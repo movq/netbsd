@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_syscallargs.h,v 1.35 1998/12/15 19:31:30 itohy Exp $	*/
+/*	$NetBSD: linux_syscallargs.h,v 1.42 2008/04/28 20:23:42 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,12 +32,20 @@
 #ifndef _LINUX_SYSCALLARGS_H
 #define _LINUX_SYSCALLARGS_H
 
-#if defined(i386)
+#if defined(__i386__)
 #include <compat/linux/arch/i386/linux_syscallargs.h>
 #elif defined(__m68k__)
 #include <compat/linux/arch/m68k/linux_syscallargs.h>
 #elif defined(__alpha__)
 #include <compat/linux/arch/alpha/linux_syscallargs.h>
+#elif defined(__powerpc__)
+#include <compat/linux/arch/powerpc/linux_syscallargs.h>
+#elif defined(__mips__)
+#include <compat/linux/arch/mips/linux_syscallargs.h>
+#elif defined(__arm__)
+#include <compat/linux/arch/arm/linux_syscallargs.h>
+#elif defined(__amd64__)
+#include <compat/linux/arch/amd64/linux_syscallargs.h>
 #else
 #error Undefined linux_syscallargs.h machine type.
 #endif

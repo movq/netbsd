@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,15 +32,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)repquota.c	8.2 (Berkeley) 11/22/94";
 #else
-__RCSID("$NetBSD: repquota.c,v 1.16 2000/01/21 17:08:37 mycroft Exp $");
+__RCSID("$NetBSD: repquota.c,v 1.23 2008/07/21 13:36:59 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -100,8 +96,6 @@ main(argc, argv)
 	struct group *gr;
 	int gflag = 0, uflag = 0, errs = 0;
 	long i, argnum, done = 0;
-	extern char *optarg;
-	extern int optind;
 	char *qfnp;
 	int ch;
 
@@ -174,7 +168,7 @@ main(argc, argv)
 void
 usage()
 {
-	fprintf(stderr, "Usage:\n\t%s\n\t%s\n",
+	fprintf(stderr, "usage:\n\t%s\n\t%s\n",
 		"repquota [-v] [-g] [-u] -a",
 		"repquota [-v] [-g] [-u] filesys ...");
 	exit(1);
@@ -222,7 +216,7 @@ repquota(fs, type, qfpathname)
 	fclose(qf);
 	printf("                        Block limits               File limits\n");
 	printf(type == USRQUOTA ? "User " : "Group");
-	printf("           used    soft    hard  grace    used  soft  hard  grace\n");
+	printf("           used    soft    hard  grace      used    soft    hard  grace\n");
 	for (id = 0; id <= highid[type]; id++) {
 		fup = lookup(id, type);
 		if (fup == 0)
@@ -230,7 +224,10 @@ repquota(fs, type, qfpathname)
 		if (fup->fu_dqblk.dqb_curinodes == 0 &&
 		    fup->fu_dqblk.dqb_curblocks == 0)
 			continue;
-		printf("%-10s", fup->fu_name);
+		if (strlen(fup->fu_name) > 9)
+			printf("%s ", fup->fu_name);
+		else
+			printf("%-10s", fup->fu_name);
 		printf("%c%c%8d%8d%8d%7s",
 			fup->fu_dqblk.dqb_bsoftlimit && 
 			    fup->fu_dqblk.dqb_curblocks >= 
@@ -238,14 +235,14 @@ repquota(fs, type, qfpathname)
 			fup->fu_dqblk.dqb_isoftlimit &&
 			    fup->fu_dqblk.dqb_curinodes >=
 			    fup->fu_dqblk.dqb_isoftlimit ? '+' : '-',
-			dbtob(fup->fu_dqblk.dqb_curblocks) / 1024,
-			dbtob(fup->fu_dqblk.dqb_bsoftlimit) / 1024,
-			dbtob(fup->fu_dqblk.dqb_bhardlimit) / 1024,
+			(int)(dbtob((u_quad_t)fup->fu_dqblk.dqb_curblocks) / 1024),
+			(int)(dbtob((u_quad_t)fup->fu_dqblk.dqb_bsoftlimit) / 1024),
+			(int)(dbtob((u_quad_t)fup->fu_dqblk.dqb_bhardlimit) / 1024),
 			fup->fu_dqblk.dqb_bsoftlimit && 
 			    fup->fu_dqblk.dqb_curblocks >= 
 			    fup->fu_dqblk.dqb_bsoftlimit ?
 			    timeprt(fup->fu_dqblk.dqb_btime) : "");
-		printf("  %6d%6d%6d%7s\n",
+		printf("  %8d%8d%8d%7s\n",
 			fup->fu_dqblk.dqb_curinodes,
 			fup->fu_dqblk.dqb_isoftlimit,
 			fup->fu_dqblk.dqb_ihardlimit,

@@ -1,4 +1,4 @@
-/*	$NetBSD: dd.h,v 1.5 1998/02/04 06:42:31 enami Exp $	*/
+/*	$NetBSD: dd.h,v 1.12 2004/01/17 20:48:57 dbj Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,37 +37,33 @@
 
 /* Input/output stream state. */
 typedef struct {
-	u_char	*db;			/* buffer address */
-	u_char	*dbp;			/* current buffer I/O address */
-	u_long	dbcnt;			/* current buffer byte count */
-	int	dbrcnt;			/* last read byte count */
-	u_long	dbsz;			/* buffer size */
+	u_char		*db;		/* buffer address */
+	u_char		*dbp;		/* current buffer I/O address */
+	uint64_t	dbcnt;		/* current buffer byte count */
+	int64_t		dbrcnt;		/* last read byte count */
+	uint64_t	dbsz;		/* buffer size */
 
 #define	ISCHR		0x01		/* character device (warn on short) */
 #define	ISPIPE		0x02		/* pipe (not truncatable) */
 #define	ISTAPE		0x04		/* tape (not seekable) */
 #define	NOREAD		0x08		/* not readable */
-	u_int	flags;
+	u_int		flags;
 
-	char 	*name;			/* name */
-	int	fd;			/* file descriptor */
-	u_long	offset;			/* # of blocks to skip */
-
-	u_long	f_stats;		/* # of full blocks processed */
-	u_long	p_stats;		/* # of partial blocks processed */
-	u_long	s_stats;		/* # of odd swab blocks */
-	u_long	t_stats;		/* # of truncations */
+	const char  	*name;		/* name */
+	int		fd;		/* file descriptor */
+	uint64_t	offset;		/* # of blocks to skip */
 } IO;
 
 typedef struct {
-	u_long	in_full;		/* # of full input blocks */
-	u_long	in_part;		/* # of partial input blocks */
-	u_long	out_full;		/* # of full output blocks */
-	u_long	out_part;		/* # of partial output blocks */
-	u_long	trunc;			/* # of truncated records */
-	u_long	swab;			/* # of odd-length swab blocks */
-	u_quad_t bytes;			/* # of bytes written */
-	time_t	start;			/* start time of dd */
+	uint64_t	in_full;	/* # of full input blocks */
+	uint64_t	in_part;	/* # of partial input blocks */
+	uint64_t	out_full;	/* # of full output blocks */
+	uint64_t	out_part;	/* # of partial output blocks */
+	uint64_t	trunc;		/* # of truncated records */
+	uint64_t	swab;		/* # of odd-length swab blocks */
+	uint64_t	sparse;		/* # of sparse output blocks */
+	uint64_t	bytes;		/* # of bytes written */
+	struct timeval	start;		/* start time of dd */
 } STAT;
 
 /* Flags (in ddflags). */
@@ -96,3 +88,4 @@ typedef struct {
 #define	C_UCASE		0x40000
 #define	C_UNBLOCK	0x80000
 #define	C_OSYNC		0x100000
+#define	C_SPARSE	0x200000

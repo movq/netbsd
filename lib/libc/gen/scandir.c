@@ -1,4 +1,4 @@
-/*	$NetBSD: scandir.c,v 1.17 2000/01/22 22:19:12 mycroft Exp $	*/
+/*	$NetBSD: scandir.c,v 1.26 2007/06/09 23:57:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,12 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)scandir.c	8.3 (Berkeley) 1/2/94";
 #else
-__RCSID("$NetBSD: scandir.c,v 1.17 2000/01/22 22:19:12 mycroft Exp $");
+__RCSID("$NetBSD: scandir.c,v 1.26 2007/06/09 23:57:25 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 /*
- * Scan the directory dirname calling select to make a list of selected
+ * Scan the directory dirname calling selectfn to make a list of selected
  * directory entries then sort using qsort and compare routine dcomp.
  * Returns the number of entries and a pointer to a list of pointers to
  * struct dirent (through namelist). Returns -1 if there were any errors.
@@ -59,100 +55,97 @@ __RCSID("$NetBSD: scandir.c,v 1.17 2000/01/22 22:19:12 mycroft Exp $");
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef __weak_alias
-__weak_alias(scandir,_scandir)
-__weak_alias(alphasort,_alphasort)
-#endif
-
 /*
- * The DIRSIZ macro is the minimum record length which will hold the directory
- * entry.  This requires the amount of space in struct dirent without the
- * d_name field, plus enough space for the name and a terminating nul byte
- * (dp->d_namlen + 1), rounded up to a 4 byte boundary.
+ * Compute an estimate of the number of entries in a directory based on
+ * the file size. Returns the estimated number of entries or 0 on failure.
  */
-#undef DIRSIZ
-#define DIRSIZ(dp)							\
-	((sizeof(struct dirent) - sizeof(dp)->d_name) +			\
-	    (((dp)->d_namlen + 1 + 3) &~ 3))
+static size_t
+dirsize(int fd, size_t olen)
+{
+	struct stat stb;
+	size_t nlen;
+
+	if (fstat(fd, &stb) == -1)
+		return 0;
+	/*
+	 * Estimate the array size by taking the size of the directory file
+	 * and dividing it by a multiple of the minimum size entry. 
+	 */
+	nlen = (size_t)(stb.st_size / _DIRENT_MINSIZE((struct dirent *)0));
+	/*
+	 * If the size turns up 0, switch to an alternate strategy and use the
+	 * file size as the number of entries like ZFS returns. If that turns
+	 * out to be 0 too return a minimum of 10 entries, plus the old length.
+	 */
+	if (nlen == 0)
+		nlen = (size_t)(stb.st_size ? stb.st_size : 10);
+	return olen + nlen;
+}
 
 int
-scandir(dirname, namelist, select, dcomp)
-	const char *dirname;
-	struct dirent ***namelist;
-	int (*select) __P((struct dirent *));
-	int (*dcomp) __P((const void *, const void *));
+scandir(const char *dirname, struct dirent ***namelist,
+    int (*selectfn)(const struct dirent *),
+    int (*dcomp)(const void *, const void *))
 {
-	struct dirent *d, *p, **names;
+	struct dirent *d, *p, **names, **newnames;
 	size_t nitems, arraysz;
-	struct stat stb;
 	DIR *dirp;
 
 	_DIAGASSERT(dirname != NULL);
 	_DIAGASSERT(namelist != NULL);
 
 	if ((dirp = opendir(dirname)) == NULL)
-		return(-1);
-	if (fstat(dirp->dd_fd, &stb) < 0)
-		return(-1);
+		return -1;
 
-	/*
-	 * estimate the array size by taking the size of the directory file
-	 * and dividing it by a multiple of the minimum size entry. 
-	 */
-	arraysz = (size_t)(stb.st_size / 24);
-	names = malloc(arraysz * sizeof(struct dirent *));
+	if ((arraysz = dirsize(dirp->dd_fd, 0)) == 0)
+		goto bad;
+
+	names = malloc(arraysz * sizeof(*names));
 	if (names == NULL)
-		return(-1);
+		goto bad;
 
 	nitems = 0;
 	while ((d = readdir(dirp)) != NULL) {
-		if (select != NULL && !(*select)(d))
+		if (selectfn != NULL && !(*selectfn)(d))
 			continue;	/* just selected names */
-		/*
-		 * Make a minimum size copy of the data
-		 */
-		p = (struct dirent *)malloc(DIRSIZ(d));
-		if (p == NULL)
-			return(-1);
-		p->d_fileno = d->d_fileno;
-		p->d_reclen = d->d_reclen;
-		p->d_type = d->d_type;
-		p->d_namlen = d->d_namlen;
-		memmove(p->d_name, d->d_name,  (size_t)(p->d_namlen + 1));
+
 		/*
 		 * Check to make sure the array has space left and
 		 * realloc the maximum size.
 		 */
-		if (++nitems >= arraysz) {
-			if (fstat(dirp->dd_fd, &stb) < 0)
-				return(-1);	/* just might have grown */
-			arraysz = (size_t)(stb.st_size / 12);
-			names = realloc(names,
-			    arraysz * sizeof(struct dirent *));
-			if (names == NULL)
-				return(-1);
+		if (nitems >= arraysz) {
+			if ((arraysz = dirsize(dirp->dd_fd, arraysz)) == 0)
+				goto bad2;
+			newnames = realloc(names, arraysz * sizeof(*names));
+			if (newnames == NULL)
+				goto bad2;
+			names = newnames;
 		}
-		names[nitems-1] = p;
+
+		/*
+		 * Make a minimum size copy of the data
+		 */
+		p = malloc((size_t)_DIRENT_SIZE(d));
+		if (p == NULL)
+			goto bad2;
+		p->d_fileno = d->d_fileno;
+		p->d_reclen = d->d_reclen;
+		p->d_type = d->d_type;
+		p->d_namlen = d->d_namlen;
+		(void)memmove(p->d_name, d->d_name, (size_t)(p->d_namlen + 1));
+		names[nitems++] = p;
 	}
-	closedir(dirp);
+	(void)closedir(dirp);
 	if (nitems && dcomp != NULL)
-		qsort(names, nitems, sizeof(struct dirent *), dcomp);
+		qsort(names, nitems, sizeof(*names), dcomp);
 	*namelist = names;
-	return(nitems);
-}
+	return nitems;
 
-/*
- * Alphabetic order comparison routine for those who want it.
- */
-int
-alphasort(d1, d2)
-	const void *d1;
-	const void *d2;
-{
-
-	_DIAGASSERT(d1 != NULL);
-	_DIAGASSERT(d2 != NULL);
-
-	return(strcmp((*(const struct dirent *const *)d1)->d_name,
-	    (*(const struct dirent *const *)d2)->d_name));
+bad2:
+	while (nitems-- > 0)
+		free(names[nitems]);
+	free(names);
+bad:
+	(void)closedir(dirp);
+	return -1;
 }

@@ -1,11 +1,34 @@
-.\"     $NetBSD: awi.4,v 1.6 2000/03/22 11:24:33 onoe Exp $
+.\"     $NetBSD: awi.4,v 1.27 2008/04/30 13:10:53 martin Exp $
 .\"
+.\" Copyright (c) 1999,2000,2001 The NetBSD Foundation, Inc.
+.\" All rights reserved.
 .\"
-.\"	$Id: awi.4,v 1.6 2000/03/22 11:24:33 onoe Exp $
+.\" This code is derived from software contributed to The NetBSD Foundation
+.\" by Bill Sommerfeld
 .\"
-.Dd October 31, 1999
-.Dt AWI 4 
-.Os 
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+.\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+.\" TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+.\" PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+.\" BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+.\" CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+.\" SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+.\" INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+.\" CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+.\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+.\" POSSIBILITY OF SUCH DAMAGE.
+.Dd January 2, 2006
+.Dt AWI 4
+.Os
 .Sh NAME
 .Nm awi
 .Nd
@@ -13,37 +36,46 @@ AMD PCnetMobile IEEE 802.11 PCMCIA wireless network driver
 .Sh SYNOPSIS
 .Cd "awi*     at pcmcia? function ?"
 .Sh DESCRIPTION
-.Pp
 The
 .Nm
 driver supports various IEEE 802.11 wireless cards
-which run AMD PCnetMobile firmware based on AMD 79c930 controller.
+that run AMD PCnetMobile firmware based on the AMD 79c930 controller
+with the Intersil (formerly Harris) PRISM radio chipset.
 It provides access to 32kb of memory shared between the controller
 and the host.
-All host/device interaction is via this shared memory, which can be
-accessed either via PCMCIA memory space or I/O space.
+All host/device interaction is accomplished via this shared memory, which
+can be accessed either via PCMCIA or I/O memory spaces.
 The
 .Nm
-driver encapsulates all IP and ARP traffic as 802.11 frames.
+driver encapsulates all IP and ARP traffic in 802.11 frames.
 .Pp
-The driver works both in infrastructure mode and in adhoc (independent
+The driver works both in infrastructure mode and in ad-hoc (independent
 BSS) mode.
 .Pp
-In infrastructure mode, it communicates with an Access Point
-which serves as a link-layer bridge between an Ethernet and
-the wireless network.  An access point also provides roaming capability
-which allows wireless node to move between access points.
+In infrastructure mode, it communicates with an Access Point,
+which serves as a link-layer bridge between an Ethernet segment and
+the wireless network.
+An access point also provides roaming capability,
+which allows a wireless node to move between access points.
 .Pp
-In adhoc mode, it communicates peer to peer.
-Though it is more efficient to communicate between wireless nodes,
-the coverage is limited spatially due to lack of roaming capability.
+In ad-hoc mode, the device communicates peer to peer.
+Although it is more efficient to communicate between wireless nodes,
+the coverage is limited spatially due to the lack of roaming capability.
 .Pp
-In addition to these two mode in IEEE 802.11 specification, the
+In addition to these two modes in the IEEE 802.11 specification, the
 .Nm
-driver also supports a variant of adhoc mode out of spec, which makes
-possible to communicate with adhoc mode of
-.Xr wi 8
-driver.  The NWID doesn't affect in this mode.
+driver also supports a variant of ad-hoc mode outside of the spec for
+DS radio cards.
+This makes it possible to communicate with the WaveLAN ad-hoc mode of
+.Xr wi 4
+driver.
+The NWID has no effect in this mode.
+.Pp
+Another mode added to the
+.Nm
+driver can be used with old Melco access points with 2Mbps cards.
+This mode actually uses the IEEE 802.11 ad-hoc mode with encapsulation of
+raw Ethernet packets (including headers) in 802.11 frames.
 .Pp
 For more information on configuring this device, see
 .Xr ifconfig 8
@@ -54,7 +86,7 @@ Cards supported by the
 .Nm
 driver include:
 .Pp
-.Bl -tag -width BayStack_650x -offset indent
+.Bl -tag -width BayStack_650x -offset indent -compact
 .It BayStack 650
 1Mbps Frequency Hopping PCCARD adapter
 .It BayStack 660
@@ -69,51 +101,53 @@ driver include:
 1Mbps Frequency Hopping PCCARD adapter
 .It Netwave AirSurfer Pro
 2Mbps Direct Sequence PCCARD adapter
+.It Nokia C020 WLAN
+2Mbps Direct Sequence PCCARD adapter
+.It Farallon SkyLINE
+2Mbps Direct Sequence PCCARD adapter
+.It Zoom Air Model 4000
 .El
 .Pp
-The original Xircom Netwave AirSurfer is supported by the 
+The original Xircom Netwave AirSurfer is supported by the
 .Xr cnw 4
+driver, and the PRISM-II cards are supported by the
+.Xr wi 4
 driver.
 .Sh MEDIA SELECTION
-The DS cards support
+In addition to default
+.Em Auto
+media type,
+the DS cards support
 .Em DS1
 and
 .Em DS2
-media types, while the FH cards support
+media types, while the FH cards support the
 .Em FH1
-media type.  For each media type,
+media type.
+For each media type, the
 .Em adhoc
-mediaopt can be used to indicate the driver to operate in adhoc mode.
-Also,
+mediaopt can be used to indicate to the driver to operate in ad-hoc mode.
+The
+.Em flag0
+mediaopt
+should be used only with old access points, which operate in IBSS mode.
+For DS radio cards, the
 .Em adhoc,flag0
 mediaopt can be used for
 .Xr wi 4
-compatible adhoc mode.
+compatible WaveLAN ad-hoc mode.
 .Sh DIAGNOSTICS
 .Bl -diag
-.It "awi0: unable to allocate memory space; using i/o only"
-Indicates that the driver was not able to allocate 32kb of PCMCIA bus
-address space into which to map the device; the driver will use the
-(slightly slower) i/o-space only access methods to read and write to
-the shared memory.  Since by default, NetBSD, only allocates 16kb of
-address space per PCMCIA controller, this message is in some sense to
-be expected and should not be a cause for alarm.
-See
-.Xr pcmcia 4
-for information on how to increase the memory available to the PCMCIA
-controller.
+.It "awi0: no suitable CIS info found"
+The device cannot be mapped due to a resource conflict.
+Or, the device failed to initialize its firmware.
 .It "awi0: failed to complete selftest (%s)"
 The device failed to complete its self test.
-.It "awi0: synced with %s ssid %s at chanset %d"
-.It "awi0: associated with %s ssid %s channel %d signal %d"
-The device has successfully synchronized with the identified Access
-Point and is ready to relay traffic.
-.It "awi0: authentication failed (reason %d)"
-.It "awi0: association failed (reason %d)"
-The access point refuses the association request from the device.
-.It "awi0: no recent beacons from %s; rescanning"
-The device has not heard a beacon from its currently associated Access
-Point recently, and is looking for a new access point.
+In some circumstances, resetting device after power on fails.
+Re-inserting the card or setting the interface up and then down again
+(using
+.Xr ifconfig 8 )
+may also be helpful.
 .It "awi0: transmit timeout"
 The device failed to generate an interrupt to acknowledge a
 transmitted packet.
@@ -122,19 +156,15 @@ The system was unable to obtain the lock to access shared memory.
 .It "awi0: command %d failed %x"
 The device failed to complete the request from the system.
 .El
-.Sh BUGS
-.Pp
-Doesn't support WEP.
-Doesn't create IBSS itself.
-.Pp
 .Sh SEE ALSO
 .Xr arp 4 ,
-.Xr netintro 4 , 
-.Xr pcmcia 4 ,
-.Xr wi 4 ,
 .Xr cnw 4 ,
 .Xr ifmedia 4 ,
-.Xr ifconfig 8
+.Xr netintro 4 ,
+.Xr pcmcia 4 ,
+.Xr wi 4 ,
+.Xr ifconfig 8 ,
+.Xr wiconfig 8
 .Rs
 .%T Am79C930 PCnet Mobile Single-Chip Wireless LAN Media Access Controller
 .%O http://www.amd.com
@@ -144,13 +174,13 @@ The
 .Nm
 device driver first appeared in
 .Nx 1.5 .
-.Sh AUTHOR
+.Sh AUTHORS
 The initial version of the
 .Nm
 driver was written by
-.An Bill Sommerfeld Aq sommerfeld@netbsd.org .
-Then the
-.Nm
-driver module completely rewritten to support cards with DS phy and
-to support adhoc mode by
-.An Atsushi Onoe Aq onoe@netbsd.org .
+.An Bill Sommerfeld
+.Aq sommerfeld@NetBSD.org .
+It was then completely rewritten to support cards with the DS phy and
+ad-hoc mode by
+.An Atsushi Onoe
+.Aq onoe@NetBSD.org .

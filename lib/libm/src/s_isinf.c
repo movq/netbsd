@@ -1,11 +1,11 @@
 /*
- * Written by J.T. Conklin <jtc@netbsd.org>.
+ * Written by J.T. Conklin <jtc@NetBSD.org>.
  * Public domain.
  */
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: s_isinf.c,v 1.4 1997/10/09 11:32:19 lukem Exp $");
+__RCSID("$NetBSD: s_isinf.c,v 1.6 2003/07/26 19:25:05 salo Exp $");
 #endif
 
 /*
@@ -16,12 +16,8 @@ __RCSID("$NetBSD: s_isinf.c,v 1.4 1997/10/09 11:32:19 lukem Exp $");
 #include "math.h"
 #include "math_private.h"
 
-#ifdef __STDC__
-	int isinf(double x)
-#else
-	int isinf(x)
-	double x;
-#endif
+int
+isinf(double x)
 {
 	int32_t hx,lx;
 	EXTRACT_WORDS(hx,lx,x);

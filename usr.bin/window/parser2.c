@@ -1,4 +1,4 @@
-/*	$NetBSD: parser2.c,v 1.6 1998/10/14 00:58:48 wsanchez Exp $	*/
+/*	$NetBSD: parser2.c,v 1.10 2006/05/02 22:35:07 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)parser2.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: parser2.c,v 1.6 1998/10/14 00:58:48 wsanchez Exp $");
+__RCSID("$NetBSD: parser2.c,v 1.10 2006/05/02 22:35:07 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,10 +55,7 @@ __RCSID("$NetBSD: parser2.c,v 1.6 1998/10/14 00:58:48 wsanchez Exp $");
  * want to parse the arguments anyway.  flag == 0 in this case.
  */
 int
-p_function(name, v, flag)
-	char *name;
-	struct value *v;
-	int flag;
+p_function(char *name, struct value *v, int flag)
 {
 	struct value t;
 	struct lcmd_tab *c = 0;
@@ -151,7 +144,7 @@ p_function(name, v, flag)
 				i = vp - av + 1;
 				lp = ap;
 			}
-			if (vp->v_type != V_ERR) {
+			if (vp && vp->v_type != V_ERR) {
 				if (*ap->arg_name)
 					p_error("%s: Argument %d (%s) duplicated.",
 						name, vp - av + 1,
@@ -222,10 +215,7 @@ abort:
 }
 
 int
-p_assign(name, v, flag)
-	char *name;
-	struct value *v;
-	char flag;
+p_assign(char *name, struct value *v, int flag)
 {
 	(void) s_gettok();
 
@@ -236,7 +226,7 @@ p_assign(name, v, flag)
 	switch (v->v_type) {
 	case V_STR:
 	case V_NUM:
-		if (flag && var_set(name, v) == 0) {
+		if (name && flag && var_set(name, v) == 0) {
 			p_memerror();
 			val_free(*v);
 			return -1;

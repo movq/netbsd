@@ -1,4 +1,4 @@
-/*	$NetBSD: master.c,v 1.8 1997/10/17 14:19:26 lukem Exp $	*/
+/*	$NetBSD: master.c,v 1.18 2007/01/26 16:12:41 christos Exp $	*/
 
 /*-
  * Copyright (c) 1985, 1993 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,25 +34,15 @@
 #if 0
 static char sccsid[] = "@(#)master.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: master.c,v 1.8 1997/10/17 14:19:26 lukem Exp $");
+__RCSID("$NetBSD: master.c,v 1.18 2007/01/26 16:12:41 christos Exp $");
 #endif
 #endif /* not lint */
-
-#ifdef sgi
-#ident "$Revision: 1.8 $"
-#endif
 
 #include "globals.h"
 #include <sys/file.h>
 #include <sys/types.h>
 #include <sys/times.h>
 #include <setjmp.h>
-#ifdef sgi
-#include <sys/schedctl.h>
-#include <utmpx.h>	/* includes utmp.h */
-#else
-#include <utmp.h>
-#endif /* sgi */
 
 #include "pathnames.h"
 
@@ -70,13 +56,6 @@ static int slvcount;			/* slaves listening to our clock */
 
 static void mchgdate(struct tsp*);
 
-#ifdef sgi
-extern	void	getutmpx(const struct utmp *, struct utmpx *);
-extern	void	logwtmp(struct timeval*, struct timeval*);
-#else
-extern	void	logwtmp __P((char *, char *, char *));
-#endif /* sgi */
-
 
 
 /*
@@ -88,8 +67,8 @@ extern	void	logwtmp __P((char *, char *, char *));
  * master's name, remote requests to set the network time, ...), and
  * takes the appropriate action.
  */
-int
-master()
+void
+master(void)
 {
 	struct hosttbl *htp;
 	long pollingtime;
@@ -164,14 +143,9 @@ loop:
 				to.tsp_vers = TSPVERSION;
 				to.tsp_seq = sequence++;
 				to.tsp_hopcnt = MAX_HOPCNT;
-				(void)strcpy(to.tsp_name, hostname);
+				set_tsp_name(&to, hostname);
 				bytenetorder(&to);
-				if (sendto(sock, (char *)&to,
-					   sizeof(struct tsp), 0,
-					   (struct sockaddr*)&ntp->dest_addr,
-					   sizeof(ntp->dest_addr)) < 0) {
-				   trace_sendto_err(ntp->dest_addr.sin_addr);
-				}
+				(void)sendtsp(sock, &to, &ntp->dest_addr);
 			}
 		}
 
@@ -190,12 +164,8 @@ loop:
 			/*
 			 * XXX check to see it is from ourself
 			 */
-#ifdef sgi
-			(void)cftime(newdate, "%D %T", &msg->tsp_time.tv_sec);
-#else
 			tmpt = msg->tsp_time.tv_sec;
-			(void)strcpy(newdate, ctime(&tmpt));
-#endif /* sgi */
+			(void)strlcpy(newdate, ctime(&tmpt), sizeof(newdate));
 			if (!good_host_name(msg->tsp_name)) {
 				syslog(LOG_NOTICE,
 				       "attempted date change by %s to %s",
@@ -212,12 +182,9 @@ loop:
 		case TSP_SETDATEREQ:
 			if (!fromnet || fromnet->status != MASTER)
 				break;
-#ifdef sgi
-			(void)cftime(newdate, "%D %T", &msg->tsp_time.tv_sec);
-#else
 			tmpt = msg->tsp_time.tv_sec;
-			(void)strcpy(newdate, ctime(&tmpt));
-#endif /* sgi */
+			(void)strlcpy(newdate, ctime(&tmpt), sizeof(newdate));
+
 			htp = findhost(msg->tsp_name);
 			if (htp == 0) {
 				syslog(LOG_ERR,
@@ -253,7 +220,7 @@ loop:
 			break;
 
 		case TSP_TRACEOFF:
-			traceoff("Tracing ended at %s\n");
+			traceoff("Tracing ended");
 			break;
 
 		case TSP_ELECTION:
@@ -264,9 +231,9 @@ loop:
 				(void)addmach(msg->tsp_name, &from,fromnet);
 			}
 			taddr = from;
-			(void)strcpy(tname, msg->tsp_name);
+			get_tsp_name(msg, tname, sizeof(tname));
 			to.tsp_type = TSP_QUIT;
-			(void)strcpy(to.tsp_name, hostname);
+			set_tsp_name(&to, hostname);
 			answer = acksend(&to, &taddr, tname,
 					 TSP_ACK, 0, 1);
 			if (answer == NULL) {
@@ -283,7 +250,8 @@ loop:
 			 */
 			if (!fromnet || fromnet->status != MASTER)
 				break;
-			(void)strcpy(to.tsp_name, hostname);
+
+			set_tsp_name(&to, hostname);
 
 			/* The other master often gets into the same state,
 			 * with boring results if we stay at it forever.
@@ -291,7 +259,7 @@ loop:
 			ntp = fromnet;	/* (acksend() can leave fromnet=0 */
 			for (i = 0; i < 3; i++) {
 				to.tsp_type = TSP_RESOLVE;
-				(void)strcpy(to.tsp_name, hostname);
+				set_tsp_name(&to, hostname);
 				answer = acksend(&to, &ntp->dest_addr,
 						 ANYADDR, TSP_MASTERACK,
 						 ntp, 0);
@@ -336,7 +304,7 @@ loop:
 			 */
 			htp = addmach(msg->tsp_name, &from,fromnet);
 			to.tsp_type = TSP_QUIT;
-			(void)strcpy(to.tsp_name, hostname);
+			set_tsp_name(&to, hostname);
 			answer = acksend(&to, &htp->addr, htp->name,
 					 TSP_ACK, 0, 1);
 			if (!answer) {
@@ -345,6 +313,7 @@ loop:
 				    htp->name, inet_ntoa(htp->addr.sin_addr));
 				(void)remmach(htp);
 			}
+			break;
 
 		case TSP_TEST:
 			if (trace) {
@@ -379,11 +348,11 @@ mchgdate(struct tsp *msg)
 	char olddate[32];
 	struct timeval otime, ntime, tmptv;
 
-	(void)strcpy(tname, msg->tsp_name);
+	get_tsp_name(msg, tname, sizeof(tname));
 
 	xmit(TSP_DATEACK, msg->tsp_seq, &from);
 
-	(void)strcpy(olddate, date());
+	(void)strlcpy(olddate, date(), sizeof(olddate));
 
 	/* adjust time for residence on the queue */
 	(void)gettimeofday(&otime, 0);
@@ -397,23 +366,12 @@ mchgdate(struct tsp *msg)
 		dictate = 3;
 		synch(tvtomsround(ntime));
 	} else {
-#ifdef sgi
-		if (0 > settimeofday(&msg->tsp_time, 0)) {
-			syslog(LOG_ERR, "settimeofday(): %m");
-		}
-		logwtmp(&otime, &msg->tsp_time);
-#else
-		logwtmp("|", "date", "");
-		tmptv.tv_sec = msg->tsp_time.tv_sec;
-		tmptv.tv_usec = msg->tsp_time.tv_usec;
-		(void)settimeofday(&tmptv, 0);
-		logwtmp("}", "date", "");
-#endif /* sgi */
+		update_time(&tmptv, msg);
 		spreadtime();
 	}
-
 	syslog(LOG_NOTICE, "date changed by %s from %s",
 	       tname, olddate);
+
 }
 
 
@@ -426,29 +384,20 @@ synch(long mydelta)
 	struct hosttbl *htp;
 	int measure_status;
 	struct timeval check, stop, wait;
-#ifdef sgi
-	int pri;
-#endif /* sgi */
 
 	if (slvcount > 0) {
 		if (trace)
 			fprintf(fd, "measurements starting at %s\n", date());
 		(void)gettimeofday(&check, 0);
-#ifdef sgi
-		/* run fast to get good time */
-		pri = schedctl(NDPRI,0,NDPHIMIN);
-		if (pri < 0)
-			syslog(LOG_ERR, "schedctl(): %m");
-#endif /* sgi */
 		for (htp = self.l_fwd; htp != &self; htp = htp->l_fwd) {
 			if (htp->noanswer != 0) {
-				measure_status = measure(500, 100,
+				measure_status = measure(500UL, 100UL,
 							 htp->name,
-							 &htp->addr,0);
+							 &htp->addr, 0);
 			} else {
-				measure_status = measure(3000, 100,
+				measure_status = measure(3000UL, 100UL,
 							 htp->name,
-							 &htp->addr,0);
+							 &htp->addr, 0);
 			}
 			if (measure_status != GOOD) {
 				/* The slave did not respond.  We have
@@ -483,10 +432,6 @@ synch(long mydelta)
 				(void)gettimeofday(&check, 0);
 			}
 		}
-#ifdef sgi
-		if (pri >= 0)
-			(void)schedctl(NDPRI,0,pri);
-#endif /* sgi */
 		if (trace)
 			fprintf(fd, "measurements finished at %s\n", date());
 	}
@@ -507,7 +452,7 @@ synch(long mydelta)
  * has received the command to set the network time
  */
 void
-spreadtime()
+spreadtime(void)
 {
 	struct hosttbl *htp;
 	struct tsp to;
@@ -520,7 +465,7 @@ spreadtime()
 	dictate = 2;
 	for (htp = self.l_fwd; htp != &self; htp = htp->l_fwd) {
 		to.tsp_type = TSP_SETTIME;
-		(void)strcpy(to.tsp_name, hostname);
+		set_tsp_name(&to, hostname);
 		(void)gettimeofday(&tmptv, 0);
 		to.tsp_time.tv_sec = tmptv.tv_sec;
 		to.tsp_time.tv_usec = tmptv.tv_usec;
@@ -560,7 +505,7 @@ prthp(clock_t delta)
 		return;
 
 	this_time = times(&tm);
-	if (this_time + delta < next_time)
+	if ((time_t) (this_time + delta) < next_time)
 		return;
 	next_time = this_time + CLK_TCK;
 
@@ -620,7 +565,7 @@ addmach(char *name, struct sockaddr_in *addr, struct netinfo *ntp)
 		if (slvcount >= NHOSTS) {
 			if (trace) {
 				fprintf(fd, "no more slots in host table\n");
-				prthp(CLK_TCK);
+				prthp((clock_t)CLK_TCK);
 			}
 			syslog(LOG_ERR, "no more slots in host table");
 			Mflag = 0;
@@ -650,7 +595,7 @@ addmach(char *name, struct sockaddr_in *addr, struct netinfo *ntp)
 				b = newhost_hash->l_bak;
 				f->l_bak = ret;
 				b->l_fwd = ret;
-				bcopy(newhost_hash,ret,sizeof(*ret));
+				memcpy(ret, newhost_hash, sizeof(*ret));
 				ret = newhost_hash;
 				ret->head = 1;
 				ret->h_fwd = ret;
@@ -674,6 +619,7 @@ addmach(char *name, struct sockaddr_in *addr, struct netinfo *ntp)
 		ret->addr = *addr;
 		ret->ntp = ntp;
 		(void)strncpy(ret->name, name, sizeof(ret->name));
+		ret->name[sizeof(ret->name) - 1] = '\0';
 		ret->good = good_host_name(name);
 		ret->l_fwd = &self;
 		ret->l_bak = self.l_bak;
@@ -727,7 +673,7 @@ remmach(struct hosttbl *htp)
 		f->l_bak = htp;
 		b->l_fwd = htp;
 		hnxt->head = 1;
-		bcopy(hnxt, htp, sizeof(*htp));
+		memcpy(htp, hnxt, sizeof(*htp));
 		lasthfree = hnxt;
 	} else {
 		lasthfree = htp;
@@ -753,13 +699,13 @@ rmnetmachs(struct netinfo *ntp)
 	struct hosttbl *htp;
 
 	if (trace)
-		prthp(CLK_TCK);
+		prthp((clock_t)CLK_TCK);
 	for (htp = self.l_fwd; htp != &self; htp = htp->l_fwd) {
 		if (ntp == htp->ntp)
 			htp = remmach(htp);
 	}
 	if (trace)
-		prthp(CLK_TCK);
+		prthp((clock_t)CLK_TCK);
 }
 
 
@@ -789,7 +735,7 @@ newslave(struct tsp *msg)
 	htp = addmach(msg->tsp_name, &from,fromnet);
 	htp->seq = msg->tsp_seq;
 	if (trace)
-		prthp(0);
+		prthp((clock_t)0);
 
 	/*
 	 * If we are stable, send our time to the slave.
@@ -799,7 +745,7 @@ newslave(struct tsp *msg)
 	if (now.tv_sec >= fromnet->slvwait.tv_sec+3
 	    || now.tv_sec < fromnet->slvwait.tv_sec) {
 		to.tsp_type = TSP_SETTIME;
-		(void)strcpy(to.tsp_name, hostname);
+		set_tsp_name(&to, hostname);
 		(void)gettimeofday(&tmptv, 0);
 		to.tsp_time.tv_sec = tmptv.tv_sec;
 		to.tsp_time.tv_usec = tmptv.tv_usec;
@@ -866,18 +812,18 @@ traceon(void)
 	trace = 1;
 	get_goodgroup(1);
 	setstatus();
-	prthp(CLK_TCK);
+	prthp((clock_t)CLK_TCK);
 }
 
 
 void
-traceoff(char *msg)
+traceoff(const char *msg)
 {
 	get_goodgroup(1);
 	setstatus();
-	prthp(CLK_TCK);
+	prthp((clock_t)CLK_TCK);
 	if (trace) {
-		fprintf(fd, msg, date());
+		fprintf(fd, "%s at %s\n", msg, date());
 		(void)fclose(fd);
 		fd = 0;
 	}
@@ -889,42 +835,3 @@ traceoff(char *msg)
 	trace = OFF;
 }
 
-
-#ifdef sgi
-void
-logwtmp(struct timeval *otime, struct timeval *ntime)
-{
-	static struct utmp wtmp[2] = {
-		{"","",OTIME_MSG,0,OLD_TIME,0,0,0},
-		{"","",NTIME_MSG,0,NEW_TIME,0,0,0}
-	};
-	static char *wtmpfile = WTMP_FILE;
-	static struct utmpx wtmpx[2];
-	int f;
-
-	wtmp[0].ut_time = otime->tv_sec + (otime->tv_usec + 500000) / 1000000;
-	wtmp[1].ut_time = ntime->tv_sec + (ntime->tv_usec + 500000) / 1000000;
-	if (wtmp[0].ut_time == wtmp[1].ut_time)
-		return;
-
-	setutent();
-	(void)pututline(&wtmp[0]);
-	(void)pututline(&wtmp[1]);
-	endutent();
-	if ((f = open(wtmpfile, O_WRONLY|O_APPEND)) >= 0) {
-		(void)write(f, (char *)wtmp, sizeof(wtmp));
-		(void)close(f);
-	}
-
-        /*
-         * convert the wtmp entries into utmpx format in wtmpx[0..1]
-         * and append to /var/adm/wtmpx to keep wtmp and wtmpx in sync.
-         */
-	getutmpx(&wtmp[0], &wtmpx[0]);
-	getutmpx(&wtmp[1], &wtmpx[1]);
-	if ((f = open(WTMPX_FILE, O_WRONLY|O_APPEND)) >= 0) {
-		(void)write(f, (char *)wtmpx, sizeof(wtmpx));
-		(void)close(f);
-	} 
-}
-#endif /* sgi */

@@ -1,4 +1,4 @@
-/*	$NetBSD: scsi_sense.c,v 1.3 1999/03/15 23:20:23 thorpej Exp $	*/
+/*	$NetBSD: scsi_sense.c,v 1.8 2008/04/28 20:23:09 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,9 +36,14 @@
  *
  * XXX THESE SHOULD BE IN A LIBRARY!
  */
+#include <sys/cdefs.h>
+
+#ifndef lint
+__RCSID("$NetBSD: scsi_sense.c,v 1.8 2008/04/28 20:23:09 martin Exp $");
+#endif
+
 
 #include <sys/param.h>
-#include <sys/device.h>
 #include <sys/scsiio.h>
 #include <stdio.h>
 #include <string.h>
@@ -53,7 +51,6 @@
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipiconf.h>
-#include <dev/scsipi/scsiconf.h>
 
 #include "extern.h"
 
@@ -275,13 +272,10 @@ static const struct {
 { 0x00, 0x00, NULL }
 };
 
-static void asc2ascii __P((unsigned char, unsigned char, char *, size_t));
+static void asc2ascii(unsigned char, unsigned char, char *, size_t);
 
 static void
-asc2ascii(asc, ascq, result, reslen)
-	unsigned char asc, ascq;
-	char *result;
-	size_t reslen;
+asc2ascii(unsigned char asc, unsigned char ascq, char *result, size_t reslen)
 {
 	int i = 0;
 
@@ -299,16 +293,12 @@ asc2ascii(asc, ascq, result, reslen)
 			(void) snprintf(result, reslen,
 			    "ASC 0x%02x ASCQ 0x%02x",
 			    asc & 0xff, ascq & 0xff);
-	} else {
-		(void) strncpy(result, adesc[i].description, reslen);
-		result[reslen - 1] = '\0';	/* ensure termination */
-	}
+	} else
+		(void) strlcpy(result, adesc[i].description, reslen);
 }
 
 void
-scsi_print_sense_data(s, slen, verbosity)
-	const unsigned char *s;
-	int slen, verbosity;
+scsi_print_sense_data(const unsigned char *s, int slen, int verbosity)
 {
 	int32_t info;
 	int i, j, k;
@@ -425,11 +415,8 @@ scsi_print_sense_data(s, slen, verbosity)
 }
 
 char *
-scsi_decode_sense(snsbuf, flag, rqsbuf, rqsbuflen)
-	const unsigned char *snsbuf;
-	int flag;
-	char *rqsbuf;
-	size_t rqsbuflen;
+scsi_decode_sense(const unsigned char *snsbuf, int flag, char *rqsbuf, 
+	size_t rqsbuflen)
 {
 	unsigned char skey;
 	char localbuf[64];
@@ -439,8 +426,7 @@ scsi_decode_sense(snsbuf, flag, rqsbuf, rqsbuflen)
 	if (flag == 0 || flag == 2 || flag == 3)
 		skey = snsbuf[2] & 0xf;
 	if (flag == 0) {			/* Sense Key Only */
-		(void) strncpy(rqsbuf, sense_keys[skey], rqsbuflen);
-		rqsbuf[rqsbuflen - 1] = '\0';
+		(void) strlcpy(rqsbuf, sense_keys[skey], rqsbuflen);
 		return (rqsbuf);
 	} else if (flag == 1) {			/* ASC/ASCQ Only */
 		asc2ascii(snsbuf[12], snsbuf[13], rqsbuf, rqsbuflen);
@@ -492,10 +478,7 @@ scsi_decode_sense(snsbuf, flag, rqsbuf, rqsbuflen)
 }
 
 void
-scsi_print_sense(name, req, verbosity)
-	const char *name;
-	const scsireq_t *req;
-	int verbosity;
+scsi_print_sense(const char *name, const scsireq_t *req, int verbosity)
 {
 	int i;
 

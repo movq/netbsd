@@ -1,4 +1,4 @@
-/*	$NetBSD: espvar.h,v 1.5 1997/11/25 03:54:56 briggs Exp $	*/
+/*	$NetBSD: espvar.h,v 1.7 2008/04/13 04:55:52 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1997 Allen Briggs.
@@ -35,18 +35,15 @@ struct esp_softc {
 	bus_space_tag_t		sc_tag;
 	bus_space_handle_t	sc_bsh;
 
-	volatile u_char *sc_reg;		/* the registers */
+	volatile uint8_t *sc_reg;		/* the registers */
 
-	u_char		irq_mask;		/* mask for clearing IRQ */
+	uint8_t		irq_mask;		/* mask for clearing IRQ */
 
 	int		sc_active;		/* Pseudo-DMA state vars */
 	int		sc_datain;
 	size_t		sc_dmasize;
-	char		**sc_dmaaddr;
+	uint8_t		**sc_dmaaddr;
 	size_t		*sc_dmalen;
 	int		sc_tc;			/* only used in non-quick */
-	u_int16_t	*sc_pdmaddr;		/* only used in quick */
-	int		sc_pdmalen;		/* only used in quick */
-	size_t		sc_prevdmasize;		/* only used in quick */
 	int		sc_pad;			/* only used in quick */
 };

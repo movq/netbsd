@@ -1,11 +1,11 @@
-/*	$NetBSD: layer_subr.c,v 1.6 2000/03/16 18:08:24 jdolecek Exp $	*/
+/*	$NetBSD: layer_subr.c,v 1.25 2008/01/24 17:32:55 ad Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
  * All rights reserved.
  *
  * This software was written by William Studenmund of the
- * Numerical Aerospace Similation Facility, NASA Ames Research Center.
+ * Numerical Aerospace Simulation Facility, NASA Ames Research Center.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -47,11 +47,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -71,20 +67,28 @@
  *	@(#)null_subr.c	8.7 (Berkeley) 5/14/95
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: layer_subr.c,v 1.25 2008/01/24 17:32:55 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/time.h>
-#include <sys/types.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
+#include <sys/kmem.h>
 #include <sys/malloc.h>
+
 #include <miscfs/specfs/specdev.h>
 #include <miscfs/genfs/layer.h>
 #include <miscfs/genfs/layer_extern.h>
 
 #define	NLAYERNODECACHE 16
+
+#ifdef LAYERFS_DIAGNOSTIC
+int layerfs_debug = 1;
+#endif
 
 /*
  * layer cache:
@@ -101,7 +105,8 @@ void
 layerfs_init()
 {
 #ifdef LAYERFS_DIAGNOSTIC
-	printf("layerfs_init\n");		/* printed during system boot */
+	if (layerfs_debug)
+		printf("layerfs_init\n");		/* printed during system boot */
 #endif
 }
 
@@ -112,12 +117,15 @@ void
 layerfs_done()
 {
 #ifdef LAYERFS_DIAGNOSTIC
-	printf("layerfs_done\n");		/* printed on layerfs detach */
+	if (layerfs_debug)
+		printf("layerfs_done\n");		/* printed on layerfs detach */
 #endif
 }
 
 /*
- * Return a locked, VREF'ed alias for lower vnode if already exists, else 0.
+ * Return a locked, VREF'ed alias for lower vnode if already exists, else NULL.
+ * The layermp's hashlock must be held on entry.
+ * It will be held upon return iff we return NULL.
  */
 struct vnode *
 layer_node_find(mp, lowervp)
@@ -128,6 +136,7 @@ layer_node_find(mp, lowervp)
 	struct layer_node_hashhead *hd;
 	struct layer_node *a;
 	struct vnode *vp;
+	int error;
 
 	/*
 	 * Find hash base, and then search the (two-way) linked
@@ -138,36 +147,46 @@ layer_node_find(mp, lowervp)
 	 */
 	hd = LAYER_NHASH(lmp, lowervp);
 loop:
-	simple_lock(&lmp->layerm_hashlock);
-	for (a = hd->lh_first; a != 0; a = a->layer_hash.le_next) {
+	LIST_FOREACH(a, hd, layer_hash) {
 		if (a->layer_lowervp == lowervp && LAYERTOV(a)->v_mount == mp) {
 			vp = LAYERTOV(a);
-			simple_unlock(&lmp->layerm_hashlock);
+			mutex_enter(&vp->v_interlock);
 			/*
-			 * We must be careful here as the fact the lower
-			 * vnode is locked will imply vp is locked unless
-			 * someone has decided to start vclean'ing either
-			 * vp or lowervp.
-			 *
-			 * So we try for an exclusive, recursive lock
-			 * on the upper vnode. If it fails, vcleaning
-			 * is in progress (so when we try again, we'll
-			 * fail). If it succeeds, we now have double
-			 * locked the bottom node. So we do an explicit
-			 * VOP_UNLOCK on it to keep the counts right. Note
-			 * that we will end up with the upper node and
-			 * the lower node locked once.
+			 * If we find a node being cleaned out, then
+			 * ignore it and continue.  A thread trying to
+			 * clean out the extant layer vnode needs to
+			 * acquire the shared lock (i.e. the lower
+			 * vnode's lock), which our caller already holds.
+			 * To allow the cleaning to succeed the current
+			 * thread must make progress.  So, for a brief
+			 * time more than one vnode in a layered file
+			 * system may refer to a single vnode in the
+			 * lower file system.
 			 */
-			if (vget(vp, LK_EXCLUSIVE | LK_CANRECURSE)) {
-				printf ("layer_node_find: vget failed.\n");
+			if ((vp->v_iflag & VI_XLOCK) != 0) {
+				mutex_exit(&vp->v_interlock);
+				continue;
+			}
+			mutex_exit(&lmp->layerm_hashlock);
+			/*
+			 * We must not let vget() try to lock the layer
+			 * vp, since the lower vp is already locked and
+			 * locking the layer vp will involve locking
+			 * the lower vp (whether or not they actually
+			 * share a lock).  Instead, take the layer vp's
+			 * lock separately afterward, but only if it
+			 * does not share the lower vp's lock.
+			 */
+			error = vget(vp, LK_INTERLOCK | LK_NOWAIT);
+			if (error) {
+				kpause("layerfs", false, 1, NULL);
+				mutex_enter(&lmp->layerm_hashlock);
 				goto loop;
-			};
-			VOP_UNLOCK(lowervp, 0);
+			}
+			LAYERFS_UPPERLOCK(vp, LK_EXCLUSIVE, error);
 			return (vp);
 		}
 	}
-
-	simple_unlock(&lmp->layerm_hashlock);
 	return NULL;
 }
 
@@ -188,46 +207,51 @@ layer_node_alloc(mp, lowervp, vpp)
 	struct layer_node *xp;
 	struct vnode *vp, *nvp;
 	int error;
-	extern int (**dead_vnodeop_p) __P((void *));
+	extern int (**dead_vnodeop_p)(void *);
 
-	if ((error = getnewvnode(lmp->layerm_tag, mp, lmp->layerm_vnodeop_p,
-			&vp)) != 0)
+	error = getnewvnode(lmp->layerm_tag, mp, lmp->layerm_vnodeop_p, &vp);
+	if (error != 0)
 		return (error);
 	vp->v_type = lowervp->v_type;
-	vp->v_flag |= VLAYER;
+	mutex_enter(&vp->v_interlock);
+	vp->v_iflag |= VI_LAYER;
+	mutex_exit(&vp->v_interlock);
 
-	MALLOC(xp, struct layer_node *, lmp->layerm_size, M_TEMP, M_WAITOK);
+	xp = kmem_alloc(lmp->layerm_size, KM_SLEEP);
+	if (xp == NULL) {
+		ungetnewvnode(vp);
+		return ENOMEM;
+	}
 	if (vp->v_type == VBLK || vp->v_type == VCHR) {
-		MALLOC(vp->v_specinfo, struct specinfo *,
-		    sizeof(struct specinfo), M_VNODE, M_WAITOK);
-		vp->v_hashchain = NULL;
-		vp->v_rdev = lowervp->v_rdev;
+		spec_node_init(vp, lowervp->v_rdev);
 	}
 
 	vp->v_data = xp;
+	vp->v_vflag = (vp->v_vflag & ~VV_MPSAFE) |
+	    (lowervp->v_vflag & VV_MPSAFE);
 	xp->layer_vnode = vp;
 	xp->layer_lowervp = lowervp;
 	xp->layer_flags = 0;
+
 	/*
 	 * Before we insert our new node onto the hash chains,
 	 * check to see if someone else has beaten us to it.
 	 * (We could have slept in MALLOC.)
 	 */
+	mutex_enter(&lmp->layerm_hashlock);
 	if ((nvp = layer_node_find(mp, lowervp)) != NULL) {
 		*vpp = nvp;
 
 		/* free the substructures we've allocated. */
-		FREE(xp, M_TEMP);
+		kmem_free(xp, lmp->layerm_size);
 		if (vp->v_type == VBLK || vp->v_type == VCHR)
-			FREE(vp->v_specinfo, M_VNODE);
+			spec_node_destroy(vp);
 
 		vp->v_type = VBAD;		/* node is discarded */
 		vp->v_op = dead_vnodeop_p;	/* so ops will still work */
 		vrele(vp);			/* get rid of it. */
 		return (0);
 	}
-
-	simple_lock(&lmp->layerm_hashlock);
 
 	/*
 	 * Now lock the new node. We rely on the fact that we were passed
@@ -242,37 +266,19 @@ layer_node_alloc(mp, lowervp, vpp)
 
 	vp->v_vnlock = lowervp->v_vnlock;
 	LAYERFS_UPPERLOCK(vp, LK_EXCLUSIVE, error);
+	KASSERT(error == 0);
 
-	if (error) {
-		/*
-		 * How did we get a locking error? The node just came off
-		 * of the free list, and we're the only routine which
-		 * knows it's there...
-		 */
-		vp->v_vnlock = &vp->v_lock;
-		*vpp = NULL;
-
-		/* free the substructures we've allocated. */
-		FREE(xp, M_TEMP);
-		if (vp->v_type == VBLK || vp->v_type == VCHR)
-			FREE(vp->v_specinfo, M_VNODE);
-
-		vp->v_type = VBAD;		/* node is discarded */
-		vp->v_op = dead_vnodeop_p;	/* so ops will still work */
-		vrele(vp);			/* get rid of it. */
-		return (error);
-	}
 	/*
-	 * NetBSD used to do an inlined checkalias here. We do not, as
-	 * we never flag device nodes as being aliased. The lowervp
-	 * node will, when appropriate, be flaged as an alias.
+	 * Insert the new node into the hash.
+	 * Add a reference to the lower node.
 	 */
 
 	*vpp = vp;
-	VREF(lowervp);	/* Take into account reference held in layer_node */
+	VREF(lowervp);
 	hd = LAYER_NHASH(lmp, lowervp);
 	LIST_INSERT_HEAD(hd, xp, layer_hash);
-	simple_unlock(&lmp->layerm_hashlock);
+	uvm_vnp_setsize(vp, 0);
+	mutex_exit(&lmp->layerm_hashlock);
 	return (0);
 }
 
@@ -294,23 +300,29 @@ layer_node_create(mp, lowervp, newvpp)
 	struct vnode *aliasvp;
 	struct layer_mount *lmp = MOUNTTOLAYERMOUNT(mp);
 
-	if ((aliasvp = layer_node_find(mp, lowervp)) != NULL) {
+	mutex_enter(&lmp->layerm_hashlock);
+	aliasvp = layer_node_find(mp, lowervp);
+	if (aliasvp != NULL) {
 		/*
 		 * layer_node_find has taken another reference
 		 * to the alias vnode and moved the lock holding to
 		 * aliasvp
 		 */
 #ifdef LAYERFS_DIAGNOSTIC
-		vprint("layer_node_create: exists", aliasvp);
+		if (layerfs_debug)
+			vprint("layer_node_create: exists", aliasvp);
 #endif
 	} else {
 		int error;
+
+		mutex_exit(&lmp->layerm_hashlock);
 
 		/*
 		 * Get new vnode.
 		 */
 #ifdef LAYERFS_DIAGNOSTIC
-		printf("layer_node_create: create new alias vnode\n");
+		if (layerfs_debug)
+			printf("layer_node_create: create new alias vnode\n");
 #endif
 
 		/*
@@ -326,7 +338,7 @@ layer_node_create(mp, lowervp, newvpp)
 
 	/*
 	 * Now that we have VREF'd the upper vnode, release the reference
-	 * to the lower node. The existance of the layer_node retains one
+	 * to the lower node. The existence of the layer_node retains one
 	 * reference to the lower node.
 	 */
 	vrele(lowervp);
@@ -337,20 +349,22 @@ layer_node_create(mp, lowervp, newvpp)
 		vprint("layer_node_create: alias", aliasvp);
 		vprint("layer_node_create: lower", lowervp);
 		panic("layer_node_create: lower has 0 usecount.");
-	};
+	}
 #endif
 
 #ifdef LAYERFS_DIAGNOSTIC
-	vprint("layer_node_create: alias", aliasvp);
+	if (layerfs_debug)
+		vprint("layer_node_create: alias", aliasvp);
 #endif
 	*newvpp = aliasvp;
 	return (0);
 }
 
+#ifdef LAYERFS_DIAGNOSTIC
 struct vnode *
 layer_checkvp(vp, fil, lno)
 	struct vnode *vp;
-	char *fil;
+	const char *fil;
 	int lno;
 {
 	struct layer_node *a = VTOLAYER(vp);
@@ -396,3 +410,4 @@ layer_checkvp(vp, fil, lno)
 #endif
 	return a->layer_lowervp;
 }
+#endif

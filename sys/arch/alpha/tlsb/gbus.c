@@ -1,4 +1,4 @@
-/* $NetBSD: gbus.c,v 1.9 1999/04/10 01:21:38 cgd Exp $ */
+/* $NetBSD: gbus.c,v 1.19 2007/03/04 05:59:12 christos Exp $ */
 
 /*
  * Copyright (c) 1997 by Matthew Jacob
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: gbus.c,v 1.9 1999/04/10 01:21:38 cgd Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gbus.c,v 1.19 2007/03/04 05:59:12 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,7 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: gbus.c,v 1.9 1999/04/10 01:21:38 cgd Exp $");
 
 #include "locators.h"
 
-#define KV(_addr)	((caddr_t)ALPHA_PHYS_TO_K0SEG((_addr)))
+#define KV(_addr)	((void *)ALPHA_PHYS_TO_K0SEG((_addr)))
 
 struct gbus_softc {
 	struct device	sc_dev;
@@ -64,12 +64,10 @@ struct gbus_softc {
 static int	gbusmatch __P((struct device *, struct cfdata *, void *));
 static void	gbusattach __P((struct device *, struct device *, void *));
 
-struct cfattach gbus_ca = {
-	sizeof(struct gbus_softc), gbusmatch, gbusattach
-};
+CFATTACH_DECL(gbus, sizeof(struct gbus_softc),
+    gbusmatch, gbusattach, NULL, NULL);
 
 static int	gbusprint __P((void *, const char *));
-static int	gbussubmatch __P((struct device *, struct cfdata *, void *));
 
 struct gbus_attach_args gbus_children[] = {
 	{ "zsc",	GBUS_DUART0_OFFSET },
@@ -86,8 +84,8 @@ gbusprint(aux, pnp)
 	struct gbus_attach_args *ga = aux;
 
 	if (pnp)
-		printf("%s at %s", ga->ga_name, pnp);
-	printf(" offset 0x%lx", ga->ga_offset);
+		aprint_normal("%s at %s", ga->ga_name, pnp);
+	aprint_normal(" offset 0x%lx", ga->ga_offset);
 	return (UNCONF);
 }
 
@@ -98,15 +96,17 @@ gbusmatch(parent, cf, aux)
 	void *aux;
 {
 	struct tlsb_dev_attach_args *ta = aux;
-	extern struct cfdriver tlsb_cd;
 
 	/*
-	 * Make sure we're looking for a Gbus.
-	 * Right now, only Gbus could be a
-	 * child of a TLSB CPU Node.
+	 * Make sure we're looking for a Gbus.  The Gbus only
+	 * "exists" on the CPU module that holds the primary CPU.
+	 *
+	 * Compute which node this should exist on by dividing the
+	 * primary CPU by 2 (since there are up to 2 CPUs per CPU
+	 * module).
 	 */
 	if (TLDEV_ISCPU(ta->ta_dtype) &&
-	    parent->dv_cfdata->cf_driver == &tlsb_cd)
+	    ta->ta_node == (hwrpb->rpb_primary_cpu_id / 2))
 		return (1);
 
 	return (0);
@@ -121,27 +121,16 @@ gbusattach(parent, self, aux)
 	struct gbus_softc *sc = (struct gbus_softc *)self;
 	struct tlsb_dev_attach_args *ta = aux;
 	struct gbus_attach_args *ga;
+	int locs[GBUSCF_NLOCS];
 
 	printf("\n");
 
 	sc->sc_tlsbnode = ta->ta_node;
 
 	/* Attach the children. */
-	for (ga = gbus_children; ga->ga_name != NULL; ga++)
-		(void) config_found_sm(self, ga, gbusprint, gbussubmatch);
-}
-
-static int
-gbussubmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
-{
-	struct gbus_attach_args *ga = aux;
-
-	if (cf->cf_loc[GBUSCF_OFFSET] != GBUSCF_OFFSET_DEFAULT &&
-	    cf->cf_loc[GBUSCF_OFFSET] != ga->ga_offset)
-		return (0);
-
-	return ((*cf->cf_attach->ca_match)(parent, cf, aux));
+	for (ga = gbus_children; ga->ga_name != NULL; ga++) {
+		locs[GBUSCF_OFFSET] = ga->ga_offset;
+		(void) config_found_sm_loc(self, "gbus", locs, ga,
+					   gbusprint, config_stdsubmatch);
+	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_sparc64.c,v 1.2 1999/07/02 15:28:51 simonb Exp $	*/
+/*	$NetBSD: kvm_sparc64.c,v 1.13 2008/01/18 16:26:09 martin Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_sparc.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: kvm_sparc64.c,v 1.2 1999/07/02 15:28:51 simonb Exp $");
+__RCSID("$NetBSD: kvm_sparc64.c,v 1.13 2008/01/18 16:26:09 martin Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -62,9 +58,11 @@ __RCSID("$NetBSD: kvm_sparc64.c,v 1.2 1999/07/02 15:28:51 simonb Exp $");
 #include <nlist.h>
 #include <kvm.h>
 
-#include <vm/vm.h>
-#include <vm/vm_param.h>
+#include <uvm/uvm_extern.h>
+
+#include <machine/pmap.h>
 #include <machine/kcore.h>
+#include <machine/vmparam.h>
 
 #include <limits.h>
 #include <db.h>
@@ -87,12 +85,15 @@ _kvm_freevtop(kd)
  * Prepare for translation of kernel virtual addresses into offsets
  * into crash dump files. We use the MMU specific goop written at the
  * front of the crash dump by pmap_dumpmmu().
+ *
+ * We should read in and cache the ksegs here to speed up operations...
  */
 int
 _kvm_initvtop(kd)
 	kvm_t *kd;
 {
-	kd->nbpg = 8196;
+	kd->nbpg = 0x2000;
+
 	return (0);
 }
 
@@ -100,7 +101,7 @@ _kvm_initvtop(kd)
  * Translate a kernel virtual address to a physical address using the
  * mapping information in kd->vm.  Returns the result in pa, and returns
  * the number of bytes that are contiguously available from this
- * physical address.  This routine is used only for crashdumps.
+ * physical address.  This routine is used only for crash dumps.
  */
 int
 _kvm_kvatop(kd, va, pa)
@@ -110,57 +111,129 @@ _kvm_kvatop(kd, va, pa)
 {
 	cpu_kcore_hdr_t *cpup = kd->cpu_data;
 	u_long kernbase = cpup->kernbase;
+	uint64_t *pseg, *pdir, *ptbl;
+	struct cpu_kcore_4mbseg *ktlb;
+	int64_t data;
+	int i;
 
 	if (va < kernbase)
-		goto err;
+		goto lose;
 
-	/* Handle the wired 4MB TTE */
-	if (va > cpup->kernbase && va < cpup->kernbase + 4*1024*1024) {
-		u_long vaddr;
+	/* Handle the wired 4MB TTEs and per-CPU mappings */
+	if (cpup->memsegoffset > sizeof(cpu_kcore_hdr_t) &&
+	    cpup->newmagic == SPARC64_KCORE_NEWMAGIC) {
+		/*
+		 * new format: we have a list of 4 MB mappings
+		 */
+		ktlb = (struct cpu_kcore_4mbseg *)
+			((uintptr_t)kd->cpu_data + cpup->off4mbsegs);
+		for (i = 0; i < cpup->num4mbsegs; i++) {
+			uint64_t start = ktlb[i].va;
+			if (va < start || va >= start+PAGE_SIZE_4M)
+				continue;
+			*pa = ktlb[i].pa + va - start;
+			return (int)(start+PAGE_SIZE_4M - va);
+		}
 
-		vaddr = va - cpup->kernbase;
-		*pa = cpup->kphys + va;
-		return (4*1024*1024 - va);
+		if (cpup->numcpuinfos > 0) {
+			/* we have per-CPU mapping info */
+			uint64_t start, base;
+
+			base = cpup->cpubase - 32*1024;
+			if (va >= base && va < (base + cpup->percpusz)) {
+				start = va - base;
+				*pa = cpup->cpusp
+				    + cpup->thiscpu*cpup->percpusz
+				    + start;
+				return cpup->percpusz - start;
+			}
+		}
+	} else {
+		/*
+		 * old format: just a textbase/size and database/size
+		 */
+		if (va > cpup->ktextbase && va < 
+		    (cpup->ktextbase + cpup->ktextsz)) {
+			u_long vaddr;
+
+			vaddr = va - cpup->ktextbase;
+			*pa = cpup->ktextp + vaddr;
+			return (int)(cpup->ktextsz - vaddr);
+		}
+		if (va > cpup->kdatabase && va < 
+		    (cpup->kdatabase + cpup->kdatasz)) {
+			u_long vaddr;
+
+			vaddr = va - cpup->kdatabase;
+			*pa = cpup->kdatap + vaddr;
+			return (int)(cpup->kdatasz - vaddr);
+		}
 	}
-#if 0
+
 	/*
-	 * Layout of CPU segment:
-	 *	cpu_kcore_hdr_t;
-	 *	[alignment]
-	 *	phys_ram_seg_t[cpup->nmemseg];
-	 *	segmap[cpup->nsegmap];
-	 *	ptes[cpup->npmegs];
+	 * Parse kernel page table.
 	 */
-	segmaps = (struct segmap *)((long)kd->cpu_data + cpup->segmapoffset);
-	ptes = (int *)((int)kd->cpu_data + cpup->pmegoffset);
-	nkreg = ((int)((-(unsigned)kernbase) / NBPRG));
-	nureg = 256 - nkreg;
-
-	vr = VA_VREG(va);
-	vs = VA_VSEG(va);
-
-	sp = &segmaps[(vr-nureg)*NSEGRG + vs];
-	if (sp->sg_npte == 0)
-		goto err;
-	if (sp->sg_pmeg == cpup->npmeg - 1) /* =seginval */
-		goto err;
-	pte = ptes[sp->sg_pmeg * nptesg + VA_VPG(va)];
-	if ((pte & PG_V) != 0) {
-		long p, off = VA_OFF(va);
-
-		p = (pte & PG_PFNUM) << pgshift;
-		*pa = p + off;
-		return (kd->nbpg - off);
+	pseg = (uint64_t *)(u_long)cpup->segmapoffset;
+	if (_kvm_pread(kd, kd->pmfd, &pdir, sizeof(pdir),
+		_kvm_pa2off(kd, (u_long)&pseg[va_to_seg(va)])) 
+		!= sizeof(pdir)) {
+		_kvm_syserr(kd, 0, "could not read L1 PTE");
+		goto lose;
 	}
-#endif
-err:
-	_kvm_err(kd, 0, "invalid address (%x)", va);
+
+	if (!pdir) {
+		_kvm_err(kd, 0, "invalid L1 PTE");
+		goto lose;
+	}
+
+	if (_kvm_pread(kd, kd->pmfd, &ptbl, sizeof(ptbl),
+		_kvm_pa2off(kd, (u_long)&pdir[va_to_dir(va)])) 
+		!= sizeof(ptbl)) {
+		_kvm_syserr(kd, 0, "could not read L2 PTE");
+		goto lose;
+	}
+
+	if (!ptbl) {
+		_kvm_err(kd, 0, "invalid L2 PTE");
+		goto lose;
+	}
+
+	if (_kvm_pread(kd, kd->pmfd, &data, sizeof(data),
+		_kvm_pa2off(kd, (u_long)&ptbl[va_to_pte(va)])) 
+		!= sizeof(data)) {
+		_kvm_syserr(kd, 0, "could not read TTE");
+		goto lose;
+	}
+
+	if (data >= 0) {
+		_kvm_err(kd, 0, "invalid L2 TTE");
+		goto lose;
+	}
+	
+	/* 
+	 * Calculate page offsets and things.
+	 *
+	 * XXXX -- We could support multiple page sizes.
+	 */
+	va = va & (kd->nbpg - 1);
+	data &= TLB_PA_MASK;
+	*pa = data + va;
+
+	/*
+	 * Parse and trnslate our TTE.
+	 */
+
+	return (int)(kd->nbpg - va);
+
+lose:
+	*pa = (u_long)-1;
+	_kvm_err(kd, 0, "invalid address (%lx)", va);
 	return (0);
 }
 
 
 /*
- * Translate a physical address to a file-offset in the crash-dump.
+ * Translate a physical address to a file-offset in the crash dump.
  */
 off_t
 _kvm_pa2off(kd, pa)
@@ -188,7 +261,7 @@ _kvm_pa2off(kd, pa)
 		off += mp->size;
 	}
 	if (nmem < 0) {
-		_kvm_err(kd, 0, "invalid address (%x)", pa);
+		_kvm_err(kd, 0, "invalid address (%lx)", pa);
 		return (-1);
 	}
 

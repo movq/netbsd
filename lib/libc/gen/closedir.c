@@ -1,4 +1,4 @@
-/*	$NetBSD: closedir.c,v 1.10 2000/01/22 22:19:09 mycroft Exp $	*/
+/*	$NetBSD: closedir.c,v 1.15 2006/05/17 20:36:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,11 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)closedir.c	8.1 (Berkeley) 6/10/93";
 #else
-__RCSID("$NetBSD: closedir.c,v 1.10 2000/01/22 22:19:09 mycroft Exp $");
+__RCSID("$NetBSD: closedir.c,v 1.15 2006/05/17 20:36:50 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
+#include "reentrant.h"
+#include "extern.h"
 #include <sys/types.h>
 
 #include <assert.h>
@@ -50,6 +48,8 @@ __RCSID("$NetBSD: closedir.c,v 1.10 2000/01/22 22:19:09 mycroft Exp $");
 #include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+#include "dirent_private.h"
 
 #ifdef __weak_alias
 __weak_alias(closedir,_closedir)
@@ -59,18 +59,36 @@ __weak_alias(closedir,_closedir)
  * close a directory.
  */
 int
-closedir(dirp)
-	DIR *dirp;
+closedir(DIR *dirp)
 {
 	int fd;
+	struct dirpos *poslist;
 
 	_DIAGASSERT(dirp != NULL);
 
-	seekdir(dirp, dirp->dd_rewind);	/* free seekdir storage */
+#ifdef _REENTRANT
+	if (__isthreaded)
+		mutex_lock((mutex_t *)dirp->dd_lock);
+#endif
 	fd = dirp->dd_fd;
 	dirp->dd_fd = -1;
 	dirp->dd_loc = 0;
-	free((void *)dirp->dd_buf);
+	free(dirp->dd_buf);
+
+	/* free seekdir/telldir storage */
+	for (poslist = dirp->dd_internal; poslist; ) {
+		struct dirpos *nextpos = poslist->dp_next;
+		free(poslist);
+		poslist = nextpos;
+	}
+
+#ifdef _REENTRANT
+	if (__isthreaded) {
+		mutex_unlock((mutex_t *)dirp->dd_lock);
+		mutex_destroy((mutex_t *)dirp->dd_lock);
+		free(dirp->dd_lock);
+	}
+#endif
 	free((void *)dirp);
 	return(close(fd));
 }

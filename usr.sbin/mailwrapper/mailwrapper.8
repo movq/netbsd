@@ -1,4 +1,4 @@
-.\"	$NetBSD: mailwrapper.8,v 1.6 1999/03/25 16:40:17 is Exp $
+.\"	$NetBSD: mailwrapper.8,v 1.11 2002/02/08 01:38:50 ross Exp $
 .\"
 .\" Copyright (c) 1998
 .\" 	Perry E. Metzger.  All rights reserved.
@@ -75,7 +75,7 @@ is
 .Dq mailq
 or
 .Dq newaliases
-and behaves appropriately. Typically, replacement MTAs provide similar 
+and behaves appropriately. Typically, replacement MTAs provide similar
 functionality, either through a program that also switches behavior
 based on calling name, or through a set of programs that provide
 similar functionality.
@@ -83,13 +83,13 @@ similar functionality.
 Although having replacement programs that plug replace
 .Xr sendmail 8
 helps in installing alternative MTAs, it essentially makes the
-configuration of the system depend on hard installing new programs in
+configuration of the system depend on hand installing new programs in
 .Pa /usr .
 This leads to configuration problems for many administrators, since
 they may wish to install a new MTA without altering the system
 provided
 .Pa /usr .
-(This may be, for example, to avoid having upgrade problems when a new 
+(This may be, for example, to avoid having upgrade problems when a new
 version of the system is installed over the old.)
 They may also have a shared
 .Pa /usr
@@ -107,35 +107,35 @@ and to invoke an appropriate MTA instead of
 based on configuration information placed in
 .Pa /etc/mailer.conf .
 This permits the administrator to configure which MTA is to be invoked on
-the system at run time. 
+the system at run time.
+.Sh EXIT STATUS
+.Nm
+exits 0 on success, and \*[Gt]0 if an error occurs.
 .Sh FILES
 Configuration for
 .Nm
 is kept in
 .Pa /etc/mailer.conf .
-.Pa /usr/sbin/sendmail 
+.Pa /usr/sbin/sendmail
 is typically set up as a symlink to
 .Nm
 which is not usually invoked on its own.
 .Sh DIAGNOSTICS
 .Nm
-will return an error value and print a diagnostic if its configuration 
-file is missing or malformed, or does not contain a mapping for the
-name under which
-.Nm
-was invoked.
+will print a diagnostic if its configuration file is missing or malformed,
+or does not contain a mapping for the name under which it was invoked.
 .Sh SEE ALSO
 .Xr mail 1 ,
 .Xr mailq 1 ,
-.Xr mailer.conf 5 ,
 .Xr newaliases 1 ,
-.Xr sendmail 8 .
+.Xr mailer.conf 5 ,
+.Xr sendmail 8
 .Sh HISTORY
 .Nm
 appeared in
 .Nx 1.4 .
 .Sh AUTHORS
-Perry E. Metzger <perry@piermont.com>
+.An Perry E. Metzger Aq perry@piermont.com
 .Sh BUGS
 The entire reason this program exists is a crock. Instead, a command
 for how to submit mail should be standardized, and all the "behave

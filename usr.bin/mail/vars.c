@@ -1,4 +1,4 @@
-/*	$NetBSD: vars.c,v 1.6 1998/10/08 17:36:56 wsanchez Exp $	*/
+/*	$NetBSD: vars.c,v 1.18 2007/10/27 15:14:51 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,11 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)vars.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: vars.c,v 1.6 1998/10/08 17:36:56 wsanchez Exp $");
+__RCSID("$NetBSD: vars.c,v 1.18 2007/10/27 15:14:51 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include "rcv.h"
+#include <util.h>
+
 #include "extern.h"
 
 /*
@@ -52,36 +50,12 @@ __RCSID("$NetBSD: vars.c,v 1.6 1998/10/08 17:36:56 wsanchez Exp $");
  */
 
 /*
- * Assign a value to a variable.
- */
-void
-assign(name, value)
-	char name[], value[];
-{
-	struct var *vp;
-	int h;
-
-	h = hash(name);
-	vp = lookup(name);
-	if (vp == NOVAR) {
-		vp = (struct var *) calloc(sizeof *vp, 1);
-		vp->v_name = vcopy(name);
-		vp->v_link = variables[h];
-		variables[h] = vp;
-	}
-	else
-                v_free(vp->v_value);
-	vp->v_value = vcopy(value);
-}
-
-/*
  * Free up a variable string.  We do not bother to allocate
  * strings whose value is "" since they are expected to be frequent.
  * Thus, we cannot free same!
  */
-void
-v_free(cp)
-	char *cp;
+PUBLIC void
+v_free(char *cp)
 {
 	if (*cp)
 		free(cp);
@@ -91,99 +65,26 @@ v_free(cp)
  * Copy a variable value into permanent (ie, not collected after each
  * command) space.  Do not bother to alloc space for ""
  */
-
-char *
-vcopy(str)
-	char str[];
+PUBLIC char *
+vcopy(const char str[])
 {
 	char *new;
-	unsigned len;
+	size_t len;
 
 	if (*str == '\0')
-		return "";
+		return estrdup("");
 	len = strlen(str) + 1;
-	if ((new = malloc(len)) == NULL)
-		errx(1, "Out of memory");
-	memmove(new, str, (int) len);
+	new = emalloc(len);
+	(void)memmove(new, str, len);
 	return new;
-}
-
-/*
- * Get the value of a variable and return it.
- * Look in the environment if its not available locally.
- */
-
-char *
-value(name)
-	char name[];
-{
-	struct var *vp;
-
-	if ((vp = lookup(name)) == NOVAR)
-		return(getenv(name));
-	return(vp->v_value);
-}
-
-/*
- * Locate a variable and return its variable
- * node.
- */
-
-struct var *
-lookup(name)
-	char name[];
-{
-	struct var *vp;
-
-	for (vp = variables[hash(name)]; vp != NOVAR; vp = vp->v_link)
-		if (*vp->v_name == *name && equal(vp->v_name, name))
-			return(vp);
-	return(NOVAR);
-}
-
-/*
- * Locate a group name and return it.
- */
-
-struct grouphead *
-findgroup(name)
-	char name[];
-{
-	struct grouphead *gh;
-
-	for (gh = groups[hash(name)]; gh != NOGRP; gh = gh->g_link)
-		if (*gh->g_name == *name && equal(gh->g_name, name))
-			return(gh);
-	return(NOGRP);
-}
-
-/*
- * Print a group out on stdout
- */
-void
-printgroup(name)
-	char name[];
-{
-	struct grouphead *gh;
-	struct group *gp;
-
-	if ((gh = findgroup(name)) == NOGRP) {
-		printf("\"%s\": not a group\n", name);
-		return;
-	}
-	printf("%s\t", gh->g_name);
-	for (gp = gh->g_list; gp != NOGE; gp = gp->ge_link)
-		printf(" %s", gp->ge_name);
-	putchar('\n');
 }
 
 /*
  * Hash the passed string and return an index into
  * the variable or group hash table.
  */
-int
-hash(name)
-	char *name;
+PUBLIC int
+hash(const char *name)
 {
 	int h = 0;
 
@@ -193,5 +94,89 @@ hash(name)
 	}
 	if (h < 0 && (h = -h) < 0)
 		h = 0;
-	return (h % HSHSIZE);
+	return h % HSHSIZE;
+}
+
+/*
+ * Locate a variable and return its variable
+ * node.
+ */
+PUBLIC struct var *
+lookup(const char name[])
+{
+	struct var *vp;
+
+	for (vp = variables[hash(name)]; vp != NULL; vp = vp->v_link)
+		if (*vp->v_name == *name && equal(vp->v_name, name))
+			return vp;
+	return NULL;
+}
+
+/*
+ * Assign a value to a variable.
+ */
+PUBLIC void
+assign(const char name[], const char values[])
+{
+	struct var *vp;
+	int h;
+
+	h = hash(name);
+	vp = lookup(name);
+	if (vp == NULL) {
+		vp = ecalloc(1, sizeof(*vp));
+		vp->v_name = vcopy(name);
+		vp->v_link = variables[h];
+		variables[h] = vp;
+	}
+	else
+                v_free(vp->v_value);
+	vp->v_value = vcopy(values);
+}
+
+/*
+ * Get the value of a variable and return it.
+ * Look in the environment if its not available locally.
+ */
+PUBLIC char *
+value(const char name[])
+{
+	struct var *vp;
+
+	if ((vp = lookup(name)) == NULL)
+		return getenv(name);
+	return vp->v_value;
+}
+
+/*
+ * Locate a group name and return it.
+ */
+PUBLIC struct grouphead *
+findgroup(const char name[])
+{
+	struct grouphead *gh;
+
+	for (gh = groups[hash(name)]; gh != NULL; gh = gh->g_link)
+		if (*gh->g_name == *name && equal(gh->g_name, name))
+			return gh;
+	return NULL;
+}
+
+/*
+ * Print a group out on stdout
+ */
+PUBLIC void
+printgroup(const char name[])
+{
+	struct grouphead *gh;
+	struct group *gp;
+
+	if ((gh = findgroup(name)) == NULL) {
+		(void)printf("\"%s\": not a group\n", name);
+		return;
+	}
+	(void)printf("%s\t", gh->g_name);
+	for (gp = gh->g_list; gp != NULL; gp = gp->ge_link)
+		(void)printf(" %s", gp->ge_name);
+	(void)putchar('\n');
 }

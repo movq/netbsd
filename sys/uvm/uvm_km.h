@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_km.h,v 1.9 1999/06/21 17:25:11 thorpej Exp $	*/
+/*	$NetBSD: uvm_km.h,v 1.17.54.1 2009/04/19 15:43:14 snj Exp $	*/
 
 /*
  *
@@ -47,9 +47,15 @@
  * prototypes
  */
 
-void uvm_km_init __P((vaddr_t, vaddr_t));
-void uvm_km_pgremove __P((struct uvm_object *, vaddr_t, vaddr_t));
-void uvm_km_pgremove_intrsafe __P((struct uvm_object *, vaddr_t, vaddr_t));
+void uvm_km_init(vaddr_t, vaddr_t);
+void uvm_km_pgremove(vaddr_t, vaddr_t);
+void uvm_km_pgremove_intrsafe(struct vm_map *, vaddr_t, vaddr_t);
+#if defined(DEBUG)
+void uvm_km_check_empty(struct vm_map *, vaddr_t, vaddr_t);
+#else
+#define	uvm_km_check_empty(a, b, c)	/* nothing */
+#endif /* defined(DEBUG) */
+void uvm_km_va_drain(struct vm_map *, uvm_flag_t);
 
 #endif /* _KERNEL */
 

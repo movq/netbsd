@@ -1,4 +1,4 @@
-/*	$NetBSD: os.h,v 1.3 1997/10/16 23:24:53 lukem Exp $	*/
+/*	$NetBSD: os.h,v 1.5 2003/08/18 05:39:52 itojun Exp $	*/
 
 /*
  * Copyright (c) 1994-95 Mats O Jansson.  All rights reserved.
@@ -28,7 +28,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$NetBSD: os.h,v 1.3 1997/10/16 23:24:53 lukem Exp $
+ *	$NetBSD: os.h,v 1.5 2003/08/18 05:39:52 itojun Exp $
  *
  */
 
@@ -55,7 +55,8 @@
 #include <syslog.h>
 #include <time.h>
 #include <unistd.h>
+#include <ifaddrs.h>
 
 #define  DEV_NEW_CONF
 
-#endif _OS_H_
+#endif /* _OS_H_ */

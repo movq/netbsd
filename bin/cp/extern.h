@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.5 1998/10/08 17:43:24 wsanchez Exp $	*/
+/* $NetBSD: extern.h,v 1.15 2006/07/16 16:22:24 jschauma Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,25 +31,30 @@
  *	@(#)extern.h	8.2 (Berkeley) 4/1/94
  */
 
+#ifndef _EXTERN_H_
+#define _EXTERN_H_
+
 typedef struct {
 	char *p_end;			/* pointer to NULL at end of path */
-	char *target_end;               /* pointer to end of target base */
+	char *target_end;		/* pointer to end of target base */
 	char p_path[MAXPATHLEN + 1];	/* pointer to the start of a path */
 } PATH_T;
 
 extern PATH_T to;
 extern uid_t myuid;
-extern int iflag, pflag, fflag;
+extern int Rflag, rflag, Hflag, Lflag, Pflag, fflag, iflag, pflag, Nflag;
 extern mode_t myumask;
 
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int	copy_fifo __P((struct stat *, int));
-int	copy_file __P((FTSENT *, int));
-int	copy_link __P((FTSENT *, int));
-int	copy_special __P((struct stat *, int));
-int	set_utimes __P((const char *, struct stat *));
-int	setfile __P((struct stat *, int));
-void	usage __P((void));
+int	copy_fifo(struct stat *, int);
+int	copy_file(FTSENT *, int);
+int	copy_link(FTSENT *, int);
+int	copy_special(struct stat *, int);
+int	set_utimes(const char *, struct stat *);
+int	setfile(struct stat *, int);
+void	usage(void) __attribute__((__noreturn__));
 __END_DECLS
+
+#endif /* !_EXTERN_H_ */

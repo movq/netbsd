@@ -1,4 +1,4 @@
-.\"	$NetBSD: mopd.8,v 1.3 1997/10/16 23:25:16 lukem Exp $
+.\"	$NetBSD: mopd.8,v 1.11 2004/04/23 02:58:30 simonb Exp $
 .\"
 .\" Copyright (c) 1993-96 Mats O Jansson.  All rights reserved.
 .\"
@@ -27,34 +27,45 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd September 24, 1995
+.Dd January 23, 2004
 .Dt MOPD 8
 .Sh NAME
 .Nm mopd
-.Nd MOP Loader Daemon
+.Nd Maintenance Operations Protocol (MOP) Loader Daemon
 .Sh SYNOPSIS
 .Nm
 .Op Fl adf
+.Op Fl s Ar mopdir
 .Op Ar interface
+.Op Ar ...
 .Sh DESCRIPTION
 .Nm
-services MOP Load requests on the Ethernet connected to
+services
+.Tn DEC
+Maintenance Operations Protocol
+.Pq Tn MOP
+Load requests on the Ethernet connected to
 .Ar interface
 or all interfaces if
-.Sq Fl a
-is given.
+.Fl a
+option is given.
+.Pp
 In a load request received by
 .Nm
-a filename can be given. This is the normal case for e.g. terminal servers.
-If a filename isn't given
+a filename can be given by the client.
+This is the normal case for terminal servers.
+If a filename isn't in the client load request
 .Nm
 must know what image to load.
 .Pp
-Upon receiving a request, 
+Upon receiving a request,
 .Nm
 checks if the requested file exists in
-.Pa /tftpboot/mop , 
-the filename is normaly uppercase and with an extension of
+.Pa /tftpboot/mop
+(unless the
+.Fl s
+option is given, see below) the filename is normally uppercase and with an
+extension of
 .Pa .SYS .
 If the filename isn't given, the ethernet address of the target is used as
 filename, e.g.
@@ -62,48 +73,60 @@ filename, e.g.
 and it might be a soft link to another file.
 .Pp
 .Nm
-supports two kinds of files. The first type that is check is if the file is
-in
+supports two kinds of files.
+The first type that is check is if the file is in
 .Xr a.out 5
-format. If not, a couple of Digital's formats are checked.
+format.
+If not, a couple of Digital's formats are checked.
 .Pp
-In normal operation, 
+In normal operation,
 .Nm
-forks a copy of itself and runs in
-the background.  Anomalies and errors are reported via 
+forks a copy of itself and runs in the background.
+Anomalies and errors are reported via
 .Xr syslog 3 .
 .Sh OPTIONS
 .Bl -tag -width indent
 .It Fl a
 Listen on all the Ethernets attached to the system.
-If 
-.Sq Fl a 
+If
+.Fl a
 is omitted, an interface must be specified.
 .It Fl d
-Run in debug mode, with all the output to stdout. The process will run in
-the foreground.
+Run in debug mode, with all the output to stdout.
+The process will run in the foreground.
 .It Fl f
-Run in the foreground. 
+Run in the foreground.
+.It Fl s
+Change the directory to look for files in from
+.Pa /tftpboot/mop
+to
+.Ar mopdir .
 .El
 .Sh FILES
 .Bl -tag -width Pa -compact
 .It Pa /tftpboot/mop
 .El
+.Sh NOTES
+.Nm
+automatically appends an upper case
+.Pa .SYS
+to the filename provided by the client.
+The typical client sends the requested file name in upper case.
 .Sh SEE ALSO
-.Xr bpf 4 ,
-.Xr mopa.out 1 ,
 .Xr mopchk 1 ,
+.Xr mopcopy 1 ,
 .Xr mopprobe 1 ,
-.Xr moptrace 1 
-.Rs 
-DECnet Digital Network Architecture Phase IV, 
+.Xr moptrace 1 ,
+.Xr bpf 4
+.Rs
+DECnet Digital Network Architecture Phase IV,
 .%R Maintenance Operations Functional Specification V3.0.0
 .%N AA-X436A-TK
 .Re
-.Rs 
-DECnet Digital Network Architecture, 
+.Rs
+DECnet Digital Network Architecture,
 .%R Maintenance Operations Protocol Functional Specification V4.0.0
 .%N EK-DNA11-FS-001
 .Re
 .Sh AUTHORS
-Mats O Jansson (moj@stacken.kth.se).
+.An Mats O Jansson Aq moj@stacken.kth.se

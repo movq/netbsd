@@ -1,4 +1,4 @@
-/*	$NetBSD: menus.mc,v 1.9 1998/07/16 07:08:26 phil Exp $	*/
+/*	$NetBSD: menus.mc,v 1.11 2004/09/17 18:16:31 wrstuden Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -75,8 +75,11 @@ menu root, title "  Main Menu of Test System", x=10;
 		sub menu scrollit2
 	;
 	option  "Big non-scrollable menu, bombs on small screens",
-		sub menu  bigscroll
+		sub menu bigscroll
 	;
+	option  "A menu with no shortcuts",
+		sub menu noshort
+	; 
 	option  "A dynamic menu ...",
 		action { do_dynamic (); }
 	;
@@ -176,7 +179,7 @@ menu submenu, title "  submenu test";
 menu upperright, title "upper right", y=2, x=60, no exit;
 	option  "Just Exit!", exit;
 
-menu lowerleft, title "lower left", y=20, x=2, no exit;
+menu lowerleft, title "lower left", y=19, x=2, no exit;
 	option  "Just Exit!", exit;
 
 menu middle, no box;
@@ -184,6 +187,11 @@ menu middle, no box;
 
 menu nextmenu, title "  A next window! ? for comments", no exit;
 	option "Just Exit!:", exit;
+
+menu noshort, title "  No shortcut characters!", no shortcut;
+	option "first", action {};
+	option "second", action {};
+	option "third", action {};
 
 menu scrollit, scrollable, h=4, title "  Scrollable Menu";
 	option "option 1", action {};

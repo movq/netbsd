@@ -1,6 +1,6 @@
-/*	$NetBSD: buf.c,v 1.19 1998/11/04 13:41:32 christos Exp $	*/
+/*	$NetBSD: buf.c,v 1.26 2006/03/17 14:37:14 rumble Exp $	*/
 
-/* buf.c: This file contains the scratch-file buffer rountines for the
+/* buf.c: This file contains the scratch-file buffer routines for the
    ed line editor. */
 /*-
  * Copyright (c) 1993 Andrew Moore, Talke Studio.
@@ -33,13 +33,15 @@
 #if 0
 static char *rcsid = "@(#)buf.c,v 1.4 1994/02/01 00:34:35 alm Exp";
 #else
-__RCSID("$NetBSD: buf.c,v 1.19 1998/11/04 13:41:32 christos Exp $");
+__RCSID("$NetBSD: buf.c,v 1.26 2006/03/17 14:37:14 rumble Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/file.h>
 #include <sys/stat.h>
 
+#include <paths.h>
+#include <stdio.h>
 #include <err.h>
 
 #include "ed.h"
@@ -53,8 +55,7 @@ line_t buffer_head;			/* incore buffer */
 /* get_sbuf_line: get a line of text from the scratch file; return pointer
    to the text */
 char *
-get_sbuf_line(lp)
-	line_t *lp;
+get_sbuf_line(line_t *lp)
 {
 	static char *sfbuf = NULL;	/* buffer */
 	static int sfbufsz = 0;		/* buffer size */
@@ -89,8 +90,7 @@ get_sbuf_line(lp)
 /* put_sbuf_line: write a line of text to the scratch file and add a line node
    to the editor buffer;  return a pointer to the end of the text */
 char *
-put_sbuf_line(cs)
-	char *cs;
+put_sbuf_line(char *cs)
 {
 	line_t *lp;
 	int len, ct;
@@ -106,6 +106,7 @@ put_sbuf_line(cs)
 		;
 	if (s - cs >= LINECHARS) {
 		sprintf(errmsg, "line too long");
+		free(lp);
 		return NULL;
 	}
 	len = s - cs;
@@ -114,6 +115,7 @@ put_sbuf_line(cs)
 		if (fseek(sfp, 0L, SEEK_END) < 0) {
 			fprintf(stderr, "%s\n", strerror(errno));
 			sprintf(errmsg, "cannot seek temp file");
+			free(lp);
 			return NULL;
 		}
 		sfseek = ftell(sfp);
@@ -124,6 +126,7 @@ put_sbuf_line(cs)
 		sfseek = -1;
 		fprintf(stderr, "%s\n", strerror(errno));
 		sprintf(errmsg, "cannot write temp file");
+		free(lp);
 		return NULL;
 	}
 	lp->len = len;
@@ -136,12 +139,11 @@ put_sbuf_line(cs)
 
 /* add_line_node: add a line node in the editor buffer after the current line */
 void
-add_line_node(lp)
-	line_t *lp;
+add_line_node(line_t *lp)
 {
 	line_t *cp;
 
-	cp = get_addressed_line_node(current_addr);				/* this get_addressed_line_node last! */
+	cp = get_addressed_line_node(current_addr); /* this get_addressed_line_node last! */
 	INSQUE(lp, cp);
 	addr_last++;
 	current_addr++;
@@ -150,8 +152,7 @@ add_line_node(lp)
 
 /* get_line_node_addr: return line number of pointer */
 long
-get_line_node_addr(lp)
-	line_t *lp;
+get_line_node_addr(line_t *lp)
 {
 	line_t *cp = &buffer_head;
 	long n = 0;
@@ -168,8 +169,7 @@ get_line_node_addr(lp)
 
 /* get_addressed_line_node: return pointer to a line node in the editor buffer */
 line_t *
-get_addressed_line_node(n)
-	long n;
+get_addressed_line_node(long n)
 {
 	static line_t *lp = &buffer_head;
 	static long on = 0;
@@ -199,20 +199,35 @@ get_addressed_line_node(n)
 }
 
 
-extern int newline_added;
-
-char sfn[15] = "";				/* scratch file name */
+char *sfn = NULL;				/* scratch file name */
 
 /* open_sbuf: open scratch file */
 int
-open_sbuf()
+open_sbuf(void)
 {
 	int u, fd;
+	const char *tmp;
+	size_t s;
 
 	isbinary = newline_added = 0;
 	fd = -1;
 	u = umask(077);
-	strcpy(sfn, "/tmp/ed.XXXXXX");
+
+	if ((tmp = getenv("TMPDIR")) == NULL)
+		tmp = _PATH_TMP;
+	
+	if ((s = strlen(tmp)) == 0 || tmp[s - 1] == '/')
+		(void)asprintf(&sfn, "%sed.XXXXXX", tmp);
+	else
+		(void)asprintf(&sfn, "%s/ed.XXXXXX", tmp);
+	if (sfn == NULL) {
+		warn(NULL);
+		sprintf(errmsg, "could not allocate memory");
+		umask(u);
+		return ERR;
+	}
+		
+
 	if ((fd = mkstemp(sfn)) == -1 || (sfp = fdopen(fd, "w+")) == NULL) {
 		if (fd != -1)
 			close(fd);
@@ -228,7 +243,7 @@ open_sbuf()
 
 /* close_sbuf: close scratch file */
 int
-close_sbuf()
+close_sbuf(void)
 {
 	if (sfp) {
 		if (fclose(sfp) < 0) {
@@ -237,7 +252,11 @@ close_sbuf()
 			return ERR;
 		}
 		sfp = NULL;
-		unlink(sfn);
+		if (sfn) {
+			unlink(sfn);
+			free(sfn);
+			sfn = NULL;
+		}
 	}
 	sfseek = seek_write = 0;
 	return 0;
@@ -246,12 +265,15 @@ close_sbuf()
 
 /* quit: remove_lines scratch file and exit */
 void
-quit(n)
-	int n;
+quit(int n)
 {
 	if (sfp) {
 		fclose(sfp);
-		unlink(sfn);
+		if (sfn) {
+			unlink(sfn);
+			free(sfn);
+			sfn = NULL;
+		}
 	}
 	exit(n);
 	/* NOTREACHED */
@@ -262,7 +284,7 @@ unsigned char ctab[256];		/* character translation table */
 
 /* init_buffers: open scratch buffer; initialize line queue */
 void
-init_buffers()
+init_buffers(void)
 {
 	int i = 0;
 
@@ -283,11 +305,7 @@ init_buffers()
 
 /* translit_text: translate characters in a string */
 char *
-translit_text(s, len, from, to)
-	char *s;
-	int len;
-	int from;
-	int to;
+translit_text(char *s, int len, int from, int to)
 {
 	static int i = 0;
 

@@ -1,25 +1,30 @@
-#	$NetBSD: Makefile,v 1.20 1999/09/16 09:12:06 fvdl Exp $
+#	$NetBSD: Makefile,v 1.33 2008/10/25 22:27:36 apb Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/8/93
 
-FILES=	acronyms airport ascii birthtoken bsd-family-tree country domains \
+NOOBJ=	# defined
+
+FILES=	NetBSD.el acronyms acronyms.comp airport ascii \
+	birthtoken bsd-family-tree \
+	country domains \
 	eqnchar flowers indent.pro inter.phone language man.template \
-	mdoc.template na.phone operator style zipcodes
+	mdoc.template na.phone na.postal operator style zipcodes
 FILESDIR=${BINDIR}/misc
-MKOBJ=	no
 
 
 # According to iana@ISI.EDU, the URL below is the authoritative list
 # distributed by the ISO 3166 Maintenance Agency.
+DOMAIN_URL=	http://www.iana.org/root-whois/index.html 
 update-domains:
-	ftp -o /tmp/domains.$$$$ http://www.iana.org/country-codes.txt ; \
 	( \
-	echo '# $$NetBSD: Makefile,v 1.20 1999/09/16 09:12:06 fvdl Exp $$' ;  \
-	echo '# ISO 3166 country codes, from http://www.iana.org/country-codes.txt' ;  \
-	echo '# '`grep ^Latest /tmp/domains.$$$$` ;  \
-	echo '#' ;  \
-	perl -ane 'print lc(join(" ", $$F[$$#F-2], @F[0..$$#F-3])),"\n" if /^[A-Z]{2,}\s*.*\d{3}\s*$$/;' </tmp/domains.$$$$ \
-	) >domains ; \
-	rm /tmp/domains.$$$$
-	
+	  echo '# $$''NetBSD''$$' ;  \
+	  echo '# ISO 3166 country codes, from ${DOMAIN_URL}' ; \
+	  echo '# Last update:' `date` ; \
+	  echo '#' ; \
+	  ftp -o - ${DOMAIN_URL} \
+	  | ${TOOL_SED} -n -f ${.CURDIR}/domains.sed \
+	 ) > domains ; \
+
+update-na.phone:
+	< /dev/null ${TOOL_AWK} -f nanpa.awk > na.phone
 
 .include <bsd.prog.mk>

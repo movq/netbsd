@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.2 2000/02/05 00:13:25 cgd Exp $	*/
+/*	$NetBSD: types.h,v 1.27 2008/01/20 18:09:09 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,19 +31,21 @@
  *	@(#)types.h	7.5 (Berkeley) 3/9/91
  */
 
-#ifndef	_MACHTYPES_H_
-#define	_MACHTYPES_H_
+#ifndef	_SH3_TYPES_H_
+#define	_SH3_TYPES_H_
 
 #include <sys/cdefs.h>
+#include <sys/featuretest.h>
+#include <sh3/int_types.h>
 
 #if defined(_KERNEL)
 typedef struct label_t {
-	int val[6];
+	int val[9];
 } label_t;
 #endif
 
 /* NB: This should probably be if defined(_KERNEL) */
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 typedef	unsigned long	vm_offset_t;
 typedef	unsigned long	vm_size_t;
 
@@ -57,24 +55,20 @@ typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
 #endif
 
-/*
- * Basic integral types.  Omit the typedef if
- * not possible for a machine/compiler combination.
- */
-#define	__BIT_TYPES_DEFINED__
-typedef	__signed char		   int8_t;
-typedef	unsigned char		 u_int8_t;
-typedef	short			  int16_t;
-typedef	unsigned short		u_int16_t;
-typedef	int			  int32_t;
-typedef	unsigned int		u_int32_t;
-/* LONGLONG */
-typedef	long long		  int64_t;
-/* LONGLONG */
-typedef	unsigned long long	u_int64_t;
+typedef int		register_t;
 
-typedef int32_t			register_t;
+typedef	volatile unsigned char __cpu_simple_lock_t;
 
-#define __BROKEN_CONFIG_UNIT_USAGE
+#define	__SIMPLELOCK_LOCKED	0x80
+#define	__SIMPLELOCK_UNLOCKED	0
 
-#endif	/* _MACHTYPES_H_ */
+#define	__SWAP_BROKEN
+
+#define	__HAVE_AST_PERPROC
+#define	__HAVE_SYSCALL_INTERN
+
+#if defined(_KERNEL)
+#define	__HAVE_RAS
+#endif
+
+#endif	/* !_SH3_TYPES_H_ */

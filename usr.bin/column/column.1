@@ -1,4 +1,4 @@
-.\"	$NetBSD: column.1,v 1.4 1997/10/18 13:02:59 lukem Exp $
+.\"	$NetBSD: column.1,v 1.8 2008/03/09 18:18:42 dholland Exp $
 .\"
 .\" Copyright (c) 1989, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     @(#)column.1	8.1 (Berkeley) 6/6/93
 .\"
-.Dd June 6, 1993
+.Dd March 9, 2008
 .Os
 .Dt COLUMN 1
 .Sh NAME
@@ -77,7 +73,7 @@ Fill columns before filling rows.
 .El
 .Pp
 .Nm
-exits 0 on success, >0 if an error occurred.
+exits 0 on success, \*[Gt]0 if an error occurred.
 .Sh ENVIRONMENT
 .Bl -tag -width COLUMNS
 .It Ev COLUMNS
@@ -87,7 +83,7 @@ is used to determine the size of
 the screen if no other information is available.
 .El
 .Sh EXAMPLES
-.Dl (printf \&"PERM LINKS OWNER SIZE MONTH DAY HH:MM/YEAR NAME\en\&"\ \&;\ \&\e
+.Dl (echo \&"PERM LINKS OWNER GROUP SIZE MONTH DAY HH:MM/YEAR NAME\&"\&;\ \&\e
 .Dl ls -l \&| sed 1d) \&| column -t
 .Sh SEE ALSO
 .Xr colrm 1 ,
@@ -97,5 +93,5 @@ the screen if no other information is available.
 .Sh HISTORY
 The
 .Nm
-command appeared in 
+command appeared in
 .Bx 4.3 Reno .

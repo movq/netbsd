@@ -1,4 +1,4 @@
-/*	$NetBSD: longname.c,v 1.9 1999/04/13 14:08:18 mrg Exp $	*/
+/*	$NetBSD: longname.c,v 1.16 2004/01/20 08:29:29 wiz Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,28 +34,55 @@
 #if 0
 static char sccsid[] = "@(#)longname.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: longname.c,v 1.9 1999/04/13 14:08:18 mrg Exp $");
+__RCSID("$NetBSD: longname.c,v 1.16 2004/01/20 08:29:29 wiz Exp $");
 #endif
 #endif				/* not lint */
 
 #include "curses.h"
+#include "curses_private.h"
 
 /*
- * longname --
+ * __longname --
  *	Fill in "def" with the long name of the terminal.
+ *      This is the original BSD version of longname(), modified to return
+ *	at most 128 characters.
  */
 char   *
-longname(bp, def)
-	char   *bp, *def;
+__longname(char *bp, char *def)
 {
-	char   *cp;
+	char   *cp, *last_bp;
+	int	i = 0;
 
-	while (*bp && *bp != ':' && *bp != '|')
-		bp++;
+	last_bp = NULL;
+	do {
+		while (*bp && *bp != ':' && *bp != '|')
+			bp++;
+		if (*bp == '|') {
+			last_bp = bp;
+			bp++;
+		}
+	} while (*bp && *bp != ':');
+
+	if (last_bp != NULL)
+		bp = last_bp;
+
 	if (*bp == '|') {
-		for (cp = def, ++bp; *bp && *bp != ':' && *bp != '|';)
+		for (cp = def, ++bp; *bp && *bp != ':' && *bp != '|' &&
+		    i < 127;)
 			*cp++ = *bp++;
+			i++;
 		*cp = '\0';
 	}
 	return (def);
+}
+
+/*
+ * longname --
+ *	Return pointer to the long name of the terminal.
+ *	This is the SUS version of longname()
+ */
+char	*
+longname(void)
+{
+	return (_cursesi_screen->ttytype);
 }

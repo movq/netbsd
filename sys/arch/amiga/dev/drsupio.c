@@ -1,4 +1,4 @@
-/*	$NetBSD: drsupio.c,v 1.8 2000/03/16 16:37:20 kleink Exp $ */
+/*	$NetBSD: drsupio.c,v 1.18 2008/04/28 20:23:12 martin Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: drsupio.c,v 1.18 2008/04/28 20:23:12 martin Exp $");
+
 /*
  * DraCo multi-io chip bus space stuff
  */
@@ -47,8 +43,9 @@
 #include <sys/systm.h>
 #include <sys/param.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <machine/bus.h>
-#include <machine/conf.h>
 
 #include <amiga/include/cpu.h>
 
@@ -62,20 +59,16 @@ struct drsupio_softc {
 	struct bus_space_tag sc_bst;
 };
 
-int drsupiomatch __P((struct device *, struct cfdata *, void *));
-void drsupioattach __P((struct device *, struct device *, void *));
-int drsupprint __P((void *auxp, const char *));
-void drlptintack __P((void *));
+int drsupiomatch(struct device *, struct cfdata *, void *);
+void drsupioattach(struct device *, struct device *, void *);
+int drsupprint(void *auxp, const char *);
+void drlptintack(void *);
 
-struct cfattach drsupio_ca = {
-	sizeof(struct drsupio_softc), drsupiomatch, drsupioattach
-};
+CFATTACH_DECL(drsupio, sizeof(struct drsupio_softc),
+    drsupiomatch, drsupioattach, NULL, NULL);
 
 int
-drsupiomatch(parent, cfp, auxp)
-	struct device *parent;
-	struct cfdata *cfp;
-	void *auxp;
+drsupiomatch(struct device *parent, struct cfdata *cfp, void *auxp)
 {
 	static int drsupio_matched = 0;
 
@@ -88,7 +81,7 @@ drsupiomatch(parent, cfp, auxp)
 }
 
 struct drsupio_devs {
-	char *name;
+	const char *name;
 	int off;
 	int arg;
 } drsupiodevs[] = {
@@ -101,9 +94,7 @@ struct drsupio_devs {
 };
 
 void
-drsupioattach(parent, self, auxp)
-	struct device *parent, *self;
-	void *auxp;
+drsupioattach(struct device *parent, struct device *self, void *auxp)
 {
 	struct drsupio_softc *drsc;
 	struct drsupio_devs  *drsd;
@@ -116,9 +107,9 @@ drsupioattach(parent, self, auxp)
 	if (parent)
 		printf("\n");
 
-	drsc->sc_bst.base = DRCCADDR + NBPG * DRSUPIOPG + 1;
+	drsc->sc_bst.base = DRCCADDR + PAGE_SIZE * DRSUPIOPG + 1;
 	drsc->sc_bst.absm = &amiga_bus_stride_4;
-	
+
 	supa.supio_iot = &drsc->sc_bst;
 	supa.supio_ipl = 5;
 
@@ -131,26 +122,23 @@ drsupioattach(parent, self, auxp)
 	}
 
 	drlptintack(0);
-	ioct = (struct drioct *)(DRCCADDR + NBPG * DRIOCTLPG);
+	ioct = (struct drioct *)(DRCCADDR + PAGE_SIZE * DRIOCTLPG);
 	ioct->io_status2 |= DRSTAT2_PARIRQENA;
 }
 
 void
-drlptintack(p)
-	void *p;
+drlptintack(void *p)
 {
 	struct drioct *ioct;
 
 	(void)p;
-	ioct = (struct drioct *)(DRCCADDR + NBPG * DRIOCTLPG);
+	ioct = (struct drioct *)(DRCCADDR + PAGE_SIZE * DRIOCTLPG);
 
 	ioct->io_parrst = 0;	/* any value works */
 }
 
 int
-drsupprint(auxp, pnp)
-	void *auxp;
-	const char *pnp;
+drsupprint(void *auxp, const char *pnp)
 {
 	struct supio_attach_args *supa;
 	supa = auxp;
@@ -158,7 +146,7 @@ drsupprint(auxp, pnp)
 	if (pnp == NULL)
 		return(QUIET);
 
-	printf("%s at %s port 0x%02x",
+	aprint_normal("%s at %s port 0x%02x",
 	    supa->supio_name, pnp, supa->supio_iobase);
 
 	return(UNCONF);

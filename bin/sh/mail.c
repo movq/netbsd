@@ -1,4 +1,4 @@
-/*	$NetBSD: mail.c,v 1.13 1999/07/09 03:05:50 christos Exp $	*/
+/*	$NetBSD: mail.c,v 1.16 2003/08/07 09:05:33 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)mail.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: mail.c,v 1.13 1999/07/09 03:05:50 christos Exp $");
+__RCSID("$NetBSD: mail.c,v 1.16 2003/08/07 09:05:33 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,6 +46,7 @@ __RCSID("$NetBSD: mail.c,v 1.13 1999/07/09 03:05:50 christos Exp $");
  */
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <stdlib.h>
 
 #include "shell.h"
 #include "exec.h"	/* defines padvance() */
@@ -75,8 +72,7 @@ STATIC time_t mailtime[MAXMBOXES];	/* times of mailboxes */
  */
 
 void
-chkmail(silent)
-	int silent;
+chkmail(int silent)
 {
 	int i;
 	const char *mpath;
@@ -90,7 +86,7 @@ chkmail(silent)
 	if (nmboxes == 0)
 		return;
 	setstackmark(&smark);
-	mpath = mpathset()? mpathval() : mailval();
+	mpath = mpathset() ? mpathval() : mailval();
 	for (i = 0 ; i < nmboxes ; i++) {
 		p = padvance(&mpath, nullstr);
 		if (p == NULL)
@@ -105,7 +101,7 @@ chkmail(silent)
 		if (stat(p, &statb) < 0)
 			statb.st_mtime = 0;
 		if (statb.st_mtime > mailtime[i] && ! silent) {
-			out2str(pathopt? pathopt : "you have mail");
+			out2str(pathopt ? pathopt : "you have mail");
 			out2c('\n');
 		}
 		mailtime[i] = statb.st_mtime;
@@ -113,7 +109,7 @@ chkmail(silent)
 		if (stat(p, &statb) < 0)
 			statb.st_size = 0;
 		if (statb.st_size > mailtime[i] && ! silent) {
-			out2str(pathopt? pathopt : "you have mail");
+			out2str(pathopt ? pathopt : "you have mail");
 			out2c('\n');
 		}
 		mailtime[i] = statb.st_size;

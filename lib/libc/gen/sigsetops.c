@@ -1,4 +1,4 @@
-/*	$NetBSD: sigsetops.c,v 1.13 1998/12/01 22:05:21 thorpej Exp $	*/
+/*	$NetBSD: sigsetops.c,v 1.15 2005/09/13 01:44:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,82 +36,11 @@
 #if 0
 static char sccsid[] = "@(#)sigsetops.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: sigsetops.c,v 1.13 1998/12/01 22:05:21 thorpej Exp $");
+__RCSID("$NetBSD: sigsetops.c,v 1.15 2005/09/13 01:44:09 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
-#define	__LIBC12_SOURCE__
+#define	_SIGINLINE
 
 #include <errno.h>
 #include <signal.h>
-
-#undef sigemptyset
-#undef sigfillset
-#undef sigaddset
-#undef sigdelset
-#undef sigismember
-
-__warn_references(sigaddset,
-    "warning: reference to compatibility sigaddset(); include <signal.h> for correct reference")
-__warn_references(sigdelset,
-    "warning: reference to compatibility sigdelset(); include <signal.h> for correct reference")
-__warn_references(sigemptyset,
-    "warning: reference to compatibility sigemptyset(); include <signal.h> for correct reference")
-__warn_references(sigfillset,
-    "warning: reference to compatibility sigfillset(); include <signal.h> for correct reference")
-__warn_references(sigismember,
-    "warning: reference to compatibility sigismember(); include <signal.h> for correct reference")
-
-int
-sigemptyset(set)
-	sigset13_t *set;
-{
-	*set = 0;
-	return (0);
-}
-
-int
-sigfillset(set)
-	sigset13_t *set;
-{
-	*set = ~(sigset13_t)0;
-	return (0);
-}
-
-int
-sigaddset(set, signo)
-	sigset13_t *set;
-	int signo;
-{
-	if (signo <= 0 || signo >= NSIG13) {
-		errno = EINVAL;
-		return -1;
-	}
-	*set |= __sigmask13(signo);
-	return (0);
-}
-
-int
-sigdelset(set, signo)
-	sigset13_t *set;
-	int signo;
-{
-	if (signo <= 0 || signo >= NSIG13) {
-		errno = EINVAL;
-		return -1;
-	}
-	*set &= ~__sigmask13(signo);
-	return (0);
-}
-
-int
-sigismember(set, signo)
-	const sigset13_t *set;
-	int signo;
-{
-	if (signo <= 0 || signo >= NSIG13) {
-		errno = EINVAL;
-		return -1;
-	}
-	return ((*set & __sigmask13(signo)) != 0);
-}

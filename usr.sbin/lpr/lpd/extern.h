@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.9 2000/02/24 06:33:48 itojun Exp $	*/
+/*	$NetBSD: extern.h,v 1.11 2003/08/07 11:25:27 agc Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -54,11 +50,11 @@ struct info {
 	struct winsize win;                     /* window info */
 }; 
 
-int        ksearch __P((char ***, struct info *));
-int        msearch __P((char ***, struct info *));
-void       printjob __P((void));
-void       recvjob __P((void));
-void       sttyclearflags __P((struct termios *tp, int flags));
-void       sttysetflags __P((struct termios *tp, int flags));
-void       sttyclearlflags __P((struct termios *tp, int flags));
-void       sttysetlflags __P((struct termios *tp, int flags));
+int        ksearch(char ***, struct info *);
+int        msearch(char ***, struct info *);
+void       printjob(void);
+void       recvjob(void);
+void       sttyclearflags(struct termios *tp, int flags);
+void       sttysetflags(struct termios *tp, int flags);
+void       sttyclearlflags(struct termios *tp, int flags);
+void       sttysetlflags(struct termios *tp, int flags);

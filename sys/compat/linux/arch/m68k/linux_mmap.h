@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_mmap.h,v 1.1 1998/12/15 19:25:40 itohy Exp $	*/
+/*	$NetBSD: linux_mmap.h,v 1.4 2008/04/28 20:23:42 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,7 +46,5 @@
 #define LINUX_MAP_EXECUTABLE	0x1000
 #define LINUX_MAP_LOCKED	0x2000
 #define LINUX_MAP_NORESERVE	0x4000
-
-#define LINUX_MAP_IGNMASK	0x7900
 
 #endif /* !_M68K_LINUX_MMAP_H */

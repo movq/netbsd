@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_interdecluster.c,v 1.4 2000/01/07 03:41:00 oster Exp $	*/
+/*	$NetBSD: rf_interdecluster.c,v 1.14 2006/11/16 01:33:23 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -32,8 +32,15 @@
  *
  ************************************************************/
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rf_interdecluster.c,v 1.14 2006/11/16 01:33:23 christos Exp $");
 
-#include "rf_types.h"
+#include "rf_archs.h"
+
+#if RF_INCLUDE_INTERDECLUSTER > 0
+
+#include <dev/raidframe/raidframevar.h>
+
 #include "rf_raid.h"
 #include "rf_interdecluster.h"
 #include "rf_dag.h"
@@ -54,7 +61,7 @@ typedef struct RF_InterdeclusterConfigInfo_s {
 	RF_SectorNum_t mirrorStripeOffset;
 }       RF_InterdeclusterConfigInfo_t;
 
-int 
+int
 rf_ConfigureInterDecluster(
     RF_ShutdownList_t ** listp,
     RF_Raid_t * raidPtr,
@@ -83,9 +90,6 @@ rf_ConfigureInterDecluster(
 		info->stripeIdentifier[i][1] = (i + 1 + tmp) % raidPtr->numCol;
 	}
 
-	/* no spare tables */
-	RF_ASSERT(raidPtr->numRow == 1);
-
 	/* fill in the remaining layout parameters */
 
 	/* total number of stripes should a multiple of 2*numCol: Each sparing
@@ -99,7 +103,6 @@ rf_ConfigureInterDecluster(
 	info->stripeUnitsPerSparingRegion = raidPtr->numCol * (raidPtr->numCol - 1);
 	info->mirrorStripeOffset = info->numSparingRegions * (raidPtr->numCol + 1);
 	layoutPtr->numStripe = info->numSparingRegions * info->stripeUnitsPerSparingRegion;
-	layoutPtr->bytesPerStripeUnit = layoutPtr->sectorsPerStripeUnit << raidPtr->logBytesPerSector;
 	layoutPtr->numDataCol = 1;
 	layoutPtr->dataSectorsPerStripe = layoutPtr->numDataCol * layoutPtr->sectorsPerStripeUnit;
 	layoutPtr->numParityCol = 1;
@@ -117,19 +120,19 @@ rf_ConfigureInterDecluster(
 	return (0);
 }
 
-int 
+int
 rf_GetDefaultNumFloatingReconBuffersInterDecluster(RF_Raid_t * raidPtr)
 {
 	return (30);
 }
 
-RF_HeadSepLimit_t 
+RF_HeadSepLimit_t
 rf_GetDefaultHeadSepLimitInterDecluster(RF_Raid_t * raidPtr)
 {
 	return (raidPtr->sectorsPerDisk);
 }
 
-RF_ReconUnitCount_t 
+RF_ReconUnitCount_t
 rf_GetNumSpareRUsInterDecluster(
     RF_Raid_t * raidPtr)
 {
@@ -140,11 +143,10 @@ rf_GetNumSpareRUsInterDecluster(
 	 * sparing region */
 }
 /* Maps to the primary copy of the data, i.e. the first mirror pair */
-void 
+void
 rf_MapSectorInterDecluster(
     RF_Raid_t * raidPtr,
     RF_RaidAddr_t raidSector,
-    RF_RowCol_t * row,
     RF_RowCol_t * col,
     RF_SectorNum_t * diskSector,
     int remap)
@@ -155,7 +157,6 @@ rf_MapSectorInterDecluster(
 	RF_StripeNum_t sparing_region_id, index_within_region;
 	int     col_before_remap;
 
-	*row = 0;
 	sparing_region_id = SUID / info->stripeUnitsPerSparingRegion;
 	index_within_region = SUID % info->stripeUnitsPerSparingRegion;
 	su_offset_into_disk = index_within_region % (raidPtr->numCol - 1);
@@ -163,7 +164,7 @@ rf_MapSectorInterDecluster(
 	col_before_remap = index_within_region / (raidPtr->numCol - 1);
 
 	if (!remap) {
-		*col = col_before_remap;;
+		*col = col_before_remap;
 		*diskSector = (su_offset_into_disk + ((raidPtr->numCol - 1) * sparing_region_id)) *
 		    raidPtr->Layout.sectorsPerStripeUnit;
 		*diskSector += (raidSector % raidPtr->Layout.sectorsPerStripeUnit);
@@ -179,11 +180,10 @@ rf_MapSectorInterDecluster(
 	}
 }
 /* Maps to the second copy of the mirror pair. */
-void 
+void
 rf_MapParityInterDecluster(
     RF_Raid_t * raidPtr,
     RF_RaidAddr_t raidSector,
-    RF_RowCol_t * row,
     RF_RowCol_t * col,
     RF_SectorNum_t * diskSector,
     int remap)
@@ -198,7 +198,6 @@ rf_MapParityInterDecluster(
 	mirror_su_offset_into_disk = index_within_region / raidPtr->numCol;
 	col_before_remap = (index_within_region + 1 + mirror_su_offset_into_disk) % raidPtr->numCol;
 
-	*row = 0;
 	if (!remap) {
 		*col = col_before_remap;
 		*diskSector = info->mirrorStripeOffset * raidPtr->Layout.sectorsPerStripeUnit;
@@ -217,12 +216,11 @@ rf_MapParityInterDecluster(
 	}
 }
 
-void 
+void
 rf_IdentifyStripeInterDecluster(
     RF_Raid_t * raidPtr,
     RF_RaidAddr_t addr,
-    RF_RowCol_t ** diskids,
-    RF_RowCol_t * outRow)
+    RF_RowCol_t ** diskids)
 {
 	RF_InterdeclusterConfigInfo_t *info = (RF_InterdeclusterConfigInfo_t *) raidPtr->Layout.layoutSpecificInfo;
 	RF_StripeNum_t SUID;
@@ -230,11 +228,10 @@ rf_IdentifyStripeInterDecluster(
 	SUID = addr / raidPtr->Layout.sectorsPerStripeUnit;
 	SUID = SUID % info->stripeUnitsPerSparingRegion;
 
-	*outRow = 0;
 	*diskids = info->stripeIdentifier[SUID];
 }
 
-void 
+void
 rf_MapSIDToPSIDInterDecluster(
     RF_RaidLayout_t * layoutPtr,
     RF_StripeNum_t stripeID,
@@ -253,7 +250,7 @@ rf_MapSIDToPSIDInterDecluster(
  *              createFunc - name of function to use to create the graph
  *****************************************************************************/
 
-void 
+void
 rf_RAIDIDagSelect(
     RF_Raid_t * raidPtr,
     RF_IoType_t type,
@@ -276,3 +273,4 @@ rf_RAIDIDagSelect(
 	} else
 		*createFunc = (RF_VoidFuncPtr) rf_CreateRaidOneWriteDAG;
 }
+#endif /* RF_INCLUDE_INTERDECLUSTER > 0 */

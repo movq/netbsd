@@ -1,7 +1,7 @@
-/*	$NetBSD: signal.c,v 1.3 1998/02/04 11:09:12 christos Exp $	*/
+/*	$NetBSD: signal.c,v 1.6 2004/09/01 01:46:56 chs Exp $	*/
 
 /*
- * Copyright (c) 1988 Mark Nudleman
+ * Copyright (c) 1988 Mark Nudelman
  * Copyright (c) 1988, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,7 +35,7 @@
 #if 0
 static char sccsid[] = "@(#)signal.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: signal.c,v 1.3 1998/02/04 11:09:12 christos Exp $");
+__RCSID("$NetBSD: signal.c,v 1.6 2004/09/01 01:46:56 chs Exp $");
 #endif
 #endif /* not lint */
 
@@ -193,7 +189,7 @@ psignals()
 		get_term();
 		if (sc_width != old_width || sc_height != old_height)
 		{
-			scroll = (sc_height + 1) / 2;
+			scroll_lines = (sc_height + 1) / 2;
 			screen_trashed = 1;
 		}
 	}

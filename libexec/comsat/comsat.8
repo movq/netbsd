@@ -1,4 +1,4 @@
-.\"	$NetBSD: comsat.8,v 1.7 1999/03/22 18:25:43 garbled Exp $
+.\"	$NetBSD: comsat.8,v 1.13 2004/06/25 17:36:04 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     from: @(#)comsat.8	8.1 (Berkeley) 6/4/93
 .\"
-.Dd June 4, 1993
+.Dd June 25, 2004
 .Dt COMSAT 8
 .Os
 .Sh NAME
@@ -67,8 +63,8 @@ the
 .Em offset
 is used as a seek offset into the appropriate mailbox file and
 the first 7 lines or 560 characters of the message are printed
-on the user's terminal.  Lines which appear to be part of
-the message header other than the
+on the user's terminal.
+Lines which appear to be part of the message header other than the
 .Dq From ,
 .Dq \&To ,
 .Dq Date ,
@@ -88,14 +84,23 @@ option turns on
 log messages.
 .El
 .Sh FILES
-.Bl -tag -width /var/run/utmp -compact
+To find out who's logged on and on what terminals
+.Nm
+consults:
+.Pp
+.Bl -tag -width /var/run/utmpx -compact
 .It Pa /var/run/utmp
-to find out who's logged on and on what terminals
+.It Pa /var/run/utmpx
 .El
 .Sh SEE ALSO
 .Xr biff 1 ,
 .Xr inetd 8 ,
-.Xr syslogd 8 .
+.Xr syslogd 8
+.Sh HISTORY
+The
+.Nm
+command appeared in
+.Bx 4.2 .
 .Sh BUGS
 The message header filtering is prone to error.
 The density of the information presented is near the theoretical minimum.
@@ -108,8 +113,3 @@ does not mess up the screen.
 .Pp
 .Nm
 runs as root so that it can open the users maildrop.
-.Sh HISTORY
-The
-.Nm
-command appeared in
-.Bx 4.2 .

@@ -1,4 +1,4 @@
-/*	$NetBSD: lock.h,v 1.1 2000/03/19 14:56:53 ragge Exp $	*/
+/*	$NetBSD: lock.h,v 1.28 2008/02/23 05:48:13 matt Exp $	*/
 
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden.
@@ -33,37 +33,145 @@
 #ifndef _VAX_LOCK_H_
 #define _VAX_LOCK_H_
 
-static __inline__ void
-cpu_simple_lock_init(__volatile struct simplelock *alp)
+#ifdef _KERNEL
+#ifdef _KERNEL_OPT
+#include "opt_multiprocessor.h"
+#include <machine/intr.h>
+#endif
+#include <machine/cpu.h>
+#endif
+
+static __inline int
+__SIMPLELOCK_LOCKED_P(__cpu_simple_lock_t *__ptr)
 {
-	alp->lock_data = SIMPLELOCK_UNLOCKED;
+	return *__ptr == __SIMPLELOCK_LOCKED;
 }
 
-static __inline__ void
-cpu_simple_lock(__volatile struct simplelock *alp)
+static __inline int
+__SIMPLELOCK_UNLOCKED_P(__cpu_simple_lock_t *__ptr)
 {
-	__asm__ __volatile ("1:;bbssi $0, (%0), 1b"
+	return *__ptr == __SIMPLELOCK_UNLOCKED;
+}
+
+static __inline void
+__cpu_simple_lock_clear(__cpu_simple_lock_t *__ptr)
+{
+	*__ptr = __SIMPLELOCK_UNLOCKED;
+}
+
+static __inline void
+__cpu_simple_lock_set(__cpu_simple_lock_t *__ptr)
+{
+	*__ptr = __SIMPLELOCK_LOCKED;
+}
+
+static __inline void __cpu_simple_lock_init(__cpu_simple_lock_t *);
+static __inline void
+__cpu_simple_lock_init(__cpu_simple_lock_t *__alp)
+{
+#ifdef _KERNEL
+	__asm __volatile ("movl %0,%%r1;jsb Sunlock"
 		: /* No output */
-		: "r"(&alp->lock_data));
+		: "g"(__alp)
+		: "r1","cc","memory");
+#else
+	__asm __volatile ("bbcci $0,%0,1f;1:"
+		: /* No output */
+		: "m"(*__alp)
+		: "cc");
+#endif
 }
 
-static __inline__ void
-cpu_simple_unlock(__volatile struct simplelock *alp)
+static __inline int __cpu_simple_lock_try(__cpu_simple_lock_t *);
+static __inline int
+__cpu_simple_lock_try(__cpu_simple_lock_t *__alp)
 {
-	alp->lock_data = SIMPLELOCK_UNLOCKED;
-}
+	int ret;
 
-static __inline__ int
-cpu_simple_lock_try(__volatile struct simplelock *alp)
-{
-	register int ret;
-
-	__asm__ __volatile ("movl $0,%0;bbssi $0,(%1),1f;incl %0;1:"
-		: "&=r"(ret)
-		: "r"(&alp->lock_data));
+#ifdef _KERNEL
+	__asm __volatile ("movl %1,%%r1;jsb Slocktry;movl %%r0,%0"
+		: "=&r"(ret)
+		: "g"(__alp)
+		: "r0","r1","cc","memory");
+#else
+	__asm __volatile ("clrl %0;bbssi $0,%1,1f;incl %0;1:"
+		: "=&r"(ret)
+		: "m"(*__alp)
+		: "cc");
+#endif
 
 	return ret;
 }
 
-#endif /* _VAX_LOCK_H_ */
+static __inline void __cpu_simple_lock(__cpu_simple_lock_t *);
+static __inline void
+__cpu_simple_lock(__cpu_simple_lock_t *__alp)
+{
+#if defined(_KERNEL) && defined(MULTIPROCESSOR)
+	struct cpu_info * const __ci = curcpu();
 
+	while (__cpu_simple_lock_try(__alp) == 0) {
+#define	VAX_LOCK_CHECKS ((1 << IPI_SEND_CNCHAR) | (1 << IPI_DDB))
+		if (__ci->ci_ipimsgs & VAX_LOCK_CHECKS) {
+			cpu_handle_ipi();
+		}
+	}
+#else /* _KERNEL && MULTIPROCESSOR */
+	__asm __volatile ("1:bbssi $0,%0,1b"
+		: /* No outputs */
+		: "m"(*__alp)
+		: "cc");
+#endif /* _KERNEL && MULTIPROCESSOR */
+}
+
+static __inline void __cpu_simple_unlock(__cpu_simple_lock_t *);
+static __inline void
+__cpu_simple_unlock(__cpu_simple_lock_t *__alp)
+{
+#ifdef _KERNEL
+	__asm __volatile ("movl %0,%%r1;jsb Sunlock"
+		: /* No output */
+		: "g"(__alp)
+		: "r1","cc","memory");
+#else
+	__asm __volatile ("bbcci $0,%0,1f;1:"
+		: /* No output */
+		: "m"(*__alp)
+		: "cc");
+#endif
+}
+
+#if defined(MULTIPROCESSOR)
+/*
+ * On the Vax, interprocessor interrupts can come in at device priority
+ * level or lower. This can cause some problems while waiting for r/w
+ * spinlocks from a high'ish priority level: IPIs that come in will not
+ * be processed. This can lead to deadlock.
+ *
+ * This hook allows IPIs to be processed while a spinlock's interlock
+ * is released.
+ */
+#define SPINLOCK_SPIN_HOOK						\
+do {									\
+	struct cpu_info * const __ci = curcpu();			\
+									\
+	if (__ci->ci_ipimsgs != 0) {					\
+		/* printf("CPU %lu has IPIs pending\n",			\
+		    __ci->ci_cpuid); */					\
+		cpu_handle_ipi();					\
+	}								\
+} while (/*CONSTCOND*/0)
+#endif /* MULTIPROCESSOR */
+
+static __inline void mb_read(void);
+static __inline void
+mb_read(void)
+{
+}
+
+static __inline void mb_write(void);
+static __inline void
+mb_write(void)
+{
+}
+#endif /* _VAX_LOCK_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: bivar.h,v 1.5 2000/03/26 11:45:04 ragge Exp $ */
+/*	$NetBSD: bivar.h,v 1.13 2008/03/11 05:34:01 matt Exp $ */
 /*
  * Copyright (c) 1996, 1999 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -13,7 +13,7 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *	This product includes software developed at Ludd, University of 
+ *	This product includes software developed at Ludd, University of
  *	Lule}, Sweden and its contributors.
  * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission
@@ -29,14 +29,15 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
+#ifndef _DEV_BI_BIVAR_H_
+#define _DEV_BI_BIVAR_H_
 
 
 /*
  * per-BI-adapter state.
  */
 struct bi_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_iot;		/* Space tag for the BI bus */
 	bus_dma_tag_t sc_dmat;
 	bus_addr_t sc_addr;		/* Address base address for this bus */
@@ -65,9 +66,18 @@ struct bi_attach_args {
 struct bi_list {
 	u_short bl_nr;		/* Unit ID# */
 	u_short bl_havedriver;	/* Have device driver (informal) */
-	char *bl_name;		/* DEC name */
+	const char *bl_name;		/* DEC name */
 };
 
+/* bl_havedriver field meaning */
+#define	DT_UNSUPP	0	/* pseudo define */
+#define	DT_HAVDRV	1	/* device have driver */
+#define	DT_ADAPT	2	/* is an adapter */
+#define	DT_QUIET	4	/* don't complain when not conf'ed */
+#define	DT_VEC		8	/* uses a interrupt vector */
+
 /* Prototype */
-void	bi_attach __P((struct bi_softc *));
-void	bi_intr_establish __P((void *, int, void (*)(void *), void *));
+void bi_attach (struct bi_softc *);
+void bi_intr_establish (void *, int, void (*)(void *), void *, struct evcnt *);
+
+#endif /* _DEV_BI_BIVAR_H_ */

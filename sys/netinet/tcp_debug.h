@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_debug.h,v 1.9 1999/07/31 18:41:15 itojun Exp $	*/
+/*	$NetBSD: tcp_debug.h,v 1.17 2007/03/04 06:03:22 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #ifndef _NETINET_TCP_DEBUG_H_
 #define _NETINET_TCP_DEBUG_H_
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_inet.h"
 #endif
 
@@ -46,7 +42,7 @@ struct	tcp_debug {
 	n_time	td_time;
 	short	td_act;
 	short	td_ostate;
-	caddr_t	td_tcb;
+	void *	td_tcb;
 	int	td_family;
 	struct	tcpiphdr td_ti;
 	struct {
@@ -68,12 +64,12 @@ struct	tcp_debug {
 #define	TA_DROP		4
 
 #ifdef TANAMES
-char	*tanames[] =
+const char	*tanames[] =
     { "input", "output", "user", "respond", "drop" };
 #endif
 
+#ifndef TCP_NDEBUG
 #define	TCP_NDEBUG 100
-struct	tcp_debug tcp_debug[TCP_NDEBUG];
-int	tcp_debx;
+#endif
 
-#endif /* _NETINET_TCP_DEBUG_H_ */
+#endif /* !_NETINET_TCP_DEBUG_H_ */

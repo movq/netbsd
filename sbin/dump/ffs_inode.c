@@ -1,8 +1,8 @@
-/*      $NetBSD: ffs_inode.c,v 1.3 1999/10/01 04:35:22 perseant Exp $ */
+/*	$NetBSD: ffs_inode.c,v 1.18 2008/07/20 01:20:22 lukem Exp $ */
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
- *      The Regents of the University of California.  All rights reserved.
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the University of
- *      California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,33 +31,22 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\n\
-        The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)main.c      8.6 (Berkeley) 5/1/95";
-#else
-__RCSID("$NetBSD: ffs_inode.c,v 1.3 1999/10/01 04:35:22 perseant Exp $");
-#endif
+__RCSID("$NetBSD: ffs_inode.c,v 1.18 2008/07/20 01:20:22 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/stat.h>
-#ifdef sunos
-#include <sys/vnode.h>
-
-#include <ufs/fs.h>
-#include <ufs/fsdir.h>
-#include <ufs/inode.h>
-#else
 #include <ufs/ufs/dir.h>
 #include <ufs/ufs/dinode.h>
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
-#endif
+#include <ufs/ufs/ufs_bswap.h>
 
 #include <protocols/dumprestore.h>
 
@@ -69,38 +54,59 @@ __RCSID("$NetBSD: ffs_inode.c,v 1.3 1999/10/01 04:35:22 perseant Exp $");
 #include <errno.h>
 #include <fts.h>
 #include <stdio.h>
-#ifdef __STDC__
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#endif
 
 #include "dump.h"
 
-#ifndef SBOFF
-#define SBOFF (SBLOCK * DEV_BSIZE)
-#endif
-
 struct fs *sblock;
+
+static off_t sblock_try[] = SBLOCKSEARCH;
+off_t sblockloc;
+
+int is_ufs2;
 
 /*
  * Read the superblock from disk, and check its magic number.
- * Determine whether byte-swapping needs to be done on this filesystem.
+ * Determine whether byte-swapping needs to be done on this file system.
  */
 int
-fs_read_sblock(char *sblock_buf)
+fs_read_sblock(char *superblock)
 {
-	int needswap = 0;
+	int i;
+	int ns = 0;
 
-	sblock = (struct fs *)sblock_buf;
-	rawread(SBOFF, (char *) sblock, SBSIZE);
-	if (sblock->fs_magic != FS_MAGIC) {
-		if (sblock->fs_magic == bswap32(FS_MAGIC)) {
-			ffs_sb_swap(sblock, sblock, 0);
-			needswap = 1;
-		} else
-			quit("bad sblock magic number\n");
-	}
-	return needswap;
+	sblock = (struct fs *)superblock;
+	for (i = 0; ; i++) {
+		if (sblock_try[i] == -1)
+			quit("can't find superblock\n");
+		rawread(sblock_try[i], (char *)superblock, MAXBSIZE);
+
+		switch(sblock->fs_magic) {
+		case FS_UFS2_MAGIC:
+			is_ufs2 = 1;
+			/*FALLTHROUGH*/
+		case FS_UFS1_MAGIC:
+			break;
+		case FS_UFS2_MAGIC_SWAPPED:
+			is_ufs2 = 1;
+			/*FALLTHROUGH*/
+		case FS_UFS1_MAGIC_SWAPPED:
+			ns = 1;
+			ffs_sb_swap(sblock, sblock);
+			break;
+                default:
+                        continue;
+                }
+		if (!is_ufs2 && sblock_try[i] == SBLOCK_UFS2)
+			continue;
+		if ((is_ufs2 || sblock->fs_old_flags & FS_FLAGS_UPDATED)
+		    && sblock_try[i] != sblock->fs_sblockloc)
+			continue;
+		break;
+        }
+	return ns;
 }
 
 /*
@@ -113,11 +119,11 @@ fs_parametrize(void)
 	static struct ufsi ufsi;
 
 #ifdef FS_44INODEFMT
-	if (sblock->fs_inodefmt >= FS_44INODEFMT) {
+	if (is_ufs2 || sblock->fs_old_inodefmt >= FS_44INODEFMT) {
 		spcl.c_flags = iswap32(iswap32(spcl.c_flags) | DR_NEWINODEFMT);
 	} else {
 		/*
-		 * Determine parameters for older filesystems. From
+		 * Determine parameters for older file systems. From
 		 *	/sys/ufs/ffs/ffs_vfsops.c::ffs_oldfscompat()
 		 *
 		 * XXX: not sure if other variables (fs_npsect, fs_interleave,
@@ -151,26 +157,101 @@ fs_parametrize(void)
 ino_t
 fs_maxino(void)
 {
+
 	return sblock->fs_ipg * sblock->fs_ncg;
 }
 
-struct dinode *
-getino(inum)
-	ino_t inum;
+void
+fs_mapinodes(ino_t maxino __unused, u_int64_t *tape_size, int *anydirskipped)
 {
-	static daddr_t minino, maxino;
-	static struct dinode inoblock[MAXINOPB];
-	int i;
+	int i, cg, inosused;
+	struct cg *cgp;
+	ino_t ino;
+	char *cp;
 
+	if ((cgp = malloc(sblock->fs_cgsize)) == NULL)
+		quit("fs_mapinodes: cannot allocate memory.\n");
+
+	for (cg = 0; cg < sblock->fs_ncg; cg++) {
+		ino = cg * sblock->fs_ipg;
+		bread(fsbtodb(sblock, cgtod(sblock, cg)), (char *)cgp,
+		    sblock->fs_cgsize);
+		if (needswap)
+			ffs_cg_swap(cgp, cgp, sblock);
+		if (sblock->fs_magic == FS_UFS2_MAGIC)
+			inosused = cgp->cg_initediblk;
+		else
+			inosused = sblock->fs_ipg;
+		/*
+		 * If we are using soft updates, then we can trust the
+		 * cylinder group inode allocation maps to tell us which
+		 * inodes are allocated. We will scan the used inode map
+		 * to find the inodes that are really in use, and then
+		 * read only those inodes in from disk.
+		 */
+		if (sblock->fs_flags & FS_DOSOFTDEP) {
+			if (!cg_chkmagic(cgp, 0))
+				quit("mapfiles: cg %d: bad magic number\n", cg);
+			cp = &cg_inosused(cgp, 0)[(inosused - 1) / CHAR_BIT];
+			for ( ; inosused > 0; inosused -= CHAR_BIT, cp--) {
+				if (*cp == 0)
+					continue;
+				for (i = 1 << (CHAR_BIT - 1); i > 0; i >>= 1) {
+					if (*cp & i)
+						break;
+					inosused--;
+				}
+				break;
+			}
+			if (inosused <= 0)
+				continue;
+		}
+		for (i = 0; i < inosused; i++, ino++) {
+			if (ino < ROOTINO)
+				continue;
+			mapfileino(ino, tape_size, anydirskipped);
+		}
+	}
+
+	free(cgp);
+}
+
+union dinode *
+getino(ino_t inum)
+{
+	static ino_t minino, maxino;
+	static caddr_t inoblock;
+	int ntoswap, i;
+	struct ufs1_dinode *dp1;
+	struct ufs2_dinode *dp2;
+
+	if (inoblock == NULL && (inoblock = malloc(ufsib->ufs_bsize)) == NULL)
+		quit("cannot allocate inode memory.\n");
 	curino = inum;
 	if (inum >= minino && inum < maxino)
-		return (&inoblock[inum - minino]);
+		goto gotit;
 	bread(fsatoda(ufsib, ino_to_fsba(sblock, inum)), (char *)inoblock,
 	    (int)ufsib->ufs_bsize);
-	if (needswap)
-		for (i = 0; i < MAXINOPB; i++)
-			ffs_dinode_swap(&inoblock[i], &inoblock[i]);
 	minino = inum - (inum % INOPB(sblock));
 	maxino = minino + INOPB(sblock);
-	return (&inoblock[inum - minino]);
+	if (needswap) {
+		if (is_ufs2) {
+			dp2 = (struct ufs2_dinode *)inoblock;
+			ntoswap = ufsib->ufs_bsize / sizeof(struct ufs2_dinode);
+			for (i = 0; i < ntoswap; i++)
+				ffs_dinode2_swap(&dp2[i], &dp2[i]);
+		} else {
+			dp1 = (struct ufs1_dinode *)inoblock;
+			ntoswap = ufsib->ufs_bsize / sizeof(struct ufs1_dinode);
+			for (i = 0; i < ntoswap; i++)
+				ffs_dinode1_swap(&dp1[i], &dp1[i]);
+		}
+	}
+gotit:
+	if (is_ufs2) {
+		dp2 = &((struct ufs2_dinode *)inoblock)[inum - minino];
+		return (union dinode *)dp2;
+	}
+	dp1 = &((struct ufs1_dinode *)inoblock)[inum - minino];
+	return ((union dinode *)dp1);
 }

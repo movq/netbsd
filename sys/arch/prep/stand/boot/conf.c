@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.1 2000/02/29 15:21:48 nonaka Exp $	*/
+/*	$NetBSD: conf.c,v 1.5 2006/04/10 18:40:06 garbled Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,16 +33,11 @@
 
 #include <lib/libsa/stand.h>
 
-int fdstrategy __P((void *, int, daddr_t, size_t, void *, size_t *));
-int fdopen __P((struct open_file *, ...));
-int fdclose __P((struct open_file *));
-
-int instrategy __P((void *, int , daddr_t, size_t, void *, size_t *));
-int inopen __P((struct open_file *, ...));
-int inclose __P((struct open_file *));
+int instrategy(void *, int , daddr_t, size_t, void *, size_t *);
+int inopen(struct open_file *, ...);
+int inclose(struct open_file *);
 
 struct devsw devsw[] = {
-	{ "fd",	fdstrategy, fdopen, fdclose, noioctl },
 	{ "in",	instrategy, inopen, inclose, noioctl },
 };
 

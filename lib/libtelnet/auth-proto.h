@@ -1,4 +1,4 @@
-/*	$NetBSD: auth-proto.h,v 1.8 1999/07/02 16:05:11 simonb Exp $	*/
+/*	$NetBSD: auth-proto.h,v 1.15 2006/03/20 21:23:47 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -55,51 +51,53 @@
  * or implied warranty.
  */
 
+#ifndef _LIBTELNET_AUTH_PROTO_H_
+#define _LIBTELNET_AUTH_PROTO_H_
 #include <sys/cdefs.h>
 
-#if	defined(AUTHENTICATION)
-Authenticator *findauthenticator __P((int, int));
+#ifdef AUTHENTICATION
+Authenticator *findauthenticator(int, int);
 
-void auth_init __P((const char *, int));
-int auth_cmd __P((int, char **));
-void auth_request __P((void));
-void auth_send __P((unsigned char *, int));
-void auth_send_retry __P((void));
-void auth_is __P((unsigned char *, int));
-void auth_reply __P((unsigned char *, int));
-void auth_finished __P((Authenticator *, int));
-int auth_wait __P((char *));
-void auth_disable_name __P((char *));
-void auth_gen_printsub __P((unsigned char *, int, unsigned char *, int));
+void auth_init(const char *, int);
+int auth_cmd(int, char **);
+void auth_request(void);
+void auth_send(unsigned char *, int);
+void auth_send_retry(void);
+void auth_is(unsigned char *, int);
+void auth_reply(unsigned char *, int);
+void auth_disable_name(char *);
+void auth_gen_printsub(unsigned char *, int, unsigned char *, int);
 
-int getauthmask __P((char *, int *));
-int auth_enable __P((char *));
-int auth_disable __P((char *));
-int auth_onoff __P((char *, int));
-int auth_togdebug __P((int));
-int auth_status __P((char *));
-void auth_name __P((unsigned char *, int));
-int auth_sendname __P((unsigned char *, int));
-void auth_finished __P((Authenticator *, int));
-int auth_wait __P((char *));
-void auth_debug __P((int));
-void auth_printsub __P((unsigned char *, int, unsigned char *, int));
-
-#ifdef	KRB4
-int kerberos4_init __P((Authenticator *, int));
-int kerberos4_send __P((Authenticator *));
-void kerberos4_is __P((Authenticator *, unsigned char *, int));
-void kerberos4_reply __P((Authenticator *, unsigned char *, int));
-int kerberos4_status __P((Authenticator *, char *, int));
-void kerberos4_printsub __P((unsigned char *, int, unsigned char *, int));
-#endif
+int getauthmask(char *, int *);
+int auth_enable(char *);
+int auth_disable(char *);
+int auth_onoff(char *, int);
+int auth_togdebug(int);
+int auth_status(char *);
+void auth_name(unsigned char *, int);
+int auth_sendname(unsigned char *, int);
+void auth_finished(Authenticator *, int);
+int auth_wait(char *, size_t);
+void auth_debug(int);
+void auth_printsub(unsigned char *, int, unsigned char *, int);
 
 #ifdef	KRB5
-int kerberos5_init __P((Authenticator *, int));
-int kerberos5_send __P((Authenticator *));
-void kerberos5_is __P((Authenticator *, unsigned char *, int));
-void kerberos5_reply __P((Authenticator *, unsigned char *, int));
-int kerberos5_status __P((Authenticator *, char *, int));
-void kerberos5_printsub __P((unsigned char *, int, unsigned char *, int));
+int kerberos5_init(Authenticator *, int);
+int kerberos5_send(Authenticator *);
+void kerberos5_is(Authenticator *, unsigned char *, int);
+void kerberos5_reply(Authenticator *, unsigned char *, int);
+int kerberos5_status(Authenticator *, char *, size_t, int);
+void kerberos5_printsub(unsigned char *, int, unsigned char *, int);
 #endif
+
+#ifdef SRA
+int sra_init(Authenticator *, int);
+int sra_send(Authenticator *);
+void sra_is(Authenticator *, unsigned char *, int);
+void sra_reply(Authenticator *, unsigned char *, int);
+int sra_status(Authenticator *, char *, size_t, int);
+void sra_printsub(unsigned char *, int, unsigned char *, int);
 #endif
+
+#endif /* AUTHENTICATION */
+#endif /* _LIBTELNET_AUTH_PROTO_H_ */

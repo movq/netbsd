@@ -1,4 +1,4 @@
-/*	$NetBSD: rcons_kern.c,v 1.12 2000/03/23 07:01:43 thorpej Exp $ */
+/*	$NetBSD: rcons_kern.c,v 1.21 2007/11/19 18:51:50 ad Exp $ */
 
 /*
  * Copyright (c) 1991, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,6 +40,9 @@
  *	@(#)rcons_kern.c	8.1 (Berkeley) 6/11/93
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rcons_kern.c,v 1.21 2007/11/19 18:51:50 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
@@ -58,7 +57,7 @@
 static void rcons_belltmr(void *);
 
 static struct rconsole *mydevicep; /* XXX */
-static void rcons_output __P((struct tty *));
+static void rcons_output(struct tty *);
 
 void
 rcons_cnputc(c)
@@ -66,7 +65,7 @@ rcons_cnputc(c)
 {
 	char buf[1];
 	long attr;
-	
+
 	/* Swap in kernel attribute */
 	attr = mydevicep->rc_attr;
 	mydevicep->rc_attr = mydevicep->rc_kern_attr;
@@ -102,16 +101,9 @@ rcons_output(tp)
 	s = spltty();
 	tp->t_state &= ~TS_BUSY;
 	/* Come back if there's more to do */
-	if (tp->t_outq.c_cc) {
+	if (ttypull(tp)) {
 		tp->t_state |= TS_TIMEOUT;
-		callout_reset(&tp->t_rstrt_ch, 1, ttrstrt, tp);
-	}
-	if (tp->t_outq.c_cc <= tp->t_lowat) {
-		if (tp->t_state&TS_ASLEEP) {
-			tp->t_state &= ~TS_ASLEEP;
-			wakeup((caddr_t)&tp->t_outq);
-		}
-		selwakeup(&tp->t_wsel);
+		callout_schedule(&tp->t_rstrt_ch, 1);
 	}
 	splx(s);
 }
@@ -178,7 +170,7 @@ rcons_init(rc, clear)
 {
 	mydevicep = rc;
 
-	callout_init(&rc->rc_belltmr_ch);
+	callout_init(&rc->rc_belltmr_ch, 0);
 
 	/* Initialize operations set, clear screen and turn cursor on */
 	rcons_init_ops(rc);

@@ -1,7 +1,8 @@
-/*	$NetBSD: xebec.bnf,v 1.4 1994/06/29 06:41:22 cgd Exp $	*/
+/*	$NetBSD: xebec.bnf,v 1.7 2005/12/11 12:25:16 christos Exp $	*/
 
 #include "main.h"
 #include "sets.h"
+#include "procs.h"
 #include <stdio.h> 
 
 extern FILE *eventfile_h, *actfile; 
@@ -218,7 +219,7 @@ translist		::=	 transition  translisttail
 translisttail	::= translist
 	::=	
 ;
-transition ::=  newstate { transno ++; } LANGLE EQUAL EQUAL oldstate  
+transition ::=  newstate { transno++; } LANGLE EQUAL EQUAL oldstate  
 	event 
 	{ 
 	 	CurrentEvent /* GAG! */ = $event.object; 

@@ -1,4 +1,4 @@
-/*	$NetBSD: Lint_htonl.c,v 1.2 1999/05/03 13:12:34 christos Exp $	*/
+/* $NetBSD: Lint_htonl.c,v 1.4 2001/08/22 07:42:08 itojun Exp $ */
 
 /*
  * This file placed in the public domain.
@@ -9,9 +9,9 @@
 #undef htonl
 
 /*ARGSUSED*/
-in_addr_t
+uint32_t
 htonl(host32)
-	in_addr_t host32;
+	uint32_t host32;
 {
 	return (0);
 }

@@ -1,4 +1,4 @@
-.\"	$NetBSD: rmdir.2,v 1.12 1999/12/02 21:42:39 kleink Exp $
+.\"	$NetBSD: rmdir.2,v 1.19 2004/05/13 10:20:58 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -42,7 +38,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <unistd.h>
+.In unistd.h
 .Ft int
 .Fn rmdir "const char *path"
 .Sh DESCRIPTION
@@ -56,7 +52,7 @@ than
 and
 .Ql \&.. .
 .Sh RETURN VALUES
-A 0 is returned if the remove succeeds; otherwise a -1 is
+A 0 is returned if the remove succeeds; otherwise a \-1 is
 returned and an error code is stored in the global location
 .Va errno .
 .Sh ERRORS
@@ -65,9 +61,9 @@ The named file is removed unless:
 .It Bq Er ENOTDIR
 A component of the path is not a directory.
 .It Bq Er ENAMETOOLONG
-A component of a pathname exceeded 
+A component of a pathname exceeded
 .Dv {NAME_MAX}
-characters, or an entire path name exceeded 
+characters, or an entire path name exceeded
 .Dv {PATH_MAX}
 characters.
 .It Bq Er ENOENT
@@ -81,9 +77,8 @@ and
 .Ql \&..
 in it.
 .It Bq Er EACCES
-Search permission is denied for a component of the path prefix.
-.It Bq Er EACCES
-Write permission is denied on the directory containing the link
+Search permission is denied for a component of the path prefix, or
+write permission is denied on the directory containing the link
 to be removed.
 .It Bq Er EPERM
 The directory containing the directory to be removed is marked sticky,

@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_param.h,v 1.12 2000/03/30 13:10:14 augustss Exp $	*/
+/*	$NetBSD: tp_param.h,v 1.18.52.1 2009/03/16 01:21:51 snj Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -210,14 +206,6 @@ extern int      N_TPREF;
 /******************************************************
  * Some fundamental data types
  *****************************************************/
-#ifndef		TRUE
-#define		TRUE				1
-#endif				/* TRUE */
-
-#ifndef		FALSE
-#define		FALSE				0
-#endif				/* FALSE */
-
 #define		TP_LOCAL				22
 #define		TP_FOREIGN				33
 
@@ -234,9 +222,6 @@ extern int      N_TPREF;
 #define 	TP_FORCE 	0x1
 #define 	TP_STRICT 	0x2
 
-#ifndef 	MNULL
-#define 	MNULL				(struct mbuf *)0
-#endif				/* MNULL */
 /*
  * if ../sys/mbuf.h gets MT_types up to 0x40, these will have to be changed:
  */
@@ -265,7 +250,7 @@ typedef unsigned short RefNum;
 	(diffp)->tv_sec = time.tv_sec - (oldtvalp)->tv_sec;\
 	(diffp)->tv_usec = time.tv_usec - (oldtvalp)->tv_usec;\
 	if( (diffp)->tv_usec <0 ) {\
-		(diffp)->tv_sec --;\
+		(diffp)->tv_sec--;\
 		(diffp)->tv_usec = 1000000 - (diffp)->tv_usec;\
 	}\
 }
@@ -290,7 +275,7 @@ typedef unsigned short RefNum;
 
 struct tp_vbp {
 	u_char          tpv_code;
-	char            tpv_len;
+	u_char          tpv_len;
 	char            tpv_val;
 };
 #define vbptr(x) ((struct tp_vbp *)(x))
@@ -299,18 +284,18 @@ struct tp_vbp {
 #define vblen(x) (vbptr(x)->tpv_len)
 
 #define vb_putval(dst,type,src)\
-	bcopy((caddr_t)&(src),(caddr_t)&(((struct tp_vbp *)(dst))->tpv_val),\
+	bcopy((void *)&(src),(void *)&(((struct tp_vbp *)(dst))->tpv_val),\
 	sizeof(type))
 
 #define vb_getval(src,type,dst)\
-bcopy((caddr_t)&(((struct tp_vbp *)(src))->tpv_val),(caddr_t)&(dst),sizeof(type))
+bcopy((void *)&(((struct tp_vbp *)(src))->tpv_val),(void *)&(dst),sizeof(type))
 
 #define ADDOPTION(type, DU, len, src)\
-{	caddr_t P;\
-	P = (caddr_t)(DU) + (int)((DU)->tpdu_li);\
+{	char *P;\
+	P = (char *)(DU) + (int)((DU)->tpdu_li);\
 	vbptr(P)->tpv_code = type;\
 	vbptr(P)->tpv_len = len;\
-	bcopy((caddr_t)&src, (caddr_t)&(vbptr(P)->tpv_val), (unsigned)len);\
+	memcpy(&(vbptr(P)->tpv_val), &src, (unsigned)len);\
 	DU->tpdu_li += len+2;/* 1 for code, 1 for length */\
 }
 /******************************************************
@@ -360,4 +345,4 @@ extern int      tp_rttadd, tp_rttdiv;
 #endif /* tp_NSTATES  */
 #endif /* _KERNEL */
 
-#endif /* _NETISO_TP_PARAM_H_ */
+#endif /* !_NETISO_TP_PARAM_H_ */

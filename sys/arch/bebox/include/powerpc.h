@@ -1,4 +1,4 @@
-/*	$NetBSD: powerpc.h,v 1.3 1998/08/24 01:40:29 sakamoto Exp $	*/
+/*	$NetBSD: powerpc.h,v 1.7 2007/10/17 19:54:00 garbled Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.
@@ -38,7 +38,7 @@ struct mem_region {
 	psize_t size;
 };
 
-void mem_regions __P((struct mem_region **, struct mem_region **));
+void mem_regions(struct mem_region **, struct mem_region **);
 
 /*
  * These two functions get used solely in boot() in machdep.c.
@@ -47,8 +47,5 @@ void mem_regions __P((struct mem_region **, struct mem_region **));
  */
 void ppc_exit __P((void)) __attribute__((__noreturn__));
 void ppc_boot __P((char *bootspec)) __attribute__((__noreturn__));
-
-extern	struct device *booted_device;
-extern	int booted_partition;
 
 #endif	/* _MACHINE_POWERPC_H_ */

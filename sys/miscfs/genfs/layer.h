@@ -1,11 +1,11 @@
-/*	$NetBSD: layer.h,v 1.3 2000/03/30 02:19:16 simonb Exp $	*/
+/*	$NetBSD: layer.h,v 1.13 2008/01/30 09:50:23 ad Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
  * All rights reserved.
  *
  * This software was written by William Studenmund of the
- * Numerical Aerospace Similation Facility, NASA Ames Research Center.
+ * Numerical Aerospace Simulation Facility, NASA Ames Research Center.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -48,11 +48,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -77,7 +73,7 @@
 
 struct layer_args {
 	char	*target;		/* Target of loopback  */
-	struct	export_args	export;	/* network export info */
+	struct export_args30 _pad1; /* compat with old userland tools */
 };
 
 #ifdef _KERNEL
@@ -89,21 +85,20 @@ LIST_HEAD(layer_node_hashhead, layer_node);
 struct layer_mount {
 	struct mount		*layerm_vfs;
 	struct vnode		*layerm_rootvp;	/* Ref to root layer_node */
-	struct netexport	layerm_export;	/* export info */
 	u_int			layerm_flags;	/* mount point layer flags */
 	u_int			layerm_size;	/* size of fs's struct node */
 	enum vtype		layerm_tag;	/* vtag of our vnodes */
 	int				/* bypass routine for this mount */
-				(*layerm_bypass) __P((void *));
+				(*layerm_bypass)(void *);
 	int			(*layerm_alloc)	/* alloc a new layer node */
-				__P((struct mount *, struct vnode *,
-						struct vnode **));
+				(struct mount *, struct vnode *,
+						struct vnode **);
 	int			(**layerm_vnodeop_p)	/* ops for our nodes */
-				__P((void *));
+				(void *);
 	struct layer_node_hashhead	/* head of hash list for layer_nodes */
 				*layerm_node_hashtbl;
 	u_long			layerm_node_hash; /* hash mask for hash chain */
-	struct simplelock	layerm_hashlock; /* interlock for hash chain. */
+	kmutex_t		layerm_hashlock; /* interlock for hash chain. */
 };
 
 #define	LAYERFS_MFLAGS		0x00000fff	/* reserved layer mount flags */
@@ -120,6 +115,7 @@ struct layer_node {
 };
 
 #define	LAYERFS_RESFLAGS	0x00000fff	/* flags reserved for layerfs */
+#define	LAYERFS_REMOVED 	0x00000001	/* Did a remove on this node */
 
 /*
  * The following macros handle upperfs-specific locking. They are needed
@@ -129,21 +125,21 @@ struct layer_node {
  */
 #define	LAYERFS_UPPERLOCK(v, f, r)	do { \
 	if ((v)->v_vnlock == NULL) \
-		r = lockmgr(&(v)->v_lock, (f), &(v)->v_interlock); \
+		r = vlockmgr(&(v)->v_lock, (f)); \
 	else \
 		r = 0; \
 	} while (0)
 
 #define	LAYERFS_UPPERUNLOCK(v, f, r)	do { \
 	if ((v)->v_vnlock == NULL) \
-	    r = lockmgr(&(v)->v_lock, (f) | LK_RELEASE, &(v)->v_interlock); \
+	    r = vlockmgr(&(v)->v_lock, (f) | LK_RELEASE); \
 	else \
 		r = 0; \
 	} while (0)
 
 #define	LAYERFS_UPPERISLOCKED(v, r)	do { \
 	if ((v)->v_vnlock == NULL) \
-		r = lockstatus(&(v)->v_lock); \
+		r = vlockstatus(&(v)->v_lock); \
 	else \
 		r = -1; \
 	} while (0)
@@ -151,13 +147,14 @@ struct layer_node {
 #define	LAYERFS_DO_BYPASS(vp, ap)	\
 	(*MOUNTTOLAYERMOUNT((vp)->v_mount)->layerm_bypass)((ap))
 
-extern struct vnode *layer_checkvp __P((struct vnode *vp, char *fil, int lno));
+struct vnode *layer_checkvp(struct vnode *vp, const char *fil, int lno);
 
 #define	MOUNTTOLAYERMOUNT(mp) ((struct layer_mount *)((mp)->mnt_data))
 #define	VTOLAYER(vp) ((struct layer_node *)(vp)->v_data)
 #define	LAYERTOV(xp) ((xp)->layer_vnode)
 #ifdef LAYERFS_DIAGNOSTIC
 #define	LAYERVPTOLOWERVP(vp) layer_checkvp((vp), __FILE__, __LINE__)
+extern int layerfs_debug;
 #else
 #define	LAYERVPTOLOWERVP(vp) (VTOLAYER(vp)->layer_lowervp)
 #endif

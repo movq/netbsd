@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ie_vme.c,v 1.8 2000/03/13 23:52:37 soren Exp $	*/
+/*	$NetBSD: if_ie_vme.c,v 1.24 2008/04/05 16:06:12 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1995 Charles D. Cranor
@@ -116,7 +116,7 @@
  *
  *	The page map to control where ram appears in the address space.
  *	We choose to have RAM start at 0 in the 24 bit address space.
- * 
+ *
  *	to get the phyiscal address of the board's RAM you must take the
  *	top 12 bits of the physical address of the register address and
  *	or in the 4 bits from the status word as bits 17-20 (remember that
@@ -144,6 +144,9 @@
  *
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_ie_vme.c,v 1.24 2008/04/05 16:06:12 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/errno.h>
@@ -157,10 +160,11 @@
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#include <vm/vm.h>
-
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
+#ifdef __sparc__
+#include <machine/autoconf.h>
+#endif
 #include <dev/vme/vmevar.h>
 
 #include <dev/ic/i82586reg.h>
@@ -221,7 +225,7 @@ struct ievme {
 /* Supported media */
 static int media[] = {
 	IFM_ETHER | IFM_10_2,
-};      
+};
 #define NMEDIA	(sizeof(media) / sizeof(media[0]))
 
 /*
@@ -229,13 +233,13 @@ static int media[] = {
  */
 
 
-static void ie_vmereset __P((struct ie_softc *, int));
-static void ie_vmeattend __P((struct ie_softc *));
-static void ie_vmerun __P((struct ie_softc *));
-static int  ie_vmeintr __P((struct ie_softc *, int));
+static void ie_vmereset(struct ie_softc *, int);
+static void ie_vmeattend(struct ie_softc *, int);
+static void ie_vmerun(struct ie_softc *);
+static int  ie_vmeintr(struct ie_softc *, int);
 
-int ie_vme_match __P((struct device *, struct cfdata *, void *));
-void ie_vme_attach __P((struct device *, struct device *, void *));
+int ie_vme_match(struct device *, struct cfdata *, void *);
+void ie_vme_attach(struct device *, struct device *, void *);
 
 struct ie_vme_softc {
 	struct ie_softc ie;
@@ -243,9 +247,8 @@ struct ie_vme_softc {
 	bus_space_handle_t ievh;
 };
 
-struct cfattach ie_vme_ca = {
-	sizeof(struct ie_vme_softc), ie_vme_match, ie_vme_attach
-};
+CFATTACH_DECL(ie_vme, sizeof(struct ie_vme_softc),
+    ie_vme_match, ie_vme_attach, NULL, NULL);
 
 #define read_iev(sc, reg) \
   bus_space_read_2(sc->ievt, sc->ievh, offsetof(struct ievme, reg))
@@ -267,8 +270,9 @@ ie_vmereset(sc, what)
 }
 
 void
-ie_vmeattend(sc)
+ie_vmeattend(sc, why)
 	struct ie_softc *sc;
+	int why;
 {
 	struct ie_vme_softc *vsc = (struct ie_vme_softc *)sc;
 
@@ -302,8 +306,8 @@ ie_vmeintr(sc, where)
          * check for parity error
          */
 	if (read_iev(vsc, status) & IEVME_PERR) {
-		printf("%s: parity error (ctrl 0x%x @ 0x%02x%04x)\n",
-		       sc->sc_dev.dv_xname, read_iev(vsc, pectrl),
+		aprint_error_dev(&sc->sc_dev, "parity error (ctrl 0x%x @ 0x%02x%04x)\n",
+		       read_iev(vsc, pectrl),
 		       read_iev(vsc, pectrl) & IEVME_HADDR,
 		       read_iev(vsc, peaddr));
 		write_iev(vsc, pectrl, read_iev(vsc, pectrl) | IEVME_PARACK);
@@ -311,8 +315,8 @@ ie_vmeintr(sc, where)
 	return (0);
 }
 
-void ie_memcopyin __P((struct ie_softc *, void *, int, size_t));
-void ie_memcopyout __P((struct ie_softc *, const void *, int, size_t));
+void ie_memcopyin(struct ie_softc *, void *, int, size_t);
+void ie_memcopyout(struct ie_softc *, const void *, int, size_t);
 
 /*
  * Copy board memory to kernel.
@@ -361,9 +365,9 @@ ie_memcopyout(sc, p, offset, size)
 	size_t help;
 
 	if ((offset & 1) && ((u_long)p & 1) && size > 0) {
-		bus_space_write_1(sc->bt, sc->bh, offset, *(u_int8_t *)p);
+		bus_space_write_1(sc->bt, sc->bh, offset, *(const u_int8_t *)p);
 		offset++;
-		p = (u_int8_t *)p + 1;
+		p = (const u_int8_t *)p + 1;
 		size--;
 	}
 
@@ -378,15 +382,15 @@ ie_memcopyout(sc, p, offset, size)
 		return;
 
 	offset += 2 * help;
-	p = (u_int16_t *)p + help;
-	bus_space_write_1(sc->bt, sc->bh, offset, *(u_int8_t *)p);
+	p = (const u_int16_t *)p + help;
+	bus_space_write_1(sc->bt, sc->bh, offset, *(const u_int8_t *)p);
 }
 
 /* read a 16-bit value at BH offset */
-u_int16_t ie_vme_read16 __P((struct ie_softc *, int offset));
+u_int16_t ie_vme_read16(struct ie_softc *, int offset);
 /* write a 16-bit value at BH offset */
-void ie_vme_write16 __P((struct ie_softc *, int offset, u_int16_t value));
-void ie_vme_write24 __P((struct ie_softc *, int offset, int addr));
+void ie_vme_write16(struct ie_softc *, int offset, u_int16_t value);
+void ie_vme_write24(struct ie_softc *, int offset, int addr);
 
 u_int16_t
 ie_vme_read16(sc, offset)
@@ -402,7 +406,7 @@ ie_vme_read16(sc, offset)
 
 void
 ie_vme_write16(sc, offset, v)
-	struct ie_softc *sc;	
+	struct ie_softc *sc;
 	int offset;
 	u_int16_t v;
 {
@@ -413,7 +417,7 @@ ie_vme_write16(sc, offset, v)
 
 void
 ie_vme_write24(sc, offset, addr)
-	struct ie_softc *sc;	
+	struct ie_softc *sc;
 	int offset;
 	int addr;
 {
@@ -492,9 +496,6 @@ ie_vme_attach(parent, self, aux)
 	void   *aux;
 {
 	u_int8_t myaddr[ETHER_ADDR_LEN];
-#ifdef sparc
-	extern void myetheraddr(u_char *);	/* should be elsewhere */
-#endif
 	struct ie_vme_softc *vsc = (void *) self;
 	struct vme_attach_args *va = aux;
 	vme_chipset_tag_t ct = va->va_vct;
@@ -527,6 +528,8 @@ ie_vme_attach(parent, self, aux)
 	sc->intrhook = ie_vmeintr;
 	sc->memcopyout = ie_memcopyout;
 	sc->memcopyin = ie_memcopyin;
+
+	sc->ie_bus_barrier = NULL;
 	sc->ie_bus_read16 = ie_vme_read16;
 	sc->ie_bus_write16 = ie_vme_write16;
 	sc->ie_bus_write24 = ie_vme_write24;
@@ -591,10 +594,10 @@ ie_vme_attach(parent, self, aux)
 
 	sc->do_xmitnopchain = 0;
 
-	printf("\n%s:", self->dv_xname);
+	printf("\n%s:", device_xname(self));
 
-#ifdef sparc
-	myetheraddr(myaddr);
+#ifdef __sparc__
+	prom_getether(0, myaddr);
 #endif
 	i82586_attach(sc, "multibus/vme", myaddr, media, NMEDIA, media[0]);
 

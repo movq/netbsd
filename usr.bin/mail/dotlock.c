@@ -1,4 +1,4 @@
-/*	$NetBSD: dotlock.c,v 1.4 1998/07/06 06:51:55 mrg Exp $	*/
+/*	$NetBSD: dotlock.c,v 1.9 2007/10/29 23:20:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Christos Zoulas.  All rights reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: dotlock.c,v 1.4 1998/07/06 06:51:55 mrg Exp $");
+__RCSID("$NetBSD: dotlock.c,v 1.9 2007/10/29 23:20:38 christos Exp $");
 #endif
 
 #include "rcv.h"
@@ -41,7 +41,7 @@ __RCSID("$NetBSD: dotlock.c,v 1.4 1998/07/06 06:51:55 mrg Exp $");
 #define O_SYNC	0
 #endif
 
-static int create_exclusive __P((const char *));
+static int create_exclusive(const char *);
 /*
  * Create a unique file. O_EXCL does not really work over NFS so we follow
  * the following trick: [Inspired by  S.R. van den Berg]
@@ -53,8 +53,7 @@ static int create_exclusive __P((const char *));
  * - if the link count was 2, then we are ok; else we've failed.
  */
 static int
-create_exclusive(fname)
-	const char *fname;
+create_exclusive(const char *fname)
 {
 	char path[MAXPATHLEN], hostname[MAXHOSTNAMELEN + 1];
 	const char *ptr;
@@ -65,7 +64,7 @@ create_exclusive(fname)
 	struct stat st;
 
 	(void)gettimeofday(&tv, NULL);
-	(void)gethostname(hostname, sizeof hostname);
+	(void)gethostname(hostname, sizeof(hostname));
 	hostname[sizeof(hostname) - 1] = '\0';
 	pid = getpid();
 
@@ -79,7 +78,7 @@ create_exclusive(fname)
 	else
 		ptr++;
 
-	(void) snprintf(path, sizeof(path), "%.*s.%s.%lx", 
+	(void)snprintf(path, sizeof(path), "%.*s.%s.%lx",
 	    (int)(ptr - fname), fname, hostname, (u_long)cookie);
 
 	/*
@@ -88,7 +87,7 @@ create_exclusive(fname)
 	for (ntries = 0; ntries < 5; ntries++) {
 		fd = open(path, O_WRONLY|O_CREAT|O_TRUNC|O_EXCL|O_SYNC, 0);
 		if (fd != -1) {
-			(void) close(fd);
+			(void)close(fd);
 			break;
 		}
 		else if (errno == EEXIST)
@@ -110,7 +109,7 @@ create_exclusive(fname)
 	if (stat(path, &st) == -1)
 		goto bad;
 
-	(void) unlink(path);
+	(void)unlink(path);
 
 	/*
 	 * If the number of links was two (one for the unique file and one
@@ -124,64 +123,65 @@ create_exclusive(fname)
 
 bad:
 	serrno = errno;
-	(void) unlink(path);
+	(void)unlink(path);
 	errno = serrno;
 	return -1;
 }
 
-int
-dot_lock(fname, pollinterval, fp, msg)
-	const char *fname;	/* Pathname to lock */
-	int pollinterval;	/* Interval to check for lock, -1 return */
-	FILE *fp;		/* File to print message */
-	const char *msg;	/* Message to print */
+/*
+ * fname -- Pathname to lock
+ * pollinterval -- Interval to check for lock, -1 return
+ * fp -- File to print message
+ * msg -- Message to print
+ */
+PUBLIC int
+dot_lock(const char *fname, int pollinterval, FILE *fp, const char *msg)
 {
 	char path[MAXPATHLEN];
 	sigset_t nset, oset;
 
-	sigemptyset(&nset);
-	sigaddset(&nset, SIGHUP);
-	sigaddset(&nset, SIGINT);
-	sigaddset(&nset, SIGQUIT);
-	sigaddset(&nset, SIGTERM);
-	sigaddset(&nset, SIGTTIN);
-	sigaddset(&nset, SIGTTOU);
-	sigaddset(&nset, SIGTSTP);
-	sigaddset(&nset, SIGCHLD);
+	(void)sigemptyset(&nset);
+	(void)sigaddset(&nset, SIGHUP);
+	(void)sigaddset(&nset, SIGINT);
+	(void)sigaddset(&nset, SIGQUIT);
+	(void)sigaddset(&nset, SIGTERM);
+	(void)sigaddset(&nset, SIGTTIN);
+	(void)sigaddset(&nset, SIGTTOU);
+	(void)sigaddset(&nset, SIGTSTP);
+	(void)sigaddset(&nset, SIGCHLD);
 
-	(void) snprintf(path, sizeof(path), "%s.lock", fname);
+	(void)snprintf(path, sizeof(path), "%s.lock", fname);
 
 	for (;;) {
-		(void) sigprocmask(SIG_BLOCK, &nset, &oset);
+		(void)sigprocmask(SIG_BLOCK, &nset, &oset);
 		if (create_exclusive(path) != -1) {
-			(void) sigprocmask(SIG_SETMASK, &oset, NULL);
+			(void)sigprocmask(SIG_SETMASK, &oset, NULL);
 			return 0;
 		}
 		else
-			(void) sigprocmask(SIG_SETMASK, &oset, NULL);
+			(void)sigprocmask(SIG_SETMASK, &oset, NULL);
 
 		if (errno != EEXIST)
 			return -1;
 
 		if (fp && msg)
-		    (void) fputs(msg, fp);
+		    (void)fputs(msg, fp);
 
 		if (pollinterval) {
 			if (pollinterval == -1) {
 				errno = EEXIST;
 				return -1;
 			}
-			sleep(pollinterval);
+			(void)sleep((unsigned int)pollinterval);
 		}
 	}
 }
 
-void
-dot_unlock(fname)
-	const char *fname;
+PUBLIC void
+dot_unlock(const char *fname)
 {
 	char path[MAXPATHLEN];
 
-	(void) snprintf(path, sizeof(path), "%s.lock", fname);
-	(void) unlink(path);
+	(void)snprintf(path, sizeof(path), "%s.lock", fname);
+	(void)unlink(path);
 }

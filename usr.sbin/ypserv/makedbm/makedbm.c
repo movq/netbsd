@@ -1,4 +1,4 @@
-/*	$NetBSD: makedbm.c,v 1.16 1999/07/25 07:59:48 lukem Exp $	*/
+/*	$NetBSD: makedbm.c,v 1.22 2008/02/29 03:00:47 lukem Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: makedbm.c,v 1.16 1999/07/25 07:59:48 lukem Exp $");
+__RCSID("$NetBSD: makedbm.c,v 1.22 2008/02/29 03:00:47 lukem Exp $");
 #endif
 
 #include <sys/param.h>
@@ -42,13 +42,11 @@ __RCSID("$NetBSD: makedbm.c,v 1.16 1999/07/25 07:59:48 lukem Exp $");
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <util.h>
 
 #include <rpc/rpc.h>
 #include <rpc/xdr.h>
@@ -57,20 +55,16 @@ __RCSID("$NetBSD: makedbm.c,v 1.16 1999/07/25 07:59:48 lukem Exp $");
 #include "ypdb.h"
 #include "ypdef.h"
 
-extern	char *__progname;		/* from crt0.o */
-
-int	main __P((int, char *[]));
-void	usage __P((void));
-int	add_record __P((DBM *, char *, char *, int));
-char	*file_date __P((char *));
-void	list_database __P((char *));
-void	create_database __P((char *, char *, char *, char *,
-	    char *, char *, int, int, int));
+int	main(int, char *[]);
+void	usage(void);
+int	add_record(DBM *, char *, char *, int);
+char	*file_date(char *);
+void	list_database(char *);
+void	create_database(char *, char *, char *, char *, char *, char *,
+			int, int, int);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int aflag, uflag, bflag, lflag, sflag;
 	char *yp_input_file, *yp_output_file;
@@ -155,10 +149,7 @@ main(argc, argv)
 }
 
 int
-add_record(db, str1, str2, check)
-	DBM *db;
-	char *str1, *str2;
-	int check;
+add_record(DBM *db, char *str1, char *str2, int check)
 {
 	datum key, val;
 	int status;
@@ -184,8 +175,7 @@ add_record(db, str1, str2, check)
 }
 
 char *
-file_date(filename)
-	char *filename;
+file_date(char *filename)
 {
 	struct stat finfo;
 	static char datestr[11];
@@ -206,13 +196,12 @@ file_date(filename)
 }
 
 void
-list_database(database)
-	char *database;
+list_database(char *database)
 {
 	DBM *db;
 	datum key, val;
 
-	db = ypdb_open(database, O_RDONLY, 0444);
+	db = ypdb_open(database);
 	if (db == NULL)
 		err(1, "can't open database `%s'", database);
 
@@ -237,11 +226,9 @@ list_database(database)
 }
 
 void
-create_database(infile, database, yp_input_file, yp_output_file,
-    yp_master_name, yp_domain_name, bflag, lflag, sflag)
-	char *infile, *database, *yp_input_file, *yp_output_file;
-	char *yp_master_name, *yp_domain_name;
-	int bflag, lflag, sflag;
+create_database(char *infile, char *database, char *yp_input_file,
+		char *yp_output_file, char *yp_master_name,
+		char *yp_domain_name, int bflag, int lflag, int sflag)
 {
 	FILE *data_file;
 	char myname[MAXHOSTNAMELEN];
@@ -249,14 +236,12 @@ create_database(infile, database, yp_input_file, yp_output_file,
 	size_t len;
 	char *p, *k, *v, *slash;
 	DBM *new_db;
-	static char mapname[] = "ypdbXXXXXX";
+	static const char template[] = "ypdbXXXXXX";
 	char db_mapname[MAXPATHLEN + 1], db_outfile[MAXPATHLEN + 1];
-	char db_tempname[MAXPATHLEN + 1];
 	char empty_str[] = "";
 
 	memset(db_mapname, 0, sizeof(db_mapname));
 	memset(db_outfile, 0, sizeof(db_outfile));
-	memset(db_tempname, 0, sizeof(db_tempname));
 
 	if (strcmp(infile, "-") == 0)
 		data_file = stdin;
@@ -266,7 +251,7 @@ create_database(infile, database, yp_input_file, yp_output_file,
 			err(1, "can't open `%s'", infile);
 	}
 
-	if (strlen(database) + strlen(YPDB_SUFFIX) > MAXPATHLEN)
+	if (strlen(database) + strlen(YPDB_SUFFIX) > (sizeof(db_outfile) - 1))
 		errx(1, "file name `%s' too long", database);
 
 	snprintf(db_outfile, sizeof(db_outfile), "%s%s", database, YPDB_SUFFIX);
@@ -279,38 +264,35 @@ create_database(infile, database, yp_input_file, yp_output_file,
 
 	/* NOTE: database is now directory where map goes ! */
 
-	if (strlen(database) + strlen(mapname) +
-	    strlen(YPDB_SUFFIX) > MAXPATHLEN)
+	if (strlen(database) + strlen(template) + strlen(YPDB_SUFFIX) >
+	    (sizeof(db_mapname) - 1))
 		errx(1, "directory name `%s' too long", database);
 
-	snprintf(db_tempname, sizeof(db_tempname), "%s%s",
-	    database, mapname);
-	mktemp(db_tempname);	/* OK */
 	snprintf(db_mapname, sizeof(db_mapname), "%s%s",
-	    db_tempname, YPDB_SUFFIX);
+	    database, template);
 
-	new_db = ypdb_open(db_tempname, O_RDWR | O_CREAT | O_EXCL, 0644);
+	new_db = ypdb_mktemp(db_mapname);
 	if (new_db == NULL)
-		err(1, "can't create temp database `%s'", db_tempname);
+		err(1, "can't create temp database `%s'", db_mapname);
 
 	for (;
 	    (p = fparseln(data_file, &len, &line_no, NULL, FPARSELN_UNESCALL));
 	    free(p)) {
 		k = p;				/* set start of key */
-		while (*k && isspace(*k))	/* skip leading whitespace */
+		while (*k && isspace((unsigned char)*k)) /* skip leading whitespace */
 			k++;
 
 		if (! *k)
 			continue;
 
 		v = k;
-		while (*v && !isspace(*v)) {	/* find leading whitespace */
+		while (*v && !isspace((unsigned char)*v)) {	/* find leading whitespace */
 				/* convert key to lower case if forcing. */
-			if (lflag && isupper(*v))
-				*v = tolower(*v);
+			if (lflag && isupper((unsigned char)*v))
+				*v = tolower((unsigned char)*v);
 			v++;
 		}
-		while (*v && isspace(*v))	/* replace space with <NUL> */
+		while (*v && isspace((unsigned char)*v))	/* replace space with <NUL> */
 			*v++ = '\0';
 
 		if (add_record(new_db, k, v, TRUE)) {    /* save record */
@@ -370,11 +352,11 @@ bad_record:
 }
 
 void
-usage()
+usage(void)
 {
 
-	fprintf(stderr, "usage: %s -u file\n", __progname);
-	fprintf(stderr, "       %s [-lbs] %s\n", __progname,
+	fprintf(stderr, "usage: %s -u file\n", getprogname());
+	fprintf(stderr, "       %s [-lbs] %s\n", getprogname(),
 	    "[-i YP_INPUT_FILE] [-o YP_OUTPUT_FILE]");
 	fprintf(stderr, "          %s infile outfile\n",
 	    "[-d YP_DOMAIN_NAME] [-m YP_MASTER_NAME]");

@@ -1,10 +1,10 @@
-.\"     $NetBSD: kprintf.9,v 1.8 2000/02/07 12:37:02 abs Exp $
+.\"     $NetBSD: kprintf.9,v 1.24 2008/07/25 07:33:57 manu Exp $
 .\"
-.\" Copyright (c) 1998 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1998, 2002, 2007 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
-.\" by Jeremy Cooper.
+.\" by Jeremy Cooper and by Jason R. Thorpe.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -14,18 +14,11 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
 .\" TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-.\" PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS 
+.\" PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
 .\" BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
 .\" CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
 .\" SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
@@ -34,217 +27,268 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd September 1, 1998
+.Dd September 24, 2007
 .Dt KPRINTF 9
 .Os
 .Sh NAME
-.Nm printf, sprintf, vprintf, uprintf, ttyprintf
+.Nm printf, snprintf, vprintf, vsnprintf, uprintf, ttyprintf, tprintf, aprint
 .Nd kernel formatted output conversion
 .Sh SYNOPSIS
-.Fd #include <sys/systm.h>
+.In sys/systm.h
 .Ft void
-.Fo "printf"
-.Fa "const char *format"
-.Fa "..."
-.Fc
+.Fn "printf" "const char *format" "..."
+.Ft void
+.Fn "printf_nolog" "const char *format" "..."
 .Ft int
-.Fo "sprintf"
-.Fa "char *buf"
-.Fa "const char *format"
-.Fa "..."
-.Fc
+.Fn "snprintf" "char *buf" "size_t size" "const char *format" "..."
+.In machine/stdarg.h
 .Ft void
-.Fo "vprintf"
-.Fa "const char *format"
-.Fa "va_list ap"
-.Fc
+.Fn "vprintf" "const char *format" "va_list ap"
+.Ft int
+.Fn "vsnprintf" "char *buf" "size_t size" "const char *format" "va_list ap"
 .Ft void
-.Fo "uprintf"
-.Fa "const char *format"
-.Fa "..."
-.Fc
+.Fn "uprintf" "const char *format" "..."
 .Ft void
-.Fo "ttyprintf"
-.Fa "struct tty *tty"
-.Fa "const char *format"
-.Fa "..."
-.Fc
+.Fn "ttyprintf" "struct tty *tty" "const char *format" "..."
+.In sys/tprintf.h
+.Ft tpr_t
+.Fn "tprintf_open" "struct proc *p"
+.Ft void
+.Fn "tprintf" "tpr_t tpr" "const char *format" "..."
+.Ft void
+.Fn "tprintf_close" "tpr_t tpr"
+.Ft void
+.Fn "aprint_normal" "const char *format" "..."
+.Ft void
+.Fn "aprint_naive" "const char *format" "..."
+.Ft void
+.Fn "aprint_verbose" "const char *format" "..."
+.Ft void
+.Fn "aprint_debug" "const char *format" "..."
+.Ft void
+.Fn "aprint_error" "const char *format" "..."
+.Ft void
+.Fn "aprint_normal_dev" "device_t" "const char *format" "..."
+.Ft void
+.Fn "aprint_naive_dev" "device_t" "const char *format" "..."
+.Ft void
+.Fn "aprint_verbose_dev" "device_t" "const char *format" "..."
+.Ft void
+.Fn "aprint_debug_dev" "device_t" "const char *format" "..."
+.Ft void
+.Fn "aprint_error_dev" "device_t" "const char *format" "..."
+.Ft void
+.Fn "aprint_normal_ifnet" "struct ifnet *" "const char *format" "..."
+.Ft void
+.Fn "aprint_naive_ifnet" "struct ifnet *" "const char *format" "..."
+.Ft void
+.Fn "aprint_verbose_ifnet" "struct ifnet *" "const char *format" "..."
+.Ft void
+.Fn "aprint_debug_ifnet" "struct ifnet *" "const char *format" "..."
+.Ft void
+.Fn "aprint_error_ifnet" "struct ifnet *" "const char *format" "..."
+.Ft int
+.Fn "aprint_get_error_count" "void"
 .Sh DESCRIPTION
 The
-.Fn printf ,
-.Fn sprintf ,
-.Fn vprintf ,
-.Fn uprintf ,
-and
-.Fn ttyprintf
-functions allow the kernel to send formatted messages to various output
-devices.
+.Fn printf
+family of functions allows the kernel to send formatted messages to various
+output devices.
 The functions
 .Fn printf
 and
 .Fn vprintf
 send formatted strings to the system console.
+The
+.Fn printf_nolog
+function is identical to
+.Fn printf ,
+except it does not send the data to the system log.
+The functions
+.Fn snprintf
+and
+.Fn vsnprintf
+write output to a string buffer.
+These four functions work similarly to their user space counterparts,
+and are not described in detail here.
+.Pp
 The functions
 .Fn uprintf
 and
 .Fn ttyprintf
 send formatted strings to the current process's controlling tty and a specific
-tty,
-respectively.
+tty, respectively.
 .Pp
-Since each of these kernel functions is a scaled down version of its user space
-counterpart
-.Po
-.Xr printf 3 ,
-.Xr sprintf 3 ,
-and
-.Xr vprintf 3
-.Pc ,
-this page describes only the differences between the user space and kernel
-versions, rather than describing all of their functional details.
-.Ss FORMAT OPTIONS
-In addition to the formatting specifiers that the user space functions
-accept in the format string
-.Fa format ,
-the kernel functions accept the following format specifiers.
-.Pp
-.Bl -tag -width "\e177"
-.It Li %b
-Bit field expansion.
-This format specifier is useful for decoding bit fields in device registers.
-It displays an integer using a specified radix
-.Pq base
-and an interpretation of
-the bits within that integer as though they were flags.
-It requires two arguments from the argument vector, the first argument being 
-the bit field to be decoded
-.Pq "as an integer"
-and the second being a decoding directive string.
-.Pp
-The decoding directive string describes how the bitfield is to be interpreted
-and displayed.
-The first character of the string is a binary character representation of the
-output numeral base in which the bitfield will be printed before it is decoded.
-Recognized radix values
-.Pq "in C escape-character format"
-are
-.Li \e10
-.Pq octal ,
-.Li \e12
-.Pq decimal ,
-and
-.Li \e20
-.Pq hexadecimal .
-.Pp
-The remaining characters in the decoding directive string are interpreted as a
-list of bit-position\(endescription pairs.
-A bit-position\(endescription pair begins with a binary character value
-that represents the position of the bit being described.
-A bit position value of one describes the least significant bit.
-Whereas a position value of 32
-.Pq "octal 40, hexadecimal 20, the ASCII space character"
-describes the most significant bit.
-.Pp
-The remaining characters in a bit-position\(endescription pair are the
-characters to print should the bit being described be set.
-Description strings are delimited by the next bit position value character
-encountered
-.Pq "distinguishable by its value being \(<= 32" ,
-or the end of the decoding directive string itself.
-.It Li %:
-Inline format continuation.
-This format specifier allows for recursive formatted output.
-Its argument is the new formatting string to obey and the argument which
-follows it is a
-.Va va_list
-argument vector from which to obtain the data to be formatted.
 The
-.Li %:
-specifier is non portable, and its use is strongly discouraged, even in
-NetBSD specific code (it is not supported on all ports).
-.It Li %r
-Integer value using current
-.Tn DDB
-radix.
-.Bf -emphasis
-This format specifier is only availble in kernels enabled with the
-.Tn DDB
-debugger.
-.Po
-See
-.Xr ddb 4
-.Pc .
-.Ef
-Displays an integer using the current
-.Tn DDB
-radix.
-.It Li %z
-Signed hexadecimal with
-.Ql 0x
-prefix.
-.Bf -emphasis
-This format specifier is only available in kernels enabled with the
-.Tn DDB
-debugger.
-.Po
-See
-.Xr ddb 4
-.Pc .
-.Ef
-Displays a signed integer using the C-style hexadecimal constant format.
+.Fn tprintf
+function sends formatted strings to a process's controlling tty,
+via a handle of type tpr_t.
+This allows multiple write operations to the tty with a guarantee that the
+tty will be valid across calls.
+A handle is acquired by calling
+.Fn tprintf_open
+with the target process as an argument.
+This handle must be closed with a matching call to
+.Fn tprintf_close .
+.Pp
+The functions
+.Fn aprint_normal ,
+.Fn aprint_naive ,
+.Fn aprint_verbose ,
+.Fn aprint_debug ,
+and
+.Fn aprint_error
+are intended to be used to print
+.Xr autoconf 4
+messages. Their
+verbosity depends on flags set in the
+.Dq boothowto
+variable, through options passed during bootstrap; see
+.Sx Interactive mode
+in
+.Xr boot 8 :
+.Bl -tag -width AB_VERBOSE
+.It Dv AB_SILENT
+silent mode, enabled by
+.Ic boot
+.Fl z .
+.It Dv AB_QUIET
+quiet mode, enabled by 
+.Ic boot
+.Fl q .
+.It Dv AB_VERBOSE
+verbose mode, enabled by
+.Ic boot
+.Fl v .
+.It Dv AB_DEBUG
+debug mode, enabled by
+.Ic boot
+.Fl x .
 .El
+.Pp
+The
+.Fn aprint_*
+functions have the following behaviour, based on the above
+mentioned flags:
+.Bl -tag -width "aprint_verbose()"
+.It Fn aprint_normal
+Sends to the console unless
+.Dv AB_QUIET
+is set.
+Always sends to the log.
+.It Fn aprint_naive
+Sends to the console only if
+.Dv AB_QUIET
+is set.
+Never sends to the log.
+.It Fn aprint_verbose
+Sends to the console only if
+.Dv AB_VERBOSE
+is set.
+Always sends to the log.
+.It Fn aprint_debug
+Sends to the console and the log only if
+.Dv AB_DEBUG
+is set.
+.It Fn aprint_error
+Like
+.Fn aprint_normal ,
+but also keeps track of the number of times called.
+This allows a subsystem to report the number of errors that occurred
+during a quiet or silent initialization phase.
+.El
+.Pp
+For the
+.Fn aprint_*
+functions there are two additional families of functions with the
+suffixes
+.Dv _dev
+and
+.Dv _ifnet
+which work like their counterparts without the suffixes, except that
+they take a
+.Ft device_t
+or
+.Ft struct ifnet *
+respectively as first argument and prefix the log message with the
+corresponding device or interface name.
+.Pp
+The
+.Fn aprint_get_error_count
+function reports the number of errors and resets the counter to 0.
+.Pp
+If
+.Dv AB_SILENT
+is set, none of the autoconfiguration message printing routines send output
+to the console.
+The
+.Dv AB_VERBOSE
+and
+.Dv AB_DEBUG
+flags override
+.Dv AB_SILENT .
 .Sh RETURN VALUES
 The
-.Fn sprintf
-function returns the number of characters it placed in the buffer
+.Fn snprintf
+and
+.Fn vsnprintf
+functions return the number of characters placed in the buffer
 .Fa buf .
-.Sh EXAMPLES
-An example use of the
-.Li %b
-format specifier for decoding device registers.
-.Bd -literal -offset indent
-printf("reg=%b\en", 3, "\e10\e2BITTWO\e1BITONE")
-\(rA "reg=3<BITTWO,BITONE>"
-
-printf("enablereg=%b\en", 0xe860,
-       "\e20\ex10NOTBOOT\ex0fFPP\ex0eSDVMA\ex0cVIDEO"
-       "\ex0bLORES\ex0aFPA\ex09DIAG\ex07CACHE"
-       "\ex06IOCACHE\ex05LOOPBACK\ex04DBGCACHE")
-\(rA "enablereg=e860<NOTBOOT,FPP,SDVMA,VIDEO,CACHE,IOCACHE>"
-.Ed
+This is different to the user-space functions of the same name.
 .Pp
-An example use of the
-.Li %:
-format specifier for recursive formatting.
-.Bd -literal -offset indent
-void
-bail(char *fmt, ...)
-{
-        va_list ap;
-        va_start (ap, fmt);
-        printf("bailing out: %:\en", fmt, ap);
-        va_end(ap);
-}
-
-bail("descriptor %d is invalid.", 5)
-\(rA "bailing out: descriptor 5 is invalid"
-.Ed
+The
+.Fn tprintf_open
+function returns
+.Dv NULL
+if no terminal handle could be acquired.
 .Sh SEE ALSO
-.\" The following page has not been written, but I am including a cross-
-.\" reference to it in the hopes that it will inspire someone to write it.
-.Xr printf 3 ,
 .Xr printf 1 ,
-.Xr ddb 4 ,
-.Xr tprintf 9
+.Xr printf 3 ,
+.Xr autoconf 4 ,
+.Xr boot 8 ,
+.Xr bitmask_snprintf 9
 .Sh CODE REFERENCES
 .Pa sys/kern/subr_prf.c
-.Sh BUGS
+.Sh HISTORY
 The
+.Fn sprintf
+and
+.Fn vsprintf
+unsized string formatting functions are supported for compatibility only,
+and are not documented here.
+New code should use the size-limited
+.Fn snprintf
+and
+.Fn vsnprintf
+functions instead.
+.Pp
+In
+.Nx 1.5
+and earlier,
+.Fn printf
+supported more format strings than the user space
+.Fn printf .
+These nonstandard format strings are no longer supported.
+For the functionality provided by the former
 .Li %b
-format specifier cannot be used to decode integers greater than 32 bits in
-size.
+format string, see
+.Xr bitmask_snprintf 9 .
+.Pp
+The
+.Fn aprint_normal ,
+.Fn aprint_naive ,
+.Fn aprint_verbose ,
+and
+.Fn aprint_debug
+functions first appeared in
+.Bsx .
+.Sh BUGS
 The
 .Fn uprintf
 and
 .Fn ttyprintf
 functions should be used sparingly, if at all.
+Where multiple lines of output are required to reach a process's
+controlling terminal,
+.Fn tprintf
+is preferred.

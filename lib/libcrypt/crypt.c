@@ -1,4 +1,4 @@
-/*	$NetBSD: crypt.c,v 1.14 2000/03/13 22:59:22 soren Exp $	*/
+/*	$NetBSD: crypt.c,v 1.26 2007/01/17 23:24:22 hubertf Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)crypt.c	8.1.1.1 (Berkeley) 8/18/93";
 #else
-__RCSID("$NetBSD: crypt.c,v 1.14 2000/03/13 22:59:22 soren Exp $");
+__RCSID("$NetBSD: crypt.c,v 1.26 2007/01/17 23:24:22 hubertf Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,6 +45,11 @@ __RCSID("$NetBSD: crypt.c,v 1.14 2000/03/13 22:59:22 soren Exp $");
 #include <pwd.h>
 #include <stdlib.h>
 #include <unistd.h>
+#if defined(DEBUG) || defined(MAIN) || defined(UNIT_TEST)
+#include <stdio.h>
+#endif
+
+#include "crypt.h"
 
 /*
  * UNIX password, and DES, encryption.
@@ -287,19 +288,20 @@ typedef union {
 #endif /* LARGEDATA */
 
 STATIC	init_des __P((void));
-STATIC	init_perm __P((C_block [64/CHUNKBITS][1<<CHUNKBITS], unsigned char [64], int, int));
+STATIC	init_perm __P((C_block [64/CHUNKBITS][1<<CHUNKBITS],
+		       const unsigned char [64], int, int));
 #ifndef LARGEDATA
-STATIC	permute __P((unsigned char *, C_block *, C_block *, int));
+STATIC	permute __P((const unsigned char *, C_block *, C_block *, int));
 #endif
 #ifdef DEBUG
-STATIC	prtab __P((char *, unsigned char *, int));
+STATIC	prtab __P((const char *, unsigned char *, int));
 #endif
 
 
 #ifndef LARGEDATA
 STATIC
 permute(cp, out, p, chars_in)
-	unsigned char *cp;
+	const unsigned char *cp;
 	C_block *out;
 	C_block *p;
 	int chars_in;
@@ -321,7 +323,7 @@ permute(cp, out, p, chars_in)
 
 /* =====  (mostly) Standard DES Tables ==================== */
 
-static unsigned char IP[] = {		/* initial permutation */
+static const unsigned char IP[] = {	/* initial permutation */
 	58, 50, 42, 34, 26, 18, 10,  2,
 	60, 52, 44, 36, 28, 20, 12,  4,
 	62, 54, 46, 38, 30, 22, 14,  6,
@@ -334,7 +336,7 @@ static unsigned char IP[] = {		/* initial permutation */
 
 /* The final permutation is the inverse of IP - no table is necessary */
 
-static unsigned char ExpandTr[] = {	/* expansion operation */
+static const unsigned char ExpandTr[] = {	/* expansion operation */
 	32,  1,  2,  3,  4,  5,
 	 4,  5,  6,  7,  8,  9,
 	 8,  9, 10, 11, 12, 13,
@@ -345,7 +347,7 @@ static unsigned char ExpandTr[] = {	/* expansion operation */
 	28, 29, 30, 31, 32,  1,
 };
 
-static unsigned char PC1[] = {		/* permuted choice table 1 */
+static const unsigned char PC1[] = {	/* permuted choice table 1 */
 	57, 49, 41, 33, 25, 17,  9,
 	 1, 58, 50, 42, 34, 26, 18,
 	10,  2, 59, 51, 43, 35, 27,
@@ -357,12 +359,12 @@ static unsigned char PC1[] = {		/* permuted choice table 1 */
 	21, 13,  5, 28, 20, 12,  4,
 };
 
-static unsigned char Rotates[] = {	/* PC1 rotation schedule */
+static const unsigned char Rotates[] = {/* PC1 rotation schedule */
 	1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1,
 };
 
 /* note: each "row" of PC2 is left-padded with bits that make it invertible */
-static unsigned char PC2[] = {		/* permuted choice table 2 */
+static const unsigned char PC2[] = {	/* permuted choice table 2 */
 	 9, 18,    14, 17, 11, 24,  1,  5,
 	22, 25,     3, 28, 15,  6, 21, 10,
 	35, 38,    23, 19, 12,  4, 26,  8,
@@ -374,7 +376,7 @@ static unsigned char PC2[] = {		/* permuted choice table 2 */
 	 0,  0,    46, 42, 50, 36, 29, 32,
 };
 
-static unsigned char S[8][64] = {	/* 48->32 bit substitution tables */
+static const unsigned char S[8][64] = {	/* 48->32 bit substitution tables */
 					/* S[1]			*/
 	{ 14,  4, 13,  1,  2, 15, 11,  8,  3, 10,  6, 12,  5,  9,  0,  7,
 	   0, 15,  7,  4, 14,  2, 13,  1, 10,  6, 12, 11,  9,  5,  3,  8,
@@ -417,7 +419,7 @@ static unsigned char S[8][64] = {	/* 48->32 bit substitution tables */
 	   2,  1, 14,  7,  4, 10,  8, 13, 15, 12,  9,  0,  3,  5,  6, 11 }
 };
 
-static unsigned char P32Tr[] = {	/* 32-bit permutation function */
+static const unsigned char P32Tr[] = {	/* 32-bit permutation function */
 	16,  7, 20, 21,
 	29, 12, 28, 17,
 	 1, 15, 23, 26,
@@ -428,7 +430,7 @@ static unsigned char P32Tr[] = {	/* 32-bit permutation function */
 	22, 11,  4, 25,
 };
 
-static unsigned char CIFP[] = {		/* compressed/interleaved permutation */
+static const unsigned char CIFP[] = {	/* compressed/interleaved permutation */
 	 1,  2,  3,  4,   17, 18, 19, 20,
 	 5,  6,  7,  8,   21, 22, 23, 24,
 	 9, 10, 11, 12,   25, 26, 27, 28,
@@ -440,7 +442,7 @@ static unsigned char CIFP[] = {		/* compressed/interleaved permutation */
 	45, 46, 47, 48,   61, 62, 63, 64,
 };
 
-static unsigned char itoa64[] =		/* 0..63 => ascii-64 */
+static const unsigned char itoa64[] =		/* 0..63 => ascii-64 */
 	"./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
 
@@ -471,6 +473,7 @@ static C_block	CF6464[64/CHUNKBITS][1<<CHUNKBITS];
 static C_block	constdatablock;			/* encryption constant */
 static char	cryptresult[1+4+4+11+1];	/* encrypted result */
 
+
 /*
  * Return a pointer to static data consisting of the "setting"
  * followed by an encryption produced by the "key" and "setting".
@@ -487,6 +490,19 @@ crypt(key, setting)
 	int num_iter, salt_size;
 	C_block keyblock, rsltblock;
 
+	/* Non-DES encryption schemes hook in here. */
+	if (setting[0] == _PASSWORD_NONDES) {
+		switch (setting[1]) {
+		case '2':
+			return (__bcrypt(key, setting));
+		case 's':
+			return (__crypt_sha1(key, setting));
+		case '1':
+		default:
+			return (__md5crypt(key, setting));
+		}
+	}
+
 	for (i = 0; i < 8; i++) {
 		if ((t = 2*(unsigned char)(*key)) != 0)
 			key++;
@@ -502,8 +518,8 @@ crypt(key, setting)
 		 * Involve the rest of the password 8 characters at a time.
 		 */
 		while (*key) {
-			if (des_cipher((char *)&keyblock,
-			    (char *)&keyblock, 0L, 1))
+			if (des_cipher((char *)(void *)&keyblock,
+			    (char *)(void *)&keyblock, 0L, 1))
 				return (NULL);
 			for (i = 0; i < 8; i++) {
 				if ((t = 2*(unsigned char)(*key)) != 0)
@@ -541,8 +557,8 @@ crypt(key, setting)
 		salt = (salt<<6) | a64toi[t];
 	}
 	encp += salt_size;
-	if (des_cipher((char *)&constdatablock, (char *)&rsltblock,
-	    salt, num_iter))
+	if (des_cipher((char *)(void *)&constdatablock,
+	    (char *)(void *)&rsltblock, salt, num_iter))
 		return (NULL);
 
 	/*
@@ -585,7 +601,7 @@ des_setkey(key)
 	const char *key;
 {
 	DCL_BLOCK(K, K0, K1);
-	C_block *ptabp;
+	C_block *help, *ptabp;
 	int i;
 	static int des_ready = 0;
 
@@ -594,15 +610,15 @@ des_setkey(key)
 		des_ready = 1;
 	}
 
-	PERM6464(K,K0,K1,(unsigned char *)key,(C_block *)PC1ROT);
-	key = (char *)&KS[0];
-	STORE(K&~0x03030303L, K0&~0x03030303L, K1, *(C_block *)key);
+	PERM6464(K,K0,K1,(const unsigned char *)key,(C_block *)PC1ROT);
+	help = &KS[0];
+	STORE(K&~0x03030303L, K0&~0x03030303L, K1, *help);
 	for (i = 1; i < 16; i++) {
-		key += sizeof(C_block);
-		STORE(K,K0,K1,*(C_block *)key);
+		help++;
+		STORE(K,K0,K1,*help);
 		ptabp = (C_block *)PC2ROT[Rotates[i]-1];
-		PERM6464(K,K0,K1,(unsigned char *)key,ptabp);
-		STORE(K&~0x03030303L, K0&~0x03030303L, K1, *(C_block *)key);
+		PERM6464(K,K0,K1,(const unsigned char *)help,ptabp);
+		STORE(K&~0x03030303L, K0&~0x03030303L, K1, *help);
 	}
 	return (0);
 }
@@ -646,7 +662,7 @@ des_cipher(in, out, salt, num_iter)
 	B.b[4] = in[4]; B.b[5] = in[5]; B.b[6] = in[6]; B.b[7] = in[7];
 	LOAD(L,L0,L1,B);
 #else
-	LOAD(L,L0,L1,*(C_block *)in);
+	LOAD(L,L0,L1,*(const C_block *)in);
 #endif
 	LOADREG(R,R0,R1,L,L0,L1);
 	L0 &= 0x55555555L;
@@ -666,7 +682,9 @@ des_cipher(in, out, salt, num_iter)
 	}
 	else
 	{		/* decryption */
-		return (1); /* always fail */
+		num_iter = -num_iter;
+		kp = &KS[KS_SIZE-1];
+		ks_inc  = -(long)sizeof(*kp);
 	}
 
 	while (--num_iter >= 0) {
@@ -882,7 +900,7 @@ init_des()
 STATIC
 init_perm(perm, p, chars_in, chars_out)
 	C_block perm[64/CHUNKBITS][1<<CHUNKBITS];
-	unsigned char p[64];
+	const unsigned char p[64];
 	int chars_in, chars_out;
 {
 	int i, j, k, l;
@@ -955,7 +973,7 @@ encrypt(block, flag)
 #ifdef DEBUG
 STATIC
 prtab(s, t, num_rows)
-	char *s;
+	const char *s;
 	unsigned char *t;
 	int num_rows;
 {
@@ -969,5 +987,19 @@ prtab(s, t, num_rows)
 		(void)printf("\n");
 	}
 	(void)printf("\n");
+}
+#endif
+
+#if defined(MAIN) || defined(UNIT_TEST)
+#include <err.h>
+
+int
+main (int argc, char *argv[])
+{
+    if (argc < 2)
+	errx(1, "Usage: %s password [salt]\n", argv[0]);
+
+    printf("%s\n", crypt(argv[1], (argc > 2) ? argv[2] : argv[1]));
+    exit(0);
 }
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_declusterPQ.h,v 1.3 1999/02/05 00:06:09 oster Exp $	*/
+/*	$NetBSD: rf_declusterPQ.h,v 1.7 2006/04/26 17:08:48 oster Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -29,23 +29,23 @@
 #ifndef _RF__RF_DECLUSTERPQ_H_
 #define _RF__RF_DECLUSTERPQ_H_
 
-#include "rf_types.h"
+#include <dev/raidframe/raidframevar.h>
 
-int 
+int
 rf_ConfigureDeclusteredPQ(RF_ShutdownList_t ** listp, RF_Raid_t * raidPtr,
     RF_Config_t * cfgPtr);
 int     rf_GetDefaultNumFloatingReconBuffersPQ(RF_Raid_t * raidPtr);
-void 
+void
 rf_MapSectorDeclusteredPQ(RF_Raid_t * raidPtr, RF_RaidAddr_t raidSector,
-    RF_RowCol_t * row, RF_RowCol_t * col, RF_SectorNum_t * diskSector, int remap);
-void 
+    RF_RowCol_t * col, RF_SectorNum_t * diskSector, int remap);
+void
 rf_MapParityDeclusteredPQ(RF_Raid_t * raidPtr, RF_RaidAddr_t raidSector,
-    RF_RowCol_t * row, RF_RowCol_t * col, RF_SectorNum_t * diskSector, int remap);
-void 
+    RF_RowCol_t * col, RF_SectorNum_t * diskSector, int remap);
+void
 rf_MapQDeclusteredPQ(RF_Raid_t * raidPtr, RF_RaidAddr_t raidSector,
-    RF_RowCol_t * row, RF_RowCol_t * col, RF_SectorNum_t * diskSector, int remap);
-void 
+    RF_RowCol_t * col, RF_SectorNum_t * diskSector, int remap);
+void
 rf_IdentifyStripeDeclusteredPQ(RF_Raid_t * raidPtr, RF_RaidAddr_t addr,
-    RF_RowCol_t ** diskids, RF_RowCol_t * outRow);
+    RF_RowCol_t ** diskids);
 
 #endif				/* !_RF__RF_DECLUSTERPQ_H_ */

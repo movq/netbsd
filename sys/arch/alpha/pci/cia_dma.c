@@ -1,4 +1,4 @@
-/* $NetBSD: cia_dma.c,v 1.15 2000/02/06 01:26:50 thorpej Exp $ */
+/* $NetBSD: cia_dma.c,v 1.22 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,14 +32,15 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: cia_dma.c,v 1.15 2000/02/06 01:26:50 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cia_dma.c,v 1.22 2008/04/28 20:23:11 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-#include <vm/vm.h>
+
+#include <uvm/uvm_extern.h>
 
 #define _ALPHA_BUS_DMA_PRIVATE
 #include <machine/bus.h>
@@ -60,11 +54,6 @@ bus_dma_tag_t cia_dma_get_tag __P((bus_dma_tag_t, alpha_bus_t));
 
 int	cia_bus_dmamap_create_direct __P((bus_dma_tag_t, bus_size_t, int,
 	    bus_size_t, bus_size_t, int, bus_dmamap_t *));
-
-int	cia_bus_dmamap_create_sgmap __P((bus_dma_tag_t, bus_size_t, int,
-	    bus_size_t, bus_size_t, int, bus_dmamap_t *));
-
-void	cia_bus_dmamap_destroy_sgmap __P((bus_dma_tag_t, bus_dmamap_t));
 
 int	cia_bus_dmamap_load_sgmap __P((bus_dma_tag_t, bus_dmamap_t, void *,
 	    bus_size_t, struct proc *, int));
@@ -92,6 +81,9 @@ void	cia_bus_dmamap_unload_sgmap __P((bus_dma_tag_t, bus_dmamap_t));
 #define	CIA_SGMAP_MAPPED_BASE	(8*1024*1024)
 #define	CIA_SGMAP_MAPPED_SIZE	(8*1024*1024)
 
+/* ALCOR/ALGOR2/PYXIS have a 256-byte out-bound DMA prefetch threshold. */
+#define	CIA_SGMAP_PFTHRESH	256
+
 void	cia_tlb_invalidate __P((void));
 void	cia_broken_pyxis_tlb_invalidate __P((void));
 
@@ -117,7 +109,7 @@ cia_dma_init(ccp)
 	t->_cookie = ccp;
 	t->_wbase = CIA_DIRECT_MAPPED_BASE;
 	t->_wsize = CIA_DIRECT_MAPPED_SIZE;
-	t->_next_window = NULL;
+	t->_next_window = &ccp->cc_dmat_sgmap;
 	t->_boundary = 0;
 	t->_sgmap = NULL;
 	t->_get_tag = cia_dma_get_tag;
@@ -146,9 +138,10 @@ cia_dma_init(ccp)
 	t->_next_window = NULL;
 	t->_boundary = 0;
 	t->_sgmap = &ccp->cc_sgmap;
+	t->_pfthresh = CIA_SGMAP_PFTHRESH;
 	t->_get_tag = cia_dma_get_tag;
-	t->_dmamap_create = cia_bus_dmamap_create_sgmap;
-	t->_dmamap_destroy = cia_bus_dmamap_destroy_sgmap;
+	t->_dmamap_create = alpha_sgmap_dmamap_create;
+	t->_dmamap_destroy = alpha_sgmap_dmamap_destroy;
 	t->_dmamap_load = cia_bus_dmamap_load_sgmap;
 	t->_dmamap_load_mbuf = cia_bus_dmamap_load_mbuf_sgmap;
 	t->_dmamap_load_uio = cia_bus_dmamap_load_uio_sgmap;
@@ -271,6 +264,12 @@ cia_dma_get_tag(t, bustype)
 		 * Systems with a CIA can only support 1G
 		 * of memory, so we use the direct-mapped window
 		 * on busses that have 32-bit DMA.
+		 *
+		 * Ahem:  I have a PWS 500au with 1.5G of memory, and it
+		 * had problems doing DMA because it was not falling back
+		 * to using SGMAPs.  I've fixed that and my PWS now works with
+		 * 1.5G.  There have been other reports about failures with
+		 * more than 1.0G of memory.  Michael Hitch
 		 */
 		return (&ccp->cc_dmat_direct);
 
@@ -323,61 +322,12 @@ cia_bus_dmamap_create_direct(t, size, nsegments, maxsegsz, boundary,
 		 * drivers allocate large contiguous blocks of memory
 		 * for control data structures, even though they won't
 		 * do any single DMA that crosses a page coundary.
-		 *	-- thorpej@netbsd.org, 2/5/2000
+		 *	-- thorpej@NetBSD.org, 2/5/2000
 		 */
 		map->_dm_flags |= DMAMAP_NO_COALESCE;
 	}
 
 	return (0);
-}
-
-/*
- * Create a CIA SGMAP-mapped DMA map.
- */
-int
-cia_bus_dmamap_create_sgmap(t, size, nsegments, maxsegsz, boundary,
-    flags, dmamp)
-	bus_dma_tag_t t;
-	bus_size_t size;  
-	int nsegments;
-	bus_size_t maxsegsz;
-	bus_size_t boundary;
-	int flags; 
-	bus_dmamap_t *dmamp;
-{
-	bus_dmamap_t map;
-	int error;
-
-	error = _bus_dmamap_create(t, size, nsegments, maxsegsz,
-	    boundary, flags, dmamp);
-	if (error)
-		return (error);
-
-	map = *dmamp;
-
-	if (flags & BUS_DMA_ALLOCNOW) {
-		error = alpha_sgmap_alloc(map, round_page(size),
-		    t->_sgmap, flags);
-		if (error)
-			cia_bus_dmamap_destroy_sgmap(t, map);
-	}
-
-	return (error);
-}
-
-/*
- * Destroy a CIA SGMAP-mapped DMA map.
- */
-void
-cia_bus_dmamap_destroy_sgmap(t, map)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-{
-
-	if (map->_dm_flags & DMAMAP_HAS_SGMAP)
-		alpha_sgmap_free(map, t->_sgmap);
-
-	_bus_dmamap_destroy(t, map);
 }
 
 /*

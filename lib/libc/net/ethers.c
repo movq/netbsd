@@ -1,4 +1,4 @@
-/*	$NetBSD: ethers.c,v 1.17 2000/01/22 22:19:14 mycroft Exp $	*/
+/*	$NetBSD: ethers.c,v 1.21 2006/10/15 10:55:01 martin Exp $	*/
 
 /* 
  * ethers(3N) a la Sun.
@@ -6,6 +6,11 @@
  * Written by Roland McGrath <roland@frob.com> 10/14/93.
  * Public domain.
  */
+
+#include <sys/cdefs.h>
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: ethers.c,v 1.21 2006/10/15 10:55:01 martin Exp $");
+#endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 #include <sys/param.h>
@@ -40,13 +45,13 @@ __weak_alias(ether_ntohost,_ether_ntohost)
 
 char *
 ether_ntoa(e)
-	struct ether_addr *e;
+	const struct ether_addr *e;
 {
 	static char a[18];
 
 	_DIAGASSERT(e != NULL);
 
-	snprintf(a, sizeof a, "%02x:%02x:%02x:%02x:%02x:%02x",
+	(void) snprintf(a, sizeof a, "%02x:%02x:%02x:%02x:%02x:%02x",
 	    e->ether_addr_octet[0], e->ether_addr_octet[1],
 	    e->ether_addr_octet[2], e->ether_addr_octet[3],
 	    e->ether_addr_octet[4], e->ether_addr_octet[5]);
@@ -78,7 +83,7 @@ ether_aton(s)
 int
 ether_ntohost(hostname, e)
 	char *hostname;
-	struct ether_addr *e;
+	const struct ether_addr *e;
 {
 	FILE *f; 
 	char *p;
@@ -198,17 +203,19 @@ ether_line(l, e, hostname)
 	char *hostname;
 {
 	u_int i[6];
-	static char buf[sizeof " %x:%x:%x:%x:%x:%x %s\\n" + 21];
-		/* XXX: 21 == strlen (ASCII representation of 2^64) */
 
+#define S2(arg) #arg
+#define S1(arg) S2(arg)
+	static const char fmt[] = " %x:%x:%x:%x:%x:%x"
+	    " %" S1(MAXHOSTNAMELEN) "s\n";
+#undef S2
+#undef S1
+	
 	_DIAGASSERT(l != NULL);
 	_DIAGASSERT(e != NULL);
 	_DIAGASSERT(hostname != NULL);
 
-	if (! buf[0])
-		snprintf(buf, sizeof buf, " %%x:%%x:%%x:%%x:%%x:%%x %%%ds\\n",
-		    MAXHOSTNAMELEN);
-	if (sscanf(l, buf,
+	if (sscanf(l, fmt,
 	    &i[0], &i[1], &i[2], &i[3], &i[4], &i[5], hostname) == 7) {
 		e->ether_addr_octet[0] = (u_char)i[0];
 		e->ether_addr_octet[1] = (u_char)i[1];

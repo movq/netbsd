@@ -1,68 +1,48 @@
-/*	$NetBSD: localeconv.c,v 1.9 1998/11/13 15:49:03 christos Exp $	*/
+/* $NetBSD: localeconv.c,v 1.14.18.1 2009/01/15 03:24:07 snj Exp $ */
 
-/*
- * Written by J.T. Conklin <jtc@netbsd.org>.
- * Public domain.
+/*-
+ * Copyright (c)2008 Citrus Project,
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: localeconv.c,v 1.9 1998/11/13 15:49:03 christos Exp $");
+__RCSID("$NetBSD: localeconv.c,v 1.14.18.1 2009/01/15 03:24:07 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
-#include <sys/localedef.h>
+#include <sys/types.h>
+#include <langinfo.h>
+#define __SETLOCALE_SOURCE__
 #include <locale.h>
 
-/* 
- * The localeconv() function constructs a struct lconv from the current
- * monetary and numeric locales.
- *
- * Because localeconv() may be called many times (especially by library
- * routines like printf() & strtod()), the approprate members of the 
- * lconv structure are computed only when the monetary or numeric 
- * locale has been changed.
- */
-int __mlocale_changed = 1;
-int __nlocale_changed = 1;
+#include "setlocale_local.h"
 
-/*
- * Return the current locale conversion.
- */
 struct lconv *
 localeconv()
 {
-    static struct lconv ret;
+	struct _locale_impl_t *impl;
 
-    if (__mlocale_changed) {
-	/* LC_MONETARY */
-	ret.int_curr_symbol	= _CurrentMonetaryLocale->int_curr_symbol;
-	ret.currency_symbol	= _CurrentMonetaryLocale->currency_symbol;
-	ret.mon_decimal_point	= _CurrentMonetaryLocale->mon_decimal_point;
-	ret.mon_thousands_sep	= _CurrentMonetaryLocale->mon_thousands_sep;
-	ret.mon_grouping	= _CurrentMonetaryLocale->mon_grouping;
-	ret.positive_sign	= _CurrentMonetaryLocale->positive_sign;
-	ret.negative_sign	= _CurrentMonetaryLocale->negative_sign;
-	ret.int_frac_digits	= _CurrentMonetaryLocale->int_frac_digits;
-	ret.frac_digits		= _CurrentMonetaryLocale->frac_digits;
-	ret.p_cs_precedes	= _CurrentMonetaryLocale->p_cs_precedes;
-	ret.p_sep_by_space	= _CurrentMonetaryLocale->p_sep_by_space;
-	ret.n_cs_precedes	= _CurrentMonetaryLocale->n_cs_precedes;
-	ret.n_sep_by_space	= _CurrentMonetaryLocale->n_sep_by_space;
-	ret.p_sign_posn		= _CurrentMonetaryLocale->p_sign_posn;
-	ret.n_sign_posn		= _CurrentMonetaryLocale->n_sign_posn;
-	__mlocale_changed = 0;
-    }
-
-    if (__nlocale_changed) {
-	/* LC_NUMERIC */
-	/* LINTED const castaway */
-	ret.decimal_point	= (char *) _CurrentNumericLocale->decimal_point;
-	/* LINTED const castaway */
-	ret.thousands_sep	= (char *) _CurrentNumericLocale->thousands_sep;
-	/* LINTED const castaway */
-	ret.grouping		= (char *) _CurrentNumericLocale->grouping;
-	__nlocale_changed = 0;
-    }
-
-    return (&ret);
+	impl = *_current_locale();
+	return &impl->cache.ldata;
 }

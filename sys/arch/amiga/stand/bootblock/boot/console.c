@@ -1,4 +1,4 @@
-/* $NetBSD: console.c,v 1.3 1999/02/16 23:34:11 is Exp $ */
+/* $NetBSD: console.c,v 1.8 2008/04/28 20:23:13 martin Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
 
 #include <sys/types.h>
 
-#include <stand.h>
+#include <lib/libsa/stand.h>
 #include "samachdep.h"
 
 #include "amigatypes.h"
@@ -66,68 +59,81 @@ u_int32_t windowtags[] = {
 	0
 };
 
-struct AmigaIO *cnior;
-struct TimerIO *tmior;
-struct MsgPort *cnmp;
+struct Console {
+	int magic;
+	struct AmigaIO *cnior;
+	struct TimerIO *tmior;
+	struct MsgPort *cnmp;
+	struct Screen *s;
+	struct Window *w;
+} *ConsoleBase;
+static struct Console myConsole;
 
 u_int16_t timelimit;
 
 int
-consinit() {
-	struct Screen *s = 0;
-	struct Window *w = 0;
+consinit(void *consptr) {
+	struct Console *mc;
 
+	if (consptr != NULL) {
+		/* Check magic? */
+		ConsoleBase = consptr;		/* Use existing console */
+		return (0);
+	}
+
+	mc = &myConsole;
 	IntuitionBase = OpenLibrary("intuition.library", 36L);
 	if (IntuitionBase == 0)
 		goto err;
 
-	s = OpenScreenTagList(0, screentags);
-	if (!s)
+	mc->s = OpenScreenTagList(0, screentags);
+	if (!mc->s)
 		goto err;
 
-	windowtags[1] = (u_int32_t)s;
-	w = OpenWindowTagList(0, windowtags);
-	if (!w)
+	windowtags[1] = (u_int32_t)mc->s;
+	mc->w = OpenWindowTagList(0, windowtags);
+	if (!mc->w)
 		goto err;
 
-	cnmp = CreateMsgPort();
+	mc->cnmp = CreateMsgPort();
 
-	if (!cnmp)
+	if (!mc->cnmp)
 		goto err;
 
-	cnior = (struct AmigaIO *)CreateIORequest(cnmp, sizeof(struct AmigaIO));
-	if (!cnior)
+	mc->cnior = (struct AmigaIO *)CreateIORequest(mc->cnmp, sizeof(struct AmigaIO));
+	if (!mc->cnior)
 		goto err;
 
-	cnior->buf = (void *)w;
-	if (OpenDevice("console.device", 0, cnior, 0))
+	mc->cnior->buf = (void *)mc->w;
+	if (OpenDevice("console.device", 0, mc->cnior, 0))
 		goto err;
 
-	tmior = (struct TimerIO *)CreateIORequest(cnmp, sizeof(struct TimerIO));
-	if (!tmior)
+	mc->tmior = (struct TimerIO *)CreateIORequest(mc->cnmp, sizeof(struct TimerIO));
+	if (!mc->tmior)
 		goto err;
 
-	if (OpenDevice("timer.device", 0, (struct AmigaIO*)tmior, 0))
+	if (OpenDevice("timer.device", 0, (struct AmigaIO*)mc->tmior, 0))
 		goto err;
 
+	ConsoleBase = mc;
 	return 0;
 
 err:
 #ifdef notyet
-	if (tmior)
-		DeleteIORequest(tmior);
+	if (mc->tmior)
+		DeleteIORequest(mc->tmior);
 
-	if (cnior)
-		DeleteIORequest(cnior);
+	if (mc->cnior)
+		DeleteIORequest(mc->cnior);
 
-	if (cnmp)
-		DeleteMsgPort(cnmp);
+	if (mc->cnmp)
+		DeleteMsgPort(mc->cnmp);
 
-	if (w)
-		CloseWindow(w);
+	if (mc->w)
+		CloseWindow(mc->w);
 
-	if (s)
-		CloseScreen(s);
+	if (mc->s)
+		CloseScreen(mc->s);
 	if (IntuitionBase)
 		CloseLibrary(IntuitionBase);
 #endif
@@ -135,24 +141,61 @@ err:
 	return 1;
 }
 
+#ifdef _PRIMARY_BOOT
+int
+consclose()
+{
+	struct Console *mc = ConsoleBase;
+
+	if (mc == NULL)
+		return 0;
+	if (mc->tmior) {
+		CloseDevice((struct AmigaIO *)mc->tmior);
+		DeleteIORequest(mc->tmior);
+	}
+
+	if (mc->cnior) {
+		CloseDevice(mc->cnior);
+		DeleteIORequest(mc->cnior);
+	}
+
+	if (mc->cnmp)
+		DeleteMsgPort(mc->cnmp);
+
+	if (mc->w)
+		CloseWindow(mc->w);
+
+	if (mc->s)
+		CloseScreen(mc->s);
+	if (IntuitionBase)
+		CloseLibrary(IntuitionBase);
+	ConsoleBase = NULL;
+	return 0;
+}
+#endif
+
 void
 putchar(c)
 	char c;
 {
-	cnior->length = 1;
-	cnior->buf = &c;
-	cnior->cmd = Cmd_Wr;
-	(void)DoIO(cnior);
+	struct Console *mc = ConsoleBase;
+
+	mc->cnior->length = 1;
+	mc->cnior->buf = &c;
+	mc->cnior->cmd = Cmd_Wr;
+	(void)DoIO(mc->cnior);
 }
 
 void
 puts(s)
 	char *s;
 {
-	cnior->length = -1;
-	cnior->buf = s;
-	cnior->cmd = Cmd_Wr;
-	(void)DoIO(cnior);
+	struct Console *mc = ConsoleBase;
+
+	mc->cnior->length = -1;
+	mc->cnior->buf = s;
+	mc->cnior->cmd = Cmd_Wr;
+	(void)DoIO(mc->cnior);
 }
 
 int
@@ -160,29 +203,30 @@ getchar()
 {
 	struct AmigaIO *ior;
 	char c = -1;
+	struct Console *mc = ConsoleBase;
 
-	cnior->length = 1;
-	cnior->buf = &c;
-	cnior->cmd = Cmd_Rd;
+	mc->cnior->length = 1;
+	mc->cnior->buf = &c;
+	mc->cnior->cmd = Cmd_Rd;
 
-	SendIO(cnior);
+	SendIO(mc->cnior);
 
 	if (timelimit) {
-		tmior->cmd = Cmd_Addtimereq;
-		tmior->secs = timelimit;
-		tmior->usec = 2; /* Paranoid */
-		SendIO((struct AmigaIO *)tmior);
+		mc->tmior->cmd = Cmd_Addtimereq;
+		mc->tmior->secs = timelimit;
+		mc->tmior->usec = 2; /* Paranoid */
+		SendIO((struct AmigaIO *)mc->tmior);
 
-		ior = WaitPort(cnmp);
-		if (ior == cnior)
-			AbortIO((struct AmigaIO *)tmior);
-		else /* if (ior == tmior) */ {
-			AbortIO(cnior);
+		ior = WaitPort(mc->cnmp);
+		if (ior == mc->cnior)
+			AbortIO((struct AmigaIO *)mc->tmior);
+		else /* if (ior == mc->tmior) */ {
+			AbortIO(mc->cnior);
 			c = '\n';
 		}
-		WaitIO((struct AmigaIO *)tmior);
+		WaitIO((struct AmigaIO *)mc->tmior);
 		timelimit = 0;
-	} 
-	(void)WaitIO(cnior);
+	}
+	(void)WaitIO(mc->cnior);
 	return c;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld.c,v 1.76 2000/02/11 00:07:36 thorpej Exp $	*/
+/*	$NetBSD: rtld.c,v 1.88 2008/04/28 20:23:03 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,15 +39,11 @@
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <a.out.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#if __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
 #include "shlib.h"
 #include "ld.h"
@@ -62,7 +51,7 @@
 #ifdef __m68k__
 /*
  * This is a slight hack to allow the same loader to be used on
- * 4k and 8k __LDPGSZ executables.
+ * 4k and 8k AOUT_LDPGSZ executables.
  */
 static int page_size = 0x2000;
 #undef PAGSIZ
@@ -214,6 +203,7 @@ static struct nzlist	*lookup __P((	const char *, struct so_map *,
 static inline struct rt_symbol	*lookup_rts __P((const char *));
 static struct rt_symbol	*enter_rts __P((const char *, long, int, caddr_t,
 						long, struct so_map *));
+static void 		clear_rts __P((struct rt_symbol *));
 static void		maphints __P((void));
 static void		unmaphints __P((void));
 static int		hash_string __P((const char *));
@@ -358,6 +348,7 @@ rtld(version, crtp, dp)
 					(caddr_t)0, 0, crtp->crt_dp);
 	LM_PRIVATE(smp)->spd_refcount++;
 	LM_PRIVATE(smp)->spd_flags |= _RTLD_MAIN | _RTLD_GLOBAL;
+	main_map = smp;
 
 	smp = alloc_link_map(us, (struct sod *)0, (struct so_map *)0,
 					(caddr_t)crtp->crt_ba, 0, dp);
@@ -586,8 +577,6 @@ alloc_link_map(path, sodp, parent, addr, size, dp)
 	if (dp == NULL)
 		return (smp);
 
-/*XXX*/	if (addr == 0) main_map = smp;
-
 #ifdef SUN_COMPAT
 	smpp->spd_offset =
 		(addr==0 && dp->d_version==LD_VERSION_SUN) ? PAGSIZ : 0;
@@ -650,6 +639,10 @@ map_object(sodp, smp)
 	name = (char *)sodp->sod_name;
 	if (smp)
 		name += (long)LM_LDBASE(smp);
+
+#ifdef DEBUG
+	xprintf("map_object: loading %s\n", name);
+#endif
 
 	if (sodp->sod_library) {
 		usehints = 1;
@@ -751,6 +744,7 @@ unmap_object(smp)
 	struct so_map	*smp;
 {
 	struct so_map *p, **pp;
+	struct rt_symbol *rtsp, *rtp;
 
 	/* remove from link map list */
 	pp = &link_map_head;
@@ -771,6 +765,20 @@ unmap_object(smp)
 
 	/* unmap from address space */
 	(void)munmap(smp->som_addr, LM_PRIVATE(smp)->spd_size);
+
+	/* remove any globals from the global list that reference this smp */
+	while (rt_symbol_head->rt_smp == smp) {
+		rtp = rt_symbol_head;
+		rt_symbol_head = rtp->rt_next;
+		clear_rts(rtp);
+	}
+
+	for (rtsp = rt_symbol_head; (rtp = rtsp->rt_next) != NULL;) {
+		rtsp->rt_next = rtp->rt_next;
+		if (rtp->rt_smp == smp) {
+			clear_rts(rtp);
+		}
+	}
 }
 
 void
@@ -878,7 +886,7 @@ reloc_map(smp)
 #endif
 			np = lookup(sym, smp, &src_map, 0/*XXX-jumpslots!*/);
 			if (np == NULL)
-				errx(1, "Undefined symbol \"%s\" in %s:%s\n",
+				errx(1, "Undefined symbol \"%s\" in %s:%s",
 					sym, main_progname, smp->som_path);
 
 			/*
@@ -929,7 +937,7 @@ reloc_map(smp)
 				LD_TEXTSZ(smp->som_dynamic),
 				PROT_READ|PROT_EXEC) == -1) {
 
-			err(1, "Cannot disable writes to %s:%s\n",
+			err(1, "Cannot disable writes to %s:%s",
 						main_progname, smp->som_path);
 		}
 		smp->som_write = 0;
@@ -1062,6 +1070,27 @@ enter_rts(name, value, type, srcaddr, size, smp)
 	return rtsp;
 }
 
+static void
+clear_rts(rtp)
+	struct rt_symbol *rtp;
+{
+	struct rt_symbol *lrt;
+	int hashval = hash_string(rtp->rt_sp->nz_name) % RTC_TABSIZE;
+
+	if (rtp == rt_symtab[hashval]) {
+		rt_symtab[hashval] = rtp->rt_next;
+	} else {
+		for (lrt = rt_symtab[hashval]; lrt->rt_link;
+		    lrt = lrt->rt_link) {
+			if (lrt->rt_link == rtp) {
+				lrt->rt_link = rtp->rt_link->rt_link;
+			}
+		}
+	}
+	free(rtp->rt_sp);
+	free(rtp);
+}
+
 
 /*
  * Lookup NAME in the link maps. The link map producing a definition
@@ -1081,8 +1110,11 @@ lookup(name, ref_map, src_map, strong)
 	struct rt_symbol	*rtsp;
 	struct	nzlist		*weak_np = 0;
 
-	if ((rtsp = lookup_rts(name)) != NULL)
+	if ((rtsp = lookup_rts(name)) != NULL) {
+		/* common symbol is not a member of particular shlib */
+		*src_map = NULL;
 		return (rtsp->rt_sp);
+	}
 
 	weak_smp = NULL; /* XXX - gcc! */
 
@@ -1209,6 +1241,9 @@ restart:
 	rtsp = enter_rts(name, (long)calloc(1, common_size),
 					N_UNDF + N_EXT, 0, common_size, NULL);
 
+	/* common symbol is not a member of particular shlib */
+	*src_map = NULL;
+
 #if DEBUG
 xprintf("Allocating common: %s size %d at %#x\n", name, common_size, rtsp->rt_sp->nz_value);
 #endif
@@ -1238,7 +1273,7 @@ __dladdr(addr, dli)
 				dli->dli_fname = 0;
 				dli->dli_fbase = 0;
 				dli->dli_sname = rtsp->rt_sp->nz_name;
-				dli->dli_saddr = addr;
+				dli->dli_saddr = (void *)addr;
 				return (1);
 			}
 	}
@@ -1355,7 +1390,7 @@ binder(jsp)
 	}
 
 	if (smp == NULL)
-		errx(1, "Call to binder from unknown location: %p\n", jsp);
+		errx(1, "Call to binder from unknown location: %p", jsp);
 
 	index = jsp->reloc_index & JMPSLOT_RELOC_MASK;
 
@@ -1475,16 +1510,19 @@ findhint(name, major, minor, prefered_path)
 {
 	struct hints_bucket	*bp;
 
+	if (hheader->hh_nbucket == 0)
+		return (NULL);
+
 	bp = hbuckets + (hinthash(name, major, minor) % hheader->hh_nbucket);
 
 	while (1) {
 		/* Sanity check */
 		if (bp->hi_namex >= hheader->hh_strtab_sz) {
-			warnx("Bad name index: %#x\n", bp->hi_namex);
+			warnx("Bad name index: %#x", bp->hi_namex);
 			break;
 		}
 		if (bp->hi_pathx >= hheader->hh_strtab_sz) {
-			warnx("Bad path index: %#x\n", bp->hi_pathx);
+			warnx("Bad path index: %#x", bp->hi_pathx);
 			break;
 		}
 
@@ -1737,7 +1775,7 @@ __dlopen(name, mode)
 
 	build_sod(name, sodp);
 
-	if ((smp = map_object(sodp, 0)) == NULL) {
+	if ((smp = map_object(sodp, main_map)) == NULL) {
 #ifdef DEBUG
 xprintf("%s: %s\n", name, strerror(errno));
 #endif
@@ -1860,22 +1898,13 @@ __dlexit()
 }
 
 void
-#if __STDC__
 xprintf(char *fmt, ...)
-#else
-xprintf(fmt, va_alist)
-char	*fmt;
-#endif
 {
 	char buf[256];
 	va_list	ap;
-#if __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 
-	vsprintf(buf, fmt, ap);
+	va_start(ap, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
 	(void)write(1, buf, strlen(buf));
 	va_end(ap);
 }

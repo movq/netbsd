@@ -1,20 +1,42 @@
-/*	$NetBSD: faketalk.c,v 1.4 1997/10/11 08:13:48 lukem Exp $	*/
+/*	$NetBSD: faketalk.c,v 1.11 2007/12/15 19:44:41 perry Exp $	*/
 /*
- *  Hunt
- *  Copyright (c) 1985 Conrad C. Huang, Gregory S. Couch, Kenneth C.R.C. Arnold
- *  San Francisco, California
- *
- *  Copyright (c) 1985 Regents of the University of California.
- *  All rights reserved.  The Berkeley software License Agreement
- *  specifies the terms and conditions for redistribution.
+ * Copyright (c) 1983-2003, Regents of the University of California.
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions are 
+ * met:
+ * 
+ * + Redistributions of source code must retain the above copyright 
+ *   notice, this list of conditions and the following disclaimer.
+ * + Redistributions in binary form must reproduce the above copyright 
+ *   notice, this list of conditions and the following disclaimer in the 
+ *   documentation and/or other materials provided with the distribution.
+ * + Neither the name of the University of California, San Francisco nor 
+ *   the names of its contributors may be used to endorse or promote 
+ *   products derived from this software without specific prior written 
+ *   permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS 
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED 
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A 
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: faketalk.c,v 1.4 1997/10/11 08:13:48 lukem Exp $");
+__RCSID("$NetBSD: faketalk.c,v 1.11 2007/12/15 19:44:41 perry Exp $");
 #endif /* not lint */
 
 #include "bsd.h"
+#include "hunt.h"
 
 #if	defined(TALK_43) || defined(TALK_42)
 
@@ -26,7 +48,6 @@ __RCSID("$NetBSD: faketalk.c,v 1.4 1997/10/11 08:13:48 lukem Exp $");
 # include	<stdio.h>
 # include	<string.h>
 # include	<unistd.h>
-# include	"hunt.h"
 # include	"talk_ctl.h"
 
 # define	TRUE		1
@@ -43,17 +64,17 @@ __RCSID("$NetBSD: faketalk.c,v 1.4 1997/10/11 08:13:48 lukem Exp $");
 
 extern	char		*my_machine_name;
 extern	char		*First_arg, *Last_arg;
+extern	char		**environ;
 
-static	void	do_announce __P((char *));
-SIGNAL_TYPE	exorcise __P((int));
-
+static	void	do_announce(char *);
+SIGNAL_TYPE	exorcise(int);
 /*
  *	exorcise - disspell zombies
  */
 
 SIGNAL_TYPE
 exorcise(dummy)
-	int dummy;
+	int dummy __unused;
 {
 	(void) wait(0);
 }
@@ -72,7 +93,6 @@ faketalk()
 	int			service;	/* socket of service */
 	struct	sockaddr_in	des;		/* address of destination */
 	char			*a, *b;
-	extern	char		**environ;
 
 	(void) signal(SIGCHLD, exorcise);
 
@@ -123,7 +143,7 @@ faketalk()
 # else
 		warn("falktalk:  socket");
 # endif
-		_exit(-1);
+		_exit(1);
 	}
 
 	if (connect(service, (struct sockaddr *) &des, sizeof(des)) != 0) {
@@ -132,7 +152,7 @@ faketalk()
 # else
 		warn("faketalk:  connect");
 # endif
-		_exit(-1);
+		_exit(1);
 	}
 	if ((f = fdopen(service, "r")) == NULL) {
 # ifdef LOG
@@ -140,7 +160,7 @@ faketalk()
 # else
 		warn("faketalk:  fdopen");
 # endif
-		_exit(-2);
+		_exit(2);
 	}
 
 	(void) fgets(buf, BUFSIZ, f);
@@ -189,7 +209,6 @@ do_announce(s)
 	char	*s;
 {
 	CTL_RESPONSE			response;
-	extern	struct	sockaddr_in	ctl_addr;
 
 	get_remote_name(s);	/* setup his_machine_addr, msg.r_name */
 
@@ -224,6 +243,7 @@ do_announce(s)
 		p_error("send delete remote");
 }
 #else
+void
 faketalk()
 {
 	return;

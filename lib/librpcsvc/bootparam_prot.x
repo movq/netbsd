@@ -28,7 +28,7 @@
  */
 
 /*
- * RPC for bootparms service.
+ * RPC for bootparams service.
  * There are two procedures:
  *   WHOAMI takes a net address and returns a client name and also a
  *	likely net address for routing
@@ -45,11 +45,11 @@
 %#include <sys/ucred.h>
 #else
 %#include <sys/cdefs.h>
-%#ifndef lint
+%#ifndef __lint__
 %/*static char sccsid[] = "from: @(#)bootparam_prot.x 1.2 87/06/24 Copyr 1987 Sun Micro";*/
 %/*static char sccsid[] = "from: @(#)bootparam_prot.x	2.1 88/08/01 4.0 RPCSRC";*/
-%__RCSID("$NetBSD: bootparam_prot.x,v 1.5 1999/07/02 15:44:13 simonb Exp $");
-%#endif /* not lint */
+%__RCSID("$NetBSD: bootparam_prot.x,v 1.7 2004/07/01 22:52:34 kleink Exp $");
+%#endif /* not __lint__ */
 #endif
 
 const MAX_MACHINE_NAME  = 255;

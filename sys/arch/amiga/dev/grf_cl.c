@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_cl.c,v 1.25 1999/06/29 19:51:28 is Exp $	*/
+/*	$NetBSD: grf_cl.c,v 1.41 2007/10/17 19:53:15 garbled Exp $ */
 
 /*
  * Copyright (c) 1997 Klaus Burkert
@@ -34,6 +34,10 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "opt_amigacons.h"
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: grf_cl.c,v 1.41 2007/10/17 19:53:15 garbled Exp $");
+
 #include "grfcl.h"
 #if NGRFCL > 0
 
@@ -83,37 +87,37 @@
 #include <amiga/dev/grf_clreg.h>
 #include <amiga/dev/zbusvar.h>
 
-int	cl_mondefok __P((struct grfvideo_mode *));
-void	cl_boardinit __P((struct grf_softc *));
-static void	cl_CompFQ __P((u_int, u_char *, u_char *, u_char *));
-int	cl_getvmode __P((struct grf_softc *, struct grfvideo_mode *));
-int	cl_setvmode __P((struct grf_softc *, unsigned int));
-int	cl_toggle __P((struct grf_softc *, unsigned short));
-int	cl_getcmap __P((struct grf_softc *, struct grf_colormap *));
-int	cl_putcmap __P((struct grf_softc *, struct grf_colormap *));
+int	cl_mondefok(struct grfvideo_mode *);
+void	cl_boardinit(struct grf_softc *);
+static void cl_CompFQ(u_int, u_char *, u_char *, u_char *);
+int	cl_getvmode(struct grf_softc *, struct grfvideo_mode *);
+int	cl_setvmode(struct grf_softc *, unsigned int);
+int	cl_toggle(struct grf_softc *, unsigned short);
+int	cl_getcmap(struct grf_softc *, struct grf_colormap *);
+int	cl_putcmap(struct grf_softc *, struct grf_colormap *);
 #ifndef CL5426CONSOLE
-void	cl_off __P((struct grf_softc *));
+void	cl_off(struct grf_softc *);
 #endif
-void	cl_inittextmode __P((struct grf_softc *));
-int	cl_ioctl __P((register struct grf_softc *, u_long, void *));
-int	cl_getmousepos __P((struct grf_softc *, struct grf_position *));
-int	cl_setmousepos __P((struct grf_softc *, struct grf_position *));
-static int	cl_setspriteinfo __P((struct grf_softc *, struct grf_spriteinfo *));
-int	cl_getspriteinfo __P((struct grf_softc *, struct grf_spriteinfo *));
-static int	cl_getspritemax __P((struct grf_softc *, struct grf_position *));
-int	cl_blank __P((struct grf_softc *, int *));
-int	cl_setmonitor __P((struct grf_softc *, struct grfvideo_mode *));
-void	cl_writesprpos __P((volatile char *, short, short));
-void	writeshifted __P((volatile char *, char, char));
+void	cl_inittextmode(struct grf_softc *);
+int	cl_ioctl(register struct grf_softc *, u_long, void *);
+int	cl_getmousepos(struct grf_softc *, struct grf_position *);
+int	cl_setmousepos(struct grf_softc *, struct grf_position *);
+static int cl_setspriteinfo(struct grf_softc *, struct grf_spriteinfo *);
+int	cl_getspriteinfo(struct grf_softc *, struct grf_spriteinfo *);
+static int cl_getspritemax(struct grf_softc *, struct grf_position *);
+int	cl_blank(struct grf_softc *, int *);
+int	cl_setmonitor(struct grf_softc *, struct grfvideo_mode *);
+void	cl_writesprpos(volatile char *, short, short);
+void	writeshifted(volatile char *, signed char, signed char);
 
-static void	RegWakeup __P((volatile caddr_t));
-static void	RegOnpass __P((volatile caddr_t));
-static void	RegOffpass __P((volatile caddr_t));
+static void	RegWakeup(volatile void *);
+static void	RegOnpass(volatile void *);
+static void	RegOffpass(volatile void *);
 
-void	grfclattach __P((struct device *, struct device *, void *));
-int	grfclprint __P((void *, const char *));
-int	grfclmatch __P((struct device *, struct cfdata *, void *));
-void	cl_memset __P((unsigned char *, unsigned char, int));
+void	grfclattach(struct device *, struct device *, void *);
+int	grfclprint(void *, const char *);
+int	grfclmatch(struct device *, struct cfdata *, void *);
+void	cl_memset(unsigned char *, unsigned char, int);
 
 /* Graphics display definitions.
  * These are filled by 'grfconfig' using GRFIOCSETMON.
@@ -156,7 +160,7 @@ unsigned char clconscolors[3][3] = {	/* background, foreground, hilite */
 
 int	cltype = 0;		/* Picasso, Spectrum or Piccolo */
 int	cl_64bit = 0;		/* PiccoloSD64 or PicassoIV */
-unsigned char pass_toggle;	/* passthru status tracker */
+unsigned char cl_pass_toggle;	/* passthru status tracker */
 
 /*
  * because all 542x-boards have 2 configdev entries, one for
@@ -184,9 +188,8 @@ static unsigned char cl_imageptr[8 * 64], cl_maskptr[8 * 64];
 static unsigned char cl_sprred[2], cl_sprgreen[2], cl_sprblue[2];
 
 /* standard driver stuff */
-struct cfattach grfcl_ca = {
-	sizeof(struct grf_softc), grfclmatch, grfclattach
-};
+CFATTACH_DECL(grfcl, sizeof(struct grf_softc),
+    grfclmatch, grfclattach, NULL, NULL);
 
 static struct cfdata *cfdata;
 
@@ -292,7 +295,7 @@ grfclmatch(pdp, cfp, auxp)
 			cl_fbaddr = zap->va;
 			cl_fbautosize = zap->size;
 			break;
-		    case 22: 
+		    case 22:
 			cl_fbautosize += zap->size;
 			break;
 		    case 23:
@@ -328,7 +331,7 @@ grfclmatch(pdp, cfp, auxp)
 			cfdata = cfp;
 		}
 #endif
-	
+
 	return (1);
 }
 
@@ -363,8 +366,8 @@ grfclattach(pdp, dp, auxp)
 		bcopy(&congrf.g_display, &gp->g_display,
 		    (char *) &gp[1] - (char *) &gp->g_display);
 	} else {
-		gp->g_regkva = (volatile caddr_t) cl_regaddr;
-		gp->g_fbkva = (volatile caddr_t) cl_fbaddr;
+		gp->g_regkva = (volatile void *) cl_regaddr;
+		gp->g_fbkva = (volatile void *) cl_fbaddr;
 
 		gp->g_unit = GRF_CL5426_UNIT;
 		gp->g_mode = cl_mode;
@@ -451,7 +454,7 @@ grfclprint(auxp, pnp)
 	const char *pnp;
 {
 	if (pnp)
-		printf("ite at %s: ", pnp);
+		aprint_normal("ite at %s: ", pnp);
 	return (UNCONF);
 }
 
@@ -459,7 +462,7 @@ void
 cl_boardinit(gp)
 	struct grf_softc *gp;
 {
-	unsigned char *ba = gp->g_regkva;
+	volatile unsigned char *ba = gp->g_regkva;
 	int     x;
 
 	if ((cltype == PICASSO) && (cl_64bit == 1)) { /* PicassoIV */
@@ -608,7 +611,7 @@ cl_getvmode(gp, vm)
 		bcopy(&clconsole_mode, vm, sizeof(struct grfvideo_mode));
 		/* XXX so grfconfig can tell us the correct text dimensions. */
 		vm->depth = clconsole_mode.fy;
-	} else 
+	} else
 #endif
         {
                 if (vm->mode_num == 0)
@@ -628,7 +631,7 @@ cl_getvmode(gp, vm)
         vm->hsync_start *= 8;
         vm->hsync_stop *= 8;
         vm->htotal *= 8;
-        
+
 	return (0);
 }
 
@@ -673,7 +676,7 @@ cl_blank(gp, on)
         WSeq(gp->g_regkva, SEQ_ID_CLOCKING_MODE, *on > 0 ? 0x01 : 0x21);
         return(0);
 }
-        
+
 /*
  * Change the mode of the display.
  * Return a UNIX error number or 0 for success.
@@ -726,7 +729,7 @@ cl_mode(gp, cmd, arg, a2, a3)
 		break;
 	}
 
-	return (EINVAL);
+	return (EPASSTHROUGH);
 }
 
 int
@@ -770,7 +773,7 @@ cl_ioctl(gp, cmd, data)
                 return (cl_blank(gp, (int *)data));
 
 	}
-	return (EINVAL);
+	return (EPASSTHROUGH);
 }
 
 int
@@ -794,7 +797,7 @@ cl_writesprpos(ba, x, y)
         volatile unsigned short *wp;
 
 	cwp = ba + 0x3c4;
-        wp = (unsigned short *)cwp;
+        wp = (volatile unsigned short *)cwp;
 
 	/*
 	 * don't ask me why, but apparently you can't do a 16-bit write with
@@ -809,13 +812,13 @@ cl_writesprpos(ba, x, y)
 void
 writeshifted(to, shiftx, shifty)
 	volatile char *to;
-	char    shiftx;
-	char    shifty;
+	signed char shiftx;
+	signed char shifty;
 {
 	int y;
 	unsigned long long *tptr, *iptr, *mptr, line;
 
-	tptr = (unsigned long long *) to;
+	tptr = (unsigned long long *) __UNVOLATILE(to);
         iptr = (unsigned long long *) cl_cursprite.image;
         mptr = (unsigned long long *) cl_cursprite.mask;
 
@@ -905,13 +908,13 @@ cl_setspriteinfo(gp, data)
 
 	if (data->set & GRFSPRSET_SHAPE) {
 
-                short dsx, dsy, i;
+                unsigned short dsx, dsy, i;
                 unsigned long *di, *dm, *si, *sm;
                 unsigned long ssi[128], ssm[128];
                 struct grf_position gpos;
 
-               
-                /* check for a too large sprite (no clipping!) */ 
+
+                /* check for a too large sprite (no clipping!) */
                 dsy = data->size.y;
                 dsx = data->size.x;
                 if (dsy > 64 || dsx > 64)
@@ -998,7 +1001,7 @@ cl_setspriteinfo(gp, data)
 			vgaw(ba, VDAC_DATA, (u_char) (green[1] >> 2));
 			vgaw(ba, VDAC_DATA, (u_char) (red[1] >> 2));
 		}
-                
+
                 /* turn on/off sprite */
 		if (cl_cursprite.enable) {
 			WSeq(ba, SEQ_ID_CURSOR_ATTR, 0x05);
@@ -1026,7 +1029,7 @@ cl_setspriteinfo(gp, data)
 
                 /* do it */
                 cl_setmousepos(gp, &data->pos);
-                
+
 	}
 	return (0);
 }
@@ -1096,7 +1099,7 @@ cl_getcmap(gfp, cmap)
 	if (cmap->count == 0 || cmap->index >= 256)
 		return 0;
 
-	if (cmap->index + cmap->count > 256)
+	if (cmap->count > 256 - cmap->index)
 		cmap->count = 256 - cmap->index;
 
 	ba = gfp->g_regkva;
@@ -1164,7 +1167,7 @@ cl_putcmap(gfp, cmap)
 	if (cmap->count == 0 || cmap->index >= 256)
 		return (0);
 
-	if (cmap->index + cmap->count > 256)
+	if (cmap->count > 256 - cmap->index)
 		cmap->count = 256 - cmap->index;
 
 	/* first copy the colors into kernelspace */
@@ -1208,11 +1211,11 @@ cl_toggle(gp, wopp)
 	struct grf_softc *gp;
 	unsigned short wopp;	/* don't need that one yet, ill */
 {
-	volatile caddr_t ba;
+	volatile void *ba;
 
 	ba = gp->g_regkva;
 
-	if (pass_toggle) {
+	if (cl_pass_toggle) {
 		RegOffpass(ba);
 	} else {
 		RegOnpass(ba);
@@ -1251,7 +1254,7 @@ cl_CompFQ(fq, num, denom, clkdoub)
 	unsigned long err, minerr;
 
 /*
-numer = 0x00 - 0x7f 
+numer = 0x00 - 0x7f
 denom = 0x00 - 0x1f (1) 0x20 - 0x3e (even)
 */
 
@@ -1307,7 +1310,7 @@ cl_mondefok(gv)
 	struct grfvideo_mode *gv;
 {
         unsigned long maxpix;
-        
+
 	if (gv->mode_num < 1 || gv->mode_num > monitor_def_max)
                 if (gv->mode_num != 255 || gv->depth != 4)
                         return(0);
@@ -1373,7 +1376,7 @@ cl_load_mon(gp, md)
 {
 	struct grfvideo_mode *gv;
 	struct grfinfo *gi;
-	volatile caddr_t ba, fb;
+	volatile void *ba, *fb;
 	unsigned char num0, denom0, clkdoub;
 	unsigned short HT, HDE, HBS, HBE, HSS, HSE, VDE, VBS, VBE, VSS,
 	        VSE, VT;
@@ -1395,12 +1398,12 @@ cl_load_mon(gp, md)
 	ba = gp->g_regkva;
 	fb = gp->g_fbkva;
 
-	/* provide all needed information in grf device-independant locations */
-	gp->g_data = (caddr_t) gv;
+	/* provide all needed information in grf device-independent locations */
+	gp->g_data = (void *) gv;
 	gi = &gp->g_display;
-	gi->gd_regaddr = (caddr_t) kvtop(ba);
+	gi->gd_regaddr = (void *) kvtop(__UNVOLATILE(ba));
 	gi->gd_regsize = 64 * 1024;
-	gi->gd_fbaddr = (caddr_t) kvtop(fb);
+	gi->gd_fbaddr = (void *) kvtop(__UNVOLATILE(fb));
 	gi->gd_fbsize = cl_fbsize;
 	gi->gd_colors = 1 << gv->depth;
 	gi->gd_planes = gv->depth;
@@ -1623,7 +1626,7 @@ cl_load_mon(gp, md)
 		HDE = gv->disp_width / 16;
 		break;
 	    case 8:
-		if (clkdoub) 
+		if (clkdoub)
 			vgaw(ba, VDAC_MASK, 0x4a); /* Clockdouble Magic */
 		else
 			vgaw(ba, VDAC_MASK, 0);
@@ -1687,7 +1690,7 @@ cl_inittextmode(gp)
 {
 	struct grfcltext_mode *tm = (struct grfcltext_mode *) gp->g_data;
 	volatile unsigned char *ba = gp->g_regkva;
-	unsigned char *fb = gp->g_fbkva;
+	unsigned char *fb = __UNVOLATILE(gp->g_fbkva);
 	unsigned char *c, *f, y;
 	unsigned short z;
 
@@ -1758,7 +1761,7 @@ cl_memset(d, c, l)
  */
 static void
 RegWakeup(ba)
-	volatile caddr_t ba;
+	volatile void *ba;
 {
 
 	switch (cltype) {
@@ -1780,7 +1783,7 @@ RegWakeup(ba)
 
 static void
 RegOnpass(ba)
-	volatile caddr_t ba;
+	volatile void *ba;
 {
 
 	switch (cltype) {
@@ -1798,13 +1801,13 @@ RegOnpass(ba)
 			vgaw(ba, PASS_ADDRESS_W, vgar(ba, PASS_ADDRESS) & 0xdf);
 		break;
 	}
-	pass_toggle = 1;
+	cl_pass_toggle = 1;
 	delay(200000);
 }
 
 static void
 RegOffpass(ba)
-	volatile caddr_t ba;
+	volatile void *ba;
 {
 
 	switch (cltype) {
@@ -1822,7 +1825,7 @@ RegOffpass(ba)
 			vgaw(ba, PASS_ADDRESS_W, vgar(ba, PASS_ADDRESS) | 0x20);
 		break;
 	}
-	pass_toggle = 0;
+	cl_pass_toggle = 0;
 	delay(200000);
 }
 

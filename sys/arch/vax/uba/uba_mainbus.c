@@ -1,9 +1,39 @@
-/*	$NetBSD: uba_mainbus.c,v 1.2 1999/06/06 19:00:53 ragge Exp $	   */
+/*	$NetBSD: uba_mainbus.c,v 1.9 2008/03/11 05:34:02 matt Exp $	   */
+/*
+ * Copyright (c) 1982, 1986 The Regents of the University of California.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)uba.c	7.10 (Berkeley) 12/16/90
+ *	@(#)autoconf.c	7.20 (Berkeley) 5/9/91
+ */
+
 /*
  * Copyright (c) 1996 Jonathan Stone.
  * Copyright (c) 1994, 1996 Ludd, University of Lule}, Sweden.
- * Copyright (c) 1982, 1986 The Regents of the University of California.
- * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,6 +67,9 @@
  *	@(#)autoconf.c	7.20 (Berkeley) 5/9/91
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: uba_mainbus.c,v 1.9 2008/03/11 05:34:02 matt Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
@@ -47,10 +80,13 @@
 #include <machine/nexus.h>
 #include <machine/cpu.h>
 #include <machine/sgmap.h>
+#include <machine/mainbus.h>
 
 #include <dev/qbus/ubavar.h>
 
-#include <arch/vax/uba/uba_common.h>
+#include <vax/uba/uba_common.h>
+
+#include "ioconf.h"
 
 /* Some Qbus-specific defines */
 #define	QBASIZE	(8192 * VAX_NBPG)
@@ -62,45 +98,39 @@
  * It has an address space of 4MB (22 address bits), therefore the name,
  * and is hardware compatible with all 16 and 18 bits Q-bus devices.
  */
-static	int	qba_match __P((struct device *, struct cfdata *, void *));
-static	void	qba_attach __P((struct device *, struct device *, void *));
-static	void	qba_beforescan __P((struct uba_softc*));
-static	void	qba_init __P((struct uba_softc*));
+static	int	qba_match(device_t, cfdata_t, void *);
+static	void	qba_attach(device_t, device_t, void *);
+static	void	qba_beforescan(struct uba_softc*);
+static	void	qba_init(struct uba_softc*);
 
-struct	cfattach uba_mainbus_ca = {
-	sizeof(struct uba_vsoftc), qba_match, qba_attach
-};
+CFATTACH_DECL_NEW(uba_mainbus, sizeof(struct uba_vsoftc),
+    qba_match, qba_attach, NULL, NULL);
 
 extern	struct vax_bus_space vax_mem_bus_space;
 
 int
-qba_match(parent, vcf, aux)
-	struct device *parent;
-	struct cfdata *vcf;
-	void *aux;
+qba_match(device_t parent, cfdata_t cf, void *aux)
 {
-	struct	bp_conf *bp = aux;
+	struct mainbus_attach_args * const ma = aux;
 
-	if (strcmp(bp->type, "uba"))
-		return 0;
-
-	return 1;
+	return !strcmp(uba_cd.cd_name, ma->ma_type);
 }
 
 void
-qba_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+qba_attach(device_t parent, device_t self, void *aux)
 {
-	struct uba_vsoftc *sc = (void *)self;
+	struct mainbus_attach_args * const ma = aux;
+	struct uba_vsoftc * const sc = device_private(self);
 
-	printf(": Q22\n");
+	aprint_normal(": Q22\n");
+
+	sc->uv_sc.uh_dev = self;
 	/*
 	 * Fill in bus specific data.
 	 */
 	sc->uv_sc.uh_beforescan = qba_beforescan;
 	sc->uv_sc.uh_ubainit = qba_init;
-	sc->uv_sc.uh_iot = &vax_mem_bus_space;
+	sc->uv_sc.uh_iot = ma->ma_iot;
 	sc->uv_sc.uh_dmat = &sc->uv_dmat;
 
 	/*
@@ -118,8 +148,7 @@ qba_attach(parent, self, aux)
  * QBA devices to main memory.
  */
 void
-qba_beforescan(sc)
-	struct uba_softc *sc;
+qba_beforescan(struct uba_softc *sc)
 {
 #define	QIPCR	0x1f40
 #define	Q_LMEAE	0x20
@@ -127,8 +156,7 @@ qba_beforescan(sc)
 }
 
 void
-qba_init(sc)
-	struct uba_softc *sc;
+qba_init(struct uba_softc *sc)
 {
 	mtpr(0, PR_IUR);
 	DELAY(500000);

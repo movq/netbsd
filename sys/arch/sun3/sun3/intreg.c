@@ -1,4 +1,4 @@
-/*	$NetBSD: intreg.c,v 1.13 1999/03/24 05:51:14 mrg Exp $	*/
+/*	$NetBSD: intreg.c,v 1.29 2008/06/28 12:13:38 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,12 +34,13 @@
  * and the handy software interrupt request register.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: intreg.c,v 1.29 2008/06/28 12:13:38 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/vmmeter.h>
-
-#include <vm/vm.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -60,136 +54,89 @@
 #include <sun3/sun3/machdep.h>
 
 struct intreg_softc {
-	struct device sc_dev;
-	volatile u_char *sc_reg;
+	device_t sc_dev;
+	volatile uint8_t *sc_reg;
 };
 
-static int  intreg_match __P((struct device *, struct cfdata *, void *));
-static void intreg_attach __P((struct device *, struct device *, void *));
-static int soft1intr __P((void *));
+static int  intreg_match(device_t, cfdata_t, void *);
+static void intreg_attach(device_t, device_t, void *);
 
-struct cfattach intreg_ca = {
-	sizeof(struct intreg_softc), intreg_match, intreg_attach
-};
+CFATTACH_DECL_NEW(intreg, sizeof(struct intreg_softc),
+    intreg_match, intreg_attach, NULL, NULL);
 
-volatile u_char *interrupt_reg;
-
+volatile uint8_t *interrupt_reg;
+static int intreg_attached;
 
 /* called early (by internal_configure) */
-void
-intreg_init()
+void 
+intreg_init(void)
 {
-	interrupt_reg = obio_find_mapping(IREG_ADDR, 1);
-	if (!interrupt_reg) {
+	vaddr_t va;
+
+	if (find_prom_map(IREG_ADDR, PMAP_OBIO, 1, &va) != 0) {
 		mon_printf("intreg_init\n");
 		sunmon_abort();
 	}
+	interrupt_reg = (void *)va;
+
 	/* Turn off all interrupts until clock_attach */
 	*interrupt_reg = 0;
 }
 
 
-static int
-intreg_match(parent, cf, args)
-    struct device *parent;
-	struct cfdata *cf;
-    void *args;
+static int 
+intreg_match(device_t parent, cfdata_t cf, void *args)
 {
 	struct confargs *ca = args;
 
-	/* This driver only supports one unit. */
-	if (cf->cf_unit != 0)
-		return (0);
+	/* This driver only supports one instance. */
+	if (intreg_attached)
+		return 0;
 
 	/* Validate the given address. */
 	if (ca->ca_paddr != IREG_ADDR)
-		return (0);
+		return 0;
 
-	return (1);
+	return 1;
 }
 
 
-static void
-intreg_attach(parent, self, args)
-	struct device *parent;
-	struct device *self;
-	void *args;
+static void 
+intreg_attach(device_t parent, device_t self, void *args)
 {
-	struct intreg_softc *sc = (void *)self;
+	struct intreg_softc *sc = device_private(self);
 
-	printf("\n");
+	sc->sc_dev = self;
+	aprint_normal("\n");
 
 	sc->sc_reg = interrupt_reg;
 
-	/* Install handler for our "soft" interrupt. */
-	isr_add_autovect(soft1intr, (void *)sc, 1);
+	intreg_attached = 1;
 }
 
 
-/*
- * Level 1 software interrupt.
- * Possible reasons:
- *	Network software interrupt
- *	Soft clock interrupt
- */
-static int
-soft1intr(arg)
-	void *arg;
+#if 0
+void 
+isr_soft_request(int level)
 {
-	union sun3sir sir;
-	int s;
+	uint8_t bit;
 
-	s = splhigh();
-	sir.sir_any = sun3sir.sir_any;
-	sun3sir.sir_any = 0;
-	isr_soft_clear(1);
-	splx(s);
-
-	if (sir.sir_any) {
-		uvmexp.softs++;
-		if (sir.sir_which[SIR_NET]) {
-			sir.sir_which[SIR_NET] = 0;
-			netintr();
-		}
-		if (sir.sir_which[SIR_CLOCK]) {
-			sir.sir_which[SIR_CLOCK] = 0;
-			softclock();
-		}
-		if (sir.sir_which[SIR_SPARE2]) {
-			sir.sir_which[SIR_SPARE2] = 0;
-			/* spare2intr(); */
-		}
-		if (sir.sir_which[SIR_SPARE3]) {
-			sir.sir_which[SIR_SPARE3] = 0;
-			/* spare3intr(); */
-		}
-		return (1);
-	}
-	return(0);
-}
-
-
-void isr_soft_request(level)
-	int level;
-{
-	register u_char bit;
-
-	if ((level < 1) || (level > 3))
+	if ((level < _IPL_SOFT_LEVEL_MIN) || (level > _IPL_SOFT_LEVEL_MAX))
 		return;
 
 	bit = 1 << level;
 	single_inst_bset_b(*interrupt_reg, bit);
 }
 
-void isr_soft_clear(level)
-	int level;
+void 
+isr_soft_clear(int level)
 {
-	register u_char bit;
+	uint8_t bit;
 
-	if ((level < 1) || (level > 3))
+	if ((level < _IPL_SOFT_LEVEL_MIN) || (level > _IPL_SOFT_LEVEL_MAX))
 		return;
 
 	bit = 1 << level;
 	single_inst_bclr_b(*interrupt_reg, bit);
 }
-
+#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: gsp_out.c,v 1.5 1999/06/22 20:27:21 is Exp $	*/
+/*	$NetBSD: gsp_out.c,v 1.9 2006/08/26 18:15:37 christos Exp $	*/
 /*
  * GSP assembler - binary & listing output
  *
@@ -17,7 +17,7 @@
  *    must display the following acknowledgement:
  *      This product includes software developed by Paul Mackerras.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,12 +33,13 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: gsp_out.c,v 1.5 1999/06/22 20:27:21 is Exp $");
+__RCSID("$NetBSD: gsp_out.c,v 1.9 2006/08/26 18:15:37 christos Exp $");
 #endif
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <util.h>
 #include "gsp_ass.h"
 
 u_int16_t codes[5];
@@ -132,13 +133,13 @@ c_dumpbuf()
 {
 	int i;
 
-	printf("\n\n\t%d, 0x%04x, 0x%04x, /* new block */",
+	fprintf(objfile, "\n\n\t%d, 0x%04x, 0x%04x, /* new block */",
 	    c_bufptr, (int)(c_binads >> 16), (int)(c_binads & 0xffff));
 
 	for (i=0; i < c_bufptr; ++i) {
 		if (i%8 == 0)
-			printf("\n\t");
-		printf("0x%04x, ", c_buf[i]);
+			fprintf(objfile, "\n\t");
+		fprintf(objfile, "0x%04x, ", c_buf[i]);
 	}
 	c_binads += c_bufptr;
 	c_bufptr = 0;
@@ -185,7 +186,7 @@ list_error(char *string)
 	if( listfile == NULL )
 		return;
 	l = strlen(string);
-	p = (struct error *) alloc(sizeof(struct error) + l);
+	p = emalloc(sizeof(struct error) + l);
 	strcpy(p->string, string);
 	p->next = NULL;
 	if( error_list == NULL )

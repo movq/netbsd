@@ -1,4 +1,4 @@
-/*	$NetBSD: pig.c,v 1.8 1999/09/18 19:38:53 jsm Exp $	*/
+/*	$NetBSD: pig.c,v 1.13 2008/07/20 01:03:21 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)pig.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: pig.c,v 1.8 1999/09/18 19:38:53 jsm Exp $");
+__RCSID("$NetBSD: pig.c,v 1.13 2008/07/20 01:03:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,9 +52,9 @@ __RCSID("$NetBSD: pig.c,v 1.8 1999/09/18 19:38:53 jsm Exp $");
 #include <string.h>
 #include <unistd.h>
 
-int main __P((int, char *[]));
-void pigout __P((char *, int));
-void usage __P((void)) __attribute__((__noreturn__));
+int main(int, char *[]);
+void pigout(char *, int);
+void usage(void) __dead;
 
 int
 main(argc, argv)
@@ -103,9 +99,9 @@ pigout(buf, len)
 	int olen, allupper, firstupper;
 
 	/* See if the word is all upper case */
-	allupper = firstupper = isupper(buf[0]);
+	allupper = firstupper = isupper((unsigned char)buf[0]);
 	for (i = 1; i < len && allupper; i++)
-		allupper = allupper && isupper(buf[i]);
+		allupper = allupper && isupper((unsigned char)buf[i]);
 
 	/*
 	 * If the word starts with a vowel, append "way".  Don't treat 'y'
@@ -122,7 +118,7 @@ pigout(buf, len)
 	 * isn't treated as a vowel.
 	 */
 	if (!allupper)
-		buf[0] = tolower(buf[0]);
+		buf[0] = tolower((unsigned char)buf[0]);
 	for (start = 0, olen = len;
 	    !strchr("aeiouyAEIOUY", buf[start]) && start < olen;) {
 		ch = buf[len++] = buf[start++];
@@ -131,7 +127,7 @@ pigout(buf, len)
 			buf[len++] = buf[start++];
 	}
 	if (firstupper)
-		buf[start] = toupper(buf[start]);
+		buf[start] = toupper((unsigned char)buf[start]);
 	(void)printf("%.*s%s", olen, buf + start, allupper ? "AY" : "ay");
 }
 

@@ -1,7 +1,7 @@
-/*	$NetBSD: scsiconf.c,v 1.138 2000/03/27 11:45:42 augustss Exp $	*/
+/*	$NetBSD: scsiconf.c,v 1.250 2008/07/16 18:50:58 drochner Exp $	*/
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999, 2004 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,16 +47,21 @@
  * Ported to run under 386BSD by Julian Elischer (julian@tfs.com) Sept 1992
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: scsiconf.c,v 1.250 2008/07/16 18:50:58 drochner Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
+#include <sys/kthread.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/conf.h>
 #include <sys/fcntl.h>
 #include <sys/scsiio.h>
+#include <sys/queue.h>
+#include <sys/simplelock.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -71,170 +69,178 @@
 
 #include "locators.h"
 
-#if 0
-#if NCALS > 0
-	{ T_PROCESSOR, T_FIXED, 1,
-	  0, 0, 0 },
-#endif	/* NCALS */
-#if NBLL > 0
-	{ T_PROCESSOR, T_FIXED, 1,
-	  "AEG     ", "READER          ", "V1.0" },
-#endif	/* NBLL */
-#if NKIL > 0
-	{ T_SCANNER, T_FIXED, 0,
-	  "KODAK   ", "IL Scanner 900  ", 0 },
-#endif	/* NKIL */
-#endif
-
-/*
- * Declarations
- */
-int scsi_probedev __P((struct scsibus_softc *, int, int));
-int scsi_probe_bus __P((int bus, int target, int lun));
-
-struct scsipi_device probe_switch = {
+static const struct scsipi_periphsw scsi_probe_dev = {
 	NULL,
 	NULL,
 	NULL,
 	NULL,
 };
 
-int scsibusmatch __P((struct device *, struct cfdata *, void *));
-void scsibusattach __P((struct device *, struct device *, void *));
-int scsibusactivate __P((struct device *, enum devact));
-int scsibusdetach __P((struct device *, int flags));
-
-int scsibussubmatch __P((struct device *, struct cfdata *, void *));
-
-struct cfattach scsibus_ca = {
-	sizeof(struct scsibus_softc), scsibusmatch, scsibusattach,
-	    scsibusdetach, scsibusactivate,
+struct scsi_initq {
+	struct scsipi_channel *sc_channel;
+	TAILQ_ENTRY(scsi_initq) scsi_initq;
 };
+
+static TAILQ_HEAD(, scsi_initq) scsi_initq_head =
+    TAILQ_HEAD_INITIALIZER(scsi_initq_head);
+static struct simplelock scsibus_interlock = SIMPLELOCK_INITIALIZER;
+
+static int	scsi_probe_device(struct scsibus_softc *, int, int);
+
+static int	scsibusmatch(struct device *, struct cfdata *, void *);
+static void	scsibusattach(struct device *, struct device *, void *);
+static int	scsibusactivate(struct device *, enum devact);
+static int	scsibusdetach(struct device *, int flags);
+static int	scsibusrescan(struct device *, const char *, const int *);
+static void	scsidevdetached(struct device *, struct device *);
+
+CFATTACH_DECL2_NEW(scsibus, sizeof(struct scsibus_softc),
+    scsibusmatch, scsibusattach, scsibusdetach, scsibusactivate,
+    scsibusrescan, scsidevdetached);
 
 extern struct cfdriver scsibus_cd;
 
-int scsibusprint __P((void *, const char *));
-void scsibus_config_interrupts __P((struct device *));
+static dev_type_open(scsibusopen);
+static dev_type_close(scsibusclose);
+static dev_type_ioctl(scsibusioctl);
 
-cdev_decl(scsibus);
+const struct cdevsw scsibus_cdevsw = {
+	scsibusopen, scsibusclose, noread, nowrite, scsibusioctl,
+	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER,
+};
+
+static int	scsibusprint(void *, const char *);
+static void	scsibus_config(struct scsipi_channel *, void *);
+
+const struct scsipi_bustype scsi_bustype = {
+	SCSIPI_BUSTYPE_SCSI,
+	scsi_scsipi_cmd,
+	scsipi_interpret_sense,
+	scsi_print_addr,
+	scsi_kill_pending,
+};
 
 int
-scsibusmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+scsiprint(void *aux, const char *pnp)
 {
-	struct scsipi_link *l = aux;
-	int channel;
+	struct scsipi_channel *chan = aux;
+	struct scsipi_adapter *adapt = chan->chan_adapter;
 
-	/*
-	 * Allow single-channel controllers to specify their channel
-	 * in a special way, so that it's not printed.
-	 */
-	channel = (l->scsipi_scsi.channel != SCSI_CHANNEL_ONLY_ONE) ?
-	    l->scsipi_scsi.channel : 0;
+	/* only "scsibus"es can attach to "scsi"s; easy. */
+	if (pnp)
+		aprint_normal("scsibus at %s", pnp);
 
-	if (cf->cf_loc[SCSICF_CHANNEL] != channel &&
+	/* don't print channel if the controller says there can be only one. */
+	if (adapt->adapt_nchannels != 1)
+		aprint_normal(" channel %d", chan->chan_channel);
+
+	return (UNCONF);
+}
+
+static int
+scsibusmatch(struct device *parent, struct cfdata *cf, void *aux)
+{
+	struct scsipi_channel *chan = aux;
+
+	if (chan->chan_bustype->bustype_type != SCSIPI_BUSTYPE_SCSI)
+		return 0;
+
+	if (cf->cf_loc[SCSICF_CHANNEL] != chan->chan_channel &&
 	    cf->cf_loc[SCSICF_CHANNEL] != SCSICF_CHANNEL_DEFAULT)
 		return (0);
 
 	return (1);
 }
 
-/*
- * The routine called by the adapter boards to get all their
- * devices configured in.
- */
-void
-scsibusattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+scsibusattach(struct device *parent, struct device *self, void *aux)
 {
-	struct scsibus_softc *sb = (struct scsibus_softc *)self;
-	struct scsipi_link *sc_link_proto = aux;
-	size_t nbytes;
-	int i;
+	struct scsibus_softc *sc = device_private(self);
+	struct scsipi_channel *chan = aux;
+	struct scsi_initq *scsi_initq;
 
-	sc_link_proto->scsipi_scsi.scsibus = sb->sc_dev.dv_unit;
-	sc_link_proto->scsipi_cmd = scsi_scsipi_cmd;
-	sc_link_proto->scsipi_interpret_sense = scsipi_interpret_sense;
-	sc_link_proto->sc_print_addr = scsi_print_addr;
-	sc_link_proto->scsipi_kill_pending = scsi_kill_pending;
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 
-	sb->adapter_link = sc_link_proto;
-	sb->sc_maxtarget = sc_link_proto->scsipi_scsi.max_target;
-	sb->sc_maxlun = sc_link_proto->scsipi_scsi.max_lun;
-	printf(": %d targets, %d luns per target\n",
-	    sb->sc_maxtarget + 1, sb->sc_maxlun + 1);
+	sc->sc_dev = self;
+	sc->sc_channel = chan;
+	chan->chan_name = device_xname(sc->sc_dev);
 
-	/* Initialize shared data. */
-	scsipi_init();
+	aprint_naive(": SCSI bus\n");
+	aprint_normal(": %d target%s, %d lun%s per target\n",
+	    chan->chan_ntargets,
+	    chan->chan_ntargets == 1 ? "" : "s",
+	    chan->chan_nluns,
+	    chan->chan_nluns == 1 ? "" : "s");
 
-	nbytes = (sb->sc_maxtarget + 1) * sizeof(struct scsipi_link **);
-	sb->sc_link = (struct scsipi_link ***)malloc(nbytes, M_DEVBUF,
-	    M_NOWAIT);
-	if (sb->sc_link == NULL)
-		panic("scsibusattach: can't allocate target links");
+	if (scsipi_adapter_addref(chan->chan_adapter))
+		return;
 
-	nbytes = (((int) sb->sc_maxlun) + 1) * sizeof(struct scsipi_link *);
-	for (i = 0; i <= sb->sc_maxtarget; i++) {
-		sb->sc_link[i] = (struct scsipi_link **)malloc(nbytes,
-		    M_DEVBUF, M_NOWAIT);
-		if (sb->sc_link[i] == NULL)
-			panic("scsibusattach: can't allocate lun links");
-		bzero(sb->sc_link[i], nbytes);
+	/* Initialize the channel structure first */
+	chan->chan_init_cb = scsibus_config;
+	chan->chan_init_cb_arg = sc;
+
+	scsi_initq = malloc(sizeof(struct scsi_initq), M_DEVBUF, M_WAITOK);
+	scsi_initq->sc_channel = chan;
+	TAILQ_INSERT_TAIL(&scsi_initq_head, scsi_initq, scsi_initq);
+        config_pending_incr();
+	if (scsipi_channel_init(chan)) {
+		aprint_error_dev(sc->sc_dev, "failed to init channel\n");
+		return;
 	}
-
-	/*
-	 * Defer configuration of the children until interrupts
-	 * are enabled.
-	 */
-	config_interrupts(self, scsibus_config_interrupts);
 }
 
-void
-scsibus_config_interrupts(self)
-	struct device *self;
+static void
+scsibus_config(struct scsipi_channel *chan, void *arg)
 {
+	struct scsibus_softc *sc = arg;
+	struct scsi_initq *scsi_initq;
+
 #ifndef SCSI_DELAY
 #define SCSI_DELAY 2
 #endif
-	if (SCSI_DELAY > 0) {
-		printf("%s: waiting %d seconds for devices to settle...\n",
-		    self->dv_xname, SCSI_DELAY);
+	if ((chan->chan_flags & SCSIPI_CHAN_NOSETTLE) == 0 &&
+	    SCSI_DELAY > 0) {
+		aprint_normal_dev(sc->sc_dev,
+		    "waiting %d seconds for devices to settle...\n",
+		    SCSI_DELAY);
 		/* ...an identifier we know no one will use... */
-		(void) tsleep(scsibus_config_interrupts, PRIBIO,
+		(void) tsleep(scsibus_config, PRIBIO,
 		    "scsidly", SCSI_DELAY * hz);
 	}
 
-	scsi_probe_bus(self->dv_unit, -1, -1);
+	/* Make sure the devices probe in scsibus order to avoid jitter. */
+	simple_lock(&scsibus_interlock);
+	for (;;) {
+		scsi_initq = TAILQ_FIRST(&scsi_initq_head);
+		if (scsi_initq->sc_channel == chan)
+			break;
+		ltsleep(&scsi_initq_head, PRIBIO, "scsi_initq", 0,
+		    &scsibus_interlock);
+	}
+
+	simple_unlock(&scsibus_interlock);
+
+	scsi_probe_bus(sc, -1, -1);
+
+	simple_lock(&scsibus_interlock);
+	TAILQ_REMOVE(&scsi_initq_head, scsi_initq, scsi_initq);
+	simple_unlock(&scsibus_interlock);
+
+	free(scsi_initq, M_DEVBUF);
+	wakeup(&scsi_initq_head);
+
+	scsipi_adapter_delref(chan->chan_adapter);
+
+	config_pending_decr();
 }
 
-int
-scsibussubmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+static int
+scsibusactivate(struct device *self, enum devact act)
 {
-	struct scsipibus_attach_args *sa = aux;
-	struct scsipi_link *sc_link = sa->sa_sc_link;
-
-	if (cf->cf_loc[SCSIBUSCF_TARGET] != SCSIBUSCF_TARGET_DEFAULT &&
-	    cf->cf_loc[SCSIBUSCF_TARGET] != sc_link->scsipi_scsi.target)
-		return (0);
-	if (cf->cf_loc[SCSIBUSCF_LUN] != SCSIBUSCF_LUN_DEFAULT &&
-	    cf->cf_loc[SCSIBUSCF_LUN] != sc_link->scsipi_scsi.lun)
-		return (0);
-	return ((*cf->cf_attach->ca_match)(parent, cf, aux));
-}
-
-int
-scsibusactivate(self, act)
-	struct device *self;
-	enum devact act;
-{
-	struct scsibus_softc *sc = (struct scsibus_softc *) self;
-	struct scsipi_link *sc_link;
+	struct scsibus_softc *sc = device_private(self);
+	struct scsipi_channel *chan = sc->sc_channel;
+	struct scsipi_periph *periph;
 	int target, lun, error = 0, s;
 
 	s = splbio();
@@ -244,16 +250,16 @@ scsibusactivate(self, act)
 		break;
 
 	case DVACT_DEACTIVATE:
-		for (target = 0; target <= sc->sc_maxtarget; target++) {
-			if (target ==
-			    sc->adapter_link->scsipi_scsi.adapter_target)
+		for (target = 0; target < chan->chan_ntargets;
+		     target++) {
+			if (target == chan->chan_id)
 				continue;
-			for (lun = 0; lun <= sc->sc_maxlun; lun++) {
-				sc_link = sc->sc_link[target][lun];
-				if (sc_link == NULL)
+			for (lun = 0; lun < chan->chan_nluns; lun++) {
+				periph = scsipi_lookup_periph(chan,
+				    target, lun);
+				if (periph == NULL)
 					continue;
-				error =
-				    config_deactivate(sc_link->device_softc);
+				error = config_deactivate(periph->periph_dev);
 				if (error)
 					goto out;
 			}
@@ -265,107 +271,140 @@ scsibusactivate(self, act)
 	return (error);
 }
 
-int
-scsibusdetach(self, flags)
-	struct device *self;
-	int flags;
+static int
+scsibusdetach(struct device *self, int flags)
 {
-	struct scsibus_softc *sc = (struct scsibus_softc *) self;
-	struct scsipi_link *sc_link;
-	int target, lun, error;
-
-	for (target = 0; target <= sc->sc_maxtarget; target++) {
-		if (target == sc->adapter_link->scsipi_scsi.adapter_target)
-			continue;
-		for (lun = 0; lun <= sc->sc_maxlun; lun++) {
-			sc_link = sc->sc_link[target][lun];
-			if (sc_link == NULL)
-				continue;
-			error = config_detach(sc_link->device_softc, flags);
-			if (error)
-				return (error);
-			free(sc_link, M_DEVBUF);
-			sc->sc_link[target][lun] = NULL;
-		}
-	}
-	return (0);
-}
-
-/*
- * Probe the requested scsi bus. It must be already set up.
- * -1 requests all set up scsi busses.
- * target and lun optionally narrow the search if not -1
- */
-int
-scsi_probe_busses(bus, target, lun)
-	int bus, target, lun;
-{
-
-	if (bus == -1) {
-		for (bus = 0; bus < scsibus_cd.cd_ndevs; bus++)
-			if (scsibus_cd.cd_devs[bus])
-				scsi_probe_bus(bus, target, lun);
-		return (0);
-	} else
-		return (scsi_probe_bus(bus, target, lun));
-}
-
-/*
- * Probe the requested scsi bus. It must be already set up.
- * target and lun optionally narrow the search if not -1
- */
-int
-scsi_probe_bus(bus, target, lun)
-	int bus, target, lun;
-{
-	struct scsibus_softc *scsi;
-	int maxtarget, mintarget, maxlun, minlun;
-	u_int8_t scsi_addr;
+	struct scsibus_softc *sc = device_private(self);
+	struct scsipi_channel *chan = sc->sc_channel;
+	struct scsipi_periph *periph;
+	int ctarget, clun;
+	struct scsipi_xfer *xs;
 	int error;
 
-	if (bus < 0 || bus >= scsibus_cd.cd_ndevs)
-		return (ENXIO);
-	scsi = scsibus_cd.cd_devs[bus];
-	if (scsi == NULL)
-		return (ENXIO);
+	pmf_device_deregister(self);
 
-	scsi_addr = scsi->adapter_link->scsipi_scsi.adapter_target;
+	/*
+	 * Process outstanding commands (which will never complete as the
+	 * controller is gone).
+	 */
+	for (ctarget = 0; ctarget < chan->chan_ntargets; ctarget++) {
+		if (ctarget == chan->chan_id)
+			continue;
+		for (clun = 0; clun < chan->chan_nluns; clun++) {
+			periph = scsipi_lookup_periph(chan, ctarget, clun);
+			if (periph == NULL)
+				continue;
+			TAILQ_FOREACH(xs, &periph->periph_xferq, device_q) {
+				callout_stop(&xs->xs_callout);
+				xs->error = XS_DRIVER_STUFFUP;
+				scsipi_done(xs);
+			}
+		}
+	}
+
+	/*
+	 * Detach all of the periphs.
+	 */
+	error = scsipi_target_detach(chan, -1, -1, flags);
+
+	/*
+	 * Now shut down the channel.
+	 * XXX only if no errors ?
+	 */
+	scsipi_channel_shutdown(chan);
+	return (error);
+}
+
+/*
+ * Probe the requested scsi bus. It must be already set up.
+ * target and lun optionally narrow the search if not -1
+ */
+int
+scsi_probe_bus(struct scsibus_softc *sc, int target, int lun)
+{
+	struct scsipi_channel *chan = sc->sc_channel;
+	int maxtarget, mintarget, maxlun, minlun;
+	int error;
 
 	if (target == -1) {
-		maxtarget = scsi->sc_maxtarget;
+		maxtarget = chan->chan_ntargets - 1;
 		mintarget = 0;
 	} else {
-		if (target < 0 || target > scsi->sc_maxtarget)
+		if (target < 0 || target >= chan->chan_ntargets)
 			return (EINVAL);
 		maxtarget = mintarget = target;
 	}
 
 	if (lun == -1) {
-		maxlun = scsi->sc_maxlun;
+		maxlun = chan->chan_nluns - 1;
 		minlun = 0;
 	} else {
-		if (lun < 0 || lun > scsi->sc_maxlun)
+		if (lun < 0 || lun >= chan->chan_nluns)
 			return (EINVAL);
 		maxlun = minlun = lun;
 	}
 
-	if ((error = scsipi_adapter_addref(scsi->adapter_link)) != 0)
+	/*
+	 * Some HBAs provide an abstracted view of the bus; give them an
+	 * oppertunity to re-scan it before we do.
+	 */
+	if (chan->chan_adapter->adapt_ioctl != NULL)
+		(*chan->chan_adapter->adapt_ioctl)(chan, SCBUSIOLLSCAN, NULL,
+		    0, curproc);
+
+	if ((error = scsipi_adapter_addref(chan->chan_adapter)) != 0)
 		return (error);
 	for (target = mintarget; target <= maxtarget; target++) {
-		if (target == scsi_addr)
+		if (target == chan->chan_id)
 			continue;
 		for (lun = minlun; lun <= maxlun; lun++) {
 			/*
 			 * See if there's a device present, and configure it.
 			 */
-			if (scsi_probedev(scsi, target, lun) == 0) {
+			if (scsi_probe_device(sc, target, lun) == 0)
 				break;
-			}
 			/* otherwise something says we should look further */
 		}
+
+		/*
+		 * Now that we've discovered all of the LUNs on this
+		 * I_T Nexus, update the xfer mode for all of them
+		 * that we know about.
+		 */
+		scsipi_set_xfer_mode(chan, target, 1);
 	}
-	scsipi_adapter_delref(scsi->adapter_link);
+	scsipi_adapter_delref(chan->chan_adapter);
 	return (0);
+}
+
+static int
+scsibusrescan(struct device *sc, const char *ifattr,
+    const int *locators)
+{
+
+	KASSERT(ifattr && !strcmp(ifattr, "scsibus"));
+	KASSERT(locators);
+
+	return (scsi_probe_bus(device_private(sc),
+		locators[SCSIBUSCF_TARGET], locators[SCSIBUSCF_LUN]));
+}
+
+static void
+scsidevdetached(struct device *sc, struct device *dev)
+{
+	struct scsibus_softc *ssc = device_private(sc);
+	struct scsipi_channel *chan = ssc->sc_channel;
+	struct scsipi_periph *periph;
+	int target, lun;
+
+	target = device_locator(dev, SCSIBUSCF_TARGET);
+	lun = device_locator(dev, SCSIBUSCF_LUN);
+
+	periph = scsipi_lookup_periph(chan, target, lun);
+	KASSERT(periph->periph_dev == dev);
+
+	scsipi_remove_periph(chan, periph);
+	free(periph, M_DEVBUF);
 }
 
 /*
@@ -378,280 +417,300 @@ scsi_probe_bus(bus, target, lun)
  * or having the device driver call a special function to print out
  * the standard device information.
  */
-int
-scsibusprint(aux, pnp)
-	void *aux;
-	const char *pnp;
+static int
+scsibusprint(void *aux, const char *pnp)
 {
 	struct scsipibus_attach_args *sa = aux;
 	struct scsipi_inquiry_pattern *inqbuf;
 	u_int8_t type;
-	char *dtype, *qtype;
+	const char *dtype;
 	char vendor[33], product[65], revision[17];
 	int target, lun;
 
 	if (pnp != NULL)
-		printf("%s", pnp);
+		aprint_normal("%s", pnp);
 
 	inqbuf = &sa->sa_inqbuf;
 
-	target = sa->sa_sc_link->scsipi_scsi.target;
-	lun = sa->sa_sc_link->scsipi_scsi.lun;
-
+	target = sa->sa_periph->periph_target;
+	lun = sa->sa_periph->periph_lun;
 	type = inqbuf->type & SID_TYPE;
 
-	/*
-	 * Figure out basic device type and qualifier.
-	 */
-	dtype = 0;
-	switch (inqbuf->type & SID_QUAL) {
-	case SID_QUAL_LU_OK:
-		qtype = "";
-		break;
-
-	case SID_QUAL_LU_OFFLINE:
-		qtype = " offline";
-		break;
-
-	case SID_QUAL_RSVD:
-	case SID_QUAL_BAD_LU:
-		panic("scsibusprint: impossible qualifier");
-
-	default:
-		qtype = "";
-		dtype = "vendor-unique";
-		break;
-	}
-	if (dtype == 0)
-		dtype = scsipi_dtype(type);
+	dtype = scsipi_dtype(type);
 
 	scsipi_strvis(vendor, 33, inqbuf->vendor, 8);
 	scsipi_strvis(product, 65, inqbuf->product, 16);
 	scsipi_strvis(revision, 17, inqbuf->revision, 4);
 
-	printf(" target %d lun %d: <%s, %s, %s> SCSI%d %d/%s %s%s",
-	    target, lun, vendor, product, revision,
-	    sa->scsipi_info.scsi_version & SID_ANSII, type, dtype,
-	    inqbuf->removable ? "removable" : "fixed", qtype);
+	aprint_normal(" target %d lun %d: <%s, %s, %s> %s %s",
+	    target, lun, vendor, product, revision, dtype,
+	    inqbuf->removable ? "removable" : "fixed");
 
 	return (UNCONF);
 }
 
-struct scsi_quirk_inquiry_pattern scsi_quirk_patterns[] = {
+static const struct scsi_quirk_inquiry_pattern scsi_quirk_patterns[] = {
 	{{T_CDROM, T_REMOV,
-	 "CHINON  ", "CD-ROM CDS-431  ", ""},     SDEV_NOLUNS},
+	 "CHINON  ", "CD-ROM CDS-431  ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "Chinon  ", "CD-ROM CDS-525  ", ""},     SDEV_NOLUNS},
+	 "CHINON  ", "CD-ROM CDS-435  ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "CHINON  ", "CD-ROM CDS-535  ", ""},     SDEV_NOLUNS},
+	 "Chinon  ", "CD-ROM CDS-525  ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "DEC     ", "RRD42   (C) DEC ", ""},     SDEV_NOLUNS},
+	 "CHINON  ", "CD-ROM CDS-535  ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "DENON   ", "DRD-25X         ", "V"},    SDEV_NOLUNS},
+	 "DEC     ", "RRD42   (C) DEC ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "HP      ", "C4324/C4325     ", ""},     SDEV_NOLUNS},
+	 "DENON   ", "DRD-25X         ", "V"},    PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "IMS     ", "CDD521/10       ", "2.06"}, SDEV_NOLUNS},
+	 "GENERIC ", "CRD-BP2         ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "MATSHITA", "CD-ROM CR-5XX   ", "1.0b"}, SDEV_NOLUNS},
+	 "HP      ", "C4324/C4325     ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "MEDAVIS ", "RENO CD-ROMX2A  ", ""},     SDEV_NOLUNS},
+	 "IMS     ", "CDD521/10       ", "2.06"}, PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "MEDIAVIS", "CDR-H93MV       ", "1.3"},  SDEV_NOLUNS},
+	 "MATSHITA", "CD-ROM CR-5XX   ", "1.0b"}, PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "NEC     ", "CD-ROM DRIVE:55 ", ""},     SDEV_NOLUNS},
+	 "MEDAVIS ", "RENO CD-ROMX2A  ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "NEC     ", "CD-ROM DRIVE:83 ", ""},     SDEV_NOLUNS},
+	 "MEDIAVIS", "CDR-H93MV       ", "1.3"},  PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "NEC     ", "CD-ROM DRIVE:84 ", ""},     SDEV_NOLUNS},
+	 "NEC     ", "CD-ROM DRIVE:502", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "NEC     ", "CD-ROM DRIVE:841", ""},     SDEV_NOLUNS},
+	 "NEC     ", "CD-ROM DRIVE:55 ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "PIONEER ", "CD-ROM DR-124X  ", "1.01"}, SDEV_NOLUNS},
+	 "NEC     ", "CD-ROM DRIVE:83 ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "SONY    ", "CD-ROM CDU-541  ", ""},     SDEV_NOLUNS},
+	 "NEC     ", "CD-ROM DRIVE:84 ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "SONY    ", "CD-ROM CDU-55S  ", ""},     SDEV_NOLUNS},
+	 "NEC     ", "CD-ROM DRIVE:841", ""},     PQUIRK_NOLUNS},
+        {{T_CDROM, T_REMOV,
+	 "OLYMPUS ", "CDS620E         ", "1.1d"},
+			       PQUIRK_NOLUNS|PQUIRK_NOSYNC|PQUIRK_NOCAPACITY},
 	{{T_CDROM, T_REMOV,
-	 "SONY    ", "CD-ROM CDU-561  ", ""},     SDEV_NOLUNS},
+	 "PIONEER ", "CD-ROM DR-124X  ", "1.01"}, PQUIRK_NOLUNS},
+        {{T_CDROM, T_REMOV,
+         "PLEXTOR ", "CD-ROM PX-4XCS  ", "1.01"},
+                               PQUIRK_NOLUNS|PQUIRK_NOSYNC},
 	{{T_CDROM, T_REMOV,
-	 "SONY    ", "CD-ROM CDU-8003A", ""},     SDEV_NOLUNS},
+	 "SONY    ", "CD-ROM CDU-541  ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "SONY    ", "CD-ROM CDU-8012 ", ""},     SDEV_NOLUNS},
+	 "SONY    ", "CD-ROM CDU-55S  ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "TEAC    ", "CD-ROM          ", "1.06"}, SDEV_NOLUNS},
+	 "SONY    ", "CD-ROM CDU-561  ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "TEAC    ", "CD-ROM CD-56S   ", "1.0B"}, SDEV_NOLUNS},
+	 "SONY    ", "CD-ROM CDU-76S", ""},
+				PQUIRK_NOLUNS|PQUIRK_NOSYNC|PQUIRK_NOWIDE},
 	{{T_CDROM, T_REMOV,
-	 "TEXEL   ", "CD-ROM          ", "1.06"}, SDEV_NOLUNS},
+	 "SONY    ", "CD-ROM CDU-8003A", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "TEXEL   ", "CD-ROM DM-XX24 K", "1.09"}, SDEV_NOLUNS},
+	 "SONY    ", "CD-ROM CDU-8012 ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "TEXEL   ", "CD-ROM DM-XX24 K", "1.10"}, SDEV_NOLUNS},
+	 "TEAC    ", "CD-ROM          ", "1.06"}, PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "TOSHIBA ", "XM-4101TASUNSLCD", "1755"}, SDEV_NOLUNS},
+	 "TEAC    ", "CD-ROM CD-56S   ", "1.0B"}, PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "ShinaKen", "CD-ROM DM-3x1S", "1.04"}, SDEV_NOLUNS},
+	 "TEXEL   ", "CD-ROM          ", "1.06"}, PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "JVC     ", "R2626",            ""},     SDEV_NOLUNS},
+	 "TEXEL   ", "CD-ROM DM-XX24 K", "1.09"}, PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,
-	 "YAMAHA", "CRW8424S",           ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "MICROP  ", "1588-15MBSUN0669", ""},     SDEV_AUTOSAVE},
-	{{T_DIRECT, T_FIXED,
-	 "MICROP  ", "2217-15MQ1091501", ""},     SDEV_NOSYNCCACHE},
-	{{T_OPTICAL, T_REMOV,
-	 "EPSON   ", "OMD-5010        ", "3.08"}, SDEV_NOLUNS},
+	 "TEXEL   ", "CD-ROM DM-XX24 K", "1.10"}, PQUIRK_NOLUNS},
+	{{T_CDROM, T_REMOV,
+	 "TOSHIBA ", "XM-4101TASUNSLCD", ""}, PQUIRK_NOLUNS|PQUIRK_NOSYNC},
+	/* "IBM CDRM00201     !F" 0724 is an IBM OEM Toshiba XM-4101BME */
+	{{T_CDROM, T_REMOV,
+	 "IBM     ", "CDRM00201     !F", "0724"}, PQUIRK_NOLUNS|PQUIRK_NOSYNC},
+	{{T_CDROM, T_REMOV,
+	 "ShinaKen", "CD-ROM DM-3x1S",   "1.04"}, PQUIRK_NOLUNS},
+	{{T_CDROM, T_REMOV,
+	 "JVC     ", "R2626",            ""},     PQUIRK_NOLUNS},
+	{{T_CDROM, T_REMOV,
+	 "YAMAHA", "CRW8424S",           ""},     PQUIRK_NOLUNS},
+	{{T_CDROM, T_REMOV,
+	 "NEC     ", "CD-ROM DRIVE:222", ""},	  PQUIRK_NOLUNS|PQUIRK_NOSYNC},
 
 	{{T_DIRECT, T_FIXED,
-	"TOSHIBA ", "CD-ROM XM-3401TA", "0283"}, ADEV_CDROM|SDEV_NOLUNS},
+	 "MICROP  ", "1588-15MBSUN0669", ""},     PQUIRK_AUTOSAVE},
 	{{T_DIRECT, T_FIXED,
-	 "ADAPTEC ", "AEC-4412BD",       "1.2A"}, SDEV_NOMODESENSE},
+	 "MICROP  ", "2217-15MQ1091501", ""},     PQUIRK_NOSYNCCACHE},
+	{{T_OPTICAL, T_REMOV,
+	 "EPSON   ", "OMD-5010        ", "3.08"}, PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "DEC     ", "RZ55     (C) DEC", ""},     SDEV_AUTOSAVE},
+	 "ADAPTEC ", "AEC-4412BD",       "1.2A"}, PQUIRK_NOMODESENSE},
 	{{T_DIRECT, T_FIXED,
-	 "EMULEX  ", "MD21/S2     ESDI", "A00"},  SDEV_FORCELUNS|SDEV_AUTOSAVE},
-	/* Gives non-media hardware failure in response to start-unit command */
+	 "ADAPTEC ", "ACB-4000",         ""},     PQUIRK_FORCELUNS|PQUIRK_AUTOSAVE|PQUIRK_NOMODESENSE},
 	{{T_DIRECT, T_FIXED,
-	 "HITACHI", "DK515C",		"CP16"},  SDEV_NOSTARTUNIT},
+	 "DEC     ", "RZ55     (C) DEC", ""},     PQUIRK_AUTOSAVE},
 	{{T_DIRECT, T_FIXED,
-	 "HITACHI", "DK515C",		"CP15"},  SDEV_NOSTARTUNIT},
+	 "EMULEX  ", "MD21/S2     ESDI", "A00"},
+				PQUIRK_FORCELUNS|PQUIRK_AUTOSAVE},
 	{{T_DIRECT, T_FIXED,
-	 "HP      ", "C372",             ""},     SDEV_NOTAG},
+	 "MICROP",  "1548-15MZ1077801",  "HZ2P"}, PQUIRK_NOTAG},
 	{{T_DIRECT, T_FIXED,
-	 "IBMRAID ", "0662S",		 ""},     SDEV_AUTOSAVE},
+	 "HP      ", "C372",             ""},     PQUIRK_NOTAG},
 	{{T_DIRECT, T_FIXED,
-	 "IBM     ", "0663H",		 ""},     SDEV_AUTOSAVE},
+	 "IBMRAID ", "0662S",		 ""},     PQUIRK_AUTOSAVE},
 	{{T_DIRECT, T_FIXED,
-	 "IBM",	     "0664",		 ""},     SDEV_AUTOSAVE},
+	 "IBM     ", "0663H",		 ""},     PQUIRK_AUTOSAVE},
 	{{T_DIRECT, T_FIXED,
-	 "IBM     ", "H3171-S2",	 ""},	  SDEV_NOLUNS|SDEV_AUTOSAVE},
+	 "IBM",	     "0664",		 ""},     PQUIRK_AUTOSAVE},
 	{{T_DIRECT, T_FIXED,
-	 "IBM     ", "KZ-C",		 ""},	  SDEV_AUTOSAVE},
+	/* improperly report DT-only sync mode */
+	 "IBM     ", "DXHS36D",		 ""},
+				PQUIRK_CAP_SYNC|PQUIRK_CAP_WIDE16},
+	{{T_DIRECT, T_FIXED,
+	 "IBM     ", "DXHS18Y",		 ""},
+				PQUIRK_CAP_SYNC|PQUIRK_CAP_WIDE16},
+	{{T_DIRECT, T_FIXED,
+	 "IBM     ", "H3171-S2",	 ""},
+				PQUIRK_NOLUNS|PQUIRK_AUTOSAVE},
+	{{T_DIRECT, T_FIXED,
+	 "IBM     ", "KZ-C",		 ""},	  PQUIRK_AUTOSAVE},
 	/* Broken IBM disk */
 	{{T_DIRECT, T_FIXED,
-	 ""	   , "DFRSS2F",		 ""},	  SDEV_AUTOSAVE},
+	 ""	   , "DFRSS2F",		 ""},	  PQUIRK_AUTOSAVE},
+	{{T_DIRECT, T_FIXED,
+	 "Initio  ", "",		 ""},	  PQUIRK_NOBIGMODESENSE},
 	{{T_DIRECT, T_REMOV,
-	 "MPL     ", "MC-DISK-        ", ""},     SDEV_NOLUNS},
+	 "MPL     ", "MC-DISK-        ", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "XT-3280         ", ""},     SDEV_NOLUNS},
+	 "MAXTOR  ", "XT-3280         ", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "XT-4380S        ", ""},     SDEV_NOLUNS},
+	 "MAXTOR  ", "XT-4380S        ", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "MXT-1240S       ", ""},     SDEV_NOLUNS},
+	 "MAXTOR  ", "MXT-1240S       ", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "XT-4170S        ", ""},     SDEV_NOLUNS},
+	 "MAXTOR  ", "XT-4170S        ", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "XT-8760S",         ""},     SDEV_NOLUNS},
+	 "MAXTOR  ", "XT-8760S",         ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "LXT-213S        ", ""},     SDEV_NOLUNS},
+	 "MAXTOR  ", "LXT-213S        ", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "LXT-213S SUN0207", ""},     SDEV_NOLUNS},
+	 "MAXTOR  ", "LXT-213S SUN0207", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "LXT-200S        ", ""},     SDEV_NOLUNS},
+	 "MAXTOR  ", "LXT-200S        ", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "MEGADRV ", "EV1000",           ""},     SDEV_NOMODESENSE},
+	 "MEGADRV ", "EV1000",           ""},     PQUIRK_NOMODESENSE},
 	{{T_DIRECT, T_FIXED,
-	 "MST     ", "SnapLink        ", ""},     SDEV_NOLUNS},
+	 "MICROP", "1991-27MZ",          ""},     PQUIRK_NOTAG},
 	{{T_DIRECT, T_FIXED,
-	 "NEC     ", "D3847           ", "0307"}, SDEV_NOLUNS},
+	 "MST     ", "SnapLink        ", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "QUANTUM ", "ELS85S          ", ""},     SDEV_AUTOSAVE},
+	 "NEC     ", "D3847           ", "0307"}, PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "QUANTUM ", "LPS525S         ", ""},     SDEV_NOLUNS},
+	 "QUANTUM ", "ELS85S          ", ""},     PQUIRK_AUTOSAVE},
 	{{T_DIRECT, T_FIXED,
-	 "QUANTUM ", "P105S 910-10-94x", ""},     SDEV_NOLUNS},
+	 "QUANTUM ", "LPS525S         ", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "QUANTUM ", "PD1225S         ", ""},     SDEV_NOLUNS},
+	 "QUANTUM ", "P105S 910-10-94x", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "QUANTUM ", "PD210S   SUN0207", ""},     SDEV_NOLUNS},
+	 "QUANTUM ", "PD1225S         ", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "RODIME  ", "RO3000S         ", ""},     SDEV_NOLUNS},
+	 "QUANTUM ", "PD210S   SUN0207", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "SEAGATE ", "ST125N          ", ""},     SDEV_NOLUNS},
+	 "QUANTUM ", "ATLAS IV 9 WLS", "0A0A"},   PQUIRK_CAP_NODT},
 	{{T_DIRECT, T_FIXED,
-	 "SEAGATE ", "ST157N          ", ""},     SDEV_NOLUNS},
+	 "RODIME  ", "RO3000S         ", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "SEAGATE ", "ST296           ", ""},     SDEV_NOLUNS},
+	 "SEAGATE ", "ST125N          ", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "SEAGATE ", "ST296N          ", ""},     SDEV_NOLUNS},
+	 "SEAGATE ", "ST157N          ", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "SEAGATE ", "ST19171",          ""},     SDEV_NOMODESENSE},
+	 "SEAGATE ", "ST296           ", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "SEAGATE ", "ST34501FC       ", ""},     SDEV_NOMODESENSE},
+	 "SEAGATE ", "ST296N          ", ""},     PQUIRK_NOLUNS},
 	{{T_DIRECT, T_FIXED,
-	 "TOSHIBA ", "MK538FB         ", "6027"}, SDEV_NOLUNS},
+	 "SEAGATE ", "ST318404LC      ", ""},     PQUIRK_NOLUNS},
+	{{T_DIRECT, T_FIXED,
+	 "SEAGATE ", "ST15150N        ", ""},     PQUIRK_NOTAG},
+	{{T_DIRECT, T_FIXED,
+	 "SEAGATE ", "ST19171",          ""},     PQUIRK_NOMODESENSE},
+	{{T_DIRECT, T_FIXED,
+	 "SEAGATE ", "ST32430N",         ""},     PQUIRK_CAP_SYNC},
+	{{T_DIRECT, T_FIXED,
+	 "SEAGATE ", "ST34501FC       ", ""},     PQUIRK_NOMODESENSE},
+	{{T_DIRECT, T_FIXED,
+	 "SEAGATE ", "SX910800N",        ""},     PQUIRK_NOTAG},
+	{{T_DIRECT, T_FIXED,
+	 "TOSHIBA ", "MK538FB         ", "6027"}, PQUIRK_NOLUNS},
+	{{T_DIRECT, T_FIXED,
+	 "MICROP  ", "1924",          ""},     PQUIRK_CAP_SYNC},
+	{{T_DIRECT, T_FIXED,
+	 "FUJITSU ", "M2266",         ""},     PQUIRK_CAP_SYNC},
+	{{T_DIRECT, T_FIXED,
+	 "FUJITSU ", "M2624S-512      ", ""},     PQUIRK_CAP_SYNC},
+	{{T_DIRECT, T_FIXED,
+	 "SEAGATE ", "SX336704LC"   , ""}, PQUIRK_CAP_SYNC | PQUIRK_CAP_WIDE16},
+
 	{{T_DIRECT, T_REMOV,
-	 "iomega", "jaz 1GB", 		 ""},	  SDEV_NOMODESENSE},
+	 "IOMEGA", "ZIP 100",		 "J.03"}, PQUIRK_NOLUNS},
 	{{T_DIRECT, T_REMOV,
-	 "IOMEGA", "ZIP 100",		 ""},	  SDEV_NOMODESENSE},
-	{{T_DIRECT, T_REMOV,
-	 "IOMEGA", "ZIP 100",		 "J.03"}, SDEV_NOMODESENSE|SDEV_NOLUNS},
-	/* Letting the motor run kills floppy drives and disks quite fast. */
-	{{T_DIRECT, T_REMOV,
-	 "TEAC", "FC-1",		 ""},	  SDEV_NOSTARTUNIT},
+	 "INSITE", "I325VM",             ""},     PQUIRK_NOLUNS},
 
 	/* XXX: QIC-36 tape behind Emulex adapter.  Very broken. */
 	{{T_SEQUENTIAL, T_REMOV,
-	 "        ", "                ", "    "}, SDEV_NOLUNS},
+	 "        ", "                ", "    "}, PQUIRK_NOLUNS},
 	{{T_SEQUENTIAL, T_REMOV,
-	 "CALIPER ", "CP150           ", ""},     SDEV_NOLUNS},
+	 "EMULEX  ", "MT-02 QIC       ", ""},     PQUIRK_NOLUNS},
 	{{T_SEQUENTIAL, T_REMOV,
-	 "EXABYTE ", "EXB-8200        ", ""},     SDEV_NOLUNS},
+	 "CALIPER ", "CP150           ", ""},     PQUIRK_NOLUNS},
 	{{T_SEQUENTIAL, T_REMOV,
-	 "SONY    ", "GY-10C          ", ""},     SDEV_NOLUNS},
+	 "EXABYTE ", "EXB-8200        ", ""},     PQUIRK_NOLUNS},
 	{{T_SEQUENTIAL, T_REMOV,
-	 "SONY    ", "SDT-2000        ", "2.09"}, SDEV_NOLUNS},
+	 "SONY    ", "GY-10C          ", ""},     PQUIRK_NOLUNS},
 	{{T_SEQUENTIAL, T_REMOV,
-	 "SONY    ", "SDT-5000        ", "3."},   SDEV_NOSYNC|SDEV_NOWIDE},
+	 "SONY    ", "SDT-2000        ", "2.09"}, PQUIRK_NOLUNS},
 	{{T_SEQUENTIAL, T_REMOV,
-	 "SONY    ", "SDT-5200        ", "3."},   SDEV_NOLUNS},
+	 "SONY    ", "SDT-5000        ", "3."},   PQUIRK_NOSYNC|PQUIRK_NOWIDE},
 	{{T_SEQUENTIAL, T_REMOV,
-	 "TANDBERG", " TDC 3600       ", ""},     SDEV_NOLUNS},
+	 "SONY    ", "SDT-5200        ", "3."},   PQUIRK_NOLUNS},
+	{{T_SEQUENTIAL, T_REMOV,
+	 "TANDBERG", " TDC 3600       ", ""},     PQUIRK_NOLUNS},
 	/* Following entry reported as a Tandberg 3600; ref. PR1933 */
 	{{T_SEQUENTIAL, T_REMOV,
-	 "ARCHIVE ", "VIPER 150  21247", ""},     SDEV_NOLUNS},
+	 "ARCHIVE ", "VIPER 150  21247", ""},     PQUIRK_NOLUNS},
 	/* Following entry for a Cipher ST150S; ref. PR4171 */
 	{{T_SEQUENTIAL, T_REMOV,
-	 "ARCHIVE ", "VIPER 1500 21247", "2.2G"}, SDEV_NOLUNS},
+	 "ARCHIVE ", "VIPER 1500 21247", "2.2G"}, PQUIRK_NOLUNS},
 	{{T_SEQUENTIAL, T_REMOV,
-	 "ARCHIVE ", "Python 28454-XXX", ""},     SDEV_NOLUNS},
+	 "ARCHIVE ", "Python 28454-XXX", ""},     PQUIRK_NOLUNS},
 	{{T_SEQUENTIAL, T_REMOV,
-	 "WANGTEK ", "5099ES SCSI",      ""},     SDEV_NOLUNS},
+	 "WANGTEK ", "5099ES SCSI",      ""},     PQUIRK_NOLUNS},
 	{{T_SEQUENTIAL, T_REMOV,
-	 "WANGTEK ", "5150ES SCSI",      ""},     SDEV_NOLUNS},
+	 "WANGTEK ", "5150ES SCSI",      ""},     PQUIRK_NOLUNS},
 	{{T_SEQUENTIAL, T_REMOV,
-	 "WANGTEK ", "SCSI-36",		 ""},     SDEV_NOLUNS},
+	 "WANGTEK ", "SCSI-36",		 ""},     PQUIRK_NOLUNS},
 	{{T_SEQUENTIAL, T_REMOV,
-	 "WangDAT ", "Model 1300      ", "02.4"}, SDEV_NOSYNC|SDEV_NOWIDE},
+	 "WangDAT ", "Model 1300      ", "02.4"}, PQUIRK_NOSYNC|PQUIRK_NOWIDE},
 	{{T_SEQUENTIAL, T_REMOV,
-	 "WangDAT ", "Model 2600      ", "01.7"}, SDEV_NOSYNC|SDEV_NOWIDE},
+	 "WangDAT ", "Model 2600      ", "01.7"}, PQUIRK_NOSYNC|PQUIRK_NOWIDE},
 	{{T_SEQUENTIAL, T_REMOV,
-	 "WangDAT ", "Model 3200      ", "02.2"}, SDEV_NOSYNC|SDEV_NOWIDE},
+	 "WangDAT ", "Model 3200      ", "02.2"}, PQUIRK_NOSYNC|PQUIRK_NOWIDE},
 	{{T_SEQUENTIAL, T_REMOV,
-	 "TEAC    ", "MT-2ST/N50      ", ""},     SDEV_NOLUNS},
+	 "TEAC    ", "MT-2ST/N50      ", ""},     PQUIRK_NOLUNS},
 
 	{{T_SCANNER, T_FIXED,
-	 "RICOH   ", "IS60            ", "1R08"}, SDEV_NOLUNS},
+	 "RICOH   ", "IS60            ", "1R08"}, PQUIRK_NOLUNS},
 	{{T_SCANNER, T_FIXED,
-	 "UMAX    ", "Astra 1200S     ", "V2.9"}, SDEV_NOLUNS},
+	 "UMAX    ", "Astra 1200S     ", "V2.9"}, PQUIRK_NOLUNS},
 	{{T_SCANNER, T_FIXED,
-	 "UMAX    ", "Astra 1220S     ", ""}, SDEV_NOLUNS},
+	 "UMAX    ", "Astra 1220S     ", ""},     PQUIRK_NOLUNS},
 	{{T_SCANNER, T_FIXED,
-	 "UMAX    ", "UMAX S-6E       ", "V2.0"}, SDEV_NOLUNS},
+	 "UMAX    ", "UMAX S-6E       ", "V2.0"}, PQUIRK_NOLUNS},
 	{{T_SCANNER, T_FIXED,
-	 "UMAX    ", "UMAX S-12       ", "V2.1"}, SDEV_NOLUNS},
+	 "UMAX    ", "UMAX S-12       ", "V2.1"}, PQUIRK_NOLUNS},
 	{{T_SCANNER, T_FIXED,
-	 "ULTIMA  ", "A6000C          ", ""}, SDEV_NOLUNS},
-
+	 "ULTIMA  ", "A6000C          ", ""},     PQUIRK_NOLUNS},
 	{{T_PROCESSOR, T_FIXED,
-	 "LITRONIC", "PCMCIA          ", ""},     SDEV_NOLUNS},
-
+	 "ESG-SHV",  "SCA HSBP M15",     ""},     PQUIRK_NOLUNS},
+	{{T_PROCESSOR, T_FIXED,
+	 "SYMBIOS",  "",                 ""},     PQUIRK_NOLUNS},
+	{{T_PROCESSOR, T_FIXED,
+	 "LITRONIC", "PCMCIA          ", ""},     PQUIRK_NOLUNS},
 	{{T_CHANGER, T_REMOV,
-	 "SONY    ", "CDL1100         ", ""},     SDEV_NOLUNS},
-
+	 "SONY    ", "CDL1100         ", ""},     PQUIRK_NOLUNS},
 	{{T_ENCLOSURE, T_FIXED,
-	 "SUN     ", "SENA            ", ""},     SDEV_NOLUNS},
+	 "SUN     ", "SENA            ", ""},     PQUIRK_NOLUNS},
 };
 
 /*
@@ -659,17 +718,18 @@ struct scsi_quirk_inquiry_pattern scsi_quirk_patterns[] = {
  * it is, and find the correct driver table
  * entry.
  */
-int
-scsi_probedev(scsi, target, lun)
-	struct scsibus_softc *scsi;
-	int target, lun;
+static int
+scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 {
-	struct scsipi_link *sc_link;
-	static struct scsipi_inquiry_data inqbuf;
-	struct scsi_quirk_inquiry_pattern *finger;
-	int checkdtype, priority, docontinue;
+	struct scsipi_channel *chan = sc->sc_channel;
+	struct scsipi_periph *periph;
+	struct scsipi_inquiry_data inqbuf;
+	const struct scsi_quirk_inquiry_pattern *finger;
+	int checkdtype, priority, docontinue, quirks;
 	struct scsipibus_attach_args sa;
 	struct cfdata *cf;
+	int locs[SCSIBUSCF_NLOCS];
+	struct device *chld;
 
 	/*
 	 * Assume no more luns to search after this one.
@@ -680,93 +740,68 @@ scsi_probedev(scsi, target, lun)
 	docontinue = 0;
 
 	/* Skip this slot if it is already attached. */
-	if (scsi->sc_link[target][lun] != NULL)
+	if (scsipi_lookup_periph(chan, target, lun) != NULL)
 		return (docontinue);
 
-	sc_link = malloc(sizeof(*sc_link), M_DEVBUF, M_NOWAIT);
-	*sc_link = *scsi->adapter_link;
-	sc_link->active = 0;
-	sc_link->scsipi_scsi.target = target;
-	sc_link->scsipi_scsi.lun = lun;
-	sc_link->device = &probe_switch;
-	TAILQ_INIT(&sc_link->pending_xfers);
+	periph = scsipi_alloc_periph(M_NOWAIT);
+	if (periph == NULL) {
+#ifdef	DIAGNOSTIC
+		aprint_error_dev(sc->sc_dev,
+		    "cannot allocate periph for target %d lun %d\n",
+		    target, lun);
+#endif
+		return (ENOMEM);
+	}
+	periph->periph_channel = chan;
+	periph->periph_switch = &scsi_probe_dev;
+
+	periph->periph_target = target;
+	periph->periph_lun = lun;
+	periph->periph_quirks = chan->chan_defquirks;
+
+#ifdef SCSIPI_DEBUG
+	if (SCSIPI_DEBUG_TYPE == SCSIPI_BUSTYPE_SCSI &&
+	    SCSIPI_DEBUG_TARGET == target &&
+	    SCSIPI_DEBUG_LUN == lun)
+		periph->periph_dbflags |= SCSIPI_DEBUG_FLAGS;
+#endif
 
 	/*
 	 * Ask the device what it is
 	 */
-#if defined(SCSIDEBUG) && DEBUGTYPE == BUS_SCSI
-	if (target == DEBUGTARGET && lun == DEBUGLUN)
-		sc_link->flags |= DEBUGLEVEL;
-#endif /* SCSIDEBUG */
-
-	(void) scsipi_test_unit_ready(sc_link,
-	    XS_CTL_DISCOVERY | XS_CTL_IGNORE_ILLEGAL_REQUEST |
-	    XS_CTL_IGNORE_NOT_READY | XS_CTL_IGNORE_MEDIA_CHANGE);
 
 #ifdef SCSI_2_DEF
 	/* some devices need to be told to go to SCSI2 */
 	/* However some just explode if you tell them this.. leave it out */
-	scsi_change_def(sc_link, XS_CTL_DISCOVERY | XS_CTL_SILENT);
+	scsi_change_def(periph, XS_CTL_DISCOVERY | XS_CTL_SILENT);
 #endif /* SCSI_2_DEF */
 
 	/* Now go ask the device all about itself. */
-	bzero(&inqbuf, sizeof(inqbuf));
-	if (scsipi_inquire(sc_link, &inqbuf, XS_CTL_DISCOVERY) != 0)
+	memset(&inqbuf, 0, sizeof(inqbuf));
+	{
+		u_int8_t *extension = &inqbuf.flags1;
+		int len = 0;
+		while (len < 3)
+			extension[len++] = '\0';
+		while (len < 3 + 28)
+			extension[len++] = ' ';
+		while (len < 3 + 28 + 20)
+			extension[len++] = '\0';
+		while (len < 3 + 28 + 20 + 1)
+			extension[len++] = '\0';
+		while (len < 3 + 28 + 20 + 1 + 1)
+			extension[len++] = '\0';
+		while (len < 3 + 28 + 20 + 1 + 1 + (8*2))
+			extension[len++] = ' ';
+	}
+	if (scsipi_inquire(periph, &inqbuf,
+	    XS_CTL_DISCOVERY | XS_CTL_DATA_ONSTACK | XS_CTL_SILENT) != 0)
 		goto bad;
 
-	{
-		int len = inqbuf.additional_length;
-		while (len < 3)
-			inqbuf.unused[len++] = '\0';
-		while (len < 3 + 28)
-			inqbuf.unused[len++] = ' ';
-	}
-
-	sa.sa_sc_link = sc_link;
-	sa.sa_inqbuf.type = inqbuf.device;
-	sa.sa_inqbuf.removable = inqbuf.dev_qual2 & SID_REMOVABLE ?
-	    T_REMOV : T_FIXED;
-	sa.sa_inqbuf.vendor = inqbuf.vendor;
-	sa.sa_inqbuf.product = inqbuf.product;
-	sa.sa_inqbuf.revision = inqbuf.revision;
-	sa.scsipi_info.scsi_version = inqbuf.version;
-	sa.sa_inqptr = &inqbuf;
-
-	finger = (struct scsi_quirk_inquiry_pattern *)scsipi_inqmatch(
-	    &sa.sa_inqbuf, (caddr_t)scsi_quirk_patterns,
-	    sizeof(scsi_quirk_patterns)/sizeof(scsi_quirk_patterns[0]),
-	    sizeof(scsi_quirk_patterns[0]), &priority);
-
-	/*
-	 * Based upon the inquiry flags we got back, and if we're
-	 * at SCSI-2 or better, set some limiting quirks.
-	 */
-	if ((inqbuf.version & SID_ANSII) >= 2) {
-		if ((inqbuf.flags & SID_CmdQue) == 0)
-			sc_link->quirks |= SDEV_NOTAG;
-		if ((inqbuf.flags & SID_Sync) == 0)
-			sc_link->quirks |= SDEV_NOSYNC;
-		if ((inqbuf.flags & SID_WBus16) == 0)
-			sc_link->quirks |= SDEV_NOWIDE;
-	}
-	/*
-	 * Now apply any quirks from the table.
-	 */
-	if (priority != 0)
-		sc_link->quirks |= finger->quirks;
-	if ((inqbuf.version & SID_ANSII) == 0 &&
-	    (sc_link->quirks & SDEV_FORCELUNS) == 0)
-		sc_link->quirks |= SDEV_NOLUNS;
-	sc_link->scsipi_scsi.scsi_version = inqbuf.version;
-
-	if ((sc_link->quirks & SDEV_NOLUNS) == 0)
-		docontinue = 1;
-
-	/*
-	 * note what BASIC type of device it is
-	 */
-	if ((inqbuf.dev_qual2 & SID_REMOVABLE) != 0)
-		sc_link->flags |= SDEV_REMOVABLE;
+	periph->periph_type = inqbuf.device & SID_TYPE;
+	if (inqbuf.dev_qual2 & SID_REMOVABLE)
+		periph->periph_flags |= PERIPH_REMOVABLE;
+	periph->periph_version = inqbuf.version & SID_ANSII;
 
 	/*
 	 * Any device qualifier that has the top bit set (qualifier&4 != 0)
@@ -775,20 +810,26 @@ scsi_probedev(scsi, target, lun)
 	 */
 	checkdtype = 0;
 	switch (inqbuf.device & SID_QUAL) {
-	case SID_QUAL_LU_OK:
-	case SID_QUAL_LU_OFFLINE:
+	case SID_QUAL_LU_PRESENT:
 		checkdtype = 1;
 		break;
 
-	case SID_QUAL_RSVD:
-	case SID_QUAL_BAD_LU:
+	case SID_QUAL_LU_NOTPRESENT:
+	case SID_QUAL_reserved:
+	case SID_QUAL_LU_NOT_SUPP:
 		goto bad;
 
 	default:
 		break;
 	}
-	if (checkdtype)
-		switch (inqbuf.device & SID_TYPE) {
+
+	/* Let the adapter driver handle the device separatley if it wants. */
+	if (chan->chan_adapter->adapt_accesschk != NULL &&
+	    (*chan->chan_adapter->adapt_accesschk)(periph, &sa.sa_inqbuf))
+		goto bad;
+
+	if (checkdtype) {
+		switch (periph->periph_type) {
 		case T_DIRECT:
 		case T_SEQUENTIAL:
 		case T_PRINTER:
@@ -803,48 +844,147 @@ scsi_probedev(scsi, target, lun)
 		case T_IT8_2:
 		case T_STORARRAY:
 		case T_ENCLOSURE:
+		case T_SIMPLE_DIRECT:
+		case T_OPTIC_CARD_RW:
+		case T_OBJECT_STORED:
 		default:
 			break;
 		case T_NODEVICE:
 			goto bad;
 		}
+	}
 
-	if ((cf = config_search(scsibussubmatch, (struct device *)scsi,
-	    &sa)) != NULL) {
-		scsi->sc_link[target][lun] = sc_link;
-		config_attach((struct device *)scsi, cf, &sa, scsibusprint);
+	sa.sa_periph = periph;
+	sa.sa_inqbuf.type = inqbuf.device;
+	sa.sa_inqbuf.removable = inqbuf.dev_qual2 & SID_REMOVABLE ?
+	    T_REMOV : T_FIXED;
+	sa.sa_inqbuf.vendor = inqbuf.vendor;
+	sa.sa_inqbuf.product = inqbuf.product;
+	sa.sa_inqbuf.revision = inqbuf.revision;
+	sa.scsipi_info.scsi_version = inqbuf.version;
+	sa.sa_inqptr = &inqbuf;
+
+	finger = scsipi_inqmatch(
+	    &sa.sa_inqbuf, scsi_quirk_patterns,
+	    sizeof(scsi_quirk_patterns)/sizeof(scsi_quirk_patterns[0]),
+	    sizeof(scsi_quirk_patterns[0]), &priority);
+
+	if (finger != NULL)
+		quirks = finger->quirks;
+	else
+		quirks = 0;
+
+	/*
+	 * Determine the operating mode capabilities of the device.
+	 */
+	if (periph->periph_version >= 2) {
+		if ((inqbuf.flags3 & SID_CmdQue) != 0 &&
+		    (quirks & PQUIRK_NOTAG) == 0)
+			periph->periph_cap |= PERIPH_CAP_TQING;
+		if ((inqbuf.flags3 & SID_Linked) != 0)
+			periph->periph_cap |= PERIPH_CAP_LINKCMDS;
+		if ((inqbuf.flags3 & SID_Sync) != 0 &&
+		    (quirks & PQUIRK_NOSYNC) == 0)
+			periph->periph_cap |= PERIPH_CAP_SYNC;
+		if ((inqbuf.flags3 & SID_WBus16) != 0 &&
+		    (quirks & PQUIRK_NOWIDE) == 0)
+			periph->periph_cap |= PERIPH_CAP_WIDE16;
+		if ((inqbuf.flags3 & SID_WBus32) != 0 &&
+		    (quirks & PQUIRK_NOWIDE) == 0)
+			periph->periph_cap |= PERIPH_CAP_WIDE32;
+		if ((inqbuf.flags3 & SID_SftRe) != 0)
+			periph->periph_cap |= PERIPH_CAP_SFTRESET;
+		if ((inqbuf.flags3 & SID_RelAdr) != 0)
+			periph->periph_cap |= PERIPH_CAP_RELADR;
+		/* SPC-2 */
+		if (periph->periph_version >= 3 &&
+		    !(quirks & PQUIRK_CAP_NODT)){
+			/*
+			 * Report ST clocking though CAP_WIDExx/CAP_SYNC.
+			 * If the device only supports DT, clear these
+			 * flags (DT implies SYNC and WIDE)
+			 */
+			switch (inqbuf.flags4 & SID_Clocking) {
+			case SID_CLOCKING_DT_ONLY:
+				periph->periph_cap &=
+				    ~(PERIPH_CAP_SYNC |
+				      PERIPH_CAP_WIDE16 |
+				      PERIPH_CAP_WIDE32);
+				/* FALLTHROUGH */
+			case SID_CLOCKING_SD_DT:
+				periph->periph_cap |= PERIPH_CAP_DT;
+				break;
+			default: /* ST only or invalid */
+				/* nothing to do */
+				break;
+			}
+		}
+		if (periph->periph_version >= 3) {
+			if (inqbuf.flags4 & SID_IUS)
+				periph->periph_cap |= PERIPH_CAP_IUS;
+			if (inqbuf.flags4 & SID_QAS)
+				periph->periph_cap |= PERIPH_CAP_QAS;
+		}
+	}
+	if (quirks & PQUIRK_CAP_SYNC)
+		periph->periph_cap |= PERIPH_CAP_SYNC;
+	if (quirks & PQUIRK_CAP_WIDE16)
+		periph->periph_cap |= PERIPH_CAP_WIDE16;
+
+	/*
+	 * Now apply any quirks from the table.
+	 */
+	periph->periph_quirks |= quirks;
+	if (periph->periph_version == 0 &&
+	    (periph->periph_quirks & PQUIRK_FORCELUNS) == 0)
+		periph->periph_quirks |= PQUIRK_NOLUNS;
+
+	if ((periph->periph_quirks & PQUIRK_NOLUNS) == 0)
+		docontinue = 1;
+
+	locs[SCSIBUSCF_TARGET] = target;
+	locs[SCSIBUSCF_LUN] = lun;
+
+	if ((cf = config_search_loc(config_stdsubmatch, sc->sc_dev,
+	     "scsibus", locs, &sa)) != NULL) {
+		scsipi_insert_periph(chan, periph);
+		/*
+		 * XXX Can't assign periph_dev here, because we'll
+		 * XXX need it before config_attach() returns.  Must
+		 * XXX assign it in periph driver.
+		 */
+		chld = config_attach_loc(sc->sc_dev, cf, locs, &sa,
+					 scsibusprint);
 	} else {
-		scsibusprint(&sa, scsi->sc_dev.dv_xname);
-		printf(" not configured\n");
+		scsibusprint(&sa, device_xname(sc->sc_dev));
+		aprint_normal(" not configured\n");
 		goto bad;
 	}
 
 	return (docontinue);
 
 bad:
-	free(sc_link, M_DEVBUF);
+	free(periph, M_DEVBUF);
 	return (docontinue);
 }
 
 /****** Entry points for user control of the SCSI bus. ******/
 
-int
-scsibusopen(dev, flag, fmt, p)
-	dev_t dev;
-	int flag, fmt;
-	struct proc *p;
+static int
+scsibusopen(dev_t dev, int flag, int fmt,
+    struct lwp *l)
 {
 	struct scsibus_softc *sc;
 	int error, unit = minor(dev);
 
-	if (unit >= scsibus_cd.cd_ndevs ||
-	    (sc = scsibus_cd.cd_devs[unit]) == NULL)
+	sc = device_lookup_private(&scsibus_cd, unit);
+	if (sc == NULL)
 		return (ENXIO);
 
 	if (sc->sc_flags & SCSIBUSF_OPEN)
 		return (EBUSY);
 
-	if ((error = scsipi_adapter_addref(sc->adapter_link)) != 0)
+	if ((error = scsipi_adapter_addref(sc->sc_channel->chan_adapter)) != 0)
 		return (error);
 
 	sc->sc_flags |= SCSIBUSF_OPEN;
@@ -852,32 +992,29 @@ scsibusopen(dev, flag, fmt, p)
 	return (0);
 }
 
-int
-scsibusclose(dev, flag, fmt, p)
-	dev_t dev;
-	int flag, fmt;
-	struct proc *p;
+static int
+scsibusclose(dev_t dev, int flag, int fmt,
+    struct lwp *l)
 {
-	struct scsibus_softc *sc = scsibus_cd.cd_devs[minor(dev)];
+	struct scsibus_softc *sc;
 
-	scsipi_adapter_delref(sc->adapter_link);
+	sc = device_lookup_private(&scsibus_cd, minor(dev));
+	scsipi_adapter_delref(sc->sc_channel->chan_adapter);
 
 	sc->sc_flags &= ~SCSIBUSF_OPEN;
 
 	return (0);
 }
 
-int
-scsibusioctl(dev, cmd, addr, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t addr;
-	int flag;
-	struct proc *p;
+static int
+scsibusioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
-	struct scsibus_softc *sc = scsibus_cd.cd_devs[minor(dev)];
-	struct scsipi_link *sc_link = sc->adapter_link;
+	struct scsibus_softc *sc;
+	struct scsipi_channel *chan;
 	int error;
+
+	sc = device_lookup_private(&scsibus_cd, minor(dev));
+	chan = sc->sc_channel;
 
 	/*
 	 * Enforce write permission for ioctls that change the
@@ -886,6 +1023,7 @@ scsibusioctl(dev, cmd, addr, flag, p)
 	 */
 	switch (cmd) {
 	case SCBUSIOSCAN:
+	case SCBUSIODETACH:
 	case SCBUSIORESET:
 		if ((flag & FWRITE) == 0)
 			return (EBADF);
@@ -897,20 +1035,28 @@ scsibusioctl(dev, cmd, addr, flag, p)
 		struct scbusioscan_args *a =
 		    (struct scbusioscan_args *)addr;
 
-		/* XXX Change interface to this function. */
-		error = scsi_probe_busses(minor(dev), a->sa_target,
-		    a->sa_lun);
+		error = scsi_probe_bus(sc, a->sa_target, a->sa_lun);
 		break;
 	    }
+
+	case SCBUSIODETACH:
+	    {
+		struct scbusiodetach_args *a =
+		    (struct scbusiodetach_args *)addr;
+
+		error = scsipi_target_detach(chan, a->sa_target, a->sa_lun, 0);
+		break;
+	    }
+
 
 	case SCBUSIORESET:
 		/* FALLTHROUGH */
 	default:
-		if (sc_link->adapter->scsipi_ioctl == NULL)
+		if (chan->chan_adapter->adapt_ioctl == NULL)
 			error = ENOTTY;
 		else
-			error = (*sc_link->adapter->scsipi_ioctl)(sc_link,
-			    cmd, addr, flag, p);
+			error = (*chan->chan_adapter->adapt_ioctl)(chan,
+			    cmd, addr, flag, l->l_proc);
 		break;
 	}
 

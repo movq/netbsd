@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_int.c,v 1.2 1999/05/30 20:17:48 briggs Exp $	*/
+/*	$NetBSD: fpu_int.c,v 1.7 2005/12/11 12:17:52 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Ken Nakata
@@ -27,6 +27,9 @@
  *
  *	@(#)fpu_int.c
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: fpu_int.c,v 1.7 2005/12/11 12:17:52 christos Exp $");
 
 #include <sys/types.h>
 
@@ -60,7 +63,7 @@ fpu_intrz(fe)
     return x;
   }
 
-  clr = 3 - sh / 32;
+  clr = 2 - sh / 32;
   mask = (0xffffffff << (sh % 32));
 
   for (i = 2; i > clr; i--) {
@@ -99,7 +102,7 @@ fpu_int(fe)
 
   fpu_shr(x, rsh - FP_NG);	/* shift to the right */
 
-  if (round(fe, x) == 1 /* rounded up */ &&
+  if (fpu_round(fe, x) == 1 /* rounded up */ &&
       x->fp_mant[2 - (FP_NMANT-rsh)/32] & (1 << ((FP_NMANT-rsh)%32))
       /* x >= 2.0 */) {
     rsh--;			/* reduce shift count by 1 */
@@ -113,7 +116,8 @@ fpu_int(fe)
   for (i = 0; i + wsh < 2; i++) {
     x->fp_mant[i] = (x->fp_mant[i+wsh] << lsh) | (x->fp_mant[i+wsh+1] >> rsh);
   }
-  x->fp_mant[i++] = (x->fp_mant[i+wsh] << lsh);
+  x->fp_mant[i] = (x->fp_mant[i+wsh] << lsh);
+  i++;
   for (; i < 3; i++) {
     x->fp_mant[i] = 0;
   }

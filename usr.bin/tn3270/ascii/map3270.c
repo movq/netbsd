@@ -1,4 +1,4 @@
-/*	$NetBSD: map3270.c,v 1.7 1998/11/06 20:03:08 christos Exp $	*/
+/*	$NetBSD: map3270.c,v 1.15 2006/04/30 23:49:34 christos Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)map3270.c	4.2 (Berkeley) 4/26/91";
 #else
-__RCSID("$NetBSD: map3270.c,v 1.7 1998/11/06 20:03:08 christos Exp $");
+__RCSID("$NetBSD: map3270.c,v 1.15 2006/04/30 23:49:34 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -62,16 +58,10 @@ __RCSID("$NetBSD: map3270.c,v 1.7 1998/11/06 20:03:08 christos Exp $");
  */
 #endif /* DOCUMENTATION_ONLY */
 
-#include <stdio.h>
 #include <ctype.h>
-#include <string.h>
-#ifdef __STDC__
+#include <stdio.h>
 #include <stdlib.h>
-#else
-extern char *malloc();
-extern void free();
-extern char *getenv();
-#endif
+#include <string.h>
 
 #define	IsPrint(c)	((isprint((unsigned char)c) && !isspace((unsigned char)c)) || ((c) == ' '))
 
@@ -87,7 +77,7 @@ extern char *getenv();
 #define	LEX_END_OF_FILE LEX_CARETED+1		/* end of file encountered */
 #define	LEX_ILLEGAL	LEX_END_OF_FILE+1	/* trailing escape character */
 
-/* the following is part of our character set dependancy... */
+/* the following is part of our character set dependency... */
 #define	ESCAPE		0x1b
 #define	TAB		0x09
 #define	NEWLINE 	0x0a
@@ -103,20 +93,20 @@ typedef struct {
     char	array[500];	/* character string */
 } stringWithLength;
 
-#define	panic(s)	{ fprintf(stderr, s); exit(1); }
+#define	panic(s)	{ fprintf(stderr, "%s", s); exit(1); }
 
 static state firstentry = { 0, STATE_NULL, 0, 0 };
 static state *headOfQueue = &firstentry;
 
 /* the following is a primitive adm3a table, to be used when nothing
- * else seems to be avaliable.
+ * else seems to be available.
  */
 
 #ifdef	DEBUG
 static int debug = 0;		/* debug flag (for debuggin tables) */
 #endif	/* DEBUG */
 
-static int (*GetTc) __P((char *));
+static int (*GetTc)(char *);
 static int doPaste = 1;		/* should we have side effects */
 static int picky = 0;		/* do we complain of unknown functions? */
 static char usePointer = 0;	/* use pointer, or file */
@@ -138,33 +128,33 @@ static	lexicon	lifo[200];		/* character stack for parser */
 static	int	rp = 0,			/* read pointer into lifo */
 		wp = 0;			/* write pointer into lifo */
 
-static int GetC __P((void));
-static lexicon Get __P((void));
-static void UnGet __P((lexicon));
-static stringWithLength *GetQuotedString __P((void));
+static int GetC(void);
+static lexicon Get(void);
+static void UnGet(lexicon);
+static stringWithLength *GetQuotedString(void);
 #ifdef NOTUSED
-static stringWithLength *GetCharString __P((void));
+static stringWithLength *GetCharString(void);
 #endif
-static int GetCharacter __P((int));
+static int GetCharacter(int);
 #ifdef NOTUSED
-static int GetString __P((char *));
+static int GetString(char *);
 #endif
-static stringWithLength *GetAlphaMericString __P((void));
-static lexicon EatToNL __P((void));
-static void GetWS __P((void));
-static void FreeState __P((state *));
-static state *GetState __P((void));
-static state *FindMatchAtThisLevel __P((state *, int));
-static state *PasteEntry __P((state *, char *, int, char *));
-static int GetInput __P((int, char *));
-static int GetDefinition __P((void));
-static int GetDefinitions __P((void));
-static int GetBegin __P((void));
-static int GetEnd __P((void));
-static int GetName __P((void));
-static int GetNames __P((void));
-static int GetEntry0 __P((void));
-static int GetEntry __P((void));
+static stringWithLength *GetAlphaMericString(void);
+static lexicon EatToNL(void);
+static void GetWS(void);
+static void FreeState(state *);
+static state *GetState(void);
+static state *FindMatchAtThisLevel(state *, int);
+static state *PasteEntry(state *, char *, int, char *);
+static int GetInput(int, char *);
+static int GetDefinition(void);
+static int GetDefinitions(void);
+static int GetBegin(void);
+static int GetEnd(void);
+static int GetName(void);
+static int GetNames(void);
+static int GetEntry0(void);
+static int GetEntry(void);
 
 static int
 GetC()
@@ -884,7 +874,7 @@ state *
 InitControl(keybdPointer, pickyarg, translator)
 char	*keybdPointer;
 int	pickyarg;		/* Should we be picky? */
-int	(*translator) __P((char *));	/* Translates ascii string to integer */
+int	(*translator)(char *);	/* Translates ascii string to integer */
 {
     int GotIt;
 
@@ -906,7 +896,7 @@ int	(*translator) __P((char *));	/* Translates ascii string to integer */
         keybdPointer = strsave(keybdPointer);
     }
     environPointer = getenv("MAP3270");
-    if (environPointer
+    if (keybdPointer && environPointer
 	    && (environPointer[0] != '/')
 #if	defined(MSDOS)
 	    && (environPointer[0] != '\\')
@@ -945,7 +935,7 @@ int	(*translator) __P((char *));	/* Translates ascii string to integer */
 	    if (environPointer) {
 		GotIt = Position(environPointer, "unknown");
 	    }
-	    if (!GotIt) {
+	    if (!GotIt && keybdPointer) {
 		GotIt = Position("/usr/share/misc/map3270", keybdPointer);
 	    }
 	}
@@ -961,5 +951,6 @@ int	(*translator) __P((char *));	/* Translates ascii string to integer */
 	usePointer = 1;
     }
     (void) GetEntry();
+    free(keybdPointer);
     return(firstentry.address);
 }

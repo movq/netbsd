@@ -1,4 +1,4 @@
-/*	$NetBSD: brk.S,v 1.3 1999/03/31 11:53:08 kleink Exp $	*/
+/*	$NetBSD: brk.S,v 1.12 2003/12/26 11:21:48 martin Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,7 +40,7 @@
 #if 0
 	.asciz "@(#)brk.s	8.1 (Berkeley) 6/4/93"
 #else
-	RCSID("$NetBSD: brk.S,v 1.3 1999/03/31 11:53:08 kleink Exp $")
+	RCSID("$NetBSD: brk.S,v 1.12 2003/12/26 11:21:48 martin Exp $")
 #endif
 #endif /* SYSLIBC_SCCS and not lint */
 
@@ -54,44 +50,63 @@
 	.globl	_C_LABEL(__minbrk)
 	.globl	_C_LABEL(_end)
 
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(brk, _brk)
+#endif
+
 	.data
+	.align	8
 _C_LABEL(__minbrk):
-	.long	_C_LABEL(_end)		! lower brk limit; also for gmon code
+	.xword	_C_LABEL(_end)		/* lower brk limit; also for gmon code */
 	.text
 
+ENTRY(_brk)
 #ifdef PIC
-ENTRY(brk)
+#ifdef BIGPIC
 	PIC_PROLOGUE(%o5,%o4)
-	ld	[%o5 + _C_LABEL(__minbrk)], %o4
-	ld	[%o4], %o1		! %o1 = minbrk
-	cmp	%o1, %o0		! if (minbrk > %o0)
-	bg,a	0f
-	 mov	%o1, %o0		!	%o0 = minbrk
-0:
-	mov	%o0, %o2		! save argument to syscall
+	set	_C_LABEL(__minbrk), %o4
+	ldx	[%o5 + %o4], %o4
+	ldx	[%o4], %o1		/* %o1 = minbrk */
+	cmp	%o1, %o0		/* if (minbrk > %o0) */
+	movgu	%xcc, %o1, %o0		/*	%o0 = minbrk */
+	mov	%o0, %o2		/* save argument to syscall */
 	mov	SYS_break, %g1
 	t	ST_SYSCALL
-	bcc,a	1f
-	ld	[%o5 + _C_LABEL(__curbrk)], %o4
+	set	_C_LABEL(__curbrk), %o3
+	bcc,a,pt	%icc, 1f
+	 ldx	[%o5 + %o3], %o4
 	ERROR()
 1:
-	retl				! success, return 0 & record new break
-	 st	%o2, [%o4]
+	retl				/* success, return 0 & record new break */
+	 stx	%o2, [%o4]
 #else
-ENTRY(brk)
-	sethi	%hi(_C_LABEL(__minbrk)), %o1	! %o1 = minbrk
-	ld	[%o1 + %lo(_C_LABEL(__minbrk))], %o1
-	cmp	%o1, %o0			! if (minbrk > %o0)
-	bg,a	0f
-	 mov	%o1, %o0			!	%o0 = minbrk
-0:
-	mov	%o0, %o2			! save argument to syscall
+	PIC_PROLOGUE(%o5,%o4)
+	ldx	[%o5 + _C_LABEL(__minbrk)], %o4
+	ldx	[%o4], %o1		/* %o1 = minbrk */
+	cmp	%o1, %o0		/* if (minbrk > %o0) */
+	movgu	%xcc, %o1, %o0		/*	%o0 = minbrk */
+	mov	%o0, %o2		/* save argument to syscall */
 	mov	SYS_break, %g1
 	t	ST_SYSCALL
-	bcc,a	1f
+	bcc,a,pt	%icc, 1f
+	 ldx	[%o5 + _C_LABEL(__curbrk)], %o4
+	ERROR()
+1:
+	retl				/* success, return 0 & record new break */
+	 stx	%o2, [%o4]
+#endif
+#else
+	sethi	%hi(_C_LABEL(__minbrk)), %o1	/* %o1 = minbrk */
+	ldx	[%o1 + %lo(_C_LABEL(__minbrk))], %o1
+	cmp	%o1, %o0		/* if (minbrk > %o0) */
+	movgu	%xcc, %o1, %o0		/*	%o0 = minbrk */
+	mov	%o0, %o2		/* save argument to syscall */
+	mov	SYS_break, %g1
+	t	ST_SYSCALL
+	bcc,a,pt	%icc,1f
 	 sethi	%hi(_C_LABEL(__curbrk)), %g1
 	ERROR()
 1:
-	retl				! success, return 0 & record new break
-	 st	%o2, [%g1 + %lo(_C_LABEL(__curbrk))]
+	retl				/* success, return 0 & record new break */
+	 stx	%o2, [%g1 + %lo(_C_LABEL(__curbrk))]
 #endif

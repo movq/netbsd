@@ -1,4 +1,4 @@
-/*	$NetBSD: Lint_ntohs.c,v 1.2 1999/05/03 13:12:34 christos Exp $	*/
+/* $NetBSD: Lint_ntohs.c,v 1.4 2001/08/22 07:42:09 itojun Exp $ */
 
 /*
  * This file placed in the public domain.
@@ -9,9 +9,9 @@
 #undef ntohs
 
 /*ARGSUSED*//*NOSTRICT*/
-in_port_t
+uint16_t
 ntohs(net16)
-	in_port_t net16;
+	uint16_t net16;
 {
 	return (0);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: tutor.c,v 1.5 1999/02/10 12:29:48 hubertf Exp $	*/
+/*	$NetBSD: tutor.c,v 1.7 2005/07/01 01:12:39 jmc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,17 +34,18 @@
 #if 0
 static char sccsid[] = "@(#)tutor.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: tutor.c,v 1.5 1999/02/10 12:29:48 hubertf Exp $");
+__RCSID("$NetBSD: tutor.c,v 1.7 2005/07/01 01:12:39 jmc Exp $");
 #endif
 #endif				/* not lint */
 
 #include "back.h"
 #include "tutor.h"
 
-static const char better[] = "That is a legal move, but there is a better one.\n";
+static const char better[] = 
+	"That is a legal move, but there is a better one.\n";
 
 void
-tutor()
+tutor(void)
 {
 	int     i, j;
 
@@ -133,7 +130,7 @@ tutor()
 }
 
 void
-clrest()
+clrest(void)
 {
 	int     r, c, j;
 
@@ -147,8 +144,7 @@ clrest()
 }
 
 int
-brdeq(b1, b2)
-	const int    *b1, *b2;
+brdeq(const int *b1, const int *b2)
 {
 	const int    *e;
 

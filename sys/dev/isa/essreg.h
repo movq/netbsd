@@ -1,4 +1,4 @@
-/*	$NetBSD: essreg.h,v 1.12 1999/06/18 20:25:23 augustss Exp $	*/
+/*	$NetBSD: essreg.h,v 1.16 2005/12/11 12:22:02 christos Exp $	*/
 /*
  * Copyright 1997
  * Digital Equipment Corporation. All rights reserved.
@@ -33,7 +33,7 @@
  */
 
 /*
-** @(#) $RCSfile: essreg.h,v $ $Revision: 1.12 $ (SHARK) $Date: 1999/06/18 20:25:23 $
+** @(#) $RCSfile: essreg.h,v $ $Revision: 1.16 $ (SHARK) $Date: 2005/12/11 12:22:02 $
 **
 **++
 **
@@ -53,7 +53,7 @@
 **	Blair Fidler	Software Engineering Australia
 **			Gold Coast, Australia.
 **
-**  CREATION DATE:  
+**  CREATION DATE:
 **
 **	March 10, 1997.
 **
@@ -66,7 +66,7 @@
  * DSP commands.  This unit handles MIDI and audio capabilities.
  * The DSP can be reset, data/commands can be read or written to it,
  * and it can generate interrupts.  Interrupts are generated for MIDI
- * input or DMA completion.  They seem to have neglected the fact 
+ * input or DMA completion.  They seem to have neglected the fact
  * that it would be nice to have a MIDI transmission complete interrupt.
  * Worse, the DMA engine is half-duplex.  This means you need to do
  * (timed) programmed I/O to be able to record and play simulataneously.
@@ -108,7 +108,7 @@
 #define	  ESS_AUDIO_CTRL_MONITOR	0x08	/* 0=disable/1=enable */
 #define	  ESS_AUDIO_CTRL_MONO		0x02	/* 0=disable/1=enable */
 #define	  ESS_AUDIO_CTRL_STEREO		0x01	/* 0=disable/1=enable */
-#define ESS_XCMD_PREAMP_CTRL	0xA9 	/* */
+#define ESS_XCMD_PREAMP_CTRL	0xA9	/* */
 #define	  ESS_PREAMP_CTRL_ENABLE	0x04
 
 #define ESS_XCMD_IRQ_CTRL	0xB1	/* legacy audio interrupt control */
@@ -126,8 +126,8 @@
 #define   ESS_DRQ_CTRL_EXT	0x40
 #define ESS_XCMD_VOLIN_CTRL	0xB4	/* stereo input volume control */
 #define ESS_1788_XCMD_AUDIO_CTRL0	0xB6
-#define   ESS_CTRL0_SIGNED	0x00  
-#define   ESS_CTRL0_UNSIGNED	0x80	
+#define   ESS_CTRL0_SIGNED	0x00
+#define   ESS_CTRL0_UNSIGNED	0x80
 #define ESS_XCMD_AUDIO1_CTRL1	0xB7	/* */
 #define	  ESS_AUDIO1_CTRL1_FIFO_CONNECT	0x80	/* 1=connected */
 #define	  ESS_AUDIO1_CTRL1_FIFO_MONO    0x40    /* 0=stereo/1=mono */
@@ -175,7 +175,7 @@
 
 #define ESS_DRQ2_VALID(chan) ((chan) == 0 || (chan) == 1 || (chan) == 3 || (chan) == 5)
 
-#define ESS_USE_AUDIO1(model) (((model) == ESS_1788) || ((model) == ESS_1868) || ((model) == ESS_1878) || ((model) == ESS_1869) || ((model) == ESS_1879))
+#define ESS_USE_AUDIO1(model) ((model) <= ESS_1879)
 
 /*
  * Macros to manipulate gain values
@@ -218,8 +218,8 @@
 /*****************************************************************************/
 /*  DSP Timeout Definitions                                                  */
 /*****************************************************************************/
-#define	ESS_READ_TIMEOUT  	5000 /* number of times to try a read, 5ms*/
-#define	ESS_WRITE_TIMEOUT  	5000 /* number of times to try a write, 5ms */
+#define	ESS_READ_TIMEOUT	5000 /* number of times to try a read, 5ms*/
+#define	ESS_WRITE_TIMEOUT	5000 /* number of times to try a write, 5ms */
 
 
 #define ESS_NPORT		16
@@ -232,9 +232,11 @@
 
 #define ESS_CLEAR_INTR		0x0E
 
+#define ESS_FIFO_WRITE		0x0F
+
 #define	ESS_DSP_RW_STATUS	0x0C
 #define	ESS_DSP_WRITE_BUSY	0x80
-#define	ESS_DSP_READ_READY     	0x40
+#define	ESS_DSP_READ_READY	0x40
 #define   ESS_DSP_READ_FULL	0x20 /* FIFO full */
 #define   ESS_DSP_READ_EMPTY	0x10 /* FIFO empty */
 #define   ESS_DSP_READ_HALF	0x08 /* FIFO half-empty */
@@ -247,7 +249,7 @@
 
 #define	ESS_MIX_REG_SELECT	0x04
 #define	ESS_MIX_REG_DATA	0x05
-#define ESS_MIX_RESET		0x00 	/* mixer reset port and value */
+#define ESS_MIX_RESET		0x00	/* mixer reset port and value */
 
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.10 2000/03/30 14:36:30 simonb Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.35 2007/10/17 19:55:37 garbled Exp $	*/
 
 /*
  * Mach Operating System
@@ -26,20 +26,27 @@
  * the rights to redistribute these changes.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.35 2007/10/17 19:55:37 garbled Exp $");
+
 #include <sys/types.h>
-#include <vm/vm_param.h>		/* XXX boolean_t */
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/proc.h>
+#include <sys/user.h>
+#include <sys/cpu.h>
 
 #include <mips/mips_opcode.h>
 
-#include <machine/param.h>
 #include <machine/db_machdep.h>
+
 #include <ddb/db_interface.h>
 #include <ddb/db_output.h>
 #include <ddb/db_variables.h>
 #include <ddb/db_sym.h>
 
-int __start __P((void));	/* lowest kernel code address */
-vaddr_t getreg_val __P((db_expr_t regno));
+int __start(void);	/* lowest kernel code address */
+vaddr_t getreg_val(db_expr_t regno);
 
 #define REG_ARG(i)	(4+i)
 #define SAVES_RA(x)	isa_spill((x),31)
@@ -54,95 +61,126 @@ vaddr_t getreg_val __P((db_expr_t regno));
 		 ((int *)(&((struct mips_kernel_state *)0)->sp) - (int *)0):  \
 	 -1)
 
-db_sym_t localsym __P((db_sym_t sym, boolean_t isreg, int *lex_level));
+db_sym_t localsym(db_sym_t sym, bool isreg, int *lex_level);
 
 /*
  * Machine register set.
  */
 struct mips_saved_state *db_cur_exc_frame = 0;
 
-/*
- *  forward declarations
- */
-int print_exception_frame __P((struct mips_saved_state *fp,
-			       unsigned epc));
-
 /*XXX*/
-void stacktrace_subr __P((int a0, int a1, int a2, int a3,
-			  u_int pc, u_int sp, u_int fp, u_int ra,
-			  void (*)(const char*, ...)));
+void	stacktrace_subr(int, int, int, int, u_int, u_int, u_int, u_int,
+	    void (*)(const char*, ...));
 
 /*
  * Stack trace helper.
  */
-void db_mips_stack_trace __P((int count, vaddr_t stackp,
-			      vaddr_t the_pc, vaddr_t the_ra, int flags,
-			      vaddr_t kstackp));
-int db_mips_variable_func __P((struct db_variable *vp, db_expr_t *valuep,
-			       int db_var_fun));
+void db_mips_stack_trace(int, vaddr_t, vaddr_t, vaddr_t, int, vaddr_t);
+int db_mips_variable_func(const struct db_variable *, db_expr_t *, int);
 
 #define DB_SETF_REGS db_mips_variable_func
 #define DBREGS_REG()
 
-struct db_variable db_regs[] = {
-	{ "at",	(long *)&ddb_regs.f_regs[AST],  DB_SETF_REGS },
-	{ "v0",	(long *)&ddb_regs.f_regs[V0],  DB_SETF_REGS },
-	{ "v1",	(long *)&ddb_regs.f_regs[V1],  DB_SETF_REGS },
-	{ "a0",	(long *)&ddb_regs.f_regs[A0],  DB_SETF_REGS },
-	{ "a1",	(long *)&ddb_regs.f_regs[A1],  DB_SETF_REGS },
-	{ "a2",	(long *)&ddb_regs.f_regs[A2],  DB_SETF_REGS },
-	{ "a3",	(long *)&ddb_regs.f_regs[A3],  DB_SETF_REGS },
-	{ "t0",	(long *)&ddb_regs.f_regs[T0],  DB_SETF_REGS },
-	{ "t1",	(long *)&ddb_regs.f_regs[T1],  DB_SETF_REGS },
-	{ "t2",	(long *)&ddb_regs.f_regs[T2],  DB_SETF_REGS },
-	{ "t3",	(long *)&ddb_regs.f_regs[T3],  DB_SETF_REGS },
-	{ "t4",	(long *)&ddb_regs.f_regs[T4],  DB_SETF_REGS },
-	{ "t5",	(long *)&ddb_regs.f_regs[T5],  DB_SETF_REGS },
-	{ "t6",	(long *)&ddb_regs.f_regs[T6],  DB_SETF_REGS },
-	{ "t7",	(long *)&ddb_regs.f_regs[T7],  DB_SETF_REGS },
-	{ "s0",	(long *)&ddb_regs.f_regs[S0],  DB_SETF_REGS },
-	{ "s1",	(long *)&ddb_regs.f_regs[S1],  DB_SETF_REGS },
-	{ "s2",	(long *)&ddb_regs.f_regs[S2],  DB_SETF_REGS },
-	{ "s3",	(long *)&ddb_regs.f_regs[S3],  DB_SETF_REGS },
-	{ "s4",	(long *)&ddb_regs.f_regs[S4],  DB_SETF_REGS },
-	{ "s5",	(long *)&ddb_regs.f_regs[S5],  DB_SETF_REGS },
-	{ "s6",	(long *)&ddb_regs.f_regs[S6],  DB_SETF_REGS },
-	{ "s7",	(long *)&ddb_regs.f_regs[S7],  DB_SETF_REGS },
-	{ "t8",	(long *)&ddb_regs.f_regs[T8],  DB_SETF_REGS },
-	{ "t9",	(long *)&ddb_regs.f_regs[T9],  DB_SETF_REGS },
-	{ "k0",	(long *)&ddb_regs.f_regs[K0],  DB_SETF_REGS },
-	{ "k1",	(long *)&ddb_regs.f_regs[K1],  DB_SETF_REGS },
-	{ "gp",	(long *)&ddb_regs.f_regs[GP],  DB_SETF_REGS },
-	{ "sp",	(long *)&ddb_regs.f_regs[SP],  DB_SETF_REGS },
-	{ "fp",	(long *)&ddb_regs.f_regs[S8],  DB_SETF_REGS },	/* frame ptr */
-	{ "ra",	(long *)&ddb_regs.f_regs[RA],  DB_SETF_REGS },
-	{ "sr",	(long *)&ddb_regs.f_regs[SR],  DB_SETF_REGS },
-	{ "mdlo",(long *)&ddb_regs.f_regs[MULLO],  DB_SETF_REGS },
-	{ "mdhi",(long *)&ddb_regs.f_regs[MULHI],  DB_SETF_REGS },
-	{ "bad", (long *)&ddb_regs.f_regs[BADVADDR], DB_SETF_REGS },
-	{ "cs",	(long *)&ddb_regs.f_regs[CAUSE],  DB_SETF_REGS },
-	{ "pc",	(long *)&ddb_regs.f_regs[PC],  DB_SETF_REGS },
+const struct db_variable db_regs[] = {
+	{ "at",	(long *)&ddb_regs.f_regs[_R_AST],  DB_SETF_REGS },
+	{ "v0",	(long *)&ddb_regs.f_regs[_R_V0],  DB_SETF_REGS },
+	{ "v1",	(long *)&ddb_regs.f_regs[_R_V1],  DB_SETF_REGS },
+	{ "a0",	(long *)&ddb_regs.f_regs[_R_A0],  DB_SETF_REGS },
+	{ "a1",	(long *)&ddb_regs.f_regs[_R_A1],  DB_SETF_REGS },
+	{ "a2",	(long *)&ddb_regs.f_regs[_R_A2],  DB_SETF_REGS },
+	{ "a3",	(long *)&ddb_regs.f_regs[_R_A3],  DB_SETF_REGS },
+#if defined(__mips_n32) || defined(__mips_n64)
+	{ "a4",	(long *)&ddb_regs.f_regs[_R_A4],  DB_SETF_REGS },
+	{ "a5",	(long *)&ddb_regs.f_regs[_R_A5],  DB_SETF_REGS },
+	{ "a6",	(long *)&ddb_regs.f_regs[_R_A6],  DB_SETF_REGS },
+	{ "a7",	(long *)&ddb_regs.f_regs[_R_A7],  DB_SETF_REGS },
+	{ "t0",	(long *)&ddb_regs.f_regs[_R_T0],  DB_SETF_REGS },
+	{ "t1",	(long *)&ddb_regs.f_regs[_R_T1],  DB_SETF_REGS },
+	{ "t2",	(long *)&ddb_regs.f_regs[_R_T2],  DB_SETF_REGS },
+	{ "t3",	(long *)&ddb_regs.f_regs[_R_T3],  DB_SETF_REGS },
+#else
+	{ "t0",	(long *)&ddb_regs.f_regs[_R_T0],  DB_SETF_REGS },
+	{ "t1",	(long *)&ddb_regs.f_regs[_R_T1],  DB_SETF_REGS },
+	{ "t2",	(long *)&ddb_regs.f_regs[_R_T2],  DB_SETF_REGS },
+	{ "t3",	(long *)&ddb_regs.f_regs[_R_T3],  DB_SETF_REGS },
+	{ "t4",	(long *)&ddb_regs.f_regs[_R_T4],  DB_SETF_REGS },
+	{ "t5",	(long *)&ddb_regs.f_regs[_R_T5],  DB_SETF_REGS },
+	{ "t6",	(long *)&ddb_regs.f_regs[_R_T6],  DB_SETF_REGS },
+	{ "t7",	(long *)&ddb_regs.f_regs[_R_T7],  DB_SETF_REGS },
+#endif /* __mips_n32 || __mips_n64 */
+	{ "s0",	(long *)&ddb_regs.f_regs[_R_S0],  DB_SETF_REGS },
+	{ "s1",	(long *)&ddb_regs.f_regs[_R_S1],  DB_SETF_REGS },
+	{ "s2",	(long *)&ddb_regs.f_regs[_R_S2],  DB_SETF_REGS },
+	{ "s3",	(long *)&ddb_regs.f_regs[_R_S3],  DB_SETF_REGS },
+	{ "s4",	(long *)&ddb_regs.f_regs[_R_S4],  DB_SETF_REGS },
+	{ "s5",	(long *)&ddb_regs.f_regs[_R_S5],  DB_SETF_REGS },
+	{ "s6",	(long *)&ddb_regs.f_regs[_R_S6],  DB_SETF_REGS },
+	{ "s7",	(long *)&ddb_regs.f_regs[_R_S7],  DB_SETF_REGS },
+	{ "t8",	(long *)&ddb_regs.f_regs[_R_T8],  DB_SETF_REGS },
+	{ "t9",	(long *)&ddb_regs.f_regs[_R_T9],  DB_SETF_REGS },
+	{ "k0",	(long *)&ddb_regs.f_regs[_R_K0],  DB_SETF_REGS },
+	{ "k1",	(long *)&ddb_regs.f_regs[_R_K1],  DB_SETF_REGS },
+	{ "gp",	(long *)&ddb_regs.f_regs[_R_GP],  DB_SETF_REGS },
+	{ "sp",	(long *)&ddb_regs.f_regs[_R_SP],  DB_SETF_REGS },
+	{ "fp",	(long *)&ddb_regs.f_regs[_R_S8],  DB_SETF_REGS },/* frame ptr */
+	{ "ra",	(long *)&ddb_regs.f_regs[_R_RA],  DB_SETF_REGS },
+	{ "sr",	(long *)&ddb_regs.f_regs[_R_SR],  DB_SETF_REGS },
+	{ "mdlo",(long *)&ddb_regs.f_regs[_R_MULLO],  DB_SETF_REGS },
+	{ "mdhi",(long *)&ddb_regs.f_regs[_R_MULHI],  DB_SETF_REGS },
+	{ "bad", (long *)&ddb_regs.f_regs[_R_BADVADDR], DB_SETF_REGS },
+	{ "cs",	(long *)&ddb_regs.f_regs[_R_CAUSE],  DB_SETF_REGS },
+	{ "pc",	(long *)&ddb_regs.f_regs[_R_PC],  DB_SETF_REGS },
 };
-struct db_variable *db_eregs = db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
+const struct db_variable * const db_eregs = db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
 
 void
-db_stack_trace_cmd(addr, have_addr, count, modif)
-	db_expr_t	addr;
-	boolean_t	have_addr;
-	db_expr_t	count;
-	char		*modif;
+db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
+    const char *modif, void (*pr)(const char *, ...))
 {
 #ifndef DDB_TRACE
-	stacktrace_subr(ddb_regs.f_regs[A0], ddb_regs.f_regs[A1],
-			ddb_regs.f_regs[A2], ddb_regs.f_regs[A3],
-			ddb_regs.f_regs[PC],
-			ddb_regs.f_regs[SP],
-			ddb_regs.f_regs[S8],	/* non-virtual frame pointer */
-			ddb_regs.f_regs[RA],
-			db_printf);
+	struct pcb *pcb;
+	struct proc *p;
+	struct lwp *l;
+
+	if (!have_addr) {
+		stacktrace_subr(ddb_regs.f_regs[_R_A0],
+				ddb_regs.f_regs[_R_A1],
+				ddb_regs.f_regs[_R_A2],
+				ddb_regs.f_regs[_R_A3],
+				ddb_regs.f_regs[_R_PC],
+				ddb_regs.f_regs[_R_SP],
+				/* non-virtual frame pointer */
+				ddb_regs.f_regs[_R_S8],
+				ddb_regs.f_regs[_R_RA],
+				pr);
+		return;
+	}
+
+	/* "trace/t" */
+	(*pr)("pid %d ", (int)addr);
+	p = p_find(addr, PFIND_LOCKED);
+	if (p == NULL) {
+		(*pr)("not found\n");
+		return;
+	}	
+	l = LIST_FIRST(&p->p_lwps); /* XXX NJWLWP */
+	if (!(l->l_flag & LW_INMEM)) {
+		(*pr)("swapped out\n");
+		return;
+	}
+
+	pcb = &(l->l_addr->u_pcb);
+	(*pr)("at %p\n", pcb);
+
+	stacktrace_subr(0,0,0,0,	/* no args known */
+			(int)cpu_switchto,
+			pcb->pcb_context[8],
+			pcb->pcb_context[9],
+			pcb->pcb_context[10],
+			pr);
 #else
 /*
- * Imcomplete but practically useful stack backtrace.
+ * Incomplete but practically useful stack backtrace.
  */
 #define	MIPS_JR_RA	0x03e00008	/* instruction code for jr ra */
 #define	MIPS_JR_K0	0x03400008	/* instruction code for jr k0 */
@@ -152,12 +190,12 @@ db_stack_trace_cmd(addr, have_addr, count, modif)
 	InstFmt i;
 	int stacksize;
 	db_addr_t offset;
-	char *name;
+	const char *name;
 	extern char verylocore[];
 
-	pc = ddb_regs.f_regs[PC];
-	sp = ddb_regs.f_regs[SP];
-	ra = ddb_regs.f_regs[RA];
+	pc = ddb_regs.f_regs[_R_PC];
+	sp = ddb_regs.f_regs[_R_SP];
+	ra = ddb_regs.f_regs[_R_RA];
 	do {
 		va = pc;
 		do {
@@ -176,12 +214,12 @@ db_stack_trace_cmd(addr, have_addr, count, modif)
 		do {
 			i.word = *(int *)va;
 			if (i.IType.op == OP_SW
-			    && i.IType.rs == SP
-			    && i.IType.rt == RA)
+			    && i.IType.rs == _R_SP
+			    && i.IType.rt == _R_RA)
 				ra = *(int *)(sp + (short)i.IType.imm);
 			if (i.IType.op == OP_ADDIU
-			    && i.IType.rs == SP
-			    && i.IType.rt == SP)
+			    && i.IType.rs == _R_SP
+			    && i.IType.rt == _R_SP)
 				stacksize = -(short)i.IType.imm;
 			va += sizeof(int);
 		} while (va < pc);
@@ -189,39 +227,37 @@ db_stack_trace_cmd(addr, have_addr, count, modif)
 		db_find_sym_and_offset(func, &name, &offset);
 		if (name == 0)
 			name = "?";
-		db_printf("%s()+0x%x, called by %p, stack size %d\n",
+		(*pr)("%s()+0x%x, called by %p, stack size %d\n",
 			name, pc - func, (void *)ra, stacksize);
 
 		if (ra == pc) {
-			db_printf("-- loop? --\n");
+			(*pr)("-- loop? --\n");
 			return;
 		}
 		sp += stacksize;
 		pc = ra;
 	} while (pc > (unsigned)verylocore);
 	if (pc < 0x80000000)
-		db_printf("-- user process --\n");
+		(*pr)("-- user process --\n");
 	else
-		db_printf("-- kernel entry --\n");
+		(*pr)("-- kernel entry --\n");
 #endif
 }
 
 void
-db_mips_stack_trace(count, stackp, the_pc, the_ra, flags, kstackp)
-	int count;
-	vaddr_t stackp, the_pc, the_ra;
-	int flags;
-	vaddr_t kstackp;
+db_mips_stack_trace(int count, vaddr_t stackp, vaddr_t the_pc, vaddr_t the_ra,
+    int flags, vaddr_t kstackp)
 {
-	return;
+
+	/* nothing... */
 }
 
 
 int
-db_mips_variable_func (struct db_variable *vp,
-	db_expr_t *valuep,
-	int db_var_fcn)
+db_mips_variable_func (const struct db_variable *vp, db_expr_t *valuep,
+    int db_var_fcn)
 {
+
 	switch (db_var_fcn) {
 	case DB_VAR_GET:
 		*valuep = *(mips_reg_t *) vp->valuep;

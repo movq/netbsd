@@ -1,4 +1,4 @@
-/*	$NetBSD: cmd.c,v 1.6 1998/08/25 20:59:42 ross Exp $	*/
+/*	$NetBSD: cmd.c,v 1.8 2003/08/07 11:17:21 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)cmd.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: cmd.c,v 1.6 1998/08/25 20:59:42 ross Exp $");
+__RCSID("$NetBSD: cmd.c,v 1.8 2003/08/07 11:17:21 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,10 +45,10 @@ __RCSID("$NetBSD: cmd.c,v 1.6 1998/08/25 20:59:42 ross Exp $");
 #include "defs.h"
 #include "char.h"
 
-int	checkproc __P((struct ww *));
+int	checkproc(struct ww *);
 
 void
-docmd()
+docmd(void)
 {
 	int c;
 	struct ww *w;
@@ -224,7 +220,7 @@ docmd()
 }
 
 struct ww *
-getwin()
+getwin(void)
 {
 	int c;
 	struct ww *w = 0;
@@ -254,8 +250,7 @@ getwin()
 }
 
 int
-checkproc(w)
-	struct ww *w;
+checkproc(struct ww *w)
 {
 	if (w->ww_state != WWS_HASPROC) {
 		error("No process in window.");
@@ -265,8 +260,7 @@ checkproc(w)
 }
 
 void
-setcmd(new)
-	char new;
+setcmd(char new)
 {
 	if (new && !incmd) {
 		if (!terse)
@@ -287,8 +281,7 @@ setcmd(new)
 }
 
 void
-setterse(new)
-	char new;
+setterse(char new)
 {
 	if (incmd) {
 		if (new && !terse) {
@@ -304,8 +297,7 @@ setterse(new)
  * Set the current window.
  */
 void
-setselwin(w)
-	struct ww *w;
+setselwin(struct ww *w)
 {
 	if (selwin == w)
 		return;

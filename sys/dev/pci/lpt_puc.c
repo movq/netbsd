@@ -1,4 +1,4 @@
-/*	$NetBSD: lpt_puc.c,v 1.1 1998/06/26 18:52:41 cgd Exp $	*/
+/*	$NetBSD: lpt_puc.c,v 1.14 2008/03/07 17:15:52 cube Exp $	*/
 
 /*
  * Copyright (c) 1998 Christopher G. Demetriou.  All rights reserved.
@@ -31,35 +31,27 @@
  */
 
 /*
- * Machine-independent parallel port ('lpt') driver attachment to "PCI 
+ * Machine-independent parallel port ('lpt') driver attachment to "PCI
  * Universal Communications" controller driver.
  *
  * Author: Christopher G. Demetriou, May 17, 1998.
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: lpt_puc.c,v 1.14 2008/03/07 17:15:52 cube Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pucvar.h>
 #include <dev/ic/lptvar.h>
 
-int	lpt_puc_probe __P((struct device *, struct cfdata *, void *));
-void	lpt_puc_attach __P((struct device *, struct device *, void *));
-
-struct cfattach lpt_puc_ca = {
-	sizeof(struct lpt_softc), lpt_puc_probe, lpt_puc_attach
-};
-
-int
-lpt_puc_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+lpt_puc_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct puc_attach_args *aa = aux;
 
@@ -72,15 +64,14 @@ lpt_puc_probe(parent, match, aux)
 	return (1);
 }
 
-void
-lpt_puc_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+lpt_puc_attach(device_t parent, device_t self, void *aux)
 {
-	struct lpt_softc *sc = (void *)self;
+	struct lpt_softc *sc = device_private(self);
 	struct puc_attach_args *aa = aux;
 	const char *intrstr;
 
+	sc->sc_dev = self;
 	sc->sc_iot = aa->t;
 	sc->sc_ioh = aa->h;
 
@@ -88,13 +79,16 @@ lpt_puc_attach(parent, self, aux)
 	sc->sc_ih = pci_intr_establish(aa->pc, aa->intrhandle, IPL_TTY,
 	    lptintr, sc);
 	if (sc->sc_ih == NULL) {
-		printf(": couldn't establish interrupt");
+		aprint_error(": couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
-	printf(": interrupting at %s\n", intrstr);
+	aprint_normal(": interrupting at %s\n", intrstr);
 
 	lpt_attach_subr(sc);
 }
+
+CFATTACH_DECL_NEW(lpt_puc, sizeof(struct lpt_softc),
+    lpt_puc_probe, lpt_puc_attach, NULL, NULL);

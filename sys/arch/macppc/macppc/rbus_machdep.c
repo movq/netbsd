@@ -1,4 +1,4 @@
-/*	$NetBSD: rbus_machdep.c,v 1.4 2000/02/03 19:27:45 tsubai Exp $	*/
+/*	$NetBSD: rbus_machdep.c,v 1.14 2007/10/17 19:55:34 garbled Exp $	*/
 
 /*
  * Copyright (c) 1999
@@ -27,22 +27,22 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.14 2007/10/17 19:55:34 garbled Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
-#include <vm/vm_page.h>
-
 #include <uvm/uvm_extern.h>
 
-#include <machine/bat.h>
+#include <powerpc/oea/bat.h>
 #include <machine/bus.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
 #include <dev/cardbus/rbus.h>
+#include <dev/ofw/openfirm.h>
 
 static void macppc_cardbus_init __P((pci_chipset_tag_t, pcitag_t));
 
@@ -53,32 +53,24 @@ static void macppc_cardbus_init __P((pci_chipset_tag_t, pcitag_t));
 #endif
 
 int
-md_space_map(t, bpa, size, flags, bshp)
-	bus_space_tag_t t;
-	bus_addr_t bpa;
-	bus_size_t size;
-	int flags;
-	bus_space_handle_t *bshp;
+md_space_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size,
+    int flags, bus_space_handle_t *bshp)
 {
-	DPRINTF("md_space_map: 0x%x, 0x%x, 0x%x\n", t, bpa, size);
+	DPRINTF("md_space_map: %p, 0x%x, 0x%x\n", t, bpa, size);
 
-	/* XXX */
-	*bshp = t + bpa;
-	return 0;
+	return bus_space_map(t, bpa, size, flags, bshp);
 }
 
 void
-md_space_unmap(t, bsh, size, adrp)
-	bus_space_tag_t t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
-	bus_addr_t *adrp;
+md_space_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size,
+    bus_addr_t *adrp)
 {
-	DPRINTF("md_space_unmap: 0x%x 0x%x\n", t, bsh);
+	DPRINTF("md_space_unmap: %p 0x%x\n", t, bsh);
 
-	/* XXX */
 	if (adrp)
-		*adrp = bsh - t;
+		*adrp = bsh - t->pbs_offset;
+
+	bus_space_unmap(t, bsh, size);
 }
 
 rbus_tag_t
@@ -147,10 +139,14 @@ macppc_cardbus_init(pc, tag)
 		x |= 0x02;
 		pci_conf_write(pc, tag, 0x8c, x);
 
-		/* Set Subordinate bus number to 1 */
 		tag = pci_make_tag(pc, 0, 0, 0);
-		x = pci_conf_read(pc, tag, 0x40);
-		x |= 1 << 8;
-		pci_conf_write(pc, tag, 0x40, x);
+		x = pci_conf_read(pc, tag, PCI_ID_REG);
+		if (PCI_VENDOR(x) == PCI_VENDOR_MOT &&
+		    PCI_PRODUCT(x) == PCI_PRODUCT_MOT_MPC106) {
+			/* Set subordinate bus number to 1. */
+			x = pci_conf_read(pc, tag, 0x40);
+			x |= 1 << 8;
+			pci_conf_write(pc, tag, 0x40, x);
+		}
 	}
 }

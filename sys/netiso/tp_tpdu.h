@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_tpdu.h,v 1.8 1996/02/13 22:12:16 christos Exp $	*/
+/*	$NetBSD: tp_tpdu.h,v 1.11 2005/12/11 00:01:36 elad Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -144,7 +140,7 @@ union tpdu_fixed_rest {
 
 	struct {
 		u_short         _tpdufr_sref,	/* source reference */
-#if BYTE_ORDER == BIG_ENDIAN 
+#if BYTE_ORDER == BIG_ENDIAN
 				_tpdufr_class:4, /* class [ISO 8073 13.3.3.e] */
 		                _tpdufr_opt:4, /* options [ISO 8073 13.3.3.e] */
 #endif
@@ -279,4 +275,4 @@ struct tpdu {
 	union tpdu_fixed_rest _tpdufr;
 };
 
-#endif /* _NETISO_TP_TPDU_H_ */
+#endif /* !_NETISO_TP_TPDU_H_ */

@@ -1,9 +1,36 @@
-/*	$NetBSD: rwall.c,v 1.10 1998/12/19 21:50:45 christos Exp $	*/
+/* $NetBSD: rwall.c,v 1.17 2008/07/21 14:19:25 lukem Exp $ */
+
+/*
+ * Copyright (c) 1988, 1990 Regents of the University of California.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
 
 /*
  * Copyright (c) 1993 Christopher G. Demetriou
- * Copyright (c) 1988, 1990 Regents of the University of California.
- * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -36,15 +63,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988 Regents of the University of California.\n\
- All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988\
+ Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "from: @(#)wall.c	5.14 (Berkeley) 3/2/91";
 #else
-__RCSID("$NetBSD: rwall.c,v 1.10 1998/12/19 21:50:45 christos Exp $");
+__RCSID("$NetBSD: rwall.c,v 1.17 2008/07/21 14:19:25 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -67,29 +94,26 @@ __RCSID("$NetBSD: rwall.c,v 1.10 1998/12/19 21:50:45 christos Exp $");
 #include <rpc/rpc.h>
 #include <rpcsvc/rwall.h>
 
-struct timeval timeout = { 25, 0 };
-int mbufsize;
-char *mbuf;
+static struct timeval timeout = { 25, 0 };
 
-int	main __P((int, char **));
-void	makemsg __P((char *));
+static char *makemsg(const char *);
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	char *wallhost, res;
 	CLIENT *cl;
+	char *mbuf;
+
+	setprogname(*argv);
 
 	if ((argc < 2) || (argc > 3)) {
-		fprintf(stderr, "usage: %s hostname [file]\n", argv[0]);
-		exit(1);
+		(void)fprintf(stderr,
+		    "Usage: %s hostname <file>\n", getprogname());
+		return 1;
 	}
 
 	wallhost = argv[1];
-
-	makemsg(argv[2]);
 
 	/*
 	 * Create client "handle" used for calling MESSAGEPROG on the
@@ -103,38 +127,43 @@ main(argc, argv)
 		 * Print error message and die.
 		 */
 		clnt_pcreateerror(wallhost);
-		exit(1);
+		return 1;
 	}
 
-	if (clnt_call(cl, WALLPROC_WALL, xdr_wrapstring, (caddr_t)&mbuf, xdr_void, &res, timeout) != RPC_SUCCESS) {
+	mbuf = makemsg(argv[2]);
+
+	if (clnt_call(cl, WALLPROC_WALL, xdr_wrapstring, (void *)&mbuf,
+	    xdr_void, &res, timeout) != RPC_SUCCESS) {
+		free(mbuf);
 		/*
 		 * An error occurred while calling the server. 
 		 * Print error message and die.
 		 */
 		clnt_perror(cl, wallhost);
-		exit(1);
+		return 1;
 	}
-
-	exit(0);
+	free(mbuf);
+	return 0;
 }
 
-void
-makemsg(fname)
-	char *fname;
+static char *
+makemsg(const char *fname)
 {
 	struct tm *lt;
 	struct passwd *pw;
 	struct stat sbuf;
 	time_t now;
+	size_t mbufsize;
+	char *mbuf;
 	FILE *fp;
 	int fd;
 	const char *whom;
-	char hostname[MAXHOSTNAMELEN + 1], lbuf[100], tmpname[32];
+	const char *tty;
+	char tmpname[MAXPATHLEN], lbuf[BUFSIZ], hostname[MAXHOSTNAMELEN + 1];
 
-	(void)strcpy(tmpname, _PATH_TMP);
-	(void)strcat(tmpname, "/wall.XXXXXX");
-	if (!(fd = mkstemp(tmpname)) || !(fp = fdopen(fd, "r+")))
-		err(1, "can't open temporary file.");
+	(void)snprintf(tmpname, sizeof(tmpname), "%s/wall.XXXXXX", _PATH_TMP);
+	if ((fd = mkstemp(tmpname)) == -1 || (fp = fdopen(fd, "r+")) == NULL)
+		err(1, "Can't open temporary file");
 	(void)unlink(tmpname);
 
 	if (!(whom = getlogin()))
@@ -153,23 +182,27 @@ makemsg(fname)
 	 */
 	(void)fprintf(fp, "Remote Broadcast Message from %s@%s\n",
 	    whom, hostname);
-	(void)fprintf(fp, "        (%s) at %d:%02d ...\n", ttyname(2),
-	    lt->tm_hour, lt->tm_min);
+	tty = ttyname(STDERR_FILENO);
+	if (tty == NULL)
+		tty = "??";
+	(void)fprintf(fp, "        (%s) at %d:%02d ...\n", tty, lt->tm_hour,
+	    lt->tm_min);
 
-	putc('\n', fp);
+	(void)putc('\n', fp);
 
 	if (fname && !(freopen(fname, "r", stdin)))
-		err(1, "can't read %s.", fname);
+		err(1, "Can't open `%s'", fname);
 	while (fgets(lbuf, sizeof(lbuf), stdin))
-		fputs(lbuf, fp);
+		(void)fputs(lbuf, fp);
 	rewind(fp);
 
-	if (fstat(fd, &sbuf))
-		err(1, "can't stat temporary file.");
-	mbufsize = sbuf.st_size;
+	if (fstat(fd, &sbuf) == -1)
+		err(1, "Can't stat temporary file.");
+	mbufsize = (size_t)sbuf.st_size;
 	if (!(mbuf = malloc((u_int)mbufsize)))
 		err(1, "malloc");
 	if (fread(mbuf, sizeof(*mbuf), mbufsize, fp) != mbufsize)
-		err(1, "can't read temporary file.");
+		err(1, "Can't read temporary file.");
 	(void)close(fd);
+	return mbuf;
 }

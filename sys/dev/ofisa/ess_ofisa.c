@@ -1,4 +1,4 @@
-/*	$NetBSD: ess_ofisa.c,v 1.5 1999/03/16 13:07:45 mycroft Exp $	*/
+/*	$NetBSD: ess_ofisa.c,v 1.20 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,12 +30,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ess_ofisa.c,v 1.20 2008/04/28 20:23:54 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -55,12 +51,11 @@
 #include <dev/isa/essreg.h>
 #include <dev/isa/essvar.h>
 
-int	ess_ofisa_match __P((struct device *, struct cfdata *, void *));
-void	ess_ofisa_attach __P((struct device *, struct device *, void *));
+int	ess_ofisa_match(struct device *, struct cfdata *, void *);
+void	ess_ofisa_attach(struct device *, struct device *, void *);
 
-struct cfattach ess_ofisa_ca = {
-	sizeof(struct ess_softc), ess_ofisa_match, ess_ofisa_attach
-};
+CFATTACH_DECL(ess_ofisa, sizeof(struct ess_softc),
+    ess_ofisa_match, ess_ofisa_attach, NULL, NULL);
 
 int
 ess_ofisa_match(parent, cf, aux)
@@ -69,7 +64,7 @@ ess_ofisa_match(parent, cf, aux)
 	void *aux;
 {
 	struct ofisa_attach_args *aa = aux;
-	const char *compatible_strings[] = {
+	static const char *const compatible_strings[] = {
 		"ESST,es1887-codec",		/* ESS 1887 */
 		"ESST,es1888-codec",		/* ESS 1888 */
 		"ESST,es888-codec",		/* ESS 888 */
@@ -90,7 +85,7 @@ ess_ofisa_attach(parent, self, aux)
 	struct device *parent, *self;
 	void *aux;
 {
-	struct ess_softc *sc = (void *)self;
+	struct ess_softc *sc = device_private(self);
 	struct ofisa_attach_args *aa = aux;
 	struct ofisa_reg_desc reg;
 	struct ofisa_intr_desc intr[2];
@@ -106,7 +101,7 @@ ess_ofisa_attach(parent, self, aux)
 	 *
 	 *	1      i/o register region
 	 *	1 or 2 interrupts
-	 *	2      dma channels
+	 *	2      DMA channels
 	 */
 
 	n = ofisa_reg_get(aa->oba.oba_phandle, &reg, 1);
@@ -158,6 +153,13 @@ ess_ofisa_attach(parent, self, aux)
 		return;
 	}
 
+	/*
+	 * The Shark firmware doesn't program the ESS ISA address registers.
+	 * Do that here instead of inside essmatch() since we want to defer
+	 * to the firmware on other platforms.
+	 */
+	if (ess_config_addr(sc))
+		return;
 	if (essmatch(sc) == 0) {
 		printf(": essmatch failed\n");
 		return;
@@ -167,8 +169,8 @@ ess_ofisa_attach(parent, self, aux)
 	if (n > 0) {
 		model = alloca(n);
 		if (OF_getprop(aa->oba.oba_phandle, "model", model, n) == n)
-			printf(": %s\n%s", model, sc->sc_dev.dv_xname);
+			printf(": %s\n%s", model, device_xname(&sc->sc_dev));
 	}
 
-	essattach(sc);
+	essattach(sc, 0);
 }

@@ -1,6 +1,8 @@
 #!/usr/pkg/bin/perl
 
-require "ctime.pl";
+@longmonth = ( "January", "February", "March", "April", "May", "June", "July",
+	       "August", "September", "October", "November", "December" );
+# require "ctime.pl";
 
 $sec = 8;				# XXX
 
@@ -33,7 +35,7 @@ sub dehtmlchar {
 }
 
 ($mday, $mon, $year) = (localtime(time))[3 .. 5];
-$date = sprintf "%s %02d, %d", $ctime'MoY[$mon], $mday, $year + 1900;
+$date = sprintf "%s %02d, %d", $longmonth[$mon], $mday, $year + 1900;
 
 swallow("<H3>");
 chomp($_ = <>);
@@ -44,7 +46,7 @@ $descr =~ s/^\s*-\s*//;
 
 print <<EOF;
 .\\"	\$NetBSD\$
-.\\" Converted from HTML to mandoc by html-to-mdoc.pl
+.\\" Converted from HTML to mandoc by ntp-html2mdoc.pl
 .\\"
 .Dd $date
 .Dt $NAME $sec
@@ -121,9 +123,9 @@ while (<>) {
 		chew("</A>");
 		chomp($_ .= " " . <>) if (/<A$/);	# another reference on the next line
 		s#<TT><A HREF="(.*).htm">\1</A></TT>#\n.Xr \1 $sec\n#ig;
-		s#<A HREF="([^"]*)">(.*?) +</A> *page#\n.%T "$2"\npage in\n.Pa /usr/share/doc/ntp/$1\n#ig;
+		s#<A HREF="([^"]*)">(.*?) +</A> *page#\n.%T "$2"\npage in\n.Pa /usr/share/doc/html/ntp/$1\n#ig;
 		s#^<BR>##g;
-		s#<A HREF="([^"]*)">(.*?)</A>#For\n.%T "$2"\n, refer to\n.Pa /usr/share/doc/ntp/$1 .\n.Pp\n#ig;
+		s#<A HREF="([^"]*)">(.*?)</A>#For\n.%T "$2"\n, refer to\n.Pa /usr/share/doc/html/ntp/$1 .\n.Pp\n#ig;
 		detag;
 	}
 	s#<TT>$name</TT>#\n.Nm\n#ig;
@@ -138,8 +140,8 @@ while (<>) {
 	dehtmlchar;
 	s/^\s+//;
 	s/\n+\s*/\n/g;
-	s/\n.Nm\n([,\.:]) /\n.Nm "" $1\n/g;
 	s/\n\.(Pa|%T) (.*)\n([,\.:]) /\n.$1 $2 $3\n/g;
+	s/\s+\n/\n/g;
 	s/\n$//;
 	print $_, "\n" if length > 0;
 }

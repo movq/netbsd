@@ -1,4 +1,4 @@
-/*	$NetBSD: mkstemp.c,v 1.4 1999/09/20 04:39:31 lukem Exp $	*/
+/*	$NetBSD: mkstemp.c,v 1.10 2008/10/20 10:28:38 apb Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,21 +29,39 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
+#if !HAVE_NBTOOL_CONFIG_H || !HAVE_MKSTEMP
+
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)mktemp.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: mkstemp.c,v 1.4 1999/09/20 04:39:31 lukem Exp $");
+__RCSID("$NetBSD: mkstemp.c,v 1.10 2008/10/20 10:28:38 apb Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
+#include "namespace.h"
+
+#if HAVE_NBTOOL_CONFIG_H
+#define	GETTEMP		__nbcompat_gettemp
+#else
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include "reentrant.h"
 #include "local.h"
+#define	GETTEMP		__gettemp
+#endif
+
+#ifdef __weak_alias
+__weak_alias(mkstemp,_mkstemp)
+#endif
 
 int
 mkstemp(path)
@@ -57,5 +71,7 @@ mkstemp(path)
 
 	_DIAGASSERT(path != NULL);
 
-	return (__gettemp(path, &fd, 0) ? fd : -1);
+	return (GETTEMP(path, &fd, 0) ? fd : -1);
 }
+
+#endif /* !HAVE_NBTOOL_CONFIG_H || !HAVE_MKSTEMP */

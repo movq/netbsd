@@ -1,4 +1,4 @@
-/*	$NetBSD: pucvar.h,v 1.2 1999/02/06 06:29:54 cgd Exp $	*/
+/*	$NetBSD: pucvar.h,v 1.8 2005/12/11 12:22:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 1999 Christopher G. Demetriou.  All rights reserved.
@@ -47,6 +47,7 @@ struct puc_device_description {
 		int	type;
 		int	bar;
 		int	offset;
+		int	flags;
 	}			ports[PUC_MAX_PORTS];
 };
 
@@ -63,16 +64,46 @@ struct puc_device_description {
   ((port) < PUC_MAX_PORTS && (desc)->ports[(port)].type != PUC_PORT_TYPE_NONE)
 #define PUC_PORT_BAR_INDEX(bar)	(((bar) - PCI_MAPREG_START) / 4)
 
+/* Flags for PUC_PORT_TYPE_COM */
+/* * assume all clock rates have 8 lower bits to 0 - this leaves us 8 flags */
+#define PUC_COM_CLOCKMASK 0xffffff00
+
+#define PUC_COM_FLAG0	(1 << 0)
+#define PUC_COM_FLAG1	(1 << 1)
+#define PUC_COM_FLAG2	(1 << 2)
+#define PUC_COM_FLAG3	(1 << 3)
+#define PUC_COM_FLAG4	(1 << 4)
+#define PUC_COM_FLAG5	(1 << 5)
+#define PUC_COM_FLAG6	(1 << 6)
+#define PUC_COM_FLAG7	(1 << 7)
+
+/* Flags for SIIG Cyberserial options */
+#define PUC_COM_SIIG10x	PUC_COM_FLAG7
+#define PUC_COM_SIIG20x	PUC_COM_FLAG6
+#define PUC_PORT_USR0	PUC_COM_FLAG0
+#define PUC_PORT_USR1	PUC_COM_FLAG1
+#define PUC_PORT_USR2	PUC_COM_FLAG2
+#define PUC_PORT_USR3	PUC_COM_FLAG3
+
+/* Flags for PUC_PORT_TYPE_LPT */
+/* none currently */
+
 struct puc_attach_args {
 	int			port;
 	int			type;
+	int			flags;
 
 	pci_chipset_tag_t	pc;
 	pci_intr_handle_t	intrhandle;
+	pcitag_t		tag;
 
 	bus_addr_t		a;
 	bus_space_tag_t		t;
 	bus_space_handle_t	h;
+	bus_dma_tag_t		dmat;
+	bus_dma_tag_t		dmat64;
 };
 
 extern const struct puc_device_description puc_devices[];
+extern const struct puc_device_description *
+	puc_find_description(pcireg_t, pcireg_t, pcireg_t, pcireg_t);

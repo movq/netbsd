@@ -1,4 +1,4 @@
-/*	$NetBSD: testdb.c,v 1.7 1997/10/18 08:49:36 lukem Exp $	*/
+/*	$NetBSD: testdb.c,v 1.10 2003/08/07 11:25:23 agc Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,17 +34,20 @@
 #if 0
 static char sccsid[] = "from: @(#)testdb.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: testdb.c,v 1.7 1997/10/18 08:49:36 lukem Exp $");
+__RCSID("$NetBSD: testdb.c,v 1.10 2003/08/07 11:25:23 agc Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/file.h>
+#include <sys/sysctl.h>
+#include <err.h>
 #include <errno.h>
 #include <limits.h>
 #include <kvm.h>
 #include <db.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <paths.h>
@@ -60,17 +59,15 @@ int
 testdb()
 {
 	DB *db;
-	int cc, kd, ret, dbversionlen;
+	int ret, dbversionlen;
 	DBT rec;
-	struct nlist nitem;
 	char dbversion[_POSIX2_LINE_MAX];
-	char kversion[_POSIX2_LINE_MAX];
+	char *kversion;
+	int mib[2];
+	size_t size;
 
 	ret = 0;
 	db = NULL;
-
-	if ((kd = open(_PATH_KMEM, O_RDONLY, 0)) < 0)
-		goto close;
 
 	if ((db = dbopen(_PATH_KVMDB, O_RDONLY, 0, DB_HASH, NULL)) == NULL)
 		goto close;
@@ -86,30 +83,21 @@ testdb()
 	dbversionlen = rec.size;
 
 	/* Read version string from kernel memory */
-	rec.data = VRS_SYM;
-	rec.size = sizeof(VRS_SYM) - 1;
-	if ((db->get)(db, &rec, &rec, 0))
-		goto close;
-	if (rec.data == 0 || rec.size != sizeof(struct nlist))
-		goto close;
-	memmove(&nitem, rec.data, sizeof(nitem));
-	/*
-	 * Theoretically possible for lseek to be seeking to -1.  Not
-	 * that it's something to lie awake nights about, however.
-	 */
-	errno = 0;
-	if (lseek(kd, (off_t)nitem.n_value, SEEK_SET) == -1 && errno != 0)
-		goto close;
-	cc = read(kd, kversion, sizeof(kversion));
-	if (cc < 0 || cc != sizeof(kversion))
-		goto close;
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_VERSION;
+	if (sysctl(mib, 2, NULL, &size, NULL, 0) == -1)
+		errx(1, "can't get size of kernel version string");
+
+	if ((kversion = malloc(size)) == NULL)
+		err(1, "couldn't allocate space for buffer data");
+
+	if (sysctl(mib, 2, kversion, &size, NULL, 0) == -1)
+		errx(1, "can't get kernel version string");
 
 	/* If they match, we win */
 	ret = memcmp(dbversion, kversion, dbversionlen) == 0;
 
-close:	if (kd >= 0)
-		(void)close(kd);
-	if (db)
+close:	if (db)
 		(void)(db->close)(db);
 	return (ret);
 }

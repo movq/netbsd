@@ -1,4 +1,4 @@
-/*	$NetBSD: wbuf.c,v 1.10 1999/09/20 04:39:35 lukem Exp $	*/
+/*	$NetBSD: wbuf.c,v 1.13 2003/08/07 16:43:35 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,13 +37,14 @@
 #if 0
 static char sccsid[] = "@(#)wbuf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: wbuf.c,v 1.10 1999/09/20 04:39:35 lukem Exp $");
+__RCSID("$NetBSD: wbuf.c,v 1.13 2003/08/07 16:43:35 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
+#include "reentrant.h"
 #include "local.h"
 
 /*
@@ -63,6 +60,8 @@ __swbuf(c, fp)
 	int n;
 
 	_DIAGASSERT(fp != NULL);
+
+	_SET_ORIENTATION(fp, -1);
 
 	/*
 	 * In case we cannot write, or longjmp takes us out early,

@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.9 1999/07/29 19:03:31 hubertf Exp $	*/
+/*	$NetBSD: extern.h,v 1.17 2006/01/09 10:17:05 apb Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,30 +37,31 @@
 
 #include <sys/cdefs.h>
 
-void block __P((void));
-void block_close __P((void));
-void dd_out __P((int));
-void def __P((void));
-void def_close __P((void));
-void jcl __P((char **));
-void pos_in __P((void));
-void pos_out __P((void));
-void summary __P((void));
-void summaryx __P((int));
-void terminate __P((int));
-void unblock __P((void));
-void unblock_close __P((void));
+void block(void);
+void block_close(void);
+void dd_out(int);
+void def(void);
+void def_close(void);
+void jcl(char **);
+void pos_in(void);
+void pos_out(void);
+void summary(void);
+void summaryx(int);
+void terminate(int);
+void unblock(void);
+void unblock_close(void);
+ssize_t bwrite(int, const void *, size_t);
 
-extern IO in, out;
-extern STAT st;
-extern void (*cfunc) __P((void));
-extern u_long cpy_cnt;
-extern u_int cbsz;
-extern u_int ddflags;
-extern u_int files_cnt;
-extern int progress;
-extern const u_char *ctab;
-extern const u_char a2e_32V[], a2e_POSIX[];
-extern const u_char e2a_32V[], e2a_POSIX[];
-extern const u_char a2ibm_32V[], a2ibm_POSIX[];
-extern u_char casetab[];
+extern IO		in, out;
+extern STAT		st;
+extern void		(*cfunc)(void);
+extern uint64_t		cpy_cnt;
+extern uint64_t		cbsz;
+extern u_int		ddflags;
+extern u_int		files_cnt;
+extern uint64_t		progress;
+extern const u_char	*ctab;
+extern const u_char	a2e_32V[], a2e_POSIX[];
+extern const u_char	e2a_32V[], e2a_POSIX[];
+extern const u_char	a2ibm_32V[], a2ibm_POSIX[];
+extern u_char		casetab[];

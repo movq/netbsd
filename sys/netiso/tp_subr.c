@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_subr.c,v 1.12 2000/03/30 13:10:15 augustss Exp $	*/
+/*	$NetBSD: tp_subr.c,v 1.21 2007/03/04 06:03:33 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -70,6 +66,9 @@ SOFTWARE.
  * (tp_stash()).
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: tp_subr.c,v 1.21 2007/03/04 06:03:33 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
@@ -106,9 +105,7 @@ int             tprexmtthresh = 3;
  * 	Returns 1 if it did this, 0 if the ack caused no action.
  */
 int
-tp_goodXack(tpcb, seq)
-	struct tp_pcb  *tpcb;
-	SeqNum          seq;
+tp_goodXack(struct tp_pcb  *tpcb, SeqNum seq)
 {
 
 #ifdef TPPT
@@ -163,15 +160,12 @@ tp_goodXack(tpcb, seq)
  */
 
 void
-tp_rtt_rtv(tpcb)
-	struct tp_pcb *tpcb;
+tp_rtt_rtv(struct tp_pcb *tpcb)
 {
 	int             old = tpcb->tp_rtt;
-	int             s, elapsed, delta = 0;
+	int             elapsed, delta = 0;
 
-	s = splclock();
-	elapsed = (int)(hardclock_ticks - tpcb->tp_rttemit);
-	splx(s);
+	elapsed = hardclock_ticks - tpcb->tp_rttemit;
 
 	if (tpcb->tp_rtt != 0) {
 		/*
@@ -250,11 +244,7 @@ tp_rtt_rtv(tpcb)
  * 	No need to see the tpdu itself.
  */
 int
-tp_goodack(tpcb, cdt, seq, subseq)
-	struct tp_pcb *tpcb;
-	u_int           cdt;
-	SeqNum seq;
-	u_int           subseq;
+tp_goodack(struct tp_pcb *tpcb, u_int cdt, SeqNum seq, u_int subseq)
 {
 	int             old_fcredit = 0;
 	int             bang = 0;	/* bang --> ack for something
@@ -443,9 +433,7 @@ done:
  *  from the retransmission queue.
  */
 int
-tp_sbdrop(tpcb, seq)
-	struct tp_pcb *tpcb;
-	SeqNum          seq;
+tp_sbdrop(struct tp_pcb *tpcb, SeqNum seq)
 {
 	struct sockbuf *sb = &tpcb->tp_sock->so_snd;
 	int    i = SEQ_SUB(tpcb, seq, tpcb->tp_snduna);
@@ -485,8 +473,7 @@ tp_sbdrop(tpcb, seq)
  *  using this value.
  */
 void
-tp_send(tpcb)
-	struct tp_pcb *tpcb;
+tp_send(struct tp_pcb *tpcb)
 {
 	int    len;
 	struct mbuf *m;
@@ -494,14 +481,10 @@ tp_send(tpcb)
 	struct sockbuf *sb = &tpcb->tp_sock->so_snd;
 	unsigned int    eotsdu = 0;
 	SeqNum          highseq, checkseq;
-	int             s, idle, idleticks, off, cong_win;
+	int             idle, idleticks, off, cong_win;
 #ifdef TP_PERF_MEAS
-	u_int64_t       send_start_time;
+	int             send_start_time = hardclock_ticks;
 	SeqNum          oldnxt = tpcb->tp_sndnxt;
-
-	s = splclock();
-	send_start_time = hardclock_ticks;
-	splx(s);
 #endif /* TP_PERF_MEAS */
 
 	idle = (tpcb->tp_snduna == tpcb->tp_sndnew);
@@ -570,7 +553,7 @@ tp_send(tpcb)
 		 */
 		mb = m;
 		m = m_copy(mb, 0, M_COPYALL);
-		if (m == MNULL)
+		if (m == NULL)
 			break;
 #ifdef TPPT
 		if (tp_traceflags[D_STASH]) {
@@ -604,9 +587,7 @@ tp_send(tpcb)
 			 * not currently timing anything.
 			 */
 			if (tpcb->tp_rttemit == 0) {
-				s = splclock();
 				tpcb->tp_rttemit = hardclock_ticks;
-				splx(s);
 				tpcb->tp_rttseq = tpcb->tp_sndnxt;
 			}
 			tpcb->tp_sndnxt = tpcb->tp_sndnew;
@@ -634,9 +615,7 @@ tp_send(tpcb)
 		int             s, elapsed, *t;
 		struct timeval  now;
 
-		s = splclock();
-		elapsed = (int)(hardclock_ticks - send_start_time);
-		splx(s);
+		elapsed = hardclock_ticks - send_start_time;
 
 		npkts = SEQ_SUB(tpcb, tpcb->tp_sndnxt, oldnxt);
 
@@ -678,10 +657,7 @@ int             TPNagleok;
 int             TPNagled;
 
 int
-tp_packetize(tpcb, m, eotsdu)
-	struct tp_pcb *tpcb;
-	struct mbuf *m;
-	int             eotsdu;
+tp_packetize(struct tp_pcb *tpcb, struct mbuf *m, int eotsdu)
 {
 	struct mbuf *n = NULL;
 	struct sockbuf *sb = &tpcb->tp_sock->so_snd;
@@ -707,8 +683,8 @@ tp_packetize(tpcb, m, eotsdu)
 	if (tpcb->tp_oktonagle) {
 		if ((n = sb->sb_mb) == 0)
 			panic("tp_packetize");
-		while (n->m_act)
-			n = n->m_act;
+		while (n->m_nextpkt)
+			n = n->m_nextpkt;
 		if (n->m_flags & M_EOR)
 			panic("tp_packetize 2");
 		SEQ_INC(tpcb, tpcb->tp_sndnum);
@@ -784,9 +760,7 @@ out:
  */
 
 int
-tp_stash(tpcb, e)
-	struct tp_pcb *tpcb;
-	struct tp_event *e;
+tp_stash(struct tp_pcb *tpcb, struct tp_event *e)
 {
 	int    ack_reason = tpcb->tp_ack_strat & ACK_STRAT_EACH;
 	/* 0--> delay acks until full window */
@@ -796,7 +770,7 @@ tp_stash(tpcb, e)
 	if (E.e_eot) {
 		struct mbuf *n = E.e_data;
 		n->m_flags |= M_EOR;
-		n->m_act = 0;
+		n->m_nextpkt = 0;
 	}
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_STASH]) {
@@ -970,8 +944,7 @@ tp_stash(tpcb, e)
  * the space avaible in the receive socket (XXX).
  */
 void
-tp_rsyflush(tpcb)
-	struct tp_pcb *tpcb;
+tp_rsyflush(struct tp_pcb *tpcb)
 {
 	struct mbuf **mp;
 	if (tpcb->tp_rsycnt) {
@@ -986,18 +959,17 @@ tp_rsyflush(tpcb)
 			tpcb->tp_rsycnt = 0;
 		}
 	}
-	free((caddr_t) tpcb->tp_rsyq, M_PCB);
+	free((void *) tpcb->tp_rsyq, M_PCB);
 	tpcb->tp_rsyq = 0;
 }
 
 void
-tp_rsyset(tpcb)
-	struct tp_pcb *tpcb;
+tp_rsyset(struct tp_pcb *tpcb)
 {
 	struct socket *so = tpcb->tp_sock;
 	int             maxcredit = tpcb->tp_xtd_format ? 0xffff : 0xf;
 	int             old_credit = tpcb->tp_maxlcredit;
-	caddr_t         rsyq;
+	void *        rsyq;
 
 	tpcb->tp_maxlcredit = maxcredit = min(maxcredit,
 					      (so->so_rcv.sb_hiwat + tpcb->tp_l_tpdusize) / tpcb->tp_l_tpdusize);
@@ -1007,16 +979,14 @@ tp_rsyset(tpcb)
 	maxcredit *= sizeof(struct mbuf *);
 	if (tpcb->tp_rsyq)
 		tp_rsyflush(tpcb);
-	if ((rsyq = (caddr_t) malloc(maxcredit, M_PCB, M_NOWAIT)) != NULL)
+	if ((rsyq = (void *) malloc(maxcredit, M_PCB, M_NOWAIT)) != NULL)
 		bzero(rsyq, maxcredit);
 	tpcb->tp_rsyq = (struct mbuf **) rsyq;
 }
 
 
 void
-tpsbcheck(tpcb, i)
-	struct tp_pcb  *tpcb;
-	int i;
+tpsbcheck(struct tp_pcb *tpcb, int i)
 {
 	struct mbuf *n, *m;
 	int    len = 0, mbcnt = 0, pktlen;

@@ -1,5 +1,5 @@
 #! /usr/bin/awk -f
-#	$NetBSD: devlist2h.awk,v 1.5 1998/01/09 06:46:26 thorpej Exp $
+#	$NetBSD: devlist2h.awk,v 1.9 2005/12/11 12:21:20 christos Exp $
 #
 # Copyright (c) 1995, 1996 Christopher G. Demetriou
 # All rights reserved.
@@ -30,15 +30,16 @@
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 BEGIN {
-	nproducts = nvendors = 0
+	nproducts = nvendors = blanklines = 0
 	dfile="eisadevs_data.h"
 	hfile="eisadevs.h"
 }
 NR == 1 {
 	VERSION = $0
 	gsub("\\$", "", VERSION)
+	gsub(/ $/, "", VERSION)
 
-	printf("/*\t\$NetBSD\$\t*/\n\n") > dfile
+	printf("/*\t$NetBSD" "$\t*/\n\n") > dfile
 	printf("/*\n") > dfile
 	printf(" * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.\n") \
 	    > dfile
@@ -47,7 +48,7 @@ NR == 1 {
 	printf(" *\t%s\n", VERSION) > dfile
 	printf(" */\n") > dfile
 
-	printf("/*\t\$NetBSD\$\t*/\n\n") > hfile
+	printf("/*\t$NetBSD" "$\t*/\n\n") > hfile
 	printf("/*\n") > hfile
 	printf(" * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.\n") \
 	    > hfile
@@ -58,7 +59,7 @@ NR == 1 {
 
 	next
 }
-$1 == "vendor" {
+NF > 0 && $1 == "vendor" {
 	nvendors++
 
 	vendorindex[$2] = nvendors;	# record index for this name, for later.
@@ -86,7 +87,7 @@ $1 == "vendor" {
 
 	next
 }
-$1 == "product" {
+NF > 0 && $1 == "product" {
 	nproducts++
 
 	products[nproducts, 1] = $2;		# vendor name
@@ -96,7 +97,7 @@ $1 == "product" {
 
 	i = vendorindex[products[nproducts, 1]]; j = 2;
 	needspace = 0;
-	while (vendors[i, j] != "") {
+	while ((i,j) in vendors) {
 		if (needspace)
 			printf(" ") > hfile
 		printf("%s", vendors[i, j]) > hfile
@@ -155,7 +156,7 @@ END {
 
 	printf("\n") > dfile
 
-	printf("struct eisa_knowndev eisa_knowndevs[] = {\n") > dfile
+	printf("const struct eisa_knowndev eisa_knowndevs[] = {\n") > dfile
 	for (i = 1; i <= nproducts; i++) {
 		printf("\t{\n") > dfile
 		printf("\t    0,\n") > dfile
@@ -176,7 +177,7 @@ END {
 		printf("\t    \"") > dfile
 		j = 2;
 		needspace = 0;
-		while (vendors[i, j] != "") {
+		while ((i, j) in vendors) {
 			if (needspace)
 				printf(" ") > dfile
 			printf("%s", vendors[i, j]) > dfile
@@ -188,4 +189,6 @@ END {
 	}
 	printf("\t{ 0, NULL, NULL, }\n") > dfile
 	printf("};\n") > dfile
+	close(dfile)
+	close(hfile)
 }

@@ -1,30 +1,30 @@
-#	$NetBSD: Makefile,v 1.2 2000/01/23 17:04:06 mycroft Exp $
+#	$NetBSD: Makefile,v 1.9 2005/12/28 08:44:27 skrll Exp $
 
 S= ${.CURDIR}/../../../..
 
-MKMAN= no
+NOMAN= # defined
 
 CFLAGS= -Os -Wall
 
-CPPFLAGS+= -D_STANDALONE -DBOOT_DEBUG
+CPPFLAGS+= -D_STANDALONE
+CPPFLAGS+= -DLIBSA_USE_MEMCPY -DLIBSA_USE_MEMSET
 CPPFLAGS+= -nostdinc -I${.OBJDIR} -I${S} -I.
+CPPFLAGS+= -D__daddr_t=int32_t
 AFLAGS= -D_LOCORE
 
 CLEANFILES+= machine m68k
 
-.BEGIN: machine m68k
-.NOPATH: machine m68k
-realdepend realall: machine m68k
+.if !make(obj) && !make(clean) && !make(cleandir)
+.PHONY: machine-links
+beforedepend: machine-links
+machine-links:
+	-rm -f machine
+	ln -s ${S}/arch/${MACHINE}/include machine
+	-rm -f ${MACHINE_ARCH}
+	ln -s ${S}/arch/${MACHINE_ARCH}/include ${MACHINE_ARCH}
+.endif
 
-machine::
-	-rm -f $@
-	ln -s ${S}/arch/${MACHINE}/include $@
-
-m68k::
-	-rm -f $@
-	ln -s ${S}/arch/m68k/include $@
-
-${OBJS}: machine m68k
+.include <bsd.prog.mk>
 
 ### find out what to use for libkern
 KERN_AS= library
@@ -44,11 +44,9 @@ LIBSA= ${SALIB}
 
 LIBS= ${LIBSA} ${LIBZ} ${LIBKERN}
 
-realall: ${LIBS}
+realall: machine-links ${LIBS}
 
 cleandir distclean: cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib
-
-.include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-.\"	$NetBSD: ratecheck.9,v 1.1 2000/02/03 23:03:14 cgd Exp $
+.\" $NetBSD: ratecheck.9,v 1.11 2008/04/30 13:10:58 martin Exp $
 .\"
 .\" Copyright (c) 2000 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,18 +14,11 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
 .\" TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-.\" PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS 
+.\" PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
 .\" BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
 .\" CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
 .\" SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
@@ -41,7 +34,7 @@
 .Nm ratecheck
 .Nd function to help implement rate-limited actions
 .Sh SYNOPSIS
-.Fd #include <sys/time.h>
+.In sys/time.h
 .Ft int
 .Fn ratecheck "struct timeval *lasttime" "const struct timeval *mininterval"
 .Sh DESCRIPTION
@@ -56,23 +49,26 @@ and
 .Fa lasttime
 is less than the value given by the
 .Fa mininterval
-argument, zero is returned.  Otherwise,
+argument, zero is returned.
+Otherwise,
 .Fa lasttime
 is set to the current time and a non-zero value is returned.
 .Pp
 The motivation for implementing
 .Fn ratecheck
 was to provide a mechanism that could be used to add rate limiting to
-diagnostic message output.  If printed too often, diagnostic messages can
-keep the system from doing useful work.  If the repeated messages can
-be caused by deliberate user action or network events, they can be
-exploited to cause denial of system service.
+diagnostic message output.
+If printed too often, diagnostic messages can keep the system from
+doing useful work.
+If the repeated messages can be caused by deliberate user action
+or network events, they can be exploited to cause denial of system service.
 .Pp
 Note that using a very short time interval (less than a second)
 for
 .Fa mininterval
-defeats the purpose of this function.  (It doesn't
-take much to flood a 9600 baud serial console with output, for instance.)
+defeats the purpose of this function.
+(It doesn't take much to flood a 9600 baud serial console with
+output, for instance.)
 .Sh EXAMPLES
 Here is a simple example of use of the
 .Fn ratecheck
@@ -88,8 +84,8 @@ struct timeval drv_lasterr2time;   /* time of last err2 message */
 long drv_err2count;                /* # of err2 errs since last msg */
 
 /*
- * the following variable will often be global or shared by all
- * instances of a driver.  It should be initalized, so it can be
+ * The following variable will often be global or shared by all
+ * instances of a driver.  It should be initialized, so it can be
  * patched.  Allowing it to be set via an option might be nice,
  * but could lead to an insane proliferation of options.
  */
@@ -109,9 +105,9 @@ drv_errhandler(int err1, int err2)
 		...
 
 		drv_err1count++;
-		if (ratecheck(&drv_lasterr1notice,
-		    &drv_errinterval)) {
-			printf("drv: %ld err1 errors occurred",	
+		if (ratecheck(\*[Am]drv_lasterr1notice,
+		    \*[Am]drv_errinterval)) {
+			printf("drv: %ld err1 errors occurred",
 			    drv_err1count);
 			drv_err1count = 0;
 		}
@@ -121,20 +117,28 @@ drv_errhandler(int err1, int err2)
 		...
 
 		drv_err2count++;
-		if (ratecheck(&drv_lasterr2notice,
-		    &drv_errinterval)) {
-			printf("drv: %ld err2 errors occurred",	
+		if (ratecheck(\*[Am]drv_lasterr2notice,
+		    \*[Am]drv_errinterval)) {
+			printf("drv: %ld err2 errors occurred",
 			    drv_err2count);
 			drv_err2count = 0;
 		}
 	}
 }
+.Ed
 .Sh SEE ALSO
 .Xr log 9 ,
+.Xr ppsratecheck 9 ,
 .Xr printf 9 ,
-.Xr time 9
+.Xr time_second 9
 .Sh HISTORY
 The
 .Fn ratecheck
 function appeared in
 .Nx 1.5 .
+.Sh BUGS
+.Fn ratecheck
+may not work as expected, if
+.Fa mininterval
+is less than the hardware clock interrupt interval
+.Pq Li 1/hz .

@@ -1,4 +1,4 @@
-/*	$NetBSD: tape.c,v 1.21 1999/10/01 04:35:23 perseant Exp $	*/
+/*	$NetBSD: tape.c,v 1.49 2008/02/16 17:58:01 matt Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)tape.c	8.4 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: tape.c,v 1.21 1999/10/01 04:35:23 perseant Exp $");
+__RCSID("$NetBSD: tape.c,v 1.49 2008/02/16 17:58:01 matt Exp $");
 #endif
 #endif /* not lint */
 
@@ -46,60 +42,50 @@ __RCSID("$NetBSD: tape.c,v 1.21 1999/10/01 04:35:23 perseant Exp $");
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/wait.h>
-#ifdef sunos
-#include <sys/vnode.h>
-
-#include <ufs/fs.h>
-#include <ufs/inode.h>
-#else
 #include <ufs/ufs/dinode.h>
-#endif
+#include <sys/ioctl.h>
+#include <sys/mtio.h>
 
 #include <protocols/dumprestore.h>
 
 #include <errno.h>
 #include <fcntl.h>
-#include <setjmp.h>
 #include <signal.h>
 #include <stdio.h>
-#ifdef __STDC__
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#else
-int	write(), read();
-#endif
 
 #include "dump.h"
 #include "pathnames.h"
 
 int	writesize;		/* size of malloc()ed buffer for tape */
-long	lastspclrec = -1;	/* tape block number of last written header */
+int64_t	lastspclrec = -1;	/* tape block number of last written header */
 int	trecno = 0;		/* next record to write in current block */
 extern	long blocksperfile;	/* number of blocks per output file */
 long	blocksthisvol;		/* number of blocks on current output file */
 extern	int ntrec;		/* blocking factor on tape */
 extern	int cartridge;
-extern	char *host;
+extern	const char *host;
 char	*nexttape;
 
-static	ssize_t atomic_read __P((int, char *, int));
-static	ssize_t atomic_write __P((int, char *, int));
-static	void doslave __P((int, int));
-static	void enslave __P((void));
-static	void flushtape __P((void));
-static	void killall __P((void));
-static	void proceed __P((int));
-static	void rollforward __P((void));
-static	void sigpipe __P((int));
-static	void tperror __P((int));
+static	ssize_t atomic_read(int, char *, int);
+static	ssize_t atomic_write(int, char *, int);
+static	void doslave(int, int);
+static	void enslave(void);
+static	void flushtape(void);
+static	void killall(void);
+static	void proceed(int);
+static	void rollforward(void);
+static	void sigpipe(int);
+static	void tperror(int);
 
 /*
  * Concurrent dump mods (Caltech) - disk block reading and tape writing
  * are exported to several slave processes.  While one slave writes the
  * tape, the others read disk blocks; they pass control of the tape in
- * a ring via signals. The parent process traverses the filesystem and
+ * a ring via signals. The parent process traverses the file system and
  * sends writeheader()'s and lists of daddr's to the slaves via pipes.
  * The following structure defines the instruction packets sent to slaves.
  */
@@ -111,14 +97,14 @@ int reqsiz;
 
 #define SLAVES 3		/* 1 slave writing, 1 reading, 1 for slack */
 struct slave {
-	int tapea;		/* header number at start of this chunk */
+	int64_t tapea;		/* header number at start of this chunk */
+	int64_t firstrec;	/* record number of this block */
 	int count;		/* count to next header (used for TS_TAPE */
 				/* after EOT) */
 	int inode;		/* inode that we are currently dealing with */
 	int fd;			/* FD for this slave */
 	int pid;		/* PID for this slave */
 	int sent;		/* 1 == we've sent this slave requests */
-	int firstrec;		/* record number of this block */
 	char (*tblock)[TP_BSIZE]; /* buffer for data blocks */
 	struct req *req;	/* buffer for requests */
 } slaves[SLAVES+1];
@@ -126,19 +112,14 @@ struct slave *slp;
 
 char	(*nextblock)[TP_BSIZE];
 
-static time_t tstart_volume;	/* time of volume start */
-static int tapea_volume;	/* value of spcl.c_tapea at volume start */
+static int64_t tapea_volume;	/* value of spcl.c_tapea at volume start */
 
 int master;		/* pid of master, for sending error signals */
 int tenths;		/* length of tape used per block written */
-static int caught;	/* have we caught the signal to proceed? */
-static int ready;	/* have we reached the lock point without having */
-			/* received the SIGUSR2 signal from the prev slave? */
-static jmp_buf jmpbuf;	/* where to jump to if we are ready when the */
-			/* SIGUSR2 arrives from the previous slave */
+static volatile sig_atomic_t caught;	/* have we caught the signal to proceed? */
 
 int
-alloctape()
+alloctape(void)
 {
 	int pgoff = getpagesize() - 1;
 	char *buf;
@@ -152,7 +133,7 @@ alloctape()
 	 * repositioning after stopping, i.e, streaming mode, where the gap is
 	 * variable, 0.30" to 0.45".  The gap is maximal when the tape stops.
 	 */
-	if (blocksperfile == 0)
+	if (blocksperfile == 0 && !unlimited)
 		tenths = writesize / density +
 		    (cartridge ? 16 : density == 625 ? 5 : 8);
 	/*
@@ -162,9 +143,7 @@ alloctape()
 	 */
 	for (i = 0; i <= SLAVES; i++) {
 		buf = (char *)
-		    malloc((unsigned)(reqsiz + writesize + pgoff + TP_BSIZE));
-		if (buf == NULL)
-			return(0);
+		    xmalloc((unsigned)(reqsiz + writesize + pgoff + TP_BSIZE));
 		slaves[i].tblock = (char (*)[TP_BSIZE])
 		    (((long)&buf[ntrec + 1] + pgoff) &~ pgoff);
 		slaves[i].req = (struct req *)slaves[i].tblock - ntrec - 1;
@@ -178,28 +157,25 @@ alloctape()
 }
 
 void
-writerec(dp, isspcl)
-	char *dp;
-	int isspcl;
+writerec(char *dp, int isspcl)
 {
 
 	slp->req[trecno].dblk = (daddr_t)0;
 	slp->req[trecno].count = 1;
 	*(union u_spcl *)(*(nextblock)++) = *(union u_spcl *)dp;
 	if (isspcl)
-		lastspclrec = iswap32(spcl.c_tapea);
+		lastspclrec = iswap64(spcl.c_tapea);
 	trecno++;
-	spcl.c_tapea = iswap32(iswap32(spcl.c_tapea) +1);
+	spcl.c_tapea = iswap64(iswap64(spcl.c_tapea) +1);
 	if (trecno >= ntrec)
 		flushtape();
 }
 
 void
-dumpblock(blkno, size)
-	daddr_t blkno;
-	int size;
+dumpblock(daddr_t blkno, int size)
 {
-	int avail, tpblks, dblkno;
+	int avail, tpblks;
+	daddr_t dblkno;
 
 	dblkno = fsatoda(ufsib, blkno);
 	tpblks = size >> tp_bshift;
@@ -207,7 +183,7 @@ dumpblock(blkno, size)
 		slp->req[trecno].dblk = dblkno;
 		slp->req[trecno].count = avail;
 		trecno += avail;
-		spcl.c_tapea = iswap32(iswap32(spcl.c_tapea) + avail);
+		spcl.c_tapea = iswap64(iswap64(spcl.c_tapea) + avail);
 		if (trecno >= ntrec)
 			flushtape();
 		dblkno += avail << (tp_bshift - dev_bshift);
@@ -218,8 +194,7 @@ dumpblock(blkno, size)
 int	nogripe = 0;
 
 static void
-tperror(signo)
-	int signo;
+tperror(int signo __unused)
 {
 
 	if (pipeout) {
@@ -227,7 +202,7 @@ tperror(signo)
 		quit("Cannot recover\n");
 		/* NOTREACHED */
 	}
-	msg("write error %d blocks into volume %d\n", blocksthisvol, tapeno);
+	msg("write error %ld blocks into volume %d\n", blocksthisvol, tapeno);
 	broadcast("DUMP WRITE ERROR!\n");
 	if (!query("Do you want to restart?"))
 		dumpabort(0);
@@ -240,8 +215,7 @@ tperror(signo)
 }
 
 static void
-sigpipe(signo)
-	int signo;
+sigpipe(int signo __unused)
 {
 
 	quit("Broken pipe\n");
@@ -252,20 +226,21 @@ sigpipe(signo)
  *	Update xferrate stats
  */
 time_t
-do_stats()
+do_stats(void)
 {
 	time_t tnow, ttaken;
-	int blocks;
+	int64_t blocks;
 
 	(void)time(&tnow);
 	ttaken = tnow - tstart_volume;
-	blocks = iswap32(spcl.c_tapea) - tapea_volume;
+	blocks = iswap64(spcl.c_tapea) - tapea_volume;
 	msg("Volume %d completed at: %s", tapeno, ctime(&tnow));
 	if (ttaken > 0) {
 		msg("Volume %d took %d:%02d:%02d\n", tapeno,
-		    ttaken / 3600, (ttaken % 3600) / 60, ttaken % 60); 
-		msg("Volume %d transfer rate: %ld KB/s\n", tapeno,
-		    blocks / ttaken);
+		    (int) (ttaken / 3600), (int) ((ttaken % 3600) / 60),
+		    (int) (ttaken % 60));
+		msg("Volume %d transfer rate: %d KB/s\n", tapeno,
+		    (int) (blocks / ttaken));
 		xferrate += blocks / ttaken;
 	}
 	return(tnow);
@@ -277,30 +252,35 @@ do_stats()
  *	(derived from optr.c::timeest())
  */
 void
-statussig(notused)
-	int notused;
+statussig(int notused __unused)
 {
 	time_t	tnow, deltat;
 	char	msgbuf[128];
+	int	errno_save;
 
 	if (blockswritten < 500)
-		return;	
+		return;
+	errno_save = errno;
 	(void) time((time_t *) &tnow);
-	deltat = tstart_writing - tnow + (1.0 * (tnow - tstart_writing))
-		/ blockswritten * tapesize;
+	if (tnow <= tstart_volume)
+		return;
+	deltat = tstart_writing - tnow +
+	    (1.0 * (tnow - tstart_writing)) / blockswritten * tapesize;
 	(void)snprintf(msgbuf, sizeof(msgbuf),
 	    "%3.2f%% done at %ld KB/s, finished in %d:%02d\n",
 	    (blockswritten * 100.0) / tapesize,
-	    (long)((iswap32(spcl.c_tapea) - tapea_volume) / (tnow - tstart_volume)),
+	    (long)((iswap64(spcl.c_tapea) - tapea_volume) /
+	      (tnow - tstart_volume)),
 	    (int)(deltat / 3600), (int)((deltat % 3600) / 60));
 	write(STDERR_FILENO, msgbuf, strlen(msgbuf));
+	errno = errno_save;
 }
 
 static void
-flushtape()
+flushtape(void)
 {
 	int i, blks, got;
-	long lastfirstrec;
+	int64_t lastfirstrec;
 
 	int siz = (char *)nextblock - (char *)slp->req;
 
@@ -357,7 +337,7 @@ flushtape()
 				blks++;
 	}
 	slp->count = lastspclrec + blks + 1 - iswap32(spcl.c_tapea);
-	slp->tapea = iswap32(spcl.c_tapea);
+	slp->tapea = iswap64(spcl.c_tapea);
 	slp->firstrec = lastfirstrec + ntrec;
 	slp->inode = curino;
 	nextblock = slp->tblock;
@@ -365,7 +345,7 @@ flushtape()
 	asize += tenths;
 	blockswritten += ntrec;
 	blocksthisvol += ntrec;
-	if (!pipeout && (blocksperfile ?
+	if (!pipeout && !unlimited && (blocksperfile ?
 	    (blocksthisvol >= blocksperfile) : (asize > tsize))) {
 		close_rewind();
 		startnewtape(0);
@@ -374,19 +354,19 @@ flushtape()
 }
 
 void
-trewind()
+trewind(int eject)
 {
 	int f;
 	int got;
 
 	for (f = 0; f < SLAVES; f++) {
 		/*
-		 * Drain the results, but unlike EOT we DO (or should) care 
-		 * what the return values were, since if we detect EOT after 
-		 * we think we've written the last blocks to the tape anyway, 
+		 * Drain the results, but unlike EOT we DO (or should) care
+		 * what the return values were, since if we detect EOT after
+		 * we think we've written the last blocks to the tape anyway,
 		 * we have to replay those blocks with rollforward.
 		 *
-		 * fixme: punt for now.  
+		 * fixme: punt for now.
 		 */
 		if (slaves[f].sent) {
 			if (atomic_read(slaves[f].fd, (char *)&got, sizeof got)
@@ -414,8 +394,12 @@ trewind()
 #ifdef RDUMP
 	if (host) {
 		rmtclose();
-		while (rmtopen(tape, 0) < 0)
+		while (rmtopen(tape, 0, 0) < 0)
 			sleep(10);
+		if (eflag && eject) {
+			msg("Ejecting %s\n", tape);
+			(void) rmtioctl(MTOFFL, 0);
+		}
 		rmtclose();
 		return;
 	}
@@ -423,20 +407,47 @@ trewind()
 	(void) close(tapefd);
 	while ((f = open(tape, 0)) < 0)
 		sleep (10);
+	if (eflag && eject) {
+		struct mtop offl;
+
+		msg("Ejecting %s\n", tape);
+		offl.mt_op = MTOFFL;
+		offl.mt_count = 0;
+		(void) ioctl(f, MTIOCTOP, &offl);
+	}
 	(void) close(f);
 }
 
 void
-close_rewind()
+close_rewind(void)
 {
-	trewind();
+	int i, f;
+
+	trewind(1);
 	(void)do_stats();
 	if (nexttape)
 		return;
 	if (!nogripe) {
 		msg("Change Volumes: Mount volume #%d\n", tapeno+1);
-		broadcast("CHANGE DUMP VOLUMES!\7\7\n");
+		broadcast("CHANGE DUMP VOLUMES!\a\a\n");
 	}
+	if (lflag) {
+		for (i = 0; i < lflag / 10; i++) { /* wait lflag seconds */
+			if (host) {
+				if (rmtopen(tape, 0, 0) >= 0) {
+					rmtclose();
+					return;
+				}
+			} else {
+				if ((f = open(tape, 0)) >= 0) {
+					close(f);
+					return;
+				}
+			}
+			sleep (10);
+		}
+	}
+
 	while (!query("Is the new volume mounted and ready to go?"))
 		if (query("Do you want to abort?")) {
 			dumpabort(0);
@@ -445,7 +456,7 @@ close_rewind()
 }
 
 void
-rollforward()
+rollforward(void)
 {
 	struct req *p, *q, *prev;
 	struct slave *tslp;
@@ -455,9 +466,9 @@ rollforward()
 	ntb = (union u_spcl *)tslp->tblock[1];
 
 	/*
-	 * Each of the N slaves should have requests that need to 
-	 * be replayed on the next tape.  Use the extra slave buffers 
-	 * (slaves[SLAVES]) to construct request lists to be sent to 
+	 * Each of the N slaves should have requests that need to
+	 * be replayed on the next tape.  Use the extra slave buffers
+	 * (slaves[SLAVES]) to construct request lists to be sent to
 	 * each slave in turn.
 	 */
 	for (i = 0; i < SLAVES; i++) {
@@ -465,7 +476,7 @@ rollforward()
 		otb = (union u_spcl *)slp->tblock;
 
 		/*
-		 * For each request in the current slave, copy it to tslp. 
+		 * For each request in the current slave, copy it to tslp.
 		 */
 
 		prev = NULL;
@@ -509,8 +520,8 @@ rollforward()
 
 		if (prev->dblk != 0) {
 			/*
-			 * If the last one was a disk block, make the 
-			 * first of this one be the last bit of that disk 
+			 * If the last one was a disk block, make the
+			 * first of this one be the last bit of that disk
 			 * block...
 			 */
 			q->dblk = prev->dblk +
@@ -518,7 +529,7 @@ rollforward()
 			ntb = (union u_spcl *)tslp->tblock;
 		} else {
 			/*
-			 * It wasn't a disk block.  Copy the data to its 
+			 * It wasn't a disk block.  Copy the data to its
 			 * new location in the buffer.
 			 */
 			q->dblk = 0;
@@ -560,19 +571,14 @@ rollforward()
  * everything continues as if nothing had happened.
  */
 void
-startnewtape(top)
-	int top;
+startnewtape(int top)
 {
 	int	parentpid;
 	int	childpid;
 	int	status;
-	int	waitpid;
+	int	waitforpid;
 	char	*p;
-#ifdef sunos
-	void	(*interrupt_save)();
-#else
 	sig_t	interrupt_save;
-#endif
 
 	interrupt_save = signal(SIGINT, SIG_IGN);
 	parentpid = getpid();
@@ -597,13 +603,14 @@ restore_check_point:
 		 *	don't catch the interrupt
 		 */
 		signal(SIGINT, SIG_IGN);
+		signal(SIGINFO, SIG_IGN);	/* only want child's stats */
 #ifdef TDEBUG
 		msg("Tape: %d; parent process: %d child process %d\n",
 			tapeno+1, parentpid, childpid);
 #endif /* TDEBUG */
-		while ((waitpid = wait(&status)) != childpid)
+		while ((waitforpid = wait(&status)) != childpid)
 			msg("Parent %d waiting for child %d has another child %d return\n",
-				parentpid, childpid, waitpid);
+				parentpid, childpid, waitforpid);
 		if (status & 0xFF) {
 			msg("Child %d returns LOB status %o\n",
 				childpid, status&0xFF);
@@ -614,7 +621,7 @@ restore_check_point:
 			case X_FINOK:
 				msg("Child %d finishes X_FINOK\n", childpid);
 				break;
-			case X_ABORT:	
+			case X_ABORT:
 				msg("Child %d finishes X_ABORT\n", childpid);
 				break;
 			case X_REWRITE:
@@ -639,6 +646,7 @@ restore_check_point:
 		}
 		/*NOTREACHED*/
 	} else {	/* we are the child; just continue */
+		signal(SIGINFO, statussig);	/* now want child's stats */
 #ifdef TDEBUG
 		sleep(4);	/* allow time for parent's message to get out */
 		msg("Child on Tape %d has parent %d, my pid = %d\n",
@@ -649,7 +657,7 @@ restore_check_point:
 		 * use the name before the comma first, and save
 		 * the remaining names for subsequent volumes.
 		 */
-		tapeno++;               /* current tape sequence */
+		tapeno++;			/* current tape sequence */
 		if (nexttape || strchr(tape, ',')) {
 			if (nexttape && *nexttape)
 				tape = nexttape;
@@ -661,10 +669,10 @@ restore_check_point:
 			msg("Dumping volume %d on %s\n", tapeno, tape);
 		}
 #ifdef RDUMP
-		while ((tapefd = (host ? rmtopen(tape, 2) :
+		while ((tapefd = (host ? rmtopen(tape, 2, 1) :
 			pipeout ? 1 : open(tape, O_WRONLY|O_CREAT, 0666))) < 0)
 #else
-		while ((tapefd = (pipeout ? 1 : 
+		while ((tapefd = (pipeout ? 1 :
 				  open(tape, O_WRONLY|O_CREAT, 0666))) < 0)
 #endif
 		    {
@@ -687,9 +695,13 @@ restore_check_point:
 		spcl.c_firstrec = iswap32(slp->firstrec);
 		spcl.c_volume = iswap32(iswap32(spcl.c_volume) + 1);
 		spcl.c_type = iswap32(TS_TAPE);
-		spcl.c_flags = iswap32(iswap32(spcl.c_flags) | DR_NEWHEADER);
+		if (!is_ufs2)
+			spcl.c_flags = iswap32(iswap32(spcl.c_flags)
+			    | DR_NEWHEADER);
 		writeheader((ino_t)slp->inode);
-		spcl.c_flags  = iswap32(iswap32(spcl.c_flags) & ~ DR_NEWHEADER);
+		if (!is_ufs2)
+			spcl.c_flags  = iswap32(iswap32(spcl.c_flags) &
+			    ~ DR_NEWHEADER);
 		msg("Volume %d started at: %s", tapeno, ctime(&tstart_volume));
 		if (tapeno > 1)
 			msg("Volume %d begins with blocks from inode %d\n",
@@ -698,14 +710,16 @@ restore_check_point:
 }
 
 void
-dumpabort(signo)
-	int signo;
+dumpabort(int signo __unused)
 {
 
 	if (master != 0 && master != getpid())
 		/* Signals master to call dumpabort */
 		(void) kill(master, SIGTERM);
 	else {
+#ifdef DUMP_LFS
+		lfs_wrap_go();
+#endif
 		killall();
 		msg("The ENTIRE dump is aborted.\n");
 	}
@@ -716,8 +730,7 @@ dumpabort(signo)
 }
 
 void
-Exit(status)
-	int status;
+Exit(int status)
 {
 
 #ifdef TDEBUG
@@ -730,17 +743,13 @@ Exit(status)
  * proceed - handler for SIGUSR2, used to synchronize IO between the slaves.
  */
 static void
-proceed(signo)
-	int signo;
+proceed(int signo __unused)
 {
-
-	if (ready)
-		longjmp(jmpbuf, 1);
 	caught++;
 }
 
 void
-enslave()
+enslave(void)
 {
 	int cmd[2];
 	int i, j;
@@ -768,30 +777,32 @@ enslave()
 		slaves[i].sent = 0;
 		if (slaves[i].pid == 0) { 	    /* Slave starts up here */
 			for (j = 0; j <= i; j++)
-			        (void) close(slaves[j].fd);
+				(void) close(slaves[j].fd);
 			signal(SIGINT, SIG_IGN);    /* Master handles this */
 			signal(SIGINFO, SIG_IGN);
 			doslave(cmd[0], i);
 			Exit(X_FINOK);
 		}
 	}
-	
+
 	for (i = 0; i < SLAVES; i++)
-		(void) atomic_write(slaves[i].fd, 
-			      (char *) &slaves[(i + 1) % SLAVES].pid, 
-		              sizeof slaves[0].pid);
-		
-	master = 0; 
+		(void) atomic_write(slaves[i].fd,
+				(char *) &slaves[(i + 1) % SLAVES].pid,
+				sizeof slaves[0].pid);
+
+	master = 0;
 }
 
 void
-killall()
+killall(void)
 {
 	int i;
 
 	for (i = 0; i < SLAVES; i++)
-		if (slaves[i].pid > 0)
+		if (slaves[i].pid > 0) {
 			(void) kill(slaves[i].pid, SIGKILL);
+			slaves[i].sent = 0;
+		}
 }
 
 /*
@@ -802,19 +813,17 @@ killall()
  * get the lock back for the next cycle by swapping descriptors.
  */
 static void
-doslave(cmd, slave_number)
-	int cmd;
-        int slave_number;
+doslave(int cmd, int slave_number __unused)
 {
-	int nread;
-	int nextslave, size, wrote, eot_count;
-	sigset_t sigset;
+	int nread, nextslave, size, wrote, eot_count, werror;
+	sigset_t nsigset, osigset;
 
+	wrote = 0;
 	/*
 	 * Need our own seek pointer.
 	 */
 	(void) close(diskfd);
-	if ((diskfd = open(disk, O_RDONLY)) < 0)
+	if ((diskfd = open(disk_dev, O_RDONLY)) < 0)
 		quit("slave couldn't reopen disk: %s\n", strerror(errno));
 
 	/*
@@ -838,22 +847,24 @@ doslave(cmd, slave_number)
 					p->count * TP_BSIZE);
 			} else {
 				if (p->count != 1 || atomic_read(cmd,
-				    (char *)slp->tblock[trecno], 
+				    (char *)slp->tblock[trecno],
 				    TP_BSIZE) != TP_BSIZE)
 				       quit("master/slave protocol botched.\n");
 			}
 		}
-		if (setjmp(jmpbuf) == 0) {
-			ready = 1;
-			if (!caught)
-				(void) pause();
-		}
-		ready = 0;
+
+		sigemptyset(&nsigset);
+		sigaddset(&nsigset, SIGUSR2);
+		sigprocmask(SIG_BLOCK, &nsigset, &osigset);
+		while (!caught)
+			sigsuspend(&osigset);
 		caught = 0;
+		sigprocmask(SIG_SETMASK, &osigset, NULL);
 
 		/* Try to write the data... */
 		eot_count = 0;
 		size = 0;
+		werror = 0;
 
 		while (eot_count < 10 && size < writesize) {
 #ifdef RDUMP
@@ -864,10 +875,12 @@ doslave(cmd, slave_number)
 #endif
 				wrote = write(tapefd, slp->tblock[0]+size,
 				    writesize-size);
+			werror = errno;
 #ifdef WRITEDEBUG
-			fprintf(stderr, "slave %d wrote %d\n", slave_number, wrote);
+			fprintf(stderr, "slave %d wrote %d werror %d\n",
+			    slave_number, wrote, werror);
 #endif
-			if (wrote < 0) 
+			if (wrote < 0)
 				break;
 			if (wrote == 0)
 				eot_count++;
@@ -875,30 +888,35 @@ doslave(cmd, slave_number)
 		}
 
 #ifdef WRITEDEBUG
-		if (size != writesize) 
-		 fprintf(stderr, "slave %d only wrote %d out of %d bytes and gave up.\n",
-		     slave_number, size, writesize);
+		if (size != writesize)
+			fprintf(stderr,
+		    "slave %d only wrote %d out of %d bytes and gave up.\n",
+			    slave_number, size, writesize);
 #endif
+
+		/*
+		 * Handle ENOSPC as an EOT condition.
+		 */
+		if (wrote < 0 && werror == ENOSPC) {
+			wrote = 0;
+			eot_count++;
+		}
 
 		if (eot_count > 0)
 			size = 0;
 
-		/*
-		 * fixme: Pyramids running OSx return ENOSPC
-		 * at EOT on 1/2 inch drives.
-		 */
-		if (size < 0) {
+		if (wrote < 0) {
 			(void) kill(master, SIGUSR1);
-			sigemptyset(&sigset);
+			sigemptyset(&nsigset);
 			for (;;)
-				sigsuspend(&sigset);
+				sigsuspend(&nsigset);
 		} else {
 			/*
 			 * pass size of write back to master
 			 * (for EOT handling)
 			 */
 			(void) atomic_write(cmd, (char *)&size, sizeof size);
-		} 
+		}
 
 		/*
 		 * If partial write, don't want next slave to go.
@@ -916,10 +934,7 @@ doslave(cmd, slave_number)
  * loop until the count is satisfied (or error).
  */
 static ssize_t
-atomic_read(fd, buf, count)
-	int fd;
-	char *buf;
-	int count;
+atomic_read(int fd, char *buf, int count)
 {
 	ssize_t got, need = count;
 
@@ -933,10 +948,7 @@ atomic_read(fd, buf, count)
  * loop until the count is satisfied (or error).
  */
 static ssize_t
-atomic_write(fd, buf, count)
-	int fd;
-	char *buf;
-	int count;
+atomic_write(int fd, char *buf, int count)
 {
 	ssize_t got, need = count;
 

@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,7 +30,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)SYS.h	5.5 (Berkeley) 5/7/91
- *	$NetBSD: SYS.h,v 1.1 2000/01/05 14:07:30 msaitoh Exp $
+ *	$NetBSD: SYS.h,v 1.9 2006/01/06 06:19:20 uwe Exp $
  */
 
 #include <machine/asm.h>
@@ -44,9 +40,8 @@
 #define SYSTRAP(x)					\
 		mov.l	903f, r0;			\
 		.long	0xc380;	/* trapa #0x80 */	\
-		nop;					\
 		bra	904f;				\
-		nop;					\
+		 nop;					\
 		.align	2;				\
 	903:	.long	(SYS_ ## x);			\
 	904:
@@ -54,9 +49,8 @@
 #define SYSTRAP(x)					\
 		mov.l	903f, r0;			\
 		trapa	#0x80;				\
-		nop;					\
 		bra	904f;				\
-		nop;					\
+		 nop;					\
 		.align	2;				\
 	903:	.long	(SYS_/**/x);			\
 	904:
@@ -66,16 +60,37 @@
 		ENTRY(x);				\
 		SYSTRAP(y)
 
+#ifdef PIC
+
+#define JUMP_CERROR					\
+		mov	r0, r4;				\
+		mov.l	912f, r1;			\
+		mova	912f, r0;			\
+		mov.l	913f, r2;			\
+		add	r1, r0;				\
+		mov.l	@(r0, r2), r3;			\
+		jmp	@r3;				\
+		 nop;					\
+		.align	2;				\
+	912:	.long	_GLOBAL_OFFSET_TABLE_;		\
+	913:	.long	PIC_GOT(cerror)
+
+#else  /* !PIC */
+
+#define JUMP_CERROR					\
+		mov.l	912f, r3;			\
+		jmp	@r3;				\
+		 mov	r0, r4;				\
+		.align	2;				\
+	912:	.long	cerror
+
+#endif /* !PIC */
+
 #define _SYSCALL(x,y)					\
 		.text;					\
-	911:	mov.l	912f, r3;			\
-		jmp	@r3;				\
-		nop;					\
-		.align	2;				\
-	912:	.long	cerror;				\
+	911:	JUMP_CERROR;				\
 		_SYSCALL_NOERROR(x,y);			\
-		bf	911b;				\
-		nop
+		bf	911b
 
 #define SYSCALL_NOERROR(x)				\
 		_SYSCALL_NOERROR(x,x)
@@ -86,17 +101,26 @@
 #define PSEUDO_NOERROR(x,y)				\
 		_SYSCALL_NOERROR(x,y);			\
 		rts;					\
-		nop
+		 nop
 
 #define PSEUDO(x,y)					\
 		_SYSCALL(x,y);				\
 		rts;					\
-		nop
+		 nop
 
 #define RSYSCALL_NOERROR(x)				\
 		PSEUDO_NOERROR(x,x)
 
 #define RSYSCALL(x)					\
 		PSEUDO(x,x)
+
+#ifdef WEAK_ALIAS
+#define	WSYSCALL(weak,strong)				\
+		WEAK_ALIAS(weak,strong);		\
+		PSEUDO(strong,weak)
+#else
+#define	WSYSCALL(weak,strong)				\
+		PSEUDO(weak,weak)
+#endif
 
 	.globl	cerror

@@ -1,4 +1,4 @@
-/*	$NetBSD: bwtwo_obio.c,v 1.2 2000/03/19 15:38:45 pk Exp $ */
+/*	$NetBSD: bwtwo_obio.c,v 1.16 2008/04/28 20:23:35 martin Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,11 +50,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -85,9 +74,12 @@
  *
  * Does not handle interrupts, even though they can occur.
  *
- * P4 and overlay plane support by Jason R. Thorpe <thorpej@NetBSD.ORG>.
+ * P4 and overlay plane support by Jason R. Thorpe <thorpej@NetBSD.org>.
  * Overlay plane handling hints and ideas provided by Brad Spencer.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: bwtwo_obio.c,v 1.16 2008/04/28 20:23:35 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -98,41 +90,33 @@
 #include <sys/tty.h>
 #include <sys/conf.h>
 
-#include <vm/vm.h>
-
-#include <machine/fbio.h>
 #include <machine/autoconf.h>
-#include <machine/pmap.h>
-#include <machine/fbvar.h>
 #include <machine/eeprom.h>
 #include <machine/ctlreg.h>
-#include <machine/conf.h>
 #include <sparc/sparc/asm.h>
 
-#include <sparc/dev/btreg.h>
-#include <sparc/dev/bwtworeg.h>
-#include <sparc/dev/bwtwovar.h>
-#include <sparc/dev/pfourreg.h>
+#include <dev/sun/fbio.h>
+#include <dev/sun/fbvar.h>
+#include <dev/sun/btreg.h>
+#include <dev/sun/bwtworeg.h>
+#include <dev/sun/bwtwovar.h>
+#include <dev/sun/pfourreg.h>
 
 /* autoconfiguration driver */
-static void	bwtwoattach_obio __P((struct device *, struct device *, void *));
-static int	bwtwomatch_obio __P((struct device *, struct cfdata *, void *));
+static void	bwtwoattach_obio (struct device *, struct device *, void *);
+static int	bwtwomatch_obio (struct device *, struct cfdata *, void *);
 
 
-struct cfattach bwtwo_obio_ca = {
-	sizeof(struct bwtwo_softc), bwtwomatch_obio, bwtwoattach_obio
-};
+CFATTACH_DECL(bwtwo_obio, sizeof(struct bwtwo_softc),
+    bwtwomatch_obio, bwtwoattach_obio, NULL, NULL);
 
-static int	bwtwo_get_video_sun4  __P((struct bwtwo_softc *));
-static void	bwtwo_set_video_sun4 __P((struct bwtwo_softc *, int));
+static int	bwtwo_get_video_sun4(struct bwtwo_softc *);
+static void	bwtwo_set_video_sun4(struct bwtwo_softc *, int);
 
 extern int fbnode;
 
 static int
-bwtwomatch_obio(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+bwtwomatch_obio(struct device *parent, struct cfdata *cf, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct obio4_attach_args *oba;
@@ -141,7 +125,7 @@ bwtwomatch_obio(parent, cf, aux)
 		return (0);
 
 	oba = &uoba->uoba_oba4;
-	return (bus_space_probe(oba->oba_bustag, 0, oba->oba_paddr,
+	return (bus_space_probe(oba->oba_bustag, oba->oba_paddr,
 				4,	/* probe size */
 				0,	/* offset */
 				0,	/* flags */
@@ -149,27 +133,24 @@ bwtwomatch_obio(parent, cf, aux)
 }
 
 static void
-bwtwoattach_obio(parent, self, uax)
-	struct device *parent, *self;
-	void *uax;
+bwtwoattach_obio(struct device *parent, struct device *self, void *aux)
 {
 	struct bwtwo_softc *sc = (struct bwtwo_softc *)self;
-	union obio_attach_args *uoba = uax;
+	union obio_attach_args *uoba = aux;
 	struct obio4_attach_args *oba;
 	struct fbdevice *fb = &sc->sc_fb;
 	struct eeprom *eep = (struct eeprom *)eeprom_va;
 	bus_space_handle_t bh;
 	int constype, isconsole;
-	char *name;
+	const char *name;
 
 	oba = &uoba->uoba_oba4;
 
 	/* Remember cookies for bwtwo_mmap() */
 	sc->sc_bustag = oba->oba_bustag;
-	sc->sc_btype = (bus_type_t)0;
 	sc->sc_paddr = (bus_addr_t)oba->oba_paddr;
 
-	fb->fb_flags = sc->sc_dev.dv_cfdata->cf_flags;
+	fb->fb_flags = device_cfdata(&sc->sc_dev)->cf_flags;
 	fb->fb_type.fb_depth = 1;
 	fb_setsize_eeprom(fb, fb->fb_type.fb_depth, 1152, 900);
 
@@ -186,17 +167,16 @@ bwtwoattach_obio(parent, self, uax)
 		 */
 		name = "bwtwo/p4";
 
-		if (obio_bus_map(oba->oba_bustag,
-				 oba->oba_paddr,
-				 0,
-				 sizeof(u_int32_t),
-				 BUS_SPACE_MAP_LINEAR,
-				 0, &bh) != 0) {
+		if (bus_space_map(oba->oba_bustag,
+				  oba->oba_paddr,
+				  sizeof(uint32_t),
+				  BUS_SPACE_MAP_LINEAR,
+				  &bh) != 0) {
 			printf("%s: cannot map pfour register\n",
 				self->dv_xname);
 			return;
 		}
-		fb->fb_pfour = (u_int32_t *)bh;
+		fb->fb_pfour = (uint32_t *)bh;
 		sc->sc_reg = NULL;
 
 		/*
@@ -224,12 +204,11 @@ bwtwoattach_obio(parent, self, uax)
 
 	} else {
 		/* A plain bwtwo */
-		if (obio_bus_map(oba->oba_bustag,
-				 oba->oba_paddr,
-				 BWREG_REG,
-				 sizeof(struct fbcontrol),
-				 BUS_SPACE_MAP_LINEAR,
-				 0, &bh) != 0) {
+		if (bus_space_map(oba->oba_bustag,
+				  oba->oba_paddr + BWREG_REG,
+				  sizeof(struct fbcontrol),
+				  BUS_SPACE_MAP_LINEAR,
+				  &bh) != 0) {
 			printf("%s: cannot map control registers\n",
 				self->dv_xname);
 			return;
@@ -245,11 +224,11 @@ bwtwoattach_obio(parent, self, uax)
 
 	if (isconsole) {
 		int ramsize = fb->fb_type.fb_height * fb->fb_linebytes;
-		if (obio_bus_map(oba->oba_bustag, oba->oba_paddr,
-				 sc->sc_pixeloffset,
-				 ramsize,
-				 BUS_SPACE_MAP_LINEAR,
-				 0, &bh) != 0) {
+		if (bus_space_map(oba->oba_bustag,
+				  oba->oba_paddr + sc->sc_pixeloffset,
+				  ramsize,
+				  BUS_SPACE_MAP_LINEAR,
+				  &bh) != 0) {
 			printf("%s: cannot map pixels\n", self->dv_xname);
 			return;
 		}
@@ -260,9 +239,7 @@ bwtwoattach_obio(parent, self, uax)
 }
 
 static void
-bwtwo_set_video_sun4(sc, enable)
-	struct bwtwo_softc *sc;
-	int enable;
+bwtwo_set_video_sun4(struct bwtwo_softc *sc, int enable)
 {
 
 	if (sc->sc_fb.fb_flags & FB_PFOUR) {
@@ -283,8 +260,7 @@ bwtwo_set_video_sun4(sc, enable)
 }
 
 static int
-bwtwo_get_video_sun4(sc)
-	struct bwtwo_softc *sc;
+bwtwo_get_video_sun4(struct bwtwo_softc *sc)
 {
 
 	if (sc->sc_fb.fb_flags & FB_PFOUR) {

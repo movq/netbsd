@@ -1,4 +1,4 @@
-/*	$NetBSD: xdvar.h,v 1.5 2000/03/23 07:01:47 thorpej Exp $	*/
+/*	$NetBSD: xdvar.h,v 1.11 2006/08/27 19:18:08 christos Exp $	*/
 
 /*
  *
@@ -54,7 +54,7 @@ struct xd_iorq {
 	int ttl;			/* time to live */
 	int mode;			/* current mode (state+other data) */
 	int tries;			/* number of times we have tried it */
-	int errno;			/* error number if we fail */
+	int errnum;			/* error number if we fail */
 	int lasterror;			/* last error we got */
 	int blockno;			/* starting block no for this xfer */
 	int sectcnt;			/* number of sectors in xfer */
@@ -152,7 +152,9 @@ struct xdc_softc {
 	struct xd_iorq *reqs;		/* i/o requests */
 	struct xd_iopb *iopbase;	/* iopb base addr (maps iopb->iorq) */
 	struct xd_iopb *dvmaiopb;	/* iopb base in DVMA space, not kvm */
-	struct buf_queue sc_wq;		/* queued IOPBs for this controller */
+	bus_dmamap_t iopmap;		/* IOPB DMA handle */
+	bus_dmamap_t auxmap;		/* auxiliary DMA handle */
+	struct bufq_state *sc_wq;	/* queued IOPBs for this controller */
 	char freereq[XDC_MAXIOPB];	/* free list (stack) */
 	char waitq[XDC_MAXIOPB];	/* wait queue */
 	u_char nfree;			/* number of iopbs free */

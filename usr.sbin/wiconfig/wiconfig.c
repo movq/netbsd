@@ -1,3 +1,4 @@
+/*	$NetBSD: wiconfig.c,v 1.41 2008/07/21 13:37:00 lukem Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999
  *	Bill Paul <wpaul@ctr.columbia.edu>.  All rights reserved.
@@ -29,7 +30,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: wiconfig.c,v 1.3 2000/03/26 08:58:11 itojun Exp $
+ *	From: Id: wicontrol.c,v 1.6 1999/05/22 16:12:49 wpaul Exp $
  */
 
 #include <sys/types.h>
@@ -37,7 +38,6 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
-#include <sys/socket.h>
 
 #include <net/if.h>
 #ifdef __FreeBSD__
@@ -49,7 +49,9 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #ifdef __NetBSD__
-#include <dev/pcmcia/if_wi_ieee.h>
+#include <net80211/ieee80211.h>
+#include <net80211/ieee80211_ioctl.h>
+#include <dev/ic/wi_ieee.h>
 #else
 #include <dev/pcmcia/if_wavelan_ieee.h>
 #endif
@@ -64,13 +66,41 @@
 #include <err.h>
 
 #if !defined(lint)
-static const char copyright[] = "@(#) Copyright (c) 1997, 1998, 1999\
-	Bill Paul. All rights reserved.";
-static const char rcsid[] =
-	"@(#) $Id: wiconfig.c,v 1.3 2000/03/26 08:58:11 itojun Exp $";
+__COPYRIGHT("@(#) Copyright (c) 1997, 1998, 1999\
+ Bill Paul.  All rights reserved.");
+__RCSID("$NetBSD: wiconfig.c,v 1.41 2008/07/21 13:37:00 lukem Exp $");
 #endif
 
-static void wi_getval		__P((char *, struct wi_req *));
+struct wi_table {
+	int wi_type;
+	int wi_code;
+#define	WI_NONE			0x00
+#define	WI_STRING		0x01
+#define	WI_BOOL			0x02
+#define	WI_WORDS		0x03
+#define	WI_HEXBYTES		0x04
+#define	WI_KEYSTRUCT		0x05
+#define	WI_BITS			0x06
+#define	WI_VENDOR		0x07
+	char *wi_label;			/* label used to print info */
+	int wi_opt;			/* option character to set this */
+	char *wi_desc;
+	char *wi_optval;
+};
+
+/* already define in wireg.h XXX */
+#define	WI_APRATE_0		0x00	/* NONE */
+#define WI_APRATE_1		0x0A	/* 1 Mbps */
+#define WI_APRATE_2		0x14	/* 2 Mbps */
+#define WI_APRATE_5		0x37	/* 5.5 Mbps */
+#define WI_APRATE_11		0x6E	/* 11 Mbps */
+
+#ifdef WI_RID_SCAN_APS
+static void wi_apscan		__P((char *));
+static int  get_if_flags	__P((int, const char *));
+static int  set_if_flags	__P((int, const char *, int));
+#endif
+static int  wi_getval		__P((char *, struct wi_req *));
 static void wi_setval		__P((char *, struct wi_req *));
 static void wi_printstr		__P((struct wi_req *));
 static void wi_setstr		__P((char *, int, char *));
@@ -80,28 +110,191 @@ static void wi_sethex		__P((char *, int, char *));
 static void wi_printwords	__P((struct wi_req *));
 static void wi_printbool	__P((struct wi_req *));
 static void wi_printhex		__P((struct wi_req *));
+static void wi_printbits	__P((struct wi_req *));
+static void wi_checkwifi	__P((char *));
 static void wi_dumpinfo		__P((char *));
-static void wi_setkeys		__P((char *, char *, int));
 static void wi_printkeys	__P((struct wi_req *));
+static void wi_printvendor	__P((struct wi_req *));
 static void wi_dumpstats	__P((char *));
-static void usage		__P((char *));
-static int  wi_hex2int(char c);
-static void wi_str2key		__P((char *, struct wi_key *));
+static void usage		__P((void));
+static struct wi_table *
+	wi_optlookup __P((struct wi_table *, int));
 int main __P((int argc, char **argv));
 
-static void wi_getval(iface, wreq)
-	char			*iface;
-	struct wi_req		*wreq;
+#ifdef WI_RID_SCAN_APS
+static int get_if_flags(s, name)
+	int		s;
+	const char	*name;
 {
+	struct ifreq	ifreq;
+	int		flags;
+
+	strncpy(ifreq.ifr_name, name, sizeof(ifreq.ifr_name));
+	if (ioctl(s, SIOCGIFFLAGS, (caddr_t)&ifreq) == -1)
+		  err(1, "SIOCGIFFLAGS");
+	flags = ifreq.ifr_flags;
+
+	return flags;
+}
+
+static int set_if_flags(s, name, flags)
+	int		s;
+	const char	*name;
+	int		flags;
+{
+	struct ifreq ifreq;
+
+	ifreq.ifr_flags = flags;
+	strncpy(ifreq.ifr_name, name, sizeof(ifreq.ifr_name));
+	if (ioctl(s, SIOCSIFFLAGS, (caddr_t)&ifreq) == -1)
+		  err(1, "SIOCSIFFLAGS");
+
+	return 0;
+}
+
+static void wi_apscan(iface)
+	char			*iface;
+{
+	struct wi_req		wreq;
 	struct ifreq		ifr;
 	int			s;
+	int			naps, rate;
+	int			retries = 10;
+	int			flags;
+	struct wi_apinfo	*w;
+	int			i, j;
 
 	if (iface == NULL)
 		errx(1, "must specify interface name");
 
+	s = socket(AF_INET, SOCK_DGRAM, 0);
+	if (s == -1)
+		err(1, "socket");
+	flags = get_if_flags(s, iface);
+	if ((flags & IFF_UP) == 0)
+		flags = set_if_flags(s, iface, flags | IFF_UP);
+
+	memset((char *)&wreq, 0, sizeof(wreq));
+
+	wreq.wi_type = WI_RID_SCAN_APS;
+	wreq.wi_len = 4;
+	/* note chan. 1 is the least significant bit */
+	wreq.wi_val[0] = htole16(0x3fff);	/* 1 bit per channel, 1-14 */
+	wreq.wi_val[1] = htole16(0xf);		/* tx rate */
+
+	/* write the request */
+	wi_setval(iface, &wreq);
+
+	/* now poll for a result */
+	memset((char *)&wreq, 0, sizeof(wreq));
+
+	wreq.wi_type = WI_RID_READ_APS;
+	wreq.wi_len = WI_MAX_DATALEN;
+
+	/* we have to do this ourself as opposed to
+	 * using getval, because we cannot bail if
+ 	 * the ioctl fails
+	 */
+	memset((char *)&ifr, 0, sizeof(ifr));
+        strncpy(ifr.ifr_name, iface, sizeof(ifr.ifr_name));
+        ifr.ifr_data = (caddr_t)&wreq;
+
+	printf("scanning ...");
+	fflush(stdout);
+	while (ioctl(s, SIOCGWAVELAN, &ifr) == -1) {
+		retries--;
+		if (retries >= 0) {
+			printf("."); fflush(stdout);
+			sleep(1);
+		} else
+			break;
+		errno = 0;
+	}
+
+	if (errno) {
+		set_if_flags(s, iface, flags);
+		close(s);
+		err(1, "ioctl");
+	}
+
+	naps = *(int *)wreq.wi_val;
+
+	if (naps > 0)
+		printf("\nAP Information\n");
+	else
+		printf("\nNo APs available\n");
+
+	w =  (struct wi_apinfo *)(((char *)&wreq.wi_val) + sizeof(int));
+	for ( i = 0; i < naps; i++, w++) {
+		printf("ap[%d]:\n", i);
+		if (w->scanreason) {
+			static char *scanm[] = {
+				"Host initiated",
+				"Firmware initiated",
+				"Inquiry request from host"
+			};
+			printf("\tScanReason:\t\t\t[ %s ]\n",
+				scanm[w->scanreason - 1]);
+		}
+		printf("\tnetname (SSID):\t\t\t[ ");
+			for (j = 0; j < w->namelen; j++) {
+				printf("%c", w->name[j]);
+			}
+			printf(" ]\n");
+		printf("\tBSSID:\t\t\t\t[ %02x:%02x:%02x:%02x:%02x:%02x ]\n",
+			w->bssid[0]&0xff, w->bssid[1]&0xff,
+			w->bssid[2]&0xff, w->bssid[3]&0xff,
+			w->bssid[4]&0xff, w->bssid[5]&0xff);
+		printf("\tChannel:\t\t\t[ %d ]\n", w->channel);
+		printf("\tQuality/Signal/Noise [signal]:\t[ %d / %d / %d ]\n"
+		       "\t                        [dBm]:\t[ %d / %d / %d ]\n", 
+			w->quality, w->signal, w->noise,
+			w->quality, w->signal - 149, w->noise - 149);
+		printf("\tBSS Beacon Interval [msec]:\t[ %d ]\n", w->interval); 
+		printf("\tCapinfo:\t\t\t[ "); 
+			if (w->capinfo & IEEE80211_CAPINFO_ESS)
+				printf("ESS ");
+			if (w->capinfo & IEEE80211_CAPINFO_PRIVACY)
+				printf("WEP ");
+			printf("]\n");
+
+		switch (w->rate) {
+		case WI_APRATE_1:
+			rate = 1;
+			break;
+		case WI_APRATE_2:
+			rate = 2;
+			break;
+		case WI_APRATE_5:
+			rate = 5.5;
+			break;
+		case WI_APRATE_11:
+			rate = 11;
+			break;
+		case WI_APRATE_0:
+		default:
+			rate = 0;
+			break;
+		}
+		if (rate) printf("\tDataRate [Mbps]:\t\t[ %d ]\n", rate);
+	}
+
+	set_if_flags(s, iface, flags);
+	close(s);
+}
+#endif
+
+static int wi_getval(iface, wreq)
+	char			*iface;
+	struct wi_req		*wreq;
+{
+	struct ifreq		ifr;
+	int			s, error;
+
+	error = 0;
 	bzero((char *)&ifr, sizeof(ifr));
 
-	strcpy(ifr.ifr_name, iface);
+	strncpy(ifr.ifr_name, iface, sizeof(ifr.ifr_name));
 	ifr.ifr_data = (caddr_t)wreq;
 
 	s = socket(AF_INET, SOCK_DGRAM, 0);
@@ -109,12 +302,14 @@ static void wi_getval(iface, wreq)
 	if (s == -1)
 		err(1, "socket");
 
-	if (ioctl(s, SIOCGWAVELAN, &ifr) == -1)
-		err(1, "SIOCGWAVELAN");
+	if (ioctl(s, SIOCGWAVELAN, &ifr) == -1) {
+		warn("SIOCGWAVELAN(wreq %04x)", wreq->wi_type);
+		error = 1;
+	}
 
 	close(s);
 
-	return;
+	return error;
 }
 
 static void wi_setval(iface, wreq)
@@ -126,7 +321,7 @@ static void wi_setval(iface, wreq)
 
 	bzero((char *)&ifr, sizeof(ifr));
 
-	strcpy(ifr.ifr_name, iface);
+	strncpy(ifr.ifr_name, iface, sizeof(ifr.ifr_name));
 	ifr.ifr_data = (caddr_t)wreq;
 
 	s = socket(AF_INET, SOCK_DGRAM, 0);
@@ -155,8 +350,10 @@ void wi_printstr(wreq)
 				ptr[i] = ' ';
 		}
 	} else {
+		int len = le16toh(wreq->wi_val[0]);
+
 		ptr = (char *)&wreq->wi_val[1];
-		for (i = 0; i < wreq->wi_val[0]; i++) {
+		for (i = 0; i < len; i++) {
 			if (ptr[i] == '\0')
 				ptr[i] = ' ';
 		}
@@ -175,12 +372,6 @@ void wi_setstr(iface, code, str)
 {
 	struct wi_req		wreq;
 
-	if (iface == NULL)
-		errx(1, "must specify interface name");
-
-	if (str == NULL)
-		errx(1, "must specify string");
-
 	bzero((char *)&wreq, sizeof(wreq));
 
 	if (strlen(str) > 30)
@@ -188,7 +379,7 @@ void wi_setstr(iface, code, str)
 
 	wreq.wi_type = code;
 	wreq.wi_len = 18;
-	wreq.wi_val[0] = strlen(str);
+	wreq.wi_val[0] = htole16(strlen(str));
 	bcopy(str, (char *)&wreq.wi_val[1], strlen(str));
 
 	wi_setval(iface, &wreq);
@@ -203,9 +394,6 @@ void wi_setbytes(iface, code, bytes, len)
 	int			len;
 {
 	struct wi_req		wreq;
-
-	if (iface == NULL)
-		errx(1, "must specify interface name");
 
 	bzero((char *)&wreq, sizeof(wreq));
 
@@ -225,14 +413,11 @@ void wi_setword(iface, code, word)
 {
 	struct wi_req		wreq;
 
-	if (iface == NULL)
-		errx(1, "must specify interface name");
-
 	bzero((char *)&wreq, sizeof(wreq));
 
 	wreq.wi_type = code;
 	wreq.wi_len = 2;
-	wreq.wi_val[0] = word;
+	wreq.wi_val[0] = htole16(word);
 
 	wi_setval(iface, &wreq);
 
@@ -246,108 +431,13 @@ void wi_sethex(iface, code, str)
 {
 	struct ether_addr	*addr;
 
-	if (iface == NULL)
-		errx(1, "must specify interface name");
-	if (str == NULL)
-		errx(1, "must specify address");
-
 	addr = ether_aton(str);
-
 	if (addr == NULL)
 		errx(1, "badly formatted address");
 
 	wi_setbytes(iface, code, (char *)addr, ETHER_ADDR_LEN);
 
 	return;
-}
-
-static int
-wi_hex2int(char c)
-{
-        if (c >= '0' && c <= '9')
-                return (c - '0');
-	if (c >= 'A' && c <= 'F')
-	        return (c - 'A' + 10);
-	if (c >= 'a' && c <= 'f')
-                return (c - 'a' + 10);
-
-	return (0); 
-}
-
-static void wi_str2key(s, k)
-        char                    *s;
-        struct wi_key           *k;
-{
-        int                     n, i;
-        char                    *p;
-
-        /* Is this a hex string? */
-        if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
-                /* Yes, convert to int. */
-                n = 0;
-                p = (char *)&k->wi_keydat[0];
-                for (i = 2; i < strlen(s); i+= 2) {
-                        *p++ = (wi_hex2int(s[i]) << 4) + wi_hex2int(s[i + 1]);
-                        n++;
-                }
-                k->wi_keylen = n;
-        } else {
-                /* No, just copy it in. */
-                bcopy(s, k->wi_keydat, strlen(s));
-                k->wi_keylen = strlen(s);
-        }
-
-        return;
-}
-
-static void wi_setkeys(iface, key, idx)
-        char                    *iface;
-        char                    *key;
-        int                     idx;
-{
-        struct wi_req           wreq;
-        struct wi_ltv_keys      *keys;
-        struct wi_key           *k;
-
-	if (iface == NULL)
-		errx(1, "must specify interface name");
-
-        bzero((char *)&wreq, sizeof(wreq));
-        wreq.wi_len = WI_MAX_DATALEN;
-        wreq.wi_type = WI_RID_WEP_AVAIL;
-
-        wi_getval(iface, &wreq);
-        if (wreq.wi_val[0] == 0)
-                err(1, "no WEP option available on this card");
-
-        bzero((char *)&wreq, sizeof(wreq));
-        wreq.wi_len = WI_MAX_DATALEN;
-        wreq.wi_type = WI_RID_DEFLT_CRYPT_KEYS;
-
-        wi_getval(iface, &wreq);
-        keys = (struct wi_ltv_keys *)&wreq;
-
-        if (key[0] == '0' && (key[1] == 'x' || key[1] == 'X')) {
-	        if (strlen(key) > 30)
-		        err(1, "encryption key must be no "
-			    "more than 28 hex digits long");
-	} else {
-	        if (strlen(key) > 14)
-		        err(1, "encryption key must be no "
-			    "more than 14 characters long");
-	}
-
-        if (idx > 3)
-                err(1, "only 4 encryption keys available");
-
-        k = &keys->wi_keys[idx];
-        wi_str2key(key, k);
-
-        wreq.wi_len = (sizeof(struct wi_ltv_keys) / 2) + 1;
-        wreq.wi_type = WI_RID_DEFLT_CRYPT_KEYS;
-        wi_setval(iface, &wreq);
-
-        return;
 }
 
 static void wi_printkeys(wreq)
@@ -363,8 +453,8 @@ static void wi_printkeys(wreq)
 	for (i = 0, bn = 0; i < 4; i++, bn = 0) {
                 k = &keys->wi_keys[i];
                 ptr = (char *)k->wi_keydat;
-                for (j = 0; j < k->wi_keylen; j++) {
-		        if (!isprint(ptr[j])) {
+                for (j = 0; j < le16toh(k->wi_keylen); j++) {
+		        if (!isprint((unsigned char) ptr[j])) {
 			        bn = 1;
 				break;
 			}
@@ -372,7 +462,7 @@ static void wi_printkeys(wreq)
 
 		if (bn)	{
 		        printf("[ 0x");
-		        for (j = 0; j < k->wi_keylen; j++)
+		        for (j = 0; j < le16toh(k->wi_keylen); j++)
 			      printf("%02x", ((unsigned char *) ptr)[j]);
 			printf(" ]");
 		} else {
@@ -384,6 +474,43 @@ static void wi_printkeys(wreq)
         return;
 };
 
+void wi_printvendor(wreq)
+	struct wi_req		*wreq;
+{
+	/* id
+	 * vendor
+	 * firmware major
+	 *          minor
+	 */
+#define WI_RID_STA_IDENTITY_LUCENT	0x1
+#define WI_RID_STA_IDENTITY_PRISMII	0x2
+#define WI_RID_STA_IDENTITY_SAMSUNG	0x3
+#define WI_RID_STA_IDENTITY_DLINK	0x6
+	
+	const char *vendor = "Unknown";
+
+	if (wreq->wi_len < 4)
+		return;
+
+	switch (le16toh(wreq->wi_val[1])) {
+	case WI_RID_STA_IDENTITY_LUCENT:
+		vendor = "Lucent";
+		break;
+	case WI_RID_STA_IDENTITY_PRISMII:
+		vendor = "generic PRISM II";
+		break;
+	case WI_RID_STA_IDENTITY_SAMSUNG:
+		vendor = "Samsung";
+		break;
+	case WI_RID_STA_IDENTITY_DLINK:
+		vendor = "D-Link";
+		break;
+	}
+	printf("[ %s ID: %d version: %d.%d ]", vendor, le16toh(wreq->wi_val[0]),
+	    le16toh(wreq->wi_val[2]), le16toh(wreq->wi_val[3]));
+	return;
+}	
+
 void wi_printwords(wreq)
 	struct wi_req		*wreq;
 {
@@ -391,7 +518,7 @@ void wi_printwords(wreq)
 
 	printf("[ ");
 	for (i = 0; i < wreq->wi_len - 1; i++)
-		printf("%d ", wreq->wi_val[i]);
+		printf("%d ", le16toh(wreq->wi_val[i]));
 	printf("]");
 
 	return;
@@ -400,7 +527,7 @@ void wi_printwords(wreq)
 void wi_printbool(wreq)
 	struct wi_req		*wreq;
 {
-	if (wreq->wi_val[0])
+	if (le16toh(wreq->wi_val[0]))
 		printf("[ On ]");
 	else
 		printf("[ Off ]");
@@ -427,48 +554,113 @@ void wi_printhex(wreq)
 	return;
 }
 
-#define WI_STRING		0x01
-#define WI_BOOL			0x02
-#define WI_WORDS		0x03
-#define WI_HEXBYTES		0x04
-#define WI_KEYSTRUCT            0x05
+void wi_printbits(wreq)
+	struct wi_req		*wreq;
+{
+	int			i;
+	int bits = le16toh(wreq->wi_val[0]);
 
-struct wi_table {
-	int			wi_code;
-	int			wi_type;
-	char			*wi_str;
-};
+	printf("[");
+	for (i = 0; i < 16; i++) {
+		if (bits & 0x1) {
+			printf(" %d", i+1);
+		}
+		bits >>= 1;
+	}
+	printf(" ]");
+	return;
+}
 
 static struct wi_table wi_table[] = {
 	{ WI_RID_SERIALNO, WI_STRING, "NIC serial number:\t\t\t" },
-	{ WI_RID_NODENAME, WI_STRING, "Station name:\t\t\t\t" },
+	{ WI_RID_NODENAME, WI_STRING, "Station name:\t\t\t\t",
+	    's', "station name" },
 	{ WI_RID_OWN_SSID, WI_STRING, "SSID for IBSS creation:\t\t\t" },
 	{ WI_RID_CURRENT_SSID, WI_STRING, "Current netname (SSID):\t\t\t" },
 	{ WI_RID_DESIRED_SSID, WI_STRING, "Desired netname (SSID):\t\t\t" },
 	{ WI_RID_CURRENT_BSSID, WI_HEXBYTES, "Current BSSID:\t\t\t\t" },
-	{ WI_RID_CHANNEL_LIST, WI_WORDS, "Channel list:\t\t\t\t" },
+	{ WI_RID_CHANNEL_LIST, WI_BITS, "Channel list:\t\t\t\t" },
 	{ WI_RID_OWN_CHNL, WI_WORDS, "IBSS channel:\t\t\t\t" },
 	{ WI_RID_CURRENT_CHAN, WI_WORDS, "Current channel:\t\t\t" },
 	{ WI_RID_COMMS_QUALITY, WI_WORDS, "Comms quality/signal/noise:\t\t" },
 	{ WI_RID_PROMISC, WI_BOOL, "Promiscuous mode:\t\t\t" },
-	{ WI_RID_PORTTYPE, WI_WORDS, "Port type (1=BSS, 3=ad-hoc):\t\t"},
-	{ WI_RID_MAC_NODE, WI_HEXBYTES, "MAC address:\t\t\t\t"},
-	{ WI_RID_TX_RATE, WI_WORDS, "TX rate (selection):\t\t\t"},
+	{ WI_RID_PORTTYPE, WI_WORDS, "Port type:\t\t\t\t" },
+	{ WI_RID_MAC_NODE, WI_HEXBYTES, "MAC address:\t\t\t\t",
+	    'm', "MAC address" },
+	{ WI_RID_TX_RATE, WI_WORDS, "TX rate (selection):\t\t\t" },
 	{ WI_RID_CUR_TX_RATE, WI_WORDS, "TX rate (actual speed):\t\t\t"},
-	{ WI_RID_RTS_THRESH, WI_WORDS, "RTS/CTS handshake threshold:\t\t"},
+	{ WI_RID_CUR_BEACON_INT, WI_WORDS, "Beacon Interval (current) [msec]:\t"},
+	{ WI_RID_MAX_DATALEN, WI_WORDS, "Maximum data length:\t\t\t",
+	    'd', "maximum data length" },
+	{ WI_RID_RTS_THRESH, WI_WORDS, "RTS/CTS handshake threshold:\t\t",
+	    'r', "RTS threshold" },
+	{ WI_RID_FRAG_THRESH, WI_WORDS, "fragmentation threshold:\t\t",
+	    'g', "fragmentation threshold" },
+	{ WI_RID_DBM_ADJUST, WI_WORDS, "RSSI -> dBm adjustment:\t\t\t" },
 	{ WI_RID_CREATE_IBSS, WI_BOOL, "Create IBSS:\t\t\t\t" },
-	{ WI_RID_SYSTEM_SCALE, WI_WORDS, "Access point density:\t\t\t" },
+	{ WI_RID_MICROWAVE_OVEN, WI_WORDS, "Microwave oven robustness:\t\t",
+	    'M', "microwave oven robustness enabled" },
+	{ WI_RID_ROAMING_MODE, WI_WORDS, "Roaming mode(1:firm,3:disable):\t\t",
+	    'R', "roaming mode" },
+	{ WI_RID_SYSTEM_SCALE, WI_WORDS, "Access point density:\t\t\t",
+	    'a', "system scale" },
 	{ WI_RID_PM_ENABLED, WI_WORDS, "Power Mgmt (1=on, 0=off):\t\t" },
-	{ WI_RID_MAX_SLEEP, WI_WORDS, "Max sleep time:\t\t\t\t" },
-	{ 0, NULL }
+	{ WI_RID_MAX_SLEEP, WI_WORDS, "Max sleep time (msec):\t\t\t" },
+ 	{ WI_RID_STA_IDENTITY, WI_VENDOR, "Vendor info:\t\t\t\t" },
+	{ 0, WI_NONE }
 };
 
 static struct wi_table wi_crypt_table[] = {
-        { WI_RID_ENCRYPTION, WI_BOOL, "WEP encryption:\t\t\t\t" },
+	{ WI_RID_ENCRYPTION, WI_BOOL, "WEP encryption:\t\t\t\t" },
+	{ WI_RID_CNFAUTHMODE, WI_WORDS, "Authentication type \n(1=OpenSys, 2=Shared Key):\t\t",
+	    'A', "authentication type" },
         { WI_RID_TX_CRYPT_KEY, WI_WORDS, "TX encryption key:\t\t\t" },
         { WI_RID_DEFLT_CRYPT_KEYS, WI_KEYSTRUCT, "Encryption keys:\t\t\t" },
-        { 0, NULL }
+	{ 0, WI_NONE }
 };
+
+static struct wi_table *wi_tables[] = {
+	wi_table,
+	wi_crypt_table,
+	NULL
+};
+
+static struct wi_table *
+wi_optlookup(table, opt)
+	struct wi_table *table;
+	int opt;
+{
+	struct wi_table *wt;
+
+	for (wt = table; wt->wi_type != 0; wt++)
+		if (wt->wi_opt == opt)
+			return (wt);
+	return (NULL);
+}
+
+static void wi_checkwifi(iface)
+	char			*iface;
+{
+	struct ifreq		ifr;
+	struct ieee80211_nwid	nwid;
+	int			s;
+
+	bzero((char *)&ifr, sizeof(ifr));
+
+	strncpy(ifr.ifr_name, iface, sizeof(ifr.ifr_name));
+	ifr.ifr_data = (void *)&nwid;
+
+	s = socket(AF_INET, SOCK_DGRAM, 0);
+
+	if (s == -1)
+		err(1, "socket");
+	
+	/* Choice of ioctl inspired by ifconfig/ieee80211.c */
+	if (ioctl(s, SIOCG80211NWID, &ifr) == -1)
+		err(1, "SIOCG80211NWID");
+
+	close(s);
+}
 
 static void wi_dumpinfo(iface)
 	char			*iface;
@@ -483,19 +675,22 @@ static void wi_dumpinfo(iface)
 	wreq.wi_type = WI_RID_WEP_AVAIL;
 
 	wi_getval(iface, &wreq);
-	has_wep = wreq.wi_val[0];
+	has_wep = le16toh(wreq.wi_val[0]);
 
 	w = wi_table;
 
-	for (i = 0; w[i].wi_type; i++) {
+	for (i = 0; w[i].wi_code != WI_NONE; i++) {
 		bzero((char *)&wreq, sizeof(wreq));
 
 		wreq.wi_len = WI_MAX_DATALEN;
-		wreq.wi_type = w[i].wi_code;
+		wreq.wi_type = w[i].wi_type;
 
-		wi_getval(iface, &wreq);
-		printf("%s", w[i].wi_str);
-		switch (w[i].wi_type) {
+		printf("%s", w[i].wi_label);
+		if (wi_getval(iface, &wreq)) {
+			printf("[ Unknown ]\n");
+			continue;
+		}
+		switch (w[i].wi_code) {
 		case WI_STRING:
 			wi_printstr(&wreq);
 			break;
@@ -508,6 +703,12 @@ static void wi_dumpinfo(iface)
 		case WI_HEXBYTES:
 			wi_printhex(&wreq);
 			break;
+		case WI_BITS:
+			wi_printbits(&wreq);
+			break;
+		case WI_VENDOR:
+			wi_printvendor(&wreq);
+			break;
 		default:
 			break;
 		}	
@@ -516,21 +717,22 @@ static void wi_dumpinfo(iface)
 
 	if (has_wep) {
 		w = wi_crypt_table;
-		for (i = 0; w[i].wi_type; i++) {
+		for (i = 0; w[i].wi_code != WI_NONE; i++) {
 			bzero((char *)&wreq, sizeof(wreq));
 
 			wreq.wi_len = WI_MAX_DATALEN;
-			wreq.wi_type = w[i].wi_code;
+			wreq.wi_type = w[i].wi_type;
 
 			wi_getval(iface, &wreq);
-			printf("%s", w[i].wi_str);
-			switch (w[i].wi_type) {
+			printf("%s", w[i].wi_label);
+			switch (w[i].wi_code) {
 			case WI_STRING:
 				wi_printstr(&wreq);
 				break;
 			case WI_WORDS:
 				if (wreq.wi_type == WI_RID_TX_CRYPT_KEY)
-					wreq.wi_val[0]++;
+					wreq.wi_val[0] =
+					  htole16(le16toh(wreq.wi_val[0]) + 1);
 				wi_printwords(&wreq);
 				break;
 			case WI_BOOL:
@@ -558,9 +760,6 @@ static void wi_dumpstats(iface)
 	struct wi_req		wreq;
 	struct wi_counters	*c;
 
-	if (iface == NULL)
-		errx(1, "must specify interface name");
-
 	bzero((char *)&wreq, sizeof(wreq));
 	wreq.wi_len = WI_MAX_DATALEN;
 	wreq.wi_type = WI_RID_IFACE_STATS;
@@ -569,6 +768,7 @@ static void wi_dumpstats(iface)
 
 	c = (struct wi_counters *)&wreq.wi_val;
 
+	/* XXX native byte order */
 	printf("Transmitted unicast frames:\t\t%d\n",
 	    c->wi_tx_unicast_frames);
 	printf("Transmitted multicast frames:\t\t%d\n",
@@ -613,16 +813,16 @@ static void wi_dumpstats(iface)
 	return;
 }
 
-static void usage(p)
-	char			*p;
+static void
+usage()
 {
+
 	fprintf(stderr,
-	    "usage: wiconfig interface "
-	    "[-o] [-t tx rate] [-n network name] [-s station name]\n"
-	    "       [-e 0|1] [-k key [-v 1|2|3|4]] [-T 1|2|3|4]\n"
-	    "       [-c 0|1] [-q SSID] [-p port type] [-a access point density]\n"
-	    "       [-m MAC address] [-d max data length] [-r RTS threshold]\n"
-	    "       [-f frequency] [-P 0|1] [-S max sleep duration]\n");
+	    "usage: %s interface [-Dho] [-A 1|2] [-a access point density]\n"
+	    "                [-d max data length] [-g fragmentation threshold] [-M 0|1]\n"
+	    "                [-m MAC address] [-R 1|3] [-r RTS threshold] [-s station name]\n"
+	    ,
+	    getprogname());
 	exit(1);
 }
 
@@ -630,107 +830,99 @@ int main(argc, argv)
 	int			argc;
 	char			*argv[];
 {
-	int			ch;
-	char			*iface = NULL;
-	char			*p = argv[0];
-	char                    *key = NULL;
-	int                     modifier = 0;
+	struct wi_table *wt, **table;
+	char *iface;
+	int ch, dumpinfo, dumpstats, apscan;
+
+#define	SET_OPERAND(opr, desc) do {				\
+	if ((opr) == NULL)					\
+		(opr) = optarg;					\
+	else							\
+		warnx("%s is already specified to %s",		\
+		    desc, (opr));				\
+} while (0)
+
+	dumpinfo = 1;
+	dumpstats = 0;
+	apscan = 0;
+	iface = NULL;
 
 	if (argc > 1 && argv[1][0] != '-') {
 		iface = argv[1];
-		memcpy(&argv[1], &argv[2], argc * sizeof(char *));
-		argc--;
+		optind++;
 	}
 
 	while ((ch = getopt(argc, argv,
-	    "hoc:d:f:p:r:q:t:n:s:i:m:P:S:T:e:k:v:")) != -1) {
-		switch (ch) {
-		case 'o':
-			wi_dumpstats(iface);
-			exit(0);
-			break;
-		case 'i':
-			if (iface == NULL)
-				iface = optarg;
-			break;
-		case 'c':
-			wi_setword(iface, WI_RID_CREATE_IBSS, atoi(optarg));
-			exit(0);
-			break;
-		case 'd':
-			wi_setword(iface, WI_RID_MAX_DATALEN, atoi(optarg));
-			exit(0);
-			break;
-		case 'f':
-			wi_setword(iface, WI_RID_OWN_CHNL, atoi(optarg));
-			exit(0);
-			break;
-		case 'p':
-			wi_setword(iface, WI_RID_PORTTYPE, atoi(optarg));
-			exit(0);
-			break;
-		case 'r':
-			wi_setword(iface, WI_RID_RTS_THRESH, atoi(optarg));
-			exit(0);
-			break;
-		case 't':
-			wi_setword(iface, WI_RID_TX_RATE, atoi(optarg));
-			exit(0);
-			break;
-		case 'n':
-			wi_setstr(iface, WI_RID_DESIRED_SSID, optarg);
-			exit(0);
-			break;
-		case 's':
-			wi_setstr(iface, WI_RID_NODENAME, optarg);
-			exit(0);
-			break;
-		case 'm':
-			wi_sethex(iface, WI_RID_MAC_NODE, optarg);
-			exit(0);
-			break;
-		case 'q':
-			wi_setstr(iface, WI_RID_OWN_SSID, optarg);
-			exit(0);
-			break;
-		case 'S':
-			wi_setword(iface, WI_RID_MAX_SLEEP, atoi(optarg));
-			exit(0);
-			break;
-		case 'P':
-			wi_setword(iface, WI_RID_PM_ENABLED, atoi(optarg));
-			exit(0);
-			break;
-		case 'T':
-			wi_setword(iface, WI_RID_TX_CRYPT_KEY,
-				   atoi(optarg) - 1);
-			exit(0);
-			break;
-		case 'k':
-		        key = optarg;
-			break;
-		case 'e':
-		        wi_setword(iface, WI_RID_ENCRYPTION, atoi(optarg));
-			exit(0);
-			break;
-		case 'v':
-		        modifier = atoi(optarg);
-			modifier--;
-			break;
-		case 'h':
-		default:
-			usage(p);
-			break;
-		}
+	    "a:d:g:hi:m:or:s:A:M:R:D")) != -1) {
+		if (ch != 'i')
+			dumpinfo = 0;
+		/*
+		 * Lookup generic options and remember operand if found.
+		 */
+		wt = NULL;	/* XXXGCC -Wuninitialized */
+		for (table = wi_tables; *table != NULL; table++)
+			if ((wt = wi_optlookup(*table, ch)) != NULL) {
+				SET_OPERAND(wt->wi_optval, wt->wi_desc);
+				break;
+			}
+		if (wt == NULL)
+			/*
+			 * Handle special options.
+			 */
+			switch (ch) {
+			case 'o':
+				dumpstats = 1;
+				break;
+			case 'i':
+				SET_OPERAND(iface, "interface");
+				break;
+			case 'D':
+				apscan = 1;
+				break;
+			case 'h':
+			default:
+				usage();
+				break;
+			}
 	}
 
 	if (iface == NULL)
-		usage(p);
+		usage();
 
-	if (key != NULL)
-	        wi_setkeys(iface, key, modifier);
+	/* Check interface is wireless. Will not return on error */
+	wi_checkwifi(iface);
+	
+	for (table = wi_tables; *table != NULL; table++)
+		for (wt = *table; wt->wi_code != WI_NONE; wt++)
+			if (wt->wi_optval != NULL) {
+				switch (wt->wi_code) {
+				case WI_BOOL:
+				case WI_WORDS:
+					wi_setword(iface, wt->wi_type,
+					    atoi(wt->wi_optval));
+					break;
+				case WI_STRING:
+					wi_setstr(iface, wt->wi_type,
+					    wt->wi_optval);
+					break;
+				case WI_HEXBYTES:
+					wi_sethex(iface, wt->wi_type,
+					    wt->wi_optval);
+					break;
+				}
+			}
 
-	wi_dumpinfo(iface);
+	if (dumpstats)
+		wi_dumpstats(iface);
+	if (dumpinfo)
+		wi_dumpinfo(iface);
+
+	if (apscan)
+#ifdef WI_RID_SCAN_APS
+		wi_apscan(iface);
+#else
+		errx(1, "AP scan mode is not available.");
+#endif
 
 	exit(0);
 }

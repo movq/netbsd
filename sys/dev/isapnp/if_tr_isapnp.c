@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tr_isapnp.c,v 1.3 1999/04/29 15:47:03 bad Exp $	*/
+/*	$NetBSD: if_tr_isapnp.c,v 1.18 2008/04/28 20:23:53 martin Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by The NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its 
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,14 +29,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "opt_inet.h"
-#include "opt_ns.h"
-#include "bpfilter.h" 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_tr_isapnp.c,v 1.18 2008/04/28 20:23:53 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/mbuf.h> 
-#include <sys/socket.h> 
+#include <sys/callout.h>
+#include <sys/mbuf.h>
+#include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 #include <sys/syslog.h>
@@ -55,26 +48,9 @@
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/in_var.h>
-#include <netinet/ip.h> 
-#endif
-
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
-#endif
-
-#include <machine/cpu.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/ic/tropicreg.h>
 #include <dev/ic/tropicvar.h>
@@ -85,18 +61,15 @@
 #include <dev/isapnp/isapnpvar.h>
 #include <dev/isapnp/isapnpdevs.h>
 
-int	tr_isapnp_match __P((struct device *, struct cfdata *, void *));
-void	tr_isapnp_attach __P((struct device *, struct device *, void *));
+int	tr_isapnp_match(struct device *, struct cfdata *, void *);
+void	tr_isapnp_attach(struct device *, struct device *, void *);
 
-struct cfattach tr_isapnp_ca = {
-	sizeof(struct tr_softc), tr_isapnp_match, tr_isapnp_attach
-};
+CFATTACH_DECL(tr_isapnp, sizeof(struct tr_softc),
+    tr_isapnp_match, tr_isapnp_attach, NULL, NULL);
 
 int
-tr_isapnp_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+tr_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -108,22 +81,21 @@ tr_isapnp_match(parent, match, aux)
 
 
 void
-tr_isapnp_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+tr_isapnp_attach(struct device *parent, struct device *self,
+    void *aux)
 {
-	struct tr_softc *sc = (void *)self;
+	struct tr_softc *sc = device_private(self);
 	struct isapnp_attach_args *ipa = aux;
 	int mmioidx, sramidx;
 
 	printf("\n");
 
 	if (isapnp_config(ipa->ipa_iot, ipa->ipa_memt, ipa)) {
-		printf("%s: error in region allocation\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "error in region allocation\n");
 		return;
 	}
 
-	printf("%s: %s %s", sc->sc_dev.dv_xname, ipa->ipa_devident,
+	printf("%s: %s %s\n", device_xname(&sc->sc_dev), ipa->ipa_devident,
 	    ipa->ipa_devclass);
 
 	sc->sc_piot = ipa->ipa_iot;
@@ -150,7 +122,7 @@ tr_isapnp_attach(parent, self, aux)
 
 	sc->sc_aca = TR_ACA_OFFSET;
 	sc->sc_maddr = ipa->ipa_mem[sramidx].base;
-	/* 
+	/*
 	 * Reset the card.
 	 */
 	if (tr_reset(sc))

@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.1 1999/03/18 17:18:05 perseant Exp $	*/
+/*	$NetBSD: extern.h,v 1.12 2008/02/16 17:58:43 matt Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,15 +33,12 @@
 
 struct dlfs;
 
-u_long  lfs_sb_cksum __P((struct dlfs *));
-u_long	cksum __P((void *, size_t));
-u_short	dkcksum __P((struct disklabel *));
-void	fatal __P((const char *fmt, ...));
-u_int	log2 __P((u_int));
-int	make_lfs
-	    __P((int, struct disklabel *, struct partition *, int,
-		int, int, int));
-int	mkfs __P((struct partition *, char *, int, int));
+uint32_t lfs_sb_cksum(struct dlfs *);
+void	fatal(const char *fmt, ...)
+     __attribute__((__format__(__printf__,1,2)));
+u_int	lfs_log2(u_int);
+int	make_lfs(int, uint, struct dkwedge_info *, int,
+    int, int, int, int, int, int, daddr_t, int, int, u_int32_t);
 
 extern char	*progname;
 extern char	*special;

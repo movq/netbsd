@@ -1,30 +1,31 @@
 #!/bin/sh
 #
-# $NetBSD: ipnat,v 1.2 2000/03/12 03:49:36 thorpej Exp $
+# $NetBSD: ipnat,v 1.13 2004/10/12 14:51:03 lukem Exp $
 #
 
 # PROVIDE: ipnat
-# REQUIRE: ipfilter
+# REQUIRE: ipfilter mountcritremote
+# BEFORE:  SERVERS
 
-. /etc/rc.subr
-. /etc/rc.conf
+$_rc_subr_loaded . /etc/rc.subr
 
 name="ipnat"
+rcvar=$name
 config="/etc/ipnat.conf"
-
-start_precmd="checkyesno ipnat"
 start_cmd="ipnat_start"
-
-stop_precmd=$start_precmd
 stop_cmd="/usr/sbin/ipnat -F -C"
-
-reload_precmd=$start_precmd
-reload_cmd="/usr/sbin/ipnat -F -C -f ${config}"
+reload_cmd="/usr/sbin/ipnat -C -f ${config}"
+restart_cmd="/usr/sbin/ipnat -F -C -f ${config}"
+extra_commands="reload"
 
 ipnat_start()
 {
 	if [ ! -f ${config} ]; then
 		return 0
+	fi
+	if [ "$(/sbin/sysctl -n net.inet.ip.forwarding)" = "0" ]; then
+		logger -s -p daemon.warning -t ipnat \
+			"WARNING: net.inet.ip.forwarding is 0"
 	fi
 	if ! checkyesno ipfilter || [ ! -f /etc/ipf.conf ]; then
 		echo "Enabling ipfilter for NAT."
@@ -34,4 +35,6 @@ ipnat_start()
 	/usr/sbin/ipnat -F -f ${config}
 }
 
-run_rc_command "$1" "reload"
+load_rc_config $name
+load_rc_config_var ipfilter ipfilter
+run_rc_command "$1"

@@ -1,32 +1,48 @@
-#	$NetBSD: Makefile,v 1.12 1999/10/20 15:09:58 hubertf Exp $
+#	$NetBSD: Makefile,v 1.25 2008/10/25 22:23:55 apb Exp $
 
-CPPFLAGS+=	-DHAVE_CONFIG_H -I.
+.include <bsd.own.mk>
+
+CPPFLAGS+=	-I.
 
 PROG=	ksh
 SRCS=	alloc.c c_ksh.c c_sh.c c_test.c c_ulimit.c edit.c emacs.c \
 	eval.c exec.c expr.c history.c io.c jobs.c lex.c mail.c \
 	main.c misc.c path.c shf.c sigact.c syn.c table.c trap.c \
 	tree.c tty.c var.c version.c vi.c
-DPSRCS=	emacs.out siglist.out ksh.1
+DPSRCS=	emacs.out siglist.out
+.if (${MKMAN} != "no")
+DPSRCS+=ksh.1
+.endif
 
 # needs tbl for the man page.
 USETBL= 
 
+# Environment for scripts executed during build.
+SCRIPT_ENV= \
+	AWK=${TOOL_AWK:Q} \
+	SED=${TOOL_SED:Q}
+
+CLEANFILES+=	siglist.out siglist.out.tmp
 # two steps to prevent the creation of a bogus siglist.out
 siglist.out: config.h sh.h siglist.in siglist.sh
-	sh $(.CURDIR)/siglist.sh "$(CPP) $(CPPFLAGS) $(DEFS) -I. -I$(.CURDIR)" < $(.CURDIR)/siglist.in > tmpsiglist.out
-	mv tmpsiglist.out siglist.out
+	${_MKTARGET_CREATE}
+	${SCRIPT_ENV} \
+	${HOST_SH} $(.CURDIR)/siglist.sh "$(CC) -E $(CPPFLAGS) $(DEFS) -I. -I$(.CURDIR)" < $(.CURDIR)/siglist.in > siglist.out.tmp \
+	    && mv siglist.out.tmp siglist.out
 
 # two steps to prevent the creation of a bogus emacs.out
+CLEANFILES+=	emacs.out emacs.out.tmp
 emacs.out: emacs.c
-	sh $(.CURDIR)/emacs-gen.sh $(.CURDIR)/emacs.c > tmpemacs.out
-	mv tmpemacs.out emacs.out
+	${_MKTARGET_CREATE}
+	${SCRIPT_ENV} \
+	${HOST_SH} $(.CURDIR)/emacs-gen.sh $(.CURDIR)/emacs.c > emacs.out.tmp \
+	    && mv emacs.out.tmp emacs.out
 
+CLEANFILES+=	ksh.1 ksh.1.tmp
 ksh.1: ksh.Man mkman
-	sh $(.CURDIR)/mkman ksh $(.CURDIR)/ksh.Man >tmpksh.1
-	mv tmpksh.1 ksh.1
-
-emacs.o:	emacs.out
-trap.o:		siglist.out
+	${_MKTARGET_CREATE}
+	${SCRIPT_ENV} \
+	${HOST_SH} $(.CURDIR)/mkman ksh $(.CURDIR)/ksh.Man >ksh.1.tmp \
+	    && mv ksh.1.tmp ksh.1
 
 .include <bsd.prog.mk>

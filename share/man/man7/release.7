@@ -1,6 +1,6 @@
-.\"	$NetBSD: release.7,v 1.7 1999/05/10 19:34:22 is Exp $
+.\"	$NetBSD: release.7,v 1.25 2008/04/30 13:10:57 martin Exp $
 .\"
-.\" Copyright (c) 1997 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1997, 2000, 2005 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd November 18, 1997
+.Dd August 30, 2007
 .Dt RELEASE 7
 .Os
 .Sh NAME
@@ -48,15 +41,15 @@ This layout should be consistent between FTP servers and CD-ROMs,
 except possibly the path that leads to the release hierarchy.
 .Pp
 In this document, the following special words have these definitions:
-.Bl -tag -width "<machine_arch>"
-.It Em <machine>
+.Bl -tag -width "\*[Lt]machine_arch\*[Gt]"
+.It Em \*[Lt]machine\*[Gt]
 The platform for which the release was built, corresponding to the
 .Em hw.machine
 sysctl variable, e.g.
 .Em i386
 or
 .Em amiga .
-.It Em <machine_arch>
+.It Em \*[Lt]machine_arch\*[Gt]
 The architecture for which a particular installation set was built,
 corresponding to the
 .Em hw.machine_arch
@@ -64,7 +57,7 @@ sysctl variable, e.g.
 .Em i386
 or
 .Em m68k .
-.It Em <rel>
+.It Em \*[Lt]rel\*[Gt]
 The target release.
 .El
 .Pp
@@ -73,6 +66,14 @@ All
 files are descriptions of the various files in directories that have
 .Dq non-standard
 contents.
+There may also be a
+.Sy README
+file at the top-level,
+describing who built the snapshot and under what circumstances
+.Po e.g. whether it's an official
+.Nx
+snapshot, or not
+.Pc .
 .Pp
 All
 .Sy BSDSUM
@@ -80,19 +81,19 @@ files are historic
 .Bx
 checksums for the various files in that directory,
 in the format produced by the command:
-.Sy cksum -o 1 <file> .
+.Sy cksum -o 1 \*[Lt]file\*[Gt] .
 .Pp
 All
 .Sy CKSUM
 files are POSIX checksums for the various files in that directory, in the
 format produced by the command:
-.Sy cksum <file> .
+.Sy cksum \*[Lt]file\*[Gt] .
 .Pp
 All
 .Sy MD5
 files are MD5 digests for the various files in that directory, in the
 format produced by the command:
-.Sy cksum -m <file> .
+.Sy cksum -m \*[Lt]file\*[Gt] .
 .Pp
 All
 .Sy SYSVSUM
@@ -100,7 +101,7 @@ files are historic
 .At V
 checksums for the various files in
 that directory, in the format produced by the command:
-.Sy cksum -o 2 <file> .
+.Sy cksum -o 2 \*[Lt]file\*[Gt] .
 .Pp
 The MD5 digest is the safest checksum, followed by the POSIX checksum.
 The other two checksums are provided only to ensure that the widest possible
@@ -126,61 +127,193 @@ include the leading
 All compression of release files is to be performed with the command:
 .Sy gzip -9 .
 .Pp
-The root of the release hierarchy is
+The root of the release hierarchy may be the root directory of a
+CD-ROM, but in all other cases it should be
 .Sm off
 .Xo
 .Sy .../NetBSD-
-.Em <rel>
-.Sy /
-.Em <machine>
+.Em \*[Lt]rel\*[Gt]
 .Sy / .
 .Xc
 .Sm on
-For files which may be shared by all systems of the same
-.Em <machine_arch> ,
-(e.g. the
-.Sy games
-and
-.Sy xbase
-sets for m68k-based platforms), this hierarchy will have a second root of
+.Pp
+The root of the release hierarchy should contain the following
+files and subdirectories:
+.Pp
+.Bl -tag -width "\*[Lt]machine\*[Gt]"
+.
+.It Sy SOURCE_DATE
+A file containing the date, in UTC, of the source code from which the
+release or snapshot was built, in the default format produced by the
+command:
+.Sy date -u .
+.
+.It Sy iso/
+CDROM images in ISO 9660 format, usually created with
+.Dq ./build.sh ... iso-image ...
+after a
+.Dq ./build.sh -x ... release ...
+in
+.Pa src
+or created with
+.Dq ./build.sh ... iso-image-source ...
+after a
+.Dq ./build.sh -x ... release sourcesets ...
+in
+.Pa src .
+.Pp
+Images in this directory, unlike images in the
 .Sm off
 .Xo
 .Sy .../NetBSD-
-.Em <rel>
+.Em \*[Lt]rel\*[Gt]
 .Sy /
-.Em <machine_arch>
+.Em \*[Lt]machine\*[Gt]
+.Sy /installation/cdrom/
+.Xc
+.Sm on
+directory, should contain file systems that
+have an internal layout that corresponds to
+a complete release for one or more machine types.
+If built with
+.Dq iso-image-source ,
+then it will also contain a
+.Dq source
+directory.
+These images are usually bootable.
+.Bl -tag -width "\*[Lt]machine_arch\*[Gt]cd.iso"
+.It Sy BSDSUM
+.It Sy CKSUM
+.It Sy MD5
+.It Sy README
+.It Sy SYSVSUM
+.Sm off
+.It Xo
+.Em \*[Lt]machine_arch\*[Gt]
+.Sy cd.iso
+.Xc
+.Sm on
+.El
+.
+.It Sy shared/
+Files shared by two or more machine types.
+.Bl -tag -width "\*[Lt]machine_arch\*[Gt]"
+.It Em \*[Lt]machine_arch\*[Gt] Ns Pa /
+Files which may be shared by all systems of the same
+.Em \*[Lt]machine_arch\*[Gt]
+will be located in
+.Sm off
+.Xo
+.Sy .../NetBSD-
+.Em \*[Lt]rel\*[Gt]
+.Sy /shared/
+.Em \*[Lt]machine_arch\*[Gt]
 .Sy /
 .Xc
 .Sm on
-which will contain those files.  For files which are completely
-machine-independent (e.g. the
-.Sy xfont
-set), this hierarchy will have a third root of
-.Sy .../NetBSD- Ns Em <rel> Ns Sy /mi/
-which will contain those files.
-Unless otherwise noted, all files may be symbolic links to common
-.Em <machine_arch>
-or machine-independent files located in their respective directory
-hierarchies.
+with symbolic links pointing to these files from the
+.Em \*[Lt]machine\*[Gt]
+subdirectory.
+.It Sy ALL/
+Files which are completely machine-independent will be
+located in
+.Sy .../NetBSD- Ns Em \*[Lt]rel\*[Gt] Ns Sy /shared/ALL/
+with symbolic links pointing to these files from the
+.Em \*[Lt]machine\*[Gt]
+subdirectory.
+.El
+.
+.It Sy source/
+Source codes of the operating system and patches for it
+should be put into
+.Sy .../NetBSD- Ns Em \*[Lt]rel\*[Gt] Ns Sy /source/
+using the following layout:
+.Pp
+.Bl -tag -width "patches/"
+.It Sy patches/
+This directory contains various patch files appropriate for
+.Xr patch 1 .
+Other patches may exist for fixing critical problems.
+.Bl -tag -width "diff-1.4.1-to-1.4.2.gz"
+.It Sy BSDSUM
+.It Sy CKSUM
+.It Sy MD5
+.It Sy README
+.It Sy SYSVSUM
+.It Xo
+.Sm off
+.Sy diff-
+.Em \*[Lt]lastrel\*[Gt]
+.Sy -
+.Em \*[Lt]rel\*[Gt]
+.Sy .gz
+.Sm on
+.Xc
+Diff against the last release, usually generated by
+.Ic cvs rdiff .
+For patch releases, diffs against the last release
+are included.  If the last release was a patch release itself, the
+diff is against that patch release is included.
+.El
+.It Sy sets/
+Sources for the various system sets, based on their modules
+in the CVS server.
+.\" XXX how are these generated? Separate checkout of each module?
+.Bl -tag -width "sharesrc.tgz"
+.It Sy BSDSUM
+.It Sy CKSUM
+.It Sy MD5
+.It Sy README
+.It Sy SYSVSUM
+.It Sy gnusrc.tgz
+Contains sources for all GPLed and possibly other programs that
+contains restrictions in their licensing that prevent others from
+using these programs in closed-source environments.
+.It Sy pkgsrc.tgz
+Package-sources for third party software ready to compile. See
+pkgsrc/README for more information.
+.It Sy sharesrc.tgz
+Contains machine-independent data files that can be shared across
+architectures/systems.
+.It Sy src.tgz
+The operating system's userland source code, including all programs,
+tools, toolchain, etc.
+.It Sy syssrc.tgz
+Kernel sources for all architectures plus sources of the tools needed
+to build kernels (like
+.Xr config 1 ) .
+.It Sy xsrc.tgz
+Source code of the X Window System used on all NetBSD architectures.
+Includes X clients and servers.
+.El
+.El
+.
+.It Em \*[Lt]machine\*[Gt] Ns Pa /
+The binary releases in
+.Sm off
+.Xo
+.Sy .../NetBSD-
+.Em \*[Lt]rel\*[Gt]
+.Sy /
+.Em \*[Lt]machine\*[Gt]
+.Sy /
+.Xc
+.Sm on
+follow the following layout:
 .Bl -tag -width "installation/"
-.It Sy SOURCE_DATE
-a file containing the date, in UTC, of the source code from which the
-release or snapshot was built, in the default format produced by the
-command:
-.Sy date -u
 .It Sy INSTALL.txt
 Installation notes, including complete descriptions of files contained
 within the release hierarchy
 .It Sy INSTALL.more
 pretty version of this, suited for viewing with
-.Xr more 1 
+.Xr more 1
 .It Sy INSTALL.html
 HTML version of this
 .It Sy INSTALL.ps
 PostScript version of this
 .It Sy binary/
 system binaries
-.Bl -tag -width "security/"
+.Bl -tag -width "SYSVSUM/"
 .It Sy sets/
 installation sets
 .Bl -tag -width "xcontrib.tgz"
@@ -188,26 +321,12 @@ installation sets
 .It Sy CKSUM
 .It Sy MD5
 .It Sy SYSVSUM
-.It Sy Split/
-installation sets split with the
-.Xr split 1
-command.
-.Em "Note: split installation sets may not be available for all platforms" .
-.Bl -tag -width "base.aa"
-.It Sy BSDSUM
-.It Sy CKSUM
-.It Sy MD5
-.It Sy SYSVSUM
-.It Sy base.aa
-.It Sy base.ab
-.It Sy ...
-.El
 .It Sy base.tgz
 The base binary distribution.  This set contains the base
 .Nx
 utilities that are necessary for the system to run and be minimally
 functional.  It includes shared libraries for those architectures that
-support support them.  This set excludes all things listed in the sets
+support them.  This set excludes all things listed in the sets
 described below.
 .It Sy comp.tgz
 The compiler tools distribution.  This set contains the C and C++
@@ -252,7 +371,7 @@ sources.
 .It Sy xfont.tgz
 This set includes the X11 fonts.
 .It Sy xserver.tgz
-This set includes the X servers and manual pages for <machine>.
+This set includes the X servers and manual pages for \*[Lt]machine\*[Gt].
 .Em "Note: this set may not be available on some platforms" .
 .El
 .It Sy kernel/
@@ -269,39 +388,35 @@ A kernel built from the
 kernel configuration file.  This is meant as an example only; different
 platforms may have differently named kernels.
 .El
-.It Sy security/
-security-related system binaries
-.Bl -tag -width "secr.tgz"
-.It Sy BSDSUM
-.It Sy CKSUM
-.It Sy MD5
-.It Sy SYSVSUM
-.It Sy Split/
-.Bl -tag -width "secr.aa"
-.It Sy BSDSUM
-.It Sy CKSUM
-.It Sy MD5
-.It Sy SYSVSUM
-.It Sy secr.aa
-.It Sy secr.ab
-.It Sy ...
-.El
-.It Sy secr.tgz
-This set contains executables which are built from the
-.Dq Pa src/domestic
-portion of the
-.Nx
-source tree.  It can only be found on those sites
-which carry the complete
-.Nx
-distribution and can legally obtain it.
-(Remember, because of United States law, it may not be legal to distribute
-this set to locations outside the United States and Canada.)
-.El
 .El
 .It Sy installation/
 installation helper items
 .Bl -tag -width "diskimage/"
+.It Sy cdrom/
+CDROM images in ISO 9660 format, usually created as part of
+.Dq build.sh ... release ...
+in
+.Pa src .
+.Pp
+Images in this directory will typically be bootable,
+and will contain one or more of a kernel, installation tools,
+and rescue tools.
+They will not contain installation sets, source sets, or
+other components of a complete release.
+.Bl -tag -width "netbsd-ARCH.iso"
+.It Sy BSDSUM
+.It Sy CKSUM
+.It Sy MD5
+.It Sy README
+.It Sy SYSVSUM
+.It Xo
+.Sm off
+.Sy netbsd-
+.Em \*[Lt]machine_arch\*[Gt]
+.Sy .iso
+.Sm on
+.Xc
+.El
 .It Sy diskimage/
 disk images, for those platforms that provide them
 .Bl -tag -width "diskimage-rz25.gz"
@@ -363,6 +478,7 @@ tape images, for those platforms that provide them
 .It Sy README
 .It Sy SYSVSUM
 .It Sy tapeimage-hp9144.gz
+.El
 .El
 .El
 .El

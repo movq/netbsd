@@ -1,4 +1,4 @@
-.\"	$NetBSD: title.cdrom,v 1.2 1998/01/09 08:04:06 perry Exp $
+.\" $NetBSD: title.cdrom,v 1.6 2003/10/13 14:34:25 agc Exp $
 .\"
 .\" Copyright (c) 1994 Regents of the University of California.
 .\" All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -402,7 +398,7 @@ l l.
 386 device drivers	Don Ahn, Sean Fagan and Tim Tucker
 HCX device drivers	Harris Corporation
 Kernel enhancements	Robert Elz, Peter Ivanov, Ian Johnstone, Piers Lauder,
-	John Lions, Tim Long, Chris Maltby, Greg Rose and John Wainwright 
+	John Lions, Tim Long, Chris Maltby, Greg Rose and John Wainwright
 ISO-9660 filesystem	Pace Willisson, Atsushi Murai
 .TE
 .sp -0.4
@@ -424,7 +420,7 @@ backgammon(6)	Alan Char	mille(6)	Ken Arnold
 banner(1)	Mark Horton	mknod(8)	Kevin Fall
 battlestar(6)	David Riggle	monop(6)	Ken Arnold
 bcd(6)	Steve Hayman	more(1)	Eric Shienbrood
-bdes(1)	Matt Bishop	more(1)	Mark Nudleman
+bdes(1)	Matt Bishop	more(1)	Mark Nudelman
 berknet(1)	Eric Schmidt	mountd(8)	Herb Hasler
 bib(1)	Dain Samples	mprof(1)	Ben Zorn
 bib(1)	Gary M. Levin	msgs(1)	David Wasley
@@ -598,7 +594,7 @@ standards compliant.
 4.4BSD-Lite Features
 .PP
 The major new facilities available in the 4.4BSD-Lite release are
-a new virtual memory system, 
+a new virtual memory system,
 the addition of ISO/OSI networking support,
 a new virtual filesystem interface supporting filesystem stacking,
 a freely redistributable implementation of NFS,
@@ -753,7 +749,7 @@ We have also added a memory-based filesystem that runs in
 pageable memory, allowing large temporary filesystems without
 requiring dedicated physical memory.
 .PP
-The local ``fast filesystem'' has been enhanced to do 
+The local ``fast filesystem'' has been enhanced to do
 clustering which allows large pieces of files to be
 allocated contiguously resulting in near doubling
 of filesystem throughput.
@@ -1072,7 +1068,7 @@ to keep them from contaminating
 the more staid information of URM section 1.
 .LP
 Miscellaneous collection of information necessary for
-writing in various specialized languages such as character codes, 
+writing in various specialized languages such as character codes,
 macro packages for typesetting, etc is contained in URM section 7.
 .LP
 System calls are entries into the BSD kernel.
@@ -1113,7 +1109,7 @@ The name of the entry is in the upper corners of its pages,
 together with the section number.
 Entries within each section are alphabetized.
 The page numbers of each entry start at 1;
-it is infeasible to number consecutively the pages of 
+it is infeasible to number consecutively the pages of
 a document like this that is republished in many variant forms.
 .LP
 All entries are based on a common format;

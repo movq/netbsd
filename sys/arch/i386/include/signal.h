@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.h,v 1.14 1998/09/14 02:50:12 thorpej Exp $	*/
+/*	$NetBSD: signal.h,v 1.27 2005/01/20 20:55:55 drochner Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991 Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,29 @@
 #ifndef _I386_SIGNAL_H_
 #define _I386_SIGNAL_H_
 
+#include <sys/featuretest.h>
+
 typedef int sig_atomic_t;
 
-#if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) && \
-    !defined(_XOPEN_SOURCE)
+#ifdef _KERNEL
+#ifdef _KERNEL_OPT
+#include "opt_compat_netbsd.h"
+#include "opt_compat_ibcs2.h"
+#endif
+#ifdef COMPAT_16
+#define SIGTRAMP_VALID(vers)	((unsigned)(vers) <= 2)
+#else
+#define SIGTRAMP_VALID(vers)	((vers) == 2)
+#endif
+#endif
+
+#if defined(_NETBSD_SOURCE)
 /*
  * Get the "code" values
  */
 #include <machine/trap.h>
 
+#if defined(_KERNEL) && (defined(COMPAT_16) || defined(COMPAT_IBCS2))
 /*
  * Information pushed on stack when a signal is delivered.
  * This is used by the kernel to restore state following
@@ -54,7 +64,7 @@ typedef int sig_atomic_t;
  * to the handler to allow it to restore state properly if
  * a non-standard exit is performed.
  */
-#if defined(__LIBC12_SOURCE__) || defined(_KERNEL)
+#if defined(COMPAT_13)
 struct sigcontext13 {
 	int	sc_gs;
 	int	sc_fs;
@@ -80,7 +90,7 @@ struct sigcontext13 {
 	int	sc_trapno;		/* XXX should be above */
 	int	sc_err;
 };
-#endif
+#endif /* COMPAT_13 */
 
 struct sigcontext {
 	int	sc_gs;
@@ -109,11 +119,7 @@ struct sigcontext {
 
 	sigset_t sc_mask;		/* signal mask to restore (new style) */
 };
+#endif /* _KERNEL && (COMPAT_16 || COMPAT_IBCS2) */
 
-#define sc_sp sc_esp
-#define sc_fp sc_ebp
-#define sc_pc sc_eip
-#define sc_ps sc_eflags
-
-#endif	/* !_ANSI_SOURCE && !_POSIX_C_SOURCE && !_XOPEN_SOURCE */
+#endif	/* _NETBSD_SOURCE */
 #endif	/* !_I386_SIGNAL_H_ */

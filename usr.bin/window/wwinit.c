@@ -1,4 +1,4 @@
-/*	$NetBSD: wwinit.c,v 1.14 1999/05/06 07:28:51 mycroft Exp $	*/
+/*	$NetBSD: wwinit.c,v 1.18 2003/08/13 15:21:07 itojun Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)wwinit.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: wwinit.c,v 1.14 1999/05/06 07:28:51 mycroft Exp $");
+__RCSID("$NetBSD: wwinit.c,v 1.18 2003/08/13 15:21:07 itojun Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,22 +52,22 @@ __RCSID("$NetBSD: wwinit.c,v 1.14 1999/05/06 07:28:51 mycroft Exp $");
 #include "char.h"
 
 int
-wwinit()
+wwinit(void)
 {
 	int i, j;
 	char *kp;
-	sigset_t sigset, osigset;
+	sigset_t nsigset, osigset;
 
 	wwdtablesize = 3;
 	wwhead.ww_forw = &wwhead;
 	wwhead.ww_back = &wwhead;
 
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGCHLD);
-	sigaddset(&sigset, SIGALRM);
-	sigaddset(&sigset, SIGHUP);
-	sigaddset(&sigset, SIGTERM);
-	sigprocmask(SIG_BLOCK, &sigset, &osigset);
+	sigemptyset(&nsigset);
+	sigaddset(&nsigset, SIGCHLD);
+	sigaddset(&nsigset, SIGALRM);
+	sigaddset(&nsigset, SIGHUP);
+	sigaddset(&nsigset, SIGTERM);
+	sigprocmask(SIG_BLOCK, &nsigset, &osigset);
 
 	if (signal(SIGCHLD, wwchild) == SIG_ERR ||
 	    signal(SIGHUP, wwquit) == SIG_ERR ||
@@ -147,7 +143,7 @@ wwinit()
 	switch (wwospeed) {
 	default:
 	case B0:
-		wwbaud = 0;
+		wwbaud = 9600;
 		break;
 	case B50:
 		wwbaud = 50;
@@ -204,7 +200,7 @@ wwinit()
 		break;
 #ifdef B57600
 	case B57600:
-		wwbaud= 57600;
+		wwbaud = 57600;
 		break;
 #endif
 #ifdef B115200
@@ -349,9 +345,7 @@ bad:
 }
 
 void
-wwaddcap(cap, kp)
-	char *cap;
-	char **kp;
+wwaddcap(char *cap, char **kp)
 {
 	char tbuf[512];
 	char *tp = tbuf;
@@ -372,9 +366,7 @@ wwaddcap(cap, kp)
 }
 
 void
-wwaddcap1(cap, kp)
-	char *cap;
-	char **kp;
+wwaddcap1(char *cap, char **kp)
 {
 	while ((*(*kp)++ = *cap++))
 		;
@@ -382,7 +374,7 @@ wwaddcap1(cap, kp)
 }
 
 void
-wwstart()
+wwstart(void)
 {
 	int i;
 
@@ -393,7 +385,7 @@ wwstart()
 }
 
 void
-wwstart1()
+wwstart1(void)
 {
 	int i, j;
 
@@ -413,7 +405,7 @@ wwstart1()
  * Restoring wwos has been taken care of elsewhere.
  */
 void
-wwreset()
+wwreset(void)
 {
 	int i;
 

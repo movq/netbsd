@@ -1,10 +1,7 @@
-#	$NetBSD: Makefile,v 1.4 1999/03/23 18:10:57 drochner Exp $
+#	$NetBSD: Makefile,v 1.12 2008/04/30 15:29:11 ad Exp $
 
-TOP=		${.CURDIR}/..
+FLOPPYBASE=	boot
+FLOPPYMAX=	3
+FLOPPYKERNEL=	netbsd-INSTALL_FLOPPY.gz
 
-.include "${TOP}/Makefile.inc"
-
-IMAGE=		boot.fs
-KERN?=	${.CURDIR}/../../../../sys/arch/i386/compile/INSTALL/netbsd
-
-.include "${TOP}/bootfloppy-common/Makefile.inc"
+.include "${.CURDIR}/../common/Makefile.bootfloppy"

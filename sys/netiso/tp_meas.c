@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_meas.c,v 1.8 2000/03/30 13:10:14 augustss Exp $	*/
+/*	$NetBSD: tp_meas.c,v 1.14 2007/03/04 06:03:33 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -66,13 +62,14 @@ SOFTWARE.
  * in the circular buffer tp_Meas[]
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: tp_meas.c,v 1.14 2007/03/04 06:03:33 christos Exp $");
+
 #include <sys/types.h>
 #include <sys/time.h>
 
 #include <netiso/argo_debug.h>
 #include <netiso/tp_meas.h>
-
-extern struct timeval time;
 
 #ifdef TP_PERF_MEAS
 int             tp_Measn = 0;
@@ -98,11 +95,8 @@ struct tp_Meas  tp_Meas[TPMEASN];
  * NOTES:
  */
 void
-Tpmeas(ref, kind, timev, seq, win, size)
-	u_int           ref;
-	u_int           kind;
-	struct timeval *timev;
-	u_int           seq, win, size;
+Tpmeas(u_int ref, u_int kind, struct timeval *timev, u_int seq, u_int win,
+	u_int size)
 {
 	struct tp_Meas *tpm;
 	static int      mseq;
@@ -114,10 +108,9 @@ Tpmeas(ref, kind, timev, seq, win, size)
 	tpm->tpm_tseq = mseq++;
 	tpm->tpm_ref = ref;
 	if (kind == TPtime_from_ll)
-		bcopy((caddr_t) timev, (caddr_t) & tpm->tpm_time, sizeof(struct timeval));
+		bcopy((void *) timev, (void *) & tpm->tpm_time, sizeof(struct timeval));
 	else
-		bcopy((caddr_t) & time,
-		      (caddr_t) & tpm->tpm_time, sizeof(struct timeval));
+		getmicrotime(& tpm->tpm_time);
 	tpm->tpm_seq = seq;
 	tpm->tpm_window = win;
 	tpm->tpm_size = size;

@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_stat.h,v 1.6 1996/02/13 22:08:46 christos Exp $	*/
+/*	$NetBSD: clnp_stat.h,v 1.9 2005/12/11 00:01:36 elad Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -95,11 +91,15 @@ struct clnp_stat {
 						 * received */
 	int             cns_er_inhist[CLNP_ERRORS + 1];
 	int             cns_er_outhist[CLNP_ERRORS + 1];
-}               clnp_stat;
+};
+
+#ifdef _KERNEL
+extern struct clnp_stat clnp_stat;
 
 #ifdef INCSTAT
 #undef INCSTAT
 #endif				/* INCSTAT */
-#define INCSTAT(x) clnp_stat./**/x/**/++
+#define INCSTAT(x) clnp_stat.x++
+#endif /* _KERNEL */
 
-#endif				/* _NETISO_CLNP_STAT_H_ */
+#endif /* !_NETISO_CLNP_STAT_H_ */

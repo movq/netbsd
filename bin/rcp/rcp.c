@@ -1,4 +1,4 @@
-/*	$NetBSD: rcp.c,v 1.26 1999/11/09 15:06:32 drochner Exp $	*/
+/*	$NetBSD: rcp.c,v 1.47 2008/07/20 00:52:40 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1990, 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1990, 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1990, 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rcp.c	8.2 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: rcp.c,v 1.26 1999/11/09 15:06:32 drochner Exp $");
+__RCSID("$NetBSD: rcp.c,v 1.47 2008/07/20 00:52:40 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -60,37 +56,19 @@ __RCSID("$NetBSD: rcp.c,v 1.26 1999/11/09 15:06:32 drochner Exp $");
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <netdb.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <string.h>
 #include <unistd.h>
 
 #include "pathnames.h"
 #include "extern.h"
 
-#ifdef KERBEROS
-#include <kerberosIV/des.h>
-#include <kerberosIV/krb.h>
-#include "krb.h"
-
-char	dst_realm_buf[REALM_SZ];
-char	*dest_realm = NULL;
-int	use_kerberos = 1;
-CREDENTIALS 	cred;
-Key_schedule	schedule;
-#ifdef CRYPT
-int	doencrypt = 0;
-#define	OPTIONS	"dfKk:prtx"
-#else
-#define	OPTIONS	"dfKk:prt"
-#endif
-#else
-#define	OPTIONS "dfprt"
-#endif
+#define	OPTIONS "46dfprt"
 
 struct passwd *pwd;
 char *pwname;
@@ -98,52 +76,42 @@ u_short	port;
 uid_t	userid;
 int errs, rem;
 int pflag, iamremote, iamrecursive, targetshouldbedirectory;
+int family = AF_UNSPEC;
+static char dot[] = ".";
 
 #define	CMDNEEDS	64
 char cmd[CMDNEEDS];		/* must hold "rcp -r -p -d\0" */
 
-#ifdef KERBEROS
-int	 kerberos __P((char **, char *, char *, char *));
-void	 oldw __P((const char *, ...));
-#endif
-int	 response __P((void));
-void	 rsource __P((char *, struct stat *));
-void	 sink __P((int, char *[]));
-void	 source __P((int, char *[]));
-void	 tolocal __P((int, char *[]));
-void	 toremote __P((char *, int, char *[]));
-void	 usage __P((void));
-int	 main __P((int, char *[]));
+int	 response(void);
+void	 rsource(char *, struct stat *);
+void	 sink(int, char *[]);
+void	 source(int, char *[]);
+void	 tolocal(int, char *[]);
+void	 toremote(char *, int, char *[]);
+void	 usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct servent *sp;
 	int ch, fflag, tflag;
-	char *targ, *shell;
+	char *targ;
+	const char *shell;
+
+	setprogname(argv[0]);
+	(void)setlocale(LC_ALL, "");
 
 	fflag = tflag = 0;
 	while ((ch = getopt(argc, argv, OPTIONS)) != -1)
 		switch(ch) {			/* User-visible flags. */
+		case '4':
+			family = AF_INET;
+			break;
+		case '6':
+			family = AF_INET6;
+			break;
 		case 'K':
-#ifdef KERBEROS
-			use_kerberos = 0;
-#endif
 			break;
-#ifdef	KERBEROS
-		case 'k':
-			dest_realm = dst_realm_buf;
-			(void)strncpy(dst_realm_buf, optarg, REALM_SZ);
-			break;
-#ifdef CRYPT
-		case 'x':
-			doencrypt = 1;
-			/* des_set_key(cred.session, schedule); */
-			break;
-#endif
-#endif
 		case 'p':
 			pflag = 1;
 			break;
@@ -169,23 +137,7 @@ main(argc, argv)
 	argc -= optind;
 	argv += optind;
 
-#ifdef KERBEROS
-	if (use_kerberos) {
-#ifdef CRYPT
-		shell = doencrypt ? "ekshell" : "kshell";
-#else
-		shell = "kshell";
-#endif
-		if ((sp = getservbyname(shell, "tcp")) == NULL) {
-			use_kerberos = 0;
-			oldw("can't get entry for %s/tcp service", shell);
-			sp = getservbyname(shell = "shell", "tcp");
-		}
-	} else
-		sp = getservbyname(shell = "shell", "tcp");
-#else
 	sp = getservbyname(shell = "shell", "tcp");
-#endif
 	if (sp == NULL)
 		errx(1, "%s/tcp: unknown service", shell);
 	port = sp->s_port;
@@ -216,20 +168,9 @@ main(argc, argv)
 
 	rem = -1;
 	/* Command to be executed on remote system using "rsh". */
-#ifdef	KERBEROS
-	(void)snprintf(cmd, sizeof(cmd),
-	    "rcp%s%s%s%s", iamrecursive ? " -r" : "",
-#ifdef CRYPT
-	    (doencrypt && use_kerberos ? " -x" : ""),
-#else
-	    "",
-#endif
-	    pflag ? " -p" : "", targetshouldbedirectory ? " -d" : "");
-#else
 	(void)snprintf(cmd, sizeof(cmd), "rcp%s%s%s",
 	    iamrecursive ? " -r" : "", pflag ? " -p" : "",
 	    targetshouldbedirectory ? " -d" : "");
-#endif
 
 	(void)signal(SIGPIPE, lostconn);
 
@@ -245,16 +186,15 @@ main(argc, argv)
 }
 
 void
-toremote(targ, argc, argv)
-	char *targ, *argv[];
-	int argc;
+toremote(char *targ, int argc, char *argv[])
 {
-	int i, len;
+	int i;
+	size_t len;
 	char *bp, *host, *src, *suser, *thost, *tuser;
 
 	*targ++ = 0;
 	if (*targ == 0)
-		targ = ".";
+		targ = dot;
 
 	if ((thost = strchr(argv[argc - 1], '@')) != NULL) {
 		/* user@host */
@@ -268,13 +208,14 @@ toremote(targ, argc, argv)
 		thost = argv[argc - 1];
 		tuser = NULL;
 	}
+	thost = unbracket(thost);
 
 	for (i = 0; i < argc - 1; i++) {
 		src = colon(argv[i]);
 		if (src) {			/* remote to remote */
 			*src++ = 0;
 			if (*src == 0)
-				src = ".";
+				src = dot;
 			host = strchr(argv[i], '@');
 			len = strlen(_PATH_RSH) + strlen(argv[i]) +
 			    strlen(src) + (tuser ? strlen(tuser) : 0) +
@@ -283,22 +224,27 @@ toremote(targ, argc, argv)
 				err(1, NULL);
 			if (host) {
 				*host++ = 0;
+				host = unbracket(host);
 				suser = argv[i];
 				if (*suser == '\0')
 					suser = pwname;
-				else if (!okname(suser))
+				else if (!okname(suser)) {
+					(void)free(bp);
 					continue;
+				}
 				(void)snprintf(bp, len,
 				    "%s %s -l %s -n %s %s '%s%s%s:%s'",
 				    _PATH_RSH, host, suser, cmd, src,
 				    tuser ? tuser : "", tuser ? "@" : "",
 				    thost, targ);
-			} else
+			} else {
+				host = unbracket(argv[i]);
 				(void)snprintf(bp, len,
 				    "exec %s %s -n %s %s '%s%s%s:%s'",
 				    _PATH_RSH, argv[i], cmd, src,
 				    tuser ? tuser : "", tuser ? "@" : "",
 				    thost, targ);
+			}
 			(void)susystem(bp);
 			(void)free(bp);
 		} else {			/* local to remote */
@@ -308,15 +254,9 @@ toremote(targ, argc, argv)
 					err(1, NULL);
 				(void)snprintf(bp, len, "%s -t %s", cmd, targ);
 				host = thost;
-#ifdef KERBEROS
-				if (use_kerberos)
-					rem = kerberos(&host, bp, pwname,
-					    tuser ? tuser : pwname);
-				else
-#endif
-					rem = rcmd(&host, port, pwname,
+					rem = rcmd_af(&host, port, pwname,
 					    tuser ? tuser : pwname,
-					    bp, 0);
+					    bp, NULL, family);
 				if (rem < 0)
 					exit(1);
 				if (response() < 0)
@@ -329,11 +269,10 @@ toremote(targ, argc, argv)
 }
 
 void
-tolocal(argc, argv)
-	int argc;
-	char *argv[];
+tolocal(int argc, char *argv[])
 {
-	int i, len;
+	int i;
+	size_t len;
 	char *bp, *host, *src, *suser;
 
 	for (i = 0; i < argc - 1; i++) {
@@ -352,7 +291,7 @@ tolocal(argc, argv)
 		}
 		*src++ = 0;
 		if (*src == 0)
-			src = ".";
+			src = dot;
 		if ((host = strchr(argv[i], '@')) == NULL) {
 			host = argv[i];
 			suser = pwname;
@@ -364,16 +303,13 @@ tolocal(argc, argv)
 			else if (!okname(suser))
 				continue;
 		}
+		host = unbracket(host);
 		len = strlen(src) + CMDNEEDS + 20;
 		if ((bp = malloc(len)) == NULL)
 			err(1, NULL);
 		(void)snprintf(bp, len, "%s -f %s", cmd, src);
 		rem = 
-#ifdef KERBEROS
-		    use_kerberos ? 
-			kerberos(&host, bp, pwname, suser) : 
-#endif
-			rcmd(&host, port, pwname, suser, bp, 0);
+			rcmd_af(&host, port, pwname, suser, bp, NULL, family);
 		(void)free(bp);
 		if (rem < 0) {
 			++errs;
@@ -386,24 +322,18 @@ tolocal(argc, argv)
 }
 
 void
-source(argc, argv)
-	int argc;
-	char *argv[];
+source(int argc, char *argv[])
 {
 	struct stat stb;
 	static BUF buffer;
 	BUF *bp;
 	off_t i;
-	int amt, fd, haderr, indx, result;
+	off_t amt;
+	int fd, haderr, indx, result;
 	char *last, *name, buf[BUFSIZ];
 
-#ifdef __GNUC__
-	/* This outrageous construct just to shut up a GCC warning. */
-	(void) &i;
-#endif
-
 	for (indx = 0; indx < argc; ++indx) {
-                name = argv[indx];
+		name = argv[indx];
 		if ((fd = open(name, O_RDONLY, 0)) < 0)
 			goto syserr;
 		if (fstat(fd, &stb)) {
@@ -432,17 +362,17 @@ syserr:			run_err("%s: %s", name, strerror(errno));
 			 * Make it compatible with possible future
 			 * versions expecting microseconds.
 			 */
-			(void)snprintf(buf, sizeof(buf), "T%ld %ld %ld %ld\n",
-			    (long)stb.st_mtimespec.tv_sec,
+			(void)snprintf(buf, sizeof(buf), "T%lld %ld %lld %ld\n",
+			    (long long)stb.st_mtimespec.tv_sec,
 			    (long)stb.st_mtimespec.tv_nsec / 1000,
-			    (long)stb.st_atimespec.tv_sec,
+			    (long long)stb.st_atimespec.tv_sec,
 			    (long)stb.st_atimespec.tv_nsec / 1000);
 			(void)write(rem, buf, strlen(buf));
 			if (response() < 0)
 				goto next;
 		}
 #define	RCPMODEMASK	(S_ISUID|S_ISGID|S_ISTXT|S_IRWXU|S_IRWXG|S_IRWXO)
-		(void)snprintf(buf, sizeof(buf), "C%04o %qd %s\n",
+		(void)snprintf(buf, sizeof(buf), "C%04o %lld %s\n",
 		    stb.st_mode & RCPMODEMASK, (long long)stb.st_size, last);
 		(void)write(rem, buf, strlen(buf));
 		if (response() < 0)
@@ -453,19 +383,20 @@ next:			(void)close(fd);
 		}
 
 		/* Keep writing after an error so that we stay sync'd up. */
-		for (haderr = i = 0; i < stb.st_size; i += bp->cnt) {
+		haderr = 0;
+		for (i = 0; i < stb.st_size; i += bp->cnt) {
 			amt = bp->cnt;
 			if (i + amt > stb.st_size)
 				amt = stb.st_size - i;
 			if (!haderr) {
-				result = read(fd, bp->buf, amt);
+				result = read(fd, bp->buf, (size_t)amt);
 				if (result != amt)
 					haderr = result >= 0 ? EIO : errno;
 			}
 			if (haderr)
-				(void)write(rem, bp->buf, amt);
+				(void)write(rem, bp->buf, (size_t)amt);
 			else {
-				result = write(rem, bp->buf, amt);
+				result = write(rem, bp->buf, (size_t)amt);
 				if (result != amt)
 					haderr = result >= 0 ? EIO : errno;
 			}
@@ -481,9 +412,7 @@ next:			(void)close(fd);
 }
 
 void
-rsource(name, statp)
-	char *name;
-	struct stat *statp;
+rsource(char *name, struct stat *statp)
 {
 	DIR *dirp;
 	struct dirent *dp;
@@ -499,14 +428,14 @@ rsource(name, statp)
 	else
 		last++;
 	if (pflag) {
-		(void)snprintf(path, sizeof(path), "T%ld %ld %ld %ld\n",
-		    (long)statp->st_mtimespec.tv_sec,
+		(void)snprintf(path, sizeof(path), "T%lld %ld %lld %ld\n",
+		    (long long)statp->st_mtimespec.tv_sec,
 		    (long)statp->st_mtimespec.tv_nsec / 1000,
-		    (long)statp->st_atimespec.tv_sec,
+		    (long long)statp->st_atimespec.tv_sec,
 		    (long)statp->st_atimespec.tv_nsec / 1000);
 		(void)write(rem, path, strlen(path));
 		if (response() < 0) {
-			closedir(dirp);
+			(void)closedir(dirp);
 			return;
 		}
 	}
@@ -514,13 +443,13 @@ rsource(name, statp)
 	    "D%04o %d %s\n", statp->st_mode & RCPMODEMASK, 0, last);
 	(void)write(rem, path, strlen(path));
 	if (response() < 0) {
-		closedir(dirp);
+		(void)closedir(dirp);
 		return;
 	}
 	while ((dp = readdir(dirp)) != NULL) {
 		if (dp->d_ino == 0)
 			continue;
-		if (!strcmp(dp->d_name, ".") || !strcmp(dp->d_name, ".."))
+		if (!strcmp(dp->d_name, dot) || !strcmp(dp->d_name, ".."))
 			continue;
 		if (strlen(name) + 1 + strlen(dp->d_name) >= MAXPATHLEN - 1) {
 			run_err("%s/%s: name too long", name, dp->d_name);
@@ -536,29 +465,30 @@ rsource(name, statp)
 }
 
 void
-sink(argc, argv)
-	int argc;
-	char *argv[];
+sink(int argc, char *argv[])
 {
 	static BUF buffer;
 	struct stat stb;
 	struct timeval tv[2];
 	enum { YES, NO, DISPLAYED } wrerr;
 	BUF *bp;
-	off_t i, j;
-	int amt, count, exists, first, mask, mode, ofd, omode;
-	int setimes, size, targisdir;
+	ssize_t j;
+	off_t i;
+	off_t amt;
+	off_t count;
+	int exists, first, ofd;
+	mode_t mask;
+	mode_t mode;
+	mode_t omode;
+	int setimes, targisdir;
 	int wrerrno = 0;	/* pacify gcc */
-	char ch, *cp, *np, *targ, *why, *vect[1], buf[BUFSIZ];
+	char ch, *cp, *np, *targ, *vect[1], buf[BUFSIZ];
+	const char *why;
+	off_t size;
 
 #define	atime	tv[0]
 #define	mtime	tv[1]
 #define	SCREWUP(str)	{ why = str; goto screwup; }
-
-#ifdef __GNUC__
-	/* This outrageous construct just to shut up a GCC warning. */
-	(void) &i;
-#endif
 
 	setimes = targisdir = 0;
 	mask = umask(0);
@@ -707,14 +637,15 @@ bad:			run_err("%s: %s", np, strerror(errno));
 		}
 		cp = bp->buf;
 		wrerr = NO;
-		for (count = i = 0; i < size; i += BUFSIZ) {
+		count = 0;
+		for (i = 0; i < size; i += BUFSIZ) {
 			amt = BUFSIZ;
 			if (i + amt > size)
 				amt = size - i;
 			count += amt;
 			do {
-				j = read(rem, cp, amt);
-				if (j <= 0) {
+				j = read(rem, cp, (size_t)amt);
+				if (j == -1) {
 					run_err("%s", j ? strerror(errno) :
 					    "dropped connection");
 					exit(1);
@@ -725,7 +656,7 @@ bad:			run_err("%s: %s", np, strerror(errno));
 			if (count == bp->cnt) {
 				/* Keep reading so we stay sync'd up. */
 				if (wrerr == NO) {
-					j = write(ofd, bp->buf, count);
+					j = write(ofd, bp->buf, (size_t)count);
 					if (j != count) {
 						wrerr = YES;
 						wrerrno = j >= 0 ? EIO : errno; 
@@ -736,7 +667,7 @@ bad:			run_err("%s: %s", np, strerror(errno));
 			}
 		}
 		if (count != 0 && wrerr == NO &&
-		    (j = write(ofd, bp->buf, count)) != count) {
+		    (j = write(ofd, bp->buf, (size_t)count)) != count) {
 			wrerr = YES;
 			wrerrno = j >= 0 ? EIO : errno; 
 		}
@@ -794,52 +725,9 @@ screwup:
 	/* NOTREACHED */
 }
 
-#ifdef KERBEROS
-int
-kerberos(host, bp, locuser, user)
-	char **host, *bp, *locuser, *user;
-{
-	struct servent *sp;
-
-again:
-	if (use_kerberos) {
-		rem = KSUCCESS;
-		errno = 0;
-		if (dest_realm == NULL)
-			dest_realm = krb_realmofhost(*host);
-		rem = 
-#ifdef CRYPT
-		    doencrypt ? 
-			krcmd_mutual(host,
-			    port, user, bp, 0, dest_realm, &cred, schedule) :
-#endif
-			krcmd(host, port, user, bp, 0, dest_realm);
-
-		if (rem < 0) {
-			use_kerberos = 0;
-			if ((sp = getservbyname("shell", "tcp")) == NULL)
-				errx(1, "unknown service shell/tcp");
-			if (errno == ECONNREFUSED)
-			    oldw("remote host doesn't support Kerberos");
-			else if (errno == ENOENT)
-			    oldw("can't provide Kerberos authentication data");
-			port = sp->s_port;
-			goto again;
-		}
-	} else {
-#ifdef CRYPT
-		if (doencrypt)
-			errx(1,
-			   "the -x option requires Kerberos authentication");
-#endif
-		rem = rcmd(host, port, locuser, user, bp, 0);
-	}
-	return (rem);
-}
-#endif /* KERBEROS */
 
 int
-response()
+response(void)
 {
 	char ch, *cp, resp, rbuf[BUFSIZ];
 
@@ -862,7 +750,7 @@ response()
 		} while (cp < &rbuf[BUFSIZ] && ch != '\n');
 
 		if (!iamremote)
-			(void)write(STDERR_FILENO, rbuf, cp - rbuf);
+			(void)write(STDERR_FILENO, rbuf, (size_t)(cp - rbuf));
 		++errs;
 		if (resp == 1)
 			return (-1);
@@ -872,83 +760,39 @@ response()
 }
 
 void
-usage()
+usage(void)
 {
-#ifdef KERBEROS
-#ifdef CRYPT
-	(void)fprintf(stderr, "%s\n\t%s\n",
-	    "usage: rcp [-Kpx] [-k realm] f1 f2",
-	    "or: rcp [-Kprx] [-k realm] f1 ... fn directory");
-#else
-	(void)fprintf(stderr, "%s\n\t%s\n",
-	    "usage: rcp [-Kp] [-k realm] f1 f2",
-	    "or: rcp [-Kpr] [-k realm] f1 ... fn directory");
-#endif
-#else
 	(void)fprintf(stderr,
-	    "usage: rcp [-p] f1 f2; or: rcp [-pr] f1 ... fn directory\n");
-#endif
+	    "usage: rcp [-46p] f1 f2; or: rcp [-46pr] f1 ... fn directory\n");
 	exit(1);
 	/* NOTREACHED */
 }
 
-#if __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
-#ifdef KERBEROS
-void
-#if __STDC__
-oldw(const char *fmt, ...)
-#else
-oldw(fmt, va_alist)
-	char *fmt;
-        va_dcl
-#endif
-{
-	va_list ap;
-#if __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
-	(void)fprintf(stderr, "rcp: ");
-	(void)vfprintf(stderr, fmt, ap);
-	(void)fprintf(stderr, ", using standard rcp\n");
-	va_end(ap);
-}
-#endif
 
 void
-#if __STDC__
 run_err(const char *fmt, ...)
-#else
-run_err(fmt, va_alist)
-	char *fmt;
-        va_dcl
-#endif
 {
 	static FILE *fp;
 	va_list ap;
-#if __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 
 	++errs;
 	if (fp == NULL && !(fp = fdopen(rem, "w")))
 		return;
+
+	va_start(ap, fmt);
+
 	(void)fprintf(fp, "%c", 0x01);
 	(void)fprintf(fp, "rcp: ");
 	(void)vfprintf(fp, fmt, ap);
 	(void)fprintf(fp, "\n");
 	(void)fflush(fp);
-
-	if (!iamremote)
-		vwarnx(fmt, ap);
-
 	va_end(ap);
+
+	if (!iamremote) {
+		va_start(ap, fmt);
+		vwarnx(fmt, ap);
+		va_end(ap);
+	}
 }

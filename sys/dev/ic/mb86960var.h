@@ -1,4 +1,4 @@
-/*	$NetBSD: mb86960var.h,v 1.25 2000/02/02 09:34:52 enami Exp $	*/
+/*	$NetBSD: mb86960var.h,v 1.36 2008/04/12 06:37:51 tsutsui Exp $	*/
 
 /*
  * All Rights Reserved, Copyright (C) Fujitsu Limited 1995
@@ -30,8 +30,6 @@
  * software, nor does the author assume any responsibility for damages
  * incurred with its use.
  */
-
-#define FE_VERSION "if_fe.c ver. 0.8"
 
 /*
  * Device driver for Fujitsu MB86960A/MB86965A based Ethernet cards.
@@ -95,9 +93,6 @@
 /* Force DLCR6 override. */
 #define FE_FLAGS_OVERRIDE_DLCR6	0x0080
 
-/* A cludge for PCMCIA support. */
-#define FE_FLAGS_PCMCIA		0x8000
-
 /*
  * Supported hardware (Ethernet card) types
  * This information is currently used only for debugging
@@ -108,30 +103,29 @@ enum fe_type {
 
 	/* Fujitsu FMV-180 series. */
 	FE_TYPE_FMV181,
+	FE_TYPE_FMV181A,
 	FE_TYPE_FMV182,
+	FE_TYPE_FMV182A,
+	FE_TYPE_FMV183,
+	FE_TYPE_FMV184,
 
 	/* Allied-Telesis AT1700 series and RE2000 series. */
 	FE_TYPE_AT1700T,
 	FE_TYPE_AT1700BT,
 	FE_TYPE_AT1700FT,
 	FE_TYPE_AT1700AT,
-	FE_TYPE_RE2000,
+	FE_TYPE_AT_UNKNOWN,
 
 	/* PCMCIA by Fujitsu. */
 	FE_TYPE_MBH10302,
-	FE_TYPE_MBH10304,
-};
-
-enum mb86960_type {
-	MB86960_TYPE_86960,
-	MB86960_TYPE_86965
+	FE_TYPE_MBH10304
 };
 
 /*
  * fe_softc: per line info and status
  */
 struct mb86960_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct ethercom sc_ec;		/* ethernet common */
 	struct ifmedia sc_media;	/* supported media information */
 
@@ -139,43 +133,47 @@ struct mb86960_softc {
 	bus_space_handle_t sc_bsh;
 
 	/* Set by probe() and not modified in later phases. */
-	enum	mb86960_type type;	/* controller type */
+	uint32_t sc_flags;		/* controller quirks */
+#define FE_FLAGS_MB86960	0x0001	/* DLCR7 is differnt on MB86960 */
+#define FE_FLAGS_SBW_BYTE	0x0002	/* byte access mode for system bus */
+#define FE_FLAGS_SRAM_150ns	0x0004	/* The board has slow SRAM */
 
-	u_char	proto_dlcr4;		/* DLCR4 prototype. */
-	u_char	proto_dlcr5;		/* DLCR5 prototype. */
-	u_char	proto_dlcr6;		/* DLCR6 prototype. */
-	u_char	proto_dlcr7;		/* DLCR7 prototype. */
-	u_char	proto_bmpr13;		/* BMPR13 prototype. */
+	uint8_t proto_dlcr4;		/* DLCR4 prototype. */
+	uint8_t proto_dlcr5;		/* DLCR5 prototype. */
+	uint8_t proto_dlcr6;		/* DLCR6 prototype. */
+	uint8_t proto_dlcr7;		/* DLCR7 prototype. */
+	uint8_t proto_bmpr13;		/* BMPR13 prototype. */
 
 	/* Vendor specific hooks. */
-	void	(*init_card) __P((struct mb86960_softc *));
-	void	(*stop_card) __P((struct mb86960_softc *));
+	void	(*init_card)(struct mb86960_softc *);
+	void	(*stop_card)(struct mb86960_softc *);
 
 	/* Transmission buffer management. */
-	u_short	txb_size;	/* total bytes in TX buffer */
-	u_short	txb_free;	/* free bytes in TX buffer */
-	u_char	txb_count;	/* number of packets in TX buffer */
-	u_char	txb_sched;	/* number of scheduled packets */
-	u_char	txb_padding;	/* number of delayed padding bytes */
+	int	txb_size;	/* total bytes in TX buffer */
+	int	txb_free;	/* free bytes in TX buffer */
+	int	txb_count;	/* number of packets in TX buffer */
+	int	txb_sched;	/* number of scheduled packets */
+	int	txb_padding;	/* number of delayed padding bytes */
 
 	/* Multicast address filter management. */
-	u_char	filter_change;	/* MARs must be changed ASAP. */
-	u_char	filter[FE_FILTER_LEN];	/* new filter value. */
+	int	filter_change;	/* MARs must be changed ASAP. */
+	uint8_t filter[FE_FILTER_LEN];	/* new filter value. */
 
-	u_int8_t sc_enaddr[ETHER_ADDR_LEN];
+	uint8_t sc_enaddr[ETHER_ADDR_LEN];
 
 #if NRND > 0
 	rndsource_element_t rnd_source;
 #endif
 
-	int	sc_enabled;	/* boolean; power enabled on interface */
+	uint32_t sc_stat;	/* driver status */
+#define FE_STAT_ENABLED		0x0001	/* power enabled on interface */
+#define FE_STAT_ATTACHED	0x0002	/* attach has succeeded */
 
-	int	(*sc_enable) __P((struct mb86960_softc *));
-	void	(*sc_disable) __P((struct mb86960_softc *));
+	int	(*sc_enable)(struct mb86960_softc *);
+	void	(*sc_disable)(struct mb86960_softc *);
 
-	int	(*sc_mediachange) __P((struct mb86960_softc *));
-	void	(*sc_mediastatus) __P((struct mb86960_softc *,
-		    struct ifmediareq *));
+	int	(*sc_mediachange)(struct mb86960_softc *);
+	void	(*sc_mediastatus)(struct mb86960_softc *, struct ifmediareq *);
 };
 
 /*
@@ -196,11 +194,11 @@ struct mb86960_softc {
 	 * Hence FE_MAX_RECV_COUNT is the upper limit for number
 	 * of packets in the receive buffer. */
 
-void	mb86960_attach	__P((struct mb86960_softc *, enum mb86960_type,
-	    u_int8_t *));
-void	mb86960_config	__P((struct mb86960_softc *, int *, int, int));
-int	mb86960_intr	__P((void *));
-int	mb86960_enable	__P((struct mb86960_softc *));
-void	mb86960_disable	__P((struct mb86960_softc *));
-int	mb86960_activate __P((struct device *, enum devact));
-int	mb86960_detach	__P((struct mb86960_softc *));
+void	mb86960_attach(struct mb86960_softc *, uint8_t *);
+void	mb86960_config(struct mb86960_softc *, int *, int, int);
+int	mb86960_intr(void *);
+int	mb86960_enable(struct mb86960_softc *);
+void	mb86960_disable(struct mb86960_softc *);
+int	mb86960_activate(struct device *, enum devact);
+int	mb86960_detach(struct mb86960_softc *);
+void	mb86965_read_eeprom(bus_space_tag_t, bus_space_handle_t, uint8_t *);

@@ -1,7 +1,7 @@
-.\"	$NetBSD: ntptime.8,v 1.2 2000/03/30 01:49:24 simonb Exp $
-.\" Converted from HTML to mandoc by html-to-mdoc.pl
+.\"	$NetBSD: ntptime.8,v 1.7 2007/12/15 17:49:14 yamt Exp $
+.\" Converted from HTML to mandoc by ntp-html2mdoc.pl
 .\"
-.Dd Mar 29, 2000
+.Dd March 29, 2000
 .Dt NTPTIME 8
 .Os
 .Sh NAME
@@ -17,15 +17,15 @@
 .Op Fl s Ar status
 .Op Fl t Ar time_constant
 .Sh DESCRIPTION
-This program is useful only with special kernels described in the 
+This program is useful only with special kernels described in the
 .%T "A Kernel Model for Precision Timekeeping"
 page in
-.Pa /usr/share/doc/ntp/kern.htm .
+.Pa /usr/share/doc/html/ntp/kern.html .
 It reads and displays
-time-related kernel variables using the 
-.Pa ntp_gettime()
+time-related kernel variables using the
+.Xr ntp_gettime 2
 system call.
-A similar display can be obtained using the 
+A similar display can be obtained using the
 .Nm ntpdc
 program and
 .Pa kerninfo
@@ -33,7 +33,7 @@ command.
 .Sh OPTIONS
 .Bl -tag -width indent
 .It Fl c
-Display the execution time of 
+Display the execution time of
 .Nm
 itself.
 .It Fl e Ar est_error
@@ -55,5 +55,5 @@ Specify clock status. Better know what you are doing.
 .It Fl t Ar time_constant
 Specify time constant, an integer in the range 0-4.
 .El
-.Sh AUTHOR
+.Sh AUTHORS
 David L. Mills (mills@udel.edu)

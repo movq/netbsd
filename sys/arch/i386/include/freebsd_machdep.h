@@ -1,4 +1,4 @@
-/*	$NetBSD: freebsd_machdep.h,v 1.2 1998/09/11 12:50:07 mycroft Exp $	*/
+/*	$NetBSD: freebsd_machdep.h,v 1.9 2005/09/14 15:00:16 he Exp $	*/
 
 /*
  * Copyright (c) 1986, 1989, 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,11 +40,13 @@
 #ifndef _FREEBSD_MACHDEP_H
 #define _FREEBSD_MACHDEP_H
 
+#include <compat/sys/sigtypes.h>
+
 /*
  * signal support
  */
 
-struct freebsd_sigcontext {
+struct freebsd_osigcontext {
 	int	sc_onstack;	/* sigstack state to restore */
 	sigset13_t sc_mask;	/* signal mask to restore */
 	int	sc_esp;		/* machine state */
@@ -66,6 +64,41 @@ struct freebsd_sigcontext {
 	int	sc_edx;
 	int	sc_ecx;
 	int	sc_eax;
+};
+
+/*
+ * The sequence of the fields/registers in struct sigcontext should match
+ * those in mcontext_t.
+ */
+struct freebsd_sigcontext {
+	sigset_t sc_mask;		/* signal mask to restore */
+	int	sc_onstack;		/* sigstack state to restore */
+	int	sc_gs;			/* machine state (struct trapframe): */
+	int	sc_fs;
+	int	sc_es;
+	int	sc_ds;
+	int	sc_edi;
+	int	sc_esi;
+	int	sc_ebp;
+	int	sc_isp;
+	int	sc_ebx;
+	int	sc_edx;
+	int	sc_ecx;
+	int	sc_eax;
+	int	sc_trapno;
+	int	sc_err;
+	int	sc_eip;
+	int	sc_cs;
+	int	sc_efl;
+	int	sc_esp;
+	int	sc_ss;
+	/*
+	 * XXX FPU state is 27 * 4 bytes h/w, 1 * 4 bytes s/w (probably not
+	 * needed here), or that + 16 * 4 bytes for emulators (probably all
+	 * needed here).  The "spare" bytes are mostly not spare.
+	 */
+	int	sc_fpregs[28];		/* machine state (FPU): */
+	int	sc_spare[17];
 };
 
 struct freebsd_sigframe {
@@ -157,6 +190,6 @@ struct freebsd_ptrace_reg {
 /* sys/i386/include/exec.h */
 #define FREEBSD___LDPGSZ	4096
 
-void freebsd_sendsig __P((sig_t, int, sigset_t *, u_long));
+void freebsd_syscall_intern(struct proc *);
 
 #endif /* _FREEBSD_MACHDEP_H */

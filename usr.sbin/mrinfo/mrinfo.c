@@ -1,4 +1,4 @@
-/*	$NetBSD: mrinfo.c,v 1.7 1998/07/04 21:31:59 mrg Exp $	*/
+/*	$NetBSD: mrinfo.c,v 1.26 2007/02/22 01:29:35 hubertf Exp $	*/
 
 /*
  * This tool requests configuration info from a multicast router
@@ -45,20 +45,33 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  * ---------------------------------
- * Copyright (c) Xerox Corporation 1992. All rights reserved.
- * 
- * License is granted to copy, to use, and to make and to use derivative works
- * for research and evaluation purposes, provided that Xerox is acknowledged
- * in all documentation pertaining to any such copy or derivative work. Xerox
- * grants no other licenses expressed or implied. The Xerox trade name should
- * not be used in any advertising without its written permission.
- * 
- * XEROX CORPORATION MAKES NO REPRESENTATIONS CONCERNING EITHER THE
- * MERCHANTABILITY OF THIS SOFTWARE OR THE SUITABILITY OF THIS SOFTWARE FOR
- * ANY PARTICULAR PURPOSE.  The software is provided "as is" without express
- * or implied warranty of any kind.
- * 
- * These notices must be retained in any copies of any part of this software.
+ * Copyright (c) 1992, 2001 Xerox Corporation.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without modification, 
+ * are permitted provided that the following conditions are met:
+ *
+ * Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+
+ * Neither name of the Xerox, PARC, nor the names of its contributors may be used
+ * to endorse or promote products derived from this software 
+ * without specific prior written permission. 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS ``AS IS'' 
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE XEROX CORPORATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
 #include <sys/cdefs.h>
@@ -67,20 +80,18 @@
 static char rcsid[] =
     "@(#) Header: mrinfo.c,v 1.6 93/04/08 15:14:16 van Exp (LBL)";
 #else
-__RCSID("$NetBSD: mrinfo.c,v 1.7 1998/07/04 21:31:59 mrg Exp $");
+__RCSID("$NetBSD: mrinfo.c,v 1.26 2007/02/22 01:29:35 hubertf Exp $");
 #endif
 #endif
 
+#include <ctype.h>
 #include <string.h>
 #include <netdb.h>
 #include <sys/time.h>
+#include <poll.h>
 #include "defs.h"
 #include <arpa/inet.h>
-#ifdef __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
 #define DEFAULT_TIMEOUT	4	/* How long to wait before retrying requests */
 #define DEFAULT_RETRIES 3	/* How many times to ask each router */
@@ -94,21 +105,21 @@ int	target_level = 0;
 vifi_t  numvifs;		/* to keep loader happy */
 				/* (see COPY_TABLES macro called in kern.c) */
 
-char *			inet_name __P((u_int32_t addr));
-void			ask __P((u_int32_t dst));
-void			ask2 __P((u_int32_t dst));
-int			get_number __P((int *var, int deflt, char ***pargv,
-					int *pargc));
-u_int32_t			host_addr __P((char *name));
-void			usage __P((void));
+char *			inet_name(u_int32_t addr);
+void			ask(u_int32_t dst);
+void			ask2(u_int32_t dst);
+int			get_number(int *var, int deflt, char ***pargv,
+				   int *pargc);
+u_int32_t		host_addr(char *name);
+void			usage(void);
 
 /* to shut up -Wstrict-prototypes */
-int			main __P((int argc, char *argv[]));
+int			main(int argc, char *argv[]);
+/* logit() prototyped in defs.h */
 
 
 char   *
-inet_name(addr)
-	u_int32_t  addr;
+inet_name(u_int32_t addr)
 {
 	struct hostent *e;
 	struct in_addr in;
@@ -129,26 +140,11 @@ inet_name(addr)
  * message and the current debug level.  For errors of severity LOG_ERR or
  * worse, terminate the program.
  */
-#ifdef __STDC__
 void
-log(int severity, int syserr, char *format, ...)
+logit(int severity, int syserr, const char *format, ...)
 {
 	va_list ap;
-	char    fmt[100];
 
-	va_start(ap, format);
-#else
-void 
-log(severity, syserr, format, va_alist)
-	int     severity, syserr;
-	char   *format;
-	va_dcl
-{
-	va_list ap;
-	char    fmt[100];
-
-	va_start(ap);
-#endif
 	switch (debug) {
 	case 0:
 		if (severity > LOG_WARNING)
@@ -160,11 +156,11 @@ log(severity, syserr, format, va_alist)
 		if (severity > LOG_INFO)
 			return;
 	default:
-		fmt[0] = '\0';
 		if (severity == LOG_WARNING)
-			strcat(fmt, "warning - ");
-		strncat(fmt, format, 80);
-		vfprintf(stderr, fmt, ap);
+			fprintf(stderr, "warning - ");
+		va_start(ap, format);
+		vfprintf(stderr, format, ap);
+		va_end(ap);
 		if (syserr == 0)
 			fprintf(stderr, "\n");
 		else
@@ -172,23 +168,21 @@ log(severity, syserr, format, va_alist)
 	}
 
 	if (severity <= LOG_ERR)
-		exit(-1);
+		exit(1);
 }
 
 /*
  * Send a neighbors-list request.
  */
 void 
-ask(dst)
-	u_int32_t  dst;
+ask(u_int32_t dst)
 {
 	send_igmp(our_addr, dst, IGMP_DVMRP, DVMRP_ASK_NEIGHBORS,
 			htonl(MROUTED_LEVEL), 0);
 }
 
 void 
-ask2(dst)
-	u_int32_t  dst;
+ask2(u_int32_t dst)
 {
 	send_igmp(our_addr, dst, IGMP_DVMRP, DVMRP_ASK_NEIGHBORS2,
 			htonl(MROUTED_LEVEL), 0);
@@ -198,21 +192,19 @@ ask2(dst)
  * Process an incoming neighbor-list message.
  */
 void 
-accept_neighbors(src, dst, p, datalen, level)
-	u_int32_t	src, dst, level;
-	u_char	*p;
-	int     datalen;
+accept_neighbors(u_int32_t src, u_int32_t dst, u_char *p, int datalen,
+		 u_int32_t level)
 {
 	u_char *ep = p + datalen;
 #define GET_ADDR(a) (a = ((u_int32_t)*p++ << 24), a += ((u_int32_t)*p++ << 16),\
 		     a += ((u_int32_t)*p++ << 8), a += *p++)
 
-	printf("%s (%s):\n", inet_fmt(src, s1), inet_name(src));
+	printf("%s (%s):\n", inet_fmt(src), inet_name(src));
 	while (p < ep) {
-		register u_int32_t laddr;
-		register u_char metric;
-		register u_char thresh;
-		register int ncount;
+		u_int32_t laddr;
+		u_char metric;
+		u_char thresh;
+		int ncount;
 
 		GET_ADDR(laddr);
 		laddr = htonl(laddr);
@@ -220,28 +212,27 @@ accept_neighbors(src, dst, p, datalen, level)
 		thresh = *p++;
 		ncount = *p++;
 		while (--ncount >= 0) {
-			register u_int32_t neighbor;
+			u_int32_t neighbor;
 			GET_ADDR(neighbor);
 			neighbor = htonl(neighbor);
-			printf("  %s -> ", inet_fmt(laddr, s1));
-			printf("%s (%s) [%d/%d]\n", inet_fmt(neighbor, s1),
+			printf("  %s -> ", inet_fmt(laddr));
+			printf("%s (%s) [%d/%d]\n",
+				inet_fmt(neighbor),
 			       inet_name(neighbor), metric, thresh);
 		}
 	}
 }
 
 void 
-accept_neighbors2(src, dst, p, datalen, level)
-	u_int32_t	src, dst, level;
-	u_char	*p;
-	int     datalen;
+accept_neighbors2(u_int32_t src, u_int32_t dst, u_char *p, int datalen,
+		  u_int32_t level)
 {
 	u_char *ep = p + datalen;
 	u_int broken_cisco = ((level & 0xffff) == 0x020a); /* 10.2 */
 	/* well, only possibly_broken_cisco, but that's too long to type. */
 
-	printf("%s (%s) [version %d.%d", inet_fmt(src, s1), inet_name(src),
-	       level & 0xff, (level >> 8) & 0xff);
+	printf("%s (%s) [version %d.%d", inet_fmt(src),
+		inet_name(src), level & 0xff, (level >> 8) & 0xff);
 	if ((level >> 16) & NF_LEAF)   { printf (",leaf"); }
 	if ((level >> 16) & NF_PRUNE)  { printf (",prune"); }
 	if ((level >> 16) & NF_GENID)  { printf (",genid"); }
@@ -249,11 +240,11 @@ accept_neighbors2(src, dst, p, datalen, level)
 	printf ("]:\n");
 	
 	while (p < ep) {
-		register u_char metric;
-		register u_char thresh;
-		register u_char flags;
-		register int ncount;
-		register u_int32_t laddr = *(u_int32_t*)p;
+		u_char metric;
+		u_char thresh;
+		u_char flags;
+		int ncount;
+		u_int32_t laddr = *(u_int32_t*)p;
 
 		p += 4;
 		metric = *p++;
@@ -265,11 +256,12 @@ accept_neighbors2(src, dst, p, datalen, level)
 		if (broken_cisco && ncount > 15)	/* dumb Ciscos */
 			ncount = ncount & 0xf;
 		while (--ncount >= 0 && p < ep) {
-			register u_int32_t neighbor = *(u_int32_t*)p;
+			u_int32_t neighbor = *(u_int32_t*)p;
 			p += 4;
-			printf("  %s -> ", inet_fmt(laddr, s1));
-			printf("%s (%s) [%d/%d", inet_fmt(neighbor, s1),
-			       inet_name(neighbor), metric, thresh);
+			printf("  %s -> ", inet_fmt(laddr));
+			printf("%s (%s) [%d/%d",
+				inet_fmt(neighbor),
+				inet_name(neighbor), metric, thresh);
 			if (flags & DVMRP_NF_TUNNEL)
 				printf("/tunnel");
 			if (flags & DVMRP_NF_SRCRT)
@@ -290,13 +282,11 @@ accept_neighbors2(src, dst, p, datalen, level)
 }
 
 int 
-get_number(var, deflt, pargv, pargc)
-	int    *var, *pargc, deflt;
-	char ***pargv;
+get_number(int *var, int deflt, char ***pargv, int *pargc)
 {
 	if ((*pargv)[0][2] == '\0') {	/* Get the value from the next
 					 * argument */
-		if (*pargc > 1 && isdigit((*pargv)[1][0])) {
+		if (*pargc > 1 && isdigit((unsigned char)(*pargv)[1][0])) {
 			(*pargv)++, (*pargc)--;
 			*var = atoi((*pargv)[0]);
 			return 1;
@@ -306,7 +296,7 @@ get_number(var, deflt, pargv, pargc)
 		} else
 			return 0;
 	} else {		/* Get value from the rest of this argument */
-		if (isdigit((*pargv)[0][2])) {
+		if (isdigit((unsigned char)(*pargv)[0][2])) {
 			*var = atoi((*pargv)[0] + 2);
 			return 1;
 		} else {
@@ -316,17 +306,15 @@ get_number(var, deflt, pargv, pargc)
 }
 
 void
-usage()
+usage(void)
 {
 	fprintf(stderr,
-	    "Usage: mrinfo [-n] [-t timeout] [-r retries] [router]\n");
+	    "usage: mrinfo [-n] [-t timeout] [-r retries] [router]\n");
 	exit(1);
 }
 
 int
-main(argc, argv)
-	int     argc;
-	char   *argv[];
+main(int argc, char *argv[])
 {
 	int tries;
 	int trynew;
@@ -336,12 +324,16 @@ main(argc, argv)
 	char *host;
 	int curaddr;
 
-	setlinebuf(stderr);
-
 	if (geteuid() != 0) {
 		fprintf(stderr, "mrinfo: must be root\n");
 		exit(1);
 	}
+	init_igmp();
+	if (setuid(getuid()) == -1)
+		logit(LOG_ERR, errno, "setuid");
+
+	setlinebuf(stderr);
+
 	argv++, argc--;
 	while (argc > 0 && argv[0][0] == '-') {
 		switch (argv[0][1]) {
@@ -376,20 +368,22 @@ main(argc, argv)
 		hp = &bogus;
 		hp->h_length = sizeof(target_addr);
 		hp->h_addr_list = (char **)malloc(2 * sizeof(char *));
+		if (hp->h_addr_list == NULL)
+			logit(LOG_ERR, errno, "malloc");
 		hp->h_addr_list[0] = malloc(hp->h_length);
+		if (hp->h_addr_list[0] == NULL)
+			logit(LOG_ERR, errno, "malloc");
 		memcpy(hp->h_addr_list[0], &target_addr, sizeof(hp->h_addr_list[0]));
-		hp->h_addr_list[1] = 0;
+		hp->h_addr_list[1] = NULL;
 	} else
 		hp = gethostbyname(host);
 
-	if (hp == NULL) {
+	if (hp == NULL || hp->h_length != sizeof(target_addr)) {
 		fprintf(stderr, "mrinfo: %s: no such host\n", argv[0]);
 		exit(1);
 	}
 	if (debug)
 		fprintf(stderr, "Debug level %u\n", debug);
-
-	init_igmp();
 
 	/* Check all addresses; mrouters often have unreachable interfaces */
 	for (curaddr = 0; hp->h_addr_list[curaddr] != NULL; curaddr++) {
@@ -397,8 +391,9 @@ main(argc, argv)
 	    {			/* Find a good local address for us. */
 		int     udp;
 		struct sockaddr_in addr;
-		int     addrlen = sizeof(addr);
+		socklen_t addrlen = sizeof(addr);
 
+		memset(&addr, 0, sizeof(addr));
 		addr.sin_family = AF_INET;
 #if (defined(BSD) && (BSD >= 199103))
 		addr.sin_len = sizeof addr;
@@ -410,7 +405,7 @@ main(argc, argv)
 		|| connect(udp, (struct sockaddr *) & addr, sizeof(addr)) < 0
 		    || getsockname(udp, (struct sockaddr *) & addr, &addrlen) < 0) {
 			perror("Determining local address");
-			exit(-1);
+			exit(1);
 		}
 		close(udp);
 		our_addr = addr.sin_addr.s_addr;
@@ -430,16 +425,17 @@ main(argc, argv)
 
 	    /* Main receive loop */
 	    for (;;) {
-		fd_set  fds;
+		struct pollfd set[1];
 		struct timeval tv, now;
-		int     count, recvlen, dummy = 0;
-		register u_int32_t src, dst, group;
+		int     count, recvlen;
+		socklen_t dummy;
+		u_int32_t src, dst, group;
 		struct ip *ip;
 		struct igmp *igmp;
 		int     ipdatalen, iphdrlen, igmpdatalen;
 
-		FD_ZERO(&fds);
-		FD_SET(igmp_socket, &fds);
+		set[0].fd = igmp_socket;
+		set[0].events = POLLIN;
 
 		gettimeofday(&now, 0);
 		tv.tv_sec = et.tv_sec - now.tv_sec;
@@ -452,14 +448,14 @@ main(argc, argv)
 		if (tv.tv_sec < 0)
 			tv.tv_sec = tv.tv_usec = 0;
 
-		count = select(igmp_socket + 1, &fds, 0, 0, &tv);
+		count = poll(set, 1, tv.tv_sec * 1000 + tv.tv_usec / 1000);
 
 		if (count < 0) {
 			if (errno != EINTR)
 				perror("select");
 			continue;
 		} else if (count == 0) {
-			log(LOG_DEBUG, 0, "Timed out receiving neighbor lists");
+			logit(LOG_DEBUG, 0, "Timed out receiving neighbor lists");
 			if (++tries > retries)
 				break;
 			/* If we've tried ASK_NEIGHBORS2 twice with
@@ -484,7 +480,7 @@ main(argc, argv)
 		}
 
 		if (recvlen < sizeof(struct ip)) {
-			log(LOG_WARNING, 0,
+			logit(LOG_WARNING, 0,
 			    "packet too short (%u bytes) for IP header",
 			    recvlen);
 			continue;
@@ -497,7 +493,7 @@ main(argc, argv)
 		iphdrlen = ip->ip_hl << 2;
 		ipdatalen = ip->ip_len;
 		if (iphdrlen + ipdatalen != recvlen) {
-		    log(LOG_WARNING, 0,
+		    logit(LOG_WARNING, 0,
 		      "packet shorter (%u bytes) than hdr+data length (%u+%u)",
 		      recvlen, iphdrlen, ipdatalen);
 		    continue;
@@ -506,9 +502,9 @@ main(argc, argv)
 		group = igmp->igmp_group.s_addr;
 		igmpdatalen = ipdatalen - IGMP_MINLEN;
 		if (igmpdatalen < 0) {
-		    log(LOG_WARNING, 0,
+		    logit(LOG_WARNING, 0,
 			"IP data field too short (%u bytes) for IGMP, from %s",
-			ipdatalen, inet_fmt(src, s1));
+			ipdatalen, inet_fmt(src));
 		    continue;
 		}
 		if (igmp->igmp_type != IGMP_DVMRP)
@@ -519,9 +515,9 @@ main(argc, argv)
 		case DVMRP_NEIGHBORS2:
 			if (src != target_addr) {
 				fprintf(stderr, "mrinfo: got reply from %s",
-					inet_fmt(src, s1));
+					inet_fmt(src));
 				fprintf(stderr, " instead of %s\n",
-					inet_fmt(target_addr, s1));
+					inet_fmt(target_addr));
 				/*continue;*/
 			}
 			break;
@@ -556,81 +552,53 @@ main(argc, argv)
 }
 
 /* dummies */
-void accept_probe(src, dst, p, datalen, level)
-	u_int32_t src, dst, level;
-	char *p;
-	int datalen;
+void accept_probe(u_int32_t src, u_int32_t dst, char *p, int datalen,
+		  u_int32_t level)
 {
 }
-void accept_group_report(src, dst, group, r_type)
-	u_int32_t src, dst, group;
-	int r_type;
+void accept_group_report(u_int32_t src, u_int32_t dst, u_int32_t group,
+			 int r_type)
 {
 }
-void accept_neighbor_request2(src, dst)
-	u_int32_t src, dst;
+void accept_neighbor_request2(u_int32_t src, u_int32_t dst)
 {
 }
-void accept_report(src, dst, p, datalen, level)
-	u_int32_t src, dst, level;
-	char *p;
-	int datalen;
+void accept_report(u_int32_t src, u_int32_t dst, char *p, int datalen,
+		   u_int32_t level)
 {
 }
-void accept_neighbor_request(src, dst)
-	u_int32_t src, dst;
+void accept_neighbor_request(u_int32_t src, u_int32_t dst)
 {
 }
-void accept_prune(src, dst, p, datalen)
-	u_int32_t src, dst;
-	char *p;
-	int datalen;
+void accept_prune(u_int32_t src, u_int32_t dst, char *p, int datalen)
 {
 }
-void accept_graft(src, dst, p, datalen)
-	u_int32_t src, dst;
-	char *p;
-	int datalen;
+void accept_graft(u_int32_t src, u_int32_t dst, char *p, int datalen)
 {
 }
-void accept_g_ack(src, dst, p, datalen)
-	u_int32_t src, dst;
-	char *p;
-	int datalen;
+void accept_g_ack(u_int32_t src, u_int32_t dst, char *p, int datalen)
 {
 }
-void add_table_entry(origin, mcastgrp)
-	u_int32_t origin, mcastgrp;
+void add_table_entry(u_int32_t origin, u_int32_t mcastgrp)
 {
 }
-void check_vif_state()
+void check_vif_state(void)
 {
 }
-void accept_leave_message(src, dst, group)
-	u_int32_t src, dst, group;
+void accept_leave_message(u_int32_t src, u_int32_t dst, u_int32_t group)
 {
 }
-void accept_mtrace(src, dst, group, data, no, datalen)
-	u_int32_t src, dst, group;
-	char *data;
-	u_int no;
-	int datalen;
+void accept_mtrace(u_int32_t src, u_int32_t dst, u_int32_t group, char *data,
+		   u_int no, int datalen)
 {
 }
-void accept_membership_query(src, dst, group, tmo)
-	u_int32_t src, dst, group;
-	int tmo;
+void accept_membership_query(u_int32_t src, u_int32_t dst, u_int32_t group,
+			     int tmo)
 {
 }
-void accept_info_request(src, dst, p, datalen)
-	u_int32_t src, dst;
-	u_char *p;
-	int datalen;
+void accept_info_request(u_int32_t src, u_int32_t dst, u_char *p, int datalen)
 {
 }
-void accept_info_reply(src, dst, p, datalen)
-	u_int32_t src, dst;
-	u_char *p;
-	int datalen;
+void accept_info_reply(u_int32_t src, u_int32_t dst, u_char *p, int datalen)
 {
 }

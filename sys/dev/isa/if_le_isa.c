@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_isa.c,v 1.23 1998/08/15 10:51:19 mycroft Exp $	*/
+/*	$NetBSD: if_le_isa.c,v 1.47 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -52,11 +45,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -75,8 +64,8 @@
  *	@(#)if_le.c	8.2 (Berkeley) 11/16/93
  */
 
-#include "opt_inet.h"
-#include "bpfilter.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_le_isa.c,v 1.47 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,20 +74,15 @@
 #include <sys/socket.h>
 #include <sys/device.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <net/if.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/if_inarp.h>
-#endif
-
-#include <vm/vm.h>
-
-#include <machine/cpu.h>
-#include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -111,25 +95,27 @@
 
 #include <dev/isa/if_levar.h>
 
-int ne2100_isa_probe __P((struct device *, struct cfdata *, void *));
-int bicc_isa_probe __P((struct device *, struct cfdata *, void *));
-void le_dummyattach __P((struct device *, struct device *, void *));
-int le_dummyprobe __P((struct device *, struct cfdata *, void *));
-void le_ne2100_attach __P((struct device *, struct device *, void *));
-void le_bicc_attach __P((struct device *, struct device *, void *));
+int ne2100_isa_probe(device_t, cfdata_t, void *);
+int bicc_isa_probe(device_t, cfdata_t, void *);
+void le_dummyattach(device_t, device_t, void *);
+int le_dummyprobe(device_t, cfdata_t, void *);
+void le_ne2100_attach(device_t, device_t, void *);
+void le_bicc_attach(device_t, device_t, void *);
 
-struct cfattach nele_ca = {
-	sizeof(struct device), ne2100_isa_probe, le_dummyattach
-}, le_nele_ca = {
-	sizeof(struct le_softc), le_dummyprobe, le_ne2100_attach
-}, bicc_ca = {
-	sizeof(struct device), bicc_isa_probe, le_dummyattach
-}, le_bicc_ca = {
-	sizeof(struct le_softc), le_dummyprobe, le_bicc_attach
-};
+CFATTACH_DECL_NEW(nele, 0,
+    ne2100_isa_probe, le_dummyattach, NULL, NULL);
+
+CFATTACH_DECL_NEW(le_nele, sizeof(struct le_softc),
+    le_dummyprobe, le_ne2100_attach, NULL, NULL);
+
+CFATTACH_DECL_NEW(bicc, 0,
+    bicc_isa_probe, le_dummyattach, NULL, NULL);
+
+CFATTACH_DECL_NEW(le_bicc, sizeof(struct le_softc),
+    le_dummyprobe, le_bicc_attach, NULL, NULL);
 
 struct le_isa_params {
-	char *name;
+	const char *name;
 	int iosize, rap, rdp;
 	int macstart, macstride;
 } ne2100_params = {
@@ -142,13 +128,13 @@ struct le_isa_params {
 	0, 2
 };
 
-int lance_isa_probe __P((struct isa_attach_args *, struct le_isa_params *));
-void le_isa_attach __P((struct device *, struct le_softc *,
-			struct isa_attach_args *, struct le_isa_params *));
+int lance_isa_probe(struct isa_attach_args *, struct le_isa_params *, int);
+void le_isa_attach(struct device *, struct le_softc *,
+    struct isa_attach_args *, struct le_isa_params *);
 
-int le_isa_intredge __P((void *));
+int le_isa_intredge(void *);
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
 #endif
 
@@ -156,19 +142,17 @@ int le_isa_intredge __P((void *));
 #define	integrate
 #define hide
 #else
-#define	integrate	static __inline
+#define	integrate	static inline
 #define hide		static
 #endif
 
-hide void le_isa_wrcsr __P((struct lance_softc *, u_int16_t, u_int16_t));
-hide u_int16_t le_isa_rdcsr __P((struct lance_softc *, u_int16_t));  
+hide void le_isa_wrcsr(struct lance_softc *, uint16_t, uint16_t);
+hide uint16_t le_isa_rdcsr(struct lance_softc *, uint16_t);
 
 #define	LE_ISA_MEMSIZE	16384
 
 hide void
-le_isa_wrcsr(sc, port, val)
-	struct lance_softc *sc;
-	u_int16_t port, val;
+le_isa_wrcsr(struct lance_softc *sc, uint16_t port, uint16_t val)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
 	bus_space_tag_t iot = lesc->sc_iot;
@@ -178,58 +162,65 @@ le_isa_wrcsr(sc, port, val)
 	bus_space_write_2(iot, ioh, lesc->sc_rdp, val);
 }
 
-hide u_int16_t
-le_isa_rdcsr(sc, port)
-	struct lance_softc *sc;
-	u_int16_t port;
+hide uint16_t
+le_isa_rdcsr(struct lance_softc *sc, uint16_t port)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
 	bus_space_tag_t iot = lesc->sc_iot;
-	bus_space_handle_t ioh = lesc->sc_ioh; 
-	u_int16_t val;
+	bus_space_handle_t ioh = lesc->sc_ioh;
+	uint16_t val;
 
 	bus_space_write_2(iot, ioh, lesc->sc_rap, port);
-	val = bus_space_read_2(iot, ioh, lesc->sc_rdp); 
+	val = bus_space_read_2(iot, ioh, lesc->sc_rdp);
 	return (val);
 }
 
 int
-ne2100_isa_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ne2100_isa_probe(device_t parent, cfdata_t cf, void *aux)
 {
-	return (lance_isa_probe(aux, &ne2100_params));
+
+	return (lance_isa_probe(aux, &ne2100_params, cf->cf_flags));
 }
 
 int
-bicc_isa_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+bicc_isa_probe(device_t parent, cfdata_t cf, void *aux)
 {
-	return (lance_isa_probe(aux, &bicc_params));
+
+	return (lance_isa_probe(aux, &bicc_params, cf->cf_flags));
 }
 
 /*
  * Determine which chip is present on the card.
  */
 int
-lance_isa_probe(ia, p)
-	struct isa_attach_args *ia;
-	struct le_isa_params *p;
+lance_isa_probe(struct isa_attach_args *ia, struct le_isa_params *p, int flags)
 {
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
 	int rap, rdp;
 	int rv = 0;
 
+	if (ia->ia_nio < 1)
+		return (0);
+	if (ia->ia_nirq < 1)
+		return (0);
+	if (ia->ia_ndrq < 1)
+		return (0);
+
+	if (ISA_DIRECT_CONFIG(ia))
+		return (0);
+
 	/* Disallow wildcarded i/o address. */
-	if (ia->ia_iobase == ISACF_PORT_DEFAULT)
+	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+		return (0);
+	if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ)
+		return (0);
+	if ((flags & LANCEISA_FLAG_LOCALBUS) == 0 &&
+	    ia->ia_drq[0].ir_drq == ISA_UNKNOWN_DRQ)
 		return (0);
 
 	/* Map i/o space. */
-	if (bus_space_map(iot, ia->ia_iobase, p->iosize, 0, &ioh))
+	if (bus_space_map(iot, ia->ia_io[0].ir_addr, p->iosize, 0, &ioh))
 		return (0);
 
 	rap = p->rap;
@@ -247,7 +238,19 @@ lance_isa_probe(ia, p)
 	bus_space_write_2(iot, ioh, rap, LE_CSR3);
 	bus_space_write_2(iot, ioh, rdp, 0);
 
-	ia->ia_iosize = p->iosize;
+	ia->ia_nio = 1;
+	ia->ia_io[0].ir_size = p->iosize;
+
+	ia->ia_nirq = 1;
+
+	if ((flags & LANCEISA_FLAG_LOCALBUS) != 0 &&
+	    ia->ia_drq[0].ir_drq == ISA_UNKNOWN_DRQ)
+	    ia->ia_ndrq = 0;
+	else
+	    ia->ia_ndrq = 1;
+
+	ia->ia_niomem = 0;
+
 	rv = 1;
 
 bad:
@@ -256,46 +259,44 @@ bad:
 }
 
 void
-le_dummyattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+le_dummyattach(device_t parent, device_t self, void *aux)
 {
-	printf("\n");
+
+	aprint_normal("\n");
 
 	config_found(self, aux, 0);
 }
 
 int
-le_dummyprobe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+le_dummyprobe(device_t parent, cfdata_t cf, void *aux)
 {
+
 	return (1);
 }
 
 void
-le_ne2100_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+le_ne2100_attach(device_t parent, device_t self, void *aux)
 {
-	le_isa_attach(parent, (void *)self, aux, &ne2100_params);
+	struct le_softc *lesc = device_private(self);
+	struct lance_softc *sc = &lesc->sc_am7990.lsc;
+
+	sc->sc_dev = self;
+	le_isa_attach(parent, lesc, aux, &ne2100_params);
 }
 
 void
-le_bicc_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+le_bicc_attach(device_t parent, device_t self, void *aux)
 {
-	le_isa_attach(parent, (void *)self, aux, &bicc_params);
+	struct le_softc *lesc = device_private(self);
+	struct lance_softc *sc = &lesc->sc_am7990.lsc;
+
+	sc->sc_dev = self;
+	le_isa_attach(parent, lesc, aux, &bicc_params);
 }
 
 void
-le_isa_attach(parent, lesc, ia, p)
-	struct device *parent;
-	struct le_softc *lesc;
-	struct isa_attach_args *ia;
-	struct le_isa_params *p;
+le_isa_attach(struct device *parent, struct le_softc *lesc,
+    struct isa_attach_args *ia, struct le_isa_params *p)
 {
 	struct lance_softc *sc = &lesc->sc_am7990.lsc;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -304,10 +305,10 @@ le_isa_attach(parent, lesc, ia, p)
 	bus_dma_segment_t seg;
 	int i, rseg, error;
 
-	printf(": %s Ethernet\n", p->name);
+	aprint_normal(": %s Ethernet\n", p->name);
 
-	if (bus_space_map(iot, ia->ia_iobase, p->iosize, 0, &ioh))
-		panic("%s: can't map io", sc->sc_dev.dv_xname);
+	if (bus_space_map(iot, ia->ia_io[0].ir_addr, p->iosize, 0, &ioh))
+		panic("%s: can't map io", device_xname(sc->sc_dev));
 
 	/*
 	 * Extract the physical MAC address from the ROM.
@@ -325,17 +326,16 @@ le_isa_attach(parent, lesc, ia, p)
 	/*
 	 * Allocate a DMA area for the card.
 	 */
-	if (bus_dmamem_alloc(dmat, LE_ISA_MEMSIZE, NBPG, 0, &seg, 1,
+	if (bus_dmamem_alloc(dmat, LE_ISA_MEMSIZE, PAGE_SIZE, 0, &seg, 1,
 			     &rseg, BUS_DMA_NOWAIT)) {
-		printf("%s: couldn't allocate memory for card\n",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "couldn't allocate memory for card\n");
 		return;
 	}
 	if (bus_dmamem_map(dmat, &seg, rseg, LE_ISA_MEMSIZE,
-			   (caddr_t *)&sc->sc_mem,
+			   (void **)&sc->sc_mem,
 			   BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) {
-		printf("%s: couldn't map memory for card\n",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't map memory for card\n");
 		return;
 	}
 
@@ -344,15 +344,13 @@ le_isa_attach(parent, lesc, ia, p)
 	 */
 	if (bus_dmamap_create(dmat, LE_ISA_MEMSIZE, 1,
 			LE_ISA_MEMSIZE, 0, BUS_DMA_NOWAIT, &lesc->sc_dmam)) {
-		printf("%s: couldn't create DMA map\n",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't create DMA map\n");
 		bus_dmamem_free(dmat, &seg, rseg);
 		return;
 	}
 	if (bus_dmamap_load(dmat, lesc->sc_dmam,
 			sc->sc_mem, LE_ISA_MEMSIZE, NULL, BUS_DMA_NOWAIT)) {
-		printf("%s: coundn't load DMA map\n",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "coundn't load DMA map\n");
 		bus_dmamem_free(dmat, &seg, rseg);
 		return;
 	}
@@ -371,18 +369,19 @@ le_isa_attach(parent, lesc, ia, p)
 	sc->sc_wrcsr = le_isa_wrcsr;
 	sc->sc_hwinit = NULL;
 
-	if (ia->ia_drq != DRQUNK) {
-		if ((error = isa_dmacascade(ia->ia_ic, ia->ia_drq)) != 0) {
-			printf("%s: unable to cascade DRQ, error = %d\n",
-			    sc->sc_dev.dv_xname, error);
+	if (ia->ia_ndrq > 0) {
+		if ((error = isa_dmacascade(ia->ia_ic,
+					    ia->ia_drq[0].ir_drq)) != 0) {
+			aprint_error_dev(sc->sc_dev,
+			    "unable to cascade DRQ, error = %d\n", error);
 			return;
 		}
 	}
 
-	lesc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq, IST_EDGE,
-	    IPL_NET, le_isa_intredge, sc);
+	lesc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
+	    IST_EDGE, IPL_NET, le_isa_intredge, sc);
 
-	printf("%s", sc->sc_dev.dv_xname);
+	aprint_normal("%s", device_xname(sc->sc_dev));
 	am7990_config(&lesc->sc_am7990);
 }
 
@@ -390,8 +389,7 @@ le_isa_attach(parent, lesc, ia, p)
  * Controller interrupt.
  */
 int
-le_isa_intredge(arg)
-	void *arg;
+le_isa_intredge(void *arg)
 {
 
 	if (am7990_intr(arg) == 0)

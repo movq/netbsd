@@ -1,11 +1,11 @@
-/*	$NetBSD: mpu_fms.c,v 1.1 1999/11/01 20:43:13 augustss Exp $	*/
+/*	$NetBSD: mpu_fms.c,v 1.16 2008/04/28 20:23:55 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Lennart Augustsson (augustss@netbsd.org).
+ * by Lennart Augustsson (augustss@NetBSD.org).
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mpu_fms.c,v 1.16 2008/04/28 20:23:55 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -46,11 +42,11 @@
 #include <sys/audioio.h>
 #include <sys/midiio.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/audio_if.h>
 #include <dev/midi_if.h>
-#include <dev/ic/ac97.h>
+#include <dev/ic/ac97var.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -58,43 +54,36 @@
 #include <dev/ic/mpuvar.h>
 #include <dev/pci/fmsvar.h>
 
-static int	mpu_fms_match __P((struct device *, struct cfdata *, void *));
-static void	mpu_fms_attach __P((struct device *, struct device *, void *));
-
-struct cfattach mpu_fms_ca = {
-	sizeof (struct mpu_softc), mpu_fms_match, mpu_fms_attach
-};
-
 static int
-mpu_fms_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+mpu_fms_match(device_t parent, cfdata_t match, void *aux)
 {
-	struct audio_attach_args *aa = (struct audio_attach_args *)aux;
-	struct fms_softc *ssc = (struct fms_softc *)parent;
+	struct audio_attach_args *aa = aux;
+	struct fms_softc *ssc = device_private(parent);
 	struct mpu_softc sc;
 
 	if (aa->type != AUDIODEV_TYPE_MPU)
-		return (0);
+		return 0;
 	memset(&sc, 0, sizeof sc);
 	sc.ioh = ssc->sc_mpu_ioh;
 	sc.iot = ssc->sc_iot;
-	return (mpu_find(&sc));
+	return mpu_find(&sc);
 }
 
 static void
-mpu_fms_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+mpu_fms_attach(device_t parent, device_t self, void *aux)
 {
-	struct fms_softc *ssc = (struct fms_softc *)parent;
-	struct mpu_softc *sc = (struct mpu_softc *)self;
+	struct fms_softc *ssc = device_private(parent);
+	struct mpu_softc *sc = device_private(self);
+
+	aprint_normal("\n");
 
 	sc->ioh = ssc->sc_mpu_ioh;
 	sc->iot = ssc->sc_iot;
 	sc->model = "FM801 MPU-401 MIDI UART";
+	sc->sc_dev = self;
 
 	mpu_attach(sc);
 }
+
+CFATTACH_DECL_NEW(mpu_fms, sizeof (struct mpu_softc),
+    mpu_fms_match, mpu_fms_attach, NULL, NULL);

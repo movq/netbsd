@@ -1,4 +1,4 @@
-/*      $NetBSD: n_pow.c,v 1.4 1999/07/02 15:37:37 simonb Exp $ */
+/*      $NetBSD: n_pow.c,v 1.7 2003/08/07 16:44:52 agc Exp $ */
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -122,12 +118,18 @@ static char sccsid[] = "@(#)pow.c	8.1 (Berkeley) 6/4/93";
 #define infnan(x)	0.0
 #endif		/* __vax__ or tahoe */
 
-const static double zero=0.0, one=1.0, two=2.0, negone= -1.0;
+static const double zero=0.0, one=1.0, two=2.0, negone= -1.0;
 
-static double pow_P __P((double, double));
+static double pow_P (double, double);
 
-double pow(x,y)
-double x,y;
+float
+powf(float x, float y)
+{
+   return pow((double) x, (double) (y));
+}
+
+double
+pow(double x, double y)
 {
 	double t;
 	if (y==zero)
@@ -168,13 +170,10 @@ double x,y;
 	else
 		return (infnan(EDOM));
 }
+
 /* kernel function for x >= 0 */
 static double
-#ifdef _ANSI_SOURCE
 pow_P(double x, double y)
-#else
-pow_P(x, y) double x, y;
-#endif
 {
 	struct Double s, t;
 	double  huge = 1e300, tiny = 1e-300;

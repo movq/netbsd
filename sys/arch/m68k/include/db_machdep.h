@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.h,v 1.21 1998/09/02 11:16:34 leo Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.27 2006/04/01 15:44:59 cherry Exp $	*/
 
 /* 
  * Mach Operating System
@@ -38,7 +38,7 @@
  * XXX - Would rather not pull in vm headers, but need boolean_t,
  * at least until boolean_t moves to <sys/types.h> or someplace.
  */
-#include <vm/vm_param.h>
+#include <uvm/uvm_param.h>
 
 #include <machine/frame.h>
 #include <machine/psl.h>
@@ -51,11 +51,12 @@ typedef struct trapframe db_regs_t;
 extern db_regs_t	ddb_regs;	/* register state */
 #define DDB_REGS	(&ddb_regs)
 
-#define	PC_REGS(regs)	((db_addr_t)(regs)->tf_pc)
+#define	PC_REGS(regs)	((regs)->tf_pc)
 
+#define	BKPT_ADDR(addr)	(addr)		/* breakpoint address */
 #define	BKPT_INST	0x4e4f		/* breakpoint instruction */
 #define	BKPT_SIZE	(2)		/* size of breakpoint inst */
-#define	BKPT_SET(inst)	(BKPT_INST)
+#define	BKPT_SET(inst, addr)	(BKPT_INST)
 
 #define	FIXUP_PC_AFTER_BREAK(regs)	((regs)->tf_pc -= BKPT_SIZE)
 
@@ -95,15 +96,17 @@ typedef long kgdb_reg_t;
 
 #ifdef _KERNEL
 
-void	Debugger __P((void));	/* XXX */
-void	kdb_kintr __P((db_regs_t *));
-int 	kdb_trap __P((int, db_regs_t *));
+void	Debugger(void);		/* XXX */
+void	kdb_kintr(db_regs_t *);
+int 	kdb_trap(int, db_regs_t *);
 
 #endif /* _KERNEL */
 
 /*
- * We use a.out symbols in DDB.
+ * We use either a.out or Elf32 symbols in DDB.
  */
 #define	DB_AOUT_SYMBOLS
+#define	DB_ELF_SYMBOLS
+#define	DB_ELFSIZE	32
 
 #endif	/* _M68K_DB_MACHDEP_H_ */

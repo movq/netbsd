@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.5 1997/10/19 14:06:01 mrg Exp $	*/
+/*	$NetBSD: misc.c,v 1.11 2007/08/22 16:59:19 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)misc.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: misc.c,v 1.5 1997/10/19 14:06:01 mrg Exp $");
+__RCSID("$NetBSD: misc.c,v 1.11 2007/08/22 16:59:19 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,21 +47,38 @@ __RCSID("$NetBSD: misc.c,v 1.5 1997/10/19 14:06:01 mrg Exp $");
 #include "extern.h"
 
 void
-eofmsg(file)
-	char *file;
+errmsg(char *file, off_t byte, off_t line)
 {
-	if (!sflag)
-		warnx("EOF on %s", file);
+	if (lflag)
+		err(ERR_EXIT, "%s: char %lld, line %lld", file,
+		    (long long)byte, (long long)line);
+	else
+		err(ERR_EXIT, "%s", file);
+}
+
+void
+eofmsg(char *file, off_t byte, off_t line)
+{
+	if (!sflag) {
+		if (!lflag)
+			warnx("EOF on %s", file);
+		else {
+		    if (line > 0)
+			    warnx("EOF on %s: char %lld, line %lld",
+				file, (long long)byte, (long long)line);
+		    else
+			    warnx("EOF on %s: char %lld",
+				file, (long long)byte);
+		}
+	}
 	exit(DIFF_EXIT);
 }
 
 void
-diffmsg(file1, file2, byte, line)
-	char *file1, *file2;
-	off_t byte, line;
+diffmsg(char *file1, char *file2, off_t byte, off_t line)
 {
 	if (!sflag)
-		(void)printf("%s %s differ: char %qd, line %qd\n",
+		(void)printf("%s %s differ: char %lld, line %lld\n",
 		    file1, file2, (long long)byte, (long long)line);
 	exit(DIFF_EXIT);
 }

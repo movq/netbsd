@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.12 1999/06/06 03:27:06 thorpej Exp $	*/
+/*	$NetBSD: main.c,v 1.23 2007/02/21 21:01:10 hubertf Exp $	*/
 
 /*
  * The mrouted program is covered by the license in the accompanying file
@@ -20,11 +20,7 @@
 
 
 #include "defs.h"
-#ifdef __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 #include <fcntl.h>
 
 #ifdef SNMP
@@ -33,9 +29,10 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("@(#) $NetBSD: main.c,v 1.12 1999/06/06 03:27:06 thorpej Exp $");
+__RCSID("@(#) $NetBSD: main.c,v 1.23 2007/02/21 21:01:10 hubertf Exp $");
 #endif
 
+#include <ctype.h>
 #include <err.h>
 #include <util.h>
 
@@ -67,23 +64,23 @@ static int nhandlers = 0;
 /*
  * Forward declarations.
  */
-static void fasttimer __P((int));
-static void done __P((int));
-static void dump __P((int));
-static void fdump __P((int));
-static void cdump __P((int));
-static void restart __P((int));
-static void timer __P((void));
-static void cleanup __P((void));
-static void resetlogging __P((void *));
+static void fasttimer(int);
+static void done(int);
+static void dump(int);
+static void fdump(int);
+static void cdump(int);
+static void restart(int);
+static void timer(void);
+static void cleanup(void);
+static void resetlogging(void *);
 
 /* To shut up gcc -Wstrict-prototypes */
-int main __P((int argc, char **argv));
+int main(int argc, char *argv[]);
+void logit(int severity, int syserr, const char *format, ...)
+	__attribute__((__format__(__printf__, 3, 4)));
 
 int
-register_input_handler(fd, func)
-    int fd;
-    ihfunc_t func;
+register_input_handler(int fd, ihfunc_t func)
 {
     if (nhandlers >= NHANDLERS)
 	return -1;
@@ -95,13 +92,11 @@ register_input_handler(fd, func)
 }
 
 int
-main(argc, argv)
-    int argc;
-    char *argv[];
+main(int argc, char *argv[])
 {
-    register int recvlen;
-    register int omask;
-    int dummy;
+    int recvlen;
+    int omask;
+    socklen_t dummy;
     FILE *fp;
     struct timeval tv;
     u_int32_t prev_genid;
@@ -124,7 +119,7 @@ main(argc, argv)
     argv++, argc--;
     while (argc > 0 && *argv[0] == '-') {
 	if (strcmp(*argv, "-d") == 0) {
-	    if (argc > 1 && isdigit(*(argv + 1)[0])) {
+	    if (argc > 1 && isdigit((unsigned char)*(argv + 1)[0])) {
 		argv++, argc--;
 		debug = atoi(*argv);
 	    } else
@@ -173,16 +168,10 @@ usage:	fprintf(stderr,
 #else
     (void)openlog("mrouted", LOG_PID);
 #endif
-    sprintf(versionstring, "mrouted version %d.%d",
-			PROTOCOL_VERSION, MROUTED_VERSION);
+    snprintf(versionstring, sizeof(versionstring),
+      "mrouted version %d.%d", PROTOCOL_VERSION, MROUTED_VERSION);
 
-    log(LOG_NOTICE, 0, "%s", versionstring);
-
-#ifdef SYSV
-    srand48(time(NULL));
-#else
-    srandom(gethostid());
-#endif
+    logit(LOG_NOTICE, 0, "%s", versionstring);
 
     /*
      * Get generation id 
@@ -217,7 +206,7 @@ usage:	fprintf(stderr,
      */
     if ((((vers >> 8) & 0xff) != 3) ||
 	 ((vers & 0xff) != 5))
-	log(LOG_ERR, 0, "kernel (v%d.%d)/mrouted (v%d.%d) version mismatch",
+	logit(LOG_ERR, 0, "kernel (v%d.%d)/mrouted (v%d.%d) version mismatch",
 		(vers >> 8) & 0xff, vers & 0xff,
 		PROTOCOL_VERSION, MROUTED_VERSION);
 #endif
@@ -242,14 +231,12 @@ usage:	fprintf(stderr,
     rsrr_init();
 #endif /* RSRR */
 
-#if defined(__STDC__) || defined(__GNUC__)
     /*
      * Allow cleanup if unexpected exit.  Apparently some architectures
      * have a kernel bug where closing the socket doesn't do an
      * ip_mrouter_done(), so we attempt to do it on exit.
      */
     atexit(cleanup);
-#endif
 
     if (debug)
 	fprintf(stderr, "pruning %s\n", pruning ? "on" : "off");
@@ -265,9 +252,13 @@ usage:	fprintf(stderr,
 	(void)signal(SIGQUIT, dump);
 
     FD_ZERO(&readers);
+    if (igmp_socket >= FD_SETSIZE)
+	logit(LOG_ERR, 0, "descriptor too big");
     FD_SET(igmp_socket, &readers);
     nfds = igmp_socket + 1;
     for (i = 0; i < nhandlers; i++) {
+	if (ihandlers[i].fd >= FD_SETSIZE)
+	    logit(LOG_ERR, 0, "descriptor too big");
 	FD_SET(ihandlers[i].fd, &readers);
 	if (ihandlers[i].fd >= nfds)
 	    nfds = ihandlers[i].fd + 1;
@@ -289,7 +280,6 @@ usage:	fprintf(stderr,
     /*
      * Main receive loop.
      */
-    dummy = 0;
     for(;;) {
 #ifdef SYSV
 	sigset_t block, oblock;
@@ -324,7 +314,7 @@ usage:	fprintf(stderr,
 #endif
    {
             if (errno != EINTR) /* SIGALRM is expected */
-                log(LOG_WARNING, errno, "select failed");
+                logit(LOG_WARNING, errno, "select failed");
             continue;
         }
 
@@ -332,14 +322,14 @@ usage:	fprintf(stderr,
 	    recvlen = recvfrom(igmp_socket, recv_buf, RECV_BUF_SIZE,
 			       0, NULL, &dummy);
 	    if (recvlen < 0) {
-		if (errno != EINTR) log(LOG_ERR, errno, "recvfrom");
+		if (errno != EINTR) logit(LOG_ERR, errno, "recvfrom");
 		continue;
 	    }
 #ifdef SYSV
 	    (void)sigemptyset(&block);
 	    (void)sigaddset(&block, SIGALRM);
 	    if (sigprocmask(SIG_BLOCK, &block, &oblock) < 0)
-		    log(LOG_ERR, errno, "sigprocmask");
+		    logit(LOG_ERR, errno, "sigprocmask");
 #else
 	    omask = sigblock(sigmask(SIGALRM));
 #endif
@@ -373,20 +363,19 @@ usage:	fprintf(stderr,
  * do all the other time-based processing.
  */
 static void
-fasttimer(i)
-    int i;
+fasttimer(int i)
 {
     static unsigned int tlast;
     static unsigned int nsent;
-    register unsigned int t = tlast + 1;
-    register int n;
+    unsigned int t = tlast + 1;
+    int n;
 
     /*
      * if we're in the last second, send everything that's left.
      * otherwise send at least the fraction we should have sent by now.
      */
     if (t >= ROUTE_REPORT_INTERVAL) {
-	register int nleft = nroutes - nsent;
+	int nleft = nroutes - nsent;
 	while (nleft > 0) {
 	    if ((n = report_next_chunk()) <= 0)
 		break;
@@ -395,7 +384,7 @@ fasttimer(i)
 	tlast = 0;
 	nsent = 0;
     } else {
-	register unsigned int ncum = nroutes * t / ROUTE_REPORT_INTERVAL;
+	unsigned int ncum = nroutes * t / ROUTE_REPORT_INTERVAL;
 	while (nsent < ncum) {
 	    if ((n = report_next_chunk()) <= 0)
 		break;
@@ -437,7 +426,7 @@ static u_long virtual_time = 0;
  * virtual interface data structures.
  */
 static void
-timer()
+timer(void)
 {
     age_routes();	/* Advance the timers in the route entries     */
     age_vifs();		/* Advance the timers for neighbors */
@@ -489,16 +478,15 @@ timer()
  * On termination, let everyone know we're going away.
  */
 static void
-done(i)
-    int i;
+done(int i)
 {
-    log(LOG_NOTICE, 0, "%s exiting", versionstring);
+    logit(LOG_NOTICE, 0, "%s exiting", versionstring);
     cleanup();
     _exit(1);
 }
 
 static void
-cleanup()
+cleanup(void)
 {
     static int in_cleanup = 0;
 
@@ -518,8 +506,7 @@ cleanup()
  * Dump internal data structures to stderr.
  */
 static void
-dump(i)
-    int i;
+dump(int i)
 {
     dump_vifs(stderr);
     dump_routes(stderr);
@@ -530,8 +517,7 @@ dump(i)
  * Dump internal data structures to a file.
  */
 static void
-fdump(i)
-    int i;
+fdump(int i)
 {
     FILE *fp;
 
@@ -548,8 +534,7 @@ fdump(i)
  * Dump local cache contents to a file.
  */
 static void
-cdump(i)
-    int i;
+cdump(int i)
 {
     FILE *fp;
 
@@ -565,15 +550,14 @@ cdump(i)
  * Restart mrouted
  */
 static void
-restart(i)
-    int i;
+restart(int i)
 {
-    register int omask;
+    int omask;
 #ifdef SYSV
     sigset_t block, oblock;
 #endif
 
-    log(LOG_NOTICE, 0, "%s restart", versionstring);
+    logit(LOG_NOTICE, 0, "%s restart", versionstring);
 
     /*
      * reset all the entries
@@ -582,7 +566,7 @@ restart(i)
     (void)sigemptyset(&block);
     (void)sigaddset(&block, SIGALRM);
     if (sigprocmask(SIG_BLOCK, &block, &oblock) < 0)
-	log(LOG_ERR, errno, "sigprocmask");
+	logit(LOG_ERR, errno, "sigprocmask");
 #else
     omask = sigblock(sigmask(SIGALRM));
 #endif
@@ -618,8 +602,7 @@ restart(i)
 static int log_nmsgs = 0;
 
 static void
-resetlogging(arg)
-    void *arg;
+resetlogging(void *arg)
 {
     int nxttime = 60;
     void *narg = NULL;
@@ -641,9 +624,8 @@ resetlogging(arg)
  * according to the severity of the message and the current debug level.
  * For errors of severity LOG_ERR or worse, terminate the program.
  */
-#ifdef __STDC__
 void
-log(int severity, int syserr, char *format, ...)
+logit(int severity, int syserr, const char *format, ...)
 {
     va_list ap;
     static char fmt[211] = "warning - ";
@@ -654,25 +636,7 @@ log(int severity, int syserr, char *format, ...)
     time_t t;
 
     va_start(ap, format);
-#else
-/*VARARGS3*/
-void
-log(severity, syserr, format, va_alist)
-    int severity, syserr;
-    char *format;
-    va_dcl
-{
-    va_list ap;
-    static char fmt[211] = "warning - ";
-    char *msg;
-    char tbuf[20];
-    struct timeval now;
-    struct tm *thyme;
-    time_t t;
-
-    va_start(ap);
-#endif
-    vsprintf(&fmt[10], format, ap);
+    vsnprintf(&fmt[10], sizeof(fmt) - 10, format, ap);
     va_end(ap);
     msg = (severity == LOG_WARNING) ? fmt : &fmt[10];
 
@@ -684,9 +648,9 @@ log(severity, syserr, format, va_alist)
 	    gettimeofday(&now,NULL);
 	    t = now.tv_sec;
 	    thyme = localtime(&t);
-	    strftime(tbuf, sizeof(tbuf), "%X.%%03d ", thyme);
-	    fprintf(stderr, tbuf, now.tv_usec / 1000);
-	    fprintf(stderr, "%s", msg);
+	    strftime(tbuf, sizeof(tbuf), "%X", thyme);
+	    fprintf(stderr, "%s.%03ld %s", tbuf, (long)now.tv_usec / 1000,
+		msg);
 	    if (syserr == 0)
 		fprintf(stderr, "\n");
 	    else
@@ -702,15 +666,13 @@ log(severity, syserr, format, va_alist)
 		syslog(severity, "%s", msg);
 	}
 
-	if (severity <= LOG_ERR) exit(-1);
+	if (severity <= LOG_ERR) exit(1);
     }
 }
 
 #ifdef DEBUG_MFC
 void
-md_log(what, origin, mcastgrp)
-    int what;
-    u_int32_t origin, mcastgrp;
+md_log(int what, u_int32_t origin, u_int32_t mcastgrp)
 {
     static FILE *f = NULL;
     struct timeval tv;
@@ -718,7 +680,7 @@ md_log(what, origin, mcastgrp)
 
     if (!f) {
 	if ((f = fopen("/tmp/mrouted.clog", "w")) == NULL) {
-	    log(LOG_ERR, errno, "open /tmp/mrouted.clog");
+	    logit(LOG_ERR, errno, "open /tmp/mrouted.clog");
 	}
     }
 

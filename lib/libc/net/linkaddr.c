@@ -1,4 +1,4 @@
-/*	$NetBSD: linkaddr.c,v 1.11 1999/09/20 04:39:15 lukem Exp $	*/
+/*	$NetBSD: linkaddr.c,v 1.14 2005/11/29 03:11:59 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)linkaddr.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: linkaddr.c,v 1.11 1999/09/20 04:39:15 lukem Exp $");
+__RCSID("$NetBSD: linkaddr.c,v 1.14 2005/11/29 03:11:59 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -128,7 +124,7 @@ link_addr(addr, sdl)
 	} while (cp < cplim); 
 	sdl->sdl_alen = cp - LLADDR(sdl);
 	newaddr = cp - (char *)(void *)sdl;
-	if (newaddr > sizeof(*sdl))
+	if ((size_t) newaddr > sizeof(*sdl))
 		sdl->sdl_len = newaddr;
 	return;
 }
@@ -142,8 +138,8 @@ link_ntoa(sdl)
 	static char obuf[64];
 	register char *out = obuf; 
 	register size_t i;
-	register u_char *in = (u_char *)LLADDR(sdl);
-	u_char *inlim = in + sdl->sdl_alen;
+	const u_char *in = (const u_char *)CLLADDR(sdl);
+	const u_char *inlim = in + sdl->sdl_alen;
 	int firsttime = 1;
 
 	_DIAGASSERT(sdl != NULL);

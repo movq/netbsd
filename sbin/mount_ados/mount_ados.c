@@ -1,9 +1,9 @@
-/*	$NetBSD: mount_ados.c,v 1.9 1999/06/25 19:28:35 perseant Exp $	*/
+/* $NetBSD: mount_ados.c,v 1.28 2008/08/05 20:57:45 pooka Exp $ */
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
  * All rights reserved.
- *
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -14,10 +14,12 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed by Christopher G. Demetriou.
+ *          This product includes software developed for the
+ *          NetBSD Project.  See http://www.NetBSD.org/ for
+ *          information about NetBSD.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
- *
+ *    derived from this software without specific prior written permission.
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -28,18 +30,19 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * 
+ * <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mount_ados.c,v 1.9 1999/06/25 19:28:35 perseant Exp $");
+__RCSID("$NetBSD: mount_ados.c,v 1.28 2008/08/05 20:57:45 pooka Exp $");
 #endif /* not lint */
 
-#include <sys/cdefs.h>
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
-#include <ctype.h>
+#include <assert.h>
 #include <err.h>
 #include <grp.h>
 #include <pwd.h>
@@ -50,28 +53,36 @@ __RCSID("$NetBSD: mount_ados.c,v 1.9 1999/06/25 19:28:35 perseant Exp $");
 
 #include <adosfs/adosfs.h>
 
-#include "mntopts.h"
+#include <mntopts.h>
+#include <errno.h>
 
-const struct mntopt mopts[] = {
+#include "mountprog.h"
+
+static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
-	{ NULL }
+	MOPT_GETARGS,
+	MOPT_NULL,
 };
 
-gid_t	a_gid __P((char *));
-uid_t	a_uid __P((char *));
-mode_t	a_mask __P((char *));
-int	main __P((int, char *[]));
-void	usage __P((void));
+int	mount_ados(int argc, char **argv);
+static void	usage(void);
+
+#ifndef MOUNT_NOMAIN
+int
+main(int argc, char **argv)
+{
+	return mount_ados(argc, argv);
+}
+#endif
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+mount_ados(int argc, char **argv)
 {
 	struct adosfs_args args;
 	struct stat sb;
+	mntoptparse_t mp;
 	int c, mntflags, set_gid, set_uid, set_mask;
-	char *dev, *dir, ndir[MAXPATHLEN+1];
+	char *dev, *dir, canon_dir[MAXPATHLEN], canon_dev[MAXPATHLEN];
 
 	mntflags = set_gid = set_uid = set_mask = 0;
 	(void)memset(&args, '\0', sizeof(args));
@@ -91,7 +102,10 @@ main(argc, argv)
 			set_mask = 1;
 			break;
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			mp = getmntopts(optarg, mopts, &mntflags, 0);
+			if (mp == NULL)
+				err(1, "getmntopts");
+			freemntopts(mp);
 			break;
 		case '?':
 		default:
@@ -105,22 +119,24 @@ main(argc, argv)
 
 	dev = argv[optind];
 	dir = argv[optind + 1];
-	if (dir[0] != '/') {
+
+	if (realpath(dev, canon_dev) == NULL)        /* Check device path */
+		err(1, "realpath %s", dev);
+	if (strncmp(dev, canon_dev, MAXPATHLEN)) {
+		warnx("\"%s\" is a relative path.", dev);
+		dev = canon_dev;
+		warnx("using \"%s\" instead.", dev);
+	}
+
+	if (realpath(dir, canon_dir) == NULL)        /* Check mounton path */
+		err(1, "realpath %s", dir);
+	if (strncmp(dir, canon_dir, MAXPATHLEN)) {
 		warnx("\"%s\" is a relative path.", dir);
-		if (getcwd(ndir, sizeof(ndir)) == NULL)
-			err(1, "getcwd");
-		strncat(ndir, "/", sizeof(ndir) - strlen(ndir) - 1);
-		strncat(ndir, dir, sizeof(ndir) - strlen(ndir) - 1);
-		dir = ndir;
+		dir = canon_dir;
 		warnx("using \"%s\" instead.", dir);
 	}
 
 	args.fspec = dev;
-	args.export.ex_root = -2;	/* unchecked anyway on DOS fs */
-	if (mntflags & MNT_RDONLY)
-		args.export.ex_flags = MNT_EXRDONLY;
-	else
-		args.export.ex_flags = 0;
 	if (!set_gid || !set_uid || !set_mask) {
 		if (stat(dir, &sb) == -1)
 			err(1, "stat %s", dir);
@@ -133,72 +149,26 @@ main(argc, argv)
 			args.mask = sb.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
 	}
 
-	if (mount(MOUNT_ADOSFS, dir, mntflags, &args) < 0)
+	if (mount(MOUNT_ADOSFS, dir, mntflags, &args, sizeof args) == -1)
+		if (errno != EROFS)
+			err(1, "%s on %s", dev, dir);
+
+	if (mntflags & MNT_GETARGS) {
+		assert(errno != EROFS);
+		printf("uid=%d, gid=%d, mask=0%o\n", args.uid, args.gid,
+		    args.mask);
+		exit(0);
+	}
+
+	mntflags |= MNT_RDONLY;
+	if (mount(MOUNT_ADOSFS, dir, mntflags, &args, sizeof args) == -1)
 		err(1, "%s on %s", dev, dir);
 
 	exit (0);
 }
 
-gid_t
-a_gid(s)
-	char *s;
-{
-	struct group *gr;
-	char *gname;
-	gid_t gid;
-
-	if ((gr = getgrnam(s)) != NULL)
-		gid = gr->gr_gid;
-	else {
-		for (gname = s; *s && isdigit(*s); ++s);
-		if (!*s)
-			gid = atoi(gname);
-		else
-			errx(1, "unknown group id: %s", gname);
-	}
-	return (gid);
-}
-
-uid_t
-a_uid(s)
-	char *s;
-{
-	struct passwd *pw;
-	char *uname;
-	uid_t uid;
-
-	if ((pw = getpwnam(s)) != NULL)
-		uid = pw->pw_uid;
-	else {
-		for (uname = s; *s && isdigit(*s); ++s);
-		if (!*s)
-			uid = atoi(uname);
-		else
-			errx(1, "unknown user id: %s", uname);
-	}
-	return (uid);
-}
-
-mode_t
-a_mask(s)
-	char *s;
-{
-	int done, rv;
-	char *ep;
-
-	done = 0;
-	rv = -1;
-	if (*s >= '0' && *s <= '7') {
-		done = 1;
-		rv = strtol(optarg, &ep, 8);
-	}
-	if (!done || rv < 0 || *ep)
-		errx(1, "invalid file mode: %s", s);
-	return (rv);
-}
-
-void
-usage()
+static void
+usage(void)
 {
 
 	fprintf(stderr, "usage: mount_ados [-o options] [-u user] [-g group] [-m mask] bdev dir\n");

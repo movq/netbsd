@@ -1,8 +1,10 @@
-/* terminal.c -- How to handle the physical terminal for Info.
-   $Id: terminal.c,v 1.3 1999/02/11 05:09:20 tv Exp $
+/*	$NetBSD: terminal.c,v 1.10 2008/09/02 08:00:24 christos Exp $	*/
 
-   Copyright (C) 1988, 89, 90, 91, 92, 93, 96, 97, 98
-   Free Software Foundation, Inc.
+/* terminal.c -- how to handle the physical terminal for Info.
+   Id: terminal.c,v 1.3 2004/04/11 17:56:46 karl Exp
+
+   Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1996, 1997, 1998,
+   1999, 2001, 2002, 2004 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -18,7 +20,7 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-   Written by Brian Fox (bfox@ai.mit.edu). */
+   Originally written by Brian Fox (bfox@ai.mit.edu). */
 
 #include "info.h"
 #include "terminal.h"
@@ -31,7 +33,7 @@
 #ifdef HAVE_NCURSES_TERMCAP_H
 #include <ncurses/termcap.h>
 #else
-#if defined(HAVE_TERMCAP_H) && !defined(__NetBSD__)
+#ifdef HAVE_TERMCAP_H
 #include <termcap.h>
 #else
 /* On Solaris2, sys/types.h #includes sys/reg.h, which #defines PC.
@@ -76,9 +78,10 @@ VFunction *terminal_scroll_terminal_hook = (VFunction *)NULL;
 /* **************************************************************** */
 
 /* A buffer which holds onto the current terminal description, and a pointer
-   used to float within it. */
-static char *term_buffer = (char *)NULL;
-static char *term_string_buffer = (char *)NULL;
+   used to float within it.  And the name of the terminal.  */
+static char *term_buffer = NULL;
+static char *term_string_buffer = NULL;
+static char *term_name;
 
 /* Some strings to control terminal actions.  These are output by tputs (). */
 static char *term_goto, *term_clreol, *term_cr, *term_clrpag;
@@ -102,9 +105,6 @@ static char *visible_bell;
 /* The string to write to turn on the meta key, if this term has one. */
 static char *term_mm;
 
-/* The string to write to turn off the meta key, if this term has one. */
-static char *term_mo;
-
 /* The string to turn on inverse mode, if this term has one. */
 static char *term_invbeg;
 
@@ -114,18 +114,11 @@ static char *term_invend;
 /* Although I can't find any documentation that says this is supposed to
    return its argument, all the code I've looked at (termutils, less)
    does so, so fine.  */
-#ifdef __NetBSD__
-void
-#else
 static int
-#endif
-output_character_function (c)
-     int c;
+output_character_function (int c)
 {
   putc (c, stdout);
-#ifndef __NetBSD__
   return c;
-#endif
 }
 
 /* Macro to send STRING to the terminal. */
@@ -137,9 +130,9 @@ output_character_function (c)
 
 /* Tell the terminal that we will be doing cursor addressable motion.  */
 static void
-terminal_begin_using_terminal ()
+terminal_begin_using_terminal (void)
 {
-  RETSIGTYPE (*sigsave) ();
+  RETSIGTYPE (*sigsave) (int signum);
 
   if (term_keypad_on)
       send_to_terminal (term_keypad_on);
@@ -152,12 +145,13 @@ terminal_begin_using_terminal ()
 #endif
 
   send_to_terminal (term_begin_use);
-  /* Without this fflush and sleep, running info in a shelltool or
-     cmdtool (TERM=sun-cmd) with scrollbars loses -- the scrollbars are
-     not restored properly.
-     From: strube@physik3.gwdg.de (Hans Werner Strube).  */
   fflush (stdout);
-  sleep (1);
+  if (STREQ (term_name, "sun-cmd"))
+    /* Without this fflush and sleep, running info in a shelltool or
+       cmdtool (TERM=sun-cmd) with scrollbars loses -- the scrollbars are
+       not restored properly.
+       From: strube@physik3.gwdg.de (Hans Werner Strube).  */
+    sleep (1);
 
 #ifdef SIGWINCH
   signal (SIGWINCH, sigsave);
@@ -167,9 +161,9 @@ terminal_begin_using_terminal ()
 /* Tell the terminal that we will not be doing any more cursor
    addressable motion. */
 static void
-terminal_end_using_terminal ()
+terminal_end_using_terminal (void)
 {
-  RETSIGTYPE (*sigsave) ();
+  RETSIGTYPE (*sigsave) (int signum);
 
   if (term_keypad_off)
       send_to_terminal (term_keypad_off);
@@ -183,7 +177,9 @@ terminal_end_using_terminal ()
 
   send_to_terminal (term_end_use);
   fflush (stdout);
-  sleep (1);
+  if (STREQ (term_name, "sun-cmd"))
+    /* See comments at other sleep.  */
+    sleep (1);
 
 #ifdef SIGWINCH
   signal (SIGWINCH, sigsave);
@@ -218,17 +214,21 @@ int terminal_use_visible_bell_p = 0;
 int terminal_can_scroll = 0;
 
 /* The key sequences output by the arrow keys, if this terminal has any. */
-char *term_ku = (char *)NULL;
-char *term_kd = (char *)NULL;
-char *term_kr = (char *)NULL;
-char *term_kl = (char *)NULL;
-char *term_kP = (char *)NULL;   /* page-up */
-char *term_kN = (char *)NULL;   /* page-down */
+char *term_ku = NULL;
+char *term_kd = NULL;
+char *term_kr = NULL;
+char *term_kl = NULL;
+char *term_kP = NULL;   /* page-up */
+char *term_kN = NULL;   /* page-down */
+char *term_kh = NULL;	/* home */
+char *term_ke = NULL;	/* end */
+char *term_kD = NULL;	/* delete */
+char *term_ki = NULL;	/* ins */
+char *term_kx = NULL;	/* del */
 
 /* Move the cursor to the terminal location of X and Y. */
 void
-terminal_goto_xy (x, y)
-     int x, y;
+terminal_goto_xy (int x, int y)
 {
   if (terminal_goto_xy_hook)
     (*terminal_goto_xy_hook) (x, y);
@@ -241,8 +241,7 @@ terminal_goto_xy (x, y)
 
 /* Print STRING to the terminal at the current position. */
 void
-terminal_put_text (string)
-     char *string;
+terminal_put_text (char *string)
 {
   if (terminal_put_text_hook)
     (*terminal_put_text_hook) (string);
@@ -254,9 +253,7 @@ terminal_put_text (string)
 
 /* Print NCHARS from STRING to the terminal at the current position. */
 void
-terminal_write_chars (string, nchars)
-     char *string;
-     int nchars;
+terminal_write_chars (char *string, int nchars)
 {
   if (terminal_write_chars_hook)
     (*terminal_write_chars_hook) (string, nchars);
@@ -269,7 +266,7 @@ terminal_write_chars (string, nchars)
 
 /* Clear from the current position of the cursor to the end of the line. */
 void
-terminal_clear_to_eol ()
+terminal_clear_to_eol (void)
 {
   if (terminal_clear_to_eol_hook)
     (*terminal_clear_to_eol_hook) ();
@@ -281,7 +278,7 @@ terminal_clear_to_eol ()
 
 /* Clear the entire terminal screen. */
 void
-terminal_clear_screen ()
+terminal_clear_screen (void)
 {
   if (terminal_clear_screen_hook)
     (*terminal_clear_screen_hook) ();
@@ -293,7 +290,7 @@ terminal_clear_screen ()
 
 /* Move the cursor up one line. */
 void
-terminal_up_line ()
+terminal_up_line (void)
 {
   if (terminal_up_line_hook)
     (*terminal_up_line_hook) ();
@@ -305,7 +302,7 @@ terminal_up_line ()
 
 /* Move the cursor down one line. */
 void
-terminal_down_line ()
+terminal_down_line (void)
 {
   if (terminal_down_line_hook)
     (*terminal_down_line_hook) ();
@@ -317,7 +314,7 @@ terminal_down_line ()
 
 /* Turn on reverse video if possible. */
 void
-terminal_begin_inverse ()
+terminal_begin_inverse (void)
 {
   if (terminal_begin_inverse_hook)
     (*terminal_begin_inverse_hook) ();
@@ -329,7 +326,7 @@ terminal_begin_inverse ()
 
 /* Turn off reverse video if possible. */
 void
-terminal_end_inverse ()
+terminal_end_inverse (void)
 {
   if (terminal_end_inverse_hook)
     (*terminal_end_inverse_hook) ();
@@ -342,7 +339,7 @@ terminal_end_inverse ()
 /* Ring the terminal bell.  The bell is run visibly if it both has one and
    terminal_use_visible_bell_p is non-zero. */
 void
-terminal_ring_bell ()
+terminal_ring_bell (void)
 {
   if (terminal_ring_bell_hook)
     (*terminal_ring_bell_hook) ();
@@ -357,8 +354,7 @@ terminal_ring_bell ()
 
 /* At the line START, delete COUNT lines from the terminal display. */
 static void
-terminal_delete_lines (start, count)
-     int start, count;
+terminal_delete_lines (int start, int count)
 {
   int lines;
 
@@ -381,8 +377,7 @@ terminal_delete_lines (start, count)
 
 /* At the line START, insert COUNT lines in the terminal display. */
 static void
-terminal_insert_lines (start, count)
-     int start, count;
+terminal_insert_lines (int start, int count)
 {
   int lines;
 
@@ -409,8 +404,7 @@ terminal_insert_lines (start, count)
    towards the top of the screen, else they are scrolled towards the
    bottom of the screen. */
 void
-terminal_scroll_terminal (start, end, amount)
-     int start, end, amount;
+terminal_scroll_terminal (int start, int end, int amount)
 {
   if (!terminal_can_scroll)
     return;
@@ -446,8 +440,7 @@ terminal_scroll_terminal (start, end, amount)
 /* Re-initialize the terminal considering that the TERM/TERMCAP variable
    has changed. */
 void
-terminal_new_terminal (terminal_name)
-     char *terminal_name;
+terminal_new_terminal (char *terminal_name)
 {
   if (terminal_new_terminal_hook)
     (*terminal_new_terminal_hook) (terminal_name);
@@ -459,7 +452,7 @@ terminal_new_terminal (terminal_name)
 
 /* Set the global variables SCREENWIDTH and SCREENHEIGHT. */
 void
-terminal_get_screen_size ()
+terminal_get_screen_size (void)
 {
   if (terminal_get_screen_size_hook)
     (*terminal_get_screen_size_hook) ();
@@ -519,10 +512,9 @@ terminal_get_screen_size ()
    TERMINAL_HAS_META_P becomes nonzero if this terminal supports a Meta
    key.  Finally, the terminal screen is cleared. */
 void
-terminal_initialize_terminal (terminal_name)
-     char *terminal_name;
+terminal_initialize_terminal (char *terminal_name)
 {
-  char *term, *buffer;
+  char *buffer;
 
   terminal_is_dumb_p = 0;
 
@@ -532,37 +524,48 @@ terminal_initialize_terminal (terminal_name)
       return;
     }
 
-  term = terminal_name ? terminal_name : getenv ("TERM");
+  term_name = terminal_name ? terminal_name : getenv ("TERM");
+  if (!term_name)
+    term_name = "dumb";
 
   if (!term_string_buffer)
-    term_string_buffer = (char *)xmalloc (2048);
+    term_string_buffer = xmalloc (2048);
 
   if (!term_buffer)
-    term_buffer = (char *)xmalloc (2048);
+    term_buffer = xmalloc (2048);
 
   buffer = term_string_buffer;
 
-  term_clrpag = term_cr = term_clreol = (char *)NULL;
+  term_clrpag = term_cr = term_clreol = NULL;
 
-  if (!term)
-    term = "dumb";
-
-  if (tgetent (term_buffer, term) <= 0)
+  /* HP-UX 11.x returns 0 for OK --jeff.hull@state.co.us.  */
+  if (tgetent (term_buffer, term_name) < 0)
     {
       terminal_is_dumb_p = 1;
       screenwidth = 80;
       screenheight = 24;
       term_cr = "\r";
-      term_up = term_dn = audible_bell = visible_bell = (char *)NULL;
-      term_ku = term_kd = term_kl = term_kr = (char *)NULL;
-      term_kP = term_kN = (char *)NULL;
+      term_up = term_dn = audible_bell = visible_bell = NULL;
+      term_ku = term_kd = term_kl = term_kr = NULL;
+      term_kP = term_kN = NULL;
+      term_kh = term_ke = NULL;
+      term_kD = NULL;
       return;
     }
 
   BC = tgetstr ("pc", &buffer);
   PC = BC ? *BC : 0;
 
-#if defined (TIOCGETP)
+#if defined (HAVE_TERMIOS_H)
+  {
+    struct termios ti;
+    if (tcgetattr (fileno(stdout), &ti) != -1)
+      ospeed = cfgetospeed (&ti);
+    else
+      ospeed = B9600;
+  }
+#else
+# if defined (TIOCGETP)
   {
     struct sgttyb sg;
 
@@ -571,16 +574,17 @@ terminal_initialize_terminal (terminal_name)
     else
       ospeed = B9600;
   }
-#else
+# else
   ospeed = B9600;
-#endif                          /* !TIOCGETP */
+# endif /* !TIOCGETP */
+#endif
 
   term_cr = tgetstr ("cr", &buffer);
   term_clreol = tgetstr ("ce", &buffer);
   term_clrpag = tgetstr ("cl", &buffer);
   term_goto = tgetstr ("cm", &buffer);
 
-  /* Find out about this terminals scrolling capability. */
+  /* Find out about this terminal's scrolling capability. */
   term_AL = tgetstr ("AL", &buffer);
   term_DL = tgetstr ("DL", &buffer);
   term_al = tgetstr ("al", &buffer);
@@ -592,7 +596,7 @@ terminal_initialize_terminal (terminal_name)
   if (term_invbeg)
     term_invend = tgetstr ("me", &buffer);
   else
-    term_invend = (char *)NULL;
+    term_invend = NULL;
 
   if (!term_cr)
     term_cr =  "\r";
@@ -602,7 +606,7 @@ terminal_initialize_terminal (terminal_name)
   term_up = tgetstr ("up", &buffer);
   term_dn = tgetstr ("dn", &buffer);
   visible_bell = tgetstr ("vb", &buffer);
-  terminal_has_visible_bell_p = (visible_bell != (char *)NULL);
+  terminal_has_visible_bell_p = (visible_bell != NULL);
   audible_bell = tgetstr ("bl", &buffer);
   if (!audible_bell)
     audible_bell = "\007";
@@ -617,12 +621,10 @@ terminal_initialize_terminal (terminal_name)
   if (terminal_has_meta_p)
     {
       term_mm = tgetstr ("mm", &buffer);
-      term_mo = tgetstr ("mo", &buffer);
     }
   else
     {
-      term_mm = (char *)NULL;
-      term_mo = (char *)NULL;
+      term_mm = NULL;
     }
 
   /* Attempt to find the arrow keys.  */
@@ -634,28 +636,25 @@ terminal_initialize_terminal (terminal_name)
   term_kP = tgetstr ("kP", &buffer);
   term_kN = tgetstr ("kN", &buffer);
 
+#if defined(INFOKEY)
+  term_kh = tgetstr ("kh", &buffer);
+  term_ke = tgetstr ("@7", &buffer);
+  term_ki = tgetstr ("kI", &buffer);
+  term_kx = tgetstr ("kD", &buffer);
+#endif /* defined(INFOKEY) */
+
+  /* Home and end keys. */
+  term_kh = tgetstr ("kh", &buffer);
+  term_ke = tgetstr ("@7", &buffer);
+
+  term_kD = tgetstr ("kD", &buffer);
+
   /* If this terminal is not cursor addressable, then it is really dumb. */
   if (!term_goto)
     terminal_is_dumb_p = 1;
 }
 
-/* **************************************************************** */
-/*                                                                  */
-/*               How to Read Characters From the Terminal           */
-/*                                                                  */
-/* **************************************************************** */
-
-#if defined (TIOCGETC)
-/* A buffer containing the terminal interrupt characters upon entry
-   to Info. */
-struct tchars original_tchars;
-#endif
-
-#if defined (TIOCGLTC)
-/* A buffer containing the local terminal mode characters upon entry
-   to Info. */
-struct ltchars original_ltchars;
-#endif
+/* How to read characters from the terminal.  */
 
 #if defined (HAVE_TERMIOS_H)
 struct termios original_termios, ttybuff;
@@ -668,12 +667,31 @@ struct termio original_termio, ttybuff;
 int original_tty_flags = 0;
 int original_lmode;
 struct sgttyb ttybuff;
+
+#    if defined(TIOCGETC) && defined(M_XENIX)
+/* SCO 3.2v5.0.2 defines but does not support TIOCGETC.  Gak.  Maybe
+   better fix would be to use Posix termios in preference.  --gildea,
+   1jul99.  */
+#      undef TIOCGETC
+#    endif
+
+#    if defined (TIOCGETC)
+/* A buffer containing the terminal interrupt characters upon entry
+   to Info. */
+struct tchars original_tchars;
+#    endif
+
+#    if defined (TIOCGLTC)
+/* A buffer containing the local terminal mode characters upon entry
+   to Info. */
+struct ltchars original_ltchars;
+#    endif
 #  endif /* !HAVE_TERMIO_H */
 #endif /* !HAVE_TERMIOS_H */
 
 /* Prepare to start using the terminal to read characters singly. */
 void
-terminal_prep_terminal ()
+terminal_prep_terminal (void)
 {
   int tty;
 
@@ -724,11 +742,22 @@ terminal_prep_terminal ()
 #endif /* VLNEXT */
 #endif /* TERMIOS or TERMIO */
 
+/* cf. emacs/src/sysdep.c for being sure output is on. */
 #if defined (HAVE_TERMIOS_H)
+  /* linux kernel 2.2.x needs a TCOFF followed by a TCOON to turn output
+     back on if the user presses ^S at the very beginning; just a TCOON
+     doesn't work.  --Kevin Ryde <user42@zip.com.au>, 16jun2000.  */
   tcsetattr (tty, TCSANOW, &ttybuff);
+#  ifdef TCOON
+  tcflow (tty, TCOOFF);
+  tcflow (tty, TCOON);
+#  endif
 #else
 #  if defined (HAVE_TERMIO_H)
   ioctl (tty, TCSETA, &ttybuff);
+#    ifdef TCXONC
+  ioctl (tty, TCXONC, 1);
+#    endif
 #  endif
 #endif
 
@@ -802,7 +831,7 @@ terminal_prep_terminal ()
 /* Restore the tty settings back to what they were before we started using
    this terminal. */
 void
-terminal_unprep_terminal ()
+terminal_unprep_terminal (void)
 {
   int tty;
 
@@ -841,3 +870,6 @@ terminal_unprep_terminal ()
   terminal_end_using_terminal ();
 }
 
+#ifdef __MSDOS__
+# include "pcterm.c"
+#endif

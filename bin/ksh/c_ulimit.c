@@ -1,10 +1,10 @@
-/*	$NetBSD: c_ulimit.c,v 1.4 1999/10/20 15:09:59 hubertf Exp $	*/
+/*	$NetBSD: c_ulimit.c,v 1.9 2008/09/14 05:00:23 sjg Exp $	*/
 
 /*
 	ulimit -- handle "ulimit" builtin
 
 	Reworked to use getrusage() and ulimit() at once (as needed on
-	some schizophenic systems, eg, HP-UX 9.01), made argument parsing
+	some schizophrenic systems, eg, HP-UX 9.01), made argument parsing
 	conform to at&t ksh, added autoconf support.  Michael Rendell, May, '94
 
 	Eric Gisin, September 1988
@@ -17,6 +17,12 @@
 	the extended 4.nBSD resource limits.  It now includes the code
 	that was originally under case SYSULIMIT in source file "xec.c".
 */
+#include <sys/cdefs.h>
+
+#ifndef lint
+__RCSID("$NetBSD: c_ulimit.c,v 1.9 2008/09/14 05:00:23 sjg Exp $");
+#endif
+
 
 #include "sh.h"
 #include "ksh_time.h"
@@ -111,9 +117,12 @@ c_ulimit(wp)
 # endif /* UL_GMEMLIM */
 #endif /* RLIMIT_VMEM */
 #ifdef RLIMIT_SWAP
-		{ "swap(kbytes)", RLIMIT_SWAP, RLIMIT_SWAP, 1024, 'w' },
+		{ "swap(kbytes)", RLIMIT, RLIMIT_SWAP, RLIMIT_SWAP, 1024, 'w' },
 #endif
-		{ (char *) 0 }
+#ifdef RLIMIT_SBSIZE
+		{ "sbsize(bytes)", RLIMIT, RLIMIT_SBSIZE, RLIMIT_SBSIZE, 1, 'b' },
+#endif
+		{ .name = NULL }
 	    };
 	static char	options[3 + NELEM(limits)];
 	rlim_t		UNINITIALIZED(val);
@@ -124,11 +133,6 @@ c_ulimit(wp)
 #ifdef HAVE_SETRLIMIT
 	struct rlimit	limit;
 #endif /* HAVE_SETRLIMIT */
-
-#ifdef __GNUC__
-	/* This outrageous construct just to shut up a GCC warning. */
-	(void) &val;
-#endif
 
 	if (!options[0]) {
 		/* build options string on first call - yuck */
@@ -189,7 +193,7 @@ c_ulimit(wp)
 			    bi_errorf("invalid limit: %s", wp[0]);
 			    return 1;
 			}
-			val = rval * l->factor;
+			val = (u_long)rval * l->factor;
 		}
 	}
 	if (all) {
@@ -201,7 +205,7 @@ c_ulimit(wp)
 					val = limit.rlim_cur;
 				else if (how & HARD)
 					val = limit.rlim_max;
-			} else 
+			} else
 #endif /* HAVE_SETRLIMIT */
 #ifdef HAVE_ULIMIT
 			{

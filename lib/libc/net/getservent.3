@@ -1,4 +1,4 @@
-.\"	$NetBSD: getservent.3,v 1.10 1999/03/24 06:33:38 mycroft Exp $
+.\"	$NetBSD: getservent.3,v 1.14 2003/08/07 16:43:10 agc Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -46,9 +42,9 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <netdb.h>
+.In netdb.h
 .Ft struct servent *
-.Fn getservent 
+.Fn getservent
 .Ft struct servent *
 .Fn getservbyname "const char *name" "const char *proto"
 .Ft struct servent *
@@ -103,7 +99,7 @@ function
 opens and rewinds the file.  If the
 .Fa stayopen
 flag is non-zero,
-the net data base will not be closed after each call to 
+the net data base will not be closed after each call to
 .Fn getservbyname
 or
 .Fn getservbyport .
@@ -126,7 +122,7 @@ or until
 .Dv EOF
 is encountered.
 If a protocol name is also supplied (non-\c
-.Dv NULL ) , 
+.Dv NULL ) ,
 searches must also match the protocol.
 .Sh FILES
 .Bl -tag -width /etc/services -compact
@@ -148,7 +144,7 @@ The
 .Fn setservent ,
 and
 .Fn endservent
-functions appeared in 
+functions appeared in
 .Bx 4.2 .
 .Sh BUGS
 These functions use static data storage;

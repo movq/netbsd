@@ -1,4 +1,4 @@
-/*	$NetBSD: test.c,v 1.21 1999/04/05 09:48:38 kleink Exp $	*/
+/* $NetBSD: test.c,v 1.37 2008/09/10 19:00:51 christos Exp $ */
 
 /*
  * test(1); version 7-like  --  author Erik Baalbergen
@@ -12,18 +12,22 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: test.c,v 1.21 1999/04/05 09:48:38 kleink Exp $");
+__RCSID("$NetBSD: test.c,v 1.37 2008/09/10 19:00:51 christos Exp $");
 #endif
 
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
+#include <sys/types.h>
+
 #include <ctype.h>
+#include <err.h>
 #include <errno.h>
+#include <limits.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <err.h>
+#include <unistd.h>
+#include <stdarg.h>
 
 /* test(1) accepts the following grammar:
 	oexpr	::= aexpr | aexpr "-o" oexpr ;
@@ -96,80 +100,136 @@ enum token_types {
 struct t_op {
 	const char *op_text;
 	short op_num, op_type;
-} const ops [] = {
-	{"-r",	FILRD,	UNOP},
-	{"-w",	FILWR,	UNOP},
-	{"-x",	FILEX,	UNOP},
-	{"-e",	FILEXIST,UNOP},
-	{"-f",	FILREG,	UNOP},
-	{"-d",	FILDIR,	UNOP},
-	{"-c",	FILCDEV,UNOP},
-	{"-b",	FILBDEV,UNOP},
-	{"-p",	FILFIFO,UNOP},
-	{"-u",	FILSUID,UNOP},
-	{"-g",	FILSGID,UNOP},
-	{"-k",	FILSTCK,UNOP},
-	{"-s",	FILGZ,	UNOP},
-	{"-t",	FILTT,	UNOP},
-	{"-z",	STREZ,	UNOP},
-	{"-n",	STRNZ,	UNOP},
-	{"-h",	FILSYM,	UNOP},		/* for backwards compat */
-	{"-O",	FILUID,	UNOP},
-	{"-G",	FILGID,	UNOP},
-	{"-L",	FILSYM,	UNOP},
-	{"-S",	FILSOCK,UNOP},
-	{"=",	STREQ,	BINOP},
-	{"!=",	STRNE,	BINOP},
-	{"<",	STRLT,	BINOP},
-	{">",	STRGT,	BINOP},
-	{"-eq",	INTEQ,	BINOP},
-	{"-ne",	INTNE,	BINOP},
-	{"-ge",	INTGE,	BINOP},
-	{"-gt",	INTGT,	BINOP},
-	{"-le",	INTLE,	BINOP},
-	{"-lt",	INTLT,	BINOP},
-	{"-nt",	FILNT,	BINOP},
-	{"-ot",	FILOT,	BINOP},
-	{"-ef",	FILEQ,	BINOP},
-	{"!",	UNOT,	BUNOP},
-	{"-a",	BAND,	BBINOP},
-	{"-o",	BOR,	BBINOP},
-	{"(",	LPAREN,	PAREN},
-	{")",	RPAREN,	PAREN},
-	{0,	0,	0}
 };
 
-char **t_wp;
-struct t_op const *t_wp_op;
+static const struct t_op cop[] = {
+	{"!",	UNOT,	BUNOP},
+	{"(",	LPAREN,	PAREN},
+	{")",	RPAREN,	PAREN},
+	{"<",	STRLT,	BINOP},
+	{"=",	STREQ,	BINOP},
+	{">",	STRGT,	BINOP},
+};
 
-static void syntax __P((const char *, const char *));
-static int oexpr __P((enum token));
-static int aexpr __P((enum token));
-static int nexpr __P((enum token));
-static int primary __P((enum token));
-static int binop __P((void));
-static int filstat __P((char *, enum token));
-static enum token t_lex __P((char *));
-static int isoperand __P((void));
-static int getn __P((const char *));
-static int newerf __P((const char *, const char *));
-static int olderf __P((const char *, const char *));
-static int equalf __P((const char *, const char *));
+static const struct t_op cop2[] = {
+	{"!=",	STRNE,	BINOP},
+};
 
-int main __P((int, char **));
+static const struct t_op mop3[] = {
+	{"ef",	FILEQ,	BINOP},
+	{"eq",	INTEQ,	BINOP},
+	{"ge",	INTGE,	BINOP},
+	{"gt",	INTGT,	BINOP},
+	{"le",	INTLE,	BINOP},
+	{"lt",	INTLT,	BINOP},
+	{"ne",	INTNE,	BINOP},
+	{"nt",	FILNT,	BINOP},
+	{"ot",	FILOT,	BINOP},
+};
+
+static const struct t_op mop2[] = {
+	{"G",	FILGID,	UNOP},
+	{"L",	FILSYM,	UNOP},
+	{"O",	FILUID,	UNOP},
+	{"S",	FILSOCK,UNOP},
+	{"a",	BAND,	BBINOP},
+	{"b",	FILBDEV,UNOP},
+	{"c",	FILCDEV,UNOP},
+	{"d",	FILDIR,	UNOP},
+	{"e",	FILEXIST,UNOP},
+	{"f",	FILREG,	UNOP},
+	{"g",	FILSGID,UNOP},
+	{"h",	FILSYM,	UNOP},		/* for backwards compat */
+	{"k",	FILSTCK,UNOP},
+	{"n",	STRNZ,	UNOP},
+	{"o",	BOR,	BBINOP},
+	{"p",	FILFIFO,UNOP},
+	{"r",	FILRD,	UNOP},
+	{"s",	FILGZ,	UNOP},
+	{"t",	FILTT,	UNOP},
+	{"u",	FILSUID,UNOP},
+	{"w",	FILWR,	UNOP},
+	{"x",	FILEX,	UNOP},
+	{"z",	STREZ,	UNOP},
+};
+
+static char **t_wp;
+static struct t_op const *t_wp_op;
+
+static void syntax(const char *, const char *);
+static int oexpr(enum token);
+static int aexpr(enum token);
+static int nexpr(enum token);
+static int primary(enum token);
+static int binop(void);
+static int test_access(struct stat *, mode_t);
+static int filstat(char *, enum token);
+static enum token t_lex(char *);
+static int isoperand(void);
+static long long getn(const char *);
+static int newerf(const char *, const char *);
+static int olderf(const char *, const char *);
+static int equalf(const char *, const char *);
+
+#if defined(SHELL)
+extern void error(const char *, ...) __dead;
+extern void *ckmalloc(size_t);
+#else
+static void error(const char *, ...) __dead;
+
+static void
+error(const char *msg, ...)
+{
+	va_list ap;
+
+	va_start(ap, msg);
+	verrx(2, msg, ap);
+	/*NOTREACHED*/
+	va_end(ap);
+}
+
+static void *ckmalloc(size_t);
+static void *
+ckmalloc(size_t nbytes)
+{
+	void *p = malloc(nbytes);
+
+	if (!p)
+		error("Not enough memory!");
+	return p;
+}
+#endif
+
+#ifdef SHELL
+int testcmd(int, char **);
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
-{
-	int	res;
+testcmd(int argc, char **argv)
+#else
+int main(int, char *[]);
 
-	if (strcmp(argv[0], "[") == 0) {
+int
+main(int argc, char *argv[])
+#endif
+{
+	int res;
+	const char *argv0;
+
+#ifdef SHELL
+	argv0 = argv[0];
+#else
+	setprogname(argv[0]);
+	(void)setlocale(LC_ALL, "");
+	argv0 = getprogname();
+#endif
+	if (strcmp(argv0, "[") == 0) {
 		if (strcmp(argv[--argc], "]"))
-			errx(2, "missing ]");
+			error("missing ]");
 		argv[argc] = NULL;
 	}
+
+	if (argc < 2)
+		return 1;
 
 	t_wp = &argv[1];
 	res = !oexpr(t_lex(*t_wp));
@@ -181,23 +241,23 @@ main(argc, argv)
 }
 
 static void
-syntax(op, msg)
-	const char	*op;
-	const char	*msg;
+syntax(const char *op, const char *msg)
 {
+
 	if (op && *op)
-		errx(2, "%s: %s", op, msg);
+		error("%s: %s", op, msg);
 	else
-		errx(2, "%s", msg);
+		error("%s", msg);
 }
 
 static int
-oexpr(n)
-	enum token n;
+oexpr(enum token n)
 {
 	int res;
 
 	res = aexpr(n);
+	if (*t_wp == NULL)
+		return res;
 	if (t_lex(*++t_wp) == BOR)
 		return oexpr(t_lex(*++t_wp)) || res;
 	t_wp--;
@@ -205,12 +265,13 @@ oexpr(n)
 }
 
 static int
-aexpr(n)
-	enum token n;
+aexpr(enum token n)
 {
 	int res;
 
 	res = nexpr(n);
+	if (*t_wp == NULL)
+		return res;
 	if (t_lex(*++t_wp) == BAND)
 		return aexpr(t_lex(*++t_wp)) && res;
 	t_wp--;
@@ -218,17 +279,16 @@ aexpr(n)
 }
 
 static int
-nexpr(n)
-	enum token n;			/* token */
+nexpr(enum token n)
 {
+
 	if (n == UNOT)
 		return !nexpr(t_lex(*++t_wp));
 	return primary(n);
 }
 
 static int
-primary(n)
-	enum token n;
+primary(enum token n)
 {
 	enum token nn;
 	int res;
@@ -253,7 +313,7 @@ primary(n)
 		case STRNZ:
 			return strlen(*t_wp) != 0;
 		case FILTT:
-			return isatty(getn(*t_wp));
+			return isatty((int)getn(*t_wp));
 		default:
 			return filstat(*t_wp, n);
 		}
@@ -267,7 +327,7 @@ primary(n)
 }
 
 static int
-binop()
+binop(void)
 {
 	const char *opnd1, *opnd2;
 	struct t_op const *op;
@@ -276,7 +336,7 @@ binop()
 	(void) t_lex(*++t_wp);
 	op = t_wp_op;
 
-	if ((opnd2 = *++t_wp) == (char *)0)
+	if ((opnd2 = *++t_wp) == NULL)
 		syntax(op->op_text, "argument expected");
 		
 	switch (op->op_num) {
@@ -301,21 +361,181 @@ binop()
 	case INTLT:
 		return getn(opnd1) < getn(opnd2);
 	case FILNT:
-		return newerf (opnd1, opnd2);
+		return newerf(opnd1, opnd2);
 	case FILOT:
-		return olderf (opnd1, opnd2);
+		return olderf(opnd1, opnd2);
 	case FILEQ:
-		return equalf (opnd1, opnd2);
+		return equalf(opnd1, opnd2);
 	default:
 		abort();
 		/* NOTREACHED */
 	}
 }
 
+/*
+ * The manual, and IEEE POSIX 1003.2, suggests this should check the mode bits,
+ * not use access():
+ *
+ *	True shall indicate only that the write flag is on.  The file is not
+ *	writable on a read-only file system even if this test indicates true.
+ *
+ * Unfortunately IEEE POSIX 1003.1-2001, as quoted in SuSv3, says only:
+ *
+ *	True shall indicate that permission to read from file will be granted,
+ *	as defined in "File Read, Write, and Creation".
+ *
+ * and that section says:
+ *
+ *	When a file is to be read or written, the file shall be opened with an
+ *	access mode corresponding to the operation to be performed.  If file
+ *	access permissions deny access, the requested operation shall fail.
+ *
+ * and of course access permissions are described as one might expect:
+ *
+ *     * If a process has the appropriate privilege:
+ *
+ *        * If read, write, or directory search permission is requested,
+ *          access shall be granted.
+ *
+ *        * If execute permission is requested, access shall be granted if
+ *          execute permission is granted to at least one user by the file
+ *          permission bits or by an alternate access control mechanism;
+ *          otherwise, access shall be denied.
+ *
+ *   * Otherwise:
+ *
+ *        * The file permission bits of a file contain read, write, and
+ *          execute/search permissions for the file owner class, file group
+ *          class, and file other class.
+ *
+ *        * Access shall be granted if an alternate access control mechanism
+ *          is not enabled and the requested access permission bit is set for
+ *          the class (file owner class, file group class, or file other class)
+ *          to which the process belongs, or if an alternate access control
+ *          mechanism is enabled and it allows the requested access; otherwise,
+ *          access shall be denied.
+ *
+ * and when I first read this I thought:  surely we can't go about using
+ * open(O_WRONLY) to try this test!  However the POSIX 1003.1-2001 Rationale
+ * section for test does in fact say:
+ *
+ *	On historical BSD systems, test -w directory always returned false
+ *	because test tried to open the directory for writing, which always
+ *	fails.
+ *
+ * and indeed this is in fact true for Seventh Edition UNIX, UNIX 32V, and UNIX
+ * System III, and thus presumably also for BSD up to and including 4.3.
+ *
+ * Secondly I remembered why using open() and/or access() are bogus.  They
+ * don't work right for detecting read and write permissions bits when called
+ * by root.
+ *
+ * Interestingly the 'test' in 4.4BSD was closer to correct (as per
+ * 1003.2-1992) and it was implemented efficiently with stat() instead of
+ * open().
+ *
+ * This was apparently broken in NetBSD around about 1994/06/30 when the old
+ * 4.4BSD implementation was replaced with a (arguably much better coded)
+ * implementation derived from pdksh.
+ *
+ * Note that modern pdksh is yet different again, but still not correct, at
+ * least not w.r.t. 1003.2-1992.
+ *
+ * As I think more about it and read more of the related IEEE docs I don't like
+ * that wording about 'test -r' and 'test -w' in 1003.1-2001 at all.  I very
+ * much prefer the original wording in 1003.2-1992.  It is much more useful,
+ * and so that's what I've implemented.
+ *
+ * (Note that a strictly conforming implementation of 1003.1-2001 is in fact
+ * totally useless for the case in question since its 'test -w' and 'test -r'
+ * can never fail for root for any existing files, i.e. files for which 'test
+ * -e' succeeds.)
+ * 
+ * The rationale for 1003.1-2001 suggests that the wording was "clarified" in
+ * 1003.1-2001 to align with the 1003.2b draft.  1003.2b Draft 12 (July 1999),
+ * which is the latest copy I have, does carry the same suggested wording as is
+ * in 1003.1-2001, with its rationale saying:
+ * 
+ * 	This change is a clarification and is the result of interpretation
+ * 	request PASC 1003.2-92 #23 submitted for IEEE Std 1003.2-1992.
+ * 
+ * That interpretation can be found here:
+ * 
+ *   http://www.pasc.org/interps/unofficial/db/p1003.2/pasc-1003.2-23.html
+ * 
+ * Not terribly helpful, unfortunately.  I wonder who that fence sitter was.
+ * 
+ * Worse, IMVNSHO, I think the authors of 1003.2b-D12 have mis-interpreted the
+ * PASC interpretation and appear to be gone against at least one widely used
+ * implementation (namely 4.4BSD).  The problem is that for file access by root
+ * this means that if test '-r' and '-w' are to behave as if open() were called
+ * then there's no way for a shell script running as root to check if a file
+ * has certain access bits set other than by the grotty means of interpreting
+ * the output of 'ls -l'.  This was widely considered to be a bug in V7's
+ * "test" and is, I believe, one of the reasons why direct use of access() was
+ * avoided in some more recent implementations!
+ * 
+ * I have always interpreted '-r' to match '-w' and '-x' as per the original
+ * wording in 1003.2-1992, not the other way around.  I think 1003.2b goes much
+ * too far the wrong way without any valid rationale and that it's best if we
+ * stick with 1003.2-1992 and test the flags, and not mimic the behaviour of
+ * open() since we already know very well how it will work -- existance of the
+ * file is all that matters to open() for root.
+ * 
+ * Unfortunately the SVID is no help at all (which is, I guess, partly why
+ * we're in this mess in the first place :-).
+ * 
+ * The SysV implementation (at least in the 'test' builtin in /bin/sh) does use
+ * access(name, 2) even though it also goes to much greater lengths for '-x'
+ * matching the 1003.2-1992 definition (which is no doubt where that definition
+ * came from).
+ *
+ * The ksh93 implementation uses access() for '-r' and '-w' if
+ * (euid==uid&&egid==gid), but uses st_mode for '-x' iff running as root.
+ * i.e. it does strictly conform to 1003.1-2001 (and presumably 1003.2b).
+ */
 static int
-filstat(nm, mode)
-	char *nm;
-	enum token mode;
+test_access(struct stat *sp, mode_t stmode)
+{
+	gid_t *groups; 
+	register int n;
+	uid_t euid;
+	int maxgroups;
+
+	/*
+	 * I suppose we could use access() if not running as root and if we are
+	 * running with ((euid == uid) && (egid == gid)), but we've already
+	 * done the stat() so we might as well just test the permissions
+	 * directly instead of asking the kernel to do it....
+	 */
+	euid = geteuid();
+	if (euid == 0)				/* any bit is good enough */
+		stmode = (stmode << 6) | (stmode << 3) | stmode;
+ 	else if (sp->st_uid == euid)
+		stmode <<= 6;
+	else if (sp->st_gid == getegid())
+		stmode <<= 3;
+	else {
+		/* XXX stolen almost verbatim from ksh93.... */
+		/* on some systems you can be in several groups */
+		if ((maxgroups = getgroups(0, NULL)) <= 0)
+			maxgroups = NGROUPS_MAX;	/* pre-POSIX system? */
+		groups = ckmalloc((maxgroups + 1) * sizeof(gid_t));
+		n = getgroups(maxgroups, groups);
+		while (--n >= 0) {
+			if (groups[n] == sp->st_gid) {
+				stmode <<= 3;
+				break;
+			}
+		}
+		free(groups);
+	}
+
+	return sp->st_mode & stmode;
+}
+
+static int
+filstat(char *nm, enum token mode)
 {
 	struct stat s;
 
@@ -324,13 +544,13 @@ filstat(nm, mode)
 
 	switch (mode) {
 	case FILRD:
-		return access(nm, R_OK) == 0;
+		return test_access(&s, S_IROTH);
 	case FILWR:
-		return access(nm, W_OK) == 0;
+		return test_access(&s, S_IWOTH);
 	case FILEX:
-		return access(nm, X_OK) == 0;
+		return test_access(&s, S_IXOTH);
 	case FILEXIST:
-		return access(nm, F_OK) == 0;
+		return 1; /* the successful lstat()/stat() is good enough */
 	case FILREG:
 		return S_ISREG(s.st_mode);
 	case FILDIR:
@@ -362,103 +582,138 @@ filstat(nm, mode)
 	}
 }
 
-static enum token
-t_lex(s)
-	char *s;
-{
-	struct t_op const *op = ops;
+#define VTOC(x)	(const unsigned char *)((const struct t_op *)x)->op_text
 
-	if (s == 0) {
-		t_wp_op = (struct t_op *)0;
+static int
+compare1(const void *va, const void *vb)
+{
+	const unsigned char *a = va;
+	const unsigned char *b = VTOC(vb);
+
+	return a[0] - b[0];
+}
+
+static int
+compare2(const void *va, const void *vb)
+{
+	const unsigned char *a = va;
+	const unsigned char *b = VTOC(vb);
+	int z = a[0] - b[0];
+
+	return z ? z : (a[1] - b[1]);
+}
+
+static struct t_op const *
+findop(const char *s)
+{
+	if (s[0] == '-') {
+		if (s[1] == '\0')
+			return NULL;
+		if (s[2] == '\0')
+			return bsearch(s + 1, mop2, __arraycount(mop2),
+			    sizeof(*mop2), compare1);
+		else if (s[3] != '\0')
+			return NULL;
+		else
+			return bsearch(s + 1, mop3, __arraycount(mop3),
+			    sizeof(*mop3), compare2);
+	} else {
+		if (s[1] == '\0')
+			return bsearch(s, cop, __arraycount(cop), sizeof(*cop),
+			    compare1);
+		else if (strcmp(s, cop2[0].op_text) == 0)
+			return cop2;
+		else
+			return NULL;
+	}
+}
+
+static enum token
+t_lex(char *s)
+{
+	struct t_op const *op;
+
+	if (s == NULL) {
+		t_wp_op = NULL;
 		return EOI;
 	}
-	while (op->op_text) {
-		if (strcmp(s, op->op_text) == 0) {
-			if ((op->op_type == UNOP && isoperand()) ||
-			    (op->op_num == LPAREN && *(t_wp+1) == 0))
-				break;
+
+	if ((op = findop(s)) != NULL) {
+		if (!((op->op_type == UNOP && isoperand()) ||
+		    (op->op_num == LPAREN && *(t_wp+1) == 0))) {
 			t_wp_op = op;
 			return op->op_num;
 		}
-		op++;
 	}
-	t_wp_op = (struct t_op *)0;
+	t_wp_op = NULL;
 	return OPERAND;
 }
 
 static int
-isoperand()
+isoperand(void)
 {
-	struct t_op const *op = ops;
-	char *s;
-	char *t;
+	struct t_op const *op;
+	char *s, *t;
 
 	if ((s  = *(t_wp+1)) == 0)
 		return 1;
 	if ((t = *(t_wp+2)) == 0)
 		return 0;
-	while (op->op_text) {
-		if (strcmp(s, op->op_text) == 0)
-	    		return op->op_type == BINOP &&
-	    		    (t[0] != ')' || t[1] != '\0'); 
-		op++;
-	}
+	if ((op = findop(s)) != NULL)
+		return op->op_type == BINOP && (t[0] != ')' || t[1] != '\0'); 
 	return 0;
 }
 
 /* atoi with error detection */
-static int
-getn(s)
-	const char *s;
+static long long
+getn(const char *s)
 {
 	char *p;
-	long r;
+	long long r;
 
 	errno = 0;
-	r = strtol(s, &p, 10);
+	r = strtoll(s, &p, 10);
 
 	if (errno != 0)
-	  errx(2, "%s: out of range", s);
+	if (errno == ERANGE && (r == LLONG_MAX || r == LLONG_MIN))
+	      error("%s: out of range", s);
 
 	while (isspace((unsigned char)*p))
-	  p++;
+	      p++;
 	
-	if (*p)
-	  errx(2, "%s: bad number", s);
+	if (*p || p == s)
+	      error("%s: bad number", s);
 
-	return (int) r;
+	return r;
 }
 
 static int
-newerf (f1, f2)
-const char *f1, *f2;
+newerf(const char *f1, const char *f2)
 {
 	struct stat b1, b2;
 
-	return (stat (f1, &b1) == 0 &&
-		stat (f2, &b2) == 0 &&
+	return (stat(f1, &b1) == 0 &&
+		stat(f2, &b2) == 0 &&
 		b1.st_mtime > b2.st_mtime);
 }
 
 static int
-olderf (f1, f2)
-const char *f1, *f2;
+olderf(const char *f1, const char *f2)
 {
 	struct stat b1, b2;
 
-	return (stat (f1, &b1) == 0 &&
-		stat (f2, &b2) == 0 &&
+	return (stat(f1, &b1) == 0 &&
+		stat(f2, &b2) == 0 &&
 		b1.st_mtime < b2.st_mtime);
 }
 
 static int
-equalf (f1, f2)
-const char *f1, *f2;
+equalf(const char *f1, const char *f2)
 {
 	struct stat b1, b2;
 
-	return (stat (f1, &b1) == 0 &&
-		stat (f2, &b2) == 0 &&
+	return (stat(f1, &b1) == 0 &&
+		stat(f2, &b2) == 0 &&
 		b1.st_dev == b2.st_dev &&
 		b1.st_ino == b2.st_ino);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: tcopy.c,v 1.9 1998/10/08 02:15:14 wsanchez Exp $	*/
+/*	$NetBSD: tcopy.c,v 1.15 2008/07/21 14:19:26 lukem Exp $	*/
 
 /*
  * Copyright (c) 1985, 1987, 1993, 1995
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1985, 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1985, 1987, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)tcopy.c	8.3 (Berkeley) 1/23/95";
 #endif
-__RCSID("$NetBSD: tcopy.c,v 1.9 1998/10/08 02:15:14 wsanchez Exp $");
+__RCSID("$NetBSD: tcopy.c,v 1.15 2008/07/21 14:19:26 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -60,6 +56,7 @@ __RCSID("$NetBSD: tcopy.c,v 1.9 1998/10/08 02:15:14 wsanchez Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <util.h>
 
 #define	MAXREC	(64 * 1024)
 #define	NOCOUNT	(-2)
@@ -133,7 +130,7 @@ main(argc, argv)
 		inf = argv[0];
 		if ((outp = open(argv[1], op == VERIFY ? O_RDONLY :
 		    op == COPY ? O_WRONLY : O_RDWR, DEFFILEMODE)) < 0) {
-			err(3, argv[1]);
+			err(3, "%s", argv[1]);
 		}
 		break;
 	default:
@@ -141,7 +138,7 @@ main(argc, argv)
 	}
 
 	if ((inp = open(inf, O_RDONLY, 0)) < 0)
-		err(1, inf);
+		err(1, "%s", inf);
 
 	buff = getspace(maxblk);
 
@@ -211,7 +208,7 @@ r1:		guesslen = 0;
 				break;
 			}
 			fprintf(msg,
-			    "file %d: eof after %ld records: %qd bytes\n",
+			    "file %d: eof after %ld records: %lld bytes\n",
 			    filen, record, (long long)size);
 			needeof = 1;
 			filen++;
@@ -221,7 +218,7 @@ r1:		guesslen = 0;
 		}
 		lastnread = nread;
 	}
-	fprintf(msg, "total length: %qd bytes\n", (long long)tsize);
+	fprintf(msg, "total length: %lld bytes\n", (long long)tsize);
 	(void)signal(SIGINT, oldsig);
 	if (op == COPY || op == COPYVERIFY) {
 		writeop(outp, MTWEOF);
@@ -276,6 +273,7 @@ r2:		if (inn != outn) {
 			if (eot++) {
 				fprintf(msg, "%s: tapes are identical.\n",
 					"tcopy");
+				free(inb);
 				return;
 			}
 		} else {
@@ -288,6 +286,7 @@ r2:		if (inn != outn) {
 			eot = 0;
 		}
 	}
+	free(inb);
 	exit(1);
 }
 
@@ -302,7 +301,8 @@ intr(signo)
 			fprintf(msg, "record %ld\n", lastrec);
 	}
 	fprintf(msg, "interrupt at file %d: record %ld\n", filen, record);
-	fprintf(msg, "total length: %qd bytes\n", (long long)(tsize + size));
+	fprintf(msg, "total length: %lld bytes\n", (long long)(tsize + size));
+	(void)raise_default_signal(signo);
 	exit(1);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: rtfps.c,v 1.40 1998/09/18 14:38:48 enami Exp $	*/
+/*	$NetBSD: rtfps.c,v 1.54 2008/04/08 20:08:50 cegger Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -33,13 +33,16 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rtfps.c,v 1.54 2008/04/08 20:08:50 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/termios.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
@@ -63,26 +66,21 @@ struct rtfps_softc {
 	bus_space_handle_t sc_slaveioh[NSLAVES];
 };
 
-int rtfpsprobe __P((struct device *, struct cfdata *, void *));
-void rtfpsattach __P((struct device *, struct device *, void *));
-int rtfpsintr __P((void *));
-int rtfpsprint __P((void *, const char *));
+int rtfpsprobe(struct device *, struct cfdata *, void *);
+void rtfpsattach(struct device *, struct device *, void *);
+int rtfpsintr(void *);
 
-struct cfattach rtfps_ca = {
-	sizeof(struct rtfps_softc), rtfpsprobe, rtfpsattach
-};
+CFATTACH_DECL(rtfps, sizeof(struct rtfps_softc),
+    rtfpsprobe, rtfpsattach, NULL, NULL);
 
 int
-rtfpsprobe(parent, self, aux)
-	struct device *parent;
-	struct cfdata *self;
-	void *aux;
+rtfpsprobe(struct device *parent, struct cfdata *self,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
-	int iobase = ia->ia_iobase;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
-	int i, rv = 1;
+	int i, iobase, rv = 1;
 
 	/*
 	 * Do the normal com probe for the first UART and assume
@@ -91,15 +89,22 @@ rtfpsprobe(parent, self, aux)
 	 * XXX Needs more robustness.
 	 */
 
+	if (ia->ia_nio < 1)
+		return (0);
+	if (ia->ia_nirq < 1)
+		return (0);
+
 	/* Disallow wildcarded i/o address. */
-	if (ia->ia_iobase == ISACF_PORT_DEFAULT)
+	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+		return (0);
+	if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ)
 		return (0);
 
 	/* if the first port is in use as console, then it. */
-	if (com_is_console(iot, iobase, 0))
+	if (com_is_console(iot, ia->ia_io[0].ir_addr, 0))
 		goto checkmappings;
 
-	if (bus_space_map(iot, iobase, COM_NPORTS, 0, &ioh)) {
+	if (bus_space_map(iot, ia->ia_io[0].ir_addr, COM_NPORTS, 0, &ioh)) {
 		rv = 0;
 		goto out;
 	}
@@ -109,7 +114,7 @@ rtfpsprobe(parent, self, aux)
 		goto out;
 
 checkmappings:
-	for (i = 1; i < NSLAVES; i++) {
+	for (i = 1, iobase = ia->ia_io[0].ir_addr; i < NSLAVES; i++) {
 		iobase += COM_NPORTS;
 
 		if (com_is_console(iot, iobase, 0))
@@ -123,64 +128,54 @@ checkmappings:
 	}
 
 out:
-	if (rv)
-		ia->ia_iosize = NSLAVES * COM_NPORTS;
+	if (rv) {
+		ia->ia_nio = 1;
+		ia->ia_io[0].ir_size = NSLAVES * COM_NPORTS;
+
+		ia->ia_nirq = 1;
+
+		ia->ia_niomem = 0;
+		ia->ia_ndrq = 0;
+	}
 	return (rv);
 }
 
-int
-rtfpsprint(aux, pnp)
-	void *aux;
-	const char *pnp;
-{
-	struct commulti_attach_args *ca = aux;
-
-	if (pnp)
-		printf("com at %s", pnp);
-	printf(" slave %d", ca->ca_slave);
-	return (UNCONF);
-}
-
 void
-rtfpsattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+rtfpsattach(struct device *parent, struct device *self, void *aux)
 {
 	struct rtfps_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
 	struct commulti_attach_args ca;
 	static int irqport[] = {
-		IOBASEUNK, IOBASEUNK, IOBASEUNK, IOBASEUNK,
-		IOBASEUNK, IOBASEUNK, IOBASEUNK, IOBASEUNK,
-		IOBASEUNK,     0x2f2,     0x6f2,     0x6f3,
-		IOBASEUNK, IOBASEUNK, IOBASEUNK, IOBASEUNK
+		-1, -1, -1, -1, -1, -1, -1, -1,
+		-1, 0x2f2, 0x6f2, 0x6f3, -1, -1, -1, -1
 	};
 	bus_space_tag_t iot = ia->ia_iot;
-	int i, iobase;
+	int i, iobase, irq;
 
 	printf("\n");
 
 	sc->sc_iot = ia->ia_iot;
-	sc->sc_iobase = ia->ia_iobase;
+	sc->sc_iobase = ia->ia_io[0].ir_addr;
+	irq = ia->ia_irq[0].ir_irq;
 
-	if (ia->ia_irq >= 16 || irqport[ia->ia_irq] == IOBASEUNK) {
-		printf("%s: invalid irq\n", sc->sc_dev.dv_xname);
+	if (irq >= 16 || irqport[irq] == -1) {
+		printf("%s: invalid irq\n", device_xname(&sc->sc_dev));
 		return;
 	}
-	sc->sc_irqport = irqport[ia->ia_irq];
+	sc->sc_irqport = irqport[irq];
 
 	for (i = 0; i < NSLAVES; i++) {
 		iobase = sc->sc_iobase + i * COM_NPORTS;
 		if (!com_is_console(iot, iobase, &sc->sc_slaveioh[i]) &&
 		    bus_space_map(iot, iobase, COM_NPORTS, 0,
 			&sc->sc_slaveioh[i])) {
-			printf("%s: can't map i/o space for slave %d\n",
-			    sc->sc_dev.dv_xname, i);
+			aprint_error_dev(&sc->sc_dev, "can't map i/o space for slave %d\n", i);
 			return;
 		}
 	}
 	if (bus_space_map(iot, sc->sc_irqport, 1, 0, &sc->sc_irqioh)) {
-		printf("%s: can't map irq port at 0x%x\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(&sc->sc_dev, "can't map irq port at 0x%x\n",
 		    sc->sc_irqport);
 		return;
 	}
@@ -194,12 +189,12 @@ rtfpsattach(parent, self, aux)
 		ca.ca_iobase = sc->sc_iobase + i * COM_NPORTS;
 		ca.ca_noien = 0;
 
-		sc->sc_slaves[i] = config_found(self, &ca, rtfpsprint);
+		sc->sc_slaves[i] = config_found(self, &ca, commultiprint);
 		if (sc->sc_slaves[i] != NULL)
 			sc->sc_alive |= 1 << i;
 	}
 
-	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq, IST_EDGE,
+	sc->sc_ih = isa_intr_establish(ia->ia_ic, irq, IST_EDGE,
 	    IPL_SERIAL, rtfpsintr, sc);
 }
 

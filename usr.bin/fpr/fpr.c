@@ -1,4 +1,4 @@
-/*	$NetBSD: fpr.c,v 1.4 1997/10/18 15:05:47 lukem Exp $	*/
+/*	$NetBSD: fpr.c,v 1.8 2008/07/21 14:19:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif				/* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)fpr.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: fpr.c,v 1.4 1997/10/18 15:05:47 lukem Exp $");
+__RCSID("$NetBSD: fpr.c,v 1.8 2008/07/21 14:19:22 lukem Exp $");
 #endif				/* not lint */
 
 #include <err.h>
@@ -87,7 +83,7 @@ int     maxpos;
 int     maxcol;
 
 void	flush __P((void));
-void	gettext __P((void));
+void	get_text __P((void));
 void	init __P((void));
 int	main __P((int, char **));
 void	nospace __P((void));
@@ -134,7 +130,7 @@ main(argc, argv)
 					}
 
 	while (!ateof) {
-		gettext();
+		get_text();
 		ch = getchar();
 		if (ch == EOF) {
 			flush();
@@ -210,12 +206,13 @@ init()
 }
 
 void
-gettext()
+get_text()
 {
 	int i;
 	char ateol;
 	int ch;
 	int pos;
+	char *n;
 
 	i = 0;
 	ateol = FALSE;
@@ -228,10 +225,11 @@ gettext()
 			if (ch == TAB) {
 				pos = (1 + i / TABSIZE) * TABSIZE;
 				if (pos > maxpos) {
-					maxpos = pos + 10;
-					text = realloc(text, (unsigned) maxpos);
-					if (text == NULL)
+					n = realloc(text, (unsigned)(pos + 10));
+					if (n == NULL)
 						nospace();
+					text = n;
+					maxpos = pos + 10;
 				}
 				while (i < pos) {
 					text[i] = BLANK;
@@ -256,10 +254,10 @@ gettext()
 							i = 0;
 						} else {
 							if (i >= maxpos) {
-								maxpos = i + 10;
-								text = realloc(text, (unsigned) maxpos);
-								if (text == NULL)
+								n = realloc(text, (unsigned)(i + 10));
+								if (n == NULL)
 									nospace();
+								maxpos = i + 10;
 							}
 							text[i] = ch;
 							i++;
@@ -279,6 +277,7 @@ savech(col)
 	COLUMN *cend;
 	char *sp;
 	int newcount;
+	COLUMN *newline;
 
 	ch = text[col];
 	if (ch == BLANK)
@@ -290,11 +289,13 @@ savech(col)
 		highcol = col;
 
 	if (col >= maxcol) {
+		newline = (COLUMN *) realloc(line,
+		    (unsigned) (col + 10) * sizeof(COLUMN));
+		if (newline == NULL)
+			nospace();
+		line = newline;
 		oldmax = maxcol;
 		maxcol = col + 10;
-		line = (COLUMN *) realloc(line, (unsigned) maxcol * sizeof(COLUMN));
-		if (line == NULL)
-			nospace();
 		cp = line + oldmax;
 		cend = line + (maxcol - 1);
 		while (cp <= cend) {

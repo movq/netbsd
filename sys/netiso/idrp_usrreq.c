@@ -1,4 +1,4 @@
-/*	$NetBSD: idrp_usrreq.c,v 1.8 2000/03/30 13:10:10 augustss Exp $	*/
+/*	$NetBSD: idrp_usrreq.c,v 1.19 2008/04/28 13:24:38 ad Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,6 +30,9 @@
  *
  *	@(#)idrp_usrreq.c	8.1 (Berkeley) 6/10/93
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: idrp_usrreq.c,v 1.19 2008/04/28 13:24:38 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -62,13 +61,22 @@
 LIST_HEAD(, rawcb) idrp_pcb;
 struct isopcb idrp_isop;
 static struct sockaddr_iso idrp_addrs[2] =
-{{sizeof(idrp_addrs), AF_ISO,}, {sizeof(idrp_addrs[1]), AF_ISO,}};
+{
+    {
+	.siso_len = sizeof(idrp_addrs[0]),
+	.siso_family = AF_ISO,
+    },
+    {
+	.siso_len = sizeof(idrp_addrs[1]),
+    	.siso_family = AF_ISO,
+    },
+};
 
 /*
  * IDRP initialization
  */
 void
-idrp_init()
+idrp_init(void)
 {
 	extern struct clnl_protosw clnl_protox[256];
 
@@ -91,13 +99,7 @@ idrp_init()
  * No return value.
  */
 void
-#if __STDC__
 idrp_input(struct mbuf *m, ...)
-#else
-idrp_input(m, va_alist)
-	struct mbuf *m;
-	va_dcl
-#endif
 {
 	struct sockaddr_iso *src, *dst;
 	va_list ap;
@@ -112,10 +114,10 @@ bad:		m_freem(m);
 		return;
 	}
 	bzero(idrp_addrs[0].siso_data, sizeof(idrp_addrs[0].siso_data));
-	bcopy((caddr_t) & (src->siso_addr), (caddr_t) & idrp_addrs[0].siso_addr,
+	bcopy((void *) & (src->siso_addr), (void *) & idrp_addrs[0].siso_addr,
 	      1 + src->siso_nlen);
 	bzero(idrp_addrs[1].siso_data, sizeof(idrp_addrs[1].siso_data));
-	bcopy((caddr_t) & (dst->siso_addr), (caddr_t) & idrp_addrs[1].siso_addr,
+	bcopy((void *) & (dst->siso_addr), (void *) & idrp_addrs[1].siso_addr,
 	      1 + dst->siso_nlen);
 	if (sbappendaddr(&idrp_isop.isop_socket->so_rcv,
 			 sisotosa(idrp_addrs), m, (struct mbuf *) 0) == 0)
@@ -124,13 +126,7 @@ bad:		m_freem(m);
 }
 
 int
-#if __STDC__
 idrp_output(struct mbuf *m, ...)
-#else
-idrp_output(m, va_alist)
-	struct mbuf    *m;
-	va_dcl
-#endif
 {
 	struct sockaddr_iso *siso;
 	int             s = splsoftnet(), i;
@@ -140,11 +136,11 @@ idrp_output(m, va_alist)
 	siso = va_arg(ap, struct sockaddr_iso *);
 	va_end(ap);
 
-	bcopy((caddr_t) & (siso->siso_addr),
-	  (caddr_t) & idrp_isop.isop_sfaddr.siso_addr, 1 + siso->siso_nlen);
+	bcopy((void *) & (siso->siso_addr),
+	  (void *) & idrp_isop.isop_sfaddr.siso_addr, 1 + siso->siso_nlen);
 	siso++;
-	bcopy((caddr_t) & (siso->siso_addr),
-	  (caddr_t) & idrp_isop.isop_sladdr.siso_addr, 1 + siso->siso_nlen);
+	bcopy((void *) & (siso->siso_addr),
+	  (void *) & idrp_isop.isop_sladdr.siso_addr, 1 + siso->siso_nlen);
 	i = clnp_output(m, idrp_isop, m->m_pkthdr.len, 0);
 	splx(s);
 	return (i);
@@ -155,18 +151,17 @@ u_long          idrp_recvspace = 40 * 1024;	/* 40 1K datagrams */
 
 /* ARGSUSED */
 int
-idrp_usrreq(so, req, m, nam, control, p)
-	struct socket *so;
-	int req;
-	struct mbuf *m, *nam, *control;
-	struct proc *p;
+idrp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
+	struct mbuf *control, struct lwp *l)
 {
 	struct rawcb *rp;
+	struct proc *p;
 	int error = 0;
 
 	if (req == PRU_CONTROL)
 		return (EOPNOTSUPP);
 
+	p = l ? l->l_proc : NULL;
 	rp = sotorawcb(so);
 #ifdef DIAGNOSTIC
 	if (req != PRU_SEND && req != PRU_SENDOOB && control)
@@ -184,6 +179,7 @@ idrp_usrreq(so, req, m, nam, control, p)
 	switch (req) {
 
 	case PRU_ATTACH:
+		sosetlock(so);
 		if (rp != 0) {
 			error = EISCONN;
 			break;
@@ -193,12 +189,11 @@ idrp_usrreq(so, req, m, nam, control, p)
 			if (error)
 				break;
 		}
-		MALLOC(rp, struct rawcb *, sizeof(*rp), M_PCB, M_WAITOK);
+		MALLOC(rp, struct rawcb *, sizeof(*rp), M_PCB, M_WAITOK|M_ZERO);
 		if (rp == 0) {
 			error = ENOBUFS;
 			break;
 		}
-		bzero(rp, sizeof(*rp));
 		rp->rcb_socket = so;
 		LIST_INSERT_HEAD(&idrp_pcb, rp, rcb_list);
 		so->so_pcb = rp;

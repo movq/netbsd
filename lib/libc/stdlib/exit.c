@@ -1,4 +1,4 @@
-/*	$NetBSD: exit.c,v 1.8 1998/10/18 14:36:30 kleink Exp $	*/
+/*	$NetBSD: exit.c,v 1.11 2007/10/30 17:19:59 skrll Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,14 +34,16 @@
 #if 0
 static char sccsid[] = "@(#)exit.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: exit.c,v 1.8 1998/10/18 14:36:30 kleink Exp $");
+__RCSID("$NetBSD: exit.c,v 1.11 2007/10/30 17:19:59 skrll Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdlib.h>
 #include <unistd.h>
+#ifdef _LIBC
 #include "reentrant.h"
 #include "atexit.h"
+#endif
 
 void (*__cleanup) __P((void));
 
@@ -56,14 +54,10 @@ void
 exit(status)
 	int status;
 {
-	struct atexit *p;
-	int n;
-	
-	mutex_lock(&__atexit_mutex);
-	for (p = __atexit; p; p = p->next)
-		for (n = p->ind; --n >= 0;)
-			(*p->fns[n])();
-	mutex_unlock(&__atexit_mutex);
+
+#ifdef _LIBC
+	__cxa_finalize(NULL);
+#endif
 	if (__cleanup)
 		(*__cleanup)();
 	_exit(status);

@@ -1,4 +1,4 @@
-/*	$NetBSD: dmphy.c,v 1.6 2000/03/06 20:56:56 thorpej Exp $	*/
+/*	$NetBSD: dmphy.c,v 1.32 2008/05/04 17:06:09 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -71,11 +64,13 @@
  * Data Sheet available from www.davicom8.com
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: dmphy.c,v 1.32 2008/05/04 17:06:09 xtraeme Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
 #include <sys/socket.h>
 #include <sys/errno.h>
 
@@ -88,74 +83,84 @@
 
 #include <dev/mii/dmphyreg.h>
 
-int	dmphymatch __P((struct device *, struct cfdata *, void *));
-void	dmphyattach __P((struct device *, struct device *, void *));
+static int	dmphymatch(device_t, cfdata_t, void *);
+static void	dmphyattach(device_t, device_t, void *);
 
-struct cfattach dmphy_ca = {
-	sizeof(struct mii_softc), dmphymatch, dmphyattach, mii_phy_detach,
-	    mii_phy_activate
+CFATTACH_DECL_NEW(dmphy, sizeof(struct mii_softc),
+    dmphymatch, dmphyattach, mii_phy_detach, mii_phy_activate);
+
+static int	dmphy_service(struct mii_softc *, struct mii_data *, int);
+static void	dmphy_status(struct mii_softc *);
+
+static const struct mii_phy_funcs dmphy_funcs = {
+	dmphy_service, dmphy_status, mii_phy_reset,
 };
 
-int	dmphy_service __P((struct mii_softc *, struct mii_data *, int));
-void	dmphy_status __P((struct mii_softc *));
+static const struct mii_phydesc dmphys[] = {
+	{ MII_OUI_xxDAVICOM,		MII_MODEL_xxDAVICOM_DM9101,
+	  MII_STR_xxDAVICOM_DM9101 },
 
-int
-dmphymatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+	{ MII_OUI_xxDAVICOM,		MII_MODEL_xxDAVICOM_DM9102,
+	  MII_STR_xxDAVICOM_DM9102 },
+
+	{ MII_OUI_DAVICOM,		MII_MODEL_xxDAVICOM_DM9101,
+	  MII_STR_xxDAVICOM_DM9101 },
+
+	{ 0,				0,
+	  NULL },
+};
+
+static int
+dmphymatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mii_attach_args *ma = aux;
 
-	if (MII_OUI(ma->mii_id1, ma->mii_id2) == MII_OUI_xxDAVICOM &&
-	    MII_MODEL(ma->mii_id2) == MII_MODEL_xxDAVICOM_DM9101)
+	if (mii_phy_match(ma, dmphys) != NULL)
 		return (10);
 
 	return (0);
 }
 
-void
-dmphyattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+dmphyattach(device_t parent, device_t self, void *aux)
 {
-	struct mii_softc *sc = (struct mii_softc *)self;
+	struct mii_softc *sc = device_private(self);
 	struct mii_attach_args *ma = aux;
 	struct mii_data *mii = ma->mii_data;
+	const struct mii_phydesc *mpd;
 
-	printf(": %s, rev. %d\n", MII_STR_xxDAVICOM_DM9101,
-	    MII_REV(ma->mii_id2));
+	mpd = mii_phy_match(ma, dmphys);
+	aprint_naive(": Media interface\n");
+	aprint_normal(": %s, rev. %d\n", mpd->mpd_name, MII_REV(ma->mii_id2));
 
+	sc->mii_dev = self;
 	sc->mii_inst = mii->mii_instance;
 	sc->mii_phy = ma->mii_phyno;
-	sc->mii_service = dmphy_service;
-	sc->mii_status = dmphy_status;
+	sc->mii_funcs = &dmphy_funcs;
 	sc->mii_pdata = mii;
-	sc->mii_flags = mii->mii_flags;
+	sc->mii_flags = ma->mii_flags;
+	sc->mii_anegticks = MII_ANEGTICKS;
 
-	mii_phy_reset(sc);
+	PHY_RESET(sc);
 
 	sc->mii_capabilities =
 	    PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
-	printf("%s: ", sc->mii_dev.dv_xname);
+	aprint_normal_dev(self, "");
 	if ((sc->mii_capabilities & BMSR_MEDIAMASK) == 0)
-		printf("no media present");
+		aprint_error("no media present");
 	else
 		mii_phy_add_media(sc);
-	printf("\n");
+	aprint_normal("\n");
+
+	if (!pmf_device_register(self, NULL, mii_phy_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
-int
-dmphy_service(sc, mii, cmd)
-	struct mii_softc *sc;
-	struct mii_data *mii;
-	int cmd;
+static int
+dmphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 {
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
 	int reg;
-
-	if ((sc->mii_dev.dv_flags & DVF_ACTIVE) == 0)
-		return (ENXIO);
 
 	switch (cmd) {
 	case MII_POLLSTAT:
@@ -210,9 +215,8 @@ dmphy_service(sc, mii, cmd)
 	return (0);
 }
 
-void
-dmphy_status(sc)
-	struct mii_softc *sc;
+static void
+dmphy_status(struct mii_softc *sc)
 {
 	struct mii_data *mii = sc->mii_pdata;
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;

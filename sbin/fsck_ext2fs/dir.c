@@ -1,7 +1,6 @@
-/*	$NetBSD: dir.c,v 1.5 2000/01/28 16:01:46 bouyer Exp $	*/
+/*	$NetBSD: dir.c,v 1.22 2008/03/16 23:17:55 lukem Exp $	*/
 
 /*
- * Copyright (c) 1997 Manuel Bouyer.
  * Copyright (c) 1980, 1986, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -13,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,12 +29,41 @@
  * SUCH DAMAGE.
  */
 
+/*
+ * Copyright (c) 1997 Manuel Bouyer.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)dir.c	8.5 (Berkeley) 12/8/94";
 #else
-__RCSID("$NetBSD: dir.c,v 1.5 2000/01/28 16:01:46 bouyer Exp $");
+__RCSID("$NetBSD: dir.c,v 1.22 2008/03/16 23:17:55 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,33 +79,45 @@ __RCSID("$NetBSD: dir.c,v 1.5 2000/01/28 16:01:46 bouyer Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <err.h>
 
 #include "fsck.h"
 #include "fsutil.h"
 #include "extern.h"
 
-char	*lfname = "lost+found";
-int	lfmode = 01777;
-struct	ext2fs_dirtemplate emptydir = { 0, DIRBLKSIZ }; 
+const char	*lfname = "lost+found";
+int	lfmode = 01700;
+struct	ext2fs_dirtemplate emptydir = {
+	.dot_ino = 0,
+	.dot_reclen = DIRBLKSIZ,
+}; 
 struct	ext2fs_dirtemplate dirhead = {
-	0, 12, 1, EXT2_FT_DIR, ".",
-	0, DIRBLKSIZ - 12, 2, EXT2_FT_DIR, ".."
+	.dot_ino = 0,
+	.dot_reclen = 12,
+	.dot_namlen = 1,
+	.dot_type = EXT2_FT_DIR,
+	.dot_name = ".",
+	.dotdot_ino = 0,
+	.dotdot_reclen = DIRBLKSIZ - 12,
+	.dotdot_namlen = 2,
+	.dotdot_type = EXT2_FT_DIR,
+	.dotdot_name = "..",
 };
 #undef DIRBLKSIZ
 
-static int expanddir __P((struct ext2fs_dinode *, char *));
-static void freedir __P((ino_t, ino_t));
-static struct ext2fs_direct *fsck_readdir __P((struct inodesc *));
-static struct bufarea *getdirblk __P((daddr_t, long));
-static int lftempname __P((char *, ino_t));
-static int mkentry __P((struct inodesc *));
-static int chgino __P((struct  inodesc *));
+static int expanddir(struct ext2fs_dinode *, char *);
+static void freedir(ino_t, ino_t);
+static struct ext2fs_direct *fsck_readdir(struct inodesc *);
+static struct bufarea *getdirblk(daddr_t, long);
+static int lftempname(char *, ino_t);
+static int mkentry(struct inodesc *);
+static int chgino(struct  inodesc *);
 
 /*
  * Propagate connected state through the tree.
  */
 void
-propagate()
+propagate(void)
 {
 	struct inoinfo **inpp, *inp, *pinp;
 	struct inoinfo **inpend;
@@ -117,8 +153,7 @@ propagate()
  * Scan each entry in a directory block.
  */
 int
-dirscan(idesc)
-	struct inodesc *idesc;
+dirscan(struct inodesc *idesc)
 {
 	struct ext2fs_direct *dp;
 	struct bufarea *bp;
@@ -126,19 +161,18 @@ dirscan(idesc)
 	long blksiz;
 	char *dbuf = NULL;
 
-	if ((dbuf = malloc(sblock.e2fs_bsize)) == NULL) {
-		fprintf(stderr, "out of memory");
-		exit(8);
-	}
+	if ((dbuf = malloc(sblock.e2fs_bsize)) == NULL)
+		err(8, "Can't allocate directory block");
 
 	if (idesc->id_type != DATA)
-		errexit("wrong type to dirscan %d\n", idesc->id_type);
+		errexit("wrong type to dirscan %d", idesc->id_type);
 	if (idesc->id_entryno == 0 &&
 	    (idesc->id_filesize & (sblock.e2fs_bsize - 1)) != 0)
 		idesc->id_filesize = roundup(idesc->id_filesize, sblock.e2fs_bsize);
 	blksiz = idesc->id_numfrags * sblock.e2fs_bsize;
 	if (chkrange(idesc->id_blkno, idesc->id_numfrags)) {
 		idesc->id_filesize -= blksiz;
+		free(dbuf);
 		return (SKIP);
 	}
 	idesc->id_loc = 0;
@@ -166,8 +200,7 @@ dirscan(idesc)
  * get next entry in a directory.
  */
 static struct ext2fs_direct *
-fsck_readdir(idesc)
-	struct inodesc *idesc;
+fsck_readdir(struct inodesc *idesc)
 {
 	struct ext2fs_direct *dp, *ndp;
 	struct bufarea *bp;
@@ -228,9 +261,7 @@ dpok:
  * This is a superset of the checks made in the kernel.
  */
 int
-dircheck(idesc, dp)
-	struct inodesc *idesc;
-	struct ext2fs_direct *dp;
+dircheck(struct inodesc *idesc, struct ext2fs_direct *dp)
 {
 	int size;
 	char *cp;
@@ -251,8 +282,8 @@ dircheck(idesc, dp)
 			return (1);
 	size = EXT2FS_DIRSIZ(dp->e2d_namlen);
 	if (reclen < size ||
-	    idesc->id_filesize < size ||
-	    dp->e2d_namlen > EXT2FS_MAXNAMLEN)
+	    idesc->id_filesize < size /* ||
+	    dp->e2d_namlen > EXT2FS_MAXNAMLEN */)
 		return (0);
 	for (cp = dp->e2d_name, size = 0; size < dp->e2d_namlen; size++)
 		if (*cp == '\0' || (*cp++ == '/'))
@@ -261,18 +292,14 @@ dircheck(idesc, dp)
 }
 
 void
-direrror(ino, errmesg)
-	ino_t ino;
-	char *errmesg;
+direrror(ino_t ino, const char *errmesg)
 {
 
 	fileerror(ino, ino, errmesg);
 }
 
 void
-fileerror(cwd, ino, errmesg)
-	ino_t cwd, ino;
-	char *errmesg;
+fileerror(ino_t cwd, ino_t ino, const char *errmesg)
 {
 	struct ext2fs_dinode *dp;
 	char pathbuf[MAXPATHLEN + 1];
@@ -280,7 +307,7 @@ fileerror(cwd, ino, errmesg)
 	pwarn("%s ", errmesg);
 	pinode(ino);
 	printf("\n");
-	getpathname(pathbuf, cwd, ino);
+	getpathname(pathbuf, sizeof(pathbuf), cwd, ino);
 	if ((ino < EXT2_FIRSTINO && ino != EXT2_ROOTINO) || ino > maxino) {
 		pfatal("NAME=%s\n", pathbuf);
 		return;
@@ -294,9 +321,7 @@ fileerror(cwd, ino, errmesg)
 }
 
 void
-adjust(idesc, lcnt)
-	struct inodesc *idesc;
-	short lcnt;
+adjust(struct inodesc *idesc, short lcnt)
 {
 	struct ext2fs_dinode *dp;
 
@@ -325,13 +350,13 @@ adjust(idesc, lcnt)
 }
 
 static int
-mkentry(idesc)
-	struct inodesc *idesc;
+mkentry(struct inodesc *idesc)
 {
 	struct ext2fs_direct *dirp = idesc->id_dirp;
 	struct ext2fs_direct newent;
 	int newlen, oldlen;
 
+	newent.e2d_type = 0;	/* XXX gcc */
 	newent.e2d_namlen = strlen(idesc->id_name);
 	if (sblock.e2fs.e2fs_rev > E2FS_REV0 &&
 	    (sblock.e2fs.e2fs_features_incompat & EXT2F_INCOMPAT_FTYPE))
@@ -355,8 +380,7 @@ mkentry(idesc)
 }
 
 static int
-chgino(idesc)
-	struct inodesc *idesc;
+chgino(struct inodesc *idesc)
 {
 	struct ext2fs_direct *dirp = idesc->id_dirp;
 	u_int16_t namlen = dirp->e2d_namlen;
@@ -374,9 +398,7 @@ chgino(idesc)
 }
 
 int
-linkup(orphan, parentdir)
-	ino_t orphan;
-	ino_t parentdir;
+linkup(ino_t orphan, ino_t parentdir)
 {
 	struct ext2fs_dinode *dp;
 	int lostdir;
@@ -389,7 +411,7 @@ linkup(orphan, parentdir)
 	lostdir = (fs2h16(dp->e2di_mode) & IFMT) == IFDIR;
 	pwarn("UNREF %s ", lostdir ? "DIR" : "FILE");
 	pinode(orphan);
-	if (preen && fs2h32(dp->e2di_size) == 0)
+	if (preen && inosize(dp) == 0)
 		return (0);
 	if (preen)
 		printf(" (RECONNECTED)\n");
@@ -468,9 +490,10 @@ linkup(orphan, parentdir)
 		dp->e2di_nlink = h2fs16(fs2h16(dp->e2di_nlink) +1);
 		inodirty();
 		lncntp[lfdir]++;
-		pwarn("DIR I=%u CONNECTED. ", orphan);
+		pwarn("DIR I=%llu CONNECTED. ", (unsigned long long)orphan);
 		if (parentdir != (ino_t)-1)
-			printf("PARENT WAS I=%u\n", parentdir);
+			printf("PARENT WAS I=%llu\n",
+			    (unsigned long long)parentdir);
 		if (preen == 0)
 			printf("\n");
 	}
@@ -481,10 +504,7 @@ linkup(orphan, parentdir)
  * fix an entry in a directory.
  */
 int
-changeino(dir, name, newnum)
-	ino_t dir;
-	char *name;
-	ino_t newnum;
+changeino(ino_t dir, const char *name, ino_t newnum)
 {
 	struct inodesc idesc;
 
@@ -502,9 +522,7 @@ changeino(dir, name, newnum)
  * make an entry in a directory
  */
 int
-makeentry(parent, ino, name)
-	ino_t parent, ino;
-	char *name;
+makeentry(ino_t parent, ino_t ino, const char *name)
 {
 	struct ext2fs_dinode *dp;
 	struct inodesc idesc;
@@ -522,14 +540,13 @@ makeentry(parent, ino, name)
 	idesc.id_fix = DONTKNOW;
 	idesc.id_name = name;
 	dp = ginode(parent);
-	if (fs2h32(dp->e2di_size) % sblock.e2fs_bsize) {
-		dp->e2di_size =
-			h2fs32(roundup(fs2h32(dp->e2di_size), sblock.e2fs_bsize));
+	if (inosize(dp) % sblock.e2fs_bsize) {
+		inossize(dp, roundup(inosize(dp), sblock.e2fs_bsize));
 		inodirty();
 	}
 	if ((ckinode(dp, &idesc) & ALTERED) != 0)
 		return (1);
-	getpathname(pathbuf, parent, parent);
+	getpathname(pathbuf, sizeof(pathbuf), parent, parent);
 	dp = ginode(parent);
 	if (expanddir(dp, pathbuf) == 0)
 		return (0);
@@ -540,38 +557,38 @@ makeentry(parent, ino, name)
  * Attempt to expand the size of a directory
  */
 static int
-expanddir(dp, name)
-	struct ext2fs_dinode *dp;
-	char *name;
+expanddir(struct ext2fs_dinode *dp, char *name)
 {
 	daddr_t lastbn, newblk;
 	struct bufarea *bp;
 	char *firstblk;
 
-	if ((firstblk = malloc(sblock.e2fs_bsize)) == NULL) {
-		fprintf(stderr, "out of memory");
-		exit(8);
-	}
-
-	lastbn = lblkno(&sblock, fs2h32(dp->e2di_size));
+	lastbn = lblkno(&sblock, inosize(dp));
 	if (lastbn >= NDADDR - 1 || fs2h32(dp->e2di_blocks[lastbn]) == 0 ||
-		fs2h32(dp->e2di_size) == 0)
+		inosize(dp) == 0) {
 		return (0);
-	if ((newblk = allocblk()) == 0)
+	}
+	if ((newblk = allocblk()) == 0) {
 		return (0);
+	}
 	dp->e2di_blocks[lastbn + 1] = dp->e2di_blocks[lastbn];
 	dp->e2di_blocks[lastbn] = h2fs32(newblk);
-	dp->e2di_size = h2fs32(fs2h32(dp->e2di_size) + sblock.e2fs_bsize);
+	inossize(dp, inosize(dp) + sblock.e2fs_bsize);
 	dp->e2di_nblock = h2fs32(fs2h32(dp->e2di_nblock) + 1);
 	bp = getdirblk(fs2h32(dp->e2di_blocks[lastbn + 1]),
 		sblock.e2fs_bsize);
 	if (bp->b_errs)
 		goto bad;
+	if ((firstblk = malloc(sblock.e2fs_bsize)) == NULL)
+		err(8, "cannot allocate first block");
 	memcpy(firstblk, bp->b_un.b_buf, sblock.e2fs_bsize);
 	bp = getdirblk(newblk, sblock.e2fs_bsize);
-	if (bp->b_errs)
+	if (bp->b_errs) {
+		free(firstblk);
 		goto bad;
+	}
 	memcpy(bp->b_un.b_buf, firstblk, sblock.e2fs_bsize);
+	free(firstblk);
 	dirty(bp);
 	bp = getdirblk(fs2h32(dp->e2di_blocks[lastbn + 1]),
 		sblock.e2fs_bsize);
@@ -590,7 +607,7 @@ expanddir(dp, name)
 bad:
 	dp->e2di_blocks[lastbn] = dp->e2di_blocks[lastbn + 1];
 	dp->e2di_blocks[lastbn + 1] = 0;
-	dp->e2di_size = h2fs32(fs2h32(dp->e2di_size) - sblock.e2fs_bsize);
+	inossize(dp, inosize(dp) - sblock.e2fs_bsize);
 	dp->e2di_nblock = h2fs32(fs2h32(dp->e2di_nblock) - 1);
 	freeblk(newblk);
 	return (0);
@@ -600,9 +617,7 @@ bad:
  * allocate a new directory
  */
 int
-allocdir(parent, request, mode)
-	ino_t parent, request;
-	int mode;
+allocdir(ino_t parent, ino_t request, int mode)
 {
 	ino_t ino;
 	struct ext2fs_dinode *dp;
@@ -662,8 +677,7 @@ allocdir(parent, request, mode)
  * free a directory inode
  */
 static void
-freedir(ino, parent)
-	ino_t ino, parent;
+freedir(ino_t ino, ino_t parent)
 {
 	struct ext2fs_dinode *dp;
 
@@ -679,9 +693,7 @@ freedir(ino, parent)
  * generate a temporary name for the lost+found directory.
  */
 static int
-lftempname(bufp, ino)
-	char *bufp;
-	ino_t ino;
+lftempname(char *bufp, ino_t ino)
 {
 	ino_t in;
 	char *cp;
@@ -706,9 +718,7 @@ lftempname(bufp, ino)
  * Insure that it is held until another is requested.
  */
 static struct bufarea *
-getdirblk(blkno, size)
-	daddr_t blkno;
-	long size;
+getdirblk(daddr_t blkno, long size)
 {
 
 	if (pdirbp != 0)

@@ -1,4 +1,4 @@
-/* $NetBSD: wsfontload.c,v 1.3 2000/01/25 01:04:07 ad Exp $ */
+/* $NetBSD: wsfontload.c,v 1.13 2008/05/26 12:15:42 drochner Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,6 +28,8 @@
 
 #include <stdio.h>
 #include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
@@ -42,37 +38,102 @@
 
 #include <dev/wscons/wsconsio.h>
 
-#define DEFDEV		"/dev/ttyEcfg"
+#define DEFDEV		"/dev/wsfont"
 #define DEFWIDTH	8
 #define DEFHEIGHT	16
 #define DEFENC		WSDISPLAY_FONTENC_ISO
 #define DEFBITORDER	WSDISPLAY_FONTORDER_L2R
 #define DEFBYTEORDER	WSDISPLAY_FONTORDER_L2R
 
-int main __P((int, char**));
-static void usage __P((void));
-static int getencoding __P((char *));
+static void usage(void);
+static int getencoding(char *);
+static const char *rgetencoding(int);
+static const char *rgetfontorder(int);
+
+static struct {
+	const char *name;
+	int val;
+} fontorders[] = {
+	{ "known", WSDISPLAY_FONTORDER_KNOWN}, 
+	{ "l2r", WSDISPLAY_FONTORDER_L2R}, 
+	{ "r2l", WSDISPLAY_FONTORDER_R2L}, 
+};
+
+static struct {
+	const char *name;
+	int val;
+} encodings[] = {
+	{"iso", WSDISPLAY_FONTENC_ISO},
+	{"ibm", WSDISPLAY_FONTENC_IBM},
+	{"pcvt", WSDISPLAY_FONTENC_PCVT},
+	{"iso7", WSDISPLAY_FONTENC_ISO7},
+	{"iso2", WSDISPLAY_FONTENC_ISO2},
+};
 
 static void
-usage()
+usage(void)
 {
-	extern char *__progname;
 
 	(void)fprintf(stderr,
-		"Usage: %s [-f wsdev] [-w width] [-h height] [-e encoding]"
+		"usage: %s [-f wsdev] [-w width] [-h height] [-e encoding]"
 		" [-N name] [-b] [-B] [fontfile]\n",
-		      __progname);
+		      getprogname());
 	exit(1);
 }
 
-int
-main(argc, argv)
-	int argc;
-	char **argv;
+/*
+ * map given fontorder to its string representation
+ */
+static const char *
+rgetfontorder(int fontorder)
 {
-	char *wsdev;
+	int i;
+
+	for (i = 0; i < sizeof(fontorders) / sizeof(fontorders[0]); i++)
+		if (fontorders[i].val == fontorder)
+			return (fontorders[i].name);
+
+	return "unknown";
+}
+
+/* 
+ * map given encoding to its string representation
+ */
+static const char *
+rgetencoding(int enc)
+{
+	int i;
+
+	for (i = 0; i < sizeof(encodings) / sizeof(encodings[0]); i++)
+		if (encodings[i].val == enc)
+			return (encodings[i].name);
+
+	return "unknown";
+}
+
+/*
+ * map given encoding string to integer value
+ */
+static int
+getencoding(char *name)
+{
+	int i;
+
+	for (i = 0; i < sizeof(encodings) / sizeof(encodings[0]); i++)
+		if (!strcmp(name, encodings[i].name))
+			return (encodings[i].val);
+
+	if (sscanf(name, "%d", &i) != 1)
+		errx(1, "invalid encoding");
+	return (i);
+}
+
+int
+main(int argc, char **argv)
+{
+	const char *wsdev;
 	struct wsdisplay_font f;
-	int c, res, wsfd, ffd;
+	int c, res, wsfd, ffd, verbose = 0;
 	size_t len;
 	void *buf;
 
@@ -87,7 +148,7 @@ main(argc, argv)
 	f.bitorder = DEFBITORDER;
 	f.byteorder = DEFBYTEORDER;
 
-	while ((c = getopt(argc, argv, "f:w:h:e:N:bB")) != -1) {
+	while ((c = getopt(argc, argv, "f:w:h:e:N:bBv")) != -1) {
 		switch (c) {
 		case 'f':
 			wsdev = optarg;
@@ -112,6 +173,9 @@ main(argc, argv)
 		case 'B':
 			f.byteorder = WSDISPLAY_FONTORDER_R2L;
 			break;
+		case 'v':
+			verbose = 1;
+			break;
 		case '?':
 		default:
 			usage();
@@ -126,12 +190,12 @@ main(argc, argv)
 
 	wsfd = open(wsdev, O_RDWR, 0);
 	if (wsfd < 0)
-		err(2, "open ws");
+		err(2, "open ws-device %s", wsdev);
 
 	if (argc > 0) {
 		ffd = open(argv[0], O_RDONLY, 0);
 		if (ffd < 0)
-			err(4, "open font");
+			err(4, "open font %s", argv[0]);
 		if (!f.name)
 			f.name = argv[0];
 	} else
@@ -154,33 +218,24 @@ main(argc, argv)
 
 	f.data = buf;
 
+	if (verbose) {
+		printf("name:       %s\n", f.name);
+		printf("firstchar:  %d\n", f.firstchar);
+		printf("numchars:   %d\n", f.numchars);
+		printf("encoding:   %s (%d)\n", 
+			rgetencoding(f.encoding), f.encoding);
+		printf("fontwidth:  %d\n", f.fontwidth);
+		printf("fontheight: %d\n", f.fontheight);
+		printf("stride:     %d\n", f.stride);
+		printf("bitorder:   %s (%d)\n",
+			rgetfontorder(f.bitorder), f.bitorder);
+		printf("byteorder:  %s (%d)\n",
+			rgetfontorder(f.byteorder), f.byteorder);
+	}
+
 	res = ioctl(wsfd, WSDISPLAYIO_LDFONT, &f);
 	if (res < 0)
 		err(3, "WSDISPLAYIO_LDFONT");
 
 	return (0);
-}
-
-static struct {
-	char *name;
-	int val;
-} encodings[] = {
-	{"iso", WSDISPLAY_FONTENC_ISO},
-	{"ibm", WSDISPLAY_FONTENC_IBM},
-	{"pcvt", WSDISPLAY_FONTENC_PCVT},
-};
-
-static int
-getencoding(name)
-	char *name;
-{
-	int i;
-
-	for (i = 0; i < sizeof(encodings) / sizeof(encodings[0]); i++)
-		if (!strcmp(name, encodings[i].name))
-			return (encodings[i].val);
-
-	if (sscanf(name, "%d", &i) != 1)
-		errx(1, "invalid encoding");
-	return (i);
 }

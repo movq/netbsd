@@ -10,11 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,15 +29,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "from: @(#)diskpart.c	8.3 (Berkeley) 11/30/94";
 #else
-__RCSID("$NetBSD: diskpart.c,v 1.11 1999/01/19 22:23:36 tron Exp $");
+__RCSID("$NetBSD: diskpart.c,v 1.17 2008/07/21 13:36:58 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -94,14 +90,14 @@ char	layouts[NLAYOUTS][NPARTITIONS] = {
  * (e.g. swap areas or for access to the entire device).
  */
 struct	partition defparam[NPARTITIONS] = {
-	{ 0, 0, 1024, FS_UNUSED, 8, { 0 }, },		/* a */
-	{ 0, 0, 1024, FS_SWAP,   8, { 0 }, },		/* b */
-	{ 0, 0, 1024, FS_UNUSED, 8, { 0 }, },		/* c */
-	{ 0, 0,  512, FS_UNUSED, 8, { 0 }, },		/* d */
-	{ 0, 0, 1024, FS_UNUSED, 8, { 0 }, },		/* e */
-	{ 0, 0, 1024, FS_UNUSED, 8, { 0 }, },		/* f */
-	{ 0, 0, 1024, FS_UNUSED, 8, { 0 }, },		/* g */
-	{ 0, 0, 1024, FS_UNUSED, 8, { 0 }, }		/* h */
+	{ 0, 0, { 1024 }, FS_UNUSED, 8, { 0 }, },		/* a */
+	{ 0, 0, { 1024 }, FS_SWAP,   8, { 0 }, },		/* b */
+	{ 0, 0, { 1024 }, FS_UNUSED, 8, { 0 }, },		/* c */
+	{ 0, 0, {  512 }, FS_UNUSED, 8, { 0 }, },		/* d */
+	{ 0, 0, { 1024 }, FS_UNUSED, 8, { 0 }, },		/* e */
+	{ 0, 0, { 1024 }, FS_UNUSED, 8, { 0 }, },		/* f */
+	{ 0, 0, { 1024 }, FS_UNUSED, 8, { 0 }, },		/* g */
+	{ 0, 0, { 1024 }, FS_UNUSED, 8, { 0 }, }		/* h */
 };
 
 /*
@@ -132,7 +128,8 @@ main(argc, argv)
 	int curcyl, spc, def, part, layout, j, ch;
 	int threshhold, numcyls[NPARTITIONS], startcyl[NPARTITIONS];
 	off_t totsize = 0;
-	char *lp, *tyname;
+	const char *tyname;
+	char *lp;
 
 	while ((ch = getopt(argc, argv, "pds:")) != -1) {
 		switch (ch) {
@@ -369,15 +366,15 @@ main(argc, argv)
 struct disklabel disk;
 
 struct	field {
-	char		*f_name;
-	char		*f_defaults;
+	const char	*f_name;
+	const char	*f_defaults;
 	u_int32_t	*f_location;
 } fields[] = {
 	{ "sector size",		"512",	&disk.d_secsize },
-	{ "#sectors/track",		0,	&disk.d_nsectors },
-	{ "#tracks/cylinder",		0,	&disk.d_ntracks },
-	{ "#cylinders",			0,	&disk.d_ncylinders },
-	{ 0, 0, 0 },
+	{ "#sectors/track",		NULL,	&disk.d_nsectors },
+	{ "#tracks/cylinder",		NULL,	&disk.d_ntracks },
+	{ "#cylinders",			NULL,	&disk.d_ncylinders },
+	{ NULL, NULL, 0 },
 };
 
 struct disklabel *
@@ -466,7 +463,8 @@ again:
 				fprintf(stderr, "no default value\n");
 				goto again;
 			}
-			cp = fp->f_defaults;
+			/* XXX __UNCONST */
+			cp = __UNCONST(fp->f_defaults);
 		}
 		*fp->f_location = atol(cp);
 		if (*fp->f_location == 0) {
@@ -508,7 +506,7 @@ gettype(t, names)
 	for (nm = names; *nm; nm++)
 		if (strcasecmp(t, *nm) == 0)
 			return (nm - names);
-	if (isdigit(*t))
+	if (isdigit((unsigned char)*t))
 		return (atoi(t));
 	return (-1);
 }
@@ -516,6 +514,6 @@ gettype(t, names)
 void
 usage(void)
 {
-	(void)fprintf(stderr, "Usage: diskpart [-dp] [-s size] disk-type\n");
+	(void)fprintf(stderr, "usage: diskpart [-dp] [-s size] disk-type\n");
 	exit(1);
 }

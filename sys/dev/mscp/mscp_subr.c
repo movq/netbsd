@@ -1,8 +1,40 @@
-/*	$NetBSD: mscp_subr.c,v 1.15 2000/03/30 12:45:34 augustss Exp $	*/
+/*	$NetBSD: mscp_subr.c,v 1.35 2008/04/08 20:10:44 cegger Exp $	*/
 /*
- * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * Copyright (c) 1988 Regents of the University of California.
  * All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Chris Torek.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)mscp.c	7.5 (Berkeley) 12/16/90
+ */
+
+/*
+ * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -42,13 +74,17 @@
  * MSCP generic driver routines
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mscp_subr.c,v 1.35 2008/04/08 20:10:44 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/buf.h>
+#include <sys/bufq.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/sid.h>
 
 #include <dev/mscp/mscp.h>
@@ -60,16 +96,15 @@
 
 #define b_forw	b_hash.le_next
 
-int	mscp_match __P((struct device *, struct cfdata *, void *));
-void	mscp_attach __P((struct device *, struct device *, void *));
-void	mscp_start __P((struct	mscp_softc *));
-int	mscp_init __P((struct  mscp_softc *));
-void	mscp_initds __P((struct mscp_softc *));
-int	mscp_waitstep __P((struct mscp_softc *, int, int));
+int	mscp_match(struct device *, struct cfdata *, void *);
+void	mscp_attach(struct device *, struct device *, void *);
+void	mscp_start(struct	mscp_softc *);
+int	mscp_init(struct  mscp_softc *);
+void	mscp_initds(struct mscp_softc *);
+int	mscp_waitstep(struct mscp_softc *, int, int);
 
-struct	cfattach mscpbus_ca = {
-	sizeof(struct mscp_softc), mscp_match, mscp_attach
-};
+CFATTACH_DECL(mscpbus, sizeof(struct mscp_softc),
+    mscp_match, mscp_attach, NULL, NULL);
 
 #define	READ_SA		(bus_space_read_2(mi->mi_iot, mi->mi_sah, 0))
 #define	READ_IP		(bus_space_read_2(mi->mi_iot, mi->mi_iph, 0))
@@ -131,7 +166,8 @@ mscp_attach(parent, self, aux)
 	void *aux;
 {
 	struct	mscp_attach_args *ma = aux;
-	struct	mscp_softc *mi = (void *)self;
+	struct	mscp_softc *mi = device_private(self);
+	struct mscp *mp2;
 	volatile struct mscp *mp;
 	volatile int i;
 	int	timeout, next = 0;
@@ -160,11 +196,10 @@ mscp_attach(parent, self, aux)
 	mi->mi_rsp.mri_size = NRSP;
 	mi->mi_rsp.mri_desc = mi->mi_uda->mp_ca.ca_rspdsc;
 	mi->mi_rsp.mri_ring = mi->mi_uda->mp_rsp;
-	BUFQ_INIT(&mi->mi_resq);
+	bufq_alloc(&mi->mi_resq, "fcfs", 0);
 
 	if (mscp_init(mi)) {
-		printf("%s: can't init, controller hung\n",
-		    mi->mi_dev.dv_xname);
+		aprint_error_dev(&mi->mi_dev, "can't init, controller hung\n");
 		return;
 	}
 	for (i = 0; i < NCMD; i++) {
@@ -175,7 +210,7 @@ mscp_attach(parent, self, aux)
 			return;
 		}
 	}
-	
+
 
 #if NRA
 	if (ma->ma_type & MSCPBUS_DISK) {
@@ -214,7 +249,7 @@ findunit:
 			goto gotit;
 	}
 	printf("%s: no response to Get Unit Status request\n",
-	    mi->mi_dev.dv_xname);
+	    device_xname(&mi->mi_dev));
 	return;
 
 gotit:	/*
@@ -260,17 +295,18 @@ gotit:	/*
 			/*
 			 * In service, or something else equally unusable.
 			 */
-			printf("%s: unit %d off line: ", mi->mi_dev.dv_xname,
+			printf("%s: unit %d off line: ", device_xname(&mi->mi_dev),
 				mp->mscp_unit);
-			mscp_printevent((struct mscp *)mp);
+			mp2 = __UNVOLATILE(mp);
+			mscp_printevent(mp2);
 			next++;
 			goto findunit;
 		}
 		break;
 
 	default:
-		printf("%s: unable to get unit status: ", mi->mi_dev.dv_xname);
-		mscp_printevent((struct mscp *)mp);
+		aprint_error_dev(&mi->mi_dev, "unable to get unit status: ");
+		mscp_printevent(__UNVOLATILE(mp));
 		return;
 	}
 
@@ -288,7 +324,7 @@ gotit:	/*
 
 
 /*
- * The ctlr gets initialised, normally after boot but may also be 
+ * The ctlr gets initialised, normally after boot but may also be
  * done if the ctlr gets in an unknown state. Returns 1 if init
  * fails, 0 otherwise.
  */
@@ -317,7 +353,7 @@ mscp_init(mi)
 	if (status == 0)
 		return 1; /* Init failed */
 	if (READ_SA & MP_ERR) {
-		(*mi->mi_mc->mc_saerror)(mi->mi_dev.dv_parent, 0);
+		(*mi->mi_mc->mc_saerror)(device_parent(&mi->mi_dev), 0);
 		return 1;
 	}
 
@@ -326,25 +362,25 @@ mscp_init(mi)
 	    MP_IE | (mi->mi_ivec >> 2));
 	status = mscp_waitstep(mi, STEP1MASK, STEP1GOOD);
 	if (status == 0) {
-		(*mi->mi_mc->mc_saerror)(mi->mi_dev.dv_parent, 0);
+		(*mi->mi_mc->mc_saerror)(device_parent(&mi->mi_dev), 0);
 		return 1;
 	}
 
 	/* step2 */
-	WRITE_SW(((mi->mi_dmam->dm_segs[0].ds_addr & 0xffff) + 
+	WRITE_SW(((mi->mi_dmam->dm_segs[0].ds_addr & 0xffff) +
 	    offsetof(struct mscp_pack, mp_ca.ca_rspdsc[0])) |
 	    (vax_cputype == VAX_780 || vax_cputype == VAX_8600 ? MP_PI : 0));
 	status = mscp_waitstep(mi, STEP2MASK, STEP2GOOD(mi->mi_ivec >> 2));
 	if (status == 0) {
-		(*mi->mi_mc->mc_saerror)(mi->mi_dev.dv_parent, 0);
+		(*mi->mi_mc->mc_saerror)(device_parent(&mi->mi_dev), 0);
 		return 1;
 	}
 
 	/* step3 */
 	WRITE_SW((mi->mi_dmam->dm_segs[0].ds_addr >> 16));
 	status = mscp_waitstep(mi, STEP3MASK, STEP3GOOD);
-	if (status == 0) { 
-		(*mi->mi_mc->mc_saerror)(mi->mi_dev.dv_parent, 0);
+	if (status == 0) {
+		(*mi->mi_mc->mc_saerror)(device_parent(&mi->mi_dev), 0);
 		return 1;
 	}
 	i = READ_SA & 0377;
@@ -353,8 +389,8 @@ mscp_init(mi)
 #define BURST 4 /* XXX */
 	if (mi->mi_type & MSCPBUS_UDA) {
 		WRITE_SW(MP_GO | (BURST - 1) << 2);
-		printf("%s: DMA burst size set to %d\n", 
-		    mi->mi_dev.dv_xname, BURST);
+		printf("%s: DMA burst size set to %d\n",
+		    device_xname(&mi->mi_dev), BURST);
 	}
 	WRITE_SW(MP_GO);
 
@@ -371,7 +407,7 @@ mscp_init(mi)
 	mi->mi_credits = 0;
 	mp->mscp_opcode = M_OP_SETCTLRC;
 	mp->mscp_unit = mp->mscp_modifier = mp->mscp_flags =
-	    mp->mscp_sccc.sccc_version = mp->mscp_sccc.sccc_hosttimo = 
+	    mp->mscp_sccc.sccc_version = mp->mscp_sccc.sccc_hosttimo =
 	    mp->mscp_sccc.sccc_time = mp->mscp_sccc.sccc_time1 =
 	    mp->mscp_sccc.sccc_errlgfl = 0;
 	mp->mscp_sccc.sccc_ctlrflags = M_CF_ATTN | M_CF_MISC | M_CF_THIS;
@@ -389,8 +425,7 @@ mscp_init(mi)
 	}
 	if (count == DELAYTEN) {
 out:
-		printf("%s: couldn't set ctlr characteristics, sa=%x\n", 
-		    mi->mi_dev.dv_xname, j);
+		aprint_error_dev(&mi->mi_dev, "couldn't set ctlr characteristics, sa=%x\n", j);
 		return 1;
 	}
 	return 0;
@@ -450,7 +485,7 @@ mscp_intr(mi)
 	/*
 	 * If there are any not-yet-handled request, try them now.
 	 */
-	if (BUFQ_FIRST(&mi->mi_resq))
+	if (BUFQ_PEEK(mi->mi_resq))
 		mscp_kickaway(mi);
 }
 
@@ -464,10 +499,11 @@ mscp_print(aux, name)
 	int type = mp->mscp_guse.guse_mediaid;
 
 	if (name) {
-		printf("%c%c", MSCP_MID_CHAR(2, type), MSCP_MID_CHAR(1, type));
+		aprint_normal("%c%c", MSCP_MID_CHAR(2, type),
+		    MSCP_MID_CHAR(1, type));
 		if (MSCP_MID_ECH(0, type))
-			printf("%c", MSCP_MID_CHAR(0, type));
-		printf("%d at %s drive %d", MSCP_MID_NUM(type), name,
+			aprint_normal("%c", MSCP_MID_CHAR(0, type));
+		aprint_normal("%d at %s drive %d", MSCP_MID_NUM(type), name,
 		    mp->mscp_unit);
 	}
 	return UNCONF;
@@ -482,9 +518,9 @@ mscp_strategy(bp, usc)
 	struct device *usc;
 {
 	struct	mscp_softc *mi = (void *)usc;
-	int s = splimp();
+	int s = spluba();
 
-	BUFQ_INSERT_TAIL(&mi->mi_resq, bp);
+	BUFQ_PUT(mi->mi_resq, bp);
 	mscp_kickaway(mi);
 	splx(s);
 }
@@ -498,7 +534,7 @@ mscp_kickaway(mi)
 	struct	mscp *mp;
 	int next;
 
-	while ((bp = BUFQ_FIRST(&mi->mi_resq)) != NULL) {
+	while ((bp = BUFQ_PEEK(mi->mi_resq)) != NULL) {
 		/*
 		 * Ok; we are ready to try to start a xfer. Get a MSCP packet
 		 * and try to start...
@@ -506,14 +542,14 @@ mscp_kickaway(mi)
 		if ((mp = mscp_getcp(mi, MSCP_DONTWAIT)) == NULL) {
 			if (mi->mi_credits > MSCP_MINCREDITS)
 				printf("%s: command ring too small\n",
-				    mi->mi_dev.dv_parent->dv_xname);
+				    device_xname(device_parent(&mi->mi_dev)));
 			/*
 			 * By some (strange) reason we didn't get a MSCP packet.
 			 * Just return and wait for free packets.
 			 */
 			return;
 		}
-	
+
 		if ((next = (ffs(mi->mi_mxiuse) - 1)) < 0)
 			panic("no mxi buffers");
 		mi->mi_mxiuse &= ~(1 << next);
@@ -530,8 +566,9 @@ mscp_kickaway(mi)
 		mi->mi_xi[next].mxi_inuse = 1;
 		bp->b_resid = next;
 		(*mi->mi_me->me_fillin)(bp, mp);
-		(*mi->mi_mc->mc_go)(mi->mi_dev.dv_parent, &mi->mi_xi[next]);
-		BUFQ_REMOVE(&mi->mi_resq, bp);
+		(*mi->mi_mc->mc_go)(device_parent(&mi->mi_dev),
+		    &mi->mi_xi[next]);
+		(void)BUFQ_GET(mi->mi_resq);
 	}
 }
 
@@ -586,7 +623,7 @@ static char unknown_msg[] = "unknown subcode";
 /*
  * Subcodes for Success (0)
  */
-static char *succ_msgs[] = {
+static const char *succ_msgs[] = {
 	"normal",		/* 0 */
 	"spin down ignored",	/* 1 = Spin-Down Ignored */
 	"still connected",	/* 2 = Still Connected */
@@ -609,7 +646,7 @@ static char *succ_msgs[] = {
 /*
  * Subcodes for Invalid Command (1)
  */
-static char *icmd_msgs[] = {
+static const char *icmd_msgs[] = {
 	"invalid msg length",	/* 0 = Invalid Message Length */
 };
 
@@ -621,7 +658,7 @@ static char *icmd_msgs[] = {
 /*
  * Subcodes for Unit Offline (3)
  */
-static char *offl_msgs[] = {
+static const char *offl_msgs[] = {
 	"unknown drive",	/* 0 = Unknown, or online to other ctlr */
 	"not mounted",		/* 1 = Unmounted, or RUN/STOP at STOP */
 	"inoperative",		/* 2 = Unit Inoperative */
@@ -641,7 +678,7 @@ static char *offl_msgs[] = {
 /*
  * Subcodes for Media Format Error (5)
  */
-static char *media_fmt_msgs[] = {
+static const char *media_fmt_msgs[] = {
 	"fct unread - edc",	/* 0 = FCT unreadable */
 	"invalid sector header",/* 1 = Invalid Sector Header */
 	"not 512 sectors",	/* 2 = Not 512 Byte Sectors */
@@ -654,7 +691,7 @@ static char *media_fmt_msgs[] = {
  * N.B.:  Code 6 subcodes are 7 bits higher than other subcodes
  * (i.e., bits 12-15).
  */
-static char *wrprot_msgs[] = {
+static const char *wrprot_msgs[] = {
 	unknown_msg,
 	"software",		/* 1 = Software Write Protect */
 	"hardware",		/* 2 = Hardware Write Protect */
@@ -668,7 +705,7 @@ static char *wrprot_msgs[] = {
 /*
  * Subcodes for Data Error (8)
  */
-static char *data_msgs[] = {
+static const char *data_msgs[] = {
 	"forced error",		/* 0 = Forced Error (software) */
 	unknown_msg,
 	"header compare",	/* 2 = Header Compare Error */
@@ -690,7 +727,7 @@ static char *data_msgs[] = {
 /*
  * Subcodes for Host Buffer Access Error (9)
  */
-static char *host_buffer_msgs[] = {
+static const char *host_buffer_msgs[] = {
 	unknown_msg,
 	"odd xfer addr",	/* 1 = Odd Transfer Address */
 	"odd xfer count",	/* 2 = Odd Transfer Count */
@@ -701,17 +738,17 @@ static char *host_buffer_msgs[] = {
 /*
  * Subcodes for Controller Error (10)
  */
-static char *cntlr_msgs[] = {
+static const char *cntlr_msgs[] = {
 	unknown_msg,
 	"serdes overrun",	/* 1 = Serialiser/Deserialiser Overrun */
 	"edc",			/* 2 = Error Detection Code? */
-	"inconsistant internal data struct",/* 3 = Internal Error */
+	"inconsistent internal data struct",/* 3 = Internal Error */
 };
 
 /*
  * Subcodes for Drive Error (11)
  */
-static char *drive_msgs[] = {
+static const char *drive_msgs[] = {
 	unknown_msg,
 	"sdi command timeout",	/* 1 = SDI Command Timeout */
 	"ctlr detected protocol",/* 2 = Controller Detected Protocol Error */
@@ -728,9 +765,9 @@ static char *drive_msgs[] = {
  * decoding strings.
  */
 struct code_decode {
-	char	*cdc_msg;
+	const char	*cdc_msg;
 	int	cdc_nsubcodes;
-	char	**cdc_submsgs;
+	const char	**cdc_submsgs;
 } code_decode[] = {
 #define SC(m)	sizeof (m) / sizeof (m[0]), m
 	{"success",			SC(succ_msgs)},
@@ -758,7 +795,7 @@ mscp_printevent(mp)
 	int event = mp->mscp_event;
 	struct code_decode *cdc;
 	int c, sc;
-	char *cm, *scm;
+	const char *cm, *scm;
 
 	/*
 	 * The code is the lower six bits of the event number (aka
@@ -782,7 +819,7 @@ mscp_printevent(mp)
 	printf(" %s (%s) (code %d, subcode %d)\n", cm, scm, c, sc);
 }
 
-static char *codemsg[16] = {
+static const char *codemsg[16] = {
 	"lbn", "code 1", "code 2", "code 3",
 	"code 4", "code 5", "rbn", "code 7",
 	"code 8", "code 9", "code 10", "code 11",
@@ -795,12 +832,12 @@ static char *codemsg[16] = {
  */
 int
 mscp_decodeerror(name, mp, mi)
-	char *name;
+	const char *name;
 	struct mscp *mp;
 	struct mscp_softc *mi;
 {
 	int issoft;
-	/* 
+	/*
 	 * We will get three sdi errors of type 11 after autoconfig
 	 * is finished; depending of searching for non-existing units.
 	 * How can we avoid this???

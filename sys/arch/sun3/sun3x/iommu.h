@@ -1,4 +1,4 @@
-/*	$NetBSD: iommu.h,v 1.5 1998/01/22 22:07:45 gwr Exp $	*/
+/*	$NetBSD: iommu.h,v 1.8 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -123,7 +116,7 @@ struct iommu_pde_struct {
 #define	IOMMU_PDE_DT_INVALID	0x00000000	/* Invalid page      */
 #define	IOMMU_PDE_DT_VALID	0x00000001	/* Valid page        */
 		} stc;
-		u_int32_t	raw;	/* For unstructured access to the above */
+		uint32_t	raw;	/* For unstructured access to the above */
 	} addr;
 };
 typedef struct iommu_pde_struct iommu_pde_t;
@@ -150,8 +143,8 @@ typedef struct iommu_pde_struct iommu_pde_t;
 
 #ifdef _KERNEL
 /* Interfaces for manipulating the I/O mapper */
-void iommu_enter __P((u_int32_t va, u_int32_t pa));
-void iommu_remove __P((u_int32_t va, u_int32_t len));
+void iommu_enter(uint32_t, uint32_t);
+void iommu_remove(uint32_t, uint32_t);
 #endif /* _KERNEL */
 
 #endif	/* _SUN3X_IOMMU_H */

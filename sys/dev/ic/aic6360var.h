@@ -1,4 +1,4 @@
-/*	$NetBSD: aic6360var.h,v 1.7 2000/03/20 22:53:36 enami Exp $	*/
+/*	$NetBSD: aic6360var.h,v 1.13 2008/04/08 12:07:25 cegger Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Charles M. Hannum.  All rights reserved.
@@ -44,6 +44,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _DEV_IC_AIC6360VAR_H_
+#define	_DEV_IC_AIC6360VAR_H_
+
 /*
  * Acknowledgements: Many of the algorithms used in this driver are
  * inspired by the work of Julian Elischer (julian@tfs.com) and
@@ -69,7 +72,7 @@ struct aic_dma_seg {
  * occasionally xs->retries.
  */
 struct aic_acb {
-	struct scsi_generic scsipi_cmd;
+	struct scsipi_generic scsipi_cmd;
 	int scsipi_cmd_length;
 	u_char *data_addr;		/* Saved data pointer */
 	int data_length;		/* Residue */
@@ -117,8 +120,8 @@ struct aic_softc {
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 
-	struct scsipi_link sc_link;	/* prototype for subdevs */
 	struct scsipi_adapter sc_adapter;
+	struct scsipi_channel sc_channel;
 
 	TAILQ_HEAD(, aic_acb) free_list, ready_list, nexus_list;
 	struct aic_acb *sc_nexus;	/* current command */
@@ -185,13 +188,24 @@ struct aic_softc {
 #define AIC_SHOWSTART	0x20
 #define AIC_DOBREAK	0x40
 extern int aic_debug; /* AIC_SHOWSTART|AIC_SHOWMISC|AIC_SHOWTRACE; */
-#define	AIC_PRINT(b, s)	do {if ((aic_debug & (b)) != 0) printf s;} while (0)
-#define	AIC_BREAK()	do {if ((aic_debug & AIC_DOBREAK) != 0) Debugger();} while (0)
-#define	AIC_ASSERT(x)	do {if (x) {} else {printf("%s at line %d: assertion failed\n", sc->sc_dev.dv_xname, __LINE__); Debugger();}} while (0)
+#define	AIC_PRINT(b, s)	do { \
+				if ((aic_debug & (b)) != 0) \
+					printf s; \
+			} while (/* CONSTCOND */ 0)
+#define	AIC_BREAK()	do { \
+				if ((aic_debug & AIC_DOBREAK) != 0) \
+					Debugger(); \
+		    	} while (/* CONSTCOND */ 0)
+#define	AIC_ASSERT(x)	do { \
+			if (! (x)) { \
+				printf("%s at line %d: assertion failed\n", \
+				    device_xname(&sc->sc_dev), __LINE__); \
+				Debugger(); \
+			} } while (/* CONSTCOND */ 0)
 #else
-#define	AIC_PRINT(b, s)
-#define	AIC_BREAK()
-#define	AIC_ASSERT(x)
+#define	AIC_PRINT(b, s)	/* NOTHING */
+#define	AIC_BREAK()	/* NOTHING */
+#define	AIC_ASSERT(x)	/* NOTHING */
 #endif
 
 #define AIC_ACBS(s)	AIC_PRINT(AIC_SHOWACBS, s)
@@ -203,10 +217,12 @@ extern int aic_debug; /* AIC_SHOWSTART|AIC_SHOWMISC|AIC_SHOWTRACE; */
 
 #define AIC_ISA_IOSIZE	0x20	/* XXX */
 
-void	aicattach	__P((struct aic_softc *));
-int	aic_activate	__P((struct device *, enum devact));
-int	aic_detach	__P((struct device *, int));
-int	aicintr		__P((void *));
-int	aic_find	__P((bus_space_tag_t, bus_space_handle_t));
-void	aic_isa_attach	__P((struct device *, struct device *, void *));
-void	aic_init	__P((struct aic_softc *, int));
+void	aicattach(struct aic_softc *);
+int	aic_activate(struct device *, enum devact);
+int	aic_detach(struct device *, int);
+int	aicintr(void *);
+int	aic_find(bus_space_tag_t, bus_space_handle_t);
+void	aic_isa_attach(struct device *, struct device *, void *);
+void	aic_init(struct aic_softc *, int);
+
+#endif /* _DEV_IC_AIC6360VAR_H_ */

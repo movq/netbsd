@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_emulate.h,v 1.5 1999/05/30 20:17:48 briggs Exp $	*/
+/*	$NetBSD: fpu_emulate.h,v 1.12.88.2 2009/02/02 00:33:48 snj Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon Ross
@@ -35,6 +35,11 @@
 #define _FPU_EMULATE_H_
 
 #include <sys/types.h>
+#include <sys/signal.h>
+#include <sys/time.h>
+#include <sys/signalvar.h>
+#include <sys/siginfo.h>
+#include <m68k/fpreg.h>
 
 /*
  * Floating point emulator (tailored for SPARC/modified for m68k, but
@@ -44,12 +49,12 @@
  * or `unpacked' form consisting of:
  *	- sign
  *	- unbiased exponent
- *	- mantissa (`1.' + 63-bit fraction + guard + round)
+ *	- mantissa (`1.' + 80-bit fraction + guard + round)
  *	- sticky bit
- * Any implied `1' bit is inserted, giving a 113-bit mantissa that is
+ * Any implied `1' bit is inserted, giving a 81-bit mantissa that is
  * always nonzero.  Additional low-order `guard' and `round' bits are
- * scrunched in, making the entire mantissa 115 bits long.  This is divided
- * into four 32-bit words, with `spare' bits left over in the upper part
+ * scrunched in, making the entire mantissa 83 bits long.  This is divided
+ * into three 32-bit words, with `spare' bits left over in the upper part
  * of the top word (the high bits of fp_mant[0]).  An internal `exploded'
  * number is thus kept within the half-open interval [1.0,2.0) (but see
  * the `number classes' below).  This holds even for denormalized numbers:
@@ -76,10 +81,10 @@ struct fpn {
 	int	fp_sign;		/* 0 => positive, 1 => negative */
 	int	fp_exp;			/* exponent (unbiased) */
 	int	fp_sticky;		/* nonzero bits lost at right end */
-	u_int	fp_mant[3];		/* 66-bit mantissa */
+	u_int	fp_mant[3];		/* 83-bit mantissa */
 };
 
-#define	FP_NMANT	67		/* total bits in mantissa (incl g,r) */
+#define	FP_NMANT	83		/* total bits in mantissa (incl g,r) */
 #define	FP_NG		2		/* number of low-order guard bits */
 #define	FP_LG		((FP_NMANT - 1) & 31)	/* log2(1.0) for fp_mant[0] */
 #define	FP_QUIETBIT	(1 << (FP_LG - 1))	/* Quiet bit in NaNs (0.5) */
@@ -157,7 +162,7 @@ struct fpemu {
  */
 struct insn_ea {
     int	ea_regnum;
-    int	ea_ext[3];		/* extention words if any */
+    int	ea_ext[3];		/* extension words if any */
     int	ea_flags;		/* flags == 0 means mode 2: An@ */
 #define	EA_DIRECT	0x001	/* mode [01]: Dn or An */
 #define EA_PREDECR	0x002	/* mode 4: An@- */
@@ -204,57 +209,6 @@ struct instruction {
 #define FTYPE_BYT 6 /* Byte Integer */
 
 /*
- * MC68881/68882 FPcr bit definitions (should these go to <m68k/reg.h>
- * or <m68k/fpu.h> or something?)
- */
-
-/* fpsr */
-#define FPSR_CCB    0xff000000
-# define FPSR_NEG   0x08000000
-# define FPSR_ZERO  0x04000000
-# define FPSR_INF   0x02000000
-# define FPSR_NAN   0x01000000
-#define FPSR_QTT    0x00ff0000
-# define FPSR_QSG   0x00800000
-# define FPSR_QUO   0x007f0000
-#define FPSR_EXCP   0x0000ff00
-# define FPSR_BSUN  0x00008000
-# define FPSR_SNAN  0x00004000
-# define FPSR_OPERR 0x00002000
-# define FPSR_OVFL  0x00001000
-# define FPSR_UNFL  0x00000800
-# define FPSR_DZ    0x00000400
-# define FPSR_INEX2 0x00000200
-# define FPSR_INEX1 0x00000100
-#define FPSR_AEX    0x000000ff
-# define FPSR_AIOP  0x00000080
-# define FPSR_AOVFL 0x00000040
-# define FPSR_AUNFL 0x00000020
-# define FPSR_ADZ   0x00000010
-# define FPSR_AINEX 0x00000008
-
-/* fpcr */
-#define FPCR_EXCP   FPSR_EXCP
-# define FPCR_BSUN  FPSR_BSUN
-# define FPCR_SNAN  FPSR_SNAN
-# define FPCR_OPERR FPSR_OPERR
-# define FPCR_OVFL  FPSR_OVFL
-# define FPCR_UNFL  FPSR_UNFL
-# define FPCR_DZ    FPSR_DZ
-# define FPCR_INEX2 FPSR_INEX2
-# define FPCR_INEX1 FPSR_INEX1
-#define FPCR_MODE   0x000000ff
-# define FPCR_PREC  0x000000c0
-#  define FPCR_EXTD 0x00000000
-#  define FPCR_SNGL 0x00000040
-#  define FPCR_DBL  0x00000080
-# define FPCR_ROUND 0x00000030
-#  define FPCR_NEAR 0x00000000
-#  define FPCR_ZERO 0x00000010
-#  define FPCR_MINF 0x00000020
-#  define FPCR_PINF 0x00000030
-
-/*
  * Other functions.
  */
 
@@ -270,7 +224,7 @@ int	fpu_shr __P((struct fpn * fp, int shr));
 /*
  * Round a number according to the round mode in FPCR
  */
-int	round __P((register struct fpemu *fe, register struct fpn *fp));
+int	fpu_round __P((register struct fpemu *fe, register struct fpn *fp));
 
 /* type conversion */
 void	fpu_explode __P((struct fpemu *fe, struct fpn *fp, int t, u_int *src));
@@ -289,7 +243,7 @@ int fpu_emul_fscale __P((struct fpemu *fe, struct instruction *insn));
  */
 #include "fpu_arith_proto.h"
 
-int fpu_emulate __P((struct frame *frame, struct fpframe *fpf));
+int fpu_emulate __P((struct frame *frame, struct fpframe *fpf, ksiginfo_t *ksi));
 
 /*
  * "helper" functions

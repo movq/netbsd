@@ -1,4 +1,4 @@
-.\"	$NetBSD: funopen.3,v 1.9 1998/02/05 18:49:24 perry Exp $
+.\"	$NetBSD: funopen.3,v 1.14 2003/08/07 16:43:26 agc Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -13,11 +13,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -46,7 +42,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <stdio.h>
+.In stdio.h
 .Ft FILE *
 .Fn funopen "void  *cookie" "int  (*readfn)(void *, char *, int)" "int (*writefn)(void *, const char *, int)" "fpos_t (*seekfn)(void *, fpos_t, int)" "int (*closefn)(void *)"
 .Ft FILE *
@@ -59,7 +55,7 @@ The
 function
 associates a stream with up to four
 .Dq Tn I/O No functions .
-Either 
+Either
 .Fa readfn
 or
 .Fa writefn
@@ -74,7 +70,7 @@ close the new stream.
 .Pp
 In general, omitting a function means that any attempt to perform the
 associated operation on the resulting stream will fail.
-If the close function is omitted, closing the stream will flush 
+If the close function is omitted, closing the stream will flush
 any buffered output and then succeed.
 .Pp
 The calling conventions of
@@ -91,7 +87,7 @@ and
 .Xr close 2 ;
 except that they are passed the
 .Fa cookie
-argument specified to 
+argument specified to
 .Fn funopen
 in place of the traditional file descriptor argument,
 and
@@ -119,7 +115,7 @@ Additionally, all of the functions should set the external variable
 .Va errno
 appropriately if an error occurs.
 .Pp
-An error on 
+An error on
 .Fn closefn
 does not keep the stream open.
 .Pp
@@ -133,7 +129,7 @@ as calls to
 .Fn funopen
 with only a read or write function specified.
 .Sh RETURN VALUES
-Upon successful completion, 
+Upon successful completion,
 .Fn funopen
 returns a
 .Dv FILE

@@ -1,4 +1,4 @@
-/*	$NetBSD: ahavar.h,v 1.10 1998/12/09 08:47:18 thorpej Exp $	*/
+/*	$NetBSD: ahavar.h,v 1.14 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +29,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#ifndef _DEV_IC_AHAVAR_H_
+#define	_DEV_IC_AHAVAR_H_
 
 #include <sys/queue.h>
 
@@ -85,10 +81,9 @@ struct aha_softc {
 	struct aha_ccb *sc_ccbhash[CCB_HASH_SIZE];
 	TAILQ_HEAD(, aha_ccb) sc_free_ccb, sc_waiting_ccb;
 	int sc_mbofull;
-	struct scsipi_link sc_link;	/* prototype for devs */
-	struct scsipi_adapter sc_adapter;
 
-	TAILQ_HEAD(, scsipi_xfer) sc_queue;
+	struct scsipi_adapter sc_adapter;
+	struct scsipi_channel sc_channel;
 
 	char sc_model[18],
 	     sc_firmware[4];
@@ -117,7 +112,9 @@ struct aha_probe_data {
 	int sc_scsi_dev;		/* adapters scsi id */
 };
 
-int	aha_find __P((bus_space_tag_t, bus_space_handle_t,
-	    struct aha_probe_data *));
-void	aha_attach __P((struct aha_softc *, struct aha_probe_data *));
-int	aha_intr __P((void *));
+int	aha_find(bus_space_tag_t, bus_space_handle_t,
+	    struct aha_probe_data *);
+void	aha_attach(struct aha_softc *, struct aha_probe_data *);
+int	aha_intr(void *);
+
+#endif /* _DEV_IC_AHAVAR_H_ */

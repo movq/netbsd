@@ -1,4 +1,4 @@
-/*	$NetBSD: pceb.c,v 1.5 1998/08/05 02:11:00 perry Exp $	*/
+/*	$NetBSD: pceb.c,v 1.22 2008/05/05 11:49:40 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pceb.c,v 1.22 2008/05/05 11:49:40 xtraeme Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -54,15 +50,12 @@
 #include "eisa.h"
 #include "isa.h"
 
-int	pcebmatch __P((struct device *, struct cfdata *, void *));
-void	pcebattach __P((struct device *, struct device *, void *));
+int	pcebmatch(device_t , cfdata_t, void *);
+void	pcebattach(device_t, device_t, void *);
 
-struct cfattach pceb_ca = {
-	sizeof(struct device), pcebmatch, pcebattach
-};
+CFATTACH_DECL_NEW(pceb, 0, pcebmatch, pcebattach, NULL, NULL);
 
-void	pceb_callback __P((struct device *));
-int	pceb_print __P((void *, const char *));
+void	pceb_callback(device_t);
 
 union pceb_attach_args {
 	const char *ea_name;			/* XXX should be common */
@@ -71,15 +64,21 @@ union pceb_attach_args {
 };
 
 int
-pcebmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+pcebmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
 	/*
-	 * Match all known PCI-EISA bridges.
+	 * Match anything which claims to be PCI-EISA bridge.
+	 */
+	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_BRIDGE &&
+	    PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_BRIDGE_EISA)
+		return (1);
+
+	/*
+	 * Match some known PCI-EISA bridges explicitly.
+	 * XXX this is probably not necessary, should be matched by above
+	 * condition
 	 */
 	switch (PCI_VENDOR(pa->pa_id)) {
 	case PCI_VENDOR_INTEL:
@@ -94,29 +93,27 @@ pcebmatch(parent, match, aux)
 }
 
 void
-pcebattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+pcebattach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	char devinfo[256];
 
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
 
 	/*
 	 * Just print out a description and defer configuration
 	 * until all PCI devices have been attached.
 	 */
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
-	printf("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	aprint_normal_dev(self, "%s (rev. 0x%02x)\n", devinfo,
 	    PCI_REVISION(pa->pa_class));
 
 	config_defer(self, pceb_callback);
 }
 
 void
-pceb_callback(self)
-	struct device *self;
+pceb_callback(device_t self)
 {
 	union pceb_attach_args ea;
 
@@ -124,35 +121,21 @@ pceb_callback(self)
 	 * Attach the EISA bus behind this bridge.
 	 */
 	memset(&ea, 0, sizeof(ea));
-	ea.ea_eba.eba_busname = "eisa";
-	ea.ea_eba.eba_iot = I386_BUS_SPACE_IO;
-	ea.ea_eba.eba_memt = I386_BUS_SPACE_MEM;
+	ea.ea_eba.eba_iot = X86_BUS_SPACE_IO;
+	ea.ea_eba.eba_memt = X86_BUS_SPACE_MEM;
 #if NEISA > 0
 	ea.ea_eba.eba_dmat = &eisa_bus_dma_tag;
 #endif
-	config_found(self, &ea.ea_eba, pceb_print);
+	config_found_ia(self, "eisabus", &ea.ea_eba, eisabusprint);
 
 	/*
 	 * Attach the ISA bus behind this bridge.
 	 */
 	memset(&ea, 0, sizeof(ea));
-	ea.ea_iba.iba_busname = "isa";
-	ea.ea_iba.iba_iot = I386_BUS_SPACE_IO;
-	ea.ea_iba.iba_memt = I386_BUS_SPACE_MEM;
+	ea.ea_iba.iba_iot = X86_BUS_SPACE_IO;
+	ea.ea_iba.iba_memt = X86_BUS_SPACE_MEM;
 #if NISA > 0
 	ea.ea_iba.iba_dmat = &isa_bus_dma_tag;
 #endif
-	config_found(self, &ea.ea_iba, pceb_print);
-}
-
-int
-pceb_print(aux, pnp)
-	void *aux;
-	const char *pnp;
-{
-	union pceb_attach_args *ea = aux;
-
-	if (pnp)
-		printf("%s at %s", ea->ea_name, pnp);
-	return (UNCONF);
+	config_found_ia(self, "isabus", &ea.ea_iba, isabusprint);
 }

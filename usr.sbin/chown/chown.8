@@ -1,4 +1,4 @@
-.\" Copyright (c) 1990, 1991, 1993, 1994
+.\" Copyright (c) 1990, 1991, 1993, 1994, 2003
 .\"	The Regents of the University of California.  All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -9,11 +9,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -30,9 +26,9 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)chown.8	8.3 (Berkeley) 3/31/94
-.\"	$NetBSD: chown.8,v 1.12 1999/03/22 18:43:50 garbled Exp $
+.\"	$NetBSD: chown.8,v 1.21 2006/06/17 04:58:15 reed Exp $
 .\"
-.Dd March 31, 1994
+.Dd December 9, 2005
 .Dt CHOWN 8
 .Os
 .Sh NAME
@@ -44,15 +40,15 @@
 .Fl R
 .Op Fl H | Fl L | Fl P
 .Oc
-.Op Fl fh
-.Ar owner Op Ar :group
+.Op Fl fhv
+.Ar owner Ns Op Ar :group
 .Ar file ...
-.Nm ""
+.Nm
 .Oo
 .Fl R
 .Op Fl H | Fl L | Fl P
 .Oc
-.Op Fl fh
+.Op Fl fhv
 .Ar :group
 .Ar file ...
 .Sh DESCRIPTION
@@ -84,6 +80,10 @@ the exit status to reflect such failures.
 If
 .Ar file
 is a symbolic link, the owner and/or group of the link is changed.
+.It Fl v
+Cause
+.Nm
+to be verbose, showing files as they are processed.
 .El
 .Pp
 The
@@ -114,14 +114,15 @@ operand is specified, it must be preceded by a colon (``:'') character.
 .Pp
 The
 .Ar owner
-may be either a numeric user ID or a user name.
-If a user name is also a numeric user ID, the operand is used as a
-user name.
+may be either a user name or a numeric user ID.
 The
 .Ar group
-may be either a numeric group ID or a group name.
-If a group name is also a numeric group ID, the operand is used as a
-group name.
+may be either a group name or a numeric group ID.
+Since it is valid to have a user or group name that is numeric (and
+doesn't have the numeric ID that matches its name) the name lookup
+is always done first.
+Preceding an ID with a ``#'' character will force it to be taken
+as a number.
 .Pp
 The ownership of a file may only be altered by a super-user for
 obvious security reasons.
@@ -134,7 +135,7 @@ programs.
 .Pp
 The
 .Nm
-utility exits 0 on success, and >0 if an error occurs.
+utility exits 0 on success, and \*[Gt]0 if an error occurs.
 .Sh COMPATIBILITY
 Previous versions of the
 .Nm
@@ -142,6 +143,7 @@ utility used the dot (``.'') character to distinguish the group name.
 This has been changed to be a colon (``:'') character so that user and
 group names may contain the dot character.
 .Sh SEE ALSO
+.Xr chflags 1 ,
 .Xr chgrp 1 ,
 .Xr find 1 ,
 .Xr chown 2 ,
@@ -152,3 +154,9 @@ group names may contain the dot character.
 The
 .Nm
 command is expected to be POSIX 1003.2 compliant.
+.Pp
+The
+.Fl v
+option and the use of ``#'' to force a numeric lookup
+are extensions to
+.St -p1003.2 .

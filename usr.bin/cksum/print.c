@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.6 1997/10/17 11:37:14 lukem Exp $	*/
+/*	$NetBSD: print.c,v 1.11 2005/01/12 17:04:35 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,12 +29,16 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)print.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: print.c,v 1.6 1997/10/17 11:37:14 lukem Exp $");
+__RCSID("$NetBSD: print.c,v 1.11 2005/01/12 17:04:35 xtraeme Exp $");
 #endif
 #endif /* not lint */
 
@@ -47,35 +47,29 @@ __RCSID("$NetBSD: print.c,v 1.6 1997/10/17 11:37:14 lukem Exp $");
 #include "extern.h"
 
 void
-pcrc(fn, val, len)
-	char *fn;
-	u_int32_t val, len;
+pcrc(char *fn, u_int32_t val, off_t len)
 {
-	(void)printf("%lu %lu", (unsigned long)val, (unsigned long)len);
+	(void)printf("%lu %lld", (unsigned long)val, (long long)len);
 	if (fn)
 		(void)printf(" %s", fn);
 	(void)printf("\n");
 }
 
 void
-psum1(fn, val, len)
-	char *fn;
-	u_int32_t val, len;
+psum1(char *fn, u_int32_t val, off_t len)
 {
-	(void)printf("%lu %lu", (unsigned long)val,
-	    (unsigned long)(len + 1023) / 1024);
+	(void)printf("%lu %lld", (unsigned long)val,
+	    (long long)(len + 1023) / 1024);
 	if (fn)
 		(void)printf(" %s", fn);
 	(void)printf("\n");
 }
 
 void
-psum2(fn, val, len)
-	char *fn;
-	u_int32_t val, len;
+psum2(char *fn, u_int32_t val, off_t len)
 {
-	(void)printf("%lu %lu", (unsigned long)val,
-	    (unsigned long)(len + 511) / 512);
+	(void)printf("%lu %lld", (unsigned long)val,
+	    (long long)(len + 511) / 512);
 	if (fn)
 		(void)printf(" %s", fn);
 	(void)printf("\n");

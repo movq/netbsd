@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_fmovecr.c,v 1.7 1999/05/30 20:17:48 briggs Exp $	*/
+/*	$NetBSD: fpu_fmovecr.c,v 1.11 2005/12/11 12:17:52 christos Exp $	*/
 
 /*
  * Copyright (c) 1995  Ken Nakata
@@ -31,14 +31,22 @@
  *	@(#)fpu_fmovecr.c	10/8/95
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: fpu_fmovecr.c,v 1.11 2005/12/11 12:17:52 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <machine/frame.h>
 
 #include "fpu_emulate.h"
 
+/* XXX: quick consistency check */
+#if (FP_1 != 0x40000)
+Error you have to change this table when changing the mantissa size
+#endif
+
 static struct fpn constrom[] = {
-    /* fp_class, fp_sign, fp_exp, fp_sticky, fp_mant[0] ... [3] */
+    /* fp_class, fp_sign, fp_exp, fp_sticky, fp_mant[0] ... [2] */
     { FPC_NUM, 0, 1, 0, { 0x6487e, 0xd5110b46, 0x11a80000 } },
     { FPC_NUM, 0, -2, 0, { 0x4d104, 0xd427de7f, 0xbcc00000 } },
     { FPC_NUM, 0, 1, 0, { 0x56fc2, 0xa2c515da, 0x54d00000 } },
@@ -72,7 +80,7 @@ fpu_const(fp, offset)
 
 #ifdef DEBUG
     if (fp == NULL) {
-	panic("fpu_const: NULL pointer passed\n");
+	panic("fpu_const: NULL pointer passed");
     }
 #endif
     if (offset == 0) {

@@ -1,15 +1,8 @@
-/*	$NetBSD: report.h,v 1.3 1998/07/26 15:33:34 mycroft Exp $	*/
+/*	$NetBSD: report.h,v 1.5 2002/07/14 00:26:18 wiz Exp $	*/
 
 /* report.h */
 
-#ifdef	__STDC__
-#define P(args) args
-#else
-#define P(args) ()
-#endif
-
-extern void report_init P((int nolog));
-extern void report P((int, char *, ...));
-extern const char *get_errmsg P((void));
-
-#undef P
+extern void report_init(int);
+extern void report(int, const char *, ...)
+     __attribute__((__format__(__printf__, 2, 3)));
+extern const char *get_errmsg(void);

@@ -1,4 +1,4 @@
-/*	$NetBSD: finger.c,v 1.14 1999/11/09 15:06:35 drochner Exp $	*/
+/*	$NetBSD: finger.c,v 1.28 2008/07/21 14:19:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,7 +33,7 @@
  */
 
 /*
- * Luke Mewburn <lukem@netbsd.org> added the following on 961121:
+ * Luke Mewburn <lukem@NetBSD.org> added the following on 961121:
  *    - mail status ("No Mail", "Mail read:...", or "New Mail ...,
  *	Unread since ...".)
  *    - 4 digit phone extensions (3210 is printed as x3210.)
@@ -48,15 +44,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)finger.c	8.5 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: finger.c,v 1.14 1999/11/09 15:06:35 drochner Exp $");
+__RCSID("$NetBSD: finger.c,v 1.28 2008/07/21 14:19:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -86,30 +82,43 @@ __RCSID("$NetBSD: finger.c,v 1.14 1999/11/09 15:06:35 drochner Exp $");
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <utmp.h>
+
+#include <locale.h>
+#include <langinfo.h>
+
+#include "utmpentry.h"
 
 #include "finger.h"
 #include "extern.h"
 
 DB *db;
 time_t now;
-int entries, gflag, lflag, mflag, oflag, sflag, pplan;
+int entries, gflag, lflag, mflag, oflag, sflag, eightflag, pplan;
 char tbuf[1024];
+struct utmpentry *ehead;
 
-static void loginlist __P((void));
-static void userlist __P((int, char **));
-int main __P((int, char **));
+static void loginlist(void);
+static void userlist(int, char **);
+int main(int, char **);
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	int ch;
 
+	/* Allow user's locale settings to affect character output. */
+	setlocale(LC_CTYPE, "");
+
+	/*
+	 * Reset back to the C locale, unless we are using a known
+	 * single-byte 8-bit locale.
+	 */
+	if (strncmp(nl_langinfo(CODESET), "ISO8859-", 8))
+		setlocale(LC_CTYPE, "C");
+
 	oflag = 1;		/* default to old "office" behavior */
 
-	while ((ch = getopt(argc, argv, "lmpshog")) != -1)
+	while ((ch = getopt(argc, argv, "lmpshog8")) != -1)
 		switch(ch) {
 		case 'l':
 			lflag = 1;		/* long format */
@@ -132,10 +141,13 @@ main(argc, argv)
 		case 'g':
 			gflag = 1;		/* no gecos info, besides name */
 			break;
+		case '8':
+			eightflag = 1;		/* 8-bit pass-through */
+			break;
 		case '?':
 		default:
 			(void)fprintf(stderr,
-			    "usage: finger [-lmpsho] [login ...]\n");
+			    "usage: finger [-lmpshog8] [login ...]\n");
 			exit(1);
 		}
 	argc -= optind;
@@ -143,7 +155,8 @@ main(argc, argv)
 
 	(void)time(&now);
 	setpassent(1);
-	if (!*argv) {
+	entries = getutentries(NULL, &ehead);
+	if (argc == 0) {
 		/*
 		 * Assign explicit "small" format if no names given and -l
 		 * not selected.  Force the -s BEFORE we get names so proper
@@ -174,28 +187,21 @@ main(argc, argv)
 }
 
 static void
-loginlist()
+loginlist(void)
 {
 	PERSON *pn;
 	DBT data, key;
 	struct passwd *pw;
-	struct utmp user;
 	int r, sflag;
-	char name[UT_NAMESIZE + 1];
+	struct utmpentry *ep;
 
-	if (!freopen(_PATH_UTMP, "r", stdin))
-		err(1, "cant read %s", _PATH_UTMP);
-	name[UT_NAMESIZE] = '\0';
-	while (fread((char *)&user, sizeof(user), 1, stdin) == 1) {
-		if (!user.ut_name[0])
-			continue;
-		if ((pn = find_person(user.ut_name)) == NULL) {
-			memcpy(name, user.ut_name, UT_NAMESIZE);
-			if ((pw = getpwnam(name)) == NULL)
+	for (ep = ehead; ep; ep = ep->next) {
+		if ((pn = find_person(ep->name)) == NULL) {
+			if ((pw = getpwnam(ep->name)) == NULL)
 				continue;
 			pn = enter_person(pw);
 		}
-		enter_where(&user, pn);
+		enter_where(ep, pn);
 	}
 	if (db && lflag)
 		for (sflag = R_FIRST;; sflag = R_NEXT) {
@@ -212,16 +218,14 @@ loginlist()
 }
 
 static void
-userlist(argc, argv)
-	int argc;
-	char **argv;
+userlist(int argc, char **argv)
 {
-	register PERSON *pn;
+	PERSON *pn;
 	DBT data, key;
-	struct utmp user;
 	struct passwd *pw;
 	int r, sflag, *used, *ip;
 	char **ap, **nargv, **np, **p;
+	struct utmpentry *ep;
 
 	if ((nargv = malloc((argc+1) * sizeof(char *))) == NULL ||
 	    (used = calloc(argc, sizeof(int))) == NULL)
@@ -249,8 +253,7 @@ userlist(argc, argv)
 			if ((pw = getpwnam(*p)) != NULL)
 				enter_person(pw);
 			else
-				(void)fprintf(stderr,
-				    "finger: %s: no such user\n", *p);
+				warnx("%s: no such user", *p);
 	} else {
 		while ((pw = getpwent()) != NULL)
 			for (p = argv, ip = used; *p; ++p, ++ip)
@@ -260,8 +263,7 @@ userlist(argc, argv)
 				}
 		for (p = argv, ip = used; *p; ++p, ++ip)
 			if (!*ip)
-				(void)fprintf(stderr,
-				    "finger: %s: no such user\n", *p);
+				warnx("%s: no such user", *p);
 	}
 
 	/* Handle network requests. */
@@ -270,22 +272,18 @@ net:
 		netfinger(*p++);
 
 	if (entries == 0)
-		return;
+		goto done;
 
 	/*
 	 * Scan thru the list of users currently logged in, saving
 	 * appropriate data whenever a match occurs.
 	 */
-	if (!freopen(_PATH_UTMP, "r", stdin))
-		err(1, "%s", _PATH_UTMP);
-	while (fread((char *)&user, sizeof(user), 1, stdin) == 1) {
-		if (!user.ut_name[0])
+	for (ep = ehead; ep; ep = ep->next) {
+		if ((pn = find_person(ep->name)) == NULL)
 			continue;
-		if ((pn = find_person(user.ut_name)) == NULL)
-			continue;
-		enter_where(&user, pn);
+		enter_where(ep, pn);
 	}
-	if (db)
+	if (db != NULL)
 		for (sflag = R_FIRST;; sflag = R_NEXT) {
 			PERSON *tmp;
 
@@ -297,4 +295,7 @@ net:
 			memmove(&tmp, data.data, sizeof tmp);
 			enter_lastlog(tmp);
 		}
+done:
+	free(nargv);
+	free(used);
 }

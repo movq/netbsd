@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_pvt.h,v 1.8 1999/09/19 19:06:19 chs Exp $	*/
+/*	$NetBSD: pmap_pvt.h,v 1.15 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +32,8 @@
 #ifndef _SUN3X_PMAPPVT_H
 #define _SUN3X_PMAPPVT_H
 
+#include "opt_pmap_debug.h"
+
 /*************************** TMGR STRUCTURES ***************************
  * The sun3x 'tmgr' structures contain MMU tables and additional       *
  * information about their current usage and availability.             *
@@ -55,10 +50,10 @@ typedef struct c_tmgr_struct c_tmgr_t;
 struct a_tmgr_struct {
 	pmap_t		at_parent; /* pmap currently using this table    */
 	mmu_long_dte_t	*at_dtbl;  /* the MMU table being managed        */
-	u_char          at_wcnt;   /* no. of wired entries in this table */
-	u_char          at_ecnt;   /* no. of valid entries in this table */
-	u_int16_t	at_dum1;   /* structure padding                  */
-    	TAILQ_ENTRY(a_tmgr_struct) at_link;  /* list linker              */
+	uint8_t         at_wcnt;   /* no. of wired entries in this table */
+	uint8_t         at_ecnt;   /* no. of valid entries in this table */
+	uint16_t	at_dum1;   /* structure padding                  */
+	TAILQ_ENTRY(a_tmgr_struct) at_link;  /* list linker              */
 };
 
 /* A level B table manager contains a pointer to an MMU table of
@@ -70,10 +65,10 @@ struct a_tmgr_struct {
 struct b_tmgr_struct {
 	a_tmgr_t	*bt_parent; /* Parent 'A' table manager         */
 	mmu_short_dte_t *bt_dtbl;   /* the MMU table being managed      */
-	u_char		bt_pidx;    /* this table's index in the parent */
-	u_char		bt_wcnt;    /* no. of wired entries in table    */
-	u_char		bt_ecnt;    /* no. of valid entries in table    */
-	u_char		bt_dum1;    /* structure padding                */
+	uint8_t		bt_pidx;    /* this table's index in the parent */
+	uint8_t		bt_wcnt;    /* no. of wired entries in table    */
+	uint8_t		bt_ecnt;    /* no. of valid entries in table    */
+	uint8_t		bt_dum1;    /* structure padding                */
     	TAILQ_ENTRY(b_tmgr_struct) bt_link; /* list linker              */
 };
 
@@ -91,15 +86,15 @@ struct b_tmgr_struct {
 struct c_tmgr_struct {
 	b_tmgr_t	*ct_parent; /* Parent 'B' table manager         */
 	mmu_short_pte_t	*ct_dtbl;   /* the MMU table being managed      */
-	u_char		ct_pidx;    /* this table's index in the parent */
-	u_char		ct_wcnt;    /* no. of wired entries in table    */
-	u_char		ct_ecnt;    /* no. of valid entries in table    */
-	u_char		ct_dum1;    /* structure padding                */
+	uint8_t		ct_pidx;    /* this table's index in the parent */
+	uint8_t		ct_wcnt;    /* no. of wired entries in table    */
+	uint8_t		ct_ecnt;    /* no. of valid entries in table    */
+	uint8_t		ct_dum1;    /* structure padding                */
 	TAILQ_ENTRY(c_tmgr_struct) ct_link; /* list linker              */
 #define	MMU_SHORT_PTE_WIRED	MMU_SHORT_PTE_UN1
 #define MMU_PTE_WIRED		((*pte)->attr.raw & MMU_SHORT_PTE_WIRED)
 	pmap_t		ct_pmap;    /* pmap currently using this table  */
-	vm_offset_t	ct_va;      /* starting va that this table maps */
+	vaddr_t		ct_va;      /* starting va that this table maps */
 };
 
 /* The Mach VM code requires that the pmap module be able to apply 
@@ -158,50 +153,13 @@ typedef struct pv_elem_struct pv_elem_t;
  * segment with its base address and its size.
  */
 struct pmap_physmem_struct {
-	vm_offset_t	pmem_start;  /* Starting physical address      */
-	vm_offset_t	pmem_end;    /* First byte outside of range    */
+	paddr_t		pmem_start;  /* Starting physical address      */
+	paddr_t		pmem_end;    /* First byte outside of range    */
 	int             pmem_pvbase; /* Offset within the pv list      */
 	struct pmap_physmem_struct *pmem_next; /* Next block of memory */
 };
 
-/* Internal function definitions. */
-a_tmgr_t *get_a_table __P((void));
-b_tmgr_t *get_b_table __P((void));
-c_tmgr_t *get_c_table __P((void));
-int    free_a_table __P((a_tmgr_t *, boolean_t));
-int    free_b_table __P((b_tmgr_t *, boolean_t));
-int    free_c_table __P((c_tmgr_t *, boolean_t));
-void   pmap_bootstrap_aalign __P((int));
-void   pmap_alloc_usermmu __P((void));
-void   pmap_alloc_usertmgr __P((void));
-void   pmap_alloc_pv __P((void));
-void   pmap_init_a_tables __P((void));
-void   pmap_init_b_tables __P((void));
-void   pmap_init_c_tables __P((void));
-void   pmap_init_pv __P((void));
-void   pmap_clear_pv __P((vm_offset_t, int));
-boolean_t pmap_remove_a __P((a_tmgr_t *, vm_offset_t, vm_offset_t));
-boolean_t pmap_remove_b __P((b_tmgr_t *, vm_offset_t, vm_offset_t));
-boolean_t pmap_remove_c __P((c_tmgr_t *, vm_offset_t, vm_offset_t));
-void   pmap_remove_pte __P((mmu_short_pte_t *));
-void   pmap_enter_kernel __P((vm_offset_t, vm_offset_t, vm_prot_t));
-void   pmap_remove_kernel __P((vm_offset_t, vm_offset_t));
-void   pmap_protect_kernel __P((vm_offset_t, vm_offset_t, vm_prot_t));
-boolean_t pmap_extract_kernel __P((vaddr_t, paddr_t *));
-vm_offset_t pmap_get_pteinfo __P((u_int, pmap_t *, c_tmgr_t **));
-void   pmap_pinit __P((pmap_t));
-int    pmap_dereference __P((pmap_t));
-boolean_t is_managed __P((vm_offset_t));
-boolean_t pmap_stroll __P((pmap_t, vm_offset_t, a_tmgr_t **, b_tmgr_t **,\
-	c_tmgr_t **, mmu_short_pte_t **, int *, int *, int *));
-void  pmap_bootstrap_copyprom __P((void));
-void  pmap_takeover_mmu __P((void));
-void  pmap_bootstrap_setprom __P((void));
-
-/* Debugging function definitions */
-void  pv_list __P((vm_offset_t, int));
-
 /* These are defined in pmap.c */
 extern struct pmap_physmem_struct avail_mem[];
 
-#endif /* _SUN3X_MYPMAP_H */
+#endif /* _SUN3X_PMAPPVT_H */

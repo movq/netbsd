@@ -1,4 +1,4 @@
-/*	$NetBSD: announce.c,v 1.11 1998/07/04 19:31:05 mrg Exp $	*/
+/*	$NetBSD: announce.c,v 1.23 2008/03/04 02:57:33 dholland Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)announce.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: announce.c,v 1.11 1998/07/04 19:31:05 mrg Exp $");
+__RCSID("$NetBSD: announce.c,v 1.23 2008/03/04 02:57:33 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -68,7 +64,7 @@ extern char hostname[];
  */
 
 /*
- * See if the user is accepting messages. If so, announce that 
+ * See if the user is accepting messages. If so, announce that
  * a talk is requested.
  */
 int
@@ -86,15 +82,15 @@ announce(request, remote_machine)
 	return (print_mesg(request->r_tty, request, remote_machine));
 }
 
-#define max(a,b) ( (a) > (b) ? (a) : (b) )
+#define max(a, b) ((a) > (b) ? (a) : (b))
 #define N_LINES 5
 #define N_CHARS 256
 
 /*
- * Build a block of characters containing the message. 
+ * Build a block of characters containing the message.
  * It is sent blank filled and in a single block to
  * try to keep the message in one piece if the recipient
- * in in vi at the time
+ * is in vi at the time.
  */
 int
 print_mesg(tty, request, remote_machine)
@@ -104,18 +100,17 @@ print_mesg(tty, request, remote_machine)
 {
 	struct timeval clock;
 	time_t clocktime;
-	struct timezone zone;
 	struct tm *localclock;
 	struct iovec iovec;
 	char line_buf[N_LINES][N_CHARS];
 	int sizes[N_LINES];
-	char big_buf[N_LINES*N_CHARS];
-	char *bptr, *lptr, *vis_user;
+	char big_buf[(N_LINES + 1) * N_CHARS];
+	char *bptr, *lptr, vis_user[sizeof(request->l_name) * 4];
 	int i, j, max_size;
 
 	i = 0;
 	max_size = 0;
-	(void)gettimeofday(&clock, &zone);
+	(void)gettimeofday(&clock, NULL);
 	clocktime = clock.tv_sec;
 	localclock = localtime(&clocktime);
 	(void)snprintf(line_buf[i], N_CHARS, " ");
@@ -123,15 +118,16 @@ print_mesg(tty, request, remote_machine)
 	max_size = max(max_size, sizes[i]);
 	i++;
 
-	(void)snprintf(line_buf[i], N_CHARS, 
+	(void)snprintf(line_buf[i], N_CHARS,
 	    "Message from Talk_Daemon@%s at %d:%02d ...",
-	    hostname, localclock->tm_hour, localclock->tm_min );
+	    hostname, localclock->tm_hour, localclock->tm_min);
 	sizes[i] = strlen(line_buf[i]);
 	max_size = max(max_size, sizes[i]);
 	i++;
-	vis_user = (char *)malloc(strlen(request->l_name) * 4 + 1);
+	if (strlen(request->l_name) + 1 > sizeof(vis_user) / 4)
+		return (FAILED);
 	strvis(vis_user, request->l_name, VIS_CSTYLE);
-	(void)snprintf(line_buf[i], N_CHARS, 
+	(void)snprintf(line_buf[i], N_CHARS,
 	    "talk: connection requested by %s@%s.", vis_user, remote_machine);
 	sizes[i] = strlen(line_buf[i]);
 	max_size = max(max_size, sizes[i]);
@@ -146,8 +142,8 @@ print_mesg(tty, request, remote_machine)
 	max_size = max(max_size, sizes[i]);
 	i++;
 	bptr = big_buf;
-	*bptr++ = ''; /* send something to wake them up */
-	*bptr++ = '\r';	/* add a \r in case of raw mode */
+	*bptr++ = '\a';			/* send something to wake them up */
+	*bptr++ = '\r';			/* add a \r in case of raw mode */
 	*bptr++ = '\n';
 	for (i = 0; i < N_LINES; i++) {
 		/* copy the line into the big buffer */

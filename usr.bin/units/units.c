@@ -1,4 +1,4 @@
-/*	$NetBSD: units.c,v 1.8 1998/02/03 04:16:02 perry Exp $	*/
+/*	$NetBSD: units.c,v 1.15 2006/05/01 00:00:12 christos Exp $	*/
 
 /*
  * units.c   Copyright (c) 1993 by Adrian Mariano (adrian@cam.cornell.edu)
@@ -70,6 +70,7 @@ void	cancelunit __P((struct unittype *));
 int	compare __P((const void *, const void *));
 int	compareproducts __P((char **, char **));
 int	compareunits __P((struct unittype *, struct unittype *));
+int	compareunitsreciprocal __P((struct unittype *, struct unittype *));
 int	completereduce __P((struct unittype *));
 void	initializeunit __P((struct unittype *));
 int	main __P((int, char **));
@@ -91,10 +92,9 @@ dupstr(char *str)
 {
 	char *ret;
 
-	ret = malloc(strlen(str) + 1);
+	ret = strdup(str);
 	if (!ret)
 		err(3, "Memory allocation error");
-	strcpy(ret, str);
 	return (ret);
 }
 
@@ -131,17 +131,20 @@ readunits(char *userfile)
 			env = getenv("PATH");
 			if (env) {
 				if (strchr(env, ';'))
-					strcpy(separator, ";");
+					strlcpy(separator, ";",
+					    sizeof(separator));
 				else
-					strcpy(separator, ":");
+					strlcpy(separator, ":",
+					    sizeof(separator));
 				direc = strtok(env, separator);
 				while (direc) {
-					strcpy(filename, "");
-					strncat(filename, direc, 999);
-					strncat(filename, "/",
-					    999 - strlen(filename));
-					strncat(filename, UNITSFILE,
-					    999 - strlen(filename));
+					strlcpy(filename, "", sizeof(filename));
+					strlcat(filename, direc,
+					    sizeof(filename));
+					strlcat(filename, "/",
+					    sizeof(filename));
+					strlcat(filename, UNITSFILE,
+					    sizeof(filename));
 					unitfile = fopen(filename, "rt");
 					if (unitfile)
 						break;
@@ -313,7 +316,7 @@ addunit(struct unittype * theunit, char *toadd, int flip)
 	savescr = scratch = dupstr(toadd);
 	for (slash = scratch + 1; *slash; slash++)
 		if (*slash == '-' &&
-		    (tolower(*(slash - 1)) != 'e' ||
+		    (tolower((unsigned char)*(slash - 1)) != 'e' ||
 		    !strchr(".0123456789", *(slash + 1))))
 			*slash = ' ';
 	slash = strchr(scratch, '/');
@@ -459,7 +462,7 @@ lookupunit(char *unit)
 		copy[strlen(copy) - 1] = 0;
 		for (i = 0; i < unitcount; i++) {
 			if (!strcmp(unittable[i].uname, copy)) {
-				strcpy(buffer, copy);
+				strlcpy(buffer, copy, sizeof(buffer));
 				free(copy);
 				return buffer;
 			}
@@ -471,7 +474,7 @@ lookupunit(char *unit)
 		copy[strlen(copy) - 1] = 0;
 		for (i = 0; i < unitcount; i++) {
 			if (!strcmp(unittable[i].uname, copy)) {
-				strcpy(buffer, copy);
+				strlcpy(buffer, copy, sizeof(buffer));
 				free(copy);
 				return buffer;
 			}
@@ -480,7 +483,7 @@ lookupunit(char *unit)
 			copy[strlen(copy) - 1] = 0;
 			for (i = 0; i < unitcount; i++) {
 				if (!strcmp(unittable[i].uname, copy)) {
-					strcpy(buffer, copy);
+					strlcpy(buffer, copy, sizeof(buffer));
 					free(copy);
 					return buffer;
 				}
@@ -493,9 +496,10 @@ lookupunit(char *unit)
 			strlen(prefixtable[i].prefixname))) {
 			unit += strlen(prefixtable[i].prefixname);
 			if (!strlen(unit) || lookupunit(unit)) {
-				strcpy(buffer, prefixtable[i].prefixval);
-				strcat(buffer, " ");
-				strcat(buffer, unit);
+				strlcpy(buffer, prefixtable[i].prefixval,
+				    sizeof(buffer));
+				strlcat(buffer, " ", sizeof(buffer));
+				strlcat(buffer, unit, sizeof(buffer));
 				return buffer;
 			}
 		}
@@ -587,7 +591,7 @@ compareproducts(char **one, char **two)
 			one++;
 		else if (*two == NULLUNIT)
 			two++;
-		else if (strcmp(*one, *two))
+		else if (*one && *two && strcmp(*one, *two))
 			return 1;
 		else
 			one++, two++;
@@ -606,6 +610,14 @@ compareunits(struct unittype * first, struct unittype * second)
 	compareproducts(first->denominator, second->denominator);
 }
 
+int 
+compareunitsreciprocal(struct unittype * first, struct unittype * second)
+{
+	return
+	compareproducts(first->numerator, second->denominator) ||
+	compareproducts(first->denominator, second->numerator);
+}
+
 
 int 
 completereduce(struct unittype * unit)
@@ -622,9 +634,15 @@ void
 showanswer(struct unittype * have, struct unittype * want)
 {
 	if (compareunits(have, want)) {
-		printf("conformability error\n");
-		showunit(have);
-		showunit(want);
+		if (compareunitsreciprocal(have, want)) {
+			printf("conformability error\n");
+			showunit(have);
+			showunit(want);
+		} else {
+			printf("\treciprocal conversion\n");
+			printf("\t* %.8g\n\t/ %.8g\n", 1 / (have->factor * want->factor),
+			    want->factor * have->factor);
+		}
 	}
 	else
 		printf("\t* %.8g\n\t/ %.8g\n", have->factor / want->factor,
@@ -638,7 +656,7 @@ usage()
 	fprintf(stderr,
 	    "\nunits [-f unitsfile] [-q] [-v] [from-unit to-unit]\n");
 	fprintf(stderr, "\n    -f specify units file\n");
-	fprintf(stderr, "    -q supress prompting (quiet)\n");
+	fprintf(stderr, "    -q suppress prompting (quiet)\n");
 	fprintf(stderr, "    -v print version number\n");
 	exit(3);
 }
@@ -653,9 +671,6 @@ main(int argc, char **argv)
 	int optchar;
 	char *userfile = 0;
 	int quiet = 0;
-
-	extern char *optarg;
-	extern int optind;
 
 	while ((optchar = getopt(argc, argv, "vqf:")) != -1) {
 		switch (optchar) {
@@ -676,14 +691,26 @@ main(int argc, char **argv)
 		}
 	}
 
-	if (optind != argc - 2 && optind != argc)
+	argc -= optind;
+	argv += optind;
+
+	if (argc != 3 && argc != 2 && argc != 0)
 		usage();
 
 	readunits(userfile);
 
-	if (optind == argc - 2) {
-		strcpy(havestr, argv[optind]);
-		strcpy(wantstr, argv[optind + 1]);
+	if (argc == 3) {
+		strlcpy(havestr, argv[0], sizeof(havestr));
+		strlcat(havestr, " ", sizeof(havestr));
+		strlcat(havestr, argv[1], sizeof(havestr));
+		argc--;
+		argv++;
+		argv[0] = havestr;
+	}
+
+	if (argc == 2) {
+		strlcpy(havestr, argv[0], sizeof(havestr));
+		strlcpy(wantstr, argv[1], sizeof(wantstr));
 		initializeunit(&have);
 		addunit(&have, havestr, 0);
 		completereduce(&have);
@@ -702,8 +729,8 @@ main(int argc, char **argv)
 				if (!quiet)
 					printf("You have: ");
 				if (!fgets(havestr, 80, stdin)) {
-					if (!quiet);
-					putchar('\n');
+					if (!quiet)
+						putchar('\n');
 					exit(0);
 				}
 			} while (addunit(&have, havestr, 0) ||

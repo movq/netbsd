@@ -1,4 +1,4 @@
-/*	$NetBSD: asa.c,v 1.11 1997/09/20 14:55:00 lukem Exp $	*/
+/*	$NetBSD: asa.c,v 1.16 2007/06/24 23:23:10 christos Exp $	*/
 
 /*
  * Copyright (c) 1993,94 Winning Strategies, Inc.
@@ -32,91 +32,86 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: asa.c,v 1.11 1997/09/20 14:55:00 lukem Exp $");
+__RCSID("$NetBSD: asa.c,v 1.16 2007/06/24 23:23:10 christos Exp $");
 #endif
 
+#include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <err.h>
 
-static void asa __P((FILE *));
-int main __P((int, char *[]));
+static void asa(FILE *);
+int main(int, char *[]);
 
 int
-main (argc, argv)
-	int argc;
-	char **argv;
+/*ARGSUSED*/
+main (int argc, char *argv[])
 {
 	FILE *fp;
 
 	/* skip progname */
 	argv++;
 
-        fp = stdin;
-        do {
-                if (*argv) {
-                        if (!(fp = fopen(*argv, "r"))) {
-				warn ("%s", *argv);
+	if (*argv == NULL)
+		asa(stdin);
+	else
+        	do {
+			if ((fp = fopen(*argv, "r")) == NULL) {
+				warn("%s", *argv);
 				continue;
-                        }
-                }
-                asa (fp);
-                if (fp != stdin)
-                        (void)fclose(fp);
-        } while (*argv++);
+			}
+			asa(fp);
+			(void)fclose(fp);
+        	} while (*++argv != NULL);
 
-	exit (0);
+	return 0;
 }
 
 static void
-asa(f)
-	FILE *f;
+asa(FILE *f)
 {
 	char *buf;
 	size_t len;
 
-	if ((buf = fgetln (f, &len)) != NULL) {
-		if (buf[len - 1] == '\n')
+	if ((buf = fgetln(f, &len)) != NULL) {
+		if (len > 0 && buf[len - 1] == '\n')
 			buf[--len] = '\0';
-		/* special case the first line  */
+		/* special case the first line */
 		switch (buf[0]) {
 		case '0':
-			putchar ('\n');
+			(void)putchar('\n');
 			break;
 		case '1':
-			putchar ('\f');
+			(void)putchar('\f');
 			break;
 		}
 
-		if (len > 1 && buf[0] && buf[1]) {
-			printf("%.*s", (int)(len - 1), buf + 1);
-		}
+		if (len > 1 && buf[0] && buf[1])
+			(void)fwrite(buf + 1, 1, len - 1, stdout);
 
 		while ((buf = fgetln(f, &len)) != NULL) {
-			if (buf[len - 1] == '\n')
+			if (len > 0 && buf[len - 1] == '\n')
 				buf[--len] = '\0';
 			switch (buf[0]) {
 			default:
 			case ' ':
-				putchar ('\n');
+				(void)putchar('\n');
 				break;
 			case '0':
-				putchar ('\n');
-				putchar ('\n');
+				(void)putchar('\n');
+				(void)putchar('\n');
 				break;
 			case '1':
-				putchar ('\f');
+				(void)putchar('\f');
 				break;
 			case '+':
-				putchar ('\r');
+				(void)putchar('\r');
 				break;
 			}
 
-			if (len > 1 && buf[0] && buf[1]) {
-				printf("%.*s", (int)(len - 1), buf + 1);
-			}
+			if (len > 1 && buf[0] && buf[1])
+				(void)fwrite(buf + 1, 1, len - 1, stdout);
 		}
 
-		putchar ('\n');
+		(void)putchar('\n');
 	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: parser1.c,v 1.4 1997/11/21 08:36:11 lukem Exp $	*/
+/*	$NetBSD: parser1.c,v 1.6 2003/08/07 11:17:28 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)parser1.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: parser1.c,v 1.4 1997/11/21 08:36:11 lukem Exp $");
+__RCSID("$NetBSD: parser1.c,v 1.6 2003/08/07 11:17:28 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,7 +45,7 @@ __RCSID("$NetBSD: parser1.c,v 1.4 1997/11/21 08:36:11 lukem Exp $");
 #include "parser.h"
 
 void
-p_start()
+p_start(void)
 {
 	char flag = 1;
 
@@ -72,16 +68,14 @@ p_start()
 }
 
 void
-p_statementlist(flag)
-	char flag;
+p_statementlist(char flag)
 {
 	for (; p_statement(flag) >= 0; p_clearerr())
 		;
 }
 
 int
-p_statement(flag)
-	char flag;
+p_statement(char flag)
 {
 	switch (token) {
 	case T_EOL:
@@ -95,8 +89,7 @@ p_statement(flag)
 }
 
 int
-p_if(flag)
-	char flag;
+p_if(char flag)
 {
 	struct value t;
 	char true = 0;
@@ -150,8 +143,7 @@ top:
 }
 
 int
-p_expression(flag)
-	char flag;
+p_expression(char flag)
 {
 	struct value t;
 	char *cmd;
@@ -196,8 +188,7 @@ p_expression(flag)
 }
 
 int
-p_convstr(v)
-	struct value *v;
+p_convstr(struct value *v)
 {
 	if (v->v_type != V_NUM)
 		return 0;
@@ -211,7 +202,7 @@ p_convstr(v)
 }
 
 void
-p_synerror()
+p_synerror(void)
 {
 	if (!cx.x_synerred) {
 		cx.x_synerred = cx.x_erred = 1;
@@ -220,20 +211,11 @@ p_synerror()
 }
 
 void
-#if __STDC__
 p_error(const char *msg, ...)
-#else
-p_error(msg, ..)
-	char *msg;
-	va_dcl
-#endif
 {
 	va_list ap;
-#if __STDC__
+
 	va_start(ap, msg);
-#else
-	va_start(ap);
-#endif
 	if (!cx.x_erred) {
 		cx.x_erred = 1;
 		verror(msg, ap);
@@ -242,7 +224,7 @@ p_error(msg, ..)
 }
 
 void
-p_memerror()
+p_memerror(void)
 {
 	cx.x_erred = cx.x_abort = 1;
 	error("Out of memory.");

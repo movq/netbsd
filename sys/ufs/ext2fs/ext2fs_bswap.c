@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_bswap.c,v 1.4 2000/01/28 16:00:23 bouyer Exp $	*/
+/*	$NetBSD: ext2fs_bswap.c,v 1.13.28.1 2008/11/29 23:10:18 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.
@@ -13,37 +13,42 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_bswap.c,v 1.13.28.1 2008/11/29 23:10:18 snj Exp $");
+
 #include <sys/types.h>
-#include <sys/systm.h>
 #include <ufs/ext2fs/ext2fs.h>
 #include <ufs/ext2fs/ext2fs_dinode.h>
+
+#if defined(_KERNEL)
+#include <sys/systm.h>
+#else
+#include <string.h>
+#endif
 
 /* These functions are only needed if native byte order is not big endian */
 #if BYTE_ORDER == BIG_ENDIAN
 void
-e2fs_sb_bswap(old, new)
-	struct ext2fs *old, *new;
+e2fs_sb_bswap(struct ext2fs *old, struct ext2fs *new)
 {
+
 	/* preserve unused fields */
 	memcpy(new, old, sizeof(struct ext2fs));
 	new->e2fs_icount	=	bswap32(old->e2fs_icount);
@@ -78,14 +83,14 @@ e2fs_sb_bswap(old, new)
 	new->e2fs_features_incompat =	bswap32(old->e2fs_features_incompat);
 	new->e2fs_features_rocompat =	bswap32(old->e2fs_features_rocompat);
 	new->e2fs_algo		=	bswap32(old->e2fs_algo);
+	new->e2fs_reserved_ngdb	=	bswap16(old->e2fs_reserved_ngdb);
 }
 
-void e2fs_cg_bswap(old, new, size)
-	struct  ext2_gd *old, *new;
-	int size;
+void e2fs_cg_bswap(struct ext2_gd *old, struct ext2_gd *new, int size)
 {
 	int i;
-	for (i=0; i < (size / sizeof(struct  ext2_gd)); i++) {
+
+	for (i = 0; i < (size / sizeof(struct  ext2_gd)); i++) {
 		new[i].ext2bgd_b_bitmap	= bswap32(old[i].ext2bgd_b_bitmap);
 		new[i].ext2bgd_i_bitmap	= bswap32(old[i].ext2bgd_i_bitmap);
 		new[i].ext2bgd_i_tables	= bswap32(old[i].ext2bgd_i_tables);
@@ -95,9 +100,9 @@ void e2fs_cg_bswap(old, new, size)
 	}
 }
 
-void e2fs_i_bswap(old, new)
-	struct ext2fs_dinode *old, *new;
+void e2fs_i_bswap(struct ext2fs_dinode *old, struct ext2fs_dinode *new)
 {
+
 	new->e2di_mode		=	bswap16(old->e2di_mode);
 	new->e2di_uid		=	bswap16(old->e2di_uid);
 	new->e2di_gid		=	bswap16(old->e2di_gid);
@@ -113,7 +118,9 @@ void e2fs_i_bswap(old, new)
 	new->e2di_facl		=	bswap32(old->e2di_facl);
 	new->e2di_dacl		=	bswap32(old->e2di_dacl);
 	new->e2di_faddr		=	bswap32(old->e2di_faddr);
+	new->e2di_uid_high	=	bswap16(old->e2di_uid_high);
+	new->e2di_gid_high	=	bswap16(old->e2di_gid_high);
 	memcpy(&new->e2di_blocks[0], &old->e2di_blocks[0],
-		(NDADDR+NIADDR) * sizeof(int));
+	    (NDADDR + NIADDR) * sizeof(uint32_t));
 }
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs.h,v 1.31 2000/02/03 02:20:13 cgd Exp $	*/
+/*	$NetBSD: cdefs.h,v 1.69 2008/08/17 00:23:02 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,6 +37,25 @@
 #ifndef	_SYS_CDEFS_H_
 #define	_SYS_CDEFS_H_
 
+/*
+ * Macro to test if we're using a GNU C compiler of a specific vintage
+ * or later, for e.g. features that appeared in a particular version
+ * of GNU C.  Usage:
+ *
+ *	#if __GNUC_PREREQ__(major, minor)
+ *	...cool feature...
+ *	#else
+ *	...delete feature...
+ *	#endif
+ */
+#ifdef __GNUC__
+#define	__GNUC_PREREQ__(x, y)						\
+	((__GNUC__ == (x) && __GNUC_MINOR__ >= (y)) ||			\
+	 (__GNUC__ > (x)))
+#else
+#define	__GNUC_PREREQ__(x, y)	0
+#endif
+
 #include <machine/cdefs.h>
 #ifdef __ELF__
 #include <sys/cdefs_elf.h>
@@ -49,11 +64,13 @@
 #endif
 
 #if defined(__cplusplus)
-#define	__BEGIN_DECLS	extern "C" {
-#define	__END_DECLS	};
+#define	__BEGIN_DECLS		extern "C" {
+#define	__END_DECLS		}
+#define	__static_cast(x,y)	static_cast<x>(y)
 #else
 #define	__BEGIN_DECLS
 #define	__END_DECLS
+#define	__static_cast(x,y)	(x)y
 #endif
 
 /*
@@ -67,7 +84,7 @@
 #define	___STRING(x)	__STRING(x)
 #define	___CONCAT(x,y)	__CONCAT(x,y)
 
-#if defined(__STDC__) || defined(__cplusplus)
+#if __STDC__ || defined(__cplusplus)
 #define	__P(protos)	protos		/* full-blown ANSI C */
 #define	__CONCAT(x,y)	x ## y
 #define	__STRING(x)	#x
@@ -75,12 +92,12 @@
 #define	__const		const		/* define reserved names to standard */
 #define	__signed	signed
 #define	__volatile	volatile
-#if defined(__cplusplus)
-#define	__inline	inline		/* convert to C++ keyword */
+#if defined(__cplusplus) || defined(__PCC__)
+#define	__inline	inline		/* convert to C++/C99 keyword */
 #else
-#ifndef __GNUC__
+#if !defined(__GNUC__) && !defined(__lint__)
 #define	__inline			/* delete GCC keyword */
-#endif /* !__GNUC__ */
+#endif /* !__GNUC__  && !__lint__ */
 #endif /* !__cplusplus */
 
 #else	/* !(__STDC__ || __cplusplus) */
@@ -119,10 +136,30 @@
 #endif
 
 /*
+ * The following macro is used to remove const cast-away warnings
+ * from gcc -Wcast-qual; it should be used with caution because it
+ * can hide valid errors; in particular most valid uses are in
+ * situations where the API requires it, not to cast away string
+ * constants. We don't use *intptr_t on purpose here and we are
+ * explicit about unsigned long so that we don't have additional
+ * dependencies.
+ */
+#define __UNCONST(a)	((void *)(unsigned long)(const void *)(a))
+
+/*
+ * The following macro is used to remove the volatile cast-away warnings
+ * from gcc -Wcast-qual; as above it should be used with caution
+ * because it can hide valid errors or warnings.  Valid uses include
+ * making it possible to pass a volatile pointer to memset().
+ * For the same reasons as above, we use unsigned long and not intptr_t.
+ */
+#define __UNVOLATILE(a)	((void *)(unsigned long)(volatile void *)(a))
+
+/*
  * GCC2 provides __extension__ to suppress warnings for various GNU C
  * language extensions under "-ansi -pedantic".
  */
-#if !defined(__GNUC__) || __GNUC__ < 2
+#if !__GNUC_PREREQ__(2, 0)
 #define	__extension__		/* delete __extension__ if non-gcc or gcc1 */
 #endif
 
@@ -134,26 +171,87 @@
  * these work for GNU C++ (modulo a slight glitch in the C++ grammar
  * in the distribution version of 2.5.5).
  */
-#if !defined(__GNUC__) || __GNUC__ < 2 || \
-	(__GNUC__ == 2 && __GNUC_MINOR__ < 5)
-#define	__attribute__(x)	/* delete __attribute__ if non-gcc or gcc1 */
-#if defined(__GNUC__) && !defined(__STRICT_ANSI__)
+#if !__GNUC_PREREQ__(2, 0)
+#define __attribute__(x)
+#endif
+
+#if __GNUC_PREREQ__(2, 5)
+#define	__dead		__attribute__((__noreturn__))
+#elif defined(__GNUC__)
 #define	__dead		__volatile
-#define	__pure		__const
-#endif
-#endif
-
-#ifdef __KPRINTF_ATTRIBUTE__
-#define __kprintf_attribute__(a) __attribute__(a)
 #else
-#define __kprintf_attribute__(a)
+#define	__dead
 #endif
 
-/* Delete pseudo-keywords wherever they are not available or needed. */
-#ifndef __dead
-#define	__dead
+#if __GNUC_PREREQ__(2, 96)
+#define	__pure		__attribute__((__pure__))
+#elif defined(__GNUC__)
+#define	__pure		__const
+#else
 #define	__pure
 #endif
+
+#if __GNUC_PREREQ__(3, 0)
+#define	__noinline	__attribute__((__noinline__))
+#else
+#define	__noinline	/* nothing */
+#endif
+
+#if __GNUC_PREREQ__(2, 7)
+#define	__unused	__attribute__((__unused__))
+#else
+#define	__unused	/* delete */
+#endif
+
+#if __GNUC_PREREQ__(3, 1)
+#define	__used		__attribute__((__used__))
+#else
+#define	__used		__unused
+#endif
+
+#if __GNUC_PREREQ__(2, 7)
+#define	__packed	__attribute__((__packed__))
+#define	__aligned(x)	__attribute__((__aligned__(x)))
+#define	__section(x)	__attribute__((__section__(x)))
+#elif defined(__PCC__)
+#define	__packed	_Pragma("packed")
+#define	__aligned(x)   	_Pragma("aligned " #x)
+#define	__section(x)   	_Pragma("section " ## x)
+#elif defined(__lint__)
+#define	__packed	/* delete */
+#define	__aligned(x)	/* delete */
+#define	__section(x)	/* delete */
+#else
+#define	__packed	error: no __packed for this compiler
+#define	__aligned(x)	error: no __aligned for this compiler
+#define	__section(x)	error: no __section for this compiler
+#endif
+
+/*
+ * C99 defines the restrict type qualifier keyword, which was made available
+ * in GCC 2.92.
+ */
+#if defined(__lint__)
+#define	__restrict	/* delete __restrict when not supported */
+#elif __STDC_VERSION__ >= 199901L
+#define	__restrict	restrict
+#elif !__GNUC_PREREQ__(2, 92)
+#define	__restrict	/* delete __restrict when not supported */
+#endif
+
+/*
+ * C99 defines __func__ predefined identifier, which was made available
+ * in GCC 2.95.
+ */
+#if !(__STDC_VERSION__ >= 199901L)
+#if __GNUC_PREREQ__(2, 6)
+#define	__func__	__PRETTY_FUNCTION__
+#elif __GNUC_PREREQ__(2, 4)
+#define	__func__	__FUNCTION__
+#else
+#define	__func__	""
+#endif
+#endif /* !(__STDC_VERSION__ >= 199901L) */
 
 #if defined(_KERNEL)
 #if defined(NO_KERNEL_RCSIDS)
@@ -163,17 +261,140 @@
 #endif /* _KERNEL */
 
 #if !defined(_STANDALONE) && !defined(_KERNEL)
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__PCC__)
 #define	__RENAME(x)	___RENAME(x)
 #else
 #ifdef __lint__
 #define	__RENAME(x)	__symbolrename(x)
 #else
- #error "No function renaming possible"
+#error "No function renaming possible"
 #endif /* __lint__ */
 #endif /* __GNUC__ */
 #else /* _STANDALONE || _KERNEL */
 #define	__RENAME(x)	no renaming in kernel or standalone environment
 #endif
+
+/*
+ * A barrier to stop the optimizer from moving code or assume live
+ * register values. This is gcc specific, the version is more or less
+ * arbitrary, might work with older compilers.
+ */
+#if __GNUC_PREREQ__(2, 95)
+#define	__insn_barrier()	__asm __volatile("":::"memory")
+#else
+#define	__insn_barrier()	/* */
+#endif
+
+/*
+ * GNU C version 2.96 adds explicit branch prediction so that
+ * the CPU back-end can hint the processor and also so that
+ * code blocks can be reordered such that the predicted path
+ * sees a more linear flow, thus improving cache behavior, etc.
+ *
+ * The following two macros provide us with a way to use this
+ * compiler feature.  Use __predict_true() if you expect the expression
+ * to evaluate to true, and __predict_false() if you expect the
+ * expression to evaluate to false.
+ *
+ * A few notes about usage:
+ *
+ *	* Generally, __predict_false() error condition checks (unless
+ *	  you have some _strong_ reason to do otherwise, in which case
+ *	  document it), and/or __predict_true() `no-error' condition
+ *	  checks, assuming you want to optimize for the no-error case.
+ *
+ *	* Other than that, if you don't know the likelihood of a test
+ *	  succeeding from empirical or other `hard' evidence, don't
+ *	  make predictions.
+ *
+ *	* These are meant to be used in places that are run `a lot'.
+ *	  It is wasteful to make predictions in code that is run
+ *	  seldomly (e.g. at subsystem initialization time) as the
+ *	  basic block reordering that this affects can often generate
+ *	  larger code.
+ */
+#if __GNUC_PREREQ__(2, 96)
+#define	__predict_true(exp)	__builtin_expect((exp) != 0, 1)
+#define	__predict_false(exp)	__builtin_expect((exp) != 0, 0)
+#else
+#define	__predict_true(exp)	(exp)
+#define	__predict_false(exp)	(exp)
+#endif
+
+/*
+ * Macros for manipulating "link sets".  Link sets are arrays of pointers
+ * to objects, which are gathered up by the linker.
+ *
+ * Object format-specific code has provided us with the following macros:
+ *
+ *	__link_set_add_text(set, sym)
+ *		Add a reference to the .text symbol `sym' to `set'.
+ *
+ *	__link_set_add_rodata(set, sym)
+ *		Add a reference to the .rodata symbol `sym' to `set'.
+ *
+ *	__link_set_add_data(set, sym)
+ *		Add a reference to the .data symbol `sym' to `set'.
+ *
+ *	__link_set_add_bss(set, sym)
+ *		Add a reference to the .bss symbol `sym' to `set'.
+ *
+ *	__link_set_decl(set, ptype)
+ *		Provide an extern declaration of the set `set', which
+ *		contains an array of the pointer type `ptype'.  This
+ *		macro must be used by any code which wishes to reference
+ *		the elements of a link set.
+ *
+ *	__link_set_start(set)
+ *		This points to the first slot in the link set.
+ *
+ *	__link_set_end(set)
+ *		This points to the (non-existent) slot after the last
+ *		entry in the link set.
+ *
+ *	__link_set_count(set)
+ *		Count the number of entries in link set `set'.
+ *
+ * In addition, we provide the following macros for accessing link sets:
+ *
+ *	__link_set_foreach(pvar, set)
+ *		Iterate over the link set `set'.  Because a link set is
+ *		an array of pointers, pvar must be declared as "type **pvar",
+ *		and the actual entry accessed as "*pvar".
+ *
+ *	__link_set_entry(set, idx)
+ *		Access the link set entry at index `idx' from set `set'.
+ */
+#define	__link_set_foreach(pvar, set)					\
+	for (pvar = __link_set_start(set); pvar < __link_set_end(set); pvar++)
+
+#define	__link_set_entry(set, idx)	(__link_set_begin(set)[idx])
+
+/*
+ * Return the number of elements in a statically-allocated array,
+ * __x.
+ */
+#define	__arraycount(__x)	(sizeof(__x) / sizeof(__x[0]))
+
+/* __BIT(n): nth bit, where __BIT(0) == 0x1. */
+#define	__BIT(__n)	\
+	(((__n) >= NBBY * sizeof(uintmax_t)) ? 0 : ((uintmax_t)1 << (__n)))
+
+/* __BITS(m, n): bits m through n, m < n. */
+#define	__BITS(__m, __n)	\
+	((__BIT(MAX((__m), (__n)) + 1) - 1) ^ (__BIT(MIN((__m), (__n))) - 1))
+
+/* find least significant bit that is set */
+#define	__LOWEST_SET_BIT(__mask) ((((__mask) - 1) & (__mask)) ^ (__mask))
+
+#define	__PRIuBIT	PRIuMAX
+#define	__PRIuBITS	__PRIuBIT
+
+#define	__PRIxBIT	PRIxMAX
+#define	__PRIxBITS	__PRIxBIT
+
+#define	__SHIFTOUT(__x, __mask)	(((__x) & (__mask)) / __LOWEST_SET_BIT(__mask))
+#define	__SHIFTIN(__x, __mask) ((__x) * __LOWEST_SET_BIT(__mask))
+#define	__SHIFTOUT_MASK(__mask) __SHIFTOUT((__mask), (__mask))
 
 #endif /* !_SYS_CDEFS_H_ */

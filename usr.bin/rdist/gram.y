@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: gram.y,v 1.8 1997/10/19 13:59:00 lukem Exp $	*/
+/*	$NetBSD: gram.y,v 1.12 2006/03/18 09:46:35 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,7 +35,7 @@
 #if 0
 static char sccsid[] = "@(#)gram.y	8.1 (Berkeley) 6/9/93";
 #else
-__RCSID("$NetBSD: gram.y,v 1.8 1997/10/19 13:59:00 lukem Exp $");
+__RCSID("$NetBSD: gram.y,v 1.12 2006/03/18 09:46:35 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,8 +46,8 @@ struct	cmd *last_cmd;
 struct	namelist *last_n;
 struct	subcmd *last_sc;
 
-static char   *makestr __P((char *));
-void	append __P((char *, struct namelist *, char *, struct subcmd *));
+static char   *makestr(char *);
+void	append(char *, struct namelist *, char *, struct subcmd *);
 
 %}
 
@@ -203,10 +199,10 @@ opt_namelist:	  /* VOID */ = {
 int	yylineno = 1;
 extern	FILE *fin;
 
-int	yylex __P((void));
+int	yylex(void);
 
 int
-yylex()
+yylex(void)
 {
 	static char yytext[INMAX];
 	int c;
@@ -357,9 +353,7 @@ again:
 }
 
 int
-any(c, str)
-	int c;
-	char *str;
+any(int c, char *str)
 {
 	while (*str)
 		if (c == *str++)
@@ -371,10 +365,8 @@ any(c, str)
  * Insert or append ARROW command to list of hosts to be updated.
  */
 void
-insert(label, files, hosts, subcmds)
-	char *label;
-	struct namelist *files, *hosts;
-	struct subcmd *subcmds;
+insert(char *label, struct namelist *files, struct namelist *hosts,
+       struct subcmd *subcmds)
 {
 	struct cmd *c, *prev, *nc;
 	struct namelist *h, *nexth;
@@ -422,11 +414,8 @@ insert(label, files, hosts, subcmds)
  * executed in the order they appear in the distfile.
  */
 void
-append(label, files, stamp, subcmds)
-	char *label;
-	struct namelist *files;
-	char *stamp;
-	struct subcmd *subcmds;
+append(char *label, struct namelist *files, char *stamp,
+       struct subcmd *subcmds)
 {
 	struct cmd *c;
 
@@ -451,8 +440,7 @@ append(label, files, stamp, subcmds)
  * Error printing routine in parser.
  */
 void
-yyerror(s)
-	char *s;
+yyerror(char *s)
 {
 
 	++nerrs;
@@ -464,15 +452,14 @@ yyerror(s)
  * Return a copy of the string.
  */
 static char *
-makestr(str)
-	char *str;
+makestr(char *str)
 {
 	char *cp, *s;
 
 	str = cp = malloc(strlen(s = str) + 1);
 	if (cp == NULL)
 		fatal("ran out of memory\n");
-	while ((*cp++ = *s++) != NULL)
+	while ((*cp++ = *s++) != 0)
 		;
 	return(str);
 }
@@ -481,8 +468,7 @@ makestr(str)
  * Allocate a namelist structure.
  */
 struct namelist *
-makenl(name)
-	char *name;
+makenl(char *name)
 {
 	struct namelist *nl;
 
@@ -494,12 +480,29 @@ makenl(name)
 	return(nl);
 }
 
+void
+freenl(struct namelist *nl)
+{
+	if (nl == NULL)
+		return;
+	freenl(nl->n_next);
+	free(nl);
+}
+
+void
+freesubcmd(struct subcmd *cmd)
+{
+	if (cmd == NULL)
+		return;
+	freesubcmd(cmd->sc_next);
+	free(cmd);
+}
+
 /*
  * Make a sub command for lists of variables, commands, etc.
  */
 struct subcmd *
-makesubcmd(type)
-	int	type;
+makesubcmd(int type)
 {
 	struct subcmd *sc;
 

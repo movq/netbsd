@@ -1,4 +1,4 @@
-/*	$NetBSD: quit.c,v 1.11 2000/02/10 12:34:43 tron Exp $	*/
+/*	$NetBSD: quit.c,v 1.26 2006/11/28 18:45:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,12 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)quit.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: quit.c,v 1.11 2000/02/10 12:34:43 tron Exp $");
+__RCSID("$NetBSD: quit.c,v 1.26 2006/11/28 18:45:32 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include "rcv.h"
 #include "extern.h"
+#include "thread.h"
 
 /*
  * Rcv -- receive mail rationally.
@@ -54,9 +51,9 @@ __RCSID("$NetBSD: quit.c,v 1.11 2000/02/10 12:34:43 tron Exp $");
 /*
  * The "quit" command.
  */
-int
-quitcmd(v)
-	void *v;
+/*ARGSUSED*/
+PUBLIC int
+quitcmd(void *v __unused)
 {
 	/*
 	 * If we are sourcing, then return 1 so execute() can handle it.
@@ -68,20 +65,206 @@ quitcmd(v)
 }
 
 /*
+ * Preserve all the appropriate messages back in the system
+ * mailbox, and print a nice message indicated how many were
+ * saved.  On any error, just return -1.  Else return 0.
+ * Incorporate the any new mail that we found.
+ */
+static int
+writeback(FILE *res)
+{
+	struct message *mp;
+	int p, c;
+	FILE *obuf;
+
+	p = 0;
+	if ((obuf = Fopen(mailname, "r+")) == NULL) {
+		warn("%s", mailname);
+		return -1;
+	}
+#ifndef APPEND
+	if (res != NULL) {
+		while ((c = getc(res)) != EOF)
+			(void)putc(c, obuf);
+		(void)fflush(obuf);
+		if (ferror(obuf)) {
+			warn("%s", mailname);
+			(void)Fclose(obuf);
+			return -1;
+		}
+	}
+#endif
+	for (mp = get_message(1); mp; mp = next_message(mp))
+		if ((mp->m_flag & MPRESERVE) || (mp->m_flag & MTOUCH)==0) {
+			p++;
+			if (sendmessage(mp, obuf, NULL, NULL, NULL) < 0) {
+				warn("%s", mailname);
+				(void)Fclose(obuf);
+				return -1;
+			}
+		}
+#ifdef APPEND
+	if (res != NULL)
+		while ((c = getc(res)) != EOF)
+			(void)putc(c, obuf);
+#endif
+	(void)fflush(obuf);
+	if (!ferror(obuf))
+		trunc(obuf);	/* XXX or should we truncate? */
+	if (ferror(obuf)) {
+		warn("%s", mailname);
+		(void)Fclose(obuf);
+		return -1;
+	}
+	if (res != NULL)
+		(void)Fclose(res);
+	(void)Fclose(obuf);
+	alter(mailname);
+	if (p == 1)
+		(void)printf("Held 1 message in %s\n", mailname);
+	else
+		(void)printf("Held %d messages in %s\n", p, mailname);
+	return 0;
+}
+
+/*
+ * Terminate an editing session by attempting to write out the user's
+ * file from the temporary.  Save any new stuff appended to the file.
+ */
+static void
+edstop(void)
+{
+	int gotcha, c;
+	struct message *mp;
+	FILE *obuf, *ibuf, *readstat = NULL;
+	struct stat statb;
+	char tempname[PATHSIZE];
+	int fd;
+
+	if (readonly)
+		return;
+	holdsigs();
+	if (Tflag != NULL) {
+		if ((readstat = Fopen(Tflag, "w")) == NULL)
+			Tflag = NULL;
+	}
+	for (mp = get_message(1), gotcha = 0; mp; mp = next_message(mp)) {
+		if (mp->m_flag & MNEW) {
+			mp->m_flag &= ~MNEW;
+			mp->m_flag |= MSTATUS;
+		}
+		if (mp->m_flag & (MMODIFY|MDELETED|MSTATUS))
+			gotcha++;
+		if (Tflag != NULL && (mp->m_flag & (MREAD|MDELETED)) != 0) {
+			char *id;
+
+			if ((id = hfield("article-id", mp)) != NULL)
+				(void)fprintf(readstat, "%s\n", id);
+		}
+	}
+	if (Tflag != NULL)
+		(void)Fclose(readstat);
+	if (!gotcha || Tflag != NULL)
+		goto done;
+	ibuf = NULL;
+	if (stat(mailname, &statb) >= 0 && statb.st_size > mailsize) {
+		(void)snprintf(tempname, sizeof(tempname),
+		    "%s/mbox.XXXXXXXXXX", tmpdir);
+		if ((fd = mkstemp(tempname)) == -1 ||
+		    (obuf = Fdopen(fd, "w")) == NULL) {
+			warn("%s", tempname);
+			if (fd != -1)
+				(void)close(fd);
+			relsesigs();
+			reset(0);
+		}
+		if ((ibuf = Fopen(mailname, "r")) == NULL) {
+			warn("%s", mailname);
+			(void)Fclose(obuf);
+			(void)rm(tempname);
+			relsesigs();
+			reset(0);
+		}
+		(void)fseek(ibuf, (long)mailsize, 0);
+		while ((c = getc(ibuf)) != EOF)
+			(void)putc(c, obuf);
+		(void)fflush(obuf);
+		if (ferror(obuf)) {
+			warn("%s", tempname);
+			(void)Fclose(obuf);
+			(void)Fclose(ibuf);
+			(void)rm(tempname);
+			relsesigs();
+			reset(0);
+		}
+		(void)Fclose(ibuf);
+		(void)Fclose(obuf);
+		if ((ibuf = Fopen(tempname, "r")) == NULL) {
+			warn("%s", tempname);
+			(void)rm(tempname);
+			relsesigs();
+			reset(0);
+		}
+		(void)rm(tempname);
+	}
+	(void)printf("\"%s\" ", mailname);
+	(void)fflush(stdout);
+	if ((obuf = Fopen(mailname, "r+")) == NULL) {
+		warn("%s", mailname);
+		relsesigs();
+		reset(0);
+	}
+	trunc(obuf);
+	c = 0;
+	for (mp = get_message(1); mp; mp = next_message(mp)) {
+		if ((mp->m_flag & MDELETED) != 0)
+			continue;
+		c++;
+		if (sendmessage(mp, obuf, NULL, NULL, NULL) < 0) {
+			warn("%s", mailname);
+			relsesigs();
+			reset(0);
+		}
+	}
+	gotcha = (c == 0 && ibuf == NULL);
+	if (ibuf != NULL) {
+		while ((c = getc(ibuf)) != EOF)
+			(void)putc(c, obuf);
+		(void)Fclose(ibuf);
+	}
+	(void)fflush(obuf);
+	if (ferror(obuf)) {
+		warn("%s", mailname);
+		relsesigs();
+		reset(0);
+	}
+	(void)Fclose(obuf);
+	if (gotcha) {
+		(void)rm(mailname);
+		(void)printf("removed\n");
+	} else
+		(void)printf("complete\n");
+	(void)fflush(stdout);
+
+done:
+	relsesigs();
+}
+
+/*
  * Save all of the undetermined messages at the top of "mbox"
  * Save all untouched messages back in the system mailbox.
  * Remove the system mailbox, if none saved there.
  */
-void
-quit()
+PUBLIC void
+quit(void)
 {
 	int mcount, p, modify, autohold, anystat, holdbit, nohold;
 	FILE *ibuf = NULL, *obuf, *fbuf, *rbuf, *readstat = NULL, *abuf;
 	struct message *mp;
-	int c;
-	extern char *tempQuit, *tempResid;
+	int c, fd;
 	struct stat minfo;
-	char *mbox;
+	const char *mbox;
+	char tempname[PATHSIZE];
 
 #ifdef __GNUC__
 	obuf = NULL;		/* XXX gcc -Wuninitialized */
@@ -93,6 +276,11 @@ quit()
 	 */
 	if (readonly)
 		return;
+
+#ifdef THREAD_SUPPORT
+	(void)showtagscmd(NULL);	/* make sure we see tagged messages */
+	(void)unthreadcmd(NULL);
+#endif
 	/*
 	 * If editing (not reading system mail box), then do the work
 	 * in edstop()
@@ -117,43 +305,48 @@ quit()
 		goto newmail;
 	if (flock(fileno(fbuf), LOCK_EX) == -1) {
 nolock:
-		perror("Unable to lock mailbox");
-		Fclose(fbuf);
+		warn("Unable to lock mailbox");
+		(void)Fclose(fbuf);
 		return;
 	}
 	if (dot_lock(mailname, 1, stdout, ".") == -1)
 		goto nolock;
 	rbuf = NULL;
 	if (fstat(fileno(fbuf), &minfo) >= 0 && minfo.st_size > mailsize) {
-		printf("New mail has arrived.\n");
-		rbuf = Fopen(tempResid, "w");
-		if (rbuf == NULL || fbuf == NULL)
+		(void)printf("New mail has arrived.\n");
+		(void)snprintf(tempname, sizeof(tempname),
+		    "%s/mail.RqXXXXXXXXXX", tmpdir);
+		if ((fd = mkstemp(tempname)) == -1 ||
+		    (rbuf = Fdopen(fd, "w")) == NULL) {
+		    	if (fd != -1)
+				(void)close(fd);
 			goto newmail;
+		}
 #ifdef APPEND
-		fseek(fbuf, (long)mailsize, 0);
+		(void)fseek(fbuf, (long)mailsize, 0);
 		while ((c = getc(fbuf)) != EOF)
-			(void) putc(c, rbuf);
+			(void)putc(c, rbuf);
 #else
 		p = minfo.st_size - mailsize;
 		while (p-- > 0) {
 			c = getc(fbuf);
 			if (c == EOF)
 				goto newmail;
-			(void) putc(c, rbuf);
+			(void)putc(c, rbuf);
 		}
 #endif
-		(void) fflush(rbuf);
+		(void)fflush(rbuf);
 		if (ferror(rbuf)) {
-			perror(tempResid);
-			Fclose(rbuf);
-			Fclose(fbuf);
+			warn("%s", tempname);
+			(void)Fclose(rbuf);
+			(void)Fclose(fbuf);
 			dot_unlock(mailname);
 			return;
 		}
-		Fclose(rbuf);
-		if ((rbuf = Fopen(tempResid, "r")) == NULL)
+		(void)Fclose(rbuf);
+		if ((rbuf = Fopen(tempname, "r")) == NULL)
 			goto newmail;
-		rm(tempResid);
+		(void)rm(tempname);
 	}
 
 	/*
@@ -161,12 +354,12 @@ nolock:
 	 */
 
 	anystat = 0;
-	autohold = value("hold") != NOSTR;
+	autohold = value(ENAME_HOLD) != NULL;
 	holdbit = autohold ? MPRESERVE : MBOX;
 	nohold = MBOX|MSAVED|MDELETED|MPRESERVE;
-	if (value("keepsave") != NOSTR)
+	if (value(ENAME_KEEPSAVE) != NULL)
 		nohold &= ~MSAVED;
-	for (mp = &message[0]; mp < &message[msgCount]; mp++) {
+	for (mp = get_message(1); mp; mp = next_message(mp)) {
 		if (mp->m_flag & MNEW) {
 			mp->m_flag &= ~MNEW;
 			mp->m_flag |= MSTATUS;
@@ -179,37 +372,37 @@ nolock:
 			mp->m_flag |= holdbit;
 	}
 	modify = 0;
-	if (Tflag != NOSTR) {
+	if (Tflag != NULL) {
 		if ((readstat = Fopen(Tflag, "w")) == NULL)
-			Tflag = NOSTR;
+			Tflag = NULL;
 	}
-	for (c = 0, p = 0, mp = &message[0]; mp < &message[msgCount]; mp++) {
+	for (c = 0, p = 0, mp = get_message(1); mp; mp = next_message(mp)) {
 		if (mp->m_flag & MBOX)
 			c++;
 		if (mp->m_flag & MPRESERVE)
 			p++;
-		if (mp->m_flag & MODIFY)
+		if (mp->m_flag & MMODIFY)
 			modify++;
-		if (Tflag != NOSTR && (mp->m_flag & (MREAD|MDELETED)) != 0) {
+		if (Tflag != NULL && (mp->m_flag & (MREAD|MDELETED)) != 0) {
 			char *id;
 
-			if ((id = hfield("article-id", mp)) != NOSTR)
-				fprintf(readstat, "%s\n", id);
+			if ((id = hfield("article-id", mp)) != NULL)
+				(void)fprintf(readstat, "%s\n", id);
 		}
 	}
-	if (Tflag != NOSTR)
-		Fclose(readstat);
-	if (p == msgCount && !modify && !anystat) {
-		printf("Held %d message%s in %s\n",
+	if (Tflag != NULL)
+		(void)Fclose(readstat);
+	if (p == get_msgCount() && !modify && !anystat) {
+		(void)printf("Held %d message%s in %s\n",
 			p, p == 1 ? "" : "s", mailname);
-		Fclose(fbuf);
+		(void)Fclose(fbuf);
 		dot_unlock(mailname);
 		return;
 	}
 	if (c == 0) {
 		if (p != 0) {
-			writeback(rbuf);
-			Fclose(fbuf);
+			(void)writeback(rbuf);
+			(void)Fclose(fbuf);
 			dot_unlock(mailname);
 			return;
 		}
@@ -225,61 +418,67 @@ nolock:
 
 	mbox = expand("&");
 	mcount = c;
-	if (value("append") == NOSTR) {
-		if ((obuf = Fopen(tempQuit, "w")) == NULL) {
-			perror(tempQuit);
-			Fclose(fbuf);
+	if (value(ENAME_APPEND) == NULL) {
+		(void)snprintf(tempname, sizeof(tempname),
+		    "%s/mail.RmXXXXXXXXXX", tmpdir);
+		if ((fd = mkstemp(tempname)) == -1 ||
+		    (obuf = Fdopen(fd, "w")) == NULL) {
+			warn("%s", tempname);
+			if (fd != -1)
+				(void)close(fd);
+			(void)Fclose(fbuf);
 			dot_unlock(mailname);
 			return;
 		}
-		if ((ibuf = Fopen(tempQuit, "r")) == NULL) {
-			perror(tempQuit);
-			rm(tempQuit);
-			Fclose(obuf);
-			Fclose(fbuf);
+		if ((ibuf = Fopen(tempname, "r")) == NULL) {
+			warn("%s", tempname);
+			(void)rm(tempname);
+			(void)Fclose(obuf);
+			(void)Fclose(fbuf);
 			dot_unlock(mailname);
 			return;
 		}
-		rm(tempQuit);
+		(void)rm(tempname);
 		if ((abuf = Fopen(mbox, "r")) != NULL) {
 			while ((c = getc(abuf)) != EOF)
-				(void) putc(c, obuf);
-			Fclose(abuf);
+				(void)putc(c, obuf);
+			(void)Fclose(abuf);
 		}
 		if (ferror(obuf)) {
-			perror(tempQuit);
-			Fclose(ibuf);
-			Fclose(obuf);
-			Fclose(fbuf);
+			warn("%s", tempname);
+			(void)Fclose(ibuf);
+			(void)Fclose(obuf);
+			(void)Fclose(fbuf);
 			dot_unlock(mailname);
 			return;
 		}
-		Fclose(obuf);
-		close(creat(mbox, 0600));
+		(void)Fclose(obuf);
+		if ((fd = creat(mbox, 0600)) != -1)
+			(void)close(fd);
 		if ((obuf = Fopen(mbox, "r+")) == NULL) {
-			perror(mbox);
-			Fclose(ibuf);
-			Fclose(fbuf);
+			warn("%s", mbox);
+			(void)Fclose(ibuf);
+			(void)Fclose(fbuf);
 			dot_unlock(mailname);
 			return;
 		}
 	}
 	else {
 		if ((obuf = Fopen(mbox, "a")) == NULL) {
-			perror(mbox);
-			Fclose(fbuf);
+			warn("%s", mbox);
+			(void)Fclose(fbuf);
 			dot_unlock(mailname);
 			return;
 		}
-		fchmod(fileno(obuf), 0600);
+		(void)fchmod(fileno(obuf), 0600);
 	}
-	for (mp = &message[0]; mp < &message[msgCount]; mp++)
+	for (mp = get_message(1); mp; mp = next_message(mp))
 		if (mp->m_flag & MBOX)
-			if (sendmessage(mp, obuf, saveignore, NOSTR) < 0) {
-				perror(mbox);
-				Fclose(ibuf);
-				Fclose(obuf);
-				Fclose(fbuf);
+			if (sendmessage(mp, obuf, saveignore, NULL, NULL) < 0) {
+				warn("%s", mbox);
+				(void)Fclose(ibuf);
+				(void)Fclose(obuf);
+				(void)Fclose(fbuf);
 				dot_unlock(mailname);
 				return;
 			}
@@ -290,32 +489,32 @@ nolock:
 	 * If we are appending, this is unnecessary.
 	 */
 
-	if (value("append") == NOSTR) {
+	if (value(ENAME_APPEND) == NULL) {
 		rewind(ibuf);
 		c = getc(ibuf);
 		while (c != EOF) {
-			(void) putc(c, obuf);
+			(void)putc(c, obuf);
 			if (ferror(obuf))
 				break;
 			c = getc(ibuf);
 		}
-		Fclose(ibuf);
+		(void)Fclose(ibuf);
 	}
-	fflush(obuf);
+	(void)fflush(obuf);
 	if (!ferror(obuf))
 		trunc(obuf);	/* XXX or should we truncate? */
 	if (ferror(obuf)) {
-		perror(mbox);
-		Fclose(obuf);
-		Fclose(fbuf);
+		warn("%s", mbox);
+		(void)Fclose(obuf);
+		(void)Fclose(fbuf);
 		dot_unlock(mailname);
 		return;
 	}
-	Fclose(obuf);
+	(void)Fclose(obuf);
 	if (mcount == 1)
-		printf("Saved 1 message in mbox\n");
+		(void)printf("Saved 1 message in mbox\n");
 	else
-		printf("Saved %d messages in mbox\n", mcount);
+		(void)printf("Saved %d messages in mbox\n", mcount);
 
 	/*
 	 * Now we are ready to copy back preserved files to
@@ -323,14 +522,14 @@ nolock:
 	 */
 
 	if (p != 0) {
-		writeback(rbuf);
-		Fclose(fbuf);
+		(void)writeback(rbuf);
+		(void)Fclose(fbuf);
 		dot_unlock(mailname);
 		return;
 	}
 
 	/*
-	 * Finally, remove his /usr/mail file.
+	 * Finally, remove his /var/mail file.
 	 * If new mail has arrived, copy it back.
 	 */
 
@@ -340,217 +539,32 @@ cream:
 		if (abuf == NULL)
 			goto newmail;
 		while ((c = getc(rbuf)) != EOF)
-			(void) putc(c, abuf);
-		(void) fflush(abuf);
+			(void)putc(c, abuf);
+		(void)fflush(abuf);
 		if (ferror(abuf)) {
-			perror(mailname);
-			Fclose(abuf);
-			Fclose(fbuf);
+			warn("%s", mailname);
+			(void)Fclose(abuf);
+			(void)Fclose(fbuf);
 			dot_unlock(mailname);
 			return;
 		}
-		Fclose(rbuf);
+		(void)Fclose(rbuf);
 		trunc(abuf);
-		Fclose(abuf);
+		(void)Fclose(abuf);
 		alter(mailname);
-		Fclose(fbuf);
+		(void)Fclose(fbuf);
 		dot_unlock(mailname);
 		return;
 	}
 	demail();
-	Fclose(fbuf);
+	(void)Fclose(fbuf);
 	dot_unlock(mailname);
 	return;
 
 newmail:
-	printf("Thou hast new mail.\n");
+	(void)printf("Thou hast new mail.\n");
 	if (fbuf != NULL) {
-		Fclose(fbuf);
+		(void)Fclose(fbuf);
 		dot_unlock(mailname);
 	}
-}
-
-/*
- * Preserve all the appropriate messages back in the system
- * mailbox, and print a nice message indicated how many were
- * saved.  On any error, just return -1.  Else return 0.
- * Incorporate the any new mail that we found.
- */
-int
-writeback(res)
-	FILE *res;
-{
-	struct message *mp;
-	int p, c;
-	FILE *obuf;
-
-	p = 0;
-	if ((obuf = Fopen(mailname, "r+")) == NULL) {
-		perror(mailname);
-		return(-1);
-	}
-#ifndef APPEND
-	if (res != NULL) {
-		while ((c = getc(res)) != EOF)
-			(void) putc(c, obuf);
-		(void) fflush(obuf);
-		if (ferror(obuf)) {
-			perror(mailname);
-			Fclose(obuf);
-			return(-1);
-		}
-	}
-#endif
-	for (mp = &message[0]; mp < &message[msgCount]; mp++)
-		if ((mp->m_flag&MPRESERVE)||(mp->m_flag&MTOUCH)==0) {
-			p++;
-			if (sendmessage(mp, obuf, (struct ignoretab *)0, NOSTR) < 0) {
-				perror(mailname);
-				Fclose(obuf);
-				return(-1);
-			}
-		}
-#ifdef APPEND
-	if (res != NULL)
-		while ((c = getc(res)) != EOF)
-			(void) putc(c, obuf);
-#endif
-	fflush(obuf);
-	if (!ferror(obuf))
-		trunc(obuf);	/* XXX or should we truncate? */
-	if (ferror(obuf)) {
-		perror(mailname);
-		Fclose(obuf);
-		return(-1);
-	}
-	if (res != NULL)
-		Fclose(res);
-	Fclose(obuf);
-	alter(mailname);
-	if (p == 1)
-		printf("Held 1 message in %s\n", mailname);
-	else
-		printf("Held %d messages in %s\n", p, mailname);
-	return(0);
-}
-
-/*
- * Terminate an editing session by attempting to write out the user's
- * file from the temporary.  Save any new stuff appended to the file.
- */
-void
-edstop()
-{
-	extern char *tmpdir;
-	int gotcha, c;
-	struct message *mp;
-	FILE *obuf, *ibuf, *readstat = NULL;
-	struct stat statb;
-	char *tempname;
-
-	if (readonly)
-		return;
-	holdsigs();
-	if (Tflag != NOSTR) {
-		if ((readstat = Fopen(Tflag, "w")) == NULL)
-			Tflag = NOSTR;
-	}
-	for (mp = &message[0], gotcha = 0; mp < &message[msgCount]; mp++) {
-		if (mp->m_flag & MNEW) {
-			mp->m_flag &= ~MNEW;
-			mp->m_flag |= MSTATUS;
-		}
-		if (mp->m_flag & (MODIFY|MDELETED|MSTATUS))
-			gotcha++;
-		if (Tflag != NOSTR && (mp->m_flag & (MREAD|MDELETED)) != 0) {
-			char *id;
-
-			if ((id = hfield("article-id", mp)) != NOSTR)
-				fprintf(readstat, "%s\n", id);
-		}
-	}
-	if (Tflag != NOSTR)
-		Fclose(readstat);
-	if (!gotcha || Tflag != NOSTR)
-		goto done;
-	ibuf = NULL;
-	if (stat(mailname, &statb) >= 0 && statb.st_size > mailsize) {
-		tempname = tempnam(tmpdir, "mbox");
-
-		if ((obuf = Fopen(tempname, "w")) == NULL) {
-			perror(tempname);
-			relsesigs();
-			reset(0);
-		}
-		if ((ibuf = Fopen(mailname, "r")) == NULL) {
-			perror(mailname);
-			Fclose(obuf);
-			rm(tempname);
-			relsesigs();
-			reset(0);
-		}
-		fseek(ibuf, (long)mailsize, 0);
-		while ((c = getc(ibuf)) != EOF)
-			(void) putc(c, obuf);
-		(void) fflush(obuf);
-		if (ferror(obuf)) {
-			perror(tempname);
-			Fclose(obuf);
-			Fclose(ibuf);
-			rm(tempname);
-			relsesigs();
-			reset(0);
-		}
-		Fclose(ibuf);
-		Fclose(obuf);
-		if ((ibuf = Fopen(tempname, "r")) == NULL) {
-			perror(tempname);
-			rm(tempname);
-			relsesigs();
-			reset(0);
-		}
-		rm(tempname);
-		free(tempname);
-	}
-	printf("\"%s\" ", mailname);
-	fflush(stdout);
-	if ((obuf = Fopen(mailname, "r+")) == NULL) {
-		perror(mailname);
-		relsesigs();
-		reset(0);
-	}
-	trunc(obuf);
-	c = 0;
-	for (mp = &message[0]; mp < &message[msgCount]; mp++) {
-		if ((mp->m_flag & MDELETED) != 0)
-			continue;
-		c++;
-		if (sendmessage(mp, obuf, (struct ignoretab *) NULL, NOSTR) < 0) {
-			perror(mailname);
-			relsesigs();
-			reset(0);
-		}
-	}
-	gotcha = (c == 0 && ibuf == NULL);
-	if (ibuf != NULL) {
-		while ((c = getc(ibuf)) != EOF)
-			(void) putc(c, obuf);
-		Fclose(ibuf);
-	}
-	fflush(obuf);
-	if (ferror(obuf)) {
-		perror(mailname);
-		relsesigs();
-		reset(0);
-	}
-	Fclose(obuf);
-	if (gotcha) {
-		rm(mailname);
-		printf("removed\n");
-	} else
-		printf("complete\n");
-	fflush(stdout);
-
-done:
-	relsesigs();
 }

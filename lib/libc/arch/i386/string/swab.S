@@ -1,12 +1,12 @@
 /*
- * Written by J.T. Conklin <jtc@netbsd.org>.
+ * Written by J.T. Conklin <jtc@NetBSD.org>.
  * Public domain.
  */
 
 #include <machine/asm.h>
 
 #if defined(LIBC_SCCS)
-	RCSID("$NetBSD: swab.S,v 1.10 1999/08/23 08:45:11 kleink Exp $")
+	RCSID("$NetBSD: swab.S,v 1.13 2007/11/12 18:42:00 ad Exp $")
 #endif
 
 /*
@@ -22,11 +22,9 @@ ENTRY(swab)
 	movl	16(%esp),%edi
 	movl	20(%esp),%ecx
 
-	cld				# set direction forward
-
 	shrl	$1,%ecx
 	testl	$7,%ecx			# copy first group of 1 to 7 words
-	jz	L2			# while swaping alternate bytes.
+	jz	L2			# while swapping alternate bytes.
 	_ALIGN_TEXT,0x90
 L1:	lodsw
 	rorw	$8,%ax

@@ -1,4 +1,4 @@
-/*	$NetBSD: cmds.c,v 1.13 1998/12/19 22:59:21 christos Exp $	*/
+/*	$NetBSD: cmds.c,v 1.32 2006/12/14 17:09:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)cmds.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: cmds.c,v 1.13 1998/12/19 22:59:21 christos Exp $");
+__RCSID("$NetBSD: cmds.c,v 1.32 2006/12/14 17:09:43 christos Exp $");
 #endif /* not lint */
 
 #include "tip.h"
@@ -53,46 +49,45 @@ __RCSID("$NetBSD: cmds.c,v 1.13 1998/12/19 22:59:21 christos Exp $");
 int	quant[] = { 60, 60, 24 };
 
 char	null = '\0';
-char	*sep[] = { "second", "minute", "hour" };
+const char	*sep[] = { "second", "minute", "hour" };
 static	char *argv[10];		/* argument vector for take and put */
 
-int	args __P((char *, char **));
-int	anyof __P((char *, char *));
-void	execute __P((char *));
-void	intcopy __P((int));
-void	prtime __P((char *, time_t));
-void	stopsnd __P((int));
-void	transfer __P((char *, int, char *));
-void	transmit __P((FILE *, char *, char *));
+int	args(char *, char **);
+int	anyof(char *, const char *);
+void	execute(char *);
+void	intcopy(int);
+void	prtime(const char *, time_t);
+void	stopsnd(int);
+void	transfer(char *, int, const char *);
+void	transmit(FILE *, const char *, char *);
 
 /*
  * FTP - remote ==> local
  *  get a file from the remote host
  */
 void
-getfl(c)
-	char c;
+getfl(char c)
 {
 	char buf[256], *cp;
-	
-	putchar(c);
+
+	(void)putchar(c);
 	/*
 	 * get the UNIX receiving file's name
 	 */
 	if (prompt("Local file name? ", copyname, sizeof copyname))
 		return;
 	cp = expand(copyname);
-	if ((sfd = open(cp, O_CREAT, 0666)) < 0) {
-		printf("\r\n%s: cannot create\r\n", copyname);
+	if ((sfd = open(cp, O_RDWR|O_CREAT, 0666)) < 0) {
+		(void)printf("\r\n%s: cannot create\r\n", copyname);
 		return;
 	}
-	
+
 	/*
 	 * collect parameters
 	 */
 	if (prompt("List command for remote system? ", buf,
 	    sizeof buf)) {
-		unlink(copyname);
+		(void)unlink(copyname);
 		return;
 	}
 	transfer(buf, sfd, value(EOFREAD));
@@ -101,9 +96,9 @@ getfl(c)
 /*
  * Cu-like take command
  */
+/* ARGSUSED */
 void
-cu_take(cc)
-	char cc;
+cu_take(char dummy __unused)
 {
 	int fd, argc;
 	char line[BUFSIZ], *cp;
@@ -111,14 +106,14 @@ cu_take(cc)
 	if (prompt("[take] ", copyname, sizeof copyname))
 		return;
 	if ((argc = args(copyname, argv)) < 1 || argc > 2) {
-		printf("usage: <take> from [to]\r\n");
+		(void)printf("usage: <take> from [to]\r\n");
 		return;
 	}
 	if (argc == 1)
 		argv[1] = argv[0];
 	cp = expand(argv[1]);
-	if ((fd = open(cp, O_CREAT, 0666)) < 0) {
-		printf("\r\n%s: cannot create\r\n", argv[1]);
+	if ((fd = open(cp, O_RDWR|O_CREAT, 0666)) < 0) {
+		(void)printf("\r\n%s: cannot create\r\n", argv[1]);
 		return;
 	}
 	(void)snprintf(line, sizeof line, "cat %s;echo \01", argv[0]);
@@ -131,38 +126,32 @@ static	jmp_buf intbuf;
  *  used by getfl(), cu_take(), and pipefile()
  */
 void
-transfer(buf, fd, eofchars)
-	char *buf;
-	int fd;
-	char *eofchars;
+transfer(char *buf, int fd, const char *eofchars)
 {
 	int ct;
 	char c, buffer[BUFSIZ];
-	char *p = buffer;
+	char * volatile p;
 	int cnt, eof;
 	time_t start;
 	sig_t f;
 	char r;
 
-#if __GNUC__		/* XXX pacify gcc */
-	(void)&p;
-#endif
-
+	p = buffer;
 	xpwrite(FD, buf, strlen(buf));
 	quit = 0;
-	kill(pid, SIGIOT);
-	read(repdes[0], (char *)&ccc, 1);  /* Wait until read process stops */
-	
+	(void)write(attndes[1], "W", 1);	/* Put TIPOUT into a wait state */
+	(void)read(repdes[0], (char *)&ccc, 1);  /* Wait until read process stops */
+
 	/*
 	 * finish command
 	 */
 	r = '\r';
 	xpwrite(FD, &r, 1);
 	do
-		read(FD, &c, 1); 
+		(void)read(FD, &c, 1);
 	while ((c&STRIP_PAR) != '\n');
-	tcsetattr(0, TCSAFLUSH, &defchars);
-	
+	(void)tcsetattr(0, TCSAFLUSH, &defchars);
+
 	(void) setjmp(intbuf);
 	f = signal(SIGINT, intcopy);
 	start = time(0);
@@ -180,34 +169,34 @@ transfer(buf, fd, eofchars)
 		*p++ = c;
 
 		if (c == '\n' && boolean(value(VERBOSE)))
-			printf("\r%d", ++ct);
+			(void)printf("\r%d", ++ct);
 		if ((cnt = (p-buffer)) == number(value(FRAMESIZE))) {
-			if (write(fd, buffer, cnt) != cnt) {
-				printf("\r\nwrite error\r\n");
+			if (write(fd, buffer, (size_t)cnt) != cnt) {
+				(void)printf("\r\nwrite error\r\n");
 				quit = 1;
 			}
 			p = buffer;
 		}
 	}
 	if ((cnt = (p-buffer)) != 0)
-		if (write(fd, buffer, cnt) != cnt)
-			printf("\r\nwrite error\r\n");
+		if (write(fd, buffer, (size_t)cnt) != cnt)
+			(void)printf("\r\nwrite error\r\n");
 
 	if (boolean(value(VERBOSE)))
 		prtime(" lines transferred in ", time(0)-start);
-	tcsetattr(0, TCSAFLUSH, &term);
-	write(fildes[1], (char *)&ccc, 1);
-	signal(SIGINT, f);
-	close(fd);
+	(void)tcsetattr(0, TCSAFLUSH, &term);
+	(void)write(fildes[1], (char *)&ccc, 1);
+	(void)signal(SIGINT, f);
+	(void)close(fd);
 }
 
 /*
  * FTP - remote ==> local process
  *   send remote input to local process via pipe
  */
+/* ARGSUSED */
 void
-pipefile(dummy)
-	char dummy;
+pipefile(char dummy __unused)
 {
 	int cpid, pdes[2];
 	char buf[256];
@@ -217,35 +206,33 @@ pipefile(dummy)
 		return;
 
 	if (pipe(pdes)) {
-		printf("can't establish pipe\r\n");
+		(void)printf("can't establish pipe\r\n");
 		return;
 	}
 
 	if ((cpid = fork()) < 0) {
-		printf("can't fork!\r\n");
+		(void)printf("can't fork!\r\n");
 		return;
 	} else if (cpid) {
 		if (prompt("List command for remote system? ", buf,
 		    sizeof buf)) {
-			close(pdes[0]), close(pdes[1]);
-			kill (cpid, SIGKILL);
+			(void)close(pdes[0]);
+			(void)close(pdes[1]);
+			(void)kill(cpid, SIGKILL);
 		} else {
-			close(pdes[0]);
-			signal(SIGPIPE, intcopy);
+			(void)close(pdes[0]);
+			(void)signal(SIGPIPE, intcopy);
 			transfer(buf, pdes[1], value(EOFREAD));
-			signal(SIGPIPE, SIG_DFL);
+			(void)signal(SIGPIPE, SIG_DFL);
 			while ((p = wait(&status)) > 0 && p != cpid)
 				;
 		}
 	} else {
-		int f;
-
-		dup2(pdes[0], 0);
-		close(pdes[0]);
-		for (f = 3; f < 20; f++)
-			close(f);
+		(void)dup2(pdes[0], 0);
+		(void)close(pdes[0]);
+		(void)closefrom(3);
 		execute(buf);
-		printf("can't execl!\r\n");
+		(void)printf("can't execl!\r\n");
 		exit(0);
 	}
 }
@@ -253,13 +240,13 @@ pipefile(dummy)
 /*
  * Interrupt service routine for FTP
  */
+/* ARGSUSED */
 void
-stopsnd(dummy)
-	int dummy;
+stopsnd(int dummy __unused)
 {
 
 	stop = 1;
-	signal(SIGINT, SIG_IGN);
+	(void)signal(SIGINT, SIG_IGN);
 }
 
 /*
@@ -268,13 +255,12 @@ stopsnd(dummy)
  *  terminate transmission with pseudo EOF sequence
  */
 void
-sendfile(cc)
-	char cc;
+sendfile(char cc)
 {
 	FILE *fd;
 	char *fnamex;
 
-	putchar(cc);
+	(void)putchar(cc);
 	/*
 	 * get file name
 	 */
@@ -286,12 +272,12 @@ sendfile(cc)
 	 */
 	fnamex = expand(fname);
 	if ((fd = fopen(fnamex, "r")) == NULL) {
-		printf("%s: cannot open\r\n", fname);
+		(void)printf("%s: cannot open\r\n", fname);
 		return;
 	}
 	transmit(fd, value(EOFWRITE), NULL);
 	if (!boolean(value(ECHOCHECK)))
-		tcdrain(FD);
+		(void)tcdrain(FD);
 }
 
 /*
@@ -299,33 +285,34 @@ sendfile(cc)
  *   used by sendfile() and cu_put()
  */
 void
-transmit(fd, eofchars, command)
-	FILE *fd;
-	char *eofchars, *command;
+transmit(FILE *fd, const char *eofchars, char *command)
 {
-	char *pc, lastc;
-	int c, ccount, lcount;
+	const char *pc;
+	char lastc;
+	int c;
+	int ccount, lcount;
 	time_t start_t, stop_t;
 	sig_t f;
 
-	kill(pid, SIGIOT);	/* put TIPOUT into a wait state */
+	(void)write(attndes[1], "W", 1);	/* put TIPOUT into a wait state */
 	stop = 0;
 	f = signal(SIGINT, stopsnd);
-	tcsetattr(0, TCSAFLUSH, &defchars);
-	read(repdes[0], (char *)&ccc, 1);
+	(void)tcsetattr(0, TCSAFLUSH, &defchars);
+	(void)read(repdes[0], (char *)&ccc, 1);
 	if (command != NULL) {
 		for (pc = command; *pc; pc++)
-			send(*pc);
+			sendchar(*pc);
 		if (boolean(value(ECHOCHECK)))
-			read(FD, (char *)&c, 1);	/* trailing \n */
+			(void)read(FD, &c, (size_t)1);	/* trailing \n */
 		else {
-			tcdrain(FD);
-			sleep(5); /* wait for remote stty to take effect */
+			(void)tcdrain(FD);
+			(void)sleep(5); /* wait for remote stty to take effect */
 		}
 	}
 	lcount = 0;
 	lastc = '\0';
 	start_t = time(0);
+	/* CONSTCOND */
 	while (1) {
 		ccount = 0;
 		do {
@@ -345,9 +332,9 @@ transmit(fd, eofchars, command)
 				else if (c == '\t') {
 					if (!boolean(value(RAWFTP))) {
 						if (boolean(value(TABEXPAND))) {
-							send(' ');
+							sendchar(' ');
 							while ((++ccount % 8) != 0)
-								send(' ');
+								sendchar(' ');
 							continue;
 						}
 					}
@@ -355,52 +342,52 @@ transmit(fd, eofchars, command)
 					if (!boolean(value(RAWFTP)))
 						continue;
 			}
-			send(c);
+			sendchar(c);
 		} while (c != '\r' && !boolean(value(RAWFTP)));
 		if (boolean(value(VERBOSE)))
-			printf("\r%d", ++lcount);
+			(void)printf("\r%d", ++lcount);
 		if (boolean(value(ECHOCHECK))) {
 			timedout = 0;
-			alarm((long)value(ETIMEOUT));
+			(void)alarm((unsigned int)number(value(ETIMEOUT)));
 			do {	/* wait for prompt */
-				read(FD, (char *)&c, 1);
+				(void)read(FD, &c, (size_t)1);
 				if (timedout || stop) {
 					if (timedout)
-						printf(
+						(void)printf(
 						    "\r\ntimed out at eol\r\n");
-					alarm(0);
+					(void)alarm(0);
 					goto out;
 				}
 			} while ((c&STRIP_PAR) != character(value(PROMPT)));
-			alarm(0);
+			(void)alarm(0);
 		}
 	}
 out:
 	if (lastc != '\n' && !boolean(value(RAWFTP)))
-		send('\r');
+		sendchar('\r');
 	if (eofchars) {
 		for (pc = eofchars; *pc; pc++)
-			send(*pc);
+			sendchar(*pc);
 	}
 	stop_t = time(0);
-	fclose(fd);
-	signal(SIGINT, f);
+	(void)fclose(fd);
+	(void)signal(SIGINT, f);
 	if (boolean(value(VERBOSE))) {
 		if (boolean(value(RAWFTP)))
 			prtime(" chars transferred in ", stop_t-start_t);
 		else
 			prtime(" lines transferred in ", stop_t-start_t);
 	}
-	write(fildes[1], (char *)&ccc, 1);
-	tcsetattr(0, TCSAFLUSH, &term);
+	(void)write(fildes[1], (char *)&ccc, 1);
+	(void)tcsetattr(0, TCSAFLUSH, &term);
 }
 
 /*
  * Cu-like put command
  */
+/* ARGSUSED */
 void
-cu_put(cc)
-	char cc;
+cu_put(char dummy __unused)
 {
 	FILE *fd;
 	char line[BUFSIZ];
@@ -410,14 +397,14 @@ cu_put(cc)
 	if (prompt("[put] ", copyname, sizeof copyname))
 		return;
 	if ((argc = args(copyname, argv)) < 1 || argc > 2) {
-		printf("usage: <put> from [to]\r\n");
+		(void)printf("usage: <put> from [to]\r\n");
 		return;
 	}
 	if (argc == 1)
 		argv[1] = argv[0];
 	copynamex = expand(argv[0]);
 	if ((fd = fopen(copynamex, "r")) == NULL) {
-		printf("%s: cannot open\r\n", copynamex);
+		(void)printf("%s: cannot open\r\n", copynamex);
 		return;
 	}
 	if (boolean(value(ECHOCHECK)))
@@ -432,8 +419,7 @@ cu_put(cc)
  *  wait for echo & handle timeout
  */
 void
-send(c)
-	char c;
+sendchar(char c)
 {
 	char cc;
 	int retry = 0;
@@ -453,11 +439,11 @@ send(c)
 	}
 tryagain:
 	timedout = 0;
-	alarm((long)value(ETIMEOUT));
-	read(FD, &cc, 1);
-	alarm(0);
+	(void)alarm((unsigned int)number(value(ETIMEOUT)));
+	(void)read(FD, &cc, 1);
+	(void)alarm(0);
 	if (timedout) {
-		printf("\r\ntimeout error (%s)\r\n", ctrl(c));
+		(void)printf("\r\ntimeout error (%s)\r\n", ctrl(c));
 		if (retry++ > 3)
 			return;
 		xpwrite(FD, &null, 1); /* poke it */
@@ -465,12 +451,12 @@ tryagain:
 	}
 }
 
+/* ARGSUSED */
 void
-alrmtimeout(dummy)
-	int dummy;
+alrmtimeout(int dummy __unused)
 {
 
-	signal(SIGALRM, alrmtimeout);
+	(void)signal(SIGALRM, alrmtimeout);
 	timedout = 1;
 }
 
@@ -479,52 +465,47 @@ alrmtimeout(dummy)
  *	Identical to consh() except for where stdout goes.
  */
 void
-pipeout(c)
-	char c;
+pipeout(char c)
 {
 	char buf[256];
 	int cpid, status, p;
 	time_t start = 0;
 
-	putchar(c);
+	(void)putchar(c);
 	if (prompt("Local command? ", buf, sizeof buf))
 		return;
-	kill(pid, SIGIOT);	/* put TIPOUT into a wait state */
-	signal(SIGINT, SIG_IGN);
-	signal(SIGQUIT, SIG_IGN);
-	tcsetattr(0, TCSAFLUSH, &defchars);
-	read(repdes[0], (char *)&ccc, 1);
+	(void)write(attndes[1], "W", 1);	/* put TIPOUT into a wait state */
+	(void)signal(SIGINT, SIG_IGN);
+	(void)signal(SIGQUIT, SIG_IGN);
+	(void)tcsetattr(0, TCSAFLUSH, &defchars);
+	(void)read(repdes[0], (char *)&ccc, 1);
 	/*
 	 * Set up file descriptors in the child and
 	 *  let it go...
 	 */
 	if ((cpid = fork()) < 0)
-		printf("can't fork!\r\n");
+		(void)printf("can't fork!\r\n");
 	else if (cpid) {
 		start = time(0);
 		while ((p = wait(&status)) > 0 && p != cpid)
 			;
 	} else {
-		int i;
-
-		dup2(FD, 1);
-		for (i = 3; i < 20; i++)
-			close(i);
-		signal(SIGINT, SIG_DFL);
-		signal(SIGQUIT, SIG_DFL);
+		(void)dup2(FD, 1);
+		(void)closefrom(3);
+		(void)signal(SIGINT, SIG_DFL);
+		(void)signal(SIGQUIT, SIG_DFL);
 		execute(buf);
-		printf("can't find `%s'\r\n", buf);
+		(void)printf("can't find `%s'\r\n", buf);
 		exit(0);
 	}
 	if (boolean(value(VERBOSE)))
 		prtime("away for ", time(0)-start);
-	write(fildes[1], (char *)&ccc, 1);
-	tcsetattr(0, TCSAFLUSH, &term);
-	signal(SIGINT, SIG_DFL);
-	signal(SIGQUIT, SIG_DFL);
+	(void)write(fildes[1], (char *)&ccc, 1);
+	(void)tcsetattr(0, TCSAFLUSH, &term);
+	(void)signal(SIGINT, SIG_DFL);
+	(void)signal(SIGQUIT, SIG_DFL);
 }
 
-#ifdef CONNECT
 /*
  * Fork a program with:
  *  0 <-> remote tty in
@@ -532,89 +513,83 @@ pipeout(c)
  *  2 <-> local tty out
  */
 void
-consh(c)
-	char c;
+consh(char c)
 {
 	char buf[256];
 	int cpid, status, p;
 	time_t start = 0;
 
-	putchar(c);
+	(void)putchar(c);
 	if (prompt("Local command? ", buf, sizeof buf))
 		return;
-	kill(pid, SIGIOT);	/* put TIPOUT into a wait state */
-	signal(SIGINT, SIG_IGN);
-	signal(SIGQUIT, SIG_IGN);
-	tcsetattr(0, TCSAFLUSH, &defchars);
-	read(repdes[0], (char *)&ccc, 1);
+	(void)write(attndes[1], "W", 1);	/* put TIPOUT into a wait state */
+	(void)signal(SIGINT, SIG_IGN);
+	(void)signal(SIGQUIT, SIG_IGN);
+	(void)tcsetattr(0, TCSAFLUSH, &defchars);
+	(void)read(repdes[0], (char *)&ccc, 1);
 	/*
 	 * Set up file descriptors in the child and
 	 *  let it go...
 	 */
 	if ((cpid = fork()) < 0)
-		printf("can't fork!\r\n");
+		(void)printf("can't fork!\r\n");
 	else if (cpid) {
 		start = time(0);
 		while ((p = wait(&status)) > 0 && p != cpid)
 			;
 	} else {
-		int i;
-
-		dup2(FD, 0);
-		dup2(3, 1);
-		for (i = 3; i < 20; i++)
-			close(i);
-		signal(SIGINT, SIG_DFL);
-		signal(SIGQUIT, SIG_DFL);
+		(void)dup2(FD, 0);
+		(void)dup2(FD, 1);
+		(void)closefrom(3);
+		(void)signal(SIGINT, SIG_DFL);
+		(void)signal(SIGQUIT, SIG_DFL);
 		execute(buf);
-		printf("can't find `%s'\r\n", buf);
+		(void)printf("can't find `%s'\r\n", buf);
 		exit(0);
 	}
 	if (boolean(value(VERBOSE)))
 		prtime("away for ", time(0)-start);
-	write(fildes[1], (char *)&ccc, 1);
-	tcsetattr(0, TCSAFLUSH, &term);
-	signal(SIGINT, SIG_DFL);
-	signal(SIGQUIT, SIG_DFL);
+	(void)write(fildes[1], (char *)&ccc, 1);
+	(void)tcsetattr(0, TCSAFLUSH, &term);
+	(void)signal(SIGINT, SIG_DFL);
+	(void)signal(SIGQUIT, SIG_DFL);
 }
-#endif
 
 /*
  * Escape to local shell
  */
+/* ARGSUSED */
 void
-shell(dummy)
-	char dummy;
+shell(char dummy __unused)
 {
 	int shpid, status;
-	char *cp;
+	const char *cp;
 
-	printf("[sh]\r\n");
-	signal(SIGINT, SIG_IGN);
-	signal(SIGQUIT, SIG_IGN);
+	(void)printf("[sh]\r\n");
+	(void)signal(SIGINT, SIG_IGN);
+	(void)signal(SIGQUIT, SIG_IGN);
 	unraw();
 	switch (shpid = fork()) {
 	default:
 		while (shpid != wait(&status));
 		raw();
-		printf("\r\n!\r\n");
-		signal(SIGINT, SIG_DFL);
-		signal(SIGQUIT, SIG_DFL);
+		(void)printf("\r\n!\r\n");
+		(void)signal(SIGINT, SIG_DFL);
+		(void)signal(SIGQUIT, SIG_DFL);
 		break;
 	case 0:
-		signal(SIGQUIT, SIG_DFL);
-		signal(SIGINT, SIG_DFL);
+		(void)signal(SIGQUIT, SIG_DFL);
+		(void)signal(SIGINT, SIG_DFL);
 		if ((cp = strrchr(value(SHELL), '/')) == NULL)
 			cp = value(SHELL);
 		else
 			cp++;
-		shell_uid();
-		execl(value(SHELL), cp, 0);
-		fprintf(stderr, "\r\n");
+		(void)execl(value(SHELL), cp, NULL);
+		(void)fprintf(stderr, "\r\n");
 		err(1, "can't execl");
 		/* NOTREACHED */
 	case -1:
-		fprintf(stderr, "\r\n");
+		(void)fprintf(stderr, "\r\n");
 		err(1, "can't fork");
 		/* NOTREACHED */
 	}
@@ -625,78 +600,75 @@ shell(dummy)
  *   initiate the conversation with TIPOUT
  */
 void
-setscript()
+setscript(void)
 {
 	char c;
 	/*
 	 * enable TIPOUT side for dialogue
 	 */
-	kill(pid, SIGEMT);
+	(void)write(attndes[1], "S", 1);
 	if (boolean(value(SCRIPT)) && strlen(value(RECORD)))
-		write(fildes[1], value(RECORD), strlen(value(RECORD)));
-	write(fildes[1], "\n", 1);
+		(void)write(fildes[1], value(RECORD), strlen(value(RECORD)));
+	(void)write(fildes[1], "\n", 1);
 	/*
 	 * wait for TIPOUT to finish
 	 */
-	read(repdes[0], &c, 1);
+	(void)read(repdes[0], &c, 1);
 	if (c == 'n')
-		printf("can't create %s\r\n", value(RECORD));
+		(void)printf("can't create %s\r\n", (char *)value(RECORD));
 }
 
 /*
  * Change current working directory of
  *   local portion of tip
  */
+/* ARGSUSED */
 void
-chdirectory(dummy)
-	char dummy;
+chdirectory(char dummy __unused)
 {
-	char dirname[80];
-	char *cp = dirname;
+	char dirnam[80];
+	const char *cp = dirnam;
 
-	if (prompt("[cd] ", dirname, sizeof dirname)) {
+	if (prompt("[cd] ", dirnam, sizeof dirnam)) {
 		if (stoprompt)
 			return;
 		cp = value(HOME);
 	}
 	if (chdir(cp) < 0)
-		printf("%s: bad directory\r\n", cp);
-	printf("!\r\n");
+		(void)printf("%s: bad directory\r\n", cp);
+	(void)printf("!\r\n");
 }
 
 void
-tipabort(msg)
-	char *msg;
+tipabort(const char *msg)
 {
 
-	kill(pid, SIGTERM);
+	(void)kill(pid, SIGTERM);
 	disconnect(msg);
 	if (msg != NULL)
-		printf("\r\n%s", msg);
-	printf("\r\n[EOT]\r\n");
-	daemon_uid();
-	(void)uu_unlock(uucplock);
+		(void)printf("\r\n%s", msg);
+	(void)printf("\r\n[EOT]\r\n");
 	unraw();
 	exit(0);
 }
 
+/* ARGSUSED */
 void
-finish(dummy)
-	char dummy;
+finish(char dummy __unused)
 {
-	char *dismsg;
+	const char *dismsg;
 
 	dismsg = value(DISCONNECT);
 	if (dismsg != NULL && dismsg[0] != '\0') {
-		write(FD, dismsg, strlen(dismsg));
-		sleep(5);
+		(void)write(FD, dismsg, strlen(dismsg));
+		(void)sleep(5);
 	}
 	tipabort(NULL);
 }
 
+/* ARGSUSED */
 void
-intcopy(dummy)
-	int dummy;
+intcopy(int dummy __unused)
 {
 
 	raw();
@@ -705,22 +677,19 @@ intcopy(dummy)
 }
 
 void
-execute(s)
-	char *s;
+execute(char *s)
 {
-	char *cp;
+	const char *cp;
 
 	if ((cp = strrchr(value(SHELL), '/')) == NULL)
 		cp = value(SHELL);
 	else
 		cp++;
-	shell_uid();
-	execl(value(SHELL), cp, "-c", s, 0);
+	(void)execl(value(SHELL), cp, "-c", s, NULL);
 }
 
 int
-args(buf, a)
-	char *buf, *a[];
+args(char *buf, char *a[])
 {
 	char *p = buf, *start;
 	char **parg = a;
@@ -744,9 +713,7 @@ args(buf, a)
 }
 
 void
-prtime(s, a)
-	char *s;
-	time_t a;
+prtime(const char *s, time_t a)
 {
 	int i;
 	int nums[3];
@@ -755,17 +722,17 @@ prtime(s, a)
 		nums[i] = (int)(a % quant[i]);
 		a /= quant[i];
 	}
-	printf("%s", s);
+	(void)printf("%s", s);
 	while (--i >= 0)
 		if (nums[i] || (i == 0 && nums[1] == 0 && nums[2] == 0))
-			printf("%d %s%c ", nums[i], sep[i],
+			(void)printf("%d %s%c ", nums[i], sep[i],
 				nums[i] == 1 ? '\0' : 's');
-	printf("\r\n!\r\n");
+	(void)printf("\r\n!\r\n");
 }
 
+/* ARGSUSED */
 void
-variable(dummy)
-	char dummy;
+variable(char dummy __unused)
 {
 	char	buf[256];
 
@@ -774,7 +741,7 @@ variable(dummy)
 	vlex(buf);
 	if (vtable[BEAUTIFY].v_access&CHANGED) {
 		vtable[BEAUTIFY].v_access &= ~CHANGED;
-		kill(pid, SIGSYS);
+		(void)write(attndes[1], "B", 1);	/* Tell TIPOUT to toggle */
 	}
 	if (vtable[SCRIPT].v_access&CHANGED) {
 		vtable[SCRIPT].v_access &= ~CHANGED;
@@ -806,18 +773,24 @@ variable(dummy)
 		vtable[PARITY].v_access &= ~CHANGED;
 		setparity(NULL);	/* XXX what is the correct arg? */
 	}
+	if (vtable[HARDWAREFLOW].v_access&CHANGED) {
+		vtable[HARDWAREFLOW].v_access &= ~CHANGED;
+		if (boolean(value(HARDWAREFLOW)))
+			hardwareflow("on");
+		else
+			hardwareflow("off");
+	}
 }
 
 /*
  * Turn tandem mode on or off for remote tty.
  */
 void
-tandem(option)
-	char *option;
+tandem(const char *option)
 {
 	struct termios	rmtty;
 
-	tcgetattr(FD, &rmtty);
+	(void)tcgetattr(FD, &rmtty);
 	if (strcmp(option, "on") == 0) {
 		rmtty.c_iflag |= IXOFF;
 		term.c_iflag |= IXOFF;
@@ -825,33 +798,48 @@ tandem(option)
 		rmtty.c_iflag &= ~IXOFF;
 		term.c_iflag &= ~IXOFF;
 	}
-	tcsetattr(FD, TCSADRAIN, &rmtty);
-	tcsetattr(0, TCSADRAIN, &term);
+	(void)tcsetattr(FD, TCSADRAIN, &rmtty);
+	(void)tcsetattr(0, TCSADRAIN, &term);
+}
+
+/*
+ * Turn hardware flow control on or off for remote tty.
+ */
+void
+hardwareflow(const char *option)
+{
+	struct termios	rmtty;
+
+	(void)tcgetattr(FD, &rmtty);
+	if (strcmp(option, "on") == 0)
+		rmtty.c_cflag |= CRTSCTS;
+	else
+		rmtty.c_cflag &= ~CRTSCTS;
+	(void)tcsetattr(FD, TCSADRAIN, &rmtty);
 }
 
 /*
  * Send a break.
  */
+/* ARGSUSED */
 void
-genbrk(dummy)
-	char dummy;
+genbrk(char dummy __unused)
 {
 
-	ioctl(FD, TIOCSBRK, NULL);
-	sleep(1);
-	ioctl(FD, TIOCCBRK, NULL);
+	(void)ioctl(FD, TIOCSBRK, NULL);
+	(void)sleep(1);
+	(void)ioctl(FD, TIOCCBRK, NULL);
 }
 
 /*
  * Suspend tip
  */
 void
-suspend(c)
-	char c;
+suspend(char c)
 {
 
 	unraw();
-	kill(c == CTRL('y') ? getpid() : 0, SIGTSTP);
+	(void)kill(c == CTRL('y') ? getpid() : 0, SIGTSTP);
 	raw();
 }
 
@@ -860,61 +848,62 @@ suspend(c)
  */
 
 char *
-expand(name)
-	char name[];
+expand(char aname[])
 {
 	static char xname[BUFSIZ];
+	char * volatile name;
 	char cmdbuf[BUFSIZ];
-	int pid, l;
-	char *cp, *Shell;
+	int mypid, l;
+	char *cp;
+	const char *Shell;
 	int s, pivec[2];
 
+	name = aname;
 	if (!anyof(name, "~{[*?$`'\"\\"))
 		return(name);
 	if (pipe(pivec) < 0) {
-		perror("pipe");
+		warn("pipe");
 		return(name);
 	}
 	(void)snprintf(cmdbuf, sizeof cmdbuf, "echo %s", name);
-	if ((pid = vfork()) == 0) {
+	if ((mypid = vfork()) == 0) {
 		Shell = value(SHELL);
 		if (Shell == NULL)
 			Shell = _PATH_BSHELL;
-		close(pivec[0]);
-		close(1);
-		dup(pivec[1]);
-		close(pivec[1]);
-		close(2);
-		shell_uid();
-		execl(Shell, Shell, "-c", cmdbuf, 0);
+		(void)close(pivec[0]);
+		(void)close(1);
+		(void)dup(pivec[1]);
+		(void)close(pivec[1]);
+		(void)close(2);
+		(void)execl(Shell, Shell, "-c", cmdbuf, NULL);
 		_exit(1);
 	}
-	if (pid == -1) {
-		perror("fork");
-		close(pivec[0]);
-		close(pivec[1]);
+	if (mypid == -1) {
+		warn("fork");
+		(void)close(pivec[0]);
+		(void)close(pivec[1]);
 		return(NULL);
 	}
-	close(pivec[1]);
+	(void)close(pivec[1]);
 	l = read(pivec[0], xname, BUFSIZ);
-	close(pivec[0]);
-	while (wait(&s) != pid);
+	(void)close(pivec[0]);
+	while (wait(&s) != mypid);
 		;
 	s &= 0377;
 	if (s != 0 && s != SIGPIPE) {
-		fprintf(stderr, "\"Echo\" failed\n");
+		(void)fprintf(stderr, "\"Echo\" failed\n");
 		return(NULL);
 	}
 	if (l < 0) {
-		perror("read");
+		warn("read");
 		return(NULL);
 	}
 	if (l == 0) {
-		fprintf(stderr, "\"%s\": No match\n", name);
+		(void)fprintf(stderr, "\"%s\": No match\n", name);
 		return(NULL);
 	}
 	if (l == BUFSIZ) {
-		fprintf(stderr, "Buffer overflow expanding \"%s\"\n", name);
+		(void)fprintf(stderr, "Buffer overflow expanding \"%s\"\n", name);
 		return(NULL);
 	}
 	xname[l] = 0;
@@ -929,12 +918,11 @@ expand(name)
  */
 
 int
-anyof(s1, s2)
-	char *s1, *s2;
+anyof(char *s1, const char *s2)
 {
 	int c;
 
-	while ((c = *s1++))
+	while ((c = *s1++) != '\0')
 		if (any(c, s2))
 			return(1);
 	return(0);

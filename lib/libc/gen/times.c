@@ -1,4 +1,4 @@
-/*	$NetBSD: times.c,v 1.11 2000/01/22 22:19:13 mycroft Exp $	*/
+/*	$NetBSD: times.c,v 1.14 2005/09/13 01:44:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)times.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: times.c,v 1.11 2000/01/22 22:19:13 mycroft Exp $");
+__RCSID("$NetBSD: times.c,v 1.14 2005/09/13 01:44:09 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -52,15 +48,11 @@ __RCSID("$NetBSD: times.c,v 1.11 2000/01/22 22:19:13 mycroft Exp $");
 #include <errno.h>
 #include <time.h>
 
-#ifdef __weak_alias
-__weak_alias(times,_times)
-#endif
-
 /*
  * Convert usec to clock ticks; could do (usec * CLK_TCK) / 1000000,
  * but this would overflow if we switch to nanosec.
  */
-#define	CONVTCK(r)	(r.tv_sec * CLK_TCK + r.tv_usec / (1000000 / CLK_TCK))
+#define	CONVTCK(r)	(r.tv_sec * clk_tck + r.tv_usec / (1000000 / (uint)clk_tck))
 
 clock_t
 times(tp)
@@ -68,8 +60,16 @@ times(tp)
 {
 	struct rusage ru;
 	struct timeval t;
-
+	static clock_t clk_tck;
+	
 	_DIAGASSERT(tp != NULL);
+
+	/*
+	 * we use a local copy of CLK_TCK because it expands to a
+	 * moderately expensive function call.
+	 */
+	if (clk_tck == 0)
+		clk_tck = (clock_t)CLK_TCK;
 
 	if (getrusage(RUSAGE_SELF, &ru) < 0)
 		return ((clock_t)-1);

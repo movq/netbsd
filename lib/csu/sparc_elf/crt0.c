@@ -1,10 +1,10 @@
-/*	$NetBSD: crt0.c,v 1.7 1999/11/02 10:07:13 lukem Exp $	*/
+/* $NetBSD: crt0.c,v 1.12 2004/08/26 21:18:36 thorpej Exp $ */
 
 /*
  * Copyright (c) 1998 Christos Zoulas
  * Copyright (c) 1995 Christopher G. Demetriou
  * All rights reserved.
- *
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -15,11 +15,12 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed by Christopher G. Demetriou
- *	for the NetBSD Project.
+ *          This product includes software developed for the
+ *          NetBSD Project.  See http://www.NetBSD.org/ for
+ *          information about NetBSD.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
- *
+ *    derived from this software without specific prior written permission.
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -30,42 +31,40 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * 
+ * <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
  */
 
 #include "common.h"
 
-void ___start __P((int, char **, char **, void (*cleanup) __P((void)),
-    const Obj_Entry *, struct ps_strings *));
+void ___start(int, char **, char **, void (*cleanup)(void),
+    const Obj_Entry *, struct ps_strings *);
 
-__asm("
-	.text
-	.align	4
-	.global	__start
-	.global	_start
-__start:
-_start:
-	mov	0, %fp
-	ld	[%sp + 64], %o0		! get argc
-	add	%sp, 68, %o1		! get argv
-	sll	%o0, 2,	%o2		!
-	add	%o2, 4,	%o2		! envp = argv + (argc << 2) + 4
-	add	%o1, %o2, %o2		!
-	andn	%sp, 7,	%sp		! align
-	sub	%sp, 24, %sp		! expand to standard stack frame size
-	mov	%g3, %o3
-	mov	%g2, %o4
-	call	___start
-	 mov	%g1, %o5
+__asm("	.text\n\
+	.align	4\n\
+	.global	__start\n\
+	.global	_start\n\
+__start:\n\
+_start:\n\
+	mov	0, %fp\n\
+	ld	[%sp + 64], %o0		! get argc\n\
+	add	%sp, 68, %o1		! get argv\n\
+	sll	%o0, 2,	%o2		!\n\
+	add	%o2, 4,	%o2		! envp = argv + (argc << 2) + 4\n\
+	add	%o1, %o2, %o2		!\n\
+	andn	%sp, 7,	%sp		! align\n\
+	sub	%sp, 24, %sp		! expand to standard stack frame size\n\
+	mov	%g3, %o3\n\
+	mov	%g2, %o4\n\
+	call	___start\n\
+	 mov	%g1, %o5\n\
 ");
 
 void
-___start(argc, argv, envp, cleanup, obj, ps_strings)
-	int argc;
-	char **argv;
-	char **envp;
-	void (*cleanup) __P((void));		/* from shared loader */
-	const Obj_Entry *obj;			/* from shared loader */
-	struct ps_strings *ps_strings;
+___start(int argc, char **argv, char **envp,
+    void (*cleanup)(void),			/* from shared loader */
+    const Obj_Entry *obj,			/* from shared loader */
+    struct ps_strings *ps_strings)
 {
 	environ = envp;
 
@@ -99,7 +98,7 @@ ___start(argc, argv, envp, cleanup, obj, ps_strings)
  * NOTE: Leave the RCS ID _after_ __start(), in case it gets placed in .text.
  */
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: crt0.c,v 1.7 1999/11/02 10:07:13 lukem Exp $");
+__RCSID("$NetBSD: crt0.c,v 1.12 2004/08/26 21:18:36 thorpej Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "common.c"

@@ -1,4 +1,4 @@
-/*	$NetBSD: word.c,v 1.5 1999/09/08 21:17:45 jsm Exp $	*/
+/*	$NetBSD: word.c,v 1.9 2006/03/18 09:40:46 rtr Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)word.c	8.1 (Berkeley) 6/11/93";
 #else
-__RCSID("$NetBSD: word.c,v 1.5 1999/09/08 21:17:45 jsm Exp $");
+__RCSID("$NetBSD: word.c,v 1.9 2006/03/18 09:40:46 rtr Exp $");
 #endif
 #endif /* not lint */
 
@@ -61,15 +57,16 @@ static char *sp;
 
 static int first = 1, lastch = 0;
 
+extern struct dictindex dictindex[];
+extern int wordlen;
+
 /*
  * Return the next word in the compressed dictionary in 'buffer' or
  * NULL on end-of-file
  */
 char *
-nextword(fp)
-	FILE *fp;
+nextword(FILE *fp)
 {
-	extern int wordlen;
 	int ch, pcount;
 	char *p;
 	static char buf[MAXWORDLEN + 1];
@@ -110,10 +107,7 @@ nextword(fp)
  * Reset the state of nextword() and do the fseek()
  */
 long
-dictseek(fp, offset, ptrname)
-	FILE *fp;
-	long offset;
-	int ptrname;
+dictseek(FILE *fp, long offset, int ptrname)
 {
 	if (fp == NULL) {
 		if ((sp = dictspace + offset) >= dictend)
@@ -126,8 +120,7 @@ dictseek(fp, offset, ptrname)
 }
 
 FILE *
-opendict(dict)
-	const char *dict;
+opendict(const char *dict)
 {
 	FILE *fp;
 
@@ -140,8 +133,7 @@ opendict(dict)
  * Load the given dictionary and initialize the pointers
  */
 int
-loaddict(fp)
-	FILE *fp;
+loaddict(FILE *fp)
 {
 	struct stat statb;
 	long n;
@@ -187,13 +179,11 @@ loaddict(fp)
  * is made for lines that are too long
  */
 int
-loadindex(indexfile)
-	const char *indexfile;
+loadindex(const char *indexfile)
 {
 	int i, j;
 	char buf[BUFSIZ];
 	FILE *fp;
-	extern struct dictindex dictindex[];
  
 	if ((fp = fopen(indexfile, "r")) == NULL) {
 		warn("Can't open '%s'", indexfile);
@@ -203,21 +193,23 @@ loadindex(indexfile)
 	while (fgets(buf, sizeof(buf), fp) != NULL) {
 		if (strchr(buf, '\n') == NULL) {
 			warnx("A line in the index file is too long");
+			(void) fclose(fp);
 			return(-1);
 		}
 		j = *buf - 'a';
 		if (i != j) {
 		    warnx("Bad index order");
+		    (void) fclose(fp);
 		    return(-1);
 		}
 		dictindex[j].start = atol(buf + 1);
 		dictindex[j].length = atol(buf + 9) - dictindex[j].start;
 		i++;
 	}
+	(void) fclose(fp);
 	if (i != 26) {
 		warnx("Bad index length");
 		return(-1);
 	}
-	(void) fclose(fp);
 	return(0);
 } 

@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_subr.c,v 1.19 2000/03/30 09:27:13 augustss Exp $	*/
+/*	$NetBSD: tty_subr.c,v 1.34 2008/07/16 18:27:49 drochner Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994 Theo de Raadt
@@ -15,11 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Theo de Raadt.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,6 +28,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: tty_subr.c,v 1.34 2008/07/16 18:27:49 drochner Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
@@ -40,13 +38,15 @@
 #include <sys/tty.h>
 #include <sys/malloc.h>
 
+MALLOC_DEFINE(M_TTYS, "ttys", "allocated tty structures");
+
 /*
  * At compile time, choose:
  * There are two ways the TTY_QUOTE bit can be stored. If QBITS is
  * defined we allocate an array of bits -- 1/8th as much memory but
- * setbit(), clrbit(), and isset() take more cpu. If QBITS is
+ * setbit(), clrbit(), and isset() take more CPU. If QBITS is
  * undefined, we just use an array of bytes.
- * 
+ *
  * If TTY_QUOTE functionality isn't required by a line discipline,
  * it can free c_cq and set it to NULL. This speeds things up,
  * and also does not use any extra memory. This is useful for (say)
@@ -61,42 +61,30 @@
 #define QMEM(n)		(n)
 #endif
 
-void	cinit __P((void));
 #ifdef QBITS
-void	clrbits __P((u_char *, int, int));
+static void	clrbits(u_char *, int, int);
 #endif
-
-/*
- * Initialize clists.
- */
-void
-cinit()
-{
-}
 
 /*
  * Initialize a particular clist. Ok, they are really ring buffers,
  * of the specified length, with/without quoting support.
  */
 int
-clalloc(clp, size, quot)
-	struct clist *clp;
-	int size;
-	int quot;
+clalloc(struct clist *clp, int size, int quot)
 {
 
-	MALLOC(clp->c_cs, u_char *, size, M_TTYS, M_WAITOK);
+	clp->c_cs = malloc(size, M_TTYS, M_WAITOK);
 	if (!clp->c_cs)
 		return (-1);
 	memset(clp->c_cs, 0, size);
 
 	if(quot) {
-		MALLOC(clp->c_cq, u_char *, QMEM(size), M_TTYS, M_WAITOK);
+		clp->c_cq = malloc(QMEM(size), M_TTYS, M_WAITOK);
 		if (!clp->c_cq) {
-			FREE(clp->c_cs, M_TTYS);
+			free(clp->c_cs, M_TTYS);
 			return (-1);
 		}
-		memset(clp->c_cs, 0, QMEM(size));
+		memset(clp->c_cq, 0, QMEM(size));
 	} else
 		clp->c_cq = (u_char *)0;
 
@@ -104,27 +92,25 @@ clalloc(clp, size, quot)
 	clp->c_ce = clp->c_cs + size;
 	clp->c_cn = size;
 	clp->c_cc = 0;
+
 	return (0);
 }
 
 void
-clfree(clp)
-	struct clist *clp;
+clfree(struct clist *clp)
 {
 	if(clp->c_cs)
-		FREE(clp->c_cs, M_TTYS);
+		free(clp->c_cs, M_TTYS);
 	if(clp->c_cq)
-		FREE(clp->c_cq, M_TTYS);
+		free(clp->c_cq, M_TTYS);
 	clp->c_cs = clp->c_cq = (u_char *)0;
 }
-
 
 /*
  * Get a character from a clist.
  */
 int
-getc(clp)
-	struct clist *clp;
+getc(struct clist *clp)
 {
 	int c = -1;
 	int s;
@@ -143,6 +129,7 @@ getc(clp)
 			c |= TTY_QUOTE;
 #endif
 	}
+	*clp->c_cf = 0; /* wipe out to avoid information disclosure */
 	if (++clp->c_cf == clp->c_ce)
 		clp->c_cf = clp->c_cs;
 	if (--clp->c_cc == 0)
@@ -157,10 +144,7 @@ out:
  * Return number of bytes moved.
  */
 int
-q_to_b(clp, cp, count)
-	struct clist *clp;
-	u_char *cp;
-	int count;
+q_to_b(struct clist *clp, u_char *cp, int count)
 {
 	int cc;
 	u_char *p = cp;
@@ -193,9 +177,7 @@ q_to_b(clp, cp, count)
  * Stop counting if flag&character is non-null.
  */
 int
-ndqb(clp, flag)
-	struct clist *clp;
-	int flag;
+ndqb(struct clist *clp, int flag)
 {
 	int count = 0;
 	int i;
@@ -237,9 +219,7 @@ out:
  * Flush count bytes from clist.
  */
 void
-ndflush(clp, count)
-	struct clist *clp;
-	int count;
+ndflush(struct clist *clp, int count)
 {
 	int cc;
 	int s;
@@ -273,9 +253,7 @@ out:
  * Put a character into the output queue.
  */
 int
-putc(c, clp)
-	int c;
-	struct clist *clp;
+putc(int c, struct clist *clp)
 {
 	int i;
 	int s;
@@ -303,7 +281,7 @@ out:
 	if (clp->c_cq) {
 #ifdef QBITS
 		if (c & TTY_QUOTE)
-			setbit(clp->c_cq, i); 
+			setbit(clp->c_cq, i);
 		else
 			clrbit(clp->c_cq, i);
 #else
@@ -326,11 +304,8 @@ out:
  * for (i = 0; i < len; i++)
  *	clrbit(cp, off + len);
  */
-void
-clrbits(cp, off, len)
-	u_char *cp;
-	int off;
-	int len;
+static void
+clrbits(u_char *cp, int off, int len)
 {
 	int sby, sbi, eby, ebi;
 	int i;
@@ -366,10 +341,7 @@ clrbits(cp, off, len)
  * Return number of bytes not transfered.
  */
 int
-b_to_q(cp, count, clp)
-	const u_char *cp;
-	int count;
-	struct clist *clp;
+b_to_q(const u_char *cp, int count, struct clist *clp)
 {
 	int cc;
 	const u_char *p = cp;
@@ -431,10 +403,7 @@ static int cc;
  * masked.
  */
 u_char *
-nextc(clp, cp, c)
-	struct clist *clp;
-	u_char *cp;
-	int *c;
+nextc(struct clist *clp, u_char *cp, int *c)
 {
 
 	if (clp->c_cf == cp) {
@@ -473,9 +442,7 @@ nextc(clp, cp, c)
  * *c is set to the NEXT character
  */
 u_char *
-firstc(clp, c)
-	struct clist *clp;
-	int *c;
+firstc(struct clist *clp, int *c)
 {
 	u_char *cp;
 
@@ -500,8 +467,7 @@ firstc(clp, c)
  * Remove the last character in the clist and return it.
  */
 int
-unputc(clp)
-	struct clist *clp;
+unputc(struct clist *clp)
 {
 	unsigned int c = -1;
 	int s;
@@ -537,8 +503,7 @@ out:
  * Put the chars in the from queue on the end of the to queue.
  */
 void
-catq(from, to)
-	struct clist *from, *to;
+catq(struct clist *from, struct clist *to)
 {
 	int c;
 

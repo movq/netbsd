@@ -1,4 +1,4 @@
-/*	$NetBSD: modes.c,v 1.3 1997/10/20 08:08:31 scottr Exp $	*/
+/*	$NetBSD: modes.c,v 1.7 2006/10/22 21:09:47 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)modes.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: modes.c,v 1.3 1997/10/20 08:08:31 scottr Exp $");
+__RCSID("$NetBSD: modes.c,v 1.7 2006/10/22 21:09:47 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,7 +46,7 @@ __RCSID("$NetBSD: modes.c,v 1.3 1997/10/20 08:08:31 scottr Exp $");
 #include "extern.h"
 
 struct modes {
-	char *name;
+	const char *name;
 	long set;
 	long unset;
 };
@@ -59,7 +55,7 @@ struct modes {
  * The code in optlist() depends on minus options following regular
  * options, i.e. "foo" must immediately precede "-foo".
  */
-struct modes cmodes[] = {
+const struct modes cmodes[] = {
 	{ "cs5",	CS5, CSIZE },
 	{ "cs6",	CS6, CSIZE },
 	{ "cs7",	CS7, CSIZE },
@@ -92,10 +88,10 @@ struct modes cmodes[] = {
 	{ "-cdtrcts",	0, CDTRCTS },
 	{ "mdmbuf",	MDMBUF, 0 },
 	{ "-mdmbuf",	0, MDMBUF },
-	{ NULL },
+	{ .name = NULL },
 };
 
-struct modes imodes[] = {
+const struct modes imodes[] = {
 	{ "ignbrk",	IGNBRK, 0 },
 	{ "-ignbrk",	0, IGNBRK },
 	{ "brkint",	BRKINT, 0 },
@@ -128,10 +124,10 @@ struct modes imodes[] = {
 	{ "-decctlq",	IXANY, 0 },
 	{ "imaxbel",	IMAXBEL, 0 },
 	{ "-imaxbel",	0, IMAXBEL },
-	{ NULL },
+	{ .name = NULL },
 };
 
-struct modes lmodes[] = {
+const struct modes lmodes[] = {
 	{ "echo",	ECHO, 0 },
 	{ "-echo",	0, ECHO },
 	{ "echoe",	ECHOE, 0 },
@@ -180,10 +176,10 @@ struct modes lmodes[] = {
 	{ "-nokerninfo",0, NOKERNINFO },
 	{ "kerninfo",	0, NOKERNINFO },
 	{ "-kerninfo",	NOKERNINFO, 0 },
-	{ NULL },
+	{ .name = NULL },
 };
 
-struct modes omodes[] = {
+const struct modes omodes[] = {
 	{ "opost",	OPOST, 0 },
 	{ "-opost",	0, OPOST },
 	{ "litout",	0, OPOST },
@@ -194,17 +190,15 @@ struct modes omodes[] = {
 	{ "-tabs",	OXTABS, 0 },
 	{ "oxtabs",	OXTABS, 0 },
 	{ "-oxtabs",	0, OXTABS },
-	{ NULL },
+	{ .name = NULL },
 };
 
 #define	CHK(s)	(*name == s[0] && !strcmp(name, s))
 
 int
-msearch(argvp, ip)
-	char ***argvp;
-	struct info *ip;
+msearch(char ***argvp, struct info *ip)
 {
-	struct modes *mp;
+	const struct modes *mp;
 	char *name;
 
 	name = **argvp;

@@ -1,4 +1,4 @@
-/*	$NetBSD: uhareg.h,v 1.7 1998/08/17 00:26:34 mycroft Exp $	*/
+/*	$NetBSD: uhareg.h,v 1.13 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -185,7 +178,7 @@ typedef u_long physlen;
 #define UHA_SBUS_RES_ERR	0xa3	/* scsi bus reset error */
 #define UHA_BAD_SG_LIST		0xff	/* invalid scatter gath list */
 
-#define UHA_NSEG	33	/* number of dma segments supported */
+#define UHA_NSEG	33	/* number of DMA segments supported */
 
 struct uha_dma_seg {
 	physaddr seg_addr;
@@ -218,13 +211,13 @@ struct uha_mscp {
 	/*set. starts at 1, 8bytes per */
 	u_char req_sense_length;
 	u_char scsi_cmd_length;
-	struct scsi_generic scsi_cmd;
+	u_char scsi_cmd[12];
 	u_char host_stat;
 	u_char target_stat;
 	physaddr sense_ptr;	/* if 0 no auto sense */
 
 	struct uha_dma_seg uha_dma[UHA_NSEG];
-	struct scsipi_sense_data mscp_sense;
+	struct scsi_sense_data mscp_sense;
 	/*-----------------end of hardware supported fields----------------*/
 	TAILQ_ENTRY(uha_mscp) chain;
 	struct uha_mscp *nexthash;
@@ -242,5 +235,4 @@ struct uha_mscp {
 	bus_dmamap_t	dmamap_xfer;
 
 };
-#pragma pack(4)
-
+#pragma pack()

@@ -1,4 +1,4 @@
-/*	$NetBSD: mbrlabel.c,v 1.7 2000/03/15 11:56:02 fvdl Exp $	*/
+/*	$NetBSD: mbrlabel.c,v 1.26 2005/12/28 06:03:15 christos Exp $	*/
 
 /*
  * Copyright (C) 1998 Wolfgang Solfrank.
@@ -33,214 +33,298 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mbrlabel.c,v 1.7 2000/03/15 11:56:02 fvdl Exp $");
+__RCSID("$NetBSD: mbrlabel.c,v 1.26 2005/12/28 06:03:15 christos Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
+#include <err.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <util.h>
 
 #include <sys/param.h>
+#define FSTYPENAMES
 #include <sys/disklabel.h>
-#include <sys/disklabel_mbr.h>
+#include <sys/bootblock.h>
 #include <sys/ioctl.h>
 
 #include "dkcksum.h"
+#include "extern.h"
 
-#define	FIRSTPART	0
-
-int main __P((int, char **));
-void usage __P((void));
-void getlabel __P((int));
-void setlabel __P((int));
-int getparts __P((int, int, u_int32_t, u_int32_t));
-int nbsdtype __P((int));
-u_int32_t getlong __P((void *p));
+int	main(int, char **);
+void	usage(void);
+void	getlabel(int);
+void	setlabel(int, int);
+int	getparts(int, u_int32_t, u_int32_t, int);
+u_int16_t	getshort(void *);
+u_int32_t	getlong(void *);
 
 struct disklabel label;
 
 void
-getlabel(sd)
-	int sd;
+getlabel(int sd)
 {
-	struct partition save;
 
 	if (ioctl(sd, DIOCGDINFO, &label) < 0) {
 		perror("get label");
 		exit(1);
 	}
-	save = label.d_partitions[RAW_PART];
-	memset(label.d_partitions, 0, sizeof label.d_partitions);
-	label.d_partitions[RAW_PART] = save;
 	/*
 	 * Some ports seem to not set the number of partitions
-	 * correctly, albeit they seem to set the raw partiton ok!
+	 * correctly, albeit they seem to set the raw partition ok!
 	 */
-	if (label.d_npartitions <= RAW_PART)
-		label.d_npartitions = RAW_PART + 1;
+	if (label.d_npartitions <= getrawpartition())
+		label.d_npartitions = getrawpartition() + 1;
 }
 
 void
-setlabel(sd)
-	int sd;
+setlabel(int sd, int doraw)
 {
+	int one = 1;
+
 	label.d_checksum = 0;
 	label.d_checksum = dkcksum(&label);
-	if (ioctl(sd, DIOCSDINFO, &label) < 0) {
+	if (ioctl(sd, doraw ? DIOCWDINFO : DIOCSDINFO, &label) < 0) {
 		perror("set label");
 		exit(1);
 	}
+	if (!doraw)
+		/* If we haven't written to the disk, don't discard on close */
+		ioctl(sd, DIOCKLABEL, &one);
+
 }
 
-static struct typetab {
-	int mbrtype;
-	int nbsdtype;
-} typetable[] = {
-	{ MBR_PTYPE_NETBSD, FS_BSDFFS },
-	{ MBR_PTYPE_386BSD, FS_BSDFFS },
-	{ MBR_PTYPE_FAT12, FS_MSDOS },
-	{ MBR_PTYPE_FAT16S, FS_MSDOS },
-	{ MBR_PTYPE_FAT16B, FS_MSDOS },
-	{ MBR_PTYPE_FAT32, FS_MSDOS },
-	{ MBR_PTYPE_FAT32L, FS_MSDOS },
-	{ MBR_PTYPE_FAT16L, FS_MSDOS },
-	{ MBR_PTYPE_LNXEXT2, FS_EX2FS },
-	{ 0, 0 }
-};
-
-int
-nbsdtype(type)
-	int type;
-{
-	struct typetab *tt;
-
-	for (tt = typetable; tt->mbrtype; tt++)
-		if (tt->mbrtype == type)
-			return tt->nbsdtype;
-	return FS_OTHER;
-}
-
-u_int32_t
-getlong(p)
-	void *p;
+u_int16_t
+getshort(void *p)
 {
 	unsigned char *cp = p;
 
-	return cp[0] | (cp[1] << 8) | (cp[2] << 16) | (cp[3] << 24);
+	return (cp[0] | (cp[1] << 8));
+}
+
+u_int32_t
+getlong(void *p)
+{
+	unsigned char *cp = p;
+
+	return (cp[0] | (cp[1] << 8) | (cp[2] << 16) | (cp[3] << 24));
 }
 
 int
-getparts(sd, np, off, eoff)
-	int sd;
-	int np;
-	u_int32_t off;
-	u_int32_t eoff;
+getparts(int sd, u_int32_t off, u_int32_t extoff, int verbose)
 {
-	unsigned char buf[DEV_BSIZE];
-	struct mbr_partition parts[NMBRPART];
-	off_t loff = 0;	/* XXX this nonsense shuts up GCC 2.7.2.2 */
-	int i;
+	unsigned char		buf[DEV_BSIZE];
+	struct mbr_partition	parts[MBR_PART_COUNT];
+	struct partition	npe;
+	off_t			loff;
+	int			i, j, unused, changed;
 
+	changed = 0;
 	loff = (off_t)off * DEV_BSIZE;
 
 	if (lseek(sd, loff, SEEK_SET) != loff) {
 		perror("seek label");
 		exit(1);
 	}
-	if (read(sd, buf, DEV_BSIZE) != DEV_BSIZE) {
-		perror("read label");
+	if (read(sd, buf, sizeof buf) != DEV_BSIZE) {
+		if (off != MBR_BBSECTOR)
+			perror("read label (sector is possibly out of "
+			    "range)");
+		else
+			perror("read label");
 		exit(1);
 	}
-	if (buf[0x1fe] != 0x55 || buf[0x1ff] != 0xaa)
-		return np;
-	memcpy(parts, buf + MBR_PARTOFF, sizeof parts);
-	for (i = 0; i < NMBRPART; i++) {
-		switch (parts[i].mbrp_typ) {
-		case 0:
-			/* Nothing to do */
-			break;
-		case MBR_PTYPE_EXT:
-		case MBR_PTYPE_EXT_LBA:
-		case MBR_PTYPE_EXT_LNX:
-			/* Will be handled below */
-			break;
-		default:
-			label.d_partitions[np].p_size = getlong(&parts[i].mbrp_size);
-			label.d_partitions[np].p_offset = getlong(&parts[i].mbrp_start) + off;
-			label.d_partitions[np].p_fstype = nbsdtype(parts[i].mbrp_typ);
-			switch (label.d_partitions[np].p_fstype) {
-			case FS_BSDFFS:
-				label.d_partitions[np].p_size = 16384;
-				label.d_partitions[np].p_fsize = 1024;
-				label.d_partitions[np].p_frag = 8;
-				label.d_partitions[np].p_cpg = 16;
-				break;
-#ifdef	__does_not_happen__
-			case FS_BSDLFS:
-				label.d_partitions[np].p_size = 16384;
-				label.d_partitions[np].p_fsize = 1024;
-				label.d_partitions[np].p_frag = 8;
-				label.d_partitions[np].p_sgs = XXX;
-				break;
+	if (getshort(buf + MBR_MAGIC_OFFSET) != MBR_MAGIC)
+		return (changed);
+	memcpy(parts, buf + MBR_PART_OFFSET, sizeof parts);
+
+				/* scan partition table */
+	for (i = 0; i < MBR_PART_COUNT; i++) {
+		if (parts[i].mbrp_type == 0 ||
+				/* extended partitions are handled below */
+		    MBR_IS_EXTENDED(parts[i].mbrp_type))
+			continue;
+
+		memset((void *)&npe, 0, sizeof(npe));
+		npe.p_size = getlong(&parts[i].mbrp_size);
+		npe.p_offset = getlong(&parts[i].mbrp_start) + off;
+		npe.p_fstype = xlat_mbr_fstype(parts[i].mbrp_type);
+
+				/* find existing entry, or first free slot */
+		unused = -1;	/* flag as no free slot */
+		if (verbose)
+			printf(
+			    "Found %s partition; size %u (%u MB), offset %u\n",
+			    fstypenames[npe.p_fstype],
+			    npe.p_size, npe.p_size / 2048, npe.p_offset);
+		for (j = 0; j < label.d_npartitions; j++) {
+			struct partition *lpe;
+
+			if (j == RAW_PART)
+				continue;
+			lpe = &label.d_partitions[j];
+			if (lpe->p_size == npe.p_size &&
+			    lpe->p_offset == npe.p_offset
+#ifdef notyet
+			    && (lpe->p_fstype == npe.p_fstype ||
+			     lpe->p_fstype == FS_UNUSED) */
 #endif
+			     ) {
+				if (verbose)
+					printf(
+			    "  skipping existing %s partition at slot %c.\n",
+					    fstypenames[lpe->p_fstype],
+					    j + 'a');
+				unused = -2;	/* flag as existing */
+				break;
 			}
-			np++;
-			break;
+			if (unused == -1 && lpe->p_size == 0 &&
+			    lpe->p_fstype == FS_UNUSED)
+				unused = j;
 		}
-		if (np >MAXPARTITIONS)
-			return np;
-		if (np == RAW_PART)
-			np++;
+		if (unused == -2)
+			continue;	/* entry exists, skip... */
+		if (unused == -1) {
+			if (label.d_npartitions < MAXPARTITIONS) {
+				unused = label.d_npartitions;
+				label.d_npartitions++;
+			} else {
+				printf(
+				"  WARNING: no slots free for %s partition.\n",
+				    fstypenames[npe.p_fstype]);
+				continue;
+			}
+		}
+
+		if (verbose)
+			printf("  adding %s partition to slot %c.\n",
+			    fstypenames[npe.p_fstype], unused + 'a');
+		switch (npe.p_fstype) {
+		case FS_BSDFFS:
+		case FS_APPLEUFS:
+			npe.p_size = 16384;	/* XXX */
+			npe.p_fsize = 1024;
+			npe.p_frag = 8;
+			npe.p_cpg = 16;
+			break;
+#ifdef	__does_not_happen__
+		case FS_BSDLFS:
+			npe.p_size = 16384;	/* XXX */
+			npe.p_fsize = 1024;
+			npe.p_frag = 8;
+			npe.p_sgs = XXX;
+			break;
+#endif
+		}
+		changed++;
+		label.d_partitions[unused] = npe;
 	}
-	for (i = 0; i < NMBRPART; i++) {
+
+				/* recursively scan extended partitions */
+	for (i = 0; i < MBR_PART_COUNT; i++) {
 		u_int32_t poff;
 
-		switch (parts[i].mbrp_typ) {
-		case MBR_PTYPE_EXT:
-		case MBR_PTYPE_EXT_LBA:
-		case MBR_PTYPE_EXT_LNX:
-			poff = getlong(&parts[i].mbrp_start) + eoff;
-			np = getparts(sd, np, poff, eoff ? eoff : poff);
-			break;
-		default:
-			break;
+		if (MBR_IS_EXTENDED(parts[i].mbrp_type)) {
+			poff = getlong(&parts[i].mbrp_start) + extoff;
+			changed += getparts(sd, poff,
+			    extoff ? extoff : poff, verbose);
 		}
-		if (np >MAXPARTITIONS)
-			return np;
 	}
-	return np;
+	return (changed);
 }
 
 void
-usage()
+usage(void)
 {
-	fprintf(stderr, "usage: mbrlabel rawdisk\n");
+	fprintf(stderr, "usage: %s [-fqrw] [-s sector] rawdisk\n",
+	    getprogname());
 	exit(1);
 }
 
-int
-main(argc, argv)
-	int argc;
-	char **argv;
-{
-	int sd;
-	int np;
-	char name[MAXPATHLEN];
 
-	if (argc != 2)
+int
+main(int argc, char **argv)
+{
+	int	sd, ch, changed;
+	char	*ep, name[MAXPATHLEN];
+	int	force;			/* force label update */
+	int	raw;			/* update on-disk label as well */
+	int	verbose;		/* verbose output */
+	int	write_it;		/* update in-core label if changed */
+	uint32_t sector;		/* sector that contains the MBR */
+	ulong	ulsector;
+
+	force = 0;
+	raw = 0;
+	verbose = 1;
+	write_it = 0;
+	sector = MBR_BBSECTOR;
+	while ((ch = getopt(argc, argv, "fqrs:w")) != -1) {
+		switch (ch) {
+		case 'f':
+			force = 1;
+			break;
+		case 'q':
+			verbose = 0;
+			break;
+		case 'r':
+			raw = 1;
+			break;
+		case 's':
+			errno = 0;
+			ulsector = strtoul(optarg, &ep, 10);
+			if (optarg[0] == '\0' || *ep != '\0')
+				errx(EXIT_FAILURE,
+				    "sector number (%s) incorrectly specified",
+				    optarg);
+			if ((errno == ERANGE && ulsector == ULONG_MAX) ||
+			    ulsector > UINT32_MAX)
+			    	errx(EXIT_FAILURE,
+				    "sector number (%s) out of range",
+				    optarg);
+			sector = (uint32_t)ulsector;
+			break;
+		case 'w':
+			write_it = 1;
+			break;
+		default:
+			usage();
+		}
+	}
+	argc -= optind;
+	argv += optind;
+	if (argc != 1)
 		usage();
 
-	if ((sd = opendisk(*++argv, O_RDWR, name, MAXPATHLEN, 0)) < 0) {
-		perror(*argv);
+	if ((sd = opendisk(argv[0], write_it ? O_RDWR : O_RDONLY, name,
+	    (size_t)MAXPATHLEN, 0)) < 0) {
+		perror(argv[0]);
 		exit(1);
 	}
 	getlabel(sd);
-	np = getparts(sd, FIRSTPART, MBR_BBSECTOR, 0);
-	if (np > label.d_npartitions)
-		label.d_npartitions = np;
-	setlabel(sd);
+	changed = getparts(sd, sector, 0, verbose);
+
+	if (verbose) {
+		putchar('\n');
+		showpartitions(stdout, &label, 0);
+		putchar('\n');
+	}
+	if (write_it) {
+		if (! changed && ! force)
+			printf("No change; not updating disk label.\n");
+		else {
+			if (verbose)
+				printf("Updating in-core %sdisk label.\n",
+				    raw ? "and on-disk " : "");
+			setlabel(sd, raw);
+		}
+	} else {
+		printf("Not updating disk label.\n");
+	}
 	close(sd);
-	return 0;
+	return (0);
 }

@@ -1,4 +1,4 @@
-.\"	$NetBSD: trpt.8,v 1.11 1999/03/22 18:44:13 garbled Exp $
+.\"	$NetBSD: trpt.8,v 1.16 2007/08/30 18:53:54 jnemeth Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     @(#)trpt.8	8.2 (Berkeley) 12/11/93
 .\"
-.Dd December 11, 1993
+.Dd August 30, 2007
 .Dt TRPT 8
 .Os
 .Sh NAME
@@ -59,7 +55,7 @@ when a socket is marked for
 (see
 .Xr setsockopt 2 ) ,
 and prints a readable description of these records.
-When no options are supplied, 
+When no options are supplied,
 .Nm
 prints all the trace records found in the system
 grouped according to
@@ -94,14 +90,10 @@ print the values for all timers at each
 point in the trace.
 .It Fl M Ar core
 Extract values associated with the name list from
-.Pa core
-instead of the default
-.Pa /dev/kmem .
+.Pa core .
 .It Fl N Ar system
 Extract the name list from
-.Pa system
-instead of the default
-.Pa /netbsd .
+.Pa system .
 .El
 .Pp
 The recommended use of
@@ -110,9 +102,9 @@ is as follows.
 Isolate the problem and enable debugging on the
 socket(s) involved in the connection.
 Find the address of the protocol control blocks
-associated with the sockets using the 
+associated with the sockets using the
 .Fl A
-option to 
+option to
 .Xr netstat 1 .
 Then run
 .Nm
@@ -129,32 +121,38 @@ many sockets using the debugging option, the
 option may be useful in checking to see if
 any trace records are present for the socket in
 question.
-.Sh FILES
-.Bl -tag -width /dev/kmem -compact
-.It Pa /dev/kmem
-default kernel memory
-.It Pa /netbsd
-default system namelist
+.Sh SYSCTLS
+The following sysctls are used by
+.Nm .
+The
+.Dv TCP_DEBUG
+kernel option must be enabled.
+.Pp
+.Bl -tag -width "XnetXinetXtcpXdebugXX"
+.It Li net.inet.tcp.debug
+Structure containing TCP sockets information used by
+.Nm .
+.It Li net.inet.tcp.debx
+Number of TCP debug messages.
+.El
+.Sh DIAGNOSTICS
+.Bl -tag -width Ds
+.It Sy no namelist
+When the image doesn't
+contain the proper symbols to find the trace buffer;
+others which should be self explanatory.
 .El
 .Sh SEE ALSO
 .Xr netstat 1 ,
 .Xr setsockopt 2 ,
-.Xr trsp 8
-.Sh DIAGNOSTICS
-.Bl -tag -width Ds
-.It Sy no namelist
-When the system image doesn't
-contain the proper symbols to find the trace buffer;
-others which should be self explanatory.
-.El
+.Sh HISTORY
+The
+.Nm
+command appeared in
+.Bx 4.2 .
 .Sh BUGS
 Should also print the data for each input or output,
 but this is not saved in the trace record.
 .Pp
 The output format is inscrutable and should be described
 here.
-.Sh HISTORY
-The
-.Nm
-command appeared in
-.Bx 4.2 .

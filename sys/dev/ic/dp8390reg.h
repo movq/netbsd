@@ -1,4 +1,4 @@
-/*	$NetBSD: dp8390reg.h,v 1.5 2000/02/09 15:40:24 enami Exp $	*/
+/*	$NetBSD: dp8390reg.h,v 1.8 2005/12/11 12:21:26 christos Exp $	*/
 
 /*
  * National Semiconductor DS8390 NIC register definitions.
@@ -357,7 +357,7 @@
  * algorithm to allow prioritization of nodes.
  */
 #define ED_TCR_OFST	0x10
- 
+
 /*
  * bits 5, 6, and 7 are unused/reserved
  */
@@ -511,7 +511,7 @@
 #define ED_RSR_PHY	0x20
 
 /*
- * DIS: Receiver Disabled.  Set to indicate that the receiver has enetered
+ * DIS: Receiver Disabled.  Set to indicate that the receiver has entered
  * monitor mode.  Cleared when the receiver exits monitor mode.
  */
 #define ED_RSR_DIS	0x40

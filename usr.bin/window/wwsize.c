@@ -1,4 +1,4 @@
-/*	$NetBSD: wwsize.c,v 1.6 1997/11/21 08:37:49 lukem Exp $	*/
+/*	$NetBSD: wwsize.c,v 1.9 2006/05/02 22:24:05 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)wwsize.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: wwsize.c,v 1.6 1997/11/21 08:37:49 lukem Exp $");
+__RCSID("$NetBSD: wwsize.c,v 1.9 2006/05/02 22:24:05 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,9 +48,7 @@ __RCSID("$NetBSD: wwsize.c,v 1.6 1997/11/21 08:37:49 lukem Exp $");
  * Resize a window.  Should be unattached.
  */
 int
-wwsize(w, nrow, ncol)
-	struct ww *w;
-	int nrow, ncol;
+wwsize(struct ww *w, int nrow, int ncol)
 {
 	int i, j;
 	int nline = 0;
@@ -195,7 +189,5 @@ bad:
 		wwfree(fmap, w->ww_w.t);
 	if (buf != 0)
 		wwfree((char **)buf, w->ww_b.t);
-	if (nvis != 0)
-		free((char *)(nvis + w->ww_w.t));
 	return -1;
 }

@@ -1,5 +1,5 @@
 # Country Code : City Code : City : Country
-#	$NetBSD: inter.phone,v 1.12 1999/12/05 15:08:31 jdolecek Exp $
+#	$NetBSD: inter.phone,v 1.25 2007/05/31 05:57:01 wiz Exp $
 #	@(#)inter.phone	8.1 (Berkeley) 6/9/93
 20:2:Cairo:Egypt, Arab Rep. of
 20:3:Alexandria:Egypt, Arab Rep. of
@@ -89,55 +89,104 @@
 39:95:Catania:Italy
 39:99:Taranto:Italy
 40:0:Bucharest:Romania
-41:1:Zurich:Switzerland
-41:21:Lausanne:Switzerland
 41:22:Geneva:Switzerland
 41:31:Berne:Switzerland
-41:41:Lucerne:Switzerland
+41:43:Zurich:Switzerland
+41:44:Zurich (before March 2005):Switzerland
 41:52:Winterthur:Switzerland
 41:61:Basel:Switzerland
-41:75::Liechtenstein
-43:222:Vienna:Austria
+423:::Liechtenstein
+43:1:Vienna:Austria
 43:316:Graz:Austria
-43:5222:Innsbruck:Austria
-44:171:Inner-London, Eng.:United Kingdom
-44:181:Outer-London, Eng.:United Kingdom
+43:512:Innsbruck:Austria
+43:662:Salzburg:Austria
+43:732:Linz:Austria
+44:113:Leeds, Eng.:United Kingdom
+44:114:Sheffield, Eng.:United Kingdom
+44:115:Nottingham, Eng.:United Kingdom
+44:116:Leicester, Eng.:United Kingdom
+44:117:Bristol, Eng.:United Kingdom
+44:118:Reading, Eng.:United Kingdom
 44:1203:Coventry, Eng.:United Kingdom
 44:121:Birmingham, Eng.:United Kingdom
 44:1222:Cardiff, Wales:United Kingdom
 44:1232:Belfast, N. Ire.:United Kingdom
-44:117:Bristol, Eng.:United Kingdom
 44:1274:Bradford, Eng.:United Kingdom
 44:131:Edinburgh, Scot.:United Kingdom
+44:1344:Bracknell, Eng.:United Kingdom
 44:141:Glasgow, Scot.:United Kingdom
 44:1484:Huddersfield, Eng.:United Kingdom
 44:1485:Hillington, Eng.:United Kingdom
+44:1494:High Wycombe, Eng.:United Kingdom
 44:151:Liverpool, Eng.:United Kingdom
-44:113:Leeds, Eng.:United Kingdom
-44:117:Leicester, Eng.:United Kingdom
-44:115:Nottingham, Eng.:United Kingdom
 44:161:Manchester, Eng.:United Kingdom
-44:191:Newcastle-upon-Tyne, Eng.:United Kingdom
-44:114:Sheffield, Eng.:United Kingdom
+44:1628:Maidenhead, Eng.:United Kingdom
 44:1752:Plymouth, Eng.:United Kingdom
+44:1753:Slough, Eng.:United Kingdom
 44:1782:Stoke-on-Trent, Eng.:United Kingdom
+44:1723:Scarborough, Eng.:United Kingdom
 44:1902:Wolverhampton, Eng.:United Kingdom
-45:3:Copenhagen:Denmark
-45:6:Aarhus:Denmark
-45:8:Aalborg:Denmark
-45:9:Odense:Denmark
+44:191:Newcastle-upon-Tyne, Eng.:United Kingdom
+44:207:Inner-London, Eng.:United Kingdom
+44:208:Outer-London, Eng.:United Kingdom
+45:::Denmark
 46:18:Uppsala:Sweden
 46:21:Vasteras:Sweden
 46:31:Goteborg:Sweden
 46:40:Malmo:Sweden
 46:8:Stockholm:Sweden
+46:920:Lulea:Sweden
 47:2:Oslo:Norway
 47:5:Bergen:Norway
 47:7:Trondheim:Norway
-48:12:Crakow:Poland, People's Rep. of
-48:22:Warsaw:Poland, People's Rep. of
-48:42:Lodz:Poland, People's Rep. of
-48:58:Gdansk:Poland, People's Rep. of
+48:12:Cracow:Poland
+48:13:Krosno:Poland
+48:15:Tarnobrzeg:Poland
+48:16:Przemysl:Poland
+48:17:Rzeszow:Poland
+48:18:Nowy Sacz:Poland
+48:22:Warsaw:Poland
+48:23:Ciechanow:Poland
+48:24:Plock:Poland
+48:25:Siedlce:Poland
+48:29:Ostroleka:Poland
+48:32:Katowice:Poland
+48:33:Bielsko Biala:Poland
+48:33:Czestochowa:Poland
+48:41:Kielce:Poland
+48:42:Lodz:Poland
+48:43:Sieradz:Poland
+48:44:Piotrkow:Poland
+48:46:Skierniewice:Poland
+48:48:Radom:Poland
+48:52:Bydgoszcz:Poland
+48:54:Wloclawek:Poland
+48:55:Elblag:Poland
+48:56:Torun:Poland
+48:58:Gdansk:Poland
+48:59:Slupsk:Poland
+48:61:Poznan:Poland
+48:62:Kalisz:Poland
+48:63:Konin:Poland
+48:65:Leszno:Poland
+48:67:Pila:Poland
+48:68:Zielona Gora:Poland
+48:71:Wroclaw:Poland
+48:74:Walbrzych:Poland
+48:75:Jelenia Gora:Poland
+48:76:Legnica:Poland
+48:77:Opole:Poland
+48:81:Lublin:Poland
+48:82:Chelm:Poland
+48:83:Biala Podlaska:Poland
+48:84:Zamosc:Poland
+48:85:Bialystok:Poland
+48:86:Lomza:Poland
+48:87:Suwalki:Poland
+48:89:Olsztyn:Poland
+48:91:Szczecin:Poland
+48:94:Koszalin:Poland
+48:95:Gorzow:Poland
 49:201:Essen:Germany, Fed. Rep. of
 49:202:Wuppertal:Germany, Fed. Rep. of
 49:203:Duisburg:Germany, Fed. Rep. of
@@ -154,11 +203,13 @@
 49:40:Hamburg:Germany, Fed. Rep. of
 49:421:Bremen:Germany, Fed. Rep. of
 49:511:Hannover:Germany, Fed. Rep. of
+49:651:Trier:Germany, Fed. Rep. of
 49:69:Frankfurt/Main:Germany, Fed. Rep. of
 49:711:Stuttgart:Germany, Fed. Rep. of
 49:721:Karlsruhe:Germany, Fed. Rep. of
 49:89:Munich (Muenchen):Germany, Fed. Rep. of
 49:911:Nuremberg (Nuernberg):Germany, Fed. Rep. of
+49:9131:Erlangen:Germany, Fed. Rep. of
 49:941:Regensburg:Germany, Fed. Rep. of
 51:14:Callao:Peru
 51:14:Lima:Peru
@@ -321,11 +372,46 @@
 354:1:Reykjavik:Iceland
 356:::Malta
 357:21:Nicosia:Cyprus
+358:2:Turku & Pori:Finland
+358:3:Häme:Finland
+358:5:Kymi:Finland
+358:6:Vaasa:Finland
+358:8:Oulu:Finland
 358:9:Helsinki:Finland
-358:3:Tampere:Finland
+358:13:Pohjois-Karjala:Finland
+358:14:Keski-Suomi:Finland
+358:15:Mikkeli:Finland
+358:16:Lappi:Finland
+358:17:Kuopio:Finland
+358:18:Ahvenanmaa:Finland
+358:19:Uusimaa:Finland
 359:2:Sofia:Bulgaria
 420:2:Prague:Czech Republic
-421:7:Bratislava:Slovak Republic
+421:2:Bratislava:Slovak Republic
+421:31:Dunajska Streda:Slovak Republic
+421:32:Trencin:Slovak Republic
+421:33:Trnava:Slovak Republic
+421:34:Senica:Slovak Republic
+421:35:Nove Zamky:Slovak Republic
+421:36:Levice:Slovak Republic
+421:37:Nitra:Slovak Republic
+421:38:Topolcany:Slovak Republic
+421:41:Zilina:Slovak Republic
+421:42:Povazska Bystrica:Slovak Republic
+421:43:Martin:Slovak Republic
+421:44:Liptovsky Mikulas:Slovak Republic
+421:45:Zvolen:Slovak Republic
+421:46:Prievidza:Slovak Republic
+421:47:Lucenec:Slovak Republic
+421:48:Banska Bystrica:Slovak Republic
+421:51:Presov:Slovak Republic
+421:52:Poprad:Slovak Republic
+421:53:Spisska Nova Ves:Slovak Republic
+421:54:Bardejov:Slovak Republic
+421:55:Kosice:Slovak Republic
+421:56:Michalovce:Slovak Republic
+421:57:Humenne:Slovak Republic
+421:58:Roznava:Slovak Republic
 501:2:Belize City:Belize
 501:8:Belmopan:Belize
 502:2:Guatemala City:Guatemala

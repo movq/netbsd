@@ -1,4 +1,4 @@
-/*	$NetBSD: xdr_stdio.c,v 1.14 2000/01/22 22:19:19 mycroft Exp $	*/
+/*	$NetBSD: xdr_stdio.c,v 1.17 2006/10/15 16:14:46 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -35,7 +35,7 @@
 static char *sccsid = "@(#)xdr_stdio.c 1.16 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)xdr_stdio.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: xdr_stdio.c,v 1.14 2000/01/22 22:19:19 mycroft Exp $");
+__RCSID("$NetBSD: xdr_stdio.c,v 1.17 2006/10/15 16:14:46 christos Exp $");
 #endif
 #endif
 
@@ -80,7 +80,8 @@ static const struct xdr_ops	xdrstdio_ops = {
 	xdrstdio_getpos,	/* get offset in the stream */
 	xdrstdio_setpos,	/* set offset in the stream */
 	xdrstdio_inline,	/* prime stream for inline macros */
-	xdrstdio_destroy	/* destroy stream */
+	xdrstdio_destroy,	/* destroy stream */
+	NULL,			/* xdrstdio_control */
 };
 
 /*
@@ -119,10 +120,11 @@ xdrstdio_getlong(xdrs, lp)
 	XDR *xdrs;
 	long *lp;
 {
+	u_int32_t temp;
 
-	if (fread(lp, sizeof(int32_t), 1, (FILE *)xdrs->x_private) != 1)
+	if (fread(&temp, sizeof(int32_t), 1, (FILE *)xdrs->x_private) != 1)
 		return (FALSE);
-	*lp = (long)ntohl((u_int32_t)*lp);
+	*lp = (long)ntohl(temp);
 	return (TRUE);
 }
 
@@ -131,7 +133,7 @@ xdrstdio_putlong(xdrs, lp)
 	XDR *xdrs;
 	const long *lp;
 {
-	long mycopy = (long)htonl((u_int32_t)*lp);
+	int32_t mycopy = htonl((u_int32_t)*lp);
 
 	if (fwrite(&mycopy, sizeof(int32_t), 1, (FILE *)xdrs->x_private) != 1)
 		return (FALSE);

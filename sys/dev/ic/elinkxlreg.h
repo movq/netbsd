@@ -1,4 +1,4 @@
-/*	$NetBSD: elinkxlreg.h,v 1.2 1999/09/01 21:03:03 fvdl Exp $	*/
+/*	$NetBSD: elinkxlreg.h,v 1.15 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,6 +39,8 @@
 #define EEPROM_SUBSYSID		0x18	/* Subsys id */
 #define EEPROM_MEDIA		0x19	/* Media options (90xB) */
 #define EEPROM_CHECKSUM_ELXL	0x20	/* EEPROM checksum */
+
+#define READ_EEPROM8		0x0200	/* 8 bit EEPROM read command */
 
 /*
  * Flat address space registers (outside the windows)
@@ -89,7 +84,7 @@
 
 /*
  * This is reset options for the other cards, media options for
- * the 90xB NICs. Reset options are in a seperate register for
+ * the 90xB NICs. Reset options are in a separate register for
  * the 90xB.
  */
 #define ELINK_W3_MEDIA_OPTIONS	0x08
@@ -101,6 +96,13 @@
 #	define ELINK_MEDIACAP_10BASE5	0x0020
 #	define ELINK_MEDIACAP_MII	0x0040
 #	define ELINK_MEDIACAP_10BASEFL	0x0080
+
+/*
+ * Reset options for the 90xB
+ */
+#define ELINK_W2_RESET_OPTIONS	0x0c
+#	define ELINK_RESET_OPT_LEDPOLAR	0x0010
+#	define ELINK_RESET_OPT_PHYPOWER	0x4000
 
 /*
  * Window 4, offset 8 is defined for MII/PHY access for EtherLink XL
@@ -115,7 +117,7 @@
  * Counter in window 4 for packets with a bad start-of-stream delimiter/
  */
 #define ELINK_W4_BADSSD		0x0c
-#define ELINK_W4_UBYTESOK	0x0c
+#define ELINK_W4_UBYTESOK	0x0d
 
 /*
  * Define for extra multicast hash filter bit implemented in the 90xB
@@ -125,13 +127,13 @@
 /*
  * Defines for the interrupt status register, only for the 90x[B]
  */
-#define S_HOST_ERROR		0x0002
-#define S_LINK_EVENT		0x0100
-#define S_DN_COMPLETE		0x0200
-#define S_UP_COMPLETE		0x0400
+#define HOST_ERROR		0x0002
+#define LINK_EVENT		0x0100
+#define DN_COMPLETE		0x0200
+#define UP_COMPLETE		0x0400
 
-#define S_MASK \
-    (S_HOST_ERROR | S_TX_COMPLETE | S_UPD_STATS | S_DN_COMPLETE | S_UP_COMPLETE)
+#define XL_WATCHED_INTERRUPTS \
+    (HOST_ERROR | TX_COMPLETE | UPD_STATS | DN_COMPLETE | UP_COMPLETE)
 
 
 /*
@@ -142,7 +144,7 @@
 #define ELINK_W7_VLANMASK	0x00	/* 90xB only */
 #define ELINK_W7_VLANTYPE	0x04	/* 90xB only */
 #define ELINK_W7_TIMER		0x0a	/* 90x only */
-#define ELINK_W7_TXSTATUS	0x0b	/* 90x only */
+#define ELINK_W7_TX_STATUS	0x0b	/* 90x only */
 #define ELINK_W7_POWEREVENT	0x0c	/* 90xB only */
 #define ELINK_W7_INTSTATUS	0x0e
 
@@ -155,6 +157,7 @@
 #define ELINK_DNUNSTALL		0x3003
 #define ELINK_TXRECLTHRESH	0xc000
 #define ELINK_TXSTARTTHRESH	0x9800
+#define ELINK_CLEARHASHFILBIT	0xc800
 #define ELINK_SETHASHFILBIT	0xcc00
 
 /*
@@ -203,8 +206,8 @@ struct ex_fraghdr {
 #define EX_FR_LENMASK	0x00001fff	/* mask for length in fr_len field */
 #define EX_FR_LAST	0x80000000	/* indicates last fragment */
 
-#define EX_NDPD		128
-#define EX_NUPD		64
+#define EX_NDPD		256
+#define EX_NUPD		128
 
 /*
  * Note: the number of receive fragments in an UPD is 1, since we're
@@ -258,8 +261,20 @@ struct ex_txdesc {
 	struct ex_dpd *tx_dpd;
 };
 
+/*
+ * hardware ip4csum-tx on ex(4) sometimes seems to set wrong IP checksums
+ * if the TX IP packet length is 21 or 22 bytes which requires autopadding.
+ * To avoid this bug, we have to pad such very short packets manually.
+ */
+#define EX_IP4CSUMTX_MINLEN	22
+#define EX_IP4CSUMTX_PADLEN	(ETHER_HDR_LEN + EX_IP4CSUMTX_MINLEN)
+
+#define DPDMEM_SIZE		(sizeof(struct ex_dpd) * EX_NDPD)
+#define DPDMEMPAD_OFF		DPDMEM_SIZE
+#define DPDMEMPAD_DMADDR(sc)	((sc)->sc_dpddma + DPDMEMPAD_OFF)
+
 #define DPD_DMADDR(s,t) \
-	((s)->sc_dpddma + ((caddr_t)((t)->tx_dpd) - (caddr_t)((s)->sc_dpd)))
+	((s)->sc_dpddma + ((char *)((t)->tx_dpd) - (char *)((s)->sc_dpd)))
 
 /*
  * Frame Start Header bitfields.
@@ -295,6 +310,8 @@ struct ex_txdesc {
 
 /*
  * upd_pktstatus bitfields.
+ * The *CKSUMERR fields are only valid if the matching *CHECKED field
+ * is set.
  */
 #define EX_UPD_PKTLENMASK	0x00001fff	/* 12:0 -> packet length */
 #define EX_UPD_ERROR		0x00004000	/* rcv error */
@@ -309,5 +326,9 @@ struct ex_txdesc {
 #define EX_UPD_IPCKSUMERR	0x02000000	/* IP cksum error (90xB) */
 #define EX_UPD_TCPCKSUMERR	0x04000000	/* TCP cksum error (90xB) */
 #define EX_UPD_UDPCKSUMERR	0x08000000	/* UDP cksum error (90xB) */
+#define EX_UPD_IPCHECKED	0x20000000	/* IP cksum done */
+#define EX_UPD_TCPCHECKED	0x40000000	/* TCP cksum done */
+#define EX_UPD_UDPCHECKED	0x80000000	/* UDP cksum done */
 
 #define EX_UPD_ERR		0x001f4000	/* Errors we check for */
+#define EX_UPD_ERR_VLAN		0x000f0000	/* same for 802.1q */

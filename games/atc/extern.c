@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.c,v 1.6 1998/11/10 13:43:30 hubertf Exp $	*/
+/*	$NetBSD: extern.c,v 1.10 2008/01/31 05:19:44 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -50,7 +46,7 @@
 #if 0
 static char sccsid[] = "@(#)extern.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: extern.c,v 1.6 1998/11/10 13:43:30 hubertf Exp $");
+__RCSID("$NetBSD: extern.c,v 1.10 2008/01/31 05:19:44 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,11 +54,14 @@ __RCSID("$NetBSD: extern.c,v 1.6 1998/11/10 13:43:30 hubertf Exp $");
 
 char		GAMES[] =	"Game_List";
 
-int		clck, safe_planes, start_time, test_mode;
+int		clck, safe_planes, test_mode;
+time_t		start_time;
 
-const char	*file;
+const char	*filename;
 
+#if 0
 FILE		*filein, *fileout;
+#endif
 
 C_SCREEN		screen, *sp = &screen;
 

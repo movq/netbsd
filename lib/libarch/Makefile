@@ -1,10 +1,11 @@
-#	$NetBSD: Makefile,v 1.14 2000/02/26 19:39:35 thorpej Exp $
+#	$NetBSD: Makefile,v 1.21 2008/10/26 07:05:33 mrg Exp $
 
-ARCHDIRS= alpha arm32 i386 m68k
+# These should always be a MACHINE_CPU value
+ARCHDIRS= alpha arm i386 m68k sparc x86_64
 
 .for arch in ${ARCHDIRS}
-.include "${.CURDIR}/${arch:C/mipse[bl]/mips/}/Makefile.inc"
-.PATH:	${.CURDIR}/${arch:C/mipse[bl]/mips/}
+.include "${.CURDIR}/${arch}/Makefile.inc"
+.PATH:	${.CURDIR}/${arch}
 .endfor
 
 OBJS+= ${ASM}
@@ -13,11 +14,16 @@ CLEANFILES+= ${ASM} ${POBJS}
 
 # Build the library if SRCS is now defined ...
 .if defined(SRCS)
-LIB=    ${MACHINE_ARCH:C/mipse[bl]/mips/}
-SHLIB_VERSION_FILE= ${.CURDIR}/${MACHINE_ARCH:C/mipse[bl]/mips/}/shlib_version
+.if defined(LD32DIR) && ${LD32DIR} != "none"
+LIB=	${LD32DIR}
+.else
+LIB=	${MACHINE_CPU}
+.endif
+SHLIB_VERSION_FILE= ${.CURDIR}/${LIB}/shlib_version
 
 .include <bsd.lib.mk>
 .else
 # ... otherwise just build the manpages
 .include <bsd.man.mk>
 .endif
+.include <bsd.subdir.mk>

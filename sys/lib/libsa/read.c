@@ -1,4 +1,4 @@
-/*	$NetBSD: read.c,v 1.10 2000/03/30 12:19:48 augustss Exp $	*/
+/*	$NetBSD: read.c,v 1.15 2007/12/02 04:59:26 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,30 +32,30 @@
  * SUCH DAMAGE.
  *
  *	@(#)read.c	8.1 (Berkeley) 6/11/93
- *  
+ *
  *
  * Copyright (c) 1989, 1990, 1991 Carnegie Mellon University
  * All Rights Reserved.
  *
  * Author: Alessandro Forin
- * 
+ *
  * Permission to use, copy, modify and distribute this software and its
  * documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
+ *
  * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
  * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND FOR
  * ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
- * 
+ *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
  *  School of Computer Science
  *  Carnegie Mellon University
  *  Pittsburgh PA 15213-3890
- * 
+ *
  * any improvements or extensions that they make and grant Carnegie the
  * rights to redistribute these changes.
  */
@@ -69,21 +65,18 @@
 
 ssize_t
 #ifndef __INTERNAL_LIBSA_CREAD
-read(fd, dest, bcount)
+read(int fd, void *dest, size_t bcount)
 #else
-oread(fd, dest, bcount)
+oread(int fd, void *dest, size_t bcount)
 #endif
-	int fd;
-	void *dest;
-	size_t bcount;
 {
 	struct open_file *f = &files[fd];
 	size_t resid;
 
 #if !defined(LIBSA_NO_FD_CHECKING)
-	if ((unsigned)fd >= SOPEN_MAX || !(f->f_flags & F_READ)) {
+	if ((unsigned int)fd >= SOPEN_MAX || !(f->f_flags & F_READ)) {
 		errno = EBADF;
-		return (-1);
+		return -1;
 	}
 #endif
 #if !defined(LIBSA_NO_RAW_ACCESS)
@@ -94,13 +87,13 @@ oread(fd, dest, bcount)
 		errno = DEV_STRATEGY(f->f_dev)(f->f_devdata, F_READ,
 			btodb(f->f_offset), bcount, dest, &resid);
 		if (errno)
-			return (-1);
+			return -1;
 		f->f_offset += resid;
-		return (resid);
+		return resid;
 	}
 #endif
 	resid = bcount;
 	if ((errno = FS_READ(f->f_ops)(f, dest, bcount, &resid)))
-		return (-1);
+		return -1;
 	return (ssize_t)(bcount - resid);
 }

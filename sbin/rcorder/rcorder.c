@@ -1,8 +1,31 @@
-/*	$NetBSD: rcorder.c,v 1.1 1999/11/23 05:28:22 mrg Exp $	*/
+/*	$NetBSD: rcorder.c,v 1.16 2008/08/03 07:49:46 lukem Exp $	*/
 
 /*
  * Copyright (c) 1998, 1999 Matthew R. Green
  * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
  * Copyright (c) 1998
  * 	Perry E. Metzger.  All rights reserved.
  *
@@ -34,6 +57,7 @@
  */
 
 #include <sys/types.h>
+#include <sys/stat.h>
 
 #include <err.h>
 #include <stdio.h>
@@ -42,8 +66,6 @@
 #include <unistd.h>
 #include <util.h>
 
-#include "ealloc.h"
-#include "sprite.h"
 #include "hash.h"
 
 #ifdef DEBUG
@@ -63,17 +85,19 @@ int debug = 0;
 #define PROVIDES_LEN	(sizeof(PROVIDES_STR) - 1)
 #define BEFORE_STR	"# BEFORE:"
 #define BEFORE_LEN	(sizeof(BEFORE_STR) - 1)
+#define KEYWORD_STR	"# KEYWORD:"
+#define KEYWORD_LEN	(sizeof(KEYWORD_STR) - 1)
+#define KEYWORDS_STR	"# KEYWORDS:"
+#define KEYWORDS_LEN	(sizeof(KEYWORDS_STR) - 1)
 
 int exit_code;
 int file_count;
 char **file_list;
 
-typedef int bool;
-#define TRUE 1
-#define FALSE 0
-typedef bool flag;
-#define SET TRUE
-#define RESET FALSE
+enum {
+	RESET	= 0,
+	SET	= 1,
+};
 
 Hash_Table provide_hash_s, *provide_hash;
 
@@ -81,11 +105,11 @@ typedef struct provnode provnode;
 typedef struct filenode filenode;
 typedef struct f_provnode f_provnode;
 typedef struct f_reqnode f_reqnode;
-typedef struct beforelist beforelist;
+typedef struct strnodelist strnodelist;
 
 struct provnode {
-	flag		head;
-	flag		in_progress;
+	int		head;
+	int		in_progress;
 	filenode	*fnode;
 	provnode	*next, *last;
 };
@@ -100,47 +124,52 @@ struct f_reqnode {
 	f_reqnode	*next;
 };
 
+struct strnodelist {
+	filenode	*node;
+	strnodelist	*next;
+	char		s[1];
+};
+
 struct filenode {
 	char		*filename;
-	flag		in_progress;
+	int		in_progress;
 	filenode	*next, *last;
 	f_reqnode	*req_list;
 	f_provnode	*prov_list;
+	strnodelist	*keyword_list;
 };
-
-struct beforelist {
-	filenode	*node;
-	char		*s;
-	beforelist	*next;
-} *bl_list = NULL;
 
 filenode fn_head_s, *fn_head;
 
-void do_file __P((filenode *fnode));
-void satisfy_req __P((f_reqnode *rnode, char *filename));
-void crunch_file __P((char *));
-void parse_require __P((filenode *, char *));
-void parse_provide __P((filenode *, char *));
-void parse_before __P((filenode *, char *));
-filenode *filenode_new __P((char *));
-void add_require __P((filenode *, char *));
-void add_provide __P((filenode *, char *));
-void add_before __P((filenode *, char *));
-void insert_before __P((void));
-Hash_Entry *make_fake_provision __P((filenode *));
-void crunch_all_files __P((void));
-void initialize __P((void));
-void generate_ordering __P((void));
-int main __P((int, char *[]));
+strnodelist *bl_list;
+strnodelist *keep_list;
+strnodelist *skip_list;
+
+void do_file(filenode *fnode);
+void strnode_add(strnodelist **, char *, filenode *);
+int skip_ok(filenode *fnode);
+int keep_ok(filenode *fnode);
+void satisfy_req(f_reqnode *rnode, char *);
+void crunch_file(char *);
+void parse_line(filenode *, char *, void (*)(filenode *, char *));
+filenode *filenode_new(char *);
+void add_require(filenode *, char *);
+void add_provide(filenode *, char *);
+void add_before(filenode *, char *);
+void add_keyword(filenode *, char *);
+void insert_before(void);
+Hash_Entry *make_fake_provision(filenode *);
+void crunch_all_files(void);
+void initialize(void);
+void generate_ordering(void);
+int main(int, char *[]);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int ch;
 
-	while ((ch = getopt(argc, argv, "d")) != -1)
+	while ((ch = getopt(argc, argv, "dk:s:")) != -1)
 		switch (ch) {
 		case 'd':
 #ifdef DEBUG
@@ -148,6 +177,12 @@ main(argc, argv)
 #else
 			warnx("debugging not compiled in, -d ignored");
 #endif
+			break;
+		case 'k':
+			strnode_add(&keep_list, optarg, 0);
+			break;
+		case 's':
+			strnode_add(&skip_list, optarg, 0);
 			break;
 		default:
 			/* XXX should crunch it? */
@@ -174,13 +209,26 @@ main(argc, argv)
  * initialise various variables.
  */
 void
-initialize()
+initialize(void)
 {
 
 	fn_head = &fn_head_s;
 
 	provide_hash = &provide_hash_s;
 	Hash_InitTable(provide_hash, file_count);
+}
+
+/* generic function to insert a new strnodelist element */
+void
+strnode_add(strnodelist **listp, char *s, filenode *fnode)
+{
+	strnodelist *ent;
+
+	ent = emalloc(sizeof *ent + strlen(s));
+	ent->node = fnode;
+	strcpy(ent->s, s);
+	ent->next = *listp;
+	*listp = ent;
 }
 
 /*
@@ -194,8 +242,7 @@ initialize()
  * fill in the bits, and put it in the filenode linked list
  */
 filenode *
-filenode_new(filename)
-	char *filename;
+filenode_new(char *filename)
 {
 	filenode *temp;
 
@@ -204,6 +251,7 @@ filenode_new(filename)
 	temp->filename = estrdup(filename);
 	temp->req_list = NULL;
 	temp->prov_list = NULL;
+	temp->keyword_list = NULL;
 	temp->in_progress = RESET;
 	/*
 	 * link the filenode into the list of filenodes.
@@ -219,12 +267,10 @@ filenode_new(filename)
 }
 
 /*
- * add a requirement a filenode.
+ * add a requirement to a filenode.
  */
 void
-add_require(fnode, s)
-	filenode *fnode;
-	char *s;
+add_require(filenode *fnode, char *s)
 {
 	Hash_Entry *entry;
 	f_reqnode *rnode;
@@ -244,9 +290,7 @@ add_require(fnode, s)
  * have a head node, create one here.
  */
 void
-add_provide(fnode, s)
-	filenode *fnode;
-	char *s;
+add_provide(filenode *fnode, char *s)
 {
 	Hash_Entry *entry;
 	f_provnode *f_pnode;
@@ -264,10 +308,46 @@ add_provide(fnode, s)
 		head->fnode = NULL;
 		head->last = head->next = NULL;
 		Hash_SetValue(entry, head);
-	} else if (new == 0) {
-		warnx("file `%s' provides `%s'.", fnode->filename, s);
-		warnx("\tpreviously seen in `%s'.", head->next->fnode->filename);
 	}
+#if 0
+	/*
+	 * Don't warn about this.  We want to be able to support
+	 * scripts that do two complex things:
+	 *
+	 *	- Two independent scripts which both provide the
+	 *	  same thing.  Both scripts must be executed in
+	 *	  any order to meet the barrier.  An example:
+	 *
+	 *		Script 1:
+	 *
+	 *			PROVIDE: mail
+	 *			REQUIRE: LOGIN
+	 *
+	 *		Script 2:
+	 *
+	 *			PROVIDE: mail
+	 *			REQUIRE: LOGIN
+	 *
+	 * 	- Two interdependent scripts which both provide the
+	 *	  same thing.  Both scripts must be executed in
+	 *	  graph order to meet the barrier.  An example:
+	 *
+	 *		Script 1:
+	 *
+	 *			PROVIDE: nameservice dnscache
+	 *			REQUIRE: SERVERS
+	 *
+	 *		Script 2:
+	 *
+	 *			PROVIDE: nameservice nscd
+	 *			REQUIRE: dnscache
+	 */
+	else if (new == 0) {
+		warnx("file `%s' provides `%s'.", fnode->filename, s);
+		warnx("\tpreviously seen in `%s'.",
+		    head->next->fnode->filename);
+	}
+#endif
 
 	pnode = emalloc(sizeof(*pnode));
 	pnode->head = RESET;
@@ -289,65 +369,34 @@ add_provide(fnode, s)
  * put the BEFORE: lines to a list and handle them later.
  */
 void
-add_before(fnode, s)
-	filenode *fnode;
-	char *s;
+add_before(filenode *fnode, char *s)
 {
-	beforelist *bf_ent;
 
-	bf_ent = emalloc(sizeof *bf_ent);
-	bf_ent->node = fnode;
-	bf_ent->s = s;
-	bf_ent->next = bl_list;
-	bl_list = bf_ent;
+	strnode_add(&bl_list, s, fnode);
 }
 
 /*
- * loop over the rest of a REQUIRE line, giving each word to
- * add_require() to do the real work.
+ * add a key to a filenode.
  */
 void
-parse_require(node, buffer)
-	filenode *node;
-	char *buffer;
+add_keyword(filenode *fnode, char *s)
+{
+
+	strnode_add(&fnode->keyword_list, s, fnode);
+}
+
+/*
+ * loop over the rest of a line, giving each word to
+ * add_func() to do the real work.
+ */
+void
+parse_line(filenode *node, char *buffer, void (*add_func)(filenode *, char *))
 {
 	char *s;
 	
 	while ((s = strsep(&buffer, " \t\n")) != NULL)
 		if (*s != '\0')
-			add_require(node, s);
-}
-
-/*
- * loop over the rest of a PROVIDE line, giving each word to
- * add_provide() to do the real work.
- */
-void
-parse_provide(node, buffer)
-	filenode *node;
-	char *buffer;
-{
-	char *s;
-	
-	while ((s = strsep(&buffer, " \t\n")) != NULL)
-		if (*s != '\0')
-			add_provide(node, s);
-}
-
-/*
- * loop over the rest of a BEFORE line, giving each word to
- * add_before() to do the real work.
- */
-void
-parse_before(node, buffer)
-	filenode *node;
-	char *buffer;
-{
-	char *s;
-	
-	while ((s = strsep(&buffer, " \t\n")) != NULL)
-		if (*s != '\0')
-			add_before(node, s);
+			(*add_func)(node, s);
 }
 
 /*
@@ -355,19 +404,32 @@ parse_before(node, buffer)
  * for provision and requirement lines, building the graphs as needed.
  */
 void
-crunch_file(filename)
-	char *filename;
+crunch_file(char *filename)
 {
 	FILE *fp;
 	char *buf;
-	int require_flag, provide_flag, before_flag, directive_flag;
+	int require_flag, provide_flag, before_flag, keyword_flag;
+	enum { BEFORE_PARSING, PARSING, PARSING_DONE } state;
 	filenode *node;
 	char delims[3] = { '\\', '\\', '\0' };
-
-	directive_flag = 0;
+	struct stat st;
 
 	if ((fp = fopen(filename, "r")) == NULL) {
 		warn("could not open %s", filename);
+		return;
+	}
+
+	if (fstat(fileno(fp), &st) == -1) {
+		warn("could not stat %s", filename);
+		fclose(fp);
+		return;
+	}
+
+	if (!S_ISREG(st.st_mode)) {
+#if 0
+		warnx("%s is not a file", filename);
+#endif
+		fclose(fp);
 		return;
 	}
 
@@ -377,8 +439,9 @@ crunch_file(filename)
 	 * we don't care about length, line number, don't want # for comments,
 	 * and have no flags.
 	 */
-	while ((buf = fparseln(fp, NULL, NULL, delims, 0))) {
-		require_flag = provide_flag = before_flag = 0;
+	for (state = BEFORE_PARSING; state != PARSING_DONE &&
+	    (buf = fparseln(fp, NULL, NULL, delims, 0)) != NULL; free(buf)) {
+		require_flag = provide_flag = before_flag = keyword_flag = 0;
 		if (strncmp(REQUIRE_STR, buf, REQUIRE_LEN) == 0)
 			require_flag = REQUIRE_LEN;
 		else if (strncmp(REQUIRES_STR, buf, REQUIRES_LEN) == 0)
@@ -389,22 +452,31 @@ crunch_file(filename)
 			provide_flag = PROVIDES_LEN;
 		else if (strncmp(BEFORE_STR, buf, BEFORE_LEN) == 0)
 			before_flag = BEFORE_LEN;
+		else if (strncmp(KEYWORD_STR, buf, KEYWORD_LEN) == 0)
+			keyword_flag = KEYWORD_LEN;
+		else if (strncmp(KEYWORDS_STR, buf, KEYWORDS_LEN) == 0)
+			keyword_flag = KEYWORDS_LEN;
+		else {
+			if (state == PARSING)
+				state = PARSING_DONE;
+			continue;
+		}
 
+		state = PARSING;
 		if (require_flag)
-			parse_require(node, buf + require_flag);
-
-		if (provide_flag)
-			parse_provide(node, buf + provide_flag);
-
-		if (before_flag)
-			parse_before(node, buf + before_flag);
+			parse_line(node, buf + require_flag, add_require);
+		else if (provide_flag)
+			parse_line(node, buf + provide_flag, add_provide);
+		else if (before_flag)
+			parse_line(node, buf + before_flag,  add_before);
+		else if (keyword_flag)
+			parse_line(node, buf + keyword_flag, add_keyword);
 	}
 	fclose(fp);
 }
 
 Hash_Entry *
-make_fake_provision(node)
-	filenode *node;
+make_fake_provision(filenode *node)
 {
 	Hash_Entry *entry;
 	f_provnode *f_pnode;
@@ -450,12 +522,12 @@ make_fake_provision(node)
  * that provisions filenode for P.
  */
 void
-insert_before()
+insert_before(void)
 {
 	Hash_Entry *entry, *fake_prov_entry;
 	provnode *pnode;
 	f_reqnode *rnode;
-	beforelist *bl;
+	strnodelist *bl;
 	int new;
 	
 	while (bl_list != NULL) {
@@ -465,7 +537,8 @@ insert_before()
 
 		entry = Hash_CreateEntry(provide_hash, bl_list->s, &new);
 		if (new == 1)
-			warnx("file `%s' is before unknown provision `%s'", bl_list->node->filename, bl_list->s);
+			warnx("file `%s' is before unknown provision `%s'",
+			    bl_list->node->filename, bl_list->s);
 
 		for (pnode = Hash_GetValue(entry); pnode; pnode = pnode->next) {
 			if (pnode->head)
@@ -488,7 +561,7 @@ insert_before()
  * lines into graph(s).
  */
 void
-crunch_all_files()
+crunch_all_files(void)
 {
 	int i;
 	
@@ -513,9 +586,7 @@ crunch_all_files()
  * provision.
  */
 void
-satisfy_req(rnode, filename)
-	f_reqnode *rnode;
-	char *filename;
+satisfy_req(f_reqnode *rnode, char *filename)
 {
 	Hash_Entry *entry;
 	provnode *head;
@@ -555,15 +626,47 @@ satisfy_req(rnode, filename)
 		do_file(head->next->fnode);
 }
 
+int
+skip_ok(filenode *fnode)
+{
+	strnodelist *s;
+	strnodelist *k;
+
+	for (s = skip_list; s; s = s->next)
+		for (k = fnode->keyword_list; k; k = k->next)
+			if (strcmp(k->s, s->s) == 0)
+				return (0);
+
+	return (1);
+}
+
+int
+keep_ok(filenode *fnode)
+{
+	strnodelist *s;
+	strnodelist *k;
+
+	for (s = keep_list; s; s = s->next)
+		for (k = fnode->keyword_list; k; k = k->next)
+			if (strcmp(k->s, s->s) == 0)
+				return (1);
+
+	/* an empty keep_list means every one */
+	return (!keep_list);
+}
+
 /*
  * given a filenode, we ensure we are not a cyclic graph.  if this
  * is ok, we loop over the filenodes requirements, calling satisfy_req()
  * for each of them.. once we have done this, remove this filenode
  * from each provision table, as we are now done.
+ *
+ * NOTE: do_file() is called recursively from several places and cannot
+ * safely free() anything related to items that may be recursed on.
+ * Circular dependancies will cause problems if we do.
  */
 void
-do_file(fnode)
-	filenode *fnode;
+do_file(filenode *fnode)
 {
 	f_reqnode *r, *r_tmp;
 	f_provnode *p, *p_tmp;
@@ -595,7 +698,9 @@ do_file(fnode)
 		r_tmp = r;
 		satisfy_req(r, fnode->filename);
 		r = r->next;
+#if 0
 		free(r_tmp);
+#endif
 	}
 	fnode->req_list = NULL;
 
@@ -623,7 +728,7 @@ do_file(fnode)
 	DPRINTF((stderr, "next do: "));
 
 	/* if we were already in progress, don't print again */
-	if (was_set == 0)
+	if (was_set == 0 && skip_ok(fnode) && keep_ok(fnode))
 		printf("%s\n", fnode->filename);
 	
 	if (fnode->next != NULL) {
@@ -634,12 +739,14 @@ do_file(fnode)
 	}
 
 	DPRINTF((stderr, "nuking %s\n", fnode->filename));
+#if 0
 	free(fnode->filename);
 	free(fnode);
+#endif
 }
 
 void
-generate_ordering()
+generate_ordering(void)
 {
 
 	/*

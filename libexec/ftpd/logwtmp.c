@@ -1,4 +1,4 @@
-/*	$NetBSD: logwtmp.c,v 1.14 2000/03/05 06:12:19 lukem Exp $	*/
+/*	$NetBSD: logwtmp.c,v 1.25 2006/09/23 16:03:50 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,7 +36,7 @@
 #if 0
 static char sccsid[] = "@(#)logwtmp.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: logwtmp.c,v 1.14 2000/03/05 06:12:19 lukem Exp $");
+__RCSID("$NetBSD: logwtmp.c,v 1.25 2006/09/23 16:03:50 xtraeme Exp $");
 #endif
 #endif /* not lint */
 
@@ -48,15 +44,22 @@ __RCSID("$NetBSD: logwtmp.c,v 1.14 2000/03/05 06:12:19 lukem Exp $");
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 #include <fcntl.h>
-#include <setjmp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <syslog.h>
 #include <unistd.h>
+#ifdef SUPPORT_UTMP
 #include <utmp.h>
+#endif
+#ifdef SUPPORT_UTMPX
+#include <utmpx.h>
+#endif
+#include <util.h>
 
 #ifdef KERBEROS5
 #include <krb5/krb5.h>
@@ -64,7 +67,16 @@ __RCSID("$NetBSD: logwtmp.c,v 1.14 2000/03/05 06:12:19 lukem Exp $");
 
 #include "extern.h"
 
+#ifdef SUPPORT_UTMP
 static int fd = -1;
+
+void
+ftpd_initwtmp(void)
+{
+	const char *wf = _PATH_WTMP;
+	if ((fd = open(wf, O_WRONLY|O_APPEND, 0)) == -1)
+		syslog(LOG_ERR, "Cannot open `%s' (%m)", wf);
+}
 
 /*
  * Modified version of logwtmp that holds wtmp file open
@@ -72,13 +84,12 @@ static int fd = -1;
  * after login, but before logout).
  */
 void
-logwtmp(line, name, host)
-	const char *line, *name, *host;
+ftpd_logwtmp(const char *line, const char *name, const char *host)
 {
 	struct utmp ut;
 	struct stat buf;
 
-	if (fd < 0 && (fd = open(_PATH_WTMP, O_WRONLY|O_APPEND, 0)) < 0)
+	if (fd < 0)
 		return;
 	if (fstat(fd, &buf) == 0) {
 		(void)strncpy(ut.ut_line, line, sizeof(ut.ut_line));
@@ -90,3 +101,45 @@ logwtmp(line, name, host)
 			(void)ftruncate(fd, buf.st_size);
 	}
 }
+#endif
+
+#ifdef SUPPORT_UTMPX
+static int fdx = -1;
+
+void
+ftpd_initwtmpx(void)
+{
+	const char *wf = _PATH_WTMPX;
+	if ((fdx = open(wf, O_WRONLY|O_APPEND, 0)) == -1)
+		syslog(LOG_ERR, "Cannot open `%s' (%m)", wf);
+}
+
+void
+ftpd_logwtmpx(const char *line, const char *name, const char *host,
+    struct sockinet *haddr, int status, int utx_type)
+{
+	struct utmpx ut;
+	struct stat buf;
+	
+	if (fdx < 0) 
+		return;
+	if (fstat(fdx, &buf) == 0) {
+		(void)strncpy(ut.ut_line, line, sizeof(ut.ut_line));
+		(void)strncpy(ut.ut_name, name, sizeof(ut.ut_name));
+		(void)strncpy(ut.ut_host, host, sizeof(ut.ut_host));
+		if (haddr)
+			(void)memcpy(&ut.ut_ss, &haddr->si_su, haddr->su_len);
+		else
+			(void)memset(&ut.ut_ss, 0, sizeof(ut.ut_ss));
+		ut.ut_type = utx_type;
+		if (WIFEXITED(status))
+			ut.ut_exit.e_exit = (uint16_t)WEXITSTATUS(status);
+		if (WIFSIGNALED(status))
+		ut.ut_exit.e_termination = (uint16_t)WTERMSIG(status);
+		(void)gettimeofday(&ut.ut_tv, NULL);
+		if(write(fdx, (char *)&ut, sizeof(struct utmpx)) !=
+		    sizeof(struct utmpx))
+			(void)ftruncate(fdx, buf.st_size);
+	}
+}
+#endif

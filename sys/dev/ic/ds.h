@@ -1,4 +1,4 @@
-/*	$NetBSD: ds.h,v 1.3 1999/02/16 23:34:13 is Exp $	*/
+/*	$NetBSD: ds.h,v 1.9 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 /*
- * Definitions for access to Dallas Semiconductor chips which attach to 
+ * Definitions for access to Dallas Semiconductor chips which attach to
  * the same 1-wire bus as the DS2404 RTC.
  */
 
@@ -46,6 +39,7 @@
 
 /* Family codes (low byte of the ROM) */
 
+#define DS_FAMILY_2401	0x01	/* DS2401 Silicon Serial Number */
 #define DS_FAMILY_2404	0x04	/* DS2404 Econoram Time Chip */
 
 /*
@@ -65,13 +59,13 @@
 
 /*
  * Memory access codes. These are available from the 1- or 3-wire bus, and
- * but you must use one of the ROM access codes first, if using the 1-wire 
+ * but you must use one of the ROM access codes first, if using the 1-wire
  * bus.
  *
  * You can read from any starting address up to the end of the chip, or
  * abort the read with a reset pulse.
  * You first write 2-32 bytes beginning some address to the scratchpad.
- * Starting address and final byte stream length are remembered by the 
+ * Starting address and final byte stream length are remembered by the
  * chip. After reading data and address/length back from the scratchpad,
  * and verifying the information, you can issue the copy scratchpad command
  * to copy the written parts of the scratchpad to the corresponding parts
@@ -79,7 +73,7 @@
  */
 
 #define DS_MEM_WRITE_SCRATCH	0x0f	/* 0F low-ads high-ads data ... */
-#define DS_MEM_READ_SCRATCH	0xaa	/* AA -> low-ads high-ads end-ofs 
+#define DS_MEM_READ_SCRATCH	0xaa	/* AA -> low-ads high-ads end-ofs
 					 * data ... */
 #define DS_MEM_COPY_SCRATCH	0x55	/* 55 low-ads high-ads end-ofs */
 #define DS_MEM_READ_MEMORY	0xf0	/* F0 low-ads high-ads -> data ...*/
@@ -89,21 +83,21 @@
  */
 
 struct ds_handle {
-	int (*ds_read_bit) __P((void *));
-	void (*ds_write_bit) __P((void *, int));
-	void (*ds_reset) __P((void *));
+	int (*ds_read_bit)(void *);
+	void (*ds_write_bit)(void *, int);
+	void (*ds_reset)(void *);
 	void *ds_hw_handle;
 };
 
 /*
- * Functions for access to Dallas Semiconductor chips which attach to 
+ * Functions for access to Dallas Semiconductor chips which attach to
  * the same 1-wire bus as the DS2404 RTC.
  */
 
-static u_int8_t ds_read_byte __P((struct ds_handle *));
-static void ds_write_byte __P((struct ds_handle *, unsigned int));
+static u_int8_t ds_read_byte(struct ds_handle *);
+static void ds_write_byte(struct ds_handle *, unsigned int);
 
-static inline u_int8_t
+static __inline u_int8_t
 ds_read_byte(dsh)
 	struct ds_handle *dsh;
 {
@@ -116,7 +110,7 @@ ds_read_byte(dsh)
 	return buf;
 }
 
-static inline void
+static __inline void
 ds_write_byte(dsh, b)
 	struct ds_handle *dsh;
 	unsigned int b;

@@ -1,4 +1,4 @@
-/*	$NetBSD: keyboard.c,v 1.10 1999/12/20 23:11:50 jwise Exp $	*/
+/*	$NetBSD: keyboard.c,v 1.24 2007/12/31 00:22:14 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,30 +34,33 @@
 #if 0
 static char sccsid[] = "@(#)keyboard.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: keyboard.c,v 1.10 1999/12/20 23:11:50 jwise Exp $");
+__RCSID("$NetBSD: keyboard.c,v 1.24 2007/12/31 00:22:14 christos Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
 
 #include <ctype.h>
-#include <curses.h>
 #include <signal.h>
 #include <termios.h>
 #include <stdlib.h>
+#include <string.h>
+#include <signal.h>
 
 #include "systat.h"
 #include "extern.h"
 
-int
-keyboard()
+extern sig_atomic_t needsredraw;
+
+void
+keyboard(void)
 {
-	char ch, rch, *line;
+	int ch, rch, col;
+	char *line;
 	int i, linesz;
-	sigset_t set;
+	static char help[] = "help";
+	static char quit[] = "quit";
 
-	sigemptyset(&set);
-	sigaddset(&set, SIGALRM);
-
+	ch = 0;	/* XXX gcc */
 	linesz = COLS - 2;		/* XXX does not get updated on SIGWINCH */
 	if ((line = malloc(linesz)) == NULL) {
 		error("malloc failed");
@@ -74,13 +73,22 @@ keyboard()
 
 		while (col == 0 || (ch != '\r' && ch != '\n')) {
 			refresh();
-			ch = getch() & 0177;
-			if (ch == 0177 && ferror(stdin)) {
-				clearerr(stdin);
+			for (;;) {
+				ch = getch();
+				if (!needsredraw)
+					break;
+				redraw();
+			}
+			if (ch == ERR) {
+				display(SIGALRM);
 				continue;
 			}
+			if (ch == KEY_RESIZE) {
+				redraw();
+				continue;
+			}
+			ch &= 0177;
 			rch = ch;
-			ch = tolower(ch);
 			if (col == 0) {
 				switch(ch) {
 				    case '\n':
@@ -89,19 +97,20 @@ keyboard()
 					display(0);
 					break;
 				    case CTRL('l'):
-					sigprocmask(SIG_BLOCK, &set, NULL);
 					wrefresh(curscr);
-					sigprocmask(SIG_UNBLOCK, &set, NULL);
 					break;
 				    case CTRL('g'):
-					sigprocmask(SIG_BLOCK, &set, NULL);
 					status();
-					sigprocmask(SIG_UNBLOCK, &set, NULL);
 					break;
 				    case '?':
+				    case 'H':
 				    case 'h':
-					command("help");
+					command(help);
 					move(CMDLINE, 0);
+					break;
+				    case 'Q':
+				    case 'q':
+					command(quit);
 					break;
 				    case ':':
 					move(CMDLINE, 0);
@@ -112,16 +121,18 @@ keyboard()
 				}
 				continue;
 			}
-			if (ch == erasechar() && col > 0) {
-				if (col == 1)
-					continue;
-				col--;
+			if (ch == '\b' || ch == '\?' || ch == erasechar()) {
+				if (col > 0)
+					col--;
 				goto doerase;
 			}
 			if (ch == CTRL('w') && col > 0) {
-				while (--col >= 0 && isspace(line[col]));
+				while (--col >= 0 &&
+				    isspace((unsigned char)line[col]))
+					continue;
 				col++;
-				while (--col >= 0 && !isspace(line[col]))
+				while (--col >= 0 &&
+				    !isspace((unsigned char)line[col]))
 					if (col == 0)
 						break;
 				col++;
@@ -145,7 +156,7 @@ keyboard()
 		line[col] = '\0';
 		/* pass commands as lowercase */
 		for (i = 1; i < col ; i++)
-			line[i] = tolower(line[i]);
+			line[i] = tolower((unsigned char)line[i]);
 		command(line + 1);
 	}
 	/* NOTREACHED */

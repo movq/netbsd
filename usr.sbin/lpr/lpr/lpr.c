@@ -1,4 +1,4 @@
-/*	$NetBSD: lpr.c,v 1.18 1998/07/27 00:52:01 mycroft Exp $	*/
+/*	$NetBSD: lpr.c,v 1.40 2008/07/21 13:36:58 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1989, 1993
@@ -18,11 +18,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,12 +37,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)lpr.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: lpr.c,v 1.18 1998/07/27 00:52:01 mycroft Exp $");
+__RCSID("$NetBSD: lpr.c,v 1.40 2008/07/21 13:36:58 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -73,6 +69,7 @@ __RCSID("$NetBSD: lpr.c,v 1.18 1998/07/27 00:52:01 mycroft Exp $");
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
+#include <errno.h>
 #include <err.h>
 
 #include "lp.h"
@@ -88,13 +85,15 @@ static int	 hdr = 1;	/* print header or not (default is yes) */
 static int	 iflag;		/* indentation wanted */
 static int	 inchar;	/* location to increment char in file names */
 static int	 indent;	/* amount to indent */
-static char	*jobname;	/* job name on header page */
+static const char *jobname;	/* job name on header page */
 static int	 mailflg;	/* send mail */
 static int	 nact;		/* number of jobs to act on */
 static int	 ncopies = 1;	/* # of copies to make */
 static const char *person;	/* user name */
 static int	 qflag;		/* q job, but don't exec daemon */
+static int	 reqid;		/* request id */
 static int	 rflag;		/* remove files upon completion */	
+static int	 Rflag;		/* print request id - like POSIX lp */
 static int	 sflag;		/* symbolic link flag */
 static int	 tfd;		/* control file descriptor */
 static char	*tfname;	/* tmp copy of cf before linking */
@@ -104,33 +103,33 @@ static char	*width;		/* width for versatec printing */
 
 static struct stat statb;
 
-static void	 card __P((int, const char *));
-static void	 chkprinter __P((char *));
-static void	 cleanup __P((int));
-static void	 copy __P((int, char []));
-static void	 fatal2 __P((const char *, ...));
-static char	*itoa __P((int));
-static char	*linked __P((char *));
-static char	*lmktemp __P((char *, int, int));
-static void	 mktemps __P((void));
-static int	 nfile __P((char *));
-static int	 test __P((char *));
-static void	 usage __P((void));
-int		 main __P((int, char *[]));
+static void	 card(int, const char *);
+static void	 chkprinter(const char *);
+static void	 cleanup(int);
+static void	 copy(int, const char *);
+static void	 fatal2(const char *, ...)
+    __attribute__((__format__(__printf__, 1, 2),__noreturn__));
+static char	*itoa(int);
+static const char	*linked(const char *);
+static char	*lmktemp(const char *, int, int);
+static void	 mktemps(void);
+static int	 nfile(char *);
+static int	 test(const char *);
+static void	 usage(void) __dead;
 
 uid_t	uid, euid;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct passwd *pw;
 	struct group *gptr;
-	char *arg, *cp;
+	char *arg;
+	const char *cp;
 	char buf[MAXPATHLEN];
 	int i, f, errs, c;
 	struct stat stb;
+	int oerrno;
 
 	euid = geteuid();
 	uid = getuid();
@@ -145,22 +144,23 @@ main(argc, argv)
 	if (signal(SIGTERM, SIG_IGN) != SIG_IGN)
 		signal(SIGTERM, cleanup);
 
-	name = argv[0];
+	setprogname(*argv);
 	gethostname(host, sizeof (host));
 	host[sizeof(host) - 1] = '\0';
 	openlog("lpd", 0, LOG_LPR);
 
 	errs = 0;
 	while ((c = getopt(argc, argv,
-	    ":#:1:2:3:4:C:J:P:T:U:cdfghi:lnmprstvw:")) != -1) {
+	    ":#:1:2:3:4:C:J:P:RT:U:cdfghi:lmnopqrstvw:")) != -1) {
 		switch (c) {
 
 		case '#':		/* n copies */
-			if (isdigit(*optarg)) {
+			if (isdigit((unsigned char)*optarg)) {
 				i = atoi(optarg);
 				if (i > 0)
 					ncopies = i;
 			}
+			break;
 
 		case '4':		/* troff fonts */
 		case '3':
@@ -183,6 +183,10 @@ main(argc, argv)
 			printer = optarg;
 			break;
 
+		case 'R':		/* print request id */
+			Rflag++;
+			break;
+			
 		case 'T':		/* pr's title line */
 			title = optarg;
 			break;
@@ -196,6 +200,7 @@ main(argc, argv)
 		case 'd':		/* print tex output (dvi files) */
 		case 'g':		/* print graph(1G) output */
 		case 'l':		/* literal output */
+		case 'o':		/* print postscript output */
 		case 'n':		/* print ditroff output */
 		case 'p':		/* print using ``pr'' */
 		case 't':		/* print troff output (cat files) */
@@ -260,7 +265,7 @@ main(argc, argv)
 	if (SC && ncopies > 1)
 		fatal2("multiple copies are not allowed");
 	if (MC > 0 && ncopies > MC)
-		fatal2("only %d copies are allowed", MC);
+		fatal2("only %ld copies are allowed", MC);
 	/*
 	 * Get the identity of the person doing the lpr using the same
 	 * algorithm as lprm. 
@@ -291,7 +296,7 @@ main(argc, argv)
 	 * Check to make sure queuing is enabled if userid is not root.
 	 */
 	(void)snprintf(buf, sizeof buf, "%s/%s", SD, LO);
-	if (userid && stat(buf, &stb) == 0 && (stb.st_mode & 010))
+	if (userid && stat(buf, &stb) == 0 && (stb.st_mode & S_IXGRP))
 		fatal2("Printer queue is disabled");
 	/*
 	 * Initialize the control file.
@@ -303,7 +308,7 @@ main(argc, argv)
 	seteuid(uid);
 	card('H', host);
 	card('P', person);
-	if (hdr) {
+	if (hdr && !SH) {
 		if (jobname == NULL) {
 			if (argc == 0)
 				jobname = "stdin";
@@ -343,7 +348,8 @@ main(argc, argv)
 
 		if (sflag && (cp = linked(arg)) != NULL) {
 			(void)snprintf(buf, sizeof buf,
-					"%d %d", statb.st_dev, statb.st_ino);
+			    "%u %llu", statb.st_dev,
+			    (unsigned long long)statb.st_ino);
 			card('S', buf);
 			if (format == 'p')
 				card('T', title ? title : arg);
@@ -358,17 +364,19 @@ main(argc, argv)
 			continue;
 		}
 		if (sflag)
-			printf("%s: %s: not linked, copying instead\n", name, arg);
+			warnx("%s: not linked, copying instead", arg);
 		seteuid(uid);
 		if ((i = open(arg, O_RDONLY)) < 0) {
+			oerrno = errno;
 			seteuid(uid);
-			printf("%s: cannot open %s\n", name, arg);
+			errno = oerrno;
+			warn("cannot open %s", arg);
 			continue;
 		} else {
 			copy(i, arg);
 			(void)close(i);
 			if (f && unlink(arg) < 0)
-				printf("%s: %s: not removed\n", name, arg);
+				warn("%s: not removed", arg);
 		}
 		seteuid(uid);
 	}
@@ -381,25 +389,27 @@ main(argc, argv)
 		 */
 		seteuid(euid);
 		if ((tfd = open(tfname, O_RDWR)) >= 0) {
-			char c;
+			char ch;
 
-			if (read(tfd, &c, 1) == 1 &&
+			if (read(tfd, &ch, 1) == 1 &&
 			    lseek(tfd, (off_t)0, 0) == 0 &&
-			    write(tfd, &c, 1) != 1) {
-				printf("%s: cannot touch %s\n", name, tfname);
+			    write(tfd, &ch, 1) != 1) {
+				warn("cannot touch %s", tfname);
 				tfname[inchar]++;
 				cleanup(0);
 			}
 			(void)close(tfd);
 		}
 		if (link(tfname, cfname) < 0) {
-			printf("%s: cannot rename %s\n", name, cfname);
+			warn("cannot rename %s", cfname);
 			tfname[inchar]++;
 			cleanup(0);
 		}
 		unlink(tfname);
 		seteuid(uid);
-		if (qflag)		/* just q things up */
+		if (Rflag)
+			printf("request id is %d\n", reqid);
+		if (qflag)		/* just queue things up */
 			exit(0);
 		if (!startdaemon(printer))
 			printf("jobs queued, but cannot start daemon.\n");
@@ -416,12 +426,10 @@ main(argc, argv)
  * Create the file n and copy from file descriptor f.
  */
 static void
-copy(f, n)
-	int f;
-	char n[];
+copy(int f, const char *n)
 {
 	int fd, i, nr, nc;
-	char buf[MAXPATHLEN];
+	char buf[BUFSIZ];
 
 	if (format == 'p')
 		card('T', title ? title : n);
@@ -433,7 +441,7 @@ copy(f, n)
 	nr = nc = 0;
 	while ((i = read(f, buf, sizeof buf)) > 0) {
 		if (write(fd, buf, i) != i) {
-			printf("%s: %s: temp file write error\n", name, n);
+			warn("%s: temp file write error", n);
 			break;
 		}
 		nc += i;
@@ -441,15 +449,16 @@ copy(f, n)
 			nc -= sizeof buf;
 			nr++;
 			if (MX > 0 && nr > MX) {
-				printf("%s: %s: copy file is too large\n",
-				    name, n);
+				warnx("%s: copy file is too large "
+				    "(check :mx:?)\n", n);
 				break;
 			}
 		}
 	}
 	(void)close(fd);
-	if (nc==0 && nr==0) 
-		printf("%s: %s: empty input file\n", name, f ? n : "stdin");
+	if (nc == 0 && nr == 0) 
+		printf("%s: %s: empty input file\n", getprogname(),
+		    f ? n : "stdin");
 	else
 		nact++;
 }
@@ -458,9 +467,8 @@ copy(f, n)
  * Try and link the file to dfname. Return a pointer to the full
  * path name if successful.
  */
-static char *
-linked(file)
-	char *file;
+static const char *
+linked(const char *file)
 {
 	char *cp;
 	static char buf[BUFSIZ];
@@ -468,7 +476,7 @@ linked(file)
 
 	if (*file != '/') {
 		/* XXX: 2 and file for "/file" */
-		if (getcwd(buf, BUFSIZ - 2 - strlen(file)) == NULL)
+		if (getcwd(buf, sizeof(buf) - 2 - strlen(file)) == NULL)
 			return(NULL);
 		while (file[0] == '.') {
 			switch (file[1]) {
@@ -485,8 +493,8 @@ linked(file)
 			}
 			break;
 		}
-		strcat(buf, "/");	/* XXX: strcat is safe */
-		strcat(buf, file);	/* XXX: strcat is safe */
+		strlcat(buf, "/", sizeof(buf));
+		strlcat(buf, file, sizeof(buf));
 		file = buf;
 	}
 	seteuid(euid);
@@ -499,13 +507,11 @@ linked(file)
  * Put a line into the control file.
  */
 static void
-card(c, p2)
-	int c;
-	const char *p2;
+card(int c, const char *p2)
 {
 	char buf[BUFSIZ];
 	char *p1 = buf;
-	int len = 2;
+	size_t len = 2;
 
 	if (strlen(p2) > BUFSIZ - 2)
 		errx(1, "Internal error:  String longer than %d", BUFSIZ);
@@ -516,28 +522,31 @@ card(c, p2)
 		len++;
 	}
 	*p1++ = '\n';
-	write(tfd, buf, len);
+	if (write(tfd, buf, len) != (ssize_t)len)
+		warn("Control file write error");
 }
 
 /*
  * Create a new file in the spool directory.
  */
 static int
-nfile(n)
-	char *n;
+nfile(char *n)
 {
 	int f;
 	int oldumask = umask(0);		/* should block signals */
+	int oerrno;
 
 	seteuid(euid);
 	f = open(n, O_WRONLY | O_EXCL | O_CREAT, FILMOD);
+	oerrno = errno;
 	(void)umask(oldumask);
 	if (f < 0) {
-		printf("%s: cannot create %s\n", name, n);
+		errno = oerrno;
+		warn("cannot create %s", n);
 		cleanup(0);
 	}
 	if (fchown(f, userid, -1) < 0) {
-		printf("%s: cannot chown %s\n", name, n);
+		warn("cannot chown %s", n);
 		cleanup(0);	/* cleanup does exit */
 	}
 	seteuid(uid);
@@ -556,8 +565,7 @@ nfile(n)
  * Cleanup after interrupts and errors.
  */
 static void
-cleanup(signo)
-	int signo;
+cleanup(int signo)
 {
 	int i;
 
@@ -591,40 +599,31 @@ cleanup(signo)
  * we should remove it after printing.
  */
 static int
-test(file)
-	char *file;
+test(const char *file)
 {
-	struct exec execb;
 	int fd;
 	char *cp;
 
 	seteuid(uid);
 	if (access(file, 4) < 0) {
-		printf("%s: cannot access %s\n", name, file);
+		warn("cannot access %s", file);
 		goto bad;
 	}
 	if (stat(file, &statb) < 0) {
-		printf("%s: cannot stat %s\n", name, file);
+		warn("cannot stat %s", file);
 		goto bad;
 	}
 	if (S_ISDIR(statb.st_mode)) {
-		printf("%s: %s is a directory\n", name, file);
+		warnx("%s is a directory", file);
 		goto bad;
 	}
 	if (statb.st_size == 0) {
-		printf("%s: %s is an empty file\n", name, file);
+		warnx("%s is an empty file", file);
 		goto bad;
  	}
 	if ((fd = open(file, O_RDONLY)) < 0) {
-		printf("%s: cannot open %s\n", name, file);
+		warn("cannot open %s", file);
 		goto bad;
-	}
-	if (read(fd, &execb, sizeof(execb)) == sizeof(execb) &&
-	    !N_BADMAG(execb)) {
-			printf("%s: %s is an executable program and is unprintable",
-				name, file);
-			(void)close(fd);
-			goto bad;
 	}
 	(void)close(fd);
 	if (rflag) {
@@ -642,7 +641,7 @@ test(file)
 			if (fd == 0)
 				return(1);
 		}
-		printf("%s: %s: is not removable by you\n", name, file);
+		warnx("%s: is not removable by you", file);
 	}
 	return(0);
 bad:
@@ -654,8 +653,7 @@ bad:
  * itoa - integer to string conversion
  */
 static char *
-itoa(i)
-	int i;
+itoa(int i)
 {
 	static char b[10] = "########";
 	char *p;
@@ -671,20 +669,12 @@ itoa(i)
  * Perform lookup for printer name or abbreviation --
  */
 static void
-chkprinter(s)
-	char *s;
+chkprinter(const char *s)
 {
-	int status;
+	char *cp;
 
-	if ((status = cgetent(&bp, printcapdb, s)) == -2)
-		fatal2("cannot open printer description file");
-	else if (status == -1)
-		fatal2("%s: unknown printer", s);
-	if (cgetstr(bp, "sd", &SD) == -1)
-		SD = _PATH_DEFSPOOL;
-	if (cgetstr(bp, "lo", &LO) == -1)
-		LO = DEFLOCK;
-	cgetstr(bp, "rg", &RG);
+	getprintcap(s);
+	RG = cgetstr(bp, "rg", &cp) == -1 ? NULL : cp;
 	if (cgetnum(bp, "mx", &MX) < 0)
 		MX = DEFMX;
 	if (cgetnum(bp,"mc", &MC) < 0)
@@ -698,22 +688,18 @@ chkprinter(s)
  * Make the temp files.
  */
 static void
-mktemps()
+mktemps(void)
 {
 	int len, fd, n;
 	char *cp;
-	char buf[BUFSIZ];
+	char buf[MAXPATHLEN];
 
-	(void)snprintf(buf, BUFSIZ, "%s/.seq", SD);
+	(void)snprintf(buf, sizeof(buf), "%s/.seq", SD);
 	seteuid(euid);
-	if ((fd = open(buf, O_RDWR|O_CREAT, 0661)) < 0) {
-		printf("%s: cannot create %s\n", name, buf);
-		exit(1);
-	}
-	if (flock(fd, LOCK_EX)) {
-		printf("%s: cannot lock %s\n", name, buf);
-		exit(1);
-	}
+	if ((fd = open(buf, O_RDWR|O_CREAT, 0661)) < 0)
+		err(1, "cannot create %s", buf);
+	if (flock(fd, LOCK_EX))
+		err(1, "cannot lock %s", buf);
 	seteuid(uid);
 	n = 0;
 	if ((len = read(fd, buf, sizeof(buf))) > 0) {
@@ -723,6 +709,7 @@ mktemps()
 			n = n * 10 + (*cp++ - '0');
 		}
 	}
+	reqid = n;
 	len = strlen(SD) + strlen(host) + 8;
 	tfname = lmktemp("tf", n, len);
 	cfname = lmktemp("cf", n, len);
@@ -730,7 +717,7 @@ mktemps()
 	inchar = strlen(SD) + 3;
 	n = (n + 1) % 1000;
 	(void)lseek(fd, (off_t)0, 0);
-	snprintf(buf, BUFSIZ, "%03d\n", n);
+	(void)snprintf(buf, sizeof(buf), "%03d\n", n);
 	(void)write(fd, buf, strlen(buf));
 	(void)close(fd);	/* unlocks as well */
 }
@@ -739,9 +726,7 @@ mktemps()
  * Make a temp file name.
  */
 static char *
-lmktemp(id, num, len)
-	char	*id;
-	int	num, len;
+lmktemp(const char *id, int num, int len)
 {
 	char *s;
 
@@ -751,28 +736,15 @@ lmktemp(id, num, len)
 	return(s);
 }
 
-#ifdef __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
 static void
-#ifdef __STDC__
 fatal2(const char *msg, ...)
-#else
-fatal2(msg, va_alist)
-	char *msg;
-        va_dcl
-#endif
 {
 	va_list ap;
-#ifdef __STDC__
+
 	va_start(ap, msg);
-#else
-	va_start(ap);
-#endif
-	printf("%s: ", name);
+	printf("%s: ", getprogname());
 	vprintf(msg, ap);
 	putchar('\n');
 	va_end(ap);
@@ -780,12 +752,13 @@ fatal2(msg, va_alist)
 }
 
 static void
-usage()
+usage(void)
 {
 
-	fprintf(stderr, "%s\n%s\n",
-	    "usage: lpr [-Pprinter] [-#num] [-C class] [-J job] [-T title] "
-	    "[-U user]",
-	    "[-i[numcols]] [-1234 font] [-wnum] [-cdfghlnmprstv] [name ...]");
+	fprintf(stderr, 
+	    "Usage: %s [-Pprinter] [-#num] [-C class] [-J job] [-T title] "
+	    "[-U user]\n"
+	    "%s [-i[numcols]] [-1234 font] [-wnum] [-cdfghlmnopqRrstv] "
+	    "[name ...]\n", getprogname(), getprogname());
 	exit(1);
 }

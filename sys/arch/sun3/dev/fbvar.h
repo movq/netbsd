@@ -1,4 +1,4 @@
-/*	$NetBSD: fbvar.h,v 1.5 1998/02/08 05:15:36 gwr Exp $	*/
+/*	$NetBSD: fbvar.h,v 1.13 2008/06/28 12:13:38 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,6 +40,8 @@
  *	@(#)fbvar.h	8.1 (Berkeley) 6/11/93
  */
 
+#include <sys/event.h>		/* for struct knote */
+
 /*
  * Frame buffer variables.  All frame buffer drivers must provide the
  * following in order to participate.
@@ -55,15 +53,15 @@ struct fbdevice {
 	struct	fbtype fb_fbtype;	/* see fbio.h */
 	struct	fbdriver *fb_driver;	/* pointer to driver */
 	void *fb_private;		/* for fb driver use */
-	char *fb_name;			/* i.e. sc_dev.dx_name */
+	const char *fb_name;		/* i.e. sc_dev->dv_xname */
 
-	caddr_t	fb_pixels;		/* display RAM */
+	void *	fb_pixels;		/* display RAM */
 	int	fb_linebytes;		/* bytes per display line */
 
 	int	fb_flags;		/* copy of cf_flags */
 
 	/* This points to the P4 register if the FB has one. */
-	volatile u_int32_t *fb_pfour;
+	volatile uint32_t *fb_pfour;
 
 	/*
 	 * XXX - The "Raster console" stuff could be stored
@@ -74,30 +72,30 @@ struct fbdevice {
 
 struct fbdriver {
 	/* These avoid the need to know our major number. */
-	int 	(*fbd_open) __P((dev_t, int, int, struct proc *));
-	int 	(*fbd_close) __P((dev_t, int, int, struct proc *));
-	int 	(*fbd_mmap) __P((dev_t, int, int));
+	int 	(*fbd_open)(dev_t, int, int, struct lwp *);
+	int 	(*fbd_close)(dev_t, int, int, struct lwp *);
+	paddr_t	(*fbd_mmap)(dev_t, off_t, int);
+	int	(*fbd_kqfilter)(dev_t, struct knote *);
 	/* These are the internal ioctl functions */
-	int 	(*fbd_gattr) __P((struct fbdevice *,  void *));
-	int 	(*fbd_gvideo) __P((struct fbdevice *, void *));
-	int 	(*fbd_svideo) __P((struct fbdevice *, void *));
-	int 	(*fbd_getcmap) __P((struct fbdevice *, void *));
-	int 	(*fbd_putcmap) __P((struct fbdevice *, void *));
+	int 	(*fbd_gattr)(struct fbdevice *,  void *);
+	int 	(*fbd_gvideo)(struct fbdevice *, void *);
+	int 	(*fbd_svideo)(struct fbdevice *, void *);
+	int 	(*fbd_getcmap)(struct fbdevice *, void *);
+	int 	(*fbd_putcmap)(struct fbdevice *, void *);
 };
 
-int 	fbioctlfb __P((struct fbdevice *, u_long, caddr_t));
+int 	fbioctlfb(struct fbdevice *, u_long, void *);
 
-void	fb_attach __P((struct fbdevice *, int));
-int 	fb_noioctl __P((struct fbdevice *, void *));
-void	fb_unblank __P((void));
+void	fb_attach(struct fbdevice *, int);
+int 	fb_noioctl(struct fbdevice *, void *);
 
-void	fb_eeprom_setsize  __P((struct fbdevice *));
+void	fb_eeprom_setsize (struct fbdevice *);
 
-int 	fb_pfour_id __P((void *));
-int 	fb_pfour_get_video __P((struct fbdevice *));
-void	fb_pfour_set_video __P((struct fbdevice *, int));
+int 	fb_pfour_id(void *);
+int 	fb_pfour_get_video(struct fbdevice *);
+void	fb_pfour_set_video(struct fbdevice *, int);
 
-void	fb_pfour_setsize __P((struct fbdevice *));
+void	fb_pfour_setsize(struct fbdevice *);
 
 /* This comes from enable.c */
-void	enable_video __P((int));
+void	enable_video(int);

@@ -1,15 +1,8 @@
-#	$NetBSD: Makefile,v 1.4 1999/03/23 18:10:58 drochner Exp $
-
-TOP=		${.CURDIR}/..
-
-.include "${TOP}/Makefile.inc"
-
-IMAGE=		boot-big.fs
-KERN?=	${.CURDIR}/../../../../sys/arch/i386/compile/INSTALL/netbsd
+#	$NetBSD: Makefile,v 1.25 2008/04/30 15:29:11 ad Exp $
 
 # This Makefile builds a boot image on a 2.88M-sized image.
 #
-# Since NetBSD currently can't write 2.88M diskettes, it's only
+# Since NetBSD currently can't write 2.88M diskettes, its only
 # use is as a boot image for El Torito bootable CD-ROM images.
 #
 # To prepare a CD, do the following steps:
@@ -21,7 +14,8 @@ KERN?=	${.CURDIR}/../../../../sys/arch/i386/compile/INSTALL/netbsd
 # This should place the image in i386-cd.img, which can hopefully
 # be used to burn a CD.
 
-DISKTYPE=	floppy288
-DISKSIZE=	5760
+FLOPPYBASE=	boot-big
+FLOPPYSIZE=	7200
+FLOPPYKERNEL=	netbsd-INSTALL_FLOPPY.gz
 
-.include "${TOP}/bootfloppy-common/Makefile.inc"
+.include "${.CURDIR}/../common/Makefile.bootfloppy"

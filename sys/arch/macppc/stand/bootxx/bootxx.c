@@ -1,4 +1,4 @@
-/*	$NetBSD: bootxx.c,v 1.5 1999/12/22 18:57:47 thorpej Exp $	*/
+/*	$NetBSD: bootxx.c,v 1.16 2005/12/24 22:50:07 perry Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,53 +32,73 @@
  */
 
 #include <sys/types.h>
-#include <machine/bat.h>
+#include <powerpc/oea/bat.h>
+
+#include <sys/bootblock.h>
 
 int (*openfirmware)(void *);
-int stack[1024];
 
-#define MAXBLOCKNUM 30
+				/*
+				 * 32 KB of stack with 32 bytes overpad
+				 * (see below)
+				 */
+int32_t __attribute__((aligned(16))) stack[8192 + 8];
 
-void (*entry_point)(int, int, void *) = (void *)0;
-int block_size = 0;
-int block_count = MAXBLOCKNUM;
-int block_table[MAXBLOCKNUM] = { 0 };
+struct shared_bbinfo bbinfo = {
+	{ MACPPC_BBINFO_MAGIC },
+	0,
+	SHARED_BBINFO_MAXBLOCKS,
+	{ 0 }
+};
 
-asm("
-	.text
-	.align 2
-	.globl	_start
-_start:
+#ifndef DEFAULT_ENTRY_POINT
+#define	DEFAULT_ENTRY_POINT	0xE00000
+#endif
 
-	li	8,0x4000	/* _start */
-	li	9,0x20
-	mtctr	9
-1:
-	dcbf	0,8
-	icbi	0,8
-	addi	8,8,0x20
-	bdnz	1b
-	sync
-
-	li	0,0
-	mtdbatu	3,0
-	mtibatu	3,0
-	isync
-	li	8,0x1ffe	/* map the lowest 256MB */
-	li	9,0x22		/* BAT_I */
-	mtdbatl	3,9
-	mtdbatu	3,8
-	mtibatl	3,9
-	mtibatu	3,8
-	isync
-
-	li	1,(stack+4096)@l	/* setup 4KB of stack */
-
-	b	startup
-");
+void (*entry_point)(int, int, void *) = (void *)DEFAULT_ENTRY_POINT;
 
 
-static __inline int
+__asm(
+"	.text			\n"
+"	.align 2		\n"
+"	.globl	_start		\n"
+"_start:			\n"
+
+"	lis	%r8,(_start)@ha	\n"
+"	addi	%r8,8,(_start)@l\n"
+"	li	%r9,0x40	\n"	/* loop 64 times (for 2048 bytes of bootxx) */
+"	mtctr	%r9		\n"
+"1:				\n"
+"	dcbf	%r0,%r8		\n"
+"	icbi	%r0,%r8		\n"
+"	addi	%r8,%r8,0x20	\n"
+"	bdnz	1b		\n"
+"	sync			\n"
+
+"	li	%r0,0		\n"
+"	mtdbatu	3,%r0		\n"
+"	mtibatu	3,%r0		\n"
+"	isync			\n"
+"	li	%r8,0x1ffe	\n"	/* map the lowest 256MB */
+"	li	%r9,0x22	\n"	/* BAT_I */
+"	mtdbatl	3,%r9		\n"
+"	mtdbatu	3,%r8		\n"
+"	mtibatl	3,%r9		\n"
+"	mtibatu	3,%r8		\n"
+"	isync			\n"
+
+	/*
+	 * setup 32 KB of stack with 32 bytes overpad (see above)
+	 */
+"	lis	%r1,(stack+32768)@ha\n"
+"	addi	%r1,%r1,(stack+32768)@l\n"
+"	stw	%r0,0(%r1)	\n"	/* terminate the frame link chain */
+
+"	b	startup		\n"
+);
+
+
+static inline int
 OF_finddevice(name)
 	char *name;
 {
@@ -100,7 +120,7 @@ OF_finddevice(name)
 	return args.phandle;
 }
 
-static __inline int
+static inline int
 OF_getprop(handle, prop, buf, buflen)
 	int handle;
 	char *prop;
@@ -131,7 +151,7 @@ OF_getprop(handle, prop, buf, buflen)
 	return args.size;
 }
 
-static __inline int
+static inline int
 OF_open(dname)
 	char *dname;
 {
@@ -153,7 +173,7 @@ OF_open(dname)
 	return args.handle;
 }
 
-static __inline int
+static inline int
 OF_read(handle, addr, len)
 	int handle;
 	void *addr;
@@ -181,7 +201,7 @@ OF_read(handle, addr, len)
 	return args.actual;
 }
 
-static __inline int
+static inline int
 OF_seek(handle, pos)
 	int handle;
 	u_quad_t pos;
@@ -208,13 +228,53 @@ OF_seek(handle, pos)
 	return args.status;
 }
 
+static inline int
+OF_write(handle, addr, len)
+	int handle;
+	const void *addr;
+	int len;
+{
+	static struct {
+		char *name;
+		int nargs;
+		int nreturns;
+		int ihandle;
+		const void *addr;
+		int len;
+		int actual;
+	} args = {
+		"write",
+		3,
+		1,
+	};
+
+	args.ihandle = handle;
+	args.addr = addr;
+	args.len = len;
+	openfirmware(&args);
+
+	return args.actual;
+}
+
+int stdout;
+
+void
+putstrn(const char *s, size_t n)
+{
+	OF_write(stdout, s, n);
+}
+
+#define putstr(x)	putstrn((x),sizeof(x)-1)
+#define putc(x)		do { char __x = (x) ; putstrn(&__x, 1); } while (0)
+
+
 void
 startup(arg1, arg2, openfirm)
 	int arg1, arg2;
 	void *openfirm;
 {
-	int fd, blk, chosen, options;
-	int i, bs;
+	int fd, blk, chosen, options, j;
+	size_t i;
 	char *addr;
 	char bootpath[128];
 
@@ -228,37 +288,47 @@ startup(arg1, arg2, openfirm)
 		options = OF_finddevice("/options");
 		OF_getprop(options, "boot-device", bootpath, sizeof(bootpath));
 	}
+	if (OF_getprop(chosen, "stdout", &stdout, sizeof(stdout))
+	    != sizeof(stdout))
+		stdout = -1;
 
 	/*
 	 * "scsi/sd@0:0" --> "scsi/sd@0"
 	 */
-	for (i = 0; i < sizeof(bootpath); i++)
+	for (i = 0; i < sizeof(bootpath); i++) {
 		if (bootpath[i] == ':')
 			bootpath[i] = 0;
+		if (bootpath[i] == 0)
+			break;
+	}
 
+	putstr("\r\nOF_open bootpath=");
+	putstrn(bootpath, i);
 	fd = OF_open(bootpath);
 
 	addr = (char *)entry_point;
-	bs = block_size;
-	for (i = 0; i < block_count; i++) {
-		blk = block_table[i];
-
+	putstr("\r\nread stage 2 blocks: ");
+	for (j = 0; j < bbinfo.bbi_block_count; j++) {
+		if ((blk = bbinfo.bbi_block_table[j]) == 0)
+			break;
+		putc('0' + j % 10);
 		OF_seek(fd, (u_quad_t)blk * 512);
-		OF_read(fd, addr, bs);
-		addr += bs;
+		OF_read(fd, addr, bbinfo.bbi_block_size);
+		addr += bbinfo.bbi_block_size;
 	}
+	putstr(". done!\r\nstarting stage 2...\r\n");
 
 	/*
 	 * enable D/I cache
 	 */
-	asm("
-		mtdbatu	3,%0
-		mtdbatl	3,%1
-		mtibatu	3,%0
-		mtibatl	3,%1
-		isync
-	" :: "r"(BATU(0, BAT_BL_256M, BAT_Vs)),
-	     "r"(BATL(0, 0, BAT_PP_RW)));
+	__asm(
+		"mtdbatu	3,%0\n\t"
+		"mtdbatl	3,%1\n\t"
+		"mtibatu	3,%0\n\t"
+		"mtibatl	3,%1\n\t"
+		"isync"
+	   ::	"r"(BATU(0, BAT_BL_256M, BAT_Vs)),
+		"r"(BATL(0, 0, BAT_PP_RW)));
 
 	entry_point(0, 0, openfirm);
 	for (;;);			/* just in case */

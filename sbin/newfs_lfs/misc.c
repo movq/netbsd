@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.1 1999/03/18 17:18:05 perseant Exp $	*/
+/*	$NetBSD: misc.c,v 1.7 2007/01/17 21:59:49 hubertf Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,20 +34,19 @@
 #if 0
 static char sccsid[] = "@(#)misc.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: misc.c,v 1.1 1999/03/18 17:18:05 perseant Exp $");
+__RCSID("$NetBSD: misc.c,v 1.7 2007/01/17 21:59:49 hubertf Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/types.h>
-#include <sys/disklabel.h>
+#include <sys/disk.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include "extern.h"
 
 u_int
-log2(num)
-        u_int num;
+lfs_log2(u_int num)
 {
         u_int i, limit;
 
@@ -60,27 +55,12 @@ log2(num)
         return (i);
 }
 
-#if __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
-
 void
-#if __STDC__
 fatal(const char *fmt, ...)
-#else
-fatal(fmt, va_alist)
-	char *fmt;
-	va_dcl
-#endif
 {
 	va_list ap;
-#if __STDC__
+
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	(void)fprintf(stderr, "%s: ", progname);
 	(void)vfprintf(stderr, fmt, ap);
 	va_end(ap);

@@ -1,4 +1,4 @@
-/*	$NetBSD: byte_swap.h,v 1.1 1999/01/15 13:31:28 bouyer Exp $	*/
+/*	$NetBSD: byte_swap.h,v 1.11 2006/02/17 08:41:31 skrll Exp $	*/
 
 /*
  * Copyright (c) 1987, 1991 Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the University of
- *      California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,25 +34,36 @@
 #ifndef _VAX_BYTE_SWAP_H_
 #define _VAX_BYTE_SWAP_H_
 
-#define	__byte_swap_long_variable(x) __extension__	\
-({ register u_int32_t __y, __x = (x);			\
-							\
-	__asm ("rotl	$-8, %1, %0;   			\
-		insv	%0, $16, $8, %0;		\
-		rotl	$8, %1, r1; 			\
-		movb	r1, %0"				\
-		: "&=r" (__y)				\
-		: "r" (__x)				\
-		: "r1", "cc" );				\
-	__y; })
+#ifdef __GNUC__
+#include <sys/types.h>
+__BEGIN_DECLS
 
-#define __byte_swap_word_variable(x) __extension__	\
-({ register u_int16_t __x = (x);			\
-							\
-	(u_int16_t)(__x << 8 | __x >> 8);		\
-})
+#define	__BYTE_SWAP_U32_VARIABLE __byte_swap_u32_variable
+static __inline uint32_t __attribute__((__unused__))
+__byte_swap_u32_variable(uint32_t x)
+{
+	uint32_t y;
 
-#define __byte_swap_long(x)     __byte_swap_long_variable(x)
-#define __byte_swap_word(x)     __byte_swap_word_variable(x)
+	__asm volatile(
+		"rotl	$-8, %1, %0	\n"
+		"insv	%0, $16, $8, %0	\n"
+		"rotl	$8, %1, %%r1	\n"
+		"movb	%%r1, %0"
+		: "=&r" (y)
+		: "r" (x)
+		: "r1", "cc");
 
+	return (y);
+}
+
+#define	__BYTE_SWAP_U16_VARIABLE __byte_swap_u16_variable
+static __inline uint16_t __attribute__((__unused__))
+__byte_swap_u16_variable(uint16_t x)
+{
+
+	return (x << 8 | x >> 8);
+}
+
+__END_DECLS
+#endif
 #endif /* _VAX_BYTE_SWAP_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: bitstring.h,v 1.6 1998/02/02 21:07:19 perry Exp $	*/
+/*	$NetBSD: bitstring.h,v 1.8 2005/02/06 04:38:18 perry Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -93,8 +89,8 @@ typedef	unsigned char bitstr_t;
 
 				/* clear bits start ... stop in bitstring */
 #define	bit_nclear(name, start, stop) do { \
-	register bitstr_t *_name = name; \
-	register int _start = start, _stop = stop; \
+	bitstr_t *_name = name; \
+	int _start = start, _stop = stop; \
 	while (_start <= _stop) { \
 		bit_clear(_name, _start); \
 		_start++; \
@@ -103,8 +99,8 @@ typedef	unsigned char bitstr_t;
 
 				/* set bits start ... stop in bitstring */
 #define	bit_nset(name, start, stop) do { \
-	register bitstr_t *_name = name; \
-	register int _start = start, _stop = stop; \
+	bitstr_t *_name = name; \
+	int _start = start, _stop = stop; \
 	while (_start <= _stop) { \
 		bit_set(_name, _start); \
 		_start++; \
@@ -113,8 +109,8 @@ typedef	unsigned char bitstr_t;
 
 				/* find first bit clear in name */
 #define	bit_ffc(name, nbits, value) do { \
-	register bitstr_t *_name = name; \
-	register int _bit, _nbits = nbits, _value = -1; \
+	bitstr_t *_name = name; \
+	int _bit, _nbits = nbits, _value = -1; \
 	for (_bit = 0; _bit < _nbits; ++_bit) \
 		if (!bit_test(_name, _bit)) { \
 			_value = _bit; \
@@ -125,8 +121,8 @@ typedef	unsigned char bitstr_t;
 
 				/* find first bit set in name */
 #define	bit_ffs(name, nbits, value) do { \
-	register bitstr_t *_name = name; \
-	register int _bit, _nbits = nbits, _value = -1; \
+	bitstr_t *_name = name; \
+	int _bit, _nbits = nbits, _value = -1; \
 	for (_bit = 0; _bit < _nbits; ++_bit) \
 		if (bit_test(_name, _bit)) { \
 			_value = _bit; \

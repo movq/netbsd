@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr5380.c,v 1.37 1999/09/30 23:01:11 thorpej Exp $	*/
+/*	$NetBSD: ncr5380.c,v 1.56.2.1 2009/01/16 21:56:48 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -29,6 +29,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ncr5380.c,v 1.56.2.1 2009/01/16 21:56:48 bouyer Exp $");
 
 /*
  * Bit mask of targets you want debugging to be shown
@@ -64,7 +67,7 @@ u_char	ncr_will_link = 0x00;
  * This is the default sense-command we send.
  */
 static	u_char	sense_cmd[] = {
-		REQUEST_SENSE, 0, 0, 0, sizeof(struct scsipi_sense_data), 0
+		SCSI_REQUEST_SENSE, 0, 0, 0, sizeof(struct scsi_sense_data), 0
 };
 
 /*
@@ -78,16 +81,9 @@ static volatile int	main_running = 0;
 static u_char	busy;
 
 static void	ncr5380_minphys __P((struct buf *bp));
-static int	ncr5380_scsi_cmd __P((struct scsipi_xfer *xs));
+static void	ncr5380_scsi_request __P((struct scsipi_channel *,
+					scsipi_adapter_req_t, void *));
 static void	ncr5380_show_scsi_cmd __P((struct scsipi_xfer *xs));
-
-struct scsipi_device ncr5380_dev = {
-	NULL,		/* use default error handler		*/
-	NULL,		/* do not have a start functio		*/
-	NULL,		/* have no async handler		*/
-	NULL		/* Use default done routine		*/
-};
-
 
 static SC_REQ	req_queue[NREQ];
 static SC_REQ	*free_head = NULL;	/* Free request structures	*/
@@ -98,24 +94,6 @@ static SC_REQ	*free_head = NULL;	/* Free request structures	*/
  */
 
 /*
- * Determine the size of a SCSI command.
- */
-extern __inline__ int command_size(opcode)
-u_char	opcode;
-{
-	switch ((opcode >> 4) & 0xf) {
-		case 0:
-		case 1:
-			return (6);
-		case 2:
-		case 3:
-			return (10);
-	}
-	return (12);
-}
-
-
-/*
  * Wait for request-line to become active. When it doesn't return 0.
  * Otherwise return != 0.
  * The timeouts in the 'wait_req_*' functions are arbitrary and rather
@@ -123,7 +101,7 @@ u_char	opcode;
  * some cases (especially when using my tapedrive, a Tandberg 3600) the
  * device is busy internally and the first SCSI-phase will be delayed.
  */
-extern __inline__ int wait_req_true(void)
+extern inline int wait_req_true(void)
 {
 	int	timeout = 250000;
 
@@ -136,7 +114,7 @@ extern __inline__ int wait_req_true(void)
  * Wait for request-line to become inactive. When it doesn't return 0.
  * Otherwise return != 0.
  */
-extern __inline__ int wait_req_false(void)
+extern inline int wait_req_false(void)
 {
 	int	timeout = 250000;
 
@@ -145,18 +123,18 @@ extern __inline__ int wait_req_false(void)
 	return (!(GET_5380_REG(NCR5380_IDSTAT) & SC_S_REQ));
 }
 
-extern __inline__ void ack_message()
+extern inline void ack_message()
 {
 	SET_5380_REG(NCR5380_ICOM, 0);
 }
 
-extern __inline__ void nack_message(SC_REQ *reqp, u_char msg)
+extern inline void nack_message(SC_REQ *reqp, u_char msg)
 {
 	SET_5380_REG(NCR5380_ICOM, SC_A_ATN);
 	reqp->msgout = msg;
 }
 
-extern __inline__ void finish_req(SC_REQ *reqp)
+extern inline void finish_req(SC_REQ *reqp)
 {
 	int			sps;
 	struct scsipi_xfer	*xs = reqp->xs;
@@ -184,7 +162,6 @@ extern __inline__ void finish_req(SC_REQ *reqp)
 	free_head  = reqp;
 	splx(sps);
 
-	xs->xs_status |= XS_STS_DONE;
 	if (!(reqp->dr_flag & DRIVER_LINKCHK))
 		scsipi_done(xs);
 }
@@ -201,10 +178,10 @@ int	ncr_match __P((struct device *, struct cfdata *, void *));
 #define CFNAME(n)	__CONCAT(n,_cd)
 #define CANAME(n)	__CONCAT(n,_ca)
 #define CFSTRING(n)	__STRING(n)
+#define	CFDRNAME(n)	n
 
-struct cfattach CANAME(DRNAME) = {
-	sizeof(struct ncr_softc), ncr_match, ncr_attach
-};
+CFATTACH_DECL(CFDRNAME(DRNAME), sizeof(struct ncr_softc),
+    ncr_match, ncr_attach, NULL, NULL);
 
 extern struct cfdriver CFNAME(DRNAME);
 
@@ -227,18 +204,19 @@ void		*auxp;
 
 	sc = (struct ncr_softc *)dp;
 
-	sc->sc_adapter.scsipi_cmd = ncr5380_scsi_cmd;
-	sc->sc_adapter.scsipi_minphys = ncr5380_minphys;
+	sc->sc_adapter.adapt_dev = &sc->sc_dev;
+	sc->sc_adapter.adapt_openings = 7;
+	sc->sc_adapter.adapt_max_periph = 1;
+	sc->sc_adapter.adapt_ioctl = NULL;
+	sc->sc_adapter.adapt_minphys = ncr5380_minphys;
+	sc->sc_adapter.adapt_request = ncr5380_scsi_request;
 
-	sc->sc_link.scsipi_scsi.channel         = SCSI_CHANNEL_ONLY_ONE;
-	sc->sc_link.adapter_softc   = sc;
-	sc->sc_link.scsipi_scsi.adapter_target  = 7;
-	sc->sc_link.adapter         = &sc->sc_adapter;
-	sc->sc_link.device          = &ncr5380_dev;
-	sc->sc_link.openings        = NREQ - 1;
-	sc->sc_link.scsipi_scsi.max_target = 7;
-	sc->sc_link.scsipi_scsi.max_lun = 7;
-	sc->sc_link.type = BUS_SCSI;
+	sc->sc_channel.chan_adapter = &sc->sc_adapter;
+	sc->sc_channel.chan_bustype = &scsi_bustype;
+	sc->sc_channel.chan_channel = 0;
+	sc->sc_channel.chan_ntargets = 8;
+	sc->sc_channel.chan_nluns = 8;
+	sc->sc_channel.chan_id = 7;
 
 	/*
 	 * bitmasks
@@ -274,7 +252,7 @@ void		*auxp;
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(dp, &sc->sc_link, scsiprint);
+	config_found(dp, &sc->sc_channel, scsiprint);
 }
 
 /*
@@ -284,135 +262,160 @@ void		*auxp;
 /*
  * Carry out a request from the high level driver.
  */
-static int
-ncr5380_scsi_cmd(struct scsipi_xfer *xs)
+static void
+ncr5380_scsi_request(chan, req, arg)
+	struct scsipi_channel *chan;
+	scsipi_adapter_req_t req;
+	void *arg;
 {
+	struct scsipi_xfer *xs;
+	struct scsipi_periph *periph;
+	struct ncr_softc *sc = (void *)chan->chan_adapter->adapt_dev;
 	int	sps;
 	SC_REQ	*reqp, *link, *tmp;
-	int	flags = xs->xs_control;
+	int	flags;
 
-	/*
-	 * We do not queue RESET commands
-	 */
-	if (flags & XS_CTL_RESET) {
-		scsi_reset_verbose(xs->sc_link->adapter_softc,
-				   "Got reset-command");
-		return (COMPLETE);
-	}
+	switch (req) {
+	case ADAPTER_REQ_RUN_XFER:
+		xs = arg;
+		periph = xs->xs_periph;
 
-	/*
-	 * Get a request block
-	 */
-	sps = splbio();
-	if ((reqp = free_head) == 0) {
+		/*
+		 * We do not queue RESET commands
+		 */
+		flags = xs->xs_control;
+		if (flags & XS_CTL_RESET) {
+			scsi_reset_verbose(sc, "Got reset-command");
+			scsipi_done(xs);
+			return;
+		}
+
+		/*
+		 * Get a request block
+		 */
+		sps = splbio();
+		if ((reqp = free_head) == 0) {
+			xs->error = XS_RESOURCE_SHORTAGE;
+			scsipi_done(xs);
+			splx(sps);
+			return;
+		}
+		free_head  = reqp->next;
+		reqp->next = NULL;
 		splx(sps);
-		return (TRY_AGAIN_LATER);
-	}
-	free_head  = reqp->next;
-	reqp->next = NULL;
-	splx(sps);
 
-	/*
-	 * Initialize our private fields
-	 */
-	reqp->dr_flag   = (flags & XS_CTL_POLL) ? DRIVER_NOINT : 0;
-	reqp->phase     = NR_PHASE;
-	reqp->msgout    = MSG_NOOP;
-	reqp->status    = SCSGOOD;
-	reqp->message   = 0xff;
-	reqp->link      = NULL;
-	reqp->xs        = xs;
-	reqp->targ_id   = xs->sc_link->scsipi_scsi.target;
-	reqp->targ_lun  = xs->sc_link->scsipi_scsi.lun;
-	reqp->xdata_ptr = (u_char*)xs->data;
-	reqp->xdata_len = xs->datalen;
-	memcpy(&reqp->xcmd, xs->cmd, sizeof(struct scsi_generic));
-	reqp->xcmd.bytes[0] |= reqp->targ_lun << 5;
+		/*
+		 * Initialize our private fields
+		 */
+		reqp->dr_flag   = (flags & XS_CTL_POLL) ? DRIVER_NOINT : 0;
+		reqp->phase     = NR_PHASE;
+		reqp->msgout    = MSG_NOOP;
+		reqp->status    = SCSGOOD;
+		reqp->message   = 0xff;
+		reqp->link      = NULL;
+		reqp->xs        = xs;
+		reqp->targ_id   = xs->xs_periph->periph_target;
+		reqp->targ_lun  = xs->xs_periph->periph_lun;
+		reqp->xdata_ptr = (u_char*)xs->data;
+		reqp->xdata_len = xs->datalen;
+		memcpy(&reqp->xcmd, xs->cmd, xs->cmdlen);
+		reqp->xcmd_len = xs->cmdlen;
+		reqp->xcmd.bytes[0] |= reqp->targ_lun << 5;
 
 #ifdef REAL_DMA
-	/*
-	 * Check if DMA can be used on this request
-	 */
-	if (scsi_dmaok(reqp))
-		reqp->dr_flag |= DRIVER_DMAOK;
+		/*
+		 * Check if DMA can be used on this request
+		 */
+		if (scsi_dmaok(reqp))
+			reqp->dr_flag |= DRIVER_DMAOK;
 #endif /* REAL_DMA */
 
-	/*
-	 * Insert the command into the issue queue. Note that 'REQUEST SENSE'
-	 * commands are inserted at the head of the queue since any command
-	 * will clear the existing contingent allegience condition and the sense
-	 * data is only valid while the condition exists.
-	 * When possible, link the command to a previous command to the same
-	 * target. This is not very sensible when AUTO_SENSE is not defined!
-	 * Interrupts are disabled while we are fiddling with the issue-queue.
-	 */
-	sps = splbio();
-	link = NULL;
-	if ((issue_q == NULL) || (reqp->xcmd.opcode == REQUEST_SENSE)) {
-		reqp->next = issue_q;
-		issue_q    = reqp;
-	}
-	else {
-		tmp  = issue_q;
-		do {
-		    if (!link && (tmp->targ_id == reqp->targ_id) && !tmp->link)
-				link = tmp;
-		} while (tmp->next && (tmp = tmp->next));
-		tmp->next = reqp;
+		/*
+		 * Insert the command into the issue queue. Note that
+		 * 'REQUEST SENSE' commands are inserted at the head of the
+		 * queue since any command will clear the existing contingent
+		 * allegience condition and the sense data is only valid while
+		 * the condition exists. When possible, link the command to a
+		 * previous command to the same target. This is not very
+		 * sensible when AUTO_SENSE is not defined! Interrupts are
+		 * disabled while we are fiddling with the issue-queue.
+		 */
+		sps = splbio();
+		link = NULL;
+		if ((issue_q == NULL) ||
+		    (reqp->xcmd.opcode == SCSI_REQUEST_SENSE)) {
+			reqp->next = issue_q;
+			issue_q    = reqp;
+		}
+		else {
+			tmp  = issue_q;
+			do {
+			    if (!link && (tmp->targ_id == reqp->targ_id) && !tmp->link)
+					link = tmp;
+			} while (tmp->next && (tmp = tmp->next));
+			tmp->next = reqp;
 #ifdef AUTO_SENSE
-		if (link && (ncr_will_link & (1<<reqp->targ_id))) {
-			link->link = reqp;
-			link->xcmd.bytes[link->xs->cmdlen-2] |= 1;
+			if (link && (ncr_will_link & (1<<reqp->targ_id))) {
+				link->link = reqp;
+				link->xcmd.bytes[link->xs->cmdlen-2] |= 1;
+			}
+#endif
+	}
+#ifdef AUTO_SENSE
+		/*
+		 * If we haven't already, check the target for link support.
+		 * Do this by prefixing the current command with a dummy
+		 * Request_Sense command, link the dummy to the current
+		 * command, and insert the dummy command at the head of the
+		 * issue queue.  Set the DRIVER_LINKCHK flag so that we'll
+		 * ignore the results of the dummy command, since we only
+		 * care about whether it was accepted or not.
+		 */
+		if (!link && !(ncr_test_link & (1<<reqp->targ_id)) &&
+		    (tmp = free_head) && !(reqp->dr_flag & DRIVER_NOINT)) {
+			free_head = tmp->next;
+			tmp->dr_flag = (reqp->dr_flag & ~DRIVER_DMAOK) | DRIVER_LINKCHK;
+			tmp->phase = NR_PHASE;
+			tmp->msgout = MSG_NOOP;
+			tmp->status = SCSGOOD;
+			tmp->xs = reqp->xs;
+			tmp->targ_id = reqp->targ_id;
+			tmp->targ_lun = reqp->targ_lun;
+			bcopy(sense_cmd, &tmp->xcmd, sizeof(sense_cmd));
+			tmp->xcmd_len = sizeof(sense_cmd);
+			tmp->xdata_ptr = (u_char *)&tmp->xs->sense.scsi_sense;
+			tmp->xdata_len = sizeof(tmp->xs->sense.scsi_sense);
+			ncr_test_link |= 1<<tmp->targ_id;
+			tmp->link = reqp;
+			tmp->xcmd.bytes[sizeof(sense_cmd)-2] |= 1;
+			tmp->next = issue_q;
+			issue_q = tmp;
+#ifdef DBG_REQ
+			if (dbg_target_mask & (1 << tmp->targ_id))
+				show_request(tmp, "LINKCHK");
+#endif
 		}
 #endif
-	}
-#ifdef AUTO_SENSE
-	/*
-	 * If we haven't already, check the target for link support.
-	 * Do this by prefixing the current command with a dummy
-	 * Request_Sense command, link the dummy to the current
-	 * command, and insert the dummy command at the head of the
-	 * issue queue.  Set the DRIVER_LINKCHK flag so that we'll
-	 * ignore the results of the dummy command, since we only
-	 * care about whether it was accepted or not.
-	 */
-	if (!link && !(ncr_test_link & (1<<reqp->targ_id)) &&
-	    (tmp = free_head) && !(reqp->dr_flag & DRIVER_NOINT)) {
-		free_head = tmp->next;
-		tmp->dr_flag = (reqp->dr_flag & ~DRIVER_DMAOK) | DRIVER_LINKCHK;
-		tmp->phase = NR_PHASE;
-		tmp->msgout = MSG_NOOP;
-		tmp->status = SCSGOOD;
-		tmp->xs = reqp->xs;
-		tmp->targ_id = reqp->targ_id;
-		tmp->targ_lun = reqp->targ_lun;
-		bcopy(sense_cmd, &tmp->xcmd, sizeof(sense_cmd));
-		tmp->xdata_ptr = (u_char *)&tmp->xs->sense.scsi_sense;
-		tmp->xdata_len = sizeof(tmp->xs->sense.scsi_sense);
-		ncr_test_link |= 1<<tmp->targ_id;
-		tmp->link = reqp;
-		tmp->xcmd.bytes[sizeof(sense_cmd)-2] |= 1;
-		tmp->next = issue_q;
-		issue_q = tmp;
-#ifdef DBG_REQ
-		if (dbg_target_mask & (1 << tmp->targ_id))
-			show_request(tmp, "LINKCHK");
-#endif
-	}
-#endif
-	splx(sps);
+		splx(sps);
 
 #ifdef DBG_REQ
-	if (dbg_target_mask & (1 << reqp->targ_id))
-		show_request(reqp, (reqp->xcmd.opcode == REQUEST_SENSE) ?
-								"HEAD":"TAIL");
+		if (dbg_target_mask & (1 << reqp->targ_id))
+			show_request(reqp,
+			    (reqp->xcmd.opcode == SCSI_REQUEST_SENSE) ?
+			    "HEAD":"TAIL");
 #endif
 
-	run_main(xs->sc_link->adapter_softc);
+		run_main(sc);
+		return;
 
-	if (xs->xs_control & XS_CTL_POLL)
-		return (COMPLETE); /* We're booting or run_main has completed */
-	return (SUCCESSFULLY_QUEUED);
+	case ADAPTER_REQ_GROW_RESOURCES:
+		/* XXX Not supported. */
+		return;
+
+	case ADAPTER_REQ_SET_XFER_MODE:
+		/* XXX Not supported. */
+		return;
+	}
 }
 
 static void
@@ -430,10 +433,8 @@ ncr5380_show_scsi_cmd(struct scsipi_xfer *xs)
 	u_char	*b = (u_char *) xs->cmd;
 	int	i  = 0;
 
+	scsipi_printaddr(xs->xs_periph);
 	if (!(xs->xs_control & XS_CTL_RESET)) {
-		printf("(%d:%d:%d,0x%x)-", xs->sc_link->scsipi_scsi.scsibus,
-		    xs->sc_link->scsipi_scsi.target, xs->sc_link->scsipi_scsi.lun,
-			xs->sc_link->flags);
 		while (i < xs->cmdlen) {
 			if (i)
 				printf(",");
@@ -442,9 +443,8 @@ ncr5380_show_scsi_cmd(struct scsipi_xfer *xs)
 		printf("-\n");
 	}
 	else {
-		printf("(%d:%d:%d)-RESET-\n",
-		    xs->sc_link->scsipi_scsi.scsibus,xs->sc_link->scsipi_scsi.target,
-			xs->sc_link->scsipi_scsi.lun);
+		
+		printf("-RESET-\n");
 	}
 }
 
@@ -556,8 +556,8 @@ struct ncr_softc *sc;
 connected:
 	    if (connected) {
 		/*
-		 * If the host is currently connected but a 'real-dma' transfer
-		 * is in progress, the 'end-of-dma' interrupt restarts main.
+		 * If the host is currently connected but a 'real-DMA' transfer
+		 * is in progress, the 'end-of-DMA' interrupt restarts main.
 		 * So quit.
 		 */
 		sps = splbio();
@@ -680,7 +680,7 @@ struct ncr_softc *sc;
 #else
 			    if (pdma_ready())
 				return;
-			    panic("Got DMA interrupt without DMA\n");
+			    panic("Got DMA interrupt without DMA");
 #endif
 			}
 			scsi_clr_ipend();
@@ -714,7 +714,7 @@ int	code;
 	u_int8_t		targ_bit;
 	struct ncr_softc	*sc;
 
-	sc = reqp->xs->sc_link->adapter_softc;
+	sc = (void*)reqp->xs->xs_periph->periph_channel->chan_adapter->adapt_dev;
 	DBG_SELPRINT ("Starting arbitration\n", 0);
 	PID("scsi_select1");
 
@@ -886,7 +886,7 @@ int	code;
 
 	/*
 	 * Here we prepare to send an 'IDENTIFY' message.
-	 * Allow disconnect only when interrups are allowed.
+	 * Allow disconnect only when interrupts are allowed.
 	 */
 	tmp[0] = MSG_IDENTIFY(reqp->targ_lun,
 			(reqp->dr_flag & DRIVER_NOINT) ? 0 : 1);
@@ -919,12 +919,12 @@ int	code;
 		 * Try to disconnect from the target.  We cannot leave
 		 * it just hanging here.
 		 */
-		if (!reach_msg_out(sc, sizeof(struct scsi_generic))) {
+		if (!reach_msg_out(sc, sizeof(struct scsipi_generic))) {
 			u_long	len   = 1;
-			u_char	phase = PH_MSGOUT;
+			u_char	phse  = PH_MSGOUT;
 			u_char	msg   = MSG_ABORT;
 
-			transfer_pio(&phase, &msg, &len, 0);
+			transfer_pio(&phse, &msg, &len, 0);
 		}
 		else scsi_reset_verbose(sc, "Connected to unidentified target");
 
@@ -1093,7 +1093,7 @@ struct ncr_softc *sc;
 		reqp->msgout = MSG_NOOP;
 		return (-1);
 	   case PH_CMD :
-		len = command_size(reqp->xcmd.opcode);
+		len = reqp->xcmd_len;
 		transfer_pio(&phase, (u_char *)&reqp->xcmd, &len, 0);
 		PID("info_transf5");
 		return (-1);
@@ -1476,8 +1476,8 @@ again:
 
 	if (poll) {
 		/*
-		 * On polled-dma transfers, we wait here until the
-		 * 'end-of-dma' condition occurs.
+		 * On polled-DMA transfers, we wait here until the
+		 * 'end-of-DMA' condition occurs.
 		 */
 		poll_edma(reqp);
 		if (!(dma_done = dma_ready()))
@@ -1621,6 +1621,7 @@ int	linked;
 		switch (reqp->status & SCSMASK) {
 		    case SCSCHKC:
 			bcopy(sense_cmd, &reqp->xcmd, sizeof(sense_cmd));
+			reqp->xcmd_len = sizeof(sense_cmd);
 			reqp->xdata_ptr = (u_char *)&reqp->xs->sense.scsi_sense;
 			reqp->xdata_len = sizeof(reqp->xs->sense.scsi_sense);
 			reqp->dr_flag  |= DRIVER_AUTOSEN;
@@ -1803,7 +1804,7 @@ struct ncr_softc *sc;
 #ifdef REAL_DMA
 /*
  * Check if DMA can be used for this request. This function also builds
- * the dma-chain.
+ * the DMA-chain.
  */
 static int
 scsi_dmaok(reqp)
@@ -1811,15 +1812,21 @@ SC_REQ	*reqp;
 {
 	u_long			phy_buf;
 	u_long			phy_len;
-	caddr_t			req_addr;
+	char			*req_addr;
 	u_long			req_len;
 	struct dma_chain	*dm;
+
+	/*
+	 * To be safe, do not use DMA for Falcon
+	 */
+	if (machineid & ATARI_FALCON)
+		return (0);
 
 	/*
 	 * Initialize locals and requests' DMA-chain.
 	 */
 	req_len        = reqp->xdata_len;
-	req_addr       = (caddr_t)reqp->xdata_ptr;
+	req_addr       = (void *)reqp->xdata_ptr;
 	dm             = reqp->dm_cur = reqp->dm_last = reqp->dm_chain;
 	dm->dm_count   = dm->dm_addr = 0;
 	reqp->dr_flag &= ~DRIVER_BOUNCING;
@@ -1852,7 +1859,8 @@ SC_REQ	*reqp;
 	 */
 	dm->dm_addr = phy_buf = kvtop(req_addr);
 	while (req_len) {
-		if (req_len < (phy_len = NBPG - ((u_long)req_addr & PGOFSET)))
+		if (req_len <
+		    (phy_len = PAGE_SIZE - ((u_long)req_addr & PGOFSET)))
 			phy_len = req_len;
 
 		req_addr     += phy_len;
@@ -1935,13 +1943,13 @@ struct ncr_softc *sc;
  * Prefix message with full target info.
  */
 static void
-ncr_tprint(SC_REQ *reqp, char *fmt, ...)
+ncr_tprint(SC_REQ *reqp, const char *fmt, ...)
 {
 	va_list	ap;
 
 	va_start(ap, fmt);
-	scsi_print_addr(reqp->xs->sc_link);
-	printf("%:", fmt, ap);
+	scsipi_printaddr(reqp->xs->xs_periph);
+	vprintf(fmt, ap);
 	va_end(ap);
 }
 
@@ -1949,18 +1957,21 @@ ncr_tprint(SC_REQ *reqp, char *fmt, ...)
  * Prefix message with adapter info.
  */
 static void
-ncr_aprint(struct ncr_softc *sc, char *fmt, ...)
+ncr_aprint(struct ncr_softc *sc, const char *fmt, ...)
 {
 	va_list	ap;
+	char buf[256];
 
 	va_start(ap, fmt);
-	printf("%s: %:", sc->sc_dev.dv_xname, fmt, ap);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
+
+	printf("%s: %s", sc->sc_dev.dv_xname, buf);
 }
 /****************************************************************************
  *		Start Debugging Functions				    *
  ****************************************************************************/
-static char *phase_names[] = {
+static const char *phase_names[] = {
 	"DATA_OUT", "DATA_IN", "COMMAND", "STATUS", "NONE", "NONE", "MSG_OUT",
 	"MSG_IN"
 };
@@ -1979,14 +1990,13 @@ struct scsipi_xfer	*xs;
 {
 	u_char	*p1, *p2;
 	int	i;
-	int	sz;
 
 	p1 = (u_char *) xs->cmd;
 	p2 = (u_char *)&xs->sense.scsi_sense;
 	if(*p2 == 0)
 		return;	/* No(n)sense */
-	printf("cmd[%d,%d]: ", xs->cmdlen, sz = command_size(*p1));
-	for (i = 0; i < sz; i++)
+	printf("cmd[%d]: ", xs->cmdlen);
+	for (i = 0; i < xs->cmdlen; i++)
 		printf("%x ", p1[i]);
 	printf("\nsense: ");
 	for (i = 0; i < sizeof(xs->sense.scsi_sense); i++)
@@ -1997,7 +2007,7 @@ struct scsipi_xfer	*xs;
 static void
 show_request(reqp, qtxt)
 SC_REQ	*reqp;
-char	*qtxt;
+const char *qtxt;
 {
 	printf("REQ-%s: %d %p[%ld] cmd[0]=%x S=%x M=%x R=%x resid=%d dr_flag=%x %s\n",
 			qtxt, reqp->targ_id, reqp->xdata_ptr, reqp->xdata_len,
@@ -2008,7 +2018,7 @@ char	*qtxt;
 		show_data_sense(reqp->xs);
 }
 
-static char *sig_names[] = {
+static const char *sig_names[] = {
 	"PAR", "SEL", "I/O", "C/D", "MSG", "REQ", "BSY", "RST",
 	"ACK", "ATN", "LBSY", "PMATCH", "IRQ", "EPAR", "DREQ", "EDMA"
 };

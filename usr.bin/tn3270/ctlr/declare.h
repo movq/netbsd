@@ -1,4 +1,4 @@
-/*	$NetBSD: declare.h,v 1.4 1998/03/04 13:16:06 christos Exp $	*/
+/*	$NetBSD: declare.h,v 1.6 2003/08/07 11:16:30 agc Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,21 +37,21 @@
 
 
 /* outbound.c */
-void init_ctlr __P((void));
-int FieldInc __P((int));
-int FieldDec __P((int));
-void Clear3270 __P((void));
-void AddHost __P((int, int));
-int DataFromNetwork __P((char *, int, int));
-void Init3270 __P((void));
-void Stop3270 __P((void));
+void init_ctlr(void);
+int FieldInc(int);
+int FieldDec(int);
+void Clear3270(void);
+void AddHost(int, int);
+int DataFromNetwork(char *, int, int);
+void Init3270(void);
+void Stop3270(void);
 
 /* inbound.c */
-void init_inbound __P((void));
-void ModifyMdt __P((int, int));
-void DoReadModified __P((int));
-void DoReadBuffer __P((void));
-void SendTransparent __P((char *, int));
-void SendToIBM __P((void));
-int AcceptKeystroke __P((unsigned int, unsigned int ));
-int DataFrom3270 __P((unsigned char *, int));
+void init_inbound(void);
+void ModifyMdt(int, int);
+void DoReadModified(int);
+void DoReadBuffer(void);
+void SendTransparent(char *, int);
+void SendToIBM(void);
+int AcceptKeystroke(unsigned int, unsigned int );
+int DataFrom3270(unsigned char *, int);

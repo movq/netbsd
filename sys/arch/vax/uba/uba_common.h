@@ -1,4 +1,4 @@
-/*	$NetBSD: uba_common.h,v 1.2 1999/06/21 16:23:01 ragge Exp $ */
+/*	$NetBSD: uba_common.h,v 1.5.14.1 2008/11/22 04:57:33 snj Exp $ */
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -69,19 +65,19 @@ struct	uba_vsoftc {
  * DW780/DW750 hardware registers
  */
 struct uba_regs {
-	int	uba_cnfgr;		/* configuration register */
-	int	uba_cr;			/* control register */
-	int	uba_sr;			/* status register */
-	int	uba_dcr;		/* diagnostic control register */
-	int	uba_fmer;		/* failed map entry register */
-	int	uba_fubar;		/* failed UNIBUS address register */
-	int	pad1[2];
-	int	uba_brsvr[4];
-	int	uba_brrvr[4];		/* receive vector registers */
-	int	uba_dpr[16];		/* buffered data path register */
-	int	pad2[480];
-	struct pte uba_map[UBAPAGES];	/* unibus map register */
-	int	pad3[UBAIOPAGES];	/* no maps for device address space */
+	volatile int	uba_cnfgr;	/* configuration register */
+	volatile int	uba_cr;		/* control register */
+	volatile int	uba_sr;		/* status register */
+	volatile int	uba_dcr;	/* diagnostic control register */
+	volatile int	uba_fmer;	/* failed map entry register */
+	volatile int	uba_fubar;	/* failed UNIBUS address register */
+	int		pad1[2];
+	volatile int	uba_brsvr[4];
+	volatile int	uba_brrvr[4];	/* receive vector registers */
+	volatile int	uba_dpr[16];	/* buffered data path register */
+	int		pad2[480];
+	struct pte	uba_map[UBAPAGES]; /* unibus map register */
+	int		pad3[UBAIOPAGES]; /* no maps for device address space */
 };
 
-void	uba_dma_init __P((struct uba_vsoftc *));
+void	uba_dma_init(struct uba_vsoftc *);

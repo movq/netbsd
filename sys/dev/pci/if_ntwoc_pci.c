@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ntwoc_pci.c,v 1.3 2000/01/04 06:31:39 chopps Exp $	*/
+/*	$NetBSD: if_ntwoc_pci.c,v 1.21 2008/04/10 19:13:37 cegger Exp $	*/
 
 /*
  * Copyright (c) 1998 Vixie Enterprises
@@ -36,6 +36,9 @@
  * ``http://www.vix.com''.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_ntwoc_pci.c,v 1.21 2008/04/10 19:13:37 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -44,9 +47,9 @@
 
 #include <net/if.h>
 
-#include <machine/cpu.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -85,7 +88,7 @@
 #endif
 
 #if __NetBSD_Version__ >= 104160000
-static	void ntwoc_pci_config_interrupts __P((struct device *));
+static	void ntwoc_pci_config_interrupts(struct device *);
 #else
 #define	SCA_BASECLOCK	16000000
 #endif
@@ -110,26 +113,25 @@ struct ntwoc_pci_softc {
 	struct sca_softc sc_sca;	/* the SCA itself */
 };
 
-static  int ntwoc_pci_match __P((struct device *, struct cfdata *, void *));
-static  void ntwoc_pci_attach __P((struct device *, struct device *, void *));
+static  int ntwoc_pci_match(struct device *, struct cfdata *, void *);
+static  void ntwoc_pci_attach(struct device *, struct device *, void *);
 
-static	int ntwoc_pci_alloc_dma __P((struct sca_softc *));
-static	void ntwoc_pci_clock_callback __P((void *, int, int));
-static	void ntwoc_pci_dtr_callback __P((void *, int, int));
-static	void ntwoc_pci_get_clock __P((struct sca_port *, u_int8_t, u_int8_t,
-    u_int8_t, u_int8_t));
-static	int ntwoc_pci_intr __P((void *));
-static	void ntwoc_pci_setup_dma __P((struct sca_softc *));
-static	void ntwoc_pci_shutdown __P((void *sc));
+static	int ntwoc_pci_alloc_dma(struct sca_softc *);
+static	void ntwoc_pci_clock_callback(void *, int, int);
+static	void ntwoc_pci_dtr_callback(void *, int, int);
+static	void ntwoc_pci_get_clock(struct sca_port *, u_int8_t, u_int8_t,
+    u_int8_t, u_int8_t);
+static	int ntwoc_pci_intr(void *);
+static	void ntwoc_pci_setup_dma(struct sca_softc *);
+static	void ntwoc_pci_shutdown(void *sc);
 
-struct cfattach ntwoc_pci_ca = {
-  sizeof(struct ntwoc_pci_softc), ntwoc_pci_match, ntwoc_pci_attach,
-};
+CFATTACH_DECL(ntwoc_pci, sizeof(struct ntwoc_pci_softc),
+    ntwoc_pci_match, ntwoc_pci_attach, NULL, NULL);
 
 /*
  * Names for daughter card types.  These match the NTWOC_DB_* defines.
  */
-char *ntwoc_pci_db_names[] = {
+const char *ntwoc_pci_db_names[] = {
 	"V.35", "Unknown 0x01", "Test", "Unknown 0x03",
 	"RS232", "Unknown 0x05", "RS422", "None"
 };
@@ -173,7 +175,8 @@ ntwoc_pci_sca_read_2(struct sca_softc *sc, u_int reg)
 
 
 static int
-ntwoc_pci_match(struct device *parent, struct cfdata *match, void *aux)
+ntwoc_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 
@@ -200,15 +203,14 @@ ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
 	u_int numports;
 
 	printf(": N2 Serial Interface\n");
-	flags = sc->sc_dev.dv_cfdata->cf_flags;
+	flags = device_cfdata(&sc->sc_dev)->cf_flags;
 
 	/*
 	 * Map in the ASIC configuration space
 	 */
 	if (pci_mapreg_map(pa, PCI_CBMA_ASIC, PCI_MAPREG_TYPE_MEM, 0,
 			   &sc->sc_asic_iot, &sc->sc_asic_ioh, NULL, NULL)) {
-		printf("%s: Can't map register space (ASIC)\n",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "Can't map register space (ASIC)\n");
 		return;
 	}
 	/*
@@ -216,8 +218,7 @@ ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
 	 */
 	if (pci_mapreg_map(pa, PCI_CBMA_SCA, PCI_MAPREG_TYPE_MEM, 0,
 			   &sca->sc_iot, &sca->sc_ioh, NULL, NULL)) {
-		printf("%s: Can't map register space (SCA)\n",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "Can't map register space (SCA)\n");
 		return;
 	}
 
@@ -230,23 +231,21 @@ ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * Map and establish the interrupt
 	 */
-	if (pci_intr_map(pa->pa_pc, pa->pa_intrtag, pa->pa_intrpin,
-			 pa->pa_intrline, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+	if (pci_intr_map(pa, &ih)) {
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pa->pa_pc, ih);
 	sc->sc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_NET, ntwoc_pci_intr,
 	    sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
 			printf(" at %s", intrstr);
 		printf("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev), intrstr);
 
 	/*
 	 * Perform total black magic.  This is not only extremely
@@ -282,7 +281,7 @@ ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
 			  0x68, 0x10900);
 
 	/*
-	 * pass the dma tag to the SCA
+	 * pass the DMA tag to the SCA
 	 */
 	sca->sc_usedma = 1;
 	sca->scu_dmat = pa->pa_dmat;
@@ -292,7 +291,7 @@ ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
 	 */
 	frontend_cr = bus_space_read_2(sca->sc_iot, sca->sc_ioh, NTWOC_FECR);
 	NTWO_DPRINTF(("%s: frontend_cr = 0x%04x\n",
-		      sc->sc_dev.dv_xname, frontend_cr));
+		      device_xname(&sc->sc_dev), frontend_cr));
 
 	db0 = (frontend_cr & NTWOC_FECR_ID0) >> NTWOC_FECR_ID0_SHIFT;
 	db1 = (frontend_cr & NTWOC_FECR_ID1) >> NTWOC_FECR_ID1_SHIFT;
@@ -301,7 +300,7 @@ ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
 	 * Port 1 HAS to be present.  If it isn't, don't attach anything.
 	 */
 	if (db0 == NTWOC_FE_ID_NONE) {
-		printf("%s: no ports available\n", sc->sc_dev.dv_xname);
+		printf("%s: no ports available\n", device_xname(&sc->sc_dev));
 		return;
 	}
 
@@ -313,12 +312,12 @@ ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
 	if (db1 != NTWOC_FE_ID_NONE)
 		numports++;
 
-	printf("%s: %d port%s\n", sc->sc_dev.dv_xname, numports,
+	printf("%s: %d port%s\n", device_xname(&sc->sc_dev), numports,
 	       (numports > 1 ? "s" : ""));
-	printf("%s: port 0 interface card: %s\n", sc->sc_dev.dv_xname,
+	printf("%s: port 0 interface card: %s\n", device_xname(&sc->sc_dev),
 	       ntwoc_pci_db_names[db0]);
 	if (numports > 1)
-		printf("%s: port 1 interface card: %s\n", sc->sc_dev.dv_xname,
+		printf("%s: port 1 interface card: %s\n", device_xname(&sc->sc_dev),
 		       ntwoc_pci_db_names[db1]);
 
 	/*
@@ -364,7 +363,7 @@ ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
 		    (flags & NTWOC_FLAGS_CLK1_MASK) >> NTWOC_FLAGS_CLK1_SHIFT,
 		    tmc, rdiv, tdiv);
 
-	/* allocate dma'able memory for card to use */
+	/* allocate DMA'able memory for card to use */
 	ntwoc_pci_alloc_dma(sca);
 	ntwoc_pci_setup_dma(sca);
 
@@ -473,7 +472,7 @@ ntwoc_pci_shutdown(void *aux)
 	sca_shutdown(&sc->sc_sca);
 
 	/*
-	 * disable interupts for the whole card.  Black magic, see comment
+	 * disable interrupts for the whole card.  Black magic, see comment
 	 * above.
 	 */
 	bus_space_write_4(sc->sc_asic_iot, sc->sc_asic_ioh,
@@ -591,7 +590,7 @@ ntwoc_pci_alloc_dma(struct sca_softc *sc)
 	if (bus_dmamem_alloc(sc->scu_dmat,
 			     allocsize,
 			     SCA_DMA_ALIGNMENT,
-			     SCA_DMA_BOUNDRY,
+			     SCA_DMA_BOUNDARY,
 			     &sc->scu_seg, 1, &rsegs, BUS_DMA_NOWAIT) != 0) {
 		printf("Could not allocate DMA memory\n");
 		return 1;
@@ -606,7 +605,7 @@ ntwoc_pci_alloc_dma(struct sca_softc *sc)
 	NTWO_DPRINTF(("DMA memory mapped\n"));
 
 	if (bus_dmamap_create(sc->scu_dmat, allocsize, 2,
-			      allocsize, SCA_DMA_BOUNDRY,
+			      allocsize, SCA_DMA_BOUNDARY,
 			      BUS_DMA_NOWAIT, &sc->scu_dmam) != 0) {
 		printf("Could not create DMA map\n");
 		return 1;
@@ -667,7 +666,7 @@ ntwoc_pci_setup_dma(struct sca_softc *sc)
 
 	scp0->sp_txdesc_p = paddr0;
 	scp0->sp_txdesc = (sca_desc_t *)vaddr0;
-	addroff = sizeof(sca_desc_t) * scp0->sp_ntxdesc;;
+	addroff = sizeof(sca_desc_t) * scp0->sp_ntxdesc;
 
 	/*
 	 * point to the range following the tx descriptors, and
@@ -719,7 +718,7 @@ ntwoc_pci_setup_dma(struct sca_softc *sc)
 	 */
 	if (sc->scu_allocsize != addroff)
 		printf("ERROR:  scu_allocsize != addroff: %lu != %lu\n",
-		       sc->scu_allocsize, addroff);
+		       (u_long)sc->scu_allocsize, addroff);
 }
 
 #if __NetBSD_Version__ >= 104160000

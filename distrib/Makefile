@@ -1,13 +1,24 @@
-#	$NetBSD: Makefile,v 1.2 1999/04/25 12:05:36 veego Exp $
+#	$NetBSD: Makefile,v 1.15 2008/08/21 06:17:41 lukem Exp $
 
-SUBDIR=	notes utils
+.include <bsd.own.mk>
 
-.if exists(${MACHINE}/miniroot)
-SUBDIR+= miniroot
+.if ${MKMAN} != "no"
+SUBDIR=	notes .WAIT
 .endif
 
-.if exists(${MACHINE}/Makefile)
-SUBDIR+= ${MACHINE}
+.if exists(${MACHINE}/miniroot/Makefile.inc)
+SUBDIR+= miniroot .WAIT
 .endif
+
+.if exists(${RELEASEMACHINE}/Makefile)
+SUBDIR+= ${RELEASEMACHINE}
+.endif
+
+.if make(obj)
+SUBDIR+= utils
+.endif
+
+TARGETS+=release
+TARGETS+=iso_image
 
 .include <bsd.subdir.mk>

@@ -1,10 +1,71 @@
-/*	$NetBSD: procfs_subr.c,v 1.31 2000/03/16 18:08:26 jdolecek Exp $	*/
+/*	$NetBSD: procfs_subr.c,v 1.92 2008/09/05 14:01:11 skrll Exp $	*/
+
+/*-
+ * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Andrew Doran.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Jan-Simon Pendry.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)procfs_subr.c	8.6 (Berkeley) 5/14/95
+ */
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou.  All rights reserved.
  * Copyright (c) 1993 Jan-Simon Pendry
- * Copyright (c) 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Jan-Simon Pendry.
@@ -40,6 +101,9 @@
  *	@(#)procfs_subr.c	8.6 (Berkeley) 5/14/95
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: procfs_subr.c,v 1.92 2008/09/05 14:01:11 skrll Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/time.h>
@@ -48,19 +112,22 @@
 #include <sys/vnode.h>
 #include <sys/malloc.h>
 #include <sys/stat.h>
+#include <sys/file.h>
+#include <sys/filedesc.h>
+#include <sys/kauth.h>
 
 #include <miscfs/procfs/procfs.h>
 
-void procfs_hashins __P((struct pfsnode *));
-void procfs_hashrem __P((struct pfsnode *));
-struct vnode *procfs_hashget __P((pid_t, pfstype, struct mount *));
+void procfs_hashins(struct pfsnode *);
+void procfs_hashrem(struct pfsnode *);
+struct vnode *procfs_hashget(pid_t, pfstype, int, struct mount *, int);
 
 LIST_HEAD(pfs_hashhead, pfsnode) *pfs_hashtbl;
 u_long	pfs_ihash;	/* size of hash table - 1 */
-#define PFSPIDHASH(pid)	(&pfs_hashtbl[(pid) & pfs_ihash])
+#define PFSPIDHASH(pid)	((pid) & pfs_ihash)
 
-struct lock pfs_hashlock;
-struct simplelock pfs_hash_slock;
+kmutex_t pfs_hashlock;
+kmutex_t pfs_ihash_lock;
 
 #define	ISSET(t, f)	((t) & (f))
 
@@ -91,84 +158,166 @@ struct simplelock pfs_hash_slock;
  * the vnode free list.
  */
 int
-procfs_allocvp(mp, vpp, pid, pfs_type)
+procfs_allocvp(mp, vpp, pid, pfs_type, fd, p)
 	struct mount *mp;
 	struct vnode **vpp;
-	long pid;
+	pid_t pid;
 	pfstype pfs_type;
+	int fd;
+	struct proc *p;
 {
 	struct pfsnode *pfs;
 	struct vnode *vp;
 	int error;
 
-	do {
-		if ((*vpp = procfs_hashget(pid, pfs_type, mp)) != NULL)
-			return (0);
-	} while (lockmgr(&pfs_hashlock, LK_EXCLUSIVE|LK_SLEEPFAIL, 0));
+ retry:
+	*vpp = procfs_hashget(pid, pfs_type, fd, mp, LK_EXCLUSIVE);
+	if (*vpp != NULL)
+		return (0);
 
-	if ((error = getnewvnode(VT_PROCFS, mp, procfs_vnodeop_p, vpp)) != 0) {
+	if ((error = getnewvnode(VT_PROCFS, mp, procfs_vnodeop_p, &vp)) != 0) {
 		*vpp = NULL;
-		lockmgr(&pfs_hashlock, LK_RELEASE, 0);
 		return (error);
 	}
-	vp = *vpp;
-
 	MALLOC(pfs, void *, sizeof(struct pfsnode), M_TEMP, M_WAITOK);
-	vp->v_data = pfs;
 
-	pfs->pfs_pid = (pid_t) pid;
+	mutex_enter(&pfs_hashlock);
+	if ((*vpp = procfs_hashget(pid, pfs_type, fd, mp, 0)) != NULL) {
+		mutex_exit(&pfs_hashlock);
+		ungetnewvnode(vp);
+		FREE(pfs, M_TEMP);
+		goto retry;
+	}
+
+	vp->v_data = pfs;
+	pfs->pfs_pid = pid;
 	pfs->pfs_type = pfs_type;
 	pfs->pfs_vnode = vp;
 	pfs->pfs_flags = 0;
-	pfs->pfs_fileno = PROCFS_FILENO(pid, pfs_type);
+	pfs->pfs_fileno = PROCFS_FILENO(pid, pfs_type, fd);
+	pfs->pfs_fd = fd;
 
 	switch (pfs_type) {
-	case Proot:	/* /proc = dr-xr-xr-x */
+	case PFSroot:	/* /proc = dr-xr-xr-x */
+		vp->v_vflag |= VV_ROOT;
+		/*FALLTHROUGH*/
+	case PFSproc:	/* /proc/N = dr-xr-xr-x */
 		pfs->pfs_mode = S_IRUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH;
 		vp->v_type = VDIR;
-		vp->v_flag = VROOT;
 		break;
 
-	case Pcurproc:	/* /proc/curproc = lr-xr-xr-x */
-	case Pself:	/* /proc/self    = lr-xr-xr-x */
+	case PFScurproc:	/* /proc/curproc = lr-xr-xr-x */
+	case PFSself:	/* /proc/self    = lr-xr-xr-x */
+	case PFScwd:	/* /proc/N/cwd = lr-xr-xr-x */
+	case PFSchroot:	/* /proc/N/chroot = lr-xr-xr-x */
+	case PFSexe:	/* /proc/N/exe = lr-xr-xr-x */
 		pfs->pfs_mode = S_IRUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH;
 		vp->v_type = VLNK;
 		break;
 
-	case Pproc:	/* /proc/N = dr-xr-xr-x */
-		pfs->pfs_mode = S_IRUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH;
-		vp->v_type = VDIR;
+	case PFSfd:
+		if (fd == -1) {	/* /proc/N/fd = dr-xr-xr-x */
+			pfs->pfs_mode = S_IRUSR|S_IXUSR;
+			vp->v_type = VDIR;
+		} else {	/* /proc/N/fd/M = [ps-]rw------- */
+			file_t *fp;
+			vnode_t *vxp;
+
+			if ((fp = fd_getfile2(p, pfs->pfs_fd)) == NULL) {
+				error = EBADF;
+				goto bad;
+			}
+
+			pfs->pfs_mode = S_IRUSR|S_IWUSR;
+			switch (fp->f_type) {
+			case DTYPE_VNODE:
+				vxp = fp->f_data;
+
+				/*
+				 * We make symlinks for directories
+				 * to avoid cycles.
+				 */
+				if (vxp->v_type == VDIR)
+					goto symlink;
+				vp->v_type = vxp->v_type;
+				break;
+			case DTYPE_PIPE:
+				vp->v_type = VFIFO;
+				break;
+			case DTYPE_SOCKET:
+				vp->v_type = VSOCK;
+				break;
+			case DTYPE_KQUEUE:
+			case DTYPE_MISC:
+			symlink:
+				pfs->pfs_mode = S_IRUSR|S_IXUSR|S_IRGRP|
+				    S_IXGRP|S_IROTH|S_IXOTH;
+				vp->v_type = VLNK;
+				break;
+			default:
+				error = EOPNOTSUPP;
+				closef(fp);
+				goto bad;
+			}
+			closef(fp);
+		}
 		break;
 
-	case Pfile:	/* /proc/N/file = -rw------- */
-	case Pmem:	/* /proc/N/mem = -rw------- */
-	case Pregs:	/* /proc/N/regs = -rw------- */
-	case Pfpregs:	/* /proc/N/fpregs = -rw------- */
+	case PFSfile:	/* /proc/N/file = -rw------- */
+	case PFSmem:	/* /proc/N/mem = -rw------- */
+	case PFSregs:	/* /proc/N/regs = -rw------- */
+	case PFSfpregs:	/* /proc/N/fpregs = -rw------- */
 		pfs->pfs_mode = S_IRUSR|S_IWUSR;
 		vp->v_type = VREG;
 		break;
 
-	case Pctl:	/* /proc/N/ctl = --w------ */
-	case Pnote:	/* /proc/N/note = --w------ */
-	case Pnotepg:	/* /proc/N/notepg = --w------ */
+	case PFSctl:	/* /proc/N/ctl = --w------ */
+	case PFSnote:	/* /proc/N/note = --w------ */
+	case PFSnotepg:	/* /proc/N/notepg = --w------ */
 		pfs->pfs_mode = S_IWUSR;
 		vp->v_type = VREG;
 		break;
 
-	case Pmap:	/* /proc/N/map = -r--r--r-- */
-	case Pstatus:	/* /proc/N/status = -r--r--r-- */
-	case Pcmdline:	/* /proc/N/cmdline = -r--r--r-- */
+	case PFSmap:	/* /proc/N/map = -r--r--r-- */
+	case PFSmaps:	/* /proc/N/maps = -r--r--r-- */
+	case PFSstatus:	/* /proc/N/status = -r--r--r-- */
+	case PFSstat:	/* /proc/N/stat = -r--r--r-- */
+	case PFScmdline:	/* /proc/N/cmdline = -r--r--r-- */
+	case PFSemul:	/* /proc/N/emul = -r--r--r-- */
+	case PFSmeminfo:	/* /proc/meminfo = -r--r--r-- */
+	case PFScpustat:	/* /proc/stat = -r--r--r-- */
+	case PFSdevices:	/* /proc/devices = -r--r--r-- */
+	case PFScpuinfo:	/* /proc/cpuinfo = -r--r--r-- */
+	case PFSuptime:	/* /proc/uptime = -r--r--r-- */
+	case PFSmounts:	/* /proc/mounts = -r--r--r-- */
+	case PFSloadavg:	/* /proc/loadavg = -r--r--r-- */
+	case PFSstatm:	/* /proc/N/statm = -r--r--r-- */
 		pfs->pfs_mode = S_IRUSR|S_IRGRP|S_IROTH;
 		vp->v_type = VREG;
 		break;
+
+#ifdef __HAVE_PROCFS_MACHDEP
+	PROCFS_MACHDEP_NODETYPE_CASES
+		procfs_machdep_allocvp(vp);
+		break;
+#endif
 
 	default:
 		panic("procfs_allocvp");
 	}
 
 	procfs_hashins(pfs);
-	lockmgr(&pfs_hashlock, LK_RELEASE, 0);
+	uvm_vnp_setsize(vp, 0);
+	mutex_exit(&pfs_hashlock);
 
+	*vpp = vp;
+	return (0);
+
+ bad:
+	mutex_exit(&pfs_hashlock);
+	FREE(pfs, M_TEMP);
+	vp->v_data = NULL;
+	ungetnewvnode(vp);
 	return (error);
 }
 
@@ -192,64 +341,155 @@ procfs_rw(v)
 	struct vop_read_args *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct uio *uio = ap->a_uio;
-	struct proc *curp = uio->uio_procp;
+	struct lwp *curl;
+	struct lwp *l;
 	struct pfsnode *pfs = VTOPFS(vp);
 	struct proc *p;
+	int error;
 
-	p = PFIND(pfs->pfs_pid);
-	if (p == 0)
-		return (EINVAL);
+	if (uio->uio_offset < 0)
+		return EINVAL;
+
+	if ((error = procfs_proc_lock(pfs->pfs_pid, &p, ESRCH)) != 0)
+		return error;
+
+	curl = curlwp;
+
+	/*
+	 * Do not allow init to be modified while in secure mode; it
+	 * could be duped into changing the security level.
+	 */
+#define	M2K(m)	((m) == UIO_READ ? KAUTH_REQ_PROCESS_PROCFS_READ : \
+		 KAUTH_REQ_PROCESS_PROCFS_WRITE)
+	mutex_enter(p->p_lock);
+	error = kauth_authorize_process(curl->l_cred, KAUTH_PROCESS_PROCFS,
+	    p, pfs, KAUTH_ARG(M2K(uio->uio_rw)), NULL);
+	mutex_exit(p->p_lock);
+	if (error) {
+		procfs_proc_unlock(p);
+		return (error);
+	}
+#undef	M2K
+
+	mutex_enter(p->p_lock);
+	LIST_FOREACH(l, &p->p_lwps, l_sibling) {
+		if (l->l_stat != LSZOMB)
+			break;
+	}
+	/* Process is exiting if no-LWPS or all LWPs are LSZOMB */
+	if (l == NULL) {
+		mutex_exit(p->p_lock);
+		procfs_proc_unlock(p);
+		return ESRCH;
+	}
+
+	lwp_addref(l);
+	mutex_exit(p->p_lock);
 
 	switch (pfs->pfs_type) {
-	case Pregs:
-	case Pfpregs:
-	case Pmem:
-		/*
-		 * Do not allow init to be modified while in secure mode; it
-		 * could be duped into changing the security level.
-		 */
-		if (uio->uio_rw == UIO_WRITE &&
-		    p == initproc && securelevel > -1)
-			return (EPERM);
+	case PFSnote:
+	case PFSnotepg:
+		error = procfs_donote(curl, p, pfs, uio);
 		break;
 
+	case PFSregs:
+		error = procfs_doregs(curl, l, pfs, uio);
+		break;
+
+	case PFSfpregs:
+		error = procfs_dofpregs(curl, l, pfs, uio);
+		break;
+
+	case PFSctl:
+		error = procfs_doctl(curl, l, pfs, uio);
+		break;
+
+	case PFSstatus:
+		error = procfs_dostatus(curl, l, pfs, uio);
+		break;
+
+	case PFSstat:
+		error = procfs_do_pid_stat(curl, l, pfs, uio);
+		break;
+
+	case PFSmap:
+		error = procfs_domap(curl, p, pfs, uio, 0);
+		break;
+
+	case PFSmaps:
+		error = procfs_domap(curl, p, pfs, uio, 1);
+		break;
+
+	case PFSmem:
+		error = procfs_domem(curl, l, pfs, uio);
+		break;
+
+	case PFScmdline:
+		error = procfs_docmdline(curl, p, pfs, uio);
+		break;
+
+	case PFSmeminfo:
+		error = procfs_domeminfo(curl, p, pfs, uio);
+		break;
+
+	case PFSdevices:
+		error = procfs_dodevices(curl, p, pfs, uio);
+		break;
+
+	case PFScpuinfo:
+		error = procfs_docpuinfo(curl, p, pfs, uio);
+		break;
+
+	case PFScpustat:
+		error = procfs_docpustat(curl, p, pfs, uio);
+		break;
+
+	case PFSloadavg:
+		error = procfs_doloadavg(curl, p, pfs, uio);
+		break;
+
+	case PFSstatm:
+		error = procfs_do_pid_statm(curl, l, pfs, uio);
+		break;
+
+	case PFSfd:
+		error = procfs_dofd(curl, p, pfs, uio);
+		break;
+
+	case PFSuptime:
+		error = procfs_douptime(curl, p, pfs, uio);
+		break;
+
+	case PFSmounts:
+		error = procfs_domounts(curl, p, pfs, uio);
+		break;
+
+	case PFSemul:
+		error = procfs_doemul(curl, p, pfs, uio);
+		break;
+
+#ifdef __HAVE_PROCFS_MACHDEP
+	PROCFS_MACHDEP_NODETYPE_CASES
+		error = procfs_machdep_rw(curl, l, pfs, uio);
+		break;
+#endif
+
 	default:
+		error = EOPNOTSUPP;
 		break;
 	}
 
-	switch (pfs->pfs_type) {
-	case Pnote:
-	case Pnotepg:
-		return (procfs_donote(curp, p, pfs, uio));
+	/*
+	 * Release the references that we acquired earlier.
+	 */
+	lwp_delref(l);
+	procfs_proc_unlock(p);
 
-	case Pregs:
-		return (procfs_doregs(curp, p, pfs, uio));
-
-	case Pfpregs:
-		return (procfs_dofpregs(curp, p, pfs, uio));
-
-	case Pctl:
-		return (procfs_doctl(curp, p, pfs, uio));
-
-	case Pstatus:
-		return (procfs_dostatus(curp, p, pfs, uio));
-
-	case Pmap:
-		return (procfs_domap(curp, p, pfs, uio));
-
-	case Pmem:
-		return (procfs_domem(curp, p, pfs, uio));
-
-	case Pcmdline:
-		return (procfs_docmdline(curp, p, pfs, uio));
-
-	default:
-		return (EOPNOTSUPP);
-	}
+	return (error);
 }
 
 /*
- * Get a string from userland into (buf).  Strip a trailing
+ * Get a string from userland into (bf).  Strip a trailing
  * nl character (to allow easy access from the shell).
  * The buffer should be *buflenp + 1 chars long.  vfs_getuserstr
  * will automatically add a nul char at the end.
@@ -261,9 +501,9 @@ procfs_rw(v)
  * EFAULT:    user i/o buffer is not addressable
  */
 int
-vfs_getuserstr(uio, buf, buflenp)
+vfs_getuserstr(uio, bf, buflenp)
 	struct uio *uio;
-	char *buf;
+	char *bf;
 	int *buflenp;
 {
 	int xlen;
@@ -279,31 +519,31 @@ vfs_getuserstr(uio, buf, buflenp)
 		return (EMSGSIZE);
 	xlen = uio->uio_resid;
 
-	if ((error = uiomove(buf, xlen, uio)) != 0)
+	if ((error = uiomove(bf, xlen, uio)) != 0)
 		return (error);
 
 	/* allow multiple writes without seeks */
 	uio->uio_offset = 0;
 
 	/* cleanup string and remove trailing newline */
-	buf[xlen] = '\0';
-	xlen = strlen(buf);
-	if (xlen > 0 && buf[xlen-1] == '\n')
-		buf[--xlen] = '\0';
+	bf[xlen] = '\0';
+	xlen = strlen(bf);
+	if (xlen > 0 && bf[xlen-1] == '\n')
+		bf[--xlen] = '\0';
 	*buflenp = xlen;
 
 	return (0);
 }
 
-vfs_namemap_t *
-vfs_findname(nm, buf, buflen)
-	vfs_namemap_t *nm;
-	char *buf;
+const vfs_namemap_t *
+vfs_findname(nm, bf, buflen)
+	const vfs_namemap_t *nm;
+	const char *bf;
 	int buflen;
 {
 
 	for (; nm->nm_name; nm++)
-		if (memcmp(buf, nm->nm_name, buflen+1) == 0)
+		if (memcmp(bf, nm->nm_name, buflen+1) == 0)
 			return (nm);
 
 	return (0);
@@ -315,10 +555,34 @@ vfs_findname(nm, buf, buflen)
 void
 procfs_hashinit()
 {
-	lockinit(&pfs_hashlock, PINOD, "pfs_hashlock", 0, 0);
-	pfs_hashtbl = hashinit(desiredvnodes / 4, M_UFSMNT, M_WAITOK,
-	    &pfs_ihash);
-	simple_lock_init(&pfs_hash_slock);
+	mutex_init(&pfs_hashlock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&pfs_ihash_lock, MUTEX_DEFAULT, IPL_NONE);
+	pfs_hashtbl = hashinit(desiredvnodes / 4, HASH_LIST, true, &pfs_ihash);
+}
+
+void
+procfs_hashreinit()
+{
+	struct pfsnode *pp;
+	struct pfs_hashhead *oldhash, *hash;
+	u_long i, oldmask, mask, val;
+
+	hash = hashinit(desiredvnodes / 4, HASH_LIST, true, &mask);
+
+	mutex_enter(&pfs_ihash_lock);
+	oldhash = pfs_hashtbl;
+	oldmask = pfs_ihash;
+	pfs_hashtbl = hash;
+	pfs_ihash = mask;
+	for (i = 0; i <= oldmask; i++) {
+		while ((pp = LIST_FIRST(&oldhash[i])) != NULL) {
+			LIST_REMOVE(pp, pfs_hash);
+			val = PFSPIDHASH(pp->pfs_pid);
+			LIST_INSERT_HEAD(&hash[val], pp, pfs_hash);
+		}
+	}
+	mutex_exit(&pfs_ihash_lock);
+	hashdone(oldhash, HASH_LIST, oldmask);
 }
 
 /*
@@ -327,32 +591,42 @@ procfs_hashinit()
 void
 procfs_hashdone()
 {
-	hashdone(pfs_hashtbl, M_UFSMNT);
+	hashdone(pfs_hashtbl, HASH_LIST, pfs_ihash);
+	mutex_destroy(&pfs_hashlock);
+	mutex_destroy(&pfs_ihash_lock);
 }
 
 struct vnode *
-procfs_hashget(pid, type, mp)
+procfs_hashget(pid, type, fd, mp, flags)
 	pid_t pid;
 	pfstype type;
+	int fd;
 	struct mount *mp;
+	int flags;
 {
+	struct pfs_hashhead *ppp;
 	struct pfsnode *pp;
 	struct vnode *vp;
 
 loop:
-	simple_lock(&pfs_hash_slock);
-	for (pp = PFSPIDHASH(pid)->lh_first; pp; pp = pp->pfs_hash.le_next) {
+	mutex_enter(&pfs_ihash_lock);
+	ppp = &pfs_hashtbl[PFSPIDHASH(pid)];
+	LIST_FOREACH(pp, ppp, pfs_hash) {
 		vp = PFSTOV(pp);
 		if (pid == pp->pfs_pid && pp->pfs_type == type &&
-		    vp->v_mount == mp) {
-			simple_lock(&vp->v_interlock);
-			simple_unlock(&pfs_hash_slock);
-			if (vget(vp, LK_EXCLUSIVE | LK_INTERLOCK))
-				goto loop;
+		    pp->pfs_fd == fd && vp->v_mount == mp) {
+		    	if (flags == 0) {
+				mutex_exit(&pfs_ihash_lock);
+			} else {
+				mutex_enter(&vp->v_interlock);
+				mutex_exit(&pfs_ihash_lock);
+				if (vget(vp, flags | LK_INTERLOCK))
+					goto loop;
+			}
 			return (vp);
 		}
 	}
-	simple_unlock(&pfs_hash_slock);
+	mutex_exit(&pfs_ihash_lock);
 	return (NULL);
 }
 
@@ -366,12 +640,12 @@ procfs_hashins(pp)
 	struct pfs_hashhead *ppp;
 
 	/* lock the pfsnode, then put it on the appropriate hash list */
-	lockmgr(&pp->pfs_vnode->v_lock, LK_EXCLUSIVE, (struct simplelock *)0);
+	vlockmgr(&pp->pfs_vnode->v_lock, LK_EXCLUSIVE);
 
-	simple_lock(&pfs_hash_slock);
-	ppp = PFSPIDHASH(pp->pfs_pid);
+	mutex_enter(&pfs_ihash_lock);
+	ppp = &pfs_hashtbl[PFSPIDHASH(pp->pfs_pid)];
 	LIST_INSERT_HEAD(ppp, pp, pfs_hash);
-	simple_unlock(&pfs_hash_slock);
+	mutex_exit(&pfs_ihash_lock);
 }
 
 /*
@@ -381,9 +655,9 @@ void
 procfs_hashrem(pp)
 	struct pfsnode *pp;
 {
-	simple_lock(&pfs_hash_slock);
+	mutex_enter(&pfs_ihash_lock);
 	LIST_REMOVE(pp, pfs_hash);
-	simple_unlock(&pfs_hash_slock);
+	mutex_exit(&pfs_ihash_lock);
 }
 
 void
@@ -394,15 +668,64 @@ procfs_revoke_vnodes(p, arg)
 	struct pfsnode *pfs, *pnext;
 	struct vnode *vp;
 	struct mount *mp = (struct mount *)arg;
+	struct pfs_hashhead *ppp;
 
-	if (!(p->p_flag & P_SUGID))
+	if (!(p->p_flag & PK_SUGID))
 		return;
 
-	for (pfs = PFSPIDHASH(p->p_pid)->lh_first; pfs; pfs = pnext) {
+	mutex_enter(&pfs_ihash_lock);
+	ppp = &pfs_hashtbl[PFSPIDHASH(p->p_pid)];
+	for (pfs = LIST_FIRST(ppp); pfs; pfs = pnext) {
 		vp = PFSTOV(pfs);
-		pnext = pfs->pfs_hash.le_next;
+		pnext = LIST_NEXT(pfs, pfs_hash);
+		mutex_enter(&vp->v_interlock);
 		if (vp->v_usecount > 0 && pfs->pfs_pid == p->p_pid &&
-		    vp->v_mount == mp)
+		    vp->v_mount == mp) {
+		    	vp->v_usecount++;
+		    	mutex_exit(&vp->v_interlock);
+			mutex_exit(&pfs_ihash_lock);
 			VOP_REVOKE(vp, REVOKEALL);
+			vrele(vp);
+			mutex_enter(&pfs_ihash_lock);
+		} else {
+			mutex_exit(&vp->v_interlock);
+		}
 	}
+	mutex_exit(&pfs_ihash_lock);
+}
+
+int
+procfs_proc_lock(int pid, struct proc **bunghole, int notfound)
+{
+	struct proc *tp;
+	int error = 0;
+
+	mutex_enter(proc_lock);
+
+	if (pid == 0)
+		tp = &proc0;
+	else if ((tp = p_find(pid, PFIND_LOCKED)) == NULL)
+		error = notfound;
+	if (tp != NULL && !rw_tryenter(&tp->p_reflock, RW_READER))
+		error = EBUSY;
+
+	mutex_exit(proc_lock);
+
+	*bunghole = tp;
+	return error;
+}
+
+void
+procfs_proc_unlock(struct proc *p)
+{
+
+	rw_exit(&p->p_reflock);
+}
+
+int
+procfs_doemul(struct lwp *curl, struct proc *p,
+    struct pfsnode *pfs, struct uio *uio)
+{
+	const char *ename = p->p_emul->e_name;
+	return uiomove_frombuf(__UNCONST(ename), strlen(ename), uio);
 }

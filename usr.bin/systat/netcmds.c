@@ -1,4 +1,4 @@
-/*	$NetBSD: netcmds.c,v 1.14 2000/01/05 11:59:12 itojun Exp $	*/
+/*	$NetBSD: netcmds.c,v 1.21 2005/02/26 22:12:33 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,14 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)netcmds.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: netcmds.c,v 1.14 2000/01/05 11:59:12 itojun Exp $");
+__RCSID("$NetBSD: netcmds.c,v 1.21 2005/02/26 22:12:33 dsl Exp $");
 #endif /* not lint */
 
 /*
  * Common network command support routines.
  */
 #include <sys/param.h>
-#include <sys/socket.h>
 #include <sys/mbuf.h>
 #include <sys/protosw.h>
 
@@ -61,10 +56,11 @@ __RCSID("$NetBSD: netcmds.c,v 1.14 2000/01/05 11:59:12 itojun Exp $");
 
 #include <arpa/inet.h>
 
+#include <ctype.h>
 #include <netdb.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
+
 #include "systat.h"
 #include "extern.h"
 
@@ -77,34 +73,31 @@ static	struct hitem {
 
 int nports, nhosts, protos;
 
-static void changeitems __P((char *, int));
-static void selectproto __P((char *));
-static void showprotos __P((void));
-static int selectport __P((long, int));
-static void showports __P((void));
-static int addrcmp __P((struct sockaddr *, struct sockaddr *));
-static int selecthost __P((struct sockaddr *, int));
-static void showhosts __P((void));
+static void changeitems(char *, int);
+static void selectproto(const char *);
+static void showprotos(void);
+static int selectport(long, int);
+static void showports(void);
+static int addrcmp(struct sockaddr *, struct sockaddr *);
+static int selecthost(struct sockaddr *, int);
+static void showhosts(void);
 
 /* please note: there are also some netstat commands in netstat.c */
 
 void
-netstat_display (args)
-	char *args;
+netstat_display(char *args)
 {
 	changeitems(args, 1);
 }
 
 void
-netstat_ignore (args)
-	char *args;
+netstat_ignore(char *args)
 {
 	changeitems(args, 0);
 }
 
 void
-netstat_reset (args)
-	char *args;
+netstat_reset(char *args)
 {
 	selectproto(0);
 	selecthost(0, 0);
@@ -112,8 +105,7 @@ netstat_reset (args)
 }
 
 void
-netstat_show (args)
-	char *args;
+netstat_show(char *args)
 {
 	move(CMDLINE, 0); clrtoeol();
 	if (!args || *args == '\0') {
@@ -133,23 +125,19 @@ netstat_show (args)
 }
 
 void
-netstat_tcp (args)
-	char *args;
+netstat_tcp(char *args)
 {
 	selectproto("tcp");
 }
 
 void
-netstat_udp (args)
-	char *args;
+netstat_udp(char *args)
 {
 	selectproto("udp");
 }
 
 static void
-changeitems(args, onoff)
-	char *args;
-	int onoff;
+changeitems(char *args, int onoff)
 {
 	char *cp;
 	struct servent *sp;
@@ -159,10 +147,10 @@ changeitems(args, onoff)
 	if (cp)
 		*cp = '\0';
 	for (;;args = cp) {
-		for (cp = args; *cp && isspace(*cp); cp++)
+		for (cp = args; *cp && isspace((unsigned char)*cp); cp++)
 			;
 		args = cp;
-		for (; *cp && !isspace(*cp); cp++)
+		for (; *cp && !isspace((unsigned char)*cp); cp++)
 			;
 		if (*cp)
 			*cp++ = '\0';
@@ -189,8 +177,7 @@ changeitems(args, onoff)
 }
 
 static void
-selectproto(proto)
-	char *proto;
+selectproto(const char *proto)
 {
 
 	if (proto == 0 || streq(proto, "all"))
@@ -202,7 +189,7 @@ selectproto(proto)
 }
 
 static void
-showprotos()
+showprotos(void)
 {
 
 	if ((protos & TCP) == 0)
@@ -219,9 +206,7 @@ static	struct pitem {
 } *ports = NULL;
 
 static int
-selectport(port, onoff)
-	long port;
-	int onoff;
+selectport(long port, int onoff)
 {
 	struct pitem *p;
 
@@ -251,8 +236,7 @@ selectport(port, onoff)
 }
 
 int
-checkport(inp)
-	struct inpcb *inp;
+checkport(struct inpcb *inp)
 {
 	struct pitem *p;
 
@@ -265,8 +249,7 @@ checkport(inp)
 
 #ifdef INET6
 int
-checkport6(in6p)
-	struct in6pcb *in6p;
+checkport6(struct in6pcb *in6p)
 {
 	struct pitem *p;
 
@@ -279,7 +262,7 @@ checkport6(in6p)
 #endif
 
 static void
-showports()
+showports(void)
 {
 	struct pitem *p;
 	struct servent *sp;
@@ -292,14 +275,12 @@ showports()
 		if (sp)
 			printw("%s ", sp->s_name);
 		else
-			printw("%d ", p->port);
+			printw("%ld ", p->port);
 	}
 }
 
 static int
-addrcmp(sa1, sa2)
-	struct sockaddr *sa1;
-	struct sockaddr *sa2;
+addrcmp(struct sockaddr *sa1, struct sockaddr *sa2)
 {
 	if (sa1->sa_family != sa2->sa_family)
 		return 0;
@@ -327,9 +308,7 @@ addrcmp(sa1, sa2)
 }
 
 static int
-selecthost(sa, onoff)
-	struct sockaddr *sa;
-	int onoff;
+selecthost(struct sockaddr *sa, int onoff)
 {
 	struct hitem *p;
 
@@ -360,19 +339,18 @@ selecthost(sa, onoff)
 }
 
 int
-checkhost(inp)
-	struct inpcb *inp;
+checkhost(struct inpcb *inp)
 {
 	struct hitem *p;
-	struct sockaddr_in *sin;
+	struct sockaddr_in *s_in;
 
 	if (hosts)
 		for (p = hosts; p < hosts+nhosts; p++) {
 			if (((struct sockaddr *)&p->addr)->sa_family != AF_INET)
 				continue;
-			sin = (struct sockaddr_in *)&p->addr;
-			if (sin->sin_addr.s_addr == inp->inp_laddr.s_addr ||
-			    sin->sin_addr.s_addr == inp->inp_faddr.s_addr)
+			s_in = (struct sockaddr_in *)&p->addr;
+			if (s_in->sin_addr.s_addr == inp->inp_laddr.s_addr ||
+			    s_in->sin_addr.s_addr == inp->inp_faddr.s_addr)
 				return (p->onoff);
 		}
 	return (1);
@@ -380,8 +358,7 @@ checkhost(inp)
 
 #ifdef INET6
 int
-checkhost6(in6p)
-	struct in6pcb *in6p;
+checkhost6(struct in6pcb *in6p)
 {
 	struct hitem *p;
 	struct sockaddr_in6 *sin6;
@@ -400,7 +377,7 @@ checkhost6(in6p)
 #endif
 
 static void
-showhosts()
+showhosts(void)
 {
 	struct hitem *p;
 	char hbuf[NI_MAXHOST];
@@ -416,7 +393,7 @@ showhosts()
 		sa = (struct sockaddr *)&p->addr;
 		if (getnameinfo(sa, sa->sa_len, hbuf, sizeof(hbuf), NULL, 0,
 				flags) != 0)
-			strcpy(hbuf, "(invalid)");
+			strlcpy(hbuf, "(invalid)", sizeof(hbuf));
 		if (!p->onoff)
 			addch('!');
 		printw("%s ", hbuf);

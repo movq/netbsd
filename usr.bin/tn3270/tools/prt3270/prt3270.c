@@ -1,4 +1,4 @@
-/*	$NetBSD: prt3270.c,v 1.5 1998/09/06 02:54:48 lukem Exp $	*/
+/*	$NetBSD: prt3270.c,v 1.11 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,23 +29,25 @@
  * SUCH DAMAGE.
  */
 
+#ifndef HOST_TOOL
 #include <sys/cdefs.h>
-#ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1988 The Regents of the University of California.\n\
- All rights reserved.\n");
+#if defined(__COPYRIGHT) && !defined(lint)
+__COPYRIGHT("@(#) Copyright (c) 1988\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
+#endif
 
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)prt3270.c	4.2 (Berkeley) 4/26/91";
 #else
-__RCSID("$NetBSD: prt3270.c,v 1.5 1998/09/06 02:54:48 lukem Exp $");
+__RCSID("$NetBSD: prt3270.c,v 1.11 2008/07/21 14:19:27 lukem Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdio.h>
 #include <ctype.h>
+#include <stdlib.h>
 
 #define DEFINING_INSTANCES
 #include "../general/general.h"
@@ -78,23 +76,23 @@ unsigned char printBuffer[200], *print = printBuffer;
 
 
 /* prt3270.c */
-void putSpace __P((void));
-void Column1 __P((void));
-void Indent __P((void));
-void Undent __P((void));
-void putChar __P((int));
-void putstr __P((char *));
-void put2hex __P((int));
-void putdecimal __P((int));
-void puthex __P((int));
-void putEChar __P((int));
-void PrintAid __P((int));
-void PrintAddr __P((int));
-int DataFromNetwork __P((unsigned char *, int, int));
-int DataToNetwork __P((unsigned char *, int, int));
-int GetXValue __P((int));
-void termblock __P((int, int , int));
-int main __P((int, char *[]));
+void putSpace(void);
+void Column1(void);
+void Indent(void);
+void Undent(void);
+void putChar(int);
+void putstr(char *);
+void put2hex(int);
+void putdecimal(int);
+void puthex(int);
+void putEChar(int);
+void PrintAid(int);
+void PrintAddr(int);
+int DataFromNetwork(unsigned char *, int, int);
+int DataToNetwork(unsigned char *, int, int);
+int GetXValue(int);
+void termblock(int, int , int);
+int main(int, char *[]);
 
 void
 putSpace()

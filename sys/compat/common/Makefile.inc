@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.17 2000/02/01 05:25:50 tsutsui Exp $
+#	$NetBSD: Makefile.inc,v 1.19 2002/11/02 07:49:57 perry Exp $
 #
 #	Configuration variables (default values are below):
 #
@@ -29,6 +29,9 @@ COMPATLIB=		${COMPATDST}/libcompat.a
 COMPATLIB_PROF=	${COMPATDST}/libcompat_p.a
 .endif
 
+LIBCOMPATLNBN=	llib-lcompat.ln
+COMPATLIBLN=	${COMPATDST}/${LIBCOMPATLNBN}
+
 COMPATMAKE= \
 	cd ${COMPATDST} && ${MAKE} -f ${COMPATDIR:Q}/Makefile \
 	    COMPATDIR=${COMPATDIR:Q} \
@@ -41,9 +44,10 @@ COMPATMAKE= \
 	    LD=${LD:Q} STRIP=${STRIP:Q} \
 	    MACHINE=${MACHINE} MACHINE_ARCH=${MACHINE_ARCH:Q} \
 	    COMPATCPPFLAGS=${CPPFLAGS:S@^-I.@-I${COMPATDOTDIR}@g:Q} \
+	    LINTFLAGS=${KERNLINTFLAGS:Q} \
 	    ${COMPATMISCMAKEFLAGS}
 
-${COMPATLIB}:		.NOTMAIN __always_make_compatlib
+${COMPATLIB}:		.NOTMAIN .MAKE __always_make_compatlib
 	@echo making sure the compat library is up to date...
 .if (${COMPAT_AS} == "library")
 	@${COMPATMAKE} libcompat.a
@@ -51,7 +55,7 @@ ${COMPATLIB}:		.NOTMAIN __always_make_compatlib
 	@${COMPATMAKE} libcompat.o
 .endif
 
-${COMPATLIB_PROF}:	.NOTMAIN __always_make_compatlib
+${COMPATLIB_PROF}:	.NOTMAIN .MAKE __always_make_compatlib
 	@echo making sure the profiled compat library is up to date...
 .if (${COMPAT_AS} == "library")
 	@${COMPATMAKE} libcompat_p.a
@@ -59,18 +63,22 @@ ${COMPATLIB_PROF}:	.NOTMAIN __always_make_compatlib
 	@${COMPATMAKE} libcompat.po
 .endif
 
+${COMPATLIBLN}:		.NOTMAIN .MAKE __always_make_compatlib
+	@echo making sure the compat lint library is up to date...
+	@${COMPATMAKE} ${LIBCOMPATLNBN}
+
 clean:			.NOTMAIN cleancompatlib
-cleancompatlib:		.NOTMAIN __always_make_compatlib
+cleancompatlib:		.NOTMAIN .MAKE __always_make_compatlib
 	@echo cleaning the compat library objects
 	@${COMPATMAKE} clean
 
 cleandir distclean:	.NOTMAIN cleandircompatlib
-cleandircompatlib:	.NOTMAIN __always_make_compatlib
+cleandircompatlib:	.NOTMAIN .MAKE  __always_make_compatlib
 	@echo cleandiring the compat library objects
 	@${COMPATMAKE} cleandir
 
 depend:			.NOTMAIN dependcompatlib
-dependcompatlib:	.NOTMAIN __always_make_compatlib
+dependcompatlib:	.NOTMAIN .MAKE __always_make_compatlib
 	@echo depending the compat library objects
 	@${COMPATMAKE} depend
 

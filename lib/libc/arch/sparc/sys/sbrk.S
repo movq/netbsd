@@ -1,4 +1,4 @@
-/*	$NetBSD: sbrk.S,v 1.6 1999/06/03 20:14:58 kleink Exp $	*/
+/*	$NetBSD: sbrk.S,v 1.10 2007/10/08 13:06:00 uwe Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,7 +40,7 @@
 #if 0
 	.asciz "@(#)sbrk.s	8.1 (Berkeley) 6/4/93"
 #else
-	RCSID("$NetBSD: sbrk.S,v 1.6 1999/06/03 20:14:58 kleink Exp $")
+	RCSID("$NetBSD: sbrk.S,v 1.10 2007/10/08 13:06:00 uwe Exp $")
 #endif
 #endif /* SYSLIBC_SCCS and not lint */
 
@@ -53,14 +49,19 @@
 	.globl	_end
 	.globl	CURBRK
 
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(sbrk, _sbrk)
+#endif
+
 	.data
 CURBRK:	.long	_end
 	.text
 
-ENTRY(sbrk)
+ENTRY(_sbrk)
 #ifdef PIC
 	PIC_PROLOGUE(%o5,%o4)
-	ld	[%o5 + CURBRK], %o2
+	set	CURBRK, %o2
+	ld	[%o5 + %o2], %o2
 	ld	[%o2], %o3			! %o3 = old break
 	add	%o3, %o0, %o4			! %o4 = new break
 	mov	%o4, %o0			! copy for syscall

@@ -1,10 +1,13 @@
-#	$NetBSD: Makefile,v 1.2 1999/02/13 02:54:29 lukem Exp $
+#	$NetBSD: Makefile,v 1.6 2004/07/12 23:45:26 wiz Exp $
 
 PROG=		makeinfo
-SRCS=		makeinfo.c multi.c
-CPPFLAGS+=	-I${DIST}/texinfo/makeinfo
-MKMAN=		no
+SRCS=		cmds.c defun.c files.c float.c footnote.c \
+		html.c index.c insertion.c lang.c \
+		macro.c makeinfo.c multi.c node.c \
+		sectioning.c toc.c xml.c xref.c
+
+CPPFLAGS+=	-I${IDIST}/makeinfo
 
 .include <bsd.prog.mk>
 
-.PATH: ${DIST}/texinfo/makeinfo
+.PATH: ${IDIST}/makeinfo ${IDIST}/doc

@@ -1,4 +1,4 @@
-/*	$NetBSD: pt_filter.c,v 1.3 2000/01/17 07:21:54 bgrayson Exp $	*/
+/*	$NetBSD: pt_filter.c,v 1.10 2008/04/28 20:23:09 martin Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: pt_filter.c,v 1.3 2000/01/17 07:21:54 bgrayson Exp $");
+__RCSID("$NetBSD: pt_filter.c,v 1.10 2008/04/28 20:23:09 martin Exp $");
 #endif				/* not lint */
 
 #include <stdio.h>
@@ -47,6 +40,7 @@ __RCSID("$NetBSD: pt_filter.c,v 1.3 2000/01/17 07:21:54 bgrayson Exp $");
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <err.h>
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/syslog.h>
@@ -60,18 +54,16 @@ __RCSID("$NetBSD: pt_filter.c,v 1.3 2000/01/17 07:21:54 bgrayson Exp $");
 
 #define FILTER_CMD_SIZE	8192
 
-static void fill_cmd __P((char **, char *, char *, int));
+static void fill_cmd(char **, char *, char *, int);
 
 static void
-fill_cmd(cmdv, path, buff, n)
-	char  **cmdv;
-	char   *path;
-	char   *buff;
-	int     n;
+fill_cmd(char **cmdv, char *path, char *buff, int n)
 {
 	int     i;
 	/* Make tempbuff at least as large as buff. */
-	char	tempbuff[n];
+	char	*tempbuff = malloc(n);;
+	if (tempbuff == NULL)
+		err(1, NULL);
 
 	strncpy(tempbuff, cmdv[0], n);
 	for (i = 1; cmdv[i]; i++) {
@@ -81,6 +73,7 @@ fill_cmd(cmdv, path, buff, n)
 	strncat(tempbuff, " ", n - strlen(tempbuff));
 	/* Now do the snprintf into buff. */
 	snprintf(buff, n, tempbuff, path);
+	free(tempbuff);
 }
 
 
@@ -89,20 +82,13 @@ fill_cmd(cmdv, path, buff, n)
  * of the path, and exec v[2] v[3] ... on the remainder.
  */
 int
-portal_rfilter(pcr, key, v, kso, fdp)
-	struct portal_cred *pcr;
-	char   *key;
-	char  **v;
-	int     kso;
-	int    *fdp;
+portal_rfilter(struct portal_cred *pcr, char *key, char **v, int *fdp)
 {
 	char    cmd[FILTER_CMD_SIZE];
 	char   *path;
 	FILE   *fp;
 	int     error = 0;
-
-	/* We don't use this parameter. */
-	(void) kso;
+	char	percent_s[] = "%s";
 
 	error = lose_credentials(pcr);
 	if (error != 0)
@@ -112,12 +98,11 @@ portal_rfilter(pcr, key, v, kso, fdp)
 	fprintf(stderr, "rfilter:  Got key %s\n", key);
 #endif
 
-	errno = 0;
 	if (!v[1] || !v[2]) {
 		syslog(LOG_ERR,
 		    "rfilter: got strip-key of %s, and command start of %s\n",
 		    v[1], v[2]);
-		exit(-1);
+		exit(1);
 	}
 	/*
 	 * Format for rfilter in config file:
@@ -134,7 +119,7 @@ portal_rfilter(pcr, key, v, kso, fdp)
 	 * v[3] could be NULL, or could point to "".
 	 */
 	if (!v[3] || strlen(v[3]) == 0)
-	  v[3] = "%s";	/* Handle above assumption. */
+		v[3] = percent_s;	/* Handle above assumption. */
 	path = key;
 	/* Strip out stripkey if it matches leading part of key. */
 	if (!strncmp(v[1], key, strlen(v[1])))
@@ -149,40 +134,32 @@ portal_rfilter(pcr, key, v, kso, fdp)
 		syslog(LOG_WARNING,
 		    "Warning:  potential overflow on string!  Length was %lu\n",
 		    (unsigned long)strlen(cmd));
-		return -1;
+		return ENAMETOOLONG;
 	}
 #ifdef DEBUG
 	fprintf(stderr, "rfilter:  Using cmd of %s\n", cmd);
 #endif
 	fp = popen(cmd, "r");
-	if (fp == NULL) {
+	if (fp == NULL)
 	  	return errno;
-	}
 
 	/* Before returning, restore original uid and gid. */
 	/* But only do this if we were root to start with. */
 	if (getuid() == 0) {
 		if ((seteuid((uid_t) 0) < 0) || (setegid((gid_t) 0) < 0)) {
 			error = errno;
-			syslog(LOG_ERR, "setcred: %m");
-			if (fp) {
-				fclose(fp);
-				fp = NULL;
-			}
+			syslog(LOG_WARNING, "setcred: %m");
+			fclose(fp);
+			fp = NULL;
 		}
 	}
-	if (error == 0)
+	if (fp)
 		fdp[0] = fileno(fp);
-	return (errno);
+	return error;
 }
 
 int
-portal_wfilter(pcr, key, v, kso, fdp)
-	struct portal_cred *pcr;
-	char   *key;
-	char  **v;
-	int     kso;
-	int    *fdp;
+portal_wfilter(struct portal_cred *pcr, char *key, char **v, int *fdp)
 {
 	char    cmd[FILTER_CMD_SIZE];
 	char   *path;
@@ -190,14 +167,10 @@ portal_wfilter(pcr, key, v, kso, fdp)
 	int     error = 0;
 	int     cred_change_err = 0;
 
-	/* We don't use this parameter. */
-	(void) kso;
-
 	cred_change_err = lose_credentials(pcr);
 	if (cred_change_err != 0)
 		return cred_change_err;
 
-	errno = 0;
 	path = key + (v[1] ? strlen(v[1]) : 0);
 	/*
 	 * v[0] is key match, v[1] says how much to strip, v[2]
@@ -208,7 +181,7 @@ portal_wfilter(pcr, key, v, kso, fdp)
 		syslog(LOG_WARNING,
 		    "Warning:  potential overflow on string!  Length was %lu\n",
 		    (unsigned long)strlen(cmd));
-		return -1;
+		return ENAMETOOLONG;
 	}
 	fp = popen(cmd, "w");
 	if (fp == NULL) {
@@ -219,14 +192,12 @@ portal_wfilter(pcr, key, v, kso, fdp)
 	if (getuid() == 0) {
 		if ((seteuid((uid_t) 0) < 0) || (setegid((gid_t) 0) < 0)) {
 			error = errno;
-			syslog(LOG_ERR, "setcred: %m");
-			if (fp) {
-				fclose(fp);
-				fp = NULL;
-			}
+			syslog(LOG_WARNING, "setcred: %m");
+			fclose(fp);
+			fp = NULL;
 		}
 	}
-	if (error == 0)
+	if (fp)
 		fdp[0] = fileno(fp);
-	return (errno);
+	return error;
 }

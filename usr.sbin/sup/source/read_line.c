@@ -1,4 +1,4 @@
-/*	$NetBSD: read_line.c,v 1.2 1999/08/02 05:36:05 erh Exp $	*/
+/*	$NetBSD: read_line.c,v 1.8 2003/10/16 06:26:06 itojun Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -31,11 +31,9 @@
  * SUCH DAMAGE.
  */
 
-#ifdef NEED_READ_LINE
-
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: read_line.c,v 1.2 1999/08/02 05:36:05 erh Exp $");
+#if defined(lint) && defined(__RCSID)
+__RCSID("$NetBSD: read_line.c,v 1.8 2003/10/16 06:26:06 itojun Exp $");
 #endif
 
 #include <sys/param.h>
@@ -52,27 +50,36 @@ __RCSID("$NetBSD: read_line.c,v 1.2 1999/08/02 05:36:05 erh Exp $");
  *	and eliminating trailing newlines.
  *	Returns a pointer to an internal buffer that is reused upon
  *	next invocation.
+ *
+ * NOTE: if HAS_FPARSELN is not defined, delim and flags are currently unused.
  */
 char *
-read_line(fp, size, lineno, delim, flags)
-	FILE		*fp;
-	size_t		*size;
-	int		*lineno;
-	const char	delim[3];	/* unused */
-	int		flags;		/* unused */
+read_line(FILE * fp, size_t * size, size_t * lineno, const char *delim,
+	  int flags)
 {
-	static char	*buf;
-	static int	 buflen;
+	static char *buf;
+#ifdef HAS_FPARSELN
 
-	size_t	 s, len;
-	char	*ptr;
-	int	 cnt;
+	if (buf != NULL)
+		free(buf);
+	return (buf = fparseln(fp, size, lineno, delim, flags));
+#else
+	char *n;
+#ifndef HAS_FGETLN
+	char sbuf[1024];
+#endif
+	static int buflen;
+
+	size_t s, len;
+	char *ptr;
+	int cnt;
 
 	len = 0;
 	cnt = 1;
 	while (cnt) {
 		if (lineno != NULL)
 			(*lineno)++;
+#ifdef HAS_FGETLN
 		if ((ptr = fgetln(fp, &s)) == NULL) {
 			if (size != NULL)
 				*size = len;
@@ -81,21 +88,42 @@ read_line(fp, size, lineno, delim, flags)
 			else
 				return buf;
 		}
+#else
+		if ((ptr = fgets(sbuf, sizeof(sbuf) - 1, fp)) == NULL) {
+			if (len == 0)
+				return NULL;
+			else
+				return buf;
+		} else {
+			char *l;
+			if ((l = strchr(sbuf, '\n')) == NULL) {
+				if (sbuf[sizeof(sbuf) - 3] != '\\') {
+					s = sizeof(sbuf);
+					sbuf[sizeof(sbuf) - 2] = '\\';
+					sbuf[sizeof(sbuf) - 1] = '\0';
+				} else
+					s = sizeof(sbuf) - 1;
+			} else {
+				s = l - sbuf;
+			}
+		}
+#endif
 		if (ptr[s - 1] == '\n')	/* the newline may be missing at EOF */
-			s--;		/* forget newline */
+			s--;	/* forget newline */
 		if (!s)
 			cnt = 0;
 		else {
 			if ((cnt = (ptr[s - 1] == '\\')) != 0)
-				s--;		/* forget \\ */
+				s--;	/* forget \\ */
 		}
 
 		if (len + s + 1 > buflen) {
+			n = realloc(buf, len + s + 1);
+			if (n == NULL)
+				err(1, "can't realloc");
+			buf = n;
 			buflen = len + s + 1;
-			buf = realloc(buf, buflen);
 		}
-		if (buf == NULL)
-			err(1, "can't realloc");
 		memcpy(buf + len, ptr, s);
 		len += s;
 		buf[len] = '\0';
@@ -103,6 +131,5 @@ read_line(fp, size, lineno, delim, flags)
 	if (size != NULL)
 		*size = len;
 	return buf;
+#endif				/* HAS_FPARSELN */
 }
-
-#endif /* NEED_READ_LINE */

@@ -1,7 +1,7 @@
-/*	$NetBSD: if_tlp_eisa.c,v 1.5 2000/03/15 18:39:52 thorpej Exp $	*/
+/*	$NetBSD: if_tlp_eisa.c,v 1.21 2008/04/28 20:23:48 martin Exp $	*/
 
 /*-
- * Copyright (c) 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,13 +35,15 @@
  * Ethernet controller family driver.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_tlp_eisa.c,v 1.21 2008/04/28 20:23:48 martin Exp $");
+
 #include "opt_inet.h"
-#include "opt_ns.h"
 #include "bpfilter.h"
 
 #include <sys/param.h>
-#include <sys/systm.h> 
-#include <sys/mbuf.h>   
+#include <sys/systm.h>
+#include <sys/mbuf.h>
 #include <sys/malloc.h>
 #include <sys/kernel.h>
 #include <sys/socket.h>
@@ -57,28 +52,24 @@
 #include <sys/device.h>
 
 #include <machine/endian.h>
- 
+
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0 
+#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif 
+#endif
 
 #ifdef INET
-#include <netinet/in.h> 
+#include <netinet/in.h>
 #include <netinet/if_inarp.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/mii/miivar.h>
 #include <dev/mii/mii_bitbang.h>
@@ -115,16 +106,15 @@ struct tulip_eisa_softc {
 	void	*sc_ih;			/* interrupt handle */
 };
 
-int	tlp_eisa_match __P((struct device *, struct cfdata *, void *));
-void	tlp_eisa_attach __P((struct device *, struct device *, void *));
+static int	tlp_eisa_match(struct device *, struct cfdata *, void *);
+static void	tlp_eisa_attach(struct device *, struct device *, void *);
 
-struct cfattach tlp_eisa_ca = {
-	sizeof(struct tulip_eisa_softc), tlp_eisa_match, tlp_eisa_attach,
-};
+CFATTACH_DECL(tlp_eisa, sizeof(struct tulip_eisa_softc),
+    tlp_eisa_match, tlp_eisa_attach, NULL, NULL);
 
-const int tlp_eisa_irqs[] = { 5, 9, 10, 11 };
+static const int tlp_eisa_irqs[] = { 5, 9, 10, 11 };
 
-const struct tulip_eisa_product {
+static const struct tulip_eisa_product {
 	const char	*tep_eisaid;	/* EISA ID */
 	const char	*tep_name;	/* device name */
 	tulip_chip_t	tep_chip;	/* base Tulip chip type */
@@ -136,12 +126,8 @@ const struct tulip_eisa_product {
 	  TULIP_CHIP_INVALID },
 };
 
-const struct tulip_eisa_product *tlp_eisa_lookup
-    __P((const struct eisa_attach_args *));
-
-const struct tulip_eisa_product *
-tlp_eisa_lookup(ea)
-	const struct eisa_attach_args *ea;
+static const struct tulip_eisa_product *
+tlp_eisa_lookup(const struct eisa_attach_args *ea)
 {
 	const struct tulip_eisa_product *tep;
 
@@ -152,11 +138,9 @@ tlp_eisa_lookup(ea)
 	return (NULL);
 }
 
-int
-tlp_eisa_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+tlp_eisa_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct eisa_attach_args *ea = aux;
 
@@ -166,14 +150,12 @@ tlp_eisa_match(parent, match, aux)
 	return (0);
 }
 
-void
-tlp_eisa_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+tlp_eisa_attach(struct device *parent, struct device *self, void *aux)
 {
 	static const u_int8_t testpat[] =
 	    { 0xff, 0, 0x55, 0xaa, 0xff, 0, 0x55, 0xaa };
-	struct tulip_eisa_softc *esc = (void *) self;
+	struct tulip_eisa_softc *esc = device_private(self);
 	struct tulip_softc *sc = &esc->sc_tulip;
 	struct eisa_attach_args *ea = aux;
 	eisa_chipset_tag_t ec = ea->ea_ec;
@@ -254,7 +236,7 @@ tlp_eisa_attach(parent, self, aux)
 	/*
 	 * ...and now read the contents of the Ethernet Address ROM.
 	 */
-	memset(sc->sc_srom, 0, sizeof(sc->sc_srom));
+	sc->sc_srom = malloc(32, M_DEVBUF, M_WAITOK|M_ZERO);
 	for (i = 0; i < 32; i++)
 		sc->sc_srom[i] = bus_space_read_1(iot, ioh, DE425_ENETROM);
 
@@ -262,8 +244,7 @@ tlp_eisa_attach(parent, self, aux)
 	 * None of the DE425 boards have the new-style SROMs.
 	 */
 	if (tlp_parse_old_srom(sc, enaddr) == 0) {
-		printf("%s: unable to decode old-style SROM\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to decode old-style SROM\n");
 		return;
 	}
 
@@ -283,23 +264,22 @@ tlp_eisa_attach(parent, self, aux)
 	 * Map and establish our interrupt.
 	 */
 	if (eisa_intr_map(ec, irq, &ih)) {
-		printf("%s: unable to map interrupt (%u)\n",
-		    sc->sc_dev.dv_xname, irq);
+		aprint_error_dev(&sc->sc_dev, "unable to map interrupt (%u)\n",
+		    irq);
 		return;
 	}
 	intrstr = eisa_intr_string(ec, ih);
 	esc->sc_ih = eisa_intr_establish(ec, ih,
 	    (val & 0x01) ? IST_EDGE : IST_LEVEL, IPL_NET, tlp_intr, sc);
 	if (esc->sc_ih == NULL) {
-		printf("%s: unable to establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to establish interrupt");
 		if (intrstr != NULL)
 			printf(" at %s", intrstr);
 		printf("\n");
 		return;
 	}
 	if (intrstr != NULL)
-		printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname,
+		printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev),
 		    intrstr);
 
 	/*

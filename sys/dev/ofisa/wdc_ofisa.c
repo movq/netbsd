@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_ofisa.c,v 1.5 1998/12/02 00:18:41 sommerfe Exp $	*/
+/*	$NetBSD: wdc_ofisa.c,v 1.30 2008/03/18 20:46:36 cube Exp $	*/
 
 /*
  * Copyright 1997, 1998
@@ -37,14 +37,17 @@
  * OFW Attachment for 'wdc' disk controller driver
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: wdc_ofisa.c,v 1.30 2008/03/18 20:46:36 cube Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 #include <sys/tty.h>
 #include <sys/malloc.h>
 
-#include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/intr.h>
+#include <sys/bus.h>
 
 #include <dev/ofw/openfirm.h>
 #include <dev/isa/isavar.h>
@@ -56,26 +59,24 @@
 
 struct wdc_ofisa_softc {
 	struct wdc_softc sc_wdcdev;
-	struct	channel_softc *wdc_chanptr;	
-	struct  channel_softc wdc_channel;
+	struct ata_channel *sc_chanlist[1];
+	struct ata_channel sc_channel;
+	struct ata_queue sc_chqueue;
+	struct wdc_regs wdc_regs;
 	void	*sc_ih;
 };
 
-int wdc_ofisa_probe __P((struct device *, struct cfdata *, void *));
-void wdc_ofisa_attach __P((struct device *, struct device *, void *));
+static int wdc_ofisa_probe(device_t, cfdata_t, void *);
+static void wdc_ofisa_attach(device_t, device_t, void *);
 
-struct cfattach wdc_ofisa_ca = {
-	sizeof(struct wdc_ofisa_softc), wdc_ofisa_probe, wdc_ofisa_attach
-};
+CFATTACH_DECL_NEW(wdc_ofisa, sizeof(struct wdc_ofisa_softc),
+    wdc_ofisa_probe, wdc_ofisa_attach, NULL, NULL);
 
-int
-wdc_ofisa_probe(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+static int
+wdc_ofisa_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ofisa_attach_args *aa = aux;
-	const char *compatible_strings[] = { "pnpPNP,600", NULL };
+	static const char *const compatible_strings[] = { "pnpPNP,600", NULL };
 	int rv = 0;
 
 	if (of_compatible(aa->oba.oba_phandle, compatible_strings) != -1)
@@ -87,16 +88,16 @@ wdc_ofisa_probe(parent, cf, aux)
 	return (rv);
 }
 
-void
-wdc_ofisa_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+wdc_ofisa_attach(device_t parent, device_t self, void *aux)
 {
-	struct wdc_ofisa_softc *sc = (void *)self;
+	struct wdc_ofisa_softc *sc = device_private(self);
+	struct wdc_regs *wdr;
 	struct ofisa_attach_args *aa = aux;
 	struct ofisa_reg_desc reg[2];
 	struct ofisa_intr_desc intr;
 	int n;
+	bus_space_handle_t ioh;
 
 	/*
 	 * We're living on an ofw.  We have to ask the OFW what our
@@ -105,16 +106,19 @@ wdc_ofisa_attach(parent, self, aux)
 	 * We expect exactly two register regions and one interrupt.
 	 */
 
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
+	sc->sc_wdcdev.regs = wdr = &sc->wdc_regs;
+
 	n = ofisa_reg_get(aa->oba.oba_phandle, reg, 2);
 #ifdef _WDC_OFISA_MD_REG_FIXUP
 	n = wdc_ofisa_md_reg_fixup(parent, self, aux, reg, 2, n);
 #endif
 	if (n != 2) {
-		printf(": error getting register data\n");
+		aprint_error(": error getting register data\n");
 		return;
 	}
 	if (reg[0].len != 8 || reg[1].len != 2) {
-		printf(": weird register size (%lu/%lu, expected 8/2)\n",
+		aprint_error(": weird register size (%lu/%lu, expected 8/2)\n",
 		    (unsigned long)reg[0].len, (unsigned long)reg[1].len);
 		return;
 	}
@@ -124,47 +128,51 @@ wdc_ofisa_attach(parent, self, aux)
 	n = wdc_ofisa_md_intr_fixup(parent, self, aux, &intr, 1, n);
 #endif
 	if (n != 1) {
-		printf(": error getting interrupt data\n");
+		aprint_error(": error getting interrupt data\n");
 		return;
 	}
 
-	sc->wdc_channel.cmd_iot =
-	    (reg[0].type == OFISA_REG_TYPE_IO) ? aa->iot : aa->memt;
-	sc->wdc_channel.ctl_iot =
-	    (reg[1].type == OFISA_REG_TYPE_IO) ? aa->iot : aa->memt;
-        if (bus_space_map(sc->wdc_channel.cmd_iot, reg[0].addr, 8, 0,
-              &sc->wdc_channel.cmd_ioh) ||
-            bus_space_map(sc->wdc_channel.ctl_iot, reg[1].addr, 1, 0,
-	      &sc->wdc_channel.ctl_ioh)) {
-                printf(": can't map register spaces\n");
+	wdr->cmd_iot = (reg[0].type == OFISA_REG_TYPE_IO) ? aa->iot : aa->memt;
+	wdr->ctl_iot = (reg[1].type == OFISA_REG_TYPE_IO) ? aa->iot : aa->memt;
+        if (bus_space_map(wdr->cmd_iot, reg[0].addr, 8, 0, &ioh) ||
+            bus_space_map(wdr->ctl_iot, reg[1].addr, 1, 0,
+	      &wdr->ctl_ioh)) {
+                aprint_error(": can't map register spaces\n");
 		return;
         }
+	wdr->cmd_baseioh = ioh;
+
+	for (n = 0; n < WDC_NREG; n++) {
+		if (bus_space_subregion(wdr->cmd_iot, ioh, n,
+		    n == 0 ? 4 : 1, &wdr->cmd_iohs[n]) != 0) {
+                	aprint_error(": can't subregion register space\n");
+			return;
+		}
+	}
 
 	sc->sc_ih = isa_intr_establish(aa->ic, intr.irq, intr.share,
-	    IPL_BIO, wdcintr, &sc->wdc_channel);
+	    IPL_BIO, wdcintr, &sc->sc_channel);
 
-	printf("\n");
-	sc->sc_wdcdev.cap |= WDC_CAPABILITY_DATA16;
-	sc->wdc_chanptr = &sc->wdc_channel;
-	sc->sc_wdcdev.channels = &sc->wdc_chanptr;
-	sc->sc_wdcdev.nchannels = 1;
-	sc->wdc_channel.channel = 0;
-	sc->wdc_channel.wdc = &sc->sc_wdcdev;
-	sc->wdc_channel.ch_queue = malloc(sizeof(struct channel_queue),
-	    M_DEVBUF, M_NOWAIT);
-	if (sc->wdc_channel.ch_queue == NULL) {
-	    printf("%s: can't allocate memory for command queue",
-		sc->sc_wdcdev.sc_dev.dv_xname);
-	    return;
-	}
-	wdcattach(&sc->wdc_channel);
+	aprint_normal("\n");
+	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16;
+	sc->sc_chanlist[0] = &sc->sc_channel;
+	sc->sc_wdcdev.sc_atac.atac_channels = sc->sc_chanlist;
+	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
+	sc->sc_channel.ch_channel = 0;
+	sc->sc_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
+	sc->sc_channel.ch_queue = &sc->sc_chqueue;
+	sc->sc_channel.ch_ndrive = 2;
+
+	wdc_init_shadow_regs(&sc->sc_channel);
+
+	wdcattach(&sc->sc_channel);
 
 #if 0
-	printf("%s: registers: ", sc->sc_dev.dv_xname);
+	aprint_verbose_dev(self, "registers: ");
 	ofisa_reg_print(reg, 2);
-	printf("\n");
-	printf("%s: interrupts: ", sc->sc_dev.dv_xname);
+	aprint_verbose("\n");
+	aprint_verbose_dev(self, "interrupts: ");
 	ofisa_intr_print(&intr, 1);
-	printf("\n");
+	aprint_verbose("\n");
 #endif
 }

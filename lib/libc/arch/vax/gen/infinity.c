@@ -1,9 +1,9 @@
-/*	$NetBSD: infinity.c,v 1.6 1999/04/17 14:53:32 ragge Exp $	*/
+/*	$NetBSD: infinity.c,v 1.8 2002/02/19 21:50:01 thorpej Exp $	*/
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: infinity.c,v 1.6 1999/04/17 14:53:32 ragge Exp $");
-#endif /* not lint */
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: infinity.c,v 1.8 2002/02/19 21:50:01 thorpej Exp $");
+#endif /* LIBC_SCCS and not lint */
 /*
  * XXX - This is not correct, but what can we do about it???
  */
@@ -13,5 +13,5 @@ __RCSID("$NetBSD: infinity.c,v 1.6 1999/04/17 14:53:32 ragge Exp $");
 #include <math.h>
 
 /* The highest D float on a vax. */
-const char __infinity[] = { (char)0xff, (char)0x7f, (char)0xff, (char)0xff,
-	(char)0xff, (char)0xff, (char)0xff, (char)0xff };
+const union __double_u __infinity =
+	{ { 0xff, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } };

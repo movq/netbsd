@@ -1,4 +1,4 @@
-/*	$NetBSD: par.c,v 1.21 2000/03/26 10:15:32 frueauf Exp $	*/
+/*	$NetBSD: par.c,v 1.36 2007/10/17 19:53:17 garbled Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,6 +31,9 @@
  *	@(#)ppi.c	7.3 (Berkeley) 12/16/90
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: par.c,v 1.36 2007/10/17 19:53:17 garbled Exp $");
+
 /*
  * parallel port interface
  */
@@ -51,13 +50,11 @@
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/proc.h>
+#include <sys/conf.h>
 
 #include <amiga/amiga/device.h>
 #include <amiga/amiga/cia.h>
 #include <amiga/dev/parioctl.h>
-
-#include <sys/conf.h>
-#include <machine/conf.h>
 
 struct	par_softc {
 	struct device sc_dev;
@@ -74,11 +71,9 @@ struct	par_softc {
 
 #define getparsp(x)	(x > 0 ? NULL : par_softcp)
 
-struct callout parintr_ch = CALLOUT_INITIALIZER;
-
 /* sc_flags values */
-#define	PARF_ALIVE	0x01	
-#define	PARF_OPEN	0x02	
+#define	PARF_ALIVE	0x01
+#define	PARF_OPEN	0x02
 #define PARF_UIO	0x04
 #define PARF_TIMO	0x08
 #define PARF_DELAY	0x10
@@ -95,30 +90,37 @@ int	pardebug = 0;
 #define PDB_NOCHECK	0x80
 #endif
 
-int parrw __P((dev_t, struct uio *));
-int parhztoms __P((int));
-int parmstohz __P((int));
-int parsend __P((u_char *, int));
-int parreceive __P((u_char *, int));
-int parsendch __P((u_char));
+int parrw(dev_t, struct uio *);
+int parhztoms(int);
+int parmstohz(int);
+int parsend(u_char *, int);
+int parreceive(u_char *, int);
+int parsendch(u_char);
 
-void partimo __P((void *));
-void parstart __P((void *));
-void parintr __P((void *));
+void partimo(void *);
+void parstart(void *);
+void parintr(void *);
 
-void parattach __P((struct device *, struct device *, void *));
-int parmatch __P((struct device *, struct cfdata *, void *));
+void parattach(struct device *, struct device *, void *);
+int parmatch(struct device *, struct cfdata *, void *);
 
-struct cfattach par_ca = {
-	sizeof(struct device), parmatch, parattach
+CFATTACH_DECL(par, sizeof(struct par_softc),
+    parmatch, parattach, NULL, NULL);
+
+dev_type_open(paropen);
+dev_type_close(parclose);
+dev_type_read(parread);
+dev_type_write(parwrite);
+dev_type_ioctl(parioctl);
+
+const struct cdevsw par_cdevsw = {
+	paropen, parclose, parread, parwrite, parioctl,
+	nostop, notty, nopoll, nommap, nokqfilter,
 };
 
 /*ARGSUSED*/
 int
-parmatch(pdp, cfp, auxp)
-	struct device *pdp;
-	struct cfdata *cfp;
-	void *auxp;
+parmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	static int par_found = 0;
 
@@ -130,9 +132,7 @@ parmatch(pdp, cfp, auxp)
 }
 
 void
-parattach(pdp, dp, auxp)
-	struct device *pdp, *dp;
-	void *auxp;
+parattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	par_softcp = (struct par_softc *)dp;
 
@@ -142,20 +142,16 @@ parattach(pdp, dp, auxp)
 		par_softcp->sc_flags = PARF_ALIVE;
 	printf("\n");
 
-	callout_init(&par_softcp->sc_timo_ch);
-	callout_init(&par_softcp->sc_start_ch);
+	callout_init(&par_softcp->sc_timo_ch, 0);
+	callout_init(&par_softcp->sc_start_ch, 0);
 }
 
 int
-paropen(dev, flags, mode, p)
-	dev_t dev;
-	int flags;
-	int mode;
-	struct proc *p;
+paropen(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	int unit = UNIT(dev);
 	struct par_softc *sc = getparsp(unit);
-  
+
 	if (unit >= NPAR || (sc->sc_flags & PARF_ALIVE) == 0)
 		return(ENXIO);
 #ifdef DEBUG
@@ -171,7 +167,7 @@ paropen(dev, flags, mode, p)
 	/* can either read or write, but not both */
 	if ((flags & (FREAD|FWRITE)) == (FREAD|FWRITE))
 		return EINVAL;
-  
+
 	sc->sc_flags |= PARF_OPEN;
 
 	if (flags & FREAD)
@@ -188,11 +184,7 @@ paropen(dev, flags, mode, p)
 }
 
 int
-parclose(dev, flags, mode, p)
-	dev_t dev;
-	int flags;
-	int mode;
-	struct proc *p;
+parclose(dev_t dev, int flags, int mode, struct lwp *l)
 {
   int unit = UNIT(dev);
   struct par_softc *sc = getparsp(unit);
@@ -209,38 +201,33 @@ parclose(dev, flags, mode, p)
 }
 
 void
-parstart(arg)
-	void *arg;
+parstart(void *arg)
 {
 	struct par_softc *sc = arg;
 
 #ifdef DEBUG
 	if (pardebug & PDB_FOLLOW)
-		printf("parstart(%x)\n", sc->sc_dev.dv_unit);
+		printf("parstart(%x)\n", device_unit(&sc->sc_dev));
 #endif
 	sc->sc_flags &= ~PARF_DELAY;
 	wakeup(sc);
 }
 
 void
-partimo(arg)
-	void *arg;
+partimo(void *arg)
 {
 	struct par_softc *sc = arg;
 
 #ifdef DEBUG
 	if (pardebug & PDB_FOLLOW)
-		printf("partimo(%x)\n", sc->sc_dev.dv_unit);
+		printf("partimo(%x)\n", device_unit(&sc->sc_dev));
 #endif
 	sc->sc_flags &= ~(PARF_UIO|PARF_TIMO);
 	wakeup(sc);
 }
 
 int
-parread(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+parread(dev_t dev, struct uio *uio, int flags)
 {
 
 #ifdef DEBUG
@@ -252,10 +239,7 @@ parread(dev, uio, flags)
 
 
 int
-parwrite(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+parwrite(dev_t dev, struct uio *uio, int flags)
 {
 
 #ifdef DEBUG
@@ -267,9 +251,7 @@ parwrite(dev, uio, flags)
 
 
 int
-parrw(dev, uio)
-     dev_t dev;
-     register struct uio *uio;
+parrw(dev_t dev, register struct uio *uio)
 {
   int unit = UNIT(dev);
   register struct par_softc *sc = getparsp(unit);
@@ -296,23 +278,22 @@ parrw(dev, uio)
   buflen = min(sc->sc_burst, uio->uio_resid);
   buf = (char *)malloc(buflen, M_DEVBUF, M_WAITOK);
   sc->sc_flags |= PARF_UIO;
-  if (sc->sc_timo > 0) 
+  if (sc->sc_timo > 0)
     {
       sc->sc_flags |= PARF_TIMO;
       callout_reset(&sc->sc_timo_ch, sc->sc_timo, partimo, sc);
     }
-  while (uio->uio_resid > 0) 
+  while (uio->uio_resid > 0)
     {
       len = min(buflen, uio->uio_resid);
       cp = buf;
-      if (uio->uio_rw == UIO_WRITE) 
+      if (uio->uio_rw == UIO_WRITE)
 	{
 	  error = uiomove(cp, len, uio);
 	  if (error)
 	    break;
 	}
 again:
-      s = splbio();
 #if 0
       if ((sc->sc_flags & PARF_UIO) && hpibreq(&sc->sc_dq) == 0)
 	sleep(sc, PRIBIO+1);
@@ -320,15 +301,15 @@ again:
       /*
        * Check if we timed out during sleep or uiomove
        */
-      (void) spllowersoftclock();
-      if ((sc->sc_flags & PARF_UIO) == 0) 
+      s = splsoftclock();
+      if ((sc->sc_flags & PARF_UIO) == 0)
 	{
 #ifdef DEBUG
 	  if (pardebug & PDB_IO)
 	    printf("parrw: uiomove/sleep timo, flags %x\n",
 		   sc->sc_flags);
 #endif
-	  if (sc->sc_flags & PARF_TIMO) 
+	  if (sc->sc_flags & PARF_TIMO)
 	    {
 	      callout_stop(&sc->sc_timo_ch);
 	      sc->sc_flags &= ~PARF_TIMO;
@@ -344,13 +325,13 @@ again:
 	cnt = parsend (cp, len);
       else
 	cnt = parreceive (cp, len);
-      
+
       if (cnt < 0)
 	{
 	  error = -cnt;
 	  break;
 	}
-      
+
       s = splbio();
 #if 0
       hpibfree(&sc->sc_dq);
@@ -361,9 +342,9 @@ again:
 	       uio->uio_rw == UIO_READ ? "recv" : "send", cp, len, cnt);
 #endif
       splx(s);
-      if (uio->uio_rw == UIO_READ) 
+      if (uio->uio_rw == UIO_READ)
 	{
-	  if (cnt) 
+	  if (cnt)
 	    {
 	      error = uiomove(cp, cnt, uio);
 	      if (error)
@@ -381,7 +362,7 @@ again:
       /*
        * Operation timeout (or non-blocking), quit now.
        */
-      if ((sc->sc_flags & PARF_UIO) == 0) 
+      if ((sc->sc_flags & PARF_UIO) == 0)
 	{
 #ifdef DEBUG
 	  if (pardebug & PDB_IO)
@@ -393,12 +374,12 @@ again:
       /*
        * Implement inter-read delay
        */
-      if (sc->sc_delay > 0) 
+      if (sc->sc_delay > 0)
 	{
 	  sc->sc_flags |= PARF_DELAY;
 	  callout_reset(&sc->sc_start_ch, sc->sc_delay, parstart, sc);
 	  error = tsleep(sc, PCATCH | (PZERO - 1), "par-cdelay", 0);
-	  if (error) 
+	  if (error)
 	    {
 	      splx(s);
 	      break;
@@ -409,7 +390,7 @@ again:
        * Must not call uiomove again til we've used all data
        * that we already grabbed.
        */
-      if (uio->uio_rw == UIO_WRITE && cnt != len) 
+      if (uio->uio_rw == UIO_WRITE && cnt != len)
 	{
 	  cp += cnt;
 	  len -= cnt;
@@ -418,12 +399,12 @@ again:
 	}
     }
   s = splsoftclock();
-  if (sc->sc_flags & PARF_TIMO) 
+  if (sc->sc_flags & PARF_TIMO)
     {
       callout_stop(&sc->sc_timo_ch);
       sc->sc_flags &= ~PARF_TIMO;
     }
-  if (sc->sc_flags & PARF_DELAY) 
+  if (sc->sc_flags & PARF_DELAY)
     {
       callout_stop(&sc->sc_start_ch);
       sc->sc_flags &= ~PARF_DELAY;
@@ -432,7 +413,7 @@ again:
   /*
    * Adjust for those chars that we uiomove'ed but never wrote
    */
-  if (uio->uio_rw == UIO_WRITE && cnt != len) 
+  if (uio->uio_rw == UIO_WRITE && cnt != len)
     {
       uio->uio_resid += (len - cnt);
 #ifdef DEBUG
@@ -450,18 +431,13 @@ again:
 }
 
 int
-parioctl(dev, cmd, data, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+parioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
   struct par_softc *sc = getparsp(UNIT(dev));
   struct parparam *pp, *upp;
   int error = 0;
 
-  switch (cmd) 
+  switch (cmd)
     {
     case PARIOCGPARAM:
       pp = &sc->sc_param;
@@ -489,8 +465,7 @@ parioctl(dev, cmd, data, flag, p)
 }
 
 int
-parhztoms(h)
-     int h;
+parhztoms(int h)
 {
   extern int hz;
   register int m = h;
@@ -501,8 +476,7 @@ parhztoms(h)
 }
 
 int
-parmstohz(m)
-     int m;
+parmstohz(int m)
 {
   extern int hz;
   register int h = m;
@@ -518,44 +492,27 @@ parmstohz(m)
 /* stuff below here if for interrupt driven output of data thru
    the parallel port. */
 
-int partimeout_pending;
 int parsend_pending;
 
 void
-parintr(arg)
-	void *arg;
+parintr(void *arg)
 {
-	int s, mask;
+	int s;
 
-	mask = (int)arg;
 	s = splclock();
 
 #ifdef DEBUG
 	if (pardebug & PDB_INTERRUPT)
-		printf("parintr %s\n", mask ? "FLG" : "tout");
+		printf("parintr\n");
 #endif
-	/*
-	 * if invoked from timeout handler, mask will be 0,
-	 * if from interrupt, it will contain the cia-icr mask,
-	 * which is != 0
-	 */
-	if (mask) {
-		if (partimeout_pending)
-			callout_stop(&parintr_ch);
-		if (parsend_pending)
-			parsend_pending = 0;
-	}
+	parsend_pending = 0;
 
-	/* either way, there won't be a timeout pending any longer */
-	partimeout_pending = 0;
-  
 	wakeup(parintr);
 	splx(s);
 }
 
 int
-parsendch (ch)
-     u_char ch;
+parsendch (u_char ch)
 {
   int error = 0;
   int s;
@@ -563,8 +520,8 @@ parsendch (ch)
   /* if either offline, busy or out of paper, wait for that
      condition to clear */
   s = splclock();
-  while (!error 
-	 && (parsend_pending 
+  while (!error
+	 && (parsend_pending
 	     || ((ciab.pra ^ CIAB_PRA_SEL)
 		 & (CIAB_PRA_SEL|CIAB_PRA_BUSY|CIAB_PRA_POUT))))
     {
@@ -576,9 +533,6 @@ parsendch (ch)
 		((ciab.pra ^ CIAB_PRA_SEL)
 		 & (CIAB_PRA_SEL|CIAB_PRA_BUSY|CIAB_PRA_POUT)));
 #endif
-      /* wait a second, and try again */
-      callout_reset(&parintr_ch, hz, parintr, NULL);
-      partimeout_pending = 1;
       /* this is essentially a flipflop to have us wait for the
 	 first character being transmitted when trying to transmit
 	 the second, etc. */
@@ -586,16 +540,15 @@ parsendch (ch)
       /* it's quite important that a parallel putc can be
 	 interrupted, given the possibility to lock a printer
 	 in an offline condition.. */
-      if ((error = tsleep(parintr, PCATCH | (PZERO - 1), "parsendch", 0)) > 0)
+      error = tsleep(parintr, PCATCH | (PZERO - 1), "parsendch", hz);
+      if (error == EWOULDBLOCK)
+	error = 0;
+      if (error > 0)
 	{
 #ifdef DEBUG
 	  if (pardebug & PDB_INTERRUPT)
 	    printf ("parsendch interrupted, error = %d\n", error);
 #endif
-	  if (partimeout_pending)
-	    callout_stop(&parintr_ch);
-
-	  partimeout_pending = 0;
 	}
     }
 
@@ -616,9 +569,7 @@ parsendch (ch)
 
 
 int
-parsend (buf, len)
-     u_char *buf;
-     int len;
+parsend (u_char *buf, int len)
 {
   int err, orig_len = len;
 
@@ -628,7 +579,7 @@ parsend (buf, len)
   ciab.ddra &= ~(CIAB_PRA_SEL|CIAB_PRA_POUT|CIAB_PRA_BUSY);
   /* data lines to output */
   ciaa.ddrb = 0xff;
-  
+
   for (; len; len--, buf++)
     if ((err = parsendch (*buf)) != 0)
       return err < 0 ? -EINTR : -err;
@@ -640,9 +591,7 @@ parsend (buf, len)
 
 
 int
-parreceive (buf, len)
-     u_char *buf;
-     int len;
+parreceive (u_char *buf, int len)
 {
   /* oh deary me, something's gotta be left to be implemented
      later... */

@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_kintf.h,v 1.12 2000/03/07 02:59:50 oster Exp $	*/
+/*	$NetBSD: rf_kintf.h,v 1.20 2006/08/27 05:07:12 christos Exp $	*/
 /*
  * rf_kintf.h
  *
@@ -34,7 +34,7 @@
 #ifndef _RF__RF_KINTF_H_
 #define _RF__RF_KINTF_H_
 
-#include "rf_types.h"
+#include <dev/raidframe/raidframevar.h>
 
 int     rf_GetSpareTableFromDaemon(RF_SparetWait_t * req);
 
@@ -43,13 +43,16 @@ int     rf_DispatchKernelIO(RF_DiskQueue_t * queue, RF_DiskQueueData_t * req);
 
 int raidwrite_component_label(dev_t, struct vnode *, RF_ComponentLabel_t *);
 int raidread_component_label(dev_t, struct vnode *, RF_ComponentLabel_t *);
-void rf_update_component_labels( RF_Raid_t *);
-void rf_final_update_component_labels( RF_Raid_t *);
-int raidlookup __P((char *, struct proc *, struct vnode **));
+
+#define RF_NORMAL_COMPONENT_UPDATE 0
+#define RF_FINAL_COMPONENT_UPDATE 1
+void rf_update_component_labels(RF_Raid_t *, int);
 int raidmarkclean(dev_t dev, struct vnode *b_vp, int);
 int raidmarkdirty(dev_t dev, struct vnode *b_vp, int);
-void raid_init_component_label __P((RF_Raid_t *, RF_ComponentLabel_t *));
-void rf_print_component_label __P((RF_ComponentLabel_t *));
+void raid_init_component_label(RF_Raid_t *, RF_ComponentLabel_t *);
+void rf_print_component_label(RF_ComponentLabel_t *);
 void rf_UnconfigureVnodes( RF_Raid_t * );
 void rf_close_component( RF_Raid_t *, struct vnode *, int);
+void rf_disk_unbusy(RF_RaidAccessDesc_t *);
+int rf_getdisksize(struct vnode *, struct lwp *, RF_RaidDisk_t *);
 #endif				/* _RF__RF_KINTF_H_ */

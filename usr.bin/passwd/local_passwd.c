@@ -1,4 +1,4 @@
-/*	$NetBSD: local_passwd.c,v 1.19 2000/02/14 04:36:21 aidan Exp $	*/
+/*	$NetBSD: local_passwd.c,v 1.31 2008/01/25 19:36:27 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)local_passwd.c    8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: local_passwd.c,v 1.19 2000/02/14 04:36:21 aidan Exp $");
+__RCSID("$NetBSD: local_passwd.c,v 1.31 2008/01/25 19:36:27 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,6 +48,7 @@ __RCSID("$NetBSD: local_passwd.c,v 1.19 2000/02/14 04:36:21 aidan Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include <time.h>
 #include <unistd.h>
 #include <util.h>
@@ -59,36 +56,15 @@ __RCSID("$NetBSD: local_passwd.c,v 1.19 2000/02/14 04:36:21 aidan Exp $");
 
 #include "extern.h"
 
-static	char   *getnewpasswd __P((struct passwd *, int));
-
 static uid_t uid;
-static int force_local;
-
-char *tempname;
-
-static unsigned char itoa64[] =		/* 0 ... 63 => ascii - 64 */
-	"./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-
-void
-to64(s, v, n)
-	char *s;
-	long v;
-	int n;
-{
-	while (--n >= 0) {
-		*s++ = itoa64[v&0x3f];
-		v >>= 6;
-	}
-}
 
 static char *
-getnewpasswd(pw, min_pw_len)
-	struct passwd *pw;
-	int min_pw_len;
+getnewpasswd(struct passwd *pw, int min_pw_len)
 {
 	int tries;
 	char *p, *t;
-	char buf[_PASSWORD_LEN+1], salt[9];
+	char buf[_PASSWORD_LEN+1], salt[_PASSWORD_LEN+1];
+	char option[LINE_MAX], *key, *opt;
 	
 	(void)printf("Changing local password for %s.\n", pw->pw_name);
 
@@ -113,7 +89,7 @@ getnewpasswd(pw, min_pw_len)
 			(void)printf("Please enter a longer password.\n");
 			continue;
 		}
-		for (t = p; *t && islower(*t); ++t);
+		for (t = p; *t && islower((unsigned char)*t); ++t);
 		if (!*t && ++tries < 2) {
 			(void)printf("Please don't use an all-lower case "
 				     "password.\nUnusual capitalization, "
@@ -121,23 +97,127 @@ getnewpasswd(pw, min_pw_len)
 				     "suggested.\n");
 			continue;
 		}
-		(void)strncpy(buf, p, sizeof(buf) - 1);
-		buf[sizeof(buf) - 1] = '\0';
+		(void)strlcpy(buf, p, sizeof(buf));
 		if (!strcmp(buf, getpass("Retype new password:")))
 			break;
 		(void)printf("Mismatch; try again, EOF to quit.\n");
 	}
-	/* grab a random printable character that isn't a colon */
-	(void)srandom((int)time((time_t *)NULL));
-#ifdef NEWSALT
-	salt[0] = _PASSWORD_EFMT1;
-	to64(&salt[1], (long)(29 * 25), 4);
-	to64(&salt[5], random(), 4);
-#else
-	to64(&salt[0], random(), 2);
-#endif
+
+	pw_getpwconf(option, sizeof(option), pw, "localcipher");
+	opt = option;
+	key = strsep(&opt, ",");
+	if(pw_gensalt(salt, _PASSWORD_LEN, key, opt) == -1) {
+		warn("Couldn't generate salt");
+		pw_error(NULL, 0, 0);
+	}
 	return(crypt(buf, salt));
 }
+
+#ifdef USE_PAM
+
+void
+pwlocal_usage(const char *prefix)
+{
+
+	(void) fprintf(stderr, "%s %s [-d files | -l] [user]\n",
+	    prefix, getprogname());
+}
+
+void
+pwlocal_process(const char *username, int argc, char **argv)
+{
+	struct passwd *pw;
+	struct passwd old_pw;
+	time_t old_change;
+	int pfd, tfd;
+	int min_pw_len = 0;
+	int pw_expiry  = 0;
+	int ch;
+#ifdef LOGIN_CAP
+	login_cap_t *lc;
+#endif
+
+	while ((ch = getopt(argc, argv, "l")) != -1) {
+		switch (ch) {
+		case 'l':
+			/*
+			 * Aborb the -l that may have gotten us here.
+			 */
+			break;
+
+		default:
+			usage();
+			/* NOTREACHED */
+		}
+	}
+
+	argc -= optind;
+	argv += optind;
+
+	switch (argc) {
+	case 0:
+		/* username already provided */
+		break;
+	case 1:
+		username = argv[0];
+		break;
+	default:
+		usage();
+		/* NOTREACHED */
+	}
+
+	if (!(pw = getpwnam(username)))
+		errx(1, "unknown user %s", username);
+
+	uid = getuid();
+	if (uid && uid != pw->pw_uid)
+		errx(1, "%s", strerror(EACCES));
+
+	/* Save the old pw information for comparing on pw_copy(). */
+	old_pw = *pw;
+
+	/*
+	 * Get class restrictions for this user, then get the new password. 
+	 */
+#ifdef LOGIN_CAP
+	if((lc = login_getclass(pw->pw_class)) != NULL) {
+		min_pw_len = (int) login_getcapnum(lc, "minpasswordlen", 0, 0);
+		pw_expiry  = (int) login_getcaptime(lc, "passwordtime", 0, 0);
+		login_close(lc);
+	}
+#endif
+
+	pw->pw_passwd = getnewpasswd(pw, min_pw_len);
+	old_change = pw->pw_change;
+	pw->pw_change = pw_expiry ? pw_expiry + time(NULL) : 0;
+
+	/*
+	 * Now that the user has given us a new password, let us
+	 * change the database.
+	 */
+	pw_init();
+	tfd = pw_lock(0);
+	if (tfd < 0) {
+		warnx ("The passwd file is busy, waiting...");
+		tfd = pw_lock(10);
+		if (tfd < 0)
+			errx(1, "The passwd file is still busy, "
+			     "try again later.");
+	}
+
+	pfd = open(_PATH_MASTERPASSWD, O_RDONLY, 0);
+	if (pfd < 0)
+		pw_error(_PATH_MASTERPASSWD, 1, 1);
+
+	pw_copy(pfd, tfd, pw, &old_pw);
+
+	if (pw_mkdb(username, old_change == pw->pw_change) < 0)
+		pw_error((char *)NULL, 0, 1);
+}
+
+#else /* ! USE_PAM */
+
+static int force_local;
 
 int
 local_init(progname)
@@ -180,6 +260,7 @@ local_chpw(uname)
 {
 	struct passwd *pw;
 	struct passwd old_pw;
+	time_t old_change;
 	int pfd, tfd;
 	int min_pw_len = 0;
 	int pw_expiry  = 0;
@@ -213,6 +294,7 @@ local_chpw(uname)
 #endif
 
 	pw->pw_passwd = getnewpasswd(pw, min_pw_len);
+	old_change = pw->pw_change;
 	pw->pw_change = pw_expiry ? pw_expiry + time(NULL) : 0;
 
 	/*
@@ -235,7 +317,9 @@ local_chpw(uname)
 
 	pw_copy(pfd, tfd, pw, &old_pw);
 
-	if (pw_mkdb() < 0)
+	if (pw_mkdb(uname, old_change == pw->pw_change) < 0)
 		pw_error((char *)NULL, 0, 1);
 	return (0);
 }
+
+#endif /* USE_PAM */

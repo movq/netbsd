@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_timer.c,v 1.9 2000/03/30 13:10:07 augustss Exp $	*/
+/*	$NetBSD: clnp_timer.c,v 1.15 2008/05/21 17:08:07 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -62,6 +58,9 @@ SOFTWARE.
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: clnp_timer.c,v 1.15 2008/05/21 17:08:07 drochner Exp $");
+
 #include <sys/param.h>
 #include <sys/mbuf.h>
 #include <sys/domain.h>
@@ -93,8 +92,8 @@ extern struct clnp_fragl *clnp_frags;
  *			TODO: send ER back to source
  */
 struct clnp_fragl *
-clnp_freefrags(cfh)
-	struct clnp_fragl *cfh;	/* fragment header to delete */
+clnp_freefrags(
+	struct clnp_fragl *cfh)	/* fragment header to delete */
 {
 	struct clnp_fragl *next = cfh->cfl_next;
 	struct clnp_frag *cf;
@@ -144,11 +143,13 @@ clnp_freefrags(cfh)
  * NOTES:
  */
 void
-clnp_slowtimo()
+clnp_slowtimo(void)
 {
-	struct clnp_fragl *cfh = clnp_frags;
-	int             s = splsoftnet();
+	struct clnp_fragl *cfh;
 
+	mutex_enter(softnet_lock);
+	KERNEL_LOCK(1, NULL);
+	cfh = clnp_frags;
 	while (cfh != NULL) {
 		if (--cfh->cfl_ttl == 0) {
 			cfh = clnp_freefrags(cfh);
@@ -157,7 +158,8 @@ clnp_slowtimo()
 			cfh = cfh->cfl_next;
 		}
 	}
-	splx(s);
+	KERNEL_UNLOCK_ONE(NULL);
+	mutex_exit(softnet_lock);
 }
 
 /*
@@ -173,10 +175,13 @@ clnp_slowtimo()
  *	TODO: should send back ER
  */
 void
-clnp_drain()
+clnp_drain(void)
 {
-	struct clnp_fragl *cfh = clnp_frags;
+	struct clnp_fragl *cfh;
 
+	KERNEL_LOCK(1, NULL);
+	cfh = clnp_frags;
 	while (cfh != NULL)
 		cfh = clnp_freefrags(cfh);
+	KERNEL_UNLOCK_ONE(NULL);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: args.c,v 1.14 1999/07/29 19:03:31 hubertf Exp $	*/
+/*	$NetBSD: args.c,v 1.26 2006/01/09 10:17:05 apb Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,11 +38,12 @@
 #if 0
 static char sccsid[] = "@(#)args.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: args.c,v 1.14 1999/07/29 19:03:31 hubertf Exp $");
+__RCSID("$NetBSD: args.c,v 1.26 2006/01/09 10:17:05 apb Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/types.h>
+#include <sys/time.h>
 
 #include <err.h>
 #include <errno.h>
@@ -58,29 +55,30 @@ __RCSID("$NetBSD: args.c,v 1.14 1999/07/29 19:03:31 hubertf Exp $");
 #include "dd.h"
 #include "extern.h"
 
-static int	c_arg __P((const void *, const void *));
-static int	c_conv __P((const void *, const void *));
-static void	f_bs __P((char *));
-static void	f_cbs __P((char *));
-static void	f_conv __P((char *));
-static void	f_count __P((char *));
-static void	f_files __P((char *));
-static void	f_ibs __P((char *));
-static void	f_if __P((char *));
-static void	f_obs __P((char *));
-static void	f_of __P((char *));
-static void	f_seek __P((char *));
-static void	f_skip __P((char *));
-static void	f_progress __P((char *));
-static u_long	get_bsz __P((char *));
+static int	c_arg(const void *, const void *);
+#ifndef	NO_CONV
+static int	c_conv(const void *, const void *);
+#endif
+static void	f_bs(char *);
+static void	f_cbs(char *);
+static void	f_conv(char *);
+static void	f_count(char *);
+static void	f_files(char *);
+static void	f_ibs(char *);
+static void	f_if(char *);
+static void	f_obs(char *);
+static void	f_of(char *);
+static void	f_seek(char *);
+static void	f_skip(char *);
+static void	f_progress(char *);
 
 static const struct arg {
-	char *name;
-	void (*f) __P((char *));
+	const char *name;
+	void (*f)(char *);
 	u_int set, noset;
 } args[] = {
      /* the array needs to be sorted by the first column so
-        bsearch() can be used to find commands quickly */
+	bsearch() can be used to find commands quickly */
 	{ "bs",		f_bs,		C_BS,	 C_BS|C_IBS|C_OBS|C_OSYNC },
 	{ "cbs",	f_cbs,		C_CBS,	 C_CBS },
 	{ "conv",	f_conv,		0,	 0 },
@@ -95,34 +93,40 @@ static const struct arg {
 	{ "skip",	f_skip,		C_SKIP,	 C_SKIP },
 };
 
-static char *oper;
-
 /*
  * args -- parse JCL syntax of dd.
  */
 void
-jcl(argv)
-	char **argv;
+jcl(char **argv)
 {
 	struct arg *ap, tmp;
-	char *arg;
+	char *oper, *arg;
 
 	in.dbsz = out.dbsz = 512;
 
 	while ((oper = *++argv) != NULL) {
-		if ((arg = strchr(oper, '=')) == NULL)
-			errx(1, "unknown operand %s", oper);
+		if ((arg = strchr(oper, '=')) == NULL) {
+			errx(EXIT_FAILURE, "unknown operand %s", oper);
+			/* NOTREACHED */
+		}
 		*arg++ = '\0';
-		if (!*arg)
-			errx(1, "no value specified for %s", oper);
+		if (!*arg) {
+			errx(EXIT_FAILURE, "no value specified for %s", oper);
+			/* NOTREACHED */
+		}
 		tmp.name = oper;
 		if (!(ap = (struct arg *)bsearch(&tmp, args,
 		    sizeof(args)/sizeof(struct arg), sizeof(struct arg),
-		    c_arg)))
-			errx(1, "unknown operand %s", tmp.name);
-		if (ddflags & ap->noset)
-			errx(1, "%s: illegal argument combination or already set",
+		    c_arg))) {
+			errx(EXIT_FAILURE, "unknown operand %s", tmp.name);
+			/* NOTREACHED */
+		}
+		if (ddflags & ap->noset) {
+			errx(EXIT_FAILURE,
+			    "%s: illegal argument combination or already set",
 			    tmp.name);
+			/* NOTREACHED */
+		}
 		ddflags |= ap->set;
 		ap->f(arg);
 	}
@@ -135,8 +139,11 @@ jcl(argv)
 		 * just wanted to set both the input and output block sizes
 		 * and didn't want the bs semantics, so we don't warn.
 		 */
-		if (ddflags & (C_BLOCK|C_LCASE|C_SWAB|C_UCASE|C_UNBLOCK))
+		if (ddflags & (C_BLOCK | C_LCASE | C_SWAB | C_UCASE |
+		    C_UNBLOCK | C_OSYNC | C_ASCII | C_EBCDIC | C_SPARSE)) {
 			ddflags &= ~C_BS;
+			ddflags |= C_IBS|C_OBS;
+		}
 
 		/* Bs supersedes ibs and obs. */
 		if (ddflags & C_BS && ddflags & (C_IBS|C_OBS))
@@ -148,10 +155,10 @@ jcl(argv)
 	 * Block/unblock requires cbs and vice-versa.
 	 */
 	if (ddflags & (C_BLOCK|C_UNBLOCK)) {
-		if (!(ddflags & C_CBS))
-			errx(1, "record operations require cbs");
-		if (cbsz == 0)
-			errx(1, "cbs cannot be zero");
+		if (!(ddflags & C_CBS)) {
+			errx(EXIT_FAILURE, "record operations require cbs");
+			/* NOTREACHED */
+		}
 		cfunc = ddflags & C_BLOCK ? block : unblock;
 	} else if (ddflags & C_CBS) {
 		if (ddflags & (C_ASCII|C_EBCDIC)) {
@@ -162,26 +169,18 @@ jcl(argv)
 				ddflags |= C_BLOCK;
 				cfunc = block;
 			}
-		} else
-			errx(1, "cbs meaningless if not doing record operations");
-		if (cbsz == 0)
-			errx(1, "cbs cannot be zero");
+		} else {
+			errx(EXIT_FAILURE,
+			    "cbs meaningless if not doing record operations");
+			/* NOTREACHED */
+		}
 	} else
 		cfunc = def;
 
-	if (in.dbsz == 0 || out.dbsz == 0)
-		errx(1, "buffer sizes cannot be zero");
-
-	/*
-	 * Check to make sure that the buffers are not too large.
-	 */
-	if (in.dbsz > INT_MAX || out.dbsz > INT_MAX)
-		errx(1, "buffer sizes cannot be greater than %d", INT_MAX);
-
-	/* Read, write and seek calls take off_t as arguments. 
+	/* Read, write and seek calls take off_t as arguments.
 	 *
 	 * The following check is not done because an off_t is a quad
-	 *  for current NetBSD implementations. 
+	 *  for current NetBSD implementations.
 	 *
 	 * if (in.offset > INT_MAX/in.dbsz || out.offset > INT_MAX/out.dbsz)
 	 *	errx(1, "seek offsets cannot be larger than %d", INT_MAX);
@@ -189,107 +188,109 @@ jcl(argv)
 }
 
 static int
-c_arg(a, b)
-	const void *a, *b;
+c_arg(const void *a, const void *b)
 {
+
 	return (strcmp(((const struct arg *)a)->name,
 	    ((const struct arg *)b)->name));
 }
 
 static void
-f_bs(arg)
-	char *arg;
+f_bs(char *arg)
 {
-	in.dbsz = out.dbsz = (int)get_bsz(arg);
+
+	in.dbsz = out.dbsz = strsuftoll("block size", arg, 1, UINT_MAX);
 }
 
 static void
-f_cbs(arg)
-	char *arg;
+f_cbs(char *arg)
 {
-	cbsz = (int)get_bsz(arg);
+
+	cbsz = strsuftoll("conversion record size", arg, 1, UINT_MAX);
 }
 
 static void
-f_count(arg)
-	char *arg;
+f_count(char *arg)
 {
-	cpy_cnt = (u_int)get_bsz(arg);
+
+	cpy_cnt = strsuftoll("block count", arg, 0, LLONG_MAX);
 	if (!cpy_cnt)
 		terminate(0);
 }
 
 static void
-f_files(arg)
-	char *arg;
+f_files(char *arg)
 {
-	files_cnt = (int)get_bsz(arg);
+
+	files_cnt = (u_int)strsuftoll("file count", arg, 0, UINT_MAX);
+	if (!files_cnt)
+		terminate(0);
 }
 
 static void
-f_ibs(arg)
-	char *arg;
+f_ibs(char *arg)
 {
+
 	if (!(ddflags & C_BS))
-		in.dbsz = (int)get_bsz(arg);
+		in.dbsz = strsuftoll("input block size", arg, 1, UINT_MAX);
 }
 
 static void
-f_if(arg)
-	char *arg;
+f_if(char *arg)
 {
+
 	in.name = arg;
 }
 
 static void
-f_obs(arg)
-	char *arg;
+f_obs(char *arg)
 {
+
 	if (!(ddflags & C_BS))
-		out.dbsz = (int)get_bsz(arg);
+		out.dbsz = strsuftoll("output block size", arg, 1, UINT_MAX);
 }
 
 static void
-f_of(arg)
-	char *arg;
+f_of(char *arg)
 {
+
 	out.name = arg;
 }
 
 static void
-f_seek(arg)
-	char *arg;
+f_seek(char *arg)
 {
-	out.offset = (u_int)get_bsz(arg);
+
+	out.offset = strsuftoll("seek blocks", arg, 0, LLONG_MAX);
 }
 
 static void
-f_skip(arg)
-	char *arg;
+f_skip(char *arg)
 {
-	in.offset = (u_int)get_bsz(arg);
+
+	in.offset = strsuftoll("skip blocks", arg, 0, LLONG_MAX);
 }
 
 static void
-f_progress(arg)
-	char *arg;
+f_progress(char *arg)
 {
-	if (*arg != '0')
-		progress = 1;
+
+	progress = strsuftoll("progress blocks", arg, 0, LLONG_MAX);
 }
 
 #ifdef	NO_CONV
 /* Build a small version (i.e. for a ramdisk root) */
 static void
-f_conv(arg)
-	char *arg;
+f_conv(char *arg)
 {
-	errx(1, "conv option disabled");
+
+	errx(EXIT_FAILURE, "conv option disabled");
+	/* NOTREACHED */
 }
 #else	/* NO_CONV */
 
 static const struct conv {
-	char *name;
+	const char *name;
 	u_int set, noset;
 	const u_char *ctab;
 } clist[] = {
@@ -304,15 +305,18 @@ static const struct conv {
 	{ "oldebcdic",	C_EBCDIC,	C_ASCII,	a2e_32V },
 	{ "oldibm",	C_EBCDIC,	C_ASCII,	a2ibm_32V },
 	{ "osync",	C_OSYNC,	C_BS,		NULL },
+	{ "sparse",	C_SPARSE,	0,		NULL },
 	{ "swab",	C_SWAB,		0,		NULL },
 	{ "sync",	C_SYNC,		0,		NULL },
 	{ "ucase",	C_UCASE,	C_LCASE,	NULL },
 	{ "unblock",	C_UNBLOCK,	C_BLOCK,	NULL },
+	/* If you add items to this table, be sure to add the
+	 * conversions to the C_BS check in the jcl routine above.
+	 */
 };
 
 static void
-f_conv(arg)
-	char *arg;
+f_conv(char *arg)
 {
 	struct conv *cp, tmp;
 
@@ -320,10 +324,14 @@ f_conv(arg)
 		tmp.name = strsep(&arg, ",");
 		if (!(cp = (struct conv *)bsearch(&tmp, clist,
 		    sizeof(clist)/sizeof(struct conv), sizeof(struct conv),
-		    c_conv)))
-			errx(1, "unknown conversion %s", tmp.name);
-		if (ddflags & cp->noset)
-			errx(1, "%s: illegal conversion combination", tmp.name);
+		    c_conv))) {
+			errx(EXIT_FAILURE, "unknown conversion %s", tmp.name);
+			/* NOTREACHED */
+		}
+		if (ddflags & cp->noset) {
+			errx(EXIT_FAILURE, "%s: illegal conversion combination", tmp.name);
+			/* NOTREACHED */
+		}
 		ddflags |= cp->set;
 		if (cp->ctab)
 			ctab = cp->ctab;
@@ -331,8 +339,7 @@ f_conv(arg)
 }
 
 static int
-c_conv(a, b)
-	const void *a, *b;
+c_conv(const void *a, const void *b)
 {
 
 	return (strcmp(((const struct conv *)a)->name,
@@ -340,74 +347,3 @@ c_conv(a, b)
 }
 
 #endif	/* NO_CONV */
-
-/*
- * Convert an expression of the following forms to an unsigned long.
- * 	1) A positive decimal number.
- *	2) A positive decimal number followed by a b (mult by 512).
- *	3) A positive decimal number followed by a k (mult by 1024).
- *	4) A positive decimal number followed by a m (mult by 512).
- *	5) A positive decimal number followed by a w (mult by sizeof int)
- *	6) Two or more positive decimal numbers (with/without k,b or w).
- *	   seperated by x (also * for backwards compatibility), specifying
- *	   the product of the indicated values.
- */
-static u_long
-get_bsz(val)
-	char *val;
-{
-	u_long num, t;
-	char *expr;
-
-	num = strtoul(val, &expr, 0);
-	if (num == ULONG_MAX)			/* Overflow. */
-		err(1, "%s", oper);
-	if (expr == val)			/* No digits. */
-		errx(1, "%s: illegal numeric value", oper);
-
-	switch (*expr) {
-	case 'b':
-		t = num;
-		num *= 512;
-		if (t > num)
-			goto erange;
-		++expr;
-		break;
-	case 'k':
-		t = num;
-		num *= 1024;
-		if (t > num)
-			goto erange;
-		++expr;
-		break;
-	case 'm':
-		t = num;
-		num *= 1048576;
-		if (t > num)
-			goto erange;
-		++expr;
-		break;
-	case 'w':
-		t = num;
-		num *= sizeof(int);
-		if (t > num)
-			goto erange;
-		++expr;
-		break;
-	}
-
-	switch (*expr) {
-	case '\0':
-		break;
-	case '*':				/* Backward compatible. */
-	case 'x':
-		t = num;
-		num *= get_bsz(expr + 1);
-		if (t > num)
-erange:			errx(1, "%s: %s", oper, strerror(ERANGE));
-		break;
-	default:
-		errx(1, "%s: illegal numeric value", oper);
-	}
-	return (num);
-}

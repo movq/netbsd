@@ -1,4 +1,4 @@
-/*	$NetBSD: qduser.h,v 1.1 1998/03/21 10:02:39 ragge Exp $	*/
+/*	$NetBSD: qduser.h,v 1.5 2006/10/09 18:42:59 oster Exp $	*/
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -91,10 +87,13 @@
 *
 ***************************************************************************/
 
+#ifndef _QDUSER_H_
+#define _QDUSER_H_
+
 #ifdef KERNEL
 #include "../include/qevent.h"		/* include event struct defs */
 #else
-#include <vax/uba/qevent.h>
+#include <vax/qevent.h>
 #endif
 
 /*---------------------
@@ -178,7 +177,7 @@ struct qdinput {
 
 	    struct _vs_eventqueue header;  /* event queue ring handling */
 
-	    /* for VS100 and QVSS compatability reasons, additions to this
+	    /* for VS100 and QVSS compatibility reasons, additions to this
 	    *  structure must be made below this point.  */
 
 	    struct _vs_cursor curs_pos;	/* current mouse position */
@@ -511,3 +510,4 @@ struct qdinput {
 #define T_BARREL_BUTTON T_LEFT_BUTTON		/* stylus buttons */
 #define T_TIP_BUTTON	T_FRONT_BUTTON
 
+#endif /* _QDUSER_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: temp.c,v 1.7 1998/07/26 22:07:27 mycroft Exp $	*/
+/*	$NetBSD: temp.c,v 1.21 2006/11/28 18:45:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,11 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)temp.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: temp.c,v 1.7 1998/07/26 22:07:27 mycroft Exp $");
+__RCSID("$NetBSD: temp.c,v 1.21 2006/11/28 18:45:32 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include "rcv.h"
+#include <util.h>
 #include "extern.h"
 
 /*
@@ -51,49 +48,53 @@ __RCSID("$NetBSD: temp.c,v 1.7 1998/07/26 22:07:27 mycroft Exp $");
  * Give names to all the temporary files that we will need.
  */
 
-char	*tempMail;
-char	*tempQuit;
-char	*tempEdit;
-char	*tempResid;
-char	*tempMesg;
-char	*tmpdir;
-
-void
-tinit()
+PUBLIC void
+tinit(void)
 {
+	char pathbuf[MAXPATHLEN];
 	const char *cp;
-
-	if ((tmpdir = getenv("TMPDIR")) == NULL) {
-		tmpdir = _PATH_TMP;
-	}
-
-	tempMail  = tempnam (tmpdir, "Rs");
-	tempResid = tempnam (tmpdir, "Rq");
-	tempQuit  = tempnam (tmpdir, "Rm");
-	tempEdit  = tempnam (tmpdir, "Re");
-	tempMesg  = tempnam (tmpdir, "Rx");
+	char *p;
 
 	/*
 	 * It's okay to call savestr in here because main will
 	 * do a spreserve() after us.
 	 */
-	if (myname != NOSTR) {
-		if (getuserid(myname) < 0) {
-			printf("\"%s\" is not a user of this system\n",
-			    myname);
-			exit(1);
-		}
-	} else {
-		if ((cp = username()) == NOSTR) {
-			myname = "nobody";
-			if (rcvmode)
-				exit(1);
+	if ((cp = getenv("TMPDIR")) == NULL || *cp == '\0')
+		cp = _PATH_TMP;
+
+	tmpdir = savestr(cp);
+
+	/* Remove trailing slashes. */
+	p = tmpdir + strlen(tmpdir) - 1;
+	while (p > tmpdir && *p == '/') {
+		*p = '\0';
+		p--;
+	}
+
+	if (myname != NULL) {
+		if (getuserid(myname) < 0)
+			errx(1, "\"%s\" is not a user of this system", myname);
+	}
+	else {
+		if ((cp = username()) == NULL) {
+			myname = savestr("nobody");
+			if (mailmode == mm_receiving)
+				errx(EXIT_FAILURE, "who am I receiving for?");
 		} else
 			myname = savestr(cp);
 	}
-	if ((cp = getenv("HOME")) == NOSTR)
+	if ((cp = getenv("HOME")) == NULL)
 		cp = ".";
 	homedir = savestr(cp);
+
+	if (getcwd(pathbuf, sizeof(pathbuf)) != NULL)
+		origdir = savestr(pathbuf);
+	else {
+		warn("getcwd");
+		origdir = savestr(".");
+	}
+
 	if (debug)
-		printf("user = %s, homedir = %s\n", myname, homedir);
+		(void)printf("user = %s, homedir = %s, origdir = %s\n",
+		    myname, homedir, origdir);
 }

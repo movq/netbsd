@@ -1,29 +1,13 @@
-/*	$NetBSD: less.h,v 1.3 1999/04/06 05:57:35 mrg Exp $	*/
+/*	$NetBSD: less.h,v 1.9 2008/02/16 07:20:54 matt Exp $	*/
 
 /*
- * Copyright (c) 1984,1985,1989,1994,1995,1996,1999  Mark Nudelman
- * All rights reserved.
+ * Copyright (C) 1984-2005  Mark Nudelman
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice in the documentation and/or other materials provided with 
- *    the distribution.
+ * You may distribute under the terms of either the GNU General Public
+ * License or the Less License, as specified in the README file.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
- * OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
- * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE 
- * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN 
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * For more information about less, or for information on how to 
+ * contact the author, see the README file.
  */
 
 
@@ -88,30 +72,82 @@
 #if HAVE_CTYPE_H
 #include <ctype.h>
 #endif
-#if STDC_HEADERS
+#if HAVE_LIMITS_H
+#include <limits.h>
+#endif
+#if HAVE_STDLIB_H
 #include <stdlib.h>
+#endif
+#if HAVE_STRING_H
 #include <string.h>
 #endif
+
+/* OS-specific includes */
 #ifdef _OSK
 #include <modes.h>
 #include <strings.h>
 #endif
-#if MSDOS_COMPILER==WIN32C || MSDOS_COMPILER==DJGPPC
+
+#ifdef __TANDEM
+#include <floss.h>
+#endif
+
+#if MSDOS_COMPILER==WIN32C || OS2
 #include <io.h>
 #endif
 
-#if !STDC_HEADERS
+#if MSDOS_COMPILER==DJGPPC
+#include <io.h>
+#include <sys/exceptn.h>
+#include <conio.h>
+#include <pc.h>
+#endif
+
+#if !HAVE_STDLIB_H
 char *getenv();
 off_t lseek();
 VOID_POINTER calloc();
 void free();
 #endif
 
+/*
+ * Simple lowercase test which can be used during option processing
+ * (before options are parsed which might tell us what charset to use).
+ */
+#define ASCII_IS_UPPER(c)	((c) >= 'A' && (c) <= 'Z')
+#define ASCII_IS_LOWER(c)	((c) >= 'a' && (c) <= 'z')
+#define	ASCII_TO_UPPER(c)	((c) - 'a' + 'A')
+#define	ASCII_TO_LOWER(c)	((c) - 'A' + 'a')
+
+#undef IS_UPPER
+#undef IS_LOWER
+#undef TO_UPPER
+#undef TO_LOWER
+#undef IS_SPACE
+#undef IS_DIGIT
+
 #if !HAVE_UPPER_LOWER
-#define	isupper(c)	((c) >= 'A' && (c) <= 'Z')
-#define	islower(c)	((c) >= 'a' && (c) <= 'z')
-#define	toupper(c)	((c) - 'a' + 'A')
-#define	tolower(c)	((c) - 'A' + 'a')
+#define	IS_UPPER(c)	ASCII_IS_UPPER(c)
+#define	IS_LOWER(c)	ASCII_IS_LOWER(c)
+#define	TO_UPPER(c)	ASCII_TO_UPPER(c)
+#define	TO_LOWER(c)	ASCII_TO_LOWER(c)
+#else
+#define	IS_UPPER(c)	isupper((unsigned char) (c))
+#define	IS_LOWER(c)	islower((unsigned char) (c))
+#define	TO_UPPER(c)	toupper((unsigned char) (c))
+#define	TO_LOWER(c)	tolower((unsigned char) (c))
+#endif
+
+#ifdef isspace
+#define IS_SPACE(c)	isspace((unsigned char)(c))
+#else
+#define IS_SPACE(c)	((c) == ' ' || (c) == '\t' || (c) == '\n' || (c) == '\r' || (c) == '\f')
+#endif
+
+#ifdef isdigit
+#define IS_DIGIT(c)	isdigit((unsigned char)(c))
+#else
+#define IS_DIGIT(c)	((c) >= '0' && (c) <= '9')
 #endif
 
 #ifndef NULL
@@ -135,16 +171,40 @@ void free();
 #endif
 #endif
 
+#if HAVE_SNPRINTF
+#define SNPRINTF1(str, size, fmt, v1)             snprintf((str), (size), (fmt), (v1))
+#define SNPRINTF2(str, size, fmt, v1, v2)         snprintf((str), (size), (fmt), (v1), (v2))
+#define SNPRINTF3(str, size, fmt, v1, v2, v3)     snprintf((str), (size), (fmt), (v1), (v2), (v3))
+#define SNPRINTF4(str, size, fmt, v1, v2, v3, v4) snprintf((str), (size), (fmt), (v1), (v2), (v3), (v4))
+#else
+/* Use unsafe sprintf if we don't have snprintf. */
+#define SNPRINTF1(str, size, fmt, v1)             sprintf((str), (fmt), (v1))
+#define SNPRINTF2(str, size, fmt, v1, v2)         sprintf((str), (fmt), (v1), (v2))
+#define SNPRINTF3(str, size, fmt, v1, v2, v3)     sprintf((str), (fmt), (v1), (v2), (v3))
+#define SNPRINTF4(str, size, fmt, v1, v2, v3, v4) sprintf((str), (fmt), (v1), (v2), (v3), (v4))
+#endif
+
 #define	BAD_LSEEK	((off_t)-1)
+
+#ifndef CHAR_BIT
+#define CHAR_BIT 8
+#endif
+
+/*
+ * Upper bound on the string length of an integer converted to string.
+ * 302 / 1000 is ceil (log10 (2.0)).  Subtract 1 for the sign bit;
+ * add 1 for integer division truncation; add 1 more for a minus sign.
+ */
+#define INT_STRLEN_BOUND(t) ((sizeof(t) * CHAR_BIT - 1) * 302 / 1000 + 1 + 1)
 
 /*
  * Special types and constants.
  */
+typedef unsigned long LWCHAR;
 typedef off_t		POSITION;
-#define PR_POSITION	"%qd"
-#define PR_CAST		long long
-#define MAX_PRINT_POSITION 20
-#define MAX_PRINT_INT      10
+typedef off_t		LINENUM;
+#define MIN_LINENUM_WIDTH  7	/* Min printing width of a line number */
+#define MAX_UTF_CHAR_LEN   6	/* Max bytes in one UTF-8 char */
 
 #define	NULL_POSITION	((POSITION)(-1))
 
@@ -181,7 +241,7 @@ typedef off_t		POSITION;
 #if MSDOS_COMPILER==MSOFTC
 #define	SET_BINARY(f)	_setmode(f, _O_BINARY);
 #else
-#if MSDOS_COMPILER
+#if MSDOS_COMPILER || OS2
 #define	SET_BINARY(f)	setmode(f, O_BINARY)
 #else
 #define	SET_BINARY(f)
@@ -220,8 +280,9 @@ struct scrpos
 
 typedef union parg
 {
-	char *p_string;
+	constant char *p_string;
 	int p_int;
+	LINENUM p_linenum;
 } PARG;
 
 #define	NULL_PARG	((PARG *)NULL)
@@ -252,14 +313,14 @@ struct textlist
 #define	BS_CONTROL	2	/* \b treated as control char; prints as ^H */
 
 /* How should we search? */
-#define	SRCH_FORW	000001	/* Search forward from current position */
-#define	SRCH_BACK	000002	/* Search backward from current position */
-#define	SRCH_NO_MOVE	000004	/* Highlight, but don't move */
-#define	SRCH_FIND_ALL	000010	/* Find and highlight all matches */
-#define	SRCH_NO_MATCH	000100	/* Search for non-matching lines */
-#define	SRCH_PAST_EOF	000200	/* Search past end-of-file, into next file */
-#define	SRCH_FIRST_FILE	000400	/* Search starting at the first file */
-#define	SRCH_NO_REGEX	001000	/* Don't use regular expressions */
+#define	SRCH_FORW	(1 << 0)  /* Search forward from current position */
+#define	SRCH_BACK	(1 << 1)  /* Search backward from current position */
+#define	SRCH_NO_MOVE	(1 << 2)  /* Highlight, but don't move */
+#define	SRCH_FIND_ALL	(1 << 4)  /* Find and highlight all matches */
+#define	SRCH_NO_MATCH	(1 << 8)  /* Search for non-matching lines */
+#define	SRCH_PAST_EOF	(1 << 9)  /* Search past end-of-file, into next file */
+#define	SRCH_FIRST_FILE	(1 << 10) /* Search starting at the first file */
+#define	SRCH_NO_REGEX	(1 << 12) /* Don't use regular expressions */
 
 #define	SRCH_REVERSE(t)	(((t) & SRCH_FORW) ? \
 				(((t) & ~SRCH_FORW) | SRCH_BACK) : \
@@ -275,13 +336,21 @@ struct textlist
 #define	CC_ERROR	2	/* Char could not be accepted due to error */
 #define	CC_PASS		3	/* Char was rejected (internal) */
 
-/* Special chars used to tell put_line() to do something special */
+#define CF_QUIT_ON_ERASE 0001   /* Abort cmd if its entirely erased */
+
+/* Special char bit-flags used to tell put_line() to do something special */
 #define	AT_NORMAL	(0)
-#define	AT_UNDERLINE	(1)
-#define	AT_BOLD		(2)
-#define	AT_BLINK	(3)
-#define	AT_INVIS	(4)
-#define	AT_STANDOUT	(5)
+#define	AT_UNDERLINE	(1 << 0)
+#define	AT_BOLD		(1 << 1)
+#define	AT_BLINK	(1 << 2)
+#define	AT_STANDOUT	(1 << 3)
+#define	AT_ANSI		(1 << 4)  /* Content-supplied "ANSI" escape sequence */
+#define	AT_BINARY	(1 << 5)  /* LESS*BINFMT representation */
+#define	AT_HILITE	(1 << 6)  /* Internal highlights (e.g., for search) */
+
+#if '0' == 240
+#define IS_EBCDIC_HOST 1
+#endif
 
 #if IS_EBCDIC_HOST
 /*
@@ -359,6 +428,20 @@ struct textlist
 #define	LSIGNAL(sig,func)	signal(sig,func)
 #endif
 
+#if HAVE_SIGPROCMASK
+#if HAVE_SIGSET_T
+#else
+#undef HAVE_SIGPROCMASK
+#endif
+#endif
+#if HAVE_SIGPROCMASK
+#if HAVE_SIGEMPTYSET
+#else
+#undef  sigemptyset
+#define sigemptyset(mp) *(mp) = 0
+#endif
+#endif
+
 #define	S_INTERRUPT	01
 #define	S_STOP		02
 #define S_WINCH		04
@@ -380,3 +463,7 @@ struct textlist
 
 #include "funcs.h"
 
+/* Functions not included in funcs.h */
+void postoa();
+void linenumtoa();
+void inttoa();

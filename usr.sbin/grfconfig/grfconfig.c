@@ -1,4 +1,4 @@
-/*	$NetBSD: grfconfig.c,v 1.9 1997/11/20 10:35:15 veego Exp $	*/
+/*	$NetBSD: grfconfig.c,v 1.13 2008/07/21 13:36:58 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,12 +31,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1997 The NetBSD Foundation, Inc.\n\
-	All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1997\
+ The NetBSD Foundation, Inc.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
-__RCSID("$NetBSD: grfconfig.c,v 1.9 1997/11/20 10:35:15 veego Exp $");
+__RCSID("$NetBSD: grfconfig.c,v 1.13 2008/07/21 13:36:58 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/file.h>
@@ -142,11 +135,11 @@ main(ac, av)
 			 * check for end-of-section, comments, strip off trailing
 			 * spaces and newline character.
 			 */
-			for (p = buf; isspace(*p); ++p)
+			for (p = buf; isspace((unsigned char)*p); ++p)
 				continue;
 			if (*p == '\0' || *p == '#')
 				continue;
-			for (p = strchr(buf, '\0'); isspace(*--p);)
+			for (p = strchr(buf, '\0'); isspace((unsigned char)*--p);)
 				continue;
 			*++p = '\0';
 
@@ -157,8 +150,8 @@ main(ac, av)
 					*tbuf2 = '\0';
 					break;
 				}
-				if (isupper(*tbuf2)) {
-					*tbuf2 = tolower(*tbuf2);
+				if (isupper((unsigned char)*tbuf2)) {
+					*tbuf2 = tolower((unsigned char)*tbuf2);
 				}
 				obuf++;
 				tbuf2++;
@@ -172,7 +165,7 @@ main(ac, av)
 				cps[i + 1] = strtok(NULL, " \b\t\r\n");
 			cps[i] = NULL;
 
-			if (cps[13] == NULL) {
+			if (i < 14) {
 				printf("grfconfig: too few values in mode "
 				    "definition file:\n %s\n", obuf);
 				return (1);

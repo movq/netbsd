@@ -1,4 +1,4 @@
-/*      $NetBSD: n_expm1.c,v 1.4 1999/07/02 15:37:37 simonb Exp $ */
+/*      $NetBSD: n_expm1.c,v 1.7 2008/04/29 15:10:02 uwe Exp $ */
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -89,6 +85,7 @@ static char sccsid[] = "@(#)expm1.c	8.1 (Berkeley) 6/4/93";
  * shown.
  */
 
+#define _LIBM_STATIC
 #include "mathimpl.h"
 
 vc(ln2hi,  6.9314718055829871446E-1  ,7217,4031,0000,f7d0,   0, .B17217F7D00000)
@@ -108,17 +105,18 @@ ic(invln2, 1.4426950408889633870E0,     0, 1.71547652B82FE)
 #define	invln2	vccast(invln2)
 #endif
 
-double expm1(x)
-double x;
+#if defined(__vax__)||defined(tahoe)
+#define PREC	56
+#else	/* defined(__vax__)||defined(tahoe) */
+#define PREC	53
+#endif	/* defined(__vax__)||defined(tahoe) */
+
+double
+expm1(double x)
 {
-	const static double one=1.0, half=1.0/2.0;
+	static const double one=1.0, half=1.0/2.0;
 	double  z,hi,lo,c;
 	int k;
-#if defined(__vax__)||defined(tahoe)
-	static int prec=56;
-#else	/* defined(__vax__)||defined(tahoe) */
-	static int prec=53;
-#endif	/* defined(__vax__)||defined(tahoe) */
 
 #if !defined(__vax__)&&!defined(tahoe)
 	if(x!=x) return(x);	/* x is NaN */
@@ -142,7 +140,7 @@ double x;
 		    /* end of k=1 */
 
 			else {
-			    if(k<=prec)
+			    if(k<=PREC)
 			      { x=one-scalb(one,-k); z += __exp__E(z,c);}
 			    else if(k<100)
 			      { x = __exp__E(z,c)-scalb(one,-k); x+=z; z=one;}

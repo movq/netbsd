@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.4 1996/05/19 21:07:21 chuck Exp $ */
+/*	$NetBSD: boot.c,v 1.16 2008/01/12 09:54:32 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,27 +35,33 @@
 #include <sys/reboot.h>
 #include <machine/prom.h>
 
-#include "stand.h"
-#include "libsa.h"
+#include <lib/libkern/libkern.h>
 
-extern	char *version;
+#include <lib/libsa/stand.h>
+#include "libsa.h"
+#include "config.h"
+
+int main(void);
+
+extern	char bootprog_name[], bootprog_rev[];
 char	line[80];
 
-main()
+int
+main(void)
 {
 	char *cp, *file;
-	int ask = 0, howto, sboot = 0;
+	int ask = 0, howto, part, sboot = 0;
 
-	printf(">> BSD MVME%x netboot (via %s) [%s]\n", bugargs.cputyp, 
-		bugargs.arg_start, version);
-	if (bcmp("sboot", bugargs.arg_start, 5) == 0)
+	printf(">> %s MVME%x netboot (via %s) [%s]\n",
+	    bootprog_name, bugargs.cputyp, bugargs.arg_start, bootprog_rev);
+	if (memcmp("sboot", bugargs.arg_start, 5) == 0)
 		sboot = 1;
 	/* cycle in the correct args */
 	bugargs.arg_start = bugargs.nbarg_start;
 	bugargs.arg_end   = bugargs.nbarg_end;
 	*bugargs.arg_end = 0; /* ensure */
 
-	parse_args(&file, &howto);
+	parse_args(&file, &howto, &part);
 
 	for (;;) {
 		if (ask) {
@@ -68,16 +70,49 @@ main()
 			if (line[0]) {
 				bugargs.arg_start = line;
 				cp = line;
-				while (cp < (line + sizeof(line) - 1) && *cp) 
+				while (cp < (line + sizeof(line) - 1) && *cp)
 					cp++;
 				bugargs.arg_end = cp;
-				parse_args(&file, &howto);
+				parse_args(&file, &howto, &part);
 			}
 		}
 		if (sboot)
 			howto |= RB_SBOOT;
-		exec_mvme(file, howto);
+		exec_mvme(file, howto, part);
 		printf("boot: %s: %s\n", file, strerror(errno));
 		ask = 1;
+	}
+}
+
+/*
+ * machdep_common_ether: get ethernet address
+ */
+void
+machdep_common_ether(u_char *ether)
+{
+	u_char *ea;
+
+	if (bugargs.cputyp == CPU_147) {
+		ea = (u_char *) ETHER_ADDR_147;
+
+		if ((*(int *)ea & 0x2fffff00) == 0x2fffff00)
+			panic("ERROR: ethernet address not set!");
+		ether[0] = 0x08;
+		ether[1] = 0x00;
+		ether[2] = 0x3e;
+		ether[3] = ea[0];
+		ether[4] = ea[1];
+		ether[5] = ea[2];
+	} else {
+		ea = (u_char *)ETHER_ADDR_16X;
+
+		if (ea[0] + ea[1] + ea[2] + ea[3] + ea[4] + ea[5] == 0)
+			panic("ERROR: ethernet address not set!");
+		ether[0] = ea[0];
+		ether[1] = ea[1];
+		ether[2] = ea[2];
+		ether[3] = ea[3];
+		ether[4] = ea[4];
+		ether[5] = ea[5];
 	}
 }

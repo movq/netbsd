@@ -1,4 +1,4 @@
-/*	$NetBSD: locate.code.c,v 1.7 2000/03/20 19:18:34 jdolecek Exp $	*/
+/*	$NetBSD: locate.code.c,v 1.10 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)locate.code.c	8.4 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: locate.code.c,v 1.7 2000/03/20 19:18:34 jdolecek Exp $");
+__RCSID("$NetBSD: locate.code.c,v 1.10 2008/07/21 14:19:23 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -99,7 +95,7 @@ __RCSID("$NetBSD: locate.code.c,v 1.7 2000/03/20 19:18:34 jdolecek Exp $");
 
 char buf1[MAXPATHLEN] = " ";	
 char buf2[MAXPATHLEN];
-char *bigrams;
+char bigrams[BGBUFSIZE + 1] = { 0 };
 
 int	bgindex __P((char *));
 int	main __P((int, char **));
@@ -125,14 +121,10 @@ main(argc, argv)
 	if (argc != 1)
 		usage();
 
-	bigrams = argv[0];
-
 	/* First copy bigram array to stdout. */
-	count = strlen(bigrams);
-	if (fwrite(bigrams, 1, count, stdout) != count)
+	strncpy(bigrams, argv[0], BGBUFSIZE + 1);
+	if (fwrite(bigrams, 1, BGBUFSIZE, stdout) != BGBUFSIZE)
 		err(1, "stdout");
-	for(count = BGBUFSIZE - count; count > 0; count--)
-		fputc('\0', stdout);
 
 	oldpath = buf1;
 	path = buf2;
@@ -204,10 +196,10 @@ bgindex(bg)			/* Return location of bg in bigrams or -1. */
 
 	bg0 = bg[0];
 	bg1 = bg[1];
-	for (p = bigrams; *p != '\0'; p++)
-		if (*p++ == bg0 && *p == bg1)
+	for (p = bigrams; *p != '\0'; p += 2)
+		if (p[0] == bg0 && p[1] == bg1)
 			break;
-	return (*p == '\0' ? -1 : --p - bigrams);
+	return (*p == '\0' ? -1 : p - bigrams);
 }
 
 void

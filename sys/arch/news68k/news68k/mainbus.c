@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.2 2000/02/08 16:17:34 tsutsui Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.15 2008/03/28 17:51:51 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -28,6 +28,9 @@
  * rights to redistribute these changes.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.15 2008/03/28 17:51:51 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -37,27 +40,19 @@
 
 #include <news68k/news68k/machid.h>
 
-struct mainbus_softc {
-	struct device sc_dev;
-};
-
 /* Definition of the mainbus driver. */
-static int	mainbus_match __P((struct device *, struct cfdata *, void *));
-static void	mainbus_attach __P((struct device *, struct device *, void *));
-static int	mainbus_search __P((struct device *, struct cfdata *, void *));
-static int	mainbus_print __P((void *, const char *));
+static int  mainbus_match(device_t, cfdata_t, void *);
+static void mainbus_attach(device_t, device_t, void *);
+static int  mainbus_search(device_t, cfdata_t, const int *, void *);
+static int  mainbus_print(void *, const char *);
 
-struct cfattach mainbus_ca = {
-	sizeof(struct mainbus_softc), mainbus_match, mainbus_attach
-};
+CFATTACH_DECL_NEW(mainbus, 0,
+    mainbus_match, mainbus_attach, NULL, NULL);
 
 static int mainbus_found;
 
 static int
-mainbus_match(parent, cfdata, aux)
-	struct device *parent;
-	struct cfdata *cfdata;
-	void *aux;
+mainbus_match(device_t parent, cfdata_t cfdata, void *aux)
 {
 
 	if (mainbus_found)
@@ -67,45 +62,37 @@ mainbus_match(parent, cfdata, aux)
 }
 
 static void
-mainbus_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+mainbus_attach(device_t parent, device_t self, void *aux)
 {
 	struct mainbus_attach_args ma;
 
 	mainbus_found = 1;
-	printf("\n");
+	aprint_normal("\n");
 
-	config_search(mainbus_search, self, &ma);
+	config_search_ia(mainbus_search, self, "mainbus", &ma);
 }
 
 static int
-mainbus_search(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+mainbus_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
-	ma->ma_name = cf->cf_driver->cd_name;
+	ma->ma_name = cf->cf_name;
 	ma->ma_systype = cf->cf_systype;
 
-	if ((*cf->cf_attach->ca_match)(parent, cf, ma) > 0)
+	if (config_match(parent, cf, ma) > 0)
 		config_attach(parent, cf, ma, mainbus_print);
 
 	return 0;
 }
 
 static int
-mainbus_print(aux, cp)
-	void *aux;
-	const char *cp;
+mainbus_print(void *aux, const char *cp)
 {
 	struct mainbus_attach_args *ma = aux;
 
 	if (cp)
-		printf("%s at %s", ma->ma_name, cp);
+		aprint_normal("%s at %s", ma->ma_name, cp);
 
-	return (UNCONF);
+	return UNCONF;
 }

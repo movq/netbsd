@@ -1,4 +1,4 @@
-/*	$NetBSD: popen.c,v 1.25 2000/01/22 22:19:11 mycroft Exp $	*/
+/*	$NetBSD: popen.c,v 1.29 2006/10/15 16:12:02 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)popen.c	8.3 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: popen.c,v 1.25 2000/01/22 22:19:11 mycroft Exp $");
+__RCSID("$NetBSD: popen.c,v 1.29 2006/10/15 16:12:02 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -58,42 +54,50 @@ __RCSID("$NetBSD: popen.c,v 1.25 2000/01/22 22:19:11 mycroft Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "reentrant.h"
 
 #ifdef __weak_alias
 __weak_alias(popen,_popen)
 __weak_alias(pclose,_pclose)
 #endif
 
+#ifdef _REENTRANT
+extern rwlock_t __environ_lock;
+#endif
+
 static struct pid {
 	struct pid *next;
 	FILE *fp;
+#ifdef _REENTRANT
+	int fd;
+#endif
 	pid_t pid;
 } *pidlist; 
 	
+#ifdef _REENTRANT
+static rwlock_t pidlist_lock = RWLOCK_INITIALIZER;
+#endif
+
 FILE *
-popen(command, type)
-	const char *command, *type;
+popen(const char *command, const char *type)
 {
 	struct pid *cur, *old;
 	FILE *iop;
-	int pdes[2], pid, twoway, serrno;
+	const char * volatile xtype = type;
+	int pdes[2], pid, serrno;
+	volatile int twoway;
 
 	_DIAGASSERT(command != NULL);
-	_DIAGASSERT(type != NULL);
+	_DIAGASSERT(xtype != NULL);
 
-#ifdef __GNUC__
-	/* This outrageous construct just to shut up a GCC warning. */
-	(void) &cur; (void) &twoway; (void) &type;
-#endif
-
-	if (strchr(type, '+')) {
+	if (strchr(xtype, '+')) {
 		twoway = 1;
 		type = "r+";
 		if (socketpair(AF_LOCAL, SOCK_STREAM, 0, pdes) < 0)
 			return (NULL);
 	} else  {
 		twoway = 0;
-		if ((*type != 'r' && *type != 'w') || type[1] ||
+		if ((*xtype != 'r' && *xtype != 'w') || xtype[1] ||
 		    (pipe(pdes) < 0)) {
 			errno = EINVAL;
 			return (NULL);
@@ -107,9 +111,13 @@ popen(command, type)
 		return (NULL);
 	}
 
+	rwlock_rdlock(&pidlist_lock);
+	rwlock_rdlock(&__environ_lock);
 	switch (pid = vfork()) {
 	case -1:			/* Error. */
 		serrno = errno;
+		rwlock_unlock(&__environ_lock);
+		rwlock_unlock(&pidlist_lock);
 		free(cur);
 		(void)close(pdes[0]);
 		(void)close(pdes[1]);
@@ -121,9 +129,13 @@ popen(command, type)
 		   from previous popen() calls that remain open in the 
 		   parent process are closed in the new child process. */
 		for (old = pidlist; old; old = old->next)
+#ifdef _REENTRANT
+			close(old->fd); /* don't allow a flush */
+#else
 			close(fileno(old->fp)); /* don't allow a flush */
+#endif
 
-		if (*type == 'r') {
+		if (*xtype == 'r') {
 			(void)close(pdes[0]);
 			if (pdes[1] != STDOUT_FILENO) {
 				(void)dup2(pdes[1], STDOUT_FILENO);
@@ -143,13 +155,20 @@ popen(command, type)
 		_exit(127);
 		/* NOTREACHED */
 	}
+	rwlock_unlock(&__environ_lock);
 
 	/* Parent; assume fdopen can't fail. */
-	if (*type == 'r') {
-		iop = fdopen(pdes[0], type);
+	if (*xtype == 'r') {
+		iop = fdopen(pdes[0], xtype);
+#ifdef _REENTRANT
+		cur->fd = pdes[0];
+#endif
 		(void)close(pdes[1]);
 	} else {
-		iop = fdopen(pdes[1], type);
+		iop = fdopen(pdes[1], xtype);
+#ifdef _REENTRANT
+		cur->fd = pdes[1];
+#endif
 		(void)close(pdes[0]);
 	}
 
@@ -158,6 +177,7 @@ popen(command, type)
 	cur->pid =  pid;
 	cur->next = pidlist;
 	pidlist = cur;
+	rwlock_unlock(&pidlist_lock);
 
 	return (iop);
 }
@@ -177,25 +197,32 @@ pclose(iop)
 
 	_DIAGASSERT(iop != NULL);
 
+	rwlock_wrlock(&pidlist_lock);
+
 	/* Find the appropriate file pointer. */
 	for (last = NULL, cur = pidlist; cur; last = cur, cur = cur->next)
 		if (cur->fp == iop)
 			break;
-	if (cur == NULL)
+	if (cur == NULL) {
+		rwlock_unlock(&pidlist_lock);
 		return (-1);
+	}
 
 	(void)fclose(iop);
-
-	do {
-		pid = waitpid(cur->pid, &pstat, 0);
-	} while (pid == -1 && errno == EINTR);
 
 	/* Remove the entry from the linked list. */
 	if (last == NULL)
 		pidlist = cur->next;
 	else
 		last->next = cur->next;
+
+	rwlock_unlock(&pidlist_lock);
+
+	do {
+		pid = waitpid(cur->pid, &pstat, 0);
+	} while (pid == -1 && errno == EINTR);
+
 	free(cur);
-		
+
 	return (pid == -1 ? -1 : pstat);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: assert.h,v 1.8 1999/09/15 23:53:26 lukem Exp $	*/
+/*	$NetBSD: assert.h,v 1.19 2008/08/17 00:24:35 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -45,45 +41,65 @@
  * multiple times, with and without NDEBUG defined.
  */
 
+#include <sys/cdefs.h>
+#include <sys/featuretest.h>
+
 #undef assert
-#undef _assert
 
 #ifdef NDEBUG
-# ifndef lint
-#  define assert(e)	((void)0)
-#  define _assert(e)	((void)0)
-# else /* !lint */
+# ifndef __lint__
+#  define assert(e)	(__static_cast(void,0))
+# else /* !__lint__ */
 #  define assert(e)
-#  define _assert(e)
-# endif /* lint */
+# endif /* __lint__ */
 #else /* !NDEBUG */
-# define _assert(e)	assert(e)
-# ifdef __STDC__
-#  define assert(e) 	((e) ? (void)0 : __assert(__FILE__, __LINE__, #e))
+# if __STDC__
+#  define assert(e)							\
+	((e) ? __static_cast(void,0) : __assert13(__FILE__, __LINE__,	\
+	                                          __assert_function__, #e))
 # else	/* PCC */
-#  define assert(e)	((e) ? (void)0 : __assert(__FILE__, __LINE__, "e"))
-# endif
+#  define assert(e)							\
+	((e) ? __static_cast(void,0) : __assert13(__FILE__, __LINE__,	\
+	                                          __assert_function__, "e"))
+# endif /* !__STDC__ */
 #endif /* NDEBUG */
 
 #undef _DIAGASSERT
 #if !defined(_DIAGNOSTIC)
-# if !defined(lint)
-#  define _DIAGASSERT(e) ((void)0)
-# else /* !lint */
+# if !defined(__lint__)
+#  define _DIAGASSERT(e) (__static_cast(void,0))
+# else /* !__lint__ */
 #  define _DIAGASSERT(e)
-# endif /* lint */
+# endif /* __lint__ */
 #else /* _DIAGNOSTIC */
-# if defined (__STDC__)
-#  define _DIAGASSERT(e) ((e) ? (void)0 : __diagassert(__FILE__, __LINE__, #e))
+# if __STDC__
+#  define _DIAGASSERT(e)						\
+	((e) ? __static_cast(void,0) : __diagassert13(__FILE__, __LINE__, \
+	                                              __assert_function__, #e))
 # else	/* !__STDC__ */
-#  define _DIAGASSERT(e) ((e) ? (void)0 : __diagassert(__FILE__, __LINE__, "e"))
+#  define _DIAGASSERT(e)	 					\
+	((e) ? __static_cast(void,0) : __diagassert13(__FILE__, __LINE__, \
+	                                              __assert_function__, "e"))
 # endif
 #endif /* _DIAGNOSTIC */
 
 
-#include <sys/cdefs.h>
+#if defined(__lint__)
+#define	__assert_function__	(__static_cast(const void *,0))
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+#define	__assert_function__	__func__
+#elif __GNUC_PREREQ__(2, 6)
+#define	__assert_function__	__PRETTY_FUNCTION__
+#else
+#define	__assert_function__	(__static_cast(const void *,0))
+#endif
 
+#ifndef __ASSERT_DECLARED
+#define __ASSERT_DECLARED
 __BEGIN_DECLS
-void __assert __P((const char *, int, const char *));
-void __diagassert __P((const char *, int, const char *));
+void __assert(const char *, int, const char *);
+void __assert13(const char *, int, const char *, const char *);
+void __diagassert(const char *, int, const char *);
+void __diagassert13(const char *, int, const char *, const char *);
 __END_DECLS
+#endif /* __ASSERT_DECLARED */

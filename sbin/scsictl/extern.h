@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.2 1998/11/12 01:16:08 thorpej Exp $	*/
+/*	$NetBSD: extern.h,v 1.6 2008/04/28 20:23:09 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,12 +33,13 @@
 extern	const char *dvname;
 
 /* scsi_sense.c */
-void	scsi_print_sense_data __P((const unsigned char *, int, int));
-char	*scsi_decode_sense __P((const unsigned char *, int, char *, size_t));
-void	scsi_print_sense __P((const char *, const scsireq_t *, int));
+void	scsi_print_sense_data(const unsigned char *, int, int);
+char	*scsi_decode_sense(const unsigned char *, int, char *, size_t);
+void	scsi_print_sense(const char *, const scsireq_t *, int);
 
 /* scsi_subr.c */
-void	scsi_command __P((int, void *, size_t, void *, size_t, int, int));
-void	scsi_mode_sense __P((int, u_int8_t, u_int8_t, void *, size_t));
-void	scsi_mode_select __P((int, u_int8_t, u_int8_t, void *, size_t));
-void	scsi_strvis __P((char *, size_t, const char *, size_t));
+void	scsi_command(int, void *, size_t, void *, size_t, int, int);
+void	scsi_mode_sense(int, u_int8_t, u_int8_t, void *, size_t);
+void	scsi_mode_select(int, u_int8_t, void *, size_t);
+void	scsi_request_sense(int, void *, size_t);
+void	scsi_strvis(char *, size_t, const char *, size_t);

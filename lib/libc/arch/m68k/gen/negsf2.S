@@ -1,4 +1,4 @@
-/*	$NetBSD: negsf2.S,v 1.5 1999/10/25 23:48:12 thorpej Exp $	*/
+/*	$NetBSD: negsf2.S,v 1.7 2003/08/07 16:42:11 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,13 +39,13 @@
 #if 0
 	RCSID"from: @(#)negsf2.s	5.1 (Berkeley) 6/7/90")
 #else
-	RCSID("$NetBSD: negsf2.S,v 1.5 1999/10/25 23:48:12 thorpej Exp $")
+	RCSID("$NetBSD: negsf2.S,v 1.7 2003/08/07 16:42:11 agc Exp $")
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 /* -single */
 ENTRY(__negsf2)
-#ifdef __SVR4_ABI__
+#if defined(__SVR4_ABI__) && defined(__HAVE_68881__)
 	fnegs	%sp@(4),%fp0
 #else
 	movel	%sp@(4),%d0

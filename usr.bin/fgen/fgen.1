@@ -1,4 +1,4 @@
-.\"	$NetBSD: fgen.1,v 1.4 1999/11/03 21:45:57 hwr Exp $
+.\"	$NetBSD: fgen.1,v 1.8 2002/02/08 01:36:22 ross Exp $
 .\"
 .\" Copyright (c) 1998 Eduardo Horvath, All Rights Reserved.
 .\"
@@ -14,7 +14,7 @@
 .\"    must display the following acknowledgement:
 .\"      This product includes software developed by Eduardo Horvath.
 .\" 4. The name of the author may not be used to endorse or promote products
-.\"    derived from this software withough specific prior written permission
+.\"    derived from this software without specific prior written permission
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,9 +33,9 @@
 .Os
 .Sh NAME
 .Nm fgen
-.Nd IEEE 1275 Open Firmware FCode Tokenizer.
+.Nd IEEE 1275 Open Firmware FCode Tokenizer
 .Sh SYNOPSIS
-.Nm fgen
+.Nm
 .Op Fl d Ar level
 .Op Fl o Ar outfile
 .Ar infile
@@ -55,10 +55,9 @@ Reads Forth source and generates tokenized FCode object file.
 .\" .Sh STANDARDS
 .\" .Sh HISTORY
 .Sh AUTHORS
-Written by Eduardo E. Horvath <eeh@one-o.com>
+Written by Eduardo E. Horvath \*[Lt]eeh@one-o.com\*[Gt]
 .Sh BUGS
-.Pp
-String escape sequences are not recognized so things such as 
+String escape sequences are not recognized so things such as
 .Pp
 .Li \&" foo \&"\&(01 02\&) \&"n \&"
 .Pp
@@ -66,8 +65,8 @@ will result in the string
 .Pp
 .Dq  foo \&"\&(01 02\&) \&"n .
 .Pp
-Hexadecimal numbers with dots in them such as 
-.Li 100.0000 
+Hexadecimal numbers with dots in them such as
+.Li 100.0000
 are not parsed.
 .Pp
 Permissions on the output file are often incorrect.

@@ -1,4 +1,4 @@
-/*	$NetBSD: byte_swap_2.S,v 1.1 1999/09/13 10:31:37 itojun Exp $	*/
+/*	$NetBSD: byte_swap_2.S,v 1.6 2006/04/14 09:23:01 nonaka Exp $	*/
 
 /*-
  * Copyright (C) 1999 SHIMIZU Ryo.  All rights reserved.
@@ -28,9 +28,22 @@
 
 #include <machine/asm.h>
 
+#undef _LOCORE
+#define	_LOCORE		/* XXX not really, just assembly-code source */
+#include <machine/endian.h>
+
 ENTRY(bswap16)
+#if BYTE_ORDER == LITTLE_ENDIAN
 ALTENTRY(ntohs)
 ALTENTRY(htons)
+#endif
+	extu.w	r4, r4
 	rts
-	swap.b	r4,r0
+	 swap.b	r4, r0
 
+#if BYTE_ORDER == BIG_ENDIAN
+ENTRY(ntohs)
+ALTENTRY(htons)
+	rts
+	 extu.w	r4, r0
+#endif

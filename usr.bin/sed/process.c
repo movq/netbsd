@@ -1,9 +1,39 @@
-/*	$NetBSD: process.c,v 1.26 1999/11/09 15:06:36 drochner Exp $	*/
+/*	$NetBSD: process.c,v 1.37 2006/06/18 05:16:41 gdamore Exp $	*/
+
+/*-
+ * Copyright (c) 1992, 1993, 1994
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Diomidis Spinellis of Imperial College, University of London.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
 
 /*-
  * Copyright (c) 1992 Diomidis Spinellis.
- * Copyright (c) 1992, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Diomidis Spinellis of Imperial College, University of London.
@@ -37,12 +67,16 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)process.c	8.6 (Berkeley) 4/20/94";
 #else
-__RCSID("$NetBSD: process.c,v 1.26 1999/11/09 15:06:36 drochner Exp $");
+__RCSID("$NetBSD: process.c,v 1.37 2006/06/18 05:16:41 gdamore Exp $");
 #endif
 #endif /* not lint */
 
@@ -71,12 +105,12 @@ static SPACE HS, PS, SS;
 #define	hs		HS.space
 #define	hsl		HS.len
 
-static inline int	 applies __P((struct s_command *));
-static void		 flush_appends __P((void));
-static void		 lputs __P((char *));
-static inline int	 regexec_e __P((regex_t *, const char *, int, int, size_t));
-static void		 regsub __P((SPACE *, char *, char *));
-static int		 substitute __P((struct s_command *));
+static inline int	 applies(struct s_command *);
+static void		 flush_appends(void);
+static void		 lputs(char *);
+static inline int	 regexec_e(regex_t *, const char *, int, int, size_t);
+static void		 regsub(SPACE *, char *, char *);
+static int		 substitute(struct s_command *);
 
 struct s_appends *appends;	/* Array of pointers to strings to append. */
 static int appendx;		/* Index into appends array. */
@@ -92,7 +126,7 @@ regmatch_t *match;
 #define OUT(s) { fwrite(s, sizeof(u_char), psl, stdout); }
 
 void
-process()
+process(void)
 {
 	struct s_command *cp;
 	SPACE tspace;
@@ -115,10 +149,12 @@ redirect:
 				cp = cp->u.c;
 				goto redirect;
 			case 'a':
-				if (appendx >= appendnum)
+				if (appendx >= appendnum) {
 					appends = xrealloc(appends,
 					    sizeof(struct s_appends) *
-					    (appendnum *= 2));
+					    (appendnum * 2));
+					appendnum *= 2;
+				}
 				appends[appendx].type = AP_STRING;
 				appends[appendx].s = cp->t;
 				appends[appendx].len = strlen(cp->t);
@@ -137,6 +173,8 @@ redirect:
 				pd = 1;
 				goto new;
 			case 'D':
+				if (psl == 0)
+					pd = 1;
 				if (pd)
 					goto new;
 				if ((p = memchr(ps, '\n', psl - 1)) == NULL) {
@@ -205,10 +243,12 @@ redirect:
 				flush_appends();
 				exit(0);
 			case 'r':
-				if (appendx >= appendnum)
+				if (appendx >= appendnum) {
 					appends = xrealloc(appends,
 					    sizeof(struct s_appends) *
-					    (appendnum *= 2));
+					    (appendnum * 2));
+					appendnum *= 2;
+				}
 				appends[appendx].type = AP_FILE;
 				appends[appendx].s = cp->t;
 				appends[appendx].len = strlen(cp->t);
@@ -230,10 +270,10 @@ redirect:
 				if (cp->u.fd == -1 && (cp->u.fd = open(cp->t,
 				    O_WRONLY|O_APPEND|O_CREAT|O_TRUNC,
 				    DEFFILEMODE)) == -1)
-					err(FATAL, "%s: %s\n",
+					err(FATAL, "%s: %s",
 					    cp->t, strerror(errno));
 				if (write(cp->u.fd, ps, psl) != psl)
-					err(FATAL, "%s: %s\n",
+					err(FATAL, "%s: %s",
 					    cp->t, strerror(errno));
 				break;
 			case 'x':
@@ -277,8 +317,7 @@ new:		if (!nflag && !pd)
  * flag to process ranges.  Interprets the non-select (``!'') flag.
  */
 static inline int
-applies(cp)
-	struct s_command *cp;
+applies(struct s_command *cp)
 {
 	int r;
 
@@ -292,7 +331,7 @@ applies(cp)
 				lastaddr = 1;
 			}
 			r = 1;
-		} else if (MATCH(cp->a1)) {
+		} else if (cp->a1 && MATCH(cp->a1)) {
 			/*
 			 * If the second address is a number less than or
 			 * equal to the line number first selected, only
@@ -319,8 +358,7 @@ applies(cp)
  *	and then swap them.
  */
 static int
-substitute(cp)
-	struct s_command *cp;
+substitute(struct s_command *cp)
 {
 	SPACE tspace;
 	regex_t *re;
@@ -417,9 +455,9 @@ substitute(cp)
 	if (cp->u.s->wfile && !pd) {
 		if (cp->u.s->wfd == -1 && (cp->u.s->wfd = open(cp->u.s->wfile,
 		    O_WRONLY|O_APPEND|O_CREAT|O_TRUNC, DEFFILEMODE)) == -1)
-			err(FATAL, "%s: %s\n", cp->u.s->wfile, strerror(errno));
+			err(FATAL, "%s: %s", cp->u.s->wfile, strerror(errno));
 		if (write(cp->u.s->wfd, ps, psl) != psl)
-			err(FATAL, "%s: %s\n", cp->u.s->wfile, strerror(errno));
+			err(FATAL, "%s: %s", cp->u.s->wfile, strerror(errno));
 	}
 	return (1);
 }
@@ -429,7 +467,7 @@ substitute(cp)
  * therefore it also resets the substitution done (sdone) flag.
  */
 static void
-flush_appends()
+flush_appends(void)
 {
 	FILE *f;
 	int count, i;
@@ -464,20 +502,23 @@ flush_appends()
 }
 
 static void
-lputs(s)
-	char *s;
+lputs(char *s)
 {
 	int count;
 	char *escapes, *p;
+#ifndef HAVE_NBTOOL_CONFIG_H
 	struct winsize win;
+#endif
 	static int termwidth = -1;
 
 	if (termwidth == -1) {
 		if ((p = getenv("COLUMNS")) != NULL)
 			termwidth = atoi(p);
+#ifndef HAVE_NBTOOL_CONFIG_H
 		else if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) == 0 &&
 		    win.ws_col > 0)
 			termwidth = win.ws_col;
+#endif
 		else
 			termwidth = 60;
 	}
@@ -509,11 +550,7 @@ lputs(s)
 }
 
 static inline int
-regexec_e(preg, string, eflags, nomatch, slen)
-	regex_t *preg;
-	const char *string;
-	int eflags, nomatch;
-	size_t slen;
+regexec_e(regex_t *preg, const char *string, int eflags, int nomatch, size_t slen)
 {
 	int eval;
 #ifndef REG_STARTEND
@@ -560,17 +597,16 @@ regexec_e(preg, string, eflags, nomatch, slen)
  * Based on a routine by Henry Spencer
  */
 static void
-regsub(sp, string, src)
-	SPACE *sp;
-	char *string, *src;
+regsub(SPACE *sp, char *string, char *src)
 {
 	int len, no;
 	char c, *dst;
 
 #define	NEEDSP(reqlen)							\
-	if (sp->len >= sp->blen - (reqlen) - 1) {			\
-		sp->blen += (reqlen) + 1024;				\
-		sp->space = sp->back = xrealloc(sp->back, sp->blen);	\
+	if (sp->len + (reqlen) + 1 >= sp->blen) {			\
+		size_t newlen = sp->blen + (reqlen) + 1024;		\
+		sp->space = sp->back = xrealloc(sp->back, newlen);	\
+		sp->blen = newlen;					\
 		dst = sp->space + sp->len;				\
 	}
 
@@ -606,19 +642,16 @@ regsub(sp, string, src)
  *	space as necessary.
  */
 void
-cspace(sp, p, len, spflag)
-	SPACE *sp;
-	char *p;
-	size_t len;
-	enum e_spflag spflag;
+cspace(SPACE *sp, char *p, size_t len, enum e_spflag spflag)
 {
 	size_t tlen;
 
 	/* Make sure SPACE has enough memory and ramp up quickly. */
 	tlen = sp->len + len + 1;
 	if (tlen > sp->blen) {
-		sp->blen = tlen + 1024;
-		sp->space = sp->back = xrealloc(sp->back, sp->blen);
+		size_t newlen = tlen + 1024;
+		sp->space = sp->back = xrealloc(sp->back, newlen);
+		sp->blen = newlen;
 	}
 
 	if (spflag == REPLACE)
@@ -633,8 +666,7 @@ cspace(sp, p, len, spflag)
  * Close all cached opened files and report any errors
  */
 void
-cfclose(cp, end)
-	struct s_command *cp, *end;
+cfclose(struct s_command *cp, struct s_command *end)
 {
 
 	for (; cp != end; cp = cp->next)

@@ -1,4 +1,4 @@
-/*	$NetBSD: crt0.c,v 1.15 1999/07/02 15:53:55 simonb Exp $	*/
+/* $NetBSD: crt0.c,v 1.19 2005/12/24 22:02:10 perry Exp $ */
 
 /*
  * Copyright (c) 1995 Christopher G. Demetriou
@@ -52,17 +52,16 @@
  *	as well as the usual registers (pc, sp, and t9 == pc for ABI).
  */
 
-void __start __P((u_long, void (*) __P((void)), const Obj_Entry *,
-		struct ps_strings *));
+void __start(u_long, void (*)(void), const Obj_Entry *,
+		struct ps_strings *);
 
-asm(".text; .align 4;  .globl _start; _start:");
+__asm(".text; .align 4;  .globl _start; _start:");
 
 void
-__start(sp, cleanup, obj, ps_strings)
-	u_long sp;
-	void (*cleanup) __P((void));	/* from shared loader */
-	const Obj_Entry *obj;		/* from shared loader */
-	struct ps_strings *ps_strings;
+__start(u_long sp,
+    void (*cleanup)(void),		/* from shared loader */
+    const Obj_Entry *obj,		/* from shared loader */
+    struct ps_strings *ps_strings)
 {
 	char **ksp;
 	char **argv, *namep;
@@ -87,7 +86,7 @@ __start(sp, cleanup, obj, ps_strings)
 	 */
 
 #ifndef DYNAMIC
-	__asm __volatile("la $28,_gp");
+	__asm volatile("la $28,_gp");
 #endif
 
 	ksp = (char**)sp;
@@ -105,10 +104,10 @@ __start(sp, cleanup, obj, ps_strings)
 
 #ifndef DYNAMIC
 		/* XXX 56 is compiler and stackframe dependent */
-		__asm __volatile("	addiu	%0,$29,56" : "=r" (ksp));
+		__asm volatile("	addiu	%0,$29,56" : "=r" (ksp));
 #else
 		/* XXX 64 is compiler and stackframe dependent */
-		__asm __volatile("	addiu	%0,$29,64" : "=r" (ksp));
+		__asm volatile("	addiu	%0,$29,64" : "=r" (ksp));
 #endif
 	}
 
@@ -158,7 +157,7 @@ __start(sp, cleanup, obj, ps_strings)
  *  is the entrypoint. (Only needed for old toolchains).
  */
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: crt0.c,v 1.15 1999/07/02 15:53:55 simonb Exp $");
+__RCSID("$NetBSD: crt0.c,v 1.19 2005/12/24 22:02:10 perry Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "common.c"

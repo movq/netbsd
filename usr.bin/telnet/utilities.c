@@ -1,4 +1,4 @@
-/*	$NetBSD: utilities.c,v 1.7 1998/03/04 13:51:58 christos Exp $	*/
+/*	$NetBSD: utilities.c,v 1.22 2006/10/07 17:27:57 elad Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)utilities.c	8.3 (Berkeley) 5/30/95";
 #else
-__RCSID("$NetBSD: utilities.c,v 1.7 1998/03/04 13:51:58 christos Exp $");
+__RCSID("$NetBSD: utilities.c,v 1.22 2006/10/07 17:27:57 elad Exp $");
 #endif
 #endif /* not lint */
 
@@ -48,25 +44,26 @@ __RCSID("$NetBSD: utilities.c,v 1.7 1998/03/04 13:51:58 christos Exp $");
 #include <arpa/telnet.h>
 #include <sys/types.h>
 #include <sys/time.h>
-#ifndef	NOT43
 #include <sys/socket.h>
-#endif
 #include <unistd.h>
+#include <poll.h>
 
 #include <ctype.h>
 
 #include "general.h"
-
-#include "fdset.h"
-
 #include "ring.h"
-
 #include "defines.h"
-
 #include "externs.h"
 
-#if defined(TN3270)
+#ifdef TN3270
 #include "../sys_curses/telextrn.h"
+#endif
+
+#ifdef AUTHENTICATION
+#include <libtelnet/auth.h>
+#endif
+#ifdef ENCRYPTION
+#include <libtelnet/encrypt.h>
 #endif
 
 FILE	*NetTrace = 0;		/* Not in bss, since needs to stay */
@@ -78,11 +75,10 @@ int	prettydump;
  *	Upcase (in place) the argument.
  */
 
-    void
-upcase(argument)
-    register char *argument;
+void
+upcase(char *argument)
 {
-    register int c;
+    int c;
 
     while ((c = *argument) != 0) {
 	if (islower(c)) {
@@ -98,52 +94,37 @@ upcase(argument)
  * Compensate for differences in 4.2 and 4.3 systems.
  */
 
-    int
-SetSockOpt(fd, level, option, yesno)
-    int fd, level, option, yesno;
+int
+SetSockOpt(int fd, int level, int option, int yesno)
 {
-#ifndef	NOT43
-    return setsockopt(fd, level, option,
-				(char *)&yesno, sizeof yesno);
-#else	/* NOT43 */
-    if (yesno == 0) {		/* Can't do that in 4.2! */
-	fprintf(stderr, "Error: attempt to turn off an option 0x%x.\n",
-				option);
-	return -1;
-    }
-    return setsockopt(fd, level, option, 0, 0);
-#endif	/* NOT43 */
+    return setsockopt(fd, level, option, (char *)&yesno, sizeof yesno);
 }
 
 /*
  * The following are routines used to print out debugging information.
  */
 
-unsigned char NetTraceFile[256] = "(standard output)";
+char NetTraceFile[256] = "(standard output)";
 
-    void
-SetNetTrace(file)
-    register char *file;
+void
+SetNetTrace(char *file)
 {
     if (NetTrace && NetTrace != stdout)
 	fclose(NetTrace);
     if (file  && (strcmp(file, "-") != 0)) {
 	NetTrace = fopen(file, "w");
 	if (NetTrace) {
-	    strcpy((char *)NetTraceFile, file);
+	    strlcpy(NetTraceFile, file, sizeof(NetTraceFile));
 	    return;
 	}
 	fprintf(stderr, "Cannot open %s.\n", file);
     }
     NetTrace = stdout;
-    strcpy((char *)NetTraceFile, "(standard output)");
+    strlcpy(NetTraceFile, "(standard output)", sizeof(NetTraceFile));
 }
 
-    void
-Dump(direction, buffer, length)
-    char direction;
-    unsigned char *buffer;
-    int length;
+void
+Dump(int direction, unsigned char *buffer, int length)
 {
 #   define BYTES_PER_LINE	32
 #   define min(x,y)	((x<y)? x:y)
@@ -190,10 +171,8 @@ Dump(direction, buffer, length)
 }
 
 
-	void
-printoption(direction, cmd, option)
-	char *direction;
-	int cmd, option;
+void
+printoption(char *direction, int cmd, int option)
 {
 	if (!showoptions)
 		return;
@@ -203,7 +182,7 @@ printoption(direction, cmd, option)
 		else
 		    fprintf(NetTrace, "%s IAC %d", direction, option);
 	} else {
-		register char *fmt;
+		char *fmt;
 		fmt = (cmd == WILL) ? "WILL" : (cmd == WONT) ? "WONT" :
 			(cmd == DO) ? "DO" : (cmd == DONT) ? "DONT" : 0;
 		if (fmt) {
@@ -226,10 +205,10 @@ printoption(direction, cmd, option)
 	return;
 }
 
-    void
-optionstatus()
+void
+optionstatus(void)
 {
-    register int i;
+    int i;
     extern char will_wont_resp[], do_dont_resp[];
 
     for (i = 0; i < 256; i++) {
@@ -303,13 +282,16 @@ optionstatus()
 
 }
 
-    void
-printsub(direction, pointer, length)
-    char direction;	/* '<' or '>' */
-    unsigned char *pointer;	/* where suboption data sits */
-    int		  length;	/* length of suboption data */
+void
+printsub(
+    int direction,	/* '<' or '>' */
+    unsigned char *pointer,	/* where suboption data sits */
+    int		  length)	/* length of suboption data */
 {
-    register int i;
+    int i;
+#ifdef	ENCRYPTION
+    char buf[512];
+#endif	/* ENCRYPTION */
     extern int want_status_response;
 
     if (showoptions || direction == 0 ||
@@ -318,7 +300,7 @@ printsub(direction, pointer, length)
 	    fprintf(NetTrace, "%s IAC SB ",
 				(direction == '<')? "RCVD":"SENT");
 	    if (length >= 3) {
-		register int j;
+		int j;
 
 		i = pointer[length-2];
 		j = pointer[length-1];
@@ -432,7 +414,7 @@ printsub(direction, pointer, length)
 		fprintf(NetTrace, " ?%d?", pointer[i]);
 	    break;
 
-#if	defined(AUTHENTICATION)
+#ifdef AUTHENTICATION
 	case TELOPT_AUTHENTICATION:
 	    fprintf(NetTrace, "AUTHENTICATION");
 	    if (length < 2) {
@@ -499,6 +481,79 @@ printsub(direction, pointer, length)
 	    break;
 #endif
 
+#ifdef	ENCRYPTION
+	case TELOPT_ENCRYPT:
+		fprintf(NetTrace, "ENCRYPT");
+		if (length < 2) {
+			fprintf(NetTrace, " (empty suboption??\?)");
+			break;
+		}
+		switch (pointer[1]) {
+		case ENCRYPT_START:
+			fprintf(NetTrace, " START");
+			break;
+
+		case ENCRYPT_END:
+			fprintf(NetTrace, " END");
+			break;
+
+		case ENCRYPT_REQSTART:
+			fprintf(NetTrace, " REQUEST-START");
+			break;
+
+		case ENCRYPT_REQEND:
+			fprintf(NetTrace, " REQUEST-END");
+			break;
+
+		case ENCRYPT_IS:
+		case ENCRYPT_REPLY:
+			fprintf(NetTrace, " %s ", (pointer[1] == ENCRYPT_IS) ?
+			    "IS" : "REPLY");
+			if (length < 3) {
+				fprintf(NetTrace, " (partial suboption??\?)");
+				break;
+			}
+			if (ENCTYPE_NAME_OK(pointer[2]))
+				fprintf(NetTrace, "%s ",
+				    ENCTYPE_NAME(pointer[2]));
+			else
+				fprintf(NetTrace, " %d (unknown)", pointer[2]);
+
+			encrypt_printsub(&pointer[1], length - 1, buf,
+			    sizeof(buf));
+			fprintf(NetTrace, "%s", buf);
+			break;
+
+		case ENCRYPT_SUPPORT:
+			i = 2;
+			fprintf(NetTrace, " SUPPORT ");
+			while (i < length) {
+				if (ENCTYPE_NAME_OK(pointer[i]))
+					fprintf(NetTrace, "%s ",
+					    ENCTYPE_NAME(pointer[i]));
+				else
+					fprintf(NetTrace, "%d ", pointer[i]);
+				i++;
+			}
+			break;
+
+		case ENCRYPT_ENC_KEYID:
+			fprintf(NetTrace, " ENC_KEYID ");
+			goto encommon;
+
+		case ENCRYPT_DEC_KEYID:
+			fprintf(NetTrace, " DEC_KEYID ");
+			goto encommon;
+
+		default:
+			fprintf(NetTrace, " %d (unknown)", pointer[1]);
+		encommon:
+			for (i = 2; i < length; i++)
+				fprintf(NetTrace, " %d", pointer[i]);
+			break;
+		}
+		break;
+#endif	/* ENCRYPTION */
 
 	case TELOPT_LINEMODE:
 	    fprintf(NetTrace, "LINEMODE ");
@@ -599,8 +654,8 @@ printsub(direction, pointer, length)
 	    break;
 
 	case TELOPT_STATUS: {
-	    register char *cp;
-	    register int j, k;
+	    char *cp;
+	    int j, k;
 
 	    fprintf(NetTrace, "STATUS");
 
@@ -713,7 +768,7 @@ printsub(direction, pointer, length)
 		fprintf(NetTrace, "INFO ");
 	    env_common:
 		{
-		    register int noquote = 2;
+		    int noquote = 2;
 #if defined(ENV_HACK) && defined(OLD_ENVIRON)
 		    extern int old_env_var, old_env_value;
 #endif
@@ -805,41 +860,32 @@ printsub(direction, pointer, length)
 
 /* EmptyTerminal - called to make sure that the terminal buffer is empty.
  *			Note that we consider the buffer to run all the
- *			way to the kernel (thus the select).
+ *			way to the kernel (thus the poll).
  */
 
-    void
-EmptyTerminal()
+void
+EmptyTerminal(void)
 {
-#if	defined(unix)
-    fd_set	o;
+    struct pollfd set[1];
 
-    FD_ZERO(&o);
-#endif	/* defined(unix) */
+    set[0].fd = tout;
+    set[0].events = POLLOUT;
 
     if (TTYBYTES() == 0) {
-#if	defined(unix)
-	FD_SET(tout, &o);
-	(void) select(tout+1, (fd_set *) 0, &o, (fd_set *) 0,
-			(struct timeval *) 0);	/* wait for TTLOWAT */
-#endif	/* defined(unix) */
+	(void) poll(set, 1, INFTIM);
     } else {
 	while (TTYBYTES()) {
 	    (void) ttyflush(0);
-#if	defined(unix)
-	    FD_SET(tout, &o);
-	    (void) select(tout+1, (fd_set *) 0, &o, (fd_set *) 0,
-				(struct timeval *) 0);	/* wait for TTLOWAT */
-#endif	/* defined(unix) */
+	    (void) poll(set, 1, INFTIM);
 	}
     }
 }
 
-    void
-SetForExit()
+void
+SetForExit(void)
 {
     setconnmode(0);
-#if	defined(TN3270)
+#ifdef TN3270
     if (In3270) {
 	Finish3270();
     }
@@ -852,7 +898,7 @@ SetForExit()
     setcommandmode();
     fflush(stdout);
     fflush(stderr);
-#if	defined(TN3270)
+#ifdef TN3270
     if (In3270) {
 	StopScreen(1);
     }
@@ -862,18 +908,15 @@ SetForExit()
     setcommandmode();
 }
 
-    void
-Exit(returnCode)
-    int returnCode;
+void
+Exit(int returnCode)
 {
     SetForExit();
     exit(returnCode);
 }
 
-    void
-ExitString(string, returnCode)
-    char *string;
-    int returnCode;
+void
+ExitString(char *string, int returnCode)
 {
     SetForExit();
     fwrite(string, 1, strlen(string), stderr);

@@ -1,4 +1,4 @@
-/*	$NetBSD: sbrk.S,v 1.10 1999/02/08 18:56:48 christos Exp $	*/
+/*	$NetBSD: sbrk.S,v 1.19 2008/07/02 20:07:43 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,7 +36,7 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: sbrk.S,v 1.10 1999/02/08 18:56:48 christos Exp $")
+	RCSID("$NetBSD: sbrk.S,v 1.19 2008/07/02 20:07:43 rmind Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
@@ -48,41 +44,50 @@
 	.globl	_end
 	.globl	CURBRK
 
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(sbrk, _sbrk)
+#endif
+
 	.data
 CURBRK:	.long	_end
 	.text
 
-ENTRY(sbrk)
+ENTRY(_sbrk)
 #ifdef PIC
 	movl	4(%esp),%ecx
 	PIC_PROLOGUE
 	movl	PIC_GOT(CURBRK),%edx
 	PIC_EPILOGUE
 	movl	(%edx),%eax
-	addl	%eax,4(%esp)
-	movl	$(SYS_break),%eax
-	int	$0x80
+	test	%ecx,%ecx
+	jz	out
+	addl	%eax,%ecx
+	movl	%ecx,4(%esp)
+	OSYSTRAP(break)	/* don't clobber %ecx */
 	jc	err
 	PIC_PROLOGUE
 	movl	PIC_GOT(CURBRK),%edx
 	PIC_EPILOGUE
 	movl	(%edx),%eax
-	addl	%ecx,(%edx)
+	movl	%ecx,(%edx)
+out:
 	ret
 err:
 	PIC_PROLOGUE
-	jmp	PIC_PLT(CERROR)
-
+	mov	PIC_GOT(CERROR),%edx
+	PIC_EPILOGUE
+	jmp	*%edx
 #else
-
 	movl	4(%esp),%ecx
 	movl	CURBRK,%eax
+	test	%ecx,%ecx
+	jz	out
 	addl	%eax,4(%esp)
-	movl	$(SYS_break),%eax
-	int	$0x80
+	OSYSTRAP(break)	/* don't clobber %ecx */
 	jc	err
 	movl	CURBRK,%eax
 	addl	%ecx,CURBRK
+out:
 	ret
 err:
 	jmp	CERROR

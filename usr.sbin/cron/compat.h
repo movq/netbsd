@@ -1,4 +1,4 @@
-/*	$NetBSD: compat.h,v 1.2 1997/03/13 06:19:09 mikel Exp $	*/
+/*	$NetBSD: compat.h,v 1.4 2005/03/16 02:53:55 xtraeme Exp $	*/
 
 /* Copyright 1993,1994 by Paul Vixie
  * All rights reserved
@@ -20,15 +20,6 @@
 /*
  * Id: compat.h,v 1.8 1994/01/15 20:43:43 vixie Exp
  */
-
-#ifndef __P
-# ifdef __STDC__
-#  define __P(x) x
-# else
-#  define __P(x) ()
-#  define const
-# endif
-#endif
 
 #if defined(UNIXPC) || defined(unixpc)
 # define UNIXPC 1

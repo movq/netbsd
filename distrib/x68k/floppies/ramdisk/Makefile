@@ -1,82 +1,44 @@
-#	$NetBSD: Makefile,v 1.14 1999/12/24 17:02:15 minoura Exp $
+#	$NetBSD: Makefile,v 1.29 2008/05/11 09:35:53 isaki Exp $
 
-TOP=		${.CURDIR}/..
+.include <bsd.own.mk>
+.include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
-.include "${TOP}/Makefile.inc"
-IMAGE=		ramdisk-${REV}.fs
+IMAGE=			inst.fs
+IMAGESIZE=		1300k
+# `floppy-root' cannot be used now, due to size issue.
+#IMAGE_RELEASEDIR=	installation/floppy
 
-AUXTARGETS=	install.sh upgrade.sh start.sh
-AUXCLEAN=	${AUXTARGETS}
+MAKEFS_FLAGS=	-f 10
+WARNS=		1
+DBG=		-Os
 
-CBIN=		ramdiskbin
+CRUNCHBIN=	ramdiskbin
+LISTS=		${.CURDIR}/list ${DISTRIBDIR}/common/list.sysinst.en
+MTREECONF=	${DISTRIBDIR}/common/mtree.common
+IMAGEENDIAN=	be
+MAKEDEVTARGETS=	ramdisk
+IMAGEDEPENDS+= 	${CRUNCHBIN} \
+		disktab.preinstall dot.profile dot.hdprofile \
+		services termcap.vt \
+		${DESTDIR}/usr/mdec/boot ${DESTDIR}/usr/mdec/mboot \
+		${DESTDIR}/usr/mdec/sdboot_ufs \
+		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
+		${NETBSDSRCDIR}/etc/netconfig ${NETBSDSRCDIR}/etc/protocols
+SMALLPROG_INET6=1
 
-MOUNT_POINT?=	/mnt
-# DEV/RDEV file system device, CDEV/RDEV vnconfig device
-VND?=		vnd0
-VND_DEV=	/dev/${VND}a
-VND_RDEV=	/dev/r${VND}a
-VND_CDEV=	/dev/${VND}c
-VND_CRDEV=	/dev/r${VND}c
-IMAGE?=		xxx-${REV}.fs
-MDEC=		${DESTDIR}/usr/mdec
+.if ${USE_INET6} != "no"
+LISTS+=		${.CURDIR}/list.inet6
+.endif
 
-LISTS=		list
-CRUNCHCONF=	${CBIN}.conf
-MTREE=		mtree.conf
+# Use stubs to eliminate some large stuff from libc
+HACKSRC=	${DISTRIBDIR}/utils/libhack
+.include	"${HACKSRC}/Makefile.inc"
+${CRUNCHBIN}:	libhack.o
 
-install.sh: install.tmpl
-	sed "s/@@VERSION@@/${VER}/" < ${.ALLSRC} > ${.TARGET}
+.include "${DISTRIBDIR}/common/Makefile.crunch"
+.include "${DISTRIBDIR}/common/Makefile.makedev"
+.include "${DISTRIBDIR}/common/Makefile.image"
 
-upgrade.sh: upgrade.tmpl
-	sed "s/@@VERSION@@/${VER}/" < ${.ALLSRC} > ${.TARGET}
+release::
 
-start.sh: start.tmpl
-	sed "s/@@VERSION@@/${VER}/" < ${.ALLSRC} > ${.TARGET}
-
-all: ${AUXTARGETS} ${CBIN} 
-	dd if=/dev/zero of=${IMAGE} count=2400
-	vnconfig -v -c ${VND_CDEV} ${IMAGE} 512/15/2/80
-	newfs -B be -m 0 -o space -i 5120 -c 80 ${VND_RDEV}
-	mount ${VND_DEV} ${MOUNT_POINT}
-	mtree -def ${.CURDIR}/${MTREE} -p ${MOUNT_POINT}/ -u
-	TOPDIR=${TOP} CURDIR=${.CURDIR} OBJDIR=${.OBJDIR} \
-	    TARGDIR=${MOUNT_POINT} sh ${TOP}/runlist.sh ${.CURDIR}/${LISTS}
-	@echo ""
-	@df -i ${MOUNT_POINT}
-	@echo ""
-	umount ${MOUNT_POINT}
-	vnconfig -u ${VND_CDEV}
-
-unconfig:
-	-umount -f ${MOUNT_POINT}
-	-vnconfig -u ${VND_DEV}
-	-/bin/rm -f ${IMAGE}
-
-${CBIN}.mk ${CBIN}.cache ${CBIN}.c: ${CRUNCHCONF}
-	crunchgen -D ${TOP}/../../.. -L ${DESTDIR}/usr/lib ${.ALLSRC}
-
-${CBIN}: ${CBIN}.mk ${CBIN}.cache ${CBIN}.c
-	make -f ${CBIN}.mk all
-
-# Use size-reduced libhack.
-${CBIN}: libhack.o
-
-HACKSRC=${TOP}/../../utils/libhack
-.include "${HACKSRC}/Makefile.inc"
-
-# turn off small gethostby* temporarily
-HACKOBJS:= getcap.o getgrent.o getnet.o getnetgr.o getpwent.o setlocale.o yplib.o
-
-# Used in building bootfloppy
-echoimage:
-	@echo ${.OBJDIR}/${IMAGE}
-
-depend:
-
-release:
-
-clean cleandir distclean:
-	/bin/rm -f ${AUXCLEAN} *.core ${IMAGE} ${CBIN} ${CBIN}.mk ${CBIN}.cache *.o *.cro *.c
-
-.include <bsd.obj.mk>
-.include <bsd.sys.mk>
+.include <bsd.prog.mk>

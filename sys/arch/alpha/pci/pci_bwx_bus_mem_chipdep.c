@@ -1,4 +1,4 @@
-/* $NetBSD: pci_bwx_bus_mem_chipdep.c,v 1.9 2000/02/26 18:53:13 thorpej Exp $ */
+/* $NetBSD: pci_bwx_bus_mem_chipdep.c,v 1.21 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -82,6 +75,9 @@
  *			for the memory space extent.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(1, "$NetBSD: pci_bwx_bus_mem_chipdep.c,v 1.21 2008/04/28 20:23:11 martin Exp $");
+
 #include <sys/extent.h>
 
 #include <machine/bwx.h>
@@ -108,6 +104,12 @@ int		__C(CHIP,_mem_alloc) __P((void *, bus_addr_t, bus_addr_t,
                     bus_space_handle_t *));
 void		__C(CHIP,_mem_free) __P((void *, bus_space_handle_t,
 		    bus_size_t));
+
+/* get kernel virtual address */
+void *		__C(CHIP,_mem_vaddr) __P((void *, bus_space_handle_t));
+
+/* mmap for user */
+paddr_t		__C(CHIP,_mem_mmap) __P((void *, bus_addr_t, off_t, int, int));
 
 /* barrier */
 inline void	__C(CHIP,_mem_barrier) __P((void *, bus_space_handle_t,
@@ -236,6 +238,12 @@ __C(CHIP,_bus_mem_init)(t, v)
 	t->abs_alloc =		__C(CHIP,_mem_alloc);
 	t->abs_free = 		__C(CHIP,_mem_free);
 
+	/* get kernel virtual address */
+	t->abs_vaddr =		__C(CHIP,_mem_vaddr);
+
+	/* mmap for user */
+	t->abs_mmap =		__C(CHIP,_mem_mmap);
+
 	/* barrier */
 	t->abs_barrier =	__C(CHIP,_mem_barrier);
 	
@@ -294,7 +302,7 @@ __C(CHIP,_bus_mem_init)(t, v)
 	t->abs_c_8 =		__C(CHIP,_mem_copy_region_8);
 
 	ex = extent_create(__S(__C(CHIP,_bus_mem)), 0x0UL, 0xffffffffUL,
-	    M_DEVBUF, (caddr_t)CHIP_MEM_EX_STORE(v), CHIP_MEM_EX_STORE_SIZE(v),
+	    M_DEVBUF, (void *)CHIP_MEM_EX_STORE(v), CHIP_MEM_EX_STORE_SIZE(v),
 	    EX_NOWAIT|EX_NOCOALESCE);
 
         CHIP_MEM_EXTENT(v) = ex;
@@ -348,13 +356,7 @@ __C(CHIP,_mem_map)(v, memaddr, memsize, flags, memhp, acct)
 	bus_space_handle_t *memhp;
 	int acct;
 {
-	int prefetchable = flags & BUS_SPACE_MAP_PREFETCHABLE;
-	int linear = flags & BUS_SPACE_MAP_LINEAR;
 	int error;
-
-	/* Requests for linear unprefetchable space can't be satisfied. */
-	if (linear && !prefetchable)
-		return (EOPNOTSUPP);
 
 	if (acct == 0)
 		goto mapit;
@@ -434,14 +436,8 @@ __C(CHIP,_mem_alloc)(v, rstart, rend, size, align, boundary, flags,
 	int flags;
 	bus_space_handle_t *bshp;
 {
-	int prefetchable = flags & BUS_SPACE_MAP_PREFETCHABLE;
-	int linear = flags & BUS_SPACE_MAP_LINEAR;
 	bus_addr_t memaddr;
 	int error;
-
-	/* Requests for linear unprefetchable space can't be satisfied. */
-	if (linear && !prefetchable)
-		return (EOPNOTSUPP);
 
 	/*
 	 * Do the requested allocation.
@@ -479,6 +475,27 @@ __C(CHIP,_mem_free)(v, bsh, size)
 
 	/* Unmap does all we need to do. */
 	__C(CHIP,_mem_unmap)(v, bsh, size, 1);
+}
+
+void *
+__C(CHIP,_mem_vaddr)(v, bsh)
+	void *v;
+	bus_space_handle_t bsh;
+{
+
+	return ((void *)bsh);
+}
+
+paddr_t
+__C(CHIP,_mem_mmap)(v, addr, off, prot, flags)
+	void *v;
+	bus_addr_t addr;
+	off_t off;
+	int prot;
+	int flags;
+{
+
+	return (alpha_btop(CHIP_MEM_SYS_START(v) + addr + off));
 }
 
 inline void

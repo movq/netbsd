@@ -1,4 +1,4 @@
-/*	$NetBSD: via82c586.c,v 1.1 1999/11/17 01:21:21 thorpej Exp $	*/
+/*	$NetBSD: via82c586.c,v 1.11 2008/04/28 20:23:25 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,6 +59,9 @@
  * Support for the VIA 82c586 PCI-ISA bridge interrupt controller.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: via82c586.c,v 1.11 2008/04/28 20:23:25 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -81,11 +77,11 @@
 #include <i386/pci/via82c586reg.h>
 #include <i386/pci/piixvar.h>
 
-int	via82c586_getclink __P((pciintr_icu_handle_t, int, int *));
-int	via82c586_get_intr __P((pciintr_icu_handle_t, int, int *));
-int	via82c586_set_intr __P((pciintr_icu_handle_t, int, int));
-int	via82c586_get_trigger __P((pciintr_icu_handle_t, int, int *));
-int	via82c586_set_trigger __P((pciintr_icu_handle_t, int, int));
+int	via82c586_getclink(pciintr_icu_handle_t, int, int *);
+int	via82c586_get_intr(pciintr_icu_handle_t, int, int *);
+int	via82c586_set_intr(pciintr_icu_handle_t, int, int);
+int	via82c586_get_trigger(pciintr_icu_handle_t, int, int *);
+int	via82c586_set_trigger(pciintr_icu_handle_t, int, int);
 
 const struct pciintr_icu via82c586_pci_icu = {
 	via82c586_getclink,
@@ -110,18 +106,17 @@ const int vp3_cfg_intr_shift[] = {
 	VP3_CFG_INTR_SHIFT_PIRQB,
 	VP3_CFG_INTR_SHIFT_PIRQC,
 	VP3_CFG_INTR_SHIFT_PIRQD,
+	VP3_CFG_INTR_SHIFT_PIRQ0,
+	VP3_CFG_INTR_SHIFT_PIRQ1,
+	VP3_CFG_INTR_SHIFT_PIRQ2,
 };
 
-#define	VP3_PIRQ(req, pirq)	(((reg) >> vp3_cfg_intr_shift[(pirq)]) & \
+#define	VP3_PIRQ(reg, pirq)	(((reg) >> vp3_cfg_intr_shift[(pirq)]) & \
 				 VP3_CFG_INTR_MASK)
 
 int
-via82c586_init(pc, iot, tag, ptagp, phandp)
-	pci_chipset_tag_t pc;
-	bus_space_tag_t iot;
-	pcitag_t tag;
-	pciintr_icu_tag_t *ptagp;
-	pciintr_icu_handle_t *phandp;
+via82c586_init(pci_chipset_tag_t pc, bus_space_tag_t iot, pcitag_t tag,
+    pciintr_icu_tag_t *ptagp, pciintr_icu_handle_t *phandp)
 {
 	pcireg_t reg;
 
@@ -143,9 +138,7 @@ via82c586_init(pc, iot, tag, ptagp, phandp)
 }
 
 int
-via82c586_getclink(v, link, clinkp)
-	pciintr_icu_handle_t v;
-	int link, *clinkp;
+via82c586_getclink(pciintr_icu_handle_t v, int link, int *clinkp)
 {
 
 	if (VP3_LEGAL_LINK(link - 1)) {
@@ -157,9 +150,7 @@ via82c586_getclink(v, link, clinkp)
 }
 
 int
-via82c586_get_intr(v, clink, irqp)
-	pciintr_icu_handle_t v;
-	int clink, *irqp;
+via82c586_get_intr(pciintr_icu_handle_t v, int clink, int *irqp)
 {
 	struct piix_handle *ph = v;
 	pcireg_t reg;
@@ -170,15 +161,14 @@ via82c586_get_intr(v, clink, irqp)
 
 	reg = pci_conf_read(ph->ph_pc, ph->ph_tag, VP3_CFG_PIRQ_REG);
 	val = VP3_PIRQ(reg, clink);
-	*irqp = (val == VP3_PIRQ_NONE) ? 0xff : val;
+	*irqp = (val == VP3_PIRQ_NONE) ?
+	    X86_PCI_INTERRUPT_LINE_NO_CONNECTION : val;
 
 	return (0);
 }
 
 int
-via82c586_set_intr(v, clink, irq)
-	pciintr_icu_handle_t v;
-	int clink, irq;
+via82c586_set_intr(pciintr_icu_handle_t v, int clink, int irq)
 {
 	struct piix_handle *ph = v;
 	int shift, val;
@@ -201,9 +191,7 @@ via82c586_set_intr(v, clink, irq)
 }
 
 int
-via82c586_get_trigger(v, irq, triggerp)
-	pciintr_icu_handle_t v;
-	int irq, *triggerp;
+via82c586_get_trigger(pciintr_icu_handle_t v, int irq, int *triggerp)
 {
 	struct piix_handle *ph = v;
 	int i, error, check_consistency, pciirq, pcitrigger = IST_NONE;
@@ -234,9 +222,7 @@ via82c586_get_trigger(v, irq, triggerp)
 }
 
 int
-via82c586_set_trigger(v, irq, trigger)
-	pciintr_icu_handle_t v;
-	int irq, trigger;
+via82c586_set_trigger(pciintr_icu_handle_t v, int irq, int trigger)
 {
 	struct piix_handle *ph = v;
 	int i, pciirq, shift, testtrig;

@@ -1,4 +1,4 @@
-/*	$NetBSD: statd.c,v 1.14 1999/06/10 05:53:51 scottr Exp $	*/
+/*	$NetBSD: statd.c,v 1.28 2007/12/15 19:44:56 perry Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas. All rights reserved.
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: statd.c,v 1.14 1999/06/10 05:53:51 scottr Exp $");
+__RCSID("$NetBSD: statd.c,v 1.28 2007/12/15 19:44:56 perry Exp $");
 #endif
 
 /* main() function for status monitor daemon.  Some of the code in this	*/
@@ -45,6 +45,7 @@ __RCSID("$NetBSD: statd.c,v 1.14 1999/06/10 05:53:51 scottr Exp $");
 /* The actual program logic is in the file procs.c			*/
 
 #include <sys/param.h>
+#include <sys/wait.h>
 
 #include <err.h>
 #include <ctype.h>
@@ -58,6 +59,7 @@ __RCSID("$NetBSD: statd.c,v 1.14 1999/06/10 05:53:51 scottr Exp $");
 #include <unistd.h>
 #include <util.h>
 #include <db.h>
+#include <netconfig.h>
 
 #include <rpc/rpc.h>
 
@@ -75,19 +77,18 @@ static DBT undefkey = {
 	undefdata,
 	sizeof(undefdata)
 };
-extern char *__progname;
 
 
 /* statd.c */
-static int walk_one __P((int (*fun )__P ((DBT *, DBT *, void *)), DBT *, DBT *, void *));
-static int walk_db __P((int (*fun )__P ((DBT *, DBT *, void *)), void *));
-static int reset_host __P((DBT *, DBT *, void *));
-static int check_work __P((DBT *, DBT *, void *));
-static int unmon_host __P((DBT *, DBT *, void *));
-static int notify_one __P((DBT *, DBT *, void *));
+static int walk_one __P((int (*fun )__P ((DBT *, HostInfo *, void *)), DBT *, DBT *, void *));
+static int walk_db __P((int (*fun )__P ((DBT *, HostInfo *, void *)), void *));
+static int reset_host __P((DBT *, HostInfo *, void *));
+static int check_work __P((DBT *, HostInfo *, void *));
+static int unmon_host __P((DBT *, HostInfo *, void *));
+static int notify_one __P((DBT *, HostInfo *, void *));
 static void init_file __P((char *));
 static int notify_one_host __P((char *));
-static void die __P((int)) __attribute__((__noreturn__));
+static void die __P((int)) __dead;
 
 int main __P((int, char **));
 
@@ -96,8 +97,9 @@ main(argc, argv)
 	int argc;
 	char **argv;
 {
-	SVCXPRT *transp;
 	int ch;
+	struct sigaction nsa;
+	int maxrec = RPC_MAXDATASIZE;
 
 	while ((ch = getopt(argc, argv, "d")) != (-1)) {
 		switch (ch) {
@@ -106,31 +108,25 @@ main(argc, argv)
 			break;
 		default:
 		case '?':
-			(void)fprintf(stderr, "usage: %s [-d]\n", __progname);
+			(void)fprintf(stderr, "usage: %s [-d]\n",
+			    getprogname());
 			exit(1);
 			/* NOTREACHED */
 		}
 	}
-	(void)pmap_unset(SM_PROG, SM_VERS);
+	(void)rpcb_unset(SM_PROG, SM_VERS, NULL);
 
-	transp = svcudp_create(RPC_ANYSOCK);
-	if (transp == NULL) {
+	rpc_control(RPC_SVC_CONNMAXREC_SET, &maxrec);
+
+	if (!svc_create(sm_prog_1, SM_PROG, SM_VERS, "udp")) {
 		errx(1, "cannot create udp service.");
 		/* NOTREACHED */
 	}
-	if (!svc_register(transp, SM_PROG, SM_VERS, sm_prog_1, IPPROTO_UDP)) {
-		errx(1, "unable to register (SM_PROG, SM_VERS, udp).");
+	if (!svc_create(sm_prog_1, SM_PROG, SM_VERS, "tcp")) {
+		errx(1, "cannot create udp service.");
 		/* NOTREACHED */
 	}
-	transp = svctcp_create(RPC_ANYSOCK, 0, 0);
-	if (transp == NULL) {
-		errx(1, "cannot create tcp service.");
-		/* NOTREACHED */
-	}
-	if (!svc_register(transp, SM_PROG, SM_VERS, sm_prog_1, IPPROTO_TCP)) {
-		errx(1, "unable to register (SM_PROG, SM_VERS, tcp).");
-		/* NOTREACHED */
-	}
+
 	init_file("/var/db/statd.status");
 
 	/*
@@ -139,6 +135,12 @@ main(argc, argv)
 	 */
 	if (!debug)
 		daemon(0, 0);
+
+	sigemptyset(&nsa.sa_mask);
+	nsa.sa_flags = SA_NOCLDSTOP|SA_NOCLDWAIT;
+	nsa.sa_handler = SIG_IGN;
+	(void)sigaction(SIGCHLD, &nsa, NULL);
+
 	pidfile(NULL);
 	openlog("rpc.statd", 0, LOG_DAEMON);
 	if (debug)
@@ -240,12 +242,17 @@ bad:
  *
  */
 void
-change_host(hostname, hp)
-	char *hostname;
+change_host(hostnamep, hp)
+	char *hostnamep;
 	HostInfo *hp;
 {
 	DBT key, data;
 	char *ptr;
+	char hostname[MAXHOSTNAMELEN + 1];
+	HostInfo h;
+
+	strncpy(hostname, hostnamep, MAXHOSTNAMELEN + 1);
+	h = *hp;
 
 	for (ptr = hostname; *ptr; ptr++)
 		if (isupper((unsigned char) *ptr))
@@ -253,8 +260,8 @@ change_host(hostname, hp)
 
 	key.data = hostname;
 	key.size = ptr - hostname + 1;
-	data.data = hp;
-	data.size = sizeof(*hp);
+	data.data = &h;
+	data.size = sizeof(h);
 
 	switch ((*db->put)(db, &key, &data, 0)) {
 	case -1:
@@ -315,10 +322,11 @@ bad:
  */
 static int
 walk_one(fun, key, data, ptr)
-	int (*fun) __P((DBT *, DBT *, void *));
+	int (*fun) __P((DBT *, HostInfo *, void *));
 	DBT *key, *data;
 	void *ptr;
 {
+	HostInfo h;
 	if (key->size == undefkey.size &&
 	    memcmp(key->data, undefkey.data, key->size) == 0)
 		return 0;
@@ -326,8 +334,8 @@ walk_one(fun, key, data, ptr)
 		syslog(LOG_ERR, "Bad data in database");
 		die(1);
 	}
-
-	return (*fun)(key, data, ptr);
+	memcpy(&h, data->data, sizeof(h));
+	return (*fun)(key, &h, ptr);
 }
 
 /* walk_db -------------------------------------------------------------- */
@@ -338,7 +346,7 @@ walk_one(fun, key, data, ptr)
  */
 static int
 walk_db(fun, ptr)
-	int (*fun) __P((DBT *, DBT *, void *));
+	int (*fun) __P((DBT *, HostInfo *, void *));
 	void *ptr;
 {
 	DBT key, data;
@@ -362,11 +370,11 @@ walk_db(fun, ptr)
 		switch ((*db->seq)(db, &key, &data, R_NEXT)) {
 		case -1:
 			goto bad;
-		case 1:
+		case 0:
 			if (walk_one(fun, &key, &data, ptr) == -1)
 				return -1;
 			break;
-		case 0:
+		case 1:
 			return 0;
 		default:
 			abort();
@@ -393,16 +401,17 @@ bad:
  *		notify them before the second crash occurred.
  */
 static int
-reset_host(key, data, ptr)
-	DBT *key, *data;
+reset_host(key, hi, ptr)
+	DBT *key;
+	HostInfo *hi;
 	void *ptr;
 {
-	HostInfo *hi = data->data;
 
 	if (hi->monList) {
-		hi->notifyReqd = *(time_t *) data;
+		hi->notifyReqd = *(time_t *) ptr;
 		hi->attempts = 0;
 		hi->monList = NULL;
+		change_host((char *)key->data, hi);
 	}
 	return 0;
 }
@@ -414,12 +423,11 @@ reset_host(key, data, ptr)
  * Notes:	
  */
 static int
-check_work(key, data, ptr)
-	DBT *key, *data;
+check_work(key, hi, ptr)
+	DBT *key;
+	HostInfo *hi;
 	void *ptr;
 {
-	HostInfo *hi = data->data;
-
 	return hi->notifyReqd ? -1 : 0;
 }
 
@@ -430,12 +438,12 @@ check_work(key, data, ptr)
  * Notes:	
  */
 static int
-unmon_host(key, data, ptr)
-	DBT *key, *data;
+unmon_host(key, hi, ptr)
+	DBT *key;
+	HostInfo *hi;
 	void *ptr;
 {
 	char *name = key->data;
-	HostInfo *hi = data->data;
 
 	if (do_unmon(name, hi, ptr))
 		change_host(name, hi);
@@ -449,60 +457,51 @@ unmon_host(key, data, ptr)
  * Notes:	
  */
 static int
-notify_one(key, data, ptr)
-	DBT *key, *data;
+notify_one(key, hi, ptr)
+	DBT *key;
+	HostInfo *hi;
 	void *ptr;
 {
 	time_t now = *(time_t *) ptr;
 	char *name = key->data;
-	HostInfo *hi = data->data;
+	int error;
 
 	if (hi->notifyReqd == 0 || hi->notifyReqd > now)
 		return 0;
 
-	if (notify_one_host(name)) {
-give_up:
+	/*
+	 * If one of the initial attempts fails, we wait
+	 * for a while and have another go.  This is necessary
+	 * because when we have crashed, (eg. a power outage)
+	 * it is quite possible that we won't be able to
+	 * contact all monitored hosts immediately on restart,
+	 * either because they crashed too and take longer
+	 * to come up (in which case the notification isn't
+	 * really required), or more importantly if some
+	 * router etc. needed to reach the monitored host
+	 * has not come back up yet.  In this case, we will
+	 * be a bit late in re-establishing locks (after the
+	 * grace period) but that is the best we can do.  We
+	 * try 10 times at 5 sec intervals, 10 more times at
+	 * 1 minute intervals, then 24 more times at hourly
+	 * intervals, finally giving up altogether if the
+	 * host hasn't come back to life after 24 hours.
+	 */
+	if (notify_one_host(name) || hi->attempts++ >= 44) {
+		error = 0;
 		hi->notifyReqd = 0;
 		hi->attempts = 0;
-		switch ((*db->put)(db, key, data, 0)) {
-		case -1:
-			syslog(LOG_ERR, "Error storing %s (%m)", name);
-		case 0:
-			return 0;
-
-		default:
-			abort();
-		}
-	}
-	else {
-		/*
-		 * If one of the initial attempts fails, we wait
-		 * for a while and have another go.  This is necessary
-		 * because when we have crashed, (eg. a power outage)
-		 * it is quite possible that we won't be able to
-		 * contact all monitored hosts immediately on restart,
-		 * either because they crashed too and take longer
-		 * to come up (in which case the notification isn't
-		 * really required), or more importantly if some
-		 * router etc. needed to reach the monitored host
-		 * has not come back up yet.  In this case, we will
-		 * be a bit late in re-establishing locks (after the
-		 * grace period) but that is the best we can do.  We
-		 * try 10 times at 5 sec intervals, 10 more times at
-		 * 1 minute intervals, then 24 more times at hourly
-		 * intervals, finally giving up altogether if the
-		 * host hasn't come back to life after 24 hours.
-		 */
-		if (hi->attempts++ >= 44)
-			goto give_up;
-		else if (hi->attempts < 10)
+	} else {
+		error = -1;
+		if (hi->attempts < 10)
 			hi->notifyReqd += 5;
 		else if (hi->attempts < 20)
 			hi->notifyReqd += 60;
 		else
 			hi->notifyReqd += 60 * 60;
-		return -1;
 	}
+	change_host(name, hi);
+	return error;
 }
 
 /* init_file -------------------------------------------------------------- */
@@ -542,6 +541,7 @@ init_file(filename)
 		if (data.size != sizeof(status_info))
 			errx(1, "database corrupted %lu != %lu",
 			    (u_long)data.size, (u_long)sizeof(status_info));
+		memcpy(&status_info, data.data, data.size);
 		break;
 	default:
 		abort();
@@ -596,7 +596,6 @@ notify_one_host(hostname)
 
 	gethostname(our_hostname, sizeof(our_hostname));
 	our_hostname[sizeof(our_hostname) - 1] = '\0';
-	our_hostname[SM_MAXSTRLEN] = '\0';
 	arg.mon_name = our_hostname;
 	arg.state = status_info.ourState;
 

@@ -1,4 +1,4 @@
-/* $NetBSD: lca.c,v 1.35 2000/02/26 18:53:12 thorpej Exp $ */
+/* $NetBSD: lca.c,v 1.44 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,14 +62,15 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: lca.c,v 1.35 2000/02/26 18:53:12 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lca.c,v 1.44 2008/04/28 20:23:11 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
-#include <vm/vm.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
@@ -102,13 +96,10 @@ __KERNEL_RCSID(0, "$NetBSD: lca.c,v 1.35 2000/02/26 18:53:12 thorpej Exp $");
 int	lcamatch __P((struct device *, struct cfdata *, void *));
 void	lcaattach __P((struct device *, struct device *, void *));
 
-struct cfattach lca_ca = {
-	sizeof(struct lca_softc), lcamatch, lcaattach,
-};
+CFATTACH_DECL(lca, sizeof(struct lca_softc),
+    lcamatch, lcaattach, NULL, NULL);
 
 extern struct cfdriver lca_cd;
-
-static int	lcaprint __P((void *, const char *pnp));
 
 int	lca_bus_get_window __P((int, int,
 	    struct alpha_bus_space_translation *));
@@ -244,30 +235,17 @@ lcaattach(parent, self, aux)
 		panic("lcaattach: shouldn't be here, really...");
 	}
 
-	pba.pba_busname = "pci";
 	pba.pba_iot = &lcp->lc_iot;
 	pba.pba_memt = &lcp->lc_memt;
 	pba.pba_dmat =
 	    alphabus_dma_get_tag(&lcp->lc_dmat_direct, ALPHA_BUS_PCI);
+	pba.pba_dmat64 = NULL;
 	pba.pba_pc = &lcp->lc_pc;
 	pba.pba_bus = 0;
+	pba.pba_bridgetag = NULL;
 	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
-	config_found(self, &pba, lcaprint);
-}
-
-static int
-lcaprint(aux, pnp)
-	void *aux;
-	const char *pnp;
-{
-	register struct pcibus_attach_args *pba = aux;
-
-	/* only PCIs can attach to LCAes; easy. */
-	if (pnp)
-		printf("%s at %s", pba->pba_busname, pnp);
-	printf(" bus %d", pba->pba_bus);
-	return (UNCONF);
+	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }
 
 int

@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_machdep.c,v 1.8 1999/05/22 20:30:54 eeh Exp $	*/
+/*	$NetBSD: ofw_machdep.c,v 1.31 2006/10/03 21:06:58 mrg Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.
@@ -30,6 +30,12 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include "opt_multiprocessor.h"
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ofw_machdep.c,v 1.31 2006/10/03 21:06:58 mrg Exp $");
+
 #include <sys/param.h>
 #include <sys/buf.h>
 #include <sys/conf.h>
@@ -38,15 +44,15 @@
 #include <sys/disklabel.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
+#include <sys/kprintf.h>
 #include <sys/malloc.h>
 #include <sys/stat.h>
 #include <sys/systm.h>
 
 #include <machine/openfirm.h>
+#include <machine/promlib.h>
 
-#if defined(FFS) && defined(CD9660)
-#include <ufs/ffs/fs.h>
-#endif
+#include <dev/ofw/ofw_pci.h>
 
 /*
  * Note that stdarg.h and the ANSI style va_start macro is used for both
@@ -56,17 +62,10 @@
 
 #include <machine/sparc64.h>
 
-int vsprintf __P((char *, const char *, va_list));
-
-void dk_cleanup __P((void));
-#if defined(FFS) && defined(CD9660)
-static int dk_match_ffs __P((void));
-#endif
-
 static u_int mmuh = -1, memh = -1;
 
-static u_int get_mmu_handle __P((void));
-static u_int get_memory_handle __P((void));
+static u_int get_mmu_handle(void);
+static u_int get_memory_handle(void);
 
 static u_int 
 get_mmu_handle()
@@ -155,15 +154,15 @@ prom_vtop(vaddr)
 	args.method = ADR2CELL(&"translate");
 	args.ihandle = HDL2CELL(mmuh);
 	args.vaddr = ADR2CELL(vaddr);
-	if(openfirmware(&args) != 0)
-		return 0;
+	if(openfirmware(&args) == -1)
+		return -1;
 #if 0
 	prom_printf("Called \"translate\", mmuh=%x, vaddr=%x, status=%x %x,\r\n retaddr=%x %x, mode=%x %x, phys_hi=%x %x, phys_lo=%x %x\r\n",
 		    mmuh, vaddr, (int)(args.status>>32), (int)args.status, (int)(args.retaddr>>32), (int)args.retaddr, 
 		    (int)(args.mode>>32), (int)args.mode, (int)(args.phys_hi>>32), (int)args.phys_hi,
 		    (int)(args.phys_lo>>32), (int)args.phys_lo);
 #endif
-	return (paddr_t)((((paddr_t)args.phys_hi)<<32)|(int)args.phys_lo); 
+	return (paddr_t)((((paddr_t)args.phys_hi)<<32)|(uint32_t)args.phys_lo); 
 }
 
 /* 
@@ -201,8 +200,8 @@ prom_claim_virt(vaddr, len)
 	args.align = 0;
 	args.len = len;
 	args.vaddr = ADR2CELL(vaddr);
-	if (openfirmware(&args) != 0)
-		return 0;
+	if (openfirmware(&args) == -1)
+		return -1;
 	return (paddr_t)args.retaddr;
 }
 
@@ -267,7 +266,7 @@ prom_free_virt(vaddr, len)
 	} args;
 
 	if (mmuh == -1 && ((mmuh = get_mmu_handle()) == -1)) {
-		prom_printf("prom_claim_virt: cannot get mmuh\r\n");
+		prom_printf("prom_free_virt: cannot get mmuh\r\n");
 		return -1;
 	}
 	args.name = ADR2CELL(&"call-method");
@@ -302,7 +301,7 @@ prom_unmap_virt(vaddr, len)
 	} args;
 
 	if (mmuh == -1 && ((mmuh = get_mmu_handle()) == -1)) {
-		prom_printf("prom_claim_virt: cannot get mmuh\r\n");
+		prom_printf("prom_unmap_virt: cannot get mmuh\r\n");
 		return -1;
 	}
 	args.name = ADR2CELL(&"call-method");
@@ -390,7 +389,7 @@ prom_alloc_phys(len, align)
 
 	if (memh == -1 && ((memh = get_memory_handle()) == -1)) {
 		prom_printf("prom_alloc_phys: cannot get memh\r\n");
-		return 0;
+		return -1;
 	}
 	args.name = ADR2CELL(&"call-method");
 	args.nargs = 4;
@@ -400,8 +399,8 @@ prom_alloc_phys(len, align)
 	args.align = align;
 	args.len = len;
 	if (openfirmware(&args) != 0)
-		return 0;
-	return (paddr_t)((((paddr_t)args.phys_hi)<<32)|(int)args.phys_lo);
+		return -1;
+	return (paddr_t)((((paddr_t)args.phys_hi)<<32)|(uint32_t)args.phys_lo);
 }
 
 /* 
@@ -425,26 +424,26 @@ prom_claim_phys(phys, len)
 		cell_t phys_hi;
 		cell_t phys_lo;
 		cell_t status;
-		cell_t res;
 		cell_t rphys_hi;
 		cell_t rphys_lo;
 	} args;
 
 	if (memh == -1 && ((memh = get_memory_handle()) == -1)) {
-		prom_printf("prom_alloc_phys: cannot get memh\r\n");
-		return 0;
+		prom_printf("prom_claim_phys: cannot get memh\r\n");
+		return -1;
 	}
 	args.name = ADR2CELL(&"call-method");
 	args.nargs = 6;
-	args.nreturns = 4;
+	args.nreturns = 3;
 	args.method = ADR2CELL(&"claim");
 	args.ihandle = HDL2CELL(memh);
+	args.align = 0;
 	args.len = len;
 	args.phys_hi = HDL2CELL(phys>>32);
 	args.phys_lo = HDL2CELL(phys);
 	if (openfirmware(&args) != 0)
 		return -1;
-	return (paddr_t)((((paddr_t)args.phys_hi)<<32)|(int)args.phys_lo);
+	return (paddr_t)((((paddr_t)args.rphys_hi)<<32)|(uint32_t)args.rphys_lo);
 }
 
 /* 
@@ -507,12 +506,28 @@ prom_get_msgbuf(len, align)
 		cell_t phys_lo;
 	} args;
 	paddr_t addr;
+	int rooth;
+	int is_e250 = 1;
+
+	/* E250s and E450s tend to have buggy PROMs that break on test-method */
+	/* XXX - need to find the reason why this breaks someday */
+	if ((rooth = OF_finddevice("/")) != -1) {
+		char name[80];
+
+		if ((OF_getprop(rooth, "name", &name, sizeof(name))) != -1) {
+			if (strcmp(name, "SUNW,Ultra-250")
+			    && strcmp(name, "SUNW,Ultra-4")) 
+				is_e250 = 0;
+		} else prom_printf("prom_get_msgbuf: cannot get \"name\"\r\n");
+	} else prom_printf("prom_get_msgbuf: cannot open root device \r\n");
 
 	if (memh == -1 && ((memh = get_memory_handle()) == -1)) {
 		prom_printf("prom_get_msgbuf: cannot get memh\r\n");
 		return -1;
 	}
-	if (OF_test("test-method") == 0) {
+	if (is_e250) {
+		prom_printf("prom_get_msgbuf: Cannot recover msgbuf on E250\r\n");
+	} else if (OF_test("test-method") == 0) {
 		if (OF_test_method(memh, "SUNW,retain") != 0) {
 			args.name = ADR2CELL(&"call-method");
 			args.nargs = 5;
@@ -524,7 +539,8 @@ prom_get_msgbuf(len, align)
 			args.align = align;
 			args.status = -1;
 			if (openfirmware(&args) == 0 && args.status == 0) {
-				return (((paddr_t)args.phys_hi<<32)|args.phys_lo);
+				return (((paddr_t)args.phys_hi<<32)|
+					(uint32_t)args.phys_lo);
 			} else prom_printf("prom_get_msgbuf: SUNW,retain failed\r\n");
 		} else prom_printf("prom_get_msgbuf: test-method failed\r\n");
 	} else prom_printf("prom_get_msgbuf: test failed\r\n");
@@ -540,60 +556,304 @@ prom_get_msgbuf(len, align)
 	return addr; /* Kluge till we go 64-bit */
 }
 
-/* 
- * Low-level prom I/O routines.
+#ifdef MULTIPROCESSOR
+/*
+ * Start secondary cpu, arrange 'func' as the entry.
  */
-
-static u_int stdin = NULL;
-static u_int stdout = NULL;
-
-int 
-OF_stdin() 
+void
+prom_startcpu(u_int cpu, void *func, u_long arg)
 {
+        static struct {
+                cell_t  name;
+                cell_t  nargs;
+                cell_t  nreturns;
+                cell_t  cpu;
+                cell_t  func;
+                cell_t  arg;
+        } args;
 
-	if (stdin == NULL) {
-		u_int chosen;
-		
-		chosen = OF_finddevice("/chosen");
-		OF_getprop(chosen, "stdin", &stdin, sizeof(stdin));
-	}
-	return stdin;
+	args.name = ADR2CELL(&"SUNW,start-cpu");
+	args.nargs = 3;
+	args.nreturns = 0;
+        args.cpu = cpu;
+        args.func = (cell_t)(u_long)func;
+        args.arg = (cell_t)arg;
+
+        openfirmware(&args);
 }
 
-int
-OF_stdout()
+/*
+ * Stop the calling cpu.
+ */
+void
+prom_stopself(void)
 {
+	extern void openfirmware_exit(void*);
+	static struct {
+		cell_t  name;
+		cell_t  nargs;
+		cell_t  nreturns;
+	} args;
 
-	if (stdout == NULL) {
-		u_int chosen;
-		
-		chosen = OF_finddevice("/chosen");
-		OF_getprop(chosen, "stdout", &stdout, sizeof(stdout));
+	args.name = ADR2CELL(&"SUNW,stop-self");
+	args.nargs = 0;
+	args.nreturns = 0;
+
+	openfirmware_exit(&args);
+	panic("sun4u_stopself: failed.");
+}
+#endif
+
+#ifdef DEBUG
+int ofmapintrdebug = 0;
+#define	DPRINTF(x)	if (ofmapintrdebug) printf x
+#else
+#define DPRINTF(x)
+#endif
+
+
+/*
+ * Recursively hunt for a property.
+ */
+int
+OF_searchprop(int node, const char *prop, void *sbuf, int buflen)
+{
+	int len;
+
+	for( ; node; node = OF_parent(node)) {
+		len = OF_getprop(node, prop, sbuf, buflen);
+		if (len >= 0)
+			return (len);
 	}
-	return stdout;
+	/* Error -- not found */
+	return (-1);
 }
 
 
 /*
- * print debug info to prom. 
- * This is not safe, but then what do you expect?
+ * Compare a sequence of cells with a mask,
+ *  return 1 if they match and 0 if they don't.
  */
-void
-#ifdef __STDC__
-prom_printf(const char *fmt, ...)
-#else
-prom_printf(fmt, va_alist)
-	char *fmt;
-	va_dcl
-#endif
+static int compare_cells (int *cell1, int *cell2, int *mask, int ncells);
+static int
+compare_cells(int *cell1, int *cell2, int *mask, int ncells) 
 {
+	int i;
+
+	for (i=0; i<ncells; i++) {
+		DPRINTF(("src %x ^ dest %x -> %x & mask %x -> %x\n",
+			cell1[i], cell2[i], (cell1[i] ^ cell2[i]),
+			mask[i], ((cell1[i] ^ cell2[i]) & mask[i])));
+		if (((cell1[i] ^ cell2[i]) & mask[i]) != 0)
+			return (0);
+	}
+	return (1);
+}
+
+/*
+ * Find top pci bus host controller for a node.
+ */
+static int
+find_pci_host_node(int node)
+{
+	char dev_type[16];
+	int pch = 0;
 	int len;
-	static char buf[256];
-	va_list ap;
 
-	va_start(ap, fmt);
-	len = vsprintf(buf, fmt, ap);
-	va_end(ap);
+	for (; node; node = OF_parent(node)) {
+		len = OF_getprop(node, "device_type",
+				 &dev_type, sizeof(dev_type));
+		if (len <= 0)
+			continue;
+		if (!strcmp(dev_type, "pci"))
+			pch = node;
+	}
+	return pch;
+}
 
-	OF_write(OF_stdout(), buf, len);
+/*
+ * Follow the OFW algorithm and return an interrupt specifier.
+ *
+ * Pass in the interrupt specifier you want mapped and the node
+ * you want it mapped from.  validlen is the number of cells in
+ * the interrupt specifier, and buflen is the number of cells in
+ * the buffer.
+ */
+int
+OF_mapintr(int node, int *interrupt, int validlen, int buflen)
+{
+	int i, len;
+	int address_cells, size_cells, interrupt_cells, interrupt_map_len;
+	int interrupt_map[100];
+	int interrupt_map_mask[10];
+	int reg[10];
+	char dev_type[32];
+	int phc_node;
+	int rc = -1;
+
+	/* Don't need to map OBP interrupt, it's already */
+	if (*interrupt & 0x20)
+		return validlen;
+
+	/*
+	 * If there is no interrupt map in the bus node, we 
+	 * need to convert the slot address to its parent
+	 * bus format, and hunt up the parent bus to see if
+	 * we need to remap.
+	 *
+	 * The specification for interrupt mapping is borken.
+	 * You are supposed to query the interrupt parent in
+	 * the interrupt-map specification to determine the
+	 * number of address and interrupt cells, but we need
+	 * to know how many address and interrupt cells to skip
+	 * to find the phandle...
+	 *
+	 */
+	if ((len = OF_getprop(node, "reg", &reg, sizeof(reg))) <= 0) {
+		printf("OF_mapintr: no reg property?\n");
+		return (-1);
+	}
+
+	phc_node = find_pci_host_node(node);
+
+	for (; node; node = OF_parent(node)) {
+#ifdef DEBUG
+		char name[40];
+
+		if (ofmapintrdebug) {
+			OF_getprop(node, "name", &name, sizeof(name));
+			printf("Node %s (%x), host %x\n", name,
+			       node, phc_node);
+		}
+#endif
+
+		if ((interrupt_map_len = OF_getprop(node,
+			"interrupt-map", &interrupt_map,
+			sizeof(interrupt_map))) <= 0) {
+
+			/* Swizzle interrupt if this is a PCI bridge. */
+			if (((len = OF_getprop(node, "device_type", &dev_type,
+					      sizeof(dev_type))) > 0) &&
+			    !strcmp(dev_type, "pci") &&
+			    (node != phc_node)) {
+				*interrupt = ((*interrupt +
+				    OFW_PCI_PHYS_HI_DEVICE(reg[0]) - 1) & 3) + 1;
+				DPRINTF(("OF_mapintr: interrupt %x, reg[0] %x\n",
+					 *interrupt, reg[0]));
+			}
+
+			/* Get reg for next level compare. */
+			reg[0] = 0;
+			OF_getprop(node, "reg", &reg, sizeof(reg));
+			continue;
+		}
+		/* Convert from bytes to cells. */
+		interrupt_map_len = interrupt_map_len/sizeof(int);
+		if ((len = (OF_searchprop(node, "#address-cells", &address_cells,
+			sizeof(address_cells)))) <= 0) {
+			/* How should I know. */
+			address_cells = 2;
+		}
+		DPRINTF(("#address-cells = %d len %d", address_cells, len));
+		if ((len = OF_searchprop(node, "#size-cells", &size_cells,
+			sizeof(size_cells))) <= 0) {
+			/* How should I know. */
+			size_cells = 2;
+		}
+		DPRINTF(("#size-cells = %d len %d", size_cells, len));
+		if ((len = OF_getprop(node, "#interrupt-cells", &interrupt_cells,
+			sizeof(interrupt_cells))) <= 0) {
+			/* How should I know. */
+			interrupt_cells = 1;
+		}
+		DPRINTF(("#interrupt-cells = %d, len %d\n", interrupt_cells,
+			len));
+		if ((len = OF_getprop(node, "interrupt-map-mask", &interrupt_map_mask,
+			sizeof(interrupt_map_mask))) <= 0) {
+			/* Create a mask that masks nothing. */
+			for (i = 0; i<(address_cells + interrupt_cells); i++)
+				interrupt_map_mask[i] = -1;
+		}
+#ifdef DEBUG
+		DPRINTF(("interrupt-map-mask len %d = ", len));
+		for (i=0; i<(address_cells + interrupt_cells); i++)
+			DPRINTF(("%x.", interrupt_map_mask[i]));
+		DPRINTF(("reg = "));
+		for (i=0; i<(address_cells); i++)
+			DPRINTF(("%x.", reg[i]));
+		DPRINTF(("interrupts = "));
+		for (i=0; i<(interrupt_cells); i++)
+			DPRINTF(("%x.", interrupt[i]));
+
+#endif
+
+		/* finally we can attempt the compare */
+		i=0;
+		while ( i < interrupt_map_len ) {
+			int pintr_cells;
+			int *imap = &interrupt_map[i];
+			int *parent = &imap[address_cells + interrupt_cells];
+
+#ifdef DEBUG
+			DPRINTF(("\ninterrupt-map addr "));
+			for (len=0; len<address_cells; len++)
+				DPRINTF(("%x.", imap[len]));
+			DPRINTF((" intr "));
+			for (; len<(address_cells+interrupt_cells); len++)
+				DPRINTF(("%x.", imap[len]));
+			DPRINTF(("\nnode %x vs parent %x\n",
+				imap[len], *parent));
+#endif
+
+			/* Find out how many cells we'll need to skip. */
+			if ((len = OF_searchprop(*parent, "#interrupt-cells",
+				&pintr_cells, sizeof(pintr_cells))) < 0) {
+				pintr_cells = interrupt_cells;
+			}
+			DPRINTF(("pintr_cells = %d len %d\n", pintr_cells, len));
+
+			if (compare_cells(imap, reg, 
+				interrupt_map_mask, address_cells) &&
+				compare_cells(&imap[address_cells], 
+					interrupt,
+					&interrupt_map_mask[address_cells], 
+					interrupt_cells))
+			{
+				/* Bingo! */
+				if (buflen < pintr_cells) {
+					/* Error -- ran out of storage. */
+					return (-1);
+				}
+				parent++;
+#ifdef DEBUG
+				DPRINTF(("Match! using "));
+				for (len=0; len<pintr_cells; len++)
+					DPRINTF(("%x.", parent[len]));
+#endif
+				for (i=0; i<pintr_cells; i++)
+					interrupt[i] = parent[i];
+				rc = validlen = pintr_cells;
+				break;
+			}
+			/* Move on to the next interrupt_map entry. */
+#ifdef DEBUG
+			DPRINTF(("skip %d cells:",
+				address_cells + interrupt_cells +
+				pintr_cells + 1));
+			for (len=0; len<(address_cells +
+				interrupt_cells + pintr_cells + 1); len++)
+				DPRINTF(("%x.", imap[len]));
+#endif
+			i += address_cells + interrupt_cells + pintr_cells + 1;
+		}
+
+		/* Get reg for the next level search. */
+		if ((len = OF_getprop(node, "reg", &reg, sizeof(reg))) <= 0) {
+			DPRINTF(("OF_mapintr: no reg property?\n"));
+			continue;
+		}
+		DPRINTF(("reg len %d\n", len));
+
+	} 
+	return (rc);
 }

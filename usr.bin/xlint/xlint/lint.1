@@ -1,4 +1,4 @@
-.\"	$NetBSD: lint.1,v 1.11 2000/03/22 01:09:34 garbled Exp $
+.\" $NetBSD: lint.1,v 1.33 2008/08/02 12:05:48 apb Exp $
 .\"
 .\" Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
 .\" Copyright (c) 1994, 1995 Jochen Pohl
@@ -30,20 +30,23 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd August 28, 1994
+.Dd August 2, 2008
 .Dt LINT 1
 .Os
 .Sh NAME
 .Nm lint
-.Nd a C program verifier.
+.Nd a C program verifier
 .Sh SYNOPSIS
-.Nm ""
-.Op Fl abceghprvxzHFV
+.Nm
+.Op Fl abceghpPrvwxzHFV
 .Bk -words
 .Op Fl s | Fl t
 .Ek
 .Bk -words
 .Op Fl i | Fl nu
+.Ek
+.Bk -words
+.Op Fl MD
 .Ek
 .Bk -words
 .Op Fl D Ar name Ns Op =def
@@ -69,11 +72,17 @@
 .Bk -words
 .Op Fl B Ar directory
 .Ek
+.Bk -words
+.Op Fl X Ar id Ns Op ,id ...
+.Ek
 .Ar
 .Nm lint
-.Op Fl abceghprvzHFV
+.Op Fl abceghprvwzHFV
 .Bk -words
-.Op Fl s | Fl t
+.Op Fl s | Fl t | Fl S
+.Ek
+.Bk -words
+.Op Fl MD
 .Ek
 .Bk -words
 .Fl C Ar library
@@ -93,28 +102,39 @@
 .Bk -words
 .Op Fl B Ar directory
 .Ek
+.Bk -words
+.Op Fl X Ar id Ns Op ,id ...
+.Ek
 .Ar
 .Sh DESCRIPTION
 .Nm
 attempts to detect features of the named C program files
 that are likely to be bugs, to be non-portable, or to be
-wasteful. It also performs stricter type checking then does
-the C compiler.
+wasteful.
+It also performs stricter type checking than does the C compiler.
+The list of errors
+.Nm
+produces are enumerated in
+.Xr lint 7 .
+.Pp
 .Nm
 runs the C preprocessor as its first phase, with the
-preprocessor symbol
-.Sy lint
+following preprocessor symbols
 defined to allow certain questionable code to be altered
-or skipped by
-.Nm lint .
-Therefore, this symbol should be thought of as a reserved
-word for all code that is to be checked by
-.Nm lint .
+or skipped:
+.Sy __LINT__ ,
+.Sy lint ,
+.Sy __lint ,
+.Sy __lint__ .
+These symbols should therefore be thought of as reserved
+words for all code that is to be checked by
+.Nm .
 .Pp
 Among the possible problems that are currently noted are
 unreachable statements, loops not entered at the top,
 variables declared and not used, and logical expressions
-with constant values. Function calls are checked for
+with constant values.
+Function calls are checked for
 inconsistencies, such as calls to functions that return
 values in some places and not in others, functions called
 with varying numbers of arguments, function calls that
@@ -125,17 +145,18 @@ the non-existent return value of the function.
 .Pp
 Filename arguments ending with
 .Pa \&.c
-are taken to be C source files. Filename arguments with
-names ending with
+are taken to be C source files.
+Filename arguments with names ending with
 .Pa \&.ln
 are taken to be the result of an earlier invocation of
-.Nm lint ,
+.Nm ,
 with either the
 .Fl i ,
 .Fl o
 or
 .Fl C
-option in effect. The
+option in effect.
+The
 .Pa \&.ln
 files are analogous to the
 .Pa \&.o
@@ -160,7 +181,8 @@ By default,
 .Nm
 appends the standard C lint library
 .Pq Pa llib-lc.ln
-to the end of the list of files. When the
+to the end of the list of files.
+When the
 .Fl i
 option is used, the
 .Pa \&.ln
@@ -171,16 +193,17 @@ or
 .Fl i
 options are used, the
 .Pa llib-l Ns Ar library Ns Pa \&.ln
-files are ignored. When the
+files are ignored.
+When the
 .Fl i
 option is
 .Em omitted
 the second pass of
 .Nm
-checks this list of files for mutual compatibility. At this point,
-if a complaint stems not from a given source file, but from one of
-its included files, the source filename will be printed followed by
-a question mark.
+checks this list of files for mutual compatibility.
+At this point, if a complaint stems not from a given source file,
+but from one of its included files, the source filename will be
+printed followed by a question mark.
 .Pp
 The special input file name
 .Dq Pa -
@@ -215,8 +238,8 @@ cause implicit narrowing conversion.
 .It Fl b
 Report
 .Sy break
-statements that cannot be reached. This is not the default
-because, unfortunately, most
+statements that cannot be reached.
+This is not the default because, unfortunately, most
 .Xr lex 1
 and many
 .Xr yacc 1
@@ -229,15 +252,20 @@ Complain about unusual operations on
 and combinations of
 .Sy enum Ns -
 and
-.Sy integer Ns -Types.
+.Sy integer Ns -Types .
 .It Fl g
 Don't print warnings for some extensions of
 .Xr gcc 1
-to the C language. Currently these are nonconstant initializers in
-automatic aggregate initializations, arithmetic on pointer to void,
+to the C language.
+Currently these are nonconstant initializers in automatic aggregate
+initializations, arithmetic on pointer to void, trailing commas in
+enum declarations, C++ -style
+.Dq //
+comments,
 zero sized structures, subscripting of non-lvalue arrays, prototypes
 overriding old style function declarations and long long
-integer types. The
+integer types.
+The
 .Fl g
 flag also turns on the keywords
 .Sy asm
@@ -256,39 +284,50 @@ Produce a
 .Pa \&.ln
 file for every
 .Pa \&.c
-file on the command line. These
+file on the command line.
+These
 .Pa \&.ln
 files are the product of
-.Nm lint Ns 's
+.Nm Ns 's
 first pass only, and are not checked for compatibility
 between functions.
 .It Fl n
 Do not check compatibility against the standard library.
 .It Fl p
 Attempt to check portability of code to other dialects of C.
+.It Fl P
+Enable more portability warnings: Enum comparisons, sign extension issues
+when assigning to wider integer types, overflow warnings when assigning
+to wider types.
 .It Fl r
 In case of redeclarations report the position of the
 previous declaration.
 .It Fl s
-Strict ANSI C mode. Issue warnings and errors required by ANSI C.
+Strict ANSI C mode.
+Issue warnings and errors required by ANSI C.
 Also do not produce warnings for constructs which behave
-differently in traditional C and ANSI C. With the
+differently in traditional C and ANSI C.
+With the
 .Fl s
 flag,
 .Li __STRICT_ANSI__
 is a predefined preprocessor macro.
+.It Fl S
+C9X mode. Currently not fully implemented.
 .It Fl t
 Traditional C mode.
 .Li __STDC__
-is not predefined in this mode. Warnings are printed for constructs
-not allowed in traditional C. Warnings for constructs which behave
-differently in traditional C and ANSI C are suppressed. Preprocessor
-macros describing the machine type (e.g.
-.Li sun3 Ns )
+is not predefined in this mode.
+Warnings are printed for constructs not allowed in traditional C.
+Warnings for constructs which behave differently in traditional C
+and ANSI C are suppressed.
+Preprocessor macros describing the machine type (e.g.
+.Li sun3 )
 and machine architecture (e.g.
-.Li m68k Ns )
-are defined without leading and trailing underscores. The keywords
-.Sy const Ns ,
+.Li m68k )
+are defined without leading and trailing underscores.
+The keywords
+.Sy const ,
 .Sy volatile
 and
 .Sy signed
@@ -303,7 +342,7 @@ on a subset of files comprising part of a larger program).
 .It Fl v
 Suppress complaints about unused arguments in functions.
 .It Fl x
-Report variables refferd to by
+Report variables referred to by
 .Sy extern
 declarations, but never used.
 .It Fl z
@@ -311,7 +350,8 @@ Do not complain about structures that are never defined
 (for example, using a structure pointer without knowing
 its contents).
 .It Fl B Ns Ar path
-Path to use when looking for the lint1 and lint2 binaries. Defualts to
+Path to use when looking for the lint1 and lint2 binaries.
+Defaults to
 .Pa /usr/libexec .
 .It Fl C Ns Ar library
 Create a
@@ -322,7 +362,8 @@ This library is built from all
 .Pa \&.c
 and
 .Pa \&.ln
-input files. After all global definitions of functions and
+input files.
+After all global definitions of functions and
 variables in these files are written to the newly created library,
 .Nm
 checks all input files, including libraries specified with the
@@ -335,7 +376,8 @@ for
 .Xr cpp 1 ,
 as if by a
 .Li #define
-directive. If no definition is given,
+directive.
+If no definition is given,
 .Ar name
 is defined as 1.
 .It Fl I Ns Ar directory
@@ -364,21 +406,31 @@ If a complaint stems from an included file
 .Nm
 prints the name of the included file instead of the source file name
 followed by a question mark.
+.It Fl MD
+Pass
+.Fl MD
+to
+.Xr cpp 1
+causing cpp to create files containing dependency information for
+each source file.
 .It Fl o Ns Ar outputfile
 Name the output file
 .Ar outputfile .
 The output file produced is the input that is given to
-.Nm lint Ns 's
-second pass. The
+.Nm Ns 's
+second pass.
+The
 .Fl o
-option simply saves this file in the named output file. If the
+option simply saves this file in the named output file.
+If the
 .Fl i
 option is also used the files are not checked for compatibility.
 To produce a
 .Pa llib-l Ns Ar library Ns Pa \&.ln
 without extraneous messages, use of the
 .Fl u
-option is suggested. The
+option is suggested.
+The
 .Fl v
 option is useful if the source file(s) for the lint library
 are just external interfaces.
@@ -389,19 +441,25 @@ for the preprocessor.
 .It Fl V
 Print the command lines constructed by the controller program to
 run the C preprocessor and
-.Nm lint Ns 's
+.Nm Ns 's
 first and second pass.
+.It Fl w
+Treat warnings as errors.
+.It Fl X Ar id Ns Op ,id ...
+Suppress error messages identified by the list of ids.
+A list of messages and ids can be found in
+.Xr lint 7 .
 .El
 .Pp
 .Sy Input Grammar
 .Pp
-.Nm lint Ns 's
+.Nm Ns 's
 first pass reads standard C source files.
 .Nm
 recognizes the following C comments as commands.
 .Bl -tag -width Fl
 .It Li /* ARGSUSED Ns Ar n Li */
-makes
+Makes
 .Nm
 check only the first
 .Ar n
@@ -410,20 +468,23 @@ arguments for usage; a missing
 is taken to be 0 (this option acts like the
 .Fl v
 option for the next function).
+.It Li /* BITFIELDTYPE */
+Suppress error messages about illegal bitfield types if the type
+is an integer type, and suppress non-portable bitfield type warnings.
 .It Li /* CONSTCOND */ No or Xo
 .Li /* CONSTANTCOND */ No or
 .Li /* CONSTANTCONDITION */
 .Xc
-suppress complaints about constant operands for the next expression.
+Suppress complaints about constant operands for the next expression.
 .It Li /*\ FALLTHRU\ */ No or Xo
 .Li /* FALLTHROUGH */
 .Xc
-suppress complaints about fall through to a
+Suppress complaints about fall through to a
 .Sy case
 or
 .Sy default
-labelled statement. This directive should be placed immediately
-preceding the label.
+labeled statement.
+This directive should be placed immediately preceding the label.
 .It Li /* LINTLIBRARY */
 At the beginning of a file, mark all functions and variables defined
 in this file as
@@ -437,50 +498,55 @@ Also shut off complaints about unused function arguments.
 .Li */
 .Xc
 Suppresses any intra-file warning except those dealing with
-unused variables or functions. This directive should be placed
-on the line immediately preceding where the lint warning occured.
+unused variables or functions.
+This directive should be placed
+on the line immediately preceding where the lint warning occurred.
 .It Li /* LONGLONG */
 Suppress complaints about use of long long integer types.
 .It Li /* NOTREACHED */
 At appropriate points, inhibit complaints about unreachable code.
 (This comment is typically placed just after calls to functions
 like
-.Xr exit 3 ).
+.Xr exit 3 ) .
 .It Li /* PRINTFLIKE Ns Ar n Li */
-makes
+Makes
 .Nm
 check the first
 .Pq Ar n Ns No -1
-arguments as usual. The
+arguments as usual.
+The
 .Ar n Ns No -th
 argument is interpreted as a
 .Sy printf
 format string that is used to check the remaining arguments.
 .It Li /* PROTOLIB Ns Ar n Li */
-causes
+Causes
 .Nm
 to treat function declaration prototypes as function definitions
 if
 .Ar n
-is non-zero. This directive can only be used in conjunction with
-the
+is non-zero.
+This directive can only be used in conjunction with the
 .Li /* LINTLIBRARY */
-directive. If
+directive.
+If
 .Ar n
 is zero, function prototypes will be treated normally.
 .It Li /* SCANFLIKE Ns Ar n Li */
-makes
+Makes
 .Nm
 check the first
 .Pq Ar n Ns No -1
-arguments as usual. The
+arguments as usual.
+The
 .Ar n Ns No -th
 argument is interpreted as a
 .Sy scanf
 format string that is used to check the remaining arguments.
 .It Li /* VARARGS Ns Ar n Li */
 Suppress the usual checking for variable numbers of arguments in
-the following function declaration. The data types of the first
+the following function declaration.
+The data types of the first
 .Ar n
 arguments are checked; a missing
 .Ar n
@@ -493,26 +559,29 @@ and the
 .Fl o
 options allows for incremental use of
 .Nm
-on a set of C source files. Generally, one invokes
+on a set of C source files.
+Generally, one invokes
 .Nm
 once for each source file with the
 .Fl i
-option. Each of these invocations produces a
+option.
+Each of these invocations produces a
 .Pa \&.ln
 file that corresponds to the
 .Pa \&.c
 file, and prints all messages that are about just that
-source file. After all the source files have been separetely
-run through
-.Nm lint ,
+source file.
+After all the source files have been separately run through
+.Nm ,
 it is invoked once more (without the
 .Fl i
 option), listing all the
 .Pa \&.ln
 files with the needed
 .Fl l Ns Ar library
-options. this will print all the inter-file inconsistencies. This
-scheme works well with
+options.
+This will print all the inter-file inconsistencies.
+This scheme works well with
 .Xr make 1 ;
 it allows
 .Xr make 1
@@ -520,21 +589,22 @@ to be used to
 .Nm
 only the source files that have been modified since the last
 time the set of source files were
-.Nm lint Ns No ed .
+.Nm Ns No ed .
 .Sh ENVIRONMENT
 .Bl -tag -width Fl
 .It Ev LIBDIR
-the directory where the lint libraries specified by the
+The directory where the lint libraries specified by the
 .Fl l Ns Ar library
-option must exist. If this environment variable is undefined,
-then the default path
+option must exist.
+If this environment variable is undefined, then the default path
 .Pa /usr/libdata/lint
 will be used to search for the libraries.
 .It Ev TMPDIR
-usually the path for temporary files can be redefined by setting
+Usually the path for temporary files can be redefined by setting
 this environment variable.
 .It Ev CC
-Location of the C compiler program.  Defaults to
+Location of the C compiler program.
+Defaults to
 .Pa /usr/bin/cc .
 .El
 .Sh FILES
@@ -549,7 +619,8 @@ temporaries
 .Sh SEE ALSO
 .Xr cc 1 ,
 .Xr cpp 1 ,
-.Xr make 1
+.Xr make 1 ,
+.Xr lint 7
 .Sh AUTHORS
 Jochen Pohl
 .Sh BUGS
@@ -569,7 +640,7 @@ option will, when used in later
 runs, cause certain errors that were reported when the libraries
 were created to be reported again, and cause line numbers and file
 names from the original source used to create those libraries
-to be reported in error messages. For these reasons, it is recommended
-to use the
+to be reported in error messages.
+For these reasons, it is recommended to use the
 .Fl C
 option to create lint libraries.

@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_raw.c,v 1.14 2000/03/30 13:10:07 augustss Exp $	*/
+/*	$NetBSD: clnp_raw.c,v 1.32 2008/08/09 13:52:05 dogcow Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -62,6 +58,9 @@ SOFTWARE.
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: clnp_raw.c,v 1.32 2008/08/09 13:52:05 dogcow Exp $");
+
 #include <sys/param.h>
 #include <sys/mbuf.h>
 #include <sys/domain.h>
@@ -71,6 +70,7 @@ SOFTWARE.
 #include <sys/errno.h>
 #include <sys/time.h>
 #include <sys/systm.h>
+#include <sys/proc.h>
 
 #include <net/if.h>
 #include <net/route.h>
@@ -87,10 +87,11 @@ SOFTWARE.
 #include <machine/stdarg.h>
 
 struct sockproto rclnp_proto = {PF_ISO, 0};
+
 /*
  * FUNCTION:		rclnp_input
  *
- * PURPOSE:		Setup generic address an protocol structures for
+ * PURPOSE:		Setup generic address and protocol structures for
  *			raw input routine, then pass them along with the
  *			mbuf chain.
  *
@@ -102,13 +103,7 @@ struct sockproto rclnp_proto = {PF_ISO, 0};
  *			indicating no protocol.
  */
 void
-#if __STDC__
 rclnp_input(struct mbuf *m, ...)
-#else
-rclnp_input(m, va_alist)
-	struct mbuf    *m;	/* ptr to packet */
-	va_dcl
-#endif
 {
 	struct sockaddr_iso *src;	/* ptr to src address */
 	struct sockaddr_iso *dst;	/* ptr to dest address */
@@ -145,13 +140,7 @@ rclnp_input(m, va_alist)
  * NOTES:
  */
 int
-#if __STDC__
 rclnp_output(struct mbuf *m0, ...)
-#else
-rclnp_output(m0, va_alist)
-	struct mbuf    *m0;	/* packet to send */
-	va_dcl
-#endif
 {
 	struct socket  *so;	/* socket to send from */
 	struct rawisopcb *rp;	/* ptr to raw cb */
@@ -196,23 +185,20 @@ rclnp_output(m0, va_alist)
  * FUNCTION:		rclnp_ctloutput
  *
  * PURPOSE:			Raw clnp socket option processing
- *					All options are stored inside an mbuf.
+ *				All options are stored inside a sockopt.
  *
  * RETURNS:			success - 0
  *					failure - unix error code
  *
- * SIDE EFFECTS:	If the options mbuf does not exist, it the mbuf passed
- *					is used.
+ * SIDE EFFECTS:
  *
  * NOTES:
  */
 int
-rclnp_ctloutput(op, so, level, optname, m)
-	int             op;	/* type of operation */
-	struct socket  *so;	/* ptr to socket */
-	int             level;	/* level of option */
-	int             optname;/* name of option */
-	struct mbuf   **m;	/* ptr to ptr to option data */
+rclnp_ctloutput(
+	int             op,	/* type of operation */
+	struct socket  *so,	/* ptr to socket */
+	struct sockopt *sopt)	/* socket options */
 {
 	int             error = 0;
 	struct rawisopcb *rp = sotorawisopcb(so);	/* raw cb ptr */
@@ -220,64 +206,66 @@ rclnp_ctloutput(op, so, level, optname, m)
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_CTLOUTPUT]) {
 		printf("rclnp_ctloutput: op = x%x, level = x%x, name = x%x\n",
-		    op, level, optname);
-		if (*m != NULL) {
-			printf("rclnp_ctloutput: %d bytes of mbuf data\n", (*m)->m_len);
-			dump_buf(mtod((*m), caddr_t), (*m)->m_len);
-		}
+		    op, sopt->sopt_level, sopt->sopt_name);
+		printf("rclnp_ctloutput: %zu bytes of data\n", sopt->sopt_size);
+		dump_buf(sopt->sopt_data, sopt->sopt_size);
 	}
 #endif
 
 #ifdef SOL_NETWORK
-	if (level != SOL_NETWORK)
-		error = EINVAL;
-	else
-		switch (op) {
-#else
+	if (sopt->sopt_level != SOL_NETWORK)
+		return (EINVAL);
+#endif
+
 	switch (op) {
-#endif				/* SOL_NETWORK */
 	case PRCO_SETOPT:
-		switch (optname) {
+		switch (sopt->sopt_name) {
 		case CLNPOPT_FLAGS:{
-				u_short         usr_flags;
-				/*
-				 * Insure that the data passed has exactly
-				 * one short in it
-				 */
-				if ((*m == NULL) || ((*m)->m_len != sizeof(short))) {
-					error = EINVAL;
-					break;
-				}
-				/*
-				 *	Don't allow invalid flags to be set
-				 */
-				usr_flags = (*mtod((*m), short *));
+			u_short flags;
 
-				if ((usr_flags & (CLNP_VFLAGS)) != usr_flags) {
-					error = EINVAL;
-				} else
-					rp->risop_flags |= usr_flags;
+			error = sockopt_get(sopt, &flags, sizeof(flags));
+			if (error)
+				break;
 
-			} break;
+			/*
+			 *	Don't allow invalid flags to be set
+			 */
+			if ((flags & (CLNP_VFLAGS)) != flags)
+				error = EINVAL;
+			else
+				rp->risop_flags |= flags;
 
-		case CLNPOPT_OPTS:
-			error = clnp_set_opts(&rp->risop_isop.isop_options, m);
+			break;
+			}
+
+		case CLNPOPT_OPTS: {
+			struct mbuf *m;
+
+			m = sockopt_getmbuf(sopt);
+			if (m == NULL) {
+				error = ENOBUFS;
+				break;
+			}
+
+			error = clnp_set_opts(&rp->risop_isop.isop_options, &m);
+			m_freem(m);
 			if (error)
 				break;
 			rp->risop_isop.isop_optindex = m_get(M_WAIT, MT_SOOPTS);
 			(void) clnp_opt_sanity(rp->risop_isop.isop_options,
-				 mtod(rp->risop_isop.isop_options, caddr_t),
+				 mtod(rp->risop_isop.isop_options, void *),
 					 rp->risop_isop.isop_options->m_len,
 					  mtod(rp->risop_isop.isop_optindex,
 					       struct clnp_optidx *));
 			break;
+			}
 		}
 		break;
 
 	case PRCO_GETOPT:
 #ifdef notdef
 		/* commented out to keep hi C quiet */
-		switch (optname) {
+		switch (sopt->sopt_name) {
 		default:
 			error = EINVAL;
 			break;
@@ -288,45 +276,39 @@ rclnp_ctloutput(op, so, level, optname, m)
 		error = EINVAL;
 		break;
 	}
-	if (op == PRCO_SETOPT) {
-		/* note: m_freem does not barf is *m is NULL */
-		m_freem(*m);
-		*m = NULL;
-	}
 	return error;
 }
 
 /* ARGSUSED */
 int
-clnp_usrreq(so, req, m, nam, control, p)
-	struct socket *so;
-	int req;
-	struct mbuf *m, *nam, *control;
-	struct proc *p;
+clnp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
+	struct mbuf *control, struct lwp *l)
 {
 	int    error = 0;
 	struct rawisopcb *rp = sotorawisopcb(so);
+	struct proc *p;
 
+	p = l ? l->l_proc : NULL;
 	rp = sotorawisopcb(so);
 	switch (req) {
 
 	case PRU_ATTACH:
+		sosetlock(so);
 		if (rp != 0) {
 			error = EISCONN;
 			break;
 		}
-		MALLOC(rp, struct rawisopcb *, sizeof *rp, M_PCB, M_WAITOK);
+		MALLOC(rp, struct rawisopcb *, sizeof *rp, M_PCB,
+		    M_WAITOK|M_ZERO);
 		if (rp == 0)
 			return (ENOBUFS);
-		bzero(rp, sizeof *rp);
 		so->so_pcb = rp;
 		break;
 
 	case PRU_DETACH:
 		if (rp->risop_isop.isop_options)
 			m_freem(rp->risop_isop.isop_options);
-		if (rp->risop_isop.isop_route.ro_rt)
-			RTFREE(rp->risop_isop.isop_route.ro_rt);
+		rtcache_free(&rp->risop_isop.isop_route);
 		if (rp->risop_rcb.rcb_laddr)
 			rp->risop_rcb.rcb_laddr = 0;
 		/* free clnp cached hdr if necessary */
@@ -367,17 +349,25 @@ clnp_usrreq(so, req, m, nam, control, p)
 				return (EINVAL);
 			if (ifnet.tqh_first == 0)
 				return (EADDRNOTAVAIL);
+
+			/* copy the address */
 			if (addr->siso_family != AF_ISO)
 				rp->risop_isop.isop_sfaddr = *addr;
+
+			/* initialize address pointers */
+			rp->risop_isop.isop_faddr = &rp->risop_isop.isop_sfaddr;
 			rp->risop_rcb.rcb_faddr = sisotosa(
-							   (rp->risop_isop.isop_faddr = &rp->risop_isop.isop_sfaddr));
+				rp->risop_isop.isop_faddr);
+
+			/* address setup, mark socket connected */
 			soisconnected(so);
+
 			return (0);
 		}
 	}
-	error = raw_usrreq(so, req, m, nam, control, p);
+	error = raw_usrreq(so, req, m, nam, control, l);
 
 	if (error && req == PRU_ATTACH && so->so_pcb)
-		free((caddr_t) rp, M_PCB);
+		free((void *) rp, M_PCB);
 	return (error);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: checkpasswd.c,v 1.4 2000/03/30 12:19:47 augustss Exp $	*/
+/*	$NetBSD: checkpasswd.c,v 1.8 2007/11/24 13:20:54 isaki Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,8 +37,7 @@
 #include "stand.h"
 
 char *
-getpass(prompt)
-	const char *prompt;
+getpass(const char *prompt)
 {
 	int c;
 	char *lp;
@@ -46,13 +45,13 @@ getpass(prompt)
 
 	printf(prompt);
 
-	for (lp = buf;;)
+	for (lp = buf;;) {
 		switch (c = getchar() & 0177) {
 		case '\n':
 		case '\r':
 			*lp = '\0';
 			putchar('\n');
-			return (buf);
+			return buf;
 		case '\b':
 		case '\177':
 			if (lp > buf) {
@@ -87,7 +86,9 @@ getpass(prompt)
 		default:
 			*lp++ = c;
 			putchar('*');
+			break;
 		}
+	}
 	/*NOTREACHED*/
 }
 
@@ -96,7 +97,14 @@ getpass(prompt)
 char bootpasswd[16] = {'\0'}; /* into data segment! */
 
 int
-checkpasswd()
+checkpasswd(void)
+{
+
+	return check_password(bootpasswd);
+}
+
+int
+check_password(const char *password)
 {
 	int i;
 	char *passwd;
@@ -104,21 +112,20 @@ checkpasswd()
 	char pwdigest[16];
 
 	for (i = 0; i < 16; i++)
-		if (bootpasswd[i])
+		if (password[i])
 			break;
 	if (i == 16)
-		return (1); /* no password set */
+		return 1; /* no password set */
 
 	for (i = 0; i < 3; i++) {
 		passwd = getpass("Password: ");
 		MD5Init(&md5ctx);
 		MD5Update(&md5ctx, passwd, strlen(passwd));
 		MD5Final(pwdigest, &md5ctx);
-		if (bcmp(pwdigest, bootpasswd, 16) == 0)
-			return (1);
+		if (memcmp(pwdigest, password, 16) == 0)
+			return 1;
 	}
 
 	/* failed */
-	return (0);
+	return 0;
 }
-

@@ -1,4 +1,4 @@
-/*	$NetBSD: fpgetmask.c,v 1.2 1999/04/30 00:58:31 ross Exp $	*/
+/*	$NetBSD: fpgetmask.c,v 1.5 2005/06/12 05:21:25 lukem Exp $	*/
 
 /*
  * Copyright (c) 1999 Ross Harvey
@@ -31,11 +31,22 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: fpgetmask.c,v 1.5 2005/06/12 05:21:25 lukem Exp $");
+#endif /* LIBC_SCCS and not lint */
+
+#include "namespace.h"
+
 #include <ieeefp.h>
 #include <machine/sysarch.h>
+
+#ifdef __weak_alias
+__weak_alias(fpgetmask,_fpgetmask)
+#endif
 
 fp_except
 fpgetmask __P((void))
 {
-	return sysarch(ALPHA_FPGETMASK, (void *)0);
+	return sysarch(ALPHA_FPGETMASK, 0L);
 }

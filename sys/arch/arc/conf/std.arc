@@ -1,11 +1,9 @@
-#	$NetBSD: std.arc,v 1.9 2000/01/25 16:07:13 enami Exp $
+#	$NetBSD: std.arc,v 1.21 2006/06/24 03:50:38 tsutsui Exp $
 # standard arc info
 
 machine arc mips
-
-prefix ../gnu/sys
-cinclude "conf/files.softdep"
-prefix
+include		"conf/std"	# MI standard options
+makeoptions	MACHINE_ARCH="mipsel"
 
 mainbus0 at root
 cpu* at mainbus0
@@ -13,6 +11,10 @@ cpu* at mainbus0
 # set CPU architecture level for kernel target
 #options 	MIPS1			# R2000/R3000 support
 options 	MIPS3			# R4000/R4400 support
+options 	MIPS3_ENABLE_CLOCK_INTR
+
+# arc port use wired map for device space
+options 	ENABLE_MIPS3_WIRED_MAP
 
 # Standard (non-optional) system "options"
 
@@ -20,7 +22,4 @@ options 	MIPS3			# R4000/R4400 support
 options 	EXEC_ELF32		# native exec format
 options 	EXEC_SCRIPT		# may be unsafe
 
-options 	MIPS3_L2CACHE_PRESENT	# may have L2 cache
-options 	MIPS3_L2CACHE_ABSENT	# may not have L2 cache
-
-options 	__NO_SOFT_SERIAL_INTERRUPT	# for "com" driver
+makeoptions	DEFTEXTADDR="0x80200000"

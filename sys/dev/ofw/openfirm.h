@@ -1,4 +1,4 @@
-/*	$NetBSD: openfirm.h,v 1.12 1999/03/10 02:19:04 mrg Exp $	*/
+/*	$NetBSD: openfirm.h,v 1.26 2007/12/25 18:33:40 perry Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -30,12 +30,15 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#ifndef _OPENFIRM_H_
+#define _OPENFIRM_H_
+
+#include <prop/proplib.h>
+
 /*
  * Prototypes for OpenFirmware Interface Routines
  */
-
-#include <sys/param.h>				/* XXX */
-#include <sys/device.h>				/* XXX */
 
 /*
  * Machine-independent OpenFirmware-related structures.
@@ -48,8 +51,10 @@
  * in order to support generic OpenFirmware device drivers.
  */
 struct ofbus_attach_args {
-	char *oba_busname;
-	int oba_phandle;
+	const char	*oba_busname;
+	char		oba_ofname[64];
+	int		oba_phandle;
+
 	/*
 	 * Special unit field for disk devices.
 	 * This is a KLUDGE to work around the fact that OpenFirmware
@@ -57,17 +62,7 @@ struct ofbus_attach_args {
 	 * YES, I THINK THIS IS A BUG IN THE OPENFIRMWARE DEFINITION!!!	XXX
 	 * See also ofdisk.c.
 	 */
-	int oba_unit;
-};
-
-/*
- * The softc structure for devices we might be booted from (i.e. we might
- * want to set root/swap to) needs to start with these fields:		XXX
- */
-struct ofb_softc {
-	struct device sc_dev;
-	int sc_phandle;
-	int sc_unit;		/* Might be missing for non-disk devices */
+	int		oba_unit;
 };
 
 
@@ -76,34 +71,47 @@ struct ofb_softc {
  */
 extern char *OF_buf;
 
-int	OF_peer __P((int phandle));
-int	OF_child __P((int phandle));
-int	OF_parent __P((int phandle));
-int	OF_instance_to_package __P((int ihandle));
-int	OF_getproplen __P((int handle, char *prop));
-int	OF_getprop __P((int handle, char *prop, void *buf, int buflen));
-int	OF_finddevice __P((char *name));
-int	OF_instance_to_path __P((int ihandle, char *buf, int buflen));
-int	OF_package_to_path __P((int phandle, char *buf, int buflen));
-int	OF_call_method_1 __P((char *method, int ihandle, int nargs, ...));
-int	OF_call_method __P((char *method, int ihandle, int nargs,
-	    int nreturns, ...));
-int	OF_open __P((char *dname));
-void	OF_close __P((int handle));
-int	OF_read __P((int handle, void *addr, int len));
-int	OF_write __P((int handle, void *addr, int len));
-int	OF_seek __P((int handle, u_quad_t pos));
-void	OF_boot __P((char *bootspec)) __attribute__((__noreturn__));
-void	OF_enter __P((void));
-void	OF_exit __P((void)) __attribute__((__noreturn__));
-void	(*OF_set_callback __P((void (*newfunc)(void *)))) __P((void *));
-int	openfirmware __P((void *));
+int	OF_peer(int);
+int	OF_child(int);
+int	OF_parent(int);
+int	OF_instance_to_package(int);
+int	OF_getproplen(int, const char *);
+int	OF_getprop(int, const char *, void *, int);
+int	OF_nextprop(int, const char *, void *);
+int	OF_setprop(int, const char *, const void *, int);
+int	OF_finddevice(const char *);
+int	OF_instance_to_path(int, char *, int);
+int	OF_package_to_path(int, char *, int);
+int	OF_call_method_1(const char *, int, int, ...);
+int	OF_call_method(const char *, int, int, int, ...);
+int	OF_open(const char *);
+void	OF_close(int);
+int	OF_read(int, void *, int);
+int	OF_write(int, const void *, int);
+int	OF_seek(int, u_quad_t);
+void	*OF_claim(void *, u_int, u_int);
+void	OF_release(void *, u_int);
+int	OF_milliseconds(void);
+void	OF_boot(const char *) __dead;
+void	OF_enter(void);
+void	OF_exit(void) __dead;
+int	OF_interpret(const char *, int, int, ...);
+void	(*OF_set_callback(void(*)(void *)))(void *);
+int	openfirmware(void *);
 
 /*
  * Functions and variables provided by machine-independent code.
  */
-int	of_compatible __P((int, const char * const *));
-int	of_decode_int __P((const unsigned char *buf));
-int	of_packagename __P((int, char *, int));
+int	of_compatible(int, const char * const *);
+int	of_decode_int(const unsigned char *);
+int	of_packagename(int, char *, int);
+int	of_find_firstchild_byname(int, const char *);
+int	of_getnode_byname(int, const char *);
+boolean_t	of_to_uint32_prop(prop_dictionary_t, int, const char *,
+    const char *);
+boolean_t	of_to_dataprop(prop_dictionary_t, int, const char *,
+    const char *);
 
-int	*of_network_decode_media __P((int, int *, int *));
+int	*of_network_decode_media(int, int *, int *);
+
+#endif /*_OPENFIRM_H_*/

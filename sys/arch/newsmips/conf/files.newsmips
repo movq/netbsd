@@ -1,4 +1,4 @@
-#	$NetBSD: files.newsmips,v 1.8 2000/03/14 15:56:56 oster Exp $
+#	$NetBSD: files.newsmips,v 1.26 2008/02/20 21:43:34 drochner Exp $
 
 # NEWSMIPS-specific configuration info
 
@@ -27,14 +27,12 @@ attach ap at mainbus
 file arch/newsmips/apbus/apbus.c		ap
 file arch/newsmips/apbus/apbus_subr.c		ap
 
-device mkclock
-file arch/newsmips/newsmips/clock.c		mkclock
-
+# MK48T02 TOD clock and NVRAM
+device mkclock: mk48txx
 attach mkclock at hb with mkclock_hb
-file arch/newsmips/dev/clock_hb.c		mkclock_hb
-
+file arch/newsmips/dev/mkclock_hb.c		mkclock_hb
 attach mkclock at ap with mkclock_ap
-file arch/newsmips/apbus/clock_ap.c		mkclock_ap
+file arch/newsmips/apbus/mkclock_ap.c		mkclock_ap
 
 attach le at hb: le24
 file arch/newsmips/dev/if_le.c			le needs-count
@@ -53,35 +51,25 @@ device zstty: tty
 attach zstty at zsc
 file dev/ic/z8530tty.c				zstty needs-count
 
-device ms
-attach ms at hb
-file arch/newsmips/dev/ms.c			ms needs-count
+device kb: wskbddev
+file dev/news/newskeymap.c			kb
 
-device kb
-attach kb at hb
-file arch/newsmips/dev/kb.c			kb needs-count
-file arch/newsmips/dev/kbms_if.c		kb | ms
-file arch/newsmips/dev/keyconf.c		kb
-file arch/newsmips/dev/kb_ctrl.c		kb
-file arch/newsmips/dev/kb_encode.c		kb
+attach kb at hb with kb_hb
+file arch/newsmips/dev/kb_hb.c			kb_hb
 
-device fb
+attach kb at ap with kb_ap
+file arch/newsmips/apbus/kb_ap.c		kb_ap
+
+device ms: wsmousedev
+attach ms at hb with ms_hb
+file arch/newsmips/dev/ms_hb.c			ms_hb
+
+attach ms at ap with ms_ap
+file arch/newsmips/apbus/ms_ap.c		ms_ap
+
+device fb: wsemuldisplaydev, rasops1
 attach fb at hb
-file arch/newsmips/dev/fb.c			fb needs-count
-file arch/newsmips/dev/fb_conf.c		fb
-file arch/newsmips/dev/fb_mfbs.c		fb
-file arch/newsmips/dev/fb_probe.c		fb
-file arch/newsmips/dev/fb_start.c		fb
-file arch/newsmips/dev/fb_sub.c			fb
-file arch/newsmips/dev/fbbm_253.c		fb
-#file arch/newsmips/dev/fbbm_lcdm.c		fb
-file arch/newsmips/dev/bmcons.c			fb
-file arch/newsmips/dev/bitmapif.c		fb
-file arch/newsmips/dev/fnt.c			fb
-file arch/newsmips/dev/fnt24.c			fb
-file arch/newsmips/dev/vt100.c			fb
-file arch/newsmips/dev/vt100esc.c		fb
-file arch/newsmips/dev/vt100if.c		fb
+file arch/newsmips/dev/fb.c			fb needs-flag
 
 device fdc {}
 attach fdc at hb
@@ -94,16 +82,21 @@ attach sn at ap with sn_ap
 file arch/newsmips/apbus/if_sn.c		sn
 file arch/newsmips/apbus/if_sn_ap.c		sn_ap
 
+attach tlp at ap with tlp_ap
+file arch/newsmips/apbus/if_tlp_ap.c		tlp_ap
+
 file arch/newsmips/newsmips/autoconf.c
-file arch/newsmips/newsmips/conf.c
+file arch/newsmips/newsmips/bus.c
+file arch/newsmips/newsmips/clock.c
 file arch/newsmips/newsmips/machdep.c
 file arch/newsmips/newsmips/news3400.c		hb
 file arch/newsmips/newsmips/news5000.c		ap
 file arch/newsmips/newsmips/disksubr.c
 file arch/newsmips/newsmips/mainbus.c
 file arch/newsmips/newsmips/cpu_cons.c
-file dev/clock_subr.c
 file dev/cons.c
+
+file arch/mips/mips/softintr.c
 
 #
 # Machine-independent SCSI driver.
@@ -116,17 +109,21 @@ attach sc at hb
 file arch/newsmips/dev/scsi_1185.c		sc needs-count
 file arch/newsmips/dev/sc_wrap.c		sc
 
+device spifi: scsi
+attach spifi at ap
+file arch/newsmips/apbus/spifi.c		spifi
+
+device dmac
+attach dmac at ap
+file arch/newsmips/apbus/dmac3.c		dmac
+
+device xafb: wsemuldisplaydev, rasops8
+attach xafb at ap
+file arch/newsmips/apbus/xafb.c			xafb needs-flag
+
 #
 # Memory Disk for install floppy
 #
-file arch/newsmips/newsmips/md_root.c		memory_disk_hooks
+file dev/md_root.c				memory_disk_hooks
 
-major { sd = 0 }
-major { fd = 1 }
-major { md = 2 }
-major { cd = 16 }
-
-#
-# RAIDframe
-#
-major { raid = 32 }
+include "arch/newsmips/conf/majors.newsmips"

@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.91 2000/03/26 20:57:02 kleink Exp $	*/
+/*	$NetBSD: param.h,v 1.330.4.9.2.2 2009/07/29 22:35:18 snj Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,31 +37,36 @@
  */
 
 #ifndef _SYS_PARAM_H_
-#define _SYS_PARAM_H_
+#define	_SYS_PARAM_H_
 
 /*
  * Historic BSD #defines -- probably will remain untouched for all time.
  */
 #define	BSD	199506		/* System version (year & month). */
-#define BSD4_3	1
-#define BSD4_4	1
+#define	BSD4_3	1
+#define	BSD4_4	1
 
 /*
  *	#define __NetBSD_Version__ MMmmrrpp00
  *
  *	M = major version
- *	m = minor version
- *	r = release ["",A-Z but numeric]
+ *	m = minor version; a minor number of 99 indicates current.
+ *	r = 0 (*)
  *	p = patchlevel
  *
- *	So:
- *	     NetBSD-1.2D  = 102040000
- *	And:
- *	     NetBSD-1.2.1 = 102000100
+ * When new releases are made, src/gnu/usr.bin/groff/tmac/mdoc.local
+ * needs to be updated and the changes sent back to the groff maintainers.
  *
+ * (*)	Up to 2.0I "release" used to be "",A-Z,Z[A-Z] but numeric
+ *	    	e.g. NetBSD-1.2D  = 102040000 ('D' == 4)
+ *	NetBSD-2.0H 	(200080000) was changed on 20041001 to:
+ *	2.99.9		(299000900)
  */
 
-#define __NetBSD_Version__  104240000	/* NetBSD 1.4X */
+#define	__NetBSD_Version__	500000003	/* NetBSD 5.0.1 */
+
+#define __NetBSD_Prereq__(M,m,p) (((((M) * 100000000) + \
+    (m) * 1000000) + (p) * 100) <= __NetBSD_Version__)
 
 /*
  * Historical NetBSD #define
@@ -79,7 +80,7 @@
  *
  */
 
-#define NetBSD	199905		/* NetBSD version (year & month). */
+#define	NetBSD	199905		/* NetBSD version (year & month). */
 
 #include <sys/null.h>
 
@@ -93,22 +94,25 @@
  * Redefined constants are from POSIX 1003.1 limits file.
  *
  * MAXCOMLEN should be >= sizeof(ac_comm) (see <acct.h>)
+ * MAXHOSTNAMELEN should be >= (_POSIX_HOST_NAME_MAX + 1) (see <limits.h>)
  * MAXLOGNAME should be >= UT_NAMESIZE (see <utmp.h>)
  */
 #include <sys/syslimits.h>
 
 #define	MAXCOMLEN	16		/* max command name remembered */
-#define	MAXINTERP	64		/* max interpreter file name length */
+#define	MAXINTERP	PATH_MAX	/* max interpreter file name length */
 /* DEPRECATED: use LOGIN_NAME_MAX instead. */
 #define	MAXLOGNAME	(LOGIN_NAME_MAX - 1) /* max login name length */
 #define	NCARGS		ARG_MAX		/* max bytes for an exec function */
 #define	NGROUPS		NGROUPS_MAX	/* max number groups */
-#define	NOFILE		OPEN_MAX	/* max open files per process */
 #define	NOGROUP		65535		/* marker for empty group set member */
-#define MAXHOSTNAMELEN	256		/* max hostname size */
+#define	MAXHOSTNAMELEN	256		/* max hostname size */
 
+#ifndef NOFILE
+#define	NOFILE		OPEN_MAX	/* max open files per process */
+#endif
 #ifndef MAXUPRC				/* max simultaneous processes */
-#define MAXUPRC		CHILD_MAX	/* POSIX 1003.1-compliant default */
+#define	MAXUPRC		CHILD_MAX	/* POSIX 1003.1-compliant default */
 #else
 #if (MAXUPRC - 0) < CHILD_MAX
 #error MAXUPRC less than CHILD_MAX.  See options(4) for details.
@@ -124,14 +128,22 @@
 #include <sys/ucred.h>
 #include <sys/uio.h>
 #ifndef NPROC
-#define	NPROC (20 + 16 * MAXUSERS)
+#define	NPROC	(20 + 16 * MAXUSERS)
 #endif
 #ifndef NTEXT
-#define	NTEXT (80 + NPROC / 8)			/* actually the object cache */
+#define	NTEXT	(80 + NPROC / 8)		/* actually the object cache */
 #endif
 #ifndef NVNODE
-#define	NVNODE (NPROC + NTEXT + 100)
+#define	NVNODE	(NPROC + NTEXT + 100)
+#define	NVNODE_IMPLICIT
 #endif
+#ifndef VNODE_VA_MAXPCT
+#define	VNODE_VA_MAXPCT	20
+#endif
+#ifndef BUFCACHE_VA_MAXPCT
+#define	BUFCACHE_VA_MAXPCT	20
+#endif
+#define	VNODE_COST	2048			/* assumed space in bytes */
 #endif /* _KERNEL */
 
 /* Signals. */
@@ -141,35 +153,140 @@
 #include <machine/param.h>
 #include <machine/limits.h>
 
+/* pages ("clicks") to disk blocks */
+#define	ctod(x)		((x) << (PGSHIFT - DEV_BSHIFT))
+#define	dtoc(x)		((x) >> (PGSHIFT - DEV_BSHIFT))
+
+/* bytes to pages */
+#define	ctob(x)		((x) << PGSHIFT)
+#define	btoc(x)		(((x) + PGOFSET) >> PGSHIFT)
+
+/* bytes to disk blocks */
+#define	dbtob(x)	((x) << DEV_BSHIFT)
+#define	btodb(x)	((x) >> DEV_BSHIFT)
+
+#ifndef COHERENCY_UNIT
+#define	COHERENCY_UNIT		64
+#endif
+#ifndef CACHE_LINE_SIZE
+#define	CACHE_LINE_SIZE		64
+#endif
+#ifndef MAXCPUS
+#define	MAXCPUS			32
+#endif
+#ifndef MAX_LWP_PER_PROC
+#define	MAX_LWP_PER_PROC	8000
+#endif
+
 /*
- * Priorities.  Note that with 32 run queues, differences less than 4 are
- * insignificant.
+ * Stack macros.  On most architectures, the stack grows down,
+ * towards lower addresses; it is the rare architecture where
+ * it grows up, towards higher addresses.
+ *
+ * STACK_GROW and STACK_SHRINK adjust a stack pointer by some
+ * size, no questions asked.  STACK_ALIGN aligns a stack pointer.
+ *
+ * STACK_ALLOC returns a pointer to allocated stack space of
+ * some size; given such a pointer and a size, STACK_MAX gives
+ * the maximum (in the "maxsaddr" sense) stack address of the
+ * allocated memory.
+ */
+#if defined(_KERNEL) || defined(__EXPOSE_STACK)
+#ifdef __MACHINE_STACK_GROWS_UP
+#define	STACK_GROW(sp, _size)		(((char *)(void *)(sp)) + (_size))
+#define	STACK_SHRINK(sp, _size)		(((char *)(void *)(sp)) - (_size))
+#define	STACK_ALIGN(sp, bytes)	\
+	((char *)((((unsigned long)(sp)) + (bytes)) & ~(bytes)))
+#define	STACK_ALLOC(sp, _size)		((char *)(void *)(sp))
+#define	STACK_MAX(p, _size)		(((char *)(void *)(p)) + (_size))
+#else
+#define	STACK_GROW(sp, _size)		(((char *)(void *)(sp)) - (_size))
+#define	STACK_SHRINK(sp, _size)		(((char *)(void *)(sp)) + (_size))
+#define	STACK_ALIGN(sp, bytes)	\
+	((char *)(((unsigned long)(sp)) & ~(bytes)))
+#define	STACK_ALLOC(sp, _size)		(((char *)(void *)(sp)) - (_size))
+#define	STACK_MAX(p, _size)		((char *)(void *)(p))
+#endif
+#endif /* defined(_KERNEL) || defined(__EXPOSE_STACK) */
+
+/*
+ * Historic priority levels.  These are meaningless and remain only
+ * for source compatibility.  Do not use in new code.
  */
 #define	PSWP	0
 #define	PVM	4
 #define	PINOD	8
 #define	PRIBIO	16
 #define	PVFS	20
-#define	PZERO	22		/* No longer magic, shouldn't be here.  XXX */
+#define	PZERO	22
 #define	PSOCK	24
 #define	PWAIT	32
 #define	PLOCK	36
 #define	PPAUSE	40
 #define	PUSER	50
-#define	MAXPRI	127		/* Priorities range from 0 through MAXPRI. */
+#define	MAXPRI	127
 
-#define	PRIMASK	0x0ff
-#define	PCATCH	0x100		/* OR'd with pri for tsleep to check signals */
+#define	PCATCH		0x100	/* OR'd with pri for tsleep to check signals */
+#define	PNORELOCK	0x200	/* OR'd with pri for tsleep to not relock */
 
+/*
+ * New priority levels.
+ */
+#define	PRI_COUNT		224
+#define	PRI_NONE		(-1)
+
+#define	PRI_KERNEL_RT		192
+#define	NPRI_KERNEL_RT		32
+#define	MAXPRI_KERNEL_RT	(PRI_KERNEL_RT + NPRI_KERNEL_RT - 1)
+
+#define	PRI_USER_RT		128
+#define	NPRI_USER_RT		64
+#define	MAXPRI_USER_RT		(PRI_USER_RT + NPRI_USER_RT - 1)
+
+#define	PRI_KTHREAD		96
+#define	NPRI_KTHREAD		32
+#define	MAXPRI_KTHREAD		(PRI_KTHREAD + NPRI_KTHREAD - 1)
+
+#define	PRI_KERNEL		64
+#define	NPRI_KERNEL		32
+#define	MAXPRI_KERNEL		(PRI_KERNEL + NPRI_KERNEL - 1)
+
+#define	PRI_USER		0
+#define	NPRI_USER		64
+#define	MAXPRI_USER		(PRI_USER + NPRI_USER - 1)
+
+/* Priority range used by POSIX real-time features */
+#define	SCHED_PRI_MIN		0
+#define	SCHED_PRI_MAX		63
+
+/*
+ * Kernel thread priorities.
+ */
+#define	PRI_SOFTSERIAL	MAXPRI_KERNEL_RT
+#define	PRI_SOFTNET	(MAXPRI_KERNEL_RT - schedppq * 1)
+#define	PRI_SOFTBIO	(MAXPRI_KERNEL_RT - schedppq * 2)
+#define	PRI_SOFTCLOCK	(MAXPRI_KERNEL_RT - schedppq * 3)
+
+#define	PRI_XCALL	MAXPRI_KTHREAD
+#define	PRI_PGDAEMON	(MAXPRI_KTHREAD - schedppq * 1)
+#define	PRI_VM		(MAXPRI_KTHREAD - schedppq * 2)
+#define	PRI_IOFLUSH	(MAXPRI_KTHREAD - schedppq * 3)
+#define	PRI_BIO		(MAXPRI_KTHREAD - schedppq * 4)
+
+#define	PRI_IDLE	PRI_USER
+
+/*
+ * Miscellaneous.
+ */
 #define	NBPW	sizeof(int)	/* number of bytes per word (integer) */
 
 #define	CMASK	022		/* default file mask: S_IWGRP|S_IWOTH */
 #define	NODEV	(dev_t)(-1)	/* non-existent device */
 
 #define	CBLOCK	64		/* Clist block size, must be a power of 2. */
-#define CBQSIZE	(CBLOCK/NBBY)	/* Quote bytes/cblock - can do better. */
+#define	CBQSIZE	(CBLOCK/NBBY)	/* Quote bytes/cblock - can do better. */
 				/* Data chars/clist. */
-#define	CBSIZE	(CBLOCK - sizeof(struct cblock *) - CBQSIZE)
+#define	CBSIZE	(CBLOCK - (int)sizeof(struct cblock *) - CBQSIZE)
 #define	CROUND	(CBLOCK - 1)	/* Clist rounding. */
 
 /*
@@ -184,7 +301,7 @@
 #ifndef MAXBSIZE				/* XXX */
 #define	MAXBSIZE	MAXPHYS
 #endif
-#define MAXFRAG 	8
+#define	MAXFRAG 	8
 
 /*
  * MAXPATHLEN defines the longest permissible path length after expanding
@@ -194,9 +311,11 @@
  * maximum number of symbolic links that may be expanded in a path name.
  * It should be set high enough to allow all legitimate uses, but halt
  * infinite loops reasonably quickly.
+ *
+ * MAXSYMLINKS should be >= _POSIX_SYMLOOP_MAX (see <limits.h>)
  */
 #define	MAXPATHLEN	PATH_MAX
-#define MAXSYMLINKS	32
+#define	MAXSYMLINKS	32
 
 /* Bit map related macros. */
 #define	setbit(a,i)	((a)[(i)/NBBY] |= 1<<((i)%NBBY))
@@ -209,13 +328,13 @@
 #define	howmany(x, y)	(((x)+((y)-1))/(y))
 #endif
 #define	roundup(x, y)	((((x)+((y)-1))/(y))*(y))
-#define powerof2(x)	((((x)-1)&(x))==0)
+#define	rounddown(x,y)	(((x)/(y))*(y))
+#define	roundup2(x, m)	(((x) + m - 1) & ~(m - 1))
+#define	powerof2(x)	((((x)-1)&(x))==0)
 
 /* Macros for min/max. */
-#ifndef _KERNEL
-#define	MIN(a,b) (((a)<(b))?(a):(b))
-#define	MAX(a,b) (((a)>(b))?(a):(b))
-#endif
+#define	MIN(a,b)	(((a)<(b))?(a):(b))
+#define	MAX(a,b)	(((a)>(b))?(a):(b))
 
 /*
  * Constants for setting the parameters of the kernel memory allocator.
@@ -230,10 +349,14 @@
  * size allocations should be done infrequently as they will be slow.
  *
  * Constraints: NBPG <= MAXALLOCSAVE <= 2 ** (MINBUCKET + 14), and
- * MAXALLOCSIZE must be a power of two.
+ * MAXALLOCSAVE must be a power of two.
  */
-#define MINBUCKET	4		/* 4 => min allocation of 16 bytes */
-#define MAXALLOCSAVE	(2 * NBPG)
+#ifdef _LP64
+#define	MINBUCKET	5		/* 5 => min allocation of 32 bytes */
+#else
+#define	MINBUCKET	4		/* 4 => min allocation of 16 bytes */
+#endif
+#define	MAXALLOCSAVE	(2 * NBPG)
 
 /*
  * Scale factor for scaled integers used to count %cpu time and load avgs.
@@ -247,6 +370,63 @@
  * FSHIFT must be at least 11; this gives us a maximum load avg of ~1024.
  */
 #define	FSHIFT	11		/* bits to right of fixed binary point */
-#define FSCALE	(1<<FSHIFT)
+#define	FSCALE	(1<<FSHIFT)
+
+/*
+ * The time for a process to be blocked before being very swappable.
+ * This is a number of seconds which the system takes as being a non-trivial
+ * amount of real time.  You probably shouldn't change this;
+ * it is used in subtle ways (fractions and multiples of it are, that is, like
+ * half of a ``long time'', almost a long time, etc.)
+ * It is related to human patience and other factors which don't really
+ * change over time.
+ */
+#define        MAXSLP          20
+
+/*
+ * Defaults for Unified Buffer Cache parameters.
+ * These may be overridden in <machine/param.h>.
+ */
+
+#ifndef UBC_WINSHIFT
+#define	UBC_WINSHIFT	13
+#endif
+#ifndef UBC_NWINS
+#define	UBC_NWINS	1024
+#endif
+
+#ifdef _KERNEL
+/*
+ * macro to convert from milliseconds to hz without integer overflow
+ * Default version using only 32bits arithmetics.
+ * 64bit port can define 64bit version in their <machine/param.h>
+ * 0x20000 is safe for hz < 20000
+ */
+#ifndef mstohz
+#define mstohz(ms) \
+	(__predict_false((ms) >= 0x20000) ? \
+	    ((ms +0u) / 1000u) * hz : \
+	    ((ms +0u) * hz) / 1000u)
+#endif
+#ifndef hztoms
+#define hztoms(t) \
+	(__predict_false((t) >= 0x20000) ? \
+	    ((t +0u) / hz) * 1000u : \
+	    ((t +0u) * 1000u) / hz)
+#endif
+
+extern const int schedppq;
+extern size_t coherency_unit;
+
+#endif /* _KERNEL */
+
+/*
+ * Minimum alignment of "struct lwp" needed by the architecture.
+ * This counts when packing a lock byte into a word alongside a
+ * pointer to an LWP.
+ */
+#ifndef MIN_LWP_ALIGNMENT
+#define	MIN_LWP_ALIGNMENT	32
+#endif
 
 #endif /* !_SYS_PARAM_H_ */

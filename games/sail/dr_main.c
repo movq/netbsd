@@ -1,4 +1,4 @@
-/*	$NetBSD: dr_main.c,v 1.6 2000/02/09 22:27:55 jsm Exp $	*/
+/*	$NetBSD: dr_main.c,v 1.12 2003/08/07 09:37:42 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,25 +34,28 @@
 #if 0
 static char sccsid[] = "@(#)dr_main.c	8.2 (Berkeley) 4/16/94";
 #else
-__RCSID("$NetBSD: dr_main.c,v 1.6 2000/02/09 22:27:55 jsm Exp $");
+__RCSID("$NetBSD: dr_main.c,v 1.12 2003/08/07 09:37:42 agc Exp $");
 #endif
 #endif /* not lint */
 
-#include "driver.h"
+#include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include "extern.h"
+#include "driver.h"
 
 int
-dr_main()
+dr_main(void)
 {
 	int n;
 	struct ship *sp;
 	int nat[NNATION];
 	int value = 0;
 
-	(void) signal(SIGINT, SIG_IGN);
-	(void) signal(SIGQUIT, SIG_IGN);
-	(void) signal(SIGTSTP, SIG_IGN);
+	signal(SIGINT, SIG_IGN);
+	signal(SIGQUIT, SIG_IGN);
+	signal(SIGTSTP, SIG_IGN);
 	if (game < 0 || game >= NSCENE) {
 		fprintf(stderr, "DRIVER: Bad game number %d\n", game);
 		exit(1);
@@ -72,7 +71,7 @@ dr_main()
 	foreachship(sp) {
 		if (sp->file == NULL &&
 		    (sp->file = (struct File *)calloc(1, sizeof (struct File))) == NULL) {
-			(void) fprintf(stderr, "DRIVER: Out of memory.\n");
+			fprintf(stderr, "DRIVER: Out of memory.\n");
 			exit(1);
 		}
 		sp->file->index = sp - SHIP(0);

@@ -1,9 +1,10 @@
-/*	$NetBSD: in_gif.h,v 1.4 1999/07/06 12:23:20 itojun Exp $	*/
+/*	$NetBSD: in_gif.h,v 1.14 2006/11/23 04:07:07 rpaulo Exp $	*/
+/*	$KAME: in_gif.h,v 1.6 2001/07/25 00:55:48 itojun Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -15,7 +16,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -36,7 +37,13 @@
 
 extern int ip_gif_ttl;
 
-void in_gif_input __P((struct mbuf *, ...));
-int in_gif_output __P((struct ifnet *, int, struct mbuf *, struct rtentry *));
+struct gif_softc;
+void in_gif_input(struct mbuf *, ...);
+int in_gif_output(struct ifnet *, int, struct mbuf *);
+#ifdef GIF_ENCAPCHECK
+int gif_encapcheck4(struct mbuf *, int, int, void *);
+#endif
+int in_gif_attach(struct gif_softc *);
+int in_gif_detach(struct gif_softc *);
 
-#endif /*_NETINET_IN_GIF_H_*/
+#endif /* !_NETINET_IN_GIF_H_ */

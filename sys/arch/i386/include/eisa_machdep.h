@@ -1,4 +1,4 @@
-/*	$NetBSD: eisa_machdep.h,v 1.5 1999/03/19 02:56:59 cgd Exp $	*/
+/*	$NetBSD: eisa_machdep.h,v 1.11 2008/06/27 11:12:06 cegger Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -42,7 +42,11 @@
 #define	EISA_ID_LEN		(sizeof(EISA_ID) - 1)
 #define	EISA_ID_PADDR		0xfffd9
 
-extern struct i386_bus_dma_tag eisa_bus_dma_tag;
+extern struct x86_bus_dma_tag eisa_bus_dma_tag;
+
+/* EISA Edge/Level trigger control registers */
+#define ELCR0   0x4d0                   /* eisa irq 0-7 */
+#define ELCR1   0x4d1                   /* eisa irq 8-15 */
 
 /*
  * Types provided to machine-independent EISA code.
@@ -53,16 +57,26 @@ typedef int eisa_intr_handle_t;
 /*
  * Functions provided to machine-independent EISA code.
  */
-void		eisa_attach_hook __P((struct device *, struct device *,
-		    struct eisabus_attach_args *));
-int		eisa_maxslots __P((eisa_chipset_tag_t));
-int		eisa_intr_map __P((eisa_chipset_tag_t, u_int,
-		    eisa_intr_handle_t *));
-const char	*eisa_intr_string __P((eisa_chipset_tag_t, eisa_intr_handle_t));
-void		*eisa_intr_establish __P((eisa_chipset_tag_t,
-		    eisa_intr_handle_t, int, int, int (*)(void *), void *));
-void		eisa_intr_disestablish __P((eisa_chipset_tag_t, void *));
-int		eisa_mem_alloc __P((bus_space_tag_t, bus_size_t, bus_size_t,
-		    bus_addr_t, int, bus_addr_t *, bus_space_handle_t *));
-void		eisa_mem_free __P((bus_space_tag_t, bus_space_handle_t,
-		    bus_size_t));
+void		eisa_attach_hook(device_t, device_t,
+		    struct eisabus_attach_args *);
+int		eisa_maxslots(eisa_chipset_tag_t);
+int		eisa_intr_map(eisa_chipset_tag_t, u_int,
+		    eisa_intr_handle_t *);
+const char	*eisa_intr_string(eisa_chipset_tag_t, eisa_intr_handle_t);
+const struct evcnt *eisa_intr_evcnt(eisa_chipset_tag_t, eisa_intr_handle_t);
+void		*eisa_intr_establish(eisa_chipset_tag_t,
+		    eisa_intr_handle_t, int, int, int (*)(void *), void *);
+void		eisa_intr_disestablish(eisa_chipset_tag_t, void *);
+int		eisa_mem_alloc(bus_space_tag_t, bus_size_t, bus_size_t,
+		    bus_addr_t, int, bus_addr_t *, bus_space_handle_t *);
+void		eisa_mem_free(bus_space_tag_t, bus_space_handle_t,
+		    bus_size_t);
+
+int		eisa_conf_read_mem(eisa_chipset_tag_t, int, int, int,
+		    struct eisa_cfg_mem *);
+int		eisa_conf_read_irq(eisa_chipset_tag_t, int, int, int,
+		    struct eisa_cfg_irq *);
+int		eisa_conf_read_dma(eisa_chipset_tag_t, int, int, int,
+		    struct eisa_cfg_dma *);
+int		eisa_conf_read_io(eisa_chipset_tag_t, int, int, int,
+		    struct eisa_cfg_io *);

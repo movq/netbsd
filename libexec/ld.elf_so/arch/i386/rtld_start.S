@@ -1,11 +1,11 @@
-/*	$NetBSD: rtld_start.S,v 1.3 1999/02/19 10:22:14 christos Exp $	*/
+/*	$NetBSD: rtld_start.S,v 1.10 2008/04/28 20:23:03 martin Exp $	*/
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Christos Zoulas.
+ * by Christos Zoulas and by Charles M. Hannum.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,12 +37,25 @@
 	.type	.rtld_start,@function
 .rtld_start:
 	subl	$8,%esp			# make room of obj_main and exit proc
-	movl	%esp,%eax		# save stack pointer for _rtld
 	pushl	%ebx			# save ps_strings
 
-	pushl	%eax
-	call	_rtld@PLT		# _rtld(sp)
-	addl	$4,%esp			# pop args
+	call	1f
+1:
+	popl	%edx
+	leal	_DYNAMIC-1b(%edx),%ecx	# &_DYNAMIC
+	movl	%ecx,%ebx
+	subl	_GLOBAL_OFFSET_TABLE_-1b(%edx),%ebx
+
+	pushl	%ebx			# relocbase
+	pushl	%ecx			# &_DYNAMIC
+	call	_rtld_relocate_nonplt_self@PLT
+
+	leal	12(%esp),%eax		# &cleanup
+	pushl	%ebx			# relocbase
+	pushl	%eax			# sp
+	call	_rtld@PLT		# _rtld(sp, relocbase)
+
+	addl	$16,%esp		# pop args
 
 	popl	%ebx			# %ebx = ps_strings
 	popl	%edx			# %edx = cleanup
@@ -64,25 +70,13 @@ _rtld_bind_start:	# (obj, reloff)
 	pushl	%eax
 	pushl	%ecx
 	pushl	%edx
-	pushl	%ebx
-	pushl	%ebp
-	pushl	%esi
-	pushl	%edi
-	pushl	%ds
-	pushl	%es
 
-	pushl	44(%esp)		# Copy of reloff
-	pushl	44(%esp)		# Copy of obj
+	pushl	20(%esp)		# Copy of reloff
+	pushl	20(%esp)		# Copy of obj
 	call	_rtld_bind@PLT		# Call the binder
 	addl	$8,%esp			# pop binder args
-	movl	%eax,44(%esp)		# Store function to be called in obj
+	movl	%eax,20(%esp)		# Store function to be called in obj
 
-	popl	%es			# restore registers
-	popl	%ds
-	popl	%edi
-	popl	%esi
-	popl	%ebp
-	popl	%ebx
 	popl	%edx
 	popl	%ecx
 	popl	%eax

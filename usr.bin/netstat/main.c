@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.26 2000/02/26 09:55:24 itojun Exp $	*/
+/*	$NetBSD: main.c,v 1.70 2008/07/21 14:19:24 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\n\
-	Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\
+ Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "from: @(#)main.c	8.4 (Berkeley) 3/1/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.26 2000/02/26 09:55:24 itojun Exp $");
+__RCSID("$NetBSD: main.c,v 1.70 2008/07/21 14:19:24 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,6 +48,7 @@ __RCSID("$NetBSD: main.c,v 1.26 2000/02/26 09:55:24 itojun Exp $");
 #include <sys/protosw.h>
 #include <sys/socket.h>
 
+#include <net/if.h>
 #include <netinet/in.h>
 
 #include <ctype.h>
@@ -72,111 +69,135 @@ struct nlist nl[] = {
 #define	N_MBSTAT	0
 	{ "_mbstat" },
 #define	N_IPSTAT	1
-	{ "_ipstat" },
+	{ "_ipstat" },		/* not available via kvm */
 #define	N_TCBTABLE	2
 	{ "_tcbtable" },
 #define	N_TCPSTAT	3
-	{ "_tcpstat" },
+	{ "_tcpstat" },		/* not available via kvm */
 #define	N_UDBTABLE	4
 	{ "_udbtable" },
 #define	N_UDPSTAT	5
-	{ "_udpstat" },
+	{ "_udpstat" },		/* not available via kvm */
 #define	N_IFNET		6
 	{ "_ifnet" },
 #define	N_IMP		7
 	{ "_imp_softc" },
 #define	N_ICMPSTAT	8
-	{ "_icmpstat" },
+	{ "_icmpstat" },	/* not available via kvm */
 #define	N_RTSTAT	9
 	{ "_rtstat" },
 #define	N_UNIXSW	10
 	{ "_unixsw" },
-#define N_IDP		11
-	{ "_nspcb"},
-#define N_IDPSTAT	12
-	{ "_idpstat"},
-#define N_SPPSTAT	13
-	{ "_spp_istat"},
-#define N_NSERR		14
-	{ "_ns_errstat"},
-#define	N_CLNPSTAT	15
+#define	N_CLNPSTAT	11
 	{ "_clnp_stat"},
-#define	IN_NOTUSED	16
+#define	IN_NOTUSED	12
 	{ "_tp_inpcb" },
-#define	ISO_TP		17
+#define	ISO_TP		13
 	{ "_tp_refinfo" },
-#define	N_TPSTAT	18
+#define	N_TPSTAT	14
 	{ "_tp_stat" },
-#define	N_ESISSTAT	19
+#define	N_ESISSTAT	15
 	{ "_esis_stat"},
-#define N_NIMP		20
+#define N_NIMP		16
 	{ "_nimp"},
-#define N_RTREE		21
+#define N_RTREE		17
 	{ "_rt_tables"},
-#define N_CLTP		22
+#define N_CLTP		18
 	{ "_cltb"},
-#define N_CLTPSTAT	23
+#define N_CLTPSTAT	19
 	{ "_cltpstat"},
-#define	N_NFILE		24
+#define	N_NFILE		20
 	{ "_nfile" },
-#define	N_FILE		25
+#define	N_FILE		21
 	{ "_file" },
-#define N_IGMPSTAT	26
-	{ "_igmpstat" },
-#define N_MRTPROTO	27
+#define N_IGMPSTAT	22
+	{ "_igmpstat" },	/* not available via kvm */
+#define N_MRTPROTO	23
 	{ "_ip_mrtproto" },
-#define N_MRTSTAT	28
+#define N_MRTSTAT	24
 	{ "_mrtstat" },
-#define N_MFCHASHTBL	29
+#define N_MFCHASHTBL	25
 	{ "_mfchashtbl" },
-#define	N_MFCHASH	30
+#define	N_MFCHASH	26
 	{ "_mfchash" },
-#define N_VIFTABLE	31
+#define N_VIFTABLE	27
 	{ "_viftable" },
-#define N_MSIZE		32
+#define N_MSIZE		28
 	{ "_msize" },
-#define N_MCLBYTES	33
+#define N_MCLBYTES	29
 	{ "_mclbytes" },
-#define N_DDPSTAT	34
-	{ "_ddpstat"},
-#define N_DDPCB		35
+#define N_DDPSTAT	30
+	{ "_ddpstat"},		/* not available via kvm */
+#define N_DDPCB		31
 	{ "_ddpcb"},
-#define N_MBPOOL	36
+#define N_MBPOOL	32
 	{ "_mbpool" },
-#define N_MCLPOOL	37
+#define N_MCLPOOL	33
 	{ "_mclpool" },
-#define N_DIVPCB	38
+#define N_DIVPCB	34
 	{ "_divcb"},
-#define N_DIVSTAT	39
+#define N_DIVSTAT	35
 	{ "_divstat"},
-#define N_IP6STAT	40
-	{ "_ip6stat" },
-#define N_TCB6		41
-	{ "_tcb6" },
-#define N_TCP6STAT	42
-	{ "_tcp6stat" },
-#define N_UDB6		43
-	{ "_udb6" },
-#define N_UDP6STAT	44
-	{ "_udp6stat" },
-#define N_ICMP6STAT	45
-	{ "_icmp6stat" },
-#define N_IPSECSTAT	46
-	{ "_ipsecstat" },
-#define N_IPSEC6STAT	47
-	{ "_ipsec6stat" },
-#define N_PIM6STAT	48
-	{ "_pim6stat" },
-#define N_MRT6PROTO	49
+#define N_IP6STAT	36
+	{ "_ip6stat" },		/* not available via kvm */
+#define N_TCP6STAT	37
+	{ "_tcp6stat" },	/* not available via kvm */
+#define N_UDP6STAT	38
+	{ "_udp6stat" },	/* not available via kvm */
+#define N_ICMP6STAT	39
+	{ "_icmp6stat" },	/* not available via kvm */
+#define N_IPSECSTAT	40
+	{ "_ipsecstat" },	/* not available via kvm */
+#define N_IPSEC6STAT	41
+	{ "_ipsec6stat" },	/* not available via kvm */
+#define N_PIM6STAT	42
+	{ "_pim6stat" },	/* not available via kvm */
+#define N_MRT6PROTO	43
 	{ "_ip6_mrtproto" },
-#define N_MRT6STAT	50
+#define N_MRT6STAT	44
 	{ "_mrt6stat" },
-#define N_MF6CTABLE	51
+#define N_MF6CTABLE	45
 	{ "_mf6ctable" },
-#define N_MIF6TABLE	52
+#define N_MIF6TABLE	46
 	{ "_mif6table" },
-#define N_PFKEYSTAT	53
-	{ "_pfkeystat" },
+#define N_PFKEYSTAT	47
+	{ "_pfkeystat" },	/* not available via kvm */
+#define N_ARPSTAT	48
+	{ "_arpstat" },		/* not available via kvm */
+#define N_RIP6STAT	49
+	{ "_rip6stat" },	/* not available via kvm */
+#define	N_ARPINTRQ	50
+	{ "_arpintrq" },
+#define	N_IPINTRQ	51
+	{ "_ipintrq" },
+#define	N_IP6INTRQ	52
+	{ "_ip6intrq" },
+#define	N_ATINTRQ1	53
+	{ "_atintrq1" },
+#define	N_ATINTRQ2	54
+	{ "_atintrq2" },
+#define	N_NSINTRQ	55
+	{ "_nsintrq" },
+#define	N_CLNLINTRQ	56
+	{ "_clnlintrq" },
+#define	N_LLCINTRQ	57
+	{ "_llcintrq" },
+#define	N_HDINTRQ	58
+	{ "_hdintrq" },
+#define	N_NATMINTRQ	59
+	{ "_natmintrq" },
+#define	N_PPPOEDISCINQ	61
+	{ "_ppoediscinq" },
+#define	N_PPPOEINQ	61
+	{ "_ppoeinq" },
+#define	N_PKINTRQ	62
+	{ "_pkintrq" },
+#define	N_HARDCLOCK_TICKS 63
+	{ "_hardclock_ticks" },
+#define N_PIMSTAT	64
+	{ "_pimstat" },
+#define N_CARPSTAT	65
+	{ "_carpstats" },	/* not available via kvm */
 	{ "" },
 };
 
@@ -204,10 +225,14 @@ struct protox {
 	  icmp_stats,	NULL,		0,	"icmp" },
 	{ -1,		N_IGMPSTAT,	1,	0,
 	  igmp_stats,	NULL,		0,	"igmp" },
+	{ -1,		N_CARPSTAT,	1,	0,
+	  carp_stats,	NULL,		0,	"carp" },
 #ifdef IPSEC
 	{ -1,		N_IPSECSTAT,	1,	0,
-	  ipsec_stats,	NULL,		0,	"ipsec" },
+	  ipsec_switch,	NULL,		0,	"ipsec" },
 #endif
+	{ -1,		N_PIMSTAT,	1,	0,
+	  pim_stats,	NULL,		0,	"pim" },
 	{ -1,		-1,		0,	0,
 	  0,		NULL,		0,	0 }
 };
@@ -219,24 +244,33 @@ struct protox ip6protox[] = {
 	{ -1,		N_ICMP6STAT,	1,	0,
 	  icmp6_stats,	icmp6_ifstats,	0,	"icmp6" },
 #ifdef TCP6
-	{ N_TCB6,	N_TCP6STAT,	1,	ip6protopr,
+	{ N_TCBTABLE,	N_TCP6STAT,	1,	ip6protopr,
 	  tcp6_stats,	NULL,		tcp6_dump,	"tcp6" },
 #else
-	{ N_TCB6,	N_TCP6STAT,	1,	ip6protopr,
+	{ N_TCBTABLE,	N_TCP6STAT,	1,	ip6protopr,
 	  tcp_stats,	NULL,		tcp_dump,	"tcp6" },
 #endif
-	{ N_UDB6,	N_UDP6STAT,	1,	ip6protopr,
+	{ N_UDBTABLE,	N_UDP6STAT,	1,	ip6protopr,
 	  udp6_stats,	NULL,		0,	"udp6" },
 #ifdef IPSEC
 	{ -1,		N_IPSEC6STAT,	1,	0,
-	  ipsec_stats,	NULL,		0,	"ipsec6" },
+	  ipsec_switch,	NULL,		0,	"ipsec6" },
 #endif
 	{ -1,		N_PIM6STAT,	1,	0,
 	  pim6_stats,	NULL,		0,	"pim6" },
+	{ -1,		N_RIP6STAT,	1,	0,
+	  rip6_stats,	NULL,		0,	"rip6" },
 	{ -1,		-1,		0,	0,
 	  0,		NULL,		0,	0 }
 };
 #endif
+
+struct protox arpprotox[] = {
+	{ -1,		N_ARPSTAT,	1,	0,
+	  arp_stats,	NULL,		0,	"arp" },
+	{ -1,		-1,		0,	0,
+	  0,		NULL,		0,	0 }
+};
 
 #ifdef IPSEC
 struct protox pfkeyprotox[] = {
@@ -251,17 +285,6 @@ struct protox pfkeyprotox[] = {
 struct protox atalkprotox[] = {
 	{ N_DDPCB,	N_DDPSTAT,	1,	atalkprotopr,
 	  ddp_stats,	NULL,		0,	"ddp" },
-	{ -1,		-1,		0,	0,
-	  0,		NULL,		0 }
-};
-
-struct protox nsprotox[] = {
-	{ N_IDP,	N_IDPSTAT,	1,	nsprotopr,
-	  idp_stats,	NULL,		0,	"idp" },
-	{ N_IDP,	N_SPPSTAT,	1,	nsprotopr,
-	  spp_stats,	NULL,		0,	"spp" },
-	{ -1,		N_NSERR,	1,	0,
-	  nserr_stats,	NULL,		0,	"ns_err" },
 	{ -1,		-1,		0,	0,
 	  0,		NULL,		0 }
 };
@@ -284,44 +307,114 @@ struct protox *protoprotox[] = { protox,
 #ifdef INET6
 				 ip6protox,
 #endif
+				 arpprotox,
 #ifdef IPSEC
 				 pfkeyprotox,
 #endif
 #ifndef SMALL
-				 atalkprotox, nsprotox, isoprotox,
+				 atalkprotox,
+				 isoprotox,
 #endif
 				 NULL };
 
+const struct softintrq {
+	const char *siq_name;
+	int siq_index;
+} softintrq[] = {
+	{ "arpintrq", N_ARPINTRQ },
+	{ "ipintrq", N_IPINTRQ },
+	{ "ip6intrq", N_IP6INTRQ },
+	{ "atintrq1", N_ATINTRQ1 },
+	{ "atintrq2", N_ATINTRQ2 },
+	{ "clnlintrq", N_CLNLINTRQ },
+	{ "llcintrq", N_LLCINTRQ },
+	{ "hdintrq", N_HDINTRQ },
+	{ "natmintrq", N_NATMINTRQ },
+	{ "ppoediscinq", N_PPPOEDISCINQ },
+	{ "ppoeinq", N_PPPOEINQ },
+	{ "pkintrq", N_PKINTRQ },
+	{ NULL, -1 },
+};
+
 int main __P((int, char *[]));
 static void printproto __P((struct protox *, char *));
+static void print_softintrq __P((void));
 static void usage __P((void));
 static struct protox *name2protox __P((char *));
 static struct protox *knownname __P((char *));
+static void prepare(char *, char *, struct protox *tp);
 
 kvm_t *kvmd;
+gid_t egid;
+
+void
+prepare(char *nlistf, char *memf, struct protox *tp)
+{
+	char buf[_POSIX2_LINE_MAX];
+
+	/*
+	 * Try to figure out if we can use sysctl or not.
+	 */
+	if (nlistf != NULL && memf != NULL) {
+		/* If we have -M and -N, we're not dealing with live memory. */
+		use_sysctl = 0;
+	} else if (qflag ||
+		   rflag ||
+		   iflag ||
+#ifndef SMALL
+		   gflag ||
+		   (pflag && tp->pr_sindex == N_TPSTAT) ||
+		   (pflag && tp->pr_sindex == N_CLTPSTAT) ||
+		   (pflag && tp->pr_sindex == N_CLNPSTAT) ||
+		   (pflag && tp->pr_sindex == N_ESISSTAT) ||
+#endif
+		   (pflag && tp->pr_sindex == N_PIMSTAT) ||
+		   Pflag) {
+		/* These flags are not yet supported via sysctl(3). */
+		use_sysctl = 0;
+	} else {
+		/* We can use sysctl(3). */
+		use_sysctl = 1;
+	}
+
+	if (!use_sysctl) {
+		(void)setegid(egid);
+		kvmd = kvm_openfiles(nlistf, memf, NULL, O_RDONLY, buf);
+		(void)setgid(getgid());
+		if (kvmd == NULL)
+			err(1, "kvm error: %s", buf);
+	
+		if (kvm_nlist(kvmd, nl) < 0 || nl[0].n_type == 0) {
+			if (nlistf)
+				errx(1, "%s: no namelist", nlistf);
+			else
+				errx(1, "no namelist");
+		}
+	} else
+		(void)setgid(getgid());
+}
 
 int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	extern char *optarg;
-	extern int optind;
 	struct protoent *p;
 	struct protox *tp;	/* for printing cblocks & stats */
 	int ch;
 	char *nlistf = NULL, *memf = NULL;
-	char buf[_POSIX2_LINE_MAX], *cp;
+	char *cp;
 	u_long pcbaddr;
-	gid_t egid = getegid();
 
+	egid = getegid();
 	(void)setegid(getgid());
 	tp = NULL;
 	af = AF_UNSPEC;
 	pcbaddr = 0;
 
-	while ((ch = getopt(argc, argv, "Aabdf:ghI:LliM:mN:nP:p:rstuvw:")) != -1)
-		switch(ch) {
+	while ((ch = getopt(argc, argv,
+	    "AabBdf:ghI:LliM:mN:nP:p:qrsStuvw:")) != -1)
+		switch (ch) {
 		case 'A':
 			Aflag = 1;
 			break;
@@ -331,16 +424,21 @@ main(argc, argv)
 		case 'b':
 			bflag = 1;
 			break;
+		case 'B':
+			Bflag = 1;
+			break;
 		case 'd':
 			dflag = 1;
 			break;
 		case 'f':
-			if (strcmp(optarg, "ns") == 0)
-				af = AF_NS;
-			else if (strcmp(optarg, "inet") == 0)
+			if (strcmp(optarg, "inet") == 0)
 				af = AF_INET;
 			else if (strcmp(optarg, "inet6") == 0)
 				af = AF_INET6;
+			else if (strcmp(optarg, "arp") == 0)
+				af = AF_ARP;
+			else if (strcmp(optarg, "pfkey") == 0)
+				af = PF_KEY;
 			else if (strcmp(optarg, "unix") == 0
 			    || strcmp(optarg, "local") == 0)
 				af = AF_LOCAL;
@@ -380,9 +478,10 @@ main(argc, argv)
 			nlistf = optarg;
 			break;
 		case 'n':
-			nflag = 1;
+			numeric_addr = numeric_port = nflag = 1;
 			break;
 		case 'P':
+			errno = 0;
 			pcbaddr = strtoul(optarg, &cp, 16);
 			if (*cp != '\0' || errno == ERANGE)
 				errx(1, "invalid PCB address %s",
@@ -395,11 +494,17 @@ main(argc, argv)
 				    optarg);
 			pflag = 1;
 			break;
+		case 'q':
+			qflag = 1;
+			break;
 		case 'r':
 			rflag = 1;
 			break;
 		case 's':
 			++sflag;
+			break;
+		case 'S':
+			numeric_addr = 1;
 			break;
 		case 't':
 			tflag = 1;
@@ -408,7 +513,7 @@ main(argc, argv)
 			af = AF_LOCAL;
 			break;
 		case 'v':
-			vflag = 1;
+			vflag++;
 			break;
 		case 'w':
 			interval = atoi(optarg);
@@ -424,7 +529,7 @@ main(argc, argv)
 #define	BACKWARD_COMPATIBILITY
 #ifdef	BACKWARD_COMPATIBILITY
 	if (*argv) {
-		if (isdigit(**argv)) {
+		if (isdigit((unsigned char)**argv)) {
 			interval = atoi(*argv);
 			if (interval <= 0)
 				usage();
@@ -439,31 +544,18 @@ main(argc, argv)
 	}
 #endif
 
-	/*
-	 * Discard setgid privileges.  If not the running kernel, we toss
-	 * them away totally so that bad guys can't print interesting stuff
-	 * from kernel memory, otherwise switch back to kmem for the
-	 * duration of the kvm_openfiles() call.
-	 */
-	if (nlistf != NULL || memf != NULL || Pflag)
-		(void)setgid(getgid());
-	else
-		(void)setegid(egid);
+	prepare(nlistf, memf, tp);
 
-	if ((kvmd = kvm_openfiles(nlistf, memf, NULL, O_RDONLY,
-	    buf)) == NULL)
-		errx(1, "%s", buf);
-
-	/* do this now anyway */
-	if (nlistf == NULL && memf == NULL)
-		(void)setgid(getgid());
-
-	if (kvm_nlist(kvmd, nl) < 0 || nl[0].n_type == 0) {
-		if (nlistf)
-			errx(1, "%s: no namelist", nlistf);
+#ifndef SMALL
+	if (Bflag) {
+		if (sflag)
+			bpf_stats();
 		else
-			errx(1, "no namelist");
+			bpf_dump(interface);
+		exit(0);
 	}
+#endif
+
 	if (mflag) {
 		mbpr(nl[N_MBSTAT].n_value,  nl[N_MSIZE].n_value,
 		    nl[N_MCLBYTES].n_value, nl[N_MBPOOL].n_value,
@@ -491,6 +583,10 @@ main(argc, argv)
 			printf("%s: no stats routine\n", tp->pr_name);
 		exit(0);
 	}
+	if (qflag) {
+		print_softintrq();
+		exit(0);
+	}
 	/*
 	 * Keep file descriptors open to avoid overhead
 	 * of open/close on each call to get* routines.
@@ -506,9 +602,13 @@ main(argc, argv)
 	}
 	if (rflag) {
 		if (sflag)
-			rt_stats(nl[N_RTSTAT].n_value);
-		else
-			routepr(nl[N_RTREE].n_value);
+			rt_stats(use_sysctl ? 0 : nl[N_RTSTAT].n_value);
+		else {
+			if (use_sysctl)
+				p_rttables(af);
+			else
+				routepr(nl[N_RTREE].n_value);
+		}
 		exit(0);
 	}
 #ifndef SMALL
@@ -563,6 +663,9 @@ main(argc, argv)
 		for (tp = ip6protox; tp->pr_name; tp++)
 			printproto(tp, tp->pr_name);
 #endif
+	if (af == AF_ARP || af == AF_UNSPEC)
+		for (tp = arpprotox; tp->pr_name; tp++)
+			printproto(tp, tp->pr_name);
 #ifdef IPSEC
 	if (af == PF_KEY || af == AF_UNSPEC)
 		for (tp = pfkeyprotox; tp->pr_name; tp++)
@@ -571,9 +674,6 @@ main(argc, argv)
 #ifndef SMALL
 	if (af == AF_APPLETALK || af == AF_UNSPEC)
 		for (tp = atalkprotox; tp->pr_name; tp++)
-			printproto(tp, tp->pr_name);
-	if (af == AF_NS || af == AF_UNSPEC)
-		for (tp = nsprotox; tp->pr_name; tp++)
 			printproto(tp, tp->pr_name);
 	if (af == AF_ISO || af == AF_UNSPEC)
 		for (tp = isoprotox; tp->pr_name; tp++)
@@ -612,8 +712,32 @@ printproto(tp, name)
 		pr = tp->pr_cblocks;
 		off = nl[tp->pr_index].n_value;
 	}
-	if (pr != NULL && (off || af != AF_UNSPEC))
+	if (pr != NULL && ((off || af != AF_UNSPEC) || use_sysctl)) {
 		(*pr)(off, name);
+	}
+}
+
+/*
+ * Print softintrq status.
+ */
+void
+print_softintrq()
+{
+	struct ifqueue intrq, *ifq = &intrq;
+	const struct softintrq *siq;
+	u_long off;
+
+	for (siq = softintrq; siq->siq_name != NULL; siq++) {
+		off = nl[siq->siq_index].n_value;
+		if (off == 0)
+			continue;
+
+		kread(off, (char *)ifq, sizeof(*ifq));
+		printf("%s:\n", siq->siq_name);
+		printf("\tqueue length: %d\n", ifq->ifq_len);
+		printf("\tmaximum queue length: %d\n", ifq->ifq_maxlen);
+		printf("\tpackets dropped: %d\n", ifq->ifq_drops);
+	}
 }
 
 /*
@@ -627,7 +751,7 @@ kread(addr, buf, size)
 {
 
 	if (kvm_read(kvmd, addr, buf, size) != size) {
-		warnx("%s\n", kvm_geterr(kvmd));
+		warnx("%s", kvm_geterr(kvmd));
 		return (-1);
 	}
 	return (0);
@@ -647,6 +771,16 @@ plurales(n)
 {
 
 	return (n != 1 ? "es" : "");
+}
+
+int
+get_hardticks(void)
+{
+	int hardticks;
+
+	kread(nl[N_HARDCLOCK_TICKS].n_value, (char *)&hardticks,
+	    sizeof(hardticks));
+	return (hardticks);
 }
 
 /*
@@ -699,16 +833,24 @@ name2protox(name)
 static void
 usage()
 {
+	const char *progname = getprogname();
+
 	(void)fprintf(stderr,
-"usage: %s [-Aan] [-f address_family] [-M core] [-N system]\n", __progname);
+"usage: %s [-Aan] [-f address_family] [-M core] [-N system]\n", progname);
 	(void)fprintf(stderr,
-"       %s [-gimnrsv] [-f address_family] [-M core] [-N system]\n", 
-	__progname);
+"       %s [-bdgiLmnqrsSv] [-f address_family] [-M core] [-N system]\n", 
+	progname);
 	(void)fprintf(stderr,
-"       %s [-n] [-I interface] [-M core] [-N system] [-w wait]\n", __progname);
+"       %s [-dn] [-I interface] [-M core] [-N system] [-w wait]\n", progname);
 	(void)fprintf(stderr,
-"       %s [-M core] [-N system] [-p protocol]\n", __progname);
+"       %s [-p protocol] [-M core] [-N system]\n", progname);
 	(void)fprintf(stderr,
-"       %s [-M core] [-N system] [-p protocol] -P pcbaddr\n", __progname);
+"       %s [-p protocol] [-M core] [-N system] -P pcbaddr\n", progname);
+	(void)fprintf(stderr,
+"       %s [-p protocol] [-i] [-I Interface] \n", progname);
+	(void)fprintf(stderr,
+"       %s [-s] [-f address_family] [-i] [-I Interface]\n", progname);
+	(void)fprintf(stderr,
+"       %s [-s] [-B] [-I interface]\n", progname);
 	exit(1);
 }

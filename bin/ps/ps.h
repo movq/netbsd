@@ -1,4 +1,4 @@
-/*	$NetBSD: ps.h,v 1.15 1999/05/03 00:20:07 mrg Exp $	*/
+/*	$NetBSD: ps.h,v 1.26 2006/10/02 17:54:35 apb Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,57 +31,64 @@
  *	@(#)ps.h	8.1 (Berkeley) 5/31/93
  */
 
+#include <sys/queue.h>
+
 #define	UNLIMITED	0	/* unlimited terminal width */
+
+#define	PRINTMODE	0	/* print values */
+#define	WIDTHMODE	1	/* determine width of column */
+
 enum type {
-	CHAR, UCHAR, SHORT, USHORT, INT, UINT, LONG, ULONG, KPTR, KPTR24,
-	INT32, UINT32, SIGLIST
+	UNSPECIFIED,
+	CHAR, UCHAR, SHORT, USHORT, INT, UINT, LONG, ULONG,
+	KPTR, KPTR24, INT32, UINT32, SIGLIST, INT64, UINT64,
+	TIMEVAL, CPUTIME, PCPU, VSIZE
 };
-
-struct usave {
-	struct	timeval u_start;
-	struct	rusage u_ru;
-	struct	rusage u_cru;
-	char	u_acflag;
-	char	u_valid;
-};
-
-#define KI_PROC(ki) (&(ki)->ki_p->kp_proc)
-#define KI_EPROC(ki) (&(ki)->ki_p->kp_eproc)
-
-typedef struct kinfo {
-	struct kinfo_proc *ki_p;	/* proc structure */
-	struct usave ki_u;	/* interesting parts of user */
-} KINFO;
 
 /* Variables. */
+typedef SIMPLEQ_HEAD(varlist, varent) VARLIST;
+
 typedef struct varent {
-	struct varent *next;
+	SIMPLEQ_ENTRY(varent) next;
 	struct var *var;
 } VARENT;
 
 typedef struct var {
-	char	*name;		/* name(s) of variable */
-	char	*header;	/* default header */
-	char	*alias;		/* aliases */
+	const char *name;	/* name(s) of variable */
+	const char *header;	/* header, possibly changed from default */
 #define	COMM	0x01		/* needs exec arguments and environment (XXX) */
-#define	LJUST	0x02		/* left adjust on output (trailing blanks) */
-#define	USER	0x04		/* needs user structure */
+#define	ARGV0	0x02		/* only print argv[0] */
+#define	LJUST	0x04		/* left adjust on output (trailing blanks) */
 #define	INF127	0x08		/* 127 = infinity: if > 127, print 127. */
+#define	LWP	0x10		/* dispatch to kinfo_lwp routine */
+#define	UAREA	0x20		/* need to check p_uvalid */
+#define	ALIAS	0x40		/* entry is alias for 'header' */
 	u_int	flag;
 				/* output routine */
-	void	(*oproc) __P((struct kinfo *, struct varent *));
-	short	width;		/* printing width */
+	void	(*oproc)(void *, struct varent *, int);
 	/*
 	 * The following (optional) elements are hooks for passing information
-	 * to the generic output routines: pvar, evar, uvar (those which print
-	 * simple elements from well known structures: proc, eproc, usave)
+	 * to the generic output routine: pvar (that which prints simple
+	 * elements from struct kinfo_proc2).
 	 */
 	int	off;		/* offset in structure */
 	enum	type type;	/* type of element */
-	char	*fmt;		/* printf format */
-	/*
-	 * glue to link selected fields together
-	 */
+	const char *fmt;	/* printf format */
+
+	/* current longest element */
+	int	width;		/* printing width */
+	int64_t	longestp;	/* longest positive signed value */
+	int64_t	longestn;	/* longest negative signed value */
+	u_int64_t longestu;	/* longest unsigned value */
+	double	longestpd;	/* longest positive double */
+	double	longestnd;	/* longest negative double */
 } VAR;
+
+#define	OUTPUT(vent, ki, kl, mode) do {					\
+	if ((vent)->var->flag & LWP)					\
+		((vent)->var->oproc)((void *)(kl), (vent), (mode));	\
+	else								\
+		((vent)->var->oproc)((void *)(ki), (vent), (mode));	\
+	} while (/*CONSTCOND*/ 0)
 
 #include "extern.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: xstr.c,v 1.11 1999/11/09 15:06:38 drochner Exp $	*/
+/*	$NetBSD: xstr.c,v 1.22 2008/07/21 14:19:28 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)xstr.c	8.1 (Berkeley) 6/9/93";
 #else
-__RCSID("$NetBSD: xstr.c,v 1.11 1999/11/09 15:06:38 drochner Exp $");
+__RCSID("$NetBSD: xstr.c,v 1.22 2008/07/21 14:19:28 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -65,21 +61,21 @@ __RCSID("$NetBSD: xstr.c,v 1.11 1999/11/09 15:06:38 drochner Exp $");
  * November, 1978
  */
 
-static off_t	hashit __P((char *, int));
-static void	onintr __P((int));
-static off_t	yankstr __P((char **));
-static int	octdigit __P((char));
-static void	inithash __P((void));
-static int	fgetNUL __P((char *, int, FILE *));
-static int	xgetc __P((FILE *));
-static void	flushsh __P((void));
-static void	found __P((int, off_t, char *));
-static void	prstr __P((char *));
-static void	xsdotc __P((void));
-static char	lastchr __P((char *));
-static int	istail __P((char *, char *));
-static void	process __P((char *));
-static void	usage __P((void));
+static off_t	hashit(const char *, int);
+static void	onintr(int);
+static off_t	yankstr(char **);
+static int	octdigit(char);
+static void	inithash(void);
+static int	fgetNUL(char *, int, FILE *);
+static int	xgetc(FILE *);
+static void	flushsh(void);
+static void	found(int, off_t, const char *);
+static void	prstr(const char *);
+static void	xsdotc(void);
+static char	lastchr(const char *);
+static int	istail(const char *, const char *);
+static void	process(const char *);
+static void	usage(void);
 
 static off_t	tellpt;
 static off_t	mesgpt;
@@ -88,7 +84,7 @@ static char	*array =	0;
 static int	cflg;
 static int	vflg;
 static int	readstd;
-static char	linebuf[BUFSIZ];
+static char	linebuf[8192];
 
 #define	BUCKETS	128
 
@@ -99,12 +95,10 @@ static struct	hash {
 	short	hnew;
 } bucket[BUCKETS];
 
-int	main __P((int, char *[]));
+int	main(int, char *[]);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int c;
 
@@ -164,12 +158,13 @@ main(argc, argv)
 }
 
 static void
-process(name)
-	char *name;
+process(const char *name)
 {
 	char *cp;
 	int c;
 	int incomm = 0;
+	int inasm = 0;
+	int asmparnest = 0;
 	int ret;
 
 	printf("extern char\t%s[];\n", array);
@@ -180,53 +175,78 @@ process(name)
 			break;
 		}
 		if (linebuf[0] == '#') {
-			if (linebuf[1] == ' ' &&
-			    isdigit((unsigned char)linebuf[2]))
-				printf("#line%s", &linebuf[1]);
-			else
-				printf("%s", linebuf);
+			printf("%s", linebuf);
 			continue;
 		}
-		for (cp = linebuf; (c = *cp++);) switch (c) {
+		for (cp = linebuf; (c = *cp++);)
+			switch (c) {
 
-		case '"':
-			if (incomm)
-				goto def;
-			if ((ret = (int) yankstr(&cp)) == -1)
-				goto out;
-			printf("(&%s[%d])", array, ret);
-			break;
+			case '"':
+				if (incomm || inasm)
+					goto def;
+				if ((ret = (int) yankstr(&cp)) == -1)
+					goto out;
+				printf("(&%s[%d])", array, ret);
+				break;
 
-		case '\'':
-			if (incomm)
-				goto def;
-			putchar(c);
-			if (*cp)
-				putchar(*cp++);
-			break;
+			case '\'':
+				if (incomm || inasm)
+					goto def;
+				putchar(c);
+				if (*cp)
+					putchar(*cp++);
+				break;
 
-		case '/':
-			if (incomm || *cp != '*')
-				goto def;
-			incomm = 1;
-			cp++;
-			printf("/*");
-			continue;
-
-		case '*':
-			if (incomm && *cp == '/') {
-				incomm = 0;
+			case '/':
+				if (incomm || *cp != '*')
+					goto def;
+				incomm = 1;
 				cp++;
-				printf("*/");
+				printf("/*");
 				continue;
-			}
-			goto def;
 
+			case '*':
+				if (incomm && *cp == '/') {
+					incomm = 0;
+					cp++;
+					printf("*/");
+					continue;
+				}
+				goto def;
+
+			case '(':
+				if (!incomm && inasm)
+					asmparnest++;
+				goto def;
+
+			case ')':
+				if (!incomm && inasm && !--asmparnest)
+					inasm = 0;
+				goto def;
+
+			case '_':
+				if (incomm || inasm)
+					goto def;
+				if (!strncmp(cp, "_asm", 4)) {
+					cp += 4;
+					printf("__asm");
+					if (!strncmp(cp, "__", 2)) {
+						cp += 2;
+						printf("__");
+					}
+					if (isalnum((unsigned char)*cp) ||
+					    *cp == '_')
+						goto def;
+					asmparnest = 0;
+					inasm = 1;
+				} else
+					goto def;
+				break;
 def:
-		default:
-			putchar(c);
-			break;
-		}
+			default:
+				putchar(c);
+				break;
+			}
 	}
 out:
 	if (ferror(stdout)) {
@@ -236,22 +256,53 @@ out:
 }
 
 static off_t
-yankstr(cpp)
-	char **cpp;
+yankstr(char **cpp)
 {
 	char *cp = *cpp;
 	int c, ch;
-	char dbuf[BUFSIZ];
-	char *dp = dbuf;
+	char *dbuf, *dp, *edp;
 	char *tp;
+	off_t hash;
+	size_t bsiz = BUFSIZ;
 
-	while ((c = *cp++)) {
+	if ((dp = dbuf = malloc(bsiz)) == NULL)
+		err(1, "malloc");
+	edp = dbuf + bsiz;
+
+	while ((c = *cp++) != '\0') {
 		switch (c) {
 
 		case '"':
-			cp++;
-			goto out;
-
+			/* Look for a concatenated string */
+			for (;;) {
+				while (isspace((unsigned char)*cp))
+					cp++;
+				if (*cp == '\0') {
+					if (fgets(linebuf,
+					    sizeof linebuf, stdin) == NULL) {
+						if (ferror(stdin))
+							err(1,
+							"Error reading `x.c'");
+						goto out;
+					}
+					cp = linebuf;
+				} else {
+					if (*cp == '"') {
+						cp++;
+						if (*cp == '"') {
+							cp++;
+							continue;
+						} else {
+							c = *cp++;
+							goto gotc;
+						}
+					} else {
+						cp++;
+						goto out;
+					}
+				}
+			}
+			/*NOTREACHED*/
 		case '\\':
 			c = *cp++;
 			if (c == 0)
@@ -285,12 +336,25 @@ yankstr(cpp)
 			break;
 		}
 gotc:
+		if (dp >= edp - 1) {
+			char *nbuf;
+			bsiz += BUFSIZ;
+			if ((nbuf = realloc(dbuf, bsiz)) == NULL) {
+				free(dbuf);
+				err(1, "realloc");
+			}
+			dp = nbuf + (dp - dbuf);
+			edp = nbuf + bsiz;
+			dbuf = nbuf;
+		}
 		*dp++ = c;
 	}
 out:
 	*cpp = --cp;
-	*dp = 0;
-	return (hashit(dbuf, 1));
+	*dp = '\0';
+	hash = hashit(dbuf, 1);
+	free(dbuf);
+	return hash;
 }
 
 static int
@@ -302,7 +366,7 @@ octdigit(c)
 }
 
 static void
-inithash()
+inithash(void)
 {
 	char buf[BUFSIZ];
 	FILE *mesgread = fopen(strings, "r");
@@ -319,34 +383,30 @@ inithash()
 }
 
 static int
-fgetNUL(obuf, rmdr, file)
-	char *obuf;
-	int rmdr;
-	FILE *file;
+fgetNUL(char *obuf, int rmdr, FILE *file)
 {
 	int c;
 	char *buf = obuf;
 
-	while (--rmdr > 0 && (c = xgetc(file)) != 0 && c != EOF)
+	c = 0;	/* XXXGCC -Wuninitialized */
+
+	while (--rmdr > 0 && (c = xgetc(file) != 0 && c != EOF))
 		*buf++ = c;
 	*buf++ = 0;
-	return ((feof(file) || ferror(file)) ? 0 : 1);
+	return (feof(file) || ferror(file)) ? 0 : 1;
 }
 
 static int
-xgetc(file)
-	FILE *file;
+xgetc(FILE *file)
 {
 
 	tellpt++;
-	return (getc(file));
+	return getc(file);
 }
 
 
 static off_t
-hashit(str, new)
-	char *str;
-	int new;
+hashit(const char *str, int new)
 {
 	int i;
 	struct hash *hp, *hp0;
@@ -358,7 +418,7 @@ hashit(str, new)
 		if (i >= 0)
 			return (hp->hpt + i);
 	}
-	if ((hp = (struct hash *) calloc(1, sizeof (*hp))) == NULL)
+	if ((hp = calloc(1, sizeof (*hp))) == NULL)
 		err(1, NULL);
 	hp->hpt = mesgpt;
 	if ((hp->hstr = strdup(str)) == NULL)
@@ -371,7 +431,7 @@ hashit(str, new)
 }
 
 static void
-flushsh()
+flushsh(void)
 {
 	int i;
 	struct hash *hp;
@@ -393,7 +453,7 @@ flushsh()
 		for (hp = bucket[i].hnext; hp != NULL; hp = hp->hnext) {
 			found(hp->hnew, hp->hpt, hp->hstr);
 			if (hp->hnew) {
-				fseek(mesgwrit, hp->hpt, 0);
+				(void)fseek(mesgwrit, hp->hpt, 0);
 				(void)fwrite(hp->hstr, strlen(hp->hstr) + 1, 1,
 				    mesgwrit);
 				if (ferror(mesgwrit))
@@ -405,10 +465,7 @@ flushsh()
 }
 
 static void
-found(new, off, str)
-	int new;
-	off_t off;
-	char *str;
+found(int new, off_t off, const char *str)
 {
 	if (vflg == 0)
 		return;
@@ -421,24 +478,23 @@ found(new, off, str)
 }
 
 static void
-prstr(cp)
-	char *cp;
+prstr(const char *cp)
 {
 	int c;
 
-	while ((c = (*cp++ & 0377)))
+	while ((c = (*cp++ & 0377)) != '\0')
 		if (c < ' ')
-			fprintf(stderr, "^%c", c + '`');
+			(void)fprintf(stderr, "^%c", c + '`');
 		else if (c == 0177)
-			fprintf(stderr, "^?");
+			(void)fprintf(stderr, "^?");
 		else if (c > 0200)
-			fprintf(stderr, "\\%03o", c);
+			(void)fprintf(stderr, "\\%03o", c);
 		else
-			fprintf(stderr, "%c", c);
+			(void)fprintf(stderr, "%c", c);
 }
 
 static void
-xsdotc()
+xsdotc(void)
 {
 	FILE *strf = fopen(strings, "r");
 	FILE *xdotcf;
@@ -448,7 +504,7 @@ xsdotc()
 	xdotcf = fopen("xs.c", "w");
 	if (xdotcf == NULL)
 		err(1, "Cannot open `%s'", "xs.c");
-	fprintf(xdotcf, "char\t%s[] = {\n", array);
+	(void)fprintf(xdotcf, "char\t%s[] = {\n", array);
 	for (;;) {
 		int i, c;
 
@@ -459,22 +515,21 @@ xsdotc()
 				onintr(1);
 			}
 			if (feof(strf)) {
-				fprintf(xdotcf, "\n");
+				(void)fprintf(xdotcf, "\n");
 				goto out;
 			}
-			fprintf(xdotcf, "0x%02x,", c);
+			(void)fprintf(xdotcf, "0x%02x,", c);
 		}
-		fprintf(xdotcf, "\n");
+		(void)fprintf(xdotcf, "\n");
 	}
 out:
-	fprintf(xdotcf, "};\n");
+	(void)fprintf(xdotcf, "};\n");
 	(void)fclose(xdotcf);
 	(void)fclose(strf);
 }
 
 static char
-lastchr(cp)
-	char *cp;
+lastchr(const char *cp)
 {
 
 	while (cp[0] && cp[1])
@@ -483,8 +538,7 @@ lastchr(cp)
 }
 
 static int
-istail(str, of)
-	char *str, *of;
+istail(const char *str, const char *of)
 {
 	int d = strlen(of) - strlen(str);
 
@@ -494,8 +548,7 @@ istail(str, of)
 }
 
 static void
-onintr(dummy)
-	int dummy;
+onintr(int dummy)
 {
 
 	(void)signal(SIGINT, SIG_IGN);
@@ -507,10 +560,10 @@ onintr(dummy)
 }
 
 static void
-usage()
+usage(void)
 {
-	extern char *__progname;
-	(void)fprintf(stderr, "Usage: %s [-vc] [-l array] [-] [<name> ...]\n",
-	    __progname);
+
+	(void)fprintf(stderr, "usage: %s [-cv] [-l array] [-] [<name> ...]\n",
+	    getprogname());
 	exit(1);
 }

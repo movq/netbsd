@@ -1,4 +1,4 @@
-/*	$NetBSD: fifo.h,v 1.16 1998/08/13 10:06:33 kleink Exp $	*/
+/*	$NetBSD: fifo.h,v 1.25 2008/01/25 14:32:15 ad Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,19 +34,19 @@
 /*
  * Prototypes for fifo operations on vnodes.
  */
-int	fifo_lookup	__P((void *));
+int	fifo_lookup(void *);
 #define fifo_create	genfs_badop
 #define fifo_mknod	genfs_badop
-int	fifo_open	__P((void *));
-int	fifo_close	__P((void *));
+int	fifo_open(void *);
+int	fifo_close(void *);
 #define fifo_access	genfs_ebadf
 #define fifo_getattr	genfs_ebadf
 #define fifo_setattr	genfs_ebadf
-int	fifo_read	__P((void *));
-int	fifo_write	__P((void *));
-#define fifo_lease_check genfs_nullop
-int	fifo_ioctl	__P((void *));
-int	fifo_poll	__P((void *));
+int	fifo_read(void *);
+int	fifo_write(void *);
+int	fifo_ioctl(void *);
+int	fifo_poll(void *);
+int	fifo_kqfilter(void *);
 #define fifo_revoke	genfs_revoke
 #define fifo_mmap	genfs_badop
 #define fifo_fsync	genfs_nullop
@@ -65,23 +61,18 @@ int	fifo_poll	__P((void *));
 #define fifo_readlink	genfs_badop
 #define fifo_abortop	genfs_badop
 #define fifo_reclaim	genfs_nullop
-#define	fifo_lock	genfs_nolock
-#define	fifo_unlock	genfs_nounlock
-int	fifo_inactive	__P((void *));
-int	fifo_bmap	__P((void *));
+#define	fifo_lock	genfs_lock
+#define	fifo_unlock	genfs_unlock
+int	fifo_inactive(void *);
+int	fifo_bmap(void *);
 #define fifo_strategy	genfs_badop
-int	fifo_print	__P((void *));
-#define fifo_islocked	genfs_noislocked
-int	fifo_pathconf	__P((void *));
+int	fifo_print(void *);
+#define fifo_islocked	genfs_islocked
+int	fifo_pathconf(void *);
 #define	fifo_advlock	genfs_einval
-#define fifo_blkatoff	genfs_badop
-#define fifo_valloc	genfs_badop
-#define fifo_reallocblks genfs_badop
-#define fifo_vfree	genfs_badop
-#define fifo_truncate	genfs_nullop
-#define fifo_update	genfs_nullop
 #define fifo_bwrite	genfs_nullop
+#define	fifo_putpages	genfs_null_putpages
 
-void 	fifo_printinfo __P((struct vnode *));
+void 	fifo_printinfo(struct vnode *);
 
-extern int (**fifo_vnodeop_p) __P((void *));
+extern int (**fifo_vnodeop_p)(void *);

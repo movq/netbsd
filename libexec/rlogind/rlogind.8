@@ -1,4 +1,4 @@
-.\"	$NetBSD: rlogind.8,v 1.10 1999/03/22 18:25:46 garbled Exp $
+.\"	$NetBSD: rlogind.8,v 1.17 2004/07/17 18:33:23 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1989, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     from: @(#)rlogind.8	8.1 (Berkeley) 6/4/93
 .\"
-.Dd November 8, 1996
+.Dd July 17, 2004
 .Dt RLOGIND 8
 .Os
 .Sh NAME
@@ -51,7 +47,7 @@ The server provides a remote login facility with authentication
 based on privileged port numbers from trusted hosts.
 .Pp
 Options supported by
-.Nm "" :
+.Nm :
 .Bl -tag -width Ds
 .It Fl a
 Ask hostname for verification.
@@ -82,7 +78,7 @@ aborts the connection.
 .It
 The server checks the client's source address
 and requests the corresponding host name (see
-.Xr gethostbyaddr 3 ,
+.Xr getnameinfo 3 ,
 .Xr hosts 5
 and
 .Xr named 8 ) .
@@ -166,8 +162,13 @@ by the server failed.
 .Sh SEE ALSO
 .Xr login 1 ,
 .Xr ruserok 3 ,
-.Xr ttyacion 3 ,
+.Xr ttyaction 3 ,
 .Xr rshd 8
+.Sh HISTORY
+The
+.Nm
+command appeared in
+.Bx 4.2 .
 .Sh BUGS
 The authentication procedure used here assumes the integrity
 of each client machine and the connecting medium.
@@ -177,8 +178,16 @@ A facility to allow all data exchanges to be encrypted should be
 present.
 .Pp
 A more extensible protocol should be used.
-.Sh HISTORY
-The
+.Pp
 .Nm
-command appeared in
-.Bx 4.2 .
+intentionally rejects accesses from IPv4 mapped address on top of
+.Dv AF_INET6
+socket, since IPv4 mapped address complicates host-address based
+authentication.
+If you would like to accept connections from IPv4 peers, you will need to run
+.Nm
+on top of
+.Dv AF_INET
+socket, not
+.Dv AF_INET6
+socket.

@@ -1,9 +1,44 @@
-/*	$NetBSD: machdep.c,v 1.150 2000/03/28 23:57:24 simonb Exp $	*/
+/*	$NetBSD: machdep.c,v 1.209.6.1 2009/02/02 03:30:32 snj Exp $	*/
+
+/*
+ * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: machdep.c 1.63 91/04/24$
+ *
+ *	@(#)machdep.c	7.16 (Berkeley) 6/3/91
+ */
 
 /*
  * Copyright (c) 1988 University of Utah.
- * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
- * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -43,47 +78,48 @@
  */
 
 #include "opt_ddb.h"
-#include "opt_inet.h"
-#include "opt_atalk.h"
-#include "opt_ccitt.h"
-#include "opt_iso.h"
-#include "opt_ns.h"
 #include "opt_compat_netbsd.h"
+#include "opt_fpu_emulate.h"
+#include "opt_lev6_defer.h"
+#include "opt_m060sp.h"
+#include "opt_panicbutton.h"
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.209.6.1 2009/02/02 03:30:32 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
-#include <sys/map.h>
 #include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/reboot.h>
 #include <sys/conf.h>
 #include <sys/file.h>
-#include <sys/clist.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/msgbuf.h>
 #include <sys/user.h>
-#include <sys/exec.h>            /* for PS_STRINGS */
 #include <sys/vnode.h>
 #include <sys/device.h>
 #include <sys/queue.h>
 #include <sys/mount.h>
-#include <sys/syscallargs.h>
 #include <sys/core.h>
 #include <sys/kcore.h>
-#include <net/netisr.h>
-#define	MAXMEM	64*1024	/* XXX - from cmap.h */
-#include <vm/vm.h>
-#include <vm/vm_param.h>
-#include <vm/pmap.h>
-#include <vm/vm_map.h>
-#include <vm/vm_object.h>
-#include <vm/vm_kern.h>
-#include <vm/vm_page.h>
+#include <sys/ksyms.h>
+#include <sys/cpu.h>
+#include <sys/exec.h>
 
+#if defined(DDB) && defined(__ELF__)
+#include <sys/exec_elf.h>
+#endif
+
+#include <sys/exec_aout.h>
+
+#undef PS	/* XXX netccitt/pk.h conflict with machine/reg.h? */
+
+#define	MAXMEM	64*1024	/* XXX - from cmap.h */
 #include <uvm/uvm_extern.h>
 
 #include <sys/sysctl.h>
@@ -92,7 +128,6 @@
 #include <ddb/db_sym.h>
 #include <ddb/db_extern.h>
 
-#include <machine/cpu.h>
 #include <machine/reg.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
@@ -110,81 +145,36 @@
 
 #include "fd.h"
 #include "ser.h"
-#include "arp.h"
-#include "ppp.h"
-
-#include <net/netisr.h>
-#include <net/if.h>
-
-#ifdef INET
-#include <netinet/in.h>
-#if NARP > 0
-#include <netinet/if_inarp.h>
-#endif
-#include <netinet/ip_var.h>
-#endif 
-#ifdef INET6
-# ifndef INET
-#  include <netinet/in.h>
-# endif
-#include <netinet/ip6.h>
-#include <netinet6/ip6_var.h>
-#endif
-#ifdef CCITT 
-#undef PS	/* XXX namespace collision */
-#include <netccitt/x25.h>
-#include <netccitt/pk.h>
-#include <netccitt/pk_extern.h>
-#undef PS	/* XXX namespace collision */
-#endif 
-#ifdef NS
-#include <netns/ns_var.h>
-#endif
-#ifdef ISO
-#include <netiso/iso.h>
-#include <netiso/clnp.h>
-#endif
-#ifdef NETATALK
-#include <netatalk/at_extern.h>
-#endif
-#if NPPP > 0
-#include <net/ppp_defs.h>
-#include <net/if_ppp.h>
-#endif
+#include "ksyms.h"
 
 /* prototypes */
-void identifycpu __P((void));
-vm_offset_t reserve_dumppages __P((vm_offset_t));
-void dumpsys __P((void));
-void initcpu __P((void));
-void straytrap __P((int, u_short));
-static void netintr __P((void));
-static void call_sicallbacks __P((void));
-static void _softintr_callit __P((void *, void *));
-void intrhand __P((int));
+void identifycpu(void);
+vm_offset_t reserve_dumppages(vm_offset_t);
+void dumpsys(void);
+void initcpu(void);
+void straytrap(int, u_short);
+static void call_sicallbacks(void);
+void intrhand(int);
 #if NSER > 0
-void ser_outintr __P((void));
+void ser_outintr(void);
 #endif
 #if NFD > 0
-void fdintr __P((int));
+void fdintr(int);
 #endif
 
-/*
- * patched by some devices at attach time (currently, only the coms)
- */
-u_int16_t amiga_serialspl = PSL_S|PSL_IPL4;
+volatile unsigned int interrupt_depth = 0;
 
-vm_map_t exec_map = NULL;  
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
-caddr_t	msgbufaddr;
+void *	msgbufaddr;
 paddr_t msgbufpa;
 
+int	machineid;
 int	maxmem;			/* max memory per process */
 int	physmem = MAXMEM;	/* max supported memory, changes to actual */
 /*
- * extender "register" for software interrupts. Moved here 
+ * extender "register" for software interrupts. Moved here
  * from locore.s, since softints are no longer dealt with
  * in locore.s.
  */
@@ -198,15 +188,26 @@ extern  int   freebufspace;
 extern	u_int lowram;
 
 /* used in init_main.c */
-char	*cpu_type = "m68k";
+const char *cpu_type = "m68k";
 /* the following is used externally (sysctl_hw) */
 char	machine[] = MACHINE;	/* from <machine/param.h> */
- 
+
+/* Our exported CPU info; we can have only one. */
+struct cpu_info cpu_info_store;
+
 /*
  * current open serial device speed;  used by some SCSI drivers to reduce
  * DMA transfer lengths.
  */
 int	ser_open_speed;
+
+#ifdef DRACO
+vaddr_t DRCCADDR;
+
+volatile u_int8_t *draco_intena, *draco_intpen, *draco_intfrc;
+volatile u_int8_t *draco_misc;
+volatile struct drioct *draco_ioct;
+#endif
 
  /*
  * Console initialization: called early on from main,
@@ -228,13 +229,16 @@ consinit()
 	 */
 	cninit();
 
-#if defined (DDB)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	{
 		extern int end[];
 		extern int *esym;
 
-		ddb_init(*(int *)&end, ((int *)&end) + 1, esym);
+		ksyms_init((int)esym - (int)&end - sizeof(Elf32_Ehdr),
+		    (void *)&end, esym);
 	}
+#endif
+#ifdef DDB
         if (boothowto & RB_KDB)
                 Debugger();
 #endif
@@ -242,21 +246,21 @@ consinit()
 
 /*
  * cpu_startup: allocate memory for variable-sized tables,
- * initialize cpu, and do autoconfiguration.
+ * initialize CPU, and do autoconfiguration.
  */
 void
 cpu_startup()
 {
-	register unsigned i;
-	caddr_t v;
-	int base, residual;
 	char pbuf[9];
+	u_int i;
 #ifdef DEBUG
 	extern int pmapdebug;
 	int opmapdebug = pmapdebug;
 #endif
-	paddr_t minaddr, maxaddr;
-	paddr_t size = 0;
+	vaddr_t minaddr, maxaddr;
+
+	if (fputype != FPU_NONE)
+		m68k_make_fpu_idle_frame();
 
 	/*
 	 * Initialize error message buffer (at end of core).
@@ -270,107 +274,49 @@ cpu_startup()
 	 */
 
 	for (i = 0; i < btoc(MSGBUFSIZE); i++)
-		pmap_enter(pmap_kernel(), (vaddr_t)msgbufaddr + i * NBPG,
-		    msgbufpa + i * NBPG, VM_PROT_READ|VM_PROT_WRITE,
+		pmap_enter(pmap_kernel(), (vaddr_t)msgbufaddr + i * PAGE_SIZE,
+		    msgbufpa + i * PAGE_SIZE, VM_PROT_READ|VM_PROT_WRITE,
 		    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+	pmap_update(pmap_kernel());
 	initmsgbuf(msgbufaddr, m68k_round_page(MSGBUFSIZE));
 
 	/*
 	 * Good {morning,afternoon,evening,night}.
 	 */
-	printf(version);
+	printf("%s%s", copyright, version);
 	identifycpu();
 	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
 	printf("total memory = %s\n", pbuf);
 
-	/*
-	 * Find out how much space we need, allocate it,
-	 * and then give everything true virtual addresses.
-	 */
-	size = (vm_size_t)allocsys(NULL, NULL);
-	if ((v = (caddr_t)uvm_km_zalloc(kernel_map, round_page(size))) == 0)
-		panic("startup: no room for tables");
-	if (allocsys(v, NULL) - v != size)
-		panic("startup: table size inconsistency");
 
-	/*
-	 * Now allocate buffers proper.  They are different than the above
-	 * in that they usually occupy more virtual memory than physical.
-	 */
-	size = MAXBSIZE * nbuf;
-	if (uvm_map(kernel_map, (vm_offset_t *)&buffers, round_page(size),
-	    NULL, UVM_UNKNOWN_OFFSET,
-	    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-	    UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
-		panic("startup: cannot allocate VM for buffers");
-	minaddr = (vm_offset_t) buffers;
-	if ((bufpages / nbuf) >= btoc(MAXBSIZE)) {
-		/* don't want to alloc more physical mem than needed */
-		bufpages = btoc(MAXBSIZE) * nbuf;
-	}
-	base = bufpages / nbuf;
-	residual = bufpages % nbuf;
-	for (i = 0; i < nbuf; i++) {
-		vm_size_t curbufsize;
-		vm_offset_t curbuf;
-		struct vm_page *pg;
-
-		/*
-		 * Each buffer has MAXBSIZE bytes of VM space allocated.  Of
-		 * that MAXBSIZE space, we allocate and map (base+1) pages
-		 * for the first "residual" buffers, and then we allocate
-		 * "base" pages for the rest.
-		 */
-		curbuf = (vm_offset_t) buffers + (i * MAXBSIZE);
-		curbufsize = NBPG * ((i < residual) ? (base+1) : base);
-
-		while (curbufsize) {
-			pg = uvm_pagealloc(NULL, 0, NULL, 0);
-			if (pg == NULL) 
-				panic("cpu_startup: not enough memory for "
-				    "buffer cache");
-			pmap_kenter_pa(curbuf, VM_PAGE_TO_PHYS(pg),
-				       VM_PROT_READ|VM_PROT_WRITE);
-			curbuf += PAGE_SIZE;
-			curbufsize -= PAGE_SIZE;
-		}
-	}
-
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
+	minaddr = 0;
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   VM_PHYS_SIZE, 0, FALSE, NULL);
+				   VM_PHYS_SIZE, 0, false, NULL);
 
 	/*
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 FALSE, NULL);
+				 false, NULL);
 
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
 #endif
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
-	format_bytes(pbuf, sizeof(pbuf), bufpages * NBPG);
-	printf("using %d buffers containing %s of memory\n", nbuf, pbuf);
-	
+
 	/*
 	 * display memory configuration passed from loadbsd
 	 */
 	if (memlist->m_nseg > 0 && memlist->m_nseg < 16)
 		for (i = 0; i < memlist->m_nseg; i++)
 			printf("memory segment %d at %08x size %08x\n", i,
-			    memlist->m_seg[i].ms_start, 
+			    memlist->m_seg[i].ms_start,
 			    memlist->m_seg[i].ms_size);
 
 #ifdef DEBUG_KERNEL_START
@@ -384,28 +330,19 @@ cpu_startup()
 #ifdef DEBUG_KERNEL_START
 	printf("survived initcpu...\n");
 #endif
-	
-	/*
-	 * Set up buffers, so they can be used to read disk labels.
-	 */
-	bufinit();
-
-#ifdef DEBUG_KERNEL_START
-	printf("survived bufinit...\n");
-#endif
 }
 
 /*
  * Set registers on exec.
  */
 void
-setregs(p, pack, stack)
-	register struct proc *p;
+setregs(l, pack, stack)
+	struct lwp *l;
 	struct exec_package *pack;
 	u_long stack;
 {
-	struct frame *frame = (struct frame *)p->p_md.md_regs;
-	
+	struct frame *frame = (struct frame *)l->l_md.md_regs;
+
 	frame->f_sr = PSL_USERSET;
 	frame->f_pc = pack->ep_entry & ~1;
 	frame->f_regs[D0] = 0;
@@ -418,7 +355,7 @@ setregs(p, pack, stack)
 	frame->f_regs[D7] = 0;
 	frame->f_regs[A0] = 0;
 	frame->f_regs[A1] = 0;
-	frame->f_regs[A2] = (int)PS_STRINGS;
+	frame->f_regs[A2] = (int)l->l_proc->p_psstr;
 	frame->f_regs[A3] = 0;
 	frame->f_regs[A4] = 0;
 	frame->f_regs[A5] = 0;
@@ -426,13 +363,13 @@ setregs(p, pack, stack)
 	frame->f_regs[SP] = stack;
 
 	/* restore a null state frame */
-	p->p_addr->u_pcb.pcb_fpregs.fpf_null = 0;
+	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
 #ifdef FPU_EMULATE
 	if (!fputype)
-		bzero(&p->p_addr->u_pcb.pcb_fpregs, sizeof(struct fpframe));
+		bzero(&l->l_addr->u_pcb.pcb_fpregs, sizeof(struct fpframe));
 	else
 #endif
-		m68881_restore(&p->p_addr->u_pcb.pcb_fpregs);
+		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
 }
 
 /*
@@ -444,12 +381,12 @@ char cpu_model[120];
 int m68060_pcr_init = 0x21;	/* make this patchable */
 #endif
 
- 
+
 void
 identifycpu()
 {
         /* there's alot of XXX in here... */
-	char *mach, *mmu, *fpu;
+	const char *mach, *mmu, *fpu;
 
 #ifdef M68060
 	char cpubuf[16];
@@ -462,7 +399,7 @@ identifycpu()
 	if (is_draco()) {
 		sprintf(machbuf, "DraCo rev.%d", is_draco());
 		mach = machbuf;
-	} else 
+	} else
 #endif
 	if (is_a4000())
 		mach = "Amiga 4000";
@@ -476,7 +413,7 @@ identifycpu()
 	fpu = NULL;
 #ifdef M68060
 	if (machineid & AMIGA_68060) {
-		asm(".word 0x4e7a,0x0808; movl d0,%0" : "=d"(pcr) : : "d0");
+		__asm(".word 0x4e7a,0x0808; movl %%d0,%0" : "=d"(pcr) : : "d0");
 		sprintf(cpubuf, "68%s060 rev.%d",
 		    pcr & 0x10000 ? "LC/EC" : "", (pcr>>8)&0xff);
 		cpu_type = cpubuf;
@@ -491,7 +428,7 @@ identifycpu()
 			fpu = "/FPU";
 			fputype = FPU_68040; /* XXX */
 		}
-	} else 
+	} else
 #endif
 	if (machineid & AMIGA_68040) {
 		cpu_type = "m68040";
@@ -524,34 +461,20 @@ identifycpu()
 /*
  * machine dependent system variables.
  */
-int
-cpu_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
-	int *name;
-	u_int namelen;
-	void *oldp;
-	size_t *oldlenp;
-	void *newp;
-	size_t newlen;
-	struct proc *p;
+SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 {
-	dev_t consdev;
 
-	/* all sysctl names at this level are terminal */
-	if (namelen != 1)
-		return(ENOTDIR);               /* overloaded */
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "machdep", NULL,
+		       NULL, 0, NULL, 0,
+		       CTL_MACHDEP, CTL_EOL);
 
-	switch (name[0]) {
-	case CPU_CONSDEV:
-		if (cn_tab != NULL)
-			consdev = cn_tab->cn_dev;
-		else
-			consdev = NODEV;
-		return(sysctl_rdstruct(oldp, oldlenp, newp, &consdev,
-		    sizeof(consdev)));
-	default:
-		return(EOPNOTSUPP);
-	}
-	/* NOTREACHED */
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_STRUCT, "console_device", NULL,
+		       sysctl_consdev, 0, NULL, sizeof(dev_t),
+		       CTL_MACHDEP, CPU_CONSDEV, CTL_EOL);
 }
 
 static int waittime = -1;
@@ -577,8 +500,8 @@ cpu_reboot(howto, bootstr)
 	char *bootstr;
 {
 	/* take a snap shot before clobbering any registers */
-	if (curproc)
-		savectx(&curproc->p_addr->u_pcb);
+	if (curlwp->l_addr)
+		savectx(&curlwp->l_addr->u_pcb);
 
 	boothowto = howto;
 	if ((howto & RB_NOSYNC) == 0)
@@ -605,16 +528,20 @@ cpu_reboot(howto, bootstr)
 }
 
 
-unsigned	dumpmag = 0x8fca0101;	/* magic number for savecore */
+u_int32_t dumpmag = 0x8fca0101;	/* magic number for savecore */
 int	dumpsize = 0;		/* also for savecore */
 long	dumplo = 0;
 cpu_kcore_hdr_t cpu_kcore_hdr;
+
+#define CHDRSIZE (ALIGN(sizeof(kcore_seg_t)) + ALIGN(sizeof(cpu_kcore_hdr_t)))
+#define MDHDRSIZE roundup(CHDRSIZE, dbtob(1))
 
 void
 cpu_dumpconf()
 {
 	cpu_kcore_hdr_t *h = &cpu_kcore_hdr;
 	struct m68k_kcore_hdr *m = &h->un._m68k;
+	const struct bdevsw *bdev;
 	int nblks;
 	int i;
 	extern u_int Sysseg_pa;
@@ -626,7 +553,7 @@ cpu_dumpconf()
 	 * Intitialize the `dispatcher' portion of the header.
 	 */
 	strcpy(h->name, machine);
-	h->page_size = NBPG;
+	h->page_size = PAGE_SIZE;
 	h->kernbase = KERNBASE;
 
 	/*
@@ -676,8 +603,12 @@ cpu_dumpconf()
 		m->ram_segs[1].size  = memlist->m_seg[i].ms_size;
 		break;
 	}
-	if (dumpdev != NODEV && bdevsw[major(dumpdev)].d_psize) {
-		nblks = (*bdevsw[major(dumpdev)].d_psize)(dumpdev);
+	if ((bdev = bdevsw_lookup(dumpdev)) == NULL) {
+		dumpdev = NODEV;
+		return;
+	}
+	if (bdev->d_psize != NULL) {
+		nblks = (*bdev->d_psize)(dumpdev);
 		if (dumpsize > btoc(dbtob(nblks - dumplo)))
 			dumpsize = btoc(dbtob(nblks - dumplo));
 		else if (dumplo == 0)
@@ -685,11 +616,11 @@ cpu_dumpconf()
 	}
 	--dumplo;	/* XXX assume header fits in one block */
 	/*
-	 * Don't dump on the first NBPG (why NBPG?)
+	 * Don't dump on the first PAGE_SIZE (why PAGE_SIZE?)
 	 * in case the dump device includes a disk label.
 	 */
-	if (dumplo < btodb(NBPG))
-		dumplo = btodb(NBPG);
+	if (dumplo < btodb(PAGE_SIZE))
+		dumplo = btodb(PAGE_SIZE);
 }
 
 /*
@@ -714,14 +645,17 @@ dumpsys()
 	unsigned bytes, i, n, seg;
 	int     maddr, psize;
 	daddr_t blkno;
-	int     (*dump) __P((dev_t, daddr_t, caddr_t, size_t));
+	int     (*dump)(dev_t, daddr_t, void *, size_t);
 	int     error = 0;
 	kcore_seg_t *kseg_p;
 	cpu_kcore_hdr_t *chdr_p;
-	char	dump_hdr[dbtob(1)];	/* XXX assume hdr fits in 1 block */
+	char	dump_hdr[MDHDRSIZE];
+	const struct bdevsw *bdev;
 
-	msgbufenabled = 0;
 	if (dumpdev == NODEV)
+		return;
+	bdev = bdevsw_lookup(dumpdev);
+	if (bdev == NULL || bdev->d_psize == NULL)
 		return;
 	/*
 	 * For dumps during autoconfiguration,
@@ -737,7 +671,7 @@ dumpsys()
 	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
 	    minor(dumpdev), dumplo);
 
-	psize = (*bdevsw[major(dumpdev)].d_psize)(dumpdev);
+	psize = (*bdev->d_psize)(dumpdev);
 	printf("dump ");
 	if (psize == -1) {
 		printf("area unavailable.\n");
@@ -751,7 +685,7 @@ dumpsys()
 	 * Generate a segment header
 	 */
 	CORE_SETMAGIC(*kseg_p, KCORE_MAGIC, MID_MACHINE, CORE_CPU);
-	kseg_p->c_size = dbtob(1) - ALIGN(sizeof(*kseg_p));
+	kseg_p->c_size = MDHDRSIZE - ALIGN(sizeof(*kseg_p));
 
 	/*
 	 * Add the md header
@@ -763,26 +697,27 @@ dumpsys()
 	maddr = cpu_kcore_hdr.un._m68k.ram_segs[0].start;
 	seg = 0;
 	blkno = dumplo;
-	dump = bdevsw[major(dumpdev)].d_dump;
-	error = (*dump) (dumpdev, blkno++, (caddr_t)dump_hdr, dbtob(1));
+	dump = bdev->d_dump;
+	error = (*dump) (dumpdev, blkno, (void *)dump_hdr, sizeof(dump_hdr));
+	blkno += btodb(sizeof(dump_hdr));
 	for (i = 0; i < bytes && error == 0; i += n) {
 		/* Print out how many MBs we have to go. */
 		n = bytes - i;
 		if (n && (n % (1024 * 1024)) == 0)
-			printf("%d ", n / (1024 * 1024));
+			printf_nolog("%d ", n / (1024 * 1024));
 
 		/* Limit size for next transfer. */
 		if (n > BYTES_PER_DUMP)
 			n = BYTES_PER_DUMP;
 
 		if (maddr == 0) {	/* XXX kvtop chokes on this */
-			maddr += NBPG;
-			n -= NBPG;
-			i += NBPG;
+			maddr += PAGE_SIZE;
+			n -= PAGE_SIZE;
+			i += PAGE_SIZE;
 			++blkno;	/* XXX skip physical page 0 */
 		}
 		(void) pmap_map(dumpspace, maddr, maddr + n, VM_PROT_READ);
-		error = (*dump) (dumpdev, blkno, (caddr_t) dumpspace, n);
+		error = (*dump) (dumpdev, blkno, (void *) dumpspace, n);
 		if (error)
 			break;
 		maddr += n;
@@ -822,43 +757,10 @@ dumpsys()
 	delay(5000000);		/* 5 seconds */
 }
 
-/*
- * Return the best possible estimate of the time in the timeval
- * to which tvp points.  We do this by returning the current time
- * plus the amount of time since the last clock interrupt (clock.c:clkread).
- *
- * Check that this time is no less than any previously-reported time,
- * which could happen around the time of a clock adjustment.  Just for fun,
- * we guarantee that the time will be greater than the value obtained by a
- * previous call.
- */
-void
-microtime(tvp)
-	register struct timeval *tvp;
-{
-	int s = spl7();
-	static struct timeval lasttime;
-
-	*tvp = time;
-	tvp->tv_usec += clkread();
-	while (tvp->tv_usec >= 1000000) {
-		tvp->tv_sec++;
-		tvp->tv_usec -= 1000000;
-	}
-	if (tvp->tv_sec == lasttime.tv_sec &&
-	    tvp->tv_usec <= lasttime.tv_usec &&
-	    (tvp->tv_usec = lasttime.tv_usec + 1) >= 1000000) {
-		tvp->tv_sec++;
-		tvp->tv_usec -= 1000000;
-	}
-	lasttime = *tvp;
-	splx(s);
-}
-
 void
 initcpu()
 {
-	typedef void trapfun __P((void));
+	typedef void trapfun(void);
 
 	/* XXX should init '40 vecs here, too */
 #if defined(M68060) || defined(M68040) || defined(DRACO) || defined(FPU_EMULATE)
@@ -897,7 +799,7 @@ initcpu()
 #ifdef M68060
 	if (machineid & AMIGA_68060) {
 		if (machineid & AMIGA_FPU40 && m68060_pcr_init & 2) {
-			/* 
+			/*
 			 * in this case, we're about to switch the FPU off;
 			 * do a FNOP to avoid stray FP traps later
 			 */
@@ -905,7 +807,7 @@ initcpu()
 			/* ... and mark FPU as absent for identifyfpu() */
 			machineid &= ~(AMIGA_FPU40|AMIGA_68882|AMIGA_68881);
 		}
-		asm volatile ("movl %0,d0; .word 0x4e7b,0x0808" : : 
+		__asm volatile ("movl %0,%%d0; .word 0x4e7b,0x0808" : :
 			"d"(m68060_pcr_init):"d0" );
 
 		/* bus/addrerr vectors */
@@ -941,7 +843,7 @@ initcpu()
 #endif
 
 /*
- * Vector initialization for special motherboards 
+ * Vector initialization for special motherboards
  */
 #ifdef M68040
 #ifdef M68060
@@ -962,7 +864,7 @@ initcpu()
 #endif
 
 /*
- * Vector initialization for special motherboards 
+ * Vector initialization for special motherboards
  */
 
 #ifdef DRACO
@@ -997,7 +899,7 @@ int	*nofault;
 
 int
 badaddr(addr)
-	register caddr_t addr;
+	register void *addr;
 {
 	register int i;
 	label_t	faultbuf;
@@ -1017,7 +919,7 @@ badaddr(addr)
 
 int
 badbaddr(addr)
-	register caddr_t addr;
+	register void *addr;
 {
 	register int i;
 	label_t	faultbuf;
@@ -1035,27 +937,10 @@ badbaddr(addr)
 	return(0);
 }
 
-static void
-netintr()
-{
-
-#define DONETISR(bit, fn) do {		\
-	if (netisr & (1 << bit)) {	\
-		netisr &= ~(1 << bit);	\
-		fn();			\
-	}				\
-} while (0)
-
-#include <net/netisr_dispatch.h>
-
-#undef DONETISR
-}
-
-
 /*
  * this is a handy package to have asynchronously executed
  * function calls executed at very low interrupt priority.
- * Example for use is keyboard repeat, where the repeat 
+ * Example for use is keyboard repeat, where the repeat
  * handler running at splclock() triggers such a (hardware
  * aided) software interrupt.
  * Note: the installed functions are currently called in a
@@ -1064,67 +949,22 @@ netintr()
  */
 struct si_callback {
 	struct si_callback *next;
-	void (*function) __P((void *rock1, void *rock2));
+	void (*function)(void *rock1, void *rock2);
 	void *rock1, *rock2;
 };
+
+struct softintr {
+	int pending;
+	void (*function)(void *);
+	void *arg;
+};
+
 static struct si_callback *si_callbacks;
 static struct si_callback *si_free;
 #ifdef DIAGNOSTIC
 static int ncb;		/* number of callback blocks allocated */
 static int ncbd;	/* number of callback blocks dynamically allocated */
 #endif
-
-/*
- * these are __GENERIC_SOFT_INTERRUPT wrappers; will be replaced
- * once by the real thing once all drivers are converted.
- *
- * to help performance for converted drivers, the YYY_sicallback() function
- * family can be implemented in terms of softintr_XXX() as an intermediate
- * measure.
- */
-
-static void
-_softintr_callit(rock1, rock2)
-	void *rock1, *rock2;
-{
-	(*(void (*)(void *))rock1)(rock2);
-}
-
-void *
-softintr_establish(ipl, func, arg)
-	int ipl;
-	void func __P((void *));
-	void *arg;
-{
-	struct si_callback *si;
-
-	(void)ipl;
-
-	si = (struct si_callback *)malloc(sizeof(*si), M_TEMP, M_NOWAIT);
-	if (si == NULL)
-		return (si);
-
-	si->function = (void *)0;
-	si->rock1 = (void *)func;
-	si->rock2 = arg;
-
-	alloc_sicallback();
-	return ((void *)si);
-}
-
-void
-softintr_disestablish(hook)
-	void *hook;
-{
-	/*
-	 * XXX currently, there is a memory leak here; we cant free the
-	 * sicallback structure.
-	 * this will be automatically repaired once we rewirte the soft
-	 * interupt functions.
-	 */
-	 
-	free(hook, M_TEMP);
-}
 
 void
 alloc_sicallback()
@@ -1145,18 +985,8 @@ alloc_sicallback()
 }
 
 void
-softintr_schedule(vsi)
-	void *vsi;
-{
-	struct si_callback *si;
-	si = vsi;
-
-	add_sicallback(_softintr_callit, si->rock1, si->rock2);
-}
-
-void
 add_sicallback (function, rock1, rock2)
-	void (*function) __P((void *rock1, void *rock2));
+	void (*function)(void *rock1, void *rock2);
 	void *rock1, *rock2;
 {
 	struct si_callback *si;
@@ -1202,7 +1032,7 @@ add_sicallback (function, rock1, rock2)
 
 void
 rem_sicallback(function)
-	void (*function) __P((void *rock1, void *rock2));
+	void (*function)(void *rock1, void *rock2);
 {
 	struct si_callback *si, *psi, *nsi;
 	int s;
@@ -1234,7 +1064,7 @@ call_sicallbacks()
 	struct si_callback *si;
 	int s;
 	void *rock1, *rock2;
-	void (*function) __P((void *, void *));
+	void (*function)(void *, void *);
 
 	do {
 		s = splhigh ();
@@ -1313,9 +1143,9 @@ add_isr(isr)
 			default:
 				break;
 		}
-	else 
+	else
 #endif
-		custom.intena = isr->isr_ipl == 2 ? 
+		custom.intena = isr->isr_ipl == 2 ?
 		    INTF_SETCLR | INTF_PORTS :
 		    INTF_SETCLR | INTF_EXTER;
 }
@@ -1387,10 +1217,12 @@ remove_isr(isr)
 			}
 		} else
 #endif
-			custom.intena = isr->isr_ipl == 6 ? 
+			custom.intena = isr->isr_ipl == 6 ?
 			    INTF_EXTER : INTF_PORTS;
 	}
 }
+
+static int idepth;
 
 void
 intrhand(sr)
@@ -1400,6 +1232,7 @@ intrhand(sr)
 	register unsigned short ireq;
 	register struct isr **p, *q;
 
+	idepth++;
 	ipl = (sr >> 8) & 7;
 #ifdef REALLYDEBUG
 	printf("intrhand: got int. %d\n", ipl);
@@ -1439,7 +1272,7 @@ intrhand(sr)
 			/*
 			 * first clear the softint-bit
 			 * then process all classes of softints.
-			 * this order is dicated by the nature of 
+			 * this order is dicated by the nature of
 			 * software interrupts.  The other order
 			 * allows software interrupts to be missed.
 			 * Also copy and clear ssir to prevent
@@ -1448,23 +1281,8 @@ intrhand(sr)
 			clrsoftint();
 			s = splhigh();
 			ssir_active = ssir;
-			siroff(SIR_NET | SIR_CLOCK | SIR_CBACK);
+			siroff(SIR_NET | SIR_CBACK);
 			splx(s);
-			if (ssir_active & SIR_NET) {
-#ifdef REALLYDEBUG
-				printf("calling netintr\n");
-#endif
-				uvmexp.softs++;
-				netintr();
-			}
-			if (ssir_active & SIR_CLOCK) {
-#ifdef REALLYDEBUG
-				printf("calling softclock\n");
-#endif
-				uvmexp.softs++;
-				/* XXXX softclock(&frame.f_stackadj); */
-				softclock();
-			}
 			if (ssir_active & SIR_CBACK) {
 #ifdef REALLYDEBUG
 				printf("calling softcallbacks\n");
@@ -1506,13 +1324,13 @@ intrhand(sr)
 		break;
 #endif
 
-	case 3: 
+	case 3:
 	/* VBL */
-		if (ireq & INTF_BLIT)  
+		if (ireq & INTF_BLIT)
 			blitter_handler();
-		if (ireq & INTF_COPER)  
+		if (ireq & INTF_COPER)
 			copper_handler();
-		if (ireq & INTF_VERTB) 
+		if (ireq & INTF_VERTB)
 			vbl_handler();
 		break;
 #ifdef DRACO
@@ -1556,6 +1374,14 @@ intrhand(sr)
 #ifdef REALLYDEBUG
 	printf("intrhand: leaving.\n");
 #endif
+	idepth--;
+}
+
+bool
+cpu_intr_p(void)
+{
+
+	return idepth != 0;
 }
 
 #if defined(DEBUG) && !defined(PANICBUTTON)
@@ -1566,8 +1392,8 @@ intrhand(sr)
 int panicbutton = 1;	/* non-zero if panic buttons are enabled */
 int crashandburn = 0;
 int candbdelay = 50;	/* give em half a second */
-void candbtimer __P((void));
-struct callout candbtimer_ch = CALLOUT_INITIALIZER;
+void candbtimer(void);
+callout_t candbtimer_ch;
 
 void
 candbtimer()
@@ -1623,8 +1449,8 @@ nmihand(frame)
  * MID and proceed to new zmagic code ;-)
  */
 int
-cpu_exec_aout_makecmds(p, epp)
-	struct proc *p;
+cpu_exec_aout_makecmds(l, epp)
+	struct lwp *l;
 	struct exec_package *epp;
 {
 	int error = ENOEXEC;
@@ -1635,7 +1461,55 @@ cpu_exec_aout_makecmds(p, epp)
 #ifdef COMPAT_NOMID
 	if (!((execp->a_midmag >> 16) & 0x0fff)
 	    && execp->a_midmag == ZMAGIC)
-		return(exec_aout_prep_zmagic(p, epp));
+		return(exec_aout_prep_zmagic(l, epp));
 #endif
 	return(error);
 }
+
+#ifdef LKM
+
+int _spllkm6(void);
+int _spllkm7(void);
+
+#ifdef LEV6_DEFER
+int _spllkm6() {
+	return spl4();
+};
+
+int _spllkm7() {
+	return spl4();
+};
+
+#else
+
+int _spllkm6() {
+	return spl6();
+};
+
+int _spllkm7() {
+	return spl7();
+};
+
+#endif
+
+#endif
+
+int ipl2spl_table[_NIPL] = {
+	[IPL_NONE] = PSL_IPL0|PSL_S,
+	[IPL_SOFTCLOCK] = PSL_IPL1|PSL_S,
+	[IPL_BIO] = PSL_IPL3|PSL_S,
+	[IPL_NET] = PSL_IPL3|PSL_S,
+	[IPL_TTY] = PSL_IPL4|PSL_S,
+	[IPL_SERIAL] = PSL_IPL5|PSL_S,
+	[IPL_VM] = PSL_IPL4|PSL_S,
+	[IPL_SERIAL] = PSL_IPL4|PSL_S,	/* patched by some devices at attach
+					   time (currently, only the coms) */
+	[IPL_AUDIO] = PSL_IPL6|PSL_S,
+#if defined(LEV6_DEFER)
+	[IPL_CLOCK] = PSL_IPL4|PSL_S,
+	[IPL_HIGH] = PSL_IPL4|PSL_S,
+#else /* defined(LEV6_DEFER) */
+	[IPL_CLOCK] = PSL_IPL6|PSL_S,
+	[IPL_HIGH] = PSL_IPL7|PSL_S,
+#endif /* defined(LEV6_DEFER) */
+};

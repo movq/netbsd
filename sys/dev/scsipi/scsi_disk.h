@@ -1,4 +1,4 @@
-/*	$NetBSD: scsi_disk.h,v 1.17 1998/10/30 02:07:15 thorpej Exp $	*/
+/*	$NetBSD: scsi_disk.h,v 1.31 2005/12/11 12:23:50 christos Exp $	*/
 
 /*
  * SCSI-specific interface description
@@ -52,6 +52,8 @@
 /*
  * SCSI command format
  */
+#ifndef _DEV_SCSIPI_SCSI_DISK_H_
+#define _DEV_SCSIPI_SCSI_DISK_H_
 
 /*
  * XXX Is this also used by ATAPI?
@@ -121,16 +123,16 @@ struct scsi_defect_descriptor_bf {
 
 /* Bytes from index format */
 struct scsi_defect_descriptor_bfif {
-	u_int8_t cylinder[2];
+	u_int8_t cylinder[3];
 	u_int8_t head;
-	u_int8_t bytes_from_index[2];
+	u_int8_t bytes_from_index[4];
 };
 
 /* Physical sector format */
 struct scsi_defect_descriptor_psf {
-	u_int8_t cylinder[2];
+	u_int8_t cylinder[3];
 	u_int8_t head;
-	u_int8_t sector[2];
+	u_int8_t sector[4];
 };
 
 /*
@@ -157,9 +159,9 @@ struct scsi_rezero_unit {
 	u_int8_t control;
 };
 
-#define	SCSI_READ_COMMAND		0x08
-#define SCSI_WRITE_COMMAND		0x0a
-struct scsi_rw {
+#define	SCSI_READ_6_COMMAND		0x08
+#define SCSI_WRITE_6_COMMAND		0x0a
+struct scsi_rw_6 {
 	u_int8_t opcode;
 	u_int8_t addr[3];
 #define	SRW_TOPADDR	0x1F	/* only 5 bits here */
@@ -170,15 +172,44 @@ struct scsi_rw {
 /*
  * XXX Does ATAPI have an equivalent?
  */
-#define	SCSI_SYNCHRONIZE_CACHE		0x35
-struct scsi_synchronize_cache {
+#define	SCSI_SYNCHRONIZE_CACHE_10	0x35
+struct scsi_synchronize_cache_10 {
 	u_int8_t opcode;
 	u_int8_t flags;
-#define	SSC_RELADR	0x01
+#define	SSC_RELADR	0x01		/* obsolete */
 #define	SSC_IMMED	0x02
+#define	SSC_SYNC_NV	0x04
 	u_int8_t addr[4];
-	u_int8_t reserved;
+	u_int8_t byte7;
 	u_int8_t length[2];
+	u_int8_t control;
+};
+
+/*
+ * XXX Does ATAPI have an equivalent?
+ */
+#define SCSI_READ_DEFECT_DATA		0x37
+struct scsi_read_defect_data {
+	 u_int8_t opcode;
+	 u_int8_t byte2;
+#define RDD_PRIMARY	0x10
+#define RDD_GROWN	0x08
+#define RDD_BF		0x00
+#define RDD_BFIF	0x04
+#define RDD_PSF		0x05
+	 u_int8_t flags;
+	 u_int8_t reserved[4];
+	 u_int8_t length[2];
+	 u_int8_t control;
+};
+
+#define	SCSI_SYNCHRONIZE_CACHE_16	0x91
+struct scsi_synchronize_cache_16 {
+	u_int8_t opcode;
+	u_int8_t flags;			/* see SYNCHRONIZE CACHE (10) */
+	u_int8_t addr[8];
+	u_int8_t length[4];
+	u_int8_t byte15;
 	u_int8_t control;
 };
 
@@ -189,6 +220,17 @@ struct scsi_reassign_blocks_data {
 	u_int8_t length[2];
 	struct {
 		u_int8_t dlbaddr[4];
+	} defect_descriptor[1];
+};
+
+struct scsi_read_defect_data_data {
+	u_int8_t reserved;
+	u_int8_t flags;
+	u_int8_t length[2];
+	union scsi_defect_descriptor {
+		struct scsi_defect_descriptor_bf bf;
+		struct scsi_defect_descriptor_bfif bfif;
+		struct scsi_defect_descriptor_psf psf;
 	} defect_descriptor[1];
 };
 
@@ -260,9 +302,74 @@ union scsi_disk_pages {
 		u_int8_t head_unload;	/* head unload delay */
 		u_int8_t pin_34_2;	/* pin 34 (6) pin 2 (7/11) definition */
 		u_int8_t pin_4_1;	/* pin 4 (8/9) pin 1 (13) definition */
-		u_int8_t reserved1;
-		u_int8_t reserved2;
+		u_int8_t rpm[2];	/* rotational rate */
 		u_int8_t reserved3;
 		u_int8_t reserved4;
 	} flex_geometry;
+	struct page_caching {
+		u_int8_t pg_code;	/* page code (should be 8) */
+		u_int8_t pg_length;	/* page length (should be 0x0a) */
+		u_int8_t flags;		/* cache parameter flags */
+#define	CACHING_RCD	0x01		/* read cache disable */
+#define	CACHING_MF	0x02		/* multiplcation factor */
+#define	CACHING_WCE	0x04		/* write cache enable (write-back) */
+#define	CACHING_SIZE	0x08		/* use CACHE SEGMENT SIZE */
+#define	CACHING_DISC	0x10		/* pftch across time discontinuities */
+#define	CACHING_CAP	0x20		/* caching analysis permitted */
+#define	CACHING_ABPF	0x40		/* abort prefetch */
+#define	CACHING_IC	0x80		/* initiator control */
+		u_int8_t ret_prio;	/* retention priority */
+#define	READ_RET_PRIO_SHIFT 4
+#define	RET_PRIO_DONT_DISTINGUISH	0x0
+#define	RET_PRIO_REPLACE_READ_WRITE	0x1
+#define	RET_PRIO_REPLACE_PREFETCH	0xf
+		u_int8_t dis_prefetch_xfer_len[2];
+		u_int8_t min_prefetch[2];
+		u_int8_t max_prefetch[2];
+		u_int8_t max_prefetch_ceiling[2];
+		u_int8_t flags2;	/* additional cache param flags */
+#define	CACHING2_VS0	0x08		/* vendor specific bit */
+#define	CACHING2_VS1	0x10		/* vendor specific bit */
+#define	CACHING2_DRA	0x20		/* disable read ahead */
+#define	CACHING2_LBCSS	0x40		/* CACHE SEGMENT SIZE is blocks */
+#define	CACHING2_FSW	0x80		/* force sequential write */
+		u_int8_t num_cache_segments;
+		u_int8_t cache_segment_size[2];
+		u_int8_t reserved1;
+		u_int8_t non_cache_segment_size[2];
+	} caching_params;
+	struct page_control {
+		u_int8_t pg_code;	/* page code (should be 0x0a) */
+		u_int8_t pg_length;	/* page length (should be 0x0a) */
+		u_int8_t ctl_flags1;	/* First set of flags */
+#define CTL1_TST_PER_INTR 	0x40	/* Task set per initiator */
+#define CTL1_TST_FIELD		0xe0	/* Full field */
+#define CTL1_D_SENSE		0x04	/* Descriptor-format sense return */
+#define CTL1_GLTSD		0x02	/* Glob. Log Targ. Save Disable */
+#define CTL1_RLEC		0x01	/* Rpt Logging Exception Condition */
+		u_int8_t ctl_flags2;	/* Second set of flags */
+#define CTL2_QAM_UNRESTRICT 0x10	/* Unrestricted reordering allowed */
+#define CTL2_QAM_FIELD		0xf0	/* Full Queue alogo. modifier field */
+#define CTL2_QERR_ABRT		0x02	/* Queue error - abort all */
+#define CTL2_QERR_ABRT_SELF	0x06	/* Queue error - abort intr's */
+#define CTL2_QERR_FIELD		0x06	/* Full field */
+#define CTL2_DQUE		0x01	/* Disable queuing */
+		u_int8_t ctl_flags3;	/* Third set of flags */
+#define CTL3_TAS		0x80	/* other-intr aborts generate status */
+#define CTL3_RAC		0x40	/* Report A Check */
+#define CTL3_UAIC_RET		0x10	/* retain UA, see SPC-3 */
+#define CTL3_UAIC_RET_EST	0x30	/* retain UA and establish UA */
+#define CTL3_UA_INTRLOCKS	0x30	/* UA Interlock control field */
+#define CTL3_SWP		0x08	/* Software write protect */
+#define CTL3_RAERP		0x04	/* (unit) Ready AER Permission */
+#define CTL3_UAAERP		0x02	/* Unit Attention AER Permission */
+#define CTL3_EAERP		0x01	/* Error AER Permission */
+		u_int8_t ctl_autoload;	/* autoload mode control */
+#define CTL_AUTOLOAD_FIELD	0x07	/* autoload field */
+		u_int8_t ctl_r_hld[2];	/* RAERP holdoff period */
+		u_int8_t ctl_busy[2];	/* busy timeout period */
+		u_int8_t ctl_selt[2];	/* extended self-test completion time */
+	} control_params;
 };
+
+#endif /* _DEV_SCSIPI_SCSI_DISK_H_ */

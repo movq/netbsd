@@ -1,4 +1,4 @@
-/*	$NetBSD: lpq.c,v 1.9 1999/12/07 14:54:47 mrg Exp $	*/
+/*	$NetBSD: lpq.c,v 1.19 2008/10/22 07:59:43 mishka Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,12 +32,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)lpq.c	8.3 (Berkeley) 5/10/95";
 #else
-__RCSID("$NetBSD: lpq.c,v 1.9 1999/12/07 14:54:47 mrg Exp $");
+__RCSID("$NetBSD: lpq.c,v 1.19 2008/10/22 07:59:43 mishka Exp $");
 #endif
 #endif /* not lint */
 
@@ -75,24 +71,18 @@ char	*user[MAXUSERS];	/* users to process */
 int	 users;			/* # of users in user array */
 uid_t	uid, euid;
 
-static int ckqueue __P((char *));
-static void usage __P((void));
-int main __P((int, char *[]));
+static void usage(void) __dead;
 
 int
-main(argc, argv)
-	int	argc;
-	char	**argv;
+main(int argc, char *argv[])
 {
-	extern char	*optarg;
-	extern int	optind;
 	int	ch, aflag, lflag;
 	char	*buf, *cp;
 
+	setprogname(*argv);
 	euid = geteuid();
 	uid = getuid();
 	seteuid(uid);
-	name = *argv;
 	if (gethostname(host, sizeof(host)))
 		err(1, "lpq: gethostname");
 	host[sizeof(host) - 1] = '\0';
@@ -127,7 +117,7 @@ main(argc, argv)
 		printer = DEFLP;
 
 	for (argc -= optind, argv += optind; argc; --argc, ++argv)
-		if (isdigit(argv[0][0])) {
+		if (isdigit((unsigned char)argv[0][0])) {
 			if (requests >= MAXREQUESTS)
 				fatal("too many requests");
 			requ[requests++] = atoi(*argv);
@@ -157,34 +147,12 @@ main(argc, argv)
 		}
 	} else
 		displayq(lflag);
-	exit(0);
-}
-
-static int
-ckqueue(cap)
-	char *cap;
-{
-	struct dirent *d;
-	DIR *dirp;
-	char *spooldir;
-
-	if (cgetstr(cap, "sd", &spooldir) == -1)
-		spooldir = _PATH_DEFSPOOL;
-	if ((dirp = opendir(spooldir)) == NULL)
-		return (-1);
-	while ((d = readdir(dirp)) != NULL) {
-		if (d->d_name[0] != 'c' || d->d_name[1] != 'f')
-			continue;	/* daemon control files only */
-		closedir(dirp);
-		return (1);		/* found something */
-	}
-	closedir(dirp);
-	return (0);
+	return 0;
 }
 
 static void
-usage()
+usage(void)
 {
-	puts("usage: lpq [-a] [-l] [-Pprinter] [user ...] [job ...]");
+	(void)fprintf(stderr, "Usage: %s [-a] [-l] [-Pprinter] [-w maxwait] [user ...] [job ...]\n", getprogname());
 	exit(1);
 }

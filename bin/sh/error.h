@@ -1,4 +1,4 @@
-/*	$NetBSD: error.h,v 1.13 1999/07/09 03:05:49 christos Exp $	*/
+/*	$NetBSD: error.h,v 1.17 2008/03/29 09:58:00 apb Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,6 +33,8 @@
  *
  *	@(#)error.h	8.2 (Berkeley) 5/4/95
  */
+
+#include <stdarg.h>
 
 /*
  * Types of operations (passed to the errmsg routine).
@@ -65,6 +63,7 @@ struct jmploc {
 
 extern struct jmploc *handler;
 extern int exception;
+extern int exerrno;	/* error for EXEXEC */
 
 /* exceptions */
 #define EXINT 0		/* SIGINT received */
@@ -82,7 +81,6 @@ extern int exception;
 
 extern volatile int suppressint;
 extern volatile int intpending;
-extern char *commandname;	/* name of command--printed on error */
 
 #define INTOFF suppressint++
 #define INTON { if (--suppressint == 0 && intpending) onint(); }
@@ -90,11 +88,24 @@ extern char *commandname;	/* name of command--printed on error */
 #define CLEAR_PENDING_INT intpending = 0
 #define int_pending() intpending
 
-void exraise __P((int)) __attribute__((__noreturn__));
-void onint __P((void));
-void error __P((const char *, ...)) __attribute__((__noreturn__));
-void exerror __P((int, const char *, ...)) __attribute__((__noreturn__));
-const char *errmsg __P((int, int));
+#if ! defined(SHELL_BUILTIN)
+void exraise(int) __attribute__((__noreturn__));
+void onint(void);
+void error(const char *, ...) __attribute__((__noreturn__));
+void exerror(int, const char *, ...) __attribute__((__noreturn__));
+const char *errmsg(int, int);
+#endif /* ! SHELL_BUILTIN */
+
+void sh_err(int, const char *, ...) __attribute__((__noreturn__));
+void sh_verr(int, const char *, va_list) __attribute__((__noreturn__));
+void sh_errx(int, const char *, ...) __attribute__((__noreturn__));
+void sh_verrx(int, const char *, va_list) __attribute__((__noreturn__));
+void sh_warn(const char *, ...);
+void sh_vwarn(const char *, va_list);
+void sh_warnx(const char *, ...);
+void sh_vwarnx(const char *, va_list);
+
+void sh_exit(int) __attribute__((__noreturn__));
 
 
 /*

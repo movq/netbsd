@@ -1,4 +1,4 @@
-/*	$NetBSD: cache.h,v 1.20 1998/10/09 10:48:14 pk Exp $ */
+/*	$NetBSD: cache.h,v 1.35 2007/03/04 06:00:45 christos Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -46,6 +46,10 @@
 #ifndef SPARC_CACHE_H
 #define SPARC_CACHE_H
 
+#if defined(_KERNEL_OPT)
+#include "opt_sparc_arch.h"
+#endif
+
 /*
  * Sun-4 and Sun-4c virtual address cache.
  *
@@ -71,6 +75,8 @@ enum vactype { VAC_UNKNOWN, VAC_NONE, VAC_WRITETHROUGH, VAC_WRITEBACK };
  *			ct_tid:14,	(cache tag ID)
  *			:2;		(unused; must be zero)
  *	};
+ *
+ * (The SS2 has 16 MMU contexts, which makes `ct_cid' one bit wider.)
  *
  * The SPARCstation 1 cache sees virtual addresses as:
  *
@@ -128,12 +134,13 @@ enum vactype { VAC_UNKNOWN, VAC_NONE, VAC_WRITETHROUGH, VAC_WRITEBACK };
 
 extern int cache_alias_dist;		/* */
 extern int cache_alias_bits;
+extern u_long dvma_cachealign;
 
 /* Optimize cache alias macros on single architecture kernels */
-#if defined(SUN4) && !defined(SUN4C) && !defined(SUN4M)
+#if defined(SUN4) && !defined(SUN4C) && !defined(SUN4M) && !defined(SUN4D)
 #define	CACHE_ALIAS_DIST	CACHE_ALIAS_DIST_SUN4
 #define	CACHE_ALIAS_BITS	CACHE_ALIAS_BITS_SUN4
-#elif !defined(SUN4) && defined(SUN4C) && !defined(SUN4M)
+#elif !defined(SUN4) && defined(SUN4C) && !defined(SUN4M) && !defined(SUN4D)
 #define	CACHE_ALIAS_DIST	CACHE_ALIAS_DIST_SUN4C
 #define	CACHE_ALIAS_BITS	CACHE_ALIAS_BITS_SUN4C
 #else
@@ -149,71 +156,83 @@ extern int cache_alias_bits;
 /*
  * Routines for dealing with the cache.
  */
-void	sun4_cache_enable __P((void));		/* turn it on */
-void	ms1_cache_enable __P((void));		/* turn it on */
-void	viking_cache_enable __P((void));	/* turn it on */
-void	hypersparc_cache_enable __P((void));	/* turn it on */
-void	swift_cache_enable __P((void));		/* turn it on */
-void	cypress_cache_enable __P((void));	/* turn it on */
-void	turbosparc_cache_enable __P((void));	/* turn it on */
+void	sun4_cache_enable(void);
+void	ms1_cache_enable(void);
+void	viking_cache_enable(void);
+void	hypersparc_cache_enable(void);
+void	swift_cache_enable(void);
+void	cypress_cache_enable(void);
+void	turbosparc_cache_enable(void);
 
-void	sun4_vcache_flush_context __P((void));	/* flush current context */
-void	sun4_vcache_flush_region __P((int));	/* flush region in cur ctx */
-void	sun4_vcache_flush_segment __P((int, int));/* flush seg in cur ctx */
-void	sun4_vcache_flush_page __P((int va));	/* flush page in cur ctx */
-void	sun4_cache_flush __P((caddr_t, u_int));/* flush region */
+void	sun4_vcache_flush_context(int);		/* flush current context */
+void	sun4_vcache_flush_region(int, int);	/* flush region in cur ctx */
+void	sun4_vcache_flush_segment(int, int, int);/* flush seg in cur ctx */
+void	sun4_vcache_flush_page(int va, int);	/* flush page in cur ctx */
+void	sun4_vcache_flush_page_hw(int va, int);	/* flush page in cur ctx */
+void	sun4_cache_flush(void *, u_int);	/* flush range */
 
-void	srmmu_vcache_flush_context __P((void));	/* flush current context */
-void	srmmu_vcache_flush_region __P((int));	/* flush region in cur ctx */
-void	srmmu_vcache_flush_segment __P((int, int));/* flush seg in cur ctx */
-void	srmmu_vcache_flush_page __P((int va));	/* flush page in cur ctx */
-void	srmmu_cache_flush __P((caddr_t, u_int));/* flush region */
+void	srmmu_vcache_flush_context(int);	/* flush current context */
+void	srmmu_vcache_flush_region(int, int);	/* flush region in cur ctx */
+void	srmmu_vcache_flush_segment(int, int, int);/* flush seg in cur ctx */
+void	srmmu_vcache_flush_page(int va, int);	/* flush page in cur ctx */
+void	srmmu_vcache_flush_range(int, int, int);
+void	srmmu_cache_flush(void *, u_int);	/* flush range */
 
-void	ms1_cache_flush __P((caddr_t, u_int));
-void	viking_cache_flush __P((caddr_t, u_int));
-void	viking_pcache_flush_line __P((int, int));
-void	srmmu_pcache_flush_line __P((int, int));
-void	hypersparc_pure_vcache_flush __P((void));
+/* `Fast trap' versions for use in cross-call cache flushes on MP systems */
+#if defined(MULTIPROCESSOR)
+void	ft_srmmu_vcache_flush_context(int);	/* flush current context */
+void	ft_srmmu_vcache_flush_region(int, int);	/* flush region in cur ctx */
+void	ft_srmmu_vcache_flush_segment(int, int, int);/* flush seg in cur ctx */
+void	ft_srmmu_vcache_flush_page(int va, int);/* flush page in cur ctx */
+void	ft_srmmu_vcache_flush_range(int, int, int);/* flush range in cur ctx */
+#else
+#define ft_srmmu_vcache_flush_context	0
+#define ft_srmmu_vcache_flush_region	0
+#define ft_srmmu_vcache_flush_segment	0
+#define ft_srmmu_vcache_flush_page	0
+#define ft_srmmu_vcache_flush_range	0
+#endif /* MULTIPROCESSOR */
 
-void	ms1_cache_flush_all __P((void));
-void	srmmu_cache_flush_all __P((void));
-void	cypress_cache_flush_all __P((void));
-void	hypersparc_cache_flush_all __P((void));
+void	ms1_cache_flush(void *, u_int);
+void	viking_cache_flush(void *, u_int);
+void	viking_pcache_flush_page(paddr_t, int);
+void	srmmu_pcache_flush_line(int, int);
+void	hypersparc_pure_vcache_flush(void);
 
-extern void sparc_noop __P((void));
+void	ms1_cache_flush_all(void);
+void	srmmu_cache_flush_all(void);
+void	cypress_cache_flush_all(void);
+void	hypersparc_cache_flush_all(void);
 
-#define noop_vcache_flush_context \
-	(void (*)__P((void))) sparc_noop
-#define noop_vcache_flush_region \
-	(void (*)__P((int))) sparc_noop
-#define noop_vcache_flush_segment \
-	(void (*)__P((int,int))) sparc_noop
-#define noop_vcache_flush_page \
-	(void (*)__P((int))) sparc_noop
-#define noop_cache_flush \
-	(void (*)__P((caddr_t, u_int))) sparc_noop
-#define noop_pcache_flush_line \
-	(void (*)__P((int, int))) sparc_noop
-#define noop_pure_vcache_flush \
-	(void (*)__P((void))) sparc_noop
-#define noop_cache_flush_all \
-	(void (*)__P((void))) sparc_noop
+extern void sparc_noop(void);
+
+#define noop_vcache_flush_context	(void (*)(int))sparc_noop
+#define noop_vcache_flush_region	(void (*)(int,int))sparc_noop
+#define noop_vcache_flush_segment	(void (*)(int,int,int))sparc_noop
+#define noop_vcache_flush_page		(void (*)(int,int))sparc_noop
+#define noop_vcache_flush_range		(void (*)(int,int,int))sparc_noop
+#define noop_cache_flush		(void (*)(void *,u_int))sparc_noop
+#define noop_pcache_flush_page		(void (*)(paddr_t,int))sparc_noop
+#define noop_pure_vcache_flush		(void (*)(void))sparc_noop
+#define noop_cache_flush_all		(void (*)(void))sparc_noop
 
 /*
  * The SMP versions of the cache flush functions. These functions
  * send a "cache flush" message to each processor.
  */
-void	smp_vcache_flush_context __P((void));	/* flush current context */
-void	smp_vcache_flush_region __P((int));	/* flush region in cur ctx */
-void	smp_vcache_flush_segment __P((int, int));/* flush seg in cur ctx */
-void	smp_vcache_flush_page __P((int va));	/* flush page in cur ctx */
-void	smp_cache_flush __P((caddr_t, u_int));	/* flush region */
+void	smp_vcache_flush_context(int);		/* flush current context */
+void	smp_vcache_flush_region(int,int);	/* flush region in cur ctx */
+void	smp_vcache_flush_segment(int, int, int);/* flush seg in cur ctx */
+void	smp_vcache_flush_page(int va,int);	/* flush page in cur ctx */
 
 
-#define cache_flush_page(va)		cpuinfo.vcache_flush_page(va)
-#define cache_flush_segment(vr,vs)	cpuinfo.vcache_flush_segment(vr,vs)
-#define cache_flush_region(vr)		cpuinfo.vcache_flush_region(vr)
-#define cache_flush_context()		cpuinfo.vcache_flush_context()
+#define cache_flush_page(va,ctx)	cpuinfo.vcache_flush_page(va,ctx)
+#define cache_flush_segment(vr,vs,ctx)	cpuinfo.vcache_flush_segment(vr,vs,ctx)
+#define cache_flush_region(vr,ctx)	cpuinfo.vcache_flush_region(vr,ctx)
+#define cache_flush_context(ctx)	cpuinfo.vcache_flush_context(ctx)
+#define cache_flush(va,len)		cpuinfo.cache_flush(va,len)
+
+#define pcache_flush_page(pa,flag)	cpuinfo.pcache_flush_page(pa,flag)
 
 /*
  * Cache control information.
@@ -224,8 +243,9 @@ struct cacheinfo {
 	int	c_enabled;		/* true => cache is enabled */
 	int	c_hwflush;		/* true => have hardware flush */
 	int	c_linesize;		/* line size, in bytes */
+					/* if split, MIN(icache,dcache) */
 	int	c_l2linesize;		/* log2(linesize) */
-	int	c_nlines;		/* number of cache lines */
+	int	c_nlines;		/* precomputed # of lines to flush */
 	int	c_physical;		/* true => cache has physical
 						   address tags */
 	int 	c_associativity;	/* # of "buckets" in cache line */
@@ -257,17 +277,4 @@ struct cacheinfo {
 
 #define CACHEINFO cpuinfo.cacheinfo
 
-/*
- * Cache control statistics.
- */
-struct cachestats {
-	int	cs_npgflush;		/* # page flushes */
-	int	cs_nsgflush;		/* # seg flushes */
-	int	cs_nrgflush;		/* # seg flushes */
-	int	cs_ncxflush;		/* # context flushes */
-	int	cs_nraflush;		/* # range flushes */
-#ifdef notyet
-	int	cs_ra[65];		/* pages/range */
-#endif
-};
 #endif /* SPARC_CACHE_H */

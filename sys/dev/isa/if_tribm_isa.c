@@ -1,4 +1,6 @@
-/*	$NetBSD: if_tribm_isa.c,v 1.2 1999/03/22 23:01:37 bad Exp $	*/
+/*	$NetBSD: if_tribm_isa.c,v 1.12 2008/04/28 20:23:52 martin Exp $	*/
+
+/* XXXJRT changes isa_attach_args too early */
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by The NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its 
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +31,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_tribm_isa.c,v 1.12 2008/04/28 20:23:52 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/socket.h>
@@ -45,24 +43,22 @@
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isavar.h>
 
 #include <dev/ic/tropicreg.h>
 #include <dev/ic/tropicvar.h>
 
-int	tribm_isa_probe __P((struct device *, struct cfdata *, void *));
-int	tr_isa_map_io __P((struct isa_attach_args *, bus_space_handle_t *,
-	    bus_space_handle_t *));
-void	tr_isa_unmap_io __P((struct isa_attach_args *, bus_space_handle_t,
-	    bus_space_handle_t));
+int	tribm_isa_probe(struct device *, struct cfdata *, void *);
+int	tr_isa_map_io(struct isa_attach_args *, bus_space_handle_t *,
+	    bus_space_handle_t *);
+void	tr_isa_unmap_io(struct isa_attach_args *, bus_space_handle_t,
+	    bus_space_handle_t);
 
 int
-tribm_isa_probe(parent, match, aux)
-	struct device	*parent;
-	struct cfdata	*match;
-	void	*aux;
+tribm_isa_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	static int irq_f[4] = { 9, 3, 6, 7 };
@@ -73,16 +69,30 @@ tribm_isa_probe(parent, match, aux)
 	int i, irq;
 	u_int8_t s;
 
+	if (ia->ia_nio < 1)
+		return (0);
+	if (ia->ia_niomem < 1)
+		return (0);
+	if (ia->ia_nirq < 1)
+		return (0);
+
+	if (ISA_DIRECT_CONFIG(ia))
+		return (0);
+
 #ifdef notyet
 /* XXX Try both 0xa20 and 0xa24 and store that info like 3com */
 	if (ia->ia_iobase == IOBASEUNK)
 		ia->ia_iobase = 0xa20;
 #else
-	if (ia->ia_iobase == IOBASEUNK)
-		return 0;
+	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+		return (0);
 #endif
 
-	ia->ia_iosize = 4;
+	/*
+	 * XXXJRT Should not modify attach_args unless we know we match!
+	 */
+
+	ia->ia_io[0].ir_size = 4;
 	ia->ia_aux = NULL;
 
 	if (tr_isa_map_io(ia, &pioh, &mmioh))
@@ -106,7 +116,7 @@ tribm_isa_probe(parent, match, aux)
 	case 0xF:
 	case 0xE:
 	case 0xD:
-		if (ia->ia_maddr == MADDRUNK)
+		if (ia->ia_iomem[0].ir_addr == ISA_UNKNOWN_IOMEM)
 #ifdef notyet
 			ia->ia_maddr = TR_SRAM_DEFAULT;
 #else
@@ -115,12 +125,12 @@ tribm_isa_probe(parent, match, aux)
 		break;
 	case 0xC:
 		i = bus_space_read_1(memt, mmioh, TR_ACA_OFFSET) << 12;
-		if (ia->ia_maddr == MADDRUNK)
-			ia->ia_maddr = i;
-		else if (ia->ia_maddr != i) {
+		if (ia->ia_iomem[0].ir_addr == ISA_UNKNOWN_IOMEM)
+			ia->ia_iomem[0].ir_addr = i;
+		else if (ia->ia_iomem[0].ir_addr != i) {
 			printf(
 "tribm_isa_probe: sram mismatch; kernel configured %x != board configured %x\n",
-				ia->ia_maddr, i);
+				ia->ia_iomem[0].ir_addr, i);
 			tr_isa_unmap_io(ia, pioh, mmioh);
 			return 0;
 		}
@@ -148,26 +158,33 @@ tribm_isa_probe(parent, match, aux)
 		return 0;
 	}
 
-	if (ia->ia_irq == IRQUNK)
-		ia->ia_irq = irq;
-	else if (ia->ia_irq != irq) {
+	if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ)
+		ia->ia_irq[0].ir_irq = irq;
+	else if (ia->ia_irq[0].ir_irq != irq) {
 		printf(
 "tribm_isa_probe: irq mismatch; kernel configured %d != board configured %d\n",
-			ia->ia_irq, irq);
+			ia->ia_irq[0].ir_irq, irq);
 		tr_isa_unmap_io(ia, pioh, mmioh);
 		return 0;
 	}
 /*
  * XXX 0x0c == MSIZEMASK (MSIZEBITS)
  */
-	ia->ia_msize = 8192 <<
+	ia->ia_iomem[0].ir_size = 8192 <<
 	    ((bus_space_read_1(memt, mmioh, TR_ACA_OFFSET + 1) & 0x0c) >> 2);
 	tr_isa_unmap_io(ia, pioh, mmioh);
 	/* Check alignment of membase. */
-	if ((ia->ia_maddr & (ia->ia_msize-1)) != 0) {
+	if ((ia->ia_iomem[0].ir_addr & (ia->ia_iomem[0].ir_size-1)) != 0) {
 		printf("tribm_isa_probe: SRAM unaligned 0x%04x/%d\n",
-		    ia->ia_maddr, ia->ia_msize);
+		    ia->ia_iomem[0].ir_addr, ia->ia_iomem[0].ir_size);
 		return 0;
 	}
+
+	ia->ia_nio = 1;
+	ia->ia_niomem = 1;
+	ia->ia_nirq = 1;
+
+	ia->ia_ndrq = 0;
+
  	return 1;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_cv3d.c,v 1.3 1999/03/25 23:20:00 is Exp $	*/
+/*	$NetBSD: ite_cv3d.c,v 1.7 2007/03/05 20:29:07 he Exp $ */
 
 /*
  * Copyright (c) 1995 Michael Teske
@@ -38,6 +38,10 @@
  */
 
 #include "opt_amigacons.h"
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ite_cv3d.c,v 1.7 2007/03/05 20:29:07 he Exp $");
+
 #include "grfcv3d.h"
 #if NGRFCV3D > 0
 
@@ -55,23 +59,23 @@
 #include <machine/cpu.h>
 #include <amiga/dev/itevar.h>
 #include <amiga/dev/iteioctl.h>
-#include <amiga/amiga/device.h> 
+#include <amiga/amiga/device.h>
 #include <amiga/dev/grfioctl.h>
 #include <amiga/dev/grfvar.h>
 #include <amiga/dev/grf_cv3dreg.h>
 
-void cv3d_ite_init __P((struct ite_softc *));
-void cv3d_ite_deinit __P((struct ite_softc *));
-static void cv3d_cursor __P((struct ite_softc *, int));
-static void cv3d_putc __P((struct ite_softc *, int, int, int, int));
-static void cv3d_clear __P((struct ite_softc *, int, int, int, int));
-static void cv3d_scroll __P((struct ite_softc *, int, int, int, int));
+void cv3d_ite_init(struct ite_softc *);
+void cv3d_ite_deinit(struct ite_softc *);
+static void cv3d_cursor(struct ite_softc *, int);
+static void cv3d_putc(struct ite_softc *, int, int, int, int);
+static void cv3d_clear(struct ite_softc *, int, int, int, int);
+static void cv3d_scroll(struct ite_softc *, int, int, int, int);
 
 /*
  * called from grf_cv3d to return console priority
  */
 int
-grfcv3d_cnprobe()
+grfcv3d_cnprobe(void)
 {
 	static int done;
 	int rv;
@@ -98,8 +102,7 @@ grfcv3d_cnprobe()
  * grf_softc struct
  */
 void
-grfcv3d_iteinit(gp)
-	struct grf_softc *gp;
+grfcv3d_iteinit(struct grf_softc *gp)
 {
 	gp->g_itecursor = cv3d_cursor;
 	gp->g_iteputc = cv3d_putc;
@@ -111,8 +114,7 @@ grfcv3d_iteinit(gp)
 
 
 void
-cv3d_ite_deinit(ip)
-	struct ite_softc *ip;
+cv3d_ite_deinit(struct ite_softc *ip)
 {
 	ip->flags &= ~ITE_INITED;
 }
@@ -127,8 +129,7 @@ static unsigned short cv3d_rowc[MAXCOLS*(MAXROWS+1)];
 static unsigned short *console_buffer;
 
 void
-cv3d_ite_init(ip)
-	register struct ite_softc *ip;
+cv3d_ite_init(register struct ite_softc *ip)
 {
 	struct grfcv3dtext_mode *md;
 	int i;
@@ -148,14 +149,14 @@ cv3d_ite_init(ip)
 #if 0  /* XXX malloc seems not to work in early init :( */
 	if (cv3d_rowc)
 		free(cv3d_rowc, M_DEVBUF);
- 
+
 	/* alloc all in one */
 	cv3d_rowc = malloc(sizeof(short) * (ip->rows + 1) * (ip->cols + 2),
 		M_DEVBUF, M_WAITOK);
 	if (!cv3d_rowc)
 		panic("No buffers for ite_cv3d!");
 #endif
- 
+
 	console_buffer = cv3d_rowc + ip->rows + 1;
 
 
@@ -177,11 +178,9 @@ cv3d_ite_init(ip)
 
 
 void
-cv3d_cursor(ip, flag)
-	struct ite_softc *ip;
-	int flag;
+cv3d_cursor(struct ite_softc *ip, int flag)
 {
-	volatile caddr_t ba = ip->grf->g_regkva;
+	volatile void *ba = ip->grf->g_regkva;
 
 	switch (flag) {
 	    case DRAW_CURSOR:
@@ -204,48 +203,40 @@ cv3d_cursor(ip, flag)
 
 
 void
-cv3d_putc(ip, c, dy, dx, mode)
-	struct ite_softc *ip;
-	int c;
-	int dy;
-	int dx;
-	int mode;
+cv3d_putc(struct ite_softc *ip, int c, int dy, int dx, int mode)
 {
-	caddr_t fb = ip->grf->g_fbkva;
+	volatile void *fb = ip->grf->g_fbkva;
 	unsigned char attr;
-	unsigned char *cp;
+	volatile unsigned char *cp;
 
 	attr = (unsigned char) ((mode & ATTR_INV) ? (0x70) : (0x07));
 	if (mode & ATTR_UL)     attr  = 0x01;
 	if (mode & ATTR_BOLD)   attr |= 0x08;
 	if (mode & ATTR_BLINK)  attr |= 0x80;
 
-	cp = fb + ((cv3d_rowc[dy] + dx) << 2); /* *4 */
+	cp = (volatile char*)fb + ((cv3d_rowc[dy] + dx) << 2); /* *4 */
 	*cp++ = (unsigned char) c;
 	*cp = (unsigned char) attr;
 
-	cp = (unsigned char *) &console_buffer[cv3d_rowc[dy]+dx];
+	cp = (volatile unsigned char *) &console_buffer[cv3d_rowc[dy]+dx];
 	*cp++ = (unsigned char) c;
 	*cp = (unsigned char) attr;
 }
 
 
 void
-cv3d_clear(ip, sy, sx, h, w)
-	struct ite_softc *ip;
-	int sy;
-	int sx;
-	int h;
-	int w;
+cv3d_clear(struct ite_softc *ip, int sy, int sx, int h, int w)
 {
 	/* cv3d_clear and cv3d_scroll both rely on ite passing arguments
 	 * which describe continuous regions.  For a VT200 terminal,
 	 * this is safe behavior.
 	 */
-	unsigned short  *dst;
+	volatile unsigned short  *dst;
 	int len;
 
-	dst = (unsigned short *) (ip->grf->g_fbkva + (((sy * ip->cols) + sx) << 2));
+	dst = (volatile unsigned short *)
+		((volatile char*)ip->grf->g_fbkva +
+		 (((sy * ip->cols) + sx) << 2));
 
 	for (len = w * h; len > 0 ; len--) {
 		*dst = 0x2007;
@@ -259,18 +250,14 @@ cv3d_clear(ip, sy, sx, h, w)
 }
 
 void
-cv3d_scroll(ip, sy, sx, count, dir)
-	struct ite_softc *ip;
-	int sy;
-	int sx;
-	int count;
-	int dir;
+cv3d_scroll(struct ite_softc *ip, int sy, int sx, int count, int dir)
 {
-	unsigned short *src, *dst, *dst2;
+	volatile unsigned short *src, *dst, *dst2;
 	int i;
 	int len;
 
-	src = (unsigned short *)(ip->grf->g_fbkva + (cv3d_rowc[sy] << 2));
+	src = (volatile unsigned short *)
+		((volatile char*)ip->grf->g_fbkva + (cv3d_rowc[sy] << 2));
 
 	switch (dir) {
 	    case SCROLL_UP:
@@ -281,13 +268,13 @@ cv3d_scroll(ip, sy, sx, count, dir)
 
 		if (count > sy) { /* boundary checks */
 			dst2 = console_buffer;
-			dst = (unsigned short *)(ip->grf->g_fbkva);
+			dst = (volatile unsigned short *)(ip->grf->g_fbkva);
 			len -= cv3d_rowc[(count - sy)];
 			src += cv3d_rowc[(count - sy)];
 		} else
 			dst2 = &console_buffer[cv3d_rowc[(sy-count)]];
 
-		bcopy (src, dst2, len << 1);
+		bcopy (__UNVOLATILE(src), __UNVOLATILE(dst2), len << 1);
 
 		for (i = 0; i < len; i++) {
 			*dst++ = *dst2++;
@@ -304,7 +291,7 @@ cv3d_scroll(ip, sy, sx, count, dir)
 		if (len < 0)
 			return;  /* do some boundary check */
 
-		bcopy (src, dst2, len << 1);
+		bcopy (__UNVOLATILE(src), __UNVOLATILE(dst2), len << 1);
 
 		for (i = 0; i < len; i++) {
 			*dst++ = *dst2++;
@@ -316,7 +303,7 @@ cv3d_scroll(ip, sy, sx, count, dir)
 		src = &console_buffer[cv3d_rowc[sy] + sx];
 		len = ip->cols - (sx + count);
 		dst2 = &console_buffer[cv3d_rowc[sy] + sx + count];
-		bcopy (src, dst2, len << 1);
+		bcopy (__UNVOLATILE(src), __UNVOLATILE(dst2), len << 1);
 
 		for (i = 0; i < len; i++) {
 			*dst++ = *dst2++;
@@ -328,7 +315,7 @@ cv3d_scroll(ip, sy, sx, count, dir)
 		src = &console_buffer[cv3d_rowc[sy] + sx];
 		len = ip->cols - sx;
 		dst2 = &console_buffer[cv3d_rowc[sy] + sx - count];
-		bcopy (src, dst2, len << 1);
+		bcopy (__UNVOLATILE(src), __UNVOLATILE(dst2), len << 1);
 
 		for (i = 0; i < len; i++) {
 			*dst++ = *dst2++;

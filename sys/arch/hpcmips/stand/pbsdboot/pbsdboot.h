@@ -1,4 +1,4 @@
-/*	$NetBSD: pbsdboot.h,v 1.8 2000/03/19 11:10:58 takemura Exp $	*/
+/*	$NetBSD: pbsdboot.h,v 1.11 2007/03/04 05:59:53 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 Shin Takemura.
@@ -43,6 +43,7 @@
 extern TCHAR szAppName[ ];
 #define whoami szAppName
 #define PREFNAME TEXT("pbsdboot.ini")
+#define LOGNAME TEXT("pbsdboot.log")
 #define PATHBUFLEN 200
 
 
@@ -59,22 +60,23 @@ BOOL VirtualCopy(LPVOID, LPVOID, DWORD, DWORD);
  *  structure declarations
  */
 struct map_s {
-	caddr_t entry;
-	caddr_t base;
+	void *entry;
+	void *base;
 	int pagesize;
 	int leafsize;
 	int nleaves;
-	caddr_t arg0;
-	caddr_t arg1;
-	caddr_t arg2;
-	caddr_t arg3;
-	caddr_t *leaf[32];
+	void *arg0;
+	void *arg1;
+	void *arg2;
+	void *arg3;
+	void **leaf[32];
 };
 
 struct preference_s {
 	int setting_idx;
 	int fb_type;
 	int fb_width, fb_height, fb_linebytes;
+	int boot_time;
 	long fb_addr;
 	unsigned long platid_cpu, platid_machine;
 	TCHAR setting_name[PATHBUFLEN];
@@ -84,6 +86,7 @@ struct preference_s {
 	BOOL load_debug_info;
 	BOOL serial_port;
 	BOOL reverse_video;
+	BOOL autoboot;	
 };
 
 struct path_s {
@@ -102,7 +105,7 @@ struct system_info {
 	DWORD si_pagesize;
 	unsigned char *si_asmcode;
 	int si_asmcodelen;
-	int (*si_boot) __P((caddr_t));
+	int (*si_boot) __P((void *));
 	int si_intrvec;
 };
 extern struct system_info system_info;
@@ -114,7 +117,7 @@ extern TCHAR* where_pref_load_from;
  *  main.c
  */
 BOOL CheckCancel(int progress);
-extern HWND hWndMain;
+extern HWND hDlgMain;
 
 /*
  *  layout.c
@@ -124,24 +127,24 @@ int CreateMainWindow(HINSTANCE hInstance, HWND hWnd, LPCTSTR name, int cmdbar_he
 /*
  *  vmem.c
  */
-int vmem_exec(caddr_t entry, int argc, char *argv[], struct bootinfo *bi);
-caddr_t vmem_get(caddr_t phys_addr, int *length);
-int vmem_init(caddr_t start, caddr_t end);
+int vmem_exec(void *entry, int argc, char *argv[], struct bootinfo *bi);
+void *vmem_get(void *phys_addr, int *length);
+int vmem_init(void *start, void *end);
 void vmem_dump_map(void);
-caddr_t vtophysaddr(caddr_t page);
+void *vtophysaddr(void *page);
 void vmem_free(void);
-caddr_t vmem_alloc(void);
+void *vmem_alloc(void);
 
 /*
  *  elf.c
  */
-int getinfo(int fd, caddr_t *start, caddr_t *end);
-int loadfile(int fd, caddr_t *entry);
+int getinfo(int fd, void **start, void **end);
+int loadfile(int fd, void **entry);
 
 /*
  *  mips.c
  */
-int mips_boot(caddr_t map);
+int mips_boot(void *map);
 
 /*
  *  pbsdboot.c
@@ -153,6 +156,10 @@ int pbsdboot(TCHAR*, int argc, char *argv[], struct bootinfo *bi);
  */
 int debug_printf(LPWSTR lpszFmt, ...);
 int msg_printf(UINT type, LPWSTR caption, LPWSTR lpszFmt, ...);
+int stat_printf(LPWSTR lpszFmt, ...);
+int set_debug_log(TCHAR* path);
+void close_debug_log(void);
+
 
 #define	MSG_ERROR	(MB_OK | MB_ICONERROR)
 #define MSG_INFO	(MB_OK | MB_ICONINFORMATION)

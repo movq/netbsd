@@ -1,11 +1,22 @@
-/*	$NetBSD: fpsetmask.c,v 1.2 1996/09/16 18:10:49 jonathan Exp $	*/
+/*	$NetBSD: fpsetmask.c,v 1.5 2005/12/24 23:10:08 perry Exp $	*/
 
 /*
  * Written by J.T. Conklin, Apr 11, 1995
  * Public domain.
  */
 
+#include <sys/cdefs.h>
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: fpsetmask.c,v 1.5 2005/12/24 23:10:08 perry Exp $");
+#endif /* LIBC_SCCS and not lint */
+
+#include "namespace.h"
+
 #include <ieeefp.h>
+
+#ifdef __weak_alias
+__weak_alias(fpsetmask,_fpsetmask)
+#endif
 
 fp_except
 fpsetmask(mask)
@@ -14,13 +25,13 @@ fpsetmask(mask)
 	fp_except old;
 	fp_except new;
 
-	__asm__("cfc1 %0,$31" : "=r" (old));
+	__asm("cfc1 %0,$31" : "=r" (old));
 
 	new = old;
 	new &= ~(0x1f << 7); 
 	new |= ((mask & 0x1f) << 7);
 
-	__asm__("ctc1 %0,$31" : : "r" (new));
+	__asm("ctc1 %0,$31" : : "r" (new));
 
 	return (old >> 7) & 0x1f;
 }

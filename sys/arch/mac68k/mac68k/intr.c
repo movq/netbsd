@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.13 2000/02/21 20:38:48 erh Exp $	*/
+/*	$NetBSD: intr.c,v 1.28 2008/06/19 13:56:22 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,25 +33,17 @@
  * Link and dispatch interrupts.
  */
 
-#include "opt_inet.h"
-#include "opt_atalk.h"
-#include "opt_ccitt.h"
-#include "opt_iso.h"
-#include "opt_ns.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.28 2008/06/19 13:56:22 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/vmmeter.h>
-
-#include <vm/vm.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
 
 #include <uvm/uvm_extern.h>
-
-#include <net/netisr.h>
-
-#include <machine/cpu.h>
-#include <machine/intr.h>
 
 #include <machine/psc.h>
 #include <machine/viareg.h>
@@ -66,9 +51,9 @@
 #define	NISR	8
 #define	ISRLOC	0x18
 
-static int intr_noint __P((void *));
+static int intr_noint(void *);
 
-static int ((*intr_func[NISR]) __P((void *))) = {
+static int ((*intr_func[NISR])(void *)) = {
 	intr_noint,
 	intr_noint,
 	intr_noint,
@@ -98,11 +83,13 @@ int	intr_debug = 0;
  * IIfx/Q700/900/950/etc. where the interrupt controller may be reprogrammed
  * to interrupt on different levels as listed in locore.s
  */
-u_short mac68k_ipls[MAC68K_NIPLS];
+uint16_t ipl2psl_table[NIPL];
+int idepth;
+volatile int ssir;
 
 extern	int intrcnt[];		/* from locore.s */
 
-void	intr_computeipl __P((void));
+void	intr_computeipl(void);
 
 #define MAX_INAME_LENGTH 53
 #define STD_INAMES \
@@ -113,52 +100,37 @@ void	intr_computeipl __P((void));
 	"spur\0via1\0via2\0ethernet\0scc\0dsp\0unused1\0nmi\0clock\0   "
 
 void
-intr_init()
+intr_init(void)
 {
 	extern long	intrnames;
-	char		*inames, *g_inames;
+	const char	*inames;
+	char		*g_inames;
 
-	mac68k_ipls[MAC68K_IPL_SOFT] = PSL_S|PSL_IPL1;
-	mac68k_ipls[MAC68K_IPL_SERIAL] = PSL_S|PSL_IPL4;
-	mac68k_ipls[MAC68K_IPL_HIGH] = PSL_S|PSL_IPL7;
+	ipl2psl_table[IPL_NONE]       = 0;
+	ipl2psl_table[IPL_SOFTCLOCK]  = PSL_S|PSL_IPL1;
+	ipl2psl_table[IPL_SOFTNET]    = PSL_S|PSL_IPL1;
+	ipl2psl_table[IPL_SOFTSERIAL] = PSL_S|PSL_IPL1;
+	ipl2psl_table[IPL_SOFTBIO]    = PSL_S|PSL_IPL1;
+	ipl2psl_table[IPL_HIGH]       = PSL_S|PSL_IPL7;
 
 	g_inames = (char *) &intrnames;
 	if (mac68k_machine.aux_interrupts) {
 		inames = AUX_INAMES;
 
 		/* Standard spl(9) interrupt priorities */
-		mac68k_ipls[MAC68K_IPL_BIO] = (PSL_S | PSL_IPL2);
-		mac68k_ipls[MAC68K_IPL_NET] = (PSL_S | PSL_IPL3);
-		mac68k_ipls[MAC68K_IPL_TTY] = (PSL_S | PSL_IPL1);
-		mac68k_ipls[MAC68K_IPL_IMP] = (PSL_S | PSL_IPL6);
-		mac68k_ipls[MAC68K_IPL_STATCLOCK] = (PSL_S | PSL_IPL6);
-		mac68k_ipls[MAC68K_IPL_CLOCK] = (PSL_S | PSL_IPL6);
-		mac68k_ipls[MAC68K_IPL_SCHED] = (PSL_S | PSL_IPL6);
-
-		/* Non-standard interrupt priorities */
-		mac68k_ipls[MAC68K_IPL_ADB] = (PSL_S | PSL_IPL6);
-		mac68k_ipls[MAC68K_IPL_AUDIO] = (PSL_S | PSL_IPL5);
-
+		ipl2psl_table[IPL_VM]        = (PSL_S | PSL_IPL6);
+		ipl2psl_table[IPL_SCHED]     = (PSL_S | PSL_IPL6);
 	} else {
 		inames = STD_INAMES;
 
 		/* Standard spl(9) interrupt priorities */
-		mac68k_ipls[MAC68K_IPL_BIO] = (PSL_S | PSL_IPL2);
-		mac68k_ipls[MAC68K_IPL_NET] = (PSL_S | PSL_IPL2);
-		mac68k_ipls[MAC68K_IPL_TTY] = (PSL_S | PSL_IPL1);
-		mac68k_ipls[MAC68K_IPL_IMP] = (PSL_S | PSL_IPL2);
-		mac68k_ipls[MAC68K_IPL_STATCLOCK] = (PSL_S | PSL_IPL2);
-		mac68k_ipls[MAC68K_IPL_CLOCK] = (PSL_S | PSL_IPL2);
-		mac68k_ipls[MAC68K_IPL_SCHED] = (PSL_S | PSL_IPL3);
-
-		/* Non-standard interrupt priorities */
-		mac68k_ipls[MAC68K_IPL_ADB] = (PSL_S | PSL_IPL1);
-		mac68k_ipls[MAC68K_IPL_AUDIO] = (PSL_S | PSL_IPL2);
+		ipl2psl_table[IPL_VM]        = (PSL_S | PSL_IPL2);
+		ipl2psl_table[IPL_SCHED]     = (PSL_S | PSL_IPL3);
 
 		if (current_mac_model->class == MACH_CLASSAV) {
 			inames = AV_INAMES;
-			mac68k_ipls[MAC68K_IPL_BIO] =
-			    mac68k_ipls[MAC68K_IPL_NET] = (PSL_S | PSL_IPL4);
+			ipl2psl_table[IPL_VM]    = (PSL_S | PSL_IPL4);
+			ipl2psl_table[IPL_SCHED] = (PSL_S | PSL_IPL4);
 		}
 	}
 
@@ -179,33 +151,17 @@ intr_init()
  * calls.  This doesn't have to be fast.
  */
 void
-intr_computeipl()
+intr_computeipl(void)
 {
 	/*
 	 * Enforce the following relationship, as defined in spl(9):
-	 * `bio <= net <= tty <= imp <= statclock <= clock <= sched <= serial'
+	 * `bio <= net <= tty <= vm <= statclock <= clock <= sched <= serial'
 	 */
-	if (mac68k_ipls[MAC68K_IPL_BIO] > mac68k_ipls[MAC68K_IPL_NET])
-		mac68k_ipls[MAC68K_IPL_NET] = mac68k_ipls[MAC68K_IPL_BIO];
+	if (ipl2psl_table[IPL_VM] > ipl2psl_table[IPL_SCHED])
+		ipl2psl_table[IPL_SCHED] = ipl2psl_table[IPL_VM];
 
-	if (mac68k_ipls[MAC68K_IPL_NET] > mac68k_ipls[MAC68K_IPL_TTY])
-		mac68k_ipls[MAC68K_IPL_TTY] = mac68k_ipls[MAC68K_IPL_NET];
-
-	if (mac68k_ipls[MAC68K_IPL_TTY] > mac68k_ipls[MAC68K_IPL_IMP])
-		mac68k_ipls[MAC68K_IPL_IMP] = mac68k_ipls[MAC68K_IPL_TTY];
-
-	if (mac68k_ipls[MAC68K_IPL_IMP] > mac68k_ipls[MAC68K_IPL_STATCLOCK])
-		mac68k_ipls[MAC68K_IPL_STATCLOCK] = mac68k_ipls[MAC68K_IPL_IMP];
-
-	if (mac68k_ipls[MAC68K_IPL_STATCLOCK] > mac68k_ipls[MAC68K_IPL_CLOCK])
-		mac68k_ipls[MAC68K_IPL_CLOCK] =
-		    mac68k_ipls[MAC68K_IPL_STATCLOCK];
-
-	if (mac68k_ipls[MAC68K_IPL_CLOCK] > mac68k_ipls[MAC68K_IPL_SCHED])
-		mac68k_ipls[MAC68K_IPL_SCHED] = mac68k_ipls[MAC68K_IPL_CLOCK];
-
-	if (mac68k_ipls[MAC68K_IPL_SCHED] > mac68k_ipls[MAC68K_IPL_SERIAL])
-		mac68k_ipls[MAC68K_IPL_SERIAL] = mac68k_ipls[MAC68K_IPL_SCHED];
+	if (ipl2psl_table[IPL_SCHED] > ipl2psl_table[IPL_HIGH])
+		ipl2psl_table[IPL_HIGH] = ipl2psl_table[IPL_SCHED];
 }
 
 /*
@@ -218,10 +174,7 @@ intr_computeipl()
  * ensue!  (sar 19980806)
  */
 void
-intr_establish(func, arg, ipl)
-	int (*func) __P((void *));
-	void *arg;
-	int ipl;
+intr_establish(int (*func)(void *), void *arg, int ipl)
 {
 	if ((ipl < 0) || (ipl >= NISR))
 		panic("intr_establish: bad ipl %d", ipl);
@@ -239,8 +192,7 @@ intr_establish(func, arg, ipl)
  * Disestablish an interrupt handler.
  */
 void
-intr_disestablish(ipl)
-	int ipl;
+intr_disestablish(int ipl)
 {
 	if ((ipl < 0) || (ipl >= NISR))
 		panic("intr_disestablish: bad ipl %d", ipl);
@@ -256,15 +208,15 @@ intr_disestablish(ipl)
  * XXX Note: see the warning in intr_establish()
  */
 void
-intr_dispatch(evec)
-	int evec;		/* format | vector offset */
+intr_dispatch(int evec)		/* format | vector offset */
 {
 	int ipl, vec;
 
+	idepth++;
 	vec = (evec & 0xfff) >> 2;
 #ifdef DIAGNOSTIC
 	if ((vec < ISRLOC) || (vec >= (ISRLOC + NISR)))
-		panic("intr_dispatch: bad vec 0x%x\n", vec);
+		panic("intr_dispatch: bad vec 0x%x", vec);
 #endif
 	ipl = vec - ISRLOC;
 
@@ -272,56 +224,27 @@ intr_dispatch(evec)
 	uvmexp.intrs++;
 
 	(void)(*intr_func[ipl])(intr_arg[ipl]);
+	idepth--;
 }
 
 /*
  * Default interrupt handler:  do nothing.
  */
 static int
-intr_noint(arg)
-	void *arg;
+intr_noint(void *arg)
 {
 #ifdef DEBUG
+	idepth++;
 	if (intr_debug)
 		printf("intr_noint: ipl %d\n", (int)arg);
+	idepth--;
 #endif
 	return 0;
 }
 
-/*
- * XXX Why on earth isn't this in a common file?!
- */
-void	netintr __P((void));
-void	arpintr __P((void));
-void	atintr __P((void));
-void	ipintr __P((void));
-void	ip6intr __P((void));
-void	nsintr __P((void));
-void	clnlintr __P((void));
-void	ccittintr __P((void));
-void	pppintr __P((void));
-
-void
-netintr()
+bool
+cpu_intr_p(void)
 {
-	int s, isr;
 
-	for (;;) {
-		s = splimp();
-		isr = netisr;
-		netisr = 0;
-		splx(s);
-
-		if (isr == 0)
-			return;
-
-#define DONETISR(bit, fn) do {		\
-	if (isr & (1 << bit))		\
-		fn();			\
-} while (0)
-
-#include <net/netisr_dispatch.h>
-
-#undef DONETISR
-	}
+	return idepth != 0;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: expand.h,v 1.12 1999/07/09 03:05:50 christos Exp $	*/
+/*	$NetBSD: expand.h,v 1.17 2007/03/25 06:29:27 apb Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,6 +33,8 @@
  *
  *	@(#)expand.h	8.2 (Berkeley) 5/4/95
  */
+
+#include <inttypes.h>
 
 struct strlist {
 	struct strlist *next;
@@ -57,19 +55,20 @@ struct arglist {
 #define	EXP_VARTILDE	0x4	/* expand tildes in an assignment */
 #define	EXP_REDIR	0x8	/* file glob for a redirection (1 match only) */
 #define EXP_CASE	0x10	/* keeps quotes around for CASE pattern */
-#define EXP_RECORD	0x20	/* need to record arguments for ifs breakup */
+#define EXP_IFS_SPLIT	0x20	/* need to record arguments for ifs breakup */
 
 
 union node;
-void expandhere __P((union node *, int));
-void expandarg __P((union node *, struct arglist *, int));
-void expari __P((int));
-int patmatch __P((char *, char *, int));
-void rmescapes __P((char *));
-int casematch __P((union node *, char *));
+void expandhere(union node *, int);
+void expandarg(union node *, struct arglist *, int);
+void expari(int);
+int patmatch(char *, char *, int);
+void rmescapes(char *);
+int casematch(union node *, char *);
+int wordexpcmd(int, char **);
 
 /* From arith.y */
-int arith __P((const char *));
-int expcmd __P((int , char **));
-void arith_lex_reset __P((void));
-int yylex __P((void));
+intmax_t arith(const char *);
+int expcmd(int , char **);
+void arith_lex_reset(void);
+int yylex(void);

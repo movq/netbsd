@@ -1,4 +1,4 @@
-/*	$NetBSD: ipkdb_ipkdb.c,v 1.10 2000/03/23 20:33:37 ws Exp $	*/
+/*	$NetBSD: ipkdb_ipkdb.c,v 1.21 2007/11/24 14:20:41 elad Exp $	*/
 
 /*
  * Copyright (C) 1993-2000 Wolfgang Solfrank.
@@ -30,6 +30,10 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ipkdb_ipkdb.c,v 1.21 2007/11/24 14:20:41 elad Exp $");
+
 #include "opt_ipkdb.h"
 
 #include <sys/param.h>
@@ -37,6 +41,8 @@
 #include <sys/mbuf.h>
 #include <sys/reboot.h>
 #include <sys/systm.h>
+#include <sys/kauth.h>
+#include <sys/cpu.h>
 
 #include <net/if.h>
 #include <net/if_arp.h>
@@ -45,12 +51,10 @@
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/if_inarp.h>
-#include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/ip_var.h>
 #include <netinet/udp.h>
 
-#include <machine/cpu.h>
 #include <machine/reg.h>
 
 #include <ipkdb/ipkdb.h>
@@ -58,7 +62,11 @@
 
 int ipkdbpanic = 0;
 
-static char *ipkdbkey = IPKDBKEY;
+#ifndef IPKDBKEY
+#error You must specify the IPKDBKEY option to use IPKDB.
+#else
+static char ipkdbkey[] = IPKDBKEY;
+#endif
 
 static struct ipkdb_if ipkdb_if;
 
@@ -76,7 +84,7 @@ static void outpkt __P((struct ipkdb_if *, char *, int, int, int));
 static void init __P((struct ipkdb_if *));
 static void *chksum __P((void *, int));
 static void getpkt __P((struct ipkdb_if *, char *, int *));
-static void putpkt __P((struct ipkdb_if *, char *, int));
+static void putpkt __P((struct ipkdb_if *, const char *, int));
 static int check_ipkdb __P((struct ipkdb_if *, struct in_addr *, char *, int));
 static int connectipkdb __P((struct ipkdb_if *, char *, int));
 static int hmac_init __P((void));
@@ -116,10 +124,12 @@ ipkdb_panic()
  */
 void
 ipkdbcopy(s, d, n)
-	void *s, *d;
+	const void *s;
+	void *d;
 	int n;
 {
-	char *sp = s, *dp = d;
+	const char *sp = s;
+	char *dp = d;
 
 	while (--n >= 0)
 		*dp++ = *sp++;
@@ -284,7 +294,7 @@ pokemem(ifp, cp, addr, len)
 	putpkt(ifp, "ok", 2);
 }
 
-__inline static u_int32_t
+inline static u_int32_t
 getnl(vs)
 	void *vs;
 {
@@ -293,7 +303,7 @@ getnl(vs)
 	return (*s << 24)|(s[1] << 16)|(s[2] << 8)|s[3];
 }
 
-__inline static u_int
+inline static u_int
 getns(vs)
 	void *vs;
 {
@@ -302,7 +312,7 @@ getns(vs)
 	return (*s << 8)|s[1];
 }
 
-__inline static void
+inline static void
 setnl(vs, l)
 	void *vs;
 	u_int32_t l;
@@ -315,7 +325,7 @@ setnl(vs, l)
 	*s = l;
 }
 
-__inline static void
+inline static void
 setns(vs, l)
 	void *vs;
 	int l;
@@ -720,7 +730,7 @@ static void ipkdb_MD5Init __P((struct ipkdb_MD5Context *));
 static void ipkdb_MD5Update __P((struct ipkdb_MD5Context *, u_char *, u_int));
 static u_char *ipkdb_MD5Final __P((struct ipkdb_MD5Context *));
 
-__inline static u_int32_t
+inline static u_int32_t
 getNl(vs)
 	void *vs;
 {
@@ -729,7 +739,7 @@ getNl(vs)
 	return *s | (s[1] << 8) | (s[2] << 16) | (s[3] << 24);
 }
 
-__inline static void
+inline static void
 setNl(vs, l)
 	void *vs;
 	u_int32_t l;
@@ -766,10 +776,10 @@ ipkdb_MD5Transform(ctx)
 {
 	u_int a, b, c, d, i;
 	u_int in[16];
-	
+
 	for (i = 0; i < 16; i++)
 		in[i] = getNl(ctx->in + 4 * i);
-	
+
 	a = ctx->buf[0];
 	b = ctx->buf[1];
 	c = ctx->buf[2];
@@ -861,7 +871,7 @@ ipkdb_MD5Init(ctx)
 	ctx->buf[1] = 0xefcdab89;
 	ctx->buf[2] = 0x98badcfe;
 	ctx->buf[3] = 0x10325476;
-	
+
 	ctx->bits[0] = 0;
 	ctx->bits[1] = 0;
 }
@@ -883,13 +893,13 @@ ipkdb_MD5Update(ctx, buf, len)
 	if ((ctx->bits[0] = (t + (len << 3)) & 0xffffffff) < t)
 		ctx->bits[1]++;	/* Carry from low to high */
 	ctx->bits[1] += (len >> 29) & 0xffffffff;
-	
+
 	t = (t >> 3) & 0x3f;	/* Bytes already in ctx->in */
-	
+
 	/* Handle any leading odd-sized chunks */
 	if (t) {
 		u_char *p = ctx->in + t;
-		
+
 		t = 64 - t;
 		if (len < t) {
 			ipkdbcopy(buf, p, len);
@@ -900,7 +910,7 @@ ipkdb_MD5Update(ctx, buf, len)
 		buf += t;
 		len -= t;
 	}
-	
+
 	/* Process data in 64-byte chunks */
 	while (len >= 64) {
 		ipkdbcopy(buf, ctx->in, 64);
@@ -908,7 +918,7 @@ ipkdb_MD5Update(ctx, buf, len)
 		buf += 64;
 		len -= 64;
 	}
-	
+
 	/* Handle any remaining bytes of data. */
 	ipkdbcopy(buf, ctx->in, len);
 }
@@ -924,34 +934,34 @@ ipkdb_MD5Final(ctx)
 	static u_char digest[16];
 	unsigned count;
 	u_char *p;
-	
+
 	/* Compute number of bytes mod 64 */
 	count = (ctx->bits[0] >> 3) & 0x3f;
-	
+
 	/* Set the first char of padding to 0x80.  This is safe since there is
 	   always at least one byte free */
 	p = ctx->in + count;
 	*p++ = 0x80;
-	
+
 	/* Bytes of padding needed to make 64 bytes */
 	count = 64 - 1 - count;
-	
+
 	/* Pad out to 56 mod 64 */
 	if (count < 8) {
 		/* Two lots of padding:  Pad the first block to 64 bytes */
 		ipkdbzero(p, count);
 		ipkdb_MD5Transform(ctx);
-		
+
 		/* Now fill the next block with 56 bytes */
 		ipkdbzero(ctx->in, 56);
 	} else
 		/* Pad block to 56 bytes */
 		ipkdbzero(p, count - 8);
-	
+
 	/* Append length in bits and transform */
 	setNl(ctx->in + 56, ctx->bits[0]);
 	setNl(ctx->in + 60, ctx->bits[1]);
-	
+
 	ipkdb_MD5Transform(ctx);
 	setNl(digest, ctx->buf[0]);
 	setNl(digest + 4, ctx->buf[1]);
@@ -1013,7 +1023,7 @@ hmac_init()
 		pad[i] ^= 0x36;
 	ipkdb_MD5Init(&icontext);
 	ipkdb_MD5Update(&icontext, pad, 64);
-	
+
 	ipkdbzero(pad, sizeof pad);
 	ipkdbcopy(key, pad, key_len);
 	for (i = 0; i < 64; i++)
@@ -1037,7 +1047,7 @@ chksum(buf, len)
 {
 	u_char *digest;
 	struct ipkdb_MD5Context context;
-	
+
 	/*
 	 * the HMAC_MD5 transform looks like:
 	 *
@@ -1103,7 +1113,7 @@ getpkt(ifp, buf, lp)
 static void
 putpkt(ifp, buf, l)
 	struct ipkdb_if *ifp;
-	char *buf;
+	const char *buf;
 	int l;
 {
 	setnl(ifp->pkt, ifp->seq++);
@@ -1130,7 +1140,8 @@ check_ipkdb(ifp, shost, p, l)
 	char save;
 
 #ifndef	IPKDBSECURE
-	if (securelevel > 0)
+	if (kauth_authorize_system(curlwp->l_cred, KAUTH_SYSTEM_DEBUG,
+	    KAUTH_ARG(KAUTH_REQ_SYSTEM_DEBUG_IPKDB), NULL, NULL, NULL))
 		return 0;
 #endif
 	if (ipkdbcmp(chksum(p, l), p + l, LENCHK))

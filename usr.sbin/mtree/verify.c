@@ -1,4 +1,4 @@
-/*	$NetBSD: verify.c,v 1.17 1999/02/11 15:32:24 mrg Exp $	*/
+/*	$NetBSD: verify.c,v 1.39 2006/10/07 15:35:51 elad Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,132 +29,144 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)verify.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: verify.c,v 1.17 1999/02/11 15:32:24 mrg Exp $");
+__RCSID("$NetBSD: verify.c,v 1.39 2006/10/07 15:35:51 elad Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
-#include <dirent.h>
-#include <fts.h>
-#include <fnmatch.h>
-#include <unistd.h>
-#include <errno.h>
-#include <stdio.h>
-#include "mtree.h"
-#include "extern.h"
 
-extern int crc_total, ftsoptions;
-extern int dflag, eflag, iflag, rflag, sflag, uflag;
-extern char fullpath[MAXPATHLEN];
+#if ! HAVE_NBTOOL_CONFIG_H
+#include <dirent.h>
+#endif
+
+#include <errno.h>
+#include <fnmatch.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "extern.h"
 
 static NODE *root;
 static char path[MAXPATHLEN];
 
-static void	miss __P((NODE *, char *));
-static int	vwalk __P((void));
+static void	miss(NODE *, char *);
+static int	vwalk(void);
 
 int
-verify()
+verify(void)
 {
 	int rval;
 
-	root = spec();
+	root = spec(stdin);
 	rval = vwalk();
 	miss(root, path);
 	return (rval);
 }
 
 static int
-vwalk()
+vwalk(void)
 {
 	FTS *t;
 	FTSENT *p;
 	NODE *ep, *level;
-	int ftsdepth, specdepth, rval;
+	int specdepth, rval;
 	char *argv[2];
-
-	argv[0] = ".";
+	char  dot[] = ".";
+	argv[0] = dot;
 	argv[1] = NULL;
+
 	if ((t = fts_open(argv, ftsoptions, NULL)) == NULL)
 		mtree_err("fts_open: %s", strerror(errno));
 	level = root;
-	ftsdepth = specdepth = rval = 0;
+	specdepth = rval = 0;
 	while ((p = fts_read(t)) != NULL) {
+		if (check_excludes(p->fts_name, p->fts_path)) {
+			fts_set(t, p, FTS_SKIP);
+			continue;
+		}
 		switch(p->fts_info) {
 		case FTS_D:
-			++ftsdepth; 
+		case FTS_SL:
 			break;
 		case FTS_DP:
-			--ftsdepth; 
-			if (specdepth > ftsdepth) {
+			if (specdepth > p->fts_level) {
 				for (level = level->parent; level->prev;
-				      level = level->prev);  
+				    level = level->prev)
+					continue;
 				--specdepth;
 			}
 			continue;
 		case FTS_DNR:
 		case FTS_ERR:
 		case FTS_NS:
-			(void)fprintf(stderr, "mtree: %s: %s\n",
-			    RP(p), strerror(errno));
+			warnx("%s: %s", RP(p), strerror(p->fts_errno));
 			continue;
 		default:
 			if (dflag)
 				continue;
 		}
 
+		if (specdepth != p->fts_level)
+			goto extra;
 		for (ep = level; ep; ep = ep->next)
 			if ((ep->flags & F_MAGIC &&
 			    !fnmatch(ep->name, p->fts_name, FNM_PATHNAME)) ||
 			    !strcmp(ep->name, p->fts_name)) {
 				ep->flags |= F_VISIT;
-				if (compare(ep->name, ep, p))
+				if (compare(ep, p))
 					rval = MISMATCHEXIT;
 				if (!(ep->flags & F_IGN) &&
-				    ep->child && ep->type == F_DIR &&
+				    ep->type == F_DIR &&
 				    p->fts_info == FTS_D) {
-					level = ep->child;
-					++specdepth;
+					if (ep->child) {
+						level = ep->child;
+						++specdepth;
+					}
 				} else
-					(void)fts_set(t, p, FTS_SKIP);
+					fts_set(t, p, FTS_SKIP);
 				break;
 			}
 
 		if (ep)
 			continue;
+ extra:
 		if (!eflag) {
-			(void)printf("extra: %s", RP(p));
+			printf("extra: %s", RP(p));
 			if (rflag) {
-				if (unlink(p->fts_accpath)) {
-					(void)printf(", not removed: %s",
+				if ((S_ISDIR(p->fts_statp->st_mode)
+				    ? rmdir : unlink)(p->fts_accpath)) {
+					printf(", not removed: %s",
 					    strerror(errno));
 				} else
-					(void)printf(", removed");
+					printf(", removed");
 			}
-			(void)putchar('\n');
+			putchar('\n');
 		}
-		(void)fts_set(t, p, FTS_SKIP);
+		fts_set(t, p, FTS_SKIP);
 	}
-	(void)fts_close(t);
+	fts_close(t);
 	if (sflag)
-		(void)fprintf(stderr,
-		    "mtree: %s checksum: %u\n", fullpath, crc_total);
+		warnx("%s checksum: %u", fullpath, crc_total);
 	return (rval);
 }
 
 static void
-miss(p, tail)
-	NODE *p;
-	char *tail;
+miss(NODE *p, char *tail)
 {
 	int create;
 	char *tp;
+	const char *type;
 	u_int32_t flags;
 
 	for (; p; p = p->next) {
@@ -166,59 +174,120 @@ miss(p, tail)
 			continue;
 		if (p->type != F_DIR && (dflag || p->flags & F_VISIT))
 			continue;
-		(void)strcpy(tail, p->name);
+		strcpy(tail, p->name);
 		if (!(p->flags & F_VISIT))
-			(void)printf("missing: %s", path);
-		if (p->type != F_DIR) {
+			printf("missing: %s", path);
+		switch (p->type) {
+		case F_BLOCK:
+		case F_CHAR:
+			type = "device";
+			break;
+		case F_DIR:
+			type = "directory";
+			break;
+		case F_LINK:
+			type = "symlink";
+			break;
+		default:
 			putchar('\n');
 			continue;
 		}
 
 		create = 0;
 		if (!(p->flags & F_VISIT) && uflag) {
+			if (mtree_Wflag || p->type == F_LINK)
+				goto createit;
 			if (!(p->flags & (F_UID | F_UNAME)))
-			    (void)printf(" (not created: user not specified)");
+			    printf(
+				" (%s not created: user not specified)", type);
 			else if (!(p->flags & (F_GID | F_GNAME)))
-			    (void)printf(" (not created: group not specified)");
+			    printf(
+				" (%s not created: group not specified)", type);
 			else if (!(p->flags & F_MODE))
-			    (void)printf(" (not created: mode not specified)");
-			else if (mkdir(path, S_IRWXU))
-				(void)printf(" (not created: %s)",
-				    strerror(errno));
-			else {
-				create = 1;
-				(void)printf(" (created)");
+			    printf(
+				" (%s not created: mode not specified)", type);
+			else
+ createit:
+			switch (p->type) {
+			case F_BLOCK:
+			case F_CHAR:
+				if (mtree_Wflag)
+					continue;
+				if (!(p->flags & F_DEV))
+					printf(
+				    " (%s not created: device not specified)",
+					    type);
+				else if (mknod(path,
+				    p->st_mode | nodetoino(p->type),
+				    p->st_rdev) == -1)
+					printf(" (%s not created: %s)\n",
+					    type, strerror(errno));
+				else
+					create = 1;
+				break;
+			case F_LINK:
+				if (!(p->flags & F_SLINK))
+					printf(
+				    " (%s not created: link not specified)\n",
+					    type);
+				else if (symlink(p->slink, path))
+					printf(
+					    " (%s not created: %s)\n",
+					    type, strerror(errno));
+				else
+					create = 1;
+				break;
+			case F_DIR:
+				if (mkdir(path, S_IRWXU|S_IRWXG|S_IRWXO))
+					printf(" (not created: %s)",
+					    strerror(errno));
+				else
+					create = 1;
+				break;
+			default:
+				mtree_err("can't create create %s",
+				    nodetype(p->type));
 			}
 		}
-		if (!(p->flags & F_VISIT))
-			(void)putchar('\n');
+		if (create)
+			printf(" (created)");
+		if (p->type == F_DIR) {
+			if (!(p->flags & F_VISIT))
+				putchar('\n');
+			for (tp = tail; *tp; ++tp)
+				continue;
+			*tp = '/';
+			miss(p->child, tp + 1);
+			*tp = '\0';
+		} else
+			putchar('\n');
 
-		for (tp = tail; *tp; ++tp)
-			;
-		*tp = '/';
-		miss(p->child, tp + 1);
-		*tp = '\0';
-
-		if (!create)
+		if (!create || mtree_Wflag)
 			continue;
-		if (chown(path, p->st_uid, p->st_gid)) {
-			(void)printf("%s: user/group/mode not modified: %s\n",
+		if ((p->flags & (F_UID | F_UNAME)) &&
+		    (p->flags & (F_GID | F_GNAME)) &&
+		    (lchown(path, p->st_uid, p->st_gid))) {
+			printf("%s: user/group/mode not modified: %s\n",
 			    path, strerror(errno));
-			(void)printf("%s: warning: file mode %snot set\n", path,
+			printf("%s: warning: file mode %snot set\n", path,
 			    (p->flags & F_FLAGS) ? "and file flags " : "");
 			continue;
 		}
-		if (chmod(path, p->st_mode))
-			(void)printf("%s: permissions not set: %s\n",
-			    path, strerror(errno));
+		if (p->flags & F_MODE) {
+			if (lchmod(path, p->st_mode))
+				printf("%s: permissions not set: %s\n",
+				    path, strerror(errno));
+		}
+#if HAVE_STRUCT_STAT_ST_FLAGS
 		if ((p->flags & F_FLAGS) && p->st_flags) {
 			if (iflag)
 				flags = p->st_flags;
 			else
 				flags = p->st_flags & ~SP_FLGS;
-			if (chflags(path, flags))
-				(void)printf("%s: file flags not set: %s\n",
+			if (lchflags(path, flags))
+				printf("%s: file flags not set: %s\n",
 				    path, strerror(errno));
 		}
+#endif	/* HAVE_STRUCT_STAT_ST_FLAGS */
 	}
 }

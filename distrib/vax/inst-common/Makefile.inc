@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.6 1999/05/11 20:47:00 veego Exp $
+#	$NetBSD: Makefile.inc,v 1.15 2003/10/26 07:25:34 lukem Exp $
 
 # TOP is assumed to be defined by Makefile including this one.
 
@@ -9,13 +9,13 @@ MOUNT_POINT?=	/mnt
 VND?=		vnd0
 VND_DEV=	/dev/${VND}c
 VND_RDEV=	/dev/r${VND}c
-IMAGE?=		miniroot-${REV}.fs
-BOOTSYS=	bootroot-${REV}.fs
+IMAGE?=		miniroot-${DISTRIBREV}.fs
+BOOTSYS=	bootroot-${DISTRIBREV}.fs
 MDEC=		${DESTDIR}/usr/mdec
 
 LISTS=		${COMMONDIR}/list ${.CURDIR}/list
 CRUNCHCONF=	${COMMONDIR}/${CBIN}.conf
-MTREE=		${COMMONDIR}/mtree.conf
+MTREECONF=	${COMMONDIR}/mtree.conf
 
 DISKTYPE=	miniroot
 BOOTDISKTYPE=	bootroot
@@ -25,9 +25,10 @@ all: ${CBIN} bootroot
 	vnconfig -t ${DISKTYPE} -v -c ${VND_DEV} ${IMAGE}
 	newfs -B le -O -m 0 -o space -i 8192 ${VND_RDEV} ${DISKTYPE}
 	mount ${VND_DEV} ${MOUNT_POINT}
-	mtree -def ${MTREE} -p ${MOUNT_POINT}/ -u
+	${TOOL_MTREE} -def ${MTREECONF} -p ${MOUNT_POINT}/ -u
 	TOPDIR=${TOP} CURDIR=${.CURDIR} OBJDIR=${.OBJDIR} \
-	    TARGDIR=${MOUNT_POINT} sh ${TOP}/runlist.sh ${LISTS}
+	    KERNOBJDIR=${KERNOBJDIR} \
+	    TARGDIR=${MOUNT_POINT} ${HOST_SH} ${TOP}/runlist.sh ${LISTS}
 	@echo ""
 	@df -i ${MOUNT_POINT}
 	@echo ""
@@ -45,7 +46,7 @@ bootroot: edlabel copy xxboot boot
 	vnconfig -u ${VND_DEV}
 
 edlabel copy xxboot boot:
-	(cd /sys/arch/vax/boot;make)
+	(cd /sys/arch/vax/boot; ${MAKE})
 	cp /sys/arch/vax/boot/edlabel .
 	cp /sys/arch/vax/boot/copy .
 	cp /sys/arch/vax/boot/xxboot .
@@ -57,10 +58,10 @@ unconfig:
 	-/bin/rm -f ${IMAGE}
 
 ${CBIN}.mk ${CBIN}.cache ${CBIN}.c: ${CRUNCHCONF}
-	crunchgen ${CRUNCHCONF}
+	${TOOL_CRUNCHGEN} ${CRUNCHCONF}
 
 ${CBIN}: ${CBIN}.mk ${CBIN}.cache ${CBIN}.c
-	make -f ${CBIN}.mk
+	${MAKE} -f ${CBIN}.mk
 
 clean cleandir distclean:
 	/bin/rm -f core ${IMAGE} ${CBIN} ${CBIN}.mk ${CBIN}.cache *.o *.cro *.c

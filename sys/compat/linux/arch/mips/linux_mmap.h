@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_mmap.h,v 1.1 1998/09/30 21:55:58 erh Exp $	*/
+/*	$NetBSD: linux_mmap.h,v 1.8 2008/04/28 20:23:43 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,12 +32,16 @@
 #ifndef _MIPS_LINUX_MMAP_H
 #define _MIPS_LINUX_MMAP_H
 
-/* LINUX_PROT_* defined in common/linux_mmap.h */
+/*
+ * LINUX_PROT_* defined in common/linux_mmap.h
+ * LINUX_MAP_SHARED/PRIVATE defined in common/linux_mmap.h
+ */
 
-/* LINUX_MAP_SHARED/PRIVATE defined in common/linux_mmap.h */
-
+/*
+ * From Linux's include/asm-mips/mman.h
+ */
 #define LINUX_MAP_FIXED		0x0010
-#define LINUX_MAP_ANON		0x0800
+#define LINUX_MAP_ANON		0x0800	/* MAP_ANONYMOUS for Linux */
 
 /* Ignored */
 #define LINUX_MAP_RENAME	0x0020
@@ -56,7 +53,5 @@
 #define LINUX_MAP_DENYWRITE	0x2000
 #define LINUX_MAP_EXECUTABLE	0x4000
 #define LINUX_MAP_LOCKED	0x8000
-
-#define LINUX_MAP_IGNMASK	0xf5e0
 
 #endif /* !_MIPS_LINUX_MMAP_H */

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_auereg.h,v 1.11 2000/03/30 16:38:55 augustss Exp $	*/
+/*	$NetBSD: if_auereg.h,v 1.21 2008/05/22 01:21:18 dyoung Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -93,6 +93,7 @@
 #define AUE_PAUSE		AUE_PAUSE0
 #define AUE_RX_FLOWCTL_CNT	0x1A
 #define AUE_RX_FLOWCTL_FIFO	0x1B
+#define AUE_REG_1D		0x1D
 #define AUE_EE_REG		0x20
 #define AUE_EE_DATA0		0x21
 #define AUE_EE_DATA1		0x22
@@ -112,8 +113,10 @@
 #define AUE_PKTLOST1		0x2F
 #define AUE_PKTLOST		AUE_PKTLOST0
 
+#define AUE_REG_7B		0x7B
 #define AUE_GPIO0		0x7E
 #define AUE_GPIO1		0x7F
+#define AUE_REG_81		0x81
 
 #define AUE_CTL0_INCLUDE_RXCRC	0x01
 #define AUE_CTL0_ALLMULTI	0x02
@@ -197,11 +200,6 @@ struct aue_rxpkt {
 
 /*************** The rest belongs in if_auevar.h *************/
 
-struct aue_type {
-	u_int16_t		aue_vid;
-	u_int16_t		aue_did;
-};
-
 #define AUE_TX_LIST_CNT		1
 #define AUE_RX_LIST_CNT		1
 
@@ -228,28 +226,18 @@ struct aue_cdata {
 struct aue_softc {
 	USBBASEDEVICE		aue_dev;
 
-#if defined(__FreeBSD__)
-	struct arpcom		arpcom;
-	device_t		aue_miibus;
-#define GET_IFP(sc) (&(sc)->arpcom.ac_if)
-#define GET_MII(sc) (device_get_softc((sc)->aue_miibus))
-#elif defined(__NetBSD__)
 	struct ethercom		aue_ec;
 	struct mii_data		aue_mii;
 #if NRND > 0
 	rndsource_element_t	rnd_source;
 #endif
+	struct lwp		*aue_thread;
+	int			aue_closing;
+	kcondvar_t		aue_domc;
+	kcondvar_t		aue_closemc;
+	kmutex_t		aue_mcmtx;
 #define GET_IFP(sc) (&(sc)->aue_ec.ec_if)
 #define GET_MII(sc) (&(sc)->aue_mii)
-#elif defined(__OpenBSD__)
-	struct arpcom		arpcom;
-	struct mii_data		aue_mii;
-#if NRND > 0
-	rndsource_element_t	rnd_source;
-#endif
-#define GET_IFP(sc) (&(sc)->arpcom.ac_if)
-#define GET_MII(sc) (&(sc)->aue_mii)
-#endif
 
 	usb_callout_t		aue_stat_ch;
 
@@ -263,10 +251,19 @@ struct aue_softc {
 	int			aue_if_flags;
 	struct aue_cdata	aue_cdata;
 
+	u_int16_t		aue_flags;
+
+	int			aue_refcnt;
 	char			aue_dying;
 	char			aue_attached;
 	u_int			aue_rx_errs;
+	u_int			aue_intr_errs;
 	struct timeval		aue_rx_notice;
+
+	struct usb_task		aue_tick_task;
+	struct usb_task		aue_stop_task;
+
+	kmutex_t		aue_mii_lock;
 };
 
 #define AUE_TIMEOUT		1000

@@ -1,4 +1,4 @@
-/*	$NetBSD: db.c,v 1.12 2000/01/22 22:19:07 mycroft Exp $	*/
+/*	$NetBSD: db.c,v 1.16 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,14 +29,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)db.c	8.4 (Berkeley) 2/21/94";
-#else
-__RCSID("$NetBSD: db.c,v 1.12 2000/01/22 22:19:07 mycroft Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: db.c,v 1.16 2008/09/11 12:58:00 joerg Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
@@ -51,19 +45,15 @@ __RCSID("$NetBSD: db.c,v 1.12 2000/01/22 22:19:07 mycroft Exp $");
 #include <stdio.h>
 
 #include <db.h>
-static int __dberr __P((void));
+static int __dberr(void);
 
 #ifdef __weak_alias
 __weak_alias(dbopen,_dbopen)
 #endif
 
 DB *
-dbopen(fname, flags, mode, type, openinfo)
-	const char *fname;
-	int flags;
-	mode_t mode;
-	DBTYPE type;
-	const void *openinfo;
+dbopen(const char *fname, int flags, mode_t mode, DBTYPE type,
+    const void *openinfo)
 {
 
 #define	DB_FLAGS	(DB_LOCK | DB_SHMEM | DB_TXN)
@@ -88,7 +78,7 @@ dbopen(fname, flags, mode, type, openinfo)
 }
 
 static int
-__dberr()
+__dberr(void)
 {
 	return (RET_ERROR);
 }
@@ -100,8 +90,7 @@ __dberr()
  *	dbp:	pointer to the DB structure.
  */
 void
-__dbpanic(dbp)
-	DB *dbp;
+__dbpanic(DB *dbp)
 {
 	/* The only thing that can succeed is a close. */
 	dbp->del = (int (*)(const struct __db *, const DBT*, u_int))__dberr;

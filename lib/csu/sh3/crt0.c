@@ -1,4 +1,4 @@
-/*	$NetBSD: crt0.c,v 1.1 1999/10/07 11:56:28 msaitoh Exp $	*/
+/*	$NetBSD: crt0.c,v 1.3 2008/06/21 00:52:52 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 1996 Charles M. Hannum.  All rights reserved.
@@ -37,7 +37,7 @@
 
 #include "common.h"
 
-extern	void		start __P((void)) asm("start");
+extern	void		start __P((void)) __asm("start");
 	void		__start __P((int, char *[], char *[]));
 
 __asm("
@@ -50,7 +50,7 @@ start:
 ");
 	
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: crt0.c,v 1.1 1999/10/07 11:56:28 msaitoh Exp $");
+__RCSID("$NetBSD: crt0.c,v 1.3 2008/06/21 00:52:52 gmcgarry Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 void
@@ -71,11 +71,7 @@ __start(argc, argv, envp)
 
 #ifdef DYNAMIC
 	/* ld(1) convention: if DYNAMIC = 0 then statically linked */
-#ifdef stupid_gcc
 	if (&_DYNAMIC)
-#else
-	if ( ({volatile caddr_t x = (caddr_t)&_DYNAMIC; x; }) )
-#endif
 		__load_rtld(&_DYNAMIC);
 #endif /* DYNAMIC */
 
@@ -89,7 +85,7 @@ __asm("__callmain:");		/* Defined for the benefit of debuggers */
 }
 
 #ifdef DYNAMIC
-asm("
+__asm("
 	.text
 	.align	2
 ___syscall:

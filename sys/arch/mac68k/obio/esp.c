@@ -1,4 +1,4 @@
-/*	$NetBSD: esp.c,v 1.24 1999/10/19 17:00:41 thorpej Exp $	*/
+/*	$NetBSD: esp.c,v 1.51 2008/06/02 12:01:11 hauke Exp $	*/
 
 /*
  * Copyright (c) 1997 Jason R. Thorpe.
@@ -76,6 +76,9 @@
  *  "DMA" glue functions).
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: esp.c,v 1.51 2008/06/02 12:01:11 hauke Exp $");
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,47 +108,39 @@
 #include <mac68k/obio/espvar.h>
 #include <mac68k/obio/obiovar.h>
 
-void	espattach	__P((struct device *, struct device *, void *));
-int	espmatch	__P((struct device *, struct cfdata *, void *));
+int	espmatch(device_t, cfdata_t, void *);
+void	espattach(device_t, device_t, void *);
 
 /* Linkup to the rest of the kernel */
-struct cfattach esp_ca = {
-	sizeof(struct esp_softc), espmatch, espattach
-};
-
-struct scsipi_device esp_dev = {
-	NULL,			/* Use default error handler */
-	NULL,			/* have a queue, served by this */
-	NULL,			/* have no async handler */
-	NULL,			/* Use default 'done' routine */
-};
+CFATTACH_DECL_NEW(esp, sizeof(struct esp_softc),
+    espmatch, espattach, NULL, NULL);
 
 /*
  * Functions and the switch for the MI code.
  */
-u_char	esp_read_reg __P((struct ncr53c9x_softc *, int));
-void	esp_write_reg __P((struct ncr53c9x_softc *, int, u_char));
-int	esp_dma_isintr __P((struct ncr53c9x_softc *));
-void	esp_dma_reset __P((struct ncr53c9x_softc *));
-int	esp_dma_intr __P((struct ncr53c9x_softc *));
-int	esp_dma_setup __P((struct ncr53c9x_softc *, caddr_t *,
-	    size_t *, int, size_t *));
-void	esp_dma_go __P((struct ncr53c9x_softc *));
-void	esp_dma_stop __P((struct ncr53c9x_softc *));
-int	esp_dma_isactive __P((struct ncr53c9x_softc *));
-void	esp_quick_write_reg __P((struct ncr53c9x_softc *, int, u_char));
-int	esp_quick_dma_intr __P((struct ncr53c9x_softc *));
-int	esp_quick_dma_setup __P((struct ncr53c9x_softc *, caddr_t *,
-	    size_t *, int, size_t *));
-void	esp_quick_dma_go __P((struct ncr53c9x_softc *));
+uint8_t	esp_read_reg(struct ncr53c9x_softc *, int);
+void	esp_write_reg(struct ncr53c9x_softc *, int, uint8_t);
+int	esp_dma_isintr(struct ncr53c9x_softc *);
+void	esp_dma_reset(struct ncr53c9x_softc *);
+int	esp_dma_intr(struct ncr53c9x_softc *);
+int	esp_dma_setup(struct ncr53c9x_softc *, uint8_t **, size_t *, int,
+	    size_t *);
+void	esp_dma_go(struct ncr53c9x_softc *);
+void	esp_dma_stop(struct ncr53c9x_softc *);
+int	esp_dma_isactive(struct ncr53c9x_softc *);
+void	esp_quick_write_reg(struct ncr53c9x_softc *, int, u_char);
+int	esp_quick_dma_intr(struct ncr53c9x_softc *);
+int	esp_quick_dma_setup(struct ncr53c9x_softc *, uint8_t **, size_t *, int,
+	     size_t *);
+void	esp_quick_dma_go(struct ncr53c9x_softc *);
 
-void	esp_intr __P((void *sc));
-void	esp_dualbus_intr __P((void *sc));
-static struct esp_softc		*esp0 = NULL, *esp1 = NULL;
+void	esp_intr(void *);
+void	esp_dualbus_intr(void *);
+static struct esp_softc		*esp0, *esp1;
 
-static __inline__ int esp_dafb_have_dreq __P((struct esp_softc *esc));
-static __inline__ int esp_iosb_have_dreq __P((struct esp_softc *esc));
-int (*esp_have_dreq) __P((struct esp_softc *esc));
+static inline int esp_dafb_have_dreq(struct esp_softc *);
+static inline int esp_iosb_have_dreq(struct esp_softc *);
+int (*esp_have_dreq)(struct esp_softc *);
 
 struct ncr53c9x_glue esp_glue = {
 	esp_read_reg,
@@ -161,40 +156,37 @@ struct ncr53c9x_glue esp_glue = {
 };
 
 int
-espmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+espmatch(device_t parent, cfdata_t cf, void *aux)
 {
-	int	found = 0;
+	struct obio_attach_args *oa = aux;
 
-	if ((cf->cf_unit == 0) && mac68k_machine.scsi96) {
-		found = 1;
+	if (oa->oa_addr == 0 && mac68k_machine.scsi96) {
+		return 1;
 	}
-	if ((cf->cf_unit == 1) && mac68k_machine.scsi96_2) {
-		found = 1;
+	if (oa->oa_addr == 1 && mac68k_machine.scsi96_2) {
+		return 1;
 	}
-
-	return found;
+	return 0;
 }
 
 /*
  * Attach this instance, and then all the sub-devices
  */
 void
-espattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+espattach(device_t parent, device_t self, void *aux)
 {
-	struct obio_attach_args *oa = (struct obio_attach_args *)aux;
-	extern vaddr_t		SCSIBase;
-	struct esp_softc	*esc = (void *)self;
+	struct esp_softc	*esc = device_private(self);
 	struct ncr53c9x_softc	*sc = &esc->sc_ncr53c9x;
+	struct obio_attach_args *oa = aux;
 	int			quick = 0;
 	unsigned long		reg_offset;
+	extern vaddr_t		SCSIBase;
+
+	sc->sc_dev = self;
 
 	reg_offset = SCSIBase - IOBase;
 	esc->sc_tag = oa->oa_tag;
+
 	/*
 	 * For Wombat, Primus and Optimus motherboards, DREQ is
 	 * visible on bit 0 of the IOSB's emulated VIA2 vIFR (and
@@ -206,7 +198,7 @@ espattach(parent, self, aux)
 	 * pseudo-DMA timing.  The default value is 0x1d1.
 	 */
 	esp_have_dreq = esp_dafb_have_dreq;
-	if (sc->sc_dev.dv_unit == 0) {
+	if (oa->oa_addr == 0) {
 		if (reg_offset == 0x10000) {
 			quick = 1;
 			esp_have_dreq = esp_iosb_have_dreq;
@@ -215,7 +207,8 @@ espattach(parent, self, aux)
 		} else {
 			if (bus_space_map(esc->sc_tag, 0xf9800024,
 					  4, 0, &esc->sc_bsh)) {
-				printf("failed to map 4 at 0xf9800024.\n");
+				aprint_error(": failed to map 4"
+				    " at 0xf9800024.\n");
 			} else {
 				quick = 1;
 				bus_space_write_4(esc->sc_tag,
@@ -225,7 +218,7 @@ espattach(parent, self, aux)
 	} else {
 		if (bus_space_map(esc->sc_tag, 0xf9800028,
 				  4, 0, &esc->sc_bsh)) {
-			printf("failed to map 4 at 0xf9800028.\n");
+			aprint_error(": failed to map 4 at 0xf9800028.\n");
 		} else {
 			quick = 1;
 			bus_space_write_4(esc->sc_tag, esc->sc_bsh, 0, 0x1d1);
@@ -246,25 +239,26 @@ espattach(parent, self, aux)
 	/*
 	 * Save the regs
 	 */
-	if (sc->sc_dev.dv_unit == 0) {
+	if (oa->oa_addr == 0) {
 		esp0 = esc;
 
-		esc->sc_reg = (volatile u_char *) SCSIBase;
+		esc->sc_reg = (volatile uint8_t *)SCSIBase;
 		via2_register_irq(VIA2_SCSIIRQ, esp_intr, esc);
 		esc->irq_mask = V2IF_SCSIIRQ;
 		if (reg_offset == 0x10000) {
+			/* From the Q650 developer's note */
 			sc->sc_freq = 16500000;
 		} else {
 			sc->sc_freq = 25000000;
 		}
 
 		if (esp_glue.gl_dma_go == esp_quick_dma_go) {
-			printf(" (quick)");
+			aprint_normal(" (quick)");
 		}
 	} else {
 		esp1 = esc;
 
-		esc->sc_reg = (volatile u_char *) SCSIBase + 0x402;
+		esc->sc_reg = (volatile uint8_t *)SCSIBase + 0x402;
 		via2_register_irq(VIA2_SCSIIRQ, esp_dualbus_intr, NULL);
 		esc->irq_mask = 0;
 		sc->sc_freq = 25000000;
@@ -274,11 +268,11 @@ espattach(parent, self, aux)
 		}
 	}
 
-	printf(": address %p", esc->sc_reg);
+	aprint_normal(": address %p", esc->sc_reg);
 
 	sc->sc_id = 7;
 
-	/* gimme Mhz */
+	/* gimme MHz */
 	sc->sc_freq /= 1000000;
 
 	/*
@@ -302,9 +296,20 @@ espattach(parent, self, aux)
 	 */
 	sc->sc_minsync = 1000 / sc->sc_freq;
 
-	sc->sc_minsync = 0;	/* No synchronous xfers w/o DMA */
-	/* Really no limit, but since we want to fit into the TCR... */
-	sc->sc_maxxfer = 8 * 1024; /*64 * 1024; XXX */
+	/* We need this to fit into the TCR... */
+	sc->sc_maxxfer = 64 * 1024;
+
+        switch (current_mac_model->machineid) {
+        case MACH_MACQ630:
+		/* XXX on LC630 64k xfer causes timeout error */
+		sc->sc_maxxfer = 63 * 1024;
+		break;
+	}
+
+	if (!quick) {
+		sc->sc_minsync = 0;	/* No synchronous xfers w/o DMA */
+		sc->sc_maxxfer = 8 * 1024;
+	}
 
 	/*
 	 * Configure interrupts.
@@ -318,19 +323,17 @@ espattach(parent, self, aux)
 	/*
 	 * Now try to attach all the sub-devices
 	 */
-	sc->sc_adapter.scsipi_cmd = ncr53c9x_scsi_cmd;
-	sc->sc_adapter.scsipi_minphys = minphys; 
-	ncr53c9x_attach(sc, &esp_dev);
+	sc->sc_adapter.adapt_minphys = minphys;
+	sc->sc_adapter.adapt_request = ncr53c9x_scsipi_request;
+	ncr53c9x_attach(sc);
 }
 
 /*
  * Glue functions.
  */
 
-u_char
-esp_read_reg(sc, reg)
-	struct ncr53c9x_softc *sc;
-	int reg;
+uint8_t
+esp_read_reg(struct ncr53c9x_softc *sc, int reg)
 {
 	struct esp_softc *esc = (struct esp_softc *)sc;
 
@@ -338,13 +341,10 @@ esp_read_reg(sc, reg)
 }
 
 void
-esp_write_reg(sc, reg, val)
-	struct ncr53c9x_softc *sc;
-	int reg;
-	u_char val;
+esp_write_reg(struct ncr53c9x_softc *sc, int reg, uint8_t val)
 {
 	struct esp_softc *esc = (struct esp_softc *)sc;
-	u_char	v = val;
+	uint8_t	v = val;
 
 	if (reg == NCR_CMD && v == (NCRCMD_TRANS|NCRCMD_DMA)) {
 		v = NCRCMD_TRANS;
@@ -353,14 +353,12 @@ esp_write_reg(sc, reg, val)
 }
 
 void
-esp_dma_stop(sc)
-	struct ncr53c9x_softc *sc;
+esp_dma_stop(struct ncr53c9x_softc *sc)
 {
 }
 
 int
-esp_dma_isactive(sc)
-	struct ncr53c9x_softc *sc;
+esp_dma_isactive(struct ncr53c9x_softc *sc)
 {
 	struct esp_softc *esc = (struct esp_softc *)sc;
 
@@ -368,8 +366,7 @@ esp_dma_isactive(sc)
 }
 
 int
-esp_dma_isintr(sc)
-	struct ncr53c9x_softc *sc;
+esp_dma_isintr(struct ncr53c9x_softc *sc)
 {
 	struct esp_softc *esc = (struct esp_softc *)sc;
 
@@ -377,8 +374,7 @@ esp_dma_isintr(sc)
 }
 
 void
-esp_dma_reset(sc)
-	struct ncr53c9x_softc *sc;
+esp_dma_reset(struct ncr53c9x_softc *sc)
 {
 	struct esp_softc *esc = (struct esp_softc *)sc;
 
@@ -387,12 +383,11 @@ esp_dma_reset(sc)
 }
 
 int
-esp_dma_intr(sc)
-	struct ncr53c9x_softc *sc;
+esp_dma_intr(struct ncr53c9x_softc *sc)
 {
 	struct esp_softc *esc = (struct esp_softc *)sc;
 	volatile u_char *cmdreg, *intrreg, *statreg, *fiforeg;
-	u_char	*p;
+	uint8_t	*p;
 	u_int	espphase, espstat, espintr;
 	int	cnt, s;
 
@@ -413,8 +408,8 @@ esp_dma_intr(sc)
 
 	p = *esc->sc_dmaaddr;
 	espphase = sc->sc_phase;
-	espstat = (u_int) sc->sc_espstat;
-	espintr = (u_int) sc->sc_espintr;
+	espstat = (u_int)sc->sc_espstat;
+	espintr = (u_int)sc->sc_espintr;
 	cmdreg = esc->sc_reg + NCR_CMD * 16;
 	fiforeg = esc->sc_reg + NCR_FIFO * 16;
 	statreg = esc->sc_reg + NCR_STAT * 16;
@@ -451,8 +446,8 @@ esp_dma_intr(sc)
 		}
 	} while (esc->sc_active && (espintr & NCRINTR_BS));
 	sc->sc_phase = espphase;
-	sc->sc_espstat = (u_char) espstat;
-	sc->sc_espintr = (u_char) espintr;
+	sc->sc_espstat = (u_char)espstat;
+	sc->sc_espintr = (u_char)espintr;
 	*esc->sc_dmaaddr = p;
 	*esc->sc_dmalen = cnt;
 
@@ -464,12 +459,8 @@ esp_dma_intr(sc)
 }
 
 int
-esp_dma_setup(sc, addr, len, datain, dmasize)
-	struct ncr53c9x_softc *sc;
-	caddr_t *addr;
-	size_t *len;
-	int datain;
-	size_t *dmasize;
+esp_dma_setup(struct ncr53c9x_softc *sc, uint8_t **addr, size_t *len,
+    int datain, size_t *dmasize)
 {
 	struct esp_softc *esc = (struct esp_softc *)sc;
 
@@ -483,8 +474,7 @@ esp_dma_setup(sc, addr, len, datain, dmasize)
 }
 
 void
-esp_dma_go(sc)
-	struct ncr53c9x_softc *sc;
+esp_dma_go(struct ncr53c9x_softc *sc)
 {
 	struct esp_softc *esc = (struct esp_softc *)sc;
 
@@ -497,49 +487,56 @@ esp_dma_go(sc)
 }
 
 void
-esp_quick_write_reg(sc, reg, val)
-	struct ncr53c9x_softc *sc;
-	int reg;
-	u_char val;
+esp_quick_write_reg(struct ncr53c9x_softc *sc, int reg, u_char val)
 {
 	struct esp_softc *esc = (struct esp_softc *)sc;
 
 	esc->sc_reg[reg * 16] = val;
 }
 
+#if DEBUG
+int mac68k_esp_debug=0;
+#endif
+
 int
-esp_quick_dma_intr(sc)
-	struct ncr53c9x_softc *sc;
+esp_quick_dma_intr(struct ncr53c9x_softc *sc)
 {
 	struct esp_softc *esc = (struct esp_softc *)sc;
 	int trans=0, resid=0;
 
 	if (esc->sc_active == 0)
-		panic("dma_intr--inactive DMA\n");
+		panic("dma_intr--inactive DMA");
 
 	esc->sc_active = 0;
 
 	if (esc->sc_dmasize == 0) {
 		int	res;
 
-		res = 65536;
-		res -= NCR_READ_REG(sc, NCR_TCL);
-		res -= NCR_READ_REG(sc, NCR_TCM) << 8;
-		printf("dmaintr: discarded %d b (last transfer was %d b).\n",
-			res, esc->sc_prevdmasize);
+		res = NCR_READ_REG(sc, NCR_TCL);
+		res += NCR_READ_REG(sc, NCR_TCM) << 8;
+		/* This can happen in the case of a TRPAD operation */
+		/* Pretend that it was complete */
+		sc->sc_espstat |= NCRSTAT_TC;
+#if DEBUG
+		if (mac68k_esp_debug) {
+			printf("dmaintr: DMA xfer of zero xferred %d\n",
+			    65536 - res);
+		}
+#endif
 		return 0;
 	}
 
-	if (esc->sc_datain &&
-	    (resid = (NCR_READ_REG(sc, NCR_FFLAG) & NCRFIFO_FF)) != 0) {
-		printf("dmaintr: empty FIFO of %d\n", resid);
-		DELAY(1);
-	}
-
 	if ((sc->sc_espstat & NCRSTAT_TC) == 0) {
+		if (esc->sc_datain == 0) {
+			resid = NCR_READ_REG(sc, NCR_FFLAG) & 0x1f;
+#if DEBUG
+			if (mac68k_esp_debug) {
+				printf("Write FIFO residual %d bytes\n", resid);
+			}
+#endif
+		}
 		resid += NCR_READ_REG(sc, NCR_TCL);
 		resid += NCR_READ_REG(sc, NCR_TCM) << 8;
-
 		if (resid == 0)
 			resid = 65536;
 	}
@@ -547,10 +544,15 @@ esp_quick_dma_intr(sc)
 	trans = esc->sc_dmasize - resid;
 	if (trans < 0) {
 		printf("dmaintr: trans < 0????");
-		trans = esc->sc_dmasize;
+		trans = *esc->sc_dmalen;
 	}
 
 	NCR_DMA(("dmaintr: trans %d, resid %d.\n", trans, resid));
+#if DEBUG
+	if (mac68k_esp_debug) {
+		printf("eqd_intr: trans %d, resid %d.\n", trans, resid);
+	}
+#endif
 	*esc->sc_dmaaddr += trans;
 	*esc->sc_dmalen -= trans;
 
@@ -558,179 +560,343 @@ esp_quick_dma_intr(sc)
 }
 
 int
-esp_quick_dma_setup(sc, addr, len, datain, dmasize)
-	struct ncr53c9x_softc *sc;
-	caddr_t *addr;
-	size_t *len;
-	int datain;
-	size_t *dmasize;
+esp_quick_dma_setup(struct ncr53c9x_softc *sc, uint8_t **addr, size_t *len,
+    int datain, size_t *dmasize)
 {
 	struct esp_softc *esc = (struct esp_softc *)sc;
 
 	esc->sc_dmaaddr = addr;
 	esc->sc_dmalen = len;
 
-	esc->sc_pdmaddr = (u_int16_t *) *addr;
-	esc->sc_pdmalen = *len;
-	if (esc->sc_pdmalen & 1) {
-		esc->sc_pdmalen--;
+	if (*len & 1) {
 		esc->sc_pad = 1;
 	} else {
 		esc->sc_pad = 0;
 	}
 
 	esc->sc_datain = datain;
-	esc->sc_prevdmasize = esc->sc_dmasize;
 	esc->sc_dmasize = *dmasize;
+
+#if DIAGNOSTIC
+	if (esc->sc_dmasize == 0) {
+		/* This can happen in the case of a TRPAD operation */
+	}
+#endif
+#if DEBUG
+	if (mac68k_esp_debug) {
+	printf("eqd_setup: addr %lx, len %lx, in? %d, dmasize %lx\n",
+	    (long) *addr, (long) *len, datain, (long) esc->sc_dmasize);
+	}
+#endif
 
 	return 0;
 }
 
-static __inline__ int
-esp_dafb_have_dreq(esc)
-	struct esp_softc *esc;
+static inline int
+esp_dafb_have_dreq(struct esp_softc *esc)
 {
-	u_int32_t r;
 
-	r = bus_space_read_4(esc->sc_tag, esc->sc_bsh, 0);
-	return (r & 0x200);
+	return *(volatile uint32_t *)(esc->sc_bsh.base) & 0x200;
 }
 
-static __inline__ int
-esp_iosb_have_dreq(esc)
-	struct esp_softc *esc;
+static inline int
+esp_iosb_have_dreq(struct esp_softc *esc)
 {
-	return (via2_reg(vIFR) & V2IF_SCSIDRQ);
+
+	return via2_reg(vIFR) & V2IF_SCSIDRQ;
 }
 
-static int espspl=-1;
-#define __splx(s) __asm __volatile ("movew %0,sr" : : "di" (s));
-#define __spl2()  __splx(PSL_S|PSL_IPL2)
-#define __spl6()  __splx(PSL_S|PSL_IPL6)
+static volatile int espspl = -1;
 
+/*
+ * Apple "DMA" is weird.
+ *
+ * Basically, the CPU acts like the DMA controller.  The DREQ/ off the
+ * chip goes to a register that we've mapped at attach time (on the
+ * IOSB or DAFB, depending on the machine).  Apple also provides some
+ * space for which the memory controller handshakes data to/from the
+ * NCR chip with the DACK/ line.  This space appears to be mapped over
+ * and over, every 4 bytes, but only the lower 16 bits are valid (but
+ * reading the upper 16 bits will handshake DACK/ just fine, so if you
+ * read *u_int16_t++ = *u_int16_t++ in a loop, you'll get
+ * <databyte><databyte>0xff0xff<databyte><databyte>0xff0xff...
+ *
+ * When you're attempting to read or write memory to this DACK/ed space,
+ * and the NCR is not ready for some timeout period, the system will
+ * generate a bus error.  This might be for one of several reasons:
+ *
+ *	1) (on write) The FIFO is full and is not draining.
+ *	2) (on read) The FIFO is empty and is not filling.
+ *	3) An interrupt condition has occurred.
+ *	4) Anything else?
+ *
+ * So if a bus error occurs, we first turn off the nofault bus error handler,
+ * then we check for an interrupt (which would render the first two
+ * possibilities moot).  If there's no interrupt, check for a DREQ/.  If we
+ * have that, then attempt to resume stuffing (or unstuffing) the FIFO.  If
+ * neither condition holds, pause briefly and check again.
+ *
+ * NOTE!!!  In order to make allowances for the hardware structure of
+ *          the mac, spl values in here are hardcoded!!!!!!!!!
+ *          This is done to allow serial interrupts to get in during
+ *          scsi transfers.  This is ugly.
+ */
 void
-esp_quick_dma_go(sc)
-	struct ncr53c9x_softc *sc;
+esp_quick_dma_go(struct ncr53c9x_softc *sc)
 {
 	struct esp_softc *esc = (struct esp_softc *)sc;
+	extern long mac68k_a2_fromfault;
 	extern int *nofault;
 	label_t faultbuf;
-	u_int16_t volatile *pdma;
-	u_char volatile *statreg;
+	uint16_t volatile *pdma;
+	uint16_t *addr;
+	int		len, res;
+	uint16_t	cnt32, cnt2;
+	volatile uint8_t *statreg;
 
 	esc->sc_active = 1;
 
-	espspl = spl2();
+	espspl = splhigh();
+
+	addr = (uint16_t *)*esc->sc_dmaaddr;
+	len  = esc->sc_dmasize;
 
 restart_dmago:
-	nofault = (int *) &faultbuf;
-	if (setjmp((label_t *) nofault)) {
-		int	i=0;
+#if DEBUG
+	if (mac68k_esp_debug) {
+		printf("eqdg: a %lx, l %lx, in? %d ... ",
+		    (long) addr, (long) len, esc->sc_datain);
+	}
+#endif
+	nofault = (int *)&faultbuf;
+	if (setjmp((label_t *)nofault)) {
+		int	i = 0;
 
-		nofault = (int *) 0;
+		nofault = NULL;
+#if DEBUG
+		if (mac68k_esp_debug) {
+			printf("be\n");
+		}
+#endif
+		/*
+		 * Bus error...
+		 * So, we first check for an interrupt.  If we have
+		 * one, go handle it.  Next we check for DREQ/.  If
+		 * we have it, then we restart the transfer.  If
+		 * neither, then loop until we get one or the other.
+		 */
 		statreg = esc->sc_reg + NCR_STAT * 16;
 		for (;;) {
+			spl2();		/* Give serial a chance... */
+			splhigh();	/* That's enough... */
+
 			if (*statreg & 0x80) {
 				goto gotintr;
 			}
 
 			if (esp_have_dreq(esc)) {
+				/*
+				 * Get the remaining length from the address
+				 * differential.
+				 */
+				addr = (uint16_t *)mac68k_a2_fromfault;
+				len = esc->sc_dmasize -
+				    ((long)addr - (long)*esc->sc_dmaaddr);
+
+				if (esc->sc_datain == 0) {
+					/*
+					 * Let the FIFO drain before we read
+					 * the transfer count.
+					 * Do we need to do this?
+					 * Can we do this?
+					 */
+					while (NCR_READ_REG(sc, NCR_FFLAG)
+					    & 0x1f);
+					/*
+					 * Get the length from the transfer
+					 * counters.
+					 */
+					res = NCR_READ_REG(sc, NCR_TCL);
+					res += NCR_READ_REG(sc, NCR_TCM) << 8;
+					/*
+					 * If they don't agree,
+					 * adjust accordingly.
+					 */
+					while (res > len) {
+						len+=2; addr--;
+					}
+					if (res != len) {
+						panic("%s: res %d != len %d",
+						    __func__, res, len);
+					}
+				}
 				break;
 			}
 
 			DELAY(1);
-			if (i++ > 10000)
-				panic("esp_dma_go: Argh!");
+			if (i++ > 1000000)
+				panic("%s: Bus error, but no condition!  Argh!",
+				    __func__);
 		}
 		goto restart_dmago;
 	}
 
+	len &= ~1;
+
 	statreg = esc->sc_reg + NCR_STAT * 16;
-	pdma = (u_int16_t *) (esc->sc_reg + 0x100);
+	pdma = (volatile uint16_t *)(esc->sc_reg + 0x100);
 
-#define WAIT while (!esp_have_dreq(esc)) if (*statreg & 0x80) goto gotintr
-
+	/*
+	 * These loops are unrolled into assembly for two reasons:
+	 * 1) We can make sure that they are as efficient as possible, and
+	 * 2) (more importantly) we need the address that we are reading
+	 *    from or writing to to be in a2.
+	 */
+	cnt32 = len / 32;
+	cnt2 = (len % 32) / 2;
 	if (esc->sc_datain == 0) {
-		while (esc->sc_pdmalen) {
-			WAIT;
-			__spl6(); *pdma = *(esc->sc_pdmaddr)++; __spl2()
-			esc->sc_pdmalen -= 2;
-		}
+		/* while (cnt32--) { 16 instances of *pdma = *addr++; } */
+		/* while (cnt2--) { *pdma = *addr++; } */
+		__asm volatile (
+			"	movl %1, %%a2	\n"
+			"	movl %2, %%a3	\n"
+			"	movw %3, %%d2	\n"
+			"	cmpw #0, %%d2	\n"
+			"	beq  2f		\n"
+			"	subql #1, %%d2	\n"
+			"1:	movw %%a2@+,%%a3@; movw %%a2@+,%%a3@	\n"
+			"	movw %%a2@+,%%a3@; movw %%a2@+,%%a3@	\n"
+			"	movw %%a2@+,%%a3@; movw %%a2@+,%%a3@	\n"
+			"	movw %%a2@+,%%a3@; movw %%a2@+,%%a3@	\n"
+			"	movw %%a2@+,%%a3@; movw %%a2@+,%%a3@	\n"
+			"	movw %%a2@+,%%a3@; movw %%a2@+,%%a3@	\n"
+			"	movw %%a2@+,%%a3@; movw %%a2@+,%%a3@	\n"
+			"	movw %%a2@+,%%a3@; movw %%a2@+,%%a3@	\n"
+			"	movw #8704,%%sr	\n"
+			"	movw #9728,%%sr	\n"
+			"	dbra %%d2, 1b	\n"
+			"2:	movw %4, %%d2	\n"
+			"	cmpw #0, %%d2	\n"
+			"	beq  4f		\n"
+			"	subql #1, %%d2	\n"
+			"3:	movw %%a2@+,%%a3@ \n"
+			"	dbra %%d2, 3b	\n"
+			"4:	movl %%a2, %0"
+			: "=g" (addr)
+			: "0" (addr), "g" (pdma), "g" (cnt32), "g" (cnt2)
+			: "a2", "a3", "d2");
 		if (esc->sc_pad) {
-			unsigned short	us;
-			unsigned char	*c;
-			c = (unsigned char *) esc->sc_pdmaddr;
-			us = *c;
-			WAIT;
-			__spl6(); *pdma = us; __spl2()
+			volatile uint8_t *c;
+			c = (volatile uint8_t *) addr;
+			/* Wait for DREQ */
+			while (!esp_have_dreq(esc)) {
+				if (*statreg & 0x80) {
+					nofault = NULL;
+					goto gotintr;
+				}
+			}
+			*(volatile int8_t *)pdma = *c;
 		}
 	} else {
-		while (esc->sc_pdmalen) {
-			WAIT;
-			__spl6(); *(esc->sc_pdmaddr)++ = *pdma; __spl2()
-			esc->sc_pdmalen -= 2;
-		}
+		/* while (cnt32--) { 16 instances of *addr++ = *pdma; } */
+		/* while (cnt2--) { *addr++ = *pdma; } */
+		__asm volatile (
+			"	movl %1, %%a2	\n"
+			"	movl %2, %%a3	\n"
+			"	movw %3, %%d2	\n"
+			"	cmpw #0, %%d2	\n"
+			"	beq  6f		\n"
+			"	subql #1, %%d2	\n"
+			"5:	movw %%a3@,%%a2@+; movw %%a3@,%%a2@+	\n"
+			"	movw %%a3@,%%a2@+; movw %%a3@,%%a2@+	\n"
+			"	movw %%a3@,%%a2@+; movw %%a3@,%%a2@+	\n"
+			"	movw %%a3@,%%a2@+; movw %%a3@,%%a2@+	\n"
+			"	movw %%a3@,%%a2@+; movw %%a3@,%%a2@+	\n"
+			"	movw %%a3@,%%a2@+; movw %%a3@,%%a2@+	\n"
+			"	movw %%a3@,%%a2@+; movw %%a3@,%%a2@+	\n"
+			"	movw %%a3@,%%a2@+; movw %%a3@,%%a2@+	\n"
+			"	movw #8704,%%sr	\n"
+			"	movw #9728,%%sr	\n"
+			"	dbra %%d2, 5b	\n"
+			"6:	movw %4, %%d2	\n"
+			"	cmpw #0, %%d2	\n"
+			"	beq  8f		\n"
+			"	subql #1, %%d2	\n"
+			"7:	movw %%a3@,%%a2@+ \n"
+			"	dbra %%d2, 7b	\n"
+			"8:	movl %%a2, %0"
+			: "=g" (addr)
+			: "0" (addr), "g" (pdma), "g" (cnt32), "g" (cnt2)
+			: "a2", "a3", "d2");
 		if (esc->sc_pad) {
-			unsigned short	us;
-			unsigned char	*c;
-			WAIT;
-			__spl6(); us = *pdma; __spl2()
-			c = (unsigned char *) esc->sc_pdmaddr;
-			*c = us & 0xff;
+			volatile uint8_t *c;
+			c = (volatile int8_t *)addr;
+			/* Wait for DREQ */
+			while (!esp_have_dreq(esc)) {
+				if (*statreg & 0x80) {
+					nofault = NULL;
+					goto gotintr;
+				}
+			}
+			*c = *(volatile uint8_t *)pdma;
 		}
 	}
-#undef WAIT
 
-	nofault = (int *) 0;
+	nofault = NULL;
 
+	/*
+	 * If we have not received an interrupt yet, we should shortly,
+	 * and we can't prevent it, so return and wait for it.
+	 */
 	if ((*statreg & 0x80) == 0) {
-		if (espspl != -1) splx(espspl); espspl = -1;
+#if DEBUG
+		if (mac68k_esp_debug) {
+			printf("g.\n");
+		}
+#endif
+		if (espspl != -1)
+			splx(espspl);
+		espspl = -1;
 		return;
 	}
 
 gotintr:
+#if DEBUG
+	if (mac68k_esp_debug) {
+		printf("g!\n");
+	}
+#endif
+	/*
+	 * We have been called from the MI ncr53c9x_intr() handler,
+	 * which protects itself against multiple invocation with a
+	 * simple_lock. Follow the example of ncr53c9x_poll().
+	 */
+	simple_unlock(&sc->sc_lock);
 	ncr53c9x_intr(sc);
-	if (espspl != -1) splx(espspl); espspl = -1;
+	simple_lock(&sc->sc_lock);
+	if (espspl != -1)
+		splx(espspl);
+	espspl = -1;
 }
 
 void
-esp_intr(sc)
-	void *sc;
+esp_intr(void *sc)
 {
 	struct esp_softc *esc = (struct esp_softc *)sc;
-	int	i = 0;
 
-	do {
-		if (esc->sc_reg[NCR_STAT * 16] & 0x80) {
-			ncr53c9x_intr((struct ncr53c9x_softc *) esp0);
-			i++;
-		}
-
-		if (!i) {
-			delay(10000);
-		}
-	} while (!i++);
+	if (esc->sc_reg[NCR_STAT * 16] & 0x80) {
+		ncr53c9x_intr((struct ncr53c9x_softc *)esp0);
+	}
 }
 
 void
-esp_dualbus_intr(sc)
-	void *sc;
+esp_dualbus_intr(void *sc)
 {
-	int	i = 0;
+	if (esp0 && (esp0->sc_reg[NCR_STAT * 16] & 0x80)) {
+		ncr53c9x_intr((struct ncr53c9x_softc *)esp0);
+	}
 
-	do {
-		if (esp0 && (esp0->sc_reg[NCR_STAT * 16] & 0x80)) {
-			ncr53c9x_intr((struct ncr53c9x_softc *) esp0);
-			i++;
-		}
-
-		if (esp1 && (esp1->sc_reg[NCR_STAT * 16] & 0x80)) {
-			ncr53c9x_intr((struct ncr53c9x_softc *) esp1);
-			i++;
-		}
-
-		if (!i) {
-			delay(10000);
-		}
-	} while (!i++);
+	if (esp1 && (esp1->sc_reg[NCR_STAT * 16] & 0x80)) {
+		ncr53c9x_intr((struct ncr53c9x_softc *)esp1);
+	}
 }

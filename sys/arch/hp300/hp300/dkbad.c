@@ -1,4 +1,4 @@
-/*	$NetBSD: dkbad.c,v 1.5 1997/04/01 03:12:15 scottr Exp $	*/
+/*	$NetBSD: dkbad.c,v 1.11 2006/07/21 10:01:39 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,12 +31,13 @@
  *	@(#)dkbad.c	8.2 (Berkeley) 1/12/94
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: dkbad.c,v 1.11 2006/07/21 10:01:39 tsutsui Exp $");
+
 #ifndef NOBADSECT
 #include <sys/param.h>
 #include <sys/buf.h>
 #include <sys/dkbad.h>
-
-int	isbad __P((struct dkbad *, int, int, int));
 
 /*
  * Search the bad sector table looking for
@@ -49,9 +46,7 @@ int	isbad __P((struct dkbad *, int, int, int));
  */
 
 int
-isbad(bt, cyl, trk, sec)
-	struct dkbad *bt;
-	int cyl, trk, sec;
+isbad(struct dkbad *bt, int cyl, int trk, int sec)
 {
 	int i;
 	long blk, bblk;
@@ -60,10 +55,10 @@ isbad(bt, cyl, trk, sec)
 	for (i = 0; i < 126; i++) {
 		bblk = ((long)bt->bt_bad[i].bt_cyl << 16) + bt->bt_bad[i].bt_trksec;
 		if (blk == bblk)
-			return (i);
+			return i;
 		if (blk < bblk || bblk < 0)
 			break;
 	}
-	return (-1);
+	return -1;
 }
 #endif

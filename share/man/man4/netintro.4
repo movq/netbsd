@@ -1,4 +1,4 @@
-.\"	$NetBSD: netintro.4,v 1.10 1999/12/15 22:07:33 abs Exp $
+.\"	$NetBSD: netintro.4,v 1.22 2007/03/07 00:41:16 dogcow Exp $
 .\"
 .\" Copyright (c) 1983, 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,16 +29,17 @@
 .\"
 .\"     @(#)netintro.4	8.2 (Berkeley) 11/30/93
 .\"
-.Dd November 30, 1993
+.Dd September 7, 2006
 .Dt NETINTRO 4
 .Os
 .Sh NAME
 .Nm netintro
 .Nd introduction to networking facilities
 .Sh SYNOPSIS
-.Fd #include <sys/socket.h>
-.Fd #include <net/route.h>
-.Fd #include <net/if.h>
+.In sys/types.h
+.In sys/socket.h
+.In net/route.h
+.In net/if.h
 .Sh DESCRIPTION
 This section is a general introduction to the networking facilities
 available in the system.
@@ -62,7 +59,7 @@ These services may include packet fragmentation and reassembly,
 routing, addressing, and basic transport.
 A protocol family may support multiple methods of addressing, though
 the current protocol implementations do not.
-A protocol family is normally comprised of a number of protocols, one per
+A protocol family normally comprises a number of protocols, one per
 .Xr socket 2
 type.
 It is not required that a protocol family support all socket types.
@@ -95,7 +92,7 @@ The
 .Em SYNOPSIS
 section of each network interface entry gives a sample specification
 of the related drivers for use in providing a system description to the
-.Xr config 8
+.Xr config 1
 program.
 .Pp
 The
@@ -107,8 +104,7 @@ and/or in the system error log,
 .Xr syslogd 8 ) ,
 due to errors in device operation.
 .Sh PROTOCOLS
-The system currently supports the Internet protocols,
-the Xerox Network Systems (XNS)(tm) protocols, and some of the
+The system currently supports the Internet protocols and some of the
 .Tn ISO OSI
 protocols.
 Raw socket interfaces are provided to the
@@ -196,7 +192,7 @@ struct	ifreq {
         struct    sockaddr ifru_broadaddr;
         short     ifru_flags;
         int       ifru_metric;
-        caddr_t   ifru_data;
+        void   *ifru_data;
     } ifr_ifru;
 #define ifr_addr      ifr_ifru.ifru_addr    /* address */
 #define ifr_dstaddr   ifr_ifru.ifru_dstaddr /* other end of p-to-p link */
@@ -257,7 +253,9 @@ characteristics of the primary address if the default address for
 the address family is specified).
 Rather than making separate calls to set destination or broadcast
 addresses, or network masks (now an integral feature of multiple
-protocols) a separate structure is used to specify all three facets
+protocols) a separate structure,
+.Ar ifaliasreq ,
+is used to specify all three facets
 simultaneously (see below).
 One would use a slightly tailored version of this struct specific
 to each family (replacing each sockaddr by one
@@ -271,12 +269,18 @@ identifier itself to include the total size, as described in
 This requests deletes the specified address from the list
 associated with an interface.
 It also uses the
-.Ar if_aliasreq
+.Ar ifaliasreq
 structure to allow for the possibility of protocols allowing
 multiple masks or destination addresses, and also adopts the
 convention that specification of the default address means
 to delete the first address for the interface belonging to
 the address family in which the original socket was opened.
+.El
+.Pp
+Request making use of the
+.Ar ifconf
+structure:
+.Bl -tag -width SIOCGIFBRDADDR
 .It Dv SIOCGIFCONF
 Get interface configuration list.
 This request takes an
@@ -292,12 +296,13 @@ configuration list.
 .El
 .Bd -literal
 /*
-* Structure used in SIOCAIFCONF request.
+* Structure used in SIOC[AD]IFADDR request.
 */
 struct ifaliasreq {
         char    ifra_name[IFNAMSIZ];   /* if name, e.g. "en0" */
         struct  sockaddr        ifra_addr;
-        struct  sockaddr        ifra_broadaddr;
+        struct  sockaddr        ifra_dstaddr;
+#define	ifra_broadaddr  ifra_dstaddr
         struct  sockaddr        ifra_mask;
 };
 .Ed
@@ -312,7 +317,7 @@ struct ifaliasreq {
 struct ifconf {
     int   ifc_len;		/* size of associated buffer */
     union {
-        caddr_t    ifcu_buf;
+        void    *ifcu_buf;
         struct     ifreq *ifcu_req;
     } ifc_ifcu;
 #define ifc_buf ifc_ifcu.ifcu_buf /* buffer address */
@@ -320,10 +325,10 @@ struct ifconf {
 };
 .Ed
 .Sh SEE ALSO
-.Xr socket 2 ,
+.Xr config 1 ,
 .Xr ioctl 2 ,
+.Xr socket 2 ,
 .Xr intro 4 ,
-.Xr config 8 ,
 .Xr routed 8
 .Sh HISTORY
 The

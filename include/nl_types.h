@@ -1,4 +1,4 @@
-/*	$NetBSD: nl_types.h,v 1.8 1997/07/30 23:00:02 jtc Exp $	*/
+/*	$NetBSD: nl_types.h,v 1.12 2008/04/28 20:22:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -81,7 +74,7 @@ struct _nls_msg_hdr {
 #define	NL_SETD		1
 #define NL_CAT_LOCALE   1
 
-typedef struct {
+typedef struct __nl_cat_d {
 	void	*__data;
 	int	__size;
 } *nl_catd;
@@ -89,9 +82,10 @@ typedef struct {
 typedef long	nl_item;
 
 __BEGIN_DECLS
-nl_catd  catopen __P((const char *, int));
-char    *catgets __P((nl_catd, int, int, const char *));
-int	 catclose __P((nl_catd));
+nl_catd  catopen(const char *, int);
+char    *catgets(nl_catd, int, int, const char *)
+	__attribute__((__format_arg__(4)));
+int	 catclose(nl_catd);
 __END_DECLS
 
 #endif	/* _NL_TYPES_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.16 2000/03/16 18:47:48 enami Exp $	*/
+/*	$NetBSD: main.c,v 1.28 2008/07/21 14:19:22 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,9 +37,9 @@
 #if 0
 static char sccsid[] = "@(#)main.c	8.4 (Berkeley) 5/4/95";
 #else
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
-__RCSID("$NetBSD: main.c,v 1.16 2000/03/16 18:47:48 enami Exp $");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
+__RCSID("$NetBSD: main.c,v 1.28 2008/07/21 14:19:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,9 +50,11 @@ __RCSID("$NetBSD: main.c,v 1.16 2000/03/16 18:47:48 enami Exp $");
 #include <errno.h>
 #include <fcntl.h>
 #include <fts.h>
+#include <signal.h>
 #include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -70,46 +68,51 @@ int isdepth;			/* do directories on post-order visit */
 int isoutput;			/* user specified output operator */
 int issort;			/* sort directory entries */
 int isxargs;			/* don't permit xargs delimiting chars */
+int regcomp_flags = REG_BASIC;	/* regex compilation flags */
 
-int main __P((int, char **));
-static void usage __P((void));
+int main(int, char **);
+static void usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
+	struct sigaction sa;
 	char **p, **start;
 	int ch;
 
 	(void)time(&now);	/* initialize the time-of-day */
 	(void)setlocale(LC_ALL, "");
 
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_flags = SA_RESTART;
+	sa.sa_handler = show_path;
+	sigaction(SIGINFO, &sa, NULL);
+
 	/* array to hold dir list.  at most (argc - 1) elements. */
-	p = start = alloca(argc * sizeof (char *));
+	p = start = malloc(argc * sizeof (char *));
+	if (p == NULL)
+		err(1, NULL);
 
 	ftsoptions = FTS_NOSTAT | FTS_PHYSICAL;
-	while ((ch = getopt(argc, argv, "HLPXdf:hsx")) != -1)
+	while ((ch = getopt(argc, argv, "HLPdEf:hsXx")) != -1)
 		switch (ch) {
 		case 'H':
-			ftsoptions |= FTS_COMFOLLOW;
-#if 0	/* XXX necessary? */
 			ftsoptions &= ~FTS_LOGICAL;
-#endif
+			ftsoptions |= FTS_PHYSICAL|FTS_COMFOLLOW;
 			break;
 		case 'L':
-			ftsoptions &= ~FTS_COMFOLLOW;
+			ftsoptions &= ~(FTS_COMFOLLOW|FTS_PHYSICAL);
 			ftsoptions |= FTS_LOGICAL;
 			break;
 		case 'P':
 			ftsoptions &= ~(FTS_COMFOLLOW|FTS_LOGICAL);
 			ftsoptions |= FTS_PHYSICAL;
 			break;
-		case 'X':
-			isxargs = 1;
-			break;
 		case 'd':
 			isdepth = 1;
+			break;
+		case 'E':
+			regcomp_flags = REG_EXTENDED;
 			break;
 		case 'f':
 			*p++ = optarg;
@@ -120,6 +123,9 @@ main(argc, argv)
 			break;
 		case 's':
 			issort = 1;
+			break;
+		case 'X':
+			isxargs = 1;
 			break;
 		case 'x':
 			ftsoptions |= FTS_XDEV;
@@ -147,19 +153,21 @@ main(argc, argv)
 
 	if (p == start)
 		usage();
+
 	*p = NULL;
 
-	if ((dotfd = open(".", O_RDONLY, 0)) < 0)
+	if ((dotfd = open(".", O_RDONLY, 0)) == -1 ||
+	    fcntl(dotfd, F_SETFD, FD_CLOEXEC) == -1)
 		err(1, ".");
 
 	exit(find_execute(find_formplan(argv), start));
 }
 
 static void
-usage()
+usage(void)
 {
 
 	(void)fprintf(stderr,
-"usage: find [-H | -L | -P] [-Xdhsx] [-f file] [file ...] [expression]\n");
+"usage: find [-H | -L | -P] [-dEhsXx] [-f file] file [file ...] [expression]\n");
 	exit(1);
 }

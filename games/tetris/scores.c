@@ -1,4 +1,4 @@
-/*	$NetBSD: scores.c,v 1.10 2000/01/21 02:10:56 jsm Exp $	*/
+/*	$NetBSD: scores.c,v 1.14 2006/06/01 16:12:27 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -78,11 +74,11 @@ static int nscores;
 static int gotscores;
 static struct highscore scores[NUMSPOTS];
 
-static int checkscores __P((struct highscore *, int));
-static int cmpscores __P((const void *, const void *));
-static void getscores __P((FILE **));
-static void printem __P((int, int, struct highscore *, int, const char *));
-static char *thisuser __P((void));
+static int checkscores(struct highscore *, int);
+static int cmpscores(const void *, const void *);
+static void getscores(FILE **);
+static void printem(int, int, struct highscore *, int, const char *);
+static char *thisuser(void);
 
 /*
  * Read the score file.  Can be called from savescore (before showscores)
@@ -152,8 +148,8 @@ void
 savescore(level)
 	int level;
 {
-	register struct highscore *sp;
-	register int i;
+	struct highscore *sp;
+	int i;
 	int change;
 	FILE *sf;
 	const char *me;
@@ -218,9 +214,9 @@ savescore(level)
 static char *
 thisuser()
 {
-	register const char *p;
-	register struct passwd *pw;
-	register size_t l;
+	const char *p;
+	struct passwd *pw;
+	size_t l;
 	static char u[sizeof(scores[0].hs_name)];
 
 	if (u[0])
@@ -251,8 +247,8 @@ static int
 cmpscores(x, y)
 	const void *x, *y;
 {
-	register const struct highscore *a, *b;
-	register long l;
+	const struct highscore *a, *b;
+	long l;
 
 	a = x;
 	b = y;
@@ -279,17 +275,17 @@ cmpscores(x, y)
  */
 static int
 checkscores(hs, num)
-	register struct highscore *hs;
+	struct highscore *hs;
 	int num;
 {
-	register struct highscore *sp;
-	register int i, j, k, numnames;
+	struct highscore *sp;
+	int i, j, k, numnames;
 	int levelfound[NLEVELS];
 	struct peruser {
 		char *name;
 		int times;
 	} count[NUMSPOTS];
-	register struct peruser *pu;
+	struct peruser *pu;
 
 	/*
 	 * Sort so that highest totals come first.
@@ -338,7 +334,8 @@ checkscores(hs, num)
 				continue;
 			}
 		}
-		levelfound[sp->hs_level] = 1;
+        if (sp->hs_level < NLEVELS && sp->hs_level >= 0)
+    		levelfound[sp->hs_level] = 1;
 		i++, sp++;
 	}
 	return (num > MAXHISCORES ? MAXHISCORES : num);
@@ -355,8 +352,8 @@ void
 showscores(level)
 	int level;
 {
-	register struct highscore *sp;
-	register int i, n, c;
+	struct highscore *sp;
+	int i, n, c;
 	const char *me;
 	int levelfound[NLEVELS];
 
@@ -377,12 +374,14 @@ showscores(level)
 	for (i = MINLEVEL; i < NLEVELS; i++)
 		levelfound[i] = 0;
 	for (i = 0, sp = scores; i < nscores; i++, sp++) {
-		if (levelfound[sp->hs_level])
-			sp->hs_time = 0;
-		else {
-			sp->hs_time = 1;
-			levelfound[sp->hs_level] = 1;
-		}
+        if (sp->hs_level < NLEVELS && sp->hs_level >= 0) {
+    		if (levelfound[sp->hs_level])
+	    		sp->hs_time = 0;
+		    else {
+			    sp->hs_time = 1;
+		    	levelfound[sp->hs_level] = 1;
+		    }
+        }
 	}
 
 	/*
@@ -407,11 +406,11 @@ showscores(level)
 static void
 printem(level, offset, hs, n, me)
 	int level, offset;
-	register struct highscore *hs;
-	register int n;
+	struct highscore *hs;
+	int n;
 	const char *me;
 {
-	register struct highscore *sp;
+	struct highscore *sp;
 	int nrows, row, col, item, i, highlight;
 	char buf[100];
 #define	TITLE "Rank  Score   Name     (points/level)"
@@ -436,7 +435,7 @@ printem(level, offset, hs, n, me)
 				continue;
 			}
 			sp = &hs[item];
-			(void)sprintf(buf,
+			(void)snprintf(buf, sizeof(buf),
 			    "%3d%c %6d  %-11s (%6d on %d)",
 			    item + offset, sp->hs_time ? '*' : ' ',
 			    sp->hs_score * sp->hs_level,

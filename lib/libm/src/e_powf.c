@@ -15,7 +15,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: e_powf.c,v 1.9 1999/07/02 15:37:40 simonb Exp $");
+__RCSID("$NetBSD: e_powf.c,v 1.13 2008/04/25 22:21:53 christos Exp $");
 #endif
 
 #include "math.h"
@@ -23,11 +23,7 @@ __RCSID("$NetBSD: e_powf.c,v 1.9 1999/07/02 15:37:40 simonb Exp $");
 
 static const float huge = 1.0e+30, tiny = 1.0e-30;
 
-#ifdef __STDC__
 static const float
-#else
-static float
-#endif
 bp[] = {1.0, 1.5,},
 dp_h[] = { 0.0, 5.84960938e-01,}, /* 0x3f15c000 */
 dp_l[] = { 0.0, 1.56322085e-06,}, /* 0x35d1cfdc */
@@ -58,15 +54,11 @@ ivln2    =  1.4426950216e+00, /* 0x3fb8aa3b =1/ln2 */
 ivln2_h  =  1.4426879883e+00, /* 0x3fb8aa00 =16b 1/ln2*/
 ivln2_l  =  7.0526075433e-06; /* 0x36eca570 =1/ln2 tail*/
 
-#ifdef __STDC__
-	float __ieee754_powf(float x, float y)
-#else
-	float __ieee754_powf(x,y)
-	float x, y;
-#endif
+float
+__ieee754_powf(float x, float y)
 {
 	float z,ax,z_h,z_l,p_h,p_l;
-	float y1,t1,t2,r,s,t,u,v,w;
+	float yy1,t1,t2,r,s,t,u,v,w;
 	int32_t i,j,k,yisint,n;
 	int32_t hx,hy,ix,iy,is;
 
@@ -139,7 +131,7 @@ ivln2_l  =  7.0526075433e-06; /* 0x36eca570 =1/ln2 tail*/
 	    if(ix>0x3f800007) return (hy>0)? huge*huge:tiny*tiny;
 	/* now |1-x| is tiny <= 2**-20, suffice to compute
 	   log(x) by x-x^2/2+x^3/3-x^4/4 */
-	    t = x-1;		/* t has 20 trailing zeros */
+	    t = ax-one;		/* t has 20 trailing zeros */
 	    w = (t*t)*((float)0.5-t*((float)0.333333333333-t*(float)0.25));
 	    u = ivln2_h*t;	/* ivln2_h has 16 sig. bits */
 	    v = t*ivln2_l-w*ivln2;
@@ -204,11 +196,11 @@ ivln2_l  =  7.0526075433e-06; /* 0x36eca570 =1/ln2 tail*/
 	if(((((u_int32_t)hx>>31)-1)|(yisint-1))==0)
 	    s = -one;	/* (-ve)**(odd int) */
 
-    /* split up y into y1+y2 and compute (y1+y2)*(t1+t2) */
+    /* split up y into yy1+y2 and compute (yy1+y2)*(t1+t2) */
 	GET_FLOAT_WORD(is,y);
-	SET_FLOAT_WORD(y1,is&0xfffff000);
-	p_l = (y-y1)*t1+y*t2;
-	p_h = y1*t1;
+	SET_FLOAT_WORD(yy1,is&0xfffff000);
+	p_l = (y-yy1)*t1+y*t2;
+	p_h = yy1*t1;
 	z = p_l+p_h;
 	GET_FLOAT_WORD(j,z);
 	if (j>0x43000000)				/* if z > 128 */
@@ -216,11 +208,11 @@ ivln2_l  =  7.0526075433e-06; /* 0x36eca570 =1/ln2 tail*/
 	else if (j==0x43000000) {			/* if z == 128 */
 	    if(p_l+ovt>z-p_h) return s*huge*huge;	/* overflow */
 	}
-	else if ((j&0x7fffffff)>0x43160000)		/* z <= -150 */
-	    return s*tiny*tiny;				/* underflow */
 	else if (j==0xc3160000){			/* z == -150 */
 	    if(p_l<=z-p_h) return s*tiny*tiny;		/* underflow */
 	}
+	else if ((j&0x7fffffff)>0x43160000)		/* z <= -150 */
+	    return s*tiny*tiny;				/* underflow */
     /*
      * compute 2**(p_h+p_l)
      */

@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.2 2000/03/28 00:29:54 thorpej Exp $	*/
+/*	$NetBSD: md.h,v 1.16 2007/11/12 15:07:34 jmmv Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -55,35 +55,10 @@
 /*
  *  Default filesets to fetch and install during installation
  *  or upgrade. The standard sets are:
- *      base, etc, comp, games, man, misc, text,
- *      xbase, xfont, xserver, xcontrib, xcomp.
- *
- * Third entry is the last extension name in the split sets for loading
- * from floppy.
+ *      base etc comp games man misc tests text xbase xcomp xetc xfont xserver
  */
-EXTERN distinfo dist_list[]
-#ifdef MAIN
-= {
-    {"kern",	1, "ag", "Kernel       : "},
-    {"base",	1, "bw", "Base         : "},
-    {"etc",	1, "aa", "System (/etc): "},
-    {"comp",	1, "bl", "Compiler     : "},
-    {"games",	1, "am", "Games        : "},
-    {"man",	1, "ar", "Manuals      : "},
-    {"misc",	1, "aj", "Miscellaneous: "},
-    {"text",	1, "af", "Text tools   : "},
-    {"secr",	0, NULL, "Security     : "},
 
-    /* XXX no X11 on floppies, what sets are they?*/
-    {"xbase",	1, "al", "X11 clients  : "},
-    {"xfont",	1, "az", "X11 fonts    : "},
-    {"xserver",	1, "cr", "X11 servers  : "},
-    {"xcontrib",1, "aa", "X11 contrib  : "},
-    {"xcomp",	1, "ah", "X programming: "},
-    {NULL, 0, NULL, NULL }
-}
-#endif
-;
+#define SET_KERNEL_1_NAME	"kern-GENERIC"
 
 /*
  * Disk names accepted as valid targets for a from-scratch installation.
@@ -91,21 +66,7 @@ EXTERN distinfo dist_list[]
  * On amiga, disks are always named "sd", regardless they are attached
  * to the IDE bus or to the SCSI bus.
  */
-EXTERN	char *disk_names[]
-#ifdef MAIN
-= {"sd", NULL}
-#endif
-;
-
-
-/*
- * Legal start character for a disk for checking input. 
- * this must return 1 for a character that matches the first
- * characters of each member of disk_names.
- *
- * On amiga, that means matching 's' for sd.
- */
-#define ISDISKSTART(dn)	(dn == 's')
+#define DISK_NAMES "sd"
 
 /*
  * Machine-specific command to write a new label to a disk.
@@ -120,18 +81,6 @@ EXTERN	char *disk_names[]
  */
 /* #define DISKLABEL_CMD "disklabel -w -r" */
 
-
-/*
- * Default fileystem type for floppy disks.
- * On amiga, that is ados.
- */
-EXTERN	char *fdtype INIT("ados");
-
-extern struct disklist *disklist;
-extern struct nativedisk_info *nativedisk;
-
-#define SCAN_ENTER      0x1c
-#define SCAN_F1         0x3b
  
 /*
  *  prototypes for MD code.

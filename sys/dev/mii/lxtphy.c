@@ -1,7 +1,7 @@
-/*	$NetBSD: lxtphy.c,v 1.20 2000/03/06 20:56:57 thorpej Exp $	*/
+/*	$NetBSD: lxtphy.c,v 1.46 2008/05/04 17:06:09 xtraeme Exp $	*/
 
 /*-
- * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 /*
  * Copyright (c) 1997 Manuel Bouyer.  All rights reserved.
  *
@@ -71,11 +64,13 @@
  * datasheet from www.level1.com
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: lxtphy.c,v 1.46 2008/05/04 17:06:09 xtraeme Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
 #include <sys/socket.h>
 #include <sys/errno.h>
 
@@ -88,74 +83,104 @@
 
 #include <dev/mii/lxtphyreg.h>
 
-int	lxtphymatch __P((struct device *, struct cfdata *, void *));
-void	lxtphyattach __P((struct device *, struct device *, void *));
+static int	lxtphymatch(device_t, cfdata_t, void *);
+static void	lxtphyattach(device_t, device_t, void *);
 
-struct cfattach lxtphy_ca = {
-	sizeof(struct mii_softc), lxtphymatch, lxtphyattach, mii_phy_detach,
-	    mii_phy_activate
+CFATTACH_DECL_NEW(lxtphy, sizeof(struct mii_softc),
+    lxtphymatch, lxtphyattach, mii_phy_detach, mii_phy_activate);
+
+static int	lxtphy_service(struct mii_softc *, struct mii_data *, int);
+static void	lxtphy_status(struct mii_softc *);
+static void	lxtphy_reset(struct mii_softc *);
+
+static void lxtphy_set_tp(struct mii_softc *);
+static void lxtphy_set_fx(struct mii_softc *);
+
+static const struct mii_phy_funcs lxtphy_funcs = {
+	lxtphy_service, lxtphy_status, lxtphy_reset,
 };
 
-int	lxtphy_service __P((struct mii_softc *, struct mii_data *, int));
-void	lxtphy_status __P((struct mii_softc *));
+static const struct mii_phy_funcs lxtphy971_funcs = {
+	lxtphy_service, ukphy_status, lxtphy_reset,
+};
 
-int
-lxtphymatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static const struct mii_phydesc lxtphys[] = {
+	{ MII_OUI_xxLEVEL1,		MII_MODEL_xxLEVEL1_LXT970,
+	  MII_STR_xxLEVEL1_LXT970 },
+
+	{ MII_OUI_LEVEL1,		MII_MODEL_LEVEL1_LXT971,
+	  MII_STR_LEVEL1_LXT971 },
+
+	{ 0,				0,
+	  NULL },
+};
+
+static int
+lxtphymatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mii_attach_args *ma = aux;
 
-	if (MII_OUI(ma->mii_id1, ma->mii_id2) == MII_OUI_xxLEVEL1 &&
-	    MII_MODEL(ma->mii_id2) == MII_MODEL_xxLEVEL1_LXT970)
+	if (mii_phy_match(ma, lxtphys) != NULL)
 		return (10);
 
 	return (0);
 }
 
-void
-lxtphyattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+lxtphyattach(device_t parent, device_t self, void *aux)
 {
-	struct mii_softc *sc = (struct mii_softc *)self;
+	struct mii_softc *sc = device_private(self);
 	struct mii_attach_args *ma = aux;
 	struct mii_data *mii = ma->mii_data;
+	const struct mii_phydesc *mpd;
 
-	printf(": %s, rev. %d\n", MII_STR_xxLEVEL1_LXT970,
-	    MII_REV(ma->mii_id2));
+	mpd = mii_phy_match(ma, lxtphys);
+	aprint_naive(": Media interface\n");
+	aprint_normal(": %s, rev. %d\n", mpd->mpd_name, MII_REV(ma->mii_id2));
 
+	sc->mii_dev = self;
 	sc->mii_inst = mii->mii_instance;
 	sc->mii_phy = ma->mii_phyno;
-	sc->mii_service = lxtphy_service;
-	sc->mii_status = lxtphy_status;
+	if (mpd->mpd_model == MII_MODEL_LEVEL1_LXT971)
+		sc->mii_funcs = &lxtphy971_funcs;
+	else
+		sc->mii_funcs = &lxtphy_funcs;
 	sc->mii_pdata = mii;
-	sc->mii_flags = mii->mii_flags;
+	sc->mii_flags = ma->mii_flags;
+	sc->mii_anegticks = MII_ANEGTICKS;
 
-	mii_phy_reset(sc);
+	PHY_RESET(sc);
 
 	sc->mii_capabilities =
 	    PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
-	printf("%s: ", sc->mii_dev.dv_xname);
+	aprint_normal_dev(self, "");
+
+	if (sc->mii_flags & MIIF_HAVEFIBER) {
+#define	ADD(m, c)	ifmedia_add(&mii->mii_media, (m), (c), NULL)
+		ADD(IFM_MAKEWORD(IFM_ETHER, IFM_100_FX, 0, sc->mii_inst),
+		    MII_MEDIA_100_TX);
+		aprint_normal("100baseFX, ");
+		ADD(IFM_MAKEWORD(IFM_ETHER, IFM_100_FX, IFM_FDX, sc->mii_inst),
+		    MII_MEDIA_100_TX_FDX);
+		aprint_normal("100baseFX-FDX, ");
+#undef ADD
+	}
+
 	if ((sc->mii_capabilities & BMSR_MEDIAMASK) == 0)
-		printf("no media present");
+		aprint_error("no media present");
 	else
 		mii_phy_add_media(sc);
-	printf("\n");
+	aprint_normal("\n");
+
+	if (!pmf_device_register(self, NULL, mii_phy_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
-int
-lxtphy_service(sc, mii, cmd)
-	struct mii_softc *sc;
-	struct mii_data *mii;
-	int cmd;
+static int
+lxtphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 {
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
 	int reg;
-
-	if ((sc->mii_dev.dv_flags & DVF_ACTIVE) == 0)
-		return (ENXIO);
 
 	switch (cmd) {
 	case MII_POLLSTAT:
@@ -182,6 +207,11 @@ lxtphy_service(sc, mii, cmd)
 		 */
 		if ((mii->mii_ifp->if_flags & IFF_UP) == 0)
 			break;
+
+		if (IFM_SUBTYPE(ife->ifm_media) == IFM_100_FX)
+			lxtphy_set_fx(sc);
+		else
+			lxtphy_set_tp(sc);
 
 		mii_phy_setmedia(sc);
 		break;
@@ -210,9 +240,8 @@ lxtphy_service(sc, mii, cmd)
 	return (0);
 }
 
-void
-lxtphy_status(sc)
-	struct mii_softc *sc;
+static void
+lxtphy_status(struct mii_softc *sc)
 {
 	struct mii_data *mii = sc->mii_pdata;
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
@@ -255,4 +284,33 @@ lxtphy_status(sc)
 			mii->mii_media_active |= IFM_FDX;
 	} else
 		mii->mii_media_active = ife->ifm_media;
+}
+
+static void
+lxtphy_reset(struct mii_softc *sc)
+{
+
+	mii_phy_reset(sc);
+	PHY_WRITE(sc, MII_LXTPHY_IER,
+	    PHY_READ(sc, MII_LXTPHY_IER) & ~IER_INTEN);
+}
+
+static void
+lxtphy_set_tp(struct mii_softc *sc)
+{
+	int cfg;
+
+	cfg = PHY_READ(sc, MII_LXTPHY_CONFIG);
+	cfg &= ~CONFIG_100BASEFX;
+	PHY_WRITE(sc, MII_LXTPHY_CONFIG, cfg);
+}
+
+static void
+lxtphy_set_fx(struct mii_softc *sc)
+{
+	int cfg;
+
+	cfg = PHY_READ(sc, MII_LXTPHY_CONFIG);
+	cfg |= CONFIG_100BASEFX;
+	PHY_WRITE(sc, MII_LXTPHY_CONFIG, cfg);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: save.c,v 1.10 2000/01/09 17:17:20 jsm Exp $	*/
+/*	$NetBSD: save.c,v 1.12 2005/07/01 06:04:54 jmc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,14 @@
 #if 0
 static char sccsid[] = "@(#)save.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: save.c,v 1.10 2000/01/09 17:17:20 jsm Exp $");
+__RCSID("$NetBSD: save.c,v 1.12 2005/07/01 06:04:54 jmc Exp $");
 #endif
 #endif				/* not lint */
 
 #include "extern.h"
 
 void
-restore(filename)
-	const char *filename;
+restore(const char *filename)
 {
 	int     n;
 	int     tmp;
@@ -98,8 +93,7 @@ restore(filename)
 }
 
 void
-save(filename)
-	const char *filename;
+save(const char *filename)
 {
 	int     n;
 	int     tmp;
@@ -160,9 +154,7 @@ save(filename)
  * with malloc(3).
  */
 char *
-save_file_name(filename, len)
-	const char *filename;
-	size_t len;
+save_file_name(const char *filename, size_t len)
 {
 	char   *home;
 	char   *newname;

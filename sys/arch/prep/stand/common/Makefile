@@ -1,28 +1,30 @@
-#	$NetBSD: Makefile,v 1.1 2000/02/29 15:21:52 nonaka Exp $
+#	$NetBSD: Makefile,v 1.9 2006/04/10 17:58:59 garbled Exp $
 
 S= ${.CURDIR}/../../../..
 
-MKMAN= no
+NOMAN= # defined
 
 CPPFLAGS+= -D_STANDALONE
+CPPFLAGS+= -D__daddr_t=int32_t
 CPPFLAGS+= -I. -I${S} -I${.OBJDIR}
 CPPFLAGS+= -Werror -Wall -Wstrict-prototypes -Wmissing-prototypes
 
+CFLAGS= -Os -mmultiple -ffreestanding
+
 CLEANFILES+= machine powerpc
 
-.BEGIN: machine powerpc
-.NOPATH: machine powerpc
-realdepend realall: machine powerpc
+.if !make(obj) && !make(clean) && !make(cleandir)
+.PHONY: machine-links
+beforedepend: machine-links
 
-machine::
-	-rm -f $@
-	ln -s ${S}/arch/${MACHINE}/include $@
+machine-links:
+	-rm -f machine
+	ln -s ${S}/arch/${MACHINE}/include machine
+	-rm -f ${MACHINE_ARCH}
+	ln -s ${S}/arch/${MACHINE_ARCH}/include ${MACHINE_ARCH}
+.endif
 
-powerpc::
-	-rm -f $@
-	ln -s ${S}/arch/powerpc/include $@
-
-${OBJS}: machine powerpc
+.include <bsd.prog.mk>
 
 ### find out what to use for libkern
 KERN_AS=	library
@@ -36,17 +38,15 @@ LIBZ=		${ZLIB}
 
 ### find out what to use for libsa
 SA_AS=		library
-SAMISCMAKEFLAGS= SA_USE_CREAD=yes SA_USE_LOADFILE=yes
+SAMISCMAKEFLAGS= SA_USE_CREAD=yes SA_USE_LOADFILE=yes SA_INCLUDE_NET=no
 .include "${S}/lib/libsa/Makefile.inc"
 LIBSA=		${SALIB}
 
 LIBS= ${LIBSA} ${LIBZ} ${LIBKERN}
 
-realall: ${LIBS}
+realall: machine-links ${LIBS}
 
 cleandir distclean: cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib
-
-.include <bsd.prog.mk>

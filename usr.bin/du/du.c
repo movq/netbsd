@@ -1,4 +1,4 @@
-/*	$NetBSD: du.c,v 1.14 1998/02/15 17:08:18 kleink Exp $	*/
+/*	$NetBSD: du.c,v 1.33 2008/07/30 22:03:40 dsl Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)du.c	8.5 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: du.c,v 1.14 1998/02/15 17:08:18 kleink Exp $");
+__RCSID("$NetBSD: du.c,v 1.33 2008/07/30 22:03:40 dsl Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,43 +53,46 @@ __RCSID("$NetBSD: du.c,v 1.14 1998/02/15 17:08:18 kleink Exp $");
 #include <err.h>
 #include <errno.h>
 #include <fts.h>
+#include <util.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
 
-int	linkchk __P((FTSENT *));
-int	main __P((int, char **));
-void	usage __P((void));
+int	linkchk(dev_t, ino_t);
+void	prstat(const char *, int64_t);
+void	usage(void);
+
+int hflag;
+long blocksize;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	FTS *fts;
 	FTSENT *p;
-	long blocksize, totalblocks;
-	int ftsoptions, listdirs, listfiles;
-	int Hflag, Lflag, Pflag, aflag, ch, cflag, kflag, notused, rval, sflag;
-	char **save;
+	int64_t totalblocks;
+	int ftsoptions, listfiles;
+	int depth;
+	int Hflag, Lflag, aflag, ch, cflag, dflag, gkmflag, nflag, rval, sflag;
+	const char *noargv[2];
 
-	save = argv;
-	Hflag = Lflag = Pflag = aflag = cflag = kflag = sflag = 0;
+	Hflag = Lflag = aflag = cflag = dflag = gkmflag = nflag = sflag = 0;
 	totalblocks = 0;
 	ftsoptions = FTS_PHYSICAL;
-	while ((ch = getopt(argc, argv, "HLPackrsx")) != -1)
+	depth = INT_MAX;
+	while ((ch = getopt(argc, argv, "HLPacd:ghkmnrsx")) != -1)
 		switch (ch) {
 		case 'H':
 			Hflag = 1;
-			Lflag = Pflag = 0;
+			Lflag = 0;
 			break;
 		case 'L':
 			Lflag = 1;
-			Hflag = Pflag = 0;
+			Hflag = 0;
 			break;
 		case 'P':
-			Pflag = 1;
 			Hflag = Lflag = 0;
 			break;
 		case 'a':
@@ -102,9 +101,32 @@ main(argc, argv)
 		case 'c':
 			cflag = 1;
 			break;
+		case 'd':
+			dflag = 1;
+			depth = atoi(optarg);
+			if (depth < 0 || depth > SHRT_MAX) {
+				warnx("invalid argument to option d: %s", 
+					optarg);
+				usage();
+			}
+			break;
+		case 'g':
+			blocksize = 1024 * 1024 * 1024;
+			gkmflag = 1;
+			break;
+		case 'h':
+			hflag = 1;
+			break;
 		case 'k':
 			blocksize = 1024;
-			kflag = 1;
+			gkmflag = 1;
+			break;
+		case 'm':
+			blocksize = 1024 * 1024;
+			gkmflag = 1;
+			break; 
+		case 'n':
+			nflag = 1;
 			break;
 		case 'r':
 			break;
@@ -140,31 +162,44 @@ main(argc, argv)
 		ftsoptions |= FTS_LOGICAL;
 	}
 
+	listfiles = 0;
 	if (aflag) {
-		if (sflag)
+		if (sflag || dflag)
 			usage();
-		listdirs = listfiles = 1;
-	} else if (sflag)
-		listdirs = listfiles = 0;
-	else {
-		listfiles = 0;
-		listdirs = 1;
+		listfiles = 1;
+	} else if (sflag) {
+		if (dflag)
+			usage();
+		depth = 0;
 	}
 
 	if (!*argv) {
-		argv = save;
-		argv[0] = ".";
-		argv[1] = NULL;
+		noargv[0] = ".";
+		noargv[1] = NULL;
+		argv = __UNCONST(noargv);
 	}
 
-	if (!kflag)
-		(void)getbsize(&notused, &blocksize);
+	if (!gkmflag)
+		(void)getbsize(NULL, &blocksize);
 	blocksize /= 512;
 
 	if ((fts = fts_open(argv, ftsoptions, NULL)) == NULL)
 		err(1, "fts_open `%s'", *argv);
 
-	for (rval = 0; (p = fts_read(fts)) != NULL;)
+	for (rval = 0; (p = fts_read(fts)) != NULL;) {
+		if (nflag) {
+			switch (p->fts_info) {
+			case FTS_NS:
+			case FTS_SLNONE:
+				/* nothing */
+				break;
+			default:
+				if (p->fts_statp->st_flags & UF_NODUMP) {
+					fts_set(fts, p, FTS_SKIP);
+					continue;
+				}
+			}
+		}
 		switch (p->fts_info) {
 		case FTS_D:			/* Ignore. */
 			break;
@@ -178,10 +213,9 @@ main(argc, argv)
 			 * or directories and this is post-order of the
 			 * root of a traversal, display the total.
 			 */
-			if (listdirs || (!listfiles && !p->fts_level))
-				(void)printf("%ld\t%s\n",
-				    howmany(p->fts_number, blocksize),
-				    p->fts_path);
+			if (p->fts_level <= depth
+			    || (!listfiles && !p->fts_level))
+				prstat(p->fts_path, p->fts_number);
 			break;
 		case FTS_DC:			/* Ignore. */
 			break;
@@ -192,64 +226,124 @@ main(argc, argv)
 			rval = 1;
 			break;
 		default:
-			if (p->fts_statp->st_nlink > 1 && linkchk(p))
+			if (p->fts_statp->st_nlink > 1 &&
+			    linkchk(p->fts_statp->st_dev, p->fts_statp->st_ino))
 				break;
 			/*
 			 * If listing each file, or a non-directory file was
 			 * the root of a traversal, display the total.
 			 */
 			if (listfiles || !p->fts_level)
-				(void)printf("%qd\t%s\n", (long long)
-				    howmany(p->fts_statp->st_blocks, blocksize),
-				    p->fts_path);
+				prstat(p->fts_path, p->fts_statp->st_blocks);
 			p->fts_parent->fts_number += p->fts_statp->st_blocks;
 			if (cflag)
 				totalblocks += p->fts_statp->st_blocks;
 		}
+	}
 	if (errno)
 		err(1, "fts_read");
 	if (cflag)
-		(void)printf("%ld\ttotal\n",
-		    howmany(totalblocks, blocksize));
-	exit(0);
-}
-
-typedef struct _ID {
-	dev_t	dev;
-	ino_t	inode;
-} ID;
-
-int
-linkchk(p)
-	FTSENT *p;
-{
-	static ID *files;
-	static int maxfiles, nfiles;
-	ID *fp, *start;
-	ino_t ino;
-	dev_t dev;
-
-	ino = p->fts_statp->st_ino;
-	dev = p->fts_statp->st_dev;
-	if ((start = files) != NULL)
-		for (fp = start + nfiles - 1; fp >= start; --fp)
-			if (ino == fp->inode && dev == fp->dev)
-				return (1);
-
-	if (nfiles == maxfiles && (files = realloc((char *)files,
-	    (u_int)(sizeof(ID) * (maxfiles += 128)))) == NULL)
-		err(1, "realloc");
-	files[nfiles].inode = ino;
-	files[nfiles].dev = dev;
-	++nfiles;
-	return (0);
+		prstat("total", totalblocks);
+	exit(rval);
 }
 
 void
-usage()
+prstat(const char *fname, int64_t blocks)
+{
+	if (hflag) {
+		char buf[5];
+		int64_t sz = blocks * 512;
+
+		humanize_number(buf, sizeof(buf), sz, "", HN_AUTOSCALE,
+		    HN_B | HN_NOSPACE | HN_DECIMAL);
+
+		(void)printf("%s\t%s\n", buf, fname);
+	} else
+		(void)printf("%lld\t%s\n",
+		    (long long)howmany(blocks, (int64_t)blocksize),
+		    fname);
+}
+
+int
+linkchk(dev_t dev, ino_t ino)
+{
+	static struct entry {
+		dev_t	dev;
+		ino_t	ino;
+	} *htable;
+	static int htshift;  /* log(allocated size) */
+	static int htmask;   /* allocated size - 1 */
+	static int htused;   /* 2*number of insertions */
+	static int sawzero;  /* Whether zero is in table or not */
+	int h, h2;
+	uint64_t tmp;
+	/* this constant is (1<<64)/((1+sqrt(5))/2)
+	 * aka (word size)/(golden ratio)
+	 */
+	const uint64_t HTCONST = 11400714819323198485ULL;
+	const int HTBITS = CHAR_BIT * sizeof(tmp);
+
+	/* Never store zero in hashtable */
+	if (dev == 0 && ino == 0) {
+		h = sawzero;
+		sawzero = 1;
+		return h;
+	}
+
+	/* Extend hash table if necessary, keep load under 0.5 */
+	if (htused<<1 >= htmask) {
+		struct entry *ohtable;
+
+		if (!htable)
+			htshift = 10;   /* starting hashtable size */
+		else
+			htshift++;   /* exponential hashtable growth */
+
+		htmask  = (1 << htshift) - 1;
+		htused = 0;
+
+		ohtable = htable;
+		htable = calloc(htmask+1, sizeof(*htable));
+		if (!htable)
+			err(1, "calloc");
+
+		/* populate newly allocated hashtable */
+		if (ohtable) {
+			int i;
+			for (i = 0; i <= htmask>>1; i++)
+				if (ohtable[i].ino || ohtable[i].dev)
+					linkchk(ohtable[i].dev, ohtable[i].ino);
+			free(ohtable);
+		}
+	}
+
+	/* multiplicative hashing */
+	tmp = dev;
+	tmp <<= HTBITS>>1;
+	tmp |=  ino;
+	tmp *= HTCONST;
+	h  = tmp >> (HTBITS - htshift);
+	h2 = 1 | ( tmp >> (HTBITS - (htshift<<1) - 1)); /* must be odd */
+
+	/* open address hashtable search with double hash probing */
+	while (htable[h].ino || htable[h].dev) {
+		if ((htable[h].ino == ino) && (htable[h].dev == dev))
+			return 1;
+		h = (h + h2) & htmask;
+	}
+
+	/* Insert the current entry into hashtable */
+	htable[h].dev = dev;
+	htable[h].ino = ino;
+	htused++;
+	return 0;
+}
+
+void
+usage(void)
 {
 
 	(void)fprintf(stderr,
-		"usage: du [-H | -L | -P] [-a | -s] [-ckx] [file ...]\n");
+		"usage: du [-H | -L | -P] [-a | -d depth | -s] [-cghkmnrx] [file ...]\n");
 	exit(1);
 }

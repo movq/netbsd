@@ -1,10 +1,10 @@
-/*	$NetBSD: ah_output.c,v 1.8 2000/03/21 23:53:30 itojun Exp $	*/
-/*	$KAME: ah_output.c,v 1.17 2000/03/09 08:54:48 itojun Exp $	*/
+/*	$NetBSD: ah_output.c,v 1.31 2008/04/23 06:09:05 thorpej Exp $	*/
+/*	$KAME: ah_output.c,v 1.31 2001/07/26 06:53:15 jinmei Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -16,7 +16,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -33,6 +33,9 @@
 /*
  * RFC1826/2402 authentication header.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ah_output.c,v 1.31 2008/04/23 06:09:05 thorpej Exp $");
 
 #include "opt_inet.h"
 
@@ -65,14 +68,16 @@
 #endif
 
 #include <netinet6/ipsec.h>
+#include <netinet6/ipsec_private.h>
 #include <netinet6/ah.h>
 #include <netkey/key.h>
 #include <netkey/keydb.h>
-#include <netkey/key_debug.h>
 
 #include <net/net_osdep.h>
 
+#ifdef INET
 static struct in_addr *ah4_finaldst __P((struct mbuf *));
+#endif
 
 /*
  * compute AH header size.
@@ -80,15 +85,14 @@ static struct in_addr *ah4_finaldst __P((struct mbuf *));
  * virtual interface, and control MTU/MSS by the interface MTU.
  */
 size_t
-ah_hdrsiz(isr)
-	struct ipsecrequest *isr;
+ah_hdrsiz(struct ipsecrequest *isr)
 {
-	struct ah_algorithm *algo;
+	const struct ah_algorithm *algo;
 	size_t hdrsiz;
 
 	/* sanity check */
 	if (isr == NULL)
-		panic("ah_hdrsiz: NULL was passed.\n");
+		panic("ah_hdrsiz: NULL was passed.");
 
 	if (isr->saidx.proto != IPPROTO_AH)
 		panic("unsupported mode passed to ah_hdrsiz");
@@ -100,7 +104,7 @@ ah_hdrsiz(isr)
 		goto estimate;
 
 	/* we need transport mode AH. */
-	algo = &ah_algorithms[isr->sav->alg_auth];
+	algo = ah_algorithm_lookup(isr->sav->alg_auth);
 	if (!algo)
 		goto estimate;
 
@@ -122,11 +126,12 @@ ah_hdrsiz(isr)
     estimate:
 	/* ASSUMING:
 	 *	sizeof(struct newah) > sizeof(struct ah).
-	 *	16 = (16 + 3) & ~(4 - 1).
+	 *	AH_MAXSUMSIZE is multiple of 4.
 	 */
-	return sizeof(struct newah) + 16;
+	return sizeof(struct newah) + AH_MAXSUMSIZE;
 }
 
+#ifdef INET
 /*
  * Modify the packet so that it includes the authentication data.
  * The mbuf passed must start with IPv4 header.
@@ -135,39 +140,43 @@ ah_hdrsiz(isr)
  * the function does not modify m.
  */
 int
-ah4_output(m, isr)
-	struct mbuf *m;
-	struct ipsecrequest *isr;
+ah4_output(struct mbuf *m, struct ipsecrequest *isr)
 {
 	struct secasvar *sav = isr->sav;
-	struct ah_algorithm *algo;
+	const struct ah_algorithm *algo;
 	u_int32_t spi;
 	u_char *ahdrpos;
-	u_char *ahsumpos = NULL;
-	size_t hlen = 0;	/*IP header+option in bytes*/
-	size_t plen = 0;	/*AH payload size in bytes*/
-	size_t ahlen = 0;	/*plen + sizeof(ah)*/
+	u_int8_t *ahsumpos = NULL;
+	size_t hlen = 0;	/* IP header+option in bytes */
+	size_t plen = 0;	/* AH payload size in bytes */
+	size_t ahlen = 0;	/* plen + sizeof(ah) */
 	struct ip *ip;
 	struct in_addr dst;
 	struct in_addr *finaldst;
 	int error;
+	dst.s_addr = 0;		/* XXX: GCC */
 
 	/* sanity checks */
 	if ((sav->flags & SADB_X_EXT_OLD) == 0 && !sav->replay) {
-		struct ip *ip;
-
 		ip = mtod(m, struct ip *);
 		ipseclog((LOG_DEBUG, "ah4_output: internal error: "
 			"sav->replay is null: %x->%x, SPI=%u\n",
 			(u_int32_t)ntohl(ip->ip_src.s_addr),
 			(u_int32_t)ntohl(ip->ip_dst.s_addr),
 			(u_int32_t)ntohl(sav->spi)));
-		ipsecstat.out_inval++;
-		m_freem(m);
-		return EINVAL;
+		IPSEC_STATINC(IPSEC_STAT_OUT_INVAL);
+		error = EINVAL;
+		goto fail;
 	}
 
-	algo = &ah_algorithms[sav->alg_auth];
+	algo = ah_algorithm_lookup(sav->alg_auth);
+	if (!algo) {
+		ipseclog((LOG_ERR, "ah4_output: unsupported algorithm: "
+		    "SPI=%u\n", (u_int32_t)ntohl(sav->spi)));
+		IPSEC_STATINC(IPSEC_STAT_OUT_INVAL);
+		error = EINVAL;
+		goto fail;
+	}
 	spi = sav->spi;
 
 	/*
@@ -175,34 +184,30 @@ ah4_output(m, isr)
 	 */
 	if (sav->flags & SADB_X_EXT_OLD) {
 		/* RFC 1826 */
-		plen = ((*algo->sumsiz)(sav) + 3) & ~(4 - 1); /*XXX pad to 8byte?*/
+		plen = ((*algo->sumsiz)(sav) + 3) & ~(4 - 1); /* XXX pad to 8byte? */
 		ahlen = plen + sizeof(struct ah);
 	} else {
 		/* RFC 2402 */
-		plen = ((*algo->sumsiz)(sav) + 3) & ~(4 - 1); /*XXX pad to 8byte?*/
+		plen = ((*algo->sumsiz)(sav) + 3) & ~(4 - 1); /* XXX pad to 8byte? */
 		ahlen = plen + sizeof(struct newah);
 	}
 
 	/*
-	 * grow the mbuf to accomodate AH.
+	 * grow the mbuf to accommodate AH.
 	 */
 	ip = mtod(m, struct ip *);
-#ifdef _IP_VHL
-	hlen = IP_VHL_HL(ip->ip_vhl) << 2;
-#else
 	hlen = ip->ip_hl << 2;
-#endif
 
 	if (m->m_len != hlen)
-		panic("ah4_output: assumption failed (first mbuf length)"); 
+		panic("ah4_output: assumption failed (first mbuf length)");
 	if (M_LEADINGSPACE(m->m_next) < ahlen) {
 		struct mbuf *n;
 		MGET(n, M_DONTWAIT, MT_DATA);
 		if (!n) {
 			ipseclog((LOG_DEBUG, "ENOBUFS in ah4_output %d\n",
 			    __LINE__));
-			m_freem(m);
-			return ENOBUFS;
+			error = ENOBUFS;
+			goto fail;
 		}
 		n->m_len = ahlen;
 		n->m_next = m->m_next;
@@ -216,7 +221,7 @@ ah4_output(m, isr)
 		ahdrpos = mtod(m->m_next, u_char *);
 	}
 
-	ip = mtod(m, struct ip *);	/*just to be sure*/
+	ip = mtod(m, struct ip *);	/* just to be sure */
 
 	/*
 	 * initialize AH.
@@ -246,9 +251,9 @@ ah4_output(m, isr)
 				ipseclog((LOG_WARNING,
 				    "replay counter overflowed. %s\n",
 				    ipsec_logsastr(sav)));
-				ipsecstat.out_inval++;
-				m_freem(m);
-				return EINVAL;
+				IPSEC_STATINC(IPSEC_STAT_OUT_INVAL);
+				error = EINVAL;
+				goto fail;
 			}
 		}
 		sav->replay->count++;
@@ -256,7 +261,7 @@ ah4_output(m, isr)
 		 * XXX sequence number must not be cycled, if the SA is
 		 * installed by IKE daemon.
 		 */
-		ahdr->ah_seq = htonl(sav->replay->count);
+		ahdr->ah_seq = htonl(sav->replay->count & 0xffffffff);
 		bzero(ahdr + 1, plen);
 	}
 
@@ -268,9 +273,9 @@ ah4_output(m, isr)
 		ip->ip_len = htons(ntohs(ip->ip_len) + ahlen);
 	else {
 		ipseclog((LOG_ERR, "IPv4 AH output: size exceeds limit\n"));
-		ipsecstat.out_inval++;
-		m_freem(m);
-		return EMSGSIZE;
+		IPSEC_STATINC(IPSEC_STAT_OUT_INVAL);
+		error = EMSGSIZE;
+		goto fail;
 	}
 
 	/*
@@ -290,46 +295,55 @@ ah4_output(m, isr)
 	 * calcurate the checksum, based on security association
 	 * and the algorithm specified.
 	 */
-	error = ah4_calccksum(m, (caddr_t)ahsumpos, algo, sav);
+	error = ah4_calccksum(m, ahsumpos, plen, algo, sav);
 	if (error) {
 		ipseclog((LOG_ERR,
 		    "error after ah4_calccksum, called from ah4_output"));
-		m = NULL;
-		ipsecstat.out_inval++;
-		return error;
+		IPSEC_STATINC(IPSEC_STAT_OUT_INVAL);
+		goto fail;
 	}
 
 	if (finaldst) {
-		ip = mtod(m, struct ip *);	/*just to make sure*/
+		ip = mtod(m, struct ip *);	/* just to make sure */
 		ip->ip_dst.s_addr = dst.s_addr;
 	}
-	ipsecstat.out_success++;
-	ipsecstat.out_ahhist[sav->alg_auth]++;
+	{
+		uint64_t *ipss = IPSEC_STAT_GETREF();
+		ipss[IPSEC_STAT_OUT_SUCCESS]++;
+		ipss[IPSEC_STAT_OUT_AHHIST + sav->alg_auth]++;
+		IPSEC_STAT_PUTREF();
+	}
 	key_sa_recordxfer(sav, m);
 
 	return 0;
+
+fail:
+	m_freem(m);
+	return error;
 }
+#endif
 
 /* Calculate AH length */
 int
-ah_hdrlen(sav)
-	struct secasvar *sav;
+ah_hdrlen(struct secasvar *sav)
 {
-	struct ah_algorithm *algo;
+	const struct ah_algorithm *algo;
 	int plen, ahlen;
-	
-	algo = &ah_algorithms[sav->alg_auth];
+
+	algo = ah_algorithm_lookup(sav->alg_auth);
+	if (!algo)
+		return 0;
 	if (sav->flags & SADB_X_EXT_OLD) {
 		/* RFC 1826 */
-		plen = ((*algo->sumsiz)(sav) + 3) & ~(4 - 1);	/*XXX pad to 8byte?*/
+		plen = ((*algo->sumsiz)(sav) + 3) & ~(4 - 1);	/* XXX pad to 8byte? */
 		ahlen = plen + sizeof(struct ah);
 	} else {
 		/* RFC 2402 */
-		plen = ((*algo->sumsiz)(sav) + 3) & ~(4 - 1);	/*XXX pad to 8byte?*/
+		plen = ((*algo->sumsiz)(sav) + 3) & ~(4 - 1);	/* XXX pad to 8byte? */
 		ahlen = plen + sizeof(struct newah);
 	}
 
-	return(ahlen);
+	return (ahlen);
 }
 
 #ifdef INET6
@@ -337,27 +351,24 @@ ah_hdrlen(sav)
  * Fill in the Authentication Header and calculate checksum.
  */
 int
-ah6_output(m, nexthdrp, md, isr)
-	struct mbuf *m;
-	u_char *nexthdrp;
-	struct mbuf *md;
-	struct ipsecrequest *isr;
+ah6_output(struct mbuf *m, u_char *nexthdrp, struct mbuf *md, 
+	struct ipsecrequest *isr)
 {
 	struct mbuf *mprev;
 	struct mbuf *mah;
 	struct secasvar *sav = isr->sav;
-	struct ah_algorithm *algo;
+	const struct ah_algorithm *algo;
 	u_int32_t spi;
-	u_char *ahsumpos = NULL;
-	size_t plen;	/*AH payload size in bytes*/
+	u_int8_t *ahsumpos = NULL;
+	size_t plen;	/* AH payload size in bytes */
 	int error = 0;
 	int ahlen;
 	struct ip6_hdr *ip6;
 
 	if (m->m_len < sizeof(struct ip6_hdr)) {
 		ipseclog((LOG_DEBUG, "ah6_output: first mbuf too short\n"));
-		m_freem(m);
-		return EINVAL;
+		error = EINVAL;
+		goto fail;
 	}
 
 	ahlen = ah_hdrlen(sav);
@@ -368,21 +379,21 @@ ah6_output(m, nexthdrp, md, isr)
 		;
 	if (!mprev || mprev->m_next != md) {
 		ipseclog((LOG_DEBUG, "ah6_output: md is not in chain\n"));
-		m_freem(m);
-		return EINVAL;
+		error = EINVAL;
+		goto fail;
 	}
 
 	MGET(mah, M_DONTWAIT, MT_DATA);
 	if (!mah) {
-		m_freem(m);
-		return ENOBUFS;
+		error = ENOBUFS;
+		goto fail;
 	}
 	if (ahlen > MLEN) {
 		MCLGET(mah, M_DONTWAIT);
 		if ((mah->m_flags & M_EXT) == 0) {
 			m_free(mah);
-			m_freem(m);
-			return ENOBUFS;
+			error = ENOBUFS;
+			goto fail;
 		}
 	}
 	mah->m_len = ahlen;
@@ -393,9 +404,9 @@ ah6_output(m, nexthdrp, md, isr)
 	/* fix plen */
 	if (m->m_pkthdr.len - sizeof(struct ip6_hdr) > IPV6_MAXPACKET) {
 		ipseclog((LOG_ERR,
-		    "ip6_output: AH with IPv6 jumbogram is not supported\n"));
-		m_freem(m);
-		return EINVAL;
+		    "ah6_output: AH with IPv6 jumbogram is not supported\n"));
+		error = EINVAL;
+		goto fail;
 	}
 	ip6 = mtod(m, struct ip6_hdr *);
 	ip6->ip6_plen = htons(m->m_pkthdr.len - sizeof(struct ip6_hdr));
@@ -404,12 +415,19 @@ ah6_output(m, nexthdrp, md, isr)
 		ipseclog((LOG_DEBUG, "ah6_output: internal error: "
 			"sav->replay is null: SPI=%u\n",
 			(u_int32_t)ntohl(sav->spi)));
-		ipsec6stat.out_inval++;
-		m_freem(m);
-		return EINVAL;
+		IPSEC6_STATINC(IPSEC_STAT_OUT_INVAL);
+		error = EINVAL;
+		goto fail;
 	}
 
-	algo = &ah_algorithms[sav->alg_auth];
+	algo = ah_algorithm_lookup(sav->alg_auth);
+	if (!algo) {
+		ipseclog((LOG_ERR, "ah6_output: unsupported algorithm: "
+		    "SPI=%u\n", (u_int32_t)ntohl(sav->spi)));
+		IPSEC6_STATINC(IPSEC_STAT_OUT_INVAL);
+		error = EINVAL;
+		goto fail;
+	}
 	spi = sav->spi;
 
 	/*
@@ -442,9 +460,9 @@ ah6_output(m, nexthdrp, md, isr)
 				ipseclog((LOG_WARNING,
 				    "replay counter overflowed. %s\n",
 				    ipsec_logsastr(sav)));
-				ipsecstat.out_inval++;
-				m_freem(m);
-				return EINVAL;
+				IPSEC6_STATINC(IPSEC_STAT_OUT_INVAL);
+				error = EINVAL;
+				goto fail;
 			}
 		}
 		sav->replay->count++;
@@ -460,20 +478,26 @@ ah6_output(m, nexthdrp, md, isr)
 	 * calcurate the checksum, based on security association
 	 * and the algorithm specified.
 	 */
-	error = ah6_calccksum(m, (caddr_t)ahsumpos, algo, sav);
+	error = ah6_calccksum(m, ahsumpos, plen, algo, sav);
 	if (error) {
-		ipsec6stat.out_inval++;
-		m_freem(m);
+		IPSEC6_STATINC(IPSEC_STAT_OUT_INVAL);
+		goto fail;
 	} else {
-		ipsec6stat.out_success++;
+		IPSEC6_STATINC(IPSEC_STAT_OUT_SUCCESS);
 		key_sa_recordxfer(sav, m);
 	}
-	ipsec6stat.out_ahhist[sav->alg_auth]++;
+	IPSEC6_STATINC(IPSEC_STAT_OUT_AHHIST + sav->alg_auth);
 
-	return(error);
+	return 0;
+
+fail:
+	m_freem(m);
+	return error;
+	
 }
 #endif
 
+#ifdef INET
 /*
  * Find the final destination if there is loose/strict source routing option.
  * Returns NULL if there's no source routing options.
@@ -483,8 +507,7 @@ ah6_output(m, nexthdrp, md, isr)
  * The mbuf must be pulled up toward, at least, ip option part.
  */
 static struct in_addr *
-ah4_finaldst(m)
-	struct mbuf *m;
+ah4_finaldst(struct mbuf *m)
 {
 	struct ip *ip;
 	int optlen;
@@ -516,6 +539,15 @@ ah4_finaldst(m)
 	q = (u_char *)(ip + 1);
 	i = 0;
 	while (i < optlen) {
+		if (i + IPOPT_OPTVAL >= optlen)
+			return NULL;
+		if (q[i + IPOPT_OPTVAL] == IPOPT_EOL ||
+		    q[i + IPOPT_OPTVAL] == IPOPT_NOP ||
+		    i + IPOPT_OLEN < optlen)
+			;
+		else
+			return NULL;
+
 		switch (q[i + IPOPT_OPTVAL]) {
 		case IPOPT_EOL:
 			i = optlen;	/* bye */
@@ -525,8 +557,8 @@ ah4_finaldst(m)
 			break;
 		case IPOPT_LSRR:
 		case IPOPT_SSRR:
-			if (q[i + IPOPT_OLEN] <= 0
-			 || optlen - i < q[i + IPOPT_OLEN]) {
+			if (q[i + IPOPT_OLEN] < 2 + sizeof(struct in_addr) ||
+			    optlen - i < q[i + IPOPT_OLEN]) {
 				ipseclog((LOG_ERR,
 				    "ip_finaldst: invalid IP option "
 				    "(code=%02x len=%02x)\n",
@@ -536,8 +568,8 @@ ah4_finaldst(m)
 			i += q[i + IPOPT_OLEN] - sizeof(struct in_addr);
 			return (struct in_addr *)(q + i);
 		default:
-			if (q[i + IPOPT_OLEN] <= 0
-			 || optlen - i < q[i + IPOPT_OLEN]) {
+			if (q[i + IPOPT_OLEN] < 2 ||
+			    optlen - i < q[i + IPOPT_OLEN]) {
 				ipseclog((LOG_ERR,
 				    "ip_finaldst: invalid IP option "
 				    "(code=%02x len=%02x)\n",
@@ -550,3 +582,4 @@ ah4_finaldst(m)
 	}
 	return NULL;
 }
+#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb.h,v 1.5 1998/09/13 14:46:24 christos Exp $	*/
+/*	$NetBSD: kgdb.h,v 1.10 2005/12/11 12:25:20 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -64,6 +60,7 @@
 #define KGDB_CONT	'c'
 #define KGDB_STEP	's'
 #define KGDB_KILL	'k'
+#define KGDB_DETACH	'D'
 #define KGDB_SIGNAL	'?'
 #define KGDB_DEBUG	'd'
 
@@ -87,18 +84,18 @@ extern int kgdb_dev, kgdb_rate, kgdb_active;
 extern int kgdb_debug_init, kgdb_debug_panic;
 extern label_t *kgdb_recover;
 
-void kgdb_attach __P((int (*)(void *), void (*)(void *, int), void *ioarg));
-void kgdb_connect __P((int));
-void kgdb_panic __P((void));
-int kgdb_trap __P((int, db_regs_t *));
+void kgdb_attach(int (*)(void *), void (*)(void *, int), void *);
+void kgdb_connect(int);
+void kgdb_panic(void);
+int kgdb_trap(int, db_regs_t *);
 
 /*
  * Machine dependent functions needed by kgdb_stub.c
  */
-int kgdb_signal __P((int));
-int kgdb_acc __P((vaddr_t, size_t));
-void kgdb_getregs __P((db_regs_t *, kgdb_reg_t *));
-void kgdb_setregs __P((db_regs_t *, kgdb_reg_t *));
+int kgdb_signal(int);
+int kgdb_acc(vaddr_t, size_t);
+void kgdb_getregs(db_regs_t *, kgdb_reg_t *);
+void kgdb_setregs(db_regs_t *, kgdb_reg_t *);
 
 #endif	/* _KERNEL */
 #endif /* !_SYS_KGDB_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.8 1999/09/18 19:38:56 jsm Exp $	*/
+/*	$NetBSD: main.c,v 1.13 2008/07/20 01:03:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.8 1999/09/18 19:38:56 jsm Exp $");
+__RCSID("$NetBSD: main.c,v 1.13 2008/07/20 01:03:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -136,7 +132,7 @@ uid_t	Mother	= 51 + (51 << 8);
 **
 **	Many things in trek are not as clear as they might be, but are
 **	done to reduce space.  I compile with the -f and -O flags.  I
-**	am constrained to running with non-seperated I/D space, since
+**	am constrained to running with non-separated I/D space, since
 **	we don't have doubleing point hardware here; even if we did, I
 **	would like trek to be available to the large number of people
 **	who either have an 11/40 or do not have FP hardware.  I also
@@ -161,7 +157,7 @@ uid_t	Mother	= 51 + (51 << 8);
 
 jmp_buf env;
 
-int main __P((int, char **));
+int main(int, char **);
 
 int
 main(argc, argv)
@@ -177,7 +173,7 @@ char	**argv;
 	struct	termios		argp;
 
 	/* Revoke setgid privileges */
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
 	av = argv;
 	ac = argc;

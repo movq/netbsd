@@ -1,4 +1,4 @@
-/*	$NetBSD: wtreg.h,v 1.5 1994/10/27 04:18:33 cgd Exp $	*/
+/*	$NetBSD: wtreg.h,v 1.8 2005/12/11 12:22:03 christos Exp $	*/
 
 /*
  * Streamer tape driver.
@@ -24,17 +24,17 @@
  * All rights reserved.
  *
  * Authors: Robert Baron
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -87,7 +87,7 @@
 #define TPRANY          0x1000  /* read command requested */
 #define TPWP            0x2000  /* write protect error seen */
 #define TPTIMER         0x4000  /* timer() is active */
-#define TPACTIVE        0x8000  /* dma i/o active */
+#define TPACTIVE        0x8000  /* DMA i/o active */
 
 /* controller error register bits */
 #define TP_FIL          0x0001  /* File mark detected */

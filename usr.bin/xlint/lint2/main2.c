@@ -1,4 +1,4 @@
-/*	$NetBSD: main2.c,v 1.3 1998/02/22 15:40:41 christos Exp $	*/
+/*	$NetBSD: main2.c,v 1.7 2004/06/20 22:20:17 jmc Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -31,9 +31,13 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: main2.c,v 1.3 1998/02/22 15:40:41 christos Exp $");
+#if defined(__RCSID) && !defined(lint)
+__RCSID("$NetBSD: main2.c,v 1.7 2004/06/20 22:20:17 jmc Exp $");
 #endif
 
 #include <stdio.h>
@@ -59,7 +63,7 @@ const	char *libname;
 int	pflag;
 
 /*
- * warnings for (tentative) definitions of the same name in more then
+ * warnings for (tentative) definitions of the same name in more than
  * one translation unit
  */
 int	sflag;
@@ -84,14 +88,12 @@ int	Fflag;
  */
 const	char	**libs;
 
-static	void	usage __P((void));
+static	void	usage(void);
 
-int main __P((int, char *[]));
+int main(int, char *[]);
 
 int
-main(argc, argv)
-	int	argc;
-	char	*argv[];
+main(int argc, char *argv[])
 {
 	int	c, i;
 	size_t	len;
@@ -135,8 +137,9 @@ main(argc, argv)
 			Fflag = 1;
 			break;
 		case 'l':
-			for (i = 0; libs[i] != NULL; i++) ;
-			libs = xrealloc(libs, (i + 2) * sizeof (char *)); 
+			for (i = 0; libs[i] != NULL; i++)
+				continue;
+			libs = xrealloc(libs, (i + 2) * sizeof (char *));
 			libs[i] = xstrdup(optarg);
 			libs[i + 1] = NULL;
 			break;
@@ -144,7 +147,7 @@ main(argc, argv)
 			usage();
 		}
 	}
-	
+
 	argc -= optind;
 	argv += optind;
 
@@ -183,10 +186,9 @@ main(argc, argv)
 }
 
 static void
-usage()
+usage(void)
 {
 	(void)fprintf(stderr,
 		      "usage: lint2 -hpstxuHF -Clib -l lib ... src1 ...\n");
 	exit(1);
 }
-

@@ -1,11 +1,43 @@
-/*	$NetBSD: segments.h,v 1.30 1999/11/12 18:37:29 drochner Exp $	*/
+/*	$NetBSD: segments.h,v 1.50.4.1 2008/11/18 01:56:59 snj Exp $	*/
+
+/*-
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * William Jolitz.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)segments.h	7.1 (Berkeley) 5/9/91
+ */
 
 /*-
  * Copyright (c) 1995, 1997
  *	Charles M. Hannum.  All rights reserved.
  * Copyright (c) 1989, 1990 William F. Jolitz
- * Copyright (c) 1990 The Regents of the University of California.
- * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * William Jolitz.
@@ -48,22 +80,38 @@
 
 #ifndef _I386_SEGMENTS_H_
 #define _I386_SEGMENTS_H_
+#ifdef _KERNEL_OPT
+#include "opt_xen.h"
+#include "opt_sa.h"
+#endif
 
 /*
  * Selectors
  */
 
 #define	ISPL(s)		((s) & SEL_RPL)	/* what is the priority level of a selector */
-#define	SEL_KPL		0		/* kernel privilege level */	
-#define	SEL_UPL		3		/* user privilege level */	
+#ifndef XEN
+#define	SEL_KPL		0		/* kernel privilege level */
+#else
+#define	SEL_XEN		0		/* Xen privilege level */
+#define	SEL_KPL		1		/* kernel privilege level */
+#endif /* XEN */
+#define	SEL_UPL		3		/* user privilege level */
 #define	SEL_RPL		3		/* requester's privilege level mask */
+#ifdef XEN
+#define	CHK_UPL		2		/* user privilege level mask */
+#else
+#define CHK_UPL		SEL_RPL
+#endif /* XEN */
 #define	ISLDT(s)	((s) & SEL_LDT)	/* is it local or global */
-#define	SEL_LDT		4		/* local descriptor table */	
+#define	SEL_LDT		4		/* local descriptor table */
 #define	IDXSEL(s)	(((s) >> 3) & 0x1fff)		/* index of selector */
+#define	IDXSELN(s)	(((s) >> 3))			/* index of selector */
 #define	GSEL(s,r)	(((s) << 3) | r)		/* a global selector */
 #define	LSEL(s,r)	(((s) << 3) | r | SEL_LDT)	/* a local selector */
+#define	GSYSSEL(s,r)	GSEL(s,r)	/* compat with amd64 */
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_vm86.h"
 #endif
 
@@ -95,7 +143,7 @@ struct segment_descriptor {
 	unsigned sd_def32:1;		/* default 32 vs 16 bit size */
 	unsigned sd_gran:1;		/* limit granularity (byte/page) */
 	unsigned sd_hibase:8;		/* segment base address (msb) */
-} __attribute__((packed));
+} __packed;
 
 /*
  * Gate descriptors (e.g. indirect descriptors)
@@ -109,7 +157,12 @@ struct gate_descriptor {
 	unsigned gd_dpl:2;		/* segment descriptor priority level */
 	unsigned gd_p:1;		/* segment descriptor present */
 	unsigned gd_hioffset:16;	/* gate offset (msb) */
-} __attribute__((packed));
+} __packed;
+
+struct ldt_descriptor {
+	vaddr_t ld_base;
+	uint32_t ld_entries;
+} __packed;
 
 /*
  * Generic descriptor
@@ -117,7 +170,10 @@ struct gate_descriptor {
 union descriptor {
 	struct segment_descriptor sd;
 	struct gate_descriptor gd;
-} __attribute__((packed));
+	struct ldt_descriptor ld;
+	uint32_t raw[2];
+	uint64_t raw64;
+} __packed;
 
 /*
  * region descriptors, used to load gdt/idt tables before segments yet exist.
@@ -125,19 +181,32 @@ union descriptor {
 struct region_descriptor {
 	unsigned rd_limit:16;		/* segment extent */
 	unsigned rd_base:32;		/* base address  */
-} __attribute__((packed));
+} __packed;
 
 #if __GNUC__ == 2 && __GNUC_MINOR__ < 7
 #pragma pack(4)
 #endif
 
 #ifdef _KERNEL
-extern union descriptor *idt, *gdt, *ldt;
+extern union descriptor *gdt, *ldt;
+extern struct gate_descriptor *idt;
 
-void setgate __P((struct gate_descriptor *, void *, int, int, int));
-void setregion __P((struct region_descriptor *, void *, size_t));
-void setsegment __P((struct segment_descriptor *, void *, size_t, int, int,
-    int, int));
+void setgate(struct gate_descriptor *, void *, int, int, int, int);
+void setregion(struct region_descriptor *, void *, size_t);
+void setsegment(struct segment_descriptor *, const void *, size_t, int, int,
+    int, int);
+void setgdt(int, const void *, size_t, int, int, int, int);
+void unsetgate(struct gate_descriptor *);
+void cpu_init_idt(void);
+
+#if !defined(XEN)
+void idt_init(void);
+void idt_vec_reserve(int);
+int idt_vec_alloc(int, int);
+void idt_vec_set(int, void (*)(void));
+void idt_vec_free(int);
+#endif
+
 #endif /* _KERNEL */
 
 #endif /* !_LOCORE */
@@ -178,17 +247,18 @@ void setsegment __P((struct segment_descriptor *, void *, size_t, int, int,
 #define	SDT_MEMERC	30	/* memory execute read conforming */
 #define	SDT_MEMERAC	31	/* memory execute read accessed conforming */
 
+#define SDTYPE(p)	(((const struct segment_descriptor *)(p))->sd_type)
 /* is memory segment descriptor pointer ? */
-#define ISMEMSDP(s)	((s->d_type) >= SDT_MEMRO && \
-			 (s->d_type) <= SDT_MEMERAC)
+#define ISMEMSDP(s)	(SDTYPE(s) >= SDT_MEMRO && \
+			 SDTYPE(s) <= SDT_MEMERAC)
 
 /* is 286 gate descriptor pointer ? */
-#define IS286GDP(s)	((s->d_type) >= SDT_SYS286CGT && \
-			 (s->d_type) < SDT_SYS286TGT)
+#define IS286GDP(s)	(SDTYPE(s) >= SDT_SYS286CGT && \
+			 SDTYPE(s) < SDT_SYS286TGT)
 
 /* is 386 gate descriptor pointer ? */
-#define IS386GDP(s)	((s->d_type) >= SDT_SYS386CGT && \
-			 (s->d_type) < SDT_SYS386TGT)
+#define IS386GDP(s)	(SDTYPE(s) >= SDT_SYS386CGT && \
+			 SDTYPE(s) < SDT_SYS386TGT)
 
 /* is gate descriptor pointer ? */
 #define ISGDP(s)	(IS286GDP(s) || IS386GDP(s))
@@ -210,27 +280,57 @@ void setsegment __P((struct segment_descriptor *, void *, size_t, int, int,
  * Entries in the Interrupt Descriptor Table (IDT)
  */
 #define	NIDT	256
-#define	NRSVIDT	32		/* reserved entries for cpu exceptions */
+#define	NRSVIDT	32		/* reserved entries for CPU exceptions */
 
 /*
- * Entries in the Global Descriptor Table (GDT)
+ * Entries in the Global Descriptor Table (GDT).
+ *
+ * NB: If you change GBIOSCODE/GBIOSDATA, you *must* rebuild arch/i386/
+ * bioscall/biostramp.inc, as that relies on GBIOSCODE/GBIOSDATA and a
+ * normal kernel build does not rebuild it (it's merely included whole-
+ * sale from i386/bioscall.s)
+ *
+ * Also, note that the GEXTBIOSDATA_SEL selector is special, as it maps
+ * to the value 0x0040 (when created as a KPL global selector).  Some
+ * BIOSes reference the extended BIOS data area at segment 0040 in a non
+ * relocatable fashion (even when in protected mode); mapping the zero page
+ * via the GEXTBIOSDATA_SEL allows these buggy BIOSes to continue to work
+ * under NetBSD.
+ *
+ * The order if the first 5 descriptors is special; the sysenter/sysexit
+ * instructions depend on them.
  */
 #define	GNULL_SEL	0	/* Null descriptor */
 #define	GCODE_SEL	1	/* Kernel code descriptor */
 #define	GDATA_SEL	2	/* Kernel data descriptor */
-#define	GLDT_SEL	3	/* Default LDT descriptor */
-#define	GUCODE_SEL	4	/* User code descriptor */
-#define	GUDATA_SEL	5	/* User data descriptor */
-#define	GAPM32CODE_SEL	6
-#define	GAPM16CODE_SEL	7
-#define	GAPMDATA_SEL	8
-#define	GBIOSCODE_SEL	9
-#define	GBIOSDATA_SEL	10
-#define GPNPBIOSCODE_SEL 11
-#define GPNPBIOSDATA_SEL 12
-#define GPNPBIOSSCRATCH_SEL 13
-#define GPNPBIOSTRAMP_SEL 14
-#define	NGDT		15
+#ifdef COMPAT_30_PTHREAD
+/* this is incompatible with sysenter/sysexit */
+#define	GLDT_SEL	3	/* User code descriptor */
+#define	GUCODE_SEL	4	/* User data descriptor */
+#define	GUDATA_SEL	5	/* Default LDT descriptor */
+#else
+#define	GUCODE_SEL	3	/* User code descriptor */
+#define	GUDATA_SEL	4	/* User data descriptor */
+#define	GLDT_SEL	5	/* Default LDT descriptor */
+#endif
+#define GCPU_SEL	6	/* per-CPU segment */
+#define	GMACHCALLS_SEL	7	/* Darwin (mach trap) system call gate */
+#define	GEXTBIOSDATA_SEL 8	/* magic to catch BIOS refs to EBDA */
+#define	GAPM32CODE_SEL	9	/* 3 APM segments must be consecutive */
+#define	GAPM16CODE_SEL	10	/* and in the specified order: code32 */
+#define	GAPMDATA_SEL	11	/* code16 and then data per APM spec */
+#define	GBIOSCODE_SEL	12
+#define	GBIOSDATA_SEL	13
+#define	GPNPBIOSCODE_SEL 14
+#define	GPNPBIOSDATA_SEL 15
+#define	GPNPBIOSSCRATCH_SEL 16
+#define	GPNPBIOSTRAMP_SEL 17
+#define GTRAPTSS_SEL	18
+#define GIPITSS_SEL	19
+#define GUCODEBIG_SEL	20	/* User code with executable stack */
+#define	GUFS_SEL	21
+#define	GUGS_SEL	22
+#define	NGDT		23
 
 /*
  * Entries in the Local Descriptor Table (LDT)
@@ -240,6 +340,7 @@ void setsegment __P((struct segment_descriptor *, void *, size_t, int, int,
 #define	LUCODE_SEL	2	/* User code descriptor */
 #define	LUDATA_SEL	3	/* User data descriptor */
 #define	LSOL26CALLS_SEL	4	/* Solaris 2.6 system call gate */
+#define	LUCODEBIG_SEL	5	/* User code with executable stack */
 #define	LBSDICALLS_SEL	16	/* BSDI system call gate */
 #define	NLDT		17
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ne2000.c,v 1.29 2000/03/22 20:58:28 ws Exp $	*/
+/*	$NetBSD: ne2000.c,v 1.59 2008/04/28 20:23:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,6 +47,9 @@
  * Common code shared by all NE2000-compatible Ethernet interfaces.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ne2000.c,v 1.59 2008/04/28 20:23:50 martin Exp $");
+
 #include "opt_ipkdb.h"
 
 #include <sys/param.h>
@@ -70,8 +66,8 @@
 
 #include <net/if_ether.h>
 
-#include <machine/bswap.h>
-#include <machine/bus.h>
+#include <sys/bswap.h>
+#include <sys/bus.h>
 
 #ifndef __BUS_SPACE_HAS_STREAM_METHODS
 #define	bus_space_write_stream_2	bus_space_write_2
@@ -89,26 +85,27 @@
 #include <dev/ic/ne2000reg.h>
 #include <dev/ic/ne2000var.h>
 
-#if BYTE_ORDER == BIG_ENDIAN
-#include <machine/bswap.h>
-#endif
+#include <dev/ic/ax88190reg.h>
 
-int	ne2000_write_mbuf __P((struct dp8390_softc *, struct mbuf *, int));
-int	ne2000_ring_copy __P((struct dp8390_softc *, int, caddr_t, u_short));
-void	ne2000_read_hdr __P((struct dp8390_softc *, int, struct dp8390_ring *));
-int	ne2000_test_mem __P((struct dp8390_softc *));
+int	ne2000_write_mbuf(struct dp8390_softc *, struct mbuf *, int);
+int	ne2000_ring_copy(struct dp8390_softc *, int, void *, u_short);
+void	ne2000_read_hdr(struct dp8390_softc *, int, struct dp8390_ring *);
+int	ne2000_test_mem(struct dp8390_softc *);
 
-void	ne2000_writemem __P((bus_space_tag_t, bus_space_handle_t,
+void	ne2000_writemem(bus_space_tag_t, bus_space_handle_t,
 	    bus_space_tag_t, bus_space_handle_t, u_int8_t *, int, size_t,
-	    int, int));
-void	ne2000_readmem __P((bus_space_tag_t, bus_space_handle_t,
-	    bus_space_tag_t, bus_space_handle_t, int, u_int8_t *, size_t, int));
+	    int, int);
+void	ne2000_readmem(bus_space_tag_t, bus_space_handle_t,
+	    bus_space_tag_t, bus_space_handle_t, int, u_int8_t *, size_t, int);
+
+#define	ASIC_BARRIER(asict, asich) \
+	bus_space_barrier((asict), (asich), 0, 0x10, \
+	    BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE)
 
 int
-ne2000_attach(nsc, myea, media, nmedia, defmedia)
+ne2000_attach(nsc, myea)
 	struct ne2000_softc *nsc;
 	u_int8_t *myea;
-	int *media, nmedia, defmedia;
 {
 	struct dp8390_softc *dsc = &nsc->sc_dp8390;
 	bus_space_tag_t nict = dsc->sc_regt;
@@ -122,19 +119,40 @@ ne2000_attach(nsc, myea, media, nmedia, defmedia)
 	 * Detect it again unless caller specified it; this gives us
 	 * the memory size.
 	 */
-	if (nsc->sc_type == 0) {
+	if (nsc->sc_type == NE2000_TYPE_UNKNOWN)
 		nsc->sc_type = ne2000_detect(nict, nich, asict, asich);
-		if (nsc->sc_type == 0) {
-			printf("%s: where did the card go?\n",
-			    dsc->sc_dev.dv_xname);
-			return (1);
-		}
+
+	/*
+	 * 8k of memory for NE1000, 16k for NE2000 and 24k for the
+	 * card uses DL10019.
+	 */
+	switch (nsc->sc_type) {
+	case NE2000_TYPE_UNKNOWN:
+	default:
+		aprint_error_dev(dsc->sc_dev, "where did the card go?\n");
+		return (1);
+	case NE2000_TYPE_NE1000:
+		memsize = 8192;
+		useword = 0;
+		break;
+	case NE2000_TYPE_NE2000:
+	case NE2000_TYPE_AX88190:		/* XXX really? */
+	case NE2000_TYPE_AX88790:
+		memsize = 8192 * 2;
+		useword = 1;
+		break;
+	case NE2000_TYPE_DL10019:
+	case NE2000_TYPE_DL10022:
+		memsize = 8192 * 3;
+		useword = 1;
+		break;
 	}
 
-	useword = NE2000_USE_WORD(nsc);
+	nsc->sc_useword = useword;
 
 	dsc->cr_proto = ED_CR_RD2;
-	if (nsc->sc_type == NE2000_TYPE_AX88190) {
+	if (nsc->sc_type == NE2000_TYPE_AX88190 ||
+	    nsc->sc_type == NE2000_TYPE_AX88790) {
 		dsc->rcr_proto = ED_RCR_INTT;
 		dsc->sc_flags |= DP8390_DO_AX88190_WORKAROUND;
 	} else
@@ -160,23 +178,6 @@ ne2000_attach(nsc, myea, media, nmedia, defmedia)
 		dsc->sc_reg_map[i] = i;
 
 	/*
-	 * 8k of memory for NE1000, 16k for NE2000 and 24k for the
-	 * card uses DL10019.
-	 */
-	switch (nsc->sc_type) {
-	case NE2000_TYPE_NE1000:
-		memsize = 8192;
-		break;
-	case NE2000_TYPE_NE2000:
-	case NE2000_TYPE_AX88190:		/* XXX really? */
-		memsize = 8192 * 2;
-		break;
-	case NE2000_TYPE_DL10019:
-		memsize = 8192 * 3;
-		break;
-	}
-
-	/*
 	 * NIC memory doens't start at zero on an NE board.
 	 * The start address is tied to the bus width.
 	 * (It happens to be computed the same way as mem size.)
@@ -198,7 +199,7 @@ ne2000_attach(nsc, myea, media, nmedia, defmedia)
 			    x << ED_PAGE_SHIFT, ED_PAGE_SIZE, useword, 0);
 			ne2000_readmem(nict, nich, asict, asich,
 			    x << ED_PAGE_SHIFT, tbuf, ED_PAGE_SIZE, useword);
-			if (bcmp(pbuf0, tbuf, ED_PAGE_SIZE) == 0) {
+			if (memcmp(pbuf0, tbuf, ED_PAGE_SIZE) == 0) {
 				for (i = 0; i < ED_PAGE_SIZE; i++)
 					pbuf[i] = 255 - x;
 				ne2000_writemem(nict, nich, asict, asich,
@@ -207,7 +208,7 @@ ne2000_attach(nsc, myea, media, nmedia, defmedia)
 				ne2000_readmem(nict, nich, asict, asich,
 				    x << ED_PAGE_SHIFT, tbuf, ED_PAGE_SIZE,
 				    useword);
-				if (bcmp(pbuf, tbuf, ED_PAGE_SIZE) == 0) {
+				if (memcmp(pbuf, tbuf, ED_PAGE_SIZE) == 0) {
 					mstart = x << ED_PAGE_SHIFT;
 					memsize = ED_PAGE_SIZE;
 					break;
@@ -216,8 +217,7 @@ ne2000_attach(nsc, myea, media, nmedia, defmedia)
 		}
 
 		if (mstart == 0) {
-			printf("%s: cannot find start of RAM\n",
-			    dsc->sc_dev.dv_xname);
+			aprint_error_dev(&dsc->sc_dev, "cannot find start of RAM\n");
 			return (1);
 		}
 
@@ -227,7 +227,7 @@ ne2000_attach(nsc, myea, media, nmedia, defmedia)
 			    x << ED_PAGE_SHIFT, ED_PAGE_SIZE, useword, 0);
 			ne2000_readmem(nict, nich, asict, asich,
 			    x << ED_PAGE_SHIFT, tbuf, ED_PAGE_SIZE, useword);
-			if (bcmp(pbuf0, tbuf, ED_PAGE_SIZE) == 0) {
+			if (memcmp(pbuf0, tbuf, ED_PAGE_SIZE) == 0) {
 				for (i = 0; i < ED_PAGE_SIZE; i++)
 					pbuf[i] = 255 - x;
 				ne2000_writemem(nict, nich, asict, asich,
@@ -236,7 +236,7 @@ ne2000_attach(nsc, myea, media, nmedia, defmedia)
 				ne2000_readmem(nict, nich, asict, asich,
 				    x << ED_PAGE_SHIFT, tbuf, ED_PAGE_SIZE,
 				    useword);
-				if (bcmp(pbuf, tbuf, ED_PAGE_SIZE) == 0)
+				if (memcmp(pbuf, tbuf, ED_PAGE_SIZE) == 0)
 					memsize += ED_PAGE_SIZE;
 				else
 					break;
@@ -245,7 +245,7 @@ ne2000_attach(nsc, myea, media, nmedia, defmedia)
 		}
 
 		printf("%s: RAM start 0x%x, size %d\n",
-		    dsc->sc_dev.dv_xname, mstart, memsize);
+		    device_xname(&dsc->sc_dev), mstart, memsize);
 
 		dsc->mem_start = mstart;
 	}
@@ -255,7 +255,8 @@ ne2000_attach(nsc, myea, media, nmedia, defmedia)
 
 	if (myea == NULL) {
 		/* Read the station address. */
-		if (nsc->sc_type == NE2000_TYPE_AX88190) {
+		if (nsc->sc_type == NE2000_TYPE_AX88190 ||
+		    nsc->sc_type == NE2000_TYPE_AX88790) {
 			/* Select page 0 registers. */
 			NIC_BARRIER(nict, nich);
 			bus_space_write_1(nict, nich, ED_P0_CR,
@@ -265,7 +266,7 @@ ne2000_attach(nsc, myea, media, nmedia, defmedia)
 			bus_space_write_1(nict, nich, ED_P0_DCR, ED_DCR_WTS);
 			NIC_BARRIER(nict, nich);
 			ne2000_readmem(nict, nich, asict, asich,
-			    NE2000_AX88190_NODEID_OFFSET, dsc->sc_enaddr,
+			    AX88190_NODEID_OFFSET, dsc->sc_enaddr,
 			    ETHER_ADDR_LEN, useword);
 		} else {
 			ne2000_readmem(nict, nich, asict, asich, 0, romdata,
@@ -275,15 +276,18 @@ ne2000_attach(nsc, myea, media, nmedia, defmedia)
 				    romdata[i * (useword ? 2 : 1)];
 		}
 	} else
-		bcopy(myea, dsc->sc_enaddr, sizeof(dsc->sc_enaddr));
+		memcpy(dsc->sc_enaddr, myea, sizeof(dsc->sc_enaddr));
 
 	/* Clear any pending interrupts that might have occurred above. */
 	NIC_BARRIER(nict, nich);
 	bus_space_write_1(nict, nich, ED_P0_ISR, 0xff);
 	NIC_BARRIER(nict, nich);
 
-	if (dp8390_config(dsc, media, nmedia, defmedia)) {
-		printf("%s: setup failed\n", dsc->sc_dev.dv_xname);
+	if (dsc->sc_media_init == NULL)
+		dsc->sc_media_init = dp8390_media_init;
+
+	if (dp8390_config(dsc)) {
+		aprint_error_dev(dsc->sc_dev, "setup failed\n");
 		return (1);
 	}
 
@@ -309,18 +313,16 @@ ne2000_detect(nict, nich, asict, asich)
 {
 	static u_int8_t test_pattern[32] = "THIS is A memory TEST pattern";
 	u_int8_t test_buffer[32], tmp;
-	int i, rv = 0;
+	int i, rv = NE2000_TYPE_UNKNOWN;
 
 	/* Reset the board. */
 #ifdef GWETHER
 	bus_space_write_1(asict, asich, NE2000_ASIC_RESET, 0);
-	bus_space_barrier(asict, asich, 0, NE2000_NPORTS,
-			  BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE);
+	ASIC_BARRIER(asict, asich);
 	delay(200);
 #endif /* GWETHER */
 	tmp = bus_space_read_1(asict, asich, NE2000_ASIC_RESET);
-	bus_space_barrier(asict, asich, 0, NE2000_NPORTS,
-			  BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE);
+	ASIC_BARRIER(asict, asich);
 	delay(10000);
 
 	/*
@@ -332,8 +334,7 @@ ne2000_detect(nict, nich, asict, asich)
 	 * the invasive thing for now.  Yuck.]
 	 */
 	bus_space_write_1(asict, asich, NE2000_ASIC_RESET, tmp);
-	bus_space_barrier(asict, asich, 0, NE2000_NPORTS,
-			  BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE);
+	ASIC_BARRIER(asict, asich);
 	delay(5000);
 
 	/*
@@ -349,7 +350,7 @@ ne2000_detect(nict, nich, asict, asich)
 	delay(5000);
 
 	/*
-	 * Generic probe routine for testing for the existance of a DS8390.
+	 * Generic probe routine for testing for the existence of a DS8390.
 	 * Must be performed  after the NIC has just been reset.  This
 	 * works by looking at certain register values that are guaranteed
 	 * to be initialized a certain way after power-up or reset.
@@ -427,7 +428,7 @@ ne2000_detect(nict, nich, asict, asich)
 	ne2000_readmem(nict, nich, asict, asich, 8192, test_buffer,
 	    sizeof(test_buffer), 0);
 
-	if (bcmp(test_pattern, test_buffer, sizeof(test_pattern))) {
+	if (memcmp(test_pattern, test_buffer, sizeof(test_pattern))) {
 		/* not an NE1000 - try NE2000 */
 		bus_space_write_1(nict, nich, ED_P0_DCR,
 		    ED_DCR_WTS | ED_DCR_FT1 | ED_DCR_LS);
@@ -445,7 +446,7 @@ ne2000_detect(nict, nich, asict, asich)
 		ne2000_readmem(nict, nich, asict, asich, 16384, test_buffer,
 		    sizeof(test_buffer), 1);
 
-		if (bcmp(test_pattern, test_buffer, sizeof(test_pattern)))
+		if (memcmp(test_pattern, test_buffer, sizeof(test_pattern)))
 			goto out;	/* not an NE2000 either */
 
 		rv = NE2000_TYPE_NE2000;
@@ -477,10 +478,16 @@ ne2000_write_mbuf(sc, m, buf)
 	bus_space_handle_t nich = sc->sc_regh;
 	bus_space_tag_t asict = nsc->sc_asict;
 	bus_space_handle_t asich = nsc->sc_asich;
-	int savelen;
+	int savelen, padlen;
 	int maxwait = 100;	/* about 120us */
 
 	savelen = m->m_pkthdr.len;
+	if (savelen < ETHER_MIN_LEN - ETHER_CRC_LEN) {
+		padlen = ETHER_MIN_LEN - ETHER_CRC_LEN - savelen;
+		savelen = ETHER_MIN_LEN - ETHER_CRC_LEN;
+	} else
+		padlen = 0;
+
 
 	/* Select page 0 registers. */
 	NIC_BARRIER(nict, nich);
@@ -520,6 +527,11 @@ ne2000_write_mbuf(sc, m, buf)
 				    NE2000_ASIC_DATA, mtod(m, u_int8_t *),
 				    m->m_len);
 			}
+		}
+		if (padlen) {
+			for(; padlen > 0; padlen--)
+				bus_space_write_1(asict, asich,
+				    NE2000_ASIC_DATA, 0);
 		}
 	} else {
 		/* NE2000s are a bit trickier. */
@@ -592,8 +604,17 @@ ne2000_write_mbuf(sc, m, buf)
 			bus_space_write_stream_2(asict, asich, NE2000_ASIC_DATA,
 			    *(u_int16_t *)savebyte);
 		}
+		if (padlen) {
+			for(; padlen > 1; padlen -= 2)
+				bus_space_write_stream_2(asict, asich,
+				    NE2000_ASIC_DATA, 0);
+		}
 	}
 	NIC_BARRIER(nict, nich);
+
+	/* AX88796 doesn't seem to have remote DMA complete */
+	if (sc->sc_flags & DP8390_NO_REMOTE_DMA_COMPLETE)
+		return(savelen);
 
 	/*
 	 * Wait for remote DMA to complete.  This is necessary because on the
@@ -604,8 +625,8 @@ ne2000_write_mbuf(sc, m, buf)
 	 */
 	while (((bus_space_read_1(nict, nich, ED_P0_ISR) & ED_ISR_RDC) !=
 	    ED_ISR_RDC) && --maxwait) {
-		bus_space_read_1(nict, nich, ED_P0_CRDA1);
-		bus_space_read_1(nict, nich, ED_P0_CRDA0);
+		(void)bus_space_read_1(nict, nich, ED_P0_CRDA1);
+		(void)bus_space_read_1(nict, nich, ED_P0_CRDA0);
 		NIC_BARRIER(nict, nich);
 		DELAY(1);
 	}
@@ -613,7 +634,7 @@ ne2000_write_mbuf(sc, m, buf)
 	if (maxwait == 0) {
 		log(LOG_WARNING,
 		    "%s: remote transmit DMA failed to complete\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		dp8390_reset(sc);
 	}
 
@@ -626,19 +647,20 @@ ne2000_write_mbuf(sc, m, buf)
  * ring-wrap.
  */
 int
-ne2000_ring_copy(sc, src, dst, amount)
+ne2000_ring_copy(sc, src, dstv, amount)
 	struct dp8390_softc *sc;
 	int src;
-	caddr_t dst;
+	void *dstv;
 	u_short amount;
 {
+	char *dst = dstv;
 	struct ne2000_softc *nsc = (struct ne2000_softc *)sc;
 	bus_space_tag_t nict = sc->sc_regt;
 	bus_space_handle_t nich = sc->sc_regh;
 	bus_space_tag_t asict = nsc->sc_asict;
 	bus_space_handle_t asich = nsc->sc_asich;
 	u_short tmp_amount;
-	int useword = NE2000_USE_WORD(nsc);
+	int useword = nsc->sc_useword;
 
 	/* Does copy wrap to lower addr in ring buffer? */
 	if (src + amount > sc->mem_end) {
@@ -669,15 +691,14 @@ ne2000_read_hdr(sc, buf, hdr)
 
 	ne2000_readmem(sc->sc_regt, sc->sc_regh, nsc->sc_asict, nsc->sc_asich,
 	    buf, (u_int8_t *)hdr, sizeof(struct dp8390_ring),
-	    NE2000_USE_WORD(nsc));
+	    nsc->sc_useword);
 #if BYTE_ORDER == BIG_ENDIAN
 	hdr->count = bswap16(hdr->count);
 #endif
 }
 
 int
-ne2000_test_mem(sc)
-	struct dp8390_softc *sc;
+ne2000_test_mem(struct dp8390_softc *sc)
 {
 
 	/* Noop. */
@@ -722,8 +743,8 @@ ne2000_readmem(nict, nich, asict, asich, src, dst, amount, useword)
 	NIC_BARRIER(nict, nich);
 	bus_space_write_1(nict, nich, ED_P0_CR,
 	    ED_CR_RD0 | ED_CR_PAGE_0 | ED_CR_STA);
-	NIC_BARRIER(nict, nich);
 
+	ASIC_BARRIER(asict, asich);
 	if (useword)
 		bus_space_read_multi_stream_2(asict, asich, NE2000_ASIC_DATA,
 		    (u_int16_t *)dst, amount >> 1);
@@ -774,12 +795,14 @@ ne2000_writemem(nict, nich, asict, asich, src, dst, len, useword, quiet)
 	    ED_CR_RD1 | ED_CR_PAGE_0 | ED_CR_STA);
 	NIC_BARRIER(nict, nich);
 
+	ASIC_BARRIER(asict, asich);
 	if (useword)
 		bus_space_write_multi_stream_2(asict, asich, NE2000_ASIC_DATA,
 		    (u_int16_t *)src, len >> 1);
 	else
 		bus_space_write_multi_1(asict, asich, NE2000_ASIC_DATA,
 		    src, len);
+	ASIC_BARRIER(asict, asich);
 
 	/*
 	 * Wait for remote DMA to complete.  This is necessary because on the
@@ -830,7 +853,7 @@ ne2000_ipkdb_attach(kip)
 	if (np->sc_type == 0)
 		return -1;
 
-	useword = NE2000_USE_WORD(np);
+	useword = np->sc_useword;
 
 	dp->cr_proto = ED_CR_RD2;
 	dp->dcr_reg = ED_DCR_FT1 | ED_DCR_LS | (useword ? ED_DCR_WTS : 0);
@@ -854,14 +877,20 @@ ne2000_ipkdb_attach(kip)
 		kip->name = "ne2000";
 		break;
 	case NE2000_TYPE_DL10019:
+	case NE2000_TYPE_DL10022:
 		dp->mem_start = dp->mem_size = 8192 * 3;
-		kip->name = "dl10019";
+		kip->name = (np->sc_type == NE2000_TYPE_DL10019) ?
+		    "dl10022" : "dl10019";
 		break;
 	case NE2000_TYPE_AX88190:
+	case NE2000_TYPE_AX88790:
 		dp->rcr_proto = ED_RCR_INTT;
 		dp->sc_flags |= DP8390_DO_AX88190_WORKAROUND;
 		dp->mem_start = dp->mem_size = 8192 * 2;
 		kip->name = "ax88190";
+		break;
+	default:
+		return -1;
 		break;
 	}
 
@@ -875,7 +904,8 @@ ne2000_ipkdb_attach(kip)
 		char romdata[16];
 
 		/* Read the station address. */
-		if (np->sc_type == NE2000_TYPE_AX88190) {
+		if (np->sc_type == NE2000_TYPE_AX88190 ||
+		    np->sc_type == NE2000_TYPE_AX88790) {
 			/* Select page 0 registers. */
 			NIC_BARRIER(nict, nich);
 			bus_space_write_1(nict, nich, ED_P0_CR,
@@ -884,14 +914,13 @@ ne2000_ipkdb_attach(kip)
 			/* Select word transfer */
 			bus_space_write_1(nict, nich, ED_P0_DCR, ED_DCR_WTS);
 			ne2000_readmem(nict, nich, np->sc_asict, np->sc_asich,
-				NE2000_AX88190_NODEID_OFFSET, kip->myenetaddr,
+				AX88190_NODEID_OFFSET, kip->myenetaddr,
 				ETHER_ADDR_LEN, useword);
 		} else {
 			ne2000_readmem(nict, nich, np->sc_asict, np->sc_asich,
 				0, romdata, sizeof romdata, useword);
-			useword = useword ? 2 : 1;
 			for (i = 0; i < ETHER_ADDR_LEN; i++)
-				kip->myenetaddr[i] = romdata[i * useword];
+				kip->myenetaddr[i] = romdata[i << useword];
 		}
 		kip->flags |= IPKDB_MYHW;
 
@@ -901,3 +930,32 @@ ne2000_ipkdb_attach(kip)
 	return 0;
 }
 #endif
+
+void
+ne2000_power(int why, void *arg)
+{
+	struct ne2000_softc *sc = arg;
+	struct dp8390_softc *dsc = &sc->sc_dp8390;
+	struct ifnet *ifp = &dsc->sc_ec.ec_if;
+	int s;
+
+	s = splnet();
+	switch (why) {
+	case PWR_SUSPEND:
+	case PWR_STANDBY:
+		dp8390_stop(dsc);
+		dp8390_disable(dsc);
+		break;
+	case PWR_RESUME:
+		if (ifp->if_flags & IFF_UP) {
+			if (dp8390_enable(dsc) == 0)
+				dp8390_init(dsc);
+		}
+		break;
+	case PWR_SOFTSUSPEND:
+	case PWR_SOFTSTANDBY:
+	case PWR_SOFTRESUME:
+		break;
+	}
+	splx(s);
+}

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcmciavar.h,v 1.12 2000/02/08 12:51:31 enami Exp $	*/
+/*	$NetBSD: pcmciavar.h,v 1.33 2008/07/03 19:07:43 drochner Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -32,8 +32,6 @@
 #include <sys/types.h>
 #include <sys/queue.h>
 
-#include <machine/bus.h>
-
 #include <dev/pcmcia/pcmciachip.h>
 
 extern int	pcmcia_verbose;
@@ -47,6 +45,7 @@ struct pcmcia_io_handle {
 	bus_addr_t      addr;		/* resulting address in bus space */
 	bus_size_t      size;		/* size of i/o space */
 	int             flags;		/* misc. information */
+	void		*ihandle;	/* opaque i/o handle */
 };
 
 #define	PCMCIA_IO_ALLOCATED	0x01	/* i/o space was allocated */
@@ -93,6 +92,9 @@ struct pcmcia_config_entry {
 	struct {
 		u_long	length;
 		u_long	start;
+
+		struct	pcmcia_io_handle handle;
+		int	window;
 	} iospace[4];		/* XXX this could be as high as 16 */
 	u_int16_t	irqmask;
 	int		num_memspace;
@@ -100,10 +102,31 @@ struct pcmcia_config_entry {
 		u_long	length;
 		u_long	cardaddr;
 		u_long	hostaddr;
+
+		struct	pcmcia_mem_handle handle;
+		bus_size_t offset;
+		int	window;
+
 	} memspace[2];		/* XXX this could be as high as 8 */
 	int		maxtwins;
 	SIMPLEQ_ENTRY(pcmcia_config_entry) cfe_list;
 };
+
+
+struct pcmcia_funce_disk {
+	int pfd_interface;
+};
+
+struct pcmcia_funce_lan {
+	int pfl_nidlen;
+	u_int8_t pfl_nid[8];
+};
+
+union pcmcia_funce {
+	struct pcmcia_funce_disk pfv_disk;
+	struct pcmcia_funce_lan pfv_lan;
+};
+
 
 struct pcmcia_function {
 	/* read off the card */
@@ -123,18 +146,24 @@ struct pcmcia_function {
 #define	pf_ccrh		pf_pcmh.memh
 #define	pf_ccr_mhandle	pf_pcmh.mhandle
 #define	pf_ccr_realsize	pf_pcmh.realsize
-	bus_addr_t	pf_ccr_offset;
+	bus_size_t	pf_ccr_offset;
 	int		pf_ccr_window;
-	long		pf_mfc_iobase;
-	long		pf_mfc_iomax;
-	int		(*ih_fct) __P((void *));
-	void		*ih_arg;
-	int		ih_ipl;
+	bus_addr_t	pf_mfc_iobase;
+	bus_addr_t	pf_mfc_iomax;
+	void		*pf_ih;
 	int		pf_flags;
+
+	union pcmcia_funce pf_funce; /* CISTPL_FUNCE */
+#define pf_funce_disk_interface pf_funce.pfv_disk.pfd_interface
+#define pf_funce_lan_nid pf_funce.pfv_lan.pfl_nid
+#define pf_funce_lan_nidlen pf_funce.pfv_lan.pfl_nidlen
 };
 
 /* pf_flags */
 #define	PFF_ENABLED	0x0001		/* function is enabled */
+#define	PFF_DETACHED	0x0002		/* card is detached */
+
+SIMPLEQ_HEAD(pcmcia_function_head, pcmcia_function);
 
 struct pcmcia_card {
 	int		cis1_major;
@@ -153,11 +182,11 @@ struct pcmcia_card {
 #define	PCMCIA_PRODUCT_INVALID		-1
 	u_int16_t	error;
 #define	PCMCIA_CIS_INVALID		{ NULL, NULL, NULL, NULL }
-	SIMPLEQ_HEAD(, pcmcia_function) pf_head;
+	struct pcmcia_function_head	pf_head;
 };
 
 struct pcmcia_softc {
-	struct device	dev;
+	device_t	dev;
 
 	/* this stuff is for the socket */
 	pcmcia_chipset_tag_t pct;
@@ -181,9 +210,9 @@ struct pcmcia_softc {
 struct pcmcia_cis_quirk {
 	int32_t manufacturer;
 	int32_t product;
-	char *cis1_info[4];
-	struct pcmcia_function *pf;
-	struct pcmcia_config_entry *cfe;
+	const char *cis1_info[4];
+	const struct pcmcia_function *pf;
+	const struct pcmcia_config_entry *cfe;
 };
 
 struct pcmcia_attach_args {
@@ -197,34 +226,30 @@ struct pcmcia_tuple {
 	unsigned int	code;
 	unsigned int	length;
 	u_long		mult;
-	bus_addr_t	ptr;
+	bus_size_t	ptr;
 	bus_space_tag_t	memt;
 	bus_space_handle_t memh;
 };
 
 struct pcmcia_product {
-	const char	*pp_name;		/* NULL if end of table */
 	u_int32_t	pp_vendor;
 	u_int32_t	pp_product;
-	int		pp_expfunc;
+	const char	*pp_cisinfo[4];
 };
 
-typedef int (*pcmcia_product_match_fn) __P((struct pcmcia_attach_args *pa,
-    const struct pcmcia_product *ent, int vpfmatch));
+typedef int (*pcmcia_product_match_fn)(struct pcmcia_attach_args *,
+    const struct pcmcia_product *, int);
 
-const struct pcmcia_product
-	*pcmcia_product_lookup __P((struct pcmcia_attach_args *pa,
-	    const struct pcmcia_product *tab, size_t ent_size,
-	    pcmcia_product_match_fn matchfn));
+const void *pcmcia_product_lookup(struct pcmcia_attach_args *, const void *,
+	    size_t, size_t, pcmcia_product_match_fn);
 
-void	pcmcia_devinfo __P((struct pcmcia_card *card, int showhex, char *cp, 
-	    int cplen));
+void	pcmcia_devinfo(struct pcmcia_card *, int, char *, size_t);
 
-void	pcmcia_read_cis __P((struct pcmcia_softc *));
-void	pcmcia_check_cis_quirks __P((struct pcmcia_softc *));
-void	pcmcia_print_cis __P((struct pcmcia_softc *));
-int	pcmcia_scan_cis __P((struct device * dev,
-	    int (*) (struct pcmcia_tuple *, void *), void *));
+void	pcmcia_read_cis(struct pcmcia_softc *);
+void	pcmcia_check_cis_quirks(struct pcmcia_softc *);
+void	pcmcia_print_cis(struct pcmcia_softc *);
+int	pcmcia_scan_cis(struct device *,
+	    int (*) (struct pcmcia_tuple *, void *), void *);
 
 #define	pcmcia_cis_read_1(tuple, idx0)					\
 	(bus_space_read_1((tuple)->memt, (tuple)->memh, (tuple)->mult*(idx0)))
@@ -256,16 +281,30 @@ int	pcmcia_scan_cis __P((struct device * dev,
 #define	PCMCIA_SPACE_MEMORY	1
 #define	PCMCIA_SPACE_IO		2
 
-int	pcmcia_ccr_read __P((struct pcmcia_function *, int));
-void	pcmcia_ccr_write __P((struct pcmcia_function *, int, int));
+int	pcmcia_ccr_read(struct pcmcia_function *, int);
+void	pcmcia_ccr_write(struct pcmcia_function *, int, int);
 
-#define	pcmcia_mfc(sc)	((sc)->card.pf_head.sqh_first &&		\
-			 (sc)->card.pf_head.sqh_first->pf_list.sqe_next)
+#define	pcmcia_mfc(sc)	(! SIMPLEQ_EMPTY(&(sc)->card.pf_head) &&	\
+		 SIMPLEQ_NEXT(SIMPLEQ_FIRST(&(sc)->card.pf_head), pf_list))
 
-void	pcmcia_function_init __P((struct pcmcia_function *,
-	    struct pcmcia_config_entry *));
-int	pcmcia_function_enable __P((struct pcmcia_function *));
-void	pcmcia_function_disable __P((struct pcmcia_function *));
+void	pcmcia_socket_enable(struct device *);
+void	pcmcia_socket_disable(struct device *);
+void	pcmcia_socket_settype(struct device *, int);
+
+int	pcmcia_config_alloc(struct pcmcia_function *,
+	    struct pcmcia_config_entry *);
+void	pcmcia_config_free(struct pcmcia_function *);
+int	pcmcia_config_map(struct pcmcia_function *);
+void	pcmcia_config_unmap(struct pcmcia_function *);
+
+
+int	pcmcia_function_configure(struct pcmcia_function *,
+	    int (*validator)(struct pcmcia_config_entry *));
+void	pcmcia_function_unconfigure(struct pcmcia_function *);
+void	pcmcia_function_init(struct pcmcia_function *,
+	    struct pcmcia_config_entry *);
+int	pcmcia_function_enable(struct pcmcia_function *);
+void	pcmcia_function_disable(struct pcmcia_function *);
 
 #define	pcmcia_io_alloc(pf, start, size, align, pciop)			\
 	(pcmcia_chip_io_alloc((pf)->sc->pct, pf->sc->pch, (start),	\
@@ -274,9 +313,11 @@ void	pcmcia_function_disable __P((struct pcmcia_function *));
 #define	pcmcia_io_free(pf, pciohp)					\
 	(pcmcia_chip_io_free((pf)->sc->pct, (pf)->sc->pch, (pciohp)))
 
-int	pcmcia_io_map __P((struct pcmcia_function *, int, bus_addr_t,
-	    bus_size_t, struct pcmcia_io_handle *, int *));
-void	pcmcia_io_unmap __P((struct pcmcia_function *, int));
+int	pcmcia_io_map(struct pcmcia_function *, int,
+	    struct pcmcia_io_handle *, int *);
+void	pcmcia_io_unmap(struct pcmcia_function *, int);
+
+void	pcmcia_free_pf(struct pcmcia_function_head *);
 
 #define pcmcia_mem_alloc(pf, size, pcmhp)				\
 	(pcmcia_chip_mem_alloc((pf)->sc->pct, (pf)->sc->pch, (size), (pcmhp)))
@@ -291,6 +332,6 @@ void	pcmcia_io_unmap __P((struct pcmcia_function *, int));
 #define	pcmcia_mem_unmap(pf, window)					\
 	(pcmcia_chip_mem_unmap((pf)->sc->pct, (pf)->sc->pch, (window)))
 
-void	*pcmcia_intr_establish __P((struct pcmcia_function *, int,
-	    int (*) (void *), void *));
-void 	pcmcia_intr_disestablish __P((struct pcmcia_function *, void *));
+void	*pcmcia_intr_establish(struct pcmcia_function *, int,
+	    int (*) (void *), void *);
+void 	pcmcia_intr_disestablish(struct pcmcia_function *, void *);

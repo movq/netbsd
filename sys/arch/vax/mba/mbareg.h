@@ -1,4 +1,4 @@
-/*	$NetBSD: mbareg.h,v 1.3 1996/02/11 13:19:38 ragge Exp $ */
+/*	$NetBSD: mbareg.h,v 1.5 2008/10/16 12:47:22 hans Exp $ */
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden
  * All rights reserved.
@@ -29,6 +29,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef notdef
 struct mba_hack {
 	u_int	pad1;
 	u_int	md_ds;		/* unit status */
@@ -52,6 +53,23 @@ struct mba_regs {
 	struct	mba_hack mba_md[8];	/* unit specific regs */
 	struct	pte mba_map[256];
 };
+#endif
+
+#define	MBA_CSR	0
+#define	MBA_CR	4
+#define	MBA_SR	8
+#define	MBA_VAR	12
+#define	MBA_BC	16
+#define	MBA_DR	20
+#define	MBA_SMR	24
+#define	MBA_CAR	28
+
+#define	MUREG(dev,reg)	(1024+(dev)*128+(reg))
+#define MAPREG(nr)	(2048+(nr)*4)
+
+#define	MU_DS	4	/* unit status */
+#define	MU_AS	16	/* attention summary */
+#define	MU_DT	24	/* drive type */
 
 /*
  * Different states which can be on massbus.
@@ -92,13 +110,13 @@ struct mba_regs {
 #define	MBADS_DPR	0x100		/* Unit present */
 
 /* Definitions in mba_device md_dt */
-#define	MBADT_RP04	0x10
-#define MBADT_RP05	0x11
-#define MBADT_RP06	0x12
-#define MBADT_RP07	0x22
-#define MBADT_RM02	0x15
-#define MBADT_RM03	0x14
-#define MBADT_RM05	0x17
-#define MBADT_RM80	0x16
+#define	MBADT_RP04	0x2010
+#define MBADT_RP05	0x2011
+#define MBADT_RP06	0x2012
+#define MBADT_RP07	0x2022
+#define MBADT_RM02	0x2015
+#define MBADT_RM03	0x2014
+#define MBADT_RM05	0x2017
+#define MBADT_RM80	0x2016
 #define	MBADT_DRQ	0x800		/* Dual ported */
 #define	MBADT_MOH	0x2000		/* Moving head device */

@@ -1,4 +1,4 @@
-/*	$NetBSD: be_bus.c,v 1.4 2000/01/19 13:12:54 leo Exp $	*/
+/*	$NetBSD: be_bus.c,v 1.9.10.1 2009/01/06 23:49:02 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: be_bus.c,v 1.9.10.1 2009/01/06 23:49:02 snj Exp $");
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -164,15 +161,15 @@ static void		beb_bus_space_set_region_8 __P((bus_space_tag_t,
 /*
  * Don't force a function call overhead on these primitives...
  */
-#define __read_1(h, o)		*((u_int8_t  *)((h) + (o)))
-#define __read_2(h, o)		*((u_int16_t *)((h) + (o)))
-#define __read_4(h, o)		*((u_int32_t *)((h) + (o)))
-#define __read_8(h, o)		*((u_int64_t *)((h) + (o)))
+#define __read_1(h, o)		*((volatile u_int8_t  *)((h) + (o)))
+#define __read_2(h, o)		*((volatile u_int16_t *)((h) + (o)))
+#define __read_4(h, o)		*((volatile u_int32_t *)((h) + (o)))
+#define __read_8(h, o)		*((volatile u_int64_t *)((h) + (o)))
 
-#define __write_1(h, o, v)	*((u_int8_t  *)((h) + (o))) = (v)
-#define __write_2(h, o, v)	*((u_int16_t *)((h) + (o))) = (v)
-#define __write_4(h, o, v)	*((u_int32_t *)((h) + (o))) = (v)
-#define __write_8(h, o, v)	*((u_int64_t *)((h) + (o))) = (v)
+#define __write_1(h, o, v)	*((volatile u_int8_t  *)((h) + (o))) = (v)
+#define __write_2(h, o, v)	*((volatile u_int16_t *)((h) + (o))) = (v)
+#define __write_4(h, o, v)	*((volatile u_int32_t *)((h) + (o))) = (v)
+#define __write_8(h, o, v)	*((volatile u_int64_t *)((h) + (o))) = (v)
 
 bus_space_tag_t
 beb_alloc_bus_space_tag(storage)
@@ -273,7 +270,7 @@ beb_bus_space_peek_1(t, h, o)
     bus_space_handle_t	h;
     bus_size_t		o;
 {
-    return(!badbaddr((caddr_t)(h + o), 1));
+    return(!badbaddr((void *)(h + o), 1));
 }
 
 static int 
@@ -282,7 +279,7 @@ beb_bus_space_peek_2(t, h, o)
     bus_space_handle_t	h;
     bus_size_t		o;
 {
-    return(!badbaddr((caddr_t)(h + o), 2));
+    return(!badbaddr((void *)(h + o), 2));
 }
 
 static int 
@@ -291,7 +288,7 @@ beb_bus_space_peek_4(t, h, o)
     bus_space_handle_t	h;
     bus_size_t		o;
 {
-    return(!badbaddr((caddr_t)(h + o), 4));
+    return(!badbaddr((void *)(h + o), 4));
 }
 
 static int 
@@ -300,7 +297,7 @@ beb_bus_space_peek_8(t, h, o)
     bus_space_handle_t	h;
     bus_size_t		o;
 {
-    return(!badbaddr((caddr_t)(h + o), 8));
+    return(!badbaddr((void *)(h + o), 8));
 }
 
 /*
@@ -401,7 +398,7 @@ beb_bus_space_write_8(t, h, o, v)
  *
  * Read 'count' 1, 2, 4, or 8 byte values from the bus_space described by
  * tag/handle at `offset' and store them in the address range starting at
- * 'address'. The values are converted to cpu endian order before being
+ * 'address'. The values are converted to CPU endian order before being
  * being stored.
  */
 static void

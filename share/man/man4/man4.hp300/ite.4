@@ -1,4 +1,4 @@
-.\"	$NetBSD: ite.4,v 1.5 1999/12/15 23:44:52 abs Exp $
+.\"	$NetBSD: ite.4,v 1.8 2003/08/07 10:31:06 agc Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -15,11 +15,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -37,7 +33,7 @@
 .\"
 .\"     from: @(#)ite.4	8.1 (Berkeley) 6/9/93
 .\"
-.Dd June 9, 1993
+.Dd September 10, 2001
 .Dt ITE 4 hp300
 .Os
 .Sh NAME
@@ -45,6 +41,8 @@
 .Nd
 .Tn HP
 Internal Terminal Emulator graphics driver
+.Sh SYNOPSIS
+.Cd "ite* at grf?"
 .Sh DESCRIPTION
 .Tn TTY
 special files of the form ``ttye?''
@@ -98,9 +96,9 @@ If a display exists at any hardware address, it will be the console.
 The kernel looks for, in order:
 a 98544, 98545, or 98547 Topcat display,
 a 98700 Gatorbox at a supported address (see
-.Xr gb 4 ) ,
+.Xr gbox 4 ) ,
 or a 98720 Renaissance at a supported address (see
-.Xr rb 4 ) .
+.Xr rbox 4 ) .
 Currently there is no
 .Tn ITE
 support for the
@@ -162,6 +160,4 @@ None under
 .Sh SEE ALSO
 .Xr grf 4 ,
 .Xr hil 4 ,
-.Xr gb 4 ,
-.Xr rb 4 ,
-.Xr tc 4
+.Xr tty 4

@@ -1,4 +1,4 @@
-/*	$NetBSD: wwframe.c,v 1.5 1997/11/21 08:37:22 lukem Exp $	*/
+/*	$NetBSD: wwframe.c,v 1.7 2003/08/07 11:17:39 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)wwframe.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: wwframe.c,v 1.5 1997/11/21 08:37:22 lukem Exp $");
+__RCSID("$NetBSD: wwframe.c,v 1.7 2003/08/07 11:17:39 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,9 +48,7 @@ __RCSID("$NetBSD: wwframe.c,v 1.5 1997/11/21 08:37:22 lukem Exp $");
 	w1->ww_fmap || w1->ww_order > (w)->ww_order)
 
 void
-wwframe(w, wframe)
-	struct ww *w;
-	struct ww *wframe;
+wwframe(struct ww *w, struct ww *wframe)
 {
 	int r, c;
 	char a1, a2, a3;
@@ -200,10 +194,7 @@ wwframe(w, wframe)
 }
 
 void
-wwframec(f, r, c, code)
-	struct ww *f;
-	int r, c;
-	char code;
+wwframec(struct ww *f, int r, int c, char code)
 {
 	char oldcode;
 	unsigned char *smap;

@@ -1,4 +1,4 @@
-/*	$NetBSD: param.c,v 1.34 2000/03/28 05:14:03 simonb Exp $	*/
+/*	$NetBSD: param.c,v 1.58 2008/07/12 11:50:07 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1989 Regents of the University of California.
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,9 +36,15 @@
  *	@(#)param.c	7.20 (Berkeley) 6/27/91
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: param.c,v 1.58 2008/07/12 11:50:07 gmcgarry Exp $");
+
+#include "opt_hz.h"
 #include "opt_rtc_offset.h"
-#include "opt_sb_max.h"
 #include "opt_sysv.h"
+#include "opt_sysvparam.h"
+#include "opt_nmbclusters.h"
+#include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,6 +67,14 @@
 #endif
 #ifdef SYSVMSG
 #include <sys/msg.h>
+#endif
+
+/*
+ * PCC cannot handle the 80KB string literal.
+ */
+#if !defined(__PCC__)
+#define CONFIG_FILE
+#include "config_file.h"
 #endif
 
 /*
@@ -97,16 +107,28 @@
 #define	MAXFILES	(3 * (NPROC + MAXUSERS) + 80)
 #endif
 
+#ifndef MAXEXEC
+#define	MAXEXEC		16
+#endif
+
 int	hz = HZ;
 int	tick = 1000000 / HZ;
-int	tickadj = 240000 / (60 * HZ);		/* can adjust 240ms in 60s */
+/* can adjust 240ms in 60s */
+int	tickadj = (240000 / (60 * HZ)) ? (240000 / (60 * HZ)) : 1;
 int	rtc_offset = RTC_OFFSET;
 int	maxproc = NPROC;
 int	desiredvnodes = NVNODE;
-int	maxfiles = MAXFILES;
-int	ncallout = 16 + NPROC;	/* size of callwheel (rounded to ^2) */
-u_long	sb_max = SB_MAX;	/* maximum socket buffer size */
+u_int	maxfiles = MAXFILES;
 int	fscale = FSCALE;	/* kernel uses `FSCALE', user uses `fscale' */
+int	maxexec = MAXEXEC;	/* max number of concurrent exec() calls */
+
+#ifdef MULTIPROCESSOR
+u_int	maxcpus = MAXCPUS;
+size_t	coherency_unit = COHERENCY_UNIT;
+#else
+u_int	maxcpus = 1;
+size_t	coherency_unit = ALIGNBYTES + 1;
+#endif
 
 /*
  * Various mbuf-related parameters.  These can also be changed at run-time
@@ -128,10 +150,18 @@ int	mcllowat = MCLLOWAT;
  * Values in support of System V compatible shared memory.	XXX
  */
 #ifdef SYSVSHM
-#define	SHMMAX	SHMMAXPGS	/* shminit() performs a `*= NBPG' */
+#ifndef	SHMMAX
+#define	SHMMAX	SHMMAXPGS	/* shminit() performs a `*= PAGE_SIZE' */
+#endif
+#ifndef	SHMMIN
 #define	SHMMIN	1
-#define	SHMMNI	128			/* <= SHMMMNI in shm.h */
-#define	SHMSEG	32
+#endif
+#ifndef	SHMMNI
+#define	SHMMNI	128		/* <64k, see IPCID_TO_IX in ipc.h */
+#endif
+#ifndef	SHMSEG
+#define	SHMSEG	128
+#endif
 #define	SHMALL	SHMMAXPGS
 
 struct	shminfo shminfo = {
@@ -141,7 +171,6 @@ struct	shminfo shminfo = {
 	SHMSEG,
 	SHMALL
 };
-struct shmid_ds *shmsegs;
 #endif
 
 /*
@@ -176,30 +205,6 @@ struct	msginfo msginfo = {
 	MSGSEG		/* number of message segments */
 };
 #endif
-
-/*
- * These have to be allocated somewhere; allocating
- * them here forces loader errors if this file is omitted
- * (if they've been externed everywhere else; hah!).
- */
-struct	buf *buf;
-char	*buffers;
-
-/*
- * These control when and to what priority a process gets after a certain
- * amount of CPU time expires.  AUTONICETIME is in seconds.
- * AUTONICEVAL is NOT offset by NZERO, i.e. it's between PRIO_MIN and PRIO_MAX.
- */
-#ifndef AUTONICETIME
-#define AUTONICETIME (60 * 10)	/* 10 minutes */
-#endif
-
-#ifndef AUTONICEVAL
-#define AUTONICEVAL 4		/* default + 4 */
-#endif
-
-int autonicetime = AUTONICETIME;
-int autoniceval = AUTONICEVAL;
 
 /*
  * Actual network mbuf sizes (read-only), for netstat.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ofcons.c,v 1.4 2000/03/23 06:40:34 thorpej Exp $	*/
+/*	$NetBSD: ofcons.c,v 1.23 2008/06/13 11:54:31 cegger Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -31,12 +31,16 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ofcons.c,v 1.23 2008/06/13 11:54:31 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
 #include <sys/tty.h>
+#include <sys/kauth.h>
 
 #include <dev/cons.h>
 #include <dev/ofw/openfirm.h>
@@ -44,8 +48,6 @@
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 
-#define KEYBOARD_ARRAY
-#include <machine/keyboard.h>
 #include <machine/adbsys.h>
 
 #include <machine/autoconf.h>
@@ -64,25 +66,36 @@ static int stdin, stdout;
 static int ofcmatch __P((struct device *, struct cfdata *, void *));
 static void ofcattach __P((struct device *, struct device *, void *));
 
-struct cfattach macofcons_ca = {
-	sizeof(struct ofcons_softc), ofcmatch, ofcattach
-};
+CFATTACH_DECL(macofcons, sizeof(struct ofcons_softc),
+    ofcmatch, ofcattach, NULL, NULL);
 
 extern struct cfdriver macofcons_cd;
 
+dev_type_open(ofcopen);
+dev_type_close(ofcclose);
+dev_type_read(ofcread);
+dev_type_write(ofcwrite);
+dev_type_ioctl(ofcioctl);
+dev_type_tty(ofctty);
+dev_type_poll(ofcpoll);
+
+const struct cdevsw macofcons_cdevsw = {
+	ofcopen, ofcclose, ofcread, ofcwrite, ofcioctl,
+	nostop, ofctty, ofcpoll, nommap, ttykqfilter, D_TTY
+};
+
 /* For polled ADB mode */
+#if NADB > 0
 static int polledkey;
 extern int adb_polling;
+#endif /* NADB */
 
-static void ofcstart __P((struct tty *));
-static int ofcparam __P((struct tty *, struct termios *));
-static int ofcons_probe __P((void));
+static void ofcstart(struct tty *);
+static int ofcparam(struct tty *, struct termios *);
+static int ofcons_probe(void);
 
 static int
-ofcmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ofcmatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	static int attached = 0;
@@ -101,26 +114,18 @@ ofcmatch(parent, match, aux)
 }
 
 static void
-ofcattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ofcattach(struct device *parent, struct device *self, void *aux)
 {
 	printf("\n");
 }
 
 int
-ofcopen(dev, flag, mode, p)
-	dev_t dev;
-	int flag, mode;
-	struct proc *p;
+ofcopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct ofcons_softc *sc;
-	int unit = minor(dev);
 	struct tty *tp;
 	
-	if (unit >= macofcons_cd.cd_ndevs)
-		return ENXIO;
-	sc = macofcons_cd.cd_devs[unit];
+	sc = device_lookup_private(&macofcons_cd, minor(dev));
 	if (!sc)
 		return ENXIO;
 	if (!(tp = sc->of_tty))
@@ -128,6 +133,8 @@ ofcopen(dev, flag, mode, p)
 	tp->t_oproc = ofcstart;
 	tp->t_param = ofcparam;
 	tp->t_dev = dev;
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
+		return (EBUSY);
 	if (!(tp->t_state & TS_ISOPEN)) {
 		ttychars(tp);
 		tp->t_iflag = TTYDEF_IFLAG;
@@ -137,89 +144,72 @@ ofcopen(dev, flag, mode, p)
 		tp->t_ispeed = tp->t_ospeed = TTYDEF_SPEED;
 		ofcparam(tp, &tp->t_termios);
 		ttsetwater(tp);
-	} else if ((tp->t_state&TS_XCLUDE) && suser(p->p_ucred, &p->p_acflag))
-		return EBUSY;
+	}
 	tp->t_state |= TS_CARR_ON;
 	
-	return (*linesw[tp->t_line].l_open)(dev, tp);
+	return (*tp->t_linesw->l_open)(dev, tp);
 }
 
 int
-ofcclose(dev, flag, mode, p)
-	dev_t dev;
-	int flag, mode;
-	struct proc *p;
+ofcclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct ofcons_softc *sc = macofcons_cd.cd_devs[minor(dev)];
+	struct ofcons_softc *sc = device_lookup_private(&macofcons_cd, minor(dev));
 	struct tty *tp = sc->of_tty;
 
-	(*linesw[tp->t_line].l_close)(tp, flag);
+	(*tp->t_linesw->l_close)(tp, flag);
 	ttyclose(tp);
 	return 0;
 }
 
 int
-ofcread(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+ofcread(dev_t dev, struct uio *uio, int flag)
 {
-	struct ofcons_softc *sc = macofcons_cd.cd_devs[minor(dev)];
+	struct ofcons_softc *sc = device_lookup_private(&macofcons_cd, minor(dev));
 	struct tty *tp = sc->of_tty;
 	
-	return (*linesw[tp->t_line].l_read)(tp, uio, flag);
+	return (*tp->t_linesw->l_read)(tp, uio, flag);
 }
 
 int
-ofcwrite(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+ofcwrite(dev_t dev, struct uio *uio, int flag)
 {
-	struct ofcons_softc *sc = macofcons_cd.cd_devs[minor(dev)];
+	struct ofcons_softc *sc = device_lookup_private(&macofcons_cd, minor(dev));
 	struct tty *tp = sc->of_tty;
 	
-	return (*linesw[tp->t_line].l_write)(tp, uio, flag);
+	return (*tp->t_linesw->l_write)(tp, uio, flag);
 }
 
 int
-ofcioctl(dev, cmd, data, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+ofcpoll(dev_t dev, int events, struct lwp *l)
 {
-	struct ofcons_softc *sc = macofcons_cd.cd_devs[minor(dev)];
+	struct ofcons_softc *sc = device_lookup_private(&macofcons_cd, minor(dev));
+	struct tty *tp = sc->of_tty;
+ 
+	return ((*tp->t_linesw->l_poll)(tp, events, l));
+}
+
+int
+ofcioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+{
+	struct ofcons_softc *sc = device_lookup_private(&macofcons_cd, minor(dev));
 	struct tty *tp = sc->of_tty;
 	int error;
 	
-	if ((error = (*linesw[tp->t_line].l_ioctl)(tp, cmd, data, flag, p)) >= 0)
+	if ((error = (*tp->t_linesw->l_ioctl)(tp, cmd, data, flag, l)) != EPASSTHROUGH)
 		return error;
-	if ((error = ttioctl(tp, cmd, data, flag, p)) >= 0)
-		return error;
-	return ENOTTY;
+	return ttioctl(tp, cmd, data, flag, l);
 }
 
 struct tty *
-ofctty(dev)
-	dev_t dev;
+ofctty(dev_t dev)
 {
-	struct ofcons_softc *sc = macofcons_cd.cd_devs[minor(dev)];
+	struct ofcons_softc *sc = device_lookup_private(&macofcons_cd, minor(dev));
 
 	return sc->of_tty;
 }
 
-void
-ofcstop(tp, flag)
-	struct tty *tp;
-	int flag;
-{
-}
-
 static void
-ofcstart(tp)
-	struct tty *tp;
+ofcstart(struct tty *tp)
 {
 	struct clist *cl;
 	int s, len;
@@ -237,24 +227,15 @@ ofcstart(tp)
 	OF_write(stdout, buf, len);
 	s = spltty();
 	tp->t_state &= ~TS_BUSY;
-	if (cl->c_cc) {
+	if (ttypull(tp)) {
 		tp->t_state |= TS_TIMEOUT;
-		callout_reset(&tp->t_rstrt_ch, 1, ttrstrt, tp);
-	}
-	if (cl->c_cc <= tp->t_lowat) {
-		if (tp->t_state & TS_ASLEEP) {
-			tp->t_state &= ~TS_ASLEEP;
-			wakeup(cl);
-		}
-		selwakeup(&tp->t_wsel);
+		callout_schedule(&tp->t_rstrt_ch, 1);
 	}
 	splx(s);
 }
 
 static int
-ofcparam(tp, t)
-	struct tty *tp;
-	struct termios *t;
+ofcparam(struct tty *tp, struct termios *t)
 {
 	tp->t_ispeed = t->c_ispeed;
 	tp->t_ospeed = t->c_ospeed;
@@ -263,7 +244,7 @@ ofcparam(tp, t)
 }
 
 static int
-ofcons_probe()
+ofcons_probe(void)
 {
 	int chosen;
 
@@ -283,36 +264,33 @@ ofcons_probe()
 /*
  * Console support functions
  */
-void
-ofccnprobe(cd)
-	struct consdev *cd;
+static void
+ofccnprobe(struct consdev *cd)
 {
 	int maj;
 
 	if (!ofcons_probe())
 		return;
 
-	for (maj = 0; maj < nchrdev; maj++) {
-		if (cdevsw[maj].d_open == ofcopen) {
-			cd->cn_dev = makedev(maj, 0);
-			cd->cn_pri = CN_INTERNAL;
-			break;
-		}
-	}
+	maj = cdevsw_lookup_major(&macofcons_cdevsw);
+
+	printf("major for ofcons: %d\n", maj);
+
+	cd->cn_dev = makedev(maj, 0);
+	cd->cn_pri = CN_INTERNAL;
 }
 
-void
-ofccninit(cd)
-	struct consdev *cd;
+static void
+ofccninit(struct consdev *cd)
 {
 }
 
-int
-ofccngetc(dev)
-	dev_t dev;
+static int
+ofccngetc(dev_t dev)
 {
 #if NADB > 0
-	int intbits, s;
+	int s;
+	extern void adb_intr_cuda(void);	/* in adb_direct.c */
 
 	s = splhigh();
 
@@ -337,20 +315,16 @@ ofccngetc(dev)
 #endif
 }
 
-void
-ofccnputc(dev, c)
-	dev_t dev;
-	int c;
+static void
+ofccnputc(dev_t dev, int c)
 {
 	char ch = c;
 	
 	OF_write(stdout, &ch, 1);
 }
 
-void
-ofccnpollc(dev, on)
-	dev_t dev;
-	int on;
+static void
+ofccnpollc(dev_t dev, int on)
 {
 }
 
@@ -364,76 +338,3 @@ struct consdev consdev_ofcons = {
 };
 
 struct consdev *cn_tab = &consdev_ofcons;
-
-
-/* For capslock key functionality */
-#define isealpha(ch) \
-  (((ch)>='A'&&(ch)<='Z')||((ch)>='a'&&(ch)<='z')||((ch)>=0xC0&&(ch)<=0xFF))
-
-int
-kbd_intr(event)
-	adb_event_t *event;
-{
-	static int shift = 0, control = 0, capslock = 0;
-
-	int key, press, val, state;
-	char str[10], *s;
-	struct ofcons_softc *sc = macofcons_cd.cd_devs[0];
-	struct tty *ite_tty = sc->of_tty;
-
-	key = event->u.k.key;
-	press = ADBK_PRESS(key);
-	val = ADBK_KEYVAL(key);
-
-	if (val == ADBK_SHIFT)
-		shift = press;
-	else if (val == ADBK_CAPSLOCK)
-		capslock = !capslock;
-	else if (val == ADBK_CONTROL)
-		control = press;
-	else if (press) {
-		switch (val) {
-		case ADBK_UP:
-			str[0] = '\e';
-			str[1] = 'O';
-			str[2] = 'A';
-			str[3] = '\0';
-			break;
-		case ADBK_DOWN:
-			str[0] = '\e';
-			str[1] = 'O';
-			str[2] = 'B';
-			str[3] = '\0';
-			break;
-		case ADBK_RIGHT:
-			str[0] = '\e';
-			str[1] = 'O';
-			str[2] = 'C';
-			str[3] = '\0';
-			break;
-		case ADBK_LEFT:
-			str[0] = '\e';
-			str[1] = 'O';
-			str[2] = 'D';
-			str[3] = '\0';
-			break;
-		default:
-			state = 0;
-			if (capslock && isealpha(keyboard[val][1]))
-				state = 1;
-			if (shift)
-				state = 1;
-			if (control)
-				state = 2;
-			str[0] = keyboard[val][state];
-			str[1] = '\0';
-			break;
-		}
-		if (adb_polling)
-			polledkey = str[0];
-		else
-			for (s = str; *s; s++)
-				(*linesw[ite_tty->t_line].l_rint)(*s, ite_tty);
-	}
-	return 0;
-}

@@ -1,10 +1,10 @@
-.\"	$NetBSD: basename.3,v 1.4 1999/09/12 18:47:10 kleink Exp $
+.\"	$NetBSD: basename.3,v 1.14 2008/05/10 22:39:40 christos Exp $
 .\"
-.\" Copyright (c) 1997 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1997, 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
-.\" by Klaus Klein.
+.\" by Klaus Klein and Jason R. Thorpe.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd October 31, 1997
+.Dd May 10, 2008
 .Dt BASENAME 3
 .Os
 .Sh NAME
@@ -43,7 +36,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <libgen.h>
+.In libgen.h
 .Ft char *
 .Fn basename "char *path"
 .Sh DESCRIPTION
@@ -52,34 +45,51 @@ The
 function takes the pathname pointed to by
 .Ar path
 and returns a pointer to the final component of the pathname,
-deleting and trailing '/' characters.
+deleting any trailing
+.Sq /
+characters.
 .Pp
 If
 .Ar path
-consists entirely of '/' characters,
+consists entirely of
+.Sq /
+characters,
 .Fn basename
-returns a pointer to the string "/".
+returns a pointer to the string
+.Dq / .
 .Pp
 If
 .Ar path
 is a null pointer or points to an empty string,
 .Fn basename
-returns a pointer to the string ".".
-.Pp
+returns a pointer to the string
+.Dq \&. .
 .Sh RETURN VALUES
 The
 .Fn basename
 function returns a pointer to the final component of
 .Ar path .
 .Sh SEE ALSO
+.Xr basename 1 ,
 .Xr dirname 3
 .Sh STANDARDS
 .Bl -bullet -compact
-.It 
+.It
 .St -xpg4.2
-.El 
+.It
+.St -p1003.1-2001
+.El
 .Sh BUGS
+If the length of the result is longer than
+.Dv PATH_MAX
+bytes
+.Pq including the terminating nul ,
+the result will be truncated.
+.Pp
 The
 .Fn basename
-function may modify the string pointed to by
-.Ar path .
+function returns a pointer to static storage that may be overwritten
+by subsequent calls to
+.Fn basename .
+This is not strictly a bug; it is explicitly allowed by
+.St -p1003.1-2001 .

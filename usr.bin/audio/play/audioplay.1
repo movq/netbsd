@@ -1,6 +1,6 @@
-.\"	$NetBSD: audioplay.1,v 1.7 1999/09/14 05:04:21 mrg Exp $
+.\"	$NetBSD: audioplay.1,v 1.21 2008/05/29 14:51:27 mrg Exp $
 .\"
-.\" Copyright (c) 1998-1999 Matthew R. Green
+.\" Copyright (c) 1998-2002 Matthew R. Green
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -11,8 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. The name of the author may not be used to endorse or promote products
-.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,9 +24,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd March 30, 1999
+.Dd January 13, 2002
 .Dt AUDIOPLAY 1
-.Os NetBSD
+.Os
 .Sh NAME
 .Nm audioplay
 .Nd play audio files
@@ -39,7 +37,6 @@
 .Op Fl b Ar balance
 .Op Fl p Ar port
 .Op Fl d Ar device
-.Op Fl C Ar ctl
 .Oo
 .Fl f
 .Op Fl c Ar channels
@@ -51,9 +48,13 @@
 .Sh DESCRIPTION
 The
 .Nm
-program copies the named audiofiles, or the standard input if no files are
-named, to the audio device.  The input files must contain a valid audio
-header, and the encoding must be understood by the underlying driver.
+program copies the named audio files, or the standard input if no files are
+named, to the audio device.
+The special name
+.Dq -
+is assumed to mean the standard input.
+The input files must contain a valid audio header, and the encoding must be
+understood by the underlying driver.
 .Sh OPTIONS
 The following options are available:
 .Bl -tag -width 123456
@@ -87,14 +88,10 @@ and
 Set the audio device to be
 .Ar device .
 The default is
-.Pa /dev/audio0 .
-.It Fl C
-Set the audio control device to be
-.Ar ctl .
-The default is
-.Pa /dev/audioctl0 .
+.Pa /dev/sound .
 .It Fl f
-Force playing, even if the format is unknown.  The
+Force playing, even if the format is unknown.
+The
 .Fl f
 flag can be used in addition with the following flags to
 change the number of channels, encoding, precision and
@@ -106,7 +103,8 @@ option, sets the number of channels to its argument.
 .It Fl e
 when combined with the
 .Fl f
-option, sets the encoding to its argument. Possible values are
+option, sets the encoding to its argument.
+Possible values are
 .Cm mulaw ,
 .Cm ulaw ,
 .Cm alaw ,
@@ -131,13 +129,14 @@ and
 .It Fl P
 when combined with the
 .Fl f
-option, sets the precision to its argument.  This value must be either
-8, 16, 24 or 32.
+option, sets the precision to its argument.
+This value must be either 4, 8, 16, 24 or 32.
 .It Fl s
 when combined with the
 .Fl f
-option, sets the sample rate to its argument.  This value must be a
-valid value for the audio device or an error will be returned.
+option, sets the sample rate to its argument.
+This value must be a valid value for the audio device or an error will
+be returned.
 .El
 .Sh ENVIRONMENT
 .Bl -tag -width AUDIOCTLDEVICE
@@ -149,14 +148,13 @@ the audio device to be used.
 .Sh EXAMPLES
 Play a raw dump taken from an audio CD ROM:
 .Pp
-.Dl "audioplay -f -c 2 -P 16 -s 44100 -e slinear_le filename
+.Dl "audioplay -f -c 2 -P 16 -s 44100 -e slinear_le filename"
 .Pp
 The
 .Xr audioctl 1
 program can be used to show the available supported encodings:
 .Pp
-.Dl "audioctl encodings
-.Pp
+.Dl "audioctl encodings"
 .Sh NOTES
 .Nm
 can be used to play Sun/NeXT audio files, and also RIFF WAVE audio files.
@@ -168,32 +166,46 @@ web browser as the program to use when playing audio files.
 If the audio device or the control device can not be opened, and error is
 returned.
 .Pp
-If an invalid parameter is specified, an error is returned.  The set of
-valid values for any audio parameter is specified by the hardware driver.
-.Sh HISTORY
-The
-.Nm
-program was first seen in SunOS 5.  The
-.Nx
-.Nm
-was first made available in 
-.Nx 1.4 .
-.Sh AUTHOR
-The
-.Nm
-program was written by Matthew R. Green <mrg@eterna.com.au>.
+If an invalid parameter is specified, an error is returned.
+The set of valid values for any audio parameter is specified by the
+hardware driver.
 .Sh SEE ALSO
 .Xr audioctl 1 ,
 .Xr audiorecord 1 ,
-.Xr audioamd 4 ,
 .Xr aria 4 ,
 .Xr audio 4 ,
+.Xr audioamd 4 ,
+.Xr auich 4 ,
+.Xr autri 4 ,
+.Xr auvia 4 ,
+.Xr clcs 4 ,
+.Xr clct 4 ,
+.Xr cmpci 4 ,
 .Xr eap 4 ,
+.Xr emuxki 4 ,
+.Xr esm 4 ,
 .Xr eso 4 ,
 .Xr ess 4 ,
+.Xr fms 4 ,
 .Xr gus 4 ,
 .Xr guspnp 4 ,
+.Xr neo 4 ,
 .Xr sb 4 ,
 .Xr sv 4 ,
 .Xr wss 4 ,
-.Xr ym 4 .
+.Xr yds 4 ,
+.Xr ym 4
+.Sh HISTORY
+The
+.Nm
+program was first seen in SunOS 5.
+The
+.Nx
+.Nm
+was first made available in
+.Nx 1.4 .
+.Sh AUTHORS
+The
+.Nm
+program was written by
+.An Matthew R. Green Aq mrg@eterna.com.au .

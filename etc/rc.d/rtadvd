@@ -1,15 +1,16 @@
 #!/bin/sh
 #
-# $NetBSD: rtadvd,v 1.2 2000/03/13 04:04:03 lukem Exp $
+# $NetBSD: rtadvd,v 1.6 2004/08/13 18:08:03 mycroft Exp $
 #
 
 # PROVIDE: rtadvd
 # REQUIRE: DAEMON
+# BEFORE:  LOGIN
 
-. /etc/rc.subr
-. /etc/rc.conf
+$_rc_subr_loaded . /etc/rc.subr
 
 name="rtadvd"
+rcvar=$name
 command="/usr/sbin/${name}"
 start_precmd="rtadvd_precmd"
 
@@ -22,4 +23,5 @@ rtadvd_precmd()
 	fi
 }
 
+load_rc_config $name
 run_rc_command "$1"

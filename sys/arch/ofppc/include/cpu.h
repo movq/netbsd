@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.6 1999/08/10 21:08:08 thorpej Exp $	*/
+/*	$NetBSD: cpu.h,v 1.23 2008/04/08 02:33:03 garbled Exp $	*/
 
 /*
  * Copyright (C) 1995-1997 Wolfgang Solfrank.
@@ -33,72 +33,10 @@
 #ifndef	_MACHINE_CPU_H_
 #define	_MACHINE_CPU_H_
 
-#include <machine/frame.h>
-
-struct machvec {
-	int (*splhigh) __P((void));
-	int (*spl0) __P((void));
-	int (*splbio) __P((void));
-	int (*splnet) __P((void));
-	int (*spltty) __P((void));
-	int (*splimp) __P((void));
-	int (*splclock) __P((void));
-	int (*spllowersoftclock) __P((void));
-	int (*splsoftclock) __P((void));
-	int (*splsoftnet) __P((void));
-	int (*splx) __P((int));
-	void (*setsoftclock) __P((void));
-	void (*setsoftnet) __P((void));
-	void (*clock_return) __P((struct clockframe *, int));
-	void (*irq_establish) __P((int, int, void (*)(void *), void *));
-};
-extern struct machvec machine_interface;
-
-#include <machine/psl.h>
-
-#define	splhigh()	((*machine_interface.splhigh)())
-#define	spl0()		((*machine_interface.spl0)())
-#define	splbio()	((*machine_interface.splbio)())
-#define	splnet()	((*machine_interface.splnet)())
-#define	spltty()	((*machine_interface.spltty)())
-#define	splimp()	((*machine_interface.splimp)())
-#define	splclock()	((*machine_interface.splclock)())
-#define	spllowersoftclock() ((*machine_interface.spllowersoftclock)())
-#define	splsoftclock()	((*machine_interface.splsoftclock)())
-#define	splstatclock()	splclock()
-#define	splsoftnet()	((*machine_interface.splsoftnet)())
-#define	splx(new)	((*machine_interface.splx)(new))
-#define	setsoftclock()	((*machine_interface.setsoftclock)())
-#define	setsoftnet()	((*machine_interface.setsoftnet)())
-#define	clock_return(frame, level)		\
-	((*machine_interface.clock_return)((frame), (level)))
-#define	irq_establish(irq, level, handler, arg)	\
-	((*machine_interface.irq_establish)((irq), (level), (handler), (arg)))
-
-#define	CLKF_USERMODE(frame)	(((frame)->srr1 & PSL_PR) != 0)
-#define	CLKF_BASEPRI(frame)	((frame)->pri == 0)
-#define	CLKF_PC(frame)		((frame)->srr0)
-#define	CLKF_INTR(frame)	((frame)->depth >= 0)
-
-#define	cpu_swapout(p)
-#define cpu_wait(p)
-#define	cpu_number()		0
-
-extern void delay __P((unsigned));
-#define	DELAY(n)		delay(n)
-
-extern __volatile int want_resched;
-extern __volatile int astpending;
-
-#define	need_resched()		(want_resched = 1, astpending = 1)
-#define	need_proftick(p)	((p)->p_flag |= P_OWEUPC, astpending = 1)
-#define	signotify(p)		(astpending = 1)
-
-extern char *bootpath;
-
-#ifdef	_KERNEL
-#define	CACHELINESIZE	32
-#endif
+#if defined(_KERNEL)
+#define	CPU_MAXNUM	16
+extern char bootpath[];
+#endif /* _KERNEL */
 
 #include <powerpc/cpu.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.8 1998/08/13 02:10:39 eeh Exp $	*/
+/*	$NetBSD: types.h,v 1.33 2008/01/31 05:30:00 matt Exp $	*/
 
 /*-
  * Copyright (C) 1995 Wolfgang Solfrank.
@@ -35,40 +35,38 @@
 #define	_MACHTYPES_H_
 
 #include <sys/cdefs.h>
-
-#if defined(_KERNEL)
-typedef struct label_t {
-        int val[40]; /* double check this XXX */
-} label_t;
-#endif
+#include <sys/featuretest.h>
+#include <powerpc/int_types.h>
 
 /* NB: This should probably be if defined(_KERNEL) */
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
-typedef	unsigned long	vm_offset_t;
-typedef	unsigned long	vm_size_t;
-
-typedef vm_offset_t	paddr_t;
-typedef vm_size_t	psize_t;
-typedef vm_offset_t	vaddr_t;
-typedef vm_size_t	vsize_t;
+#if defined(_NETBSD_SOURCE)
+typedef	unsigned long	paddr_t, vaddr_t;
+typedef	unsigned long	psize_t, vsize_t;
 #endif
 
 /*
- * Basic integral types.  Omit the typedef if
- * not possible for a machine/compiler combination.
+ * Because lwz etal don't sign extend, it's best to make registers unsigned.
  */
-#define	__BIT_TYPES_DEFINED__
-typedef	__signed char		   int8_t;
-typedef	unsigned char		 u_int8_t;
-typedef	short			  int16_t;
-typedef	unsigned short		u_int16_t;
-typedef	int			  int32_t;
-typedef	unsigned int		u_int32_t;
-/* LONGLONG */
-typedef	long long		  int64_t;
-/* LONGLONG */
-typedef	unsigned long long	u_int64_t;
+typedef unsigned long register_t;
+typedef __uint64_t register64_t;
+typedef __uint32_t register32_t;
 
-typedef	int32_t			register_t;
+#if defined(_KERNEL)
+typedef struct label_t {
+	register_t val[40]; /* double check this XXX */
+} label_t;
+#endif
+
+typedef volatile int __cpu_simple_lock_t;
+
+#define __SIMPLELOCK_LOCKED	1
+#define __SIMPLELOCK_UNLOCKED	0
+
+#define	__HAVE_CPU_COUNTER
+#define	__HAVE_SYSCALL_INTERN
+
+#ifdef _LP64
+#define	__HAVE_ATOMIC64_OPS
+#endif
 
 #endif	/* _MACHTYPES_H_ */

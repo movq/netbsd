@@ -1,4 +1,4 @@
-/*	$NetBSD: readmsg.c,v 1.9 2000/03/27 17:07:23 kleink Exp $	*/
+/*	$NetBSD: readmsg.c,v 1.22 2008/02/16 07:30:15 matt Exp $	*/
 
 /*-
  * Copyright (c) 1985, 1993 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,17 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)readmsg.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: readmsg.c,v 1.9 2000/03/27 17:07:23 kleink Exp $");
+__RCSID("$NetBSD: readmsg.c,v 1.22 2008/02/16 07:30:15 matt Exp $");
 #endif
 #endif /* not lint */
 
-#ifdef sgi
-#ident "$Revision: 1.9 $"
-#endif
-
 #include "globals.h"
 
-extern char *tsptype[];
+extern const char * const tsptype[];
 
 /*
  * LOOKAT checks if the message is of the requested type and comes from
@@ -84,14 +76,15 @@ struct tsp *
 readmsg(int type, char *machfrom, struct timeval *intvl,
 	struct netinfo *netfrom)
 {
-	int length;
-	fd_set ready;
+	socklen_t length;
+	struct pollfd set[1];
 	static struct tsplist *head = &msgslist;
 	static struct tsplist *tail = &msgslist;
 	static int msgcnt = 0;
 	struct tsplist *prev;
-	register struct netinfo *ntp;
-	register struct tsplist *ptr;
+	struct netinfo *ntp;
+	struct tsplist *ptr;
+	ssize_t n;
 
 	if (trace) {
 		fprintf(fd, "readmsg: looking for %s from %s, %s\n",
@@ -132,7 +125,7 @@ again:
 			prev->p = ptr->p;
 			if (ptr == tail)
 				tail = prev;
-			free((char *)ptr);
+			free(ptr);
 			fromnet = NULL;
 			if (netfrom == NULL)
 			    for (ntp = nettab; ntp != NULL; ntp = ntp->next) {
@@ -178,7 +171,8 @@ again:
 
 	(void)gettimeofday(&rtout, 0);
 	timeradd(&rtout, intvl, &rtout);
-	FD_ZERO(&ready);
+	set[0].fd = sock;
+	set[0].events = POLLIN;
 	for (;;) {
 		(void)gettimeofday(&rtime, 0);
 		timersub(&rtout, &rtime, &rwait);
@@ -200,21 +194,26 @@ again:
 			 */
 			if (rwait.tv_sec != 0
 			    && EOF == fflush(fd))
-				traceoff("Tracing ended for cause at %s\n");
+				traceoff("Tracing ended for cause");
 		}
 
-		FD_SET(sock, &ready);
-		if (!select(sock+1, &ready, (fd_set *)0, (fd_set *)0,
-			   &rwait)) {
+		if (!poll(set, 1, (int)(rwait.tv_sec * 1000 + rwait.tv_usec / 1000))) {
 			if (rwait.tv_sec == 0 && rwait.tv_usec == 0)
 				return(0);
 			continue;
 		}
 		length = sizeof(from);
-		if (recvfrom(sock, (char *)&msgin, sizeof(struct tsp), 0,
-			     (struct sockaddr*)&from, &length) < 0) {
+		if ((n = recvfrom(sock, &msgin, sizeof(struct tsp), 0,
+			     (struct sockaddr*)(void *)&from, &length)) < 0) {
 			syslog(LOG_ERR, "recvfrom: %m");
-			exit(1);
+			exit(EXIT_FAILURE);
+		}
+		if (n < (ssize_t)sizeof(struct tsp)) {
+			syslog(LOG_NOTICE,
+			    "short packet (%lu/%lu bytes) from %s",
+			      (u_long)n, (u_long)sizeof(struct tsp),
+			      inet_ntoa(from.sin_addr));
+			continue;
 		}
 		(void)gettimeofday(&from_when, (struct timezone *)0);
 		bytehostorder(&msgin);
@@ -224,6 +223,13 @@ again:
 			    fprintf(fd,"readmsg: version mismatch\n");
 			    /* should do a dump of the packet */
 			}
+			continue;
+		}
+
+		if (memchr(msgin.tsp_name,
+		    '\0', sizeof msgin.tsp_name) == NULL) {
+			syslog(LOG_NOTICE, "hostname field not NUL terminated "
+			    "in packet from %s", inet_ntoa(from.sin_addr));
 			continue;
 		}
 
@@ -309,14 +315,13 @@ again:
 					"readmsg: discarding %d msgs\n",
 					msgcnt);
 			msgcnt = 0;
-			while ((ptr=head->p) != NULL) {
+			while ((ptr = head->p) != NULL) {
 				head->p = ptr->p;
-				free((char *)ptr);
+				free(ptr);
 			}
 			tail = head;
 		} else {
-			tail->p = (struct tsplist *)
-				    malloc(sizeof(struct tsplist));
+			tail->p = malloc(sizeof(struct tsplist));
 			tail = tail->p;
 			tail->p = NULL;
 			tail->info = msgin;
@@ -332,7 +337,7 @@ again:
  * only the type ACK is to be sent by a slave
  */
 void
-slaveack()
+slaveack(void)
 {
 	switch(msgin.tsp_type) {
 
@@ -364,7 +369,7 @@ slaveack()
  * These packets should be acknowledged.
  */
 void
-ignoreack()
+ignoreack(void)
 {
 	switch(msgin.tsp_type) {
 
@@ -392,13 +397,13 @@ ignoreack()
  * to the messages received by a master
  */
 void
-masterack()
+masterack(void)
 {
 	struct tsp resp;
 
 	resp = msgin;
 	resp.tsp_vers = TSPVERSION;
-	(void)strcpy(resp.tsp_name, hostname);
+	set_tsp_name(&resp, hostname);
 
 	switch(msgin.tsp_type) {
 
@@ -435,12 +440,16 @@ masterack()
  * Print a TSP message
  */
 void
-print(msg, addr)
-struct tsp *msg;
-struct sockaddr_in *addr;
+print(struct tsp *msg, struct sockaddr_in *addr)
 {
 	char tm[26];
 	time_t msgtime;
+
+	if (msg->tsp_type >= TSPTYPENUMBER) {
+		fprintf(fd, "bad type (%u) on packet from %s\n",
+		  msg->tsp_type, inet_ntoa(addr->sin_addr));
+		return;
+	}
 
 	switch (msg->tsp_type) {
 
@@ -457,13 +466,9 @@ struct sockaddr_in *addr;
 	case TSP_SETTIME:
 	case TSP_SETDATE:
 	case TSP_SETDATEREQ:
-#ifdef sgi
-		(void)cftime(tm, "%D %T", &msg->tsp_time.tv_sec);
-#else
 		msgtime = msg->tsp_time.tv_sec;
-		strncpy(tm, ctime(&msgtime)+3+1, sizeof(tm));
+		strlcpy(tm, ctime(&msgtime)+3+1, sizeof(tm));
 		tm[15] = '\0';		/* ugh */
-#endif /* sgi */
 		fprintf(fd, "%s %d %-6u %s %-15s %s\n",
 			tsptype[msg->tsp_type],
 			msg->tsp_vers,

@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.7 1999/08/03 07:08:36 tsubai Exp $	*/
+/*	$NetBSD: boot.c,v 1.22.10.1 2009/02/02 22:19:09 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -77,37 +70,41 @@
  *	[promdev[{:|,}partition]]/[filename] [flags]
  */
 
-#define	ELFSIZE		32		/* We use 32-bit ELF. */
+#include "boot.h"
 
 #include <sys/param.h>
-#include <sys/exec.h>
-#include <sys/exec_elf.h>
-#include <sys/reboot.h>
+#include <sys/boot_flag.h>
 #include <sys/disklabel.h>
 
 #include <lib/libsa/stand.h>
 #include <lib/libsa/loadfile.h>
 #include <lib/libkern/libkern.h>
 
-#include <machine/cpu.h>
-#include <machine/machine_type.h>
-
 #include "ofdev.h"
 #include "openfirm.h"
 
-char bootdev[128];
-char bootfile[128];
-int boothowto;
-int debug;
+extern void __syncicache(void *, size_t); /* in libkern */
 
-static ofw_version = 0;
+
+#ifdef DEBUG
+# define DPRINTF printf
+#else
+# define DPRINTF while (0) printf
+#endif
+
+char bootdev[MAXBOOTPATHLEN];
+char bootfile[MAXBOOTPATHLEN];
+int boothowto;
+bool floppyboot;
+
+static int ofw_version = 0;
+static const char *kernels[] = { "/netbsd", "/netbsd.gz", "/netbsd.macppc", NULL };
 
 static void
-prom2boot(dev)
-	char *dev;
+prom2boot(char *dev)
 {
 	char *cp;
-	
+
 	cp = dev + strlen(dev) - 1;
 	for (; *cp; cp--) {
 		if (*cp == ':') {
@@ -125,9 +122,7 @@ prom2boot(dev)
 }
 
 static void
-parseargs(str, howtop)
-	char *str;
-	int *howtop;
+parseargs(char *str, int *howtop)
 {
 	char *cp;
 
@@ -147,30 +142,44 @@ parseargs(str, howtop)
 
 found:
 	*cp++ = 0;
-	while (*cp) {
-		switch (*cp++) {
-		case 'a':
-			*howtop |= RB_ASKNAME;
-			break;
-		case 's':
-			*howtop |= RB_SINGLE;
-			break;
-		case 'd':
-			*howtop |= RB_KDB;
-			debug = 1;
-			break;
+	while (*cp)
+		BOOT_FLAG(*cp++, *howtop);
+}
+
+static bool
+is_floppyboot(const char *path, const char *defaultdev)
+{
+	char dev[MAXBOOTPATHLEN];
+	char nam[16];
+	int handle, rv;
+
+	if (parsefilepath(path, dev, NULL, NULL)) {
+		if (dev[0] == '\0' && defaultdev != NULL)
+			strlcpy(dev, defaultdev, sizeof(dev));
+
+		/* check properties */
+		handle = OF_finddevice(dev);
+		if (handle != -1) {
+			rv = OF_getprop(handle, "name", nam, sizeof(nam));
+			if (rv >= 0 &&
+			    (strcmp(nam, "swim3") == 0 ||
+			     strcmp(nam, "floppy") == 0))
+				return true;
 		}
+
+		/* also check devalias */
+		if (strcmp(dev, "fd") == 0)
+			return true;
 	}
+
+	return false;
 }
 
 static void
-chain(entry, args, ssym, esym)
-	void (*entry)();
-	char *args;
-	void *ssym, *esym;
+chain(boot_entry_t entry, char *args, void *ssym, void *esym)
 {
 	extern char end[];
-	int l, machine_tag;
+	int l;
 
 	freeall();
 
@@ -179,31 +188,25 @@ chain(entry, args, ssym, esym)
 	 * strings.
 	 */
 	l = strlen(args) + 1;
-	bcopy(&ssym, args + l, sizeof(ssym));
+	memcpy(args + l, &ssym, sizeof(ssym));
 	l += sizeof(ssym);
-	bcopy(&esym, args + l, sizeof(esym));
+	memcpy(args + l, &esym, sizeof(esym));
 	l += sizeof(esym);
+	l += sizeof(int);	/* XXX */
 
-	/*
-	 * Tell the kernel we're an OpenFirmware system.
-	 */
-	machine_tag = POWERPC_MACHINE_OPENFIRMWARE;
-	bcopy(&machine_tag, args + l, sizeof(machine_tag));
-	l += sizeof(machine_tag);
-
-	OF_chain((void *)RELOC, end - (char *)RELOC, entry, args, l);
+	OF_chain((void *) RELOC, end - (char *) RELOC, entry, args, l);
 	panic("chain");
 }
 
 __dead void
-_rtt()
+_rtt(void)
 {
 
 	OF_exit();
 }
 
 void
-main()
+main(void)
 {
 	extern char bootprog_name[], bootprog_rev[],
 		    bootprog_maker[], bootprog_date[];
@@ -224,16 +227,14 @@ main()
 	if ((openprom = OF_finddevice("/openprom")) != -1) {
 		char model[32];
 
-		bzero(model, sizeof model);
+		memset(model, 0, sizeof model);
 		OF_getprop(openprom, "model", model, sizeof model);
 		for (cp = model; *cp; cp++)
 			if (*cp >= '0' && *cp <= '9') {
 				ofw_version = *cp - '0';
 				break;
 			}
-#if 0
-		printf(">> Open Firmware version %d.x\n", ofw_version);
-#endif
+		DPRINTF(">> Open Firmware version %d.x\n", ofw_version);
 	}
 
 	/*
@@ -263,20 +264,40 @@ main()
 
 	prom2boot(bootdev);
 	parseargs(bootline, &boothowto);
+	DPRINTF("bootline=%s\n", bootline);
 
 	for (;;) {
+		int i, loadflag;
+
 		if (boothowto & RB_ASKNAME) {
 			printf("Boot: ");
 			gets(bootline);
 			parseargs(bootline, &boothowto);
 		}
-		marks[MARK_START] = 0;
-		if (loadfile(bootline, marks, LOAD_ALL) >= 0)
-			break;
-		if (errno)
-			printf("open %s: %s\n", opened_name, strerror(errno));
+
+		if (bootline[0]) {
+			kernels[0] = bootline;
+			kernels[1] = NULL;
+		}
+
+		for (i = 0; kernels[i]; i++) {
+			floppyboot = is_floppyboot(kernels[i], bootdev);
+
+			DPRINTF("Trying %s%s\n", kernels[i],
+			    floppyboot ? " (floppyboot)" : "");
+
+			loadflag = LOAD_KERNEL;
+			if (floppyboot)
+				loadflag &= ~LOAD_NOTE;
+
+			marks[MARK_START] = 0;
+			if (loadfile(kernels[i], marks, loadflag) >= 0)
+				goto loaded;
+		}
 		boothowto |= RB_ASKNAME;
 	}
+loaded:
+
 #ifdef	__notyet__
 	OF_setprop(chosen, "bootpath", opened_name, strlen(opened_name) + 1);
 	cp = bootline;
@@ -288,6 +309,8 @@ main()
 	*cp = '-';
 	if (boothowto & RB_ASKNAME)
 		*++cp = 'a';
+	if (boothowto & RB_USERCONF)
+		*++cp = 'c';
 	if (boothowto & RB_SINGLE)
 		*++cp = 's';
 	if (boothowto & RB_KDB)
@@ -307,10 +330,30 @@ main()
 	entry = marks[MARK_ENTRY];
 	ssym = (void *)marks[MARK_SYM];
 	esym = (void *)marks[MARK_END];
-	
+
 	printf(" start=0x%x\n", entry);
-	__syncicache((void *)entry, (u_int)ssym - (u_int)entry);
-	chain((void *)entry, bootline, ssym, esym);
+	__syncicache((void *) entry, (u_int) ssym - (u_int) entry);
+	chain((boot_entry_t) entry, bootline, ssym, esym);
 
 	OF_exit();
 }
+
+#ifdef HAVE_CHANGEDISK_HOOK
+void
+changedisk_hook(struct open_file *of)
+{
+	struct of_dev *op = of->f_devdata;
+	int c;
+
+	OF_call_method("eject", op->handle, 0, 0);
+
+	c = getchar();
+	if (c == 'q') {
+		printf("quit\n");
+		OF_exit();
+	}
+
+	OF_call_method("close", op->handle, 0, 0);
+	OF_call_method("open", op->handle, 0, 0);
+}
+#endif

@@ -1,4 +1,4 @@
-/* $NetBSD: i82557.c,v 1.3 1999/09/10 09:12:44 drochner Exp $ */
+/* $NetBSD: i82557.c,v 1.10 2008/02/11 13:51:35 mlelstv Exp $ */
 
 /*
  * Copyright (c) 1998, 1999
@@ -64,7 +64,7 @@ static union _sndbuf {
 #define	PCI_MODE1_ENABLE	0x80000000UL
 static pcihdl_t mytag = PCI_MODE1_ENABLE | (PCIDEVNO << 11);
 
-extern caddr_t mapmem __P((int, int));
+extern void *mapmem __P((int, int));
 void *dmamem; /* virtual */
 #define RECVBUF_PHYS DMABASE
 #define RECVBUF_VIRT dmamem
@@ -72,7 +72,7 @@ void *dmamem; /* virtual */
 #define SNDBUF_VIRT ((void *)(((char *)dmamem) + RECVBUF_SIZE))
 #endif /* _STANDALONE */
 
-static void fxp_read_eeprom	__P((u_int16_t *, int, int));
+static void fxp_read_eeprom	__P((uint16_t *, int, int));
 static inline void fxp_scb_wait	__P((void));
 #ifdef DEBUG
 static void fxp_checkintr __P((char *));
@@ -85,7 +85,7 @@ static void fxp_startreceiver __P((void));
  * Template for default configuration parameters.
  * See struct fxp_cb_config for the bit definitions.
  */
-static u_int8_t fxp_cb_config_template[] = {
+static uint8_t fxp_cb_config_template[] = {
 	0x0, 0x0,		/* cb_status */
 	0x80, 0x2,		/* cb_command */
 	0xff, 0xff, 0xff, 0xff,	/* link_addr */
@@ -148,7 +148,7 @@ static void
 fxp_checkintr(msg)
 	char *msg;
 {
-	u_int8_t statack;
+	uint8_t statack;
 	int i = 10000;
 
 	do {
@@ -167,7 +167,7 @@ EtherInit(myadr)
 	unsigned char *myadr;
 {
 #ifndef _STANDALONE
-	u_int32_t id;
+	uint32_t id;
 #endif
 	volatile struct fxp_cb_config *cbp;
 	volatile struct fxp_cb_ias *cb_ias;
@@ -213,11 +213,11 @@ EtherInit(myadr)
 
 	cbp = SNDBUF_VIRT;
 	/*
-	 * This bcopy is kind of disgusting, but there are a bunch of must be
+	 * This memcpy is kind of disgusting, but there are a bunch of must be
 	 * zero and must be one bits in this structure and this is the easiest
 	 * way to initialize them all to proper values.
 	 */
-	bcopy(fxp_cb_config_template, (void *)cbp,
+	memcpy((void *)cbp, fxp_cb_config_template,
 	      sizeof(fxp_cb_config_template));
 
 #define prm 0
@@ -232,9 +232,9 @@ EtherInit(myadr)
 	cbp->adaptive_ifs =	0;	/* (no) adaptive interframe spacing */
 	cbp->rx_dma_bytecount =	0;	/* (no) rx DMA max */
 	cbp->tx_dma_bytecount =	0;	/* (no) tx DMA max */
-	cbp->dma_bce =		0;	/* (disable) dma max counters */
+	cbp->dma_mbce =		0;	/* (disable) dma max counters */
 	cbp->late_scb =		0;	/* (don't) defer SCB update */
-	cbp->tno_int =		0;	/* (disable) tx not okay interrupt */
+	cbp->tno_int_or_tco_en = 0;	/* (disable) tx not okay interrupt */
 	cbp->ci_int =		0;	/* interrupt on CU not active */
 	cbp->save_bf =		prm;	/* save bad frames */
 	cbp->disc_short_rx =	!prm;	/* discard short packets */
@@ -283,7 +283,7 @@ EtherInit(myadr)
 	cb_ias->cb_status = 0;
 	cb_ias->cb_command = FXP_CB_COMMAND_IAS | FXP_CB_COMMAND_EL;
 	cb_ias->link_addr = -1;
-	bcopy(myadr, (void *)cb_ias->macaddr, 6);
+	memcpy((void *)cb_ias->macaddr, myadr, 6);
 
 	/*
 	 * Start the IAS (Individual Address Setup) command/DMA.
@@ -343,7 +343,7 @@ int EtherSend(pkt, len)
 	/* XXX assuming we send at max 400 bytes */
 	tbdp = (struct fxp_tbd *)(SNDBUF_VIRT + 440);
 	txp->tbd_array_addr = SNDBUF_PHYS + 440;
-	bcopy(pkt, SNDBUF_VIRT + 400, len);
+	memcpy(SNDBUF_VIRT + 400, pkt, len);
 	tbdp->tb_addr = SNDBUF_PHYS + 400;
 #endif
 	tbdp->tb_size = len;
@@ -375,7 +375,7 @@ static void
 fxp_startreceiver()
 {
 	volatile struct fxp_rfa *rfa;
-	u_int32_t v;
+	uint32_t v;
 
 	rfa = RECVBUF_VIRT;
 	rfa->size = RECVBUF_SIZE - sizeof(struct fxp_rfa);
@@ -397,7 +397,7 @@ EtherReceive(pkt, maxlen)
 	char *pkt;
 	int maxlen;
 {
-	u_int8_t ruscus;
+	uint8_t ruscus;
 	volatile struct fxp_rfa *rfa;
 	int len = 0;
 
@@ -413,10 +413,10 @@ EtherReceive(pkt, maxlen)
 	if (rfa->rfa_status & FXP_RFA_STATUS_C) {
 		len = rfa->actual_size & 0x7ff;
 		if (len <= maxlen) {
-			bcopy((caddr_t)(rfa + 1), pkt, maxlen);
+			memcpy(pkt, (char *) rfa + RFA_SIZE, maxlen);
 #if 0
-			printf("rfa status=%x, len=%x, i=%d\n",
-			       rfa->rfa_status, len, i);
+			printf("rfa status=%x, len=%x\n",
+			       rfa->rfa_status, len);
 #endif
 		} else
 			len = 0;
@@ -437,11 +437,11 @@ EtherReceive(pkt, maxlen)
  */
 static void
 fxp_read_eeprom(data, offset, words)
-	u_int16_t *data;
+	uint16_t *data;
 	int offset;
 	int words;
 {
-	u_int16_t reg;
+	uint16_t reg;
 	int i, x;
 
 	for (i = 0; i < words; i++) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: mcclock_ibus.c,v 1.7 2000/01/14 15:52:00 ad Exp $	*/
+/*	$NetBSD: mcclock_ibus.c,v 1.13 2008/01/03 23:02:24 joerg Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -28,11 +28,13 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: mcclock_ibus.c,v 1.7 2000/01/14 15:52:00 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcclock_ibus.c,v 1.13 2008/01/03 23:02:24 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
+#include <sys/systm.h>
+#include <dev/clock_subr.h>
 
 #include <dev/dec/mcclockvar.h>
 #include <dev/dec/mcclock_pad32.h>
@@ -44,11 +46,8 @@ static int	mcclock_ibus_match __P((struct device *, struct cfdata *,
 static void	mcclock_ibus_attach __P((struct device *, struct device *,
 		    void *));
 
-struct cfattach mcclock_ibus_ca = {
-	sizeof (struct mcclock_pad32_softc),
-	     (void *)mcclock_ibus_match, mcclock_ibus_attach,
-};
-extern struct cfdriver ibus_cd;
+CFATTACH_DECL(mcclock_ibus, sizeof (struct mcclock_pad32_softc),
+    mcclock_ibus_match, mcclock_ibus_attach, NULL, NULL);
 
 static int
 mcclock_ibus_match(parent, match, aux)
@@ -57,9 +56,6 @@ mcclock_ibus_match(parent, match, aux)
 	void *aux;
 {
 	struct ibus_attach_args *ia = aux;
-
-	if (parent->dv_cfdata->cf_driver != &ibus_cd)
-		return (0);
 
 	if (strcmp("mc146818", ia->ia_name) != 0)
 		return (0);

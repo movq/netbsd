@@ -1,4 +1,4 @@
-/*	$NetBSD: scores.c,v 1.10 1997/10/18 20:03:48 christos Exp $	*/
+/*	$NetBSD: scores.c,v 1.17 2008/02/03 20:41:53 dholland Exp $	*/
 
 /*
  * scores.c			 Larn is copyrighted 1986 by Noah Morgan.
@@ -26,7 +26,7 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: scores.c,v 1.10 1997/10/18 20:03:48 christos Exp $");
+__RCSID("$NetBSD: scores.c,v 1.17 2008/02/03 20:41:53 dholland Exp $");
 #endif				/* not lint */
 #include <sys/types.h>
 #include <sys/times.h>
@@ -74,9 +74,9 @@ struct log_fmt {		/* 102 bytes struct for the log file 				 */
 	long            moves;	/* number of moves made by player 					 */
 	short           ac;	/* armor class of player 							 */
 	short           hp, hpmax;	/* players hitpoints 								 */
-	short           cputime;/* cpu time needed in seconds 						 */
+	short           cputime;/* CPU time needed in seconds 						 */
 	short           killed, spused;	/* monsters killed and spells cast 					 */
-	short           usage;	/* usage of the cpu in % 							 */
+	short           usage;	/* usage of the CPU in % 							 */
 	short           lev;	/* player level 									 */
 #endif
 	char            who[12];/* player name 										 */
@@ -86,7 +86,7 @@ struct log_fmt {		/* 102 bytes struct for the log file 				 */
 static struct scofmt sco[SCORESIZE];	/* the structure for the scoreboard  */
 static struct wscofmt winr[SCORESIZE];	/* struct for the winning scoreboard */
 static struct log_fmt logg;	/* structure for the log file 		 */
-static char    *whydead[] = {
+static const char *whydead[] = {
 	"quit", "suspended", "self - annihilated", "shot by an arrow",
 	"hit by a dart", "fell into a pit", "fell into a bottomless pit",
 	"a winner", "trapped in solid rock", "killed by a missing save file",
@@ -112,9 +112,11 @@ readboard()
 {
 	int             i;
 
-	seteuid(euid);
+	if (gid != egid)
+		setegid(egid);
 	i = lopen(scorefile);
-	seteuid(uid);
+	if (gid != egid)
+		setegid(gid);
 	if (i < 0) {
 		lprcat("Can't read scoreboard\n");
 		lflush();
@@ -138,9 +140,11 @@ writeboard()
 	int             i;
 
 	set_score_output();
-	seteuid(euid);
+	if (gid != egid)
+		setegid(egid);
 	i = lcreat(scorefile);
-	seteuid(uid);
+	if (gid != egid)
+		setegid(gid);
 	if (i < 0) {
 		lprcat("Can't write scoreboard\n");
 		lflush();
@@ -162,15 +166,18 @@ int
 makeboard()
 {
 	int    i;
+	set_score_output();
 	for (i = 0; i < SCORESIZE; i++) {
 		winr[i].taxes = winr[i].score = sco[i].score = 0;
 		winr[i].order = sco[i].order = i;
 	}
 	if (writeboard())
 		return (-1);
-	seteuid(euid);
+	if (gid != egid)
+		setegid(egid);
 	chmod(scorefile, 0660);
-	seteuid(uid);
+	if (gid != egid)
+		setegid(gid);
 	return (0);
 }
 
@@ -226,6 +233,7 @@ paytaxes(x)
 							 * (Ughhhhh) */
 				winr[i].taxes -= amt;
 				outstanding_taxes -= amt;
+				set_score_output();
 				if (writeboard() < 0)
 					return (0);
 				return (amt);
@@ -260,7 +268,7 @@ winshou()
 				if (p->order == i) {
 					if (p->score) {
 						count++;
-						lprintf("%10d     %2d      %5d Mobuls   %s \n",
+						lprintf("%10ld     %2ld      %5ld Mobuls   %s \n",
 							(long) p->score, (long) p->hardlev, (long) p->timeused, p->who);
 					}
 					break;
@@ -297,7 +305,7 @@ shou(x)
 				if (sco[j].order == i) {
 					if (sco[j].score) {
 						count++;
-						lprintf("%10d     %2d       %s ",
+						lprintf("%10ld     %2ld       %s ",
 							(long) sco[j].score, (long) sco[j].hardlev, sco[j].who);
 						if (sco[j].what < 256)
 							lprintf("killed by a %s", monster[sco[j].what].name);
@@ -587,7 +595,8 @@ died(x)
 	int             x;
 {
 	int    f, win;
-	char            ch, *mod;
+	char            ch;
+	const char     *mod;
 	time_t          zzz;
 	if (c[LIFEPROT] > 0) {	/* if life protection */
 		switch ((x > 0) ? x : -x) {
@@ -643,7 +652,8 @@ invalid:
 	set_score_output();
 	if ((wizard == 0) && (c[GOLD] > 0)) {	/* wizards can't score		 */
 #ifndef NOLOG
-		seteuid(euid);
+		if (gid != egid)
+			setegid(egid);
 		if (lappend(logfile) < 0) {	/* append to file */
 			if (lcreat(logfile) < 0) {	/* and can't create new
 							 * log file */
@@ -654,11 +664,14 @@ invalid:
 				lflush();
 				exit(0);
 			}
-			seteuid(euid);
+			if (gid != egid)
+				setegid(egid);
 			chmod(logfile, 0660);
-			seteuid(uid);
+			if (gid != egid)
+				setegid(gid);
 		}
-		seteuid(uid);
+		if (gid != egid)
+			setegid(gid);
 		strcpy(logg.who, loginname);
 		logg.score = c[GOLD];
 		logg.diff = c[HARDGAME];
@@ -668,14 +681,16 @@ invalid:
 				mod = "an";
 			else
 				mod = "a";
-			sprintf(logg.what, "killed by %s %s", mod, monster[x].name);
+			snprintf(logg.what, sizeof(logg.what),
+			    "killed by %s %s", mod, monster[x].name);
 		} else
-			sprintf(logg.what, "%s", whydead[x - 256]);
+			snprintf(logg.what, sizeof(logg.what),
+			    "%s", whydead[x - 256]);
 		logg.cavelev = level;
-		time(&zzz);	/* get cpu time -- write out score info */
+		time(&zzz);	/* get CPU time -- write out score info */
 		logg.diedtime = zzz;
 #ifdef EXTRA
-		times(&cputime);/* get cpu time -- write out score info */
+		times(&cputime);/* get CPU time -- write out score info */
 		logg.cputime = i = (cputime.tms_utime + cputime.tms_stime) / 60 + c[CPUTIME];
 		logg.lev = c[LEVEL];
 		logg.ac = c[AC];
@@ -698,8 +713,10 @@ invalid:
 		 * game
 		 */
 		if (x != 257) {
-			if (sortboard())
+			if (sortboard()) {
+				set_score_output();
 				scorerror = writeboard();
+			}
 		}
 	}
 	if ((x == 256) || (x == 257) || (f != 0))
@@ -716,11 +733,12 @@ invalid:
  * 	int x;
  */
 void
-diedsub(x)
-	int             x;
+diedsub(int x)
 {
-	char   ch, *mod;
-	lprintf("Score: %d, Diff: %d,  %s ", (long) c[GOLD], (long) c[HARDGAME], logname);
+	char   ch;
+	const char *mod;
+
+	lprintf("Score: %ld, Diff: %ld,  %s ", (long) c[GOLD], (long) c[HARDGAME], logname);
 	if (x < 256) {
 		ch = *monster[x].name;
 		if (ch == 'a' || ch == 'e' || ch == 'i' || ch == 'o' || ch == 'u')
@@ -750,7 +768,7 @@ diedlog()
 		lprintf("Can't locate log file <%s>\n", logfile);
 		return;
 	}
-	if (fstat(fd, &stbuf) < 0) {
+	if (fstat(io_infd, &stbuf) < 0) {
 		lprintf("Can't  stat log file <%s>\n", logfile);
 		return;
 	}
@@ -759,14 +777,14 @@ diedlog()
 		p = ctime(&logg.diedtime);
 		p[16] = '\n';
 		p[17] = 0;
-		lprintf("Score: %d, Diff: %d,  %s %s on %d at %s", (long) (logg.score), (long) (logg.diff), logg.who, logg.what, (long) (logg.cavelev), p + 4);
+		lprintf("Score: %ld, Diff: %ld,  %s %s on %ld at %s", (long) (logg.score), (long) (logg.diff), logg.who, logg.what, (long) (logg.cavelev), p + 4);
 #ifdef EXTRA
 		if (logg.moves <= 0)
 			logg.moves = 1;
-		lprintf("  Experience Level: %d,  AC: %d,  HP: %d/%d,  Elapsed Time: %d minutes\n", (long) (logg.lev), (long) (logg.ac), (long) (logg.hp), (long) (logg.hpmax), (long) (logg.elapsedtime));
-		lprintf("  CPU time used: %d seconds,  Machine usage: %d.%02d%%\n", (long) (logg.cputime), (long) (logg.usage / 100), (long) (logg.usage % 100));
-		lprintf("  BYTES in: %d, out: %d, moves: %d, deaths: %d, spells cast: %d\n", (long) (logg.bytin), (long) (logg.bytout), (long) (logg.moves), (long) (logg.killed), (long) (logg.spused));
-		lprintf("  out bytes per move: %d,  time per move: %d ms\n", (long) (logg.bytout / logg.moves), (long) ((logg.cputime * 1000) / logg.moves));
+		lprintf("  Experience Level: %ld,  AC: %ld,  HP: %ld/%ld,  Elapsed Time: %ld minutes\n", (long) (logg.lev), (long) (logg.ac), (long) (logg.hp), (long) (logg.hpmax), (long) (logg.elapsedtime));
+		lprintf("  CPU time used: %ld seconds,  Machine usage: %ld.%02ld%%\n", (long) (logg.cputime), (long) (logg.usage / 100), (long) (logg.usage % 100));
+		lprintf("  BYTES in: %ld, out: %ld, moves: %ld, deaths: %ld, spells cast: %ld\n", (long) (logg.bytin), (long) (logg.bytout), (long) (logg.moves), (long) (logg.killed), (long) (logg.spused));
+		lprintf("  out bytes per move: %ld,  time per move: %ld ms\n", (long) (logg.bytout / logg.moves), (long) ((logg.cputime * 1000) / logg.moves));
 #endif
 	}
 	lflush();
@@ -797,9 +815,9 @@ getplid(nam)
 	if (havepid != -1)
 		return (havepid);	/* already did it */
 	lflush();		/* flush any pending I/O */
-	sprintf(name, "%s\n", nam);	/* append a \n to name */
+	snprintf(name, sizeof(name), "%s\n", nam);/* append a \n to name */
 	if (lopen(playerids) < 0) {	/* no file, make it */
-		if ((fd7 = creat(playerids, 0666)) < 0)
+		if ((fd7 = creat(playerids, 0664)) < 0)
 			return (-1);	/* can't make it */
 		close(fd7);
 		goto addone;	/* now append new playerid record to file */
@@ -824,7 +842,7 @@ getplid(nam)
 addone:
 	if (lappend(playerids) < 0)
 		return (-1);	/* can't open file for append */
-	lprintf("%d\n%s", (long) ++high, name);	/* new id # and name */
+	lprintf("%ld\n%s", (long) ++high, name);	/* new id # and name */
 	lwclose();
 	lcreat((char *) 0);	/* re-open terminal channel */
 	return (high);

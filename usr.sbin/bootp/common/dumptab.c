@@ -1,8 +1,8 @@
-/*	$NetBSD: dumptab.c,v 1.5 1998/03/14 04:39:54 lukem Exp $	*/
+/*	$NetBSD: dumptab.c,v 1.9 2008/05/02 19:22:10 xtraeme Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: dumptab.c,v 1.5 1998/03/14 04:39:54 lukem Exp $");
+__RCSID("$NetBSD: dumptab.c,v 1.9 2008/05/02 19:22:10 xtraeme Exp $");
 #endif
 
 /*
@@ -15,16 +15,9 @@ __RCSID("$NetBSD: dumptab.c,v 1.5 1998/03/14 04:39:54 lukem Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <strings.h>
 #include <syslog.h>
 #include <time.h>
-
-#ifndef USE_BFUNCS
-#include <memory.h>
-/* Yes, memcpy is OK here (no overlapped copies). */
-#define bcopy(a,b,c)    memcpy(b,a,c)
-#define bzero(p,l)      memset(p,0,l)
-#define bcmp(a,b,c)     memcmp(a,b,c)
-#endif
 
 #include "bootp.h"
 #include "hash.h"
@@ -33,23 +26,14 @@ __RCSID("$NetBSD: dumptab.c,v 1.5 1998/03/14 04:39:54 lukem Exp $");
 #include "patchlevel.h"
 #include "bootpd.h"
 
-#ifdef	__STDC__
-#define P(args) args
-#else
-#define P(args) ()
-#endif
-
-static void dump_generic P((FILE *, struct shared_bindata *));
-static void dump_host P((FILE *, struct host *));
-static void list_ipaddresses P((FILE *, struct in_addr_list *));
-void dumptab P((char *));
-
-#undef P
+static void dump_generic(FILE *, struct shared_bindata *);
+static void dump_host(FILE *, struct host *);
+static void list_ipaddresses(FILE *, struct in_addr_list *);
+void dumptab(const char *);
 
 #ifndef	DEBUG
 void
-dumptab(filename)
-	char *filename;
+dumptab(const char *filename)
 {
 	report(LOG_INFO, "No dumptab support!");
 }
@@ -61,8 +45,7 @@ dumptab(filename)
  */
 
 void
-dumptab(filename)
-	char *filename;
+dumptab(const char *filename)
 {
 	int n;
 	struct host *hp;
@@ -142,9 +125,7 @@ dumptab(filename)
  */
 
 static void
-dump_host(fp, hp)
-	FILE *fp;
-	struct host *hp;
+dump_host(FILE *fp, struct host *hp)
 {
 	/* Print symbols in alphabetical order for reader's convenience. */
 	if (hp) {
@@ -311,9 +292,7 @@ dump_host(fp, hp)
 
 
 static void
-dump_generic(fp, generic)
-	FILE *fp;
-	struct shared_bindata *generic;
+dump_generic(FILE *fp, struct shared_bindata *generic)
 {
 	u_char *bp = generic->data;
 	u_char *ep = bp + generic->length;
@@ -350,15 +329,13 @@ dump_generic(fp, generic)
  *
  * The addresses are printed in standard ASCII "dot" notation and separated
  * from one another by a single space.  A single leading space is also
- * printed before the first adddress.
+ * printed before the first address.
  *
  * Null lists produce no output (and no error).
  */
 
 static void
-list_ipaddresses(fp, ipptr)
-	FILE *fp;
-	struct in_addr_list *ipptr;
+list_ipaddresses(FILE *fp, struct in_addr_list *ipptr)
 {
 	unsigned count;
 	struct in_addr *addrptr;

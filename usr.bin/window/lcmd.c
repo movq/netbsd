@@ -1,4 +1,4 @@
-/*	$NetBSD: lcmd.c,v 1.5 1998/10/14 00:58:47 wsanchez Exp $	*/
+/*	$NetBSD: lcmd.c,v 1.8 2006/12/18 20:04:55 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)lcmd.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: lcmd.c,v 1.5 1998/10/14 00:58:47 wsanchez Exp $");
+__RCSID("$NetBSD: lcmd.c,v 1.8 2006/12/18 20:04:55 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -69,7 +65,7 @@ extern struct lcmd_arg arg_unalias[];
 extern struct lcmd_arg arg_unset[];
 extern struct lcmd_arg arg_window[];
 extern struct lcmd_arg arg_write[];
-struct lcmd_arg arg_null[1] = { { 0 } };
+struct lcmd_arg arg_null[1] = { { NULL, 0, 0 } };
 
 struct lcmd_tab lcmd_tab[] = {
 	{ "alias",		1,	l_alias,	arg_alias },
@@ -101,8 +97,7 @@ struct lcmd_tab lcmd_tab[] = {
 };
 
 struct lcmd_tab *
-lcmd_lookup(name)
-	char *name;
+lcmd_lookup(char *name)
 {
 	struct lcmd_tab *p;
 
@@ -113,8 +108,7 @@ lcmd_lookup(name)
 }
 
 int
-dosource(filename)
-	char *filename;
+dosource(char *filename)
 {
 	if (cx_beginfile(filename) < 0)
 		return -1;
@@ -125,10 +119,7 @@ dosource(filename)
 }
 
 int
-dolongcmd(buffer, arg, narg)
-	char *buffer;
-	struct value *arg;
-	int narg;
+dolongcmd(char *buffer, struct value *arg, int narg)
 {
 	if (cx_beginbuf(buffer, arg, narg) < 0)
 		return -1;

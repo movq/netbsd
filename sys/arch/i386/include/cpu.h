@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.61 2000/03/29 03:54:03 simonb Exp $	*/
+/*	$NetBSD: cpu.h,v 1.175 2008/05/22 13:55:51 ad Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,213 +37,54 @@
 #ifndef _I386_CPU_H_
 #define _I386_CPU_H_
 
-/*
- * Definitions unique to i386 cpu support.
- */
-#include <machine/psl.h>
-#include <machine/frame.h>
-#include <machine/segments.h>
-
-/*
- * definitions of cpu-dependent requirements
- * referenced in generic code
- */
-#define	cpu_swapin(p)			/* nothing */
-#define	cpu_number()			0
-
-/*
- * Arguments to hardclock, softclock and statclock
- * encapsulate the previous machine state in an opaque
- * clockframe; for now, use generic intrframe.
- *
- * XXX intrframe has a lot of gunk we don't need.
- */
-#define clockframe intrframe
-
-#define	CLKF_USERMODE(frame)	USERMODE((frame)->if_cs, (frame)->if_eflags)
-#define	CLKF_BASEPRI(frame)	((frame)->if_ppl == 0)
-#define	CLKF_PC(frame)		((frame)->if_eip)
-#define	CLKF_INTR(frame)	(0)	/* XXX should have an interrupt stack */
-
-/*
- * Preempt the current process if in interrupt from user mode,
- * or after the current trap/syscall if in system mode.
- */
-int	want_resched;		/* resched() was called */
-#define	need_resched()		(want_resched = 1, setsoftast())
-
-/*
- * Give a profiling tick to the current process when the user profiling
- * buffer pages are invalid.  On the i386, request an ast to send us
- * through trap(), marking the proc as needing a profiling tick.
- */
-#define	need_proftick(p)	((p)->p_flag |= P_OWEUPC, setsoftast())
-
-/*
- * Notify the current process (p) that it has a signal pending,
- * process as soon as possible.
- */
-#define	signotify(p)		setsoftast()
-
-/*
- * We need a machine-independent name for this.
- */
-#define	DELAY(x)		delay(x)
-
-/*
- * pull in #defines for kinds of processors
- */
-#include <machine/cputypes.h>
-
-struct cpu_nocpuid_nameclass {
-	int cpu_vendor;
-	const char *cpu_vendorname;
-	const char *cpu_name;
-	int cpu_class;
-	void (*cpu_setup) __P((void));
-};
-
-
-struct cpu_cpuid_nameclass {
-	const char *cpu_id;
-	int cpu_vendor;
-	const char *cpu_vendorname;
-	struct cpu_cpuid_family {
-		int cpu_class;
-		const char *cpu_models[CPU_MAXMODEL+2];
-		void (*cpu_setup) __P((void));
-	} cpu_family[CPU_MAXFAMILY - CPU_MINFAMILY + 1];
-};
+#include <x86/cpu.h>
 
 #ifdef _KERNEL
-extern int cpu;
-extern int cpu_class;
-extern int cpu_feature;
-extern int cpu_id;
-extern char cpu_vendor[];
-extern int cpuid_level;
-extern struct cpu_nocpuid_nameclass i386_nocpuid_cpus[];
-extern struct cpu_cpuid_nameclass i386_cpuid_cpus[];
 
-/* machdep.c */
-void	delay __P((int));
-void	dumpconf __P((void));
-void	cpu_reset __P((void));
-void	i386_proc0_tss_ldt_init __P((void));
-void	i386_bufinit __P((void));
+#if defined(__GNUC__) && !defined(_LKM)
+static struct cpu_info *x86_curcpu(void);
+static lwp_t *x86_curlwp(void);
 
-/* locore.s */
-struct region_descriptor;
-void	lgdt __P((struct region_descriptor *));
-void	fillw __P((short, void *, size_t));
+__inline static struct cpu_info * __unused
+x86_curcpu(void)
+{
+	struct cpu_info *ci;
 
-struct pcb;
-void	savectx __P((struct pcb *));
-void	switch_exit __P((struct proc *));
-void	proc_trampoline __P((void));
-
-/* clock.c */
-void	initrtclock __P((void));
-void	startrtclock __P((void));
-
-/* npx.c */
-void	npxdrop __P((void));
-void	npxsave __P((void));
-
-/* vm_machdep.c */
-int kvtop __P((caddr_t));
-
-#if !defined(_LKM)
-#include "opt_math_emulate.h"
-#endif
-#ifdef MATH_EMULATE
-/* math_emulate.c */
-int	math_emulate __P((struct trapframe *));
-#endif
-
-#if !defined(_LKM)
-#include "opt_user_ldt.h"
-#endif
-#ifdef USER_LDT
-/* sys_machdep.h */
-void	i386_user_cleanup __P((struct pcb *));
-int	i386_get_ldt __P((struct proc *, char *, register_t *));
-int	i386_set_ldt __P((struct proc *, char *, register_t *));
-#endif
-
-/* isa_machdep.c */
-void	isa_defaultirq __P((void));
-int	isa_nmi __P((void));
-
-#if !defined(_LKM)
-#include "opt_vm86.h"
-#endif
-#ifdef VM86
-/* vm86.c */
-void	vm86_gpfault __P((struct proc *, int));
-#endif /* VM86 */
-
-/* trap.c */
-void	child_return __P((void *));
-
-/* consinit.c */
-void kgdb_port_init __P((void));
-
-/* bus_machdep.c */
-void i386_bus_space_init __P((void));
-void i386_bus_space_mallocok __P((void));
-
-#endif /* _KERNEL */
-
-/* 
- * CTL_MACHDEP definitions.
- */
-#define	CPU_CONSDEV		1	/* dev_t: console terminal device */
-#define	CPU_BIOSBASEMEM		2	/* int: bios-reported base mem (K) */
-#define	CPU_BIOSEXTMEM		3	/* int: bios-reported ext. mem (K) */
-#define	CPU_NKPDE		4	/* int: number of kernel PDEs */
-#define	CPU_BOOTED_KERNEL	5	/* string: booted kernel name */
-#define CPU_DISKINFO		6	/* disk geometry information */
-#define CPU_FPU_PRESENT		7	/* FPU is present */
-#define	CPU_MAXID		8	/* number of valid machdep ids */
-
-#define	CTL_MACHDEP_NAMES { \
-	{ 0, 0 }, \
-	{ "console_device", CTLTYPE_STRUCT }, \
-	{ "biosbasemem", CTLTYPE_INT }, \
-	{ "biosextmem", CTLTYPE_INT }, \
-	{ "nkpde", CTLTYPE_INT }, \
-	{ "booted_kernel", CTLTYPE_STRING }, \
-	{ "diskinfo", CTLTYPE_STRUCT }, \
-	{ "fpu_present", CTLTYPE_INT }, \
+	__asm volatile("movl %%fs:%1, %0" :
+	    "=r" (ci) :
+	    "m"
+	    (*(struct cpu_info * const *)offsetof(struct cpu_info, ci_self)));
+	return ci;
 }
 
+__inline static lwp_t * __attribute__ ((const))
+x86_curlwp(void)
+{
+	lwp_t *l;
 
-/*
- * Structure for CPU_DISKINFO sysctl call.
- * XXX this should be somewhere else.
- */
-#define MAX_BIOSDISKS	16
+	__asm volatile("movl %%fs:%1, %0" :
+	    "=r" (l) :
+	    "m"
+	    (*(struct cpu_info * const *)offsetof(struct cpu_info, ci_curlwp)));
+	return l;
+}
+__inline static void __unused
+cpu_set_curpri(int pri)
+{
 
-struct disklist {
-	int dl_nbiosdisks;			   /* number of bios disks */
-	struct biosdisk_info {
-		int bi_dev;			   /* BIOS device # (0x80 ..) */
-		int bi_cyl;			   /* cylinders on disk */
-		int bi_head;			   /* heads per track */
-		int bi_sec;			   /* sectors per track */
-		u_int64_t bi_lbasecs;		   /* total sec. (iff ext13) */
-#define BIFLAG_INVALID		0x01
-#define BIFLAG_EXTINT13		0x02
-		int bi_flags;
-	} dl_biosdisks[MAX_BIOSDISKS];
+	__asm volatile(
+	    "movl %1, %%fs:%0" :
+	    "=m" (*(struct cpu_info *)offsetof(struct cpu_info, ci_schedstate.spc_curpriority)) :
+	    "r" (pri)
+	);
+}
+#endif
 
-	int dl_nnativedisks;			   /* number of native disks */
-	struct nativedisk_info {
-		char ni_devname[16];		   /* native device name */
-		int ni_nmatches; 		   /* # of matches w/ BIOS */
-		int ni_biosmatches[MAX_BIOSDISKS]; /* indices in dl_biosdisks */
-	} dl_nativedisks[1];			   /* actually longer */
-};
+#define	CLKF_USERMODE(frame)	USERMODE((frame)->cf_if.if_cs, (frame)->cf_if.if_eflags)
+#define	CLKF_PC(frame)		((frame)->cf_if.if_eip)
+#define	CLKF_INTR(frame)	(curcpu()->ci_idepth > 0)
+#define	LWP_PC(l)		((l)->l_md.md_regs->tf_eip)
+
+#endif	/* _KERNEL */
 
 #endif /* !_I386_CPU_H_ */

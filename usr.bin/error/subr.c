@@ -1,4 +1,4 @@
-/*	$NetBSD: subr.c,v 1.9 2000/01/14 06:53:48 mjl Exp $	*/
+/*	$NetBSD: subr.c,v 1.14 2003/08/07 11:13:38 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)subr.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: subr.c,v 1.9 2000/01/14 06:53:48 mjl Exp $");
+__RCSID("$NetBSD: subr.c,v 1.14 2003/08/07 11:13:38 agc Exp $");
 #endif /* not lint */
 
 #include <ctype.h>
@@ -51,10 +47,7 @@ __RCSID("$NetBSD: subr.c,v 1.9 2000/01/14 06:53:48 mjl Exp $");
  *	Arrayify a list of rules
  */
 void
-arrayify(e_length, e_array, header)
-	int	*e_length;
-	Eptr	**e_array;
-	Eptr	header;
+arrayify(int *e_length, Eptr **e_array, Eptr header)
 {
 	Eptr	errorp;
 	Eptr	*array;
@@ -77,9 +70,7 @@ arrayify(e_length, e_array, header)
 }
 
 char *
-Calloc(nelements, size)
-	int	nelements;
-	int	size;
+Calloc(int nelements, int size)
 {
 	char	*back;
 	if ( (back = (char *)calloc(nelements, size)) == NULL)
@@ -87,24 +78,12 @@ Calloc(nelements, size)
 	return(back);
 }
 
-char *
-strsave(instring)
-	char	*instring;
-{
-	char	*outstring;
-	(void)strcpy(outstring = (char *)Calloc(1, strlen(instring) + 1),
-		instring);
-	return(outstring);
-}
-
 /*
  *	find the position of a given character in a string
  *		(one based)
  */
 int
-position(string, ch)
-	char	*string;
-	char	ch;
+position(char *string, char ch)
 {
 	int	i;
 	if (string)
@@ -119,9 +98,7 @@ position(string, ch)
  *	clobber the first occurance of ch in string by the new character
  */
 char *
-substitute(string, chold, chnew)
-	char	*string;
-	char	chold, chnew;
+substitute(char *string, char chold, char chnew)
 {
 	char	*cp = string;
 
@@ -137,8 +114,7 @@ substitute(string, chold, chnew)
 }
 
 char
-lastchar(string)
-	char	*string;
+lastchar(char *string)
 {
 	int	length;
 	if (string == NULL) return('\0');
@@ -150,8 +126,7 @@ lastchar(string)
 }
 
 char
-firstchar(string)
-	char	*string;
+firstchar(char *string)
 {
 	if (string)
 		return(string[0]);
@@ -160,8 +135,7 @@ firstchar(string)
 }
 
 char
-next_lastchar(string)
-	char	*string;
+next_lastchar(char *string)
 {
 	int	length;
 	if (string == NULL) return('\0');
@@ -173,8 +147,7 @@ next_lastchar(string)
 }
 
 void
-clob_last(string, newstuff)
-	char	*string, newstuff;
+clob_last(char *string, char newstuff)
 {
 	int	length = 0;
 	if (string)
@@ -188,9 +161,7 @@ clob_last(string, newstuff)
  *	return TRUE if this is of the proper format
  */
 boolean
-persperdexplode(string, r_perd, r_pers)
-	char	*string;
-	char	**r_perd, **r_pers;
+persperdexplode(char *string, char **r_perd, char **r_pers)
 {
 	char	*cp;
 	int	length = 0;
@@ -205,10 +176,10 @@ persperdexplode(string, r_perd, r_pers)
 			continue;
 		if (*cp == '('){
 			string[length - 1] = '\0';	/* clobber the ) */
-			*r_perd = strsave(cp+1);
+			*r_perd = strdup(cp+1);
 			string[length - 1] = ')';
 			*cp = '\0';			/* clobber the ( */
-			*r_pers = strsave(string);
+			*r_pers = strdup(string);
 			*cp = '(';
 			return(TRUE);
 		} 
@@ -221,9 +192,7 @@ persperdexplode(string, r_perd, r_pers)
  *	return TRUE if this is of the proper format
  */
 boolean
-qpersperdexplode(string, r_perd, r_pers)
-	char	*string;
-	char	**r_perd, **r_pers;
+qpersperdexplode(char *string, char **r_perd, char **r_pers)
 {
 	char	*cp;
 	int	length = 0;
@@ -238,10 +207,10 @@ qpersperdexplode(string, r_perd, r_pers)
 			continue;
 		if (*cp == '(' && *(cp - 1) == '"'){
 			string[length - 1] = '\0';
-			*r_perd = strsave(cp+1);
+			*r_perd = strdup(cp+1);
 			string[length - 1] = ')';
 			*(cp - 1) = '\0';		/* clobber the " */
-			*r_pers = strsave(string + 1);
+			*r_pers = strdup(string + 1);
 			*(cp - 1) = '"';
 			return(TRUE);
 		} 
@@ -289,10 +258,7 @@ struct	lang_desc lang_table[] = {
 };
 
 void
-printerrors(look_at_subclass, errorc, errorv)
-	boolean	look_at_subclass;
-	int	errorc;
-	Eptr	errorv[];
+printerrors(boolean look_at_subclass, int errorc, Eptr errorv[])
 {
 	int	i;
 	Eptr	errorp;
@@ -312,10 +278,7 @@ printerrors(look_at_subclass, errorc, errorv)
 }
 
 void
-wordvprint(fyle, wordc, wordv)
-	FILE	*fyle;
-	int	wordc;
-	char	*wordv[];
+wordvprint(FILE *fyle, int wordc, char **wordv)
 {
 	int	i;
 	char *sep = "";
@@ -332,10 +295,7 @@ wordvprint(fyle, wordc, wordv)
  *	a wordc wordv combination pointing into it.
  */
 void
-wordvbuild(string, r_wordc, r_wordv)
-	char	*string;
-	int	*r_wordc;
-	char	***r_wordv;
+wordvbuild(char *string, int *r_wordc, char ***r_wordv)
 {
 	char 	*cp;
 	char	**wordv;
@@ -377,10 +337,7 @@ wordvbuild(string, r_wordc, r_wordv)
  *	Compare two 0 based wordvectors
  */
 int
-wordvcmp(wordv1, wordc, wordv2)
-	char	**wordv1;
-	int	wordc;
-	char	**wordv2;
+wordvcmp(char **wordv1, int wordc, char **wordv2)
 {
 	int i;
 	int	back;
@@ -388,7 +345,7 @@ wordvcmp(wordv1, wordc, wordv2)
 	for (i = 0; i < wordc; i++){
 		if (wordv1[i] == NULL || wordv2[i] == NULL)
 			return(-1);
-		if ((back = strcmp(wordv1[i], wordv2[i])) != NULL)
+		if ((back = strcmp(wordv1[i], wordv2[i])) != 0)
 			return(back);
 	}
 	return(0);	/* they are equal */
@@ -399,10 +356,7 @@ wordvcmp(wordv1, wordc, wordv2)
  *	new wordv, allowing the first emptyhead slots to be empty
  */
 char	**
-wordvsplice(emptyhead, wordc, wordv)
-	int	emptyhead;
-	int	wordc;
-	char	**wordv;
+wordvsplice(int emptyhead, int wordc, char **wordv)
 {
 	char	**nwordv;
 	int	nwordc = emptyhead + wordc;
@@ -424,15 +378,13 @@ static	char	*S = "s";
 static	char	*N = "";
 
 char *
-plural(n)
-	int	n;
+plural(int n)
 {
 	return( n > 1 ? S : N);
 }
 
 char *
-verbform(n)
-	int	n;
+verbform(int n)
 {
 	return( n > 1 ? N : S);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: viareg.h,v 1.2 1998/10/20 14:56:30 tsubai Exp $	*/
+/*	$NetBSD: viareg.h,v 1.7 2007/10/17 19:55:20 garbled Exp $	*/
 
 /*-
  * Copyright (C) 1993	Allen K. Briggs, Chris P. Caputo,
@@ -149,10 +149,10 @@ extern volatile unsigned char *Via1Base;
 #define VIA2		0
 
 	/* VIA interface registers */
-#define vBufA		0x1e00	/* register A */
-#define vBufB		0	/* register B */
-#define vDirA		0x0600	/* data direction register */
+#define vBufB		0x0000	/* register B */
+#define vBufA		0x0200	/* register A */
 #define vDirB		0x0400	/* data direction register */
+#define vDirA		0x0600	/* data direction register */
 #define vT1C		0x0800
 #define vT1CH		0x0a00
 #define vT1L		0x0c00
@@ -184,11 +184,23 @@ extern volatile unsigned char *Via1Base;
 #define RBVMonIDRGB15	0x28	/* 15 inch RGB */
 #define RBVMonIDBW	0x30	/* No internal video */
 
+/* some misc. leftovers */
+#define vPB		0x0000
+#define vPB3		0x08
+#define vPB4		0x10
+#define vPB5		0x20
+#define vSR_INT		0x04
+#define vSR_OUT		0x10
+
 #define via_reg(v, r) (*(Via1Base + (r)))
 
-#include <machine/pio.h>
+static inline void via_reg_and(int, int, int);
+static inline void via_reg_or(int, int, int);
+static inline void via_reg_xor(int, int, int);
+static inline void write_via_reg(int, int, int);
+static inline int read_via_reg(int, int);
 
-static __inline void
+static inline void
 via_reg_and(ign, reg, val) 
 	int ign, reg, val;
 {
@@ -197,7 +209,7 @@ via_reg_and(ign, reg, val)
 	out8(addr, in8(addr) & val);
 }
 
-static __inline void
+static inline void
 via_reg_or(ign, reg, val) 
 	int ign, reg, val;
 {
@@ -206,7 +218,7 @@ via_reg_or(ign, reg, val)
 	out8(addr, in8(addr) | val);
 }
 
-static __inline void
+static inline void
 via_reg_xor(ign, reg, val) 
 	int ign, reg, val;
 {
@@ -215,7 +227,7 @@ via_reg_xor(ign, reg, val)
 	out8(addr, in8(addr) ^ val);
 }
 
-static __inline int
+static inline int
 read_via_reg(ign, reg)
 	int ign, reg;
 {
@@ -224,7 +236,7 @@ read_via_reg(ign, reg)
 	return in8(addr);
 }
 
-static __inline void
+static inline void
 write_via_reg(ign, reg, val)
 	int ign, reg, val;
 {

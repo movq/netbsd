@@ -1,4 +1,4 @@
-/*	$NetBSD: dvma.c,v 1.5 2000/02/15 14:09:59 pk Exp $	*/
+/*	$NetBSD: dvma.c,v 1.14 2006/07/13 20:03:34 uwe Exp $	*/
 /*
  * Copyright (c) 1995 Gordon W. Ross
  * All rights reserved.
@@ -57,16 +57,23 @@ static int base_va;
 #define	setsegmap(va, pmeg)	do stha(va, ASI_SEGMAP, pmeg); while(0)
 
 void
-dvma_init()
+dvma_init(void)
 {
-	int segva, dmava;
+	u_int segva, dmava;
+	int nseg;
 	extern int start;
 
-	/* Align our address base with the DVMA segment */
-	base_va = segva = ((int)&start) & DVMA_BASE;
+	/*
+	 * Align our address base with the DVMA segment.
+	 * Allocate one DVMA segment to cover the stack, which
+	 * grows downward from `start'.
+	 */
+	dmava = DVMA_BASE;
+	base_va = segva = (((int)&start) & -NBPSG) - NBPSG;
 
-	/* Then double-map the DVMA adresses */
-	for (dmava = DVMA_BASE; dmava < DVMA_BASE + DVMA_MAPLEN; ) {
+	/* Then double-map the DVMA addresses */
+	nseg = (DVMA_MAPLEN + NBPSG - 1) >> SGSHIFT;
+	while (nseg-- > 0) {
 		setsegmap(dmava, getsegmap(segva));
 		segva += NBPSG;
 		dmava += NBPSG;
@@ -77,9 +84,7 @@ dvma_init()
  * Convert a local address to a DVMA address.
  */
 char *
-dvma_mapin(addr, len)
-	char *addr;
-	size_t len;
+dvma_mapin(char *addr, size_t len)
 {
 	int va = (int)addr;
 
@@ -88,7 +93,7 @@ dvma_mapin(addr, len)
 #ifndef BOOTXX
 	/* Make sure the address is in the DVMA map. */
 	if (va < 0 || va >= DVMA_MAPLEN)
-		panic("dvma_mapin");
+		panic("dvma_mapin: va %x (DMA base %x)", va+base_va, base_va);
 #endif
 
 	va += DVMA_BASE;
@@ -100,9 +105,7 @@ dvma_mapin(addr, len)
  * Convert a DVMA address to a local address.
  */
 char *
-dvma_mapout(addr, len)
-	char *addr;
-	size_t len;
+dvma_mapout(char *addr, size_t len)
 {
 	int va = (int)addr;
 
@@ -111,7 +114,7 @@ dvma_mapout(addr, len)
 #ifndef BOOTXX
 	/* Make sure the address is in the DVMA map. */
 	if (va < 0 || va >= DVMA_MAPLEN)
-		panic("dvma_mapout");
+		panic("dvma_mapout: va %x (DMA base %x)", va+base_va, base_va);
 #endif
 
 	va += base_va;
@@ -120,8 +123,7 @@ dvma_mapout(addr, len)
 }
 
 char *
-dvma_alloc(len)
-	int len;
+dvma_alloc(int len)
 {
 	char *mem;
 
@@ -132,13 +134,11 @@ dvma_alloc(len)
 }
 
 void
-dvma_free(dvma, len)
-	char *dvma;
-	int len;
+dvma_free(char *dvma, int len)
 {
 	char *mem;
 
 	mem = dvma_mapout(dvma, len);
 	if (mem != NULL)
-		free(mem, len);
+		dealloc(mem, len);
 }

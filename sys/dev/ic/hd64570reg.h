@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64570reg.h,v 1.5 2000/01/09 14:47:43 chopps Exp $	*/
+/*	$NetBSD: hd64570reg.h,v 1.11 2005/12/11 12:21:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1998 Vixie Enterprises
@@ -60,6 +60,7 @@ struct cisco_pkt {
 #define CISCO_PKT_LEN	18	/* sizeof doesn't work right... */
 
 #define HDLC_PROTOCOL_IP	0x0800	/* IP */
+#define HDLC_PROTOCOL_IPV6	0x86dd	/* IPv6 */
 #define HDLC_PROTOCOL_ISO	0xfefe	/* LLC_ISO_LSAP dsap,ssap */
 
 struct hdlc_header {
@@ -78,7 +79,7 @@ struct hdlc_llc_header {
 };
 
 /*
- * Hitachi HD64570  defininitions 
+ * Hitachi HD64570  defininitions
  */
 
 /*  SCA Control Registers  */
@@ -101,8 +102,8 @@ struct hdlc_llc_header {
 #define  SCA_IMVR   0x1c    /* modified interrupt vector */
 
 /*  MSCI  Channel 0 Registers  */
-#define  SCA_TRBL0  0x20    /* TX/RX buffer reg */ 
-#define  SCA_TRBH0  0x21    /* TX/RX buffer reg */ 
+#define  SCA_TRBL0  0x20    /* TX/RX buffer reg */
+#define  SCA_TRBH0  0x21    /* TX/RX buffer reg */
 #define  SCA_ST00   0x22     /* Status reg 0 */
 #define  SCA_ST10   0x23     /* Status reg 1 */
 #define  SCA_ST20   0x24     /* Status reg 2 */
@@ -123,13 +124,13 @@ struct hdlc_llc_header {
 #define  SCA_TMC0   0x35     /* Time constant */
 #define  SCA_RXS0   0x36     /* RX clock source */
 #define  SCA_TXS0   0x37     /* TX clock source */
-#define  SCA_TRC00  0x38    /* TX Ready control reg 0 */ 
-#define  SCA_TRC10  0x39    /* TX Ready control reg 1 */ 
-#define  SCA_RRC0   0x3A    /* RX Ready control reg */ 
+#define  SCA_TRC00  0x38    /* TX Ready control reg 0 */
+#define  SCA_TRC10  0x39    /* TX Ready control reg 1 */
+#define  SCA_RRC0   0x3A    /* RX Ready control reg */
 
 /*  MSCI  Channel 1 Registers  */
-#define  SCA_TRBL1  0x40    /* TX/RX buffer reg */ 
-#define  SCA_TRBH1  0x41    /* TX/RX buffer reg */ 
+#define  SCA_TRBL1  0x40    /* TX/RX buffer reg */
+#define  SCA_TRBH1  0x41    /* TX/RX buffer reg */
 #define  SCA_ST01   0x42     /* Status reg 0 */
 #define  SCA_ST11   0x43     /* Status reg 1 */
 #define  SCA_ST21   0x44     /* Status reg 2 */
@@ -150,9 +151,9 @@ struct hdlc_llc_header {
 #define  SCA_TMC1   0x55     /* Time constant */
 #define  SCA_RXS1   0x56     /* RX clock source */
 #define  SCA_TXS1   0x57     /* TX clock source */
-#define  SCA_TRC01  0x58    /* TX Ready control reg 0 */ 
-#define  SCA_TRC11  0x59    /* TX Ready control reg 1 */ 
-#define  SCA_RRC1   0x5A    /* RX Ready control reg */ 
+#define  SCA_TRC01  0x58    /* TX Ready control reg 0 */
+#define  SCA_TRC11  0x59    /* TX Ready control reg 1 */
+#define  SCA_RRC1   0x5A    /* RX Ready control reg */
 
 
 /*  SCA  DMA  registers  */
@@ -317,7 +318,7 @@ struct hdlc_llc_header {
 #define	SCA_CTL_IDLC_MASK	0x10	/* control idle state */
 #define	SCA_CTL_IDLC_MARK	0x00	/* transmit mark in idle state */
 #define SCA_CTL_IDLC_PATTERN	0x10	/* tranmist idle pattern */
-#define SCA_CTL_UDRNC_MASK	0x20	/* control underun state */
+#define SCA_CTL_UDRNC_MASK	0x20	/* control underrun state */
 #define	SCA_CTL_UDRNC_AFTER_ABORT	0x00	/* idle after aborting trans */
 #define SCA_CTL_UDRNC_AFTER_FCS	0x20	/* idle after FCS and flag trans */
 
@@ -353,7 +354,7 @@ struct hdlc_llc_header {
 #define SCA_TXS_CLK_MASK	0x70	/* which clock source */
 #define SCA_TXS_CLK_LINE	0x00	/* TXC line input */
 #define SCA_TXS_CLK_INTERNAL	0x40	/* Baud Rate Gen. output */
-#define SCA_TXS_CLK_RXCLK	0x60	/* Recieve clock */
+#define SCA_TXS_CLK_RXCLK	0x60	/* Receive clock */
 
 #define SCA_ST0_RXRDY           0x01
 #define SCA_ST0_TXRDY           0x02
@@ -527,7 +528,7 @@ struct hdlc_llc_header {
 #define SCA_PCR_PR1             0x02
 #define SCA_PCR_PR0             0x01
 
-/* 
+/*
  * Descriptor Status byte bit definitions:
  *
  *  Bit    Receive Status            Transmit Status
@@ -552,7 +553,7 @@ struct hdlc_llc_header {
 #define  ST_OVFL   0x1     /* Buffer OverFlow error  (software defined) */
 
 #define  ST_EOT      1     /* End of transmit command */
-                   
+
 
 /*  DMA  Status register (DSR)  bit definitions  */
 #define  DSR_EOT  0x80      /* end of transfer EOT bit */
@@ -591,7 +592,7 @@ struct hdlc_llc_header {
 #define CLK_BRG		0x40	/* internal baud rate generator */
 #define CLK_RXC		0x60	/* receive clock */
 
-/*   Clocking options  */                                        
+/*   Clocking options  */
 #define  CLK_INT   0        /* Internal - Baud Rate generator output */
 #define  CLK_EXT   1        /* External - both clocks */
 #define  CLK_RXCI  2        /* External - Receive Clock only */
@@ -606,6 +607,6 @@ struct hdlc_llc_header {
  * DMA constraints
  */
 #define SCA_DMA_ALIGNMENT	(64 * 1024)	/* 64 KB alignment */
-#define SCA_DMA_BOUNDRY		(16 * 1024 * 1024)	/* 16 MB region */
+#define SCA_DMA_BOUNDARY	(16 * 1024 * 1024)	/* 16 MB region */
 
 #endif /* _DEV_IC_HD64570REG_H_ */

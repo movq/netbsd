@@ -1,4 +1,4 @@
-/* $NetBSD: macfb.c,v 1.3 2000/03/17 04:46:32 scottr Exp $ */
+/* $NetBSD: macfb.c,v 1.19 2007/10/17 19:55:14 garbled Exp $ */
 /*
  * Copyright (c) 1998 Matt DeBergalis
  * All rights reserved.
@@ -29,6 +29,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: macfb.c,v 1.19 2007/10/17 19:55:14 garbled Exp $");
+
 #include "opt_wsdisplay_compat.h"
 #include "grf.h"
 
@@ -43,6 +46,7 @@
 #include <machine/cpu.h>
 #include <machine/bus.h>
 
+#include <machine/video.h>
 #include <machine/grfioctl.h>
 #include <mac68k/nubus/nubus.h>
 #include <mac68k/dev/grfvar.h>
@@ -53,14 +57,11 @@
 #include <dev/wscons/wscons_raster.h>
 #include <dev/wscons/wsdisplayvar.h>
 
-int macfb_match __P((struct device *, struct cfdata *, void *));
-void macfb_attach __P((struct device *, struct device *, void *));
+int macfb_match(struct device *, struct cfdata *, void *);
+void macfb_attach(struct device *, struct device *, void *);
 
-struct cfattach macfb_ca = {
-	sizeof(struct macfb_softc), 
-	macfb_match,
-	macfb_attach,
-};
+CFATTACH_DECL(macfb, sizeof(struct macfb_softc),
+    macfb_match, macfb_attach, NULL, NULL);
 
 const struct wsdisplay_emulops macfb_emulops = {
 	rcons_cursor,
@@ -70,7 +71,7 @@ const struct wsdisplay_emulops macfb_emulops = {
 	rcons_erasecols,
 	rcons_copyrows,
 	rcons_eraserows,
-	rcons_alloc_attr
+	rcons_allocattr
 };
 
 struct wsscreen_descr macfb_stdscreen = {
@@ -90,13 +91,13 @@ const struct wsscreen_list macfb_screenlist = {
 	_macfb_scrlist
 };
 
-static int	macfb_ioctl __P((void *, u_long, caddr_t, int, struct proc *));
-static int	macfb_mmap __P((void *, off_t, int));
-static int	macfb_alloc_screen __P((void *, const struct wsscreen_descr *,
-		    void **, int *, int *, long *));
-static void	macfb_free_screen __P((void *, void *));
-static int	macfb_show_screen __P((void *, void *, int,
-		    void (*)(void *, int, int), void *));
+static int	macfb_ioctl(void *, void *, u_long, void *, int, struct lwp *);
+static paddr_t	macfb_mmap(void *, void *, off_t, int);
+static int	macfb_alloc_screen(void *, const struct wsscreen_descr *,
+		    void **, int *, int *, long *);
+static void	macfb_free_screen(void *, void *);
+static int	macfb_show_screen(void *, void *, int,
+		    void (*)(void *, int, int), void *);
 
 const struct wsdisplay_accessops macfb_accessops = {
 	macfb_ioctl,
@@ -107,24 +108,15 @@ const struct wsdisplay_accessops macfb_accessops = {
 	0 /* load_font */
 };
 
-void macfb_init __P((struct macfb_devconfig *));
+void macfb_init(struct macfb_devconfig *);
 
 paddr_t macfb_consaddr;
-static int macfb_is_console __P((paddr_t addr));
+static int macfb_is_console(paddr_t);
 #ifdef WSDISPLAY_COMPAT_ITEFONT
-static void	init_itefont __P((void));
+static void	init_itefont(void);
 #endif /* WSDISPLAY_COMPAT_ITEFONT */
 
 static struct macfb_devconfig macfb_console_dc;
-
-/* From Booter via locore */
-extern long		videoaddr;
-extern long		videorowbytes;
-extern long		videobitdepth;
-extern u_long		videosize;
-extern u_int32_t	mac68k_vidlog;
-extern u_int32_t	mac68k_vidphys;
-extern u_int32_t	mac68k_vidlen;
 
 static int
 macfb_is_console(paddr_t addr)
@@ -147,8 +139,7 @@ macfb_is_console(paddr_t addr)
 }
 
 void
-macfb_clear(dc)
-	struct macfb_devconfig *dc;
+macfb_clear(struct macfb_devconfig *dc)
 {
 	int i, rows;
 
@@ -160,8 +151,7 @@ macfb_clear(dc)
 }
 
 void
-macfb_init(dc)
-	struct macfb_devconfig *dc;
+macfb_init(struct macfb_devconfig *dc)
 {
 	struct raster *rap;
 	struct rcons *rcp;
@@ -192,19 +182,13 @@ macfb_init(dc)
 }
 
 int
-macfb_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+macfb_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	return (1);
 }
 
 void
-macfb_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+macfb_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct grfbus_attach_args *ga = aux;
 	struct grfmode *gm = ga->ga_grfmode;
@@ -234,7 +218,7 @@ macfb_attach(parent, self, aux)
 
 		sc->sc_dc->dc_offset = gm->fboff;
 
-		macfb_init(sc->sc_dc);
+		macfb_clear(sc->sc_dc);
 
 		sc->nscreens = 1;
 	}
@@ -248,18 +232,14 @@ macfb_attach(parent, self, aux)
 	config_found(self, &waa, wsemuldisplaydevprint);
 
 #if NGRF > 0
-	grf_attach(sc, self->dv_unit);
+	grf_attach(sc, device_unit(self));
 #endif
 }
 
 
 int
-macfb_ioctl(v, cmd, data, flag, p)
-	void *v;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+macfb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
+	struct lwp *l)
 {
 	struct macfb_softc *sc = v;
 	struct macfb_devconfig *dc = sc->sc_dc;
@@ -288,21 +268,18 @@ macfb_ioctl(v, cmd, data, flag, p)
 	case WSDISPLAYIO_SCURSOR:
 	case WSDISPLAYIO_SVIDEO:
 		/* NONE of these operations are supported. */
-		return ENOTTY;
+		return EPASSTHROUGH;
 	}
 
-	return -1;
+	return EPASSTHROUGH;
 }
 
-static int
-macfb_mmap(v, offset, prot)
-	void *v;
-	off_t offset;
-	int prot;
+static paddr_t
+macfb_mmap(void *v, void *vs, off_t offset, int prot)
 {
 	struct macfb_softc *sc = v;
 	struct macfb_devconfig *dc = sc->sc_dc;
-	u_long addr;
+	paddr_t addr;
 
 	if (offset >= 0 &&
 	    offset < m68k_round_page(dc->dc_rowbytes * dc->dc_ht))
@@ -310,16 +287,12 @@ macfb_mmap(v, offset, prot)
 	else
 		addr = (-1);	/* XXX bogus */
 
-	return (int)addr;
+	return addr;
 }
 
 int
-macfb_alloc_screen(v, type, cookiep, curxp, curyp, defattrp)
-	void *v;
-	const struct wsscreen_descr *type;
-	void **cookiep;
-	int *curxp, *curyp;
-	long *defattrp;
+macfb_alloc_screen(void *v, const struct wsscreen_descr *type, void **cookiep,
+    int *curxp, int *curyp, long *defattrp)
 {
 	struct macfb_softc *sc = v;
 	long defattr;
@@ -330,16 +303,14 @@ macfb_alloc_screen(v, type, cookiep, curxp, curyp, defattrp)
 	*cookiep = &sc->sc_dc->dc_rcons; /* one and only for now */
 	*curxp = 0;
 	*curyp = 0;
-	rcons_alloc_attr(&sc->sc_dc->dc_rcons, 0, 0, 0, &defattr);
+	rcons_allocattr(&sc->sc_dc->dc_rcons, 0, 0, 0, &defattr);
 	*defattrp = defattr;
 	sc->nscreens++;
 	return (0);
 }
 
 void
-macfb_free_screen(v, cookie)
-	void *v;
-	void *cookie;
+macfb_free_screen(void *v, void *cookie)
 {
 	struct macfb_softc *sc = v;
 
@@ -350,39 +321,34 @@ macfb_free_screen(v, cookie)
 }
 
 int
-macfb_show_screen(v, cookie, waitok, cb, cbarg)
-	void *v;
-	void *cookie;
-	int waitok;
-	void (*cb) __P((void *, int, int));
-	void *cbarg;
+macfb_show_screen(void *v, void *cookie, int waitok,
+    void (*cb)(void *, int, int), void *cbarg)
 {
 	return 0;
 }
 
 int
-macfb_cnattach(addr)
-	paddr_t addr;
+macfb_cnattach(paddr_t addr)
 {
 	struct macfb_devconfig *dc = &macfb_console_dc;
 	long defattr;
 
-	dc->dc_vaddr = m68k_trunc_page(videoaddr);
-	dc->dc_paddr = m68k_trunc_page(mac68k_vidphys);
+	dc->dc_vaddr = m68k_trunc_page(mac68k_video.mv_kvaddr);
+	dc->dc_paddr = m68k_trunc_page(mac68k_video.mv_phys);
 
-	dc->dc_wid = videosize & 0xffff;
-	dc->dc_ht = (videosize >> 16) & 0xffff;
-	dc->dc_depth = videobitdepth;
-	dc->dc_rowbytes = videorowbytes;
+	dc->dc_wid = mac68k_video.mv_width;
+	dc->dc_ht = mac68k_video.mv_height;
+	dc->dc_depth = mac68k_video.mv_depth;
+	dc->dc_rowbytes = mac68k_video.mv_stride;
 
-	dc->dc_size = (mac68k_vidlen > 0) ?
-	    mac68k_vidlen : dc->dc_ht * dc->dc_rowbytes;
-	dc->dc_offset = m68k_page_offset(mac68k_vidphys);
+	dc->dc_size = (mac68k_video.mv_len > 0) ?
+	    mac68k_video.mv_len : dc->dc_ht * dc->dc_rowbytes;
+	dc->dc_offset = m68k_page_offset(mac68k_video.mv_phys);
 
 	/* set up the display */
 	macfb_init(&macfb_console_dc);
 
-	rcons_alloc_attr(&dc->dc_rcons, 0, 0, 0, &defattr);
+	rcons_allocattr(&dc->dc_rcons, 0, 0, 0, &defattr);
 
 	wsdisplay_cnattach(&macfb_stdscreen, &dc->dc_rcons,
 			0, 0, defattr);
@@ -396,9 +362,9 @@ macfb_cnattach(addr)
 #include <mac68k/dev/6x10.h>
 
 void
-init_itefont()
+init_itefont(void)
 {
-	static int itefont_initted = 0;
+	static int itefont_initted;
 	int i, j;
 
 	extern struct raster_font gallant19;		/* XXX */

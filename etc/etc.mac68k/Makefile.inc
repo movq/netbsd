@@ -1,28 +1,24 @@
-#	$NetBSD: Makefile.inc,v 1.4 2000/03/30 03:25:48 fredb Exp $
+#	$NetBSD: Makefile.inc,v 1.20 2008/03/18 04:20:37 lukem Exp $
 #
-#	mac68k-specific release building goo
+#	etc.mac68k/Makefile.inc -- mac68k-specific etc Makefile targets
 #
 
-# You will find no configs for GENERICSBC or INSTALLSBC in the
-# sources. That's because they're trivial to generate--each is
-# simply its corresponding config with "ncrscsi" commented out,
-# and "sbc" uncommented.
-#
-BUILD_KERNELS?=	INSTALL	# INSTALLSBC
-EXTRA_KERNELS?=		# GENERICSBC
+# If you change the list of distributed kernels, don't forget
+# to update the release documentation in distrib/notes/common/contents
 
-INSTALLATION_DIRS+=	installation/instkernel
+KERNEL_SETS=		GENERIC GENERICSBC
+
+BUILD_KERNELS=		INSTALL INSTALLSBC
+
+INSTALLATION_DIRS+=	installation/miniroot	\
+			installation/instkernel
 
 snap_md_post:
-.ifndef UPDATE
-	cd ${.CURDIR}/../distrib/mac68k/instkernel/ramdisk && ${MAKE} clean
-.endif
-	cd ${.CURDIR}/../distrib/mac68k/instkernel/ramdisk && ${MAKE}
-.ifndef UPDATE
-	cd ${.CURDIR}/../distrib/mac68k/instkernel/instkernel && ${MAKE} clean
-.endif
-.for k in ${BUILD_KERNELS}
-	cd ${.CURDIR}/../distrib/mac68k/instkernel/instkernel && \
-		${MAKE} INSTALL_KERNEL=${k} && ${MAKE} release INSTALL_KERNEL=${k}
-.endfor
-	sh ../distrib/sets/makesums -t ${RELEASEDIR}/installation/instkernel
+	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/instkernel '*.gz'
+
+# For "make iso-image"
+# mkisofs arguments to create a hybrid (HFS/Rockridge) CD-ROM image.
+MKISOFS_FLAGS+=	-hfs --macbin \
+	-map ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/misc/extensions.map
+
+iso-image: do-iso-image

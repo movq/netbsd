@@ -1,4 +1,4 @@
-/*	$NetBSD: idprom.c,v 1.23 1999/04/08 04:08:01 gwr Exp $	*/
+/*	$NetBSD: idprom.c,v 1.29 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +32,9 @@
 /*
  * Machine ID PROM - system type and serial number
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: idprom.c,v 1.29 2008/04/28 20:23:38 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,17 +57,17 @@
  */
 struct idprom identity_prom;
 
-static int idprom_cksum __P((u_char *));
-static void idprom_get __P((u_char *));
-static int idprom_hostid __P((void));
+static int idprom_cksum(u_char *);
+static void idprom_get(u_char *);
+static int idprom_hostid(void);
 
 /*
  * Copy the IDPROM contents,
  * verify the checksum,
  * set the hostid...
  */
-void
-idprom_init()
+void 
+idprom_init(void)
 {
 
 	idprom_get((u_char *)&identity_prom);
@@ -85,8 +81,7 @@ idprom_init()
 }
 
 static int
-idprom_cksum(p)
-	u_char *p;
+idprom_cksum(u_char *p)
 {
 	int len, x;
 
@@ -97,8 +92,8 @@ idprom_cksum(p)
 	return (x);
 }
 
-static int
-idprom_hostid()
+static int 
+idprom_hostid(void)
 {
 	struct idprom *idp;
 	union {
@@ -119,11 +114,10 @@ idprom_hostid()
 }
 
 void
-idprom_etheraddr(eaddrp)
-	u_char *eaddrp;
+idprom_etheraddr(u_char *eaddrp)
 {
 
-	bcopy(identity_prom.idp_etheraddr, eaddrp, 6);
+	memcpy(eaddrp, identity_prom.idp_etheraddr, 6);
 }
 
 /*
@@ -138,10 +132,9 @@ idprom_etheraddr(eaddrp)
  * because we need the cputype.
  */
 static void
-idprom_get(dst)
-	u_char *dst;
+idprom_get(u_char *dst)
 {
-	vm_offset_t src;	/* control space address */
+	vaddr_t src;	/* control space address */
 	int len, x;
 
 	src = IDPROM_BASE;

@@ -1,4 +1,4 @@
-/*	$NetBSD: misc-proto.h,v 1.8 2000/02/01 02:25:30 assar Exp $	*/
+/*	$NetBSD: misc-proto.h,v 1.10 2005/02/06 05:53:07 perry Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -60,17 +56,17 @@
 
 #include <sys/cdefs.h>
 
-void auth_encrypt_init __P((const char *, const char *, const char *, int));
-void auth_encrypt_user __P((const char *));
-void auth_encrypt_connect __P((int));
-void printd __P((const unsigned char *, int));
+void auth_encrypt_init(const char *, const char *, const char *, int);
+void auth_encrypt_user(const char *);
+void auth_encrypt_connect(int);
+void printd(const unsigned char *, int);
 
 /*
  * These functions are imported from the application
  */
-int telnet_net_write __P((unsigned char *, int));
-void net_encrypt __P((void));
-int telnet_spin __P((void));
-char *telnet_getenv __P((char *));
-char *telnet_gets __P((char *, char *, int, int));
+int telnet_net_write(unsigned char *, int);
+void net_encrypt(void);
+int telnet_spin(void);
+char *telnet_getenv(char *);
+char *telnet_gets(char *, char *, int, int);
 #endif

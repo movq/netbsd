@@ -1,4 +1,4 @@
-/*	$NetBSD: context.c,v 1.5 1998/10/14 00:58:47 wsanchez Exp $	*/
+/*	$NetBSD: context.c,v 1.7 2003/08/07 11:17:24 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)context.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: context.c,v 1.5 1998/10/14 00:58:47 wsanchez Exp $");
+__RCSID("$NetBSD: context.c,v 1.7 2003/08/07 11:17:24 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,11 +53,11 @@ __RCSID("$NetBSD: context.c,v 1.5 1998/10/14 00:58:47 wsanchez Exp $");
 /*
  * Context push/pop for nested command files.
  */
-int	cx_alloc __P((void));
-void	cx_free __P((void));
+int	cx_alloc(void);
+void	cx_free(void);
 
 int
-cx_alloc()
+cx_alloc(void)
 {
 	struct context *xp;
 
@@ -81,7 +77,7 @@ cx_alloc()
 }
 
 void
-cx_free()
+cx_free(void)
 {
 	struct context *xp;
 
@@ -93,8 +89,7 @@ cx_free()
 }
 
 int
-cx_beginfile(filename)
-	char *filename;
+cx_beginfile(char *filename)
 {
 	if (cx_alloc() < 0)
 		return -1;
@@ -118,10 +113,7 @@ bad:
 }
 
 int
-cx_beginbuf(buf, arg, narg)
-	char *buf;
-	struct value *arg;
-	int narg;
+cx_beginbuf(char *buf, struct value *arg, int narg)
 {
 	if (cx_alloc() < 0)
 		return -1;
@@ -133,7 +125,7 @@ cx_beginbuf(buf, arg, narg)
 }
 
 void
-cx_end()
+cx_end(void)
 {
 	switch (cx.x_type) {
 	case X_BUF:

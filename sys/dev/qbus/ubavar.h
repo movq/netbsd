@@ -1,4 +1,4 @@
-/*	$NetBSD: ubavar.h,v 1.26 2000/01/24 02:40:30 matt Exp $	*/
+/*	$NetBSD: ubavar.h,v 1.39 2008/03/11 05:34:02 matt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986 Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -59,7 +55,7 @@
  * During normal operation, resources are allocated and returned
  * to the structures here.  We watch the number of passive releases
  * on each uba, and if the number is excessive may reset the uba.
- * 
+ *
  * When uba resources are needed and not available, or if a device
  * which can tolerate no other uba activity (rk07) gets on the bus,
  * then device drivers may have to wait to get to the bus and are
@@ -68,21 +64,22 @@
  * wait states are also recorded here.
  */
 struct	uba_softc {
-	struct	device uh_dev;		/* Device struct, autoconfig */
+	device_t uh_dev;		/* Device struct, autoconfig */
+	struct evcnt uh_intrcnt;		/* interrupt counting */
 	SIMPLEQ_HEAD(, uba_unit) uh_resq;	/* resource wait chain */
-	void	(**uh_reset) __P((int));/* UBA reset function array */
-	int	*uh_resarg;		/* array of ubareset args */
-	int	uh_resno;		/* Number of devices to reset */
+	SIMPLEQ_HEAD(, uba_reset) uh_resetq;	/* ubareset queue */
 	int	uh_lastiv;		/* last free interrupt vector */
-	int	(*uh_errchk) __P((struct uba_softc *));
-	void	(*uh_beforescan) __P((struct uba_softc *));
-	void	(*uh_afterscan) __P((struct uba_softc *));
-	void	(*uh_ubainit) __P((struct uba_softc *));
-	void	(*uh_ubapurge) __P((struct uba_softc *, int));
+	int	(*uh_errchk)(struct uba_softc *);
+	void	(*uh_beforescan)(struct uba_softc *);
+	void	(*uh_afterscan)(struct uba_softc *);
+	void	(*uh_ubainit)(struct uba_softc *);
+	void	(*uh_ubapurge)(struct uba_softc *, int);
 	short	uh_nr;			/* Unibus sequential number */
+	short	uh_type;		/* Type of bus */
 	bus_space_tag_t	uh_iot;		/* Tag for this Unibus */
 	bus_space_handle_t uh_ioh;	/* Handle for I/O space */
 	bus_dma_tag_t	uh_dmat;
+	char	*uh_used;		/* I/O addresses used */
 };
 
 /*
@@ -93,12 +90,22 @@ struct	uba_softc {
  */
 struct	uba_unit {
 	SIMPLEQ_ENTRY(uba_unit) uu_resq;/* Queue while waiting for resources */
-	void	*uu_softc;	/* Pointer to units softc */
+	device_t uu_dev;	/* unit's device_t */
 	int	uu_bdp;		/* for controllers that hang on to bdp's */
-	int    (*uu_ready) __P((struct uba_unit *));
+	int    (*uu_ready)(struct uba_unit *);
 	void	*uu_ref;	/* Buffer this is related to */
-	short   uu_xclu;        /* want exclusive use of bdp's */
-	short   uu_keepbdp;     /* hang on to bdp's once allocated */
+	short   uu_xclu;	/* want exclusive use of bdp's */
+	short   uu_keepbdp;	/* hang on to bdp's once allocated */
+};
+
+/*
+ * Reset structure. All devices that needs to be reinitialized
+ * after an ubareset registers with this struct.
+ */
+struct	uba_reset {
+	SIMPLEQ_ENTRY(uba_reset) ur_resetq;
+	void (*ur_reset)(device_t);
+	device_t ur_dev;
 };
 
 /*
@@ -108,10 +115,9 @@ struct	uba_unit {
 struct uba_attach_args {
 	bus_space_tag_t	ua_iot;		/* Tag for this bus I/O-space */
 	bus_addr_t	ua_ioh;		/* I/O regs addr */
-	bus_dma_tag_t	ua_dmat;
+	bus_dma_tag_t	ua_dmat;	/* DMA tag for this bus'es dma */
+	struct evcnt	*ua_evcnt;
 	void		*ua_icookie;	/* Cookie for interrupt establish */
-		    /* UBA reset routine, filled in by probe */
-	void		(*ua_reset) __P((int));
 	int		ua_iaddr;	/* Full CSR address of device */
 	int		ua_br;		/* IPL this dev interrupted on */
 	int		ua_cvec;	/* Vector for this device */
@@ -127,21 +133,40 @@ struct uba_attach_args {
 #define	UBA_DONTQUE	0x10		/* Do not enqueue xfer */
 
 /*
+ * Type of adapter.
+ */
+#define	UBA_UBA		0		/* Traditional unibus adapter */
+#define	UBA_MVI		1		/* MVI direct-mapped unibus */
+#define	UBA_QBUS	2		/* Qbus with map registers */
+/*
+ * Struct for unibus allocation.
+ */
+struct ubinfo {
+	bus_dmamap_t ui_dmam;
+	bus_dma_segment_t ui_seg;
+	int ui_rseg;
+	void *ui_vaddr;
+	bus_addr_t ui_baddr;
+	bus_size_t ui_size;
+};
+
+/*
  * Some common defines for all subtypes of U/Q-buses/adapters.
  */
 #define	MAXUBAXFER	(63*1024)	/* Max transfer size in bytes */
-#define	UBAIOSIZE	(8*1024)	/* 8K I/O space */
 #define ubdevreg(addr) ((addr) & 017777)
 
 #ifdef _KERNEL
-#define b_forw  b_hash.le_next	/* Nice to have when handling uba queues */
-
-void	uba_intr_establish __P((void *, int, void (*)(void *), void *));
-void	uba_attach __P((struct uba_softc *, unsigned long));
-void	uba_enqueue __P((struct uba_unit *));
-void	uba_done __P((struct uba_softc *));
-void	ubareset __P((int));
-
+void uba_intr_establish(void *, int, void (*)(void *), void *, struct evcnt *);
+void uba_reset_establish(void (*)(device_t), device_t);
+void uba_attach(struct uba_softc *, unsigned long);
+void uba_enqueue(struct uba_unit *);
+void uba_done(struct uba_softc *);
+void ubareset(struct uba_softc *);
+int uballoc(struct uba_softc *, struct ubinfo *, int);
+int ubmemalloc(struct uba_softc *, struct ubinfo *, int);
+void ubfree(struct uba_softc *, struct ubinfo *);
+void ubmemfree(struct uba_softc *, struct ubinfo *);
 #endif /* _KERNEL */
 
 #endif /* _QBUS_UBAVAR_H */

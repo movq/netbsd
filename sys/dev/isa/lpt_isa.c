@@ -1,4 +1,4 @@
-/*	$NetBSD: lpt_isa.c,v 1.50 2000/03/29 03:43:31 simonb Exp $	*/
+/*	$NetBSD: lpt_isa.c,v 1.67 2008/05/31 14:07:03 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994 Charles M. Hannum.
@@ -15,25 +15,25 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *	This software is a component of "386BSD" developed by 
+ *	This software is a component of "386BSD" developed by
  *	William F. Jolitz, TeleMuse.
  * 4. Neither the name of the developer nor the name "386BSD"
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
- * THIS SOFTWARE IS A COMPONENT OF 386BSD DEVELOPED BY WILLIAM F. JOLITZ 
- * AND IS INTENDED FOR RESEARCH AND EDUCATIONAL PURPOSES ONLY. THIS 
- * SOFTWARE SHOULD NOT BE CONSIDERED TO BE A COMMERCIAL PRODUCT. 
- * THE DEVELOPER URGES THAT USERS WHO REQUIRE A COMMERCIAL PRODUCT 
+ * THIS SOFTWARE IS A COMPONENT OF 386BSD DEVELOPED BY WILLIAM F. JOLITZ
+ * AND IS INTENDED FOR RESEARCH AND EDUCATIONAL PURPOSES ONLY. THIS
+ * SOFTWARE SHOULD NOT BE CONSIDERED TO BE A COMMERCIAL PRODUCT.
+ * THE DEVELOPER URGES THAT USERS WHO REQUIRE A COMMERCIAL PRODUCT
  * NOT MAKE USE OF THIS WORK.
  *
  * FOR USERS WHO WISH TO UNDERSTAND THE 386BSD SYSTEM DEVELOPED
- * BY WILLIAM F. JOLITZ, WE RECOMMEND THE USER STUDY WRITTEN 
- * REFERENCES SUCH AS THE  "PORTING UNIX TO THE 386" SERIES 
- * (BEGINNING JANUARY 1991 "DR. DOBBS JOURNAL", USA AND BEGINNING 
- * JUNE 1991 "UNIX MAGAZIN", GERMANY) BY WILLIAM F. JOLITZ AND 
- * LYNNE GREER JOLITZ, AS WELL AS OTHER BOOKS ON UNIX AND THE 
- * ON-LINE 386BSD USER MANUAL BEFORE USE. A BOOK DISCUSSING THE INTERNALS 
+ * BY WILLIAM F. JOLITZ, WE RECOMMEND THE USER STUDY WRITTEN
+ * REFERENCES SUCH AS THE  "PORTING UNIX TO THE 386" SERIES
+ * (BEGINNING JANUARY 1991 "DR. DOBBS JOURNAL", USA AND BEGINNING
+ * JUNE 1991 "UNIX MAGAZIN", GERMANY) BY WILLIAM F. JOLITZ AND
+ * LYNNE GREER JOLITZ, AS WELL AS OTHER BOOKS ON UNIX AND THE
+ * ON-LINE 386BSD USER MANUAL BEFORE USE. A BOOK DISCUSSING THE INTERNALS
  * OF 386BSD ENTITLED "386BSD FROM THE INSIDE OUT" WILL BE AVAILABLE LATE 1992.
  *
  * THIS SOFTWARE IS PROVIDED BY THE DEVELOPER ``AS IS'' AND
@@ -53,6 +53,9 @@
  * Device Driver for AT parallel printer port
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: lpt_isa.c,v 1.67 2008/05/31 14:07:03 jmcneill Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -64,8 +67,8 @@
 #include <sys/device.h>
 #include <sys/syslog.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/isa/isavar.h>
 #include <dev/ic/lptreg.h>
@@ -84,29 +87,26 @@ int lpt_isa_debug = 0;
 struct lpt_isa_softc {
 	struct lpt_softc sc_lpt;
 	int sc_irq;
+	isa_chipset_tag_t sc_ic;
 
 };
 
-int lpt_isa_probe __P((struct device *, struct cfdata *, void *));
-void lpt_isa_attach __P((struct device *, struct device *, void *));
+int lpt_isa_probe(device_t, cfdata_t, void *);
+static void lpt_isa_attach(device_t, device_t, void *);
+static int lpt_isa_detach(device_t, int);
 
-struct cfattach lpt_isa_ca = {
-	sizeof(struct lpt_isa_softc), lpt_isa_probe, lpt_isa_attach
-};
+CFATTACH_DECL_NEW(lpt_isa, sizeof(struct lpt_isa_softc),
+    lpt_isa_probe, lpt_isa_attach, lpt_isa_detach, NULL);
 
-int	lpt_port_test __P((bus_space_tag_t, bus_space_handle_t, bus_addr_t,
-	    bus_size_t, u_char, u_char));
+int lpt_port_test(bus_space_tag_t, bus_space_handle_t, bus_addr_t,
+	    bus_size_t, u_char, u_char);
 
 /*
  * Internal routine to lptprobe to do port tests of one byte value.
  */
 int
-lpt_port_test(iot, ioh, base, off, data, mask)
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
-	bus_addr_t base;
-	bus_size_t off;
-	u_char data, mask;
+lpt_port_test(bus_space_tag_t iot, bus_space_handle_t ioh,
+    bus_addr_t base, bus_size_t off, u_char data, u_char mask)
 {
 	int timeout;
 	u_char temp;
@@ -145,10 +145,7 @@ lpt_port_test(iot, ioh, base, off, data, mask)
  *	3) Set the data and control ports to a value of 0
  */
 int
-lpt_isa_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+lpt_isa_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot;
@@ -157,19 +154,25 @@ lpt_isa_probe(parent, match, aux)
 	u_char mask, data;
 	int i, rv;
 
-#ifdef DEBUG
+#ifdef LPT_DEBUG
 #define	ABORT	do {printf("lptprobe: mask %x data %x failed\n", mask, data); \
 		    goto out;} while (0)
 #else
 #define	ABORT	goto out
 #endif
 
+	if (ia->ia_nio < 1)
+		return (0);
+
+	if (ISA_DIRECT_CONFIG(ia))
+		return (0);
+
 	/* Disallow wildcarded i/o address. */
-	if (ia->ia_iobase == ISACF_PORT_DEFAULT)
+	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
 		return (0);
 
 	iot = ia->ia_iot;
-	base = ia->ia_iobase;
+	base = ia->ia_io[0].ir_addr;
 	if (bus_space_map(iot, base, LPT_NPORTS, 0, &ioh))
 		return 0;
 
@@ -199,8 +202,10 @@ lpt_isa_probe(parent, match, aux)
 	bus_space_write_1(iot, ioh, lpt_data, 0);
 	bus_space_write_1(iot, ioh, lpt_control, 0);
 
-	ia->ia_iosize = LPT_NPORTS;
-	ia->ia_msize = 0;
+	ia->ia_io[0].ir_size = LPT_NPORTS;
+
+	ia->ia_niomem = 0;
+	ia->ia_ndrq = 0;
 
 	rv = 1;
 
@@ -210,34 +215,56 @@ out:
 }
 
 void
-lpt_isa_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+lpt_isa_attach(device_t parent, device_t self, void *aux)
 {
-	struct lpt_isa_softc *sc = (void *)self;
+	struct lpt_isa_softc *sc = device_private(self);
 	struct lpt_softc *lsc = &sc->sc_lpt;
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 
-	if (ia->ia_irq != IRQUNK)
-		printf("\n");
-	else
-		printf(": polled\n");
+	lsc->sc_dev = self;
 
-	sc->sc_irq = ia->ia_irq;
+	if (ia->ia_nirq < 1 ||
+	    ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ) {
+		sc->sc_irq = -1;
+		aprint_normal(": polled\n");
+	} else {
+		sc->sc_irq = ia->ia_irq[0].ir_irq;
+		aprint_normal("\n");
+	}
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	iot = lsc->sc_iot = ia->ia_iot;
-	if (bus_space_map(iot, ia->ia_iobase, LPT_NPORTS, 0, &ioh)) {
-		printf("%s: can't map i/o space\n", self->dv_xname);
+	if (bus_space_map(iot, ia->ia_io[0].ir_addr, LPT_NPORTS, 0, &ioh)) {
+		aprint_normal_dev(self, "can't map i/o space\n");
 		return;
 	}
 	lsc->sc_ioh = ioh;
 
 	lpt_attach_subr(lsc);
 
-	if (ia->ia_irq != IRQUNK)
-		lsc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq, IST_EDGE,
-		    IPL_TTY, lptintr, lsc);
+	sc->sc_ic = ia->ia_ic;
+	if (sc->sc_irq != -1)
+		lsc->sc_ih = isa_intr_establish(sc->sc_ic, sc->sc_irq,
+		    IST_EDGE, IPL_TTY, lptintr, lsc);
 }
 
+static int
+lpt_isa_detach(device_t self, int flags)
+{
+	int rc;
+	struct lpt_isa_softc *sc = device_private(self);
+	struct lpt_softc *lsc = &sc->sc_lpt;
+
+	if ((rc = lpt_detach_subr(self, flags)) != 0)
+		return rc;
+
+	if (sc->sc_irq != -1)
+		isa_intr_disestablish(sc->sc_ic, lsc->sc_ih);
+
+	bus_space_unmap(lsc->sc_iot, lsc->sc_ioh, LPT_NPORTS);
+	return 0;
+}

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_oldmmap.h,v 1.2 1998/10/07 23:06:17 erh Exp $	*/
+/*	$NetBSD: linux_oldmmap.h,v 1.5 2008/04/28 20:23:43 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,12 +44,12 @@
  * Passed to the mmap() system call
  */
 struct linux_oldmmap {
-	caddr_t lm_addr;
-	int lm_len;
-	int lm_prot;
-	int lm_flags;
+	unsigned int lm_addr;
+	unsigned int lm_len;
+	unsigned int lm_prot;
+	unsigned int lm_flags;
 	int lm_fd;
-	int lm_pos;
+	unsigned int lm_offset;
 };
 
 #endif /* !_MULTIARCH_LINUX_OLDMMAP_H */

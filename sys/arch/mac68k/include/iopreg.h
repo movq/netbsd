@@ -1,8 +1,30 @@
-/*	$NetBSD: iopreg.h,v 1.3 2000/02/21 02:04:49 scottr Exp $	*/
+/*	$NetBSD: iopreg.h,v 1.7 2005/12/11 12:18:03 christos Exp $	*/
 
 /*
- * Freely contributed to The NetBSD Foundation.
- * XXX - Do paperwork and put a proper copyright here.
+ * Copyright (c) 2000 Allen Briggs.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #define IOP1_BASE	0x00004000
@@ -124,21 +146,48 @@ typedef struct _s_IOP {
 #define	IOP_LOADADDR(ioph,addr)	(ioph->ram_lo = addr & 0xff, \
 				 ioph->ram_hi = (addr >> 8) & 0xff)
 
-void	iop_init __P((int fullinit));
-void	iop_upload __P((int iop, u_char *mem, u_long nb, u_long iopbase));
-void	iop_download __P((int iop, u_char *mem, u_long nb, u_long iopbase));
-int	iop_send_msg __P((int iopn, int chan, u_char *msg, int msglen,
-			 iop_msg_handler handler, void *udata));
-int	iop_queue_receipt __P((int iopn, int chan, iop_msg_handler handler,
-				void *user_data));
-int	iop_register_listener __P((int iopn, int chan, iop_msg_handler handler,
-				void *user_data));
+void	iop_init(int);
+void	iop_upload(int, u_char *, u_long, u_long);
+void	iop_download(int, u_char *, u_long, u_long);
+int	iop_send_msg(int, int, u_char *, int, iop_msg_handler, void *);
+int	iop_queue_receipt(int, int, iop_msg_handler, void *);
+int	iop_register_listener(int, int, iop_msg_handler, void *);
+
+/* SWIM support */
+#define IOP_CHAN_SWIM	1
+
+#define IOP_SWIM_INITIALIZE		0x01
+#define IOP_SWIM_SHUTDOWN		0x02
+#define IOP_SWIM_START_POLLING		0x03
+#define IOP_SWIM_STOP_POLLING		0x04
+#define IOP_SWIM_SET_HFS_TAG_ADDR	0x05
+#define IOP_SWIM_DRIVE_STATUS		0x06
+#define IOP_SWIM_EJECT			0x07
+#define IOP_SWIM_FORMAT			0x08
+#define IOP_SWIM_FORMAT_VERIFY		0x09
+#define IOP_SWIM_WRITE			0x0a
+#define IOP_SWIM_READ			0x0b
+#define IOP_SWIM_READ_VERIFY		0x0c
+#define IOP_SWIM_CACHE_CONTROL		0x0d
+#define IOP_SWIM_TAG_BUFFER_CONTROL	0x0e
+#define IOP_SWIM_GET_ICON		0x0f
+#define IOP_SWIM_DISK_DUP_INFO		0x10
+#define IOP_SWIM_GET_RAW_DATA		0x11
+
+/*
+ * The structure of a SWIM packet to/from the IOP is:
+ *	Request kind
+ *	Drive Number (if needed)
+ *	Error Code
+ *	Data (optional)
+ */
 
 /* ADB support */
 #define IOP_CHAN_ADB	2
 
 #define IOP_ADB_FL_EXPLICIT	0x80	/* Non-zero if explicit command */
 #define IOP_ADB_FL_AUTOPOLL	0x40	/* Auto/SRQ polling enabled     */
+#define IOP_ADB_FL_POLL_UPDATE	0x20	/* Update polling bit mask	*/
 #define IOP_ADB_FL_SRQ		0x04	/* SRQ detected                 */
 #define IOP_ADB_FL_TIMEOUT	0x02	/* Non-zero if timeout          */
 

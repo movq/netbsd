@@ -1,9 +1,10 @@
-/*	$NetBSD: ipcomp_core.c,v 1.9 2000/01/31 14:19:04 itojun Exp $	*/
+/*	$NetBSD: ipcomp_core.c,v 1.28 2008/05/05 13:41:30 ad Exp $	*/
+/*	$KAME: ipcomp_core.c,v 1.25 2001/07/26 06:53:17 jinmei Exp $	*/
 
 /*
  * Copyright (C) 1999 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -15,7 +16,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -32,6 +33,9 @@
 /*
  * RFC2393 IP payload compression protocol (IPComp).
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ipcomp_core.c,v 1.28 2008/05/05 13:41:30 ad Exp $");
 
 #include "opt_inet.h"
 
@@ -52,7 +56,7 @@
 #include <net/route.h>
 #include <net/netisr.h>
 #include <net/zlib.h>
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 
 #include <netinet6/ipcomp.h>
 #include <netinet6/ipsec.h>
@@ -61,11 +65,11 @@
 
 #include <net/net_osdep.h>
 
-static void *deflate_alloc __P((void *, u_int, u_int));
-static void deflate_free __P((void *, void *));
-static int deflate_common __P((struct mbuf *, struct mbuf *, size_t *, int));
-static int deflate_compress __P((struct mbuf *, struct mbuf *, size_t *));
-static int deflate_decompress __P((struct mbuf *, struct mbuf *, size_t *));
+static void *deflate_alloc(void *, u_int, u_int);
+static void deflate_free(void *, void *);
+static int deflate_common(struct mbuf *, struct mbuf *, size_t *, int);
+static int deflate_compress(struct mbuf *, struct mbuf *, size_t *);
+static int deflate_decompress(struct mbuf *, struct mbuf *, size_t *);
 
 /*
  * We need to use default window size (2^15 = 32Kbytes as of writing) for
@@ -76,49 +80,85 @@ static int deflate_decompress __P((struct mbuf *, struct mbuf *, size_t *));
 static int deflate_policy = Z_DEFAULT_COMPRESSION;
 static int deflate_window_out = -12;
 static const int deflate_window_in = -1 * MAX_WBITS;	/* don't change it */
-static int deflate_memlevel = MAX_MEM_LEVEL; 
+static int deflate_memlevel = MAX_MEM_LEVEL;
 
-struct ipcomp_algorithm ipcomp_algorithms[] = {
-	{ NULL, NULL, -1 },
-	{ NULL, NULL, -1 },
+static const struct ipcomp_algorithm ipcomp_algorithms[] = {
 	{ deflate_compress, deflate_decompress, 90 },
-	{ NULL, NULL, 90 },
 };
 
+const struct ipcomp_algorithm *
+ipcomp_algorithm_lookup(int idx)
+{
+
+	if (idx == SADB_X_CALG_DEFLATE)
+		return &ipcomp_algorithms[0];
+	return NULL;
+}
+
 static void *
-deflate_alloc(aux, items, siz)
-	void *aux;
-	u_int items;
-	u_int siz;
+deflate_alloc(void *aux, u_int items, u_int siz)
 {
 	void *ptr;
-	MALLOC(ptr, void *, items * siz, M_TEMP, M_NOWAIT);
+	ptr = malloc(items * siz, M_TEMP, M_NOWAIT);
 	return ptr;
 }
 
 static void
-deflate_free(aux, ptr)
-	void *aux;
-	void *ptr;
+deflate_free(void *aux, void *ptr)
 {
-	FREE(ptr, M_TEMP);
+	free(ptr, M_TEMP);
 }
 
+/*
+ * mode - 0: compress 1: decompress
+ */
+
 static int
-deflate_common(m, md, lenp, mode)
-	struct mbuf *m;
-	struct mbuf *md;
-	size_t *lenp;
-	int mode;	/* 0: compress 1: decompress */
+deflate_common(struct mbuf *m, struct mbuf *md, size_t *lenp, int mode)
 {
 	struct mbuf *mprev;
 	struct mbuf *p;
-	struct mbuf *n, *n0 = NULL, **np;
+	struct mbuf *n = NULL, *n0 = NULL, **np;
 	z_stream zs;
 	int error = 0;
 	int zerror;
 	size_t offset;
-	int firsttime, final, flush;
+
+#define MOREBLOCK() \
+do { \
+	/* keep the reply buffer into our chain */		\
+	if (n) {						\
+		n->m_len = zs.total_out - offset;		\
+		offset = zs.total_out;				\
+		*np = n;					\
+		np = &n->m_next;				\
+		n = NULL;					\
+	}							\
+								\
+	/* get a fresh reply buffer */				\
+	MGET(n, M_DONTWAIT, MT_DATA);				\
+	if (n) {						\
+		MCLGET(n, M_DONTWAIT);				\
+	}							\
+	if (!n) {						\
+		error = ENOBUFS;				\
+		goto fail;					\
+	}							\
+	n->m_len = 0;						\
+	n->m_len = M_TRAILINGSPACE(n);				\
+	n->m_next = NULL;					\
+	/*							\
+	 * if this is the first reply buffer, reserve		\
+	 * region for ipcomp header.				\
+	 */							\
+	if (*np == NULL) {					\
+		n->m_len -= sizeof(struct ipcomp);		\
+		n->m_data += sizeof(struct ipcomp);		\
+	}							\
+								\
+	zs.next_out = mtod(n, u_int8_t *);			\
+	zs.avail_out = n->m_len;				\
+} while (/*CONSTCOND*/ 0)
 
 	for (mprev = m; mprev && mprev->m_next != md; mprev = mprev->m_next)
 		;
@@ -141,113 +181,106 @@ deflate_common(m, md, lenp, mode)
 	n0 = n = NULL;
 	np = &n0;
 	offset = 0;
-	firsttime = 1;
-	final = 0;
-	flush = Z_NO_FLUSH;
 	zerror = 0;
 	p = md;
-	while (1) {
-		/*
-		 * first time, we need to setup the buffer before calling
-		 * compression function.
-		 */
-		if (firsttime)
-			firsttime = 0;
-		else {
-			zerror = mode ? inflate(&zs, flush)
-				      : deflate(&zs, flush);
-		}
+	while (p && p->m_len == 0) {
+		p = p->m_next;
+	}
 
+	/* input stream and output stream are available */
+	while (p && zs.avail_in == 0) {
 		/* get input buffer */
 		if (p && zs.avail_in == 0) {
 			zs.next_in = mtod(p, u_int8_t *);
 			zs.avail_in = p->m_len;
 			p = p->m_next;
-			if (!p) {
-				final = 1;
-				flush = Z_PARTIAL_FLUSH;
+			while (p && p->m_len == 0) {
+				p = p->m_next;
 			}
 		}
 
 		/* get output buffer */
 		if (zs.next_out == NULL || zs.avail_out == 0) {
-			/* keep the reply buffer into our chain */
-			if (n) {
-				n->m_len = zs.total_out - offset;
-				offset = zs.total_out;
-				*np = n;
-				np = &n->m_next;
-			}
-
-			/* get a fresh reply buffer */
-			MGET(n, M_DONTWAIT, MT_DATA);
-			if (n) {
-				MCLGET(n, M_DONTWAIT);
-			}
-			if (!n) {
-				error = ENOBUFS;
-				goto fail;
-			}
-			n->m_len = 0;
-			n->m_len = M_TRAILINGSPACE(n);
-			n->m_next = NULL;
-			/*
-			 * if this is the first reply buffer, reserve
-			 * region for ipcomp header.
-			 */
-			if (*np == NULL) {
-				n->m_len -= sizeof(struct ipcomp);
-				n->m_data += sizeof(struct ipcomp);
-			}
-
-			zs.next_out = mtod(n, u_int8_t *);
-			zs.avail_out = n->m_len;
+			MOREBLOCK();
 		}
 
-		if (zerror == Z_OK) {
-			/*
-			 * to terminate deflate/inflate process, we need to
-			 * call {in,de}flate() with different flushing methods.
-			 *
-			 * deflate() needs at least one Z_PARTIAL_FLUSH,
-			 * then use Z_FINISH until we get to the end.
-			 * (if we use Z_FLUSH without Z_PARTIAL_FLUSH, deflate()
-			 * will assume contiguous single output buffer, and that
-			 * is not what we want)
-			 * inflate() does not care about flushing method, but
-			 * needs output buffer until it gets to the end.
-			 *
-			 * the most outer loop will be terminated with
-			 * Z_STREAM_END.
-			 */
-			if (final == 1) {
-				/* reached end of mbuf chain */
-				if (mode == 0)
-					final = 2;
-				else
-					final = 3;
-			} else if (final == 2) {
-				/* terminate deflate case */
-				flush = Z_FINISH;
-			} else if (final == 3) {
-				/* terminate inflate case */
-				;
+		zerror = mode ? inflate(&zs, Z_NO_FLUSH)
+			      : deflate(&zs, Z_NO_FLUSH);
+
+		if (zerror == Z_STREAM_END)
+			; /* once more. */
+		else if (zerror == Z_OK) {
+			/* inflate: Z_OK can indicate the end of decode */
+			if (mode && !p && zs.avail_out != 0)
+				goto terminate;
+		} else {
+			if (zs.msg) {
+				ipseclog((LOG_ERR, "ipcomp_%scompress: "
+				    "%sflate(Z_NO_FLUSH): %s\n",
+				    mode ? "de" : "", mode ? "in" : "de",
+				    zs.msg));
+			} else {
+				ipseclog((LOG_ERR, "ipcomp_%scompress: "
+				    "%sflate(Z_NO_FLUSH): unknown error (%d)\n",
+				    mode ? "de" : "", mode ? "in" : "de",
+				    zerror));
 			}
-		} else if (zerror == Z_STREAM_END)
-			break;
-		else {
-			ipseclog((LOG_ERR, "ipcomp_%scompress: %sflate: %s\n",
-				mode ? "de" : "", mode ? "in" : "de",
-				zs.msg ? zs.msg : "unknown error"));
+			mode ? inflateEnd(&zs) : deflateEnd(&zs);
 			error = EINVAL;
 			goto fail;
 		}
 	}
+
+	if (zerror == Z_STREAM_END)
+		goto terminate;
+
+	/* termination */
+	while (1) {
+		/* get output buffer */
+		if (zs.next_out == NULL || zs.avail_out == 0) {
+			MOREBLOCK();
+		}
+
+		zerror = mode ? inflate(&zs, Z_SYNC_FLUSH)
+			      : deflate(&zs, Z_FINISH);
+
+		if (zerror == Z_STREAM_END)
+			break;
+		else if (zerror == Z_OK) {
+			if (mode && zs.avail_out != 0)
+				goto terminate;
+		} else {
+			if (zs.msg) {
+				ipseclog((LOG_ERR, "ipcomp_%scompress: "
+				    "%sflate(Z_FINISH): %s\n",
+				    mode ? "de" : "", mode ? "in" : "de",
+				    zs.msg));
+			} else {
+				ipseclog((LOG_ERR, "ipcomp_%scompress: "
+				    "%sflate(Z_FINISH): unknown error (%d)\n",
+				    mode ? "de" : "", mode ? "in" : "de",
+				    zerror));
+			}
+			mode ? inflateEnd(&zs) : deflateEnd(&zs);
+			error = EINVAL;
+			goto fail;
+		}
+	}
+
+terminate:
 	zerror = mode ? inflateEnd(&zs) : deflateEnd(&zs);
 	if (zerror != Z_OK) {
-		ipseclog((LOG_ERR, "ipcomp_%scompress: %sflate: %s\n",
-			mode ? "de" : "", mode ? "in" : "de",
-			zs.msg ? zs.msg : "unknown error"));
+		if (zs.msg) {
+			ipseclog((LOG_ERR, "ipcomp_%scompress: "
+			    "%sflateEnd: %s\n",
+			    mode ? "de" : "", mode ? "in" : "de",
+			    zs.msg));
+		} else {
+			ipseclog((LOG_ERR, "ipcomp_%scompress: "
+			    "%sflateEnd: unknown error (%d)\n",
+			    mode ? "de" : "", mode ? "in" : "de",
+			    zerror));
+		}
 		error = EINVAL;
 		goto fail;
 	}
@@ -257,6 +290,7 @@ deflate_common(m, md, lenp, mode)
 		offset = zs.total_out;
 		*np = n;
 		np = &n->m_next;
+		n = NULL;
 	}
 
 	/* switch the mbuf to the new one */
@@ -269,16 +303,16 @@ deflate_common(m, md, lenp, mode)
 fail:
 	if (m)
 		m_freem(m);
+	if (n)
+		m_freem(n);
 	if (n0)
 		m_freem(n0);
 	return error;
+#undef MOREBLOCK
 }
 
 static int
-deflate_compress(m, md, lenp)
-	struct mbuf *m;
-	struct mbuf *md;
-	size_t *lenp;
+deflate_compress(struct mbuf *m, struct mbuf *md, size_t *lenp)
 {
 	if (!m)
 		panic("m == NULL in deflate_compress");
@@ -291,10 +325,7 @@ deflate_compress(m, md, lenp)
 }
 
 static int
-deflate_decompress(m, md, lenp)
-	struct mbuf *m;
-	struct mbuf *md;
-	size_t *lenp;
+deflate_decompress(struct mbuf *m, struct mbuf *md, size_t *lenp)
 {
 	if (!m)
 		panic("m == NULL in deflate_decompress");

@@ -1,4 +1,4 @@
-/*	$NetBSD: ptrace.S,v 1.1 1998/09/11 04:56:34 eeh Exp $	*/
+/*	$NetBSD: ptrace.S,v 1.5 2003/08/07 16:42:30 agc Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,21 +40,18 @@
 #if 0
 	.asciz "@(#)ptrace.s	8.1 (Berkeley) 6/4/93"
 #else
-	RCSID("$NetBSD: ptrace.S,v 1.1 1998/09/11 04:56:34 eeh Exp $")
+	RCSID("$NetBSD: ptrace.S,v 1.5 2003/08/07 16:42:30 agc Exp $")
 #endif
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
 
 ENTRY(ptrace)
-#ifdef PIC
-	PIC_PROLOGUE(%g1,%g2)
-	ld	[%g1 + _C_LABEL(errno)], %g1
-	st	%g0, [%g1]
-#else
-	sethi	%hi(_C_LABEL(errno)), %g1
-	st	%g0, [%g1 + %lo(_C_LABEL(errno))]
-#endif
+	save	%sp, -CC64FSZ, %sp
+	call	_C_LABEL(__errno)
+	 nop
+	st	%g0, [%o0]
+	restore
 	mov	SYS_ptrace, %g1
 	t	ST_SYSCALL
 	bcc	1f

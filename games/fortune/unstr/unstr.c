@@ -1,4 +1,4 @@
-/*	$NetBSD: unstr.c,v 1.7 1999/09/18 19:38:50 jsm Exp $	*/
+/*	$NetBSD: unstr.c,v 1.13 2008/07/20 01:03:21 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)unstr.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: unstr.c,v 1.7 1999/09/18 19:38:50 jsm Exp $");
+__RCSID("$NetBSD: unstr.c,v 1.13 2008/07/20 01:03:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -65,10 +61,11 @@ __RCSID("$NetBSD: unstr.c,v 1.7 1999/09/18 19:38:50 jsm Exp $");
 
 # include	<sys/types.h>
 # include	<sys/param.h>
-# include	<machine/endian.h>
+# include	<sys/endian.h>
 # include	<ctype.h>
 # include	<err.h>
 # include	<stdio.h>
+# include	<stdlib.h>
 # include	<string.h>
 # include	"strfile.h"
 
@@ -82,14 +79,14 @@ char	*Infile,			/* name of input file */
 
 FILE	*Inf, *Dataf;
 
-void	getargs __P((char *[]));
-int	main __P((int, char *[]));
-void	order_unstr __P((STRFILE *));
+void	getargs(char *[]);
+int	main(int, char *[]);
+void	order_unstr(STRFILE *);
 
 /* ARGSUSED */
 int
 main(ac, av)
-	int	ac;
+	int	ac __unused;
 	char	**av;
 {
 	static STRFILE	tbl;		/* description table */

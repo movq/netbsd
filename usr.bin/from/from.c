@@ -1,4 +1,4 @@
-/*	$NetBSD: from.c,v 1.9 1998/12/19 16:37:28 christos Exp $	*/
+/*	$NetBSD: from.c,v 1.17 2008/07/21 14:19:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,19 +31,20 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)from.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: from.c,v 1.9 1998/12/19 16:37:28 christos Exp $");
+__RCSID("$NetBSD: from.c,v 1.17 2008/07/21 14:19:22 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <ctype.h>
+#include <err.h>
 #include <paths.h>
 #include <pwd.h>
 #include <stdio.h>
@@ -55,13 +52,11 @@ __RCSID("$NetBSD: from.c,v 1.9 1998/12/19 16:37:28 christos Exp $");
 #include <string.h>
 #include <unistd.h>
 
-int	main __P((int, char **));
-int	match __P((char *, char *));
+int	main (int, char **);
+int	match (const char *, const char *);
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	struct passwd *pwd;
 	int ch, newline;
@@ -81,10 +76,8 @@ main(argc, argv)
 		case 's':
 			sender = optarg;
 			for (p = sender; *p; ++p)
-				if (isupper((unsigned char)*p))
-					*p = tolower(*p);
+				*p = tolower((unsigned char)*p);
 			break;
-		case '?':
 		default:
 			fprintf(stderr, "usage: from [-f file] [-s sender] [user]\n");
 			exit(1);
@@ -101,28 +94,27 @@ main(argc, argv)
 	if (!file) {
 		if (!(file = *argv)) {
 			if (!(file = getenv("MAIL"))) {
-				if (!(pwd = getpwuid(getuid()))) {
-					(void)fprintf(stderr,
-				"from: no password file entry for you.\n");
-					exit(1);
-				}
-				if ((file = getenv("USER")) != NULL) {
-					(void)sprintf(buf, "%s/%s",
-					    _PATH_MAILDIR, file);
+				if (!(pwd = getpwuid(getuid())))
+					errx(1, "no password file entry for you");
+				if ((file = getenv("LOGNAME")) != NULL ||
+				    (file = getenv("USER")) != NULL) {
+					(void)snprintf(buf, sizeof(buf), 
+					    "%s/%s", _PATH_MAILDIR, file);
 					file = buf;
 				} else
-					(void)sprintf(file = buf, "%s/%s",
+					(void)snprintf(file = buf, sizeof(buf),
+					    "%s/%s",
 					    _PATH_MAILDIR, pwd->pw_name);
 			}
 		} else {
-			(void)sprintf(buf, "%s/%s", _PATH_MAILDIR, file);
+			(void)snprintf(buf, sizeof(buf), "%s/%s",
+				_PATH_MAILDIR, file);
 			file = buf;
 		}
 	}
-	if (!freopen(file, "r", stdin)) {
-		(void)fprintf(stderr, "from: can't read %s.\n", file);
-		exit(1);
-	}
+	if (!freopen(file, "r", stdin))
+		err(1, "can't read %s", file);
+
 	for (newline = 1; fgets(buf, sizeof(buf), stdin);) {
 		if (*buf == '\n') {
 			newline = 1;
@@ -137,24 +129,22 @@ main(argc, argv)
 }
 
 int
-match(line, sender)
-	char *line, *sender;
+match(const char *line, const char *sender)
 {
-	char ch, pch, first, *p, *t;
+	char ch, pch, first;
+	const char *p, *t;
 
 	for (first = *sender++;;) {
 		if (isspace((unsigned char)(ch = *line)))
 			return(0);
 		++line;
-		if (isupper((unsigned char)ch))
-			ch = tolower(ch);
+		ch = tolower((unsigned char)ch);
 		if (ch != first)
 			continue;
 		for (p = sender, t = line;;) {
 			if (!(pch = *p++))
 				return(1);
-			if (isupper((unsigned char)(ch = *t++)))
-				ch = tolower(ch);
+			ch = tolower((unsigned char)*t++);
 			if (ch != pch)
 				break;
 		}

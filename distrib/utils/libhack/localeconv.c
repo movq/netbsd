@@ -1,13 +1,14 @@
-/*	$NetBSD: localeconv.c,v 1.1 1999/05/19 03:53:58 gwr Exp $	*/
+/*	$NetBSD: localeconv.c,v 1.3 2003/07/26 17:07:36 salo Exp $	*/
 
 /*
- * Written by J.T. Conklin <jtc@netbsd.org>.
+ * Written by J.T. Conklin <jtc@NetBSD.org>.
  * Public domain.
  */
 
 #include <sys/cdefs.h>
 #include <sys/localedef.h>
 #include <locale.h>
+#include <limits.h>
 
 /* 
  * The localeconv() function constructs a struct lconv from the current

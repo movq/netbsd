@@ -1,4 +1,4 @@
-/*	$NetBSD: chio.h,v 1.10 1999/09/09 23:24:11 thorpej Exp $	*/
+/*	$NetBSD: chio.h,v 1.12 2008/04/28 20:24:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -123,7 +116,7 @@ struct changer_params {
  */
 struct ochanger_element_status_request {
 	int	cesr_type;	/* element type */
-	u_int8_t *cesr_data;	/* pre-allocated data storage */
+	uint8_t *cesr_data;	/* pre-allocated data storage */
 };
 
 /*
@@ -132,7 +125,7 @@ struct ochanger_element_status_request {
 #define	CHANGER_VOLTAG_SIZE	32	/* same as SCSI voltag size */
 struct changer_voltag {
 	char	cv_tag[CHANGER_VOLTAG_SIZE + 1];	/* ASCII tag */
-	u_int16_t cv_serial;				/* serial number */
+	uint16_t cv_serial;				/* serial number */
 };
 
 /*
@@ -165,16 +158,16 @@ struct changer_element_status {
 	 * These two fields are only valid if CESTATUS_EXCEPT is
 	 * set in ces_flags, and are only valid on SCSI changers.
 	 */
-	u_int8_t ces_asc;	/* Additional Sense Code */
-	u_int8_t ces_ascq;	/* Additional Sense Code Qualifier */
+	uint8_t ces_asc;	/* Additional Sense Code */
+	uint8_t ces_ascq;	/* Additional Sense Code Qualifier */
 
 	/*
 	 * These two fields may be useful if ces_xname is not valid.
 	 * They indicate the target and lun of a drive element.  These
 	 * are only valid on SCSI changers.
 	 */
-	u_int8_t ces_target;	/* SCSI target of drive */
-	u_int8_t ces_lun;	/* SCSI LUN of drive */
+	uint8_t ces_target;	/* SCSI target of drive */
+	uint8_t ces_lun;	/* SCSI LUN of drive */
 };
 
 /*

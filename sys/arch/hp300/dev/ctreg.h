@@ -1,4 +1,4 @@
-/*	$NetBSD: ctreg.h,v 1.6 1996/02/09 18:00:35 scottr Exp $	*/
+/*	$NetBSD: ctreg.h,v 1.10 2005/12/11 12:17:13 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -117,7 +113,7 @@ struct ct_describe {
 		d_access:16,	/* unit: access time param (1/100-sec) */
 		d_maxint:8,	/* unit: maximum interleave */
 		d_fvbyte:8,	/* unit: fixed volume byte */
-		d_rvbyte:8,	/* unit: removeable volume byte */
+		d_rvbyte:8,	/* unit: removable volume byte */
 		d_maxcyl:24,	/* volume: maximum cylinder */
 		d_maxhead:8,	/* volume: maximum head */
 		d_maxsect:16,	/* volume: maximum sector on track */
@@ -133,6 +129,7 @@ struct ct_describe {
 #define	CT7912PID	0x209
 #define	CT7914PID	0x20B
 #define	CT88140		1
+#define	CT35401ID	0x270
 
 /* convert bytes to 1k tape block and back */
 #define CTBTOK(x)	((x) >> 10)

@@ -1,4 +1,4 @@
-/*	$NetBSD: ioasicvar.h,v 1.12 2000/03/15 03:07:44 nisimura Exp $	*/
+/*	$NetBSD: ioasicvar.h,v 1.19 2005/12/11 12:24:00 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
@@ -31,24 +31,18 @@
 #define _DEV_TC_IOASICVAR_H_
 
 struct ioasic_dev {
-	char		*iad_modname;
+	const char	*iad_modname;
 	tc_offset_t	iad_offset;
 	void		*iad_cookie;
 	u_int32_t	iad_intrbits;
 };
 
 struct ioasicdev_attach_args {
-	char	iada_modname[TC_ROM_LLEN];
+	char	iada_modname[TC_ROM_LLEN+1];
 	tc_offset_t iada_offset;
 	tc_addr_t iada_addr;
 	void	*iada_cookie;
 };
-
-/* Device locators. */
-#include "locators.h"
-#define	ioasiccf_offset	cf_loc[IOASICCF_OFFSET]		/* offset */
-
-#define	IOASIC_OFFSET_UNKNOWN	IOASICCF_OFFSET_DEFAULT
 
 struct ioasic_softc {
 	struct	device sc_dv;
@@ -57,7 +51,6 @@ struct ioasic_softc {
 	bus_dma_tag_t sc_dmat;
 
 	tc_addr_t sc_base;		/* XXX offset XXX */
-	bus_dmamap_t sc_lance_dmam;	/* XXX LANCE XXX */
 };
 
 extern struct cfdriver ioasic_cd;
@@ -67,11 +60,11 @@ extern struct cfdriver ioasic_cd;
  */
 extern tc_addr_t ioasic_base;
 
-void    ioasic_intr_establish __P((struct device *, void *,
-	    int, int (*)(void *), void *));
-void    ioasic_intr_disestablish __P((struct device *, void *));
-int	ioasic_submatch __P((struct cfdata *, struct ioasicdev_attach_args *));
-void	ioasic_attach_devs __P((struct ioasic_softc *,
-	    struct ioasic_dev *, int));
+const struct evcnt *ioasic_intr_evcnt(struct device *, void *);
+void    ioasic_intr_establish(struct device *, void *,
+	    int, int (*)(void *), void *);
+void    ioasic_intr_disestablish(struct device *, void *);
+void	ioasic_attach_devs(struct ioasic_softc *,
+	    struct ioasic_dev *, int);
 
 #endif /* _DEV_TC_IOASICVAR_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: displayq.c,v 1.17 1999/12/07 14:54:44 mrg Exp $	*/
+/*	$NetBSD: displayq.c,v 1.32 2006/03/21 22:47:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)displayq.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: displayq.c,v 1.17 1999/12/07 14:54:44 mrg Exp $");
+__RCSID("$NetBSD: displayq.c,v 1.32 2006/03/21 22:47:26 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -76,18 +72,18 @@ extern int	users;		/* # of users in user array */
 extern uid_t	uid, euid;
 
 static int	col;		/* column on screen */
-static char	current[40];	/* current file being printed */
-static char	file[132];	/* print file name */
+static char	current[MAXPATHLEN]; /* current file being printed */
+static char	fname[MAXPATHLEN]; /* print file name */
 static int	first;		/* first file in ``files'' column? */
 static int	garbage;	/* # of garbage cf files */
 static int	lflag;		/* long output option */
 static int	rank;		/* order to be printed (-1=none, 0=active) */
 static long	totsize;	/* total print job size in bytes */
 
-static char	*head0 = "Rank   Owner      Job  Files";
-static char	*head1 = "Total Size\n";
+static const char head0[] = "Rank   Owner      Job  Files";
+static const char head1[] = "Total Size\n";
 
-static	void	alarmer __P((int));
+static	void	alarmer(int);
 
 int wait_time = 300;	/* time out after 5 minutes by default */
 
@@ -95,12 +91,11 @@ int wait_time = 300;	/* time out after 5 minutes by default */
  * Display the current state of the queue. Format = 1 if long format.
  */
 void
-displayq(format)
-	int format;
+displayq(int format)
 {
 	struct queue *q;
 	int i, nitems, fd, ret;
-	char *cp;
+	char *cp, *ecp;
 	struct queue **queue;
 	struct stat statb;
 	FILE *fp;
@@ -108,25 +103,7 @@ displayq(format)
 	lflag = format;
 	totsize = 0;
 	rank = -1;
-	if ((i = cgetent(&bp, printcapdb, printer)) == -2)
-		fatal("can't open printer description file");
-	else if (i == -1)
-		fatal("unknown printer");
-	else if (i == -3)
-		fatal("potential reference loop detected in printcap file");
-	if (cgetstr(bp, "lp", &LP) < 0)
-		LP = _PATH_DEFDEVLP;
-	if (cgetstr(bp, "rp", &RP) < 0)
-		RP = DEFLP;
-	if (cgetstr(bp, "sd", &SD) < 0)
-		SD = _PATH_DEFSPOOL;
-	if (cgetstr(bp,"lo", &LO) < 0)
-		LO = DEFLOCK;
-	if (cgetstr(bp, "st", &ST) < 0)
-		ST = DEFSTAT;
-	cgetstr(bp, "rm", &RM);
-	if ((cp = checkremote()) != NULL)
-		printf("Warning: %s\n", cp);
+	getprintcap(printer);
 
 	/*
 	 * Print out local queue
@@ -142,7 +119,7 @@ displayq(format)
 	ret = stat(LO, &statb);
 	seteuid(uid);
 	if (ret >= 0) {
-		if (statb.st_mode & 0100) {
+		if (statb.st_mode & S_IXUSR) {
 			if (remote)
 				printf("%s: ", host);
 			printf("Warning: %s is down: ", printer);
@@ -157,7 +134,7 @@ displayq(format)
 			} else
 				putchar('\n');
 		}
-		if (statb.st_mode & 010) {
+		if (statb.st_mode & S_IXGRP) {
 			if (remote)
 				printf("%s: ", host);
 			printf("Warning: %s queue is turned off\n", printer);
@@ -173,8 +150,11 @@ displayq(format)
 		else {
 			/* get daemon pid */
 			cp = current;
-			while ((i = getc(fp)) != EOF && i != '\n')
-				*cp++ = i;
+			ecp = cp + sizeof(current) - 1;
+			while ((i = getc(fp)) != EOF && i != '\n') {
+				if (cp < ecp)
+					*cp++ = i;
+			}
 			*cp = '\0';
 			i = atoi(current);
 			if (i <= 0) {
@@ -189,8 +169,11 @@ displayq(format)
 			} else {
 				/* read current file name */
 				cp = current;
-				while ((i = getc(fp)) != EOF && i != '\n')
-					*cp++ = i;
+		    		ecp = cp + sizeof(current) - 1;
+				while ((i = getc(fp)) != EOF && i != '\n') {
+					if (cp < ecp)
+						*cp++ = i;
+				}
 				*cp = '\0';
 				/*
 				 * Print the status file.
@@ -219,10 +202,9 @@ displayq(format)
 		for (i = 0; i < nitems; i++) {
 			q = queue[i];
 			inform(q->q_name);
-			free(q);
 		}
-		free(queue);
 	}
+	freeq(queue, nitems);
 	if (!remote) {
 		if (nitems == 0)
 			puts("no entries");
@@ -237,24 +219,22 @@ displayq(format)
 		putchar('\n');
 	(void)snprintf(line, sizeof(line), "%c%s", format + '\3', RP);
 	cp = line;
-	for (i = 0; i < requests && cp-line+10 < sizeof(line) - 1; i++) {
+	ecp = line + sizeof(line);
+	for (i = 0; i < requests && cp - line + 11 < sizeof(line) - 2; i++) {
 		cp += strlen(cp);
-		(void)snprintf(cp, (size_t)(line - cp), " %d", requ[i]);
+		(void)snprintf(cp, ecp - cp, " %d", requ[i]);
 	}
 	for (i = 0; i < users && cp - line + 1 + strlen(user[i]) <
-	    sizeof(line) - 1; i++) {
+	    sizeof(line) - 2; i++) {
 		cp += strlen(cp);
-		if (cp - line > sizeof(line) - 1)
+		if (cp - line > sizeof(line) - 2)
 			break;
 		*cp++ = ' ';
-		if (strlen(user[i]) < (sizeof(line) - (cp - line) - 1))
-			(void)strcpy(cp, user[i]);
-		else
-			(void)strncpy(cp, user[i],
-				(sizeof(line) - (cp - line) - 1));
+		/* truncation may happen */
+		(void)strlcpy(cp, user[i], ecp - cp);
 	}
-	(void)strncat(line, "\n", sizeof(line) - strlen(line) - 1);
-	fd = getport(RM, 0);
+	(void)strlcat(line, "\n", sizeof(line));
+	fd = getport(RM);
 	if (fd < 0) {
 		if (from != host)
 			printf("%s: ", host);
@@ -283,8 +263,7 @@ displayq(format)
 }
 
 static void
-alarmer(s)
-	int s;
+alarmer(int s)
 {
 	/* nothing */
 }
@@ -293,7 +272,7 @@ alarmer(s)
  * Print a warning message if there is no daemon present.
  */
 void
-nodaemon()
+nodaemon(void)
 {
 	if (remote)
 		printf("\n%s: ", host);
@@ -305,7 +284,7 @@ nodaemon()
  * Print the header for the short listing format
  */
 void
-header()
+header(void)
 {
 	printf(head0);
 	col = strlen(head0)+1;
@@ -314,8 +293,7 @@ header()
 }
 
 void
-inform(cf)
-	char *cf;
+inform(const char *cf)
 {
 	int j;
 	FILE *cfp;
@@ -359,15 +337,14 @@ inform(cf)
 		default: /* some format specifer and file name? */
 			if (line[0] < 'a' || line[0] > 'z')
 				continue;
-			if (j == 0 || strcmp(file, line+1) != 0) {
-				(void)strncpy(file, line+1, sizeof(file) - 1);
-				file[sizeof(file) - 1] = '\0';
+			if (j == 0 || strcmp(fname, line+1) != 0) {
+				(void)strlcpy(fname, line+1, sizeof(fname));
 			}
 			j++;
 			continue;
 		case 'N':
-			show(line+1, file, j);
-			file[0] = '\0';
+			show(line + 1, fname, j);
+			fname[0] = '\0';
 			j = 0;
 		}
 	}
@@ -380,11 +357,11 @@ inform(cf)
 }
 
 int
-inlist(name, file)
-	char *name, *file;
+inlist(const char *name, const char *file)
 {
 	int *r, n;
-	char **u, *cp;
+	char **u;
+	const char *cp;
 
 	if (users == 0 && requests == 0)
 		return(1);
@@ -397,7 +374,7 @@ inlist(name, file)
 	/*
 	 * Check the request list
 	 */
-	for (n = 0, cp = file+3; isdigit(*cp); )
+	for (n = 0, cp = file+3; isdigit((unsigned char)*cp); )
 		n = n * 10 + (*cp++ - '0');
 	for (r = requ; r < &requ[requests]; r++)
 		if (*r == n && !strcmp(cp, from))
@@ -406,9 +383,7 @@ inlist(name, file)
 }
 
 void
-show(nfile, file, copies)
-	char *nfile, *file;
-	int copies;
+show(const char *nfile, const char *file, int copies)
 {
 	if (strcmp(nfile, " ") == 0)
 		nfile = "(standard input)";
@@ -422,8 +397,7 @@ show(nfile, file, copies)
  * Fill the line with blanks to the specified column
  */
 void
-blankfill(n)
-	int n;
+blankfill(int n)
 {
 	while (col++ < n)
 		putchar(' ');
@@ -433,9 +407,7 @@ blankfill(n)
  * Give the abbreviated dump of the file names
  */
 void
-dump(nfile, file, copies)
-	char *nfile, *file;
-	int copies;
+dump(const char *nfile, const char *file, int copies)
 {
 	short n, fill;
 	struct stat lbuf;
@@ -468,9 +440,7 @@ dump(nfile, file, copies)
  * Print the long info about the file
  */
 void
-ldump(nfile, file, copies)
-	char *nfile, *file;
-	int copies;
+ldump(const char *nfile, const char *file, int copies)
 {
 	struct stat lbuf;
 
@@ -480,7 +450,7 @@ ldump(nfile, file, copies)
 	else
 		printf("%-32s", nfile);
 	if (*file && !stat(file, &lbuf))
-		printf(" %qd bytes", (long long)lbuf.st_size);
+		printf(" %lld bytes", (long long)lbuf.st_size);
 	else
 		printf(" ??? bytes");
 	putchar('\n');
@@ -491,11 +461,10 @@ ldump(nfile, file, copies)
  *   update col for screen management
  */
 void
-prank(n)
-	int n;
+prank(int n)
 {
 	char rline[100];
-	static char *r[] = {
+	static const char *r[] = {
 		"th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"
 	};
 

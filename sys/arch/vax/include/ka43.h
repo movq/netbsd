@@ -1,4 +1,4 @@
-/*	$NetBSD: ka43.h,v 1.4 1998/10/06 04:04:31 matt Exp $ */
+/*	$NetBSD: ka43.h,v 1.7 2005/12/11 12:19:34 christos Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -31,6 +31,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#ifndef _VAX_KA43_H_
+#define _VAX_KA43_H_
 
 /*
  * Definitions for I/O addresses of
@@ -242,5 +245,8 @@ struct ka43_clock {
 	u_long  :2;	u_long	csr1	:8;	u_long  :22;
 	u_long  :2;	u_long	csr2	:8;	u_long  :22;
 	u_long  :2;	u_long	csr3	:8;	u_long  :22;
-	u_long  :2;	u_long	cpmbx	:8;	u_long  :22;
+	u_long  :2;	u_long	req	:4;
+	u_long	halt	:4;	u_long  :22;
 };
+
+#endif /* _VAX_KA43_H_ */

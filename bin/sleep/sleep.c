@@ -1,4 +1,4 @@
-/*	$NetBSD: sleep.c,v 1.16 1998/11/04 20:13:03 christos Exp $	*/
+/* $NetBSD: sleep.c,v 1.22 2008/07/20 00:52:40 lukem Exp $ */
 
 /*
  * Copyright (c) 1988, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,49 +31,47 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)sleep.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: sleep.c,v 1.16 1998/11/04 20:13:03 christos Exp $");
+__RCSID("$NetBSD: sleep.c,v 1.22 2008/07/20 00:52:40 lukem Exp $");
 #endif
 #endif /* not lint */
 
-#include <time.h>
 #include <ctype.h>
+#include <err.h>
+#include <locale.h>
 #include <math.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
-#include <locale.h>
 
-void usage __P((void));
-void alarmhandle __P((int));
-int  main __P((int, char *[]));
+static void alarmhandle(int);
+static void usage(void);
+int main(int, char *[]);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	char *arg, *temp;
-	double val, ival, fval;
+	double fval, ival, val;
 	struct timespec ntime;
-	int fracflag;
-	int ch;
+	int ch, fracflag;
 
+	setprogname(argv[0]);
 	(void)setlocale(LC_ALL, "");
 
 	(void)signal(SIGALRM, alarmhandle);
 
 	while ((ch = getopt(argc, argv, "")) != -1)
 		switch(ch) {
-		case '?':
 		default:
 			usage();
 		}
@@ -108,38 +102,38 @@ main(argc, argv)
 	if (fracflag) {
 		val = atof(arg);
 		if (val <= 0)
-			exit(0);
+			usage();
 		ival = floor(val);
 		fval = (1000000000 * (val-ival));
 		ntime.tv_sec = ival;
 		ntime.tv_nsec = fval;
 	}
-	else{
+	else {
 		ntime.tv_sec = atol(arg);
 		if (ntime.tv_sec <= 0)
-			exit(0);
+			return EXIT_SUCCESS;
 		ntime.tv_nsec = 0;
 	}
 
-	(void)nanosleep(&ntime, NULL);
+	if (nanosleep(&ntime, NULL) == -1)
+		err(EXIT_FAILURE, "nanosleep failed");
 
-	exit(0);
+	return EXIT_SUCCESS;
 	/* NOTREACHED */
 }
 
 void
-usage()
+usage(void)
 {
-	(void)fputs("usage: sleep seconds\n", stderr);
-	exit(1);
+	(void)fprintf(stderr, "usage: %s seconds\n", getprogname());
+	exit(EXIT_FAILURE);
 	/* NOTREACHED */
 }
 
 /* ARGSUSED */
 void
-alarmhandle(i)
-	int i;
+alarmhandle(int i)
 {
-	_exit(0);
+	_exit(EXIT_SUCCESS);
 	/* NOTREACHED */
 }

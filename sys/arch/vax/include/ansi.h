@@ -1,4 +1,4 @@
-/*	$NetBSD: ansi.h,v 1.7 1998/04/27 17:39:11 kleink Exp $	*/
+/*	$NetBSD: ansi.h,v 1.23 2008/08/29 18:25:01 matt Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the University of
- *      California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,6 +34,9 @@
 #ifndef _ANSI_H_
 #define _ANSI_H_
 
+#include <sys/cdefs.h>
+#include <machine/int_types.h>
+
 /*
  * Types which are fundamental to the implementation and may appear in
  * more than one standard header are defined here.  Standard headers
@@ -49,20 +48,34 @@
  *
  * Thanks, ANSI!
  */
-#define	_BSD_CLOCK_T_		unsigned long	/* clock() */
-#define	_BSD_PTRDIFF_T_		int		/* ptr1 - ptr2 */
-#define	_BSD_SIZE_T_		unsigned int	/* sizeof() */
-#define	_BSD_SSIZE_T_		int		/* byte count or error */
-#define	_BSD_TIME_T_		long		/* time() */
+#define	_BSD_CLOCK_T_		unsigned int	/* clock() */
+#define	_BSD_PTRDIFF_T_		long int	/* ptr1 - ptr2 */
+#define	_BSD_SIZE_T_		unsigned long int /* sizeof() */
+#define	_BSD_SSIZE_T_		long int	/* byte count or error */
+#define	_BSD_TIME_T_		int		/* time() */
+#if __GNUC_PREREQ__(2,96)
+#define	_BSD_VA_LIST_		__builtin_va_list /* va_list */
+#else
 #define	_BSD_VA_LIST_		char *		/* va_list */
-#define	_BSD_WCHAR_T_		int		/* wchar_t */
+#endif
 #define	_BSD_WINT_T_		int		/* wint_t */
 #define	_BSD_CLOCKID_T_		int		/* clockid_t */
 #define	_BSD_TIMER_T_		int		/* timer_t */
 #define	_BSD_SUSECONDS_T_	int		/* suseconds_t */
 #define	_BSD_USECONDS_T_	unsigned int	/* useconds_t */
-#define	_BSD_INTPTR_T_		int		/* intptr_t */
-#define	_BSD_UINTPTR_T_		unsigned int	/* uintptr_t */
+#define	_BSD_WCHAR_T_		int		/* wchar_t */
+#define	_BSD_WINT_T_		int		/* wint_t */
+#define _BSD_WCTRANS_T_		void *		/* wctrans_t */
+#define _BSD_WCTYPE_T_		void *		/* wctype_t */
 
+/*
+ * mbstate_t is an opaque object to keep conversion state, during multibyte
+ * stream conversions.  The content must not be referenced by user programs.
+ */
+typedef union {
+	__int64_t __mbstateL;	/* for alignment */
+	char __mbstate8[128];
+} __mbstate_t;
+#define	_BSD_MBSTATE_T_		__mbstate_t	/* mbstate_t */
 
 #endif  /* _ANSI_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: in_cksum.c,v 1.6 1996/04/30 11:57:05 briggs Exp $	*/
+/*	$NetBSD: in_cksum.c,v 1.11 2006/07/22 06:34:42 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1988, 1990 Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,12 +37,15 @@
  * in_cksum - checksum routine for the Internet Protocol family.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: in_cksum.c,v 1.11 2006/07/22 06:34:42 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/mbuf.h>
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 
-extern int oc_cksum __P((char *buffer, int length, int startingval));
+extern int oc_cksum(char *buffer, int length, int startingval);
 
 /*
  * Checksum routine for the Internet Protocol family.
@@ -60,9 +59,7 @@ extern int oc_cksum __P((char *buffer, int length, int startingval));
  * their job, we should never do the hairy code inside the "if".
  */
 int
-in_cksum(m, len)
-	register struct mbuf *m;
-	register int len;
+in_cksum(struct mbuf *m, int len)
 {
 	register int sum = 0;
 	register int i;
@@ -99,5 +96,5 @@ in_cksum(m, len)
 			}
 		}
 	}
-	return (0xffff & ~oc_cksum(mtod(m, u_char *), len, sum));
+	return 0xffff & ~oc_cksum(mtod(m, u_char *), len, sum);
 }

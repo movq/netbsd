@@ -1,4 +1,5 @@
-/*	$NetBSD: btl.c,v 1.4 2000/03/23 06:34:25 thorpej Exp $	*/
+/*	$NetBSD: btl.c,v 1.20 2008/07/05 08:46:25 tsutsui Exp $	*/
+/*	NetBSD: bt.c,v 1.10 1996/05/12 23:51:54 mycroft Exp 	*/
 
 #undef BTDIAG
 #define integrate
@@ -49,6 +50,9 @@
  * functioning of this software in any circumstances.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: btl.c,v 1.20 2008/07/05 08:46:25 tsutsui Exp $");
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,7 +76,7 @@
 
 #include <dev/isa/isavar.h>
 #include <arc/dti/btlreg.h>
-#include <arc/arc/arctype.h>    /* XXX for cpu types */
+#include <arc/dti/btlvar.h>
 
 #ifndef DDB
 #define Debugger() panic("should call debugger here (bt742a.c)")
@@ -103,13 +107,11 @@ struct bt_mbx {
 	struct bt_mbx_in *tmbi;		/* Target Mail Box in */
 };
 
-#define KVTOPHYS(x)	((cputype == DESKSTATION_TYNE) ? \
-	(((int)(x) & 0x7fffff) | 0x800000) : ((int)(x)))
-#define PHYSTOKV(x)	((cputype == DESKSTATION_TYNE) ? \
-	(((int)(x) & 0x7fffff) | TYNE_V_BOUNCE) : ((int)(x)))
+#define KVTOPHYS(x)	(*btl_conf->bc_kvtophys)((int)(x))
+#define PHYSTOKV(x)	(*btl_conf->bc_phystokv)((int)(x))
 
 struct bt_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	void *sc_ih;
 
 	int sc_iobase;
@@ -134,31 +136,27 @@ struct bt_softc {
 int     bt_debug = 0;
 #endif /* BTDEBUG */
 
-int bt_cmd __P((int, struct bt_softc *, int, u_char *, int, u_char *));
-integrate void bt_finish_ccbs __P((struct bt_softc *));
-int btintr __P((void *));
-integrate void bt_reset_ccb __P((struct bt_softc *, struct bt_ccb *));
-void bt_free_ccb __P((struct bt_softc *, struct bt_ccb *));
-integrate void bt_init_ccb __P((struct bt_softc *, struct bt_ccb *));
-struct bt_ccb *bt_get_ccb __P((struct bt_softc *, int));
-struct bt_ccb *bt_ccb_phys_kv __P((struct bt_softc *, u_long));
-void bt_queue_ccb __P((struct bt_softc *, struct bt_ccb *));
-void bt_collect_mbo __P((struct bt_softc *));
-void bt_start_ccbs __P((struct bt_softc *));
-void bt_done __P((struct bt_softc *, struct bt_ccb *));
-int bt_find __P((struct isa_attach_args *, struct bt_softc *));
-void bt_init __P((struct bt_softc *));
-void bt_inquire_setup_information __P((struct bt_softc *));
-void btminphys __P((struct buf *));
-int bt_scsi_cmd __P((struct scsipi_xfer *));
-int bt_poll __P((struct bt_softc *, struct scsipi_xfer *, int));
-void bt_timeout __P((void *arg));
-void bt_free_buf __P((struct bt_softc *, struct bt_buf *));
-struct bt_buf * bt_get_buf __P((struct bt_softc *, int));
-
-/* XXX static buffer as a kludge.  DMA isn't cache coherent on the rpc44, so 
- * we always use uncached buffers for DMA. */
-static char rpc44_buffer[ TYNE_S_BOUNCE ];
+int bt_cmd(int, struct bt_softc *, int, u_char *, int, u_char *);
+integrate void bt_finish_ccbs(struct bt_softc *);
+int btintr(void *);
+integrate void bt_reset_ccb(struct bt_softc *, struct bt_ccb *);
+void bt_free_ccb(struct bt_softc *, struct bt_ccb *);
+integrate void bt_init_ccb(struct bt_softc *, struct bt_ccb *);
+struct bt_ccb *bt_get_ccb(struct bt_softc *, int);
+struct bt_ccb *bt_ccb_phys_kv(struct bt_softc *, u_long);
+void bt_queue_ccb(struct bt_softc *, struct bt_ccb *);
+void bt_collect_mbo(struct bt_softc *);
+void bt_start_ccbs(struct bt_softc *);
+void bt_done(struct bt_softc *, struct bt_ccb *);
+int bt_find(struct isa_attach_args *, struct bt_softc *);
+void bt_init(struct bt_softc *);
+void bt_inquire_setup_information(struct bt_softc *);
+void btminphys(struct buf *);
+int bt_scsi_cmd(struct scsipi_xfer *);
+int bt_poll(struct bt_softc *, struct scsipi_xfer *, int);
+void bt_timeout(void *arg);
+void bt_free_buf(struct bt_softc *, struct bt_buf *);
+struct bt_buf * bt_get_buf(struct bt_softc *, int);
 
 /* the below structure is so we have a default dev struct for out link struct */
 struct scsipi_device bt_dev = {
@@ -168,16 +166,16 @@ struct scsipi_device bt_dev = {
 	NULL,			/* Use default 'done' routine */
 };
 
-int	btprobe __P((struct device *, struct cfdata *, void *));
-void	btattach __P((struct device *, struct device *, void *));
-int	btprint __P((void *, const char *));
+static int	btprobe(device_t, cfdata_t, void *);
+static void	btattach(device_t, device_t, void *);
 
-struct cfattach btl_ca = {
-	sizeof(struct bt_softc), btprobe, btattach
-};
+CFATTACH_DECL_NEW(btl, sizeof(struct bt_softc),
+    btprobe, btattach, NULL, NULL);
 
 #define BT_RESET_TIMEOUT	2000	/* time to wait for reset (mSec) */
 #define	BT_ABORT_TIMEOUT	2000	/* time to wait for abort (mSec) */
+
+struct btl_config *btl_conf = NULL;
 
 /*
  * bt_cmd(iobase, sc, icnt, ibuf, ocnt, obuf)
@@ -190,24 +188,21 @@ struct cfattach btl_ca = {
  *    wait:   number of seconds to wait for response
  *
  * Performs an adapter command through the ports.  Not to be confused with a
- * scsi command, which is read in via the dma; one of the adapter commands
+ * scsi command, which is read in via the DMA; one of the adapter commands
  * tells it to read in a scsi command.
  */
 int
-bt_cmd(iobase, sc, icnt, ibuf, ocnt, obuf)
-	int iobase;
-	struct bt_softc *sc;
-	int icnt, ocnt;
-	u_char *ibuf, *obuf;
+bt_cmd(int iobase, struct bt_softc *sc, int icnt, int ocnt, u_char *ibuf,
+    u_char *obuf)
 {
 	const char *name;
-	register int i;
+	int i;
 	int wait;
 	u_char sts;
 	u_char opcode = ibuf[0];
 
 	if (sc != NULL)
-		name = sc->sc_dev.dv_xname;
+		name = device_xname(sc->sc_dev);
 	else
 		name = "(bt probe)";
 
@@ -318,18 +313,18 @@ bt_cmd(iobase, sc, icnt, ibuf, ocnt, obuf)
  * as an argument, takes the isa_device structure from
  * autoconf.c
  */
-int
-btprobe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+btprobe(device_t parent, cfdata_t cf, void *aux)
 {
-	register struct isa_attach_args *ia = aux;
+	struct isa_attach_args *ia = aux;
 
 #ifdef NEWCONFIG
 	if (ia->ia_iobase == IOBASEUNK)
 		return 0;
 #endif
+
+	if (btl_conf == NULL)
+		return (0);
 
 	/* See if there is a unit at this location. */
 	if (bt_find(ia, NULL) != 0)
@@ -344,18 +339,18 @@ btprobe(parent, match, aux)
 /*
  * Attach all the sub-devices we can find
  */
-void
-btattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+btattach(device_t parent, device_t self, void *aux)
 {
 	struct isa_attach_args *ia = aux;
-	struct bt_softc *sc = (void *)self;
+	struct bt_softc *sc = device_private(self);
 	struct bt_ccb *ccb;
 	struct bt_buf *buf;
 	u_int bouncearea;
 	u_int bouncebase;
 	u_int bouncesize;
+
+	sc->sc_dev = self;
 
 	if (bt_find(ia, sc) != 0)
 		panic("btattach: bt_find of %s failed", self->dv_xname);
@@ -364,14 +359,7 @@ btattach(parent, self, aux)
 	/*
 	 * create mbox area
 	 */
-	if (cputype == DESKSTATION_TYNE) {
-		bouncebase = TYNE_V_BOUNCE;
-		bouncesize = TYNE_S_BOUNCE;
-	} else {
-		bouncesize = TYNE_S_BOUNCE; /* Good enough? XXX */
-/*		bouncebase = (u_int) malloc( bouncesize, M_DEVBUF, M_NOWAIT);*/
-		bouncebase = (u_int) rpc44_buffer | 0xa0000000;
-	}
+	(*btl_conf->bc_bouncemem)(&bouncebase, &bouncesize);
 	bouncearea = bouncebase + sizeof(struct bt_mbx);
 	sc->sc_mbx = (struct bt_mbx *)bouncebase;
 
@@ -428,8 +416,7 @@ btattach(parent, self, aux)
 }
 
 integrate void
-bt_finish_ccbs(sc)
-	struct bt_softc *sc;
+bt_finish_ccbs(struct bt_softc *sc)
 {
 	struct bt_mbx_in *wmbi;
 	struct bt_ccb *ccb;
@@ -441,14 +428,14 @@ bt_finish_ccbs(sc)
 		for (i = 0; i < BT_MBX_SIZE; i++) {
 			if (wmbi->stat != BT_MBI_FREE) {
 				printf("%s: mbi not in round-robin order\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 				goto AGAIN;
 			}
 			bt_nextmbx(wmbi, wmbx, mbi);
 		}
 #ifdef BTDIAGnot
 		printf("%s: mbi interrupt with no full mailboxes\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 #endif
 		return;
 	}
@@ -458,7 +445,7 @@ AGAIN:
 		ccb = bt_ccb_phys_kv(sc, phystol(wmbi->ccb_addr));
 		if (!ccb) {
 			printf("%s: bad mbi ccb pointer; skipping\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			goto next;
 		}
 
@@ -493,13 +480,13 @@ AGAIN:
 		case BT_MBI_UNKNOWN:
 			/*
 			 * Even if the CCB wasn't found, we clear it anyway.
-			 * See preceeding comment.
+			 * See preceding comment.
 			 */
 			break;
 
 		default:
 			printf("%s: bad mbi status %02x; skipping\n",
-			    sc->sc_dev.dv_xname, wmbi->stat);
+			    device_xname(sc->sc_dev), wmbi->stat);
 			goto next;
 		}
 
@@ -518,15 +505,14 @@ AGAIN:
  * Catch an interrupt from the adaptor
  */
 int
-btintr(arg)
-	void *arg;
+btintr(void *arg)
 {
 	struct bt_softc *sc = arg;
 	int iobase = sc->sc_iobase;
 	u_char sts;
 
 #ifdef BTDEBUG
-	printf("%s: btintr ", sc->sc_dev.dv_xname);
+	printf("%s: btintr ", device_xname(sc->sc_dev));
 #endif /* BTDEBUG */
 
 	/*
@@ -562,9 +548,7 @@ btintr(arg)
 }
 
 integrate void
-bt_reset_ccb(sc, ccb)
-	struct bt_softc *sc;
-	struct bt_ccb *ccb;
+bt_reset_ccb(struct bt_softc *sc, struct bt_ccb *ccb)
 {
 
 	ccb->flags = 0;
@@ -574,9 +558,7 @@ bt_reset_ccb(sc, ccb)
  * A ccb is put onto the free list.
  */
 void
-bt_free_ccb(sc, ccb)
-	struct bt_softc *sc;
-	struct bt_ccb *ccb;
+bt_free_ccb(struct bt_softc *sc, struct bt_ccb *ccb)
 {
 	int s;
 
@@ -599,9 +581,7 @@ bt_free_ccb(sc, ccb)
  * A buf is put onto the free list.
  */
 void
-bt_free_buf(sc, buf)
-	struct bt_softc *sc;
-	struct bt_buf *buf;
+bt_free_buf(struct bt_softc *sc, struct bt_buf *buf)
 {
 	int s;
 
@@ -621,13 +601,11 @@ bt_free_buf(sc, buf)
 }
 
 integrate void
-bt_init_ccb(sc, ccb)
-	struct bt_softc *sc;
-	struct bt_ccb *ccb;
+bt_init_ccb(struct bt_softc *sc, struct bt_ccb *ccb)
 {
 	int hashnum;
 
-	bzero(ccb, sizeof(struct bt_ccb));
+	memset(ccb, 0, sizeof(struct bt_ccb));
 	/*
 	 * put in the phystokv hash table
 	 * Never gets taken out.
@@ -645,9 +623,7 @@ bt_init_ccb(sc, ccb)
  * If there are none, either return an error or sleep.
  */
 struct bt_ccb *
-bt_get_ccb(sc, nosleep)
-	struct bt_softc *sc;
-	int nosleep;
+bt_get_ccb(struct bt_softc *sc, int nosleep)
 {
 	struct bt_ccb *ccb;
 	int s;
@@ -681,9 +657,7 @@ out:
  * If there are none, either return an error or sleep.
  */
 struct bt_buf *
-bt_get_buf(sc, nosleep)
-	struct bt_softc *sc;
-	int nosleep;
+bt_get_buf(struct bt_softc *sc, int nosleep)
 {
 	struct bt_buf *buf;
 	int s;
@@ -714,9 +688,7 @@ out:
  * Given a physical address, find the ccb that it corresponds to.
  */
 struct bt_ccb *
-bt_ccb_phys_kv(sc, ccb_phys)
-	struct bt_softc *sc;
-	u_long ccb_phys;
+bt_ccb_phys_kv(struct bt_softc *sc, u_long ccb_phys)
 {
 	int hashnum = CCB_HASH(ccb_phys);
 	struct bt_ccb *ccb = sc->sc_ccbhash[hashnum];
@@ -733,9 +705,7 @@ bt_ccb_phys_kv(sc, ccb_phys)
  * Queue a CCB to be sent to the controller, and send it if possible.
  */
 void
-bt_queue_ccb(sc, ccb)
-	struct bt_softc *sc;
-	struct bt_ccb *ccb;
+bt_queue_ccb(struct bt_softc *sc, struct bt_ccb *ccb)
 {
 
 	TAILQ_INSERT_TAIL(&sc->sc_waiting_ccb, ccb, chain);
@@ -746,8 +716,7 @@ bt_queue_ccb(sc, ccb)
  * Garbage collect mailboxes that are no longer in use.
  */
 void
-bt_collect_mbo(sc)
-	struct bt_softc *sc;
+bt_collect_mbo(struct bt_softc *sc)
 {
 	struct bt_mbx_out *wmbo;	/* Mail Box Out pointer */
 
@@ -773,8 +742,7 @@ bt_collect_mbo(sc)
  * Send as many CCBs as we have empty mailboxes for.
  */
 void
-bt_start_ccbs(sc)
-	struct bt_softc *sc;
+bt_start_ccbs(struct bt_softc *sc)
 {
 	int iobase = sc->sc_iobase;
 	struct bt_mbx_out *wmbo;	/* Mail Box Out pointer */
@@ -813,7 +781,7 @@ bt_start_ccbs(sc)
 
 		if ((ccb->xs->xs_control & XS_CTL_POLL) == 0)
 			callout_reset(&ccb->xs->xs_callout,
-			    (ccb->timeout * hz) / 1000, bt_timeout, ccb);
+			    mstohz(ccb->timeout), bt_timeout, ccb);
 
 		++sc->sc_mbofull;
 		bt_nextmbx(wmbo, wmbx, mbo);
@@ -828,11 +796,9 @@ bt_start_ccbs(sc)
  * went. Wake up the owner if waiting
  */
 void
-bt_done(sc, ccb)
-	struct bt_softc *sc;
-	struct bt_ccb *ccb;
+bt_done(struct bt_softc *sc, struct bt_ccb *ccb)
 {
-	struct scsipi_sense_data *s1, *s2;
+	struct scsi_sense_data *s1, *s2;
 	struct scsipi_xfer *xs = ccb->xs;
 
 	u_long thiskv, thisbounce;
@@ -847,13 +813,15 @@ bt_done(sc, ccb)
 	 */
 #ifdef BTDIAG
 	if (ccb->flags & CCB_SENDING) {
-		printf("%s: exiting ccb still in transit!\n", sc->sc_dev.dv_xname);
+		printf("%s: exiting ccb still in transit!\n",
+		    device_xname(sc->sc_dev));
 		Debugger();
 		return;
 	}
 #endif
 	if ((ccb->flags & CCB_ALLOC) == 0) {
-		printf("%s: exiting ccb not allocated!\n", sc->sc_dev.dv_xname);
+		printf("%s: exiting ccb not allocated!\n",
+		    device_xname(sc->sc_dev));
 		Debugger();
 		return;
 	}
@@ -865,7 +833,7 @@ bt_done(sc, ccb)
 				break;
 			default:	/* Other scsi protocol messes */
 				printf("%s: host_stat %x\n",
-				    sc->sc_dev.dv_xname, ccb->host_stat);
+				    device_xname(sc->sc_dev), ccb->host_stat);
 				xs->error = XS_DRIVER_STUFFUP;
 				break;
 			}
@@ -882,7 +850,7 @@ bt_done(sc, ccb)
 				break;
 			default:
 				printf("%s: target_stat %x\n",
-				    sc->sc_dev.dv_xname, ccb->target_stat);
+				    device_xname(sc->sc_dev), ccb->target_stat);
 				xs->error = XS_DRIVER_STUFFUP;
 				break;
 			}
@@ -892,7 +860,7 @@ bt_done(sc, ccb)
 
 	if((datalen = xs->datalen) != 0) {
 		thiskv = (int)xs->data;
-		sg = ccb->scat_gath;       
+		sg = ccb->scat_gath;
 		seg = phystol(ccb->data_length) / sizeof(struct bt_scat_gath);
 
 		while (seg) {
@@ -919,9 +887,7 @@ bt_done(sc, ccb)
  * Find the board and find it's irq/drq
  */
 int
-bt_find(ia, sc)
-	struct isa_attach_args *ia;
-	struct bt_softc *sc;
+bt_find(struct isa_attach_args *ia, struct bt_softc *sc0
 {
 	int iobase = ia->ia_iobase;
 	int i;
@@ -962,7 +928,7 @@ bt_find(ia, sc)
 #ifndef notyet
 	/*
 	 * The BusLogic cards implement an Adaptec 1542 (aha)-compatible
-	 * interface. The native bha interface is not compatible with 
+	 * interface. The native bha interface is not compatible with
 	 * an aha. 1542. We need to ensure that we never match an
 	 * Adaptec 1542. We must also avoid sending Adaptec-compatible
 	 * commands to a real bha, lest it go into 1542 emulation mode.
@@ -983,7 +949,7 @@ bt_find(ia, sc)
 	 * Check that we actually know how to use this board.
 	 */
 	delay(1000);
-	bzero(&inquire, sizeof inquire);
+	memset(&inquire, 0, sizeof inquire);
 	inquire.cmd.opcode = BT_INQUIRE_EXTENDED;
 	inquire.cmd.len = sizeof(inquire.reply);
 	i = bt_cmd(iobase, sc, sizeof(inquire.cmd), (u_char *)&inquire.cmd,
@@ -1020,7 +986,7 @@ bt_find(ia, sc)
 	}
 
 	/*
-	 * Assume we have a board at this stage setup dma channel from
+	 * Assume we have a board at this stage setup DMA channel from
 	 * jumpers and save int level
 	 */
 	delay(1000);
@@ -1097,8 +1063,7 @@ bt_find(ia, sc)
  * Start the board, ready for normal operation
  */
 void
-bt_init(sc)
-	struct bt_softc *sc;
+bt_init(struct bt_softc *sc)
 {
 	int iobase = sc->sc_iobase;
 	struct bt_devices devices;
@@ -1129,7 +1094,7 @@ bt_init(sc)
 	    sizeof(setup.reply), (u_char *)&setup.reply);
 
 	printf("%s: %s, %s\n",
-	    sc->sc_dev.dv_xname,
+	    device_xname(sc->sc_dev),
 	    setup.reply.sync_neg ? "sync" : "async",
 	    setup.reply.parity ? "parity" : "no parity");
 
@@ -1148,7 +1113,7 @@ bt_init(sc)
 		    (!setup.reply.sync[i].offset && !setup.reply.sync[i].period))
 			continue;
 		printf("%s targ %d: sync, offset %d, period %dnsec\n",
-		    sc->sc_dev.dv_xname, i,
+		    device_xname(sc->sc_dev), i,
 		    setup.reply.sync[i].offset, period.reply.period[i] * 10);
 	}
 
@@ -1172,8 +1137,7 @@ bt_init(sc)
 }
 
 void
-bt_inquire_setup_information(sc)
-	struct bt_softc *sc;
+bt_inquire_setup_information(struct bt_softc *sc)
 {
 	int iobase = sc->sc_iobase;
 	struct bt_model model;
@@ -1233,8 +1197,7 @@ bt_inquire_setup_information(sc)
 }
 
 void
-btminphys(bp)
-	struct buf *bp;
+btminphys(struct buf *bp)
 {
 
 	if (bp->b_bcount > ((BT_NSEG - 1) << PGSHIFT))
@@ -1247,8 +1210,7 @@ btminphys(bp)
  * the unit, target and lu.
  */
 int
-bt_scsi_cmd(xs)
-	struct scsipi_xfer *xs;
+bt_scsi_cmd(struct scsipi_xfer *xs)
 {
 	struct scsipi_link *sc_link = xs->sc_link;
 	struct bt_softc *sc = sc_link->adapter_softc;
@@ -1281,6 +1243,13 @@ bt_scsi_cmd(xs)
 		ccb->scsi_cmd_length = 0;
 	} else {
 		/* can't use S/G if zero length */
+		if (xs->cmdlen > sizeof(ccb->scsi_cmd)) {
+			printf("%s: cmdlen %d too large for CCB\n",
+			    device_xname(sc->sc_dev), xs->cmdlen);
+			xs->error = XS_DRIVER_STUFFUP;
+			bt_free_ccb(sc, ccb);
+			return COMPLETE;
+		}
 		ccb->opcode = (xs->datalen ? BT_INIT_SCAT_GATH_CCB
 					   : BT_INITIATOR_CCB);
 		bcopy(xs->cmd, &ccb->scsi_cmd,
@@ -1321,7 +1290,7 @@ bt_scsi_cmd(xs)
 		SC_DEBUGN(sc_link, SDEV_DB4, ("\n"));
 		if (datalen) {
 			printf("%s: bt_scsi_cmd, out of bufs %d of %d left.\n",
-					sc->sc_dev.dv_xname, datalen, xs->datalen);
+			    device_xname(sc->sc_dev), datalen, xs->datalen);
 			goto badbuf;
 		}
 		ltophys(KVTOPHYS(ccb->scat_gath), ccb->data_addr);
@@ -1364,7 +1333,7 @@ bt_scsi_cmd(xs)
 	return COMPLETE;
 
 badbuf:
-	sg = ccb->scat_gath;       
+	sg = ccb->scat_gath;
 	while (seg) {
 		thisbounce = PHYSTOKV(phystol(sg->seg_addr));
 		bt_free_buf(sc, (struct bt_buf *)thisbounce);
@@ -1380,10 +1349,7 @@ badbuf:
  * Poll a particular unit, looking for a particular xs
  */
 int
-bt_poll(sc, xs, count)
-	struct bt_softc *sc;
-	struct scsipi_xfer *xs;
-	int count;
+bt_poll(struct bt_softc *sc, struct scsipi_xfer *xs, int count)
 {
 	int iobase = sc->sc_iobase;
 
@@ -1404,8 +1370,7 @@ bt_poll(sc, xs, count)
 }
 
 void
-bt_timeout(arg)
-	void *arg;
+bt_timeout(void *arg)
 {
 	struct bt_ccb *ccb = arg;
 	struct scsipi_xfer *xs = ccb->xs;
@@ -1424,7 +1389,7 @@ bt_timeout(arg)
 	 */
 	bt_collect_mbo(sc);
 	if (ccb->flags & CCB_SENDING) {
-		printf("%s: not taking commands!\n", sc->sc_dev.dv_xname);
+		printf("%s: not taking commands!\n", device_xname(sc->sc_dev));
 		Debugger();
 	}
 #endif

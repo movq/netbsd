@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_shutdown.c,v 1.6 2000/01/13 23:41:18 oster Exp $	*/
+/*	$NetBSD: rf_shutdown.c,v 1.19 2005/12/11 12:23:37 christos Exp $	*/
 /*
  * rf_shutdown.c
  */
@@ -33,25 +33,37 @@
  * thread startup and shutdown.
  */
 
-#include "rf_types.h"
-#include "rf_threadstuff.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rf_shutdown.c,v 1.19 2005/12/11 12:23:37 christos Exp $");
+
+#include <dev/raidframe/raidframevar.h>
+
+#include "rf_archs.h"
 #include "rf_shutdown.h"
 #include "rf_debugMem.h"
-#include "rf_freelist.h"
 
-static void 
-rf_FreeShutdownEnt(RF_ShutdownList_t * ent)
+
+#ifndef RF_DEBUG_SHUTDOWN
+#define RF_DEBUG_SHUTDOWN 0
+#endif
+
+static void rf_FreeShutdownEnt(RF_ShutdownList_t *);
+
+static void
+rf_FreeShutdownEnt(RF_ShutdownList_t *ent)
 {
 	FREE(ent, M_RAIDFRAME);
 }
 
-int 
-_rf_ShutdownCreate(
-    RF_ShutdownList_t ** listp,
-    void (*cleanup) (void *arg),
-    void *arg,
-    char *file,
-    int line)
+#if RF_DEBUG_SHUTDOWN
+void
+_rf_ShutdownCreate(RF_ShutdownList_t **listp,  void (*cleanup)(void *arg),
+		   void *arg, char *file, int line)
+#else
+void
+_rf_ShutdownCreate(RF_ShutdownList_t **listp,  void (*cleanup)(void *arg),
+		   void *arg)
+#endif
 {
 	RF_ShutdownList_t *ent;
 
@@ -59,43 +71,46 @@ _rf_ShutdownCreate(
          * Have to directly allocate memory here, since we start up before
          * and shutdown after RAIDframe internal allocation system.
          */
-	/* 	ent = (RF_ShutdownList_t *) malloc(sizeof(RF_ShutdownList_t), 
+	/* 	ent = (RF_ShutdownList_t *) malloc(sizeof(RF_ShutdownList_t),
 		M_RAIDFRAME, M_WAITOK); */
-	ent = (RF_ShutdownList_t *) malloc(sizeof(RF_ShutdownList_t), 
-					   M_RAIDFRAME, M_NOWAIT);
-	if (ent == NULL)
-		return (ENOMEM);
+	ent = (RF_ShutdownList_t *) malloc(sizeof(RF_ShutdownList_t),
+					   M_RAIDFRAME, M_WAITOK);
 	ent->cleanup = cleanup;
 	ent->arg = arg;
+#if RF_DEBUG_SHUTDOWN
 	ent->file = file;
 	ent->line = line;
+#endif
 	ent->next = *listp;
 	*listp = ent;
-	return (0);
 }
 
-int 
-rf_ShutdownList(RF_ShutdownList_t ** list)
+void
+rf_ShutdownList(RF_ShutdownList_t **list)
 {
 	RF_ShutdownList_t *r, *next;
+#if RF_DEBUG_SHUTDOWN
 	char   *file;
 	int     line;
+#endif
 
 	for (r = *list; r; r = next) {
 		next = r->next;
+#if RF_DEBUG_SHUTDOWN
 		file = r->file;
 		line = r->line;
 
 		if (rf_shutdownDebug) {
 			printf("call shutdown, created %s:%d\n", file, line);
 		}
+#endif
 		r->cleanup(r->arg);
-
+#if RF_DEBUG_SHUTDOWN
 		if (rf_shutdownDebug) {
 			printf("completed shutdown, created %s:%d\n", file, line);
 		}
+#endif
 		rf_FreeShutdownEnt(r);
 	}
 	*list = NULL;
-	return (0);
 }

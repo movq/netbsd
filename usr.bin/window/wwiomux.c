@@ -1,4 +1,4 @@
-/*	$NetBSD: wwiomux.c,v 1.6 1997/11/21 08:37:30 lukem Exp $	*/
+/*	$NetBSD: wwiomux.c,v 1.13 2006/12/18 20:04:55 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)wwiomux.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: wwiomux.c,v 1.6 1997/11/21 08:37:30 lukem Exp $");
+__RCSID("$NetBSD: wwiomux.c,v 1.13 2006/12/18 20:04:55 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,9 +46,12 @@ __RCSID("$NetBSD: wwiomux.c,v 1.6 1997/11/21 08:37:30 lukem Exp $");
 #include <sys/ioctl.h>
 #endif
 #include <sys/time.h>
+#include <poll.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
+#include <err.h>
 #include "ww.h"
 
 /*
@@ -65,15 +64,19 @@ __RCSID("$NetBSD: wwiomux.c,v 1.6 1997/11/21 08:37:30 lukem Exp $");
  * The history of this routine is interesting.
  */
 void
-wwiomux()
+wwiomux(void)
 {
 	struct ww *w;
-	fd_set imask;
-	volatile int n;
+	int nfd;
+	int volatile dostdin;	/* avoid longjmp clobbering */
+	char volatile c;	/* avoid longjmp clobbering */
 	char *p;
-	char c;
-	struct timeval tv;
+	int millis;
 	char noblock = 0;
+	static struct pollfd *pfd = NULL;
+	static size_t maxfds = 0;
+
+	c = 0; 	/* XXXGCC -Wuninitialized */
 
 	for (;;) {
 		if (wwinterrupt()) {
@@ -81,24 +84,47 @@ wwiomux()
 			return;
 		}
 
-		FD_ZERO(&imask);
-		n = -1;
+		nfd = 0;
+		for (w = wwhead.ww_forw; w != &wwhead; w = w->ww_forw) {
+			if (w->ww_pty < 0 || w->ww_obq >= w->ww_obe)
+				continue;
+			nfd++;
+		}
+
+		if (maxfds <= ++nfd) {	/* One more for the fd=0 case below */
+			struct pollfd *npfd = pfd == NULL ?
+			    malloc(sizeof(*pfd) * nfd) :
+			   realloc(pfd, sizeof(*pfd) * nfd);
+			if (npfd == NULL) {
+				warn("will retry");
+				if (pfd)
+					free(pfd);
+				pfd = NULL;
+				maxfds = 0;
+				return;
+			}
+			pfd = npfd;
+			maxfds = nfd;
+		}
+
+		nfd = 0;
 		for (w = wwhead.ww_forw; w != &wwhead; w = w->ww_forw) {
 			if (w->ww_pty < 0)
 				continue;
 			if (w->ww_obq < w->ww_obe) {
-				if (w->ww_pty > n)
-					n = w->ww_pty + 1;
-				FD_SET(w->ww_pty, &imask);
+				pfd[nfd].fd = w->ww_pty;
+				pfd[nfd++].events = POLLIN;
 			}
 			if (w->ww_obq > w->ww_obp &&
 			    !ISSET(w->ww_pflags, WWP_STOPPED))
 				noblock = 1;
 		}
 		if (wwibq < wwibe) {
-			if (0 > n)
-				n = 0 + 1;
-			FD_SET(0, &imask);
+			dostdin = nfd;
+			pfd[nfd].fd = 0;
+			pfd[nfd++].events = POLLIN;
+		} else {
+			dostdin = -1;
 		}
 
 		if (!noblock) {
@@ -114,27 +140,32 @@ wwiomux()
 				return;
 			}
 			/* XXXX */
-			tv.tv_sec = 30;
-			tv.tv_usec = 0;
+			millis = 30000;
 		} else {
-			tv.tv_sec = 0;
-			tv.tv_usec = 10000;
+			millis = 10;
 		}
 		wwnselect++;
-		n = select(n + 1, &imask, (fd_set *)0, (fd_set *)0, &tv);
+		nfd = poll(pfd, nfd, millis);
 		wwsetjmp = 0;
 		noblock = 0;
 
-		if (n < 0)
+		if (nfd < 0)
 			wwnselecte++;
-		else if (n == 0)
+		else if (nfd == 0)
 			wwnselectz++;
 		else {
-			if (FD_ISSET(0, &imask))
+			if (dostdin != -1 && (pfd[dostdin].revents & POLLIN) != 0)
 				wwrint();
+
+			nfd = 0;
 			for (w = wwhead.ww_forw; w != &wwhead; w = w->ww_forw) {
-				if (w->ww_pty < 0 ||
-				    !FD_ISSET(w->ww_pty, &imask))
+				int n;
+
+				if (w->ww_pty < 0)
+					continue;
+				if (w->ww_pty != pfd[nfd].fd)
+					continue;
+				if ((pfd[nfd++].revents & POLLIN) == 0)
 					continue;
 				wwnwread++;
 				p = w->ww_obq;
@@ -176,6 +207,8 @@ wwiomux()
 							w->ww_ob;
 					}
 				}
+				if (w->ww_type == WWT_PTY)
+					*p = c;
 			}
 		}
 		/*
@@ -189,7 +222,7 @@ wwiomux()
 		if ((w = wwcurwin) != 0 && w->ww_pty >= 0 &&
 		    w->ww_obq > w->ww_obp &&
 		    !ISSET(w->ww_pflags, WWP_STOPPED)) {
-			n = wwwrite(w, w->ww_obp, w->ww_obq - w->ww_obp);
+			int n = wwwrite(w, w->ww_obp, w->ww_obq - w->ww_obp);
 			if ((w->ww_obp += n) == w->ww_obq)
 				w->ww_obq = w->ww_obp = w->ww_ob;
 			noblock = 1;
@@ -198,7 +231,7 @@ wwiomux()
 		for (w = wwhead.ww_forw; w != &wwhead; w = w->ww_forw)
 			if (w->ww_pty >= 0 && w->ww_obq > w->ww_obp &&
 			    !ISSET(w->ww_pflags, WWP_STOPPED)) {
-				n = wwwrite(w, w->ww_obp,
+				int n = wwwrite(w, w->ww_obp,
 					w->ww_obq - w->ww_obp);
 				if ((w->ww_obp += n) == w->ww_obq)
 					w->ww_obq = w->ww_obp = w->ww_ob;

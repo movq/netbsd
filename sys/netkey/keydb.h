@@ -1,9 +1,10 @@
-/*	$NetBSD: keydb.h,v 1.4 2000/01/31 14:19:13 itojun Exp $	*/
+/*	$NetBSD: keydb.h,v 1.28 2007/05/02 20:40:29 dyoung Exp $	*/
+/*	$KAME: keydb.h,v 1.23 2003/09/07 05:25:20 itojun Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -15,7 +16,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -34,7 +35,14 @@
 
 #ifdef _KERNEL
 
+#if defined(_KERNEL_OPT)
+#include "opt_ipsec.h"
+#endif
+
+#include <sys/mallocvar.h>
 #include <netkey/key_var.h>
+
+MALLOC_DECLARE(M_SECA);
 
 /* Security Assocciation Index */
 /* NOTE: Ensure to be same address family */
@@ -43,7 +51,7 @@ struct secasindex {
 	struct sockaddr_storage dst;	/* destination address for SA */
 	u_int16_t proto;		/* IPPROTO_ESP or IPPROTO_AH */
 	u_int8_t mode;			/* mode of protocol, see ipsec.h */
-	u_int32_t reqid;		/* reqid id who owned this SA */
+	u_int16_t reqid;		/* reqid id who owned this SA */
 					/* see IPSEC_MANUAL_REQID_MAX. */
 };
 
@@ -62,12 +70,14 @@ struct secashead {
 					/* SA chain */
 					/* The first of this list is newer SA */
 
-	struct route sa_route;		/* route cache */
+	struct route sa_route;
 };
 
 /* Security Association */
 struct secasvar {
+	TAILQ_ENTRY(secasvar) tailq;
 	LIST_ENTRY(secasvar) chain;
+	LIST_ENTRY(secasvar) spihash;
 
 	int refcnt;			/* reference count */
 	u_int8_t state;			/* Status of this Association */
@@ -78,41 +88,43 @@ struct secasvar {
 	u_int32_t flags;		/* holder for SADB_KEY_FLAGS */
 
 	struct sadb_key *key_auth;	/* Key for Authentication */
-					/* length has been shifted up to 3. */
 	struct sadb_key *key_enc;	/* Key for Encryption */
-					/* length has been shifted up to 3. */
-	caddr_t iv;			/* Initilization Vector */
+	void *iv;			/* Initilization Vector */
 	u_int ivlen;			/* length of IV */
-#if 0
-	caddr_t misc1;
-	caddr_t misc2;
-	caddr_t misc3;
-#endif
+	void *sched;			/* intermediate encryption key */
+	size_t schedlen;
 
 	struct secreplay *replay;	/* replay prevention */
-	u_int32_t tick;			/* for lifetime */
+	long created;			/* for lifetime */
 
 	struct sadb_lifetime *lft_c;	/* CURRENT lifetime, it's constant. */
 	struct sadb_lifetime *lft_h;	/* HARD lifetime */
 	struct sadb_lifetime *lft_s;	/* SOFT lifetime */
 
-	u_int32_t seq;			/* sequence number */
+	u_int64_t seq;			/* sequence number */
 	pid_t pid;			/* message's pid */
 
 	struct secashead *sah;		/* back pointer to the secashead */
+
+	u_int32_t id;			/* SA id */
+	/* Nat-Traversal state */
+#ifdef IPSEC_NAT_T
+	u_int16_t	natt_type;
+	u_int16_t	esp_frag;
+#endif
 };
 
 /* replay prevention */
 struct secreplay {
-	u_int32_t count;
+	u_int64_t count;
 	u_int wsize;		/* window size, i.g. 4 bytes */
-	u_int32_t seq;		/* used by sender */
-	u_int32_t lastseq;	/* used by receiver */
-	caddr_t bitmap;		/* used by receiver */
-	int overflow;		/* overflow flag */
+	u_int64_t seq;		/* used by sender */
+	u_int64_t lastseq;	/* used by receiver */
+	u_int8_t *bitmap;	/* used by receiver */
+	int overflow;		/* what round does the counter take. */
 };
 
-/* socket table due to send PF_KEY messages. */ 
+/* socket table due to send PF_KEY messages. */
 struct secreg {
 	LIST_ENTRY(secreg) chain;
 
@@ -120,14 +132,14 @@ struct secreg {
 };
 
 #ifndef IPSEC_NONBLOCK_ACQUIRE
-/* acquiring list table. */ 
+/* acquiring list table. */
 struct secacq {
 	LIST_ENTRY(secacq) chain;
 
 	struct secasindex saidx;
 
 	u_int32_t seq;		/* sequence number */
-	u_int32_t tick;		/* for lifetime */
+	long created;		/* for lifetime */
 	int count;		/* for lifetime */
 };
 #endif
@@ -143,15 +155,19 @@ struct key_cb {
 };
 
 /* secpolicy */
+struct secpolicy;
+struct secpolicyindex;
 extern struct secpolicy *keydb_newsecpolicy __P((void));
+extern u_int32_t keydb_newspid __P((void));
 extern void keydb_delsecpolicy __P((struct secpolicy *));
+extern int keydb_setsecpolicyindex
+	__P((struct secpolicy *, struct secpolicyindex *));
 /* secashead */
 extern struct secashead *keydb_newsecashead __P((void));
 extern void keydb_delsecashead __P((struct secashead *));
 /* secasvar */
 extern struct secasvar *keydb_newsecasvar __P((void));
-extern void keydb_refsecasvar __P((struct secasvar *));
-extern void keydb_freesecasvar __P((struct secasvar *));
+extern void keydb_delsecasvar __P((struct secasvar *));
 /* secreplay */
 extern struct secreplay *keydb_newsecreplay __P((size_t));
 extern void keydb_delsecreplay __P((struct secreplay *));
@@ -161,4 +177,4 @@ extern void keydb_delsecreg __P((struct secreg *));
 
 #endif /* _KERNEL */
 
-#endif /* _NETKEY_KEYDB_H_ */
+#endif /* !_NETKEY_KEYDB_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ttycom.h,v 1.9 1999/08/25 01:47:33 christos Exp $	*/
+/*	$NetBSD: ttycom.h,v 1.18 2005/12/11 12:25:21 christos Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993, 1994
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -61,6 +57,16 @@ struct winsize {
 	unsigned short	ws_ypixel;	/* vertical size, pixels */
 };
 
+/* ptmget, for /dev/ptm pty getting ioctl PTMGET */
+struct ptmget {
+	int	cfd;
+	int	sfd;
+	char	cn[16];
+	char	sn[16];
+};
+
+#define _PATH_PTMDEV	"/dev/ptm"
+
 #define		TIOCM_LE	0001		/* line enable */
 #define		TIOCM_DTR	0002		/* data terminal ready */
 #define		TIOCM_RTS	0004		/* request to send */
@@ -82,8 +88,16 @@ struct winsize {
 #define	TIOCSETA	_IOW('t', 20, struct termios) /* set termios struct */
 #define	TIOCSETAW	_IOW('t', 21, struct termios) /* drain output, set */
 #define	TIOCSETAF	_IOW('t', 22, struct termios) /* drn out, fls in, set */
-#define	TIOCGETD	_IOR('t', 26, int)	/* get line discipline */
-#define	TIOCSETD	_IOW('t', 27, int)	/* set line discipline */
+#define	TIOCGETD	_IOR('t', 26, int)	/* get line discipline (deprecated) */
+#define	TIOCSETD	_IOW('t', 27, int)	/* set line discipline (deprecated) */
+
+/*
+ * This is the maximum length of a line discipline's name.
+ */
+#define	TTLINEDNAMELEN	32
+typedef char linedn_t[TTLINEDNAMELEN];
+#define TIOCGLINED	_IOR('t', 66, linedn_t)	/* get line discipline (new) */
+#define TIOCSLINED	_IOW('t', 67, linedn_t)	/* set line discipline (new) */
 						/* 127-124 compat */
 #define	TIOCSBRK	 _IO('t', 123)		/* set break bit */
 #define	TIOCCBRK	 _IO('t', 122)		/* clear break bit */
@@ -135,12 +149,16 @@ struct winsize {
 #define	TIOCRCVFRAME	_IOW('t', 69, struct mbuf *)/* data frame received */
 #define	TIOCXMTFRAME	_IOW('t', 68, struct mbuf *)/* data frame transmit */
 
+#define TIOCPTMGET 	 _IOR('t', 70, struct ptmget)	/* get ptys */
+#define TIOCGRANTPT 	 _IO('t', 71) 			/* grantpt(3) */
+#define TIOCPTSNAME 	 _IOR('t', 72, struct ptmget)	/* ptsname(3) */
+
 
 #define	TTYDISC		0		/* termios tty line discipline */
 #define	TABLDISC	3		/* tablet discipline */
 #define	SLIPDISC	4		/* serial IP discipline */
 #define	PPPDISC		5		/* ppp discipline */
 #define	STRIPDISC	6		/* metricom wireless IP discipline */
-#define	HDLCDISC	7		/* HDLC discipline */
+#define	HDLCDISC	9		/* HDLC discipline */
 
 #endif /* !_SYS_TTYCOM_H_ */

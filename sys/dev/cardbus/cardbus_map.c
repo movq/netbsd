@@ -1,4 +1,4 @@
-/*	$NetBSD: cardbus_map.c,v 1.10 2000/03/07 00:31:46 mycroft Exp $	*/
+/*	$NetBSD: cardbus_map.c,v 1.27 2008/06/25 11:42:32 drochner Exp $	*/
 
 /*
  * Copyright (c) 1999 and 2000
@@ -32,13 +32,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: cardbus_map.c,v 1.27 2008/06/25 11:42:32 drochner Exp $");
 
-#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/cardbus/cardbusvar.h>
 
@@ -57,30 +58,30 @@
 #endif
 
 
-static int cardbus_io_find __P((cardbus_chipset_tag_t, cardbus_function_tag_t,
+static int cardbus_io_find(cardbus_chipset_tag_t, cardbus_function_tag_t,
 				cardbustag_t, int, cardbusreg_t,
-				bus_addr_t *, bus_size_t *, int *));
-static int cardbus_mem_find __P((cardbus_chipset_tag_t, cardbus_function_tag_t,
+				bus_addr_t *, bus_size_t *, int *);
+static int cardbus_mem_find(cardbus_chipset_tag_t, cardbus_function_tag_t,
 				 cardbustag_t, int, cardbusreg_t,
-				 bus_addr_t *, bus_size_t *, int *));
+				 bus_addr_t *, bus_size_t *, int *);
 
 /*
  * static int cardbus_io_find(cardbus_chipset_tag_t cc,
  *			      cardbus_function_tag_t cf, cardbustag_t tag,
  *			      int reg, cardbusreg_t type, bus_addr_t *basep,
  *			      bus_size_t *sizep, int *flagsp)
- * This code is stallen from sys/dev/pci_map.c.
+ * This code is stolen from sys/dev/pci_map.c.
  */
 static int
-cardbus_io_find(cc, cf, tag, reg, type, basep, sizep, flagsp)
-	cardbus_chipset_tag_t cc;
-	cardbus_function_tag_t cf;
-	cardbustag_t tag;
-	int reg;
-	cardbusreg_t type;
-	bus_addr_t *basep;
-	bus_size_t *sizep;
-	int *flagsp;
+cardbus_io_find(
+    cardbus_chipset_tag_t cc,
+    cardbus_function_tag_t cf,
+    cardbustag_t tag,
+    int reg,
+    cardbusreg_t type,
+    bus_addr_t *basep,
+    bus_size_t *sizep,
+    int *flagsp)
 {
 	cardbusreg_t address, mask;
 	int s;
@@ -141,7 +142,7 @@ cardbus_io_find(cc, cf, tag, reg, type, basep, sizep, flagsp)
  *			       cardbus_function_tag_t cf, cardbustag_t tag,
  *			       int reg, cardbusreg_t type, bus_addr_t *basep,
  *			       bus_size_t *sizep, int *flagsp)
- * This code is stallen from sys/dev/pci_map.c.
+ * This code is stolen from sys/dev/pci_map.c.
  */
 static int
 cardbus_mem_find(cc, cf, tag, reg, type, basep, sizep, flagsp)
@@ -157,7 +158,7 @@ cardbus_mem_find(cc, cf, tag, reg, type, basep, sizep, flagsp)
 	cardbusreg_t address, mask;
 	int s;
 
-	if (reg != CARDBUS_ROM_REG && 
+	if (reg != CARDBUS_ROM_REG &&
 	    (reg < PCI_MAPREG_START || reg >= PCI_MAPREG_END || (reg & 3))) {
 		panic("cardbus_mem_find: bad request");
 	}
@@ -221,7 +222,7 @@ cardbus_mem_find(cc, cf, tag, reg, type, basep, sizep, flagsp)
 		*flagsp = PCI_MAPREG_MEM_PREFETCHABLE(address) ?
 		    BUS_SPACE_MAP_PREFETCHABLE : 0;
 	}
-	
+
 	return 0;
 }
 
@@ -259,10 +260,14 @@ cardbus_mapreg_map(sc, func, reg, type, busflags, tagp, handlep, basep, sizep)
 	bus_size_t size;
 	int flags;
 	int status = 0;
+	cardbustag_t tag;
 
-	cardbustag_t tag = cardbus_make_tag(cc, cf, sc->sc_bus, sc->sc_device, func);
+	size = 0;	/* XXX gcc */
+	flags = 0;	/* XXX gcc */
 
-	DPRINTF(("cardbus_mapreg_map called: %s %x\n", sc->sc_dev.dv_xname,
+	tag = cardbus_make_tag(cc, cf, sc->sc_bus, func);
+
+	DPRINTF(("cardbus_mapreg_map called: %s %x\n", device_xname(sc->sc_dev),
 	   type));
 
 	if (PCI_MAPREG_TYPE(type) == PCI_MAPREG_TYPE_IO) {
@@ -306,7 +311,7 @@ cardbus_mapreg_map(sc, func, reg, type, busflags, tagp, handlep, basep, sizep)
 	}
 	cardbus_conf_write(cc, cf, tag, reg, base);
 
-	DPRINTF(("cardbus_mapreg_map: physaddr %lx\n", base));
+	DPRINTF(("cardbus_mapreg_map: physaddr %lx\n", (unsigned long)base));
 
 	if (tagp != 0) {
 		*tagp = bustag;
@@ -359,18 +364,18 @@ cardbus_mapreg_unmap(sc, func, reg, tag, handle, size)
 
 	if (sc->sc_iot == tag) {
 		/* bus space is io space */
-		DPRINTF(("%s: unmap i/o space\n", sc->sc_dev.dv_xname));
+		DPRINTF(("%s: unmap i/o space\n", device_xname(sc->sc_dev)));
 		rbustag = sc->sc_rbus_iot;
 	} else if (sc->sc_memt == tag) {
 		/* bus space is memory space */
-		DPRINTF(("%s: unmap mem space\n", sc->sc_dev.dv_xname));
+		DPRINTF(("%s: unmap mem space\n", device_xname(sc->sc_dev)));
 		rbustag = sc->sc_rbus_memt;
 	} else {
 		return 1;
 	}
 #endif
 
-	cardbustag = cardbus_make_tag(cc, cf, sc->sc_bus, sc->sc_device, func);
+	cardbustag = cardbus_make_tag(cc, cf, sc->sc_bus, func);
 
 	cardbus_conf_write(cc, cf, cardbustag, reg, 0);
 

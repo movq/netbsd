@@ -1,4 +1,4 @@
-/*	$NetBSD: pm_direct.c,v 1.11 2000/03/19 07:37:58 scottr Exp $	*/
+/*	$NetBSD: pm_direct.c,v 1.28 2007/01/24 13:08:12 hubertf Exp $	*/
 
 /*
  * Copyright (C) 1997 Takashi Hamada
@@ -31,6 +31,9 @@
  */
 /* From: pm_direct.c 1.3 03/18/98 Takashi Hamada */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pm_direct.c,v 1.28 2007/01/24 13:08:12 hubertf Exp $");
+
 #include "opt_adb.h"
 
 #ifdef DEBUG
@@ -42,7 +45,6 @@
 /* #define	PM_GRAB_SI	1 */
 
 #include <sys/types.h>
-#include <sys/cdefs.h>
 #include <sys/systm.h>
 
 #include <machine/viareg.h>
@@ -163,38 +165,38 @@ char pm_receive_cmd_type[] = {
 
 /* for debugging */
 #ifdef ADB_DEBUG
-void	pm_printerr __P((char *, int, int, char *));
+void	pm_printerr(const char *, int, int, char *);
 #endif
 
-int	pm_wait_busy __P((int));
-int	pm_wait_free __P((int));
+int	pm_wait_busy(int);
+int	pm_wait_free(int);
 
 /* these functions are for the PB1XX series */
-int	pm_receive_pm1 __P((u_char *));
-int	pm_send_pm1 __P((u_char,int));
-int	pm_pmgrop_pm1 __P((PMData *));
-void	pm_intr_pm1 __P((void *));
+int	pm_receive_pm1(u_char *);
+int	pm_send_pm1(u_char, int);
+int	pm_pmgrop_pm1(PMData *);
+void	pm_intr_pm1(void *);
 
 /* these functions are for the PB Duo series and the PB 5XX series */
-int	pm_receive_pm2 __P((u_char *));
-int	pm_send_pm2 __P((u_char));
-int	pm_pmgrop_pm2 __P((PMData *));
-void	pm_intr_pm2 __P((void *));
+int	pm_receive_pm2(u_char *);
+int	pm_send_pm2(u_char);
+int	pm_pmgrop_pm2(PMData *);
+void	pm_intr_pm2(void *);
 
 /* this function is MRG-Based (for testing) */
-int	pm_pmgrop_mrg __P((PMData *));
+int	pm_pmgrop_mrg(PMData *);
 
 /* these functions are called from adb_direct.c */
-void	pm_setup_adb __P((void));
-void	pm_check_adb_devices __P((int));
-void	pm_intr __P((void *));
-int	pm_adb_op __P((u_char *, void *, void *, int));
-void	pm_hw_setup __P((void));
+void	pm_setup_adb(void);
+void	pm_check_adb_devices(int);
+void	pm_intr(void *);
+int	pm_adb_op(u_char *, void *, void *, int);
+void	pm_hw_setup(void);
 
 /* these functions also use the variables of adb_direct.c */
-void	pm_adb_get_TALK_result __P((PMData *));
-void	pm_adb_get_ADB_data __P((PMData *));
-void	pm_adb_poll_next_device_pm1 __P((PMData *));
+void	pm_adb_get_TALK_result(PMData *);
+void	pm_adb_get_ADB_data(PMData *);
+void	pm_adb_poll_next_device_pm1(PMData *);
 
 
 /*
@@ -219,25 +221,14 @@ struct adbCommand {
 	u_int	unsol;		/* 1 if packet was unsolicited */
 	u_int	ack_only;	/* 1 for no special processing */
 };
-extern	void	adb_pass_up __P((struct adbCommand *));
-
-#if 0
-/*
- * Define the external functions
- */
-extern int	zshard __P((int));		/* from zs.c */
-#endif
+extern	void	adb_pass_up(struct adbCommand *);
 
 #ifdef ADB_DEBUG
 /*
  * This function dumps contents of the PMData
  */
 void
-pm_printerr(ttl, rval, num, data)
-	char *ttl;
-	int rval;
-	int num;
-	char *data;
+pm_printerr(const char *ttl, int rval, int num, char *data)
 {
 	int i;
 
@@ -254,12 +245,11 @@ pm_printerr(ttl, rval, num, data)
  * Check the hardware type of the Power Manager
  */
 void
-pm_setup_adb()
+pm_setup_adb(void)
 {
 	switch (mac68k_machine.machineid) {
 		case MACH_MACPB140:
 		case MACH_MACPB145:
-		case MACH_MACPB150:
 		case MACH_MACPB160:
 		case MACH_MACPB165:
 		case MACH_MACPB165C:
@@ -268,6 +258,7 @@ pm_setup_adb()
 		case MACH_MACPB180C:
 			pmHardware = PM_HW_PB1XX;
 			break;
+		case MACH_MACPB150:
 		case MACH_MACPB210:
 		case MACH_MACPB230:
 		case MACH_MACPB250:
@@ -275,6 +266,8 @@ pm_setup_adb()
 		case MACH_MACPB280:
 		case MACH_MACPB280C:
 		case MACH_MACPB500:
+		case MACH_MACPB190:
+		case MACH_MACPB190CS:
 			pmHardware = PM_HW_PB5XX;
 			break;
 		default:
@@ -287,8 +280,7 @@ pm_setup_adb()
  * Check the existent ADB devices
  */
 void
-pm_check_adb_devices(id)
-	int id;
+pm_check_adb_devices(int id)
 {
 	u_short ed = 0x1;
 
@@ -301,18 +293,13 @@ pm_check_adb_devices(id)
  * Wait until PM IC is busy
  */
 int
-pm_wait_busy(delay)
-	int delay;
+pm_wait_busy(int xdelay)
 {
 	while (PM_IS_ON) {
 #ifdef PM_GRAB_SI
-#if 0
-		zshard(0);		/* grab any serial interrupts */
-#else
-		(void)intr_dispatch(0x70);
+		(void)intr_dispatch(0x70);	/* grab any serial interrupts */
 #endif
-#endif
-		if ((--delay) < 0)
+		if ((--xdelay) < 0)
 			return 1;	/* timeout */
 	}
 	return 0;
@@ -323,18 +310,13 @@ pm_wait_busy(delay)
  * Wait until PM IC is free
  */
 int
-pm_wait_free(delay)
-	int delay;
+pm_wait_free(int xdelay)
 {
 	while (PM_IS_OFF) {
 #ifdef PM_GRAB_SI
-#if 0
-		zshard(0);		/* grab any serial interrupts */
-#else
-		(void)intr_dispatch(0x70);
+		(void)intr_dispatch(0x70);	/* grab any serial interrupts */
 #endif
-#endif
-		if ((--delay) < 0)
+		if ((--xdelay) < 0)
 			return 0;	/* timeout */
 	}
 	return 1;
@@ -350,8 +332,7 @@ pm_wait_free(delay)
  * Receive data from PM for the PB1XX series
  */
 int
-pm_receive_pm1(data)
-	u_char *data;
+pm_receive_pm1(u_char *data)
 {
 	int rval = 0xffffcd34;
 
@@ -385,9 +366,7 @@ pm_receive_pm1(data)
  * Send data to PM for the PB1XX series
  */
 int
-pm_send_pm1(data, delay)
-	u_char data;
-	int delay;
+pm_send_pm1(u_char data, int timo)
 {
 	int rval;
 
@@ -395,17 +374,19 @@ pm_send_pm1(data, delay)
 	via_reg(VIA2, 0x200) = data;
 
 	PM_SET_STATE_ACKOFF();
-	if (pm_wait_busy(0x400) != 0) {
+#if 0
+	if (pm_wait_busy(0x400) == 0) {
+#else
+	if (pm_wait_busy(timo) == 0) {
+#endif
 		PM_SET_STATE_ACKON();
-		via_reg(VIA2, vDirA) = 0x00;
-
-		return 0xffffcd36;
+		if (pm_wait_free(0x40) != 0)
+			rval = 0x0;
+		else
+			rval = 0xffffcd35;
+	} else {
+		rval = 0xffffcd36;
 	}
-
-	rval = 0x0;
-	PM_SET_STATE_ACKON();
-	if (pm_wait_free(0x40) == 0)
-		rval = 0xffffcd35;
 
 	PM_SET_STATE_ACKON();
 	via_reg(VIA2, vDirA) = 0x00;
@@ -418,8 +399,7 @@ pm_send_pm1(data, delay)
  * My PMgrOp routine for the PB1XX series
  */
 int
-pm_pmgrop_pm1(pmdata)
-	PMData *pmdata;
+pm_pmgrop_pm1(PMData *pmdata)
 {
 	int i;
 	int s = 0x81815963;
@@ -458,13 +438,13 @@ pm_pmgrop_pm1(pmdata)
 					case MACH_MACPB180:
 					case MACH_MACPB180C:
 						{
-							int delay = ADBDelay * 16;
+							int xdelay = ADBDelay * 16;
 
 							via_reg(VIA2, vDirA) = 0x00;
-							while ((via_reg(VIA2, 0x200) == 0x7f) && (delay >= 0))
-								delay--;
+							while ((via_reg(VIA2, 0x200) == 0x7f) && (xdelay >= 0))
+								xdelay--;
 
-							if (delay < 0) {	/* timeout */
+							if (xdelay < 0) {	/* timeout */
 								via_reg(VIA2, vDirA) = 0x00;
 								/* restore formar value */
 								via_reg(VIA1, vIER) = via1_vIER;
@@ -492,7 +472,9 @@ pm_pmgrop_pm1(pmdata)
 				/* restore formar value */
 				via_reg(VIA1, vDirA) = via1_vDirA;
 				via_reg(VIA1, vIER) = via1_vIER;
-					return 0xffffcd38;
+				if (s != 0x81815963)
+					splx(s);
+				return 0xffffcd38;
 			}
 
 			/* send # of PM data */
@@ -534,7 +516,7 @@ pm_pmgrop_pm1(pmdata)
 			pm_buf = (u_char *)pmdata->r_buf;
 			for (i = 0; i < num_pm_data; i++) {
 				if ((rval = pm_receive_pm1(&pm_data)) != 0)
-					break;				/* timeout */
+					break;		/* timeout */
 				pm_buf[i] = pm_data;
 			}
 
@@ -557,8 +539,7 @@ pm_pmgrop_pm1(pmdata)
  * My PM interrupt routine for PB1XX series
  */
 void
-pm_intr_pm1(arg)
-	void *arg;
+pm_intr_pm1(void *arg)
 {
 	int s;
 	int rval;
@@ -615,8 +596,7 @@ pm_intr_pm1(arg)
  * Receive data from PM for the PB Duo series and the PB 5XX series
  */
 int
-pm_receive_pm2(data)
-	u_char *data;
+pm_receive_pm2(u_char *data)
 {
 	int i;
 	int rval;
@@ -657,8 +637,7 @@ pm_receive_pm2(data)
  * Send data to PM for the PB Duo series and the PB 5XX series
  */
 int
-pm_send_pm2(data)
-	u_char data;
+pm_send_pm2(u_char data)
 {
 	int rval;
 
@@ -666,19 +645,15 @@ pm_send_pm2(data)
 	PM_SR() = data;
 
 	PM_SET_STATE_ACKOFF();
-	rval = 0xffffcd36;
-	if (pm_wait_busy((int)ADBDelay*32) != 0) {
+	if (pm_wait_busy((int)ADBDelay*32) == 0) {
 		PM_SET_STATE_ACKON();
-
-		via_reg(VIA1, vACR) |= 0x1c;
-
-		return rval;		
+		if (pm_wait_free((int)ADBDelay*32) != 0)
+			rval = 0;
+		else
+			rval = 0xffffcd35;
+	} else {
+		rval = 0xffffcd36;
 	}
-
-	PM_SET_STATE_ACKON();
-	rval = 0xffffcd35;
-	if (pm_wait_free((int)ADBDelay*32) != 0)
-		rval = 0;
 
 	PM_SET_STATE_ACKON();
 	via_reg(VIA1, vACR) |= 0x1c;
@@ -692,8 +667,7 @@ pm_send_pm2(data)
  * My PMgrOp routine for the PB Duo series and the PB 5XX series
  */
 int
-pm_pmgrop_pm2(pmdata)
-	PMData *pmdata;
+pm_pmgrop_pm2(PMData *pmdata)
 {
 	int i;
 	int s;
@@ -724,14 +698,14 @@ pm_pmgrop_pm2(pmdata)
 
 			if (HwCfgFlags3 & 0x00200000) {	
 				/* PB 160, PB 165(c), PB 180(c)? */
-				int delay = ADBDelay * 16;
+				int xdelay = ADBDelay * 16;
 
 				via_reg(VIA2, vDirA) = 0x00;
 				while ((via_reg(VIA2, 0x200) == 0x07) &&
-				    (delay >= 0))
-					delay--;
+				    (xdelay >= 0))
+					xdelay--;
 
-				if (delay < 0) {
+				if (xdelay < 0) {
 					rval = 0xffffcd38;
 					break;		/* timeout */
 				}
@@ -827,8 +801,7 @@ pm_pmgrop_pm2(pmdata)
  * My PM interrupt routine for the PB Duo series and the PB 5XX series
  */
 void
-pm_intr_pm2(arg)
-	void *arg;
+pm_intr_pm2(void *arg)
 {
 	int s;
 	int rval;
@@ -911,18 +884,17 @@ pm_intr_pm2(arg)
  * MRG-based PMgrOp routine
  */
 int
-pm_pmgrop_mrg(pmdata)
-	PMData *pmdata;
+pm_pmgrop_mrg(PMData *pmdata)
 {
 	u_int32_t rval=0;
 
-	asm("
-		movl	%1, a0
-		.word	0xa085
-		movl	d0, %0"
+	__asm volatile(
+	"	movl	%1,%%a0	\n"
+	"	.word	0xa085	\n"
+	"	movl	%%d0,%0"
 		: "=g" (rval)
 		: "g" (pmdata)
-		: "a0", "d0" );
+		: "a0","d0");
 
 	return rval;
 }
@@ -932,8 +904,7 @@ pm_pmgrop_mrg(pmdata)
  * My PMgrOp routine
  */
 int
-pmgrop(pmdata)
-	PMData *pmdata;
+pmgrop(PMData *pmdata)
 {
 	switch (pmHardware) {
 		case PM_HW_PB1XX:
@@ -953,8 +924,7 @@ pmgrop(pmdata)
  * My PM interrupt routine
  */
 void
-pm_intr(arg)
-	void *arg;
+pm_intr(void *arg)
 {
 	switch (pmHardware) {
 		case PM_HW_PB1XX:
@@ -970,7 +940,7 @@ pm_intr(arg)
 
 
 void
-pm_hw_setup()
+pm_hw_setup(void)
 {
 	switch (pmHardware) {
 		case PM_HW_PB1XX:
@@ -991,16 +961,12 @@ pm_hw_setup()
  * Synchronous ADBOp routine for the Power Manager
  */
 int
-pm_adb_op(buffer, compRout, data, command)
-	u_char *buffer;
-	void *compRout;
-	void *data;
-	int command;
+pm_adb_op(u_char *buffer, void *compRout, void *data, int command)
 {
 	int i;
 	int s;
 	int rval;
-	int delay;
+	int xdelay;
 	PMData pmdata;
 	struct adbCommand packet;
 
@@ -1055,28 +1021,43 @@ pm_adb_op(buffer, compRout, data, command)
 	}
 
 	rval = pmgrop(&pmdata);
-	if (rval != 0)
+	if (rval != 0) {
+		splx(s);
 		return 1;
+	}
 
 	adbWaiting = 1;
 	adbWaitingCmd = command;
 
 	PM_VIA_INTR_ENABLE();
 
-	/* wait until the PM interrupt is occured */
-	delay = 0x80000;
+	/* wait until the PM interrupt has occurred */
+	xdelay = 0x80000;
 	while (adbWaiting == 1) {
-		if ((via_reg(VIA1, vIFR) & 0x10) == 0x10)
+		switch (mac68k_machine.machineid) {
+		case MACH_MACPB150:
+		case MACH_MACPB210:
+		case MACH_MACPB230:	/* daishi tested with Duo230 */
+		case MACH_MACPB250:
+		case MACH_MACPB270:
+		case MACH_MACPB280:
+		case MACH_MACPB280C:
+		case MACH_MACPB190:
+		case MACH_MACPB190CS:
 			pm_intr((void *)0);
+			break;
+		default:
+			if ((via_reg(VIA1, vIFR) & 0x10) == 0x10)
+				pm_intr((void *)0);
+			break;
+		}
 #ifdef PM_GRAB_SI
-#if 0
-			zshard(0);		/* grab any serial interrupts */
-#else
-			(void)intr_dispatch(0x70);
+		(void)intr_dispatch(0x70);	/* grab any serial interrupts */
 #endif
-#endif
-		if ((--delay) < 0)
+		if ((--xdelay) < 0) {
+			splx(s);
 			return 1;
+		}
 	}
 
 	/* this command enables the interrupt by operating ADB devices */
@@ -1106,8 +1087,7 @@ pm_adb_op(buffer, compRout, data, command)
 
 
 void
-pm_adb_get_TALK_result(pmdata)
-	PMData *pmdata;
+pm_adb_get_TALK_result(PMData *pmdata)
 {
 	int i;
 	struct adbCommand packet;
@@ -1135,8 +1115,7 @@ pm_adb_get_TALK_result(pmdata)
 
 
 void
-pm_adb_get_ADB_data(pmdata)
-	PMData *pmdata;
+pm_adb_get_ADB_data(PMData *pmdata)
 {
 	int i;
 	struct adbCommand packet;
@@ -1153,8 +1132,7 @@ pm_adb_get_ADB_data(pmdata)
 
 
 void
-pm_adb_poll_next_device_pm1(pmdata)
-	PMData *pmdata;
+pm_adb_poll_next_device_pm1(PMData *pmdata)
 {
 	int i;
 	int ndid;

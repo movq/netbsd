@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.13 2000/03/10 11:46:04 itohy Exp $	*/
+/*	$NetBSD: extern.h,v 1.28 2007/07/19 07:49:30 daniel Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,54 +33,67 @@
 
 #include <sys/cdefs.h>
 
-void	 brace_subst __P((char *, char **, char *, int));
-void	*emalloc __P((unsigned int));
-PLAN	*find_create __P((char ***));
-int	 find_execute __P((PLAN *, char **));
-PLAN	*find_formplan __P((char **));
-int	 f_expr __P((PLAN *, FTSENT *));
-PLAN	*not_squish __P((PLAN *));
-PLAN	*or_squish __P((PLAN *));
-PLAN	*paren_squish __P((PLAN *));
-struct stat;
-void	 printlong __P((char *, char *, struct stat *));
-int	 queryuser __P((char **));
+void	 brace_subst(char *, char **, char *, int *);
+PLAN	*find_create(char ***);
+int	 find_execute(PLAN *, char **);
+PLAN	*find_formplan(char **);
+int	 find_traverse(PLAN *, int (*)(PLAN *, void *), void *);
+int	 f_expr(PLAN *, FTSENT *);
+PLAN	*not_squish(PLAN *);
+PLAN	*or_squish(PLAN *);
+PLAN	*paren_squish(PLAN *);
+int	 plan_cleanup(PLAN *, void *);
+void	 printlong(char *, char *, struct stat *);
+int	 queryuser(char **);
+void	 show_path(int);
 
-PLAN	*c_amin __P((char ***, int));
-PLAN	*c_atime __P((char ***, int));
-PLAN	*c_cmin __P((char ***, int));
-PLAN	*c_ctime __P((char ***, int));
-PLAN	*c_depth __P((char ***, int));
-PLAN	*c_exec __P((char ***, int));
-PLAN	*c_flags __P((char ***, int));
-PLAN	*c_follow __P((char ***, int));
-PLAN	*c_fstype __P((char ***, int));
-PLAN	*c_group __P((char ***, int));
-PLAN	*c_inum __P((char ***, int));
-PLAN	*c_iregex __P((char ***, int));
-PLAN	*c_links __P((char ***, int));
-PLAN	*c_ls __P((char ***, int));
-PLAN	*c_mmin __P((char ***, int));
-PLAN	*c_mtime __P((char ***, int));
-PLAN	*c_name __P((char ***, int));
-PLAN	*c_newer __P((char ***, int));
-PLAN	*c_nogroup __P((char ***, int));
-PLAN	*c_nouser __P((char ***, int));
-PLAN	*c_path __P((char ***, int));
-PLAN	*c_perm __P((char ***, int));
-PLAN	*c_print __P((char ***, int));
-PLAN	*c_print0 __P((char ***, int));
-PLAN	*c_printx __P((char ***, int));
-PLAN	*c_prune __P((char ***, int));
-PLAN	*c_regex __P((char ***, int));
-PLAN	*c_size __P((char ***, int));
-PLAN	*c_type __P((char ***, int));
-PLAN	*c_user __P((char ***, int));
-PLAN	*c_xdev __P((char ***, int));
-PLAN	*c_openparen __P((char ***, int));
-PLAN	*c_closeparen __P((char ***, int));
-PLAN	*c_not __P((char ***, int));
-PLAN	*c_or __P((char ***, int));
-PLAN	*c_null __P((char ***, int));
+PLAN	*c_amin(char ***, int);
+PLAN	*c_anewer(char ***, int);
+PLAN	*c_atime(char ***, int);
+PLAN	*c_cmin(char ***, int);
+PLAN	*c_cnewer(char ***, int);
+PLAN	*c_ctime(char ***, int);
+PLAN	*c_delete(char ***, int);
+PLAN	*c_depth(char ***, int);
+PLAN	*c_empty(char ***, int);
+PLAN	*c_exec(char ***, int);
+PLAN	*c_execdir(char ***, int);
+PLAN	*c_exit(char ***, int);
+PLAN	*c_false(char ***, int);
+PLAN	*c_flags(char ***, int);
+PLAN	*c_follow(char ***, int);
+PLAN	*c_fprint(char ***, int);
+PLAN	*c_fstype(char ***, int);
+PLAN	*c_group(char ***, int);
+PLAN	*c_iname(char ***, int);
+PLAN	*c_inum(char ***, int);
+PLAN	*c_iregex(char ***, int);
+PLAN	*c_links(char ***, int);
+PLAN	*c_ls(char ***, int);
+PLAN	*c_maxdepth(char ***, int);
+PLAN	*c_mindepth(char ***, int);
+PLAN	*c_mmin(char ***, int);
+PLAN	*c_mtime(char ***, int);
+PLAN	*c_name(char ***, int);
+PLAN	*c_newer(char ***, int);
+PLAN	*c_nogroup(char ***, int);
+PLAN	*c_nouser(char ***, int);
+PLAN	*c_path(char ***, int);
+PLAN	*c_perm(char ***, int);
+PLAN	*c_print(char ***, int);
+PLAN	*c_print0(char ***, int);
+PLAN	*c_printx(char ***, int);
+PLAN	*c_prune(char ***, int);
+PLAN	*c_regex(char ***, int);
+PLAN	*c_size(char ***, int);
+PLAN	*c_type(char ***, int);
+PLAN	*c_user(char ***, int);
+PLAN	*c_xdev(char ***, int);
+PLAN	*c_openparen(char ***, int);
+PLAN	*c_closeparen(char ***, int);
+PLAN	*c_not(char ***, int);
+PLAN	*c_or(char ***, int);
+PLAN	*c_null(char ***, int);
 
-extern int ftsoptions, isdeprecated, isdepth, isoutput, issort, isxargs;
+extern int ftsoptions, isdeprecated, isdepth, isoutput, issort, isxargs,
+	regcomp_flags;

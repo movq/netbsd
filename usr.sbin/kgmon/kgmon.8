@@ -1,4 +1,4 @@
-.\"	$NetBSD: kgmon.8,v 1.9 1999/03/22 18:43:58 garbled Exp $
+.\"	$NetBSD: kgmon.8,v 1.18 2005/06/20 13:25:26 peter Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -40,23 +36,23 @@
 .Nm kgmon
 .Nd generate a dump of the operating system's profile buffers
 .Sh SYNOPSIS
-.Nm kgmon
-.Op Fl bhpr
-.Op Fl M core
-.Op Fl N system
+.Nm
+.Op Fl bdhpr
+.Op Fl M Ar core
+.Op Fl N Ar system
 .Sh DESCRIPTION
-.Nm Kgmon
+.Nm
 is a tool used when profiling the operating system.
 When no arguments are supplied,
-.Nm kgmon
+.Nm
 indicates the state of operating system profiling as running,
-off, or not configured.
+off, or not configured
 (see
-.Xr config 8 )
+.Xr config 1 ) .
 If the
 .Fl p
 flag is specified,
-.Nm kgmon
+.Nm
 extracts profile data from the operating system and produces a
 .Pa gmon.out
 file suitable for later analysis by
@@ -66,28 +62,32 @@ The options are as follows:
 .Bl -tag -width Ds
 .It Fl b
 Resume the collection of profile data.
+.It Fl d
+Enable debug output.
 .It Fl h
 Stop the collection of profile data.
+.It Fl M
+Extract values associated with the name list from the specified core
+instead of the default
+.Pa /dev/kmem .
+.It Fl N
+Extract the name list from the specified system instead of the
+default
+.Pa /netbsd .
 .It Fl p
 Dump the contents of the profile buffers into a
 .Pa gmon.out
 file.
 .It Fl r
-Reset all the profile buffers. 
+Reset all the profile buffers.
 If the
 .Fl p
 flag is also specified, the
 .Pa gmon.out
 file is generated before the buffers are reset.
-.It Fl M
-Extract values associated with the name list from the specified core
-instead of the default ``/dev/kmem''.
-.It Fl N
-Extract the name list from the specified system instead of the
-default ``/netbsd''.
 .El
 .Pp
-If neither 
+If neither
 .Fl b
 nor
 .Fl h
@@ -105,18 +105,17 @@ the default system
 .It Pa /dev/kmem
 the default memory
 .El
-.Sh SEE ALSO
-.Xr gprof 1 ,
-.Xr config 8
 .Sh DIAGNOSTICS
 Users with only read permission on
 .Pa /dev/kmem
-cannot change the state
-of profiling collection. 
-They can get a 
+cannot change the state of profiling collection.
+They can get a
 .Pa gmon.out
 file with the warning that the data may be
 inconsistent if profiling is in progress.
+.Sh SEE ALSO
+.Xr config 1 ,
+.Xr gprof 1
 .Sh HISTORY
 The
 .Nm

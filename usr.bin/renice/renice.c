@@ -1,4 +1,4 @@
-/*	$NetBSD: renice.c,v 1.6 1998/12/19 21:07:12 christos Exp $	*/
+/*	$NetBSD: renice.c,v 1.18 2008/07/21 14:19:25 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,30 +31,29 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 /*static char sccsid[] = "from: @(#)renice.c	8.1 (Berkeley) 6/9/93";*/
-__RCSID("$NetBSD: renice.c,v 1.6 1998/12/19 21:07:12 christos Exp $");
+__RCSID("$NetBSD: renice.c,v 1.18 2008/07/21 14:19:25 lukem Exp $");
 #endif /* not lint */
 
-#include <sys/types.h>
-#include <sys/time.h>
 #include <sys/resource.h>
 
 #include <err.h>
+#include <errno.h>
+#include <limits.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
+#include <string.h>
+#include <sysexits.h>
 
-static int	getnum __P((const char *, const char *, int *));
-static int	donice __P((int, int, int, int));
-static void	usage __P((void)) __attribute__((__noreturn__));
-
-int	main __P((int, char **));
+static int	getnum(const char *, const char *, int *);
+static int	donice(int, id_t, int, int);
+static void	usage(void) __dead;
 
 /*
  * Change the priority (nice) of processes
@@ -66,12 +61,11 @@ int	main __P((int, char **));
  * running.
  */
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	int which = PRIO_PROCESS;
-	int who = 0, prio, errs = 0, incr = 0;
+	int prio, errs = 0, incr = 0;
+	id_t who = 0;
 
 	argc--, argv++;
 	if (argc < 2)
@@ -103,31 +97,36 @@ main(argc, argv)
 			
 			if (pwd == NULL) {
 				warnx("%s: unknown user", *argv);
+				errs++;
 				continue;
 			}
-			who = pwd->pw_uid;
+			who = (id_t)pwd->pw_uid;
 		} else {
-			if (getnum("pid", *argv, &who))
-				continue;
-			if (who < 0) {
-				warnx("%s: bad value", *argv);
+			int twho;
+			if (getnum("pid", *argv, &twho)) {
+				errs++;
 				continue;
 			}
+			if (twho < 0) {
+				warnx("%s: bad value", *argv);
+				errs++;
+				continue;
+			}
+			who = (id_t)twho;
 		}
 		errs += donice(which, who, prio, incr);
 	}
-	exit(errs != 0);
+	return errs == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 static int
-getnum(com, str, val)
-	const char *com, *str;
-	int *val;
+getnum(const char *com, const char *str, int *val)
 {
 	long v;
 	char *ep;
 
-	v = strtol(str, &ep, NULL);
+	errno = 0;
+	v = strtol(str, &ep, 0);
 
 	if (*ep) {
 		warnx("Bad %s argument: %s", com, str);
@@ -143,14 +142,14 @@ getnum(com, str, val)
 }
 
 static int
-donice(which, who, prio, incr)
-	int which, who, prio, incr;
+donice(int which, id_t who, int prio, int incr)
 {
 	int oldprio;
 
-	if ((oldprio = getpriority(which, who)) == -1) {
+	errno = 0;
+	if ((oldprio = getpriority(which, who)) == -1 && errno != 0) {
 		warn("%d: getpriority", who);
-		return (1);
+		return 1;
 	}
 
 	if (incr)
@@ -163,19 +162,19 @@ donice(which, who, prio, incr)
 
 	if (setpriority(which, who, prio) == -1) {
 		warn("%d: setpriority", who);
-		return (1);
+		return 1;
 	}
-	printf("%d: old priority %d, new priority %d\n", who, oldprio, prio);
-	return (0);
+	(void)printf("%d: old priority %d, new priority %d\n",
+	    who, oldprio, prio);
+	return 0;
 }
 
 static void
-usage()
+usage(void)
 {
-	extern char *__progname;
 
 	(void)fprintf(stderr, "Usage: %s [<priority> | -n <incr>] ",
-	    __progname);
+	    getprogname());
 	(void)fprintf(stderr, "[[-p] <pids>...] [-g <pgrp>...] ");
 	(void)fprintf(stderr, "[-u <user>...]\n");
 	exit(1);

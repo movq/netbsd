@@ -10,11 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,7 +32,7 @@
 #if 0
 static char sccsid[] = "@(#)cuserid.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: cuserid.c,v 1.5 1999/09/16 11:45:48 lukem Exp $");
+__RCSID("$NetBSD: cuserid.c,v 1.8 2005/04/19 03:38:08 lukem Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -46,21 +42,22 @@ __RCSID("$NetBSD: cuserid.c,v 1.5 1999/09/16 11:45:48 lukem Exp $");
 #include <unistd.h>
 
 char *
-cuserid(s)
-	char *s;
+cuserid(char *s)
 {
-	struct passwd *pw;
+	struct passwd *pw, pwres;
 	static char buf[L_cuserid];
+	char pwbuf[1024];
 
 	/* s may be NULL */
 
-	if ((pw = getpwuid(geteuid())) == NULL) {
-		if (s)
+	if (getpwuid_r(geteuid(), &pwres, pwbuf, sizeof(pwbuf), &pw) != 0
+	    || pw == NULL) {
+		if (s != NULL)
 			*s = '\0';
-		return (s);
+		return s;
 	}
-	if (!s)
+	if (s == NULL)
 		s = buf;
 	(void)strncpy(s, pw->pw_name, L_cuserid);
-	return (s);
+	return s;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ucred.h,v 1.13 1998/03/01 02:24:15 fvdl Exp $	*/
+/*	$NetBSD: ucred.h,v 1.34 2007/08/29 10:32:01 pooka Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,27 +34,19 @@
 #ifndef _SYS_UCRED_H_
 #define	_SYS_UCRED_H_
 
+#include <sys/param.h>
+
 /*
  * Credentials.
  */
-struct ucred {
-	u_short	cr_ref;			/* reference count */
-	uid_t	cr_uid;			/* effective user id */
-	gid_t	cr_gid;			/* effective group id */
-	short	cr_ngroups;		/* number of groups */
-	gid_t	cr_groups[NGROUPS];	/* groups */
+
+/* Userland's view of credentials. This should not change */
+struct uucred {
+	unsigned short	cr_unused;		/* not used, compat */
+	uid_t		cr_uid;			/* effective user id */
+	gid_t		cr_gid;			/* effective group id */
+	short		cr_ngroups;		/* number of groups */
+	gid_t		cr_groups[NGROUPS];	/* groups */
 };
-#define NOCRED ((struct ucred *)-1)	/* no credential available */
-#define FSCRED ((struct ucred *)-2)	/* filesystem credential */
-
-#ifdef _KERNEL
-#define	crhold(cr)	(cr)->cr_ref++
-
-struct ucred	*crcopy __P((struct ucred *cr));
-struct ucred	*crdup __P((struct ucred *cr));
-void		crfree __P((struct ucred *cr));
-struct ucred	*crget __P((void));
-int		suser __P((struct ucred *cred, u_short *acflag));
-#endif /* _KERNEL */
 
 #endif /* !_SYS_UCRED_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: crib.c,v 1.12 1999/09/12 09:02:21 jsm Exp $	*/
+/*	$NetBSD: crib.c,v 1.22 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)crib.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: crib.c,v 1.12 1999/09/12 09:02:21 jsm Exp $");
+__RCSID("$NetBSD: crib.c,v 1.22 2008/08/08 16:10:47 drochner Exp $");
 #endif
 #endif /* not lint */
 
@@ -60,12 +56,8 @@ __RCSID("$NetBSD: crib.c,v 1.12 1999/09/12 09:02:21 jsm Exp $");
 #include "cribcur.h"
 #include "pathnames.h"
 
-int	main __P((int, char *[]));
-
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	BOOLEAN playing;
 	FILE *f;
@@ -80,7 +72,7 @@ main(argc, argv)
 		exit(1);
 
 	/* Revoke setgid privileges */
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
 	/* Set close-on-exec flag on log file */
 	if (f != NULL) {
@@ -110,9 +102,10 @@ main(argc, argv)
 			exit(1);
 		}
 
-	initscr();
-	(void)signal(SIGINT, rint);
-	crmode();
+	if (!initscr())
+		errx(0, "couldn't initialize screen");
+	(void)signal(SIGINT, receive_intr);
+	cbreak();
 	noecho();
 
 	Playwin = subwin(stdscr, PLAY_Y, PLAY_X, 0, 0);
@@ -132,7 +125,7 @@ main(argc, argv)
 			mvcur(0, COLS - 1, LINES - 1, 0);
 			fflush(stdout);
 			instructions();
-			crmode();
+			cbreak();
 			noecho();
 			clear();
 			refresh();
@@ -166,7 +159,7 @@ main(argc, argv)
  *	Print out the initial board on the screen
  */
 void
-makeboard()
+makeboard(void)
 {
 	mvaddstr(SCORE_Y + 0, SCORE_X,
 	    "+---------------------------------------+");
@@ -194,10 +187,8 @@ makeboard()
  *	Print out the current game score
  */
 void
-gamescore()
+gamescore(void)
 {
-	extern int Lastscore[];
-
 	if (pgames || cgames) {
 		mvprintw(SCORE_Y + 1, SCORE_X + 28, "Games: %3d", pgames);
 		mvprintw(SCORE_Y + 7, SCORE_X + 28, "Games: %3d", cgames);
@@ -212,7 +203,7 @@ gamescore()
  *	player what card to turn.  We do a random one, anyway.
  */
 void
-game()
+game(void)
 {
 	int i, j;
 	BOOLEAN flag;
@@ -306,8 +297,7 @@ game()
  *	Do up one hand of the game
  */
 int
-playhand(mycrib)
-	BOOLEAN mycrib;
+playhand(BOOLEAN mycrib)
 {
 	int deckpos;
 
@@ -338,8 +328,7 @@ playhand(mycrib)
  * deal cards to both players from deck
  */
 int
-deal(mycrib)
-	BOOLEAN mycrib;
+deal(BOOLEAN mycrib)
 {
 	int i, j;
 
@@ -361,8 +350,7 @@ deal(mycrib)
  * Note: we call cdiscard() after prining first message so player doesn't wait
  */
 void
-discard(mycrib)
-	BOOLEAN mycrib;
+discard(BOOLEAN mycrib)
 {
 	const char *prompt;
 	CARD crd;
@@ -391,9 +379,7 @@ discard(mycrib)
  *	player what card to turn.  We do a random one, anyway.
  */
 int
-cut(mycrib, pos)
-	BOOLEAN mycrib;
-	int  pos;
+cut(BOOLEAN mycrib, int  pos)
 {
 	int i;
 	BOOLEAN win;
@@ -435,8 +421,7 @@ cut(mycrib, pos)
  *	Print out the turnover card with crib indicator
  */
 void
-prcrib(mycrib, blank)
-	BOOLEAN mycrib, blank;
+prcrib(BOOLEAN mycrib, BOOLEAN blank)
 {
 	int y, cardx;
 
@@ -466,8 +451,7 @@ static CARD Table[14];
 static int Tcnt;
 
 int
-peg(mycrib)
-	BOOLEAN mycrib;
+peg(BOOLEAN mycrib)
 {
 	static CARD ch[CINHAND], ph[CINHAND];
 	int i, j, k;
@@ -626,11 +610,10 @@ peg(mycrib)
  *	Print out the table with the current score
  */
 void
-prtable(score)
-	int score;
+prtable(int curscore)
 {
 	prhand(Table, Tcnt, Tablewin, FALSE);
-	mvwprintw(Tablewin, (Tcnt + 2) * 2, Tcnt + 1, "%2d", score);
+	mvwprintw(Tablewin, (Tcnt + 2) * 2, Tcnt + 1, "%2d", curscore);
 	wrefresh(Tablewin);
 }
 
@@ -639,8 +622,7 @@ prtable(score)
  *	Handle the scoring of the hands
  */
 int
-score(mycrib)
-	BOOLEAN mycrib;
+score(BOOLEAN mycrib)
 {
 	sorthand(crib, CINHAND);
 	if (mycrib) {

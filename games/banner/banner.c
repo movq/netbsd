@@ -1,4 +1,4 @@
-/*	$NetBSD: banner.c,v 1.10 1999/07/19 19:07:17 hubertf Exp $	*/
+/*	$NetBSD: banner.c,v 1.17 2008/07/20 01:03:20 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)banner.c	8.4 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: banner.c,v 1.10 1999/07/19 19:07:17 hubertf Exp $");
+__RCSID("$NetBSD: banner.c,v 1.17 2008/07/20 01:03:20 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -91,7 +87,7 @@ const int asc_ptr[NCHARS] = {
  * is the next elt in array) and goto second
  * next element in array.
  */
-const char data_table[NBYTES] = {
+const unsigned char data_table[NBYTES] = {
 /*             0     1     2     3     4     5     6     7     8     9 */
 /*    0 */   129,  227,  130,   34,    6,   90,   19,  129,   32,   10, 
 /*   10 */    74,   40,  129,   31,   12,   64,   53,  129,   30,   14, 
@@ -1029,13 +1025,14 @@ char	print[DWIDTH];
 int	debug, i, j, linen, max, nchars, pc, term, trace, x, y;
 int	width = DWIDTH;	/* -w option: scrunch letters to 80 columns */
 
-
-int main __P((int, char *[]));
+static void
+toolong(void)
+{
+	errx(EXIT_FAILURE, "message too long");
+}
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 { 
 	int ch;
 
@@ -1049,7 +1046,7 @@ main(argc, argv)
 			break;
 		case 'w':
 			width = atoi(optarg);
-			if (width <= 0)
+			if (width <= 0 || width > DWIDTH)
 				errx(1, "illegal argument for -w option");
 			break;
 		case '?':
@@ -1061,16 +1058,21 @@ main(argc, argv)
 	argv += optind;
 
 	for (i = 0; i < width; i++) {
-		j = i * 132 / width;
+		j = i * DWIDTH / width;
 		print[j] = 1;
 	}
 
 	/* Have now read in the data. Next get the message to be printed. */
 	if (*argv) {
-		strcpy(message, *argv);
+		const size_t msize = sizeof(message);
+
+		if (strlcpy(message, *argv, msize) >= msize)
+			toolong();
 		while (*++argv) {
-			strcat(message, " ");
-			strcat(message, *argv);
+			if (strlcat(message, " ", msize) >= msize)
+				toolong();
+			if (strlcat(message, *argv, msize) >= msize)
+				toolong();
 		}
 		nchars = strlen(message);
 	} else {
@@ -1096,7 +1098,7 @@ main(argc, argv)
 		for (i = 0; i < NBYTES; i += 10) {
 			printf("/* %4d */  ",i);
 			for (j = i; j < i+10; j++) { 
-				x = data_table[j] & 0377;
+				x = data_table[j];
 				printf(" %3d, ",x);
 			}
 			putchar('\n');
@@ -1133,9 +1135,12 @@ main(argc, argv)
 				printf("bad pc: %d\n",pc);
 				exit(1);
 			}
-			x = data_table[pc] & 0377;
-			if (trace)
-				printf("pc=%d, term=%d, max=%d, linen=%d, x=%d\n",pc,term,max,linen,x);
+			x = data_table[pc];
+			if (trace) {
+				printf("pc=%d, term=%d, max=%d, linen=%d, x=%d",
+				    pc,term,max,linen,x);
+				printf("\n");
+			}
 			if (x >= 128) {
 				if (x>192) term++;
 				x = x & 63;
@@ -1153,7 +1158,7 @@ main(argc, argv)
 			else {
 				y = data_table[pc+1];
 				/* compensate for narrow teminals */
-#ifdef notdef
+#if 0 /* notdef */
 				x = (x*width + (DWIDTH/2)) / DWIDTH;
 				y = (y*width + (DWIDTH/2)) / DWIDTH;
 #endif

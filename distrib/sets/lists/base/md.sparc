@@ -1,26 +1,26 @@
-# $NetBSD: md.sparc,v 1.48 2000/01/24 07:25:02 mycroft Exp $
-./sbin/edlabel
-./usr/bin/fdformat
-./usr/lkm/adosfs.o
-./usr/lkm/cd9660.o
-./usr/lkm/coda.o
-./usr/lkm/ext2fs.o
-./usr/lkm/fdesc.o
-./usr/lkm/if_ipl.o
-./usr/lkm/kernfs.o
-./usr/lkm/mfs.o
-./usr/lkm/msdosfs.o
-./usr/lkm/ntfs.o
-./usr/lkm/nullfs.o
-./usr/lkm/overlay.o
-./usr/lkm/portal.o
-./usr/lkm/procfs.o
-./usr/lkm/umapfs.o
-./usr/mdec/binstall
-./usr/mdec/boot
-./usr/mdec/boot.net
-./usr/mdec/bootxx
-./usr/mdec/installboot
-./usr/sbin/eeprom
-./usr/sbin/apmd
-./usr/sbin/tadepolectl
+# $NetBSD: md.sparc,v 1.74.2.1 2008/11/06 23:51:26 snj Exp $
+./lib/libsparc_v8.so.0				base-sys-shlib		dynamicroot,pic
+./lib/libsparc_v8.so.0.0			base-sys-shlib		dynamicroot,pic
+./sbin/edlabel					base-sysutil-root
+./sbin/ldconfig					base-sysutil-root	pic
+./usr/bin/fdformat				base-util-bin
+./usr/lib/libsparc_v8.so.0			base-sys-shlib		pic
+./usr/lib/libsparc_v8.so.0.0			base-sys-shlib		pic
+./usr/libexec/ld.so				base-sys-shlib		pic
+./usr/mdec/binstall				base-sysutil-bin
+./usr/mdec/boot					base-sysutil-bin
+./usr/mdec/boot.388000				base-sysutil-bin
+./usr/mdec/boot.net				base-sysutil-bin
+./usr/mdec/bootblk				base-sysutil-bin
+./usr/mdec/bootjs.elf				base-obsolete		obsolete
+./usr/mdec/bootjs.net				base-sysutil-bin
+./usr/mdec/bootxx				base-sysutil-bin
+./usr/mdec/installboot				base-obsolete		obsolete
+./usr/mdec/ofwboot				base-sysutil-bin
+./usr/mdec/ofwboot.net				base-sysutil-bin
+./usr/sbin/apmd					base-sysutil-bin
+./usr/sbin/apm					base-sysutil-bin
+./usr/sbin/zzz					base-sysutil-bin
+./usr/sbin/eeprom				base-sysutil-bin
+./usr/sbin/tadpolectl				base-sysutil-bin
+./usr/sbin/ofctl				base-sysutil-bin

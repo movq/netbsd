@@ -1,9 +1,43 @@
-/*	$NetBSD: itevar.h,v 1.5 1999/03/24 14:11:47 minoura Exp $	*/
+/*	$NetBSD: itevar.h,v 1.13 2007/10/17 19:58:02 garbled Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: itevar.h 1.1 90/07/09$
+ *
+ *	@(#)itevar.h	7.2 (Berkeley) 11/4/90
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -47,13 +81,13 @@
 struct ite_softc;
 
 struct itesw {
-	int	(*ite_cnprobe) __P((int minor));
-	void	(*ite_init) __P((struct ite_softc *));
-	void	(*ite_deinit) __P((struct ite_softc *));
-	void	(*ite_clear) __P((struct ite_softc *,int,int,int,int));
-	void	(*ite_putc) __P((struct ite_softc *,int,int,int,int));
-	void	(*ite_cursor) __P((struct ite_softc *,int));
-	void	(*ite_scroll) __P((struct ite_softc *,int,int,int,int));
+	int	(*ite_cnprobe)(int minor);
+	void	(*ite_init)(struct ite_softc *);
+	void	(*ite_deinit)(struct ite_softc *);
+	void	(*ite_clear)(struct ite_softc *, int, int, int, int);
+	void	(*ite_putc)(struct ite_softc *, int, int, int, int);
+	void	(*ite_cursor)(struct ite_softc *, int);
+	void	(*ite_scroll)(struct ite_softc *, int, int, int, int);
 };
 
 enum ite_arraymaxs {
@@ -119,11 +153,11 @@ enum emul_level {
 	(ip->attrbuf + ((y) * ip->cols) + (x))
 
 #define attrclr(ip, sy, sx, h, w) \
-	bzero(ip->attrbuf + ((sy) * ip->cols) + (sx), (h) * (w))
-  
+	memset(ip->attrbuf + ((sy) * ip->cols) + (sx), 0, (h) * (w))
+
 #define attrmov(ip, sy, sx, dy, dx, h, w) \
-	bcopy(ip->attrbuf + ((sy) * ip->cols) + (sx), \
-	      ip->attrbuf + ((dy) * ip->cols) + (dx), \
+	memcpy(ip->attrbuf + ((dy) * ip->cols) + (dx), \
+	      ip->attrbuf + ((sy) * ip->cols) + (sx), \
 	      (h) * (w))
 
 #define attrtest(ip, attr) \
@@ -139,7 +173,7 @@ enum emul_level {
 #define attrset(ip, attr)
 #endif
 
-  
+
 /*
  * X and Y location of character 'c' in the framebuffer, in pixels.
  */
@@ -159,7 +193,7 @@ enum emul_level {
 
 /* Keyboard attributes */
 #define ATTR_KPAD	0x80		/* keypad transmit */
-  
+
 /* Replacement Rules */
 #define RR_CLEAR		0x0
 #define RR_COPY			0x3
@@ -204,10 +238,10 @@ enum emul_level {
 #define KBD_MOD_OPT1	(1<<8)
 #define KBD_MOD_OPT2	(1<<9)
 
-/* type for the second argument to itefilter(). Note that the 
+/* type for the second argument to itefilter(). Note that the
    driver doesn't support key-repeat for console-mode, since it can't use
    timeout() for polled I/O. */
-   
+
 enum tab_size { TABSIZE = 8 };
 #define TABEND(u) (ite_tty[u]->t_windsize.ws_col - TABSIZE) /* XXX */
 
@@ -231,37 +265,33 @@ enum tab_size { TABSIZE = 8 };
 struct consdev;
 
 /* console related function */
-void	itecnprobe __P((struct consdev *));
-void	itecninit __P((struct consdev *));
-int	itecngetc __P((dev_t));
-void	itecnputc __P((dev_t, int));
-void	itecnfinish __P((struct ite_softc *));
+void	itecnprobe(struct consdev *);
+void	itecninit(struct consdev *);
+int	itecngetc(dev_t);
+void	itecnputc(dev_t, int);
+void	itecnfinish(struct ite_softc *);
 
 /* standard ite device entry points. */
-void	iteinit __P((dev_t));
-int	iteopen __P((dev_t, int, int, struct proc *));
-int	iteclose __P((dev_t, int, int, struct proc *));
-int	iteread __P((dev_t, struct uio *, int));
-int	itewrite __P((dev_t, struct uio *, int));
-int	iteioctl __P((dev_t, u_long, caddr_t, int, struct proc *));
-void	itestart __P((struct tty *));
+void	iteinit(dev_t);
+void	itestart(struct tty *);
 
 /* ite functions */
-int	iteon __P((dev_t, int));
-void	iteoff __P((dev_t, int));
-void	ite_reinit __P((dev_t));
-void	ite_reset __P((struct ite_softc *));
-int	ite_cnfilter __P((u_char));
-void	ite_filter __P((u_char));
+int	iteon(dev_t, int);
+void	iteoff(dev_t, int);
+void	ite_reinit(dev_t);
+void	ite_reset(struct ite_softc *);
+int	ite_cnfilter(u_char);
+void	ite_filter(u_char);
 
 /* lower layer functions */
-void	tv_init __P((struct ite_softc *));
-void	tv_deinit __P((struct ite_softc *));
+void	tv_init(struct ite_softc *);
+void	tv_deinit(struct ite_softc *);
 
 #ifdef _KERNEL
 extern unsigned char kern_font[];
 
 /* keyboard LED status variable */
 extern unsigned char kbdled;
-void kbd_setLED __P((void));
+void ite_set_glyph(void);
+void kbd_setLED(void);
 #endif

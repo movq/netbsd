@@ -1,4 +1,4 @@
-/*	$NetBSD: mv.c,v 1.24 1999/12/14 17:30:11 jdolecek Exp $	*/
+/* $NetBSD: mv.c,v 1.41 2008/07/20 00:52:40 lukem Exp $ */
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mv.c	8.2 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: mv.c,v 1.24 1999/12/14 17:30:11 jdolecek Exp $");
+__RCSID("$NetBSD: mv.c,v 1.41 2008/07/20 00:52:40 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,39 +54,38 @@ __RCSID("$NetBSD: mv.c,v 1.24 1999/12/14 17:30:11 jdolecek Exp $");
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <grp.h>
 #include <locale.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <pwd.h>
-#include <grp.h>
 
 #include "pathnames.h"
 
-int fflg, iflg;
+int fflg, iflg, vflg;
 int stdin_ok;
 
-int	copy __P((char *, char *));
-int	do_move __P((char *, char *));
-int	fastcopy __P((char *, char *, struct stat *));
-void	usage __P((void));
-int	main __P((int, char *[]));
+int	copy(char *, char *);
+int	do_move(char *, char *);
+int	fastcopy(char *, char *, struct stat *);
+void	usage(void);
+int	main(int, char *[]);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-	int baselen, len, rval;
+	int ch, len, rval;
 	char *p, *endp;
 	struct stat sb;
-	int ch;
 	char path[MAXPATHLEN + 1];
+	size_t baselen;
 
+	setprogname(argv[0]);
 	(void)setlocale(LC_ALL, "");
 
-	while ((ch = getopt(argc, argv, "if")) != -1)
+	while ((ch = getopt(argc, argv, "ifv")) != -1)
 		switch (ch) {
 		case 'i':
 			fflg = 0;
@@ -100,7 +95,9 @@ main(argc, argv)
 			iflg = 0;
 			fflg = 1;
 			break;
-		case '?':
+		case 'v':
+			vflg = 1;
+			break;
 		default:
 			usage();
 		}
@@ -123,11 +120,14 @@ main(argc, argv)
 	}
 
 	/* It's a directory, move each file into it. */
-	(void)strcpy(path, argv[argc - 1]);
-	baselen = strlen(path);
+	baselen = strlcpy(path, argv[argc - 1], sizeof(path));
+	if (baselen >= sizeof(path))
+		errx(1, "%s: destination pathname too long", argv[argc - 1]);
 	endp = &path[baselen];
-	*endp++ = '/';
-	++baselen;
+	if (!baselen || *(endp - 1) != '/') {
+		*endp++ = '/';
+		++baselen;
+	}
 	for (rval = 0; --argc; ++argv) {
 		p = *argv + strlen(*argv) - 1;
 		while (*p == '/' && p != *argv)
@@ -151,8 +151,7 @@ main(argc, argv)
 }
 
 int
-do_move(from, to)
-	char *from, *to;
+do_move(char *from, char *to)
 {
 	struct stat sb;
 	char modep[15];
@@ -193,8 +192,11 @@ do_move(from, to)
 		} else
 			ask = 0;
 		if (ask) {
-			if ((ch = getchar()) != EOF && ch != '\n')
-				while (getchar() != '\n');
+			if ((ch = getchar()) != EOF && ch != '\n') {
+				int ch2;
+				while ((ch2 = getchar()) != EOF && ch2 != '\n')
+					continue;
+			}
 			if (ch != 'y' && ch != 'Y')
 				return (0);
 		}
@@ -213,8 +215,11 @@ do_move(from, to)
 	 *	message to standard error, and do nothing more with the
 	 *	current source file...
 	 */
-	if (!rename(from, to))
+	if (!rename(from, to)) {
+		if (vflg)
+			printf("%s -> %s\n", from, to);
 		return (0);
+	}
 
 	if (errno != EXDEV) {
 		warn("rename %s to %s", from, to);
@@ -242,17 +247,16 @@ do_move(from, to)
 		warn("%s", from);
 		return (1);
 	}
+
 	return (S_ISREG(sb.st_mode) ?
 	    fastcopy(from, to, &sb) : copy(from, to));
 }
 
 int
-fastcopy(from, to, sbp)
-	char *from, *to;
-	struct stat *sbp;
+fastcopy(char *from, char *to, struct stat *sbp)
 {
 	struct timeval tval[2];
-	static u_int blen;
+	static blksize_t blen;
 	static char *bp;
 	int nread, from_fd, to_fd;
 
@@ -268,6 +272,9 @@ fastcopy(from, to, sbp)
 	}
 	if (!blen && !(bp = malloc(blen = sbp->st_blksize))) {
 		warn(NULL);
+		blen = 0;
+		(void)close(from_fd);
+		(void)close(to_fd);
 		return (1);
 	}
 	while ((nread = read(from_fd, bp, blen)) > 0)
@@ -306,6 +313,8 @@ err:		if (unlink(to))
 	}
 	if (fchmod(to_fd, sbp->st_mode))
 		warn("%s: set mode", to);
+	if (fchflags(to_fd, sbp->st_flags) && (errno != EOPNOTSUPP))
+		warn("%s: set flags (was: 0%07o)", to, sbp->st_flags);
 
 	if (close(to_fd)) {
 		warn("%s", to);
@@ -316,17 +325,21 @@ err:		if (unlink(to))
 		warn("%s: remove", from);
 		return (1);
 	}
+
+	if (vflg)
+		printf("%s -> %s\n", from, to);
+
 	return (0);
 }
 
 int
-copy(from, to)
-	char *from, *to;
+copy(char *from, char *to)
 {
-	int pid, status;
+	pid_t pid;
+	int status;
 
 	if ((pid = vfork()) == 0) {
-		execl(_PATH_CP, "mv", "-PRp", from, to, NULL);
+		execl(_PATH_CP, "mv", vflg ? "-PRpv" : "-PRp", "--", from, to, NULL);
 		warn("%s", _PATH_CP);
 		_exit(1);
 	}
@@ -335,16 +348,16 @@ copy(from, to)
 		return (1);
 	}
 	if (!WIFEXITED(status)) {
-		warn("%s: did not terminate normally", _PATH_CP);
+		warnx("%s: did not terminate normally", _PATH_CP);
 		return (1);
 	}
 	if (WEXITSTATUS(status)) {
-		warn("%s: terminated with %d (non-zero) status",
+		warnx("%s: terminated with %d (non-zero) status",
 		    _PATH_CP, WEXITSTATUS(status));
 		return (1);
 	}
 	if (!(pid = vfork())) {
-		execl(_PATH_RM, "mv", "-rf", from, NULL);
+		execl(_PATH_RM, "mv", "-rf", "--", from, NULL);
 		warn("%s", _PATH_RM);
 		_exit(1);
 	}
@@ -353,11 +366,11 @@ copy(from, to)
 		return (1);
 	}
 	if (!WIFEXITED(status)) {
-		warn("%s: did not terminate normally", _PATH_RM);
+		warnx("%s: did not terminate normally", _PATH_RM);
 		return (1);
 	}
 	if (WEXITSTATUS(status)) {
-		warn("%s: terminated with %d (non-zero) status",
+		warnx("%s: terminated with %d (non-zero) status",
 		    _PATH_RM, WEXITSTATUS(status));
 		return (1);
 	}
@@ -365,11 +378,11 @@ copy(from, to)
 }
 
 void
-usage()
+usage(void)
 {
-
-	(void)fprintf(stderr, "usage: mv [-fi] source target\n");
-	(void)fprintf(stderr, "       mv [-fi] source ... directory\n");
+	(void)fprintf(stderr, "usage: %s [-fiv] source target\n"
+	    "       %s [-fiv] source ... directory\n", getprogname(),
+	    getprogname());
 	exit(1);
 	/* NOTREACHED */
 }

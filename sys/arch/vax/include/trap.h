@@ -1,4 +1,4 @@
-/*      $NetBSD: trap.h,v 1.17 2000/01/24 02:40:32 matt Exp $     */
+/*      $NetBSD: trap.h,v 1.21.4.1 2009/02/24 03:01:10 snj Exp $     */
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -65,6 +61,18 @@
 #define	T_WRITE		0x80
 #define	T_PTEFETCH	0x40
 
+/* Section 6.4.1 Arithmetic Traps/Faults */
+#define ATRP_INTOVF	0x1	/* integer overflow */
+#define ATRP_INTDIV	0x2	/* integer divide by zero */
+#define ATRP_FLTOVF	0x3	/* floating overflow */
+#define ATRP_FLTDIV	0x4	/* floating/decimal divide by zero */
+#define ATRP_FLTUND	0x5	/* floating underflow */
+#define ATRP_DECOVF	0x6	/* decimal underflow */
+#define ATRP_FLTSUB	0x7	/* subscript range */
+#define	AFLT_FLTOVF	0x8	/* floating overflow */
+#define	AFLT_FLTDIV	0x9	/* floating divide-by-zero */
+#define	AFLT_FLTUND	0xa	/* floating underflow */
+
 /* Trap's coming from user mode */
 #define	T_USER	0x100
 
@@ -90,26 +98,6 @@ struct	trapframe {
         long	pc;     /* User pc */
         long	psl;    /* User psl */
 };
-
-/*
- * This struct is used when setting up interrupt vectors dynamically.
- * It pushes a longword between 0-63 on the stack; this number is
- * normally used as the ctlr number on devices. This use effectively
- * limits the number of interruptable ctlrs on one unibus to 64.
- */
-struct ivec_dsp {
-	char	pushr; 		/* pushr */
-	char	pushrarg;	/* $0x3f */
-	char	jsb;
-	char	mode;
-	long	displacement;
-	void	(*hoppaddr) __P((void *));
-	void	*pushlarg;
-};
-
-#ifdef _KERNEL
-extern	const struct ivec_dsp idsptch;
-#endif
 
 #endif /* _LOCORE */
 

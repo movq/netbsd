@@ -1,9 +1,9 @@
-/* dribble.c -- Dribble files for Info. */
+/*	$NetBSD: dribble.c,v 1.1.1.5 2008/09/02 07:49:34 christos Exp $	*/
 
-/* This file is part of GNU Info, a program for reading online documentation
-   stored in Info format.
+/* dribble.c -- dribble files for Info.
+   Id: dribble.c,v 1.3 2004/04/11 17:56:45 karl Exp
 
-   Copyright (C) 1993 Free Software Foundation, Inc.
+   Copyright (C) 1993, 1998, 2004 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -31,13 +31,13 @@ FILE *info_dribble_file = (FILE *)NULL;
 /* Open a dribble file named NAME, perhaps closing an already open one.
    This sets the global variable INFO_DRIBBLE_FILE to the open stream. */
 void
-open_dribble_file (name)
-     char *name;
+open_dribble_file (char *name)
 {
   /* Perhaps close existing dribble file. */
   close_dribble_file ();
 
-  info_dribble_file = fopen (name, "w");
+  /* Keystrokes can be non-printable characters, so we need binary I/O.  */
+  info_dribble_file = fopen (name, FOPEN_WBIN);
 
 #if defined (HAVE_SETVBUF)
   if (info_dribble_file)
@@ -51,7 +51,7 @@ open_dribble_file (name)
 
 /* If there is a dribble file already open, close it. */
 void
-close_dribble_file ()
+close_dribble_file (void)
 {
   if (info_dribble_file)
     {
@@ -63,8 +63,7 @@ close_dribble_file ()
 
 /* Write some output to our existing dribble file. */
 void
-dribble (byte)
-     unsigned char byte;
+dribble (unsigned char byte)
 {
   if (info_dribble_file)
     fwrite (&byte, sizeof (unsigned char), 1, info_dribble_file);

@@ -1,4 +1,4 @@
-/*	$NetBSD: rusers_proc.c,v 1.21 1999/07/06 14:36:10 christos Exp $	*/
+/*	$NetBSD: rusers_proc.c,v 1.25 2005/08/01 21:08:34 christos Exp $	*/
 
 /*-
  *  Copyright (c) 1993 John Brezak
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rusers_proc.c,v 1.21 1999/07/06 14:36:10 christos Exp $");
+__RCSID("$NetBSD: rusers_proc.c,v 1.25 2005/08/01 21:08:34 christos Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -51,121 +51,153 @@ __RCSID("$NetBSD: rusers_proc.c,v 1.21 1999/07/06 14:36:10 christos Exp $");
 #include <rpc/rpc.h>
 
 #include "rusers_proc.h"
+#include "utmpentry.h"
 
 #ifdef XIDLE
 #include <setjmp.h>
 #include <X11/Xlib.h>
 #include <X11/extensions/xidle.h>
 #endif
+
 #include <rpcsvc/rusers.h>	/* New version */
+static size_t maxusers3 = 0;
+static struct rusers_utmp *utmps;
+
 #include <rpcsvc/rnusers.h>	/* Old version */
+static size_t maxusers2 = 0;
+static struct utmpidle **utmp_idlep;
+static struct utmpidle *utmp_idle;
 
-#define	IGNOREUSER	"sleeper"
-
-#ifdef OSF
-#define _PATH_UTMP UTMP_FILE
-#endif
-
-#ifndef _PATH_UTMP
-#define _PATH_UTMP "/etc/utmp"
-#endif
+typedef char *(*rusersproc)(void *, struct svc_req *);
 
 #ifndef _PATH_DEV
 #define _PATH_DEV "/dev"
 #endif
 
-#ifndef UT_LINESIZE
-#define UT_LINESIZE sizeof(((struct utmp *)0)->ut_line)
-#endif
-#ifndef UT_NAMESIZE
-#define UT_NAMESIZE sizeof(((struct utmp *)0)->ut_name)
-#endif
-#ifndef UT_HOSTSIZE
-#define UT_HOSTSIZE sizeof(((struct utmp *)0)->ut_host)
-#endif
-
-typedef char ut_line_t[UT_LINESIZE];
-typedef char ut_name_t[UT_NAMESIZE];
-typedef char ut_host_t[UT_HOSTSIZE];
-
-static struct rusers_utmp utmps[MAXUSERS];
-static struct utmpidle *utmp_idlep[MAXUSERS];
-static struct utmpidle utmp_idle[MAXUSERS];
-static ut_line_t line[MAXUSERS];
-static ut_name_t name[MAXUSERS];
-static ut_host_t host[MAXUSERS];
 
 extern int from_inetd;
 
-static int getidle __P((char *, char *));
-static int *rusers_num_svc __P((void *, struct svc_req *));
-static utmp_array *do_names_3 __P((int));
-static struct utmpidlearr *do_names_2 __P((int));
+static int getarrays2(int);
+static int getarrays3(int);
+static int getidle(char *, char *);
+static int *rusers_num_svc(void *, struct svc_req *);
+static utmp_array *do_names_3(int);
+static struct utmpidlearr *do_names_2(int);
 
 /* XXX */
-struct utmpidlearr *rusersproc_names_2_svc __P((void *, struct svc_req *));
-struct utmpidlearr *rusersproc_allnames_2_svc __P((void *, struct svc_req *));
+struct utmpidlearr *rusersproc_names_2_svc(void *, struct svc_req *);
+struct utmpidlearr *rusersproc_allnames_2_svc(void *, struct svc_req *);
 
 
 #ifdef XIDLE
 static Display *dpy;
 static sigjmp_buf openAbort;
 
-static int XqueryIdle __P((char *));
-static void abortOpen __P((int));
+static int XqueryIdle(char *);
+static void abortOpen(int);
 
 static void
-abortOpen(n)
-	int n;
+abortOpen(int n)
 {
 	siglongjmp(openAbort, 1);
 }
 
 static int
-XqueryIdle(display)
-	char *display;
+XqueryIdle(char *display)
 {
 	int first_event, first_error;
 	Time IdleTime;
 
-	(void) signal(SIGALRM, abortOpen);
-	(void) alarm(10);
+	(void)signal(SIGALRM, abortOpen);
+	(void)alarm(10);
 	if (!sigsetjmp(openAbort, 0)) {
 		if ((dpy = XOpenDisplay(display)) == NULL) {
 			syslog(LOG_DEBUG, "cannot open display %s", display);
-			return (-1);
+			return -1;
 		}
 		if (XidleQueryExtension(dpy, &first_event, &first_error)) {
 			if (!XGetIdleTime(dpy, &IdleTime)) {
-				syslog(LOG_DEBUG, "%s: unable to get idle time",
-				    display);
-				return (-1);
+				syslog(LOG_DEBUG,
+				    "%s: unable to get idle time", display);
+				return -1;
 			}
 		} else {
 			syslog(LOG_DEBUG, "%s: Xidle extension not loaded",
 			    display);
-			return (-1);
+			return -1;
 		}
 		XCloseDisplay(dpy);
 	} else {
 		syslog(LOG_DEBUG, "%s: server grabbed for over 10 seconds",
 		    display);
-		return (-1);
+		return -1;
 	}
-	(void) alarm(0);
-	(void) signal(SIGALRM, SIG_DFL);
+	(void)alarm(0);
+	(void)signal(SIGALRM, SIG_DFL);
 
 	IdleTime /= 1000;
-	return ((IdleTime + 30) / 60);
+	return (IdleTime + 30) / 60;
 }
 #endif /* XIDLE */
 
 static int
-getidle(tty, display)
-	char *tty, *display;
+getarrays2(int ne)
+{
+	struct utmpidle **nutmp_idlep;
+	struct utmpidle *nutmp_idle;
+
+	/* Limit to MAXUSERS for version 2 */
+	if (ne > MAXUSERS)
+		ne = MAXUSERS;
+
+	if (maxusers2 == 0) {
+		nutmp_idlep = malloc(sizeof(*nutmp_idlep) * ne);
+		nutmp_idle = malloc(sizeof(*nutmp_idle) * ne);
+	} else {
+		nutmp_idlep = realloc(utmp_idlep, sizeof(*nutmp_idlep) * ne);
+		nutmp_idle = realloc(utmp_idle, sizeof(*nutmp_idle) * ne);
+	}
+
+	if (nutmp_idlep == NULL || nutmp_idle == NULL) {
+		syslog(LOG_WARNING, "Cannot allocate data for %u users (%m)",
+		    ne);
+		free(nutmp_idlep);
+		free(nutmp_idle);
+		return 0;
+	}
+
+	utmp_idlep = nutmp_idlep;
+	utmp_idle = nutmp_idle;
+	return maxusers2 = ne;
+}
+
+static int
+getarrays3(int ne)
+{
+	struct rusers_utmp *nutmps;
+
+	if (maxusers3 == 0) {
+		nutmps = malloc(sizeof(*nutmps) * ne);
+	} else {
+		nutmps = realloc(utmps, sizeof(*nutmps) * ne);
+	}
+
+	if (nutmps == NULL) {
+		syslog(LOG_WARNING, "Cannot allocate data for %u users (%m)",
+		    ne);
+		return 0;
+	}
+
+	utmps = nutmps;
+	return maxusers3 = ne;
+}
+
+static int
+/*ARGUSED*/
+getidle(char *tty, char *display)
 {
 	struct stat st;
-	char devname[PATH_MAX];
+	char dev_name[PATH_MAX];
 	time_t now;
 	long idle;
 	
@@ -176,7 +208,7 @@ getidle(tty, display)
 #ifdef XIDLE
 	if (display && *display && strchr(display, ':') != NULL &&
 	    (idle = XqueryIdle(display)) >= 0)
-		return (idle);
+		return idle;
 #endif
 	idle = 0;
 	if (*tty == 'X') {
@@ -192,14 +224,14 @@ getidle(tty, display)
 		mouse_idle = getidle("mouse", NULL);
 		idle = (kbd_idle < mouse_idle) ? kbd_idle : mouse_idle;
 	} else {
-		snprintf(devname, sizeof devname, "%s/%s", _PATH_DEV, tty);
-		if (stat(devname, &st) == -1) {
-			syslog(LOG_WARNING, "Cannot stat %s (%m)", devname);
+		snprintf(dev_name, sizeof dev_name, "%s/%s", _PATH_DEV, tty);
+		if (stat(dev_name, &st) == -1) {
+			syslog(LOG_WARNING, "Cannot stat %s (%m)", dev_name);
 			return 0;
 		}
 		(void)time(&now);
 #ifdef DEBUG
-		printf("%s: now=%ld atime=%ld\n", devname,
+		printf("%s: now=%ld atime=%ld\n", dev_name,
 		    (long)now, (long)st.st_atime);
 #endif
 		idle = now - st.st_atime;
@@ -211,183 +243,124 @@ getidle(tty, display)
 	return idle;
 }
 	
+static struct utmpentry *ue = NULL;
+static int nusers = 0;
+
 static int *
-rusers_num_svc(arg, rqstp)
-	void *arg;
-	struct svc_req *rqstp;
+/*ARGSUSED*/
+rusers_num_svc(void *arg, struct svc_req *rqstp)
 {
-	static int num_users = 0;
-	struct utmp usr;
-	FILE *ufp;
-
-	ufp = fopen(_PATH_UTMP, "r");
-	if (!ufp) {
-		syslog(LOG_ERR, "%m");
-		return (0);
-	}
-
-	/* only entries with both name and line fields */
-	while (fread((char *)&usr, sizeof(usr), 1, ufp) == 1)
-		if (*usr.ut_name && *usr.ut_line &&
-		    strncmp(usr.ut_name, IGNOREUSER,
-			    sizeof(usr.ut_name))
-#ifdef OSF
-		    && usr.ut_type == USER_PROCESS
-#endif
-		    ) {
-			num_users++;
-		}
-
-	fclose(ufp);
-	return (&num_users);
+	nusers = getutentries(NULL, &ue);
+	return &nusers;
 }
 
 static utmp_array *
-do_names_3(all)
-	int all;
+do_names_3(int all)
 {
 	static utmp_array ut;
-	struct utmp usr;
-	int nusers = 0;
-	FILE *ufp;
+	struct utmpentry *e;
+	size_t nu;
+	int idle;
 
-	memset(&ut, 0, sizeof(ut));
-	ut.utmp_array_val = &utmps[0];
-	
-	ufp = fopen(_PATH_UTMP, "r");
-	if (!ufp) {
-		syslog(LOG_ERR, "%m");
-		return (NULL);
+	nusers = getutentries(NULL, &ue);
+	nusers = getarrays3(nusers);
+
+	(void)memset(&ut, 0, sizeof(ut));
+	ut.utmp_array_val = utmps;
+
+	for (nu = 0, e = ue; e != NULL && nu < nusers; e = e->next) {
+		if ((idle = getidle(e->line, e->host)) > 0 && !all)
+			continue;
+		utmps[nu].ut_type = RUSERS_USER_PROCESS;
+		utmps[nu].ut_time = e->tv.tv_sec;
+		utmps[nu].ut_idle = idle;
+		utmps[nu].ut_line = e->line;
+		utmps[nu].ut_user = e->name;
+		utmps[nu].ut_host = e->host;
+		nu++;
 	}
 
-	/* only entries with both name and line fields */
-	while (fread((char *)&usr, sizeof(usr), 1, ufp) == 1 &&
-	       nusers < MAXUSERS)
-		if (*usr.ut_name && *usr.ut_line &&
-		    strncmp(usr.ut_name, IGNOREUSER,
-			    sizeof(usr.ut_name))
-#ifdef OSF
-		    && usr.ut_type == USER_PROCESS
-#endif
-		    ) {
-			utmps[nusers].ut_type = RUSERS_USER_PROCESS;
-			utmps[nusers].ut_time =
-				usr.ut_time;
-			utmps[nusers].ut_idle =
-				getidle(usr.ut_line, usr.ut_host);
-			utmps[nusers].ut_line = line[nusers];
-			strncpy(line[nusers], usr.ut_line,
-			    sizeof(line[nusers]));
-			utmps[nusers].ut_user = name[nusers];
-			strncpy(name[nusers], usr.ut_name,
-			    sizeof(name[nusers]));
-			utmps[nusers].ut_host = host[nusers];
-			strncpy(host[nusers], usr.ut_host,
-			    sizeof(host[nusers]));
-			nusers++;
-		}
-	ut.utmp_array_len = nusers;
+	ut.utmp_array_len = nu;
 
-	fclose(ufp);
-	return (&ut);
+	return &ut;
 }
 
 utmp_array *
-rusersproc_names_3_svc(arg, rqstp)
-	void *arg;
-	struct svc_req *rqstp;
+/*ARGSUSED*/
+rusersproc_names_3_svc(void *arg, struct svc_req *rqstp)
 {
 
-	return (do_names_3(0));
+	return do_names_3(0);
 }
 
 utmp_array *
-rusersproc_allnames_3_svc(arg, rqstp)
-	void *arg;
-	struct svc_req *rqstp;
+/*ARGSUSED*/
+rusersproc_allnames_3_svc(void *arg, struct svc_req *rqstp)
 {
 
-	return (do_names_3(1));
+	return do_names_3(1);
 }
 
 static struct utmpidlearr *
 do_names_2(int all)
 {
 	static struct utmpidlearr ut;
-	struct utmp usr;
-	int nusers = 0;
-	FILE *ufp;
+	struct utmpentry *e;
+	size_t nu;
+	int idle;
 
-	memset((char *)&ut, 0, sizeof(ut));
+	nusers = getutentries(NULL, &ue);
+	nusers = getarrays2(nusers);
+	(void)memset(&ut, 0, sizeof(ut));
 	ut.uia_arr = utmp_idlep;
 	ut.uia_cnt = 0;
 	
-	ufp = fopen(_PATH_UTMP, "r");
-	if (!ufp) {
-		syslog(LOG_ERR, "%m");
-		return (NULL);
+	for (nu = 0, e = ue; e != NULL && nu < nusers; e = e->next) {
+		if ((idle = getidle(e->line, e->host)) > 0 && !all)
+			continue;
+		utmp_idlep[nu] = &utmp_idle[nu];
+		utmp_idle[nu].ui_utmp.ut_time = e->tv.tv_sec;
+		utmp_idle[nu].ui_idle = idle;
+		(void)strncpy(utmp_idle[nu].ui_utmp.ut_line, e->line,
+		    sizeof(utmp_idle[nu].ui_utmp.ut_line));
+		(void)strncpy(utmp_idle[nu].ui_utmp.ut_name, e->name,
+		    sizeof(utmp_idle[nu].ui_utmp.ut_name));
+		(void)strncpy(utmp_idle[nu].ui_utmp.ut_host, e->host,
+		    sizeof(utmp_idle[nu].ui_utmp.ut_host));
+		nu++;
 	}
 
-	/* only entries with both name and line fields */
-	while (fread((char *)&usr, sizeof(usr), 1, ufp) == 1 &&
-	       nusers < MAXUSERS)
-		if (*usr.ut_name && *usr.ut_line &&
-		    strncmp(usr.ut_name, IGNOREUSER,
-			    sizeof(usr.ut_name))
-#ifdef OSF
-		    && usr.ut_type == USER_PROCESS
-#endif
-		    ) {
-			utmp_idlep[nusers] = &utmp_idle[nusers];
-			utmp_idle[nusers].ui_utmp.ut_time =
-				usr.ut_time;
-			utmp_idle[nusers].ui_idle =
-				getidle(usr.ut_line, usr.ut_host);
-			strncpy(utmp_idle[nusers].ui_utmp.ut_line, usr.ut_line,
-			    sizeof(utmp_idle[nusers].ui_utmp.ut_line));
-			strncpy(utmp_idle[nusers].ui_utmp.ut_name, usr.ut_name,
-			    sizeof(utmp_idle[nusers].ui_utmp.ut_name));
-			strncpy(utmp_idle[nusers].ui_utmp.ut_host, usr.ut_host,
-			    sizeof(utmp_idle[nusers].ui_utmp.ut_host));
-			nusers++;
-		}
-
-	ut.uia_cnt = nusers;
-	fclose(ufp);
-	return (&ut);
+	ut.uia_cnt = nu;
+	return &ut;
 }
 
 struct utmpidlearr *
-rusersproc_names_2_svc(arg, rqstp)
-	void *arg;
-	struct svc_req *rqstp;
+/*ARGSUSED*/
+rusersproc_names_2_svc(void *arg, struct svc_req *rqstp)
 {
-	return (do_names_2(0));
+	return do_names_2(0);
 }
 
 struct utmpidlearr *
-rusersproc_allnames_2_svc(arg, rqstp)
-	void *arg;
-	struct svc_req *rqstp;
+/*ARGSUSED*/
+rusersproc_allnames_2_svc(void *arg, struct svc_req *rqstp)
 {
-	return (do_names_2(1));
+	return do_names_2(1);
 }
 
 void
-rusers_service(rqstp, transp)
-	struct svc_req *rqstp;
-	SVCXPRT *transp;
+rusers_service(struct svc_req *rqstp, SVCXPRT *transp)
 {
 	union {
 		int fill;
 	} argument;
 	char *result;
 	xdrproc_t xdr_argument, xdr_result;
-	char *(*local) __P((void *, struct svc_req *));
+	rusersproc local;
 
 	switch (rqstp->rq_proc) {
 	case NULLPROC:
-		(void)svc_sendreply(transp, xdr_void, (char *)NULL);
+		(void)svc_sendreply(transp, xdr_void, NULL);
 		goto leave;
 
 	case RUSERSPROC_NUM:
@@ -396,7 +369,7 @@ rusers_service(rqstp, transp)
 		switch (rqstp->rq_vers) {
 		case RUSERSVERS_3:
 		case RUSERSVERS_IDLE:
-			local = (char *(*) __P((void *, struct svc_req *)))
+			local = (char *(*)(void *, struct svc_req *))
 			    rusers_num_svc;
 			break;
 		default:
@@ -411,14 +384,12 @@ rusers_service(rqstp, transp)
 		xdr_result = (xdrproc_t)xdr_utmp_array;
 		switch (rqstp->rq_vers) {
 		case RUSERSVERS_3:
-			local = (char *(*) __P((void *, struct svc_req *)))
-			    rusersproc_names_3_svc;
+			local = (rusersproc)rusersproc_names_3_svc;
 			break;
 
 		case RUSERSVERS_IDLE:
 			xdr_result = (xdrproc_t)xdr_utmpidlearr;
-			local = (char *(*) __P((void *, struct svc_req *)))
-			    rusersproc_names_2_svc;
+			local = (rusersproc)rusersproc_names_2_svc;
 			break;
 
 		default:
@@ -433,14 +404,12 @@ rusers_service(rqstp, transp)
 		xdr_result = (xdrproc_t)xdr_utmp_array;
 		switch (rqstp->rq_vers) {
 		case RUSERSVERS_3:
-			local = (char *(*) __P((void *, struct svc_req *)))
-			    rusersproc_allnames_3_svc;
+			local = (rusersproc)rusersproc_allnames_3_svc;
 			break;
 
 		case RUSERSVERS_IDLE:
 			xdr_result = (xdrproc_t)xdr_utmpidlearr;
-			local = (char *(*) __P((void *, struct svc_req *)))
-			    rusersproc_allnames_2_svc;
+			local = (rusersproc)rusersproc_allnames_2_svc;
 			break;
 
 		default:
@@ -454,8 +423,8 @@ rusers_service(rqstp, transp)
 		svcerr_noproc(transp);
 		goto leave;
 	}
-	memset((char *)&argument, 0, sizeof(argument));
-	if (!svc_getargs(transp, xdr_argument, (caddr_t)&argument)) {
+	(void)memset(&argument, 0, sizeof(argument));
+	if (!svc_getargs(transp, xdr_argument, (caddr_t)(void *)&argument)) {
 		svcerr_decode(transp);
 		goto leave;
 	}
@@ -463,7 +432,7 @@ rusers_service(rqstp, transp)
 	if (result != NULL && !svc_sendreply(transp, xdr_result, result)) {
 		svcerr_systemerr(transp);
 	}
-	if (!svc_freeargs(transp, xdr_argument, (caddr_t)&argument)) {
+	if (!svc_freeargs(transp, xdr_argument, (caddr_t)(void *)&argument)) {
 		syslog(LOG_ERR, "unable to free arguments");
 		exit(1);
 	}

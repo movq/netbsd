@@ -1,4 +1,4 @@
-/*	$NetBSD: utmp.h,v 1.6 1994/10/26 00:56:40 cgd Exp $	*/
+/*	$NetBSD: utmp.h,v 1.11 2005/02/03 04:39:32 perry Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -63,5 +59,12 @@ struct utmp {
 	char	ut_host[UT_HOSTSIZE];
 	time_t	ut_time;
 };
+
+__BEGIN_DECLS
+int utmpname(const char *);
+void setutent(void);
+struct utmp *getutent(void);
+void endutent(void);
+__END_DECLS
 
 #endif /* !_UTMP_H_ */

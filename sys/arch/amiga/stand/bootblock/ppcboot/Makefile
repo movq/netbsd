@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1999/11/28 22:10:48 is Exp $
+#	$NetBSD: Makefile,v 1.6 2008/10/19 22:05:21 apb Exp $
 
 ### what we need:
 
@@ -24,7 +24,7 @@ COBJS+=  ufs.o ppcstart.o
 
 SOBJS = alloc.o ashrdi3.o bcopy.o muldi3.o printf.o
 SOBJS += strlen.o strcmp.o
-SOBJS += libstubs.o 
+SOBJS += libstubs.o
 
 OBJS=	$(SOBJS) $(COBJS)
 
@@ -44,7 +44,7 @@ AFLAGS += -m68030 -l
 CAFLAGS += -Wa,-l -Wa,-m68030 ${INCPATH}
 
 COPTIM= -O -fomit-frame-pointer -fcse-follow-jumps -fcse-skip-blocks  -Wa,-l -m68060 -Wa,-m68030
-CFLAGS= ${COPTIM} ${INCPATH} ${DEFS} -Wall #-Wstrict-prototypes
+CFLAGS= -ffreestanding ${COPTIM} ${INCPATH} ${DEFS} -Wall #-Wstrict-prototypes
 
 .c.o:
 	${CC} ${CFLAGS} -S $< -o $*.s
@@ -58,10 +58,10 @@ CFLAGS= ${COPTIM} ${INCPATH} ${DEFS} -Wall #-Wstrict-prototypes
 CLEANFILES += xxppcboot fdppcboot x.out f.out xxstart.o fdstart.o libboot.a
 
 xxppcboot: x.out
-	${AOUT2BB} x.out $@ || nm -u x.out
+	${RELOC2BB} x.out $@ || nm -u x.out
 
 fdppcboot: f.out
-	${AOUT2BB} f.out $@ || nm -u f.out
+	${RELOC2BB} f.out $@ || nm -u f.out
 
 x.out: xxstart.o libboot.a
 	${LD} ${LDFLAGS} -r -dc -e _start -o $@ $>
@@ -91,7 +91,7 @@ CLEANFILES += kickstart.o kickstart.bin kickstart68.c
 ppcstart.o:	kickstart68.c
 
 kickstart68.c:	kickstart.bin hex2c.awk
-		hexdump kickstart.bin | awk -f ${.CURDIR}/hex2c.awk > $@
+		hexdump kickstart.bin | ${TOOL_AWK} -f ${.CURDIR}/hex2c.awk > $@
 
 kickstart.bin:	kickstart.o
 		$(PPCLD) -Ttext=0xfff00100 -o$@ --oformat binary $?
@@ -108,4 +108,6 @@ libboot.a: ${OBJS}
 # make sure these are built:
 
 ${COBJS}: ${TXLT}
-${FILES}: ${AOUT2BB}
+${FILES}: ${RELOC2BB}
+
+.include "${.CURDIR}/../Makefile.booters"

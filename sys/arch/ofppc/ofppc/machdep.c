@@ -1,9 +1,10 @@
-/*	$NetBSD: machdep.c,v 1.53 2000/03/24 17:05:33 ws Exp $	*/
-
-/*
- * Copyright (C) 1995, 1996 Wolfgang Solfrank.
- * Copyright (C) 1995, 1996 TooLs GmbH.
+/*	$NetBSD: machdep.c,v 1.106 2008/04/28 20:23:31 martin Exp $	*/
+/*-
+ * Copyright (c) 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Tim Rightnour
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -13,654 +14,233 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by TooLs GmbH.
- * 4. The name of TooLs GmbH may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY TOOLS GMBH ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL TOOLS GMBH BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
- * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "opt_compat_netbsd.h"
-#include "opt_ddb.h"
-#include "opt_inet.h"
-#include "opt_ccitt.h"
-#include "opt_iso.h"
-#include "opt_ns.h"
-#include "opt_ipkdb.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.106 2008/04/28 20:23:31 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
-#include <sys/exec.h>
-#include <sys/malloc.h>
-#include <sys/map.h>
-#include <sys/mbuf.h>
+#include <sys/boot_flag.h>
 #include <sys/mount.h>
-#include <sys/msgbuf.h>
-#include <sys/proc.h>
-#include <sys/reboot.h>
-#include <sys/syscallargs.h>
-#include <sys/syslog.h>
-#include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/user.h>
-
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <net/netisr.h>
+#include <dev/ofw/openfirm.h>
+#include <dev/cons.h>
 
-#include <machine/bat.h>
+#include <machine/autoconf.h>
 #include <machine/pmap.h>
 #include <machine/powerpc.h>
 #include <machine/trap.h>
+#include <machine/bus.h>
+#include <machine/isa_machdep.h>
+#include <machine/spr.h>
 
-/*
- * Global variables used here and there
- */
-vm_map_t exec_map = NULL;
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+#include <powerpc/oea/bat.h>
+#include <powerpc/ofw_cons.h>
+#include <powerpc/rtas.h>
 
-struct pcb *curpcb;
-struct pmap *curpm;
-struct proc *fpuproc;
+#include "com.h"
+#if (NCOM > 0)
+#include <sys/termios.h>
+#include <dev/ic/comreg.h>
+#include <dev/ic/comvar.h>
+#endif
 
-extern struct user *proc0paddr;
+struct pmap ofw_pmap;
+char bootpath[256];
 
-struct bat battable[16];
+void ofwppc_batinit(void);
+void ofppc_bootstrap_console(void);
 
-int astpending;
+extern u_int l2cr_config;
+extern int machine_has_rtas;
 
-char *bootpath;
-
-paddr_t msgbuf_paddr;
-vaddr_t msgbuf_vaddr;
-
-static int fake_spl __P((void));
-static int fake_splx __P((int));
-static void fake_setsoft __P((void));
-static void fake_clock_return __P((struct clockframe *, int));
-static void fake_irq_establish __P((int, int, void (*)(void *), void *));
-
-struct machvec machine_interface = {
-	fake_spl,
-	fake_spl,
-	fake_spl,
-	fake_spl,
-	fake_spl,
-	fake_spl,
-	fake_spl,
-	fake_spl,
-	fake_spl,
-	fake_spl,
-	fake_splx,
-	fake_setsoft,
-	fake_setsoft,
-	fake_clock_return,
-	fake_irq_establish,
-};
+struct model_data modeldata;
 
 void
-initppc(startkernel, endkernel, args)
-	u_int startkernel, endkernel;
-	char *args;
+initppc(u_int startkernel, u_int endkernel, char *args)
 {
-	int phandle, qhandle;
-	char name[32];
-	struct machvec *mp;
-	extern trapcode, trapsize;
-	extern alitrap, alisize;
-	extern dsitrap, dsisize;
-	extern isitrap, isisize;
-	extern decrint, decrsize;
-	extern tlbimiss, tlbimsize;
-	extern tlbdlmiss, tlbdlmsize;
-	extern tlbdsmiss, tlbdsmsize;
-#ifdef DDB
-	extern ddblow, ddbsize;
-	extern void *startsym, *endsym;
-#endif
-#ifdef IPKDB
-	extern ipkdblow, ipkdbsize;
-#endif
-	extern void consinit __P((void));
-	extern void callback __P((void *));
-	int exc, scratch;
+	ofwoea_initppc(startkernel, endkernel, args);
+}
 
-	proc0.p_addr = proc0paddr;
-	bzero(proc0.p_addr, sizeof *proc0.p_addr);
+/* perform model-specific actions at initppc() */
+void
+model_init(void)
+{
+	int qhandle, phandle, j;
 
-	curpcb = &proc0paddr->u_pcb;
+	memset(&modeldata, 0, sizeof(struct model_data));
+	/* provide sane defaults */
+	for (j=0; j < MAX_PCI_BUSSES; j++) {
+		modeldata.pciiodata[j].start = 0x00008000;
+		modeldata.pciiodata[j].limit = 0x0000ffff;
+	}
+	modeldata.ranges_offset = 1;
 
-	curpm = curpcb->pcb_pmreal = curpcb->pcb_pm = pmap_kernel();
+	if (strncmp(model_name, "FirePower,", 10) == 0) {
+		modeldata.ranges_offset = 0;
+	}
+	if (strcmp(model_name, "MOT,PowerStack_II_Pro4000") == 0) {
+		modeldata.ranges_offset = 0;
+	}
 
-	/*
-	 * i386 port says, that this shouldn't be here,
-	 * but I really think the console should be initialized
-	 * as early as possible.
-	 */
-	consinit();
+	/* 7044-270 and 7044-170 */
+	if (strncmp(model_name, "IBM,7044", 8) == 0) {
+		for (j=0; j < MAX_PCI_BUSSES; j++) {
+			modeldata.pciiodata[j].start = 0x00fff000;
+			modeldata.pciiodata[j].limit = 0x00ffffff;
+		}
+	}
 
-#ifdef	__notyet__		/* Needs some rethinking regarding real/virtual OFW */
-	OF_set_callback(callback);
-#endif
-	/*
-	 * Initialize BAT registers to unmapped to not generate
-	 * overlapping mappings below.
-	 */
-	asm volatile ("mtibatu 0,%0" :: "r"(0));
-	asm volatile ("mtibatu 1,%0" :: "r"(0));
-	asm volatile ("mtibatu 2,%0" :: "r"(0));
-	asm volatile ("mtibatu 3,%0" :: "r"(0));
-	asm volatile ("mtdbatu 0,%0" :: "r"(0));
-	asm volatile ("mtdbatu 1,%0" :: "r"(0));
-	asm volatile ("mtdbatu 2,%0" :: "r"(0));
-	asm volatile ("mtdbatu 3,%0" :: "r"(0));
+	/* Pegasos1, Pegasos2 */
+	if (strncmp(model_name, "Pegasos", 7) == 0) {
+		static uint16_t modew[] = { 640, 800, 1024, 1280, 0 };
+		static uint16_t modeh[] = { 480, 600, 768, 1024, 0 };
+		uint32_t width, height, mode, fbaddr;
+		char buf[32];
+		int i;
 
-	/*
-	 * Set up initial BAT table to only map the lowest 256 MB area
-	 */
-	battable[0].batl = BATL(0x00000000, BAT_M, BAT_PP_RW);
-	battable[0].batu = BATU(0x00000000, BAT_BL_256M, BAT_Vs);
-
-	/*
-	 * Now setup fixed bat registers
-	 *
-	 * Note that we still run in real mode, and the BAT
-	 * registers were cleared above.
-	 */
-	/* IBAT0 used for initial 256 MB segment */
-	asm volatile ("mtibatl 0,%0; mtibatu 0,%1"
-		      :: "r"(battable[0].batl), "r"(battable[0].batu));
-	/* DBAT0 used similar */
-	asm volatile ("mtdbatl 0,%0; mtdbatu 0,%1"
-		      :: "r"(battable[0].batl), "r"(battable[0].batu));
-
-	/*
-	 * Set up trap vectors
-	 */
-	for (exc = EXC_RSVD; exc <= EXC_LAST; exc += 0x100)
-		switch (exc) {
-		default:
-			bcopy(&trapcode, (void *)exc, (size_t)&trapsize);
-			break;
-		case EXC_EXI:
-			/*
-			 * This one is (potentially) installed during autoconf
-			 */
-			break;
-		case EXC_ALI:
-			bcopy(&alitrap, (void *)EXC_ALI, (size_t)&alisize);
-			break;
-		case EXC_DSI:
-			bcopy(&dsitrap, (void *)EXC_DSI, (size_t)&dsisize);
-			break;
-		case EXC_ISI:
-			bcopy(&isitrap, (void *)EXC_ISI, (size_t)&isisize);
-			break;
-		case EXC_DECR:
-			bcopy(&decrint, (void *)EXC_DECR, (size_t)&decrsize);
-			break;
-		case EXC_IMISS:
-			bcopy(&tlbimiss, (void *)EXC_IMISS, (size_t)&tlbimsize);
-			break;
-		case EXC_DLMISS:
-			bcopy(&tlbdlmiss, (void *)EXC_DLMISS, (size_t)&tlbdlmsize);
-			break;
-		case EXC_DSMISS:
-			bcopy(&tlbdsmiss, (void *)EXC_DSMISS, (size_t)&tlbdsmsize);
-			break;
-#if defined(DDB) || defined(IPKDB)
-		case EXC_PGM:
-		case EXC_TRC:
-		case EXC_BPT:
-#if defined(DDB)
-			bcopy(&ddblow, (void *)exc, (size_t)&ddbsize);
-#else
-			bcopy(&ipkdblow, (void *)exc, (size_t)&ipkdbsize);
-#endif
-			break;
-#endif /* DDB || IPKDB */
+		modeldata.ranges_offset = 1;
+		modeldata.pciiodata[0].start = 0x00001400;
+		modeldata.pciiodata[0].limit = 0x0000ffff;
+		
+		/* the pegasos doesn't bother to set the L2 cache up*/
+		l2cr_config = L2CR_L2PE;
+		
+		/* fix the device_type property of a graphics card */
+		for (qhandle = OF_peer(0); qhandle; qhandle = phandle) {
+			if (OF_getprop(qhandle, "name", buf, sizeof buf) > 0
+			    && strncmp(buf, "display", 7) == 0) {
+				OF_setprop(qhandle, "device_type", "display", 8);
+				break;
+			}
+			if ((phandle = OF_child(qhandle)))
+				continue;
+			while (qhandle) {
+				if ((phandle = OF_peer(qhandle)))
+					break;
+				qhandle = OF_parent(qhandle);
+			}
 		}
 
-	__syncicache((void *)EXC_RST, EXC_LAST - EXC_RST + 0x100);
+		/*
+		 * Get screen width/height and switch to framebuffer mode.
+		 * The default dimensions are: 800 x 600
+		 */
+		OF_interpret("screen-width", 0, 1, &width);
+		if (width == 0)
+			width = 800;
 
-	/*
-	 * Now enable translation (and machine checks/recoverable interrupts).
-	 */
-	asm volatile ("mfmsr %0; ori %0,%0,%1; mtmsr %0; isync"
-		      : "=r"(scratch) : "K"(PSL_IR|PSL_DR|PSL_ME|PSL_RI));
+		OF_interpret("screen-height", 0, 1, &height);
+		if (height == 0)
+			height = 600;
 
-	/*
-	 * Parse arg string.
-	 */
-	bootpath = args;
-	while (*++args && *args != ' ');
-	if (*args) {
-		*args++ = 0;
-		while (*args) {
-			switch (*args++) {
-			case 'a':
-				boothowto |= RB_ASKNAME;
-				break;
-			case 's':
-				boothowto |= RB_SINGLE;
-				break;
-			case 'd':
-				boothowto |= RB_KDB;
+		/* find VESA mode */
+		for (i = 0, mode = 0; modew[i] != 0; i++) {
+			if (modew[i] == width && modeh[i] == height) {
+				mode = 0x101 + 2 * i;
 				break;
 			}
 		}
-	}
+		if (!mode) {
+			mode = 0x102;
+			width = 800;
+			height = 600;
+		}
 
-#ifdef DDB
-	/* ddb_init((int)(endsym - startsym), startsym, endsym); */
-#endif
-#ifdef IPKDB
-	/*
-	 * Now trap to IPKDB
-	 */
-	ipkdb_init();
-	if (boothowto & RB_KDB)
-		ipkdb_connect(0);
-#endif
+		/* init frame buffer mode */
+		sprintf(buf, "%x vesa-set-mode", mode);
+		OF_interpret(buf, 0, 0);
 
-	/*
-	 * Set the page size.
-	 */
-	uvm_setpagesize();
-
-	/*
-	 * Initialize pmap module.
-	 */
-	pmap_bootstrap(startkernel, endkernel);
-}
-
-/*
- * This should probably be in autoconf!				XXX
- */
-int cpu;
-char cpu_model[80];
-char machine[] = MACHINE;		/* from <machine/param.h> */
-char machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
-
-void
-identifycpu()
-{
-	int phandle, pvr;
-	char name[32];
-
-	/*
-	 * Find cpu type (Do it by OpenFirmware?)
-	 */
-	asm ("mfpvr %0" : "=r"(pvr));
-	cpu = pvr >> 16;
-	switch (cpu) {
-	case 1:
-		sprintf(cpu_model, "601");
-		break;
-	case 3:
-		sprintf(cpu_model, "603");
-		break;
-	case 4:
-		sprintf(cpu_model, "604");
-		break;
-	case 5:
-		sprintf(cpu_model, "602");
-		break;
-	case 6:
-		sprintf(cpu_model, "603e");
-		break;
-	case 7:
-		sprintf(cpu_model, "603ev");
-		break;
-	case 9:
-		sprintf(cpu_model, "604ev");
-		break;
-	case 20:
-		sprintf(cpu_model, "620");
-		break;
-	default:
-		sprintf(cpu_model, "Version %x", cpu);
-		break;
-	}
-	sprintf(cpu_model + strlen(cpu_model), " (Revision %x)", pvr & 0xffff);
-	printf("CPU: %s\n", cpu_model);
-}
-
-void
-install_extint(handler)
-	void (*handler) __P((void));
-{
-	extern extint, extsize;
-	extern u_long extint_call;
-	u_long offset = (u_long)handler - (u_long)&extint_call;
-	int omsr, msr;
-
-#ifdef	DIAGNOSTIC
-	if (offset > 0x1ffffff)
-		panic("install_extint: too far away");
-#endif
-	asm volatile ("mfmsr %0; andi. %1,%0,%2; mtmsr %1"
-		      : "=r"(omsr), "=r"(msr) : "K"((u_short)~PSL_EE));
-	extint_call = (extint_call & 0xfc000003) | offset;
-	bcopy(&extint, (void *)EXC_EXI, (size_t)&extsize);
-	__syncicache((void *)&extint_call, sizeof extint_call);
-	__syncicache((void *)EXC_EXI, (int)&extsize);
-	asm volatile ("mtmsr %0" :: "r"(omsr));
-}
-
-/*
- * Machine dependent startup code.
- */
-void
-cpu_startup()
-{
-	int sz, i;
-	caddr_t v;
-	paddr_t minaddr, maxaddr;
-	int base, residual;
-	char pbuf[9];
-
-	proc0.p_addr = proc0paddr;
-	v = (caddr_t)proc0paddr + USPACE;
-
-	/*
-	 * Initialize error message buffer (at end of core).
-	 */
-	if (!(msgbuf_vaddr = uvm_km_alloc(kernel_map, round_page(MSGBUFSIZE))))
-		panic("startup: no room for message buffer");
-	for (i = 0; i < btoc(MSGBUFSIZE); i++)
-		pmap_enter(pmap_kernel(), msgbuf_vaddr + i * NBPG,
-		    msgbuf_paddr + i * NBPG, VM_PROT_READ|VM_PROT_WRITE,
-		    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
-	initmsgbuf((caddr_t)msgbuf_vaddr, round_page(MSGBUFSIZE));
-
-	printf("%s", version);
-	identifycpu();
-
-	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
-	printf("total memory = %s\n", pbuf);
-
-	/*
-	 * Find out how much space we need, allocate it,
-	 * and then give everything true virtual addresses.
-	 */
-	sz = (int)allocsys(NULL, NULL);
-	if ((v = (caddr_t)uvm_km_zalloc(kernel_map, round_page(sz))) == 0)
-		panic("startup: no room for tables");
-	if (allocsys(v, NULL) - v != sz)
-		panic("startup: table size inconsistency");
-
-	/*
-	 * Now allocate buffers proper.  They are different than the above
-	 * in that they usually occupy more virtual memory than physical.
-	 */
-	sz = MAXBSIZE * nbuf;
-	if (uvm_map(kernel_map, (vaddr_t *)&buffers, round_page(sz),
-		    NULL, UVM_UNKNOWN_OFFSET,
-		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-				UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
-		panic("startup: cannot allocate VM for buffers");
-	minaddr = (vaddr_t)buffers;
-	base = bufpages / nbuf;
-	residual = bufpages % nbuf;
-	if (base >= MAXBSIZE) {
-		/* Don't want to alloc more physical mem than ever needed */
-		base = MAXBSIZE;
-		residual = 0;
-	}
-	for (i = 0; i < nbuf; i++) {
-		vsize_t curbufsize;
-		vaddr_t curbuf;
-		struct vm_page *pg;
-
-		/*
-		 * Each buffer has MAXBSIZE bytes of VM space allocated.  Of
-		 * that MAXBSIZE space, we allocate and map (base+1) pages
-		 * for the first "residual" buffers, and then we allocate
-		 * "base" pages for the rest.
-		 */
-		curbuf = (vaddr_t) buffers + (i * MAXBSIZE);
-		curbufsize = NBPG * ((i < residual) ? (base+1) : base);
-
-		while (curbufsize) {
-			pg = uvm_pagealloc(NULL, 0, NULL, 0);
-			if (pg == NULL)
-				panic("startup: not enough memory for "
-					"buffer cache");
-			pmap_enter(kernel_map->pmap, curbuf,
-			    VM_PAGE_TO_PHYS(pg), VM_PROT_READ|VM_PROT_WRITE,
-			    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
-			curbuf += PAGE_SIZE;
-			curbufsize -= PAGE_SIZE;
+		/* set dimensions and frame buffer address in OFW */
+		sprintf(buf, "%x to screen-width", width);
+		OF_interpret(buf, 0, 0);
+		sprintf(buf, "%x to screen-height", height);
+		OF_interpret(buf, 0, 0);
+		OF_interpret("vesa-frame-buffer-adr", 0, 1, &fbaddr);
+		if (fbaddr != 0) {
+			sprintf(buf, "%x to frame-buffer-adr", fbaddr);
+			OF_interpret(buf, 0, 0);
 		}
 	}
-
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 16*NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
-
-	/*
-	 * Allocate a submap for physio
-	 */
-	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 VM_PHYS_SIZE, 0, FALSE, NULL);
-
-	/*
-	 * No need to allocate an mbuf cluster submap.  Mbuf clusters
-	 * are allocated via the pool allocator, and we use direct-mapped
-	 * pool pages.
-	 */
-
-	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
-	printf("avail memory = %s\n", pbuf);
-	format_bytes(pbuf, sizeof(pbuf), bufpages * NBPG);
-	printf("using %d buffers containing %s of memory\n", nbuf, pbuf);
-
-	/*
-	 * Set up the buffers.
-	 */
-	bufinit();
-
-	/*
-	 * For now, use soft spl handling.
-	 */
-	{
-		extern struct machvec soft_machvec;
-
-		machine_interface = soft_machvec;
-	}
-
-	/*
-	 * Now allow hardware interrupts.
-	 */
-	{
-		int msr;
-
-		splhigh();
-		asm volatile ("mfmsr %0; ori %0,%0,%1; mtmsr %0"
-			      : "=r"(msr) : "K"((u_short)(PSL_EE|PSL_RI)));
-	}
 }
-
-/*
- * consinit
- * Initialize system console.
- */
-void
-consinit()
-{
-	static int initted;
-
-	if (initted)
-		return;
-	initted = 1;
-	cninit();
-}
-
-/*
- * Set set up registers on exec.
- */
-void
-setregs(p, pack, stack)
-	struct proc *p;
-	struct exec_package *pack;
-	u_long stack;
-{
-	struct trapframe *tf = trapframe(p);
-	struct ps_strings arginfo;
-
-	bzero(tf, sizeof *tf);
-	tf->fixreg[1] = -roundup(-stack + 8, 16);
-
-	/*
-	 * XXX Machine-independent code has already copied arguments and
-	 * XXX environment to userland.  Get them back here.
-	 */
-	(void)copyin((char *)PS_STRINGS, &arginfo, sizeof (arginfo));
-
-	/*
-	 * Set up arguments for _start():
-	 *	_start(argc, argv, envp, obj, cleanup, ps_strings);
-	 *
-	 * Notes:
-	 *	- obj and cleanup are the auxilliary and termination
-	 *	  vectors.  They are fixed up by ld.elf_so.
-	 *	- ps_strings is a NetBSD extention, and will be
-	 * 	  ignored by executables which are strictly
-	 *	  compliant with the SVR4 ABI.
-	 *
-	 * XXX We have to set both regs and retval here due to different
-	 * XXX calling convention in trap.c and init_main.c.
-	 */
-	tf->fixreg[3] = arginfo.ps_nargvstr;
-	tf->fixreg[4] = (register_t)arginfo.ps_argvstr;
-	tf->fixreg[5] = (register_t)arginfo.ps_envstr;
-	tf->fixreg[6] = 0;			/* auxillary vector */
-	tf->fixreg[7] = 0;			/* termination vector */
-	tf->fixreg[8] = (register_t)PS_STRINGS;	/* NetBSD extension */
-
-	tf->srr0 = pack->ep_entry;
-	tf->srr1 = PSL_MBO | PSL_USERSET | PSL_FE_DFLT;
-	p->p_addr->u_pcb.pcb_flags = 0;
-}
-
-/*
- * Machine dependent system variables.
- */
-int
-cpu_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
-	int *name;
-	u_int namelen;
-	void *oldp;
-	size_t *oldlenp;
-	void *newp;
-	size_t newlen;
-	struct proc *p;
-{
-	/* all sysctl names at this level are terminal */
-	if (namelen != 1)
-		return (ENOTDIR);
-
-	switch (name[0]) {
-	case CPU_CACHELINE:
-		return sysctl_rdint(oldp, oldlenp, newp, CACHELINESIZE);
-	default:
-		return (EOPNOTSUPP);
-	}
-}
-
-/*
- * Crash dump handling.
- */
-u_long dumpmag = 0x8fca0101;		/* magic number */
-int dumpsize = 0;			/* size of dump in pages */
-long dumplo = -1;			/* blocks */
 
 void
-dumpsys()
+cpu_startup(void)
 {
-	printf("dumpsys: TBD\n");
+	oea_startup(model_name[0] ? model_name : NULL);
+	bus_space_mallocok();
 }
 
-/*
- * Soft networking interrupts.
- */
+
 void
-softnet()
+consinit(void)
 {
-	int isr = netisr;
-
-	netisr = 0;
-
-#define DONETISR(bit, fn) do {		\
-	if (isr & (1 << bit))		\
-		fn();			\
-} while (0)
-
-#include <net/netisr_dispatch.h>
-
-#undef DONETISR
+	ofwoea_consinit();
 }
 
-/*
- * Stray interrupts.
- */
+
 void
-strayintr(irq)
-	int irq;
+dumpsys(void)
 {
-	log(LOG_ERR, "stray interrupt %d\n", irq);
+	aprint_normal("dumpsys: TBD\n");
 }
 
 /*
  * Halt or reboot the machine after syncing/dumping according to howto.
  */
+
 void
-cpu_reboot(howto, what)
-	int howto;
-	char *what;
+cpu_reboot(int howto, char *what)
 {
 	static int syncing;
 	static char str[256];
+	int junk;
 	char *ap = str, *ap1 = ap;
 
 	boothowto = howto;
 	if (!cold && !(howto & RB_NOSYNC) && !syncing) {
 		syncing = 1;
-		vfs_shutdown();		/* sync */
-		resettodr();		/* set wall clock */
+		vfs_shutdown();         /* sync */
+		resettodr();            /* set wall clock */
 	}
 	splhigh();
 	if (howto & RB_HALT) {
 		doshutdownhooks();
-		printf("halted\n\n");
+		aprint_normal("halted\n\n");
+		if ((howto & 0x800) && machine_has_rtas &&
+		    rtas_has_func(RTAS_FUNC_POWER_OFF))
+			rtas_call(RTAS_FUNC_POWER_OFF, 2, 1, 0, 0, &junk);
 		ppc_exit();
 	}
 	if (!cold && (howto & RB_DUMP))
-		dumpsys();
+		oea_dumpsys();
 	doshutdownhooks();
-	printf("rebooting\n\n");
+	aprint_normal("rebooting\n\n");
+
+	if (machine_has_rtas && rtas_has_func(RTAS_FUNC_SYSTEM_REBOOT)) {
+		rtas_call(RTAS_FUNC_SYSTEM_REBOOT, 0, 1, &junk);
+		for(;;);
+	}
+
 	if (what && *what) {
 		if (strlen(what) > sizeof str - 5)
-			printf("boot string too large, ignored\n");
+			aprint_normal("boot string too large, ignored\n");
 		else {
 			strcpy(str, what);
 			ap1 = ap = str + strlen(str);
@@ -679,54 +259,126 @@ cpu_reboot(howto, what)
 }
 
 /*
- * OpenFirmware callback routine
  */
+
+#define divrnd(n, q)	(((n)*2/(q)+1)/2)
+
 void
-callback(p)
-	void *p;
+ofppc_init_comcons(int isa_node)
 {
-	panic("callback");	/* for now			XXX */
+#if (NCOM > 0)
+	char name[64];
+	uint32_t reg[2], comfreq;
+	uint8_t dll, dlm;
+	int speed, rate, err, com_node, child;
+	bus_space_handle_t comh;
+
+	/* if we have a serial cons, we have work to do */
+	memset(name, 0, sizeof(name));
+	OF_getprop(console_node, "device_type", name, sizeof(name));
+	if (strcmp(name, "serial") != 0)
+		return;
+
+	/* scan ISA children for serial devices to match our console */
+	com_node = -1;
+	for (child = OF_child(isa_node); child; child = OF_peer(child)) {
+		memset(name, 0, sizeof(name));
+		OF_getprop(child, "device_type", name, sizeof(name));
+		if (strcmp(name, "serial") == 0) {
+			/*
+			 * Serial device even matches our console_node?
+			 * Then we're done!
+			 */
+			if (child == console_node) {
+				com_node = child;
+				break;
+			}
+			/* remember first serial device found */
+			if (com_node == -1)
+				com_node = child;
+		}
+	}
+
+	if (com_node == -1)
+		return;
+
+	if (OF_getprop(com_node, "reg", reg, sizeof(reg)) == -1)
+		return;
+
+	if (OF_getprop(com_node, "clock-frequency", &comfreq, 4) == -1)
+		comfreq = 0;
+
+	if (comfreq == 0)
+		comfreq = COM_FREQ;
+
+	/* we need to BSM this, and then undo that before calling
+	 * comcnattach.
+	 */
+
+	if (bus_space_map(&genppc_isa_io_space_tag, reg[1], 8, 0, &comh) != 0)
+		panic("Can't map isa serial\n");
+
+	bus_space_write_1(&genppc_isa_io_space_tag, comh, com_cfcr, LCR_DLAB);
+	dll = bus_space_read_1(&genppc_isa_io_space_tag, comh, com_dlbl);
+	dlm = bus_space_read_1(&genppc_isa_io_space_tag, comh, com_dlbh);
+	rate = dll | (dlm << 8);
+	bus_space_write_1(&genppc_isa_io_space_tag, comh, com_cfcr, LCR_8BITS);
+	speed = divrnd((comfreq / 16), rate);
+	err = speed - (speed + 150)/300 * 300;
+	speed -= err;
+	if (err < 0)
+		err = -err;
+	if (err > 50)
+		speed = 9600;
+
+	bus_space_unmap(&genppc_isa_io_space_tag, comh, 8);
+
+	/* Now we can attach the comcons */
+	aprint_verbose("Switching to COM console at speed %d", speed);
+	if (comcnattach(&genppc_isa_io_space_tag, reg[1],
+	    speed, comfreq, COM_TYPE_NORMAL,
+	    ((TTYDEF_CFLAG & ~(CSIZE | CSTOPB | PARENB)) | CS8)))
+		panic("Can't init serial console");
+	aprint_verbose("\n");
+#endif /*NCOM*/
 }
 
-/*
- * Initial Machine Interface.
- */
-static int
-fake_spl()
+void
+copy_disp_props(struct device *dev, int node, prop_dictionary_t dict)
 {
-	int scratch;
+	uint32_t temp;
+	char typestr[32];
 
-	asm volatile ("mfmsr %0; andi. %0,%0,%1; mtmsr %0; isync"
-	    : "=r"(scratch) : "K"((u_short)~(PSL_EE|PSL_ME)));
-	return (-1);
-}
+	memset(typestr, 0, sizeof(typestr));
+	OF_getprop(console_node, "device_type", typestr, sizeof(typestr));
+	if (strcmp(typestr, "serial") != 0) {
+		/* this is our console, when we don't have a serial console */
+		prop_dictionary_set_bool(dict, "is_console", 1);
+	}
 
-static void
-fake_setsoft()
-{
-	/* Do nothing */
-}
+	if (!of_to_uint32_prop(dict, node, "width", "width")) {
 
-static int
-fake_splx(new)
-	int new;
-{
-	return (fake_spl());
-}
+		OF_interpret("screen-width", 0, 1, &temp);
+		prop_dictionary_set_uint32(dict, "width", temp);
+	}
+	if (!of_to_uint32_prop(dict, node, "height", "height")) {
 
-static void
-fake_clock_return(frame, nticks)
-	struct clockframe *frame;
-	int nticks;
-{
-	/* Do nothing */
-}
-
-static void
-fake_irq_establish(irq, level, handler, arg)
-	int irq, level;
-	void (*handler) __P((void *));
-	void *arg;
-{
-	panic("fake_irq_establish");
+		OF_interpret("screen-height", 0, 1, &temp);
+		prop_dictionary_set_uint32(dict, "height", temp);
+	}
+	of_to_uint32_prop(dict, node, "linebytes", "linebytes");
+	if (!of_to_uint32_prop(dict, node, "depth", "depth")) {
+		/*
+		 * XXX we should check linebytes vs. width but those
+		 * FBs that don't have a depth property ( /chaos/control... )
+		 * won't have linebytes either
+		 */
+		prop_dictionary_set_uint32(dict, "depth", 8);
+	}
+	if (!of_to_uint32_prop(dict, node, "address", "address")) {
+		uint32_t fbaddr = 0;
+			OF_interpret("frame-buffer-adr", 0, 1, &fbaddr);
+		if (fbaddr != 0)
+			prop_dictionary_set_uint32(dict, "address", fbaddr);
+	}
 }

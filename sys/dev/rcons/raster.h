@@ -1,4 +1,4 @@
-/*	$NetBSD: raster.h,v 1.4 1999/01/11 11:08:14 drochner Exp $ */
+/*	$NetBSD: raster.h,v 1.8 2007/03/04 06:02:39 christos Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -88,7 +84,7 @@ struct raster {
     int depth;		/* bits per pixel - 1, 2, or 8 */
     int linelongs;	/* longs from one line to the next - for padding */
     u_int32_t *pixels;	/* pointer to the actual bits */
-    caddr_t data;	/* special pointer for frame buffers and subregions */
+    void *data;	/* special pointer for frame buffers and subregions */
     };
 
 /* Colormap struct. */
@@ -159,12 +155,20 @@ struct raster_font {
 #define RAS_OR			0xe	/* src | dst */
 #define RAS_SET			0xf	/* 1 */
 
+#ifndef RCONS_16BPP
 #define RAS_COLOR(color) ( ( (color) & 0xff ) << 4 )
+#else
+#define RAS_COLOR(color) ( ( (color) & 0xffff ) << 4 )
+#endif
 
 /* Get the op from a rop. */
 #define RAS_GETOP(op) ( (op) & 0xf )
 /* Get the color from a rop. */
+#ifndef RCONS_16BPP
 #define RAS_GETCOLOR(op) ( ( (op) >> 4 ) & 0xff )
+#else
+#define RAS_GETCOLOR(op) ( ( (op) >> 4 ) & 0xffff )
+#endif
 /* Get the longword address of a pixel. */
 #define RAS_ADDR( r, x, y ) \
     ( (r)->pixels + (y) * (r)->linelongs + (x) * (r)->depth / 32 )

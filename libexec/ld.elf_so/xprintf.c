@@ -1,4 +1,4 @@
-/*	$NetBSD: xprintf.c,v 1.5 1999/03/03 21:18:01 christos Exp $	 */
+/*	$NetBSD: xprintf.c,v 1.19 2007/11/24 18:32:26 christos Exp $	 */
 
 /*
  * Copyright 1996 Matt Thomas <matt@3am-software.com>
@@ -28,23 +28,22 @@
  */
 
 #include <sys/cdefs.h>
-#include "rtldenv.h"
+#ifndef lint
+__RCSID("$NetBSD: xprintf.c,v 1.19 2007/11/24 18:32:26 christos Exp $");
+#endif /* not lint */
+
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
-#ifdef __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
+
+#include "rtldenv.h"
 
 #ifdef RTLD_LOADER
-#define SZ_SHORT	0x01
-#define	SZ_INT		0x02
-#define	SZ_LONG		0x04
-#define	SZ_QUAD		0x08
-#define	SZ_UNSIGNED	0x10
-#define	SZ_MASK		0x0f
+#define	SZ_LONG		0x01
+#define	SZ_UNSIGNED	0x02
+#define SZ_SIZE_T	0x04
 
 /*
  * Non-mallocing printf, for use by malloc and rtld itself.
@@ -53,17 +52,13 @@
  * deals withs formats %x, %p, %s, and %d.
  */
 size_t
-xvsnprintf(buf, buflen, fmt, ap)
-	char *buf;
-	size_t buflen;
-	const char *fmt;
-	va_list ap;
+xvsnprintf(char *buf, size_t buflen, const char *fmt, va_list ap)
 {
 	char *bp = buf;
 	char *const ep = buf + buflen - 4;
-	int size;
+	int size, prec;
 
-	while (*fmt != NULL && bp < ep) {
+	while (*fmt != '\0' && bp < ep) {
 		switch (*fmt) {
 		case '\\':{
 			if (fmt[1] != '\0')
@@ -71,38 +66,38 @@ xvsnprintf(buf, buflen, fmt, ap)
 			continue;
 		}
 		case '%':{
-			size = SZ_INT;
+			size = 0;
+			prec = -1;
 	rflag:		switch (fmt[1]) {
-			case 'h':
-				size = (size&SZ_MASK)|SZ_SHORT;
+			case '*':
+				prec = va_arg(ap, int);
+				/* FALLTHROUGH */
+			case '.':
 				fmt++;
 				goto rflag;
 			case 'l':
-				size = (size&SZ_MASK)|SZ_LONG;
+				size |= SZ_LONG;
 				fmt++;
-				if (fmt[1] == 'l') {
-			case 'q':
-					size = (size&SZ_MASK)|SZ_QUAD;
-					fmt++;
-				}
+				goto rflag;
+			case 'z':
+				size |= SZ_SIZE_T;
+				fmt++;
 				goto rflag;
 			case 'u':
 				size |= SZ_UNSIGNED;
 				/* FALLTHROUGH */
 			case 'd':{
-				long long sval;
-				unsigned long long uval;
+				long sval;
+				unsigned long uval;
 				char digits[sizeof(int) * 3], *dp = digits;
 #define	SARG() \
-(size & SZ_SHORT ? va_arg(ap, short) : \
-size & SZ_LONG ? va_arg(ap, long) : \
-size & SZ_QUAD ? va_arg(ap, long long) : \
-va_arg(ap, int))
+(size & SZ_LONG ? va_arg(ap, long) : \
+((size & SZ_SIZE_T ? va_arg(ap, size_t) : \
+va_arg(ap, int))))
 #define	UARG() \
-(size & SZ_SHORT ? va_arg(ap, unsigned short) : \
-size & SZ_LONG ? va_arg(ap, unsigned long) : \
-size & SZ_QUAD ? va_arg(ap, unsigned long long) : \
-va_arg(ap, unsigned int))
+(size & SZ_LONG ? va_arg(ap, unsigned long) : \
+((size & SZ_SIZE_T ? va_arg(ap, size_t) : \
+va_arg(ap, unsigned int))))
 #define	ARG()	(size & SZ_UNSIGNED ? UARG() : SARG())
 
 				if (fmt[1] == 'd') {
@@ -178,11 +173,20 @@ va_arg(ap, unsigned int))
 				if (str == NULL)
 					str = "(null)";
 
-				len = strlen(str);
+				if (prec < 0)
+					len = strlen(str);
+				else
+					len = prec;
 				if (ep - bp < len)
 					len = ep - bp;
 				memcpy(bp, str, len);
 				bp += len;
+				fmt += 2;
+				break;
+			}
+			case 'c':{
+				int c = va_arg(ap, int);
+				*bp++ = (char)c;
 				fmt += 2;
 				break;
 			}
@@ -203,32 +207,19 @@ va_arg(ap, unsigned int))
 }
 
 void
-xvprintf(fmt, ap)
-	const char *fmt;
-	va_list ap;
+xvprintf(const char *fmt, va_list ap)
 {
 	char buf[256];
+
 	(void) write(2, buf, xvsnprintf(buf, sizeof(buf), fmt, ap));
 }
 
 void
-#ifdef __STDC__
 xprintf(const char *fmt, ...)
-#else
-xprintf(va_alist)
-	va_dcl
-#endif
 {
 	va_list ap;
 
-#ifdef __STDC__
 	va_start(ap, fmt);
-#else
-	const char *fmt;
-
-	va_start(ap);
-	fmt = va_arg(ap, const char *);
-#endif
 
 	xvprintf(fmt, ap);
 
@@ -236,35 +227,21 @@ xprintf(va_alist)
 }
 
 void
-#ifdef __STDC__
 xsnprintf(char *buf, size_t buflen, const char *fmt, ...)
-#else
-xsnprintf(va_alist)
-	va_dcl
-#endif
 {
 	va_list ap;
-#ifdef __STDC__
-	va_start(ap, fmt);
-#else
-	char *buf;
-	size_t buflen;
-	const char *fmt;
 
-	va_start(ap);
-	buf = va_arg(ap, char *);
-	buflen = va_arg(ap, size_t);
-	fmt = va_arg(ap, const char *);
-#endif
+	va_start(ap, fmt);
+
 	xvsnprintf(buf, buflen, fmt, ap);
 
 	va_end(ap);
 }
 
 const char *
-xstrerror(error)
-	int error;
+xstrerror(int error)
 {
+
 	if (error >= sys_nerr || error < 0) {
 		static char buf[128];
 		xsnprintf(buf, sizeof(buf), "Unknown error: %d", error);
@@ -274,51 +251,25 @@ xstrerror(error)
 }
 
 void
-#ifdef __STDC__
 xerrx(int eval, const char *fmt, ...)
-#else
-xerrx(va_alist)
-	va_dcl
-#endif
 {
 	va_list ap;
-#ifdef __STDC__
+
 	va_start(ap, fmt);
-#else
-	int eval;
-	const char *fmt;
-
-	va_start(ap);
-	eval = va_arg(ap, int);
-	fmt = va_arg(ap, const char *);
-#endif
-
 	xvprintf(fmt, ap);
 	va_end(ap);
+	(void) write(2, "\n", 1);
 
 	exit(eval);
 }
 
 void
-#ifdef __STDC__
 xerr(int eval, const char *fmt, ...)
-#else
-xerr(va_alist)
-	va_dcl
-#endif
 {
 	int saved_errno = errno;
 	va_list ap;
-#ifdef __STDC__
-	va_start(ap, fmt);
-#else
-	int eval;
-	const char *fmt;
 
-	va_start(ap);
-	eval = va_arg(ap, int);
-	fmt = va_arg(ap, const char *);
-#endif
+	va_start(ap, fmt);
 	xvprintf(fmt, ap);
 	va_end(ap);
 
@@ -327,23 +278,12 @@ xerr(va_alist)
 }
 
 void
-#ifdef __STDC__
 xwarn(const char *fmt, ...)
-#else
-xwarn(va_alist)
-	va_dcl
-#endif
 {
 	int saved_errno = errno;
 	va_list ap;
-#ifdef __STDC__
-	va_start(ap, fmt);
-#else
-	const char *fmt;
 
-	va_start(ap);
-	fmt = va_arg(ap, const char *);
-#endif
+	va_start(ap, fmt);
 	xvprintf(fmt, ap);
 	va_end(ap);
 
@@ -352,35 +292,25 @@ xwarn(va_alist)
 }
 
 void
-#ifdef __STDC__
 xwarnx(const char *fmt, ...)
-#else
-xwarnx(va_alist)
-	va_dcl
-#endif
 {
 	va_list ap;
-#ifdef __STDC__
-	va_start(ap, fmt);
-#else
-	const char *fmt;
 
-	va_start(ap);
-	fmt = va_arg(ap, const char *);
-#endif
+	va_start(ap, fmt);
 	xvprintf(fmt, ap);
 	va_end(ap);
+	(void) write(2, "\n", 1);
 }
 
+#ifdef DEBUG
 void
-xassert(file, line, failedexpr)
-	const char *file;
-	int line;
-	const char *failedexpr;
+xassert(const char *file, int line, const char *failedexpr)
 {
+
 	xprintf("assertion \"%s\" failed: file \"%s\", line %d\n",
 		failedexpr, file, line);
 	abort();
 	/* NOTREACHED */
 }
+#endif
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.1.1.1 1997/09/26 21:16:38 phil Exp $	*/
+/*	$NetBSD: defs.h,v 1.4 2003/10/27 00:12:43 lukem Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -38,6 +38,10 @@
 
 /* defs.h: definitions needed for the message system. */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <stdio.h>
 #include "msgdb.h"
 
@@ -69,24 +73,23 @@ EXTERN id_rec *root INIT(NULL);
 /* Prototypes. */
 
 /* From util.c */
-void yyerror (const char *, ...);
-void buff_add_ch (char);
-char *buff_copy (void); 
+void yyerror(const char *, ...);
+void buff_add_ch(char);
+char *buff_copy(void); 
 
 /* From avl.c */
-id_rec *find_id (id_rec *tree, char *id);
-int insert_id (id_rec **root, id_rec *new_id);
+id_rec *find_id(id_rec *, char *);
+int insert_id(id_rec **, id_rec *);
 
 /* from scan.l */
-int yylex (void);
+int yylex(void);
 
 /* from parse.y */
-int yyparse (void);
+int yyparse(void);
 
 /* Vars not defined in main.c */
 extern FILE *yyin;
 
 /* from mdb.c */
-void define_msg (char *, char *);
-void write_msg_file (void);
-
+void define_msg(char *, char *);
+void write_msg_file(void);

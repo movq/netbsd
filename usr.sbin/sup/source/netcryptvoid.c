@@ -1,9 +1,9 @@
-/*	$NetBSD: netcryptvoid.c,v 1.5 1999/04/12 20:48:07 pk Exp $	*/
+/*	$NetBSD: netcryptvoid.c,v 1.9 2006/12/20 16:33:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
  * All Rights Reserved.
- * 
+ *
  * Permission to use, copy, modify and distribute this software and its
  * documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
@@ -29,7 +29,7 @@
  * Revision 2.2  92/09/09  22:04:34  mrt
  * 	Created.
  * 	[92/09/09            mrt]
- * 
+ *
  */
 /*
  * DATA ENCRYPTION
@@ -44,7 +44,7 @@
  *  you can only run unencrypted sups
  */
 
-#include <libc.h>
+#include "libc.h"
 #include "supcdefs.h"
 #include "supextern.h"
 #include "supmsg.h"
@@ -53,38 +53,36 @@
  ***    G L O B A L   V A R I A B L E S    ***
  *********************************************/
 
-int cryptflag = 0;		/* whether to encrypt/decrypt data */
+int cryptflag;			/* whether to encrypt/decrypt data */
 char *cryptbuf;			/* buffer for data encryption/decryption */
 
-int netcrypt (pword)
-char *pword;
+int 
+netcrypt(char *pword)
 {
-	if (pword == NULL || (strcmp(pword,PSWDCRYPT) == 0)) {
+	if (pword == NULL || (strcmp(pword, PSWDCRYPT) == 0)) {
 		cryptflag = 0;
-		(void) getcryptbuf (0);
+		(void) getcryptbuf(0);
 		return (SCMOK);
 	}
 	return (SCMERR);
 }
 
-int getcryptbuf (x)
-int x;
+int 
+getcryptbuf(int x __unused)
 {
 	if (cryptflag == 0) {
-		return(SCMOK);
-	} else 
+		return (SCMOK);
+	} else
 		return (SCMERR);
 }
 
-void decode (in,out,count)
-char *in,*out;
-int count;
+void 
+decode(char *in __unused, char *out __unused, int count __unused)
 {
 }
 
 
-void encode (in,out,count)
-char *in,*out;
-int count;
+void 
+encode(char *in __unused, char *out __unused, int count __unused)
 {
 }

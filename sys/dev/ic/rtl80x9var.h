@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl80x9var.h,v 1.1 1998/10/31 00:44:33 thorpej Exp $	*/
+/*	$NetBSD: rtl80x9var.h,v 1.6 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 /*
- * Definitions on RealTek 8019 and 8029 NE2000-compatible network interfaces.
+ * Definitions on Realtek 8019 and 8029 NE2000-compatible network interfaces.
  *
  * Data sheets for these chips can be found at:
  *
@@ -49,12 +42,11 @@
 #define	_DEV_IC_RTL80x9_VAR_H_
 
 #ifdef _KERNEL
-int	rtl80x9_mediachange __P((struct dp8390_softc *));
-void	rtl80x9_mediastatus __P((struct dp8390_softc *,
-	    struct ifmediareq *));
-void	rtl80x9_init_card __P((struct dp8390_softc *));
-void	rtl80x9_init_media __P((struct dp8390_softc *, int **,
-	    int *, int *));
+int	rtl80x9_mediachange(struct dp8390_softc *);
+void	rtl80x9_mediastatus(struct dp8390_softc *, struct ifmediareq *);
+void	rtl80x9_init_card(struct dp8390_softc *);
+
+void	rtl80x9_media_init(struct dp8390_softc *);
 #endif /* _KERNEL */
 
 #endif /* _DEV_IC_RTL80x9_VAR_H_ */

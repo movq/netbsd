@@ -1,4 +1,4 @@
-/*	$NetBSD: scsi_tape.h,v 1.19 2000/02/21 05:11:09 mjacob Exp $	*/
+/*	$NetBSD: scsi_tape.h,v 1.25 2008/04/28 20:23:57 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -197,21 +190,9 @@ struct scsi_tape_dev_compression_page {
 #define	SMH_DSP_BUFF_MODE_MLTI	0x20
 #define	SMH_DSP_WRITE_PROT	0x80
 
-/* A special for the CIPHER ST150S(old drive) */
-struct block_desc_cipher {
-	u_int8_t density;
-	u_int8_t nblocks[3];
-	u_int8_t reserved;
-	u_int8_t blklen[3];
-	u_int8_t other;
-#define ST150_SEC		0x01	/* soft error count */
-#define	SR150_AUI		0x02	/* autoload inhibit */
-};
-
-
 #define	READ_POSITION	0x34
 struct scsi_tape_read_position {
-	u_int8_t opcode;		/* READ_POSITION */
+	u_int8_t opcode;
 	u_int8_t byte1;			/* set LSB to read hardware block pos */
 	u_int8_t reserved[8];
 };
@@ -230,14 +211,13 @@ struct scsi_tape_locate {
 #define	HALFINCH_800	0x01
 #define	HALFINCH_1600	0x02
 #define	HALFINCH_6250	0x03
-#define	QIC_11		0x04	/* from Archive 150S Theory of Op. XXX	*/
-#define QIC_24		0x05	/* may be bad, works for CIPHER ST150S XXX */
+#define	QIC_11		0x04
+#define QIC_24		0x05
 #define QIC_120		0x0f
 #define QIC_150		0x10
 #define QIC_320		0x11
 #define QIC_525		0x11
 #define QIC_1320	0x12
 #define DDS		0x13
-#define DAT_1		0x13
 #define QIC_3095	0x45
-#define	QIC_3220	0x47
+#define QIC_3220	0x47

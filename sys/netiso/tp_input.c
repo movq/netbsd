@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_input.c,v 1.13 2000/03/30 13:10:13 augustss Exp $	*/
+/*	$NetBSD: tp_input.c,v 1.30 2008/04/23 09:57:59 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -82,6 +78,11 @@ SOFTWARE.
  * static structure tpdu_info.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: tp_input.c,v 1.30 2008/04/23 09:57:59 plunky Exp $");
+
+#include "opt_iso.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
@@ -99,31 +100,22 @@ SOFTWARE.
 #include <netiso/iso_errno.h>
 #include <netiso/iso_pcb.h>
 #include <netiso/tp_param.h>
+#include <netiso/tp_var.h>
 #include <netiso/tp_timer.h>
 #include <netiso/tp_stat.h>
 #include <netiso/tp_pcb.h>
 #include <netiso/argo_debug.h>
 #include <netiso/tp_trace.h>
 #include <netiso/tp_tpdu.h>
-#include <netiso/tp_var.h>
 #include <netiso/iso_var.h>
-
-#ifdef TRUE
-#undef FALSE
-#undef TRUE
-#endif
-#include <netccitt/x25.h>
-#include <netccitt/pk.h>
-#include <netccitt/pk_var.h>
 
 #include <machine/stdarg.h>
 
-static struct socket *tp_newsocket __P((struct socket *, struct sockaddr *,
-					caddr_t, u_int, u_int));
+static struct socket *
+	tp_newsocket(struct socket *, struct sockaddr *, void *, u_int, u_int);
 
-struct mbuf    *
-tp_inputprep(m)
-	struct mbuf *m;
+struct mbuf *
+tp_inputprep(struct mbuf *m)
 {
 	int             hdrlen;
 
@@ -135,7 +127,7 @@ tp_inputprep(m)
 
 	while (m->m_len < 1) {
 		/*
-		 * The "m_free" logic if( (m = m_free(m)) == MNULL ) return
+		 * The "m_free" logic if( (m = m_free(m)) == NULL ) return
 		 * (struct mbuf *)0; would cause a system crash if ever
 		 * executed. This logic will be executed if the first mbuf in
 		 * the chain only contains a CLNP header. The m_free routine
@@ -146,17 +138,17 @@ tp_inputprep(m)
 		 * calls "panic" if M_PKTHDR is not set. m_pullup is a cheap
 		 * way of keeping the head of the chain from being freed.
 		 */
-		if ((m = m_pullup(m, 1)) == MNULL)
-			return (MNULL);
+		if ((m = m_pullup(m, 1)) == NULL)
+			return (NULL);
 	}
 	if (((long) m->m_data) & 0x3) {
 		/*
 		 * If we are not 4-byte aligned, we have to be above the
 		 * beginning of the mbuf, and it is ok just to slide it back.
 		 */
-		caddr_t         ocp = m->m_data;
+		void *        ocp = m->m_data;
 
-		m->m_data = (caddr_t) (((long) m->m_data) & ~0x3);
+		m->m_data = (void *) (((long) m->m_data) & ~0x3);
 		bcopy(ocp, m->m_data, (unsigned) m->m_len);
 	}
 	CHANGE_MTYPE(m, TPMT_DATA);
@@ -172,7 +164,7 @@ tp_inputprep(m)
 	 * now pull up the whole tp header
 	 */
 	if (m->m_len < hdrlen) {
-		if ((m = m_pullup(m, hdrlen)) == MNULL) {
+		if ((m = m_pullup(m, hdrlen)) == NULL) {
 			IncStat(ts_recv_drop);
 			return (struct mbuf *) 0;
 		}
@@ -197,7 +189,7 @@ tp_inputprep(m)
 #define TP_LEN_CLASS_0_INDEX	2
 #define TP_MAX_DATA_INDEX 3
 
-static u_char   tpdu_info[][4] =
+static const u_char tpdu_info[][4] =
 {
 	/* length						 max data len */
 	/* reg fmt 	xtd fmt  class 0  		 	  */
@@ -229,11 +221,11 @@ static u_char   tpdu_info[][4] =
  */
 
 #define WHILE_OPTIONS(P, hdr, format)\
-{	caddr_t P = tpdu_info[(hdr)->tpdu_type][(format)] + (caddr_t)hdr;\
-	caddr_t PLIM = 1 + hdr->tpdu_li + (caddr_t)hdr;\
+{	char *P = tpdu_info[(hdr)->tpdu_type][(format)] + (char *)hdr;\
+	char *PLIM = 1 + hdr->tpdu_li + (char *)hdr;\
 	for (;; P += 2 + ((struct tp_vbp *)P)->tpv_len) {\
 		CHECK((P > PLIM), E_TP_LENGTH_INVAL, ts_inv_length,\
-				respond, P - (caddr_t)hdr);\
+				respond, P - (char *)hdr);\
 		if (P == PLIM) break;
 
 #define END_WHILE_OPTIONS(P) } }
@@ -262,12 +254,12 @@ static u_char   tpdu_info[][4] =
  * NOTES:
  */
 static struct socket *
-tp_newsocket(so, fname, cons_channel, class_to_use, netservice)
-	struct socket  *so;
-	struct sockaddr *fname;
-	caddr_t         cons_channel;
-	u_int          class_to_use;
-	u_int           netservice;
+tp_newsocket(
+	struct socket  *so,
+	struct sockaddr *fname,
+	void *        cons_channel,
+	u_int          class_to_use,
+	u_int           netservice)
 {
 	struct tp_pcb *tpcb = sototpcb(so);	/* old tpcb, needed
 							 * below */
@@ -363,7 +355,7 @@ tp_newsocket(so, fname, cons_channel, class_to_use, netservice)
 			 * pcb_connect, which expects the name/addr in an mbuf as well.
 			 * sigh.
 			 */
-			bcopy((caddr_t) fname, mtod(m, caddr_t), fname->sa_len);
+			bcopy((void *) fname, mtod(m, void *), fname->sa_len);
 			m->m_len = fname->sa_len;
 
 			/*
@@ -418,17 +410,11 @@ ok:
  * reasonable minimum.
  */
 void
-#if __STDC__
 tp_input(struct mbuf *m, ...)
-#else
-tp_input(m, va_alist)
-	struct mbuf *m;
-	va_dcl
-#endif
 {
 	struct sockaddr *faddr, *laddr;	/* NSAP addresses */
-	caddr_t         cons_channel;
-	int             (*dgout_routine) __P((struct mbuf *, ...));
+	void *        cons_channel;
+	int             (*dgout_routine) (struct mbuf *, ...);
 	int             ce_bit;
 	struct tp_pcb *tpcb;
 	struct tpdu *hdr;
@@ -438,12 +424,12 @@ tp_input(m, va_alist)
 	unsigned        dutype;
 	u_short         dref, sref, acktime, subseq;
 	u_char          preferred_class, class_to_use, pdusize;
-	u_char          opt, dusize, addlopt, version = 0;
+	u_char          opt, dusize, addlopt, myversion = 0;
 #ifdef TP_PERF_MEAS
 	u_char          perf_meas;
 #endif				/* TP_PERF_MEAS */
 	u_char          fsufxlen, lsufxlen;
-	caddr_t         fsufxloc, lsufxloc;
+	void            *fsufxloc, *lsufxloc;
 	int             tpdu_len;
 	u_int           takes_data;
 	u_int           fcc_present;
@@ -454,9 +440,9 @@ tp_input(m, va_alist)
 	va_start(ap, m);
 	faddr = va_arg(ap, struct sockaddr *);
 	laddr = va_arg(ap, struct sockaddr *);
-	cons_channel = va_arg(ap, caddr_t);
+	cons_channel = va_arg(ap, void *);
 	/* XXX: Does va_arg does not work for function ptrs */
-	dgout_routine = (int (*) __P((struct mbuf *, ...))) va_arg(ap, void *);
+	dgout_routine = (int (*)(struct mbuf *, ...)) va_arg(ap, void *);
 	ce_bit = va_arg(ap, int);
 	va_end(ap);
 
@@ -464,7 +450,7 @@ again:
 	hdr = mtod(m, struct tpdu *);
 	tpcb = 0;
 	error = errlen = tpdu_len = 0;
-	takes_data = fcc_present = FALSE;
+	takes_data = fcc_present = false;
 	acktime = 2;
 	sref = subseq = 0;
 	fsufxloc = lsufxloc = NULL;
@@ -508,7 +494,7 @@ again:
 				chain_length++;
 			}
 #endif
-			if (n->m_next == MNULL) {
+			if (n->m_next == NULL) {
 				break;
 			}
 			n = n->m_next;
@@ -616,7 +602,7 @@ again:
 			 * could use vb_getval, but we want to save the loc &
 			 * len for later use
 			 */
-			fsufxloc = (caddr_t) & vbptr(P)->tpv_val;
+			fsufxloc = (void *) & vbptr(P)->tpv_val;
 			fsufxlen = vbptr(P)->tpv_len;
 #ifdef ARGO_DEBUG
 			if (argo_debug[D_TPINPUT]) {
@@ -624,7 +610,7 @@ again:
 				{
 					int    j;
 					for (j = 0; j < fsufxlen; j++) {
-						printf(" 0x%x. ", *((caddr_t) (fsufxloc + j)));
+						printf(" 0x%x. ", *((char *) fsufxloc + j));
 					}
 					printf("\n");
 				}
@@ -636,7 +622,7 @@ again:
 			 * could use vb_getval, but we want to save the loc &
 			 * len for later use
 			 */
-			lsufxloc = (caddr_t) & vbptr(P)->tpv_val;
+			lsufxloc = &vbptr(P)->tpv_val;
 			lsufxlen = vbptr(P)->tpv_len;
 #ifdef ARGO_DEBUG
 			if (argo_debug[D_TPINPUT]) {
@@ -644,7 +630,7 @@ again:
 				{
 					int    j;
 					for (j = 0; j < lsufxlen; j++) {
-						printf(" 0x%x. ", *((u_char *) (lsufxloc + j)));
+						printf(" 0x%x. ", *((u_char *)lsufxloc + j));
 					}
 					printf("\n");
 				}
@@ -666,9 +652,9 @@ again:
 			 */
 			CHECK((vbval(P, u_char) != TP_VERSION),
 			      E_TP_INV_PVAL, ts_inv_pval, setversion,
-			(1 + (caddr_t) & vbptr(P)->tpv_val - (caddr_t) hdr));
+			(1 + (char *)&vbptr(P)->tpv_val - (char *)hdr));
 	setversion:
-			version = vbval(P, u_char);
+			myversion = vbval(P, u_char);
 			break;
 		case TPP_acktime:
 			vb_getval(P, u_short, acktime);
@@ -699,7 +685,7 @@ again:
 				}
 				CHECK((bad_alt_classes[hdr->tpdu_CRclass] & alt_classes),
 				      E_TP_INV_PVAL, ts_inv_aclass, respond,
-				      ((caddr_t) aclass) - (caddr_t) hdr);
+				      ((char *) aclass) - (char *) hdr);
 #ifdef ARGO_DEBUG
 				if (argo_debug[D_TPINPUT]) {
 					printf("alt_classes 0x%x\n", alt_classes);
@@ -764,7 +750,7 @@ again:
 			for (t = tp_listeners; t; t = t->tp_nextlisten)
 				if ((t->tp_lsuffixlen == 0 ||
 				     (lsufxlen == t->tp_lsuffixlen &&
-				      bcmp(lsufxloc, t->tp_lsuffix, lsufxlen) == 0)) &&
+				      memcmp(lsufxloc, t->tp_lsuffix, lsufxlen) == 0)) &&
 				    ((t->tp_flags & TPF_GENERAL_ADDR) ||
 				     (laddr->sa_family == t->tp_domain &&
 				      (*t->tp_nlproto->nlp_cmpnetaddr)
@@ -772,7 +758,7 @@ again:
 					break;
 
 			CHECK(t == 0, E_TP_NO_SESSION, ts_inv_sufx, respond,
-			  (1 + 2 + (caddr_t) & hdr->_tpduf - (caddr_t) hdr))
+			  (1 + 2 + (char *)&hdr->_tpduf - (char *)hdr))
 			/*
 			 * _tpduf is the fixed part; add 2 to get the dref
 			 * bits of the fixed part (can't take the address of
@@ -839,7 +825,7 @@ again:
 			tpp.p_xpd_service = (addlopt & TPAO_USE_TXPD) == TPAO_USE_TXPD;
 			tpp.p_use_checksum = (tpp.p_class == TP_CLASS_0) ? 0 :
 				(addlopt & TPAO_NO_CSUM) == 0;
-			tpp.p_version = version;
+			tpp.p_version = myversion;
 #ifdef notdef
 			tpp.p_use_efc = (opt & TPO_USE_EFC) == TPO_USE_EFC;
 			tpp.p_use_nxpd = (addlopt & TPAO_USE_NXPD) == TPAO_USE_NXPD;
@@ -849,7 +835,7 @@ again:
 			CHECK(
 			      tp_consistency(tpcb, 0 /* not force or strict */ , &tpp) != 0,
 			E_TP_NEGOT_FAILED, ts_negotfailed, clear_parent_tcb,
-			      (1 + 2 + (caddr_t) & hdr->_tpdufr.CRCC - (caddr_t) hdr)
+			      (1 + 2 + (char *)&hdr->_tpdufr.CRCC - (char *)hdr)
 			/* ^ more or less the location of class */
 				)
 		}
@@ -862,10 +848,10 @@ again:
 			);
 		}
 #endif
-		CHECK(((class_to_use == TP_CLASS_0) && 
+		CHECK(((class_to_use == TP_CLASS_0) &&
 		      (dgout_routine != tpcons_output)),
 			E_TP_NEGOT_FAILED, ts_negotfailed, clear_parent_tcb,
-		     (1 + 2 + (caddr_t) & hdr->_tpdufr.CRCC - (caddr_t) hdr)
+		     (1 + 2 + (char *)&hdr->_tpdufr.CRCC - (char *)hdr)
 		/* ^ more or less the location of class */
 			)
 #ifdef ARGO_DEBUG
@@ -874,7 +860,7 @@ again:
 			       tpcb, tpcb->tp_flags);
 		}
 #endif
-		takes_data = TRUE;
+		takes_data = true;
 		e.TPDU_ATTR(CR).e_cdt = hdr->tpdu_CRcdt;
 		e.ev_number = CR_TPDU;
 
@@ -913,7 +899,7 @@ again:
 				goto respond;
 			}
 			tpcb = sototpcb(so);
-			insque(tpcb, parent_tpcb);
+			iso_insque(tpcb, parent_tpcb);
 
 			/*
 			 * Stash the addresses in the net level pcb
@@ -931,7 +917,7 @@ again:
 			}
 			/* stash the l suffix in the new tpcb */
 			tpcb->tp_lsuffixlen = lsufxlen;
-			bcopy(lsufxloc, tpcb->tp_lsuffix, lsufxlen);
+			memcpy(tpcb->tp_lsuffix, lsufxloc, lsufxlen);
 			(tpcb->tp_nlproto->nlp_putsufx)
 				(tpcb->tp_npcb, lsufxloc, lsufxlen, TP_LOCAL);
 #ifdef TP_PERF_MEAS
@@ -1008,38 +994,17 @@ again:
 		 * get the dref bits of the fixed part (can't take the
 		 * address of a bit field)
 		 */
-#ifdef TPCONS
-		if (cons_channel && dutype == DT_TPDU_type) {
-			struct isopcb  *isop = ((struct isopcb *)
-			       ((struct pklcd *) cons_channel)->lcd_upnext);
-			if (isop && isop->isop_refcnt == 1 && isop->isop_socket &&
-			    (tpcb = sototpcb(isop->isop_socket)) &&
-			    (tpcb->tp_class == TP_CLASS_0 /* || == CLASS_1 */ )) {
-#ifdef ARGO_DEBUG
-				if (argo_debug[D_TPINPUT]) {
-					printf("tpinput_dt: class 0 short circuit\n");
-				}
-#endif
-				dref = tpcb->tp_lref;
-				sref = tpcb->tp_fref;
-				CHECK((tpcb->tp_refstate == REF_FREE),
-				      E_TP_MISM_REFS, ts_inv_dref, nonx_dref,
-				      (1 + 2 + (caddr_t) & hdr->_tpduf - (caddr_t) hdr))
-					goto tp0_data;
-			}
-		}
-#endif
 		{
 
 			CHECK(((int) dref <= 0 || dref >= tp_refinfo.tpr_size),
 			      E_TP_MISM_REFS, ts_inv_dref, nonx_dref,
-			  (1 + 2 + (caddr_t) & hdr->_tpduf - (caddr_t) hdr))
+			  (1 + 2 + (char *)&hdr->_tpduf - (char *)hdr))
 				CHECK(((tpcb = tp_ref[dref].tpr_pcb) == (struct tp_pcb *) 0),
 				      E_TP_MISM_REFS, ts_inv_dref, nonx_dref,
-			  (1 + 2 + (caddr_t) & hdr->_tpduf - (caddr_t) hdr))
+			  (1 + 2 + (char *)&hdr->_tpduf - (char *)hdr))
 				CHECK((tpcb->tp_refstate == REF_FREE),
 				      E_TP_MISM_REFS, ts_inv_dref, nonx_dref,
-			  (1 + 2 + (caddr_t) & hdr->_tpduf - (caddr_t) hdr))
+			  (1 + 2 + (char *)&hdr->_tpduf - (char *)hdr))
 		}
 
 #ifdef ARGO_DEBUG
@@ -1052,7 +1017,7 @@ again:
 		CHECK((tpcb->tp_refstate == REF_FROZEN),
 		(dutype == CC_TPDU_type ? E_TP_NO_SESSION : E_TP_MISM_REFS),
 		      ts_inv_dref, respond,
-		      (1 + 2 + (caddr_t) & hdr->_tpduf - (caddr_t) hdr))
+		      (1 + 2 + (char *)&hdr->_tpduf - (char *)hdr))
 #ifdef ARGO_DEBUG
 		if (argo_debug[D_TPINPUT]) {
 			printf("state of dref %d ok, tpcb %p\n", dref, tpcb);
@@ -1090,7 +1055,7 @@ again:
 				CHECK((dusize < TP_MIN_TPDUSIZE ||
 				       dusize > TP_MAX_TPDUSIZE || dusize > odusize),
 				      E_TP_INV_PVAL, ts_inv_pval, respond,
-				      (1 + (caddr_t) & vbptr(P)->tpv_val - (caddr_t) hdr))
+				      (1 + (char *)&vbptr(P)->tpv_val - (char *) hdr))
 #ifdef ARGO_DEBUG
 					if (argo_debug[D_TPINPUT]) {
 					printf("CC dusize 0x%x\n", dusize);
@@ -1118,7 +1083,7 @@ again:
 				CHECK((pdusize == 0 ||
 				       (opdusize && (pdusize > opdusize))),
 				      E_TP_INV_PVAL, ts_inv_pval, respond,
-				      (1 + (caddr_t) & vbptr(P)->tpv_val - (caddr_t) hdr))
+				      (1 + (char *)&vbptr(P)->tpv_val - (char *)hdr))
 			}
 			break;
 	caseof(CC_TPDU_type, TPP_calling_sufx):
@@ -1127,7 +1092,7 @@ again:
 				printf("CC calling (local) sufxlen 0x%x\n", lsufxlen);
 			}
 #endif
-			lsufxloc = (caddr_t) & vbptr(P)->tpv_val;
+			lsufxloc = &vbptr(P)->tpv_val;
 			lsufxlen = vbptr(P)->tpv_len;
 			break;
 	caseof(CC_TPDU_type, TPP_acktime):
@@ -1140,7 +1105,7 @@ again:
 				acktime = 2;
 			break;
 	caseof(CC_TPDU_type, TPP_called_sufx):
-			fsufxloc = (caddr_t) & vbptr(P)->tpv_val;
+			fsufxloc = (void *) & vbptr(P)->tpv_val;
 			fsufxlen = vbptr(P)->tpv_len;
 #ifdef ARGO_DEBUG
 			if (argo_debug[D_TPINPUT]) {
@@ -1198,7 +1163,7 @@ again:
 				u_int           ylwe;
 				u_short         ysubseq, ycredit;
 
-				fcc_present = TRUE;
+				fcc_present = true;
 				vb_getval(P, u_int, ylwe);
 				vb_getval(P, u_short, ysubseq);
 				vb_getval(P, u_short, ycredit);
@@ -1261,7 +1226,7 @@ again:
 				CHECK(
 				  tp_consistency(tpcb, TP_FORCE, &tpp) != 0,
 				 E_TP_NEGOT_FAILED, ts_negotfailed, respond,
-				      (1 + 2 + (caddr_t) & hdr->_tpdufr.CRCC - (caddr_t) hdr)
+				      (1 + 2 + (char *)&hdr->_tpdufr.CRCC - (char *)hdr)
 				/* ^ more or less the location of class */
 					)
 #ifdef TPPT
@@ -1276,17 +1241,9 @@ again:
 					    ((class_to_use == TP_CLASS_0) &&
 					  (dgout_routine != tpcons_output)),
 				 E_TP_NEGOT_FAILED, ts_negotfailed, respond,
-					      (1 + 2 + (caddr_t) & hdr->_tpdufr.CRCC - (caddr_t) hdr)
+					      (1 + 2 + (char *)&hdr->_tpdufr.CRCC - (char *)hdr)
 				/* ^ more or less the location of class */
 					)
-#ifdef TPCONS
-					if (tpcb->tp_netservice == ISO_CONS &&
-					    class_to_use == TP_CLASS_0) {
-					struct isopcb  *isop = (struct isopcb *) tpcb->tp_npcb;
-					struct pklcd   *lcp = (struct pklcd *) isop->isop_chan;
-					lcp->lcd_flags &= ~X25_DG_CIRCUIT;
-				}
-#endif
 			}
 			if (!tpcb->tp_use_checksum)
 				IncStat(ts_csum_off);
@@ -1304,24 +1261,24 @@ again:
 #endif
 
 			/*
-			 * if called or calling suffices appeared on the CC,
+			 * if called or calling suffixes appeared on the CC,
 			 * they'd better jive with what's in the pcb
 			 */
 				if (fsufxlen) {
 				CHECK(((tpcb->tp_fsuffixlen != fsufxlen) ||
 				bcmp(fsufxloc, tpcb->tp_fsuffix, fsufxlen)),
 				      E_TP_INV_PVAL, ts_inv_sufx, respond,
-				      (1 + fsufxloc - (caddr_t) hdr))
+				      (1 + (char *)fsufxloc - (char *)hdr))
 			}
 			if (lsufxlen) {
 				CHECK(((tpcb->tp_lsuffixlen != lsufxlen) ||
 				bcmp(lsufxloc, tpcb->tp_lsuffix, lsufxlen)),
 				      E_TP_INV_PVAL, ts_inv_sufx, respond,
-				      (1 + lsufxloc - (caddr_t) hdr))
+				      (1 + (char *)lsufxloc - (char *)hdr))
 			}
 			e.TPDU_ATTR(CC).e_sref = sref;
 			e.TPDU_ATTR(CC).e_cdt = hdr->tpdu_CCcdt;
-			takes_data = TRUE;
+			takes_data = true;
 			e.ev_number = CC_TPDU;
 			IncStat(ts_CC_rcvd);
 			break;
@@ -1333,7 +1290,7 @@ again:
 
 			CHECK((sref != tpcb->tp_fref),
 			      E_TP_MISM_REFS, ts_inv_sufx, discard,
-			 (1 + (caddr_t) & hdr->tpdu_DCsref - (caddr_t) hdr))
+			 (1 + (char *)&hdr->tpdu_DCsref - (char *)hdr))
 				e.ev_number = DC_TPDU;
 			IncStat(ts_DC_rcvd);
 			break;
@@ -1351,10 +1308,10 @@ again:
 			CHECK((sref != 0 && sref != tpcb->tp_fref &&
 			       tpcb->tp_state != TP_CRSENT),
 			      (TP_ERROR_SNDC | E_TP_MISM_REFS), ts_inv_sufx, respond,
-			 (1 + (caddr_t) & hdr->tpdu_DRsref - (caddr_t) hdr))
+			 (1 + (char *)&hdr->tpdu_DRsref - (char *)hdr))
 				e.TPDU_ATTR(DR).e_reason = hdr->tpdu_DRreason;
 			e.TPDU_ATTR(DR).e_sref = (u_short) sref;
-			takes_data = TRUE;
+			takes_data = true;
 			e.ev_number = DR_TPDU;
 			IncStat(ts_DR_rcvd);
 			break;
@@ -1434,7 +1391,7 @@ again:
 			} else {
 				e.TPDU_ATTR(XPD).e_seq = hdr->tpdu_XPDseq;
 			}
-			takes_data = TRUE;
+			takes_data = true;
 			e.ev_number = XPD_TPDU;
 			IncStat(ts_XPD_rcvd);
 			IncPStat(tpcb, tps_XPD_rcvd);
@@ -1449,7 +1406,7 @@ again:
 
 #ifdef ARGO_DEBUG
 			if (argo_debug[D_DROP]) {
-				if (time.tv_usec & 0x4 &&
+				if (time_second & 0x4 &&
 				    hdr->tpdu_DTseq & 0x1) {
 					IncStat(ts_ydebug);
 					goto discard;
@@ -1457,9 +1414,6 @@ again:
 			}
 #endif
 			if (tpcb->tp_class == TP_CLASS_0) {
-#ifdef TPCONS
-		tp0_data:
-#endif
 				e.TPDU_ATTR(DT).e_seq = 0;	/* actually don't care */
 				e.TPDU_ATTR(DT).e_eot = (((struct tp0du *) hdr)->tp0du_eot);
 			} else if (tpcb->tp_xtd_format) {
@@ -1479,7 +1433,7 @@ again:
 			}
 			if (e.TPDU_ATTR(DT).e_eot)
 				IncStat(ts_eot_input);
-			takes_data = TRUE;
+			takes_data = true;
 			e.ev_number = DT_TPDU;
 			IncStat(ts_DT_rcvd);
 			IncPStat(tpcb, tps_DT_rcvd);
@@ -1514,7 +1468,7 @@ again:
 	m->m_data += ((int) hdr->tpdu_li + 1);
 
 	if (takes_data) {
-		int             max = tpdu_info[hdr->tpdu_type][TP_MAX_DATA_INDEX];
+		int             xmax = tpdu_info[hdr->tpdu_type][TP_MAX_DATA_INDEX];
 		int             datalen = tpdu_len - hdr->tpdu_li - 1, mbtype = MT_DATA;
 		struct {
 			struct tp_disc_reason dr;
@@ -1523,8 +1477,8 @@ again:
 #define c_hdr x.x_hdr
 		struct mbuf *n;
 
-		CHECK((max && datalen > max), E_TP_LENGTH_INVAL,
-		      ts_inv_length, respond, (max + hdr->tpdu_li + 1));
+		CHECK((xmax && datalen > xmax), E_TP_LENGTH_INVAL,
+		      ts_inv_length, respond, (xmax + hdr->tpdu_li + 1));
 		switch (hdr->tpdu_type) {
 
 		case CR_TPDU_type:
@@ -1555,9 +1509,9 @@ again:
 			}
 			if (hdr->tpdu_type == DR_TPDU_type) {
 				datalen += sizeof(x) - sizeof(c_hdr);
-				bcopy((caddr_t) & x, mtod(n, caddr_t), n->m_len = sizeof(x));
+				bcopy((void *) & x, mtod(n, void *), n->m_len = sizeof(x));
 			} else
-				bcopy((caddr_t) & c_hdr, mtod(n, caddr_t),
+				bcopy((void *) & c_hdr, mtod(n, void *),
 				      n->m_len = sizeof(c_hdr));
 			n->m_next = m;
 			m = n;
@@ -1588,7 +1542,7 @@ again:
 		 * prevent m_freem() after tp_driver() from throwing it all
 		 * away
 		 */
-		m = MNULL;
+		m = NULL;
 	}
 	IncStat(ts_tpdu_rcvd);
 
@@ -1598,7 +1552,7 @@ again:
 		       tpcb->tp_state, e.ev_number, m);
 		printf(" e.e_data %p\n", e.TPDU_ATTR(DT).e_data);
 		printf("takes_data 0x%x m_len 0x%x, tpdu_len 0x%x\n",
-		       takes_data, (m == MNULL) ? 0 : m->m_len, tpdu_len);
+		       takes_data, (m == NULL) ? 0 : m->m_len, tpdu_len);
 	}
 #endif
 
@@ -1637,7 +1591,7 @@ again:
 	 */
 
 	if (takes_data == 0) {
-		ASSERT(m != MNULL);
+		ASSERT(m != NULL);
 		/*
 		 * we already peeled off the prev. tp header so we can just
 		 * pull up some more and repeat
@@ -1657,7 +1611,7 @@ again:
 			goto again;
 		}
 	}
-	if (m != MNULL) {
+	if (m != NULL) {
 #ifdef ARGO_DEBUG
 		if (argo_debug[D_TPINPUT]) {
 			printf("tp_input : m_freem(%p)\n", m);
@@ -1750,9 +1704,7 @@ respond:
  * NOTES:	 It would be nice if it got the network header size as well.
  */
 int
-tp_headersize(dutype, tpcb)
-	int             dutype;
-	struct tp_pcb  *tpcb;
+tp_headersize(int dutype, struct tp_pcb *tpcb)
 {
 	int    size = 0;
 

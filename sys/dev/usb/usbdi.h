@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdi.h,v 1.41 2000/03/02 12:37:51 augustss Exp $	*/
+/*	$NetBSD: usbdi.h,v 1.76.10.1 2008/12/13 21:44:42 bouyer Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usbdi.h,v 1.18 1999/11/17 22:33:49 n_hibma Exp $	*/
 
 /*
@@ -6,7 +6,7 @@
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Lennart Augustsson (augustss@carlstedt.se) at
+ * by Lennart Augustsson (lennart@augustsson.net) at
  * Carlstedt Research & Technology.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,6 +31,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _USBDI_H_
+#define _USBDI_H_
+
 typedef struct usbd_bus		*usbd_bus_handle;
 typedef struct usbd_device	*usbd_device_handle;
 typedef struct usbd_interface	*usbd_interface_handle;
@@ -45,33 +41,33 @@ typedef struct usbd_pipe	*usbd_pipe_handle;
 typedef struct usbd_xfer	*usbd_xfer_handle;
 typedef void			*usbd_private_handle;
 
-typedef enum {		/* keep in sync with usbd_status_msgs */ 
+typedef enum {		/* keep in sync with usbd_status_msgs */
 	USBD_NORMAL_COMPLETION = 0, /* must be 0 */
-	USBD_IN_PROGRESS,
+	USBD_IN_PROGRESS,	/* 1 */
 	/* errors */
-	USBD_PENDING_REQUESTS,
-	USBD_NOT_STARTED,
-	USBD_INVAL,
-	USBD_NOMEM,
-	USBD_CANCELLED,
-	USBD_BAD_ADDRESS,
-	USBD_IN_USE,
-	USBD_NO_ADDR,
-	USBD_SET_ADDR_FAILED,
-	USBD_NO_POWER,
-	USBD_TOO_DEEP,
-	USBD_IOERROR,
-	USBD_NOT_CONFIGURED,
-	USBD_TIMEOUT,
-	USBD_SHORT_XFER,
-	USBD_STALLED,
-	USBD_INTERRUPTED,
+	USBD_PENDING_REQUESTS,	/* 2 */
+	USBD_NOT_STARTED,	/* 3 */
+	USBD_INVAL,		/* 4 */
+	USBD_NOMEM,		/* 5 */
+	USBD_CANCELLED,		/* 6 */
+	USBD_BAD_ADDRESS,	/* 7 */
+	USBD_IN_USE,		/* 8 */
+	USBD_NO_ADDR,		/* 9 */
+	USBD_SET_ADDR_FAILED,	/* 10 */
+	USBD_NO_POWER,		/* 11 */
+	USBD_TOO_DEEP,		/* 12 */
+	USBD_IOERROR,		/* 13 */
+	USBD_NOT_CONFIGURED,	/* 14 */
+	USBD_TIMEOUT,		/* 15 */
+	USBD_SHORT_XFER,	/* 16 */
+	USBD_STALLED,		/* 17 */
+	USBD_INTERRUPTED,	/* 18 */
 
-	USBD_ERROR_MAX,		/* must be last */
+	USBD_ERROR_MAX		/* must be last */
 } usbd_status;
 
-typedef void (*usbd_callback) __P((usbd_xfer_handle, usbd_private_handle,
-				   usbd_status));
+typedef void (*usbd_callback)(usbd_xfer_handle, usbd_private_handle,
+			      usbd_status);
 
 /* Open flags */
 #define USBD_EXCLUSIVE_USE	0x01
@@ -85,9 +81,6 @@ typedef void (*usbd_callback) __P((usbd_xfer_handle, usbd_private_handle,
 /* in usb.h #define USBD_SHORT_XFER_OK	0x04*/	/* allow short reads */
 #define USBD_FORCE_SHORT_XFER	0x08	/* force last short packet on write */
 
-/* XXX Temporary hack XXX */
-#define USBD_NO_TSLEEP		0x80	/* XXX use busy wait */
-
 #define USBD_NO_TIMEOUT 0
 #define USBD_DEFAULT_TIMEOUT 5000 /* ms = 5 s */
 
@@ -95,102 +88,151 @@ typedef void (*usbd_callback) __P((usbd_xfer_handle, usbd_private_handle,
 #define USB_CDEV_MAJOR 108
 #endif
 
-usbd_status usbd_open_pipe
-	__P((usbd_interface_handle iface, u_int8_t address,
-	     u_int8_t flags, usbd_pipe_handle *pipe));
-usbd_status usbd_close_pipe	__P((usbd_pipe_handle pipe));
-usbd_status usbd_transfer	__P((usbd_xfer_handle req));
-usbd_xfer_handle usbd_alloc_xfer __P((usbd_device_handle));
-usbd_status usbd_free_xfer	__P((usbd_xfer_handle xfer));
-void usbd_setup_xfer
-	__P((usbd_xfer_handle xfer, usbd_pipe_handle pipe,
-	     usbd_private_handle priv, void *buffer,
-	     u_int32_t length, u_int16_t flags, u_int32_t timeout,
-	     usbd_callback));
-void usbd_setup_default_xfer
-	__P((usbd_xfer_handle xfer, usbd_device_handle dev,
-	     usbd_private_handle priv, u_int32_t timeout,
-	     usb_device_request_t *req,  void *buffer,
-	     u_int32_t length, u_int16_t flags, usbd_callback));
-void usbd_setup_isoc_xfer	
-	__P((usbd_xfer_handle xfer, usbd_pipe_handle pipe,
-	     usbd_private_handle priv, u_int16_t *frlengths,
-	     u_int32_t nframes, u_int16_t flags, usbd_callback));
-void usbd_get_xfer_status
-	__P((usbd_xfer_handle xfer, usbd_private_handle *priv,
-	     void **buffer, u_int32_t *count, usbd_status *status));
+#define DEVINFOSIZE 1024
+
+usbd_status usbd_open_pipe(usbd_interface_handle, u_int8_t,
+			   u_int8_t, usbd_pipe_handle *);
+usbd_status usbd_close_pipe(usbd_pipe_handle);
+usbd_status usbd_transfer(usbd_xfer_handle);
+usbd_xfer_handle usbd_alloc_xfer(usbd_device_handle);
+usbd_status usbd_free_xfer(usbd_xfer_handle);
+void usbd_setup_xfer(usbd_xfer_handle, usbd_pipe_handle,
+		     usbd_private_handle, void *,
+		     u_int32_t, u_int16_t, u_int32_t,
+		     usbd_callback);
+void usbd_setup_default_xfer(usbd_xfer_handle, usbd_device_handle,
+			     usbd_private_handle, u_int32_t,
+			     usb_device_request_t *, void *,
+			     u_int32_t, u_int16_t, usbd_callback);
+void usbd_setup_isoc_xfer(usbd_xfer_handle, usbd_pipe_handle,
+			  usbd_private_handle, u_int16_t *,
+			  u_int32_t, u_int16_t, usbd_callback);
+void usbd_get_xfer_status(usbd_xfer_handle, usbd_private_handle *,
+			  void **, u_int32_t *, usbd_status *);
 usb_endpoint_descriptor_t *usbd_interface2endpoint_descriptor
-	__P((usbd_interface_handle iface, u_int8_t address));
-usbd_status usbd_abort_pipe __P((usbd_pipe_handle pipe));
-usbd_status usbd_clear_endpoint_stall __P((usbd_pipe_handle pipe));
-usbd_status usbd_clear_endpoint_stall_async __P((usbd_pipe_handle pipe));
-usbd_status usbd_endpoint_count
-	__P((usbd_interface_handle dev, u_int8_t *count));
-usbd_status usbd_interface_count
-	__P((usbd_device_handle dev, u_int8_t *count));
-usbd_status usbd_interface2device_handle
-	__P((usbd_interface_handle iface, usbd_device_handle *dev));
-usbd_status usbd_device2interface_handle
-	__P((usbd_device_handle dev, u_int8_t ifaceno, usbd_interface_handle *iface));
+			(usbd_interface_handle, u_int8_t);
+usbd_status usbd_abort_pipe(usbd_pipe_handle);
+usbd_status usbd_abort_default_pipe(usbd_device_handle);
+usbd_status usbd_clear_endpoint_stall(usbd_pipe_handle);
+usbd_status usbd_clear_endpoint_stall_async(usbd_pipe_handle);
+void usbd_clear_endpoint_toggle(usbd_pipe_handle);
+usbd_status usbd_endpoint_count(usbd_interface_handle, u_int8_t *);
+usbd_status usbd_interface_count(usbd_device_handle, u_int8_t *);
+void usbd_interface2device_handle(usbd_interface_handle,
+					 usbd_device_handle *);
+usbd_status usbd_device2interface_handle(usbd_device_handle,
+			      u_int8_t, usbd_interface_handle *);
 
-usbd_device_handle usbd_pipe2device_handle __P((usbd_pipe_handle));
-void *usbd_alloc_buffer __P((usbd_xfer_handle req, u_int32_t size));
-void usbd_free_buffer __P((usbd_xfer_handle req));
-void *usbd_get_buffer __P((usbd_xfer_handle xfer));
-usbd_status usbd_sync_transfer	__P((usbd_xfer_handle req));
-usbd_status usbd_open_pipe_intr
-	__P((usbd_interface_handle iface, u_int8_t address,
-	     u_int8_t flags, usbd_pipe_handle *pipe,
-	     usbd_private_handle priv, void *buffer,
-	     u_int32_t length, usbd_callback, int));
-usbd_status usbd_do_request 
-	__P((usbd_device_handle pipe, usb_device_request_t *req, void *data));
-usbd_status usbd_do_request_async
-	__P((usbd_device_handle pipe, usb_device_request_t *req, void *data));
-usbd_status usbd_do_request_flags
-	__P((usbd_device_handle pipe, usb_device_request_t *req, 
-	     void *data, u_int16_t flags, int *));
+usbd_device_handle usbd_pipe2device_handle(usbd_pipe_handle);
+void *usbd_alloc_buffer(usbd_xfer_handle, u_int32_t);
+void usbd_free_buffer(usbd_xfer_handle);
+void *usbd_get_buffer(usbd_xfer_handle);
+usbd_status usbd_sync_transfer(usbd_xfer_handle);
+usbd_status usbd_open_pipe_intr(usbd_interface_handle, u_int8_t,
+				u_int8_t, usbd_pipe_handle *,
+				usbd_private_handle, void *,
+				u_int32_t, usbd_callback, int);
+usbd_status usbd_do_request(usbd_device_handle, usb_device_request_t *, void *);
+usbd_status usbd_do_request_async(usbd_device_handle,
+				  usb_device_request_t *, void *);
+usbd_status usbd_do_request_flags(usbd_device_handle, usb_device_request_t *,
+				  void *, u_int16_t, int*, u_int32_t);
+usbd_status usbd_do_request_flags_pipe(usbd_device_handle, usbd_pipe_handle,
+	usb_device_request_t *, void *, u_int16_t, int *, u_int32_t);
 usb_interface_descriptor_t *usbd_get_interface_descriptor
-	__P((usbd_interface_handle iface));
-usb_config_descriptor_t *usbd_get_config_descriptor
-	__P((usbd_device_handle dev));
-usb_device_descriptor_t *usbd_get_device_descriptor
-	__P((usbd_device_handle dev));
-usbd_status usbd_set_interface __P((usbd_interface_handle, int));
-int usbd_get_no_alts __P((usb_config_descriptor_t *, int));
-usbd_status	usbd_get_interface
-	__P((usbd_interface_handle iface, u_int8_t *aiface));
-void usbd_fill_deviceinfo 
-	__P((usbd_device_handle dev, struct usb_device_info *di));
-int usbd_get_interface_altindex __P((usbd_interface_handle iface));
+				(usbd_interface_handle);
+usb_config_descriptor_t *usbd_get_config_descriptor(usbd_device_handle);
+usb_device_descriptor_t *usbd_get_device_descriptor(usbd_device_handle);
+usbd_status usbd_set_interface(usbd_interface_handle, int);
+int usbd_get_no_alts(usb_config_descriptor_t *, int);
+usbd_status  usbd_get_interface(usbd_interface_handle, u_int8_t *);
+void usbd_fill_deviceinfo(usbd_device_handle, struct usb_device_info *, int);
+#ifdef COMPAT_30
+void usbd_fill_deviceinfo_old(usbd_device_handle, struct usb_device_info_old *,
+    int);
+#endif
+int usbd_get_interface_altindex(usbd_interface_handle);
 
-usb_interface_descriptor_t *usbd_find_idesc
-	__P((usb_config_descriptor_t *cd, int iindex, int ano));
-usb_endpoint_descriptor_t *usbd_find_edesc
-	__P((usb_config_descriptor_t *cd, int ifaceidx, int altidx, 
-	     int endptidx));
+usb_interface_descriptor_t *usbd_find_idesc(usb_config_descriptor_t *,
+					    int, int);
+usb_endpoint_descriptor_t *usbd_find_edesc(usb_config_descriptor_t *,
+					   int, int, int);
 
-void usbd_dopoll __P((usbd_interface_handle));
-void usbd_set_polling __P((usbd_device_handle iface, int on));
+void usbd_dopoll(usbd_interface_handle);
+void usbd_set_polling(usbd_device_handle, int);
 
-const char *usbd_errstr __P((usbd_status err));
+const char *usbd_errstr(usbd_status);
 
-void usbd_add_dev_event __P((int, usbd_device_handle));
-void usbd_add_drv_event __P((int, usbd_device_handle, device_ptr_t));
+void usbd_add_dev_event(int, usbd_device_handle);
+void usbd_add_drv_event(int, usbd_device_handle, device_ptr_t);
 
-void usbd_devinfo __P((usbd_device_handle, int, char *));
-struct usbd_quirks *usbd_get_quirks __P((usbd_device_handle));
+char *usbd_devinfo_alloc(usbd_device_handle, int);
+void usbd_devinfo_free(char *);
+
+const struct usbd_quirks *usbd_get_quirks(usbd_device_handle);
 usb_endpoint_descriptor_t *usbd_get_endpoint_descriptor
-	__P((usbd_interface_handle iface, u_int8_t address));
+			(usbd_interface_handle, u_int8_t);
 
-usbd_status usbd_reload_device_desc __P((usbd_device_handle));
+usbd_status usbd_reload_device_desc(usbd_device_handle);
 
-int usbd_ratecheck __P((struct timeval *last));
+int usbd_ratecheck(struct timeval *);
+
+usbd_status usbd_get_string(usbd_device_handle, int, char *);
+usbd_status usbd_get_string0(usbd_device_handle, int, char *, int);
+
+/* An iterator for descriptors. */
+typedef struct {
+	const uByte *cur;
+	const uByte *end;
+} usbd_desc_iter_t;
+void usb_desc_iter_init(usbd_device_handle, usbd_desc_iter_t *);
+const usb_descriptor_t *usb_desc_iter_next(usbd_desc_iter_t *);
+
+/*
+ * The usb_task structs form a queue of things to run in the USB event
+ * thread.  Normally this is just device discovery when a connect/disconnect
+ * has been detected.  But it may also be used by drivers that need to
+ * perform (short) tasks that must have a process context.
+ */
+struct usb_task {
+	TAILQ_ENTRY(usb_task) next;
+	void (*fun)(void *);
+	void *arg;
+	int queue;
+};
+#define	USB_TASKQ_HC		0
+#define	USB_TASKQ_DRIVER	1
+#define	USB_NUM_TASKQS		2
+#define	USB_TASKQ_NAMES		{"usbtask-hc", "usbtask-dr"}
+
+void usb_add_task(usbd_device_handle, struct usb_task *, int);
+void usb_rem_task(usbd_device_handle, struct usb_task *);
+#define usb_init_task(t, f, a) ((t)->fun = (f), (t)->arg = (a), (t)->queue = -1)
+
+struct usb_devno {
+	u_int16_t ud_vendor;
+	u_int16_t ud_product;
+};
+const struct usb_devno *usb_match_device(const struct usb_devno *,
+	u_int, u_int, u_int16_t, u_int16_t);
+#define usb_lookup(tbl, vendor, product) \
+	usb_match_device((const struct usb_devno *)(tbl), sizeof (tbl) / sizeof ((tbl)[0]), sizeof ((tbl)[0]), (vendor), (product))
+#define	USB_PRODUCT_ANY		0xffff
 
 /* NetBSD attachment information */
 
 /* Attach data */
 struct usb_attach_arg {
+	int			port;
+	int			vendor;
+	int			product;
+	int			release;
+	usbd_device_handle	device;	/* current device */
+	int			class, subclass, proto;
+	int			usegeneric;
+};
+
+struct usbif_attach_arg {
 	int			port;
 	int			configno;
 	int			ifaceno;
@@ -198,14 +240,18 @@ struct usb_attach_arg {
 	int			product;
 	int			release;
 	usbd_device_handle	device;	/* current device */
+
 	usbd_interface_handle	iface; /* current interface */
-	int			usegeneric;
+	int			class, subclass, proto;
+
+	/* XXX need accounting for interfaces not matched to */
+
 	usbd_interface_handle  *ifaces;	/* all interfaces */
 	int			nifaces; /* number of interfaces */
 };
 
-#if defined(__NetBSD__) || defined(__OpenBSD__)
 /* Match codes. */
+#define UMATCH_HIGHEST					15
 /* First five codes is for a whole device. */
 #define UMATCH_VENDOR_PRODUCT_REV			14
 #define UMATCH_VENDOR_PRODUCT				13
@@ -226,38 +272,13 @@ struct usb_attach_arg {
 /* No match */
 #define UMATCH_NONE					 0
 
-#elif defined(__FreeBSD__)
-/* FreeBSD needs values less than zero */
-#define UMATCH_VENDOR_PRODUCT_REV			(-10)
-#define UMATCH_VENDOR_PRODUCT				(-20)
-#define UMATCH_VENDOR_DEVCLASS_DEVPROTO			(-30)
-#define UMATCH_DEVCLASS_DEVSUBCLASS_DEVPROTO		(-40)
-#define UMATCH_DEVCLASS_DEVSUBCLASS			(-50)
-#define UMATCH_VENDOR_PRODUCT_REV_CONF_IFACE		(-60)
-#define UMATCH_VENDOR_PRODUCT_CONF_IFACE		(-70)
-#define UMATCH_VENDOR_IFACESUBCLASS_IFACEPROTO		(-80)
-#define UMATCH_VENDOR_IFACESUBCLASS			(-90)
-#define UMATCH_IFACECLASS_IFACESUBCLASS_IFACEPROTO	(-100)
-#define UMATCH_IFACECLASS_IFACESUBCLASS			(-110)
-#define UMATCH_IFACECLASS				(-120)
-#define UMATCH_IFACECLASS_GENERIC			(-130)
-#define UMATCH_GENERIC					(-140)
-#define UMATCH_NONE					(ENXIO)
-
-#endif
-
-#if defined(__FreeBSD__)
-int usbd_driver_load    __P((module_t mod, int what, void *arg));
-#endif
-
-/*
- * XXX
- * splusb MUST be the lowest level interrupt so that within USB callbacks
- * the level can be raised the appropriate level.
- * XXX Should probably use a softsplusb.
- */
-/* XXX */
-#define splusb splbio
+/* XXX Perhaps USB should have its own levels? */
+#define splusb splsoftnet
 #define splhardusb splbio
 #define IPL_USB IPL_BIO
-/* XXX */
+#define splsoftusb splusb
+#define IPL_SOFTUSB IPL_SOFTNET
+#define IPL_HARDUSB IPL_USB
+
+
+#endif /* _USBDI_H_ */

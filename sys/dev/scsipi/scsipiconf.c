@@ -1,11 +1,12 @@
-/*	$NetBSD: scsipiconf.c,v 1.8 1998/11/17 14:38:43 bouyer Exp $	*/
+/*	$NetBSD: scsipiconf.c,v 1.36 2008/04/28 20:23:58 martin Exp $	*/
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999, 2004 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Charles M. Hannum.
+ * by Charles M. Hannum; by Jason R. Thorpe of the Numerical Aerospace
+ * Simulation Facility, NASA Ames Research Center.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,34 +47,84 @@
  * Ported to run under 386BSD by Julian Elischer (julian@tfs.com) Sept 1992
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: scsipiconf.c,v 1.36 2008/04/28 20:23:58 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
+#include <sys/proc.h>
 
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsipiconf.h>
+#include <dev/scsipi/scsipi_base.h>
+
+#define	STRVIS_ISWHITE(x) ((x) == ' ' || (x) == '\0' || (x) == (u_char)'\377')
+
+int
+scsipi_command(struct scsipi_periph *periph, struct scsipi_generic *cmd,
+    int cmdlen, u_char *data_addr, int datalen, int retries, int timeout,
+    struct buf *bp, int flags)
+{
+	struct scsipi_xfer *xs;
+
+	xs = scsipi_make_xs(periph, cmd, cmdlen, data_addr, datalen, retries,
+	    timeout, bp, flags);
+	if (!xs)
+		return (ENOMEM);
+
+	return (scsipi_execute_xs(xs));
+}
+
+/*
+ * allocate and init a scsipi_periph structure for a new device.
+ */
+struct scsipi_periph *
+scsipi_alloc_periph(int malloc_flag)
+{
+	struct scsipi_periph *periph;
+	u_int i;
+
+	periph = malloc(sizeof(*periph), M_DEVBUF, malloc_flag|M_ZERO);
+	if (periph == NULL)
+		return NULL;
+
+	periph->periph_dev = NULL;
+
+	/*
+	 * Start with one command opening.  The periph driver
+	 * will grow this if it knows it can take advantage of it.
+	 */
+	periph->periph_openings = 1;
+	periph->periph_active = 0;
+
+	for (i = 0; i < PERIPH_NTAGWORDS; i++)
+		periph->periph_freetags[i] = 0xffffffff;
+
+	TAILQ_INIT(&periph->periph_xferq);
+	callout_init(&periph->periph_callout, 0);
+
+	return periph;
+}
 
 /*
  * Return a priority based on how much of the inquiry data matches
  * the patterns for the particular driver.
  */
-caddr_t
-scsipi_inqmatch(inqbuf, base, nmatches, matchsize, bestpriority)
-	struct scsipi_inquiry_pattern *inqbuf;
-	caddr_t base;
-	int nmatches, matchsize;
-	int *bestpriority;
+const void *
+scsipi_inqmatch(struct scsipi_inquiry_pattern *inqbuf, const void *base,
+    size_t nmatches, size_t matchsize, int *bestpriority)
 {
 	u_int8_t type;
-	caddr_t bestmatch;
+	const struct scsipi_inquiry_pattern *bestmatch;
 
 	/* Include the qualifier to catch vendor-unique types. */
 	type = inqbuf->type;
 
-	for (*bestpriority = 0, bestmatch = 0; nmatches--; base += matchsize) {
-		struct scsipi_inquiry_pattern *match = (void *)base;
+	for (*bestpriority = 0, bestmatch = 0; nmatches--;
+	    base = (const char *)base + matchsize) {
+		const struct scsipi_inquiry_pattern *match = base;
 		int priority, len;
 
 		if (type != match->type)
@@ -89,19 +133,19 @@ scsipi_inqmatch(inqbuf, base, nmatches, matchsize, bestpriority)
 			continue;
 		priority = 2;
 		len = strlen(match->vendor);
-		if (bcmp(inqbuf->vendor, match->vendor, len))
+		if (memcmp(inqbuf->vendor, match->vendor, len))
 			continue;
 		priority += len;
 		len = strlen(match->product);
-		if (bcmp(inqbuf->product, match->product, len))
+		if (memcmp(inqbuf->product, match->product, len))
 			continue;
 		priority += len;
 		len = strlen(match->revision);
-		if (bcmp(inqbuf->revision, match->revision, len))
+		if (memcmp(inqbuf->revision, match->revision, len))
 			continue;
 		priority += len;
 
-#ifdef SCSIDEBUG
+#ifdef SCSIPI_DEBUG
 		printf("scsipi_inqmatch: %d/%d/%d <%s, %s, %s>\n",
 		    priority, match->type, match->removable,
 		    match->vendor, match->product, match->revision);
@@ -115,18 +159,17 @@ scsipi_inqmatch(inqbuf, base, nmatches, matchsize, bestpriority)
 	return (bestmatch);
 }
 
-char *
-scsipi_dtype(type)
-	int type;
+const char *
+scsipi_dtype(int type)
 {
-	char *dtype;
+	const char *dtype;
 
 	switch (type) {
 	case T_DIRECT:
-		dtype = "direct";
+		dtype = "disk";
 		break;
 	case T_SEQUENTIAL:
-		dtype = "sequential";
+		dtype = "tape";
 		break;
 	case T_PRINTER:
 		dtype = "printer";
@@ -154,13 +197,22 @@ scsipi_dtype(type)
 		break;
 	case T_IT8_1:
 	case T_IT8_2:
-		dtype = "it8";		/* ??? */
+		dtype = "graphic arts pre-press";
 		break;
 	case T_STORARRAY:
 		dtype = "storage array";
 		break;
 	case T_ENCLOSURE:
 		dtype = "enclosure services";
+		break;
+	case T_SIMPLE_DIRECT:
+		dtype = "simplified direct";
+		break;
+	case T_OPTIC_CARD_RW:
+		dtype = "optical card r/w";
+		break;
+	case T_OBJECT_STORED:
+		dtype = "object-based storage";
 		break;
 	case T_NODEVICE:
 		panic("scsipi_dtype: impossible device type");
@@ -172,15 +224,13 @@ scsipi_dtype(type)
 }
 
 void
-scsipi_strvis(dst, dlen, src, slen)
-	u_char *dst, *src;
-	int dlen, slen;
+scsipi_strvis(u_char *dst, int dlen, const u_char *src, int slen)
 {
 
 	/* Trim leading and trailing blanks and NULs. */
-	while (slen > 0 && (src[0] == ' ' || src[0] == '\0'))
+	while (slen > 0 && STRVIS_ISWHITE(src[0]))
 		++src, --slen;
-	while (slen > 0 && (src[slen-1] == ' ' || src[slen-1] == '\0'))
+	while (slen > 0 && STRVIS_ISWHITE(src[slen - 1]))
 		--slen;
 
 	while (slen > 0) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: reloc.h,v 1.2 1994/11/20 20:53:30 deraadt Exp $ */
+/*	$NetBSD: reloc.h,v 1.7 2005/12/11 12:19:06 christos Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -46,8 +42,7 @@
 
 /*
  * SPARC relocations.  The linker has, unfortunately, a large number
- * of link types.  We do not do dynamic linking (yet?) but we define
- * the dynamic link types.
+ * of link types.
  */
 enum reloc_type {
 		/* architecturally-required types */
@@ -74,6 +69,7 @@ enum reloc_type {
 		/* gnu ld does not use these but Sun linker does */
 		/* we define them anyway (note that they are included
 		   in the freely-available gas sources!) */
+		/* actually, newer gnu ld does generate some of these. */
 	RELOC_PC10,		/* ? */
 	RELOC_PC22,		/* ? */
 	RELOC_JMP_TBL,		/* ? */
@@ -81,6 +77,35 @@ enum reloc_type {
 	RELOC_GLOB_DAT,		/* ? */
 	RELOC_JMP_SLOT,		/* ? */
 	RELOC_RELATIVE,		/* ? */
+	RELOC_UA_32,		/* unaligned 32bit relocation */
+
+		/* The following are LP64 relocations */
+
+	RELOC_PLT32,
+	RELOC_HIPLT22,
+	RELOC_LOPLT10,
+	RELOC_PCPLT32,
+	RELOC_PCPLT22,
+	RELOC_PCPLT10,
+
+	RELOC_10,
+	RELOC_11,
+	RELOC_64,
+	RELOC_OLO10,
+	RELOC_HH22,
+
+	RELOC_HM10,
+	RELOC_LM22,
+	RELOC_PC_HH22,
+	RELOC_PC_HM10,
+	RELOC_PC_LM22,
+
+	RELOC_WDISP16,
+	RELOC_WDISP19,
+	RELOC_GLOB_JMP,
+	RELOC_7,
+	RELOC_5,
+	RELOC_6
 };
 
 /*

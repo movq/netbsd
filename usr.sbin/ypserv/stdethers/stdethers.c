@@ -1,4 +1,4 @@
-/*	$NetBSD: stdethers.c,v 1.12 1999/01/17 06:56:51 lukem Exp $	*/
+/*	$NetBSD: stdethers.c,v 1.16 2007/03/10 01:21:08 hubertf Exp $	*/
 
 /*
  * Copyright (c) 1995 Mats O Jansson <moj@stacken.kth.se>
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: stdethers.c,v 1.12 1999/01/17 06:56:51 lukem Exp $");
+__RCSID("$NetBSD: stdethers.c,v 1.16 2007/03/10 01:21:08 hubertf Exp $");
 #endif
 
 #include <sys/types.h>
@@ -42,26 +42,20 @@ __RCSID("$NetBSD: stdethers.c,v 1.12 1999/01/17 06:56:51 lukem Exp $");
 #include <net/if.h>
 #include <net/if_ether.h>
 #include <netinet/in.h>
-#include <ctype.h>
 #include <err.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <util.h>
 
 #include "protos.h"
 
-int	main __P((int, char *[]));
-void	usage __P((void));
-
-extern	char *__progname;		/* from crt0.o */
+int	main(int, char *[]);
+void	usage(void);
 
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct ether_addr eth_addr;
 	FILE	*data_file;
@@ -97,13 +91,13 @@ main(argc, argv)
 			    (unsigned long)line_no, p);
 	}
 
-	exit(0);
+	return 0;
 }
 
 void
-usage()
+usage(void)
 {
 
-	fprintf(stderr, "usage: %s [file]\n", __progname);
+	fprintf(stderr, "usage: %s [file]\n", getprogname());
 	exit(1);
 }

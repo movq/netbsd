@@ -27,7 +27,7 @@ SOFTWARE.
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bootpgw.c,v 1.8 1998/07/06 07:02:17 mrg Exp $");
+__RCSID("$NetBSD: bootpgw.c,v 1.13 2007/05/27 16:31:42 tls Exp $");
 #endif
 
 /*
@@ -42,6 +42,7 @@ __RCSID("$NetBSD: bootpgw.c,v 1.8 1998/07/06 07:02:17 mrg Exp $");
 #include <sys/file.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/poll.h>
 
 #include <net/if.h>
 #include <netinet/in.h>
@@ -54,6 +55,7 @@ __RCSID("$NetBSD: bootpgw.c,v 1.8 1998/07/06 07:02:17 mrg Exp $");
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <errno.h>
 #include <ctype.h>
 #include <netdb.h>
@@ -62,14 +64,6 @@ __RCSID("$NetBSD: bootpgw.c,v 1.8 1998/07/06 07:02:17 mrg Exp $");
 
 #ifdef	NO_SETSID
 # include <fcntl.h>		/* for O_RDONLY, etc */
-#endif
-
-#ifndef	USE_BFUNCS
-# include <memory.h>
-/* Yes, memcpy is OK here (no overlapped copies). */
-# define bcopy(a,b,c)    memcpy(b,a,c)
-# define bzero(p,l)      memset(p,0,l)
-# define bcmp(a,b,c)     memcmp(a,b,c)
 #endif
 
 #include "bootp.h"
@@ -90,18 +84,10 @@ __RCSID("$NetBSD: bootpgw.c,v 1.8 1998/07/06 07:02:17 mrg Exp $");
  * Externals, forward declarations, and global variables
  */
 
-#ifdef	__STDC__
-#define P(args) args
-#else
-#define P(args) ()
-#endif
-
-static void usage P((void));
-static void handle_reply P((void));
-static void handle_request P((void));
-int main P((int, char **));
-
-#undef	P
+static void usage(void);
+static void handle_reply(void);
+static void handle_request(void);
+int main(int, char **);
 
 /*
  * IP port numbers for client and server obtained from /etc/services
@@ -123,11 +109,7 @@ struct sockaddr_in serv_addr;	/* server address */
  * option defaults
  */
 int debug = 0;					/* Debugging flag (level) */
-struct timeval actualtimeout =
-{								/* fifteen minutes */
-	15 * 60L,					/* tv_sec */
-	0							/* tv_usec */
-};
+int actualtimeout = 15 * 60000;			/* fifteen minutes */
 u_int maxhops = 4;				/* Number of hops allowed for requests. */
 u_int minwait = 3;				/* Number of seconds client must wait before
 						   its bootrequest packets are forwarded. */
@@ -154,17 +136,17 @@ struct in_addr my_ip_addr;
  */
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
-	struct timeval *timeout;
+	int timeout;
 	struct bootp *bp;
 	struct servent *servp;
 	struct hostent *hep;
 	char *stmp;
-	int n, ba_len, ra_len;
-	int nfound, readfds;
+	socklen_t ba_len, ra_len;
+	int n;
+	int nfound;
+	struct pollfd set[1];
 	int standalone;
 
 	progname = strrchr(argv[0], '/');
@@ -220,7 +202,7 @@ main(argc, argv)
 	 * Set defaults that might be changed by option switches.
 	 */
 	stmp = NULL;
-	timeout = &actualtimeout;
+	timeout = actualtimeout;
 	gethostname(myhostname, sizeof(myhostname));
 	myhostname[sizeof(myhostname) - 1] = '\0';
 	hep = gethostbyname(myhostname);
@@ -300,13 +282,13 @@ main(argc, argv)
 						"%s: invalid timeout specification\n", progname);
 				break;
 			}
-			actualtimeout.tv_sec = (int32) (60 * n);
+			actualtimeout = n * 60000;
 			/*
-			 * If the actual timeout is zero, pass a NULL pointer
-			 * to select so it blocks indefinitely, otherwise,
-			 * point to the actual timeout value.
+			 * If the actual timeout is zero, pass INFTIM
+			 * to poll so it blocks indefinitely, otherwise,
+			 * use the actual timeout value.
 			 */
-			timeout = (n > 0) ? &actualtimeout : NULL;
+			timeout = (n > 0) ? actualtimeout : INFTIM;
 			break;
 
 		case 'w':				/* wait time */
@@ -380,7 +362,7 @@ main(argc, argv)
 		/*
 		 * Nuke any timeout value
 		 */
-		timeout = NULL;
+		timeout = INFTIM;
 
 		/*
 		 * Here, bootpd would do:
@@ -441,18 +423,20 @@ main(argc, argv)
 	/*
 	 * Process incoming requests.
 	 */
+	set[0].fd = s;
+	set[0].events = POLLIN;
 	for (;;) {
-		readfds = 1 << s;
-		nfound = select(s + 1, (fd_set *)&readfds, NULL, NULL, timeout);
+		nfound = poll(set, 1, timeout);
 		if (nfound < 0) {
 			if (errno != EINTR) {
-				report(LOG_ERR, "select: %s", get_errmsg());
+				report(LOG_ERR, "poll: %s", get_errmsg());
 			}
 			continue;
 		}
-		if (!(readfds & (1 << s))) {
-			report(LOG_INFO, "exiting after %ld minutes of inactivity",
-				   actualtimeout.tv_sec / 60);
+		if (nfound == 0) {
+			report(LOG_INFO, "exiting after %d minute%s of inactivity",
+				   actualtimeout / 60000,
+				   actualtimeout == 60000 ? "" : "s");
 			exit(0);
 		}
 		ra_len = sizeof(clnt_addr);
@@ -492,7 +476,7 @@ main(argc, argv)
  */
 
 static void
-usage()
+usage(void)
 {
 	fprintf(stderr,
 			"usage:  bootpgw [-d level] [-i] [-s] [-t timeout] server\n");
@@ -513,7 +497,7 @@ usage()
  * Note, this just forwards the request to a real server.
  */
 static void
-handle_request()
+handle_request(void)
 {
 	struct bootp *bp = (struct bootp *) pktbuf;
 #if 0
@@ -604,7 +588,7 @@ handle_request()
  * Process BOOTREPLY packet.
  */
 static void
-handle_reply()
+handle_reply(void)
 {
 	struct bootp *bp = (struct bootp *) pktbuf;
 	struct ifreq *ifr;

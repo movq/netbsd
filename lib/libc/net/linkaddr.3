@@ -1,4 +1,4 @@
-.\"	$NetBSD: linkaddr.3,v 1.6 1999/06/25 16:13:21 sommerfeld Exp $
+.\"	$NetBSD: linkaddr.3,v 1.10 2003/08/07 16:43:11 agc Exp $
 .\"
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -14,11 +14,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -46,9 +42,9 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
-.Fd #include <sys/socket.h>
-.Fd #include <net/if_dl.h>
+.In sys/types.h
+.In sys/socket.h
+.In net/if_dl.h
 .Ft void
 .Fn link_addr "const char *addr" "struct sockaddr_dl *sdl"
 .Ft char *
@@ -66,11 +62,11 @@ string representing some of the information present, including the
 link level address itself, and the interface name or number, if present.
 This facility is experimental and is still subject to change.
 .Pp
-Prior to a call to 
+Prior to a call to
 .Fn link_addr ,
-.Fa sdl->sdl_len 
+.Fa sdl-\*[Gt]sdl_len
 must be initialized to the size of the link-level socket structure,
-typically 
+typically
 .Fa sizeof(struct sockaddr_dl) .
 .Pp
 For

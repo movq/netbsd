@@ -1,4 +1,4 @@
-.\"	$NetBSD: 1.2.t,v 1.2 1998/01/09 06:54:41 perry Exp $
+.\"	$NetBSD: 1.2.t,v 1.4 2004/02/13 11:36:08 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -111,7 +107,7 @@ MAP_HASSEMAPHORE	/* region may contain semaphores */
 .FS
 \(dg In 4.4BSD, only MAP_ANON and MAP_FIXED are implemented.
 .FE
-The size of a page is cpu-dependent, and is returned by the
+The size of a page is CPU-dependent, and is returned by the
 .Fn sysctl
 interface described in section
 .Xr 1.7.1 .

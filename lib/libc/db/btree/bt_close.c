@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_close.c,v 1.9 1997/07/21 14:06:30 jtc Exp $	*/
+/*	$NetBSD: bt_close.c,v 1.14 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,18 +32,16 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_close.c	8.7 (Berkeley) 8/17/94";
-#else
-__RCSID("$NetBSD: bt_close.c,v 1.9 1997/07/21 14:06:30 jtc Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: bt_close.c,v 1.14 2008/09/11 12:58:00 joerg Exp $");
 
 #include "namespace.h"
-#include <sys/param.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,7 +51,7 @@ __RCSID("$NetBSD: bt_close.c,v 1.9 1997/07/21 14:06:30 jtc Exp $");
 #include <db.h>
 #include "btree.h"
 
-static int bt_meta __P((BTREE *));
+static int bt_meta(BTREE *);
 
 /*
  * BT_CLOSE -- Close a btree.
@@ -69,8 +63,7 @@ static int bt_meta __P((BTREE *));
  *	RET_ERROR, RET_SUCCESS
  */
 int
-__bt_close(dbp)
-	DB *dbp;
+__bt_close(DB *dbp)
 {
 	BTREE *t;
 	int fd;
@@ -124,9 +117,7 @@ __bt_close(dbp)
  *	RET_SUCCESS, RET_ERROR.
  */
 int
-__bt_sync(dbp, flags)
-	const DB *dbp;
-	u_int flags;
+__bt_sync(const DB *dbp, u_int flags)
 {
 	BTREE *t;
 	int status;
@@ -167,8 +158,7 @@ __bt_sync(dbp, flags)
  *	RET_ERROR, RET_SUCCESS
  */
 static int
-bt_meta(t)
-	BTREE *t;
+bt_meta(BTREE *t)
 {
 	BTMETA m;
 	void *p;

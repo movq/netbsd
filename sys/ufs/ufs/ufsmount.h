@@ -1,4 +1,4 @@
-/*	$NetBSD: ufsmount.h,v 1.7 1998/03/18 15:57:29 bouyer Exp $	*/
+/*	$NetBSD: ufsmount.h,v 1.34 2008/04/17 09:52:47 hannken Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,12 +31,16 @@
  *	@(#)ufsmount.h	8.6 (Berkeley) 3/30/95
  */
 
+#ifndef _UFS_UFS_UFSMOUNT_H_
+#define _UFS_UFS_UFSMOUNT_H_
+
+#include <sys/mount.h> /* struct export_args30 */
+
 /*
  * Arguments to mount UFS-based filesystems
  */
 struct ufs_args {
 	char	*fspec;			/* block special device to mount */
-	struct	export_args export;	/* network export information */
 };
 
 /*
@@ -48,26 +48,35 @@ struct ufs_args {
  */
 struct mfs_args {
 	char	*fspec;			/* name to export for statfs */
-	struct	export_args export;	/* if exported MFSes are supported */
-	caddr_t	base;			/* base of file system in memory */
+	struct	export_args30 _pad1; /* compat with old userland tools */
+	void *	base;			/* base of file system in memory */
 	u_long	size;			/* size of file system */
 };
 
 #ifdef _KERNEL
+
+#if defined(_KERNEL_OPT)
+#include "opt_ffs.h"
+#endif
+
+#include <sys/mutex.h>
+
+#include <ufs/ufs/extattr.h>
+#include <ufs/ufs/quota.h>
+
 struct buf;
 struct inode;
 struct nameidata;
 struct timeval;
-struct ucred;
 struct uio;
 struct vnode;
-struct netexport;
 
 /* This structure describes the UFS specific mount structure data. */
 struct ufsmount {
 	struct	mount *um_mountp;		/* filesystem vfs structure */
 	dev_t	um_dev;				/* device mounted */
 	struct	vnode *um_devvp;		/* block device mounted vnode */
+	u_long	um_fstype;
 	u_int32_t um_flags;			/* UFS-specific flags - see below */
 	union {					/* pointer to superblock */
 		struct	fs *fs;			/* FFS */
@@ -79,20 +88,65 @@ struct ufsmount {
 #define um_e2fs	ufsmount_u.e2fs
 #define um_e2fsb ufsmount_u.e2fs->s_es
 
+	/* Extended attribute information. */
+	struct ufs_extattr_per_mount um_extattr;
+
 	struct	vnode *um_quotas[MAXQUOTAS];	/* pointer to quota files */
-	struct	ucred *um_cred[MAXQUOTAS];	/* quota file access cred */
+	kauth_cred_t   um_cred[MAXQUOTAS];	/* quota file access cred */
 	u_long	um_nindir;			/* indirect ptrs per block */
+	u_long	um_lognindir;			/* log2 of um_nindir */
 	u_long	um_bptrtodb;			/* indir ptr to disk block */
 	u_long	um_seqinc;			/* inc between seq blocks */
+	kmutex_t um_lock;			/* lock on global data */
 	time_t	um_btime[MAXQUOTAS];		/* block quota time limit */
 	time_t	um_itime[MAXQUOTAS];		/* inode quota time limit */
 	char	um_qflags[MAXQUOTAS];		/* quota specific flags */
-	struct	netexport um_export;		/* export information */
-	u_int64_t um_savedmaxfilesize;		/* XXX - limit maxfilesize */
+	void	*um_oldfscompat;		/* save 4.2 rotbl */
+	int	um_maxsymlinklen;
+	int	um_dirblksiz;
+	u_int64_t um_maxfilesize;
+	void	*um_snapinfo;			/* snapshot private data */
+
+	const struct ufs_ops *um_ops;
 };
+
+struct ufs_ops {
+	void (*uo_itimes)(struct inode *ip, const struct timespec *,
+	    const struct timespec *, const struct timespec *);
+	int (*uo_update)(struct vnode *, const struct timespec *,
+	    const struct timespec *, int);
+	int (*uo_truncate)(struct vnode *, off_t, int, kauth_cred_t);
+	int (*uo_valloc)(struct vnode *, int, kauth_cred_t, struct vnode **);
+	int (*uo_vfree)(struct vnode *, ino_t, int);
+	int (*uo_balloc)(struct vnode *, off_t, int, kauth_cred_t, int,
+	    struct buf **);
+};
+
+#define	UFS_OPS(vp)	(VFSTOUFS((vp)->v_mount)->um_ops)
+
+#define	UFS_ITIMES(vp, acc, mod, cre) \
+	(*UFS_OPS(vp)->uo_itimes)(VTOI(vp), (acc), (mod), (cre))
+#define	UFS_UPDATE(vp, acc, mod, flags) \
+	(*UFS_OPS(vp)->uo_update)((vp), (acc), (mod), (flags))
+#define	UFS_TRUNCATE(vp, off, flags, cr) \
+	(*UFS_OPS(vp)->uo_truncate)((vp), (off), (flags), (cr))
+#define	UFS_VALLOC(vp, mode, cr, vpp) \
+	(*UFS_OPS(vp)->uo_valloc)((vp), (mode), (cr), (vpp))
+#define	UFS_VFREE(vp, ino, mode) \
+	(*UFS_OPS(vp)->uo_vfree)((vp), (ino), (mode))
+#define	UFS_BALLOC(vp, off, size, cr, flags, bpp) \
+	(*UFS_OPS(vp)->uo_balloc)((vp), (off), (size), (cr), (flags), (bpp))
 
 /* UFS-specific flags */
 #define UFS_NEEDSWAP	0x01	/* filesystem metadata need byte-swapping */
+#define UFS_ISAPPLEUFS	0x02	/* filesystem is Apple UFS */
+
+/*
+ * Filesystem types
+ */
+#define UFS1  1
+#define UFS2  2
+
 
 /*
  * Flags describing the state of quotas.
@@ -103,11 +157,18 @@ struct ufsmount {
 /* Convert mount ptr to ufsmount ptr. */
 #define VFSTOUFS(mp)	((struct ufsmount *)((mp)->mnt_data))
 
+#ifdef APPLE_UFS
+#define UFS_MPISAPPLEUFS(ump)	((ump)->um_flags & UFS_ISAPPLEUFS)
+#else
+#define UFS_MPISAPPLEUFS(ump)	(0)
+#endif
+
 /*
  * Macros to access file system parameters in the ufsmount structure.
  * Used by ufs_bmap.
  */
 #define MNINDIR(ump)			((ump)->um_nindir)
 #define	blkptrtodb(ump, b)		((b) << (ump)->um_bptrtodb)
-#define	is_sequential(ump, a, b)	((b) == (a) + ump->um_seqinc)
 #endif /* _KERNEL */
+
+#endif /* !_UFS_UFS_UFSMOUNT_H_ */

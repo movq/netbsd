@@ -1,4 +1,4 @@
-/*	$NetBSD: gettytab.h,v 1.10 2000/01/04 13:43:37 ad Exp $	*/
+/*	$NetBSD: gettytab.h,v 1.16 2006/11/16 04:31:24 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -60,6 +56,10 @@ struct gettyflags {
 };
 
 /*
+ * See init.c for the arrays indexed by these values.
+ */
+
+/*
  * String values.
  */
 #define	NX	gettystrs[0].value
@@ -86,9 +86,11 @@ struct gettyflags {
 #define FL	gettystrs[21].value
 #define WE	gettystrs[22].value
 #define LN	gettystrs[23].value
-#define PP	gettystrs[24].value
-#define IF	gettystrs[25].value
-#define AL	gettystrs[26].value
+#define ST	gettystrs[24].value
+#define B2	gettystrs[25].value
+#define PP	gettystrs[26].value
+#define IF	gettystrs[27].value
+#define AL	gettystrs[28].value
 
 /*
  * Numeric definitions.
@@ -163,13 +165,9 @@ struct gettyflags {
 #define DX	gettyflags[20].value
 #define	NP	gettyflags[21].value
 #define	MB	gettyflags[22].value
-
-int	getent __P((char *, char *));
-long	getnum __P((char *));
-int	getflag __P((char *));
-char	*getstr __P((char *, char **));
+#define	CS	gettyflags[23].value
+#define	NN	gettyflags[24].value
 
 extern	struct gettyflags gettyflags[];
 extern	struct gettynums gettynums[];
 extern	struct gettystrs gettystrs[];
-extern	int hopcount;

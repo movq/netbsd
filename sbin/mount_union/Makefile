@@ -1,12 +1,15 @@
-#	$NetBSD: Makefile,v 1.9 1997/10/10 19:51:39 christos Exp $
+#	$NetBSD: Makefile,v 1.14 2005/06/27 01:00:06 christos Exp $
 #	@(#)Makefile	8.4 (Berkeley) 7/13/94
 
+.include <bsd.own.mk>
+
 PROG=	mount_union
-SRCS=	mount_union.c getmntopts.c
+SRCS=	mount_union.c
 MAN=	mount_union.8
 
-MOUNT=	${.CURDIR}/../mount
-CPPFLAGS+= -I${.CURDIR}/../../sys -I${MOUNT}
-.PATH:	${MOUNT}
+CPPFLAGS+= -I${NETBSDSRCDIR}/sys
+
+DPADD+=${LIBUTIL}
+LDADD+=-lutil
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mc.c,v 1.2 1998/05/30 06:16:06 tsubai Exp $	*/
+/*	$NetBSD: if_mc.c,v 1.14 2008/10/05 05:01:08 macallan Exp $	*/
 
 /*-
  * Copyright (c) 1997 David Huang <khym@bga.com>
@@ -35,6 +35,9 @@
  * Controller) for DMA to and from the MACE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.14 2008/10/05 05:01:08 macallan Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
@@ -45,13 +48,13 @@
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <dev/ofw/openfirm.h>
 
-#include <machine/pio.h>
 #include <machine/bus.h>
 #include <machine/autoconf.h>
+#include <machine/pio.h>
 
 #include <macppc/dev/am79c950reg.h>
 #include <macppc/dev/if_mcvar.h>
@@ -68,6 +71,7 @@ hide void	mc_reset_txdma __P((struct mc_softc *sc));
 hide void	mc_select_utp __P((struct mc_softc *sc));
 hide void	mc_select_aui __P((struct mc_softc *sc));
 hide int	mc_mediachange __P((struct mc_softc *sc));
+hide void	mc_mediastatus __P((struct mc_softc *sc, struct ifmediareq *));
 
 int mc_supmedia[] = {
 	IFM_ETHER | IFM_10_T,
@@ -77,9 +81,8 @@ int mc_supmedia[] = {
 
 #define N_SUPMEDIA (sizeof(mc_supmedia) / sizeof(int));
 
-struct cfattach mc_ca = {
-	sizeof(struct mc_softc), mc_match, mc_attach
-};
+CFATTACH_DECL(mc, sizeof(struct mc_softc),
+    mc_match, mc_attach, NULL, NULL);
 
 hide int
 mc_match(parent, cf, aux)
@@ -114,6 +117,7 @@ mc_attach(parent, self, aux)
 	u_int *reg;
 
 	sc->sc_node = ca->ca_node;
+	sc->sc_regt = ca->ca_tag;
 
 	reg  = ca->ca_reg;
 	reg[0] += ca->ca_baseaddr;
@@ -123,12 +127,12 @@ mc_attach(parent, self, aux)
 	sc->sc_txdma = mapiodev(reg[2], reg[3]);
 	sc->sc_rxdma = mapiodev(reg[4], reg[5]);
 	bus_space_map(sc->sc_regt, reg[0], reg[1], 0, &sc->sc_regh);
-					/* XXX sc_regt is uninitialized */
+
 	sc->sc_tail = 0;
 	sc->sc_txdmacmd = dbdma_alloc(sizeof(dbdma_command_t) * 2);
 	sc->sc_rxdmacmd = (void *)dbdma_alloc(sizeof(dbdma_command_t) * 8);
-	bzero(sc->sc_txdmacmd, sizeof(dbdma_command_t) * 2);
-	bzero(sc->sc_rxdmacmd, sizeof(dbdma_command_t) * 8);
+	memset(sc->sc_txdmacmd, 0, sizeof(dbdma_command_t) * 2);
+	memset(sc->sc_rxdmacmd, 0, sizeof(dbdma_command_t) * 8);
 
 	printf(": irq %d,%d,%d",
 		ca->ca_intr[0], ca->ca_intr[1], ca->ca_intr[2]);
@@ -139,9 +143,9 @@ mc_attach(parent, self, aux)
 	}
 
 	/* allocate memory for transmit buffer and mark it non-cacheable */
-	sc->sc_txbuf = malloc(NBPG, M_DEVBUF, M_WAITOK);
+	sc->sc_txbuf = malloc(PAGE_SIZE, M_DEVBUF, M_WAITOK);
 	sc->sc_txbuf_phys = kvtop(sc->sc_txbuf);
-	bzero(sc->sc_txbuf, NBPG);
+	memset(sc->sc_txbuf, 0, PAGE_SIZE);
 
 	/*
 	 * allocate memory for receive buffer and mark it non-cacheable
@@ -151,9 +155,9 @@ mc_attach(parent, self, aux)
 	 * memory. If it's not, suggest reducing the number of buffers
 	 * to 2, which will fit in one 4K page.
 	 */
-	sc->sc_rxbuf = malloc(MC_NPAGES * NBPG, M_DEVBUF, M_WAITOK);
+	sc->sc_rxbuf = malloc(MC_NPAGES * PAGE_SIZE, M_DEVBUF, M_WAITOK);
 	sc->sc_rxbuf_phys = kvtop(sc->sc_rxbuf);
-	bzero(sc->sc_rxbuf, MC_NPAGES * NBPG);
+	memset(sc->sc_rxbuf, 0, MC_NPAGES * PAGE_SIZE);
 
 	if ((int)sc->sc_txbuf & PGOFSET)
 		printf("txbuf is not page-aligned\n");
@@ -171,9 +175,9 @@ mc_attach(parent, self, aux)
 	dbdma_reset(sc->sc_txdma);
 
 	/* install interrupt handlers */
-	/*intr_establish(ca->ca_intr[1], IST_LEVEL, IPL_NET, mc_dmaintr, sc);*/
-	intr_establish(ca->ca_intr[2], IST_LEVEL, IPL_NET, mc_dmaintr, sc);
-	intr_establish(ca->ca_intr[0], IST_LEVEL, IPL_NET, mcintr, sc);
+	/*intr_establish(ca->ca_intr[1], IST_EDGE, IPL_NET, mc_dmaintr, sc);*/
+	intr_establish(ca->ca_intr[2], IST_EDGE, IPL_NET, mc_dmaintr, sc);
+	intr_establish(ca->ca_intr[0], IST_EDGE, IPL_NET, mcintr, sc);
 
 	sc->sc_biucc = XMTSP_64;
 	sc->sc_fifocc = XMTFW_16 | RCVFW_64 | XMTFWU | RCVFWU |
@@ -228,7 +232,6 @@ mc_dmaintr(arg)
 	int status, offset, statoff;
 	int datalen, resid;
 	int i, n;
-	u_int maccc;
 	dbdma_command_t *cmd;
 
 	/* We've received some packets from the MACE */
@@ -241,19 +244,19 @@ mc_dmaintr(arg)
 
 		cmd = &sc->sc_rxdmacmd[i];
 		/* flushcache(cmd, sizeof(dbdma_command_t)); */
-		status = dbdma_ld16(&cmd->d_status);
-		resid = dbdma_ld16(&cmd->d_resid);
+		status = in16rb(&cmd->d_status);
+		resid = in16rb(&cmd->d_resid);
 
 		/*if ((status & D_ACTIVE) == 0)*/
 		if ((status & 0x40) == 0)
 			continue;
 
 #if 1
-		if (dbdma_ld16(&cmd->d_count) != ETHERMTU + 22)
+		if (in16rb(&cmd->d_count) != ETHERMTU + 22)
 			printf("bad d_count\n");
 #endif
 
-		datalen = dbdma_ld16(&cmd->d_count) - resid;
+		datalen = in16rb(&cmd->d_count) - resid;
 		datalen -= 4;	/* 4 == status bytes */
 
 		if (datalen < 4 + sizeof(struct ether_header)) {
@@ -266,7 +269,7 @@ mc_dmaintr(arg)
 		statoff = offset + datalen;
 
 		DBDMA_BUILD_CMD(cmd, DBDMA_CMD_STOP, 0, 0, 0, 0);
-		__asm __volatile("eieio");
+		__asm volatile("eieio");
 
 		/* flushcache(sc->sc_rxbuf + offset, datalen + 4); */
 
@@ -281,7 +284,7 @@ mc_dmaintr(arg)
 next:
 		DBDMA_BUILD_CMD(cmd, DBDMA_CMD_IN_LAST, 0, DBDMA_INT_ALWAYS,
 			DBDMA_WAIT_NEVER, DBDMA_BRANCH_NEVER);
-		__asm __volatile("eieio");
+		__asm volatile("eieio");
 		cmd->d_status = 0;
 		cmd->d_resid = 0;
 		sc->sc_tail = i + 1;
@@ -316,7 +319,7 @@ mc_reset_rxdma(sc)
 
 	DBDMA_BUILD(cmd, DBDMA_CMD_NOP, 0, 0, 0,
 		DBDMA_INT_NEVER, DBDMA_WAIT_NEVER, DBDMA_BRANCH_ALWAYS);
-	dbdma_st32(&cmd->d_cmddep, kvtop((caddr_t)sc->sc_rxdmacmd));
+	out32rb(&cmd->d_cmddep, kvtop((void *)sc->sc_rxdmacmd));
 	cmd++;
 
 	dbdma_start(dmareg, sc->sc_rxdmacmd);
@@ -348,7 +351,7 @@ mc_reset_txdma(sc)
 		DBDMA_INT_NEVER, DBDMA_WAIT_NEVER, DBDMA_BRANCH_NEVER);
 
 	out32rb(&dmareg->d_cmdptrhi, 0);
-	out32rb(&dmareg->d_cmdptrlo, kvtop((caddr_t)sc->sc_txdmacmd));
+	out32rb(&dmareg->d_cmdptrlo, kvtop((void *)sc->sc_txdmacmd));
 
 	/* restore old value */
 	NIC_PUT(sc, MACE_MACCC, maccc);

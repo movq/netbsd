@@ -1,4 +1,4 @@
-/*	$NetBSD: opl_isa.c,v 1.4 2000/02/26 05:11:27 thorpej Exp $	*/
+/*	$NetBSD: opl_isa.c,v 1.19 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: opl_isa.c,v 1.19 2008/04/28 20:23:52 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -48,7 +44,7 @@
 #include <sys/audioio.h>
 #include <sys/midiio.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/audio_if.h>
 #include <dev/midi_if.h>
@@ -60,47 +56,55 @@
 
 #define OPL_SIZE 4
 
-int	opl_isa_match __P((struct device *, struct cfdata *, void *));
-void	opl_isa_attach __P((struct device *, struct device *, void *));
+int	opl_isa_match(device_t, cfdata_t, void *);
+void	opl_isa_attach(device_t, device_t, void *);
 
-struct cfattach opl_isa_ca = {
-	sizeof (struct opl_softc), opl_isa_match, opl_isa_attach
-};
+CFATTACH_DECL_NEW(opl_isa, sizeof(struct opl_softc),
+    opl_isa_match, opl_isa_attach, NULL, NULL);
 
 int
-opl_isa_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+opl_isa_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
-	struct opl_softc sc;
+	bus_space_handle_t ioh;
 	int r;
 
-	memset(&sc, 0, sizeof sc);
-	sc.iot = ia->ia_iot;
-	if (bus_space_map(sc.iot, ia->ia_iobase, OPL_SIZE, 0, &sc.ioh))
+	if (ia->ia_nio < 1)
 		return (0);
-	r = opl_find(&sc);
-        bus_space_unmap(sc.iot, sc.ioh, OPL_SIZE);
-	if (r != 0)
-		ia->ia_iosize = OPL_SIZE;
+
+	if (ISA_DIRECT_CONFIG(ia))
+		return (0);
+
+	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+		return (0);
+
+	if (bus_space_map(ia->ia_iot, ia->ia_io[0].ir_addr, OPL_SIZE, 0, &ioh))
+		return (0);
+	r = opl_match(ia->ia_iot, ioh, 0);
+        bus_space_unmap(ia->ia_iot, ioh, OPL_SIZE);
+	if (r != 0) {
+		ia->ia_nio = 1;
+		ia->ia_io[0].ir_size = OPL_SIZE;
+
+		ia->ia_nirq = 0;
+		ia->ia_niomem = 0;
+		ia->ia_ndrq = 0;
+	}
 	return (r);
 }
 
 void
-opl_isa_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+opl_isa_attach(device_t parent, device_t self, void *aux)
 {
-	struct opl_softc *sc = (struct opl_softc *)self;
+	struct opl_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
 
+	sc->mididev.dev = self;
 	sc->iot = ia->ia_iot;
 
-	if (bus_space_map(sc->iot, ia->ia_iobase, OPL_SIZE, 0, &sc->ioh)) {
-		printf("opl_isa_attach: bus_space_map failed\n");
+	if (bus_space_map(sc->iot, ia->ia_io[0].ir_addr, OPL_SIZE,
+	    0, &sc->ioh)) {
+		aprint_error("opl_isa_attach: bus_space_map failed\n");
 		return;
 	}
 	sc->offs = 0;

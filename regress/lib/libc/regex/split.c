@@ -1,4 +1,30 @@
-/*	$NetBSD: split.c,v 1.2 1995/04/20 22:39:57 cgd Exp $	*/
+/*	$NetBSD: split.c,v 1.5 2008/04/28 20:23:05 martin Exp $	*/
+
+/*-
+ * Copyright (c) 1993 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include <stdio.h>
 #include <string.h>
@@ -14,14 +40,14 @@ char *fields[];			/* list is not NULL-terminated */
 int nfields;			/* number of entries available in fields[] */
 char *sep;			/* "" white, "c" single char, "ab" [ab]+ */
 {
-	register char *p = string;
-	register char c;			/* latest character */
-	register char sepc = sep[0];
-	register char sepc2;
-	register int fn;
-	register char **fp = fields;
-	register char *sepp;
-	register int trimtrail;
+	char *p = string;
+	char c;			/* latest character */
+	char sepc = sep[0];
+	char sepc2;
+	int fn;
+	char **fp = fields;
+	char *sepp;
+	int trimtrail;
 
 	/* white space */
 	if (sepc == '\0') {
@@ -155,7 +181,7 @@ int argc;
 char *argv[];
 {
 	char buf[512];
-	register int n;
+	int n;
 #	define	MNF	10
 	char *fields[MNF];
 
@@ -187,7 +213,7 @@ char *seps;
 {
 #	define	NF	5
 	char *fields[NF];
-	register int nf;
+	int nf;
 
 	nf = split(string, fields, NF, seps);
 	print(nf, NF, fields);
@@ -198,8 +224,8 @@ int nf;
 int nfp;
 char *fields[];
 {
-	register int fn;
-	register int bound;
+	int fn;
+	int bound;
 
 	bound = (nf > nfp) ? nfp : nf;
 	printf("%d:\t", nf);
@@ -279,12 +305,12 @@ struct {
 regress()
 {
 	char buf[512];
-	register int n;
+	int n;
 	char *fields[RNF+1];
-	register int nf;
-	register int i;
-	register int printit;
-	register char *f;
+	int nf;
+	int i;
+	int printit;
+	char *f;
 
 	for (n = 0; tests[n].str != NULL; n++) {
 		(void) strcpy(buf, tests[n].str);

@@ -1,4 +1,4 @@
-/*	$NetBSD: acu.c,v 1.7 1998/07/12 09:59:29 mrg Exp $	*/
+/*	$NetBSD: acu.c,v 1.15 2006/12/14 17:09:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)acu.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: acu.c,v 1.7 1998/07/12 09:59:29 mrg Exp $");
+__RCSID("$NetBSD: acu.c,v 1.15 2006/12/14 17:09:43 christos Exp $");
 #endif /* not lint */
 
 #include "tip.h"
@@ -47,8 +43,8 @@ static acu_t *acu = NULL;
 static int conflag;
 static jmp_buf jmpbuf;
 
-static void	acuabort __P((int));
-static acu_t   *acutype __P((char *));
+static void	acuabort(int);
+static acu_t   *acutype(char *);
 
 /*
  * Establish connection for tip
@@ -66,36 +62,32 @@ static acu_t   *acutype __P((char *));
  *   for a single host acting as a rotary (in the order
  *   found in the file).
  */
-char *
-connect()
+const char *
+tip_connect(void)
 {
-	char *cp = PN;
+	char * volatile cp;
 	char *phnum, string[256];
 	FILE *fd;
-	int tried = 0;
+	int volatile tried;
 
-#if __GNUC__		/* XXX pacify gcc */
-	(void)&cp;
-	(void)&tried;
-#endif
+	cp = PN;
+	tried = 0;
 
 	if (!DU) {		/* regular connect message */
 		if (CM != NULL)
 			xpwrite(FD, CM, strlen(CM));
-		logent(value(HOST), "", DV, "call completed");
 		return (NULL);
 	}
 	/*
 	 * @ =>'s use data base in PHONES environment variable
 	 *        otherwise, use /etc/phones
 	 */
-	signal(SIGINT, acuabort);
-	signal(SIGQUIT, acuabort);
+	(void)signal(SIGINT, acuabort);
+	(void)signal(SIGQUIT, acuabort);
 	if (setjmp(jmpbuf)) {
-		signal(SIGINT, SIG_IGN);
-		signal(SIGQUIT, SIG_IGN);
-		printf("\ncall aborted\n");
-		logent(value(HOST), "", "", "call aborted");
+		(void)signal(SIGINT, SIG_IGN);
+		(void)signal(SIGQUIT, SIG_IGN);
+		(void)printf("\ncall aborted\n");
 		if (acu != NULL) {
 			setboolean(value(VERBOSE), FALSE);
 			if (conflag)
@@ -113,28 +105,24 @@ connect()
 				;
 			if (*cp)
 				*cp++ = '\0';
-			
+
 			if ((conflag = (*acu->acu_dialer)(phnum, CU)) != 0) {
 				if (CM != NULL)
 					xpwrite(FD, CM, strlen(CM));
-				logent(value(HOST), phnum, acu->acu_name,
-					"call completed");
 				return (NULL);
 			} else
-				logent(value(HOST), phnum, acu->acu_name,
-					"call failed");
 			tried++;
 		}
 	} else {
 		if ((fd = fopen(PH, "r")) == NULL) {
-			printf("%s: ", PH);
+			(void)printf("%s: ", PH);
 			return ("can't open phone number file");
 		}
 		while (fgets(string, sizeof(string), fd) != NULL) {
 			for (cp = string; !any(*cp, " \t\n"); cp++)
 				;
 			if (*cp == '\n') {
-				fclose(fd);
+				(void)fclose(fd);
 				return ("unrecognizable host name");
 			}
 			*cp++ = '\0';
@@ -143,65 +131,55 @@ connect()
 			while (any(*cp, " \t"))
 				cp++;
 			if (*cp == '\n') {
-				fclose(fd);
+				(void)fclose(fd);
 				return ("missing phone number");
 			}
 			for (phnum = cp; *cp && *cp != ',' && *cp != '\n'; cp++)
 				;
 			if (*cp)
 				*cp++ = '\0';
-			
+
 			if ((conflag = (*acu->acu_dialer)(phnum, CU)) != 0) {
-				fclose(fd);
+				(void)fclose(fd);
 				if (CM != NULL)
 					xpwrite(FD, CM, strlen(CM));
-				logent(value(HOST), phnum, acu->acu_name,
-					"call completed");
 				return (NULL);
 			} else
-				logent(value(HOST), phnum, acu->acu_name,
-					"call failed");
 			tried++;
 		}
-		fclose(fd);
+		(void)fclose(fd);
 	}
-	if (!tried)
-		logent(value(HOST), "", acu->acu_name, "missing phone number");
+	if (!tried) {
+	}
 	else
 		(*acu->acu_abort)();
 	return (tried ? "call failed" : "missing phone number");
 }
 
 void
-disconnect(reason)
-	char *reason;
+disconnect(const char *reason)
 {
 
 	if (!conflag) {
-		logent(value(HOST), "", DV, "call terminated");
 		return;
 	}
 	if (reason == NULL) {
-		logent(value(HOST), "", acu->acu_name, "call terminated");
 		if (boolean(value(VERBOSE)))
-			printf("\r\ndisconnecting...");
-	} else 
-		logent(value(HOST), "", acu->acu_name, reason);
+			(void)printf("\r\ndisconnecting...");
+	} else
 	(*acu->acu_disconnect)();
 }
 
 static void
-acuabort(s)
-	int s;
+acuabort(int s)
 {
 
-	signal(s, SIG_IGN);
+	(void)signal(s, SIG_IGN);
 	longjmp(jmpbuf, 1);
 }
 
 static acu_t *
-acutype(s)
-	char *s;
+acutype(char *s)
 {
 	acu_t *p;
 

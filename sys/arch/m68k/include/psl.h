@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.7 1999/11/06 17:42:33 thorpej Exp $	*/
+/*	$NetBSD: psl.h,v 1.13.88.1 2009/05/10 20:40:35 snj Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -74,38 +70,32 @@
 #if defined(_KERNEL) && !defined(_LOCORE)
 
 /*
- * spl functions; platform-specific code must define spl0.
+ * spl functions; platform-specific code must define spl0 and splx().
  */
 
-#define	_spl(s)								\
-({									\
-	register int _spl_r;						\
-									\
-	__asm __volatile ("clrl %0; movew %%sr,%0; movew %1,%%sr" :	\
-	    "&=d" (_spl_r) : "di" (s));					\
-	_spl_r;								\
-})
+static __inline int
+_spl(int s)
+{
+	int sr;
 
-#define	_splraise(s)							\
-({									\
-	int _spl_r;							\
-									\
-	__asm __volatile ("						\
-		clrl	%%d0					;	\
-		movw	%%sr,%%d0				;	\
-		movl	%%d0,%0					;	\
-		andw	#0x700,%%d0				;	\
-		movw	%1,%%d1					;	\
-		andw	#0x700,%%d1				;	\
-		cmpw	%%d0,%%d1				;	\
-		jle	1f					;	\
-		movw	%1,%%sr					;	\
-	    1:"							:	\
-		    "&=d" (_spl_r)				:	\
-		    "di" (s)					:	\
-		    "d0", "d1");					\
-	_spl_r;								\
-})
+	__asm volatile ("movew %%sr,%0; movew %1,%%sr" :
+	    "=&d" (sr) : "di" (s) : "memory");
+
+	return sr;
+}
+
+static __inline int
+_splraise(int level)
+{
+	int sr;
+
+	__asm volatile("movw %%sr,%0" : "=d" (sr));
+
+	if ((u_int16_t)level >= PSL_HIGHIPL || (u_int16_t)level > (u_int16_t)sr)
+		__asm volatile("movw %0,%%sr" :: "di" (level) : "memory");
+
+	return sr;
+}
 
 /* spl0 may require checking for software interrupts */
 #define	_spl0()		_spl(PSL_S|PSL_IPL0)

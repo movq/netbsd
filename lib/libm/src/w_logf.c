@@ -15,23 +15,23 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: w_logf.c,v 1.5 1999/07/02 15:37:45 simonb Exp $");
+__RCSID("$NetBSD: w_logf.c,v 1.7 2007/08/20 16:01:40 drochner Exp $");
 #endif
 
 /*
  * wrapper logf(x)
  */
 
+#include "namespace.h"
 #include "math.h"
 #include "math_private.h"
 
-
-#ifdef __STDC__
-	float logf(float x)		/* wrapper logf */
-#else
-	float logf(x)			/* wrapper logf */
-	float x;
+#ifdef __weak_alias
+__weak_alias(logf, _logf)
 #endif
+
+float
+logf(float x)		/* wrapper logf */
 {
 #ifdef _IEEE_LIBM
 	return __ieee754_logf(x);

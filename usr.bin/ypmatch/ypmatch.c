@@ -1,4 +1,4 @@
-/*	$NetBSD: ypmatch.c,v 1.10 1997/07/18 07:05:36 thorpej Exp $	*/
+/*	$NetBSD: ypmatch.c,v 1.16 2004/01/05 23:23:37 jmmv Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993 Theo de Raadt <deraadt@fsa.ca>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Theo de Raadt.
- * 4. The name of the author may not be used to endorse or promote
- *    products derived from this software without specific prior written
- *    permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -34,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ypmatch.c,v 1.10 1997/07/18 07:05:36 thorpej Exp $");
+__RCSID("$NetBSD: ypmatch.c,v 1.16 2004/01/05 23:23:37 jmmv Exp $");
 #endif
 
 #include <sys/param.h>
@@ -43,6 +37,7 @@ __RCSID("$NetBSD: ypmatch.c,v 1.10 1997/07/18 07:05:36 thorpej Exp $");
 #include <ctype.h>
 #include <err.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -67,8 +62,6 @@ const struct ypalias {
 int	main __P((int, char *[]));
 void	usage __P((void));
 
-extern	char *__progname;
-
 int
 main(argc, argv)
 	int argc;
@@ -76,15 +69,13 @@ main(argc, argv)
 {
 	char *domainname;
 	char *inkey, *inmap, *outbuf;
-	extern char *optarg;
-	extern int optind;
-	int outbuflen, key, notrans;
-	int c, r, i;
+	int outbuflen, key, null, notrans;
+	int c, r, i, len;
 	int rval;
 
 	domainname = NULL;
-	notrans = key = 0;
-	while ((c = getopt(argc, argv, "xd:kt")) != -1) {
+	notrans = key = null = 0;
+	while ((c = getopt(argc, argv, "xd:ktz")) != -1) {
 		switch (c) {
 		case 'x':
 			for(i = 0;
@@ -104,6 +95,10 @@ main(argc, argv)
 
 		case 'k':
 			key++;
+			break;
+
+		case 'z':
+			null++;
 			break;
 
 		default:
@@ -131,13 +126,17 @@ main(argc, argv)
 	for(i = 0; i < (argc - 1); i++) {
 		inkey = argv[i];
 
-		r = yp_match(domainname, inmap, inkey, strlen(inkey),
+		len = strlen(inkey);
+		if (null)
+			len++;
+		r = yp_match(domainname, inmap, inkey, len,
 		    &outbuf, &outbuflen);
 		switch (r) {
 		case 0:
 			if (key)
 				printf("%s: ", inkey);
-			printf("%*.*s\n", outbuflen, outbuflen, outbuf);
+			fwrite(outbuf, outbuflen, 1, stdout);
+			putc('\n', stdout);
 			break;
 
 		case YPERR_YPBIND:
@@ -158,8 +157,8 @@ void
 usage()
 {
 
-	fprintf(stderr, "usage: %s [-d domain] [-t] [-k] key [key ...] "
-	    "mapname\n", __progname);
-	fprintf(stderr, "       %s -x\n", __progname);
+	fprintf(stderr, "usage: %s [-d domain] [-tkz] key [key ...] "
+	    "mapname\n", getprogname());
+	fprintf(stderr, "       %s -x\n", getprogname());
 	exit(1);
 }

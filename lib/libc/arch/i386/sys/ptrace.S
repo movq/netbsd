@@ -1,4 +1,4 @@
-/*	$NetBSD: ptrace.S,v 1.11 1999/02/08 18:56:48 christos Exp $	*/
+/*	$NetBSD: ptrace.S,v 1.16 2003/08/07 16:42:09 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,19 +36,14 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: ptrace.S,v 1.11 1999/02/08 18:56:48 christos Exp $")
+	RCSID("$NetBSD: ptrace.S,v 1.16 2003/08/07 16:42:09 agc Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
 
-#ifdef _REENTRANT
 	.globl	_C_LABEL(__errno)
-#else
-	.globl	_C_LABEL(errno)
-#endif
 
 ENTRY(ptrace)
-#ifdef _REENTRANT
 #ifdef PIC
 	PIC_PROLOGUE
 	call	PIC_PLT(_C_LABEL(__errno))
@@ -60,27 +51,17 @@ ENTRY(ptrace)
 #else
 	call	_C_LABEL(__errno)
 #endif /* PIC */
-	xorl	%ecx,%ecx
-	movl	%ecx,(%eax)
-#else
-#ifdef PIC
-	xorl	%eax,%eax
-	PIC_PROLOGUE
-	movl	PIC_GOT(_C_LABEL(errno)),%edx
-	PIC_EPILOGUE
-	movl	%eax,(%edx)
-#else
-	movl	$0,_C_LABEL(errno)
-#endif /* PIC */
-#endif /* _REENTRANT */
-	movl	$(SYS_ptrace),%eax
-	int	$0x80
+	xorl	%edx,%edx
+	movl	%edx,(%eax)
+	SYSTRAP(ptrace)
 	jc	err
 	ret
 err:
 #ifdef PIC
 	PIC_PROLOGUE
-	jmp	PIC_PLT(CERROR)
+	mov	PIC_GOT(CERROR), %ecx
+	PIC_EPILOGUE
+	jmp	*%ecx
 #else
 	jmp	CERROR
 #endif

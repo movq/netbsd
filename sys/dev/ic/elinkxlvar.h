@@ -1,4 +1,4 @@
-/*	$NetBSD: elinkxlvar.h,v 1.5 2000/03/23 07:01:30 thorpej Exp $	*/
+/*	$NetBSD: elinkxlvar.h,v 1.20 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +39,7 @@
  * Ethernet software status per interface.
  */
 struct ex_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	void *sc_ih;
 
 	struct ethercom sc_ethercom;	/* Ethernet common part		*/
@@ -83,6 +76,15 @@ struct ex_softc {
 #define EX_CONF_MII		0x0001	/* has MII bus */
 #define EX_CONF_INTPHY		0x0002	/* has internal PHY */
 #define EX_CONF_90XB		0x0004	/* is 90xB */
+#define EX_CONF_INV_LED_POLARITY 0x0010	/* CardBus & MiniPCI: LED polarity */
+#define EX_CONF_PHY_POWER	0x0020	/* CardBus & MiniPCI: PHY power */
+#define EX_CONF_EEPROM_OFF	0x0040	/* EEPROM is offset by 0x30 */
+#define EX_CONF_EEPROM_8BIT	0x0080	/* 8 bit EEPROM */
+#define EX_CONF_PCI_FUNCREG	0x0100	/* Has PCI function registers */
+#define EX_CONF_RESETHACK	0x0200	/* Hack to make reset work on 556B */
+#define EX_CONF_NO_XCVR_PWR	0x0400	/* Hack to enable later 556B xcvr */
+
+#define EX_XCVR_PWR_MAGICBITS	0x0900	/* NO_XCVR_PWR magic value */
 
 
 	/*
@@ -103,6 +105,7 @@ struct ex_softc {
 #define EX_FLAGS_SNOOPING		0x0800
 #define EX_FLAGS_100MBIT		0x1000
 #define EX_FLAGS_POWERMGMT		0x2000
+#define EX_FLAGS_ATTACHED		0x4000	/* attach has succeeded */
 
 	u_char	ex_bustype;		/* parent bus type (currently unused) */
 
@@ -114,28 +117,37 @@ struct ex_softc {
 #endif
 
 	/* power management hooks */
-	int (*enable) __P((struct ex_softc *));
-	void (*disable) __P((struct ex_softc *));
+	int (*enable)(struct ex_softc *);
+	void (*disable)(struct ex_softc *);
 	int enabled;
-	/* interrupt acknowledge hook */
-	void (*intr_ack) __P((struct ex_softc *));
 
-	void *sc_sdhook;
+	/* interrupt acknowledge hook */
+	void (*intr_ack)(struct ex_softc *);
 
 	bus_dma_segment_t sc_useg, sc_dseg;
 	int sc_urseg, sc_drseg;
+
+	short sc_if_flags;
 };
 
 #define ex_waitcmd(sc) \
-	while (bus_space_read_2((sc)->sc_iot, (sc)->sc_ioh, ELINK_STATUS) \
-		& S_COMMAND_IN_PROGRESS);
+	do { \
+		int stat; \
+		do { \
+			stat = bus_space_read_2((sc)->sc_iot, (sc)->sc_ioh, \
+			    ELINK_STATUS); \
+		} while ((stat & COMMAND_IN_PROGRESS) && (stat != 0xffff)); \
+	} while (0)\
 
-u_int16_t exreadeeprom __P((bus_space_tag_t, bus_space_handle_t, int));
-void	ex_config __P((struct ex_softc *));
+u_int16_t exreadeeprom(bus_space_tag_t, bus_space_handle_t, int);
+void	ex_config(struct ex_softc *);
 
-int	ex_intr __P((void *));
-void	ex_stop __P((struct ex_softc *));
-void	ex_watchdog __P((struct ifnet *));
-int	ex_ioctl __P((struct ifnet *ifp, u_long, caddr_t));
-int	ex_activate __P((struct device *, enum devact));
-int	ex_detach __P((struct ex_softc *));
+int	ex_intr(void *);
+void	ex_stop(struct ifnet *, int);
+void	ex_watchdog(struct ifnet *);
+int	ex_ioctl(struct ifnet *ifp, u_long, void *);
+int	ex_activate(device_t, enum devact);
+int	ex_detach(struct ex_softc *);
+
+int	ex_enable(struct ex_softc *);
+void	ex_disable(struct ex_softc *);

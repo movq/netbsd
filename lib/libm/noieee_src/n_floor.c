@@ -1,4 +1,4 @@
-/*      $NetBSD: n_floor.c,v 1.3 1998/10/20 02:26:11 matt Exp $ */
+/*      $NetBSD: n_floor.c,v 1.6 2004/05/13 20:35:40 mhitch Exp $ */
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,6 +34,7 @@ static char sccsid[] = "@(#)floor.c	8.1 (Berkeley) 6/4/93";
 #endif
 #endif /* not lint */
 
+#define _LIBM_STATIC
 #include "mathimpl.h"
 
 vc(L, 4503599627370496.0E0 ,0000,5c00,0000,0000, 55, 1.0) /* 2**55 */
@@ -56,8 +53,7 @@ ic(L, 4503599627370496.0E0, 52, 1.0)			  /* 2**52 */
  *	customary for IEEE 754.  No other signal can be emitted.
  */
 double
-floor(x)
-double x;
+floor(double x)
 {
 	volatile double y;
 
@@ -76,9 +72,14 @@ double x;
 	}
 }
 
+float
+floorf(float x)
+{
+	return floor((double)x);
+}
+
 double
-ceil(x)
-double x;
+ceil(double x)
 {
 	volatile double y;
 
@@ -95,6 +96,12 @@ double x;
 		y -= L;			/* an integer, and |x-y| < 1 */
 		return x > y ? y+(double)1 : y;
 	}
+}
+
+float
+ceilf(float x)
+{
+	return ceil((double)x);
 }
 
 #ifndef ns32000			/* rint() is in ./NATIONAL/support.s */
@@ -120,8 +127,7 @@ double x;
  *	customary for IEEE 754.  No other signal can be emitted.
  */
 double
-rint(x)
-double x;
+rint(double x)
 {
 	double s;
 	volatile double t;

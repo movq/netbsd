@@ -12,22 +12,23 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: w_cosh.c,v 1.8 1999/07/02 15:37:44 simonb Exp $");
+__RCSID("$NetBSD: w_cosh.c,v 1.10 2007/08/20 16:01:39 drochner Exp $");
 #endif
 
 /*
  * wrapper cosh(x)
  */
 
+#include "namespace.h"
 #include "math.h"
 #include "math_private.h"
 
-#ifdef __STDC__
-	double cosh(double x)		/* wrapper cosh */
-#else
-	double cosh(x)			/* wrapper cosh */
-	double x;
+#ifdef __weak_alias
+__weak_alias(cosh, _cosh)
 #endif
+
+double
+cosh(double x)		/* wrapper cosh */
 {
 #ifdef _IEEE_LIBM
 	return __ieee754_cosh(x);

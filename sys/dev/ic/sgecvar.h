@@ -1,4 +1,4 @@
-/*      $NetBSD: sgecvar.h,v 1.1 1999/08/08 11:41:30 ragge Exp $ */
+/*      $NetBSD: sgecvar.h,v 1.8 2008/03/11 05:34:01 matt Exp $ */
 /*
  * Copyright (c) 1999 Ludd, University of Lule}, Sweden. All rights reserved.
  *
@@ -12,7 +12,7 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed at Ludd, University of 
+ *      This product includes software developed at Ludd, University of
  *      Lule}, Sweden and its contributors.
  * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission
@@ -29,6 +29,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _DEV_IC_SGECVAR_H_
+#define _DEV_IC_SGECVAR_H_
+
 #define RXDESCS	30	/* # of receive descriptors */
 #define TXDESCS	60	/* # transmit descs */
 
@@ -42,7 +45,13 @@ struct ze_cdata {
 };
 
 struct	ze_softc {
-	struct device	sc_dev;		/* Configuration common part	*/
+	device_t	sc_dev;		/* Configuration common part	*/
+	struct evcnt	sc_intrcnt;	/* Interrupt counters		*/
+	struct evcnt	sc_rxintrcnt;	/* Interrupt counters		*/
+	struct evcnt	sc_txintrcnt;	/* Interrupt counters		*/
+	struct evcnt	sc_txdraincnt;	/* Interrupt counters		*/
+	struct evcnt	sc_nobufintrcnt; /* Interrupt counters		*/
+	struct evcnt	sc_nointrcnt;	/* Interrupt counters		*/
 	struct ethercom sc_ec;		/* Ethernet common part		*/
 #define sc_if	sc_ec.ec_if		/* network-visible interface	*/
 	bus_space_tag_t sc_iot;
@@ -57,6 +66,7 @@ struct	ze_softc {
 	bus_dmamap_t	sc_rcvmap[RXDESCS];
 	int		sc_intvec;	/* Interrupt vector		*/
 	int		sc_nexttx;
+	int		sc_txcnt;
 	int		sc_inq;
 	int		sc_lastack;
 	int		sc_nextrx;
@@ -64,5 +74,7 @@ struct	ze_softc {
 	u_int8_t 	sc_enaddr[ETHER_ADDR_LEN];
 };
 
-void	sgec_attach __P((struct ze_softc *));
-int	sgec_intr __P((struct ze_softc *));
+void	sgec_attach(struct ze_softc *);
+int	sgec_intr(struct ze_softc *);
+
+#endif /* _DEV_IC_SGECVAR_H_ */

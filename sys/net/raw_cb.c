@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_cb.c,v 1.11 2000/03/30 09:45:40 augustss Exp $	*/
+/*	$NetBSD: raw_cb.c,v 1.20 2008/08/04 06:19:35 matt Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,6 +31,9 @@
  *	@(#)raw_cb.c	8.1 (Berkeley) 6/10/93
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: raw_cb.c,v 1.20 2008/08/04 06:19:35 matt Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
@@ -50,13 +49,15 @@
 #include <netinet/in.h>
 
 /*
- * Routines to manage the raw protocol control blocks. 
+ * Routines to manage the raw protocol control blocks.
  *
  * TODO:
  *	hash lookups by protocol family/protocol + address family
  *	take care of unique address problems per AF?
  *	redo address binding to allow wildcards
  */
+
+struct	rawcbhead rawcb = LIST_HEAD_INITIALIZER(rawcb);
 
 u_long	raw_sendspace = RAWSNDQ;
 u_long	raw_recvspace = RAWRCVQ;
@@ -66,9 +67,7 @@ u_long	raw_recvspace = RAWRCVQ;
  * of buffer space for the socket.
  */
 int
-raw_attach(so, proto)
-	struct socket *so;
-	int proto;
+raw_attach(struct socket *so, int proto)
 {
 	struct rawcb *rp = sotorawcb(so);
 	int error;
@@ -94,28 +93,29 @@ raw_attach(so, proto)
  * socket resources.
  */
 void
-raw_detach(rp)
-	struct rawcb *rp;
+raw_detach(struct rawcb *rp)
 {
 	struct socket *so = rp->rcb_socket;
 
-	so->so_pcb = 0;
+	so->so_pcb = NULL;
+	KASSERT(so->so_lock == softnet_lock);	/* XXX */
+	LIST_REMOVE(rp, rcb_list);		/* remove last reference */
+	/* sofree drops the socket's lock. */
 	sofree(so);
-	LIST_REMOVE(rp, rcb_list);
 #ifdef notdef
 	if (rp->rcb_laddr)
 		m_freem(dtom(rp->rcb_laddr));
 	rp->rcb_laddr = 0;
 #endif
-	free((caddr_t)rp, M_PCB);
+	free((void *)rp, M_PCB);
+	mutex_enter(softnet_lock);
 }
 
 /*
  * Disconnect and possibly release resources.
  */
 void
-raw_disconnect(rp)
-	struct rawcb *rp;
+raw_disconnect(struct rawcb *rp)
 {
 
 #ifdef notdef

@@ -1,4 +1,5 @@
-/*	$NetBSD: mdef.h,v 1.8 1997/12/02 22:34:04 cgd Exp $	*/
+/*	$NetBSD: mdef.h,v 1.12 2003/08/07 11:14:33 agc Exp $	*/
+/*	$OpenBSD: mdef.h,v 1.21 2001/09/27 11:40:33 espie Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -71,8 +68,22 @@
 #define SYSVTYPE        31
 #define EXITTYPE        32
 #define DEFNTYPE        33
+#define SELFTYPE	34
+#define INDIRTYPE	35
+#define BUILTINTYPE	36
+#define PATSTYPE	37
+#define FILENAMETYPE	38
+#define LINETYPE	39
+#define REGEXPTYPE	40
+#define ESYSCMDTYPE	41
+#define TRACEONTYPE	42
+#define TRACEOFFTYPE	43
+
  
-#define STATIC          128
+#define TYPEMASK	63	/* Keep bits really corresponding to a type. */
+#define RECDEF		256	/* Pure recursive def, don't expand it */
+#define NOARGS		512	/* builtin needs no args */
+#define NEEDARGS	1024	/* mark builtin that need args with this */
 
 /*
  * m4 special characters
@@ -95,16 +106,15 @@
  * other important constants
  */
 
-#define EOS             (char) 0
-#define MAXINP          10              /* maximum include files   */
-#define MAXOUT          10              /* maximum # of diversions */
-#define MAXSTR          512             /* maximum size of string  */
-#define BUFSIZE         4096            /* size of pushback buffer */
-#define STACKMAX        1024            /* size of call stack      */
-#define STRSPMAX        4096            /* size of string space    */
-#define MAXTOK          MAXSTR          /* maximum chars in a tokn */
-#define HASHSIZE        199             /* maximum size of hashtab */
-#define MAXCCHARS	5		/* max size of comment/quote delim */
+#define EOS             '\0'
+#define MAXINP          10              /* maximum include files   	    */
+#define MAXOUT          10              /* maximum # of diversions 	    */
+#define BUFSIZE         4096            /* starting size of pushback buffer */
+#define INITSTACKMAX    4096           	/* starting size of call stack      */
+#define STRSPMAX        4096            /* starting size of string space    */
+#define MAXTOK          512          	/* maximum chars in a tokn 	    */
+#define HASHSIZE        199             /* maximum size of hashtab 	    */
+#define MAXCCHARS	5		/* max size of comment/quote delim  */
  
 #define ALL             1
 #define TOP             0
@@ -119,18 +129,19 @@
  
 typedef struct ndblock *ndptr;
  
-struct ndblock {                /* hastable structure         */
-        char    *name;          /* entry name..               */
-        char    *defn;          /* definition..               */
-        int     type;           /* type of the entry..        */
-        ndptr   nxtptr;         /* link to next entry..       */
+struct ndblock {		/* hastable structure         */
+	char		*name;	/* entry name..               */
+	char		*defn;	/* definition..               */
+	unsigned int	type;	/* type of the entry..        */
+	unsigned int 	hv;	/* hash function value..      */
+	ndptr		nxtptr;	/* link to next entry..       */
 };
  
 #define nil     ((ndptr) 0)
  
 struct keyblk {
-        char    *knam;          /* keyword name */
-        int     ktyp;           /* keyword type */
+	const char	*knam;	/* keyword name */
+	int		ktyp;	/* keyword type */
 };
 
 typedef union {			/* stack structure */
@@ -138,8 +149,15 @@ typedef union {			/* stack structure */
 	char 	*sstr;		/* string entry */
 } stae;
 
-typedef short pbent;		/* pushback entry; needs to hold chars + EOF */
+struct input_file {
+	FILE 		*file;
+	char 		*name;
+	unsigned long 	lineno;
+	int 		c;
+};
 
+#define CURRENT_NAME	(infile[ilevel].name)
+#define CURRENT_LINE	(infile[ilevel].lineno)
 /*
  * macros for readibility and/or speed
  *
@@ -147,9 +165,30 @@ typedef short pbent;		/* pushback entry; needs to hold chars + EOF */
  *      pushf() - push a call frame entry onto stack
  *      pushs() - push a string pointer onto stack
  */
-#define gpbc() 	 (bp > bufbase) ? *--bp : getc(infile[ilevel])
-#define pushf(x) if (sp < STACKMAX) mstack[++sp].sfra = (x)
-#define pushs(x) if (sp < STACKMAX) mstack[++sp].sstr = (x)
+#define gpbc() 	 (bp > bufbase) ? *--bp : obtain_char(infile+ilevel)
+#define pushf(x) 			\
+	do {				\
+		if (++sp == STACKMAX) 	\
+			enlarge_stack();\
+		mstack[sp].sfra = (x);	\
+		sstack[sp] = 0; \
+	} while (0)
+
+#define pushs(x) 			\
+	do {				\
+		if (++sp == STACKMAX) 	\
+			enlarge_stack();\
+		mstack[sp].sstr = (x);	\
+		sstack[sp] = 1; \
+	} while (0)
+
+#define pushs1(x) 			\
+	do {				\
+		if (++sp == STACKMAX) 	\
+			enlarge_stack();\
+		mstack[sp].sstr = (x);	\
+		sstack[sp] = 0; \
+	} while (0)
 
 /*
  *	    .				   .

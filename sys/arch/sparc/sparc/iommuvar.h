@@ -1,4 +1,4 @@
-/*	$NetBSD: iommuvar.h,v 1.5 2000/01/11 13:01:52 pk Exp $	*/
+/*	$NetBSD: iommuvar.h,v 1.10 2008/04/28 20:23:36 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,22 +32,15 @@
 #ifndef _IOMMU_VAR_H
 #define _IOMMU_VAR_H
 
-struct iommu_reg {
-	u_int32_t	ior_iospace;
-	u_int32_t	ior_pa;
-	u_int32_t	ior_size;
-};
+#include <machine/bsd_openprom.h>
 
 struct iommu_attach_args {
 	bus_space_tag_t	iom_bustag;
 	bus_dma_tag_t	iom_dmatag;
-	char		*iom_name;	/* PROM node name */
+	const char	*iom_name;	/* PROM node name */
         int		iom_node;	/* PROM handle */
-	struct iommu_reg *iom_reg;
+	struct openprom_addr *iom_reg;
 	int		iom_nreg;
 };
-
-void	iommu_enter __P((bus_addr_t, paddr_t));
-void	iommu_remove __P((bus_addr_t, bus_size_t));
 
 #endif /* _IOMMU_VAR_H */

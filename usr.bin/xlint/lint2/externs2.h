@@ -1,4 +1,4 @@
-/*	$NetBSD: externs2.h,v 1.5 1998/02/22 15:40:41 christos Exp $	*/
+/* $NetBSD: externs2.h,v 1.8 2002/01/18 21:01:39 thorpej Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -39,7 +39,6 @@ extern	int	xflag;
 extern	int	uflag;
 extern	int	Cflag;
 extern	const	char *libname;
-extern	int	pflag;
 extern	int	sflag;
 extern	int	tflag;
 extern	int	Hflag;
@@ -50,10 +49,10 @@ extern	int	Fflag;
 /*
  * hash.c
  */
-extern	void	_inithash __P((hte_t ***));
-extern	hte_t	*_hsearch __P((hte_t **, const char *, int));
-extern	void	_forall __P((hte_t **, void (*)(hte_t *)));
-extern	void	_destroyhash __P((hte_t	**));
+extern	void	_inithash(hte_t ***);
+extern	hte_t	*_hsearch(hte_t **, const char *, int);
+extern	void	_forall(hte_t **, void (*)(hte_t *));
+extern	void	_destroyhash(hte_t **);
 
 #define	inithash()	_inithash(NULL);
 #define	hsearch(a, b)	_hsearch(NULL, (a), (b))
@@ -65,30 +64,30 @@ extern	void	_destroyhash __P((hte_t	**));
 extern	const	char **fnames;
 extern	type_t	**tlst;
 
-extern	void	readfile __P((const char *));
-extern	void	mkstatic __P((hte_t *));
+extern	void	readfile(const char *);
+extern	void	mkstatic(hte_t *);
 
 /*
  * mem2.c
  */
-extern	void	initmem __P((void));
-extern	void	*xalloc __P((size_t));
+extern	void	initmem(void);
+extern	void	*xalloc(size_t);
 
 /*
  * chk.c
  */
-extern	void	inittyp __P((void));
-extern	void	mainused __P((void));
-extern	void	chkname __P((hte_t *));
+extern	void	inittyp(void);
+extern	void	mainused(void);
+extern	void	chkname(hte_t *);
 
 /*
  * msg.c
  */
-extern	void	msg __P((int, ...));
-extern	const	char *mkpos __P((pos_t *));
+extern	void	msg(int, ...);
+extern	const	char *mkpos(pos_t *);
 
 /*
  * emit2.c
  */
-extern	void	outlib __P((const char *));
-extern	int	addoutfile __P((short));
+extern	void	outlib(const char *);
+extern	int	addoutfile(short);

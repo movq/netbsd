@@ -1,4 +1,4 @@
-/*	$NetBSD: locore_machdep.S,v 1.13 2000/03/10 01:31:23 nisimura Exp $	*/
+/*	$NetBSD: locore_machdep.S,v 1.23 2005/12/11 12:18:39 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -53,7 +49,6 @@
  *	@(#)locore.s	8.5 (Berkeley) 1/4/94
  */
 
-
 /*
  * DECstation-specific mips locore code.
  */
@@ -61,16 +56,16 @@
 #include <mips/asm.h>
 #include <mips/cpuregs.h>	/* XXX - misnomer? */
 
-#include "opt_dec_3100.h"
+#include "sii.h"
 #include "opt_dec_5100.h"
 #include "opt_dec_5400.h"
 
 	.set	noreorder
-#if defined(DEC_3100) || defined(DEC_5100)
 
+#if NSII > 0
 /*
  * Copy data to a DMA buffer padded with 16 bits of data, 16
- * bits of padding per 32bit word (e.g., for pmin/pmax  sii (and lance) DMA).
+ * bits of padding per 32bit word (e.g., for pmin/pmax sii DMA).
  *
  * The DMA bufffer can only be written one short at a time
  * (and takes ~14 cycles).
@@ -140,8 +135,7 @@ LEAF(CopyFromBuffer)
 	j	ra
 	nop
 END(CopyFromBuffer)
-#endif /* DEC_3100 || DEC_5100 */
-
+#endif	/* NSII > 0 */
 
 /*
  * Write-buffer flush for writebuffer hardware on DEC mips r2000a
@@ -150,11 +144,11 @@ END(CopyFromBuffer)
 LEAF(dec_mips1_wbflush)
 ALEAF(kn230_wbflush)
 ALEAF(kn210_wbflush)
-        mfc0	v0, MIPS_COP_0_STATUS_REG	# save original SR in v0
+        mfc0	v0, MIPS_COP_0_STATUS		# save original SR in v0
 	li	t0, 0x80000000			# set CU3 bit
 	or	v1, v0 ,t0			# v1 = v0 | 0x80000000
 	nop
-	mtc0	v1, MIPS_COP_0_STATUS_REG
+	mtc0	v1, MIPS_COP_0_STATUS
 	nop				/* two  more cycles to complete */
  	nop
 
@@ -162,38 +156,9 @@ ALEAF(kn210_wbflush)
 	bc3f    1b				# until write buffer drained
         nop                     		# (branch delay slot)
 
-        mtc0    v0, MIPS_COP_0_STATUS_REG	# restore SR on exit
+        mtc0    v0, MIPS_COP_0_STATUS		# restore SR on exit
         nop
         j       ra
         nop
 END(dec_mips1_wbflush)
 #endif	/* defined(DEC_5100) || defined(DEC_5400) */
-
-/*
- * Interrupt counters for vmstat.
- */
-	.data
-EXPORT(intrnames)
-	.asciiz	"softclock"
-	.asciiz	"softnet"
-	.asciiz	"serial0"
-	.asciiz	"serial1"
-	.asciiz	"ether"
-	.asciiz	"scsi"
-	.asciiz	"memory"
-	.asciiz	"clock"
-	.asciiz	"fpu"
-	.asciiz	"optslot0"
-	.asciiz	"optslot1"
-	.asciiz	"optslot2"
-	.asciiz "dtop"
-	.asciiz "isdn"
-	.asciiz	"floppy"
-	.asciiz	"stray"
-EXPORT(eintrnames)
-	.align	2
-EXPORT(intrcnt)
-	.word	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0
-EXPORT(eintrcnt)
-	.word	0	# This shouldn't be needed but with 4.4bsd's as, the eintrcnt
-			#  label ends end up in a different section otherwise.

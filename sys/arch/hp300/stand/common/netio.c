@@ -1,4 +1,4 @@
-/*	$NetBSD: netio.c,v 1.7 1999/11/13 21:21:38 thorpej Exp $	*/
+/*	$NetBSD: netio.c,v 1.12 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -87,6 +80,8 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 
+#include <machine/stdarg.h>
+
 #include <net/if.h>
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
@@ -94,11 +89,13 @@
 #include <lib/libsa/stand.h>
 #include <lib/libsa/net.h>
 #include <lib/libsa/netif.h>
+#include <lib/libsa/bootp.h>
 #include <lib/libsa/bootparam.h>
 #include <lib/libsa/nfs.h>
 
 #include <lib/libkern/libkern.h>
 
+#include <hp300/stand/common/conf.h>
 #include <hp300/stand/common/samachdep.h>
 
 extern int nfs_root_node[];	/* XXX - get from nfs_mount() */
@@ -107,59 +104,58 @@ struct	in_addr myip, rootip, gateip;
 n_long	netmask;
 char rootpath[FNAME_SIZE];
 
-int netdev_sock = -1;
+static int netdev_sock = -1;
 static int open_count;
 
 int netio_ask = 0;		/* default to bootparam, can override */
 
 static	char input_line[100];
 
-/* Why be any different? */
-#define SUN_BOOTPARAMS
+int netmountroot(struct open_file *, char *);
 
 /*
  * Called by devopen after it sets f->f_dev to our devsw entry.
  * This opens the low-level device and sets f->f_devdata.
  */
 int
-netopen(f, devname)
-	struct open_file *f;
-	char *devname;		/* Device part of file name (or NULL). */
+netopen(struct open_file *f, ...)
 {
+	va_list ap;
+	char *devname;
 	int error = 0;
 	
+	va_start(ap, f);
+	devname = va_arg(ap, char *);
+	va_end(ap);
+
 	/* On first open, do netif open, mount, etc. */
 	if (open_count == 0) {
 		/* Find network interface. */
 		if ((netdev_sock = netif_open(devname)) < 0)
-			return (error=ENXIO);
+			return ENXIO;
 		if ((error = netmountroot(f, devname)) != 0)
-			return (error);
+			return error;
 	}
 	open_count++;
 	f->f_devdata = nfs_root_node;
-	return (error);
+	return error;
 }
 
 int
-netclose(f)
-	struct open_file *f;
+netclose(struct open_file *f)
 {
 	/* On last close, do netif close, etc. */
 	if (open_count > 0)
 		if (--open_count == 0)
 			netif_close(netdev_sock);
 	f->f_devdata = NULL;
+
+	return 0;
 }
 
 int
-netstrategy(devdata, func, dblk, size, v_buf, rsize)
-	void *devdata;
-	int func;
-	daddr_t dblk;
-	size_t size;
-	void *v_buf;
-	size_t *rsize;
+netstrategy(void *devdata, int func, daddr_t dblk, size_t size, void *v_buf,
+    size_t *rsize)
 {
 
 	*rsize = size;
@@ -167,9 +163,7 @@ netstrategy(devdata, func, dblk, size, v_buf, rsize)
 }
 
 int
-netmountroot(f, devname)
-	struct open_file *f;
-	char *devname;		/* Device part of file name (or NULL). */
+netmountroot(struct open_file *f, char *devname)
 {
 	int error;
 	struct iodesc *d;
@@ -181,7 +175,7 @@ netmountroot(f, devname)
 	if (netio_ask) {
  get_my_ip:
 		printf("My IP address? ");
-		bzero(input_line, sizeof(input_line));
+		memset(input_line, 0, sizeof(input_line));
 		gets(input_line);
 		if ((myip.s_addr = inet_addr(input_line)) ==
 		    htonl(INADDR_NONE)) {
@@ -191,7 +185,7 @@ netmountroot(f, devname)
 
  get_my_netmask:
 		printf("My netmask? ");
-		bzero(input_line, sizeof(input_line)); 
+		memset(input_line, 0, sizeof(input_line)); 
 		gets(input_line);
 		if ((netmask = inet_addr(input_line)) ==
 		    htonl(INADDR_NONE)) {
@@ -201,7 +195,7 @@ netmountroot(f, devname)
 
  get_my_gateway:
 		printf("My gateway? ");
-		bzero(input_line, sizeof(input_line)); 
+		memset(input_line, 0, sizeof(input_line)); 
 		gets(input_line);
 		if ((gateip.s_addr = inet_addr(input_line)) ==
 		    htonl(INADDR_NONE)) {
@@ -211,7 +205,7 @@ netmountroot(f, devname)
 
  get_server_ip:
 		printf("Server IP address? ");
-		bzero(input_line, sizeof(input_line)); 
+		memset(input_line, 0, sizeof(input_line)); 
 		gets(input_line);
 		if ((rootip.s_addr = inet_addr(input_line)) ==
 		    htonl(INADDR_NONE)) {
@@ -221,13 +215,13 @@ netmountroot(f, devname)
 
  get_server_path:
 		printf("Server path? ");
-		bzero(rootpath, sizeof(rootpath)); 
+		memset(rootpath, 0, sizeof(rootpath)); 
 		gets(rootpath);
 		if (rootpath[0] == '\0' || rootpath[0] == '\n')
 			goto get_server_path;
 
 		if ((d = socktodesc(netdev_sock)) == NULL)
-			return (EMFILE);
+			return EMFILE;
 
 		d->myip = myip;
 
@@ -246,33 +240,26 @@ netmountroot(f, devname)
 
 	/* Get our IP address.  (rarp.c) */
 	if (rarp_getipaddress(netdev_sock) == -1)
-		return (errno);
+		return errno;
 
 	printf("boot: client IP address: %s\n", inet_ntoa(myip));
 
 	/* Get our hostname, server IP address. */
 	if (bp_whoami(netdev_sock))
-		return (errno);
+		return errno;
 
 	printf("boot: client name: %s\n", hostname);
 
 	/* Get the root pathname. */
 	if (bp_getfile(netdev_sock, "root", &rootip, rootpath))
-		return (errno);
+		return errno;
 
 #else
 
 	/* Get boot info using BOOTP way. (RFC951, RFC1048) */
 	bootp(netdev_sock);
 
-	printf("Using IP address: %s\n", inet_ntoa(myip));
-
-	printf("myip: %s (%s)", hostname, inet_ntoa(myip));
-	if (gateip)
-		printf(", gateip: %s", inet_ntoa(gateip));
-	if (mask)
-		printf(", mask: %s", intoa(netmask));
-	printf("\n");
+	printf("boot: client IP address: %s \n", inet_ntoa(myip));
 
 #endif /* SUN_BOOTPARAMS */
 
@@ -282,5 +269,5 @@ netmountroot(f, devname)
 	/* Get the NFS file handle (mount). */
 	error = nfs_mount(netdev_sock, rootip, rootpath);
 
-	return (error);
+	return error;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: iso_pcb.h,v 1.9 1997/06/24 02:26:11 thorpej Exp $	*/
+/*	$NetBSD: iso_pcb.h,v 1.17 2007/05/02 20:40:29 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -62,6 +58,11 @@ SOFTWARE.
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
 
+#ifndef _NETISO_ISO_PCB_H_
+#define _NETISO_ISO_PCB_H_
+
+#include <net/route.h>
+
 #define	MAXX25CRUDLEN	16	/* 16 bytes of call request user data */
 
 /*
@@ -74,14 +75,11 @@ struct isopcb {
 	struct socket  *isop_socket;	/* back pointer to socket */
 	struct sockaddr_iso *isop_laddr;
 	struct sockaddr_iso *isop_faddr;
-	struct route_iso {
-		struct rtentry *ro_rt;
-		struct sockaddr_iso ro_dst;
-	}               isop_route;	/* CLNP routing entry */
+	struct route   isop_route;	/* CLNP routing entry */
 	struct mbuf    *isop_options;	/* CLNP options */
 	struct mbuf    *isop_optindex;	/* CLNP options index */
 	struct mbuf    *isop_clnpcache;	/* CLNP cached hdr */
-	caddr_t         isop_chan;	/* actually struct pklcb * */
+	void *        isop_chan;	/* actually struct pklcb * */
 	u_short         isop_refcnt;	/* mult TP4 tpcb's -> here */
 	u_short         isop_lport;	/* MISLEADLING work var */
 	u_short         isop_tuba_cached;	/* for tuba address ref cnts */
@@ -118,13 +116,15 @@ struct inpcb;
 struct mbuf;
 struct sockaddr_iso;
 
-int iso_pcballoc __P((struct socket *, void *));
-int iso_pcbbind __P((void *, struct mbuf *, struct proc *));
-int iso_pcbconnect __P((void *, struct mbuf *));
-void iso_pcbdisconnect __P((void *));
-void iso_pcbdetach __P((void *));
-void iso_pcbnotify __P((struct isopcb *, struct sockaddr_iso *, int,
-			void (*) (struct isopcb *)));
-struct isopcb  *iso_pcblookup __P((struct isopcb *, int, caddr_t,
-				   struct sockaddr_iso *));
+int iso_pcballoc (struct socket *, void *);
+int iso_pcbbind (void *, struct mbuf *, struct lwp *);
+int iso_pcbconnect (void *, struct mbuf *, struct lwp *);
+void iso_pcbdisconnect (void *);
+void iso_pcbdetach (void *);
+void iso_pcbnotify(struct isopcb *, const struct sockaddr_iso *, int,
+                   void (*)(struct isopcb *));
+struct isopcb  *iso_pcblookup (struct isopcb *, int, void *,
+				   const struct sockaddr_iso *);
 #endif
+
+#endif /* !_NETISO_ISO_PCB_H_ */

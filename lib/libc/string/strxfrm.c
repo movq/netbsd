@@ -1,4 +1,4 @@
-/*	$NetBSD: strxfrm.c,v 1.9 1999/09/20 04:39:49 lukem Exp $	*/
+/*	$NetBSD: strxfrm.c,v 1.11 2003/08/07 16:43:53 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)strxfrm.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: strxfrm.c,v 1.9 1999/09/20 04:39:49 lukem Exp $");
+__RCSID("$NetBSD: strxfrm.c,v 1.11 2003/08/07 16:43:53 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -62,13 +58,13 @@ strxfrm(dst, src, n)
 	size_t srclen, copysize;
 
 	_DIAGASSERT(src != NULL);
-	_DIAGASSERT(dst != NULL);
 
 	/*
 	 * Since locales are unimplemented, this is just a copy.
 	 */
 	srclen = strlen(src);
 	if (n != 0) {
+		_DIAGASSERT(dst != NULL);
 		copysize = srclen < n ? srclen : n - 1;
 		(void)memcpy(dst, src, copysize);
 		dst[copysize] = 0;

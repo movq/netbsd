@@ -1,7 +1,7 @@
 #!/bin/sh
-#	$NetBSD: upgrade.sh,v 1.19 1999/11/02 06:11:25 sjg Exp $
+#	$NetBSD: upgrade.sh,v 1.22 2008/04/30 13:10:48 martin Exp $
 #
-# Copyright (c) 1996 The NetBSD Foundation, Inc.
+# Copyright (c) 1996-2000,2006 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -58,6 +51,14 @@ MODE="upgrade"
 #	md_welcome_banner()	- display friendly message
 #	md_not_going_to_install() - display friendly message
 #	md_congrats()		- display friendly message
+#	md_set_term		- set terminal type
+#	md_makerootwritable	- what it says
+# optional:
+#	md_upgrade_prep_needed	- variable: set if you md_prepare_upgrade()
+#	md_prepare_upgrade	- any machine dependent preparations
+#	md_view_labels_possible	- variable: md_view_labels defined
+#	md_view_labels		- peek at preexisting disk labels, to 
+#				  better identify disks
 
 # we need to make sure .'s below work if this directory is not in $PATH
 # dirname may not be available but expr is
@@ -145,6 +146,8 @@ ls -l /dev > /dev/null 2>&1
 # This might make an MFS mount on /tmp, or it may
 # just re-mount the root with read-write enabled.
 md_makerootwritable
+
+test "$md_view_labels_possible" && md_view_labels
 
 while [ "X${ROOTDISK}" = "X" ]; do
 	getrootdisk
@@ -281,6 +284,26 @@ check_fs /tmp/fstab.shadow
 
 # Mount filesystems.
 mount_fs /tmp/fstab.shadow
+
+# Machine dependent preparation.
+test "$md_upgrade_prep_needed" && {
+	md_prepare_upgrade || {
+		cat << 'EOF'
+The preparations for upgrading your machine did not complete successfully.
+
+EOF
+		echo -n "Continue anyway? [n]"
+		getresp "n"
+		case "$resp" in
+			y*|Y*)
+				;;
+			*)
+				exit 1
+				;;
+		esac
+	}
+}
+
 
 echo -n	"Are the upgrade sets on one of your normally mounted (local) filesystems? [y] "
 getresp "y"

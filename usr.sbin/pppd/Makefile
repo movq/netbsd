@@ -1,5 +1,5 @@
-#	$NetBSD: Makefile,v 1.17 1997/09/26 19:52:08 christos Exp $
+#	$NetBSD: Makefile,v 1.19 2002/05/29 19:06:30 christos Exp $
 
-SUBDIR=	chat pppd pppstats
+SUBDIR=	chat pppd pppdump pppstats
 
 .include <bsd.subdir.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_dirent.h,v 1.6 1998/10/04 00:02:30 fvdl Exp $	*/
+/*	$NetBSD: linux_dirent.h,v 1.11 2008/04/28 20:23:43 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,7 +41,16 @@ struct linux_dirent {
 	char		d_name[LINUX_MAXNAMLEN + 1];
 };
 
-#define LINUX_NAMEOFF(dp)       ((char *)&(dp)->d_name - (char *)dp)
+struct linux_dirent64 {
+        unsigned long long	d_ino;
+        long long		d_off;
+        unsigned short		d_reclen;
+        unsigned char		d_type;
+        char			d_name[LINUX_MAXNAMLEN + 1];
+};
+
+
+#define LINUX_NAMEOFF(dp)       ((char *)&(dp)->d_name - (char *)(dp))
 #define LINUX_RECLEN(de,namlen) ALIGN((LINUX_NAMEOFF(de) + (namlen) + 1))
 
 #endif /* !_LINUX_DIRENT_H */

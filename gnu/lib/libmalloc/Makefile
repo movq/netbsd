@@ -1,6 +1,6 @@
-#	$Id: Makefile,v 1.4 1999/02/13 02:54:23 lukem Exp $
+#	$NetBSD: Makefile,v 1.8 2004/06/30 03:26:27 jmc Exp $
 
-CPPFLAGS+= -I${.CURDIR}
+NOMAN=	# defined
 
 LIB=	gnumalloc
 SRCS+=	combined.c
@@ -8,6 +8,7 @@ SRCS+=	combined.c
 SRCS+=	cfree.c calloc.c morecore.c
 SRCS+=	memalign.c valloc.c mcheck.c mtrace.c mstats.c vm-limit.c
 SRCS+=	ralloc.c
-MKMAN=	no
+
+CPPFLAGS+= -I${.CURDIR} -DSTDC_HEADERS -DHAVE_STDLIB_H
 
 .include <bsd.lib.mk>

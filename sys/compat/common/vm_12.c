@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_12.c,v 1.9 1998/08/29 17:01:15 mrg Exp $	*/
+/*	$NetBSD: vm_12.c,v 1.19 2008/06/17 16:17:21 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1997 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,45 +26,44 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: vm_12.c,v 1.19 2008/06/17 16:17:21 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/mount.h>		/* needed for next include! */
+#include <sys/mount.h>		/* needed for syscallargs.h */
+#include <sys/sched.h>		/* needed for syscallargs.h */
 #include <sys/syscallargs.h>
 
 #include <sys/swap.h>
 #include <sys/mman.h>
 
 int
-compat_12_sys_swapon(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_12_sys_swapon(struct lwp *l, const struct compat_12_sys_swapon_args *uap, register_t *retval)
 {
-	struct sys_swapctl_args ua;
-	struct compat_12_sys_swapon_args /* {
+	/* {
 		syscallarg(const char *) name;
-	} */ *uap = v;
+	} */
+	struct sys_swapctl_args ua;
 
 	SCARG(&ua, cmd) = SWAP_ON;
-	SCARG(&ua, arg) = (void *)SCARG(uap, name);
+	/*XXXUNCONST*/
+	SCARG(&ua, arg) = __UNCONST(SCARG(uap, name));
 	SCARG(&ua, misc) = 0;	/* priority */
-	return (sys_swapctl(p, &ua, retval));
+	return (sys_swapctl(l, &ua, retval));
 }
 
 int
-compat_12_sys_msync(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_12_sys_msync(struct lwp *l, const struct compat_12_sys_msync_args *uap, register_t *retval)
 {
-	struct sys___msync13_args ua;
-	struct compat_12_sys_msync_args /* {
-		syscallarg(caddr_t) addr;
+	/* {
+		syscallarg(void *) addr;
 		syscallarg(size_t) len;
-	} */ *uap = v;
+	} */
+	struct sys___msync13_args ua;
 
-	SCARG(&ua, addr) = SCARG(uap, addr);;
-	SCARG(&ua, len) = SCARG(uap, len);;
+	SCARG(&ua, addr) = SCARG(uap, addr);
+	SCARG(&ua, len) = SCARG(uap, len);
 	SCARG(&ua, flags) = MS_SYNC | MS_INVALIDATE;
-	return (sys___msync13(p, &ua, retval));
+	return (sys___msync13(l, &ua, retval));
 }

@@ -1,19 +1,39 @@
-#	$NetBSD: Makefile.inc,v 1.19 2000/03/29 23:47:53 fredb Exp $
+#	$NetBSD: Makefile.inc,v 1.59 2008/05/11 12:31:45 chris Exp $
 #
 #	etc.i386/Makefile.inc -- i386-specific etc Makefile targets
 #
 
-# These are packaged and distributed
-EXTRA_KERNELS+= GENERIC_TINY
+# If you change the list of distributed kernels, don't forget
+# to update the release documentation in distrib/notes/common/contents
 
-# These are for use by the bootfloppy construction tools
-BUILD_KERNELS+= INSTALL INSTALL_TINY
+KERNEL_SETS=	GENERIC
+KERNEL_SETS+=	XEN2_DOM0
+KERNEL_SETS+=	XEN2_DOMU
+KERNEL_SETS+=	XEN3_DOM0
+KERNEL_SETS+=	XEN3_DOMU
+KERNEL_SETS+=	XEN3PAE_DOMU
+# KERNEL_SETS+=	GENERIC_TINY
+# KERNEL_SETS+=	GENERIC_PS2TINY
 
-# Build the boot floppies and install them
+BUILD_KERNELS+=	INSTALL_FLOPPY
+BUILD_KERNELS+=	INSTALL_XEN2_DOMU
+BUILD_KERNELS+=	INSTALL_XEN3_DOMU
+BUILD_KERNELS+=	INSTALL_XEN3PAE_DOMU
+# BUILD_KERNELS+=	INSTALL_SMALL
+# BUILD_KERNELS+=	INSTALL_TINY
+# BUILD_KERNELS+=	INSTALL_PS2
+
+INSTALLATION_DIRS+=	installation/misc
+INSTALLATION_DIRS+=	installation/cdrom
+INSTALLATION_DIRS+=	installation/floppy
+INSTALLATION_DIRS+=	installation/miniroot
+
+# i386 specific distrib stuff
 snap_md_post:
-.ifndef UPDATE
-	cd ${.CURDIR}/../distrib/i386/floppies && ${MAKE} clean
-.endif
-	cd ${.CURDIR}/../distrib/i386/floppies && \
-		${MAKE} depend && ${MAKE} ${_J} && ${MAKE} release
-	sh ../distrib/sets/makesums -t ${RELEASEDIR}/installation/floppies '*.gz'
+	cd ${KERNSRCDIR}/arch/i386/stand/dosboot && ${MAKE} release
+	cd ${KERNSRCDIR}/arch/i386/stand/pxeboot && ${MAKE} release
+	cd ${KERNSRCDIR}/arch/i386/stand/misc && ${MAKE} release
+	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/cdrom '*.iso'
+	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/floppy '*.fs'
+	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/miniroot '*.*'
+	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/misc '*.*'

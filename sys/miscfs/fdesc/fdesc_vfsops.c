@@ -1,4 +1,4 @@
-/*	$NetBSD: fdesc_vfsops.c,v 1.30 2000/03/30 02:16:22 simonb Exp $	*/
+/*	$NetBSD: fdesc_vfsops.c,v 1.77 2008/06/28 01:34:06 rumble Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,55 +40,52 @@
  * /dev/fd Filesystem
  */
 
-#if defined(_KERNEL) && !defined(_LKM)
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.77 2008/06/28 01:34:06 rumble Exp $");
+
+#if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
 #endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/sysctl.h>
 #include <sys/time.h>
-#include <sys/types.h>
 #include <sys/proc.h>
 #include <sys/resourcevar.h>
 #include <sys/filedesc.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
+#include <sys/dirent.h>
 #include <sys/namei.h>
 #include <sys/malloc.h>
+#include <sys/kauth.h>
+#include <sys/module.h>
+
+#include <miscfs/genfs/genfs.h>
 #include <miscfs/fdesc/fdesc.h>
 
-int	fdesc_mount __P((struct mount *, const char *, void *,
-			 struct nameidata *, struct proc *));
-int	fdesc_start __P((struct mount *, int, struct proc *));
-int	fdesc_unmount __P((struct mount *, int, struct proc *));
-int	fdesc_quotactl __P((struct mount *, int, uid_t, caddr_t,
-			    struct proc *));
-int	fdesc_statfs __P((struct mount *, struct statfs *, struct proc *));
-int	fdesc_sync __P((struct mount *, int, struct ucred *, struct proc *));
-int	fdesc_vget __P((struct mount *, ino_t, struct vnode **));
-int	fdesc_fhtovp __P((struct mount *, struct fid *, struct vnode **));
-int	fdesc_checkexp __P((struct mount *, struct mbuf *, int *,
-			    struct ucred **));
-int	fdesc_vptofh __P((struct vnode *, struct fid *));
-int	fdesc_sysctl __P((int *, u_int, void *, size_t *, void *, size_t,
-			  struct proc *));
+MODULE(MODULE_CLASS_VFS, fdesc, NULL);
+
+VFS_PROTOS(fdesc);
+
+static struct sysctllog *fdesc_sysctl_log;
 
 /*
  * Mount the per-process file descriptors (/dev/fd)
  */
 int
-fdesc_mount(mp, path, data, ndp, p)
-	struct mount *mp;
-	const char *path;
-	void *data;
-	struct nameidata *ndp;
-	struct proc *p;
+fdesc_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 {
+	struct lwp *l = curlwp;
 	int error = 0;
-	size_t size;
 	struct fdescmount *fmp;
 	struct vnode *rvp;
 
+	if (mp->mnt_flag & MNT_GETARGS) {
+		*data_len = 0;
+		return 0;
+	}
 	/*
 	 * Update is a no-op
 	 */
@@ -106,65 +99,49 @@ fdesc_mount(mp, path, data, ndp, p)
 	MALLOC(fmp, struct fdescmount *, sizeof(struct fdescmount),
 				M_UFSMNT, M_WAITOK);	/* XXX */
 	rvp->v_type = VDIR;
-	rvp->v_flag |= VROOT;
+	rvp->v_vflag |= VV_ROOT;
 	fmp->f_root = rvp;
+	mp->mnt_stat.f_namemax = MAXNAMLEN;
 	mp->mnt_flag |= MNT_LOCAL;
-	mp->mnt_data = (qaddr_t)fmp;
-	vfs_getnewfsid(mp, MOUNT_FDESC);
+	mp->mnt_data = fmp;
+	vfs_getnewfsid(mp);
 
-	(void) copyinstr(path, mp->mnt_stat.f_mntonname, MNAMELEN - 1, &size);
-	memset(mp->mnt_stat.f_mntonname + size, 0, MNAMELEN - size);
-	memset(mp->mnt_stat.f_mntfromname, 0, MNAMELEN);
-	memcpy(mp->mnt_stat.f_mntfromname, "fdesc", sizeof("fdesc"));
+	error = set_statvfs_info(path, UIO_USERSPACE, "fdesc", UIO_SYSSPACE,
+	    mp->mnt_op->vfs_name, mp, l);
 	VOP_UNLOCK(rvp, 0);
-	return (0);
+	return error;
 }
 
 int
-fdesc_start(mp, flags, p)
-	struct mount *mp;
-	int flags;
-	struct proc *p;
+fdesc_start(struct mount *mp, int flags)
 {
 	return (0);
 }
 
 int
-fdesc_unmount(mp, mntflags, p)
-	struct mount *mp;
-	int mntflags;
-	struct proc *p;
+fdesc_unmount(struct mount *mp, int mntflags)
 {
 	int error;
 	int flags = 0;
-	struct vnode *rootvp = VFSTOFDESC(mp)->f_root;
+	struct vnode *rtvp = VFSTOFDESC(mp)->f_root;
 
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
 
-	/*
-	 * Clear out buffer cache.  I don't think we
-	 * ever get anything cached at this level at the
-	 * moment, but who knows...
-	 */
-	if (rootvp->v_usecount > 1)
+	if (rtvp->v_usecount > 1 && (mntflags & MNT_FORCE) == 0)
 		return (EBUSY);
-	if ((error = vflush(mp, rootvp, flags)) != 0)
+	if ((error = vflush(mp, rtvp, flags)) != 0)
 		return (error);
 
 	/*
-	 * Release reference on underlying root vnode
+	 * Blow it away for future re-use
 	 */
-	vrele(rootvp);
-	/*
-	 * And blow it away for future re-use
-	 */
-	vgone(rootvp);
+	vgone(rtvp);
 	/*
 	 * Finally, throw away the fdescmount structure
 	 */
 	free(mp->mnt_data, M_UFSMNT);	/* XXX */
-	mp->mnt_data = 0;
+	mp->mnt_data = NULL;
 
 	return (0);
 }
@@ -187,24 +164,13 @@ fdesc_root(mp, vpp)
 }
 
 int
-fdesc_quotactl(mp, cmd, uid, arg, p)
+fdesc_statvfs(mp, sbp)
 	struct mount *mp;
-	int cmd;
-	uid_t uid;
-	caddr_t arg;
-	struct proc *p;
+	struct statvfs *sbp;
 {
-
-	return (EOPNOTSUPP);
-}
-
-int
-fdesc_statfs(mp, sbp, p)
-	struct mount *mp;
-	struct statfs *sbp;
-	struct proc *p;
-{
+	struct lwp *l = curlwp;
 	struct filedesc *fdp;
+	struct proc *p;
 	int lim;
 	int i;
 	int last;
@@ -216,6 +182,7 @@ fdesc_statfs(mp, sbp, p)
 	 * limit is ever reduced below the current number
 	 * of open files... ]
 	 */
+	p = l->l_proc;
 	lim = p->p_rlimit[RLIMIT_NOFILE].rlim_cur;
 	fdp = p->p_fd;
 	last = min(fdp->fd_nfiles, lim);
@@ -232,33 +199,24 @@ fdesc_statfs(mp, sbp, p)
 		freefd += (lim - fdp->fd_nfiles);
 
 	sbp->f_bsize = DEV_BSIZE;
+	sbp->f_frsize = DEV_BSIZE;
 	sbp->f_iosize = DEV_BSIZE;
 	sbp->f_blocks = 2;		/* 1K to keep df happy */
 	sbp->f_bfree = 0;
 	sbp->f_bavail = 0;
+	sbp->f_bresvd = 0;
 	sbp->f_files = lim + 1;		/* Allow for "." */
 	sbp->f_ffree = freefd;		/* See comments above */
-#ifdef COMPAT_09
-	sbp->f_type = 6;
-#else
-	sbp->f_type = 0;
-#endif
-	if (sbp != &mp->mnt_stat) {
-		memcpy(&sbp->f_fsid, &mp->mnt_stat.f_fsid, sizeof(sbp->f_fsid));
-		memcpy(sbp->f_mntonname, mp->mnt_stat.f_mntonname, MNAMELEN);
-		memcpy(sbp->f_mntfromname, mp->mnt_stat.f_mntfromname, MNAMELEN);
-	}
-	strncpy(sbp->f_fstypename, mp->mnt_op->vfs_name, MFSNAMELEN);
+	sbp->f_favail = freefd;		/* See comments above */
+	sbp->f_fresvd = 0;
+	copy_statvfs_info(sbp, mp);
 	return (0);
 }
 
 /*ARGSUSED*/
 int
-fdesc_sync(mp, waitfor, uc, p)
-	struct mount *mp;
-	int waitfor;
-	struct ucred *uc;
-	struct proc *p;
+fdesc_sync(struct mount *mp, int waitfor,
+    kauth_cred_t uc)
 {
 
 	return (0);
@@ -269,84 +227,85 @@ fdesc_sync(mp, waitfor, uc, p)
  * Currently unsupported.
  */
 int
-fdesc_vget(mp, ino, vpp)
-	struct mount *mp;
-	ino_t ino;
-	struct vnode **vpp;
+fdesc_vget(struct mount *mp, ino_t ino,
+    struct vnode **vpp)
 {
 
 	return (EOPNOTSUPP);
 }
 
+extern const struct vnodeopv_desc fdesc_vnodeop_opv_desc;
 
-/*ARGSUSED*/
-int
-fdesc_fhtovp(mp, fhp, vpp)
-	struct mount *mp;
-	struct fid *fhp;
-	struct vnode **vpp;
-{
-
-	return (EOPNOTSUPP);
-}
-
-/*ARGSUSED*/
-int
-fdesc_checkexp(mp, nam, exflagsp, credanonp)
-	struct mount *mp;
-	struct mbuf *nam;
-	int *exflagsp;
-	struct ucred **credanonp;
-{
-
-	return (EOPNOTSUPP);
-}
-
-/*ARGSUSED*/
-int
-fdesc_vptofh(vp, fhp)
-	struct vnode *vp;
-	struct fid *fhp;
-{
-	return (EOPNOTSUPP);
-}
-
-int
-fdesc_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
-	int *name;
-	u_int namelen;
-	void *oldp;
-	size_t *oldlenp;
-	void *newp;
-	size_t newlen;
-	struct proc *p;
-{
-	return (EOPNOTSUPP);
-}
-
-extern struct vnodeopv_desc fdesc_vnodeop_opv_desc;
-
-struct vnodeopv_desc *fdesc_vnodeopv_descs[] = {
+const struct vnodeopv_desc * const fdesc_vnodeopv_descs[] = {
 	&fdesc_vnodeop_opv_desc,
 	NULL,
 };
 
 struct vfsops fdesc_vfsops = {
 	MOUNT_FDESC,
+	0,
 	fdesc_mount,
 	fdesc_start,
 	fdesc_unmount,
 	fdesc_root,
-	fdesc_quotactl,
-	fdesc_statfs,
+	(void *)eopnotsupp,		/* vfs_quotactl */
+	fdesc_statvfs,
 	fdesc_sync,
 	fdesc_vget,
-	fdesc_fhtovp,
-	fdesc_vptofh,
+	(void *)eopnotsupp,		/* vfs_fhtovp */
+	(void *)eopnotsupp,		/* vfs_vptofh */
 	fdesc_init,
+	NULL,
 	fdesc_done,
-	fdesc_sysctl,
 	NULL,				/* vfs_mountroot */
-	fdesc_checkexp,
+	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
+	vfs_stdextattrctl,
+	(void *)eopnotsupp,		/* vfs_suspendctl */
+	genfs_renamelock_enter,
+	genfs_renamelock_exit,
+	(void *)eopnotsupp,
 	fdesc_vnodeopv_descs,
+	0,
+	{ NULL, NULL},
 };
+
+static int
+fdesc_modcmd(modcmd_t cmd, void *arg)
+{
+	int error;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = vfs_attach(&fdesc_vfsops);
+		if (error != 0)
+			break;
+		sysctl_createv(&fdesc_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT,
+			       CTLTYPE_NODE, "vfs", NULL,
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, CTL_EOL);
+		sysctl_createv(&fdesc_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT,
+			       CTLTYPE_NODE, "fdesc",
+			       SYSCTL_DESCR("File-descriptor file system"),
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, 7, CTL_EOL);
+		/*
+		 * XXX the "7" above could be dynamic, thereby eliminating one
+		 * more instance of the "number to vfs" mapping problem, but
+		 * "7" is the order as taken from sys/mount.h
+		 */
+		break;
+	case MODULE_CMD_FINI:
+		error = vfs_detach(&fdesc_vfsops);
+		if (error != 0)
+			break;
+		sysctl_teardown(&fdesc_sysctl_log);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+
+	return (error);
+}

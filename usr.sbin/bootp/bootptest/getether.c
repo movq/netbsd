@@ -1,8 +1,8 @@
-/*	$NetBSD: getether.c,v 1.3 1998/03/14 04:39:54 lukem Exp $	*/
+/*	$NetBSD: getether.c,v 1.8 2007/05/27 16:31:42 tls Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: getether.c,v 1.3 1998/03/14 04:39:54 lukem Exp $");
+__RCSID("$NetBSD: getether.c,v 1.8 2007/05/27 16:31:42 tls Exp $");
 #endif
 
 /*
@@ -20,21 +20,14 @@ __RCSID("$NetBSD: getether.c,v 1.3 1998/03/14 04:39:54 lukem Exp $");
 
 #include <ctype.h>
 #include <string.h>
+#include <strings.h>
 #include <syslog.h>
 #include <unistd.h>
 
 #include "report.h"
 #define EALEN 6
 
-#ifdef	__STDC__
-#define P(args) args
-#else
-#define P(args) ()
-#endif
-
-extern int getether P((char *, char *));
-
-#undef P
+extern int getether(char *, char *);
 
 #if defined(ultrix) || (defined(__osf__) && defined(__alpha))
 /*
@@ -50,14 +43,14 @@ extern int getether P((char *, char *));
 #include <net/if.h>				/* struct ifdevea */
 
 int
-getether(ifname, eap)
-	char *ifname, *eap;
+getether(char *ifname, char *eap)
 {
 	int rc = -1;
 	int fd;
 	struct ifdevea phys;
+
 	bzero(&phys, sizeof(phys));
-	strcpy(phys.ifr_name, ifname);
+	strncpy(phys.ifr_name, ifname, sizeof(phys.ifr_name));
 	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		report(LOG_ERR, "getether: socket(INET,DGRAM) failed");
 		return -1;
@@ -83,9 +76,9 @@ getether(ifname, eap)
 #include <net/nit_if.h>			/* for NIOCBIND */
 #include <net/if.h>				/* for struct ifreq */
 
-getether(ifname, eap)
-	char *ifname;				/* interface name from ifconfig structure */
-	char *eap;					/* Ether address (output) */
+/* ifname: interface name from ifconfig structure */
+/* eap: Ether address (output) */
+getether(char *ifname, char *eap)
 {
 	int rc = -1;
 
@@ -128,16 +121,16 @@ getether(ifname, eap)
 #include <net/if_dl.h>
 #include <net/if_types.h>
 
+/* ifname: interface name from ifconfig structure */
+/* eap: Ether address (output) */
 int
-getether(ifname, eap)
-	char *ifname;				/* interface name from ifconfig structure */
-	char *eap;					/* Ether address (output) */
+getether(char *ifname, char *eap)
 {
 	int fd, rc = -1;
-	register int n;
+	int n;
 	struct ifreq ibuf[16];
 	struct ifconf ifc;
-	register struct ifreq *ifrp, *ifend;
+	struct ifreq *ifrp, *ifend;
 
 	/* Fetch the interface configuration */
 	fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -149,7 +142,7 @@ getether(ifname, eap)
 	ifc.ifc_buf = (caddr_t) ibuf;
 	if (ioctl(fd, SIOCGIFCONF, (char *) &ifc) < 0 ||
 		ifc.ifc_len < sizeof(struct ifreq)) {
-		report(LOG_ERR, "getether: SIOCGIFCONF: %s", get_errmsg);
+		report(LOG_ERR, "getether: SIOCGIFCONF: %s", get_errmsg());
 		goto out;
 	}
 	/* Search interface configuration list for link layer address. */
@@ -193,9 +186,9 @@ getether(ifname, eap)
 #define NULL 0
 #endif
 
-getether(ifname, eap)
-	char *ifname;				/* interface name from ifconfig structure */
-	char *eap;					/* Ether address (output) */
+/* ifname: interface name from ifconfig structure */
+/* eap: Ether address (output) */
+getether(char *ifname, char *eap)
 {
 	int rc = -1;
 	char devname[32];
@@ -206,7 +199,7 @@ getether(ifname, eap)
 	char *enaddr;
 	int unit = -1;				/* which unit to attach */
 
-	sprintf(devname, "/dev/%s", ifname);
+	snprintf(devname, sizeof(devname), "/dev/%s", ifname);
 	fd = open(devname, 2);
 	if (fd < 0) {
 		/* Try without the trailing digit. */
@@ -346,14 +339,14 @@ getether(ifname, eap)
    or sys/sockios.h, but on my distribution these don't line up correctly */
 #include <linux/sockios.h>	/* Needed for IOCTL defs */
 
-getether(ifname, eap)
-	char *ifname, *eap;
+getether(char *ifname, char *eap)
 {
 	int rc = -1;
 	int fd;
 	struct ifreq phys;
+
 	bzero(&phys, sizeof(phys));
-	strcpy(phys.ifr_name, ifname);
+	strncpy(phys.ifr_name, ifname, sizeof(phys.ifr_name));
 	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		report(LOG_ERR, "getether: socket(INET,DGRAM) failed");
 		return -1;
@@ -374,8 +367,7 @@ getether(ifname, eap)
 
 /* If we don't know how on this system, just return an error. */
 #ifndef	GETETHER
-getether(ifname, eap)
-	char *ifname, *eap;
+getether(char *ifname, char *eap)
 {
 	return -1;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: devopen.c,v 1.2 1999/12/22 05:54:41 tsubai Exp $	*/
+/*	$NetBSD: devopen.c,v 1.10 2008/02/21 14:30:41 tsutsui Exp $	*/
 
 /*-
  * Copyright (C) 1999 Tsubai Masanari.  All rights reserved.
@@ -29,6 +29,7 @@
 #include <lib/libkern/libkern.h>
 #include <lib/libsa/stand.h>
 #include <lib/libsa/ufs.h>
+#include <lib/libsa/ustarfs.h>
 #include <netinet/in.h>
 #include <lib/libsa/nfs.h>
 
@@ -42,55 +43,55 @@
 # define DPRINTF while (0) printf
 #endif
 
-int dkopen __P((struct open_file *, ...));
-int dkclose __P((struct open_file *));
-int dkstrategy __P((void *, int, daddr_t, size_t, void *, size_t *));
+int dkopen(struct open_file *, ...);
+int dkclose(struct open_file *);
+int dkstrategy(void *, int, daddr_t, size_t, void *, size_t *);
+#ifdef HAVE_CHANGEDISK_HOOK
+void changedisk_hook(struct open_file *);
+#endif
 
 struct devsw devsw[] = {
 	{ "dk", dkstrategy, dkopen, dkclose, noioctl }
 };
-int ndevs = sizeof(devsw) / sizeof(devsw[0]);
+int ndevs = __arraycount(devsw);
 
-struct fs_ops file_system_ufs[] = {
-	{ ufs_open, ufs_close, ufs_read, ufs_write, ufs_seek, ufs_stat }
-};
-struct fs_ops file_system_nfs[] = {
-	{ nfs_open, nfs_close, nfs_read, nfs_write, nfs_seek, nfs_stat },
-};
+struct fs_ops file_system_ufs = FS_OPS(ufs);
+struct fs_ops file_system_nfs = FS_OPS(nfs);
+#ifdef SUPPORT_USTARFS
+struct fs_ops file_system_ustarfs = FS_OPS(ustarfs);
+struct fs_ops file_system[2];
+#else
 struct fs_ops file_system[1];
-int nfsys = sizeof(file_system) / sizeof(file_system[0]);
+#endif
+int nfsys;
 
 struct romdev romdev;
 
 extern int apbus;
 
 int
-devopen(f, fname, file)
-	struct open_file *f;
-	const char *fname;
-	char **file;	/* out */
+devopen(struct open_file *f, const char *fname, char **file)
 {
 	int fd;
-	char devname[32];
 	char *cp;
 	int error = 0;
 
 	DPRINTF("devopen: %s\n", fname);
 
-	strcpy(devname, fname);
-	cp = strchr(devname, ')') + 1;
+	strcpy(romdev.devname, fname);
+	cp = strchr(romdev.devname, ')') + 1;
 	*cp = 0;
 	if (apbus)
-		fd = apcall_open(devname, 2);
+		fd = apcall_open(romdev.devname, 2);
 	else
-		fd = rom_open(devname, 2);
+		fd = rom_open(romdev.devname, 2);
 
-	DPRINTF("devname = %s, fd = %d\n", devname, fd);
+	DPRINTF("devname = %s, fd = %d\n", romdev.devname, fd);
 	if (fd == -1)
 		return -1;
 
 	romdev.fd = fd;
-	if (strncmp(devname, "sonic", 5) == 0)
+	if (strncmp(romdev.devname, "sonic", 5) == 0)
 		romdev.devtype = DT_NET;
 	else
 		romdev.devtype = DT_BLOCK;
@@ -99,14 +100,21 @@ devopen(f, fname, file)
 	f->f_devdata = &romdev;
 	*file = strchr(fname, ')') + 1;
 
-	if (romdev.devtype == DT_BLOCK)
-		bcopy(file_system_ufs, file_system, sizeof(file_system));
-	else {	/* DT_NET */
-		bcopy(file_system_nfs, file_system, sizeof(file_system));
+	if (romdev.devtype == DT_BLOCK) {
+		file_system[0] = file_system_ufs;
+#ifdef SUPPORT_USTARFS
+		file_system[1] = file_system_ustarfs;
+		nfsys = 2;
+#else
+		nfsys = 1;
+#endif
+	} else {	/* DT_NET */
+		file_system[0] = file_system_nfs;
+		nfsys = 1;
 
 		if ((error = net_open(&romdev)) != 0) {
 			printf("Can't open NFS network connection on `%s'\n",
-			       devname);
+			    romdev.devname);
 			return error;
 		}
 	}
@@ -117,13 +125,13 @@ devopen(f, fname, file)
 int
 dkopen(struct open_file *f, ...)
 {
+
 	DPRINTF("dkopen\n");
 	return 0;
 }
 
 int
-dkclose(f)
-	struct open_file *f;
+dkclose(struct open_file *f)
 {
 	struct romdev *dev = f->f_devdata;
 
@@ -137,13 +145,8 @@ dkclose(f)
 }
 
 int
-dkstrategy(devdata, rw, blk, size, buf, rsize)
-	void *devdata;
-	int rw;
-	daddr_t blk;
-	size_t size;
-	void *buf;
-	size_t *rsize;	/* out: number of bytes transfered */
+dkstrategy(void *devdata, int rw, daddr_t blk, size_t size, void *buf,
+    size_t *rsize)
 {
 	struct romdev *dev = devdata;
 
@@ -159,3 +162,23 @@ dkstrategy(devdata, rw, blk, size, buf, rsize)
 	*rsize = size;		/* XXX */
 	return 0;
 }
+
+#ifdef HAVE_CHANGEDISK_HOOK
+void
+changedisk_hook(struct open_file *f)
+{
+	struct romdev *dev = f->f_devdata;
+
+	if (apbus) {
+		apcall_ioctl(dev->fd, APIOCEJECT, NULL);
+		apcall_close(dev->fd);
+		getchar();
+		dev->fd = apcall_open(dev->devname, 2);
+	} else {
+		rom_ioctl(dev->fd, SYSIOCEJECT, NULL);
+		rom_close(dev->fd);
+		getchar();
+		dev->fd = rom_open(dev->devname, 2);
+	}
+}
+#endif

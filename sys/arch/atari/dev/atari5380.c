@@ -1,4 +1,4 @@
-/*	$NetBSD: atari5380.c,v 1.31 2000/03/29 14:19:22 leo Exp $	*/
+/*	$NetBSD: atari5380.c,v 1.46 2008/10/29 14:31:01 abs Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -30,6 +30,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: atari5380.c,v 1.46 2008/10/29 14:31:01 abs Exp $");
+
+#include "opt_atariscsi.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -39,6 +44,8 @@
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsi_message.h>
 #include <dev/scsipi/scsiconf.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <m68k/asm_single.h>
 #include <m68k/cpu.h>
@@ -131,14 +138,14 @@ struct scsi_dma {
 
 #define	set_scsi_dma(addr, val)	(void)(					\
 	{								\
-	u_char	*address = (u_char*)addr+1;				\
+	volatile u_char	*address = (volatile u_char *)addr+1;		\
 	u_long	nval	 = (u_long)val;					\
 	__asm("movepl	%0, %1@(0)": :"d" (nval), "a" (address));	\
 	})
 
 #define	get_scsi_dma(addr, res)	(					\
 	{								\
-	u_char	*address = (u_char*)addr+1;				\
+	volatile u_char	*address = (volatile u_char *)addr+1;		\
 	u_long	nval;							\
 	__asm("movepl	%1@(0), %0": "=d" (nval) : "a" (address));	\
 	res = (u_long)nval;						\
@@ -252,7 +259,7 @@ scsi_tt_init(struct ncr_softc *sc)
 	MFP2->mf_aer  |= 0x80;		/* SCSI IRQ goes HIGH!!!!!	*/
 
 	if (machineid & ATARI_TT) {
-		/* SCSI-dma interrupts		*/
+		/* SCSI-DMA interrupts		*/
 		MFP2->mf_ierb |= IB_SCDM;
 		MFP2->mf_iprb  = (u_int8_t)~IB_SCDM;
 		MFP2->mf_imrb |= IB_SCDM;
@@ -272,10 +279,10 @@ scsi_tt_init(struct ncr_softc *sc)
 	MFP2->mf_imra |= IA_SCSI;
 
 	/*
-	 * LWP: DMA transfers to TT-ram causes data to be garbeled
-	 * without notice on some revisons of the TT-mainboard.
-	 * When program's generate misterious Segmentations faults,
-	 * try turning on NO_TTRAM_DMA.
+	 * LWP: DMA transfers to TT-ram causes data to be garbled
+	 * without notice on some TT-mainboard revisions.
+	 * If programs generate mysterious Segmentations faults,
+	 * try enabling NO_TTRAM_DMA.
 	 */
 #ifdef NO_TTRAM_DMA
 	printf(": DMA to TT-RAM is disabled!");
@@ -294,7 +301,7 @@ set_tt_5380_reg(u_short rnum, u_short val)
 	SCSI_5380->scsi_5380[(rnum << 1) | 1] = val;
 }
 
-extern __inline__ void
+extern inline void
 scsi_tt_ienable(void)
 {
 	if (machineid & ATARI_TT)
@@ -302,7 +309,7 @@ scsi_tt_ienable(void)
 	single_inst_bset_b(MFP2->mf_imra, IA_SCSI);
 }
 
-extern __inline__ void
+extern inline void
 scsi_tt_idisable(void)
 {
 	if (machineid & ATARI_TT)
@@ -310,7 +317,7 @@ scsi_tt_idisable(void)
 	single_inst_bclr_b(MFP2->mf_imra, IA_SCSI);
 }
 
-extern __inline__ void
+extern inline void
 scsi_tt_clr_ipend(void)
 {
 	int	tmp;
@@ -335,8 +342,8 @@ scsi_tt_dmasetup(SC_REQ *reqp, u_int phase, u_char	mode)
 		SCSI_DMA->s_dma_ctrl = SD_IN;
 		if (machineid & ATARI_HADES)
 		    SCSI_DMA->s_hdma_ctrl &= ~(SDH_BUSERR|SDH_EOP);
-		set_scsi_dma(&(SCSI_DMA->s_dma_ptr), reqp->dm_cur->dm_addr);
-		set_scsi_dma(&(SCSI_DMA->s_dma_cnt), reqp->dm_cur->dm_count);
+		set_scsi_dma(SCSI_DMA->s_dma_ptr, reqp->dm_cur->dm_addr);
+		set_scsi_dma(SCSI_DMA->s_dma_cnt, reqp->dm_cur->dm_count);
 		SET_TT_REG(NCR5380_ICOM, 0);
 		SET_TT_REG(NCR5380_MODE, mode);
 		SCSI_DMA->s_dma_ctrl = SD_ENABLE;
@@ -346,8 +353,8 @@ scsi_tt_dmasetup(SC_REQ *reqp, u_int phase, u_char	mode)
 		SCSI_DMA->s_dma_ctrl = SD_OUT;
 		if (machineid & ATARI_HADES)
 		    SCSI_DMA->s_hdma_ctrl &= ~(SDH_BUSERR|SDH_EOP);
-		set_scsi_dma(&(SCSI_DMA->s_dma_ptr), reqp->dm_cur->dm_addr);
-		set_scsi_dma(&(SCSI_DMA->s_dma_cnt), reqp->dm_cur->dm_count);
+		set_scsi_dma(SCSI_DMA->s_dma_ptr, reqp->dm_cur->dm_addr);
+		set_scsi_dma(SCSI_DMA->s_dma_cnt, reqp->dm_cur->dm_count);
 		SET_TT_REG(NCR5380_MODE, mode);
 		SET_TT_REG(NCR5380_ICOM, SC_ADTB);
 		SET_TT_REG(NCR5380_DMSTAT, 0);
@@ -367,7 +374,7 @@ tt_poll_edma(SC_REQ *reqp)
 	 *   - 5380:
 	 *	- End of DMA flag is set
 	 *	- We lost BSY (error!!)
-	 *	- A phase mismatch has occured (partial transfer)
+	 *	- A phase mismatch has occurred (partial transfer)
 	 *   - DMA-controller:
 	 *	- A bus error occurred (Kernel error!!)
 	 *	- All bytes are transferred
@@ -425,12 +432,13 @@ tt_get_dma_result(SC_REQ *reqp, u_long *bytes_left)
 {
 	int	dmastat, dmstat;
 	u_char	*byte_p;
-	u_long	leftover;
+	u_long	leftover, ptr;
 
 	dmastat = SCSI_DMA->s_dma_ctrl;
 	dmstat  = GET_TT_REG(NCR5380_DMSTAT);
 	get_scsi_dma(SCSI_DMA->s_dma_cnt, leftover);
-	get_scsi_dma(SCSI_DMA->s_dma_ptr, (u_long)byte_p);
+	get_scsi_dma(SCSI_DMA->s_dma_ptr, ptr);
+	byte_p = (u_char *)ptr;
 
 	if (dmastat & SD_BUSERR) {
 		/*
@@ -464,10 +472,11 @@ tt_get_dma_result(SC_REQ *reqp, u_long *bytes_left)
 	 */
 	if ((machineid & ATARI_TT) && ((u_long)byte_p & 3)
 	    && PH_IN(reqp->phase)) {
-		u_char	*p, *q;
+		u_char	*p;
+		volatile u_char *q;
 
 		p = ptov(reqp, (u_long *)((u_long)byte_p & ~3));
-		q = (u_char*)&(SCSI_DMA->s_dma_res);
+		q = SCSI_DMA->s_dma_res;
 		switch ((u_long)byte_p & 3) {
 			case 3: *p++ = *q++;
 			case 2: *p++ = *q++;
@@ -486,8 +495,8 @@ int poll;
 extern	int			*nofault;
 	label_t			faultbuf;
 	int			write;
-	u_long	 		count;
-	u_char			*data_p = (u_char*)(stio_addr+0x741);
+	u_long	 		count, t;
+	volatile u_char		*data_p = (volatile u_char *)(stio_addr+0x741);
 
 	/*
 	 * Block SCSI interrupts while emulating DMA. They come
@@ -512,12 +521,13 @@ extern	int			*nofault;
 		/*
 		 * Determine number of bytes transferred
 		 */
-		get_scsi_dma(SCSI_DMA->s_dma_ptr, (u_long)ptr);
+		get_scsi_dma(SCSI_DMA->s_dma_ptr, tmp);
+		ptr = (u_char *)tmp;
 		cnt = dma_ptr - ptr;
 
 		if (cnt != 0) {
 			/*
-			 * Update the dma pointer/count fields
+			 * Update the DMA pointer/count fields
 			 */
 			set_scsi_dma(SCSI_DMA->s_dma_ptr, dma_ptr);
 			get_scsi_dma(SCSI_DMA->s_dma_cnt, tmp);
@@ -551,7 +561,7 @@ extern	int			*nofault;
 				 */
 				SCSI_DMA->s_hdma_ctrl |= SDH_BUSERR;
 			}
-			__asm __volatile ("tstb	%0@(0)": : "a" (dma_ptr));
+			__asm volatile ("tstb	%0@(0)": : "a" (dma_ptr));
 			nofault = (int *)0;
 		}
 
@@ -581,7 +591,8 @@ extern	int			*nofault;
 #endif
 
 	get_scsi_dma(SCSI_DMA->s_dma_cnt, count);
-	get_scsi_dma(SCSI_DMA->s_dma_ptr, (u_long)dma_ptr);
+	get_scsi_dma(SCSI_DMA->s_dma_ptr, t);
+	dma_ptr = (u_char *)t;
 
 	/*
 	 * Keep pushing bytes until we're done or a bus-error
@@ -705,19 +716,19 @@ u_short	rnum, val;
 	DMA->dma_data = val;
 }
 
-extern __inline__ void
+extern inline void
 scsi_falcon_ienable()
 {
 	single_inst_bset_b(MFP->mf_imrb, IB_DINT);
 }
 
-extern __inline__ void
+extern inline void
 scsi_falcon_idisable()
 {
 	single_inst_bclr_b(MFP->mf_imrb, IB_DINT);
 }
 
-extern __inline__ void
+extern inline void
 scsi_falcon_clr_ipend()
 {
 	int	tmp;
@@ -726,7 +737,7 @@ scsi_falcon_clr_ipend()
 	rem_sicallback((si_farg)ncr_ctrl_intr);
 }
 
-extern __inline__ int
+extern inline int
 scsi_falcon_ipending()
 {
 	if (connected && (connected->dr_flag & DRIVER_IN_DMA)) {
@@ -737,8 +748,8 @@ scsi_falcon_ipending()
 		if (MFP->mf_gpip & IO_DINT)
 		    return (0); /* XXX: Actually: we're not allowed to check */
 
-		/* LWP: 28-06, must be a dma interrupt! should the
-		 * ST-DMA unit be taken out of dma mode?????
+		/* LWP: 28-06, must be a DMA interrupt! should the
+		 * ST-DMA unit be taken out of DMA mode?????
 		 */
 		DMA->dma_mode = 0x90;
 
@@ -771,7 +782,7 @@ struct dma_chain	*dm;
 
 static	int falcon_lock = 0;
 
-extern __inline__ int
+extern inline int
 falcon_claimed_dma()
 {
 	if (falcon_lock != DMA_LOCK_GRANT) {
@@ -788,7 +799,7 @@ falcon_claimed_dma()
 	return(1);
 }
 
-extern __inline__ void
+extern inline void
 falcon_reconsider_dma()
 {
 	if (falcon_lock && (connected == NULL) && (discon_q == NULL)) {
@@ -816,7 +827,7 @@ u_int	dir, nsects;
 SC_REQ	*reqp;
 {
 	dir <<= 8;
-	st_dmaaddr_set((caddr_t)reqp->dm_cur->dm_addr);
+	st_dmaaddr_set((void *)reqp->dm_cur->dm_addr);
 	DMA->dma_mode = 0x90 | dir;
 	DMA->dma_mode = 0x90 | (dir ^ DMA_WRBIT);
 	DMA->dma_mode = 0x90 | dir;
@@ -979,7 +990,7 @@ struct ncr_softc	*sc;
 	}
 }
 
-extern __inline__ void
+extern inline void
 scsi_ienable()
 {
 	if (machineid & ATARI_FALCON)
@@ -987,7 +998,7 @@ scsi_ienable()
 	else scsi_tt_ienable();
 }
 
-extern __inline__ void
+extern inline void
 scsi_idisable()
 {
 	if (machineid & ATARI_FALCON)
@@ -995,7 +1006,7 @@ scsi_idisable()
 	else scsi_tt_idisable();
 }
 
-extern __inline__ void
+extern inline void
 scsi_clr_ipend()
 {
 	if (machineid & ATARI_FALCON)
@@ -1003,7 +1014,7 @@ scsi_clr_ipend()
 	else scsi_tt_clr_ipend();
 }
 
-extern __inline__ int
+extern inline int
 scsi_ipending()
 {
 	if (machineid & ATARI_FALCON)
@@ -1011,7 +1022,7 @@ scsi_ipending()
 	else return (GET_TT_REG(NCR5380_DMSTAT) & SC_IRQ_SET);
 }
 
-extern __inline__ void
+extern inline void
 scsi_dma_setup(reqp, phase, mbase)
 SC_REQ	*reqp;
 u_int	phase;
@@ -1022,7 +1033,7 @@ u_char	mbase;
 	else scsi_tt_dmasetup(reqp, phase, mbase);
 }
 
-extern __inline__ int
+extern inline int
 wrong_dma_range(reqp, dm)
 SC_REQ			*reqp;
 struct dma_chain	*dm;
@@ -1032,7 +1043,7 @@ struct dma_chain	*dm;
 	else return(tt_wrong_dma_range(reqp, dm));
 }
 
-extern __inline__ int
+extern inline int
 poll_edma(reqp)
 SC_REQ	*reqp;
 {
@@ -1041,7 +1052,7 @@ SC_REQ	*reqp;
 	else return(tt_poll_edma(reqp));
 }
 
-extern __inline__ int
+extern inline int
 get_dma_result(reqp, bytes_left)
 SC_REQ	*reqp;
 u_long	*bytes_left;
@@ -1051,7 +1062,7 @@ u_long	*bytes_left;
 	else return(tt_get_dma_result(reqp, bytes_left));
 }
 
-extern __inline__ int
+extern inline int
 can_access_5380()
 {
 	if (machineid & ATARI_FALCON)

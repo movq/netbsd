@@ -1,4 +1,4 @@
-.\"	$NetBSD: kernmalloc.t,v 1.3 2000/03/13 23:03:37 soren Exp $
+.\"	$NetBSD: kernmalloc.t,v 1.5 2003/08/07 10:30:43 agc Exp $
 .\"
 .\" Copyright (c) 1988 The Regents of the University of California.
 .\" All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -105,7 +101,7 @@ University of California, Berkeley
 Berkeley, California  94720
 .AB
 The 4.3BSD UNIX kernel uses many memory allocation mechanisms,
-each designed for the particular needs of the utilizing subsystem.
+each designed for the particular needs of the particular subsystem.
 This paper describes a general purpose dynamic memory allocator
 that can be used by all of the kernel subsystems.
 The design of this allocator takes advantage of known memory usage

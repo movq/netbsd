@@ -1,7 +1,7 @@
-/*	$NetBSD: wdc_mb.c,v 1.9 2000/03/29 14:19:23 leo Exp $	*/
+/*	$NetBSD: wdc_mb.c,v 1.32.10.1 2009/01/06 23:49:02 snj Exp $	*/
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,13 +29,16 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: wdc_mb.c,v 1.32.10.1 2009/01/06 23:49:02 snj Exp $");
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
 
-#include <machine/bswap.h>
+#include <sys/bswap.h>
 #include <machine/cpu.h>
 #include <machine/bus.h>
 #include <machine/iomap.h>
@@ -57,39 +53,44 @@
 #include <atari/dev/ym2149reg.h>
 #include <atari/atari/device.h>
 
+/* Falcon IDE register locations (base and offsets). */
+#define FALCON_WD_BASE	0xfff00000
+#define FALCON_WD_LEN	0x40
+#define FALCON_WD_AUX	0x38
+
 /*
  * XXX This code currently doesn't even try to allow 32-bit data port use.
  */
-static int	claim_hw __P((void *, int));
-static void	free_hw __P((void *));
-static void	read_multi_2_swap __P((bus_space_tag_t, bus_space_handle_t,
-				bus_size_t, u_int16_t *, bus_size_t));
-static void	write_multi_2_swap __P((bus_space_tag_t, bus_space_handle_t,
-				bus_size_t, const u_int16_t *, bus_size_t));
+static int	claim_hw (struct ata_channel *, int);
+static void	free_hw (struct ata_channel *);
+static void	read_multi_2_swap (bus_space_tag_t, bus_space_handle_t,
+				bus_size_t, u_int16_t *, bus_size_t);
+static void	write_multi_2_swap (bus_space_tag_t, bus_space_handle_t,
+				bus_size_t, const u_int16_t *, bus_size_t);
 
 struct wdc_mb_softc {
 	struct wdc_softc sc_wdcdev;
-	struct	channel_softc *wdc_chanptr;
-	struct  channel_softc wdc_channel;
+	struct	ata_channel *sc_chanlist[1];
+	struct  ata_channel sc_channel;
+	struct	ata_queue sc_chqueue;
+	struct	wdc_regs sc_wdc_regs;
 	void	*sc_ih;
 };
 
-int	wdc_mb_probe	__P((struct device *, struct cfdata *, void *));
-void	wdc_mb_attach	__P((struct device *, struct device *, void *));
+int	wdc_mb_probe	(device_t, struct cfdata *, void *);
+void	wdc_mb_attach	(device_t, device_t, void *);
 
-struct cfattach wdc_mb_ca = {
-	sizeof(struct wdc_mb_softc), wdc_mb_probe, wdc_mb_attach
-};
+CFATTACH_DECL_NEW(wdc_mb, sizeof(struct wdc_mb_softc),
+    wdc_mb_probe, wdc_mb_attach, NULL, NULL);
 
 int
-wdc_mb_probe(parent, cfp, aux)
-	struct device *parent;
-	struct cfdata *cfp;
-	void *aux;
+wdc_mb_probe(device_t parent, cfdata_t cfp, void *aux)
 {
 	static int	wdc_matched = 0;
-	struct channel_softc ch;
-	int	result = 0;
+	struct ata_channel ch;
+	struct wdc_softc wdc;
+	struct wdc_regs wdr;
+	int	result = 0, i;
 	u_char	sv_ierb;
 
 	if ((machineid & ATARI_TT) || strcmp("wdc", aux) || wdc_matched)
@@ -97,18 +98,30 @@ wdc_mb_probe(parent, cfp, aux)
 	if (!atari_realconfig)
 		return 0;
 
+	memset(&wdc, 0, sizeof(wdc));
 	memset(&ch, 0, sizeof(ch));
+	ch.ch_atac = &wdc.sc_atac;
+	wdc.regs = &wdr;
 
-	ch.cmd_iot = ch.ctl_iot = mb_alloc_bus_space_tag();
-	if (ch.cmd_iot == NULL)
+	wdr.cmd_iot = wdr.ctl_iot = mb_alloc_bus_space_tag();
+	if (wdr.cmd_iot == NULL)
 		return 0;
-	ch.cmd_iot->stride = 2;
-	ch.cmd_iot->wo_1   = 1;
+	wdr.cmd_iot->stride = 0;
+	wdr.cmd_iot->wo_1   = 1;
 
-	if (bus_space_map(ch.cmd_iot, 0xfff00000, 0x40, 0, &ch.cmd_ioh))
-		return 0;
-	if (bus_space_subregion(ch.cmd_iot, ch.cmd_ioh, 0x38, 1, &ch.ctl_ioh))
-		return 0;
+	if (bus_space_map(wdr.cmd_iot, FALCON_WD_BASE, FALCON_WD_LEN, 0,
+	    &wdr.cmd_baseioh))
+		goto out;
+	for (i = 0; i < WDC_NREG; i++) {
+		if (bus_space_subregion(wdr.cmd_iot, wdr.cmd_baseioh,
+		    i * 4, 4, &wdr.cmd_iohs[i]) != 0)
+			goto outunmap;
+	}
+	wdc_init_shadow_regs(&ch);
+
+	if (bus_space_subregion(wdr.cmd_iot, wdr.cmd_baseioh, FALCON_WD_AUX, 4,
+	    &wdr.ctl_ioh))
+		goto outunmap;
 
 	/*
 	 * Make sure IDE interrupts are disabled during probing.
@@ -126,8 +139,10 @@ wdc_mb_probe(parent, cfp, aux)
 
 	MFP->mf_ierb = sv_ierb;
 
-	bus_space_unmap(ch.cmd_iot,  ch.cmd_ioh, 0x40);
-	mb_free_bus_space_tag(ch.cmd_iot);
+ outunmap:
+	bus_space_unmap(wdr.cmd_iot, wdr.cmd_baseioh, FALCON_WD_LEN);
+ out:
+	mb_free_bus_space_tag(wdr.cmd_iot);
 
 	if (result)
 		wdc_matched = 1;
@@ -135,29 +150,44 @@ wdc_mb_probe(parent, cfp, aux)
 }
 
 void
-wdc_mb_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+wdc_mb_attach(device_t parent, device_t self, void *aux)
 {
-	struct wdc_mb_softc *sc = (void *)self;
+	struct wdc_mb_softc *sc = device_private(self);
+	struct wdc_regs *wdr;
+	int i;
 
-	printf("\n");
+	aprint_normal("\n");
 
-	sc->wdc_channel.cmd_iot = sc->wdc_channel.ctl_iot =
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
+	sc->sc_wdcdev.regs = wdr = &sc->sc_wdc_regs;
+	wdr->cmd_iot = wdr->ctl_iot =
 	    mb_alloc_bus_space_tag();
-	sc->wdc_channel.cmd_iot->stride = 2;
-	sc->wdc_channel.cmd_iot->wo_1   = 1;
-	sc->wdc_channel.cmd_iot->abs_rms_2 = read_multi_2_swap;
-	sc->wdc_channel.cmd_iot->abs_wms_2 = write_multi_2_swap;
-	if (bus_space_map(sc->wdc_channel.cmd_iot, 0xfff00000, 0x40, 0,
-			  &sc->wdc_channel.cmd_ioh)) {
-		printf("%s: couldn't map registers\n",
-		    sc->sc_wdcdev.sc_dev.dv_xname);
+	wdr->cmd_iot->stride = 0;
+	wdr->cmd_iot->wo_1   = 1;
+	wdr->cmd_iot->abs_rms_2 = read_multi_2_swap;
+	wdr->cmd_iot->abs_wms_2 = write_multi_2_swap;
+	if (bus_space_map(wdr->cmd_iot, FALCON_WD_BASE, FALCON_WD_LEN, 0,
+			  &wdr->cmd_baseioh)) {
+		aprint_error_dev(self, "couldn't map registers\n");
 		return;
 	}
-	if (bus_space_subregion(sc->wdc_channel.cmd_iot,
-	    sc->wdc_channel.cmd_ioh, 0x38, 1, &sc->wdc_channel.ctl_ioh))
+	for (i = 0; i < WDC_NREG; i++) {
+		if (bus_space_subregion(wdr->cmd_iot, wdr->cmd_baseioh,
+		    i * 4, 4, &wdr->cmd_iohs[i]) != 0) {
+			aprint_error_dev(self,
+			    "couldn't subregion cmd reg %i\n", i);
+			bus_space_unmap(wdr->cmd_iot, wdr->cmd_baseioh,
+			    FALCON_WD_LEN);
+			return;
+		}
+	}
+
+	if (bus_space_subregion(wdr->cmd_iot,
+	    wdr->cmd_baseioh, FALCON_WD_AUX, 4, &wdr->ctl_ioh)) {
+		bus_space_unmap(wdr->cmd_iot, wdr->cmd_baseioh, FALCON_WD_LEN);
+		aprint_error_dev(self, "couldn't subregion aux reg\n");
 		return;
+	}
 
 	/*
 	 * Play a nasty trick here. Normally we only manipulate the
@@ -166,24 +196,19 @@ wdc_mb_attach(parent, self, aux)
 	 */
 	MFP->mf_ierb &= ~IB_DINT;
 
-	sc->sc_wdcdev.cap |= WDC_CAPABILITY_DATA16 | WDC_CAPABILITY_HWLOCK |
-	    WDC_CAPABILITY_ATA_NOSTREAM;
-	sc->sc_wdcdev.PIO_cap = 0;
-	sc->sc_wdcdev.claim_hw = &claim_hw;
-	sc->sc_wdcdev.free_hw  = &free_hw;
-	sc->wdc_chanptr = &sc->wdc_channel;
-	sc->sc_wdcdev.channels = &sc->wdc_chanptr;
-	sc->sc_wdcdev.nchannels = 1;
-	sc->wdc_channel.channel = 0;
-	sc->wdc_channel.wdc = &sc->sc_wdcdev;
-	sc->wdc_channel.ch_queue = malloc(sizeof(struct channel_queue),
-	    M_DEVBUF, M_NOWAIT);
-	if (sc->wdc_channel.ch_queue == NULL) {
-	    printf("%s: can't allocate memory for command queue",
-		sc->sc_wdcdev.sc_dev.dv_xname);
-	    return;
-	}
-	wdcattach(&sc->wdc_channel);
+	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16 |
+	    ATAC_CAP_ATA_NOSTREAM;
+	sc->sc_wdcdev.sc_atac.atac_pio_cap = 0;
+	sc->sc_wdcdev.sc_atac.atac_claim_hw = &claim_hw;
+	sc->sc_wdcdev.sc_atac.atac_free_hw  = &free_hw;
+	sc->sc_chanlist[0] = &sc->sc_channel;
+	sc->sc_wdcdev.sc_atac.atac_channels = sc->sc_chanlist;
+	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
+	sc->sc_channel.ch_channel = 0;
+	sc->sc_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
+	sc->sc_channel.ch_queue = &sc->sc_chqueue;
+	sc->sc_channel.ch_ndrive = 2;
+	wdc_init_shadow_regs(&sc->sc_channel);
 
 	/*
 	 * Setup & enable disk related interrupts.
@@ -191,6 +216,8 @@ wdc_mb_attach(parent, self, aux)
 	MFP->mf_ierb |= IB_DINT;
 	MFP->mf_iprb  = (u_int8_t)~IB_DINT;
 	MFP->mf_imrb |= IB_DINT;
+
+	wdcattach(&sc->sc_channel);
 }
 
 /*
@@ -199,8 +226,8 @@ wdc_mb_attach(parent, self, aux)
 static int	wd_lock;
 
 static int
-claim_hw(softc, maysleep)
-void *softc;
+claim_hw(chp, maysleep)
+struct ata_channel *chp;
 int  maysleep;
 {
 	if (wd_lock != DMA_LOCK_GRANT) {
@@ -211,7 +238,7 @@ int  maysleep;
 			return 0;
 		}
 		if (!st_dmagrab((dma_farg)wdcintr,
-		    (dma_farg)(maysleep ? NULL : wdcrestart), softc,
+		    (dma_farg)(maysleep ? NULL : wdcrestart), chp,
 		    &wd_lock, 1))
 			return 0;
 	}
@@ -219,8 +246,8 @@ int  maysleep;
 }
 
 static void
-free_hw(softc)
-void *softc;
+free_hw(chp)
+struct ata_channel *chp;
 {
 	/*
 	 * Flush pending interrupts before giving-up lock
@@ -231,7 +258,7 @@ void *softc;
 	 * Only free the lock on a Falcon. On the Hades, keep it.
 	 */
 /*	if (machineid & ATARI_FALCON) */
-		st_dmafree(softc, &wd_lock);
+		st_dmafree(chp, &wd_lock);
 }
 
 /*
@@ -250,9 +277,9 @@ read_multi_2_swap(t, h, o, a, c)
 	bus_size_t		o, c;
 	u_int16_t		*a;
 {
-	u_int16_t	*ba;
+	volatile u_int16_t	*ba;
 
-	ba = (u_int16_t *)calc_addr(h, o, t->stride, t->wo_2);
+	ba = (volatile u_int16_t *)calc_addr(h, o, t->stride, t->wo_2);
 	for (; c; a++, c--)
 		*a = bswap16(*ba);
 }
@@ -264,9 +291,9 @@ write_multi_2_swap(t, h, o, a, c)
 	bus_size_t		o, c;
 	const u_int16_t		*a;
 {
-	u_int16_t	*ba;
+	volatile u_int16_t	*ba;
 
-	ba = (u_int16_t *)calc_addr(h, o, t->stride, t->wo_2);
+	ba = (volatile u_int16_t *)calc_addr(h, o, t->stride, t->wo_2);
 	for (; c; a++, c--)
 		*ba = bswap16(*a);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: __semctl13.c,v 1.1 2000/01/31 15:14:19 christos Exp $	*/
+/*	$NetBSD: __semctl13.c,v 1.6 2008/04/28 20:23:00 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,50 +30,37 @@
  */
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: __semctl13.c,v 1.1 2000/01/31 15:14:19 christos Exp $");
+__RCSID("$NetBSD: __semctl13.c,v 1.6 2008/04/28 20:23:00 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
-#if __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
-
 
 /* The kernel version [... == union semun *] */
 int ____semctl13 __P((int, int, int, ...));
 /* The userland version [... == union semun] */
 int __semctl13 __P((int, int, int, ...));
 
-#if __STDC__
-int __semctl13(int semid, int semnum, int cmd, ...)
-#else
-int __semctl13(va_alist)
-	va_dcl
-#endif
+int
+__semctl13(int semid, int semnum, int cmd, ...)
 {
 	va_list ap;
 	union __semun semun;
-#if __STDC__
+
 	va_start(ap, cmd);
-#else
-	int semid, semnum;
-	int cmd;
-	va_start(ap);
-	semid = va_arg(ap, int);
-	semnum = va_arg(ap, int);
-	cmd = va_arg(ap, int);
-#endif
 	switch (cmd) {
 	case IPC_SET:
 	case IPC_STAT:
 	case GETALL:
 	case SETVAL:
 	case SETALL:
-	    semun = va_arg(ap, union __semun);
+#ifdef __lint__
+		memcpy(&semun, &ap, sizeof(semun));
+#else
+		semun = va_arg(ap, union __semun);
+#endif
 	}
 	va_end(ap);
 	return ____semctl13(semid, semnum, cmd, &semun);

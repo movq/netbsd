@@ -1,4 +1,4 @@
-/*	$NetBSD: keyword.c,v 1.21 1999/12/03 02:26:36 simonb Exp $	*/
+/*	$NetBSD: keyword.c,v 1.52 2008/02/10 17:47:59 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,12 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)keyword.c	8.5 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: keyword.c,v 1.21 1999/12/03 02:26:36 simonb Exp $");
+__RCSID("$NetBSD: keyword.c,v 1.52 2008/02/10 17:47:59 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/time.h>
+#include <sys/lwp.h>
 #include <sys/proc.h>
 #include <sys/resource.h>
 #include <sys/sysctl.h>
@@ -60,141 +57,177 @@ __RCSID("$NetBSD: keyword.c,v 1.21 1999/12/03 02:26:36 simonb Exp $");
 
 #include "ps.h"
 
-static VAR *findvar __P((char *));
-static int  vcmp __P((const void *, const void *));
+static VAR *findvar(const char *);
+static int  vcmp(const void *, const void *);
 
-
-#define SIGWIDTH	(((_NSIG / 32) + 1) * 8)
-
-#ifdef NOTINUSE
-int	utime(), stime(), ixrss(), idrss(), isrss();
-	{{"utime"}, "UTIME", USER, utime, 4},
-	{{"stime"}, "STIME", USER, stime, 4},
-	{{"ixrss"}, "IXRSS", USER, ixrss, 4},
-	{{"idrss"}, "IDRSS", USER, idrss, 4},
-	{{"isrss"}, "ISRSS", USER, isrss, 4},
+#if 0 	/* kernel doesn't calculate these */
+	PUVAR("idrss", "IDRSS", 0, p_uru_idrss, UINT64, PRIu64),
+	PUVAR("isrss", "ISRSS", 0, p_uru_isrss, UINT64, PRId64),
+	PUVAR("ixrss", "IXRSS", 0, p_uru_ixrss, UINT64, PRId64),
+	PUVAR("maxrss", "MAXRSS", 0, p_uru_maxrss, UINT64, PRIu64),
 #endif
 
 /* Compute offset in common structures. */
-#define	POFF(x)	offsetof(struct proc, x)
-#define	EOFF(x)	offsetof(struct eproc, x)
-#define	UOFF(x)	offsetof(struct usave, x)
-#define	ROFF(x)	offsetof(struct rusage, x)
+#define	POFF(x)	offsetof(struct kinfo_proc2, x)
+#define	LOFF(x)	offsetof(struct kinfo_lwp, x)
 
 #define	UIDFMT	"u"
-#define	UIDLEN	5
-#define	UID(n1, n2, fn, off) \
-	{ n1, n2, NULL, 0, fn, UIDLEN, off, UINT32, UIDFMT }
-#define	GID(n1, n2, fn, off)	UID(n1, n2, fn, off)
+#define	UID(n1, n2, of) \
+	{ .name = n1, .header = n2, .flag = 0, .oproc = pvar, \
+	  .off = POFF(of), .type = UINT32, .fmt = UIDFMT }
+#define	GID(n1, n2, off)	UID(n1, n2, off)
 
 #define	PIDFMT	"d"
-#define	PIDLEN	5
-#define	PID(n1, n2, fn, off) \
-	{ n1, n2, NULL, 0, fn, PIDLEN, off, INT32, PIDFMT }
+#define	PID(n1, n2, of) \
+	{ .name = n1, .header = n2, .flag = 0, .oproc = pvar, \
+	  .off = POFF(of), .type = INT32, .fmt = PIDFMT }
 
-#define	USERLEN	8
+#define	LVAR(n1, n2, fl, of, ty, fm) \
+	{ .name = n1, .header = n2, .flag = (fl) | LWP, .oproc = pvar, \
+	  .off = LOFF(of), .type = ty, .fmt = fm }
+#define	PVAR(n1, n2, fl, of, ty, fm) \
+	{ .name = n1, .header = n2, .flag = (fl) | 0, .oproc = pvar, \
+	  .off = POFF(of), .type = ty, .fmt = fm }
+#define	PUVAR(n1, n2, fl, of, ty, fm) \
+	{ .name = n1, .header = n2, .flag = (fl) | UAREA, .oproc = pvar, \
+	  .off = POFF(of), .type = ty, .fmt = fm }
+#define VAR3(n1, n2, fl) \
+	{ .name = n1, .header = n2, .flag = fl }
+#define VAR4(n1, n2, fl, op) \
+	{ .name = n1, .header = n2, .flag = fl, .oproc = op, }
+#define VAR6(n1, n2, fl, op, of, ty) \
+	{ .name = n1, .header = n2, .flag = fl, .oproc = op, \
+	  .off = of, .type = ty }
 
+/* NB: table must be sorted, in vi use:
+ *	:/^VAR/,/end_sort/! sort -t\" +1
+ * breaking long lines just makes the sort harder
+ *
+ * We support all the fields required by P1003.1-2004 (SUSv3), with
+ * the correct default headers, except for the "tty" field, where the
+ * standard says the header should be "TT", but we have "TTY".
+ */
 VAR var[] = {
-	{"%cpu", "%CPU", NULL, 0, pcpu, 4},
-	{"%mem", "%MEM", NULL, 0, pmem, 4},
-	{"acflag", "ACFLG", NULL, 0, pvar, 3, POFF(p_acflag), USHORT, "x"},
-	{"acflg", "", "acflag"},
-	{"blocked", "", "sigmask"},
-	{"caught", "", "sigcatch"},
-	{"command", "COMMAND", NULL, COMM|LJUST|USER, command, 16},
-	{"cpu", "CPU", NULL, 0, pvar, 3, POFF(p_estcpu), UINT, "d"},
-	{"cputime", "", "time"},
-	{"f", "F", NULL, 0, pvar, 7, POFF(p_flag), INT, "x"},
-	{"flags", "", "f"},
-	{"holdcnt", "HOLDCNT", NULL, 0, pvar, 8, POFF(p_holdcnt), INT, "d"},
-	{"ignored", "", "sigignore"},
-	{"inblk", "INBLK", NULL, USER, rvar, 4, ROFF(ru_inblock), LONG, "d"},
-	{"inblock", "", "inblk"},
-	{"jobc", "JOBC", NULL, 0, evar, 4, EOFF(e_jobc), SHORT, "d"},
-	{"ktrace", "KTRACE", NULL, 0, pvar, 8, POFF(p_traceflag), INT, "x"},
-	/* XXX */
-	{"ktracep", "KTRACEP", NULL, 0, pvar, 8, POFF(p_tracep), KPTR, "x"},
-	{"lim", "LIM", NULL, 0, maxrss, 5},
-	{"login", "LOGIN", NULL, LJUST, logname, MAXLOGNAME},
-	{"logname", "", "login"},
-	{"lstart", "STARTED", NULL, LJUST|USER, lstarted, 28},
-	{"majflt", "MAJFLT", NULL, USER, rvar, 4, ROFF(ru_majflt), LONG, "d"},
-	{"minflt", "MINFLT", NULL, USER, rvar, 4, ROFF(ru_minflt), LONG, "d"},
-	{"msgrcv", "MSGRCV", NULL, USER, rvar, 4, ROFF(ru_msgrcv), LONG, "d"},
-	{"msgsnd", "MSGSND", NULL, USER, rvar, 4, ROFF(ru_msgsnd), LONG, "d"},
-	{"ni", "", "nice"},
-	{"nice", "NI", NULL, 0, pnice, 2},
-	{"nivcsw", "NIVCSW", NULL, USER, rvar, 5, ROFF(ru_nivcsw), LONG, "d"},
-	{"nsignals", "", "nsigs"},
-	{"nsigs", "NSIGS", NULL, USER, rvar, 4, ROFF(ru_nsignals), LONG, "d"},
-	{"nswap", "NSWAP", NULL, USER, rvar, 4, ROFF(ru_nswap), LONG, "d"},
-	{"nvcsw", "NVCSW", NULL, USER, rvar, 5, ROFF(ru_nvcsw), LONG, "d"},
-	/* XXX */
-	{"nwchan", "WCHAN", NULL, 0, pvar, 6, POFF(p_wchan), KPTR, "x"},
-	{"oublk", "OUBLK", NULL, USER, rvar, 4, ROFF(ru_oublock), LONG, "d"},
-	{"oublock", "", "oublk"},
-	/* XXX */
-	{"p_ru", "P_RU", NULL, 0, pvar, 6, POFF(p_ru), KPTR, "x"},
-	/* XXX */
-	{"paddr", "PADDR", NULL, 0, evar, 6, EOFF(e_paddr), KPTR, "x"},
-	{"pagein", "PAGEIN", NULL, USER, pagein, 6},
-	{"pcpu", "", "%cpu"},
-	{"pending", "", "sig"},
-	PID("pgid", "PGID", evar, EOFF(e_pgid)),
-	PID("pid", "PID", pvar, POFF(p_pid)),
-	{"pmem", "", "%mem"},
-	PID("ppid", "PPID", evar, EOFF(e_ppid)),
-	{"pri", "PRI", NULL, 0, pri, 3},
-	{"re", "RE", NULL, INF127, pvar, 3, POFF(p_swtime), UINT, "d"},
-	GID("rgid", "RGID", evar, EOFF(e_pcred.p_rgid)),
-	/* XXX */
-	{"rlink", "RLINK", NULL, 0, pvar, 8, POFF(p_back), KPTR, "x"},
-	{"rss", "RSS", NULL, 0, p_rssize, 4},
-	{"rssize", "", "rsz"},
-	{"rsz", "RSZ", NULL, 0, rssize, 4},
-	UID("ruid", "RUID", evar, EOFF(e_pcred.p_ruid)),
-	{"ruser", "RUSER", NULL, LJUST, runame, USERLEN},
-	{"sess", "SESS", NULL, 0, evar, 6, EOFF(e_sess), KPTR24, "x"},
-	PID("sid", "SID", evar, EOFF(e_sid)),
-	{"sig", "PENDING",
-	    NULL, 0, pvar, SIGWIDTH, POFF(p_siglist), SIGLIST, "s"},
-	{"sigcatch", "CAUGHT",
-	    NULL, 0, pvar, SIGWIDTH, POFF(p_sigcatch), SIGLIST, "s"},
-	{"sigignore", "IGNORED",
-	    NULL, 0, pvar, SIGWIDTH, POFF(p_sigignore), SIGLIST, "s"},
-	{"sigmask", "BLOCKED",
-	    NULL, 0, pvar, SIGWIDTH, POFF(p_sigmask), SIGLIST, "s"},
-	{"sl", "SL", NULL, INF127, pvar, 3, POFF(p_slptime), UINT, "d"},
-	{"start", "STARTED", NULL, LJUST|USER, started, 8},
-	{"stat", "", "state"},
-	{"state", "STAT", NULL, 0, state, 4},
-	GID("svgid", "SVGID", evar, EOFF(e_pcred.p_svgid)),
-	UID("svuid", "SVUID", evar, EOFF(e_pcred.p_svuid)),
-	{"tdev", "TDEV", NULL, 0, tdev, 4},
-	{"time", "TIME", NULL, USER, cputime, 9},
-	PID("tpgid", "TGPID", evar, EOFF(e_tpgid)),
-	{"tsess", "TSESS", NULL, 0, evar, 6, EOFF(e_tsess), KPTR, "x"},
-	{"tsiz", "TSIZ", NULL, 0, tsize, 4},
-	{"tt", "TT", NULL, LJUST, tname, 3},
-	{"tty", "TTY", NULL, LJUST, longtname, 8},
-	{"ucomm", "UCOMM", NULL, LJUST, ucomm, MAXCOMLEN},
-	UID("uid", "UID", evar, EOFF(e_ucred.cr_uid)),
-	{"upr", "UPR", NULL, 0, pvar, 3, POFF(p_usrpri), UCHAR, "d"},
-	{"user", "USER", NULL, LJUST, uname, USERLEN},
-	{"usrpri", "", "upr"},
-	{"vsize", "", "vsz"},
-	{"vsz", "VSZ", NULL, 0, vsize, 5},
-	{"wchan", "WCHAN", NULL, LJUST, wchan, 6},
-	{"xstat", "XSTAT", NULL, 0, pvar, 4, POFF(p_xstat), USHORT, "x"},
-	{""},
+	VAR6("%cpu", "%CPU", 0, pcpu, 0, PCPU),
+	VAR6("%mem", "%MEM", 0, pmem, POFF(p_vm_rssize), INT32),
+	PVAR("acflag", "ACFLG", 0, p_acflag, USHORT, "x"),
+	VAR3("acflg", "acflag", ALIAS),
+	VAR3("args", "command", ALIAS),
+	VAR3("blocked", "sigmask", ALIAS),
+	VAR3("caught", "sigcatch", ALIAS),
+	VAR4("comm", "COMMAND", COMM|ARGV0|LJUST, command),
+	VAR4("command", "COMMAND", COMM|LJUST, command),
+	PVAR("cpu", "CPU", 0, p_estcpu, UINT, "u"),
+	VAR4("cpuid", "CPUID", LWP, cpuid),
+	VAR3("cputime", "time", ALIAS),
+	VAR6("ctime", "CTIME", 0, putimeval, POFF(p_uctime_sec), TIMEVAL),
+	GID("egid", "EGID", p_gid),
+	VAR4("egroup", "EGROUP", LJUST, gname),
+	VAR4("emul", "EMUL", LJUST, emul),
+	VAR6("etime", "ELAPSED", 0, elapsed, POFF(p_ustart_sec), TIMEVAL),
+	UID("euid", "EUID", p_uid),
+	VAR4("euser", "EUSER", LJUST, uname),
+	PVAR("f", "F", 0, p_flag, INT, "x"),
+	VAR3("flags", "f", ALIAS),
+	GID("gid", "GID", p_gid),
+	VAR4("group", "GROUP", LJUST, gname),
+	VAR4("groupnames", "GROUPNAMES", LJUST, groupnames),
+	VAR4("groups", "GROUPS", LJUST, groups),
+	LVAR("holdcnt", "HOLDCNT", 0, l_holdcnt, INT, "d"),
+	VAR3("ignored", "sigignore", ALIAS),
+	PUVAR("inblk", "INBLK", 0, p_uru_inblock, UINT64, PRIu64),
+	VAR3("inblock", "inblk", ALIAS),
+	PVAR("jobc", "JOBC", 0, p_jobc, SHORT, "d"),
+	PVAR("ktrace", "KTRACE", 0, p_traceflag, INT, "x"),
+/*XXX*/	PVAR("ktracep", "KTRACEP", 0, p_tracep, KPTR, PRIx64),
+	LVAR("laddr", "LADDR", 0, l_laddr, KPTR, PRIx64),
+	LVAR("lid", "LID", 0, l_lid, INT32, "d"),
+	VAR4("lim", "LIM", 0, maxrss),
+	VAR4("lname", "LNAME", LJUST|LWP, lname),
+	VAR4("login", "LOGIN", LJUST, logname),
+	VAR3("logname", "login", ALIAS),
+	VAR6("lstart", "STARTED", LJUST, lstarted, POFF(p_ustart_sec), UINT32),
+	VAR4("lstate", "STAT", LJUST|LWP, lstate),
+	PUVAR("majflt", "MAJFLT", 0, p_uru_majflt, UINT64, PRIu64),
+	PUVAR("minflt", "MINFLT", 0, p_uru_minflt, UINT64, PRIu64),
+	PUVAR("msgrcv", "MSGRCV", 0, p_uru_msgrcv, UINT64, PRIu64),
+	PUVAR("msgsnd", "MSGSND", 0, p_uru_msgsnd, UINT64, PRIu64),
+	VAR3("ni", "nice", ALIAS),
+	VAR6("nice", "NI", 0, pnice, POFF(p_nice), UCHAR),
+	PUVAR("nivcsw", "NIVCSW", 0, p_uru_nivcsw, UINT64, PRIu64),
+	PVAR("nlwp", "NLWP", 0, p_nlwps, UINT64, PRId64),
+	VAR3("nsignals", "nsigs", ALIAS),
+	PUVAR("nsigs", "NSIGS", 0, p_uru_nsignals, UINT64, PRIu64),
+	PUVAR("nswap", "NSWAP", 0, p_uru_nswap, UINT64, PRIu64),
+	PUVAR("nvcsw", "NVCSW", 0, p_uru_nvcsw, UINT64, PRIu64),
+/*XXX*/	LVAR("nwchan", "WCHAN", 0, l_wchan, KPTR, PRIx64),
+	PUVAR("oublk", "OUBLK", 0, p_uru_oublock, UINT64, PRIu64),
+	VAR3("oublock", "oublk", ALIAS),
+/*XXX*/	PVAR("p_ru", "P_RU", 0, p_ru, KPTR, PRIx64),
+/*XXX*/	PVAR("paddr", "PADDR", 0, p_paddr, KPTR, PRIx64),
+	PUVAR("pagein", "PAGEIN", 0, p_uru_majflt, UINT64, PRIu64),
+	VAR3("pcpu", "%cpu", ALIAS),
+	VAR3("pending", "sig", ALIAS),
+	PID("pgid", "PGID", p__pgid),
+	PID("pid", "PID", p_pid),
+	VAR3("pmem", "%mem", ALIAS),
+	PID("ppid", "PPID", p_ppid),
+	VAR4("pri", "PRI", LWP, pri),
+	LVAR("re", "RE", INF127, l_swtime, UINT, "u"),
+	GID("rgid", "RGID", p_rgid),
+	VAR4("rgroup", "RGROUP", LJUST, rgname),
+/*XXX*/	LVAR("rlink", "RLINK", 0, l_back, KPTR, PRIx64),
+	PVAR("rlwp", "RLWP", 0, p_nrlwps, UINT64, PRId64),
+	VAR6("rss", "RSS", 0, p_rssize, POFF(p_vm_rssize), INT32),
+	VAR3("rssize", "rsz", ALIAS),
+	VAR6("rsz", "RSZ", 0, rssize, POFF(p_vm_rssize), INT32),
+	UID("ruid", "RUID", p_ruid),
+	VAR4("ruser", "RUSER", LJUST, runame),
+	PVAR("sess", "SESS", 0, p_sess, KPTR24, PRIx64),
+	PID("sid", "SID", p_sid),
+	PVAR("sig", "PENDING", 0, p_siglist, SIGLIST, "s"),
+	PVAR("sigcatch", "CAUGHT", 0, p_sigcatch, SIGLIST, "s"),
+	PVAR("sigignore", "IGNORED", 0, p_sigignore, SIGLIST, "s"),
+	PVAR("sigmask", "BLOCKED", 0, p_sigmask, SIGLIST, "s"),
+	LVAR("sl", "SL", INF127, l_slptime, UINT, "u"),
+	VAR6("start", "STARTED", 0, started, POFF(p_ustart_sec), UINT32),
+	VAR3("stat", "state", ALIAS),
+	VAR4("state", "STAT", LJUST, state),
+	VAR6("stime", "STIME", 0, putimeval, POFF(p_ustime_sec), TIMEVAL),
+	GID("svgid", "SVGID", p_svgid),
+	VAR4("svgroup", "SVGROUP", LJUST, svgname),
+	UID("svuid", "SVUID", p_svuid),
+	VAR4("svuser", "SVUSER", LJUST, svuname),
+	/* "tdev" is UINT32, but we do this for sorting purposes */
+	VAR6("tdev", "TDEV", 0, tdev, POFF(p_tdev), INT32),
+	VAR6("time", "TIME", 0, cputime, 0, CPUTIME),
+	PID("tpgid", "TPGID", p_tpgid),
+	PVAR("tsess", "TSESS", 0, p_tsess, KPTR, PRIx64),
+	VAR6("tsiz", "TSIZ", 0, tsize, POFF(p_vm_tsize), INT32),
+	VAR6("tt", "TTY", LJUST, tname, POFF(p_tdev), INT32),
+	VAR6("tty", "TTY", LJUST, longtname, POFF(p_tdev), INT32),
+	LVAR("uaddr", "UADDR", 0, l_addr, KPTR, PRIx64),
+	VAR4("ucomm", "UCOMM", LJUST, ucomm),
+	UID("uid", "UID", p_uid),
+	LVAR("upr", "UPR", 0, l_usrpri, UCHAR, "u"),
+	VAR4("user", "USER", LJUST, uname),
+	VAR3("usrpri", "upr", ALIAS),
+	VAR6("utime", "UTIME", 0, putimeval, POFF(p_uutime_sec), TIMEVAL),
+	VAR3("vsize", "vsz", ALIAS),
+	VAR6("vsz", "VSZ", 0, vsize, 0, VSIZE),
+	VAR4("wchan", "WCHAN", LJUST|LWP, wchan),
+	PVAR("xstat", "XSTAT", 0, p_xstat, USHORT, "x"),
+/* "zzzz" end_sort */
+	{ .name = "" },
 };
 
 void
-showkey()
+showkey(void)
 {
 	VAR *v;
 	int i;
-	char *p, *sep;
+	const char *p;
+	const char *sep;
 
 	i = 0;
 	sep = "";
@@ -204,17 +237,34 @@ showkey()
 			i = len;
 			sep = "\n";
 		}
-		(void) printf("%s%s", sep, p);
+		(void)printf("%s%s", sep, p);
 		sep = " ";
 	}
-	(void) printf("\n");
+	(void)printf("\n");
 }
 
-void
-parsefmt(p)
-	char *p;
+/*
+ * Parse the string pp, and insert or append entries to the list
+ * referenced by listptr.  If pos in non-null and *pos is non-null, then
+ * *pos specifies where to insert (instead of appending).  If pos is
+ * non-null, then a new value is returned through *pos referring to the
+ * last item inserted.
+ */
+static void
+parsevarlist(const char *pp, struct varlist *listptr, struct varent **pos)
 {
-	static struct varent *vtail;
+	char *p, *sp, *equalsp;
+
+	/* dup to avoid zapping arguments.  We will free sp later. */
+	p = sp = strdup(pp);
+
+	/*
+	 * Everything after the first '=' is part of a custom header.
+	 * Temporarily replace it with '\0' to simplify other code.
+	 */
+	equalsp = strchr(p, '=');
+	if (equalsp)
+	    *equalsp = '\0';
 
 #define	FMTSEP	" \t,\n"
 	while (p && *p) {
@@ -222,62 +272,141 @@ parsefmt(p)
 		VAR *v;
 		struct varent *vent;
 
-		while ((cp = strsep(&p, FMTSEP)) != NULL && *cp == '\0')
-			/* void */;
-		if (!(v = findvar(cp)))
+		/*
+		 * skip separators before the first keyword, and
+		 * look for the separator after the keyword.
+		 */
+		for (cp = p; *cp != '\0'; cp++) {
+		    p = strpbrk(cp, FMTSEP);
+		    if (p != cp)
+			break;
+		}
+		if (*cp == '\0')
+		    break;
+		/*
+		 * Now cp points to the start of a keyword,
+		 * and p is NULL or points past the end of the keyword.
+		 *
+		 * Terminate the keyword with '\0', or reinstate the
+		 * '=' that was removed earlier, if appropriate.
+		 */
+		if (p) {
+			*p = '\0';
+			p++;
+		} else if (equalsp) {
+			*equalsp = '=';
+		}
+
+		/*
+		 * If findvar() likes the keyword or keyword=header,
+		 * add it to our list.  If findvar() doesn't like it,
+		 * it will print a warning, so we ignore it.
+		 */
+		if ((v = findvar(cp)) == NULL)
 			continue;
 		if ((vent = malloc(sizeof(struct varent))) == NULL)
 			err(1, NULL);
 		vent->var = v;
-		vent->next = NULL;
-		if (vhead == NULL)
-			vhead = vtail = vent;
+		if (pos && *pos)
+		    SIMPLEQ_INSERT_AFTER(listptr, *pos, vent, next);
 		else {
-			vtail->next = vent;
-			vtail = vent;
+		    SIMPLEQ_INSERT_TAIL(listptr, vent, next);
 		}
+		if (pos)
+		    *pos = vent;
 	}
-	if (!vhead)
+ 	free(sp);
+	if (SIMPLEQ_EMPTY(listptr))
 		errx(1, "no valid keywords");
 }
 
-static VAR *
-findvar(p)
-	char *p;
+void
+parsefmt(const char *p)
 {
-	VAR *v, key;
-	char *hp;
 
-	key.name = p;
+	parsevarlist(p, &displaylist, NULL);
+}
+
+void
+parsefmt_insert(const char *p, struct varent **pos)
+{
+
+	parsevarlist(p, &displaylist, pos);
+}
+
+void
+parsesort(const char *p)
+{
+
+	parsevarlist(p, &sortlist, NULL);
+}
+
+/* Search through a list for an entry with a specified name. */
+struct varent *
+varlist_find(struct varlist *list, const char *name)
+{
+	struct varent *vent;
+
+	SIMPLEQ_FOREACH(vent, list, next) {
+		if (strcmp(vent->var->name, name) == 0)
+			break;
+	}
+	return vent;
+}
+
+static VAR *
+findvar(const char *p)
+{
+	VAR *v;
+	char *hp;
 
 	hp = strchr(p, '=');
 	if (hp)
 		*hp++ = '\0';
 
-	key.name = p;
-	v = bsearch(&key, var, sizeof(var)/sizeof(VAR) - 1, sizeof(VAR), vcmp);
-
-	if (v && v->alias) {
-		if (hp) {
-			warnx("%s: illegal keyword specification", p);
-			eval = 1;
-		}
-		parsefmt(v->alias);
-		return ((VAR *)NULL);
-	}
+	v = bsearch(p, var, sizeof(var)/sizeof(VAR) - 1, sizeof(VAR), vcmp);
+	if (v && v->flag & ALIAS)
+		v = findvar(v->header);
 	if (!v) {
 		warnx("%s: keyword not found", p);
 		eval = 1;
-		return ((VAR *)NULL);
+		return NULL;
 	}
-	if (hp)
-		v->header = hp;
-	return (v);
+
+	if (v && hp) {
+		/*
+		 * Override the header.
+		 *
+		 * We need to copy the entry first, and override the
+		 * header in the copy, because the same field might be
+		 * used multiple times with different headers.  We also
+		 * need to strdup the header.
+		 */
+		struct var *newvar;
+		char *newheader;
+
+		if ((newvar = malloc(sizeof(struct var))) == NULL)
+			err(1, NULL);
+		if ((newheader = strdup(hp)) == NULL)
+			err(1, NULL);
+		memcpy(newvar, v, sizeof(struct var));
+		newvar->header = newheader;
+
+		/*
+		 * According to P1003.1-2004, if the header text is null,
+		 * such as -o user=, the field width will be at least as
+		 * wide as the default header text.
+		 */
+		if (*hp == '\0')
+			newvar->width = strlen(v->header);
+
+		v = newvar;
+	}
+	return v;
 }
 
 static int
-vcmp(a, b)
-        const void *a, *b;
+vcmp(const void *a, const void *b)
 {
-        return (strcmp(((VAR *)a)->name, ((VAR *)b)->name));
+        return strcmp(a, ((const VAR *)b)->name);
 }

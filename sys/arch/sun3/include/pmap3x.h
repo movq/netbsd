@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap3x.h,v 1.10 1998/06/09 19:58:50 gwr Exp $	*/
+/*	$NetBSD: pmap3x.h,v 1.25 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,10 +34,12 @@
  * XXX - Does user-level code really see this struct?
  */
 
+#include <sys/simplelock.h>
+
 struct pmap {
 	struct a_tmgr_struct	*pm_a_tmgr; 	/* Level-A table manager */
 	u_long              	pm_a_phys;  	/* MMU level-A phys addr */
-	simple_lock_data_t	pm_lock;    	/* lock on pmap */
+	struct simplelock	pm_lock;    	/* lock on pmap */
 	int             	pm_refcount;	/* reference count */
 	int             	pm_version;
 };
@@ -54,7 +49,7 @@ extern	struct pmap 	kernel_pmap;
 #define	pmap_kernel()	(&kernel_pmap)
 
 /* Common function for pmap_resident_count(), pmap_wired_count() */
-segsz_t pmap_count __P((pmap_t, int));
+segsz_t pmap_count(pmap_t, int);
 
 /* This needs to be a macro for kern_sysctl.c */
 #define	pmap_resident_count(pmap)	(pmap_count((pmap), 0))
@@ -65,14 +60,24 @@ segsz_t pmap_count __P((pmap_t, int));
 /* We use the PA plus some low bits for device mmap. */
 #define pmap_phys_address(addr) 	(addr)
 
+#define	pmap_update(pmap)		/* nothing (yet) */
+
 /* Map a given physical region to a virtual region */
-vm_offset_t pmap_map __P((vm_offset_t, vm_offset_t, vm_offset_t, int));
+vaddr_t pmap_map(vaddr_t, paddr_t, paddr_t, int);
+
+static __inline void
+pmap_remove_all(struct pmap *pmap)
+{
+	/* Nothing. */
+}
 
 /*
  * Flags to tell pmap_enter `this is not to be cached', etc.
  * Since physical addresses are always aligned, we can use
  * the low order bits for this.
  */
+#define	PMAP_OBMEM	0x00	/* unused */
+#define	PMAP_OBIO	0x00	/* unused */
 #define	PMAP_VME16	0x10	/* pmap will add the necessary offset */
 #define	PMAP_VME32	0x20	/* etc. */
 #define	PMAP_NC		0x40	/* tells pmap_enter to set PTE_CI */

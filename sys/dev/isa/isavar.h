@@ -1,12 +1,11 @@
-/*	$NetBSD: isavar.h,v 1.37 1999/03/19 05:13:18 cgd Exp $	*/
+/*	$NetBSD: isavar.h,v 1.52 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
- * Copyright (c) 1997 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Jason R. Thorpe of the Numerical Aerospace Simulation Facility,
- * NASA Ames Research Center.
+ * by Jason R. Thorpe of Wasabi Systems, Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -16,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,7 +62,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	BSDI Id: isavar.h,v 1.5 1992/12/01 18:06:00 karels Exp 
+ *	BSDI Id: isavar.h,v 1.5 1992/12/01 18:06:00 karels Exp
  */
 
 #ifndef _DEV_ISA_ISAVAR_H_
@@ -81,9 +73,9 @@
  */
 
 #include <sys/queue.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
-/* 
+/*
  * Structures and definitions needed by the machine-dependent header.
  */
 struct isabus_attach_args;
@@ -94,11 +86,81 @@ struct isabus_attach_args;
  * ISA bus attach arguments
  */
 struct isabus_attach_args {
-	char	*iba_busname;		/* XXX should be common */
+	const char *_iba_busname;		/* XXX placeholder */
 	bus_space_tag_t iba_iot;	/* isa i/o space tag */
 	bus_space_tag_t iba_memt;	/* isa mem space tag */
 	bus_dma_tag_t iba_dmat;		/* isa DMA tag */
 	isa_chipset_tag_t iba_ic;
+};
+
+/*
+ * ISA bus resources.
+ */
+
+struct isa_io {
+	int ir_addr;
+	int ir_size;
+};
+
+struct isa_iomem {
+	int ir_addr;
+	int ir_size;
+};
+
+struct isa_irq {
+	int ir_irq;
+};
+
+struct isa_drq {
+	int ir_drq;
+};
+
+struct isa_pnpname {
+	struct isa_pnpname *ipn_next;
+	char *ipn_name;
+};
+
+/*
+ * Machine-dependent code provides a list of these to describe
+ * devices on the ISA bus which should be attached via direct
+ * configuration.
+ *
+ * All of this information is dynamically allocated, so that
+ * the ISA bus driver may free all of this information if the
+ * bus does not support dynamic attach/detach of devices (e.g.
+ * on a docking station).
+ *
+ * Some info on the "ik_key" field: This is a unique number for
+ * each knowndev node.  If, when we need to re-enumerate the
+ * knowndevs, we discover that a node with key N is in the old
+ * list but not in the new, the device has disappeared.  Similarly,
+ * if a node with key M is in the new list but not in the old,
+ * the device is new.  Note that the knowndevs list must be
+ * sorted in ascending "key" order.
+ */
+struct isa_knowndev {
+	TAILQ_ENTRY(isa_knowndev) ik_list;
+	uintptr_t ik_key;
+	struct device *ik_claimed;
+
+	/*
+	 * The rest of these fields correspond to isa_attach_args
+	 * fields.
+	 */
+	char *ik_pnpname;
+	struct isa_pnpname *ik_pnpcompatnames;
+
+	struct isa_io *ik_io;
+	int ik_nio;
+
+	struct isa_iomem *ik_iomem;
+	int ik_niomem;
+
+	struct isa_irq *ik_irq;
+	int ik_nirq;
+
+	struct isa_drq *ik_drq;
+	int ik_ndrq;
 };
 
 /*
@@ -111,47 +173,70 @@ struct isa_attach_args {
 
 	isa_chipset_tag_t ia_ic;
 
-	int	ia_iobase;		/* base i/o address */
-	int	ia_iosize;		/* span of ports used */
-	int	ia_irq;			/* interrupt request */
-	int	ia_drq;			/* DMA request */
-	int	ia_drq2;		/* second DMA request */
-	int	ia_maddr;		/* physical i/o mem addr */
-	u_int	ia_msize;		/* size of i/o memory */
+	/*
+	 * PNP (or other) names to with which we can match a device
+	 * driver to a device that machine-dependent code tells us
+	 * is there (i.e. support for direct-configuration of ISA
+	 * devices).
+	 */
+	char *ia_pnpname;
+	struct isa_pnpname *ia_pnpcompatnames;
+
+	struct isa_io *ia_io;		/* I/O resources */
+	int ia_nio;
+
+	struct isa_iomem *ia_iomem;	/* memory resources */
+	int ia_niomem;
+
+	struct isa_irq *ia_irq;		/* IRQ resources */
+	int ia_nirq;
+
+	struct isa_drq *ia_drq;		/* DRQ resources */
+	int ia_ndrq;
+
 	void	*ia_aux;		/* driver specific */
 };
 
-#include "locators.h"
-
-#define	IOBASEUNK	ISACF_PORT_DEFAULT	/* i/o address is unknown */
-#define	IRQUNK		ISACF_IRQ_DEFAULT	/* interrupt request line is unknown */
-#define	DRQUNK		ISACF_DRQ_DEFAULT	/* DMA request line is unknown */
-#define	MADDRUNK	ISACF_IOMEM_DEFAULT	/* shared memory address is unknown */
+/*
+ * Test to determine if a given call to an ISA device probe routine
+ * is actually an attempt to do direct configuration.
+ */
+#define	ISA_DIRECT_CONFIG(ia)						\
+	((ia)->ia_pnpname != NULL || (ia)->ia_pnpcompatnames != NULL)
 
 /*
  * ISA master bus
  */
 struct isa_softc {
-	struct	device sc_dev;		/* base device */
+	device_t sc_dev;		/* base device */
 
 	bus_space_tag_t sc_iot;		/* isa io space tag */
 	bus_space_tag_t sc_memt;	/* isa mem space tag */
 	bus_dma_tag_t sc_dmat;		/* isa DMA tag */
 
 	isa_chipset_tag_t sc_ic;
+
+	TAILQ_HEAD(, isa_knowndev) sc_knowndevs;
+	int sc_dynamicdevs;
 };
 
-#define		cf_iobase		cf_loc[ISACF_PORT]
-#define		cf_iosize		cf_loc[ISACF_SIZE]
-#define		cf_maddr		cf_loc[ISACF_IOMEM]
-#define		cf_msize		cf_loc[ISACF_IOSIZ]
-#define		cf_irq			cf_loc[ISACF_IRQ]
-#define		cf_drq			cf_loc[ISACF_DRQ]
-#define		cf_drq2			cf_loc[ISACF_DRQ2]
+/*
+ * These must be in sync with the ISACF_XXX_DEFAULT definitions
+ * in "locators.h" (generated from files.isa).
+ * (not including "locators.h" here to avoid dependency)
+ */
+#define ISA_UNKNOWN_PORT	(-1)
+#define ISA_UNKNOWN_IOMEM	(-1)
+#define ISA_UNKNOWN_IOSIZ	(0)
+#define ISA_UNKNOWN_IRQ		(-1)
+#define ISA_UNKNOWN_DRQ		(-1)
+#define ISA_UNKNOWN_DRQ2	(-1)
+
+int	isabusprint(void *, const char *);
 
 /*
  * ISA interrupt handler manipulation.
- * 
+ *
  * To establish an ISA interrupt handler, a driver calls isa_intr_establish()
  * with the interrupt number, type, level, function, and function argument of
  * the interrupt it wants to handle.  Isa_intr_establish() returns an opaque
@@ -163,17 +248,30 @@ struct isa_softc {
  * "I took care of it", or -1 for "I guess it was mine, but I wasn't
  * expecting it."
  *
- * To remove an interrupt handler, the driver calls isa_intr_disestablish() 
+ * To remove an interrupt handler, the driver calls isa_intr_disestablish()
  * with the handle returned by isa_intr_establish() for that handler.
+ *
+ * The event counter (struct evcnt) associated with an interrupt line
+ * (to be used as 'parent' for an ISA device's interrupt handler's evcnt)
+ * can be obtained with isa_intr_evcnt().
  */
 
 /* ISA interrupt sharing types */
-char	*isa_intr_typename __P((int type));
+const char	*isa_intr_typename(int);
 
 /*
  * Some ISA devices (e.g. on a VLB) can perform 32-bit DMA.  This
  * flag is passed to bus_dmamap_create() to indicate that fact.
  */
 #define	ISABUS_DMA_32BIT	BUS_DMA_BUS1
+
+/*
+ * This flag indicates that the DMA channel should not yet be reserved,
+ * even if BUS_DMA_ALLOCNOW is specified.
+ */
+#define ISABUS_DMA_DEFERCHAN	BUS_DMA_BUS2
+
+void	isa_set_slotcount(int);
+int	isa_get_slotcount(void);
 
 #endif /* _DEV_ISA_ISAVAR_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: sbc_obio.c,v 1.13 2000/03/25 15:27:55 tsutsui Exp $	*/
+/*	$NetBSD: sbc_obio.c,v 1.23 2008/04/04 16:00:57 tsutsui Exp $	*/
 
 /*
  * Copyright (C) 1996,1997 Scott Reynolds.  All rights reserved.
@@ -26,6 +26,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: sbc_obio.c,v 1.23 2008/04/04 16:00:57 tsutsui Exp $");
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,10 +48,13 @@
 #include <dev/ic/ncr5380var.h>
 
 #include <machine/cpu.h>
+#include <machine/bus.h>
 #include <machine/viareg.h>
 
 #include <mac68k/dev/sbcreg.h>
 #include <mac68k/dev/sbcvar.h>
+
+#include <mac68k/obio/obiovar.h>
 
 /*
  * From Guide to the Macintosh Family Hardware, pp. 137-143
@@ -68,59 +74,56 @@
 #define	SBC_DMA_OFS_DUO2	0x02000
 #define	SBC_HSK_OFS_DUO2	0x04000
 
-static int	sbc_obio_match __P((struct device *, struct cfdata *, void *));
-static void	sbc_obio_attach __P((struct device *, struct device *, void *));
+static int	sbc_obio_match(device_t, cfdata_t, void *);
+static void	sbc_obio_attach(device_t, device_t, void *);
 
-void	sbc_intr_enable __P((struct ncr5380_softc *));
-void	sbc_intr_disable __P((struct ncr5380_softc *));
-void	sbc_obio_clrintr __P((struct ncr5380_softc *));
+void	sbc_intr_enable(struct ncr5380_softc *);
+void	sbc_intr_disable(struct ncr5380_softc *);
+void	sbc_obio_clrintr(struct ncr5380_softc *);
 
-struct cfattach sbc_obio_ca = {
-	sizeof(struct sbc_softc), sbc_obio_match, sbc_obio_attach
-};
+CFATTACH_DECL_NEW(sbc_obio, sizeof(struct sbc_softc),
+    sbc_obio_match, sbc_obio_attach, NULL, NULL);
 
 static int
-sbc_obio_match(parent, cf, args)
-	struct device *parent;
-	struct cfdata *cf;
-	void *args;
+sbc_obio_match(device_t parent, cfdata_t cf, void *aux)
 {
+	struct obio_attach_args *oa = aux;
+
 	switch (current_mac_model->machineid) {
 	case MACH_MACIIFX:	/* Note: the IIfx isn't (yet) supported. */
-/*
-		if (cf->cf_unit == 0)
+		if (oa->oa_addr == 0)
 			return 1;
-*/
 		break;
+
 	case MACH_MACPB210:
 	case MACH_MACPB230:
 	case MACH_MACPB250:
 	case MACH_MACPB270:
 	case MACH_MACPB280:
 	case MACH_MACPB280C:
-		if (cf->cf_unit == 1)
+		if (oa->oa_addr == 1)
 			return 1;
 		/*FALLTHROUGH*/
 	default:
-		if (cf->cf_unit == 0 && mac68k_machine.scsi80)
+		if (oa->oa_addr == 0 && mac68k_machine.scsi80)
 			return 1;
 	}
 	return 0;
 }
 
 static void
-sbc_obio_attach(parent, self, args)
-	struct device *parent, *self;
-	void *args;
+sbc_obio_attach(device_t parent, device_t self, void *aux)
 {
-	struct sbc_softc *sc = (struct sbc_softc *) self;
-	struct ncr5380_softc *ncr_sc = (struct ncr5380_softc *) sc;
+	struct sbc_softc *sc = device_private(self);
+	struct ncr5380_softc *ncr_sc = &sc->ncr_sc;
+	struct obio_attach_args *oa = aux;
 	char bits[64];
 	extern vaddr_t SCSIBase;
 
+	ncr_sc->sc_dev = self;
 	/* Pull in the options flags. */ 
-	sc->sc_options = ((ncr_sc->sc_dev.dv_cfdata->cf_flags | sbc_options)
-	    & SBC_OPTIONS_MASK);
+	sc->sc_options = ((device_cfdata(self)->cf_flags |
+			   sbc_options) & SBC_OPTIONS_MASK);
 
 	/*
 	 * Set up offsets to 5380 registers and GLUE I/O space, and turn
@@ -145,7 +148,7 @@ sbc_obio_attach(parent, self, args)
 	case MACH_MACPB270:
 	case MACH_MACPB280:
 	case MACH_MACPB280C:
-		if (ncr_sc->sc_dev.dv_unit == 1) {
+		if (oa->oa_addr == 1) {
 			sc->sc_regs = (struct sbc_regs *)(0xfee00000 + SBC_REG_OFS_DUO2);
 			sc->sc_drq_addr = (vaddr_t)(0xfee00000 + SBC_HSK_OFS_DUO2);
 			sc->sc_nodrq_addr = (vaddr_t)(0xfee00000 + SBC_DMA_OFS_DUO2);
@@ -213,9 +216,9 @@ sbc_obio_attach(parent, self, args)
 		ncr_sc->sc_no_disconnect = 0xff;
 
 	if (sc->sc_options)
-		printf(": options=%s", bitmask_snprintf(sc->sc_options,
+		aprint_normal(": options=%s", bitmask_snprintf(sc->sc_options,
 		    SBC_OPTIONS_BITS, bits, sizeof(bits)));
-	printf("\n");
+	aprint_normal("\n");
 
 	if (sc->sc_options & (SBC_INTR|SBC_RESELECT)) {
 		/* Enable SCSI interrupts through VIA2 */
@@ -224,13 +227,11 @@ sbc_obio_attach(parent, self, args)
 
 #ifdef SBC_DEBUG
 	if (sbc_debug)
-		printf("%s: softc=%p regs=%p\n", ncr_sc->sc_dev.dv_xname,
-		    sc, sc->sc_regs);
-	ncr_sc->sc_link.flags |= sbc_link_flags;
+		aprint_debug_dev(self, "softc=%p regs=%p\n", sc, sc->sc_regs);
 #endif
 
-	ncr_sc->sc_link.scsipi_scsi.adapter_target = 7;
-	ncr_sc->sc_adapter.scsipi_minphys = minphys;
+	ncr_sc->sc_channel.chan_id = 7;
+	ncr_sc->sc_adapter.adapt_minphys = minphys;
 
 	/*
 	 *  Initialize the SCSI controller itself.
@@ -242,8 +243,7 @@ sbc_obio_attach(parent, self, args)
  * Interrupt support routines.
  */
 void
-sbc_intr_enable(ncr_sc)
-	struct ncr5380_softc *ncr_sc;
+sbc_intr_enable(struct ncr5380_softc *ncr_sc)
 {
 	struct sbc_softc *sc = (struct sbc_softc *)ncr_sc;
 	int s, flags;
@@ -261,8 +261,7 @@ sbc_intr_enable(ncr_sc)
 }
 
 void
-sbc_intr_disable(ncr_sc)
-	struct ncr5380_softc *ncr_sc;
+sbc_intr_disable(struct ncr5380_softc *ncr_sc)
 {
 	struct sbc_softc *sc = (struct sbc_softc *)ncr_sc;
 	int s, flags;
@@ -280,8 +279,7 @@ sbc_intr_disable(ncr_sc)
 }
 
 void
-sbc_obio_clrintr(ncr_sc)
-	struct ncr5380_softc *ncr_sc;
+sbc_obio_clrintr(struct ncr5380_softc *ncr_sc)
 {
 	struct sbc_softc *sc = (struct sbc_softc *)ncr_sc;
 	int flags;

@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.10 1999/06/28 01:35:11 sakamoto Exp $	*/
+/*	$NetBSD: boot.c,v 1.17 2008/05/26 16:28:39 kiyohara Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -30,10 +30,15 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include <stand.h>
-#include <loadfile.h>
+
+#include <lib/libsa/stand.h>
+#include <lib/libsa/loadfile.h>
+#include <lib/libkern/libkern.h>
+#include <sys/boot_flag.h>
 #include <sys/reboot.h>
 #include <machine/bootinfo.h>
+#include <machine/cpu.h>
+
 #include "boot.h"
 
 char *names[] = {
@@ -54,7 +59,8 @@ struct btinfo_clock btinfo_clock;
 
 extern char bootprog_name[], bootprog_rev[], bootprog_maker[], bootprog_date[];
 
-void exec_kernel __P((char *, void *));
+void main(void);
+void exec_kernel(char *, void *);
 
 void
 main()
@@ -133,20 +139,16 @@ main()
  * Exec kernel
  */
 void
-exec_kernel(name, bootinfo)
-	char *name;
-	void *bootinfo;
+exec_kernel(char *name, void *bootinfo)
 {
 	int howto = 0;
 	char c, *ptr;
 	u_long marks[MARK_MAX];
 #ifdef DBMONITOR
 	int go_monitor;
-	extern int db_monitor __P((void));
-#endif /* DBMONITOR */
-	extern int tgets __P((char *buf));
 
 ret:
+#endif /* DBMONITOR */
 	printf("\nBoot: ");
 	memset(namebuf, 0, sizeof (namebuf));
 	(void)tgets(namebuf);
@@ -170,18 +172,8 @@ ret:
 		if (!c)
 			goto next;
 		if (c == '-') {
-			while ((c = *++ptr) && c != ' ') {
-				if (c == 'a')
-					howto |= RB_ASKNAME;
-				else if (c == 'b')
-					howto |= RB_HALT;
-				else if (c == 'd')
-					howto |= RB_KDB;
-				else if (c == 'r')
-					howto |= RB_DFLTROOT;
-				else if (c == 's')
-					howto |= RB_SINGLE;
-			}
+			while ((c = *++ptr) && c != ' ')
+				BOOT_FLAG(c, howto);
 		} else {
 			name = ptr;
 			while ((c = *++ptr) && c != ' ');
@@ -202,7 +194,7 @@ next:
 		}
 #endif /* DBMONITOR */
 
-		printf("start=0x%x\n\n", marks[MARK_ENTRY]);
+		printf("start=0x%lx\n\n", marks[MARK_ENTRY]);
 		delay(1000);
 		__syncicache((void *)marks[MARK_ENTRY],
 			(u_int)marks[MARK_SYM] - (u_int)marks[MARK_ENTRY]);

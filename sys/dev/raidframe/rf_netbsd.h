@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_netbsd.h,v 1.11 2000/03/27 03:01:33 oster Exp $	*/
+/*	$NetBSD: rf_netbsd.h,v 1.29 2008/04/28 20:23:56 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,71 +32,14 @@
 #ifndef _RF__RF_NETBSDSTUFF_H_
 #define _RF__RF_NETBSDSTUFF_H_
 
-#ifdef _KERNEL
 #include <sys/fcntl.h>
 #include <sys/systm.h>
-#include <sys/namei.h>
 #include <sys/vnode.h>
-#endif /* _KERNEL */
+#include <sys/pool.h>
+#include <sys/disk.h>
 
-/* The per-component label information that the user can set */
-typedef struct RF_ComponentInfo_s {
-	int row;              /* the row number of this component */
-	int column;           /* the column number of this component */
-	int serial_number;    /* a user-specified serial number for this
-				 RAID set */
-} RF_ComponentInfo_t;
-
-/* The per-component label information */
-typedef struct RF_ComponentLabel_s {
-	int version;          /* The version of this label. */
-	int serial_number;    /* a user-specified serial number for this
-				 RAID set */
-	int mod_counter;      /* modification counter.  Changed (usually
-				 by incrementing) every time the label 
-				 is changed */
-	int row;              /* the row number of this component */
-	int column;           /* the column number of this component */
-	int num_rows;         /* number of rows in this RAID set */
-	int num_columns;      /* number of columns in this RAID set */
-	int clean;            /* 1 when clean, 0 when dirty */
-	int status;           /* rf_ds_optimal, rf_ds_dist_spared, whatever. */
-	/* stuff that will be in version 2 of the label */
-	int sectPerSU;        /* Sectors per Stripe Unit */
-	int SUsPerPU;         /* Stripe Units per Parity Units */
-	int SUsPerRU;         /* Stripe Units per Reconstruction Units */
-	int parityConfig;     /* '0' == RAID0, '1' == RAID1, etc. */
-	int maxOutstanding;   /* maxOutstanding disk requests */
-	int blockSize;        /* size of component block. 
-				 (disklabel->d_secsize) */
-	int numBlocks;        /* number of blocks on this component.  May
-			         be smaller than the partition size. */
-	int partitionSize;    /* number of blocks on this *partition*. 
-				 Must exactly match the partition size
-				 from the disklabel. */
-	int future_use[33];   /* Future expansion */
-	int autoconfigure;    /* automatically configure this RAID set. 
-				 0 == no, 1 == yes */
-	int root_partition;   /* Use this set as /
-				 0 == no, 1 == yes*/
-	int last_unit;        /* last unit number (e.g. 0 for /dev/raid0) 
-				 of this component.  Used for autoconfigure
-				 only. */
-	int config_order;     /* 0 .. n.  The order in which the component
-				 should be auto-configured.  E.g. 0 is will 
-				 done first, (and would become raid0).
-				 This may be in conflict with last_unit!!?! */
-	                      /* Not currently used. */
-	int future_use2[44];  /* More future expansion */
-} RF_ComponentLabel_t;
-
-typedef struct RF_SingleComponent_s {
-	int row;
-	int column;
-	char component_name[50]; /* name of the component */
-} RF_SingleComponent_t; 
-
-#ifdef _KERNEL
+#include <dev/dkvar.h>
+#include <dev/raidframe/raidframevar.h>
 
 struct raidcinfo {
 	struct vnode *ci_vp;	/* component device's vnode */
@@ -117,14 +53,46 @@ struct raidcinfo {
 };
 
 
+/* a little structure to serve as a container for all the various
+   global pools used in RAIDframe */
+
+struct RF_Pools_s {
+	struct pool alloclist;   /* AllocList */
+	struct pool asm_hdr;     /* Access Stripe Map Header */
+	struct pool asmap;       /* Access Stripe Map */
+	struct pool asmhle;      /* Access Stripe Map Header List Elements */
+	struct pool callback;    /* Callback descriptors */
+	struct pool dagh;        /* DAG headers */
+	struct pool dagnode;     /* DAG nodes */
+	struct pool daglist;     /* DAG lists */
+	struct pool dagpcache;   /* DAG pointer/param cache */
+	struct pool dqd;         /* Disk Queue Data */
+	struct pool fss;         /* Failed Stripe Structures */
+	struct pool funclist;    /* Function Lists */
+	struct pool mcpair;      /* Mutex/Cond Pairs */
+	struct pool pda;         /* Physical Disk Access structures */
+	struct pool pss;         /* Parity Stripe Status */
+	struct pool pss_issued;  /* Parity Stripe Status Issued */
+	struct pool rad;         /* Raid Access Descriptors */
+	struct pool reconbuffer; /* reconstruction buffer (header) pool */
+	struct pool revent;      /* reconstruct events */
+	struct pool stripelock;  /* StripeLock */
+	struct pool vfple;       /* VoidFunctionPtr List Elements */
+	struct pool vple;        /* VoidPointer List Elements */
+};
+
+extern struct RF_Pools_s rf_pools;
+void rf_pool_init(struct pool *, size_t, const char *, size_t, size_t);
+int rf_buf_queue_check(int);
 
 /* XXX probably belongs in a different .h file. */
 typedef struct RF_AutoConfig_s {
 	char devname[56];       /* the name of this component */
+	int flag;               /* a general-purpose flag */
 	dev_t dev;              /* the device for this component */
 	struct vnode *vp;       /* Mr. Vnode Pointer */
 	RF_ComponentLabel_t *clabel;  /* the label */
-	struct RF_AutoConfig_s *next; /* the next autoconfig structure 
+	struct RF_AutoConfig_s *next; /* the next autoconfig structure
 				         in this set. */
 } RF_AutoConfig_t;
 
@@ -135,5 +103,4 @@ typedef struct RF_ConfigSet_s {
 	struct RF_ConfigSet_s *next;
 } RF_ConfigSet_t;
 
-#endif /* _KERNEL */
 #endif /* _RF__RF_NETBSDSTUFF_H_ */

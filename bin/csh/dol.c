@@ -1,4 +1,4 @@
-/*	$NetBSD: dol.c,v 1.13 1998/08/19 01:31:46 thorpej Exp $	*/
+/* $NetBSD: dol.c,v 1.26 2007/07/16 18:26:09 christos Exp $ */
 
 /*-
  * Copyright (c) 1980, 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,21 +34,18 @@
 #if 0
 static char sccsid[] = "@(#)dol.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: dol.c,v 1.13 1998/08/19 01:31:46 thorpej Exp $");
+__RCSID("$NetBSD: dol.c,v 1.26 2007/07/16 18:26:09 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <fcntl.h>
+
 #include <errno.h>
+#include <fcntl.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#if __STDC__
-# include <stdarg.h>
-#else
-# include <varargs.h>
-#endif
 
 #include "csh.h"
 #include "extern.h"
@@ -69,11 +62,9 @@ __RCSID("$NetBSD: dol.c,v 1.13 1998/08/19 01:31:46 thorpej Exp $");
 static int Dpeekc, Dpeekrd;	/* Peeks for DgetC and Dreadc */
 static Char *Dcp, **Dvp;	/* Input vector for Dreadc */
 
-#define	DEOF	-1
-
-#define	unDgetC(c)	Dpeekc = c
-
-#define QUOTES		(_QF|_QB|_ESC)	/* \ ' " ` */
+#define	DEOF -1
+#define	unDgetC(c) Dpeekc = c
+#define QUOTES (_QF|_QB|_ESC)	/* \ ' " ` */
 
 /*
  * The following variables give the information about the current
@@ -81,27 +72,27 @@ static Char *Dcp, **Dvp;	/* Input vector for Dreadc */
  * words within this expansion, the count of remaining words, and the
  * information about any : modifier which is being applied.
  */
-#define MAXWLEN (BUFSIZ - 4)
+#define MAXWLEN (BUFSIZE - 4)
 #define MAXMOD MAXWLEN		/* This cannot overflow	*/
+static Char dolmod[MAXMOD];	/* : modifier character */
 static Char *dolp;		/* Remaining chars from this word */
 static Char **dolnxt;		/* Further words */
 static int dolcnt;		/* Count of further words */
-static Char dolmod[MAXMOD];	/* : modifier character */
 static int dolnmod;		/* Number of modifiers */
 static int dolmcnt;		/* :gx -> 10000, else 1 */
 static int dolwcnt;		/* :wx -> 10000, else 1 */
 
-static void	 Dfix2 __P((Char **));
-static Char	*Dpack __P((Char *, Char *));
-static int	 Dword __P((void));
-static void	 dolerror __P((Char *));
-static int	 DgetC __P((int));
-static void	 Dgetdol __P((void));
-static void	 fixDolMod __P((void));
-static void	 setDolp __P((Char *));
-static void	 unDredc __P((int));
-static int	 Dredc __P((void));
-static void	 Dtestq __P((int));
+static void Dfix2(Char **);
+static Char *Dpack(Char *, Char *);
+static int Dword(void);
+static void dolerror(Char *);
+static int DgetC(int);
+static void Dgetdol(void);
+static void fixDolMod(void);
+static void setDolp(Char *);
+static void unDredc(int);
+static int Dredc(void);
+static void Dtestq(int);
 
 
 /*
@@ -109,11 +100,9 @@ static void	 Dtestq __P((int));
  * argument list to command t.
  */
 void
-Dfix(t)
-    struct command *t;
+Dfix(struct command *t)
 {
-    Char **pp;
-    Char *p;
+    Char *p, **pp;
 
     if (noexec)
 	return;
@@ -133,11 +122,10 @@ Dfix(t)
 /*
  * $ substitute one word, for i/o redirection
  */
-Char   *
-Dfix1(cp)
-    Char *cp;
+Char *
+Dfix1(Char *cp)
 {
-    Char   *Dv[2];
+    Char *Dv[2];
 
     if (noexec)
 	return (0);
@@ -157,8 +145,7 @@ Dfix1(cp)
  * Subroutine to do actual fixing after state initialization.
  */
 static void
-Dfix2(v)
-    Char  **v;
+Dfix2(Char **v)
 {
     ginit();			/* Initialize glob's area pointers */
     Dvp = v;
@@ -175,12 +162,11 @@ Dfix2(v)
  * Pack up more characters in this word
  */
 static Char *
-Dpack(wbuf, wp)
-    Char   *wbuf, *wp;
+Dpack(Char *wbuf, Char *wp)
 {
-    int c;
-    int i = MAXWLEN - (wp - wbuf);
-
+    int c, i;
+    
+    i = MAXWLEN - (wp - wbuf);
     for (;;) {
 	c = DgetC(DODOL);
 	if (c == '\\') {
@@ -223,37 +209,35 @@ Dpack(wbuf, wp)
  * Rather, DgetC will return a DEOF when we hit the end-of-input.
  */
 static int
-Dword()
+Dword(void)
 {
-    int c, c1;
-    Char    wbuf[BUFSIZ];
-    Char *wp = wbuf;
-    int i = MAXWLEN;
-    bool dolflg;
-    bool    sofar = 0, done = 0;
+    Char wbuf[BUFSIZE], *wp;
+    int c, c1, i;
+    int dolflg, done, sofar;
+    
+    done = 0;
+    i = MAXWLEN;
+    sofar = 0;
+    wp = wbuf;
 
     while (!done) {
 	done = 1;
 	c = DgetC(DODOL);
 	switch (c) {
-
 	case DEOF:
 	    if (sofar == 0)
 		return (0);
 	    /* finish this word and catch the code above the next time */
 	    unDredc(c);
 	    /* FALLTHROUGH */
-
 	case '\n':
 	    *wp = 0;
 	    Gcat(STRNULL, wbuf);
 	    return (1);
-
 	case ' ':
 	case '\t':
 	    done = 0;
 	    break;
-
 	case '`':
 	    /* We preserve ` quotations which are done yet later */
 	    *wp++ = c, --i;
@@ -277,7 +261,6 @@ Dword()
 		if (--i <= 0)
 		    stderror(ERR_WTOOLONG);
 		switch (c1) {
-
 		case '"':
 		    /*
 		     * Leave any `s alone for later. Other chars are all
@@ -285,17 +268,14 @@ Dword()
 		     */
 		    *wp++ = c == '`' ? '`' : c | QUOTE;
 		    break;
-
 		case '\'':
 		    /* Prevent all further interpretation */
 		    *wp++ = c | QUOTE;
 		    break;
-
 		case '`':
 		    /* Leave all text alone for later */
 		    *wp++ = c;
 		    break;
-
 		default:
 		    break;
 		}
@@ -310,7 +290,6 @@ Dword()
 		done = 0;
 	    }
 	    break;
-
 	case '\\':
 	    c = DgetC(0);	/* No $ subst! */
 	    if (c == '\n' || c == DEOF) {
@@ -319,7 +298,6 @@ Dword()
 	    }
 	    c |= QUOTE;
 	    break;
-
 	default:
 	    break;
 	}
@@ -345,11 +323,9 @@ Dword()
  * QUOTEd so that it will not be recognized above.
  */
 static int
-DgetC(flag)
-    int flag;
+DgetC(int flag)
 {
     int c;
-
 top:
     if ((c = Dpeekc) != '\0') {
 	Dpeekc = 0;
@@ -393,8 +369,7 @@ static Char *nulvec[] = {0};
 static struct varent nulargv = {nulvec, STRargv, { NULL, NULL, NULL }, 0};
 
 static void
-dolerror(s)
-    Char   *s;
+dolerror(Char *s)
 {
     setname(vis_str(s));
     stderror(ERR_NAME | ERR_RANGE);
@@ -406,17 +381,23 @@ dolerror(s)
  * Ugh.
  */
 static void
-Dgetdol()
+Dgetdol(void)
 {
-    Char *np;
-    struct varent *vp = NULL;
-    Char    name[4 * MAXVARLEN + 1];
-    int     c, sc;
-    int     subscr = 0, lwb = 1, upb = 0;
-    bool    dimen = 0, bitset = 0;
-    char    tnp;
-    Char    wbuf[BUFSIZ];
     static Char *dolbang = NULL;
+    Char name[4*MAXVARLEN+1];
+    Char wbuf[BUFSIZE];
+    struct varent *vp;
+    Char *np;
+    int c, lwb, sc, subscr, upb;
+    int dimen, bitset;
+    char tnp;
+    
+    bitset = 0;
+    dimen = 0;
+    lwb = 1;
+    upb = 0;
+    subscr = 0;
+    vp = NULL;
 
     dolnmod = dolmcnt = dolwcnt = 0;
     c = sc = DgetC(0);
@@ -427,31 +408,28 @@ Dgetdol()
     else if (c == '?')
 	bitset++, c = DgetC(0);	/* $? tests existence */
     switch (c) {
-
     case '!':
 	if (dimen || bitset)
 	    stderror(ERR_SYNTAX);
 	if (backpid != 0) {
 	    if (dolbang) 
-		xfree((ptr_t) dolbang);
+		xfree((ptr_t)dolbang);
 	    setDolp(dolbang = putn(backpid));
 	}
 	goto eatbrac;
-
     case '$':
 	if (dimen || bitset)
 	    stderror(ERR_SYNTAX);
 	setDolp(doldol);
 	goto eatbrac;
-
     case '<' | QUOTE:
 	if (bitset)
 	    stderror(ERR_NOTALLOWED, "$?<");
 	if (dimen)
 	    stderror(ERR_NOTALLOWED, "$?#");
 	for (np = wbuf; read(OLDSTD, &tnp, 1) == 1; np++) {
-	    *np = (unsigned char) tnp;
-	    if (np >= &wbuf[BUFSIZ - 1])
+	    *np = (unsigned char)tnp;
+	    if (np >= &wbuf[BUFSIZE - 1])
 		stderror(ERR_LTOOLONG);
 	    if (tnp == '\n')
 		break;
@@ -468,18 +446,15 @@ Dgetdol()
 	dolmcnt = 10000;
 	setDolp(wbuf);
 	goto eatbrac;
-
     case DEOF:
     case '\n':
 	stderror(ERR_SYNTAX);
 	/* NOTREACHED */
-
     case '*':
 	(void) Strcpy(name, STRargv);
 	vp = adrof(STRargv);
 	subscr = -1;		/* Prevent eating [...] */
 	break;
-
     default:
 	np = name;
 	if (Isdigit(c)) {
@@ -491,10 +466,8 @@ Dgetdol()
 		c = DgetC(0);
 	    } while (Isdigit(c));
 	    unDredc(c);
-	    if (subscr < 0) {
-		dolerror(vp->v_name);
-		return;
-	    }
+	    if (subscr < 0)
+		stderror(ERR_RANGE);
 	    if (subscr == 0) {
 		if (bitset) {
 		    dolp = ffile ? STR1 : STR0;
@@ -636,7 +609,7 @@ eatbrac:
 }
 
 static void
-fixDolMod()
+fixDolMod(void)
 {
     int c;
 
@@ -696,8 +669,7 @@ fixDolMod()
 }
 
 static void
-setDolp(cp)
-    Char *cp;
+setDolp(Char *cp)
 {
     Char *dp;
     int i;
@@ -735,12 +707,12 @@ setDolp(cp)
 	    do {
 		dp = Strstr(cp, lhsub);
 		if (dp) {
-		    np = (Char *) xmalloc((size_t)
-					  ((Strlen(cp) + 1 - lhlen + rhlen) *
-					  sizeof(Char)));
-		    (void) Strncpy(np, cp, dp - cp);
-		    (void) Strcpy(np + (dp - cp), rhsub);
-		    (void) Strcpy(np + (dp - cp) + rhlen, dp + lhlen);
+		    np = (Char *)xmalloc(
+		        (size_t)((Strlen(cp) + 1 - lhlen + rhlen) *
+		        sizeof(Char)));
+		    (void)Strncpy(np, cp, dp - cp);
+		    (void)Strcpy(np + (dp - cp), rhsub);
+		    (void)Strcpy(np + (dp - cp) + rhlen, dp + lhlen);
 
 		    xfree((ptr_t) cp);
 		    dp = cp = np;
@@ -791,8 +763,10 @@ setDolp(cp)
 	addla(dp);
 	xfree((ptr_t) dp);
     }
-    else
+    else {
 	addla(cp);
+	xfree((ptr_t) cp);
+    }
 
     dolp = STRNULL;
     if (seterr)
@@ -800,15 +774,13 @@ setDolp(cp)
 }
 
 static void
-unDredc(c)
-    int     c;
+unDredc(int c)
 {
-
     Dpeekrd = c;
 }
 
 static int
-Dredc()
+Dredc(void)
 {
     int c;
 
@@ -827,10 +799,8 @@ Dredc()
 }
 
 static void
-Dtestq(c)
-    int c;
+Dtestq(int c)
 {
-
     if (cmap(c, QUOTES))
 	gflag = 1;
 }
@@ -842,36 +812,45 @@ Dtestq(c)
  */
 void
 /*ARGSUSED*/
-heredoc(term)
-    Char *term;
+heredoc(Char *term)
 {
-    int c;
-    Char   *Dv[2];
-    Char    obuf[BUFSIZ], lbuf[BUFSIZ], mbuf[BUFSIZ];
-    int     ocnt, lcnt, mcnt;
-    Char   *lbp, *obp, *mbp;
-    Char  **vp;
-    bool    quoted;
-    char   *tmp;
+    Char obuf[BUFSIZE], lbuf[BUFSIZE], mbuf[BUFSIZE];
+    struct timeval tv;
+    Char *Dv[2], *lbp, *obp, *mbp, **vp;
+    char *tmp;
+    int c, ocnt, lcnt, mcnt;
+    int quoted;
 
+again:
     tmp = short2str(shtemp);
-    if (open(tmp, O_RDWR | O_CREAT | O_TRUNC, 0600) < 0)
+    if (open(tmp, O_RDWR | O_CREAT | O_TRUNC | O_EXCL, 0600) < 0) {
+	if (errno == EEXIST) {
+	    if (unlink(tmp) == -1) {
+		(void)gettimeofday(&tv, NULL);
+		mbp = putn((((int)tv.tv_sec) ^ 
+		    ((int)tv.tv_usec) ^ ((int)getpid())) & 0x00ffffff);
+		shtemp = Strspl(STRtmpsh, mbp);
+		xfree((ptr_t)mbp);
+	    }
+	    goto again;
+	}
 	stderror(ERR_SYSTEM, tmp, strerror(errno));
-    (void) unlink(tmp);		/* 0 0 inode! */
+    }
+    (void)unlink(tmp);		/* 0 0 inode! */
     Dv[0] = term;
     Dv[1] = NULL;
     gflag = 0;
     trim(Dv);
     rscan(Dv, Dtestq);
     quoted = gflag;
-    ocnt = BUFSIZ;
+    ocnt = BUFSIZE;
     obp = obuf;
     for (;;) {
 	/*
 	 * Read up a line
 	 */
 	lbp = lbuf;
-	lcnt = BUFSIZ - 4;
+	lcnt = BUFSIZE - 4;
 	for (;;) {
 	    c = readc(1);	/* 1 -> Want EOF returns */
 	    if (c < 0 || c == '\n')
@@ -890,8 +869,8 @@ heredoc(term)
 	 * Check for EOF or compare to terminator -- before expansion
 	 */
 	if (c < 0 || eq(lbuf, term)) {
-	    (void) write(0, short2str(obuf), (size_t) (BUFSIZ - ocnt));
-	    (void) lseek(0, (off_t) 0, SEEK_SET);
+	    (void)write(0, short2str(obuf), (size_t)(BUFSIZE - ocnt));
+	    (void)lseek(0, (off_t)0, SEEK_SET);
 	    return;
 	}
 
@@ -904,9 +883,9 @@ heredoc(term)
 	    for (lbp = lbuf; (c = *lbp++) != '\0';) {
 		*obp++ = c;
 		if (--ocnt == 0) {
-		    (void) write(0, short2str(obuf), BUFSIZ);
+		    (void) write(0, short2str(obuf), BUFSIZE);
 		    obp = obuf;
-		    ocnt = BUFSIZ;
+		    ocnt = BUFSIZE;
 		}
 	    }
 	    continue;
@@ -919,7 +898,7 @@ heredoc(term)
 	Dcp = lbuf;
 	Dvp = Dv + 1;
 	mbp = mbuf;
-	mcnt = BUFSIZ - 4;
+	mcnt = BUFSIZE - 4;
 	for (;;) {
 	    c = DgetC(DODOL);
 	    if (c == DEOF)
@@ -968,16 +947,16 @@ heredoc(term)
 	    for (mbp = *vp; *mbp; mbp++) {
 		*obp++ = *mbp & TRIM;
 		if (--ocnt == 0) {
-		    (void) write(0, short2str(obuf), BUFSIZ);
+		    (void)write(0, short2str(obuf), BUFSIZE);
 		    obp = obuf;
-		    ocnt = BUFSIZ;
+		    ocnt = BUFSIZE;
 		}
 	    }
 	    *obp++ = '\n';
 	    if (--ocnt == 0) {
-		(void) write(0, short2str(obuf), BUFSIZ);
+		(void)write(0, short2str(obuf), BUFSIZE);
 		obp = obuf;
-		ocnt = BUFSIZ;
+		ocnt = BUFSIZE;
 	    }
 	}
 	if (pargv)

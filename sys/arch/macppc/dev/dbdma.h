@@ -1,4 +1,4 @@
-/*	$NetBSD: dbdma.h,v 1.2 1998/08/21 16:13:28 tsubai Exp $	*/
+/*	$NetBSD: dbdma.h,v 1.5 2007/10/17 19:55:18 garbled Exp $	*/
 
 /*
  * Copyright 1991-1998 by Open Software Foundation, Inc. 
@@ -100,79 +100,37 @@
 /* This struct is layout in little endian format */
 
 struct dbdma_command {
-	u_int16_t	d_count;
-	u_int16_t	d_command;
-	u_int32_t	d_address;
-	u_int32_t	d_cmddep;
-	u_int16_t	d_resid;
-	u_int16_t	d_status;
+	uint16_t	d_count;
+	uint16_t	d_command;
+	uint32_t	d_address;
+	uint32_t	d_cmddep;
+	uint16_t	d_resid;
+	uint16_t	d_status;
 };
 
 typedef struct dbdma_command dbdma_command_t;
 
 #define	DBDMA_BUILD_CMD(d, cmd, key, interrupt, wait, branch) {		\
-		dbdma_st16(&(d)->d_command,				\
+		out16rb(&(d)->d_command,				\
 				((cmd) << 12) | ((key) << 8) |		\
 				((interrupt) << 4) |			\
 				((branch) << 2) | (wait));		\
 	}
 
 #define	DBDMA_BUILD(d, cmd, key, count, address, interrupt, wait, branch) { \
-		dbdma_st16(&(d)->d_count, count);			\
-		dbdma_st32(&(d)->d_address, address);			\
+		out16rb(&(d)->d_count, count);			\
+		out32rb(&(d)->d_address, address);			\
 		(d)->d_resid = 0;					\
 		(d)->d_status = 0;					\
 		(d)->d_cmddep = 0;					\
-		dbdma_st16(&(d)->d_command,				\
+		out16rb(&(d)->d_command,				\
 				((cmd) << 12) | ((key) << 8) |		\
 				((interrupt) << 4) |			\
 				((branch) << 2) | (wait));		\
 	}
 
-static __inline__ void
-dbdma_st32(a, x)
-	volatile u_int32_t *a;
-	u_int32_t x;
-{
-	__asm__ volatile
-		("stwbrx %0,0,%1" : : "r" (x), "r" (a) : "memory");
-}
-
-static __inline__ void
-dbdma_st16(a, x)
-	volatile u_int16_t *a;
-	u_int16_t x;
-{
-	__asm__ volatile
-		("sthbrx %0,0,%1" : : "r" (x), "r" (a) : "memory");
-}
-
-static __inline__ u_int32_t
-dbdma_ld32(a)
-	volatile u_int32_t *a;
-{
-	u_int32_t swap;
-
-	__asm__ volatile
-		("lwbrx %0,0,%1" :  "=r" (swap) : "r" (a));
-
-	return	swap;
-}
-
-static __inline__ u_int16_t
-dbdma_ld16(a)
-	volatile u_int16_t *a;
-{
-	u_int16_t swap;
-
-	__asm__ volatile
-		("lhbrx %0,0,%1" :  "=r" (swap) : "r" (a));
-
-	return	swap;
-}
-
-#define	DBDMA_LD4_ENDIAN(a) 	dbdma_ld32(a)
-#define	DBDMA_ST4_ENDIAN(a, x) 	dbdma_st32(a, x)
+#define	DBDMA_LD4_ENDIAN(a) 	in32rb(a)
+#define	DBDMA_ST4_ENDIAN(a, x) 	out32rb(a, x)
 
 /*
  * DBDMA Channel layout
@@ -181,19 +139,19 @@ dbdma_ld16(a)
  */
 
 struct dbdma_regmap {
-	unsigned long	d_control;	/* Control Register */
-	unsigned long	d_status;	/* DBDMA Status Register */
-	unsigned long	d_cmdptrhi;	/* MSB of command pointer (not used yet) */
-	unsigned long	d_cmdptrlo;	/* LSB of command pointer */
-	unsigned long	d_intselect;	/* Interrupt Select */
-	unsigned long	d_branch;	/* Branch selection */
-	unsigned long	d_wait;		/* Wait selection */
-	unsigned long	d_transmode;	/* Transfer modes */
-	unsigned long	d_dataptrhi;	/* MSB of Data Pointer */
-	unsigned long	d_dataptrlo;	/* LSB of Data Pointer */
-	unsigned long	d_reserved;	/* Reserved for the moment */
-	unsigned long	d_branchptrhi;	/* MSB of Branch Pointer */
-	unsigned long	d_branchptrlo;	/* LSB of Branch Pointer */
+	uint32_t	d_control;	/* Control Register */
+	uint32_t	d_status;	/* DBDMA Status Register */
+	uint32_t	d_cmdptrhi;	/* MSB of command pointer (not used yet) */
+	uint32_t	d_cmdptrlo;	/* LSB of command pointer */
+	uint32_t	d_intselect;	/* Interrupt Select */
+	uint32_t	d_branch;	/* Branch selection */
+	uint32_t	d_wait;		/* Wait selection */
+	uint32_t	d_transmode;	/* Transfer modes */
+	uint32_t	d_dataptrhi;	/* MSB of Data Pointer */
+	uint32_t	d_dataptrlo;	/* LSB of Data Pointer */
+	uint32_t	d_reserved;	/* Reserved for the moment */
+	uint32_t	d_branchptrhi;	/* MSB of Branch Pointer */
+	uint32_t	d_branchptrlo;	/* LSB of Branch Pointer */
 	/* The remaining fields are undefinied and unimplemented */
 };
 

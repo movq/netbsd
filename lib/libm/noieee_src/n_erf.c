@@ -1,4 +1,4 @@
-/*	$NetBSD: n_erf.c,v 1.4 1999/07/02 15:37:36 simonb Exp $	*/
+/*	$NetBSD: n_erf.c,v 1.7 2005/05/03 04:18:32 matt Exp $	*/
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -150,7 +146,7 @@ static char sccsid[] = "@(#)erf.c	8.1 (Berkeley) 6/4/93";
 
 #if defined(__vax__) || defined(tahoe)
 #define _IEEE	0
-#define TRUNC(x) (double)(x) = (float)(x)
+#define TRUNC(x) (x) = (float)(x)
 #else
 #define _IEEE	1
 #define TRUNC(x) *(((int *) &x) + 1) &= 0xf8000000
@@ -164,7 +160,7 @@ static char sccsid[] = "@(#)erf.c	8.1 (Berkeley) 6/4/93";
 #include "ieee_libm.h"
 #endif
 
-static double
+static const double
 tiny	    = 1e-300,
 half	    = 0.5,
 one	    = 1.0,
@@ -188,7 +184,7 @@ p10=   1.073087585213621540635426191486561494058e-0008;
 /*
  * Coefficients for approximation to erf in [0.84375,1.25]
  */
-static double
+static const double
 pa0 =  -2.362118560752659485957248365514511540287e-0003,
 pa1 =   4.148561186837483359654781492060070469522e-0001,
 pa2 =  -3.722078760357013107593507594535478633044e-0001,
@@ -207,14 +203,14 @@ qa6 =   1.198449984679910764099772682882189711364e-0002;
  * The tail (lsqrtPI_lo) is included in the rational
  * approximations.
 */
-static double
+static const double
    lsqrtPI_hi = .5723649429247000819387380943226;
 /*
  * lsqrtPI_lo = .000000000000000005132975581353913;
  *
  * Coefficients for approximation to erfc in [2, 4]
 */
-static double
+static const double
 rb0  =	-1.5306508387410807582e-010,	/* includes lsqrtPI_lo */
 rb1  =	 2.15592846101742183841910806188e-008,
 rb2  =	 6.24998557732436510470108714799e-001,
@@ -232,7 +228,7 @@ sb3  =	 9.60121069770492994166488642804e+001;
 /*
  * Coefficients for approximation to erfc in [1.25, 2]
 */
-static double
+static const double
 rc0  =	-2.47925334685189288817e-007,	/* includes lsqrtPI_lo */
 rc1  =	 1.28735722546372485255126993930e-005,
 rc2  =	 6.24664954087883916855616917019e-001,
@@ -250,7 +246,7 @@ sc3  =	 2.19826478142545234106819407316e+001;
 /*
  * Coefficients for approximation to  erfc in [4,28]
  */
-static double
+static const double
 rd0  =	-2.1491361969012978677e-016,	/* includes lsqrtPI_lo */
 rd1  =	-4.99999999999640086151350330820e-001,
 rd2  =	 6.24999999772906433825880867516e-001,
@@ -266,8 +262,8 @@ rd11 =	-2.06466642800404317677021026611e+006,
 rd12 =	 7.78293889471135381609201431274e+006,
 rd13 =	-1.42821001129434127360582351685e+007;
 
-double erf(x)
-	double x;
+double
+erf(double x)
 {
 	double R,S,P,Q,ax,s,y,z,r;
 	if(!finite(x)) {		/* erf(nan)=nan */
@@ -324,8 +320,8 @@ double erf(x)
 		return (z-one);
 }
 
-double erfc(x)
-	double x;
+double
+erfc(double x)
 {
 	double R,S,P,Q,s,ax,y,z,r;
 	if (!finite(x)) {

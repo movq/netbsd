@@ -1,4 +1,8 @@
-#	$NetBSD: Makefile,v 1.8 1997/10/17 12:07:34 lukem Exp $
+#	$NetBSD: Makefile,v 1.11 2005/02/21 06:41:20 cube Exp $
+
+.include <bsd.own.mk>
+
+.PATH: ${NETBSDSRCDIR}/dist/pppd/chat
 
 PROG=	chat
 MAN=	chat.8

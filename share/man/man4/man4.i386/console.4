@@ -1,12 +1,17 @@
-.\"	$NetBSD: console.4,v 1.2 1998/01/09 08:04:32 perry Exp $
+.\"	$NetBSD: console.4,v 1.10 2006/09/06 16:47:00 rpaulo Exp $
 .\"
-.Dd September 30, 1997
+.Dd September 6, 2006
 .Os
 .Dt CONS 4 i386
 .Sh NAME
 .Nm console
 .Nd i386 console interface
-
+.Sh SYNOPSIS
+.Cd options CONSDEVNAME=string
+.Cd options CONADDR=integer
+.Cd options CONSPEED=integer
+.Cd options CONS_OVERRIDE
+.Cd options CONMODE=integer
 .Sh DESCRIPTION
 The
 .Dq console
@@ -16,21 +21,40 @@ messages and accesses to the
 .Pa /dev/console
 character special device in user mode.
 It is attached to a hardware interface at boot time controlled by options
-in the kernel configuration file or information passed by the boot loader.
-The current choices are:
+in the kernel configuration file, or information passed by the boot loader.
+.Pp
+Bootblocks from
+.Nx 1.4
+or newer select their console device from a compiled-in list,
+and then pass their choice of console device and console parameters to
+the kernel.
+.Pp
+As of
+.Nx 1.5 ,
+the
+.Ic consdev
+bootblock command allows changing the console device on-the-fly.
+.Pp
+The kernel will use the same console device as the
+bootblock; no special kernel configuration is required.
+.Pp
+To override
+the bootblock's choice of console, or to use a serial kernel console
+with older bootblocks, you must specify kernel config-file options to
+override the information passed by the bootblock.
+The current option choices are:
 .Bl -tag -width aaa
 .It - the standard PC keyboard and display
 (with either the
 .Dq pc
 or the
-.Xr pcvt 4
+.Xr wscons 4
 driver)
 .It - standard PC serial ports
 (with
 .Xr com 4
 driver)
 .El
-
 .Pp
 The available
 .Em kernel configuration
@@ -48,7 +72,7 @@ sets the base address for the serial console port (default: 0x3f8).
 .It Cd options CONSPEED=integer
 sets the baudrate for the serial console (default: 9600).
 .It Cd options CONS_OVERRIDE
-causes console information passed bt the bootloader to be ignored and
+causes console information passed by the bootloader to be ignored and
 the settings specified by the three options above (or the defaults) to be
 used. Default behaviour is to use the settings from the bootloader if
 present, and to use option / default values only if no information was
@@ -64,20 +88,18 @@ for details. Default is
 This option takes always effect, because mode settings are not passed
 by the bootloader.
 .El
-
-.Sh EXAMPLES
-.Cd options \&"CONSDEVNAME=\e"com\e"",CONADDR=0x2f8,CONSPEED=19200
-
 .Sh FILES
 .Bl -tag -width /dev/console
 .It Pa /dev/console
 .It Pa /sys/arch/i386/conf/CONFIG
 .El
-
+.Sh EXAMPLES
+.Cd options CONSDEVNAME=\&"\e"com\e"\&",CONADDR=0x2f8,CONSPEED=57600
 .Sh SEE ALSO
+.Xr config 1 ,
 .Xr tty 4 ,
-.Xr boot 8
-
+.Xr boot 8 ,
+.Xr boot_console 8
 .Sh BUGS
 The console device is chosen early in system startup regardless
 if the specified driver / device is present in the system configuration file.

@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.c,v 1.8 1998/12/19 16:43:39 christos Exp $	*/
+/*	$NetBSD: parse.c,v 1.24.24.1 2009/03/27 14:50:36 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,12 +29,16 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if !defined(lint)
 #if 0
 static char sccsid[] = "@(#)parse.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: parse.c,v 1.8 1998/12/19 16:43:39 christos Exp $");
+__RCSID("$NetBSD: parse.c,v 1.24.24.1 2009/03/27 14:50:36 msaitoh Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,14 +52,14 @@ __RCSID("$NetBSD: parse.c,v 1.8 1998/12/19 16:43:39 christos Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <util.h>
 
 #include "hexdump.h"
 
 FU *endfu;					/* format at end-of-data */
 
 void
-addfile(name)
-	char *name;
+addfile(char *name)
 {
 	char *p;
 	FILE *fp;
@@ -84,17 +84,16 @@ addfile(name)
 }
 
 void
-add(fmt)
-	char *fmt;
+add(const char *fmt)
 {
-	char *p;
+	const char *p;
 	static FS **nextfs;
 	FS *tfs;
 	FU *tfu, **nextfu;
-	char *savep;
+	const char *savep;
 
 	/* start new linked list of format units */
-	tfs = emalloc(sizeof(FS));
+	tfs = ecalloc(1, sizeof(FS));
 	if (!fshead)
 		fshead = tfs;
 	else
@@ -110,7 +109,7 @@ add(fmt)
 			break;
 
 		/* allocate a new format unit and link it in */
-		tfu = emalloc(sizeof(FU));
+		tfu = ecalloc(1, sizeof(FU));
 		*nextfu = tfu;
 		nextfu = &tfu->nextfu;
 		tfu->reps = 1;
@@ -147,8 +146,7 @@ add(fmt)
 		for (savep = ++p; *p != '"';)
 			if (*p++ == 0)
 				badfmt(fmt);
-		if (!(tfu->fmt = malloc(p - savep + 1)))
-			nomem();
+		tfu->fmt = emalloc(p - savep + 1);
 		(void) strncpy(tfu->fmt, savep, p - savep);
 		tfu->fmt[p - savep] = '\0';
 		escape(tfu->fmt);
@@ -159,8 +157,7 @@ add(fmt)
 static const char *spec = ".#-+ 0123456789";
 
 int
-size(fs)
-	FS *fs;
+size(FS *fs)
 {
 	FU *fu;
 	int bcnt, cursize;
@@ -213,29 +210,25 @@ size(fs)
 }
 
 void
-rewrite(fs)
-	FS *fs;
+rewrite(FS *fs)
 {
 	enum { NOTOKAY, USEBCNT, USEPREC } sokay;
 	PR *pr, **nextpr;
 	FU *fu;
 	char *p1, *p2;
-	char savech, *fmtp, cs[3];
+	char savech, *fmtp, cs[4];
 	int nconv, prec;
 
-	nextpr = NULL;
 	prec = 0;
 	for (fu = fs->nextfu; fu; fu = fu->nextfu) {
 		/*
 		 * Break each format unit into print units; each conversion
 		 * character gets its own.
 		 */
+		nextpr = &fu->nextpr;
 		for (nconv = 0, fmtp = fu->fmt; *fmtp; nextpr = &pr->nextpr) {
-			pr = emalloc(sizeof(PR));
-			if (!fu->nextpr)
-				fu->nextpr = pr;
-			else
-				*nextpr = pr;
+			pr = ecalloc(1, sizeof(*pr));
+			*nextpr = pr;
 
 			/* Skip preceding text and up to the next % sign. */
 			for (p1 = fmtp; *p1 && *p1 != '%'; ++p1);
@@ -254,10 +247,10 @@ rewrite(fs)
 			if (fu->bcnt) {
 				sokay = USEBCNT;
 				/* Skip to conversion character. */
-				for (++p1; strchr(spec, *p1); ++p1);
+				for (++p1; *p1 && strchr(spec, *p1); ++p1);
 			} else {
 				/* Skip any special chars, field width. */
-				while (strchr(spec + 1, *++p1));
+				while (*++p1 && strchr(spec + 1, *p1));
 				if (*p1 == '.' &&
 				    isdigit((unsigned char)*++p1)) {
 					sokay = USEPREC;
@@ -268,7 +261,7 @@ rewrite(fs)
 					sokay = NOTOKAY;
 			}
 
-			p2 = p1 + 1;		/* Set end pointer. */
+			p2 = *p1 ? p1 + 1 : p1;	/* Set end pointer. */
 			cs[0] = *p1;		/* Set conversion string. */
 			cs[1] = '\0';
 
@@ -294,9 +287,10 @@ rewrite(fs)
 				goto isint;
 			case 'o': case 'u': case 'x': case 'X':
 				pr->flags = F_UINT;
-isint:				cs[2] = '\0';
-				cs[1] = cs[0];
-				cs[0] = 'q';
+isint:				cs[3] = '\0';
+				cs[2] = cs[0];
+				cs[1] = 'l';
+				cs[0] = 'l';
 				switch(fu->bcnt) {
 				case 0: case 4:
 					pr->bcnt = 4;
@@ -306,6 +300,9 @@ isint:				cs[2] = '\0';
 					break;
 				case 2:
 					pr->bcnt = 2;
+					break;
+				case 8:
+					pr->bcnt = 8;
 					break;
 				default:
 					p1[1] = '\0';
@@ -351,9 +348,10 @@ isint:				cs[2] = '\0';
 					++p2;
 					switch(p1[2]) {
 					case 'd': case 'o': case'x':
-						cs[0] = 'q';
-						cs[1] = p1[2];
-						cs[2] = '\0';
+						cs[0] = 'l';
+						cs[1] = 'l';
+						cs[2] = p1[2];
+						cs[3] = '\0';
 						break;
 					default:
 						p1[3] = '\0';
@@ -396,7 +394,7 @@ isint2:					switch(fu->bcnt) {
 			 */
 			savech = *p2;
 			p1[0] = '\0';
-			pr->fmt = emalloc(strlen(fmtp) + 2);
+			pr->fmt = emalloc(strlen(fmtp) + strlen(cs) + 1);
 			(void)strcpy(pr->fmt, fmtp);
 			(void)strcat(pr->fmt, cs);
 			*p2 = savech;
@@ -425,11 +423,13 @@ isint2:					switch(fu->bcnt) {
 	 * If, rep count is greater than 1, no trailing whitespace
 	 * gets output from the last iteration of the format unit.
 	 */
-	for (fu = fs->nextfu;; fu = fu->nextfu) {
+	for (fu = fs->nextfu; fu; fu = fu->nextfu) {
 		if (!fu->nextfu && fs->bcnt < blocksize &&
 		    !(fu->flags&F_SETREP) && fu->bcnt)
 			fu->reps += (blocksize - fs->bcnt) / fu->bcnt;
 		if (fu->reps > 1) {
+			if (!fu->nextpr)
+				break;
 			for (pr = fu->nextpr;; pr = pr->nextpr)
 				if (!pr->nextpr)
 					break;
@@ -438,8 +438,6 @@ isint2:					switch(fu->bcnt) {
 			if (p2)
 				pr->nospace = p2;
 		}
-		if (!fu->nextfu)
-			break;
 	}
 #ifdef DEBUG
 	for (fu = fs->nextfu; fu; fu = fu->nextfu) {
@@ -452,8 +450,7 @@ isint2:					switch(fu->bcnt) {
 }
 
 void
-escape(p1)
-	char *p1;
+escape(char *p1)
 {
 	char *p2;
 
@@ -465,6 +462,10 @@ escape(p1)
 		}
 		if (*p1 == '\\')
 			switch(*++p1) {
+			case '\0':
+				*p2 = '\\';
+				*++p2 = '\0';
+				return;	/* incomplete escape sequence */
 			case 'a':
 			     /* *p2 = '\a'; */
 				*p2 = '\007';
@@ -491,32 +492,31 @@ escape(p1)
 				*p2 = *p1;
 				break;
 			}
+		else
+			*p2 = *p1;
 	}
 }
 
 void
-badcnt(s)
-	char *s;
+badcnt(char *s)
 {
 	errx(1, "%s: bad byte count", s);
 }
 
 void
-badsfmt()
+badsfmt(void)
 {
-	errx(1, "%%s: requires a precision or a byte count\n");
+	errx(1, "%%s: requires a precision or a byte count");
 }
 
 void
-badfmt(fmt)
-	char *fmt;
+badfmt(const char *fmt)
 {
-	errx(1, "\"%s\": bad format\n", fmt);
+	errx(1, "\"%s\": bad format", fmt);
 }
 
 void
-badconv(ch)
-	char *ch;
+badconv(char *ch)
 {
-	errx(1, "%%%s: bad conversion character\n", ch);
+	errx(1, "%%%s: bad conversion character", ch);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: input.c,v 1.13 1999/07/25 00:24:38 hubertf Exp $	*/
+/*	$NetBSD: input.c,v 1.22 2007/12/15 19:44:38 perry Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -50,9 +46,9 @@
 #if 0
 static char sccsid[] = "@(#)input.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: input.c,v 1.13 1999/07/25 00:24:38 hubertf Exp $");
+__RCSID("$NetBSD: input.c,v 1.22 2007/12/15 19:44:38 perry Exp $");
 #endif
-#endif not lint
+#endif /* not lint */
 
 #include "include.h"
 #include "pathnames.h"
@@ -71,7 +67,7 @@ typedef struct {
 	int	token;
 	int	to_state;
 	const char	*str;
-	const char	*(*func) __P((char));
+	const char	*(*func)(int);
 } RULE;
 
 typedef struct {
@@ -179,7 +175,7 @@ int	tval;
 int	dest_type, dest_no, dir;
 
 int
-pop()
+pop(void)
 {
 	if (level == 0)
 		return (-1);
@@ -187,14 +183,14 @@ pop()
 
 	ioclrtoeol(T_POS);
 
-	strcpy(T_STR, "");
+	(void)strcpy(T_STR, "");
 	T_RULE = -1;
 	T_CH = -1;
 	return (0);
 }
 
 void
-rezero()
+rezero(void)
 {
 	iomove(0);
 
@@ -203,15 +199,15 @@ rezero()
 	T_RULE = -1;
 	T_CH = -1;
 	T_POS = 0;
-	strcpy(T_STR, "");
+	(void)strcpy(T_STR, "");
 }
 
 void
-push(ruleno, ch)
-	int ruleno, ch;
+push(int ruleno, int ch)
 {
 	int	newstate, newpos;
 
+	assert(level < (MAXDEPTH - 1));
 	(void)sprintf(T_STR, st[T_STATE].rule[ruleno].str, tval);
 	T_RULE = ruleno;
 	T_CH = ch;
@@ -226,14 +222,14 @@ push(ruleno, ch)
 	T_STATE = newstate;
 	T_POS = newpos;
 	T_RULE = -1;
-	strcpy(T_STR, "");
+	(void)strcpy(T_STR, "");
 }
 
 int
-getcommand()
+getcommand(void)
 {
 	int	c, i, done;
-	const char	*s, *(*func) __P((char));
+	const char	*s, *(*func)(int);
 	PLANE	*pp;
 
 	rezero();
@@ -270,7 +266,8 @@ getcommand()
 		func = st[stack[i].state].rule[stack[i].rule].func;
 		if (func != NULL)
 			if ((s = (*func)(stack[i].ch)) != NULL) {
-				ioerror(stack[i].pos, strlen(stack[i].str), s);
+				ioerror(stack[i].pos, 
+				    (int)strlen(stack[i].str), s);
 				return (-1);
 			}
 	}
@@ -289,14 +286,14 @@ getcommand()
 }
 
 void
-noise()
+noise(void)
 {
-	putchar('\07');
-	fflush(stdout);
+	(void)putchar('\07');
+	(void)fflush(stdout);
 }
 
 int
-gettoken()
+gettoken(void)
 {
 	while ((tval = getAChar()) == REDRAWTOKEN || tval == SHELLTOKEN)
 	{
@@ -306,7 +303,7 @@ gettoken()
 			struct itimerval	itv;
 			itv.it_value.tv_sec = 0;
 			itv.it_value.tv_usec = 0;
-			setitimer(ITIMER_REAL, &itv, NULL);
+			(void)setitimer(ITIMER_REAL, &itv, NULL);
 #endif
 #ifdef SYSV
 			int aval;
@@ -326,28 +323,29 @@ gettoken()
 						base = shell;
 					else
 						base++;
-					execl(shell, base, 0);
+					(void)execl(shell, base, (char *) 0);
 				}
 				else
-					execl(_PATH_BSHELL, "sh", 0);
+					(void)execl(_PATH_BSHELL, "sh", 
+					    (char *) 0);
 
 				exit(0);	/* oops */
 			}
 
-			wait(0);
-			tcsetattr(fileno(stdin), TCSADRAIN, &tty_new);
+			(void)wait(0);
+			(void)tcsetattr(fileno(stdin), TCSADRAIN, &tty_new);
 #ifdef BSD
 			itv.it_value.tv_sec = 0;
 			itv.it_value.tv_usec = 1;
 			itv.it_interval.tv_sec = sp->update_secs;
 			itv.it_interval.tv_usec = 0;
-			setitimer(ITIMER_REAL, &itv, NULL);
+			(void)setitimer(ITIMER_REAL, &itv, NULL);
 #endif
 #ifdef SYSV
 			alarm(aval);
 #endif
 		}
-		redraw();
+		(void)redraw();
 	}
 
 	if (isdigit(tval))
@@ -358,32 +356,31 @@ gettoken()
 		return (tval);
 }
 
-const char	*
-setplane(c)
-	char c;
+const char *
+setplane(int c)
 {
 	PLANE	*pp;
 
 	pp = findplane(number(c));
 	if (pp == NULL)
 		return ("Unknown Plane");
-	memcpy(&p, pp, sizeof (p));
+	(void)memcpy(&p, pp, sizeof (p));
 	p.delayd = 0;
 	return (NULL);
 }
 
-const char	*
-turn(c)
-	char c __attribute__((__unused__));
+/* ARGSUSED */
+const char *
+turn(int c __unused)
 {
 	if (p.altitude == 0)
 		return ("Planes at airports may not change direction");
 	return (NULL);
 }
 
-const char	*
-circle(c)
-	char c __attribute__((__unused__));
+/* ARGSUSED */
+const char *
+circle(int c __unused)
 {
 	if (p.altitude == 0)
 		return ("Planes cannot circle on the ground");
@@ -391,9 +388,9 @@ circle(c)
 	return (NULL);
 }
 
-const char	*
-left(c)
-	char c __attribute__((__unused__));
+/* ARGSUSED */
+const char *
+left(int c __unused)
 {
 	dir = D_LEFT;
 	p.new_dir = p.dir - 1;
@@ -402,9 +399,9 @@ left(c)
 	return (NULL);
 }
 
-const char	*
-right(c)
-	char c __attribute__((__unused__));
+/* ARGSUSED */
+const char *
+right(int c __unused)
 {
 	dir = D_RIGHT;
 	p.new_dir = p.dir + 1;
@@ -413,9 +410,9 @@ right(c)
 	return (NULL);
 }
 
-const char	*
-Left(c)
-	char c __attribute__((__unused__));
+/* ARGSUSED */
+const char *
+Left(int c __unused)
 {
 	p.new_dir = p.dir - 2;
 	if (p.new_dir < 0)
@@ -423,9 +420,9 @@ Left(c)
 	return (NULL);
 }
 
-const char	*
-Right(c)
-	char c __attribute__((__unused__));
+/* ARGSUSED */
+const char *
+Right(int c __unused)
 {
 	p.new_dir = p.dir + 2;
 	if (p.new_dir >= MAXDIR)
@@ -433,9 +430,8 @@ Right(c)
 	return (NULL);
 }
 
-const char	*
-delayb(c)
-	char c;
+const char *
+delayb(int c)
 {
 	int	xdiff, ydiff;
 
@@ -468,7 +464,6 @@ delayb(c)
 			break;
 		default:
 			return ("Bad case in delayb!  Get help!");
-			break;
 		}
 		if (xdiff == 0 && ydiff == 0)
 			return ("Would already be there");
@@ -479,74 +474,83 @@ delayb(c)
 	return (NULL);
 }
 
-const char	*
-beacon(c)
-	char c __attribute__((__unused__));
+/* ARGSUSED */
+const char *
+beacon(int c __unused)
 {
 	dest_type = T_BEACON;
 	return (NULL);
 }
 
-const char	*
-ex_it(c)
-	char c __attribute__((__unused__));
+/* ARGSUSED */
+const char *
+ex_it(int c __unused)
 {
 	dest_type = T_EXIT;
 	return (NULL);
 }
 
-const char	*
-airport(c)
-	char c __attribute__((__unused__));
+/* ARGSUSED */
+const char *
+airport(int c __unused)
 {
 	dest_type = T_AIRPORT;
 	return (NULL);
 }
 
-const char	*
-climb(c)
-	char c __attribute__((__unused__));
+/* ARGSUSED */
+const char *
+climb(int c __unused)
 {
 	dir = D_UP;
 	return (NULL);
 }
 
-const char	*
-descend(c)
-	char c __attribute__((__unused__));
+/* ARGSUSED */
+const char *
+descend(int c __unused)
 {
 	dir = D_DOWN;
 	return (NULL);
 }
 
-const char	*
-setalt(c)
-	char c;
+const char *
+setalt(int c)
 {
-	if ((p.altitude == c - '0') && (p.new_altitude == p.altitude))
+	int newalt = c - '0';
+	if ((p.altitude == newalt) && (p.new_altitude == p.altitude))
 		return ("Already at that altitude");
-	p.new_altitude = c - '0';
+	if (p.new_altitude == newalt) {
+		return ("Already going to that altitude");
+	}
+	p.new_altitude = newalt;
 	return (NULL);
 }
 
-const char	*
-setrelalt(c)
-	char c;
+const char *
+setrelalt(int c)
 {
+	int newalt;
+
 	if (c == 0)
 		return ("altitude not changed");
 
 	switch (dir) {
 	case D_UP:
-		p.new_altitude = p.altitude + c - '0';
+		newalt = p.altitude + c - '0';
 		break;
 	case D_DOWN:
-		p.new_altitude = p.altitude - (c - '0');
+		newalt = p.altitude - (c - '0');
 		break;
 	default:
 		return ("Unknown case in setrelalt!  Get help!");
-		break;
 	}
+
+	if (p.new_altitude == newalt)
+		return ("Already going to that altitude");
+
+	p.new_altitude = newalt;
+
 	if (p.new_altitude < 0)
 		return ("Altitude would be too low");
 	else if (p.new_altitude > 9)
@@ -554,9 +558,8 @@ setrelalt(c)
 	return (NULL);
 }
 
-const char	*
-benum(c)
-	char c;
+const char *
+benum(int c)
 {
 	dest_no = c -= '0';
 
@@ -581,22 +584,19 @@ benum(c)
 		break;
 	default:
 		return ("Unknown case in benum!  Get help!");
-		break;
 	}
 	return (NULL);
 }
 
-const char	*
-to_dir(c)
-	char c;
+const char *
+to_dir(int c)
 {
 	p.new_dir = dir_no(c);
 	return (NULL);
 }
 
-const char	*
-rel_dir(c)
-	char c;
+const char *
+rel_dir(int c)
 {
 	int	angle;
 
@@ -614,14 +614,13 @@ rel_dir(c)
 		break;
 	default:
 		return ("Bizarre direction in rel_dir!  Get help!");
-		break;
 	}
 	return (NULL);
 }
 
-const char	*
-mark(c)
-	char c __attribute__((__unused__));
+/* ARGSUSED */
+const char *
+mark(int c __unused)
 {
 	if (p.altitude == 0)
 		return ("Cannot mark planes on the ground");
@@ -631,9 +630,9 @@ mark(c)
 	return (NULL);
 }
 
-const char	*
-unmark(c)
-	char c __attribute__((__unused__));
+/* ARGSUSED */
+const char *
+unmark(int c __unused)
 {
 	if (p.altitude == 0)
 		return ("Cannot unmark planes on the ground");
@@ -643,9 +642,9 @@ unmark(c)
 	return (NULL);
 }
 
-const char	*
-ignore(c)
-	char c __attribute__((__unused__));
+/* ARGSUSED */
+const char *
+ignore(int c __unused)
 {
 	if (p.altitude == 0)
 		return ("Cannot ignore planes on the ground");
@@ -656,24 +655,23 @@ ignore(c)
 }
 
 int
-dir_no(ch)
-	char	ch;
+dir_no(int ch)
 {
-	int	dir;
+	int	dirno;
 
-	dir = -1;
+	dirno = -1;
 	switch (ch) {
-	case 'w':	dir = 0;	break;
-	case 'e':	dir = 1;	break;
-	case 'd':	dir = 2;	break;
-	case 'c':	dir = 3;	break;
-	case 'x':	dir = 4;	break;
-	case 'z':	dir = 5;	break;
-	case 'a':	dir = 6;	break;
-	case 'q':	dir = 7;	break;
+	case 'w':	dirno = 0;	break;
+	case 'e':	dirno = 1;	break;
+	case 'd':	dirno = 2;	break;
+	case 'c':	dirno = 3;	break;
+	case 'x':	dirno = 4;	break;
+	case 'z':	dirno = 5;	break;
+	case 'a':	dirno = 6;	break;
+	case 'q':	dirno = 7;	break;
 	default:
-		fprintf(stderr, "bad character in dir_no\n");
+		(void)fprintf(stderr, "bad character in dir_no\n");
 		break;
 	}
-	return (dir);
+	return (dirno);
 }

@@ -1,11 +1,18 @@
-#	$NetBSD: Makefile.inc,v 1.12 2000/03/06 21:54:05 is Exp $
+#	$NetBSD: Makefile.inc,v 1.26 2008/03/18 04:20:36 lukem Exp $
 #
 #	etc.amiga/Makefile.inc -- amiga-specific etc Makefile targets
 #
 
-# Set this for any kernels beyond GENERIC you want to include
-# in the distribution.
-#EXTRA_KERNELS+=
+# If you change the list of distributed kernels, don't forget
+# to update the release documentation in distrib/notes/common/contents
+
+KERNEL_SETS=		GENERIC
+
+EXTRA_KERNELS=		INSTALL ISDN
+
+INSTALLATION_DIRS+=	installation/miniroot	\
+			installation/misc
 
 snap_md_post:
-	(cd $(SRCTOP)/distrib/miniroot; ${MAKE} release)
+	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/misc '*'
+#	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/miniroot '*.gz'

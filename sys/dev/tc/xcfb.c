@@ -1,7 +1,11 @@
-/* $NetBSD: xcfb.c,v 1.17 2000/03/16 05:50:57 nisimura Exp $ */
+/* $NetBSD: xcfb.c,v 1.47 2008/07/09 13:19:33 joerg Exp $ */
 
-/*
- * Copyright (c) 1998, 1999 Tohru Nishimura.  All rights reserved.
+/*-
+ * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Tohru Nishimura.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,28 +15,22 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Tohru Nishimura
- *	for the NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-
-__KERNEL_RCSID(0, "$NetBSD: xcfb.c,v 1.17 2000/03/16 05:50:57 nisimura Exp $");
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: xcfb.c,v 1.47 2008/07/09 13:19:33 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,10 +39,9 @@ __KERNEL_RCSID(0, "$NetBSD: xcfb.c,v 1.17 2000/03/16 05:50:57 nisimura Exp $");
 #include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/ioctl.h>
-#include <vm/vm.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
@@ -58,20 +55,6 @@ __KERNEL_RCSID(0, "$NetBSD: xcfb.c,v 1.17 2000/03/16 05:50:57 nisimura Exp $");
 #include <pmax/pmax/maxine.h>
 
 #include <uvm/uvm_extern.h>
-
-struct fb_devconfig {
-	vaddr_t dc_vaddr;		/* memory space virtual base address */
-	paddr_t dc_paddr;		/* memory space physical base address */
-	vsize_t dc_size;		/* size of slot memory */
-	int	dc_wid;			/* width of frame buffer */
-	int	dc_ht;			/* height of frame buffer */
-	int	dc_depth;		/* depth, bits per pixel */
-	int	dc_rowbytes;		/* bytes in a FB scan line */
-	vaddr_t dc_videobase;		/* base of flat frame buffer */
-	int	   dc_blanked;		/* currently has video disabled */
-
-	struct rasops_info rinfo;
-};
 
 struct hwcmap256 {
 #define	CMAP_SIZE	256	/* 256 R/G/B entries */
@@ -87,39 +70,41 @@ struct hwcursor64 {
 	struct wsdisplay_curpos cc_magic;	/* not used by PMAG-DV */
 #define	CURSOR_MAX_SIZE	64
 	u_int8_t cc_color[6];
-	u_int64_t cc_image[64 + 64];
+	u_int64_t cc_image[CURSOR_MAX_SIZE];
+	u_int64_t cc_mask[CURSOR_MAX_SIZE];
 };
 
-#define	XCFB_FB_OFFSET	0x2000000	/* from module's base */
-#define	XCFB_FB_SIZE	 0x100000	/* frame buffer size */
+#define	XCFB_FB_BASE	(XINE_PHYS_CFB_START + 0x2000000)
+#define	XCFB_FB_SIZE	0x100000
 
 #define	IMS332_HIGH	(IOASIC_SLOT_5_START)
 #define	IMS332_RLOW	(IOASIC_SLOT_7_START)
 #define	IMS332_WLOW	(IOASIC_SLOT_7_START + 0x20000)
 
 struct xcfb_softc {
-	struct device sc_dev;
-	struct fb_devconfig *sc_dc;	/* device configuration */
+	vaddr_t sc_vaddr;
+	size_t sc_size;
+	struct rasops_info *sc_ri;
 	struct hwcmap256 sc_cmap;	/* software copy of colormap */
 	struct hwcursor64 sc_cursor;	/* software copy of cursor */
-	/* XXX MAXINE can take PMAG-DV virtical retrace interrupt XXX */
+	int sc_blanked;
+	/* XXX MAXINE can take PMAG-DV vertical retrace interrupt XXX */
 	int nscreens;
-	/* cursor coordiate is located at upper-left corner */
+	/* cursor coordinate is located at upper-left corner */
 	int sc_csr;			/* software copy of IMS332 CSR A */
 };
 
-static int  xcfbmatch __P((struct device *, struct cfdata *, void *));
-static void xcfbattach __P((struct device *, struct device *, void *));
+static int  xcfbmatch(struct device *, struct cfdata *, void *);
+static void xcfbattach(struct device *, struct device *, void *);
 
-const struct cfattach xcfb_ca = {
-	sizeof(struct xcfb_softc), xcfbmatch, xcfbattach,
-};
+CFATTACH_DECL_NEW(xcfb, sizeof(struct xcfb_softc),
+    xcfbmatch, xcfbattach, NULL, NULL);
 
 static tc_addr_t xcfb_consaddr;
-static struct fb_devconfig xcfb_console_dc;
-static void xcfb_getdevconfig __P((tc_addr_t, struct fb_devconfig *));
-static void xcfbinit __P((struct fb_devconfig *));
-int xcfb_cnattach __P((void));
+static struct rasops_info xcfb_console_ri;
+static void xcfb_common_init(struct rasops_info *);
+static void xcfbhwinit(void *);
+int xcfb_cnattach(void);
 
 struct wsscreen_descr xcfb_stdscreen = {
 	"std", 0, 0,
@@ -136,14 +121,14 @@ static const struct wsscreen_list xcfb_screenlist = {
 	sizeof(_xcfb_scrlist) / sizeof(struct wsscreen_descr *), _xcfb_scrlist
 };
 
-static int  xcfbioctl __P((void *, u_long, caddr_t, int, struct proc *));
-static int  xcfbmmap __P((void *, off_t, int));
+static int	xcfbioctl(void *, void *, u_long, void *, int, struct lwp *);
+static paddr_t	xcfbmmap(void *, void *, off_t, int);
 
-static int  xcfb_alloc_screen __P((void *, const struct wsscreen_descr *,
-				      void **, int *, int *, long *));
-static void xcfb_free_screen __P((void *, void *));
-static int xcfb_show_screen __P((void *, void *, int,
-				 void (*) (void *, int, int), void *));
+static int	xcfb_alloc_screen(void *, const struct wsscreen_descr *,
+				       void **, int *, int *, long *);
+static void	xcfb_free_screen(void *, void *);
+static int	xcfb_show_screen(void *, void *, int,
+				      void (*) (void *, int, int), void *);
 
 static const struct wsdisplay_accessops xcfb_accessops = {
 	xcfbioctl,
@@ -154,26 +139,27 @@ static const struct wsdisplay_accessops xcfb_accessops = {
 	0 /* load_font */
 };
 
-static int  xcfbintr __P((void *));
-static void xcfb_screenblank __P((struct xcfb_softc *));
-static int  set_cmap __P((struct xcfb_softc *, struct wsdisplay_cmap *));
-static int  get_cmap __P((struct xcfb_softc *, struct wsdisplay_cmap *));
-static int  set_cursor __P((struct xcfb_softc *, struct wsdisplay_cursor *));
-static int  get_cursor __P((struct xcfb_softc *, struct wsdisplay_cursor *));
-static void set_curpos __P((struct xcfb_softc *, struct wsdisplay_curpos *));
-static void ims332_loadcmap __P((struct hwcmap256 *));
-static void ims332_set_curpos __P((struct xcfb_softc *));
-static void ims332_load_curcmap __P((struct xcfb_softc *));
-static void ims332_load_curshape __P((struct xcfb_softc *));
-static void ims332_write_reg __P((int, u_int32_t));
+static int  xcfbintr(void *);
+static void xcfb_screenblank(struct xcfb_softc *);
+static void xcfb_cmap_init(struct xcfb_softc *);
+static int  set_cmap(struct xcfb_softc *, struct wsdisplay_cmap *);
+static int  get_cmap(struct xcfb_softc *, struct wsdisplay_cmap *);
+static int  set_cursor(struct xcfb_softc *, struct wsdisplay_cursor *);
+static int  get_cursor(struct xcfb_softc *, struct wsdisplay_cursor *);
+static void set_curpos(struct xcfb_softc *, struct wsdisplay_curpos *);
+static void ims332_loadcmap(struct hwcmap256 *);
+static void ims332_set_curpos(struct xcfb_softc *);
+static void ims332_load_curcmap(struct xcfb_softc *);
+static void ims332_load_curshape(struct xcfb_softc *);
+static void ims332_write_reg(int, u_int32_t);
 #if 0
-static u_int32_t ims332_read_reg __P((int));
+static u_int32_t ims332_read_reg(int);
 #endif
 
 extern long ioasic_base;	/* XXX */
 
 /*
- * Compose 2 bit/pixel cursor image.  
+ * Compose 2 bit/pixel cursor image.
  *   M M M M I I I I		M I M I M I M I
  *	[ before ]		   [ after ]
  *   3 2 1 0 3 2 1 0		3 3 2 2 1 1 0 0
@@ -215,10 +201,7 @@ static const u_int8_t shuffle[256] = {
 };
 
 static int
-xcfbmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+xcfbmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct tc_attach_args *ta = aux;
 
@@ -229,86 +212,38 @@ xcfbmatch(parent, match, aux)
 }
 
 static void
-xcfb_getdevconfig(dense_addr, dc)
-	tc_addr_t dense_addr;
-	struct fb_devconfig *dc;
+xcfbattach(device_t parent, device_t self, void *aux)
 {
-	int i, cookie;
-
-	dc->dc_vaddr = dense_addr;
-	dc->dc_paddr = MIPS_KSEG1_TO_PHYS(dc->dc_vaddr + XCFB_FB_OFFSET);
-
-	dc->dc_wid = 1024;
-	dc->dc_ht = 768;
-	dc->dc_depth = 8;
-	dc->dc_rowbytes = 1024;
-	dc->dc_videobase = dc->dc_vaddr + XCFB_FB_OFFSET;
-	dc->dc_blanked = 0;
-
-	/* initialize colormap and cursor resource */
-	xcfbinit(dc);
-
-	/* clear the screen */
-	for (i = 0; i < dc->dc_ht * dc->dc_rowbytes; i += sizeof(u_int32_t))
-		*(u_int32_t *)(dc->dc_videobase + i) = 0;
-
-	dc->rinfo.ri_flg = RI_CENTER;
-	dc->rinfo.ri_depth = dc->dc_depth;
-	dc->rinfo.ri_bits = (void *)dc->dc_videobase;
-	dc->rinfo.ri_width = dc->dc_wid;
-	dc->rinfo.ri_height = dc->dc_ht;
-	dc->rinfo.ri_stride = dc->dc_rowbytes;
-
-	wsfont_init();
-	/* prefer 8 pixel wide font */
-	if ((cookie = wsfont_find(NULL, 8, 0, 0)) <= 0)
-		cookie = wsfont_find(NULL, 0, 0, 0);
-	if (cookie <= 0) {
-		printf("xcfb: font table is empty\n");
-		return;
-	}
-
-	if (wsfont_lock(cookie, &dc->rinfo.ri_font,
-	    WSDISPLAY_FONTORDER_R2L, WSDISPLAY_FONTORDER_L2R) <= 0) {
-		printf("xcfb: couldn't lock font\n");
-		return;
-	}
-	dc->rinfo.ri_wsfcookie = cookie;
-
-	rasops_init(&dc->rinfo, 34, 80);
-
-	/* XXX shouldn't be global */
-	xcfb_stdscreen.nrows = dc->rinfo.ri_rows;
-	xcfb_stdscreen.ncols = dc->rinfo.ri_cols;
-	xcfb_stdscreen.textops = &dc->rinfo.ri_ops;
-	xcfb_stdscreen.capabilities = dc->rinfo.ri_caps;
-}
-
-static void
-xcfbattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
-{
-	struct xcfb_softc *sc = (struct xcfb_softc *)self;
+	struct xcfb_softc *sc = device_private(self);
 	struct tc_attach_args *ta = aux;
+	struct rasops_info *ri;
 	struct wsemuldisplaydev_attach_args waa;
 	int console;
 
 	console = (ta->ta_addr == xcfb_consaddr);
 	if (console) {
-		sc->sc_dc = &xcfb_console_dc;
+		sc->sc_ri = ri = &xcfb_console_ri;
 		sc->nscreens = 1;
 	}
 	else {
-		sc->sc_dc = (struct fb_devconfig *)
-		    malloc(sizeof(struct fb_devconfig), M_DEVBUF, M_WAITOK);
-		xcfb_getdevconfig(ta->ta_addr, sc->sc_dc);
+		MALLOC(ri, struct rasops_info *, sizeof(struct rasops_info),
+			M_DEVBUF, M_NOWAIT);
+		if (ri == NULL) {
+			printf(": can't alloc memory\n");
+			return;
+		}
+		memset(ri, 0, sizeof(struct rasops_info));
+
+		ri->ri_hw = (void *)ioasic_base;
+		xcfb_common_init(ri);
+		sc->sc_ri = ri;
 	}
-	printf(": %d x %d, %dbpp\n", sc->sc_dc->dc_wid, sc->sc_dc->dc_ht,
-	    sc->sc_dc->dc_depth);
+	printf(": %dx%d, %dbpp\n", ri->ri_width, ri->ri_height, ri->ri_depth);
 
-	memcpy(&sc->sc_cmap, rasops_cmap, sizeof(struct hwcmap256));
+	xcfb_cmap_init(sc);
 
+	sc->sc_vaddr = ta->ta_addr;
+	sc->sc_blanked = 0;
 	sc->sc_csr = IMS332_BPP_8 | IMS332_CSR_A_VTG_ENABLE;
 
         tc_intr_establish(parent, ta->ta_cookie, IPL_TTY, xcfbintr, sc);
@@ -321,33 +256,96 @@ xcfbattach(parent, self, aux)
 	config_found(self, &waa, wsemuldisplaydevprint);
 }
 
-int
-xcfb_cnattach()
+static void
+xcfb_cmap_init(struct xcfb_softc *sc)
 {
-	tc_addr_t addr = MIPS_PHYS_TO_KSEG1(XINE_PHYS_CFB_START);
-	struct fb_devconfig *dcp = &xcfb_console_dc;
+	struct hwcmap256 *cm;
+	const u_int8_t *p;
+	int index;
+
+	cm = &sc->sc_cmap;
+	p = rasops_cmap;
+	for (index = 0; index < CMAP_SIZE; index++, p += 3) {
+		cm->r[index] = p[0];
+		cm->g[index] = p[1];
+		cm->b[index] = p[2];
+	}
+}
+
+static void
+xcfb_common_init(struct rasops_info *ri)
+{
+	int cookie;
+
+	/* initialize colormap and cursor hardware */
+	xcfbhwinit((void *)ri->ri_hw);
+
+	ri->ri_flg = RI_CENTER;
+	ri->ri_depth = 8;
+	ri->ri_width = 1024;
+	ri->ri_height = 768;
+	ri->ri_stride = 1024;
+	ri->ri_bits = (void *)MIPS_PHYS_TO_KSEG1(XCFB_FB_BASE);
+
+	/* clear the screen */
+	memset(ri->ri_bits, 0, ri->ri_stride * ri->ri_height);
+
+	wsfont_init();
+	/* prefer 12 pixel wide font */
+	cookie = wsfont_find(NULL, 12, 0, 0, WSDISPLAY_FONTORDER_L2R,
+	    WSDISPLAY_FONTORDER_L2R);
+	if (cookie <= 0)
+		cookie = wsfont_find(NULL, 0, 0, 0, WSDISPLAY_FONTORDER_L2R,
+		    WSDISPLAY_FONTORDER_L2R);
+	if (cookie <= 0) {
+		printf("xcfb: font table is empty\n");
+		return;
+	}
+
+	if (wsfont_lock(cookie, &ri->ri_font)) {
+		printf("xcfb: couldn't lock font\n");
+		return;
+	}
+	ri->ri_wsfcookie = cookie;
+
+	rasops_init(ri, 34, 80);
+
+	/* XXX shouldn't be global */
+	xcfb_stdscreen.nrows = ri->ri_rows;
+	xcfb_stdscreen.ncols = ri->ri_cols;
+	xcfb_stdscreen.textops = &ri->ri_ops;
+	xcfb_stdscreen.capabilities = ri->ri_caps;
+}
+
+int
+xcfb_cnattach(void)
+{
+	struct rasops_info *ri;
 	long defattr;
 
-	xcfb_getdevconfig(addr, dcp);
-	(*dcp->rinfo.ri_ops.alloc_attr)(&dcp->rinfo, 0, 0, 0, &defattr);
-	wsdisplay_cnattach(&xcfb_stdscreen, &dcp->rinfo, 0, 0, defattr);
-	xcfb_consaddr = addr;
+	ri = &xcfb_console_ri;
+	ri->ri_hw = (void *)ioasic_base;
+	xcfb_common_init(ri);
+	(*ri->ri_ops.allocattr)(ri, 0, 0, 0, &defattr);
+	wsdisplay_cnattach(&xcfb_stdscreen, ri, 0, 0, defattr);
+	xcfb_consaddr = MIPS_PHYS_TO_KSEG1(XINE_PHYS_CFB_START);
 	return (0);
 }
 
 static void
-xcfbinit(dc)
-	struct fb_devconfig *dc;
+xcfbhwinit(void *base)
 {
-	u_int32_t csr;
-	int i;
+	volatile u_int32_t *csr;
+	u_int32_t i;
+	const u_int8_t *p;
 
-	csr = *(u_int32_t *)(ioasic_base + IOASIC_CSR);
-	csr &= ~XINE_CSR_VDAC_ENABLE;
-	*(u_int32_t *)(ioasic_base + IOASIC_CSR) = csr;
+	csr = (volatile u_int32_t *)((char *)base + IOASIC_CSR);
+	i = *csr;
+	i &= ~XINE_CSR_VDAC_ENABLE;
+	*csr = i;
 	DELAY(50);
-	csr |= XINE_CSR_VDAC_ENABLE;
-	*(u_int32_t *)(ioasic_base + IOASIC_CSR) = csr;
+	i |= XINE_CSR_VDAC_ENABLE;
+	*csr = i;
 	DELAY(50);
 	ims332_write_reg(IMS332_REG_BOOT, 0x2c);
 	ims332_write_reg(IMS332_REG_CSR_A,
@@ -370,11 +368,10 @@ xcfbinit(dc)
 		IMS332_BPP_8|IMS332_CSR_A_VTG_ENABLE);
 
 	/* build sane colormap */
-	for (i = 0; i < CMAP_SIZE; i++) {
-		const u_int8_t *p;
+	p = rasops_cmap;
+	for (i = 0; i < CMAP_SIZE; i++, p += 3) {
 		u_int32_t bgr;
 
-		p = &rasops_cmap[3 * i];
 		bgr = p[2] << 16 | p[1] << 8 | p[0];
 		ims332_write_reg(IMS332_REG_LUT_BASE + i, bgr);
 	}
@@ -394,15 +391,10 @@ xcfbinit(dc)
 }
 
 static int
-xcfbioctl(v, cmd, data, flag, p)
-	void *v;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+xcfbioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct xcfb_softc *sc = v;
-	struct fb_devconfig *dc = sc->sc_dc;
+	struct rasops_info *ri = sc->sc_ri;
 	int turnoff, error;
 
 	switch (cmd) {
@@ -412,9 +404,9 @@ xcfbioctl(v, cmd, data, flag, p)
 
 	case WSDISPLAYIO_GINFO:
 #define	wsd_fbip ((struct wsdisplay_fbinfo *)data)
-		wsd_fbip->height = sc->sc_dc->dc_ht;
-		wsd_fbip->width = sc->sc_dc->dc_wid;
-		wsd_fbip->depth = sc->sc_dc->dc_depth;
+		wsd_fbip->height = ri->ri_height;
+		wsd_fbip->width = ri->ri_width;
+		wsd_fbip->depth = ri->ri_depth;
 		wsd_fbip->cmsize = CMAP_SIZE;
 #undef fbt
 		return (0);
@@ -430,14 +422,14 @@ xcfbioctl(v, cmd, data, flag, p)
 
 	case WSDISPLAYIO_SVIDEO:
 		turnoff = *(int *)data == WSDISPLAYIO_VIDEO_OFF;
-		if ((dc->dc_blanked == 0) ^ turnoff) {
-			dc->dc_blanked = turnoff;
+		if (sc->sc_blanked != turnoff) {
+			sc->sc_blanked = turnoff;
 			xcfb_screenblank(sc);
 		}
 		return (0);
 
 	case WSDISPLAYIO_GVIDEO:
-		*(u_int *)data = dc->dc_blanked ?
+		*(u_int *)data = sc->sc_blanked ?
 		    WSDISPLAYIO_VIDEO_OFF : WSDISPLAYIO_VIDEO_ON;
 		return (0);
 
@@ -460,88 +452,86 @@ xcfbioctl(v, cmd, data, flag, p)
 
 	case WSDISPLAYIO_SCURSOR:
 		return set_cursor(sc, (struct wsdisplay_cursor *)data);
+
+	case WSDISPLAYIO_SMODE:
+		if (*(int *)data == WSDISPLAYIO_MODE_EMUL) {
+			sc->sc_csr |= IMS332_CSR_A_DISABLE_CURSOR;
+			ims332_write_reg(IMS332_REG_CSR_A, sc->sc_csr);
+			xcfb_cmap_init(sc);
+			ims332_loadcmap(&sc->sc_cmap);
+			sc->sc_blanked = 0;
+			xcfb_screenblank(sc);
+		}
+		return (0);
 	}
-	return (ENOTTY);
+	return (EPASSTHROUGH);
 }
 
-static int
-xcfbmmap(v, offset, prot)
-	void *v;
-	off_t offset;
-	int prot;
+static paddr_t
+xcfbmmap(void *v, void *vs, off_t offset, int prot)
 {
-	struct xcfb_softc *sc = v;
 
 	if (offset >= XCFB_FB_SIZE || offset < 0)
 		return (-1);
-	return mips_btop(sc->sc_dc->dc_paddr + offset);
+	return mips_btop(MIPS_KSEG1_TO_PHYS(XCFB_FB_BASE + offset));
 }
 
 static int
-xcfb_alloc_screen(v, type, cookiep, curxp, curyp, attrp)
-	void *v;
-	const struct wsscreen_descr *type;
-	void **cookiep;
-	int *curxp, *curyp;
-	long *attrp;
+xcfb_alloc_screen(void *v, const struct wsscreen_descr *type, void **cookiep,
+    int *curxp, int *curyp, long *attrp)
 {
 	struct xcfb_softc *sc = v;
+	struct rasops_info *ri = sc->sc_ri;
 	long defattr;
 
 	if (sc->nscreens > 0)
 		return (ENOMEM);
 
-	*cookiep = &sc->sc_dc->rinfo; /* one and only for now */
+	*cookiep = ri; 		/* one and only for now */
 	*curxp = 0;
 	*curyp = 0;
-	(*sc->sc_dc->rinfo.ri_ops.alloc_attr)(&sc->sc_dc->rinfo, 0, 0, 0, &defattr);
+	(*ri->ri_ops.allocattr)(ri, 0, 0, 0, &defattr);
 	*attrp = defattr;
 	sc->nscreens++;
 	return (0);
 }
 
 static void
-xcfb_free_screen(v, cookie)
-	void *v;
-	void *cookie;
+xcfb_free_screen(void *v, void *cookie)
 {
 	struct xcfb_softc *sc = v;
 
-	if (sc->sc_dc == &xcfb_console_dc)
+	if (sc->sc_ri == &xcfb_console_ri)
 		panic("xcfb_free_screen: console");
 
 	sc->nscreens--;
 }
 
 static int
-xcfb_show_screen(v, cookie, waitok, cb, cbarg)
-	void *v;
-	void *cookie;
-	int waitok;
-	void (*cb) __P((void *, int, int));
-	void *cbarg;
+xcfb_show_screen(void *v, void *cookie, int waitok,
+    void (*cb)(void *, int, int), void *cbarg)
 {
 
 	return (0);
 }
 
 static int
-xcfbintr(v)
-	void *v;
+xcfbintr(void *v)
 {
-	int intr;
+	struct xcfb_softc *sc = v;
+	u_int32_t *intr, i;
 
-	intr = *(u_int32_t *)(ioasic_base + IOASIC_INTR);
-	intr &= ~XINE_INTR_VINT;
-	*(u_int32_t *)(ioasic_base + IOASIC_INTR) = intr;
+	intr = (u_int32_t *)((char *)sc->sc_ri->ri_hw + IOASIC_INTR);
+	i = *intr;
+	i &= ~XINE_INTR_VINT;
+	*intr = i;
 	return (1);
 }
 
 static void
-xcfb_screenblank(sc)
-	struct xcfb_softc *sc;
+xcfb_screenblank(struct xcfb_softc *sc)
 {
-	if (sc->sc_dc->dc_blanked)
+	if (sc->sc_blanked)
 		sc->sc_csr |= IMS332_CSR_A_FORCE_BLANK;
 	else
 		sc->sc_csr &= ~IMS332_CSR_A_FORCE_BLANK;
@@ -549,56 +539,56 @@ xcfb_screenblank(sc)
 }
 
 static int
-get_cmap(sc, p)
-	struct xcfb_softc *sc;
-	struct wsdisplay_cmap *p;
+get_cmap(struct xcfb_softc *sc, struct wsdisplay_cmap *p)
 {
 	u_int index = p->index, count = p->count;
+	int error;
 
-	if (index >= CMAP_SIZE || (index + count) > CMAP_SIZE)
+	if (index >= CMAP_SIZE || count > CMAP_SIZE - index)
 		return (EINVAL);
 
-	if (!uvm_useracc(p->red, count, B_WRITE) ||
-	    !uvm_useracc(p->green, count, B_WRITE) ||
-	    !uvm_useracc(p->blue, count, B_WRITE))
-		return (EFAULT);
+	error = copyout(&sc->sc_cmap.r[index], p->red, count);
+	if (error)
+		return error;
+	error = copyout(&sc->sc_cmap.g[index], p->green, count);
+	if (error)
+		return error;
+	error = copyout(&sc->sc_cmap.b[index], p->blue, count);
+	return error;
+}
 
-	copyout(&sc->sc_cmap.r[index], p->red, count);
-	copyout(&sc->sc_cmap.g[index], p->green, count);
-	copyout(&sc->sc_cmap.b[index], p->blue, count);
+static int
+set_cmap(struct xcfb_softc *sc, struct wsdisplay_cmap *p)
+{
+	struct hwcmap256 cmap;
+	u_int index = p->index, count = p->count;
+	int error;
 
+	if (index >= CMAP_SIZE || count > CMAP_SIZE - index)
+		return (EINVAL);
+
+	error = copyin(p->red, &cmap.r[index], count);
+	if (error)
+		return error;
+	error = copyin(p->green, &cmap.g[index], count);
+	if (error)
+		return error;
+	error = copyin(p->blue, &cmap.b[index], count);
+	if (error)
+		return error;
+	memcpy(&sc->sc_cmap.r[index], &cmap.r[index], count);
+	memcpy(&sc->sc_cmap.g[index], &cmap.g[index], count);
+	memcpy(&sc->sc_cmap.b[index], &cmap.b[index], count);
 	return (0);
 }
 
 static int
-set_cmap(sc, p)
-	struct xcfb_softc *sc;
-	struct wsdisplay_cmap *p;
-{
-	u_int index = p->index, count = p->count;
-
-	if (index >= CMAP_SIZE || (index + count) > CMAP_SIZE)
-		return (EINVAL);
-
-	if (!uvm_useracc(p->red, count, B_READ) ||
-	    !uvm_useracc(p->green, count, B_READ) ||
-	    !uvm_useracc(p->blue, count, B_READ))
-		return (EFAULT);
-
-	copyin(p->red, &sc->sc_cmap.r[index], count);
-	copyin(p->green, &sc->sc_cmap.g[index], count);
-	copyin(p->blue, &sc->sc_cmap.b[index], count);
-
-	return (0);
-}
-
-static int
-set_cursor(sc, p)
-	struct xcfb_softc *sc;
-	struct wsdisplay_cursor *p;
+set_cursor(struct xcfb_softc *sc, struct wsdisplay_cursor *p)
 {
 #define	cc (&sc->sc_cursor)
-	int v, index, count;
+	u_int v, index = 0, count = 0, icount = 0;
+	uint8_t r[2], g[2], b[2], image[512], mask[512];
+	int error;
 
 	v = p->which;
 	if (v & WSDISPLAY_CURSOR_DOCMAP) {
@@ -607,27 +597,40 @@ set_cursor(sc, p)
 
 		if (index >= 2 || index + count > 2)
 			return (EINVAL);
-		if (!uvm_useracc(p->cmap.red, count, B_READ) ||
-		    !uvm_useracc(p->cmap.green, count, B_READ) ||
-		    !uvm_useracc(p->cmap.blue, count, B_READ))
-			return (EFAULT);
-
-		copyin(p->cmap.red, &cc->cc_color[index], count);
-		copyin(p->cmap.green, &cc->cc_color[index + 2], count);
-		copyin(p->cmap.blue, &cc->cc_color[index + 4], count);
-		ims332_load_curcmap(sc);
+		error = copyin(p->cmap.red, &r[index], count);
+		if (error)
+			return error;
+		error = copyin(p->cmap.green, &g[index], count);
+		if (error)
+			return error;
+		error = copyin(p->cmap.blue, &b[index], count);
+		if (error)
+			return error;
 	}
 	if (v & WSDISPLAY_CURSOR_DOSHAPE) {
 		if (p->size.x > CURSOR_MAX_SIZE || p->size.y > CURSOR_MAX_SIZE)
 			return (EINVAL);
-		count = ((p->size.x < 33) ? 4 : 8) * p->size.y;
-		if (!uvm_useracc(p->image, count, B_READ) ||
-		    !uvm_useracc(p->mask, count, B_READ))
-			return (EFAULT);
+		icount = ((p->size.x < 33) ? 4 : 8) * p->size.y;
+		error = copyin(p->image, image, icount);
+		if (error)
+			return error;
+		error = copyin(p->mask, mask, icount);
+		if (error)
+			return error;
+	}
+
+	if (v & WSDISPLAY_CURSOR_DOCMAP) {
+		memcpy(&cc->cc_color[index], &r[index], count);
+		memcpy(&cc->cc_color[index + 2], &g[index], count);
+		memcpy(&cc->cc_color[index + 4], &b[index], count);
+		ims332_load_curcmap(sc);
+	}
+	if (v & WSDISPLAY_CURSOR_DOSHAPE) {
 		cc->cc_size = p->size;
 		memset(cc->cc_image, 0, sizeof cc->cc_image);
-		copyin(p->image, cc->cc_image, count);
-		copyin(p->mask, cc->cc_image+CURSOR_MAX_SIZE, count);
+		memcpy(cc->cc_image, image, icount);
+		memset(cc->cc_mask, 0, sizeof cc->cc_mask);
+		memcpy(cc->cc_mask, mask, icount);
 		ims332_load_curshape(sc);
 	}
 	if (v & WSDISPLAY_CURSOR_DOCUR) {
@@ -648,40 +651,35 @@ set_cursor(sc, p)
 }
 
 static int
-get_cursor(sc, p)
-	struct xcfb_softc *sc;
-	struct wsdisplay_cursor *p;
+get_cursor(struct xcfb_softc *sc, struct wsdisplay_cursor *p)
 {
-	return (ENOTTY); /* XXX */
+	return (EPASSTHROUGH); /* XXX */
 }
 
 static void
-set_curpos(sc, curpos)
-	struct xcfb_softc *sc;
-	struct wsdisplay_curpos *curpos;
+set_curpos(struct xcfb_softc *sc, struct wsdisplay_curpos *curpos)
 {
-	struct fb_devconfig *dc = sc->sc_dc;
+	struct rasops_info *ri = sc->sc_ri;
 	int x = curpos->x, y = curpos->y;
 
 	if (y < 0)
 		y = 0;
-	else if (y > dc->dc_ht)
-		y = dc->dc_ht;
+	else if (y > ri->ri_height)
+		y = ri->ri_height;
 	if (x < 0)
 		x = 0;
-	else if (x > dc->dc_wid)
-		x = dc->dc_wid;
+	else if (x > ri->ri_width)
+		x = ri->ri_width;
 	sc->sc_cursor.cc_pos.x = x;
 	sc->sc_cursor.cc_pos.y = y;
 }
 
 static void
-ims332_loadcmap(cm)
-	struct hwcmap256 *cm;
+ims332_loadcmap(struct hwcmap256 *cm)
 {
 	int i;
 	u_int32_t rgb;
-	
+
 	for (i = 0; i < CMAP_SIZE; i++) {
 		rgb = cm->b[i] << 16 | cm->g[i] << 8 | cm->r[i];
 		ims332_write_reg(IMS332_REG_LUT_BASE + i, rgb);
@@ -689,8 +687,7 @@ ims332_loadcmap(cm)
 }
 
 static void
-ims332_set_curpos(sc)
-	struct xcfb_softc *sc;
+ims332_set_curpos(struct xcfb_softc *sc)
 {
 	struct wsdisplay_curpos *curpos = &sc->sc_cursor.cc_pos;
 	u_int32_t pos;
@@ -703,8 +700,7 @@ ims332_set_curpos(sc)
 }
 
 static void
-ims332_load_curcmap(sc)
-	struct xcfb_softc *sc;
+ims332_load_curcmap(struct xcfb_softc *sc)
 {
 	u_int8_t *cp = sc->sc_cursor.cc_color;
 	u_int32_t rgb;
@@ -719,17 +715,16 @@ ims332_load_curcmap(sc)
 }
 
 static void
-ims332_load_curshape(sc)
-	struct xcfb_softc *sc;
+ims332_load_curshape(struct xcfb_softc *sc)
 {
-	unsigned i, img, msk, bits;
+	u_int i, img, msk, bits;
 	u_int8_t u, *ip, *mp;
 
 	ip = (u_int8_t *)sc->sc_cursor.cc_image;
-	mp = (u_int8_t *)(sc->sc_cursor.cc_image+CURSOR_MAX_SIZE);
+	mp = (u_int8_t *)sc->sc_cursor.cc_mask;
 
 	i = 0;
-	/* 64 pixel scan line is consisted with 8 halfward cursor ram */
+	/* 64 pixel scan line is consisted with 8 halfword cursor ram */
 	while (i < sc->sc_cursor.cc_size.y * 8) {
 		/* pad right half 32 pixel when smaller than 33 */
 		if ((i & 0x4) && sc->sc_cursor.cc_size.x < 33)
@@ -754,12 +749,10 @@ ims332_load_curshape(sc)
 }
 
 static void
-ims332_write_reg(regno, val)
-	int regno;
-	u_int32_t val;
+ims332_write_reg(int regno, u_int32_t val)
 {
-	caddr_t high8 = (caddr_t)(ioasic_base + IMS332_HIGH);
-	caddr_t low16 = (caddr_t)(ioasic_base + IMS332_WLOW) + (regno << 4);
+	void *high8 = (void *)(ioasic_base + IMS332_HIGH);
+	void *low16 = (void *)(ioasic_base + IMS332_WLOW + (regno << 4));
 
 	*(volatile u_int16_t *)high8 = (val & 0xff0000) >> 8;
 	*(volatile u_int16_t *)low16 = val;
@@ -767,11 +760,10 @@ ims332_write_reg(regno, val)
 
 #if 0
 static u_int32_t
-ims332_read_reg(regno)
-	int regno;
+ims332_read_reg(int regno)
 {
-	caddr_t high8 = (caddr_t)(ioasic_base + IMS332_HIGH);
-	caddr_t low16 = (caddr_t)(ioasic_base + IMS332_RLOW) + (regno << 4);
+	void *high8 = (void *)(ioasic_base + IMS332_HIGH);
+	void *low16 = (void *)(ioasic_base + IMS332_RLOW) + (regno << 4);
 	u_int v0, v1;
 
 	v1 = *(volatile u_int16_t *)high8;

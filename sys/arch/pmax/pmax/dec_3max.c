@@ -1,4 +1,4 @@
-/* $NetBSD: dec_3max.c,v 1.28 2000/03/08 18:09:27 mhitch Exp $ */
+/* $NetBSD: dec_3max.c,v 1.45 2007/12/03 15:34:09 ad Exp $ */
 
 /*
  * Copyright (c) 1998 Jonathan Stone.  All rights reserved.
@@ -31,9 +31,42 @@
  */
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department, The Mach Operating System project at
+ * Carnegie-Mellon University and Ralph Campbell.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)machdep.c	8.3 (Berkeley) 1/12/94
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -73,37 +106,52 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_3max.c,v 1.28 2000/03/08 18:09:27 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_3max.c,v 1.45 2007/12/03 15:34:09 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #include <machine/cpu.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/locore.h>
 #include <machine/sysconf.h>
 
 #include <mips/mips/mips_mcclock.h>	/* mcclock CPUspeed estimation */
 
+#include <dev/tc/tcvar.h>		/* tc_addr_t */
+
 #include <pmax/pmax/machdep.h>
 #include <pmax/pmax/kn02.h>
 #include <pmax/pmax/memc.h>
-#include <pmax/dev/dcvar.h>
 
-#include "rasterconsole.h"
+#include <dev/dec/dzreg.h>
+#include <dev/dec/dzvar.h>
+#include <dev/dec/dzkbdvar.h>
+#include <pmax/pmax/cons.h>
+#include "wsdisplay.h"
 
 void		dec_3max_init __P((void));		/* XXX */
 static void	dec_3max_bus_reset __P((void));
 
 static void	dec_3max_cons_init __P((void));
 static void	dec_3max_errintr __P((void));
-static int	dec_3max_intr __P((unsigned, unsigned, unsigned, unsigned));
+static void	dec_3max_intr __P((unsigned, unsigned, unsigned, unsigned));
 static void	dec_3max_intr_establish __P((struct device *, void *,
 		    int, int (*)(void *), void *));
 
 
 #define	kn02_wbflush()	mips1_wbflush()	/* XXX to be corrected XXX */
+
+static const int dec_3max_ipl2spl_table[] = {
+	[IPL_NONE] = 0,
+	[IPL_SOFTCLOCK] = _SPL_SOFTCLOCK,
+	[IPL_SOFTNET] = _SPL_SOFTNET,
+	[IPL_VM] = MIPS_SPL0,
+	[IPL_SCHED] = MIPS_SPL_0_1,
+	[IPL_HIGH] = MIPS_SPL_0_1,
+};
 
 void
 dec_3max_init()
@@ -115,21 +163,14 @@ dec_3max_init()
 	platform.cons_init = dec_3max_cons_init;
 	platform.iointr = dec_3max_intr;
 	platform.intr_establish = dec_3max_intr_establish;
-	platform.memsize = memsize_scan;
+	platform.memsize = memsize_bitmap;
 	/* no high resolution timer available */
 
 	/* clear any memory errors */
 	*(u_int32_t *)MIPS_PHYS_TO_KSEG1(KN02_SYS_ERRADR) = 0;
 	kn02_wbflush();
 
-	mips_hardware_intr = dec_3max_intr;
-
-	splvec.splbio = MIPS_SPL0;
-	splvec.splnet = MIPS_SPL0;
-	splvec.spltty = MIPS_SPL0;
-	splvec.splimp = MIPS_SPL0;
-	splvec.splclock = MIPS_SPL_0_1;
-	splvec.splstatclock = MIPS_SPL_0_1;
+	ipl2spl_table = dec_3max_ipl2spl_table;
 
 	/* calibrate cpu_mhz value */
 	mc_cpuspeed(MIPS_PHYS_TO_KSEG1(KN02_SYS_CLOCK), MIPS_INT_MASK_1);
@@ -147,7 +188,7 @@ dec_3max_init()
 }
 
 /*
- * Initalize the memory system and I/O buses.
+ * Initialize the memory system and I/O buses.
  */
 static void
 dec_3max_bus_reset()
@@ -166,31 +207,32 @@ dec_3max_bus_reset()
 static void
 dec_3max_cons_init()
 {
- 	int kbd, crt, screen;
- 	extern int tcfb_cnattach __P((int));		/* XXX */
- 
- 	kbd = crt = screen = 0;
- 	prom_findcons(&kbd, &crt, &screen);
- 
- 	if (screen > 0) {
-#if NRASTERCONSOLE > 0
+	int kbd, crt, screen;
+	extern int tcfb_cnattach __P((int));		/* XXX */
+
+	kbd = crt = screen = 0;
+	prom_findcons(&kbd, &crt, &screen);
+
+	if (screen > 0) {
+#if NWSDISPLAY > 0
  		if (kbd == 7 && tcfb_cnattach(crt) > 0) {
- 			dckbd_cnattach(KN02_SYS_DZ);
+			dz_ibus_cnsetup(KN02_SYS_DZ);
+			dzkbd_cnattach(NULL);
  			return;
  		}
-#else
- 		printf("No framebuffer device configured for slot %d: ", crt);
- 		printf("using serial console\n");
 #endif
- 	}
- 	/*
- 	 * Delay to allow PROM putchars to complete.
- 	 * FIFO depth * character time,
- 	 * character time = (1000000 / (defaultrate / 10))
- 	 */
- 	DELAY(160000000 / 9600);	/* XXX */
- 
- 	dc_cnattach(KN02_SYS_DZ, kbd);
+		printf("No framebuffer device configured for slot %d: ", crt);
+		printf("using serial console\n");
+	}
+	/*
+	 * Delay to allow PROM putchars to complete.
+	 * FIFO depth * character time,
+	 * character time = (1000000 / (defaultrate / 10))
+	 */
+	DELAY(160000000 / 9600);	/* XXX */
+
+	dz_ibus_cnsetup(KN02_SYS_DZ);
+	dz_ibus_cnattach(kbd);
 }
 
 static const struct {
@@ -235,25 +277,25 @@ found:
 
 #define CALLINTR(vvv)						\
 	do {							\
-		intrcnt[vvv] += 1;				\
+		intrtab[vvv].ih_count.ev_count++;		\
 		(*intrtab[vvv].ih_func)(intrtab[vvv].ih_arg);	\
 	} while (0)
 
-static int
-dec_3max_intr(cpumask, pc, status, cause)
-	unsigned cpumask;
-	unsigned pc;
+static void
+dec_3max_intr(status, cause, pc, ipending)
 	unsigned status;
 	unsigned cause;
+	unsigned pc;
+	unsigned ipending;
 {
 	static int warned = 0;
 	u_int32_t csr;
 
 	/* handle clock interrupts ASAP */
-	if (cpumask & MIPS_INT_MASK_1) {
+	if (ipending & MIPS_INT_MASK_1) {
 		struct clockframe cf;
 
-		csr = *(unsigned *)MIPS_PHYS_TO_KSEG1(KN02_SYS_CSR);
+		csr = *(u_int32_t *)MIPS_PHYS_TO_KSEG1(KN02_SYS_CSR);
 		if ((csr & KN02_CSR_PSWARN) && !warned) {
 			warned = 1;
 			printf("WARNING: power supply is overheating!\n");
@@ -262,21 +304,21 @@ dec_3max_intr(cpumask, pc, status, cause)
 			printf("WARNING: power supply is OK again\n");
 		}
 
-		__asm __volatile("lbu $0,48(%0)" ::
+		__asm volatile("lbu $0,48(%0)" ::
 			"r"(MIPS_PHYS_TO_KSEG1(KN02_SYS_CLOCK)));
 		cf.pc = pc;
 		cf.sr = status;
 		hardclock(&cf);
-		intrcnt[HARDCLOCK]++;
+		pmax_clock_evcnt.ev_count++;
 
 		/* keep clock interrupts enabled when we return */
 		cause &= ~MIPS_INT_MASK_1;
 	}
 
-	/* If clock interrups were enabled, re-enable them ASAP. */
+	/* If clock interrupts were enabled, re-enable them ASAP. */
 	_splset(MIPS_SR_INT_IE | (status & MIPS_INT_MASK_1));
 
-	if (cpumask & MIPS_INT_MASK_0) {
+	if (ipending & MIPS_INT_MASK_0) {
 		csr = *(u_int32_t *)MIPS_PHYS_TO_KSEG1(KN02_SYS_CSR);
 		csr &= (csr >> KN02_CSR_IOINTEN_SHIFT);
 		if (csr & (KN02_IP_DZ | KN02_IP_LANCE | KN02_IP_SCSI)) {
@@ -296,18 +338,18 @@ dec_3max_intr(cpumask, pc, status, cause)
 				CALLINTR(SYS_DEV_OPT0);
 		}
 	}
-	if (cpumask & MIPS_INT_MASK_3) {
-		intrcnt[ERROR_INTR]++;
+	if (ipending & MIPS_INT_MASK_3) {
 		dec_3max_errintr();
+		pmax_memerr_evcnt.ev_count++;
 	}
 
-	return (MIPS_SR_INT_IE | (status & ~cause & MIPS_HARD_INT_MASK));
+	_splset(MIPS_SR_INT_IE | (status & ~cause & MIPS_HARD_INT_MASK));
 }
 
 
 /*
  * Handle Memory error.   3max, 3maxplus has ECC.
- * Correct single-bit error, panic on  double-bit error.
+ * Correct single-bit error, panic on double-bit error.
  * XXX on double-error on clean user page, mark bad and reload frame?
  */
 static void

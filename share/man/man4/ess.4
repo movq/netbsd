@@ -1,4 +1,4 @@
-.\"	$NetBSD: ess.4,v 1.9 2000/02/15 17:23:11 nathanw Exp $
+.\"	$NetBSD: ess.4,v 1.14 2008/04/30 13:10:54 martin Exp $
 .\"
 .\" Copyright (c) 1999 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -11,13 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -31,23 +24,22 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd February 18, 1999
+.Dd June 22, 2005
 .Dt ESS 4
 .Os
 .Sh NAME
 .Nm ess
 .Nd ESS Technology AudioDrive family audio device driver
 .Sh SYNOPSIS
-.Cd "ess0   at isa? port 0x220 irq 5 drq 1 drq2 5"
 .Cd "ess*   at isapnp?"
 .Cd "ess*   at pnpbios? index ?"
 .Cd "ess*   at ofisa?"
-.Cd "audio* at ess?"
+.Cd "audio* at audiobus?"
 .Cd "opl*   at ess?"
 .Sh DESCRIPTION
 The
 .Nm
-driver provides support for the ESS 1788, 1888, 1887, and 888 AudioDrive 
+driver provides support for the ESS 1788, 1888, 1887, and 888 AudioDrive
 audio devices.
 .Pp
 The AudioDrive 1788 is a half-duplex device, while the 1888, 1887, and
@@ -55,9 +47,9 @@ The AudioDrive 1788 is a half-duplex device, while the 1888, 1887, and
 recording and playback at rates up to 44.1kHz.
 .Pp
 The AudioDrive takes 16 I/O ports. The I/O port range, IRQ, and DRQ
-channels are set by the driver to the vaues specified in the
-configuration file (or for isapnp, pnpbios, or ofisa, the values 
-assigned from the firmware). 
+channels are set by the driver to the values specified in the
+configuration file (or for isapnp, pnpbios, or ofisa, the values
+assigned from the firmware).
 The I/O port base must be one of 0x220, 0x230, 0x240,
 0x250. The IRQ must be one of 5, 7, 9, 10 (or 15 on the 1887
 only). The first DRQ channel must be selected from 0, 1, 3. The second
@@ -67,23 +59,22 @@ used they must be different.
 .Pp
 The joystick interface (if enabled) is handled by the
 .Xr joy 4
-driver. 
-.Sh BUGS
-The AudioDrive devices have a SoundBlaster compatibility mode, and may
-be detected by the SoundBlaster driver (see 
-.Xr sb 4 )  
-rather than the AudioDrive driver. The workaround is to remove the
-SoundBlaster driver from the kernel configuration.
+driver.
 .Sh SEE ALSO
 .Xr audio 4 ,
-.Xr isa 4 ,
 .Xr isapnp 4 ,
+.Xr joy 4 ,
 .Xr ofisa 4 ,
 .Xr opl 4 ,
-.Xr pnpbios 4 ,
-.Xr joy 4
+.Xr pnpbios 4
 .Sh HISTORY
 The
 .Nm
 device driver appeared in
 .Nx 1.4 .
+.Sh BUGS
+The AudioDrive devices have a SoundBlaster compatibility mode, and may
+be detected by the SoundBlaster driver (see
+.Xr sb 4 )
+rather than the AudioDrive driver. The workaround is to remove the
+SoundBlaster driver from the kernel configuration.

@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_parse.c,v 1.10 1999/12/15 16:47:35 bouyer Exp $	*/
+/*	$NetBSD: rpc_parse.c,v 1.15 2006/04/04 21:27:42 christos Exp $	*/
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
  * unrestricted use provided that this legend is included on all tape
@@ -29,12 +29,16 @@
  * Mountain View, California  94043
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)rpc_parse.c 1.8 89/02/22 (C) 1987 SMI";
 #else
-__RCSID("$NetBSD: rpc_parse.c,v 1.10 1999/12/15 16:47:35 bouyer Exp $");
+__RCSID("$NetBSD: rpc_parse.c,v 1.15 2006/04/04 21:27:42 christos Exp $");
 #endif
 #endif
 
@@ -96,6 +100,7 @@ get_definition()
 		def_const(defp);
 		break;
 	case TOK_EOF:
+		free(defp);
 		return (NULL);
 	default:
 		error("definition keyword expected");
@@ -297,7 +302,6 @@ def_union(defp)
 	declaration dec;
 	case_list *cases;
 	case_list **tailp;
-	int     flag;
 
 	defp->def_kind = DEF_UNION;
 	scan(TOK_IDENT, &tok);
@@ -316,7 +320,6 @@ def_union(defp)
 		cases->case_name = tok.str;
 		scan(TOK_COLON, &tok);
 		/* now peek at next token */
-		flag = 0;
 		if (peekscan(TOK_CASE, &tok)) {
 
 			do {
@@ -330,14 +333,7 @@ def_union(defp)
 				scan(TOK_COLON, &tok);
 
 			} while (peekscan(TOK_CASE, &tok));
-		} else
-			if (flag) {
-
-				*tailp = cases;
-				tailp = &cases->next;
-				cases = ALLOC(case_list);
-			};
-
+		}
 		get_declaration(&dec, DEF_UNION);
 		cases->case_decl = dec;
 		cases->contflag = 0;	/* no continued case statement */
@@ -460,8 +456,8 @@ get_declaration(dec, dkind)
 			}
 			dec->rel = REL_ARRAY;
 			if (peekscan(TOK_RANGLE, &tok)) {
-				dec->array_max = "~0";	/* unspecified size, use
-							 * max */
+				dec->array_max = "(u_int)~0";
+				/* unspecified size, use * max */
 			} else {
 				scan_num(&tok);
 				dec->array_max = tok.str;
@@ -529,7 +525,8 @@ get_prog_declaration(dec, dkind, num)
 		}
 		dec->rel = REL_ARRAY;
 		if (peekscan(TOK_RANGLE, &tok)) {
-			dec->array_max = "~0";	/* unspecified size, use max */
+			dec->array_max = "(u_int)~0";
+			/* unspecified size, use max */
 		} else {
 			scan_num(&tok);
 			dec->array_max = tok.str;
@@ -541,7 +538,8 @@ get_prog_declaration(dec, dkind, num)
 						 * type of argument - make it
 						 * string<> */
 			dec->rel = REL_ARRAY;
-			dec->array_max = "~0";	/* unspecified size, use max */
+			dec->array_max = "(u_int)~0";
+			/* unspecified size, use max */
 		}
 	}
 }

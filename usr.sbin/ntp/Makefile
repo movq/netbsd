@@ -1,10 +1,13 @@
-#	$NetBSD: Makefile,v 1.2 2000/03/29 14:35:45 simonb Exp $
+#	$NetBSD: Makefile,v 1.9 2007/01/20 16:50:29 kardel Exp $
 
-SUBDIR=	libntp ntpd ntpdate ntpdc ntpq ntptime ntptimeset ntptrace
+.include <bsd.own.mk>
 
-all-ntpd all-ntpdate all-ntpdc all-ntpq all-ntptime all-ntptimeset \
-	all-ntptrace: all-libntp
-depend-ntpd depend-ntpdate depend-ntpdc depend-ntpq depend-ntptime \
-	depend-ntptimeset depend-ntptrace: depend-libntp
+SUBDIR=	libopts libisc libntp libparse .WAIT
+SUBDIR+= ntpd ntpdate ntpdc ntpq ntptime
+SUBDIR+= ntptrace html
+
+.if (${MKCRYPTO} != "no")
+SUBDIR+= ntp-keygen
+.endif
 
 .include <bsd.subdir.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.6 1999/03/26 22:23:57 sommerfe Exp $	*/
+/*	$NetBSD: extern.h,v 1.15 2007/12/04 17:45:07 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -31,10 +31,37 @@
 
 __BEGIN_DECLS
 extern char *__minbrk;
-int __getcwd __P((char *, size_t));
-int __getlogin __P((char *, size_t));
-const char *__strerror __P((int , char *, size_t));
-const char *__strsignal __P((int , char *, size_t));
-char *__dtoa __P((double, int, int, int *, int *, char **));
-int __sysctl __P((int *, unsigned int, void *, size_t *, void *, size_t));
+int __getcwd(char *, size_t);
+int __getlogin(char *, size_t);
+int __setlogin(const char *);
+void _resumecontext(void);
+const char *__strerror(int , char *, size_t);
+const char *__strsignal(int , char *, size_t);
+char *__dtoa(double, int, int, int *, int *, char **);
+void __freedtoa(char *);
+int __sysctl(const int *, unsigned int, void *, size_t *, const void *, size_t);
+
+struct sigaction;
+int __sigaction_sigtramp(int, const struct sigaction *,
+    struct sigaction *, const void *, int);
+
+#ifdef WIDE_DOUBLE
+char *__hdtoa(double, const char *, int, int *, int *, char **);
+char *__hldtoa(long double, const char *, int, int *, int *,  char **);
+char *__ldtoa(long double *, int, int, int *, int *, char **);
+#endif
+
+struct syslog_data;
+void	syslog_ss(int, struct syslog_data *, const char *, ...)
+    __attribute__((__format__(__printf__,3,4)));
+void	vsyslog_ss(int, struct syslog_data *, const char *, _BSD_VA_LIST_);
+
+int	snprintf_ss(char * __restrict, size_t, const char * __restrict, ...)
+    __attribute__((__format__(__printf__, 3, 4)));
+int	vsnprintf_ss(char * __restrict, size_t, const char * __restrict,
+    _BSD_VA_LIST_) __attribute__((__format__(__printf__, 3, 0)));
+
+void	_malloc_prefork(void);
+void	_malloc_postfork(void);
+
 __END_DECLS

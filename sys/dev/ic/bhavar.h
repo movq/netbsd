@@ -1,4 +1,4 @@
-/*	$NetBSD: bhavar.h,v 1.17 2000/03/27 17:00:50 kleink Exp $	*/
+/*	$NetBSD: bhavar.h,v 1.24 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +29,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#ifndef _DEV_IC_BHAVAR_H_
+#define	_DEV_IC_BHAVAR_H_
 
 #include <sys/queue.h>
 
@@ -69,19 +65,24 @@ do {									\
 	    BHA_CCB_OFFSET(ccb), sizeof(struct bha_ccb), (ops));	\
 } while (0)
 
-#define	BHA_MBI_OFFSET(sc, mbi)	((u_long)(mbi) - (u_long)(sc)->sc_mbi)
-#define	BHA_MBO_OFFSET(sc, mbo)	((u_long)(mbo) - (u_long)(sc)->sc_mbo)
+/*
+ * Offset in the DMA mapping for mailboxes.
+ * Since all mailboxes are allocated on a single DMA'able memory
+ * due to the hardware limitation, an offset of any mailboxes can be
+ * calculated using same expression.
+ */
+#define	BHA_MBX_OFFSET(sc, mbx)	((u_long)(mbx) - (u_long)(sc)->sc_mbo)
 
 #define	BHA_MBI_SYNC(sc, mbi, ops)					\
 do {									\
 	bus_dmamap_sync((sc)->sc_dmat, (sc)->sc_dmamap_mbox,		\
-	    BHA_MBI_OFFSET((sc), (mbi)), sizeof(struct bha_mbx_in), (ops)); \
+	    BHA_MBX_OFFSET((sc), (mbi)), sizeof(struct bha_mbx_in), (ops)); \
 } while (0)
 
 #define	BHA_MBO_SYNC(sc, mbo, ops)					\
 do {									\
 	bus_dmamap_sync((sc)->sc_dmat, (sc)->sc_dmamap_mbox,		\
-	    BHA_MBO_OFFSET((sc), (mbo)), sizeof(struct bha_mbx_out), (ops)); \
+	    BHA_MBX_OFFSET((sc), (mbo)), sizeof(struct bha_mbx_out), (ops)); \
 } while (0)
 
 struct bha_softc {
@@ -105,10 +106,8 @@ struct bha_softc {
 #define	BHAF_STRICT_ROUND_ROBIN	0x20	/* device supports strict RR mode */
 
 	int sc_max_dmaseg;		/* maximum number of DMA segments */
-	int sc_hw_ccbs;			/* maximum number of CCBs (HW) */
-	int sc_max_ccbs;		/* maximum number of CCBs (SW) */
+	int sc_max_ccbs;		/* maximum number of CCBs (HW) */
 	int sc_cur_ccbs;		/* current number of CCBs */
-	int sc_mbox_count;		/* maximum number of mailboxes */
 
 	int sc_disc_mask;		/* mask of targets allowing discnnct */
 	int sc_ultra_mask;		/* mask of targets allowing ultra */
@@ -126,6 +125,7 @@ struct bha_softc {
 	struct bha_mbx_out *sc_cmbo;	/* Collection Mail Box out */
 	struct bha_mbx_out *sc_tmbo;	/* Target Mail Box out */
 
+	int sc_mbox_count;		/* number of mailboxes */
 	int sc_mbofull;			/* number of full Mail Box Out */
 
 	struct bha_mbx_in *sc_tmbi;	/* Target Mail Box in */
@@ -134,10 +134,9 @@ struct bha_softc {
 	TAILQ_HEAD(, bha_ccb)	sc_free_ccb,
 				sc_waiting_ccb,
 				sc_allocating_ccbs;
-	struct scsipi_link sc_link;	/* prototype for devs */
-	struct scsipi_adapter sc_adapter;
 
-	TAILQ_HEAD(, scsipi_xfer) sc_queue;
+	struct scsipi_adapter sc_adapter;
+	struct scsipi_channel sc_channel;
 
 	char sc_model[7],
 	     sc_firmware[6];
@@ -147,10 +146,15 @@ struct bha_probe_data {
 	int sc_irq, sc_drq;
 };
 
-int	bha_find __P((bus_space_tag_t, bus_space_handle_t,
-	    struct bha_probe_data *));
-void	bha_attach __P((struct bha_softc *, struct bha_probe_data *));
-int	bha_info __P((struct bha_softc *));
-int	bha_intr __P((void *));
+int	bha_find(bus_space_tag_t, bus_space_handle_t);
+int	bha_inquire_config(bus_space_tag_t, bus_space_handle_t,
+	    struct bha_probe_data *);
+void	bha_attach(struct bha_softc *);
+int	bha_info(struct bha_softc *);
+int	bha_intr(void *);
 
-int	bha_disable_isacompat __P((struct bha_softc *));
+int	bha_disable_isacompat(struct bha_softc *);
+int	bha_probe_inquiry(bus_space_tag_t, bus_space_handle_t,
+	    struct bha_probe_data *);
+
+#endif /* _DEV_IC_BHAVAR_H_ */

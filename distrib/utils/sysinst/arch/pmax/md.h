@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.14 2000/03/28 00:29:57 thorpej Exp $	*/
+/*	$NetBSD: md.h,v 1.32 2007/11/12 15:07:36 jmmv Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -43,36 +43,17 @@
 /*
  * Symbolic names for disk partitions.
  */
-#define PART_ROOT	A
-#define PART_SWAP	B
-#define PART_RAW	C
-#define PART_USR	D	/* Can be after PART_FIRST_FREE */
-#define PART_FIRST_FREE	E
+#define PART_ROOT	PART_A
+#define PART_SWAP	PART_B
+#define PART_RAW	PART_C
+#define PART_USR	PART_D	/* Can be after PART_FIRST_FREE */
+#define PART_FIRST_FREE	PART_E
 
 #define DEFSWAPRAM	32	/* Assume at least this RAM for swap calc */
-#define DEFROOTSIZE	32	/* Default root size */
-#define STDNEEDMB	140	/* Min space for non X install */
+#define DEFROOTSIZE	64	/* Default root size */
+#define DEFVARSIZE	32	/* Default /var size, if created */
+#define DEFUSRSIZE	120	/* Default /usr size, if /home */
 #define XNEEDMB		100	/* Extra megs for full X installation */
-
-/*
- * Disk names accepted as valid targets for a from-scratch installation.
- *
- * On the pmax, we accept the current 'rz' driver and also accept
- * 'sd' in case this release of sysinst gets used after we switch to
- * the MI scsi code. 
- */
-EXTERN	char *disk_names[]
-#ifdef MAIN
-= {"rz", "sd", NULL}
-#endif
-;
-
-/*
- * Legal start character for a disk for checking input. 
- * this must return 1 for a character that matches the first
- * characters of each member of disk_names.
- */
-#define ISDISKSTART(dn)	(dn == 'r' || dn == 's')
 
 /*
  * Machine-specific command to write a new label to a disk.
@@ -85,37 +66,6 @@ EXTERN	char *disk_names[]
 /*
  *  Default filesets to fetch and install during installation
  *  or upgrade. The standard sets are:
- *      base, etc, comp, games, man, misc, text,
- *      xbase, xfont, xserver, xcontrib, xcomp.
+ *      base etc comp games man misc tests text xbase xcomp xetc xfont xserver
  */
-EXTERN distinfo dist_list[]
-#ifdef MAIN
-= {
-    {"kern",	1, NULL, "Kernel       : "},
-    {"base",	1, NULL, "Base         : "},
-    {"etc",	1, NULL, "System (/etc): "},
-    {"comp",	1, NULL, "Compiler     : "},
-    {"games",	1, NULL, "Games        : "},
-    {"man",	1, NULL, "Manuals      : "},
-    {"misc",	1, NULL, "Miscellaneous: "},
-    {"text",	1, NULL, "Text tools   : "},
-    {"secr",	0, NULL, "Security     : "},
-
-    {"xbase",	1, NULL, "X11 clients  : "},
-    {"xfont",	1, NULL, "X11 fonts    : "},
-    {"xserver",	1, NULL, "X11 servers  : "},
-    {"xcontrib",1, NULL, "X11 contrib  : "},
-    {"xcomp",	1, NULL, "X programming: "},
-    {NULL, 0, NULL, NULL }
-}
-#endif
-;
-
-/*
- * Default fileystem type for floppy disks.
- *
- * On pmax, we don't support a dedicated floppy-disk driver, only
- * SCSI floppy drives, so we can't recognize floppies by name.
- */
-EXTERN char *fdtype INIT("");
-
+#define SET_KERNEL_1_NAME	"kern-GENERIC"

@@ -1,4 +1,4 @@
-/*	$NetBSD: radix.c,v 1.10 2000/03/02 21:00:23 christos Exp $	*/
+/*	$NetBSD: radix.c,v 1.13 2006/02/25 00:58:35 wiz Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1993
@@ -38,14 +38,17 @@
 /*
  * Routines to build and maintain radix trees for routing lookups.
  */
-#if !defined(lint) && !defined(sgi) && !defined(__NetBSD__)
-static char sccsid[] __attribute__((unused)) = "@(#)rdisc.c	8.1 (Berkeley) x/y/95";
-#elif defined(__NetBSD__)
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: radix.c,v 1.10 2000/03/02 21:00:23 christos Exp $");
-#endif
 
 #include "defs.h"
+
+#ifdef __NetBSD__
+__RCSID("$NetBSD: radix.c,v 1.13 2006/02/25 00:58:35 wiz Exp $");
+#elif defined(__FreeBSD__)
+__RCSID("$FreeBSD$");
+#else
+__RCSID("Revision: 2.23 ");
+#ident "Revision: 2.23 "
+#endif
 
 #define log(x, msg) syslog(x, msg)
 #define panic(s) {log(LOG_ERR,s); exit(1);}
@@ -94,7 +97,7 @@ static int rn_satisfies_leaf(char *, struct radix_node *, int);
  * node as high in the tree as we can go.
  *
  * The present version of the code makes use of normal routes in short-
- * circuiting an explict mask and compare operation when testing whether
+ * circuiting an explicit mask and compare operation when testing whether
  * a key satisfies a normal route, and also in remembering the unique leaf
  * that governs a subtree.
  */
@@ -888,7 +891,7 @@ rn_init(void)
 	addmask_key = cplim = rn_ones + max_keylen;
 	while (cp < cplim)
 		*cp++ = -1;
-	if (rn_inithead((void **)&mask_rnhead, 0) == 0)
+	if (rn_inithead((void *)&mask_rnhead, 0) == 0)
 		panic("rn_init 2");
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ul.c,v 1.8 1999/10/04 23:32:54 lukem Exp $	*/
+/*	$NetBSD: ul.c,v 1.13 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)ul.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: ul.c,v 1.8 1999/10/04 23:32:54 lukem Exp $");
+__RCSID("$NetBSD: ul.c,v 1.13 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -67,6 +63,7 @@ __RCSID("$NetBSD: ul.c,v 1.8 1999/10/04 23:32:54 lukem Exp $");
 #define	UNDERL	010	/* Ul */
 #define	BOLD	020	/* Bold */
 
+struct tinfo *info;
 int	must_use_uc, must_overstrike;
 char	*CURS_UP, *CURS_RIGHT, *CURS_LEFT,
 	*ENTER_STANDOUT, *EXIT_STANDOUT, *ENTER_UNDERLINE, *EXIT_UNDERLINE,
@@ -105,12 +102,9 @@ main(argc, argv)
 	int argc;
 	char **argv;
 {
-	extern int optind;
-	extern char *optarg;
 	int c;
 	char *termtype;
 	FILE *f;
-	char termcap[1024];
 
 	termtype = getenv("TERM");
 	if (termtype == NULL || (argv[0][0] == 'c' && !isatty(1)))
@@ -133,7 +127,7 @@ main(argc, argv)
 			exit(1);
 		}
 
-	switch(tgetent(termcap, termtype)) {
+	switch(t_getent(&info, termtype)) {
 
 	case 1:
 		break;
@@ -144,12 +138,17 @@ main(argc, argv)
 
 	case 0:
 		/* No such terminal type - assume dumb */
-		(void)strcpy(termcap, "dumb:os:col#80:cr=^M:sf=^J:am:");
+		if (t_setinfo(&info, "dumb:os:col#80:cr=^M:sf=^J:am:") < 0) {
+			fprintf(stderr, "t_setinfo failed, cannot continue\n");
+			exit(1);
+		}
+		
 		break;
 	}
 	initcap();
-	if (    (tgetflag("os") && ENTER_BOLD==NULL ) ||
-		(tgetflag("ul") && ENTER_UNDERLINE==NULL && UNDER_CHAR==NULL))
+	if (    (t_getflag(info, "os") && ENTER_BOLD==NULL ) ||
+		(t_getflag(info, "ul") && ENTER_UNDERLINE==NULL
+		 && UNDER_CHAR==NULL))
 			must_overstrike = 1;
 	initbuf();
 	if (optind == argc)
@@ -420,28 +419,25 @@ reverse()
 void
 initcap()
 {
-	static char tcapbuf[512];
-	char *bp = tcapbuf;
-
 	/* This nonsense attempts to work with both old and new termcap */
-	CURS_UP =		tgetstr("up", &bp);
-	CURS_RIGHT =		tgetstr("ri", &bp);
+	CURS_UP =		t_agetstr(info, "up");
+	CURS_RIGHT =		t_agetstr(info, "ri");
 	if (CURS_RIGHT == NULL)
-		CURS_RIGHT =	tgetstr("nd", &bp);
-	CURS_LEFT =		tgetstr("le", &bp);
+		CURS_RIGHT =	t_agetstr(info, "nd");
+	CURS_LEFT =		t_agetstr(info, "le");
 	if (CURS_LEFT == NULL)
-		CURS_LEFT =	tgetstr("bc", &bp);
-	if (CURS_LEFT == NULL && tgetflag("bs"))
+		CURS_LEFT =	t_agetstr(info, "bc");
+	if (CURS_LEFT == NULL && t_getflag(info, "bs"))
 		CURS_LEFT =	"\b";
 
-	ENTER_STANDOUT =	tgetstr("so", &bp);
-	EXIT_STANDOUT =		tgetstr("se", &bp);
-	ENTER_UNDERLINE =	tgetstr("us", &bp);
-	EXIT_UNDERLINE =	tgetstr("ue", &bp);
-	ENTER_DIM =		tgetstr("mh", &bp);
-	ENTER_BOLD =		tgetstr("md", &bp);
-	ENTER_REVERSE =		tgetstr("mr", &bp);
-	EXIT_ATTRIBUTES =	tgetstr("me", &bp);
+	ENTER_STANDOUT =	t_agetstr(info, "so");
+	EXIT_STANDOUT =		t_agetstr(info, "se");
+	ENTER_UNDERLINE =	t_agetstr(info, "us");
+	EXIT_UNDERLINE =	t_agetstr(info, "ue");
+	ENTER_DIM =		t_agetstr(info, "mh");
+	ENTER_BOLD =		t_agetstr(info, "md");
+	ENTER_REVERSE =		t_agetstr(info, "mr");
+	EXIT_ATTRIBUTES =	t_agetstr(info, "me");
 
 	if (!ENTER_BOLD && ENTER_REVERSE)
 		ENTER_BOLD = ENTER_REVERSE;
@@ -466,7 +462,7 @@ initcap()
 	 * letters the 37 has.
 	 */
 
-	UNDER_CHAR =		tgetstr("uc", &bp);
+	UNDER_CHAR =		t_agetstr(info, "uc");
 	must_use_uc = (UNDER_CHAR && !ENTER_UNDERLINE);
 }
 

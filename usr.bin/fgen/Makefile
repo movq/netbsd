@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.2 1998/11/11 05:26:57 mrg Exp $
+#	$NetBSD: Makefile,v 1.6 2003/05/18 07:57:34 lukem Exp $
 
+CPPFLAGS+= -I${.CURDIR}
 PROG=	fgen
 SRCS=	fgen.l
 MAN=	fgen.1
 
 .include <bsd.prog.mk>
-

@@ -1,4 +1,4 @@
-/*	$NetBSD: rcons_subr.c,v 1.6 1999/08/26 20:48:09 thorpej Exp $ */
+/*	$NetBSD: rcons_subr.c,v 1.16 2006/01/21 19:28:44 chs Exp $ */
 
 /*
  * Copyright (c) 1991, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,12 +40,14 @@
  *	@(#)rcons_subr.c	8.1 (Berkeley) 6/11/93
  */
 
-#ifdef _KERNEL
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rcons_subr.c,v 1.16 2006/01/21 19:28:44 chs Exp $");
+
 #include <sys/param.h>
+#ifdef _KERNEL
 #include <sys/device.h>
 #include <sys/systm.h>
 #else
-#include <sys/types.h>
 #include "myfbdevice.h"
 #endif
 
@@ -65,7 +63,7 @@ extern void rcons_bell(struct rconsole *);
 #endif
 #define RCONS_ISDIGIT(c) ((c) >= '0' && (c) <= '9')
 
-/* Initalize our operations set */
+/* Initialize our operations set */
 void
 rcons_init_ops(rc)
 	struct rconsole *rc;
@@ -74,7 +72,7 @@ rcons_init_ops(rc)
 	int i, m;
 
 	m = sizeof(rc->rc_charmap) / sizeof(rc->rc_charmap[0]);
-	
+
 	for (i = 0; i < m; i++)
 		rc->rc_ops->mapchar(rc->rc_cookie, i, rc->rc_charmap + i);
 
@@ -88,29 +86,30 @@ rcons_init_ops(rc)
 	rc->rc_fgcolor = rc->rc_deffgcolor;
 	rc->rc_bgcolor = rc->rc_defbgcolor;
 	rc->rc_supwsflg = 0;
-	
+
 	for (i = 1; i < 256; i <<= 1)
-		if (rc->rc_ops->alloc_attr(rc->rc_cookie, 0, 0, i, &tmp) == 0)
+		if (rc->rc_ops->allocattr(rc->rc_cookie, 0, 0, i, &tmp) == 0)
 			rc->rc_supwsflg |= i;
 
 	/* Allocate kernel output attribute */
 	rc->rc_wsflg = WSATTR_HILIT;
 	rcons_setcolor(rc, rc->rc_deffgcolor, rc->rc_defbgcolor);
 	rc->rc_kern_attr = rc->rc_attr;
-	
+
 	rc->rc_wsflg = 0;
 	rcons_setcolor(rc, rc->rc_deffgcolor, rc->rc_defbgcolor);
+	rc->rc_defattr = rc->rc_attr;
 }
 
 /* Output (or at least handle) a string sent to the console */
 void
 rcons_puts(rc, str, n)
 	struct rconsole *rc;
-	unsigned char *str;
+	const unsigned char *str;
  	int n;
 {
 	int c, i, j;
-	unsigned char *cp;
+	const unsigned char *cp;
 
 	/* Jump scroll */
 	/* XXX maybe this should be an option? */
@@ -277,38 +276,40 @@ rcons_sgresc(rc, c)
 	/* Clear all attributes || End underline */
 	case 0:
 		rc->rc_wsflg = 0;
-		rcons_setcolor(rc, rc->rc_deffgcolor, rc->rc_defbgcolor);
+		rc->rc_fgcolor = rc->rc_deffgcolor;
+		rc->rc_bgcolor = rc->rc_defbgcolor;
+		rc->rc_attr = rc->rc_defattr;
 		break;
 
 	/* ANSI foreground color */
-	case 30: case 31: case 32: case 33: 
-	case 34: case 35: case 36: case 37: 
+	case 30: case 31: case 32: case 33:
+	case 34: case 35: case 36: case 37:
 		rcons_setcolor(rc, c - 30, rc->rc_bgcolor);
 		break;
 
 	/* ANSI background color */
 	case 40: case 41: case 42: case 43:
-	case 44: case 45: case 46: case 47: 
+	case 44: case 45: case 46: case 47:
 		rcons_setcolor(rc, rc->rc_fgcolor, c - 40);
 		break;
-		
+
 	/* Begin reverse */
-	case 7: 
+	case 7:
 		rc->rc_wsflg |= WSATTR_REVERSE;
 		rcons_setcolor(rc, rc->rc_fgcolor, rc->rc_bgcolor);
 		break;
-		
+
 	/* Begin bold */
 	case 1:
 		rc->rc_wsflg |= WSATTR_HILIT;
 		rcons_setcolor(rc, rc->rc_fgcolor, rc->rc_bgcolor);
-		break;			
-		
+		break;
+
 	/* Begin underline */
 	case 4:
 		rc->rc_wsflg |= WSATTR_UNDERLINE;
 		rcons_setcolor(rc, rc->rc_fgcolor, rc->rc_bgcolor);
-		break;			
+		break;
 	}
 }
 
@@ -334,8 +335,9 @@ rcons_doesc(rc, c)
 
 	case 'A':
 		/* Cursor Up (CUU) */
-		rc->rc_row -= rc->rc_p0;
-		if (rc->rc_row < 0)
+		if (rc->rc_row >= rc->rc_p0)
+			rc->rc_row -= rc->rc_p0;
+		else
 			rc->rc_row = 0;
 		break;
 
@@ -355,8 +357,9 @@ rcons_doesc(rc, c)
 
 	case 'D':
 		/* Cursor Backward (CUB) */
-		rc->rc_col -= rc->rc_p0;
-		if (rc->rc_col < 0)
+		if (rc->rc_col >= rc->rc_p0)
+			rc->rc_col -= rc->rc_p0;
+		else
 			rc->rc_col = 0;
 		break;
 
@@ -372,17 +375,8 @@ rcons_doesc(rc, c)
 		/* Horizontal And Vertical Position (HVP) */
 	case 'H':
 		/* Cursor Position (CUP) */
-		rc->rc_col = rc->rc_p1 - 1;
-		if (rc->rc_col < 0)
-			rc->rc_col = 0;
-		else if (rc->rc_col >= rc->rc_maxcol)
-			rc->rc_col = rc->rc_maxcol - 1;
-
-		rc->rc_row = rc->rc_p0 - 1;
-		if (rc->rc_row < 0)
-			rc->rc_row = 0;
-		else if (rc->rc_row >= rc->rc_maxrow)
-			rc->rc_row = rc->rc_maxrow - 1;
+		rc->rc_col = MIN(MAX(rc->rc_p1, 1), rc->rc_maxcol) - 1;
+		rc->rc_row = MIN(MAX(rc->rc_p0, 1), rc->rc_maxrow) - 1;
 		break;
 
 	case 'J':
@@ -415,25 +409,29 @@ rcons_doesc(rc, c)
 		/* (defaults to zero) */
 		if (rc->rc_bits & FB_P0_DEFAULT)
 			rc->rc_p0 = 0;
-		
+
 		if (rc->rc_bits & FB_P1_DEFAULT)
 			rc->rc_p1 = 0;
-		
+
 		rcons_sgresc(rc, rc->rc_p0);
-		
+
 		if (rc->rc_bits & FB_P1)
 			rcons_sgresc(rc, rc->rc_p1);
 
 		break;
 
+	/*
+	 * XXX: setting SUNBOW and SUNWOB should probably affect
+	 * deffgcolor, defbgcolor and defattr too.
+	 */
 	case 'p':
 		/* Black On White (SUNBOW) */
-		rcons_invert(rc, 0);
+		rcons_setcolor(rc, WSCOL_BLACK, WSCOL_WHITE);
 		break;
 
 	case 'q':
 		/* White On Black (SUNWOB) */
-		rcons_invert(rc, 1);
+		rcons_setcolor(rc, WSCOL_WHITE, WSCOL_BLACK);
 		break;
 
 	case 'r':
@@ -450,13 +448,15 @@ rcons_doesc(rc, c)
 		rc->rc_wsflg = 0;
 		rc->rc_scroll = 0;
 		rc->rc_bits &= ~FB_NO_CURSOR;
-		rcons_setcolor(rc, rc->rc_deffgcolor, rc->rc_defbgcolor);
+		rc->rc_fgcolor = rc->rc_deffgcolor;
+		rc->rc_bgcolor = rc->rc_defbgcolor;
+		rc->rc_attr = rc->rc_defattr;
 
 		if (rc->rc_bits & FB_INVERT)
 			rcons_invert(rc, 0);
 		break;
 #ifdef notyet
-	/* 
+	/*
 	 * XXX following two read \E[?25h and \E[?25l. rcons
 	 * can't currently handle the '?'.
 	 */
@@ -464,20 +464,20 @@ rcons_doesc(rc, c)
 		/* Normal/very visible cursor */
 		if (rc->rc_p0 == 25) {
 			rc->rc_bits &= ~FB_NO_CURSOR;
-			
+
 			if (rc->rc_bits & FB_CURSOR) {
 				rc->rc_bits ^= FB_CURSOR;
 				rcons_cursor(rc);
 			}
 		}
 		break;
-		
+
 	case 'l':
 		/* Invisible cursor */
 		if (rc->rc_p0 == 25 && (rc->rc_bits & FB_NO_CURSOR) == 0) {
 			if (rc->rc_bits & FB_CURSOR)
 				rcons_cursor(rc);
-		
+
 			rc->rc_bits |= FB_NO_CURSOR;
 		}
 		break;
@@ -492,10 +492,10 @@ rcons_setcolor(rc, fg, bg)
 	int fg, bg;
 {
 	int flg;
-	
+
 	if (fg > WSCOL_WHITE || fg < 0)
 		return;
-		
+
 	if (bg > WSCOL_WHITE || bg < 0)
 		return;
 
@@ -503,21 +503,24 @@ rcons_setcolor(rc, fg, bg)
 	flg = bg;
 	bg = fg;
 	fg = flg;
-#endif	
+#endif
 
 	/* Emulate WSATTR_REVERSE attribute if it's not supported */
-	if ((rc->rc_wsflg & WSATTR_REVERSE) && 
+	if ((rc->rc_wsflg & WSATTR_REVERSE) &&
 	    !(rc->rc_supwsflg & WSATTR_REVERSE)) {
 		flg = bg;
 		bg = fg;
 		fg = flg;
 	}
-	
-	/* Mask out unsupported flags and get attribute */
-	flg = rc->rc_wsflg & rc->rc_supwsflg;
+
+	/*
+	 * Mask out unsupported flags and get attribute
+	 * XXX - always ask for WSCOLORS if supported (why shouldn't we?)
+	 */
+	flg = (rc->rc_wsflg | WSATTR_WSCOLORS) & rc->rc_supwsflg;
 	rc->rc_bgcolor = bg;
 	rc->rc_fgcolor = fg;
-	rc->rc_ops->alloc_attr(rc->rc_cookie, fg, bg, flg, &rc->rc_attr);
+	rc->rc_ops->allocattr(rc->rc_cookie, fg, bg, flg, &rc->rc_attr);
 }
 
 
@@ -525,15 +528,15 @@ rcons_setcolor(rc, fg, bg)
 void
 rcons_text(rc, str, n)
 	struct rconsole *rc;
-	unsigned char *str;
+	const unsigned char *str;
 	int n;
 {
 	u_int uc;
-		
+
 	while (n--) {
 		uc = rc->rc_charmap[*str++ & 255];
 		rc->rc_ops->putchar(rc->rc_cookie, rc->rc_row, rc->rc_col++,
-		    uc, rc->rc_attr);												       
+		    uc, rc->rc_attr);
 	}
 
 	if (rc->rc_col >= rc->rc_maxcol) {
@@ -551,10 +554,10 @@ rcons_cursor(rc)
 	struct rconsole *rc;
 {
 	rc->rc_bits ^= FB_CURSOR;
-	
+
 	if (rc->rc_bits & FB_NO_CURSOR)
 		return;
-	
+
 	rc->rc_ops->cursor(rc->rc_cookie, rc->rc_bits & FB_CURSOR,
 	    rc->rc_row, rc->rc_col);
 }
@@ -579,7 +582,7 @@ rcons_clear2eop(rc)
 		rcons_clear2eol(rc);
 
 		if (rc->rc_row < (rc->rc_maxrow - 1))
-			rc->rc_ops->eraserows(rc->rc_cookie, rc->rc_row + 1, 
+			rc->rc_ops->eraserows(rc->rc_cookie, rc->rc_row + 1,
 			    rc->rc_maxrow, rc->rc_attr);
 	} else
 		rc->rc_ops->eraserows(rc->rc_cookie, 0, rc->rc_maxrow,
@@ -607,9 +610,9 @@ rcons_scroll(rc, n)
 		n = rc->rc_maxrow;
 
 	/* Calculate new row */
-	rc->rc_row -= n;
-
-	if (rc->rc_row < 0)
+	if (rc->rc_row >= n)
+		rc->rc_row -= n;
+	else 
 		rc->rc_row = 0;
 
 	rc->rc_ops->copyrows(rc->rc_cookie, n, 0, rc->rc_maxrow - n);
@@ -625,11 +628,11 @@ rcons_delchar(rc, n)
 	/* Can't delete more chars than there are */
 	if (n > rc->rc_maxcol - rc->rc_col)
 		n = rc->rc_maxcol - rc->rc_col;
-		
+
 	rc->rc_ops->copycols(rc->rc_cookie, rc->rc_row, rc->rc_col + n,
 	    rc->rc_col, rc->rc_maxcol - rc->rc_col - n);
 
-	rc->rc_ops->erasecols(rc->rc_cookie, rc->rc_row, 
+	rc->rc_ops->erasecols(rc->rc_cookie, rc->rc_row,
 	    rc->rc_maxcol - n, n, rc->rc_attr);
 }
 
@@ -659,7 +662,7 @@ rcons_insertchar(rc, n)
 	/* Can't insert more chars than can fit */
 	if (n > rc->rc_maxcol - rc->rc_col)
 		n = rc->rc_maxcol - rc->rc_col - 1;
-		
+
 	rc->rc_ops->copycols(rc->rc_cookie, rc->rc_row, rc->rc_col,
 	    rc->rc_col + n, rc->rc_maxcol - rc->rc_col - n - 1);
 

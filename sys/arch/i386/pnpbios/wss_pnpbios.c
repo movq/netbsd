@@ -1,4 +1,4 @@
-/* $NetBSD: wss_pnpbios.c,v 1.3 2000/02/20 22:03:49 groo Exp $ */
+/* $NetBSD: wss_pnpbios.c,v 1.16 2008/04/04 22:18:05 cegger Exp $ */
 /*
  * Copyright (c) 1999
  * 	Matthias Drochner.  All rights reserved.
@@ -25,6 +25,9 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: wss_pnpbios.c,v 1.16 2008/04/04 22:18:05 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/errno.h>
@@ -47,14 +50,13 @@
 #include <dev/isa/wssreg.h>
 #include <dev/isa/wssvar.h>
 
-int wss_pnpbios_match __P((struct device *, struct cfdata *, void *));
-void wss_pnpbios_attach __P((struct device *, struct device *, void *));
-int wss_pnpbios_hints_index __P((const char *));
+int wss_pnpbios_match(struct device *, struct cfdata *, void *);
+void wss_pnpbios_attach(struct device *, struct device *, void *);
+int wss_pnpbios_hints_index(const char *);
 
 
-struct cfattach wss_pnpbios_ca = {
-	sizeof(struct wss_softc), wss_pnpbios_match, wss_pnpbios_attach
-};
+CFATTACH_DECL(wss_pnpbios, sizeof(struct wss_softc),
+    wss_pnpbios_match, wss_pnpbios_attach, NULL, NULL);
 
 struct wss_pnpbios_hint {
 	char idstr[8];
@@ -66,6 +68,7 @@ struct wss_pnpbios_hint {
 struct wss_pnpbios_hint wss_pnpbios_hints[] = {
 	{ "NMX2210", 1, 2, WSS_CODEC },
 	{ "CSC0000", 0, 1, 0 },		/* Dell Latitude CPi */
+	{ "CSC0100", 0, 1, 0 },		/* CS4610 with CS4236 codec */
 	{ { 0 }, 0, 0, 0 }
 };
 
@@ -86,10 +89,8 @@ wss_pnpbios_hints_index(idstr)
 }
 
 int
-wss_pnpbios_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+wss_pnpbios_match(struct device *parent,
+    struct cfdata *match, void *aux)
 {
 	struct pnpbiosdev_attach_args *aa = aux;
 
@@ -100,9 +101,8 @@ wss_pnpbios_match(parent, match, aux)
 }
 
 void
-wss_pnpbios_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+wss_pnpbios_attach(struct device *parent, struct device *self,
+    void *aux)
 {
 	struct wss_softc *sc = (void *)self;
 	struct pnpbiosdev_attach_args *aa = aux;
@@ -131,7 +131,7 @@ wss_pnpbios_attach(parent, self, aux)
 
 	sc->wss_ic = aa->ic;
 
-	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->wss_irq)) {
+	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->wss_irq, NULL)) {
 		printf(": can't get IRQ\n");
 		return;
 	}
@@ -140,8 +140,10 @@ wss_pnpbios_attach(parent, self, aux)
 		printf(": can't get DMA channel\n");
 		return;
 	}
-	if (pnpbios_getdmachan(aa->pbt, aa->resc, 1, &sc->wss_recdrq))
-		sc->wss_recdrq = -1;
+	if (pnpbios_getdmachan(aa->pbt, aa->resc, 1, &sc->wss_recdrq)) {
+		printf(": can't get recording DMA channel");
+		sc->wss_recdrq = sc->wss_playdrq;
+	}
 
 	sc->sc_ad1848.sc_ad1848.sc_iot = sc->sc_iot;
 	bus_space_subregion(sc->sc_iot, sc->sc_ioh, wph->offset_ad1848, 4,
@@ -150,10 +152,10 @@ wss_pnpbios_attach(parent, self, aux)
 	printf("\n");
 	pnpbios_print_devres(self, aa);
 
-	printf("%s", self->dv_xname);
+	printf("%s", device_xname(self));
 
 	if (!ad1848_isa_probe(&sc->sc_ad1848)) {
-		printf("%s: ad1848 probe failed\n", self->dv_xname);
+		aprint_error_dev(self, "ad1848 probe failed\n");
 		return;
 	}
 

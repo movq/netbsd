@@ -1,7 +1,8 @@
-/*	$NetBSD: rtld_start.S,v 1.1 1999/08/21 19:26:19 matt Exp $	*/
+/*	$NetBSD: rtld_start.S,v 1.16 2003/03/02 22:03:40 mycroft Exp $	*/
 
 /*
  * Copyright 1996 Matt Thomas <matt@3am-software.com>
+ * Portions copyright 2002, 2003 Charles M. Hannum <root@ihack.net>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,40 +32,47 @@
 
 /* R9 contains the address of PS_STRINGS and since its caller saved,
  * we can just use it.  R6 has a backup copy of the stack pointer which
- * we can use as well.  Since the VAX has perfectly PIC code, we don't
- * need to relocate anything upon startup.
+ * we can use as well.
  */
-ENTRY(_rtld_start)
-	.word	0x0101		/* nops to be safe */
-
+ENTRY(_rtld_start, 0)
 	/* Allocate space on the stack for the cleanup and obj_main
 	 * entries that _rtld() will provide for us.
 	 */
-	subl2	$8, sp
-	pushl	sp
-	calls	$1, _rtld
+	clrl	%fp
+	subl2	$8,%sp
 
-	movq	(sp)+, r7	/* grab cleanup and obj_main into r7/r8 */
-	jmp	2(r0)		/* jump to entry point + 2 */
+	movab	_DYNAMIC,%r0
+	subl3	_GLOBAL_OFFSET_TABLE_,%r0,%r10
+	pushl	%r10		/* relocbase */
+	pushl	%r0		/* &_DYNAMIC */
+	calls	$2,_rtld_relocate_nonplt_self
+
+	pushl	%r10		/* relocbase */
+	pushal	4(%sp)		/* sp */
+	calls	$2,_rtld	/* entry = _rtld(sp, relocbase) */
+
+	movq	(%sp)+,%r7	/* grab cleanup and obj_main into %r7/%r8 */
+	jmp	2(%r0)		/* jump to entry point + 2 */
 
 /*
  * Lazy binding entry point, called via PLT.
+ *
+ * Note: Some functions rely on there not being an additional call frame;
+ * hence the `optimization' to avoid the callg opportunistically.
  */
-ENTRY(_rtld_bind_start):
+ALTENTRY(_rtld_bind_start)
 	pushr	$0x3f		/* save R0-R5 */
-	movq	24(sp),r0	/* get addresses of plt.got & reloc index */
-	pushl	(r1)		/* push relocation index */
-	pushl	4(r0)		/* push address of obj entry */
+	movq	24(%sp),%r0	/* get addresses of plt.got & reloc index */
+	pushl	(%r1)		/* push relocation index */
+	pushl	%r0		/* push address of obj entry */
 	calls	$2,_rtld_bind
-	movpsl	-(sp)		/* flush the instruction cache */
-	pushab	1f		/*   by issuing an */
-	rei			/*   rei. */
-1:	movl	r0, 28(sp)	/* save return address onto stack */
-	bicw3	6(fp),(r0),r0	/* does the entry mask save any additional regs */
-	popr	$0x3f		/* restore r0 to r5 (cond flags aren't modified) */
-	bneq	2f		/* yes? do it the hard way */
-	addl4	$4,sp		/* no? skip past plt.got on stack */
-	addl2	$2,(sp)		/*    skip past the mask */
+	movl	%r0,28(%sp)	/* save return address onto stack */
+	bicw3	6(%fp),(%r0),%r0/* does the entry mask save any additional regs */
+	popr	$0x3f		/* restore R0-R5 (cond flags not modified) */
+	bneq	4f		/* yes? do it the hard way */
+	addl2	$4,%sp		/* no? skip past plt.got on stack */
+	addl2	$2,(%sp)		/*    skip past the mask */
 	rsb			/*    and jump to it */
-2:	callg	(ap),*(sp)+	/* return value from _rtld_bind() == actual */
+4:	addl2	$4,%sp
+	callg	(%ap),*(%sp)+	/* return value from _rtld_bind() == actual */
 	ret

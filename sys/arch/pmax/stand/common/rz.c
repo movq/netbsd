@@ -1,4 +1,4 @@
-/*	$NetBSD: rz.c,v 1.16 2000/03/30 14:45:11 simonb Exp $	*/
+/*	$NetBSD: rz.c,v 1.22 2006/01/25 18:28:27 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,6 +35,7 @@
  */
 
 #include <lib/libsa/stand.h>
+#include <lib/libkern/libkern.h>
 #include <machine/dec_prom.h>
 #include <machine/stdarg.h>
 
@@ -47,6 +44,9 @@
 
 #include "common.h"
 #include "rz.h"
+
+#define	RF_PROTECTED_SECTORS	64	/* XXX refer to <.../rf_optnames.h> */
+
 
 struct	rz_softc {
 	int	sc_fd;			/* PROM file id */
@@ -71,7 +71,7 @@ rzstrategy(devdata, rw, bn, reqcnt, addr, cnt)
 	int s;
 	long offset;
 
-	offset = bn * DEV_BSIZE;
+	offset = bn;
 
 	/*
 	 * Partial-block transfers not handled.
@@ -81,7 +81,15 @@ rzstrategy(devdata, rw, bn, reqcnt, addr, cnt)
 		return (EINVAL);
 	}
 
-	offset += pp->p_offset * DEV_BSIZE;
+	offset += pp->p_offset;
+
+	if (pp->p_fstype == FS_RAID)
+		offset += RF_PROTECTED_SECTORS;
+
+	/*
+	 * Convert from blocks to bytes.
+	 */
+	offset *= DEV_BSIZE;
 
 	if (callv == &callvec) {
 		/* No REX on this machine */
@@ -116,6 +124,7 @@ rzopen(struct open_file *f, ...)
 	ctlr = va_arg(ap, int);
 	unit = va_arg(ap, int);
 	part = va_arg(ap, int);
+	va_end(ap);
 	if (unit >= 8 || part >= 8)
 		return (ENXIO);
 	device[5] = '0' + unit;
@@ -165,7 +174,7 @@ rzopen(struct open_file *f, ...)
 
 	if (part >= lp->d_npartitions || lp->d_partitions[part].p_size == 0) {
 	bad:
-		free(sc, sizeof(struct rz_softc));
+		dealloc(sc, sizeof(struct rz_softc));
 		return (ENXIO);
 	}
 	return (0);
@@ -179,7 +188,7 @@ rzclose(f)
 	if (callv == &callvec)
 		prom_close(((struct rz_softc *)f->f_devdata)->sc_fd);
 
-	free(f->f_devdata, sizeof(struct rz_softc));
+	dealloc(f->f_devdata, sizeof(struct rz_softc));
 	f->f_devdata = (void *)0;
 	return (0);
 }

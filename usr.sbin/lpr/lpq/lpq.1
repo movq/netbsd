@@ -1,4 +1,4 @@
-.\"	$NetBSD: lpq.1,v 1.10 1999/03/22 18:43:59 garbled Exp $
+.\"	$NetBSD: lpq.1,v 1.14 2003/08/07 11:25:29 agc Exp $
 .\"
 .\" Copyright (c) 1983, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -40,9 +36,10 @@
 .Nm lpq
 .Nd spool queue examination program
 .Sh SYNOPSIS
-.Nm ""
+.Nm
 .Op Fl al
 .Op Fl P Ar printer
+.Op Fl w Ar maxwait
 .Op Ar job# ...
 .Op Ar user ...
 .Sh DESCRIPTION
@@ -72,6 +69,9 @@ Normally, only as much information as will fit on one line is displayed.
 .It Fl a
 Report on the local queues for all printers,
 rather than just the specified printer.
+.It Fl w Ar maxwait
+Specify the maximum time to wait in seconds for remote responses.
+The default is 300 seconds or 5 minutes.
 .El
 .Pp
 For each job submitted (i.e. invocation of
@@ -101,7 +101,7 @@ the
 command can be used to restart the printer daemon.
 .Sh ENVIRONMENT
 If the following environment variable exists, it is used by
-.Nm "" :
+.Nm :
 .Bl -tag -width PRINTER
 .It Ev PRINTER
 Specifies an alternative default printer.
@@ -117,6 +117,9 @@ Control files specifying jobs.
 .It Pa /var/spool/output/*/lock
 The lock file to obtain the currently active job.
 .El
+.Sh DIAGNOSTICS
+Unable to open various files.  The lock file being malformed.  Garbage
+files when there is no daemon active, but files in the spooling directory.
 .Sh SEE ALSO
 .Xr lpr 1 ,
 .Xr lprm 1 ,
@@ -132,6 +135,3 @@ Due to the dynamic nature of the information in the spooling directory
 may report unreliably.
 Output formatting is sensitive to the line length of the terminal;
 this can results in widely spaced columns.
-.Sh DIAGNOSTICS
-Unable to open various files.  The lock file being malformed.  Garbage
-files when there is no daemon active, but files in the spooling directory.

@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: ntp2netbsd,v 1.1 2000/03/29 12:25:55 simonb Exp $
+#	$NetBSD: ntp2netbsd,v 1.9 2008/07/16 20:53:56 kardel Exp $
 #
 # Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -13,13 +13,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#	This product includes software developed by the NetBSD
-#	Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,13 +27,41 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 # ntp2netbsd:  convert a ntp source tree into a
-# netbsd ntp source tree, under basesrc/dist,
+# netbsd ntp source tree, under src/dist,
 # based on bind2netbsd by Bernd Ernesti
-
+#
+# Rough instructions for importing new NTP release:
+#
+#	$ cd /some/where/temporary
+#	$ tar xpfz /new/ntp/release/tar/file
+#	$ sh /usr/src/dist/ntp/ntp2netbsd ntp-4.x.y `pwd`
+#	$ cd src/dist/ntp
+#	$ cvs import -m "Import ntp 4.x.y" src/dist/ntp UDEL ntp-4-x-y
+#	$ cd ../../../ntp-4.x.y
+#	$ run ./configure  --enable-all-clocks --enable-parse-clocks
+#	$ cp config.h /usr/src/usr.sbin/ntp/include
+#         - not really - we have some changed defaults and the vax port has no ieee.h support.
+#           so do a careful diff and patch - Frank Kardel
+#	$ echo cp scripts/mkver /usr/src/usr.sbin/ntp/scripts
+#		merge possible changes to mkver 
+#	        our version uses the import date in the file
+#               /usr/src/usr.sbin/ntp/importdate for the date and buildnumber information
+#		to achieve consistent version string over all builds
+#	$ cd ..
+#	$ rm -r src ntp-4.x.y
+#	$ cd /usr/src/usr.sbin/ntp
+#	$ cvs commit -m "Updated autoconf generated files for ntp 4.x.y."
+#
+#	- check makefiles to see if any extra sources have been added,
+#	  esp. libntp and ntpd.
+#	- check for and remove img tags in html docs.
+#	- update distrib/sets if necessary.
+#       - update src/usr.sbin/ntp/importdate to match the date of this import
+#
 if [ $# -ne 2 ]; then echo "ntp2netbsd src dest"; exit 1; fi
 
 r=$1
-d=$2/basesrc/dist/ntp
+d=$2/src/dist/ntp
 
 case "$d" in
 	/*)
@@ -71,7 +92,7 @@ echo removing unneeded directories and files
 
 ### Remove unneeded directories
 cd $d
-rm -r ports
+rm -r ports html/pic
 
 ### Remove .cvsignore
 find $d -name '.cvsignore*' -exec rm {} \;

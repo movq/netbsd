@@ -1,4 +1,4 @@
-/*	$NetBSD: atoll.c,v 1.2 2000/03/07 20:02:00 kleink Exp $	*/
+/*	$NetBSD: atoll.c,v 1.5 2003/10/27 00:12:42 lukem Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,22 +29,32 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
 #if 0
 static char sccsid[] = "from: @(#)atol.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: atoll.c,v 1.2 2000/03/07 20:02:00 kleink Exp $");
+__RCSID("$NetBSD: atoll.c,v 1.5 2003/10/27 00:12:42 lukem Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
+#ifdef _LIBC
 #include "namespace.h"
+#endif
+
 #include <stdlib.h>
 
+#ifdef _LIBC
 #ifdef __weak_alias
 __weak_alias(atoll, _atoll)
 #endif
+#endif
 
+#if !HAVE_ATOLL
 /* LONGLONG */
 long long int
 atoll(str)
@@ -56,3 +62,4 @@ atoll(str)
 {
 	return (strtoll(str, (char **)NULL, 10));
 }
+#endif

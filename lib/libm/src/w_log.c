@@ -12,23 +12,23 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: w_log.c,v 1.8 1999/07/02 15:37:44 simonb Exp $");
+__RCSID("$NetBSD: w_log.c,v 1.10 2007/08/20 16:01:40 drochner Exp $");
 #endif
 
 /*
  * wrapper log(x)
  */
 
+#include "namespace.h"
 #include "math.h"
 #include "math_private.h"
 
-
-#ifdef __STDC__
-	double log(double x)		/* wrapper log */
-#else
-	double log(x)			/* wrapper log */
-	double x;
+#ifdef __weak_alias
+__weak_alias(log, _log)
 #endif
+
+double
+log(double x)		/* wrapper log */
 {
 #ifdef _IEEE_LIBM
 	return __ieee754_log(x);

@@ -1,4 +1,4 @@
-.\"	$NetBSD: fseek.3,v 1.12 1999/03/08 10:27:34 kleink Exp $
+.\"	$NetBSD: fseek.3,v 1.24 2003/08/07 16:43:25 agc Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -15,11 +15,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -37,30 +33,36 @@
 .\"
 .\"     @(#)fseek.3	8.1 (Berkeley) 6/4/93
 .\"
-.Dd June 4, 1993
+.Dd July 8, 2000
 .Dt FSEEK 3
 .Os
 .Sh NAME
 .Nm fgetpos ,
 .Nm fseek ,
+.Nm fseeko ,
 .Nm fsetpos ,
 .Nm ftell ,
+.Nm ftello ,
 .Nm rewind
 .Nd reposition a stream
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <stdio.h>
+.In stdio.h
 .Ft int
-.Fn fseek "FILE *stream" "long offset" "int whence"
-.Ft long
+.Fn fseek "FILE *stream" "long int offset" "int whence"
+.Ft int
+.Fn fseeko "FILE *stream" "off_t offset" "int whence"
+.Ft long int
 .Fn ftell "FILE *stream"
+.Ft off_t
+.Fn ftello "FILE *stream"
 .Ft void
 .Fn rewind "FILE *stream"
 .Ft int
-.Fn fgetpos "FILE *stream" "fpos_t *pos"
+.Fn fgetpos "FILE * restrict stream" "fpos_t * restrict pos"
 .Ft int
-.Fn fsetpos "FILE *stream" "const fpos_t *pos"
+.Fn fsetpos "FILE * restrict stream" "const fpos_t * restrict pos"
 .Sh DESCRIPTION
 The
 .Fn fseek
@@ -71,7 +73,7 @@ The new position, measured in bytes, is obtained by adding
 .Fa offset
 bytes to the position specified by
 .Fa whence .
-If 
+If
 .Fa whence
 is set to
 .Dv SEEK_SET ,
@@ -89,11 +91,27 @@ any effects of the
 function on the same stream.
 .Pp
 The
+.Fn fseeko
+function is identical to the
+.Fn fseek
+function except that the
+.Fa offset
+argument is of type
+.Fa off_t .
+.Pp
+The
 .Fn ftell
 function
 obtains the current value of the file position indicator for the
 stream pointed to by
 .Fa stream .
+.Pp
+The
+.Fn ftello
+function is identical to the
+.Fn ftell
+function except that the return value is of type
+.Fa off_t .
 .Pp
 The
 .Fn rewind
@@ -109,23 +127,23 @@ except that the error indicator for the stream is also cleared
 (see
 .Xr clearerr 3 ) .
 .Pp
-The
+In this implementation, the
 .Fn fgetpos
 and
 .Fn fsetpos
 functions
 are alternative interfaces equivalent to
-.Fn ftell
-and
+.Fn ftell ,
+.Fn ftello ,
 .Fn fseek
+and
+.Fn fseeko
 (with whence set to
-.Dv SEEK_SET
-), setting and storing the current value of
-the file offset into or from the object referenced by 
+.Dv SEEK_SET ) ,
+setting and storing the current value of
+the file offset into or from the object referenced by
 .Fa pos .
-On systems other than
-.Ux ,
-an
+In others implementations, an
 .Dq Fa fpos_t
 object may be a complex object
 and these routines may be the only way to portably reposition a text stream.
@@ -142,13 +160,13 @@ return 0,
 and
 .Fn ftell
 returns the current offset.
-Otherwise, 
+Otherwise,
 .Fn fseek
 and
 .Fn ftell
 return \-1 and
 the others
-return a nonzero value and the global variable 
+return a nonzero value and the global variable
 .Va errno
 is set to indicate the error.
 .Sh ERRORS
@@ -161,28 +179,42 @@ is not a seekable stream.
 .It Bq Er EINVAL
 The
 .Fa whence
-argument to 
+argument to
 .Fn fseek
 was not
 .Dv SEEK_SET ,
 .Dv SEEK_END ,
 or
 .Dv SEEK_CUR .
+.\" .It Bq Er EOVERFLOW
+.\" For
+.\" .Fn ftell ,
+.\" the current file offset cannot be represented correctly in an object of type
+.\" .Fa long .
+.\" .Pp
+.\" For
+.\" .Fn fseek ,
+.\" the resulting file offset would be a value which cannot be represented
+.\" correctly in an object of type
+.\" .Fa long.
 .El
 .Pp
 The function
 .Fn fgetpos ,
 .Fn fseek ,
+.Fn fseeko ,
 .Fn fsetpos ,
-and 
-.Fn ftell
+.Fn ftell ,
+.Fn ftello ,
+and
+.Fn rewind
 may also fail and set
 .Va errno
 for any of the errors specified for the routines
 .Xr fflush 3 ,
 .Xr fstat 2 ,
 .Xr lseek 2 ,
-and 
+and
 .Xr malloc 3 .
 .Sh SEE ALSO
 .Xr lseek 2
@@ -197,3 +229,15 @@ and
 functions
 conform to
 .St -ansiC .
+The
+.Fn fseeko
+and
+.Fn ftello
+functions conform to
+.St -xsh5 .
+.Sh BUGS
+The
+.Fn fgetpos
+and
+.Fn fsetpos
+functions don't store/set shift states of the stream in this implementation.

@@ -1,4 +1,4 @@
-/*	$NetBSD: encrypt.h,v 1.5 1998/02/27 10:33:46 christos Exp $	*/
+/*	$NetBSD: encrypt.h,v 1.8 2005/02/06 05:53:07 perry Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -55,3 +51,51 @@
  * or implied warranty.
  */
 
+#ifdef	ENCRYPTION
+#include <sys/cdefs.h>
+
+# ifndef __ENCRYPTION__
+# define __ENCRYPTION__
+
+#define	DIR_DECRYPT		1
+#define	DIR_ENCRYPT		2
+
+#define Block des_cblock
+typedef unsigned char *BlockT;
+#define Schedule des_key_schedule
+
+#define	VALIDKEY(key)	( key[0] | key[1] | key[2] | key[3] | \
+			  key[4] | key[5] | key[6] | key[7])
+
+#define	SAMEKEY(k1, k2)	(!bcmp((void *)k1, (void *)k2, sizeof(Block)))
+
+typedef	struct {
+	short		type;
+	int		length;
+	unsigned char	*data;
+} Session_Key;
+
+
+typedef struct {
+	char	*name;
+	int	type;
+	void	(*output)(unsigned char *, int);
+	int	(*input)(int);
+	void	(*init)(int);
+	int	(*start)(int, int);
+	int	(*is)(unsigned char *, int);
+	int	(*reply)(unsigned char *, int);
+	void	(*session)(Session_Key *, int);
+	int	(*keyid)(int, unsigned char *, int *);
+	void	(*printsub)(unsigned char *, int, unsigned char *, int);
+} Encryptions;
+
+#define	SK_DES		1	/* Matched Kerberos v5 KEYTYPE_DES */
+
+#include "enc-proto.h"
+
+extern int encrypt_debug_mode;
+extern int (*decrypt_input)(int);
+extern void (*encrypt_output)(unsigned char *, int);
+# endif /* __ENCRYPTION__ */
+#endif /* ENCRYPTION */

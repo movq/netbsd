@@ -1,4 +1,4 @@
-/*	$NetBSD: leo.c,v 1.2 1999/10/25 14:52:56 leo Exp $	*/
+/*	$NetBSD: leo.c,v 1.13 2008/06/13 08:50:12 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1997 maximum entropy <entropy@zippy.bernstein.com>
@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -52,6 +45,9 @@
  * This product includes software developed by the University of
  *	California, Berkeley and its contributors.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: leo.c,v 1.13 2008/06/13 08:50:12 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -99,20 +95,22 @@ static int leo_probe __P((bus_space_tag_t *, bus_space_tag_t *,
 			  u_int, u_int));
 static int leo_init __P((struct leo_softc *, int));
 static int leo_scroll __P((struct leo_softc *, int));
-static int leomove __P((dev_t, struct uio *, int));
 
-dev_decl(leo,open);
-dev_decl(leo,close);
-dev_decl(leo,read);
-dev_decl(leo,write);
-dev_decl(leo,ioctl);
-dev_decl(leo,mmap);
-
-struct cfattach leo_ca = {
-	sizeof(struct leo_softc), leo_match, leo_attach
-};
+CFATTACH_DECL(leo, sizeof(struct leo_softc),
+    leo_match, leo_attach, NULL, NULL);
 
 extern struct cfdriver leo_cd;
+
+dev_type_open(leoopen);
+dev_type_close(leoclose);
+dev_type_read(leomove);
+dev_type_ioctl(leoioctl);
+dev_type_mmap(leommap);
+
+const struct cdevsw leo_cdevsw = {
+	leoopen, leoclose, leomove, leomove, leoioctl,
+	nostop, notty, nopoll, leommap, nokqfilter,
+};
 
 static int
 leo_match(parent, cfp, aux)
@@ -227,10 +225,10 @@ leo_attach(parent, self, aux)
 
 	printf("\n");
 	if (bus_space_map(va->va_iot, va->va_iobase, va->va_iosize, 0, &ioh))
-		panic("leo_attach: cannot map io area\n");
+		panic("leo_attach: cannot map io area");
 	if (bus_space_map(va->va_memt, va->va_maddr, va->va_msize,
 			  BUS_SPACE_MAP_LINEAR|BUS_SPACE_MAP_CACHEABLE, &memh))
-		panic("leo_attach: cannot map memory area\n");
+		panic("leo_attach: cannot map memory area");
 #ifdef SET_REGION /* XXX seems to be unimplemented on atari? */
 	bus_space_set_region_4(va->va_memt, memh, 0, 0, va->va_msize >> 2);
 #else
@@ -249,18 +247,12 @@ leo_attach(parent, self, aux)
 }
 
 int
-leoopen(dev, flags, devtype, p)
-	dev_t dev;
-	int flags, devtype;
-	struct proc *p;
+leoopen(dev_t dev, int flags, int devtype, struct proc *p)
 {
-	int unit = minor(dev);
 	struct leo_softc *sc;
 	int r;
 
-	if (unit >= leo_cd.cd_ndevs)
-		return ENXIO;
-	sc = leo_cd.cd_devs[unit];
+	sc = device_lookup_private(&leo_cd, minor(dev));
 	if (!sc)
 		return ENXIO;
 	if (sc->sc_flags & LEO_SC_FLAGS_INUSE)
@@ -348,32 +340,26 @@ leo_scroll(sc, scroll)
 }
 
 int
-leoclose(dev, flags, devtype, p)
-	dev_t dev;
-	int flags, devtype;
-	struct proc *p;
+leoclose(dev_t dev, int flags, int devtype, struct proc *p)
 {
 	struct leo_softc *sc;
 
-	sc = leo_cd.cd_devs[minor(dev)];
+	sc = device_lookup_private(&leo_cd, minor(dev));
 	sc->sc_flags &= ~LEO_SC_FLAGS_INUSE;
 	return 0;
 }
 
 #define SMALLBSIZE      32
 
-static int
-leomove(dev, uio, flags)
-        dev_t dev;
-        struct uio *uio;
-        int flags;
+int
+leomove(dev_t dev, struct uio *uio, int flags)
 {
         struct leo_softc *sc;
         int length, size, error;
         u_int8_t smallbuf[SMALLBSIZE];
 	off_t offset;
 
-        sc = leo_cd.cd_devs[minor(dev)];
+        sc = device_lookup_private(&leo_cd,minor(dev));
         if (uio->uio_offset > sc->sc_msize)
                 return 0;
         length = sc->sc_msize - uio->uio_offset;
@@ -388,7 +374,7 @@ leomove(dev, uio, flags)
                 if (uio->uio_rw == UIO_READ)
                         bus_space_read_region_1(sc->sc_memt, sc->sc_memh,
                                         offset, smallbuf, size);
-                if ((error = uiomove((caddr_t)smallbuf, size, uio)))
+                if ((error = uiomove((void *)smallbuf, size, uio)))
                         return (error);
                 if (uio->uio_rw == UIO_WRITE)
                         bus_space_write_region_1(sc->sc_memt, sc->sc_memh,
@@ -398,36 +384,11 @@ leomove(dev, uio, flags)
 }
 
 int
-leoread(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
-{
-
-	return leomove(dev, uio, flags);
-}
-
-int
-leowrite(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
-{
-
-	return leomove(dev, uio, flags);
-}
-
-int
-leoioctl(dev, cmd, data, flags, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flags;
-	struct proc *p;
+leoioctl(dev_t dev, u_long cmd, void *data, int flags, struct proc *p)
 {
 	struct leo_softc *sc;
 
-	sc = leo_cd.cd_devs[minor(dev)];
+	sc = device_lookup_private(&leo_cd,minor(dev));
         switch (cmd) {
         case LIOCYRES:
 		return leo_init(sc, *(int *)data);
@@ -441,15 +402,12 @@ leoioctl(dev, cmd, data, flags, p)
 	}
 }
 
-int
-leommap(dev, offset, prot)
-	dev_t dev;
-	int offset;
-	int prot;
+paddr_t
+leommap(dev_t dev, off_t offset, int prot)
 {
 	struct leo_softc *sc;
 
-	sc = leo_cd.cd_devs[minor(dev)];
+	sc = device_lookup_private(&leo_cd, minor(dev));
 	if (offset >= 0 && offset < sc->sc_msize)
 		return m68k_btop(sc->sc_maddr + offset);
 	return -1;

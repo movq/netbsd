@@ -1,7 +1,7 @@
-.\"	$NetBSD: rpcgen.1,v 1.8 1998/04/28 07:19:29 fair Exp $
+.\"	$NetBSD: rpcgen.1,v 1.21 2008/01/19 14:22:05 hubertf Exp $
 .\" from: @(#)rpcgen.new.1	1.1 90/11/09 TIRPC 1.0; from 40.10 of 10/10/89
 .\" Copyright (c) 1988,1990 Sun Microsystems, Inc. - All Rights Reserved.
-.Dd June 11, 1995
+.Dd January 19, 2008
 .Dt RPCGEN 1
 .Sh NAME
 .Nm rpcgen
@@ -9,32 +9,39 @@
 .Sh SYNOPSIS
 .Nm
 .Ar infile
-.Nm ""
-.Op Fl D Op Ar name=value
+.Nm
 .Op Fl A
-.Op Fl M
-.Op Fl T
+.Op Fl a
+.Op Fl b
+.Op Fl C
+.Op Fl D Ar name Op =value
+.Op Fl I
+.Op Fl i Ar size
 .Op Fl K Ar secs
-.Ar infile
-.Nm ""
 .Op Fl L
+.Op Fl M
+.Op Fl N
+.Op Fl T
+.Op Fl v
+.Op Fl Y Ar pathname
+.Ar infile
+.Nm
 .Fl c Li |
 .Fl h Li |
 .Fl l Li |
 .Fl m Li |
 .Fl t Li |
 .Fl S\&c Li |
-.Fl S\&s Li |
+.Fl S\&s
+.\" .Fl S\&m
 .Op Fl o Ar outfile
 .Op Ar infile
-.Nm ""
-.Fl c Li |
-.Ar nettype
+.Nm
+.Op Fl s Ar nettype
 .Op Fl o Ar outfile
 .Op Ar infile
-.Nm ""
-.Fl s Li |
-.Ar netid
+.Nm
+.Op Fl n Ar netid
 .Op Fl o Ar outfile
 .Op Ar infile
 .Sh DESCRIPTION
@@ -76,13 +83,15 @@ With the
 .Fl S\&c
 option,
 it will also generate sample code which would illustrate how to use the
-remote procedures on the client side. This code would be created in
+remote procedures on the client side.
+This code would be created in
 .Pa proto_client.c .
 With the
 .Fl S\&s
 option,
 it will also generate a sample server code which would illustrate how to write
-the remote procedures. This code would be created in
+the remote procedures.
+This code would be created in
 .Pa proto_server.c .
 .Pp
 The server created can be started both by the port monitors
@@ -109,7 +118,7 @@ it creates server handles for all the visible transports from
 .Pa /etc/netconfig
 file.
 .Pp
-.Em Note:
+.Em Note :
 the transports are chosen at run time and not at compile time.
 When the server is self-started,
 it backgrounds itself by default.
@@ -150,7 +159,7 @@ The other three synopses shown above are used when
 one does not want to generate all the output files,
 but only a particular one.
 Some examples of their usage is described in the
-EXAMPLE
+.Sx EXAMPLES
 section below.
 When
 .Nm
@@ -200,7 +209,7 @@ Any line beginning with
 .Sq %
 is passed directly into the output file,
 uninterpreted by
-.Nm "" .
+.Nm .
 .Pp
 For every data type referred to in
 .Ar infile
@@ -220,12 +229,19 @@ routines.
 .Bl -tag -width indent
 .It Fl a
 Generate all the files including sample code for client and server side.
+.It Fl A
+Generate an
+.Fn svc_caller
+function.
 .It Fl b
-This generates code for the
-.Tn "SunOS 4.1"
-style of
-.Tn RPC .
-This is the default.
+Compile stubs in "backwards compatible" mode, disabling support for
+transport-independent RPC.
+The
+.Fl b
+should always be specified when generating files for
+.Nx ,
+since there is no transport-independent RPC support in
+.Nx .
 .It Fl c
 Compile into
 .Tn XDR
@@ -256,6 +272,21 @@ option can be used in conjunction to produce a
 header file which supports
 .Tn RPC
 dispatch tables.
+.It Fl i Ar size
+Size to decide when to start generating inline code.
+The default size is 3.
+.It Fl I
+Support
+.Xr inetd 8
+in the server side stubs.
+Servers generated using this flag can either be standalone or
+started from
+.Xr inetd 8 .
+If a server is started as standalone, then it places itself
+in the background, unless
+.Dv RCP_SVC_FG
+is defined, or the server is compiled without
+.Fl I .
 .It Fl K Ar secs
 By default, services created using
 .Nm
@@ -274,7 +305,7 @@ When monitoring for a server,
 some port monitors, like the
 .At V.4
 utility
-.Xr listen 1 ,
+.Ic listen ,
 .Em always
 spawn a new process in response to a service request.
 If it is known that a server will be used with such a monitor, the
@@ -285,6 +316,10 @@ should be used with
 .Dq Fl K No -1 .
 .It Fl l
 Compile into client-side stubs.
+.Xr inetd 8 .
+.It Fl I
+Compile stubs meant for use in programs started by
+.Xr inetd 8 .
 .It Fl L
 Server errors will be sent to syslog instead of stderr.
 .It Fl m
@@ -296,19 +331,18 @@ This option is useful for doing callback-routines
 and for users who need to write their own
 .Fn main
 routine to do initialization.
-.It Fl n Ar netid
-Compile into server-side stubs for the transport
-specified by
-.Ar netid.
-There should be an entry for
-.Ar netid
-in the
-netconfig database.
-This option may be specified more than once,
-so as to compile a server that serves multiple transports.
+.It Fl M
+Generate thread-safe stubs.
+This alters the calling pattern of client and
+server stubs so that storage for results is allocated by the caller.
+Note
+that all components for a particular service (stubs, client and service
+wrappers, etc.) must be built either with or without the
+.Fl M
+flag.
 .It Fl N
 Use the newstyle of
-.Nm "" .
+.Nm .
 This allows procedures to have multiple arguments.
 It also uses the style of parameter passing that closely resembles C.
 So, when passing an argument to a remote procedure you do not have
@@ -318,6 +352,16 @@ of
 .Nm
 generated code.
 The newstyle is not the default case because of backward compatibility.
+.It Fl n Ar netid
+Compile into server-side stubs for the transport
+specified by
+.Ar netid .
+There should be an entry for
+.Ar netid
+in the
+netconfig database.
+This option may be specified more than once,
+so as to compile a server that serves multiple transports.
 .It Fl o Ar outfile
 Specify the name of the output file.
 If none is specified,
@@ -327,24 +371,30 @@ standard output is used
 .Fl m Fl n Fl s
 modes only
 .Pc
+.It Fl n Ar netid
+Specify the transport for the server-side stubs.
+.Ar netid
+should be defined in
+.Xr netconfig 5 .
+This option can be repeated in order to support more than one transport.
 .It Fl s Ar nettype
 Compile into server-side stubs for all the
 transports belonging to the class
 .Ar nettype .
 The supported classes are
-.Em netpath,
-.Em visible,
-.Em circuit_n,
-.Em circuit_v,
-.Em datagram_n,
-.Em datagram_v,
-.Em tcp,
+.Em netpath ,
+.Em visible ,
+.Em circuit_n ,
+.Em circuit_v ,
+.Em datagram_n ,
+.Em datagram_v ,
+.Em tcp ,
 and
 .Em udp
 [see
 .Xr rpc 3
 for the meanings associated with these classes.
-.Em Note:
+.Em Note :
 .Bx
 currently supports only the
 .Em tcp
@@ -352,15 +402,18 @@ and
 .Em udp
 classes].
 This option may be specified more than once.
-.Em Note:
+.Em Note :
 the transports are chosen at run time and not at compile time.
 .It Fl S\&c
 Generate sample code to show the use of remote procedure and how to bind
 to the server before calling the client side stubs generated by
-.Nm "" .
+.Nm .
 .It Fl S\&s
-Generate skeleton code for the remote procedures on the server side. You would need
+Generate skeleton code for the remote procedures on the server side.
+You would need
 to fill in the actual code for the remote procedures.
+.\" .It Fl S\&m
+.\" Generate a sample Makefile that can be used to compile the application.
 .It Fl t
 Compile into
 .Tn RPC
@@ -369,6 +422,12 @@ dispatch table.
 Generate the code to support
 .Tn RPC
 dispatch tables.
+.It Fl v
+Display the version number.
+.It Fl Y Ar pathname
+Specify the directory where
+.Nm
+looks for the C pre-processor.
 .El
 .Pp
 The options
@@ -385,6 +444,11 @@ while the options
 and
 .Fl T
 are global and can be used with the other options.
+.Sh ENVIRONMENT
+If the
+.Ev RPCGEN_CPP
+environment variable is set, its value is used as the pathname of the
+C preprocessor to be run on the input file.
 .Sh NOTES
 The
 .Tn RPC
@@ -406,8 +470,7 @@ The server code generated with
 option refers to the transport indicated by
 .Em netid
 and hence is very site specific.
-.Sh EXAMPLE
-.Pp
+.Sh EXAMPLES
 The command
 .Pp
 .Bd -literal -offset indent
@@ -449,4 +512,11 @@ use:
 $ rpcgen -n tcp -o prot_svc.c prot.x
 .Ed
 .Sh SEE ALSO
-.Xr cpp 1
+.Xr cpp 1 ,
+.Xr inetd 8
+.Sh HISTORY
+The
+.Fl M
+option was first implemented in RedHat Linux, and was reimplemented by
+Charles M. Hannum in
+.Nx 1.6 .

@@ -1,4 +1,4 @@
-/*	$NetBSD: talkd.c,v 1.10 1998/07/06 06:49:16 mrg Exp $	*/
+/*	$NetBSD: talkd.c,v 1.20 2008/07/20 01:09:07 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)talkd.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: talkd.c,v 1.10 1998/07/06 06:49:16 mrg Exp $");
+__RCSID("$NetBSD: talkd.c,v 1.20 2008/07/20 01:09:07 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -77,7 +73,7 @@ CTL_RESPONSE	response;
 int	sockt = STDIN_FILENO;
 int	debug = 0;
 int	logging = 0;
-long	lastmsgtime;
+time_t	lastmsgtime;
 
 char	hostname[MAXHOSTNAMELEN + 1];
 
@@ -94,7 +90,7 @@ main(argc, argv)
 {
 	CTL_MSG *mp = &request;
 	int cc, ch;
-	extern char *__progname;
+	struct sockaddr ctl_addr;
 
 	openlog("talkd", LOG_PID, LOG_DAEMON);
 	while ((ch = getopt(argc, argv, "dl")) != -1)
@@ -106,7 +102,7 @@ main(argc, argv)
 			logging = 1;
 			break;
 		default:
-			syslog(LOG_ERR, "usage: %s [-dl]", __progname);
+			syslog(LOG_ERR, "Usage: %s [-dl]", getprogname());
 			exit(1);
 		}
 
@@ -122,18 +118,28 @@ main(argc, argv)
 	signal(SIGALRM, timeout);
 	alarm(TIMEOUT);
 	for (;;) {
+		memset(&response, 0, sizeof(response));
 		cc = recv(0, (char *)mp, sizeof (*mp), 0);
 		if (cc != sizeof (*mp)) {
 			if (cc < 0 && errno != EINTR)
 				syslog(LOG_WARNING, "recv: %m");
 			continue;
 		}
+
+		mp->l_name[sizeof(mp->l_name) - 1] = '\0';
+		mp->r_name[sizeof(mp->r_name) - 1] = '\0';
+		mp->r_tty[sizeof(mp->r_tty) - 1] = '\0';
+
 		lastmsgtime = time(0);
 		process_request(mp, &response);
+
+		tsa2sa(&ctl_addr, &mp->ctl_addr);
+		if (ctl_addr.sa_family != AF_INET)
+			continue;
+
 		/* can block here, is this what I want? */
-		cc = sendto(sockt, (char *)&response,
-		    sizeof (response), 0, (struct sockaddr *)&mp->ctl_addr,
-		    sizeof (mp->ctl_addr));
+		cc = sendto(sockt, (char *)&response, sizeof (response), 0,
+		    &ctl_addr, sizeof (ctl_addr));
 		if (cc != sizeof (response))
 			syslog(LOG_WARNING, "sendto: %m");
 	}
@@ -143,8 +149,18 @@ void
 timeout(n)
 	int n;
 {
+	int save_errno = errno;
 
 	if (time(0) - lastmsgtime >= MAXIDLE)
 		_exit(0);
 	alarm(TIMEOUT);
+	errno = save_errno;
+}
+
+void
+tsa2sa(struct sockaddr *sa, const struct talkd_sockaddr *tsa)
+{
+	(void)memcpy(sa, tsa, sizeof(*tsa));
+	sa->sa_len = sizeof(*tsa);
+	sa->sa_family = tsa->sa_family;
 }

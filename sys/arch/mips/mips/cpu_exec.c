@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_exec.c,v 1.22 1999/11/15 02:00:08 kleink Exp $	*/
+/*	$NetBSD: cpu_exec.c,v 1.50.54.1 2009/04/01 00:25:21 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,8 +34,12 @@
  *	@(#)machdep.c	8.3 (Berkeley) 1/12/94
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: cpu_exec.c,v 1.50.54.1 2009/04/01 00:25:21 snj Exp $");
+
 #include "opt_compat_netbsd.h"
 #include "opt_compat_ultrix.h"
+#include "opt_execfmt.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,17 +48,20 @@
 #include <sys/vnode.h>
 #include <sys/exec.h>
 #include <sys/resourcevar.h>
-#include <vm/vm.h>
 
+#include <uvm/uvm_extern.h>
+
+#ifdef EXEC_ECOFF
 #include <sys/exec_ecoff.h>
-#include <sys/exec_elf.h>
+#endif
+#include <sys/exec_elf.h>			/* mandatory */
 #ifdef COMPAT_09
 #include <machine/bsd-aout.h>
 #endif
 #include <machine/reg.h>
 #include <mips/regnum.h>			/* symbolic register indices */
 
-int	mips_elf_makecmds __P((struct proc *, struct exec_package *));
+int	mips_elf_makecmds(struct lwp *, struct exec_package *);
 
 
 /*
@@ -70,8 +73,8 @@ int	mips_elf_makecmds __P((struct proc *, struct exec_package *));
  *
  */
 int
-cpu_exec_aout_makecmds(p, epp)
-	struct proc *p;
+cpu_exec_aout_makecmds(l, epp)
+	struct lwp *l;
 	struct exec_package *epp;
 {
 	int error;
@@ -86,33 +89,20 @@ cpu_exec_aout_makecmds(p, epp)
 #endif
 	{
 		/* If that failed, try old NetBSD-1.1 elf format */
-		error = mips_elf_makecmds (p, epp);
+		error = mips_elf_makecmds (l, epp);
 		return error;
 	}
 
-
-
 #ifdef COMPAT_09
+	error = vn_marktext(epp->ep_vp);
+	if (error)
+		return (error);
+
 	epp->ep_taddr = 0x1000;
 	epp->ep_entry = hdr->a_entry;
 	epp->ep_tsize = hdr->a_text;
 	epp->ep_daddr = epp->ep_taddr + hdr->a_text;
 	epp->ep_dsize = hdr->a_data + hdr->a_bss;
-
-	/*
-	 * check if vnode is in open for writing, because we want to
-	 * demand-page out of it.  if it is, don't do it, for various
-	 * reasons
-	 */
-	if ((hdr->a_text != 0 || hdr->a_data != 0)
-	    && epp->ep_vp->v_writecount != 0) {
-#ifdef DIAGNOSTIC
-		if (epp->ep_vp->v_flag & VTEXT)
-			panic("exec: a VTEXT vnode has writecount != 0\n");
-#endif
-		return ETXTBSY;
-	}
-	epp->ep_vp->v_flag |= VTEXT;
 
 	/* set up command for text segment */
 	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_pagedvn, hdr->a_text,
@@ -128,54 +118,50 @@ cpu_exec_aout_makecmds(p, epp)
 	    epp->ep_daddr + hdr->a_data, NULLVP, 0,
 	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
-	return exec_aout_setup_stack(p, epp);
+	return (*epp->ep_esch->ep_setup_stack)(p, epp);
 #endif
 }
 
-#ifdef COMPAT_ULTRIX
-extern struct emul emul_ultrix;
-
+#ifdef EXEC_ECOFF
 void
-cpu_exec_ecoff_setregs(p, epp, stack)
-	struct proc *p;
+cpu_exec_ecoff_setregs(l, epp, stack)
+	struct lwp *l;
 	struct exec_package *epp;
 	u_long stack;
 {
 	struct ecoff_exechdr *execp = (struct ecoff_exechdr *)epp->ep_hdr;
-	struct frame *f = (struct frame *)p->p_md.md_regs;
+	struct frame *f = (struct frame *)l->l_md.md_regs;
 
-	setregs(p, epp, stack);
-	f->f_regs[GP] = (register_t)execp->a.gp_value;
+	f->f_regs[_R_GP] = (register_t)execp->a.gp_value;
 }
 
 /*
- * cpu_exec_ecoff_hook():
+ * cpu_exec_ecoff_probe()
  *	cpu-dependent ECOFF format hook for execve().
  *
  * Do any machine-dependent diddling of the exec package when doing ECOFF.
- *
  */
 int
-cpu_exec_ecoff_hook(p, epp)
-	struct proc *p;
+cpu_exec_ecoff_probe(l, epp)
+	struct lwp *l;
 	struct exec_package *epp;
 {
 
-	epp->ep_emul = &emul_ultrix;
-	return 0;
+	/* NetBSD/mips does not have native ECOFF binaries. */
+	return ENOEXEC;
 }
-#endif
+#endif /* EXEC_ECOFF */
 
 /*
- * mips_elf_makecmds (p, epp)
+ * mips_elf_makecmds (l, epp)
  *
  * Test if an executable is a MIPS ELF executable.   If it is,
  * try to load it.
  */
 
 int
-mips_elf_makecmds (p, epp)
-        struct proc *p;
+mips_elf_makecmds (l, epp)
+        struct lwp *l;
         struct exec_package *epp;
 {
 	Elf32_Ehdr *ex = (Elf32_Ehdr *)epp->ep_hdr;
@@ -193,7 +179,7 @@ mips_elf_makecmds (p, epp)
 	}
 
 	/* See if it's got the basic elf magic number leadin... */
-	if (bcmp(ex->e_ident, ELFMAG, SELFMAG) != 0) {
+	if (memcmp(ex->e_ident, ELFMAG, SELFMAG) != 0) {
 		return ENOEXEC;
 	}
 
@@ -202,27 +188,17 @@ mips_elf_makecmds (p, epp)
 		return ENOEXEC;
 	}
 
-		/* See if we got any program header information... */
+	/* See if we got any program header information... */
 	if (!ex->e_phoff || !ex->e_phnum) {
 		return ENOEXEC;
 	}
 
+	error = vn_marktext(epp->ep_vp);
+	if (error)
+		return (error);
+
 	/* Set the entry point... */
 	epp->ep_entry = ex->e_entry;
-
-	/*
-	 * Check if vnode is open for writing, because we want to
-	 * demand-page out of it.  If it is, don't do it.
-	 */
-	if (epp->ep_vp->v_writecount != 0) {
-#ifdef DIAGNOSTIC
-		if (epp->ep_vp->v_flag & VTEXT)
-			panic("exec: a VTEXT vnode has writecount != 0\n");
-#endif
-		return ETXTBSY;
-	}
-	epp->ep_vp->v_flag |= VTEXT;
-
 	epp->ep_taddr = 0;
 	epp->ep_tsize = 0;
 	epp->ep_daddr = 0;
@@ -232,10 +208,10 @@ mips_elf_makecmds (p, epp)
 #ifdef DEBUG
 		/*printf("obsolete elf: mapping %x %x %x\n", resid);*/
 #endif
-		if ((error = vn_rdwr(UIO_READ, epp->ep_vp, (caddr_t)&ph,
+		if ((error = vn_rdwr(UIO_READ, epp->ep_vp, (void *)&ph,
 				    sizeof ph, ex->e_phoff + i * sizeof ph,
 				    UIO_SYSSPACE, IO_NODELOCKED,
-				    p->p_ucred, &resid, p))
+				    l->l_cred, &resid, NULL))
 		    != 0)
 			return error;
 
@@ -265,23 +241,23 @@ mips_elf_makecmds (p, epp)
 					  epp->ep_vp, offset, prot);
 #ifdef OLD_ELF_DEBUG
 /*XXX*/		printf(
-	"obsolete elf: NEW_VNCMD len %x va %x off %x prot %x residue %x\n",
+	"obsolete elf: NEW_VMCMD len %x va %x off %x prot %x residue %x\n",
 			length, vaddr, offset, prot, residue);
 #endif /*ELF_DEBUG*/
 
 				if (residue) {
-					vaddr &= ~(NBPG - 1);
-					offset &= ~(NBPG - 1);
+					vaddr &= ~(PAGE_SIZE - 1);
+					offset &= ~(PAGE_SIZE - 1);
 					length = roundup (length + ph.p_vaddr
-							  - vaddr, NBPG);
+							  - vaddr, PAGE_SIZE);
 					residue = (ph.p_vaddr + ph.p_memsz)
 						  - (vaddr + length);
 				}
 			} else {
-				vaddr &= ~(NBPG - 1);
-				offset &= ~(NBPG - 1);
+				vaddr &= ~(PAGE_SIZE - 1);
+				offset &= ~(PAGE_SIZE - 1);
 				length = roundup (length + ph.p_vaddr - vaddr,
-						  NBPG);
+						  PAGE_SIZE);
 				residue = (ph.p_vaddr + ph.p_memsz)
 					  - (vaddr + length);
 				if (!epp->ep_taddr || vaddr < epp->ep_taddr)
@@ -297,7 +273,7 @@ mips_elf_makecmds (p, epp)
 			if (residue > 0) {
 #ifdef OLD_ELF_DEBUG
 /*XXX*/			printf(
-	"old elf:resid NEW_VNCMD len %x va %x off %x prot %x residue %x\n",
+	"old elf:resid NEW_VMCMD len %x va %x off %x prot %x residue %x\n",
 				length, vaddr + length, offset, prot, residue);
 #endif /*ELF_DEBUG*/
 
@@ -310,7 +286,7 @@ mips_elf_makecmds (p, epp)
 
 	epp->ep_maxsaddr = USRSTACK - MAXSSIZ;
 	epp->ep_minsaddr = USRSTACK;
-	epp->ep_ssize = p->p_rlimit[RLIMIT_STACK].rlim_cur;
+	epp->ep_ssize = l->l_proc->p_rlimit[RLIMIT_STACK].rlim_cur;
 
 	/*
 	 * set up commands for stack.  note that this takes *two*, one to
@@ -323,12 +299,12 @@ mips_elf_makecmds (p, epp)
 	 * note that in memory, things assumed to be: 0 ....... ep_maxsaddr
 	 * <stack> ep_minsaddr
 	 */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero,
+	NEW_VMCMD2(&epp->ep_vmcmds, vmcmd_map_zero,
 	    ((epp->ep_minsaddr - epp->ep_ssize) - epp->ep_maxsaddr),
-	    epp->ep_maxsaddr, NULLVP, 0, VM_PROT_NONE);
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, epp->ep_ssize,
+	    epp->ep_maxsaddr, NULLVP, 0, VM_PROT_NONE, VMCMD_STACK);
+	NEW_VMCMD2(&epp->ep_vmcmds, vmcmd_map_zero, epp->ep_ssize,
 	    (epp->ep_minsaddr - epp->ep_ssize), NULLVP, 0,
-	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
+	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE, VMCMD_STACK);
 
 	return 0;
 }

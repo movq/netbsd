@@ -1,4 +1,4 @@
-/*	$NetBSD: msgdb.c,v 1.11 1999/07/04 22:55:48 cgd Exp $	*/
+/*	$NetBSD: msgdb.c,v 1.20 2004/06/20 22:20:16 jmc Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -38,14 +38,26 @@
 
 /* mdb.c - message database manipulation */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
+#include <sys/cdefs.h>
+
+#if defined(__RCSID) && !defined(lint)
+__RCSID("$NetBSD: msgdb.c,v 1.20 2004/06/20 22:20:16 jmc Exp $");
+#endif
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "defs.h"
+#include "pathnames.h"
 
 static struct id_rec *head = NULL, *tail = NULL;
-static int msg_no = 0;
+static int msg_no = 1;
 
 void define_msg (char *name, char *value)
 {
@@ -111,7 +123,7 @@ write_msg_file ()
 	/* Open the msg_sys file first. */
 	sys_prefix = getenv ("MSGDEF");
 	if (sys_prefix == NULL)
-		sys_prefix = "/usr/share/misc";
+		sys_prefix = _PATH_DEFSYSPREFIX;
 	snprintf (sname, 1024, "%s/%s", sys_prefix, sys_name);
 	sys_file = fopen (sname, "r");
 	if (sys_file == NULL) {
@@ -136,28 +148,36 @@ write_msg_file ()
 		"#define MSG_DEFS_H\n"
 		"#include <stdio.h>\n"
 		"#include <stdlib.h>\n"
+		"#include <unistd.h>\n"
+		"#include <fcntl.h>\n"
 		"#include <string.h>\n"
 		"#include <ctype.h>\n"
 		"#include <stdarg.h>\n"
+		"#include <stdint.h>\n"
 		"#include <curses.h>\n"
+		"#include <sys/mman.h>\n"
 		"\n"
 		"typedef const char *msg;\n"
 		"\n"
 		"/* Prototypes */\n"
-		"int  msg_window(WINDOW *window);\n"
-		"const char *msg_string (msg msg_no);\n"
+		"WINDOW *msg_window(WINDOW *window);\n"
+		"const char *msg_string(msg msg_no);\n"
+		"int msg_file(const char *);\n"
 		"void msg_clear(void);\n"
 		"void msg_standout(void);\n"
 		"void msg_standend(void);\n"
 		"void msg_display(msg msg_no,...);\n"
 		"void msg_display_add(msg msg_no,...);\n"
 		"void msg_prompt (msg msg_no, const char *def,"
-			" char *val, int max_chars, ...);\n"
+			" char *val, size_t max_chars, ...);\n"
 		"void msg_prompt_add (msg msg_no, const char *def,"
-			" char *val, int max_chars, ...);\n"
+			" char *val, size_t max_chars, ...);\n"
 		"void msg_prompt_noecho (msg msg_no, const char *def,"
-			" char *val, int max_chars, ...);\n"
+			" char *val, size_t max_chars, ...);\n"
+		"void msg_prompt_win (msg, int, int, int, int,"
+			" const char *, char *, size_t, ...);\n"
 		"void msg_table_add(msg msg_no,...);\n"
+		"int msg_row(void);\n"
 		"\n"
 		"/* Message names */\n"
 	      );
@@ -182,7 +202,7 @@ write_msg_file ()
 	(void)fprintf (out_file, "#include \"%s\"\n", hname);
 
 	/* msg_list */
-	(void)fprintf (out_file, "const char *msg_list[] = {\n");
+	(void)fprintf (out_file, "const char *msg_list[] = {\nNULL,\n");
 	for (t=head ; t != NULL; t = t->next) 
 		write_str (out_file, t->msg);
 	(void)fprintf (out_file, "NULL};\n");

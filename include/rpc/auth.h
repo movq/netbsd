@@ -1,4 +1,4 @@
-/*	$NetBSD: auth.h,v 1.14 1998/11/16 12:07:43 christos Exp $	*/
+/*	$NetBSD: auth.h,v 1.17 2005/12/26 19:01:47 perry Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -69,18 +69,16 @@ enum auth_stat {
 	AUTH_FAILED=7			/* some unknown reason */
 };
 
-typedef u_int32_t u_int32;	/* 32-bit unsigned integers */
-
 union des_block {
 	struct {
-		u_int32 high;
-		u_int32 low;
+		uint32_t high;
+		uint32_t low;
 	} key;
 	char c[8];
 };
 typedef union des_block des_block;
 __BEGIN_DECLS
-extern bool_t xdr_des_block __P((XDR *, des_block *));
+extern bool_t xdr_des_block(XDR *, des_block *);
 __END_DECLS
 
 /*
@@ -101,16 +99,16 @@ typedef struct __rpc_auth {
 	struct	opaque_auth	ah_verf;
 	union	des_block	ah_key;
 	const struct auth_ops {
-		void	(*ah_nextverf) __P((struct __rpc_auth *));
+		void	(*ah_nextverf)(struct __rpc_auth *);
 		/* nextverf & serialize */
-		int	(*ah_marshal) __P((struct __rpc_auth *, XDR *));
+		int	(*ah_marshal)(struct __rpc_auth *, XDR *);
 		/* validate varifier */
-		int	(*ah_validate) __P((struct __rpc_auth *,
-			    struct opaque_auth *));
+		int	(*ah_validate)(struct __rpc_auth *,
+			    struct opaque_auth *);
 		/* refresh credentials */
-		int	(*ah_refresh) __P((struct __rpc_auth *));
+		int	(*ah_refresh)(struct __rpc_auth *);
 		/* destroy this structure */
-		void	(*ah_destroy) __P((struct __rpc_auth *));
+		void	(*ah_destroy)(struct __rpc_auth *);
 	} *ah_ops;
 	void *ah_private;
 } AUTH;
@@ -168,23 +166,27 @@ extern struct opaque_auth _null_auth;
  */
 __BEGIN_DECLS
 struct sockaddr_in;
-extern AUTH *authunix_create		__P((char *, int, int, int, int *));
-extern AUTH *authunix_create_default	__P((void));
-extern AUTH *authnone_create		__P((void));
-extern AUTH *authdes_create		__P((char *, u_int,
-					    struct sockaddr_in *, des_block *));
-extern bool_t xdr_opaque_auth		__P((XDR *, struct opaque_auth *));
+extern AUTH *authunix_create		(char *, int, int, int, int *);
+extern AUTH *authunix_create_default	(void);
+extern AUTH *authnone_create		(void);
+extern AUTH *authdes_create		(char *, u_int,
+					    struct sockaddr_in *, des_block *);
+extern bool_t xdr_opaque_auth		(XDR *, struct opaque_auth *);
+
+#define authsys_create(c,i1,i2,i3,ip) authunix_create((c),(i1),(i2),(i3),(ip))
+#define authsys_create_default() authunix_create_default()
 
 struct svc_req;
 struct rpc_msg;
-enum auth_stat _svcauth_null __P((struct svc_req *, struct rpc_msg *));
-enum auth_stat _svcauth_short __P((struct svc_req *, struct rpc_msg *));
-enum auth_stat _svcauth_unix __P((struct svc_req *, struct rpc_msg *));
+enum auth_stat _svcauth_null(struct svc_req *, struct rpc_msg *);
+enum auth_stat _svcauth_short(struct svc_req *, struct rpc_msg *);
+enum auth_stat _svcauth_unix(struct svc_req *, struct rpc_msg *);
 __END_DECLS
 
 #define AUTH_NONE	0		/* no authentication */
 #define	AUTH_NULL	0		/* backward compatibility */
-#define	AUTH_UNIX	1		/* unix style (uid, gids) */
+#define	AUTH_SYS	1		/* unix style (uid, gids) */
+#define AUTH_UNIX	AUTH_SYS	/* backward compatibility */
 #define	AUTH_SHORT	2		/* short hand unix style */
 #define AUTH_DES	3		/* des style (encrypted timestamps) */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: endian.h,v 1.3 2000/03/17 11:47:43 soren Exp $	*/
+/*	$NetBSD: endian.h,v 1.26 2007/07/20 15:07:15 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,6 +34,8 @@
 #ifndef _SYS_ENDIAN_H_
 #define _SYS_ENDIAN_H_
 
+#include <sys/featuretest.h>
+
 /*
  * Definitions for byte order, according to byte significance from low
  * address to high.
@@ -45,6 +43,37 @@
 #define	_LITTLE_ENDIAN	1234	/* LSB first: i386, vax */
 #define	_BIG_ENDIAN	4321	/* MSB first: 68000, ibm, net */
 #define	_PDP_ENDIAN	3412	/* LSB first in word, MSW first in long */
+
+
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
+#ifndef _LOCORE
+
+/* C-family endian-ness definitions */
+
+#include <sys/ansi.h>
+#include <sys/cdefs.h>
+#include <sys/types.h>
+
+#ifndef in_addr_t
+typedef __in_addr_t	in_addr_t;
+#define	in_addr_t	__in_addr_t
+#endif
+
+#ifndef in_port_t
+typedef __in_port_t	in_port_t;
+#define	in_port_t	__in_port_t
+#endif
+
+__BEGIN_DECLS
+uint32_t htonl(uint32_t) __attribute__((__const__));
+uint16_t htons(uint16_t) __attribute__((__const__));
+uint32_t ntohl(uint32_t) __attribute__((__const__));
+uint16_t ntohs(uint16_t) __attribute__((__const__));
+__END_DECLS
+
+#endif /* !_LOCORE */
+#endif /* _XOPEN_SOURCE || _NETBSD_SOURCE */
+
 
 #include <machine/endian_machdep.h>
 
@@ -62,7 +91,7 @@
 #endif
 
 
-#ifndef _POSIX_SOURCE
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 /*
  *  Traditional names for byteorder.  These are defined as the numeric
  *  sequences so that third party code can "#define XXX_ENDIAN" and not
@@ -74,25 +103,13 @@
 #define BYTE_ORDER	_BYTE_ORDER
 
 #ifndef _LOCORE
-/* C-family endian-ness definitions */
 
-#include <sys/cdefs.h>
-#include <sys/types.h>
-
-typedef u_int32_t	in_addr_t;
-typedef u_int16_t	in_port_t;
-
-__BEGIN_DECLS
-in_addr_t	htonl __P((in_addr_t)) __attribute__((__const__));
-in_port_t	htons __P((in_port_t)) __attribute__((__const__));
-in_addr_t	ntohl __P((in_addr_t)) __attribute__((__const__));
-in_port_t	ntohs __P((in_port_t)) __attribute__((__const__));
-__END_DECLS
+#include <machine/bswap.h>
 
 /*
  * Macros for network/external number representation conversion.
  */
-#if BYTE_ORDER == BIG_ENDIAN && !defined(lint)
+#if BYTE_ORDER == BIG_ENDIAN && !defined(__lint__)
 #define	ntohl(x)	(x)
 #define	ntohs(x)	(x)
 #define	htonl(x)	(x)
@@ -103,48 +120,51 @@ __END_DECLS
 #define	HTONL(x)	(void) (x)
 #define	HTONS(x)	(void) (x)
 
-#else	/* LITTLE_ENDIAN || !defined(lint) */
+#else	/* LITTLE_ENDIAN || !defined(__lint__) */
 
-#define	NTOHL(x)	(x) = ntohl((in_addr_t)(x))
-#define	NTOHS(x)	(x) = ntohs((in_port_t)(x))
-#define	HTONL(x)	(x) = htonl((in_addr_t)(x))
-#define	HTONS(x)	(x) = htons((in_port_t)(x))
-#endif	/* LITTLE_ENDIAN || !defined(lint) */
+#define	ntohl(x)	bswap32((uint32_t)(x))
+#define	ntohs(x)	bswap16((uint16_t)(x))
+#define	htonl(x)	bswap32((uint32_t)(x))
+#define	htons(x)	bswap16((uint16_t)(x))
+
+#define	NTOHL(x)	(x) = ntohl((uint32_t)(x))
+#define	NTOHS(x)	(x) = ntohs((uint16_t)(x))
+#define	HTONL(x)	(x) = htonl((uint32_t)(x))
+#define	HTONS(x)	(x) = htons((uint16_t)(x))
+#endif	/* LITTLE_ENDIAN || !defined(__lint__) */
 
 /*
  * Macros to convert to a specific endianness.
  */
-
-#include <machine/bswap.h>
 
 #if BYTE_ORDER == BIG_ENDIAN
 
 #define htobe16(x)	(x)
 #define htobe32(x)	(x)
 #define htobe64(x)	(x)
-#define htole16(x)	bswap16((u_int16_t)(x))
-#define htole32(x)	bswap32((u_int32_t)(x))
-#define htole64(x)	bswap64((u_int64_t)(x))
+#define htole16(x)	bswap16((uint16_t)(x))
+#define htole32(x)	bswap32((uint32_t)(x))
+#define htole64(x)	bswap64((uint64_t)(x))
 
 #define HTOBE16(x)	(void) (x)
 #define HTOBE32(x)	(void) (x)
 #define HTOBE64(x)	(void) (x)
-#define HTOLE16(x)	(x) = bswap16((u_int16_t)(x))
-#define HTOLE32(x)	(x) = bswap32((u_int32_t)(x))
-#define HTOLE64(x)	(x) = bswap64((u_int64_t)(x))
+#define HTOLE16(x)	(x) = bswap16((uint16_t)(x))
+#define HTOLE32(x)	(x) = bswap32((uint32_t)(x))
+#define HTOLE64(x)	(x) = bswap64((uint64_t)(x))
 
 #else	/* LITTLE_ENDIAN */
 
-#define htobe16(x)	bswap16((u_int16_t)(x))
-#define htobe32(x)	bswap32((u_int32_t)(x))
-#define htobe64(x)	bswap64((u_int64_t)(x))
+#define htobe16(x)	bswap16((uint16_t)(x))
+#define htobe32(x)	bswap32((uint32_t)(x))
+#define htobe64(x)	bswap64((uint64_t)(x))
 #define htole16(x)	(x)
 #define htole32(x)	(x)
 #define htole64(x)	(x)
 
-#define HTOBE16(x)	(x) = bswap16((u_int16_t)(x))
-#define HTOBE32(x)	(x) = bswap32((u_int32_t)(x))
-#define HTOBE64(x)	(x) = bswap64((u_int64_t)(x))
+#define HTOBE16(x)	(x) = bswap16((uint16_t)(x))
+#define HTOBE32(x)	(x) = bswap32((uint32_t)(x))
+#define HTOBE64(x)	(x) = bswap64((uint64_t)(x))
 #define HTOLE16(x)	(void) (x)
 #define HTOLE32(x)	(void) (x)
 #define HTOLE64(x)	(void) (x)
@@ -165,6 +185,156 @@ __END_DECLS
 #define LE32TOH(x)	HTOLE32(x)
 #define LE64TOH(x)	HTOLE64(x)
 
+/*
+ * Routines to encode/decode big- and little-endian multi-octet values
+ * to/from an octet stream.
+ */
+
+#if __GNUC_PREREQ__(2, 95)
+
+#define __GEN_ENDIAN_ENC(bits, endian) \
+static __inline __unused void \
+endian ## bits ## enc(void *dst, uint ## bits ## _t u) \
+{ \
+	u = hto ## endian ## bits (u); \
+	__builtin_memcpy(dst, &u, sizeof(u)); \
+}
+
+__GEN_ENDIAN_ENC(16, be)
+__GEN_ENDIAN_ENC(32, be)
+__GEN_ENDIAN_ENC(64, be)
+__GEN_ENDIAN_ENC(16, le)
+__GEN_ENDIAN_ENC(32, le)
+__GEN_ENDIAN_ENC(64, le)
+#undef __GEN_ENDIAN_ENC
+
+#define __GEN_ENDIAN_DEC(bits, endian) \
+static __inline __unused uint ## bits ## _t \
+endian ## bits ## dec(const void *buf) \
+{ \
+	uint ## bits ## _t u; \
+	__builtin_memcpy(&u, buf, sizeof(u)); \
+	return endian ## bits ## toh (u); \
+}
+
+__GEN_ENDIAN_DEC(16, be)
+__GEN_ENDIAN_DEC(32, be)
+__GEN_ENDIAN_DEC(64, be)
+__GEN_ENDIAN_DEC(16, le)
+__GEN_ENDIAN_DEC(32, le)
+__GEN_ENDIAN_DEC(64, le)
+#undef __GEN_ENDIAN_DEC
+
+#else	/* !(GCC >= 2.95) */
+
+static __inline void __unused
+be16enc(void *buf, uint16_t u)
+{
+	uint8_t *p = (uint8_t *)buf;
+
+	p[0] = (uint8_t)(((unsigned)u >> 8) & 0xff);
+	p[1] = (uint8_t)(u & 0xff);
+}
+
+static __inline void __unused
+le16enc(void *buf, uint16_t u)
+{
+	uint8_t *p = (uint8_t *)buf;
+
+	p[0] = (uint8_t)(u & 0xff);
+	p[1] = (uint8_t)(((unsigned)u >> 8) & 0xff);
+}
+
+static __inline uint16_t __unused
+be16dec(const void *buf)
+{
+	const uint8_t *p = (const uint8_t *)buf;
+
+	return (uint16_t)((p[0] << 8) | p[1]);
+}
+
+static __inline uint16_t __unused
+le16dec(const void *buf)
+{
+	const uint8_t *p = (const uint8_t *)buf;
+
+	return (uint16_t)((p[1] << 8) | p[0]);
+}
+
+static __inline void __unused
+be32enc(void *buf, uint32_t u)
+{
+	uint8_t *p = (uint8_t *)buf;
+
+	p[0] = (uint8_t)((u >> 24) & 0xff);
+	p[1] = (uint8_t)((u >> 16) & 0xff);
+	p[2] = (uint8_t)((u >> 8) & 0xff);
+	p[3] = (uint8_t)(u & 0xff);
+}
+
+static __inline void __unused
+le32enc(void *buf, uint32_t u)
+{
+	uint8_t *p = (uint8_t *)buf;
+
+	p[0] = (uint8_t)(u & 0xff);
+	p[1] = (uint8_t)((u >> 8) & 0xff);
+	p[2] = (uint8_t)((u >> 16) & 0xff);
+	p[3] = (uint8_t)((u >> 24) & 0xff);
+}
+
+static __inline uint32_t __unused
+be32dec(const void *buf)
+{
+	const uint8_t *p = (const uint8_t *)buf;
+
+	return ((p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]);
+}
+
+static __inline uint32_t __unused
+le32dec(const void *buf)
+{
+	const uint8_t *p = (const uint8_t *)buf;
+
+	return ((p[3] << 24) | (p[2] << 16) | (p[1] << 8) | p[0]);
+}
+
+static __inline void __unused
+be64enc(void *buf, uint64_t u)
+{
+	uint8_t *p = (uint8_t *)buf;
+
+	be32enc(p, (uint32_t)(u >> 32));
+	be32enc(p + 4, (uint32_t)(u & 0xffffffffULL));
+}
+
+static __inline void __unused
+le64enc(void *buf, uint64_t u)
+{
+	uint8_t *p = (uint8_t *)buf;
+
+	le32enc(p, (uint32_t)(u & 0xffffffffULL));
+	le32enc(p + 4, (uint32_t)(u >> 32));
+}
+
+static __inline uint64_t __unused
+be64dec(const void *buf)
+{
+	const uint8_t *p = (const uint8_t *)buf;
+
+	return (((uint64_t)be32dec(p) << 32) | be32dec(p + 4));
+}
+
+static __inline uint64_t __unused
+le64dec(const void *buf)
+{
+	const uint8_t *p = (const uint8_t *)buf;
+
+	return (le32dec(p) | ((uint64_t)le32dec(p + 4) << 32));
+}
+
+#endif	/* GCC >= 2.95 */
+
 #endif /* !_LOCORE */
-#endif /* !_POSIX_SOURCE */
+#endif /* _XOPEN_SOURCE || _NETBSD_SOURCE */
 #endif /* !_SYS_ENDIAN_H_ */

@@ -1,38 +1,42 @@
-#	$NetBSD: Makefile,v 1.2 2000/01/23 17:04:06 mycroft Exp $
+#	$NetBSD: Makefile,v 1.18 2008/01/11 09:26:26 tsutsui Exp $
+
+NOMAN= # defined
+
+.include <bsd.own.mk>
 
 COMMON=	${.CURDIR}/../common
-.ifnmake(print-objdir)
-COMMONOBJ!=	cd ${COMMON}; ${MAKE} print-objdir
-.endif
+COMMONOBJ!=	cd ${COMMON} && ${PRINTOBJDIR}
 
 .PATH:	${COMMON}
 
 PROG= bootxx
 SRCS= start.S bootxx.c
 SRCS+= romcalls.S putchar.c
-MKMAN= no
 STRIPFLAG=
 BINMODE= 444
 
 SIZE?= size
+OBJCOPY?= objcopy
 
-S= ${.CURDIR}/../../../..
+S!= cd ${.CURDIR}/../../../..; pwd
 
-LDFLAGS= -x -N -Ttext 0
-CFLAGS= -Os -Wall
+LINKFLAGS= -x -N -Ttext 0 -e start
+CFLAGS= -Os -Wall -Werror
+CFLAGS+= -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith
+#CFLAGS+= -Wno-format-zero-length -Wno-sign-compare
 
-CPPFLAGS+= -D_STANDALONE -DBOOTXX_DEBUG
+CPPFLAGS+= -D_STANDALONE # -DBOOTXX_DEBUG
 CPPFLAGS+= -nostdinc -I${.OBJDIR} -I${S}
 AFLAGS= -D_LOCORE
 
-CLEANFILES+= machine m68k
+CLEANFILES+= machine m68k ${PROG}.sym
 
 L= ${COMMONOBJ}/lib
 LIBS= ${L}/sa/libsa.a ${L}/kern/libkern.a
 
+.if !make(obj) && !make(clean) && !make(cleandir)
 .BEGIN: machine m68k
 .NOPATH: machine m68k
-realdepend realall: machine m68k
 
 machine::
 	-rm -f $@
@@ -41,9 +45,12 @@ machine::
 m68k::
 	-rm -f $@
 	ln -s ${S}/arch/m68k/include $@
+.endif
 
-${PROG}: ${OBJS} machine m68k
-	${LD} ${LDFLAGS} -o ${PROG} ${OBJS} ${LIBS}
-	${SIZE} ${PROG}
+${PROG}: ${OBJS} ${LIBS}
+	${_MKTARGET_LINK}
+	${LD} ${LINKFLAGS} -o ${.TARGET}.sym ${OBJS} ${LIBS}
+	${SIZE} ${.TARGET}.sym
+	${OBJCOPY} -O binary ${.TARGET}.sym ${.TARGET}
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: trig.h,v 1.4 1999/07/02 15:37:37 simonb Exp $	*/
+/*	$NetBSD: trig.h,v 1.6 2003/08/07 16:44:53 agc Exp $	*/
 /*
  * Copyright (c) 1987, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -62,17 +58,30 @@ static long fmaxx[]	= { 0xffffffff, 0x7fefffff};
 #define   fmax    (*(double*)fmaxx)
 #endif	/* national */
 
-static const double
-	zero = 0,
-	one = 1,
-	negone = -1,
-	half = 1.0/2.0,
-	small = 1E-10,	/* 1+small**2 == 1; better values for small:
-			 *		small	= 1.5E-9 for VAX D
-			 *			= 1.2E-8 for IEEE Double
-			 *			= 2.8E-10 for IEEE Extended
-			 */
-	big = 1E20;	/* big := 1/(small**2) */
+#ifdef _LIBM_DECLARE
+const double
+	__zero = 0,
+	__one = 1,
+	__negone = -1,
+	__half = 1.0/2.0,
+#ifdef __vax__
+	__small = 1E-9, /* 1+small**2 == 1; better values for small:
+			  *		small	= 1.5E-9 for VAX D
+			  *			= 1.2E-8 for IEEE Double
+			  *			= 2.8E-10 for IEEE Extended
+			  */
+	__big = 1E18;	/* big := 1/(small**2) */
+#else
+	__small = 1E-10, /* 1+small**2 == 1; better values for small:
+			  *		small	= 1.5E-9 for VAX D
+			  *			= 1.2E-8 for IEEE Double
+			  *			= 2.8E-10 for IEEE Extended
+			  */
+	__big = 1E20;	/* big := 1/(small**2) */
+#endif
+#else
+extern const double __zero, __one, __negone, __half, __small, __big;
+#endif
 
 /* sin__S(x*x) ... re-implemented as a macro
  * DOUBLE PRECISION (VAX D format 56 bits, IEEE DOUBLE 53 BITS)

@@ -1,4 +1,4 @@
-/*	$NetBSD: bm.h,v 1.3 1994/10/26 00:55:46 cgd Exp $	*/
+/*	$NetBSD: bm.h,v 1.5 2005/02/03 04:39:32 perry Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -53,9 +49,9 @@ typedef struct {
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-bm_pat	*bm_comp __P((u_char const *, size_t, u_char const *));
-u_char	*bm_exec __P((bm_pat *, u_char *, size_t));
-void	 bm_free __P((bm_pat *));
+bm_pat	*bm_comp(u_char const *, size_t, u_char const *);
+u_char	*bm_exec(bm_pat *, u_char *, size_t);
+void	 bm_free(bm_pat *);
 __END_DECLS
 
 #endif /* !_BM_H_ */

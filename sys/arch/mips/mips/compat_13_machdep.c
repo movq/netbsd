@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_13_machdep.c,v 1.7 1999/04/24 08:10:38 simonb Exp $	*/
+/*	$NetBSD: compat_13_machdep.c,v 1.16 2008/04/24 18:39:21 ad Exp $	*/
 
 /*
  * Copyright 1996 The Board of Trustees of The Leland Stanford
@@ -15,7 +15,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.7 1999/04/24 08:10:38 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.16 2008/04/24 18:39:21 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -25,6 +25,9 @@ __KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.7 1999/04/24 08:10:38 simonb
 #include <sys/user.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
+
+#include <compat/sys/signal.h>
+#include <compat/sys/signalvar.h>
 
 #include <mips/regnum.h>
 
@@ -37,15 +40,13 @@ extern int sigdebug;
 #endif
 
 int
-compat_13_sys_sigreturn(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args *uap, register_t *retval)
 {
-	struct compat_13_sys_sigreturn_args /* {
+	/* {
 		syscallarg(struct sigcontext13 *) sigcntxp;
-	} */ *uap = v;
+	} */
 	struct sigcontext13 *scp, ksc;
+	struct proc *p = l->l_proc;
 	int error;
 	struct frame *f;
 	sigset_t mask;
@@ -63,28 +64,32 @@ compat_13_sys_sigreturn(p, v, retval)
 	if ((error = copyin(scp, &ksc, sizeof(ksc))) != 0)
 		return (error);
 
-	if ((int)ksc.sc_regs[ZERO] != 0xACEDBADE)	/* magic number */
+	if ((u_int)ksc.sc_regs[_R_ZERO] != 0xacedbadeU)/* magic number */
 		return (EINVAL);
 
 	/* Resture the register context. */
-	f = (struct frame *)p->p_md.md_regs;
-	f->f_regs[PC] = ksc.sc_pc;
-	f->f_regs[MULLO] = ksc.mullo;
-	f->f_regs[MULHI] = ksc.mulhi;
+	f = (struct frame *)l->l_md.md_regs;
+	f->f_regs[_R_PC] = ksc.sc_pc;
+	f->f_regs[_R_MULLO] = ksc.mullo;
+	f->f_regs[_R_MULHI] = ksc.mulhi;
 	memcpy(&f->f_regs[1], &scp->sc_regs[1],
 	    sizeof(scp->sc_regs) - sizeof(scp->sc_regs[0]));
 	if (scp->sc_fpused)
-		p->p_addr->u_pcb.pcb_fpregs = *(struct fpreg *)scp->sc_fpregs;
+		l->l_addr->u_pcb.pcb_fpregs = *(struct fpreg *)scp->sc_fpregs;
+
+	mutex_enter(p->p_lock);
 
 	/* Restore signal stack. */
 	if (ksc.sc_onstack & SS_ONSTACK)
-		p->p_sigacts->ps_sigstk.ss_flags |= SS_ONSTACK;
+		l->l_sigstk.ss_flags |= SS_ONSTACK;
 	else
-		p->p_sigacts->ps_sigstk.ss_flags &= ~SS_ONSTACK;
+		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
 
-	/* Restore signal mask. */
+	mutex_exit(p->p_lock);
+
+	/* Restore signal mask-> */
 	native_sigset13_to_sigset(&ksc.sc_mask, &mask);
-	(void) sigprocmask1(p, SIG_SETMASK, &mask, 0);
+	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
 
 	return (EJUSTRETURN);
 }

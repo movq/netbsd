@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.15 1999/09/17 17:07:11 jsm Exp $	*/
+/*	$NetBSD: main.c,v 1.25 2008/07/21 13:24:38 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.15 1999/09/17 17:07:11 jsm Exp $");
+__RCSID("$NetBSD: main.c,v 1.25 2008/07/21 13:24:38 lukem Exp $");
 #endif
 #endif				/* not lint */
 
@@ -92,17 +88,15 @@ static const char password[] = "losfurng";
 static char pbuf[10];
 
 int
-main(argc, argv)
-	int     argc;
-	char  **argv;
+main(int argc __unused, char **argv)
 {
 	int     i;		/* non-descript index */
 	int     l;		/* non-descript index */
 	char    c;		/* non-descript character storage */
-	long    t;		/* time for random num generator */
+	time_t  t;		/* time for random num generator */
 
 	/* revoke setgid privileges */
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
 	/* initialization */
 	bflag = 2;		/* default no board */
@@ -154,7 +148,8 @@ main(argc, argv)
 			if (yorn(0)) {
 
 				fixtty(&old);	/* restore tty */
-				execl(TEACH, "teachgammon", args[0]?args:0, 0);
+				execl(TEACH, "teachgammon", args[0]?args:0,
+				      (char *) 0);
 
 				tflag = 0;	/* error! */
 				writel(noteach);
@@ -268,7 +263,7 @@ main(argc, argv)
 				cturn = -1;
 			}
 		}
-		/* initalize variables according to whose turn it is */
+		/* initialize variables according to whose turn it is */
 
 		if (cturn == 1) {	/* red */
 			home = 25;
@@ -423,7 +418,8 @@ main(argc, argv)
 						writec('\n');
 					text(helpm);
 					if (tflag)
-						curmove(cturn == -1 ? 18 : 19, 0);
+						curmove(cturn == -1 ? 
+						    18 : 19, 0);
 					else
 						writec('\n');
 
@@ -476,7 +472,7 @@ main(argc, argv)
 		/* compute game value */
 		if (tflag)
 			curmove(20, 0);
-		if (*offopp == 15 && *offptr <= 0) {
+		if (*offopp == 15 && (*offptr == 0 || *offptr == -15)) {
 			if (mflag) {
 				writel(bgammon);
 				gvalue *= 3;

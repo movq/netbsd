@@ -1,4 +1,4 @@
-/*	$NetBSD: findfp.c,v 1.13 2000/01/21 19:55:02 mycroft Exp $	*/
+/*	$NetBSD: findfp.c,v 1.23 2006/10/07 21:40:46 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)findfp.c	8.2 (Berkeley) 1/4/94";
 #else
-__RCSID("$NetBSD: findfp.c,v 1.13 2000/01/21 19:55:02 mycroft Exp $");
+__RCSID("$NetBSD: findfp.c,v 1.23 2006/10/07 21:40:46 thorpej Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -52,21 +48,35 @@ __RCSID("$NetBSD: findfp.c,v 1.13 2000/01/21 19:55:02 mycroft Exp $");
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include "reentrant.h"
 #include "local.h"
 #include "glue.h"
-#include "reentrant.h"
 
 int	__sdidinit;
 
 #define	NDYNAMIC 10		/* add ten more whenever necessary */
 
 #define	std(flags, file) \
-	{0,0,0,flags,file,{0},0,__sF+file,__sclose,__sread,__sseek,__swrite}
-/*	 p r w flags file _bf z  cookie      close    read    seek    write */
+/*	  p     r  w  flags  file  bf     lfbsize  cookie       close */ \
+	{ NULL, 0, 0, flags, file, { NULL, 0 }, 0, __sF + file, __sclose, \
+/*	  read      seek     write     ext                              up */ \
+	  __sread,  __sseek, __swrite, { (void *)(__sFext + file), 0 }, NULL, \
+/*	  ur ubuf,                 nbuf      lb     blksize  offset */ \
+	  0, { '\0', '\0', '\0' }, { '\0' }, { NULL, 0 }, 0, (fpos_t)0 }
 
 				/* the usual - (stdin + stdout + stderr) */
 static FILE usual[FOPEN_MAX - 3];
+static struct __sfileext usualext[FOPEN_MAX - 3];
 static struct glue uglue = { 0, FOPEN_MAX - 3, usual };
+
+#if defined(_REENTRANT) && !defined(__lint__) /* XXX lint is busted */
+#define	STDEXT { ._lock = MUTEX_INITIALIZER, ._lockcond = COND_INITIALIZER }
+struct __sfileext __sFext[3] = { STDEXT,
+				 STDEXT,
+				 STDEXT};
+#else
+struct __sfileext __sFext[3];
+#endif
 
 FILE __sF[3] = {
 	std(__SRD, STDIN_FILENO),		/* stdin */
@@ -78,7 +88,7 @@ struct glue __sglue = { &uglue, 3, __sF };
 static struct glue *moreglue __P((int));
 void f_prealloc __P((void));
 
-#ifdef _REENT
+#ifdef _REENTRANT
 rwlock_t __sfp_lock = RWLOCK_INITIALIZER;
 #endif
 
@@ -88,17 +98,24 @@ moreglue(n)
 {
 	struct glue *g;
 	FILE *p;
+	struct __sfileext *pext;
 	static FILE empty;
 
-	g = (struct glue *)malloc(sizeof(*g) + ALIGNBYTES + n * sizeof(FILE));
+	g = (struct glue *)malloc(sizeof(*g) + ALIGNBYTES + n * sizeof(FILE)
+		+ n * sizeof(struct __sfileext));
 	if (g == NULL)
 		return (NULL);
 	p = (FILE *)ALIGN((u_long)(g + 1));
 	g->next = NULL;
 	g->niobs = n;
 	g->iobs = p;
-	while (--n >= 0)
-		*p++ = empty;
+	pext = (void *)(p + n);
+	while (--n >= 0) {
+		*p = empty;
+		_FILEEXT_SETUP(p, pext);
+		p++;
+		pext++;
+	}
 	return (g);
 }
 
@@ -135,10 +152,11 @@ found:
 	fp->_lbfsize = 0;	/* not line buffered */
 	fp->_file = -1;		/* no file */
 /*	fp->_cookie = <any>; */	/* caller sets cookie, _read/_write etc */
-	fp->_ub._base = NULL;	/* no ungetc buffer */
-	fp->_ub._size = 0;
+	_UB(fp)._base = NULL;	/* no ungetc buffer */
+	_UB(fp)._size = 0;
 	fp->_lb._base = NULL;	/* no line buffer */
 	fp->_lb._size = 0;
+	memset(WCIO_GET(fp), 0, sizeof(struct wchar_io_data));
 	rwlock_unlock(&__sfp_lock);
 	return (fp);
 }
@@ -180,6 +198,11 @@ _cleanup()
 void
 __sinit()
 {
+	int i;
+
+	for (i = 0; i < FOPEN_MAX - 3; i++)
+		_FILEEXT_SETUP(&usual[i], &usualext[i]);
+
 	/* make sure we clean up on exit */
 	__cleanup = _cleanup;		/* conservative */
 	__sdidinit = 1;

@@ -1,3 +1,5 @@
+/*	$NetBSD: inet.h,v 1.24 2008/06/21 20:12:49 christos Exp $	*/
+
 /*
  * ++Copyright++ 1983, 1993
  * -
@@ -12,11 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- * 	This product includes software developed by the University of
- * 	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  * 
@@ -53,9 +51,9 @@
  * --Copyright--
  */
 
-/*
+/*%
  *	@(#)inet.h	8.1 (Berkeley) 6/2/93
- *	$NetBSD: inet.h,v 1.9 1999/07/03 13:30:38 kleink Exp $
+ *	Id: inet.h,v 1.3 2005/04/27 04:56:16 sra Exp
  */
 
 #ifndef _ARPA_INET_H_
@@ -63,32 +61,44 @@
 
 /* External definitions for functions in inet(3) */
 
-#include <sys/param.h>
-#if (!defined(BSD)) || (BSD < 199306)
-# include <sys/bitypes.h>
-#else
-# include <sys/types.h>
-#endif
+#include <sys/ansi.h>
 #include <sys/cdefs.h>
+#include <sys/featuretest.h>
+#include <sys/types.h>
+
+#include <netinet/in.h>
+
+#if (_POSIX_C_SOURCE - 0) >= 200112L || (_XOPEN_SOURCE - 0) >= 520 || \
+    defined(_NETBSD_SOURCE)
+#ifndef socklen_t
+typedef __socklen_t	socklen_t;
+#define socklen_t	__socklen_t
+#endif
+#endif /* _POSIX_C_SOURCE >= 200112 || XOPEN_SOURCE >= 520 || _NETBSD_SOURCE */
 
 __BEGIN_DECLS
-unsigned long	 inet_addr __P((const char *));
-unsigned long	 inet_lnaof __P((struct in_addr));
-struct in_addr	 inet_makeaddr __P((u_long , u_long));
-unsigned long	 inet_netof __P((struct in_addr));
-unsigned long	 inet_network __P((const char *));
-char		*inet_ntoa __P((struct in_addr));
-#if !defined(_XOPEN_SOURCE) || (_XOPEN_SOURCE - 0) >= 500
-const char	*inet_ntop __P((int, const void *, char *, size_t));
-int		 inet_pton __P((int, const char *, void *));
+in_addr_t	 inet_addr(const char *);
+in_addr_t	 inet_lnaof(struct in_addr);
+struct in_addr	 inet_makeaddr(in_addr_t, in_addr_t);
+in_addr_t	 inet_netof(struct in_addr);
+in_addr_t	 inet_network(const char *);
+char		*inet_ntoa(struct in_addr);
+#if (_POSIX_C_SOURCE - 0) >= 200112L || (_XOPEN_SOURCE - 0) >= 520 || \
+    defined(_NETBSD_SOURCE)
+const char	*inet_ntop(int, const void * __restrict,
+		                char * __restrict, socklen_t);
+int		 inet_pton(int, const char * __restrict,
+		                void * __restrict);
 #endif
-#if !defined(_XOPEN_SOURCE)
-int		 inet_aton __P((const char *, struct in_addr *));
-char *		 inet_neta __P((u_long, char *, size_t));
-char		*inet_net_ntop __P((int, const void *, int, char *, size_t));
-int		 inet_net_pton __P((int, const char *, void *, size_t));
-u_int		 inet_nsap_addr __P((const char *, u_char *, int));
-char		*inet_nsap_ntoa __P((int, const u_char *, char *));
+#if defined(_NETBSD_SOURCE)
+int		 inet_aton(const char *, struct in_addr *);
+char *		 inet_neta(u_long, char *, size_t);
+char		*inet_net_ntop(int, const void *, int, char *, size_t);
+int		 inet_net_pton(int, const char *, void *, size_t);
+char		*inet_cidr_ntop(int, const void *, int, char *, size_t);
+int		 inet_cidr_pton(int, const char *, void *, int *);
+u_int		 inet_nsap_addr(const char *, u_char *, int);
+char		*inet_nsap_ntoa(int, const u_char *, char *);
 #endif
 __END_DECLS
 

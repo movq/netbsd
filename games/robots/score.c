@@ -1,4 +1,4 @@
-/*	$NetBSD: score.c,v 1.12 2000/01/20 13:24:11 jsm Exp $	*/
+/*	$NetBSD: score.c,v 1.18 2006/03/17 23:11:47 abs Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)score.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: score.c,v 1.12 2000/01/20 13:24:11 jsm Exp $");
+__RCSID("$NetBSD: score.c,v 1.18 2006/03/17 23:11:47 abs Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,8 +49,8 @@ static SCORE	Top[MAXSCORES];
 
 static u_int32_t	numscores, max_uid;
 
-static void read_score __P((int));
-static void write_score __P((int));
+static void read_score(int);
+static void write_score(int);
 
 /*
  * read_score:
@@ -175,8 +171,8 @@ score(score_wfd)
 		move((scp - Top) + 2, 15);
 		if (!done_show && scp->s_uid == uid && scp->s_score == Score)
 			standout();
-		printw("%5.5d %5.5d %-8.8s %-9.9s %5.5d",
-		    (scp - Top) + 1, scp->s_score, scp->s_name,
+		printw("%5ld %5d %-8.8s %-9.9s %5d",
+		    (long)(scp - Top) + 1, scp->s_score, scp->s_name,
 		    scp->s_auto ? "(autobot)" : "", scp->s_level);
 		if (!done_show && scp->s_uid == uid && scp->s_score == Score) {
 			standend();
@@ -197,11 +193,11 @@ set_name(scp)
 	SCORE	*scp;
 {
 	PASSWD	*pp;
-	static char unknown[] = "???";
 
 	if ((pp = getpwuid(scp->s_uid)) == NULL)
-		pp->pw_name = unknown;
-	strncpy(scp->s_name, pp->pw_name, MAXNAME);
+		strncpy(scp->s_name, "???", MAXNAME);
+	else
+		strncpy(scp->s_name, pp->pw_name, MAXNAME);
 }
 
 /*
@@ -237,7 +233,7 @@ show_score()
 	    " ", "Level");
 	for (scp = Top; scp < &Top[MAXSCORES]; scp++)
 		if (scp->s_score > 0)
-			printf("%5.5d %5.5d %-8.8s %-9.9s %5.5d\n",
+			printf("%5d %5d %-8.8s %-9.9s %5d\n",
 			    inf++, scp->s_score, scp->s_name,
 			    scp->s_auto ? "(autobot)" :  "", scp->s_level);
 }

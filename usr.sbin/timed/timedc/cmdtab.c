@@ -1,4 +1,4 @@
-/*	$NetBSD: cmdtab.c,v 1.5 1997/10/17 14:20:02 lukem Exp $	*/
+/*	$NetBSD: cmdtab.c,v 1.7 2007/01/27 17:57:45 cbiere Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,27 +34,27 @@
 #if 0
 static char sccsid[] = "@(#)cmdtab.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: cmdtab.c,v 1.5 1997/10/17 14:20:02 lukem Exp $");
+__RCSID("$NetBSD: cmdtab.c,v 1.7 2007/01/27 17:57:45 cbiere Exp $");
 #endif
 #endif /* not lint */
 
 #include "timedc.h"
 
-char	clockdiffhelp[] =	"measures clock differences between machines";
-char	helphelp[] =		"gets help on commands";
-char	msitehelp[] =		"finds location of master";
-char	quithelp[] =		"exits timedc";
-char	testinghelp[] =		"causes election timers to expire";
-char	tracinghelp[] =		"turns tracing on or off";
+const char	clockdiffhelp[] =	"measures clock differences between machines";
+const char	helphelp[] =		"gets help on commands";
+const char	msitehelp[] =		"finds location of master";
+const char	quithelp[] =		"exits timedc";
+const char	testinghelp[] =		"causes election timers to expire";
+const char	tracinghelp[] =		"turns tracing on or off";
 
-struct cmd cmdtab[] = {
-	{ "clockdiff",	clockdiffhelp,	clockdiff,	0 },
-	{ "election",	testinghelp,	testing,	1 },
-	{ "help",	helphelp,	help,		0 },
-	{ "msite",	msitehelp,	msite,		0 },
-	{ "quit",	quithelp,	quit,		0 },
-	{ "trace",	tracinghelp,	tracing,	1 },
-	{ "?",		helphelp,	help,		0 },
+const struct cmd cmdtab[] = {
+	{ "clockdiff",	clockdiffhelp,	clockdiff	},
+	{ "election",	testinghelp,	testing		},
+	{ "help",	helphelp,	help		},
+	{ "msite",	msitehelp,	msite		},
+	{ "quit",	quithelp,	quit 		},
+	{ "trace",	tracinghelp,	tracing 	},
+	{ "?",		helphelp,	help		},
 };
 
 int	NCMDS = sizeof (cmdtab) / sizeof (cmdtab[0]);

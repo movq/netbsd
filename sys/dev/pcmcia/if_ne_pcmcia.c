@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_pcmcia.c,v 1.59 2000/03/20 18:39:32 tron Exp $	*/
+/*	$NetBSD: if_ne_pcmcia.c,v 1.155 2008/05/16 20:27:20 jnemeth Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -29,6 +29,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_ne_pcmcia.c,v 1.155 2008/05/16 20:27:20 jnemeth Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/select.h>
@@ -40,8 +43,8 @@
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/pcmcia/pcmciareg.h>
 #include <dev/pcmcia/pcmciavar.h>
@@ -56,42 +59,42 @@
 #include <dev/ic/rtl80x9reg.h>
 #include <dev/ic/rtl80x9var.h>
 
-int	ne_pcmcia_match __P((struct device *, struct cfdata *, void *));
-void	ne_pcmcia_attach __P((struct device *, struct device *, void *));
-int	ne_pcmcia_detach __P((struct device *, int));
+#include <dev/ic/dl10019var.h>
 
-int	ne_pcmcia_enable __P((struct dp8390_softc *));
-void	ne_pcmcia_disable __P((struct dp8390_softc *));
+#include <dev/ic/ax88190reg.h>
+#include <dev/ic/ax88190var.h>
+
+int	ne_pcmcia_match(device_t, cfdata_t , void *);
+int	ne_pcmcia_validate_config(struct pcmcia_config_entry *);
+void	ne_pcmcia_attach(device_t, device_t, void *);
+int	ne_pcmcia_detach(device_t, int);
+
+int	ne_pcmcia_enable(struct dp8390_softc *);
+void	ne_pcmcia_disable(struct dp8390_softc *);
 
 struct ne_pcmcia_softc {
 	struct ne2000_softc sc_ne2000;		/* real "ne2000" softc */
 
-	/* PCMCIA-specific goo */
-	struct pcmcia_io_handle sc_pcioh;	/* PCMCIA i/o information */
-	int sc_asic_io_window;			/* i/o window for ASIC */
-	int sc_nic_io_window;			/* i/o window for NIC */
-	struct pcmcia_function *sc_pf;		/* our PCMCIA function */
 	void *sc_ih;				/* interrupt handle */
+
+	struct pcmcia_function *sc_pf;		/* our PCMCIA function */
+	int sc_state;
+#define	NE_PCMCIA_ATTACHED	3
+	void *sc_powerhook;			/* power management hook */
 };
 
-u_int8_t *
-	ne_pcmcia_get_enaddr __P((struct ne_pcmcia_softc *, int,
-	    u_int8_t [ETHER_ADDR_LEN]));
-u_int8_t *
-	ne_pcmcia_dl10019_get_enaddr __P((struct ne_pcmcia_softc *,
-	    u_int8_t [ETHER_ADDR_LEN]));
-int	ne_pcmcia_ax88190_set_iobase __P((struct ne_pcmcia_softc *));
+u_int8_t *ne_pcmcia_get_enaddr(struct ne_pcmcia_softc *, int,
+	    u_int8_t [ETHER_ADDR_LEN]);
+u_int8_t *ne_pcmcia_dl10019_get_enaddr(struct ne_pcmcia_softc *,
+	    u_int8_t [ETHER_ADDR_LEN]);
 
-struct cfattach ne_pcmcia_ca = {
-	sizeof(struct ne_pcmcia_softc), ne_pcmcia_match, ne_pcmcia_attach,
-	    ne_pcmcia_detach, dp8390_activate
-};
+CFATTACH_DECL_NEW(ne_pcmcia, sizeof(struct ne_pcmcia_softc),
+    ne_pcmcia_match, ne_pcmcia_attach, ne_pcmcia_detach, dp8390_activate);
 
-struct ne2000dev {
-    char *name;
+static const struct ne2000dev {
     int32_t manufacturer;
     int32_t product;
-    char *cis_info[4];
+    const char *cis_info[4];
     int function;
     int enet_maddr;
     unsigned char enet_vendor[3];
@@ -99,64 +102,90 @@ struct ne2000dev {
 #define	NE2000DVF_DL10019	0x0001		/* chip is D-Link DL10019 */
 #define	NE2000DVF_AX88190	0x0002		/* chip is ASIX AX88190 */
 } ne2000devs[] = {
-    { PCMCIA_STR_AMBICOM_AMB8002T,
-      PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+    { PCMCIA_VENDOR_EDIMAX, PCMCIA_PRODUCT_EDIMAX_EP4000A,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0xa0, 0x0c }, 0 },
+
+    { PCMCIA_VENDOR_EDIMAX, PCMCIA_PRODUCT_EDIMAX_EP4101,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0x90, 0xcc }, NE2000DVF_AX88190 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_SYNERGY21_S21810,
+      0, -1, { 0x00, 0x48, 0x54 }, 0 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_AMBICOM_AMB8002T,
-      0, -1, { 0x00, 0x10, 0x7a } },
+      0, -1, { 0x00, 0x10, 0x7a }, 0 },
 
-    { PCMCIA_STR_PREMAX_PE200,
-      PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_AMBICOM_AMB8110,
+      0, -1, { 0x00, 0x10, 0x7a }, NE2000DVF_AX88190 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_PREMAX_PE200,
-      0, 0x07f0, { 0x00, 0x20, 0xe0 } },
+      0, 0x07f0, { 0x00, 0x20, 0xe0 }, 0 },
 
-    { PCMCIA_STR_DIGITAL_DEPCMXX,
-      PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
-      PCMCIA_CIS_DIGITAL_DEPCMXX,
-      0, 0x0ff0, { 0x00, 0x00, 0xe8 } },
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_PREMAX_PE200,
+      0, -1, { 0x00, 0x20, 0xe0 }, 0 },
 
-    { PCMCIA_STR_PLANET_SMARTCOM2000,
-      PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_PLANET_SMARTCOM2000,
-      0, 0xff0, { 0x00, 0x00, 0xe8 } },
+      0, 0xff0, { 0x00, 0x00, 0xe8 }, 0 },
 
-    { PCMCIA_STR_DLINK_DE660,
-      PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_DLINK_DE660,
-      0, -1, { 0x00, 0x80, 0xc8 } },
+      0, -1, { 0x00, 0x80, 0xc8 }, 0 },
 
-    { PCMCIA_STR_RPTI_EP400,
-      PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_DLINK_DE660PLUS,
+      0, -1, { 0x00, 0x80, 0xc8 }, 0 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_RPTI_EP400,
-      0, -1, { 0x00, 0x40, 0x95 } },
+      0, 0x110, { 0x00, 0x40, 0x95 }, 0 },
 
-    { PCMCIA_STR_RPTI_EP401,
-      PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_RPTI_EP401,
-      0, -1, { 0x00, 0x40, 0x95 } },
+      0, -1, { 0x00, 0x40, 0x95 }, 0 },
 
-    { PCMCIA_STR_ACCTON_EN2212,
-      PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_ACCTON_EN2212,
-      0, 0x0ff0, { 0x00, 0x00, 0xe8 } },
+      0, 0x0ff0, { 0x00, 0x00, 0xe8 }, 0 },
 
-    { PCMCIA_STR_SVEC_COMBOCARD,
-      PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_ACCTON_EN2216,
+      0, -1, { 0x00, 0x00, 0xe8 }, 0 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_SVEC_COMBOCARD,
-      0, -1, { 0x00, 0xe0, 0x98 } },
+      0, -1, { 0x00, 0xe0, 0x98 }, 0 },
 
-    { PCMCIA_STR_SVEC_LANCARD,
-      PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_SVEC_LANCARD,
-      0, 0x7f0, { 0x00, 0xc0, 0x6c } },
+      0, 0x7f0, { 0x00, 0xc0, 0x6c }, 0 },
 
-    { PCMCIA_STR_EPSON_EEN10B,
-      PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_EPSON_EEN10B,
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_EPSON_EEN10B,
       PCMCIA_CIS_EPSON_EEN10B,
-      0, 0xff0, { 0x00, 0x00, 0x48 } },
+      0, 0xff0, { 0x00, 0x00, 0x48 }, 0 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_TAMARACK_ETHERNET,
+      0, -1, { 0x00, 0x00, 0x00 }, 0 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_CNET_NE2000,
+      0, -1, { 0x00, 0x80, 0xad }, 0 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_GENIUS_ME3000II,
+      0, -1, { 0x00, 0x40, 0x95 }, 0 },
+
 
     /*
      * You have to add new entries which contains
-     * PCMCIA_VENDOR_INVALID and/or PCMCIA_PRODUCT_INVALID 
+     * PCMCIA_VENDOR_INVALID and/or PCMCIA_PRODUCT_INVALID
      * in front of this comment.
      *
      * There are cards which use a generic vendor and product id but needs
@@ -165,59 +194,57 @@ struct ne2000dev {
      * product and vendor entries.
      */
 
-    { PCMCIA_STR_IBM_INFOMOVER,
-      PCMCIA_VENDOR_IBM, PCMCIA_PRODUCT_IBM_INFOMOVER,
-      PCMCIA_CIS_IBM_INFOMOVER,
-      0, 0x0ff0, { 0x08, 0x00, 0x5a } },
+    { PCMCIA_VENDOR_IBM, PCMCIA_PRODUCT_IBM_INFOMOVER,
+      PCMCIA_CIS_INVALID,
+      0, 0x0ff0, { 0xff, 0xff, 0xff }, 0 },
 
-    { PCMCIA_STR_LINKSYS_ECARD_1, 
-      PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_LINKSYS_ECARD_1,
-      PCMCIA_CIS_LINKSYS_ECARD_1, 
-      0, -1, { 0x00, 0x80, 0xc8 } },
+    { PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_LINKSYS_ECARD_1,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0x80, 0xc8 }, 0 },
 
-    { PCMCIA_STR_PLANEX_FNW3600T,
-      PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_LINKSYS_COMBO_ECARD,
-      PCMCIA_CIS_PLANEX_FNW3600T,
-      0, -1, { 0x00, 0x90, 0xcc }, NE2000DVF_DL10019 },
+    { PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_LINKSYS_COMBO_ECARD,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0xff, 0xff, 0xff }, NE2000DVF_DL10019 },
 
-    { PCMCIA_STR_SVEC_PN650TX,
-      PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_LINKSYS_COMBO_ECARD,
-      PCMCIA_CIS_SVEC_PN650TX,
-      0, -1, { 0x00, 0xe0, 0x98 }, NE2000DVF_DL10019 },
+    { PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_LINKSYS_COMBO_ECARD,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0xff, 0xff, 0xff }, NE2000DVF_AX88190 },
 
-    /*
-     * This entry should be here so that above two cards doesn't
-     * match with this.  FNW-3700T won't match above entries due to
-     * MAC address check.
-     */
-    { PCMCIA_STR_PLANEX_FNW3700T, 
-      PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_LINKSYS_COMBO_ECARD,
-      PCMCIA_CIS_PLANEX_FNW3700T, 
-      0, -1, { 0x00, 0x90, 0xcc }, NE2000DVF_AX88190 },
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_LANTECH_FASTNETTX,
+      0, -1, { 0x00, 0x04, 0x1c }, NE2000DVF_AX88190 },
 
-    { PCMCIA_STR_LINKSYS_ETHERFAST,
-      PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_LINKSYS_ETHERFAST,
-      PCMCIA_CIS_LINKSYS_ETHERFAST,
-      0, -1, { 0x00, 0x80, 0xc8 }, NE2000DVF_DL10019 },
+    { PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_LINKSYS_ETHERFAST,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0xff, 0xff, 0xff }, NE2000DVF_DL10019 },
 
-    { PCMCIA_STR_LINKSYS_COMBO_ECARD, 
-      PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_LINKSYS_COMBO_ECARD,
-      PCMCIA_CIS_LINKSYS_COMBO_ECARD, 
-      0, -1, { 0x00, 0x80, 0xc8 } },
+    { PCMCIA_VENDOR_NETGEAR, PCMCIA_PRODUCT_NETGEAR_FA410TXC,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0xff, 0xff, 0xff }, NE2000DVF_DL10019 },
 
-    { PCMCIA_STR_LINKSYS_TRUST_COMBO_ECARD,
-      PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_LINKSYS_TRUST_COMBO_ECARD,
-      PCMCIA_CIS_LINKSYS_TRUST_COMBO_ECARD,
-      0, 0x0120, { 0x20, 0x04, 0x49 } },
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_DLINK_DFE670TXD,
+      0, -1, { 0xff, 0xff, 0xff }, NE2000DVF_DL10019 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_MELCO_LPC2_TX,
+      0, -1, { 0x00, 0x40, 0x26 }, NE2000DVF_DL10019 },
+
+    { PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_LINKSYS_COMBO_ECARD,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0x80, 0xc8 }, 0 },
+
+    { PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_LINKSYS_TRUST_COMBO_ECARD,
+      PCMCIA_CIS_INVALID,
+      0, 0x0120, { 0x20, 0x04, 0x49 }, 0 },
 
     /* Although the comments above say to put VENDOR/PRODUCT INVALID IDs
        above this list, we need to keep this one below the ECARD_1, or else
        both will match the same more-generic entry rather than the more
        specific one above with proper vendor and product IDs. */
-    { PCMCIA_STR_LINKSYS_ECARD_2, 
-      PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_LINKSYS_ECARD_2,
-      0, -1, { 0x00, 0x80, 0xc8 } },
+      0, -1, { 0x00, 0x80, 0xc8 }, 0 },
 
     /*
      * D-Link DE-650 has many minor versions:
@@ -232,10 +259,9 @@ struct ne2000dev {
      * the 3rd and the 4th types should use the "Linksys EtherCard" entry.
      * Therefore, this enty must be below the LINKSYS_ECARD_1.  --itohy
      */
-    { PCMCIA_STR_DLINK_DE650,
-      PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_DLINK_DE650,
-      0, 0x0040, { 0x00, 0x80, 0xc8 } },
+      0, 0x0040, { 0x00, 0x80, 0xc8 }, 0 },
 
     /*
      * IO-DATA PCLA/TE and later version of PCLA/T has valid
@@ -250,74 +276,161 @@ struct ne2000dev {
      * for the earlier version of PCLA/T (or, modify to match all CIS
      * information and have three or more individual entries).
      */
-    { PCMCIA_STR_IODATA_PCLATE,
-      PCMCIA_VENDOR_IODATA, PCMCIA_PRODUCT_IODATA_PCLATE,
-      PCMCIA_CIS_IODATA_PCLATE,
-      0, -1, { 0x00, 0xa0, 0xb0 } },
+    { PCMCIA_VENDOR_IODATA, PCMCIA_PRODUCT_IODATA_PCLATE,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0xff, 0xff, 0xff }, 0 },
+
+    { PCMCIA_VENDOR_IODATA3, PCMCIA_PRODUCT_IODATA3_PCETTXR,
+      PCMCIA_CIS_IODATA3_PCETTXR,
+      0, -1, { 0x00, 0xa0, 0xb0 }, NE2000DVF_DL10019 },
 
     /*
      * This entry should be placed after above PCLA-TE entry.
      * See above comments for detail.
      */
-    { PCMCIA_STR_IODATA_PCLAT,
-      PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_IODATA_PCLAT,
-      0, 0x0ff0, { 0x00, 0xa0, 0xb0 } },
+      0, 0x0ff0, { 0x00, 0xa0, 0xb0 }, 0 },
 
-    { PCMCIA_STR_DAYNA_COMMUNICARD_E_1,
-      PCMCIA_VENDOR_DAYNA, PCMCIA_PRODUCT_DAYNA_COMMUNICARD_E_1,
-      PCMCIA_CIS_DAYNA_COMMUNICARD_E_1,
-      0, 0x0110, { 0x00, 0x80, 0x19 } },
+    { PCMCIA_VENDOR_DAYNA, PCMCIA_PRODUCT_DAYNA_COMMUNICARD_E_1,
+      PCMCIA_CIS_INVALID,
+      0, 0x0110, { 0x00, 0x80, 0x19 }, 0 },
 
-    { PCMCIA_STR_DAYNA_COMMUNICARD_E_2,
-      PCMCIA_VENDOR_DAYNA, PCMCIA_PRODUCT_DAYNA_COMMUNICARD_E_2,
-      PCMCIA_CIS_DAYNA_COMMUNICARD_E_2,
-      0, -1, { 0x00, 0x80, 0x19 } },
+    { PCMCIA_VENDOR_DAYNA, PCMCIA_PRODUCT_DAYNA_COMMUNICARD_E_2,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0x80, 0x19 }, 0 },
 
-    { PCMCIA_STR_COREGA_ETHER_PCC_T,
-      PCMCIA_VENDOR_COREGA, PCMCIA_PRODUCT_COREGA_ETHER_PCC_T,
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_COREGA_ETHER_PCC_T,
-      0, -1, { 0x00, 0x00, 0xf4 } },
+      0, -1, { 0x00, 0x00, 0xf4 }, 0 },
 
-    { PCMCIA_STR_COREGA_ETHER_II_PCC_T,
-      PCMCIA_VENDOR_COREGA, PCMCIA_PRODUCT_COREGA_ETHER_II_PCC_T,
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_COREGA_ETHER_PCC_TD,
+      0, -1, { 0x00, 0x00, 0xf4 }, 0 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_COREGA_ETHER_PCC_TL,
+      0, -1, { 0x00, 0x00, 0xf4 }, 0 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_COREGA_ETHER_II_PCC_T,
-      0, -1, { 0x00, 0x00, 0xf4 } },
+      0, -1, { 0x00, 0x00, 0xf4 }, 0 },
 
-    { PCMCIA_STR_COREGA_FAST_ETHER_PCC_TX,
-      PCMCIA_VENDOR_COREGA, PCMCIA_PRODUCT_COREGA_FAST_ETHER_PCC_TX,
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_COREGA_ETHER_II_PCC_TD,
+      0, -1, { 0x00, 0x00, 0xf4 }, 0 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_COREGA_FAST_ETHER_PCC_TX,
       0, -1, { 0x00, 0x00, 0xf4 }, NE2000DVF_DL10019 },
 
-    { PCMCIA_STR_COMPEX_LINKPORT_ENET_B,
-      PCMCIA_VENDOR_COMPEX, PCMCIA_PRODUCT_COMPEX_LINKPORT_ENET_B,
-      PCMCIA_CIS_COMPEX_LINKPORT_ENET_B,
-      0, 0x01c0, { 0x00, 0xa0, 0x0c } },
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_COREGA_FETHER_PCC_TXF,
+      0, -1, { 0x00, 0x90, 0x99 }, NE2000DVF_DL10019 },
 
-    { PCMCIA_STR_SMC_EZCARD,
-      PCMCIA_VENDOR_SMC, PCMCIA_PRODUCT_SMC_EZCARD,
-      PCMCIA_CIS_SMC_EZCARD,
-      0, 0x01c0, { 0x00, 0xe0, 0x29 } },
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_COREGA_FETHER_PCC_TXD,
+      0, -1, { 0x00, 0x90, 0x99 }, 0 },
 
-    { PCMCIA_STR_SOCEKT_LP_ETHER_CF,
-      PCMCIA_VENDOR_SOCKET, PCMCIA_PRODUCT_SOCEKT_LP_ETHER_CF,
-      PCMCIA_CIS_SOCEKT_LP_ETHER_CF,
-      0, -1, { 0x00, 0xc0, 0x1b} },
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_COREGA_FETHER_II_PCC_TXD,
+      0, -1, { 0x00, 0x90, 0x99 }, NE2000DVF_AX88190 },
 
-    { PCMCIA_STR_XIRCOM_CFE_10,
-      PCMCIA_VENDOR_XIRCOM, PCMCIA_PRODUCT_XIRCOM_CFE_10,
-      PCMCIA_CIS_XIRCOM_CFE_10,
-      0, -1, { 0x00, 0x10, 0xa4 } },
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_COREGA_LAPCCTXD,
+      0, -1, { 0x00, 0x90, 0x99 }, 0 },
 
-    { PCMCIA_STR_MELCO_LPC3_TX, 
-      PCMCIA_VENDOR_MELCO, PCMCIA_PRODUCT_MELCO_LPC3_TX,
-      PCMCIA_CIS_MELCO_LPC3_TX, 
+    { PCMCIA_VENDOR_COMPEX, PCMCIA_PRODUCT_COMPEX_LINKPORT_ENET_B,
+      PCMCIA_CIS_INVALID,
+      0, 0x01c0, { 0xff, 0xff, 0xff }, 0 },
+
+    { PCMCIA_VENDOR_SMC, PCMCIA_PRODUCT_SMC_EZCARD,
+      PCMCIA_CIS_INVALID,
+      0, 0x01c0, { 0x00, 0xe0, 0x29 }, 0 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_SMC_8041,
+      0, -1, { 0x00, 0x04, 0xe2 }, 0 },
+
+    { PCMCIA_VENDOR_SOCKET, PCMCIA_PRODUCT_SOCKET_EA_ETHER,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0xc0, 0x1b }, 0 },
+
+    { PCMCIA_VENDOR_SOCKET, PCMCIA_PRODUCT_SOCKET_LP_ETHER_CF,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0xc0, 0x1b }, 0 },
+
+    { PCMCIA_VENDOR_SOCKET, PCMCIA_PRODUCT_SOCKET_LP_ETH_10_100_CF,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0xe0, 0x98 }, NE2000DVF_DL10019 },
+
+    { PCMCIA_VENDOR_SOCKET, PCMCIA_PRODUCT_SOCKET_LP_ETHER,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0xc0, 0x1b }, 0 },
+
+    { PCMCIA_VENDOR_KINGSTON, PCMCIA_PRODUCT_KINGSTON_KNE2,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0xc0, 0xf0 }, 0 },
+
+    { PCMCIA_VENDOR_XIRCOM, PCMCIA_PRODUCT_XIRCOM_CFE_10,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0x10, 0xa4 }, 0 },
+
+    { PCMCIA_VENDOR_MELCO, PCMCIA_PRODUCT_MELCO_LPC3_TX,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0xff, 0xff, 0xff }, NE2000DVF_AX88190 },
+
+    { PCMCIA_VENDOR_BUFFALO, PCMCIA_PRODUCT_BUFFALO_LPC_CF_CLT,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0x07, 0x40 }, 0 },
+
+    { PCMCIA_VENDOR_BUFFALO, PCMCIA_PRODUCT_BUFFALO_LPC3_CLT,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0x07, 0x40 }, 0 },
+
+    { PCMCIA_VENDOR_BUFFALO, PCMCIA_PRODUCT_BUFFALO_LPC4_CLX,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0x40, 0xfa }, NE2000DVF_AX88190 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_BILLIONTON_LNT10TN,
+      0, -1, { 0x00, 0x00, 0x00 }, 0 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_BILLIONTON_CFLT10N,
+      0, -1, { 0x00, 0x00, 0x00 }, 0 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_NDC_ND5100_E,
+      0, -1, { 0x00, 0x80, 0xc6 }, 0 },
+
+    { PCMCIA_VENDOR_TELECOMDEVICE, PCMCIA_PRODUCT_TELECOMDEVICE_TCD_HPC100,
+      PCMCIA_CIS_INVALID,
       0, -1, { 0x00, 0x40, 0x26 }, NE2000DVF_AX88190 },
 
-    { PCMCIA_STR_BILLIONTON_LNT10TN,
-      PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
-      PCMCIA_CIS_BILLIONTON_LNT10TN,
-      0, -1, { 0x00, 0x00, 0x00 } },
+    { PCMCIA_VENDOR_MACNICA, PCMCIA_PRODUCT_MACNICA_ME1_JEIDA,
+      PCMCIA_CIS_INVALID,
+      0, 0x00b8, { 0x08, 0x00, 0x42 }, 0 },
+
+    { PCMCIA_VENDOR_NETGEAR, PCMCIA_PRODUCT_NETGEAR_FA411,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0x40, 0xf4 }, 0 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_DYNALINK_L10C,
+      0, -1, { 0x00, 0x00, 0x00 }, 0 },
+
+    { PCMCIA_VENDOR_ALLIEDTELESIS, PCMCIA_PRODUCT_ALLIEDTELESIS_LA_PCM,
+      PCMCIA_CIS_INVALID,
+      0, 0x0ff0, { 0x00, 0x00, 0xf4 }, 0 },
+
+    { PCMCIA_VENDOR_NEXTCOM, PCMCIA_PRODUCT_NEXTCOM_NEXTHAWK,
+      PCMCIA_CIS_INVALID,
+      0, -1, { 0x00, 0x40, 0xb4 }, 0 },
+
+    { PCMCIA_VENDOR_BELKIN, PCMCIA_PRODUCT_BELKIN_F5D5020,
+      PCMCIA_CIS_BELKIN_F5D5020,
+      0, -1, { 0x00, 0x30, 0xbd } , NE2000DVF_AX88190 },
 
 #if 0
     /* the rest of these are stolen from the linux pcnet pcmcia device
@@ -325,111 +438,114 @@ struct ne2000dev {
        any of them, they're not compiled in until I do. */
     { "APEX MultiCard",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x03f4, { 0x00, 0x20, 0xe5 } },
+      0x03f4, { 0x00, 0x20, 0xe5 }, 0 },
     { "ASANTE FriendlyNet",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x4910, { 0x00, 0x00, 0x94 } },
+      0x4910, { 0x00, 0x00, 0x94 }, 0 },
     { "Danpex EN-6200P2",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0110, { 0x00, 0x40, 0xc7 } },
+      0x0110, { 0x00, 0x40, 0xc7 }, 0 },
     { "DataTrek NetCard",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0ff0, { 0x00, 0x20, 0xe8 } },
-    { "Dayna CommuniCard E",
-      0x0000, 0x0000, NULL, NULL, 0,
-      0x0110, { 0x00, 0x80, 0x19 } },
+      0x0ff0, { 0x00, 0x20, 0xe8 }, 0 },
     { "EP-210 Ethernet",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0110, { 0x00, 0x40, 0x33 } },
+      0x0110, { 0x00, 0x40, 0x33 }, 0 },
     { "ELECOM Laneed LD-CDWA",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x00b8, { 0x08, 0x00, 0x42 } },
+      0x00b8, { 0x08, 0x00, 0x42 }, 0 },
     { "Grey Cell GCS2220",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0000, { 0x00, 0x47, 0x43 } },
+      0x0000, { 0x00, 0x47, 0x43 }, 0 },
     { "Hypertec Ethernet",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x01c0, { 0x00, 0x40, 0x4c } },
+      0x01c0, { 0x00, 0x40, 0x4c }, 0 },
     { "IBM CCAE",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0ff0, { 0x08, 0x00, 0x5a } },
+      0x0ff0, { 0x08, 0x00, 0x5a }, 0 },
     { "IBM CCAE",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0ff0, { 0x00, 0x04, 0xac } },
+      0x0ff0, { 0x00, 0x04, 0xac }, 0 },
     { "IBM CCAE",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0ff0, { 0x00, 0x06, 0x29 } },
+      0x0ff0, { 0x00, 0x06, 0x29 }, 0 },
     { "IBM FME",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0374, { 0x00, 0x04, 0xac } },
+      0x0374, { 0x00, 0x04, 0xac }, 0 },
     { "IBM FME",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0374, { 0x08, 0x00, 0x5a } },
+      0x0374, { 0x08, 0x00, 0x5a }, 0 },
     { "Katron PE-520",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0110, { 0x00, 0x40, 0xf6 } },
+      0x0110, { 0x00, 0x40, 0xf6 }, 0 },
     { "Kingston KNE-PCM/x",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0ff0, { 0x00, 0xc0, 0xf0 } },
+      0x0ff0, { 0x00, 0xc0, 0xf0 }, 0 },
     { "Kingston KNE-PCM/x",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0ff0, { 0xe2, 0x0c, 0x0f } },
-    { "Kingston KNE-PC2",
-      0x0000, 0x0000, NULL, NULL, 0,
-      0x0180, { 0x00, 0xc0, 0xf0 } },
+      0x0ff0, { 0xe2, 0x0c, 0x0f }, 0 },
     { "Longshine LCS-8534",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0000, { 0x08, 0x00, 0x00 } },
+      0x0000, { 0x08, 0x00, 0x00 }, 0 },
     { "Maxtech PCN2000",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x5000, { 0x00, 0x00, 0xe8 } },
+      0x5000, { 0x00, 0x00, 0xe8 }, 0 },
     { "NDC Instant-Link",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x003a, { 0x00, 0x80, 0xc6 } },
+      0x003a, { 0x00, 0x80, 0xc6 }, 0 },
     { "NE2000 Compatible",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0ff0, { 0x00, 0xa0, 0x0c } },
+      0x0ff0, { 0x00, 0xa0, 0x0c }, 0 },
     { "Network General Sniffer",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0ff0, { 0x00, 0x00, 0x65 } },
+      0x0ff0, { 0x00, 0x00, 0x65 }, 0 },
     { "Panasonic VEL211",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0ff0, { 0x00, 0x80, 0x45 } },
+      0x0ff0, { 0x00, 0x80, 0x45 }, 0 },
     { "SCM Ethernet",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0ff0, { 0x00, 0x20, 0xcb } },
-    { "Socket EA",
-      0x0000, 0x0000, NULL, NULL, 0,
-      0x4000, { 0x00, 0xc0, 0x1b } },
+      0x0ff0, { 0x00, 0x20, 0xcb }, 0 },
     { "Volktek NPL-402CT",
       0x0000, 0x0000, NULL, NULL, 0,
-      0x0060, { 0x00, 0x40, 0x05 } },
+      0x0060, { 0x00, 0x40, 0x05 }, 0 },
 #endif
-
-    { PCMCIA_STR_ALLIEDTELESIS_LA_PCM,
-      PCMCIA_VENDOR_ALLIEDTELESIS, PCMCIA_PRODUCT_ALLIEDTELESIS_LA_PCM,
-      PCMCIA_CIS_ALLIEDTELESIS_LA_PCM,
-      0, 0x0ff0, { 0x00, 0x00, 0xf4 } },
 };
 
 #define	NE2000_NDEVS	(sizeof(ne2000devs) / sizeof(ne2000devs[0]))
 
-#define ne2000_match(card, fct, n) \
-((((((card)->manufacturer != PCMCIA_VENDOR_INVALID) && \
-    ((card)->manufacturer == ne2000devs[(n)].manufacturer) && \
-    ((card)->product != PCMCIA_PRODUCT_INVALID) && \
-    ((card)->product == ne2000devs[(n)].product)) || \
-   ((ne2000devs[(n)].cis_info[0]) && (ne2000devs[(n)].cis_info[1]) && \
-    (strcmp((card)->cis1_info[0], ne2000devs[(n)].cis_info[0]) == 0) && \
-    (strcmp((card)->cis1_info[1], ne2000devs[(n)].cis_info[1]) == 0))) && \
-  ((fct) == ne2000devs[(n)].function))? \
- &ne2000devs[(n)]:NULL)
+static const struct ne2000dev *
+ne2000_match(struct pcmcia_card *card, int fct, int n)
+{
+	size_t i;
+
+	/*
+	 * See if it matches by manufacturer & product.
+	 */
+	if (card->manufacturer == ne2000devs[n].manufacturer &&
+	    card->manufacturer != PCMCIA_VENDOR_INVALID &&
+	    card->product == ne2000devs[n].product &&
+	    card->product != PCMCIA_PRODUCT_INVALID)
+		goto match;
+
+	/*
+	 * Otherwise, try to match by CIS strings.
+	 */
+	for (i = 0; i < 2; i++)
+		if (card->cis1_info[i] == NULL ||
+		    ne2000devs[n].cis_info[i] == NULL ||
+		    strcmp(card->cis1_info[i], ne2000devs[n].cis_info[i]) != 0)
+			return (NULL);
+
+match:
+	/*
+	 * Finally, see if function number matches.
+	 */
+	return (fct == ne2000devs[n].function ? &ne2000devs[n] : NULL);
+}
+
 
 int
-ne_pcmcia_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ne_pcmcia_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 	int i;
@@ -442,132 +558,66 @@ ne_pcmcia_match(parent, match, aux)
 	return (0);
 }
 
-void
-ne_pcmcia_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+int
+ne_pcmcia_validate_config(struct pcmcia_config_entry *cfe)
 {
-	struct ne_pcmcia_softc *psc = (void *) self;
+	if (cfe->iftype != PCMCIA_IFTYPE_IO ||
+	    cfe->num_iospace < 1 || cfe->num_iospace > 2)
+		return (EINVAL);
+	/* Some cards have a memory space, but we don't use it. */
+	cfe->num_memspace = 0;
+	return (0);
+}
+
+void
+ne_pcmcia_attach(device_t parent, device_t self, void *aux)
+{
+	struct ne_pcmcia_softc *psc = device_private(self);
 	struct ne2000_softc *nsc = &psc->sc_ne2000;
 	struct dp8390_softc *dsc = &nsc->sc_dp8390;
 	struct pcmcia_attach_args *pa = aux;
 	struct pcmcia_config_entry *cfe;
-	struct ne2000dev *ne_dev;
+	const struct ne2000dev *ne_dev;
 	int i;
 	u_int8_t myea[6], *enaddr;
-	void (*npp_init_media) __P((struct dp8390_softc *, int **,
-	    int *, int *));
-	int *media, nmedia, defmedia;
 	const char *typestr = "";
+	int error;
 
-	npp_init_media = NULL;
-	media = NULL;
-	nmedia = defmedia = 0;
+	aprint_naive("\n");
 
+	dsc->sc_dev = self;
 	psc->sc_pf = pa->pf;
 
-	for (cfe = SIMPLEQ_FIRST(&pa->pf->cfe_head); cfe != NULL;
-	    cfe = SIMPLEQ_NEXT(cfe, cfe_list)) {
-#if 0
-		/*
-		 * Some ne2000 driver's claim to have memory; others don't.
-		 * Since I don't care, I don't check.
-		 */
-
-		if (cfe->num_memspace != 1) {
-			printf(": unexpected number of memory spaces "
-			    " %d should be 1\n", cfe->num_memspace);
-			continue;
-		}
-#endif
-
-		if (cfe->num_iospace == 1) {
-			if (cfe->iospace[0].length != NE2000_NPORTS) {
-				printf(": unexpected I/O space configuration"
-				    " (continued)\n%s", dsc->sc_dev.dv_xname);
-				/* XXX really safe for all other cards? */
-			}
-		} else if (cfe->num_iospace == 2) {
-			/*
-			 * Some cards report a separate space for NIC and ASIC.
-			 * This make some sense, but we must allocate a single
-			 * NE2000_NPORTS-sized chunk, due to brain damaged
-			 * address decoders on some of these cards.
-			 */
-			if (cfe->iospace[0].length + cfe->iospace[1].length !=
-			    NE2000_NPORTS) {
-#ifdef DIAGNOSTIC
-				printf(": unexpected I/O "
-				    "space configuration; ignored\n%s",
-				    dsc->sc_dev.dv_xname);
-#endif
-				continue;
-			}
-		} else {
-#ifdef DIAGNOSTIC
-			printf(": unexpected number of i/o spaces %d"
-			    " should be 1 or 2; ignored\n%s",
-			    cfe->num_iospace, dsc->sc_dev.dv_xname);
-#endif
-			continue;
-		}
-
-		if (pcmcia_io_alloc(pa->pf, cfe->iospace[0].start,
-		    NE2000_NPORTS, NE2000_NPORTS, &psc->sc_pcioh)) {
-#ifdef DIAGNOSTIC
-			printf(": can't allocate i/o space %lx; ignored\n%s",
-			    cfe->iospace[0].start, dsc->sc_dev.dv_xname);
-#endif
-			continue;
-		}
-
-		/* Ok, found. */
-		break;
+	error = pcmcia_function_configure(pa->pf, ne_pcmcia_validate_config);
+	if (error) {
+		aprint_error_dev(self, "configure failed, error=%d\n", error);
+		return;
 	}
 
-	if (cfe == NULL) {
-		printf(": no suitable config entry\n");
-		goto fail_1;
+	cfe = pa->pf->cfe;
+	dsc->sc_regt = cfe->iospace[0].handle.iot;
+	dsc->sc_regh = cfe->iospace[0].handle.ioh;
+
+	if (cfe->num_iospace == 1) {
+		nsc->sc_asict = dsc->sc_regt;
+		if (bus_space_subregion(dsc->sc_regt, dsc->sc_regh,
+		    NE2000_ASIC_OFFSET, NE2000_ASIC_NPORTS, &nsc->sc_asich)) {
+			aprint_error_dev(self,
+			    "can't get subregion for asic\n");
+			goto fail;
+		}
+	} else {
+		nsc->sc_asict = cfe->iospace[1].handle.iot;
+		nsc->sc_asich = cfe->iospace[1].handle.ioh;
 	}
 
-	dsc->sc_regt = psc->sc_pcioh.iot;
-	dsc->sc_regh = psc->sc_pcioh.ioh;
-
-	nsc->sc_asict = psc->sc_pcioh.iot;
-	if (bus_space_subregion(dsc->sc_regt, dsc->sc_regh,
-	    NE2000_ASIC_OFFSET, NE2000_ASIC_NPORTS,
-	    &nsc->sc_asich)) {
-		printf(": can't get subregion for asic\n");
-		goto fail_2;
-	}
+	error = ne_pcmcia_enable(dsc);
+	if (error)
+		goto fail;
 
 	/* Set up power management hooks. */
 	dsc->sc_enable = ne_pcmcia_enable;
 	dsc->sc_disable = ne_pcmcia_disable;
-
-	/* Enable the card. */
-	pcmcia_function_init(pa->pf, cfe);
-	if (pcmcia_function_enable(pa->pf)) {
-		printf(": function enable failed\n");
-		goto fail_2;
-	}
-
-	/* some cards claim to be io16, but they're lying. */
-	if (pcmcia_io_map(pa->pf, PCMCIA_WIDTH_IO8,
-	    NE2000_NIC_OFFSET, NE2000_NIC_NPORTS,
-	    &psc->sc_pcioh, &psc->sc_nic_io_window)) {
-		printf(": can't map NIC i/o space\n");
-		goto fail_3;
-	}
-
-	if (pcmcia_io_map(pa->pf, PCMCIA_WIDTH_IO16,
-	    NE2000_ASIC_OFFSET, NE2000_ASIC_NPORTS,
-	    &psc->sc_pcioh, &psc->sc_asic_io_window)) {
-		printf(": can't map ASIC i/o space\n");
-		goto fail_4;
-	}
-
-	printf("\n");
 
 	/*
 	 * Read the station address from the board.
@@ -575,42 +625,82 @@ ne_pcmcia_attach(parent, self, aux)
 	i = 0;
 again:
 	enaddr = NULL;			/* Ask ASIC by default */
+	typestr = "";			/* clear previous card-type */
 	for (; i < NE2000_NDEVS; i++) {
 		ne_dev = ne2000_match(pa->card, pa->pf->number, i);
 		if (ne_dev != NULL) {
 			if (ne_dev->enet_maddr >= 0) {
-				enaddr = ne_pcmcia_get_enaddr(psc, 
+				enaddr = ne_pcmcia_get_enaddr(psc,
 				    ne_dev->enet_maddr, myea);
 				if (enaddr == NULL)
 					continue;
 			}
-			break;
+			goto found;
 		}
 	}
-	if (i == NE2000_NDEVS) {
-		printf("%s: can't match ethernet vendor code\n",
-		    dsc->sc_dev.dv_xname);
-		goto fail_5;
-	}
+	aprint_error_dev(self, "can't match ethernet vendor code\n");
+	if (enaddr != NULL)
+		aprint_error_dev(self,
+		    "ethernet vendor code %02x:%02x:%02x\n",
+		    enaddr[0], enaddr[1], enaddr[2]);
+	goto fail2;
 
+found:
 	if ((ne_dev->flags & NE2000DVF_DL10019) != 0) {
+		u_int8_t type;
+
 		enaddr = ne_pcmcia_dl10019_get_enaddr(psc, myea);
 		if (enaddr == NULL) {
 			++i;
 			goto again;
 		}
-		nsc->sc_type = NE2000_TYPE_DL10019;
-		typestr = " (DL10019)";
+
+		dsc->sc_mediachange = dl10019_mediachange;
+		dsc->sc_mediastatus = dl10019_mediastatus;
+		dsc->init_card = dl10019_init_card;
+		dsc->stop_card = dl10019_stop_card;
+		dsc->sc_media_init = dl10019_media_init;
+		dsc->sc_media_fini = dl10019_media_fini;
+
+		/* Determine if this is a DL10019 or a DL10022. */
+		type = bus_space_read_1(nsc->sc_asict, nsc->sc_asich, 0x0f);
+		if (type == 0x91 || type == 0x99) {
+			nsc->sc_type = NE2000_TYPE_DL10022;
+			typestr = " (DL10022)";
+		} else {
+			nsc->sc_type = NE2000_TYPE_DL10019;
+			typestr = " (DL10019)";
+		}
 	}
 
 	if ((ne_dev->flags & NE2000DVF_AX88190) != 0) {
-		if (ne_pcmcia_ax88190_set_iobase(psc))
-			goto fail_5;
-		nsc->sc_type = NE2000_TYPE_AX88190;
-		typestr = " (AX88190)";
+		u_int8_t test;
+
+		/* XXX This is highly bogus. */
+		if ((pa->pf->ccr_mask & (1 << PCMCIA_CCR_IOBASE0)) == 0) {
+			++i;
+			goto again;
+		}
+
+		dsc->sc_mediachange = ax88190_mediachange;
+		dsc->sc_mediastatus = ax88190_mediastatus;
+		dsc->init_card = ax88190_init_card;
+		dsc->stop_card = ax88190_stop_card;
+		dsc->sc_media_init = ax88190_media_init;
+		dsc->sc_media_fini = ax88190_media_fini;
+
+		test = bus_space_read_1(nsc->sc_asict, nsc->sc_asich, 0x05);
+		if (test != 0) {
+			nsc->sc_type = NE2000_TYPE_AX88790;
+			typestr = " (AX88790)";
+		} else {
+			nsc->sc_type = NE2000_TYPE_AX88190;
+			typestr = " (AX88190)";
+		}
 	}
 
-	if (enaddr != NULL) {
+	if (enaddr != NULL &&
+	    ne_dev->enet_vendor[0] != 0xff) {
 		/*
 		 * Make sure this is what we expect.
 		 */
@@ -623,132 +713,103 @@ again:
 	}
 
 	/*
-	 * Check for a RealTek 8019.
+	 * Check for a Realtek 8019.
 	 */
-	bus_space_write_1(dsc->sc_regt, dsc->sc_regh, ED_P0_CR,
-	    ED_CR_PAGE_0 | ED_CR_STP);
-	if (bus_space_read_1(dsc->sc_regt, dsc->sc_regh, NERTL_RTL0_8019ID0)
-		== RTL0_8019ID0 &&
-	    bus_space_read_1(dsc->sc_regt, dsc->sc_regh, NERTL_RTL0_8019ID1)
-		== RTL0_8019ID1) {
-		typestr = " (RTL8019)";
-		npp_init_media = rtl80x9_init_media;
-		dsc->sc_mediachange = rtl80x9_mediachange;
-		dsc->sc_mediastatus = rtl80x9_mediastatus;
-		dsc->init_card = rtl80x9_init_card;
+	if (nsc->sc_type == NE2000_TYPE_UNKNOWN) {
+		bus_space_write_1(dsc->sc_regt, dsc->sc_regh, ED_P0_CR,
+		    ED_CR_PAGE_0 | ED_CR_STP);
+		if (bus_space_read_1(dsc->sc_regt, dsc->sc_regh,
+		    NERTL_RTL0_8019ID0) == RTL0_8019ID0 &&
+		    bus_space_read_1(dsc->sc_regt, dsc->sc_regh,
+		    NERTL_RTL0_8019ID1) == RTL0_8019ID1) {
+			typestr = " (RTL8019)";
+			dsc->sc_mediachange = rtl80x9_mediachange;
+			dsc->sc_mediastatus = rtl80x9_mediastatus;
+			dsc->init_card = rtl80x9_init_card;
+			dsc->sc_media_init = rtl80x9_media_init;
+		}
 	}
 
-	printf("%s: %s%s Ethernet\n", dsc->sc_dev.dv_xname, ne_dev->name,
-	    typestr);
+	if (ne2000_attach(nsc, enaddr))
+		goto fail2;
 
-	/* Initialize media, if we have it. */
-	if (npp_init_media != NULL)
-		(*npp_init_media)(dsc, &media, &nmedia, &defmedia);
+	psc->sc_powerhook = powerhook_establish(device_xname(self),
+	    ne2000_power, nsc);
+	if (psc->sc_powerhook == NULL)
+		aprint_error_dev(self,
+		   "WARNING: unable to establish power hook\n");
 
-	if (ne2000_attach(nsc, enaddr, media, nmedia, defmedia))
-		goto fail_5;
-
-	pcmcia_function_disable(pa->pf);
+	psc->sc_state = NE_PCMCIA_ATTACHED;
+	ne_pcmcia_disable(dsc);
 	return;
 
- fail_5:
-	/* Unmap ASIC i/o windows. */
-	pcmcia_io_unmap(psc->sc_pf, psc->sc_asic_io_window);
-
- fail_4:
-	/* Unmap NIC i/o windows. */
-	pcmcia_io_unmap(psc->sc_pf, psc->sc_nic_io_window);
-
- fail_3:
-	pcmcia_function_disable(pa->pf);
-
- fail_2:
-	/* Free our i/o space. */
-	pcmcia_io_free(psc->sc_pf, &psc->sc_pcioh);
-
- fail_1:
-	psc->sc_nic_io_window = -1;
+fail2:
+	ne_pcmcia_disable(dsc);
+fail:
+	pcmcia_function_unconfigure(pa->pf);
 }
 
 int
-ne_pcmcia_detach(self, flags)
-	struct device *self;
-	int flags;
+ne_pcmcia_detach(device_t self, int flags)
 {
-	struct ne_pcmcia_softc *psc = (struct ne_pcmcia_softc *)self;
+	struct ne_pcmcia_softc *psc = device_private(self);
+	struct pcmcia_function *pf = psc->sc_pf;
 	int error;
 
-	if (psc->sc_nic_io_window == -1)
-		/* Nothing to detach. */
+	if (psc->sc_state != NE_PCMCIA_ATTACHED)
 		return (0);
 
+	if (psc->sc_powerhook != NULL)
+		powerhook_disestablish(psc->sc_powerhook);
+
 	error = ne2000_detach(&psc->sc_ne2000, flags);
-	if (error != 0)
+	if (error)
 		return (error);
 
-	/* Unmap our i/o windows. */
-	pcmcia_io_unmap(psc->sc_pf, psc->sc_asic_io_window);
-	pcmcia_io_unmap(psc->sc_pf, psc->sc_nic_io_window);
-
-	/* Free our i/o space. */
-	pcmcia_io_free(psc->sc_pf, &psc->sc_pcioh);
+	pcmcia_function_unconfigure(pf);
 
 	return (0);
 }
 
 int
-ne_pcmcia_enable(dsc)
-	struct dp8390_softc *dsc;
+ne_pcmcia_enable(struct dp8390_softc *dsc)
 {
 	struct ne_pcmcia_softc *psc = (struct ne_pcmcia_softc *)dsc;
-	struct ne2000_softc *nsc = &psc->sc_ne2000;
+	int error;
 
 	/* set up the interrupt */
 	psc->sc_ih = pcmcia_intr_establish(psc->sc_pf, IPL_NET, dp8390_intr,
 	    dsc);
-	if (psc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt\n",
-		    dsc->sc_dev.dv_xname);
-		goto fail_1;
+	if (!psc->sc_ih)
+		return (EIO);
+
+	error = pcmcia_function_enable(psc->sc_pf);
+	if (error) {
+		pcmcia_intr_disestablish(psc->sc_pf, psc->sc_ih);
+		psc->sc_ih = 0;
 	}
 
-	if (pcmcia_function_enable(psc->sc_pf))
-		goto fail_2;
-
-	if (nsc->sc_type == NE2000_TYPE_AX88190)
-		if (ne_pcmcia_ax88190_set_iobase(psc))
-			goto fail_3;
-
-	return (0);
-
- fail_3:
-	pcmcia_function_disable(psc->sc_pf);
- fail_2:
-	pcmcia_intr_disestablish(psc->sc_pf, psc->sc_ih);
- fail_1:
-	return (1);
+	return (error);
 }
 
 void
-ne_pcmcia_disable(dsc)
-	struct dp8390_softc *dsc;
+ne_pcmcia_disable(struct dp8390_softc *dsc)
 {
 	struct ne_pcmcia_softc *psc = (struct ne_pcmcia_softc *)dsc;
 
 	pcmcia_function_disable(psc->sc_pf);
 	pcmcia_intr_disestablish(psc->sc_pf, psc->sc_ih);
+	psc->sc_ih = 0;
 }
 
 u_int8_t *
-ne_pcmcia_get_enaddr(psc, maddr, myea)
-	struct ne_pcmcia_softc *psc;
-	int maddr;
-	u_int8_t myea[ETHER_ADDR_LEN];
+ne_pcmcia_get_enaddr(struct ne_pcmcia_softc *psc, int maddr,
+   u_int8_t myea[ETHER_ADDR_LEN])
 {
 	struct ne2000_softc *nsc = &psc->sc_ne2000;
 	struct dp8390_softc *dsc = &nsc->sc_dp8390;
 	struct pcmcia_mem_handle pcmh;
-	bus_addr_t offset;
+	bus_size_t offset;
 	u_int8_t *enaddr = NULL;
 	int j, mwindow;
 
@@ -756,14 +817,13 @@ ne_pcmcia_get_enaddr(psc, maddr, myea)
 		return (NULL);
 
 	if (pcmcia_mem_alloc(psc->sc_pf, ETHER_ADDR_LEN * 2, &pcmh)) {
-		printf("%s: can't alloc mem for enet addr\n",
-		    dsc->sc_dev.dv_xname);
+		aprint_error_dev(dsc->sc_dev,
+		    "can't alloc mem for enet addr\n");
 		goto fail_1;
 	}
 	if (pcmcia_mem_map(psc->sc_pf, PCMCIA_MEM_ATTR, maddr,
 	    ETHER_ADDR_LEN * 2, &pcmh, &offset, &mwindow)) {
-		printf("%s: can't map mem for enet addr\n",
-		    dsc->sc_dev.dv_xname);
+		aprint_error_dev(dsc->sc_dev, "can't map mem for enet addr\n");
 		goto fail_2;
 	}
 	for (j = 0; j < ETHER_ADDR_LEN; j++)
@@ -779,9 +839,8 @@ ne_pcmcia_get_enaddr(psc, maddr, myea)
 }
 
 u_int8_t *
-ne_pcmcia_dl10019_get_enaddr(psc, myea)
-	struct ne_pcmcia_softc *psc;
-	u_int8_t myea[ETHER_ADDR_LEN];
+ne_pcmcia_dl10019_get_enaddr(struct ne_pcmcia_softc *psc,
+    u_int8_t myea[ETHER_ADDR_LEN])
 {
 	struct ne2000_softc *nsc = &psc->sc_ne2000;
 	u_int8_t sum;
@@ -798,50 +857,4 @@ ne_pcmcia_dl10019_get_enaddr(psc, myea)
 		    nsc->sc_asich, PAR0 + j);
 #undef PAR0
 	return (myea);
-}
-
-int
-ne_pcmcia_ax88190_set_iobase(psc)
-	struct ne_pcmcia_softc *psc;
-{
-	struct ne2000_softc *nsc = &psc->sc_ne2000;
-	struct dp8390_softc *dsc = &nsc->sc_dp8390;
-	struct pcmcia_mem_handle pcmh;
-	bus_addr_t offset;
-	int rv = 1, mwindow;
-
-	if (pcmcia_mem_alloc(psc->sc_pf, NE2000_AX88190_LAN_IOSIZE, &pcmh)) {
-		printf("%s: can't alloc mem for LAN iobase\n",
-		    dsc->sc_dev.dv_xname);
-		goto fail_1;
-	}
-	if (pcmcia_mem_map(psc->sc_pf, PCMCIA_MEM_ATTR,
-	    NE2000_AX88190_LAN_IOBASE, NE2000_AX88190_LAN_IOSIZE,
-	    &pcmh, &offset, &mwindow)) {
-		printf("%s: can't map mem for LAN iobase\n",
-		    dsc->sc_dev.dv_xname);
-		goto fail_2;
-	}
-
-#ifdef DIAGNOSTIC
-	printf("%s: LAN iobase 0x%x (0x%x) ->", dsc->sc_dev.dv_xname,
-	    bus_space_read_1(pcmh.memt, pcmh.memh, offset + 0) |
-	    bus_space_read_1(pcmh.memt, pcmh.memh, offset + 2) << 8,
-	    (u_int)psc->sc_pcioh.addr);
-#endif
-	bus_space_write_1(pcmh.memt, pcmh.memh, offset,
-	    psc->sc_pcioh.addr & 0xff);
-	bus_space_write_1(pcmh.memt, pcmh.memh, offset + 2,
-	    psc->sc_pcioh.addr >> 8);
-#ifdef DIAGNOSTIC
-	printf(" 0x%x\n", bus_space_read_1(pcmh.memt, pcmh.memh, offset + 0) |
-	    bus_space_read_1(pcmh.memt, pcmh.memh, offset + 2) << 8);
-#endif
-	rv = 0;
-
-	pcmcia_mem_unmap(psc->sc_pf, mwindow);
- fail_2:
-	pcmcia_mem_free(psc->sc_pf, &pcmh);
- fail_1:
-	return (rv);
 }

@@ -1,6 +1,7 @@
-#	$NetBSD: Makefile,v 1.2 1999/02/13 02:54:58 lukem Exp $
+#	$NetBSD: Makefile,v 1.4 2002/09/18 13:31:52 lukem Exp $
+
+NOMAN=	# defined
 
 PROG=	bootpgw
-MKMAN=	no
 
 .include <bsd.prog.mk>

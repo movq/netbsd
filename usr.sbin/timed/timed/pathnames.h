@@ -1,4 +1,4 @@
-/*	$NetBSD: pathnames.h,v 1.5 1998/01/09 08:12:05 perry Exp $	*/
+/*	$NetBSD: pathnames.h,v 1.7 2003/08/07 11:25:46 agc Exp $	*/
 
 /*-
  * Copyright (c) 1985 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,10 +33,5 @@
 
 #include <paths.h>
 
-#ifdef sgi
-#define	_PATH_MASTERLOG	"/var/adm/timed.masterlog"
-#define	_PATH_TIMEDLOG	"/var/adm/timed.log"
-#else
 #define	_PATH_MASTERLOG	"/var/log/timed.masterlog"
 #define	_PATH_TIMEDLOG	"/var/log/timed.log"
-#endif

@@ -1,29 +1,45 @@
-#	$NetBSD: Makefile,v 1.24 2000/01/12 05:13:32 mjl Exp $
+#	$NetBSD: Makefile,v 1.41 2007/05/28 12:06:29 tls Exp $
 #	from: @(#)Makefile    8.3 (Berkeley) 4/2/94
 
-SRCTOP=	../..
-.include <bsd.crypto.mk>
+.include <bsd.own.mk>
 
+USE_FORT?= yes	# setuid
 PROG=	passwd
-SRCS=	local_passwd.c yp_passwd.c passwd.c
-DPADD+= ${LIBRPCSVC} ${LIBCRYPT} ${LIBUTIL}
-LDADD+= -lrpcsvc -lcrypt -lutil
-CPPFLAGS+=-I${.CURDIR} -DYP -DLOGIN_CAP
+SRCS=	local_passwd.c passwd.c
+MAN=	passwd.1
 
-LINKS=	${BINDIR}/passwd ${BINDIR}/yppasswd
-MLINKS=	passwd.1 yppasswd.1
+CPPFLAGS+=-I${.CURDIR} -DLOGIN_CAP
+
+.if (${USE_YP} != "no")
+SRCS+=	yp_passwd.c
+CPPFLAGS+=-DYP
+DPADD+=	${LIBRPCSVC}
+LDADD+=	-lrpcsvc
+LINKS+=	${BINDIR}/passwd ${BINDIR}/yppasswd
+MAN+=	yppasswd.1
+.endif
+
+DPADD+= ${LIBCRYPT} ${LIBUTIL}
+LDADD+= -lcrypt -lutil
 
 BINOWN=	root
 BINMODE=4555
-.if defined(notyet)
-INSTALLFLAGS=-fschg
+
+.if (${USE_KERBEROS} != "no")
+CPPFLAGS+= -DKERBEROS5 -I${DESTDIR}/usr/include/krb5
+SRCS+=	krb5_passwd.c
+
+DPADD+=	${LIBKRB5} ${LIBCRYPTO} ${LIBASN1} ${LIBCOM_ERR} ${LIBROKEN} ${LIBCRYPT}
+LDADD+=	-lkrb5 -lcrypto -lasn1 -lcom_err -lroken -lcrypt
+LINKS+=	${BINDIR}/passwd ${BINDIR}/kpasswd
+MAN+=	kpasswd.1
 .endif
 
-.if defined(CRYPTOPATH)
-.sinclude "${CRYPTOPATH}/usr.bin/passwd/Makefile.frag"
+.if (${USE_PAM} != "no")
+CPPFLAGS+=-DUSE_PAM
+SRCS+= pam_passwd.c
+LDADD+=-lpam ${PAM_STATIC_LDADD}
+DPADD+=${LIBPAM} ${PAM_STATIC_DPADD}
 .endif
 
 .include <bsd.prog.mk>
-
-# getpwent.o: getpwent.c
-# 	${COMPILE.c} -UYP ${.IMPSRC}

@@ -1,4 +1,4 @@
-/*	$NetBSD: chpass.h,v 1.9 1998/07/26 15:13:14 mycroft Exp $	*/
+/*	$NetBSD: chpass.h,v 1.12 2005/02/17 17:09:48 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,7 +35,7 @@ struct passwd;
 
 typedef struct _entry {
 	const char *prompt;
-	int (*func) __P((const char *, struct passwd *, struct _entry *)), restricted, len;
+	int (*func)(const char *, struct passwd *, struct _entry *), restricted, len;
 	const char *except, *save;
 } ENTRY;
 
@@ -55,32 +51,31 @@ extern	int use_yp;
 extern ENTRY list[];
 extern uid_t uid;
 
-int	 atot __P((const char *, time_t *));
-void	 display __P((char *, int, struct passwd *));
-void	 edit __P((char *, struct passwd *));
+int	 atot(const char *, time_t *);
+void	 display(char *, int, struct passwd *);
+void	 edit(char *, struct passwd *);
 const char *
-	 ok_shell __P((const char *));
-int	 p_change __P((const char *, struct passwd *, ENTRY *));
-int	 p_class __P((const char *, struct passwd *, ENTRY *));
-int	 p_expire __P((const char *, struct passwd *, ENTRY *));
-int	 p_gecos __P((const char *, struct passwd *, ENTRY *));
-int	 p_gid __P((const char *, struct passwd *, ENTRY *));
-int	 p_hdir __P((const char *, struct passwd *, ENTRY *));
-int	 p_login __P((const char *, struct passwd *, ENTRY *));
-int	 p_login __P((const char *, struct passwd *, ENTRY *));
-int	 p_passwd __P((const char *, struct passwd *, ENTRY *));
-int	 p_shell __P((const char *, struct passwd *, ENTRY *));
-int	 p_uid __P((const char *, struct passwd *, ENTRY *));
-char    *ttoa __P((char *, size_t, time_t));
-int	 verify __P((char *, struct passwd *));
+	 ok_shell(const char *);
+int	 p_change(const char *, struct passwd *, ENTRY *);
+int	 p_class(const char *, struct passwd *, ENTRY *);
+int	 p_expire(const char *, struct passwd *, ENTRY *);
+int	 p_gecos(const char *, struct passwd *, ENTRY *);
+int	 p_gid(const char *, struct passwd *, ENTRY *);
+int	 p_hdir(const char *, struct passwd *, ENTRY *);
+int	 p_login(const char *, struct passwd *, ENTRY *);
+int	 p_passwd(const char *, struct passwd *, ENTRY *);
+int	 p_shell(const char *, struct passwd *, ENTRY *);
+int	 p_uid(const char *, struct passwd *, ENTRY *);
+char    *ttoa(char *, size_t, time_t);
+int	 verify(char *, struct passwd *);
 
 #ifdef YP
-int	check_yppasswdd __P((void));
-int	pw_yp __P((struct passwd *, uid_t));
-void	yppw_error __P((const char *name, int, int));
-void	yppw_prompt __P((void));
-struct passwd *ypgetpwnam __P((const char *));
-struct passwd *ypgetpwuid __P((uid_t));
+int	check_yppasswdd(void);
+int	pw_yp(struct passwd *, uid_t);
+void	yppw_error(const char *name, int, int);
+void	yppw_prompt(void);
+struct passwd *ypgetpwnam(const char *);
+struct passwd *ypgetpwuid(uid_t);
 #endif
 
-extern	void (*Pw_error) __P((const char *name, int, int));
+extern	void (*Pw_error)(const char *name, int, int);

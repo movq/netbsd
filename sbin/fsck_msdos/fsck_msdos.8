@@ -1,4 +1,4 @@
-.\"	$NetBSD: fsck_msdos.8,v 1.10 1999/03/07 11:02:06 mycroft Exp $
+.\"	$NetBSD: fsck_msdos.8,v 1.15 2008/06/13 20:46:09 martin Exp $
 .\"
 .\" Copyright (C) 1995 Wolfgang Solfrank
 .\" Copyright (c) 1995 Martin Husemann
@@ -11,13 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by Martin Husemann
-.\"	and Wolfgang Solfrank.
-.\" 4. Neither the name of the University nor the names of its contributors
-.\"    may be used to endorse or promote products derived from this software
-.\"    without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,20 +26,19 @@
 .\"
 .Dd August 13, 1995
 .Dt FSCK_MSDOS 8
-.Os NetBSD 1.1a
+.Os
 .Sh NAME
 .Nm fsck_msdos
 .Nd DOS/Windows (FAT) filesystem consistency checker
 .Sh SYNOPSIS
-.Nm ""
+.Nm
 .Fl p
 .Op Fl f
 .Ar filesystem ...
-.Nm ""
+.Nm
 .Op Fl fny
 .Ar filesystem ...
 .Sh DESCRIPTION
-.Pp
 The
 .Nm
 utility verifies and repairs
@@ -66,8 +58,8 @@ run from
 during automatic reboot, when a FAT filesystem is detected.
 When preening file systems,
 .Nm
-will fix common inconsistencies non-interactively.  If
-more serious problems are found,
+will fix common inconsistencies non-interactively.
+If more serious problems are found,
 .Nm
 does not try to fix them, indicates that it was not
 successful, and exits.
@@ -82,7 +74,7 @@ The options are as follows:
 .Bl -hang -offset indent
 .It Fl f
 This option is ignored by
-.Nm "" ,
+.Nm ,
 and is present only for compatibility with programs that
 check other file system types for consistency, such as
 .Xr fsck_ffs 8 .

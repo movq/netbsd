@@ -1,4 +1,4 @@
-/*	$NetBSD: qv.c,v 1.3 1999/01/01 21:43:18 ragge Exp $	*/
+/*	$NetBSD: qv.c,v 1.20 2008/03/11 05:34:02 matt Exp $	*/
 
 /*-
  * Copyright (c) 1988
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -126,6 +122,8 @@
  *
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: qv.c,v 1.20 2008/03/11 05:34:02 matt Exp $");
 
 #include "qv.h"
 #if NQV > 0
@@ -137,10 +135,8 @@
 #include "sys/user.h"
 #include "qvioctl.h"
 #include "sys/tty.h"
-#include "sys/map.h"
 #include "sys/buf.h"
 #include "sys/vm.h"
-#include "sys/clist.h"
 #include "sys/file.h"
 #include "sys/uio.h"
 #include "sys/kernel.h"
@@ -176,7 +172,6 @@ extern	struct pte QVmap[][512];
  */
 
 #define QVWAITPRI 	(PZERO+1)
-#define QVSSMAJOR	40
 
 #define QVKEYBOARD 	0	/* minor 0, keyboard/glass tty */
 #define QVPCONS 	1	/* minor 1, console interceptor XXX */
@@ -188,8 +183,8 @@ extern	struct pte QVmap[][512];
  * virtual console vputc.  consops is used to redirect the console
  * device to the qvss console.
  */
-extern (*v_putc)();
-extern struct cdevsw *consops;
+extern int (*v_putc)();
+extern const struct cdevsw *consops;
 /*
  * qv_def_scrn is used to select the appropriate tables. 0=15 inch 1=19 inch,
  * 2 = uVAXII.
@@ -219,7 +214,7 @@ struct qv_info qv_scn_defaults[] = {
  * Screen controller initialization parameters. The definations and use
  * of these parameters can be found in the Motorola 68045 crtc specs. In
  * essence they set the display parameters for the chip. The first set is
- * for the 15" screen and the second is for the 19" seperate sync. There
+ * for the 15" screen and the second is for the 19" separate sync. There
  * is also a third set for a 19" composite sync monitor which we have not
  * tested and which is not supported.
  */
@@ -276,13 +271,27 @@ int	qvstart(), qvputc(),  ttrstrt();
 extern u_short q_key[], q_shift_key[], q_cursor[];
 extern char *q_special[], q_font[];
 
+dev_type_open(qvopen);
+dev_type_close(qvclose);
+dev_type_read(qvread);
+dev_type_write(qvwrite);
+dev_type_ioctl(qvioctl);
+dev_type_stop(qvstop);
+dev_type_poll(qvpoll);
+dev_type_kqfilter(qvkqfilter);
+
+const struct cdevsw qv_cdevsw = {
+	qvopen, qvclose, qvread, qvwrite, qvioctl,
+	qvstop, notty, qvpoll, nommap, qvkqfilter,
+};
+
 /*
  * See if the qvss will interrupt.
  */
 
 /*ARGSUSED*/
 qvprobe(reg, ctlr)
-	caddr_t reg;
+	void *reg;
 	int ctlr;
 {
 	register int br, cvec;		/* these are ``value-result'' */
@@ -301,7 +310,7 @@ qvprobe(reg, ctlr)
 	/*
 	 * Turn on the keyboard and vertical interrupt vectors.
 	 */
-	qvaddr->qv_intcsr = 0;		/* init the interrupt controler */
+	qvaddr->qv_intcsr = 0;		/* init the interrupt controller */
 	qvaddr->qv_intcsr = 0x40;	/* reset irr			*/
 	qvaddr->qv_intcsr = 0x80;	/* specify individual vectors	*/
 	qvaddr->qv_intcsr = 0xc0;	/* preset autoclear data	*/
@@ -359,8 +368,11 @@ qvattach(ui)
 
 
 /*ARGSUSED*/
-qvopen(dev, flag)
+int
+qvopen(dev, flag, mode, p)
 	dev_t dev;
+	int flag, mode;
+	struct proc *p;
 {
 	register struct tty *tp;
 	register int unit, qv;
@@ -383,7 +395,7 @@ qvopen(dev, flag)
 		return (EBUSY);
 	qvaddr = (struct qvdevice *)ui->ui_addr;
         qv_scn->qvaddr = qvaddr;
-	tp->t_addr = (caddr_t)qvaddr;
+	tp->t_addr = (void *)qvaddr;
 	tp->t_oproc = qvstart;
 
 	if ((tp->t_state&TS_ISOPEN) == 0) {
@@ -409,7 +421,7 @@ qvopen(dev, flag)
 	 * mouse channel. For the mouse we init the ring ptr's.
 	 */
 	if( QVCHAN(unit) != QVMOUSECHAN )
-		return ((*linesw[tp->t_line].l_open)(dev, tp));
+		return ((*tp->t_linesw->l_open)(dev, tp));
 	else {
 		mouseon = 1;
 		/* set up event queue for later */
@@ -418,12 +430,15 @@ qvopen(dev, flag)
 		qp->ihead = qp->itail = 0;
 		return 0;
 	}
+
+	return (0);
 }
 
 /*
  * Close a QVSS line.
  */
 /*ARGSUSED*/
+int
 qvclose(dev, flag, mode, p)
 	dev_t dev;
 	int flag, mode;
@@ -450,7 +465,7 @@ qvclose(dev, flag, mode, p)
 	 * otherwise clear the state flag, and put the keyboard into down/up.
 	 */
 	if (QVCHAN(unit) != QVMOUSECHAN) {
-		(*linesw[tp->t_line].l_close)(tp, flag);
+		(*tp->t_linesw->l_close)(tp, flag);
 		error = ttyclose(tp);
 	} else {
 		mouseon = 0;
@@ -461,23 +476,27 @@ qvclose(dev, flag, mode, p)
 	return (error);
 }
 
-qvread(dev, uio)
+int
+qvread(dev, uio, flag)
 	dev_t dev;
 	struct uio *uio;
+	int flag;
 {
 	register struct tty *tp;
 	int unit = minor( dev );
 
 	if (QVCHAN(unit) != QVMOUSECHAN) {
 		tp = &qv_tty[unit];
-		return ((*linesw[tp->t_line].l_read)(tp, uio));
+		return ((*tp->t_linesw->l_read)(tp, uio));
 	}
 	return (ENXIO);
 }
 
-qvwrite(dev, uio)
+int
+qvwrite(dev, uio, flag)
 	dev_t dev;
 	struct uio *uio;
+	int flag;
 {
 	register struct tty *tp;
 	int unit = minor( dev );
@@ -492,9 +511,29 @@ qvwrite(dev, uio)
 		return 0;
 	}
 	tp = &qv_tty[unit];
-	return ((*linesw[tp->t_line].l_write)(tp, uio));
+	return ((*tp->t_linesw->l_write)(tp, uio));
 }
 
+int
+qvpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	register struct tty *tp;
+	int unit = minor( dev );
+
+	/*
+	 * XXX Should perform similar checks to deprecated `qvselect()'
+	 */
+	tp = &qv_tty[unit];
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
+}
+
+/*
+ * XXX Is qvselect() even useful now?
+ * This driver looks to have suffered some serious bit-rot...
+ */
 
 /*
  * Mouse activity select routine
@@ -606,9 +645,9 @@ qvkint(qv)
 			register char *string;
 			string = q_special[ c & 0x7f ];
 			while( *string )
-			(*linesw[tp->t_line].l_rint)(*string++, tp);
+			(*tp->t_linesw->l_rint)(*string++, tp);
 		} else
-			(*linesw[tp->t_line].l_rint)(c, tp);
+			(*tp->t_linesw->l_rint)(c, tp);
 	} else {
 		/*
 		 * Mouse channel is open put it into the event queue
@@ -629,7 +668,7 @@ qvkint(qv)
 		vep->vse_key = key;
 		qp->itail = i;
 		if(qvrsel) {
-			selwakeup(qvrsel,0);
+			selnotify(qvrsel, 0, 0);
 			qvrsel = 0;
 		}
 	}
@@ -639,9 +678,13 @@ qvkint(qv)
  * Ioctl for QVSS.
  */
 /*ARGSUSED*/
-qvioctl(dev, cmd, data, flag)
+int
+qvioctl(dev, cmd, data, flag, p)
 	dev_t dev;
-	register caddr_t data;
+	u_long cmd;
+	register void *data;
+	int flag;
+	struct proc *p;
 {
 	register struct tty *tp;
 	register int unit = minor(dev);
@@ -655,7 +698,7 @@ qvioctl(dev, cmd, data, flag)
 	 */
 	switch( cmd ) {
 	case QIOCGINFO:					/* return screen info */
-		bcopy((caddr_t)qp, data, sizeof (struct qv_info));
+		bcopy((void *)qp, data, sizeof (struct qv_info));
 		break;
 
 	case QIOCSMSTATE:				/* set mouse state */
@@ -683,13 +726,10 @@ qvioctl(dev, cmd, data, flag)
 		break;
 	default:					/* not ours ??  */
 		tp = &qv_tty[unit];
-		error = (*linesw[tp->t_line].l_ioctl)(tp, cmd, data, flag);
-		if (error >= 0)
+		error = (*tp->t_linesw->l_ioctl)(tp, cmd, data, flag);
+		if (error != EPASSTHROUGH)
 			return (error);
-		error = ttioctl(tp, cmd, data, flag);
-		if (error >= 0) {
-			return (error);
-		}
+		return ttioctl(tp, cmd, data, flag);
 		break;
 	}
 	return (0);
@@ -885,7 +925,7 @@ switches:if( om_switch != ( m_switch = (qvaddr->qv_csr & QV_MOUSE_ANY) >> 8 ) ) 
 	}
 	/* if we have proc waiting, and event has happened, wake him up */
 	if(qvrsel && (qp->ihead != qp->itail)) {
-		selwakeup(qvrsel,0);
+		selnotify(qvrsel, 0, 0);
 		qvrsel = 0;
 	}
 	/*
@@ -927,7 +967,7 @@ qvstart(tp)
 		if (unit == QVKEYBOARD)
 #ifdef CONS_HACK
 			if( tp0->t_state & TS_ISOPEN ){
-				(*linesw[tp0->t_line].l_rint)(c, tp0);
+				(*tp0->t_linesw->l_rint)(c, tp0);
 			} else
 #endif
 				qvputchar( c & 0xff );
@@ -941,12 +981,7 @@ qvstart(tp)
 	 * If there are sleepers, and output has drained below low
 	 * water mark, wake up the sleepers.
 	 */
-	if ( tp->t_outq.c_cc<= tp->t_lowat ) {
-		if (tp->t_state&TS_ASLEEP){
-			tp->t_state &= ~TS_ASLEEP;
-			wakeup((caddr_t)&tp->t_outq);
-		}
-	}
+	ttypull(tp);
 	tp->t_state &= ~TS_BUSY;
 out:
 	splx(s);
@@ -1150,7 +1185,7 @@ qvscroll()
 	 * Save the first 15 scanlines so that we can put them at
 	 * the bottom when done.
 	 */
-	bcopy((caddr_t)qp->scanmap, (caddr_t)tmpscanlines, sizeof tmpscanlines);
+	bcopy((void *)qp->scanmap, (void *)tmpscanlines, sizeof tmpscanlines);
 
 	/*
 	 * Clear the wrapping line so that it won't flash on the bottom
@@ -1163,13 +1198,13 @@ qvscroll()
 	/*
 	 * Now move the scanlines down 
 	 */
-	bcopy((caddr_t)(qp->scanmap+15), (caddr_t)qp->scanmap,
+	bcopy((void *)(qp->scanmap+15), (void *)qp->scanmap,
 	      (qp->row * 15) * sizeof (short) );
 
 	/*
 	 * Now put the other lines back
 	 */
-	bcopy((caddr_t)tmpscanlines, (caddr_t)(qp->scanmap+(qp->row * 15)),
+	bcopy((void *)tmpscanlines, (void *)(qp->scanmap+(qp->row * 15)),
 	      sizeof (tmpscanlines) );
 
 }
@@ -1223,7 +1258,7 @@ qvcons_init()
 		return 0;
 
         /*
-         * Found an entry for this cpu. Because this device is Microvax specific
+         * Found an entry for this CPU. Because this device is Microvax specific
          * we assume that there is a single q-bus and don't have to worry about
          * multiple adapters.
          *
@@ -1237,7 +1272,7 @@ qvcons_init()
          */
         devptr = (short *)((char *)umem[0] + (qb->qb_memsize * VAX_NBPG));
         qvaddr = (struct qvdevice *)((u_int)devptr + ubdevreg(QVSSCSR));
-        if (badaddr((caddr_t)qvaddr, sizeof(short)))
+        if (badaddr((void *)qvaddr, sizeof(short)))
                 return 0;
         /*
          * Okay the device is there lets set it up
@@ -1245,7 +1280,7 @@ qvcons_init()
         if (!qv_setup(qvaddr, 0, 0))
 		return 0;
 	v_putc = qvputc;
-        consops = &cdevsw[QVSSMAJOR];
+        consops = &qv_cdevsw;
 	return 1;
 }
 /*
@@ -1256,7 +1291,7 @@ struct qvdevice *qvaddr;
 int unit;
 int probed;
 {
-        caddr_t qvssmem;		/* pointer to the display mem   */
+        void *qvssmem;		/* pointer to the display mem   */
         register i;			/* simple index                 */
 	register struct qv_info *qp;
         register int *pte;
@@ -1272,7 +1307,7 @@ int probed;
                 return(0);
 
         /*
-         * Found an entry for this cpu. Because this device is Microvax specific
+         * Found an entry for this CPU. Because this device is Microvax specific
          * we assume that there is a single q-bus and don't have to worry about
          * multiple adapters.
          *

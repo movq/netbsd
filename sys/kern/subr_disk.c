@@ -1,7 +1,7 @@
-/*	$NetBSD: subr_disk.c,v 1.29 2000/03/30 09:27:12 augustss Exp $	*/
+/*	$NetBSD: subr_disk.c,v 1.93.10.1 2009/04/04 17:49:21 snj Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997, 1999, 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 1999, 2000, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,11 +47,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -77,248 +66,36 @@
  *	@(#)ufs_disksubr.c	8.5 (Berkeley) 1/21/94
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.93.10.1 2009/04/04 17:49:21 snj Exp $");
+
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/syslog.h>
-#include <sys/time.h>
 #include <sys/disklabel.h>
 #include <sys/disk.h>
-
-/*
- * A global list of all disks attached to the system.  May grow or
- * shrink over time.
- */
-struct	disklist_head disklist;	/* TAILQ_HEAD */
-int	disk_count;		/* number of drives in global disklist */
-
-/*
- * Seek sort for disks.  We depend on the driver which calls us using b_resid
- * as the current cylinder number.
- *
- * The argument bufq is an I/O queue for the device, on which there are
- * actually two queues, sorted in ascending cylinder order.  The first
- * queue holds those requests which are positioned after the current
- * cylinder (in the first request); the second holds requests which came
- * in after their cylinder number was passed.  Thus we implement a one-way
- * scan, retracting after reaching the end of the drive to the first request
- * on the second queue, at which time it becomes the first queue.
- *
- * A one-way scan is natural because of the way UNIX read-ahead blocks are
- * allocated.
- *
- * This is further adjusted by any `barriers' which may exist in the queue.
- * The bufq points to the last such ordered request.
- */
-void
-disksort_cylinder(bufq, bp)
-	struct buf_queue *bufq;
-	struct buf *bp;
-{
-	struct buf *bq, *nbq;
-
-	/*
-	 * If there are ordered requests on the queue, we must start
-	 * the elevator sort after the last of these.
-	 */
-	if ((bq = bufq->bq_barrier) == NULL)
-		bq = BUFQ_FIRST(bufq);
-
-	/*
-	 * If the queue is empty, of if it's an ordered request,
-	 * it's easy; we just go on the end.
-	 */
-	if (bq == NULL || (bp->b_flags & B_ORDERED) != 0) {
-		BUFQ_INSERT_TAIL(bufq, bp);
-		return;
-	}
-
-	/*
-	 * If we lie after the first (currently active) request, then we
-	 * must locate the second request list and add ourselves to it.
-	 */
-	if (bp->b_cylinder < bq->b_cylinder ||
-	    (bp->b_cylinder == bq->b_cylinder &&
-	     bp->b_rawblkno < bq->b_rawblkno)) {
-		while ((nbq = BUFQ_NEXT(bq)) != NULL) {
-			/*
-			 * Check for an ``inversion'' in the normally ascending
-			 * cylinder numbers, indicating the start of the second
-			 * request list.
-			 */
-			if (nbq->b_cylinder < bq->b_cylinder) {
-				/*
-				 * Search the second request list for the first
-				 * request at a larger cylinder number.  We go
-				 * before that; if there is no such request, we
-				 * go at end.
-				 */
-				do {
-					if (bp->b_cylinder < nbq->b_cylinder)
-						goto insert;
-					if (bp->b_cylinder == nbq->b_cylinder &&
-					    bp->b_rawblkno < nbq->b_rawblkno)
-						goto insert;
-					bq = nbq;
-				} while ((nbq = BUFQ_NEXT(bq)) != NULL);
-				goto insert;		/* after last */
-			}
-			bq = BUFQ_NEXT(bq);
-		}
-		/*
-		 * No inversions... we will go after the last, and
-		 * be the first request in the second request list.
-		 */
-		goto insert;
-	}
-	/*
-	 * Request is at/after the current request...
-	 * sort in the first request list.
-	 */
-	while ((nbq = BUFQ_NEXT(bq)) != NULL) {
-		/*
-		 * We want to go after the current request if there is an
-		 * inversion after it (i.e. it is the end of the first
-		 * request list), or if the next request is a larger cylinder
-		 * than our request.
-		 */
-		if (nbq->b_cylinder < bq->b_cylinder ||
-		    bp->b_cylinder < nbq->b_cylinder ||
-		    (bp->b_cylinder == nbq->b_cylinder &&
-		     bp->b_rawblkno < nbq->b_rawblkno))
-			goto insert;
-		bq = nbq;
-	}
-	/*
-	 * Neither a second list nor a larger request... we go at the end of
-	 * the first list, which is the same as the end of the whole schebang.
-	 */
-insert:	BUFQ_INSERT_AFTER(bufq, bq, bp);
-}
-
-/*
- * Seek sort for disks.  This version sorts based on b_rawblkno, which
- * indicates the block number.
- *
- * As before, there are actually two queues, sorted in ascendening block
- * order.  The first queue holds those requests which are positioned after
- * the current block (in the first request); the second holds requests which
- * came in after their block number was passed.  Thus we implement a one-way
- * scan, retracting after reaching the end of the driver to the first request
- * on the second queue, at which time it becomes the first queue.
- *
- * A one-way scan is natural because of the way UNIX read-ahead blocks are
- * allocated.
- *
- * This is further adjusted by any `barriers' which may exist in the queue.
- * The bufq points to the last such ordered request.
- */
-void
-disksort_blkno(bufq, bp)
-	struct buf_queue *bufq;
-	struct buf *bp;
-{
-	struct buf *bq, *nbq;
-
-	/*
-	 * If there are ordered requests on the queue, we must start
-	 * the elevator sort after the last of these.
-	 */
-	if ((bq = bufq->bq_barrier) == NULL)
-		bq = BUFQ_FIRST(bufq);
-
-	/*
-	 * If the queue is empty, or if it's an ordered request,
-	 * it's easy; we just go on the end.
-	 */
-	if (bq == NULL || (bp->b_flags & B_ORDERED) != 0) {
-		BUFQ_INSERT_TAIL(bufq, bp);
-		return;
-	}
-
-	/*
-	 * If we lie after the first (currently active) request, then we
-	 * must locate the second request list and add ourselves to it.
-	 */
-	if (bp->b_rawblkno < bq->b_rawblkno) {
-		while ((nbq = BUFQ_NEXT(bq)) != NULL) {
-			/*
-			 * Check for an ``inversion'' in the normally ascending
-			 * block numbers, indicating the start of the second
-			 * request list.
-			 */
-			if (nbq->b_rawblkno < bq->b_rawblkno) {
-				/*
-				 * Search the second request list for the first
-				 * request at a larger block number.  We go
-				 * after that; if there is no such request, we
-				 * go at the end.
-				 */
-				do {
-					if (bp->b_rawblkno < nbq->b_rawblkno)
-						goto insert;
-					bq = nbq;
-				} while ((nbq = BUFQ_NEXT(bq)) != NULL);
-				goto insert;		/* after last */
-			}
-			bq = BUFQ_NEXT(bq);
-		}
-		/*
-		 * No inversions... we will go after the last, and
-		 * be the first request in the second request list.
-		 */
-		goto insert;
-	}
-	/*
-	 * Request is at/after the current request...
-	 * sort in the first request list.
-	 */
-	while ((nbq = BUFQ_NEXT(bq)) != NULL) {
-		/*
-		 * We want to go after the current request if there is an
-		 * inversion after it (i.e. it is the end of the first
-		 * request list), or if the next request is a larger cylinder
-		 * than our request.
-		 */
-		if (nbq->b_rawblkno < bq->b_rawblkno ||
-		    bp->b_rawblkno < nbq->b_rawblkno)
-			goto insert;
-		bq = nbq;
-	}
-	/*
-	 * Neither a second list nor a larger request... we go at the end of
-	 * the first list, which is the same as the end of the whole schebang.
-	 */
-insert:	BUFQ_INSERT_AFTER(bufq, bq, bp);
-}
-
-/*
- * Seek non-sort for disks.  This version simply inserts requests at
- * the tail of the queue.
- */
-void
-disksort_tail(bufq, bp)
-	struct buf_queue *bufq;
-	struct buf *bp;
-{
-
-	BUFQ_INSERT_TAIL(bufq, bp);
-}
+#include <sys/sysctl.h>
+#include <lib/libkern/libkern.h>
 
 /*
  * Compute checksum for disk label.
  */
 u_int
-dkcksum(lp)
-	struct disklabel *lp;
+dkcksum(struct disklabel *lp)
+{
+	return dkcksum_sized(lp, lp->d_npartitions);
+}
+
+u_int
+dkcksum_sized(struct disklabel *lp, size_t npartitions)
 {
 	u_short *start, *end;
 	u_short sum = 0;
 
 	start = (u_short *)lp;
-	end = (u_short *)&lp->d_partitions[lp->d_npartitions];
+	end = (u_short *)&lp->d_partitions[npartitions];
 	while (start < end)
 		sum ^= *start++;
 	return (sum);
@@ -338,17 +115,21 @@ hp0g: hard error reading fsbn 12345 of 12344-12347 (hp0 bn %d cn %d tn %d sn %d)
  * The message should be completed (with at least a newline) with printf
  * or addlog, respectively.  There is no trailing space.
  */
+#ifndef PRIdaddr
+#define PRIdaddr PRId64
+#endif
 void
-diskerr(bp, dname, what, pri, blkdone, lp)
-	struct buf *bp;
-	char *dname, *what;
-	int pri, blkdone;
-	struct disklabel *lp;
+diskerr(const struct buf *bp, const char *dname, const char *what, int pri,
+    int blkdone, const struct disklabel *lp)
 {
 	int unit = DISKUNIT(bp->b_dev), part = DISKPART(bp->b_dev);
-	void (*pr) __P((const char *, ...));
+	void (*pr)(const char *, ...);
 	char partname = 'a' + part;
-	int sn;
+	daddr_t sn;
+
+	if (/*CONSTCOND*/0)
+		/* Compiler will error this is the format is wrong... */
+		printf("%" PRIdaddr, bp->b_blkno);
 
 	if (pri != LOG_PRINTF) {
 		static const char fmt[] = "";
@@ -360,64 +141,65 @@ diskerr(bp, dname, what, pri, blkdone, lp)
 	    bp->b_flags & B_READ ? "read" : "writ");
 	sn = bp->b_blkno;
 	if (bp->b_bcount <= DEV_BSIZE)
-		(*pr)("%d", sn);
+		(*pr)("%" PRIdaddr, sn);
 	else {
 		if (blkdone >= 0) {
 			sn += blkdone;
-			(*pr)("%d of ", sn);
+			(*pr)("%" PRIdaddr " of ", sn);
 		}
-		(*pr)("%d-%d", bp->b_blkno,
+		(*pr)("%" PRIdaddr "-%" PRIdaddr "", bp->b_blkno,
 		    bp->b_blkno + (bp->b_bcount - 1) / DEV_BSIZE);
 	}
 	if (lp && (blkdone >= 0 || bp->b_bcount <= lp->d_secsize)) {
 		sn += lp->d_partitions[part].p_offset;
-		(*pr)(" (%s%d bn %d; cn %d", dname, unit, sn,
-		    sn / lp->d_secpercyl);
+		(*pr)(" (%s%d bn %" PRIdaddr "; cn %" PRIdaddr "",
+		    dname, unit, sn, sn / lp->d_secpercyl);
 		sn %= lp->d_secpercyl;
-		(*pr)(" tn %d sn %d)", sn / lp->d_nsectors, sn % lp->d_nsectors);
+		(*pr)(" tn %" PRIdaddr " sn %" PRIdaddr ")",
+		    sn / lp->d_nsectors, sn % lp->d_nsectors);
 	}
 }
 
 /*
- * Initialize the disklist.  Called by main() before autoconfiguration.
- */
-void
-disk_init()
-{
-
-	TAILQ_INIT(&disklist);
-	disk_count = 0;
-}
-
-/*
- * Searches the disklist for the disk corresponding to the
+ * Searches the iostatlist for the disk corresponding to the
  * name provided.
  */
 struct disk *
-disk_find(name)
-	char *name;
+disk_find(const char *name)
 {
-	struct disk *diskp;
+	struct io_stats *stat;
 
-	if ((name == NULL) || (disk_count <= 0))
-		return (NULL);
+	stat = iostat_find(name);
 
-	for (diskp = disklist.tqh_first; diskp != NULL;
-	    diskp = diskp->dk_link.tqe_next)
-		if (strcmp(diskp->dk_name, name) == 0)
-			return (diskp);
+	if ((stat != NULL) && (stat->io_type == IOSTAT_DISK))
+		return stat->io_parent;
 
 	return (NULL);
+}
+
+void
+disk_init(struct disk *diskp, const char *name, const struct dkdriver *driver)
+{
+
+	/*
+	 * Initialize the wedge-related locks and other fields.
+	 */
+	mutex_init(&diskp->dk_rawlock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&diskp->dk_openlock, MUTEX_DEFAULT, IPL_NONE);
+	LIST_INIT(&diskp->dk_wedges);
+	diskp->dk_nwedges = 0;
+	diskp->dk_labelsector = LABELSECTOR;
+	disk_blocksize(diskp, DEV_BSIZE);
+	diskp->dk_name = name;
+	diskp->dk_driver = driver;
 }
 
 /*
  * Attach a disk.
  */
 void
-disk_attach(diskp)
-	struct disk *diskp;
+disk_attach(struct disk *diskp)
 {
-	int s;
 
 	/*
 	 * Allocate and initialize the disklabel structures.  Note that
@@ -434,33 +216,30 @@ disk_attach(diskp)
 	memset(diskp->dk_cpulabel, 0, sizeof(struct cpu_disklabel));
 
 	/*
-	 * Set the attached timestamp.
+	 * Set up the stats collection.
 	 */
-	s = splclock();
-	diskp->dk_attachtime = mono_time;
-	splx(s);
-
-	/*
-	 * Link into the disklist.
-	 */
-	TAILQ_INSERT_TAIL(&disklist, diskp, dk_link);
-	++disk_count;
+	diskp->dk_stats = iostat_alloc(IOSTAT_DISK, diskp, diskp->dk_name);
 }
 
 /*
  * Detach a disk.
  */
 void
-disk_detach(diskp)
-	struct disk *diskp;
+disk_detach(struct disk *diskp)
 {
 
 	/*
-	 * Remove from the disklist.
+	 * Remove from the drivelist.
 	 */
-	if (--disk_count < 0)
-		panic("disk_detach: disk_count < 0");
-	TAILQ_REMOVE(&disklist, diskp, dk_link);
+	iostat_free(diskp->dk_stats);
+
+	/*
+	 * Release the disk-info dictionary.
+	 */
+	if (diskp->dk_info) {
+		prop_object_release(diskp->dk_info);
+		diskp->dk_info = NULL;
+	}
 
 	/*
 	 * Free the space used by the disklabel structures.
@@ -469,78 +248,248 @@ disk_detach(diskp)
 	free(diskp->dk_cpulabel, M_DEVBUF);
 }
 
-/*
- * Increment a disk's busy counter.  If the counter is going from
- * 0 to 1, set the timestamp.
- */
 void
-disk_busy(diskp)
-	struct disk *diskp;
+disk_destroy(struct disk *diskp)
 {
-	int s;
 
-	/*
-	 * XXX We'd like to use something as accurate as microtime(),
-	 * but that doesn't depend on the system TOD clock.
-	 */
-	if (diskp->dk_busy++ == 0) {
-		s = splclock();
-		diskp->dk_timestamp = mono_time;
-		splx(s);
-	}
+	mutex_destroy(&diskp->dk_openlock);
+	mutex_destroy(&diskp->dk_rawlock);
 }
 
 /*
- * Decrement a disk's busy counter, increment the byte count, total busy
- * time, and reset the timestamp.
+ * Mark the disk as busy for metrics collection.
  */
 void
-disk_unbusy(diskp, bcount)
-	struct disk *diskp;
-	long bcount;
+disk_busy(struct disk *diskp)
 {
-	int s;
-	struct timeval dv_time, diff_time;
 
-	if (diskp->dk_busy-- == 0) {
-		printf("%s: dk_busy < 0\n", diskp->dk_name);
-		panic("disk_unbusy");
-	}
-
-	s = splclock();
-	dv_time = mono_time;
-	splx(s);
-
-	timersub(&dv_time, &diskp->dk_timestamp, &diff_time);
-	timeradd(&diskp->dk_time, &diff_time, &diskp->dk_time);
-
-	diskp->dk_timestamp = dv_time;
-	if (bcount > 0) {
-		diskp->dk_bytes += bcount;
-		diskp->dk_xfer++;
-	}
+	iostat_busy(diskp->dk_stats);
 }
 
 /*
- * Reset the metrics counters on the given disk.  Note that we cannot
- * reset the busy counter, as it may case a panic in disk_unbusy().
- * We also must avoid playing with the timestamp information, as it
- * may skew any pending transfer results.
+ * Finished disk operations, gather metrics.
  */
 void
-disk_resetstat(diskp)
-	struct disk *diskp;
+disk_unbusy(struct disk *diskp, long bcount, int read)
 {
-	int s = splbio(), t;
 
-	diskp->dk_xfer = 0;
-	diskp->dk_bytes = 0;
+	iostat_unbusy(diskp->dk_stats, bcount, read);
+}
 
-	t = splclock();
-	diskp->dk_attachtime = mono_time;
-	splx(t);
+/*
+ * Return true if disk has an I/O operation in flight.
+ */
+bool
+disk_isbusy(struct disk *diskp)
+{
 
-	timerclear(&diskp->dk_time);
+	return iostat_isbusy(diskp->dk_stats);
+}
 
-	splx(s);
+/*
+ * Set the physical blocksize of a disk, in bytes.
+ * Only necessary if blocksize != DEV_BSIZE.
+ */
+void
+disk_blocksize(struct disk *diskp, int blocksize)
+{
+
+	diskp->dk_blkshift = DK_BSIZE2BLKSHIFT(blocksize);
+	diskp->dk_byteshift = DK_BSIZE2BYTESHIFT(blocksize);
+}
+
+/*
+ * Bounds checking against the media size, used for the raw partition.
+ * The sector size passed in should currently always be DEV_BSIZE,
+ * and the media size the size of the device in DEV_BSIZE sectors.
+ */
+int
+bounds_check_with_mediasize(struct buf *bp, int secsize, uint64_t mediasize)
+{
+	int64_t sz;
+
+	sz = howmany(bp->b_bcount, secsize);
+
+	if (bp->b_blkno + sz > mediasize) {
+		sz = mediasize - bp->b_blkno;
+		if (sz == 0) {
+			/* If exactly at end of disk, return EOF. */
+			bp->b_resid = bp->b_bcount;
+			return 0;
+		}
+		if (sz < 0) {
+			/* If past end of disk, return EINVAL. */
+			bp->b_error = EINVAL;
+			return 0;
+		}
+		/* Otherwise, truncate request. */
+		bp->b_bcount = sz << DEV_BSHIFT;
+	}
+
+	return 1;
+}
+
+/*
+ * Determine the size of the transfer, and make sure it is
+ * within the boundaries of the partition. Adjust transfer
+ * if needed, and signal errors or early completion.
+ */
+int
+bounds_check_with_label(struct disk *dk, struct buf *bp, int wlabel)
+{
+	struct disklabel *lp = dk->dk_label;
+	struct partition *p = lp->d_partitions + DISKPART(bp->b_dev);
+	uint64_t p_size, p_offset, labelsector;
+	int64_t sz;
+
+	/* Protect against division by zero. XXX: Should never happen?!?! */
+	if (lp->d_secpercyl == 0) {
+		bp->b_error = EINVAL;
+		return -1;
+	}
+
+	p_size = p->p_size << dk->dk_blkshift;
+	p_offset = p->p_offset << dk->dk_blkshift;
+#if RAW_PART == 3
+	labelsector = lp->d_partitions[2].p_offset;
+#else
+	labelsector = lp->d_partitions[RAW_PART].p_offset;
+#endif
+	labelsector = (labelsector + dk->dk_labelsector) << dk->dk_blkshift;
+
+	sz = howmany(bp->b_bcount, DEV_BSIZE);
+	if ((bp->b_blkno + sz) > p_size) {
+		sz = p_size - bp->b_blkno;
+		if (sz == 0) {
+			/* If exactly at end of disk, return EOF. */
+			bp->b_resid = bp->b_bcount;
+			return 0;
+		}
+		if (sz < 0) {
+			/* If past end of disk, return EINVAL. */
+			bp->b_error = EINVAL;
+			return -1;
+		}
+		/* Otherwise, truncate request. */
+		bp->b_bcount = sz << DEV_BSHIFT;
+	}
+
+	/* Overwriting disk label? */
+	if (bp->b_blkno + p_offset <= labelsector &&
+	    bp->b_blkno + p_offset + sz > labelsector &&
+	    (bp->b_flags & B_READ) == 0 && !wlabel) {
+		bp->b_error = EROFS;
+		return -1;
+	}
+
+	/* calculate cylinder for disksort to order transfers with */
+	bp->b_cylinder = (bp->b_blkno + p->p_offset) /
+	    (lp->d_secsize / DEV_BSIZE) / lp->d_secpercyl;
+	return 1;
+}
+
+int
+disk_read_sectors(void (*strat)(struct buf *), const struct disklabel *lp,
+    struct buf *bp, unsigned int sector, int count)
+{
+	bp->b_blkno = sector;
+	bp->b_bcount = count * lp->d_secsize;
+	bp->b_flags = (bp->b_flags & ~B_WRITE) | B_READ;
+	bp->b_oflags &= ~BO_DONE;
+	bp->b_cylinder = sector / lp->d_secpercyl;
+	(*strat)(bp);
+	return biowait(bp);
+}
+
+const char *
+convertdisklabel(struct disklabel *lp, void (*strat)(struct buf *),
+    struct buf *bp, uint32_t secperunit)
+{
+	struct partition rp, *altp, *p;
+	int geom_ok;
+
+	memset(&rp, 0, sizeof(rp));
+	rp.p_size = secperunit;
+	rp.p_fstype = FS_UNUSED;
+
+	/* If we can seek to d_secperunit - 1, believe the disk geometry. */
+	if (secperunit != 0 &&
+	    disk_read_sectors(strat, lp, bp, secperunit - 1, 1) == 0)
+		geom_ok = 1;
+	else
+		geom_ok = 0;
+
+#if 0
+	printf("%s: secperunit (%" PRIu32 ") %s\n", __func__,
+	    secperunit, geom_ok ? "ok" : "not ok");
+#endif
+
+	p = &lp->d_partitions[RAW_PART];
+	if (RAW_PART == 'c' - 'a')
+		altp = &lp->d_partitions['d' - 'a'];
+	else
+		altp = &lp->d_partitions['c' - 'a'];
+
+	if (lp->d_npartitions > RAW_PART && p->p_offset == 0 && p->p_size != 0)
+		;	/* already a raw partition */
+	else if (lp->d_npartitions > MAX('c', 'd') - 'a' &&
+		 altp->p_offset == 0 && altp->p_size != 0) {
+		/* alternate partition ('c' or 'd') is suitable for raw slot,
+		 * swap with 'd' or 'c'.
+		 */
+		rp = *p;
+		*p = *altp;
+		*altp = rp;
+	} else if (lp->d_npartitions <= RAW_PART &&
+	           lp->d_npartitions > 'c' - 'a') {
+		/* No raw partition is present, but the alternate is present.
+		 * Copy alternate to raw partition.
+		 */
+		lp->d_npartitions = RAW_PART + 1;
+		*p = *altp;
+	} else if (!geom_ok)
+		return "no raw partition and disk reports bad geometry";
+	else if (lp->d_npartitions <= RAW_PART) {
+		memset(&lp->d_partitions[lp->d_npartitions], 0,
+		    sizeof(struct partition) * (RAW_PART - lp->d_npartitions));
+		*p = rp;
+		lp->d_npartitions = RAW_PART + 1;
+	} else if (lp->d_npartitions < MAXPARTITIONS) {
+		memmove(p + 1, p,
+		    sizeof(struct partition) * (lp->d_npartitions - RAW_PART));
+		*p = rp;
+		lp->d_npartitions++;
+	} else
+		return "no raw partition and partition table is full";
+	return NULL;
+}
+
+/*
+ * disk_ioctl --
+ *	Generic disk ioctl handling.
+ */
+int
+disk_ioctl(struct disk *diskp, u_long cmd, void *data, int flag,
+	   struct lwp *l)
+{
+	int error;
+
+	switch (cmd) {
+	case DIOCGDISKINFO:
+	    {
+		struct plistref *pref = (struct plistref *) data;
+
+		if (diskp->dk_info == NULL)
+			error = ENOTSUP;
+		else
+			error = prop_dictionary_copyout_ioctl(pref, cmd,
+							diskp->dk_info);
+		break;
+	    }
+
+	default:
+		error = EPASSTHROUGH;
+	}
+
+	return (error);
 }

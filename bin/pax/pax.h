@@ -1,4 +1,4 @@
-/*	$NetBSD: pax.h,v 1.9 2000/02/17 03:12:26 itohy Exp $	*/
+/*	$NetBSD: pax.h,v 1.28.8.1 2009/04/13 20:42:59 snj Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,6 +35,11 @@
  *	@(#)pax.h	8.2 (Berkeley) 4/18/94
  */
 
+#if ! HAVE_NBTOOL_CONFIG_H
+#define HAVE_LUTIMES 1
+#define HAVE_STRUCT_STAT_ST_FLAGS 1
+#endif
+
 /*
  * BSD PAX global data structures and constants.
  */
@@ -56,12 +57,12 @@
 /*
  * Pax modes of operation
  */
+#define ERROR		-1	/* nothing selected */
 #define	LIST		0	/* List the file in an archive */
 #define	EXTRACT		1	/* extract the files in an archive */
 #define ARCHIVE		2	/* write a new archive */
 #define APPND		3	/* append to the end of an archive */
 #define	COPY		4	/* copy files to destination dir */
-#define DEFOP		LIST	/* if no flags default is to LIST */
 
 /*
  * Device type of the current archive volume
@@ -71,7 +72,9 @@
 #define ISBLK		2	/* block device */
 #define ISTAPE		3	/* tape drive */
 #define ISPIPE		4	/* pipe/socket */
-
+#ifdef SUPPORT_RMT
+#define	ISRMT		5	/* rmt */
+#endif
 
 /*
  * Pattern matching structure
@@ -81,11 +84,12 @@
 typedef struct pattern {
 	char		*pstr;		/* pattern to match, user supplied */
 	char		*pend;		/* end of a prefix match */
+	char		*chdname;	/* the dir to change to if not NULL. */
 	int		plen;		/* length of pstr */
 	int		flgs;		/* processing/state flags */
 #define MTCH		0x1		/* pattern has been matched */
 #define DIR_MTCH	0x2		/* pattern matched a directory */
-#define PTCHDIR		0x4		/* not pattern but chdir */
+#define NOGLOB_MTCH	0x4		/* non-globbing match */
 	struct pattern	*fow;		/* next pattern */
 } PATTERN;
 
@@ -107,6 +111,8 @@ typedef struct {
 	int ln_nlen;			/* link name length */
 	char ln_name[PAXPATHLEN+1];	/* name to link to (if any) */
 	char *org_name;			/* orig name in file system */
+	char fts_name[PAXPATHLEN+1];	/* name from fts (for *org_name) */
+	char *tmp_name;			/* tmp name used to restore */
 	PATTERN *pat;			/* ptr to pattern match (if any) */
 	struct stat sb;			/* stat buffer see stat(2) */
 	off_t pad;			/* bytes of padding after file xfer */
@@ -136,12 +142,12 @@ typedef struct {
  * The format specific routine table allows new archive formats to be quickly
  * added. Overall pax operation is independent of the actual format used to
  * form the archive. Only those routines which deal directly with the archive
- * are tailored to the oddities of the specifc format. All other routines are
+ * are tailored to the oddities of the specific format. All other routines are
  * independent of the archive format. Data flow in and out of the format
  * dependent routines pass pointers to ARCHD structure (described below).
  */
 typedef struct {
-	char *name;		/* name of format, this is the name the user */
+	const char *name;	/* name of format, this is the name the user */
 				/* gives to -x option to select it. */
 	int bsz;		/* default block size. used when the user */
 				/* does not specify a blocksize for writing */
@@ -166,13 +172,13 @@ typedef struct {
 	int inhead;		/* is the trailer encoded in a valid header? */
 				/* if not, trailers are assumed to be found */
 				/* in invalid headers (i.e like tar) */
-	int (*id)		/* checks if a buffer is a valid header */
-		__P((char *, int)); /* returns 1 if it is, o.w. returns a 0 */
-	int (*st_rd)		/* initialize routine for read. so format */
-		__P((void));	/* can set up tables etc before it starts */
+	int (*id)(char *, int);	/* checks if a buffer is a valid header */
+				/* returns 1 if it is, o.w. returns a 0 */
+	int (*st_rd)(void);	/* initialize routine for read. so format */
+				/* can set up tables etc before it starts */
 				/* reading an archive */
 	int (*rd)		/* read header routine. passed a pointer to */
-		__P((ARCHD *, char *)); /* ARCHD. It must extract the info */
+		(ARCHD *, char *); /* ARCHD. It must extract the info */
 				/* from the format and store it in the  ARCHD */
 				/* struct. This routine is expected to fill */
 				/* all the fields in the ARCHD (including */
@@ -183,14 +189,13 @@ typedef struct {
 				/* amount of padding and the number of bytes */
 				/* of data which follow the header. This info */
 				/* is used to skip to the next file header */
-	off_t (*end_rd)		/* read cleanup. Allows format to clean up */
-		__P((void));	/* and MUST RETURN THE LENGTH OF THE TRAILER */
+	off_t (*end_rd)(void);	/* read cleanup. Allows format to clean up */
+				/* and MUST RETURN THE LENGTH OF THE TRAILER */
 				/* RECORD (so append knows how many bytes */
 				/* to move back to rewrite the trailer) */
-	int (*st_wr)		/* initialize routine for write operations */
-		__P((void));
-	int (*wr)		/* write archive header. Passed an ARCHD */
-		__P((ARCHD *)); /* filled with the specs on the next file to */
+	int (*st_wr)(void);	/* initialize routine for write operations */
+	int (*wr)(ARCHD *);	/* write archive header. Passed an ARCHD */
+				/* filled with the specs on the next file to */
 				/* archived. Returns a 1 if no file data is */
 				/* is to be stored; 0 if file data is to be */
 				/* added. A -1 is returned if a write */
@@ -199,25 +204,24 @@ typedef struct {
 				/* the proper padding can be added after */
 				/* file data. This routine must NEVER write */
 				/* a flawed archive header. */
-	int (*end_wr)		/* end write. write the trailer and do any */
-		__P((void));	/* other format specific functions needed */
-				/* at the ecnd of a archive write */
+	int (*end_wr)(void);	/* end write. write the trailer and do any */
+				/* other format specific functions needed */
+				/* at the end of an archive write */
 	int (*trail)		/* returns 0 if a valid trailer, -1 if not */
-		__P((char *, int, int *)); /* For formats which encode the */
+		(char *, int, int *); /* For formats which encode the */
 				/* trailer outside of a valid header, a */
 				/* return value of 1 indicates that the block */
 				/* passed to it can never contain a valid */
 				/* header (skip this block, no point in */
 				/* looking at it) */
 	int (*subtrail)		/* read/process file data from the archive */
-		__P((ARCHD *)); /* this function is called for trailers */
+		(ARCHD *);	/* this function is called for trailers */
 				/* inside headers. */
 	int (*rd_data)		/* read/process file data from the archive */
-		__P((ARCHD *, int, off_t *));
+		(ARCHD *, int, off_t *);
 	int (*wr_data)		/* write/process file data to the archive */
-		__P((ARCHD *, int, off_t *));
-	int (*options)		/* process format specific options (-o) */
-		__P((void));
+		(ARCHD *, int, off_t *);
+	int (*options)(void);	/* process format specific options (-o) */
 } FSUB;
 
 /*
@@ -237,9 +241,17 @@ typedef struct oplist {
 #ifndef MIN
 #define        MIN(a,b) (((a)<(b))?(a):(b))
 #endif
-#define MAJOR(x)        major(x)
-#define MINOR(x)        minor(x)
-#define TODEV(x, y)	makedev(x, y)
+
+#ifdef HOSTPROG
+# include "pack_dev.h"			/* explicitly use NetBSD's macros */
+# define MAJOR(x)	major_netbsd(x)
+# define MINOR(x)	minor_netbsd(x)
+# define TODEV(x, y)	makedev_netbsd((x), (y))
+#else
+# define MAJOR(x)	major(x)
+# define MINOR(x)	minor(x)
+# define TODEV(x, y)	makedev((x), (y))
+#endif
 
 /*
  * General Defines
@@ -252,4 +264,27 @@ typedef struct oplist {
  * Pathname base component of the temporary file template, to be created in
  * ${TMPDIR} or, as a fall-back, _PATH_TMP.
  */
-#define TMPFILE	"paxXXXXXX"
+#define _TFILE_BASE	"paxXXXXXXXXXX"
+
+/*
+ * Macros to manipulate off_t as a unsigned long or unsigned long long
+ */
+#if defined(_LP64)
+#define	OFFT_F			"%lu"
+#define	OFFT_FP(x)		"%" x "lu"
+#define	OFFT_T			u_long
+#define	ASC_OFFT(x,y,z)		asc_ul(x,y,z)
+#define	OFFT_ASC(w,x,y,z)	ul_asc((u_long)w,x,y,z)
+#define	OFFT_OCT(w,x,y,z)	ul_oct((u_long)w,x,y,z)
+#define	STRTOOFFT(x,y,z)	strtol(x,y,z)
+#define	OFFT_MAX		LONG_MAX
+#else
+#define	OFFT_F			"%llu"
+#define	OFFT_FP(x)		"%" x "llu"
+#define	OFFT_T			unsigned long long
+#define	ASC_OFFT(x,y,z)		asc_ull(x,y,z)
+#define	OFFT_ASC(w,x,y,z)	ull_asc((unsigned long long)w,x,y,z)
+#define	OFFT_OCT(w,x,y,z)	ull_oct((unsigned long long)w,x,y,z)
+#define	STRTOOFFT(x,y,z)	strtoll(x,y,z)
+#define	OFFT_MAX		ULLONG_MAX
+#endif

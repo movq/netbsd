@@ -1,4 +1,4 @@
-.\"	$NetBSD: chio.1,v 1.9 1999/09/09 23:24:29 thorpej Exp $
+.\"	$NetBSD: chio.1,v 1.15 2008/04/30 13:10:46 martin Exp $
 .\"
 .\" Copyright (c) 1996, 1998, 1999 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -15,13 +15,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -79,58 +72,60 @@ There are four element types:
 .Pa portal
 (import/export), and
 .Pa drive
-(data transfer).  In this command description, the shorthand
+(data transfer).
+In this command description, the shorthand
 .Ic ET
 will be used to represent an element type, and
 .Ic EU
-will be used to represent an element unit.  For example, to represent
+will be used to represent an element unit.
+For example, to represent
 the first robotic arm in the changer, the ET would be
 .Dq picker
 and the EU would be
 .Dq 0 .
-.Pp
 .Sh SUPPORTED COMMANDS
 .Nm
 .Ic move
-.Ar <from ET> <from EU> <to ET> <to EU>
+.Ar \*[Lt]from ET\*[Gt] \*[Lt]from EU\*[Gt] \*[Lt]to ET\*[Gt] \*[Lt]to EU\*[Gt]
 .Op Ar inv
 .Pp
 Moves the media unit from
-.Pa <from ET/EU>
+.Pa \*[Lt]from ET/EU\*[Gt]
 to
-.Pa <to ET/EU> .
+.Pa \*[Lt]to ET/EU\*[Gt] .
 If the optional modifier
 .Pa inv
 is specified, the media unit will be inverted before insertion.
 .Pp
 .Nm
 .Ic exchange
-.Ar <src ET> <src EU> <dst1 ET> <dst1 EU>
-.Op Ar <dst2 ET> <dst2 ET>
+.Ar \*[Lt]src ET\*[Gt] \*[Lt]src EU\*[Gt] \*[Lt]dst1 ET\*[Gt] \*[Lt]dst1 EU\*[Gt]
+.Op Ar \*[Lt]dst2 ET\*[Gt] \*[Lt]dst2 ET\*[Gt]
 .Op Ar inv1
 .Op Ar inv2
 .Pp
-Performs a media unit exchange operation.  The media unit in
-.Pa <src ET/EU>
+Performs a media unit exchange operation.
+The media unit in
+.Pa \*[Lt]src ET/EU\*[Gt]
 is moved to
-.Pa <dst1 ET/EU>
+.Pa \*[Lt]dst1 ET/EU\*[Gt]
 and the media unit previously in
-.Pa <dst1 ET/EU>
+.Pa \*[Lt]dst1 ET/EU\*[Gt]
 is moved to
-.Pa <dst2 ET/EU> .
+.Pa \*[Lt]dst2 ET/EU\*[Gt] .
 In the case of a simple exchange,
-.Pa <dst2 ET/EU>
+.Pa \*[Lt]dst2 ET/EU\*[Gt]
 is omitted and the values
-.Pa <src ET/EU>
+.Pa \*[Lt]src ET/EU\*[Gt]
 are used in their place.
 The optional modifiers
 .Pa inv1
 and
 .Pa inv2
 specify whether the media units are to be inverted before insertion into
-.Pa <dst1 ET/EU>
+.Pa \*[Lt]dst1 ET/EU\*[Gt]
 and
-.Pa <dst2 ET/EU>
+.Pa \*[Lt]dst2 ET/EU\*[Gt]
 respectively.
 .Pp
 Note that not all medium changers support the
@@ -140,11 +135,11 @@ multiple free pickers with transient storage.
 .Pp
 .Nm
 .Ic position
-.Ar <to ET> <to EU>
+.Ar \*[Lt]to ET\*[Gt] \*[Lt]to EU\*[Gt]
 .Op Ar inv
 .Pp
 Position the picker in front of the element described by
-.Pa <to ET/EU> .
+.Pa \*[Lt]to ET/EU\*[Gt] .
 If the optional modifier
 .Pa inv
 is specified, the media unit will be inverted before insertion.
@@ -164,20 +159,21 @@ Report which picker unit the changer is currently configured to use.
 .Pp
 .Nm
 .Ic setpicker
-.Ar <unit>
+.Ar \*[Lt]unit\*[Gt]
 .Pp
 Configure the changer to use picker
-.Pa <unit> .
+.Pa \*[Lt]unit\*[Gt] .
 .Pp
 .Nm
 .Ic status
-.Oo Ar <type> Oo unit Oo count Oc Oc Oc
+.Oo Ar \*[Lt]type\*[Gt] Oo unit Oo count Oc Oc Oc
 .Op Ar voltags
 .Pp
-Report the status of all elements in the changer.  If
-.Pa <type>
+Report the status of all elements in the changer.
+If
+.Pa \*[Lt]type\*[Gt]
 is specified, report the status of all elements of type
-.Pa <type> .
+.Pa \*[Lt]type\*[Gt] .
 .Pp
 The status bits are defined as follows:
 .Bl -tag -width indent
@@ -208,17 +204,19 @@ If the previous location of the media is available, it will also be reported.
 .Nm
 .Ic ielem
 .Pp
-Perform an \fBINITIALIZE ELEMENT STATUS\fR
+Perform an
+.Em INITIALIZE ELEMENT STATUS
 operation on the changer.
 .Pp
 .Nm
 .Ic cdlu
-.Ar <sub-command>
-.Ar <slot>
+.Ar \*[Lt]sub-command\*[Gt]
+.Ar \*[Lt]slot\*[Gt]
 .Pp
 This command is provided for controlling CD-ROM changer mechanisms which
-cannot use the standard changer control interface.  ATAPI CD-ROM changers
-fall into this category.  There are 3 sub-commands:
+cannot use the standard changer control interface.
+ATAPI CD-ROM changers fall into this category.
+There are 3 sub-commands:
 .Bl -tag -width indent
 .It Nm load
 Loads the media from the specified slot into the CD-ROM drive.
@@ -227,7 +225,8 @@ Unloads the media from the CD-ROM drive and returns it to the specified slot.
 .It Nm abort
 Aborts any pending load or unload operation.
 .El
-.Pp
+.Sh FILES
+/dev/ch0 - default changer device
 .Sh EXAMPLES
 .Dl chio -f /dev/ch0 move slot 3 drive 0
 .Pp
@@ -243,17 +242,15 @@ Loads the media from slot (second slot) into the CD-ROM drive.
 .Pp
 .Dl chio -f /dev/ch1 status
 .Pp
-Returns status of all elements in the second changer. 
-.Pp
-.Sh FILES
-/dev/ch0 - default changer device
+Returns status of all elements in the second changer.
 .Sh SEE ALSO
 .Xr mt 1 ,
 .Xr mount 8
-.Sh AUTHOR
+.Sh AUTHORS
 The
 .Nm
 program and SCSI changer driver were originally written by Jason R. Thorpe
-for And Communications, http://www.and.com/.  Additional development was
+for And Communications, http://www.and.com/.
+Additional development was
 done by Jason R. Thorpe for the Numerical Aerospace Simulation Facility,
 NASA Ames Research Center.

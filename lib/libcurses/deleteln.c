@@ -1,4 +1,4 @@
-/*	$NetBSD: deleteln.c,v 1.11 1999/09/17 13:44:31 simonb Exp $	*/
+/*	$NetBSD: deleteln.c,v 1.14 2003/08/07 16:44:21 agc Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,52 +34,32 @@
 #if 0
 static char sccsid[] = "@(#)deleteln.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: deleteln.c,v 1.11 1999/09/17 13:44:31 simonb Exp $");
+__RCSID("$NetBSD: deleteln.c,v 1.14 2003/08/07 16:44:21 agc Exp $");
 #endif
 #endif				/* not lint */
 
-#include <string.h>
-
 #include "curses.h"
+#include "curses_private.h"
+
+#ifndef _CURSES_USE_MACROS
+/*
+ * deleteln --
+ *	Delete a line from stdscr.  It leaves (cury, curx) unchanged.
+ */
+int
+deleteln(void)
+{
+	return(winsdelln(stdscr, -1));
+}
+
+#endif
 
 /*
  * wdeleteln --
  *	Delete a line from the screen.  It leaves (cury, curx) unchanged.
  */
 int
-wdeleteln(win)
-	WINDOW *win;
+wdeleteln(WINDOW *win)
 {
-	int     y, i;
-	__LINE *temp;
-
-#ifdef DEBUG
-	__CTRACE("deleteln: (%0.2o) cury=%d\n", win, win->cury);
-#endif
-	temp = win->lines[win->cury];
-	for (y = win->cury; y < win->maxy - 1; y++) {
-		win->lines[y]->flags &= ~__ISPASTEOL;
-		win->lines[y + 1]->flags &= ~__ISPASTEOL;
-		if (win->orig == NULL)
-			win->lines[y] = win->lines[y + 1];
-		else
-			(void) memcpy(win->lines[y]->line,
-			    win->lines[y + 1]->line,
-			    win->maxx * __LDATASIZE);
-		__touchline(win, y, 0, (int) win->maxx - 1, 0);
-	}
-
-	if (win->orig == NULL)
-		win->lines[y] = temp;
-	else
-		temp = win->lines[y];
-
-	for (i = 0; i < win->maxx; i++) {
-		temp->line[i].ch = ' ';
-		temp->line[i].attr = 0;
-	}
-	__touchline(win, y, 0, (int) win->maxx - 1, 0);
-	if (win->orig == NULL)
-		__id_subwins(win);
-	return (OK);
+	return(winsdelln(win, -1));
 }

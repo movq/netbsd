@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.3 1996/06/07 01:39:16 thorpej Exp $	*/
+/*	$NetBSD: extern.h,v 1.6 2003/08/07 11:17:12 agc Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,9 +31,9 @@
  *	@(#)extern.h	8.1 (Berkeley) 6/6/93
  */
 
-struct proc;
-void	fmt_puts __P((char *, int *));
-void	fmt_putc __P((int, int *));
-void	pr_attime __P((time_t *, time_t *));
-void	pr_idle __P((time_t));
-int	proc_compare __P((struct proc *, struct proc *));
+struct kinfo_proc2;
+void	fmt_puts(char *, int *);
+void	fmt_putc(int, int *);
+void	pr_attime(time_t *, time_t *);
+void	pr_idle(time_t);
+int	proc_compare(struct kinfo_proc2 *, struct kinfo_proc2 *);

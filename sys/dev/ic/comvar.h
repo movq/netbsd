@@ -1,4 +1,4 @@
-/*	$NetBSD: comvar.h,v 1.32 2000/03/23 07:01:30 thorpej Exp $	*/
+/*	comvar.h,v 1.55.8.3 2008/01/09 01:52:50 matt Exp	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -31,47 +31,129 @@
  */
 
 #include "rnd.h"
+#include "opt_multiprocessor.h"
+#include "opt_lockdebug.h"
+#include "opt_com.h"
+#include "opt_kgdb.h"
+
 #if NRND > 0 && defined(RND_COM)
 #include <sys/rnd.h>
 #endif
 
 #include <sys/callout.h>
 #include <sys/timepps.h>
+#include <sys/mutex.h>
 
-int comcnattach __P((bus_space_tag_t, int, int, int, tcflag_t));
+#include <dev/ic/comreg.h>	/* for COM_NPORTS */
+
+struct com_regs;
+
+int comcnattach(bus_space_tag_t, bus_addr_t, int, int, int, tcflag_t);
+int comcnattach1(struct com_regs *, int, int, int, tcflag_t);
 
 #ifdef KGDB
-int com_kgdb_attach __P((bus_space_tag_t, int, int, int, tcflag_t));
+int com_kgdb_attach(bus_space_tag_t, bus_addr_t, int, int, int, tcflag_t);
+int com_kgdb_attach1(struct com_regs *, int, int, int, tcflag_t);
 #endif
 
-int com_is_console __P((bus_space_tag_t, int, bus_space_handle_t *));
+int com_is_console(bus_space_tag_t, bus_addr_t, bus_space_handle_t *);
 
 /* Hardware flag masks */
 #define	COM_HW_NOIEN	0x01
 #define	COM_HW_FIFO	0x02
-#define	COM_HW_HAYESP	0x04
+		/*	0x04	free for use */
 #define	COM_HW_FLOW	0x08
 #define	COM_HW_DEV_OK	0x20
 #define	COM_HW_CONSOLE	0x40
 #define	COM_HW_KGDB	0x80
 #define	COM_HW_TXFIFO_DISABLE	0x100
+#define	COM_HW_NO_TXPRELOAD	0x200
 
 /* Buffer size for character buffer */
 #define	COM_RING_SIZE	2048
 
+#ifdef	COM_REGMAP
+#define	COM_REG_RXDATA		0
+#define	COM_REG_TXDATA		1
+#define	COM_REG_DLBL		2
+#define	COM_REG_DLBH		3
+#define	COM_REG_IER		4
+#define	COM_REG_IIR		5
+#define	COM_REG_FIFO		6
+#define	COM_REG_TCR		6
+#define	COM_REG_EFR		7
+#define	COM_REG_TLR		7
+#define	COM_REG_LCR		8
+#define	COM_REG_MDR1		8
+#define	COM_REG_MCR		9
+#define	COM_REG_LSR		10
+#define	COM_REG_MSR		11
+
+struct com_regs {
+	bus_space_tag_t		cr_iot;
+	bus_space_handle_t	cr_ioh;
+	bus_addr_t		cr_iobase;
+	bus_size_t		cr_nports;
+	bus_size_t		cr_map[16];
+};
+
+extern const bus_size_t com_std_map[16];
+
+#define	COM_INIT_REGS(regs, tag, hdl, addr)				\
+	do {								\
+		regs.cr_iot = tag;					\
+		regs.cr_ioh = hdl;					\
+		regs.cr_iobase = addr;					\
+		regs.cr_nports = COM_NPORTS;				\
+		memcpy(regs.cr_map, com_std_map, sizeof (regs.cr_map));	\
+	} while (0)
+
+#else
+#define	COM_REG_RXDATA		com_data
+#define	COM_REG_TXDATA		com_data
+#define	COM_REG_DLBL		com_dlbl
+#define	COM_REG_DLBH		com_dlbh
+#define	COM_REG_IER		com_ier
+#define	COM_REG_IIR		com_iir
+#define	COM_REG_FIFO		com_fifo
+#define	COM_REG_EFR		com_efr
+#define	COM_REG_LCR		com_lctl
+#define	COM_REG_MCR		com_mcr
+#define	COM_REG_LSR		com_lsr
+#define	COM_REG_MSR		com_msr
+#define	COM_REG_TCR		com_msr
+#define	COM_REG_TLR		com_scratch
+#define	COM_REG_MDR1		8
+
+struct com_regs {
+	bus_space_tag_t		cr_iot;
+	bus_space_handle_t	cr_ioh;
+	bus_addr_t		cr_iobase;
+	bus_size_t		cr_nports;
+};
+
+#define	COM_INIT_REGS(regs, tag, hdl, addr)		\
+	do {						\
+		regs.cr_iot = tag;			\
+		regs.cr_ioh = hdl;			\
+		regs.cr_iobase = addr;			\
+		regs.cr_nports = COM_NPORTS;		\
+	} while (0)
+
+#endif
+
 struct com_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	void *sc_si;
 	struct tty *sc_tty;
 
 	struct callout sc_diag_callout;
 
-	int sc_iobase;			/* XXX ISA-centric name */
 	int sc_frequency;
 
-	bus_space_tag_t sc_iot;
-	bus_space_handle_t sc_ioh;
+	struct com_regs sc_regs;
 	bus_space_handle_t sc_hayespioh;
+
 
 	u_int sc_overflows,
 	      sc_floods,
@@ -110,41 +192,47 @@ struct com_softc {
 	    sc_mcr_active, sc_lcr, sc_ier, sc_fifo, sc_dlbl, sc_dlbh, sc_efr;
 	u_char sc_mcr_dtr, sc_mcr_rts, sc_msr_cts, sc_msr_dcd;
 
+#ifdef COM_HAYESP
+	u_char sc_prescaler;
+#endif
+
+	/*
+	 * There are a great many almost-ns16550-compatible UARTs out
+	 * there, which have minor differences.  The type field here
+	 * lets us distinguish between them.
+	 */
+	int sc_type;
+#define	COM_TYPE_NORMAL		0	/* normal 16x50 */
+#define	COM_TYPE_HAYESP		1	/* Hayes ESP modem */
+#define	COM_TYPE_PXA2x0		2	/* Intel PXA2x0 processor built-in */
+#define	COM_TYPE_AU1x00		3	/* AMD/Alchemy Au1x000 proc. built-in */
+#define	COM_TYPE_OMAP		4	/* TI OMAP processor built-in */
+#define	COM_TYPE_16550_NOERS	5	/* like a 16550, no ERS */
+
 	/* power management hooks */
-	int (*enable) __P((struct com_softc *));
-	void (*disable) __P((struct com_softc *));
+	int (*enable)(struct com_softc *);
+	void (*disable)(struct com_softc *);
 	int enabled;
 
-	/* PPS signal on DCD, with or without inkernel clock disciplining */
-	u_char	sc_ppsmask;			/* pps signal mask */
-	u_char	sc_ppsassert;			/* pps leading edge */
-	u_char	sc_ppsclear;			/* pps trailing edge */
-	pps_info_t ppsinfo;
-	pps_params_t ppsparam;
+	struct pps_state sc_pps_state;	/* pps state */
 
 #if NRND > 0 && defined(RND_COM)
 	rndsource_element_t  rnd_source;
 #endif
+	kmutex_t		sc_lock;
 };
 
-/* Macros to clear/set/test flags. */
-#define SET(t, f)	(t) |= (f)
-#define CLR(t, f)	(t) &= ~(f)
-#define ISSET(t, f)	((t) & (f))
+int comprobe1(bus_space_tag_t, bus_space_handle_t);
+int comintr(void *);
+void com_attach_subr(struct com_softc *);
+int com_probe_subr(struct com_regs *);
+int com_detach(struct device *, int);
+bool com_resume(device_t PMF_FN_PROTO);
+int com_activate(struct device *, enum devact);
+bool com_cleanup(device_t, int);
+bool com_suspend(device_t PMF_FN_PROTO);
 
-int comprobe1 __P((bus_space_tag_t, bus_space_handle_t));
-int comintr __P((void *));
-void com_attach_subr __P((struct com_softc *));
-int cominit __P((bus_space_tag_t, int, int, int, tcflag_t,
-	bus_space_handle_t *));
-int com_detach __P((struct device *, int));
-int com_activate __P((struct device *, enum devact));
-
-#ifndef __GENERIC_SOFT_INTERRUPTS
-#ifdef __NO_SOFT_SERIAL_INTERRUPT
+#ifndef IPL_SERIAL
 #define	IPL_SERIAL	IPL_TTY
 #define	splserial()	spltty()
-#define	IPL_SOFTSERIAL	IPL_TTY
-#define	splsoftserial()	spltty()
-#endif
 #endif

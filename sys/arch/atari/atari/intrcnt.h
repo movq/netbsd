@@ -1,4 +1,4 @@
-/*	$NetBSD: intrcnt.h,v 1.3 1998/06/17 11:41:21 leo Exp $	*/
+/*	$NetBSD: intrcnt.h,v 1.5 2008/04/28 20:23:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,7 @@
  */
 
 /* interrupt counters */
-	.globl	_intrcnt,_eintrcnt,_intrnames,_eintrnames
-	.globl	_intrcnt_auto, _intrcnt_user
-_intrnames:
+GLOBAL(intrnames)
 	.asciz	"spur"
 	.asciz	"clock"
 	.asciz	"kbd/mouse"
@@ -253,14 +244,14 @@ _intrnames:
 	.asciz	"uservec191"
 	.asciz	"uservec192"
 
-_eintrnames:
+GLOBAL(eintrnames)
 	.even
-_intrcnt:
+GLOBAL(intrcnt)
 	.long	0,0,0,0,0,0,0,0,0,0,0
 	.long	0		| spurious
-_intrcnt_auto:
+GLOBAL(intrcnt_auto)
 	.long	0,0,0,0,0,0,0	| auto-vectors
-_intrcnt_user:
+GLOBAL(intrcnt_user)
 	.long	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	.long	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	.long	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
@@ -273,5 +264,5 @@ _intrcnt_user:
 	.long	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	.long	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	.long	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-_intrcnt_special:
-_eintrcnt:
+GLOBAL(intrcnt_special)
+GLOBAL(eintrcnt)

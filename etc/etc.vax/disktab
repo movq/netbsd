@@ -1,34 +1,10 @@
-#	$NetBSD: disktab,v 1.4 2000/03/04 16:11:35 ragge Exp $
+#	$NetBSD: disktab,v 1.12 2002/12/19 13:54:19 jdolecek Exp $
 #
 #	@(#)disktab	8.1 (Berkeley) 6/9/93
 #
-# Disk geometry and partition layout tables. 
-# Key:
-#	dt	controller type
-#	ty	type of disk (fixed, removeable, simulated)
-#	d[0-4]	drive-type-dependent parameters
-#	ns	#sectors/track
-#	nt	#tracks/cylinder
-#	nc	#cylinders/disk
-#	sc	#sectors/cylinder, nc*nt default
-#	su	#sectors/unit, sc*nc default
-#	se	sector size, DEV_BSIZE default
-#	rm	rpm, 3600 default
-#	sf	supports bad144-style bad sector forwarding
-#	sk	sector skew per track, default 0
-#	cs	sector skew per cylinder, default 0
-#	hs	headswitch time, default 0
-#	ts	one-cylinder seek time, default 0
-#	il	sector interleave (n:1), 1 default
-#	bs	boot block size, default BBSIZE
-#	sb	superblock size, default SBSIZE
-#	o[a-h]	partition offsets in sectors
-#	p[a-h]	partition sizes in sectors
-#	b[a-h]	partition block sizes in bytes
-#	f[a-h]	partition fragment sizes in bytes
-#	t[a-h]	partition types (filesystem, swap, etc)
-#	b[0-1]	primary and secondary bootstraps, optional
-#
+# See disktab(5) for format of this file, and also other examples in
+# /usr/share/examples/disktab/
+
 # WARNING:
 # On drives that contain bad-sector replacement areas,
 # `c' partitions DO overlap the bad-sector replacements.
@@ -420,8 +396,7 @@ rd52|RD52|DEC RD52 on Microvax:\
 	:pa#15884:oa#0:ba#4096:fa#1024:\
 	:pb#9766:ob#15884:bb#4096:fb#512:tb=swap:\
 	:pc#60480:oc#0:bc#4096:fc#512:\
-	:pg#34830:og#25650:bg#4096:fg#512:\
-	:b0=rdboot:
+	:pg#34830:og#25650:bg#4096:fg#512:
 #
 rd53|RD53|DEC RD53 on Microvax:\
 	:ty=winchester:ns#18:nt#8:nc#963:\
@@ -432,8 +407,7 @@ rd53|RD53|DEC RD53 on Microvax:\
 	:pe#33440:oe#0:be#4096:fe#512:\
 	:pf#105232:of#33440:bf#4096:ff#512:\
 	:pg#89348:og#49324:bg#4096:fg#512:\
-	:ph#122788:oh#15884:bh#4096:fh#512:\
-	:b0=rdboot:
+	:ph#122788:oh#15884:bh#4096:fh#512:
 #
 rd54|RD54|DEC RD54 on Microvax:\
 	:ty=winchester:ns#17:nt#15:nc#1225:\
@@ -444,8 +418,7 @@ rd54|RD54|DEC RD54 on Microvax:\
 	:pd#15884:od#49324:bd#4096:fd#512:\
 	:pe#55936:oe#65208:be#8192:fe#1024:\
 	:pf#190485:of#121144:bf#8192:ff#1024:\
-	:pg#261876:og#49324:bg#8192:fg#1024:\
-	:b0=rdboot:
+	:pg#261876:og#49324:bg#8192:fg#1024:
 #
 qdeagle|qd-eagle|Fujitsu 2351A eagle on QD33 (Microvax):\
 	:ty=winchester:ns#47:nt#20:nc#840:\
@@ -457,8 +430,7 @@ qdeagle|qd-eagle|Fujitsu 2351A eagle on QD33 (Microvax):\
 	:pe#307200:oe#391040:be#8192:fe#1024:\
 	:pf#88736:of#698420:bf#8192:ff#1024:\
 	:pg#412096:og#375060:bg#8192:fg#1024:\
-	:ph#291346:oh#83660:bh#8192:fh#1024:\
-	:b0=rdboot:
+	:ph#291346:oh#83660:bh#8192:fh#1024:
 #
 # floppy disk drives
 #
@@ -502,7 +474,7 @@ ncc2|nec2363|1Gb NEC:\
 	:ty=winchester:ns#64:nt#27:nc#1024:rm#3600:se#512:\
 	:dt=SMD:\
 	:d0#0:\
-        :pa#15884:oa#0:ba#8192:fa#1024:\
+	:pa#15884:oa#0:ba#8192:fa#1024:\
 	:pb#66880:ob#17280:bb#8192:fb#1024:tb=swap:\
 	:pc#1769472:oc#0:bc#8192:fc#1024:\
 	:pd#15884:od#376704:bd#4096:fd#512:\
@@ -510,20 +482,3 @@ ncc2|nec2363|1Gb NEC:\
 	:pf#1067904:of#701568:bf#8192:ff#1024:\
 	:pg#1392768:og#376704:bg#8192:fg#1024:\
 	:ph#291346:oh#84672:bh#8192:fh#1024:
-#
-# Special disktab entries used when creating distributions.
-#
-ramdisk|fake-type used for in kernel ramdisk:\
-	:ty=fake:nt#1:ns#2112:nc#1:\
-	:pa#2112:ba#4096:fa#512:ta=4.2BSD:\
-	:pc#2112:bc#4096:fc#512:
-
-bootroot|fake-type used in install boot:\
-	:ty=fake:nt#1:ns#208:nc#1:\
-	:pa#192:ba#8192:fa#1024:ta=4.2BSD:\
-	:pc#192:bc#8192:fc#1024:
-
-miniroot|fake-type used when installation:\
-	:ty=fake:nt#1:ns#2000:nc#1:\
-	:pa#2000:ba#4096:fa#512:ta=4.2BSD:\
-	:pc#2000:bc#4096:fc#512:

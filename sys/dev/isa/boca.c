@@ -1,4 +1,4 @@
-/*	$NetBSD: boca.c,v 1.32 1998/09/18 14:38:48 enami Exp $	*/
+/*	$NetBSD: boca.c,v 1.50 2008/04/08 20:08:49 cegger Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -33,13 +33,18 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: boca.c,v 1.50 2008/04/08 20:08:49 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/termios.h>
+#include <sys/kernel.h>
+#include <sys/callout.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
@@ -59,28 +64,25 @@ struct boca_softc {
 	int sc_alive;			/* mask of slave units attached */
 	void *sc_slaves[NSLAVES];	/* com device unit numbers */
 	bus_space_handle_t sc_slaveioh[NSLAVES];
+	callout_t fixup;
 };
 
-int bocaprobe __P((struct device *, struct cfdata *, void *));
-void bocaattach __P((struct device *, struct device *, void *));
-int bocaintr __P((void *));
-int bocaprint __P((void *, const char *));
+int bocaprobe(struct device *, struct cfdata *, void *);
+void bocaattach(struct device *, struct device *, void *);
+int bocaintr(void *);
+void boca_fixup(void *);
 
-struct cfattach boca_ca = {
-	sizeof(struct boca_softc), bocaprobe, bocaattach,
-};
+CFATTACH_DECL(boca, sizeof(struct boca_softc),
+    bocaprobe, bocaattach, NULL, NULL);
 
 int
-bocaprobe(parent, self, aux)
-	struct device *parent;
-	struct cfdata *self;
-	void *aux;
+bocaprobe(struct device *parent, struct cfdata *self,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
-	int iobase = ia->ia_iobase;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
-	int i, rv = 1;
+	int i, iobase, rv = 1;
 
 	/*
 	 * Do the normal com probe for the first UART and assume
@@ -89,9 +91,21 @@ bocaprobe(parent, self, aux)
 	 * XXX Needs more robustness.
 	 */
 
-	/* Disallow wildcarded i/o address. */
-	if (ia->ia_iobase == ISACF_PORT_DEFAULT)
+	if (ia->ia_nio < 1)
 		return (0);
+	if (ia->ia_nirq < 1)
+		return (0);
+
+	if (ISA_DIRECT_CONFIG(ia))
+		return (0);
+
+	/* Disallow wildcarded i/o address. */
+	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+		return (0);
+	if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ)
+		return (0);
+
+	iobase = ia->ia_io[0].ir_addr;
 
 	/* if the first port is in use as console, then it. */
 	if (com_is_console(iot, iobase, 0))
@@ -121,28 +135,20 @@ checkmappings:
 	}
 
 out:
-	if (rv)
-		ia->ia_iosize = NSLAVES * COM_NPORTS;
+	if (rv) {
+		ia->ia_nio = 1;
+		ia->ia_io[0].ir_size = NSLAVES * COM_NPORTS;
+
+		ia->ia_nirq = 1;
+
+		ia->ia_niomem = 0;
+		ia->ia_ndrq = 0;
+	}
 	return (rv);
 }
 
-int
-bocaprint(aux, pnp)
-	void *aux;
-	const char *pnp;
-{
-	struct commulti_attach_args *ca = aux;
-
-	if (pnp)
-		printf("com at %s", pnp);
-	printf(" slave %d", ca->ca_slave);
-	return (UNCONF);
-}
-
 void
-bocaattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+bocaattach(struct device *parent, struct device *self, void *aux)
 {
 	struct boca_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
@@ -153,15 +159,14 @@ bocaattach(parent, self, aux)
 	printf("\n");
 
 	sc->sc_iot = ia->ia_iot;
-	sc->sc_iobase = ia->ia_iobase;
+	sc->sc_iobase = ia->ia_io[0].ir_addr;
 
 	for (i = 0; i < NSLAVES; i++) {
 		iobase = sc->sc_iobase + i * COM_NPORTS;
 		if (!com_is_console(iot, iobase, &sc->sc_slaveioh[i]) &&
 		    bus_space_map(iot, iobase, COM_NPORTS, 0,
 			&sc->sc_slaveioh[i])) {
-			printf("%s: can't map i/o space for slave %d\n",
-			     sc->sc_dev.dv_xname, i);
+			aprint_error_dev(&sc->sc_dev, "can't map i/o space for slave %d\n", i);
 			return;
 		}
 	}
@@ -174,13 +179,15 @@ bocaattach(parent, self, aux)
 		ca.ca_iobase = sc->sc_iobase + i * COM_NPORTS;
 		ca.ca_noien = 0;
 
-		sc->sc_slaves[i] = config_found(self, &ca, bocaprint);
+		sc->sc_slaves[i] = config_found(self, &ca, commultiprint);
 		if (sc->sc_slaves[i] != NULL)
 			sc->sc_alive |= 1 << i;
 	}
 
-	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq, IST_EDGE,
-	    IPL_SERIAL, bocaintr, sc);
+	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
+	    IST_EDGE, IPL_SERIAL, bocaintr, sc);
+	callout_init(&sc->fixup, 0);
+	callout_reset(&sc->fixup, hz/10, boca_fixup, sc);
 }
 
 int
@@ -192,14 +199,18 @@ bocaintr(arg)
 	int alive = sc->sc_alive;
 	int bits;
 
-	bits = bus_space_read_1(iot, sc->sc_slaveioh[0], 7) & alive;
+	bits = bus_space_read_1(iot, sc->sc_slaveioh[0], com_scratch) & alive;
 	if (bits == 0)
 		return (0);
 
 	for (;;) {
 #define	TRY(n) \
-		if (bits & (1 << (n))) \
-			comintr(sc->sc_slaves[n]);
+		if (bits & (1 << (n))) { \
+			if (comintr(sc->sc_slaves[n]) == 0) { \
+				printf("%s: bogus intr for port %d\n", \
+				    device_xname(&sc->sc_dev), n); \
+			} \
+		}
 		TRY(0);
 		TRY(1);
 		TRY(2);
@@ -209,8 +220,28 @@ bocaintr(arg)
 		TRY(6);
 		TRY(7);
 #undef TRY
-		bits = bus_space_read_1(iot, sc->sc_slaveioh[0], 7) & alive;
-		if (bits == 0)
+		bits = bus_space_read_1(iot, sc->sc_slaveioh[0],
+		    com_scratch) & alive;
+		if (bits == 0) {
 			return (1);
+		}
  	}
+}
+
+void
+boca_fixup(v)
+	void *v;
+{
+	struct boca_softc *sc = v;
+	int alive = sc->sc_alive;
+	int i, s;
+
+	s = splserial();
+
+	for (i = 0; i < 8; i++) {
+		if (alive & (1 << (i)))
+			comintr(sc->sc_slaves[i]);
+	}
+	callout_reset(&sc->fixup, hz/10, boca_fixup, sc);
+	splx(s);
 }

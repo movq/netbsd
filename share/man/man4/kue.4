@@ -1,4 +1,5 @@
-.\" $NetBSD: kue.4,v 1.5 2000/03/20 01:34:22 augustss Exp $
+.\"	$NetBSD: kue.4,v 1.12 2002/02/07 03:15:08 ross Exp $
+.\"
 .\" Copyright (c) 1997, 1998, 1999, 2000
 .\"     Bill Paul <wpaul@ee.columbia.edu>. All rights reserved.
 .\"
@@ -44,29 +45,33 @@ The
 .Nm
 driver supports the following adapters:
 .Pp
-.Bl -tag -width -offset indent -compact
+.Bl -tag -width Dv -offset indent -compact
 .It Tn 3Com 3c19250
 .It Tn 3Com 3c460 HomeConnect Ethernet USB Adapter
+.It Tn Abocom URE450
 .It Tn ADS Technologies USB-10BT
 .It Tn Aox USB101
 .It Tn ATen UC10T
+.It Tn Corega EtherUSB
 .It Tn D-Link DSB-650
 .It Tn Entrega NET-USB-E45
+.It Tn I/O Data USB-ET/T
 .It Tn Kawasaki USB101
 .It Tn LinkSys USB10T
 .It Tn Netgear EA101
-.It Tn Peracom USB Ethernet Adapter
+.It Tn Peracom USB Ethernet Adapter (3 models)
 .It Tn SMC 2102USB
 .It Tn SMC 2104USB
 .El
 .Sh DESCRIPTION
 The
 .Nm
-driver provides support for USB ethernet adapters based on the Kawasaki
-LSI KL5KLUSB101B chipset.
+driver provides support for USB
+.Tn Ethernet
+adapters based on the Kawasaki LSI KL5KLUSB101B chipset.
 .Pp
 The KL5KLUSB101B supports a 128-entry multicast filter, single perfect
-filter entry for the station address and promiscuous mode. Packets are
+filter entry for the station address and promiscuous mode.  Packets are
 received and transmitted over separate USB bulk transfer endpoints.
 .Pp
 The Kawasaki adapter supports only 10Mbps half-duplex mode, hence there
@@ -87,9 +92,9 @@ The driver failed to allocate an mbuf for the receiver ring.
 .El
 .Sh SEE ALSO
 .Xr arp 4 ,
-.Xr ifconfig 8 ,
 .Xr netintro 4 ,
-.Xr usb 4 
+.Xr usb 4 ,
+.Xr ifconfig 8
 .Sh HISTORY
 The
 .Nm
@@ -101,9 +106,12 @@ and in
 The
 .Nm
 driver was written by
-.An Bill Paul Aq wpaul@ee.columbia.edu .
+.An Bill Paul
+.Aq wpaul@ee.columbia.edu .
 .Sh BUGS
 The
 .Nm
-driver does not accumulate ethernet collisions statistics because the
-Kawasaki firmware does not appear to maintain any internal statistics.
+driver does not accumulate
+.Tn Ethernet
+collisions statistics because the Kawasaki firmware does not appear to
+maintain any internal statistics.

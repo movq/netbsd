@@ -1,4 +1,4 @@
-/*	$NetBSD: window_string.h,v 1.5 1998/10/14 00:58:49 wsanchez Exp $	*/
+/*	$NetBSD: window_string.h,v 1.7 2003/08/07 11:17:35 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -49,11 +45,11 @@
 
 #define STR_DEBUG
 
-char	*str_cat __P((char *, char *));
-char	*str_cpy __P((char *));
-char	*str_itoa __P((int));
-int	 str_match __P((char *, char *, int));
-char	*str_ncpy __P((char *, int));
+char	*str_cat(char *, char *);
+char	*str_cpy(char *);
+char	*str_itoa(int);
+int	 str_match(char *, char *, int);
+char	*str_ncpy(char *, int);
 
 #define str_cmp(a, b)	strcmp(a, b)
 
@@ -69,8 +65,8 @@ EXTERN struct string str_head;
 #define str_offset ((unsigned)str_head.s_data - (unsigned)&str_head)
 #define str_stos(s) ((struct string *)((unsigned)(s) - str_offset))
 
-char	*str_alloc __P((size_t));
-void	str_free __P((char *));
+char	*str_alloc(size_t);
+void	str_free(char *);
 #else
 #define str_free(s)	free(s)
 #define str_alloc(s)	malloc(s)

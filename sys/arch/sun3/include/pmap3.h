@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap3.h,v 1.26 1998/03/16 16:25:38 gwr Exp $	*/
+/*	$NetBSD: pmap3.h,v 1.44 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,10 +34,12 @@
  * XXX - Does user-level code really see this struct?
  */
 
+#include <sys/simplelock.h>
+
 struct pmap {
 	unsigned char   	*pm_segmap; 	/* soft copy of segmap */
 	int             	pm_ctxnum;	/* MMU context number */
-	simple_lock_data_t	pm_lock;    	/* lock on pmap */
+	struct simplelock	pm_lock;    	/* lock on pmap */
 	int             	pm_refcount;	/* reference count */
 	int             	pm_version;
 };
@@ -59,11 +54,11 @@ extern	struct pmap	kernel_pmap_store;
  * This function does that, and calls vm_fault if it
  * could not resolve the fault by reloading the MMU.
  */
-int _pmap_fault __P((vm_map_t, vm_offset_t, vm_prot_t));
+int _pmap_fault(struct vm_map *, vaddr_t, vm_prot_t);
 
 /* This lets us have some say in choosing VA locations. */
-extern void pmap_prefer(vm_offset_t, vm_offset_t *);
-#define PMAP_PREFER(fo, ap) pmap_prefer((fo), (ap))
+extern void pmap_prefer(vaddr_t, vaddr_t *);
+#define PMAP_PREFER(fo, ap, sz, td) pmap_prefer((fo), (ap))
 
 /* This needs to be a macro for kern_sysctl.c */
 extern segsz_t pmap_resident_pages(pmap_t);
@@ -76,11 +71,16 @@ extern segsz_t pmap_wired_pages(pmap_t);
 /* We use the PA plus some low bits for device mmap. */
 #define pmap_phys_address(addr) 	(addr)
 
-/* Our memory is contiguous (or nearly so). */
-#define pmap_page_index(pa) (atop(pa))
+#define	pmap_update(pmap)		/* nothing (yet) */
 
 /* Map a given physical region to a virtual region */
-extern vm_offset_t pmap_map __P((vm_offset_t, vm_offset_t, vm_offset_t, int));
+extern vaddr_t pmap_map(vaddr_t, paddr_t, paddr_t, int);
+
+static __inline void
+pmap_remove_all(struct pmap *pmap)
+{
+	/* Nothing. */
+}
 
 /*
  * Since PTEs also contain type bits, we have to have some way
@@ -91,6 +91,7 @@ extern vm_offset_t pmap_map __P((vm_offset_t, vm_offset_t, vm_offset_t, int));
  * The values below must agree with pte.h such that:
  *	(PMAP_OBIO << PG_MOD_SHIFT) == PGT_OBIO
  */
+#define	PMAP_OBMEM	0x00	/* unused */
 #define	PMAP_OBIO	0x04	/* tells pmap_enter to use PG_OBIO */
 #define	PMAP_VME16	0x08	/* etc */
 #define	PMAP_VME32	0x0C	/* etc */

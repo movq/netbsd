@@ -1,4 +1,4 @@
-/*	$NetBSD: crl.c,v 1.6 2000/01/24 02:40:33 matt Exp $	*/
+/*	$NetBSD: crl.c,v 1.25 2008/03/11 05:34:03 matt Exp $	*/
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,6 +34,9 @@
  * TO DO (tef  7/18/85):
  *	1) change printf's to log() instead???
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: crl.c,v 1.25 2008/03/11 05:34:03 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -66,31 +65,31 @@ struct {
 	int	crl_ds;		/* saved drive status */
 } crlstat;
 
-void	crlintr __P((void *));
-void	crlattach __P((void));
-static	void crlstart __P((void));
+void	crlintr(void *);
+void	crlattach(void);
 
-int	crlopen __P((dev_t, int, struct proc *));
-int	crlclose __P((dev_t, int, struct proc *));
-int	crlrw __P((dev_t, struct uio *, int));
+static void crlstart(void);
+static dev_type_open(crlopen);
+static dev_type_close(crlclose);
+static dev_type_read(crlrw);
 
+const struct cdevsw crl_cdevsw = {
+	crlopen, crlclose, crlrw, crlrw, noioctl,
+	nostop, notty, nopoll, nommap, nokqfilter,
+};
 
-struct	ivec_dsp crl_intr;
+struct evcnt crl_ev = EVCNT_INITIALIZER(EVCNT_TYPE_INTR, NULL, "crl", "intr");
+EVCNT_ATTACH_STATIC(crl_ev);
 
 void
-crlattach()
+crlattach(void)
 {
-	crl_intr = idsptch;
-	crl_intr.hoppaddr = crlintr;
-	scb->scb_csrint = &crl_intr;
+	scb_vecalloc(0xF0, crlintr, NULL, SCB_ISTACK, &crl_ev);
 }	
 
 /*ARGSUSED*/
 int
-crlopen(dev, flag, p)
-	dev_t dev;
-	int flag;
-	struct proc *p;
+crlopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	if (vax_cputype != VAX_8600)
 		return (ENXIO);
@@ -103,34 +102,27 @@ crlopen(dev, flag, p)
 
 /*ARGSUSED*/
 int
-crlclose(dev, flag, p)
-	dev_t dev;
-	int flag;
-	struct proc *p;
+crlclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-
-	brelse(crltab.crl_buf);
+	brelse(crltab.crl_buf, 0);
 	crltab.crl_state = CRL_IDLE;
 	return 0;
 }
 
 /*ARGSUSED*/
 int
-crlrw(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+crlrw(dev_t dev, struct uio *uio, int flag)
 {
-	register struct buf *bp;
-	register int i;
-	register int s;
+	struct buf *bp;
+	int i;
+	int s;
 	int error;
 
 	if (uio->uio_resid == 0) 
 		return (0);
-	s = spl4();
+	s = splconsmedia();
 	while (crltab.crl_state & CRL_BUSY)
-		sleep((caddr_t)&crltab, PRIBIO);
+		(void) tsleep(&crltab, PRIBIO, "crlbusy", 0);
 	crltab.crl_state |= CRL_BUSY;
 	splx(s);
 
@@ -143,39 +135,46 @@ crlrw(dev, uio, flag)
 			break;
 		}
 		if (uio->uio_rw == UIO_WRITE) {
-			error = uiomove(bp->b_un.b_addr, i, uio);
+			error = uiomove(bp->b_data, i, uio);
 			if (error)
 				break;
 		}
-		bp->b_flags = uio->uio_rw == UIO_WRITE ? B_WRITE : B_READ;
-		s = spl4(); 
+		if (uio->uio_rw == UIO_WRITE) {
+			bp->b_oflags &= ~(BO_DONE);
+			bp->b_flags &= ~(B_READ);
+			bp->b_flags |= B_WRITE;
+		} else {
+			bp->b_oflags &= ~(BO_DONE);
+			bp->b_flags &= ~(B_WRITE);
+			bp->b_flags |= B_READ;
+		}
+		s = splconsmedia(); 
 		crlstart();
-		while ((bp->b_flags & B_DONE) == 0)
-			sleep((caddr_t)bp, PRIBIO);	
+		biowait(bp);
 		splx(s);
-		if (bp->b_flags & B_ERROR) {
-			error = EIO;
+		if (bp->b_error != 0) {
+			error = bp->b_error;
 			break;
 		}
 		if (uio->uio_rw == UIO_READ) {
-			error = uiomove(bp->b_un.b_addr, i, uio);
+			error = uiomove(bp->b_data, i, uio);
 			if (error)
 				break;
 		}
 	}
 	crltab.crl_state &= ~CRL_BUSY;
-	wakeup((caddr_t)&crltab);
+	wakeup((void *)&crltab);
 	return (error);
 }
 
 void
-crlstart()
+crlstart(void)
 {
-	register struct buf *bp;
+	struct buf *bp;
 
 	bp = crltab.crl_buf;
 	crltab.crl_errcnt = 0;
-	crltab.crl_xaddr = (ushort *) bp->b_un.b_addr;
+	crltab.crl_xaddr = (ushort *) bp->b_data;
 	bp->b_resid = 0;
 
 	if ((mfpr(PR_STXCS) & STXCS_RDY) == 0)
@@ -194,10 +193,9 @@ crlstart()
 }
 
 void
-crlintr(arg)
-	void *arg;
+crlintr(void *arg)
 {
-	register struct buf *bp;
+	struct buf *bp;
 	int i;
 
 	bp = crltab.crl_buf;
@@ -208,17 +206,25 @@ crlintr(arg)
 		switch (crltab.crl_active) {
 
 		case CRL_F_RETSTS:
-			crlstat.crl_ds = mfpr(PR_STXDB);
-			printf("crlcs=0x%b, crlds=0x%b\n", crlstat.crl_cs,
-				CRLCS_BITS, crlstat.crl_ds, CRLDS_BITS); 
-			break;
+			{
+				char sbuf[256], sbuf2[256];
+
+				crlstat.crl_ds = mfpr(PR_STXDB);
+
+				bitmask_snprintf(crlstat.crl_cs, CRLCS_BITS,
+						 sbuf, sizeof(sbuf));
+				bitmask_snprintf(crlstat.crl_ds, CRLDS_BITS,
+						 sbuf2, sizeof(sbuf2));
+				printf("crlcs=0x%s, crlds=0x%s\n", sbuf, sbuf2);
+				break;
+			}
 
 		case CRL_F_READ:
 		case CRL_F_WRITE:
-			bp->b_flags |= B_DONE;
+			bp->b_oflags |= BO_DONE;
 		}
 		crltab.crl_active = 0;
-		wakeup((caddr_t)bp);
+		wakeup((void *)bp);
 		break;
 
 	case CRL_S_XCONT:
@@ -238,7 +244,8 @@ crlintr(arg)
 	case CRL_S_ABORT:
 		crltab.crl_active = CRL_F_RETSTS;
 		mtpr(STXCS_IE | CRL_F_RETSTS, PR_STXCS);
-		bp->b_flags |= B_DONE|B_ERROR;
+		bp->b_oflags |= BO_DONE;
+		bp->b_error = EIO;
 		break;
 
 	case CRL_S_RETSTS:
@@ -249,12 +256,13 @@ crlintr(arg)
 	case CRL_S_HNDSHK:
 		printf("crl: hndshk error\n");	/* dump out some status too? */
 		crltab.crl_active = 0;
-		bp->b_flags |= B_DONE|B_ERROR;
-		wakeup((caddr_t)bp);
+		bp->b_oflags |= BO_DONE;
+		bp->b_error = EIO;
+		cv_broadcast(&bp->b_done);
 		break;
 
 	case CRL_S_HWERR:
-		printf("crl: hard error sn%d\n", bp->b_blkno);
+		printf("crl: hard error sn%" PRId64 "\n", bp->b_blkno);
 		crltab.crl_active = CRL_F_ABORT;
 		mtpr(STXCS_IE | CRL_F_ABORT, PR_STXCS);
 		break;

@@ -1,4 +1,4 @@
-/*	$NetBSD: init_field.c,v 1.6 1999/09/08 21:17:57 jsm Exp $	*/
+/*	$NetBSD: init_field.c,v 1.8 2003/08/07 09:37:36 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,11 +34,14 @@
 #if 0
 static char sccsid[] = "@(#)init_field.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: init_field.c,v 1.6 1999/09/08 21:17:57 jsm Exp $");
+__RCSID("$NetBSD: init_field.c,v 1.8 2003/08/07 09:37:36 agc Exp $");
 #endif
 #endif /* not lint */
 
 # include	"robots.h"
+
+static int telx = 0;
+static int tely = 0;
 
 /*
  * init_field:
@@ -112,6 +111,8 @@ init_field()
 		move(i, X_FIELDSIZE + 2);
 		addstr(desc[i]);
 	}
+	telx = X_FIELDSIZE + 2;
+	tely = i;
 	if (first)
 		refresh();
 	first = FALSE;
@@ -119,4 +120,12 @@ init_field()
 	if (Pattern_roll)
 		Next_move = &Move_list[-1];
 #endif
+}
+
+void
+telmsg(on)
+	int on;
+{
+	move(tely, telx);
+	addstr(on ? "Teleport!" : "         ");
 }

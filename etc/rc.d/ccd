@@ -1,14 +1,14 @@
 #!/bin/sh
 #
-# $NetBSD: ccd,v 1.1.1.1 2000/03/10 11:53:25 lukem Exp $
+# $NetBSD: ccd,v 1.5 2004/08/13 18:08:03 mycroft Exp $
 #
 
-# PROVIDE: ccd
+# PROVIDE: disks
 
-. /etc/rc.subr
-. /etc/rc.conf
+$_rc_subr_loaded . /etc/rc.subr
 
 name="ccd"
+rcvar=$name
 start_cmd="ccd_start"
 stop_cmd=":"
 
@@ -20,4 +20,5 @@ ccd_start()
 	fi
 }
 
+load_rc_config $name
 run_rc_command "$1"

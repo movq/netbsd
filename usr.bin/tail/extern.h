@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.4 1999/07/21 06:38:49 cgd Exp $	*/
+/*	$NetBSD: extern.h,v 1.8 2004/02/16 21:57:04 itojun Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,15 +37,16 @@
 
 enum STYLE { NOTSET = 0, FBYTES, FLINES, RBYTES, RLINES, REVERSE };
 
-void forward __P((FILE *, enum STYLE, long, struct stat *));
-void reverse __P((FILE *, enum STYLE, long, struct stat *));
+void forward(FILE *, enum STYLE, off_t, struct stat *);
+void reverse(FILE *, enum STYLE, off_t, struct stat *);
 
-int bytes __P((FILE *, off_t));
-int lines __P((FILE *, off_t));
+int bytes(FILE *, off_t);
+int lines(FILE *, off_t);
 
-void err __P((int fatal, const char *fmt, ...));
-void ierr __P((void));
-void oerr __P((void));
+void err(int fatal, const char *fmt, ...)
+     __attribute__((__format__(__printf__, 2, 3)));
+void ierr(void);
+void oerr(void);
 
 extern int fflag, rflag, rval;
 extern char *fname;

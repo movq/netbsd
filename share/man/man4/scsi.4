@@ -1,4 +1,4 @@
-.\"	$NetBSD: scsi.4,v 1.10 2000/03/18 16:54:37 augustss Exp $
+.\"	$NetBSD: scsi.4,v 1.29 2008/04/13 04:03:23 dholland Exp $
 .\" Copyright (c) 1996
 .\"	Julian Elischer <julian@freebsd.org>.  All rights reserved.
 .\"
@@ -24,7 +24,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd August 27, 1993
+.Dd July 26, 2006
 .Dt SCSI 4
 .Os
 .Sh NAME
@@ -32,30 +32,8 @@
 .Nm scsibus
 .Nd Small Computer Systems Interface (SCSI) bus driver
 .Sh SYNOPSIS
-.Cd "scsibus* at aha?"
-.Cd "scsibus* at ahb?"
-.Cd "scsibus* at ahc?"
-.Cd "scsibus* at aic?"
-.Cd "scsibus* at asc?"
-.Cd "scsibus* at bha?"
-.Cd "scsibus* at cosc?"
-.Cd "scsibus* at dpt?"
-.Cd "scsibus* at esp?"
-.Cd "scsibus* at isp?"
-.Cd "scsibus* at mha?"
-.Cd "scsibus* at nca?"
-.Cd "scsibus* at ncr?"
-.Cd "scsibus* at oak?"
-.Cd "scsibus* at ptsc?"
-.Cd "scsibus* at sea?"
-.Cd "scsibus* at si?"
-.Cd "scsibus* at spc?"
-.Cd "scsibus* at sw?"
-.Cd "scsibus* at uha?"
-.Cd "scsibus* at umass?"
-.Cd "scsibus* at wds?"
-.Cd "atapibus* at wdc? channel ?"
-.Cd "atapibus* at pciide? channel ?"
+.Cd "scsibus* at scsi?"
+.Cd "atapibus* at atapi?"
 .Cd options SCSIDEBUG
 .Cd options SCSIVERBOSE
 .Sh DESCRIPTION
@@ -67,14 +45,14 @@ implementation of drivers to control various
 .Tn SCSI
 or
 .Tn ATAPI
-bus devices, and to utilize different
+bus devices, and to use different
 .Tn SCSI
 bus host adapters or
 .Tn EIDE
 controllers.
 .Tn SCSI
 bus is capable of supporting a wide variety of peripherals, including
-hard disks, removeable disks,
+hard disks, removable disks,
 .Tn CD-ROMs ,
 scanners, tape drives, and other miscellaneous high-speed devices.
 .Pp
@@ -87,7 +65,7 @@ interfaces, including, but not limited to
 .Tn PCI ,
 .Tn ISA ,
 .Tn Sbus ,
-.Tn TurboBus ,
+.Tn TURBOchannel ,
 and
 .Tn NuBus .
 These individual devices are referred to as
@@ -131,8 +109,9 @@ driver so that user level
 .Xr ioctl 2
 calls may still be performed against the device. Currently, only
 .Xr sd 4 ,
-.Xr cd 4
-or
+.Xr cd 4 ,
+.Xr st 4
+and
 .Xr uk 4
 can attach to an atapi bus.
 .Pp
@@ -149,7 +128,7 @@ The
 software supports some
 .Nx
 kernel
-.Xr config 8
+.Xr config 1
 options.
 They are:
 .Bl -tag -width SCSIVERBOSE
@@ -232,7 +211,7 @@ how generic
 calls may be applied to a specific device.
 .Bl -tag -width DIOCSDINFO____
 .It Dv SCIOCRESET
-reset a
+Reset a
 .Tn SCSI
 device.
 .It Dv SCIOCDEBUG
@@ -246,7 +225,7 @@ If no debugging is configured into the kernel, debugging will have
 no effect.
 .Tn SCSI
 debugging is controlled by the configuration option
-.Dv SCSIDEBUG.
+.Dv SCSIDEBUG .
 .It Dv SCIOCCOMMAND
 Take a
 .Tn SCSI
@@ -322,15 +301,17 @@ shows more detailed information including
 scatter-gather logs.
 .El
 .Sh SEE ALSO
+.Xr config 1 ,
 .Xr ioctl 2 ,
-.Xr intro 4 ,
+.Xr ata 4 ,
 .Xr cd 4 ,
 .Xr ch 4 ,
+.Xr intro 4 ,
 .Xr sd 4 ,
+.Xr se 4 ,
 .Xr ss 4 ,
 .Xr st 4 ,
-.Xr uk 4 ,
-.Xr config 8
+.Xr uk 4
 .Sh HISTORY
 This
 .Nm
@@ -338,8 +319,11 @@ system appeared in MACH 2.5 at TRW.
 .Pp
 This man page was originally written by Julian Elischer
 .Aq julian@freebsd.org
-for FreeBSD and extensively modified by Erik Fair
-.Aq fair@netbsd.org
+for
+.Fx
+and extensively modified by
+.An Erik Fair
+.Aq fair@NetBSD.org
 for
 .Nx .
 .Sh BUGS
@@ -348,7 +332,7 @@ Not every device obeys the
 specification as faithfully as it should.
 As such devices are discovered by the
 .Nx
-Project, their names are added to a 
+Project, their names are added to a
 .Em quirk list
 compiled into the
 .Nm

@@ -32,7 +32,7 @@ char copyright[] =
  All rights reserved.\n";
 #endif /* not lint */
 
-/* $NetBSD: main.c,v 1.12 1998/02/22 12:08:35 christos Exp $ */
+/* $NetBSD: main.c,v 1.17 2006/04/22 20:51:09 christos Exp $ */
 
 
 #include "flexdef.h"
@@ -109,11 +109,11 @@ int num_input_files;
 char *program_name = "flex";
 
 #ifndef SHORT_FILE_NAMES
-static char *outfile_template = "lex.%s.%s";
-static char *backing_name = "lex.backup";
+static const char outfile_template[] = "lex.%s.%s";
+static const char backing_name[] = "lex.backup";
 #else
-static char *outfile_template = "lex%s.%s";
-static char *backing_name = "lex.bck";
+static const char outfile_template[] = "lex%s.%s";
+static const char backing_name[] = "lex.bck";
 #endif
 
 #ifdef THINK_C
@@ -242,7 +242,7 @@ void check_options()
 
 	if ( C_plus_plus && yytext_is_array )
 		{
-		warn( _( "%array incompatible with -+ option" ) );
+		lwarn( _( "%array incompatible with -+ option" ) );
 		yytext_is_array = false;
 		}
 
@@ -286,8 +286,8 @@ void check_options()
 			else
 				suffix = "c";
 
-			sprintf( outfile_path, outfile_template,
-				prefix, suffix );
+			snprintf(outfile_path, sizeof(outfile_path),
+			    outfile_template, prefix, suffix);
 
 			outfilename = outfile_path;
 			}
@@ -670,7 +670,7 @@ char **argv;
 						sawcmpflag = true;
 						}
 
-					for ( ++i; arg[i] != '\0'; ++i )
+					for ( i = 2; arg[i] != '\0'; ++i )
 						switch ( arg[i] )
 							{
 							case 'a':
@@ -949,7 +949,7 @@ _( "Variable trailing context rules entail a large performance penalty\n" ) );
 
 	if ( ! do_yywrap )
 		{
-		outn( "\n#define yywrap() 1" );
+		outn( "\n#define yywrap() (/*CONSTCOND*/1)" );
 		outn( "#define YY_SKIP_YYWRAP" );
 		}
 
@@ -1134,8 +1134,8 @@ _( "%s [-bcdfhilnpstvwBFILTV78+? -C[aefFmr] -ooutput -Pprefix -Sskeleton]\n" ),
 
 	if ( ! did_outfilename )
 		{
-		sprintf( outfile_path, outfile_template,
-			prefix, C_plus_plus ? "cc" : "c" );
+		snprintf(outfile_path, sizeof(outfile_path), outfile_template,
+			prefix, C_plus_plus ? "cc" : "c");
 		outfilename = outfile_path;
 		}
 

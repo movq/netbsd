@@ -1,4 +1,4 @@
-/*	$NetBSD: show.h,v 1.4 1999/10/08 21:10:44 pk Exp $	*/
+/*	$NetBSD: show.h,v 1.7 2003/08/07 09:05:38 agc Exp $	*/
 
 /*-
  * Copyright (c) 1995
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,12 +31,15 @@
  *	@(#)show.h	1.1 (Berkeley) 5/4/95
  */
 
+#include <stdarg.h>
+
 union node;
-void showtree __P((union node *));
-void trace __P((const char *, ...));
-void trargs __P((char **));
+void showtree(union node *);
+void trace(const char *, ...);
+void tracev(const char *, va_list);
+void trargs(char **);
 #ifdef DEBUG
-void trputc __P((int));
-void trputs __P((const char *));
-void opentrace __P((void));
+void trputc(int);
+void trputs(const char *);
+void opentrace(void);
 #endif

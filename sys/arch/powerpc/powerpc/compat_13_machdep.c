@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_13_machdep.c,v 1.1 1998/09/13 09:15:52 thorpej Exp $	*/
+/*	$NetBSD: compat_13_machdep.c,v 1.14 2008/04/24 18:39:21 ad Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -31,25 +31,30 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.14 2008/04/24 18:39:21 ad Exp $");
+
+#include "opt_ppcarch.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
-#include <sys/map.h>
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/mount.h>  
 #include <sys/syscallargs.h>
 
+#include <compat/sys/signal.h>
+#include <compat/sys/signalvar.h>
+
 int
-compat_13_sys_sigreturn(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args *uap, register_t *retval)
 {
-	struct compat_13_sys_sigreturn_args /* {
+	/* {
 		syscallarg(struct sigcontext13 *) sigcntxp;
-	} */ *uap = v;
+	} */
+	struct proc *p = l->l_proc;
 	struct sigcontext13 sc;
 	struct trapframe *tf;
 	int error;
@@ -64,20 +69,34 @@ compat_13_sys_sigreturn(p, v, retval)
 		return (error);
 
 	/* Restore the register context. */
-	tf = trapframe(p);
-	if ((sc.sc_frame.srr1 & PSL_USERSTATIC) != (tf->srr1 & PSL_USERSTATIC))
+	tf = trapframe(l);
+	if (!PSL_USEROK_P(sc.sc_frame.srr1))
 		return (EINVAL);
-	bcopy(&sc.sc_frame, tf, sizeof *tf);
 
+	/* Restore register context. */
+	memcpy(tf->fixreg, sc.sc_frame.fixreg, sizeof(tf->fixreg));
+	tf->lr   = sc.sc_frame.lr;
+	tf->cr   = sc.sc_frame.cr;
+	tf->xer  = sc.sc_frame.xer;
+	tf->ctr  = sc.sc_frame.ctr;
+	tf->srr0 = sc.sc_frame.srr0;
+	tf->srr1 = sc.sc_frame.srr1;
+#ifdef PPC_OEA
+	tf->tf_xtra[TF_VRSAVE] = sc.sc_frame.vrsave;
+	tf->tf_xtra[TF_MQ] = sc.sc_frame.mq;
+#endif
+
+	mutex_enter(p->p_lock);
 	/* Restore signal stack. */
 	if (sc.sc_onstack & SS_ONSTACK)
-		p->p_sigacts->ps_sigstk.ss_flags |= SS_ONSTACK;
+		l->l_sigstk.ss_flags |= SS_ONSTACK;
 	else
-		p->p_sigacts->ps_sigstk.ss_flags &= ~SS_ONSTACK;
+		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
 
 	/* Restore signal mask. */
 	native_sigset13_to_sigset(&sc.sc_mask, &mask);
-	(void) sigprocmask1(p, SIG_SETMASK, &mask, 0);
+	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }

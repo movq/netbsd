@@ -1,9 +1,41 @@
-/* $NetBSD: if_le.c,v 1.1 2000/01/05 08:48:56 nisimura Exp $ */
+/* $NetBSD: if_le.c,v 1.5 2008/04/04 12:25:06 tsutsui Exp $ */
+
+/*-
+ * Copyright (c) 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Ralph Campbell and Rick Macklem.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)if_le.c	8.2 (Berkeley) 11/16/93
+ */
 
 /*-
  * Copyright (c) 1995 Charles M. Hannum.  All rights reserved.
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Ralph Campbell and Rick Macklem.
@@ -41,7 +73,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.1 2000/01/05 08:48:56 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.5 2008/04/04 12:25:06 tsutsui Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -71,12 +103,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.1 2000/01/05 08:48:56 nisimura Exp $");
 #include <dev/ic/am7990reg.h>
 #include <dev/ic/am7990var.h>
 
+#include "ioconf.h"
+
 /*
  * LANCE registers.
  */
 struct lereg1 {
-	volatile u_int16_t	ler1_rdp;	/* data port */
-	volatile u_int16_t	ler1_rap;	/* register select port */
+	volatile uint16_t	ler1_rdp;	/* data port */
+	volatile uint16_t	ler1_rap;	/* register select port */
 };
 
 /*
@@ -92,22 +126,18 @@ struct	le_softc {
 	struct	lereg1 *sc_r1;		/* LANCE registers */
 };
 
-static int  le_match __P((struct device *, struct cfdata  *, void *));
-static void le_attach __P((struct device *, struct device *, void *));
+static int  le_match(device_t, cfdata_t, void *);
+static void le_attach(device_t, device_t, void *);
 
-const struct cfattach le_ca = {
-	sizeof(struct le_softc), le_match, le_attach
-};
-extern struct cfdriver le_cd;
+CFATTACH_DECL_NEW(le, sizeof(struct le_softc),
+    le_match, le_attach, NULL, NULL);
 
-static void lesrcsr __P((struct lance_softc *, u_int16_t, u_int16_t));
-static u_int16_t lerdcsr __P((struct lance_softc *, u_int16_t));
-static void myetheraddr __P((u_int8_t *));
+static void lesrcsr(struct lance_softc *, uint16_t, uint16_t);
+static uint16_t lerdcsr(struct lance_softc *, uint16_t);
+static void myetheraddr(uint8_t *);
 
 static void
-lesrcsr(sc, port, val)
-	struct lance_softc *sc;
-	u_int16_t port, val;
+lesrcsr(struct lance_softc *sc, uint16_t port, uint16_t val)
 {
 	struct lereg1 *ler1 = ((struct le_softc *)sc)->sc_r1;
 
@@ -115,13 +145,11 @@ lesrcsr(sc, port, val)
 	ler1->ler1_rdp = val;
 }
 
-static u_int16_t
-lerdcsr(sc, port)
-	struct lance_softc *sc;
-	u_int16_t port;
+static uint16_t
+lerdcsr(struct lance_softc *sc, uint16_t port)
 {
 	struct lereg1 *ler1 = ((struct le_softc *)sc)->sc_r1;
-	u_int16_t val;
+	uint16_t val;
 
 	ler1->ler1_rap = port;
 	val = ler1->ler1_rdp;
@@ -129,10 +157,7 @@ lerdcsr(sc, port)
 }
 
 static int
-le_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+le_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -143,13 +168,13 @@ le_match(parent, cf, aux)
 }
 
 void
-le_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+le_attach(device_t parent, device_t self, void *aux)
 {
-	struct le_softc *lesc = (void *)self;
+	struct le_softc *lesc = device_private(self);
 	struct lance_softc *sc = &lesc->sc_am7990.lsc;
 	struct mainbus_attach_args *ma = aux;
+
+	sc->sc_dev = self;
 
 	/* Map control registers. */
 	lesc->sc_r1 = (struct lereg1 *)ma->ma_addr;	/* LANCE */
@@ -185,17 +210,16 @@ le_attach(parent, self, aux)
  * mapped at 0xF1000004.
  */
 void
-myetheraddr(ether)
-	u_int8_t *ether;
+myetheraddr(uint8_t *ether)
 {
-	unsigned i, loc;
-	u_int8_t *ea;
-	volatile struct { u_int32_t ctl; } *ds1220;
+	unsigned int i, loc;
+	uint8_t *ea;
+	volatile struct { uint32_t ctl; } *ds1220;
 
 	switch (machtype) {
 	case LUNA_I:
-		ea = (u_int8_t *)0x4101FFE0;
-		for (i = 0; i < 6; i++) {
+		ea = (uint8_t *)0x4101FFE0;
+		for (i = 0; i < ETHER_ADDR_LEN; i++) {
 			int u, l;
 
 			u = ea[0];
@@ -210,8 +234,8 @@ myetheraddr(ether)
 	case LUNA_II:
 		ds1220 = (void *)0xF1000004;
 		loc = 12;
-		for (i = 0; i < 6; i++) {
-			unsigned u, l, hex;
+		for (i = 0; i < ETHER_ADDR_LEN; i++) {
+			unsigned int u, l, hex;
 
 			ds1220->ctl = (loc) << 16;
 			u = 0xf0 & (ds1220->ctl >> 12);

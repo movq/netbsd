@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.4 1997/07/20 06:35:38 thorpej Exp $	*/
+/*	$NetBSD: io.c,v 1.8 2005/06/26 19:10:49 christos Exp $	*/
 
 /* io.c: This file contains the i/o routines for the ed line editor */
 /*-
@@ -32,20 +32,16 @@
 #if 0
 static char *rcsid = "@(#)io.c,v 1.1 1994/02/01 00:34:41 alm Exp";
 #else
-__RCSID("$NetBSD: io.c,v 1.4 1997/07/20 06:35:38 thorpej Exp $");
+__RCSID("$NetBSD: io.c,v 1.8 2005/06/26 19:10:49 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include "ed.h"
 
 
-extern int scripted;
-
 /* read_file: read a named file/pipe into the buffer; return line count */
 long
-read_file(fn, n)
-	char *fn;
-	long n;
+read_file(char *fn, long n)
 {
 	FILE *fp;
 	long size;
@@ -68,17 +64,13 @@ read_file(fn, n)
 }
 
 
-extern int des;
-
 char *sbuf;			/* file i/o buffer */
 int sbufsz;			/* file i/o buffer size */
 int newline_added;		/* if set, newline appended to input file */
 
 /* read_stream: read a stream into the editor buffer; return status */
 long
-read_stream(fp, n)
-	FILE *fp;
-	long n;
+read_stream(FILE *fp, long n)
 {
 	line_t *lp = get_addressed_line_node(n);
 	undo_t *up = NULL;
@@ -127,8 +119,7 @@ read_stream(fp, n)
 
 /* get_stream_line: read a line of text from a stream; return line length */
 int
-get_stream_line(fp)
-	FILE *fp;
+get_stream_line(FILE *fp)
 {
 	int c;
 	int i = 0;
@@ -157,11 +148,7 @@ get_stream_line(fp)
 
 /* write_file: write a range of lines to a named file/pipe; return line count */
 long
-write_file(fn, mode, n, m)
-	char *fn;
-	char *mode;
-	long n;
-	long m;
+write_file(const char *fn, const char *mode, long n, long m)
 {
 	FILE *fp;
 	long size;
@@ -185,10 +172,7 @@ write_file(fn, mode, n, m)
 
 /* write_stream: write a range of lines to a stream; return status */
 long
-write_stream(fp, n, m)
-	FILE *fp;
-	long n;
-	long m;
+write_stream(FILE *fp, long n, long m)
 {
 	line_t *lp = get_addressed_line_node(n);
 	unsigned long size = 0;
@@ -217,10 +201,7 @@ write_stream(fp, n, m)
 
 /* put_stream_line: write a line of text to a stream; return status */
 int
-put_stream_line(fp, s, len)
-	FILE *fp;
-	char *s;
-	int len;
+put_stream_line(FILE *fp, char *s, int len)
 {
 	while (len--)
 		if ((des ? put_des_char(*s++, fp) : fputc(*s++, fp)) < 0) {
@@ -233,9 +214,7 @@ put_stream_line(fp, s, len)
 
 /* get_extended_line: get a an extended line from stdin */
 char *
-get_extended_line(sizep, nonl)
-	int *sizep;
-	int nonl;
+get_extended_line(int *sizep, int nonl)
 {
 	static char *cvbuf = NULL;		/* buffer */
 	static int cvbufsz = 0;			/* buffer size */
@@ -278,7 +257,7 @@ get_extended_line(sizep, nonl)
 
 /* get_tty_line: read a line of text from stdin; return line length */
 int
-get_tty_line()
+get_tty_line(void)
 {
 	int oi = 0;
 	int i = 0;
@@ -321,19 +300,15 @@ get_tty_line()
 #define ESCAPES "\a\b\f\n\r\t\v\\"
 #define ESCCHARS "abfnrtv\\"
 
-extern int rows;
-extern int cols;
-
 /* put_tty_line: print text to stdout */
 int
-put_tty_line(s, l, n, gflag)
-	char *s;
-	int l;
-	long n;
-	int gflag;
+put_tty_line(char *s, int l, long n, int gflag)
 {
 	int col = 0;
 	char *cp;
+#ifndef BACKWARDS
+	int lc = 0;
+#endif
 
 	if (gflag & GNP) {
 		printf("%ld\t", n);

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2000/03/19 23:07:43 soren Exp $
+#	$NetBSD: Makefile,v 1.5 2008/10/25 22:27:37 apb Exp $
 
 # Makefile for cobalt tags file
 
@@ -7,7 +7,7 @@
 
 TCOBALT=	../cobalt/tags
 SCOBALT=	../cobalt/cobalt/*.[ch] ../cobalt/include/*.h \
-		../cobalt/pci/*.[ch]
+		../cobalt/dev/*.[ch] ../cobalt/pci/*.[ch]
 ACOBALT=	../cobalt/cobalt/*.S
 
 # Directories in which to place tags links
@@ -18,7 +18,8 @@ DCOBALT=	pci include
 tags:
 	-ctags -wdtf ${TCOBALT} ${SCOBALT} ${SMIPS} ${COMM}
 	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${ACOBALT} ${AMIPS} | \
-	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
+	    ${TOOL_SED} -e \
+		"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
 		>> ${TCOBALT}
 	sort -o ${TCOBALT} ${TCOBALT}
 
@@ -26,6 +27,6 @@ links:
 	-for i in ${DCOBALT}; do \
 	    cd $$i && rm -f tags; ln -s ../tags tags; done
 
-SUBDIR=	include
+SUBDIR=	compile include stand
 
 .include <bsd.subdir.mk>

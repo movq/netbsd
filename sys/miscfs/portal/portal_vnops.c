@@ -1,4 +1,4 @@
-/*	$NetBSD: portal_vnops.c,v 1.35 1999/08/03 20:19:19 wrstuden Exp $	*/
+/*	$NetBSD: portal_vnops.c,v 1.79.12.1 2009/02/02 21:04:45 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,10 +39,12 @@
  * Portal Filesystem
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: portal_vnops.c,v 1.79.12.1 2009/02/02 21:04:45 snj Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/types.h>
 #include <sys/time.h>
 #include <sys/proc.h>
 #include <sys/filedesc.h>
@@ -58,64 +56,61 @@
 #include <sys/namei.h>
 #include <sys/mbuf.h>
 #include <sys/socket.h>
+#include <sys/protosw.h>
 #include <sys/socketvar.h>
 #include <sys/un.h>
 #include <sys/unpcb.h>
 #include <sys/syscallargs.h>
+#include <sys/kauth.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/portal/portal.h>
 
 static int portal_fileid = PORTAL_ROOTFILEID+1;
 
-static void	portal_closefd __P((struct proc *, int));
-static int	portal_connect __P((struct socket *, struct socket *));
+static void	portal_closefd(struct lwp *, int);
+static int	portal_connect(struct socket *, struct socket *);
 
-int	portal_lookup	__P((void *));
-#define	portal_create	genfs_eopnotsupp_rele
-#define	portal_mknod	genfs_eopnotsupp_rele
-int	portal_open	__P((void *));
+int	portal_lookup(void *);
+#define	portal_create	genfs_eopnotsupp
+#define	portal_mknod	genfs_eopnotsupp
+int	portal_open(void *);
 #define	portal_close	genfs_nullop
 #define	portal_access	genfs_nullop
-int	portal_getattr	__P((void *));
-int	portal_setattr	__P((void *));
+int	portal_getattr(void *);
+int	portal_setattr(void *);
 #define	portal_read	genfs_eopnotsupp
 #define	portal_write	genfs_eopnotsupp
 #define	portal_fcntl	genfs_fcntl
 #define	portal_ioctl	genfs_enoioctl
 #define	portal_poll	genfs_eopnotsupp
-#define	portal_mmap	genfs_eopnotsupp
 #define portal_revoke	genfs_revoke
 #define	portal_fsync	genfs_nullop
 #define	portal_seek	genfs_seek
-#define	portal_remove	genfs_eopnotsupp_rele
-int	portal_link	__P((void *));
-#define	portal_rename	genfs_eopnotsupp_rele
-#define	portal_mkdir	genfs_eopnotsupp_rele
-#define	portal_rmdir	genfs_eopnotsupp_rele
-int	portal_symlink	__P((void *));
-int	portal_readdir	__P((void *));
+#define	portal_remove	genfs_eopnotsupp
+int	portal_link(void *);
+#define	portal_rename	genfs_eopnotsupp
+#define	portal_mkdir	genfs_eopnotsupp
+#define	portal_rmdir	genfs_eopnotsupp
+int	portal_symlink(void *);
+int	portal_readdir(void *);
 #define	portal_readlink	genfs_eopnotsupp
 #define	portal_abortop	genfs_abortop
-int	portal_inactive	__P((void *));
-int	portal_reclaim	__P((void *));
+int	portal_inactive(void *);
+int	portal_reclaim(void *);
 #define	portal_lock	genfs_lock
 #define	portal_unlock	genfs_unlock
 #define	portal_bmap	genfs_badop
 #define	portal_strategy	genfs_badop
-int	portal_print	__P((void *));
+int	portal_print(void *);
 #define	portal_islocked	genfs_islocked
-int	portal_pathconf	__P((void *));
-#define	portal_advlock	genfs_badop
-#define	portal_blkatoff	genfs_badop
-#define	portal_valloc	genfs_eopnotsupp
-#define	portal_vfree	genfs_nullop
-#define	portal_truncate	genfs_eopnotsupp
-#define	portal_update	genfs_eopnotsupp
+int	portal_pathconf(void *);
+#define	portal_advlock	genfs_eopnotsupp
 #define	portal_bwrite	genfs_eopnotsupp
+#define	portal_putpages	genfs_null_putpages
 
-int (**portal_vnodeop_p) __P((void *));
-struct vnodeopv_entry_desc portal_vnodeop_entries[] = {
+int (**portal_vnodeop_p)(void *);
+const struct vnodeopv_entry_desc portal_vnodeop_entries[] = {
 	{ &vop_default_desc, vn_default_error },
 	{ &vop_lookup_desc, portal_lookup },		/* lookup */
 	{ &vop_create_desc, portal_create },		/* create */
@@ -131,7 +126,6 @@ struct vnodeopv_entry_desc portal_vnodeop_entries[] = {
 	{ &vop_ioctl_desc, portal_ioctl },		/* ioctl */
 	{ &vop_poll_desc, portal_poll },		/* poll */
 	{ &vop_revoke_desc, portal_revoke },		/* revoke */
-	{ &vop_mmap_desc, portal_mmap },		/* mmap */
 	{ &vop_fsync_desc, portal_fsync },		/* fsync */
 	{ &vop_seek_desc, portal_seek },		/* seek */
 	{ &vop_remove_desc, portal_remove },		/* remove */
@@ -153,20 +147,16 @@ struct vnodeopv_entry_desc portal_vnodeop_entries[] = {
 	{ &vop_islocked_desc, portal_islocked },	/* islocked */
 	{ &vop_pathconf_desc, portal_pathconf },	/* pathconf */
 	{ &vop_advlock_desc, portal_advlock },		/* advlock */
-	{ &vop_blkatoff_desc, portal_blkatoff },	/* blkatoff */
-	{ &vop_valloc_desc, portal_valloc },		/* valloc */
-	{ &vop_vfree_desc, portal_vfree },		/* vfree */
-	{ &vop_truncate_desc, portal_truncate },	/* truncate */
-	{ &vop_update_desc, portal_update },		/* update */
 	{ &vop_bwrite_desc, portal_bwrite },		/* bwrite */
-	{ (struct vnodeop_desc*)NULL, (int(*) __P((void *)))NULL }
+	{ &vop_putpages_desc, portal_putpages },	/* putpages */
+	{ NULL, NULL }
 };
-struct vnodeopv_desc portal_vnodeop_opv_desc =
+const struct vnodeopv_desc portal_vnodeop_opv_desc =
 	{ &portal_vnodeop_p, portal_vnodeop_entries };
 
 static void
-portal_closefd(p, fd)
-	struct proc *p;
+portal_closefd(l, fd)
+	struct lwp *l;
 	int fd;
 {
 	struct sys_close_args /* {
@@ -176,7 +166,7 @@ portal_closefd(p, fd)
 	int error;
 
 	SCARG(&ua, fd) = fd;
-	error = sys_close(p, &ua, retval);
+	error = sys_close(l, &ua, retval);
 	/*
 	 * We should never get an error, and there isn't anything
 	 * we could do if we got one, so just print a message.
@@ -223,10 +213,12 @@ portal_lookup(v)
 	if (error)
 		goto bad;
 	fvp->v_type = VREG;
+	uvm_vnp_setsize(fvp, 0);
 	MALLOC(fvp->v_data, void *, sizeof(struct portalnode), M_TEMP,
 	    M_WAITOK);
 
 	pt = VTOPORTAL(fvp);
+
 	/*
 	 * Save all of the remaining pathname and
 	 * advance the namei next pointer to the end
@@ -242,16 +234,8 @@ portal_lookup(v)
 	memcpy(pt->pt_arg, pname, pt->pt_size);
 	pt->pt_fileid = portal_fileid++;
 
+	vn_lock(fvp, LK_EXCLUSIVE | LK_RETRY);
 	*vpp = fvp;
-	VOP_LOCK(fvp, LK_EXCLUSIVE);
-	/*
-	 * As we are the last component of the path name, fix up
-	 * the locking on the directory node.
-	 */
-	if ((cnp->cn_flags & LOCKPARENT) == 0) {
-		VOP_UNLOCK(dvp, 0);
-		cnp->cn_flags |= PDIRUNLOCK;
-	}
 	return (0);
 
 bad:;
@@ -270,8 +254,7 @@ portal_connect(so, so2)
 	struct unpcb *unp2;
 	struct unpcb *unp3;
 
-	if (so2 == 0)
-		return (ECONNREFUSED);
+	KASSERT(solocked2(so, so2));
 
 	if (so->so_type != so2->so_type)
 		return (EPROTOTYPE);
@@ -293,7 +276,7 @@ portal_connect(so, so2)
 	so2 = so3;
 
 
-	return (unp_connect2(so, so2));
+	return (unp_connect2(so, so2, PRU_CONNECT2));
 }
 
 int
@@ -303,14 +286,12 @@ portal_open(v)
 	struct vop_open_args /* {
 		struct vnode *a_vp;
 		int  a_mode;
-		struct ucred *a_cred;
-		struct proc *a_p;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
-	struct socket *so = 0;
+	struct socket *so = 0, *so2;
 	struct portalnode *pt;
-	struct proc *p = ap->a_p;
+	struct lwp *l = curlwp;
 	struct vnode *vp = ap->a_vp;
-	int s;
 	struct uio auio;
 	struct iovec aiov[2];
 	int res;
@@ -328,24 +309,30 @@ portal_open(v)
 	/*
 	 * Nothing to do when opening the root node.
 	 */
-	if (vp->v_flag & VROOT)
+	if (vp->v_vflag & VV_ROOT)
 		return (0);
 
 	/*
 	 * Can't be opened unless the caller is set up
 	 * to deal with the side effects.  Check for this
-	 * by testing whether the p_dupfd has been set.
+	 * by testing whether the dupfd has been set.
 	 */
-	if (p->p_dupfd >= 0)
-		return (ENODEV);
+	if (curlwp->l_dupfd >= 0)	/* XXX */
+		return EDUPFD;
 
 	pt = VTOPORTAL(vp);
 	fmp = VFSTOPORTAL(vp->v_mount);
+	so2 = fmp->pm_server->f_data;
+
+	if (so2 == NULL) {
+		/* XXX very fishy */
+		return ECONNREFUSED;
+	}
 
 	/*
 	 * Create a new socket.
 	 */
-	error = socreate(AF_LOCAL, &so, SOCK_STREAM, 0);
+	error = socreate(AF_LOCAL, &so, SOCK_STREAM, 0, l, so2);
 	if (error)
 		goto bad;
 
@@ -353,16 +340,21 @@ portal_open(v)
 	 * Reserve some buffer space
 	 */
 	res = pt->pt_size + sizeof(pcred) + 512;	/* XXX */
+	solock(so);
 	error = soreserve(so, res, res);
-	if (error)
+	if (error) {
+		sounlock(so);
 		goto bad;
+	}
 
 	/*
 	 * Kick off connection
 	 */
-	error = portal_connect(so, (struct socket *)fmp->pm_server->f_data);
-	if (error)
+	error = portal_connect(so, so2);
+	if (error) {
+		sounlock(so);
 		goto bad;
+	}
 
 	/*
 	 * Wait for connection to complete
@@ -377,22 +369,20 @@ portal_open(v)
 	 * will happen if the server dies.  Sleep for 5 second intervals
 	 * and keep polling the reference count.   XXX.
 	 */
-	s = splsoftnet();
 	while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
 		if (fmp->pm_server->f_count == 1) {
 			error = ECONNREFUSED;
-			splx(s);
+			sounlock(so);
 			goto bad;
 		}
-		(void) tsleep((caddr_t) &so->so_timeo, PSOCK, "portalcon", 5 * hz);
+		sowait(so, false, 5 * hz);
 	}
-	splx(s);
-
 	if (so->so_error) {
 		error = so->so_error;
+		sounlock(so);
 		goto bad;
 	}
-		
+
 	/*
 	 * Set miscellaneous flags
 	 */
@@ -400,27 +390,26 @@ portal_open(v)
 	so->so_snd.sb_timeo = 0;
 	so->so_rcv.sb_flags |= SB_NOINTR;
 	so->so_snd.sb_flags |= SB_NOINTR;
-
+	sounlock(so);
 
 	pcred.pcr_flag = ap->a_mode;
-	pcred.pcr_uid = ap->a_cred->cr_uid;
-	pcred.pcr_gid = ap->a_cred->cr_gid;
-	pcred.pcr_ngroups = ap->a_cred->cr_ngroups;
-	memcpy(pcred.pcr_groups, ap->a_cred->cr_groups, NGROUPS * sizeof(gid_t));
-	aiov[0].iov_base = (caddr_t) &pcred;
+	pcred.pcr_uid = kauth_cred_geteuid(ap->a_cred);
+	pcred.pcr_gid = kauth_cred_getegid(ap->a_cred);
+	pcred.pcr_ngroups = kauth_cred_ngroups(ap->a_cred);
+	kauth_cred_getgroups(ap->a_cred, pcred.pcr_groups, pcred.pcr_ngroups,
+	    UIO_SYSSPACE);
+	aiov[0].iov_base = &pcred;
 	aiov[0].iov_len = sizeof(pcred);
 	aiov[1].iov_base = pt->pt_arg;
 	aiov[1].iov_len = pt->pt_size;
 	auio.uio_iov = aiov;
 	auio.uio_iovcnt = 2;
 	auio.uio_rw = UIO_WRITE;
-	auio.uio_segflg = UIO_SYSSPACE;
-	auio.uio_procp = p;
 	auio.uio_offset = 0;
 	auio.uio_resid = aiov[0].iov_len + aiov[1].iov_len;
+	UIO_SETUP_SYSSPACE(&auio);
 
-	error = (*so->so_send)(so, (struct mbuf *) 0, &auio,
-			(struct mbuf *) 0, (struct mbuf *) 0, 0);
+	error = (*so->so_send)(so, NULL, &auio, NULL, NULL, 0, l);
 	if (error)
 		goto bad;
 
@@ -472,7 +461,7 @@ portal_open(v)
 	 * than a single mbuf in it.  What to do?
 	 */
 	cmsg = mtod(cm, struct cmsghdr *);
-	newfds = (cmsg->cmsg_len - sizeof(*cmsg)) / sizeof (int);
+	newfds = (cmsg->cmsg_len - CMSG_ALIGN(sizeof(*cmsg))) / sizeof(int);
 	if (newfds == 0) {
 		error = ECONNREFUSED;
 		goto bad;
@@ -483,7 +472,7 @@ portal_open(v)
 	 * integer file descriptors.  The fds were allocated by the action
 	 * of receiving the control message.
 	 */
-	ip = (int *) (cmsg + 1);
+	ip = (int *) CMSG_DATA(cmsg);
 	fd = *ip++;
 	if (newfds > 1) {
 		/*
@@ -492,40 +481,42 @@ portal_open(v)
 		int i;
 		printf("portal_open: %d extra fds\n", newfds - 1);
 		for (i = 1; i < newfds; i++) {
-			portal_closefd(p, *ip);
+			portal_closefd(l, *ip); /* XXXNJWLWP */
 			ip++;
 		}
 	}
 
 	/*
-	 * Check that the mode the file is being opened for is a subset 
+	 * Check that the mode the file is being opened for is a subset
 	 * of the mode of the existing descriptor.
 	 */
- 	fp = p->p_fd->fd_ofiles[fd];
+ 	fp = l->l_proc->p_fd->fd_ofiles[fd]->ff_file;
 	if (((ap->a_mode & (FREAD|FWRITE)) | fp->f_flag) != fp->f_flag) {
-		portal_closefd(p, fd);
+		portal_closefd(l, fd); /* XXXNJWLWP */
 		error = EACCES;
 		goto bad;
 	}
 
 	/*
 	 * Save the dup fd in the proc structure then return the
-	 * special error code (ENXIO) which causes magic things to
+	 * special error code (EMOVEFD) which causes magic things to
 	 * happen in vn_open.  The whole concept is, well, hmmm.
 	 */
-	p->p_dupfd = fd;
-	error = ENXIO;
+	curlwp->l_dupfd = fd;
+	error = EMOVEFD;
 
 bad:;
 	/*
 	 * And discard the control message.
 	 */
-	if (cm) { 
+	if (cm) {
 		m_freem(cm);
 	}
 
 	if (so) {
+		solock(so);
 		soshutdown(so, 2);
+		sounlock(so);
 		soclose(so);
 	}
 	return (error);
@@ -538,31 +529,28 @@ portal_getattr(v)
 	struct vop_getattr_args /* {
 		struct vnode *a_vp;
 		struct vattr *a_vap;
-		struct ucred *a_cred;
-		struct proc *a_p;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct vattr *vap = ap->a_vap;
-	struct timeval tv;
 
 	memset(vap, 0, sizeof(*vap));
 	vattr_null(vap);
 	vap->va_uid = 0;
 	vap->va_gid = 0;
-	vap->va_fsid = vp->v_mount->mnt_stat.f_fsid.val[0];
+	vap->va_fsid = vp->v_mount->mnt_stat.f_fsidx.__fsid_val[0];
 	vap->va_size = DEV_BSIZE;
 	vap->va_blocksize = DEV_BSIZE;
-	microtime(&tv);
-	TIMEVAL_TO_TIMESPEC(&tv, &vap->va_atime);
-	vap->va_mtime = vap->va_atime;
-	vap->va_ctime = vap->va_ctime;
+	/* Make all times be current TOD. */
+	getnanotime(&vap->va_ctime);
+	vap->va_atime = vap->va_mtime = vap->va_ctime;
 	vap->va_gen = 0;
 	vap->va_flags = 0;
 	vap->va_rdev = 0;
 	/* vap->va_qbytes = 0; */
 	vap->va_bytes = 0;
 	/* vap->va_qsize = 0; */
-	if (vp->v_flag & VROOT) {
+	if (vp->v_vflag & VV_ROOT) {
 		vap->va_type = VDIR;
 		vap->va_mode = S_IRUSR|S_IWUSR|S_IXUSR|
 				S_IRGRP|S_IWGRP|S_IXGRP|
@@ -587,14 +575,13 @@ portal_setattr(v)
 	struct vop_setattr_args /* {
 		struct vnode *a_vp;
 		struct vattr *a_vap;
-		struct ucred *a_cred;
-		struct proc *a_p;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 
 	/*
 	 * Can't mess with the root vnode
 	 */
-	if (ap->a_vp->v_flag & VROOT)
+	if (ap->a_vp->v_vflag & VV_ROOT)
 		return (EACCES);
 
 	return (0);
@@ -606,8 +593,7 @@ portal_setattr(v)
  */
 /*ARGSUSED*/
 int
-portal_readdir(v)
-	void *v;
+portal_readdir(void *v)
 {
 
 	return (0);
@@ -620,7 +606,6 @@ portal_inactive(v)
 {
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
-		struct proc *a_p;
 	} */ *ap = v;
 
 	VOP_UNLOCK(ap->a_vp, 0);
@@ -637,7 +622,7 @@ portal_reclaim(v)
 	struct portalnode *pt = VTOPORTAL(ap->a_vp);
 
 	if (pt->pt_arg) {
-		free((caddr_t) pt->pt_arg, M_TEMP);
+		free(pt->pt_arg, M_TEMP);
 		pt->pt_arg = 0;
 	}
 	FREE(ap->a_vp->v_data, M_TEMP);
@@ -692,23 +677,22 @@ portal_pathconf(v)
  */
 /* ARGSUSED */
 int
-portal_print(v)
-	void *v;
+portal_print(void *v)
 {
 	printf("tag VT_PORTAL, portal vnode\n");
 	return (0);
 }
 
 int
-portal_link(v) 
+portal_link(v)
 	void *v;
 {
 	struct vop_link_args /* {
 		struct vnode *a_dvp;
-		struct vnode *a_vp;  
+		struct vnode *a_vp;
 		struct componentname *a_cnp;
 	} */ *ap = v;
- 
+
 	VOP_ABORTOP(ap->a_dvp, ap->a_cnp);
 	vput(ap->a_dvp);
 	return (EROFS);
@@ -725,7 +709,7 @@ portal_symlink(v)
 		struct vattr *a_vap;
 		char *a_target;
 	} */ *ap = v;
-  
+
 	VOP_ABORTOP(ap->a_dvp, ap->a_cnp);
 	vput(ap->a_dvp);
 	return (EROFS);

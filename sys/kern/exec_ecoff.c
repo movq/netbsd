@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_ecoff.c,v 1.10 1999/04/27 05:36:43 cgd Exp $	*/
+/*	$NetBSD: exec_ecoff.c,v 1.26 2005/12/11 12:24:29 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Adam Glass
@@ -32,6 +32,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: exec_ecoff.c,v 1.26 2005/12/11 12:24:29 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -39,7 +42,6 @@
 #include <sys/vnode.h>
 #include <sys/exec.h>
 #include <sys/resourcevar.h>
-#include <vm/vm.h>
 
 #include <sys/exec_ecoff.h>
 
@@ -55,9 +57,7 @@
  * package.
  */
 int
-exec_ecoff_makecmds(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
+exec_ecoff_makecmds(struct lwp *l, struct exec_package *epp)
 {
 	int error;
 	struct ecoff_exechdr *execp = epp->ep_hdr;
@@ -68,7 +68,7 @@ exec_ecoff_makecmds(p, epp)
 	if (ECOFF_BADMAG(execp))
 		return ENOEXEC;
 
-	error = cpu_exec_ecoff_hook(p, epp);
+	error = (*epp->ep_esch->u.ecoff_probe_func)(l, epp);
 
 	/*
 	 * if there was an error or there are already vmcmds set up,
@@ -84,15 +84,15 @@ exec_ecoff_makecmds(p, epp)
 	 */
 	switch (execp->a.magic) {
 	case ECOFF_OMAGIC:
-		error = exec_ecoff_prep_omagic(p, epp, epp->ep_hdr,
+		error = exec_ecoff_prep_omagic(l, epp, epp->ep_hdr,
 		   epp->ep_vp);
 		break;
 	case ECOFF_NMAGIC:
-		error = exec_ecoff_prep_nmagic(p, epp, epp->ep_hdr, 
+		error = exec_ecoff_prep_nmagic(l, epp, epp->ep_hdr,
 		   epp->ep_vp);
 		break;
 	case ECOFF_ZMAGIC:
-		error = exec_ecoff_prep_zmagic(p, epp, epp->ep_hdr,
+		error = exec_ecoff_prep_zmagic(l, epp, epp->ep_hdr,
 		   epp->ep_vp);
 		break;
 	default:
@@ -101,7 +101,7 @@ exec_ecoff_makecmds(p, epp)
 
 	/* set up the stack */
 	if (!error)
-		error = exec_ecoff_setup_stack(p, epp);
+		error = (*epp->ep_esch->es_setup_stack)(l, epp);
 
 	if (error)
 		kill_vmcmds(&epp->ep_vmcmds);
@@ -110,57 +110,11 @@ exec_ecoff_makecmds(p, epp)
 }
 
 /*
- * exec_ecoff_setup_stack(): Set up the stack segment for an ecoff
- * executable.
- *
- * Note that the ep_ssize parameter must be set to be the current stack
- * limit; this is adjusted in the body of execve() to yield the
- * appropriate stack segment usage once the argument length is
- * calculated.
- *
- * This function returns an int for uniformity with other (future) formats'
- * stack setup functions.  They might have errors to return.
- */
-int
-exec_ecoff_setup_stack(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
-{
-
-	epp->ep_maxsaddr = USRSTACK - MAXSSIZ;
-	epp->ep_minsaddr = USRSTACK;
-	epp->ep_ssize = p->p_rlimit[RLIMIT_STACK].rlim_cur;
-
-	/*
-	 * set up commands for stack.  note that this takes *two*, one to
-	 * map the part of the stack which we can access, and one to map
-	 * the part which we can't.
-	 *
-	 * arguably, it could be made into one, but that would require the
-	 * addition of another mapping proc, which is unnecessary
-	 *
-	 * note that in memory, things assumed to be: 0 ... ep_maxsaddr
-	 * <stack> ep_minsaddr
-	 */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero,
-	    ((epp->ep_minsaddr - epp->ep_ssize) - epp->ep_maxsaddr),
-	    epp->ep_maxsaddr, NULLVP, 0, VM_PROT_NONE);
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, epp->ep_ssize,
-	    (epp->ep_minsaddr - epp->ep_ssize), NULLVP, 0,
-	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
-
-	return 0;
-}
-
-/*
  * exec_ecoff_prep_omagic(): Prepare a ECOFF OMAGIC binary's exec package
  */
 int
-exec_ecoff_prep_omagic(p, epp, execp, vp)
-	struct proc *p;
-	struct exec_package *epp;
-	struct ecoff_exechdr *execp;
-	struct vnode *vp;
+exec_ecoff_prep_omagic(struct lwp *l, struct exec_package *epp,
+    struct ecoff_exechdr *execp, struct vnode *vp)
 {
 	struct ecoff_aouthdr *eap = &execp->a;
 
@@ -181,7 +135,7 @@ exec_ecoff_prep_omagic(p, epp, execp, vp)
 		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, eap->bsize,
 		    ECOFF_SEGMENT_ALIGN(execp, eap->bss_start), NULLVP, 0,
 		    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
-	
+
 	return 0;
 }
 
@@ -190,11 +144,8 @@ exec_ecoff_prep_omagic(p, epp, execp, vp)
  *                           package.
  */
 int
-exec_ecoff_prep_nmagic(p, epp, execp, vp)
-	struct proc *p;
-	struct exec_package *epp;
-	struct ecoff_exechdr *execp;
-	struct vnode *vp;
+exec_ecoff_prep_nmagic(struct lwp *l, struct exec_package *epp,
+    struct ecoff_exechdr *execp, struct vnode *vp)
 {
 	struct ecoff_aouthdr *eap = &execp->a;
 
@@ -233,13 +184,11 @@ exec_ecoff_prep_nmagic(p, epp, execp, vp)
  * text, data, bss, and stack segments.
  */
 int
-exec_ecoff_prep_zmagic(p, epp, execp, vp)
-	struct proc *p;
-	struct exec_package *epp;
-	struct ecoff_exechdr *execp;
-	struct vnode *vp;
+exec_ecoff_prep_zmagic(struct lwp *l, struct exec_package *epp,
+    struct ecoff_exechdr *execp, struct vnode *vp)
 {
 	struct ecoff_aouthdr *eap = &execp->a;
+	int error;
 
 	epp->ep_taddr = ECOFF_SEGMENT_ALIGN(execp, eap->text_start);
 	epp->ep_tsize = eap->tsize;
@@ -247,20 +196,9 @@ exec_ecoff_prep_zmagic(p, epp, execp, vp)
 	epp->ep_dsize = eap->dsize + eap->bsize;
 	epp->ep_entry = eap->entry;
 
-	/*
-	 * check if vnode is in open for writing, because we want to
-	 * demand-page out of it.  if it is, don't do it, for various
-	 * reasons
-	 */
-	if ((eap->tsize != 0 || eap->dsize != 0) &&
-	    vp->v_writecount != 0) {
-#ifdef DIAGNOSTIC
-		if (vp->v_flag & VTEXT)
-			panic("exec: a VTEXT vnode has writecount != 0\n");
-#endif
-		return ETXTBSY;
-	}
-	vp->v_flag |= VTEXT;
+	error = vn_marktext(vp);
+	if (error)
+		return (error);
 
 	/* set up command for text segment */
 	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_pagedvn, eap->tsize,
@@ -273,9 +211,10 @@ exec_ecoff_prep_zmagic(p, epp, execp, vp)
 	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
 	/* set up command for bss segment */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, eap->bsize,
-	    ECOFF_SEGMENT_ALIGN(execp, eap->bss_start), NULLVP, 0,
-	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
+	if (eap->bsize > 0)
+		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, eap->bsize,
+		    ECOFF_SEGMENT_ALIGN(execp, eap->bss_start), NULLVP, 0,
+		    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
 	return 0;
 }

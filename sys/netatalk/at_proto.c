@@ -1,4 +1,4 @@
-/*	$NetBSD: at_proto.c,v 1.2 1999/01/14 01:19:29 thorpej Exp $	*/
+/*	$NetBSD: at_proto.c,v 1.16 2008/04/24 11:38:37 ad Exp $	*/
 
 /*
  * Copyright (c) 1990,1991 Regents of The University of Michigan.
@@ -26,11 +26,13 @@
  *	netatalk@umich.edu
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: at_proto.c,v 1.16 2008/04/24 11:38:37 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/protosw.h>
 #include <sys/domain.h>
-#include <sys/types.h>
 #include <sys/socket.h>
 
 #include <sys/kernel.h>
@@ -46,33 +48,61 @@
 #include <netatalk/ddp_var.h>
 #include <netatalk/at_extern.h>
 
+DOMAIN_DEFINE(atalkdomain);	/* forward declare and add to link set */
 
-struct protosw		atalksw[] = {
+PR_WRAP_USRREQ(ddp_usrreq)
+#define	ddp_usrreq	ddp_usrreq_wrapper
+
+const struct protosw atalksw[] = {
     {
-	/* Identifiers */
-	SOCK_DGRAM,	&atalkdomain,	ATPROTO_DDP,	PR_ATOMIC|PR_ADDR,
-	/*
-	 * protocol-protocol interface.
-	 * fields are pr_input, pr_output, pr_ctlinput, and pr_ctloutput.
-	 * pr_input can be called from the udp protocol stack for iptalk
-	 * packets bound for a local socket.
-	 * pr_output can be used by higher level appletalk protocols, should
-	 * they be included in the kernel.
-	 */
-	0,		ddp_output,	0,		0,
-	/* socket-protocol interface. */
-	ddp_usrreq,
-	/* utility routines. */
-	ddp_init,	0,		0,		0,
+	.pr_type = SOCK_DGRAM,
+	.pr_domain = &atalkdomain,
+	.pr_protocol = ATPROTO_DDP,
+	.pr_flags = PR_ATOMIC|PR_ADDR,
+	.pr_output = ddp_output,
+	.pr_usrreq = ddp_usrreq,
+	.pr_init = ddp_init,
     },
 };
 
-struct domain		atalkdomain = {
-    PF_APPLETALK,	"appletalk",	0,	0,	0,
-    atalksw, &atalksw[sizeof(atalksw)/sizeof(atalksw[0])],
-    0, rn_inithead,
-    32,
-    sizeof(struct sockaddr_at)
+struct domain atalkdomain = {
+	.dom_family = PF_APPLETALK,
+	.dom_name = "appletalk",
+	.dom_init = NULL,
+	.dom_externalize = NULL,
+	.dom_dispose = NULL,
+	.dom_protosw = atalksw,
+	.dom_protoswNPROTOSW = &atalksw[__arraycount(atalksw)],
+	.dom_rtattach = rn_inithead,
+	.dom_rtoffset = 32,
+	.dom_maxrtkey = sizeof(struct sockaddr_at),
+	.dom_ifattach = NULL,
+	.dom_ifdetach = NULL,
+	.dom_ifqueues = { &atintrq1, &atintrq2 },
+	.dom_link = { NULL },
+	.dom_mowner = MOWNER_INIT("",""),
+	.dom_sa_cmpofs = offsetof(struct sockaddr_at, sat_addr),
+	.dom_sa_cmplen = sizeof(struct at_addr),
+	.dom_rtcache = LIST_HEAD_INITIALIZER(atalkdomain.dom_rtcache)
 };
 
+int
+sockaddr_at_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
+{
+	int rc;
+	uint_fast8_t len;
+	const uint_fast8_t addrofs = offsetof(struct sockaddr_at, sat_addr),
+			   addrend = addrofs + sizeof(struct at_addr);
+	const struct sockaddr_at *sat1, *sat2;
 
+	sat1 = satocsat(sa1);
+	sat2 = satocsat(sa2);
+
+	len = MIN(addrend, MIN(sat1->sat_len, sat2->sat_len));
+
+	if (len > addrofs &&
+	    (rc = memcmp(&sat1->sat_addr, &sat2->sat_addr, len - addrofs)) != 0)
+		return rc;
+
+	return sat1->sat_len - sat2->sat_len;
+}

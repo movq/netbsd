@@ -1,4 +1,4 @@
-/*	$NetBSD: comp.c,v 1.8 1999/09/30 18:01:32 jsm Exp $	*/
+/*	$NetBSD: comp.c,v 1.10 2006/03/19 00:29:27 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)comp.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: comp.c,v 1.8 1999/09/30 18:01:32 jsm Exp $");
+__RCSID("$NetBSD: comp.c,v 1.10 2006/03/19 00:29:27 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -346,9 +342,7 @@ normbad:
 						*value /= ++badcount;
 					if (op->mileage == 0)
 						*value += 5;
-					if ((card == C_LIMIT &&
-					     op->speed == C_LIMIT) ||
-					    !op->can_go)
+					if (op->speed == C_LIMIT || !op->can_go)
 						*value -= 5;
 					if (cango && pp->safety[S_RIGHT_WAY] !=
 						     S_UNKNOWN)

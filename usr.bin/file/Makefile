@@ -1,34 +1,52 @@
-#	$NetBSD: Makefile,v 1.23 2000/01/23 18:00:38 mycroft Exp $
+#	$NetBSD: Makefile,v 1.55 2008/08/30 12:26:17 christos Exp $
 
 .include <bsd.own.mk>
+.include <bsd.sys.mk>
+
+USE_FORT?= yes	# data-driven bugs?
+
+DIST=		${NETBSDSRCDIR}/dist/file
+.PATH:		${DIST}/src ${DIST}/doc
 
 MFILESDIR=	/usr/share/misc
-MFILES=		magic
-MAGIC=		${MFILESDIR}/${MFILES}
+MFILES=		magic magic.mgc 
+MAGIC=		${MFILESDIR}/magic
+TOOL_MKMAGIC?=	${.OBJDIR}/file
+
 .if ${MKSHARE} != "no"
 FILESDIR=	${MFILESDIR}
 FILES=		${MFILES}
 .endif
 
 PROG=		file
-SRCS=		file.c apprentice.c fsmagic.c softmagic.c ascmagic.c is_tar.c \
-		print.c compress.c readelf.c internat.c
-CPPFLAGS+=	-DMAGIC='"$(MAGIC)"' -DHAVE_CONFIG_H -I${.CURDIR}
-CPPFLAGS+=	-DBUILTIN_ELF -DELFCORE
+SRCS=		file.c
+CPPFLAGS+=	-DMAGIC='"${MAGIC}"' -DHAVE_CONFIG_H -DQUICK -DBUILTIN_ELF \
+		-DELFCORE
+CPPFLAGS+=	-I${.CURDIR}/../../lib/libmagic -I${DIST}
+LDADD+=		-lmagic -lz
+DPADD+=		${LIBMAGIC} ${LIBZ}
 MAN=		file.1 magic.5
 
-CLEANFILES+=	magic
-realall:		file magic
+CLEANFILES+=	magic magic.mgc
+.if ${MKSHARE} != "no"
+realall:	file magic magic.mgc
+.endif
 
-MAGDIRF:sh=	echo $(.CURDIR)/magdir/[0-9a-z]*
-MAGFILES=	$(.CURDIR)/Header \
-		$(.CURDIR)/Localstuff \
-		$(.CURDIR)/magdir/netbsd \
+MAGDIRF:sh=	LANG=C ${HOST_SH} -c 'echo ${DIST}/magic/magdir/[0-9a-z]*'
+MAGFILES=	${DIST}/magic/Header \
+		${DIST}/magic/Localstuff \
+		${DIST}/magic/magdir/netbsd \
 		${MAGDIRF}
 
 .if ${MKSHARE} != "no"
-magic:		$(MAGFILES)
-	cat $(MAGFILES) > $(.TARGET)
+magic: ${MAGFILES}
+	${_MKTARGET_CREATE}
+	${TOOL_CAT} ${MAGFILES} > ${.TARGET}
+
+magic.mgc: magic
+	${_MKTARGET_CREATE}
+	${TOOL_MKMAGIC} -C -m magic
+
 .else
 magic:
 .endif

@@ -1,6 +1,6 @@
 #!/bin/csh -f
 #
-#	$NetBSD: vgrind.sh,v 1.3 1994/11/17 08:28:06 jtc Exp $
+#	$NetBSD: vgrind.sh,v 1.5 2003/08/18 14:10:22 pooka Exp $
 #
 # Copyright (c) 1980, 1993
 #	The Regents of the University of California.  All rights reserved.
@@ -43,6 +43,7 @@ set f=''
 set head=""
 set vf=/usr/libexec/vfontedpr
 set tm=/usr/share/tmac
+set vmacs=vgrind.tmac
 top:
 if ($#argv > 0) then
     switch ($1:q)
@@ -111,17 +112,17 @@ if (-r index) then
     sed -f nindex index >xindex
     if ($f == 'filter') then
 	if ("$head" != "") then
-	    $vf $options -h "$head" $files | cat $tm/tmac.vgrind -
+	    $vf $options -h "$head" $files | cat $tm/$vmacs -
 	else
-	    $vf $options $files | cat $tm/tmac.vgrind -
+	    $vf $options $files | cat $tm/$vmacs -
 	endif
     else
 	if ("$head" != "") then
 	    $vf $options -h "$head" $files | \
-		sh -c "psroff -rx1 $voptions -i -mvgrind 2>> xindex"
+		sh -c "groff -Tps -l -C -rx1 $voptions -i -mvgrind 2>> xindex"
 	else
 	    $vf $options $files | \
-		sh -c "psroff -rx1 $voptions -i -mvgrind 2>> xindex"
+		sh -c "groff -Tps -l -C -rx1 $voptions -i -mvgrind 2>> xindex"
 	endif
     endif
     sort -df +0 -2 xindex >index
@@ -129,15 +130,15 @@ if (-r index) then
 else
     if ($f == 'filter') then
 	if ("$head" != "") then
-	    $vf $options -h "$head" $files | cat $tm/tmac.vgrind -
+	    $vf $options -h "$head" $files | cat $tm/$vmacs -
 	else
-	    $vf $options $files | cat $tm/tmac.vgrind -
+	    $vf $options $files | cat $tm/$vmacs -
 	endif
     else
 	if ("$head" != "") then
-	    $vf $options -h "$head" $files | psroff -i $voptions -mvgrind
+	    $vf $options -h "$head" $files | groff -Tps -l -C -i $voptions -mvgrind
 	else
-	    $vf $options $files | psroff -i $voptions -mvgrind
+	    $vf $options $files | groff -Tps -l -C -i $voptions -mvgrind
 	endif
     endif
 endif

@@ -1,4 +1,4 @@
-/* $NetBSD: tlsb.c,v 1.19 1999/08/10 23:35:47 thorpej Exp $ */
+/* $NetBSD: tlsb.c,v 1.32 2007/03/04 05:59:12 christos Exp $ */
 /*
  * Copyright (c) 1997 by Matthew Jacob
  * NASA AMES Research Center.
@@ -39,7 +39,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: tlsb.c,v 1.19 1999/08/10 23:35:47 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tlsb.c,v 1.32 2007/03/04 05:59:12 christos Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -50,6 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: tlsb.c,v 1.19 1999/08/10 23:35:47 thorpej Exp $");
 
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
+#include <machine/cpuvar.h>
 #include <machine/rpb.h>
 #include <machine/pte.h>
 #include <machine/alpha.h>
@@ -59,20 +60,18 @@ __KERNEL_RCSID(0, "$NetBSD: tlsb.c,v 1.19 1999/08/10 23:35:47 thorpej Exp $");
 
 #include "locators.h"
 
-#define KV(_addr)	((caddr_t)ALPHA_PHYS_TO_K0SEG((_addr)))
+#define KV(_addr)	((void *)ALPHA_PHYS_TO_K0SEG((_addr)))
 
 static int	tlsbmatch __P((struct device *, struct cfdata *, void *));
 static void	tlsbattach __P((struct device *, struct device *, void *));
 
-struct cfattach tlsb_ca = {
-	sizeof (struct device), tlsbmatch, tlsbattach
-};
+CFATTACH_DECL(tlsb, sizeof (struct device),
+    tlsbmatch, tlsbattach, NULL, NULL);
 
 extern struct cfdriver tlsb_cd;
 
 static int	tlsbprint __P((void *, const char *));
-static int	tlsbsubmatch __P((struct device *, struct cfdata *, void *));
-static char	*tlsb_node_type_str __P((u_int32_t));
+static const char *tlsb_node_type_str __P((u_int32_t));
 
 /*
  * There can be only one TurboLaser, and we'll overload it
@@ -93,28 +92,13 @@ tlsbprint(aux, pnp)
 	struct tlsb_dev_attach_args *tap = aux;
 
 	if (pnp)
-		printf("%s at %s node %d", tlsb_node_type_str(tap->ta_dtype),
-		    pnp, tap->ta_node);
+		aprint_normal("%s at %s node %d",
+		    tlsb_node_type_str(tap->ta_dtype), pnp, tap->ta_node);
 	else
-		printf(" node %d: %s", tap->ta_node,
+		aprint_normal(" node %d: %s", tap->ta_node,
 		    tlsb_node_type_str(tap->ta_dtype));
 
 	return (UNCONF);
-}
-
-static int
-tlsbsubmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
-{
-	struct tlsb_dev_attach_args *tap = aux;
-
-	if (cf->cf_loc[TLSBCF_NODE] != TLSBCF_NODE_DEFAULT &&
-	    cf->cf_loc[TLSBCF_NODE] != tap->ta_node)
-		return (0);
-
-	return ((*cf->cf_attach->ca_match)(parent, cf, aux));
 }
 
 static int
@@ -149,6 +133,7 @@ tlsbattach(parent, self, aux)
 	struct tlsb_dev_attach_args ta;
 	u_int32_t tldev;
 	int node;
+	int locs[TLSBCF_NLOCS];
 
 	printf("\n");
 
@@ -200,7 +185,11 @@ tlsbattach(parent, self, aux)
 		/*
 		 * Attach any children nodes, including a CPU's GBus
 		 */
-		config_found_sm(self, &ta, tlsbprint, tlsbsubmatch);
+		locs[TLSBCF_NODE] = node;
+		locs[TLSBCF_OFFSET] = 0; /* XXX unused? */
+
+		config_found_sm_loc(self, "tlsb", locs, &ta,
+				    tlsbprint, config_stdsubmatch);
 	}
 	/*
 	 * *Now* search for I/O nodes (in descending order)
@@ -226,7 +215,7 @@ tlsbattach(parent, self, aux)
 			 */
 			printf("%s node %d: routing interrupts to %s\n",
 			  self->dv_xname, node,
-			  cpu_info[hwrpb->rpb_primary_cpu_id].ci_dev->dv_xname);
+			  cpu_info[hwrpb->rpb_primary_cpu_id]->ci_softc->sc_dev.dv_xname);
 			TLSB_PUT_NODEREG(node, TLCPUMASK,
 			    (1UL << hwrpb->rpb_primary_cpu_id));
 #else
@@ -241,12 +230,17 @@ tlsbattach(parent, self, aux)
 			ta.ta_dtype = TLDEV_DTYPE(tldev);
 			ta.ta_swrev = TLDEV_SWREV(tldev);
 			ta.ta_hwrev = TLDEV_HWREV(tldev);
-			config_found_sm(self, &ta, tlsbprint, tlsbsubmatch);
+
+			locs[TLSBCF_NODE] = node;
+			locs[TLSBCF_OFFSET] = 0; /* XXX unused? */
+
+			config_found_sm_loc(self, "tlsb", locs, &ta,
+					    tlsbprint, config_stdsubmatch);
 		}
 	}
 }
 
-static char *
+static const char *
 tlsb_node_type_str(dtype)
 	u_int32_t dtype;
 {
@@ -275,7 +269,7 @@ tlsb_node_type_str(dtype)
 		return ("Dual CPU, 16MB cache");
 
 	default:
-		bzero(tlsb_line, sizeof(tlsb_line));
+		memset(tlsb_line, 0, sizeof(tlsb_line));
 		sprintf(tlsb_line, "unknown, dtype 0x%x", dtype);
 		return (tlsb_line);
 	}

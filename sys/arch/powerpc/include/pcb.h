@@ -1,4 +1,4 @@
-/*	$NetBSD: pcb.h,v 1.3 1999/12/07 15:14:56 danw Exp $	*/
+/*	$NetBSD: pcb.h,v 1.21 2005/12/24 20:07:28 perry Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -30,33 +30,46 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef	_MACHINE_PCB_H_
-#define	_MACHINE_PCB_H_
+#ifndef	_POWERPC_PCB_H_
+#define	_POWERPC_PCB_H_
 
-typedef int faultbuf[23];
+#include <powerpc/reg.h>
+
+struct faultbuf {
+	register_t fb_pc;		/* PC */
+	register_t fb_sp;		/* R1 */
+	register_t fb_r2;		/* R2 (why?) */
+	register_t fb_cr;		/* CR */
+	register_t fb_fixreg[19];	/* R13-R31 */
+};
 
 struct pcb {
 	struct pmap *pcb_pm;	/* pmap of our vmspace */
-	struct pmap *pcb_pmreal; /* real address of above */
 	register_t pcb_sp;	/* saved SP */
-	int pcb_spl;		/* saved SPL */
-	faultbuf *pcb_onfault;	/* For use during copyin/copyout */
 	int pcb_flags;
-#define	PCB_FPU		1	/* Process had FPU initialized */
-	struct fpu {
-		double fpr[32];
-		double fpscr;	/* FPSCR stored as double for easier access */
-	} pcb_fpu;		/* Floating point processor */
+#define	PCB_OWNFPU	1	/* Process owns FPU resources */
+#define	PCB_OWNALTIVEC	2	/* Process owns AltiVec resources */
+#define	PCB_FPU		4	/* Process had FPU initialized */
+#define	PCB_ALTIVEC	8	/* Process had AltiVec initialized */
+#define	PCB_FE1		PSL_FE1	/* 0x100 */
+#define	PCB_FE0		PSL_FE0	/* 0x800 */
+	struct cpu_info * volatile pcb_fpcpu; /* CPU with our FP state */
+	struct cpu_info * volatile pcb_veccpu;/* CPU with our VECTOR state */
+	struct faultbuf *pcb_onfault;	/* For use during copyin/copyout */
+	vaddr_t pcb_kmapsr;	/* where to map user segment in kernel */
+	vaddr_t pcb_umapsr;	/* the user segment mapped in kernel */
+	struct fpreg pcb_fpu;	/* Floating point processor */
+	struct vreg pcb_vr __attribute__((aligned(16)));
 };
 
 struct md_coredump {
 	struct trapframe frame;
-	/* Need to add FPU regs here */
+	struct fpreg fpstate;
+	struct vreg vstate;
 };
 
-#ifdef	_KERNEL
-extern struct pcb *curpcb;
-extern struct pmap *curpm;
-extern struct proc *fpuproc;
+#ifdef _KERNEL
+int setfault(struct faultbuf *);
 #endif
-#endif	/* _MACHINE_PCB_H_ */
+
+#endif	/* _POWERPC_PCB_H_ */

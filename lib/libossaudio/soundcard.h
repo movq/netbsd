@@ -1,4 +1,4 @@
-/*	$NetBSD: soundcard.h,v 1.10 1999/11/16 23:56:42 augustss Exp $	*/
+/*	$NetBSD: soundcard.h,v 1.18 2008/04/28 20:23:01 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +39,7 @@
 #ifndef _SOUNDCARD_H_
 #define _SOUNDCARD_H_
 
-#define SOUND_VERSION	0x030000
+#define SOUND_VERSION	0x030001
 
 #define	SNDCTL_DSP_RESET		_IO  ('P', 0)
 #define	SNDCTL_DSP_SYNC			_IO  ('P', 1)
@@ -99,32 +92,18 @@
 #define SNDCTL_DSP_SETSYNCRO		_IO  ('P', 21)
 #define SNDCTL_DSP_SETDUPLEX		_IO  ('P', 22)
 #define SNDCTL_DSP_PROFILE		_IOW ('P', 23, int)
+#define SNDCTL_DSP_GETODELAY		_IOR ('P', 23, int)
 #define	  APF_NORMAL			0
 #define	  APF_NETWORK			1
 #define   APF_CPUINTENS			2
 
 /* Need native 16 bit format which depends on byte order */
-/* XXX This isn't really a good way, but I don't want to
- * include all of endian.h because it contains a lot
- * junk symbols.  [augustss]
- */
-#ifndef _POSIX_SOURCE
-#define __SOUNDCARD_UNSET_POSIX_SOURCE
-#define _POSIX_SOURCE		/* make sure we don't get all the gunk */
-#endif
-
-#include <machine/endian.h>
-#if _QUAD_LOWWORD == 0
+#include <machine/endian_machdep.h>
+#if _BYTE_ORDER == _LITTLE_ENDIAN
 #define  AFMT_S16_NE AFMT_S16_LE
 #else
 #define  AFMT_S16_NE AFMT_S16_BE
 #endif
-
-#ifdef __SOUNDCARD_UNSET_POSIX_SOURCE
-#undef _POSIX_SOURCE
-#undef __SOUNDCARD_UNSET_POSIX_SOURCE
-#endif
-
 
 /* Aliases */
 #define SOUND_PCM_WRITE_BITS		SNDCTL_DSP_SETFMT
@@ -267,6 +246,14 @@
 #define SOUND_MASK_LINE1	(1 << SOUND_MIXER_LINE1)
 #define SOUND_MASK_LINE2	(1 << SOUND_MIXER_LINE2)
 #define SOUND_MASK_LINE3	(1 << SOUND_MIXER_LINE3)
+#define SOUND_MASK_DIGITAL1	(1 << SOUND_MIXER_DIGITAL1)
+#define SOUND_MASK_DIGITAL2	(1 << SOUND_MIXER_DIGITAL2)
+#define SOUND_MASK_DIGITAL3	(1 << SOUND_MIXER_DIGITAL3)
+#define SOUND_MASK_PHONEIN	(1 << SOUND_MIXER_PHONEIN)
+#define SOUND_MASK_PHONEOUT	(1 << SOUND_MIXER_PHONEOUT)
+#define SOUND_MASK_VIDEO	(1 << SOUND_MIXER_VIDEO)
+#define SOUND_MASK_RADIO	(1 << SOUND_MIXER_RADIO)
+#define SOUND_MASK_MONITOR	(1 << SOUND_MIXER_MONITOR)
 
 typedef struct mixer_info {
 	char id[16];
@@ -307,13 +294,20 @@ typedef struct buffmem_desc {
 /* This is what we'd like to have, but it causes prototype conflicts. */
 #define ioctl _oss_ioctl
 #else
+/*
+ * XXX force inclusion of <sys/ioctl.h> before we redefine
+ * ioctl() to avoid a prototype conflict.
+ * Its multiple inclusion protection will keep this from
+ * happening if it is pulled in later.
+ */
+#include <sys/ioctl.h>
 #define ioctl(x,y,z) _oss_ioctl(x,y,z)
 #endif
 
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int _oss_ioctl __P((int fd, unsigned long com, void *argp));
+int _oss_ioctl(int fd, unsigned long com, void *argp);
 __END_DECLS
 
 #endif /* !_SOUNDCARD_H_ */

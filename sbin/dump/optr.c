@@ -1,4 +1,4 @@
-/*	$NetBSD: optr.c,v 1.13 1998/04/01 16:15:40 kleink Exp $	*/
+/*	$NetBSD: optr.c,v 1.36 2006/12/18 20:07:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,41 +34,41 @@
 #if 0
 static char sccsid[] = "@(#)optr.c	8.2 (Berkeley) 1/6/94";
 #else
-__RCSID("$NetBSD: optr.c,v 1.13 1998/04/01 16:15:40 kleink Exp $");
+__RCSID("$NetBSD: optr.c,v 1.36 2006/12/18 20:07:32 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
+#include <sys/queue.h>
 #include <sys/wait.h>
 #include <sys/time.h>
+#include <sys/ucred.h>
+#include <sys/mount.h>
 
 #include <errno.h>
 #include <fstab.h>
 #include <grp.h>
 #include <signal.h>
 #include <stdio.h>
-#ifdef __STDC__
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#endif
 #include <time.h>
 #include <tzfile.h>
-#ifdef __STDC__
 #include <unistd.h>
-#endif
-#include <utmp.h>
-#ifndef __STDC__
-#include <varargs.h>
-#endif
+
+#include <ufs/ufs/dinode.h>
 
 #include "dump.h"
 #include "pathnames.h"
 
-void	alarmcatch __P((int));
-struct fstab *allocfsent __P((struct fstab *fs));
-int	datesort __P((const void *, const void *));
-static	void sendmes __P((char *, char *));
+void	alarmcatch(int);
+struct fstab *allocfsent(struct fstab *);
+int	datesort(const void *, const void *);
+extern  char *time_string;
+extern  char default_time_string[];
+
+static void do_timestamp(time_t, const char *);
 
 /*
  *	Query the operator; This previously-fascist piece of code
@@ -86,11 +82,10 @@ static	void sendmes __P((char *, char *));
  *	that dump needs attention.
  */
 static	int timeout;
-static	char *attnmessage;		/* attention message */
+static	const char *attnmessage;		/* attention message */
 
 int
-query(question)
-	char	*question;
+query(const char *question)
 {
 	char	replybuffer[64];
 	int	back, errcount;
@@ -136,27 +131,29 @@ query(question)
 	 * for operator input.
 	 */
 	if (tstart_writing != 0)
-	    tstart_writing += (when_answered - firstprompt);
+		tstart_writing += (when_answered - firstprompt);
+	if (tstart_volume != 0)
+		tstart_volume += (when_answered - firstprompt);
 	return(back);
 }
 
-char lastmsg[100];
+char lastmsg[200];
 
 /*
  *	Alert the console operator, and enable the alarm clock to
  *	sleep for 2 minutes in case nobody comes to satisfy dump
  */
 void
-alarmcatch(dummy)
-	int dummy;
+alarmcatch(int dummy __unused)
 {
+
 	if (notify == 0) {
 		if (timeout == 0)
 			(void) fprintf(stderr,
 			    "  DUMP: %s: (\"yes\" or \"no\") ",
 			    attnmessage);
 		else
-			msgtail("\7\7");
+			msgtail("\a\a");
 	} else {
 		if (timeout) {
 			msgtail("\n");
@@ -174,137 +171,64 @@ alarmcatch(dummy)
  *	Here if an inquisitive operator interrupts the dump program
  */
 void
-interrupt(signo)
-	int signo;
+interrupt(int signo __unused)
 {
+	int errno_save;
+
+	errno_save = errno;
 	msg("Interrupt received.\n");
 	if (query("Do you want to abort dump?"))
 		dumpabort(0);
+	errno = errno_save;
 }
 
 /*
- *	The following variables and routines manage alerting
- *	operators to the status of dump.
- *	This works much like wall(1) does.
- */
-struct	group *gp;
-
-/*
- *	Get the names from the group entry "operator" to notify.
- */	
-void
-set_operators()
-{
-	if (!notify)		/*not going to notify*/
-		return;
-	gp = getgrnam(OPGRENT);
-	(void) endgrent();
-	if (gp == NULL) {
-		msg("No group entry for %s.\n", OPGRENT);
-		notify = 0;
-		return;
-	}
-}
-
-struct tm *localclock;
-
-/*
- *	We fork a child to do the actual broadcasting, so
- *	that the process control groups are not messed up
+ *	Use wall(1) "-g operator" to do the actual broadcasting.
  */
 void
-broadcast(message)
-	char	*message;
+broadcast(const char *message)
 {
-	time_t		clock;
-	FILE	*f_utmp;
-	struct	utmp	utmp;
-	char	**np;
-	int	pid, s;
+	FILE	*fp;
+	char	buf[sizeof(_PATH_WALL) + sizeof(OPGRENT) + 3];
 
-	if (!notify || gp == NULL)
+	if (!notify)
 		return;
 
-	switch (pid = fork()) {
-	case -1:
+	(void)snprintf(buf, sizeof(buf), "%s -g %s", _PATH_WALL, OPGRENT);
+	if ((fp = popen(buf, "w")) == NULL)
 		return;
-	case 0:
-		break;
-	default:
-		while (wait(&s) != pid)
-			continue;
-		return;
-	}
 
-	clock = time((time_t *)0);
-	localclock = localtime(&clock);
+	(void) fputs("\a\a\aMessage from the dump program to all operators\n\nDUMP: NEEDS ATTENTION: ", fp);
+	if (lastmsg[0])
+		(void) fputs(lastmsg, fp);
+	if (message[0])
+		(void) fputs(message, fp);
 
-	if ((f_utmp = fopen(_PATH_UTMP, "r")) == NULL) {
-		msg("Cannot open %s: %s\n", _PATH_UTMP, strerror(errno));
-		return;
-	}
-
-	while (!feof(f_utmp)) {
-		if (fread((char *) &utmp, sizeof (struct utmp), 1, f_utmp) != 1)
-			break;
-		if (utmp.ut_name[0] == 0)
-			continue;
-		for (np = gp->gr_mem; *np; np++) {
-			if (strncmp(*np, utmp.ut_name, sizeof(utmp.ut_name)) != 0)
-				continue;
-			/*
-			 *	Do not send messages to operators on dialups
-			 */
-			if (strncmp(utmp.ut_line, DIALUP, strlen(DIALUP)) == 0)
-				continue;
-#ifdef DEBUG
-			msg("Message to %s at %s\n", *np, utmp.ut_line);
-#endif
-			sendmes(utmp.ut_line, message);
-		}
-	}
-	(void) fclose(f_utmp);
-	Exit(0);	/* the wait in this same routine will catch this */
-	/* NOTREACHED */
+	(void) pclose(fp);
 }
+
+/*
+ *	print out the timestamp string to stderr.
+ */
+#define STAMP_LENGTH 80
 
 static void
-sendmes(tty, message)
-	char *tty, *message;
+do_timestamp(time_t thistime, const char *message)
 {
-	char t[50], buf[BUFSIZ];
-	char *cp;
-	int lmsg = 1;
-	FILE *f_tty;
+	struct tm tm_time;
+	char then[STAMP_LENGTH + 1];
 
-	(void)strncpy(t, _PATH_DEV, sizeof(t) - 1);
-	(void)strncat(t, tty, sizeof(t) - sizeof(_PATH_DEV) - 1);
-	t[sizeof(t) - 1] = '\0';
-
-	if ((f_tty = fopen(t, "w")) != NULL) {
-		setbuf(f_tty, buf);
-		(void) fprintf(f_tty,
-		    "\n\
-\7\7\7Message from the dump program to all operators at %d:%02d ...\r\n\n\
-DUMP: NEEDS ATTENTION: ",
-		    localclock->tm_hour, localclock->tm_min);
-		for (cp = lastmsg; ; cp++) {
-			if (*cp == '\0') {
-				if (lmsg) {
-					cp = message;
-					if (*cp == '\0')
-						break;
-					lmsg = 0;
-				} else
-					break;
-			}
-			if (*cp == '\n')
-				(void) putc('\r', f_tty);
-			(void) putc(*cp, f_tty);
-		}
-		(void) fclose(f_tty);
+	(void) localtime_r(&thistime, &tm_time);
+	if (strftime(then, STAMP_LENGTH, time_string, &tm_time) == 0) {
+		time_string = default_time_string;
+		strftime(then, STAMP_LENGTH, time_string, &tm_time);
+		fprintf(stderr,
+		   "DUMP: ERROR: TIMEFORMAT too long, reverting to default\n");
 	}
+
+	fprintf(stderr, message, then);
 }
+
 
 /*
  *	print out an estimate of the amount of time left to do the dump
@@ -313,7 +237,7 @@ DUMP: NEEDS ATTENTION: ",
 time_t	tschedule = 0;
 
 void
-timeest()
+timeest(void)
 {
 	time_t	tnow, deltat;
 
@@ -321,70 +245,58 @@ timeest()
 	if (tnow >= tschedule) {
 		tschedule = tnow + 300;
 		if (blockswritten < 500)
-			return;	
+			return;
 		deltat = tstart_writing - tnow +
 			(1.0 * (tnow - tstart_writing))
 			/ blockswritten * tapesize;
-		msg("%3.2f%% done, finished in %d:%02d\n",
-			(blockswritten * 100.0) / tapesize,
-			deltat / 3600, (deltat % 3600) / 60);
+
+		msg("%3.2f%% done, finished in %ld:%02ld",
+		    (blockswritten * 100.0) / tapesize,
+		    (long)(deltat / 3600), (long)((deltat % 3600) / 60));
+
+		if (timestamp == 1)
+			do_timestamp(tnow + deltat, " (at %s)");
+
+		fprintf(stderr, "\n");
 	}
 }
 
 void
-#if __STDC__
 msg(const char *fmt, ...)
-#else
-msg(fmt, va_alist)
-	char *fmt;
-	va_dcl
-#endif
 {
+	time_t  tnow;
 	va_list ap;
 
-	(void) fprintf(stderr,"  DUMP: ");
+	fprintf(stderr, "  ");
+	if (timestamp == 1) {
+		(void) time((time_t *) &tnow);
+		do_timestamp(tnow, "[%s] ");
+	}
+
+	(void) fprintf(stderr,"DUMP: ");
 #ifdef TDEBUG
 	(void) fprintf(stderr, "pid=%d ", getpid());
 #endif
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
-	(void) vfprintf(stderr, fmt, ap);
+	(void) vsnprintf(lastmsg, sizeof lastmsg, fmt, ap);
+	fputs(lastmsg, stderr);
 	(void) fflush(stdout);
 	(void) fflush(stderr);
-	(void) vsnprintf(lastmsg, sizeof lastmsg, fmt, ap);
 	va_end(ap);
 }
 
 void
-#if __STDC__
 msgtail(const char *fmt, ...)
-#else
-msgtail(fmt, va_alist)
-	char *fmt;
-	va_dcl
-#endif
 {
 	va_list ap;
-#if __STDC__
+
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	(void) vfprintf(stderr, fmt, ap);
 	va_end(ap);
 }
 
 void
-#if __STDC__
 quit(const char *fmt, ...)
-#else
-quit(fmt, va_alist)
-	char *fmt;
-	va_dcl
-#endif
 {
 	va_list ap;
 
@@ -392,11 +304,7 @@ quit(fmt, va_alist)
 #ifdef TDEBUG
 	(void) fprintf(stderr, "pid=%d ", getpid());
 #endif
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	(void) vfprintf(stderr, fmt, ap);
 	va_end(ap);
 	(void) fflush(stdout);
@@ -410,31 +318,28 @@ quit(fmt, va_alist)
  */
 
 struct fstab *
-allocfsent(fs)
-	struct fstab *fs;
+allocfsent(struct fstab *fs)
 {
 	struct fstab *new;
 
-	new = (struct fstab *)malloc(sizeof (*fs));
-	if (new == NULL ||
-	    (new->fs_file = strdup(fs->fs_file)) == NULL ||
-	    (new->fs_type = strdup(fs->fs_type)) == NULL ||
-	    (new->fs_spec = strdup(fs->fs_spec)) == NULL)
-		quit("%s\n", strerror(errno));
+	new = (struct fstab *)xmalloc(sizeof (*fs));
+	new->fs_file = xstrdup(fs->fs_file);
+	new->fs_type = xstrdup(fs->fs_type);
+	new->fs_spec = xstrdup(fs->fs_spec);
 	new->fs_passno = fs->fs_passno;
 	new->fs_freq = fs->fs_freq;
 	return (new);
 }
 
 struct	pfstab {
-	struct	pfstab *pf_next;
+	SLIST_ENTRY(pfstab) pf_list;
 	struct	fstab *pf_fstab;
 };
 
-static	struct pfstab *table;
+static	SLIST_HEAD(, pfstab) table;
 
 void
-getfstab()
+getfstab(void)
 {
 	struct fstab *fs;
 	struct pfstab *pf;
@@ -449,15 +354,18 @@ getfstab()
 		    strcmp(fs->fs_type, FSTAB_RO) &&
 		    strcmp(fs->fs_type, FSTAB_RQ))
 			continue;
+#ifdef DUMP_LFS
+		if (strcmp(fs->fs_vfstype, "lfs"))
+			continue;
+#else
 		if (strcmp(fs->fs_vfstype, "ufs") &&
 		    strcmp(fs->fs_vfstype, "ffs"))
 			continue;
+#endif
 		fs = allocfsent(fs);
-		if ((pf = (struct pfstab *)malloc(sizeof (*pf))) == NULL)
-			quit("%s\n", strerror(errno));
+		pf = (struct pfstab *)xmalloc(sizeof (*pf));
 		pf->pf_fstab = fs;
-		pf->pf_next = table;
-		table = pf;
+		SLIST_INSERT_HEAD(&table, pf, pf_list);
 	}
 	(void) endfsent();
 }
@@ -474,14 +382,13 @@ getfstab()
  * The file name can omit the leading '/'.
  */
 struct fstab *
-fstabsearch(key)
-	char *key;
+fstabsearch(const char *key)
 {
 	struct pfstab *pf;
 	struct fstab *fs;
 	char *rn;
 
-	for (pf = table; pf != NULL; pf = pf->pf_next) {
+	SLIST_FOREACH(pf, &table, pf_list) {
 		fs = pf->pf_fstab;
 		if (strcmp(fs->fs_file, key) == 0 ||
 		    strcmp(fs->fs_spec, key) == 0)
@@ -502,16 +409,55 @@ fstabsearch(key)
 }
 
 /*
- *	Tell the operator what to do
+ * Search in the mounted file list for a file name.
+ * This file name can be either the special or the path file name.
+ *
+ * The entries in the list are the BLOCK special names, not the
+ * character special names.
+ * The caller of mntinfosearch assures that the character device
+ * is dumped (that is much faster)
+ */
+struct statvfs *
+mntinfosearch(const char *key)
+{
+	int i, mntbufc;
+	struct statvfs *mntbuf, *fs;
+	char *rn;
+
+	if ((mntbufc = getmntinfo(&mntbuf, MNT_NOWAIT)) == 0)
+		quit("Can't get mount list: %s", strerror(errno));
+	for (fs = mntbuf, i = 0; i < mntbufc; i++, fs++) {
+#ifdef DUMP_LFS
+		if (strcmp(fs->f_fstypename, "lfs") != 0)
+			continue;
+#else /* ! DUMP_LFS */
+		if (strcmp(fs->f_fstypename, "ufs") != 0 &&
+		    strcmp(fs->f_fstypename, "ffs") != 0)
+			continue;
+#endif /* ! DUMP_LFS */
+		if (strcmp(fs->f_mntonname, key) == 0 ||
+		    strcmp(fs->f_mntfromname, key) == 0)
+			return (fs);
+		rn = rawname(fs->f_mntfromname);
+		if (rn != NULL && strcmp(rn, key) == 0)
+			return (fs);
+	}
+	return (NULL);
+}
+
+
+/*
+ *	Tell the operator what to do.
+ *	arg:	w ==> just what to do; W ==> most recent dumps
  */
 void
-lastdump(arg)
-	char	arg;	/* w ==> just what to do; W ==> most recent dumps */
+lastdump(char arg)
 {
 	int i;
 	struct fstab *dt;
 	struct dumpdates *dtwalk;
-	char *lastname, *date;
+	char *date;
+	const char *lastname;
 	int dumpme;
 	time_t tnow;
 
@@ -549,11 +495,10 @@ lastdump(arg)
 }
 
 int
-datesort(a1, a2)
-	const void *a1, *a2;
+datesort(const void *a1, const void *a2)
 {
-	struct dumpdates *d1 = *(struct dumpdates **)a1;
-	struct dumpdates *d2 = *(struct dumpdates **)a2;
+	const struct dumpdates *d1 = *(const struct dumpdates *const *)a1;
+	const struct dumpdates *d2 = *(const struct dumpdates *const *)a2;
 	int diff;
 
 	diff = strncmp(d1->dd_name, d2->dd_name, sizeof(d1->dd_name));

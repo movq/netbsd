@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.1 2000/02/29 15:21:48 nonaka Exp $	*/
+/*	$NetBSD: boot.c,v 1.15 2006/06/10 07:49:29 tsutsui Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -33,20 +33,18 @@
 
 #include <lib/libsa/stand.h>
 #include <lib/libsa/loadfile.h>
+#include <lib/libkern/libkern.h>
 #include <sys/reboot.h>
+#include <sys/boot_flag.h>
 #include <machine/bootinfo.h>
 #include <machine/cpu.h>
 #include <machine/residual.h>
+#include <powerpc/spr.h>
 
 #include "boot.h"
 
 char *names[] = {
 	"in()",
-#if 0
-	"fd(0,0,0)netbsd", "fd(0,0,0)netbsd.gz",
-	"fd(0,0,0)netbsd.old", "fd(0,0,0)netbsd.old.gz",
-	"fd(0,0,0)onetbsd", "fd(0,0,0)onetbsd.gz"
-#endif
 };
 #define	NUMNAMES (sizeof (names) / sizeof (names[0]))
 
@@ -60,28 +58,32 @@ struct btinfo_console btinfo_console;
 struct btinfo_clock btinfo_clock;
 
 RESIDUAL residual;
-u_long ladr;
 
 extern u_long ns_per_tick;
 extern char bootprog_name[], bootprog_rev[], bootprog_maker[], bootprog_date[];
 
-void boot __P((void *, u_long));
-static void exec_kernel __P((char *));
+void boot(void *, u_long);
+static void exec_kernel(char *);
 
 void
-boot(resp, loadaddr)
-	void *resp;
-	u_long loadaddr;
+boot(void *resp, u_long loadaddr)
 {
+	extern char _end[], _edata[];
 	int n = 0;
 	int addr, speed;
+	unsigned int cpuvers;
 	char *name, *cnname, *p;
-	ladr = loadaddr;
+
+	/* Clear all of BSS */
+	memset(_edata, 0, _end - _edata);
 
 	/*
 	 * console init
 	 */
 	cnname = cninit(&addr, &speed);
+#ifdef VGA_RESET
+	vga_reset((u_char *)0xc0000000);
+#endif
 
 	/* make bootinfo */
 	/*
@@ -109,10 +111,17 @@ boot(resp, loadaddr)
 	/*
 	 * clock
 	 */
+	__asm volatile ("mfpvr %0" : "=r"(cpuvers));
+	cpuvers >>= 16;
 	btinfo_clock.common.next = 0;
 	btinfo_clock.common.type = BTINFO_CLOCK;
-	btinfo_clock.ticks_per_sec = resp ?
-	    residual.VitalProductData.ProcessorBusHz / 4 : TICKS_PER_SEC;
+	if (cpuvers == MPC601) {
+		btinfo_clock.ticks_per_sec = 1000000000;
+	} else {
+		btinfo_clock.ticks_per_sec = resp ?
+		    residual.VitalProductData.ProcessorBusHz/4 : TICKS_PER_SEC;
+	}
+	ns_per_tick = 1000000000 / btinfo_clock.ticks_per_sec;
 
 	p = bootinfo;
         memcpy(p, (void *)&btinfo_residual, sizeof(btinfo_residual));
@@ -122,9 +131,9 @@ boot(resp, loadaddr)
         memcpy(p, (void *)&btinfo_clock, sizeof(btinfo_clock));
 
 	/*
-	 * attached kernel check
+	 * load kernel if attached
 	 */
-	init_in();
+	init_in(loadaddr);
 
 	printf("\n");
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
@@ -143,8 +152,7 @@ boot(resp, loadaddr)
  * Exec kernel
  */
 static void
-exec_kernel(name)
-	char *name;
+exec_kernel(char *name)
 {
 	int howto = 0;
 	char c, *ptr;
@@ -152,12 +160,13 @@ exec_kernel(name)
 #ifdef DBMONITOR
 	int go_monitor;
 	extern int db_monitor __P((void));
-#endif /* DBMONITOR */
 
 ret:
+#endif /* DBMONITOR */
 	printf("\nBoot: ");
 	memset(namebuf, 0, sizeof (namebuf));
-	(void)tgets(namebuf);
+	if (tgets(namebuf) == -1)
+		printf("\n");
 
 	ptr = namebuf;
 #ifdef DBMONITOR
@@ -178,18 +187,8 @@ ret:
 		if (!c)
 			goto next;
 		if (c == '-') {
-			while ((c = *++ptr) && c != ' ') {
-				if (c == 'a')
-					howto |= RB_ASKNAME;
-				else if (c == 'b')
-					howto |= RB_HALT;
-				else if (c == 'd')
-					howto |= RB_KDB;
-				else if (c == 'r')
-					howto |= RB_DFLTROOT;
-				else if (c == 's')
-					howto |= RB_SINGLE;
-			}
+			while ((c = *++ptr) && c != ' ')
+				BOOT_FLAG(c, howto);
 		} else {
 			name = ptr;
 			while ((c = *++ptr) && c != ' ');

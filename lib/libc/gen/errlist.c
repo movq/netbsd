@@ -1,4 +1,4 @@
-/*	$NetBSD: errlist.c,v 1.12 1999/08/17 03:50:56 mycroft Exp $	*/
+/*	$NetBSD: errlist.c,v 1.17 2006/10/31 00:38:07 cbiere Exp $	*/
 
 /*
  * Copyright (c) 1982, 1985, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,18 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)errlst.c	8.2 (Berkeley) 11/16/93";
 #else
-__RCSID("$NetBSD: errlist.c,v 1.12 1999/08/17 03:50:56 mycroft Exp $");
+__RCSID("$NetBSD: errlist.c,v 1.17 2006/10/31 00:38:07 cbiere Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
-#ifdef __weak_alias
-__weak_alias(sys_errlist, _sys_errlist)
-__weak_alias(__sys_errlist, _sys_errlist)
-__weak_alias(sys_nerr, _sys_nerr)
-__weak_alias(__sys_nerr, _sys_nerr)
-#endif
+#include <errno.h>
 
-const char *const _sys_errlist[] = {
+static const char *const errlist[] = {
 	"Undefined error: 0",			/*  0 - ENOERROR */
 	"Operation not permitted",		/*  1 - EPERM */
 	"No such file or directory",		/*  2 - ENOENT */
@@ -86,7 +77,7 @@ const char *const _sys_errlist[] = {
 
 /* math software */
 	"Numerical argument out of domain",	/* 33 - EDOM */
-	"Result too large",			/* 34 - ERANGE */
+	"Result too large or too small",	/* 34 - ERANGE */
 
 /* non-blocking and interrupt i/o */
 	"Resource temporarily unavailable",	/* 35 - EAGAIN */
@@ -99,7 +90,7 @@ const char *const _sys_errlist[] = {
 	"Destination address required",		/* 39 - EDESTADDRREQ */
 	"Message too long",			/* 40 - EMSGSIZE */
 	"Protocol wrong type for socket",	/* 41 - EPROTOTYPE */
-	"Protocol not available",		/* 42 - ENOPROTOOPT */
+	"Protocol option not available",	/* 42 - ENOPROTOOPT */
 	"Protocol not supported",		/* 43 - EPROTONOSUPPORT */
 	"Socket type not supported",		/* 44 - ESOCKTNOSUPPORT */
 	"Operation not supported",		/* 45 - EOPNOTSUPP */
@@ -149,5 +140,41 @@ const char *const _sys_errlist[] = {
 	"Function not implemented",		/* 78 - ENOSYS */
 
 	"Inappropriate file type or format",	/* 79 - EFTYPE */
+	"Authentication error",			/* 80 - EAUTH */
+	"Need authenticator",			/* 81 - ENEEDAUTH */
+
+/* SystemV IPC */
+	"Identifier removed",			/* 82 - EIDRM */
+	"No message of desired type",		/* 83 - ENOMSG */
+						/* 84 - EOVERFLOW */
+	"Value too large to be stored in data type",
+
+/* Wide/multibyte-character handling, ISO/IEC 9899/AMD1:1995 */
+	"Illegal byte sequence",		/* 85 - EILSEQ */
+
+/* Base, Realtime, Threads or Thread Priority Scheduling option errors */
+	"Not supported",			/* 86 - ENOTSUP */
+
+/* Realtime option errors */
+	"Operation Canceled",			/* 87 - ECANCELED */
+
+/* Realtime, XSI STREAMS option errors */
+	"Bad or Corrupt message",		/* 88 - EBADMSG */
+
+/* XSI STREAMS option errors  */
+	"No message available",			/* 89 - ENODATA */
+	"No STREAM resources",			/* 90 - ENOSR */
+	"Not a STREAM",				/* 91 - ENOSTR */
+	"STREAM ioctl timeout",			/* 92 - ETIME */
+
+/* File system extended attribute errors */
+	"Attribute not found",			/* 93 - ENOATTR */
+
+	"Multihop attempted",			/* 94 - EMULTIHOP */
+	"Link has been severed",		/* 95 - ENOLINK */
+	"Protocol error"			/* 96 - EPROTO */
 };
-const int _sys_nerr = { sizeof _sys_errlist/sizeof _sys_errlist[0] };
+
+const int sys_nerr = sizeof(errlist) / sizeof(errlist[0]);
+
+const char * const *sys_errlist = errlist;

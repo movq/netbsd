@@ -1,4 +1,4 @@
-/*	$NetBSD: sbicreg.h,v 1.3 1998/08/21 19:13:29 is Exp $	*/
+/*	$NetBSD: sbicreg.h,v 1.7 2006/05/14 21:55:09 elad Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -105,10 +101,10 @@
  * My ID register, and/or CDB Size
  */
 
-#define SBIC_ID_FS_8_10		0x00	/* Input clock is  8-10 Mhz */
-					/* 11 Mhz is invalid */
-#define SBIC_ID_FS_12_15	0x40	/* Input clock is 12-15 Mhz */
-#define SBIC_ID_FS_16_20	0x80	/* Input clock is 16-20 Mhz */
+#define SBIC_ID_FS_8_10		0x00	/* Input clock is  8-10 MHz */
+					/* 11 MHz is invalid */
+#define SBIC_ID_FS_12_15	0x40	/* Input clock is 12-15 MHz */
+#define SBIC_ID_FS_16_20	0x80	/* Input clock is 16-20 MHz */
 #define SBIC_ID_EHP		0x10	/* Enable host parity */
 #define SBIC_ID_EAF		0x08	/* Enable Advanced Features */
 #define SBIC_ID_MASK		0x07
@@ -130,7 +126,7 @@
 
 /*
  * Timeout period register
- * [val in msecs, input clk in 0.1 Mhz]
+ * [val in msecs, input clk in 0.1 MHz]
  */
 
 #define	SBIC_TIMEOUT(val,clk)	((((val) * (clk)) / 800) + 1)

@@ -1,4 +1,4 @@
-/*	$NetBSD: smc90cx6.c,v 1.35 2000/03/30 12:45:32 augustss Exp $ */
+/*	$NetBSD: smc90cx6.c,v 1.56 2008/04/28 20:23:51 martin Exp $ */
 
 /*-
  * Copyright (c) 1994, 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,6 +34,9 @@
  * compatibility mode) boards
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: smc90cx6.c,v 1.56 2008/04/28 20:23:51 martin Exp $");
+
 /* #define BAHSOFTCOPY */
 #define BAHRETRANSMIT /**/
 
@@ -57,6 +53,8 @@
 #include <sys/syslog.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
+#include <sys/kernel.h>
+#include <sys/intr.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -76,10 +74,8 @@
 #include <net/bpfdesc.h>
 #endif
 
-#include <sys/kernel.h>
-#include <machine/bus.h>
-#include <machine/cpu.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 #include <machine/mtpr.h>
 
 #include <dev/ic/smc90cx6reg.h>
@@ -101,8 +97,8 @@
  *
  * New rx protocol:
  *
- * rx has a fillcount variable. If fillcount > (NRXBUF-1), 
- * rx can be switched off from rx hard int. 
+ * rx has a fillcount variable. If fillcount > (NRXBUF-1),
+ * rx can be switched off from rx hard int.
  * Else rx is restarted on the other receiver.
  * rx soft int counts down. if it is == (NRXBUF-1), it restarts
  * the receiver.
@@ -112,7 +108,7 @@
  * compare both values to determine the older packet.
  *
  * Transmit direction:
- * 
+ *
  * bah_start checks tx_fillcount
  * case 2: return
  *
@@ -129,15 +125,15 @@
  * #define fill(i) get mbuf && copy mbuf to chip(i)
  */
 
-void	bah_init __P((struct bah_softc *));
-void	bah_reset __P((struct bah_softc *));
-void	bah_stop __P((struct bah_softc *));
-void	bah_start __P((struct ifnet *));
-int	bahintr __P((void *));
-int	bah_ioctl __P((struct ifnet *, unsigned long, caddr_t));
-void	bah_watchdog __P((struct ifnet *));
-void	bah_srint __P((void *vsc));
-static	void bah_tint __P((struct bah_softc *, int));
+void	bah_init(struct bah_softc *);
+void	bah_reset(struct bah_softc *);
+void	bah_stop(struct bah_softc *);
+void	bah_start(struct ifnet *);
+int	bahintr(void *);
+int	bah_ioctl(struct ifnet *, unsigned long, void *);
+void	bah_watchdog(struct ifnet *);
+void	bah_srint(void *vsc);
+static	void bah_tint(struct bah_softc *, int);
 void	bah_reconwatch(void *);
 
 /* short notation */
@@ -162,7 +158,7 @@ bah_attach_subr(sc)
 
 #if (defined(BAH_DEBUG) && (BAH_DEBUG > 2))
 	printf("\n%s: attach(0x%x, 0x%x, 0x%x)\n",
-	    sc->sc_dev.dv_xname, parent, self, aux);
+	    device_xname(&sc->sc_dev), parent, self, aux);
 #endif
 	s = splhigh();
 
@@ -174,7 +170,7 @@ bah_attach_subr(sc)
 
 	do {
 		delay(200);
-	} while (!(GETREG(BAHSTAT) & BAH_POR)); 
+	} while (!(GETREG(BAHSTAT) & BAH_POR));
 
 	linkaddress = GETMEM(BAHMACOFF);
 
@@ -195,14 +191,15 @@ bah_attach_subr(sc)
 	/*
 	 * set interface to stopped condition (reset)
 	 */
-	bah_stop(sc); 
+	bah_stop(sc);
 
-	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
+	strlcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = bah_start;
 	ifp->if_ioctl = bah_ioctl;
 	ifp->if_timer = 0;
 	ifp->if_watchdog  = bah_watchdog;
+	IFQ_SET_READY(&ifp->if_snd);
 
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_NOTRAILERS;
 
@@ -210,16 +207,13 @@ bah_attach_subr(sc)
 
 	arc_ifattach(ifp, linkaddress);
 
-#if NBPFILTER > 0
-	bpfattach(&ifp->if_bpf, ifp, DLT_ARCNET, ARC_HDRLEN);
-#endif
 #ifdef BAHSOFTCOPY
-	sc->sc_rxcookie = softintr_establish(IPL_SOFTNET, bah_srint, sc);
-	sc->sc_txcookie = softintr_establish(IPL_SOFTNET,
-		(void (*) __P((void *)))bah_start, ifp);
+	sc->sc_rxcookie = softint_establish(SOFTINT_NET, bah_srint, sc);
+	sc->sc_txcookie = softint_establish(SOFTINT_NET,
+		(void (*)(void *))bah_start, ifp);
 #endif
 
-	callout_init(&sc->sc_recon_ch);
+	callout_init(&sc->sc_recon_ch, 0);
 }
 
 /*
@@ -255,7 +249,7 @@ bah_reset(sc)
 	struct bah_softc *sc;
 {
 	struct ifnet *ifp;
-	int linkaddress;
+	uint8_t linkaddress;
 
 	bus_space_tag_t bst_r = sc->sc_bst_r;
         bus_space_tag_t bst_m = sc->sc_bst_m;
@@ -265,39 +259,39 @@ bah_reset(sc)
 	ifp = &sc->sc_arccom.ac_if;
 
 #ifdef BAH_DEBUG
-	printf("%s: reset\n", sc->sc_dev.dv_xname);
+	printf("%s: reset\n", device_xname(&sc->sc_dev));
 #endif
 	/* stop and restart hardware */
 
 	(*sc->sc_reset)(sc, 1);
 	do {
 		DELAY(200);
-	} while (!(GETREG(BAHSTAT) & BAH_POR)); 
+	} while (!(GETREG(BAHSTAT) & BAH_POR));
 
 	linkaddress = GETMEM(BAHMACOFF);
 
 #if defined(BAH_DEBUG) && (BAH_DEBUG > 2)
 	printf("%s: reset: card reset, link addr = 0x%02x (%ld)\n",
-	    sc->sc_dev.dv_xname, linkaddress, linkaddress);
+	    device_xname(&sc->sc_dev), linkaddress, linkaddress);
 #endif
 
 	/* tell the routing level about the (possibly changed) link address */
-	arc_storelladdr(ifp, linkaddress);
+	if_set_sadl(ifp, &linkaddress, sizeof(linkaddress));
 
 	/* POR is NMI, but we need it below: */
 	sc->sc_intmask = BAH_RECON|BAH_POR;
 	PUTREG(BAHSTAT, sc->sc_intmask);
 	PUTREG(BAHCMD, BAH_CONF(CONF_LONG));
-	
+
 #ifdef BAH_DEBUG
 	printf("%s: reset: chip configured, status=0x%02x\n",
-	    sc->sc_dev.dv_xname, GETREG(BAHSTAT));
+	    device_xname(&sc->sc_dev), GETREG(BAHSTAT));
 #endif
 	PUTREG(BAHCMD, BAH_CLR(CLR_POR|CLR_RECONFIG));
 
 #ifdef BAH_DEBUG
 	printf("%s: reset: bits cleared, status=0x%02x\n",
-	    sc->sc_dev.dv_xname, GETREG(BAHSTAT);
+	    device_xname(&sc->sc_dev), GETREG(BAHSTAT);
 #endif
 
 	sc->sc_reconcount_excessive = ARC_EXCESSIVE_RECONS;
@@ -313,7 +307,7 @@ bah_reset(sc)
 
 #ifdef BAH_DEBUG
 	printf("%s: reset: started receiver, status=0x%02x\n",
-	    sc->sc_dev.dv_xname, GETREG(BAHSTAT);
+	    device_xname(&sc->sc_dev), GETREG(BAHSTAT);
 #endif
 
 	/* and init transmitter status */
@@ -349,7 +343,7 @@ bah_stop(sc)
 /*
  * Start output on interface. Get another datagram to send
  * off the interface queue, and copy it to the
- * interface becore starting the output
+ * interface before starting the output
  *
  * this assumes that it is called inside a critical section...
  * XXX hm... does it still?
@@ -374,7 +368,7 @@ bah_start(ifp)
 #endif
 
 #if defined(BAH_DEBUG) && (BAH_DEBUG > 3)
-	printf("%s: start(0x%x)\n", sc->sc_dev.dv_xname, ifp);
+	printf("%s: start(0x%x)\n", device_xname(&sc->sc_dev), ifp);
 #endif
 
 	if ((ifp->if_flags & IFF_RUNNING) == 0)
@@ -387,7 +381,7 @@ bah_start(ifp)
 		return;
 	}
 
-	IF_DEQUEUE(&ifp->if_snd, m);
+	IFQ_DEQUEUE(&ifp->if_snd, m);
 	buffer = sc->sc_tx_act ^ 1;
 
 	splx(s);
@@ -411,7 +405,7 @@ bah_start(ifp)
 	if (m->m_len < ARC_HDRLEN)
 		m = m_pullup(m, ARC_HDRLEN);/* gcc does structure padding */
 	printf("%s: start: filling %ld from %ld to %ld type %ld\n",
-	    sc->sc_dev.dv_xname, buffer, mtod(m, u_char *)[0],
+	    device_xname(&sc->sc_dev), buffer, mtod(m, u_char *)[0],
 	    mtod(m, u_char *)[1], mtod(m, u_char *)[2]);
 #else
 	if (m->m_len < 2)
@@ -432,7 +426,7 @@ bah_start(ifp)
 
 	PUTMEM(bah_ram_ptr + 1, mtod(m, u_char *)[1]);
 	m_adj(m, 2);
-		
+
 	/* get total length left at this point */
 	tlen = m->m_pkthdr.len;
 	if (tlen < ARC_MIN_FORBID_LEN) {
@@ -457,7 +451,7 @@ bah_start(ifp)
 	for (mp = m; mp; mp = mp->m_next) {
 		if ((len = mp->m_len)) {		/* YAMS */
 			bus_space_write_region_1(bst_m, mem, bah_ram_ptr,
-			    mtod(mp, caddr_t), len);
+			    mtod(mp, void *), len);
 
 			bah_ram_ptr += len;
 		}
@@ -469,7 +463,7 @@ bah_start(ifp)
 	/* actually transmit the packet */
 	s = splnet();
 
-	if (++sc->sc_tx_fillcount > 1) { 
+	if (++sc->sc_tx_fillcount > 1) {
 		/*
 		 * We are filled up to the rim. No more bufs for the moment,
 		 * please.
@@ -477,8 +471,8 @@ bah_start(ifp)
 		ifp->if_flags |= IFF_OACTIVE;
 	} else {
 #ifdef BAH_DEBUG
-		printf("%s: start: starting transmitter on buffer %d\n", 
-		    sc->sc_dev.dv_xname, buffer);
+		printf("%s: start: starting transmitter on buffer %d\n",
+		    device_xname(&sc->sc_dev), buffer);
 #endif
 		/* Transmitter was off, start it */
 		sc->sc_tx_act = buffer;
@@ -537,7 +531,7 @@ bah_srint(vsc)
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 
 	if (m == 0) {
-		/* 
+		/*
 	 	 * in case s.th. goes wrong with mem, drop it
 	 	 * to make sure the receiver can be started again
 		 * count it as input error (we dont have any other
@@ -546,7 +540,7 @@ bah_srint(vsc)
 		ifp->if_ierrors++;
 		goto cleanup;
 	}
-			
+
 	m->m_pkthdr.rcvif = ifp;
 
 	/*
@@ -566,7 +560,7 @@ bah_srint(vsc)
 	}
 	if (len+2 >= MINCLSIZE)
 		MCLGET(m, M_DONTWAIT);
-	
+
 	if (m == 0) {
 		ifp->if_ierrors++;
 		goto cleanup;
@@ -577,7 +571,7 @@ bah_srint(vsc)
 
 	head = m;
 	ah = mtod(head, struct arc_header *);
-		
+
 	ah->arc_shost = GETMEM(bah_ram_ptr + 0);
 	ah->arc_dhost = GETMEM(bah_ram_ptr + 1);
 
@@ -586,22 +580,22 @@ bah_srint(vsc)
 	bah_ram_ptr += offset;	/* ram buffer continues there */
 
 	while (len > 0) {
-	
+
 		len1 = len;
 		amount = M_TRAILINGSPACE(m);
 
 		if (amount == 0) {
 			dst = m;
 			MGET(m, M_DONTWAIT, MT_DATA);
-		
+
 			if (m == 0) {
 				ifp->if_ierrors++;
 				goto cleanup;
 			}
-		
+
 			if (len1 >= MINCLSIZE)
 				MCLGET(m, M_DONTWAIT);
-	
+
 			m->m_len = 0;
 			dst->m_next = m;
 			amount = M_TRAILINGSPACE(m);
@@ -610,7 +604,7 @@ bah_srint(vsc)
 		if (amount < len1)
 			len1 = amount;
 
-		bus_space_read_region_1(bst_m, mem, bah_ram_ptr, 
+		bus_space_read_region_1(bst_m, mem, bah_ram_ptr,
 		    mtod(m, u_char *) + m->m_len, len1);
 
 		m->m_len += len1;
@@ -627,7 +621,7 @@ bah_srint(vsc)
 
 	head = NULL;
 	ifp->if_ipackets++;
-	
+
 cleanup:
 
 	if (head != NULL)
@@ -643,19 +637,19 @@ cleanup:
 		sc->sc_rx_act = buffer;
 		sc->sc_intmask |= BAH_RI;
 
-		/* this also clears the RI flag interupt: */
+		/* this also clears the RI flag interrupt: */
 		PUTREG(BAHCMD, BAH_RXBC(buffer));
 		PUTREG(BAHSTAT, sc->sc_intmask);
 
 #ifdef BAH_DEBUG
 		printf("%s: srint: restarted rx on buf %ld\n",
-		    sc->sc_dev.dv_xname, buffer);
+		    device_xname(&sc->sc_dev), buffer);
 #endif
 	}
 	splx(s);
 }
 
-__inline static void
+inline static void
 bah_tint(sc, isr)
 	struct bah_softc *sc;
 	int isr;
@@ -675,16 +669,16 @@ bah_tint(sc, isr)
 	buffer = sc->sc_tx_act;
 
 	/*
-	 * retransmit code:  
-	 * Normal situtations first for fast path:
+	 * retransmit code:
+	 * Normal situations first for fast path:
 	 * If acknowledgement received ok or broadcast, we're ok.
-	 * else if 
-	 */ 
+	 * else if
+	 */
 
 	if (isr & BAH_TMA || sc->sc_broadcast[buffer])
 		sc->sc_arccom.ac_if.if_opackets++;
 #ifdef BAHRETRANSMIT
-	else if (ifp->if_flags & IFF_LINK2 && ifp->if_timer > 0 
+	else if (ifp->if_flags & IFF_LINK2 && ifp->if_timer > 0
 	    && --sc->sc_retransmits[buffer] > 0) {
 		/* retransmit same buffer */
 		PUTREG(BAHCMD, BAH_TX(buffer));
@@ -693,14 +687,14 @@ bah_tint(sc, isr)
 #endif
 	else
 		ifp->if_oerrors++;
-		
-		
+
+
 	/* We know we can accept another buffer at this point. */
 	ifp->if_flags &= ~IFF_OACTIVE;
 
 	if (--sc->sc_tx_fillcount > 0) {
 
-		/* 
+		/*
 		 * start tx on other buffer.
 		 * This also clears the int flag
 		 */
@@ -709,7 +703,7 @@ bah_tint(sc, isr)
 
 		/*
 		 * already given:
-		 * sc->sc_intmask |= BAH_TA; 
+		 * sc->sc_intmask |= BAH_TA;
 		 * PUTREG(BAHSTAT, sc->sc_intmask);
 		 */
 		PUTREG(BAHCMD, BAH_TX(buffer));
@@ -717,8 +711,8 @@ bah_tint(sc, isr)
 		ifp->if_timer = ARCTIMEOUT;
 
 #if defined(BAH_DEBUG) && (BAH_DEBUG > 1)
-		printf("%s: tint: starting tx on buffer %d, status 0x%02x\n", 
-		    sc->sc_dev.dv_xname, buffer, GETREG(BAHSTAT));
+		printf("%s: tint: starting tx on buffer %d, status 0x%02x\n",
+		    device_xname(&sc->sc_dev), buffer, GETREG(BAHSTAT));
 #endif
 	} else {
 		/* have to disable TX interrupt */
@@ -729,14 +723,14 @@ bah_tint(sc, isr)
 
 #ifdef BAH_DEBUG
 		printf("%s: tint: no more buffers to send, status 0x%02x\n",
-		    sc->sc_dev.dv_xname, GETREG(BAHSTAT));
+		    device_xname(&sc->sc_dev), GETREG(BAHSTAT));
 #endif
 	}
 
 	/* XXXX TODO */
 #ifdef BAHSOFTCOPY
 	/* schedule soft int to fill a new buffer for us */
-	softintr_schedule(sc->sc_txcookie);
+	softint_schedule(sc->sc_txcookie);
 #else
 	/* call it directly */
 	bah_start(ifp);
@@ -763,17 +757,17 @@ bahintr(arg)
 
 	isr = GETREG(BAHSTAT);
 	maskedisr = isr & sc->sc_intmask;
-	if (!maskedisr) 
+	if (!maskedisr)
 		return (0);
 	do {
 
 #if defined(BAH_DEBUG) && (BAH_DEBUG>1)
 		printf("%s: intr: status 0x%02x, intmask 0x%02x\n",
-		    sc->sc_dev.dv_xname, isr, sc->sc_intmask);
+		    device_xname(&sc->sc_dev), isr, sc->sc_intmask);
 #endif
 
 		if (maskedisr & BAH_POR) {
-		  	/* 
+		  	/*
 			 * XXX We should never see this. Don't bother to store
 			 * the address.
 			 * sc->sc_arccom.ac_anaddr = GETMEM(BAHMACOFF);
@@ -781,9 +775,9 @@ bahintr(arg)
 			PUTREG(BAHCMD, BAH_CLR(CLR_POR));
 			log(LOG_WARNING,
 			    "%s: intr: got spurious power on reset int\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(&sc->sc_dev));
 		}
-	
+
 		if (maskedisr & BAH_RECON) {
 			/*
 			 * we dont need to:
@@ -791,11 +785,11 @@ bahintr(arg)
 			 */
 			PUTREG(BAHCMD, BAH_CLR(CLR_RECONFIG));
 			sc->sc_arccom.ac_if.if_collisions++;
-	
+
 			/*
 			 * If less than 2 seconds per reconfig:
 			 *	If ARC_EXCESSIVE_RECONFIGS
-			 *	since last burst, complain and set treshold for
+			 *	since last burst, complain and set threshold for
 			 *	warnings to ARC_EXCESSIVE_RECONS_REWARN.
 			 *
 			 * This allows for, e.g., new stations on the cable, or
@@ -805,14 +799,14 @@ bahintr(arg)
 			 * XXX TODO: check timeout bits in status word and
 			 * double time if necessary.
 			 */
-	
+
 			callout_stop(&sc->sc_recon_ch);
-			newsec = time.tv_sec;
-			if ((newsec - sc->sc_recontime <= 2) && 
+			newsec = time_second;
+			if ((newsec - sc->sc_recontime <= 2) &&
 			    (++sc->sc_reconcount == ARC_EXCESSIVE_RECONS)) {
 				log(LOG_WARNING,
 				    "%s: excessive token losses, "
-				    "cable problem?\n", sc->sc_dev.dv_xname);
+				    "cable problem?\n", device_xname(&sc->sc_dev));
 			}
 			sc->sc_recontime = newsec;
 			callout_reset(&sc->sc_recon_ch, 15 * hz,
@@ -822,7 +816,7 @@ bahintr(arg)
 		if (maskedisr & BAH_RI) {
 #if defined(BAH_DEBUG) && (BAH_DEBUG > 1)
 			printf("%s: intr: hard rint, act %ld\n",
-			    sc->sc_dev.dv_xname, sc->sc_rx_act);
+			    device_xname(&sc->sc_dev), sc->sc_rx_act);
 #endif
 
 			buffer = sc->sc_rx_act;
@@ -832,9 +826,9 @@ bahintr(arg)
 				 * invalid marked buffer (or illegally
 				 * configured sender)
 				 */
-				log(LOG_WARNING, 
-				    "%s: spurious RX interupt or sender 0 "
-				    " (ignored)\n", sc->sc_dev.dv_xname);
+				log(LOG_WARNING,
+				    "%s: spurious RX interrupt or sender 0 "
+				    " (ignored)\n", device_xname(&sc->sc_dev));
 				/*
 				 * restart receiver on same buffer.
 				 * XXX maybe better reset interface?
@@ -847,29 +841,29 @@ bahintr(arg)
 				} else {
 					buffer ^= 1;
 					sc->sc_rx_act = buffer;
-	
+
 					/*
 					 * Start receiver on other receive
 					 * buffer. This also clears the RI
-					 * interupt flag.
+					 * interrupt flag.
 					 */
 					PUTREG(BAHCMD, BAH_RXBC(buffer));
 					/* in RX intr, so mask is ok for RX */
-		
+
 #ifdef BAH_DEBUG
 					printf("%s: strt rx for buf %ld, "
 					    "stat 0x%02x\n",
-					    sc->sc_dev.dv_xname, sc->sc_rx_act,
+					    device_xname(&sc->sc_dev), sc->sc_rx_act,
 					    GETREG(BAHSTAT);
 #endif
 				}
-		
+
 #ifdef BAHSOFTCOPY
 				/*
 				 * this one starts a soft int to copy out
 				 * of the hw
 				 */
-				softintr_schedule(sc->sc_rxcookie);
+				softint_schedule(sc->sc_rxcookie);
 #else
 				/* this one does the copy here */
 				bah_srint(sc);
@@ -895,21 +889,21 @@ bah_reconwatch(arg)
 	if (sc->sc_reconcount >= ARC_EXCESSIVE_RECONS) {
 		sc->sc_reconcount = 0;
 		log(LOG_WARNING, "%s: token valid again.\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(&sc->sc_dev));
 	}
 	sc->sc_reconcount = 0;
 }
 
 
 /*
- * Process an ioctl request. 
+ * Process an ioctl request.
  * This code needs some work - it looks pretty ugly.
  */
 int
-bah_ioctl(ifp, command, data)
+bah_ioctl(ifp, cmd, data)
 	struct ifnet *ifp;
-	u_long command;
-	caddr_t data;
+	u_long cmd;
+	void *data;
 {
 	struct bah_softc *sc;
 	struct ifaddr *ifa;
@@ -922,12 +916,12 @@ bah_ioctl(ifp, command, data)
 	ifr = (struct ifreq *)data;
 	s = splnet();
 
-#if defined(BAH_DEBUG) && (BAH_DEBUG > 2) 
+#if defined(BAH_DEBUG) && (BAH_DEBUG > 2)
 	printf("%s: ioctl() called, cmd = 0x%x\n",
-	    sc->sc_dev.dv_xname, command);
+	    device_xname(&sc->sc_dev), cmd);
 #endif
 
-	switch (command) {
+	switch (cmd) {
 	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 		switch (ifa->ifa_addr->sa_family) {
@@ -946,7 +940,7 @@ bah_ioctl(ifp, command, data)
 		if ((ifp->if_flags & IFF_UP) == 0 &&
 		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
-			 * If interface is marked down and it is running, 
+			 * If interface is marked down and it is running,
 			 * then stop it.
 			 */
 			bah_stop(sc);
@@ -958,12 +952,12 @@ bah_ioctl(ifp, command, data)
 			 * start it.
 			 */
 			bah_init(sc);
-		} 
+		}
 		break;
 
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		switch (ifr->ifr_addr.sa_family) {
+		switch (ifreq_getaddr(cmd, ifr)->sa_family) {
 		case AF_INET:
 		case AF_INET6:
 			error = 0;

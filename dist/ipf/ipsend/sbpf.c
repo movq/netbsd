@@ -1,22 +1,13 @@
-/*	$NetBSD: sbpf.c,v 1.1.1.1 1999/12/11 22:24:10 veego Exp $	*/
+/*	$NetBSD: sbpf.c,v 1.7 2006/04/04 16:17:18 martti Exp $	*/
 
 /*
  * (C)opyright 1995-1998 Darren Reed. (from tcplog)
  *
- * Redistribution and use in source and binary forms are permitted
- * provided that this notice is preserved and due credit is given
- * to the original author and the contributors.
+ * See the IPFILTER.LICENCE file for details on licencing.
+ *
  */
-#include <stdio.h>
-#include <netdb.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <signal.h>
-#include <errno.h>
-#include <sys/types.h>
 #include <sys/param.h>
+#include <sys/types.h>
 #include <sys/mbuf.h>
 #include <sys/time.h>
 #include <sys/timeb.h>
@@ -41,11 +32,24 @@
 #include <netinet/udp.h>
 #include <netinet/udp_var.h>
 #include <netinet/tcp.h>
+
+#include <stdio.h>
+#include <netdb.h>
+#include <string.h>
+#include <unistd.h>
+#include <stdlib.h>
+#ifdef __NetBSD__
+# include <paths.h>
+#endif
+#include <ctype.h>
+#include <signal.h>
+#include <errno.h>
+
 #include "ipsend.h"
 
 #if !defined(lint)
 static const char sccsid[] = "@(#)sbpf.c	1.3 8/25/95 (C)1995 Darren Reed";
-static const char rcsid[] = "@(#)Id: sbpf.c,v 2.1 1999/08/04 17:31:13 darrenr Exp";
+static const char rcsid[] = "@(#)Id: sbpf.c,v 2.5.4.1 2006/03/21 16:32:58 darrenr Exp";
 #endif
 
 /*
@@ -55,15 +59,25 @@ static	u_char	*buf = NULL;
 static	int	bufsize = 0, timeout = 1;
 
 
-int	initdevice(device, sport, tout)
+int	initdevice(device, tout)
 char	*device;
-int	sport, tout;
+int	tout;
 {
 	struct	bpf_version bv;
 	struct	timeval to;
 	struct	ifreq ifr;
+#ifdef _PATH_BPF
+	char	*bpfname = _PATH_BPF;
+	int	fd;
+
+	if ((fd = open(bpfname, O_RDWR)) < 0)
+	    {
+		fprintf(stderr, "no bpf devices available as /dev/bpfxx\n");
+		return -1;
+	    }
+#else
 	char	bpfname[16];
-	int	fd, i;
+	int	fd = 0, i;
 
 	for (i = 0; i < 16; i++)
 	    {
@@ -76,6 +90,7 @@ int	sport, tout;
 		fprintf(stderr, "no bpf devices available as /dev/bpfxx\n");
 		return -1;
 	    }
+#endif
 
 	if (ioctl(fd, BIOCVERSION, (caddr_t)&bv) < 0)
 	    {

@@ -1,4 +1,4 @@
-/*	$NetBSD: pigs.c,v 1.16 2000/01/08 23:12:37 itojun Exp $	*/
+/*	$NetBSD: pigs.c,v 1.30 2006/10/22 16:43:24 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pigs.c	8.2 (Berkeley) 9/23/93";
 #endif
-__RCSID("$NetBSD: pigs.c,v 1.16 2000/01/08 23:12:37 itojun Exp $");
+__RCSID("$NetBSD: pigs.c,v 1.30 2006/10/22 16:43:24 christos Exp $");
 #endif /* not lint */
 
 /*
@@ -46,29 +42,25 @@ __RCSID("$NetBSD: pigs.c,v 1.16 2000/01/08 23:12:37 itojun Exp $");
  */
 
 #include <sys/param.h>
-#include <sys/dkstat.h>
-#include <sys/dir.h>
-#include <sys/time.h>
-#include <sys/proc.h>
+#include <sys/sched.h>
 #include <sys/sysctl.h>
 
 #include <curses.h>
 #include <math.h>
-#include <nlist.h>
 #include <pwd.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "extern.h"
 #include "systat.h"
+#include "extern.h"
 #include "ps.h"
 
-int compare_pctcpu __P((const void *, const void *));
+int compare_pctcpu(const void *, const void *);
 
 int nproc;
 struct p_times *pt;
 
-long stime[CPUSTATES];
+u_int64_t stime[CPUSTATES];
 long	mempages;
 int     fscale;
 double  lccpu;
@@ -78,15 +70,14 @@ double  lccpu;
 #endif
 
 WINDOW *
-openpigs()
+openpigs(void)
 {
 
-	return (subwin(stdscr, LINES-5-1, 0, 5, 0));
+	return (subwin(stdscr, -1, 0, 5, 0));
 }
 
 void
-closepigs(w)
-	WINDOW *w;
+closepigs(WINDOW *w)
 {
 
 	if (w == NULL)
@@ -98,10 +89,10 @@ closepigs(w)
 
 
 void
-showpigs()
+showpigs(void)
 {
-	int i, j, y, k;
-	struct	eproc *ep;
+	int i, y, k;
+	struct kinfo_proc2 *kp;
 	float total;
 	int factor;
 	const char *pname;
@@ -109,7 +100,7 @@ showpigs()
 
 	if (pt == NULL)
 		return;
-	/* Accumulate the percent of cpu per user. */
+	/* Accumulate the percent of CPU per user. */
 	total = 0.0;
 	for (i = 0; i <= nproc; i++) {
 		/* Accumulate the percentage. */
@@ -132,10 +123,11 @@ showpigs()
 			usrstr[0] = '\0';
 		}
 		else {
-			ep = &pt[k].pt_kp->kp_eproc;
-			pname = pt[k].pt_kp->kp_proc.p_comm;
-			snprintf(pidstr, sizeof(pidstr), "%5d", pt[k].pt_kp->kp_proc.p_pid);
-			snprintf(usrstr, sizeof(usrstr), "%8s", user_from_uid(ep->e_ucred.cr_uid, 0));
+			kp = pt[k].pt_kp;
+			pname = kp->p_comm;
+			snprintf(pidstr, sizeof(pidstr), "%5d", kp->p_pid);
+			snprintf(usrstr, sizeof(usrstr), "%8s",
+			    user_from_uid(kp->p_uid, 0));
 		}
 		wmove(wnd, y, 0);
 		wclrtoeol(wnd);
@@ -143,28 +135,24 @@ showpigs()
 		mvwaddstr(wnd, y, 9, pidstr);
 		(void)snprintf(pidname, sizeof(pidname), "%9.9s", pname);
 		mvwaddstr(wnd, y, 15, pidname);
-		wmove(wnd, y, 25);
-		for (j = pt[k].pt_pctcpu*factor + 0.5; j > 0; j--)
-			waddch(wnd, 'X');
+		mvwhline(wnd, y, 25, 'X', pt[k].pt_pctcpu*factor + 0.5);
 	}
 	wmove(wnd, y, 0); wclrtobot(wnd);
 }
 
 static struct nlist namelist[] = {
 #define X_FIRST		0
-#define X_CPTIME	0
-	{ "_cp_time" },
-#define X_CCPU          1
-	{ "_ccpu" },
-#define X_FSCALE        2
-	{ "_fscale" },
-#define X_PHYSMEM	3
-	{ "_physmem" },
-	{ "" }
+#define X_CCPU          0
+	{ .n_name = "_ccpu" },
+#define X_FSCALE        1
+	{ .n_name = "_fscale" },
+#define X_PHYSMEM	2
+	{ .n_name = "_physmem" },
+	{ .n_name = NULL }
 };
 
 int
-initpigs()
+initpigs(void)
 {
 	fixpt_t ccpu;
 
@@ -178,7 +166,7 @@ initpigs()
 			return(0);
 		}
 	}
-	KREAD(NPTR(X_CPTIME), stime, sizeof (stime));
+	(void) fetch_cptime(stime);
 	KREAD(NPTR(X_PHYSMEM), &mempages, sizeof (mempages));
 	NREAD(X_CCPU, &ccpu, sizeof ccpu);
 	NREAD(X_FSCALE,  &fscale, sizeof fscale);
@@ -188,20 +176,19 @@ initpigs()
 }
 
 void
-fetchpigs()
+fetchpigs(void)
 {
 	int i;
-	float time;
-	struct proc *pp;
 	float *pctp;
-	struct kinfo_proc *kpp;
-	long ctime[CPUSTATES];
+	struct kinfo_proc2 *kpp, *k;
+	u_int64_t cputime[CPUSTATES];
 	double t;
 	static int lastnproc = 0;
 
 	if (namelist[X_FIRST].n_type == 0)
 		return;
-	if ((kpp = kvm_getprocs(kd, KERN_PROC_ALL, 0, &nproc)) == NULL) {
+	if ((kpp = kvm_getproc2(kd, KERN_PROC_ALL, 0, sizeof(*kpp),
+				&nproc)) == NULL) {
 		error("%s", kvm_geterr(kd));
 		if (pt)
 			free(pt);
@@ -220,34 +207,33 @@ fetchpigs()
 	 * calculate %cpu for each proc
 	 */
 	for (i = 0; i < nproc; i++) {
-		pt[i].pt_kp = &kpp[i];
-		pp = &kpp[i].kp_proc;
+		pt[i].pt_kp = k = &kpp[i];
 		pctp = &pt[i].pt_pctcpu;
-		time = pp->p_swtime;
-		if (P_ZOMBIE(pp) ||
-		    time == 0 || (pp->p_flag & P_INMEM) == 0)
+		/* XXX - I don't like this */
+		if (k->p_swtime == 0 || (k->p_flag & L_INMEM) == 0 ||
+		    k->p_stat == SZOMB)
 			*pctp = 0;
 		else
-			*pctp = ((double) pp->p_pctcpu / 
-					fscale) / (1.0 - exp(time * lccpu));
+			*pctp = ((double) k->p_pctcpu / 
+				    fscale) / (1.0 - exp(k->p_swtime * lccpu));
 	}
 	/*
 	 * and for the imaginary "idle" process
 	 */
-	KREAD(NPTR(X_CPTIME), ctime, sizeof (ctime));
+	(void) fetch_cptime(cputime);
 	t = 0;
 	for (i = 0; i < CPUSTATES; i++)
-		t += ctime[i] - stime[i];
+		t += cputime[i] - stime[i];
 	if (t == 0.0)
 		t = 1.0;
 	pt[nproc].pt_kp = NULL;
-	pt[nproc].pt_pctcpu = (ctime[CP_IDLE] - stime[CP_IDLE]) / t;
+	pt[nproc].pt_pctcpu = (cputime[CP_IDLE] - stime[CP_IDLE]) / t;
 	for (i = 0; i < CPUSTATES; i++)
-		stime[i] = ctime[i];
+		stime[i] = cputime[i];
 }
 
 void
-labelpigs()
+labelpigs(void)
 {
 	wmove(wnd, 0, 0);
 	wclrtoeol(wnd);
@@ -255,9 +241,8 @@ labelpigs()
 }
 
 int
-compare_pctcpu(a, b)
-	const void *a, *b;
+compare_pctcpu(const void *a, const void *b)
 {
-	return (((struct p_times *) a)->pt_pctcpu >
-		((struct p_times *) b)->pt_pctcpu)? -1: 1;
+	return (((const struct p_times *) a)->pt_pctcpu >
+		((const struct p_times *) b)->pt_pctcpu)? -1: 1;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ka630.h,v 1.4 2000/01/24 02:40:32 matt Exp $ */
+/*	$NetBSD: ka630.h,v 1.8 2005/12/11 12:19:34 christos Exp $ */
 /*-
  * Copyright (c) 1986, 1988 The Regents of the University of California.
  * All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,6 +36,7 @@
 #define UVAXIISID	((u_long *)0x20040004)
 #define UVAXIICPU	((struct uvaxIIcpu *)0x20080000)
 
+#ifndef _LOCORE
 struct uvaxIIcpu {
 	u_short uvaxII_bdr;
 	u_short uvaxII_xxx;
@@ -47,6 +44,7 @@ struct uvaxIIcpu {
 	u_long  uvaxII_cear;
 	u_long  uvaxII_dear;
 };
+#endif
 
 /* Memory system err reg. */
 #define	UVAXIIMSER_CD	0x00000300
@@ -65,8 +63,8 @@ struct uvaxIIcpu {
 #define	UVAXIIDEAR_PG	0x00007fff
 
 /*
- * Definitions specific to the ka630 MicroVAXII Q22 bus cpu card. Includes the
- * tod clock chip and the cpu registers.
+ * Definitions specific to the ka630 MicroVAXII Q22 bus CPU card. Includes the
+ * tod clock chip and the CPU registers.
  */
 #define KA630CLK	((struct ka630clock *)0x200b8000)
 
@@ -119,6 +117,18 @@ struct ka630clock {
 	u_short	cpmbx;	/* CPMBX is used by the boot rom. see ka630-ug-3.3.3 */
 };
 #endif
+
+#define KA630_NVR_ADRS	0x200B8024
+/* Definitions for various locations in the KA630 console page */
+#define KA630_PUTC_POLL 0x20
+#define KA630_PUTC	0x24
+#define KA630_GETC	0x1C
+#define KA630_ROW	0x4C
+#define KA630_MINROW	0x4D
+#define KA630_MAXROW	0x4E
+#define KA630_COL	0x50
+#define KA630_MINCOL	0x51
+#define KA630_MAXCOL	0x52
 
 #endif /* _VAX_INCLUDE_KA630_H_ */
 

@@ -1,15 +1,13 @@
-/*	$NetBSD: zdump.c,v 1.10 1999/02/08 18:00:19 kleink Exp $	*/
+/*	$NetBSD: zdump.c,v 1.16 2006/12/04 17:24:40 kleink Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
 #ifndef NOID
-#if 0
-static char	elsieid[] = "@(#)zdump.c	7.28";
-#else
-__RCSID("$NetBSD: zdump.c,v 1.10 1999/02/08 18:00:19 kleink Exp $");
-#endif
+__RCSID("$NetBSD: zdump.c,v 1.16 2006/12/04 17:24:40 kleink Exp $");
 #endif /* !defined NOID */
 #endif /* !defined lint */
+
+static char	elsieid[] = "@(#)zdump.c	7.31";
 
 /*
 ** This code has been made independent of the rest of the time
@@ -17,11 +15,12 @@ __RCSID("$NetBSD: zdump.c,v 1.10 1999/02/08 18:00:19 kleink Exp $");
 ** You can use this code to help in verifying other implementations.
 */
 
-#include "stdio.h"	/* for stdout, stderr, perror */
+#include "stdio.h"	/* for stdout, stderr */
 #include "string.h"	/* for strcpy */
 #include "sys/types.h"	/* for time_t */
 #include "time.h"	/* for struct tm */
 #include "stdlib.h"	/* for exit, malloc, atoi */
+#include <err.h>
 
 #ifndef MAX_STRING_LENGTH
 #define MAX_STRING_LENGTH	1024
@@ -119,12 +118,7 @@ __RCSID("$NetBSD: zdump.c,v 1.10 1999/02/08 18:00:19 kleink Exp $");
 #endif /* !defined TZ_DOMAIN */
 
 #ifndef P
-#ifdef __STDC__
 #define P(x)	x
-#endif /* defined __STDC__ */
-#ifndef __STDC__
-#define P(x)	()
-#endif /* !defined __STDC__ */
 #endif /* !defined P */
 
 extern char **	environ;
@@ -169,6 +163,11 @@ char *	argv[];
 	(void) textdomain(TZ_DOMAIN);
 #endif /* HAVE_GETTEXT - 0 */
 	progname = argv[0];
+	for (i = 1; i < argc; ++i)
+		if (strcmp(argv[i], "--version") == 0) {
+			(void) printf("%s\n", elsieid);
+			(void) exit(EXIT_SUCCESS);
+		}
 	vflag = 0;
 	cutoff = NULL;
 	while ((c = getopt(argc, argv, "c:v")) == 'c' || c == 'v')
@@ -178,7 +177,7 @@ char *	argv[];
 	if ((c != EOF && c != -1) ||
 		(optind == argc - 1 && strcmp(argv[optind], "=") == 0)) {
 			(void) fprintf(stderr,
-_("%s: usage is %s [ -v ] [ -c cutoff ] zonename ...\n"),
+_("%s: usage is %s [ --version ] [ -v ] [ -c cutoff ] zonename ...\n"),
 				argv[0], argv[0]);
 			(void) exit(EXIT_FAILURE);
 	}
@@ -208,8 +207,8 @@ _("%s: usage is %s [ -v ] [ -c cutoff ] zonename ...\n"),
 			sizeof *fakeenv));
 		if (fakeenv == NULL ||
 			(fakeenv[0] = (char *) malloc(longest + 4)) == NULL) {
-					(void) perror(progname);
-					(void) exit(EXIT_FAILURE);
+			err(EXIT_FAILURE, "Can't allocated %zu bytes",
+			    longest + 4);
 		}
 		to = 0;
 		(void)strcpy(fakeenv[to++], "TZ=");	/* XXX strcpy is safe */
@@ -237,7 +236,7 @@ _("%s: usage is %s [ -v ] [ -c cutoff ] zonename ...\n"),
 		t += SECSPERHOUR * HOURSPERDAY;
 		show(argv[i], t, TRUE);
 		tm = *localtime(&t);
-		(void) strncpy(buf, abbr(&tm), (sizeof buf) - 1);
+		(void) strlcpy(buf, abbr(&tm), (sizeof buf));
 		for ( ; ; ) {
 			if (cutoff != NULL && t >= cuttime)
 				break;
@@ -252,8 +251,8 @@ _("%s: usage is %s [ -v ] [ -c cutoff ] zonename ...\n"),
 				strcmp(abbr(&newtm), buf) != 0) {
 					newt = hunt(argv[i], t, newt);
 					newtm = *localtime(&newt);
-					(void) strncpy(buf, abbr(&newtm),
-						(sizeof buf) - 1);
+					(void) strlcpy(buf, abbr(&newtm),
+						(sizeof buf));
 			}
 			t = newt;
 			tm = newtm;
@@ -270,10 +269,7 @@ _("%s: usage is %s [ -v ] [ -c cutoff ] zonename ...\n"),
 		show(argv[i], t, TRUE);
 	}
 	if (fflush(stdout) || ferror(stdout)) {
-		(void) fprintf(stderr, _("%s: Error writing "),
-			argv[0]);
-		(void) perror(_("standard output"));
-		(void) exit(EXIT_FAILURE);
+		err(EXIT_FAILURE, _("Error writing standard output"));
 	}
 	exit(EXIT_SUCCESS);
 
@@ -294,7 +290,7 @@ time_t	hit;
 	static char	loab[MAX_STRING_LENGTH];
 
 	lotm = *localtime(&lot);
-	(void) strncpy(loab, abbr(&lotm), (sizeof loab) - 1);
+	(void) strlcpy(loab, abbr(&lotm), (sizeof loab));
 	while ((hit - lot) >= 2) {
 		t = lot / 2 + hit / 2;
 		if (t <= lot)

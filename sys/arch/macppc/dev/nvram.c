@@ -1,4 +1,4 @@
-/*	$NetBSD: nvram.c,v 1.2 1998/11/19 15:38:23 mrg Exp $	*/
+/*	$NetBSD: nvram.c,v 1.12 2008/06/13 11:54:31 cegger Exp $	*/
 
 /*-
  * Copyright (C) 1998	Internet Research Institute, Inc.
@@ -31,12 +31,17 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: nvram.c,v 1.12 2008/06/13 11:54:31 cegger Exp $");
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/conf.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
+#include <sys/event.h>
 
 #include <machine/autoconf.h>
 #include <machine/pio.h>
@@ -49,7 +54,6 @@
 
 static void nvram_attach __P((struct device *, struct device *, void *));
 static int nvram_match __P((struct device *, struct cfdata *, void *));
-static int nvram_print __P((void *, const char *));
 
 struct nvram_softc {
 	struct device sc_dev;
@@ -58,11 +62,19 @@ struct nvram_softc {
 	char *nv_data;
 };
 
-struct cfattach nvram_ca = {
-	sizeof(struct nvram_softc), nvram_match, nvram_attach
-};
+CFATTACH_DECL(nvram, sizeof(struct nvram_softc),
+    nvram_match, nvram_attach, NULL, NULL);
 
 extern struct cfdriver nvram_cd;
+
+dev_type_read(nvramread);
+dev_type_write(nvramwrite);
+dev_type_mmap(nvrammmap);
+
+const struct cdevsw nvram_cdevsw = {
+	nullopen, nullclose, nvramread, nvramwrite, noioctl,
+	nostop, notty, nopoll, nvrammmap, nokqfilter,
+};
 
 int
 nvram_match(parent, cf, aux)
@@ -113,28 +125,7 @@ nvram_attach(parent, self, aux)
 }
 
 int
-nvramopen(dev, flag, mode, p)
-	dev_t dev;
-	int flag, mode;
-	struct proc *p;
-{
-	return 0;
-}
-
-int
-nvramclose(dev, flag, mode, p)
-	dev_t dev;
-	int flag, mode;
-	struct proc *p;
-{
-	return 0;
-}
-
-int
-nvramread(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+nvramread(dev_t dev, struct uio *uio, int flag)
 {
 	struct nvram_softc *sc;
 	u_int off, cnt;
@@ -142,7 +133,7 @@ nvramread(dev, uio, flag)
 	int error = 0;
 	char *buf;
 
-	sc = nvram_cd.cd_devs[0];
+	sc = device_lookup_private(&nvram_cd, 0);
 
 	off = uio->uio_offset;
 	cnt = uio->uio_resid;
@@ -200,21 +191,11 @@ nvramwrite(dev, uio, flag)
 	return ENXIO;
 }
 
-int
-nvramioctl(dev, cmd, data, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
-{
-	return ENOTTY;
-}
-
-int
+paddr_t
 nvrammmap(dev, off, prot)
         dev_t dev;
-        int off, prot;
+        off_t off;
+	int prot;
 {
 	return -1;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: interact.c,v 1.13 1999/12/17 13:06:49 abs Exp $	*/
+/*	$NetBSD: interact.c,v 1.30 2006/11/26 16:16:31 jmmv Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -29,52 +29,64 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: interact.c,v 1.13 1999/12/17 13:06:49 abs Exp $");
+__RCSID("$NetBSD: interact.c,v 1.30 2006/11/26 16:16:31 jmmv Exp $");
 #endif /* lint */
 
 #include <sys/param.h>
 #define FSTYPENAMES
 #define DKTYPENAMES
-#include <sys/disklabel.h>
 
 #include <err.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+
+#if HAVE_NBTOOL_CONFIG_H
+#define	getmaxpartitions()	MAXPARTITIONS
+#include <nbinclude/sys/disklabel.h>
+#else
 #include <util.h>
+#include <sys/disklabel.h>
+#endif /* HAVE_NBTOOL_CONFIG_H */
 
 #include "extern.h"
 
-static void cmd_help __P((struct disklabel *, char *, int));
-static void cmd_chain __P((struct disklabel *, char *, int));
-static void cmd_print __P((struct disklabel *, char *, int));
-static void cmd_printall __P((struct disklabel *, char *, int));
-static void cmd_info __P((struct disklabel *, char *, int));
-static void cmd_part __P((struct disklabel *, char *, int));
-static void cmd_label __P((struct disklabel *, char *, int));
-static void cmd_round __P((struct disklabel *, char *, int));
-static void cmd_name __P((struct disklabel *, char *, int));
-static int runcmd __P((char *, struct disklabel *, int));
-static int getinput __P((const char *, const char *, const char *, char *));
-static void defnum __P((char *, struct disklabel *, int));
-static int getnum __P((char *, int, struct disklabel *));
-static void deffstypename __P((char *, int));
-static int getfstypename __P((const char *));
+static void	cmd_help(struct disklabel *, char *, int);
+static void	cmd_chain(struct disklabel *, char *, int);
+static void	cmd_print(struct disklabel *, char *, int);
+static void	cmd_printall(struct disklabel *, char *, int);
+static void	cmd_info(struct disklabel *, char *, int);
+static void	cmd_part(struct disklabel *, char *, int);
+static void	cmd_label(struct disklabel *, char *, int);
+static void	cmd_round(struct disklabel *, char *, int);
+static void	cmd_name(struct disklabel *, char *, int);
+static void	cmd_listfstypes(struct disklabel *, char *, int);
+static int	runcmd(struct disklabel *, char *, int);
+static int	getinput(const char *, const char *, const char *, char *);
+static int	alphacmp(const void *, const void *);
+static void	defnum(struct disklabel *, char *, uint32_t);
+static void	dumpnames(const char *, const char * const *, size_t);
+static int	getnum(struct disklabel *, char *, int);
 
 static int rounding = 0;	/* sector rounding */
 static int chaining = 0;	/* make partitions contiguous */
 
 static struct cmds {
 	const char *name;
-	void (*func) __P((struct disklabel *, char *, int));
+	void (*func)(struct disklabel *, char *, int);
 	const char *help;
 } cmds[] = {
 	{ "?",	cmd_help,	"print this menu" },
 	{ "C",	cmd_chain,	"make partitions contiguous" },
 	{ "E",	cmd_printall,	"print disk label and current partition table"},
 	{ "I",	cmd_info,	"change label information" },
+	{ "L",	cmd_listfstypes,"list all known file system types" },
 	{ "N",	cmd_name,	"name the label" },
 	{ "P",	cmd_print,	"print current partition table" },
 	{ "Q",	NULL,		"quit" },
@@ -86,10 +98,7 @@ static struct cmds {
 	
 
 static void
-cmd_help(lp, s, fd)
-	struct disklabel *lp;
-	char *s;
-	int fd;
+cmd_help(struct disklabel *lp, char *s, int fd)
 {
 	struct cmds *cmd;
 
@@ -101,17 +110,13 @@ cmd_help(lp, s, fd)
 
 
 static void
-cmd_chain(lp, s, fd)
-	struct disklabel *lp;
-	char *s;
-	int fd;
+cmd_chain(struct disklabel *lp, char *s, int fd)
 {
-	int i;
-	char line[BUFSIZ];
+	int	i;
+	char	line[BUFSIZ];
 
 	i = getinput(":", "Automatically adjust partitions",
 	    chaining ? "yes" : "no", line);
-
 	if (i <= 0)
 		return;
 
@@ -128,76 +133,89 @@ cmd_chain(lp, s, fd)
 	}
 }
 
+
 static void
-cmd_printall(lp, s, fd)
-	struct disklabel *lp;
-	char *s;
-	int fd;
+cmd_printall(struct disklabel *lp, char *s, int fd)
 {
 
-	showinfo(stdout, lp);
-	showpartitions(stdout, lp);
+	showinfo(stdout, lp, specname);
+	showpartitions(stdout, lp, Cflag);
 }
 
-static void
-cmd_print(lp, s, fd)
-	struct disklabel *lp;
-	char *s;
-	int fd;
-{
-	showpartitions(stdout, lp);
-}
 
 static void
-cmd_info(lp, s, fd)
-	struct disklabel *lp;
-	char *s;
-	int fd;
+cmd_print(struct disklabel *lp, char *s, int fd)
 {
-	char line[BUFSIZ];
-	char def[BUFSIZ];
-	const char * const *cpp;
-	const char *t;
-	int v, i;
+
+	showpartitions(stdout, lp, Cflag);
+}
+
+
+static void
+cmd_info(struct disklabel *lp, char *s, int fd)
+{
+	char	line[BUFSIZ];
+	char	def[BUFSIZ];
+	int	v, i;
 	u_int32_t u;
 
 	printf("# Current values:\n");
-	showinfo(stdout, lp);
+	showinfo(stdout, lp, specname);
 
-	/* d_typename */
+	/* d_type */
 	for (;;) {
-		strncpy(def, lp->d_typename, sizeof(def));
-		def[sizeof(def) - 1] = '\0';
-		i = getinput(":", "Disk type", def, line);
-		if (i <= 0)
+		i = lp->d_type;
+		if (i < 0 || i >= DKMAXTYPES)
+			i = 0;
+		snprintf(def, sizeof(def), "%s", dktypenames[i]);
+		i = getinput(":", "Disk type [?]", def, line);
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
-		cpp = dktypenames;
-		for (; cpp < &dktypenames[DKMAXTYPES]; cpp++)
-			if ((t = *cpp) && !strcmp(t, line)) {
-				lp->d_type = cpp - dktypenames;
+		if (!strcmp(line, "?")) {
+			dumpnames("Supported disk types", dktypenames,
+			    DKMAXTYPES);
+			continue;
+		}
+		for (i = 0; i < DKMAXTYPES; i++) {
+			if (!strcasecmp(dktypenames[i], line)) {
+				lp->d_type = i;
 				goto done_typename;
 			}
+		}
 		v = atoi(line);
 		if ((unsigned)v >= DKMAXTYPES) {
-			warnx("unknown disk type: %s", line);
+			warnx("Unknown disk type: %s", line);
 			continue;
 		}
 		lp->d_type = v;
-done_typename:
+ done_typename:
 		break;
 	}
+
+	/* d_typename */
+	snprintf(def, sizeof(def), "%.*s",
+	    (int) sizeof(lp->d_typename), lp->d_typename);
+	i = getinput(":", "Disk name", def, line);
+	if (i == -1)
+		return;
+	else if (i == 1)
+		(void) strncpy(lp->d_typename, line, sizeof(lp->d_typename));
 
 	/* d_packname */
 	cmd_name(lp, s, fd);
 
 	/* d_npartitions */
 	for (;;) {
-		snprintf(def, sizeof def, "%u", lp->d_npartitions);
+		snprintf(def, sizeof(def), "%u", lp->d_npartitions);
 		i = getinput(":", "Number of partitions", def, line);
-		if (i <= 0)
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
 		if (sscanf(line, "%u", &u) != 1) {
-			printf("Invalid sector size `%s'\n", line);
+			printf("Invalid number of partitions `%s'\n", line);
 			continue;
 		}
 		lp->d_npartitions = u;
@@ -206,9 +224,11 @@ done_typename:
 
 	/* d_secsize */
 	for (;;) {
-		snprintf(def, sizeof def, "%u", lp->d_secsize);
+		snprintf(def, sizeof(def), "%u", lp->d_secsize);
 		i = getinput(":", "Sector size (bytes)", def, line);
-		if (i <= 0)
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
 		if (sscanf(line, "%u", &u) != 1) {
 			printf("Invalid sector size `%s'\n", line);
@@ -220,12 +240,14 @@ done_typename:
 
 	/* d_nsectors */
 	for (;;) {
-		snprintf(def, sizeof def, "%u", lp->d_nsectors);
+		snprintf(def, sizeof(def), "%u", lp->d_nsectors);
 		i = getinput(":", "Number of sectors per track", def, line);
-		if (i <= 0)
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
 		if (sscanf(line, "%u", &u) != 1) {
-			printf("Invalid number of sector `%s'\n", line);
+			printf("Invalid number of sectors `%s'\n", line);
 			continue;
 		}
 		lp->d_nsectors = u;
@@ -234,9 +256,11 @@ done_typename:
 
 	/* d_ntracks */
 	for (;;) {
-		snprintf(def, sizeof def, "%u", lp->d_ntracks);
+		snprintf(def, sizeof(def), "%u", lp->d_ntracks);
 		i = getinput(":", "Number of tracks per cylinder", def, line);
-		if (i <= 0)
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
 		if (sscanf(line, "%u", &u) != 1) {
 			printf("Invalid number of tracks `%s'\n", line);
@@ -248,12 +272,15 @@ done_typename:
 
 	/* d_secpercyl */
 	for (;;) {
-		snprintf(def, sizeof def, "%u", lp->d_secpercyl);
+		snprintf(def, sizeof(def), "%u", lp->d_secpercyl);
 		i = getinput(":", "Number of sectors/cylinder", def, line);
-		if (i <= 0)
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
 		if (sscanf(line, "%u", &u) != 1) {
-			printf("Invalid number of sector/cylinder `%s'\n", line);
+			printf("Invalid number of sector/cylinder `%s'\n",
+			    line);
 			continue;
 		}
 		lp->d_secpercyl = u;
@@ -262,9 +289,11 @@ done_typename:
 
 	/* d_ncylinders */
 	for (;;) {
-		snprintf(def, sizeof def, "%u", lp->d_ncylinders);
+		snprintf(def, sizeof(def), "%u", lp->d_ncylinders);
 		i = getinput(":", "Total number of cylinders", def, line);
-		if (i <= 0)
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
 		if (sscanf(line, "%u", &u) != 1) {
 			printf("Invalid sector size `%s'\n", line);
@@ -276,12 +305,14 @@ done_typename:
 
 	/* d_secperunit */
 	for (;;) {
-		snprintf(def, sizeof def, "%u", lp->d_secperunit);
+		snprintf(def, sizeof(def), "%u", lp->d_secperunit);
 		i = getinput(":", "Total number of sectors", def, line);
-		if (i <= 0)
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
 		if (sscanf(line, "%u", &u) != 1) {
-			printf("Invalid number of sector `%s'\n", line);
+			printf("Invalid number of sectors `%s'\n", line);
 			continue;
 		}
 		lp->d_secperunit = u;
@@ -292,13 +323,14 @@ done_typename:
 
 	/* d_interleave */
 	for (;;) {
-		snprintf(def, sizeof def, "%u", lp->d_interleave);
+		snprintf(def, sizeof(def), "%u", lp->d_interleave);
 		i = getinput(":", "Hardware sectors interleave", def, line);
-
-		if (i <= 0)
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
 		if (sscanf(line, "%u", &u) != 1) {
-			printf("Invalid sector size `%s'\n", line);
+			printf("Invalid sector interleave `%s'\n", line);
 			continue;
 		}
 		lp->d_interleave = u;
@@ -307,12 +339,14 @@ done_typename:
 
 	/* d_trackskew */
 	for (;;) {
-		snprintf(def, sizeof def, "%u", lp->d_trackskew);
+		snprintf(def, sizeof(def), "%u", lp->d_trackskew);
 		i = getinput(":", "Sector 0 skew, per track", def, line);
-		if (i <= 0)
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
 		if (sscanf(line, "%u", &u) != 1) {
-			printf("Invalid sector size `%s'\n", line);
+			printf("Invalid track sector skew `%s'\n", line);
 			continue;
 		}
 		lp->d_trackskew = u;
@@ -321,12 +355,14 @@ done_typename:
 
 	/* d_cylskew */
 	for (;;) {
-		snprintf(def, sizeof def, "%u", lp->d_cylskew);
+		snprintf(def, sizeof(def), "%u", lp->d_cylskew);
 		i = getinput(":", "Sector 0 skew, per cylinder", def, line);
-		if (i <= 0)
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
 		if (sscanf(line, "%u", &u) != 1) {
-			printf("Invalid sector size `%s'\n", line);
+			printf("Invalid cylinder sector `%s'\n", line);
 			continue;
 		}
 		lp->d_cylskew = u;
@@ -335,12 +371,14 @@ done_typename:
 
 	/* d_headswitch */
 	for (;;) {
-		snprintf(def, sizeof def, "%u", lp->d_headswitch);
+		snprintf(def, sizeof(def), "%u", lp->d_headswitch);
 		i = getinput(":", "Head switch time (usec)", def, line);
-		if (i <= 0)
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
 		if (sscanf(line, "%u", &u) != 1) {
-			printf("Invalid sector size `%s'\n", line);
+			printf("Invalid head switch time `%s'\n", line);
 			continue;
 		}
 		lp->d_headswitch = u;
@@ -349,53 +387,55 @@ done_typename:
 
 	/* d_trkseek */
 	for (;;) {
-		snprintf(def, sizeof def, "%u", lp->d_trkseek);
+		snprintf(def, sizeof(def), "%u", lp->d_trkseek);
 		i = getinput(":", "Track seek time (usec)", def, line);
-		if (i <= 0)
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
 		if (sscanf(line, "%u", &u) != 1) {
-			printf("Invalid sector size `%s'\n", line);
+			printf("Invalid track seek time `%s'\n", line);
 			continue;
 		}
 		lp->d_trkseek = u;
 		break;
 	}
-
 }
 
-static void
-cmd_name(lp, s, fd)
-	struct disklabel *lp;
-	char *s;
-	int fd;
-{
-	char line[BUFSIZ];
-	int i = getinput(":", "Label name", lp->d_packname, line);
 
+static void
+cmd_name(struct disklabel *lp, char *s, int fd)
+{
+	char	line[BUFSIZ];
+	char	def[BUFSIZ];
+	int	i;
+
+	snprintf(def, sizeof(def), "%.*s",
+	    (int) sizeof(lp->d_packname), lp->d_packname);
+	i = getinput(":", "Label name", def, line);
 	if (i <= 0)
 		return;
 	(void) strncpy(lp->d_packname, line, sizeof(lp->d_packname));
 }
 
+
 static void
-cmd_round(lp, s, fd)
-	struct disklabel *lp;
-	char *s;
-	int fd;
+cmd_round(struct disklabel *lp, char *s, int fd)
 {
-	int i;
-	char line[BUFSIZ];
+	int	i;
+	char	line[BUFSIZ];
 
 	i = getinput(":", "Rounding", rounding ? "cylinders" : "sectors", line);
-
 	if (i <= 0)
 		return;
 
 	switch (line[0]) {
 	case 'c':
+	case 'C':
 		rounding = 1;
 		return;
 	case 's':
+	case 'S':
 		rounding = 0;
 		return;
 	default:
@@ -404,68 +444,114 @@ cmd_round(lp, s, fd)
 	}
 }
 
-static void
-cmd_part(lp, s, fd)
-	struct disklabel *lp;
-	char *s;
-	int fd;
-{
-	int i;
-	char line[BUFSIZ];
-	char def[BUFSIZ];
-	int part = *s - 'a';
-	struct partition *p = &lp->d_partitions[part];
 
+static void
+cmd_part(struct disklabel *lp, char *s, int fd)
+{
+	int	i;
+	char	line[BUFSIZ];
+	char	def[BUFSIZ];
+	int	part;
+	struct partition *p, ps;
+
+	part = s[0] - 'a';
+	p = &lp->d_partitions[part];
 	if (part >= lp->d_npartitions)
 		lp->d_npartitions = part + 1;
 
+	(void)memcpy(&ps, p, sizeof(ps));
+
 	for (;;) {
-		deffstypename(def, p->p_fstype);
-		i = getinput(":", "Filesystem type", def, line);
-		if (i <= 0)
+		i = p->p_fstype;
+		if (i < 0 || i >= FSMAXTYPES)
+			i = 0;
+		snprintf(def, sizeof(def), "%s", fstypenames[i]);
+		i = getinput(":", "Filesystem type [?]", def, line);
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
-		if ((i = getfstypename(line)) == -1) {
-			printf("Invalid file system typename `%s'\n", line);
+		if (!strcmp(line, "?")) {
+			dumpnames("Supported file system types",
+			    fstypenames, FSMAXTYPES);
 			continue;
 		}
-		p->p_fstype = i;
+		for (i = 0; i < FSMAXTYPES; i++)
+			if (!strcasecmp(line, fstypenames[i])) {
+				p->p_fstype = i;
+				goto done_typename;
+			}
+		printf("Invalid file system typename `%s'\n", line);
+		continue;
+ done_typename:
 		break;
 	}
 	for (;;) {
-		defnum(def, lp, p->p_offset);
-		i = getinput(":", "Start offset", def, line);
-		if (i <= 0)
+		defnum(lp, def, p->p_offset);
+		i = getinput(":",
+		    "Start offset ('x' to start after partition 'x')",
+		    def, line);
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
-		if ((i = getnum(line, 0, lp)) == -1) {
-			printf("Bad offset `%s'\n", line);
-			continue;
+		if (line[1] == '\0' &&
+	    		line[0] >= 'a' && line[0] < 'a' + getmaxpartitions()) {
+			struct partition *cp = lp->d_partitions;
+
+			if ((cp[line[0] - 'a'].p_offset +
+			    cp[line[0] - 'a'].p_size) >= lp->d_secperunit) {
+				printf("Bad offset `%s'\n", line);
+				continue;
+			} else {
+				p->p_offset = cp[line[0] - 'a'].p_offset +
+				    cp[line[0] - 'a'].p_size;
+			}
+		} else {
+			if ((i = getnum(lp, line, 0)) == -1) {
+				printf("Bad offset `%s'\n", line);
+				continue;
+			} else if (i > lp->d_secperunit) {
+				printf("Offset `%s' out of range\n", line);
+				continue;
+			}
+			p->p_offset = i;
 		}
-		p->p_offset = i;
 		break;
 	}
 	for (;;) {
-		defnum(def, lp, p->p_size);
+		defnum(lp, def, p->p_size);
 		i = getinput(":", "Partition size ('$' for all remaining)",
 		    def, line);
-		if (i <= 0)
+		if (i == -1)
+			return;
+		else if (i == 0)
 			break;
-		if ((i = getnum(line, lp->d_secperunit - p->p_offset, lp))
+		if ((i = getnum(lp, line, lp->d_secperunit - p->p_offset))
 		    == -1) {
 			printf("Bad size `%s'\n", line);
+			continue;
+		} else if
+		    ((i + p->p_offset) > lp->d_secperunit) {
+			printf("Size `%s' out of range\n", line);
 			continue;
 		}
 		p->p_size = i;
 		break;
 	}
 
+	if (memcmp(&ps, p, sizeof(ps)))
+		showpartition(stdout, lp, part, Cflag);
 	if (chaining) {
-		int offs = p[0].p_offset + p[0].p_size;
-		p = lp->d_partitions;
-		part = getrawpartition();
-		for (i = 1; i < lp->d_npartitions; i++) {
-			if (i != part && p[i].p_fstype) {
-				p[i].p_offset = offs;
-				offs = p[i].p_offset + p[i].p_size;
+		int offs = -1;
+		struct partition *cp = lp->d_partitions;
+		for (i = 0; i < lp->d_npartitions; i++) {
+			if (cp[i].p_fstype != FS_UNUSED) {
+				if (offs != -1 && cp[i].p_offset != offs) {
+					cp[i].p_offset = offs;
+					showpartition(stdout, lp, i, Cflag);
+					}
+				offs = cp[i].p_offset + cp[i].p_size;
 			}
 		}
 	}
@@ -473,16 +559,12 @@ cmd_part(lp, s, fd)
 
 
 static void
-cmd_label(lp, s, fd)
-	struct disklabel *lp;
-	char *s;
-	int fd;
+cmd_label(struct disklabel *lp, char *s, int fd)
 {
-	char line[BUFSIZ];
-	int i;
+	char	line[BUFSIZ];
+	int	i;
 
 	i = getinput("?", "Label disk", "n", line);
-
 	if (i <= 0 || (*line != 'y' && *line != 'Y') )
 		return;
 
@@ -491,7 +573,7 @@ cmd_label(lp, s, fd)
 		return;
 	}
 
-	if (writelabel(fd, bootarea, lp) != 0) {
+	if (writelabel(fd, lp) != 0) {
 		printf("Label not written\n");
 		return;
 	}
@@ -499,11 +581,16 @@ cmd_label(lp, s, fd)
 }
 
 
+static void
+cmd_listfstypes(struct disklabel *lp, char *s, int fd)
+{
+
+	(void)list_fs_types();
+}
+
+
 static int
-runcmd(line, lp, fd)
-	char *line;
-	struct disklabel *lp;
-	int fd;
+runcmd(struct disklabel *lp, char *line, int fd)
 {
 	struct cmds *cmd;
 
@@ -527,12 +614,9 @@ runcmd(line, lp, fd)
 
 
 static int
-getinput(sep, prompt, def, line)
-	const char *sep;
-	const char *prompt;
-	const char *def;
-	char *line;
+getinput(const char *sep, const char *prompt, const char *def, char *line)
 {
+
 	for (;;) {
 		printf("%s", prompt);
 		if (def)
@@ -555,28 +639,86 @@ getinput(sep, prompt, def, line)
 	}
 }
 
+static int
+alphacmp(const void *a, const void *b)
+{
+
+	return (strcasecmp(*(const char * const*)a, *(const char * const*)b));
+}
+
 
 static void
-defnum(buf, lp, size)
-	char *buf;
-	struct disklabel *lp;
-	int size;
+dumpnames(const char *prompt, const char * const *olist, size_t numentries)
 {
-	(void) snprintf(buf, BUFSIZ, "%gc, %ds, %gM",
+	int	i, w;
+	int	entry;
+	int	columns, width, lines;
+	const char *p;
+	const char **list;
+
+	if ((list = (const char **)malloc(sizeof(char *) * numentries)) == NULL)
+		err(1, "malloc");
+	width = 0;
+	printf("%s:\n", prompt);
+	for (i = 0; i < numentries; i++) {
+		list[i] = olist[i];
+		w = strlen(list[i]);
+		if (w > width)
+			width = w;
+	}
+#if 0
+	for (i = 0; i < numentries; i++)
+		printf("%s%s", i == 0 ? "" : ", ", list[i]);
+	puts("");
+#endif
+	(void)qsort(list, numentries, sizeof(char *), alphacmp);
+	width++;		/* want two spaces between items */
+	width = (width + 8) &~ 7;
+
+#define ttywidth 72
+	columns = ttywidth / width;
+#undef ttywidth
+	if (columns == 0)
+		columns = 1;
+	lines = (numentries + columns - 1) / columns;
+	/* Output sorted by columns */
+	for (i = 0; i < lines; i++) {
+		putc('\t', stdout);
+		entry = i;
+		for (;;) {
+			p = list[entry];
+			fputs(p, stdout);
+			entry += lines;
+			if (entry >= numentries)
+				break;
+			w = strlen(p);
+			while (w < width) {
+				w = (w + 8) & ~7;
+				putc('\t', stdout);
+			}
+		}
+		putc('\n', stdout);
+	}
+	free(list);
+}
+
+
+static void
+defnum(struct disklabel *lp, char *buf, uint32_t size)
+{
+
+	(void) snprintf(buf, BUFSIZ, "%gc, %us, %gM",
 	    size / (float) lp->d_secpercyl,
 	    size, size  * (lp->d_secsize / (float) (1024 * 1024)));
 }
 
 
 static int
-getnum(buf, max, lp)
-	char *buf;
-	int max;
-	struct disklabel *lp;
+getnum(struct disklabel *lp, char *buf, int max)
 {
-	char *ep;
-	double d;
-	int rv;
+	char	*ep;
+	double	 d;
+	int	 rv;
 
 	if (max && buf[0] == '$' && buf[1] == 0)
 		return max;
@@ -585,25 +727,45 @@ getnum(buf, max, lp)
 	if (buf == ep)
 		return -1;
 
-#define ROUND(a)	((a / lp->d_secpercyl) + \
-		 ((a % lp->d_secpercyl) ? 1 : 0)) * lp->d_secpercyl
+#define ROUND(a)	((((a) / lp->d_secpercyl) + \
+		 	 (((a) % lp->d_secpercyl) ? 1 : 0)) * lp->d_secpercyl)
 
 	switch (*ep) {
 	case '\0':
 	case 's':
+	case 'S':
 		rv = (int) d;
 		break;
 
 	case 'c':
+	case 'C':
 		rv = (int) (d * lp->d_secpercyl);
 		break;
 
+	case 'k':
+	case 'K':
+		rv =  (int) (d * 1024 / lp->d_secsize);
+		break;
+
+	case 'm':
 	case 'M':
 		rv =  (int) (d * 1024 * 1024 / lp->d_secsize);
 		break;
 
+	case 'g':
+	case 'G':
+		rv =  (int) (d * 1024 * 1024 * 1024 / lp->d_secsize);
+		break;
+
+	case 't':
+	case 'T':
+		rv =  (int) (d * 1024 * 1024 * 1024 * 1024 / lp->d_secsize);
+		break;
+
 	default:
 		printf("Unit error %c\n", *ep);
+		printf("Valid units: (S)ectors, (C)ylinders, (K)ilo, (M)ega, "
+		    "(G)iga, (T)era");
 		return -1;
 	}
 
@@ -614,41 +776,15 @@ getnum(buf, max, lp)
 }
 
 
-static void
-deffstypename(buf, i)
-	char *buf;
-	int i;
-{
-	if (i < 0 || i >= FSMAXTYPES)
-		i = 0;
-	(void) strcpy(buf, fstypenames[i]);
-}
-
-
-static int
-getfstypename(buf)
-	const char *buf;
-{
-	int i;
-
-	for (i = 0; i < FSMAXTYPES; i++)
-		if (strcmp(buf, fstypenames[i]) == 0)
-			return i;
-	return -1;
-}
-
-
 void
-interact(lp, fd)
-	struct disklabel *lp;
-	int fd;
+interact(struct disklabel *lp, int fd)
 {
-	char line[BUFSIZ];
+	char	line[BUFSIZ];
 
 	for (;;) {
 		if (getinput(">", "partition", NULL, line) == -1)
 			return;
-		if (runcmd(line, lp, fd) == -1)
+		if (runcmd(lp, line, fd) == -1)
 			return;
 	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: item.c,v 1.5 1999/12/22 14:38:12 kleink Exp $	*/
+/*	$NetBSD: item.c,v 1.11 2007/07/23 12:12:19 blymn Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com.au)
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,9 +26,13 @@
  *
  */
 
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: item.c,v 1.11 2007/07/23 12:12:19 blymn Exp $");
+
 #include <menu.h>
 #include <stdlib.h>
 #include <string.h>
+#include "internals.h"
 
 /* the following is defined in menu.c - it is the default menu struct */
 extern MENU _menui_default_menu;
@@ -55,8 +59,7 @@ ITEM _menui_default_item = {
  * Return the item visibility flag
  */
 int
-item_visible(item)
-        ITEM *item;
+item_visible(ITEM *item)
 {
 	if (item == NULL)
 		return E_BAD_ARGUMENT;
@@ -70,8 +73,7 @@ item_visible(item)
  * Return the pointer to the item name
  */
 char *
-item_name(item)
-        ITEM *item;
+item_name(ITEM *item)
 {
 	if (item == NULL)
 		return NULL;
@@ -83,8 +85,7 @@ item_name(item)
  * Return the pointer to the item description
  */
 char *
-item_description(item)
-        ITEM *item;
+item_description(ITEM *item)
 {
 	if (item == NULL)
 		return NULL;
@@ -97,9 +98,7 @@ item_description(item)
  * just after the current item changes.
  */
 int
-set_item_init(menu, func)
-        MENU *menu;
-	Menu_Hook func;
+set_item_init(MENU *menu, Menu_Hook func)
 {
 	if (menu == NULL)
 		_menui_default_menu.item_init = func;
@@ -113,8 +112,7 @@ set_item_init(menu, func)
  * Return a pointer to the item initialisation routine.
  */
 Menu_Hook
-item_init(menu)
-        MENU *menu;
+item_init(MENU *menu)
 {
 	if (menu == NULL)
 		return _menui_default_menu.item_init;
@@ -127,9 +125,7 @@ item_init(menu)
  * before the current item changes.
  */
 int
-set_item_term(menu, func)
-        MENU *menu;
-        Menu_Hook func;
+set_item_term(MENU *menu, Menu_Hook func)
 {
 	if (menu == NULL)
 		_menui_default_menu.item_term = func;
@@ -142,13 +138,45 @@ set_item_term(menu, func)
  * Return a pointer to the termination function
  */
 Menu_Hook
-item_term(menu)
-        MENU *menu;
+item_term(MENU *menu)
 {
 	if (menu == NULL)
 		return _menui_default_menu.item_term;
 	else
 		return menu->item_term;
+}
+
+/*
+ * Returns the number of items that are selected.
+ * The index numbers of the items are placed in the dynamically allocated
+ * int array *sel.
+ */
+int
+item_selected(MENU *menu, int **sel)
+{
+	int i, j;
+
+	if (menu == NULL)
+		return E_BAD_ARGUMENT;
+
+	/* count selected */
+	for (i = 0, j = 0; i < menu->item_count; i++)
+		if (menu->items[i]->selected)
+			j++;
+
+	if (j == 0) {
+		*sel = NULL;
+		return 0;
+	}
+	
+	if ( (*sel = malloc(sizeof(int) * j)) == NULL)
+		return E_SYSTEM_ERROR;
+
+	for (i = 0, j = 0; i < menu->item_count; i++)
+		if (menu->items[i]->selected)
+			(*sel)[j++] = i;
+
+	return j;
 }
 
 /*
@@ -176,9 +204,7 @@ set_item_opts(item, opts)
  * Set item options on.
  */
 int
-item_opts_on(item, opts)
-        ITEM *item;
-        OPTIONS opts;
+item_opts_on(ITEM *item, OPTIONS opts)
 {
         if (opts != O_SELECTABLE)
                 return E_SYSTEM_ERROR;
@@ -194,9 +220,7 @@ item_opts_on(item, opts)
  * Turn off the named options.
  */
 int
-item_opts_off(item, opts)
-        ITEM *item;
-        OPTIONS opts;
+item_opts_off(ITEM *item, OPTIONS opts)
 {
         if (opts != O_SELECTABLE)
                 return E_SYSTEM_ERROR;
@@ -212,8 +236,7 @@ item_opts_off(item, opts)
  * Return the current options set in item.
  */
 OPTIONS
-item_opts(item)
-        ITEM *item;
+item_opts(ITEM *item)
 {
 	if (item == NULL)
 		return _menui_default_item.opts;
@@ -225,9 +248,7 @@ item_opts(item)
  * Set the selected flag of the item iff the menu options allow it.
  */
 int
-set_item_value(param_item, flag)
-        ITEM *param_item;
-        int flag;
+set_item_value(ITEM *param_item, int flag)
 {
 	ITEM *item = (param_item != NULL) ? param_item : &_menui_default_item;
 	
@@ -240,6 +261,7 @@ set_item_value(param_item, flag)
                 return E_REQUEST_DENIED;
 
         item->selected = flag;
+	_menui_draw_item(item->parent, item->index);
         return E_OK;
 }
 
@@ -247,8 +269,7 @@ set_item_value(param_item, flag)
  * Return the item value of the item.
  */
 int
-item_value(item)
-        ITEM *item;
+item_value(ITEM *item)
 {
 	if (item == NULL)
 		return _menui_default_item.selected;
@@ -261,11 +282,12 @@ item_value(item)
  * structure.
  */
 ITEM *
-new_item(name, description)
-        char *name;
-        char *description;
+new_item(char *name, char *description)
 {
         ITEM *new_one;
+
+	if (name == NULL)
+		return NULL;
 
 	  /* allocate a new item structure for ourselves */
         if ((new_one = (ITEM *)malloc(sizeof(ITEM))) == NULL)
@@ -286,18 +308,26 @@ new_item(name, description)
         
         strcpy(new_one->name.string, name);
 
+	if (description == NULL)
+		new_one->description.length = 0;
+	else {
 	  /* fill in the description structure, stash the length then
 	     allocate room for description string and copy it in */
-        new_one->description.length = strlen(description);
-        if ((new_one->description.string = (char *)
-             malloc(sizeof(char) * new_one->description.length + 1)) == NULL) {
-		  /* malloc has failed - free up allocated memory and return */
-		free(new_one->name.string);
-		free(new_one);
-		return NULL;
-	}
+        	new_one->description.length = strlen(description);
+        	if ((new_one->description.string =
+		    (char *) malloc(sizeof(char) *
+		    new_one->description.length + 1)) == NULL) {
+		  	/*
+			 * malloc has failed
+			 * - free up allocated memory and return
+			 */
+			free(new_one->name.string);
+			free(new_one);
+			return NULL;
+		}
 	
-	strcpy(new_one->description.string, description);
+		strcpy(new_one->description.string, description);
+	}
 
 	return new_one;
 }
@@ -306,8 +336,7 @@ new_item(name, description)
  * Free the allocated storage associated with item.
  */
 int
-free_item(item)
-	ITEM *item;
+free_item(ITEM *item)
 {
 	if (item == NULL)
 		return E_BAD_ARGUMENT;
@@ -318,7 +347,8 @@ free_item(item)
 
 	  /* no connections, so free storage starting with the strings */
 	free(item->name.string);
-	free(item->description.string);
+	if (item->description.length)
+		free(item->description.string);
 	free(item);
 	return E_OK;
 }
@@ -327,9 +357,7 @@ free_item(item)
  * Set the menu's current item to the one given.
  */
 int
-set_current_item(param_menu, item)
-	MENU *param_menu;
-	ITEM *item;
+set_current_item(MENU *param_menu, ITEM *item)
 {
 	MENU *menu = (param_menu != NULL) ? param_menu : &_menui_default_menu;
 	int i = 0;
@@ -354,8 +382,7 @@ set_current_item(param_menu, item)
  * Return a pointer to the current item for the menu
  */
 ITEM *
-current_item(menu)
-	MENU *menu;
+current_item(MENU *menu)
 {
 	if (menu == NULL)
 		return NULL;
@@ -370,8 +397,7 @@ current_item(menu)
  * Return the index into the item array that matches item.
  */
 int
-item_index(item)
-	ITEM *item;
+item_index(ITEM *item)
 {
 	if (item == NULL)
 		return _menui_default_item.index;

@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.15 1999/09/14 19:54:47 jsm Exp $ */
+/*	$NetBSD: extern.h,v 1.31 2005/07/01 06:04:54 jmc Exp $ */
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -187,6 +183,10 @@
 #define BURY	1050
 #define JUMP	1051
 #define KICK	1052
+#define OPEN	1053
+#define VERBOSE	1054
+#define BRIEF	1055
+#define AUXVERB	1056
 
  /* injuries */
 #define ARM	6		/* broken arm */
@@ -206,6 +206,9 @@
 #define DUG		5
 #define NUMOFNOTES	6
 
+/* Number of times room description shown. */
+#define ROOMDESC	3
+
  /* fundamental constants */
 #define NUMOFROOMS	275
 #define NUMOFWORDS	((NUMOFOBJECTS + BITS - 1) / BITS)
@@ -220,6 +223,19 @@
 #define TORPEDOES	10
 #define MAXWEIGHT	60
 #define MAXCUMBER	10
+
+/*
+ * These are flags for objects in the objflags array.  OBJ_PLURAL means
+ * that the object short name is plural; OBJ_AN that it begins with a
+ * vowel sound so should be preceded by "an" instead of "a"; OBJ_PERSON
+ * that it is a living person; OBJ_NONOBJ that it is not an object (to
+ * which any game action can be applied) at all (e.g. footsteps, asteroids).
+ * Any individual object has at most one of OBJ_PERSON and OBJ_NONOBJ.
+ */
+#define OBJ_PLURAL	1
+#define OBJ_AN		2
+#define OBJ_PERSON	4
+#define OBJ_NONOBJ	8
 
 struct room {
 	const char   *name;
@@ -245,10 +261,21 @@ extern const char   *const objsht[NUMOFOBJECTS];
 extern const char   *const ouch[NUMOFINJURIES];
 extern const int     objwt[NUMOFOBJECTS];
 extern const int     objcumber[NUMOFOBJECTS];
+extern const int     objflags[NUMOFOBJECTS];
+#define is_plural_object(n)	(objflags[(n)] & OBJ_PLURAL)
+/*
+ * These macros yield words to use with objects (followed but not preceded
+ * by spaces, or with no spaces if the expansion is the empty string).
+ */
+#define A_OR_AN(n)		(objflags[(n)] & OBJ_AN ? "an " : "a ")
+#define A_OR_AN_OR_THE(n)	(is_plural_object((n)) ? "the " : A_OR_AN((n)))
+#define A_OR_AN_OR_BLANK(n)	(is_plural_object((n)) ? "" : A_OR_AN((n)))
+#define IS_OR_ARE(n)		(is_plural_object((n)) ? "are " : "is ")
 
  /* current input line */
+#define WORDLEN	15
 #define NWORD	20		/* words per line */
-extern char    words[NWORD][15];
+extern char    words[NWORD][WORDLEN];
 extern int     wordvalue[NWORD];
 extern int     wordtype[NWORD];
 extern int     wordcount, wordnumber;
@@ -281,18 +308,15 @@ extern unsigned int inven[NUMOFWORDS];
 extern unsigned int wear[NUMOFWORDS];
 extern char    beenthere[NUMOFROOMS + 1];
 extern char    injuries[NUMOFINJURIES];
+extern int     verbose;
 
-extern char    username[9];
+extern const char *username;
 
 struct wlist {
 	const char   *string;
 	int     value, article;
 	struct wlist *next;
 };
-#define HASHSIZE	256
-#define HASHMUL		81
-#define HASHMASK	(HASHSIZE - 1)
-extern struct wlist *hashtab[HASHSIZE];
 extern struct wlist wlist[];
 
 struct objs {
@@ -304,72 +328,60 @@ extern const struct objs nightobjs[];
 
 #define DEFAULT_SAVE_FILE	".Bstar"
 
-void blast __P((void));
-void bury __P((void));
-int card __P((const char *, int));
-int checkout __P((const char *));
-void chime __P((void));
-void convert __P((int));
-void crash __P((void));
-int cypher __P((void));
-void die __P((void)) __attribute__((__noreturn__));
-void diesig __P((int)) __attribute__((__noreturn__));
-void dig __P((void));
-int draw __P((void));
-void drink __P((void));
-int drive __P((void));
-int drop __P((const char *));
-int eat __P((void));
-void endfly __P((void));
-int fight __P((int, int));
-int follow __P((void));
-void getutmp __P((char *));
-int give __P((void));
-int hash __P((const char *));
-void initialize __P((const char *));
-void install __P((struct wlist *));
-int jump __P((void));
-void kiss __P((void));
-int land __P((void));
-int launch __P((void));
-void light __P((void));
-void live __P((void)) __attribute__((__noreturn__));
-void love __P((void));
-int move __P((int, int));
-void moveenemy __P((int));
-void murder __P((void));
-void news __P((void));
-void newway __P((int));
-void notarget __P((void));
-void open_score_file __P((void));
-void parse __P((void));
-void post __P((char));
-void printobjs __P((void));
-int put __P((void));
-int puton __P((void));
-void ravage __P((void));
-void restore __P((const char *));
-int ride __P((void));
-void save __P((const char *));
-char *save_file_name __P((const char *, size_t));
-void screen __P((void));
-int shoot __P((void));
-void succumb __P((int));
-int take __P((unsigned int[]));
-int takeoff __P((void));
-void target __P((void));
-int throw __P((const char *));
-int ucard __P((const unsigned int *));
-int use __P((void));
-int visual __P((void));
-int wearit __P((void));
-void whichway __P((struct room));
-int wizard __P((const char *));
-void wordinit __P((void));
-void writedes __P((void));
-int zzz __P((void));
-char   *getcom __P((char *, int, const char *, const char *));
-char   *getword __P((char *, char *, int));
-const char   *rate __P((void));
-const char   *truedirec __P((int, char));
-struct wlist *lookup __P((const char *));
+void bury(void);
+int card(const char *, int);
+void chime(void);
+void convert(int);
+void crash(void);
+int cypher(void);
+void die(void) __attribute__((__noreturn__));
+void diesig(int) __attribute__((__noreturn__));
+void dig(void);
+void dooropen(void);
+int draw(void);
+void drink(void);
+int drive(void);
+int drop(const char *);
+int eat(void);
+int fight(int, int);
+int follow(void);
+char *getcom(char *, int, const char *, const char *);
+char *getword(char *, char *, int);
+int give(void);
+void initialize(const char *);
+int jump(void);
+void kiss(void);
+int land(void);
+int launch(void);
+void light(void);
+void live(void) __attribute__((__noreturn__));
+void love(void);
+int moveplayer(int, int);
+void murder(void);
+void news(void);
+void newway(int);
+void open_score_file(void);
+void parse(void);
+void post(int);
+void printobjs(void);
+int put(void);
+int puton(void);
+const char *rate(void);
+void ravage(void);
+void restore(const char *);
+int ride(void);
+void save(const char *);
+char *save_file_name(const char *, size_t);
+int shoot(void);
+int take(unsigned int[]);
+int takeoff(void);
+int throw(const char *);
+const char *truedirec(int, int);
+int ucard(const unsigned int *);
+int use(void);
+int visual(void);
+int wearit(void);
+void whichway(struct room);
+void wordinit(void);
+void writedes(void);
+int zzz(void);

@@ -1,27 +1,17 @@
-#	$NetBSD: Makefile.inc,v 1.10 2000/02/20 03:52:24 mycroft Exp $
+#	$NetBSD: Makefile.inc,v 1.17 2007/07/24 10:49:28 pavel Exp $
 #
 #	etc.sun3/Makefile.inc -- sun3-specific etc Makefile targets
 #
 
-BIN3+= etc.sun3/ttyaction
+# If you change the list of distributed kernels, don't forget
+# to update the release documentation in distrib/notes/common/contents
 
-# These are put in ${RELEASEDIR} by "make release" in distrib/sun3
-# after it builds and patches in the installation ramdisk image.
-BUILD_KERNELS= \
- RAMDISK RAMDISK3X
+KERNEL_SETS=		GENERIC GENERIC3X DISKLESS DISKLESS3X
 
-# These are just built and copied to the release area.
-EXTRA_KERNELS= \
- GENERIC3X \
- INSTALL INSTALL3X \
- DISKLESS DISKLESS3X
+EXTRA_KERNELS=		INSTALL INSTALL3X
 
-snap_md_post:
-# Build the ramdisk image and patch it into the ramdisk kernels.
-# Build the miniroot, etc. and copy all to the release area.
-.ifndef UPDATE
-	cd ${.CURDIR}/../distrib/sun3 && ${MAKE} clean
-.endif
-	cd ${.CURDIR}/../distrib/sun3 && \
-	  ${MAKE} depend && ${MAKE} ${_J} && ${MAKE} release
+BUILD_KERNELS=		RAMDISK RAMDISK3X
 
+INSTALLATION_DIRS+=	installation/miniroot	\
+			installation/netboot	\
+			installation/tapeimage

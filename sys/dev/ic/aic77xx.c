@@ -1,4 +1,4 @@
-/*	$NetBSD: aic77xx.c,v 1.1 2000/03/15 02:06:18 fvdl Exp $	*/
+/*	$NetBSD: aic77xx.c,v 1.7 2007/10/19 11:59:46 ad Exp $	*/
 
 /*
  * Common routines for AHA-27/284X and aic7770 motherboard SCSI controllers.
@@ -30,19 +30,22 @@
  * $FreeBSD: src/sys/dev/aic7xxx/ahc_eisa.c,v 1.15 2000/01/29 14:22:19 peter Exp $
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: aic77xx.c,v 1.7 2007/10/19 11:59:46 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 
-#include <dev/microcode/aic7xxx/aic7xxx_reg.h>
-#include <dev/ic/aic7xxxvar.h>
+#include <dev/ic/aic7xxx_osm.h>
+#include <dev/ic/aic7xxx_inline.h>
 #include <dev/ic/aic77xxreg.h>
 #include <dev/ic/aic77xxvar.h>
 
@@ -61,7 +64,7 @@ ahc_aic77xx_irq(iot, ioh)
 	/* Pause the card preseving the IRQ type */
 	hcntrl = bus_space_read_1(iot, ioh, HCNTRL) & IRQMS;
 	bus_space_write_1(iot, ioh, HCNTRL, hcntrl | PAUSE);
-	
+
 	intdef = bus_space_read_1(iot, ioh, INTDEF);
 	irq = (intdef & INTDEF_IRQ_MASK);
 	switch (irq) {
@@ -84,7 +87,6 @@ int
 ahc_aic77xx_attach(ahc)
 	struct ahc_softc *ahc;
 {
-	char *id_string;
 	u_int8_t sblkctl;
 	u_int8_t sblkctl_orig;
 	u_int8_t hostconf;
@@ -98,16 +100,14 @@ ahc_aic77xx_attach(ahc)
 	ahc_outb(ahc, SBLKCTL, sblkctl);
 	sblkctl = ahc_inb(ahc, SBLKCTL);
 	if (sblkctl != sblkctl_orig) {
-		id_string = "aic7770 >= Rev E, ";
+		printf("%s: aic7770 >= Rev E: R/O autoflush enabled\n",
+		    ahc_name(ahc));
 		/*
 		 * Ensure autoflush is enabled
 		 */
 		sblkctl &= ~AUTOFLUSHDIS;
 		ahc_outb(ahc, SBLKCTL, sblkctl);
-	} else
-		id_string = "aic7770 <= Rev C, ";
-
-	printf("%s: %s", ahc_name(ahc), id_string);
+	}
 
 	/* Setup the FIFO threshold and the bus off time */
 	hostconf = ahc_inb(ahc, HOSTCONF);
@@ -135,4 +135,3 @@ ahc_aic77xx_attach(ahc)
 
 	return 0;
 }
-

@@ -1,4 +1,4 @@
-.\"	$NetBSD: dd.1,v 1.8 1999/07/29 19:03:31 hubertf Exp $
+.\"	$NetBSD: dd.1,v 1.21 2007/04/13 00:38:45 lukem Exp $
 .\"
 .\" Copyright (c) 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -14,11 +14,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -36,7 +32,7 @@
 .\"
 .\"	@(#)dd.1	8.2 (Berkeley) 1/13/94
 .\"
-.Dd July 28, 1999
+.Dd April 13, 2007
 .Dt DD 1
 .Os
 .Sh NAME
@@ -140,11 +136,17 @@ distinguishing between a partial or complete block being read.
 .It Cm progress= Ns Ar n
 Switch on display of progress if
 .Va n
-is set to ``1'', i.e. a ``.'' is printed for each 
-block written to the output file.
+is set to any non-zero value.
+This will cause a
+.Dq \&.
+to be printed (to the standard error output) for every
+.Va n
+full or partial blocks written to the output file.
 .It Xo
+.Sm off
 .Cm conv=
-.Ns Cm value Ns Op \&, Cm value \&...
+.Cm value Op \&, Cm value \&...
+.Sm on
 .Xc
 Where
 .Cm value
@@ -168,12 +170,12 @@ There are two conversion maps for
 .Tn ASCII .
 The value
 .Cm ascii
-specifies the recommended one which is compatible with 
+specifies the recommended one which is compatible with
 .At V .
 The value
 .Cm oldascii
 specifies the one used in historic
-.Tn AT&T
+.Tn AT\*[Am]T
 and pre-
 .Bx 4.3 Reno
 systems.
@@ -220,7 +222,7 @@ The values
 and
 .Cm oldibm
 are maps used in historic
-.Tn AT&T
+.Tn AT\*[Am]T
 and pre
 .Bx 4.3 Reno
 systems.
@@ -248,7 +250,7 @@ will be positioned past the block in which the error occurred using
 Do not truncate the output file.
 This will preserve any blocks in the output file not explicitly written
 by
-.Nm "" .
+.Nm .
 The
 .Cm notrunc
 value is not supported for tapes.
@@ -261,6 +263,13 @@ regularly sized blocks to be written.
 This option is incompatible with use of the
 .Cm bs= Ns Ar n
 block size specification.
+.It Cm sparse
+If one or more non-final output blocks would consist solely of
+.Dv NUL
+bytes, try to seek the output file by the required space instead of
+filling them with
+.Dv NUL Ns s .
+This results in a sparse file on some file systems.
 .It Cm swab
 Swap every pair of input bytes.
 If an input buffer has an odd number of bytes, the last byte will be
@@ -285,10 +294,24 @@ appended.
 .El
 .Pp
 Where sizes are specified, a decimal number of bytes is expected.
-If the number ends with a ``b'', ``k'', ``m'' or ``w'', the number
-is multiplied by 512, 1024 (1K), 1048576 (1M) or the number of bytes
-in an integer, respectively.
-Two or more numbers may be separated by an ``x'' to indicate a product.
+Two or more numbers may be separated by an
+.Dq x
+to indicate a product.
+Each number may have one of the following optional suffixes:
+.Bl -tag -width 3n -offset indent -compact
+.It b
+Block; multiply by 512
+.It k
+Kibi; multiply by 1024 (1 KiB)
+.It m
+Mebi; multiply by 1048576 (1 MiB)
+.It g
+Gibi; multiply by 1073741824 (1 GiB)
+.It t
+Tebi; multiply by 1099511627776 (1 TiB)
+.It w
+Word; multiply by the number of bytes in an integer
+.El
 .Pp
 When finished,
 .Nm
@@ -317,9 +340,12 @@ If
 .Nm
 receives a
 .Dv SIGINFO
-(see the ``status'' argument for
-.Xr stty 1 )
-signal, the current input and output block counts will
+signal
+(see the
+.Ic status
+argument for
+.Xr stty 1 ) ,
+the current input and output block counts will
 be written to the standard error output
 in the same format as the standard completion message.
 If
@@ -331,10 +357,10 @@ be written to the standard error output
 in the same format as the standard completion message and
 .Nm
 will exit.
-.Pp
+.Sh EXIT STATUS
 The
 .Nm
-utility exits 0 on success and >0 if an error occurred.
+utility exits 0 on success and \*[Gt]0 if an error occurred.
 .Sh SEE ALSO
 .Xr cp 1 ,
 .Xr mt 1 ,

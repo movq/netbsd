@@ -1,4 +1,4 @@
-/*	$NetBSD: zsvar.h,v 1.5 2000/03/18 22:33:05 scw Exp $	*/
+/*	$NetBSD: zsvar.h,v 1.12 2008/04/28 20:23:29 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,9 +35,14 @@
  */
 
 /*
- * The MVME provides a 4.9152 MHz clock to the SCC chips.
+ * The MVME-147 provides a 5 MHz clock to the SCC chips.
  */
-#define PCLK	(9600 * 512)	/* PCLK pin input clock rate */
+#define PCLK_147	5000000		/* PCLK pin input clock rate */
+
+/*
+ * The MVME-162 provides a 10 MHz clock to the SCC chips.
+ */
+#define PCLK_162	10000000	/* PCLK pin input clock rate */
 
 /*
  * SCC should interrupt host at level 4.
@@ -65,8 +63,8 @@
  * The layout of this is hardware-dependent (padding, order).
  */
 struct zschan {
-	volatile u_char zc_csr;		/* ctrl,status, and indirect access */
-	volatile u_char zc_data;	/* data */
+	volatile u_char *zc_csr;	/* ctrl,status, and indirect access */
+	volatile u_char *zc_data;	/* data */
 };
 
 struct zsdevice {
@@ -79,7 +77,11 @@ struct zsdevice {
 extern	u_char zs_init_reg[];
 
 /* Functions exported to ASIC-specific drivers. */
-void	zs_config __P((struct zsc_softc *, bus_space_tag_t,bus_space_handle_t));
-void	zs_cnconfig __P((int, int, bus_space_tag_t, bus_space_handle_t));
-int	zshard __P((void *));
-void	zssoft __P((void *));
+void	zs_config(struct zsc_softc *, struct zsdevice *, int, int);
+void	zs_cnconfig(int, int, struct zsdevice *, int);
+#ifdef MVME147
+int	zshard_shared(void *);
+#endif
+#if defined(MVME162) || defined(MVME172)
+int	zshard_unshared(void *);
+#endif

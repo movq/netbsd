@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 1999/07/08 11:48:47 tsubai Exp $
+#	$NetBSD: Makefile,v 1.5 2008/10/25 22:27:38 apb Exp $
 
 # Makefile for newsmips tags file
 
@@ -18,7 +18,8 @@ DNEWSMIPS=	dev include
 tags:
 	-ctags -wdtf ${TNEWSMIPS} ${SNEWSMIPS} ${SMIPS} ${COMM}
 	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${ANEWSMIPS} ${AMIPS} | \
-	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
+	    ${TOOL_SED} -e \
+		"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
 	    >> ${TNEWSMIPS}
 	sort -o ${TNEWSMIPS} ${TNEWSMIPS}
 
@@ -26,6 +27,6 @@ links:
 	-for i in ${DNEWSMIPS}; do \
 	    cd $$i && rm -f tags; ln -s ../tags tags; done
 
-SUBDIR=	include stand
+SUBDIR=	compile include stand
 
 .include <bsd.subdir.mk>

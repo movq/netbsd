@@ -1,4 +1,4 @@
-/*	$NetBSD: uba_bi.c,v 1.4 1999/07/12 13:43:40 ragge Exp $ */
+/*	$NetBSD: uba_bi.c,v 1.13 2008/04/06 07:23:57 cegger Exp $ */
 /*
  * Copyright (c) 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -13,7 +13,7 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *	This product includes software developed at Ludd, University of 
+ *	This product includes software developed at Ludd, University of
  *	Lule}, Sweden and its contributors.
  * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission
@@ -33,6 +33,9 @@
 /*
  * DWBUA BI-Unibus adapter
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: uba_bi.c,v 1.13 2008/04/06 07:23:57 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -59,10 +62,10 @@
 
 #define	BUA(uba)	((struct dwbua_regs *)(uba))
 
-static	int uba_bi_match __P((struct device *, struct cfdata *, void *));
-static	void uba_bi_attach __P((struct device *, struct device *, void *));
-static	void bua_init __P((struct uba_softc *));
-static	void bua_purge __P((struct uba_softc *, int));
+static	int uba_bi_match(device_t, cfdata_t, void *);
+static	void uba_bi_attach(device_t, device_t, void *);
+static	void bua_init(struct uba_softc *);
+static	void bua_purge(struct uba_softc *, int);
 
 /* bua_csr */
 #define BUACSR_ERR      0x80000000      /* composite error */
@@ -89,9 +92,8 @@ static	void bua_purge __P((struct uba_softc *, int));
 
 static	int allocvec;
 
-struct	cfattach uba_bi_ca = {
-	sizeof(struct uba_softc), uba_bi_match, uba_bi_attach,
-};
+CFATTACH_DECL_NEW(uba_bi, sizeof(struct uba_softc),
+    uba_bi_match, uba_bi_attach, NULL, NULL);
 
 struct dwbua_regs {
 	struct  biiregs bn_biic;   /* interface */
@@ -112,10 +114,7 @@ struct dwbua_regs {
  * Poke at a supposed DWBUA to see if it is there.
  */
 static int
-uba_bi_match(parent, cf, aux)
-	struct	device *parent;
-	struct	cfdata *cf;
-	void	*aux;
+uba_bi_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct bi_attach_args *ba = aux;
 
@@ -131,12 +130,10 @@ uba_bi_match(parent, cf, aux)
 }
 
 void
-uba_bi_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+uba_bi_attach(device_t parent, device_t self, void *aux)
 {
-	struct	uba_softc *sc = (void *)self;
-	struct	bi_attach_args *ba = aux;
+	struct uba_softc *sc = device_private(self);
+	struct bi_attach_args *ba = aux;
 	volatile int timo;
 
 	if (ba->ba_node->biic.bi_dtype == BIDT_DWBUA)
@@ -147,6 +144,7 @@ uba_bi_attach(parent, self, aux)
 	/*
 	 * Fill in bus specific data.
 	 */
+	sc->uh_dev = self;
 	sc->uh_uba = (void *)ba->ba_node;
 	sc->uh_nbdp = NBDPBUA;
 /*	sc->uh_nr is 0; uninteresting here */
@@ -169,12 +167,12 @@ uba_bi_attach(parent, self, aux)
 	timo = 1000;
 	while (BUA(sc->uh_uba)->bn_biic.bi_csr & BICSR_BROKE)
 		if (timo == 0) {
-			printf("%s: BROKE bit set\n", self->dv_xname);
+			aprint_error_dev(self, "BROKE bit set\n");
 			return;
 		}
 
 	BUA(sc->uh_uba)->bn_biic.bi_intrdes = ba->ba_intcpu;
-	BUA(sc->uh_uba)->bn_biic.bi_csr = 
+	BUA(sc->uh_uba)->bn_biic.bi_csr =
 	    (BUA(sc->uh_uba)->bn_biic.bi_csr&~BICSR_ARB_MASK) | BICSR_ARB_HIGH;
 	BUA(sc->uh_uba)->bn_vor = VAX_NBPG + (VAX_NBPG * allocvec++);
 

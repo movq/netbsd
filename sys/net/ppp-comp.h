@@ -1,36 +1,42 @@
-/*	$NetBSD: ppp-comp.h,v 1.4 1998/05/02 14:34:25 christos Exp $	*/
+/*	$NetBSD: ppp-comp.h,v 1.14 2008/02/20 17:05:53 matt Exp $	*/
 
 /*
  * ppp-comp.h - Definitions for doing PPP packet compression.
  *
- * Copyright (c) 1994 The Australian National University.
- * All rights reserved.
+ * Copyright (c) 1989-2002 Paul Mackerras. All rights reserved.
  *
- * Permission to use, copy, modify, and distribute this software and its
- * documentation is hereby granted, provided that the above copyright
- * notice appears in all copies.  This software is provided without any
- * warranty, express or implied. The Australian National University
- * makes no representations about the suitability of this software for
- * any purpose.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
  *
- * IN NO EVENT SHALL THE AUSTRALIAN NATIONAL UNIVERSITY BE LIABLE TO ANY
- * PARTY FOR DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES
- * ARISING OUT OF THE USE OF THIS SOFTWARE AND ITS DOCUMENTATION, EVEN IF
- * THE AUSTRALIAN NATIONAL UNIVERSITY HAVE BEEN ADVISED OF THE POSSIBILITY
- * OF SUCH DAMAGE.
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
  *
- * THE AUSTRALIAN NATIONAL UNIVERSITY SPECIFICALLY DISCLAIMS ANY WARRANTIES,
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
- * AND FITNESS FOR A PARTICULAR PURPOSE.  THE SOFTWARE PROVIDED HEREUNDER IS
- * ON AN "AS IS" BASIS, AND THE AUSTRALIAN NATIONAL UNIVERSITY HAS NO
- * OBLIGATION TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS,
- * OR MODIFICATIONS.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
  *
- * Id: ppp-comp.h,v 1.10 1996/09/26 06:30:11 paulus Exp 
+ * 3. The name(s) of the authors of this software must not be used to
+ *    endorse or promote products derived from this software without
+ *    prior written permission.
+ *
+ * 4. Redistributions of any form whatsoever must retain the following
+ *    acknowledgment:
+ *    "This product includes software developed by Paul Mackerras
+ *     <paulus@samba.org>".
+ *
+ * THE AUTHORS OF THIS SOFTWARE DISCLAIM ALL WARRANTIES WITH REGARD TO
+ * THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS, IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
+ * SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN
+ * AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING
+ * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef _NET_PPP_COMP_H
-#define _NET_PPP_COMP_H
+#ifndef _NET_PPP_COMP_H_
+#define _NET_PPP_COMP_H_
 
 /*
  * The following symbols control whether we include code for
@@ -46,6 +52,13 @@
 #define DO_PREDICTOR_2	0
 
 /*
+ * How many entries to make available in the compressors table
+ */
+#ifndef PPP_COMPRESSORS_MAX
+#define PPP_COMPRESSORS_MAX	8
+#endif
+
+/*
  * Structure giving methods for compression/decompression.
  */
 #ifdef PACKETPTR
@@ -53,36 +66,32 @@ struct compressor {
 	int	compress_proto;	/* CCP compression protocol number */
 
 	/* Allocate space for a compressor (transmit side) */
-	void	*(*comp_alloc) __P((u_char *options, int opt_len));
+	void	*(*comp_alloc)(u_char *, int);
 	/* Free space used by a compressor */
-	void	(*comp_free) __P((void *state));
+	void	(*comp_free)(void *);
 	/* Initialize a compressor */
-	int	(*comp_init) __P((void *state, u_char *options, int opt_len,
-				  int unit, int hdrlen, int debug));
+	int	(*comp_init)(void *, u_char *, int, int, int, int);
 	/* Reset a compressor */
-	void	(*comp_reset) __P((void *state));
+	void	(*comp_reset)(void *);
 	/* Compress a packet */
-	int	(*compress) __P((void *state, PACKETPTR *mret,
-				 PACKETPTR mp, int orig_len, int max_len));
+	int	(*compress)(void *, PACKETPTR *, PACKETPTR, int, int);
 	/* Return compression statistics */
-	void	(*comp_stat) __P((void *state, struct compstat *stats));
+	void	(*comp_stat)(void *, struct compstat *);
 
 	/* Allocate space for a decompressor (receive side) */
-	void	*(*decomp_alloc) __P((u_char *options, int opt_len));
+	void	*(*decomp_alloc)(u_char *, int);
 	/* Free space used by a decompressor */
-	void	(*decomp_free) __P((void *state));
+	void	(*decomp_free)(void *);
 	/* Initialize a decompressor */
-	int	(*decomp_init) __P((void *state, u_char *options, int opt_len,
-				    int unit, int hdrlen, int mru, int debug));
+	int	(*decomp_init)(void *, u_char *, int, int, int, int, int);
 	/* Reset a decompressor */
-	void	(*decomp_reset) __P((void *state));
+	void	(*decomp_reset)(void *);
 	/* Decompress a packet. */
-	int	(*decompress) __P((void *state, PACKETPTR mp,
-				   PACKETPTR *dmpp));
+	int	(*decompress)(void *, PACKETPTR, PACKETPTR *);
 	/* Update state for an incompressible packet received */
-	void	(*incomp) __P((void *state, PACKETPTR mp));
+	void	(*incomp)(void *, PACKETPTR);
 	/* Return decompression statistics */
-	void	(*decomp_stat) __P((void *state, struct compstat *stats));
+	void	(*decomp_stat)(void *, struct compstat *);
 };
 #endif /* PACKETPTR */
 
@@ -103,6 +112,8 @@ struct compressor {
  */
 #define CCP_CONFREQ	1
 #define CCP_CONFACK	2
+#define	CCP_CONFNAK	3
+#define	CCP_CONFREJ	4
 #define CCP_TERMREQ	5
 #define CCP_TERMACK	6
 #define CCP_RESETREQ	14
@@ -111,7 +122,7 @@ struct compressor {
 /*
  * Max # bytes for a CCP option
  */
-#define CCP_MAX_OPTION_LENGTH	32
+#define CCP_MAX_OPTION_LENGTH	64
 
 /*
  * Parts of a CCP packet.
@@ -158,6 +169,99 @@ struct compressor {
 #define DEFLATE_CHK_SEQUENCE	0
 
 /*
+ * Definitions for MPPE.
+ */
+#define CI_MPPE			18	/* config option for MPPE */
+#define CILEN_MPPE		6	/* length of config option */
+
+#define MPPE_PAD		4	/* MPPE growth per frame */
+#define MPPE_MAX_KEY_LEN	16	/* largest key length (128-bit) */
+
+/* option bits for ccp_options.mppe */
+#define MPPE_OPT_40		0x01	/* 40 bit */
+#define MPPE_OPT_128		0x02	/* 128 bit */
+#define MPPE_OPT_STATEFUL	0x04	/* stateful mode */
+/* unsupported opts */
+#define MPPE_OPT_56		0x08	/* 56 bit */
+#define MPPE_OPT_MPPC		0x10	/* MPPC compression */
+#define MPPE_OPT_D		0x20	/* Unknown */
+#define MPPE_OPT_UNSUPPORTED (MPPE_OPT_56|MPPE_OPT_MPPC|MPPE_OPT_D)
+#define MPPE_OPT_UNKNOWN	0x40	/* Bits !defined in RFC 3078 were set */
+
+/*
+ * This is not nice ... the alternative is a bitfield struct though.
+ * And unfortunately, we cannot share the same bits for the option
+ * names above since C and H are the same bit.  We could do a uint32_t
+ * but then we have to do a htonl() all the time and/or we still need
+ * to know which octet is which.
+ */
+#define MPPE_C_BIT		0x01	/* MPPC */
+#define MPPE_D_BIT		0x10	/* Obsolete, usage unknown */
+#define MPPE_L_BIT		0x20	/* 40-bit */
+#define MPPE_S_BIT		0x40	/* 128-bit */
+#define MPPE_M_BIT		0x80	/* 56-bit, not supported */
+#define MPPE_H_BIT		0x01	/* Stateless (in a different byte) */
+
+/* Does not include H bit; used for least significant octet only. */
+#define MPPE_ALL_BITS (MPPE_D_BIT|MPPE_L_BIT|MPPE_S_BIT|MPPE_M_BIT|MPPE_H_BIT)
+
+/* Build a CI from mppe opts (see RFC 3078) */
+#define MPPE_OPTS_TO_CI(opts, ci)		\
+    do {					\
+	u_char *ptr = ci; /* u_char[4] */	\
+						\
+	/* H bit */				\
+	if (opts & MPPE_OPT_STATEFUL)		\
+	    *ptr++ = 0x0;			\
+	else					\
+	    *ptr++ = MPPE_H_BIT;		\
+	*ptr++ = 0;				\
+	*ptr++ = 0;				\
+						\
+	/* S,L bits */				\
+	*ptr = 0;				\
+	if (opts & MPPE_OPT_128)		\
+	    *ptr |= MPPE_S_BIT;			\
+	if (opts & MPPE_OPT_40)			\
+	    *ptr |= MPPE_L_BIT;			\
+	/* M,D,C bits not supported */		\
+    } while (/* CONSTCOND */ 0)
+
+/* The reverse of the above */
+#define MPPE_CI_TO_OPTS(ci, opts)		\
+    do {					\
+	u_char *ptr = ci; /* u_char[4] */	\
+						\
+	opts = 0;				\
+						\
+	/* H bit */				\
+	if (!(ptr[0] & MPPE_H_BIT))		\
+	    opts |= MPPE_OPT_STATEFUL;		\
+						\
+	/* S,L bits */				\
+	if (ptr[3] & MPPE_S_BIT)		\
+	    opts |= MPPE_OPT_128;		\
+	if (ptr[3] & MPPE_L_BIT)		\
+	    opts |= MPPE_OPT_40;		\
+						\
+	/* M,D,C bits */			\
+	if (ptr[3] & MPPE_M_BIT)		\
+	    opts |= MPPE_OPT_56;		\
+	if (ptr[3] & MPPE_D_BIT)		\
+	    opts |= MPPE_OPT_D;			\
+	if (ptr[3] & MPPE_C_BIT)		\
+	    opts |= MPPE_OPT_MPPC;		\
+						\
+	/* Other bits */			\
+	if (ptr[0] & ~MPPE_H_BIT)		\
+	    opts |= MPPE_OPT_UNKNOWN;		\
+	if (ptr[1] || ptr[2])			\
+	    opts |= MPPE_OPT_UNKNOWN;		\
+	if (ptr[3] & ~MPPE_ALL_BITS)		\
+	    opts |= MPPE_OPT_UNKNOWN;		\
+    } while (/* CONSTCOND */ 0)
+
+/*
  * Definitions for other, as yet unsupported, compression methods.
  */
 #define CI_PREDICTOR_1		1	/* config option for Predictor-1 */
@@ -165,4 +269,4 @@ struct compressor {
 #define CI_PREDICTOR_2		2	/* config option for Predictor-2 */
 #define CILEN_PREDICTOR_2	2	/* length of its config option */
 
-#endif /* _NET_PPP_COMP_H */
+#endif /* !_NET_PPP_COMP_H_ */

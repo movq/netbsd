@@ -1,4 +1,4 @@
-.\"	$NetBSD: st.4,v 1.15 1999/03/16 01:19:18 garbled Exp $
+.\"	$NetBSD: st.4,v 1.24 2005/12/26 19:48:12 perry Exp $
 .\"
 .\" Copyright (c) 1996
 .\"     Julian Elischer <julian@freebsd.org>.  All rights reserved.
@@ -30,15 +30,18 @@
 .Os
 .Sh NAME
 .Nm st
-.Nd SCSI tape driver
+.Nd SCSI/ATAPI tape driver
 .Sh SYNOPSIS
-.Cd st* at scsibus? target ? lun ?
-.Cd st1 at scsibus0 target 4 lun 0
+.Cd "st* at scsibus? target ? lun ?"
+.Cd "st1 at scsibus0 target 4 lun 0"
+.Cd "st* at atapibus? drive ? flags 0x0000"
 .Sh DESCRIPTION
 The
 .Nm
 driver provides support for
 .Tn SCSI
+and Advanced Technology Attachment Packet Interface
+.Pq Tn ATAPI
 tape drives.
 It allows a tape drive to be run in several different
 modes depending on minor numbers and supports several different
@@ -50,23 +53,38 @@ interface and a
 interface; however, only the raw interface is usually used (or recommended).
 .Pp
 .Tn SCSI
+and
+.Tn ATAPI
 devices have a relatively high level interface and talk to the system via a
 .Tn SCSI
+or
+.Tn ATAPI
 adapter and a
 .Tn SCSI
+or
+.Tn ATAPI
 adapter driver
 (e.g.
-.Xr ahc 4 ) .
+.Xr ahc 4 ,
+.Xr pciide 4 ) .
 A
 .Tn SCSI
+or
+.Tn ATAPI
 adapter must also be separately configured into the system before a
 .Tn SCSI
+or
+.Tn ATAPI
 tape can be configured.
 .Pp
 As the
 .Tn SCSI
+or
+.Tn ATAPI
 adapter is probed during boot, the
 .Tn SCSI
+or
+.Tn ATAPI
 bus is scanned for devices.
 Any devices found which answer as
 .Sq Em Sequential
@@ -169,7 +187,7 @@ devices run in fixed block-size mode, where most nine-track tapes
 and many new cartridge formats allow variable block-size.
 The difference between the two is as follows:
 .Bl -inset
-.It Variable block-size:
+.It Variable block-size
 Each write made to the device results in a single logical record
 written to the tape.
 One can never read or write
@@ -230,7 +248,9 @@ Attempts to write past EOM and how EOM is reported are handled slightly
 differently based upon whether EARLY WARNING recognition is enabled in
 the driver.
 .Pp
-If EARLY WARNING recognitions is \fBnot\fR enabled, then detection
+If EARLY WARNING recognitions is
+.Em not
+enabled, then detection
 of EOM (as reported in SCSI Sense Data with an EOM indicator)
 causes the write operation to be flagged with I/O error (EIO).
 This has the effect for the user application of not knowing actually
@@ -238,12 +258,16 @@ how many bytes were read (since the return of the
 .Xr read 2
 system call is set to \(mi1).
 .Pp
-If EARLY WARNING recognition \fBis\fR enabled, then detection of EOM
+If EARLY WARNING recognition
+.Em is
+enabled, then detection of EOM
 (as reported in SCSI Sense Data with an EOM indicator)
 has no immediate effect except that
 the driver notes that EOM has been detected. If the write completing
 didn't transfer all data that was requested, then the residual count
-(counting bytes \fBnot\fR written)
+(counting bytes
+.Em not
+written)
 is returned to the user application. In any event, the next attempt
 to write (if that is the next action the user application takes)
 is immediately completed with no data transferred, and a residual
@@ -373,7 +397,7 @@ mount session only, unless the device was opened in Control Mode (in which
 case this set value persists until a reboot).
 Any byte sized value may be specified. Note that
 only a very small number of them will actually usefully work. The
-rest will cause the tape drive to spit up. 
+rest will cause the tape drive to spit up.
 .It Dv MTCMPRESS
 Enable or disable tape drive data compression.
 Typically tape drives will quite contentedly ignore settings on
@@ -384,18 +408,18 @@ Enable or disable EARLY WARNING at EOM behaviour (using the count
 as a boolean value).
 .El
 .It Dv MTIOCRDSPOS
-.Pq Li "u_int32_t"
+.Pq Li "uint32_t"
 Read device logical block position.
 Not all drives support this option.
 .It Dv MTIOCRDHPOS
-.Pq Li "u_int32_t"
+.Pq Li "uint32_t"
 Read device hardware block position.
 Not all drives support this option.
 .It Dv MTIOCSLOCATE
-.Pq Li "u_int32_t"
+.Pq Li "uint32_t"
 Position the tape to the specified device logical block position.
 .It Dv MTIOCHLOCATE
-.Pq Li "u_int32_t"
+.Pq Li "uint32_t"
 Position the tape to the specified hardware block position.
 Not all drives support this option.
 .El
@@ -409,14 +433,9 @@ Mode 0, Rewind on close
 Mode 1, No rewind on close
 .It Pa /dev/erst0
 Mode 2, Eject on close (if capable)
-.It Pa /dev/enst0
+.It Pa /dev/enrst0
 Mode 3, Control Mode (elsewise like mode 0)
 .El
-.Sh BUGS
-The selection of compression could possibly also be usefully done
-as with a minor device bit.
-.Sh DIAGNOSTICS
-A variety, far too many to list.
 .Sh SEE ALSO
 .Xr mt 1 ,
 .Xr intro 4 ,
@@ -433,3 +452,6 @@ by Charles Hannum.
 This man page was edited for
 .Nx
 by Jon Buller.
+.Sh BUGS
+The selection of compression could possibly also be usefully done
+as with a minor device bit.

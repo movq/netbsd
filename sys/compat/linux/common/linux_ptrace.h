@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_ptrace.h,v 1.2 1999/12/16 15:09:49 tron Exp $	*/
+/*	$NetBSD: linux_ptrace.h,v 1.12 2008/04/28 20:23:43 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,16 +42,22 @@
 #define LINUX_PTRACE_CONT		 7
 #define LINUX_PTRACE_KILL		 8
 #define LINUX_PTRACE_SINGLESTEP		 9
+#define LINUX_PTRACE_GETREGS		12
+#define LINUX_PTRACE_SETREGS		13
+#define LINUX_PTRACE_GETFPREGS		14
+#define LINUX_PTRACE_SETFPREGS		15
 #define LINUX_PTRACE_ATTACH		16
 #define LINUX_PTRACE_DETACH		17
 #define LINUX_PTRACE_SYSCALL		24
 
-#if defined(__i386__)
-int linux_sys_ptrace_arch __P((struct proc *, void *, register_t *));
+#if defined(__i386__) || defined (__powerpc__) || defined (__mips__) || \
+    defined(__arm__)
+struct linux_sys_ptrace_args;
+int linux_sys_ptrace_arch(struct lwp *, const struct linux_sys_ptrace_args *, register_t *);
 
-#define LINUX_SYS_PTRACE_ARCH(p,v,r)	linux_sys_ptrace_arch((p),(v),(r))
+#define LINUX_SYS_PTRACE_ARCH(l,v,r)	linux_sys_ptrace_arch((l),(v),(r))
 #else
-#define LINUX_SYS_PTRACE_ARCH(p,v,r)	EIO
+#define LINUX_SYS_PTRACE_ARCH(l,v,r)	EIO
 #endif
 
 #endif /* !_LINUX_PTRACE_H */

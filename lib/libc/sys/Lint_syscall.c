@@ -1,26 +1,16 @@
-/*	$NetBSD: Lint_syscall.c,v 1.1 1997/11/06 00:53:22 cgd Exp $	*/
+/* $NetBSD: Lint_syscall.c,v 1.4 2003/01/18 11:32:58 thorpej Exp $ */
 
 /*
  * This file placed in the public domain.
  * Chris Demetriou, November 5, 1997.
  */
 
-#include <unistd.h>
-#ifdef __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
+#include <unistd.h>
 
 /*ARGSUSED*/
 int
-#ifdef __STDC__
 syscall(int arg1, ...)
-#else
-syscall(arg1, va_alist)
-        int arg1;
-        va_dcl
-#endif
 {
 	return (0);
 }

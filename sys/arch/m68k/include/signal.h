@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.h,v 1.8 1998/09/30 21:52:45 thorpej Exp $	*/
+/*	$NetBSD: signal.h,v 1.23.76.1 2009/02/02 00:48:56 snj Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991 Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,10 +34,20 @@
 #ifndef _M68K_SIGNAL_H_
 #define _M68K_SIGNAL_H_
 
+#include <sys/featuretest.h>
+
 typedef int sig_atomic_t;
 
-#if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) && \
-    !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
+
+#ifdef _KERNEL
+#ifdef COMPAT_16
+#define SIGTRAMP_VALID(vers)	((unsigned)(vers) <= 2)
+#else
+#define SIGTRAMP_VALID(vers)	((vers) == 2)
+#endif
+#endif
+
 /*
  * Get the "code" values
  */
@@ -66,6 +72,7 @@ struct sigcontext13 {
 };
 #endif /* __LIBC12_SOURCE__ || _KERNEL */
 
+#if defined(_LIBC) || defined(_KERNEL)
 struct sigcontext {
 	int	sc_onstack;		/* sigstack state to restore */
 	int	__sc_mask13;		/* signal mask to restore (old style) */
@@ -76,9 +83,10 @@ struct sigcontext {
 	int	sc_ps;			/* psl to restore */
 	sigset_t sc_mask;		/* signal mask to restore (new style) */
 };
+#endif /* _LIBC || _KERNEL */
 
-#if defined(_KERNEL) && defined(__M68K_SIGNAL_PRIVATE)
-#include <m68k/frame.h>
+#ifdef _KERNEL
+#include <m68k/cpuframe.h>
 
 /*
  * Register state saved while kernel delivers a signal.
@@ -93,21 +101,17 @@ struct sigstate {
 #define	SS_FPSTATE	0x02
 #define	SS_USERREGS	0x04
 
-/*
- * Stack frame layout when delivering a signal.
- *
- * WARNING: code in locore.s assumes the layout shown for sf_signum
- * thru sf_handler, so... don't screw with them!
- */
-struct sigframe {
-	int	sf_signum;		/* signal number for handler */
-	int	sf_code;		/* additional info for handler */
-	struct sigcontext *sf_scp;	/* context pointer for handler */
-	sig_t	sf_handler;		/* handler address for u_sigc */
-	struct sigstate sf_state;	/* state of the hardware */
-	struct sigcontext sf_sc;	/* actual context */
-};
-#endif /* _KERNEL && __M68K_SIGNAL_PRIVATE */
+u_int fpsr2siginfocode(u_int fpsr);
 
-#endif	/* !_ANSI_SOURCE && !_POSIX_C_SOURCE && !_XOPEN_SOURCE */
+#endif
+
+#if defined(__M68K_SIGNAL_PRIVATE)
+
+#ifdef _KERNEL
+#define	_SIGSTATE_EXFRAMESIZE(fmt)	exframesize[(fmt)]
+#endif
+
+#endif /* __M68K_SIGNAL_PRIVATE */
+
+#endif	/* _NETBSD_SOURCE */
 #endif	/* !_M68K_SIGNAL_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: lpf.c,v 1.7 1999/12/07 14:54:46 mrg Exp $	*/
+/*	$NetBSD: lpf.c,v 1.13 2008/07/21 13:36:58 lukem Exp $	*/
 /*
  * Copyright (c) 1983, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,12 +30,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)lpf.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: lpf.c,v 1.7 1999/12/07 14:54:46 mrg Exp $");
+__RCSID("$NetBSD: lpf.c,v 1.13 2008/07/21 13:36:58 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,6 +49,7 @@ __RCSID("$NetBSD: lpf.c,v 1.7 1999/12/07 14:54:46 mrg Exp $");
  */
 
 #include <signal.h>
+#include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -74,12 +71,11 @@ char	*acctfile;	/* accounting information file */
 int	crnl;		/* \n -> \r\n */
 int	need_cr;
 
-int main __P((int, char *[]));
+int main(int, char *[]);
+void usage(void);
 
 int
-main(argc, argv) 
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	FILE *p = stdin, *o = stdout;
 	int i, col;
@@ -87,45 +83,41 @@ main(argc, argv)
 	int done, linedone, maxrep, ch, prch;
 	char *limit;
 
-	while (--argc) {
-		if (*(cp = *++argv) == '-') {
-			switch (cp[1]) {
-			case 'n':
-				argc--;
-				name = *++argv;
-				break;
+        while ((ch = getopt(argc, argv, "cfh:i:j:l:n:w:")) != -1)
+		switch (ch) {
+		case 'n':
+			name = optarg;
+			break;
+		case 'h':
+			host = optarg;
+			break;
+		case 'w':
+			if ((i = atoi(optarg)) > 0 && i <= MAXWIDTH)
+				width = i;
+			break;
+		case 'l':
+			length = atoi(optarg);
+			break;
+		case 'i':
+			indent = atoi(optarg);
+			break;
+		case 'c':	/* Print control chars */
+			literal++;
+			break;
+		case 'f':	/* Fix missing carriage returns */
+			crnl++;
+			break;
+		case 'j':	/* ignore job name */
+			break;
+		default:
+			usage();
+		}
+	argc -= optind;
+	argv += optind;
+	if (argc)
+		acctfile = *argv;
 
-			case 'h':
-				argc--;
-				host = *++argv;
-				break;
-
-			case 'w':
-				if ((i = atoi(&cp[2])) > 0 && i <= MAXWIDTH)
-					width = i;
-				break;
-
-			case 'l':
-				length = atoi(&cp[2]);
-				break;
-
-			case 'i':
-				indent = atoi(&cp[2]);
-				break;
-
-			case 'c':	/* Print control chars */
-				literal++;
-				break;
-
-			case 'f':	/* Fix missing carriage returns */
-				crnl++;
-				break;
-			}
-		} else
-			acctfile = cp;
-	}
-
-	for (cp = buf[0], limit = buf[MAXREP]; cp < limit; *cp++ = ' ');
+	memset(buf, ' ',  sizeof(buf));
 	done = 0;
 	
 	while (!done) {
@@ -233,3 +225,13 @@ main(argc, argv)
 	}
 	exit(0);
 }
+
+void
+usage(void)
+{
+        fprintf(stderr,
+	  "usage: lpf [-c] [-f] [-h host] [-i indent] [-l length] [-n name] [-w width] [acctfile]\n");
+	exit(1);
+
+}
+

@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_emit.c,v 1.13 2000/03/30 13:10:12 augustss Exp $	*/
+/*	$NetBSD: tp_emit.c,v 1.27 2008/04/23 09:57:59 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -75,6 +71,11 @@ SOFTWARE.
  * of separation under the 'w' tpdebug option, that's all.)
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: tp_emit.c,v 1.27 2008/04/23 09:57:59 plunky Exp $");
+
+#include "opt_iso.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
@@ -100,14 +101,6 @@ SOFTWARE.
 #include <netiso/tp_var.h>
 #include <netiso/iso_errno.h>
 #include <netiso/iso_var.h>
-
-#ifdef TRUE
-#undef FALSE
-#undef TRUE
-#endif
-#include <netccitt/x25.h>
-#include <netccitt/pk.h>
-#include <netccitt/pk_var.h>
 
 /*
  * Here is a mighty kludge.  The token ring misorders packets if you fire
@@ -160,12 +153,12 @@ char            tp_delay = 0x00;/* delay to keep token ring from blowing it */
  */
 
 int
-tp_emit(dutype, tpcb, seq, eot, data)
-	int             dutype;
-	struct tp_pcb  *tpcb;
-	SeqNum          seq;
-	u_int           eot;
-	struct mbuf    *data;
+tp_emit(
+	int             dutype,
+	struct tp_pcb  *tpcb,
+	SeqNum          seq,
+	u_int           eot,
+	struct mbuf    *data)
 {
 	struct tpdu *hdr;
 	struct mbuf *m;
@@ -194,8 +187,8 @@ tp_emit(dutype, tpcb, seq, eot, data)
 		if (m) {
 			m->m_type = TPMT_TPHDR;
 			mbstat.m_mtypes[TPMT_TPHDR]++;
-			m->m_next = MNULL;
-			m->m_nextpkt = MNULL;
+			m->m_next = NULL;
+			m->m_nextpkt = NULL;
 			m->m_data = m->m_pktdat;
 			m->m_flags = M_PKTHDR;
 			bzero(&m->m_pkthdr, sizeof(m->m_pkthdr));
@@ -203,18 +196,18 @@ tp_emit(dutype, tpcb, seq, eot, data)
 	} else {
 		MGETHDR(m, M_DONTWAIT, TPMT_TPHDR);
 	}
-	m->m_data += max_hdr;
 	if (m == NULL) {
 		if (data != (struct mbuf *) 0)
 			m_freem(data);
 		error = ENOBUFS;
 		goto done;
 	}
+	m->m_data += max_hdr;
 	m->m_len = sizeof(struct tpdu);
-	m->m_act = MNULL;
+	m->m_nextpkt = NULL;
 
 	hdr = mtod(m, struct tpdu *);
-	bzero((caddr_t) hdr, sizeof(struct tpdu));
+	bzero((void *) hdr, sizeof(struct tpdu));
 
 	{
 		hdr->tpdu_type = dutype;
@@ -263,13 +256,6 @@ tp_emit(dutype, tpcb, seq, eot, data)
 					tpcb->tp_sent_lcdt = tpcb->tp_lcredit;
 					hdr->tpdu_cdt = tpcb->tp_lcredit;
 				} else {
-#ifdef TPCONS
-					if (tpcb->tp_netservice == ISO_CONS) {
-						struct isopcb  *isop = (struct isopcb *) tpcb->tp_npcb;
-						struct pklcd   *lcp = (struct pklcd *) (isop->isop_chan);
-						lcp->lcd_flags &= ~X25_DG_CIRCUIT;
-					}
-#endif
 					hdr->tpdu_cdt = 0;
 				}
 				hdr->tpdu_CCclass = tp_mask_to_num(tpcb->tp_class);
@@ -347,8 +333,10 @@ tp_emit(dutype, tpcb, seq, eot, data)
 					x = 0;
 					ADDOPTION(TPP_alt_class, hdr, 1, x);
 				}
+#if 0
 				if (hdr->tpdu_li > MLEN)
 					panic("tp_emit CR/CC");
+#endif
 			}
 			break;
 
@@ -425,10 +413,10 @@ tp_emit(dutype, tpcb, seq, eot, data)
 #ifdef ARGO_DEBUG
 			if (argo_debug[D_SIZE_CHECK]) {
 #if 0
-				 if (data->m_len <= 16 && 
+				 if (data->m_len <= 16 &&
 				     data->m_off < (MLEN-18)) {
 					printf("Sending too much data on XPD: 18 bytes\n");
-					data->m_len = 18; 
+					data->m_len = 18;
 				}
 #endif
 			}
@@ -550,7 +538,7 @@ tp_emit(dutype, tpcb, seq, eot, data)
 
 					/*
 					 * tmp1 = amt of new cdt we're
-					 * advertising 
+					 * advertising
 					 */
 					tmp1 = SEQ_SUB(tpcb, seq,
 						       tpcb->tp_sent_rcvnxt);
@@ -561,7 +549,7 @@ tp_emit(dutype, tpcb, seq, eot, data)
 						 tps_cdt_acked[tmp1]
 						 [((tpcb->tp_lcredit >
 						    TP_PM_MAX) ?
-						   TP_PM_MAX : 
+						   TP_PM_MAX :
 						   tpcb->tp_lcredit)]);
 
 				}
@@ -655,9 +643,9 @@ tp_emit(dutype, tpcb, seq, eot, data)
 				subseq = htons(tpcb->tp_r_subseq);
 				fcredit = htons(tpcb->tp_fcredit);
 
-				bcopy((caddr_t) & lwe, (caddr_t) & bogus[0], sizeof(SeqNum));
-				bcopy((caddr_t) & subseq, (caddr_t) & bogus[2], sizeof(u_short));
-				bcopy((caddr_t) & fcredit, (caddr_t) & bogus[3], sizeof(u_short));
+				bcopy((void *) & lwe, (void *) & bogus[0], sizeof(SeqNum));
+				bcopy((void *) & subseq, (void *) & bogus[2], sizeof(u_short));
+				bcopy((void *) & fcredit, (void *) & bogus[3], sizeof(u_short));
 
 #ifdef TPPT
 				if (tp_traceflags[D_ACKSEND]) {
@@ -718,11 +706,16 @@ tp_emit(dutype, tpcb, seq, eot, data)
 		}
 
 	}
-	ASSERT(((int) hdr->tpdu_li > 0) && ((int) hdr->tpdu_li < MLEN));
+	ASSERT((int) hdr->tpdu_li != 0);
+#if 0
+ 	ASSERT((int) hdr->tpdu_li < MLEN);
+#endif
 
 	m->m_next = data;
 
+#if 0
 	ASSERT(hdr->tpdu_li < MLEN);	/* leave this in */
+#endif
 	ASSERT(hdr->tpdu_li != 0);	/* leave this in */
 
 	m->m_len = hdr->tpdu_li;
@@ -759,7 +752,7 @@ tp_emit(dutype, tpcb, seq, eot, data)
 	if (argo_debug[D_EMIT]) {
 		printf("tp_emit before tpxxx_output tpcb %p, dutype 0x%x, datalen 0x%x\n",
 		       tpcb, dutype, datalen);
-		dump_buf(mtod(m, caddr_t), datalen);
+		dump_buf(mtod(m, void *), datalen);
 	}
 #endif
 
@@ -848,16 +841,16 @@ done:
  */
 
 int
-tp_error_emit(error, sref, faddr, laddr, erdata, erlen, tpcb, cons_channel,
-	      dgout_routine)
-	int             error;
-	u_long          sref;
-	struct sockaddr_iso *faddr, *laddr;
-	struct mbuf    *erdata;
-	int             erlen;
-	struct tp_pcb  *tpcb;
-	caddr_t         cons_channel;
-        int 	      (*dgout_routine) __P((struct mbuf *, ...));
+tp_error_emit(
+	int             error,
+	u_long          sref,
+	struct sockaddr_iso *faddr,
+	struct sockaddr_iso *laddr,
+	struct mbuf    *erdata,
+	int             erlen,
+	struct tp_pcb  *tpcb,
+	void *        cons_channel,
+        int 	      (*dgout_routine)(struct mbuf *, ...))
 {
 	int             dutype;
 	int             datalen = 0;
@@ -884,7 +877,7 @@ tp_error_emit(error, sref, faddr, laddr, erdata, erlen, tpcb, cons_channel,
 		return ENOBUFS;
 	}
 	m->m_len = sizeof(struct tpdu);
-	m->m_act = MNULL;
+	m->m_nextpkt = NULL;
 
 	hdr = mtod(m, struct tpdu *);
 
@@ -956,11 +949,13 @@ tp_error_emit(error, sref, faddr, laddr, erdata, erlen, tpcb, cons_channel,
 			ADDOPTION(TPP_checksum, hdr, 2, csum_offset /* dummy argument */ );
 			csum_offset = hdr->tpdu_li - 2;
 		}
+#if 0
 	ASSERT(hdr->tpdu_li < MLEN);
+#endif
 
 	if (dutype == ER_TPDU_type) {
 		/* copy the errant tpdu into another 'variable part' */
-		caddr_t P;
+		void *P;
 
 #ifdef TPPT
 		if (tp_traceflags[D_ERROR_EMIT]) {
@@ -979,7 +974,7 @@ tp_error_emit(error, sref, faddr, laddr, erdata, erlen, tpcb, cons_channel,
 			erlen = TP_MAX_HEADER_LEN - hdr->tpdu_li - 2;
 
 		/* add the "invalid tpdu" parameter : required in class 0 */
-		P = (caddr_t) hdr + (int) (hdr->tpdu_li);
+		P = (char *) hdr + (int) (hdr->tpdu_li);
 		vbptr(P)->tpv_code = TPP_invalid_tpdu;	/* parameter code */
 		vbptr(P)->tpv_len = erlen;	/* parameter length */
 		m->m_len = hdr->tpdu_li + 2;	/* 1 for code, 1 for length */
@@ -1042,31 +1037,8 @@ tp_error_emit(error, sref, faddr, laddr, erdata, erlen, tpcb, cons_channel,
 #endif
 	}
 	if (cons_channel) {
-#ifdef TPCONS
-		struct pklcd   *lcp = (struct pklcd *) cons_channel;
-#ifdef notdef
-		struct isopcb  *isop = (struct isopcb *) lcp->lcd_upnext;
-#endif
-		tpcons_output_dg(m, datalen, cons_channel);
-#ifdef notdef
-		if (tpcb == 0) iso_pcbdetach(isop);
-#endif
-		/*
-		 * but other side may want to try again over same VC, so,
-		 * we'll depend on him closing it, but in case it gets
-		 * forgotten we'll mark it for garbage collection
-		 */
-		lcp->lcd_flags |= X25_DG_CIRCUIT;
-#ifdef ARGO_DEBUG
-		if (argo_debug[D_ERROR_EMIT]) {
-			printf("OUTPUT: dutype 0x%x channel 0x%x\n",
-			       dutype, cons_channel);
-		}
-#endif
-#else
 		printf("TP panic! cons channel %p but not cons configured\n",
 		       cons_channel);
-#endif
 		return 0;
 	} else if (tpcb) {
 
@@ -1081,7 +1053,7 @@ tp_error_emit(error, sref, faddr, laddr, erdata, erlen, tpcb, cons_channel,
 		return (*tpcb->tp_nlproto->nlp_dgoutput) (m, datalen,
 							 &laddr->siso_addr,
 							 &faddr->siso_addr,
-		        /* no route */ (caddr_t) 0, !tpcb->tp_use_checksum);
+		        /* no route */ (void *) 0, !tpcb->tp_use_checksum);
 	} else if (dgout_routine) {
 #ifdef ARGO_DEBUG
 		if (argo_debug[D_ERROR_EMIT]) {
@@ -1092,7 +1064,7 @@ tp_error_emit(error, sref, faddr, laddr, erdata, erlen, tpcb, cons_channel,
 		}
 #endif
 		return (*dgout_routine) (m, datalen, &laddr->siso_addr, &faddr->siso_addr,
-				        (caddr_t) 0, /* nochecksum==false */ 0);
+				        (void *) 0, /* nochecksum==false */ 0);
 	} else {
 #ifdef ARGO_DEBUG
 		if (argo_debug[D_ERROR_EMIT]) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: mach.c,v 1.10 1999/09/08 21:45:26 jsm Exp $	*/
+/*	$NetBSD: mach.c,v 1.18 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)mach.c	8.1 (Berkeley) 6/11/93";
 #else
-__RCSID("$NetBSD: mach.c,v 1.10 1999/09/08 21:45:26 jsm Exp $");
+__RCSID("$NetBSD: mach.c,v 1.18 2008/08/08 16:10:47 drochner Exp $");
 #endif
 #endif /* not lint */
 
@@ -72,27 +68,27 @@ int ncols, nlines;
 
 extern const char *pword[], *mword[];
 extern int ngames, nmwords, npwords, tnmwords, tnpwords;
+extern char board[];
+extern int usedbits, wordpath[];
+extern time_t start_t;
+extern int debug;
 
-static void	cont_catcher __P((int));
-static int	prwidth __P((const char *const [], int));
-static void	prword __P((const char *const [], int));
-static void	stop_catcher __P((int));
-static void	tty_cleanup __P((void));
-static int	tty_setup __P((void));
-static void	tty_showboard __P((const char *));
-static void	winch_catcher __P((int));
+static void	cont_catcher(int);
+static int	prwidth(const char *const [], int);
+static void	prword(const char *const [], int);
+static void	stop_catcher(int);
+static void	tty_cleanup(void);
+static int	tty_setup(void);
+static void	tty_showboard(const char *);
+static void	winch_catcher(int);
 
 /*
  * Do system dependent initialization
  * This is called once, when the program starts
  */
 int
-setup(sflag, seed)
-	int sflag;
-	time_t seed;
+setup(int sflag, time_t seed)
 {
-	extern int debug;
-
 	if (tty_setup() < 0)
 		return(-1);
 
@@ -109,7 +105,7 @@ setup(sflag, seed)
  * This is called once, just before the program terminates
  */
 void
-cleanup()
+cleanup(void)
 {
 	tty_cleanup();
 }
@@ -119,7 +115,7 @@ cleanup()
  * stats
  */
 void
-results()
+results(void)
 {
 	int col, row;
 	int denom1, denom2;
@@ -149,17 +145,13 @@ results()
 }
 
 static void
-prword(base, indx)
-	const char *const base[];
-	int indx;
+prword(const char *const base[], int indx)
 {
 	printw("%s", base[indx]);
 }
 
 static int
-prwidth(base, indx)
-	const char *const base[];
-	int indx;
+prwidth(const char *const base[], int indx)
 {
 	return (strlen(base[indx]));
 }
@@ -170,8 +162,7 @@ prwidth(base, indx)
  * - doesn't accept words longer than MAXWORDLEN or containing caps
  */
 char *
-getline(q)
-	char *q;
+getline(char *q)
 {
 	int ch, done;
 	char *p;
@@ -187,11 +178,11 @@ getline(q)
 		case ' ':
 			done = 1;
 			break;
-		case '\033':
+		case '\e':
 			findword();
 			break;
 		case '\177':			/* <del> */
-		case '\010':			/* <bs> */
+		case CTRL('h'):			/* <bs> */
 			if (p == q)
 				break;
 			p--;
@@ -200,8 +191,8 @@ getline(q)
 			clrtoeol();
 			refresh();
 			break;
-		case '\025':			/* <^u> */
-		case '\027':			/* <^w> */
+		case CTRL('u'):			/* <^u> */
+		case CTRL('w'):			/* <^w> */
 			if (p == q)
 				break;
 			getyx(stdscr, row, col);
@@ -211,11 +202,11 @@ getline(q)
 			refresh();
 			break;
 #ifdef SIGTSTP
-		case '\032':			/* <^z> */
+		case CTRL('z'):			/* <^z> */
 			stop_catcher(0);
 			break;
 #endif
-		case '\023':			/* <^s> */
+		case CTRL('s'):			/* <^s> */
 			stoptime();
 			printw("<PAUSE>");
 			refresh();
@@ -226,22 +217,23 @@ getline(q)
 			refresh();
 			starttime();
 			break;
-		case '\003':			/* <^c> */
+		case CTRL('c'):			/* <^c> */
 			cleanup();
 			exit(0);
 			/*NOTREACHED*/
-		case '\004':			/* <^d> */
+		case CTRL('d'):			/* <^d> */
 			done = 1;
 			ch = EOF;
 			break;
-		case '\014':			/* <^l> */
-		case '\022':			/* <^r> */
+		case CTRL('r'):			/* <^l> */
+		case CTRL('l'):			/* <^r> */
 			redraw();
 			break;
 		case '?':
 			stoptime();
 			if (help() < 0)
 				showstr("Can't open help file", 1);
+			touchwin(stdscr);
 			starttime();
 			break;
 		default:
@@ -265,21 +257,20 @@ getline(q)
 }
 
 int
-inputch()
+inputch(void)
 {
 	return (getch() & 0177);
 }
 
 void
-redraw()
+redraw(void)
 {
 	clearok(stdscr, 1);
 	refresh();
 }
 
 void
-flushin(fp)
-	FILE *fp;
+flushin(FILE *fp)
 {
 
 	(void) tcflush(fileno(fp), TCIFLUSH);
@@ -291,9 +282,8 @@ static int gone;
  * Stop the game timer
  */
 void
-stoptime()
+stoptime(void)
 {
-	extern time_t start_t;
 	time_t t;
 
 	(void)time(&t);
@@ -304,9 +294,8 @@ stoptime()
  * Restart the game timer
  */
 void
-starttime()
+starttime(void)
 {
-	extern time_t start_t;
 	time_t t;
 
 	(void)time(&t);
@@ -321,7 +310,7 @@ starttime()
  * There is no check for exceeding COLS
  */
 void
-startwords()
+startwords(void)
 {
 	crow = LIST_LINE;
 	ccol = LIST_COL;
@@ -338,8 +327,7 @@ startwords()
  * to start the next column
  */
 void
-addword(w)
-	const char *w;
+addword(const char *w)
 {
 	int n;
 
@@ -362,7 +350,7 @@ addword(w)
  * The current word is unacceptable so erase it
  */
 void
-badword()
+badword(void)
 {
 
 	move(crow, ccol);
@@ -375,8 +363,7 @@ badword()
  * No check for wild arg
  */
 void
-showword(n)
-	int n;
+showword(int n)
 {
 	int col, row;
 
@@ -404,13 +391,10 @@ showword(n)
  * Note: this function knows about the format of the board
  */
 void
-findword()
+findword(void)
 {
 	int c, col, found, i, r, row;
 	char buf[MAXWORDLEN + 1];
-	extern char board[];
-	extern int usedbits, wordpath[];
-	extern int nmwords, npwords;
 
 	getyx(stdscr, r, c);
 	getword(buf);
@@ -452,7 +436,8 @@ findword()
 		if (board[wordpath[i]] == 'q')
 			printw("Qu");
 		else
-			printw("%c", toupper(board[wordpath[i]]));
+			printw("%c", 
+			    toupper((unsigned char)board[wordpath[i]]));
 		move(r, c);
 		refresh();
 		delay(5);
@@ -467,7 +452,8 @@ findword()
 		if (board[wordpath[i]] == 'q')
 			printw("Qu");
 		else
-			printw("%c", toupper(board[wordpath[i]]));
+			printw("%c", 
+			    toupper((unsigned char)board[wordpath[i]]));
 	}
 	move(r, c);
 	clrtoeol();
@@ -478,9 +464,7 @@ findword()
  * Display a string at the current cursor position for the given number of secs
  */
 void
-showstr(str, delaysecs)
-	const char *str;
-	int delaysecs;
+showstr(const char *str, int delaysecs)
 {
 	addstr(str);
 	refresh();
@@ -491,8 +475,7 @@ showstr(str, delaysecs)
 }
 
 void
-putstr(s)
-	const char *s;
+putstr(const char *s)
 {
 	addstr(s);
 }
@@ -501,8 +484,7 @@ putstr(s)
  * Get a valid word and put it in the buffer
  */
 void
-getword(q)
-	char *q;
+getword(char *q)
 {
 	int ch, col, done, i, row;
 	char *p;
@@ -559,15 +541,13 @@ getword(q)
 }
 
 void
-showboard(b)
-	const char *b;
+showboard(const char *b)
 {
 	tty_showboard(b);
 }
 
 void
-prompt(mesg)
-	const char *mesg;
+prompt(const char *mesg)
 {
 	move(PROMPT_LINE, PROMPT_COL);
 	printw("%s", mesg);
@@ -576,9 +556,12 @@ prompt(mesg)
 }
 
 static int
-tty_setup()
+tty_setup(void)
 {
-	initscr();
+	if (!initscr()) {
+		fprintf(stderr, "couldn't initialize screen\n");
+		exit (0);
+	}
 	raw();
 	noecho();
 
@@ -597,10 +580,9 @@ tty_setup()
 }
 
 static void
-stop_catcher(signo)
-	int signo __attribute__((__unused__));
+stop_catcher(int signo __unused)
 {
-	sigset_t sigset, osigset;
+	sigset_t isigset, osigset;
 
 	stoptime();
 	noraw();
@@ -609,17 +591,16 @@ stop_catcher(signo)
 	refresh();
 
 	signal(SIGTSTP, SIG_DFL);
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGTSTP);
-	sigprocmask(SIG_UNBLOCK, &sigset, &osigset);
+	sigemptyset(&isigset);
+	sigaddset(&isigset, SIGTSTP);
+	sigprocmask(SIG_UNBLOCK, &isigset, &osigset);
 	kill(0, SIGTSTP);
 	sigprocmask(SIG_SETMASK, &osigset, (sigset_t *)0);
 	signal(SIGTSTP, stop_catcher);
 }
  
 static void
-cont_catcher(signo)
-	int signo __attribute__((__unused__));
+cont_catcher(int signo __unused)
 {
 	noecho();
 	raw();
@@ -634,8 +615,7 @@ cont_catcher(signo)
  * It would mean reformatting the entire display
  */
 static void
-winch_catcher(signo)
-	int signo __attribute__((__unused__));
+winch_catcher(int signo __unused)
 {
 	struct winsize win;
 
@@ -648,7 +628,7 @@ winch_catcher(signo)
 }
 
 static void
-tty_cleanup()
+tty_cleanup(void)
 {
 	move(nlines - 1, 0);
 	refresh();
@@ -658,8 +638,7 @@ tty_cleanup()
 }
 
 static void
-tty_showboard(b)
-	const char *b;
+tty_showboard(const char *b)
 {
 	int i;
 	int line;
@@ -673,7 +652,7 @@ tty_showboard(b)
 		if (b[i] == 'q')
 			printw("| Qu");
 		else
-			printw("| %c ", toupper(b[i]));
+			printw("| %c ", toupper((unsigned char)b[i]));
 		if ((i + 1) % 4 == 0) {
 			printw("|");
 			move(++line, BOARD_COL);

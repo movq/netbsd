@@ -1,4 +1,4 @@
-/* $NetBSD: sysarch.h,v 1.4 2000/02/26 18:53:12 thorpej Exp $ */
+/* $NetBSD: sysarch.h,v 1.13 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,17 +42,26 @@
 #define	ALPHA_FPGETMASK			0
 #define	ALPHA_FPSETMASK			1
 #define	ALPHA_FPSETSTICKY		2
+#define	ALPHA_BUS_GET_WINDOW_COUNT	3
+#define	ALPHA_BUS_GET_WINDOW		4
+#define	ALPHA_PCI_CONF_READWRITE	5
+#define	ALPHA_FPGETSTICKY		6
+#define	ALPHA_GET_FP_C			7
+#define	ALPHA_SET_FP_C			8
+
 struct alpha_fp_except_args {
 	fp_except mask;
 };
 
-#define	ALPHA_BUS_GET_WINDOW_COUNT	3
+struct alpha_fp_c_args {
+	uint64_t fp_c;
+};
+
 struct alpha_bus_get_window_count_args {
 	u_int type;
 	u_int count;	/* output */
 };
 
-#define	ALPHA_BUS_GET_WINDOW		4
 struct alpha_bus_get_window_args {
 	u_int type;
 	u_int window;
@@ -70,7 +72,6 @@ struct alpha_bus_get_window_args {
 #define	ALPHA_BUS_TYPE_PCI_MEM		1
 #define	ALPHA_BUS_TYPE_MAX		1
 
-#define	ALPHA_PCI_CONF_READWRITE	5
 struct alpha_pci_conf_readwrite_args {
 	int write;
 	u_int bus;
@@ -82,28 +83,33 @@ struct alpha_pci_conf_readwrite_args {
 
 #ifdef _KERNEL
 extern	u_int alpha_bus_window_count[];
-extern	int (*alpha_bus_get_window) __P((int, int,
-	    struct alpha_bus_space_translation *));
+extern	int (*alpha_bus_get_window)(int, int,
+	    struct alpha_bus_space_translation *);
 extern	struct alpha_pci_chipset *alpha_pci_chipset;
 #else
+#include <sys/cdefs.h>
+
 struct alpha_bus_window {
-	caddr_t		abw_addr;
+	void *		abw_addr;
 	size_t		abw_size;
 	struct alpha_bus_space_translation abw_abst;
 };
 
-int	alpha_bus_getwindows __P((int, struct alpha_bus_window **));
-int	alpha_bus_mapwindow __P((struct alpha_bus_window *));
-void	alpha_bus_unmapwindow __P((struct alpha_bus_window *));
+__BEGIN_DECLS
+int	alpha_bus_getwindows(int, struct alpha_bus_window **);
+int	alpha_bus_mapwindow(struct alpha_bus_window *);
+void	alpha_bus_unmapwindow(struct alpha_bus_window *);
 
-void	*alpha_pci_mem_map __P((bus_addr_t, bus_size_t, int,
-	    struct alpha_bus_space_translation *));
-void	alpha_pci_mem_unmap __P((void *addr, bus_size_t));
+void	*alpha_pci_mem_map(bus_addr_t, bus_size_t, int,
+	    struct alpha_bus_space_translation *);
+void	alpha_pci_mem_unmap(struct alpha_bus_space_translation *,
+	    void *addr, bus_size_t);
 
-u_int32_t alpha_pci_conf_read __P((u_int, u_int, u_int, u_int));
-void	alpha_pci_conf_write __P((u_int, u_int, u_int, u_int, u_int32_t));
+u_int32_t alpha_pci_conf_read(u_int, u_int, u_int, u_int);
+void	alpha_pci_conf_write(u_int, u_int, u_int, u_int, u_int32_t);
 
-int	sysarch __P((int, void *));
+int	sysarch(int, void *);
+__END_DECLS
 #endif /* _KERNEL */
 
 #endif /* !_ALPHA_SYSARCH_H_ */

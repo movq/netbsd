@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_obio.c,v 1.6 2000/01/11 12:59:46 pk Exp $	*/
+/*	$NetBSD: if_le_obio.c,v 1.26 2008/04/28 20:23:35 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,21 +30,22 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "opt_inet.h"
-#include "bpfilter.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_le_obio.c,v 1.26 2008/04/28 20:23:35 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
-#include <sys/socket.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
+#include <machine/bus.h>
+#include <machine/intr.h>
 #include <machine/autoconf.h>
-#include <machine/cpu.h>
 
 #include <dev/ic/lancereg.h>
 #include <dev/ic/lancevar.h>
@@ -68,13 +62,11 @@ struct	le_softc {
 	struct	am7990_softc	sc_am7990;	/* glue to MI code */
 	bus_space_tag_t		sc_bustag;
 	bus_dma_tag_t		sc_dmatag;
+	bus_dmamap_t		sc_dmamap;
 	bus_space_handle_t	sc_reg;		/* LANCE registers */
 };
 
 #define MEMSIZE 0x4000		/* LANCE memory size */
-
-int	lematch_obio __P((struct device *, struct cfdata *, void *));
-void	leattach_obio __P((struct device *, struct device *, void *));
 
 /*
  * Media types supported.
@@ -84,54 +76,40 @@ static int lemedia[] = {
 };
 #define NLEMEDIA	(sizeof(lemedia) / sizeof(lemedia[0]))
 
-struct cfattach le_obio_ca = {
-	sizeof(struct le_softc), lematch_obio, leattach_obio
-};
+static int	lematch_obio(device_t, cfdata_t, void *);
+static void	leattach_obio(device_t, device_t, void *);
 
-extern struct cfdriver le_cd;
+CFATTACH_DECL_NEW(le_obio, sizeof(struct le_softc),
+    lematch_obio, leattach_obio, NULL, NULL);
 
-#if defined(_KERNEL) && !defined(_LKM)
-#include "opt_ddb.h"
-#endif
 
-#ifdef DDB
-#define	integrate
-#define hide
-#else
-#define	integrate	static __inline
-#define hide		static
-#endif
-
-static void lewrcsr __P((struct lance_softc *, u_int16_t, u_int16_t));
-static u_int16_t lerdcsr __P((struct lance_softc *, u_int16_t));
+static void lewrcsr(struct lance_softc *, uint16_t, uint16_t);
+static uint16_t lerdcsr(struct lance_softc *, uint16_t);
 
 static void
-lewrcsr(sc, port, val)
-	struct lance_softc *sc;
-	u_int16_t port, val;
+lewrcsr(struct lance_softc *sc, uint16_t port, uint16_t val)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
+	bus_space_tag_t t = lesc->sc_bustag;
+	bus_space_handle_t h = lesc->sc_reg;
 
-	bus_space_write_2(lesc->sc_bustag, lesc->sc_reg, LEREG1_RAP, port);
-	bus_space_write_2(lesc->sc_bustag, lesc->sc_reg, LEREG1_RDP, val);
+	bus_space_write_2(t, h, LEREG1_RAP, port);
+	bus_space_write_2(t, h, LEREG1_RDP, val);
 }
 
-static u_int16_t
-lerdcsr(sc, port)
-	struct lance_softc *sc;
-	u_int16_t port;
+static uint16_t
+lerdcsr(struct lance_softc *sc, uint16_t port)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
+	bus_space_tag_t t = lesc->sc_bustag;
+	bus_space_handle_t h = lesc->sc_reg;
 
-	bus_space_write_2(lesc->sc_bustag, lesc->sc_reg, LEREG1_RAP, port);
-	return (bus_space_read_2(lesc->sc_bustag, lesc->sc_reg, LEREG1_RDP));
+	bus_space_write_2(t, h, LEREG1_RAP, port);
+	return (bus_space_read_2(t, h, LEREG1_RDP));
 }
 
-int
-lematch_obio(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+static int
+lematch_obio(device_t parent, cfdata_t cf, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct obio4_attach_args *oba;
@@ -140,53 +118,70 @@ lematch_obio(parent, cf, aux)
 		return (0);
 
 	oba = &uoba->uoba_oba4;
-	return (bus_space_probe(oba->oba_bustag, 0, oba->oba_paddr,
+	return (bus_space_probe(oba->oba_bustag, oba->oba_paddr,
 				2,	/* probe size */
 				0,	/* offset */
 				0,	/* flags */
 				NULL, NULL));
 }
 
-void
-leattach_obio(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+leattach_obio(device_t parent, device_t self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct obio4_attach_args *oba = &uoba->uoba_oba4;
-	struct le_softc *lesc = (struct le_softc *)self;
+	struct le_softc *lesc = device_private(self);
 	struct lance_softc *sc = &lesc->sc_am7990.lsc;
 	bus_dma_segment_t seg;
+	bus_dma_tag_t dmatag;
 	int rseg;
-	/* XXX the following declarations should be elsewhere */
-	extern void myetheraddr __P((u_char *));
+	int error;
 
+	sc->sc_dev = self;
 	lesc->sc_bustag = oba->oba_bustag;
-	lesc->sc_dmatag = oba->oba_dmatag;
+	lesc->sc_dmatag = dmatag = oba->oba_dmatag;
 
-	if (obio_bus_map(oba->oba_bustag, oba->oba_paddr,
-			 0, 2 * sizeof(u_int16_t),
-			 0, 0,
-			 &lesc->sc_reg) != 0) {
-		printf("%s @ obio: cannot map registers\n", self->dv_xname);
+	if (bus_space_map(oba->oba_bustag, oba->oba_paddr,
+			  2 * sizeof(uint16_t),
+			  0, &lesc->sc_reg) != 0) {
+		aprint_error(": cannot map registers\n");
 		return;
 	}
 
-	if (bus_dmamem_alloc(lesc->sc_dmatag, MEMSIZE, NBPG, 0,
+	/* Get a DMA handle */
+	if ((error = bus_dmamap_create(dmatag, MEMSIZE, 1, MEMSIZE, 0,
+					BUS_DMA_NOWAIT|BUS_DMA_24BIT,
+					&lesc->sc_dmamap)) != 0) {
+		aprint_error(": DMA map create error %d\n", error);
+		return;
+	}
+
+	/* Allocate DMA buffer */
+	if ((error = bus_dmamem_alloc(dmatag, MEMSIZE, PAGE_SIZE, 0,
 			     &seg, 1, &rseg,
-			     BUS_DMA_NOWAIT | BUS_DMA_24BIT) != 0) {
-		printf("%s @ obio: DMA memory allocation error\n",
-			self->dv_xname);
+			     BUS_DMA_NOWAIT | BUS_DMA_24BIT)) != 0) {
+		aprint_error(": DMA memory allocation error %d\n", error);
 		return;
 	}
-	if (bus_dmamem_map(lesc->sc_dmatag, &seg, rseg, MEMSIZE,
-			   (caddr_t *)&sc->sc_mem,
-			   BUS_DMA_NOWAIT|BUS_DMA_COHERENT) != 0) {
-		printf("%s @ obio: DMA memory map error\n", self->dv_xname);
+	/* Map DMA buffer into kernel space */
+	if ((error = bus_dmamem_map(dmatag, &seg, rseg, MEMSIZE,
+			   (void **)&sc->sc_mem,
+			   BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
+		aprint_error(": DMA memory map error %d\n", error);
 		bus_dmamem_free(lesc->sc_dmatag, &seg, rseg);
 		return;
 	}
-	sc->sc_addr = seg.ds_addr & 0xffffff;
+	/* Load DMA buffer */
+	if ((error = bus_dmamap_load(dmatag, lesc->sc_dmamap,
+				     sc->sc_mem, MEMSIZE, NULL,
+				     BUS_DMA_NOWAIT)) != 0) {
+		aprint_error(": DMA buffer map load error %d\n", error);
+		bus_dmamem_unmap(dmatag, (void *)sc->sc_mem, MEMSIZE);
+		bus_dmamem_free(dmatag, &seg, rseg);
+		return;
+	}
+
+	sc->sc_addr = lesc->sc_dmamap->dm_segs[0].ds_addr & 0xffffff;
 	sc->sc_memsize = MEMSIZE;
 	sc->sc_conf3 = LE_C3_BSWP | LE_C3_ACON | LE_C3_BCON;
 
@@ -194,7 +189,7 @@ leattach_obio(parent, self, aux)
 	sc->sc_nsupmedia = NLEMEDIA;
 	sc->sc_defaultmedia = lemedia[0];
 
-	myetheraddr(sc->sc_enaddr);
+	prom_getether(0, sc->sc_enaddr);
 
 	sc->sc_copytodesc = lance_copytobuf_contig;
 	sc->sc_copyfromdesc = lance_copyfrombuf_contig;
@@ -208,6 +203,6 @@ leattach_obio(parent, self, aux)
 	am7990_config(&lesc->sc_am7990);
 
 	/* Install interrupt */
-	(void)bus_intr_establish(lesc->sc_bustag, oba->oba_pri, 0,
+	(void)bus_intr_establish(lesc->sc_bustag, oba->oba_pri, IPL_NET,
 				 am7990_intr, sc);
 }

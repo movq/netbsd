@@ -1,4 +1,4 @@
-/* $NetBSD: dec_5100.c,v 1.23 2000/03/06 03:13:35 mhitch Exp $ */
+/* $NetBSD: dec_5100.c,v 1.40 2007/12/03 15:34:10 ad Exp $ */
 
 /*
  * Copyright (c) 1998 Jonathan Stone.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_5100.c,v 1.23 2000/03/06 03:13:35 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_5100.c,v 1.40 2007/12/03 15:34:10 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,20 +45,32 @@ __KERNEL_RCSID(0, "$NetBSD: dec_5100.c,v 1.23 2000/03/06 03:13:35 mhitch Exp $")
 
 #include <mips/mips/mips_mcclock.h>	/* mcclock CPUspeed estimation */
 
+#include <dev/tc/tcvar.h>		/* tc_addr_t */
+
 #include <pmax/pmax/machdep.h>
 #include <pmax/pmax/kn01.h>		/* common definitions */
 #include <pmax/pmax/kn230.h>
-#include <pmax/dev/dcvar.h>
 
 #include <pmax/ibus/ibusvar.h>
+
+#include <pmax/pmax/cons.h>
 
 void		dec_5100_init __P((void));		/* XXX */
 static void	dec_5100_bus_reset __P((void));
 static void	dec_5100_cons_init __P((void));
-static int	dec_5100_intr __P((unsigned, unsigned, unsigned, unsigned));
+static void	dec_5100_intr __P((unsigned, unsigned, unsigned, unsigned));
 static void	dec_5100_intr_establish __P((struct device *, void *,
 		    int, int (*)(void *), void *));
 static void	dec_5100_memintr __P((void));
+
+static const int dec_5100_ipl2spl_table[] = {
+	[IPL_NONE] = 0,
+	[IPL_SOFTCLOCK] = _SPL_SOFTCLOCK,
+	[IPL_SOFTNET] = _SPL_SOFTNET,
+	[IPL_VM] = MIPS_SPL_0_1,
+	[IPL_SCHED] = MIPS_SPL_0_1_2,
+	[IPL_HIGH] = MIPS_SPL_0_1_2,
+};
 
 void
 dec_5100_init()
@@ -74,14 +86,7 @@ dec_5100_init()
 	/* set correct wbflush routine for this motherboard */
 	mips_set_wbflush(kn230_wbflush);
 
-	mips_hardware_intr = dec_5100_intr;
-
-	splvec.splbio = MIPS_SPL1;
-	splvec.splnet = MIPS_SPL1;
-	splvec.spltty = MIPS_SPL_0_1; 
-	splvec.splimp = MIPS_SPL_0_1_2;
-	splvec.splclock = MIPS_SPL_0_1_2;
-	splvec.splstatclock = MIPS_SPL_0_1_2;
+	ipl2spl_table = dec_5100_ipl2spl_table;
 
 	/* calibrate cpu_mhz value */
 	mc_cpuspeed(MIPS_PHYS_TO_KSEG1(KN01_SYS_CLOCK), MIPS_INT_MASK_2);
@@ -90,7 +95,7 @@ dec_5100_init()
 }
 
 /*
- * Initalize the memory system and I/O buses.
+ * Initialize the memory system and I/O buses.
  */
 static void
 dec_5100_bus_reset()
@@ -116,7 +121,8 @@ dec_5100_cons_init()
 	 */
 	DELAY(160000000 / 9600);	/* XXX */
 
-	dc_cnattach(KN230_SYS_DZ0, 0);
+	dz_ibus_cnsetup(KN230_SYS_DZ0);
+	dz_ibus_cnattach(0);
 }
 
 static void
@@ -137,20 +143,20 @@ dec_5100_intr_establish(dev, cookie, level, handler, arg)
     do {								\
 	if ((icsr & (ibit)) && intrtab[vvv].ih_func) {			\
 		(*intrtab[vvv].ih_func)(intrtab[vvv].ih_arg);		\
-		intrcnt[vvv]++;						\
+		intrtab[vvv].ih_count.ev_count++;			\
 	}								\
     } while (0)
 
-static int
-dec_5100_intr(cpumask, pc, status, cause)
-	unsigned cpumask;
-	unsigned pc;
+static void
+dec_5100_intr(status, cause, pc, ipending)
 	unsigned status;
 	unsigned cause;
+	unsigned pc;
+	unsigned ipending;
 {
 	u_int32_t icsr;
 
-	if (cpumask & MIPS_INT_MASK_4) {
+	if (ipending & MIPS_INT_MASK_4) {
 #ifdef DDB
 		Debugger();
 #else
@@ -161,15 +167,15 @@ dec_5100_intr(cpumask, pc, status, cause)
 	icsr = *(volatile u_int32_t *)MIPS_PHYS_TO_KSEG1(KN230_SYS_ICSR);
 
 	/* handle clock interrupts ASAP */
-	if (cpumask & MIPS_INT_MASK_2) {
+	if (ipending & MIPS_INT_MASK_2) {
 		struct clockframe cf;
 
-		__asm __volatile("lbu $0,48(%0)" ::
+		__asm volatile("lbu $0,48(%0)" ::
 			"r"(MIPS_PHYS_TO_KSEG1(KN01_SYS_CLOCK)));
 		cf.pc = pc;
 		cf.sr = status;
 		hardclock(&cf);
-		intrcnt[HARDCLOCK]++;
+		pmax_clock_evcnt.ev_count++;
 
 		/* keep clock interrupts enabled when we return */
 		cause &= ~MIPS_INT_MASK_2;
@@ -178,23 +184,23 @@ dec_5100_intr(cpumask, pc, status, cause)
 	/* If clock interrupts were enabled, re-enable them ASAP. */
 	_splset(MIPS_SR_INT_IE | (status & MIPS_INT_MASK_2));
 
-	if (cpumask & MIPS_INT_MASK_0) {
+	if (ipending & MIPS_INT_MASK_0) {
 		CALLINTR(SYS_DEV_SCC0, KN230_CSR_INTR_DZ0);
 		CALLINTR(SYS_DEV_OPT0, KN230_CSR_INTR_OPT0);
 		CALLINTR(SYS_DEV_OPT1, KN230_CSR_INTR_OPT1);
 	}
 
-	if (cpumask & MIPS_INT_MASK_1) {
+	if (ipending & MIPS_INT_MASK_1) {
 		CALLINTR(SYS_DEV_LANCE, KN230_CSR_INTR_LANCE);
 		CALLINTR(SYS_DEV_SCSI, KN230_CSR_INTR_SII);
 	}
 
-	if (cpumask & MIPS_INT_MASK_3) {
+	if (ipending & MIPS_INT_MASK_3) {
 		dec_5100_memintr();
-		intrcnt[ERROR_INTR]++;
+		pmax_memerr_evcnt.ev_count++;
 	}
 
-	return (MIPS_SR_INT_IE | (status & ~cause & MIPS_HARD_INT_MASK));
+	_splset(MIPS_SR_INT_IE | (status & ~cause & MIPS_HARD_INT_MASK));
 }
 
 
@@ -213,11 +219,11 @@ dec_5100_memintr()
 	/* read icsr and clear error  */
 	icsr = *(volatile u_int32_t *)MIPS_PHYS_TO_KSEG1(KN230_SYS_ICSR);
 	icsr |= KN230_CSR_INTR_WMERR;
-	*(volatile u_int32_t *)MIPS_PHYS_TO_KSEG1(KN230_SYS_ICSR);
+	*(volatile u_int32_t *)MIPS_PHYS_TO_KSEG1(KN230_SYS_ICSR) = icsr;
 	kn230_wbflush();
 
 #ifdef DIAGNOSTIC
-		printf("\nMemory interrupt\n");
+	printf("\nMemory interrupt\n");
 #endif
 
 	/* ignore errors during probes */
@@ -225,7 +231,7 @@ dec_5100_memintr()
 		return;
 
 	if (icsr & KN230_CSR_INTR_WMERR) {
-		panic("write to non-existant memory");
+		panic("write to non-existent memory");
 	}
 	else {
 		panic("stray memory error interrupt");

@@ -1,4 +1,4 @@
-/*	$NetBSD: skeleton.c,v 1.17 1999/10/29 16:41:51 explorer Exp $	*/
+/*	$NetBSD: skeleton.c,v 1.29 2008/07/18 14:25:37 drochner Exp $	*/
 
 /*
  * Copyright (c) 1989 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,11 +33,11 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)skeleton.c	5.8 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: skeleton.c,v 1.17 1999/10/29 16:41:51 explorer Exp $");
+__RCSID("$NetBSD: skeleton.c,v 1.29 2008/07/18 14:25:37 drochner Exp $");
 #endif /* 0 */
 #endif /* not lint */
 
@@ -59,19 +55,18 @@ __RCSID("$NetBSD: skeleton.c,v 1.17 1999/10/29 16:41:51 explorer Exp $");
 /*  the body either are not useful outside of semantic actions or	*/
 /*  are conditional.							*/
 
-char *banner[] =
+const char * const banner[] =
 {
-    "#include <sys/cdefs.h>",
+    "#include <stdlib.h>",
     "#ifndef lint",
     "#if 0",
     "static char yysccsid[] = \"@(#)yaccpar	1.9 (Berkeley) 02/21/93\";",
     "#else",
     "#if defined(__NetBSD__) && defined(__IDSTRING)",
-    "__IDSTRING(yyrcsid, \"$NetBSD: skeleton.c,v 1.17 1999/10/29 16:41:51 explorer Exp $\");",
+    "__IDSTRING(yyrcsid, \"$NetBSD: skeleton.c,v 1.29 2008/07/18 14:25:37 drochner Exp $\");",
     "#endif /* __NetBSD__ && __IDSTRING */",
     "#endif /* 0 */",
     "#endif /* lint */",
-    "#include <stdlib.h>",
     "#define YYBYACC 1",
     "#define YYMAJOR 1",
     "#define YYMINOR 9",
@@ -84,26 +79,26 @@ char *banner[] =
 };
 
 
-char *tables[] =
+const char * const tables[] =
 {
-    "extern short yylhs[];",
-    "extern short yylen[];",
-    "extern short yydefred[];",
-    "extern short yydgoto[];",
-    "extern short yysindex[];",
-    "extern short yyrindex[];",
-    "extern short yygindex[];",
-    "extern short yytable[];",
-    "extern short yycheck[];",
+    "extern const short yylhs[];",
+    "extern const short yylen[];",
+    "extern const short yydefred[];",
+    "extern const short yydgoto[];",
+    "extern const short yysindex[];",
+    "extern const short yyrindex[];",
+    "extern const short yygindex[];",
+    "extern const short yytable[];",
+    "extern const short yycheck[];",
     "#if YYDEBUG",
-    "extern char *yyname[];",
-    "extern char *yyrule[];",
+    "extern const char * const yyname[];",
+    "extern const char * const yyrule[];",
     "#endif",
     0
 };
 
 
-char *header[] =
+const char * const header[] =
 {
     "#ifdef YYSTACKSIZE",
     "#undef YYMAXDEPTH",
@@ -124,21 +119,22 @@ char *header[] =
     "short *yyssp;",
     "YYSTYPE *yyvsp;",
     "YYSTYPE yyval;",
+    "static YYSTYPE yyvalzero;", /* no "const", must compile as C++ */
     "YYSTYPE yylval;",
     "short *yyss;",
     "short *yysslim;",
     "YYSTYPE *yyvs;",
     "int yystacksize;",
+    "int yyparse(void);",
     0
 };
 
 
-char *body[] =
+const char * const body[] =
 {
     "/* allocate initial stack or double stack size, up to YYMAXDEPTH */",
-    "int yyparse __P((void));",
-    "static int yygrowstack __P((void));",
-    "static int yygrowstack()",
+    "static int yygrowstack(void);",
+    "static int yygrowstack(void)",
     "{",
     "    int newsize, i;",
     "    short *newss;",
@@ -169,11 +165,11 @@ char *body[] =
     "#define YYACCEPT goto yyaccept",
     "#define YYERROR goto yyerrlab",
     "int",
-    "yyparse()",
+    "yyparse(void)",
     "{",
     "    int yym, yyn, yystate;",
     "#if YYDEBUG",
-    "    char *yys;",
+    "    const char *yys;",
     "",
     "    if ((yys = getenv(\"YYDEBUG\")) != NULL)",
     "    {",
@@ -299,14 +295,17 @@ char *body[] =
     "                YYPREFIX, yystate, yyn, yyrule[yyn]);",
     "#endif",
     "    yym = yylen[yyn];",
-    "    yyval = yyvsp[1-yym];",
+    "    if (yym)",
+    "        yyval = yyvsp[1-yym];",
+    "    else",
+    "        yyval = yyvalzero;",
     "    switch (yyn)",
     "    {",
     0
 };
 
 
-char *trailer[] =
+const char * const trailer[] =
 {
     "    }",
     "    yyssp -= yym;",
@@ -369,12 +368,11 @@ char *trailer[] =
 
 
 void
-write_section(section)
-char *section[];
+write_section(const char * const section[])
 {
     int c;
     int i;
-    char *s;
+    const char *s;
     FILE *f;
 
     f = code_file;

@@ -1,4 +1,4 @@
-/*	$NetBSD: timer.c,v 1.4 1997/10/10 12:04:36 lukem Exp $	*/
+/*	$NetBSD: timer.c,v 1.10 2005/07/01 16:38:24 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,12 +37,13 @@
 #if 0
 static char sccsid[] = "@(#)timer.c	8.2 (Berkeley) 2/22/94";
 #else
-__RCSID("$NetBSD: timer.c,v 1.4 1997/10/10 12:04:36 lukem Exp $");
+__RCSID("$NetBSD: timer.c,v 1.10 2005/07/01 16:38:24 jmc Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/time.h>
+#include <sys/poll.h>
 
 #include <curses.h>
 #include <setjmp.h>
@@ -57,7 +54,11 @@ __RCSID("$NetBSD: timer.c,v 1.4 1997/10/10 12:04:36 lukem Exp $");
 #include "bog.h"
 #include "extern.h"
 
-static int waitch __P((long));
+static int waitch(int);
+
+extern int tlimit;
+extern time_t start_t;
+extern jmp_buf env;
 
 /*
  * Update the display of the remaining time while waiting for a character
@@ -66,18 +67,15 @@ static int waitch __P((long));
  * Leave the cursor where it was initially
  */
 int
-timerch()
+timerch(void)
 {
-	extern int tlimit;
-	extern time_t start_t;
-	extern jmp_buf env;
 	time_t prevt, t;
 	int col, remaining, row;
 
 	getyx(stdscr, row, col);
 	prevt = 0L;
 	for (;;) {
-		if (waitch(1000L) == 1)
+		if (waitch(1) == 1)
 			break;
 		time(&t);
 		if (t == prevt)
@@ -101,26 +99,21 @@ timerch()
  * Returns 1 if input is ready, 0 oth.
  */
 static int
-waitch(delay)
-	long delay;
+waitch(int tdelay)
 {
-	fd_set fdbits;
-	struct timeval duration;
+	struct pollfd set[1];
 
-	duration.tv_sec = 0;
-	duration.tv_usec = delay;
-	FD_ZERO(&fdbits);
-	FD_SET(STDIN_FILENO, &fdbits);
-	return (select(32, &fdbits, NULL, NULL, &duration));
+	set[0].fd = STDIN_FILENO;
+	set[0].events = POLLIN;
+	return (poll(set, 1, tdelay));
 }
 
 void
-delay(tenths)
-	int tenths;
+delay(int tenths)
 {
-	struct timeval duration;
+	struct timespec duration;
 
-	duration.tv_usec = (tenths % 10 ) * 100000L;
+	duration.tv_nsec = (tenths % 10 ) * 100000000L;
 	duration.tv_sec = (long) (tenths / 10);
-	select(32, 0, 0, 0, &duration);
+	nanosleep(&duration, NULL);
 }

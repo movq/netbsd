@@ -1,4 +1,4 @@
-/*	$NetBSD: openfirm.c,v 1.4 1999/01/10 10:24:16 tsubai Exp $	*/
+/*	$NetBSD: openfirm.c,v 1.20 2008/04/08 02:33:03 garbled Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -30,7 +30,16 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include "opt_multiprocessor.h"
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: openfirm.c,v 1.20 2008/04/08 02:33:03 garbled Exp $");
+
 #include <sys/param.h>
+#include <sys/systm.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/psl.h>
 #include <machine/stdarg.h>
@@ -39,15 +48,17 @@
 
 char *OF_buf;
 
-extern void ofw_stack __P((void));
-extern void ofbcopy __P((const void *, void *, size_t));
+void ofw_stack(void);
+void ofbcopy(const void *, void *, size_t);
+#ifdef MULTIPROCESSOR
+void OF_start_cpu(int, u_int, int);
+#endif
 
 int
-OF_peer(phandle)
-	int phandle;
+OF_peer(int phandle)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
 		int phandle;
@@ -66,11 +77,10 @@ OF_peer(phandle)
 }
 
 int
-OF_child(phandle)
-	int phandle;
+OF_child(int phandle)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
 		int phandle;
@@ -89,11 +99,10 @@ OF_child(phandle)
 }
 
 int
-OF_parent(phandle)
-	int phandle;
+OF_parent(int phandle)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
 		int phandle;
@@ -112,11 +121,10 @@ OF_parent(phandle)
 }
 
 int
-OF_instance_to_package(ihandle)
-	int ihandle;
+OF_instance_to_package(int ihandle)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
 		int ihandle;
@@ -135,16 +143,14 @@ OF_instance_to_package(ihandle)
 }
 
 int
-OF_getproplen(handle, prop)
-	int handle;
-	char *prop;
+OF_getproplen(int handle, const char *prop)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
 		int phandle;
-		char *prop;
+		const char *prop;
 		int proplen;
 	} args = {
 		"getproplen",
@@ -161,18 +167,14 @@ OF_getproplen(handle, prop)
 }
 
 int
-OF_getprop(handle, prop, buf, buflen)
-	int handle;
-	char *prop;
-	void *buf;
-	int buflen;
+OF_getprop(int handle, const char *prop, void *buf, int buflen)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
 		int phandle;
-		char *prop;
+		const char *prop;
 		void *buf;
 		int buflen;
 		int size;
@@ -183,7 +185,7 @@ OF_getprop(handle, prop, buf, buflen)
 	};
 
 	ofw_stack();
-	if (buflen > NBPG)
+	if (buflen > PAGE_SIZE)
 		return -1;
 	args.phandle = handle;
 	args.prop = prop;
@@ -199,14 +201,72 @@ OF_getprop(handle, prop, buf, buflen)
 }
 
 int
-OF_finddevice(name)
-	char *name;
+OF_setprop(int handle, const char *prop, const void *buf, int buflen)
 {
-	static struct {
-		char *name;
+	struct {
+		const char *name;
 		int nargs;
 		int nreturns;
-		char *device;
+		int phandle;
+		const char *prop;
+		const void *buf;
+		int buflen;
+		int size;
+	} args = {
+		"setprop", 
+		4,
+		1
+	};
+	ofw_stack();
+
+	if (buflen > NBPG)
+		return -1;
+
+	ofbcopy(buf, OF_buf, buflen);
+	args.phandle = handle;
+	args.prop = prop;
+	args.buf = OF_buf;
+	args.buflen = buflen;
+	if (openfirmware(&args) == -1)
+		return -1;
+	return args.size;
+}
+
+int
+OF_nextprop(int handle, const char *prop, void *nextprop)
+{
+	static struct {
+		const char *name;
+		int nargs;
+		int nreturns;
+		int phandle;
+		const char *prop;
+		char *buf;
+		int flag;
+	} args = {
+		"nextprop",
+		3,
+		1,
+	};
+
+	ofw_stack();
+	args.phandle = handle;
+	args.prop = prop;
+	args.buf = OF_buf;
+	if (openfirmware(&args) == -1)
+		return -1;
+	strncpy(nextprop, OF_buf, 32);
+	return args.flag;
+}
+
+int
+OF_finddevice(const char *name)
+{
+	static struct {
+		const char *name;
+		int nargs;
+		int nreturns;
+		const char *device;
 		int phandle;
 	} args = {
 		"finddevice",
@@ -222,13 +282,10 @@ OF_finddevice(name)
 }
 
 int
-OF_instance_to_path(ihandle, buf, buflen)
-	int ihandle;
-	char *buf;
-	int buflen;
+OF_instance_to_path(int ihandle, char *buf, int buflen)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
 		int ihandle;
@@ -241,7 +298,7 @@ OF_instance_to_path(ihandle, buf, buflen)
 		1,
 	};
 
-	if (buflen > NBPG)
+	if (buflen > PAGE_SIZE)
 		return -1;
 	args.ihandle = ihandle;
 	args.buf = OF_buf;
@@ -256,13 +313,10 @@ OF_instance_to_path(ihandle, buf, buflen)
 }
 
 int
-OF_package_to_path(phandle, buf, buflen)
-	int phandle;
-	char *buf;
-	int buflen;
+OF_package_to_path(int phandle, char *buf, int buflen)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
 		int phandle;
@@ -276,7 +330,7 @@ OF_package_to_path(phandle, buf, buflen)
 	};
 
 	ofw_stack();
-	if (buflen > NBPG)
+	if (buflen > PAGE_SIZE)
 		return -1;
 	args.phandle = phandle;
 	args.buf = OF_buf;
@@ -291,23 +345,14 @@ OF_package_to_path(phandle, buf, buflen)
 }
 
 int
-#ifdef	__STDC__
-OF_call_method(char *method, int ihandle, int nargs, int nreturns, ...)
-#else
-OF_call_method(method, ihandle, nargs, nreturns, va_alist)
-	char *method;
-	int ihandle;
-	int nargs;
-	int nreturns;
-	va_dcl
-#endif
+OF_call_method(const char *method, int ihandle, int nargs, int nreturns, ...)
 {
 	va_list ap;
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
-		char *method;
+		const char *method;
 		int ihandle;
 		int args_n_results[12];
 	} args = {
@@ -327,10 +372,14 @@ OF_call_method(method, ihandle, nargs, nreturns, va_alist)
 	for (ip = args.args_n_results + (n = nargs); --n >= 0;)
 		*--ip = va_arg(ap, int);
 	ofw_stack();
-	if (openfirmware(&args) == -1)
+	if (openfirmware(&args) == -1) {
+		va_end(ap);
 		return -1;
-	if (args.args_n_results[nargs])
+	}
+	if (args.args_n_results[nargs]) {
+		va_end(ap);
 		return args.args_n_results[nargs];
+	}
 	for (ip = args.args_n_results + nargs + (n = args.nreturns); --n > 0;)
 		*va_arg(ap, int *) = *--ip;
 	va_end(ap);
@@ -338,22 +387,14 @@ OF_call_method(method, ihandle, nargs, nreturns, va_alist)
 }
 
 int
-#ifdef	__STDC__
-OF_call_method_1(char *method, int ihandle, int nargs, ...)
-#else
-OF_call_method_1(method, ihandle, nargs, va_alist)
-	char *method;
-	int ihandle;
-	int nargs;
-	va_dcl
-#endif
+OF_call_method_1(const char *method, int ihandle, int nargs, ...)
 {
 	va_list ap;
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
-		char *method;
+		const char *method;
 		int ihandle;
 		int args_n_results[8];
 	} args = {
@@ -381,14 +422,13 @@ OF_call_method_1(method, ihandle, nargs, va_alist)
 }
 
 int
-OF_open(dname)
-	char *dname;
+OF_open(const char *dname)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
-		char *dname;
+		const char *dname;
 		int handle;
 	} args = {
 		"open",
@@ -398,7 +438,7 @@ OF_open(dname)
 	int l;
 
 	ofw_stack();
-	if ((l = strlen(dname)) >= NBPG)
+	if ((l = strlen(dname)) >= PAGE_SIZE)
 		return -1;
 	ofbcopy(dname, OF_buf, l + 1);
 	args.dname = OF_buf;
@@ -408,11 +448,10 @@ OF_open(dname)
 }
 
 void
-OF_close(handle)
-	int handle;
+OF_close(int handle)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
 		int handle;
@@ -428,16 +467,13 @@ OF_close(handle)
 }
 
 /*
- * This assumes that character devices don't read in multiples of NBPG.
+ * This assumes that character devices don't read in multiples of PAGE_SIZE.
  */
 int
-OF_read(handle, addr, len)
-	int handle;
-	void *addr;
-	int len;
+OF_read(int handle, void *addr, int len)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
 		int ihandle;
@@ -456,7 +492,7 @@ OF_read(handle, addr, len)
 	args.ihandle = handle;
 	args.addr = OF_buf;
 	for (; len > 0; len -= l, p += l) {
-		l = min(NBPG, len);
+		l = min(PAGE_SIZE, len);
 		args.len = l;
 		if (openfirmware(&args) == -1)
 			return -1;
@@ -464,23 +500,21 @@ OF_read(handle, addr, len)
 			ofbcopy(OF_buf, p, args.actual);
 			act += args.actual;
 		}
-		if (args.actual < l)
+		if (args.actual < l) {
 			if (act)
 				return act;
 			else
 				return args.actual;
+		}
 	}
 	return act;
 }
 
 int
-OF_write(handle, addr, len)
-	int handle;
-	void *addr;
-	int len;
+OF_write(int handle, const void *addr, int len)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
 		int ihandle;
@@ -493,15 +527,16 @@ OF_write(handle, addr, len)
 		1,
 	};
 	int l, act = 0;
-	char *p = addr;
+	const char *p = addr;
 
 	ofw_stack();
 	args.ihandle = handle;
 	args.addr = OF_buf;
 	for (; len > 0; len -= l, p += l) {
-		l = min(NBPG, len);
+		l = min(PAGE_SIZE, len);
 		ofbcopy(p, OF_buf, l);
 		args.len = l;
+		args.actual = l;	/* work around a PIBS bug */
 		if (openfirmware(&args) == -1)
 			return -1;
 		l = args.actual;
@@ -511,12 +546,10 @@ OF_write(handle, addr, len)
 }
 
 int
-OF_seek(handle, pos)
-	int handle;
-	u_quad_t pos;
+OF_seek(int handle, u_quad_t pos)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
 		int handle;
@@ -538,12 +571,36 @@ OF_seek(handle, pos)
 	return args.status;
 }
 
+#ifdef MULTIPROCESSOR
 void
-OF_boot(bootspec)
-	char *bootspec;
+OF_start_cpu(int phandle, u_int pc, int arg)
 {
 	static struct {
-		char *name;
+		const char *name;
+		int nargs;
+		int nreturns;
+		int phandle;
+		u_int pc;
+		int arg;
+	} args = {
+		"start-cpu",
+		3,
+		0,
+	};
+	ofw_stack();
+	args.phandle = phandle;
+	args.pc = pc;
+	args.arg = arg;
+	if (openfirmware(&args) == -1)
+		panic("WTF?");
+}
+#endif
+
+void
+OF_boot(const char *bootspec)
+{
+	static struct {
+		const char *name;
 		int nargs;
 		int nreturns;
 		char *bootspec;
@@ -554,7 +611,7 @@ OF_boot(bootspec)
 	};
 	int l;
 
-	if ((l = strlen(bootspec)) >= NBPG)
+	if ((l = strlen(bootspec)) >= PAGE_SIZE)
 		panic("OF_boot");
 	ofw_stack();
 	ofbcopy(bootspec, OF_buf, l + 1);
@@ -564,10 +621,10 @@ OF_boot(bootspec)
 }
 
 void
-OF_enter()
+OF_enter(void)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
 	} args = {
@@ -581,10 +638,10 @@ OF_enter()
 }
 
 void
-OF_exit()
+OF_exit(void)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
 	} args = {
@@ -599,15 +656,14 @@ OF_exit()
 }
 
 void
-(*OF_set_callback(newfunc))()
-	void (*newfunc)();
+(*OF_set_callback (void (*newfunc)(void *))) (void *)
 {
 	static struct {
-		char *name;
+		const char *name;
 		int nargs;
 		int nreturns;
-		void (*newfunc)();
-		void (*oldfunc)();
+		void (*newfunc)(void *);
+		void (*oldfunc)(void *);
 	} args = {
 		"set-callback",
 		1,
@@ -621,14 +677,57 @@ void
 	return args.oldfunc;
 }
 
+int
+OF_interpret(const char *cmd, int nargs, int nreturns, ...)
+{
+	va_list ap;
+	int i, len, status;
+	static struct {
+		const char *name;
+		uint32_t nargs;
+		uint32_t nreturns;
+		uint32_t slots[16];
+	} args = {
+		"interpret",
+		1,
+		2,
+	};
+
+	ofw_stack();
+	if (nreturns > 8)
+		return -1;
+	if ((len = strlen(cmd)) >= PAGE_SIZE)
+		return -1;
+	ofbcopy(cmd, OF_buf, len + 1);
+	i = 0;
+	args.slots[i] = (uint32_t)OF_buf;
+	args.nargs = nargs + 1;
+	args.nreturns = nreturns + 1;
+	va_start(ap, nreturns);
+	i++;
+	while (i < args.nargs) {
+		args.slots[i] = (uint32_t)va_arg(ap, uint32_t *);
+		i++;
+	}
+
+	if (openfirmware(&args) == -1)
+		return -1;
+	status = args.slots[i];
+	i++;
+
+	while (i < args.nargs + args.nreturns) {
+		*va_arg(ap, uint32_t *) = args.slots[i];
+		i++;
+	}
+	va_end(ap);
+	return status;
+}
+
 /*
  * This version of bcopy doesn't work for overlapping regions!
  */
 void
-ofbcopy(src, dst, len)
-	const void *src;
-	void *dst;
-	size_t len;
+ofbcopy(const void *src, void *dst, size_t len)
 {
 	const char *sp = src;
 	char *dp = dst;

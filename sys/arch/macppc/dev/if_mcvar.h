@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mcvar.h,v 1.3 1998/09/03 14:06:07 tsubai Exp $	*/
+/*	$NetBSD: if_mcvar.h,v 1.11 2007/03/05 10:50:01 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1997 David Huang <khym@bga.com>
@@ -25,17 +25,13 @@
  *
  */
 
-#if defined(_KERNEL)  && !defined(_LKM)
-#include "opt_ddb.h"
-#endif
-
 #include <macppc/dev/dbdma.h>
 
-#ifdef DDB
-#define	integrate
+#if 1
+#define integrate
 #define hide
 #else
-#define	integrate	static /*__inline*/
+#define integrate	static /*inline*/
 #define hide		static
 #endif
 
@@ -49,20 +45,20 @@
 				    (sc)->sc_regh, MACE_REG(reg), (val)))
 
 #ifndef	MC_RXDMABUFS
-#define	MC_RXDMABUFS	4
+#define	MC_RXDMABUFS	2
 #endif
 #if (MC_RXDMABUFS < 2)
 #error Must have at least two buffers for DMA!
 #endif
 
-#define	MC_NPAGES	((MC_RXDMABUFS * 0x800 + NBPG - 1) / NBPG)
+#define	MC_NPAGES	((MC_RXDMABUFS * 0x800 + PAGE_SIZE - 1) / PAGE_SIZE)
 
 struct mc_rxframe {
-	u_int8_t	rx_rcvcnt;
-	u_int8_t	rx_rcvsts;
-	u_int8_t	rx_rntpc;
-	u_int8_t	rx_rcvcc;
-	u_char		*rx_frame;
+	uint8_t		rx_rcvcnt;
+	uint8_t		rx_rcvsts;
+	uint8_t		rx_rntpc;
+	uint8_t		rx_rcvcc;
+	uint8_t		*rx_frame;
 };
 
 struct mc_softc {

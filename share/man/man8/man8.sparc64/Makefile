@@ -1,7 +1,9 @@
-#	$NetBSD: Makefile,v 1.2 1998/12/22 02:34:09 mrg Exp $
+#	$NetBSD: Makefile,v 1.7 2003/10/24 20:26:59 jdolecek Exp $
 
-MAN=	MAKEDEV.8 installboot.8
-MLINKS=	MAKEDEV.8 makedev.8
+MAN=	boot.8
+MLINKS=	boot.8 ofwboot.8
 MANSUBDIR=/sparc64
 
 .include <bsd.man.mk>
+
+.PATH: ${.CURDIR}/../man8.sparc

@@ -1,23 +1,42 @@
-#	$NetBSD: Makefile,v 1.26 1999/08/25 02:07:41 christos Exp $
+#	$NetBSD: Makefile,v 1.39 2008/08/29 00:02:25 gmcgarry Exp $
 
-PCAPDIR=${.CURDIR}/../../../lib/libpcap
+.include <bsd.own.mk>
 
 PROG=	pppd
-SRCS=	auth.c cbcp.c ccp.c chap.c chap_ms.c demand.c eui64.c fsm.c \
-	ipcp.c ipv6cp.c ipxcp.c lcp.c magic.c main.c options.c sys-bsd.c \
-	upap.c utils.c
+SRCS=	auth.c cbcp.c ccp.c chap-md5.c chap-new.c chap_ms.c demand.c eap.c \
+	ecp.c fsm.c ipcp.c ipxcp.c lcp.c magic.c main.c multilink.c \
+	options.c pppcrypt.c sys-bsd.c tdb.c tty.c upap.c utils.c
 
-.PATH:	${PCAPDIR}
+PPPDDIR=	${NETBSDSRCDIR}/dist/pppd/pppd
+
+.PATH:	${PPPDDIR}
 MAN=	pppd.8
 BINMODE=4555
 BINOWN=	root
 
-LDADD=	-lpcap -lcrypt -lutil
-DPADD=	${LIBPCAP} ${LIBCRYPT} ${LIBUTIL}
-CPPFLAGS+= -I. -DHAVE_PATHS_H 
-CPPFLAGS+= -I${PCAPDIR} -DPPP_FILTER
-CPPFLAGS+= -DCBCP_SUPPORT -DCHAPMS -DUSE_CRYPT -DMSLANMAN
-# XXX: Does not work (yet)
-#CPPFLAGS+= -DINET6
+CPPFLAGS+= -I${.CURDIR} -DHAVE_PATHS_H -DSUPPORT_UTMP -DSUPPORT_UTMPX -DPLUGIN
+CPPFLAGS+= -I${PPPDDIR} -DPPP_FILTER
+CPPFLAGS+= -DCBCP_SUPPORT -DUSE_CRYPT -DCHAPMS -DMSLANMAN -DMPPE
+CPPFLAGS+= -DHAVE_MULTILINK -DUSE_TDB
+
+.if (!defined(SMALLPROG) || defined(SMALLPROG_INET6)) && (${USE_INET6} != "no")
+CPPFLAGS+= -DINET6
+SRCS+=	eui64.c ipv6cp.c
+.endif
+
+.if (!defined(SMALLPROG)) && (${USE_PAM} != "no")
+CPPFLAGS+= -DUSE_PAM
+LDADD+=-lpam ${PAM_STATIC_LDADD}
+DPADD+=${LIBPAM} ${PAM_STATIC_DPADD}
+.endif
+
+LDADD+= -lpcap -lcrypt -lutil -Wl,--export-dynamic
+DPADD+= ${LIBPCAP} ${LIBCRYPT} ${LIBUTIL}
+
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
+.for f in chap-md5 chap_ms eap
+COPTS.${f}.c+=	-Wno-pointer-sign
+.endfor
+.endif
 
 .include <bsd.prog.mk>

@@ -1,9 +1,12 @@
-$NetBSD: TODO,v 1.1 2000/03/30 22:14:17 soren Exp $
+$NetBSD: TODO,v 1.7 2008/05/13 15:06:40 tsutsui Exp $
 
 Things yet to do:
 
-- A boot loader
-- Configuration of PCI cards?
-- Front panel driver
-- Installation guide
-- Properly fix Tulip PHY problem
+- Update installation note (mention Restore CD?)
+- Integrate restorecd into the tree?
+- Add kloader(8) support, so that we could load a RAMDISK root install kernel
+  from any device which is supported by kernel
+  (should be trivial, but needs rethink how to pass bootinfo)
+- Configure PCI interrupts properly for boards which have PCI bridges
+- Handle more GT64x11 interrupts (PCI timeout etc.)
+- Add console support with com(4) at puc(4) so that QUBE2700 could have console

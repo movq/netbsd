@@ -1,9 +1,14 @@
-/*	$NetBSD: _def_messages.c,v 1.4 1997/10/18 05:08:32 mikel Exp $	*/
+/*	$NetBSD: _def_messages.c,v 1.6 2005/06/12 05:21:27 lukem Exp $	*/
 
 /*
- * Written by J.T. Conklin <jtc@netbsd.org>.
+ * Written by J.T. Conklin <jtc@NetBSD.org>.
  * Public domain.
  */
+
+#include <sys/cdefs.h>
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: _def_messages.c,v 1.6 2005/06/12 05:21:27 lukem Exp $");
+#endif /* LIBC_SCCS and not lint */
 
 #include <sys/localedef.h>
 #include <locale.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: users.c,v 1.9 1998/12/19 23:35:24 christos Exp $	*/
+/*	$NetBSD: users.c,v 1.15 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1987, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,92 +31,84 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1987, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)users.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: users.c,v 1.9 1998/12/19 23:35:24 christos Exp $");
+__RCSID("$NetBSD: users.c,v 1.15 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
 
 #include <err.h>
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <unistd.h>
-#include <utmp.h>
 
-typedef char	namebuf[UT_NAMESIZE];
+#include "utmpentry.h"
 
 int	main __P((int, char **));
-int scmp __P((const void *, const void *));
 
 int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	namebuf *names = NULL;
 	int ncnt = 0;
-	int nmax = 0;
-	int cnt;
-	struct utmp utmp;
 	int ch;
+	struct utmpentry *from, *ehead, *save, **nextp;
 
 	while ((ch = getopt(argc, argv, "")) != -1)
 		switch(ch) {
 		case '?':
 		default:
-			(void)fprintf(stderr, "usage: users\n");
+			(void)fprintf(stderr, "usage: %s\n", getprogname());
 			exit(1);
 		}
 	argc -= optind;
 	argv += optind;
 
-	if (!freopen(_PATH_UTMP, "r", stdin)) {
-		err(1, "can't open %s", _PATH_UTMP);
-		/* NOTREACHED */
+	ncnt = getutentries(NULL, &ehead);
+
+	if (ncnt == 0)
+		return 0;
+
+	/*
+	 * XXX the utmp list belongs to getutentries and we shouldn't
+	 * sort it in place. Since we don't call endutentries and we
+	 * don't call getutentries again it doesn't matter, but it's
+	 * untidy. Maybe give getutentries a sort function? It has to
+	 * sort anyway if it's merging utmp and utmpx data.
+	 */
+
+	from = ehead;
+	ehead = NULL;
+	while (from != NULL) {
+		for (nextp = &ehead;
+		    (*nextp) && strcmp(from->name, (*nextp)->name) > 0;
+		    nextp = &(*nextp)->next)
+			continue;
+		save = from;
+		from = from->next;
+		save->next = *nextp;
+		*nextp = save;
 	}
 
-	while (fread((char *)&utmp, sizeof(utmp), 1, stdin) == 1) {
-		if (*utmp.ut_name) {
-			if (ncnt >= nmax) {
-				nmax += 32;
-				names = realloc(names, 
-					sizeof (*names) * nmax);
+	save = ehead;
+	(void)printf("%s", ehead->name);
 
-				if (!names) {
-					err(1, "realloc");
-					/* NOTREACHED */
-				}
-			}
-
-			(void)strncpy(names[ncnt], utmp.ut_name, UT_NAMESIZE);
-			++ncnt;
+	for (from = ehead->next; from; from = from->next)
+		if (strcmp(save->name, from->name) != 0) {
+			(void)printf(" %s", from->name);
+			save = from;
 		}
-	}
 
-	if (ncnt) {
-		qsort(names, ncnt, UT_NAMESIZE, scmp);
-		(void)printf("%.*s", (int)UT_NAMESIZE, names[0]);
-		for (cnt = 1; cnt < ncnt; ++cnt)
-			if (strncmp(names[cnt], names[cnt - 1], UT_NAMESIZE))
-				(void)printf(" %.*s", (int)UT_NAMESIZE,
-				names[cnt]);
-		(void)printf("\n");
-	}
+	(void)printf("\n");
 	exit(0);
-}
-
-int
-scmp(p, q)
-	const void *p, *q;
-{
-	return(strncmp((char *) p, (char *) q, UT_NAMESIZE));
 }

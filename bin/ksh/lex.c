@@ -1,8 +1,14 @@
-/*	$NetBSD: lex.c,v 1.7 1999/10/20 15:49:15 hubertf Exp $	*/
+/*	$NetBSD: lex.c,v 1.13 2008/10/27 19:52:28 apb Exp $	*/
 
 /*
  * lexical analysis and source input
  */
+#include <sys/cdefs.h>
+
+#ifndef lint
+__RCSID("$NetBSD: lex.c,v 1.13 2008/10/27 19:52:28 apb Exp $");
+#endif
+
 
 #include "sh.h"
 #include <ctype.h>
@@ -215,10 +221,10 @@ yylex(cf)
 			  case '\\':
 				c = getsc();
 #ifdef OS2
-				if (isalnum(c)) {
+				if (isalnum((unsigned char)c)) {
 					*wp++ = CHAR, *wp++ = '\\';
 					*wp++ = CHAR, *wp++ = c;
-				} else 
+				} else
 #endif
 				if (c) /* trailing \ is lost */
 					*wp++ = QCHAR, *wp++ = c;
@@ -242,10 +248,16 @@ yylex(cf)
 			  case '\\':
 				c = getsc();
 				switch (c) {
-				  case '"': case '\\':
+				  case '\\':
 				  case '$': case '`':
 					*wp++ = QCHAR, *wp++ = c;
 					break;
+				  case '"':
+					if ((cf & HEREDOC) == 0) {
+						*wp++ = QCHAR, *wp++ = c;
+						break;
+					}
+					/* FALLTROUGH */
 				  default:
 					Xcheck(ws, wp);
 					if (c) { /* trailing \ is lost */
@@ -322,41 +334,27 @@ yylex(cf)
 				*wp++ = COMSUB;
 				/* Need to know if we are inside double quotes
 				 * since sh/at&t-ksh translate the \" to " in
-				 * "`..\"..`".
-				 * This is not done in posix mode (section
-				 * 3.2.3, Double Quotes: "The backquote shall
-				 * retain its special meaning introducing the
-				 * other form of command substitution (see
-				 * 3.6.3). The portion of the quoted string
-				 * from the initial backquote and the
-				 * characters up to the next backquote that
-				 * is not preceded by a backslash (having
-				 * escape characters removed) defines that
-				 * command whose output replaces `...` when
-				 * the word is expanded."
-				 * Section 3.6.3, Command Substitution:
-				 * "Within the backquoted style of command
-				 * substitution, backslash shall retain its
-				 * literal meaning, except when followed by
-				 * $ ` \.").
+				 * "`..\"..`".  POSIX also requires this.
+				 * An earlier version of ksh misinterpreted
+				 * the POSIX specification and performed
+				 * removal of backslash escapes only if
+				 * posix mode was not in effect.
 				 */
 				statep->ls_sbquote.indquotes = 0;
-				if (!Flag(FPOSIX)) {
-					Lex_state *s = statep;
-					Lex_state *base = state_info.base;
-					while (1) {
-						for (; s != base; s--) {
-							if (s->ls_state == SDQUOTE) {
-								statep->ls_sbquote.indquotes = 1;
-								break;
-							}
+				Lex_state *s = statep;
+				Lex_state *base = state_info.base;
+				while (1) {
+					for (; s != base; s--) {
+						if (s->ls_state == SDQUOTE) {
+							statep->ls_sbquote.indquotes = 1;
+							break;
 						}
-						if (s != base)
-							break;
-						if (!(s = s->ls_info.base))
-							break;
-						base = s-- - STATE_BSIZE;
 					}
+					if (s != base)
+						break;
+					if (!(s = s->ls_info.base))
+						break;
+					base = s-- - STATE_BSIZE;
 				}
 				break;
 			  default:
@@ -729,7 +727,7 @@ Done:
 	/* copy word to unprefixed string ident */
 	for (sp = yylval.cp, dp = ident; dp < ident+IDENT && (c = *sp++) == CHAR; )
 		*dp++ = *sp++;
-	/* Make sure the ident array stays '\0' paded */
+	/* Make sure the ident array stays '\0' padded */
 	memset(dp, 0, (ident+IDENT) - dp + 1);
 	if (c != EOS)
 		*ident = '\0';	/* word is not unquoted */
@@ -1123,11 +1121,8 @@ set_prompt(to, s)
 		 */
 		{
 			struct shf *shf;
-			char *ps1;
+			char * volatile ps1;
 			Area *saved_atemp;
-#ifdef __GNUC__
-			(void) &ps1;
-#endif
 
 			ps1 = str_val(global("PS1"));
 			shf = shf_sopen((char *) 0, strlen(ps1) * 2,
@@ -1396,5 +1391,5 @@ pop_state_(si, old_end)
 
 	afree(old_base, ATEMP);
 
-	return si->base + STATE_BSIZE - 1;;
+	return si->base + STATE_BSIZE - 1;
 }

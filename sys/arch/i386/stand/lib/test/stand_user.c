@@ -1,4 +1,4 @@
-/*	$NetBSD: stand_user.c,v 1.2 1998/11/22 15:44:03 drochner Exp $	*/
+/*	$NetBSD: stand_user.c,v 1.5 2007/03/04 06:00:02 christos Exp $	*/
 
 /*
  * Copyright (c) 1998
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -106,11 +100,11 @@ saputchar(c)
 
 static int memfd, memcnt;
 
-caddr_t
+void *
 mapmem(offset, len)
 	int offset, len;
 {
-	caddr_t base;
+	void *base;
 
 	if (memcnt == 0)
 		memfd = open("/dev/mem", O_RDWR, 0);
@@ -120,7 +114,7 @@ mapmem(offset, len)
 	}
 	base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED,
 		    memfd, offset);
-	if (base == (caddr_t)-1) {
+	if (base == (void *)-1) {
 		warn("mmap %x-%x", offset, offset + len - 1);
 		return (0);
 	}
@@ -130,7 +124,7 @@ mapmem(offset, len)
 
 void
 unmapmem(addr, len)
-	caddr_t addr;
+	void *addr;
 	int len;
 {
 	munmap(addr, len);

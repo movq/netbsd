@@ -1,4 +1,4 @@
-/*	$NetBSD: ofbus.c,v 1.10 1998/02/24 05:44:39 mycroft Exp $	*/
+/*	$NetBSD: ofbus.c,v 1.20 2005/12/11 12:22:48 christos Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -31,19 +31,21 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ofbus.c,v 1.20 2005/12/11 12:22:48 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #include <dev/ofw/openfirm.h>
 
-int ofbus_match __P((struct device *, struct cfdata *, void *));
-void ofbus_attach __P((struct device *, struct device *, void *));
-static int ofbus_print __P((void *, const char *));
+int ofbus_match(struct device *, struct cfdata *, void *);
+void ofbus_attach(struct device *, struct device *, void *);
+static int ofbus_print(void *, const char *);
 
-struct cfattach ofbus_ca = {
-	sizeof(struct device), ofbus_match, ofbus_attach
-};
+CFATTACH_DECL(ofbus, sizeof(struct device),
+    ofbus_match, ofbus_attach, NULL, NULL);
 
 static int
 ofbus_print(aux, pnp)
@@ -51,13 +53,11 @@ ofbus_print(aux, pnp)
 	const char *pnp;
 {
 	struct ofbus_attach_args *oba = aux;
-	char name[64];
 
-	(void)of_packagename(oba->oba_phandle, name, sizeof name);
 	if (pnp)
-		printf("%s at %s", name, pnp);
+		aprint_normal("%s at %s", oba->oba_ofname, pnp);
 	else
-		printf(" (%s)", name);
+		aprint_normal(" (%s)", oba->oba_ofname);
 	return UNCONF;
 }
 
@@ -81,11 +81,10 @@ ofbus_attach(parent, dev, aux)
 	struct device *parent, *dev;
 	void *aux;
 {
-	int child;
-	char name[5];
 	struct ofbus_attach_args *oba = aux;
 	struct ofbus_attach_args oba2;
-	int units;
+	char name[64];
+	int child, units;
 
 	printf("\n");
 
@@ -95,6 +94,7 @@ ofbus_attach(parent, dev, aux)
 	 * DEVICES ON THESE BUSSES.
 	 */
 	units = 1;
+	name[0] = 0;
 	if (OF_getprop(oba->oba_phandle, "name", name, sizeof name) > 0) {
 		if (!strcmp(name, "scsi"))
 			units = 7; /* What about wide or hostid != 7?	XXX */
@@ -102,18 +102,22 @@ ofbus_attach(parent, dev, aux)
 			units = 2;
 	}
 
-	for (child = OF_child(oba->oba_phandle); child;
-	    child = OF_peer(child)) {
-		/*
-		 * This is a hack to skip all the entries in the tree
-		 * that aren't devices (packages, openfirmware etc.).
-		 */
-		if (OF_getprop(child, "device_type", name, sizeof name) < 0 &&
-		    OF_getprop(child, "compatible", name, sizeof name) < 0)
-			continue;
+	for (child = OF_child(oba->oba_phandle); child != 0;
+	     child = OF_peer(child)) {
 		oba2.oba_busname = "ofw";
+		of_packagename(child, name, sizeof name);
 		oba2.oba_phandle = child;
-		for (oba2.oba_unit = 0; oba2.oba_unit < units; oba2.oba_unit++)
+		for (oba2.oba_unit = 0; oba2.oba_unit < units;
+		     oba2.oba_unit++) {
+			if (units > 1) {
+				snprintf(oba2.oba_ofname,
+				    sizeof(oba2.oba_ofname), "%s@%d", name,
+				    oba2.oba_unit);
+			} else {
+				strlcpy(oba2.oba_ofname, name,
+				    sizeof(oba2.oba_ofname));
+			}
 			config_found(dev, &oba2, ofbus_print);
+		}
 	}
 }

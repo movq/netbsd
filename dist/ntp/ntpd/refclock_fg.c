@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_fg.c,v 1.1.1.1 2000/03/29 12:38:53 simonb Exp $	*/
+/*	$NetBSD: refclock_fg.c,v 1.4 2006/06/11 19:34:12 kardel Exp $	*/
 
 /*
  * refclock_fg - clock driver for the Forum Graphic GPS datating station
@@ -9,8 +9,6 @@
 #endif
 
 #if defined(REFCLOCK) && defined(CLOCK_FG)
-
-#include <time.h>
 
 #include "ntpd.h"
 #include "ntp_io.h"
@@ -303,14 +301,14 @@ fg_receive(
 	{
         	pp->minute = BP1(7)*10 + BP2(7);
         	pp->second = BP1(8)*10 + BP2(8);
-        	pp->msec = BP1(9)*10 + BP2(9);
-        	pp->usec = BP1(10);
+        	pp->nsec = (BP1(9)*10 + BP2(9)) * 1000000;
+        	pp->nsec += BP1(10) * 1000;
 	} else {
         	pp->hour = BP1(5)*10 + BP2(5);
         	pp->minute = BP1(6)*10 + BP2(6);
         	pp->second = BP1(7)*10 + BP2(7);
-        	pp->msec = BP1(8)*10 + BP2(8);
-        	pp->usec = BP1(9);
+        	pp->nsec = (BP1(8)*10 + BP2(8)) * 1000000;
+        	pp->nsec += BP1(9) * 1000;
 	}
         
 	if((pp->hour == 10) && (pp->minute == 10))
@@ -327,11 +325,8 @@ fg_receive(
                 printf ("fg: time is %04d/%03d %02d:%02d:%02d UTC\n",
                          pp->year, pp->day, pp->hour, pp->minute, pp->second);
 #endif
-
-        if (peer->stratum <= 1)
-                peer->refid = pp->refid;
         pp->disp =  (10e-6);
-	pp->lastrec = rbufp->recv_time; /* Is it better then get_systime()? */
+	pp->lastrec = rbufp->recv_time; /* Is it better than get_systime()? */
 	/* pp->leap = LEAP_NOWARNING; */
 
         /*
@@ -341,7 +336,7 @@ fg_receive(
 
         if (!refclock_process(pp))
                 refclock_report(peer, CEVNT_BADTIME);
-        
+        pp->lastref = pp->lastrec;
 	refclock_receive(peer);
 	return;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.12 1998/08/13 02:10:38 eeh Exp $	*/
+/*	$NetBSD: types.h,v 1.27 2007/10/17 19:55:05 garbled Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,6 +34,8 @@
 #define	_M68K_TYPES_H_
 
 #include <sys/cdefs.h>
+#include <sys/featuretest.h>
+#include <m68k/int_types.h>
 
 #if defined(_KERNEL)
 typedef struct label_t {		/* consistent with HP-UX */
@@ -46,7 +44,7 @@ typedef struct label_t {		/* consistent with HP-UX */
 #endif
 
 /* NB: This should probably be if defined(_KERNEL) */
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 typedef	unsigned long	vm_offset_t;
 typedef	unsigned long	vm_size_t;
 
@@ -56,22 +54,20 @@ typedef vm_offset_t	vaddr_t;
 typedef vm_size_t	vsize_t;
 #endif
 
-/*
- * Basic integral types.  Omit the typedef if
- * not possible for a machine/compiler combination.
- */
-#define	__BIT_TYPES_DEFINED__
-typedef	signed char		   int8_t;
-typedef	unsigned char		 u_int8_t;
-typedef	short			  int16_t;
-typedef	unsigned short		u_int16_t;
-typedef	int			  int32_t;
-typedef	unsigned int		u_int32_t;
-/* LONGLONG */
-typedef	long long		  int64_t;
-/* LONGLONG */
-typedef	unsigned long long	u_int64_t;
+typedef int		register_t;
 
-typedef int32_t			register_t;
+typedef	volatile unsigned char __cpu_simple_lock_t;
+
+#define	__SIMPLELOCK_LOCKED	0x80	/* result of `tas' insn */
+#define	__SIMPLELOCK_UNLOCKED	0
+
+/* The m68k does not have strict alignment requirements. */
+#define	__NO_STRICT_ALIGNMENT
+
+#define	__HAVE_SYSCALL_INTERN
+
+#if defined(_KERNEL)
+#define	__HAVE_RAS
+#endif
 
 #endif	/* !_M68K_TYPES_H_ */

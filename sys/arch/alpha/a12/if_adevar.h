@@ -1,4 +1,4 @@
-/*	$NetBSD: if_adevar.h,v 1.1 1998/09/24 05:36:05 ross Exp $	*/
+/*	$NetBSD: if_adevar.h,v 1.6 2008/06/13 05:36:50 cegger Exp $	*/
 
 /*
  * NOTE: this version of if_de was modified for bounce buffers prior
@@ -52,7 +52,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -515,7 +515,7 @@ struct _tulip_softc_t {
     struct intrhand tulip_ih;		/* intrrupt vectoring */
     struct atshutdown tulip_ats;	/* shutdown hook */
 #if _BSDI_VERSION < 199401
-    caddr_t tulip_bpf;			/* for BPF */
+    void *tulip_bpf;			/* for BPF */
 #else
     prf_t tulip_pf;			/* printf function */
 #if _BSDI_VERSION >= 199701
@@ -899,9 +899,8 @@ arp_ifinit(
 #if defined(__NetBSD__)
 typedef void ifnet_ret_t;
 typedef u_long ioctl_cmd_t;
-extern struct cfattach ade_ca;
 extern struct cfdriver ade_cd;
-#define	TULIP_UNIT_TO_SOFTC(unit)	((tulip_softc_t *) ade_cd.cd_devs[unit])
+#define	TULIP_UNIT_TO_SOFTC(unit)	(device_lookup_private(&ade_cd,unit))
 #define TULIP_IFP_TO_SOFTC(ifp)         ((tulip_softc_t *)((ifp)->if_softc))
 #define	tulip_unit			tulip_dev.dv_unit
 #define	tulip_xname			tulip_if.if_xname

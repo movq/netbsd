@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ether.h,v 1.30 1999/11/20 00:37:58 thorpej Exp $	*/
+/*	$NetBSD: if_ether.h,v 1.34 2007/12/25 18:33:46 perry Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -69,7 +65,7 @@
  * Ethernet Address Resolution Protocol.
  *
  * See RFC 826 for protocol description.  Structure below is not
- * used by our kernel!!! Only for userland programs which are externelly
+ * used by our kernel!!! Only for userland programs which are externally
  * maintained and need it.
  */
 
@@ -79,7 +75,7 @@ struct	ether_arp {
 	u_int8_t arp_spa[4];			/* sender protocol address */
 	u_int8_t arp_tha[ETHER_ADDR_LEN];	/* target hardware address */
 	u_int8_t arp_tpa[4];			/* target protocol address */
-} __attribute__((__packed__));
+} __packed;
 #define	arp_hrd	ea_hdr.ar_hrd
 #define	arp_pro	ea_hdr.ar_pro
 #define	arp_hln	ea_hdr.ar_hln
@@ -88,4 +84,4 @@ struct	ether_arp {
 
 #endif /* _netinet_if_ether_compat_h_ */
 
-#endif /* _NETINET_IF_ETHER_H_ */
+#endif /* !_NETINET_IF_ETHER_H_ */

@@ -1,10 +1,10 @@
-/*	$NetBSD: tcdevs_data.h,v 1.16 2000/01/05 12:15:01 drochner Exp $	*/
+/*	$NetBSD: tcdevs_data.h,v 1.23 2007/04/12 21:39:24 matt Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: tcdevs,v 1.15 2000/01/05 12:14:33 drochner Exp 
+ *	NetBSD: tcdevs,v 1.20 2005/12/11 12:24:00 christos Exp
  */
 
 /*
@@ -38,7 +38,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-struct tc_knowndev tc_knowndevs[] = {
+const struct tc_knowndev tc_knowndevs[] = {
 	{
 	    "AV01B-AA",
 	    TC_DEVICE_AV01B_AA,
@@ -60,6 +60,11 @@ struct tc_knowndev tc_knowndevs[] = {
 	    TC_DESCRIPTION_FORE_ATM,
 	},
 	{
+	    "KWS_TD  ",
+	    TC_DEVICE_KWS_TD,
+	    TC_DESCRIPTION_KWS_TD,
+	},
+	{
 	    "KZTSA-AA",
 	    TC_DEVICE_KZTSA_AA,
 	    TC_DESCRIPTION_KZTSA_AA,
@@ -70,9 +75,19 @@ struct tc_knowndev tc_knowndevs[] = {
 	    TC_DESCRIPTION_OTTO,
 	},
 	{
+	    "PMABV-AA",
+	    TC_DEVICE_PMABV_AA,
+	    TC_DESCRIPTION_PMABV_AA,
+	},
+	{
 	    "PMAD-AA ",
 	    TC_DEVICE_PMAD_AA,
 	    TC_DESCRIPTION_PMAD_AA,
+	},
+	{
+	    "PMAD-AB ",
+	    TC_DEVICE_PMAD_AB,
+	    TC_DESCRIPTION_PMAD_AB,
 	},
 	{
 	    "PMAF-AA ",
@@ -105,9 +120,9 @@ struct tc_knowndev tc_knowndevs[] = {
 	    TC_DESCRIPTION_PMAG_DA,
 	},
 	{
-	    "PMAG-FA ",
-	    TC_DEVICE_PMAG_FA,
-	    TC_DESCRIPTION_PMAG_FA,
+	    "PMAG-DB ",
+	    TC_DEVICE_PMAG_DB,
+	    TC_DESCRIPTION_PMAG_DB,
 	},
 	{
 	    "PMAG-DV ",
@@ -115,9 +130,74 @@ struct tc_knowndev tc_knowndevs[] = {
 	    TC_DESCRIPTION_PMAG_DV,
 	},
 	{
+	    "PMAG-EB ",
+	    TC_DEVICE_PMAG_EB,
+	    TC_DESCRIPTION_PMAG_EB,
+	},
+	{
+	    "PMAG-FA ",
+	    TC_DEVICE_PMAG_FA,
+	    TC_DESCRIPTION_PMAG_FA,
+	},
+	{
+	    "PMAG-FB ",
+	    TC_DEVICE_PMAG_FB,
+	    TC_DESCRIPTION_PMAG_FB,
+	},
+	{
+	    "PMAG-JA ",
+	    TC_DEVICE_PMAG_JA,
+	    TC_DESCRIPTION_PMAG_JA,
+	},
+	{
+	    "PMAG-JB ",
+	    TC_DEVICE_PMAG_JB,
+	    TC_DESCRIPTION_PMAG_JB,
+	},
+	{
 	    "PMAGB-BA",
 	    TC_DEVICE_PMAGB_BA,
 	    TC_DESCRIPTION_PMAGB_BA,
+	},
+	{
+	    "PMAGB-FA",
+	    TC_DEVICE_PMAGB_FA,
+	    TC_DESCRIPTION_PMAGB_FA,
+	},
+	{
+	    "PMAGB-FB",
+	    TC_DEVICE_PMAGB_FB,
+	    TC_DESCRIPTION_PMAGB_FB,
+	},
+	{
+	    "PMAGB-JA",
+	    TC_DEVICE_PMAGB_JA,
+	    TC_DESCRIPTION_PMAGB_JA,
+	},
+	{
+	    "PMAGB-JB",
+	    TC_DEVICE_PMAGB_JB,
+	    TC_DESCRIPTION_PMAGB_JB,
+	},
+	{
+	    "PMAGC-AA",
+	    TC_DEVICE_PMAGC_AA,
+	    TC_DESCRIPTION_PMAGC_AA,
+	},
+	{
+	    "PMAGC-BA",
+	    TC_DEVICE_PMAGC_BA,
+	    TC_DESCRIPTION_PMAGC_BA,
+	},
+	{
+	    "PMAGC-DA",
+	    TC_DEVICE_PMAGC_DA,
+	    TC_DESCRIPTION_PMAGC_DA,
+	},
+	{
+	    "PMAGC-EA",
+	    TC_DEVICE_PMAGC_EA,
+	    TC_DESCRIPTION_PMAGC_EA,
 	},
 	{
 	    "PMAGD   ",
@@ -135,9 +215,29 @@ struct tc_knowndev tc_knowndevs[] = {
 	    TC_DESCRIPTION_PMAGD_BA,
 	},
 	{
+	    "PMAGD-CA",
+	    TC_DEVICE_PMAGD_CA,
+	    TC_DESCRIPTION_PMAGD_CA,
+	},
+	{
+	    "PMAP-AA ",
+	    TC_DEVICE_PMAP_AA,
+	    TC_DESCRIPTION_PMAP_AA,
+	},
+	{
+	    "PMAT-AA ",
+	    TC_DEVICE_PMAT_AA,
+	    TC_DESCRIPTION_PMAT_AA,
+	},
+	{
 	    "PMAZ-AA ",
 	    TC_DEVICE_PMAZ_AA,
 	    TC_DESCRIPTION_PMAZ_AA,
+	},
+	{
+	    "PMAZ-AB ",
+	    TC_DEVICE_PMAZ_AB,
+	    TC_DESCRIPTION_PMAZ_AB,
 	},
 	{
 	    "PMAZ-DS ",
@@ -178,26 +278,6 @@ struct tc_knowndev tc_knowndevs[] = {
 	    "T3PKT   ",
 	    TC_DEVICE_T3PKT,
 	    TC_DESCRIPTION_T3PKT,
-	},
-	{
-	    "PMAT-AA ",
-	    TC_DEVICE_PMAT_AA,
-	    TC_DESCRIPTION_PMAT_AA,
-	},
-	{
-	    "PMABV-AA",
-	    TC_DEVICE_PMABV_AA,
-	    TC_DESCRIPTION_PMABV_AA,
-	},
-	{
-	    "PMAP-AA ",
-	    TC_DEVICE_PMAP_AA,
-	    TC_DESCRIPTION_PMAP_AA,
-	},
-	{
-	    "KWS_TD  ",
-	    TC_DEVICE_KWS_TD,
-	    TC_DESCRIPTION_KWS_TD,
 	},
 	{ NULL, NULL, NULL, }
 };

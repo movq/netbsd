@@ -1,12 +1,12 @@
-#       $NetBSD: Makefile,v 1.1.1.1 1999/11/19 00:43:20 lonhyn Exp $
+#       $NetBSD: Makefile,v 1.3 2008/01/23 23:22:02 garbled Exp $
 
 PROG=   ppmtochrpicon
-MKMAN=no
+NOMAN=# defined
 
 PBMROOT=/usr/pkg
 
 CPPFLAGS+= -I${.CURDIR}/.. -I${PBMROOT}/include
-LDADD+=-L${PBMROOT}/lib -lpnm -lppm -lpgm -lpbm
+LDADD+=-Wl,-R${PBMROOT}/lib -L${PBMROOT}/lib -lnetpbm
 
 .include <bsd.prog.mk>
 

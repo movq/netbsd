@@ -1,7 +1,6 @@
-/*	$NetBSD: main.c,v 1.8 2000/01/28 16:01:46 bouyer Exp $	*/
+/*	$NetBSD: main.c,v 1.32 2008/10/12 20:49:43 wiz Exp $	*/
 
 /*
- * Copyright (c) 1997 Manuel Bouyer.
  * Copyright (c) 1980, 1986, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -13,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,17 +29,46 @@
  * SUCH DAMAGE.
  */
 
+/*
+ * Copyright (c) 1997 Manuel Bouyer.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1986, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1986, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.2 (Berkeley) 1/23/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.8 2000/01/28 16:01:46 bouyer Exp $");
+__RCSID("$NetBSD: main.c,v 1.32 2008/10/12 20:49:43 wiz Exp $");
 #endif
 #endif /* not lint */
 
@@ -61,31 +85,29 @@ __RCSID("$NetBSD: main.c,v 1.8 2000/01/28 16:01:46 bouyer Exp $");
 #include <stdio.h>
 #include <time.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include "fsck.h"
 #include "extern.h"
 #include "fsutil.h"
+#include "exitvalues.h"
 
-int	returntosingle;
+int	returntosingle = 0;
 
-int	main __P((int, char *[]));
 
-static int	argtoi __P((int, char *, char *, int));
-static int	checkfilesys __P((const char *, char *, long, int));
-static  void usage __P((void));
-
+static int	argtoi(int, const char *, const char *, int);
+static int	checkfilesys(const char *, char *, long, int);
+static void	usage(void) __dead;
 
 int
-main(argc, argv)
-	int	argc;
-	char	*argv[];
+main(int argc, char *argv[])
 {
 	int ch;
-	int ret = 0;
+	int ret = FSCK_EXIT_OK;
 
 	sync();
 	skipclean = 1;
-	while ((ch = getopt(argc, argv, "b:c:dfm:npy")) != -1) {
+	while ((ch = getopt(argc, argv, "b:dfm:npqUy")) != -1) {
 		switch (ch) {
 		case 'b':
 			skipclean = 0;
@@ -104,7 +126,7 @@ main(argc, argv)
 		case 'm':
 			lfmode = argtoi('m', "mode", optarg, 8);
 			if (lfmode &~ 07777)
-				errexit("bad mode to -m: %o\n", lfmode);
+				errexit("bad mode to -m: %o", lfmode);
 			printf("** lost+found creation mode %o\n", lfmode);
 			break;
 
@@ -116,6 +138,19 @@ main(argc, argv)
 		case 'p':
 			preen++;
 			break;
+
+		case 'P':
+			/* Progress meter not implemented. */
+			break;
+
+		case 'q':		/* Quiet not implemented */
+			break;
+
+#ifndef SMALL
+		case 'U':
+			Uflag++;
+			break;
+#endif
 
 		case 'y':
 			yflag++;
@@ -138,27 +173,24 @@ main(argc, argv)
 	if (preen)
 		(void)signal(SIGQUIT, catchquit);
 
-	while (argc-- > 0)
-		(void)checkfilesys(blockcheck(*argv++), 0, 0L, 0);
+	while (argc-- > 0) {
+		int nret = checkfilesys(blockcheck(*argv++), 0, 0L, 0);
+		if (ret < nret)
+			ret = nret;
+	}
 
-	if (returntosingle)
-		ret = 2;
-
-	exit(ret);
+	return returntosingle ? FSCK_EXIT_UNRESOLVED : ret;
 }
 
 static int
-argtoi(flag, req, str, base)
-	int flag;
-	char *req, *str;
-	int base;
+argtoi(int flag, const char *req, const char *str, int base)
 {
 	char *cp;
 	int ret;
 
 	ret = (int)strtol(str, &cp, base);
 	if (cp == str || *cp)
-		errexit("-%c flag requires a %s\n", flag, req);
+		errexit("-%c flag requires a %s", flag, req);
 	return (ret);
 }
 
@@ -167,11 +199,7 @@ argtoi(flag, req, str, base)
  */
 /* ARGSUSED */
 static int
-checkfilesys(filesys, mntpt, auxdata, child)
-	const char *filesys;
-	char *mntpt;
-	long auxdata;
-	int child;
+checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
 {
 	daddr_t n_bfree;
 	struct dups *dp;
@@ -188,7 +216,7 @@ checkfilesys(filesys, mntpt, auxdata, child)
 		if (preen)
 			pfatal("CAN'T CHECK FILE SYSTEM.");
 	case -1:
-		return (0);
+		return FSCK_EXIT_OK;
 	}
 	/*
 	 * 1: scan inodes tallying blocks used
@@ -247,28 +275,29 @@ checkfilesys(filesys, mntpt, auxdata, child)
 	 */
 	n_bfree = sblock.e2fs.e2fs_fbcount;
 		
-	pwarn("%d files, %d used, %d free\n",
-	    n_files, n_blks, n_bfree);
+	pwarn("%lld files, %lld used, %lld free\n",
+	    (long long)n_files, (long long)n_blks, (long long)n_bfree);
 	if (debug &&
 		/* 9 reserved and unused inodes in FS */
 	    (n_files -= maxino - 9 - sblock.e2fs.e2fs_ficount))
-		printf("%d files missing\n", n_files);
+		printf("%lld files missing\n", (long long)n_files);
 	if (debug) {
 		for (i = 0; i < sblock.e2fs_ncg; i++)
 			n_blks +=  cgoverhead(i);
 		n_blks += sblock.e2fs.e2fs_first_dblock;
 		if (n_blks -= maxfsblock - n_bfree)
-			printf("%d blocks missing\n", n_blks);
+			printf("%lld blocks missing\n", (long long)n_blks);
 		if (duplist != NULL) {
 			printf("The following duplicate blocks remain:");
 			for (dp = duplist; dp; dp = dp->next)
-				printf(" %d,", dp->dup);
+				printf(" %lld,", (long long)dp->dup);
 			printf("\n");
 		}
 		if (zlnhead != NULL) {
 			printf("The following zero link count inodes remain:");
 			for (zlnp = zlnhead; zlnp; zlnp = zlnp->next)
-				printf(" %u,", zlnp->zlncnt);
+				printf(" %llu,",
+				    (unsigned long long)zlnp->zlncnt);
 			printf("\n");
 		}
 	}
@@ -288,48 +317,44 @@ checkfilesys(filesys, mntpt, auxdata, child)
 	free(statemap);
 	free((char *)lncntp);
 	if (!fsmodified)
-		return (0);
+		return FSCK_EXIT_OK;
 	if (!preen)
 		printf("\n***** FILE SYSTEM WAS MODIFIED *****\n");
 	if (rerun)
 		printf("\n***** PLEASE RERUN FSCK *****\n");
 	if (hotroot()) {
-		struct statfs stfs_buf;
+		struct statvfs stfs_buf;
 		/*
 		 * We modified the root.  Do a mount update on
 		 * it, unless it is read-write, so we can continue.
 		 */
-		if (statfs("/", &stfs_buf) == 0) {
-			long flags = stfs_buf.f_flags;
+		if (statvfs("/", &stfs_buf) == 0) {
+			long flags = stfs_buf.f_flag;
 			struct ufs_args args;
-			int ret;
 
 			if (flags & MNT_RDONLY) {
 				args.fspec = 0;
-				args.export.ex_flags = 0;
-				args.export.ex_root = 0;
 				flags |= MNT_UPDATE | MNT_RELOAD;
-				ret = mount(MOUNT_EXT2FS, "/", flags, &args);
-				if (ret == 0)
-					return(0);
+				if (mount(MOUNT_EXT2FS, "/", flags,
+				    &args, sizeof args) == 0)
+					return FSCK_EXIT_OK;
 			}
 		}
 		if (!preen)
 			printf("\n***** REBOOT NOW *****\n");
 		sync();
-		return (4);
+		return FSCK_EXIT_ROOT_CHANGED;
 	}
-	return (0);
+	return FSCK_EXIT_OK;
 }
 
 static void
-usage()
+usage(void)
 {
-	extern char *__progname;
 
 	(void) fprintf(stderr,
-	    "Usage: %s [-dfnpy] [-b block] [-c level] [-m mode] filesystem ...\n",
-	    __progname);
-	exit(1);
+	    "usage: %s [-dfnpUy] [-b block] [-c level] [-m mode] filesystem ...\n",
+	    getprogname());
+	exit(FSCK_EXIT_USAGE);
 }
 

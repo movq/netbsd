@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1998/11/19 23:54:59 kenh Exp $
+#	$NetBSD: Makefile,v 1.6 2008/07/24 05:21:12 dholland Exp $
 
 SRCS=	atactl.c
 

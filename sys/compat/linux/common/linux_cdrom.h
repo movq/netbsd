@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_cdrom.h,v 1.4 1999/10/29 15:02:56 mycroft Exp $	*/
+/*	$NetBSD: linux_cdrom.h,v 1.8 2008/04/28 20:23:43 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +32,8 @@
 #ifndef _LINUX_CDROM_H
 #define _LINUX_CDROM_H
 
+#include <machine/endian.h>
+
 #define LINUX_CDROMPAUSE	0x5301
 #define LINUX_CDROMRESUME	0x5302
 #define LINUX_CDROMPLAYMSF	0x5303	/* (struct linux_cdrom_msf) */
@@ -51,13 +46,26 @@
 #define LINUX_CDROMVOLCTRL	0x530a	/* (struct linux_cdrom_volctrl) */
 #define LINUX_CDROMSUBCHNL	0x530b	/* (struct linux_cdrom_subchnl) */
 #define LINUX_CDROMEJECT_SW	0x530f	/* arg: 0 or 1 */
+#define LINUX_CDROMMULTISESSION	0x5310	/* (struct linux_cdrom_multisession) */
 #define LINUX_CDROMRESET	0x5312
 #define LINUX_CDROMVOLREAD	0x5313	/* (struct linux_cdrom_volctrl) */
 #define LINUX_CDROMPLAYBLK	0x5317	/* (struct linux_cdrom_blk) */
+#define LINUX_CDROMCLOSETRAY	0x5319	/* */
+#define LINUX_CDROM_SET_OPTIONS	0x5320	/* int */
+#define LINUX_CDROM_CLEAR_OPTIONS	0x5321	/* int */
+#define LINUX_CDROM_SELECT_SPEED	0x5322
+#define LINUX_CDROM_SELECT_DISC		0x5323
+#define LINUX_CDROM_MEDIA_CHANGED	0x5325
+#define LINUX_CDROM_DRIVE_STATUS	0x5326
+#define LINUX_CDROM_DISC_STATUS		0x5327
+#define LINUX_CDROM_CHANGER_NSLOTS	0x5328
+#define LINUX_CDROM_LOCKDOOR		0x5329
+#define LINUX_CDROM_DEBUG		0x5330
+#define LINUX_CDROM_GET_CAPABILITY	0x5331
 
-/* DVD-ROM Specific ioctls */              
+/* DVD-ROM Specific ioctls */
 #define	LINUX_DVD_READ_STRUCT	0x5390	/* Read structure */
-#define	LINUX_DVD_WRITE_STRUCT	0x5391	/* Write structure */ 
+#define	LINUX_DVD_WRITE_STRUCT	0x5391	/* Write structure */
 #define	LINUX_DVD_AUTH		0x5392	/* Authentication */
 
 struct linux_cdrom_blk {
@@ -80,7 +88,7 @@ struct linux_cdrom_ti {
 	u_char	cdti_trk1;	/* end track */
 	u_char	cdti_ind1;	/* end index */
 };
- 
+
 struct linux_cdrom_tochdr {
 	u_char	cdth_trk0;	/* start track */
 	u_char	cdth_trk1;	/* end track */
@@ -122,6 +130,53 @@ struct linux_cdrom_volctrl {
 	u_char	channel1;
 	u_char	channel2;
 	u_char	channel3;
+};
+
+struct linux_cdrom_multisession {
+	union linux_cdrom_addr addr;
+	u_char xa_flag;
+	u_char addr_format;
+};
+
+struct linux_cdrom_mechstat_header {
+#if BYTE_ORDER == BIG_ENDIAN
+	u_int8_t fault		: 1;
+	u_int8_t changer_state	: 2;
+	u_int8_t curslot	: 5;
+	u_int8_t mech_state	: 3;
+	u_int8_t door_open	: 1;
+	u_int8_t reserved1	: 4;
+#elif BYTE_ORDER == LITTLE_ENDIAN
+	u_int8_t curslot	: 5;
+	u_int8_t changer_state	: 2;
+	u_int8_t fault		: 1;
+	u_int8_t reserved1	: 4;
+	u_int8_t door_open	: 1;
+	u_int8_t mech_state	: 3;
+#endif
+	u_int8_t curlba[3];
+	u_int8_t nslots;
+	u_int16_t slot_tablelen;
+};
+
+struct linux_cdrom_slot {
+#if BYTE_ORDER == BIG_ENDIAN
+	u_int8_t disc_present	: 1;
+	u_int8_t reserved1	: 6;
+	u_int8_t change		: 1;
+#elif BYTE_ORDER == LITTLE_ENDIAN
+	u_int8_t change		: 1;
+	u_int8_t reserved1	: 6;
+	u_int8_t disc_present	: 1;
+#endif
+	u_int8_t reserved2[3];
+};
+
+#define LINUX_CDROM_MAX_SLOTS   256
+
+struct linux_cdrom_changer_info {
+	struct linux_cdrom_mechstat_header hdr;
+	struct linux_cdrom_slot slots[LINUX_CDROM_MAX_SLOTS];
 };
 
 #endif /* !_LINUX_CDROM_H */

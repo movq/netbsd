@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ep_eisa.c,v 1.21 1999/08/19 08:06:31 tron Exp $	*/
+/*	$NetBSD: if_ep_eisa.c,v 1.39.4.1 2009/02/02 20:48:00 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,8 +63,10 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_ep_eisa.c,v 1.39.4.1 2009/02/02 20:48:00 snj Exp $");
+
 #include "opt_inet.h"
-#include "opt_ns.h"
 #include "bpfilter.h"
 
 #include <sys/param.h>
@@ -86,30 +81,26 @@
 
 #include <net/if.h>
 #include <net/if_dl.h>
-#include <net/if_ether.h>   
+#include <net/if_ether.h>
 #include <net/if_media.h>
 
 #ifdef INET
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
-#include <netinet/in_var.h>     
+#include <netinet/in_var.h>
 #include <netinet/ip.h>
-#include <netinet/if_inarp.h>   
+#include <netinet/if_inarp.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif 
-        
+
 #if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
 #endif
 
-#include <machine/cpu.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/mii/miivar.h>
 
@@ -120,34 +111,50 @@
 #include <dev/eisa/eisavar.h>
 #include <dev/eisa/eisadevs.h>
 
-int ep_eisa_match __P((struct device *, struct cfdata *, void *));
-void ep_eisa_attach __P((struct device *, struct device *, void *));
+static int	ep_eisa_match(device_t , cfdata_t , void *);
+static void	ep_eisa_attach(device_t , device_t , void *);
 
-struct cfattach ep_eisa_ca = {
-	sizeof(struct ep_softc), ep_eisa_match, ep_eisa_attach
-};
+CFATTACH_DECL_NEW(ep_eisa, sizeof(struct ep_softc),
+    ep_eisa_match, ep_eisa_attach, NULL, NULL);
 
 /* XXX move these somewhere else */
-#define EISA_CONTROL	0x0c84
+/* While attaching we need a few special EISA registers of the card,
+   these are mapped at slotbase+EP_EISA_CFG_BASE with len EP_EISA_CFG_SIZE */
+#define EP_EISA_CFG_BASE	0x0c80
+#define	EP_EISA_CFG_CONTROL	0x0004	/* 1 byte */
+#define	EP_EISA_CFG_RESOURCE	0x0008	/* 2 byte */
+#define	EP_EISA_CFG_SIZE	0x000a
+
+/* The generic driver backend only needs access to the standard ports,
+   mapped at the beginning of the eisa slot space */
+#define	EP_IOPORT_OFFSET	0x0000
+#define	EP_IOPORT_SIZE		0x0020
+
+/* Bits for the eisa control register */
 #define EISA_RESET	0x04
 #define EISA_ERROR	0x02
 #define EISA_ENABLE	0x01
 
-struct ep_eisa_product {
+static const struct ep_eisa_product {
 	const char	*eep_eisaid;	/* EISA ID */
 	u_short		eep_chipset;	/* 3Com chipset used */
 	int		eep_flags;	/* initial softc flags */
 	const char	*eep_name;	/* device name */
 } ep_eisa_products[] = {
+	{ "TCM5090",			ELINK_CHIPSET_3C509,
+	  0,				EISA_PRODUCT_TCM5090 },
 	{ "TCM5091",			ELINK_CHIPSET_3C509,
 	  0,				EISA_PRODUCT_TCM5091 },
-
 	{ "TCM5092",			ELINK_CHIPSET_3C509,
 	  0,				EISA_PRODUCT_TCM5092 },
 	{ "TCM5093",			ELINK_CHIPSET_3C509,
 	  0,				EISA_PRODUCT_TCM5093 },
 	{ "TCM5094",			ELINK_CHIPSET_3C509,
 	  0,				EISA_PRODUCT_TCM5094 },
+	{ "TCM5095",			ELINK_CHIPSET_3C509,
+	  0,				EISA_PRODUCT_TCM5095 },
+	{ "TCM5098",			ELINK_CHIPSET_3C509,
+	  0,				EISA_PRODUCT_TCM5098 },
 
 	/*
 	 * Note: The 3c597 Fast Etherlink MII (TCM5972) is an
@@ -167,13 +174,10 @@ struct ep_eisa_product {
 	  0,				NULL },
 };
 
-struct ep_eisa_product *ep_eisa_lookup __P((struct eisa_attach_args *));
-
-struct ep_eisa_product *
-ep_eisa_lookup(ea)
-	struct eisa_attach_args *ea;
+static const struct ep_eisa_product *
+ep_eisa_lookup(const struct eisa_attach_args *ea)
 {
-	struct ep_eisa_product *eep;
+	const struct ep_eisa_product *eep;
 
 	for (eep = ep_eisa_products; eep->eep_name != NULL; eep++)
 		if (strcmp(ea->ea_idstring, eep->eep_eisaid) == 0)
@@ -182,11 +186,8 @@ ep_eisa_lookup(ea)
 	return (NULL);
 }
 
-int
-ep_eisa_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+ep_eisa_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct eisa_attach_args *ea = aux;
 
@@ -197,46 +198,53 @@ ep_eisa_match(parent, match, aux)
 	return (0);
 }
 
-void
-ep_eisa_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+ep_eisa_attach(device_t parent, device_t self, void *aux)
 {
-	struct ep_softc *sc = (void *)self;
+	struct ep_softc *sc = device_private(self);
 	struct eisa_attach_args *ea = aux;
 	bus_space_tag_t iot = ea->ea_iot;
-	bus_space_handle_t ioh;
+	bus_space_handle_t ioh, ioh_cfg;
 	eisa_chipset_tag_t ec = ea->ea_ec;
 	eisa_intr_handle_t ih;
 	const char *intrstr;
-	struct ep_eisa_product *eep;
+	const struct ep_eisa_product *eep;
 	u_int irq;
 
 	/* Map i/o space. */
-	if (bus_space_map(iot, EISA_SLOT_ADDR(ea->ea_slot),
-	    EISA_SLOT_SIZE, 0, &ioh)) {
+	if (bus_space_map(iot, EISA_SLOT_ADDR(ea->ea_slot) + EP_EISA_CFG_BASE,
+	    EP_EISA_CFG_SIZE, 0, &ioh_cfg)) {
+		printf("\n");
+		panic("ep_eisa_attach: can't map eisa cfg i/o space");
+	}
+	if (bus_space_map(iot, EISA_SLOT_ADDR(ea->ea_slot) + EP_IOPORT_OFFSET,
+	    EP_IOPORT_SIZE, 0, &ioh)) {
 		printf("\n");
 		panic("ep_eisa_attach: can't map i/o space");
 	}
 
+	sc->sc_dev = self;
 	sc->sc_ioh = ioh;
 	sc->sc_iot = iot;
 
-	/* Reset card. */
-	bus_space_write_1(iot, ioh, EISA_CONTROL, EISA_ENABLE | EISA_RESET);
-	delay(10);
-	bus_space_write_1(iot, ioh, EISA_CONTROL, EISA_ENABLE);
-	/* Wait for reset? */
-	delay(1000);
+	bus_space_write_1(iot, ioh_cfg, EP_EISA_CFG_CONTROL, EISA_ENABLE);
+	delay(4000);
 
 	/* Read the IRQ from the card. */
-	irq = bus_space_read_2(iot, ioh, ELINK_W0_RESOURCE_CFG) >> 12;
+	irq = bus_space_read_2(iot, ioh_cfg, EP_EISA_CFG_RESOURCE) >> 12;
 
 	eep = ep_eisa_lookup(ea);
 	if (eep == NULL) {
 		printf("\n");
 		panic("ep_eisa_attach: impossible");
 	}
+
+	/* we don't need access to the config registers any more, but
+	   noone else should be able to map this space, so keep it
+	   reserved? */
+#if 0
+	bus_space_unmap(iot, ioh_cfg, EP_EISA_CFG_SIZE);
+#endif
 
 	printf(": %s\n", eep->eep_name);
 
@@ -248,23 +256,22 @@ ep_eisa_attach(parent, self, aux)
 	sc->ep_flags = eep->eep_flags;
 
 	if (eisa_intr_map(ec, irq, &ih)) {
-		printf("%s: couldn't map interrupt (%u)\n",
-		    sc->sc_dev.dv_xname, irq);
+		aprint_error_dev(sc->sc_dev, "couldn't map interrupt (%u)\n",
+		    irq);
 		return;
 	}
 	intrstr = eisa_intr_string(ec, ih);
 	sc->sc_ih = eisa_intr_establish(ec, ih, IST_EDGE, IPL_NET,
 	    epintr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
 			printf(" at %s", intrstr);
 		printf("\n");
 		return;
 	}
 	if (intrstr != NULL)
-		printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname,
+		printf("%s: interrupting at %s\n", device_xname(sc->sc_dev),
 		    intrstr);
 
 	epconfig(sc, eep->eep_chipset, NULL);

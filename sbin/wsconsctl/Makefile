@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 1999/01/10 18:05:49 augustss Exp $
+#	$NetBSD: Makefile,v 1.14 2008/10/26 14:55:17 apb Exp $
 
 PROG=	wsconsctl
 SRCS=	display.c keyboard.c keysym.c map_parse.y map_scan.l \
@@ -6,13 +6,18 @@ SRCS=	display.c keyboard.c keysym.c map_parse.y map_scan.l \
 MAN=	wsconsctl.8
 
 YHEADER=	1
-CPPFLAGS+=	-I.
+CPPFLAGS+=	-I. -I${.CURDIR}
+DPSRCS+=	keysym.h
 CLEANFILES+=	keysym.h
 
-.depend keysym.c: keysym.h
+.include <bsd.prog.mk>
+
+# Environment for scripts executed during build.
+SCRIPT_ENV= \
+	AWK=${TOOL_AWK:Q} \
+	SED=${TOOL_SED:Q}
 
 keysym.h: mkkeysym.sh ${DESTDIR}/usr/include/dev/wscons/wsksymdef.h
-	sh ${.CURDIR}/mkkeysym.sh \
+	${_MKTARGET_CREATE}
+	${SCRIPT_ENV} ${HOST_SH} ${.CURDIR}/mkkeysym.sh \
 	  ${DESTDIR}/usr/include/dev/wscons/wsksymdef.h > keysym.h
-
-.include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: cmds.c,v 1.19 2000/01/10 21:06:15 itojun Exp $	*/
+/*	$NetBSD: cmds.c,v 1.28 2004/11/04 07:18:47 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,38 +34,35 @@
 #if 0
 static char sccsid[] = "@(#)cmds.c	8.2 (Berkeley) 4/29/95";
 #endif
-__RCSID("$NetBSD: cmds.c,v 1.19 2000/01/10 21:06:15 itojun Exp $");
+__RCSID("$NetBSD: cmds.c,v 1.28 2004/11/04 07:18:47 dsl Exp $");
 #endif /* not lint */
 
-#include <stdlib.h>
-#include <unistd.h>
-#include <signal.h>
 #include <ctype.h>
+#include <signal.h>
 #include <string.h>
+#include <unistd.h>
+
 #include "systat.h"
 #include "extern.h"
 
-void	switch_mode __P((struct mode *p));
+void	switch_mode(struct mode *p);
 
 void
-command(cmd)
-	char *cmd;
+command(char *cmd)
 {
 	struct command *c;
 	struct mode *p;
 	char *args;
-	sigset_t set;
 
-	sigemptyset(&set);
-	sigaddset(&set, SIGALRM);
-	sigprocmask(SIG_BLOCK, &set, NULL);
+	if (cmd[0] == '\0')
+		return;
 
-	args  = strtok(cmd, " \t");
-	args  = strtok(NULL, " \t");
+	args = cmd;
+	cmd = strsep(&args, " \t");
 
 	if (curmode->c_commands) {
 		for (c = curmode->c_commands; c->c_name; c++) {
-			if (strcmp(cmd, c->c_name) == 0) {
+			if (strstr(c->c_name, cmd) == c->c_name) {
 				(c->c_cmd)(args);
 				goto done;
 			}
@@ -77,39 +70,42 @@ command(cmd)
 	}
 
 	for (c = global_commands; c->c_name; c++) {
-		if (strcmp(cmd, c->c_name) == 0) {
+		if (strstr(c->c_name, cmd) == c->c_name) {
 			(c->c_cmd)(args);
 			goto done;
 		}
 	}
 
 	for (p = modes; p->c_name; p++) {
-		if (strcmp(cmd, p->c_name) == 0) {
+		if (strstr(p->c_name, cmd) == p->c_name) {
 			switch_mode(p);
 			goto done;
 		}
 	}
 
-	if (isdigit(cmd[0])) {
+	if (isdigit((unsigned char)cmd[0])) {
 		global_interval(cmd);
 		goto done;
 	}
 
 	error("%s: Unknown command.", cmd);
 done:
-	sigprocmask(SIG_UNBLOCK, &set, NULL);
+	;
 }
 
 void
-switch_mode(p)
-	struct mode *p;
+switch_mode(struct mode *p)
 {
 	int switchfail;
+	struct mode *r;
 
 	switchfail = 0;
+	r = p;
 
-	if (curmode == p)
+	if (curmode == p) {
+		status();
 		return;
+	}
 
 	alarm(0);
 	(*curmode->c_close)(wnd);
@@ -139,14 +135,20 @@ switch_mode(p)
 	curmode = p;
 	labels();
 	display(0);
-	if (switchfail)
+	if (switchfail && !allflag)
 		error("Couldn't switch mode, back to %s", curmode->c_name);
-	else
-		status();
+	else {
+		if (switchfail && allflag) {
+			r++;
+			switch_mode(r);
+		} else {
+			status();
+		}
+	}
 }
 
 void
-status()
+status(void)
 {
 	error("Showing %s, refresh every %d seconds.", curmode->c_name, naptime);
 }

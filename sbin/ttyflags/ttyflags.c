@@ -1,9 +1,9 @@
-/*	$NetBSD: ttyflags.c,v 1.10 1997/10/20 08:08:24 scottr Exp $	*/
+/* $NetBSD: ttyflags.c,v 1.17 2008/07/20 01:20:23 lukem Exp $ */
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
  * All rights reserved.
- *
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -14,10 +14,12 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed by Christopher G. Demetriou.
+ *          This product includes software developed for the
+ *          NetBSD Project.  See http://www.NetBSD.org/ for
+ *          information about NetBSD.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
- *
+ *    derived from this software without specific prior written permission.
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -28,20 +30,21 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * 
+ * <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1994 Christopher G. Demetriou\n\
-	All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1994\
+ Christopher G. Demetriou.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
-__RCSID("$NetBSD: ttyflags.c,v 1.10 1997/10/20 08:08:24 scottr Exp $");
+__RCSID("$NetBSD: ttyflags.c,v 1.17 2008/07/20 01:20:23 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/cdefs.h>
 #include <sys/ioctl.h>
 
 #include <err.h>
@@ -55,11 +58,10 @@ __RCSID("$NetBSD: ttyflags.c,v 1.10 1997/10/20 08:08:24 scottr Exp $");
 #include <ttyent.h>
 #include <unistd.h>
 
-int change_all __P((void));
-int change_ttyflags __P((struct ttyent *));
-int change_ttys __P((char **));
-int main __P((int, char *[]));
-void usage __P((void));
+int change_all(void);
+int change_ttyflags(struct ttyent *);
+int change_ttys(char **);
+void usage(void);
 
 int nflag, vflag;
 
@@ -69,9 +71,7 @@ int nflag, vflag;
  * the flags of the ttys specified on the command line.
  */
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int aflag, ch, rval;
 
@@ -117,7 +117,7 @@ main(argc, argv)
  * Change all /etc/ttys entries' flags.
  */
 int
-change_all()
+change_all(void)
 {
 	struct ttyent *tep;
 	int rval;
@@ -133,8 +133,7 @@ change_all()
  * Change the specified ttys' flags.
  */
 int
-change_ttys(ttylist)
-	char **ttylist;
+change_ttys(char **ttylist)
 {
 	struct ttyent *tep;
 	int rval;
@@ -161,8 +160,7 @@ change_ttys(ttylist)
  * open the device, and change the flags.
  */
 int
-change_ttyflags(tep)
-	struct ttyent *tep;
+change_ttyflags(struct ttyent *tep)
 {
 	int fd, flags, rval, st, sep;
 	char path[PATH_MAX];
@@ -176,36 +174,36 @@ change_ttyflags(tep)
 	/* Convert ttyent.h flags into ioctl flags. */
 	if (st & TTY_LOCAL) {
 		flags |= TIOCFLAG_CLOCAL;
-		(void)strcat(strflags, "local");
+		(void)strlcat(strflags, "local", sizeof(strflags));
 		sep++;
 	}
 	if (st & TTY_RTSCTS) {
 		flags |= TIOCFLAG_CRTSCTS;
 		if (sep++)
-			(void)strcat(strflags, "|");
-		(void)strcat(strflags, "rtscts");
+			(void)strlcat(strflags, "|", sizeof(strflags));
+		(void)strlcat(strflags, "rtscts", sizeof(strflags));
 	}
 	if (st & TTY_DTRCTS) {
 		flags |= TIOCFLAG_CDTRCTS;
 		if (sep++)
-			(void)strcat(strflags, "|");
-		(void)strcat(strflags, "dtrcts");
+			(void)strlcat(strflags, "|", sizeof(strflags));
+		(void)strlcat(strflags, "dtrcts", sizeof(strflags));
 	}
 	if (st & TTY_SOFTCAR) {
 		flags |= TIOCFLAG_SOFTCAR;
 		if (sep++)
-			(void)strcat(strflags, "|");
-		(void)strcat(strflags, "softcar");
+			(void)strlcat(strflags, "|", sizeof(strflags));
+		(void)strlcat(strflags, "softcar", sizeof(strflags));
 	}
 	if (st & TTY_MDMBUF) {
 		flags |= TIOCFLAG_MDMBUF;
 		if (sep++)
-			(void)strcat(strflags, "|");
-		(void)strcat(strflags, "mdmbuf");
+			(void)strlcat(strflags, "|", sizeof(strflags));
+		(void)strlcat(strflags, "mdmbuf", sizeof(strflags));
 	}
 
 	if (strflags[0] == '\0')
-		(void)strcpy(strflags, "none");
+		(void)strlcpy(strflags, "none", sizeof(strflags));
 
 	/* Find the full device path name. */
 	(void)snprintf(path, sizeof path, "%s%s", _PATH_DEV, tep->ty_name);
@@ -240,7 +238,7 @@ change_ttyflags(tep)
  * Print usage information when a bogus set of arguments is given.
  */
 void
-usage()
+usage(void)
 {
 	(void)fprintf(stderr, "usage: ttyflags [-v] [-a | tty ... ]\n");
 	exit(1);

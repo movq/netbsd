@@ -1,4 +1,4 @@
-/*	$NetBSD: rlogind.c,v 1.20 2000/01/31 14:20:13 itojun Exp $	*/
+/*	$NetBSD: rlogind.c,v 1.38 2008/07/20 01:09:07 lukem Exp $	*/
 
 /*
  * Copyright (C) 1998 WIDE Project.
@@ -45,11 +45,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -68,12 +64,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)rlogind.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: rlogind.c,v 1.20 2000/01/31 14:20:13 itojun Exp $");
+__RCSID("$NetBSD: rlogind.c,v 1.38 2008/07/20 01:09:07 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -86,12 +82,13 @@ __RCSID("$NetBSD: rlogind.c,v 1.20 2000/01/31 14:20:13 itojun Exp $");
  *	data
  */
 
-#define	FD_SETSIZE	16		/* don't need many bits for select */
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <signal.h>
 #include <termios.h>
+#include <poll.h>
+#include <vis.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -108,7 +105,6 @@ __RCSID("$NetBSD: rlogind.c,v 1.20 2000/01/31 14:20:13 itojun Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <util.h>
-#include <utmp.h>
 #include "pathnames.h"
 
 #ifndef TIOCPKT_WINDOW
@@ -128,13 +124,13 @@ int	log_success = 0;
 
 struct	passwd *pwd;
 
-void	doit __P((int, struct sockaddr *));
+void	doit __P((int, struct sockaddr_storage *));
 int	control __P((int, char *, int));
 void	protocol __P((int, int));
 void	cleanup __P((int));
-void	fatal __P((int, char *, int));
+void	fatal __P((int, const char *, int));
 int	do_rlogin __P((struct sockaddr *, char *));
-void	getstr __P((char *, int, char *));
+void	getstr __P((char *, int, const char *));
 void	setup_term __P((int));
 #if 0
 int	do_krb_login __P((union sockunion *));
@@ -144,14 +140,18 @@ int	local_domain __P((char *));
 char	*topdomain __P((char *));
 int	main __P((int, char *[]));
 
+extern int __check_rhosts_file;
+extern char *__rcmd_errstr;	/* syslog hook from libc/net/rcmd.c */
+extern char **environ;
+
 int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	extern int __check_rhosts_file;
 	struct sockaddr_storage from;
-	int ch, fromlen, on;
+	int ch, on;
+	socklen_t fromlen = sizeof(from);
 
 	openlog("rlogind", LOG_PID, LOG_AUTH);
 
@@ -178,23 +178,52 @@ main(argc, argv)
 	argc -= optind;
 	argv += optind;
 
-	fromlen = sizeof (from); /* xxx */
 	if (getpeername(0, (struct sockaddr *)&from, &fromlen) < 0) {
 		syslog(LOG_ERR,"Can't get peer name of remote host: %m");
 		fatal(STDERR_FILENO, "Can't get peer name of remote host", 1);
 	}
+#ifdef INET6
+	if (from.ss_family == AF_INET6 &&
+	    IN6_IS_ADDR_V4MAPPED(&((struct sockaddr_in6 *)&from)->sin6_addr) &&
+	    sizeof(struct sockaddr_in) <= sizeof(from)) {
+		struct sockaddr_in sin4;
+		struct sockaddr_in6 *sin6;
+		const int off = sizeof(struct sockaddr_in6) -
+		    sizeof(struct sockaddr_in);
+
+		sin6 = (struct sockaddr_in6 *)&from;
+		memset(&sin4, 0, sizeof(sin4));
+		sin4.sin_family = AF_INET;
+		sin4.sin_len = sizeof(struct sockaddr_in);
+		memcpy(&sin4.sin_addr, &sin6->sin6_addr.s6_addr[off],
+		    sizeof(sin4.sin_addr));
+		memcpy(&from, &sin4, sizeof(sin4));
+	}
+#else
+	if (from.ss_family == AF_INET6 &&
+	    IN6_IS_ADDR_V4MAPPED(&((struct sockaddr_in6 *)&from)->sin6_addr)) {
+		char hbuf[NI_MAXHOST];
+		if (getnameinfo((struct sockaddr *)&from, fromlen, hbuf,
+				sizeof(hbuf), NULL, 0, NI_NUMERICHOST) != 0) {
+			strlcpy(hbuf, "invalid", sizeof(hbuf));
+		}
+		syslog(LOG_ERR, "malformed \"from\" address (v4 mapped, %s)\n",
+		    hbuf);
+		exit(1);
+	}
+#endif
 	on = 1;
 	if (keepalive &&
 	    setsockopt(0, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof (on)) < 0)
 		syslog(LOG_WARNING, "setsockopt (SO_KEEPALIVE): %m");
 #if defined(IP_TOS)
-	if (((struct sockaddr *)&from)->sa_family == AF_INET) {
+	if (from.ss_family == AF_INET) {
 		on = IPTOS_LOWDELAY;
 		if (setsockopt(0, IPPROTO_IP, IP_TOS, (char *)&on, sizeof(int)) < 0)
 			syslog(LOG_WARNING, "setsockopt (IP_TOS): %m");
 	}
 #endif
-	doit(0, (struct sockaddr *)&from);
+	doit(0, &from);
 	/* NOTREACHED */
 #ifdef __GNUC__
 	exit(0);
@@ -212,26 +241,24 @@ struct winsize win = { 0, 0, 0, 0 };
 void
 doit(f, fromp)
 	int f;
-	struct sockaddr *fromp;
+	struct sockaddr_storage *fromp;
 {
 	int master, pid, on = 1;
 	int authenticated = 0;
-	char utmphost[UT_HOSTSIZE + 1];
 	char *hostname;
 	char hostnamebuf[2 * MAXHOSTNAMELEN + 1];
+	char hostaddrbuf[sizeof(*fromp) * 4 + 1];
 	char c;
 	char naddr[NI_MAXHOST];
 	char saddr[NI_MAXHOST];
 	char raddr[NI_MAXHOST];
-	int af = fromp->sa_family;
+	int af = fromp->ss_family;
 	u_int16_t *portp;
 	struct addrinfo hints, *res, *res0;
 	int gaierror;
-#ifdef NI_WITHSCOPEID
-	const int niflags = NI_NUMERICHOST | NI_NUMERICSERV | NI_WITHSCOPEID;
-#else
+	socklen_t fromlen = fromp->ss_len > sizeof(*fromp)
+	    ? sizeof(*fromp) : fromp->ss_len;
 	const int niflags = NI_NUMERICHOST | NI_NUMERICSERV;
-#endif
 
 	alarm(60);
 	read(f, &c, 1);
@@ -253,39 +280,39 @@ doit(f, fromp)
 		syslog(LOG_ERR, "malformed \"from\" address (af %d)\n", af);
 		exit(1);
 	}
-	if (getnameinfo((struct sockaddr *)fromp, fromp->sa_len,
+	if (getnameinfo((struct sockaddr *)fromp, fromlen,
 		    naddr, sizeof(naddr), NULL, 0, niflags) != 0) {
 		syslog(LOG_ERR, "malformed \"from\" address (af %d)\n", af);
 		exit(1);
 	}
 
-	if (getnameinfo((struct sockaddr *)fromp, fromp->sa_len,
+	if (getnameinfo((struct sockaddr *)fromp, fromlen,
 		    saddr, sizeof(saddr), NULL, 0, NI_NAMEREQD) == 0) {
 		/*
-		 * If name returned by gethostbyaddr is in our domain,
+		 * If name returned by getnameinfo is in our domain,
 		 * attempt to verify that we haven't been fooled by someone
 		 * in a remote net; look up the name and check that this
 		 * address corresponds to the name.
 		 */
 		hostname = saddr;
+		res0 = NULL;
 		if (check_all || local_domain(saddr)) {
-			strncpy(hostnamebuf, saddr, sizeof(hostnamebuf) - 1);
-			hostnamebuf[sizeof(hostnamebuf) - 1] = 0;
+			strlcpy(hostnamebuf, saddr, sizeof(hostnamebuf));
 			memset(&hints, 0, sizeof(hints));
-			hints.ai_family = fromp->sa_family;
+			hints.ai_family = fromp->ss_family;
 			hints.ai_socktype = SOCK_STREAM;
 			hints.ai_flags = AI_CANONNAME;
 			gaierror = getaddrinfo(hostnamebuf, "0", &hints, &res0);
 			if (gaierror) {
-				syslog(LOG_INFO,
+				syslog(LOG_NOTICE,
 				    "Couldn't look up address for %s: %s",
 				    hostnamebuf, gai_strerror(gaierror));
 				hostname = naddr;
 			} else {
 				for (res = res0; res; res = res->ai_next) {
-					if (res->ai_family != fromp->sa_family)
+					if (res->ai_family != fromp->ss_family)
 						continue;
-					if (res->ai_addrlen != fromp->sa_len)
+					if (res->ai_addrlen != fromp->ss_len)
 						continue;
 					if (getnameinfo(res->ai_addr,
 						res->ai_addrlen,
@@ -306,22 +333,16 @@ doit(f, fromp)
 						    : saddr);
 					hostname = naddr;
 				}
-				freeaddrinfo(res0);
 			}
 		}
-		hostname = strncpy(hostnamebuf, hostname,
-				   sizeof(hostnamebuf) - 1);
-	} else
-		hostname = strncpy(hostnamebuf, naddr,
-				   sizeof(hostnamebuf) - 1);
-
-	hostnamebuf[sizeof(hostnamebuf) - 1] = '\0';
-
-	if (strlen(hostname) < sizeof(utmphost))
-		(void)strcpy(utmphost, hostname);
-	else
-		(void)strncpy(utmphost, hostname, sizeof(utmphost));
-	utmphost[sizeof(utmphost) - 1] = '\0';
+		strlcpy(hostnamebuf, hostname, sizeof(hostnamebuf));
+		hostname = hostnamebuf;
+		if (res0)
+			freeaddrinfo(res0);
+	} else {
+		strlcpy(hostnamebuf, naddr, sizeof(hostnamebuf));
+		hostname = hostnamebuf;
+	}
 
 	if (ntohs(*portp) >= IPPORT_RESERVED ||
 	    ntohs(*portp) < IPPORT_RESERVED/2) {
@@ -330,10 +351,11 @@ doit(f, fromp)
 		fatal(f, "Permission denied", 0);
 	}
 #ifdef IP_OPTIONS
-	if (fromp->sa_family == AF_INET) {
+	if (fromp->ss_family == AF_INET) {
 		u_char optbuf[BUFSIZ/3], *cp;
-		char lbuf[BUFSIZ], *lp;
-		int optsize = sizeof(optbuf), ipproto;
+		char lbuf[BUFSIZ], *lp, *ep;
+		socklen_t optsize = sizeof(optbuf);
+		int ipproto;
 		struct protoent *ip;
 
 		if ((ip = getprotobyname("ip")) != NULL)
@@ -343,8 +365,9 @@ doit(f, fromp)
 		if (getsockopt(0, ipproto, IP_OPTIONS, (char *)optbuf,
 		    &optsize) == 0 && optsize != 0) {
 			lp = lbuf;
+			ep = lbuf + sizeof(lbuf);
 			for (cp = optbuf; optsize > 0; cp++, optsize--, lp += 3)
-				sprintf(lp, " %2.2x", *cp);
+				snprintf(lp, ep - lp, " %2.2x", *cp);
 			syslog(LOG_NOTICE,
 			    "Connection received using IP options (ignored):%s",
 			    lbuf);
@@ -357,7 +380,7 @@ doit(f, fromp)
 		}
 	}
 #endif
-	if (do_rlogin(fromp, hostname) == 0)
+	if (do_rlogin((struct sockaddr *)fromp, hostname) == 0)
 		authenticated++;
 	if (confirmed == 0) {
 		write(f, "", 1);
@@ -376,12 +399,16 @@ doit(f, fromp)
 		if (f > 2)	/* f should always be 0, but... */
 			(void) close(f);
 		setup_term(0);
+		(void)strvisx(hostaddrbuf, (const char *)(const void *)fromp,
+		    sizeof(*fromp), VIS_WHITE);
 		if (authenticated)
 			execl(_PATH_LOGIN, "login", "-p",
-			    "-h", utmphost, "-f", "--", lusername, (char *)0);
+			    "-h", hostname, "-a", hostaddrbuf,
+			    "-f", "--", lusername, (char *)0);
 		else
 			execl(_PATH_LOGIN, "login", "-p",
-			    "-h", utmphost, "--", lusername, (char *)0);
+			    "-h", hostname, "-a", hostaddrbuf,
+			    "--", lusername, (char *)0);
 		fatal(STDERR_FILENO, _PATH_LOGIN, 1);
 		/*NOTREACHED*/
 	}
@@ -432,8 +459,9 @@ protocol(f, p)
 	char pibuf[1024+1], fibuf[1024], *pbp = NULL, *fbp = NULL;
 					/* XXX gcc above */
 	int pcc = 0, fcc = 0;
-	int cc, nfd, n;
+	int cc, nfd;
 	char cntl;
+	struct pollfd set[2];
 
 	/*
 	 * Must ignore SIGTTOU, otherwise we'll stop
@@ -442,58 +470,43 @@ protocol(f, p)
 	 */
 	(void) signal(SIGTTOU, SIG_IGN);
 	send(f, oobdata, 1, MSG_OOB);	/* indicate new rlogin */
-	if (f > p)
-		nfd = f + 1;
-	else
-		nfd = p + 1;
-	if (nfd > FD_SETSIZE) {
-		syslog(LOG_ERR, "select mask too small, increase FD_SETSIZE");
-		fatal(f, "internal error (select mask too small)", 0);
-	}
+	set[0].fd = p;
+	set[1].fd = f;
 	for (;;) {
-		fd_set ibits, obits, ebits, *omask;
-
-		FD_ZERO(&ebits);
-		FD_ZERO(&ibits);
-		FD_ZERO(&obits);
-		omask = (fd_set *)NULL;
-		if (fcc) {
-			FD_SET(p, &obits);
-			omask = &obits;
-		} else
-			FD_SET(f, &ibits);
+		set[0].events = POLLPRI;
+		set[1].events = 0;
+		if (fcc)
+			set[0].events |= POLLOUT;
+		else
+			set[1].events |= POLLIN;
 		if (pcc >= 0) {
-			if (pcc) {
-				FD_SET(f, &obits);
-				omask = &obits;
-			} else
-				FD_SET(p, &ibits);
+			if (pcc)
+				set[1].events |= POLLOUT;
+			else
+				set[0].events |= POLLIN;
 		}
-		FD_SET(p, &ebits);
-		if ((n = select(nfd, &ibits, omask, &ebits, 0)) < 0) {
+		if ((nfd = poll(set, 2, INFTIM)) < 0) {
 			if (errno == EINTR)
 				continue;
-			fatal(f, "select", 1);
+			fatal(f, "poll", 1);
 		}
-		if (n == 0) {
+		if (nfd == 0) {
 			/* shouldn't happen... */
 			sleep(5);
 			continue;
 		}
 #define	pkcontrol(c)	((c)&(TIOCPKT_FLUSHWRITE|TIOCPKT_NOSTOP|TIOCPKT_DOSTOP))
-		if (FD_ISSET(p, &ebits)) {
+		if (set[0].revents & POLLPRI) {
 			cc = read(p, &cntl, 1);
 			if (cc == 1 && pkcontrol(cntl)) {
 				cntl |= oobdata[0];
 				send(f, &cntl, 1, MSG_OOB);
-				if (cntl & TIOCPKT_FLUSHWRITE) {
+				if (cntl & TIOCPKT_FLUSHWRITE)
 					pcc = 0;
-					FD_CLR(p, &ibits);
-				}
 			}
 		}
-		if (FD_ISSET(f, &ibits)) {
-				fcc = read(f, fibuf, sizeof(fibuf));
+		if (set[1].revents & POLLIN) {
+			fcc = read(f, fibuf, sizeof(fibuf));
 			if (fcc < 0 && errno == EWOULDBLOCK)
 				fcc = 0;
 			else {
@@ -520,11 +533,10 @@ protocol(f, p)
 							goto top; /* n^2 */
 						}
 					}
-				FD_SET(p, &obits);		/* try write */
 			}
 		}
 
-		if (FD_ISSET(p, &obits) && fcc > 0) {
+		if (set[0].revents & POLLOUT && fcc > 0) {
 			cc = write(p, fbp, fcc);
 			if (cc > 0) {
 				fcc -= cc;
@@ -532,7 +544,7 @@ protocol(f, p)
 			}
 		}
 
-		if (FD_ISSET(p, &ibits)) {
+		if (set[0].revents & POLLIN) {
 			pcc = read(p, pibuf, sizeof (pibuf));
 			pbp = pibuf;
 			if (pcc < 0 && errno == EWOULDBLOCK)
@@ -541,7 +553,6 @@ protocol(f, p)
 				break;
 			else if (pibuf[0] == 0) {
 				pbp++, pcc--;
-					FD_SET(f, &obits);	/* try write */
 			} else {
 				if (pkcontrol(pibuf[0])) {
 					pibuf[0] |= oobdata[0];
@@ -550,18 +561,8 @@ protocol(f, p)
 				pcc = 0;
 			}
 		}
-		if ((FD_ISSET(f, &obits)) && pcc > 0) {
-				cc = write(f, pbp, pcc);
-			if (cc < 0 && errno == EWOULDBLOCK) {
-				/*
-				 * This happens when we try write after read
-				 * from p, but some old kernels balk at large
-				 * writes even when select returns true.
-				 */
-				if (!FD_ISSET(p, &ibits))
-					sleep(5);
-				continue;
-			}
+		if (set[1].revents & POLLOUT && pcc > 0) {
+			cc = write(f, pbp, pcc);
 			if (cc > 0) {
 				pcc -= cc;
 				pbp += cc;
@@ -577,8 +578,14 @@ cleanup(signo)
 	char *p, c;
 
 	p = line + sizeof(_PATH_DEV) - 1;
+#ifdef SUPPORT_UTMP
 	if (logout(p))
 		logwtmp(p, "", "");
+#endif
+#ifdef SUPPORT_UTMPX
+	if (logoutx(p, 0, DEAD_PROCESS))
+		logwtmpx(p, "", "", 0, DEAD_PROCESS);
+#endif
 	(void)chmod(line, 0666);
 	(void)chown(line, 0, 0);
 	c = *p; *p = 'p';
@@ -594,23 +601,26 @@ cleanup(signo)
 void
 fatal(f, msg, syserr)
 	int f;
-	char *msg;
+	const char *msg;
 	int syserr;
 {
 	int len;
-	char buf[BUFSIZ], *bp = buf;
+	char buf[BUFSIZ], *bp, *ep;
+
+	bp = buf;
+	ep = buf + sizeof(buf);
 
 	/*
 	 * Prepend binary one to message if we haven't sent
 	 * the magic null as confirmation.
 	 */
 	if (!confirmed)
-		*bp++ = '\01';		/* error indicator */
+		*bp++ = '\001';		/* error indicator */
 	if (syserr)
-		len = sprintf(bp, "rlogind: %s: %s.\r\n",
+		len = snprintf(bp, ep - bp, "rlogind: %s: %s.\r\n",
 		    msg, strerror(errno));
 	else
-		len = sprintf(bp, "rlogind: %s.\r\n", msg);
+		len = snprintf(bp, ep - bp, "rlogind: %s.\r\n", msg);
 	(void) write(f, buf, bp + len - buf);
 	exit(1);
 }
@@ -620,7 +630,6 @@ do_rlogin(dest, host)
 	struct sockaddr *dest;
 	char *host;
 {
-	extern char *__rcmd_errstr;	/* syslog hook from libc/net/rcmd.c */
 	int retval;
 
 	getstr(rusername, sizeof(rusername), "remuser too long");
@@ -656,7 +665,7 @@ void
 getstr(buf, cnt, errmsg)
 	char *buf;
 	int cnt;
-	char *errmsg;
+	const char *errmsg;
 {
 	char c;
 
@@ -669,7 +678,6 @@ getstr(buf, cnt, errmsg)
 	} while (c != 0);
 }
 
-extern	char **environ;
 
 void
 setup_term(fd)

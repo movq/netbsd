@@ -1,4 +1,4 @@
-/*	$NetBSD: pathnames.h,v 1.7 1998/10/29 20:12:56 bad Exp $	*/
+/*	$NetBSD: pathnames.h,v 1.9 2004/08/19 22:30:10 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,12 @@
 #include <paths.h>
 
 #define	_PATH_FASTBOOT	"/fastboot"
+#ifdef RESCUEDIR
+#define	_PATH_HALT	RESCUEDIR "/halt"
+#define	_PATH_REBOOT	RESCUEDIR "/reboot"
+#else
 #define	_PATH_HALT	"/sbin/halt"
 #define	_PATH_REBOOT	"/sbin/reboot"
+#endif
 #define	_PATH_WALL	"/usr/bin/wall"
 #define _PATH_RCSHUTDOWN	"/etc/rc.shutdown"

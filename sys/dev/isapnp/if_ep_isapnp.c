@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ep_isapnp.c,v 1.19 1999/03/22 10:00:11 mycroft Exp $	*/
+/*	$NetBSD: if_ep_isapnp.c,v 1.34 2008/08/27 05:33:47 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Jonathan Stone <jonathan@NetBSD.org>
@@ -30,14 +30,13 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "opt_inet.h"
-#include "opt_ns.h"
-#include "bpfilter.h" 
- 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_ep_isapnp.c,v 1.34 2008/08/27 05:33:47 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/mbuf.h> 
-#include <sys/socket.h> 
+#include <sys/mbuf.h>
+#include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 #include <sys/syslog.h>
@@ -49,26 +48,9 @@
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/in_var.h>
-#include <netinet/ip.h> 
-#endif
- 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
-  
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
-#endif
-
-#include <machine/cpu.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/isa/isavar.h>
 
@@ -81,18 +63,14 @@
 #include <dev/ic/elink3var.h>
 #include <dev/ic/elink3reg.h>
 
-int ep_isapnp_match __P((struct device *, struct cfdata *, void *));
-void ep_isapnp_attach __P((struct device *, struct device *, void *));
+int ep_isapnp_match(device_t , cfdata_t , void *);
+void ep_isapnp_attach(device_t , device_t , void *);
 
-struct cfattach ep_isapnp_ca = {
-	sizeof(struct ep_softc), ep_isapnp_match, ep_isapnp_attach
-};
+CFATTACH_DECL_NEW(ep_isapnp, sizeof(struct ep_softc),
+    ep_isapnp_match, ep_isapnp_attach, NULL, NULL);
 
 int
-ep_isapnp_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ep_isapnp_match(device_t parent, cfdata_t match, void *aux)
 {
 	int pri, variant;
 
@@ -103,21 +81,21 @@ ep_isapnp_match(parent, match, aux)
 }
 
 void
-ep_isapnp_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ep_isapnp_attach(device_t parent, device_t self, void *aux)
 {
-	struct ep_softc *sc = (void *)self;
+	struct ep_softc *sc = device_private(self);
 	struct isapnp_attach_args *ipa = aux;
+	int chipset;
 
 	printf("\n");
 
+	sc->sc_dev = self;
 	if (isapnp_config(ipa->ipa_iot, ipa->ipa_memt, ipa)) {
-		printf("%s: error in region allocation\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "error in region allocation\n");
 		return;
 	}
 
-	printf("%s: %s %s\n", sc->sc_dev.dv_xname, ipa->ipa_devident,
+	printf("%s: %s %s\n", device_xname(sc->sc_dev), ipa->ipa_devident,
 	    ipa->ipa_devclass);
 
 	sc->sc_iot = ipa->ipa_iot;
@@ -131,7 +109,13 @@ ep_isapnp_attach(parent, self, aux)
 	sc->disable = NULL;
 	sc->enabled = 1;
 
-	/* XXX 3c515 */
+	if (strcmp(ipa->ipa_devlogic, "TCM5051") == 0) {
+		/* 3c515 */
+		chipset = ELINK_CHIPSET_CORKSCREW;
+	} else {
+		/* 3c509 */
+		chipset = ELINK_CHIPSET_3C509;
+	}
 
-	epconfig(sc, ELINK_CHIPSET_3C509, NULL);
+	epconfig(sc, chipset, NULL);
 }

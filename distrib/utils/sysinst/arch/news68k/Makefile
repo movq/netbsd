@@ -1,14 +1,8 @@
-#	$NetBSD: Makefile,v 1.1 1999/12/09 15:02:41 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.7 2005/02/19 17:00:39 dsl Exp $
 #
 # Makefile for news68k
 #
 
-# have to have all of them here for crunch ...
-
-SRCS=	menu_defs.c msg_defs.c main.c install.c upgrade.c \
-	txtwalk.c run.c factor.c net.c disks.c util.c geom.c \
-	label.c target.c md.c
-
-md.o:	menu_defs.h msg_defs.h
+MD_OPTIONS=	AOUT2ELF
 
 .include "../../Makefile.inc"

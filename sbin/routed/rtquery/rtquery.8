@@ -1,8 +1,8 @@
-.\"	$NetBSD: rtquery.8,v 1.14 1999/02/23 10:47:41 christos Exp $
+.\"	$NetBSD: rtquery.8,v 1.19 2003/09/23 12:14:49 wiz Exp $
 .\"
 .Dd June 1, 1996
 .Dt RTQUERY 8
-.Os BSD 4.4
+.Os
 .Sh NAME
 .Nm rtquery
 .Nd query routing daemons for their routing tables
@@ -13,7 +13,7 @@
 .Op Fl r Ar addr
 .Op Fl a Ar secret
 .Ar host ...
-.Nm ""
+.Nm
 .Op Fl t Ar op
 .Ar host ...
 .Sh DESCRIPTION
@@ -113,8 +113,8 @@ turns off tracing.
 dumps the daemon's routing table to the current tracefile.
 .El
 .Sh SEE ALSO
-.Xr routed 8 ,
-.Xr gated 8
+.Xr gated 8 ,
+.Xr routed 8
 .br
 RFC\ 1058 - Routing Information Protocol, RIPv1
 .br

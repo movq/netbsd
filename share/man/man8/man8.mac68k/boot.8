@@ -1,4 +1,4 @@
-.\"	$NetBSD: boot.8,v 1.4 1998/02/06 06:15:00 perry Exp $
+.\"	$NetBSD: boot.8,v 1.9 2008/09/24 20:07:05 reed Exp $
 .\"
 .\" Copyright (c) 1990, 1991 The Regents of the University of California.
 .\" All rights reserved.
@@ -15,11 +15,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -46,7 +42,7 @@
 .Nd
 system bootstrapping procedures
 .Sh DESCRIPTION
-.Sy Power fail and crash recovery.
+.Ss Power fail and crash recovery
 Normally, the
 .Nx
 kernel on the mac68k architecture is booted from the native operating
@@ -79,7 +75,7 @@ without intervention.  When a system is so configured, it can crash
 or lose power and reboot back to a fully multi-user state without
 any intervention.
 .Pp
-.Sy The boot application
+.Ss The boot application
 The boot application runs in the native OS on the system.  It has a
 dialog where booting preferences may be changed and an option whereby
 these options may be saved.  The preferences are stored in the program
@@ -88,7 +84,7 @@ of the program to be configured differently (e.g. to boot different
 netbsd or netbsd.test, or to boot from two different drives).
 .Pp
 One option that may be specified is a boot to single-user mode.  This
-stops the boot process very early on and allows system maintenence.
+stops the boot process very early on and allows system maintenance.
 If one wishes to provide some security at this phase of the boot, remove
 the
 .Ql secure
@@ -109,7 +105,7 @@ in native OS rather than from the usual location in the
 file system.  A radio button is supplied for this purpose.  Note that
 some programs will not run properly if the kernel is not found as
 .Ar /netbsd
-within the 
+within the
 .Nx
 file system.
 .Sh FILES

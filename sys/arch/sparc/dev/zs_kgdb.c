@@ -1,4 +1,4 @@
-/*	$NetBSD: zs_kgdb.c,v 1.5 2000/03/21 12:48:45 pk Exp $	*/
+/*	$NetBSD: zs_kgdb.c,v 1.18 2008/04/28 20:23:36 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,6 +40,11 @@
  *   (gdb) target remote /dev/ttyb
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: zs_kgdb.c,v 1.18 2008/04/28 20:23:36 martin Exp $");
+
+#include "opt_kgdb.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -59,6 +57,7 @@
 
 #include <dev/ic/z8530reg.h>
 #include <machine/z8530var.h>
+#include <machine/autoconf.h>
 #include <machine/promlib.h>
 #include <sparc/dev/cons.h>
 
@@ -78,12 +77,12 @@ struct zsdevice {
 	struct	zschan zs_chan_a;
 };
 
-static void zs_setparam __P((struct zs_chanstate *, int, int));
-static void *findzs __P((int));
+static void zs_setparam(struct zs_chanstate *, int, int);
+static void *findzs(int);
 struct zsops zsops_kgdb;
 
-extern int  zs_getc __P((void *arg));
-extern void zs_putc __P((void *arg, int c));
+extern int  zs_getc(void *);
+extern void zs_putc(void *, int);
 
 static u_char zs_kgdb_regs[16] = {
 	0,	/* 0: CMD (reset, etc.) */
@@ -108,10 +107,7 @@ static u_char zs_kgdb_regs[16] = {
  * This replaces "zs_reset()" in the sparc driver.
  */
 static void
-zs_setparam(cs, iena, rate)
-	struct zs_chanstate *cs;
-	int iena;
-	int rate;
+zs_setparam(struct zs_chanstate *cs, int iena, int rate)
 {
 	int s, tconst;
 
@@ -138,15 +134,16 @@ zs_setparam(cs, iena, rate)
  * Called after cninit(), so printf() etc. works.
  */
 void
-zs_kgdb_init()
+zs_kgdb_init(void)
 {
 	struct zs_chanstate cs;
 	struct zsdevice *zsd;
 	volatile struct zschan *zc;
 	int channel, promzs_unit;
+	extern const struct cdevsw zstty_cdevsw;
 
 	/* printf("zs_kgdb_init: kgdb_dev=0x%x\n", kgdb_dev); */
-	if (major(kgdb_dev) != zs_major)
+	if (cdevsw_lookup(kgdb_dev) != &zstty_cdevsw)
 		return;
 
 	/* Note: (ttya,ttyb) on zs0, and (ttyc,ttyd) on zs2 */
@@ -156,7 +153,7 @@ zs_kgdb_init()
 		   'a' + (kgdb_dev & 3), kgdb_rate);
 
 	/* Setup temporary chanstate. */
-	bzero((caddr_t)&cs, sizeof(cs));
+	bzero((void *)&cs, sizeof(cs));
 	zsd = findzs(promzs_unit);
 	if (zsd == NULL) {
 		printf("zs_kgdb_init: zs not mapped.\n");
@@ -173,7 +170,7 @@ zs_kgdb_init()
 	zs_setparam(&cs, 0, kgdb_rate);
 
 	/* Store the getc/putc functions and arg. */
-	kgdb_attach(zs_getc, zs_putc, (void *)zc);
+	kgdb_attach(zs_getc, zs_putc, __UNVOLATILE(zc));
 }
 
 /*
@@ -184,9 +181,7 @@ zs_kgdb_init()
  * Set the speed to kgdb_rate, CS8, etc.
  */
 int
-zs_check_kgdb(cs, dev)
-	struct zs_chanstate *cs;
-	int dev;
+zs_check_kgdb(struct zs_chanstate *cs, int dev)
 {
 
 	if (dev != kgdb_dev)
@@ -209,8 +204,7 @@ zs_check_kgdb(cs, dev)
  * should time out after a few seconds to avoid hanging on spurious input.
  */
 void
-zskgdb(cs)
-	struct zs_chanstate *cs;
+zskgdb(struct zs_chanstate *cs)
 {
 	int unit = minor(kgdb_dev);
 
@@ -224,16 +218,15 @@ zskgdb(cs)
  * Interface to the lower layer (zscc)
  ****************************************************************/
 
-static void zs_kgdb_rxint __P((struct zs_chanstate *));
-static void zs_kgdb_stint __P((struct zs_chanstate *, int));
-static void zs_kgdb_txint __P((struct zs_chanstate *));
-static void zs_kgdb_softint __P((struct zs_chanstate *));
+static void zs_kgdb_rxint(struct zs_chanstate *);
+static void zs_kgdb_stint(struct zs_chanstate *, int);
+static void zs_kgdb_txint(struct zs_chanstate *);
+static void zs_kgdb_softint(struct zs_chanstate *);
 
 int kgdb_input_lost;
 
 static void
-zs_kgdb_rxint(cs)
-	struct zs_chanstate *cs;
+zs_kgdb_rxint(struct zs_chanstate *cs)
 {
 	register u_char c, rr1;
 
@@ -257,8 +250,7 @@ zs_kgdb_rxint(cs)
 }
 
 static void
-zs_kgdb_txint(cs)
-	register struct zs_chanstate *cs;
+zs_kgdb_txint(struct zs_chanstate *cs)
 {
 	register int rr0;
 
@@ -267,9 +259,7 @@ zs_kgdb_txint(cs)
 }
 
 static void
-zs_kgdb_stint(cs, force)
-	register struct zs_chanstate *cs;
-	int force;
+zs_kgdb_stint(struct zs_chanstate *cs, int force)
 {
 	register int rr0;
 
@@ -286,9 +276,9 @@ zs_kgdb_stint(cs, force)
 }
 
 static void
-zs_kgdb_softint(cs)
-	struct zs_chanstate *cs;
+zs_kgdb_softint(struct zs_chanstate *cs)
 {
+
 	printf("zs_kgdb_softint?\n");
 }
 
@@ -303,9 +293,8 @@ struct zsops zsops_kgdb = {
  * findzs() should return the address of the given zs channel.
  * Here we count on the PROM to map in the required zs chips.
  */
-void *
-findzs(zs)
-	int zs;
+static void *
+findzs(int zs)
 {
 
 #if defined(SUN4)
@@ -341,7 +330,7 @@ findzs(zs)
 		 * Have the obio module figure out which virtual
 		 * address the device is mapped to.
 		 */
-		if (obio_find_rom_map(paddr, PMAP_OBIO, NBPG, &bh) != 0)
+		if (obio_find_rom_map(paddr, PAGE_SIZE, &bh) != 0)
 			return (NULL);
 
 		return ((void *)bh);
@@ -349,7 +338,7 @@ findzs(zs)
 #endif
 
 #if defined(SUN4C) || defined(SUN4M)
-	if (CPU_ISSUN4COR4M) {
+	if (CPU_ISSUN4C || CPU_ISSUN4M) {
 		int node;
 
 		node = firstchild(findroot());
@@ -365,7 +354,7 @@ findzs(zs)
 		while ((node = findnode(node, "zs")) != 0) {
 			int nvaddrs, *vaddrs, vstore[10];
 
-			if (getpropint(node, "slave", -1) != zs) {
+			if (prom_getpropint(node, "slave", -1) != zs) {
 				node = nextsibling(node);
 				continue;
 			}
@@ -376,8 +365,8 @@ findzs(zs)
 			 */
 			vaddrs = vstore;
 			nvaddrs = sizeof(vstore)/sizeof(vstore[0]);
-			if (getprop(node, "address", sizeof(int),
-				    &nvaddrs, (void **)&vaddrs) != 0)
+			if (prom_getprop(node, "address", sizeof(int),
+				    &nvaddrs, &vaddrs) != 0)
 				return (NULL);
 
 			return ((void *)vaddrs[0]);

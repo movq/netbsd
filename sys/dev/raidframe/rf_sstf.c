@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_sstf.c,v 1.4 2000/01/08 23:45:05 oster Exp $	*/
+/*	$NetBSD: rf_sstf.c,v 1.15 2006/11/16 01:33:23 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -32,6 +32,11 @@
  *
  ******************************************************************************/
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rf_sstf.c,v 1.15 2006/11/16 01:33:23 christos Exp $");
+
+#include <dev/raidframe/raidframevar.h>
+
 #include "rf_alloclist.h"
 #include "rf_stripelocks.h"
 #include "rf_layout.h"
@@ -41,7 +46,6 @@
 #include "rf_general.h"
 #include "rf_options.h"
 #include "rf_raid.h"
-#include "rf_types.h"
 
 #define DIR_LEFT   1
 #define DIR_RIGHT  2
@@ -52,7 +56,7 @@
 #define QSUM(_sstfq_) (((_sstfq_)->lopri.qlen)+((_sstfq_)->left.qlen)+((_sstfq_)->right.qlen))
 
 
-static void 
+static void
 do_sstf_ord_q(RF_DiskQueueData_t **,
     RF_DiskQueueData_t **,
     RF_DiskQueueData_t *);
@@ -65,7 +69,7 @@ closest_to_arm(RF_SstfQ_t *,
 static void do_dequeue(RF_SstfQ_t *, RF_DiskQueueData_t *);
 
 
-static void 
+static void
 do_sstf_ord_q(queuep, tailp, req)
 	RF_DiskQueueData_t **queuep;
 	RF_DiskQueueData_t **tailp;
@@ -242,47 +246,47 @@ closest_to_arm(queue, arm_pos, dir, allow_reverse)
 }
 
 void   *
-rf_SstfCreate(sect_per_disk, cl_list, listp)
-	RF_SectorCount_t sect_per_disk;
-	RF_AllocListElem_t *cl_list;
-	RF_ShutdownList_t **listp;
+rf_SstfCreate(
+	RF_SectorCount_t sect_per_disk,
+	RF_AllocListElem_t *cl_list,
+	RF_ShutdownList_t **listp)
 {
 	RF_Sstf_t *sstfq;
 
-	RF_CallocAndAdd(sstfq, 1, sizeof(RF_Sstf_t), (RF_Sstf_t *), cl_list);
+	RF_MallocAndAdd(sstfq, sizeof(RF_Sstf_t), (RF_Sstf_t *), cl_list);
 	sstfq->dir = DIR_EITHER;
 	sstfq->allow_reverse = 1;
 	return ((void *) sstfq);
 }
 
 void   *
-rf_ScanCreate(sect_per_disk, cl_list, listp)
-	RF_SectorCount_t sect_per_disk;
-	RF_AllocListElem_t *cl_list;
-	RF_ShutdownList_t **listp;
+rf_ScanCreate(
+	RF_SectorCount_t sect_per_disk,
+	RF_AllocListElem_t *cl_list,
+	RF_ShutdownList_t **listp)
 {
 	RF_Sstf_t *scanq;
 
-	RF_CallocAndAdd(scanq, 1, sizeof(RF_Sstf_t), (RF_Sstf_t *), cl_list);
+	RF_MallocAndAdd(scanq, sizeof(RF_Sstf_t), (RF_Sstf_t *), cl_list);
 	scanq->dir = DIR_RIGHT;
 	scanq->allow_reverse = 1;
 	return ((void *) scanq);
 }
 
 void   *
-rf_CscanCreate(sect_per_disk, cl_list, listp)
-	RF_SectorCount_t sect_per_disk;
-	RF_AllocListElem_t *cl_list;
-	RF_ShutdownList_t **listp;
+rf_CscanCreate(
+	RF_SectorCount_t sect_per_disk,
+	RF_AllocListElem_t *cl_list,
+	RF_ShutdownList_t **listp)
 {
 	RF_Sstf_t *cscanq;
 
-	RF_CallocAndAdd(cscanq, 1, sizeof(RF_Sstf_t), (RF_Sstf_t *), cl_list);
+	RF_MallocAndAdd(cscanq, sizeof(RF_Sstf_t), (RF_Sstf_t *), cl_list);
 	cscanq->dir = DIR_RIGHT;
 	return ((void *) cscanq);
 }
 
-void 
+void
 rf_SstfEnqueue(qptr, req, priority)
 	void   *qptr;
 	RF_DiskQueueData_t *req;
@@ -293,15 +297,17 @@ rf_SstfEnqueue(qptr, req, priority)
 	sstfq = (RF_Sstf_t *) qptr;
 
 	if (priority == RF_IO_LOW_PRIORITY) {
+#if RF_DEBUG_QUEUE
 		if (rf_sstfDebug || rf_scanDebug || rf_cscanDebug) {
 			RF_DiskQueue_t *dq;
 			dq = (RF_DiskQueue_t *) req->queue;
-			printf("raid%d: ENQ lopri %d,%d queues are %d,%d,%d\n",
+			printf("raid%d: ENQ lopri %d queues are %d,%d,%d\n",
 			       req->raidPtr->raidid,
-			       dq->row, dq->col, 
+			       dq->col,
 			       sstfq->left.qlen, sstfq->right.qlen,
 			       sstfq->lopri.qlen);
 		}
+#endif
 		do_sstf_ord_q(&sstfq->lopri.queue, &sstfq->lopri.qtail, req);
 		sstfq->lopri.qlen++;
 	} else {
@@ -315,16 +321,18 @@ rf_SstfEnqueue(qptr, req, priority)
 	}
 }
 
-static void 
+static void
 do_dequeue(queue, req)
 	RF_SstfQ_t *queue;
 	RF_DiskQueueData_t *req;
 {
 	RF_DiskQueueData_t *req2;
 
+#if RF_DEBUG_QUEUE
 	if (rf_sstfDebug || rf_scanDebug || rf_cscanDebug) {
 		printf("raid%d: do_dequeue\n", req->raidPtr->raidid);
 	}
+#endif
 	if (req == queue->queue) {
 		DO_HEAD_DEQ(req2, queue);
 		RF_ASSERT(req2 == req);
@@ -352,14 +360,16 @@ rf_SstfDequeue(qptr)
 
 	sstfq = (RF_Sstf_t *) qptr;
 
+#if RF_DEBUG_QUEUE
 	if (rf_sstfDebug) {
 		RF_DiskQueue_t *dq;
 		dq = (RF_DiskQueue_t *) req->queue;
 		RF_ASSERT(QSUM(sstfq) == dq->queueLength);
-		printf("raid%d: sstf: Dequeue %d,%d queues are %d,%d,%d\n",
-		       req->raidPtr->raidid, dq->row, dq->col, 
+		printf("raid%d: sstf: Dequeue %d queues are %d,%d,%d\n",
+		       req->raidPtr->raidid, dq->col,
 		       sstfq->left.qlen, sstfq->right.qlen, sstfq->lopri.qlen);
 	}
+#endif
 	if (sstfq->left.queue == NULL) {
 		RF_ASSERT(sstfq->left.qlen == 0);
 		if (sstfq->right.queue == NULL) {
@@ -368,16 +378,20 @@ rf_SstfDequeue(qptr)
 				RF_ASSERT(sstfq->lopri.qlen == 0);
 				return (NULL);
 			}
+#if RF_DEBUG_QUEUE
 			if (rf_sstfDebug) {
 				printf("raid%d: sstf: check for close lopri",
 				       req->raidPtr->raidid);
 			}
+#endif
 			req = closest_to_arm(&sstfq->lopri, sstfq->last_sector,
 			    &sstfq->dir, sstfq->allow_reverse);
+#if RF_DEBUG_QUEUE
 			if (rf_sstfDebug) {
 				printf("raid%d: sstf: closest_to_arm said %lx",
 				       req->raidPtr->raidid, (long) req);
 			}
+#endif
 			if (req == NULL)
 				return (NULL);
 			do_dequeue(&sstfq->lopri, req);
@@ -411,14 +425,16 @@ rf_ScanDequeue(qptr)
 
 	scanq = (RF_Sstf_t *) qptr;
 
+#if RF_DEBUG_QUEUE
 	if (rf_scanDebug) {
 		RF_DiskQueue_t *dq;
 		dq = (RF_DiskQueue_t *) req->queue;
 		RF_ASSERT(QSUM(scanq) == dq->queueLength);
-		printf("raid%d: scan: Dequeue %d,%d queues are %d,%d,%d\n", 
-		       req->raidPtr->raidid, dq->row, dq->col, 
+		printf("raid%d: scan: Dequeue %d queues are %d,%d,%d\n",
+		       req->raidPtr->raidid, dq->col,
 		       scanq->left.qlen, scanq->right.qlen, scanq->lopri.qlen);
 	}
+#endif
 	if (scanq->left.queue == NULL) {
 		RF_ASSERT(scanq->left.qlen == 0);
 		if (scanq->right.queue == NULL) {
@@ -466,15 +482,17 @@ rf_CscanDequeue(qptr)
 	cscanq = (RF_Sstf_t *) qptr;
 
 	RF_ASSERT(cscanq->dir == DIR_RIGHT);
+#if RF_DEBUG_QUEUE
 	if (rf_cscanDebug) {
 		RF_DiskQueue_t *dq;
 		dq = (RF_DiskQueue_t *) req->queue;
 		RF_ASSERT(QSUM(cscanq) == dq->queueLength);
-		printf("raid%d: scan: Dequeue %d,%d queues are %d,%d,%d\n", 
-		       req->raidPtr->raidid, dq->row, dq->col,
+		printf("raid%d: scan: Dequeue %d queues are %d,%d,%d\n",
+		       req->raidPtr->raidid, dq->col,
 		       cscanq->left.qlen, cscanq->right.qlen,
 		       cscanq->lopri.qlen);
 	}
+#endif
 	if (cscanq->right.queue) {
 		DO_HEAD_DEQ(req, &cscanq->right);
 	} else {
@@ -620,7 +638,7 @@ rf_CscanPeek(qptr)
 	return (req);
 }
 
-int 
+int
 rf_SstfPromote(qptr, parityStripeID, which_ru)
 	void   *qptr;
 	RF_StripeNum_t parityStripeID;
@@ -633,20 +651,14 @@ rf_SstfPromote(qptr, parityStripeID, which_ru)
 	sstfq = (RF_Sstf_t *) qptr;
 
 	n = 0;
-	if (rf_sstfDebug || rf_scanDebug || rf_cscanDebug) {
-		printf("raid%d: promote %ld %d  queues are %d,%d,%d\n",
-		       r->raidPtr->raidid, (long) parityStripeID, 
-		       (int) which_ru,
-		       sstfq->left.qlen,
-		       sstfq->right.qlen,
-		       sstfq->lopri.qlen);
-	}
 	for (r = sstfq->lopri.queue; r; r = next) {
 		next = r->next;
+#if RF_DEBUG_QUEUE
 		if (rf_sstfDebug || rf_scanDebug || rf_cscanDebug) {
 			printf("raid%d: check promote %lx\n",
 			       r->raidPtr->raidid, (long) r);
 		}
+#endif
 		if ((r->parityStripeID == parityStripeID)
 		    && (r->which_ru == which_ru)) {
 			do_dequeue(&sstfq->lopri, r);
@@ -654,10 +666,12 @@ rf_SstfPromote(qptr, parityStripeID, which_ru)
 			n++;
 		}
 	}
+#if RF_DEBUG_QUEUE
 	if (rf_sstfDebug || rf_scanDebug || rf_cscanDebug) {
 		printf("raid%d: promoted %d matching I/Os queues are %d,%d,%d\n",
-		       r->raidPtr->raidid, n, sstfq->left.qlen, 
+		       r->raidPtr->raidid, n, sstfq->left.qlen,
 		       sstfq->right.qlen, sstfq->lopri.qlen);
 	}
+#endif
 	return (n);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.22 2000/03/19 14:41:49 pk Exp $ */
+/*	$NetBSD: intr.c,v 1.60 2008/05/18 22:40:14 martin Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,16 +21,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT OT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
@@ -44,58 +40,23 @@
  *	@(#)intr.c	8.3 (Berkeley) 11/11/93
  */
 
-#include "opt_inet.h"
-#include "opt_atalk.h"
-#include "opt_iso.h"
-#include "opt_ns.h"
-#include "opt_ccitt.h"
-#include "opt_natm.h"
-#include "ppp.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.60 2008/05/18 22:40:14 martin Exp $");
+
+#include "opt_ddb.h"
+#include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/socket.h>
-
-#include <vm/vm.h>
+#include <sys/malloc.h>
 
 #include <dev/cons.h>
-
-#include <net/netisr.h>
-#include <net/if.h>
 
 #include <machine/cpu.h>
 #include <machine/ctlreg.h>
 #include <machine/instr.h>
 #include <machine/trap.h>
-
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/if_inarp.h>
-#include <netinet/ip_var.h>
-#endif
-#ifdef INET6
-# ifndef INET
-#  include <netinet/in.h>
-# endif
-#include <netinet/ip6.h>
-#include <netinet6/ip6_var.h>
-#endif
-#ifdef NS
-#include <netns/ns_var.h>
-#endif
-#ifdef ISO
-#include <netiso/iso.h>
-#include <netiso/clnp.h>
-#endif
-#ifdef NETATALK
-#include <netatalk/at_extern.h>
-#endif
-#include "ppp.h"
-#if NPPP > 0
-#include <net/ppp_defs.h>
-#include <net/if_ppp.h>
-#endif
 
 /*
  * The following array is to used by locore.s to map interrupt packets
@@ -105,10 +66,8 @@
  */
 struct intrhand *intrlev[MAXINTNUM];
 
-void	strayintr __P((const struct trapframe64 *, int));
-int	softintr __P((void *));
-int	softnet __P((void *));
-int	send_softclock __P((void *));
+void	strayintr(const struct trapframe64 *, int);
+int	intr_list_handler(void *);
 
 /*
  * Stray interrupt handler.  Clear it if possible.
@@ -118,12 +77,11 @@ int ignore_stray = 1;
 int straycnt[16];
 
 void
-strayintr(fp, vectored)
-	const struct trapframe64 *fp;
-	int vectored;
+strayintr(const struct trapframe64 *fp, int vectored)
 {
 	static int straytime, nstray;
 	int timesince;
+	char buf[256];
 #if 0
 	extern int swallow_zsintrs;
 #endif
@@ -137,110 +95,67 @@ strayintr(fp, vectored)
 	/* If we're in polled mode ignore spurious interrupts */
 	if ((fp->tf_pil == PIL_SER) /* && swallow_zsintrs */) return;
 
-	printf("stray interrupt ipl %u pc=%lx npc=%lx pstate=%lb vecttored=%d\n",
-		fp->tf_pil, fp->tf_pc, fp->tf_npc, 
-	       (unsigned long)(fp->tf_tstate>>TSTATE_PSTATE_SHIFT), PSTATE_BITS, vectored);
-	timesince = time.tv_sec - straytime;
+	printf("stray interrupt ipl %u pc=%llx npc=%llx pstate=%s vecttored=%d\n",
+	    fp->tf_pil, (unsigned long long)fp->tf_pc,
+	    (unsigned long long)fp->tf_npc, 
+	    bitmask_snprintf((fp->tf_tstate>>TSTATE_PSTATE_SHIFT),
+	      PSTATE_BITS, buf, sizeof(buf)), vectored);
+
+	timesince = time_second - straytime;
 	if (timesince <= 10) {
 		if (++nstray > 500)
 			panic("crazy interrupts");
 	} else {
-		straytime = time.tv_sec;
+		straytime = time_second;
 		nstray = 1;
 	}
-}
-
-#include "arp.h"
-
-/*
- * Level 1 software interrupt (could also be Sbus level 1 interrupt).
- * Three possible reasons:
- *	Network software interrupt
- *	Soft clock interrupt
- */
-int
-softintr(fp)
-	void *fp;
-{
-
-	return (1);
-}
-
-int
-softnet(fp)
-	void *fp;
-{
-	int n, s;
-	
-	s = splhigh();
-	n = netisr;
-	netisr = 0;
-	splx(s);
-	
-#define DONETISR(bit, fn) do {		\
-	if (n & (1 << bit))		\
-		fn();			\
-} while (0)
-#include <net/netisr_dispatch.h>
-#undef DONETISR
-}
-
-/* 
- * Damn softclock doesn't return a value.
- */
-int
-send_softclock(fp)
-	void *fp;
-{
-	softclock();
-	return 1;
-}
-
-struct intrhand soft01intr = { softintr, NULL, 1 };
-struct intrhand soft01net = { softnet, NULL, 1 };
-struct intrhand soft01clock = { send_softclock, NULL, 1 };
-
-#if 1
-void 
-setsoftint() {
-	send_softint(-1, IPL_SOFTINT, &soft01intr);
-}
-void 
-setsoftnet() {
-	send_softint(-1, IPL_SOFTNET, &soft01net);
-}
-void 
-setsoftclock() {
-	send_softint(-1, IPL_SOFTCLOCK, &soft01clock);
-}
+#ifdef DDB
+	Debugger();
 #endif
+}
 
 /*
- * Level 15 interrupts are special, and not vectored here.
- * Only `prewired' interrupts appear here; boot-time configured devices
- * are attached via intr_establish() below.
+ * PCI devices can share interrupts so we need to have
+ * a handler to hand out interrupts.
  */
-struct intrhand *intrhand[15] = {
-	NULL,			/*  0 = error */
-	&soft01intr,		/*  1 = software level 1 + Sbus */
-	NULL,	 		/*  2 = Sbus level 2 (4m: Sbus L1) */
-	NULL,			/*  3 = SCSI + DMA + Sbus level 3 (4m: L2,lpt)*/
-	NULL,			/*  4 = software level 4 (tty softint) (scsi) */
-	NULL,			/*  5 = Ethernet + Sbus level 4 (4m: Sbus L3) */
-	NULL,			/*  6 = software level 6 (not used) (4m: enet)*/
-	NULL,			/*  7 = video + Sbus level 5 */
-	NULL,			/*  8 = Sbus level 6 */
-	NULL,			/*  9 = Sbus level 7 */
-	NULL,			/* 10 = counter 0 = clock */
-	NULL,			/* 11 = floppy */
-	NULL,			/* 12 = zs hardware interrupt */
-	NULL,			/* 13 = audio chip */
-	NULL			/* 14 = counter 1 = profiling timer */
-};
+int
+intr_list_handler(void *arg)
+{
+	int claimed = 0;
+	struct intrhand *ih = (struct intrhand *)arg;
 
-int fastvec = 0;
-#ifdef DIAGNOSTIC
-extern int sparc_interrupt[];
+	if (!arg) panic("intr_list_handler: no handlers!");
+	while (ih && !claimed) {
+		claimed = (*ih->ih_fun)(ih->ih_arg);
+#ifdef DEBUG
+		{
+			extern int intrdebug;
+			if (intrdebug & 1)
+				printf("intr %p %x arg %p %s\n",
+					ih, ih->ih_number, ih->ih_arg,
+					claimed ? "claimed" : "");
+		}
+#endif
+		ih = ih->ih_next;
+	}
+	return (claimed);
+}
+
+#ifdef MULTIPROCESSOR
+static int intr_biglock_wrapper(void *);
+
+static int
+intr_biglock_wrapper(void *vp)
+{
+	struct intrhand *ih = vp;
+	int ret;
+
+	KERNEL_LOCK(1, NULL);
+	ret = (*ih->ih_realfun)(ih->ih_realarg);
+	KERNEL_UNLOCK_ONE(NULL);
+
+	return ret;
+}
 #endif
 
 /*
@@ -248,23 +163,29 @@ extern int sparc_interrupt[];
  * This is not possible if it has been taken away as a fast vector.
  */
 void
-intr_establish(level, ih)
-	int level;
-	struct intrhand *ih;
+intr_establish(int level, bool mpsafe, struct intrhand *ih)
 {
-	register struct intrhand **p, *q;
+	struct intrhand *q = NULL;
 	int s;
 
-	s = splhigh();
 	/*
 	 * This is O(N^2) for long chains, but chains are never long
 	 * and we do want to preserve order.
 	 */
 	ih->ih_pil = level; /* XXXX caller should have done this before */
+	ih->ih_pending = 0; /* XXXX caller should have done this before */
 	ih->ih_next = NULL;
-	for (p = &intrhand[level]; (q = *p) != NULL; p = &q->ih_next)
-		;
-	*p = ih;
+
+#ifdef MULTIPROCESSOR
+	if (!mpsafe) {
+		ih->ih_realarg = ih->ih_arg;
+		ih->ih_realfun = ih->ih_fun;
+		ih->ih_arg = ih;
+		ih->ih_fun = intr_biglock_wrapper;
+	}
+#endif
+
+	s = splhigh();
 	/*
 	 * Store in fast lookup table
 	 */
@@ -275,17 +196,76 @@ intr_establish(level, ih)
 		Debugger();
 	}
 #endif
-	if (ih->ih_number < MAXINTNUM || ih->ih_number <= 0) {
-		if (intrlev[ih->ih_number]) 
-			panic("intr_establish: intr reused %d", ih->ih_number);
-		intrlev[ih->ih_number] = ih;
+	if (ih->ih_number < MAXINTNUM && ih->ih_number >= 0) {
+		if ((q = intrlev[ih->ih_number])) {
+			struct intrhand *nih;
+			/*
+			 * Interrupt is already there.  We need to create a
+			 * new interrupt handler and interpose it.
+			 */
+#ifdef DEBUG
+			printf("intr_establish: intr reused %x\n", 
+				ih->ih_number);
+#endif
+			if (q->ih_fun != intr_list_handler) {
+				nih = (struct intrhand *)
+					malloc(sizeof(struct intrhand),
+						M_DEVBUF, M_NOWAIT);
+				/* Point the old IH at the new handler */
+				*nih = *q;
+				nih->ih_next = NULL;
+				q->ih_arg = (void *)nih;
+				q->ih_fun = intr_list_handler;
+			}
+			/* Add the ih to the head of the list */
+			ih->ih_next = (struct intrhand *)q->ih_arg;
+			q->ih_arg = (void *)ih;
+		} else {
+			intrlev[ih->ih_number] = ih;
+		}
 #ifdef NOT_DEBUG
-		printf("\nintr_establish: vector %x ipl mask %x clrintr %p fun %p arg %p\n",
-		       ih->ih_number, ih->ih_pil, (long)ih->ih_clr, ih->ih_fun, ih->ih_arg);
-		Debugger();
+		printf("\nintr_establish: vector %x pil %x mapintr %p "
+			"clrintr %p fun %p arg %p\n",
+			ih->ih_number, ih->ih_pil, (void *)ih->ih_map,
+			(void *)ih->ih_clr, (void *)ih->ih_fun,
+			(void *)ih->ih_arg);
+		/*Debugger();*/
 #endif
 	} else
-		panic("intr_establish: bad intr number %d", ih->ih_number);
+		panic("intr_establish: bad intr number %x", ih->ih_number);
+
 	splx(s);
 }
 
+/*
+ * Prepare an interrupt handler used for send_softint.
+ */
+void *
+sparc_softintr_establish(int pil, int (*fun)(void *), void *arg)
+{
+	struct intrhand *ih;
+
+	ih = malloc(sizeof(struct intrhand), M_DEVBUF, M_NOWAIT|M_ZERO);
+	if (ih == NULL)
+		panic("could not allocate softint interrupt handler");
+
+	ih->ih_fun = fun;
+	ih->ih_pil = pil;
+	ih->ih_arg = arg;
+	return ih;
+}
+
+void
+sparc_softintr_disestablish(void *cookie)
+{
+
+	free(cookie, M_DEVBUF);
+}
+
+void
+sparc_softintr_schedule(void *cookie)
+{
+	struct intrhand *ih = (struct intrhand *)cookie;
+
+	send_softint(-1, ih->ih_pil, ih);
+}

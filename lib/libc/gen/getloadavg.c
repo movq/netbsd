@@ -1,4 +1,4 @@
-/*	$NetBSD: getloadavg.c,v 1.10 2000/01/22 22:19:10 mycroft Exp $	*/
+/*	$NetBSD: getloadavg.c,v 1.13 2003/08/07 16:42:50 agc Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)getloadavg.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: getloadavg.c,v 1.10 2000/01/22 22:19:10 mycroft Exp $");
+__RCSID("$NetBSD: getloadavg.c,v 1.13 2003/08/07 16:42:50 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -47,7 +43,7 @@ __RCSID("$NetBSD: getloadavg.c,v 1.10 2000/01/22 22:19:10 mycroft Exp $");
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/sysctl.h>
-#include <vm/vm_param.h>
+#include <uvm/uvm_param.h>
 
 #include <assert.h>
 #include <errno.h>
@@ -73,6 +69,7 @@ getloadavg(loadavg, nelem)
 	size_t size;
 
 	_DIAGASSERT(loadavg != NULL);
+	_DIAGASSERT(nelem >= 0);
 
 	mib[0] = CTL_VM;
 	mib[1] = VM_LOADAVG;
@@ -80,7 +77,7 @@ getloadavg(loadavg, nelem)
 	if (sysctl(mib, 2, &loadinfo, &size, NULL, 0) < 0)
 		return (-1);
 
-	nelem = MIN(nelem, sizeof(loadinfo.ldavg) / sizeof(fixpt_t));
+	nelem = MIN((size_t) nelem, sizeof(loadinfo.ldavg) / sizeof(fixpt_t));
 	for (i = 0; i < nelem; i++)
 		loadavg[i] = (double) loadinfo.ldavg[i] / loadinfo.fscale;
 	return (nelem);

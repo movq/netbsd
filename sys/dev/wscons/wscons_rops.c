@@ -1,4 +1,4 @@
-/* $NetBSD: wscons_rops.c,v 1.6 2000/03/30 12:45:44 augustss Exp $ */
+/* $NetBSD: wscons_rops.c,v 1.11 2005/12/11 12:24:12 christos Exp $ */
 
 /*
  * Copyright (c) 1991, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,6 +40,9 @@
  *	@(#)rcons_subr.c	8.1 (Berkeley) 6/11/93
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: wscons_rops.c,v 1.11 2005/12/11 12:24:12 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 
@@ -56,9 +55,7 @@
  * Pays no lip service to hardware cursors.
  */
 void
-rcons_cursor(id, on, row, col)
-	void *id;
-	int on, row, col;
+rcons_cursor(void *id, int on, int row, int col)
 {
 	struct rcons *rc = id;
 	int x, y;
@@ -95,10 +92,7 @@ rcons_cursor(id, on, row, col)
 }
 
 int
-rcons_mapchar(id, uni, index)
-	void *id;
-	int uni;
-	unsigned int *index;
+rcons_mapchar(void *id, int uni, unsigned int *index)
 {
 
 	if (uni < 128) {
@@ -113,11 +107,7 @@ rcons_mapchar(id, uni, index)
  * Actually write a string to the frame buffer.
  */
 void
-rcons_putchar(id, row, col, uc, attr)
-	void *id;
-	int row, col;
-	u_int uc;
-	long attr;
+rcons_putchar(void *id, int row, int col, u_int uc, long attr)
 {
 	struct rcons *rc = id;
 	int x, y, op;
@@ -137,9 +127,7 @@ rcons_putchar(id, row, col, uc, attr)
  * Possibly change to white-on-black or black-on-white modes.
  */
 void
-rcons_invert(id, inverted)
-	void *id;
-	int inverted;
+rcons_invert(void *id, int inverted)
 {
 	struct rcons *rc = id;
 
@@ -157,9 +145,7 @@ rcons_invert(id, inverted)
  * Copy columns (characters) in a row (line).
  */
 void
-rcons_copycols(id, row, srccol, dstcol, ncols)
-	void *id;
-	int row, srccol, dstcol, ncols;
+rcons_copycols(void *id, int row, int srccol, int dstcol, int ncols)
 {
 	struct rcons *rc = id;
 	int y, srcx, dstx, nx;
@@ -178,10 +164,7 @@ rcons_copycols(id, row, srccol, dstcol, ncols)
  * Clear columns (characters) in a row (line).
  */
 void
-rcons_erasecols(id, row, startcol, ncols, fillattr)
-	void *id;
-	int row, startcol, ncols;
-	long fillattr;
+rcons_erasecols(void *id, int row, int startcol, int ncols, long fillattr)
 {
 	struct rcons *rc = id;
 	int y, startx, nx, op;
@@ -202,9 +185,7 @@ rcons_erasecols(id, row, startcol, ncols, fillattr)
  * Copy rows (lines).
  */
 void
-rcons_copyrows(id, srcrow, dstrow, nrows)
-	void *id;
-	int srcrow, dstrow, nrows;
+rcons_copyrows(void *id, int srcrow, int dstrow, int nrows)
 {
 	struct rcons *rc = id;
 	int srcy, dsty, ny;
@@ -222,10 +203,7 @@ rcons_copyrows(id, srcrow, dstrow, nrows)
  * Erase rows (lines).
  */
 void
-rcons_eraserows(id, startrow, nrows, fillattr)
-	void *id;
-	int startrow, nrows;
-	long fillattr;
+rcons_eraserows(void *id, int startrow, int nrows, long fillattr)
 {
 	struct rcons *rc = id;
 	int starty, ny, op;
@@ -242,10 +220,7 @@ rcons_eraserows(id, startrow, nrows, fillattr)
 }
 
 int
-rcons_alloc_attr(id, fg, bg, flags, attrp)
-	void *id;
-	int fg, bg, flags;
-	long *attrp;
+rcons_allocattr(void *id, int fg, int bg, int flags, long *attrp)
 {
 	if (flags & (WSATTR_HILIT | WSATTR_BLINK |
 		     WSATTR_UNDERLINE | WSATTR_WSCOLORS))

@@ -1,4 +1,4 @@
-/*	$NetBSD: mulaw.h,v 1.11 1999/11/01 18:12:19 augustss Exp $	*/
+/*	$NetBSD: mulaw.h,v 1.20 2008/04/28 20:23:47 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,27 +29,21 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Convert 8-bit mu-law to 16 bit unsigned linear. */
-extern void mulaw_to_ulinear16_le __P((void *, u_char *buf, int cnt));
-extern void mulaw_to_ulinear16_be __P((void *, u_char *buf, int cnt));
-/* Convert 8-bit mu-law to 16 bit signed linear. */
-extern void mulaw_to_slinear16_le __P((void *, u_char *buf, int cnt));
-extern void mulaw_to_slinear16_be __P((void *, u_char *buf, int cnt));
-/* Convert 8-bit mu-law to/from 8 bit unsigned linear. */
-extern void mulaw_to_ulinear8 __P((void *, u_char *buf, int cnt));
-extern void ulinear8_to_mulaw __P((void *, u_char *buf, int cnt));
-/* Convert 8-bit mu-law to/from 8 bit signed linear. */
-extern void mulaw_to_slinear8 __P((void *, u_char *buf, int cnt));
-extern void slinear8_to_mulaw __P((void *, u_char *buf, int cnt));
-/* Convert 8-bit a-law to 16 bit unsigned linear. */
-extern void alaw_to_ulinear16_le __P((void *, u_char *buf, int cnt));
-extern void alaw_to_ulinear16_be __P((void *, u_char *buf, int cnt));
-/* Convert 8-bit a-law to 16 bit signed linear. */
-extern void alaw_to_slinear16_le __P((void *, u_char *buf, int cnt));
-extern void alaw_to_slinear16_be __P((void *, u_char *buf, int cnt));
-/* Convert 8-bit a-law to/from 8 bit unsigned linear. */
-extern void alaw_to_ulinear8 __P((void *, u_char *buf, int cnt));
-extern void ulinear8_to_alaw __P((void *, u_char *buf, int cnt));
-/* Convert 8-bit a-law to/from 8 bit signed linear. */
-extern void alaw_to_slinear8 __P((void *, u_char *buf, int cnt));
-extern void slinear8_to_alaw __P((void *, u_char *buf, int cnt));
+#ifndef _SYS_DEV_MULAW_H_
+#define _SYS_DEV_MULAW_H_
+#include <dev/audio_if.h>
+
+/* Convert 8-bit mu-law to/from 16 bit unsigned/signed linear. */
+extern stream_filter_factory_t mulaw_to_linear16;
+extern stream_filter_factory_t linear16_to_mulaw;
+/* Convert 8-bit mu-law to/from 8 bit unsigned/signed linear. */
+extern stream_filter_factory_t mulaw_to_linear8;
+extern stream_filter_factory_t linear8_to_mulaw;
+/* Convert 8-bit A-law to/from 16 bit unsigned/signed linear. */
+extern stream_filter_factory_t alaw_to_linear16;
+extern stream_filter_factory_t linear16_to_alaw;
+/* Convert 8-bit A-law to/from 8 bit unsigned/signed linear. */
+extern stream_filter_factory_t alaw_to_linear8;
+extern stream_filter_factory_t linear8_to_alaw;
+
+#endif /* _SYS_DEV_MULAW_H_ */

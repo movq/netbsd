@@ -1,4 +1,4 @@
-/*	$NetBSD: m68k4k_exec.c,v 1.3 1999/02/20 23:25:55 thorpej Exp $	*/
+/*	$NetBSD: m68k4k_exec.c,v 1.19 2007/12/08 18:36:13 dsl Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994 Christopher G. Demetriou
@@ -36,15 +36,16 @@
  * Taken directly from kern/exec_aout.c and frobbed to map text and
  * data as m68k4k executables expect.
  *
- * This module only works on machines with NBPG == 4096.  It's not clear
+ * This module only works on machines with PAGE_SIZE == 4096.  It's not clear
  * that making it work on other machines is worth the trouble.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: m68k4k_exec.c,v 1.19 2007/12/08 18:36:13 dsl Exp $");
 
 #if !defined(__m68k__)
 #error YOU GOTTA BE KIDDING!
 #endif
-
-#include "opt_compat_aout.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,17 +55,11 @@
 #include <sys/exec.h>
 #include <sys/resourcevar.h>
 
-#include <vm/vm.h>
-
 #include <compat/m68k4k/m68k4k_exec.h>
 
-#if defined(COMPAT_AOUT)
-extern struct emul emul_netbsd_aout;
-#endif
-
-int	exec_m68k4k_prep_zmagic __P((struct proc *, struct exec_package *));
-int	exec_m68k4k_prep_nmagic __P((struct proc *, struct exec_package *));
-int	exec_m68k4k_prep_omagic __P((struct proc *, struct exec_package *));
+int	exec_m68k4k_prep_zmagic(struct lwp *, struct exec_package *);
+int	exec_m68k4k_prep_nmagic(struct lwp *, struct exec_package *);
+int	exec_m68k4k_prep_omagic(struct lwp *, struct exec_package *);
 
 /*
  * exec_m68k4k_makecmds(): Check if it's an a.out-format executable
@@ -80,9 +75,7 @@ int	exec_m68k4k_prep_omagic __P((struct proc *, struct exec_package *));
  */
 
 int
-exec_m68k4k_makecmds(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
+exec_m68k4k_makecmds(struct lwp *l, struct exec_package *epp)
 {
 	u_long midmag, magic;
 	u_short mid;
@@ -90,7 +83,7 @@ exec_m68k4k_makecmds(p, epp)
 	struct exec *execp = epp->ep_hdr;
 
 	/* See note above... */
-	if (M68K4K_LDPGSZ != NBPG)
+	if (M68K4K_LDPGSZ != PAGE_SIZE)
 		return ENOEXEC;
 
 	if (epp->ep_hdrvalid < sizeof(struct exec))
@@ -104,13 +97,13 @@ exec_m68k4k_makecmds(p, epp)
 
 	switch (midmag) {
 	case (MID_M68K4K << 16) | ZMAGIC:
-		error = exec_m68k4k_prep_zmagic(p, epp);
+		error = exec_m68k4k_prep_zmagic(l, epp);
 		break;
 	case (MID_M68K4K << 16) | NMAGIC:
-		error = exec_m68k4k_prep_nmagic(p, epp);
+		error = exec_m68k4k_prep_nmagic(l, epp);
 		break;
 	case (MID_M68K4K << 16) | OMAGIC:
-		error = exec_m68k4k_prep_omagic(p, epp);
+		error = exec_m68k4k_prep_omagic(l, epp);
 		break;
 	default:
 		error = ENOEXEC;
@@ -118,10 +111,6 @@ exec_m68k4k_makecmds(p, epp)
 
 	if (error)
 		kill_vmcmds(&epp->ep_vmcmds);
-#if defined(COMPAT_AOUT)
-	else
-		epp->ep_emul = &emul_netbsd_aout;
-#endif
 
 	return error;
 }
@@ -137,11 +126,10 @@ exec_m68k4k_makecmds(p, epp)
  */
 
 int
-exec_m68k4k_prep_zmagic(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
+exec_m68k4k_prep_zmagic(struct lwp *l, struct exec_package *epp)
 {
 	struct exec *execp = epp->ep_hdr;
+	int error;
 
 	epp->ep_taddr = M68K4K_USRTEXT;
 	epp->ep_tsize = execp->a_text;
@@ -149,20 +137,9 @@ exec_m68k4k_prep_zmagic(p, epp)
 	epp->ep_dsize = execp->a_data + execp->a_bss;
 	epp->ep_entry = execp->a_entry;
 
-	/*
-	 * check if vnode is in open for writing, because we want to
-	 * demand-page out of it.  if it is, don't do it, for various
-	 * reasons
-	 */
-	if ((execp->a_text != 0 || execp->a_data != 0) &&
-	    epp->ep_vp->v_writecount != 0) {
-#ifdef DIAGNOSTIC
-		if (epp->ep_vp->v_flag & VTEXT)
-			panic("exec: a VTEXT vnode has writecount != 0\n");
-#endif
-		return ETXTBSY;
-	}
-	epp->ep_vp->v_flag |= VTEXT;
+	error = vn_marktext(epp->ep_vp);
+	if (error)
+		return (error);
 
 	/* set up command for text segment */
 	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_pagedvn, execp->a_text,
@@ -174,11 +151,12 @@ exec_m68k4k_prep_zmagic(p, epp)
 	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
 	/* set up command for bss segment */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, execp->a_bss,
-	    epp->ep_daddr + execp->a_data, NULLVP, 0,
-	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
+	if (execp->a_bss)
+		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, execp->a_bss,
+		    epp->ep_daddr + execp->a_data, NULLVP, 0,
+		    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
-	return exec_aout_setup_stack(p, epp);
+	return (*epp->ep_esch->es_setup_stack)(l, epp);
 }
 
 /*
@@ -186,9 +164,7 @@ exec_m68k4k_prep_zmagic(p, epp)
  */
 
 int
-exec_m68k4k_prep_nmagic(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
+exec_m68k4k_prep_nmagic(struct lwp *l, struct exec_package *epp)
 {
 	struct exec *execp = epp->ep_hdr;
 	long bsize, baddr;
@@ -211,13 +187,13 @@ exec_m68k4k_prep_nmagic(p, epp)
 	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
 	/* set up command for bss segment */
-	baddr = roundup(epp->ep_daddr + execp->a_data, NBPG);
+	baddr = roundup(epp->ep_daddr + execp->a_data, PAGE_SIZE);
 	bsize = epp->ep_daddr + epp->ep_dsize - baddr;
 	if (bsize > 0)
 		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, bsize, baddr,
 		    NULLVP, 0, VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
-	return exec_aout_setup_stack(p, epp);
+	return (*epp->ep_esch->es_setup_stack)(l, epp);
 }
 
 /*
@@ -225,9 +201,7 @@ exec_m68k4k_prep_nmagic(p, epp)
  */
 
 int
-exec_m68k4k_prep_omagic(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
+exec_m68k4k_prep_omagic(struct lwp *l, struct exec_package *epp)
 {
 	struct exec *execp = epp->ep_hdr;
 	long dsize, bsize, baddr;
@@ -244,7 +218,7 @@ exec_m68k4k_prep_omagic(p, epp)
 	    sizeof(struct exec), VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
 	/* set up command for bss segment */
-	baddr = roundup(epp->ep_daddr + execp->a_data, NBPG);
+	baddr = roundup(epp->ep_daddr + execp->a_data, PAGE_SIZE);
 	bsize = epp->ep_daddr + epp->ep_dsize - baddr;
 	if (bsize > 0)
 		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, bsize, baddr,
@@ -256,9 +230,10 @@ exec_m68k4k_prep_omagic(p, epp)
 	 * computed (in execve(2)) by rounding *up* `ep_tsize' and `ep_dsize'
 	 * respectively to page boundaries.
 	 * Compensate `ep_dsize' for the amount of data covered by the last
-	 * text page. 
+	 * text page.
 	 */
-	dsize = epp->ep_dsize + execp->a_text - roundup(execp->a_text, NBPG);
+	dsize = epp->ep_dsize + execp->a_text - roundup(execp->a_text,
+							PAGE_SIZE);
 	epp->ep_dsize = (dsize > 0) ? dsize : 0;
-	return exec_aout_setup_stack(p, epp);
+	return (*epp->ep_esch->es_setup_stack)(l, epp);
 }

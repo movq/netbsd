@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.4 1997/10/12 11:45:22 lukem Exp $	*/
+/*	$NetBSD: main.c,v 1.9 2008/07/20 01:03:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.4 1997/10/12 11:45:22 lukem Exp $");
+__RCSID("$NetBSD: main.c,v 1.9 2008/07/20 01:03:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -64,12 +60,8 @@ __RCSID("$NetBSD: main.c,v 1.4 1997/10/12 11:45:22 lukem Exp $");
 
 #include "rogue.h"
 
-int	main __P((int, char **));
-
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	if (init(argc, argv)) {		/* restored game */
 		goto PL;
@@ -84,7 +76,7 @@ main(argc, argv)
 		put_mons();
 		put_player(party_room);
 		print_stats(STAT_ALL);
-PL:		
+PL:
 		play_level();
 		free_stuff(&level_objects);
 		free_stuff(&level_monsters);

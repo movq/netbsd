@@ -1,4 +1,4 @@
-/* $NetBSD: pcdisplay.c,v 1.9 2000/01/25 02:44:04 ad Exp $ */
+/* $NetBSD: pcdisplay.c,v 1.34 2007/10/19 12:00:21 ad Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,12 +26,15 @@
  *
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pcdisplay.c,v 1.34 2007/10/19 12:00:21 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isavar.h>
 
@@ -50,6 +47,12 @@
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
 
+#include "pcweasel.h"
+#if NPCWEASEL > 0
+#include <dev/isa/weaselreg.h>
+#include <dev/isa/weaselvar.h>
+#endif
+
 struct pcdisplay_config {
 	struct pcdisplayscreen pcs;
 	struct pcdisplay_handle dc_ph;
@@ -60,25 +63,27 @@ struct pcdisplay_softc {
 	struct device sc_dev;
 	struct pcdisplay_config *sc_dc;
 	int nscreens;
+#if NPCWEASEL > 0
+	struct weasel_handle sc_weasel;
+#endif
 };
 
 static int pcdisplayconsole, pcdisplay_console_attached;
 static struct pcdisplay_config pcdisplay_console_dc;
 
-int	pcdisplay_match __P((struct device *, struct cfdata *, void *));
-void	pcdisplay_attach __P((struct device *, struct device *, void *));
+int	pcdisplay_match(struct device *, struct cfdata *, void *);
+void	pcdisplay_attach(struct device *, struct device *, void *);
 
-static int pcdisplay_is_console __P((bus_space_tag_t));
-static int pcdisplay_probe_col __P((bus_space_tag_t, bus_space_tag_t));
-static int pcdisplay_probe_mono __P((bus_space_tag_t, bus_space_tag_t));
-static void pcdisplay_init __P((struct pcdisplay_config *,
+static int pcdisplay_is_console(bus_space_tag_t);
+static int pcdisplay_probe_col(bus_space_tag_t, bus_space_tag_t);
+static int pcdisplay_probe_mono(bus_space_tag_t, bus_space_tag_t);
+static void pcdisplay_init(struct pcdisplay_config *,
 			     bus_space_tag_t, bus_space_tag_t,
-			     int));
-static int pcdisplay_alloc_attr __P((void *, int, int, int, long *));
+			     int);
+static int pcdisplay_allocattr(void *, int, int, int, long *);
 
-struct cfattach pcdisplay_ca = {
-	sizeof(struct pcdisplay_softc), pcdisplay_match, pcdisplay_attach,
-};
+CFATTACH_DECL(pcdisplay, sizeof(struct pcdisplay_softc),
+    pcdisplay_match, pcdisplay_attach, NULL, NULL);
 
 const struct wsdisplay_emulops pcdisplay_emulops = {
 	pcdisplay_cursor,
@@ -88,14 +93,16 @@ const struct wsdisplay_emulops pcdisplay_emulops = {
 	pcdisplay_erasecols,
 	pcdisplay_copyrows,
 	pcdisplay_eraserows,
-	pcdisplay_alloc_attr
+	pcdisplay_allocattr,
+	NULL,	/* replaceattr */
 };
 
 const struct wsscreen_descr pcdisplay_scr = {
 	"80x25", 80, 25,
 	&pcdisplay_emulops,
 	0, 0, /* no font support */
-	WSSCREEN_REVERSE /* that's minimal... */
+	WSSCREEN_REVERSE, /* that's minimal... */
+	NULL, /* modecookie */
 };
 
 const struct wsscreen_descr *_pcdisplay_scrlist[] = {
@@ -107,13 +114,13 @@ const struct wsscreen_list pcdisplay_screenlist = {
 	_pcdisplay_scrlist
 };
 
-static int pcdisplay_ioctl __P((void *, u_long, caddr_t, int, struct proc *));
-static int pcdisplay_mmap __P((void *, off_t, int));
-static int pcdisplay_alloc_screen __P((void *, const struct wsscreen_descr *,
-				       void **, int *, int *, long *));
-static void pcdisplay_free_screen __P((void *, void *));
-static int pcdisplay_show_screen __P((void *, void *, int,
-				      void (*) (void *, int, int), void *));
+static int pcdisplay_ioctl(void *, void *, u_long, void *, int, struct lwp *);
+static paddr_t pcdisplay_mmap(void *, void *, off_t, int);
+static int pcdisplay_alloc_screen(void *, const struct wsscreen_descr *,
+				       void **, int *, int *, long *);
+static void pcdisplay_free_screen(void *, void *);
+static int pcdisplay_show_screen(void *, void *, int,
+				      void (*) (void *, int, int), void *);
 
 const struct wsdisplay_accessops pcdisplay_accessops = {
 	pcdisplay_ioctl,
@@ -121,7 +128,9 @@ const struct wsdisplay_accessops pcdisplay_accessops = {
 	pcdisplay_alloc_screen,
 	pcdisplay_free_screen,
 	pcdisplay_show_screen,
-	0 /* load_font */
+	NULL, /* load_font */
+	NULL, /* pollc */
+	NULL, /* scroll */
 };
 
 static int
@@ -209,54 +218,74 @@ pcdisplay_init(dc, iot, memt, mono)
 
 	dc->pcs.dispoffset = 0;
 
-	dc->pcs.vc_crow = cpos / pcdisplay_scr.ncols;
-	dc->pcs.vc_ccol = cpos % pcdisplay_scr.ncols;
+	dc->pcs.cursorrow = cpos / pcdisplay_scr.ncols;
+	dc->pcs.cursorcol = cpos % pcdisplay_scr.ncols;
 	pcdisplay_cursor_init(&dc->pcs, 1);
 }
 
 int
-pcdisplay_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+pcdisplay_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	int mono;
 
+	if (ISA_DIRECT_CONFIG(ia))
+		return (0);
+
 	/* If values are hardwired to something that they can't be, punt. */
-	if ((ia->ia_iobase != IOBASEUNK &&
-	     ia->ia_iobase != 0x3d0 &&
-	     ia->ia_iobase != 0x3b0) ||
-	    /* ia->ia_iosize != 0 || XXX isa.c */
-	    (ia->ia_maddr != MADDRUNK &&
-	     ia->ia_maddr != 0xb8000 &&
-	     ia->ia_maddr != 0xb0000) ||
-	    (ia->ia_msize != 0 && ia->ia_msize != 0x8000) ||
-	    ia->ia_irq != IRQUNK || ia->ia_drq != DRQUNK)
+	if (ia->ia_nio < 1 ||
+	    (ia->ia_io[0].ir_addr != ISA_UNKNOWN_PORT &&
+	     ia->ia_io[0].ir_addr != 0x3d0 &&
+	     ia->ia_io[0].ir_addr != 0x3b0))
+		return (0);
+
+	if (ia->ia_niomem < 1 ||
+	    (ia->ia_iomem[0].ir_addr != ISA_UNKNOWN_IOMEM &&
+	     ia->ia_iomem[0].ir_addr != 0xb8000 &&
+	     ia->ia_iomem[0].ir_addr != 0xb0000))
+		return (0);
+	if (ia->ia_iomem[0].ir_size != 0 &&
+	    ia->ia_iomem[0].ir_size != 0x8000)
+		return (0);
+
+	if (ia->ia_nirq > 0 &&
+	    ia->ia_irq[0].ir_irq != ISA_UNKNOWN_IRQ)
+		return (0);
+
+	if (ia->ia_ndrq > 0 &&
+	    ia->ia_drq[0].ir_drq != ISA_UNKNOWN_DRQ)
 		return (0);
 
 	if (pcdisplay_is_console(ia->ia_iot))
 		mono = pcdisplay_console_dc.mono;
-	else if (ia->ia_iobase != 0x3b0 && ia->ia_maddr != 0xb0000 &&
+	else if (ia->ia_io[0].ir_addr != 0x3b0 &&
+		 ia->ia_iomem[0].ir_addr != 0xb0000 &&
 		 pcdisplay_probe_col(ia->ia_iot, ia->ia_memt))
 		mono = 0;
-	else if (ia->ia_iobase != 0x3d0 && ia->ia_maddr != 0xb8000 &&
+	else if (ia->ia_io[0].ir_addr != 0x3d0 &&
+		 ia->ia_iomem[0].ir_addr != 0xb8000 &&
 		 pcdisplay_probe_mono(ia->ia_iot, ia->ia_memt))
 		mono = 1;
 	else
 		return (0);
 
-	ia->ia_iobase = mono ? 0x3b0 : 0x3d0;
-	ia->ia_iosize = 0x10;
-	ia->ia_maddr = mono ? 0xb0000 : 0xb8000;
-	ia->ia_msize = 0x8000;
+	ia->ia_nio = 1;
+	ia->ia_io[0].ir_addr = mono ? 0x3b0 : 0x3d0;
+	ia->ia_io[0].ir_size = 0x10;
+
+	ia->ia_niomem = 1;
+	ia->ia_iomem[0].ir_size = mono ? 0xb0000 : 0xb8000;
+	ia->ia_iomem[0].ir_size = 0x8000;
+
+	ia->ia_nirq = 0;
+	ia->ia_ndrq = 0;
+
 	return (1);
 }
 
 void
-pcdisplay_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+pcdisplay_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	struct pcdisplay_softc *sc = (struct pcdisplay_softc *)self;
@@ -275,16 +304,31 @@ pcdisplay_attach(parent, self, aux)
 	} else {
 		dc = malloc(sizeof(struct pcdisplay_config),
 			    M_DEVBUF, M_WAITOK);
-		if (ia->ia_iobase != 0x3b0 && ia->ia_maddr != 0xb0000 &&
+		if (ia->ia_io[0].ir_addr != 0x3b0 &&
+		    ia->ia_iomem[0].ir_addr != 0xb0000 &&
 		    pcdisplay_probe_col(ia->ia_iot, ia->ia_memt))
 			pcdisplay_init(dc, ia->ia_iot, ia->ia_memt, 0);
-		else if (ia->ia_iobase != 0x3d0 && ia->ia_maddr != 0xb8000 &&
+		else if (ia->ia_io[0].ir_addr != 0x3d0 &&
+			 ia->ia_iomem[0].ir_addr != 0xb8000 &&
 			 pcdisplay_probe_mono(ia->ia_iot, ia->ia_memt))
 			pcdisplay_init(dc, ia->ia_iot, ia->ia_memt, 1);
 		else
 			panic("pcdisplay_attach: display disappeared");
 	}
 	sc->sc_dc = dc;
+
+#if NPCWEASEL > 0
+	/*
+	 * If the display is monochrome, check to see if we have
+	 * a PC-Weasel, and initialize its special features.
+	 */
+	if (dc->mono) {
+		sc->sc_weasel.wh_st = dc->dc_ph.ph_memt;
+		sc->sc_weasel.wh_sh = dc->dc_ph.ph_memh;
+		sc->sc_weasel.wh_parent = &sc->sc_dev;
+		weasel_isa_init(&sc->sc_weasel);
+	}
+#endif /* NPCWEASEL > 0 */
 
 	aa.console = console;
 	aa.scrdata = &pcdisplay_screenlist;
@@ -311,8 +355,8 @@ pcdisplay_cnattach(iot, memt)
 	pcdisplay_init(&pcdisplay_console_dc, iot, memt, mono);
 
 	wsdisplay_cnattach(&pcdisplay_scr, &pcdisplay_console_dc,
-			   pcdisplay_console_dc.pcs.vc_ccol,
-			   pcdisplay_console_dc.pcs.vc_crow,
+			   pcdisplay_console_dc.pcs.cursorcol,
+			   pcdisplay_console_dc.pcs.cursorrow,
 			   FG_LIGHTGREY | BG_BLACK);
 
 	pcdisplayconsole = 1;
@@ -331,35 +375,25 @@ pcdisplay_is_console(iot)
 }
 
 static int
-pcdisplay_ioctl(v, cmd, data, flag, p)
-	void *v;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+pcdisplay_ioctl(void *v, void *vs, u_long cmd,
+    void *data, int flag, struct lwp *l)
 {
 	/*
 	 * XXX "do something!"
 	 */
-	return (-1);
+	return (EPASSTHROUGH);
 }
 
-static int
-pcdisplay_mmap(v, offset, prot)
-	void *v;
-	off_t offset;
-	int prot;
+static paddr_t
+pcdisplay_mmap(void *v, void *vs, off_t offset,
+    int prot)
 {
 	return (-1);
 }
 
 static int
-pcdisplay_alloc_screen(v, type, cookiep, curxp, curyp, defattrp)
-	void *v;
-	const struct wsscreen_descr *type;
-	void **cookiep;
-	int *curxp, *curyp;
-	long *defattrp;
+pcdisplay_alloc_screen(void *v, const struct wsscreen_descr *type,
+    void **cookiep, int *curxp, int *curyp, long *defattrp)
 {
 	struct pcdisplay_softc *sc = v;
 
@@ -375,9 +409,7 @@ pcdisplay_alloc_screen(v, type, cookiep, curxp, curyp, defattrp)
 }
 
 static void
-pcdisplay_free_screen(v, cookie)
-	void *v;
-	void *cookie;
+pcdisplay_free_screen(void *v, void *cookie)
 {
 	struct pcdisplay_softc *sc = v;
 
@@ -388,12 +420,9 @@ pcdisplay_free_screen(v, cookie)
 }
 
 static int
-pcdisplay_show_screen(v, cookie, waitok, cb, cbarg)
-	void *v;
-	void *cookie;
-	int waitok;
-	void (*cb) __P((void *, int, int));
-	void *cbarg;
+pcdisplay_show_screen(void *v, void *cookie,
+    int waitok, void (*cb)(void *, int, int),
+    void *cbarg)
 {
 #ifdef DIAGNOSTIC
 	struct pcdisplay_softc *sc = v;
@@ -405,11 +434,8 @@ pcdisplay_show_screen(v, cookie, waitok, cb, cbarg)
 }
 
 static int
-pcdisplay_alloc_attr(id, fg, bg, flags, attrp)
-	void *id;
-	int fg, bg;
-	int flags;
-	long *attrp;
+pcdisplay_allocattr(void *id, int fg, int bg,
+    int flags, long *attrp)
 {
 	if (flags & WSATTR_REVERSE)
 		*attrp = FG_BLACK | BG_LIGHTGREY;

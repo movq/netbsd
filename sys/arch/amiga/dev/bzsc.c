@@ -1,4 +1,4 @@
-/*	$NetBSD: bzsc.c,v 1.26 1999/09/30 22:59:52 thorpej Exp $	*/
+/*	$NetBSD: bzsc.c,v 1.44 2008/04/13 04:55:52 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1997 Michael L. Hitch
@@ -36,6 +36,9 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: bzsc.c,v 1.44 2008/04/13 04:55:52 tsutsui Exp $");
+
 /*
  * Initial amiga Blizzard 1230-II driver by Daniel Widenfalk.  Conversion to
  * 53c9x MI driver by Michael L. Hitch (mhitch@montana.edu).
@@ -53,6 +56,8 @@
 #include <sys/user.h>
 #include <sys/queue.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
@@ -68,34 +73,30 @@
 #include <amiga/dev/bzscvar.h>
 #include <amiga/dev/zbusvar.h>
 
-void	bzscattach	__P((struct device *, struct device *, void *));
-int	bzscmatch	__P((struct device *, struct cfdata *, void *));
+#ifdef __powerpc__
+#define badaddr(a)      badaddr_read(a, 2, NULL)
+#endif
+
+int	bzscmatch(device_t, cfdata_t, void *);
+void	bzscattach(device_t, device_t, void *);
 
 /* Linkup to the rest of the kernel */
-struct cfattach bzsc_ca = {
-	sizeof(struct bzsc_softc), bzscmatch, bzscattach
-};
-
-struct scsipi_device bzsc_dev = {
-	NULL,			/* Use default error handler */
-	NULL,			/* have a queue, served by this */
-	NULL,			/* have no async handler */
-	NULL,			/* Use default 'done' routine */
-};
+CFATTACH_DECL_NEW(bzsc, sizeof(struct bzsc_softc),
+    bzscmatch, bzscattach, NULL, NULL);
 
 /*
  * Functions and the switch for the MI code.
  */
-u_char	bzsc_read_reg __P((struct ncr53c9x_softc *, int));
-void	bzsc_write_reg __P((struct ncr53c9x_softc *, int, u_char));
-int	bzsc_dma_isintr __P((struct ncr53c9x_softc *));
-void	bzsc_dma_reset __P((struct ncr53c9x_softc *));
-int	bzsc_dma_intr __P((struct ncr53c9x_softc *));
-int	bzsc_dma_setup __P((struct ncr53c9x_softc *, caddr_t *,
-	    size_t *, int, size_t *));
-void	bzsc_dma_go __P((struct ncr53c9x_softc *));
-void	bzsc_dma_stop __P((struct ncr53c9x_softc *));
-int	bzsc_dma_isactive __P((struct ncr53c9x_softc *));
+uint8_t	bzsc_read_reg(struct ncr53c9x_softc *, int);
+void	bzsc_write_reg(struct ncr53c9x_softc *, int, uint8_t);
+int	bzsc_dma_isintr(struct ncr53c9x_softc *);
+void	bzsc_dma_reset(struct ncr53c9x_softc *);
+int	bzsc_dma_intr(struct ncr53c9x_softc *);
+int	bzsc_dma_setup(struct ncr53c9x_softc *, uint8_t **,
+	    size_t *, int, size_t *);
+void	bzsc_dma_go(struct ncr53c9x_softc *);
+void	bzsc_dma_stop(struct ncr53c9x_softc *);
+int	bzsc_dma_isactive(struct ncr53c9x_softc *);
 
 struct ncr53c9x_glue bzsc_glue = {
 	bzsc_read_reg,
@@ -107,7 +108,7 @@ struct ncr53c9x_glue bzsc_glue = {
 	bzsc_dma_go,
 	bzsc_dma_stop,
 	bzsc_dma_isactive,
-	0,
+	NULL,
 };
 
 /* Maximum DMA transfer length to reduce impact on high-speed serial input */
@@ -121,53 +122,48 @@ u_long bzsc_cnt_dma3 = 0;	/* number of pages combined */
 
 #ifdef DEBUG
 struct {
-	u_char hardbits;
-	u_char status;
-	u_char xx;
-	u_char yy;
+	uint8_t hardbits;
+	uint8_t status;
+	uint8_t xx;
+	uint8_t yy;
 } bzsc_trace[128];
 int bzsc_trace_ptr = 0;
 int bzsc_trace_enable = 1;
-void bzsc_dump __P((void));
+void bzsc_dump(void);
 #endif
 
 /*
  * if we are a Phase5 Blizzard 1230 II
  */
 int
-bzscmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+bzscmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct zbus_args *zap;
-	volatile u_char *regs;
+	volatile uint8_t *regs;
 
 	zap = aux;
 	if (zap->manid != 0x2140 || zap->prodid != 11)
-		return(0);			/* It's not Blizzard 1230 */
+		return 0;			/* It's not Blizzard 1230 */
 	if (!is_a1200())
-		return(0);			/* And not A1200 */
-	regs = &((volatile u_char *)zap->va)[0x10000];
-	if (badaddr((caddr_t)regs))
-		return(0);
+		return 0;			/* And not A1200 */
+	regs = &((volatile uint8_t *)zap->va)[0x10000];
+	if (badaddr((void *)__UNVOLATILE(regs)))
+		return 0;
 	regs[NCR_CFG1 * 2] = 0;
 	regs[NCR_CFG1 * 2] = NCRCFG1_PARENB | 7;
 	delay(5);
 	if (regs[NCR_CFG1 * 2] != (NCRCFG1_PARENB | 7))
-		return(0);
-	return(1);
+		return 0;
+	return 1;
 }
 
 /*
  * Attach this instance, and then all the sub-devices
  */
 void
-bzscattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+bzscattach(device_t parent, device_t self, void *aux)
 {
-	struct bzsc_softc *bsc = (void *)self;
+	struct bzsc_softc *bsc = device_private(self);
 	struct ncr53c9x_softc *sc = &bsc->sc_ncr53c9x;
 	struct zbus_args  *zap;
 	extern u_long scsi_nosync;
@@ -177,18 +173,19 @@ bzscattach(parent, self, aux)
 	/*
 	 * Set up the glue for MI code early; we use some of it here.
 	 */
+	sc->sc_dev = self;
 	sc->sc_glue = &bzsc_glue;
 
 	/*
 	 * Save the regs
 	 */
 	zap = aux;
-	bsc->sc_reg = &((volatile u_char *)zap->va)[0x10000];
+	bsc->sc_reg = &((volatile uint8_t *)zap->va)[0x10000];
 	bsc->sc_dmabase = &bsc->sc_reg[0x21];
 
-	sc->sc_freq = 40;		/* Clocked at 40Mhz */
+	sc->sc_freq = 40;		/* Clocked at 40 MHz */
 
-	printf(": address %p", bsc->sc_reg);
+	aprint_normal(": address %p", bsc->sc_reg);
 
 	sc->sc_id = 7;
 
@@ -218,7 +215,7 @@ bzscattach(parent, self, aux)
 	 * NOTE: low 8 bits are to disable disconnect, and the next
 	 *       8 bits are to disable sync.
 	 */
-	sc->sc_dev.dv_cfdata->cf_flags |= (scsi_nosync >> shift_nosync)
+	device_cfdata(self)->cf_flags |= (scsi_nosync >> shift_nosync)
 	    & 0xffff;
 	shift_nosync += 16;
 
@@ -237,7 +234,7 @@ bzscattach(parent, self, aux)
 	/*
 	 * Configure interrupts.
 	 */
-	bsc->sc_isr.isr_intr = (int (*)(void *))ncr53c9x_intr;
+	bsc->sc_isr.isr_intr = ncr53c9x_intr;
 	bsc->sc_isr.isr_arg  = sc;
 	bsc->sc_isr.isr_ipl  = 2;
 	add_isr(&bsc->sc_isr);
@@ -245,19 +242,17 @@ bzscattach(parent, self, aux)
 	/*
 	 * Now try to attach all the sub-devices
 	 */
-	sc->sc_adapter.scsipi_cmd = ncr53c9x_scsi_cmd;
-	sc->sc_adapter.scsipi_minphys = minphys; 
-	ncr53c9x_attach(sc, &bzsc_dev);
+	sc->sc_adapter.adapt_request = ncr53c9x_scsipi_request;
+	sc->sc_adapter.adapt_minphys = minphys;
+	ncr53c9x_attach(sc);
 }
 
 /*
  * Glue functions.
  */
 
-u_char
-bzsc_read_reg(sc, reg)
-	struct ncr53c9x_softc *sc;
-	int reg;
+uint8_t
+bzsc_read_reg(struct ncr53c9x_softc *sc, int reg)
 {
 	struct bzsc_softc *bsc = (struct bzsc_softc *)sc;
 
@@ -265,13 +260,10 @@ bzsc_read_reg(sc, reg)
 }
 
 void
-bzsc_write_reg(sc, reg, val)
-	struct ncr53c9x_softc *sc;
-	int reg;
-	u_char val;
+bzsc_write_reg(struct ncr53c9x_softc *sc, int reg, uint8_t val)
 {
 	struct bzsc_softc *bsc = (struct bzsc_softc *)sc;
-	u_char v = val;
+	uint8_t v = val;
 
 	bsc->sc_reg[reg * 2] = v;
 #ifdef DEBUG
@@ -284,8 +276,7 @@ if (bzsc_trace_enable/* && sc->sc_nexus && sc->sc_nexus->xs->xs_control & XS_CTL
 }
 
 int
-bzsc_dma_isintr(sc)
-	struct ncr53c9x_softc *sc;
+bzsc_dma_isintr(struct ncr53c9x_softc *sc)
 {
 	struct bzsc_softc *bsc = (struct bzsc_softc *)sc;
 
@@ -304,8 +295,7 @@ if (/*sc->sc_nexus && sc->sc_nexus->xs->xs_control & XS_CTL_POLL &&*/ bzsc_trace
 }
 
 void
-bzsc_dma_reset(sc)
-	struct ncr53c9x_softc *sc;
+bzsc_dma_reset(struct ncr53c9x_softc *sc)
 {
 	struct bzsc_softc *bsc = (struct bzsc_softc *)sc;
 
@@ -313,11 +303,10 @@ bzsc_dma_reset(sc)
 }
 
 int
-bzsc_dma_intr(sc)
-	struct ncr53c9x_softc *sc;
+bzsc_dma_intr(struct ncr53c9x_softc *sc)
 {
-	register struct bzsc_softc *bsc = (struct bzsc_softc *)sc;
-	register int	cnt;
+	struct bzsc_softc *bsc = (struct bzsc_softc *)sc;
+	int	cnt;
 
 	NCR_DMA(("bzsc_dma_intr: cnt %d int %x stat %x fifo %d ",
 	    bsc->sc_dmasize, sc->sc_espintr, sc->sc_espstat,
@@ -338,7 +327,7 @@ bzsc_dma_intr(sc)
 	cnt = bsc->sc_dmasize - cnt;	/* number of bytes transferred */
 	NCR_DMA(("DMA xferred %d\n", cnt));
 	if (bsc->sc_xfr_align) {
-		bcopy(bsc->sc_alignbuf, *bsc->sc_dmaaddr, cnt);
+		memcpy(*bsc->sc_dmaaddr, bsc->sc_alignbuf, cnt);
 		bsc->sc_xfr_align = 0;
 	}
 	*bsc->sc_dmaaddr += cnt;
@@ -348,16 +337,12 @@ bzsc_dma_intr(sc)
 }
 
 int
-bzsc_dma_setup(sc, addr, len, datain, dmasize)
-	struct ncr53c9x_softc *sc;
-	caddr_t *addr;
-	size_t *len;
-	int datain;
-	size_t *dmasize;
+bzsc_dma_setup(struct ncr53c9x_softc *sc, uint8_t **addr, size_t *len,
+               int datain, size_t *dmasize)
 {
 	struct bzsc_softc *bsc = (struct bzsc_softc *)sc;
 	paddr_t pa;
-	u_char *ptr;
+	uint8_t *ptr;
 	size_t xfer;
 
 	bsc->sc_dmaaddr = addr;
@@ -368,7 +353,7 @@ bzsc_dma_setup(sc, addr, len, datain, dmasize)
 	 * DMA can be nasty for high-speed serial input, so limit the
 	 * size of this DMA operation if the serial port is running at
 	 * a high speed (higher than 19200 for now - should be adjusted
-	 * based on cpu type and speed?).
+	 * based on CPU type and speed?).
 	 * XXX - add serial speed check XXX
 	 */
 	if (ser_open_speed > 19200 && bzsc_max_dma != 0 &&
@@ -376,7 +361,7 @@ bzsc_dma_setup(sc, addr, len, datain, dmasize)
 		bsc->sc_dmasize = bzsc_max_dma;
 	ptr = *addr;			/* Kernel virtual address */
 	pa = kvtop(ptr);		/* Physical address of DMA */
-	xfer = min(bsc->sc_dmasize, NBPG - (pa & (NBPG - 1)));
+	xfer = min(bsc->sc_dmasize, PAGE_SIZE - (pa & (PAGE_SIZE - 1)));
 	bsc->sc_xfr_align = 0;
 	/*
 	 * If output and unaligned, stuff odd byte into FIFO
@@ -391,8 +376,8 @@ bzsc_dma_setup(sc, addr, len, datain, dmasize)
 	 * If unaligned address, read unaligned bytes into alignment buffer
 	 */
 	else if ((int)ptr & 1) {
-		pa = kvtop((caddr_t)&bsc->sc_alignbuf);
-		xfer = bsc->sc_dmasize = min(xfer, sizeof (bsc->sc_alignbuf));
+		pa = kvtop((void *)&bsc->sc_alignbuf);
+		xfer = bsc->sc_dmasize = min(xfer, sizeof(bsc->sc_alignbuf));
 		NCR_DMA(("bzsc_dma_setup: align read by %d bytes\n", xfer));
 		bsc->sc_xfr_align = 1;
 	}
@@ -401,10 +386,10 @@ bzsc_dma_setup(sc, addr, len, datain, dmasize)
 	while (xfer < bsc->sc_dmasize) {
 		if ((pa + xfer) != kvtop(*addr + xfer))
 			break;
-		if ((bsc->sc_dmasize - xfer) < NBPG)
+		if ((bsc->sc_dmasize - xfer) < PAGE_SIZE)
 			xfer = bsc->sc_dmasize;
 		else
-			xfer += NBPG;
+			xfer += PAGE_SIZE;
 ++bzsc_cnt_dma3;
 	}
 if (xfer != *len)
@@ -427,29 +412,26 @@ if (xfer != *len)
 	pa >>= 1;
 	if (!bsc->sc_datain)
 		pa |= 0x80000000;
-	bsc->sc_dmabase[0x10] = (u_int8_t)(pa >> 24);
-	bsc->sc_dmabase[0] = (u_int8_t)(pa >> 16);
-	bsc->sc_dmabase[0] = (u_int8_t)(pa >> 8);
-	bsc->sc_dmabase[0] = (u_int8_t)(pa);
+	bsc->sc_dmabase[0x10] = (uint8_t)(pa >> 24);
+	bsc->sc_dmabase[0] = (uint8_t)(pa >> 16);
+	bsc->sc_dmabase[0] = (uint8_t)(pa >> 8);
+	bsc->sc_dmabase[0] = (uint8_t)(pa);
 	bsc->sc_active = 1;
 	return 0;
 }
 
 void
-bzsc_dma_go(sc)
-	struct ncr53c9x_softc *sc;
+bzsc_dma_go(struct ncr53c9x_softc *sc)
 {
 }
 
 void
-bzsc_dma_stop(sc)
-	struct ncr53c9x_softc *sc;
+bzsc_dma_stop(struct ncr53c9x_softc *sc)
 {
 }
 
 int
-bzsc_dma_isactive(sc)
-	struct ncr53c9x_softc *sc;
+bzsc_dma_isactive(struct ncr53c9x_softc *sc)
 {
 	struct bzsc_softc *bsc = (struct bzsc_softc *)sc;
 
@@ -458,7 +440,7 @@ bzsc_dma_isactive(sc)
 
 #ifdef DEBUG
 void
-bzsc_dump()
+bzsc_dump(void)
 {
 	int i;
 

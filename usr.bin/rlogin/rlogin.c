@@ -1,4 +1,4 @@
-/*	$NetBSD: rlogin.c,v 1.24 2000/01/31 14:19:35 itojun Exp $	*/
+/*	$NetBSD: rlogin.c,v 1.39 2008/07/21 14:19:25 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rlogin.c	8.4 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: rlogin.c,v 1.24 2000/01/31 14:19:35 itojun Exp $");
+__RCSID("$NetBSD: rlogin.c,v 1.39 2008/07/21 14:19:25 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,7 +52,6 @@ __RCSID("$NetBSD: rlogin.c,v 1.24 2000/01/31 14:19:35 itojun Exp $");
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
-#include <sys/ioctl.h>
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
@@ -68,33 +63,16 @@ __RCSID("$NetBSD: rlogin.c,v 1.24 2000/01/31 14:19:35 itojun Exp $");
 #include <netdb.h>
 #include <pwd.h>
 #include <setjmp.h>
-#include <termios.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <termios.h>
 #include <unistd.h>
 
-#ifdef __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
+#include "getport.h"
 
-#ifdef KERBEROS
-#include <kerberosIV/des.h>
-#include <kerberosIV/krb.h>
-#include <kerberosIV/kstream.h>
-
-#include "krb.h"
-
-CREDENTIALS cred;
-Key_schedule schedule;
-MSG_DAT msg_data;
-struct sockaddr_in local, foreign;
-int use_kerberos = 1, doencrypt;
-kstream krem;
-#endif
 
 #ifndef TIOCPKT_WINDOW
 #define	TIOCPKT_WINDOW	0x80
@@ -125,66 +103,57 @@ struct winsize {
 #endif
 struct	winsize winsize;
 
-void		catch_child __P((int));
-void		copytochild __P((int));
-void		doit __P((sigset_t *));
-void		done __P((int));
-void		echo __P((int));
-u_int		getescape __P((char *));
-void		lostpeer __P((int));
-int		main __P((int, char **));
-void		mode __P((int));
-void		msg __P((char *));
-void		oob __P((int));
-int		reader __P((sigset_t *));
-void		sendwindow __P((void));
-void		setsignal __P((int));
-int		speed __P((int));
-void		sigwinch __P((int));
-void		stop __P((int));
-void		usage __P((void));
-void		writer __P((void));
-void		writeroob __P((int));
+void		catch_child(int);
+void		copytochild(int);
+void		doit(sigset_t *);
+void		done(int);
+void		echo(int);
+u_int		getescape(char *);
+void		lostpeer(int);
+int		main(int, char **);
+void		mode(int);
+void		msg(const char *);
+void		oob(int);
+int		reader(sigset_t *);
+void		sendwindow(void);
+void		setsignal(int);
+void		sigwinch(int);
+void		stop(int);
+void		usage(void);
+void		writer(void);
+void		writeroob(int);
 
-#ifdef	KERBEROS
-void		warning __P((const char *, ...));
-#endif
 #ifdef OLDSUN
-int		get_window_size __P((int, struct winsize *));
+int		get_window_size(int, struct winsize *);
 #endif
-
-extern char *__progname;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct passwd *pw;
 	struct servent *sp;
 	struct termios tty;
 	sigset_t smask;
-	int argoff, ch, dflag, one, uid;
+	uid_t uid;
+	int argoff, ch, dflag, one;
 	int i, len, len2;
+	int family = AF_UNSPEC;
 	char *host, *p, *user, *name, term[1024] = "network";
 	speed_t ospeed;
 	struct sigaction sa;
+	char *service = NULL;
 	struct rlimit rlim;
-#ifdef KERBEROS
-	KTEXT_ST ticket;
-	int sock;
-	long authopts;
-	int through_once = 0;
-	extern int _kstream_des_debug_OOB;
-	char *dest_realm = NULL;
-#endif
 
 	argoff = dflag = 0;
 	one = 1;
 	host = user = NULL;
+	sp = NULL;
 
-	if (strcmp(__progname, "rlogin") != 0)
-		host = __progname;
+	if (strcmp(getprogname(), "rlogin") != 0) {
+		host = strdup(getprogname());
+		if (host == NULL)
+			err(1, NULL);
+	}
 
 	/* handle "rlogin host flags" */
 	if (!host && argc > 2 && argv[1][0] != '-') {
@@ -192,49 +161,34 @@ main(argc, argv)
 		argoff = 1;
 	}
 
-#ifdef KERBEROS
-#define	OPTIONS	"8EKLde:k:l:x"
-#else
-#define	OPTIONS	"8EKLde:l:"
-#endif
+#define	OPTIONS	"468dEe:l:p:"
 	while ((ch = getopt(argc - argoff, argv + argoff, OPTIONS)) != -1)
 		switch(ch) {
+		case '4':
+			family = AF_INET;
+			break;
+		case '6':
+			family = AF_INET6;
+			break;
 		case '8':
 			eight = 1;
 			break;
+		case 'd':
+			dflag = 1;
+			break;
 		case 'E':
 			noescape = 1;
-			break;
-#ifdef KERBEROS
-		case 'K':
-			use_kerberos = 0;
-			break;
-#endif
-		case 'd':
-#ifdef KERBEROS
-			_kstream_des_debug_OOB = 1;
-#endif
-			dflag = 1;
 			break;
 		case 'e':
 			noescape = 0;
 			escapechar = getescape(optarg);
 			break;
-#ifdef KERBEROS
-		case 'k':
-			dest_realm = optarg;
-			break;
-#endif
 		case 'l':
 			user = optarg;
 			break;
-#ifdef CRYPT
-#ifdef KERBEROS
-		case 'x':
-			doencrypt = 1;
+		case 'p':
+			sp = getport(service = optarg, "tcp");
 			break;
-#endif
-#endif
 		case '?':
 		default:
 			usage();
@@ -267,26 +221,13 @@ main(argc, argv)
 	if (!user)
 		user = name;
 
-#ifdef KERBEROS
-	sp = NULL;
-	if (use_kerberos) {
-		sp = getservbyname((doencrypt ? "eklogin" : "klogin"), "tcp");
-		if (sp == NULL) {
-			use_kerberos = 0;
-			warning("can't get entry for %s/tcp service",
-			    doencrypt ? "eklogin" : "klogin");
-		}
-	}
 	if (sp == NULL)
-#endif
 		sp = getservbyname("login", "tcp");
 	if (sp == NULL)
 		errx(1, "login/tcp: unknown service.");
 
-	if ((p = getenv("TERM")) != NULL) {
-		(void)strncpy(term, p, sizeof(term) - 1);
-		term[sizeof(term) - 1] = '\0';
-	}
+	if ((p = getenv("TERM")) != NULL)
+		(void)strlcpy(term, p, sizeof(term));
 	len = strlen(term);
 	if (len < (sizeof(term) - 1) && tcgetattr(0, &tty) == 0) {
 		/* start at 2 to include the / */
@@ -312,7 +253,7 @@ main(argc, argv)
 	 * We set SIGURG and SIGUSR1 below so that an
 	 * incoming signal will be held pending rather than being
 	 * discarded. Note that these routines will be ready to get
-	 * a signal by the time that they are unblocked below.;
+	 * a signal by the time that they are unblocked below.
 	 */
 	sa.sa_handler = copytochild;
 	(void)sigaction(SIGURG, &sa, (struct sigaction *) 0);
@@ -324,91 +265,8 @@ main(argc, argv)
 	if (setrlimit(RLIMIT_CORE, &rlim) < 0)
 		warn("setrlimit");
 
-#ifdef KERBEROS
-try_connect:
-	if (use_kerberos) {
-		struct hostent *hp;
+	rem = rcmd_af(&host, sp->s_port, name, user, term, 0, family);
 
-		/* Fully qualify hostname (needed for krb_realmofhost). */
-		hp = gethostbyname(host);
-		if (hp != NULL && !(host = strdup(hp->h_name)))
-			errx(1, "%s", strerror(ENOMEM));
-
-		rem = KSUCCESS;
-		errno = 0;
-#ifdef CRYPT
-		if (doencrypt)
-			authopts = KOPT_DO_MUTUAL;
-		else
-#endif /* CRYPT */
-			authopts = 0L;
-
-		if (dest_realm == NULL) {
-			/* default this now, once. */
-			if (!(dest_realm = krb_realmofhost (host))) {
-				warnx("Unknown realm for host %s.", host);
-				use_kerberos = 0;
-				sp = getservbyname("login", "tcp");
-				goto try_connect;
-			}
-		}
-
-		rem = kcmd(&sock, &host, sp->s_port, name, user, 
-			   term, 0, &ticket, "rcmd", dest_realm,
-			   &cred, schedule, &msg_data, &local, &foreign,
-			   authopts);
-
-		if (rem != KSUCCESS) {
-			switch(rem) {
-
-				case KDC_PR_UNKNOWN:
-					warnx("Host %s not registered for %s",
-				       	      host, "Kerberos rlogin service");
-					use_kerberos = 0;
-					sp = getservbyname("login", "tcp");
-					goto try_connect;
-				case NO_TKT_FIL:
-					if (through_once++) {
-						use_kerberos = 0;
-						sp = getservbyname("login", "tcp");
-						goto try_connect;
-					}
-#ifdef notyet
-				krb_get_pw_in_tkt(user, krb_realm, "krbtgt",
-						  krb_realm,
-					          DEFAULT_TKT_LIFE/5, 0);
-				goto try_connect;
-#endif
-			default:
-				warnx("Kerberos rcmd failed: %s",
-				      (rem == -1) ? "rcmd protocol failure" :
-				      krb_err_txt[rem]);
-				use_kerberos = 0;
-				sp = getservbyname("login", "tcp");
-				goto try_connect;
-			}
-		}
-		rem = sock;
-		if (doencrypt)
-			krem = kstream_create_rlogin_from_fd(rem, &schedule,
-							     &cred.session);
-		else
-			krem = kstream_create_from_fd(rem, 0, 0);
-			kstream_set_buffer_mode(krem, 0);
-	} else {
-#ifdef CRYPT
-		if (doencrypt)
-			errx(1, "the -x flag requires Kerberos authentication.");
-#endif /* CRYPT */
-		rem = rcmd_af(&host, sp->s_port, name, user, term, 0,
-		    PF_UNSPEC);
-		if (rem < 0)
-			exit(1);
-	}
-#else
-	rem = rcmd_af(&host, sp->s_port, name, user, term, 0, PF_UNSPEC);
-
-#endif /* KERBEROS */
 
 	if (rem < 0)
 		exit(1);
@@ -418,7 +276,7 @@ try_connect:
 		warn("setsockopt DEBUG (ignored)");
     {
 	struct sockaddr_storage ss;
-	int sslen;
+	socklen_t sslen;
 	sslen = sizeof(ss);
 	if (getsockname(rem, (struct sockaddr *)&ss, &sslen) == 0
 	 && ((struct sockaddr *)&ss)->sa_family == AF_INET) {
@@ -436,33 +294,13 @@ try_connect:
 	return (0);
 }
 
-int
-speed(fd)
-	int fd;
-{
-	struct termios tt;
-
-	(void)tcgetattr(fd, &tt);
-
-	return ((int)cfgetispeed(&tt));
-}
-
 pid_t child;
-struct termios deftt;
-struct termios nott;
 
 void
-doit(smask)
-	sigset_t *smask;
+doit(sigset_t *smask)
 {
-	int i;
 	struct sigaction sa;
 
-	for (i = 0; i < NCCS; i++)
-		nott.c_cc[i] = _POSIX_VDISABLE;
-	tcgetattr(0, &deftt);
-	nott.c_cc[VSTART] = deftt.c_cc[VSTART];
-	nott.c_cc[VSTOP] = deftt.c_cc[VSTOP];
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = SA_RESTART;
 	sa.sa_handler = SIG_IGN;
@@ -503,8 +341,7 @@ doit(smask)
 
 /* trap a signal, unless it is being ignored. */
 void
-setsignal(sig)
-	int sig;
+setsignal(int sig)
 {
 	struct sigaction sa;
 	sigset_t sigs;
@@ -524,8 +361,7 @@ setsignal(sig)
 }
 
 void
-done(status)
-	int status;
+done(int status)
 {
 	pid_t w;
 	int wstatus;
@@ -552,8 +388,7 @@ int dosigwinch;
  * request to turn on the window-changing protocol.
  */
 void
-writeroob(signo)
-	int signo;
+writeroob(int signo)
 {
 	struct sigaction sa;
 
@@ -568,8 +403,7 @@ writeroob(signo)
 }
 
 void
-catch_child(signo)
-	int signo;
+catch_child(int signo)
 {
 	int status;
 	pid_t pid;
@@ -592,7 +426,7 @@ catch_child(signo)
  * ~<delayed-suspend char>	suspend rlogin process, but leave reader alone.
  */
 void
-writer()
+writer(void)
 {
 	int bol, local, n;
 	char c;
@@ -638,25 +472,10 @@ writer()
 				continue;
 			}
 			if (c != escapechar) {
-#ifdef KERBEROS
-				if (use_kerberos)
-					(void)kstream_write(krem,
-					    (char *)&escapechar, 1);
-				else
-#endif
 					(void)write(rem, &escapechar, 1);
 			}
 		}
 
-#ifdef KERBEROS
-		if (use_kerberos) {
-			if (kstream_write(krem, &c, 1) == 0) {
-					msg("line gone");
-					break;
-			}
-		}
-		else
-#endif
 			if (write(rem, &c, 1) == 0) {
 				msg("line gone");
 				break;
@@ -671,8 +490,7 @@ writer()
 }
 
 void
-echo(i)
-	int i;
+echo(int i)
 {
 	char c = (char)i;
 	char *p;
@@ -695,8 +513,7 @@ echo(i)
 }
 
 void
-stop(all)
-	int all;
+stop(int all)
 {
 	struct sigaction sa;
 
@@ -713,8 +530,7 @@ stop(all)
 }
 
 void
-sigwinch(signo)
-	int signo;
+sigwinch(int signo)
 {
 	struct winsize ws;
 
@@ -729,7 +545,7 @@ sigwinch(signo)
  * Send the window size to the server via the magic escape
  */
 void
-sendwindow()
+sendwindow(void)
 {
 	struct winsize *wp;
 	char obuf[4 + sizeof (struct winsize)];
@@ -744,11 +560,6 @@ sendwindow()
 	wp->ws_xpixel = htons(winsize.ws_xpixel);
 	wp->ws_ypixel = htons(winsize.ws_ypixel);
 
-#ifdef KERBEROS
-		if (use_kerberos)
-			(void)kstream_write(krem, obuf, sizeof(obuf));
-		else
-#endif
 		(void)write(rem, obuf, sizeof(obuf));
 }
 
@@ -764,8 +575,7 @@ int rcvcnt, rcvstate;
 char rcvbuf[8 * 1024];
 
 void
-oob(signo)
-	int signo;
+oob(int signo)
 {
 	struct termios tty;
 	int atmark, n, rcvd;
@@ -846,8 +656,7 @@ oob(signo)
 
 /* reader: read from remote: line -> 1 */
 int
-reader(smask)
-	sigset_t *smask;
+reader(sigset_t *smask)
 {
 	pid_t pid;
 	int n, remaining;
@@ -881,11 +690,6 @@ reader(smask)
 		rcvcnt = 0;
 		rcvstate = READING;
 
-#ifdef KERBEROS
-			if (use_kerberos)
-				rcvcnt = kstream_read(krem, rcvbuf, sizeof(rcvbuf));
-			else
-#endif
 			rcvcnt = read(rem, rcvbuf, sizeof (rcvbuf));
 
 		if (rcvcnt == 0)
@@ -900,8 +704,7 @@ reader(smask)
 }
 
 void
-mode(f)
-	int f;
+mode(int f)
 {
 	struct termios tty;
 
@@ -932,8 +735,7 @@ mode(f)
 }
 
 void
-lostpeer(signo)
-	int signo;
+lostpeer(int signo)
 {
 	struct sigaction sa;
 	sa.sa_flags = SA_RESTART;
@@ -945,60 +747,26 @@ lostpeer(signo)
 
 /* copy SIGURGs to the child process. */
 void
-copytochild(signo)
-	int signo;
+copytochild(int signo)
 {
 
 	(void)kill(child, SIGURG);
 }
 
 void
-msg(str)
-	char *str;
+msg(const char *str)
 {
 
 	(void)fprintf(stderr, "rlogin: %s\r\n", str);
 }
 
-#ifdef KERBEROS
-/* VARARGS */
-void
-#if __STDC__
-warning(const char *fmt, ...)
-#else
-warning(fmt, va_alist)
-	char *fmt;
-	va_dcl
-#endif
-{
-	va_list ap;
-
-	(void)fprintf(stderr, "rlogin: warning, using standard rlogin: ");
-#ifdef __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
-	vfprintf(stderr, fmt, ap);
-	va_end(ap);
-	(void)fprintf(stderr, ".\n");
-}
-#endif
 
 void
-usage()
+usage(void)
 {
 	(void)fprintf(stderr,
-	    "usage: rlogin [ -%s]%s[-e char] [ -l username ] [username@]host\n",
-#ifdef KERBEROS
-#ifdef CRYPT
-	    "8EKLdx", " [-k realm] ");
-#else
-	    "8EKLd", " [-k realm] ");
-#endif
-#else
-	    "8ELd", " ");
-#endif
+	    "usage: rlogin [-%s]%s[-e char] [-l username] [-p port] [username@]host\n",
+	    "468Ed", " ");
 	exit(1);
 }
 
@@ -1026,8 +794,7 @@ get_window_size(fd, wp)
 #endif
 
 u_int
-getescape(p)
-	char *p;
+getescape(char *p)
 {
 	long val;
 	int len;

@@ -1,4 +1,4 @@
-/*	$NetBSD: index.S,v 1.5 1996/09/17 01:32:34 jonathan Exp $	*/
+/*	$NetBSD: index.S,v 1.8 2005/04/22 06:59:00 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,18 +36,19 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 	ASMSTR("from: @(#)index.s	8.1 (Berkeley) 6/4/93")
-	ASMSTR("$NetBSD: index.S,v 1.5 1996/09/17 01:32:34 jonathan Exp $")
+	ASMSTR("$NetBSD: index.S,v 1.8 2005/04/22 06:59:00 simonb Exp $")
 #endif /* LIBC_SCCS and not lint */
 
-#ifdef ABICALLS
+#ifdef __ABICALLS__
 	.abicalls
 #endif
 
 LEAF(index)
+1:
 	lbu	a2, 0(a0)		# get a byte
 	addu	a0, a0, 1
 	beq	a2, a1, fnd
-	bne	a2, zero, _C_LABEL(index)
+	bne	a2, zero, 1b
 notfnd:
 	move	v0, zero
 	j	ra

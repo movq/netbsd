@@ -1,4 +1,4 @@
-/*	$NetBSD: profile.h,v 1.7 1999/11/06 17:42:33 thorpej Exp $	*/
+/*	$NetBSD: profile.h,v 1.19 2006/08/07 23:24:55 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,13 +33,36 @@
 
 #define	_MCOUNT_DECL static __inline void _mcount
 
+#ifdef __ELF__
+#define	MCOUNT_ENTRY	"__mcount"
+#else
+#define	MCOUNT_ENTRY	"mcount"
+#endif
+
+#ifndef	__mc68010__
 #define	MCOUNT \
-extern void mcount __P((void)) __asm__("mcount"); void mcount() { \
+extern void mcount(void) __asm(MCOUNT_ENTRY) \
+	__attribute__((__no_instrument_function__)); \
+void mcount() { \
 	int selfpc, frompcindex; \
-	__asm__("movl %%a6@(4),%0" : "=r" (selfpc)); \
-	__asm__("movl %%a6@(0)@(4),%0" : "=r" (frompcindex)); \
+	__asm("movl %%a6@(4),%0" : "=r" (selfpc)); \
+	__asm("movl %%a6@(0)@(4),%0" : "=r" (frompcindex)); \
 	_mcount(frompcindex, selfpc); \
 }
+#else	/* __mc68010__ */
+/*
+ * The 68010 doesn't have the memory indirect addressing mode
+ * that the above definition of mcount uses, so we're forced
+ * to do something different.
+ */
+#define	MCOUNT \
+extern void mcount(void) __asm("mcount"); void mcount() { \
+	int selfpc, frompcindex; \
+	__asm("movl %%a6@(4),%0" : "=r" (selfpc)); \
+	__asm("movl %%a6@(0),%%a0 ; movl %%a0@(4),%0" : "=r" (frompcindex) : /* no inputs */ : "a0"); \
+	_mcount(frompcindex, selfpc); \
+}
+#endif	/* __mc68010__ */
 
 #ifdef _KERNEL
 /*
@@ -53,9 +72,9 @@ extern void mcount __P((void)) __asm__("mcount"); void mcount() { \
  * recursively.
  */
 #define MCOUNT_ENTER \
-	__asm__("movw	%%sr,%0" : "=g" (s)); \
-	__asm__("movw	#0x2700,%%sr")
+	__asm("movw	%%sr,%0" : "=g" (s)); \
+	__asm("movw	#0x2700,%sr")
 
 #define MCOUNT_EXIT \
-	__asm__("movw	%0,%%sr" : : "g" (s))
+	__asm("movw	%0,%%sr" : : "g" (s))
 #endif /* _KERNEL */

@@ -1,7 +1,9 @@
+/* $NetBSD: pdb.c,v 1.12 2003/11/12 13:31:08 grant Exp $ */
+
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
  * All rights reserved.
- *
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -12,10 +14,12 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed by Christopher G. Demetriou.
+ *          This product includes software developed for the
+ *          NetBSD Project.  See http://www.NetBSD.org/ for
+ *          information about NetBSD.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
- *
+ *    derived from this software without specific prior written permission.
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -26,11 +30,13 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * 
+ * <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: pdb.c,v 1.6 1998/08/27 20:31:01 ross Exp $");
+__RCSID("$NetBSD: pdb.c,v 1.12 2003/11/12 13:31:08 grant Exp $");
 #endif
 
 #include <sys/types.h>
@@ -54,8 +60,9 @@ pacct_init()
 {
 	DB *saved_pacct_db;
 	int error;
+	int ndups = 0;
 
-	pacct_db = dbopen(NULL, O_RDWR, 0, DB_BTREE, NULL);
+	pacct_db = dbopen(NULL, O_RDWR|O_CREAT|O_TRUNC, 0644, DB_BTREE, NULL);
 	if (pacct_db == NULL)
 		return (-1);
 
@@ -80,11 +87,22 @@ pacct_init()
 			goto closeout;
 		}
 		while (serr == 0) {
-			nerr = DB_PUT(pacct_db, &key, &data, 0);
+			nerr = DB_PUT(pacct_db, &key, &data, R_NOOVERWRITE);
 			if (nerr < 0) {
 				warn("initializing process accounting stats");
 				error = -1;
 				break;
+			}
+			if (nerr == 1) {
+				warnx("duplicate key in `%s': %s",
+				    _PATH_SAVACCT, fmt(&key));
+				if (ndups++ == 5) {
+					warnx("too many duplicate keys;"
+					    " `%s' possibly corrupted.",
+					    _PATH_SAVACCT);
+					error = -1;
+					break;
+				}
 			}
 
 			serr = DB_SEQ(saved_pacct_db, &key, &data, R_NEXT);
@@ -210,7 +228,7 @@ pacct_print()
 	BTREEINFO bti;
 	DBT key, data, ndata;
 	DB *output_pacct_db;
-	struct cmdinfo *cip, ci, ci_total, ci_other, ci_junk;
+	struct cmdinfo ci, ci_total, ci_other, ci_junk;
 	int rv;
 
 	memset(&ci_total, 0, sizeof(ci_total));
@@ -238,8 +256,7 @@ pacct_print()
 	if (rv < 0)
 		warn("retrieving process accounting stats");
 	while (rv == 0) {
-		cip = (struct cmdinfo *) data.data;
-		memcpy(&ci, cip, sizeof(ci));
+		memcpy(&ci, data.data, sizeof(ci));
 
 		/* add to total */
 		add_ci(&ci, &ci_total);
@@ -289,8 +306,7 @@ next:		rv = DB_SEQ(pacct_db, &key, &data, R_NEXT);
 	if (rv < 0)
 		warn("retrieving process accounting report");
 	while (rv == 0) {
-		cip = (struct cmdinfo *) data.data;
-		memcpy(&ci, cip, sizeof(ci));
+		memcpy(&ci, data.data, sizeof(ci));
 
 		print_ci(&ci, &ci_total);
 
@@ -309,7 +325,7 @@ check_junk(cip)
 	char *cp;
 	size_t len;
 
-	fprintf(stderr, "%s (%qu) -- ", cip->ci_comm,
+	fprintf(stderr, "%s (%llu) -- ", cip->ci_comm,
 	    (unsigned long long)cip->ci_calls);
 	cp = fgetln(stdin, &len);
 
@@ -344,7 +360,7 @@ print_ci(cip, totalcip)
 	} else
 		uflow = 0;
 
-	printf("%8qu ", (unsigned long long)cip->ci_calls);
+	printf("%8llu ", (unsigned long long)cip->ci_calls);
 	if (cflag) {
 		if (cip != totalcip)
 			printf(" %4.2f%%  ",
@@ -409,12 +425,12 @@ print_ci(cip, totalcip)
 	}
 
 	if (Dflag)
-		printf("%10qutio ", (unsigned long long)cip->ci_io);
+		printf("%10llutio ", (unsigned long long)cip->ci_io);
 	else
 		printf("%8.0favio ", cip->ci_io / c);
 
 	if (Kflag)
-		printf("%10quk*sec ", (unsigned long long)cip->ci_mem);
+		printf("%10lluk*sec ", (unsigned long long)cip->ci_mem);
 	else
 		printf("%8.0fk ", cip->ci_mem / t);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: in_cksum.c,v 1.5 1999/04/24 08:10:39 simonb Exp $	*/
+/* $NetBSD: in_cksum.c,v 1.13 2007/01/24 13:08:11 hubertf Exp $ */
 
 /*
  * Copyright (c) 1993 Regents of the University of California.
@@ -41,11 +41,18 @@
  *   and byteswap out-of-phase mbuf sums.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: in_cksum.c,v 1.13 2007/01/24 13:08:11 hubertf Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
-#include <sys/cdefs.h>
+
+#include <netinet/in_systm.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/ip_var.h>
+
 #include <machine/endian.h>
 
 union memptr {
@@ -56,8 +63,7 @@ union memptr {
 	unsigned char *c;
 };
 
-static __inline u_int32_t fastsum __P((union memptr, int n, u_int sum, int odd));
-
+static inline uint32_t fastsum(union memptr, int, unsigned int, int);
 
 /*
  * Compute 1's complement sum over a contiguous block at 'buf' for 'n' bytes.
@@ -68,11 +74,8 @@ static __inline u_int32_t fastsum __P((union memptr, int n, u_int sum, int odd))
  * and so we must byteswap the memory-aligned 1's-complement sum
  * over the data before adding it to `oldsum'.
  */
-u_int32_t
-fastsum(buf, n, oldsum, odd_aligned)
-	union memptr buf;
-	int n;
-	unsigned int oldsum;
+static inline uint32_t
+fastsum(union memptr buf, int n, unsigned int oldsum, int odd_aligned)
 {
 	unsigned long hilo = 0, high = 0;
 	unsigned long w0, w1;
@@ -80,6 +83,10 @@ fastsum(buf, n, oldsum, odd_aligned)
 
 	/* Align to 32 bits. */
 	if (buf.u & 0x3) {
+		/* Skip to the end for very small mbufs */
+		if (n < 3)
+			goto verylittleleft;
+
 		/*
 	         * 16-bit-align.
 		 * If buf is odd-byte-aligned, add the byte and toggle
@@ -206,13 +213,15 @@ fastsum(buf, n, oldsum, odd_aligned)
 		sum += *(buf.s++);
 	}
 
-	/* handle trailing byte */
-	if (n > 0)
+ verylittleleft:
+	/* handle trailing byte and short (possibly) unaligned payloads */
+	while (n-- > 0) {
 #if BYTE_ORDER == BIG_ENDIAN
-		sum += *buf.c << 8;
+		sum += *(buf.c++) << 8;
 #else
-		sum += *buf.c;
+		sum += *(buf.c++);
 #endif
+	}
 
 	/*
 	 * compensate for a trailing byte in previous mbuf
@@ -233,35 +242,74 @@ fastsum(buf, n, oldsum, odd_aligned)
 	return(sum);
 }
 
-
 /*
- * Checksum routine for Internet Protocol family headers (mips r3000 Version).
+ * Checksum routine for Internet Protocol family headers.
  *
  */
-int
-in_cksum(m, len)
-	struct mbuf *m;
-	int len;
+static inline int
+in_cksum_internal(struct mbuf *m, int off, int len, uint32_t sum)
 {
 	/*u_short **/ union memptr w;
-	u_int32_t sum = 0;
 	int mlen;
 	int odd_aligned = 0;
 
-	for ( ; m && len; m = m->m_next) {
-
-		mlen = m->m_len;
-		if (mlen == 0)
+	for (; m && len; m = m->m_next) {
+		if (m->m_len == 0)
 			continue;
-		if (mlen > len)
+		w.c = mtod(m, u_char *) + off;
+		mlen = m->m_len - off;
+		off = 0;
+		if (len < mlen)
 			mlen = len;
-		w.c = mtod(m, u_char *);
-		sum = fastsum(w, mlen, sum, odd_aligned);
 		len -= mlen;
+
+		sum = fastsum(w, mlen, sum, odd_aligned);
 		odd_aligned = (odd_aligned + mlen) & 0x01;
 	}
 	if (len != 0) {
-		printf("in_cksum: out of data, %d\n", len);
+		printf("cksum: out of data, %d\n", len);
 	}
 	return (~sum & 0xffff);
+}
+
+int
+in_cksum(struct mbuf *m, int len)
+{
+
+	return (in_cksum_internal(m, 0, len, 0));
+}
+
+int
+in4_cksum(struct mbuf *m, uint8_t nxt, int off, int len)
+{
+	uint sum = 0;
+
+	if (nxt != 0) {
+		uint16_t *w;
+		union {
+			struct ipovly ipov;
+			u_int16_t w[10];
+		} u;
+
+		/* pseudo header */
+		memset(&u.ipov, 0, sizeof(u.ipov));
+		u.ipov.ih_len = htons(len);
+		u.ipov.ih_pr = nxt;
+		u.ipov.ih_src = mtod(m, struct ip *)->ip_src;
+		u.ipov.ih_dst = mtod(m, struct ip *)->ip_dst;
+		w = u.w;
+		/* assumes sizeof(ipov) == 20 */
+		sum += w[0]; sum += w[1]; sum += w[2]; sum += w[3]; sum += w[4];
+		sum += w[5]; sum += w[6]; sum += w[7]; sum += w[8]; sum += w[9];
+	}
+
+	/* skip unnecessary part */
+	while (m && off > 0) {
+		if (m->m_len > off)
+			break;
+		off -= m->m_len;
+		m = m->m_next;
+	}
+
+	return (in_cksum_internal(m, off, len, sum));
 }

@@ -1,10 +1,8 @@
-#	$NetBSD: std.news68k,v 1.1 1999/12/09 14:53:03 tsutsui Exp $
+#	$NetBSD: std.news68k,v 1.6 2005/12/11 12:18:20 christos Exp $
 
 machine news68k m68k
+include		"conf/std"	# MI standard options
 
-prefix ../gnu/sys
-cinclude "conf/files.softdep"
-prefix
-
-options	EXEC_AOUT	# exec a.out binaries
-options	EXEC_SCRIPT	# exec #! scripts
+options 	EXEC_AOUT	# exec a.out binaries
+options 	EXEC_ELF32	# exec ELF binaries
+options 	EXEC_SCRIPT	# exec #! scripts

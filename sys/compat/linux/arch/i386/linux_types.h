@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_types.h,v 1.7 1998/10/04 00:02:29 fvdl Exp $	*/
+/*	$NetBSD: linux_types.h,v 1.16 2008/04/28 20:23:42 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,10 +32,6 @@
 #ifndef _I386_LINUX_TYPES_H
 #define _I386_LINUX_TYPES_H
 
-typedef struct {
-	long	val[2];
-} linux_fsid_t;
-
 typedef unsigned short linux_uid_t;
 typedef unsigned short linux_gid_t;
 typedef unsigned short linux_dev_t;
@@ -59,19 +48,7 @@ typedef unsigned char linux_cc_t;
 typedef unsigned long linux_speed_t;
 typedef unsigned long linux_tcflag_t;
 
-struct linux_statfs {
-	long		l_ftype;
-	long		l_fbsize;
-	long		l_fblocks;
-	long		l_fbfree;
-	long		l_fbavail;
-	long		l_ffiles;
-	long		l_fffree;
-	linux_fsid_t	l_ffsid;
-	long		l_fnamelen;
-	long		l_fspare[6];
-};
-
+#define LINUX_STAT_HAS_NSEC	1
 struct linux_stat {
 	linux_dev_t		lst_dev;
 	unsigned short		pad1;
@@ -86,13 +63,49 @@ struct linux_stat {
 	unsigned long		lst_blksize;
 	unsigned long		lst_blocks;
 	linux_time_t		lst_atime;
-	unsigned long		unused1;
+	unsigned long		lst_atime_nsec;
 	linux_time_t		lst_mtime;
-	unsigned long		unused2;
+	unsigned long		lst_mtime_nsec;
 	linux_time_t		lst_ctime;
-	unsigned long		unused3;
+	unsigned long		lst_ctime_nsec;
 	unsigned long		unused4;
 	unsigned long		unused5;
+};
+
+/* This matches struct stat64 in glibc2.1, hence the absolutely
+ * insane amounts of padding around dev_t's.
+ */
+#define LINUX_STAT64_HAS_NSEC	1
+struct linux_stat64 {
+	unsigned long long lst_dev;
+	unsigned int	__pad1;
+
+#define LINUX_STAT64_HAS_BROKEN_ST_INO	1
+	unsigned int	__lst_ino;
+	unsigned int	lst_mode;
+	unsigned int	lst_nlink;
+
+	unsigned int	lst_uid;
+	unsigned int	lst_gid;
+
+	unsigned long long	lst_rdev;
+	unsigned int	__pad2;
+
+	long long	lst_size;
+	unsigned int	lst_blksize;
+
+	unsigned long long lst_blocks;	/* Number 512-byte blocks allocated. */
+
+	unsigned int	lst_atime;
+	unsigned int	lst_atime_nsec;
+
+	unsigned int	lst_mtime;
+	unsigned int	lst_mtime_nsec;
+
+	unsigned int	lst_ctime;
+	unsigned int	lst_ctime_nsec;
+
+	unsigned long long lst_ino;
 };
 
 #endif /* !_I386_LINUX_TYPES_H */

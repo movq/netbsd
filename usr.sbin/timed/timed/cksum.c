@@ -10,11 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,13 +32,9 @@
 #if 0
 static char sccsid[] = "@(#)cksum.c	5.2 (Berkeley) 5/11/93";
 #else
-__RCSID("$NetBSD: cksum.c,v 1.2 1997/10/17 14:19:20 lukem Exp $");
+__RCSID("$NetBSD: cksum.c,v 1.7 2007/05/17 00:36:31 christos Exp $");
 #endif
 #endif /* not lint */
-
-#ifdef sgi
-#ident "$Revision: 1.2 $"
-#endif
 
 #include <sys/types.h>
 #include "globals.h"
@@ -59,12 +51,12 @@ __RCSID("$NetBSD: cksum.c,v 1.2 1997/10/17 14:19:20 lukem Exp $");
  * worry about carries except at the end.
  */
 int
-in_cksum(u_short *addr, int len)
+in_cksum(const void *data, int len)
 {
-	register int nleft = len;
-	register u_short *w = addr;
-	register u_short answer;
-	register int sum = 0;
+	const u_char *addr = data;
+	int nleft = len;
+	uint16_t answer;
+	int sum = 0;
 
 	/*
 	 *  Our algorithm is simple, using a 32 bit accumulator (sum),
@@ -72,14 +64,18 @@ in_cksum(u_short *addr, int len)
 	 *  back all the carry bits from the top 16 bits into the lower
 	 *  16 bits.
 	 */
-	while( nleft > 1 )  {
-		sum += *w++;
+	while (nleft > 1) {
+		uint16_t w;
+
+		memcpy(&w, addr, sizeof(w));
+		sum += w;
+		addr += 2;
 		nleft -= 2;
 	}
 
 	/* mop up an odd byte, if necessary */
-	if( nleft == 1 )
-		sum += (*(u_char *)w) << 8;
+	if (nleft == 1)
+		sum += *addr << 8;
 
 	/*
 	 * add back carry outs from top 16 bits to low 16 bits

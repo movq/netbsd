@@ -1,4 +1,4 @@
-/*	$NetBSD: errno.h,v 1.24 2000/03/14 19:16:03 kleink Exp $	*/
+/*	$NetBSD: errno.h,v 1.39 2006/10/31 00:38:07 cbiere Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -58,9 +54,7 @@
 #define	ENOMEM		12		/* Cannot allocate memory */
 #define	EACCES		13		/* Permission denied */
 #define	EFAULT		14		/* Bad address */
-#ifndef _POSIX_SOURCE
 #define	ENOTBLK		15		/* Block device required */
-#endif
 #define	EBUSY		16		/* Device busy */
 #define	EEXIST		17		/* File exists */
 #define	EXDEV		18		/* Cross-device link */
@@ -71,9 +65,7 @@
 #define	ENFILE		23		/* Too many open files in system */
 #define	EMFILE		24		/* Too many open files */
 #define	ENOTTY		25		/* Inappropriate ioctl for device */
-#ifndef _POSIX_SOURCE
 #define	ETXTBSY		26		/* Text file busy */
-#endif
 #define	EFBIG		27		/* File too large */
 #define	ENOSPC		28		/* No space left on device */
 #define	ESPIPE		29		/* Illegal seek */
@@ -83,11 +75,10 @@
 
 /* math software */
 #define	EDOM		33		/* Numerical argument out of domain */
-#define	ERANGE		34		/* Result too large */
+#define	ERANGE		34		/* Result too large or too small */
 
 /* non-blocking and interrupt i/o */
 #define	EAGAIN		35		/* Resource temporarily unavailable */
-#ifndef _POSIX_SOURCE
 #define	EWOULDBLOCK	EAGAIN		/* Operation would block */
 #define	EINPROGRESS	36		/* Operation now in progress */
 #define	EALREADY	37		/* Operation already in progress */
@@ -97,7 +88,7 @@
 #define	EDESTADDRREQ	39		/* Destination address required */
 #define	EMSGSIZE	40		/* Message too long */
 #define	EPROTOTYPE	41		/* Protocol wrong type for socket */
-#define	ENOPROTOOPT	42		/* Protocol not available */
+#define	ENOPROTOOPT	42		/* Protocol option not available */
 #define	EPROTONOSUPPORT	43		/* Protocol not supported */
 #define	ESOCKTNOSUPPORT	44		/* Socket type not supported */
 #define	EOPNOTSUPP	45		/* Operation not supported */
@@ -121,18 +112,14 @@
 #define	ECONNREFUSED	61		/* Connection refused */
 
 #define	ELOOP		62		/* Too many levels of symbolic links */
-#endif /* _POSIX_SOURCE */
 #define	ENAMETOOLONG	63		/* File name too long */
 
 /* should be rearranged */
-#ifndef _POSIX_SOURCE
 #define	EHOSTDOWN	64		/* Host is down */
 #define	EHOSTUNREACH	65		/* No route to host */
-#endif /* _POSIX_SOURCE */
 #define	ENOTEMPTY	66		/* Directory not empty */
 
 /* quotas & mush */
-#ifndef _POSIX_SOURCE
 #define	EPROCLIM	67		/* Too many processes */
 #define	EUSERS		68		/* Too many users */
 #define	EDQUOT		69		/* Disc quota exceeded */
@@ -145,12 +132,10 @@
 #define	EPROGUNAVAIL	74		/* RPC prog. not avail */
 #define	EPROGMISMATCH	75		/* Program version wrong */
 #define	EPROCUNAVAIL	76		/* Bad procedure for program */
-#endif /* _POSIX_SOURCE */
 
 #define	ENOLCK		77		/* No locks available */
 #define	ENOSYS		78		/* Function not implemented */
 
-#ifndef _POSIX_SOURCE
 #define	EFTYPE		79		/* Inappropriate file type or format */
 #define	EAUTH		80		/* Authentication error */
 #define	ENEEDAUTH	81		/* Need authenticator */
@@ -159,17 +144,43 @@
 #define	EIDRM		82		/* Identifier removed */
 #define	ENOMSG		83		/* No message of desired type */
 #define	EOVERFLOW	84		/* Value too large to be stored in data type */
-#endif /* _POSIX_SOURCE */
 
 /* Wide/multibyte-character handling, ISO/IEC 9899/AMD1:1995 */
 #define	EILSEQ		85		/* Illegal byte sequence */
 
-#define	ELAST		85		/* Must equal largest errno */
+/* From IEEE Std 1003.1-2001 */
+/* Base, Realtime, Threads or Thread Priority Scheduling option errors */
+#define ENOTSUP		86		/* Not supported */
+
+/* Realtime option errors */
+#define ECANCELED	87		/* Operation canceled */
+
+/* Realtime, XSI STREAMS option errors */
+#define EBADMSG		88		/* Bad or Corrupt message */
+
+/* XSI STREAMS option errors  */
+#define ENODATA		89		/* No message available */
+#define ENOSR		90		/* No STREAM resources */
+#define ENOSTR		91		/* Not a STREAM */
+#define ETIME		92		/* STREAM ioctl timeout */
+
+/* File system extended attribute errors */
+#define	ENOATTR		93		/* Attribute not found */
+
+/* Realtime, XSI STREAMS option errors */
+#define	EMULTIHOP	94		/* Multihop attempted */ 
+#define	ENOLINK		95		/* Link has been severed */
+#define	EPROTO		96		/* Protocol error */
+
+#define	ELAST		96		/* Must equal largest errno */
 
 #ifdef _KERNEL
 /* pseudo-errors returned inside kernel to modify return to process */
-#define	ERESTART	-1		/* restart syscall */
 #define	EJUSTRETURN	-2		/* don't modify regs, just return */
+#define	ERESTART	-3		/* restart syscall */
+#define	EPASSTHROUGH	-4		/* ioctl not handled by this layer */
+#define	EDUPFD		-5		/* Dup given fd */
+#define	EMOVEFD		-6		/* Move given fd */
 #endif
 
 #endif /* !_SYS_ERRNO_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: auxreg.h,v 1.8 2000/01/21 13:25:12 pk Exp $ */
+/*	$NetBSD: auxreg.h,v 1.12 2005/11/16 03:00:23 uwe Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -60,7 +56,11 @@
 #define	AUXIO4M_MB1	0xc0		/* must be set on write? */
 #define	AUXIO4M_FHD	0x20		/* floppy: high density (unreliable?)*/
 #define	AUXIO4M_LTE	0x08		/* link-test enable */
+					/* power up modem in SPARCbook 3GX */
+
 #define	AUXIO4M_MMX	0x04		/* Monitor/Mouse MUX; what is it? */
+					/* power up DBRI in SPARCbook 3GX */
+
 #define	AUXIO4M_FTC	0x02		/* floppy: drives Terminal Count pin */
 #define	AUXIO4M_LED	0x01		/* front panel LED */
 
@@ -123,6 +123,5 @@
 #ifndef _LOCORE
 volatile u_char *auxio_reg;	/* Copy of AUXIO_REG */
 u_char auxio_regval;
-unsigned int auxregbisc __P((int, int));
+unsigned int auxregbisc(int, int);
 #endif
-

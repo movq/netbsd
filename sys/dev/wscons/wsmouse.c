@@ -1,4 +1,33 @@
-/* $NetBSD: wsmouse.c,v 1.11 2000/01/08 02:57:24 takemura Exp $ */
+/* $NetBSD: wsmouse.c,v 1.60 2008/06/12 23:04:37 cegger Exp $ */
+
+/*-
+ * Copyright (c) 2006 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Julio M. Merino Vidal.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -30,9 +59,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsmouse.c,v 1.11 2000/01/08 02:57:24 takemura Exp $");
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -54,11 +80,7 @@ __KERNEL_RCSID(0, "$NetBSD: wsmouse.c,v 1.11 2000/01/08 02:57:24 takemura Exp $"
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -81,9 +103,17 @@ __KERNEL_RCSID(0, "$NetBSD: wsmouse.c,v 1.11 2000/01/08 02:57:24 takemura Exp $"
  * Mouse driver.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: wsmouse.c,v 1.60 2008/06/12 23:04:37 cegger Exp $");
+
+#include "wsmouse.h"
+#include "wsdisplay.h"
+#include "wsmux.h"
+
 #include <sys/param.h>
 #include <sys/conf.h>
 #include <sys/ioctl.h>
+#include <sys/poll.h>
 #include <sys/fcntl.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
@@ -93,18 +123,21 @@ __KERNEL_RCSID(0, "$NetBSD: wsmouse.c,v 1.11 2000/01/08 02:57:24 takemura Exp $"
 #include <sys/signalvar.h>
 #include <sys/device.h>
 #include <sys/vnode.h>
+#include <sys/callout.h>
+#include <sys/malloc.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsmousevar.h>
 #include <dev/wscons/wseventvar.h>
-
-#include "wsmouse.h"
-#include "wsmux.h"
-#include "wsdisplay.h"
-#include "wskbd.h"
-
-#if NWSMUX > 0
 #include <dev/wscons/wsmuxvar.h>
+
+#if defined(WSMUX_DEBUG) && NWSMUX > 0
+#define DPRINTF(x)	if (wsmuxdebug) printf x
+#define DPRINTFN(n,x)	if (wsmuxdebug > (n)) printf x
+extern int wsmuxdebug;
+#else
+#define DPRINTF(x)
+#define DPRINTFN(n,x)
 #endif
 
 #define INVALID_X	INT_MAX
@@ -112,57 +145,71 @@ __KERNEL_RCSID(0, "$NetBSD: wsmouse.c,v 1.11 2000/01/08 02:57:24 takemura Exp $"
 #define INVALID_Z	INT_MAX
 
 struct wsmouse_softc {
-	struct device	sc_dv;
+	struct wsevsrc	sc_base;
 
 	const struct wsmouse_accessops *sc_accessops;
 	void		*sc_accesscookie;
-
-	int		sc_ready;	/* accepting events */
-	struct wseventvar sc_events;	/* event queue state */
 
 	u_int		sc_mb;		/* mouse button state */
 	u_int		sc_ub;		/* user button state */
 	int		sc_dx;		/* delta-x */
 	int		sc_dy;		/* delta-y */
 	int		sc_dz;		/* delta-z */
+	int		sc_dw;		/* delta-w */
 	int		sc_x;		/* absolute-x */
 	int		sc_y;		/* absolute-y */
 	int		sc_z;		/* absolute-z */
+	int		sc_w;		/* absolute-w */
 
 	int		sc_refcnt;
 	u_char		sc_dying;	/* device is being detached */
 
+	struct wsmouse_repeat	sc_repeat;
+	int			sc_repeat_button;
+	callout_t		sc_repeat_callout;
+	unsigned int		sc_repeat_delay;
+};
+
+static int  wsmouse_match(device_t, cfdata_t, void *);
+static void wsmouse_attach(device_t, device_t, void *);
+static int  wsmouse_detach(device_t, int);
+static int  wsmouse_activate(device_t, enum devact);
+
+static int  wsmouse_do_ioctl(struct wsmouse_softc *, u_long, void *,
+			     int, struct lwp *);
+
 #if NWSMUX > 0
-	struct wsmux_softc *sc_mux;
+static int  wsmouse_mux_open(struct wsevsrc *, struct wseventvar *);
+static int  wsmouse_mux_close(struct wsevsrc *);
 #endif
-};
 
-int	wsmouse_match __P((struct device *, struct cfdata *, void *));
-void	wsmouse_attach __P((struct device *, struct device *, void *));
-int	wsmouse_detach __P((struct device *, int));
-int	wsmouse_activate __P((struct device *, enum devact));
+static int  wsmousedoioctl(device_t, u_long, void *, int, struct lwp *);
 
-int	wsmouse_do_ioctl __P((struct wsmouse_softc *, u_long, caddr_t, 
-			      int, struct proc *));
+static int  wsmousedoopen(struct wsmouse_softc *, struct wseventvar *);
 
-int	wsmousedoclose __P((struct device *, int, int, struct proc *));
-int	wsmousedoioctl __P((struct device *, u_long, caddr_t, int, 
-			    struct proc *));
+CFATTACH_DECL_NEW(wsmouse, sizeof (struct wsmouse_softc),
+    wsmouse_match, wsmouse_attach, wsmouse_detach, wsmouse_activate);
 
-struct cfattach wsmouse_ca = {
-	sizeof (struct wsmouse_softc), wsmouse_match, wsmouse_attach,
-	wsmouse_detach, wsmouse_activate
-};
+static void wsmouse_repeat(void *v);
 
-#if NWSMOUSE > 0
 extern struct cfdriver wsmouse_cd;
-#endif /* NWSMOUSE > 0 */
 
-cdev_decl(wsmouse);
+dev_type_open(wsmouseopen);
+dev_type_close(wsmouseclose);
+dev_type_read(wsmouseread);
+dev_type_ioctl(wsmouseioctl);
+dev_type_poll(wsmousepoll);
+dev_type_kqfilter(wsmousekqfilter);
+
+const struct cdevsw wsmouse_cdevsw = {
+	wsmouseopen, wsmouseclose, wsmouseread, nowrite, wsmouseioctl,
+	nostop, notty, wsmousepoll, nommap, wsmousekqfilter, D_OTHER
+};
 
 #if NWSMUX > 0
-struct wsmuxops wsmouse_muxops = {
-	wsmouseopen, wsmousedoclose, wsmousedoioctl, 0, 0
+struct wssrcops wsmouse_srcops = {
+	WSMUX_MOUSE,
+	wsmouse_mux_open, wsmouse_mux_close, wsmousedoioctl, NULL, NULL
 };
 #endif
 
@@ -170,58 +217,69 @@ struct wsmuxops wsmouse_muxops = {
  * Print function (for parent devices).
  */
 int
-wsmousedevprint(aux, pnp)
-	void *aux;
-	const char *pnp;
+wsmousedevprint(void *aux, const char *pnp)
 {
 
 	if (pnp)
-		printf("wsmouse at %s", pnp);
+		aprint_normal("wsmouse at %s", pnp);
 	return (UNCONF);
 }
 
 int
-wsmouse_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+wsmouse_match(device_t parent, cfdata_t match, void *aux)
 {
 	return (1);
 }
 
 void
-wsmouse_attach(parent, self, aux)
-        struct device *parent, *self;
-	void *aux;
+wsmouse_attach(device_t parent, device_t self, void *aux)
 {
-        struct wsmouse_softc *sc = (struct wsmouse_softc *)self;
+        struct wsmouse_softc *sc = device_private(self);
 	struct wsmousedev_attach_args *ap = aux;
 #if NWSMUX > 0
-	int mux;
+	int mux, error;
 #endif
 
+	sc->sc_base.me_dv = self;
 	sc->sc_accessops = ap->accessops;
 	sc->sc_accesscookie = ap->accesscookie;
-	sc->sc_ready = 0;				/* sanity */
+
+	/* Initialize button repeating. */
+	memset(&sc->sc_repeat, 0, sizeof(sc->sc_repeat));
+	sc->sc_repeat_button = -1;
+	sc->sc_repeat_delay = 0;
+	callout_init(&sc->sc_repeat_callout, 0);
+	callout_setfunc(&sc->sc_repeat_callout, wsmouse_repeat, sc);
 
 #if NWSMUX > 0
-	mux = sc->sc_dv.dv_cfdata->wsmousedevcf_mux;
-	if (mux != WSMOUSEDEVCF_MUX_DEFAULT) {
-		wsmux_attach(mux, WSMUX_MOUSE, &sc->sc_dv, &sc->sc_events,
-			     &sc->sc_mux, &wsmouse_muxops);
-		printf(" mux %d", mux);
+	sc->sc_base.me_ops = &wsmouse_srcops;
+	mux = device_cfdata(self)->wsmousedevcf_mux;
+	if (mux >= 0) {
+		error = wsmux_attach_sc(wsmux_getmux(mux), &sc->sc_base);
+		if (error)
+			aprint_error(" attach error=%d", error);
+		else
+			aprint_normal(" mux %d", mux);
 	}
+#else
+	if (device_cfdata(self)->wsmousedevcf_mux >= 0)
+		aprint_normal(" (mux ignored)");
 #endif
 
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 int
-wsmouse_activate(self, act)
-	struct device *self;
-	enum devact act;
+wsmouse_activate(device_t self, enum devact act)
 {
-	/* XXX should we do something more? */
+	struct wsmouse_softc *sc = device_private(self);
+
+	if (act == DVACT_DEACTIVATE)
+		sc->sc_dying = 1;
 	return (0);
 }
 
@@ -234,78 +292,81 @@ wsmouse_activate(self, act)
  * vnode and return (which will deallocate the softc).
  */
 int
-wsmouse_detach(self, flags)
-	struct device  *self;
-	int flags;
+wsmouse_detach(device_t self, int flags)
 {
-	struct wsmouse_softc *sc = (struct wsmouse_softc *)self;
+	struct wsmouse_softc *sc = device_private(self);
 	struct wseventvar *evar;
 	int maj, mn;
 	int s;
-#if NWSMUX > 0
-	int mux;
-#endif
-
-	sc->sc_dying = 1;
 
 #if NWSMUX > 0
-	mux = sc->sc_dv.dv_cfdata->wsmousedevcf_mux;
-	if (mux != WSMOUSEDEVCF_MUX_DEFAULT)
-		wsmux_detach(mux, &sc->sc_dv);
+	/* Tell parent mux we're leaving. */
+	if (sc->sc_base.me_parent != NULL) {
+		DPRINTF(("wsmouse_detach:\n"));
+		wsmux_detach_sc(&sc->sc_base);
+	}
 #endif
 
-	evar = &sc->sc_events;
-	if (evar->io) {
+	/* If we're open ... */
+	evar = sc->sc_base.me_evp;
+	if (evar != NULL && evar->io != NULL) {
 		s = spltty();
 		if (--sc->sc_refcnt >= 0) {
+			struct wscons_event event;
+
 			/* Wake everyone by generating a dummy event. */
-			if (++evar->put >= WSEVENT_QSIZE)
-				evar->put = 0;
-			WSEVENT_WAKEUP(evar);
+			event.type = 0;
+			event.value = 0;
+			if (wsevent_inject(evar, &event, 1) != 0)
+				wsevent_wakeup(evar);
+
 			/* Wait for processes to go away. */
 			if (tsleep(sc, PZERO, "wsmdet", hz * 60))
 				printf("wsmouse_detach: %s didn't detach\n",
-				       sc->sc_dv.dv_xname);
+				       device_xname(self));
 		}
 		splx(s);
 	}
 
 	/* locate the major number */
-	for (maj = 0; maj < nchrdev; maj++)
-		if (cdevsw[maj].d_open == wsmouseopen)
-			break;
+	maj = cdevsw_lookup_major(&wsmouse_cdevsw);
 
 	/* Nuke the vnodes for any open instances (calls close). */
-	mn = self->dv_unit;
+	mn = device_unit(self);
 	vdevgone(maj, mn, mn, VCHR);
 
 	return (0);
 }
 
 void
-wsmouse_input(wsmousedev, btns, x, y, z, flags)
-	struct device *wsmousedev;
-	u_int btns;			/* 0 is up */
-	int x, y, z;
-	u_int flags;
+wsmouse_input(device_t wsmousedev, u_int btns /* 0 is up */,
+	int x, int y, int z, int w, u_int flags)
 {
-	struct wsmouse_softc *sc = (struct wsmouse_softc *)wsmousedev;
-	struct wscons_event *ev;
+	struct wsmouse_softc *sc = device_private(wsmousedev);
 	struct wseventvar *evar;
-	int mb, ub, d, get, put, any;
+	int mb, ub, d, nevents;
+	/* one for each dimension (4) + a bit for each button */
+	struct wscons_event events[4 + sizeof(d) * 8];
 
         /*
-         * Discard input if not ready.
+         * Discard input if not open.
          */
-	if (sc->sc_ready == 0)
+	evar = sc->sc_base.me_evp;
+	if (evar == NULL)
 		return;
 
-#if NWSMUX > 0
-	if (sc->sc_mux)
-		evar = &sc->sc_mux->sc_events;
-	else
+#ifdef DIAGNOSTIC
+	if (evar->q == NULL) {
+		printf("wsmouse_input: evar->q=NULL\n");
+		return;
+	}
 #endif
-		evar = &sc->sc_events;
+
+#if NWSMUX > 0
+	DPRINTFN(5,("wsmouse_input: %s mux=%p, evar=%p\n",
+		    device_xname(sc->sc_base.me_dv),
+		    sc->sc_base.me_parent, evar));
+#endif
 
 	sc->sc_mb = btns;
 	if (!(flags & WSMOUSE_INPUT_ABSOLUTE_X))
@@ -314,6 +375,8 @@ wsmouse_input(wsmousedev, btns, x, y, z, flags)
 		sc->sc_dy += y;
 	if (!(flags & WSMOUSE_INPUT_ABSOLUTE_Z))
 		sc->sc_dz += z;
+	if (!(flags & WSMOUSE_INPUT_ABSOLUTE_W))
+		sc->sc_dw += w;
 
 	/*
 	 * We have at least one event (mouse button, delta-X, or
@@ -322,132 +385,192 @@ wsmouse_input(wsmousedev, btns, x, y, z, flags)
 	 * of changes or out of room.  As events get delivered,
 	 * mark them `unchanged'.
 	 */
-	any = 0;
-	get = evar->get;
-	put = evar->put;
-	ev = &evar->q[put];
-
-	/* NEXT prepares to put the next event, backing off if necessary */
-#define	NEXT								\
-	if ((++put) % WSEVENT_QSIZE == get) {				\
-		put--;							\
-		goto out;						\
-	}
-	/* ADVANCE completes the `put' of the event */
-#define	ADVANCE								\
-	ev++;								\
-	if (put >= WSEVENT_QSIZE) {					\
-		put = 0;						\
-		ev = &evar->q[0];				\
-	}								\
-	any = 1
-	/* TIMESTAMP sets `time' field of the event to the current time */
-#define TIMESTAMP							\
-	do {								\
-		int s;							\
-		s = splhigh();						\
-		TIMEVAL_TO_TIMESPEC(&time, &ev->time);			\
-		splx(s);						\
-	} while (0)
-
-	mb = sc->sc_mb;
 	ub = sc->sc_ub;
-	while ((d = mb ^ ub) != 0) {
-		/*
-		 * Mouse button change.  Find the first change and drop
-		 * it into the event queue.
-		 */
-		NEXT;
-		ev->value = ffs(d) - 1;
+	nevents = 0;
 
-		KASSERT(ev->value >= 0);
-
-		d = 1 << ev->value;
-		ev->type =
-		    (mb & d) ? WSCONS_EVENT_MOUSE_DOWN : WSCONS_EVENT_MOUSE_UP;
-		TIMESTAMP;
-		ADVANCE;
-		ub ^= d;
-	}
 	if (flags & WSMOUSE_INPUT_ABSOLUTE_X) {
 		if (sc->sc_x != x) {
-			NEXT;
-			ev->type = WSCONS_EVENT_MOUSE_ABSOLUTE_X;
-			ev->value = x;
-			TIMESTAMP;
-			ADVANCE;
-			sc->sc_x = x;
+			events[nevents].type = WSCONS_EVENT_MOUSE_ABSOLUTE_X;
+			events[nevents].value = x;
+			nevents++;
 		}
 	} else {
 		if (sc->sc_dx) {
-			NEXT;
-			ev->type = WSCONS_EVENT_MOUSE_DELTA_X;
-			ev->value = sc->sc_dx;
-			TIMESTAMP;
-			ADVANCE;
-			sc->sc_dx = 0;
+			events[nevents].type = WSCONS_EVENT_MOUSE_DELTA_X;
+			events[nevents].value = sc->sc_dx;
+			nevents++;
 		}
 	}
 	if (flags & WSMOUSE_INPUT_ABSOLUTE_Y) {
 		if (sc->sc_y != y) {
-			NEXT;
-			ev->type = WSCONS_EVENT_MOUSE_ABSOLUTE_Y;
-			ev->value = y;
-			TIMESTAMP;
-			ADVANCE;
-			sc->sc_y = y;
+			events[nevents].type = WSCONS_EVENT_MOUSE_ABSOLUTE_Y;
+			events[nevents].value = y;
+			nevents++;
 		}
 	} else {
 		if (sc->sc_dy) {
-			NEXT;
-			ev->type = WSCONS_EVENT_MOUSE_DELTA_Y;
-			ev->value = sc->sc_dy;
-			TIMESTAMP;
-			ADVANCE;
-			sc->sc_dy = 0;
+			events[nevents].type = WSCONS_EVENT_MOUSE_DELTA_Y;
+			events[nevents].value = sc->sc_dy;
+			nevents++;
 		}
 	}
 	if (flags & WSMOUSE_INPUT_ABSOLUTE_Z) {
 		if (sc->sc_z != z) {
-			NEXT;
-			ev->type = WSCONS_EVENT_MOUSE_ABSOLUTE_Z;
-			ev->value = z;
-			TIMESTAMP;
-			ADVANCE;
-			sc->sc_z = z;
+			events[nevents].type = WSCONS_EVENT_MOUSE_ABSOLUTE_Z;
+			events[nevents].value = z;
+			nevents++;
 		}
 	} else {
 		if (sc->sc_dz) {
-			NEXT;
-			ev->type = WSCONS_EVENT_MOUSE_DELTA_Z;
-			ev->value = sc->sc_dz;
-			TIMESTAMP;
-			ADVANCE;
-			sc->sc_dz = 0;
+			events[nevents].type = WSCONS_EVENT_MOUSE_DELTA_Z;
+			events[nevents].value = sc->sc_dz;
+			nevents++;
 		}
 	}
-out:
-	if (any) {
+	if (flags & WSMOUSE_INPUT_ABSOLUTE_W) {
+		if (sc->sc_w != w) {
+			events[nevents].type = WSCONS_EVENT_MOUSE_ABSOLUTE_W;
+			events[nevents].value = w;
+			nevents++;
+		}
+	} else {
+		if (sc->sc_dw) {
+			events[nevents].type = WSCONS_EVENT_MOUSE_DELTA_W;
+			events[nevents].value = sc->sc_dw;
+			nevents++;
+		}
+	}
+
+	mb = sc->sc_mb;
+	while ((d = mb ^ ub) != 0) {
+		int btnno;
+
+		/*
+		 * Cancel button repeating if button status changed.
+		 */
+		if (sc->sc_repeat_button != -1) {
+			KASSERT(sc->sc_repeat_button >= 0);
+			KASSERT(sc->sc_repeat.wr_buttons &
+                            (1 << sc->sc_repeat_button));
+			ub &= ~(1 << sc->sc_repeat_button);
+			sc->sc_repeat_button = -1;
+			callout_stop(&sc->sc_repeat_callout);
+		}
+
+		/*
+		 * Mouse button change.  Find the first change and drop
+		 * it into the event queue.
+		 */
+		btnno = ffs(d) - 1;
+		KASSERT(btnno >= 0);
+
+		if (nevents >= sizeof(events) / sizeof(events[0])) {
+			aprint_error_dev(sc->sc_base.me_dv,
+			    "Event queue full (button status mb=0x%x"
+			    " ub=0x%x)\n", mb, ub);
+			break;
+		}
+
+		events[nevents].type =
+		    (mb & d) ? WSCONS_EVENT_MOUSE_DOWN : WSCONS_EVENT_MOUSE_UP;
+		events[nevents].value = btnno;
+		nevents++;
+
+		ub ^= (1 << btnno);
+
+		/*
+		 * Program button repeating if configured for this button.
+		 */
+		if ((mb & d) && (sc->sc_repeat.wr_buttons & (1 << btnno)) &&
+		    sc->sc_repeat.wr_delay_first > 0) {
+			sc->sc_repeat_button = btnno;
+			sc->sc_repeat_delay = sc->sc_repeat.wr_delay_first;
+			callout_schedule(&sc->sc_repeat_callout,
+			    mstohz(sc->sc_repeat_delay));
+		}
+	}
+
+	if (nevents == 0 || wsevent_inject(evar, events, nevents) == 0) {
+		/* All events were correctly injected into the queue.
+		 * Synchronize the mouse's status with what the user
+		 * has received. */
+		sc->sc_x = x; sc->sc_dx = 0;
+		sc->sc_y = y; sc->sc_dy = 0;
+		sc->sc_z = z; sc->sc_dz = 0;
+		sc->sc_w = w; sc->sc_dw = 0;
 		sc->sc_ub = ub;
-		evar->put = put;
-		WSEVENT_WAKEUP(evar);
+#if NWSMUX > 0
+		DPRINTFN(5,("wsmouse_input: %s wakeup evar=%p\n",
+			    device_xname(sc->sc_base.me_dv), evar));
+#endif
 	}
 }
 
-int
-wsmouseopen(dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
+static void
+wsmouse_repeat(void *v)
 {
-#if NWSMOUSE > 0
+	int oldspl;
+	unsigned int newdelay;
 	struct wsmouse_softc *sc;
-	int error, unit;
+	struct wscons_event events[2];
 
-	unit = minor(dev);
-	if (unit >= wsmouse_cd.cd_ndevs ||	/* make sure it was attached */
-	    (sc = wsmouse_cd.cd_devs[unit]) == NULL)
-		return (ENXIO);
+	oldspl = spltty();
+	sc = (struct wsmouse_softc *)v;
+
+	if (sc->sc_repeat_button == -1) {
+		/* Race condition: a "button up" event came in when
+		 * this function was already called but did not do
+		 * spltty() yet. */
+		splx(oldspl);
+		return;
+	}
+	KASSERT(sc->sc_repeat_button >= 0);
+
+	KASSERT(sc->sc_repeat.wr_buttons & (1 << sc->sc_repeat_button));
+
+	newdelay = sc->sc_repeat_delay;
+
+	events[0].type = WSCONS_EVENT_MOUSE_UP;
+	events[0].value = sc->sc_repeat_button;
+	events[1].type = WSCONS_EVENT_MOUSE_DOWN;
+	events[1].value = sc->sc_repeat_button;
+
+	if (wsevent_inject(sc->sc_base.me_evp, events, 2) == 0) {
+		sc->sc_ub = 1 << sc->sc_repeat_button;
+
+		if (newdelay - sc->sc_repeat.wr_delay_decrement <
+		    sc->sc_repeat.wr_delay_minimum)
+			newdelay = sc->sc_repeat.wr_delay_minimum;
+		else if (newdelay > sc->sc_repeat.wr_delay_minimum)
+			newdelay -= sc->sc_repeat.wr_delay_decrement;
+		KASSERT(newdelay >= sc->sc_repeat.wr_delay_minimum &&
+		    newdelay <= sc->sc_repeat.wr_delay_first);
+	}
+
+	/*
+	 * Reprogram the repeating event.
+	 */
+	sc->sc_repeat_delay = newdelay;
+	callout_schedule(&sc->sc_repeat_callout, mstohz(newdelay));
+
+	splx(oldspl);
+}
+
+int
+wsmouseopen(dev_t dev, int flags, int mode, struct lwp *l)
+{
+	struct wsmouse_softc *sc;
+	struct wseventvar *evar;
+	int error;
+
+	sc = device_lookup_private(&wsmouse_cd, minor(dev));
+	if (sc == NULL)
+		return ENXIO;
+
+#if NWSMUX > 0
+	DPRINTF(("wsmouseopen: %s mux=%p p=%p\n", device_xname(sc->sc_base.me_dv),
+		 sc->sc_base.me_parent, l));
+#endif
 
 	if (sc->sc_dying)
 		return (EIO);
@@ -456,142 +579,114 @@ wsmouseopen(dev, flags, mode, p)
 		return (0);			/* always allow open for write
 						   so ioctl() is possible. */
 
-#if NWSMUX > 0
-	if (sc->sc_mux)
-		return (EBUSY);
-#endif
-
-	if (sc->sc_events.io)			/* and that it's not in use */
+	if (sc->sc_base.me_evp != NULL)
 		return (EBUSY);
 
-	sc->sc_events.io = p;
-	wsevent_init(&sc->sc_events);		/* may cause sleep */
+	evar = &sc->sc_base.me_evar;
+	wsevent_init(evar, l->l_proc);
+	sc->sc_base.me_evp = evar;
 
-	sc->sc_ready = 1;			/* start accepting events */
+	error = wsmousedoopen(sc, evar);
+	if (error) {
+		DPRINTF(("wsmouseopen: %s open failed\n",
+			 device_xname(sc->sc_base.me_dv)));
+		sc->sc_base.me_evp = NULL;
+		wsevent_fini(evar);
+	}
+	return (error);
+}
+
+int
+wsmouseclose(dev_t dev, int flags, int mode,
+    struct lwp *l)
+{
+	struct wsmouse_softc *sc =
+	    device_lookup_private(&wsmouse_cd, minor(dev));
+	struct wseventvar *evar = sc->sc_base.me_evp;
+
+	if (evar == NULL)
+		/* not open for read */
+		return (0);
+	sc->sc_base.me_evp = NULL;
+	(*sc->sc_accessops->disable)(sc->sc_accesscookie);
+	wsevent_fini(evar);
+
+	return (0);
+}
+
+int
+wsmousedoopen(struct wsmouse_softc *sc, struct wseventvar *evp)
+{
+	sc->sc_base.me_evp = evp;
 	sc->sc_x = INVALID_X;
 	sc->sc_y = INVALID_Y;
 	sc->sc_z = INVALID_Z;
 
-	/* enable the device, and punt if that's not possible */
-	error = (*sc->sc_accessops->enable)(sc->sc_accesscookie);
-	if (error) {
-		sc->sc_ready = 0;		/* stop accepting events */
-		wsevent_fini(&sc->sc_events);
-		sc->sc_events.io = NULL;
-		return (error);
+	/* Stop button repeating when messing with the device. */
+	if (sc->sc_repeat_button != -1) {
+		KASSERT(sc->sc_repeat_button >= 0);
+		sc->sc_repeat_button = -1;
+		callout_stop(&sc->sc_repeat_callout);
 	}
 
-	return (0);
-#else
-	return (ENXIO);
-#endif /* NWSMOUSE > 0 */
+	/* enable the device, and punt if that's not possible */
+	return (*sc->sc_accessops->enable)(sc->sc_accesscookie);
 }
 
 int
-wsmouseclose(dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
+wsmouseread(dev_t dev, struct uio *uio, int flags)
 {
-#if NWSMOUSE > 0
-	return (wsmousedoclose(wsmouse_cd.cd_devs[minor(dev)], 
-			       flags, mode, p));
-#else
-	return (ENXIO);
-#endif /* NWSMOUSE > 0 */
-}
-
-#if NWSMOUSE > 0
-int
-wsmousedoclose(dv, flags, mode, p)
-	struct device *dv;
-	int flags, mode;
-	struct proc *p;
-{
-	struct wsmouse_softc *sc = (struct wsmouse_softc *)dv;
-
-	if ((flags & (FREAD | FWRITE)) == FWRITE)
-		return (0);			/* see wsmouseopen() */
-
-	(*sc->sc_accessops->disable)(sc->sc_accesscookie);
-
-	sc->sc_ready = 0;			/* stop accepting events */
-	wsevent_fini(&sc->sc_events);
-	sc->sc_events.io = NULL;
-	return (0);
-}
-#endif /* NWSMOUSE > 0 */
-
-int
-wsmouseread(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
-{
-#if NWSMOUSE > 0
-	struct wsmouse_softc *sc = wsmouse_cd.cd_devs[minor(dev)];
+	struct wsmouse_softc *sc =
+	    device_lookup_private(&wsmouse_cd, minor(dev));
 	int error;
 
 	if (sc->sc_dying)
 		return (EIO);
 
+#ifdef DIAGNOSTIC
+	if (sc->sc_base.me_evp == NULL) {
+		printf("wsmouseread: evp == NULL\n");
+		return (EINVAL);
+	}
+#endif
+
 	sc->sc_refcnt++;
-	error = wsevent_read(&sc->sc_events, uio, flags);
+	error = wsevent_read(sc->sc_base.me_evp, uio, flags);
 	if (--sc->sc_refcnt < 0) {
 		wakeup(sc);
 		error = EIO;
 	}
 	return (error);
-#else
-	return (ENXIO);
-#endif /* NWSMOUSE > 0 */
 }
 
 int
-wsmouseioctl(dev, cmd, data, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+wsmouseioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-#if NWSMOUSE > 0
-	return (wsmousedoioctl(wsmouse_cd.cd_devs[minor(dev)],
-			       cmd, data, flag, p));
-#else
-	return (ENXIO);
-#endif /* NWSMOUSE > 0 */
+	return (wsmousedoioctl(device_lookup(&wsmouse_cd, minor(dev)),
+			       cmd, data, flag, l));
 }
 
-#if NWSMOUSE > 0
 /* A wrapper around the ioctl() workhorse to make reference counting easy. */
 int
-wsmousedoioctl(dv, cmd, data, flag, p)
-	struct device *dv;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+wsmousedoioctl(device_t dv, u_long cmd, void *data, int flag,
+	       struct lwp *l)
 {
-	struct wsmouse_softc *sc = (struct wsmouse_softc *)dv;
+	struct wsmouse_softc *sc = device_private(dv);
 	int error;
 
 	sc->sc_refcnt++;
-	error = wsmouse_do_ioctl(sc, cmd, data, flag, p);
+	error = wsmouse_do_ioctl(sc, cmd, data, flag, l);
 	if (--sc->sc_refcnt < 0)
 		wakeup(sc);
 	return (error);
 }
 
 int
-wsmouse_do_ioctl(sc, cmd, data, flag, p)
-	struct wsmouse_softc *sc;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+wsmouse_do_ioctl(struct wsmouse_softc *sc, u_long cmd, void *data,
+		 int flag, struct lwp *l)
 {
 	int error;
+	struct wsmouse_repeat *wr;
 
 	if (sc->sc_dying)
 		return (EIO);
@@ -604,13 +699,55 @@ wsmouse_do_ioctl(sc, cmd, data, flag, p)
 		return (0);
 
 	case FIOASYNC:
-		sc->sc_events.async = *(int *)data != 0;
+		if (sc->sc_base.me_evp == NULL)
+			return (EINVAL);
+		sc->sc_base.me_evp->async = *(int *)data != 0;
+		return (0);
+
+	case FIOSETOWN:
+		if (sc->sc_base.me_evp == NULL)
+			return (EINVAL);
+		if (-*(int *)data != sc->sc_base.me_evp->io->p_pgid
+		    && *(int *)data != sc->sc_base.me_evp->io->p_pid)
+			return (EPERM);
 		return (0);
 
 	case TIOCSPGRP:
-		if (*(int *)data != sc->sc_events.io->p_pgid)
+		if (sc->sc_base.me_evp == NULL)
+			return (EINVAL);
+		if (*(int *)data != sc->sc_base.me_evp->io->p_pgid)
 			return (EPERM);
 		return (0);
+	}
+
+	/*
+	 * Try the wsmouse specific ioctls.
+	 */
+	switch (cmd) {
+	case WSMOUSEIO_GETREPEAT:
+		wr = (struct wsmouse_repeat *)data;
+		memcpy(wr, &sc->sc_repeat, sizeof(sc->sc_repeat));
+		return 0;
+
+	case WSMOUSEIO_SETREPEAT:
+		if ((flag & FWRITE) == 0)
+			return EACCES;
+
+		/* Validate input data. */
+		wr = (struct wsmouse_repeat *)data;
+		if (wr->wr_delay_first != 0 &&
+		    (wr->wr_delay_first < wr->wr_delay_decrement ||
+		     wr->wr_delay_first < wr->wr_delay_minimum ||
+		     wr->wr_delay_first < wr->wr_delay_minimum +
+		     wr->wr_delay_decrement))
+			return EINVAL;
+
+		/* Stop current repeating and set new data. */
+		sc->sc_repeat_button = -1;
+		callout_stop(&sc->sc_repeat_callout);
+		memcpy(&sc->sc_repeat, wr, sizeof(sc->sc_repeat));
+
+		return 0;
 	}
 
 	/*
@@ -618,57 +755,67 @@ wsmouse_do_ioctl(sc, cmd, data, flag, p)
 	 * if it didn't recognize the request.
 	 */
 	error = (*sc->sc_accessops->ioctl)(sc->sc_accesscookie, cmd,
-	    data, flag, p);
-	return (error != -1 ? error : ENOTTY);
+	    data, flag, l);
+	return (error); /* may be EPASSTHROUGH */
 }
-#endif /* NWSMOUSE > 0 */
 
 int
-wsmousepoll(dev, events, p)
-	dev_t dev;
-	int events;
-	struct proc *p;
+wsmousepoll(dev_t dev, int events, struct lwp *l)
 {
-#if NWSMOUSE > 0
-	struct wsmouse_softc *sc = wsmouse_cd.cd_devs[minor(dev)];
+	struct wsmouse_softc *sc =
+	    device_lookup_private(&wsmouse_cd, minor(dev));
 
-	return (wsevent_poll(&sc->sc_events, events, p));
-#else
-	return (0);
-#endif /* NWSMOUSE > 0 */
+	if (sc->sc_base.me_evp == NULL)
+		return (POLLERR);
+	return (wsevent_poll(sc->sc_base.me_evp, events, l));
+}
+
+int
+wsmousekqfilter(dev_t dev, struct knote *kn)
+{
+	struct wsmouse_softc *sc =
+	    device_lookup_private(&wsmouse_cd, minor(dev));
+
+	if (sc->sc_base.me_evp == NULL)
+		return (1);
+	return (wsevent_kqfilter(sc->sc_base.me_evp, kn));
 }
 
 #if NWSMUX > 0
 int
-wsmouse_add_mux(unit, muxsc)
-	int unit;
-	struct wsmux_softc *muxsc;
+wsmouse_mux_open(struct wsevsrc *me, struct wseventvar *evp)
 {
-	struct wsmouse_softc *sc;
+	struct wsmouse_softc *sc = (struct wsmouse_softc *)me;
 
-	if (unit < 0 || unit >= wsmouse_cd.cd_ndevs ||
-	    (sc = wsmouse_cd.cd_devs[unit]) == NULL)
-		return (ENXIO);
-
-	if (sc->sc_mux || sc->sc_events.io)
+	if (sc->sc_base.me_evp != NULL)
 		return (EBUSY);
 
-	return (wsmux_attach_sc(muxsc, WSMUX_KBD, &sc->sc_dv, &sc->sc_events, 
-				&sc->sc_mux, &wsmouse_muxops));
+	return wsmousedoopen(sc, evp);
 }
 
 int
-wsmouse_rem_mux(unit, muxsc)
-	int unit;
-	struct wsmux_softc *muxsc;
+wsmouse_mux_close(struct wsevsrc *me)
+{
+	struct wsmouse_softc *sc = (struct wsmouse_softc *)me;
+
+	sc->sc_base.me_evp = NULL;
+	(*sc->sc_accessops->disable)(sc->sc_accesscookie);
+
+	return (0);
+}
+
+int
+wsmouse_add_mux(int unit, struct wsmux_softc *muxsc)
 {
 	struct wsmouse_softc *sc;
 
-	if (unit < 0 || unit >= wsmouse_cd.cd_ndevs ||
-	    (sc = wsmouse_cd.cd_devs[unit]) == NULL)
-		return (ENXIO);
+	sc = device_lookup_private(&wsmouse_cd, unit);
+	if (sc == NULL)
+		return ENXIO;
 
-	return (wsmux_detach_sc(muxsc, &sc->sc_dv));
+	if (sc->sc_base.me_parent != NULL || sc->sc_base.me_evp != NULL)
+		return (EBUSY);
+
+	return (wsmux_attach_sc(muxsc, &sc->sc_base));
 }
-
-#endif
+#endif /* NWSMUX > 0 */

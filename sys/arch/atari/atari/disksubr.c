@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.17 1999/09/22 07:20:44 leo Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.35 2008/01/02 11:48:23 ad Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -29,6 +29,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.35 2008/01/02 11:48:23 ad Exp $");
 
 #ifndef DISKLABEL_NBDA
 #define	DISKLABEL_NBDA	/* required */
@@ -63,76 +66,6 @@ static u_int ahdi_getparts __P((dev_t, void (*)(struct buf *), u_int,
 					u_int, u_int, struct ahdi_ptbl *));
 
 /*
- * XXX unknown function but needed for /sys/scsi to link
- */
-void
-dk_establish(disk, device)
-	struct disk	*disk;
-	struct device	*device;
-{
-}
-
-/*
- * Determine the size of the transfer, and make sure it is
- * within the boundaries of the partition. Adjust transfer
- * if needed, and signal errors or early completion.
- */
-int
-bounds_check_with_label(bp, lp, wlabel)
-	struct buf		*bp;
-	struct disklabel	*lp;
-	int			wlabel;
-{
-	struct partition	*pp;
-	u_int			maxsz, sz;
-
-	pp = &lp->d_partitions[DISKPART(bp->b_dev)];
-	if (bp->b_flags & B_RAW) {
-		if (bp->b_bcount & (lp->d_secsize - 1)) {
-			bp->b_error = EINVAL;
-			bp->b_flags |= B_ERROR;
-			return(-1);
-		}
-		if (lp->d_secsize < DEV_BSIZE)
-			maxsz = pp->p_size / (DEV_BSIZE / lp->d_secsize);
-		else maxsz = pp->p_size * (lp->d_secsize / DEV_BSIZE);
-		sz = (bp->b_bcount + DEV_BSIZE - 1) >> DEV_BSHIFT;
-	} else {
-		maxsz = pp->p_size;
-		sz = (bp->b_bcount + lp->d_secsize - 1) / lp->d_secsize;
-	}
-
-	if (bp->b_blkno < 0 || bp->b_blkno + sz > maxsz) {
-		if (bp->b_blkno == maxsz) {
-			/* 
-			 * trying to get one block beyond return EOF.
-			 */
-			bp->b_resid = bp->b_bcount;
-			return(0);
-		}
-		if (bp->b_blkno > maxsz || bp->b_blkno < 0) {
-			bp->b_error = EINVAL;
-			bp->b_flags |= B_ERROR;
-			return(-1);
-		}
-		sz = maxsz - bp->b_blkno;
-
-		/* 
-		 * adjust count down
-		 */
-		if (bp->b_flags & B_RAW)
-			bp->b_bcount = sz << DEV_BSHIFT;
-		else bp->b_bcount = sz * lp->d_secsize;
-	}
-
-	/*
-	 * calc cylinder for disksort to order transfers with
-	 */
-	bp->b_cylinder = (bp->b_blkno + pp->p_offset) / lp->d_secpercyl;
-	return(1);
-}
-
-/*
  * Attempt to read a disk label from a device using the
  * indicated strategy routine. The label must be partly
  * set up before this:
@@ -140,7 +73,7 @@ bounds_check_with_label(bp, lp, wlabel)
  * (e.g. sector size) must be filled in before calling us.
  * Returns NULL on success and an error string on failure.
  */
-char *
+const char *
 readdisklabel(dev, strat, lp, clp)
 	dev_t			dev;
 	void			(*strat)(struct buf *);
@@ -149,7 +82,9 @@ readdisklabel(dev, strat, lp, clp)
 {
 	int			e;
 
-	bzero(clp, sizeof *clp);
+	if (clp != NULL)
+		bzero(clp, sizeof *clp);
+	else printf("Warning: clp == NULL\n");
 
 	/*
 	 * Give some guaranteed validity to the disk label.
@@ -174,11 +109,11 @@ readdisklabel(dev, strat, lp, clp)
 	lp->d_partitions[RAW_PART].p_size = lp->d_secperunit;
 	lp->d_npartitions                 = RAW_PART + 1;
 	lp->d_bbsize                      = BBSIZE;
-	lp->d_sbsize                      = SBSIZE;
+	lp->d_sbsize                      = SBLOCKSIZE;
 
 #ifdef DISKLABEL_NBDA
 	/* Try the native NetBSD/Atari format first. */
-	e = bsd_label(dev, strat, lp, 0, &clp->cd_label);
+	e = bsd_label(dev, strat, lp, 0, clp != NULL ? &clp->cd_label : NULL);
 #endif
 #if 0
 	/* Other label formats go here. */
@@ -187,13 +122,13 @@ readdisklabel(dev, strat, lp, clp)
 #endif
 #ifdef DISKLABEL_AHDI
 	/* The unprotected AHDI format comes last. */
-	if (e > 0)
+	if (e > 0 && (clp != NULL))
 		e = ahdi_label(dev, strat, lp, clp);
 #endif
 	if (e < 0)
 		return("I/O error");
 
-	/* Unknown format or unitialised volume? */
+	/* Unknown format or uninitialized volume? */
 	if (e > 0)
 		uprintf("Warning: unknown disklabel format"
 			"- assuming empty disk\n");
@@ -279,7 +214,7 @@ writedisklabel(dev, strat, lp, clp)
 
 	bp = geteblk(BBMINSIZE);
 	bp->b_dev      = MAKEDISKDEV(major(dev), DISKUNIT(dev), RAW_PART);
-	bp->b_flags    = B_BUSY | B_READ;
+	bp->b_flags    |= B_READ;
 	bp->b_bcount   = BBMINSIZE;
 	bp->b_blkno    = blk;
 	bp->b_cylinder = blk / lp->d_secpercyl;
@@ -299,15 +234,16 @@ writedisklabel(dev, strat, lp, clp)
 		bb->bb_magic = (blk == 0) ? NBDAMAGIC : AHDIMAGIC;
 		BBSETLABEL(bb, lp);
 
-		bp->b_flags    = B_BUSY | B_WRITE;
+		bp->b_oflags   &= ~(BO_DONE);
+		bp->b_flags    &= ~(B_READ);
+		bp->b_flags    |= B_WRITE;
 		bp->b_bcount   = BBMINSIZE;
 		bp->b_blkno    = blk;
 		bp->b_cylinder = blk / lp->d_secpercyl;
 		(*strat)(bp);
 		rv = biowait(bp);
 	}
-	bp->b_flags |= B_INVAL | B_AGE;
-	brelse(bp);
+	brelse(bp, 0);
 	return(rv);
 }
 
@@ -315,24 +251,24 @@ writedisklabel(dev, strat, lp, clp)
  * Read bootblock at block `blkno' and check
  * if it contains a valid NetBSD disk label.
  *
- * Returns:  0 if successfull,
- *          -1 if an I/O error occured,
+ * Returns:  0 if successful,
+ *          -1 if an I/O error occurred,
  *          +1 if no valid label was found.
  */
 static int
-bsd_label(dev, strat, label, blkno, offset)
+bsd_label(dev, strat, label, blkno, offsetp)
 	dev_t			dev;
 	void			(*strat)(struct buf *);
 	struct disklabel	*label;
 	u_int			blkno,
-				*offset;
+				*offsetp;
 {
 	struct buf		*bp;
 	int			rv;
 
 	bp = geteblk(BBMINSIZE);
 	bp->b_dev      = MAKEDISKDEV(major(dev), DISKUNIT(dev), RAW_PART);
-	bp->b_flags    = B_BUSY | B_READ;
+	bp->b_flags    |= B_READ;
 	bp->b_bcount   = BBMINSIZE;
 	bp->b_blkno    = blkno;
 	bp->b_cylinder = blkno / label->d_secpercyl;
@@ -364,24 +300,23 @@ bsd_label(dev, strat, label, blkno, offset)
 			   && dl->d_magic  == DISKMAGIC
 		  	   && dkcksum(dl)  == 0
 			   )	{
-				*offset = (char *)dl - (char *)bb;
-				*label  = *dl;
-				rv      = 0;
+				if (offsetp != NULL)
+					*offsetp = (char *)dl - (char *)bb;
+				*label = *dl;
+				rv     = 0;
 				break;
 			}
 		}
 	}
-
-	bp->b_flags = B_INVAL | B_AGE | B_READ;
-	brelse(bp);
+	brelse(bp, 0);
 	return(rv);
 }
 
 #ifdef DISKLABEL_AHDI
 /*
  * Check for consistency between the NetBSD partition table
- * and the AHDI auxilary root sectors. There's no good reason
- * to force such consistency, but issueing a warning may help
+ * and the AHDI auxiliary root sectors. There's no good reason
+ * to force such consistency, but issuing a warning may help
  * an inexperienced sysadmin to prevent corruption of AHDI
  * partitions.
  */
@@ -407,19 +342,19 @@ ck_label(dl, cdl)
 			if (*rp >= p->p_offset
 			  && *rp < p->p_offset + p->p_size) {
 				uprintf("Warning: NetBSD partition %c"
-				" includes AHDI auxilary root\n", 'a'+i);
+				" includes AHDI auxiliary root\n", 'a'+i);
 			}
 		}
 	}
 }
 
 /*
- * Check volume for the existance of an AHDI label. Fetch
+ * Check volume for the existence of an AHDI label. Fetch
  * NetBSD label from NBD or RAW partition, or otherwise
  * create a fake NetBSD label based on the AHDI label.
  *
  * Returns:  0 if successful,
- *          -1 if an I/O error occured,
+ *          -1 if an I/O error occurred,
  *          +1 if no valid AHDI label was found.
  */
 int
@@ -608,7 +543,7 @@ ahdi_to_bsd(dl, apt)
 }
 
 /*
- * Fetch the AHDI partitions and auxilary roots.
+ * Fetch the AHDI partitions and auxiliary roots.
  *
  * Returns:  0 if successful,
  *           otherwise an I/O error occurred, and the
@@ -629,7 +564,7 @@ ahdi_getparts(dev, strat, secpercyl, rsec, esec, apt)
 
 	bp = geteblk(AHDI_BSIZE);
 	bp->b_dev      = MAKEDISKDEV(major(dev), DISKUNIT(dev), RAW_PART);
-	bp->b_flags    = B_BUSY | B_READ;
+	bp->b_flags    |= B_READ;
 	bp->b_bcount   = AHDI_BSIZE;
 	bp->b_blkno    = rsec;
 	bp->b_cylinder = rsec / secpercyl;
@@ -671,8 +606,7 @@ ahdi_getparts(dev, strat, secpercyl, rsec, esec, apt)
 	apt->at_bslend = root->ar_bslst + root->ar_bslsize - 1;
 	rv = 0;
 done:
-	bp->b_flags = B_INVAL | B_AGE | B_READ;
-	brelse(bp);
+	brelse(bp, 0);
 	return(rv);
 }
 #endif /* DISKLABEL_AHDI */

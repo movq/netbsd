@@ -1,16 +1,23 @@
-#	$NetBSD: Makefile.inc,v 1.6 1999/07/25 04:23:49 abs Exp $
+#	$NetBSD: Makefile.inc,v 1.23 2008/03/18 04:20:37 lukem Exp $
 #
 #	etc.vax/Makefile.inc -- vax-specific etc Makefile targets
 #
 
-# Set this for any kernels beyond GENERIC you want to include
-# in the distribution.
-#EXTRA_KERNELS+=
+# If you change the list of distributed kernels, don't forget
+# to update the release documentation in distrib/notes/common/contents
 
-distribution: pcs750.bin
+KERNEL_SETS=		GENERIC GENERIC.MP
 
-pcs750.bin:
-	(cd etc.vax;uudecode pcs750.bin.uu)
-	(cd etc.vax; install -c -o ${BINOWN} -g ${BINGRP} -m 444 ${PCS} \
-	    ${DESTDIR}/)
+BUILD_KERNELS=		INSTALL
 
+INSTALLATION_DIRS+=	installation/bootfs	\
+			installation/miniroot	\
+			installation/netboot
+
+iso-image-md-pre:
+	cp -f ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/netboot/install.ram.gz \
+	    ${CDROM.dir}/netbsd
+	cp -f ${DESTDIR}/usr/mdec/boot ${CDROM.dir}
+
+iso-image-md-post:
+	${TOOL_INSTALLBOOT} -m ${MACHINE} ${CDROM.image} ${DESTDIR}/usr/mdec/xxboot

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.33 2000/02/01 05:25:51 tsutsui Exp $
+#	$NetBSD: Makefile.inc,v 1.40 2005/12/20 19:35:26 christos Exp $
 #
 #	Configuration variables (default values are below):
 #
@@ -30,6 +30,9 @@ KERNLIB=	${KERNDST}/libkern.a
 KERNLIB_PROF=	${KERNDST}/libkern_p.a
 .endif
 
+LIBKERNLNBN=	llib-lkern.ln
+KERNLIBLN=	${KERNDST}/${LIBKERNLNBN}
+
 KERNMAKE= \
 	cd ${KERNDST} && ${MAKE} -f ${KERNDIR:Q}/Makefile \
 	    KERNDIR=${KERNDIR:Q} \
@@ -43,9 +46,10 @@ KERNMAKE= \
 	    MACHINE=${MACHINE} MACHINE_ARCH=${MACHINE_ARCH:Q} \
 	    KERNCPPFLAGS=${CPPFLAGS:S@^-I.@-I${KERNDOTDIR}@g:Q} \
 	    KERNMISCCPPFLAGS=${KERNMISCCPPFLAGS:Q} \
+	    LINTFLAGS=${KERNLINTFLAGS:Q} \
 	    ${KERNMISCMAKEFLAGS}
 
-${KERNLIB}:		.NOTMAIN __always_make_kernlib
+${KERNLIB}:		.NOTMAIN .MAKE __always_make_kernlib
 	@echo making sure the kern library is up to date...
 .if (${KERN_AS} == "library")
 	@${KERNMAKE} libkern.a
@@ -53,7 +57,7 @@ ${KERNLIB}:		.NOTMAIN __always_make_kernlib
 	@${KERNMAKE} libkern.o
 .endif
 
-${KERNLIB_PROF}:	.NOTMAIN __always_make_kernlib
+${KERNLIB_PROF}:	.NOTMAIN .MAKE __always_make_kernlib
 	@echo making sure the profiled kern library is up to date...
 .if (${KERN_AS} == "library")
 	@${KERNMAKE} libkern_p.a
@@ -61,18 +65,22 @@ ${KERNLIB_PROF}:	.NOTMAIN __always_make_kernlib
 	@${KERNMAKE} libkern.po
 .endif
 
+${KERNLIBLN}:		.NOTMAIN .MAKE __always_make_kernlib
+	@echo making sure the kern lint library is up to date...
+	@${KERNMAKE} ${LIBKERNLNBN}
+
 clean:			.NOTMAIN cleankernlib
-cleankernlib:		.NOTMAIN __always_make_kernlib
+cleankernlib:		.NOTMAIN
 	@echo cleaning the kern library objects
-	@${KERNMAKE} clean
+	@if [ -d "${KERNDST}" ]; then ${KERNMAKE} clean; fi
 
 cleandir distclean:	.NOTMAIN cleandirkernlib
-cleandirkernlib:	.NOTMAIN __always_make_kernlib
+cleandirkernlib:	.NOTMAIN
 	@echo cleandiring the kern library objects
-	@${KERNMAKE} cleandir
+	@if [ -d "${KERNDST}" ]; then ${KERNMAKE} cleandir; fi
 
-depend:			.NOTMAIN dependkernlib
-dependkernlib:		.NOTMAIN __always_make_kernlib
+dependall depend:	.NOTMAIN dependkernlib
+dependkernlib:		.NOTMAIN .MAKE __always_make_kernlib
 	@echo depending the kern library objects
 	@${KERNMAKE} depend
 
@@ -81,3 +89,5 @@ __always_make_kernlib:	.NOTMAIN
 
 .PHONY: __always_make_kernlib
 .PHONY: cleankernlib cleandirkernlib dependkernlib
+
+.include "${.PARSEDIR}/../../../common/lib/libc/Makefile.inc"

@@ -1,32 +1,38 @@
-/*	$NetBSD: plumiobus.c,v 1.3 2000/02/27 16:28:13 uch Exp $ */
+/*	$NetBSD: plumiobus.c,v 1.13 2008/04/28 20:23:21 martin Exp $ */
 
-/*
- * Copyright (c) 1999, 2000 by UCHIYAMA Yasushi
+/*-
+ * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by UCHIYAMA Yasushi.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
- * 2. The name of the developer may NOT be used to endorse or promote products
- *    derived from this software without specific prior written permission.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: plumiobus.c,v 1.13 2008/04/28 20:23:21 martin Exp $");
+
 #define PLUMIOBUSDEBUG
-#include "opt_tx39_debug.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,10 +60,11 @@ int	plumiobus_debug = 0;
 #define DPRINTFN(n, arg)
 #endif
 
-int	plumiobus_match __P((struct device*, struct cfdata*, void*));
-void	plumiobus_attach __P((struct device*, struct device*, void*));
-int	plumiobus_print __P((void*, const char*));
-int	plumiobus_search __P((struct device*, struct cfdata*, void*));
+int plumiobus_match(struct device *, struct cfdata *, void *);
+void plumiobus_attach(struct device *, struct device *, void *);
+int plumiobus_print(void *, const char *);
+int plumiobus_search(struct device *, struct cfdata *,
+		     const int *, void *);
 
 struct plumisa_resource {
 	int		pr_irq;
@@ -75,30 +82,24 @@ struct plumiobus_softc {
 	struct plumisa_resource	sc_isa[PLUM_IOBUS_IO5CSMAX];
 };
 
-struct cfattach plumiobus_ca = {
-	sizeof(struct plumiobus_softc), plumiobus_match, plumiobus_attach
-};
+CFATTACH_DECL(plumiobus, sizeof(struct plumiobus_softc),
+    plumiobus_match, plumiobus_attach, NULL, NULL);
 
-bus_space_tag_t __plumiobus_subregion __P((bus_space_tag_t, bus_addr_t,
-					   bus_size_t));
+bus_space_tag_t __plumiobus_subregion(bus_space_tag_t, bus_addr_t,
+    bus_size_t);
 #ifdef PLUMIOBUSDEBUG
-void	plumiobus_dump __P((struct plumiobus_softc*));
+void plumiobus_dump(struct plumiobus_softc *);
 #endif 
 
 int
-plumiobus_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+plumiobus_match(struct device *parent, struct cfdata *cf, void *aux)
 {
+
 	return (1);
 }
 
 void
-plumiobus_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+plumiobus_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct plum_attach_args *pa = aux;
 	struct plumiobus_softc *sc = (void*)self;
@@ -109,7 +110,7 @@ plumiobus_attach(parent, self, aux)
 	sc->sc_iot	= pa->pa_iot;
 
 	if (bus_space_map(sc->sc_regt, PLUM_IOBUS_REGBASE, 
-			  PLUM_IOBUS_REGSIZE, 0, &sc->sc_regh)) {
+	    PLUM_IOBUS_REGSIZE, 0, &sc->sc_regh)) {
 		printf(": register map failed.\n");
 		return;
 	}
@@ -164,20 +165,17 @@ plumiobus_attach(parent, self, aux)
 	plumiobus_dump(sc);
 #endif
 
-	config_search(plumiobus_search, self, plumiobus_print);
+	config_search_ia(plumiobus_search, self, "plumiobusif", plumiobus_print);
 }
 
 /* XXX something kludge */
 bus_space_tag_t
-__plumiobus_subregion(t, ofs, size)
-	bus_space_tag_t t;
-	bus_addr_t ofs;
-	bus_size_t size;
+__plumiobus_subregion(bus_space_tag_t t, bus_addr_t ofs, bus_size_t size)
 {
 	struct hpcmips_bus_space *hbs;
 	
 	if (!(hbs = malloc(sizeof(struct hpcmips_bus_space), 
-			   M_DEVBUF, M_NOWAIT))) {
+	    M_DEVBUF, M_NOWAIT))) {
 		panic ("__plumiobus_subregion: no memory.");
 	}
 	*hbs = *t;
@@ -188,10 +186,8 @@ __plumiobus_subregion(t, ofs, size)
 }
 
 int
-plumiobus_search(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+plumiobus_search(struct device *parent, struct cfdata *cf,
+		 const int *ldesc, void *aux)
 {
 	struct plumiobus_softc *sc = (void*)parent;
 	struct plumiobus_attach_args pba;
@@ -210,7 +206,7 @@ plumiobus_search(parent, cf, aux)
 	pba.pba_busname	= "plumisab";
 	
 	if (!(sc->sc_isa[slot].pr_enabled) && /* not attached slot */
-	    (*cf->cf_attach->ca_match)(parent, cf, &pba)) {
+	    config_match(parent, cf, &pba)) {
 		config_attach(parent, cf, &pba, plumiobus_print);
 		sc->sc_isa[slot].pr_enabled = 1;
 	}
@@ -219,17 +215,15 @@ plumiobus_search(parent, cf, aux)
 }
 
 int
-plumiobus_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+plumiobus_print(void *aux, const char *pnp)
 {
+
 	return (pnp ? QUIET : UNCONF);
 }
 
 #ifdef PLUMIOBUSDEBUG
 void
-plumiobus_dump(sc)
-	struct plumiobus_softc *sc;
+plumiobus_dump(struct plumiobus_softc *sc)
 {
 	bus_space_tag_t regt = sc->sc_regt;
 	bus_space_handle_t regh = sc->sc_regh;
@@ -246,20 +240,20 @@ plumiobus_dump(sc)
 	printf("\n");
 
 	reg = PLUM_IOBUS_IOXCCNT_MASK &
-		plum_conf_read(regt, regh, PLUM_IOBUS_IOXCCNT_REG);
+	    plum_conf_read(regt, regh, PLUM_IOBUS_IOXCCNT_REG);
 	printf(" # of wait to become from the access begining: %d clock\n",
-	       reg + 1);
+	    reg + 1);
 	reg = plum_conf_read(regt, regh, PLUM_IOBUS_IOXACNT_REG);
 	printf(" # of wait in access clock: ");
 	for (i = 0; i < 5; i++) {
 		wait = (reg >> (i * PLUM_IOBUS_IOXACNT_SHIFT))
-			& PLUM_IOBUS_IOXACNT_MASK;
+		    & PLUM_IOBUS_IOXACNT_MASK;
 		printf("[CS%d:%d] ", i, wait + 1);
 	}
 	printf("\n");
 
 	reg = PLUM_IOBUS_IOXSCNT_MASK &
-		plum_conf_read(regt, regh, PLUM_IOBUS_IOXSCNT_REG);
+	    plum_conf_read(regt, regh, PLUM_IOBUS_IOXSCNT_REG);
 	printf(" # of wait during access by I/O bus : %d clock\n", reg + 1);
 	
 	reg = plum_conf_read(regt, regh, PLUM_IOBUS_IDEMODE_REG);

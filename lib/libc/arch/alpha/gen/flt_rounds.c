@@ -1,9 +1,9 @@
-/*	$NetBSD: flt_rounds.c,v 1.2 1997/07/18 00:30:30 thorpej Exp $	*/
+/* $NetBSD: flt_rounds.c,v 1.8 2005/12/24 23:10:08 perry Exp $ */
 
 /*
  * Copyright (c) 1995 Christopher G. Demetriou
  * All rights reserved.
- *
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -14,11 +14,12 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed by Christopher G. Demetriou
- *	for the NetBSD Project.
+ *          This product includes software developed for the
+ *          NetBSD Project.  See http://www.NetBSD.org/ for
+ *          information about NetBSD.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
- *
+ *    derived from this software without specific prior written permission.
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -29,7 +30,14 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * 
+ * <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
  */
+
+#include <sys/cdefs.h>
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: flt_rounds.c,v 1.8 2005/12/24 23:10:08 perry Exp $");
+#endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
 #include <machine/float.h>
@@ -47,10 +55,10 @@ __flt_rounds()
 	double fpcrval;
 	u_int64_t old;
 
-	__asm__("trapb");
-	__asm__("mf_fpcr %0" : "=f" (fpcrval));
-	__asm__("trapb");
-	old = *(u_int64_t *)&fpcrval;
+	__asm("trapb");
+	__asm("mf_fpcr %0" : "=f" (fpcrval));
+	__asm("trapb");
+	old = *(u_int64_t *)(void *)&fpcrval;
 
 	return map[(old >> 58) & 0x3];
 }

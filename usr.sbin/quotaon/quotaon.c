@@ -1,4 +1,4 @@
-/*	$NetBSD: quotaon.c,v 1.13 1998/07/27 00:52:03 mycroft Exp $	*/
+/*	$NetBSD: quotaon.c,v 1.22 2008/07/21 13:36:59 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)quotaon.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: quotaon.c,v 1.13 1998/07/27 00:52:03 mycroft Exp $");
+__RCSID("$NetBSD: quotaon.c,v 1.22 2008/07/21 13:36:59 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -61,6 +57,7 @@ __RCSID("$NetBSD: quotaon.c,v 1.13 1998/07/27 00:52:03 mycroft Exp $");
 #include <err.h>
 #include <fstab.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -71,8 +68,6 @@ int	aflag;		/* all file systems */
 int	gflag;		/* operate on group quotas */
 int	uflag;		/* operate on user quotas */
 int	vflag;		/* verbose */
-
-extern char *__progname;
 
 int main __P((int, char *[]));
 
@@ -93,10 +88,10 @@ main(argc, argv)
 	int i, offmode = 0, errs = 0;
 	int ch;
 
-	if (strcmp(__progname, "quotaoff") == 0)
+	if (strcmp(getprogname(), "quotaoff") == 0)
 		offmode++;
-	else if (strcmp(__progname, "quotaon") != 0)
-		errx(1, "Name must be quotaon or quotaoff\n");
+	else if (strcmp(getprogname(), "quotaon") != 0)
+		errx(1, "Name must be quotaon or quotaoff");
 
 	while ((ch = getopt(argc, argv, "avug")) != -1) {
 		switch(ch) {
@@ -129,7 +124,8 @@ main(argc, argv)
 	}
 	setfsent();
 	while ((fs = getfsent()) != NULL) {
-		if (strcmp(fs->fs_vfstype, "ffs") ||
+		if ((strcmp(fs->fs_vfstype, "ffs") &&
+		     strcmp(fs->fs_vfstype, "lfs")) ||
 		    strcmp(fs->fs_type, FSTAB_RW))
 			continue;
 		if (aflag) {
@@ -159,8 +155,10 @@ static void
 usage()
 {
 
-	(void) fprintf(stderr, "Usage:\n\t%s [-g] [-u] [-v] -a\n", __progname);
-	(void) fprintf(stderr, "\t%s [-g] [-u] [-v] filesys ...\n", __progname);
+	(void) fprintf(stderr, "usage:\n\t%s [-g] [-u] [-v] -a\n",
+	    getprogname());
+	(void) fprintf(stderr, "\t%s [-g] [-u] [-v] filesys ...\n",
+	    getprogname());
 	exit(1);
 }
 
@@ -175,7 +173,7 @@ quotaonoff(fs, offmode, type, qfpathname)
 		return (1);
 	if (offmode) {
 		if (quotactl(fs->fs_file, QCMD(Q_QUOTAOFF, type), 0, 0) < 0) {
-			warn(fs->fs_file);
+			warn("%s", fs->fs_file);
 			return (1);
 		}
 		if (vflag)
@@ -260,15 +258,15 @@ static int
 readonly(fs)
 	struct fstab *fs;
 {
-	struct statfs fsbuf;
+	struct statvfs fsbuf;
 
-	if (statfs(fs->fs_file, &fsbuf) < 0 ||
+	if (statvfs(fs->fs_file, &fsbuf) < 0 ||
 	    strcmp(fsbuf.f_mntonname, fs->fs_file) ||
 	    strcmp(fsbuf.f_mntfromname, fs->fs_spec)) {
 		printf("%s: not mounted\n", fs->fs_file);
 		return (1);
 	}
-	if (fsbuf.f_flags & MNT_RDONLY) {
+	if (fsbuf.f_flag & MNT_RDONLY) {
 		printf("%s: mounted read-only\n", fs->fs_file);
 		return (1);
 	}

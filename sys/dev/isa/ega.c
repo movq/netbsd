@@ -1,4 +1,4 @@
-/* $NetBSD: ega.c,v 1.4 2000/03/23 07:01:34 thorpej Exp $ */
+/* $NetBSD: ega.c,v 1.24 2007/10/19 12:00:16 ad Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,13 +26,16 @@
  *
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ega.c,v 1.24 2007/10/19 12:00:16 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isavar.h>
 
@@ -86,10 +83,10 @@ struct ega_config {
 	struct egafont *vc_fonts[4];
 
 	struct egascreen *wantedscreen;
-	void (*switchcb) __P((void *, int, int));
+	void (*switchcb)(void *, int, int);
 	void *switchcbarg;
 
-	struct callout switch_callout;
+	callout_t switch_callout;
 };
 
 struct ega_softc {
@@ -102,26 +99,23 @@ static int egaconsole, ega_console_attached;
 static struct egascreen ega_console_screen;
 static struct ega_config ega_console_dc;
 
-int	ega_match __P((struct device *, struct cfdata *, void *));
-void	ega_attach __P((struct device *, struct device *, void *));
+int	ega_match(struct device *, struct cfdata *, void *);
+void	ega_attach(struct device *, struct device *, void *);
 
-static int ega_is_console __P((bus_space_tag_t));
-static int ega_probe_col __P((bus_space_tag_t, bus_space_tag_t));
-static int ega_probe_mono __P((bus_space_tag_t, bus_space_tag_t));
-int ega_selectfont __P((struct ega_config *, struct egascreen *,
-			char *, char *));
-void ega_init_screen __P((struct ega_config *, struct egascreen *,
-			  const struct wsscreen_descr *,
-			  int, long *));
-static void ega_init __P((struct ega_config *,
-			  bus_space_tag_t, bus_space_tag_t, int));
-static void ega_setfont __P((struct ega_config *, struct egascreen *));
-static int ega_alloc_attr __P((void *, int, int, int, long *));
-void ega_copyrows __P((void *, int, int, int));
+static int ega_is_console(bus_space_tag_t);
+static int ega_probe_col(bus_space_tag_t, bus_space_tag_t);
+static int ega_probe_mono(bus_space_tag_t, bus_space_tag_t);
+int ega_selectfont(struct ega_config *, struct egascreen *, char *, char *);
+void ega_init_screen(struct ega_config *, struct egascreen *,
+		     const struct wsscreen_descr *, int, long *);
+static void ega_init(struct ega_config *, bus_space_tag_t, bus_space_tag_t,
+		     int);
+static void ega_setfont(struct ega_config *, struct egascreen *);
+static int ega_allocattr(void *, int, int, int, long *);
+void ega_copyrows(void *, int, int, int);
 
-struct cfattach ega_ca = {
-	sizeof(struct ega_softc), ega_match, ega_attach,
-};
+CFATTACH_DECL(ega, sizeof(struct ega_softc),
+    ega_match, ega_attach, NULL, NULL);
 
 const struct wsdisplay_emulops ega_emulops = {
 	pcdisplay_cursor,
@@ -131,7 +125,7 @@ const struct wsdisplay_emulops ega_emulops = {
 	pcdisplay_erasecols,
 	ega_copyrows,
 	pcdisplay_eraserows,
-	ega_alloc_attr
+	ega_allocattr
 };
 
 /*
@@ -216,16 +210,16 @@ const struct wsscreen_list ega_screenlist = {
 	_ega_scrlist_mono
 };
 
-static int ega_ioctl __P((void *, u_long, caddr_t, int, struct proc *));
-static int ega_mmap __P((void *, off_t, int));
-static int ega_alloc_screen __P((void *, const struct wsscreen_descr *,
-				       void **, int *, int *, long *));
-static void ega_free_screen __P((void *, void *));
-static int ega_show_screen __P((void *, void *, int,
-				      	void (*) (void *, int, int), void *));
-static int ega_load_font __P((void *, void *, struct wsdisplay_font *));
+static int ega_ioctl(void *, void *, u_long, void *, int, struct proc *);
+static paddr_t ega_mmap(void *, void *, off_t, int);
+static int ega_alloc_screen(void *, const struct wsscreen_descr *,
+			    void **, int *, int *, long *);
+static void ega_free_screen(void *, void *);
+static int ega_show_screen(void *, void *, int,
+			   void (*) (void *, int, int), void *);
+static int ega_load_font(void *, void *, struct wsdisplay_font *);
 
-void ega_doswitch __P((struct ega_config *));
+void ega_doswitch(struct ega_config *);
 
 const struct wsdisplay_accessops ega_accessops = {
 	ega_ioctl,
@@ -381,11 +375,11 @@ ega_init_screen(vc, scr, type, existing, attrp)
 		scr->pcs.dispoffset = scr->mindispoffset;
 	}
 
-	scr->pcs.vc_crow = cpos / type->ncols;
-	scr->pcs.vc_ccol = cpos % type->ncols;
+	scr->pcs.cursorrow = cpos / type->ncols;
+	scr->pcs.cursorcol = cpos % type->ncols;
 	pcdisplay_cursor_init(&scr->pcs, existing);
 
-	res = ega_alloc_attr(scr, 0, 0, 0, attrp);
+	res = ega_allocattr(scr, 0, 0, 0, attrp);
 #ifdef DIAGNOSTIC
 	if (res)
 		panic("ega_init_screen: attribute botch");
@@ -437,7 +431,7 @@ ega_init(vc, iot, memt, mono)
 	LIST_INIT(&vc->screens);
 	vc->active = NULL;
 	vc->currenttype = vh->vh_mono ? &ega_stdscreen_mono : &ega_stdscreen;
-	callout_init(&vc->switch_callout);
+	callout_init(&vc->switch_callout, 0);
 
 	vc->vc_fonts[0] = &ega_builtinfont;
 	for (i = 1; i < 4; i++)
@@ -455,33 +449,52 @@ ega_match(parent, match, aux)
 	struct isa_attach_args *ia = aux;
 	int mono;
 
+	if (ia->ia_nio < 1)
+		return (0);
+
+	if (ia->ia_iomem < 1)
+		return (0);
+
+	if (ia->ia_nirq < 1)
+		return (0);
+
+	if (ia->ia_ndrq < 1)
+		return (0);
+
+	if (ISA_DIRECT_CONFIG(ia))
+		return (0);
+
 	/* If values are hardwired to something that they can't be, punt. */
-	if ((ia->ia_iobase != IOBASEUNK &&
-	     ia->ia_iobase != 0x3d0 &&
-	     ia->ia_iobase != 0x3b0) ||
-	    /* ia->ia_iosize != 0 || XXX isa.c */
-	    (ia->ia_maddr != MADDRUNK &&
-	     ia->ia_maddr != 0xb8000 &&
-	     ia->ia_maddr != 0xb0000) ||
-	    (ia->ia_msize != 0 && ia->ia_msize != 0x8000) ||
-	    ia->ia_irq != IRQUNK || ia->ia_drq != DRQUNK)
+	if ((ia->ia_io[0].ir_addr != ISA_UNKNOWN_PORT &&
+	     ia->ia_io[0].ir_addr != 0x3d0 &&
+	     ia->ia_io[0].ir_addr != 0x3b0) ||
+	    /* ia->ia_io[0].ir_size != 0 || XXX isa.c */
+	    (ia->ia_iomem[0].ir_addr != ISA_UNKNOWN_IOMEM &&
+	     ia->ia_iomem[0].ir_addr != 0xb8000 &&
+	     ia->ia_iomem[0].ir_addr != 0xb0000) ||
+	    (ia->ia_iomem[0].ir_size != 0 &&
+	     ia->ia_iomem[0].ir_size != 0x8000) ||
+	    ia->ia_irq[0].ir_irq != ISA_UNKNOWN_IRQ ||
+	    ia->ia_drq[0].ir_drq != ISA_UNKNOWN_DRQ)
 		return (0);
 
 	if (ega_is_console(ia->ia_iot))
 		mono = ega_console_dc.hdl.vh_mono;
-	else if (ia->ia_iobase != 0x3b0 && ia->ia_maddr != 0xb0000 &&
+	else if (ia->ia_io[0].ir_addr != 0x3b0 &&
+	    ia->ia_iomem[0].ir_addr != 0xb0000 &&
 		 ega_probe_col(ia->ia_iot, ia->ia_memt))
 		mono = 0;
-	else if (ia->ia_iobase != 0x3d0 && ia->ia_maddr != 0xb8000 &&
+	else if (ia->ia_io[0].ir_addr != 0x3d0 &&
+	    ia->ia_iomem[0].ir_addr != 0xb8000 &&
 		ega_probe_mono(ia->ia_iot, ia->ia_memt))
 		mono = 1;
 	else
 		return (0);
 
-	ia->ia_iobase = mono ? 0x3b0 : 0x3d0;
-	ia->ia_iosize = 0x10;
-	ia->ia_maddr = mono ? 0xb0000 : 0xb8000;
-	ia->ia_msize = 0x8000;
+	ia->ia_io[0].ir_addr = mono ? 0x3b0 : 0x3d0;
+	ia->ia_io[0].ir_size = 0x10;
+	ia->ia_iomem[0].ir_addr = mono ? 0xb0000 : 0xb8000;
+	ia->ia_iomem[0].ir_size = 0x8000;
 	return (2); /* beat pcdisplay */
 }
 
@@ -507,10 +520,12 @@ ega_attach(parent, self, aux)
 	} else {
 		dc = malloc(sizeof(struct ega_config),
 			    M_DEVBUF, M_WAITOK);
-		if (ia->ia_iobase != 0x3b0 && ia->ia_maddr != 0xb0000 &&
+		if (ia->ia_io[0].ir_addr != 0x3b0 &&
+		    ia->ia_iomem[0].ir_addr != 0xb0000 &&
 		    ega_probe_col(ia->ia_iot, ia->ia_memt))
 			ega_init(dc, ia->ia_iot, ia->ia_memt, 0);
-		else if (ia->ia_iobase != 0x3d0 && ia->ia_maddr != 0xb8000 &&
+		else if (ia->ia_io[0].ir_addr != 0x3d0 &&
+		    ia->ia_iomem[0].ir_addr != 0xb8000 &&
 			 ega_probe_mono(ia->ia_iot, ia->ia_memt))
 			ega_init(dc, ia->ia_iot, ia->ia_memt, 1);
 		else
@@ -550,8 +565,8 @@ ega_cnattach(iot, memt)
 	ega_console_dc.active = &ega_console_screen;
 
 	wsdisplay_cnattach(scr, &ega_console_screen,
-			   ega_console_screen.pcs.vc_ccol,
-			   ega_console_screen.pcs.vc_crow,
+			   ega_console_screen.pcs.cursorcol,
+			   ega_console_screen.pcs.cursorrow,
 			   defattr);
 
 	egaconsole = 1;
@@ -570,22 +585,24 @@ ega_is_console(iot)
 }
 
 static int
-ega_ioctl(v, cmd, data, flag, p)
+ega_ioctl(v, vs, cmd, data, flag, p)
 	void *v;
+	void *vs;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 	int flag;
 	struct proc *p;
 {
 	/*
 	 * XXX "do something!"
 	 */
-	return (-1);
+	return (EPASSTHROUGH);
 }
 
-static int
-ega_mmap(v, offset, prot)
+static paddr_t
+ega_mmap(v, vs, offset, prot)
 	void *v;
+	void *vs;
 	off_t offset;
 	int prot;
 {
@@ -627,8 +644,8 @@ ega_alloc_screen(v, type, cookiep, curxp, curyp, defattrp)
 	}
 
 	*cookiep = scr;
-	*curxp = scr->pcs.vc_ccol;
-	*curyp = scr->pcs.vc_crow;
+	*curxp = scr->pcs.cursorcol;
+	*curyp = scr->pcs.cursorrow;
 	return (0);
 }
 
@@ -672,7 +689,7 @@ ega_show_screen(v, cookie, waitok, cb, cbarg)
 	void *v;
 	void *cookie;
 	int waitok;
-	void (*cb) __P((void *, int, int));
+	void (*cb)(void *, int, int);
 	void *cbarg;
 {
 	struct egascreen *scr = cookie, *oldscr;
@@ -759,7 +776,7 @@ ega_doswitch(vc)
 	vc->active = scr;
 
 	pcdisplay_cursor(&scr->pcs, scr->pcs.cursoron,
-			 scr->pcs.vc_crow, scr->pcs.vc_ccol);
+			 scr->pcs.cursorrow, scr->pcs.cursorcol);
 
 	vc->wantedscreen = 0;
 	if (vc->switchcb)
@@ -825,7 +842,7 @@ ega_load_font(v, cookie, data)
 }
 
 static int
-ega_alloc_attr(id, fg, bg, flags, attrp)
+ega_allocattr(id, fg, bg, flags, attrp)
 	void *id;
 	int fg, bg;
 	int flags;
@@ -833,6 +850,10 @@ ega_alloc_attr(id, fg, bg, flags, attrp)
 {
 	struct egascreen *scr = id;
 	struct ega_config *vc = scr->cfg;
+
+	if (__predict_false((unsigned int)fg >= sizeof(fgansitopc) ||
+	    (unsigned int)bg >= sizeof(bgansitopc)))
+		return (EINVAL);
 
 	if (vc->hdl.vh_mono) {
 		if (flags & WSATTR_WSCOLORS)
@@ -881,7 +902,7 @@ ega_copyrows(id, srcrow, dstrow, nrows)
 
 			if (cursoron)
 				pcdisplay_cursor(&scr->pcs, 0,
-				    scr->pcs.vc_crow, scr->pcs.vc_ccol);
+				    scr->pcs.cursorrow, scr->pcs.cursorcol);
 #endif
 			/* scroll up whole screen */
 			if ((scr->pcs.dispoffset + srcrow * ncols * 2)
@@ -901,7 +922,7 @@ ega_copyrows(id, srcrow, dstrow, nrows)
 #ifdef PCDISPLAY_SOFTCURSOR
 			if (cursoron)
 				pcdisplay_cursor(&scr->pcs, 1,
-				    scr->pcs.vc_crow, scr->pcs.vc_ccol);
+				    scr->pcs.cursorrow, scr->pcs.cursorcol);
 #endif
 		} else {
 			bus_space_copy_region_2(memt, memh,
@@ -910,6 +931,6 @@ ega_copyrows(id, srcrow, dstrow, nrows)
 					nrows * ncols);
 		}
 	} else
-		bcopy(&scr->pcs.mem[srcoff], &scr->pcs.mem[dstoff],
+		memcpy(&scr->pcs.mem[dstoff], &scr->pcs.mem[srcoff],
 		      nrows * ncols * 2);
 }

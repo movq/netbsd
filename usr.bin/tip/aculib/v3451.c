@@ -1,4 +1,4 @@
-/*	$NetBSD: v3451.c,v 1.8 1998/07/12 09:14:20 mrg Exp $	*/
+/*	$NetBSD: v3451.c,v 1.14 2006/12/14 17:09:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)v3451.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: v3451.c,v 1.8 1998/07/12 09:14:20 mrg Exp $");
+__RCSID("$NetBSD: v3451.c,v 1.14 2006/12/14 17:09:43 christos Exp $");
 #endif /* not lint */
 
 /*
@@ -48,16 +44,15 @@ __RCSID("$NetBSD: v3451.c,v 1.8 1998/07/12 09:14:20 mrg Exp $");
 
 static	jmp_buf Sjbuf;
 
-static	void	alarmtr __P((int));
-static	int	expect __P((char *));
-static	int	notin __P((char *, char *));
-static	int	prefix __P((char *, char *));
-static	void	vawrite __P((char *, int));
+static	void	alarmtr(int);
+static	int	expect(const char *);
+static	int	notin(const char *, char *);
+static	int	prefix(const char *, char *);
+static	void	vawrite(const char *, int);
 
 int
-v3451_dialer(num, acu)
-	char *num;
-	char *acu;
+/*ARGSUSED*/
+v3451_dialer(char *num, char *acu __unused)
 {
 	sig_t func;
 	int ok;
@@ -73,31 +68,22 @@ v3451_dialer(num, acu)
 	vawrite("I\r", 1 + slow);
 	vawrite("\005\r", 2 + slow);
 	if (!expect("READY")) {
-		printf("can't synchronize with vadic 3451\n");
-#ifdef ACULOG
-		logent(value(HOST), num, "vadic", "can't synch up");
-#endif
+		(void)printf("can't synchronize with vadic 3451\n");
 		return (0);
 	}
-	tcgetattr(FD, &cntrl);
+	(void)tcgetattr(FD, &cntrl);
 	term.c_cflag |= HUPCL;
-	tcsetattr(FD, TCSANOW, &cntrl);
-	sleep(1);
+	(void)tcsetattr(FD, TCSANOW, &cntrl);
+	(void)sleep(1);
 	vawrite("D\r", 2 + slow);
 	if (!expect("NUMBER?")) {
-		printf("Vadic will not accept dial command\n");
-#ifdef ACULOG
-		logent(value(HOST), num, "vadic", "will not accept dial");
-#endif
+		(void)printf("Vadic will not accept dial command\n");
 		return (0);
 	}
-	snprintf(phone, sizeof phone, "%s\r", num);
+	(void)snprintf(phone, sizeof phone, "%s\r", num);
 	vawrite(phone, 1 + slow);
 	if (!expect(phone)) {
-		printf("Vadic will not accept phone number\n");
-#ifdef ACULOG
-		logent(value(HOST), num, "vadic", "will not accept number");
-#endif
+		(void)printf("Vadic will not accept phone number\n");
 		return (0);
 	}
 	func = signal(SIGINT,SIG_IGN);
@@ -109,64 +95,56 @@ v3451_dialer(num, acu)
 	vawrite("\r", 1 + slow);
 	vawrite("\r", 1 + slow);
 	if (!expect("DIALING:")) {
-		printf("Vadic failed to dial\n");
-#ifdef ACULOG
-		logent(value(HOST), num, "vadic", "failed to dial");
-#endif
+		(void)printf("Vadic failed to dial\n");
 		return (0);
 	}
 	if (boolean(value(VERBOSE)))
-		printf("\ndialing...");
+		(void)printf("\ndialing...");
 	ok = expect("ON LINE");
-	signal(SIGINT, func);
+	(void)signal(SIGINT, func);
 	if (!ok) {
-		printf("call failed\n");
-#ifdef ACULOG
-		logent(value(HOST), num, "vadic", "call failed");
-#endif
+		(void)printf("call failed\n");
 		return (0);
 	}
-	tcflush(FD, TCIOFLUSH);
+	(void)tcflush(FD, TCIOFLUSH);
 	return (1);
 }
 
 void
-v3451_disconnect()
+v3451_disconnect(void)
 {
 
-	close(FD);
+	(void)close(FD);
 }
 
 void
-v3451_abort()
+v3451_abort(void)
 {
 
-	close(FD);
+	(void)close(FD);
 }
 
 static void
-vawrite(cp, delay)
-	char *cp;
-	int delay;
+vawrite(const char *cp, int delay)
 {
 
-	for (; *cp; sleep(delay), cp++)
-		write(FD, cp, 1);
+	for (/*EMPTY*/; *cp; cp++) {
+		(void)write(FD, cp, 1);
+		(void)sleep((unsigned)delay);
+	}
 }
 
 static int
-expect(cp)
-	char *cp;
+expect(const char *cp)
 {
 	char buf[300];
-	char *rp = buf;
-	int timeout = 30, online = 0;
+	char * volatile rp;
+	int volatile timeout;
+	int volatile online;
 
-#if __GNUC__	/* XXX pacify gcc */
-	(void)&online;
-	(void)&rp;
-	(void)&timeout;
-#endif
+	rp = buf;
+	timeout = 30;
+	online = 0;
 
 	if (strcmp(cp, "\"\"") == 0)
 		return (1);
@@ -180,36 +158,35 @@ expect(cp)
 	online = strcmp(cp, "ON LINE") == 0;
 	if (online)
 		timeout = number(value(DIALTIMEOUT));
-	signal(SIGALRM, alarmtr);
+	(void)signal(SIGALRM, alarmtr);
 	if (setjmp(Sjbuf))
 		return (0);
-	alarm(timeout);
+	(void)alarm((unsigned)timeout);
 	while (notin(cp, buf) && rp < buf + sizeof (buf) - 1) {
 		if (online && notin("FAILED CALL", buf) == 0)
 			return (0);
 		if (read(FD, rp, 1) < 0) {
-			alarm(0);
+			(void)alarm(0);
 			return (0);
 		}
 		if (*rp &= 0177)
 			rp++;
 		*rp = '\0';
 	}
-	alarm(0);
+	(void)alarm(0);
 	return (1);
 }
 
 static void
-alarmtr(dummy)
-	int dummy;
+/*ARGSUSED*/
+alarmtr(int dummy __unused)
 {
 
 	longjmp(Sjbuf, 1);
 }
 
 static int
-notin(sh, lg)
-	char *sh, *lg;
+notin(const char *sh, char *lg)
 {
 
 	for (; *lg; lg++)
@@ -219,8 +196,7 @@ notin(sh, lg)
 }
 
 static int
-prefix(s1, s2)
-	char *s1, *s2;
+prefix(const char *s1, char *s2)
 {
 	char c;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: err.c,v 1.11 1998/07/27 13:50:47 mycroft Exp $	*/
+/*	$NetBSD: err.c,v 1.38 2008/07/31 15:21:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -31,10 +31,20 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
+
+#include <sys/cdefs.h>
+#if defined(__RCSID) && !defined(lint)
+__RCSID("$NetBSD: err.c,v 1.38 2008/07/31 15:21:34 christos Exp $");
+#endif
+
+#include <sys/types.h>
+#include <stdlib.h>
+#include <stdarg.h>
+
+#include "lint1.h"
 
 /* number of errors found */
 int	nerr;
@@ -42,18 +52,10 @@ int	nerr;
 /* number of syntax errors */
 int	sytxerr;
 
-#include <stdlib.h>
-#ifdef __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
-#include "lint1.h"
-
-static	const	char *basename __P((const char *));
-static	void	verror __P((int, va_list));
-static	void	vwarning __P((int, va_list));
+static	const	char *lbasename(const char *);
+static	void	verror(int, va_list);
+static	void	vwarning(int, va_list);
 
 
 const	char *msgs[] = {
@@ -77,7 +79,7 @@ const	char *msgs[] = {
 	"null dimension",					      /* 17 */
 	"illegal use of 'void'",				      /* 18 */
 	"void type for %s",					      /* 19 */
-	"zero or negative array dimension",			      /* 20 */
+	"negative array dimension (%d)",			      /* 20 */
 	"redeclaration of formal parameter %s",			      /* 21 */
 	"incomplete or misplaced function definition",		      /* 22 */
 	"undefined label %s",					      /* 23 */
@@ -96,7 +98,7 @@ const	char *msgs[] = {
 	"illegal bit-field size",				      /* 36 */
 	"zero size bit-field",					      /* 37 */
 	"function illegal in structure or union",		      /* 38 */
-	"illegal zero sized structure member: %s",		      /* 39 */
+	"zero sized array in struct is a C99 extension: %s",	      /* 39 */
 	"unknown size: %s",					      /* 40 */
 	"illegal use of bit-field",				      /* 41 */
 	"forward reference to enum type",			      /* 42 */
@@ -104,7 +106,7 @@ const	char *msgs[] = {
 	"declaration introduces new type in ANSI C: %s %s",	      /* 44 */
 	"base type is really '%s %s'",				      /* 45 */
 	"(%s) tag redeclared",					      /* 46 */
-	"zero sized %s",					      /* 47 */
+	"zero sized %s is a C9X feature",			      /* 47 */
 	"overflow in enumeration values: %s",			      /* 48 */
 	"struct or union member must be named",			      /* 49 */
 	"a function is declared as an argument: %s",		      /* 50 */
@@ -164,8 +166,8 @@ const	char *msgs[] = {
 	"left operand of '->' must be pointer to struct/union",	      /* 104 */
 	"non-unique member requires struct/union %s",		      /* 105 */
 	"left operand of '->' must be pointer",			      /* 106 */
-	"operands of '%s' have incompatible types",		      /* 107 */
-	"operand of '%s' has incompatible type",		      /* 108 */
+	"operands of '%s' have incompatible types (%s != %s)",		      /* 107 */
+	"operand of '%s' has incompatible type (%s != %s)",		      /* 108 */
 	"void type illegal in expression",			      /* 109 */
 	"pointer to function is not allowed here",		      /* 110 */
 	"unacceptable operand of '%s'",				      /* 111 */
@@ -189,7 +191,7 @@ const	char *msgs[] = {
 	"expression has null effect",				      /* 129 */
 	"enum type mismatch, op %s",				      /* 130 */
 	"conversion to '%s' may sign-extend incorrectly",	      /* 131 */
-	"conversion from '%s' may lose accuracy",		      /* 132 */
+	"conversion from '%s' to '%s' may lose accuracy",	      /* 132 */
 	"conversion of pointer to '%s' loses bits",		      /* 133 */
 	"conversion of pointer to '%s' may lose bits",		      /* 134 */
 	"possible pointer alignment problem",			      /* 135 */
@@ -228,12 +230,12 @@ const	char *msgs[] = {
 	"array subscript cannot be > %d: %ld",			      /* 168 */
 	"precedence confusion possible: parenthesize!",		      /* 169 */
 	"first operand must have scalar type, op ? :",		      /* 170 */
-	"assignment type mismatch",				      /* 171 */
+	"assignment type mismatch (%s != %s)",			      /* 171 */
 	"too many struct/union initializers",			      /* 172 */
-	"too many array initializers",				      /* 173 */
+	"too many array initializers, expected %d",		      /* 173 */
 	"too many initializers",				      /* 174 */
 	"initialisation of an incomplete type",			      /* 175 */
-	"invalid initializer",					      /* 176 */
+	"invalid initializer type %s",				      /* 176 */
 	"non-constant initializer",				      /* 177 */
 	"initializer does not fit",				      /* 178 */
 	"cannot initialize struct/union with no named member",	      /* 179 */
@@ -297,7 +299,7 @@ const	char *msgs[] = {
 	"redeclaration of formal parameter %s",			      /* 237 */
 	"initialisation of union is illegal in traditional C",	      /* 238 */
 	"constant argument to NOT",				      /* 239 */
-	"assignment of different structures",			      /* 240 */
+	"assignment of different structures (%s != %s)",	      /* 240 */
 	"dubious operation on enum, op %s",			      /* 241 */
 	"combination of '%s' and '%s', op %s",			      /* 242 */
 	"dubious comparison of enums, op %s",			      /* 243 */
@@ -306,7 +308,7 @@ const	char *msgs[] = {
 	"dubious conversion of enum to '%s'",			      /* 246 */
 	"pointer casts may be troublesome",			      /* 247 */
 	"floating-point constant out of range",			      /* 248 */
-	"syntax error",						      /* 249 */
+	"syntax error '%s'",					      /* 249 */
 	"unknown character \\%o",				      /* 250 */
 	"malformed integer constant",				      /* 251 */
 	"integer constant out of range",			      /* 252 */
@@ -333,7 +335,7 @@ const	char *msgs[] = {
 	"bit-field type '%s' invalid in ANSI C",		      /* 273 */
 	"ANSI C forbids comparison of %s with %s",		      /* 274 */
 	"cast discards 'const' from pointer target type",	      /* 275 */
-	"",							      /* 276 */
+	"__%s__ is illegal for type %s",			      /* 276 */
 	"initialisation of '%s' with '%s'",			      /* 277 */
 	"combination of '%s' and '%s', arg #%d",		      /* 278 */
 	"combination of '%s' and '%s' in return",		      /* 279 */
@@ -355,7 +357,7 @@ const	char *msgs[] = {
 	"conversion of '%s' to '%s' is out of range, arg #%d",	      /* 295 */
 	"conversion of negative constant to unsigned type, arg #%d",  /* 296 */
 	"conversion to '%s' may sign-extend incorrectly, arg #%d",    /* 297 */
-	"conversion from '%s' may lose accuracy, arg #%d",	      /* 298 */
+	"conversion from '%s' to '%s' may lose accuracy, arg #%d",    /* 298 */
 	"prototype does not match old style definition, arg #%d",     /* 299 */
 	"old style definition",					      /* 300 */
 	"array of incomplete type",				      /* 301 */
@@ -365,19 +367,43 @@ const	char *msgs[] = {
 	"ANSI C forbids conversion of %s to %s, op %s",		      /* 305 */
 	"constant truncated by conversion, op %s",		      /* 306 */
 	"static variable %s set but not used",			      /* 307 */
-	"",							      /* 308 */
+	"Invalid type %s for _Complex",				      /* 308 */
 	"extra bits set to 0 in conversion of '%s' to '%s', op %s",   /* 309 */
 	"symbol renaming can't be used on function arguments",	      /* 310 */
 	"symbol renaming can't be used on automatic variables",	      /* 311 */
+	"%s C does not support // comments",			      /* 312 */
+	"struct or union member name in initializer is a C9X feature",/* 313 */
+	"%s is not a structure or a union",			      /* 314 */
+	"GCC style struct or union member name in initializer",	      /* 315 */
+	"__FUNCTION__ is a GCC extension",			      /* 316 */
+	"__func__ is a C9X feature",				      /* 317 */
+	"variable array dimension is a C99/GCC extension",	      /* 318 */
+	"compound literals are a C9X/GCC extension",		      /* 319 */
+	"({ }) is a GCC extension",				      /* 320 */
+	"array initializer with designators is a C9X feature",	      /* 321 */
+	"zero sized array is a C99 extension",			      /* 322 */
+	"continue in 'do ... while (0)' loop",			      /* 323 */
+	"suggest cast from '%s' to '%s' on op %s to avoid overflow",  /* 324 */
 };
 
 /*
- * If Fflag is not set basename() returns a pointer to the last
+ * print a list of the messages with their ids
+ */
+void
+msglist(void)
+{
+	int i;
+
+	for (i = 0; i < sizeof(msgs) / sizeof(msgs[0]); i++)
+		printf("%d\t%s\n", i, msgs[i]);
+}
+
+/*
+ * If Fflag is not set lbasename() returns a pointer to the last
  * component of the path, otherwise it returns the argument.
  */
 static const char *
-basename(path)
-	const	char *path;
+lbasename(const char *path)
 {
 	const	char *cp, *cp1, *cp2;
 
@@ -395,75 +421,60 @@ basename(path)
 }
 
 static void
-verror(n, ap)
-	int	n;
-	va_list	ap;
+verror( int n, va_list ap)
 {
 	const	char *fn;
 
-	fn = basename(curr_pos.p_file);
+	if (ERR_ISSET(n, &msgset))
+		return;
+
+	fn = lbasename(curr_pos.p_file);
 	(void)printf("%s(%d): ", fn, curr_pos.p_line);
 	(void)vprintf(msgs[n], ap);
-	(void)printf("\n");
+	(void)printf(" [%d]\n", n);
 	nerr++;
 }
 
 static void
-vwarning(n, ap)
-	int	n;
-	va_list	ap;
+vwarning( int n, va_list ap)
 {
 	const	char *fn;
+
+	if (ERR_ISSET(n, &msgset))
+		return;
 
 	if (nowarn)
 		/* this warning is suppressed by a LINTED comment */
 		return;
 
-	fn = basename(curr_pos.p_file);
+	fn = lbasename(curr_pos.p_file);
 	(void)printf("%s(%d): warning: ", fn, curr_pos.p_line);
 	(void)vprintf(msgs[n], ap);
-	(void)printf("\n");
+	(void)printf(" [%d]\n", n);
+	if (wflag)
+		nerr++;
 }
 
 void
-#ifdef __STDC__
 error(int n, ...)
-#else
-error(n, va_alist)
-	int	n;
-	va_dcl
-#endif
 {
 	va_list	ap;
 
-#ifdef __STDC__
 	va_start(ap, n);
-#else
-	va_start(ap);
-#endif
 	verror(n, ap);
 	va_end(ap);
 }
 
 void
-#ifdef __STDC__
-lerror(const char *msg, ...)
-#else
-lerror(msg, va_alist)
-	const	char *msg;
-	va_dcl
-#endif
+lerror(const char *file, int line, const char *msg, ...)
 {
 	va_list	ap;
 	const	char *fn;
 
-#ifdef __STDC__
 	va_start(ap, msg);
-#else
-	va_start(ap);
-#endif
-	fn = basename(curr_pos.p_file);
-	(void)fprintf(stderr, "%s(%d): lint error: ", fn, curr_pos.p_line);
+	fn = lbasename(curr_pos.p_file);
+	(void)fprintf(stderr, "%s(%d): lint error: %s, %d: ",
+	    fn, curr_pos.p_line, file, line);
 	(void)vfprintf(stderr, msg, ap);
 	(void)fprintf(stderr, "\n");
 	va_end(ap);
@@ -471,66 +482,66 @@ lerror(msg, va_alist)
 }
 
 void
-#ifdef __STDC__
 warning(int n, ...)
-#else
-warning(n, va_alist)
-	int	n;
-	va_dcl
-#endif
 {
 	va_list	ap;
 
-#ifdef __STDC__
 	va_start(ap, n);
-#else
-	va_start(ap);
-#endif
 	vwarning(n, ap);
 	va_end(ap);
 }
 
 void
-#ifdef __STDC__
 message(int n, ...)
-#else
-message(n, va_alist)
-	int	n;
-	va_dcl
-#endif
 {
 	va_list	ap;
 	const	char *fn;
 
-#ifdef __STDC__
+	if (ERR_ISSET(n, &msgset))
+		return;
+
 	va_start(ap, n);
-#else
-	va_start(ap);
-#endif
-	fn = basename(curr_pos.p_file);
+	fn = lbasename(curr_pos.p_file);
 	(void)printf("%s(%d): ", fn, curr_pos.p_line);
 	(void)vprintf(msgs[n], ap);
-	(void)printf("\n");
+	(void)printf(" [%d]\n", n);
 	va_end(ap);
 }
 
+/*
+ * XXX I think the logic is possibly somewhat screwed up here. The
+ * question is, how do we want to interpret the -s and -S flags going
+ * forward? We need to answer that and then we can fix this to be
+ * "right"... [perry, 2 Nov 2002]
+*/
 int
-#ifdef __STDC__
-gnuism(int n, ...)
-#else
-gnuism(n, va_alist)
-	int	n;
-	va_dcl
-#endif
+c99ism(int n, ...)
 {
 	va_list	ap;
 	int	msg;
 
-#ifdef __STDC__
 	va_start(ap, n);
-#else
-	va_start(ap);
-#endif
+	if (sflag && !(Sflag || gflag)) {
+		verror(n, ap);
+		msg = 1;
+	} else if (!sflag && (Sflag || gflag)) {
+		msg = 0;
+	} else {
+		vwarning(n, ap);
+		msg = 1;
+	}
+	va_end(ap);
+
+	return (msg);
+}
+
+int
+gnuism(int n, ...)
+{
+	va_list	ap;
+	int	msg;
+
+	va_start(ap, n);
 	if (sflag && !gflag) {
 		verror(n, ap);
 		msg = 1;

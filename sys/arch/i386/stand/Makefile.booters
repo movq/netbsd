@@ -1,34 +1,74 @@
-#	$NetBSD: Makefile.booters,v 1.25 2000/01/23 16:44:18 mycroft Exp $
+#	$NetBSD: Makefile.booters,v 1.76.4.1 2009/01/22 19:45:29 snj Exp $
 
-BINDIR= /usr/mdec
+.include <bsd.own.mk>
+
 STRIPFLAG=
 BINMODE=444
 
+LIBCRT0=	# nothing
+LIBCRTBEGIN=	# nothing
+LIBCRTEND=	# nothing
+LIBC=		# nothing
+
+# Make sure we override any optimization options specified by the
+# user.
+.if defined(HAVE_GCC)
+.if ${MACHINE_ARCH} == "x86_64"
+CPUFLAGS= -m32
+.if ${HAVE_GCC} != 3
+CPUFLAGS+= -Wno-attributes
+.endif
+.else
+.if ${HAVE_GCC} == 3
+CPUFLAGS=  -mcpu=i386
+.else
+CPUFLAGS=  -march=i386 -mtune=i386 -Wno-attributes
+.endif
+.endif
+.endif
+COPTS=	-Os -ffreestanding
+
 I386_STAND_DIR?= $S/arch/i386/stand
 
-.PATH: ${I386_STAND_DIR}/lib/crt/bootsect ${I386_STAND_DIR}/lib
-BSSTART= start_bootsect.o fraglist.o bootsectmain.o biosdisk_ll.o bios_disk.o diskbuf.o
-.PATH: ${I386_STAND_DIR}/lib/crt/rom
+.PATH: ${I386_STAND_DIR}/lib
+
 ROMSTART= start_rom.o
 GENPROMDIR= ${I386_STAND_DIR}/genprom
+GENPROMOBJDIR!= cd ${GENPROMDIR} && ${PRINTOBJDIR}
+GENPROM= ${GENPROMOBJDIR}/genprom
+
 .PATH: ${I386_STAND_DIR}/lib/crt/dos
 DOSSTART= start_dos.o doscommain.o
 
-CPPFLAGS += -nostdinc -I${.OBJDIR} -I$S -I${I386_STAND_DIR}/lib -I$S/lib/libsa
+.PATH: ${I386_STAND_DIR}/lib/crt/pxe
+PXESTART= start_pxe.o
+
+CPPFLAGS+= -nostdinc -I${.OBJDIR} -I$S -I${I386_STAND_DIR}/lib -I$S/lib/libsa
 CPPFLAGS+= -D_STANDALONE
+LDFLAGS+=  -nostdlib
 
-CLEANFILES+= vers.c vers.o ${BASE}.list
+# XXX
+.if ${MACHINE_ARCH} == "x86_64"
+CPPFLAGS+=-m32
+LDFLAGS+=-Wl,-m,elf_i386
+LIBKERN_ARCH=i386
+KERNMISCMAKEFLAGS="LIBKERN_ARCH=i386"
+.endif
 
-.BEGIN: machine
-.NOPATH: machine
-realdepend realall: machine
-CLEANFILES+= machine
+CLEANFILES+= ${STARTFILE} vers.c ${BASE}.list
+SRCS+=	vers.c
 
-machine::
-	-rm -f $@
-	ln -s $S/arch/i386/include $@
+CLEANFILES+= machine x86
 
-${OBJS} ${BSSTART} ${ROMSTART} ${DOSSTART}: machine
+.if !make(obj) && !make(clean) && !make(cleandir)
+.BEGIN:
+	-rm -f machine && ln -s $S/arch/i386/include machine
+	-rm -f x86 && ln -s $S/arch/x86/include x86
+.ifdef LIBOBJ
+	-rm -f lib && ln -s ${LIBOBJ}/lib lib
+	mkdir -p ${LIBOBJ}/lib
+.endif
+.endif
 
 ### find out what to use for libkern
 KERN_AS=	library
@@ -54,37 +94,47 @@ LIBI386=		${I386LIB}
 cleandir distclean: cleanlibdir
 
 cleanlibdir:
-	rm -rf lib
-
-.include <bsd.own.mk>
+	-rm -rf lib
 
 .if ${OBJECT_FMT} == "ELF"
-LDFLAGS=-M -e start 	# -N does not work properly.
+LDFLAGS+=-Wl,-M -Wl,-e,start 	# -N does not work properly.
 .else
-LDFLAGS=-N -M -e _start 
+LDFLAGS+=-Wl,-N -Wl,-M -Wl,-e,_start 
 .endif
 
 LIBLIST=${LIBI386} ${LIBSA} ${LIBZ} ${LIBSA} ${LIBKERN} ${LIBI386} ${LIBSA}
 
-vers.o: ${VERSIONFILE}
-	sh ${I386_STAND_DIR}/newvers.sh ${.ALLSRC} ${NEWVERSWHAT}
-	${COMPILE.c} vers.c
+vers.c: ${VERSIONFILE} ${SOURCES} ${S}conf/newvers_stand.sh
+	${HOST_SH} ${S}conf/newvers_stand.sh -DM ${VERSIONFILE} x86 ${NEWVERSWHAT}
 
-${BASE}.sym: ${BSSTART} ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN} ${LIBI386} vers.o
-	${LD} -o ${BASE}.sym ${LDFLAGS} -Ttext 0 ${BSSTART} ${OBJS} \
-	vers.o ${LIBLIST} >${BASE}.list
+CLEANFILES+= ${BASE}.sym
+${BASE}.sym: ${STARTFILE} ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN} ${LIBI386}
+	${_MKTARGET_LINK}
+	${CC} -o ${BASE}.sym ${LDFLAGS} -Wl,-Ttext,${RELOC} \
+	    ${STARTFILE} ${OBJS} ${LIBLIST} >${BASE}.list
 
-${BASE}.rom: ${GENPROM} ${ROMSTART} ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN} ${LIBI386} vers.o
-	${LD} -o ${BASE}.sym ${LDFLAGS} -Ttext ${RELOC} ${ROMSTART} ${OBJS} \
-	vers.o ${LIBLIST} >${BASE}.list
-	objcopy --output-target=binary ${BASE}.sym ${BASE}.bin
-	(cd ${GENPROMDIR}; ${MAKE} rom BINFILE=${.OBJDIR:Q}/${BASE:Q}.bin \
-		ROMFILE=${.OBJDIR:Q}/${BASE:Q}.rom ROM_SIZE=${ROM_SIZE:Q})
-	rm -f ${BASE}.bin
+CLEANFILES+= ${BASE}.rom ${BASE}.rom.tmp
+${BASE}.rom: ${STARTFILE} ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN} ${LIBI386}
+	${_MKTARGET_LINK}
+	${CC} -o ${BASE}.sym ${LDFLAGS} -Wl,-Ttext,${RELOC} \
+	    ${STARTFILE} ${OBJS} ${LIBLIST} >${BASE}.list
+	${OBJCOPY} -O binary ${BASE}.sym ${BASE}.rom.tmp
+	${GENPROM} ${ROM_SIZE} < ${BASE}.rom.tmp > ${BASE}.rom || \
+	    rm -f ${BASE}.rom
+	rm -f ${BASE}.rom.tmp
 
-${BASE}.com: ${DOSSTART} ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN} ${LIBI386} vers.o
-	${LD} -o ${BASE}.sym ${LDFLAGS} -Ttext 0x100 ${DOSSTART} ${OBJS} \
-	vers.o ${LIBLIST} >${BASE}.list
-	objcopy --output-target=binary ${BASE}.sym ${BASE}.com
+CLEANFILES+= ${BASE}.com
+${BASE}.com: ${STARTFILE} ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN} ${LIBI386}
+	${_MKTARGET_LINK}
+	${CC} -o ${BASE}.sym ${LDFLAGS} -Wl,-Ttext,${RELOC} \
+	    ${STARTFILE} ${OBJS} ${LIBLIST} >${BASE}.list
+	${OBJCOPY} -O binary ${BASE}.sym ${BASE}.com
+
+CLEANFILES+= ${BASE}.bin
+${BASE}.bin: ${STARTFILE} ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN} ${LIBI386}
+	${_MKTARGET_LINK}
+	${CC} -o ${BASE}.sym ${LDFLAGS} -Wl,-Ttext,${RELOC} \
+	    ${STARTFILE} ${OBJS} ${LIBLIST} > ${BASE}.list
+	${OBJCOPY} -O binary ${BASE}.sym ${BASE}.bin
 
 .include <bsd.prog.mk>

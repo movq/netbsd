@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.4 2000/03/28 00:29:56 thorpej Exp $	*/
+/*	$NetBSD: md.h,v 1.16 2006/02/26 10:25:53 dsl Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -41,6 +41,13 @@
 
 /* Constants and defines */
 
+/*
+ * Symbolic names for disk partitions.
+ */
+#define	PART_ROOT	PART_A
+#define	PART_RAW	PART_C
+#define	PART_USR	PART_G
+
 /* Megs required for a full X installation. */
 #define XNEEDMB 35	/* XXXTHORPEJ */
 
@@ -48,44 +55,7 @@
  * Default filesets to fetch and install during installation
  * or upgrade.
  */
-EXTERN distinfo dist_list[]
-#ifdef MAIN
-= {
-    {"kern",	1, NULL, "Kernel       : "},
-    {"base",	1, NULL, "Base         : "},
-    {"etc",	1, NULL, "System (/etc): "},
-    {"comp",	1, NULL, "Compiler     : "},
-    {"games",	1, NULL, "Games        : "},
-    {"man",	1, NULL, "Manuals      : "},
-    {"misc",	1, NULL, "Miscellaneous: "},
-    {"text",	1, NULL, "Text tools   : "},
-    {"secr",	0, NULL, "Security     : "},
-
-    {"xbase",	1, NULL, "X11 clients  : "},
-    {"xfont",	1, NULL, "X11 fonts    : "},
-    {"xserver",	1, NULL, "X11 servers  : "},
-    {"xcontrib",1, NULL, "X11 contrib  : "},
-    {"xcomp",	1, NULL, "X programming: "},
-    {NULL, 0, NULL, NULL }
-}
-#endif
-;
-
-/*
- * Disk names accepted as valid targets for a from-scratch installation.
- */
-EXTERN	char *disk_names[]
-#ifdef MAIN
-= {"sd", "wd", NULL}
-#endif
-;
-
-/*
- * Legal start character for a disk for checking input.
- * this must return 1 for a character that matches the first
- * characters of each member of disk_names.
- */
-#define ISDISKSTART(dn)	(dn == 's' || dn == 'w')
+#define SET_KERNEL_1_NAME	"kern-GENERIC"
 
 /*
  * Machine-specific command to write a new label to a disk.
@@ -93,8 +63,3 @@ EXTERN	char *disk_names[]
  * the hand-edited disklabel will NOT be written by MI code.
  */
 #define	DISKLABEL_CMD	"disklabel -w -r"
-
-/*
- * Default file system type for floppies.
- */
-EXTERN char *fdtype INIT("msdos");

@@ -1,4 +1,4 @@
-.\"	$NetBSD: isp.4,v 1.5 1999/12/18 18:33:05 mjacob Exp $
+.\"	$NetBSD: isp.4,v 1.11 2004/05/11 22:42:47 wiz Exp $
 .\"
 .\" Copyright (c) 1998, 1999
 .\" 	Matthew Jacob, for NASA/Ames Research Center
@@ -12,7 +12,7 @@
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
 .\" 3. The name of the author may not be used to endorse or promote products
-.\"    derived from this software withough specific prior written permission.
+.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -27,7 +27,6 @@
 .\"
 .\"
 .Dd March 25, 1999
-.\".Dt AHC 4
 .Dt ISP 4
 .Os
 .Sh NAME
@@ -50,8 +49,8 @@ and LVD (for the ISP1080 and ISP1280),
 .Pp
 Fibre Channel support uses FCP SCSI profile for
 .Tn FibreChannel .
-and utilizes Class 3 connections only. Support is available for Public
-and Private loops.
+and uses Class 3 connections only.
+Support is available for Public and Private loops.
 Command tagging is supported for all (in fact,
 .Tn FibreChannel
 requires tagging).
@@ -60,8 +59,9 @@ An optional
 .Tn flags 0x80
 appended to the above
 .Tn isp*
-declarations will disable the download of driver f/w, which means you
-use whatever F/W is running on the card. If no firmware is running on the card,
+declarations will disable the download of driver firmware, which means you
+use whatever firmware is running on the card.
+If no firmware is running on the card,
 the driver cannot operate the card.
 .Pp
 An optional
@@ -79,13 +79,13 @@ Supported cards include:
 .It ISP1000
 SBus Fast Wide, Ultra Fast Wide cards, Single Ended or Differential cards.
 .It PTI SBS440
-Perfomance Technology ISP1000 variants.
+Performance Technology ISP1000 variants.
 .It ISP1020
 Qlogic 1020 Fast Wide and Differential Fast Wide PCI cards.
 .It ISP1040
 Qlogic 1040 Ultra Wide and Differential Ultra Wide PCI cards.
 .It PTI SBS450
-Perfomance Technology ISP1040 variants.
+Performance Technology ISP1040 variants.
 .It Qlogic 1240
 Qlogic 1240 Dual Bus Ultra Wide and Differential Ultra Wide PCI cards.
 .It Qlogic 1080
@@ -100,32 +100,37 @@ Qlogic Dual Loop 2100A Optical Fibre Channel Arbitrated Loop PCI cards.
 Qlogic 2200 Copper and Optical Fibre Channel Arbitrated Loop PCI cards.
 .It Qlogic 2202
 Qlogic 2200 Dual Bus Optical Fibre Channel Arbitrated Loop PCI cards.
+.It Qlogic 2204
+Qlogic 2200 Quad Bus Optical Fibre Channel Arbitrated Loop PCI cards.
+.It Qlogic 2300
+Qlogic 2300 2-Gigabit Optical Fibre Channel PCI cards.
+.It Qlogic 2312
+Qlogic 2300 2-Gigabit Dual Channel Optical Fibre Channel PCI cards.
 .It PTI SBS470
-Perfomance Technology ISP2100 variants.
+Performance Technology ISP2100 variants.
 .It Antares P-0033
 Antares Microsystems ISP2100 variants.
 .El
+.Sh SEE ALSO
+.Xr cd 4 ,
+.Xr intro 4 ,
+.Xr scsi 4 ,
+.Xr sd 4 ,
+.Xr st 4
+.Sh AUTHORS
+The
+.Nm
+driver was written by Matthew Jacob for NASA/Ames Research Center.
 .Sh BUGS
 The driver currently ignores some NVRAM settings.
 .Pp
 The driver currently doesn't do error recovery for timed out commands
 very gracefully.
 .Pp
-Fabric (public loop) support isn't very well debugged yet.
-.Pp
 Sometimes, when booting, the driver gets stuck waiting for the Fibre Channel
-f/w to tell it that the loop port database is ready. In this case you'll
-see an announcement that the loop state has a value of 0x1. To unwedge
-the system, unplug and replug the fibre channel connection, or otherwise
-cause a LIP (Loop Initialization Primitive sequence)- this will kick the f/w
-into getting unstuck.
-.Sh SEE ALSO
-.Xr intro 4 ,
-.Xr cd 4 ,
-.Xr scsi 4 ,
-.Xr sd 4 ,
-.Xr st 4
-.Sh AUTHOR
-The
-.Nm
-driver was written by Matthew Jacob for NASA/Ames Research Center.
+firmware to tell it that the loop port database is ready.
+In this case you'll see an announcement that the loop state has a
+value of 0x1.
+To unwedge the system, unplug and replug the fibre channel connection,
+or otherwise cause a LIP (Loop Initialization Primitive sequence) -
+this will kick the firmware into getting unstuck.

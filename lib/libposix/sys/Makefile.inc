@@ -1,49 +1,31 @@
-#	$NetBSD: Makefile.inc,v 1.11 1999/10/27 14:58:30 is Exp $
+#	$NetBSD: Makefile.inc,v 1.19 2004/02/08 22:55:27 lukem Exp $
 
 # sys sources
 .PATH: ${.CURDIR}/sys
 
 # stubs providing an entry "foo" but calling "__posix_foo()"
-PSEUDO=	chown.o fchown.o lchown.o rename.o
-PPSEUDO=${PSEUDO:.o=.po}
-SPSEUDO=${PSEUDO:.o=.so}
+PSEUDO=		chown.S fchown.S lchown.S rename.S
 
-OBJS+=	${PSEUDO}
+SRCS+=		${PSEUDO}
+CLEANFILES+=	${PSEUDO}
 
-${PPSEUDO}: ${ARCHDIR}/SYS.h \
-    ${DESTDIR}/usr/include/sys/syscall.h
-	@echo creating ${.TARGET}
-	@printf '#include "SYS.h"\n \
-	    PSEUDO(${.PREFIX},${.PREFIX:S/^/__posix_/})\n' | \
-	    ${CPP} -DGPROF ${CPPFLAGS:M-[ID]*} ${AINC} | ${AS} -o ${.TARGET}.o
-	@${LD} -X -r ${.TARGET}.o -o ${.TARGET}
-	@rm -f ${.TARGET}.o
+ASMDEPS=	${.CURDIR}/sys/Makefile.inc ${ARCHDIR}/SYS.h \
+		${DESTDIR}/usr/include/sys/syscall.h
 
-${SPSEUDO}: ${ARCHDIR}/SYS.h \
-    ${DESTDIR}/usr/include/sys/syscall.h
-	@echo creating ${.TARGET}
-	@printf '#include "SYS.h"\n \
-	    PSEUDO(${.PREFIX},${.PREFIX:S/^/__posix_/})\n' | \
-	    ${CPP} ${CPPPICFLAGS} ${CPPFLAGS:M-[ID]*} ${AINC} | \
-	    ${AS} ${APICFLAGS} -o ${.TARGET}
-
-${PSEUDO}: ${ARCHDIR}/SYS.h \
-    ${DESTDIR}/usr/include/sys/syscall.h
-	@echo creating ${.TARGET}
-	@printf '#include "SYS.h"\n \
-	    PSEUDO(${.PREFIX},${.PREFIX:S/^/__posix_/})\n' | \
-	    ${CPP} ${CPPFLAGS:M-[ID]*} ${AINC} | ${AS} -o ${.TARGET}.o
-	@${LD} -X -r ${.TARGET}.o -o ${.TARGET}
-	@rm -f ${.TARGET}.o
+${PSEUDO}: ${ASMDEPS}
+	${_MKTARGET_CREATE}
+	printf '#include "SYS.h"\nPSEUDO(${.PREFIX},${.PREFIX:S/^/__posix_/})\n' \
+		>${.TARGET}
 
 # Lint stubs for all automatically-generated assembly stubs (GENERATED)
-LSRCS+=	LintSysPseudo.c
-DPSRCS+=LintSysPseudo.c
+.if ${MKLINT} != "no"
+LSRCS+=		LintSysPseudo.c
+DPSRCS+=	LintSysPseudo.c
+CLEANFILES+=	LintSysPseudo.c
+.endif
 
-CLEANFILES+= LintSysPseudo.c
-
-LintSysPseudo.c: ${.CURDIR}/../libc/sys/makelintstub \
+LintSysPseudo.c: ${NETBSDSRCDIR}/lib/libc/sys/makelintstub \
     ${DESTDIR}/usr/include/sys/syscall.h
-	@echo creating ${.TARGET}
-	@sh ${.CURDIR}/../libc/sys/makelintstub -o ${.TARGET} -p \
-	    -s ${DESTDIR}/usr/include/sys/syscall.h ${PSEUDO}
+	${_MKTARGET_CREATE}
+	CPP=${CPP:Q} ${HOST_SH} ${NETBSDSRCDIR}/lib/libc/sys/makelintstub \
+	    -o ${.TARGET} -p -s ${DESTDIR}/usr/include/sys/syscall.h ${PSEUDO}

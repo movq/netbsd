@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_ipccall.h,v 1.7 1999/01/10 15:05:36 tron Exp $	*/
+/*	$NetBSD: linux_ipccall.h,v 1.14 2008/04/28 20:23:43 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,9 +36,9 @@
  * All linux architectures except alpha use the sys_ipc
  * syscall and need the associated defines.
  */
-# if !defined(__alpha__)
+# if !defined(__alpha__) && !defined(__amd64__)
 /* Used on: arm, i386, m68k, mips, ppc, sparc, sparc64 */
-/* Not used on: alpha */
+/* Not used on: alpha, amd64 */
 
 /*
  * Defines for the numbers passes as the first argument to the
@@ -66,28 +59,28 @@
 
 
 #  ifdef SYSVSEM
-inline int linux_semop __P((struct proc *, struct linux_sys_ipc_args *,
-    register_t *));
-inline int linux_semget __P((struct proc *, struct linux_sys_ipc_args *,
-    register_t *));
+__inline int linux_semop(struct lwp *, const struct linux_sys_ipc_args *,
+    register_t *);
+__inline int linux_semget(struct lwp *, const struct linux_sys_ipc_args *,
+    register_t *);
 #  endif
 
 
 #  ifdef SYSVMSG
-inline int linux_msgsnd __P((struct proc *, struct linux_sys_ipc_args *,
-    register_t *));
-inline int linux_msgrcv __P((struct proc *, struct linux_sys_ipc_args *,
-    register_t *));
-inline int linux_msgget __P((struct proc *, struct linux_sys_ipc_args *,
-    register_t *));
+__inline int linux_msgsnd(struct lwp *, const struct linux_sys_ipc_args *,
+    register_t *);
+__inline int linux_msgrcv(struct lwp *, const struct linux_sys_ipc_args *,
+    register_t *);
+__inline int linux_msgget(struct lwp *, const struct linux_sys_ipc_args *,
+    register_t *);
 #  endif
 
 
 #  ifdef SYSVSHM
-inline int linux_shmdt __P((struct proc *, struct linux_sys_ipc_args *,
-    register_t *));
-inline int linux_shmget __P((struct proc *, struct linux_sys_ipc_args *,
-    register_t *));
+__inline int linux_shmdt(struct lwp *, const struct linux_sys_ipc_args *,
+    register_t *);
+__inline int linux_shmget(struct lwp *, const struct linux_sys_ipc_args *,
+    register_t *);
 #  endif
 
 # endif

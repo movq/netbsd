@@ -1,4 +1,4 @@
-/*	$NetBSD: env.c,v 1.11 1999/03/22 22:18:45 aidan Exp $	*/
+/*	$NetBSD: env.c,v 1.15 2005/06/07 13:43:52 he Exp $	*/
 
 /* Copyright 1988,1990,1993,1994 by Paul Vixie
  * All rights reserved
@@ -22,7 +22,7 @@
 #if 0
 static char rcsid[] = "Id: env.c,v 2.7 1994/01/26 02:25:50 vixie Exp";
 #else
-__RCSID("$NetBSD: env.c,v 1.11 1999/03/22 22:18:45 aidan Exp $");
+__RCSID("$NetBSD: env.c,v 1.15 2005/06/07 13:43:52 he Exp $");
 #endif
 #endif
 
@@ -31,7 +31,7 @@ __RCSID("$NetBSD: env.c,v 1.11 1999/03/22 22:18:45 aidan Exp $");
 #include <string.h>
 
 char **
-env_init()
+env_init(void)
 {
 	char	**p = (char **) malloc(sizeof(char **));
 
@@ -41,8 +41,7 @@ env_init()
 
 
 void
-env_free(envp)
-	char	**envp;
+env_free(char **envp)
 {
 	char	**p;
 
@@ -53,8 +52,7 @@ env_free(envp)
 
 
 char **
-env_copy(envp)
-	char	**envp;
+env_copy(char **envp)
 {
 	int	count, i;
 	char	**p;
@@ -70,9 +68,7 @@ env_copy(envp)
 
 
 char **
-env_set(envp, envstr)
-	char	**envp;
-	char	*envstr;
+env_set(char **envp, char *envstr)
 {
 	int	count, found;
 	char	**p;
@@ -116,14 +112,14 @@ env_set(envp, envstr)
  *		TRUE = was an env setting
  */
 int
-load_env(envstr, f)
-	char	*envstr;
-	FILE	*f;
+load_env(char *envstr, FILE *f)
 {
 	long	filepos;
 	int	fileline, len;
 	char	*name, *name_end, *val, *equal;
 	char	*s;
+
+	s = name = name_end = NULL;	/* XXXGCC -Wuninitialized [sparc64] */
 
 	filepos = ftell(f);
 	fileline = LineNumber;
@@ -133,6 +129,9 @@ load_env(envstr, f)
 
 	Debug(DPARS, ("load_env, read <%s>\n", envstr))
 
+	name = NULL;
+	name_end = NULL;
+	s = NULL;
 	equal = strchr(envstr, '=');
 	if (equal) {
 		/*
@@ -142,7 +141,7 @@ load_env(envstr, f)
 		 * <min> <hour> <day> <month> <weekday> command flag=value)
 		 */
 		/* space before var name */
-		for (name = envstr; name < equal && isspace(*name); name++)
+		for (name = envstr; name < equal && isspace((unsigned char)*name); name++)
 			;
 
 		/* var name */
@@ -157,7 +156,7 @@ load_env(envstr, f)
 			}
 			name_end = s++;
 		} else {
-			for (s = name ; s < equal && !isspace(*s); s++)
+			for (s = name ; s < equal && !isspace((unsigned char)*s); s++)
 				;
 			name_end = s;
 			if (s < equal)
@@ -165,7 +164,7 @@ load_env(envstr, f)
 		}
 
 		/* space after var name */
-		for ( ; s < equal && isspace(*s); s++)
+		for ( ; s < equal && isspace((unsigned char)*s); s++)
 			;
 		/*
 		 * "s" should equal "equal"..  otherwise, this is not an
@@ -183,7 +182,7 @@ load_env(envstr, f)
 	 * process value string
 	 */
 	val = equal + 1;
-	while (*val && isspace(*val))
+	while (*val && isspace((unsigned char)*val))
 		val++;
 	if (*val) {
 		len = strdtb(val);
@@ -202,9 +201,7 @@ load_env(envstr, f)
 
 
 char *
-env_get(name, envp)
-	char	*name;
-	char	**envp;
+env_get(const char *name, char **envp)
 {
 	int	len = strlen(name);
 	char	*p, *q;

@@ -1,7 +1,9 @@
-#	$NetBSD: Makefile,v 1.5 2000/01/24 03:01:54 mycroft Exp $
+#	$NetBSD: Makefile,v 1.8 2002/09/18 05:41:56 lukem Exp $
 
-PROG=	unfdpass
-MKMAN=	no
+NOMAN=		# defined
+
+PROG=		unfdpass
+WARNS=		1
 
 CLEANFILES+=file1 file2 file3 file4 file5 file6 file7 file8 file9 file10 \
 	file11 file12 file13 file14 file15 file16 file17 file18 file19 \

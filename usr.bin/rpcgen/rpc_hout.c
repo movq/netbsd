@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_hout.c,v 1.11 1998/10/19 00:43:59 wsanchez Exp $	*/
+/*	$NetBSD: rpc_hout.c,v 1.20 2004/06/20 22:20:16 jmc Exp $	*/
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
  * unrestricted use provided that this legend is included on all tape
@@ -29,21 +29,25 @@
  * Mountain View, California  94043
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)rpc_hout.c 1.12 89/02/22 (C) 1987 SMI";
 #else
-__RCSID("$NetBSD: rpc_hout.c,v 1.11 1998/10/19 00:43:59 wsanchez Exp $");
+__RCSID("$NetBSD: rpc_hout.c,v 1.20 2004/06/20 22:20:16 jmc Exp $");
 #endif
 #endif
 
 /*
  * rpc_hout.c, Header file outputter for the RPC protocol compiler
  */
-#include <stdio.h>
 #include <ctype.h>
 #include <err.h>
+#include <stdio.h>
 #include "rpc_scan.h"
 #include "rpc_parse.h"
 #include "rpc_util.h"
@@ -56,7 +60,6 @@ static void pdefine __P((char *, char *));
 static void puldefine __P((char *, char *));
 static int define_printed __P((proc_list *, version_list *));
 static void pprogramdef __P((definition *));
-static void parglist __P((proc_list *, char *));
 static void penumdef __P((definition *));
 static void ptypedef __P((definition *));
 static int undefined2 __P((char *, char *));
@@ -131,11 +134,11 @@ pxdrfuncdecl(name, pointerp)
 	f_print(fout, "#ifdef __cplusplus\n");
 	f_print(fout, "extern \"C\" bool_t xdr_%s(XDR *, %s%s);\n",
 	    name,
-	    name, pointerp ? ("*") : "");
+	    name, pointerp ? (" *") : "");
 	f_print(fout, "#elif __STDC__\n");
 	f_print(fout, "extern  bool_t xdr_%s(XDR *, %s%s);\n",
 	    name,
-	    name, pointerp ? ("*") : "");
+	    name, pointerp ? (" *") : "");
 	f_print(fout, "#else /* Old Style C */\n");
 	f_print(fout, "bool_t xdr_%s();\n", name);
 	f_print(fout, "#endif /* Old Style C */\n\n");
@@ -176,7 +179,7 @@ pargdef(def)
 			}
 			f_print(fout, "};\n");
 			f_print(fout, "typedef struct %s %s;\n", name, name);
-			pxdrfuncdecl(name, NULL);
+			pxdrfuncdecl(name, 1);
 			f_print(fout, "\n");
 		}
 	}
@@ -241,7 +244,7 @@ puldefine(name, num)
 	char   *name;
 	char   *num;
 {
-	f_print(fout, "#define %s ((u_long)%s)\n", name, num);
+	f_print(fout, "#define %s %s\n", name, num);
 }
 
 static int
@@ -262,7 +265,7 @@ define_printed(stop, start)
 				}
 		}
 	}
-	errx(1, "Internal error %s, %d: procedure not found\n",
+	errx(1, "Internal error %s, %d: procedure not found",
 	    __FILE__, __LINE__);
 	/* NOTREACHED */
 }
@@ -329,9 +332,17 @@ pprocdef(proc, vp, addargtype, server_p, mode)
 	int     server_p;
 	int     mode;
 {
+	decl_list *dl;
 
-	ptype(proc->res_prefix, proc->res_type, 1);
-	f_print(fout, "* ");
+	if (Mflag) {
+		if (server_p)
+			f_print(fout, "bool_t ");
+		else
+			f_print(fout, "enum clnt_stat ");
+	} else {
+		ptype(proc->res_prefix, proc->res_type, 1);
+		f_print(fout, "*");
+	}
 	if (server_p)
 		pvname_svc(proc->proc_name, vp->vers_num);
 	else
@@ -340,39 +351,34 @@ pprocdef(proc, vp, addargtype, server_p, mode)
 	/*
 	 * mode  0 == cplusplus, mode  1 = ANSI-C, mode 2 = old style C
 	 */
-	if (mode == 0 || mode == 1)
-		parglist(proc, addargtype);
+	if (mode == 0 || mode == 1) {
+		f_print(fout, "(");
+		if (proc->arg_num < 2 && newstyle &&
+		    streq(proc->args.decls->decl.type, "void")) {
+			/* 0 argument in new style:  do nothing */
+		} else {
+			for (dl = proc->args.decls; dl != NULL; dl = dl->next) {
+				ptype(dl->decl.prefix, dl->decl.type, 1);
+				if (!newstyle)
+					f_print(fout, "*");
+				f_print(fout, ", ");
+			}
+		}
+		if (Mflag) {
+			if (streq(proc->res_type, "void"))
+				f_print(fout, "char");
+			else
+				ptype(proc->res_prefix, proc->res_type, 0);
+			if (!isvectordef(proc->res_type, REL_ALIAS))
+				f_print(fout, "*");
+			f_print(fout, ", ");
+		}
+		f_print(fout, "%s);\n", addargtype);
+	}
 	else
 		f_print(fout, "();\n");
 }
 
-
-/* print out argument list of procedure */
-static void
-parglist(proc, addargtype)
-	proc_list *proc;
-	char   *addargtype;
-{
-	decl_list *dl;
-
-	f_print(fout, "(");
-
-	if (proc->arg_num < 2 && newstyle &&
-	    streq(proc->args.decls->decl.type, "void")) {
-		/* 0 argument in new style:  do nothing */
-	} else {
-		for (dl = proc->args.decls; dl != NULL; dl = dl->next) {
-			ptype(dl->decl.prefix, dl->decl.type, 1);
-			if (!newstyle)
-				f_print(fout, "*");	/* old style passes by
-							 * reference */
-
-			f_print(fout, ", ");
-		}
-	}
-
-	f_print(fout, "%s);\n", addargtype);
-}
 
 static void
 penumdef(def)
@@ -382,10 +388,11 @@ penumdef(def)
 	enumval_list *l;
 	char   *last = NULL;
 	int     count = 0;
+	char   *first = "";
 
 	f_print(fout, "enum %s {\n", name);
 	for (l = def->def.en.vals; l != NULL; l = l->next) {
-		f_print(fout, "\t%s", l->name);
+		f_print(fout, "%s\t%s", first, l->name);
 		if (l->assignment) {
 			f_print(fout, " = %s", l->assignment);
 			last = l->assignment;
@@ -397,9 +404,9 @@ penumdef(def)
 				f_print(fout, " = %s + %d", last, count++);
 			}
 		}
-		f_print(fout, ",\n");
+		first = ",\n";
 	}
-	f_print(fout, "};\n");
+	f_print(fout, "\n};\n");
 	f_print(fout, "typedef enum %s %s;\n", name, name);
 }
 
@@ -508,7 +515,7 @@ pdeclaration(name, dec, tab, separator)
 			break;
 		}
 	}
-	f_print(fout, separator);
+	f_print(fout, "%s", separator);
 }
 
 static int

@@ -1,4 +1,4 @@
-/*	$NetBSD: mmap.c,v 1.10 2000/01/24 00:39:17 mycroft Exp $	*/
+/*	$NetBSD: mmap.c,v 1.18 2008/04/28 20:23:07 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -55,10 +48,10 @@
 #include <unistd.h>
 #include <string.h>	/* for memset declaration (?) */
 
-int	main __P((int, char *[]));
-void	usage __P((void));
+int	main(int, char *[]);
+void	usage(void);
 
-int	check_residency __P((void *, int));
+int	check_residency(void *, int);
 
 int	pgsize;
 int	verbose;
@@ -119,7 +112,9 @@ main(argc, argv)
 
 	(void) close(fd);
 
-	npgs = (st.st_size / pgsize) + 1;
+	npgs = (st.st_size / pgsize);
+	if (st.st_size % pgsize != 0)
+		npgs++;
 
 	printf("    CHECKING RESIDENCY\n");
 
@@ -143,6 +138,29 @@ main(argc, argv)
 		err(1, "munlock %s", filename);
 
 	(void) munmap(addr, st.st_size);
+
+	/*
+	 * TEST THE MAP_WIRED FLAG TO MMAP.
+	 */
+
+	npgs = 128;
+
+	printf(">>> MAPPING %d PAGE ANONYMOUS REGION WITH MAP_WIRED <<<\n",
+	    npgs);
+
+	addr = mmap(NULL, npgs * pgsize, PROT_READ|PROT_WRITE,
+	    MAP_ANON|MAP_PRIVATE|MAP_WIRED, -1, (off_t) 0);
+	if (addr == MAP_FAILED)
+		err(1, "mmap anon MAP_WIRED");
+
+	printf("    CHECKING RESIDENCY\n");
+
+	if (check_residency(addr, npgs) != npgs) {
+		printf("    RESIDENCY CHECK FAILED!\n");
+		ecode = 1;
+	}
+
+	(void) munmap(addr, npgs * pgsize);
 
 	/*
 	 * TEST MLOCKALL'ING AN ANONYMOUS MEMORY RANGE.
@@ -179,7 +197,7 @@ main(argc, argv)
 	printf(">>> MAPPING ANOTHER %d PAGE ANONYMOUS REGION <<<\n", npgs);
 
 	addr2 = mmap(NULL, npgs * pgsize, PROT_READ, MAP_ANON, -1, (off_t) 0);
-	if (addr == MAP_FAILED)
+	if (addr2 == MAP_FAILED)
 		err(1, "mmap anon #2");
 
 	printf("    CHECKING RESIDENCY\n");
@@ -269,7 +287,7 @@ main(argc, argv)
 
 	printf("    CHECKING RESIDENCY\n");
 
-	if (check_residency(addr2, npgs) != 0) {
+	if (check_residency(addr, npgs) != 0) {
 		printf("    RESIDENCY CHECK FAILED!\n");
 		ecode = 1;
 	}
@@ -371,10 +389,22 @@ main(argc, argv)
 
 	printf("    CHECKING RESIDENCY\n");
 
-	if (check_residency(addr, npgs) != 0) {
-		printf("    RESIDENCY CHECK FAILED!\n");
-		ecode = 1;
-	}
+	/*
+	 * NOTE!  Even though we have MADV_FREE'd the range,
+	 * there is another reference (the kernel's) to the
+	 * object which owns the pages.  In this case, the
+	 * kernel does not simply free the pages, as haphazardly
+	 * freeing pages when there are still references to
+	 * an object can cause data corruption (say, the other
+	 * referencer doesn't expect the pages to be freed,
+	 * and is surprised by the subsequent ZFOD).
+	 *
+	 * Because of this, we simply report the number of
+	 * pages still resident, for information only.
+	 */
+
+	npgs = check_residency(addr, npgs);
+	printf("    RESIDENCY CHECK: %d pages still resident\n", npgs);
 
 	if (shmdt(addr) == -1)
 		warn("shmdt");
@@ -415,8 +445,7 @@ check_residency(addr, npgs)
 void
 usage()
 {
-	extern const char *__progname;
 
-	fprintf(stderr, "usage: %s [-v] filename\n", __progname);
+	fprintf(stderr, "usage: %s [-v] filename\n", getprogname());
 	exit(1);
 }

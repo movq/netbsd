@@ -1,4 +1,4 @@
-/*	$NetBSD: hid.c,v 1.13 2000/03/27 12:33:53 augustss Exp $	*/
+/*	$NetBSD: hid.c,v 1.28 2008/04/28 20:23:59 martin Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/hid.c,v 1.11 1999/11/17 22:33:39 n_hibma Exp $ */
 
 /*
@@ -6,7 +6,7 @@
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Lennart Augustsson (augustss@carlstedt.se) at
+ * by Lennart Augustsson (lennart@augustsson.net) at
  * Carlstedt Research & Technology.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,47 +31,51 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: hid.c,v 1.28 2008/04/28 20:23:59 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #if defined(__NetBSD__)
 #include <sys/kernel.h>
 #endif
 #include <sys/malloc.h>
- 
+
 #include <dev/usb/usb.h>
 #include <dev/usb/usbhid.h>
 
 #include <dev/usb/hid.h>
 
-#ifdef UHID_DEBUG
-#define DPRINTF(x)	if (usbdebug) logprintf x
-#define DPRINTFN(n,x)	if (usbdebug>(n)) logprintf x
-extern int usbdebug;
+#ifdef UHIDEV_DEBUG
+#define DPRINTF(x)	if (uhidevdebug) logprintf x
+#define DPRINTFN(n,x)	if (uhidevdebug>(n)) logprintf x
+extern int uhidevdebug;
 #else
 #define DPRINTF(x)
 #define DPRINTFN(n,x)
 #endif
 
-Static void hid_clear_local __P((struct hid_item *));
+Static void hid_clear_local(struct hid_item *);
 
-#define MAXUSAGE 100
+#define MAXUSAGE 256
 struct hid_data {
-	u_char *start;
-	u_char *end;
-	u_char *p;
+	const u_char *start;
+	const u_char *end;
+	const u_char *p;
 	struct hid_item cur;
 	int32_t usages[MAXUSAGE];
 	int nu;
 	int minset;
 	int multi;
 	int multimax;
-	int kindset;
+	enum hid_kind kind;
 };
 
 Static void
-hid_clear_local(c)
-	struct hid_item *c;
+hid_clear_local(struct hid_item *c)
 {
+
+	DPRINTFN(5,("hid_clear_local\n"));
 	c->usage = 0;
 	c->usage_minimum = 0;
 	c->usage_maximum = 0;
@@ -92,25 +89,21 @@ hid_clear_local(c)
 }
 
 struct hid_data *
-hid_start_parse(d, len, kindset)
-	void *d;
-	int len;
-	int kindset;
+hid_start_parse(const void *d, int len, enum hid_kind kind)
 {
 	struct hid_data *s;
 
-	s = malloc(sizeof *s, M_TEMP, M_WAITOK);
-	memset(s, 0, sizeof *s);
+	s = malloc(sizeof *s, M_TEMP, M_WAITOK|M_ZERO);
 	s->start = s->p = d;
-	s->end = (char *)d + len;
-	s->kindset = kindset;
+	s->end = (const char *)d + len;
+	s->kind = kind;
 	return (s);
 }
 
 void
-hid_end_parse(s)
-	struct hid_data *s;
+hid_end_parse(struct hid_data *s)
 {
+
 	while (s->cur.next != NULL) {
 		struct hid_item *hi = s->cur.next->next;
 		free(s->cur.next, M_TEMP);
@@ -120,27 +113,29 @@ hid_end_parse(s)
 }
 
 int
-hid_get_item(s, h)
-	struct hid_data *s;
-	struct hid_item *h;
+hid_get_item(struct hid_data *s, struct hid_item *h)
 {
 	struct hid_item *c = &s->cur;
 	unsigned int bTag, bType, bSize;
-	struct hid_location oldloc;
-	u_char *data;
+	u_int32_t oldpos;
+	const u_char *data;
 	int32_t dval;
-	u_char *p;
+	const u_char *p;
 	struct hid_item *hi;
 	int i;
+	enum hid_kind retkind;
 
  top:
+	DPRINTFN(5,("hid_get_item: multi=%d multimax=%d\n",
+		    s->multi, s->multimax));
 	if (s->multimax != 0) {
 		if (s->multi < s->multimax) {
 			c->usage = s->usages[min(s->multi, s->nu-1)];
 			s->multi++;
 			*h = *c;
 			c->loc.pos += c->loc.size;
-			h->next = 0;
+			h->next = NULL;
+			DPRINTFN(5,("return multi\n"));
 			return (1);
 		} else {
 			c->loc.count = s->multimax;
@@ -178,12 +173,12 @@ hid_get_item(s, h)
 			dval = 0;
 			break;
 		case 1:
-			dval = (int8_t)*data++;
+			dval = /*(int8_t)*/ *data++;
 			break;
 		case 2:
 			dval = *data++;
 			dval |= *data++ << 8;
-			dval = (int16_t)dval;
+			dval = /*(int16_t)*/ dval;
 			break;
 		case 4:
 			dval = *data++;
@@ -195,23 +190,30 @@ hid_get_item(s, h)
 			printf("BAD LENGTH %d\n", bSize);
 			continue;
 		}
-		
+
+		DPRINTFN(5,("hid_get_item: bType=%d bTag=%d dval=%d\n",
+			 bType, bTag, dval));
 		switch (bType) {
 		case 0:			/* Main */
 			switch (bTag) {
 			case 8:		/* Input */
-				if (!(s->kindset & (1 << hid_input)))
-					continue;
-				c->kind = hid_input;
-				c->flags = dval;
+				retkind = hid_input;
 			ret:
+				if (s->kind != retkind) {
+					s->minset = 0;
+					s->nu = 0;
+					hid_clear_local(c);
+					continue;
+				}
+				c->kind = retkind;
+				c->flags = dval;
 				if (c->flags & HIO_VARIABLE) {
 					s->multimax = c->loc.count;
 					s->multi = 0;
 					c->loc.count = 1;
 					if (s->minset) {
-						for (i = c->usage_minimum; 
-						     i <= c->usage_maximum; 
+						for (i = c->usage_minimum;
+						     i <= c->usage_maximum;
 						     i++) {
 							s->usages[s->nu] = i;
 							if (s->nu < MAXUSAGE-1)
@@ -221,19 +223,18 @@ hid_get_item(s, h)
 					}
 					goto top;
 				} else {
+					c->usage = c->_usage_page; /* XXX */
 					*h = *c;
-					h->next = 0;
-					c->loc.pos += 
-						c->loc.size * c->loc.count;
-					hid_clear_local(c);
+					h->next = NULL;
+					c->loc.pos +=
+					    c->loc.size * c->loc.count;
 					s->minset = 0;
+					s->nu = 0;
+					hid_clear_local(c);
 					return (1);
 				}
 			case 9:		/* Output */
-				if (!(s->kindset & (1 << hid_output)))
-					continue;
-				c->kind = hid_output;
-				c->flags = dval;
+				retkind = hid_output;
 				goto ret;
 			case 10:	/* Collection */
 				c->kind = hid_collection;
@@ -244,16 +245,12 @@ hid_get_item(s, h)
 				s->nu = 0;
 				return (1);
 			case 11:	/* Feature */
-				if (!(s->kindset & (1 << hid_feature)))
-					continue;
-				c->kind = hid_feature;
-				c->flags = dval;
+				retkind = hid_feature;
 				goto ret;
 			case 12:	/* End collection */
 				c->kind = hid_endcollection;
 				c->collevel--;
 				*h = *c;
-				hid_clear_local(c);
 				s->nu = 0;
 				return (1);
 			default:
@@ -289,20 +286,21 @@ hid_get_item(s, h)
 				break;
 			case 8:
 				c->report_ID = dval;
+				c->loc.pos = 0;
 				break;
 			case 9:
 				c->loc.count = dval;
 				break;
 			case 10: /* Push */
 				hi = malloc(sizeof *hi, M_TEMP, M_WAITOK);
-				*hi = s->cur;
+				*hi = *c;
 				c->next = hi;
 				break;
 			case 11: /* Pop */
 				hi = c->next;
-				oldloc = c->loc;
-				s->cur = *hi;
-				c->loc = oldloc;
+				oldpos = c->loc.pos;
+				*c = *hi;
+				c->loc.pos = oldpos;
 				free(hi, M_TEMP);
 				break;
 			default:
@@ -313,9 +311,9 @@ hid_get_item(s, h)
 		case 2:		/* Local */
 			switch (bTag) {
 			case 0:
-				if (bSize == 1) 
+				if (bSize == 1)
 					dval = c->_usage_page | (dval&0xff);
-				else if (bSize == 2) 
+				else if (bSize == 2)
 					dval = c->_usage_page | (dval&0xffff);
 				c->usage = dval;
 				if (s->nu < MAXUSAGE)
@@ -324,16 +322,16 @@ hid_get_item(s, h)
 				break;
 			case 1:
 				s->minset = 1;
-				if (bSize == 1) 
+				if (bSize == 1)
 					dval = c->_usage_page | (dval&0xff);
-				else if (bSize == 2) 
+				else if (bSize == 2)
 					dval = c->_usage_page | (dval&0xffff);
 				c->usage_minimum = dval;
 				break;
 			case 2:
-				if (bSize == 1) 
+				if (bSize == 1)
 					dval = c->_usage_page | (dval&0xff);
-				else if (bSize == 2) 
+				else if (bSize == 2)
 					dval = c->_usage_page | (dval&0xffff);
 				c->usage_maximum = dval;
 				break;
@@ -371,44 +369,51 @@ hid_get_item(s, h)
 }
 
 int
-hid_report_size(buf, len, k, idp)
-	void *buf;
-	int len;
-	enum hid_kind k;
-	u_int8_t *idp;
+hid_report_size(const void *buf, int len, enum hid_kind k, u_int8_t id)
 {
 	struct hid_data *d;
 	struct hid_item h;
-	int size, id;
+	int lo, hi;
 
-	id = 0;
-	for (d = hid_start_parse(buf, len, 1<<k); hid_get_item(d, &h); )
-		if (h.report_ID != 0)
-			id = h.report_ID;
+	h.report_ID = 0;
+	lo = hi = -1;
+	DPRINTFN(2,("hid_report_size: kind=%d id=%d\n", k, id));
+	for (d = hid_start_parse(buf, len, k); hid_get_item(d, &h); ) {
+		DPRINTFN(2,("hid_report_size: item kind=%d id=%d pos=%d "
+			    "size=%d count=%d\n",
+			    h.kind, h.report_ID, h.loc.pos, h.loc.size,
+			    h.loc.count));
+		if (h.report_ID == id && h.kind == k) {
+			if (lo < 0) {
+				lo = h.loc.pos;
+#ifdef DIAGNOSTIC
+				if (lo != 0) {
+					printf("hid_report_size: lo != 0\n");
+				}
+#endif
+			}
+			hi = h.loc.pos + h.loc.size * h.loc.count;
+			DPRINTFN(2,("hid_report_size: lo=%d hi=%d\n", lo, hi));
+		}
+	}
 	hid_end_parse(d);
-	size = h.loc.pos;
-	if (id != 0) {
-		size += 8;
-		*idp = id;	/* XXX wrong */
-	} else
-		*idp = 0;
-	return ((size + 7) / 8);
+	return ((hi - lo + 7) / 8);
 }
 
 int
-hid_locate(desc, size, u, k, loc, flags)
-	void *desc;
-	int size;
-	u_int32_t u;
-	enum hid_kind k;
-	struct hid_location *loc;
-	u_int32_t *flags;
+hid_locate(const void *desc, int size, u_int32_t u, u_int8_t id, enum hid_kind k,
+	   struct hid_location *loc, u_int32_t *flags)
 {
 	struct hid_data *d;
 	struct hid_item h;
 
-	for (d = hid_start_parse(desc, size, 1<<k); hid_get_item(d, &h); ) {
-		if (h.kind == k && !(h.flags & HIO_CONST) && h.usage == u) {
+	h.report_ID = 0;
+	DPRINTFN(5,("hid_locate: enter usage=0x%x kind=%d id=%d\n", u, k, id));
+	for (d = hid_start_parse(desc, size, k); hid_get_item(d, &h); ) {
+		DPRINTFN(5,("hid_locate: usage=0x%x kind=%d id=%d flags=0x%x\n",
+			    h.usage, h.kind, h.report_ID, h.flags));
+		if (h.kind == k && !(h.flags & HIO_CONST) &&
+		    h.usage == u && h.report_ID == id) {
 			if (loc != NULL)
 				*loc = h.loc;
 			if (flags != NULL)
@@ -423,9 +428,7 @@ hid_locate(desc, size, u, k, loc, flags)
 }
 
 u_long
-hid_get_data(buf, loc)
-	u_char *buf;
-	struct hid_location *loc;
+hid_get_data(u_char *buf, struct hid_location *loc)
 {
 	u_int hpos = loc->pos;
 	u_int hsize = loc->size;
@@ -438,7 +441,7 @@ hid_get_data(buf, loc)
 		return (0);
 
 	data = 0;
-	s = hpos / 8; 
+	s = hpos / 8;
 	for (i = hpos; i < hpos+hsize; i += 8)
 		data |= buf[i / 8] << ((i / 8 - s) * 8);
 	data >>= hpos % 8;
@@ -446,28 +449,63 @@ hid_get_data(buf, loc)
 	hsize = 32 - hsize;
 	/* Sign extend */
 	data = ((int32_t)data << hsize) >> hsize;
-	DPRINTFN(10,("hid_get_data: loc %d/%d = %lu\n", 
+	DPRINTFN(10,("hid_get_data: loc %d/%d = %lu\n",
 		    loc->pos, loc->size, (long)data));
 	return (data);
 }
 
+/*
+ * hid_is_collection(desc, size, id, usage)
+ *
+ * This function is broken in the following way.
+ *
+ * It is used to discover if the given 'id' is part of 'usage' collection
+ * in the descriptor in order to match report id against device type.
+ *
+ * The semantics of hid_start_parse() means though, that only a single
+ * kind of report is considered. The current HID code that uses this for
+ * matching is actually only looking for input reports, so this works
+ * for now.
+ * 
+ * This function could try all report kinds (input, output and feature)
+ * consecutively if necessary, but it may be better to integrate the
+ * libusbhid code which can consider multiple report kinds simultaneously
+ *
+ * Needs some thought.
+ */
 int
-hid_is_collection(desc, size, usage)
-	void *desc;
-	int size;
-	u_int32_t usage;
+hid_is_collection(const void *desc, int size, u_int8_t id, u_int32_t usage)
 {
 	struct hid_data *hd;
 	struct hid_item hi;
-	int err;
+	u_int32_t coll_usage = ~0;
 
 	hd = hid_start_parse(desc, size, hid_input);
 	if (hd == NULL)
 		return (0);
 
-	err = hid_get_item(hd, &hi) &&
-	    hi.kind == hid_collection &&
-	    hi.usage == usage;
+	DPRINTFN(2,("hid_is_collection: id=%d usage=0x%x\n", id, usage));
+	while (hid_get_item(hd, &hi)) {
+		DPRINTFN(2,("hid_is_collection: kind=%d id=%d usage=0x%x"
+			    "(0x%x)\n",
+			    hi.kind, hi.report_ID, hi.usage, coll_usage));
+
+		if (hi.kind == hid_collection &&
+		    hi.collection == HCOLL_APPLICATION)
+			coll_usage = hi.usage;
+
+		if (hi.kind == hid_endcollection)
+			coll_usage = ~0;
+
+		if (hi.kind == hid_input &&
+		    coll_usage == usage &&
+		    hi.report_ID == id) {
+			DPRINTFN(2,("hid_is_collection: found\n"));
+			hid_end_parse(hd);
+			return (1);
+		}
+	}
+	DPRINTFN(2,("hid_is_collection: not found\n"));
 	hid_end_parse(hd);
-	return (err);
+	return (0);
 }

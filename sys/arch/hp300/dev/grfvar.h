@@ -1,9 +1,43 @@
-/*	$NetBSD: grfvar.h,v 1.11 1998/06/25 23:57:34 thorpej Exp $	*/
+/*	$NetBSD: grfvar.h,v 1.24 2008/03/29 06:47:07 tsutsui Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: grfvar.h 1.11 93/08/13$
+ *
+ *	@(#)grfvar.h	8.2 (Berkeley) 9/9/93
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -53,14 +87,14 @@ struct	grf_lockpage {
 struct	grf_data {
 	int	g_flags;		/* software flags */
 	struct  grfsw *g_sw;		/* static configuration info */
-	caddr_t	g_regkva;		/* KVA of registers */
-	caddr_t	g_fbkva;		/* KVA of framebuffer */
+	uint8_t *g_regkva;		/* KVA of registers */
+	uint8_t *g_fbkva;		/* KVA of framebuffer */
 	struct	grfinfo g_display;	/* hardware description (for ioctl) */
 	struct	grf_lockpage *g_lock;	/* lock page associated with device */
 	struct	proc *g_lockp;		/* process holding lock */
 	short	*g_pid;			/* array of pids with device open */
 	int	g_lockpslot;		/* g_pid entry of g_lockp */
-	caddr_t	g_data;			/* device dependent data */
+	void *	g_data;			/* device dependent data */
 };
 
 /*
@@ -69,24 +103,25 @@ struct	grf_data {
 struct	grfsw {
 	int	gd_hwid;	/* id returned by hardware */
 	int	gd_swid;	/* id to be returned by software */
-	char	*gd_desc;	/* description printed at config time */
+	const char *gd_desc;	/* description printed at config time */
 				/* boot time init routine */
-	int	(*gd_init) __P((struct grf_data *, int, caddr_t));
+	int	(*gd_init)(struct grf_data *, int, uint8_t *);
 				/* misc function routine */
-	int	(*gd_mode) __P((struct grf_data *, int, caddr_t));
+	int	(*gd_mode)(struct grf_data *, int, void *);
 };
 
 struct	grf_softc {
-	struct	device sc_dev;		/* generic device info */
+	device_t sc_dev;		/* generic device info */
 	int	sc_scode;		/* select code; for grfdevno() */
 	struct	grf_data *sc_data;	/* display state information */
 	struct	ite_softc *sc_ite;	/* pointer to ite; may be NULL */
 };
 
 struct	grfdev_softc {
-	struct	device sc_dev;		/* generic device info */
+	device_t sc_dev;		/* generic device info */
 	struct	grf_data *sc_data;	/* generic grf data */
 	int	sc_scode;		/* select code, -1 for intio */
+	int	sc_isconsole;		/* device is the console */
 };
 
 /*
@@ -125,35 +160,15 @@ struct	grfdev_attach_args {
 extern	struct grf_data grf_cn;		/* grf_data for console device */
 
 /* grf.c prototypes */
-int	grfmap __P((dev_t, caddr_t *, struct proc *));
-int	grfunmap __P((dev_t, caddr_t, struct proc *));
-int	grfon __P((dev_t));
-int	grfoff __P((dev_t));
-int	grfaddr __P((struct grf_softc *, int));
-
-#ifndef _LKM
-#include "opt_compat_hpux.h"
-#endif
-
-#ifdef COMPAT_HPUX
-int	hpuxgrfioctl __P((dev_t, int, caddr_t, int, struct proc *));
-
-int	grflock __P((struct grf_data *, int));
-int	grfunlock __P((struct grf_data *));
-int	grfdevno __P((dev_t));
-
-int	iommap __P((dev_t, caddr_t *));
-int	iounmmap __P((dev_t, caddr_t));
-
-int	grffindpid __P((struct grf_data *));
-void	grfrmpid __P((struct grf_data *));
-int	grflckmmap __P((dev_t, caddr_t *));
-int	grflckunmmap __P((dev_t, caddr_t));
-#endif /* COMPAT_HPUX */
+int	grfmap(dev_t, void **, struct proc *);
+int	grfunmap(dev_t, void *, struct proc *);
+int	grfon(dev_t);
+int	grfoff(dev_t);
+paddr_t	grfaddr(struct grf_softc *, off_t);
 
 /* grf_subr.c prototypes */
-void	grfdev_attach __P((struct grfdev_softc *,
-	    int (*init)(struct grf_data *, int, caddr_t),
-	    caddr_t, struct grfsw *));
+void	grfdev_attach(struct grfdev_softc *,
+	    int (*init)(struct grf_data *, int, uint8_t *),
+	    void *, struct grfsw *);
 
 #endif /* _KERNEL */

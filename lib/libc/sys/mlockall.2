@@ -1,4 +1,4 @@
-.\"	$NetBSD: mlockall.2,v 1.5 1999/12/02 21:42:38 kleink Exp $
+.\"	$NetBSD: mlockall.2,v 1.13 2008/04/30 13:10:51 martin Exp $
 .\"
 .\" Copyright (c) 1999 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -15,13 +15,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,8 +38,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
-.Fd #include <sys/mman.h>
+.In sys/mman.h
 .Ft int
 .Fn mlockall "int flags"
 .Ft int
@@ -65,17 +57,17 @@ The following flags affect the behavior of
 Lock all pages currently mapped into the process's address space.
 .It Dv MCL_FUTURE
 Lock all pages mapped into the process's address space in the future,
-at the time the mapping is established.  Note that this may cause
-future mappings to fail if those mappings cause resource limits to
-be exceeded.
+at the time the mapping is established.
+Note that this may cause future mappings to fail if those mappings
+cause resource limits to be exceeded.
 .El
-.Pp 
+.Pp
 Since physical memory is a potentially scarce resource, processes are
 limited in how much they can lock down.
 A single process can lock the minimum of a system-wide
 .Dq wired pages
 limit and the per-process
-.Li RLIMIT_MEMLOCK 
+.Li RLIMIT_MEMLOCK
 resource limit.
 .Pp
 The
@@ -87,7 +79,7 @@ call will not be locked.
 .Sh RETURN VALUES
 A return value of 0 indicates that the call
 succeeded and all pages in the range have either been locked or unlocked.
-A return value of -1 indicates an error occurred and the locked
+A return value of \-1 indicates an error occurred and the locked
 status of all pages in the range remains unchanged.
 In this case, the global location
 .Va errno

@@ -1,7 +1,7 @@
-/*	$NetBSD: prim.c,v 1.5 1998/02/09 07:40:18 thorpej Exp $	*/
+/*	$NetBSD: prim.c,v 1.9 2003/10/13 14:34:25 agc Exp $	*/
 
 /*
- * Copyright (c) 1988 Mark Nudleman
+ * Copyright (c) 1988 Mark Nudelman
  * Copyright (c) 1988, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,7 +35,7 @@
 #if 0
 static char sccsid[] = "@(#)prim.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: prim.c,v 1.5 1998/02/09 07:40:18 thorpej Exp $");
+__RCSID("$NetBSD: prim.c,v 1.9 2003/10/13 14:34:25 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -697,7 +693,7 @@ search(search_forward, pattern, n, wantmatch)
 		pattern = last_pattern;
 	} else
 	{
-		(void)strcpy(lpbuf, pattern);
+		(void)strlcpy(lpbuf, pattern, sizeof(lpbuf));
 		last_pattern = lpbuf;
 	}
 #endif
@@ -798,13 +794,13 @@ search(search_forward, pattern, n, wantmatch)
 				*q = isupper(*p) ? tolower(*p) : *p;
 
 		/*
-		 * Remove any backspaces along with the preceeding char.
+		 * Remove any backspaces along with the preceding char.
 		 * This allows us to match text which is underlined or
 		 * overstruck.
 		 */
 		for (p = q = line;  *p;  p++, q++)
 			if (q > line && *p == '\b')
-				/* Delete BS and preceeding char. */
+				/* Delete BS and preceding char. */
 				q -= 2;
 			else
 				/* Otherwise, just copy. */

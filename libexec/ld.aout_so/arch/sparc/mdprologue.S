@@ -1,4 +1,4 @@
-/*	$NetBSD: mdprologue.S,v 1.7 1998/09/05 13:08:39 pk Exp $	*/
+/*	$NetBSD: mdprologue.S,v 1.9 2008/04/28 20:23:03 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,6 +41,22 @@
 _rtld_entry:
 !#PROLOGUE# 0
 	save	%sp,-96,%sp
+	
+	! use mprotect() to make the data segment executable.
+	! this is needed because the PLT is there.  doh!
+
+	call	1f
+	mov	0x4a, %g1
+1:
+	sub	%o7, 4 + 32, %o3
+	ld	[%o3 + 4], %o0
+	add	%o0, %o3, %o0
+	ld	[%o3 + 8], %o1
+	mov	7, %o2
+	ta	0
+
+	! now we can continue as before.
+
 L.1B:
 	call	L.2B
 	sethi	%hi((__GLOBAL_OFFSET_TABLE_-(L.1B-.))),%l7

@@ -1,4 +1,4 @@
-/* $NetBSD: dwlpx_pci.c,v 1.9 1998/04/15 00:48:58 mjacob Exp $ */
+/* $NetBSD: dwlpx_pci.c,v 1.12 2007/03/04 05:59:11 christos Exp $ */
 
 /*
  * Copyright (c) 1997 by Matthew Jacob
@@ -32,13 +32,14 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dwlpx_pci.c,v 1.9 1998/04/15 00:48:58 mjacob Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dwlpx_pci.c,v 1.12 2007/03/04 05:59:11 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-#include <vm/vm.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -46,7 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: dwlpx_pci.c,v 1.9 1998/04/15 00:48:58 mjacob Exp $")
 #include <alpha/pci/dwlpxreg.h>
 #include <alpha/pci/dwlpxvar.h>
 
-#define	KV(_addr)	((caddr_t)ALPHA_PHYS_TO_K0SEG((_addr)))
+#define	KV(_addr)	((void *)ALPHA_PHYS_TO_K0SEG((_addr)))
 
 void		dwlpx_attach_hook __P((struct device *, struct device *,
 		    struct pcibus_attach_args *));
@@ -141,7 +142,7 @@ dwlpx_conf_read(cpv, tag, offset)
 	u_int32_t rvp;
 
 	if (ccp == NULL) {
-		panic("NULL ccp in dwlpx_conf_read\n");
+		panic("NULL ccp in dwlpx_conf_read");
 	}
 	sc = ccp->cc_sc;
 	secondary = tag >> 24;
@@ -211,7 +212,7 @@ dwlpx_conf_write(cpv, tag, offset, data)
 	u_int32_t rvp;
 
 	if (ccp == NULL) {
-		panic("NULL ccp in dwlpx_conf_write\n");
+		panic("NULL ccp in dwlpx_conf_write");
 	}
 	sc = ccp->cc_sc;
 	secondary = tag >> 24;

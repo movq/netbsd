@@ -1,4 +1,4 @@
-/* $NetBSD: lk201var.h,v 1.2 1998/10/22 17:55:20 drochner Exp $ */
+/* $NetBSD: lk201var.h,v 1.6 2005/12/11 12:21:20 christos Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,7 +27,7 @@
  */
 
 struct lk201_attachment {
-	int (*sendchar) __P((void *, u_char));
+	int (*sendchar)(void *, u_char);
 	void *cookie;
 };
 
@@ -43,9 +37,11 @@ struct lk201_state {
 	int down_keys_list[LK_KLL];
 	int bellvol;
 	int leds_state;
+	int kcvol;
 };
 
-int lk201_init __P((struct lk201_state *));
-int lk201_decode __P((struct lk201_state *, int, u_int *, int *));
-void lk201_bell __P((struct lk201_state *, struct wskbd_bell_data *));
-void lk201_set_leds __P((struct lk201_state *, int));
+int lk201_init(struct lk201_state *);
+int lk201_decode(struct lk201_state *, int, u_int *, int *);
+void lk201_bell(struct lk201_state *, struct wskbd_bell_data *);
+void lk201_set_leds(struct lk201_state *, int);
+void lk201_set_keyclick(struct lk201_state *, int);

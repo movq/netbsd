@@ -1,4 +1,4 @@
-/* $NetBSD: amiga_bus_simple_4.c,v 1.2 2000/02/01 05:21:24 mhitch Exp $ */
+/* $NetBSD: amiga_bus_simple_4.c,v 1.5 2008/04/28 20:23:12 martin Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(1, "$NetBSD: amiga_bus_simple_4.c,v 1.5 2008/04/28 20:23:12 martin Exp $");
 
 #define AMIGA_SIMPLE_BUS_STRIDE 4		/* 1 byte per long */
 #define AMIGA_SIMPLE_BUS_WORD_METHODS
@@ -52,16 +48,13 @@ bsrm(oabs(bsrm2_swap_), u_int16_t);
 bswm(oabs(bswm2_swap_), u_int16_t);
 
 void
-oabs(bsrm2_swap_)(handle, offset, pointer, count)
-	bus_space_handle_t handle;
-	bus_size_t offset;
-	u_int16_t *pointer;
-	bus_size_t count;
+oabs(bsrm2_swap_)(bus_space_handle_t handle, bus_size_t offset,
+	 	  u_int16_t *pointer, bus_size_t count)
 {
 	volatile u_int16_t *p;
 
 	p = (volatile u_int16_t *)(handle + offset * AMIGA_SIMPLE_BUS_STRIDE);
-	
+
 	while (count > 0) {
 		*pointer++ = bswap16(*p);
 		--count;
@@ -69,16 +62,13 @@ oabs(bsrm2_swap_)(handle, offset, pointer, count)
 }
 
 void
-oabs(bswm2_swap_)(handle, offset, pointer, count)
-	bus_space_handle_t handle;
-	bus_size_t offset;
-	const u_int16_t *pointer;
-	bus_size_t count;
+oabs(bswm2_swap_)(bus_space_handle_t handle, bus_size_t offset,
+		  const u_int16_t *pointer, bus_size_t count)
 {
 	volatile u_int16_t *p;
 
 	p = (volatile u_int16_t *)(handle + offset * AMIGA_SIMPLE_BUS_STRIDE);
-	
+
 	while (count > 0) {
 		*p = bswap16(*pointer);
 		++pointer;
@@ -93,7 +83,7 @@ const struct amiga_bus_space_methods amiga_bus_stride_4swap = {
         oabs(bsu_),
         0,
         0,
- 
+
         oabs(bsr1_),
         oabs(bsw1_),
         oabs(bsrm1_),

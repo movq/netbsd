@@ -1,4 +1,4 @@
-/*	$NetBSD: swapctl.c,v 1.13 2000/03/13 22:59:22 soren Exp $	*/
+/*	$NetBSD: swapctl.c,v 1.33 2008/05/29 14:51:25 mrg Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997, 1999 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,13 +30,25 @@
  * swapctl command:
  *	-A		add all devices listed as `sw' in /etc/fstab (also
  *			(sets the dump device, if listed in fstab)
- *	-D <dev>	set dumpdev to <dev>
+ *	-D [<dev>|none]	set dumpdev to <dev> or disable dumps
+ *	-z		show dumpdev
  *	-U		remove all devices listed as `sw' in /etc/fstab.
- *	-t [blk|noblk]	if -A or -U , add (remove) either all block device
- *			or all non-block devices
+ *	-t [blk|noblk|auto]
+ *			if -A or -U , add (remove) either all block device
+ *			or all non-block devices, or all swap partitions
+ *	-q		check if any swap or dump devices are defined in
+ *			/etc/fstab
  *	-a <dev>	add this device
- *	-d <dev>	remove this swap device (not supported yet)
+ *	-d <dev>	remove this swap device
+ *	-f		with -A -t auto, use the first swap as dump device
+ *	-g		use gigabytes
+ *	-h		use humanize_number(3) for listing
  *	-l		list swap devices
+ *	-m		use megabytes
+ *	-n		print actions, but do not add/remove swap or
+ *			with -A/-U
+ *	-o		with -A -t auto only configure the first swap as dump,
+ *			(similar to -f), but do not add any further swap devs
  *	-s		short listing of swap devices
  *	-k		use kilobytes
  *	-p <pri>	use this priority
@@ -51,11 +61,19 @@
  *			swapon(8) command)
  *	<dev>		add this device
  */
+#include <sys/cdefs.h>
+
+#ifndef lint
+__RCSID("$NetBSD: swapctl.c,v 1.33 2008/05/29 14:51:25 mrg Exp $");
+#endif
+
 
 #include <sys/param.h>
 #include <sys/stat.h>
-
-#include <vm/vm_swap.h>
+#include <sys/swap.h>
+#include <sys/sysctl.h>
+#include <sys/disk.h>
+#include <sys/disklabel.h>
 
 #include <unistd.h>
 #include <err.h>
@@ -64,6 +82,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fstab.h>
+#include <fcntl.h>
+#include <util.h>
+#include <paths.h>
 
 #include "swapctl.h"
 
@@ -80,6 +101,8 @@ int	command;
 #define	CMD_d		0x20	/* delete a swap file/device */
 #define	CMD_l		0x40	/* list swap files/devices */
 #define	CMD_s		0x80	/* summary of swap files/devices */
+#define	CMD_z		0x100	/* show dump device */
+#define	CMD_q		0x200	/* check for dump/swap in /etc/fstab */
 
 #define	SET_COMMAND(cmd) \
 do { \
@@ -93,56 +116,72 @@ do { \
  * line, and the ones which require that none exist.
  */
 #define	REQUIRE_PATH	(CMD_D | CMD_a | CMD_c | CMD_d)
-#define	REQUIRE_NOPATH	(CMD_A | CMD_U | CMD_l | CMD_s)
+#define	REQUIRE_NOPATH	(CMD_A | CMD_U | CMD_l | CMD_s | CMD_z | CMD_q)
 
 /*
  * Option flags, and the commands with which they are valid.
  */
-int	kflag;		/* display in 1K blocks */
+int	kflag;		/* display in 1K^x blocks */
 #define	KFLAG_CMDS	(CMD_l | CMD_s)
+#define MFLAG_CMDS	(CMD_l | CMD_s)
+#define GFLAG_CMDS	(CMD_l | CMD_s)
+
+int	hflag;		/* display with humanize_number */
+#define HFLAG_CMDS	(CMD_l | CMD_s)
 
 int	pflag;		/* priority was specified */
 #define	PFLAG_CMDS	(CMD_A | CMD_a | CMD_c)
 
-char	*tflag;		/* swap device type (blk or noblk) */
-#define	TFLAG_CMDS	(CMD_A | CMD_U )
+char	*tflag;		/* swap device type (blk, noblk, auto) */
+int	autoflag;	/* 1, if tflag is "auto" */
+#define	TFLAG_CMDS	(CMD_A | CMD_U)
+
+int	fflag;		/* first swap becomes dump */
+#define	FFLAG_CMDS	(CMD_A)
+
+int	oflag;		/* only autoset dump device */
+#define	OFLAG_CMDS	(CMD_A)
+
+int	nflag;		/* no execute, just print actions */
+#define	NFLAG_CMDS	(CMD_A | CMD_U)
 
 int	pri;		/* uses 0 as default pri */
 
-static	void change_priority __P((const char *));
-static	int  add_swap __P((const char *, int));
-static	int  delete_swap __P((const char *));
-static	void set_dumpdev __P((const char *));
-	int  main __P((int, char *[]));
-static	void do_fstab __P((int));
-static	void usage __P((void));
-static	void swapon_command __P((int, char **));
+static	void change_priority(char *);
+static	int  add_swap(char *, int);
+static	int  delete_swap(char *);
+static	void set_dumpdev(char *);
+static	int get_dumpdev(void);
+static	void do_fstab(int);
+static	int check_fstab(void);
+static	void do_localdevs(int);
+static	void do_localdisk(const char *, int);
+static	int do_wedgesofdisk(int fd, int);
+static	int do_partitionsofdisk(const char *, int fd, int);
+static	void usage(void);
+static	void swapon_command(int, char **);
 #if 0
-static	void swapoff_command __P((int, char **));
+static	void swapoff_command(int, char **);
 #endif
 
-extern	char *__progname;	/* from crt0.o */
-
 int
-main(argc, argv)
-	int	argc;
-	char	*argv[];
+main(int argc, char *argv[])
 {
 	int	c;
 
-	if (strcmp(__progname, "swapon") == 0) {
+	if (strcmp(getprogname(), "swapon") == 0) {
 		swapon_command(argc, argv);
 		/* NOTREACHED */
 	}
 
 #if 0
-	if (strcmp(__progname, "swapoff") == 0) {
+	if (strcmp(getprogname(), "swapoff") == 0) {
 		swapoff_command(argc, argv);
 		/* NOTREACHED */
 	}
 #endif
 
-	while ((c = getopt(argc, argv, "ADUacdlkp:st:")) != -1) {
+	while ((c = getopt(argc, argv, "ADUacdfghklmnop:qst:z")) != -1) {
 		switch (c) {
 		case 'A':
 			SET_COMMAND(CMD_A);
@@ -168,18 +207,46 @@ main(argc, argv)
 			SET_COMMAND(CMD_d);
 			break;
 
-		case 'l':
-			SET_COMMAND(CMD_l);
+		case 'f':
+			fflag = 1;
+			break;
+
+		case 'g':
+			kflag = 3; /* 1k ^ 3 */
+			break;
+
+		case 'h':
+			hflag = 1;
 			break;
 
 		case 'k':
 			kflag = 1;
 			break;
 
+		case 'l':
+			SET_COMMAND(CMD_l);
+			break;
+
+		case 'm':
+			kflag = 2; /* 1k ^ 2 */
+			break;
+
+		case 'n':
+			nflag = 1;
+			break;
+
+		case 'o':
+			oflag = 1;
+			break;
+
 		case 'p':
 			pflag = 1;
 			/* XXX strtol() */
 			pri = atoi(optarg);
+			break;
+
+		case 'q':
+			SET_COMMAND(CMD_q);
 			break;
 
 		case 's':
@@ -190,6 +257,12 @@ main(argc, argv)
 			if (tflag != NULL)
 				usage();
 			tflag = optarg;
+			if (strcmp(tflag, "auto") == 0)
+				autoflag = 1;
+			break;
+
+		case 'z':
+			SET_COMMAND(CMD_z);
 			break;
 
 		default:
@@ -224,23 +297,29 @@ main(argc, argv)
 	if ((command == CMD_c) && pflag == 0)
 		usage();
 
+	/* -f and -o are mutualy exclusive */
+	if (fflag && oflag)
+		usage();
+		
 	/* Sanity-check -t */
 	if (tflag != NULL) {
 		if (command != CMD_A && command != CMD_U)
 			usage();
 		if (strcmp(tflag, "blk") != 0 &&
-		    strcmp(tflag, "noblk") != 0)
+		    strcmp(tflag, "noblk") != 0 &&
+		    strcmp(tflag, "auto") != 0)
 			usage();
 	}
 
 	/* Dispatch the command. */
 	switch (command) {
 	case CMD_l:
-		list_swap(pri, kflag, pflag, 0, 1);
+		if (!list_swap(pri, kflag, pflag, 0, 1, hflag))
+			exit(1);
 		break;
 
 	case CMD_s:
-		list_swap(pri, kflag, pflag, 0, 0);
+		list_swap(pri, kflag, pflag, 0, 0, hflag);
 		break;
 
 	case CMD_c:
@@ -258,16 +337,37 @@ main(argc, argv)
 		break;
 
 	case CMD_A:
-		do_fstab(1);
+		if (autoflag)
+			do_localdevs(1);
+		else
+			do_fstab(1);
 		break;
 
 	case CMD_D:
 		set_dumpdev(argv[0]);
 		break;
 
-	case CMD_U:
-		do_fstab(0);
+	case CMD_z:
+		if (!get_dumpdev())
+			exit(1);
 		break;
+
+	case CMD_U:
+		if (autoflag)
+			do_localdevs(0);
+		else
+			do_fstab(0);
+		break;
+	case CMD_q:
+		if (check_fstab()) {
+			printf("%s: there are swap or dump devices defined in "
+			    _PATH_FSTAB "\n", getprogname());
+			exit(0);
+		} else {
+			printf("%s: no swap or dump devices in "
+			    _PATH_FSTAB "\n", getprogname());
+			exit(1);
+		}
 	}
 
 	exit(0);
@@ -277,9 +377,7 @@ main(argc, argv)
  * swapon_command: emulate the old swapon(8) program.
  */
 static void
-swapon_command(argc, argv)
-	int argc;
-	char **argv;
+swapon_command(int argc, char **argv)
 {
 	int ch, fiztab = 0;
 
@@ -324,8 +422,8 @@ swapon_command(argc, argv)
 	/* NOTREACHED */
 
  swapon_usage:
-	fprintf(stderr, "usage: %s -a [-t blk|noblk]\n", __progname);
-	fprintf(stderr, "       %s <path> ...\n", __progname);
+	fprintf(stderr, "usage: %s -a [-t blk|noblk]\n", getprogname());
+	fprintf(stderr, "       %s <path> ...\n", getprogname());
 	exit(1);
 }
 
@@ -333,21 +431,18 @@ swapon_command(argc, argv)
  * change_priority:  change the priority of a swap device.
  */
 static void
-change_priority(path)
-	const char	*path;
+change_priority(char *path)
 {
 
 	if (swapctl(SWAP_CTL, path, pri) < 0)
-		warn("%s", path);
+		err(1, "%s", path);
 }
 
 /*
  * add_swap:  add the pathname to the list of swap devices.
  */
 static int
-add_swap(path, priority)
-	const char *path;
-	int priority;
+add_swap(char *path, int priority)
 {
 	struct stat sb;
 
@@ -355,14 +450,24 @@ add_swap(path, priority)
 		goto oops;
 
 	if (sb.st_mode & S_IROTH) 
-		warnx("%s is readable by the world", path);
+		warnx("WARNING: %s is readable by the world", path);
 	if (sb.st_mode & S_IWOTH)
-		warnx("%s is writable by the world", path);
+		warnx("WARNING: %s is writable by the world", path);
+
+	if (fflag || oflag) {
+		set_dumpdev(path);
+		if (oflag)
+			exit(0);
+		else
+			fflag = 0;
+	}
+
+	if (nflag)
+		return 1;
 
 	if (swapctl(SWAP_ON, path, priority) < 0) {
 oops:
-		warn("%s", path);
-		return (0);
+		err(1, "%s", path);
 	}
 	return (1);
 }
@@ -371,31 +476,201 @@ oops:
  * delete_swap:  remove the pathname to the list of swap devices.
  */
 static int
-delete_swap(path)
-	const char *path;
+delete_swap(char *path)
 {
 
-	if (swapctl(SWAP_OFF, path, pri) < 0) {
-		warn("%s", path);
-		return (0);
-	}
+	if (nflag)
+		return 1;
+
+	if (swapctl(SWAP_OFF, path, pri) < 0) 
+		err(1, "%s", path);
 	return (1);
 }
 
 static void
-set_dumpdev(path)
-	const char *path;
+set_dumpdev(char *path)
 {
+	int rv = 0;
 
-	if (swapctl(SWAP_DUMPDEV, path, NULL) == -1)
-		warn("could not set dump device to %s", path);
+	if (!nflag) {
+		if (strcmp(path, "none") == 0) 
+			rv = swapctl(SWAP_DUMPOFF, NULL, 0);
+		else
+			rv = swapctl(SWAP_DUMPDEV, path, 0);
+	}
+
+	if (rv == -1)
+		err(1, "could not set dump device to %s", path);
 	else
-		printf("%s: setting dump device to %s\n", __progname, path);
+		printf("%s: setting dump device to %s\n", getprogname(), path);
+}
+
+static int
+get_dumpdev(void)
+{
+	dev_t	dev;
+	char 	*name;
+
+	if (swapctl(SWAP_GETDUMPDEV, &dev, 0) == -1) {
+		warn("could not get dump device");
+		return 0;
+	} else if (dev == NODEV) {
+		printf("no dump device set\n");
+		return 0;
+	} else {
+		name = devname(dev, S_IFBLK);
+		printf("dump device is ");
+		if (name)
+			printf("%s\n", name);
+		else
+			printf("major %d minor %d\n", major(dev), minor(dev));
+	}
+	return 1;
 }
 
 static void
-do_fstab(add)
-	int add;
+do_localdevs(int add)
+{
+	size_t ressize;
+	char *disknames, *disk;
+	static const char mibname[] = "hw.disknames";
+
+	ressize = 0;
+	if (sysctlbyname(mibname, NULL, &ressize, NULL, 0))
+		return;
+	ressize += 200;	/* add some arbitrary slope */
+	disknames = malloc(ressize);
+	if (sysctlbyname(mibname, disknames, &ressize, NULL, 0) == 0) {
+		for (disk = strtok(disknames, " "); disk;
+		    disk = strtok(NULL, " "))
+			do_localdisk(disk, add);
+	}
+	free(disknames);
+}
+
+static void
+do_localdisk(const char *disk, int add)
+{
+	int fd;
+	char dvname[MAXPATHLEN];
+
+	if ((fd = opendisk(disk, O_RDONLY, dvname, sizeof(dvname), 0)) == -1)
+		return;
+
+	if (!do_wedgesofdisk(fd, add))
+		do_partitionsofdisk(disk, fd, add);
+
+	close(fd);
+}
+
+static int
+do_wedgesofdisk(int fd, int add)
+{
+	char devicename[MAXPATHLEN];
+	struct dkwedge_info *dkw;
+	struct dkwedge_list dkwl;
+	size_t bufsize;
+	u_int i;
+
+	dkw = NULL;
+	dkwl.dkwl_buf = dkw;
+	dkwl.dkwl_bufsize = 0;
+
+	for (;;) {
+		if (ioctl(fd, DIOCLWEDGES, &dkwl) == -1)
+			return 0;
+		if (dkwl.dkwl_nwedges == dkwl.dkwl_ncopied)
+			break;
+		bufsize = dkwl.dkwl_nwedges * sizeof(*dkw);
+		if (dkwl.dkwl_bufsize < bufsize) {
+			dkw = realloc(dkwl.dkwl_buf, bufsize);
+			if (dkw == NULL)
+				return 0;
+			dkwl.dkwl_buf = dkw;
+			dkwl.dkwl_bufsize = bufsize;
+		}
+	}
+
+	for (i = 0; i < dkwl.dkwl_ncopied; i++) {
+		if (strcmp(dkw[i].dkw_ptype, DKW_PTYPE_SWAP) != 0)
+			continue;
+		snprintf(devicename, sizeof(devicename), "%s%s", _PATH_DEV,
+		    dkw[i].dkw_devname);
+		devicename[sizeof(devicename)-1] = '\0';
+
+		if (add) {
+			if (add_swap(devicename, pri)) {
+				printf(
+			    	"%s: adding %s as swap device at priority 0\n",
+				    getprogname(), devicename);
+			}
+		} else {
+			if (delete_swap(devicename)) {
+				printf(
+				    "%s: removing %s as swap device\n",
+				    getprogname(), devicename);
+			}
+		}
+
+	}
+
+	free(dkw);
+	return dkwl.dkwl_nwedges != 0;
+}
+
+static int
+do_partitionsofdisk(const char *prefix, int fd, int add)
+{
+	char devicename[MAXPATHLEN];
+	struct disklabel lab;
+	uint i;
+
+	if (ioctl(fd, DIOCGDINFO, &lab) != 0)
+		return 0;
+
+	for (i = 0; i < lab.d_npartitions; i++) {
+		if (lab.d_partitions[i].p_fstype != FS_SWAP)
+			continue;
+		snprintf(devicename, sizeof(devicename), "%s%s%c", _PATH_DEV,
+		    prefix, 'a'+i);
+		devicename[sizeof(devicename)-1] = '\0';
+
+		if (add) {
+			if (add_swap(devicename, pri)) {
+				printf(
+			    	"%s: adding %s as swap device at priority 0\n",
+				    getprogname(), devicename);
+			}
+		} else {
+			if (delete_swap(devicename)) {
+				printf(
+				    "%s: removing %s as swap device\n",
+				    getprogname(), devicename);
+			}
+		}
+	}
+
+	return 1;
+}
+
+static int
+check_fstab(void)
+{
+	struct	fstab *fp;
+
+	while ((fp = getfsent()) != NULL) {
+		if (strcmp(fp->fs_type, "dp") == 0)
+			return 1;
+
+		if (strcmp(fp->fs_type, "sw") == 0)
+			return 1;
+	}
+
+	return 0;
+}
+
+static void
+do_fstab(int add)
 {
 	struct	fstab *fp;
 	char	*s;
@@ -403,14 +678,21 @@ do_fstab(add)
 	struct	stat st;
 	int	isblk;
 	int	gotone = 0;
+
+#ifdef RESCUEDIR
+#define PATH_MOUNT	RESCUEDIR "/mount_nfs"
+#define PATH_UMOUNT	RESCUEDIR "/umount"
+#else
 #define PATH_MOUNT	"/sbin/mount_nfs"
 #define PATH_UMOUNT	"/sbin/umount"
+#endif
+
 	char	cmd[2*PATH_MAX+sizeof(PATH_MOUNT)+2];
 
 #define PRIORITYEQ	"priority="
 #define NFSMNTPT	"nfsmntpt="
 	while ((fp = getfsent()) != NULL) {
-		const char *spec;
+		char *spec;
 
 		spec = fp->fs_spec;
 		cmd[0] = '\0';
@@ -422,6 +704,11 @@ do_fstab(add)
 
 		if (strcmp(fp->fs_type, "sw") != 0)
 			continue;
+
+		/* handle dp as mnt option */
+		if (strstr(fp->fs_mntops, "dp") && add)
+			set_dumpdev(spec);
+
 		isblk = 0;
 
 		if ((s = strstr(fp->fs_mntops, PRIORITYEQ)) != NULL) {
@@ -452,7 +739,7 @@ do_fstab(add)
 
 			if (strlen(spec) == 0) {
 				warnx("empty mountpoint");
-				free((char *)spec);
+				free(spec);
 				continue;
 			}
 			if (add) {
@@ -471,7 +758,7 @@ do_fstab(add)
 			 * Determine blk-ness.
 			 */
 			if (stat(spec, &st) < 0) {
-				warn(spec);
+				warn("%s", spec);
 				continue;
 			}
 			if (S_ISBLK(st.st_mode))
@@ -493,14 +780,14 @@ do_fstab(add)
 				gotone = 1;
 				printf(
 			    	"%s: adding %s as swap device at priority %d\n",
-				    __progname, fp->fs_spec, (int)priority);
+				    getprogname(), fp->fs_spec, (int)priority);
 			}
 		} else {
 			if (delete_swap(spec)) {
 				gotone = 1;
 				printf(
 				    "%s: removing %s as swap device\n",
-				    __progname, fp->fs_spec);
+				    getprogname(), fp->fs_spec);
 			}
 			if (cmd[0]) {
 				if (system(cmd) != 0) {
@@ -511,23 +798,26 @@ do_fstab(add)
 		}
 
 		if (spec != fp->fs_spec)
-			free((char *)spec);
+			free(spec);
 	}
 	if (gotone == 0)
 		exit(1);
 }
 
 static void
-usage()
+usage(void)
 {
+	const char *progname = getprogname();
 
-	fprintf(stderr, "usage: %s -A [-p priority] [-t blk|noblk]\n",
-	    __progname);
-	fprintf(stderr, "       %s -D dumppath\n", __progname);
-	fprintf(stderr, "       %s -U [-t blk|noblk]\n", __progname);
-	fprintf(stderr, "       %s -a [-p priority] path\n", __progname);
-	fprintf(stderr, "       %s -c -p priority path\n", __progname);
-	fprintf(stderr, "       %s -d path\n", __progname);
-	fprintf(stderr, "       %s -l | -s [-k]\n", __progname);
+	fprintf(stderr, "usage: %s -A [-f|-o] [-n] [-p priority] "
+	    "[-t blk|noblk|auto]\n", progname);
+	fprintf(stderr, "       %s -a [-p priority] path\n", progname);
+	fprintf(stderr, "       %s -q\n", progname);
+	fprintf(stderr, "       %s -c -p priority path\n", progname);
+	fprintf(stderr, "       %s -D dumpdev|none\n", progname);
+	fprintf(stderr, "       %s -d path\n", progname);
+	fprintf(stderr, "       %s -l | -s [-k|-m|-g|-h]\n", progname);
+	fprintf(stderr, "       %s -U [-n] [-t blk|noblk|auto]\n", progname);
+	fprintf(stderr, "       %s -z\n", progname);
 	exit(1);
 }

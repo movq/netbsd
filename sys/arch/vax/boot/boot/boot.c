@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.4 1999/10/23 14:42:22 ragge Exp $ */
+/*	$NetBSD: boot.c,v 1.26 2005/12/24 22:45:40 perry Exp $ */
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,11 +30,17 @@
  *	@(#)boot.c	7.15 (Berkeley) 5/4/91
  */
 
-#include "sys/param.h"
-#include "sys/reboot.h"
-#include "lib/libsa/stand.h"
+#include <sys/param.h>
+#include <sys/reboot.h>
+#include <sys/boot_flag.h>
+
+#include <lib/libsa/stand.h>
+#include <lib/libsa/loadfile.h>
+#include <lib/libkern/libkern.h>
 
 #define V750UCODE(x)    ((x>>8)&255)
+
+#include "machine/rpb.h"
 
 #include "vaxstand.h"
 
@@ -49,15 +51,20 @@
  */
 
 char line[100];
-int	devtype, bootdev, howto, debug;
+int	bootdev, debug;
 extern	unsigned opendev;
-extern  unsigned *bootregs;
 
-void	usage(), boot(), halt();
+void	usage(char *), boot(char *), halt(char *);
+void	Xmain(void);
+void	autoconf(void);
+int	getsecs(void);
+int	setjmp(int *);
+int	testkey(void);
+void	loadpcs(void);
 
-struct vals {
+const struct vals {
 	char	*namn;
-	void	(*func)();
+	void	(*func)(char *);
 	char	*info;
 } val[] = {
 	{"?", usage, "Show this help menu"},
@@ -67,26 +74,42 @@ struct vals {
 	{0, 0},
 };
 
-char *filer[] = {
-	"netbsd",
-	"netbsd.gz",
-	"netbsd.old",
-	"gennetbsd",
-	0,
+static struct {
+	char name[12];
+	int quiet;
+} filelist[] = {
+	{ "netbsd.vax", 1 },
+	{ "netbsd", 0 },
+	{ "netbsd.gz", 0 },
+	{ "netbsd.old", 0 },
+	{ "gennetbsd", 0 },
+	{ "", 0 },
 };
 
-Xmain()
-{
-	int io, type, sluttid, askname, filindex = 0;
-	int j, senast = 0, nu;
+int jbuf[10];
+int sluttid, senast, skip, askname;
+struct rpb bootrpb;
 
-	io=0;
+void
+Xmain(void)
+{
+	int io;
+	int j, nu;
+	u_long marks[MARK_MAX];
+	extern const char bootprog_rev[], bootprog_date[];
+
+	io = 0;
+	skip = 1;
 	autoconf();
 
-	askname = howto & RB_ASKNAME;
-	printf("\n\r>> NetBSD/vax boot [%s %s] <<\n", __DATE__, __TIME__);
+	askname = bootrpb.rpb_bootr5 & RB_ASKNAME;
+	printf("\n\r>> NetBSD/vax boot [%s %s] <<\n", bootprog_rev,
+		bootprog_date);
 	printf(">> Press any key to abort autoboot  ");
 	sluttid = getsecs() + 5;
+	senast = 0;
+	skip = 0;
+	setjmp(jbuf);
 	for (;;) {
 		nu = sluttid - getsecs();
 		if (senast != nu)
@@ -95,6 +118,7 @@ Xmain()
 			break;
 		senast = nu;
 		if ((j = (testkey() & 0177))) {
+			skip = 1;
 			if (j != 10 && j != 13) {
 				printf("\nPress '?' for help");
 				askname = 1;
@@ -102,25 +126,43 @@ Xmain()
 			break;
 		}
 	}
+	skip = 1;
 	printf("\n");
+	if (setjmp(jbuf))
+		askname = 1;
 
 	/* First try to autoboot */
 	if (askname == 0) {
-		type = (devtype >> B_TYPESHIFT) & B_TYPEMASK;
-		if ((unsigned)type < ndevs && devsw[type].dv_name)
-			while (filer[filindex]) {
-				errno = 0;
-				printf("> boot %s\n", filer[filindex]);
-				exec(filer[filindex++], 0, 0);
-				printf("boot failed: %s\n", strerror(errno));
-				if (testkey())
-					break;
+		int fileindex;
+		for (fileindex = 0; filelist[fileindex].name[0] != '\0';
+		    fileindex++) {
+			int err;
+			errno = 0;
+			if (!filelist[fileindex].quiet)
+				printf("> boot %s\n", filelist[fileindex].name);
+			marks[MARK_START] = 0;
+			err = loadfile(filelist[fileindex].name, marks,
+			    LOAD_KERNEL|COUNT_KERNEL);
+			if (err == 0) {
+				machdep_start((char *)marks[MARK_ENTRY],
+						      marks[MARK_NSYM],
+					      (void *)marks[MARK_START],
+					      (void *)marks[MARK_SYM],
+					      (void *)marks[MARK_END]);
 			}
+			if (!filelist[fileindex].quiet)
+				printf("%s: boot failed: %s\n",
+				    filelist[fileindex].name, strerror(errno));
+#if 0 /* Will hang VAX 4000 machines */
+			if (testkey())
+				break;
+#endif
+		}
 	}
 
 	/* If any key pressed, go to conversational boot */
 	for (;;) {
-		struct vals *v = &val[0];
+		const struct vals *v = &val[0];
 		char *c, *d;
 
 		printf("> ");
@@ -133,7 +175,7 @@ Xmain()
 		if (c[0] == 0)
 			continue;
 
-		if ((d = index(c, ' ')))
+		if ((d = strchr(c, ' ')))
 			*d++ = 0;
 
 		while (v->namn) {
@@ -145,21 +187,21 @@ Xmain()
 			(*v->func)(d);
 		else
 			printf("Unknown command: %s\n", c);
-			
 	}
 }
 
 void
-halt()
+halt(char *hej)
 {
-	asm("halt");
+	__asm("halt");
 }
 
 void
-boot(arg)
-	char *arg;
+boot(char *arg)
 {
 	char *fn = "netbsd";
+	int howto, fl, err;
+	u_long marks[MARK_MAX];
 
 	if (arg) {
 		while (*arg == ' ')
@@ -167,7 +209,7 @@ boot(arg)
 
 		if (*arg != '-') {
 			fn = arg;
-			if ((arg = index(arg, ' '))) {
+			if ((arg = strchr(arg, ' '))) {
 				*arg++ = 0;
 				while (*arg == ' ')
 					arg++;
@@ -175,22 +217,30 @@ boot(arg)
 				goto load;
 		}
 		if (*arg != '-') {
-fail:			printf("usage: boot [filename] [-asd]\n");
+fail:			printf("usage: boot [filename] [-asdqv]\n");
 			return;
 		}
 
+		howto = 0;
 		while (*++arg) {
-			if (*arg == 'a')
-				howto |= RB_ASKNAME;
-			else if (*arg == 'd')
-				howto |= RB_KDB;
-			else if (*arg == 's')
-				howto |= RB_SINGLE;
-			else
+			fl = 0;
+			BOOT_FLAG(*arg, fl);
+			if (!fl)
 				goto fail;
+			howto |= fl;
 		}
+		bootrpb.rpb_bootr5 = howto;
 	}
-load:	exec(fn, 0, 0);
+load:
+	marks[MARK_START] = 0;
+	err = loadfile(fn, marks, LOAD_KERNEL|COUNT_KERNEL);
+	if (err == 0) {
+		machdep_start((char *)marks[MARK_ENTRY],
+				      marks[MARK_NSYM],
+			      (void *)marks[MARK_START],
+			      (void *)marks[MARK_SYM],
+			      (void *)marks[MARK_END]);
+	}
 	printf("Boot failed: %s\n", strerror(errno));
 }
 
@@ -208,12 +258,13 @@ load:	exec(fn, 0, 0);
 
 #define	extzv(one, two, three,four)	\
 ({			\
-	asm __volatile (" extzv %0,%3,(%1),(%2)+"	\
+	__asm volatile ("extzv %0,%3,%1,%2"	\
 			:			\
-			: "g"(one),"g"(two),"g"(three),"g"(four));	\
+			: "g"(one),"m"(two),"mo>"(three),"g"(four));	\
 })
 
 
+void
 loadpcs()
 {
 	static int pcsdone = 0;
@@ -260,7 +311,7 @@ loadpcs()
 	ip = (int *)PCS_PATCHADDR;
 	jp = (int *)0;
 	for (i=0; i < PCS_BITCNT; i++) {
-		extzv(i,jp,ip,1);
+		extzv(i,*jp,*ip++,1);
 	}
 	*((int *)PCS_PATCHBIT) = 0;
 
@@ -270,7 +321,7 @@ loadpcs()
 	ip = (int *)PCS_PCSADDR;
 	jp = (int *)1024;
 	for (i=j=0; j < PCS_MICRONUM * 4; i+=20, j++) {
-		extzv(i,jp,ip,20);
+		extzv(i,*jp,*ip++,20);
 	}
 
 	/*
@@ -287,9 +338,9 @@ loadpcs()
 }
 
 void
-usage()
+usage(char *hej)
 {
-	struct vals *v = &val[0];
+	const struct vals *v = &val[0];
 
 	printf("Commands:\n");
 	while (v->namn) {

@@ -1,34 +1,37 @@
-/*	$NetBSD: arp.c,v 1.1.1.1 1999/12/11 22:24:07 veego Exp $	*/
+/*	$NetBSD: arp.c,v 1.6 2007/04/14 20:34:19 martin Exp $	*/
 
 /*
  * arp.c (C) 1995-1998 Darren Reed
  *
- * Redistribution and use in source and binary forms are permitted
- * provided that this notice is preserved and due credit is given
- * to the original author and the contributors.
+ * See the IPFILTER.LICENCE file for details on licencing.
  */
 #if !defined(lint)
 static const char sccsid[] = "@(#)arp.c	1.4 1/11/96 (C)1995 Darren Reed";
-static const char rcsid[] = "@(#)Id: arp.c,v 2.1 1999/08/04 17:31:03 darrenr Exp";
+static const char rcsid[] = "@(#)Id: arp.c,v 2.8.2.2 2007/02/17 12:41:50 darrenr Exp";
 #endif
-#include <stdio.h>
-#include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#if !defined(ultrix) && !defined(hpux)
-#include <sys/sockio.h>
+#if !defined(ultrix) && !defined(hpux) && !defined(__hpux) && !defined(__osf__) && !defined(_AIX51)
+# include <sys/sockio.h>
 #endif
 #include <sys/ioctl.h>
-#include <netdb.h>
+#include <netinet/in_systm.h>
 #include <netinet/in.h>
+#ifdef __osf__
+# include "radix_ipf_local.h"
+#endif
 #include <net/if.h>
 #include <netinet/if_ether.h>
 #ifndef	ultrix
-#include <net/if_arp.h>
+# include <net/if_arp.h>
 #endif
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <netinet/ip_var.h>
 #include <netinet/tcp.h>
+#include <stdio.h>
+#include <errno.h>
+#include <netdb.h>
 #include "ipsend.h"
 #include "iplang/iplang.h"
 
@@ -38,7 +41,7 @@ static const char rcsid[] = "@(#)Id: arp.c,v 2.1 1999/08/04 17:31:03 darrenr Exp
  * its IP address in address
  * (4 bytes)
  */
-int	resolve(host, address) 
+int	resolve(host, address)
 char	*host, *address;
 {
         struct	hostent	*hp;
@@ -90,7 +93,11 @@ char	*ether;
 	bcopy(ip, (char *)&sin->sin_addr.s_addr, 4);
 #ifndef	hpux
 	if ((hp = gethostbyaddr(ip, 4, AF_INET)))
+# if SOLARIS && (SOLARIS2 >= 10)
+		if (!(ether_hostton(hp->h_name, (struct ether_addr *)ether)))
+# else
 		if (!(ether_hostton(hp->h_name, ether)))
+# endif
 			goto savearp;
 #endif
 
@@ -121,6 +128,13 @@ tryagain:
 			perror("SIOCGARP");
 		return -1;
 	    }
+
+	if ((ar.arp_ha.sa_data[0] == 0) && (ar.arp_ha.sa_data[1] == 0) &&
+	    (ar.arp_ha.sa_data[2] == 0) && (ar.arp_ha.sa_data[3] == 0) &&
+	    (ar.arp_ha.sa_data[4] == 0) && (ar.arp_ha.sa_data[5] == 0)) {
+		fprintf(stderr, "(%s):", inet_ntoa(sin->sin_addr));
+		return -1;
+	}
 
 	bcopy(ar.arp_ha.sa_data, ether, 6);
 savearp:

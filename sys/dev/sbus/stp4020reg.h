@@ -1,4 +1,4 @@
-/*	$NetBSD: stp4020reg.h,v 1.1 1998/11/22 22:14:35 pk Exp $ */
+/*	$NetBSD: stp4020reg.h,v 1.4 2008/04/28 20:23:57 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -165,7 +158,6 @@
 #define	STP4020_ISR0_RDYCHG	0x0400	/* ready/busy status change */
 #define	STP4020_ISR0_WPCHG	0x0200	/* write protect status change */
 #define	STP4020_ISR0_PCTO	0x0100	/* PC card access timeout */
-#define STP4020_ISR0_ALL_STATUS_IRQ	0x7f00
 
 #define	STP4020_ISR0_LIVE	0x00ff	/* live status bit mask */
 #define	STP4020_ISR0_CD2ST	0x0080	/* card detect 2 live status */

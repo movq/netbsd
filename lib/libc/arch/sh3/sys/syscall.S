@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.S,v 1.1 2000/01/05 14:07:42 msaitoh Exp $	*/
+/*	$NetBSD: syscall.S,v 1.6 2006/01/06 01:27:23 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,24 +36,9 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: syscall.S,v 1.1 2000/01/05 14:07:42 msaitoh Exp $")
+	RCSID("$NetBSD: syscall.S,v 1.6 2006/01/06 01:27:23 uwe Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
 
-ENTRY(syscall)
-	sts	pr,r2	/* rta */
-	mov	r4,r0	/* syscall number */
-	trapa	#0x80
-	bf	err
-	rts
-	nop
-err:
-	mov.l	Lcerror, r1
-	jmp	@r1
-	nop
-
-	.align 2
-Lcerror:	.long	cerror
-
-
+RSYSCALL(syscall)

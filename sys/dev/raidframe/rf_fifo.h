@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_fifo.h,v 1.3 1999/02/05 00:06:11 oster Exp $	*/
+/*	$NetBSD: rf_fifo.h,v 1.6 2005/12/11 12:23:37 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -36,8 +36,9 @@
 #ifndef _RF__RF_FIFO_H_
 #define _RF__RF_FIFO_H_
 
+#include <dev/raidframe/raidframevar.h>
+
 #include "rf_archs.h"
-#include "rf_types.h"
 #include "rf_diskqueue.h"
 
 typedef struct RF_FifoHeader_s {
@@ -49,12 +50,12 @@ typedef struct RF_FifoHeader_s {
 extern void *
 rf_FifoCreate(RF_SectorCount_t sectPerDisk,
     RF_AllocListElem_t * clList, RF_ShutdownList_t ** listp);
-extern void 
+extern void
 rf_FifoEnqueue(void *q_in, RF_DiskQueueData_t * elem,
     int priority);
 extern RF_DiskQueueData_t *rf_FifoDequeue(void *q_in);
 extern RF_DiskQueueData_t *rf_FifoPeek(void *q_in);
-extern int 
+extern int
 rf_FifoPromote(void *q_in, RF_StripeNum_t parityStripeID,
     RF_ReconUnitNum_t which_ru);
 

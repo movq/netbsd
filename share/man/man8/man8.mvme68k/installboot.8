@@ -1,13 +1,13 @@
-.\"	$NetBSD: installboot.8,v 1.5 1999/12/30 22:31:19 simonb Exp $
+.\"	$NetBSD: installboot.8,v 1.8 2001/12/26 01:53:18 wiz Exp $
 .\"
-.Dd 31 May 1995
+.Dd May 31, 1995
 .Dt INSTALLBOOT 8 mvme68k
-.Os 
+.Os
 .Sh NAME
 .Nm installboot
 .Nd install a bootstrap on a UFS disk
 .Sh SYNOPSIS
-.Nm
+.Nm /usr/mdec/installboot
 .Fl n | Fl v
 .Ar ufsboot
 .Ar bootxx
@@ -44,6 +44,9 @@ on which the file system containing
 .Ar ufsboot
 is mounted.
 .El
+.Sh SEE ALSO
+.Xr disklabel 8 ,
+.Xr init 8
 .Sh BUGS
 .Nm
 requires simultaneous access to the mounted file system and
@@ -51,8 +54,5 @@ the raw device, but that is not allowed with the kernel
 .Dv securelevel
 variable set to a value greater than zero (the default), so
 .Nm
-only works in single-user mode (or insecure mode - see 
-.Xr init 8 ).
-.Sh SEE ALSO
-.Xr disklabel 8 ,
-.Xr init 8
+only works in single-user mode (or insecure mode - see
+.Xr init 8 ) .

@@ -1,12 +1,69 @@
-/*	$NetBSD: hack.topl.c,v 1.4 1997/10/19 16:59:10 christos Exp $	*/
+/*	$NetBSD: hack.topl.c,v 1.8.14.2 2009/06/29 23:25:09 snj Exp $	*/
 
 /*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.topl.c,v 1.4 1997/10/19 16:59:10 christos Exp $");
+__RCSID("$NetBSD: hack.topl.c,v 1.8.14.2 2009/06/29 23:25:09 snj Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -81,10 +138,10 @@ remember_topl()
 
 void
 addtopl(s)
-	char           *s;
+	const char           *s;
 {
 	curs(tlx, tly);
-	if (tlx + strlen(s) > CO)
+	if (tlx + (int)strlen(s) > CO)
 		putsym('\n');
 	putstr(s);
 	tlx = curx;
@@ -94,7 +151,7 @@ addtopl(s)
 
 void
 xmore(s)
-	char           *s;	/* allowed chars besides space/return */
+	const char *s;	/* allowed chars besides space/return */
 {
 	if (flags.toplin) {
 		curs(tlx, tly);
@@ -124,7 +181,7 @@ more()
 
 void
 cmore(s)
-	char           *s;
+	const char           *s;
 {
 	xmore(s);
 }
@@ -143,21 +200,11 @@ clrlin()
 }
 
 void
-#ifdef __STDC__
 pline(const char *fmt, ...)
-#else
-pline(va_alist)
-	va_dcl
-#endif
 {
 	va_list ap;
-#ifndef __STDC__
-	const char *fmt;
-	va_start(ap);
-	fmt = va_arg(ap, const char *);
-#else
+
 	va_start(ap, fmt);
-#endif
 	vpline(fmt, ap);
 	va_end(ap);
 }
@@ -169,14 +216,14 @@ vpline(line, ap)
 {
 	char            pbuf[BUFSZ];
 	char           *bp = pbuf, *tl;
-	int             n, n0;
+	int             n, n0, tlpos, dead;
 
 	if (!line || !*line)
 		return;
 	if (!strchr(line, '%'))
-		(void) strcpy(pbuf, line);
+		(void) strlcpy(pbuf, line, sizeof(pbuf));
 	else
-		(void) vsprintf(pbuf, line, ap);
+		(void) vsnprintf(pbuf, sizeof(pbuf), line, ap);
 	if (flags.toplin == 1 && !strcmp(pbuf, toplines))
 		return;
 	nscr();			/* %% */
@@ -185,7 +232,7 @@ vpline(line, ap)
 	/* But messages like "You die..." deserve their own line */
 	n0 = strlen(bp);
 	if (flags.toplin == 1 && tly == 1 &&
-	    n0 + strlen(toplines) + 3 < CO - 8 &&	/* leave room for
+	    n0 + (int)strlen(toplines) + 3 < CO - 8 &&	/* leave room for
 							 * --More-- */
 	    strncmp(bp, "You ", 4)) {
 		(void) strcat(toplines, "  ");
@@ -197,8 +244,9 @@ vpline(line, ap)
 	if (flags.toplin == 1)
 		more();
 	remember_topl();
+	dead = 0;
 	toplines[0] = 0;
-	while (n0) {
+	while (n0 && !dead) {
 		if (n0 >= CO) {
 			/* look for appropriate cut point */
 			n0 = 0;
@@ -212,7 +260,14 @@ vpline(line, ap)
 			if (!n0)
 				n0 = CO - 2;
 		}
-		(void) strncpy((tl = eos(toplines)), bp, n0);
+		tlpos = strlen(toplines);
+		tl = toplines + tlpos;
+		/* avoid overflow */
+		if (tlpos + n0 > (int)sizeof(toplines) - 1) {
+			n0 = sizeof(toplines) - 1 - tlpos;
+			dead = 1;
+		}
+		(void) memcpy(tl, bp, n0);
 		tl[n0] = 0;
 		bp += n0;
 
@@ -222,7 +277,7 @@ vpline(line, ap)
 
 		n0 = strlen(bp);
 		if (n0 && tl[0])
-			(void) strcat(tl, "\n");
+			(void) strlcat(toplines, "\n", sizeof(toplines));
 	}
 	redotoplin();
 }
@@ -252,7 +307,7 @@ putsym(c)
 
 void
 putstr(s)
-	char           *s;
+	const char           *s;
 {
 	while (*s)
 		putsym(*s++);

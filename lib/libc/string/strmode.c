@@ -1,4 +1,4 @@
-/*	$NetBSD: strmode.c,v 1.11 1999/09/20 04:39:47 lukem Exp $	*/
+/*	$NetBSD: strmode.c,v 1.18 2006/10/07 22:04:18 apb Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,21 +29,27 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)strmode.c	8.3 (Berkeley) 8/15/94";
 #else
-__RCSID("$NetBSD: strmode.c,v 1.11 1999/09/20 04:39:47 lukem Exp $");
+__RCSID("$NetBSD: strmode.c,v 1.18 2006/10/07 22:04:18 apb Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
+#include "namespace.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 
 #include <assert.h>
 #include <unistd.h>
 
+#if !HAVE_STRMODE
 void
 strmode(mode, p)
 	mode_t mode;
@@ -83,9 +85,11 @@ strmode(mode, p)
 	case S_IFLNK:			/* symbolic link */
 		*p++ = 'l';
 		break;
+#ifdef S_IFSOCK
 	case S_IFSOCK:			/* socket */
 		*p++ = 's';
 		break;
+#endif
 #ifdef S_IFIFO
 	case S_IFIFO:			/* fifo */
 		*p++ = 'p';
@@ -94,6 +98,11 @@ strmode(mode, p)
 #ifdef S_IFWHT
 	case S_IFWHT:			/* whiteout */
 		*p++ = 'w';
+		break;
+#endif
+#ifdef S_IFDOOR
+	case S_IFDOOR:			/* door */
+		*p++ = 'D';
 		break;
 #endif
 	default:			/* unknown */
@@ -172,3 +181,4 @@ strmode(mode, p)
 	*p++ = ' ';		/* will be a '+' if ACL's implemented */
 	*p = '\0';
 }
+#endif /* !HAVE_STRMODE */

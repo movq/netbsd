@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_sun3x.c,v 1.6 1999/07/02 15:28:51 simonb Exp $	*/
+/*	$NetBSD: kvm_sun3x.c,v 1.9 2008/04/28 20:23:01 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_sparc.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: kvm_sun3x.c,v 1.6 1999/07/02 15:28:51 simonb Exp $");
+__RCSID("$NetBSD: kvm_sun3x.c,v 1.9 2008/04/28 20:23:01 martin Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -105,7 +98,7 @@ _kvm_sun3x_freevtop(kd)
  * Translate a kernel virtual address to a physical address using the
  * mapping information in kd->vm.  Returns the result in pa, and returns
  * the number of bytes that are contiguously available from this
- * physical address.  This routine is used only for crashdumps.
+ * physical address.  This routine is used only for crash dumps.
  */
 int
 _kvm_sun3x_kvatop(kd, va, pap)
@@ -152,7 +145,7 @@ _kvm_sun3x_kvatop(kd, va, pap)
 		return (0);
 	}
 	if ((pte & s->pg_valid) == 0) {
-		_kvm_err(kd, 0, "page not valid (VA=0x%x)", va);
+		_kvm_err(kd, 0, "page not valid (VA=0x%lx)", va);
 		return (0);
 	}
 	offset = va & v->pgofset;
@@ -165,7 +158,7 @@ done:
 }
 
 /*
- * Translate a physical address to a file-offset in the crash-dump.
+ * Translate a physical address to a file-offset in the crash dump.
  */
 off_t
 _kvm_sun3x_pa2off(kd, pa)

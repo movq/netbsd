@@ -1,4 +1,4 @@
-/*	$NetBSD: mailwrapper.c,v 1.3 1999/05/29 18:18:15 christos Exp $	*/
+/*	$NetBSD: mailwrapper.c,v 1.9 2003/03/09 08:10:43 mjl Exp $	*/
 
 /*
  * Copyright (c) 1998
@@ -36,7 +36,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <util.h>
 
 #define _PATH_MAILERCONF	"/etc/mailer.conf"
 
@@ -49,9 +48,6 @@ int main __P((int, char *[], char *[]));
 
 static void initarg __P((struct arglist *));
 static void addarg __P((struct arglist *, const char *, int));
-static void freearg __P((struct arglist *, int));
-
-extern const char *__progname;	/* from crt0.o */
 
 static void
 initarg(al)
@@ -60,6 +56,14 @@ initarg(al)
 	al->argc = 0;
 	al->maxc = 10;
 	if ((al->argv = malloc(al->maxc * sizeof(char *))) == NULL)
+		/*
+		 * This (using err("mailwrapper")) is intentional.
+		 * Mailwrapper plays ugly games with argv[0] and thus it
+		 * is often difficult for people to know that the error
+		 * isn't from "mailq" or "sendmail" but from mailwrapper
+		 * -- having mailwrapper add an indication that it was really
+		 * mailwrapper running was a requested feature.
+		 */
 		err(1, "mailwrapper");
 }
 
@@ -82,18 +86,6 @@ addarg(al, arg, copy)
 		al->argv[al->argc++] = (char *)arg;
 }
 
-static void
-freearg(al, copy)
-	struct arglist *al;
-	int copy;
-{
-	size_t i;
-	if (copy)
-		for (i = 0; i < al->argc; i++)
-			free(al->argv[i]);
-	free(al->argv);
-}
-
 int
 main(argc, argv, envp)
 	int argc;
@@ -103,11 +95,11 @@ main(argc, argv, envp)
 	FILE *config;
 	char *line, *cp, *from, *to, *ap;
 	size_t len, lineno = 0;
+	int i;
 	struct arglist al;
 
 	initarg(&al);
-	for (len = 0; len < argc; len++)
-		addarg(&al, argv[len], 0);
+	addarg(&al, argv[0], 0);
 
 	if ((config = fopen(_PATH_MAILERCONF, "r")) == NULL)
 		err(1, "mailwrapper: can't open %s", _PATH_MAILERCONF);
@@ -138,7 +130,7 @@ main(argc, argv, envp)
 		if ((to = strsep(&cp, WS)) == NULL)
 			goto parse_error;
 
-		if (strcmp(from, __progname) == 0) {
+		if (strcmp(from, getprogname()) == 0) {
 			for (ap = strsep(&cp, WS); ap != NULL; 
 			    ap = strsep(&cp, WS))
 			    if (*ap)
@@ -151,14 +143,14 @@ main(argc, argv, envp)
 
 	(void)fclose(config);
 
+	for (i = 1; i < argc; i++)
+		addarg(&al, argv[i], 0);
+
+	addarg(&al, NULL, 0);
 	execve(to, al.argv, envp);
-	freearg(&al, 0);
-	free(line);
 	err(1, "mailwrapper: execing %s", to);
 	/*NOTREACHED*/
 parse_error:
-	freearg(&al, 0);
-	free(line);
 	errx(1, "mailwrapper: parse error in %s at line %lu",
 	    _PATH_MAILERCONF, (u_long)lineno);
 	/*NOTREACHED*/

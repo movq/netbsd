@@ -1,4 +1,4 @@
-/*	$NetBSD: strings.h,v 1.8 2000/01/10 16:58:38 kleink Exp $	*/
+/*	$NetBSD: strings.h,v 1.13 2008/04/28 20:22:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,25 +40,28 @@ typedef	_BSD_SIZE_T_	size_t;
 #undef	_BSD_SIZE_T_
 #endif
 
-#ifndef	_XOPEN_SOURCE
+#if defined(_NETBSD_SOURCE)
 #include <sys/null.h>
 #endif
 
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int	 bcmp __P((const void *, const void *, size_t));
-void	 bcopy __P((const void *, void *, size_t));
-void	 bzero __P((void *, size_t));
-int	 ffs __P((int));
-char	*index __P((const char *, int));
-char	*rindex __P((const char *, int));
-int	 strcasecmp __P((const char *, const char *));
-int	 strncasecmp __P((const char *, const char *, size_t));
+int	 bcmp(const void *, const void *, size_t);
+void	 bcopy(const void *, void *, size_t);
+void	 bzero(void *, size_t);
+int	 ffs(int);
+char	*index(const char *, int);
+char	*rindex(const char *, int);
+int	 strcasecmp(const char *, const char *);
+int	 strncasecmp(const char *, const char *, size_t);
 __END_DECLS
 
-#if !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 #include <string.h>
 #endif
 
+#if _FORTIFY_SOURCE > 0
+#include <ssp/strings.h>
+#endif
 #endif /* !defined(_STRINGS_H_) */

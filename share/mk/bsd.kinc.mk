@@ -1,138 +1,84 @@
-#	$NetBSD: bsd.kinc.mk,v 1.11 2000/02/26 19:02:40 mycroft Exp $
+#	$NetBSD: bsd.kinc.mk,v 1.36 2006/03/16 18:43:34 jwise Exp $
 
-# System configuration variables:
-#
-# SYS_INCLUDE	"symlinks": symlinks to include directories are created.
-#		This may not work 100% properly for all headers.
-#
-#		"copies": directories are made, if necessary, and headers
-#		are installed into them.
-#
 # Variables:
 #
 # INCSDIR	Directory to install includes into (and/or make, and/or
 #		symlink, depending on what's going on).
 #
-# KDIR		Kernel directory to symlink to, if SYS_INCLUDE is symlinks.
-#		If unspecified, no action will be taken when making include
-#		for the directory if SYS_INCLUDE is symlinks.
-#
-# INCS		Headers to install, if SYS_INCLUDE is copies.
+# INCS		Headers to install.
 #
 # DEPINCS	Headers to install which are built dynamically.
 #
 # SUBDIR	Subdirectories to enter
 #
-# SYMLINKS	Symlinks to make (unconditionally), a la bsd.links.mk.
+# INCSYMLINKS	Symlinks to make (unconditionally), a la bsd.links.mk.
 #		Note that the original bits will be 'rm -rf'd rather than
 #		just 'rm -f'd, to make the right thing happen with include
 #		directories.
 #
 
-.if !target(__initialized__)
-__initialized__:
-.if exists(${.CURDIR}/../Makefile.inc)
-.include "${.CURDIR}/../Makefile.inc"
-.endif
-.include <bsd.own.mk>
-.MAIN:		all
-.endif
+.include <bsd.init.mk>
 
-# Change SYS_INCLUDE in bsd.own.mk or /etc/mk.conf to "symlinks" if you
-# don't want copies
-SYS_INCLUDE?=   copies
+##### Basic targets
+.PRECIOUS:	${DESTDIR}${INCSDIR}
+includes:	${DESTDIR}${INCSDIR} .WAIT ${INCS} incinstall
 
-# If DESTDIR is set, we're probably building a release, so force "copies".
-.if defined(DESTDIR) && (${DESTDIR} != "/" && !empty(DESTDIR))
-SYS_INCLUDE=    copies
-.endif
-
-
+##### Install rules
+incinstall::	# ensure existence
 .PHONY:		incinstall
-includes:	${INCS} incinstall
-
-
-.if ${SYS_INCLUDE} == "symlinks"
-
-# don't install includes, just make symlinks.
-
-.if defined(KDIR)
-SYMLINKS+=	${KDIR} ${INCSDIR}
-.endif
-
-.else # not symlinks
 
 # make sure the directory is OK, and install includes.
 
-.PRECIOUS: ${DESTDIR}${INCSDIR}
-.PHONY: ${DESTDIR}${INCSDIR}
-${DESTDIR}${INCSDIR}:
+${DESTDIR}${INCSDIR}: .EXEC
 	@if [ ! -d ${.TARGET} ] || [ -h ${.TARGET} ] ; then \
-		echo creating ${.TARGET}; \
+		${_MKSHMSG_CREATE} ${.TARGET}; \
 		/bin/rm -rf ${.TARGET}; \
-		${INSTALL} ${INSTPRIV} -d -o ${BINOWN} -g ${BINGRP} -m 755 \
-		    ${.TARGET}; \
+		${_MKSHECHO} ${INSTALL_DIR} -o ${BINOWN} -g ${BINGRP} -m 755 \
+			${.TARGET}; \
+		${INSTALL_DIR} -o ${BINOWN} -g ${BINGRP} -m 755 \
+			${.TARGET}; \
 	fi
 
-incinstall:: ${DESTDIR}${INCSDIR}
+# -c is forced on here, in order to preserve modtimes for "make depend"
+__incinstall: .USE
+	@cmp -s ${.ALLSRC} ${.TARGET} > /dev/null 2>&1 || \
+	    (${_MKSHMSG_INSTALL} ${.TARGET}; \
+	     ${_MKSHECHO} "${INSTALL_FILE} -c -o ${BINOWN} -g ${BINGRP} \
+		-m ${NONBINMODE} ${.ALLSRC} ${.TARGET}" && \
+	     ${INSTALL_FILE} -c -o ${BINOWN} -g ${BINGRP} \
+		-m ${NONBINMODE} ${.ALLSRC} ${.TARGET})
 
-.if defined(INCS)
-.for I in ${INCS}
-incinstall:: ${DESTDIR}${INCSDIR}/$I
+.for F in ${INCS:O:u} ${DEPINCS:O:u}
+_F:=		${DESTDIR}${INCSDIR}/${F}		# installed path
 
-.PRECIOUS: ${DESTDIR}${INCSDIR}/$I
-.if !defined(UPDATE)
-.PHONY: ${DESTDIR}${INCSDIR}/$I
+.if ${MKUPDATE} == "no"
+${_F}!		${F} __incinstall			# install rule
+.else
+${_F}:		${F} __incinstall			# install rule
 .endif
-${DESTDIR}${INCSDIR}/$I: ${DESTDIR}${INCSDIR} $I 
-	@cmp -s ${.CURDIR}/$I ${.TARGET} > /dev/null 2>&1 || \
-	    (echo "${INSTALL} ${RENAME} ${PRESERVE} ${INSTPRIV} -c \
-		-o ${BINOWN} -g ${BINGRP} -m ${NONBINMODE} ${.CURDIR}/$I \
-		${.TARGET}" && \
-	     ${INSTALL} ${RENAME} ${PRESERVE} ${INSTPRIV} -c -o ${BINOWN} \
-		-g ${BINGRP} -m ${NONBINMODE} ${.CURDIR}/$I ${.TARGET})
+
+incinstall::	${_F}
+.PRECIOUS:	${_F}					# keep if install fails
 .endfor
-.endif
 
-.if defined(DEPINCS)
-.for I in ${DEPINCS}
-incinstall:: ${DESTDIR}${INCSDIR}/$I
+.undef _F
 
-.PRECIOUS: ${DESTDIR}${INCSDIR}/$I
-.if !defined(UPDATE)
-.PHONY: ${DESTDIR}${INCSDIR}/$I
-.endif
-${DESTDIR}${INCSDIR}/$I: ${DESTDIR}${INCSDIR} $I 
-	@cmp -s $I ${.TARGET} > /dev/null 2>&1 || \
-	    (echo "${INSTALL} ${RENAME} ${PRESERVE} -c -o ${BINOWN} \
-		-g ${BINGRP} -m ${NONBINMODE} $I ${.TARGET}" && \
-	     ${INSTALL} ${RENAME} ${PRESERVE} -c -o ${BINOWN} -g ${BINGRP} \
-		-m ${NONBINMODE} $I ${.TARGET})
-.endfor
-.endif
-
-.endif # not symlinks
-
-.if defined(SYMLINKS) && !empty(SYMLINKS)
+.if defined(INCSYMLINKS) && !empty(INCSYMLINKS)
 incinstall::
-	@(set ${SYMLINKS}; \
-	 echo ".include <bsd.own.mk>"; \
+	@(set ${INCSYMLINKS}; \
 	 while test $$# -ge 2; do \
-		l=$$1; \
-		shift; \
-		t=${DESTDIR}$$1; \
-		shift; \
-		echo "realall: $$t"; \
-		echo ".PHONY: $$t"; \
-		echo "$$t:"; \
-		echo "	@echo \"$$t -> $$l\""; \
-		echo "	@rm -rf $$t; ln -s $$l $$t"; \
-	 done; \
-	) | ${MAKE} -f- all
+		l=$$1; shift; \
+		t=${DESTDIR}$$1; shift; \
+		if  ttarg=`${TOOL_STAT} -qf '%Y' $$t` && \
+		    [ "$$l" = "$$ttarg" ]; then \
+			continue ; \
+		fi ; \
+		${_MKSHMSG_INSTALL} $$t; \
+		${_MKSHECHO} ${INSTALL_SYMLINK} $$l $$t; \
+		${INSTALL_SYMLINK} $$l $$t; \
+	 done; )
 .endif
 
-.if !target(incinstall)
-incinstall::
-.endif
-
+##### Pull in related .mk logic
 .include <bsd.subdir.mk>
+.include <bsd.sys.mk>

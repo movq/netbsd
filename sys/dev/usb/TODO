@@ -1,12 +1,39 @@
-Some things that need to be done in no particular order:
---------------------------------------------------------
+Some things that need to be done:
+---------------------------------
 
-Before 1.5:
------------
+High priority:
+--------------
 
-Port FreeBSD umass driver.
+On a short control transfer the status phase needs to be executed anyway.
 
------------
+Allow interrupt out endpoints. (USB 1.1)
+
+Fix flow control in ucom (copy from com driver).
+
+Use some encapsulation in the upl driver to allow multiple protocols.
+
+Get the uezcom driver (with Doug Ambrisko's firmware) running.
+
+
+Bug reports:
+------------
+
+Bernd Ernesti's problem: host controller halted with umodem
+
+umass problem with Ricoh flash reader
+
+wskbd for X
+
+mel kravitz's problem, lockups with disk and printer
+
+Aaron's problem: Test aue with ohci.
+
+
+General:
+--------
+
+Figure out why uvisor is so slow.
+Try to get specs, and check if Linux driver is really right.
 
 Add lots of bus_dmamap_sync().
 
@@ -23,9 +50,7 @@ Some hubs change the number of available ports on this transition. :(
 Handle overcurrent conditions.
 
 Make it possible to open any device in a "generic" way, i.e., like ugen.
-
-Rewrite mouse and keyboard driver to handle devices which use the
-report ID.  One way would be to attach ums and ukbd to uhid.
+Perhaps usbdevfs?
 
 Rotate the QHs for bulk transport to get fairer scheduling.
 
@@ -37,18 +62,12 @@ Do memory deallocation when HC driver is detached.
 uaudio problems:
 	mixer names are awful, use some heuristics.
 	implement selector units
-	implement input
+	debug input
 	test with more devices
 
 Stylistic changes:
 	use usb_ and usbd_ consistently
 	rearrange the contents and names of some files (Nick)
-
-Document device driver API.
-
-Document HC driver API.
-
-Handle CLEAR_ENDPOINT_STALL centrally.
 
 Use splsoftusb() or a thread to deliver callbacks.
 
@@ -57,7 +76,20 @@ Add threads to the Ethernet drivers.
 Change what's done at watchdog timeout inb if_{a,c,k}ue.c; what we have
 now doesn't work because it's done in an interrupt context.
 
-Rewrite HID driver to handle report IDs properly.  Perhaps there should
-be a hiddev to which hid with different IDs can attach?
+Factor out the common code from the Ethernet drivers and reuse that.
 
 Get rid of hcpriv.
+
+Keyspan serial driver
+
+Clean up umass driver
+
+
+Documentation:
+--------------
+
+Document device driver API.
+
+Document HC driver API.
+
+Update ugen(4)

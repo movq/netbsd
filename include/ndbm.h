@@ -1,4 +1,4 @@
-/*	$NetBSD: ndbm.h,v 1.7 1998/05/07 19:02:04 kleink Exp $	*/
+/*	$NetBSD: ndbm.h,v 1.14 2005/09/13 01:44:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,10 +37,11 @@
 #ifndef _NDBM_H_
 #define	_NDBM_H_
 
+#include <sys/cdefs.h>
 #include <sys/featuretest.h>
 #include <db.h>
 
-#if !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 /* Map dbm interface onto db(3). */
 #define DBM_RDONLY	O_RDONLY
 #endif
@@ -53,7 +50,7 @@
 #define DBM_INSERT      0
 #define DBM_REPLACE     1
 
-#if !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 /*
  * The db(3) support for ndbm(3) always appends this suffix to the
  * file name to avoid overwriting the user's original database.
@@ -62,30 +59,29 @@
 #endif
 
 typedef struct {
-	void *dptr;
-	int dsize;		/* XXX */
+	void	*dptr;
+	size_t	 dsize;		/* XPG4.2 */
 } datum;
 
 typedef DB DBM;
-#if !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 #define	dbm_pagfno(a)	DBM_PAGFNO_NOT_AVAILABLE
 #endif
 
 __BEGIN_DECLS
-void	 dbm_close __P((DBM *));
-int	 dbm_delete __P((DBM *, datum));
-datum	 dbm_fetch __P((DBM *, datum));
-datum	 dbm_firstkey __P((DBM *));
-#if !defined(_XOPEN_SOURCE)
-long	 dbm_forder __P((DBM *, datum));
+void	 dbm_close(DBM *);
+DBM	*dbm_open(const char *, int, mode_t);
+int	 dbm_error(DBM *);
+int	 dbm_clearerr(DBM *);
+#if defined(_NETBSD_SOURCE)
+int	 dbm_dirfno(DBM *);
 #endif
-datum	 dbm_nextkey __P((DBM *));
-DBM	*dbm_open __P((const char *, int, mode_t));
-int	 dbm_store __P((DBM *, datum, datum, int));
-int	 dbm_error __P((DBM *));
-int	 dbm_clearerr __P((DBM *));
-#if !defined(_XOPEN_SOURCE)
-int	 dbm_dirfno __P((DBM *));
+#ifndef __LIBC12_SOURCE__
+int	 dbm_delete(DBM *, datum)		__RENAME(__dbm_delete13);
+datum	 dbm_fetch(DBM *, datum)		__RENAME(__dbm_fetch13);
+datum	 dbm_firstkey(DBM *)			__RENAME(__dbm_firstkey13);
+datum	 dbm_nextkey(DBM *)			__RENAME(__dbm_nextkey13);
+int	 dbm_store(DBM *, datum, datum, int)	__RENAME(__dbm_store13);
 #endif
 __END_DECLS
 

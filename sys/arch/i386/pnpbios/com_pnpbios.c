@@ -1,4 +1,4 @@
-/* $NetBSD: com_pnpbios.c,v 1.3 2000/02/01 18:33:22 soren Exp $ */
+/* $NetBSD: com_pnpbios.c,v 1.14 2008/03/14 15:09:10 cube Exp $ */
 /*
  * Copyright (c) 1999
  * 	Matthias Drochner.  All rights reserved.
@@ -25,6 +25,9 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: com_pnpbios.c,v 1.14 2008/03/14 15:09:10 cube Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/errno.h>
@@ -48,18 +51,14 @@ struct com_pnpbios_softc {
 	void	*sc_ih;
 };
 
-int com_pnpbios_match __P((struct device *, struct cfdata *, void *));
-void com_pnpbios_attach __P((struct device *, struct device *, void *));
+int com_pnpbios_match(device_t, cfdata_t , void *);
+void com_pnpbios_attach(device_t, device_t, void *);
 
-struct cfattach com_pnpbios_ca = {
-	sizeof(struct com_pnpbios_softc), com_pnpbios_match, com_pnpbios_attach
-};
+CFATTACH_DECL_NEW(com_pnpbios, sizeof(struct com_pnpbios_softc),
+    com_pnpbios_match, com_pnpbios_attach, NULL, NULL);
 
 int
-com_pnpbios_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+com_pnpbios_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pnpbiosdev_attach_args *aa = aux;
 
@@ -73,40 +72,42 @@ com_pnpbios_match(parent, match, aux)
 }
 
 void
-com_pnpbios_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+com_pnpbios_attach(device_t parent, device_t self, void *aux)
 {
-	struct com_pnpbios_softc *psc = (void *)self;
+	struct com_pnpbios_softc *psc = device_private(self);
 	struct com_softc *sc = &psc->sc_com;
 	struct pnpbiosdev_attach_args *aa = aux;
 	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
 	int iobase;
 
+	sc->sc_dev = self;
+
 	if (pnpbios_getiobase(aa->pbt, aa->resc, 0, &iot, &iobase)) {
-		printf(": can't get iobase\n");
+		aprint_error(": can't get iobase\n");
 		return;
 	}
 
-	if (com_is_console(iot, iobase, &sc->sc_ioh))
-		sc->sc_iot = iot;
-	else if (pnpbios_io_map(aa->pbt, aa->resc, 0,
-				&sc->sc_iot, &sc->sc_ioh)) { 	
-		printf(": can't map i/o space\n");
+	if ((!com_is_console(iot, iobase, &ioh)) &&
+	    pnpbios_io_map(aa->pbt, aa->resc, 0, &iot, &ioh)) { 	
+		aprint_error(": can't map i/o space\n");
 		return;
 	}
-	sc->sc_iobase = iobase;
 
-	printf("\n");
+	COM_INIT_REGS(sc->sc_regs, iot, ioh, iobase);
+
+	aprint_normal("\n");
 	pnpbios_print_devres(self, aa);
 
-	printf("%s", self->dv_xname);
+	aprint_normal("%s", device_xname(self));
 
 	/*
 	 * if the chip isn't something we recognise skip it.
 	 */
-	if (comprobe1(sc->sc_iot, sc->sc_ioh) == 0)
+	if (com_probe_subr(&sc->sc_regs) == 0) {
+		aprint_error(": com probe failed\n");
 		return;
+	}
 
 	sc->sc_frequency = 115200 * 16;
 

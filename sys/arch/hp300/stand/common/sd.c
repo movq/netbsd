@@ -1,9 +1,43 @@
-/*	$NetBSD: sd.c,v 1.1 1997/02/04 03:52:53 thorpej Exp $	*/
+/*	$NetBSD: sd.c,v 1.9 2007/03/04 05:59:50 christos Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Van Jacobson of Lawrence Berkeley Laboratory and the Systems
+ * Programming Group of the University of Utah Computer Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: sd.c 1.9 92/12/21$
+ *
+ *	@(#)sd.c	8.1 (Berkeley) 6/10/93
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * Van Jacobson of Lawrence Berkeley Laboratory and the Systems
@@ -49,14 +83,16 @@
 #include <sys/param.h>
 #include <sys/disklabel.h>
 
+#include <machine/stdarg.h>
+
 #include <lib/libsa/stand.h>
 
 #include <hp300/stand/common/samachdep.h>
+#include <hp300/stand/common/conf.h>
 
 #define _IOCTL_
-#include <hp300/dev/scsireg.h>
-
-struct	disklabel sdlabel;
+#include <hp300/stand/common/scsireg.h>
+#include <hp300/stand/common/scsivar.h>
 
 struct	sdminilabel {
 	u_short	npart;
@@ -71,14 +107,20 @@ struct	sd_softc {
 	char	sc_alive;
 	short	sc_blkshift;
 	struct	sdminilabel sc_pinfo;
-} sd_softc[NSCSI][NSD];
+};
 
 #define	SDRETRY		2
 
-sdinit(ctlr, unit)
-	int ctlr, unit;
+static int sdinit(int ,int);
+static int sdgetinfo(struct sd_softc *);
+
+struct	disklabel sdlabel;
+struct sd_softc sd_softc[NSCSI][NSD];
+
+static int
+sdinit(int ctlr, int unit)
 {
-	register struct sd_softc *ss = &sd_softc[ctlr][unit];
+	struct sd_softc *ss = &sd_softc[ctlr][unit];
 	u_char stat;
 	int capbuf[2];
 
@@ -92,7 +134,7 @@ sdinit(ctlr, unit)
 		if (stat) {
 			printf("sd(%d,%d,0,0): init failed (stat=%x)\n",
 			       ctlr, unit, stat);
-			return (0);
+			return 0;
 		}
 	}
 	/*
@@ -108,33 +150,21 @@ sdinit(ctlr, unit)
 				++ss->sc_blkshift;
 	}
 	ss->sc_alive = 1;
-	return (1);
+	return 1;
 }
-
-sdreset(ctlr, unit)
-	int ctlr, unit;
-{
-}
-
-#ifdef COMPAT_NOLABEL
-struct	sdminilabel defaultpinfo = {
-	8,
-	{ 1024, 17408, 0, 17408, 115712, 218112, 82944, 115712 }
-};
-#endif
 
 char io_buf[MAXBSIZE];
 
-sdgetinfo(ss)
-	register struct sd_softc *ss;
+static int
+sdgetinfo(struct sd_softc *ss)
 {
-	register struct sdminilabel *pi = &ss->sc_pinfo;
-	register struct disklabel *lp = &sdlabel;
-	char *msg, *getdisklabel();
-	int sdstrategy(), err, savepart;
+	struct sdminilabel *pi = &ss->sc_pinfo;
+	struct disklabel *lp = &sdlabel;
+	char *msg;
+	int err, savepart;
 	size_t i;
 
-	bzero((caddr_t)lp, sizeof *lp);
+	memset((void *)lp, 0, sizeof *lp);
 	lp->d_secsize = (DEV_BSIZE << ss->sc_blkshift);
 
 	/* Disklabel is always from RAW_PART. */
@@ -146,36 +176,37 @@ sdgetinfo(ss)
 
 	if (err) {
 		printf("sdgetinfo: sdstrategy error %d\n", err);
-		return(0);
+		return 0;
 	}
 	
 	msg = getdisklabel(io_buf, lp);
 	if (msg) {
-		printf("sd(%d,%d,%d): WARNING: %s, ",
+		printf("sd(%d,%d,%d): WARNING: %s\n",
 		       ss->sc_ctlr, ss->sc_unit, ss->sc_part, msg);
-#ifdef COMPAT_NOLABEL
-		printf("using old default partitioning\n");
-		*pi = defaultpinfo;
-#else
-		printf("defining `c' partition as entire disk\n");
 		pi->npart = 3;
 		pi->offset[0] = pi->offset[1] = -1;
 		pi->offset[2] = 0;
-#endif
 	} else {
 		pi->npart = lp->d_npartitions;
 		for (i = 0; i < pi->npart; i++)
 			pi->offset[i] = lp->d_partitions[i].p_size == 0 ?
 				-1 : lp->d_partitions[i].p_offset;
 	}
-	return(1);
+	return 1;
 }
 
-sdopen(f, ctlr, unit, part)
-	struct open_file *f;
-	int ctlr, unit, part;
+int
+sdopen(struct open_file *f, ...)
 {
-	register struct sd_softc *ss;
+	va_list ap;
+	int ctlr, unit, part;
+	struct sd_softc *ss;
+
+	va_start(ap, f);
+	ctlr = va_arg(ap, int);
+	unit = va_arg(ap, int);
+	part = va_arg(ap, int);
+	va_end(ap);
 
 #ifdef SD_DEBUG
 	if (debug)
@@ -184,28 +215,28 @@ sdopen(f, ctlr, unit, part)
 #endif
 	
 	if (ctlr >= NSCSI || scsialive(ctlr) == 0)
-		return (EADAPT);
+		return EADAPT;
 	if (unit >= NSD)
-		return (ECTLR);
+		return ECTLR;
 	ss = &sd_softc[ctlr][unit];
 	ss->sc_part = part;
 	ss->sc_unit = unit;
 	ss->sc_ctlr = ctlr;
 	if (ss->sc_alive == 0) {
 		if (sdinit(ctlr, unit) == 0)
-			return (ENXIO);
+			return ENXIO;
 		if (sdgetinfo(ss) == 0)
-			return (ERDLAB);
+			return ERDLAB;
 	}
 	if (part != RAW_PART &&     /* always allow RAW_PART to be opened */
 	    (part >= ss->sc_pinfo.npart || ss->sc_pinfo.offset[part] == -1))
-		return (EPART);
+		return EPART;
 	f->f_devdata = (void *)ss;
-	return (0);
+	return 0;
 }
 
-sdclose(f)
-	struct open_file *f;
+int
+sdclose(struct open_file *f)
 {
 	struct sd_softc *ss = f->f_devdata;
 
@@ -213,29 +244,26 @@ sdclose(f)
 	 * Mark the disk `not alive' so that the disklabel
 	 * will be re-loaded at next open.
 	 */
-	bzero(ss, sizeof(sd_softc));
+	memset(ss, 0, sizeof(sd_softc));
 	f->f_devdata = NULL;
 
-	return (0);
+	return 0;
 }
 
-sdstrategy(ss, func, dblk, size, v_buf, rsize)
-	register struct sd_softc *ss;
-	int func;
-	daddr_t dblk;
-	size_t size;
-	void *v_buf;
-	size_t *rsize;
+int
+sdstrategy(void *devdata, int func, daddr_t dblk, size_t size, void *v_buf,
+    size_t *rsize)
 {
-	char *buf = v_buf;
-	register int ctlr = ss->sc_ctlr;
-	register int unit = ss->sc_unit;
+	struct sd_softc *ss = devdata;
+	uint8_t *buf = v_buf;
+	int ctlr = ss->sc_ctlr;
+	int unit = ss->sc_unit;
 	u_int nblk = size >> ss->sc_blkshift;
 	daddr_t blk;
-	char stat;
+	int stat;
 
 	if (size == 0)
-		return(0);
+		return 0;
 
 	/*
 	 * Don't do partition translation on the `raw partition'.
@@ -260,10 +288,10 @@ retry:
 		printf("sd(%d,%d,%d): block=%x, error=0x%x\n",
 		       ctlr, unit, ss->sc_part, blk, stat);
 		if (++ss->sc_retry > SDRETRY)
-			return(EIO);
+			return EIO;
 		goto retry;
 	}
 	*rsize = size;
 	
-	return(0);
+	return 0;
 }

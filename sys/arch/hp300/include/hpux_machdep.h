@@ -1,4 +1,4 @@
-/*	$NetBSD: hpux_machdep.h,v 1.11 1998/10/01 08:28:30 thorpej Exp $	*/
+/*	$NetBSD: hpux_machdep.h,v 1.23 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,15 +29,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _MACHINE_HPUX_MACHDEP_H_
-#define _MACHINE_HPUX_MACHDEP_H_
+#ifndef _HP300_HPUX_MACHDEP_H_
+#define _HP300_HPUX_MACHDEP_H_
 
-/*    
+/*
  * Information pushed on stack when a signal is delivered.
  * This is used by the kernel to restore state following
  * execution of the signal handler.  It is also made available
  * to the handler to allow it to restore state properly if
- * a non-standard exit is performed. 
+ * a non-standard exit is performed.
  */
 struct hpuxsigcontext {
 	int	hsc_syscall;		/* ??? (syscall number?) */
@@ -69,14 +62,13 @@ struct hpuxsigcontext {
 struct exec_package;
 struct exec_vmcmd;
 
-int	hpux_cpu_makecmds __P((struct proc *, struct exec_package *));
-int	hpux_cpu_vmcmd __P((struct proc *, struct exec_vmcmd *));
-int	hpux_cpu_sysconf_arch __P((void));
-int	hpux_to_bsd_uoff __P((int *, int *, struct proc *));
+int	hpux_cpu_makecmds(struct lwp *, struct exec_package *);
+int	hpux_cpu_vmcmd(struct lwp *, struct exec_vmcmd *);
+int	hpux_cpu_sysconf_arch(void);
+int	hpux_to_bsd_uoff(int *, int *, struct lwp *);
 
-void	hpux_sendsig __P((sig_t, int, sigset_t *, u_long));
-void	hpux_setregs __P((struct proc *, struct exec_package *,
-	    u_long));
+void	hpux_sendsig(const ksiginfo_t *, const sigset_t *);
+void	hpux_setregs(struct lwp *, struct exec_package *, u_long);
 #endif /* _KERNEL */
 
-#endif /* ! _MACHINE_HPUX_MACHDEP_H_ */
+#endif /* ! _HP300_HPUX_MACHDEP_H_ */

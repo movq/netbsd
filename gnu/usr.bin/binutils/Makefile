@@ -1,14 +1,15 @@
-#	$NetBSD: Makefile,v 1.10 1999/02/11 16:15:55 tv Exp $
+#	$NetBSD: Makefile,v 1.22 2003/12/04 09:29:33 mrg Exp $
 
-SUBDIR=		common addr2line ar c++filt nm objcopy objdump ranlib size \
-		strings strip
+.include <bsd.own.mk>
 
-all-addr2line all-ar all-c++filt all-nm all-objcopy all-objdump \
-	all-ranlib all-size all-strings all-strip: all-common
+.if ${MKBFD} != "no" && exists(${.CURDIR}/common/arch/${MACHINE_ARCH}/defs.mk)
+.include "${.CURDIR}/common/arch/${MACHINE_ARCH}/defs.mk"
 
-TEXINFO=	binutils.info
-INFOFLAGS=	-I${.CURDIR}/../../dist/binutils
-.PATH: ${.CURDIR}/../../dist/binutils
+#SUBDIR=		libopcodes libbfd libiberty .WAIT
 
-.include <bsd.info.mk>
+SSUBDIR+=	common gas gprof ld ${G_PROGRAMS:C/-new$//:C/sysdump//:C/srconv//:cxxfilt=c++filt}
+SUBDIR+=	${SSUBDIR:O} # alphabetize
+
+.endif	# MKBFD != no
+
 .include <bsd.subdir.mk>

@@ -10,11 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -32,7 +28,7 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	.asciz "$NetBSD: __sigsetjmp14.S,v 1.1 1998/10/01 18:59:16 christos Exp $"
+	.asciz "$NetBSD: __sigsetjmp14.S,v 1.4 2003/08/07 16:42:31 agc Exp $"
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -51,18 +47,18 @@
 #include <machine/setjmp.h>
 
 ENTRY(__sigsetjmp14, R6)
-	movl	4(ap),r0		# get env pointer
-	movl	8(ap),(_JBLEN*4)(r0)	# save "savemask"
-	tstl	8(ap)			# do saving of signal mask?
+	movl	4(%ap),%r0		# get env pointer
+	movl	8(%ap),(_JBLEN*4)(%r0)	# save "savemask"
+	tstl	8(%ap)			# do saving of signal mask?
 	beql	L1
-	jmp	___setjmp14+2		# yep, do full setjmp
-L1:	jmp	__setjmp+2		# nope, skip to _setjmp
+	jmp	_C_LABEL(__setjmp14)+2	# yep, do full setjmp
+L1:	jmp	_C_LABEL(_setjmp)+2	# nope, skip to _setjmp
 
 ENTRY(__siglongjmp14, 0)
-	movl	4(ap),r0		# get env pointer
-	tstl	(_JBLEN*4)(r0)		# test if "savemask" was set
+	movl	4(%ap),%r0		# get env pointer
+	tstl	(_JBLEN*4)(%r0)		# test if "savemask" was set
 	beql	L2
-	jmp	___longjmp14+2		# yep, do full longjmp
-L2:	jmp	__longjmp+2		# nope, skip to _longjmp
+	jmp	_C_LABEL(__longjmp14)+2	# yep, do full longjmp
+L2:	jmp	_C_LABEL(_longjmp)+2	# nope, skip to _longjmp
 
 

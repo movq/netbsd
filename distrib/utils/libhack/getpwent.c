@@ -1,8 +1,8 @@
-/*	$NetBSD: getpwent.c,v 1.3 1999/03/13 19:08:44 sommerfe Exp $	*/
+/*	$NetBSD: getpwent.c,v 1.9.28.1 2008/11/29 20:52:48 bouyer Exp $	*/
 
 /*
- * Copyright (c) 1995 Gordon W. Ross
- * All rights reserved.
+ * Copyright (c) 1987, 1988, 1989, 1993, 1994, 1995
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -12,162 +12,271 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
- * 4. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Gordon W. Ross
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  */
 
 /*
- * Smaller replacement for: libc/gen/getpwent.c
- * Needed by programs like: rsh, rlogin
+ * Copied from:  lib/libc/gen/getpwent.c
+ *	NetBSD: getpwent.c,v 1.48 2000/10/03 03:22:26 enami Exp
+ * and then gutted, leaving only /etc/master.passwd support.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <sys/cdefs.h>
+
+#ifdef __weak_alias
+#define endpwent		_endpwent
+#define getpwent		_getpwent
+#define getpwent_r		_getpwent_r
+#define getpwuid		_getpwuid
+#define getpwnam		_getpwnam
+#define setpwent		_setpwent
+#define setpassent		_setpassent
+#define getpwuid_r		_getpwuid_r
+#define getpwnam_r		_getpwnam_r
+
+__weak_alias(endpwent,_endpwent)
+__weak_alias(getpwent,_getpwent)
+__weak_alias(getpwent_r,_getpwent_r)
+__weak_alias(getpwuid,_getpwuid)
+__weak_alias(getpwnam,_getpwnam)
+__weak_alias(setpwent,_setpwent)
+__weak_alias(setpassent,_setpassent)
+__weak_alias(getpwuid_r,_getpwuid_r)
+__weak_alias(getpwnam_r,_getpwnam_r)
+#endif
+
+#include <sys/param.h>
+
+#include <limits.h>
 #include <pwd.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 
-#define	PWNULL	(struct passwd *)0
-#define MAXFIELD 8
+static	int		pwstart(void);
+static	int		pwscan(int, uid_t, const char *, struct passwd *,
+    char *, size_t);
+static	int		pwmatchline(int, uid_t, const char *, struct passwd *,
+    char *);
 
-static char *pw_file = "/etc/passwd";
-static FILE *pw_fp;
-static char  pw_line[128];
-static struct passwd pw_ent;
+static	FILE		*_pw_fp;
+static	struct passwd	_pw_passwd;	/* password structure */
+static	int		_pw_stayopen;	/* keep fd's open */
+static	int		_pw_filesdone;
 
-/*
- * Open passwd file if necessary, and
- * get the next entry.
- */
+#define	MAXLINELENGTH	1024
+
+static	char		pwline[MAXLINELENGTH];
+
 struct passwd *
-getpwent()
+getpwent(void)
 {
-	char *fv[MAXFIELD];
-	char *p;
-	int   fc;
 
-	/* Open passwd file if not already. */
-	if (pw_fp == NULL)
-		pw_fp = fopen(pw_file, "r");
-	/* Still NULL.  No passwd file? */
-	if (pw_fp == NULL)
-		return PWNULL;
-
-readnext:
-	/* Read the next line... */
-	if (fgets(pw_line, sizeof(pw_line), pw_fp) == NULL)
-		return PWNULL;
-
-	/* ...and parse it. */
-	p = pw_line;
-	fc = 0;
-	while (fc < MAXFIELD) {
-		fv[fc] = strsep(&p, ":\n");
-		if (fv[fc] == NULL)
-			break;
-		fc++;
-	}
-
-	/* Need at least 0..5 */
-	if (fc < 6)
-		goto readnext;
-	while (fc < MAXFIELD)
-		fv[fc++] = "";
-
-	/* Build the pw entry... */
-	pw_ent.pw_name   = fv[0];
-	pw_ent.pw_passwd = fv[1];
-	pw_ent.pw_uid = atoi(fv[2]);
-	pw_ent.pw_gid = atoi(fv[3]);
-	pw_ent.pw_gecos = fv[4];
-	pw_ent.pw_dir   = fv[5];
-	pw_ent.pw_shell = fv[6];
-
-	return (&pw_ent);
+	if ((!_pw_fp && !pwstart()) ||
+	    !pwscan(0, 0, NULL, &_pw_passwd, pwline, sizeof(pwline)))
+		return (NULL);
+	return (&_pw_passwd);
 }
 
-/* internal for setpwent() */
 int
-setpassent(stayopen)
-	int stayopen;
+getpwent_r(struct passwd *pwres, char *buf, size_t bufsiz,
+    struct passwd **pwd)
 {
-	if (pw_fp)
-		rewind(pw_fp);
-	return 1;
+	int rval;
+
+	if (!_pw_fp && !pwstart())
+		return 1;
+	rval = !pwscan(0, 0, NULL, pwres, buf, bufsiz);
+	if (rval)
+		*pwd = NULL;
+	else
+		*pwd = pwres;
+	return rval;
 }
 
-/* rewind to the beginning. */
-void
-setpwent()
+struct passwd *
+getpwnam(const char *name)
 {
+	struct passwd *pwd;
+	return getpwnam_r(name, &_pw_passwd, pwline, sizeof(pwline),
+	    &pwd) == 0 ? pwd : NULL;
+}
+
+int
+getpwnam_r(const char *name, struct passwd *pwres, char *buf, size_t bufsiz,
+    struct passwd **pwd)
+{
+	int rval;
+
+	if (!pwstart())
+		return 1;
+	rval = !pwscan(1, 0, name, pwres, buf, bufsiz);
+	if (!_pw_stayopen)
+		endpwent();
+	if (rval)
+		*pwd = NULL;
+	else
+		*pwd = pwres;
+	return rval;
+}
+
+struct passwd *
+getpwuid(uid_t uid)
+{
+	struct passwd *pwd;
+	return getpwuid_r(uid, &_pw_passwd, pwline, sizeof(pwline),
+	    &pwd) == 0 ? pwd : NULL;
+}
+
+int
+getpwuid_r(uid_t uid, struct passwd *pwres, char *buf, size_t bufsiz,
+    struct passwd **pwd)
+{
+	int rval;
+
+	if (!pwstart())
+		return 1;
+	rval = !pwscan(1, uid, NULL, pwres, buf, bufsiz);
+	if (!_pw_stayopen)
+		endpwent();
+	if (rval)
+		*pwd = NULL;
+	else
+		*pwd = pwres;
+	return rval;
+}
+
+void
+setpwent(void)
+{
+
 	(void) setpassent(0);
 }
 
-/* done with the passwd file */
+int
+setpassent(int stayopen)
+{
+
+	if (!pwstart())
+		return 0;
+	_pw_stayopen = stayopen;
+	return 1;
+}
+
 void
-endpwent()
+endpwent(void)
 {
-	if (pw_fp) {
-		fclose(pw_fp);
-		pw_fp = NULL;
+
+	_pw_filesdone = 0;
+	if (_pw_fp) {
+		(void)fclose(_pw_fp);
+		_pw_fp = NULL;
 	}
 }
 
-struct passwd *
-getpwnam(name)
-	const char *name;
+static int
+pwstart(void)
 {
-	struct passwd *pw;
 
-	setpwent();
-	while ((pw = getpwent()) != PWNULL)
-		if (!strcmp(pw->pw_name, name))
-			break;
-
-	endpwent();
-	return(pw);
-}
-
-struct passwd *
-getpwuid(uid)
-	uid_t uid;
-{
-	struct passwd *pw;
-
-	setpwent();
-	while ((pw = getpwent()) != PWNULL)
-		if (pw->pw_uid == uid)
-			break;
-
-	endpwent();
-	return(pw);
-}
-
-#ifdef	TEST_MAIN
-main() {
-	struct passwd *pw;
-
-	printf("#name, password, uid, gid, comment, dir, shell\n");
-
-	while ((pw = getpwent()) != NULL) {
-		printf("%s:%s:", pw->pw_name, pw->pw_passwd);
-		printf("%d:%d:", pw->pw_uid, pw->pw_gid);
-		printf("%s:", pw->pw_gecos);
-		printf("%s:", pw->pw_dir);
-		printf("%s\n", pw->pw_shell);
+	_pw_filesdone = 0;
+	if (_pw_fp) {
+		rewind(_pw_fp);
+		return 1;
 	}
+	return (_pw_fp = fopen(_PATH_MASTERPASSWD, "r")) ? 1 : 0;
 }
-#endif
+
+
+static int
+pwscan(int search, uid_t uid, const char *name, struct passwd *pwd, char *buf,
+    size_t bufsiz)
+{
+
+	if (_pw_filesdone)
+		return 0;
+	for (;;) {
+		if (!fgets(buf, bufsiz, _pw_fp)) {
+			if (!search)
+				_pw_filesdone = 1;
+			return 0;
+		}
+		/* skip lines that are too big */
+		if (!strchr(buf, '\n')) {
+			int ch;
+
+			while ((ch = getc(_pw_fp)) != '\n' && ch != EOF)
+				;
+			continue;
+		}
+		if (pwmatchline(search, uid, name, pwd, buf))
+			return 1;
+	}
+	/* NOTREACHED */
+}
+
+static int
+pwmatchline(int search, uid_t uid, const char *name, struct passwd *pwd,
+    char *buf)
+{
+	unsigned long	id;
+	char		*cp, *bp, *ep;
+
+	/* name may be NULL if search is nonzero */
+
+	bp = buf;
+	memset(pwd, 0, sizeof(*pwd));
+	pwd->pw_name = strsep(&bp, ":\n");		/* name */
+	if (search && name && strcmp(pwd->pw_name, name))
+		return 0;
+
+	pwd->pw_passwd = strsep(&bp, ":\n");		/* passwd */
+
+	if (!(cp = strsep(&bp, ":\n")))				/* uid */
+		return 0;
+	id = strtoul(cp, &ep, 10);
+	if (id > UID_MAX || *ep != '\0')
+		return 0;
+	pwd->pw_uid = (uid_t)id;
+	if (search && name == NULL && pwd->pw_uid != uid)
+		return 0;
+
+	if (!(cp = strsep(&bp, ":\n")))				/* gid */
+		return 0;
+	id = strtoul(cp, &ep, 10);
+	if (id > GID_MAX || *ep != '\0')
+		return 0;
+	pwd->pw_gid = (gid_t)id;
+
+	if (!(pwd->pw_class = strsep(&bp, ":")))		/* class */
+		return 0;
+	if (!(ep = strsep(&bp, ":")))				/* change */
+		return 0;
+	if (!(ep = strsep(&bp, ":")))				/* expire */
+		return 0;
+
+	if (!(pwd->pw_gecos = strsep(&bp, ":\n")))		/* gecos */
+		return 0;
+	if (!(pwd->pw_dir = strsep(&bp, ":\n")))		/* directory */
+		return 0;
+	if (!(pwd->pw_shell = strsep(&bp, ":\n")))		/* shell */
+		return 0;
+
+	if (strchr(bp, ':') != NULL)
+		return 0;
+
+	return 1;
+}

@@ -1,4 +1,4 @@
-.\"	$NetBSD: mount_ext2fs.8,v 1.7 2000/01/28 17:19:37 bouyer Exp $
+.\"	$NetBSD: mount_ext2fs.8,v 1.13 2005/01/31 05:19:19 erh Exp $
 .\"
 .\" Copyright (c) 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -34,12 +30,12 @@
 .\"
 .Dd June 27, 1996
 .Dt MOUNT_EXT2FS 8
-.Os NetBSD
+.Os
 .Sh NAME
 .Nm mount_ext2fs
 .Nd Mount an EXT2FS file system
 .Sh SYNOPSIS
-.Nm ""
+.Nm
 .Op Fl o Ar options
 .Ar special
 .Ar node
@@ -50,6 +46,11 @@ command attaches an EXT2FS file system
 .Ar special
 device on to the file system tree at the point
 .Ar node .
+Both
+.Ar special
+and
+.Ar node
+are converted to absolute paths before use.
 .Pp
 This command is normally executed by
 .Xr mount 8
@@ -65,15 +66,10 @@ See the
 .Xr mount 8
 man page for possible options and their meanings.
 .El
-.Sh BUGS
-Some EXT2FS-specific options, features or file flags are not supported.
-.Pp
-Because of EXT2FS limitations, an EXT2FS file system can't be used with
-any UID or GID greater than 65535.
 .Sh SEE ALSO
 .Xr mount 2 ,
 .Xr unmount 2 ,
-.Xr options 4 , 
+.Xr options 4 ,
 .Xr fstab 5 ,
 .Xr mount 8
 .Sh HISTORY
@@ -81,3 +77,8 @@ The
 .Nm
 utility first appeared in
 .Fx 2.2 .
+.Sh BUGS
+Some EXT2FS-specific options, features or file flags are not supported.
+.Pp
+Because of EXT2FS limitations, an EXT2FS file system can't be used with
+any UID or GID greater than 65535.

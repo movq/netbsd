@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.9 1998/07/28 11:40:58 mycroft Exp $	*/
+/* $NetBSD: extern.h,v 1.11 2003/08/07 09:05:41 agc Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,16 +31,21 @@
  *	@(#)extern.h	8.1 (Berkeley) 5/31/93
  */
 
-int	c_cchars __P((const void *, const void *));
-int	c_modes __P((const void *, const void *));
-int	csearch __P((char ***, struct info *));
-void	checkredirect __P((void));
-void	gprint __P((struct termios *));
-void	gread __P((struct termios *, char *));
-int	ksearch __P((char ***, struct info *));
-int	msearch __P((char ***, struct info *));
-void	optlist __P((void));
-void	print __P((struct termios *, struct winsize *, int, enum FMT));
-void	usage __P((void));
+#ifndef _EXTERN_H_
+#define _EXTERN_H_
+
+int	c_cchars(const void *, const void *);
+int	c_modes(const void *, const void *);
+int	csearch(char ***, struct info *);
+void	checkredirect(void);
+void	gprint(struct termios *);
+void	gread(struct termios *, char *);
+int	ksearch(char ***, struct info *);
+int	msearch(char ***, struct info *);
+void	optlist(void);
+void	print(struct termios *, struct winsize *, int, enum FMT);
+void	usage(void);
 
 extern const struct cchar cchars1[], cchars2[];
+
+#endif /* !_EXTERN_H_ */

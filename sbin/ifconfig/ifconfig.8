@@ -1,4 +1,4 @@
-.\"	$NetBSD: ifconfig.8,v 1.32 2000/03/01 03:32:55 enami Exp $
+.\"	$NetBSD: ifconfig.8,v 1.94 2008/09/30 09:41:41 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,9 +29,9 @@
 .\"
 .\"     @(#)ifconfig.8	8.4 (Berkeley) 6/1/94
 .\"
-.Dd April 16, 1997
+.Dd September 29, 2008
 .Dt IFCONFIG 8
-.Os BSD 4.2
+.Os
 .Sh NAME
 .Nm ifconfig
 .Nd configure network interface parameters
@@ -47,29 +43,22 @@
 .Op Ar dest_address
 .Oc
 .Op Ar parameters
-.Nm ""
-.Op Fl A
-.Op Fl mL
+.Nm
+.Op Fl hLmvz
 .Ar interface
 .Op Ar protocol_family
-.Nm ""
+.Nm
 .Fl a
-.Op Fl A
-.Op Fl mL
-.Op Fl b
-.Op Fl d
-.Op Fl u
-.Op Fl s
+.Op Fl bdhLmsuvz
 .Op Ar protocol_family
-.Nm ""
+.Nm
 .Fl l
-.Op Fl b
-.Op Fl d
-.Op Fl u
-.Op Fl s
-.Nm ""
+.Op Fl bdsu
+.Nm
 .Fl s
 .Ar interface
+.Nm
+.Fl C
 .Sh DESCRIPTION
 .Nm
 is used to assign an address
@@ -82,9 +71,9 @@ a later time to redefine an interface's address
 or other operating parameters.
 .Pp
 Available operands for
-.Nm "" :
+.Nm :
 .Bl -tag -width Ds
-.It Ar Address
+.It Ar address
 For the
 .Tn DARPA-Internet
 family,
@@ -100,24 +89,27 @@ addresses are
 .Ar net:a.b.c.d.e.f ,
 where
 .Ar net
-is the assigned network number (in decimal),
+is the assigned network number
+.Pq in decimal ,
 and each of the six bytes of the host number,
 .Ar a
 through
 .Ar f ,
 are specified in hexadecimal.
-The host number may be omitted on 10Mb/s Ethernet interfaces,
+The host number may be omitted on Ethernet interfaces,
 which use the hardware physical address,
 and on interfaces other than the first.
 For the
 .Tn ISO
 family, addresses are specified as a long hexadecimal string,
-as in the Xerox family.  However, two consecutive dots imply a zero
-byte, and the dots are optional, if the user wishes to (carefully)
+as in the Xerox family.
+However, two consecutive dots imply a zero
+byte, and the dots are optional, if the user wishes to
+.Pq carefully
 count out long strings of digits in network byte order.
 .It Ar address_family
 Specifies the
-.Ar address family
+.Ar address_family
 which affects interpretation of the remaining parameters.
 Since an interface can receive transmissions in differing protocols
 with different naming schemes, specifying the address family is recommended.
@@ -128,8 +120,8 @@ supported are
 .Dq atalk ,
 .Dq iso ,
 and
-.Dq ns .
-.It Ar Interface
+.Dq link .
+.It Ar interface
 The
 .Ar interface
 parameter is a string of the form
@@ -139,8 +131,46 @@ for example,
 .El
 .Pp
 The following parameters may be set with
-.Nm "" :
+.Nm :
 .Bl -tag -width dest_addressxx
+.It Cm active
+This keyword applies when
+.Nm
+adds or modifies any link-layer address.
+It indicates that
+.Nm
+should
+.Dq activate
+the address.
+Activation makes an address the default source for transmissions
+on the interface.
+You may not delete the active address from an interface.
+You must activate some other address, first.
+.It Cm advbase Ar n
+If the driver is a
+.Xr carp 4
+pseudo-device, set the base advertisement interval to
+.Ar n
+seconds.
+This ia an 8-bit number; the default value is 1 second.
+.It Cm advskew Ar n
+If the driver is a
+.Xr carp 4
+pseudo-device, skew the advertisement interval by
+.Ar n .
+This is an 8-bit number; the default value is 0.
+.Pp
+Taken together the
+.Cm advbase
+indicate how frequently, in seconds, the host will advertise the fact that it
+considers itself the master of the virtual host.
+The formula is
+.Cm advbase
++
+.Pf ( Cm advskew
+/ 256).
+If the master does not advertise within three times this interval, this host
+will begin advertising as master.
 .It Cm alias
 Establish an additional network address for this interface.
 This is sometimes useful when changing network numbers, and
@@ -149,24 +179,32 @@ one wishes to accept packets addressed to the old interface.
 Remove the specified network address alias.
 .It Cm arp
 Enable the use of the Address Resolution Protocol in mapping
-between network level addresses and link level addresses (default).
+between network level addresses and link level addresses
+.Pq default .
 This is currently implemented for mapping between
 .Tn DARPA
 Internet
-addresses and 10Mb/s Ethernet addresses.
+addresses and Ethernet addresses.
 .It Fl arp
 Disable the use of the Address Resolution Protocol.
 .It Cm anycast
-(inet6 only)
+.Pq inet6 only
 Set the IPv6 anycast address bit.
 .It Fl anycast
-(inet6 only)
+.Pq inet6 only
 Clear the IPv6 anycast address bit.
 .It Cm broadcast Ar mask
-(Inet only)
+.Pq Inet only
 Specify the address to use to represent broadcasts to the
 network.
 The default broadcast address is the address with a host part of all 1's.
+.It Cm carpdev Ar iface
+If the driver is a
+.Xr carp 4
+pseudo-device, attach it to
+.Ar iface .
+If not specified, the kernel will attempt to select an interface with
+a subnet matching that of the carp interface.
 .It Cm debug
 Enable driver dependent debugging code; usually, this turns on
 extra console error logging.
@@ -185,11 +223,12 @@ does not work for IPv6 addresses.
 Use
 .Fl alias
 with explicit IPv6 address instead.
-.It Cm dest_address
+.It Ar dest_address
 Specify the address of the correspondent on the other end
 of a point to point link.
 .It Cm down
-Mark an interface ``down''.  When an interface is
+Mark an interface ``down''.
+When an interface is
 marked ``down'', the system will not attempt to
 transmit messages through that interface.
 If possible, the interface will be reset to disable reception as well.
@@ -207,10 +246,12 @@ packets is done differently.
 Set the media type of the interface to
 .Ar type .
 Some interfaces support the mutually exclusive use of one of several
-different physical media connectors.  For example, a 10Mb/s Ethernet
+different physical media connectors.
+For example, a 10Mb/s Ethernet
 interface might support the use of either
 .Tn AUI
-or twisted pair connectors.  Setting the media type to
+or twisted pair connectors.
+Setting the media type to
 .Dq 10base5
 or
 .Dq AUI
@@ -219,7 +260,8 @@ Setting it to
 .Dq 10baseT
 or
 .Dq UTP
-would activate twisted pair.  Refer to the interfaces' driver
+would activate twisted pair.
+Refer to the interfaces' driver
 specific man page for a complete list of the available types.
 .It Cm mediaopt Ar opts
 Set the specified media options on the interface.
@@ -229,11 +271,24 @@ Refer to the interfaces' driver specific man page for a complete
 list of available options.
 .It Fl mediaopt Ar opts
 Disable the specified media options on the interface.
+.It Cm mode Ar mode
+If the driver supports the media selection system, set the specified
+operating mode on the interface to
+.Ar mode .
+For IEEE 802.11 wireless interfaces that support multiple operating modes
+this directive is used to select between 802.11a
+.Pq Dq 11a ,
+802.11b
+.Pq Dq 11b ,
+and 802.11g
+.Pq Dq 11g
+operating modes.
 .It Cm instance Ar minst
 Set the media instance to
 .Ar minst .
 This is useful for devices which have multiple physical layer interfaces
-(PHYs).  Setting the instance on such devices may not be strictly required
+.Pq PHYs .
+Setting the instance on such devices may not be strictly required
 by the network interface driver as the driver may take care of this
 automatically; see the driver's manual page for more information.
 .It Cm metric Ar n
@@ -250,7 +305,7 @@ Set the maximum transmission unit of the interface to
 .Ar n .
 Most interfaces don't support this option.
 .It Cm netmask Ar mask
-(Inet, inet6 and ISO)
+.Pq inet, inet6, and ISO
 Specify how much of the address to reserve for subdividing
 networks into sub-networks.
 The mask includes the network part of the local address
@@ -267,7 +322,8 @@ and the subnet field should be contiguous with the network
 portion.
 .Pp
 For INET and INET6 addresses, the netmask can also be given with
-slash-notation after the address (e.g 192.168.17.3/24).
+slash-notation after the address
+.Pq e.g 192.168.17.3/24 .
 .\" see
 .\" Xr eon 5 .
 .It Cm nsellength Ar n
@@ -278,7 +334,7 @@ This specifies a trailing number of bytes for a received
 used for local identification, the remaining leading part of which is
 taken to be the
 .Tn NET
-(Network Entity Title).
+.Pq Network Entity Title .
 The default value is 1, which is conformant to US
 .Tn GOSIP .
 When an ISO address is set in an ifconfig command,
@@ -295,49 +351,206 @@ There is some evidence that a number different from 1 may be useful
 for
 .Tn AFI
 37 type addresses.
+.It Cm state Ar state
+Explicitly force the
+.Xr carp 4
+pseudo-device to enter this state.
+Valid states are
+.Ar init ,
+.Ar backup ,
+and
+.Ar master .
+.It Cm frag Ar threshold
+.Pq IEEE 802.11 devices only
+Configure the fragmentation threshold for IEEE 802.11-based wireless
+network interfaces.
+.It Cm ssid Ar id
+.Pq IEEE 802.11 devices only
+Configure the Service Set Identifier (a.k.a. the network name)
+for IEEE 802.11-based wireless network interfaces.
+The
+.Ar id
+can either be any text string up to 32 characters in length,
+or a series of up to 64 hexadecimal digits preceded by
+.Dq 0x .
+Setting
+.Ar id
+to the empty string allows the interface to connect to any available
+access point.
 .It Cm nwid Ar id
-(IEEE 802.11 devices only)
-Configure network ID for IEEE 802.11-based wireless network interfaces.
+Synonym for
+.Dq ssid .
+.It Cm hidessid
+.Pq IEEE 802.11 devices only
+When operating as an access point, do not broadcast the SSID
+in beacon frames or respond to probe request frames unless
+they are directed to the ap (i.e., they include the ap's SSID).
+By default, the SSID is included in beacon frames and
+undirected probe request frames are answered.
+.It Fl hidessid
+.Pq IEEE 802.11 devices only
+When operating as an access point, broadcast the SSID
+in beacon frames and answer and respond to undirected probe
+request frames (default).
+.It Cm nwkey Ar key
+.Pq IEEE 802.11 devices only
+Enable WEP encryption for IEEE 802.11-based wireless network interfaces
+with the
+.Ar key .
+The
+.Ar key
+can either be a string, a series of hexadecimal digits preceded by
+.Dq 0x ,
+or a set of keys in the form
+.Ar n:k1,k2,k3,k4 ,
+where
+.Ar n
+specifies which of keys will be used for all transmitted packets,
+and four keys,
+.Ar k1
+through
+.Ar k4 ,
+are configured as WEP keys.
+Note that the order must be match within same network if multiple keys
+are used.
+For IEEE 802.11 wireless network, the length of each key is restricted to
+40 bits, i.e. 5-character string or 10 hexadecimal digits,
+while the WaveLAN/IEEE Gold cards accept the 104 bits
+.Pq 13 characters
+key.
+.It Cm nwkey Cm persist
+.Pq IEEE 802.11 devices only
+Enable WEP encryption for IEEE 802.11-based wireless network interfaces
+with the persistent key written in the network card.
+.It Cm nwkey Cm persist: Ns Ar key
+.Pq IEEE 802.11 devices only
+Write the
+.Ar key
+to the persistent memory of the network card, and
+enable WEP encryption for IEEE 802.11-based wireless network interfaces
+with the
+.Ar key .
+.It Fl nwkey
+.Pq IEEE 802.11 devices only
+Disable WEP encryption for IEEE 802.11-based wireless network interfaces.
+.It Cm apbridge
+.Pq IEEE 802.11 devices only
+When operating as an access point, pass packets between
+wireless clients directly (default).
+.It Fl apbridge
+.Pq IEEE 802.11 devices only
+When operating as an access point, pass packets through
+the system so that they can be forwared using some other mechanism.
+Disabling the internal bridging is useful when traffic
+is to be processed with packet filtering.
+.It Cm pass Ar passphrase
+If the driver is a
+.Xr carp 4
+pseudo-device, set the authentication key to
+.Ar passphrase .
+There is no passphrase by default
+.It Cm powersave
+.Pq IEEE 802.11 devices only
+Enable 802.11 power saving mode.
+.It Fl powersave
+.Pq IEEE 802.11 devices only
+Disable 802.11 power saving mode.
+.It Cm powersavesleep Ar duration
+.Pq IEEE 802.11 devices only
+Set the receiver sleep duration in milliseconds for 802.11 power saving mode.
+.It Cm bssid Ar bssid
+.Pq IEEE 802.11 devices only
+Set the desired BSSID for IEEE 802.11-based wireless network interfaces.
+.It Fl bssid
+.Pq IEEE 802.11 devices only
+Unset the desired BSSID for IEEE 802.11-based wireless network interfaces.
+The interface will automatically select a BSSID in this mode, which is
+the default.
+.It Cm chan Ar chan
+.Pq IEEE 802.11 devices only
+Select the channel
+.Pq radio frequency
+to be used for IEEE 802.11-based wireless network interfaces.
+.It Fl chan
+.Pq IEEE 802.11 devices only
+Unset the desired channel to be used
+for IEEE 802.11-based wireless network interfaces.
+It doesn't affect the channel to be created for IBSS or hostap mode.
+.It Bk -words
+.It Cm list scan
+.Pq IEEE 802.11 devices only
+Display the access points and/or ad-hoc neighbors
+located in the vicinity.
+The
+.Fl v
+flag may be used to display long SSIDs.
+.Fl v
+also causes received information elements to be displayed symbolicaly.
+Only the super-user can use this command.
+.It Cm tunnel Ar src_addr Ns Op Ar ,src_port
+.Ar dest_addr Ns Op Ar ,dest_port
+.Ek
+.Pq IP tunnel devices only
+Configure the physical source and destination address for IP tunnel
+interfaces, including
+.Xr gif 4 .
+The arguments
+.Ar src_addr
+and
+.Ar dest_addr
+are interpreted as the outer source/destination for the encapsulating
+IPv4/IPv6 header.
+.Pp
+On a
+.Xr gre 4
+interface in UDP mode, the arguments
+.Ar src_port
+and
+.Ar dest_port
+are interpreted as the outer source/destination port for the encapsulating
+UDP header.
+.It Cm deletetunnel
+Unconfigure the physical source and destination address for IP tunnel
+interfaces previously configured with
+.Cm tunnel .
+.It Cm create
+Create the specified network pseudo-device.
+.It Cm destroy
+Destroy the specified network pseudo-device.
 .It Cm pltime Ar n
-(inet6 only)
+.Pq inet6 only
 Set preferred lifetime for the address.
 .It Cm prefixlen Ar n
-(inet6 only)
+.Pq inet and inet6 only
 Effect is similar to
 .Cm netmask .
 but you can specify by prefix length by digits.
+.It Cm deprecated
+.Pq inet6 only
+Set the IPv6 deprecated address bit.
+.It Fl deprecated
+.Pq inet6 only
+Clear the IPv6 deprecated address bit.
 .It Cm tentative
-(inet6 only)
+.Pq inet6 only
 Set the IPv6 tentative address bit.
 .It Fl tentative
-(inet6 only)
+.Pq inet6 only
 Clear the IPv6 tentative address bit.
-.It Cm trailers
-Request the use of a ``trailer'' link level encapsulation when
-sending (default).
-If a network interface supports
-.Cm trailers ,
-the system will, when possible, encapsulate outgoing
-messages in a manner which minimizes the number of
-memory to memory copy operations performed by the receiver.
-On networks that support the Address Resolution Protocol (see
-.Xr arp 4 ;
-currently, only 10 Mb/s Ethernet),
-this flag indicates that the system should request that other
-systems use trailers when sending to this host.
-Similarly, trailer encapsulations will be sent to other
-hosts that have made such requests.
-Currently used by Internet protocols only.
-.It Fl trailers
-Disable the use of a ``trailer'' link level encapsulation.
+.It Cm eui64
+.Pq inet6 only
+Fill interface index
+.Pq lowermost 64bit of an IPv6 address
+automatically.
 .It Cm link[0-2]
 Enable special processing of the link level of the interface.
 These three options are interface specific in actual effect, however,
-they are in general used to select special modes of operation. An example
+they are in general used to select special modes of operation.
+An example
 of this is to enable SLIP compression, or to select the connector type
-for some ethernet cards.  Refer to the man page for the specific driver
+for some Ethernet cards.
+Refer to the man page for the specific driver
 for more information.
-.ne 1i
 .It Fl link[0-2]
 Disable special processing at the link level with the specified interface.
 .It Cm up
@@ -346,28 +559,180 @@ This may be used to enable an interface after an ``ifconfig down.''
 It happens automatically when setting the first address on an interface.
 If the interface was reset when previously marked down,
 the hardware will be re-initialized.
+.It Cm vhid Ar n
+If the driver is a
+.Xr carp 4
+pseudo-device, set the virtual host ID to
+.Ar n .
+Acceptable values are 1 to 255.
+.It Cm vlan Ar vid
+If the interface is a
+.Xr vlan 4
+pseudo-interface, set the VLAN identifier to
+.Ar vid .
+These are the first 12 bits (0-4095) from a 16-bit integer used
+to create an 802.1Q VLAN header for packets sent from the
+.Xr vlan 4
+interface.
+Note that
+.Cm vlan
+and
+.Cm vlanif
+must be set at the same time.
+.It Cm vlanif Ar iface
+If the interface is a
+.Xr vlan 4
+pseudo-interface, associate the physical interface
+.Ar iface
+with it.
+Packets transmitted through the
+.Xr vlan 4
+interface will be diverted to the specified physical interface
+.Ar iface
+with 802.1Q VLAN encapsulation.
+Packets with 802.1Q encapsulation received
+by the physical interface with the correct VLAN tag will be diverted to the
+associated
+.Xr vlan 4
+pseudo-interface.
+The VLAN interface is assigned a copy of the physical
+interface's flags and
+.Tn Ethernet
+address.
+If the
+.Xr vlan 4
+interface already has a physical interface associated with it, this command
+will fail.
+To change the association to another physical interface, the
+existing association must be cleared first.
+Note that
+.Cm vlanif
+and
+.Cm vlan
+must be set at the same time.
+.It Cm agrport Ar iface
+Add
+.Ar iface
+to the
+.Xr agr 4
+interface.
+.It Cm -agrport Ar iface
+Remove
+.Ar iface
+from the
+.Xr agr 4
+interface.
 .It Cm vltime Ar n
-(inet6 only)
+.Pq inet6 only
 Set valid lifetime for the address.
+.It Cm ip4csum
+Shorthand of
+.Dq ip4csum-tx ip4csum-rx
+.It Cm -ip4csum
+Shorthand of
+.Dq -ip4csum-tx -ip4csum-rx
+.It Cm tcp4csum
+Shorthand of
+.Dq tcp4csum-tx tcp4csum-rx
+.It Cm -tcp4csum
+Shorthand of
+.Dq -tcp4csum-tx -tcp4csum-rx
+.It Cm udp4csum
+Shorthand of
+.Dq udp4csum-tx udp4csum-rx
+.It Cm -udp4csum
+Shorthand of
+.Dq -udp4csum-tx -udp4csum-rx
+.It Cm tcp6csum
+Shorthand of
+.Dq tcp6csum-tx tcp6csum-rx
+.It Cm -tcp6csum
+Shorthand of
+.Dq -tcp6csum-tx -tcp6csum-rx
+.It Cm udp6csum
+Shorthand of
+.Dq udp6csum-tx udp6csum-rx
+.It Cm -udp6csum
+Shorthand of
+.Dq -udp6csum-tx -udp6csum-rx
+.It Cm ip4csum-tx
+Enable hardware-assisted IPv4 header checksums for the out-bound direction.
+.It Cm -ip4csum-tx
+Disable hardware-assisted IPv4 header checksums for the out-bound direction.
+.It Cm ip4csum-rx
+Enable hardware-assisted IPv4 header checksums for the in-bound direction.
+.It Cm -ip4csum-rx
+Disable hardware-assisted IPv4 header checksums for the in-bound direction.
+.It Cm tcp4csum-tx
+Enable hardware-assisted TCP/IPv4 checksums for the out-bound direction.
+.It Cm -tcp4csum-tx
+Disable hardware-assisted TCP/IPv4 checksums for the out-bound direction.
+.It Cm tcp4csum-rx
+Enable hardware-assisted TCP/IPv4 checksums for the in-bound direction.
+.It Cm -tcp4csum-rx
+Disable hardware-assisted TCP/IPv4 checksums for the in-bound direction.
+.It Cm udp4csum-tx
+Enable hardware-assisted UDP/IPv4 checksums for the out-bound direction.
+.It Cm -udp4csum-tx
+Disable hardware-assisted UDP/IPv4 checksums for the out-bound direction.
+.It Cm udp4csum-rx
+Enable hardware-assisted UDP/IPv4 checksums for the in-bound direction.
+.It Cm -udp4csum-rx
+Disable hardware-assisted UDP/IPv4 checksums for the in-bound direction.
+.It Cm tcp6csum-tx
+Enable hardware-assisted TCP/IPv6 checksums for the out-bound direction.
+.It Cm -tcp6csum-tx
+Disable hardware-assisted TCP/IPv6 checksums for the out-bound direction.
+.It Cm tcp6csum-rx
+Enable hardware-assisted TCP/IPv6 checksums for the in-bound direction.
+.It Cm -tcp6csum-rx
+Disable hardware-assisted TCP/IPv6 checksums for the in-bound direction.
+.It Cm udp6csum-tx
+Enable hardware-assisted UDP/IPv6 checksums for the out-bound direction.
+.It Cm -udp6csum-tx
+Disable hardware-assisted UDP/IPv6 checksums for the out-bound direction.
+.It Cm udp6csum-rx
+Enable hardware-assisted UDP/IPv6 checksums for the in-bound direction.
+.It Cm -udp6csum-rx
+Disable hardware-assisted UDP/IPv6 checksums for the in-bound direction.
+.It Cm tso4
+Enable hardware-assisted TCP/IPv4 segmentation on interfaces that
+support it.
+.It Cm -tso4
+Disable hardware-assisted TCP/IPv4 segmentation on interfaces that
+support it.
+.It Cm tso6
+Enable hardware-assisted TCP/IPv6 segmentation on interfaces that
+support it.
+.It Cm -tso6
+Disable hardware-assisted TCP/IPv6 segmentation on interfaces that
+support it.
 .El
 .Pp
 .Nm
 displays the current configuration for a network interface
 when no optional parameters are supplied.
 If a protocol family is specified,
-Ifconfig will report only the details specific to that protocol
+.Nm
+will report only the details specific to that protocol
 family.
 .Pp
 If the
 .Fl s
 flag is passed before an interface name,
 .Nm
-will attempt to query the interface for its media status.  If the
+will attempt to query the interface for its media status.
+If the
 interface supports reporting media status, and it reports that it does
 not appear to be connected to a network,
-.Nm 
-will exit with status of 1 (false); otherwise, it will exit with a
-zero (true) exit status.  Not all interface drivers support media
+.Nm
+will exit with status of 1
+.Pq false ;
+otherwise, it will exit with a
+zero
+.Pq true
+exit status.
+Not all interface drivers support media
 status reporting.
 .Pp
 If the
@@ -382,7 +747,8 @@ as time offset string.
 .Pp
 Optionally, the
 .Fl a
-flag may be used instead of an interface name.  This flag instructs
+flag may be used instead of an interface name.
+This flag instructs
 .Nm
 to display information about all interfaces in the system.
 .Fl d
@@ -394,37 +760,68 @@ limits this to broadcast interfaces, and
 .Fl s
 omits interfaces which appear not to be connected to a network.
 .Pp
-If the
-.Fl A
-flag is also specified, any relevant interface alias information is also
-displayed.
-.Pp
 The
 .Fl l
 flag may be used to list all available interfaces on the system, with
-no other additional information.  Use of this flag is mutually exclusive
+no other additional information.
+Use of this flag is mutually exclusive
 with all other flags and commands, except for
 .Fl d
-(only list interfaces that are down),
+.Pq only list interfaces that are down ,
 .Fl u
-(only list interfaces that are up),
+.Pq only list interfaces that are up ,
 .Fl s
-(only list interfaces that may be connected),
+.Pq only list interfaces that may be connected ,
 .Fl b
-(only list broadcast interfaces).
+.Pq only list broadcast interfaces .
+.Pp
+The
+.Fl C
+flag may be used to list all of the interface cloners available on
+the system, with no additional information.
+Use of this flag is
+mutually exclusive with all other flags and commands.
+.Pp
+The
+.Fl v
+flag prints statistics on packets sent and received on the given
+interface.
+If
+.Fl h
+is used in conjunction with
+.Fl v ,
+the byte statistics will be printed in "human-readable" format.
+The
+.Fl z
+flag is identical to the
+.Fl v
+flag except that it zeros the interface input and output statistics
+after printing them.
 .Pp
 Only the super-user may modify the configuration of a network interface.
+.Sh EXAMPLES
+Add a link-layer address to an Ethernet:
+.Pp
+.Ic ifconfig sip0 link 00:11:22:33:44:55
+.Pp
+Add and activate a link-layer address:
+.Pp
+.Ic ifconfig sip0 link 00:11:22:33:44:55 active
 .Sh DIAGNOSTICS
-Messages indicating the specified interface does not exit, the
+Messages indicating the specified interface does not exist, the
 requested address is unknown, or the user is not privileged and
 tried to alter an interface's configuration.
 .Sh SEE ALSO
-.Xr ifmedia 4 ,
 .Xr netstat 1 ,
+.Xr agr 4 ,
+.Xr carp 4 ,
+.Xr ifmedia 4 ,
 .Xr netintro 4 ,
+.Xr vlan 4 ,
+.Xr ifconfig.if 5 ,
+.\" .Xr eon 5 ,
 .Xr rc 8 ,
-.Xr routed 8 ,
-.\" .Xr eon 5
+.Xr routed 8
 .Sh HISTORY
 The
 .Nm

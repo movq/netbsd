@@ -1,4 +1,4 @@
-/*	$NetBSD: sbusvar.h,v 1.9 1998/09/19 15:49:50 pk Exp $ */
+/*	$NetBSD: sbusvar.h,v 1.19 2008/05/17 18:11:32 macallan Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,11 +50,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -86,19 +75,27 @@
 
 /* variables per Sbus */
 struct sbus_softc {
-	struct	device sc_dev;		/* base device */
+	device_t sc_dev;		/* base device */
 	bus_space_tag_t	sc_bustag;
 	bus_dma_tag_t	sc_dmatag;
 	bus_space_handle_t sc_bh;	/* SBus control registers */
 	int	sc_clockfreq;		/* clock frequency (in Hz) */
 	struct	sbusdev *sc_sbdev;	/* list of all children */
-	struct	sbus_range *sc_range;	/* Address space translations */
-	int	sc_nrange;
 	int	sc_burst;		/* burst transfer sizes supported */
 
 	/* MD fields follow here */
 	int	*sc_intr2ipl;		/* Interrupt level translation */
-	int	*sc_intr_compat;	/* `intr' property to sbus compat */
 };
+
+/*
+ * Macro to convert a PROM virtual address to a bus_space_handle_t.
+ */
+#define	sbus_promaddr_to_handle(tag, promaddr, hp) sparc_promaddr_to_handle(tag, promaddr, hp)
+
+static inline void
+sparc_promaddr_to_handle(bus_space_tag_t tag, u_int promaddr, bus_space_handle_t *hp)
+{
+	*(hp) = (bus_space_handle_t)(promaddr);
+}
 
 #endif /* _SBUS_VAR_SPARC_H */

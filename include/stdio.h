@@ -1,4 +1,4 @@
-/*	$NetBSD: stdio.h,v 1.32 2000/01/10 16:58:38 kleink Exp $	*/
+/*	$NetBSD: stdio.h,v 1.73 2008/09/21 16:59:46 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,12 +37,9 @@
 #ifndef	_STDIO_H_
 #define	_STDIO_H_
 
-#if !defined(_ANSI_SOURCE) && !defined(__STRICT_ANSI__)
-#include <sys/types.h>
-#endif
-
 #include <sys/cdefs.h>
 #include <sys/featuretest.h>
+#include <sys/ansi.h>
 
 #include <machine/ansi.h>
 #ifdef	_BSD_SIZE_T_
@@ -61,11 +54,11 @@ typedef	_BSD_SIZE_T_	size_t;
  * innards of an fpos_t anyway.  The library internally uses off_t,
  * which we assume is exactly as big as eight chars.
  */
-#if !defined(_ANSI_SOURCE) && !defined(__STRICT_ANSI__)
-typedef off_t fpos_t;
+#if (!defined(_ANSI_SOURCE) && !defined(__STRICT_ANSI__)) || defined(_LIBC)
+typedef __off_t fpos_t;
 #else
 typedef struct __sfpos {
-	long long _pos;			/* XXX must be the same as off_t */
+	__off_t _pos;
 } fpos_t;
 #endif
 
@@ -113,20 +106,22 @@ typedef	struct __sFILE {
 	unsigned char *_p;	/* current position in (some) buffer */
 	int	_r;		/* read space left for getc() */
 	int	_w;		/* write space left for putc() */
-	short	_flags;		/* flags, below; this FILE is free if 0 */
+	unsigned short _flags;	/* flags, below; this FILE is free if 0 */
 	short	_file;		/* fileno, if Unix descriptor, else -1 */
 	struct	__sbuf _bf;	/* the buffer (at least 1 byte, if !NULL) */
 	int	_lbfsize;	/* 0 or -_bf._size, for inline putc */
 
 	/* operations */
 	void	*_cookie;	/* cookie passed to io functions */
-	int	(*_close) __P((void *));
-	int	(*_read)  __P((void *, char *, int));
-	fpos_t	(*_seek)  __P((void *, fpos_t, int));
-	int	(*_write) __P((void *, const char *, int));
+	int	(*_close)(void *);
+	int	(*_read) (void *, char *, int);
+	fpos_t	(*_seek) (void *, fpos_t, int);
+	int	(*_write)(void *, const char *, int);
+
+	/* file extension */
+	struct	__sbuf _ext;
 
 	/* separate buffer for long sequences of ungetc() */
-	struct	__sbuf _ub;	/* ungetc buffer */
 	unsigned char *_up;	/* saved _p when _p is doing ungetc data */
 	int	_ur;		/* saved _r when _r is counting ungetc data */
 
@@ -157,8 +152,8 @@ __END_DECLS
 #define	__SMBF	0x0080		/* _buf is from malloc */
 #define	__SAPP	0x0100		/* fdopen()ed in append mode */
 #define	__SSTR	0x0200		/* this is an sprintf/snprintf string */
-#define	__SOPT	0x0400		/* do fseek() optimisation */
-#define	__SNPT	0x0800		/* do not do fseek() optimisation */
+#define	__SOPT	0x0400		/* do fseek() optimization */
+#define	__SNPT	0x0800		/* do not do fseek() optimization */
 #define	__SOFF	0x1000		/* set iff _offset is in fact correct */
 #define	__SMOD	0x2000		/* true => fgetln modified _p text */
 #define	__SALC	0x4000		/* allocate string space dynamically */
@@ -189,11 +184,14 @@ __END_DECLS
 #define	FILENAME_MAX	1024	/* must be <= PATH_MAX <sys/syslimits.h> */
 
 /* System V/ANSI C; this is the wrong way to do this, do *not* use these. */
-#ifndef _ANSI_SOURCE
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 #define	P_tmpdir	"/var/tmp/"
 #endif
 #define	L_tmpnam	1024	/* XXX must be == PATH_MAX */
-#define	TMP_MAX		308915776
+/* Always ensure that this is consistent with <limits.h> */
+#ifndef TMP_MAX
+#define TMP_MAX			308915776	/* Legacy */
+#endif
 
 /* Always ensure that these are consistent with <fcntl.h> and <unistd.h>! */
 #ifndef SEEK_SET
@@ -214,170 +212,224 @@ __END_DECLS
  * Functions defined in ANSI C standard.
  */
 __BEGIN_DECLS
-void	 clearerr __P((FILE *));
-int	 fclose __P((FILE *));
-int	 feof __P((FILE *));
-int	 ferror __P((FILE *));
-int	 fflush __P((FILE *));
-int	 fgetc __P((FILE *));
-int	 fgetpos __P((FILE *, fpos_t *));
-char	*fgets __P((char *, int, FILE *));
-FILE	*fopen __P((const char *, const char *));
-int	 fprintf __P((FILE *, const char *, ...));
-int	 fputc __P((int, FILE *));
-int	 fputs __P((const char *, FILE *));
-size_t	 fread __P((void *, size_t, size_t, FILE *));
-FILE	*freopen __P((const char *, const char *, FILE *));
-int	 fscanf __P((FILE *, const char *, ...));
-int	 fseek __P((FILE *, long, int));
-int	 fsetpos __P((FILE *, const fpos_t *));
-long	 ftell __P((FILE *));
-size_t	 fwrite __P((const void *, size_t, size_t, FILE *));
-int	 getc __P((FILE *));
-int	 getchar __P((void));
-void	 perror __P((const char *));
-int	 printf __P((const char *, ...));
-int	 putc __P((int, FILE *));
-int	 putchar __P((int));
-int	 puts __P((const char *));
-int	 remove __P((const char *));
-void	 rewind __P((FILE *));
-int	 scanf __P((const char *, ...));
-void	 setbuf __P((FILE *, char *));
-int	 setvbuf __P((FILE *, char *, int, size_t));
-int	 sscanf __P((const char *, const char *, ...));
-FILE	*tmpfile __P((void));
-int	 ungetc __P((int, FILE *));
-int	 vfprintf __P((FILE *, const char *, _BSD_VA_LIST_));
-int	 vprintf __P((const char *, _BSD_VA_LIST_));
+void	 clearerr(FILE *);
+int	 fclose(FILE *);
+int	 feof(FILE *);
+int	 ferror(FILE *);
+int	 fflush(FILE *);
+int	 fgetc(FILE *);
+int	 fgetpos(FILE * __restrict, fpos_t * __restrict);
+char	*fgets(char * __restrict, int, FILE * __restrict);
+FILE	*fopen(const char * __restrict , const char * __restrict);
+int	 fprintf(FILE * __restrict , const char * __restrict, ...)
+    __attribute__((__format__(__printf__, 2, 3)));
+int	 fputc(int, FILE *);
+int	 fputs(const char * __restrict, FILE * __restrict);
+size_t	 fread(void * __restrict, size_t, size_t, FILE * __restrict);
+FILE	*freopen(const char * __restrict, const char * __restrict,
+	    FILE * __restrict);
+int	 fscanf(FILE * __restrict, const char * __restrict, ...)
+    __attribute__((__format__(__scanf__, 2, 3)));
+int	 fseek(FILE *, long, int);
+int	 fsetpos(FILE *, const fpos_t *);
+long	 ftell(FILE *);
+size_t	 fwrite(const void * __restrict, size_t, size_t, FILE * __restrict);
+int	 getc(FILE *);
+int	 getchar(void);
+void	 perror(const char *);
+int	 printf(const char * __restrict, ...)
+    __attribute__((__format__(__printf__, 1, 2)));
+int	 putc(int, FILE *);
+int	 putchar(int);
+int	 puts(const char *);
+int	 remove(const char *);
+void	 rewind(FILE *);
+int	 scanf(const char * __restrict, ...)
+    __attribute__((__format__(__scanf__, 1, 2)));
+void	 setbuf(FILE * __restrict, char * __restrict);
+int	 setvbuf(FILE * __restrict, char * __restrict, int, size_t);
+int	 sscanf(const char * __restrict, const char * __restrict, ...)
+    __attribute__((__format__(__scanf__, 2, 3)));
+FILE	*tmpfile(void);
+int	 ungetc(int, FILE *);
+int	 vfprintf(FILE * __restrict, const char * __restrict, _BSD_VA_LIST_)
+    __attribute__((__format__(__printf__, 2, 0)));
+int	 vprintf(const char * __restrict, _BSD_VA_LIST_)
+    __attribute__((__format__(__printf__, 1, 0)));
 
 #ifndef __AUDIT__
-char	*gets __P((char *));
-int	 sprintf __P((char *, const char *, ...));
-char	*tmpnam __P((char *));
-int	 vsprintf __P((char *, const char *, _BSD_VA_LIST_));
+char	*gets(char *);
+int	 sprintf(char * __restrict, const char * __restrict, ...)
+    __attribute__((__format__(__printf__, 2, 3)));
+char	*tmpnam(char *);
+int	 vsprintf(char * __restrict, const char * __restrict,
+    _BSD_VA_LIST_)
+    __attribute__((__format__(__printf__, 2, 0)));
 #endif
 
 #if defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE)
-int	 rename  __P((const char *, const char *)) __RENAME(__posix_rename);
+int	 rename (const char *, const char *) __RENAME(__posix_rename);
 #else
-int	 rename  __P((const char *, const char *));
+int	 rename (const char *, const char *);
 #endif
 __END_DECLS
 
 /*
  * IEEE Std 1003.1-90
  */
-#ifndef _ANSI_SOURCE
+#if defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE) || \
+    defined(_NETBSD_SOURCE)
 #define	L_ctermid	1024	/* size for ctermid(); PATH_MAX */
 #define L_cuserid	9	/* size for cuserid(); UT_NAMESIZE + 1 */
 
 __BEGIN_DECLS
-char	*ctermid __P((char *));
-char	*cuserid __P((char *));
-FILE	*fdopen __P((int, const char *));
-int	 fileno __P((FILE *));
+char	*ctermid(char *);
+#ifndef __CUSERID_DECLARED
+#define __CUSERID_DECLARED
+/* also declared in unistd.h */
+char	*cuserid(char *);
+#endif /* __CUSERID_DECLARED */
+FILE	*fdopen(int, const char *);
+int	 fileno(FILE *);
 __END_DECLS
 #endif /* not ANSI */
 
 /*
  * IEEE Std 1003.1c-95, also adopted by X/Open CAE Spec Issue 5 Version 2
  */
-#if (!defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) && \
-     !defined(_XOPEN_SOURCE)) || (_POSIX_C_SOURCE - 0) >= 199506L || \
-    (_XOPEN_SOURCE - 0) >= 500 || defined(_REENTRANT)
+#if (_POSIX_C_SOURCE - 0) >= 199506L || (_XOPEN_SOURCE - 0) >= 500 || \
+    defined(_REENTRANT) || defined(_NETBSD_SOURCE)
 __BEGIN_DECLS
-#if 0 /* not yet */
-void	flockfile __P((FILE *));
-int	ftrylockfile __P((FILE *));
-void	funlockfile __P((FILE *));
-#endif /* 0 */
-int	getc_unlocked __P((FILE *));
-int	getchar_unlocked __P((void));
-int	putc_unlocked __P((int, FILE *));
-int	putchar_unlocked __P((int));
+void	flockfile(FILE *);
+int	ftrylockfile(FILE *);
+void	funlockfile(FILE *);
+int	getc_unlocked(FILE *);
+int	getchar_unlocked(void);
+int	putc_unlocked(int, FILE *);
+int	putchar_unlocked(int);
 __END_DECLS
-#endif /* (!_ANSI_SOURCE && !_POSIX_C_SOURCE && !_XOPEN_SOURCE) || ... */
+#endif /* _POSIX_C_SOURCE >= 1995056 || _XOPEN_SOURCE >= 500 || ... */
 
 /*
  * Functions defined in POSIX 1003.2 and XPG2 or later.
  */
-#if (!defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) && \
-     !defined(_XOPEN_SOURCE)) || (_POSIX_C_SOURCE - 0) >= 2 || \
-    (_XOPEN_SOURCE - 0) >= 2
+#if (_POSIX_C_SOURCE - 0) >= 2 || (_XOPEN_SOURCE - 0) >= 2 || \
+    defined(_NETBSD_SOURCE)
 __BEGIN_DECLS
-int	 pclose __P((FILE *));
-FILE	*popen __P((const char *, const char *));
+int	 pclose(FILE *);
+FILE	*popen(const char *, const char *);
+__END_DECLS
+#endif
+
+/*
+ * Functions defined in ISO XPG4.2, ISO C99, POSIX 1003.1-2001 or later.
+ */
+#if ((__STDC_VERSION__ - 0) >= 199901L) || \
+    ((_POSIX_C_SOURCE - 0) >= 200112L) || \
+    (defined(_XOPEN_SOURCE) && defined(_XOPEN_SOURCE_EXTENDED)) || \
+    ((_XOPEN_SOURCE - 0) >= 500) || \
+    defined(_ISOC99_SOURCE) || defined(_NETBSD_SOURCE)
+__BEGIN_DECLS
+int	 snprintf(char * __restrict, size_t, const char * __restrict, ...)
+    __attribute__((__format__(__printf__, 3, 4)));
+int	 vsnprintf(char * __restrict, size_t, const char * __restrict,
+	    _BSD_VA_LIST_)
+    __attribute__((__format__(__printf__, 3, 0)));
 __END_DECLS
 #endif
 
 /*
  * Functions defined in XPG4.2.
  */
-#if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) || \
-    defined(_XOPEN_SOURCE)
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 __BEGIN_DECLS
-int	 getw __P((FILE *));
-int	 putw __P((int, FILE *));
-int	 snprintf __P((char *, size_t, const char *, ...))
-	    __attribute__((__format__(__printf__, 3, 4)));
-int	 vsnprintf __P((char *, size_t, const char *, _BSD_VA_LIST_))
-	    __attribute__((__format__(__printf__, 3, 0)));
+int	 getw(FILE *);
+int	 putw(int, FILE *);
 
 #ifndef __AUDIT__
-char	*tempnam __P((const char *, const char *));
+char	*tempnam(const char *, const char *);
 #endif
 __END_DECLS
 #endif
+
+/*
+ * X/Open CAE Specification Issue 5 Version 2
+ */
+#if (_XOPEN_SOURCE - 0) >= 500 || defined(_LARGEFILE_SOURCE) || \
+    defined(_NETBSD_SOURCE)
+#ifndef	off_t
+typedef	__off_t		off_t;
+#define	off_t		__off_t
+#endif /* off_t */
+
+__BEGIN_DECLS
+int	 fseeko(FILE *, off_t, int);
+off_t	 ftello(FILE *);
+__END_DECLS
+#endif /* _XOPEN_SOURCE >= 500 || _LARGEFILE_SOURCE || _NETBSD_SOURCE */
+
+/*
+ * Functions defined in ISO C99.  Still put under _NETBSD_SOURCE due to
+ * backward compatible.
+ */
+#if defined(_ISOC99_SOURCE) || defined(_NETBSD_SOURCE)
+__BEGIN_DECLS
+int	 vscanf(const char * __restrict, _BSD_VA_LIST_)
+    __attribute__((__format__(__scanf__, 1, 0)));
+int	 vfscanf(FILE * __restrict, const char * __restrict, _BSD_VA_LIST_)
+    __attribute__((__format__(__scanf__, 2, 0)));
+int	 vsscanf(const char * __restrict, const char * __restrict,
+    _BSD_VA_LIST_)
+    __attribute__((__format__(__scanf__, 2, 0)));
+__END_DECLS
+#endif /* _ISOC99_SOURCE || _NETBSD_SOURCE */
 
 /*
  * Routines that are purely local.
  */
-#if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) && \
-    !defined(_XOPEN_SOURCE)
-__BEGIN_DECLS
-int	 asprintf __P((char **, const char *, ...))
-		__attribute__((__format__(__printf__, 2, 3)));
-char	*fgetln __P((FILE *, size_t *));
-int	 fpurge __P((FILE *));
-void	 setbuffer __P((FILE *, char *, int));
-int	 setlinebuf __P((FILE *));
-int	 vasprintf __P((char **, const char *, _BSD_VA_LIST_))
-		__attribute__((__format__(__printf__, 2, 0)));
-int	 vscanf __P((const char *, _BSD_VA_LIST_))
-	    __attribute__((__format__(__scanf__, 1, 0)));
-int	 vsscanf __P((const char *, const char *, _BSD_VA_LIST_))
-	    __attribute__((__format__(__scanf__, 2, 0)));
-__END_DECLS
+#if defined(_NETBSD_SOURCE)
 
-/*
- * This is a #define because the function is used internally and
- * (unlike vfscanf) the name __svfscanf is guaranteed not to collide
- * with a user function when _ANSI_SOURCE or _POSIX_SOURCE is defined.
- */
-#define	 vfscanf	__svfscanf
+#define	FPARSELN_UNESCESC	0x01
+#define	FPARSELN_UNESCCONT	0x02
+#define	FPARSELN_UNESCCOMM	0x04
+#define	FPARSELN_UNESCREST	0x08
+#define	FPARSELN_UNESCALL	0x0f
+
+__BEGIN_DECLS
+int	 asprintf(char ** __restrict, const char * __restrict, ...)
+    __attribute__((__format__(__printf__, 2, 3)));
+char	*fgetln(FILE * __restrict, size_t * __restrict);
+char	*fparseln(FILE *, size_t *, size_t *, const char[3], int);
+int	 fpurge(FILE *);
+void	 setbuffer(FILE *, char *, int);
+int	 setlinebuf(FILE *);
+int	 vasprintf(char ** __restrict, const char * __restrict,
+    _BSD_VA_LIST_)
+    __attribute__((__format__(__printf__, 2, 0)));
+const char *fmtcheck(const char *, const char *)
+    __attribute__((__format_arg__(2)));
+__END_DECLS
 
 /*
  * Stdio function-access interface.
  */
 __BEGIN_DECLS
-FILE	*funopen __P((const void *,
+FILE	*funopen(const void *,
 		int (*)(void *, char *, int),
 		int (*)(void *, const char *, int),
 		fpos_t (*)(void *, fpos_t, int),
-		int (*)(void *)));
+		int (*)(void *));
 __END_DECLS
 #define	fropen(cookie, fn) funopen(cookie, fn, 0, 0, 0)
 #define	fwopen(cookie, fn) funopen(cookie, 0, fn, 0, 0)
-#endif /* !_ANSI_SOURCE && !_POSIX_SOURCE */
+#endif /* _NETBSD_SOURCE */
 
 /*
  * Functions internal to the implementation.
  */
 __BEGIN_DECLS
-int	__srget __P((FILE *));
-int	__svfscanf __P((FILE *, const char *, _BSD_VA_LIST_));
-int	__swbuf __P((int, FILE *));
+int	__srget(FILE *);
+int	__swbuf(int, FILE *);
 __END_DECLS
 
 /*
@@ -409,36 +461,41 @@ static __inline int __sputc(int _c, FILE *_p) {
 #define	__sfeof(p)	(((p)->_flags & __SEOF) != 0)
 #define	__sferror(p)	(((p)->_flags & __SERR) != 0)
 #define	__sclearerr(p)	((void)((p)->_flags &= ~(__SERR|__SEOF)))
-#define	__sfileno(p)	((p)->_file)
+#define	__sfileno(p)	\
+    ((p)->_file == -1 ? -1 : (int)(unsigned short)(p)->_file)
 
-#ifndef lint
-#ifndef _REENTRANT
+#ifndef __lint__
+#if !defined(_REENTRANT) && !defined(_PTHREADS)
 #define	feof(p)		__sfeof(p)
 #define	ferror(p)	__sferror(p)
 #define	clearerr(p)	__sclearerr(p)
 
 #define	getc(fp)	__sgetc(fp)
 #define putc(x, fp)	__sputc(x, fp)
-#endif /* !_REENTRANT */
-#endif /* lint */
+#endif /* !_REENTRANT && !_PTHREADS */
+#endif /* __lint__ */
 
 #define	getchar()	getc(stdin)
 #define	putchar(x)	putc(x, stdout)
 
-#ifndef _ANSI_SOURCE
-#ifndef _REENTRANT
+#if defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE) || \
+    defined(_NETBSD_SOURCE)
+#if !defined(_REENTRANT) && !defined(_PTHREADS)
 #define	fileno(p)	__sfileno(p)
-#endif /* !_REENTRANT */
+#endif /* !_REENTRANT && !_PTHREADS */
 #endif /* !_ANSI_SOURCE */
 
-#if (!defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) && \
-     !defined(_XOPEN_SOURCE)) || (_POSIX_C_SOURCE - 0) >= 199506L || \
-    (_XOPEN_SOURCE - 0) >= 500 || defined(_REENTRANT)
+#if (_POSIX_C_SOURCE - 0) >= 199506L || (_XOPEN_SOURCE - 0) >= 500 || \
+    defined(_REENTRANT) || defined(_NETBSD_SOURCE)
 #define getc_unlocked(fp)	__sgetc(fp)
 #define putc_unlocked(x, fp)	__sputc(x, fp)
 
 #define getchar_unlocked()	getc_unlocked(stdin)
 #define putchar_unlocked(x)	putc_unlocked(x, stdout)
-#endif /* (!_ANSI_SOURCE && !_POSIX_C_SOURCE && !_XOPEN_SOURCE) || ... */
+#endif /* _POSIX_C_SOURCE >= 199506 || _XOPEN_SOURCE >= 500 || _REENTRANT... */
+
+#if _FORTIFY_SOURCE > 0
+#include <ssp/stdio.h>
+#endif
 
 #endif /* _STDIO_H_ */

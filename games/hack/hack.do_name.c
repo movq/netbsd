@@ -1,12 +1,69 @@
-/*	$NetBSD: hack.do_name.c,v 1.4 1997/10/19 16:57:46 christos Exp $	*/
+/*	$NetBSD: hack.do_name.c,v 1.7.14.2 2009/06/29 23:25:09 snj Exp $	*/
 
 /*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.do_name.c,v 1.4 1997/10/19 16:57:46 christos Exp $");
+__RCSID("$NetBSD: hack.do_name.c,v 1.7.14.2 2009/06/29 23:25:09 snj Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -16,7 +73,7 @@ __RCSID("$NetBSD: hack.do_name.c,v 1.4 1997/10/19 16:57:46 christos Exp $");
 coord
 getpos(force, goal)
 	int             force;
-	char           *goal;
+	const char           *goal;
 {
 	int             cx, cy, i, c;
 	coord           cc;
@@ -59,7 +116,8 @@ do_mname()
 {
 	char            buf[BUFSZ];
 	coord           cc;
-	int             cx, cy, lth, i;
+	int             cx, cy, lth;
+	unsigned        i;
 	struct monst   *mtmp, *mtmp2;
 	cc = getpos(0, "the monster you want to name");
 	cx = cc.x;
@@ -202,7 +260,7 @@ docall(obj)
 	*str1 = str;
 }
 
-char           *ghostnames[] = {/* these names should have length < PL_NSIZ */
+const char *const ghostnames[] = {/* these names should have length < PL_NSIZ */
 	"adri", "andries", "andreas", "bert", "david", "dirk", "emile",
 	"frans", "fred", "greg", "hether", "jay", "john", "jon", "kay",
 	"kenny", "maud", "michiel", "mike", "peter", "robert", "ron",
@@ -216,36 +274,36 @@ xmonnam(mtmp, vb)
 {
 	static char     buf[BUFSZ];	/* %% */
 	if (mtmp->mnamelth && !vb) {
-		(void) strcpy(buf, NAME(mtmp));
+		(void) strlcpy(buf, NAME(mtmp), sizeof(buf));
 		return (buf);
 	}
 	switch (mtmp->data->mlet) {
 	case ' ':
 		{
-			char           *gn = (char *) mtmp->mextra;
+			const char           *gn = (char *) mtmp->mextra;
 			if (!*gn) {	/* might also look in scorefile */
 				gn = ghostnames[rn2(SIZE(ghostnames))];
 				if (!rn2(2))
 					(void)
-						strcpy((char *) mtmp->mextra, !rn2(5) ? plname : gn);
+						strlcpy((char *) mtmp->mextra, !rn2(5) ? plname : gn, mtmp->mxlth);
 			}
-			(void) sprintf(buf, "%s's ghost", gn);
+			(void) snprintf(buf, sizeof(buf), "%s's ghost", gn);
 		}
 		break;
 	case '@':
 		if (mtmp->isshk) {
-			(void) strcpy(buf, shkname(mtmp));
+			(void) strlcpy(buf, shkname(mtmp), sizeof(buf));
 			break;
 		}
 		/* fall into next case */
 	default:
-		(void) sprintf(buf, "the %s%s",
+		(void) snprintf(buf, sizeof(buf), "the %s%s",
 			       mtmp->minvis ? "invisible " : "",
 			       mtmp->data->mname);
 	}
 	if (vb && mtmp->mnamelth) {
-		(void) strcat(buf, " called ");
-		(void) strcat(buf, NAME(mtmp));
+		(void) strlcat(buf, " called ", sizeof(buf));
+		(void) strlcat(buf, NAME(mtmp), sizeof(buf));
 	}
 	return (buf);
 }
@@ -277,21 +335,21 @@ Monnam(mtmp)
 char           *
 amonnam(mtmp, adj)
 	struct monst   *mtmp;
-	char           *adj;
+	const char           *adj;
 {
 	char           *bp = monnam(mtmp);
 	static char     buf[BUFSZ];	/* %% */
 
 	if (!strncmp(bp, "the ", 4))
 		bp += 4;
-	(void) sprintf(buf, "the %s %s", adj, bp);
+	(void) snprintf(buf, sizeof(buf), "the %s %s", adj, bp);
 	return (buf);
 }
 
 char           *
 Amonnam(mtmp, adj)
 	struct monst   *mtmp;
-	char           *adj;
+	const char           *adj;
 {
 	char           *bp = amonnam(mtmp, adj);
 

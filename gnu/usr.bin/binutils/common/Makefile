@@ -1,20 +1,24 @@
-#	$NetBSD: Makefile,v 1.8 1999/10/10 13:02:32 pk Exp $
+#	$NetBSD: Makefile,v 1.16 2003/11/27 15:02:21 mrg Exp $
 
-LIB=		common
+.include <bsd.own.mk>
 
-SRCS=		arparse.y arlex.l arsup.c bucomm.c version.c filemode.c \
-		rddbg.c debug.c stabs.c ieee.c rdcoff.c wrstabs.c
-CPPFLAGS+=	-DTARGET='"${MACHINE_GNU_ARCH}--netbsd"'
-YHEADER=1
+TOP=		${NETBSDSRCDIR}/gnu
 
-MKPROFILE=	no
-MKPIC=		no
-MKLINT=		no
+.include "${.CURDIR}/arch/${MACHINE_ARCH}/defs.mk"
+.include "${.CURDIR}/../common/Makefile.inc"
 
-# only needed during build
-libinstall::
+TEXINFO=	${G_TEXINFOS}
+INFOFLAGS=	-I${DIST}/binutils/doc -I{.CURDIR}
 
-# mention explicit dependency, so arparse.h will appear timely
-arlex.c: arparse.h
+.PATH: ${DIST}/binutils ${DIST}/binutils/doc
 
-.include <bsd.lib.mk>
+${TEXINFO}: config.texi
+
+config.texi: ${.CURDIR}/arch/${MACHINE_ARCH}/defs.mk
+	${_MKTARGET_CREATE}
+	rm -f config.texi
+	echo "@set VERSION ${VERSION}" > config.texi
+
+CLEANFILES+=	config.texi
+
+.include <bsd.info.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: init.c,v 1.12 1999/07/28 23:23:39 hubertf Exp $	*/
+/*	$NetBSD: init.c,v 1.17 2007/12/15 19:44:38 perry Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)init.c	8.1 (Berkeley) 6/2/93";
 #else
-__RCSID("$NetBSD: init.c,v 1.12 1999/07/28 23:23:39 hubertf Exp $");
+__RCSID("$NetBSD: init.c,v 1.17 2007/12/15 19:44:38 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -61,8 +57,8 @@ __RCSID("$NetBSD: init.c,v 1.12 1999/07/28 23:23:39 hubertf Exp $");
 
 int     blklin = TRUE;
 
-int     setbit[16] = {1, 2, 4, 010, 020, 040, 0100, 0200, 0400, 01000, 02000, 04000,
-010000, 020000, 040000, 0100000};
+int     setbit[16] = {1, 2, 4, 010, 020, 040, 0100, 0200, 0400, 01000, 02000, 
+		      04000, 010000, 020000, 040000, 0100000};
 
 int     datfd;			/* message file descriptor */
 volatile sig_atomic_t delhit;
@@ -127,19 +123,19 @@ int     turns, lmwarn, iwest, knfloc, detail,	/* various flags and
         abbnum, maxdie, numdie, holdng, dkill, foobar, bonus, clock1,
         clock2, saved, closng, panic, closed, scorng;
 
-int     demo, newloc, limit;
+int     demo, limit;
 
+/* everything for 1st time run */
 void
-init()			/* everything for 1st time run */
+init(void)
 {
 	rdata();		/* read data from orig. file */
 	linkdata();
 	poof();
 }
 
-char   *
-decr(a, b, c, d, e)
-	char    a, b, c, d, e;
+char *
+decr(int a, int b, int c, int d, int e)
 {
 	static char buf[6];
 
@@ -153,12 +149,12 @@ decr(a, b, c, d, e)
 }
 
 void
-linkdata()
+linkdata(void)
 {				/* secondary data manipulation */
 	int     i, j;
 
 	/* array linkages */
-	for (i = 1; i <= LOCSIZ; i++)
+	for (i = 1; i < LOCSIZ; i++)
 		if (ltext[i].seekadr != 0 && travel[i] != 0)
 			if ((travel[i]->tverb) == 1)
 				cond[i] = 2;
@@ -277,11 +273,9 @@ linkdata()
 	closng = panic = closed = scorng = FALSE;
 }
 
-
-
+/* come here if he hits a del */
 void
-trapdel(n)			/* come here if he hits a del */
-	int     n __attribute__((__unused__));
+trapdel(int n __unused)
 {
 	delhit = 1;		/* main checks, treats as QUIT */
 	signal(SIGINT, trapdel);/* catch subsequent DELs */
@@ -289,7 +283,7 @@ trapdel(n)			/* come here if he hits a del */
 
 
 void
-startup()
+startup(void)
 {
 	demo = Start();
 	srand((int) (time((time_t *) NULL)));	/* random seed */

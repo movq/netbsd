@@ -1,4 +1,4 @@
-/*	$NetBSD: func.c,v 1.12 1998/11/23 14:37:08 christos Exp $	*/
+/*	$NetBSD: func.c,v 1.23 2008/07/25 18:33:53 dsl Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -31,9 +31,13 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: func.c,v 1.12 1998/11/23 14:37:08 christos Exp $");
+#if defined(__RCSID) && !defined(lint)
+__RCSID("$NetBSD: func.c,v 1.23 2008/07/25 18:33:53 dsl Exp $");
 #endif
 
 #include <stdlib.h>
@@ -130,6 +134,12 @@ int	llibflg;
 int	nowarn;
 
 /*
+ * Nonzero if bitfield type errors are suppressed by a BITFIELDTYPE
+ * directive.
+ */
+int	bitfieldtype_ok;
+
+/*
  * Nonzero if complaints about use of "long long" are suppressed in
  * the next statement or declaration.
  */
@@ -139,8 +149,7 @@ int	quadflg;
  * Puts a new element at the top of the stack used for control statements.
  */
 void
-pushctrl(env)
-	int	env;
+pushctrl(int env)
 {
 	cstk_t	*ci;
 
@@ -154,14 +163,13 @@ pushctrl(env)
  * Removes the top element of the stack used for control statements.
  */
 void
-popctrl(env)
-	int	env;
+popctrl(int env)
 {
 	cstk_t	*ci;
 	clst_t	*cl;
 
 	if (cstk == NULL || cstk->c_env != env)
-		lerror("popctrl() 1");
+		LERROR("popctrl()");
 
 	cstk = (ci = cstk)->c_nxt;
 
@@ -180,7 +188,7 @@ popctrl(env)
  * Prints a warning if a statement cannot be reached.
  */
 void
-chkreach()
+chkreach(void)
 {
 	if (!reached && !rchflg) {
 		/* statement not reached */
@@ -200,8 +208,7 @@ chkreach()
  * redeclaration etc..
  */
 void
-funcdef(fsym)
-	sym_t	*fsym;
+funcdef(sym_t *fsym)
 {
 	int	n, warn;
 	sym_t	*arg, *sym, *rdsym;
@@ -215,7 +222,7 @@ funcdef(fsym)
 	for (sym = dcs->d_fpsyms; sym != NULL; sym = sym->s_dlnxt) {
 		if (sym->s_blklev != -1) {
 			if (sym->s_blklev != 1)
-				lerror("funcdef() 1");
+				LERROR("funcdef()");
 			inssym(1, sym);
 		}
 	}
@@ -259,12 +266,12 @@ funcdef(fsym)
 	for (arg = fsym->s_type->t_args; arg != NULL; arg = arg->s_nxt) {
 		if (arg->s_scl == ABSTRACT) {
 			if (arg->s_name != unnamed)
-				lerror("funcdef() 2");
+				LERROR("funcdef()");
 			/* formal parameter lacks name: param #%d */
 			error(59, n);
 		} else {
 			if (arg->s_name == unnamed)
-				lerror("funcdef() 3");
+				LERROR("funcdef()");
 		}
 		n++;
 	}
@@ -323,7 +330,7 @@ funcdef(fsym)
 	}
 
 	if (dcs->d_notyp)
-		/* return value is implizitly declared to be int */
+		/* return value is implicitly declared to be int */
 		fsym->s_rimpl = 1;
 
 	reached = 1;
@@ -333,7 +340,7 @@ funcdef(fsym)
  * Called at the end of a function definition.
  */
 void
-funcend()
+funcend(void)
 {
 	sym_t	*arg;
 	int	n;
@@ -348,7 +355,7 @@ funcend()
 	}
 
 	/*
-	 * This warning is printed only if the return value was implizitly
+	 * This warning is printed only if the return value was implicitly
 	 * declared to be int. Otherwise the wrong return statement
 	 * has already printed a warning.
 	 */
@@ -369,7 +376,7 @@ funcend()
 	/*
 	 * write the information about the function definition to the
 	 * output file
-	 * inline functions explicitely declared extern are written as
+	 * inline functions explicitly declared extern are written as
 	 * declarations only.
 	 */
 	if (dcs->d_scl == EXTERN && funcsym->s_inline) {
@@ -384,7 +391,7 @@ funcend()
 	 * the symbol table
 	 */
 	if (dcs->d_nxt != NULL || dcs->d_ctx != EXTERN)
-		lerror("funcend() 1");
+		LERROR("funcend()");
 	rmsyms(dcs->d_fpsyms);
 
 	/* must be set on level 0 */
@@ -399,10 +406,7 @@ funcend()
  * tn		expression if typ == T_CASE
  */
 void
-label(typ, sym, tn)
-	int	typ;
-	sym_t	*sym;
-	tnode_t	*tn;
+label(int typ, sym_t *sym, tnode_t *tn)
 {
 	cstk_t	*ci;
 	clst_t	*cl;
@@ -424,7 +428,8 @@ label(typ, sym, tn)
 	case T_CASE:
 
 		/* find the stack entry for the innermost switch statement */
-		for (ci = cstk; ci != NULL && !ci->c_switch; ci = ci->c_nxt) ;
+		for (ci = cstk; ci != NULL && !ci->c_switch; ci = ci->c_nxt)
+			continue;
 
 		if (ci == NULL) {
 			/* case not in switch */
@@ -443,7 +448,7 @@ label(typ, sym, tn)
 		if (tn != NULL) {
 
 			if (ci->c_swtype == NULL)
-				lerror("label() 1");
+				LERROR("label()");
 
 			if (reached && !ftflg) {
 				if (hflag)
@@ -463,7 +468,7 @@ label(typ, sym, tn)
 			 * get the value of the expression and convert it
 			 * to the type of the switch expression
 			 */
-			v = constant(tn);
+			v = constant(tn, 1);
 			(void) memset(&nv, 0, sizeof nv);
 			cvtcon(CASE, 0, ci->c_swtype, &nv, v);
 			free(v);
@@ -496,7 +501,8 @@ label(typ, sym, tn)
 	case T_DEFAULT:
 
 		/* find the stack entry for the innermost switch statement */
-		for (ci = cstk; ci != NULL && !ci->c_switch; ci = ci->c_nxt) ;
+		for (ci = cstk; ci != NULL && !ci->c_switch; ci = ci->c_nxt)
+			continue;
 
 		if (ci == NULL) {
 			/* default outside switch */
@@ -521,14 +527,14 @@ label(typ, sym, tn)
  * T_IF T_LPARN expr T_RPARN
  */
 void
-if1(tn)
-	tnode_t	*tn;
+if1(tnode_t *tn)
 {
+
 	if (tn != NULL)
 		tn = cconv(tn);
 	if (tn != NULL)
 		tn = promote(NOOP, 0, tn);
-	expr(tn, 0, 1);
+	expr(tn, 0, 1, 1);
 	pushctrl(T_IF);
 }
 
@@ -537,8 +543,9 @@ if1(tn)
  * if_without_else T_ELSE
  */
 void
-if2()
+if2(void)
 {
+
 	cstk->c_rchif = reached ? 1 : 0;
 	reached = 1;
 }
@@ -548,9 +555,9 @@ if2()
  * if_without_else T_ELSE stmnt
  */
 void
-if3(els)
-	int	els;
+if3(int els)
 {
+
 	if (els) {
 		reached |= cstk->c_rchif;
 	} else {
@@ -563,8 +570,7 @@ if3(els)
  * T_SWITCH T_LPARN expr T_RPARN
  */
 void
-switch1(tn)
-	tnode_t	*tn;
+switch1(tnode_t *tn)
 {
 	tspec_t	t;
 	type_t	*tp;
@@ -601,7 +607,7 @@ switch1(tn)
 		tp->t_tspec = INT;
 	}
 
-	expr(tn, 1, 0);
+	expr(tn, 1, 0, 1);
 
 	pushctrl(T_SWITCH);
 	cstk->c_switch = 1;
@@ -615,14 +621,14 @@ switch1(tn)
  * switch_expr stmnt
  */
 void
-switch2()
+switch2(void)
 {
 	int	nenum = 0, nclab = 0;
 	sym_t	*esym;
 	clst_t	*cl;
 
 	if (cstk->c_swtype == NULL)
-		lerror("switch2() 1");
+		LERROR("switch2()");
 
 	/*
 	 * If the switch expression was of type enumeration, count the case
@@ -632,7 +638,7 @@ switch2()
 	if (cstk->c_swtype->t_isenum) {
 		nenum = nclab = 0;
 		if (cstk->c_swtype->t_enum == NULL)
-			lerror("switch2() 2");
+			LERROR("switch2()");
 		for (esym = cstk->c_swtype->t_enum->elem;
 		     esym != NULL; esym = esym->s_nxt) {
 			nenum++;
@@ -670,9 +676,9 @@ switch2()
  * T_WHILE T_LPARN expr T_RPARN
  */
 void
-while1(tn)
-	tnode_t	*tn;
+while1(tnode_t *tn)
 {
+
 	if (!reached) {
 		/* loop not entered at top */
 		warning(207);
@@ -699,7 +705,7 @@ while1(tn)
 		}
 	}
 
-	expr(tn, 0, 1);
+	expr(tn, 0, 1, 1);
 }
 
 /*
@@ -707,8 +713,9 @@ while1(tn)
  * while_expr error
  */
 void
-while2()
+while2(void)
 {
+
 	/*
 	 * The end of the loop can be reached if it is no endless loop
 	 * or there was a break statement which was reached.
@@ -723,8 +730,9 @@ while2()
  * T_DO
  */
 void
-do1()
+do1(void)
 {
+
 	if (!reached) {
 		/* loop not entered at top */
 		warning(207);
@@ -740,9 +748,9 @@ do1()
  * do error
  */
 void
-do2(tn)
-	tnode_t	*tn;
+do2(tnode_t *tn)
 {
+
 	/*
 	 * If there was a continue statement the expression controlling the
 	 * loop is reached.
@@ -766,9 +774,11 @@ do2(tn)
 		} else {
 			cstk->c_infinite = tn->tn_val->v_ldbl != 0.0;
 		}
+		if (!cstk->c_infinite && cstk->c_cont)
+		    error(323);
 	}
 
-	expr(tn, 0, 1);
+	expr(tn, 0, 1, 1);
 
 	/*
 	 * The end of the loop is only reached if it is no endless loop
@@ -784,9 +794,9 @@ do2(tn)
  * T_FOR T_LPARN opt_expr T_SEMI opt_expr T_SEMI opt_expr T_RPARN
  */
 void
-for1(tn1, tn2, tn3)
-	tnode_t	*tn1, *tn2, *tn3;
+for1(tnode_t *tn1, tnode_t *tn2, tnode_t *tn3)
 {
+
 	/*
 	 * If there is no initialisation expression it is possible that
 	 * it is intended not to enter the loop at top.
@@ -811,7 +821,7 @@ for1(tn1, tn2, tn3)
 	STRUCT_ASSIGN(cstk->c_cfpos, csrc_pos);
 
 	if (tn1 != NULL)
-		expr(tn1, 0, 0);
+		expr(tn1, 0, 0, 1);
 
 	if (tn2 != NULL)
 		tn2 = cconv(tn2);
@@ -823,7 +833,7 @@ for1(tn1, tn2, tn3)
 		tn2 = NULL;
 	}
 	if (tn2 != NULL)
-		expr(tn2, 0, 1);
+		expr(tn2, 0, 1, 1);
 
 	if (tn2 == NULL) {
 		cstk->c_infinite = 1;
@@ -845,7 +855,7 @@ for1(tn1, tn2, tn3)
  * for_exprs error
  */
 void
-for2()
+for2(void)
 {
 	pos_t	cpos, cspos;
 	tnode_t	*tn3;
@@ -870,7 +880,7 @@ for2()
 	}
 
 	if (tn3 != NULL) {
-		expr(tn3, 0, 0);
+		expr(tn3, 0, 0, 1);
 	} else {
 		tfreeblk();
 	}
@@ -890,9 +900,9 @@ for2()
  * T_GOTO error T_SEMI
  */
 void
-dogoto(lab)
-	sym_t	*lab;
+dogoto(sym_t *lab)
 {
+
 	setuflg(lab, 0, 0);
 
 	chkreach();
@@ -904,7 +914,7 @@ dogoto(lab)
  * T_BREAK T_SEMI
  */
 void
-dobreak()
+dobreak(void)
 {
 	cstk_t	*ci;
 
@@ -930,11 +940,12 @@ dobreak()
  * T_CONTINUE T_SEMI
  */
 void
-docont()
+docont(void)
 {
 	cstk_t	*ci;
 
-	for (ci = cstk; ci != NULL && !ci->c_loop; ci = ci->c_nxt) ;
+	for (ci = cstk; ci != NULL && !ci->c_loop; ci = ci->c_nxt)
+		continue;
 
 	if (ci == NULL) {
 		/* continue outside loop */
@@ -953,14 +964,14 @@ docont()
  * T_RETURN expr T_SEMI
  */
 void
-doreturn(tn)
-	tnode_t	*tn;
+doreturn(tnode_t *tn)
 {
 	tnode_t	*ln, *rn;
 	cstk_t	*ci;
 	op_t	op;
 
-	for (ci = cstk; ci->c_nxt != NULL; ci = ci->c_nxt) ;
+	for (ci = cstk; ci->c_nxt != NULL; ci = ci->c_nxt)
+		continue;
 
 	if (tn != NULL) {
 		ci->c_retval = 1;
@@ -1006,7 +1017,7 @@ doreturn(tn)
 			}
 		}
 
-		expr(tn, 1, 0);
+		expr(tn, 1, 0, 1);
 
 	} else {
 
@@ -1022,8 +1033,7 @@ doreturn(tn)
  * Especially remove informations about unused lint comments.
  */
 void
-glclup(silent)
-	int	silent;
+glclup(int silent)
 {
 	pos_t	cpos;
 
@@ -1074,9 +1084,9 @@ glclup(silent)
  * for usage. A missing argument is taken to be 0.
  */
 void
-argsused(n)
-	int	n;
+argsused(int n)
 {
+
 	if (n == -1)
 		n = 0;
 
@@ -1100,9 +1110,9 @@ argsused(n)
  * to the function definition. A missing argument is taken to be 0.
  */
 void
-varargs(n)
-	int	n;
+varargs(int n)
 {
+
 	if (n == -1)
 		n = 0;
 
@@ -1126,9 +1136,9 @@ varargs(n)
  * used the check the types of remaining arguments.
  */
 void
-printflike(n)
-	int	n;
+printflike(int n)
 {
+
 	if (n == -1)
 		n = 0;
 
@@ -1152,9 +1162,9 @@ printflike(n)
  * used the check the types of remaining arguments.
  */
 void
-scanflike(n)
-	int	n;
+scanflike(int n)
 {
+
 	if (n == -1)
 		n = 0;
 
@@ -1177,9 +1187,9 @@ scanflike(n)
  */
 /* ARGSUSED */
 void
-constcond(n)
-	int	n;
+constcond(int n)
 {
+
 	ccflg = 1;
 }
 
@@ -1189,9 +1199,9 @@ constcond(n)
  */
 /* ARGSUSED */
 void
-fallthru(n)
-	int	n;
+fallthru(int n)
 {
+
 	ftflg = 1;
 }
 
@@ -1201,18 +1211,18 @@ fallthru(n)
  */
 /* ARGSUSED */
 void
-notreach(n)
-	int	n;
+notreach(int n)
 {
+
 	reached = 0;
 	rchflg = 1;
 }
 
 /* ARGSUSED */
 void
-lintlib(n)
-	int	n;
+lintlib(int n)
 {
+
 	if (dcs->d_ctx != EXTERN) {
 		/* must be outside function: ** %s ** */
 		warning(280, "LINTLIBRARY");
@@ -1227,13 +1237,28 @@ lintlib(n)
  */
 /* ARGSUSED */
 void
-linted(n)
-	int	n;
+linted(int n)
 {
+
 #ifdef DEBUG
 	printf("%s, %d: nowarn = 1\n", curr_pos.p_file, curr_pos.p_line);
 #endif
 	nowarn = 1;
+}
+
+/*
+ * Suppress bitfield type errors on the current line.
+ */
+/* ARGSUSED */
+void
+bitfieldtype(int n)
+{
+
+#ifdef DEBUG
+	printf("%s, %d: bitfieldtype_ok = 1\n", curr_pos.p_file,
+	    curr_pos.p_line);
+#endif
+	bitfieldtype_ok = 1;
 }
 
 /*
@@ -1242,9 +1267,9 @@ linted(n)
  * to PROTOLIB is nonzero. Otherwise prototypes are handled normaly.
  */
 void
-protolib(n)
-	int	n;
+protolib(int n)
 {
+
 	if (dcs->d_ctx != EXTERN) {
 		/* must be outside function: ** %s ** */
 		warning(280, "PROTOLIB");
@@ -1259,8 +1284,8 @@ protolib(n)
  */
 /* ARGSUSED */
 void
-longlong(n)
-	int	n;
+longlong(int n)
 {
+
 	quadflg = 1;
 }

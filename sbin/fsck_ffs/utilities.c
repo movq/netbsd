@@ -1,4 +1,4 @@
-/*	$NetBSD: utilities.c,v 1.26 1999/11/15 19:18:26 fvdl Exp $	*/
+/*	$NetBSD: utilities.c,v 1.56 2008/07/31 05:38:04 simonb Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)utilities.c	8.6 (Berkeley) 5/19/95";
 #else
-__RCSID("$NetBSD: utilities.c,v 1.26 1999/11/15 19:18:26 fvdl Exp $");
+__RCSID("$NetBSD: utilities.c,v 1.56 2008/07/31 05:38:04 simonb Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,24 +49,28 @@ __RCSID("$NetBSD: utilities.c,v 1.26 1999/11/15 19:18:26 fvdl Exp $");
 
 #include <ctype.h>
 #include <err.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include "fsutil.h"
 #include "fsck.h"
 #include "extern.h"
+#include "exitvalues.h"
 
 long	diskreads, totalreads;	/* Disk cache statistics */
 
-static void rwerror __P((char *, ufs_daddr_t));
+static void rwerror(const char *, daddr_t);
+
+extern int returntosingle;
 
 int
-ftypeok(dp)
-	struct dinode *dp;
+ftypeok(union dinode *dp)
 {
-	switch (iswap16(dp->di_mode) & IFMT) {
+	switch (iswap16(DIP(dp, mode)) & IFMT) {
 
 	case IFDIR:
 	case IFREG:
@@ -83,14 +83,13 @@ ftypeok(dp)
 
 	default:
 		if (debug)
-			printf("bad file type 0%o\n", iswap16(dp->di_mode));
+			printf("bad file type 0%o\n", iswap16(DIP(dp, mode)));
 		return (0);
 	}
 }
 
 int
-reply(question)
-	char *question;
+reply(const char *question)
 {
 	int persevere;
 	char c;
@@ -130,7 +129,7 @@ reply(question)
  * Malloc buffers and set up cache.
  */
 void
-bufinit()
+bufinit(void)
 {
 	struct bufarea *bp;
 	long bufcnt, i;
@@ -139,20 +138,30 @@ bufinit()
 	pbp = pdirbp = (struct bufarea *)0;
 	bufp = malloc((unsigned int)sblock->fs_bsize);
 	if (bufp == 0)
-		errx(EEXIT, "cannot allocate buffer pool");
+		errexit("cannot allocate buffer pool");
 	cgblk.b_un.b_buf = bufp;
 	initbarea(&cgblk);
+	bufp = malloc((unsigned int)APPLEUFS_LABEL_SIZE);
+	if (bufp == 0)
+		errexit("cannot allocate buffer pool");
+	appleufsblk.b_un.b_buf = bufp;
+	initbarea(&appleufsblk);
 	bufhead.b_next = bufhead.b_prev = &bufhead;
 	bufcnt = MAXBUFSPACE / sblock->fs_bsize;
 	if (bufcnt < MINBUFS)
 		bufcnt = MINBUFS;
 	for (i = 0; i < bufcnt; i++) {
-		bp = (struct bufarea *)malloc(sizeof(struct bufarea));
+		bp = malloc(sizeof(struct bufarea));
 		bufp = malloc((unsigned int)sblock->fs_bsize);
 		if (bp == NULL || bufp == NULL) {
-			if (i >= MINBUFS)
+			if (i >= MINBUFS) {
+				if (bp)
+					free(bp);
+				if (bufp)
+					free(bufp);
 				break;
-			errx(EEXIT, "cannot allocate buffer pool");
+			}
+			errexit("cannot allocate buffer pool");
 		}
 		bp->b_un.b_buf = bufp;
 		bp->b_prev = &bufhead;
@@ -168,9 +177,7 @@ bufinit()
  * Manage a cache of directory blocks.
  */
 struct bufarea *
-getdatablk(blkno, size)
-	ufs_daddr_t blkno;
-	long size;
+getdatablk(daddr_t blkno, long size)
 {
 	struct bufarea *bp;
 
@@ -181,11 +188,10 @@ getdatablk(blkno, size)
 		if ((bp->b_flags & B_INUSE) == 0)
 			break;
 	if (bp == &bufhead)
-		errx(EEXIT, "deadlocked buffer pool");
-	getblk(bp, blkno, size);
+		errexit("deadlocked buffer pool");
 	/* fall through */
 foundit:
-	totalreads++;
+	getblk(bp, blkno, size);
 	bp->b_prev->b_next = bp->b_next;
 	bp->b_next->b_prev = bp->b_prev;
 	bp->b_prev = &bufhead;
@@ -197,14 +203,12 @@ foundit:
 }
 
 void
-getblk(bp, blk, size)
-	struct bufarea *bp;
-	ufs_daddr_t blk;
-	long size;
+getblk(struct bufarea *bp, daddr_t blk, long size)
 {
-	ufs_daddr_t dblk;
+	daddr_t dblk;
 
 	dblk = fsbtodb(sblock, blk);
+	totalreads++;
 	if (bp->b_bno != dblk) {
 		flush(fswritefd, bp);
 		diskreads++;
@@ -215,18 +219,17 @@ getblk(bp, blk, size)
 }
 
 void
-flush(fd, bp)
-	int fd;
-	struct bufarea *bp;
+flush(int fd, struct bufarea *bp)
 {
 	int i, j;
+	struct csum *ccsp;
 
 	if (!bp->b_dirty)
 		return;
 	if (bp->b_errs != 0)
-		pfatal("WRITING %sZERO'ED BLOCK %d TO DISK\n",
+		pfatal("WRITING %sZERO'ED BLOCK %lld TO DISK\n",
 		    (bp->b_errs == bp->b_size / dev_bsize) ? "" : "PARTIALLY ",
-		    bp->b_bno);
+		    (long long)bp->b_bno);
 	bp->b_dirty = 0;
 	bp->b_errs = 0;
 	bwrite(fd, bp->b_un.b_buf, bp->b_bno, (long)bp->b_size);
@@ -235,44 +238,30 @@ flush(fd, bp)
 	for (i = 0, j = 0; i < sblock->fs_cssize; i += sblock->fs_bsize, j++) {
 		int size = sblock->fs_cssize - i < sblock->fs_bsize ?
 			sblock->fs_cssize - i : sblock->fs_bsize;
-		/*
-		 * The following routines assumes that struct csum is made of
-		 * u_int32_t's
-		 */
-		if (needswap) {
-			u_int32_t *cd = (u_int32_t *)sblock->fs_csp[j];
-			int k;
-			for (k = 0; k < size / sizeof(u_int32_t); k++)
-				cd[k] = bswap32(cd[k]);
-		}
-		bwrite(fswritefd, (char *)sblock->fs_csp[j],
+		ccsp = (struct csum *)((char *)sblock->fs_csp + i);
+		if (needswap)
+			ffs_csum_swap(ccsp, ccsp, size);
+		bwrite(fswritefd, (char *)ccsp,
 		    fsbtodb(sblock, sblock->fs_csaddr + j * sblock->fs_frag),
-		    sblock->fs_cssize - i < sblock->fs_bsize ?
-		    sblock->fs_cssize - i : sblock->fs_bsize);
-		if (needswap) {
-			u_int32_t *cd = (u_int32_t *)sblock->fs_csp[j];
-			int k;
-			for (k = 0; k < size / sizeof(u_int32_t); k++)
-				cd[k] = bswap32(cd[k]);
-		}
+		    size);
+		if (needswap)
+			ffs_csum_swap(ccsp, ccsp, size);
 	}
 }
 
 static void
-rwerror(mesg, blk)
-	char *mesg;
-	ufs_daddr_t blk;
+rwerror(const char *mesg, daddr_t blk)
 {
 
 	if (preen == 0)
 		printf("\n");
-	pfatal("CANNOT %s: BLK %d", mesg, blk);
+	pfatal("CANNOT %s: BLK %lld", mesg, (long long)blk);
 	if (reply("CONTINUE") == 0)
-		exit(EEXIT);
+		exit(FSCK_EXIT_CHECK_FAILED);
 }
 
 void
-ckfini()
+ckfini(void)
 {
 	struct bufarea *bp, *nbp;
 	int ofsmodified, cnt = 0;
@@ -282,12 +271,19 @@ ckfini()
 		return;
 	}
 	flush(fswritefd, &sblk);
-	if (havesb && sblk.b_bno != SBOFF / dev_bsize &&
-	    !preen && reply("UPDATE STANDARD SUPERBLOCK")) {
-		sblk.b_bno = SBOFF / dev_bsize;
+	if (havesb && bflag != 0 &&
+	    (preen || reply("UPDATE STANDARD SUPERBLOCK"))) {
+		if (preen)
+			pwarn("UPDATING STANDARD SUPERBLOCK\n");
+		if (!is_ufs2 && (sblock->fs_old_flags & FS_FLAGS_UPDATED) == 0)
+			sblk.b_bno = SBLOCK_UFS1 / dev_bsize;
+		else
+			sblk.b_bno = sblock->fs_sblockloc / dev_bsize;
 		sbdirty();
 		flush(fswritefd, &sblk);
 	}
+	flush(fswritefd, &appleufsblk);
+	free(appleufsblk.b_un.b_buf);
 	flush(fswritefd, &cgblk);
 	free(cgblk.b_un.b_buf);
 	for (bp = bufhead.b_prev; bp && bp != &bufhead; bp = nbp) {
@@ -298,7 +294,7 @@ ckfini()
 		free((char *)bp);
 	}
 	if (bufhead.b_size != cnt)
-		errx(EEXIT, "Panic: lost %d buffers", bufhead.b_size - cnt);
+		errexit("Panic: lost %d buffers", bufhead.b_size - cnt);
 	pbp = pdirbp = (struct bufarea *)0;
 	if (markclean && (sblock->fs_clean & FS_ISCLEAN) == 0) {
 		/*
@@ -310,6 +306,8 @@ ckfini()
 			markclean = 0;
 		if (markclean) {
 			sblock->fs_clean = FS_ISCLEAN;
+			sblock->fs_pendingblocks = 0;
+			sblock->fs_pendinginodes = 0;
 			sbdirty();
 			ofsmodified = fsmodified;
 			flush(fswritefd, &sblk);
@@ -324,16 +322,13 @@ ckfini()
 	if (debug)
 		printf("cache missed %ld of %ld (%d%%)\n", diskreads,
 		    totalreads, (int)(diskreads * 100 / totalreads));
+	cleanup_wapbl();
 	(void)close(fsreadfd);
 	(void)close(fswritefd);
 }
 
 int
-bread(fd, buf, blk, size)
-	int fd;
-	char *buf;
-	ufs_daddr_t blk;
-	long size;
+bread(int fd, char *buf, daddr_t blk, long size)
 {
 	char *cp;
 	int i, errs;
@@ -341,25 +336,22 @@ bread(fd, buf, blk, size)
 
 	offset = blk;
 	offset *= dev_bsize;
-	if (lseek(fd, offset, 0) < 0)
-		rwerror("SEEK", blk);
-	else if (read(fd, buf, (int)size) == size)
+	if ((pread(fd, buf, (int)size, offset) == size) &&
+	    read_wapbl(buf, size, blk) == 0)
 		return (0);
 	rwerror("READ", blk);
-	if (lseek(fd, offset, 0) < 0)
-		rwerror("SEEK", blk);
 	errs = 0;
 	memset(buf, 0, (size_t)size);
 	printf("THE FOLLOWING DISK SECTORS COULD NOT BE READ:");
 	for (cp = buf, i = 0; i < size; i += secsize, cp += secsize) {
-		if (read(fd, cp, (int)secsize) != secsize) {
-			(void)lseek(fd, offset + i + secsize, 0);
+		if (pread(fd, cp, (int)secsize, offset + i) != secsize) {
 			if (secsize != dev_bsize && dev_bsize != 1)
-				printf(" %ld (%ld),",
-				    (blk * dev_bsize + i) / secsize,
-				    blk + i / dev_bsize);
+				printf(" %lld (%lld),",
+				    (long long)((blk*dev_bsize + i) / secsize),
+				    (long long)(blk + i / dev_bsize));
 			else
-				printf(" %ld,", blk + i / dev_bsize);
+				printf(" %lld,",
+				    (long long)(blk + i / dev_bsize));
 			errs++;
 		}
 	}
@@ -368,11 +360,7 @@ bread(fd, buf, blk, size)
 }
 
 void
-bwrite(fd, buf, blk, size)
-	int fd;
-	char *buf;
-	ufs_daddr_t blk;
-	long size;
+bwrite(int fd, char *buf, daddr_t blk, long size)
 {
 	int i;
 	char *cp;
@@ -382,21 +370,15 @@ bwrite(fd, buf, blk, size)
 		return;
 	offset = blk;
 	offset *= dev_bsize;
-	if (lseek(fd, offset, 0) < 0)
-		rwerror("SEEK", blk);
-	else if (write(fd, buf, (int)size) == size) {
+	if (pwrite(fd, buf, (int)size, offset) == size) {
 		fsmodified = 1;
 		return;
 	}
 	rwerror("WRITE", blk);
-	if (lseek(fd, offset, 0) < 0)
-		rwerror("SEEK", blk);
 	printf("THE FOLLOWING SECTORS COULD NOT BE WRITTEN:");
 	for (cp = buf, i = 0; i < size; i += dev_bsize, cp += dev_bsize)
-		if (write(fd, cp, (int)dev_bsize) != dev_bsize) {
-			(void)lseek(fd, offset + i + dev_bsize, 0);
-			printf(" %ld,", blk + i / dev_bsize);
-		}
+		if (pwrite(fd, cp, (int)dev_bsize, offset + i) != dev_bsize)
+			printf(" %lld,", (long long)(blk + i / dev_bsize));
 	printf("\n");
 	return;
 }
@@ -404,9 +386,8 @@ bwrite(fd, buf, blk, size)
 /*
  * allocate a data block with the specified number of fragments
  */
-ufs_daddr_t
-allocblk(frags)
-	long frags;
+daddr_t
+allocblk(long frags)
 {
 	int i, j, k, cg, baseblk;
 	struct cg *cgp = cgrp;
@@ -428,7 +409,7 @@ allocblk(frags)
 			getblk(&cgblk, cgtod(sblock, cg), sblock->fs_cgsize);
 			memcpy(cgp, cgblk.b_un.b_cg, sblock->fs_cgsize);
 			if ((doswap && !needswap) || (!doswap && needswap))
-				swap_cg(cgblk.b_un.b_cg, cgp);
+				ffs_cg_swap(cgblk.b_un.b_cg, cgp, sblock);
 			if (!cg_chkmagic(cgp, 0))
 				pfatal("CG %d: ALLOCBLK: BAD MAGIC NUMBER\n",
 				    cg);
@@ -453,9 +434,7 @@ allocblk(frags)
  * Free a previously allocated block
  */
 void
-freeblk(blkno, frags)
-	ufs_daddr_t blkno;
-	long frags;
+freeblk(daddr_t blkno, long frags)
 {
 	struct inodesc idesc;
 
@@ -468,22 +447,21 @@ freeblk(blkno, frags)
  * Find a pathname
  */
 void
-getpathname(namebuf, curdir, ino)
-	char *namebuf;
-	ino_t curdir, ino;
+getpathname(char *namebuf, size_t namebuflen, ino_t curdir, ino_t ino)
 {
 	int len;
 	char *cp;
 	struct inodesc idesc;
 	static int busy = 0;
+	struct inostat *info;
 
 	if (curdir == ino && ino == ROOTINO) {
-		(void)strcpy(namebuf, "/");
+		(void)strlcpy(namebuf, "/", namebuflen);
 		return;
 	}
-	if (busy ||
-	    (statemap[curdir] != DSTATE && statemap[curdir] != DFOUND)) {
-		(void)strcpy(namebuf, "?");
+	info = inoinfo(curdir);
+	if (busy || (info->ino_state != DSTATE && info->ino_state != DFOUND)) {
+		(void)strlcpy(namebuf, "?", namebuflen);
 		return;
 	}
 	busy = 1;
@@ -513,7 +491,7 @@ getpathname(namebuf, curdir, ino)
 		cp -= len;
 		memmove(cp, namebuf, (size_t)len);
 		*--cp = '/';
-		if (cp < &namebuf[MAXNAMLEN])
+		if (cp < &namebuf[FFS_MAXNAMLEN])
 			break;
 		ino = idesc.id_number;
 	}
@@ -524,14 +502,13 @@ getpathname(namebuf, curdir, ino)
 }
 
 void
-catch(sig)
-	int sig;
+catch(int sig)
 {
 	if (!doinglevel2) {
 		markclean = 0;
 		ckfini();
 	}
-	exit(12);
+	exit(FSCK_EXIT_SIGNALLED);
 }
 
 /*
@@ -540,14 +517,14 @@ catch(sig)
  * so that reboot sequence may be interrupted.
  */
 void
-catchquit(sig)
-	int sig;
+catchquit(int sig)
 {
-	extern int returntosingle;
+	int errsave = errno;
 
-	printf("returning to single-user after filesystem check\n");
+	printf("returning to single-user after file system check\n");
 	returntosingle = 1;
 	(void)signal(SIGQUIT, SIG_DFL);
+	errno = errsave;
 }
 
 /*
@@ -555,22 +532,21 @@ catchquit(sig)
  * Used by child processes in preen.
  */
 void
-voidquit(sig)
-	int sig;
+voidquit(int sig)
 {
+	int errsave = errno;
 
 	sleep(1);
 	(void)signal(SIGQUIT, SIG_IGN);
 	(void)signal(SIGQUIT, SIG_DFL);
+	errno = errsave;
 }
 
 /*
  * determine whether an inode should be fixed.
  */
 int
-dofix(idesc, msg)
-	struct inodesc *idesc;
-	char *msg;
+dofix(struct inodesc *idesc, const char *msg)
 {
 
 	switch (idesc->id_fix) {
@@ -579,7 +555,7 @@ dofix(idesc, msg)
 		if (idesc->id_type == DATA)
 			direrror(idesc->id_number, msg);
 		else
-			pwarn(msg);
+			pwarn("%s", msg);
 		if (preen) {
 			printf(" (SALVAGED)\n");
 			idesc->id_fix = FIX;
@@ -600,96 +576,153 @@ dofix(idesc, msg)
 		return (0);
 
 	default:
-		errx(EEXIT, "UNKNOWN INODESC FIX MODE %d", idesc->id_fix);
+		errexit("UNKNOWN INODESC FIX MODE %d", idesc->id_fix);
 	}
 	/* NOTREACHED */
 	return (0);
 }
 
 void
-copyback_cg(blk)
-	struct bufarea *blk;
+copyback_cg(struct bufarea *blk)
 {
 
 	memcpy(blk->b_un.b_cg, cgrp, sblock->fs_cgsize);
 	if (needswap)
-		swap_cg(cgrp, blk->b_un.b_cg);
+		ffs_cg_swap(cgrp, blk->b_un.b_cg, sblock);
 }
 
 void
-swap_cg(o, n)
-	struct cg *o, *n;
+infohandler(int sig)
 {
-	int i;
-	u_int32_t *n32, *o32;
-	u_int16_t *n16, *o16;
+	got_siginfo = 1;
+}
 
-	n->cg_firstfield = bswap32(o->cg_firstfield);
-	n->cg_magic = bswap32(o->cg_magic);
-	n->cg_time = bswap32(o->cg_time);
-	n->cg_cgx = bswap32(o->cg_cgx);
-	n->cg_ncyl = bswap16(o->cg_ncyl);
-	n->cg_niblk = bswap16(o->cg_niblk);
-	n->cg_ndblk = bswap32(o->cg_ndblk);
-	n->cg_cs.cs_ndir = bswap32(o->cg_cs.cs_ndir);
-	n->cg_cs.cs_nbfree = bswap32(o->cg_cs.cs_nbfree);
-	n->cg_cs.cs_nifree = bswap32(o->cg_cs.cs_nifree);
-	n->cg_cs.cs_nffree = bswap32(o->cg_cs.cs_nffree);
-	n->cg_rotor = bswap32(o->cg_rotor);
-	n->cg_frotor = bswap32(o->cg_frotor);
-	n->cg_irotor = bswap32(o->cg_irotor);
-	n->cg_btotoff = bswap32(o->cg_btotoff);
-	n->cg_boff = bswap32(o->cg_boff);
-	n->cg_iusedoff = bswap32(o->cg_iusedoff);
-	n->cg_freeoff = bswap32(o->cg_freeoff);
-	n->cg_nextfreeoff = bswap32(o->cg_nextfreeoff);
-	n->cg_clustersumoff = bswap32(o->cg_clustersumoff);
-	n->cg_clusteroff = bswap32(o->cg_clusteroff);
-	n->cg_nclusterblks = bswap32(o->cg_nclusterblks);
-	for (i=0; i < MAXFRAG; i++)
-		n->cg_frsum[i] = bswap32(o->cg_frsum[i]);
+/*
+ * Look up state information for an inode.
+ */
+struct inostat *
+inoinfo(ino_t inum)
+{
+	static struct inostat unallocated = { USTATE, 0, 0 };
+	struct inostatlist *ilp;
+	int iloff;
 
-	if (sblock->fs_postblformat == FS_42POSTBLFMT) { /* old format */
-		struct ocg *on, *oo;
-		int j;
-		on = (struct ocg *)n;
-		oo = (struct ocg *)o;
-		for(i = 0; i < 8; i++) {
-			on->cg_frsum[i] = bswap32(oo->cg_frsum[i]);
-		}
-		for(i = 0; i < 32; i++) {
-			on->cg_btot[i] = bswap32(oo->cg_btot[i]);
-			for (j = 0; j < 8; j++)
-				on->cg_b[i][j] = bswap16(oo->cg_b[i][j]);
-		}
-		memmove(on->cg_iused, oo->cg_iused, 256);
-		on->cg_magic = bswap32(oo->cg_magic);
-	} else {  /* new format */
-		if (n->cg_magic == CG_MAGIC) {
-			n32 = (u_int32_t*)((u_int8_t*)n + n->cg_btotoff);
-			o32 = (u_int32_t*)((u_int8_t*)o + n->cg_btotoff);
-			n16 = (u_int16_t*)((u_int8_t*)n + n->cg_boff);
-			o16 = (u_int16_t*)((u_int8_t*)o + n->cg_boff);
-		} else {
-			n32 = (u_int32_t*)((u_int8_t*)n + o->cg_btotoff);
-			o32 = (u_int32_t*)((u_int8_t*)o + o->cg_btotoff);
-			n16 = (u_int16_t*)((u_int8_t*)n + o->cg_boff);
-			o16 = (u_int16_t*)((u_int8_t*)o + o->cg_boff);
-		}
-		for (i=0; i < sblock->fs_cpg; i++)
-			n32[i] = bswap32(o32[i]);
-		
-		for (i=0; i < sblock->fs_cpg * sblock->fs_nrpos; i++)
-			n16[i] = bswap16(o16[i]);
+	if (inum > maxino)
+		errexit("inoinfo: inumber %llu out of range",
+		    (unsigned long long)inum);
+	ilp = &inostathead[inum / sblock->fs_ipg];
+	iloff = inum % sblock->fs_ipg;
+	if (iloff >= ilp->il_numalloced)
+		return (&unallocated);
+	return (&ilp->il_stat[iloff]);
+}
 
-		if (n->cg_magic == CG_MAGIC) {
-			n32 = (u_int32_t*)((u_int8_t*)n + n->cg_clustersumoff);
-			o32 = (u_int32_t*)((u_int8_t*)o + n->cg_clustersumoff);
-		} else {
-			n32 = (u_int32_t*)((u_int8_t*)n + o->cg_clustersumoff);
-			o32 = (u_int32_t*)((u_int8_t*)o + o->cg_clustersumoff);
+void
+sb_oldfscompat_read(struct fs *fs, struct fs **fssave)
+{
+	if ((fs->fs_magic != FS_UFS1_MAGIC) ||
+	    (fs->fs_old_flags & FS_FLAGS_UPDATED))
+		return;
+
+	/* Save a copy of fields that may be modified for compatibility */
+	if (fssave) {
+		if (!*fssave)
+			*fssave = malloc(sizeof(struct fs));
+		if (!*fssave)
+			errexit("cannot allocate space for compat store");
+		memmove(*fssave, fs, sizeof(struct fs));
+
+		if (debug)
+			printf("detected ufs1 superblock not yet updated for ufs2 kernels\n");
+
+		if (doswap) {
+			uint16_t postbl[256];
+			int i, n;
+
+			if (fs->fs_old_postblformat == FS_42POSTBLFMT)
+				n = 256;
+			else
+				n = 128;
+
+			/* extract the postbl from the unswapped superblock */
+			if (!needswap)
+				ffs_sb_swap(*fssave, *fssave);
+			memmove(postbl, (&(*fssave)->fs_old_postbl_start),
+			    n * sizeof(postbl[0]));
+			if (!needswap)
+				ffs_sb_swap(*fssave, *fssave);
+
+			/* Now swap it */
+			for (i=0; i < n; i++)
+				postbl[i] = bswap16(postbl[i]);
+
+			/* And put it back such that it will get correctly
+			 * unscrambled if it is swapped again on the way out
+			 */
+			if (needswap)
+				ffs_sb_swap(*fssave, *fssave);
+			memmove((&(*fssave)->fs_old_postbl_start), postbl,
+			    n * sizeof(postbl[0]));
+			if (needswap)
+				ffs_sb_swap(*fssave, *fssave);
 		}
-		for (i = 0; i < sblock->fs_contigsumsize + 1; i++)
-			n32[i] = bswap32(o32[i]);
+
 	}
+
+	/* These fields will be overwritten by their
+	 * original values in fs_oldfscompat_write, so it is harmless
+	 * to modify them here.
+	 */
+	fs->fs_cstotal.cs_ndir =
+	    fs->fs_old_cstotal.cs_ndir;
+	fs->fs_cstotal.cs_nbfree =
+	    fs->fs_old_cstotal.cs_nbfree;
+	fs->fs_cstotal.cs_nifree =
+	    fs->fs_old_cstotal.cs_nifree;
+	fs->fs_cstotal.cs_nffree =
+	    fs->fs_old_cstotal.cs_nffree;
+	
+	fs->fs_maxbsize = fs->fs_bsize;
+	fs->fs_time = fs->fs_old_time;
+	fs->fs_size = fs->fs_old_size;
+	fs->fs_dsize = fs->fs_old_dsize;
+	fs->fs_csaddr = fs->fs_old_csaddr;
+	fs->fs_sblockloc = SBLOCK_UFS1;
+
+	fs->fs_flags = fs->fs_old_flags;
+
+	if (fs->fs_old_postblformat == FS_42POSTBLFMT) {
+		fs->fs_old_nrpos = 8;
+		fs->fs_old_npsect = fs->fs_old_nsect;
+		fs->fs_old_interleave = 1;
+		fs->fs_old_trackskew = 0;
+	}
+}
+
+void
+sb_oldfscompat_write(struct fs *fs, struct fs *fssave)
+{
+	if ((fs->fs_magic != FS_UFS1_MAGIC) ||
+	    (fs->fs_old_flags & FS_FLAGS_UPDATED))
+		return;
+
+	fs->fs_old_flags = fs->fs_flags;
+	fs->fs_old_time = fs->fs_time;
+	fs->fs_old_cstotal.cs_ndir = fs->fs_cstotal.cs_ndir;
+	fs->fs_old_cstotal.cs_nbfree = fs->fs_cstotal.cs_nbfree;
+	fs->fs_old_cstotal.cs_nifree = fs->fs_cstotal.cs_nifree;
+	fs->fs_old_cstotal.cs_nffree = fs->fs_cstotal.cs_nffree;
+
+	fs->fs_flags = fssave->fs_flags;
+
+	if (fs->fs_old_postblformat == FS_42POSTBLFMT) {
+		fs->fs_old_nrpos = fssave->fs_old_nrpos;
+		fs->fs_old_npsect = fssave->fs_old_npsect;
+		fs->fs_old_interleave = fssave->fs_old_interleave;
+		fs->fs_old_trackskew = fssave->fs_old_trackskew;
+	}
+
+	memmove(&fs->fs_old_postbl_start, &fssave->fs_old_postbl_start,
+	    ((fs->fs_old_postblformat == FS_42POSTBLFMT) ?
+	    512 : 256));
 }

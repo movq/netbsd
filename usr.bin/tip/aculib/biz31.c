@@ -1,4 +1,4 @@
-/*	$NetBSD: biz31.c,v 1.7 1998/07/12 09:14:19 mrg Exp $	*/
+/*	$NetBSD: biz31.c,v 1.12 2006/12/14 17:09:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)biz31.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: biz31.c,v 1.7 1998/07/12 09:14:19 mrg Exp $");
+__RCSID("$NetBSD: biz31.c,v 1.12 2006/12/14 17:09:43 christos Exp $");
 #endif /* not lint */
 
 #include "tip.h"
@@ -46,9 +42,14 @@ __RCSID("$NetBSD: biz31.c,v 1.7 1998/07/12 09:14:19 mrg Exp $");
 #define MAXRETRY	3		/* sync up retry count */
 #define DISCONNECT_CMD	"\21\25\11\24"	/* disconnection string */
 
-static	void sigALRM();
+static	void sigALRM(int);
 static	int timeout = 0;
 static	jmp_buf timeoutbuf;
+
+static void echo(const char *);
+static int detect(const char *);
+static void flush(const char *);
+static int bizsync(int);
 
 /*
  * Dial up on a BIZCOMP Model 1031 with either
@@ -56,19 +57,17 @@ static	jmp_buf timeoutbuf;
  *	pulse dialing (mod = "w")
  */
 static int
-biz_dialer(num, mod)
-	char *num, *mod;
+biz_dialer(char *num, const char *mod)
 {
 	int connected = 0;
 
 	if (!bizsync(FD)) {
 		logent(value(HOST), "", "biz", "out of sync");
-		printf("bizcomp out of sync\n");
-		delock(uucplock);
+		(void)printf("bizcomp out of sync\n");
 		exit(0);
 	}
 	if (boolean(value(VERBOSE)))
-		printf("\nstarting call...");
+		(void)printf("\nstarting call...");
 	echo("#\rk$\r$\n");			/* disable auto-answer */
 	echo("$>$.$ #\r");			/* tone/pulse dialing */
 	echo(mod);
@@ -80,22 +79,13 @@ biz_dialer(num, mod)
 	echo(num);
 	echo("\r$\n");
 	if (boolean(value(VERBOSE)))
-		printf("ringing...");
+		(void)printf("ringing...");
 	/*
 	 * The reply from the BIZCOMP should be:
 	 *	`^G NO CONNECTION\r\n^G\r\n'	failure
 	 *	` CONNECTION\r\n^G'		success
 	 */
 	connected = detect(" ");
-#ifdef ACULOG
-	if (timeout) {
-		char line[80];
-
-		(void)snprintf(line, sizeof line, "%d second dial timeout",
-			number(value(DIALTIMEOUT)));
-		logent(value(HOST), num, "biz", line);
-	}
-#endif
 	if (!connected)
 		flush(" NO CONNECTION\r\n\07\r\n");
 	else
@@ -105,59 +95,64 @@ biz_dialer(num, mod)
 	return (connected);
 }
 
-biz31w_dialer(num, acu)
-	char *num, *acu;
+int
+/*ARGSUSED*/
+biz31w_dialer(char *num, char *acu __unused)
 {
 
 	return (biz_dialer(num, "w"));
 }
 
-biz31f_dialer(num, acu)
-	char *num, *acu;
+int
+/*ARGSUSED*/
+biz31f_dialer(char *num, char *acu __unused)
 {
 
 	return (biz_dialer(num, "f"));
 }
 
-biz31_disconnect()
+void
+biz31_disconnect(void)
 {
 
-	write(FD, DISCONNECT_CMD, 4);
-	sleep(2);
-	tcflush(FD, TCIOFLUSH);
+	(void)write(FD, DISCONNECT_CMD, 4);
+	(void)sleep(2);
+	(void)tcflush(FD, TCIOFLUSH);
 }
 
-biz31_abort()
+void
+biz31_abort(void)
 {
 
-	write(FD, "\33", 1);
-}
-
-static int
-echo(s)
-	char *s;
-{
-	char c;
-
-	while (c = *s++) switch (c) {
-	case '$':
-		read(FD, &c, 1);
-		s++;
-		break;
-
-	case '#':
-		c = *s++;
-		write(FD, &c, 1);
-		break;
-
-	default:
-		write(FD, &c, 1);
-		read(FD, &c, 1);
-	}
+	(void)write(FD, "\33", 1);
 }
 
 static void
-sigALRM()
+echo(const char *s)
+{
+	char c;
+
+	while ((c = *s++) != '\0')
+		switch (c) {
+		case '$':
+			(void)read(FD, &c, 1);
+			s++;
+			break;
+			
+		case '#':
+			c = *s++;
+			(void)write(FD, &c, 1);
+			break;
+			
+		default:
+			(void)write(FD, &c, 1);
+			(void)read(FD, &c, 1);
+		}
+}
+
+static void
+/*ARGSUSED*/
+sigALRM(int signo __unused)
 {
 
 	timeout = 1;
@@ -165,8 +160,7 @@ sigALRM()
 }
 
 static int
-detect(s)
-	char *s;
+detect(const char *s)
 {
 	sig_t f;
 	char c;
@@ -175,23 +169,22 @@ detect(s)
 	timeout = 0;
 	while (*s) {
 		if (setjmp(timeoutbuf)) {
-			printf("\07timeout waiting for reply\n");
+			(void)printf("\07timeout waiting for reply\n");
 			biz31_abort();
 			break;
 		}
-		alarm(number(value(DIALTIMEOUT)));
-		read(FD, &c, 1);
-		alarm(0);
+		(void)alarm((unsigned)number(value(DIALTIMEOUT)));
+		(void)read(FD, &c, 1);
+		(void)alarm(0);
 		if (c != *s++)
 			break;
 	}
-	signal(SIGALRM, f);
+	(void)signal(SIGALRM, f);
 	return (timeout == 0);
 }
 
-static int
-flush(s)
-	char *s;
+static void
+flush(const char *s)
 {
 	sig_t f;
 	char c;
@@ -200,11 +193,11 @@ flush(s)
 	while (*s++) {
 		if (setjmp(timeoutbuf))
 			break;
-		alarm(10);
-		read(FD, &c, 1);
-		alarm(0);
+		(void)alarm(10);
+		(void)read(FD, &c, 1);
+		(void)alarm(0);
 	}
-	signal(SIGALRM, f);
+	(void)signal(SIGALRM, f);
 	timeout = 0;			/* guard against disconnection */
 }
 
@@ -214,7 +207,7 @@ flush(s)
  *  call there are gory ways to simulate this.
  */
 static int
-bizsync(fd)
+bizsync(int fd)
 {
 #ifdef FIOCAPACITY
 	struct capacity b;
@@ -230,21 +223,21 @@ bizsync(fd)
 	char buf[10];
 
 retry:
-	if (ioctl(fd, IOCTL, (caddr_t)&b) >= 0 && chars(b) > 0)
-		tcflush(FD, TCIOFLUSH);
-	write(fd, "\rp>\r", 4);
-	sleep(1);
-	if (ioctl(fd, IOCTL, (caddr_t)&b) >= 0) {
+	if (ioctl(fd, IOCTL, &b) >= 0 && chars(b) > 0)
+		(void)tcflush(FD, TCIOFLUSH);
+	(void)write(fd, "\rp>\r", 4);
+	(void)sleep(1);
+	if (ioctl(fd, IOCTL, &b) >= 0) {
 		if (chars(b) != 10) {
 	nono:
 			if (already > MAXRETRY)
 				return (0);
-			write(fd, DISCONNECT_CMD, 4);
-			sleep(2);
+			(void)write(fd, DISCONNECT_CMD, 4);
+			(void)sleep(2);
 			already++;
 			goto retry;
 		} else {
-			read(fd, buf, 10);
+			(void)read(fd, buf, 10);
 			if (strncmp(buf, "p >\r\n\r\n>", 8))
 				goto nono;
 		}

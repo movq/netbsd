@@ -1,4 +1,4 @@
-/*	$NetBSD: symtab.c,v 1.13 1997/09/16 13:44:15 lukem Exp $	*/
+/*	$NetBSD: symtab.c,v 1.23 2005/08/19 02:07:19 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)symtab.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: symtab.c,v 1.13 1997/09/16 13:44:15 lukem Exp $");
+__RCSID("$NetBSD: symtab.c,v 1.23 2005/08/19 02:07:19 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -77,16 +73,15 @@ __RCSID("$NetBSD: symtab.c,v 1.13 1997/09/16 13:44:15 lukem Exp $");
 static struct entry **entry;
 static long entrytblsize;
 
-static void		 addino __P((ino_t, struct entry *));
-static struct entry	*lookupparent __P((char *));
-static void		 removeentry __P((struct entry *));
+static void		 addino(ino_t, struct entry *);
+static struct entry	*lookupparent(const char *);
+static void		 removeentry(struct entry *);
 
 /*
  * Look up an entry by inode number
  */
 struct entry *
-lookupino(inum)
-	ino_t inum;
+lookupino(ino_t inum)
 {
 	struct entry *ep;
 
@@ -102,14 +97,12 @@ lookupino(inum)
  * Add an entry into the entry table
  */
 static void
-addino(inum, np)
-	ino_t inum;
-	struct entry *np;
+addino(ino_t inum, struct entry *np)
 {
 	struct entry **epp;
 
 	if (inum < WINO || inum >= maxino)
-		panic("addino: out of range %d\n", inum);
+		panic("addino: out of range %llu\n", (unsigned long long)inum);
 	epp = &entry[inum % entrytblsize];
 	np->e_ino = inum;
 	np->e_next = *epp;
@@ -124,14 +117,14 @@ addino(inum, np)
  * Delete an entry from the entry table
  */
 void
-deleteino(inum)
-	ino_t inum;
+deleteino(ino_t inum)
 {
 	struct entry *next;
 	struct entry **prev;
 
 	if (inum < WINO || inum >= maxino)
-		panic("deleteino: out of range %d\n", inum);
+		panic("deleteino: out of range %llu\n",
+		    (unsigned long long)inum);
 	prev = &entry[inum % entrytblsize];
 	for (next = *prev; next != NULL; next = next->e_next) {
 		if (next->e_ino == inum) {
@@ -141,18 +134,18 @@ deleteino(inum)
 		}
 		prev = &next->e_next;
 	}
-	panic("deleteino: %d not found\n", inum);
+	panic("deleteino: %llu not found\n", (unsigned long long)inum);
 }
 
 /*
  * Look up an entry by name
  */
 struct entry *
-lookupname(name)
-	char *name;
+lookupname(const char *name)
 {
 	struct entry *ep;
-	char *np, *cp;
+	char *np;
+	const char *cp;
 	char buf[MAXPATHLEN];
 
 	cp = name;
@@ -175,8 +168,7 @@ lookupname(name)
  * Look up the parent of a pathname
  */
 static struct entry *
-lookupparent(name)
-	char *name;
+lookupparent(const char *name)
 {
 	struct entry *ep;
 	char *tailindex;
@@ -198,8 +190,7 @@ lookupparent(name)
  * Determine the current pathname of a node or leaf
  */
 char *
-myname(ep)
-	struct entry *ep;
+myname(struct entry *ep)
 {
 	char *cp;
 	static char namebuf[MAXPATHLEN];
@@ -226,22 +217,24 @@ static struct entry *freelist = NULL;
  * add an entry to the symbol table
  */
 struct entry *
-addentry(name, inum, type)
-	char *name;
-	ino_t inum;
-	int type;
+addentry(const char *name, ino_t inum, int type)
 {
 	struct entry *np, *ep;
 
-	if (freelist != NULL) {
-		np = freelist;
-		freelist = np->e_next;
-		memset(np, 0, (long)sizeof(struct entry));
-	} else {
-		np = (struct entry *)calloc(1, sizeof(struct entry));
+	if (freelist == NULL) {
+		np = malloc(pagesize);
 		if (np == NULL)
 			panic("no memory to extend symbol table\n");
+		for (ep = (struct entry *)((char *)np + pagesize) - 1;
+		    np <= ep; np++) {
+			np->e_next = freelist;
+			freelist = np;
+		}
 	}
+	np = freelist;
+	freelist = np->e_next;
+	memset(np, 0, (long)sizeof(struct entry));
+
 	np->e_type = type & ~LINK;
 	ep = lookupparent(name);
 	if (ep == NULL) {
@@ -261,7 +254,7 @@ addentry(name, inum, type)
 	if (type & LINK) {
 		ep = lookupino(inum);
 		if (ep == NULL)
-			panic("link to non-existant name\n");
+			panic("link to non-existent name\n");
 		np->e_ino = inum;
 		np->e_links = ep->e_links;
 		ep->e_links = np;
@@ -277,8 +270,7 @@ addentry(name, inum, type)
  * delete an entry from the symbol table
  */
 void
-freeentry(ep)
-	struct entry *ep;
+freeentry(struct entry *ep)
 {
 	struct entry *np;
 	ino_t inum;
@@ -321,9 +313,7 @@ freeentry(ep)
  * Relocate an entry in the tree structure
  */
 void
-moveentry(ep, newname)
-	struct entry *ep;
-	char *newname;
+moveentry(struct entry *ep, const char *newname)
 {
 	struct entry *np;
 	char *cp;
@@ -351,8 +341,7 @@ moveentry(ep, newname)
  * Remove an entry in the tree structure
  */
 static void
-removeentry(ep)
-	struct entry *ep;
+removeentry(struct entry *ep)
 {
 	struct entry *np;
 
@@ -378,7 +367,7 @@ removeentry(ep)
  * of similar lengths can use the same entry. The value of STRTBLINCR
  * is chosen so that every entry has at least enough space to hold
  * a "struct strtbl" header. Thus every entry can be linked onto an
- * apprpriate free list.
+ * appropriate free list.
  *
  * NB. The macro "allocsize" below assumes that "struct strhdr"
  *     has a size that is a power of two.
@@ -397,25 +386,30 @@ static struct strhdr strtblhdr[allocsize(NAME_MAX) / STRTBLINCR];
  * has an appropriate sized entry, and if not allocates a new one.
  */
 char *
-savename(name)
-	char *name;
+savename(const char *name)
 {
-	struct strhdr *np;
-	long len;
-	char *cp;
+	struct strhdr *np, *tp;
+	long len, siz;
+	char *cp, *ep;
 
 	if (name == NULL)
 		panic("bad name\n");
 	len = strlen(name);
-	np = strtblhdr[len / STRTBLINCR].next;
-	if (np != NULL) {
-		strtblhdr[len / STRTBLINCR].next = np->next;
-		cp = (char *)np;
-	} else {
-		cp = malloc((unsigned)allocsize(len));
+	tp = &strtblhdr[len / STRTBLINCR];
+	if (tp->next == NULL) {
+		cp = malloc(pagesize);
 		if (cp == NULL)
 			panic("no space for string table\n");
+		for (siz = allocsize(len), ep = (cp + pagesize) - siz;
+		    cp <= ep; cp += siz) {
+			np = (struct strhdr *)cp;
+			np->next = tp->next;
+			tp->next = np;
+		}
 	}
+	np = tp->next;
+	tp->next = np->next;
+	cp = (char *)np;
 	(void) strcpy(cp, name);
 	return (cp);
 }
@@ -425,8 +419,7 @@ savename(name)
  * appropriate free list.
  */
 void
-freename(name)
-	char *name;
+freename(char *name)
 {
 	struct strhdr *tp, *np;
 	
@@ -453,9 +446,7 @@ struct symtableheader {
  * dump a snapshot of the symbol table
  */
 void
-dumpsymtable(filename, checkpt)
-	char *filename;
-	int32_t checkpt;
+dumpsymtable(const char *filename, int32_t checkpt)
 {
 	struct entry *ep, *tep;
 	ino_t i;
@@ -541,8 +532,7 @@ dumpsymtable(filename, checkpt)
  * Initialize a symbol table from a file
  */
 void
-initsymtable(filename)
-	char *filename;
+initsymtable(const char *filename)
 {
 	char *base;
 	long tblsize;
@@ -573,7 +563,7 @@ initsymtable(filename)
 		panic("cannot stat symbol table file %s\n", filename);
 	}
 	tblsize = stbuf.st_size - sizeof(struct symtableheader);
-	base = calloc(sizeof(char), (unsigned)tblsize);
+	base = calloc((unsigned)tblsize, sizeof(char));
 	if (base == NULL)
 		panic("cannot allocate space for symbol table\n");
 	if (read(fd, base, (int)tblsize) < 0 ||

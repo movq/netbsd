@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2000/02/29 15:21:53 nonaka Exp $
+#	$NetBSD: Makefile,v 1.3 2008/10/25 22:27:38 apb Exp $
 
 # Makefile for tags file
 
@@ -15,7 +15,8 @@ DPREP=       include
 tags:
 	-ctags -wdtf ${TPREP} ${SPREP} ${COMM}
 	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${APREP} | \
-	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
+	    ${TOOL_SED} -e \
+		"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
 	    >> ${TPREP}
 	sort -o ${TPREP} ${TPREP}
 
@@ -23,6 +24,7 @@ links:
 	-for i in ${DPREP}; do \
 	    cd $$i && rm -f tags; ln -s ../tags tags; done
 
-SUBDIR=	include stand
+
+SUBDIR=	compile include stand
 
 .include <bsd.subdir.mk>

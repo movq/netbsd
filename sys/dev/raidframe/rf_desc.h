@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_desc.h,v 1.5 2000/01/09 00:00:18 oster Exp $	*/
+/*	$NetBSD: rf_desc.h,v 1.20 2007/03/04 06:02:36 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -29,23 +29,20 @@
 #ifndef _RF__RF_DESC_H_
 #define _RF__RF_DESC_H_
 
+#include <dev/raidframe/raidframevar.h>
+
 #include "rf_archs.h"
-#include "rf_types.h"
 #include "rf_etimer.h"
 #include "rf_dag.h"
+#include "rf_layout.h"
 
 struct RF_RaidReconDesc_s {
 	RF_Raid_t *raidPtr;	/* raid device descriptor */
-	RF_RowCol_t row;	/* row of failed disk */
 	RF_RowCol_t col;	/* col of failed disk */
-	int     state;		/* how far along the reconstruction operation
-				 * has gotten */
 	RF_RaidDisk_t *spareDiskPtr;	/* describes target disk for recon
 					 * (not used in dist sparing) */
 	int     numDisksDone;	/* the number of surviving disks that have
 				 * completed their work */
-	RF_RowCol_t srow;	/* row ID of the spare disk (not used in dist
-				 * sparing) */
 	RF_RowCol_t scol;	/* col ID of the spare disk (not used in dist
 				 * sparing) */
 	/*
@@ -73,40 +70,28 @@ struct RF_RaidAccessDesc_s {
 					 * transfer */
 	RF_StripeCount_t numStripes;	/* number of stripes involved in
 					 * access */
-	caddr_t bufPtr;		/* pointer to data buffer */
+	void *bufPtr;		/* pointer to data buffer */
 	RF_RaidAccessFlags_t flags;	/* flags controlling operation */
 	int     state;		/* index into states telling how far along the
 				 * RAID operation has gotten */
-	RF_AccessState_t *states;	/* array of states to be run */
+	const RF_AccessState_t *states;	/* array of states to be run */
 	int     status;		/* pass/fail status of the last operation */
-	RF_DagList_t *dagArray;	/* array of dag lists, one list per stripe */
+	int     numRetries;     /* number of times this IO has been attempted */
+	RF_DagList_t *dagList;	/* list of dag lists, one list per stripe */
+	RF_VoidPointerListElem_t *iobufs; /* iobufs that need to be cleaned
+					     up at the end of this IO */
+	RF_VoidPointerListElem_t *stripebufs; /* stripe buffers that need to
+						 be cleaned up at the end of
+						 this IO */
 	RF_AccessStripeMapHeader_t *asmap;	/* the asm for this I/O */
-	void   *bp;		/* buf pointer for this RAID acc.  ignored
-				 * outside the kernel */
-	RF_DagHeader_t **paramDAG;	/* allows the DAG to be returned to
-					 * the caller after I/O completion */
-	RF_AccessStripeMapHeader_t **paramASM;	/* allows the ASM to be
-						 * returned to the caller
-						 * after I/O completion */
+	struct buf *bp;		/* buf pointer for this RAID acc */
 	RF_AccTraceEntry_t tracerec;	/* perf monitoring information for a
 					 * user access (not for dag stats) */
 	void    (*callbackFunc) (RF_CBParam_t);	/* callback function for this
 						 * I/O */
 	void   *callbackArg;	/* arg to give to callback func */
-
-	RF_AllocListElem_t *cleanupList;	/* memory to be freed at the
-						 * end of the access */
-
 	RF_RaidAccessDesc_t *next;
-	RF_RaidAccessDesc_t *head;
-
-	int     numPending;
-
-	        RF_DECLARE_MUTEX(mutex)	/* these are used to implement
-					 * blocking I/O */
-	        RF_DECLARE_COND(cond)
 	int     async_flag;
-
 	RF_Etimer_t timer;	/* used for timing this access */
 };
 #endif				/* !_RF__RF_DESC_H_ */

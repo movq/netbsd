@@ -1,17 +1,8 @@
-#	$NetBSD: Makefile,v 1.18 2000/03/19 23:01:07 soren Exp $
+#	$NetBSD: Makefile,v 1.38 2007/11/29 23:19:25 dsl Exp $
 
-SUBDIR=	mbr
-.if ${MACHINE} == "i386"
-SUBDIR+= mbr_bootsel
-.endif
-
-.if (${MACHINE} == "i386" || ${MACHINE} == "bebox" || ${MACHINE} == "cobalt" ||\
-    ${MACHINE} == "ofppc" || ${MACHINE} == "hpcmips" || ${MACHINE} == "arc")
+WARS=	4
 PROG=	fdisk 
 SRCS=	fdisk.c
-DPADD+=	${LIBUTIL}
-LDADD+=	-lutil
-.endif
 
 MAN=	fdisk.8
 
@@ -19,5 +10,15 @@ MAN=	fdisk.8
 CPPFLAGS+= -D_PATH_DEFDISK='"/dev/rsd0d"'
 .endif
 
+.if ${MACHINE} == "netwinder"
+CPPFLAGS+= -D_PATH_DEFDISK='"/dev/rwd0c"'
+.endif
+
 .include <bsd.prog.mk>
+
+.if (${HOSTPROG:U} == "")
+SUBDIR=	mbr
+DPADD+=	${LIBUTIL}
+LDADD+=	-lutil
 .include <bsd.subdir.mk>
+.endif

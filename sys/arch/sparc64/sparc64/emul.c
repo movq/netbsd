@@ -1,7 +1,7 @@
-/*	$NetBSD: emul.c,v 1.5 1999/11/06 20:18:50 eeh Exp $	*/
+/*	$NetBSD: emul.c,v 1.21 2008/04/28 20:23:37 martin Exp $	*/
 
 /*-
- * Copyright (c) 1997 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: emul.c,v 1.21 2008/04/28 20:23:37 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -43,7 +39,7 @@
 #include <machine/instr.h>
 #include <machine/cpu.h>
 #include <machine/psl.h>
-#include <sparc64/sparc64/cpuvar.h>
+#include <sparc64/sparc64/cache.h>
 
 #define DEBUG_EMUL
 #ifdef DEBUG_EMUL
@@ -52,26 +48,24 @@
 # define DPRINTF(a)
 #endif
 
-#define GPR(tf, i)	((int32_t *) &tf->tf_global)[i]
-#define IPR(tf, i)	((int32_t *) tf->tf_out[6])[i - 16]
-#define FPR(p, i)	((int32_t) p->p_md.md_fpstate->fs_regs[i])
+#define GPR(tf, i)	((int32_t *)(u_long)&tf->tf_global)[i]
+#define IPR(tf, i)	((int32_t *)(u_long)tf->tf_out[6])[i - 16]
+#define FPR(l, i)	((int32_t) l->l_md.md_fpstate->fs_regs[i])
+#define FPRSET(l, i, v)	l->l_md.md_fpstate->fs_regs[i] = (v)
 
-static __inline int readgpreg __P((struct trapframe64 *, int, void *));
-static __inline int readfpreg __P((struct proc *, int, void *));
-static __inline int writegpreg __P((struct trapframe64 *, int, const void *));
-static __inline int writefpreg __P((struct proc *, int, const void *));
-static __inline int decodeaddr __P((struct trapframe64 *, union instr *, void *));
-static int muldiv __P((struct trapframe64 *, union instr *, int32_t *, int32_t *,
-    int32_t *));
+static inline int readgpreg(struct trapframe64 *, int, void *);
+static inline int readfpreg(struct lwp *, int, void *);
+static inline int writegpreg(struct trapframe64 *, int, const void *);
+static inline int writefpreg(struct lwp *, int, const void *);
+static inline int decodeaddr(struct trapframe64 *, union instr *, void *);
+static int muldiv(struct trapframe64 *, union instr *, int32_t *, int32_t *,
+    int32_t *);
 
 #define	REGNAME(i)	"goli"[i >> 3], i & 7
 
 
-static __inline int
-readgpreg(tf, i, val)
-	struct trapframe64 *tf;
-	int i;
-	void *val;
+static inline int
+readgpreg(struct trapframe64 *tf, int i, void *val)
 {
 	int error = 0;
 	if (i == 0)
@@ -85,52 +79,40 @@ readgpreg(tf, i, val)
 }
 
 		
-static __inline int
-writegpreg(tf, i, val)
-	struct trapframe64 *tf;
-	int i;
-	const void *val;
+static inline int
+writegpreg(struct trapframe64 *tf, int i, const void *val)
 {
 	int error = 0;
 
 	if (i == 0)
 		return error;
 	else if (i < 16)
-		GPR(tf, i) = *(int32_t *) val;
+		GPR(tf, i) = *(const int32_t *) val;
 	else
 		/* XXX: Fix copyout prototype */
-		error = copyout((caddr_t) val, &IPR(tf, i), sizeof(int32_t));
+		error = copyout(val, &IPR(tf, i), sizeof(int32_t));
 
 	return error;
 }
 	
 
-static __inline int
-readfpreg(p, i, val)
-	struct proc *p;
-	int i;
-	void *val;
+static inline int
+readfpreg(struct lwp *l, int i, void *val)
 {
-	*(int32_t *) val = FPR(p, i);
+	*(int32_t *) val = FPR(l, i);
 	return 0;
 }
 
 		
-static __inline int
-writefpreg(p, i, val)
-	struct proc *p;
-	int i;
-	const void *val;
+static inline int
+writefpreg(struct lwp *l, int i, const void *val)
 {
-	FPR(p, i) = *(const int32_t *) val;
+	FPRSET(l, i, *(const int32_t *) val);
 	return 0;
 }
 
-static __inline int
-decodeaddr(tf, code, val)
-	struct trapframe64 *tf;
-	union instr *code;
-	void *val;
+static inline int
+decodeaddr(struct trapframe64 *tf, union instr *code, void *val)
 {
 	if (code->i_simm13.i_i)
 		*((int32_t *) val) = code->i_simm13.i_simm13;
@@ -147,10 +129,8 @@ decodeaddr(tf, code, val)
 
 
 static int
-muldiv(tf, code, rd, rs1, rs2)
-	struct trapframe64 *tf;
-	union instr *code;
-	int32_t *rd, *rs1, *rs2;
+muldiv(struct trapframe64 *tf, union instr *code, int32_t *rd, int32_t *rs1,
+        int32_t *rs2)
 {
 	/*
 	 * We check for {S,U}{MUL,DIV}{,cc}
@@ -209,17 +189,17 @@ muldiv(tf, code, rd, rs1, rs2)
 		tf->tf_tstate &= ~(TSTATE_CCR);
 
 		if (*rd == 0)
-			tf->tf_tstate |= (ICC_Z|XCC_Z) << TSTATE_CCR_SHIFT;
+			tf->tf_tstate |= (uint64_t)(ICC_Z|XCC_Z) << TSTATE_CCR_SHIFT;
 		else {
 			if (op.bits.sgn && *rd < 0)
-				tf->tf_tstate |= (ICC_N|XCC_N) << TSTATE_CCR_SHIFT;
+				tf->tf_tstate |= (uint64_t)(ICC_N|XCC_N) << TSTATE_CCR_SHIFT;
 			if (op.bits.div) {
 				if (*rd * *rs2 != *rs1)
-					tf->tf_tstate |= (ICC_V|XCC_V) << TSTATE_CCR_SHIFT;
+					tf->tf_tstate |= (uint64_t)(ICC_V|XCC_V) << TSTATE_CCR_SHIFT;
 			}
 			else {
 				if (*rd / *rs2 != *rs1)
-					tf->tf_tstate |= (ICC_V|XCC_V) << TSTATE_CCR_SHIFT;
+					tf->tf_tstate |= (uint64_t)(ICC_V|XCC_V) << TSTATE_CCR_SHIFT;
 			}
 		}
 	}
@@ -234,9 +214,7 @@ muldiv(tf, code, rd, rs1, rs2)
  */
 
 int
-fixalign(p, tf)
-	struct proc *p;
-	struct trapframe64 *tf;
+fixalign(struct lwp *l, struct trapframe64 *tf)
 {
 	static u_char sizedef[] = { 0x4, 0xff, 0x2, 0x8 };
 
@@ -268,7 +246,7 @@ fixalign(p, tf)
 	int error;
 
 	/* fetch and check the instruction that caused the fault */
-	error = copyin((caddr_t) tf->tf_pc, &code.i_int, sizeof(code.i_int));
+	error = copyin((void *)(u_long)tf->tf_pc, &code.i_int, sizeof(code.i_int));
 	if (error != 0) {
 		DPRINTF(("fixalign: Bad instruction fetch\n"));
 		return EINVAL;
@@ -309,24 +287,24 @@ fixalign(p, tf)
 	    "w*hd"[op.bits.sz], op.bits.fl ? 'f' : REGNAME(code.i_op3.i_rd),
 	    REGNAME(code.i_op3.i_rs1));
 	if (code.i_loadstore.i_i)
-		uprintf("0x%x\n", rs2);
+		uprintf("0x%llx\n", (unsigned long long)rs2);
 	else
 		uprintf("%c%d\n", REGNAME(code.i_asi.i_rs2));
 #endif
 #ifdef DIAGNOSTIC
-	if (op.bits.fl && p != fpproc)
+	if (op.bits.fl && l != fplwp)
 		panic("fp align without being the FP owning process");
 #endif
 
 	if (op.bits.st) {
 		if (op.bits.fl) {
-			savefpstate(p->p_md.md_fpstate);
+			fpusave_lwp(l, true);
 
-			error = readfpreg(p, code.i_op3.i_rd, &data.i[0]);
+			error = readfpreg(l, code.i_op3.i_rd, &data.i[0]);
 			if (error)
 				return error;
 			if (size == 8) {
-				error = readfpreg(p, code.i_op3.i_rd + 1,
+				error = readfpreg(l, code.i_op3.i_rd + 1,
 				    &data.i[1]);
 				if (error)
 					return error;
@@ -345,13 +323,13 @@ fixalign(p, tf)
 		}
 
 		if (size == 2)
-			return copyout(&data.s[1], (caddr_t) rs1, size);
+			return copyout(&data.s[1], (void *)(u_long)rs1, size);
 		else
-			return copyout(&data.d, (caddr_t) rs1, size);
+			return copyout(&data.d, (void *)(u_long)rs1, size);
 	}
 	else { /* load */
 		if (size == 2) {
-			error = copyin((caddr_t) rs1, &data.s[1], size);
+			error = copyin((void *)(u_long)rs1, &data.s[1], size);
 			if (error)
 				return error;
 
@@ -362,22 +340,23 @@ fixalign(p, tf)
 				data.s[0] = 0;
 		}
 		else
-			error = copyin((caddr_t) rs1, &data.d, size);
+			error = copyin((void *)(u_long)rs1, &data.d, size);
 
 		if (error)
 			return error;
 
 		if (op.bits.fl) {
-			error = writefpreg(p, code.i_op3.i_rd, &data.i[0]);
+			error = writefpreg(l, code.i_op3.i_rd, &data.i[0]);
 			if (error)
 				return error;
 			if (size == 8) {
-				error = writefpreg(p, code.i_op3.i_rd + 1,
+				error = writefpreg(l, code.i_op3.i_rd + 1,
 				    &data.i[1]);
 				if (error)
 					return error;
 			}
-			loadfpstate(p->p_md.md_fpstate);
+			loadfpstate(l->l_md.md_fpstate);
+			fplwp = l;
 		}
 		else {
 			error = writegpreg(tf, code.i_op3.i_rd, &data.i[0]);
@@ -395,16 +374,14 @@ fixalign(p, tf)
  * Emulate unimplemented instructions on earlier sparc chips.
  */
 int
-emulinstr(pc, tf)
-	vaddr_t pc;
-	struct trapframe64 *tf;
+emulinstr(vaddr_t pc, struct trapframe64 *tf)
 {
 	union instr code;
 	int32_t rs1, rs2, rd;
 	int error;
 
 	/* fetch and check the instruction that caused the fault */
-	error = copyin((caddr_t) pc, &code.i_int, sizeof(code.i_int));
+	error = copyin((void *) pc, &code.i_int, sizeof(code.i_int));
 	if (error != 0) {
 		DPRINTF(("emulinstr: Bad instruction fetch\n"));
 		return SIGILL;
@@ -430,7 +407,7 @@ emulinstr(pc, tf)
 
 	switch (code.i_op3.i_op3) {
 	case IOP3_FLUSH:
-/*		cpuinfo.cache_flush((caddr_t)(rs1 + rs2), 4); XXX */
+		blast_icache();		/* XXX overkill */
 		return 0;
 
 	default:

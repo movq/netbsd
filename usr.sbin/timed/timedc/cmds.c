@@ -1,4 +1,4 @@
-/*	$NetBSD: cmds.c,v 1.9 1998/07/06 07:06:14 mrg Exp $	*/
+/*	$NetBSD: cmds.c,v 1.23 2007/02/04 21:17:01 cbiere Exp $	*/
 
 /*-
  * Copyright (c) 1985, 1993 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,13 +34,9 @@
 #if 0
 static char sccsid[] = "@(#)cmds.c	8.2 (Berkeley) 3/26/95";
 #else
-__RCSID("$NetBSD: cmds.c,v 1.9 1998/07/06 07:06:14 mrg Exp $");
+__RCSID("$NetBSD: cmds.c,v 1.23 2007/02/04 21:17:01 cbiere Exp $");
 #endif
 #endif /* not lint */
-
-#ifdef sgi
-#ident "$Revision: 1.9 $"
-#endif
 
 #include "timedc.h"
 #include <sys/file.h>
@@ -56,100 +48,154 @@ __RCSID("$NetBSD: cmds.c,v 1.9 1998/07/06 07:06:14 mrg Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <err.h>
 
 #define TSPTYPES
 #include <protocols/timed.h>
 
-#ifdef sgi
-#include <bstring.h>
-#include <sys/clock.h>
-#else
 #define	SECHR	(60*60)
 #define	SECDAY	(24*SECHR)
-#endif /* sgi */
 
-# define DATE_PROTO "udp"
-# define DATE_PORT "time"
-
-
-int sock;
-int sock_raw;
-char myname[MAXHOSTNAMELEN + 1];
-struct hostent *hp;
-struct sockaddr_in server;
-struct sockaddr_in dayaddr;
+int sock_raw;	/* used by measure() */
+static int sock;
 extern int measure_delta;
 
 void bytenetorder(struct tsp *);
 void bytehostorder(struct tsp *);
+void set_tsp_name(struct tsp *, const char *);
+void get_tsp_name(const struct tsp *, char *, size_t);
 
 
-#define BU ((unsigned long)2208988800U)	/* seconds before UNIX epoch */
+#define BU 2208988800UL	/* seconds before UNIX epoch */
 
+enum { CACHED, REFRESH };
+
+static const char *
+myname(int refresh)
+{
+	static char name[MAXHOSTNAMELEN + 1];
+	static int initialized;
+
+	if (refresh || !initialized) {
+		initialized = 1;
+		(void)gethostname(name, sizeof(name));
+		name[sizeof(name) - 1] = '\0';
+	}
+	return name;
+}
+
+static in_port_t
+udpservport(const char *service)
+{
+	const struct servent *srvp;
+
+	srvp = getservbyname(service, "udp");
+	if (srvp == NULL) {
+		warnx("%s/udp: unknown service", service);
+		return 0;
+	}
+	return srvp->s_port;
+}
+
+static const char *
+getaddr(const char *name, struct sockaddr_in *addr, in_port_t port)
+{
+	const struct hostent *hp;
+
+	hp = gethostbyname(name);
+	if (hp == NULL) {
+		warnx("Error resolving %s (%s)", name, hstrerror(h_errno));
+		return NULL;
+	}
+	if (addr) {
+		memset(addr, 0, sizeof(*addr));
+		addr->sin_family = AF_INET;
+		addr->sin_port = port;
+		memcpy(&addr->sin_addr.s_addr, hp->h_addr, sizeof(in_addr_t));
+	}
+	return hp->h_name ? hp->h_name : name;
+}
+
+static const char *
+tsp_type_to_string(const struct tsp *msg)
+{
+	unsigned i;
+
+	i = msg->tsp_type;
+	return i < TSPTYPENUMBER ? tsptype[i] : "unknown";
+}
 
 /* compute the difference between our date and another machine
  */
 static int				/* difference in days from our time */
-daydiff(char *hostname)
+daydiff(const char *hostname, const struct sockaddr_in *addr)
 {
-	int i;
+	struct pollfd set[1];
 	int trials;
-	struct timeval tout, now;
-	fd_set ready;
-	struct sockaddr from;
-	int fromlen;
-	unsigned long sec;
 
+	if (connect(sock, (const struct sockaddr *)addr,
+		    sizeof(*addr)) == -1) {
+		warn("connect");
+		return 0;
+	}
 
-	/* wait 2 seconds between 10 tries */
-	tout.tv_sec = 2;
-	tout.tv_usec = 0;
+	set[0].fd = sock;
+	set[0].events = POLLIN;
 	for (trials = 0; trials < 10; trials++) {
+		ssize_t ret;
+		uint32_t sec;
+
 		/* ask for the time */
 		sec = 0;
-		if (sendto(sock, &sec, sizeof(sec), 0,
-			   (struct sockaddr*)&dayaddr, sizeof(dayaddr)) < 0) {
-			perror("sendto(sock)");
+		ret = send(sock, &sec, sizeof(sec), 0);
+		if (ret < (ssize_t)sizeof(sec)) {
+			if (ret < 0) 
+				warn("send(sock)");
+			else
+				warnx("send(sock): incomplete");
 			return 0;
 		}
 
 		for (;;) {
-			FD_ZERO(&ready);
-			FD_SET(sock, &ready);
-			i = select(sock+1, &ready, (fd_set *)0,
-				   (fd_set *)0, &tout);
+			int i;
+
+			/* wait 2 seconds between 10 tries */
+			i = poll(set, 1, 2000);
 			if (i < 0) {
 				if (errno == EINTR)
 					continue;
-				perror("select(date read)");
+				warn("poll(date read)");
 				return 0;
 			}
 			if (0 == i)
 				break;
 
-			fromlen = sizeof(from);
-			if (recvfrom(sock,&sec,sizeof(sec),0,
-				     &from,&fromlen) < 0) {
-				perror("recvfrom(date read)");
+			ret = recv(sock, &sec, sizeof(sec), 0);
+			if (ret < (ssize_t)sizeof(sec)) {
+				if (ret < 0)
+					warn("recv(date read)");
+				else
+					warnx("recv(date read): incomplete");
 				return 0;
 			}
 
 			sec = ntohl(sec);
 			if (sec < BU) {
-				fprintf(stderr,
-					"%s says it is before 1970: %lu",
-					hostname, sec);
+				warnx("%s says it is before 1970: %lu",
+					hostname, (unsigned long)sec);
 				return 0;
-			}
-			sec -= BU;
+			} else {
+				struct timeval now;
 
-			(void)gettimeofday(&now, (struct timezone*)0);
-			return (sec - now.tv_sec);
+				sec -= BU;
+				(void)gettimeofday(&now, NULL);
+				return (sec - now.tv_sec);
+			}
 		}
 	}
 
 	/* if we get here, we tried too many times */
-	fprintf(stderr,"%s will not tell us the date\n", hostname);
+	warnx("%s will not tell us the date", hostname);
 	return 0;
 }
 
@@ -176,45 +222,33 @@ daydiff(char *hostname)
  * measurement.
  */
 void
-clockdiff(argc, argv)
-	int argc;
-	char *argv[];
+clockdiff(int argc, char *argv[])
 {
-	int measure_status;
-	extern int measure(u_long, u_long, char *, struct sockaddr_in*, int);
-	register int avg_cnt;
-	register long avg;
-	struct servent *sp;
+	extern int measure(u_long, u_long, const char *,
+			const struct sockaddr_in*, int);
+	in_port_t port;
 
 	if (argc < 2)  {
 		printf("Usage: clockdiff host ... \n");
 		return;
 	}
 
-	(void)gethostname(myname,sizeof(myname));
-	myname[sizeof(myname) - 1] = '\0';
+	(void)myname(REFRESH);
 
 	/* get the address for the date ready */
-	sp = getservbyname(DATE_PORT, DATE_PROTO);
-	if (!sp) {
-		(void)fprintf(stderr, "%s/%s is an unknown service\n",
-			      DATE_PORT, DATE_PROTO);
-		dayaddr.sin_port = 0;
-	} else {
-		dayaddr.sin_port = sp->s_port;
-	}
+	port = udpservport("time");
 
 	while (argc > 1) {
-		argc--; argv++;
-		hp = gethostbyname(*argv);
-		if (hp == NULL) {
-			fprintf(stderr, "timedc: %s: ", *argv);
-			herror(0);
-			continue;
-		}
+		struct sockaddr_in server;
+		const char *hostname;
+		int measure_status;
+		int avg_cnt;
+		long avg;
 
-		server.sin_family = hp->h_addrtype;
-		bcopy(hp->h_addr, &server.sin_addr.s_addr, hp->h_length);
+		argc--; argv++;
+		if ((hostname = getaddr(*argv, &server, port)) == NULL)
+			continue;
+
 		for (avg_cnt = 0, avg = 0; avg_cnt < 16; avg_cnt++) {
 			measure_status = measure(10000,100, *argv, &server, 1);
 			if (measure_status != GOOD)
@@ -226,14 +260,14 @@ clockdiff(argc, argv)
 
 		switch (measure_status) {
 		case HOSTDOWN:
-			printf("%s is down\n", hp->h_name);
+			printf("%s is down\n", hostname);
 			continue;
 		case NONSTDTIME:
-			printf("%s transmitts a non-standard time format\n",
-			       hp->h_name);
+			printf("%s transmits a non-standard time format\n",
+			       hostname);
 			continue;
 		case UNREACHABLE:
-			printf("%s is unreachable\n", hp->h_name);
+			printf("%s is unreachable\n", hostname);
 			continue;
 		}
 
@@ -242,31 +276,28 @@ clockdiff(argc, argv)
 		 * get the time.  This is because the date protocol
 		 * is optional.
 		 */
-		if (dayaddr.sin_port != 0) {
-			dayaddr.sin_family = hp->h_addrtype;
-			bcopy(hp->h_addr, &dayaddr.sin_addr.s_addr,
-			      hp->h_length);
-			avg = daydiff(*argv);
+		if (port != 0) {
+			avg = daydiff(*argv, &server);
 			if (avg > SECDAY) {
 				printf("time on %s is %ld days ahead %s\n",
-				       hp->h_name, avg/SECDAY, myname);
+				       hostname, avg/SECDAY, myname(CACHED));
 				continue;
 			} else if (avg < -SECDAY) {
 				printf("time on %s is %ld days behind %s\n",
-				       hp->h_name, -avg/SECDAY, myname);
+				       hostname, -avg/SECDAY, myname(CACHED));
 				continue;
 			}
 		}
 
 		if (measure_delta > 0) {
 			printf("time on %s is %d ms. ahead of time on %s\n",
-			       hp->h_name, measure_delta, myname);
+			       hostname, measure_delta, myname(CACHED));
 		} else if (measure_delta == 0) {
 			printf("%s and %s have the same time\n",
-			       hp->h_name, myname);
+			       hostname, myname(CACHED));
 		} else {
 			printf("time on %s is %d ms. behind time on %s\n",
-			       hp->h_name, -measure_delta, myname);
+			       hostname, -measure_delta, myname(CACHED));
 		}
 	}
 	return;
@@ -279,72 +310,68 @@ clockdiff(argc, argv)
 void
 msite(int argc, char *argv[])
 {
-	int cc;
-	fd_set ready;
-	struct sockaddr_in dest;
-	int i, length;
-	struct sockaddr from;
-	struct timeval tout;
-	struct tsp msg;
-	struct servent *srvp;
-	char *tgtname;
+	struct pollfd set[1];
+	in_port_t port;
+	int i;
 
 	if (argc < 1) {
 		printf("Usage: msite [hostname]\n");
 		return;
 	}
 
-	srvp = getservbyname("timed", "udp");
-	if (srvp == 0) {
-		fprintf(stderr, "udp/timed: unknown service\n");
+	port = udpservport("timed");
+	if (port == 0)
 		return;
-	}
-	dest.sin_port = srvp->s_port;
-	dest.sin_family = AF_INET;
 
-	(void)gethostname(myname, sizeof(myname));
+	(void)myname(REFRESH);
 	i = 1;
+	set[0].fd = sock;
+	set[0].events = POLLIN;
 	do {
-		tgtname = (i >= argc) ? myname : argv[i];
-		hp = gethostbyname(tgtname);
-		if (hp == 0) {
-			fprintf(stderr, "timedc: %s: ", tgtname);
-			herror(0);
+		struct sockaddr_in dest;
+		struct tsp msg;
+		const char *tgtname;
+
+		tgtname = (i >= argc) ? myname(CACHED) : argv[i];
+		if (getaddr(tgtname, &dest, port) == NULL)
+			continue;
+
+		if (connect(sock, (const struct sockaddr *)&dest,
+		    	    sizeof(dest)) == -1) {
+			warn("connect");
 			continue;
 		}
-		bcopy(hp->h_addr, &dest.sin_addr.s_addr, hp->h_length);
 
-		(void)strncpy(msg.tsp_name, myname, sizeof(msg.tsp_name) - 1);
+		set_tsp_name(&msg, myname(CACHED));
 		msg.tsp_type = TSP_MSITE;
 		msg.tsp_vers = TSPVERSION;
 		bytenetorder(&msg);
-		if (sendto(sock, &msg, sizeof(struct tsp), 0,
-			   (struct sockaddr*)&dest,
-			   sizeof(struct sockaddr)) < 0) {
-			perror("sendto");
+		if (send(sock, &msg, sizeof(msg), 0) < 0) {
+			warn("send");
 			continue;
 		}
 
-		tout.tv_sec = 15;
-		tout.tv_usec = 0;
-		FD_ZERO(&ready);
-		FD_SET(sock, &ready);
-		if (select(FD_SETSIZE, &ready, (fd_set *)0, (fd_set *)0,
-			   &tout)) {
-			length = sizeof(struct sockaddr);
-			cc = recvfrom(sock, &msg, sizeof(struct tsp), 0,
-				      &from, &length);
-			if (cc < 0) {
-				perror("recvfrom");
+		if (poll(set, 1, 15000)) {
+			ssize_t ret;
+
+			ret = recv(sock, &msg, sizeof(msg), 0);
+			if (ret < (ssize_t)sizeof(msg)) {
+				if (ret < 0)
+					warn("recv");
+				else
+					warnx("recv: incomplete");
 				continue;
 			}
 			bytehostorder(&msg);
 			if (msg.tsp_type == TSP_ACK) {
+				char name[MAXHOSTNAMELEN];
+
+				get_tsp_name(&msg, name, sizeof(name));
 				printf("master timedaemon at %s is %s\n",
-				       tgtname, msg.tsp_name);
+				       tgtname, name);
 			} else {
 				printf("received wrong ack: %s\n",
-				       tsptype[msg.tsp_type]);
+				       tsp_type_to_string(&msg));
 			}
 		} else {
 			printf("communication error with %s\n", tgtname);
@@ -358,7 +385,9 @@ msite(int argc, char *argv[])
 void
 quit(int argc, char *argv[])
 {
-	exit(0);
+	(void) argc;
+	(void) argv;
+	exit(EXIT_SUCCESS);
 }
 
 
@@ -370,43 +399,32 @@ quit(int argc, char *argv[])
 void
 testing(int argc, char *argv[])
 {
-	struct servent *srvp;
-	struct sockaddr_in sin;
-	struct tsp msg;
+	in_port_t port;
 
 	if (argc < 2)  {
 		printf("Usage: election host1 [host2 ...]\n");
 		return;
 	}
 
-	srvp = getservbyname("timed", "udp");
-	if (srvp == 0) {
-		fprintf(stderr, "udp/timed: unknown service\n");
+	port = udpservport("timed");
+	if (port == 0)
 		return;
-	}
 
 	while (argc > 1) {
+		struct sockaddr_in addr;
+		struct tsp msg;
+
 		argc--; argv++;
-		hp = gethostbyname(*argv);
-		if (hp == NULL) {
-			fprintf(stderr, "timedc: %s: ", *argv);
-			herror(0);
-			argc--; argv++;
+		if (getaddr(*argv, &addr, port) == NULL)
 			continue;
-		}
-		sin.sin_port = srvp->s_port;
-		sin.sin_family = hp->h_addrtype;
-		bcopy(hp->h_addr, &sin.sin_addr.s_addr, hp->h_length);
 
 		msg.tsp_type = TSP_TEST;
 		msg.tsp_vers = TSPVERSION;
-		(void)gethostname(myname, sizeof(myname));
-		(void)strncpy(msg.tsp_name, myname, sizeof(msg.tsp_name));
+		set_tsp_name(&msg, myname(CACHED));
 		bytenetorder(&msg);
-		if (sendto(sock, &msg, sizeof(struct tsp), 0,
-			   (struct sockaddr*)&sin,
-			   sizeof(struct sockaddr)) < 0) {
-			perror("sendto");
+		if (sendto(sock, &msg, sizeof(msg), 0,
+			   (const struct sockaddr*)&addr, sizeof(addr)) < 0) {
+			warn("send");
 		}
 	}
 }
@@ -418,32 +436,27 @@ testing(int argc, char *argv[])
 void
 tracing(int argc, char *argv[])
 {
-	int onflag;
-	int length;
-	int cc;
-	fd_set ready;
+	struct pollfd set[1];
 	struct sockaddr_in dest;
-	struct sockaddr from;
-	struct timeval tout;
+	in_port_t port;
 	struct tsp msg;
-	struct servent *srvp;
+	int onflag;
 
 	if (argc != 2) {
 		printf("Usage: tracing { on | off }\n");
 		return;
 	}
 
-	srvp = getservbyname("timed", "udp");
-	if (srvp == 0) {
-		fprintf(stderr, "udp/timed: unknown service\n");
+	port = udpservport("timed");
+	if (port == 0)
+		return;
+	if (getaddr(myname(REFRESH), &dest, port) == NULL)
+		return;
+	if (connect(sock, (const struct sockaddr *)&dest,
+		    sizeof(dest)) == -1) {
+		warn("connect");
 		return;
 	}
-	dest.sin_port = srvp->s_port;
-	dest.sin_family = AF_INET;
-
-	(void)gethostname(myname,sizeof(myname));
-	hp = gethostbyname(myname);
-	bcopy(hp->h_addr, &dest.sin_addr.s_addr, hp->h_length);
 
 	if (strcmp(argv[1], "on") == 0) {
 		msg.tsp_type = TSP_TRACEON;
@@ -453,75 +466,50 @@ tracing(int argc, char *argv[])
 		onflag = OFF;
 	}
 
-	(void)strncpy(msg.tsp_name, myname, sizeof(msg.tsp_name) - 1);
+	set_tsp_name(&msg, myname(CACHED));
 	msg.tsp_vers = TSPVERSION;
 	bytenetorder(&msg);
-	if (sendto(sock, &msg, sizeof(struct tsp), 0,
-		   (struct sockaddr*)&dest, sizeof(struct sockaddr)) < 0) {
-		perror("sendto");
+	if (send(sock, &msg, sizeof(msg), 0) < 0) {
+		warn("send");
 		return;
 	}
 
-	tout.tv_sec = 5;
-	tout.tv_usec = 0;
-	FD_ZERO(&ready);
-	FD_SET(sock, &ready);
-	if (select(FD_SETSIZE, &ready, (fd_set *)0, (fd_set *)0, &tout)) {
-		length = sizeof(struct sockaddr);
-		cc = recvfrom(sock, &msg, sizeof(struct tsp), 0,
-			      &from, &length);
-		if (cc < 0) {
-			perror("recvfrom");
+	set[0].fd = sock;
+	set[0].events = POLLIN;
+	if (poll(set, 1, 5000)) {
+		ssize_t ret;
+
+		ret = recv(sock, &msg, sizeof(msg), 0);
+		if (ret < (ssize_t)sizeof(msg)) {
+			if (ret < 0)
+				warn("recv");
+			else
+				warnx("recv: incomplete");
 			return;
 		}
 		bytehostorder(&msg);
 		if (msg.tsp_type == TSP_ACK)
-			if (onflag)
-				printf("timed tracing enabled\n");
-			else
-				printf("timed tracing disabled\n");
+			printf("timed tracing %s\n",
+				onflag ? "enabled" : "disabled");
 		else
 			printf("wrong ack received: %s\n",
-						tsptype[msg.tsp_type]);
+				tsp_type_to_string(&msg));
 	} else
 		printf("communication error\n");
 }
 
 int
-priv_resources()
+priv_resources(void)
 {
-	int port;
-	struct sockaddr_in sin;
-
-	sock = socket(AF_INET, SOCK_DGRAM, 0);
-	if (sock < 0) {
-		perror("opening socket");
-		return(-1);
+	if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+		warn("Cannot open UDP socket");
+		return -1;
 	}
 
-	sin.sin_family = AF_INET;
-	sin.sin_addr.s_addr = 0;
-	for (port = IPPORT_RESERVED - 1; port > IPPORT_RESERVED / 2; port--) {
-		sin.sin_port = htons((u_short)port);
-		if (bind(sock, (struct sockaddr*)&sin, sizeof (sin)) >= 0)
-			break;
-		if (errno != EADDRINUSE && errno != EADDRNOTAVAIL) {
-			perror("bind");
-			(void) close(sock);
-			return(-1);
-		}
+	if ((sock_raw = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
+		warn("Cannot open raw socket");
+		(void)close(sock);
+		return -1;
 	}
-	if (port == IPPORT_RESERVED / 2) {
-		fprintf(stderr, "all reserved ports in use\n");
-		(void) close(sock);
-		return(-1);
-	}
-
-	sock_raw = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-	if (sock_raw < 0)  {
-		perror("opening raw socket");
-		(void) close(sock);
-		return(-1);
-	}
-	return(1);
+	return 1;
 }

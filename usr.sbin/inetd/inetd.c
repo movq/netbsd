@@ -1,12 +1,12 @@
-/*	$NetBSD: inetd.c,v 1.59 2000/03/06 19:52:13 itojun Exp $	*/
+/*	$NetBSD: inetd.c,v 1.107 2008/08/04 03:55:48 tls Exp $	*/
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
  * by Jason R. Thorpe of the Numerical Aerospace Simulation Facility,
- * NASA Ames Research Center.
+ * NASA Ames Research Center and by Matthias Scheler.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,11 +42,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -72,12 +61,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1991, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1991, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)inetd.c	8.4 (Berkeley) 4/13/94";
 #else
-__RCSID("$NetBSD: inetd.c,v 1.59 2000/03/06 19:52:13 itojun Exp $");
+__RCSID("$NetBSD: inetd.c,v 1.107 2008/08/04 03:55:48 tls Exp $");
 #endif
 #endif /* not lint */
 
@@ -106,7 +95,8 @@ __RCSID("$NetBSD: inetd.c,v 1.59 2000/03/06 19:52:13 itojun Exp $");
  *
  *	service name			must be in /etc/services or must
  *					name a tcpmux service
- *	socket type			stream/dgram/raw/rdm/seqpacket
+ *	socket type[:accf[,arg]]	stream/dgram/raw/rdm/seqpacket,
+					only stream can name an accept filter
  *	protocol			must be in /etc/protocols
  *	wait/nowait[:max]		single-threaded/multi-threaded, max #
  *	user[:group]			user/group to run daemon as
@@ -202,6 +192,7 @@ __RCSID("$NetBSD: inetd.c,v 1.59 2000/03/06 19:52:13 itojun Exp $");
 #include <sys/wait.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/event.h>
 
 #ifndef RLIMIT_NOFILE
 #define RLIMIT_NOFILE	RLIMIT_OFILE
@@ -211,11 +202,14 @@ __RCSID("$NetBSD: inetd.c,v 1.59 2000/03/06 19:52:13 itojun Exp $");
 #define RPC
 #endif
 
+#include <net/if.h>
+
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #ifdef RPC
 #include <rpc/rpc.h>
-#include <rpc/pmap_clnt.h>
+#include <rpc/rpcb_clnt.h>
+#include <netconfig.h>
 #endif
 
 #include <ctype.h>
@@ -231,6 +225,7 @@ __RCSID("$NetBSD: inetd.c,v 1.59 2000/03/06 19:52:13 itojun Exp $");
 #include <syslog.h>
 #include <unistd.h>
 #include <util.h>
+#include <ifaddrs.h>
 
 #include "pathnames.h"
 
@@ -264,23 +259,19 @@ int deny_severity = LIBWRAP_DENY_FACILITY|LIBWRAP_DENY_SEVERITY;
 #define	CNT_INTVL	60		/* servers in CNT_INTVL sec. */
 #define	RETRYTIME	(60*10)		/* retry after bind or server fail */
 
-#define	SIGBLOCK	(sigmask(SIGCHLD)|sigmask(SIGHUP)|sigmask(SIGALRM))
+#define	A_CNT(a)	(sizeof (a) / sizeof (a[0]))
 
 int	debug;
 #ifdef LIBWRAP
 int	lflag;
 #endif
-int	nsock, maxsock;
-fd_set	allsock;
+int	maxsock;
+int	kq;
 int	options;
 int	timingout;
 struct	servent *sp;
 char	*curdom;
-#ifdef NI_WITHSCOPEID
-const int niflags = NI_NUMERICHOST | NI_NUMERICSERV | NI_WITHSCOPEID;
-#else
 const int niflags = NI_NUMERICHOST | NI_NUMERICSERV;
-#endif
 
 #ifndef OPEN_MAX
 #define OPEN_MAX	64
@@ -288,11 +279,14 @@ const int niflags = NI_NUMERICHOST | NI_NUMERICSERV;
 
 /* Reserve some descriptors, 3 stdio + at least: 1 log, 1 conf. file */
 #define FD_MARGIN	(8)
-typeof(((struct rlimit *)0)->rlim_cur)	rlim_ofile_cur = OPEN_MAX;
+rlim_t		rlim_ofile_cur = OPEN_MAX;
 
 #ifdef RLIMIT_NOFILE
 struct rlimit	rlim_ofile;
 #endif
+
+struct kevent	changebuf[64];
+size_t		changes;
 
 struct	servtab {
 	char	*se_hostaddr;		/* host address to listen on */
@@ -317,6 +311,7 @@ struct	servtab {
 #ifdef IPSEC
 	char	*se_policy;		/* IPsec poilcy string */
 #endif
+	struct accept_filter_arg se_accf; /* accept filter for stream service */
 	int	se_fd;			/* open descriptor */
 	int	se_type;		/* type */
 	union {
@@ -342,56 +337,66 @@ struct	servtab {
 #define NORM_TYPE	0
 #define MUX_TYPE	1
 #define MUXPLUS_TYPE	2
+#define FAITH_TYPE	3
 #define ISMUX(sep)	(((sep)->se_type == MUX_TYPE) || \
 			 ((sep)->se_type == MUXPLUS_TYPE))
 #define ISMUXPLUS(sep)	((sep)->se_type == MUXPLUS_TYPE)
 
 
-void		chargen_dg __P((int, struct servtab *));
-void		chargen_stream __P((int, struct servtab *));
-void		close_sep __P((struct servtab *));
-void		config __P((int));
-void		daytime_dg __P((int, struct servtab *));
-void		daytime_stream __P((int, struct servtab *));
-void		discard_dg __P((int, struct servtab *));
-void		discard_stream __P((int, struct servtab *));
-void		echo_dg __P((int, struct servtab *));
-void		echo_stream __P((int, struct servtab *));
-void		endconfig __P((void));
-struct servtab *enter __P((struct servtab *));
-void		freeconfig __P((struct servtab *));
-struct servtab *getconfigent __P((void));
-void		goaway __P((int));
-void		machtime_dg __P((int, struct servtab *));
-void		machtime_stream __P((int, struct servtab *));
-char	       *newstr __P((char *));
-char	       *nextline __P((FILE *));
-void		print_service __P((char *, struct servtab *));
-void		reapchild __P((int));
-void		retry __P((int));
-void		run_service __P((int, struct servtab *));
-int		setconfig __P((void));
-void		setup __P((struct servtab *));
-char	       *sskip __P((char **));
-char	       *skip __P((char **));
-void		tcpmux __P((int, struct servtab *));
-void		usage __P((void));
-void		register_rpc __P((struct servtab *sep));
-void		unregister_rpc __P((struct servtab *sep));
-void		bump_nofile __P((void));
-void		inetd_setproctitle __P((char *, int));
-void		initring __P((void));
-long		machtime __P((void));
-int 		port_good_dg __P((struct sockaddr *sa));
-static int	getline __P((int, char *, int));
-int		main __P((int, char *[], char *[]));
+static void	chargen_dg(int, struct servtab *);
+static void	chargen_stream(int, struct servtab *);
+static void	close_sep(struct servtab *);
+static void	config(void);
+static void	daytime_dg(int, struct servtab *);
+static void	daytime_stream(int, struct servtab *);
+static void	discard_dg(int, struct servtab *);
+static void	discard_stream(int, struct servtab *);
+static void	echo_dg(int, struct servtab *);
+static void	echo_stream(int, struct servtab *);
+static void	endconfig(void);
+static struct servtab *enter(struct servtab *);
+static void	freeconfig(struct servtab *);
+static struct servtab *getconfigent(void);
+static void	goaway(void);
+static void	machtime_dg(int, struct servtab *);
+static void	machtime_stream(int, struct servtab *);
+static char    *newstr(char *);
+static char    *nextline(FILE *);
+static void	print_service(char *, struct servtab *);
+static void	reapchild(void);
+static void	retry(void);
+static void	run_service(int, struct servtab *, int);
+static int	setconfig(void);
+static void	setup(struct servtab *);
+static char    *sskip(char **);
+static char    *skip(char **);
+static void	tcpmux(int, struct servtab *);
+static void	usage(void);
+static void	register_rpc(struct servtab *);
+static void	unregister_rpc(struct servtab *);
+static void	bump_nofile(void);
+static void	inetd_setproctitle(char *, int);
+static void	initring(void);
+static uint32_t	machtime(void);
+static int	port_good_dg(struct sockaddr *);
+static int 	dg_broadcast(struct in_addr *);
+static int	my_kevent(const struct kevent *, size_t, struct kevent *,
+		size_t);
+static struct kevent *	allocchange(void);
+static int	getline(int, char *, int);
+static void	spawn(struct servtab *, int);
+#ifdef MULOG
+static void	dolog(struct servtab *, int);
+static void	timeout(int);
+static char    *rfc931_name(struct sockaddr *, int);
+#endif
 
 struct biltin {
 	char	*bi_service;		/* internally provided service name */
 	int	bi_socktype;		/* type of socket supported */
 	short	bi_fork;		/* 1 if should fork before call */
 	short	bi_wait;		/* 1 if should wait for child */
-	void	(*bi_fn) __P((int, struct servtab *));
+	void	(*bi_fn)(int, struct servtab *);
 					/* function which performs it */
 } biltins[] = {
 	/* Echo received data */
@@ -424,43 +429,19 @@ struct biltin {
  * List must end with port number "0".
  */
 
-u_int16_t bad_ports[] =  { 7, 9, 13, 19, 37, 0};
+u_int16_t bad_ports[] =  { 7, 9, 13, 19, 37, 0 };
 
 
 #define NUMINT	(sizeof(intab) / sizeof(struct inent))
 char	*CONFIG = _PATH_INETDCONF;
-char	**Argv;
-char 	*LastArg;
-extern char	*__progname;
 
-#ifdef sun
-/*
- * Sun's RPC library caches the result of `dtablesize()'
- * This is incompatible with our "bumping" of file descriptors "on demand"
- */
-int
-_rpc_dtablesize()
-{
-	return rlim_ofile_cur;
-}
-#endif
+static int my_signals[] =
+    { SIGALRM, SIGHUP, SIGCHLD, SIGTERM, SIGINT, SIGPIPE };
 
 int
-main(argc, argv, envp)
-	int argc;
-	char *argv[], *envp[];
+main(int argc, char *argv[])
 {
-	struct servtab *sep, *nsep;
-	struct sigvec sv;
-	int ch, dofork;
-	pid_t pid;
-
-	Argv = argv;
-	if (envp == 0 || *envp == 0)
-		envp = argv;
-	while (*envp)
-		envp++;
-	LastArg = envp[-1] + strlen(envp[-1]);
+	int		ch, n, reload = 1;
 
 	while ((ch = getopt(argc, argv,
 #ifdef LIBWRAP
@@ -489,10 +470,16 @@ main(argc, argv, envp)
 	if (argc > 0)
 		CONFIG = argv[0];
 
-	if (debug == 0)
+	if (!debug)
 		daemon(0, 0);
-	openlog(__progname, LOG_PID | LOG_NOWAIT, LOG_DAEMON);
+	openlog("inetd", LOG_PID | LOG_NOWAIT, LOG_DAEMON);
 	pidfile(NULL);
+
+	kq = kqueue();
+	if (kq < 0) {
+		syslog(LOG_ERR, "kqueue: %m");
+		return (EXIT_FAILURE);
+	}
 
 #ifdef RLIMIT_NOFILE
 	if (getrlimit(RLIMIT_NOFILE, &rlim_ofile) < 0) {
@@ -504,151 +491,163 @@ main(argc, argv, envp)
 	}
 #endif
 
-	memset(&sv, 0, sizeof(sv));
-	sv.sv_mask = SIGBLOCK;
-	sv.sv_handler = retry;
-	sigvec(SIGALRM, &sv, (struct sigvec *)0);
-	config(SIGHUP);
-	sv.sv_handler = config;
-	sigvec(SIGHUP, &sv, (struct sigvec *)0);
-	sv.sv_handler = reapchild;
-	sigvec(SIGCHLD, &sv, (struct sigvec *)0);
-	sv.sv_handler = goaway;
-	sigvec(SIGTERM, &sv, (struct sigvec *)0);
-	sv.sv_handler = goaway;
-	sigvec(SIGINT, &sv, (struct sigvec *)0);
-	sv.sv_mask = 0L;
-	sv.sv_handler = SIG_IGN;
-	sigvec(SIGPIPE, &sv, (struct sigvec *)0);
+	for (n = 0; n < (int)A_CNT(my_signals); n++) {
+		int	signum;
 
-	{
-		/* space for daemons to overwrite environment for ps */
-#define	DUMMYSIZE	100
-		char dummy[DUMMYSIZE];
+		signum = my_signals[n];
+		if (signum != SIGCHLD)
+			(void) signal(signum, SIG_IGN);
 
-		(void)memset(dummy, 'x', DUMMYSIZE - 1);
-		dummy[DUMMYSIZE - 1] = '\0';
+		if (signum != SIGPIPE) {
+			struct kevent	*ev;
 
-		(void)setenv("inetd_dummy", dummy, 1);
+			ev = allocchange();
+			EV_SET(ev, signum, EVFILT_SIGNAL, EV_ADD | EV_ENABLE,
+			    0, 0, 0);
+		}
 	}
 
 	for (;;) {
-	    int n, ctrl;
-	    fd_set readable;
+		int		ctrl;
+		struct kevent	eventbuf[64], *ev;
+		struct servtab	*sep;
 
-	    if (nsock == 0) {
-		(void) sigblock(SIGBLOCK);
-		while (nsock == 0)
-		    sigpause(0L);
-		(void) sigsetmask(0L);
-	    }
-	    readable = allsock;
-	    if ((n = select(maxsock + 1, &readable, (fd_set *)0,
-		(fd_set *)0, (struct timeval *)0)) <= 0) {
-		    if (n == -1 && errno != EINTR) {
-			syslog(LOG_WARNING, "select: %m");
-			sleep(1);
-		    }
-		    continue;
-	    }
-	    for (sep = servtab; n && sep; sep = nsep) {
-	    nsep = sep->se_next;
-	    if (sep->se_fd != -1 && FD_ISSET(sep->se_fd, &readable)) {
-		n--;
-		if (debug)
-			fprintf(stderr, "someone wants %s\n", sep->se_service);
-		if (!sep->se_wait && sep->se_socktype == SOCK_STREAM) {
-			/* XXX here do the libwrap check-before-accept */
-			ctrl = accept(sep->se_fd, (struct sockaddr *)0,
-			    (int *)0);
-			if (debug)
-				fprintf(stderr, "accept, ctrl %d\n", ctrl);
-			if (ctrl < 0) {
-				if (errno != EINTR)
-					syslog(LOG_WARNING,
-					    "accept (for %s): %m",
-					    sep->se_service);
+		if (reload) {
+			reload = 0;
+			config();
+		}
+
+		n = my_kevent(changebuf, changes, eventbuf, A_CNT(eventbuf));
+		changes = 0;
+
+		for (ev = eventbuf; n > 0; ev++, n--) {
+			if (ev->filter == EVFILT_SIGNAL) {
+				switch (ev->ident) {
+				case SIGALRM:
+					retry();
+					break;
+				case SIGCHLD:
+					reapchild();
+					break;
+				case SIGTERM:
+				case SIGINT:
+					goaway();
+					break;
+				case SIGHUP:
+					reload = 1;
+					break;
+				}
 				continue;
 			}
-		} else
-			ctrl = sep->se_fd;
-		(void) sigblock(SIGBLOCK);
-		pid = 0;
-#ifdef LIBWRAP_INTERNAL
-		dofork = 1;
-#else
-		dofork = (sep->se_bi == 0 || sep->se_bi->bi_fork);
-#endif
-		if (dofork) {
-			if (sep->se_count++ == 0)
-			    (void)gettimeofday(&sep->se_time,
-			        (struct timezone *)0);
-			else if (sep->se_count >= sep->se_max) {
-				struct timeval now;
-
-				(void)gettimeofday(&now, (struct timezone *)0);
-				if (now.tv_sec - sep->se_time.tv_sec >
-				    CNT_INTVL) {
-					sep->se_time = now;
-					sep->se_count = 1;
-				} else {
-					syslog(LOG_ERR,
-			"%s/%s server failing (looping), service terminated\n",
-					    sep->se_service, sep->se_proto);
-					if (!sep->se_wait && sep->se_socktype == SOCK_STREAM)
-					    close(ctrl);
-					close_sep(sep);
-					sigsetmask(0L);
-					if (!timingout) {
-						timingout = 1;
-						alarm(RETRYTIME);
-					}
+			if (ev->filter != EVFILT_READ)
+				continue;
+			sep = (struct servtab *)ev->udata;
+			/* Paranoia */
+			if ((int)ev->ident != sep->se_fd)
+				continue;
+			if (debug)
+				fprintf(stderr, "someone wants %s\n",
+				    sep->se_service);
+			if (!sep->se_wait && sep->se_socktype == SOCK_STREAM) {
+				/* XXX here do the libwrap check-before-accept*/
+				ctrl = accept(sep->se_fd, NULL, NULL);
+				if (debug)
+					fprintf(stderr, "accept, ctrl %d\n",
+					    ctrl);
+				if (ctrl < 0) {
+					if (errno != EINTR)
+						syslog(LOG_WARNING,
+						    "accept (for %s): %m",
+						    sep->se_service);
 					continue;
 				}
-			}
-			pid = fork();
-			if (pid < 0) {
-				syslog(LOG_ERR, "fork: %m");
-				if (!sep->se_wait && sep->se_socktype == SOCK_STREAM)
-					close(ctrl);
-				sigsetmask(0L);
-				sleep(1);
-				continue;
-			}
-			if (pid != 0 && sep->se_wait) {
-				sep->se_wait = pid;
-				FD_CLR(sep->se_fd, &allsock);
-				nsock--;
-			}
-			if (pid == 0) {
-				sv.sv_mask = 0L;
-				sv.sv_handler = SIG_DFL;
-				sigvec(SIGPIPE, &sv, (struct sigvec *)0);
-				if (debug)
-					setsid();
-			}
+			} else
+				ctrl = sep->se_fd;
+			spawn(sep, ctrl);
 		}
-		sigsetmask(0L);
-		if (pid == 0) {
-			run_service(ctrl, sep);
-			if (dofork)
-				exit(0);
-		}
-		if (!sep->se_wait && sep->se_socktype == SOCK_STREAM)
-			close(ctrl);
-	    }
-	    }
 	}
 }
 
-void
-run_service(ctrl, sep)
-	int ctrl;
-	struct servtab *sep;
+static void
+spawn(struct servtab *sep, int ctrl)
+{
+	int dofork;
+	pid_t pid;
+
+	pid = 0;
+#ifdef LIBWRAP_INTERNAL
+	dofork = 1;
+#else
+	dofork = (sep->se_bi == 0 || sep->se_bi->bi_fork);
+#endif
+	if (dofork) {
+		if (sep->se_count++ == 0)
+			(void)gettimeofday(&sep->se_time, NULL);
+		else if (sep->se_count >= sep->se_max) {
+			struct timeval now;
+
+			(void)gettimeofday(&now, NULL);
+			if (now.tv_sec - sep->se_time.tv_sec > CNT_INTVL) {
+				sep->se_time = now;
+				sep->se_count = 1;
+			} else {
+				syslog(LOG_ERR,
+				    "%s/%s max spawn rate (%d in %d seconds) "
+				    "exceeded; service not started",
+				    sep->se_service, sep->se_proto,
+				    sep->se_max, CNT_INTVL);
+				if (!sep->se_wait && sep->se_socktype ==
+				    SOCK_STREAM)
+					close(ctrl);
+				close_sep(sep);
+				if (!timingout) {
+					timingout = 1;
+					alarm(RETRYTIME);
+				}
+				return;
+			}
+		}
+		pid = fork();
+		if (pid < 0) {
+			syslog(LOG_ERR, "fork: %m");
+			if (!sep->se_wait && sep->se_socktype == SOCK_STREAM)
+				close(ctrl);
+			sleep(1);
+			return;
+		}
+		if (pid != 0 && sep->se_wait) {
+			struct kevent	*ev;
+
+			sep->se_wait = pid;
+			ev = allocchange();
+			EV_SET(ev, sep->se_fd, EVFILT_READ,
+			    EV_DELETE, 0, 0, 0);
+		}
+		if (pid == 0) {
+			size_t	n;
+
+			for (n = 0; n < A_CNT(my_signals); n++)
+				(void) signal(my_signals[n], SIG_DFL);
+			if (debug)
+				setsid();
+		}
+	}
+	if (pid == 0) {
+		run_service(ctrl, sep, dofork);
+		if (dofork)
+			exit(0);
+	}
+	if (!sep->se_wait && sep->se_socktype == SOCK_STREAM)
+		close(ctrl);
+}
+
+static void
+run_service(int ctrl, struct servtab *sep, int didfork)
 {
 	struct passwd *pwd;
 	struct group *grp = NULL;	/* XXX gcc */
 	char buf[NI_MAXSERV];
+	struct servtab *s;
 #ifdef LIBWRAP
 	struct request_info req;
 	int denied;
@@ -689,6 +688,11 @@ run_service(ctrl, sep)
 #endif /* LIBWRAP */
 
 	if (sep->se_bi) {
+		if (didfork) {
+			for (s = servtab; s; s = s->se_next)
+				if (s->se_fd != -1 && s->se_fd != ctrl)
+					close(s->se_fd);
+		}
 		(*sep->se_bi->bi_fn)(ctrl, sep);
 	} else {
 		if ((pwd = getpwnam(sep->se_user)) == NULL) {
@@ -754,23 +758,24 @@ run_service(ctrl, sep)
 	}
 }
 
-void
-reapchild(signo)
-	int signo;
+static void
+reapchild(void)
 {
 	int status;
 	pid_t pid;
 	struct servtab *sep;
 
 	for (;;) {
-		pid = wait3(&status, WNOHANG, (struct rusage *)0);
+		pid = wait3(&status, WNOHANG, NULL);
 		if (pid <= 0)
 			break;
 		if (debug)
-			fprintf(stderr, "%d reaped, status %#x\n", 
+			(void) fprintf(stderr, "%d reaped, status %#x\n", 
 			    pid, status);
-		for (sep = servtab; sep; sep = sep->se_next)
+		for (sep = servtab; sep != NULL; sep = sep->se_next)
 			if (sep->se_wait == pid) {
+				struct kevent	*ev;
+
 				if (WIFEXITED(status) && WEXITSTATUS(status))
 					syslog(LOG_WARNING,
 					    "%s: exit status 0x%x",
@@ -780,8 +785,9 @@ reapchild(signo)
 					    "%s: exit signal 0x%x",
 					    sep->se_server, WTERMSIG(status));
 				sep->se_wait = 1;
-				FD_SET(sep->se_fd, &allsock);
-				nsock++;
+				ev = allocchange();
+				EV_SET(ev, sep->se_fd, EVFILT_READ,
+				    EV_ADD | EV_ENABLE, 0, 0, (intptr_t)sep);
 				if (debug)
 					fprintf(stderr, "restored %s, fd %d\n",
 					    sep->se_service, sep->se_fd);
@@ -789,33 +795,30 @@ reapchild(signo)
 	}
 }
 
-void
-config(signo)
-	int signo;
+static void
+config(void)
 {
 	struct servtab *sep, *cp, **sepp;
-	long omask;
-	int n;
+	size_t n;
 
 	if (!setconfig()) {
 		syslog(LOG_ERR, "%s: %m", CONFIG);
 		return;
 	}
-	for (sep = servtab; sep; sep = sep->se_next)
+	for (sep = servtab; sep != NULL; sep = sep->se_next)
 		sep->se_checked = 0;
 	while ((cp = getconfigent())) {
-		for (sep = servtab; sep; sep = sep->se_next)
+		for (sep = servtab; sep != NULL; sep = sep->se_next)
 			if (strcmp(sep->se_service, cp->se_service) == 0 &&
 			    strcmp(sep->se_hostaddr, cp->se_hostaddr) == 0 &&
 			    strcmp(sep->se_proto, cp->se_proto) == 0 &&
 			    ISMUX(sep) == ISMUX(cp))
 				break;
-		if (sep != 0) {
+		if (sep != NULL) {
 			int i;
 
-#define SWAP(type, a, b) {type c=(type)a; (type)a=(type)b; (type)b=(type)c;}
+#define SWAP(type, a, b) {type c = a; a = b; b = c;}
 
-			omask = sigblock(SIGBLOCK);
 			/*
 			 * sep->se_wait may be holding the pid of a daemon
 			 * that we're waiting for.  If so, don't overwrite
@@ -832,17 +835,6 @@ config(signo)
 				SWAP(char *, sep->se_argv[i], cp->se_argv[i]);
 #ifdef IPSEC
 			SWAP(char *, sep->se_policy, cp->se_policy);
-			if (sep->se_fd != -1) {
-				if (ipsecsetup(sep->se_family, sep->se_fd,
-				    sep->se_policy) < 0 && sep->se_policy) {
-					syslog(LOG_ERR, "%s/%s: "
-					    "ipsec initialization failed",
-					    sep->se_service, sep->se_proto);
-					sep->se_checked = 0;
-					sigsetmask(omask);
-					continue;
-				}
-			}
 #endif
 			SWAP(int, cp->se_type, sep->se_type);
 			SWAP(int, cp->se_max, sep->se_max);
@@ -851,7 +843,6 @@ config(signo)
 				unregister_rpc(sep);
 			sep->se_rpcversl = cp->se_rpcversl;
 			sep->se_rpcversh = cp->se_rpcversh;
-			sigsetmask(omask);
 			freeconfig(cp);
 			if (debug)
 				print_service("REDO", sep);
@@ -891,14 +882,28 @@ config(signo)
 			struct addrinfo hints, *res;
 			char *host, *port;
 			int error;
+			int s;
+
+			/* check if the family is supported */
+			s = socket(sep->se_family, SOCK_DGRAM, 0);
+			if (s < 0) {
+				syslog(LOG_WARNING,
+				    "%s/%s: %s: the address family is not "
+				    "supported by the kernel",
+				    sep->se_service, sep->se_proto,
+				    sep->se_hostaddr);
+				sep->se_checked = 0;
+				continue;
+			}
+			close(s);
 
 			memset(&hints, 0, sizeof(hints));
 			hints.ai_family = sep->se_family;
 			hints.ai_socktype = sep->se_socktype;
-			if (!strcmp(sep->se_hostaddr, "*")) {
-				hints.ai_flags = AI_PASSIVE;
+			hints.ai_flags = AI_PASSIVE;
+			if (!strcmp(sep->se_hostaddr, "*"))
 				host = NULL;
-			} else
+			else
 				host = sep->se_hostaddr;
 			if (isrpcservice(sep) || ISMUX(sep))
 				port = "0";
@@ -906,9 +911,17 @@ config(signo)
 				port = sep->se_service;
 			error = getaddrinfo(host, port, &hints, &res);
 			if (error) {
-				syslog(LOG_ERR, "%s/%s: %s: %s",
-				    sep->se_service, sep->se_proto,
-				    sep->se_hostaddr, gai_strerror(error));
+				if (error == EAI_SERVICE) {
+					/* gai_strerror not friendly enough */
+					syslog(LOG_WARNING, "%s/%s: "
+					    "unknown service",
+					    sep->se_service, sep->se_proto);
+				} else {
+					syslog(LOG_ERR, "%s/%s: %s: %s",
+					    sep->se_service, sep->se_proto,
+					    sep->se_hostaddr,
+					    gai_strerror(error));
+				}
 				sep->se_checked = 0;
 				continue;
 			}
@@ -966,7 +979,6 @@ config(signo)
 	/*
 	 * Purge anything not looked at above.
 	 */
-	omask = sigblock(SIGBLOCK);
 	sepp = &servtab;
 	while ((sep = *sepp)) {
 		if (sep->se_checked) {
@@ -983,19 +995,17 @@ config(signo)
 		if (debug)
 			print_service("FREE", sep);
 		freeconfig(sep);
-		free((char *)sep);
+		free(sep);
 	}
-	(void) sigsetmask(omask);
 }
 
-void
-retry(signo)
-	int signo;
+static void
+retry(void)
 {
 	struct servtab *sep;
 
 	timingout = 0;
-	for (sep = servtab; sep; sep = sep->se_next) {
+	for (sep = servtab; sep != NULL; sep = sep->se_next) {
 		if (sep->se_fd == -1 && !ISMUX(sep)) {
 			switch (sep->se_family) {
 			case AF_LOCAL:
@@ -1012,13 +1022,12 @@ retry(signo)
 	}
 }
 
-void
-goaway(signo)
-	int signo;
+static void
+goaway(void)
 {
 	struct servtab *sep;
 
-	for (sep = servtab; sep; sep = sep->se_next) {
+	for (sep = servtab; sep != NULL; sep = sep->se_next) {
 		if (sep->se_fd == -1)
 			continue;
 
@@ -1039,11 +1048,14 @@ goaway(signo)
 	exit(0);
 }
 
-void
-setup(sep)
-	struct servtab *sep;
+static void
+setup(struct servtab *sep)
 {
-	int on = 1;
+	int		on = 1;
+#ifdef INET6
+	int		off = 0;
+#endif
+	struct kevent	*ev;
 
 	if ((sep->se_fd = socket(sep->se_family, sep->se_socktype, 0)) < 0) {
 		if (debug)
@@ -1054,8 +1066,12 @@ setup(sep)
 		return;
 	}
 	/* Set all listening sockets to close-on-exec. */
-	if (fcntl(sep->se_fd, F_SETFD, FD_CLOEXEC) < 0)
-		syslog(LOG_ERR, "fcntl (F_SETFD, FD_CLOEXEC): %m");
+	if (fcntl(sep->se_fd, F_SETFD, FD_CLOEXEC) < 0) {
+		syslog(LOG_ERR, "%s/%s: fcntl(F_SETFD, FD_CLOEXEC): %m",
+		    sep->se_service, sep->se_proto);
+		close(sep->se_fd);
+		return;
+	}
 
 #define	turnon(fd, opt) \
 setsockopt(fd, SOL_SOCKET, opt, (char *)&on, sizeof (on))
@@ -1075,9 +1091,18 @@ setsockopt(fd, SOL_SOCKET, opt, (char *)&on, sizeof (on))
 	    SO_RCVBUF, (char *)&sep->se_rcvbuf, sizeof(sep->se_rcvbuf)) < 0)
 		syslog(LOG_ERR, "setsockopt (SO_RCVBUF %d): %m",
 		    sep->se_rcvbuf);
+#ifdef INET6
+	if (sep->se_family == AF_INET6) {
+		int *v;
+		v = (sep->se_type == FAITH_TYPE) ? &on : &off;
+		if (setsockopt(sep->se_fd, IPPROTO_IPV6, IPV6_FAITH,
+		    (char *)v, sizeof(*v)) < 0)
+			syslog(LOG_ERR, "setsockopt (IPV6_FAITH): %m");
+	}
+#endif
 #ifdef IPSEC
-	if (ipsecsetup(sep->se_family, sep->se_fd, sep->se_policy) < 0
-	 && sep->se_policy) {
+	if (ipsecsetup(sep->se_family, sep->se_fd, sep->se_policy) < 0 &&
+	    sep->se_policy) {
 		syslog(LOG_ERR, "%s/%s: ipsec setup failed",
 		    sep->se_service, sep->se_proto);
 		(void)close(sep->se_fd);
@@ -1103,8 +1128,16 @@ setsockopt(fd, SOL_SOCKET, opt, (char *)&on, sizeof (on))
 	if (sep->se_socktype == SOCK_STREAM)
 		listen(sep->se_fd, 10);
 
-	FD_SET(sep->se_fd, &allsock);
-	nsock++;
+	/* Set the accept filter, if specified. To be done after listen.*/
+	if (sep->se_accf.af_name[0] != 0 && setsockopt(sep->se_fd, SOL_SOCKET,
+	    SO_ACCEPTFILTER, (char *)&sep->se_accf,
+	    sizeof(sep->se_accf)) < 0)
+		syslog(LOG_ERR, "setsockopt(SO_ACCEPTFILTER %s): %m",
+		    sep->se_accf.af_name);
+
+	ev = allocchange();
+	EV_SET(ev, sep->se_fd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0,
+	    (intptr_t)sep);
 	if (sep->se_fd > maxsock) {
 		maxsock = sep->se_fd;
 		if (maxsock > rlim_ofile_cur - FD_MARGIN)
@@ -1118,104 +1151,95 @@ setsockopt(fd, SOL_SOCKET, opt, (char *)&on, sizeof (on))
 /*
  * Finish with a service and its socket.
  */
-void
-close_sep(sep)
-	struct servtab *sep;
+static void
+close_sep(struct servtab *sep)
 {
 	if (sep->se_fd >= 0) {
-		nsock--;
-		FD_CLR(sep->se_fd, &allsock);
 		(void) close(sep->se_fd);
 		sep->se_fd = -1;
 	}
 	sep->se_count = 0;
-	/*
-	 * Don't keep the pid of this running deamon: when reapchild()
-	 * reaps this pid, it would erroneously increment nsock.
-	 */
-	if (sep->se_wait > 1)
-		sep->se_wait = 1;
 }
 
-void
-register_rpc(sep)
-	struct servtab *sep;
+static void
+register_rpc(struct servtab *sep)
 {
 #ifdef RPC
-	int n;
+	struct netbuf nbuf;
 	struct sockaddr_storage ss;
-	struct sockaddr_in *sin = (struct sockaddr_in *)&ss;
-	struct protoent *pp;
+	struct netconfig *nconf;
+	socklen_t socklen;
+	int n;
 
-	if ((pp = getprotobyname(sep->se_proto+4)) == NULL) {
-		syslog(LOG_ERR, "%s: getproto: %m",
+	if ((nconf = getnetconfigent(sep->se_proto+4)) == NULL) {
+		syslog(LOG_ERR, "%s: getnetconfigent failed",
 		    sep->se_proto);
 		return;
 	}
-	n = sizeof ss;
-	if (getsockname(sep->se_fd, (struct sockaddr *)&ss, &n) < 0) {
+	socklen = sizeof ss;
+	if (getsockname(sep->se_fd, (struct sockaddr *)&ss, &socklen) < 0) {
 		syslog(LOG_ERR, "%s/%s: getsockname: %m",
 		    sep->se_service, sep->se_proto);
 		return;
 	}
-	if (ss.ss_family != AF_INET) {	/*XXX*/
-		syslog(LOG_ERR, "%s/%s: rpc not supported",
-		    sep->se_service, sep->se_proto);
+
+	nbuf.buf = &ss;
+	nbuf.len = ss.ss_len;
+	nbuf.maxlen = sizeof (struct sockaddr_storage);
+	for (n = sep->se_rpcversl; n <= sep->se_rpcversh; n++) {
+		if (debug)
+			fprintf(stderr, "rpcb_set: %u %d %s %s\n",
+			    sep->se_rpcprog, n, nconf->nc_netid,
+			    taddr2uaddr(nconf, &nbuf));
+		(void)rpcb_unset(sep->se_rpcprog, n, nconf);
+		if (!rpcb_set(sep->se_rpcprog, n, nconf, &nbuf))
+			syslog(LOG_ERR, "rpcb_set: %u %d %s %s%s",
+			    sep->se_rpcprog, n, nconf->nc_netid,
+			    taddr2uaddr(nconf, &nbuf), clnt_spcreateerror(""));
+	}
+#endif /* RPC */
+}
+
+static void
+unregister_rpc(struct servtab *sep)
+{
+#ifdef RPC
+	int n;
+	struct netconfig *nconf;
+
+	if ((nconf = getnetconfigent(sep->se_proto+4)) == NULL) {
+		syslog(LOG_ERR, "%s: getnetconfigent failed",
+		    sep->se_proto);
 		return;
 	}
 
 	for (n = sep->se_rpcversl; n <= sep->se_rpcversh; n++) {
 		if (debug)
-			fprintf(stderr, "pmap_set: %u %u %u %u\n",
-			    sep->se_rpcprog, n, pp->p_proto,
-			    ntohs(sin->sin_port));
-		(void)pmap_unset(sep->se_rpcprog, n);
-		if (!pmap_set(sep->se_rpcprog, n, pp->p_proto, ntohs(sin->sin_port)))
-			syslog(LOG_ERR, "pmap_set: %u %u %u %u: %m",
-			    sep->se_rpcprog, n, pp->p_proto,
-			    ntohs(sin->sin_port));
-	}
-#endif /* RPC */
-}
-
-void
-unregister_rpc(sep)
-	struct servtab *sep;
-{
-#ifdef RPC
-	int n;
-
-	for (n = sep->se_rpcversl; n <= sep->se_rpcversh; n++) {
-		if (debug)
-			fprintf(stderr, "pmap_unset(%u, %u)\n",
-			    sep->se_rpcprog, n);
-		if (!pmap_unset(sep->se_rpcprog, n))
-			syslog(LOG_ERR, "pmap_unset(%u, %u)\n",
-			    sep->se_rpcprog, n);
+			fprintf(stderr, "rpcb_unset(%u, %d, %s)\n",
+			    sep->se_rpcprog, n, nconf->nc_netid);
+		if (!rpcb_unset(sep->se_rpcprog, n, nconf))
+			syslog(LOG_ERR, "rpcb_unset(%u, %d, %s) failed\n",
+			    sep->se_rpcprog, n, nconf->nc_netid);
 	}
 #endif /* RPC */
 }
 
 
-struct servtab *
-enter(cp)
-	struct servtab *cp;
+static struct servtab *
+enter(struct servtab *cp)
 {
 	struct servtab *sep;
-	long omask;
 
 	sep = (struct servtab *)malloc(sizeof (*sep));
-	if (sep == (struct servtab *)0) {
+	if (sep == NULL) {
 		syslog(LOG_ERR, "Out of memory.");
-		exit(-1);
+		exit(1);
 	}
 	*sep = *cp;
 	sep->se_fd = -1;
 	sep->se_rpcprog = -1;
-	omask = sigblock(SIGBLOCK);
 	sep->se_next = servtab;
 	servtab = sep;
-	sigsetmask(omask);
 	return (sep);
 }
 
@@ -1227,8 +1251,8 @@ char    *defhost;
 static char *policy = NULL;
 #endif
 
-int
-setconfig()
+static int
+setconfig(void)
 {
 	if (defhost)
 		free(defhost);
@@ -1246,21 +1270,21 @@ setconfig()
 	return (fconfig != NULL);
 }
 
-void
-endconfig()
+static void
+endconfig(void)
 {
-	if (fconfig) {
+	if (fconfig != NULL) {
 		(void) fclose(fconfig);
 		fconfig = NULL;
 	}
-	if (defhost) {
+	if (defhost != NULL) {
 		free(defhost);
-		defhost = 0;
+		defhost = NULL;
 	}
 }
 
-struct servtab *
-getconfigent()
+static struct servtab *
+getconfigent(void)
 {
 	struct servtab *sep = &serv;
 	int argc, val;
@@ -1275,7 +1299,7 @@ more:
 		/* lines starting with #@ is not a comment, but the policy */
 		if (cp[0] == '#' && cp[1] == '@') {
 			char *p;
-			for (p = cp + 2; p && *p && isspace(*p); p++)
+			for (p = cp + 2; p && *p && isspace((unsigned char)*p); p++)
 				;
 			if (*p == '\0') {
 				if (policy)
@@ -1286,7 +1310,7 @@ more:
 					syslog(LOG_ERR,
 						"%s: invalid ipsec policy \"%s\"",
 						CONFIG, p);
-					exit(-1);
+					exit(1);
 				} else {
 					if (policy)
 						free(policy);
@@ -1327,7 +1351,7 @@ more:
 		break;
 	}
 	if (cp == NULL)
-		return ((struct servtab *)0);
+		return (NULL);
 	/*
 	 * clear the static buffer, since some fields (se_ctrladdr,
 	 * for example) don't get initialized here.
@@ -1342,7 +1366,11 @@ more:
 	hostdelim = strrchr(arg, ':');
 	if (hostdelim) {
 		*hostdelim = '\0';
-		sep->se_hostaddr = newstr(arg);
+		if (arg[0] == '[' && hostdelim > arg && hostdelim[-1] == ']') {
+			hostdelim[-1] = '\0';
+			sep->se_hostaddr = newstr(arg + 1);
+		} else
+			sep->se_hostaddr = newstr(arg);
 		arg = hostdelim + 1;
 		/*
 		 * If the line is of the form `host:', then just change the
@@ -1372,8 +1400,36 @@ more:
 	}
 
 	arg = sskip(&cp);
-	if (strcmp(arg, "stream") == 0)
+	if (strncmp(arg, "stream", sizeof("stream") - 1) == 0) {
+		char *accf, *accf_arg;
+
 		sep->se_socktype = SOCK_STREAM;
+
+		/* one and only one accept filter */
+		accf = index(arg, ':');	
+		if (accf) {
+	    		if (accf != rindex(arg, ':') ||	/* more than one */
+	    		    *(accf + 1) == '\0') {	/* nothing beyond */
+				sep->se_socktype = -1;
+			} else {
+				accf++;			/* skip delimiter */
+				strncpy(sep->se_accf.af_name, accf,
+					sizeof(sep->se_accf.af_name));
+				accf_arg = index(accf, ',');
+				if (accf_arg) {	/* zero or one arg, no more */
+					if ((rindex(accf, ',') != accf_arg)) {
+						sep->se_socktype = -1;
+					} else {
+						accf_arg++;
+						strncpy(sep->se_accf.af_arg,
+							accf_arg,
+							sizeof(sep->se_accf.af_arg));
+					}
+				}
+			}
+		}
+	}
+		
 	else if (strcmp(arg, "dgram") == 0)
 		sep->se_socktype = SOCK_DGRAM;
 	else if (strcmp(arg, "rdm") == 0)
@@ -1385,7 +1441,13 @@ more:
 	else
 		sep->se_socktype = -1;
 
-	sep->se_proto = newstr(sskip(&cp));
+	arg = sskip(&cp);
+	if (sep->se_type == NORM_TYPE &&
+	    strncmp(arg, "faith/", strlen("faith/")) == 0) {
+		arg += strlen("faith/");
+		sep->se_type = FAITH_TYPE;
+	}
+	sep->se_proto = newstr(arg);
 
 #define	MALFORMED(arg) \
 do { \
@@ -1396,7 +1458,7 @@ do { \
 
 #define	GETVAL(arg) \
 do { \
-	if (!isdigit(*(arg))) \
+	if (!isdigit((unsigned char)*(arg))) \
 		MALFORMED(arg); \
 	val = strtol((arg), &cp0, 10); \
 	if (cp0 != NULL) { \
@@ -1432,7 +1494,7 @@ do { \
 	buf0 = buf1 = sz0 = sz1 = NULL;
 	if ((buf0 = strchr(sep->se_proto, ',')) != NULL) {
 		/* Not meaningful for Tcpmux services. */
-		if (sep->se_type != NORM_TYPE) {
+		if (ISMUX(sep)) {
 			syslog(LOG_ERR, "%s: can't specify buffer sizes for "
 			    "tcpmux services", sep->se_service);
 			goto more;
@@ -1633,9 +1695,8 @@ do { \
 	return (sep);
 }
 
-void
-freeconfig(cp)
-	struct servtab *cp;
+static void
+freeconfig(struct servtab *cp)
 {
 	int i;
 
@@ -1664,29 +1725,28 @@ freeconfig(cp)
  * Safe skip - if skip returns null, log a syntax error in the
  * configuration file and exit.
  */
-char *
-sskip(cpp)
-	char **cpp;
+static char *
+sskip(char **cpp)
 {
 	char *cp;
 
 	cp = skip(cpp);
 	if (cp == NULL) {
 		syslog(LOG_ERR, "%s: syntax error", CONFIG);
-		exit(-1);
+		exit(1);
 	}
 	return (cp);
 }
 
-char *
-skip(cpp)
-	char **cpp;
+static char *
+skip(char **cpp)
 {
 	char *cp = *cpp;
 	char *start;
+	char quote;
 
 	if (*cpp == NULL)
-		return ((char *)0);
+		return (NULL);
 
 again:
 	while (*cp == ' ' || *cp == '\t')
@@ -1699,70 +1759,72 @@ again:
 		if (c == ' ' || c == '\t')
 			if ((cp = nextline(fconfig)))
 				goto again;
-		*cpp = (char *)0;
-		return ((char *)0);
+		*cpp = NULL;
+		return (NULL);
 	}
 	start = cp;
-	while (*cp && *cp != ' ' && *cp != '\t')
-		cp++;
+	quote = '\0';
+	while (*cp && (quote || (*cp != ' ' && *cp != '\t'))) {
+		if (*cp == '\'' || *cp == '"') {
+			if (quote && *cp != quote)
+				cp++;
+			else {
+				if (quote)
+					quote = '\0';
+				else
+					quote = *cp;
+				memmove(cp, cp+1, strlen(cp));
+			}
+		} else
+			cp++;
+	}
 	if (*cp != '\0')
 		*cp++ = '\0';
 	*cpp = cp;
 	return (start);
 }
 
-char *
-nextline(fd)
-	FILE *fd;
+static char *
+nextline(FILE *fd)
 {
 	char *cp;
 
 	if (fgets(line, sizeof (line), fd) == NULL)
-		return ((char *)0);
+		return (NULL);
 	cp = strchr(line, '\n');
 	if (cp)
 		*cp = '\0';
 	return (line);
 }
 
-char *
-newstr(cp)
-	char *cp;
+static char *
+newstr(char *cp)
 {
-	if ((cp = strdup(cp ? cp : "")))
+	if ((cp = strdup((cp != NULL) ? cp : "")) != NULL)
 		return (cp);
 	syslog(LOG_ERR, "strdup: %m");
-	exit(-1);
+	exit(1);
 }
 
-void
-inetd_setproctitle(a, s)
-	char *a;
-	int s;
+static void
+inetd_setproctitle(char *a, int s)
 {
-	int size;
-	char *cp;
+	socklen_t size;
 	struct sockaddr_storage ss;
-	char buf[80];
-	char hbuf[NI_MAXHOST];
+	char hbuf[NI_MAXHOST], *hp;
 
-	cp = Argv[0];
 	size = sizeof(ss);
 	if (getpeername(s, (struct sockaddr *)&ss, &size) == 0) {
-		if (getnameinfo((struct sockaddr *)&ss, ss.ss_len,
-				hbuf, sizeof(hbuf), NULL, 0, niflags) != 0)
-			strcpy(hbuf, "?");
-		(void)snprintf(buf, sizeof buf, "-%s [%s]", a, hbuf);
+		if (getnameinfo((struct sockaddr *)&ss, size, hp = hbuf,
+		    sizeof(hbuf), NULL, 0, niflags) != 0)
+			hp = "?";
+		setproctitle("-%s [%s]", a, hp);
 	} else
-		(void)snprintf(buf, sizeof buf, "-%s", a);
-	strncpy(cp, buf, LastArg - cp);
-	cp += strlen(cp);
-	while (cp < LastArg)
-		*cp++ = ' ';
+		setproctitle("-%s", a);
 }
 
-void
-bump_nofile()
+static void
+bump_nofile(void)
 {
 #ifdef RLIMIT_NOFILE
 
@@ -1802,10 +1864,8 @@ bump_nofile()
 #define	BUFSIZE	4096
 
 /* ARGSUSED */
-void
-echo_stream(s, sep)		/* Echo service -- echo data back */
-	int s;
-	struct servtab *sep;
+static void
+echo_stream(int s, struct servtab *sep)	/* Echo service -- echo data back */
 {
 	char buffer[BUFSIZE];
 	int i;
@@ -1817,13 +1877,12 @@ echo_stream(s, sep)		/* Echo service -- echo data back */
 }
 
 /* ARGSUSED */
-void
-echo_dg(s, sep)			/* Echo service -- echo data back */
-	int s;
-	struct servtab *sep;
+static void
+echo_dg(int s, struct servtab *sep)	/* Echo service -- echo data back */
 {
 	char buffer[BUFSIZE];
-	int i, size;
+	int i;
+	socklen_t size;
 	struct sockaddr_storage ss;
 	struct sockaddr *sa;
 
@@ -1836,10 +1895,8 @@ echo_dg(s, sep)			/* Echo service -- echo data back */
 }
 
 /* ARGSUSED */
-void
-discard_stream(s, sep)		/* Discard service -- ignore data */
-	int s;
-	struct servtab *sep;
+static void
+discard_stream(int s, struct servtab *sep) /* Discard service -- ignore data */
 {
 	char buffer[BUFSIZE];
 
@@ -1850,23 +1907,21 @@ discard_stream(s, sep)		/* Discard service -- ignore data */
 }
 
 /* ARGSUSED */
-void
-discard_dg(s, sep)		/* Discard service -- ignore data */
-	int s;
-	struct servtab *sep;
+static void
+discard_dg(int s, struct servtab *sep)	/* Discard service -- ignore data */
+	
 {
 	char buffer[BUFSIZE];
 
 	(void) read(s, buffer, sizeof(buffer));
 }
 
-#include <ctype.h>
 #define LINESIZ 72
 char ring[128];
 char *endring;
 
-void
-initring()
+static void
+initring(void)
 {
 	int i;
 
@@ -1878,10 +1933,8 @@ initring()
 }
 
 /* ARGSUSED */
-void
-chargen_stream(s, sep)		/* Character generator */
-	int s;
-	struct servtab *sep;
+static void
+chargen_stream(int s,struct servtab *sep)	/* Character generator */
 {
 	int len;
 	char *rs, text[LINESIZ+2];
@@ -1910,15 +1963,14 @@ chargen_stream(s, sep)		/* Character generator */
 }
 
 /* ARGSUSED */
-void
-chargen_dg(s, sep)		/* Character generator */
-	int s;
-	struct servtab *sep;
+static void
+chargen_dg(int s, struct servtab *sep)		/* Character generator */
 {
 	struct sockaddr_storage ss;
 	struct sockaddr *sa;
 	static char *rs;
-	int len, size;
+	int len;
+	socklen_t size;
 	char text[LINESIZ+2];
 
 	if (endring == 0) {
@@ -1955,28 +2007,26 @@ chargen_dg(s, sep)		/* Character generator */
  * some seventy years Bell Labs was asleep.
  */
 
-long
-machtime()
+static uint32_t
+machtime(void)
 {
 	struct timeval tv;
 
-	if (gettimeofday(&tv, (struct timezone *)0) < 0) {
+	if (gettimeofday(&tv, NULL) < 0) {
 		if (debug)
 			fprintf(stderr, "Unable to get time of day\n");
-		return (0L);
+		return (0);
 	}
-#define	OFFSET ((u_long)25567 * 24*60*60)
-	return (htonl((long)(tv.tv_sec + OFFSET)));
+#define	OFFSET ((uint32_t)25567 * 24*60*60)
+	return (htonl((uint32_t)(tv.tv_sec + OFFSET)));
 #undef OFFSET
 }
 
 /* ARGSUSED */
-void
-machtime_stream(s, sep)
-	int s;
-	struct servtab *sep;
+static void
+machtime_stream(int s, struct servtab *sep)
 {
-	long result;
+	uint32_t result;
 
 	result = machtime();
 	(void) write(s, (char *) &result, sizeof(result));
@@ -1984,14 +2034,12 @@ machtime_stream(s, sep)
 
 /* ARGSUSED */
 void
-machtime_dg(s, sep)
-	int s;
-	struct servtab *sep;
+machtime_dg(int s, struct servtab *sep)
 {
-	long result;
+	uint32_t result;
 	struct sockaddr_storage ss;
 	struct sockaddr *sa;
-	int size;
+	socklen_t size;
 
 	sa = (struct sockaddr *)&ss;
 	size = sizeof(ss);
@@ -2004,10 +2052,9 @@ machtime_dg(s, sep)
 }
 
 /* ARGSUSED */
-void
-daytime_stream(s, sep)		/* Return human-readable time of day */
-	int s;
-	struct servtab *sep;
+static void
+daytime_stream(int s,struct servtab *sep)
+/* Return human-readable time of day */
 {
 	char buffer[256];
 	time_t clock;
@@ -2021,15 +2068,15 @@ daytime_stream(s, sep)		/* Return human-readable time of day */
 
 /* ARGSUSED */
 void
-daytime_dg(s, sep)		/* Return human-readable time of day */
-	int s;
-	struct servtab *sep;
+daytime_dg(int s, struct servtab *sep)
+/* Return human-readable time of day */
 {
 	char buffer[256];
 	time_t clock;
 	struct sockaddr_storage ss;
 	struct sockaddr *sa;
-	int size, len;
+	socklen_t size;
+	int len;
 
 	clock = time((time_t *) 0);
 
@@ -2047,14 +2094,13 @@ daytime_dg(s, sep)		/* Return human-readable time of day */
  * print_service:
  *	Dump relevant information to stderr
  */
-void
-print_service(action, sep)
-	char *action;
-	struct servtab *sep;
+static void
+print_service(char *action, struct servtab *sep)
 {
+
 	if (isrpcservice(sep))
 		fprintf(stderr,
-		    "%s: %s rpcprog=%d, rpcvers = %d/%d, proto=%s, wait:max=%d.%d, user:group=%s.%s builtin=%lx server=%s"
+		    "%s: %s rpcprog=%d, rpcvers = %d/%d, proto=%s, wait.max=%d.%d, user:group=%s:%s builtin=%lx server=%s"
 #ifdef IPSEC
 		    " policy=\"%s\""
 #endif
@@ -2069,12 +2115,14 @@ print_service(action, sep)
 		    );
 	else
 		fprintf(stderr,
-		    "%s: %s proto=%s, wait:max=%d.%d, user:group=%s.%s builtin=%lx server=%s"
+		    "%s: %s proto=%s%s, wait.max=%d.%d, user:group=%s:%s builtin=%lx server=%s"
 #ifdef IPSEC
 		    " policy=%s"
 #endif
 		    "\n",
-		    action, sep->se_service, sep->se_proto,
+		    action, sep->se_service,
+		    sep->se_type == FAITH_TYPE ? "faith/" : "",
+		    sep->se_proto,
 		    sep->se_wait, sep->se_max, sep->se_user, sep->se_group,
 		    (long)sep->se_bi, sep->se_server
 #ifdef IPSEC
@@ -2083,14 +2131,13 @@ print_service(action, sep)
 		    );
 }
 
-void
-usage()
+static void
+usage(void)
 {
-
 #ifdef LIBWRAP
-	(void)fprintf(stderr, "usage: %s [-dl] [conf]\n", __progname);
+	(void)fprintf(stderr, "usage: %s [-dl] [conf]\n", getprogname());
 #else
-	(void)fprintf(stderr, "usage: %s [-d] [conf]\n", __progname);
+	(void)fprintf(stderr, "usage: %s [-d] [conf]\n", getprogname());
 #endif
 	exit(1);
 }
@@ -2102,10 +2149,7 @@ usage()
  */
 
 static int		/* # of characters upto \r,\n or \0 */
-getline(fd, buf, len)
-	int fd;
-	char *buf;
-	int len;
+getline(int fd,	char *buf, int len)
 {
 	int count = 0, n;
 
@@ -2129,10 +2173,8 @@ getline(fd, buf, len)
 
 #define strwrite(fd, buf)	(void) write(fd, buf, sizeof(buf)-1)
 
-void
-tcpmux(ctrl, sep)
-	int ctrl;
-	struct servtab *sep;
+static void
+tcpmux(int ctrl, struct servtab *sep)
 {
 	char service[MAX_SERV_LEN+1];
 	int len;
@@ -2154,7 +2196,7 @@ tcpmux(ctrl, sep)
 	if (!strcasecmp(service, "help")) {
 		strwrite(ctrl, "+Available services:\r\n");
 		strwrite(ctrl, "help\r\n");
-		for (sep = servtab; sep; sep = sep->se_next) {
+		for (sep = servtab; sep != NULL; sep = sep->se_next) {
 			if (!ISMUX(sep))
 				continue;
 			(void)write(ctrl, sep->se_service,
@@ -2165,13 +2207,13 @@ tcpmux(ctrl, sep)
 	}
 
 	/* Try matching a service in inetd.conf with the request */
-	for (sep = servtab; sep; sep = sep->se_next) {
+	for (sep = servtab; sep != NULL; sep = sep->se_next) {
 		if (!ISMUX(sep))
 			continue;
 		if (!strcasecmp(service, sep->se_service)) {
 			if (ISMUXPLUS(sep))
 				strwrite(ctrl, "+Go\r\n");
-			run_service(ctrl, sep);
+			run_service(ctrl, sep, 1 /* forked */);
 			return;
 		}
 	}
@@ -2180,18 +2222,14 @@ reject:
 	_exit(1);
 }
 
-
 #ifdef MULOG
-dolog(sep, ctrl)
-	struct servtab *sep;
-	int		ctrl;
+void
+dolog(struct servtab *sep, int ctrl)
 {
 	struct sockaddr_storage	ss;
 	struct sockaddr		*sa = (struct sockaddr *)&ss;
-	struct sockaddr_in	*sin = (struct sockaddr_in *)&ss;
-	int			len = sizeof(ss);
-	struct hostent		*hp;
-	char			*host, *dp, buf[BUFSIZ], *rfc931_name();
+	socklen_t		len = sizeof(ss);
+	char			*host, *dp, buf[BUFSIZ];
 	int			connected = 1;
 
 	switch (sep->se_family) {
@@ -2200,7 +2238,7 @@ dolog(sep, ctrl)
 	case AF_INET6:
 #endif
 		break;
-	default;
+	default:
 		return;
 	}
 
@@ -2221,13 +2259,13 @@ dolog(sep, ctrl)
 	case AF_INET6:
 #endif
 		break;
-	default;
+	default:
 		syslog(LOG_ERR, "unexpected address family %u", sa->sa_family);
 		return;
 	}
 
-	if (getnameinfo(sa, sa->sa_len, buf, sizeof(buf), NULL, 0, 0) != 0)
-		strcpy(buf, "?");
+	if (getnameinfo(sa, len, buf, sizeof(buf), NULL, 0, 0) != 0)
+		strlcpy(buf, "?", sizeof(buf));
 	host = buf;
 
 	switch (sep->se_log & ~MULOG_RFC931) {
@@ -2278,8 +2316,8 @@ static jmp_buf timebuf;
 
 /* timeout - handle timeouts */
 
-static void timeout(sig)
-int     sig;
+static void
+timeout(int sig)
 {
 	longjmp(timebuf, sig);
 }
@@ -2287,13 +2325,12 @@ int     sig;
 /* rfc931_name - return remote user name */
 
 char *
-rfc931_name(there, ctrl)
-struct sockaddr *there;		/* remote link information */
-int	ctrl;
+rfc931_name(struct sockaddr *there,	/* remote link information */
+    int ctrl)
 {
 	struct sockaddr_storage here;	/* local link information */
 	struct sockaddr_storage sin;	/* for talking to RFC931 daemon */
-	int		length;
+	socklen_t	length;
 	int		s;
 	unsigned	remote;
 	unsigned	local;
@@ -2323,11 +2360,11 @@ int	ctrl;
 	}
 	switch (there->sa_family) {
 	case AF_INET:
-		hisport = ((struct sockaddr_in *)sa)->sin_port;
+		hisport = ((struct sockaddr_in *)&there)->sin_port;
 		break;
 #ifdef INET6
 	case AF_INET6:
-		hisport = ((struct sockaddr_in6 *)sa)->sin6_port;
+		hisport = ((struct sockaddr_in6 *)&there)->sin6_port;
 		break;
 #endif
 	}
@@ -2384,7 +2421,6 @@ int	ctrl;
 	(void)snprintf(buf, sizeof buf, "%u,%u\r\n", ntohs(hisport),
 	    ntohs(myport));
 
-
 	for (len = 0, cp = buf; len < strlen(buf); ) {
 		int	n;
 
@@ -2411,12 +2447,10 @@ int	ctrl;
 	}
 	*cp = '\0';
 
-	if (sscanf(buf, "%u , %u : USERID :%*[^:]:%255s", &remote, &local, user) == 3
-		&& ntohs(hisport) == remote
-		&& ntohs(myport) == local) {
-
+	if (sscanf(buf, "%u , %u : USERID :%*[^:]:%255s", &remote, &local,
+	    user) == 3 && ntohs(hisport) == remote && ntohs(myport) == local) {
 		/* Strip trailing carriage return. */
-		if (cp = strchr(user, '\r'))
+		if ((cp = strchr(user, '\r')) != NULL)
 			*cp = 0;
 		result = user;
 	}
@@ -2428,14 +2462,17 @@ int	ctrl;
 #endif
 
 /*
- * check if the port where send data to is one of the obvious ports
+ * check if the address/port where send data to is one of the obvious ports
  * that are used for denial of service attacks like two echo ports
  * just echoing data between them
  */
-int
-port_good_dg(sa)
-	struct sockaddr *sa;
+static int
+port_good_dg(struct sockaddr *sa)
 {
+	struct in_addr in;
+#ifdef INET6
+	struct in6_addr *in6;
+#endif
 	u_int16_t port;
 	int i, bad;
 	char hbuf[NI_MAXHOST];
@@ -2444,32 +2481,100 @@ port_good_dg(sa)
 
 	switch (sa->sa_family) {
 	case AF_INET:
+		in.s_addr = ntohl(((struct sockaddr_in *)sa)->sin_addr.s_addr);
 		port = ntohs(((struct sockaddr_in *)sa)->sin_port);
+#ifdef INET6
+	v4chk:
+#endif
+		if (IN_MULTICAST(in.s_addr))
+			goto bad;
+		switch ((in.s_addr & 0xff000000) >> 24) {
+		case 0: case 127: case 255:
+			goto bad;
+		}
+		if (dg_broadcast(&in))
+			goto bad;
 		break;
 #ifdef INET6
 	case AF_INET6:
+		in6 = &((struct sockaddr_in6 *)sa)->sin6_addr;
 		port = ntohs(((struct sockaddr_in6 *)sa)->sin6_port);
+		if (IN6_IS_ADDR_MULTICAST(in6) || IN6_IS_ADDR_UNSPECIFIED(in6))
+			goto bad;
+		if (IN6_IS_ADDR_V4MAPPED(in6) || IN6_IS_ADDR_V4COMPAT(in6)) {
+			memcpy(&in, &in6->s6_addr[12], sizeof(in));
+			in.s_addr = ntohl(in.s_addr);
+			goto v4chk;
+		}
 		break;
 #endif
 	default:
 		/* XXX unsupported af, is it safe to assume it to be safe? */
-		return 1;
+		return (1);
 	}
 
-	for (i = 0; bad_ports[i] != 0; i++)
-		if (port == bad_ports[i]) {
-			bad = 1;
-			break;
-		}
+	for (i = 0; bad_ports[i] != 0; i++) {
+		if (port == bad_ports[i])
+			goto bad;
+	}
 
-	if (bad) {
-		if (getnameinfo(sa, sa->sa_len, hbuf, sizeof(hbuf),
-				NULL, 0, niflags) != 0)
-			strcpy(hbuf, "?");
-		syslog(LOG_WARNING,"Possible DoS attack from %s, Port %d",
-			hbuf, port);
-		return (0);
-	} else
-		return (1);
+	return (1);
+
+bad:
+	if (getnameinfo(sa, sa->sa_len, hbuf, sizeof(hbuf), NULL, 0,
+	    niflags) != 0)
+		strlcpy(hbuf, "?", sizeof(hbuf));
+	syslog(LOG_WARNING,"Possible DoS attack from %s, Port %d",
+		hbuf, port);
+	return (0);
 }
 
+/* XXX need optimization */
+static int
+dg_broadcast(struct in_addr *in)
+{
+	struct ifaddrs *ifa, *ifap;
+	struct sockaddr_in *sin;
+
+	if (getifaddrs(&ifap) < 0)
+		return (0);
+	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr->sa_family != AF_INET ||
+		    (ifa->ifa_flags & IFF_BROADCAST) == 0)
+			continue;
+		sin = (struct sockaddr_in *)ifa->ifa_broadaddr;
+		if (sin->sin_addr.s_addr == in->s_addr) {
+			freeifaddrs(ifap);
+			return (1);
+		}
+	}
+	freeifaddrs(ifap);
+	return (0);
+}
+
+static int
+my_kevent(const struct kevent *changelist, size_t nchanges,
+    struct kevent *eventlist, size_t nevents)
+{
+	int	result;
+
+	while ((result = kevent(kq, changelist, nchanges, eventlist, nevents,
+	    NULL)) < 0)
+		if (errno != EINTR) {
+			syslog(LOG_ERR, "kevent: %m");
+			exit(EXIT_FAILURE);
+		}
+
+	return (result);
+}
+
+static struct kevent *
+allocchange(void)
+{
+	if (changes == A_CNT(changebuf)) {
+		(void) my_kevent(changebuf, A_CNT(changebuf), NULL, 0);
+		changes = 0;
+	}
+
+	return (&changebuf[changes++]);
+}

@@ -1,4 +1,4 @@
-/*	$NetBSD: ttymsg.c,v 1.14 1999/09/20 04:48:11 lukem Exp $	*/
+/*	$NetBSD: ttymsg.c,v 1.22 2005/08/27 17:16:06 elad Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)ttymsg.c	8.2 (Berkeley) 11/16/93";
 #else
-__RCSID("$NetBSD: ttymsg.c,v 1.14 1999/09/20 04:48:11 lukem Exp $");
+__RCSID("$NetBSD: ttymsg.c,v 1.22 2005/08/27 17:16:06 elad Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -65,34 +61,42 @@ __RCSID("$NetBSD: ttymsg.c,v 1.14 1999/09/20 04:48:11 lukem Exp $");
  * ignored (exclusive-use, lack of permission, etc.).
  */
 char *
-ttymsg(iov, iovcnt, line, tmout)
-	struct iovec *iov;
-	int iovcnt;
-	const char *line;
-	int tmout;
+ttymsg(struct iovec *iov, int iovcnt, const char *line, int tmout)
 {
-	static char device[MAXNAMLEN] = _PATH_DEV;
 	static char errbuf[1024];
-	int cnt, fd, left, wret;
-	struct iovec localiov[6];
+	char device[MAXNAMLEN];
+	const char *ptr;
+	int fd, ret;
+	struct iovec localiov[32];
 	sigset_t nset;
 	int forked = 0;
+	size_t cnt, left, wret;
 
 	_DIAGASSERT(iov != NULL);
 	_DIAGASSERT(iovcnt >= 0);
 	_DIAGASSERT(line != NULL);
 
-	if (iovcnt > sizeof(localiov) / sizeof(localiov[0]))
-		return ("too many iov's (change code in libutil/ttymsg.c)");
-
-	(void)strncpy(device + sizeof(_PATH_DEV) - 1, line,
-	    sizeof(device) - sizeof(_PATH_DEV));
-	if (strchr(device + sizeof(_PATH_DEV) - 1, '/')) {
-		/* A slash is an attempt to break security... */
-		(void) snprintf(errbuf, sizeof(errbuf), "'/' in \"%s\"",
-		    device);
-		return (errbuf);
+	if (iovcnt >= sizeof(localiov) / sizeof(localiov[0])) {
+		(void)snprintf(errbuf, sizeof(errbuf),
+		    "%s: too many iov's (%d) max is %zu", __func__,
+		    iovcnt, sizeof(localiov) / sizeof(localiov[0]));
+		return errbuf;
 	}
+
+	ptr = strncmp(line, "pts/", (size_t)4) == 0 ? line + 4 : line;
+	if (strcspn(ptr, "./") != strlen(ptr)) {
+		/* A slash or dot is an attempt to break security... */
+		(void)snprintf(errbuf, sizeof(errbuf),
+		    "%s: '/' or '.' in \"%s\"", __func__, line);
+		return errbuf;
+	}
+	ret = snprintf(device, sizeof(device), "%s%s", _PATH_DEV, line);
+	if (ret == -1 || ret >= (int)sizeof(device)) {
+		(void) snprintf(errbuf, sizeof(errbuf),
+		    "%s: line `%s' too long", __func__, line);
+		return errbuf;
+	}
+	cnt = (size_t)ret;
 
 	/*
 	 * open will fail on slip lines or exclusive-use lines
@@ -100,10 +104,17 @@ ttymsg(iov, iovcnt, line, tmout)
 	 */
 	if ((fd = open(device, O_WRONLY|O_NONBLOCK, 0)) < 0) {
 		if (errno == EBUSY || errno == EACCES)
-			return (NULL);
-		(void) snprintf(errbuf, sizeof(errbuf),
-		    "%s: %s", device, strerror(errno));
-		return (errbuf);
+			return NULL;
+		(void)snprintf(errbuf, sizeof(errbuf),
+		    "%s: Cannot open `%s' (%s)",
+		    __func__, device, strerror(errno));
+		return errbuf;
+	}
+	if (!isatty(fd)) {
+		(void)snprintf(errbuf, sizeof(errbuf),
+		    "%s: line `%s' is not a tty device", __func__, device);
+		(void)close(fd);
+		return errbuf;
 	}
 
 	for (cnt = left = 0; cnt < iovcnt; ++cnt)
@@ -113,10 +124,10 @@ ttymsg(iov, iovcnt, line, tmout)
 		wret = writev(fd, iov, iovcnt);
 		if (wret >= left)
 			break;
-		if (wret >= 0) {
+		if (wret > 0) {
 			left -= wret;
 			if (iov != localiov) {
-				memcpy(localiov, iov,
+				(void)memcpy(localiov, iov,
 				    iovcnt * sizeof(struct iovec));
 				iov = localiov;
 			}
@@ -131,33 +142,42 @@ ttymsg(iov, iovcnt, line, tmout)
 				iov->iov_len -= wret;
 			}
 			continue;
+		} else if (wret == 0) {
+			(void)snprintf(errbuf, sizeof(errbuf),
+			    "%s: failed writing %zu bytes to `%s'", __func__,
+			    left, device);
+			(void) close(fd);
+			if (forked)
+				_exit(1);
+			return errbuf;
 		}
 		if (errno == EWOULDBLOCK) {
-			int cpid, off = 0;
+			pid_t cpid;
 
 			if (forked) {
-				(void) close(fd);
+				(void)close(fd);
 				_exit(1);
 			}
 			cpid = fork();
 			if (cpid < 0) {
-				(void) snprintf(errbuf, sizeof(errbuf),
-				    "fork: %s", strerror(errno));
-				(void) close(fd);
-				return (errbuf);
+				(void)snprintf(errbuf, sizeof(errbuf),
+				    "%s: Cannot fork (%s)", __func__,
+				    strerror(errno));
+				(void)close(fd);
+				return errbuf;
 			}
 			if (cpid) {	/* parent */
-				(void) close(fd);
-				return (NULL);
+				(void)close(fd);
+				return NULL;
 			}
 			forked++;
 			/* wait at most tmout seconds */
-			(void) signal(SIGALRM, SIG_DFL);
-			(void) signal(SIGTERM, SIG_DFL); /* XXX */
+			(void)signal(SIGALRM, SIG_DFL);
+			(void)signal(SIGTERM, SIG_DFL); /* XXX */
 			sigfillset(&nset);
-			(void) sigprocmask(SIG_UNBLOCK, &nset, NULL);
-			(void) alarm((u_int)tmout);
-			(void) fcntl(fd, O_NONBLOCK, &off);
+			(void)sigprocmask(SIG_UNBLOCK, &nset, NULL);
+			(void)alarm((u_int)tmout);
+			(void)fcntl(fd, F_SETFL, 0);	/* clear O_NONBLOCK */
 			continue;
 		}
 		/*
@@ -169,13 +189,14 @@ ttymsg(iov, iovcnt, line, tmout)
 		(void) close(fd);
 		if (forked)
 			_exit(1);
-		(void) snprintf(errbuf, sizeof(errbuf),
-		    "%s: %s", device, strerror(errno));
-		return (errbuf);
+		(void)snprintf(errbuf, sizeof(errbuf),
+		    "%s: Write to line `%s' failed (%s)", __func__,
+		    device, strerror(errno));
+		return errbuf;
 	}
 
 	(void) close(fd);
 	if (forked)
 		_exit(0);
-	return (NULL);
+	return NULL;
 }

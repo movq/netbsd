@@ -1,13 +1,38 @@
-/*	$NetBSD: shots.c,v 1.3 1997/10/11 08:13:50 lukem Exp $	*/
+/*	$NetBSD: shots.c,v 1.6 2006/03/17 23:34:37 abs Exp $	*/
 /*
- *  Hunt
- *  Copyright (c) 1985 Conrad C. Huang, Gregory S. Couch, Kenneth C.R.C. Arnold
- *  San Francisco, California
+ * Copyright (c) 1983-2003, Regents of the University of California.
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions are 
+ * met:
+ * 
+ * + Redistributions of source code must retain the above copyright 
+ *   notice, this list of conditions and the following disclaimer.
+ * + Redistributions in binary form must reproduce the above copyright 
+ *   notice, this list of conditions and the following disclaimer in the 
+ *   documentation and/or other materials provided with the distribution.
+ * + Neither the name of the University of California, San Francisco nor 
+ *   the names of its contributors may be used to endorse or promote 
+ *   products derived from this software without specific prior written 
+ *   permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS 
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED 
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A 
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: shots.c,v 1.3 1997/10/11 08:13:50 lukem Exp $");
+__RCSID("$NetBSD: shots.c,v 1.6 2006/03/17 23:34:37 abs Exp $");
 #endif /* not lint */
 
 # include	<err.h>
@@ -18,21 +43,21 @@ __RCSID("$NetBSD: shots.c,v 1.3 1997/10/11 08:13:50 lukem Exp $");
 # define	PLUS_DELTA(x, max)	if (x < max) x++; else x--
 # define	MINUS_DELTA(x, min)	if (x > min) x--; else x++
 
-static	void	chkshot __P((BULLET *, BULLET *));
-static	void	chkslime __P((BULLET *, BULLET *));
-static	void	explshot __P((BULLET *, int, int));
-static	void	find_under __P((BULLET *, BULLET *));
-static	int	iswall __P((int, int));
-static	void	mark_boot __P((BULLET *));
-static	void	mark_player __P((BULLET *));
+static	void	chkshot(BULLET *, BULLET *);
+static	void	chkslime(BULLET *, BULLET *);
+static	void	explshot(BULLET *, int, int);
+static	void	find_under(BULLET *, BULLET *);
+static	int	iswall(int, int);
+static	void	mark_boot(BULLET *);
+static	void	mark_player(BULLET *);
 #ifdef DRONE
-static	void	move_drone __P((BULLET *));
+static	void	move_drone(BULLET *);
 #endif
-static	void	move_flyer __P((PLAYER *));
-static	int	move_normal_shot __P((BULLET *));
-static	void	move_slime __P((BULLET *, int, BULLET *));
-static	void	save_bullet __P((BULLET *));
-static	void	zapshot __P((BULLET *, BULLET *));
+static	void	move_flyer(PLAYER *);
+static	int	move_normal_shot(BULLET *);
+static	void	move_slime(BULLET *, int, BULLET *);
+static	void	save_bullet(BULLET *);
+static	void	zapshot(BULLET *, BULLET *);
 
 /*
  * moveshots:
@@ -313,7 +338,7 @@ move_normal_shot(bp)
 				message(pp, "Zing!");
 				if (bp->b_owner == NULL)
 					break;
-				message(bp->b_owner,
+				message(bp->b_owner, bp->b_score &&
 					((bp->b_score->i_missed & 0x7) == 0x7) ?
 					"My!  What a bad shot you are!" :
 					"Missed him");

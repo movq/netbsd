@@ -1,4 +1,4 @@
-/*	$NetBSD: getpar.h,v 1.6 1999/09/08 21:18:01 jsm Exp $	*/
+/*	$NetBSD: getpar.h,v 1.10 2005/02/15 12:54:50 jsm Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,8 +31,8 @@
  *	@(#)getpar.h	8.1 (Berkeley) 5/31/93
  */
 
-typedef void (*cmdfun) __P((int));
-struct cvntab		/* used for getcodpar() paramater list */
+typedef void (*cmdfun)(int);
+struct cvntab		/* used for getcodpar() parameter list */
 {
 	const char	*abrev;
 	const char	*full;
@@ -44,11 +40,14 @@ struct cvntab		/* used for getcodpar() paramater list */
 	int	value2;
 };
 
-int getintpar __P((const  char *));
-double getfltpar __P((const char *));
-int getynpar __P((const char *));
-const struct cvntab *getcodpar __P((const char *, const struct cvntab[]));
-void getstrpar __P((const char *, char *, int, const char *));
-int testnl __P((void));
-void skiptonl __P((int));
-int readdelim __P((int));
+extern const struct cvntab	Skitab[];
+extern const struct cvntab	Lentab[];
+
+int getintpar(const  char *);
+double getfltpar(const char *);
+int getynpar(const char *);
+const struct cvntab *getcodpar(const char *, const struct cvntab[]);
+void getstrpar(const char *, char *, int, const char *);
+int testnl(void);
+void skiptonl(int);
+int readdelim(int);

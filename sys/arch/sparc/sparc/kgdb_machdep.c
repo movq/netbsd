@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_machdep.c,v 1.6 1998/10/08 21:47:34 pk Exp $ */
+/*	$NetBSD: kgdb_machdep.c,v 1.19 2008/04/28 20:23:36 martin Exp $ */
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,6 +31,44 @@
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This software was developed by the Computer Systems Engineering group
+ * at Lawrence Berkeley Laboratory under DARPA contract BG 91-66 and
+ * contributed to Berkeley.
+ *
+ * All advertising materials mentioning features or use of this software
+ * must display the following acknowledgements:
+ *	This product includes software developed by the University of
+ *	California, Lawrence Berkeley Laboratory.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)kgdb_stub.c	8.1 (Berkeley) 6/11/93
+ */
+
+/*
  * Copyright (c) 1995
  * 	The President and Fellows of Harvard College. All rights reserved.
  *
@@ -86,14 +117,20 @@
 /*
  * Machine dependent routines needed by kern/kgdb_stub.c
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.19 2008/04/28 20:23:36 martin Exp $");
+
+#include "opt_kgdb.h"
+#include "opt_multiprocessor.h"
+#include "opt_sparc_arch.h"
+
 #ifdef KGDB
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/kgdb.h>
-
-#include <vm/vm.h>
 
 #include <machine/ctlreg.h>
 #include <machine/psl.h>
@@ -103,16 +140,14 @@
 
 #include <sparc/sparc/asm.h>
 
-static __inline void kgdb_copy __P((char *, char *, int));
-static __inline void kgdb_zero __P((char *, int));
+static inline void kgdb_copy(char *, char *, int);
+static inline void kgdb_zero(char *, int);
 
 /*
  * This little routine exists simply so that bcopy() can be debugged.
  */
-static __inline void
-kgdb_copy(src, dst, len)
-	register char *src, *dst;
-	register int len;
+static inline void
+kgdb_copy(register char *src, register char *dst, register int len)
 {
 
 	while (--len >= 0)
@@ -120,22 +155,76 @@ kgdb_copy(src, dst, len)
 }
 
 /* ditto for bzero */
-static __inline void
-kgdb_zero(ptr, len)
-	register char *ptr;
-	register int len;
+static inline void
+kgdb_zero(register char *ptr, register int len)
 {
+
 	while (--len >= 0)
 		*ptr++ = (char) 0;
 }
+
+/*
+ * Deal with KGDB in a MP environment. XXX need to have "mach cpu" equiv.
+ */
+#ifdef MULTIPROCESSOR
+
+#define NOCPU -1
+
+static int kgdb_suspend_others(void);
+static void kgdb_resume_others(void);
+static void kgdb_suspend(void);
+
+__cpu_simple_lock_t kgdb_lock;
+int kgdb_cpu = NOCPU;
+
+static int
+kgdb_suspend_others(void)
+{
+	int cpu_me = cpu_number();
+	int win;
+
+	if (cpus == NULL)
+		return 1;
+
+	__cpu_simple_lock(&kgdb_lock);
+	if (kgdb_cpu == NOCPU)
+		kgdb_cpu = cpu_me;
+	win = (kgdb_cpu == cpu_me);
+	__cpu_simple_unlock(&kgdb_lock);
+
+	if (win)
+		mp_pause_cpus();
+
+	return win;
+}
+
+static void
+kgdb_resume_others(void)
+{
+
+	mp_resume_cpus();
+
+	__cpu_simple_lock(&kgdb_lock);
+	kgdb_cpu = NOCPU;
+	__cpu_simple_unlock(&kgdb_lock);
+}
+
+static void
+kgdb_suspend(void)
+{
+
+	while (cpuinfo.flags & CPUFLG_PAUSED)
+		cache_flush((void *)__UNVOLATILE(&cpuinfo.flags),
+			    sizeof(cpuinfo.flags));
+}
+#endif /* MULTIPROCESSOR */
 
 /*
  * Trap into kgdb to wait for debugger to connect,
  * noting on the console why nothing else is going on.
  */
 void
-kgdb_connect(verbose)
-	int verbose;
+kgdb_connect(int verbose)
 {
 
 	if (kgdb_dev < 0)
@@ -143,24 +232,30 @@ kgdb_connect(verbose)
 #if NFB > 0
 	fb_unblank();
 #endif
+#ifdef MULTIPROCESSOR
 	/* While we're in the debugger, pause all other CPUs */
-	mp_pause_cpus();
+	if (!kgdb_suspend_others()) {
+		kgdb_suspend();
+	} else {
+#endif
+		if (verbose)
+			printf("kgdb waiting...");
+		__asm("ta %0" :: "n" (T_KGDB_EXEC));	/* trap into kgdb */
 
-	if (verbose)
-		printf("kgdb waiting...");
-	__asm("ta %0" :: "n" (T_KGDB_EXEC));	/* trap into kgdb */
+		kgdb_debug_panic = 1;
 
-	kgdb_debug_panic = 1;
-
-	/* Other CPUs can continue now */
-	mp_resume_cpus();
+#ifdef MULTIPROCESSOR
+		/* Other CPUs can continue now */
+		kgdb_resume_others();
+	}
+#endif
 }
 
 /*
  * Decide what to do on panic.
  */
 void
-kgdb_panic()
+kgdb_panic(void)
 {
 
 	if (kgdb_dev >= 0 && kgdb_debug_panic)
@@ -173,8 +268,7 @@ kgdb_panic()
  * XXX should this be done at the other end?
  */
 int
-kgdb_signal(type)
-	int type;
+kgdb_signal(int type)
 {
 	int sigval;
 
@@ -243,21 +337,19 @@ kgdb_signal(type)
  * understood by gdb.
  */
 void
-kgdb_getregs(regs, gdb_regs)
-	db_regs_t *regs;
-	kgdb_reg_t *gdb_regs;
+kgdb_getregs(db_regs_t *regs, kgdb_reg_t *gdb_regs)
 {
 	struct trapframe *tf = &regs->db_tf;
 
 	/* %g0..%g7 and %o0..%o7: from trapframe */
 	gdb_regs[0] = 0;
-	kgdb_copy((caddr_t)&tf->tf_global[1], (caddr_t)&gdb_regs[1], 15 * 4);
+	kgdb_copy((void *)&tf->tf_global[1], (void *)&gdb_regs[1], 15 * 4);
 
 	/* %l0..%l7 and %i0..%i7: from stack */
-	kgdb_copy((caddr_t)tf->tf_out[6], (caddr_t)&gdb_regs[GDB_L0], 16 * 4);
+	kgdb_copy((void *)tf->tf_out[6], (void *)&gdb_regs[GDB_L0], 16 * 4);
 
 	/* %f0..%f31 -- fake, kernel does not use FP */
-	kgdb_zero((caddr_t)&gdb_regs[GDB_FP0], 32 * 4);
+	kgdb_zero((void *)&gdb_regs[GDB_FP0], 32 * 4);
 
 	/* %y, %psr, %wim, %tbr, %pc, %npc, %fsr, %csr */
 	gdb_regs[GDB_Y] = tf->tf_y;
@@ -274,14 +366,12 @@ kgdb_getregs(regs, gdb_regs)
  * Reverse the above.
  */
 void
-kgdb_setregs(regs, gdb_regs)
-	db_regs_t *regs;
-	kgdb_reg_t *gdb_regs;
+kgdb_setregs(db_regs_t *regs, kgdb_reg_t *gdb_regs)
 {
 	struct trapframe *tf = &regs->db_tf;
 
-	kgdb_copy((caddr_t)&gdb_regs[1], (caddr_t)&tf->tf_global[1], 15 * 4);
-	kgdb_copy((caddr_t)&gdb_regs[GDB_L0], (caddr_t)tf->tf_out[6], 16 * 4);
+	kgdb_copy((void *)&gdb_regs[1], (void *)&tf->tf_global[1], 15 * 4);
+	kgdb_copy((void *)&gdb_regs[GDB_L0], (void *)tf->tf_out[6], 16 * 4);
 	tf->tf_y = gdb_regs[GDB_Y];
 	tf->tf_psr = gdb_regs[GDB_PSR];
 	tf->tf_pc = gdb_regs[GDB_PC];
@@ -292,9 +382,7 @@ kgdb_setregs(regs, gdb_regs)
  * Determine if memory at [va..(va+len)] is valid.
  */
 int
-kgdb_acc(va, len)
-	vaddr_t va;
-	size_t len;
+kgdb_acc(vaddr_t va, size_t len)
 {
 	int pte;
 	vaddr_t eva;
@@ -306,9 +394,9 @@ kgdb_acc(va, len)
 	if (va >= (vaddr_t)0xfffff000)
 		return (0);
 
-	for (; va < eva; va += NBPG) {
-#if defined(SUN4M)
-		if (CPU_ISSUN4M) {
+	for (; va < eva; va += PAGE_SIZE) {
+#if defined(SUN4M) || defined(SUN4D)
+		if (CPU_HAS_SRMMU) {
 			pte = getpte4m(va);
 			if ((pte & SRMMU_TETYPE) != SRMMU_TEPTE)
 				return (0);
@@ -325,4 +413,4 @@ kgdb_acc(va, len)
 
 	return (1);
 }
-#endif
+#endif /* KGDB */

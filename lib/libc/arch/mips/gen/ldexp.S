@@ -1,4 +1,4 @@
-/*	$NetBSD: ldexp.S,v 1.5 1996/09/17 01:32:25 jonathan Exp $	*/
+/*	$NetBSD: ldexp.S,v 1.8 2003/08/07 16:42:15 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,10 +36,10 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 	ASMSTR("from: @(#)ldexp.s	8.1 (Berkeley) 6/4/93")
-	ASMSTR("$NetBSD: ldexp.S,v 1.5 1996/09/17 01:32:25 jonathan Exp $")
+	ASMSTR("$NetBSD: ldexp.S,v 1.8 2003/08/07 16:42:15 agc Exp $")
 #endif /* LIBC_SCCS and not lint */
 
-#ifdef ABICALLS
+#ifdef __ABICALLS__
 	.abicalls
 #endif
 
@@ -97,28 +93,28 @@ LEAF(ldexp)
 	move	v0, t3
 	addu	t9, 32
 1:
-	srl	t4, v0, 16
-	bne	t4, zero, 1f
+	srl	ta0, v0, 16
+	bne	ta0, zero, 1f
 	addu	t9, 16
 	sll	v0, 16
 1:
-	srl	t4, v0, 24
-	bne	t4, zero, 1f
+	srl	ta0, v0, 24
+	bne	ta0, zero, 1f
 	addu	t9, 8
 	sll	v0, 8
 1:
-	srl	t4, v0, 28
-	bne	t4, zero, 1f
+	srl	ta0, v0, 28
+	bne	ta0, zero, 1f
 	addu	t9, 4
 	sll	v0, 4
 1:
-	srl	t4, v0, 30
-	bne	t4, zero, 1f
+	srl	ta0, v0, 30
+	bne	ta0, zero, 1f
 	addu	t9, 2
 	sll	v0, 2
 1:
-	srl	t4, v0, 31
-	bne	t4, zero, 1f
+	srl	ta0, v0, 31
+	bne	ta0, zero, 1f
 	addu	t9, 1
 /*
  * Now shift t2,t3 the correct number of bits.
@@ -137,8 +133,8 @@ LEAF(ldexp)
 1:
 	subu	v0, v0, t9		# shift fraction left < 32 bits
 	sll	t2, t2, t9
-	srl	t4, t3, v0
-	or	t2, t2, t4
+	srl	ta0, t3, v0
+	or	t2, t2, ta0
 	sll	t3, t3, t9
 2:
 	bge	t1, DEXP_INF, 8f	# overflow?
@@ -161,17 +157,17 @@ LEAF(ldexp)
 	blt	t1, -30, 2f		# will all bits in t3 be shifted out?
 	srl	t2, t2, 31 - 20		# shift fraction back to normal position
 	subu	t1, t1, 1
-	sll	t4, t2, t1		# shift right t2,t3 based on exponent
+	sll	ta0, t2, t1		# shift right t2,t3 based on exponent
 	srl	t8, t3, t1		# save bits shifted out
 	negu	t1
 	srl	t3, t3, t1
-	or	t3, t3, t4
+	or	t3, t3, ta0
 	srl	t2, t2, t1
 	bge	t8, zero, 1f		# does result need to be rounded?
 	addu	t3, t3, 1		# round result
-	sltu	t4, t3, 1
+	sltu	ta0, t3, 1
 	sll	t8, t8, 1
-	addu	t2, t2, t4
+	addu	t2, t2, ta0
 	bne	t8, zero, 1f		# round result to nearest
 	and	t3, t3, ~1
 1:
@@ -189,9 +185,9 @@ LEAF(ldexp)
 	srl	t3, t2, t1
 	bge	t8, zero, 1f		# does result need to be rounded?
 	addu	t3, t3, 1		# round result
-	sltu	t4, t3, 1
+	sltu	ta0, t3, 1
 	sll	t8, t8, 1
-	mtc1	t4, $f1			# exponent and upper fraction
+	mtc1	ta0, $f1			# exponent and upper fraction
 	bne	t8, zero, 1f		# round result to nearest
 	and	t3, t3, ~1
 1:

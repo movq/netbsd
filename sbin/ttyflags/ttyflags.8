@@ -1,4 +1,4 @@
-.\"	$NetBSD: ttyflags.8,v 1.5 1999/04/06 20:24:38 pk Exp $
+.\" $NetBSD: ttyflags.8,v 1.12 2006/10/06 22:07:44 elad Exp $
 .\"
 .\" Copyright (c) 1994 Christopher G. Demetriou
 .\" All rights reserved.
@@ -13,9 +13,11 @@
 .\"    documentation and/or other materials provided with the distribution.
 .\" 3. All advertising materials mentioning features or use of this software
 .\"    must display the following acknowledgement:
-.\"      This product includes software developed by Christopher G. Demetriou.
+.\"          This product includes software developed for the
+.\"          NetBSD Project.  See http://www.NetBSD.org/ for
+.\"          information about NetBSD.
 .\" 4. The name of the author may not be used to endorse or promote products
-.\"    derived from this software without specific prior written permission
+.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,9 +30,11 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd March 30, 1994
+.\" <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
+.\"
+.Dd October 7, 2006
 .Dt TTYFLAGS 8
-.Os NetBSD 1.0
+.Os
 .Sh NAME
 .Nm ttyflags
 .Nd set device-specific flags for terminals
@@ -40,8 +44,9 @@
 .Op Fl a | Ar tty ...
 .Sh DESCRIPTION
 .Nm
-sets the device-specific flags for terminals, based on the flags
-found on the terminal's line in
+sets the device-specific flags for terminals using
+.Dv TIOCSFLAGS ,
+based on the flags found on the terminal's line in
 .Pa /etc/ttys .
 .Pp
 The options are as follows:
@@ -57,7 +62,8 @@ The
 .Ar tty
 arguments are optional, but must not be specified if the
 .Fl a
-flag is used.  If specified, the
+flag is used.
+If specified, the
 .Ar tty
 arguments should be the base names of
 the ttys, as found in
@@ -68,6 +74,7 @@ the ttys, as found in
 .El
 .Sh SEE ALSO
 .Xr getttyent 3 ,
+.Xr tty 4 ,
 .Xr ttys 5
 .Sh HISTORY
 The

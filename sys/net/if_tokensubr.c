@@ -1,10 +1,6 @@
-/*	$NetBSD: if_tokensubr.c,v 1.9 2000/03/30 09:45:37 augustss Exp $	*/
+/*	$NetBSD: if_tokensubr.c,v 1.54 2008/04/28 20:24:09 martin Exp $	*/
 
 /*
- * Copyright (c) 1997-1999
- *	Onno van der Linden
- * Copyright (c) 1995
- *	Matt Thomas.  All rights reserved.
  * Copyright (c) 1982, 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -16,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,13 +30,76 @@
  *
  *	from: NetBSD: if_fddisubr.c,v 1.2 1995/08/19 04:35:29 cgd Exp
  */
+
+/*
+ * Copyright (c) 1997-1999 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Onno van der Linden.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1995
+ *	Matt Thomas.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The names of its contributors may not be used to endorse or promote
+ *    products derived from this software without specific prior written
+ *    permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	from: NetBSD: if_fddisubr.c,v 1.2 1995/08/19 04:35:29 cgd Exp
+ */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_tokensubr.c,v 1.54 2008/04/28 20:24:09 martin Exp $");
+
 #include "opt_inet.h"
 #include "opt_atalk.h"
-#include "opt_ccitt.h"
-#include "opt_llc.h"
 #include "opt_iso.h"
-#include "opt_ns.h"
 #include "opt_gateway.h"
+
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,7 +112,7 @@
 #include <sys/errno.h>
 #include <sys/syslog.h>
 
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 
 #include <net/if.h>
 #include <net/netisr.h>
@@ -66,19 +121,24 @@
 #include <net/if_dl.h>
 #include <net/if_types.h>
 
+#if NBPFILTER > 0
+#include <net/bpf.h>
+#endif
+
 #include <net/if_ether.h>
+#include <net/if_token.h>
+
+#include "carp.h"
+#if NCARP > 0
+#include <netinet/ip_carp.h>
+#endif
 
 #ifdef INET
 #include <netinet/in.h>
 #include <netinet/in_var.h>
 #include <netinet/if_inarp.h>
-#include <net/if_token.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #ifdef DECNET
 #include <netdnet/dn.h>
@@ -92,24 +152,6 @@
 #endif
 
 #include "bpfilter.h"
-
-#ifdef LLC
-#include <netccitt/dll.h>
-#include <netccitt/llc_var.h>
-#endif
-
-/*
- * TODO:
- * handle source routing via send_xid()
- * source routing for ISO,LLC,CCITT protocols
- * need sockaddr_dl_8025 to handle this correctly
- * IPX cases
- * handle "fast" forwarding like if_ether and if_fddi
- */
-
-#if defined(LLC) && defined(CCITT)
-extern struct ifqueue pkintrq;
-#endif
 
 #define senderr(e) { error = (e); goto bad;}
 
@@ -126,9 +168,9 @@ extern struct ifqueue pkintrq;
 #define RCF_ALLROUTES (2 << 8) | TOKEN_RCF_FRAME2 | TOKEN_RCF_BROADCAST_ALL
 #define RCF_SINGLEROUTE (2 << 8) | TOKEN_RCF_FRAME2 | TOKEN_RCF_BROADCAST_SINGLE
 
-static	int token_output __P((struct ifnet *, struct mbuf *,
-	    struct sockaddr *, struct rtentry *)); 
-static	void token_input __P((struct ifnet *, struct mbuf *));
+static int	token_output(struct ifnet *, struct mbuf *,
+			     const struct sockaddr *, struct rtentry *);
+static void	token_input(struct ifnet *, struct mbuf *);
 
 /*
  * Token Ring output routine.
@@ -137,29 +179,46 @@ static	void token_input __P((struct ifnet *, struct mbuf *));
  * XXX route info has to go into the same mbuf as the header
  */
 static int
-token_output(ifp, m0, dst, rt0)
-	struct ifnet *ifp;
-	struct mbuf *m0;
-	struct sockaddr *dst;
-	struct rtentry *rt0;
+token_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
+    struct rtentry *rt0)
 {
-	u_int16_t etype;
-	int s, error = 0;
+	uint16_t etype;
+	int error = 0;
 	u_char edst[ISO88025_ADDR_LEN];
 	struct mbuf *m = m0;
 	struct rtentry *rt;
-	struct mbuf *mcopy = (struct mbuf *)0;
+	struct mbuf *mcopy = NULL;
 	struct token_header *trh;
 #ifdef INET
-	struct arphdr *ah = (struct arphdr *)ifp;
+	struct arphdr *ah = (struct arphdr *)ifp0;
 #endif /* INET */
-	struct token_rif *rif = (struct  token_rif *)0;
+	struct token_rif *rif = NULL;
 	struct token_rif bcastrif;
+	struct ifnet *ifp = ifp0;
 	size_t riflen = 0;
+	ALTQ_DECL(struct altq_pktattr pktattr;)
+
+#if NCARP > 0
+	if (ifp->if_type == IFT_CARP) {
+		struct ifaddr *ifa;
+
+		/* loop back if this is going to the carp interface */
+		if (dst != NULL && ifp0->if_link_state == LINK_STATE_UP &&
+		    (ifa = ifa_ifwithaddr(dst)) != NULL &&
+		    ifa->ifa_ifp == ifp0)
+			return (looutput(ifp0, m, dst, rt0));
+
+		ifp = ifp->if_carpdev;
+		ah = (struct arphdr *)ifp;
+
+		if ((ifp0->if_flags & (IFF_UP|IFF_RUNNING)) !=
+		    (IFF_UP|IFF_RUNNING))
+			senderr(ENETDOWN);
+	}
+#endif /* NCARP > 0 */
 
 	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) != (IFF_UP|IFF_RUNNING))
 		senderr(ENETDOWN);
-	ifp->if_lastchange = time;
 	if ((rt = rt0)) {
 		if ((rt->rt_flags & RTF_UP) == 0) {
 			if ((rt0 = rt = RTALLOC1(dst, 1)))
@@ -179,9 +238,16 @@ token_output(ifp, m0, dst, rt0)
 		}
 		if (rt->rt_flags & RTF_REJECT)
 			if (rt->rt_rmx.rmx_expire == 0 ||
-			    time.tv_sec < rt->rt_rmx.rmx_expire)
+			    time_second < rt->rt_rmx.rmx_expire)
 				senderr(rt == rt0 ? EHOSTDOWN : EHOSTUNREACH);
 	}
+
+	/*
+	 * If the queueing discipline needs packet classification,
+	 * do it before prepending link headers.
+	 */
+	IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family, &pktattr);
+
 	switch (dst->sa_family) {
 
 #ifdef INET
@@ -195,8 +261,7 @@ token_output(ifp, m0, dst, rt0)
 				rif = &bcastrif;
 				riflen = sizeof(rif->tr_rcf);
 			}
-			bcopy((caddr_t)etherbroadcastaddr, (caddr_t)edst,
-			    sizeof(edst));
+			memcpy(edst, tokenbroadcastaddr, sizeof(edst));
 		}
 /*
  * XXX m->m_flags & M_MCAST   IEEE802_MAP_IP_MULTICAST ??
@@ -219,7 +284,7 @@ token_output(ifp, m0, dst, rt0)
 		ah = mtod(m, struct arphdr *);
 		ah->ar_hrd = htons(ARPHRD_IEEE802);
 
-		switch(ntohs(ah->ar_op)) {
+		switch (ntohs(ah->ar_op)) {
 		case ARPOP_REVREQUEST:
 		case ARPOP_REVREPLY:
 			etype = htons(ETHERTYPE_REVARP);
@@ -240,11 +305,13 @@ token_output(ifp, m0, dst, rt0)
 				rif = &bcastrif;
 				riflen = sizeof(rif->tr_rcf);
 			}
-			bcopy((caddr_t)etherbroadcastaddr, (caddr_t)edst,
-			    sizeof(edst));
+			memcpy(edst, tokenbroadcastaddr, sizeof(edst));
 		}
 		else {
-			bcopy((caddr_t)ar_tha(ah), (caddr_t)edst, sizeof(edst));
+			void *tha = (void *)ar_tha(ah);
+			KASSERT(tha);
+			if (tha)
+				bcopy(tha, (void *)edst, sizeof(edst));
 			trh = (struct token_header *)M_TRHSTART(m);
 			trh->token_ac = TOKEN_AC;
 			trh->token_fc = TOKEN_FC;
@@ -254,9 +321,9 @@ token_output(ifp, m0, dst, rt0)
 				trrif = TOKEN_RIF(trh);
 				riflen = (ntohs(trrif->tr_rcf) & TOKEN_RCF_LEN_MASK) >> 8;
 			}
-			bcopy((caddr_t)edst, (caddr_t)trh->token_dhost,
+			bcopy((void *)edst, (void *)trh->token_dhost,
 			    sizeof (edst));
-			bcopy(LLADDR(ifp->if_sadl), (caddr_t)trh->token_shost,
+			bcopy(CLLADDR(ifp->if_sadl), (void *)trh->token_shost,
 			    sizeof(trh->token_shost));
 			if (riflen != 0)
 				trh->token_shost[0] |= TOKEN_RI_PRESENT;
@@ -270,31 +337,18 @@ token_output(ifp, m0, dst, rt0)
 		}
 		break;
 #endif
-#ifdef NS
-	case AF_NS:
-		etype = htons(ETHERTYPE_NS);
-		bcopy((caddr_t)&(((struct sockaddr_ns *)dst)->sns_addr.x_host),
-		    (caddr_t)edst, sizeof (edst));
-		if (!bcmp((caddr_t)edst, (caddr_t)&ns_thishost, sizeof(edst)))
-			return (looutput(ifp, m, dst, rt));
-		/* If broadcasting on a simplex interface, loopback a copy. */
-		if ((m->m_flags & M_BCAST) && (ifp->if_flags & IFF_SIMPLEX))
-			mcopy = m_copy(m, 0, (int)M_COPYALL);
-		break;
-#endif
 #ifdef	ISO
 	case AF_ISO: {
 		int	snpalen;
 		struct	llc *l;
-		struct sockaddr_dl *sdl;
+		const struct sockaddr_dl *sdl;
 
-		if (rt && (sdl = (struct sockaddr_dl *)rt->rt_gateway) &&
+		if (rt && (sdl = satocsdl(rt->rt_gateway)) &&
 		    sdl->sdl_family == AF_LINK && sdl->sdl_alen > 0) {
-			bcopy(LLADDR(sdl), (caddr_t)edst, sizeof(edst));
+			memcpy(edst, CLLADDR(sdl), sizeof(edst));
 		}
-		else if ((error =
-			    iso_snparesolve(ifp, (struct sockaddr_iso *)dst,
-					    (char *)edst, &snpalen)))
+		else if ((error = iso_snparesolve(ifp,
+		    (const struct sockaddr_iso *)dst, (char *)edst, &snpalen)))
 			goto bad; /* Not resolved */
 		/* If broadcasting on a simplex interface, loopback a copy. */
 		if (*edst & 1)
@@ -304,10 +358,10 @@ token_output(ifp, m0, dst, rt0)
 			M_PREPEND(mcopy, sizeof (*trh), M_DONTWAIT);
 			if (mcopy) {
 				trh = mtod(mcopy, struct token_header *);
-				bcopy((caddr_t)edst,
-				    (caddr_t)trh->token_dhost, sizeof (edst));
-				bcopy(LLADDR(ifp->if_sadl),
-				    (caddr_t)trh->token_shost, sizeof (edst));
+				bcopy((void *)edst,
+				    (void *)trh->token_dhost, sizeof (edst));
+				bcopy(CLLADDR(ifp->if_sadl),
+				    (void *)trh->token_shost, sizeof (edst));
 			}
 		}
 		M_PREPEND(m, 3, M_DONTWAIT);
@@ -328,55 +382,12 @@ token_output(ifp, m0, dst, rt0)
 #endif
 		} break;
 #endif /* ISO */
-#ifdef	LLC
-/*	case AF_NSAP: */
-	case AF_CCITT: {
-		struct sockaddr_dl *sdl =
-		    (struct sockaddr_dl *) rt -> rt_gateway;
-
-		if (sdl && sdl->sdl_family == AF_LINK
-		    && sdl->sdl_alen > 0) {
-			bcopy(LLADDR(sdl), (char *)edst, sizeof(edst));
-		}
-		else {
-			/* Not a link interface ? Funny ... */
-			goto bad;
-		}
-		if ((ifp->if_flags & IFF_SIMPLEX) && (*edst & 1) &&
-		    (mcopy = m_copy(m, 0, (int)M_COPYALL))) {
-			M_PREPEND(mcopy, sizeof (*trh), M_DONTWAIT);
-			if (mcopy) {
-				trh = mtod(mcopy, struct token_header *);
-				bcopy((caddr_t)edst,
-				    (caddr_t)trh->token_dhost, sizeof (edst));
-				bcopy(LLADDR(ifp->if_sadl),
-				    (caddr_t)trh->token_shost, sizeof (edst));
-			}
-		}
-		etype = 0;
-#ifdef LLC_DEBUG
-		{
-			int i;
-			struct llc *l = mtod(m, struct llc *);
-
-			printf("token_output: sending LLC2 pkt to: ");
-			for (i=0; i < ISO88025_ADDR_LEN; i++)
-				printf("%x ", edst[i] & 0xff);
-			printf(" len 0x%x dsap 0x%x ssap 0x%x control 0x%x\n",
-			    etype & 0xff, l->llc_dsap & 0xff, l->llc_ssap &0xff,
-			    l->llc_control & 0xff);
-
-		}
-#endif /* LLC_DEBUG */
-		}
-		break;
-#endif /* LLC */
 
 	case AF_UNSPEC:
 	{
-		struct ether_header *eh;
-		eh = (struct ether_header *)dst->sa_data;
-		bcopy((caddr_t)eh->ether_dhost, (caddr_t)edst, sizeof (edst));
+		const struct ether_header *eh;
+		eh = (const struct ether_header *)dst->sa_data;
+		memcpy(edst, eh->ether_dhost, sizeof(edst));
 		if (*edst & 1)
 			m->m_flags |= (M_BCAST|M_MCAST);
 		etype = TYPEHTONS(eh->ether_type);
@@ -412,8 +423,8 @@ token_output(ifp, m0, dst, rt0)
 		l->llc_dsap = l->llc_ssap = LLC_SNAP_LSAP;
 		l->llc_snap.org_code[0] = l->llc_snap.org_code[1] =
 		    l->llc_snap.org_code[2] = 0;
-		bcopy((caddr_t) &etype, (caddr_t) &l->llc_snap.ether_type,
-		    sizeof(u_short));
+		bcopy((void *) &etype, (void *) &l->llc_snap.ether_type,
+		    sizeof(uint16_t));
 	}
 
 	/*
@@ -427,8 +438,8 @@ token_output(ifp, m0, dst, rt0)
 	trh = mtod(m, struct token_header *);
 	trh->token_ac = TOKEN_AC;
 	trh->token_fc = TOKEN_FC;
-	bcopy((caddr_t)edst, (caddr_t)trh->token_dhost, sizeof (edst));
-	bcopy(LLADDR(ifp->if_sadl), (caddr_t)trh->token_shost,
+	bcopy((void *)edst, (void *)trh->token_dhost, sizeof (edst));
+	bcopy(CLLADDR(ifp->if_sadl), (void *)trh->token_shost,
 	    sizeof(trh->token_shost));
 
 	if (riflen != 0) {
@@ -438,27 +449,18 @@ token_output(ifp, m0, dst, rt0)
 		trrif = TOKEN_RIF(trh);
 		bcopy(rif, trrif, riflen);
 	}
+#ifdef INET
 send:
+#endif
 
-	s = splimp();
-	/*
-	 * Queue message on interface, and start output if interface
-	 * not yet active.
-	 */
-	if (IF_QFULL(&ifp->if_snd)) {
-		IF_DROP(&ifp->if_snd);
-		splx(s);
-		senderr(ENOBUFS);
+#if NCARP > 0
+	if (ifp0 != ifp && ifp0->if_type == IFT_CARP) {
+		bcopy(CLLADDR(ifp0->if_sadl), (void *)trh->token_shost,	    
+		    sizeof(trh->token_shost));
 	}
-	ifp->if_obytes += m->m_pkthdr.len;
-	IF_ENQUEUE(&ifp->if_snd, m);
-	if ((ifp->if_flags & IFF_OACTIVE) == 0)
-		(*ifp->if_start)(ifp);
-	splx(s);
-	if (m->m_flags & M_MCAST)
-		ifp->if_omcasts++;
-	return (error);
+#endif /* NCARP > 0 */
 
+	return ifq_enqueue(ifp, m ALTQ_COMMA ALTQ_DECL(&pktattr));
 bad:
 	if (m)
 		m_freem(m);
@@ -471,9 +473,7 @@ bad:
  * the token ring header.
  */
 static void
-token_input(ifp, m)
-	struct ifnet *ifp;
-	struct mbuf *m;
+token_input(struct ifnet *ifp, struct mbuf *m)
 {
 	struct ifqueue *inq;
 	struct llc *l;
@@ -487,9 +487,8 @@ token_input(ifp, m)
 
 	trh = mtod(m, struct token_header *);
 
-	ifp->if_lastchange = time;
 	ifp->if_ibytes += m->m_pkthdr.len;
-	if (bcmp((caddr_t)tokenbroadcastaddr, (caddr_t)trh->token_dhost,
+	if (memcmp(tokenbroadcastaddr, trh->token_dhost,
 	    sizeof(tokenbroadcastaddr)) == 0)
 		m->m_flags |= M_BCAST;
 	else if (trh->token_dhost[0] & 1)
@@ -505,14 +504,14 @@ token_input(ifp, m)
 		trrif = TOKEN_RIF(trh);
 		lan_hdr_len += (ntohs(trrif->tr_rcf) & TOKEN_RCF_LEN_MASK) >> 8;
 	}
-	m_adj(m, lan_hdr_len);
 
-	l = mtod(m, struct llc *);
+	l = (struct llc *)(mtod(m, uint8_t *) + lan_hdr_len);
+
 	switch (l->llc_dsap) {
 #if defined(INET) || defined(NS) || defined(DECNET)
 	case LLC_SNAP_LSAP:
 	{
-		u_int16_t etype;
+		uint16_t etype;
 		if (l->llc_control != LLC_UI || l->llc_ssap != LLC_SNAP_LSAP)
 			goto dropanyway;
 		if (l->llc_snap.org_code[0] != 0 ||
@@ -520,7 +519,14 @@ token_input(ifp, m)
 		    l->llc_snap.org_code[2] != 0)
 			goto dropanyway;
 		etype = ntohs(l->llc_snap.ether_type);
-		m_adj(m, LLC_SNAPFRAMELEN);
+		m_adj(m, lan_hdr_len + LLC_SNAPFRAMELEN);
+#if NCARP > 0
+		if (ifp->if_carp && ifp->if_type != IFT_CARP &&
+		    (carp_input(m, (uint8_t *)&trh->token_shost,
+		    (uint8_t *)&trh->token_dhost, l->llc_snap.ether_type) == 0))
+			return;
+#endif /* NCARP > 0 */
+
 		switch (etype) {
 #ifdef INET
 		case ETHERTYPE_IP:
@@ -531,12 +537,6 @@ token_input(ifp, m)
 		case ETHERTYPE_ARP:
 			schednetisr(NETISR_ARP);
 			inq = &arpintrq;
-			break;
-#endif
-#ifdef NS
-		case ETHERTYPE_NS:
-			schednetisr(NETISR_NS);
-			inq = &nsintrq;
 			break;
 #endif
 #ifdef DECNET
@@ -554,7 +554,7 @@ token_input(ifp, m)
 		}
 		break;
 	}
-#endif /* INET || NS */
+#endif /* INET || NS || DECNET */
 #ifdef	ISO
 	case LLC_ISO_LSAP:
 		switch (l->llc_control) {
@@ -562,14 +562,7 @@ token_input(ifp, m)
 			/* LLC_UI_P forbidden in class 1 service */
 			if ((l->llc_dsap == LLC_ISO_LSAP) &&
 			    (l->llc_ssap == LLC_ISO_LSAP)) {
-				/* LSAP for ISO */
-				m->m_data += 3;		/* XXX */
-				m->m_len -= 3;		/* XXX */
-				m->m_pkthdr.len -= 3;	/* XXX */
-				M_PREPEND(m, sizeof *trh, M_DONTWAIT);
-				if (m == 0)
-					return;
-				*mtod(m, struct token_header *) = *trh;
+
 #if defined(__FreeBSD__)
 				IFDEBUG(D_ETHER)
 					printf("clnp packet");
@@ -583,11 +576,11 @@ token_input(ifp, m)
 
 		case LLC_XID:
 		case LLC_XID_P:
-			if(m->m_len < ISO88025_ADDR_LEN)
+			if(m->m_len < LLC_XID_BASIC_MINLEN + lan_hdr_len)
 				goto dropanyway;
 			l->llc_window = 0;
-			l->llc_fid = 9;
-			l->llc_class = 1;
+			l->llc_fid = LLC_XID_FORMAT_BASIC;
+			l->llc_class = LLC_XID_CLASS_I;
 			l->llc_dsap = l->llc_ssap = 0;
 			/* Fall through to */
 		case LLC_TEST:
@@ -601,8 +594,8 @@ token_input(ifp, m)
 			l->llc_dsap = l->llc_ssap;
 			l->llc_ssap = c;
 			if (m->m_flags & (M_BCAST | M_MCAST))
-				bcopy(LLADDR(ifp->if_sadl),
-				    (caddr_t)trh->token_dhost,
+				bcopy(CLLADDR(ifp->if_sadl),
+				    (void *)trh->token_dhost,
 				    ISO88025_ADDR_LEN);
 			sa.sa_family = AF_UNSPEC;
 			sa.sa_len = sizeof(sa);
@@ -614,6 +607,7 @@ token_input(ifp, m)
 				eh->ether_shost[i] = c;
 			}
 			eh->ether_type = 0;
+			m_adj(m, lan_hdr_len);
 			ifp->if_output(ifp, m, &sa, NULL);
 			return;
 		}
@@ -623,41 +617,18 @@ token_input(ifp, m)
 		}
 		break;
 #endif /* ISO */
-#ifdef LLC
-	case LLC_X25_LSAP:
-	{
-/*
- * XXX check for source routing info ? (sizeof(struct sdl_hdr) and
- * ISO88025_ADDR_LEN)
- */
-		M_PREPEND(m, sizeof(struct sdl_hdr) , M_DONTWAIT);
-		if (m == 0)
-			return;
-		if (!sdl_sethdrif(ifp, trh->token_shost, LLC_X25_LSAP,
-				    trh->token_dhost, LLC_X25_LSAP,
-				    ISO88025_ADDR_LEN,
-				    mtod(m, struct sdl_hdr *)))
-			panic("ETHER cons addr failure");
-		mtod(m, struct sdl_hdr *)->sdlhdr_len =
-		    m->m_pkthdr.len - sizeof(struct sdl_hdr);
-#ifdef LLC_DEBUG
-		printf("llc packet\n");
-#endif /* LLC_DEBUG */
-		schednetisr(NETISR_CCITT);
-		inq = &llcintrq;
-		break;
-	}
-#endif /* LLC */
 
 	default:
 		/* printf("token_input: unknown dsap 0x%x\n", l->llc_dsap); */
 		ifp->if_noproto++;
+#if defined(INET) || defined(NS) || defined(DECNET) || defined(ISO)
 	dropanyway:
+#endif
 		m_freem(m);
 		return;
 	}
 
-	s = splimp();
+	s = splnet();
 	if (IF_QFULL(inq)) {
 		IF_DROP(inq);
 		m_freem(m);
@@ -671,15 +642,12 @@ token_input(ifp, m)
  * Perform common duties while attaching to interface list
  */
 void
-token_ifattach(ifp, lla)
-	struct ifnet *ifp;
-	caddr_t	lla;
+token_ifattach(struct ifnet *ifp, void *lla)
 {
-	struct sockaddr_dl *sdl;
 
 	ifp->if_type = IFT_ISO88025;
-	ifp->if_addrlen = ISO88025_ADDR_LEN;
 	ifp->if_hdrlen = 14;
+	ifp->if_dlt = DLT_IEEE802;
 	ifp->if_mtu = ISO88025_MTU;
 	ifp->if_output = token_output;
 	ifp->if_input = token_input;
@@ -687,17 +655,22 @@ token_ifattach(ifp, lla)
 #ifdef IFF_NOTRAILERS
 	ifp->if_flags |= IFF_NOTRAILERS;
 #endif
-	if ((sdl = ifp->if_sadl) != NULL && sdl->sdl_family == AF_LINK) {
-		sdl->sdl_type = IFT_ISO88025;
-		sdl->sdl_alen = ifp->if_addrlen;
-		bcopy(lla, LLADDR(sdl), ifp->if_addrlen);
-	}
+
+	if_set_sadl(ifp, lla, ISO88025_ADDR_LEN);
+
+#if NBPFILTER > 0
+	bpfattach(ifp, DLT_IEEE802, sizeof(struct token_header));
+#endif
 }
 
-void    
-token_ifdetach(ifp)
-        struct ifnet *ifp;
+void
+token_ifdetach(struct ifnet *ifp)
 {
 
-        /* Nothing. */
+#if NBPFILTER > 0
+	bpfdetach(ifp);
+#endif
+#if 0	/* done in if_detach() */
+	if_free_sadl(ifp);
+#endif
 }

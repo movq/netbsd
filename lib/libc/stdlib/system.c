@@ -1,4 +1,4 @@
-/*	$NetBSD: system.c,v 1.16 1998/11/15 17:13:52 christos Exp $	*/
+/*	$NetBSD: system.c,v 1.22 2008/08/27 06:45:02 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,18 +34,23 @@
 #if 0
 static char sccsid[] = "@(#)system.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: system.c,v 1.16 1998/11/15 17:13:52 christos Exp $");
+__RCSID("$NetBSD: system.c,v 1.22 2008/08/27 06:45:02 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <errno.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <paths.h>
+#include "reentrant.h"
 
+#ifdef _REENTRANT
+extern rwlock_t __environ_lock;
+#endif
 extern char **environ;
 
 int
@@ -57,33 +58,68 @@ system(command)
 	const char *command;
 {
 	pid_t pid;
-	sig_t intsave, quitsave;
+	struct sigaction intsa, quitsa, sa;
 	sigset_t nmask, omask;
 	int pstat;
-	char *argp[] = {"sh", "-c", /* LINTED */(char *)command, NULL};
+	const char *argp[] = {"sh", "-c", NULL, NULL};
+	argp[2] = command;
 
-	if (!command)		/* just checking... */
-		return(1);
+	/*
+	 * ISO/IEC 9899:1999 in 7.20.4.6 describes this special case.
+	 * We need to check availability of a command interpreter.
+	 */
+	if (command == NULL) {
+		if (access(_PATH_BSHELL, X_OK) == 0)
+			return 1;
+		return 0;
+	}
+
+	sa.sa_handler = SIG_IGN;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+
+	if (sigaction(SIGINT, &sa, &intsa) == -1)
+		return -1;
+	if (sigaction(SIGQUIT, &sa, &quitsa) == -1) {
+		sigaction(SIGINT, &intsa, NULL);
+		return -1;
+	}
 
 	sigemptyset(&nmask);
 	sigaddset(&nmask, SIGCHLD);
-	if (sigprocmask(SIG_BLOCK, &nmask, &omask) == -1)
+	if (sigprocmask(SIG_BLOCK, &nmask, &omask) == -1) {
+		sigaction(SIGINT, &intsa, NULL);
+		sigaction(SIGQUIT, &quitsa, NULL);
 		return -1;
-	switch(pid = vfork()) {
-	case -1:			/* error */
-		(void)sigprocmask(SIG_SETMASK, &omask, NULL);
-		return(-1);
-	case 0:				/* child */
-		(void)sigprocmask(SIG_SETMASK, &omask, NULL);
-		execve(_PATH_BSHELL, argp, environ);
-		_exit(127);
 	}
 
-	intsave = signal(SIGINT, SIG_IGN);
-	quitsave = signal(SIGQUIT, SIG_IGN);
-	pid = waitpid(pid, (int *)&pstat, 0);
+	rwlock_rdlock(&__environ_lock);
+	switch(pid = vfork()) {
+	case -1:			/* error */
+		rwlock_unlock(&__environ_lock);
+		sigaction(SIGINT, &intsa, NULL);
+		sigaction(SIGQUIT, &quitsa, NULL);
+		(void)sigprocmask(SIG_SETMASK, &omask, NULL);
+		return -1;
+	case 0:				/* child */
+		sigaction(SIGINT, &intsa, NULL);
+		sigaction(SIGQUIT, &quitsa, NULL);
+		(void)sigprocmask(SIG_SETMASK, &omask, NULL);
+		execve(_PATH_BSHELL, __UNCONST(argp), environ);
+		_exit(127);
+	}
+	rwlock_unlock(&__environ_lock);
+
+	while (waitpid(pid, &pstat, 0) == -1) {
+		if (errno != EINTR) {
+			pstat = -1;
+			break;
+		}
+	}
+
+	sigaction(SIGINT, &intsa, NULL);
+	sigaction(SIGQUIT, &quitsa, NULL);
 	(void)sigprocmask(SIG_SETMASK, &omask, NULL);
-	(void)signal(SIGINT, intsave);
-	(void)signal(SIGQUIT, quitsave);
-	return(pid == -1 ? -1 : pstat);
+
+	return (pstat);
 }

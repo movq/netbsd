@@ -1,4 +1,4 @@
-/*	$NetBSD: pdqvar.h,v 1.26 1999/03/24 05:51:20 mrg Exp $	*/
+/*	$NetBSD: pdqvar.h,v 1.40 2008/06/24 10:12:06 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,6 +39,30 @@
 
 #define	PDQ_OS_TX_TIMEOUT		5	/* seconds */
 
+enum _pdq_boolean_t { 
+    PDQ_FALSE=0,
+    PDQ_TRUE=1
+}; 
+
+enum _pdq_type_t {
+    PDQ_DEFPA,		/* PCI-bus */
+    PDQ_DEFEA,		/* EISA-bus */
+    PDQ_DEFTA,		/* TurboChannel */
+    PDQ_DEFAA,		/* FutureBus+ */
+    PDQ_DEFQA		/* Q-bus */
+};
+
+enum _pdq_state_t {
+    PDQS_RESET=0,
+    PDQS_UPGRADE=1,
+    PDQS_DMA_UNAVAILABLE=2,
+    PDQS_DMA_AVAILABLE=3,
+    PDQS_LINK_AVAILABLE=4,
+    PDQS_LINK_UNAVAILABLE=5,
+    PDQS_HALTED=6,
+    PDQS_RING_MEMBER=7
+}; 
+
 typedef struct _pdq_t pdq_t;
 typedef struct _pdq_csrs_t pdq_csrs_t;
 typedef struct _pdq_pci_csrs_t pdq_pci_csrs_t;
@@ -50,14 +74,6 @@ typedef enum _pdq_boolean_t pdq_boolean_t;
 typedef enum _pdq_type_t pdq_type_t;
 typedef enum _pdq_state_t pdq_state_t;
 
-enum _pdq_type_t {
-    PDQ_DEFPA,		/* PCI-bus */
-    PDQ_DEFEA,		/* EISA-bus */
-    PDQ_DEFTA,		/* TurboChannel */
-    PDQ_DEFAA,		/* FutureBus+ */
-    PDQ_DEFQA		/* Q-bus */
-};
-
 #if defined(PDQTEST)
 #include <pdq_os_test.h>
 #elif defined(__FreeBSD__) || defined(__bsdi__) || defined(__NetBSD__)
@@ -68,8 +84,8 @@ enum _pdq_type_t {
 #include <sys/mbuf.h>
 #endif /* M_CAST */
 #include <sys/malloc.h>
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
+
+#include <uvm/uvm_extern.h>
 
 #define	PDQ_USE_MBUFS
 #if defined(__NetBSD__)
@@ -79,13 +95,13 @@ enum _pdq_type_t {
 #define	PDQ_OS_PREFIX			"%s%d: "
 #define	PDQ_OS_PREFIX_ARGS		pdq->pdq_os_name, pdq->pdq_unit
 #endif
-#if defined(__FreeBSD__) && BSD >= 199506
+#if (defined(__FreeBSD__) && BSD >= 199506) || defined(__NetBSD__)
 #define	PDQ_OS_PAGESIZE			PAGE_SIZE
 #else
 #define	PDQ_OS_PAGESIZE			NBPG
 #endif
 #define	PDQ_OS_USEC_DELAY(n)		DELAY(n)
-#define	PDQ_OS_MEMZERO(p, n)		bzero((caddr_t)(p), (n))
+#define	PDQ_OS_MEMZERO(p, n)		memset((void *)(p), 0, (n))
 #if defined(__NetBSD__) && !defined(PDQ_NO_BUS_DMA)
 #define PDQ_BUS_DMA
 #endif
@@ -109,7 +125,7 @@ enum _pdq_type_t {
 #include <vm/vm_extern.h>
 #include <machine/cpufunc.h>
 #include <machine/clock.h>
-typedef void ifnet_ret_t;
+#define	ifnet_ret_t void
 typedef int ioctl_cmd_t;
 typedef enum { PDQ_BUS_EISA, PDQ_BUS_PCI } pdq_bus_t;
 typedef	u_int16_t pdq_bus_ioport_t;
@@ -127,7 +143,7 @@ typedef pdq_bus_memaddr_t pdq_bus_memoffset_t;
 #include <net/if_media.h>
 #endif
 #include <machine/inline.h>
-typedef int ifnet_ret_t;
+#define	ifnet_ret_t int
 typedef int ioctl_cmd_t;
 typedef enum { PDQ_BUS_EISA, PDQ_BUS_PCI } pdq_bus_t;
 typedef	u_int16_t pdq_bus_ioport_t;
@@ -139,12 +155,12 @@ typedef pdq_bus_memaddr_t pdq_bus_memoffset_t;
 #if !defined(PDQ_HWSUPPORT)
 #include <net/if_media.h>
 #endif
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 #define PDQ_OS_HDR_OFFSET	(PDQ_RX_FC_OFFSET-3)
 #define	PDQ_OS_PTR_FMT		"%p"
 #define	PDQ_OS_CSR_FMT		"0x%lx"
-typedef void ifnet_ret_t;
+#define	ifnet_ret_t void
 typedef u_long ioctl_cmd_t;
 typedef	bus_space_tag_t pdq_bus_t;
 typedef	bus_space_handle_t pdq_bus_ioport_t;
@@ -161,13 +177,13 @@ typedef bus_addr_t pdq_bus_memoffset_t;
 #ifdef PDQ_BUS_DMA
 #define	PDQ_OS_UNSOL_EVENT_PRESYNC(pdq, event) \
 	pdq_os_unsolicited_event_sync((pdq)->pdq_os_ctx, \
-			(u_int8_t *) (event) - \
-				(u_int8_t *) (pdq)->pdq_unsolicited_info.ui_events, \
+			(const u_int8_t *) (event) - \
+				(const u_int8_t *) (pdq)->pdq_unsolicited_info.ui_events, \
 			sizeof(*event), BUS_DMASYNC_PREREAD)
 #define	PDQ_OS_UNSOL_EVENT_POSTSYNC(pdq, event) \
 	pdq_os_unsolicited_event_sync((pdq)->pdq_os_ctx, \
-			(u_int8_t *) (event) - \
-				(u_int8_t *) (pdq)->pdq_unsolicited_info.ui_events, \
+			(const u_int8_t *) (event) - \
+				(const u_int8_t *) (pdq)->pdq_unsolicited_info.ui_events, \
 			sizeof(*event), BUS_DMASYNC_POSTREAD)
 #define	PDQ_OS_DESCBLOCK_SYNC(pdq, what, length, why) \
 	pdq_os_descriptor_block_sync((pdq)->pdq_os_ctx, \
@@ -209,15 +225,15 @@ typedef bus_addr_t pdq_bus_memoffset_t;
 #define	PDQ_OS_DATABUF_FREE(pdq, b)	pdq_os_databuf_free((pdq)->pdq_os_ctx, (b))
 #define PDQ_OS_DATABUF_BUSPA(pdq, b)	(M_GETCTX((b), bus_dmamap_t)->dm_segs[0].ds_addr + 0)
 struct _pdq_os_ctx_t;
-extern void pdq_os_descriptor_block_sync(struct _pdq_os_ctx_t *osctx, size_t offset,
-					 size_t length, int ops);
-extern void pdq_os_consumer_block_sync(struct _pdq_os_ctx_t *osctx, int ops);
-extern void pdq_os_unsolicited_event_sync(struct _pdq_os_ctx_t *osctx, size_t offset,
-				 	  size_t length, int ops);
-extern struct mbuf *pdq_os_databuf_alloc(struct _pdq_os_ctx_t *osctx);
-extern void pdq_os_databuf_sync(struct _pdq_os_ctx_t *osctx, struct mbuf *b,
-				size_t offset, size_t length, int ops);
-extern void pdq_os_databuf_free(struct _pdq_os_ctx_t *osctx, struct mbuf *m);
+extern void pdq_os_descriptor_block_sync(struct _pdq_os_ctx_t *, size_t,
+					 size_t, int);
+extern void pdq_os_consumer_block_sync(struct _pdq_os_ctx_t *, int);
+extern void pdq_os_unsolicited_event_sync(struct _pdq_os_ctx_t *, size_t,
+				 	  size_t, int);
+extern struct mbuf *pdq_os_databuf_alloc(struct _pdq_os_ctx_t *);
+extern void pdq_os_databuf_sync(struct _pdq_os_ctx_t *, struct mbuf *,
+				size_t, size_t, int);
+extern void pdq_os_databuf_free(struct _pdq_os_ctx_t *, struct mbuf *);
 #define M_HASTXDMAMAP		M_LINK1
 #define M_HASRXDMAMAP		M_LINK2
 #endif
@@ -228,7 +244,7 @@ extern void pdq_os_databuf_free(struct _pdq_os_ctx_t *osctx, struct mbuf *m);
 #define	PDQ_OS_IFP_TO_SOFTC(ifp)		((pdq_softc_t *) (ifp)->if_softc)
 #define	PDQ_ARP_IFINIT(sc, ifa)			arp_ifinit(&(sc)->sc_if, (ifa))
 #define	PDQ_FDDICOM(sc)				(&(sc)->sc_ec)
-#define	PDQ_LANADDR(sc)				LLADDR((sc)->sc_if.if_sadl)
+#define	PDQ_LANADDR(sc)				CLLADDR((sc)->sc_if.if_sadl)
 #define	PDQ_LANADDR_SIZE(sc)			((sc)->sc_if.if_sadl->sdl_alen)
 #endif
 
@@ -287,7 +303,7 @@ extern void pdq_os_databuf_free(struct _pdq_os_ctx_t *osctx, struct mbuf *m);
 #endif
 
 #ifndef PDQ_OS_IFP_TO_SOFTC
-#define	PDQ_OS_IFP_TO_SOFTC(ifp)	((pdq_softc_t *) ((caddr_t) ifp - offsetof(pdq_softc_t, sc_ac.ac_if)))
+#define	PDQ_OS_IFP_TO_SOFTC(ifp)	((pdq_softc_t *) ((void *) ifp - offsetof(pdq_softc_t, sc_ac.ac_if)))
 #endif
 
 
@@ -316,6 +332,8 @@ typedef struct _pdq_os_ctx_t {
 #if defined(IFM_FDDI)
     struct ifmedia sc_ifmedia;
 #endif
+    int sc_flags;
+#define	PDQIF_DOWNCALL		0x0001	/* active calling from if to pdq */
     pdq_t *sc_pdq;
 #if defined(__alpha__) || defined(__i386__)
     pdq_bus_ioport_t sc_iobase;
@@ -330,7 +348,7 @@ typedef struct _pdq_os_ctx_t {
 #if !defined(__bsdi__) || _BSDI_VERSION >= 199401
 #define	sc_bpf		sc_if.if_bpf
 #else
-    caddr_t sc_bpf;
+    void *sc_bpf;
 #endif
 #if defined(PDQ_BUS_DMA)
 #if !defined(__NetBSD__)
@@ -343,12 +361,12 @@ typedef struct _pdq_os_ctx_t {
 } pdq_softc_t;
 
 
-extern void pdq_ifreset(pdq_softc_t *sc);
-extern void pdq_ifinit(pdq_softc_t *sc);
-extern void pdq_ifwatchdog(struct ifnet *ifp);
-extern ifnet_ret_t pdq_ifstart(struct ifnet *ifp);
-extern int pdq_ifioctl(struct ifnet *ifp, ioctl_cmd_t cmd, caddr_t data);
-extern void pdq_ifattach(pdq_softc_t *sc, ifnet_ret_t (*ifwatchdog)(int unit));
+extern void pdq_ifreset(pdq_softc_t *);
+extern void pdq_ifinit(pdq_softc_t *);
+extern void pdq_ifwatchdog(struct ifnet *);
+extern ifnet_ret_t pdq_ifstart(struct ifnet *);
+extern int pdq_ifioctl(struct ifnet *, ioctl_cmd_t, void *);
+extern void pdq_ifattach(pdq_softc_t *, ifnet_ret_t (*ifwatchdog)(int));
 #endif /* !PDQ_HWSUPPORT */
 
 
@@ -364,10 +382,10 @@ extern void pdq_ifattach(pdq_softc_t *sc, ifnet_ret_t (*ifwatchdog)(int unit));
 
 #define	PDQ_OS_PAGESIZE			PAGESIZE
 #define	PDQ_OS_USEC_DELAY(n)		drv_usecwait(n)
-#define	PDQ_OS_MEMZERO(p, n)		bzero((caddr_t)(p), (n))
-#define	PDQ_OS_VA_TO_BUSPA(pdq, p)		vtop((caddr_t)p, NULL)
+#define	PDQ_OS_MEMZERO(p, n)		bzero((void *)(p), (n))
+#define	PDQ_OS_VA_TO_BUSPA(pdq, p)		vtop((void *)p, NULL)
 #define	PDQ_OS_MEMALLOC(n)		kmem_zalloc(n, KM_NOSLEEP)
-#define	PDQ_OS_MEMFREE(p, n)		kmem_free((caddr_t) p, n)
+#define	PDQ_OS_MEMFREE(p, n)		kmem_free((void *) p, n)
 #define	PDQ_OS_MEMALLOC_CONTIG(n)	kmem_zalloc_physreq(n, decfddiphysreq_db, KM_NOSLEEP)
 #define	PDQ_OS_MEMFREE_CONTIG(p, n)	PDQ_OS_MEMFREE(p, n)
 
@@ -479,25 +497,24 @@ typedef mblk_t PDQ_OS_DATABUF_T;
 #define	PDQ_OS_HDR_OFFSET	PDQ_RX_FC_OFFSET
 #endif
 
-extern void pdq_os_addr_fill(pdq_t *pdq, pdq_lanaddr_t *addrs, size_t numaddrs);
-extern void pdq_os_receive_pdu(pdq_t *, PDQ_OS_DATABUF_T *pdu, size_t pdulen, int drop);
-extern void pdq_os_restart_transmitter(pdq_t *pdq);
-extern void pdq_os_transmit_done(pdq_t *pdq, PDQ_OS_DATABUF_T *pdu);
+extern void pdq_os_addr_fill(pdq_t *, pdq_lanaddr_t *, size_t);
+extern void pdq_os_receive_pdu(pdq_t *, PDQ_OS_DATABUF_T *, size_t, int);
+extern void pdq_os_restart_transmitter(pdq_t *);
+extern void pdq_os_transmit_done(pdq_t *, PDQ_OS_DATABUF_T *);
 #if !defined(pdq_os_update_status)
-extern void pdq_os_update_status(pdq_t *pdq, const void *rsp);
+extern void pdq_os_update_status(pdq_t *, const void *);
 #endif
 #if !defined(PDQ_OS_MEMALLOC_CONTIG)
-extern int pdq_os_memalloc_contig(pdq_t *pdq);
+extern int pdq_os_memalloc_contig(pdq_t *);
 #endif
-extern pdq_boolean_t pdq_queue_transmit_data(pdq_t *pdq, PDQ_OS_DATABUF_T *pdu);
-extern void pdq_flush_transmitter(pdq_t *pdq);
+extern pdq_boolean_t pdq_queue_transmit_data(pdq_t *, PDQ_OS_DATABUF_T *);
+extern void pdq_flush_transmitter(pdq_t *);
 
-extern void pdq_run(pdq_t *pdq);
-extern pdq_state_t pdq_stop(pdq_t *pdq);
-extern void pdq_hwreset(pdq_t *pdq);
+extern void pdq_run(pdq_t *);
+extern pdq_state_t pdq_stop(pdq_t *);
+extern void pdq_hwreset(pdq_t *);
 
-extern int pdq_interrupt(pdq_t *pdq);
-extern pdq_t *pdq_initialize(pdq_bus_t bus, pdq_bus_memaddr_t csr_va,
-			     const char *name, int unit,
-			     void *ctx, pdq_type_t type);
+extern int pdq_interrupt(pdq_t *);
+extern pdq_t *pdq_initialize(pdq_bus_t, pdq_bus_memaddr_t, const char *, int,
+			     void *, pdq_type_t);
 #endif /* _PDQ_OS_H */

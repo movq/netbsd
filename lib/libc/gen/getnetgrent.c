@@ -1,4 +1,4 @@
-/*	$NetBSD: getnetgrent.c,v 1.28 2000/01/22 22:40:58 mycroft Exp $	*/
+/*	$NetBSD: getnetgrent.c,v 1.40 2008/04/05 08:01:54 rtr Exp $	*/
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getnetgrent.c,v 1.28 2000/01/22 22:40:58 mycroft Exp $");
+__RCSID("$NetBSD: getnetgrent.c,v 1.40 2008/04/05 08:01:54 rtr Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -45,12 +45,13 @@ __RCSID("$NetBSD: getnetgrent.c,v 1.28 2000/01/22 22:40:58 mycroft Exp $");
 #include <err.h>
 #include <fcntl.h>
 #define _NETGROUP_PRIVATE
+#include <stringlist.h>
 #include <netgroup.h>
 #include <nsswitch.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stringlist.h>
 
 #ifdef YP
 #include <rpc/rpc.h>
@@ -58,12 +59,6 @@ __RCSID("$NetBSD: getnetgrent.c,v 1.28 2000/01/22 22:40:58 mycroft Exp $");
 #include <rpcsvc/yp_prot.h>
 #endif
 
-#ifdef __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
- 
 #ifdef __weak_alias
 __weak_alias(endnetgrent,_endnetgrent)
 __weak_alias(getnetgrent,_getnetgrent)
@@ -76,39 +71,37 @@ __weak_alias(setnetgrent,_setnetgrent)
 #define _NG_ISSPACE(p)	(isspace((unsigned char) (p)) || (p) == '\n')
 
 static const char _ngstar[] = "*";
-static struct netgroup *_nghead = (struct netgroup *)NULL;
-static struct netgroup *_nglist = (struct netgroup *)NULL;
+static struct netgroup *_nghead = NULL;
+static struct netgroup *_nglist = NULL;
 static DB *_ng_db;
 
-static int		 getstring __P((char **, int, __aconst char **));
-static struct netgroup	*getnetgroup __P((char **));
-static int		 lookup __P((char *, char **, int));
-static int		 addgroup __P((StringList *, char *));
-static int		 in_check __P((const char *, const char *,
-				       const char *, struct netgroup *));
-static int		 in_find __P((StringList *, char *, const char *,
-				      const char *, const char *));
-static char		*in_lookup1 __P((const char *, const char *, int));
-static int		 in_lookup __P((const char *, const char *,
-					const char *, int));
+static int getstring(char **, int, __aconst char **);
+static struct netgroup *getnetgroup(char **);
+static int lookup(char *, char **, int);
+static int addgroup(StringList *, char *);
+static int in_check(const char *, const char *, const char *,
+    struct netgroup *);
+static int in_find(StringList *, char *, const char *, const char *,
+    const char *);
+static char *in_lookup1(const char *, const char *, int);
+static int in_lookup(const char *, const char *, const char *, int);
 
+#ifdef NSSRC_FILES
 static const ns_src default_files_nis[] = {
 	{ NSSRC_FILES,	NS_SUCCESS | NS_NOTFOUND },
 #ifdef YP
 	{ NSSRC_NIS,	NS_SUCCESS },
 #endif
-	{ 0 }
+	{ 0, 0 },
 };
+#endif
 
 /*
  * getstring(): Get a string delimited by the character, skipping leading and
  * trailing blanks and advancing the pointer
  */
 static int
-getstring(pp, del, str)
-	char	**pp;
-	int	  del;
-	char	__aconst **str;
+getstring(char **pp, int del, char __aconst **str)
 {
 	size_t len;
 	char *sp, *ep, *dp;
@@ -140,7 +133,7 @@ getstring(pp, del, str)
 		dp = malloc(len);
 		if (dp == NULL)
 			return 0;
-		memcpy(dp, sp, len);
+		(void)memcpy(dp, sp, len);
 		dp[len - 1] = '\0';
 	} else
 		dp = NULL;
@@ -187,24 +180,31 @@ getnetgroup(pp)
 
 baddomain:
 	if (ng->ng_user)
-		free((char *)ng->ng_user);
+		free(ng->ng_user);
 baduser:
 	if (ng->ng_host)
-		free((char *)ng->ng_host);
+		free(ng->ng_host);
 badhost:
 	free(ng);
 	return NULL;
 }
 
+void
+_ng_cycle(const char *grp, const StringList *sl)
+{
+	size_t i;
+	warnx("netgroup: Cycle in group `%s'", grp);
+	(void)fprintf(stderr, "groups: ");
+	for (i = 0; i < sl->sl_cur; i++)
+		(void)fprintf(stderr, "%s ", sl->sl_str[i]);
+	(void)fprintf(stderr, "\n");
+}
 
-static int _local_lookup __P((void *, void *, va_list));
+static int _local_lookup(void *, void *, va_list);
 
 /*ARGSUSED*/
 static int
-_local_lookup(rv, cb_data, ap)
-	void	*rv;
-	void	*cb_data;
-	va_list	ap;
+_local_lookup(void *rv, void *cb_data, va_list ap)
 {
 	char	 *name = va_arg(ap, char *);
 	char	**line = va_arg(ap, char **);
@@ -224,12 +224,12 @@ _local_lookup(rv, cb_data, ap)
 		return NS_UNAVAIL;
 
 	ks[0] = bywhat;
-	memcpy(&ks[1], name, len - 1);
+	(void)memcpy(&ks[1], name, len - 1);
 
-	key.data = (u_char *) ks;
+	key.data = (u_char *)ks;
 	key.size = len;
 
-	r = (_ng_db->get) (_ng_db, &key, &data, 0);
+	r = (*_ng_db->get)(_ng_db, &key, &data, 0);
 	free(ks);
 	switch (r) {
 	case 0:
@@ -248,14 +248,11 @@ _local_lookup(rv, cb_data, ap)
 }
 
 #ifdef YP
-static int _nis_lookup __P((void *, void *, va_list));
+static int _nis_lookup(void *, void *, va_list);
 
 /*ARGSUSED*/
 static int
-_nis_lookup(rv, cb_data, ap)
-	void	*rv;
-	void	*cb_data;
-	va_list	 ap;
+_nis_lookup(void *rv, void *cb_data, va_list ap)
 {
 	char	 *name = va_arg(ap, char *);
 	char	**line = va_arg(ap, char **);
@@ -263,7 +260,7 @@ _nis_lookup(rv, cb_data, ap)
 
 	static char	*__ypdomain;
 	int              i;
-	char            *map = NULL;
+	const char      *map = NULL;
 
 	if(__ypdomain == NULL) {
 		switch (yp_get_default_domain(&__ypdomain)) {
@@ -310,22 +307,19 @@ _nis_lookup(rv, cb_data, ap)
 }
 #endif
 
-
+#ifdef NSSRC_FILES
 /*
  * lookup(): Find the given key in the database or yp, and return its value
  * in *line; returns 1 if key was found, 0 otherwise
  */
 static int
-lookup(name, line, bywhat)
-	char	 *name;
-	char	**line;
-	int	  bywhat;
+lookup(char *name, char	**line, int bywhat)
 {
 	int		r;
 	static const ns_dtab dtab[] = {
 		NS_FILES_CB(_local_lookup, NULL)
 		NS_NIS_CB(_nis_lookup, NULL)
-		{ 0 }
+		NS_NULL_CB
 	};
 
 	_DIAGASSERT(name != NULL);
@@ -335,6 +329,27 @@ lookup(name, line, bywhat)
 	    name, line, bywhat);
 	return (r == NS_SUCCESS) ? 1 : 0;
 }
+#else
+static int
+_local_lookupv(int *rv, void *cbdata, ...)
+{
+	int e;
+	va_list ap;
+	va_start(ap, cbdata);
+	e = _local_lookup(rv, cbdata, ap);
+	va_end(ap);
+	return e;
+}
+
+static int
+lookup(name, line, bywhat)
+	char	 *name;
+	char	**line;
+	int	  bywhat;
+{
+	return _local_lookupv(NULL, NULL, name, line, bywhat) == NS_SUCCESS;
+}
+#endif
 
 /*
  * _ng_parse(): Parse a line and return: _NG_ERROR: Syntax Error _NG_NONE:
@@ -344,10 +359,7 @@ lookup(name, line, bywhat)
  * Public since used by netgroup_mkdb
  */
 int
-_ng_parse(p, name, ng)
-	char		**p;
-	char		**name;
-	struct netgroup	**ng;
+_ng_parse(char **p, char **name, struct netgroup **ng)
 {
 
 	_DIAGASSERT(p != NULL);
@@ -379,7 +391,7 @@ _ng_parse(p, name, ng)
 				*name = malloc(i);
 				if (*name == NULL)
 					return _NG_ERROR;
-				memcpy(*name, np, i);
+				(void)memcpy(*name, np, i);
 				(*name)[i - 1] = '\0';
 				return _NG_NAME;
 			}
@@ -396,9 +408,7 @@ _ng_parse(p, name, ng)
  * to a stringlist). in either case, it shouldn't be used again.
  */
 static int
-addgroup(sl, grp)
-	StringList	*sl;
-	char		*grp;
+addgroup(StringList *sl, char *grp)
 {
 	char		*line, *p;
 	struct netgroup	*ng;
@@ -408,12 +418,12 @@ addgroup(sl, grp)
 	_DIAGASSERT(grp != NULL);
 
 #ifdef DEBUG_NG
-	(void) fprintf(stderr, "addgroup(%s)\n", grp);
+	(void)fprintf(stderr, "addgroup(%s)\n", grp);
 #endif
 	/* check for cycles */
 	if (sl_find(sl, grp) != NULL) {
+		_ng_cycle(grp, sl);
 		free(grp);
-		warnx("netgroup: Cycle in group `%s'", grp);
 		return 0;
 	}
 	if (sl_add(sl, grp) == -1) {
@@ -424,7 +434,7 @@ addgroup(sl, grp)
 	/* Lookup this netgroup */
 	line = NULL;
 	if (!lookup(grp, &line, _NG_KEYBYNAME)) {
-		if (line != NULL)
+		if (line)
 			free(line);
 		return 0;
 	}
@@ -465,11 +475,8 @@ addgroup(sl, grp)
  * in_check(): Compare the spec with the netgroup
  */
 static int
-in_check(host, user, domain, ng)
-	const char	*host;
-	const char	*user;
-	const char	*domain;
-	struct netgroup	*ng;
+in_check(const char *host, const char *user, const char *domain,
+    struct netgroup *ng)
 {
 
 	/* host may be NULL */
@@ -499,12 +506,8 @@ in_check(host, user, domain, ng)
  * to a stringlist). in either case, it shouldn't be used again.
  */
 static int
-in_find(sl, grp, host, user, domain)
-	StringList	*sl;
-	char		*grp;
-	const char	*host;
-	const char	*user;
-	const char	*domain;
+in_find(StringList *sl, char *grp, const char *host, const char *user,
+    const char *domain)
 {
 	char		*line, *p;
 	int		 i;
@@ -518,12 +521,12 @@ in_find(sl, grp, host, user, domain)
 	/* domain may be NULL */
 
 #ifdef DEBUG_NG
-	(void) fprintf(stderr, "in_find(%s)\n", grp);
+	(void)fprintf(stderr, "in_find(%s)\n", grp);
 #endif
 	/* check for cycles */
 	if (sl_find(sl, grp) != NULL) {
+		_ng_cycle(grp, sl);
 		free(grp);
-		warnx("netgroup: Cycle in group `%s'", grp);
 		return 0;
 	}
 	if (sl_add(sl, grp) == -1) {
@@ -552,11 +555,11 @@ in_find(sl, grp, host, user, domain)
 			/* new netgroup */
 			i = in_check(host, user, domain, ng);
 			if (ng->ng_host != NULL)
-				free((char *)ng->ng_host);
+				free(ng->ng_host);
 			if (ng->ng_user != NULL)
-				free((char *)ng->ng_user);
+				free(ng->ng_user);
 			if (ng->ng_domain != NULL)
-				free((char *)ng->ng_domain);
+				free(ng->ng_domain);
 			free(ng);
 			if (i) {
 				free(line);
@@ -588,9 +591,7 @@ in_find(sl, grp, host, user, domain)
  * Returns NULL if there's a problem.
  */
 char *
-_ng_makekey(s1, s2, len)
-	const char	*s1, *s2;
-	size_t		 len;
+_ng_makekey(const char *s1, const char *s2, size_t len)
 {
 	char *buf;
 
@@ -599,20 +600,17 @@ _ng_makekey(s1, s2, len)
 
 	buf = malloc(len);
 	if (buf != NULL)
-		(void) snprintf(buf, len, "%s.%s", _NG_STAR(s1), _NG_STAR(s2));
+		(void)snprintf(buf, len, "%s.%s", _NG_STAR(s1), _NG_STAR(s2));
 	return buf;
 }
 
 void
-_ng_print(buf, len, ng)
-	char *buf;
-	size_t len;
-	const struct netgroup *ng;
+_ng_print(char *buf, size_t len, const struct netgroup *ng)
 {
 	_DIAGASSERT(buf != NULL);
 	_DIAGASSERT(ng != NULL);
 
-	(void) snprintf(buf, len, "(%s,%s,%s)", _NG_EMPTY(ng->ng_host),
+	(void)snprintf(buf, len, "(%s,%s,%s)", _NG_EMPTY(ng->ng_host),
 	    _NG_EMPTY(ng->ng_user), _NG_EMPTY(ng->ng_domain));
 }
 
@@ -621,10 +619,7 @@ _ng_print(buf, len, ng)
  * in_lookup1(): Fast lookup for a key in the appropriate map
  */
 static char *
-in_lookup1(key, domain, map)
-	const char	*key;
-	const char	*domain;
-	int		 map;
+in_lookup1(const char *key, const char *domain, int map)
 {
 	char	*line;
 	size_t	 len;
@@ -648,11 +643,7 @@ in_lookup1(key, domain, map)
  * in_lookup(): Fast lookup for a key in the appropriate map
  */
 static int
-in_lookup(group, key, domain, map)
-	const char	*group;
-	const char	*key;
-	const char	*domain;
-	int		 map;
+in_lookup(const char *group, const char *key, const char *domain, int map)
 {
 	size_t	 len;
 	char	*ptr, *line;
@@ -669,10 +660,10 @@ in_lookup(group, key, domain, map)
 		line = NULL;
 
 	if (line == NULL) {
-		/* 
-		 * domain not specified or domain lookup failed; look in
-		 * "group.*" and "*.*"
-		 */
+	    /* 
+	     * domain not specified or domain lookup failed; look in
+	     * "group.*" and "*.*"
+	     */
 	    if (((line = in_lookup1(key, NULL, map)) == NULL) &&
 		((line = in_lookup1(NULL, NULL, map)) == NULL))
 		return 0;
@@ -694,32 +685,34 @@ in_lookup(group, key, domain, map)
 	return 0;
 }
 
-
-void
-endnetgrent()
+/*ARGSUSED*/
+static int
+_local_endnetgrent(void *rv, void *cb_data, va_list ap)
 {
 	for (_nglist = _nghead; _nglist != NULL; _nglist = _nghead) {
 		_nghead = _nglist->ng_next;
 		if (_nglist->ng_host != NULL)
-			free((char *)_nglist->ng_host);
+			free(_nglist->ng_host);
 		if (_nglist->ng_user != NULL)
-			free((char *)_nglist->ng_user);
+			free(_nglist->ng_user);
 		if (_nglist->ng_domain != NULL)
-			free((char *)_nglist->ng_domain);
+			free(_nglist->ng_domain);
 		free(_nglist);
 	}
 
 	if (_ng_db) {
-		(void) (_ng_db->close) (_ng_db);
+		(void)(*_ng_db->close)(_ng_db);
 		_ng_db = NULL;
 	}
+
+	return NS_SUCCESS;
 }
 
-
-void
-setnetgrent(ng)
-	const char	*ng;
+/*ARGSUSED*/
+static int
+_local_setnetgrent(void *rv, void *cb_data, va_list ap)
 {
+	const char	*ng = va_arg(ap, const char *);
 	StringList	*sl;
 	char		*ng_copy;
 
@@ -727,7 +720,7 @@ setnetgrent(ng)
 
 	sl = sl_init();
 	if (sl == NULL)
-		return;
+		return NS_TRYAGAIN;
 
 	/* Cleanup any previous storage */
 	if (_nghead != NULL)
@@ -741,21 +734,27 @@ setnetgrent(ng)
 		addgroup(sl, ng_copy);
 	_nghead = _nglist;
 	sl_free(sl, 1);
+
+	return NS_SUCCESS;
 }
 
-
-int
-getnetgrent(host, user, domain)
-	const char	**host;
-	const char	**user;
-	const char	**domain;
+/*ARGSUSED*/
+static int
+_local_getnetgrent(void *rv, void *cb_data, va_list ap)
 {
+	int *retval = va_arg(ap, int *);
+	const char **host = va_arg(ap, const char **);
+	const char **user = va_arg(ap, const char **);
+	const char **domain = va_arg(ap, const char **);
+
 	_DIAGASSERT(host != NULL);
 	_DIAGASSERT(user != NULL);
 	_DIAGASSERT(domain != NULL);
 
+	*retval = 0;
+
 	if (_nglist == NULL)
-		return 0;
+		return NS_TRYAGAIN;
 
 	*host   = _nglist->ng_host;
 	*user   = _nglist->ng_user;
@@ -763,16 +762,24 @@ getnetgrent(host, user, domain)
 
 	_nglist = _nglist->ng_next;
 
-	return 1;
+	*retval = 1;
+
+	return NS_SUCCESS;
 }
 
-
-int
-innetgr(grp, host, user, domain)
-	const char	*grp, *host, *user, *domain;
+/*ARGSUSED*/
+static int
+_local_innetgr(void *rv, void *cb_data, va_list ap)
 {
+	int *retval = va_arg(ap, int *);
+	const char *grp = va_arg(ap, const char *);
+	const char *host = va_arg(ap, const char *);
+	const char *user = va_arg(ap, const char *);
+	const char *domain = va_arg(ap, const char *);
+
 	int	 found;
 	StringList *sl;
+	char *grcpy;
 
 	_DIAGASSERT(grp != NULL);
 	/* host may be NULL */
@@ -784,22 +791,206 @@ innetgr(grp, host, user, domain)
 
 	/* Try the fast lookup first */
 	if (host != NULL && user == NULL) {
-		if (in_lookup(grp, host, domain, _NG_KEYBYHOST))
-			return 1;
+		if (in_lookup(grp, host, domain, _NG_KEYBYHOST)) {
+			*retval = 1;
+			return NS_SUCCESS;
+		}
 	} else if (host == NULL && user != NULL) {
-		if (in_lookup(grp, user, domain, _NG_KEYBYUSER))
-			return 1;
+		if (in_lookup(grp, user, domain, _NG_KEYBYUSER)) {
+			*retval = 1;
+			return NS_SUCCESS;
+		}
 	}
 	/* If a domainname is given, we would have found a match */
-	if (domain != NULL)
-		return 0;
+	if (domain != NULL) {
+		*retval = 0;
+		return NS_SUCCESS;
+	}
 
 	/* Too bad need the slow recursive way */
 	sl = sl_init();
-	if (sl == NULL)
-		return 0;
-	found = in_find(sl, strdup(grp), host, user, domain);
+	if (sl == NULL) {
+		*retval = 0;
+		return NS_SUCCESS;
+	}
+	if ((grcpy = strdup(grp)) == NULL) {
+		sl_free(sl, 1);
+		*retval = 0;
+		return NS_SUCCESS;
+	}
+	found = in_find(sl, grcpy, host, user, domain);
 	sl_free(sl, 1);
 
-	return found;
+	*retval = found;
+	return NS_SUCCESS;
 }
+
+#ifdef YP
+
+/*ARGSUSED*/
+static int
+_nis_endnetgrent(void *rv, void *cb_data, va_list ap)
+{
+	return _local_endnetgrent(rv, cb_data, ap);
+}
+
+/*ARGSUSED*/
+static int
+_nis_setnetgrent(void *rv, void *cb_data, va_list ap)
+{
+	return _local_setnetgrent(rv, cb_data, ap);
+}
+
+/*ARGSUSED*/
+static int
+_nis_getnetgrent(void *rv, void *cb_data, va_list ap)
+{
+	return _local_getnetgrent(rv, cb_data, ap);
+}
+
+/*ARGSUSED*/
+static int
+_nis_innetgr(void *rv, void *cb_data, va_list ap)
+{
+	return _local_innetgr(rv, cb_data, ap);
+}
+
+#endif
+
+
+#ifdef NSSRC_FILES
+void
+endnetgrent(void)
+{
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_local_endnetgrent, NULL)
+		NS_NIS_CB(_nis_endnetgrent, NULL)
+		NS_NULL_CB
+	};
+
+	(void) nsdispatch(NULL, dtab, NSDB_NETGROUP, "endnetgrent",
+			  __nsdefaultcompat);
+}
+#else
+static int
+_local_endnetgrentv(int *rv, void *cbdata, ...)
+{
+	int e;
+	va_list ap;
+	va_start(ap, cbdata);
+	e = _local_endnetgrent(rv, cbdata, ap);
+	va_end(ap);
+	return e;
+}
+
+void
+endnetgrent(void)
+{
+	(void)_local_endnetgrentv(NULL, NULL, NULL);
+}
+#endif
+
+#ifdef NSSRC_FILES
+void
+setnetgrent(const char *ng)
+{
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_local_setnetgrent, NULL)
+		NS_NIS_CB(_nis_setnetgrent, NULL)
+		NS_NULL_CB
+	};
+
+	(void) nsdispatch(NULL, dtab, NSDB_NETGROUP, "setnetgrent",
+			   __nsdefaultnis, ng);
+}
+#else
+static int
+_local_setnetgrentv(int *rv, void *cbdata, ...)
+{
+	int e;
+	va_list ap;
+	va_start(ap, cbdata);
+	e = _local_setnetgrent(rv, cbdata, ap);
+	va_end(ap);
+	return e;
+}
+
+void
+setnetgrent(const char *ng)
+{
+	(void) _local_setnetgrentv(NULL, NULL,ng);
+}
+
+#endif
+
+#ifdef NSSRC_FILES
+int
+getnetgrent(const char **host, const char **user, const char **domain)
+{
+	int     r, retval;
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_local_getnetgrent, NULL)
+		NS_NIS_CB(_nis_getnetgrent, NULL)
+		NS_NULL_CB
+	};
+
+	r = nsdispatch(NULL, dtab, NSDB_NETGROUP, "getnetgrent",
+		       __nsdefaultnis, &retval, host, user, domain);
+
+	return (r == NS_SUCCESS) ? retval : 0;
+}
+#else
+static int
+_local_getnetgrentv(int *rv, void *cbdata, ...)
+{
+	int e;
+	va_list ap;
+	va_start(ap, cbdata);
+	e = _local_getnetgrent(rv, cbdata, ap);
+	va_end(ap);
+	return e;
+}
+
+int
+getnetgrent(const char **host, const char **user, const char **domain)
+{
+	return _local_getnetgrentv(NULL, NULL, host, user, domain) == NS_SUCCESS;
+}
+#endif
+
+#ifdef NSSRC_FILES
+int
+innetgr(const char *grp, const char *host, const char *user, 
+	const char *domain)
+{
+	int     r, retval;
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_local_innetgr, NULL)
+		NS_NIS_CB(_nis_innetgr, NULL)
+		NS_NULL_CB
+	};
+
+	r = nsdispatch(NULL, dtab, NSDB_NETGROUP, "innetgr",
+		       __nsdefaultnis, &retval, grp, host, user, domain);
+
+	return (r == NS_SUCCESS) ? retval : 0;
+}
+#else
+static int
+_local_innetgrv(int *rv, void *cbdata, ...)
+{
+	int e;
+	va_list ap;
+	va_start(ap, cbdata);
+	e = _local_innetgr(rv, cbdata, ap);
+	va_end(ap);
+	return e;
+}
+
+int
+innetgr(const char *grp, const char *host, const char *user, 
+	const char *domain)
+{
+	return _local_innetgrv(NULL, NULL, grp, host, user, domain) == NS_SUCCESS;
+}
+#endif

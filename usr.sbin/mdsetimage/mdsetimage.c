@@ -1,8 +1,9 @@
-/*	$NetBSD: mdsetimage.c,v 1.8 1999/09/12 16:08:14 itojun Exp $	*/
+/* $NetBSD: mdsetimage.c,v 1.18 2008/07/21 13:36:59 lukem Exp $ */
 
 /*
- * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
- *
+ * Copyright (c) 1996 Christopher G. Demetriou
+ * All rights reserved.
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -11,13 +12,9 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Christopher G. Demetriou
- *	for the NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
- *
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -28,17 +25,18 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * 
+ * <<Id: LICENSE_GC,v 1.1 2001/10/01 23:24:05 cgd Exp>>
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-    "@(#) Copyright (c) 1996 Christopher G. Demetriou.\
-  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1996\
+ Christopher G. Demetriou.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
-__RCSID("$NetBSD: mdsetimage.c,v 1.8 1999/09/12 16:08:14 itojun Exp $");
+__RCSID("$NetBSD: mdsetimage.c,v 1.18 2008/07/21 13:36:59 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -56,7 +54,7 @@ __RCSID("$NetBSD: mdsetimage.c,v 1.8 1999/09/12 16:08:14 itojun Exp $");
 #include "extern.h"
 
 int		main __P((int, char *[]));
-static void	usage __P((void)) __attribute__((noreturn));
+static void	usage __P((void)) __dead;
 static int	find_md_root __P((const char *, const char *, size_t,
 		    const struct nlist *, size_t *, u_int32_t *));
 
@@ -90,6 +88,8 @@ main(argc, argv)
 	const char *kfile, *fsfile;
 	char *mappedkfile;
 	int ch, kfd, fsfd, rv;
+
+	setprogname(argv[0]);
 
 	while ((ch = getopt(argc, argv, "T:v")) != -1)
 		switch (ch) {
@@ -125,7 +125,7 @@ main(argc, argv)
 
 	if (fstat(kfd, &ksb) == -1)
 		err(1, "fstat %s", kfile);
-	if (ksb.st_size > SIZE_T_MAX)
+	if (ksb.st_size != (size_t)ksb.st_size)
 		errx(1, "%s too big to map", kfile);
 
 	if ((mappedkfile = mmap(NULL, ksb.st_size, PROT_READ | PROT_WRITE,
@@ -142,11 +142,11 @@ main(argc, argv)
 		err(1, "open %s", fsfile);
 	if (fstat(fsfd, &fssb) == -1)
 		err(1, "fstat %s", fsfile);
-	if (fssb.st_size > SIZE_T_MAX)
+	if (fssb.st_size != (size_t)fssb.st_size)
 		errx(1, "fs image is too big");
 	if (fssb.st_size > md_root_size)
-		errx(1, "fs image (%qd bytes) too big for buffer (%ld bytes)",
-		     (long long)fssb.st_size, (unsigned long)md_root_size);
+		errx(1, "fs image (%lld bytes) too big for buffer (%lu bytes)",
+		    (long long)fssb.st_size, (unsigned long)md_root_size);
 
 	if (verbose)
 		fprintf(stderr, "copying image from %s into %s\n", fsfile,
@@ -174,9 +174,10 @@ main(argc, argv)
 static void
 usage()
 {
-	extern const char *__progname;
 
-	fprintf(stderr, "usage: %s kernel_file fsimage_file\n", __progname);
+	fprintf(stderr,
+	    "usage: %s kernel_file fsimage_file\n",
+	    getprogname());
 	exit(1);
 }
 

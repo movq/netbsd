@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.44 2000/03/19 13:38:55 pk Exp $ */
+/*	$NetBSD: intr.c,v 1.100 2008/01/09 13:52:33 ad Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,76 +39,60 @@
  *
  *	@(#)intr.c	8.3 (Berkeley) 11/11/93
  */
-#include "opt_inet.h"
-#include "opt_atalk.h"
-#include "opt_iso.h"
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.100 2008/01/09 13:52:33 ad Exp $");
+
 #include "opt_multiprocessor.h"
-#include "opt_ns.h"
-#include "opt_natm.h"
+#include "opt_sparc_arch.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/socket.h>
+#include <sys/malloc.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
+#include <sys/simplelock.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <dev/cons.h>
 
-#include <net/netisr.h>
-#include <net/if.h>
-
-#include <machine/cpu.h>
 #include <machine/ctlreg.h>
 #include <machine/instr.h>
 #include <machine/trap.h>
 #include <machine/promlib.h>
+
+#include <sparc/sparc/asm.h>
 #include <sparc/sparc/cpuvar.h>
 
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/if_inarp.h>
-#include <netinet/ip_var.h>
-#endif
-#ifdef INET6
-# ifndef INET
-#  include <netinet/in.h>
-# endif
-#include <netinet/ip6.h>
-#include <netinet6/ip6_var.h>
-#endif
-#ifdef NS
-#include <netns/ns_var.h>
-#endif
-#ifdef ISO
-#include <netiso/iso.h>
-#include <netiso/clnp.h>
-#endif
-#ifdef NETATALK
-#include <netatalk/at_extern.h>
-#endif
-#include "ppp.h"
-#if NPPP > 0
-#include <net/ppp_defs.h>
-#include <net/if_ppp.h>
-#endif
-#include "com.h"
-#if NCOM > 0
-extern void comsoft __P((void));
+#if defined(MULTIPROCESSOR) && defined(DDB)
+#include <machine/db_machdep.h>
 #endif
 
-union sir	sir;
+#if defined(MULTIPROCESSOR)
+void *xcall_cookie;
 
-void	strayintr __P((struct clockframe *));
-int	soft01intr __P((void *));
+/* Stats */
+struct evcnt lev13_evcnt = EVCNT_INITIALIZER(EVCNT_TYPE_INTR,0,"xcall","std");
+struct evcnt lev14_evcnt = EVCNT_INITIALIZER(EVCNT_TYPE_INTR,0,"xcall","fast");
+EVCNT_ATTACH_STATIC(lev13_evcnt);
+EVCNT_ATTACH_STATIC(lev14_evcnt);
+#endif
+
+
+void	strayintr(struct clockframe *);
+#ifdef DIAGNOSTIC
+void	bogusintr(struct clockframe *);
+#endif
 
 /*
  * Stray interrupt handler.  Clear it if possible.
  * If not, and if we get 10 interrupts in 10 seconds, panic.
+ * XXXSMP: We are holding the kernel lock at entry & exit.
  */
 void
-strayintr(fp)
-	struct clockframe *fp;
+strayintr(struct clockframe *fp)
 {
 	static int straytime, nstray;
 	char bits[64];
@@ -122,88 +102,97 @@ strayintr(fp)
 		fp->ipl, fp->pc, fp->npc, bitmask_snprintf(fp->psr,
 		       PSR_BITS, bits, sizeof(bits)));
 
-	timesince = time.tv_sec - straytime;
+	timesince = time_uptime - straytime;
 	if (timesince <= 10) {
-		if (++nstray > 9)
+		if (++nstray > 10)
 			panic("crazy interrupts");
 	} else {
-		straytime = time.tv_sec;
+		straytime = time_uptime;
 		nstray = 1;
 	}
 }
 
+
+#ifdef DIAGNOSTIC
 /*
- * Level 1 software interrupt (could also be Sbus level 1 interrupt).
- * Three possible reasons:
- *	ROM console input needed
- *	Network software interrupt
- *	Soft clock interrupt
+ * Bogus interrupt for which neither hard nor soft interrupt bit in
+ * the IPR was set.
  */
-int
-soft01intr(fp)
-	void *fp;
+void
+bogusintr(struct clockframe *fp)
 {
+	char bits[64];
 
-	if (sir.sir_any) {
-		/*
-		 * XXX	this is bogus: should just have a list of
-		 *	routines to call, a la timeouts.  Mods to
-		 *	netisr are not atomic and must be protected (gah).
-		 */
-		if (sir.sir_which[SIR_NET]) {
-			int n, s;
+	printf("cpu%d: bogus interrupt ipl 0x%x pc=0x%x npc=0x%x psr=%s\n",
+		cpu_number(),
+		fp->ipl, fp->pc, fp->npc, bitmask_snprintf(fp->psr,
+		       PSR_BITS, bits, sizeof(bits)));
+}
+#endif /* DIAGNOSTIC */
 
-			s = splhigh();
-			n = netisr;
-			netisr = 0;
-			splx(s);
-			sir.sir_which[SIR_NET] = 0;
+/*
+ * Get module ID of interrupt target.
+ */
+u_int
+getitr(void)
+{
+#if defined(MULTIPROCESSOR)
+	u_int v;
 
-#define DONETISR(bit, fn) do {		\
-	if (n & (1 << bit))		\
-		fn();			\
-} while (0)
+	if (!CPU_ISSUN4M || sparc_ncpus <= 1)
+		return (0);
 
-#include <net/netisr_dispatch.h>
-
-#undef DONETISR
-
-		}
-		if (sir.sir_which[SIR_CLOCK]) {
-			sir.sir_which[SIR_CLOCK] = 0;
-			softclock();
-		}
-#if NCOM > 0
-		/*
-		 * XXX - consider using __GENERIC_SOFT_INTERRUPTS instead
-		 */
-		if (sir.sir_which[SIR_SERIAL]) {
-			sir.sir_which[SIR_SERIAL] = 0;
-			comsoft();
-		}
+	v = *((u_int *)ICR_ITR);
+	return (v + 8);
+#else
+	return (0);
 #endif
-	}
-	return (1);
 }
 
-#if defined(SUN4M)
-void	nmi_hard __P((void));
-void	nmi_soft __P((void));
+/*
+ * Set interrupt target.
+ * Return previous value.
+ */
+u_int
+setitr(u_int mid)
+{
+#if defined(MULTIPROCESSOR)
+	u_int v;
 
-int	(*memerr_handler) __P((void));
-int	(*sbuserr_handler) __P((void));
-int	(*vmeerr_handler) __P((void));
-int	(*moduleerr_handler) __P((void));
+	if (!CPU_ISSUN4M || sparc_ncpus <= 1)
+		return (0);
 
+	v = *((u_int *)ICR_ITR);
+	*((u_int *)ICR_ITR) = CPU_MID2CPUNO(mid);
+	return (v + 8);
+#else
+	return (0);
+#endif
+}
+
+#if (defined(SUN4M) && !defined(MSIIEP)) || defined(SUN4D)
+void	nmi_hard(void);
+void	nmi_soft(struct trapframe *);
+
+int	(*memerr_handler)(void);
+int	(*sbuserr_handler)(void);
+int	(*vmeerr_handler)(void);
+int	(*moduleerr_handler)(void);
+
+#if defined(MULTIPROCESSOR)
+volatile int nmi_hard_wait = 0;
+struct simplelock nmihard_lock = SIMPLELOCK_INITIALIZER;
+int drop_into_rom_on_fatal = 1;
+#endif
 
 void
-nmi_hard()
+nmi_hard(void)
 {
 	/*
 	 * A level 15 hard interrupt.
 	 */
 	int fatal = 0;
-	u_int32_t si;
+	uint32_t si;
 	char bits[64];
 	u_int afsr, afva;
 
@@ -215,19 +204,38 @@ nmi_hard()
 			(afsr & AFSR_AFA) >> AFSR_AFA_RSHIFT, afva);
 	}
 
+#if defined(MULTIPROCESSOR)
+	/*
+	 * Increase nmi_hard_wait.  If we aren't the master, loop while this
+	 * variable is non-zero.  If we are the master, loop while this
+	 * variable is less than the number of cpus.
+	 */
+	simple_lock(&nmihard_lock);
+	nmi_hard_wait++;
+	simple_unlock(&nmihard_lock);
+
 	if (cpuinfo.master == 0) {
-		/*
-		 * For now, just return.
-		 * Should wait on damage analysis done by the master.
-		 */
+		while (nmi_hard_wait)
+			;
 		return;
+	} else {
+		int n = 100000;
+
+		while (nmi_hard_wait < sparc_ncpus) {
+			DELAY(1);
+			if (n-- > 0)
+				continue;
+			printf("nmi_hard: SMP botch.");
+			break;
+		}
 	}
+#endif
 
 	/*
 	 * Examine pending system interrupts.
 	 */
-	si = *((u_int32_t *)ICR_SI_PEND);
-	printf("NMI: system interrupts: %s\n",
+	si = *((uint32_t *)ICR_SI_PEND);
+	printf("cpu%d: NMI: system interrupts: %s\n", cpu_number(),
 		bitmask_snprintf(si, SINTR_BITS, bits, sizeof(bits)));
 
 	if ((si & SINTR_M) != 0) {
@@ -251,80 +259,183 @@ nmi_hard()
 			fatal |= (*moduleerr_handler)();
 	}
 
+#if defined(MULTIPROCESSOR)
+	/*
+	 * Tell everyone else we've finished dealing with the hard NMI.
+	 */
+	simple_lock(&nmihard_lock);
+	nmi_hard_wait = 0;
+	simple_unlock(&nmihard_lock);
+	if (fatal && drop_into_rom_on_fatal) {
+		prom_abort();
+		return;
+	}
+#endif
+
 	if (fatal)
 		panic("nmi");
 }
 
+/*
+ * Non-maskable soft interrupt level 15 handler
+ */
 void
-nmi_soft()
+nmi_soft(struct trapframe *tf)
+{
+	if (cpuinfo.mailbox) {
+		/* Check PROM messages */
+		uint8_t msg = *(uint8_t *)cpuinfo.mailbox;
+		switch (msg) {
+		case OPENPROM_MBX_STOP:
+		case OPENPROM_MBX_WD:
+			/* In case there's an xcall in progress (unlikely) */
+			spl0();
+			cpuinfo.flags &= ~CPUFLG_READY;
+			cpu_ready_mask &= ~(1 << cpu_number());
+			prom_cpustop(0);
+			break;
+		case OPENPROM_MBX_ABORT:
+		case OPENPROM_MBX_BPT:
+			prom_cpuidle(0);
+			/*
+			 * We emerge here after someone does a
+			 * prom_resumecpu(ournode).
+			 */
+			return;
+		default:
+			break;
+		}
+	}
+
+#if defined(MULTIPROCESSOR)
+	switch (cpuinfo.msg_lev15.tag) {
+	case XPMSG15_PAUSECPU:
+		/* XXX - assumes DDB is the only user of mp_pause_cpu() */
+		cpuinfo.flags |= CPUFLG_PAUSED;
+#if defined(DDB)
+		/* trap(T_DBPAUSE) */
+		__asm("ta 0x8b");
+#else
+		while (cpuinfo.flags & CPUFLG_PAUSED)
+			/* spin */;
+#endif /* DDB */
+	}
+	cpuinfo.msg_lev15.tag = 0;
+#endif /* MULTIPROCESSOR */
+}
+
+#if defined(MULTIPROCESSOR)
+/*
+ * Respond to an xcall() request from another CPU.
+ */
+static void
+xcallintr(void *v)
 {
 
-#ifdef MULTIPROCESSOR
-	switch (cpuinfo.msg.tag) {
-	case XPMSG_SAVEFPU: {
-		savefpstate(cpuinfo.fpproc->p_md.md_fpstate);
-		}
-		break;
-	case XPMSG_PAUSECPU: {
-		cpuinfo.flags |= 0x4000;
-		while (cpuinfo.flags & 0x4000) {
-			simple_unlock(&cpuinfo.msg.lock);
-			delay(1);
-			simple_lock(&cpuinfo.msg.lock);
-		}
-		}
-		break;
-	case XPMSG_RESUMECPU: {
-		cpuinfo.flags &= ~0x4000;
-		}
-		break;
-	case XPMSG_VCACHE_FLUSH_PAGE: {
-		struct xpmsg_flush_page *p = &cpuinfo.msg.u.xpmsg_flush_page;
-		int ctx = getcontext();
-		setcontext(p->ctx);
-		cpuinfo.sp_vcache_flush_page(p->va);
-		setcontext(ctx);
-		}
-		break;
-	case XPMSG_VCACHE_FLUSH_SEGMENT: {
-		struct xpmsg_flush_segment *p = &cpuinfo.msg.u.xpmsg_flush_segment;
-		int ctx = getcontext();
-		setcontext(p->ctx);
-		cpuinfo.sp_vcache_flush_segment(p->vr, p->vs);
-		setcontext(ctx);
-		}
-		break;
-	case XPMSG_VCACHE_FLUSH_REGION: {
-		struct xpmsg_flush_region *p = &cpuinfo.msg.u.xpmsg_flush_region;
-		int ctx = getcontext();
-		setcontext(p->ctx);
-		cpuinfo.sp_vcache_flush_region(p->vr);
-		setcontext(ctx);
-		}
-		break;
-	case XPMSG_VCACHE_FLUSH_CONTEXT: {
-		struct xpmsg_flush_context *p = &cpuinfo.msg.u.xpmsg_flush_context;
-		int ctx = getcontext();
-		setcontext(p->ctx);
-		cpuinfo.sp_vcache_flush_context();
-		setcontext(ctx);
-		}
-		break;
-	case XPMSG_VCACHE_FLUSH_RANGE: {
-		struct xpmsg_flush_range *p = &cpuinfo.msg.u.xpmsg_flush_range;
-		int ctx = getcontext();
-		setcontext(p->ctx);
-		cpuinfo.sp_cache_flush(p->va, p->size);
-		setcontext(ctx);
-		}
-		break;
-	}
-	simple_unlock(&cpuinfo.msg.lock);
-#endif
-}
-#endif
+	/* Tally */
+	lev13_evcnt.ev_count++;
 
-static struct intrhand level01 = { soft01intr };
+	/* notyet - cpuinfo.msg.received = 1; */
+	switch (cpuinfo.msg.tag) {
+	case XPMSG_FUNC:
+	    {
+		volatile struct xpmsg_func *p = &cpuinfo.msg.u.xpmsg_func;
+
+		if (p->func)
+			p->retval = (*p->func)(p->arg0, p->arg1, p->arg2);
+		break;
+	    }
+	}
+	cpuinfo.msg.tag = 0;
+	cpuinfo.msg.complete = 1;
+}
+#endif /* MULTIPROCESSOR */
+#endif /* SUN4M || SUN4D */
+
+
+#ifdef MSIIEP
+/*
+ * It's easier to make this separate so that not to further obscure
+ * SUN4M case with more ifdefs.  There's no common functionality
+ * anyway.
+ */
+
+#include <sparc/sparc/msiiepreg.h>
+
+void	nmi_hard_msiiep(void);
+void	nmi_soft_msiiep(void);
+
+
+void
+nmi_hard_msiiep(void)
+{
+	uint32_t si;
+	char bits[128];
+	int fatal = 0;
+
+	si = mspcic_read_4(pcic_sys_ipr);
+	printf("NMI: system interrupts: %s\n",
+	       bitmask_snprintf(si, MSIIEP_SYS_IPR_BITS, bits, sizeof(bits)));
+
+	if (si & MSIIEP_SYS_IPR_MEM_FAULT) {
+		uint32_t afsr, afar, mfsr, mfar;
+
+		afar = *(volatile uint32_t *)MSIIEP_AFAR;
+		afsr = *(volatile uint32_t *)MSIIEP_AFSR;
+
+		mfar = *(volatile uint32_t *)MSIIEP_MFAR;
+		mfsr = *(volatile uint32_t *)MSIIEP_MFSR;
+
+		if (afsr & MSIIEP_AFSR_ERR)
+			printf("async fault: afsr=%s; afar=%08x\n",
+			       bitmask_snprintf(afsr, MSIIEP_AFSR_BITS,
+						bits, sizeof(bits)),
+			       afar);
+
+		if (mfsr & MSIIEP_MFSR_ERR)
+			printf("mem fault: mfsr=%s; mfar=%08x\n",
+			       bitmask_snprintf(mfsr, MSIIEP_MFSR_BITS,
+						bits, sizeof(bits)),
+			       mfar);
+
+		fatal = 0;
+	}
+
+	if (si & MSIIEP_SYS_IPR_SERR) {	/* XXX */
+		printf("serr#\n");
+		fatal = 0;
+	}
+
+	if (si & MSIIEP_SYS_IPR_DMA_ERR) {
+		printf("dma: %08x\n",
+		       mspcic_read_stream_4(pcic_iotlb_err_addr));
+		fatal = 0;
+	}
+
+	if (si & MSIIEP_SYS_IPR_PIO_ERR) {
+		printf("pio: addr=%08x, cmd=%x\n",
+		       mspcic_read_stream_4(pcic_pio_err_addr),
+		       mspcic_read_stream_1(pcic_pio_err_cmd));
+		fatal = 0;
+	}
+
+	if (fatal)
+		panic("nmi");
+
+	/* Clear the NMI if it was PCIC related */
+	mspcic_write_1(pcic_sys_ipr_clr, MSIIEP_SYS_IPR_CLR_ALL);
+}
+
+
+void
+nmi_soft_msiiep(void)
+{
+
+	panic("soft nmi");
+}
+
+#endif /* MSIIEP */
+
 
 /*
  * Level 15 interrupts are special, and not vectored here.
@@ -333,7 +444,7 @@ static struct intrhand level01 = { soft01intr };
  */
 struct intrhand *intrhand[15] = {
 	NULL,			/*  0 = error */
-	&level01,		/*  1 = software level 1 + Sbus */
+	NULL,			/*  1 = software level 1 + Sbus */
 	NULL,	 		/*  2 = Sbus level 2 (4m: Sbus L1) */
 	NULL,			/*  3 = SCSI + DMA + Sbus level 3 (4m: L2,lpt)*/
 	NULL,			/*  4 = software level 4 (tty softint) (scsi) */
@@ -349,86 +460,57 @@ struct intrhand *intrhand[15] = {
 	NULL, 			/* 14 = counter 1 = profiling timer */
 };
 
-static int fastvec;		/* marks fast vectors (see below) */
-#ifdef DIAGNOSTIC
-extern int sparc_interrupt4m[];
-extern int sparc_interrupt44c[];
-#endif
-
 /*
- * Attach an interrupt handler to the vector chain for the given level.
- * This is not possible if it has been taken away as a fast vector.
+ * Soft interrupts use a separate set of handler chains.
+ * This is necessary since soft interrupt handlers do not return a value
+ * and therefore cannot be mixed with hardware interrupt handlers on a
+ * shared handler chain.
  */
-void
-intr_establish(level, ih)
-	int level;
-	struct intrhand *ih;
+struct intrhand *sintrhand[15] = { NULL };
+
+static void
+ih_insert(struct intrhand **head, struct intrhand *ih)
 {
 	struct intrhand **p, *q;
-#ifdef DIAGNOSTIC
-	struct trapvec *tv;
-	int displ;
-#endif
-	int s;
-
-	s = splhigh();
-	if (fastvec & (1 << level))
-		panic("intr_establish: level %d interrupt tied to fast vector",
-		    level);
-#ifdef DIAGNOSTIC
-	/* double check for legal hardware interrupt */
-	if ((level != 1 && level != 4 && level != 6) || CPU_ISSUN4M ) {
-		tv = &trapbase[T_L1INT - 1 + level];
-		displ = (CPU_ISSUN4M)
-			? &sparc_interrupt4m[0] - &tv->tv_instr[1]
-			: &sparc_interrupt44c[0] - &tv->tv_instr[1];
-
-		/* has to be `mov level,%l3; ba _sparc_interrupt; rdpsr %l0' */
-		if (tv->tv_instr[0] != I_MOVi(I_L3, level) ||
-		    tv->tv_instr[1] != I_BA(0, displ) ||
-		    tv->tv_instr[2] != I_RDPSR(I_L0))
-			panic("intr_establish(%d, %p)\n0x%x 0x%x 0x%x != 0x%x 0x%x 0x%x",
-			    level, ih,
-			    tv->tv_instr[0], tv->tv_instr[1], tv->tv_instr[2],
-			    I_MOVi(I_L3, level), I_BA(0, displ), I_RDPSR(I_L0));
-	}
-#endif
 	/*
 	 * This is O(N^2) for long chains, but chains are never long
 	 * and we do want to preserve order.
 	 */
-	for (p = &intrhand[level]; (q = *p) != NULL; p = &q->ih_next)
+	for (p = head; (q = *p) != NULL; p = &q->ih_next)
 		continue;
 	*p = ih;
 	ih->ih_next = NULL;
-	splx(s);
 }
 
-/*
- * Like intr_establish, but wires a fast trap vector.  Only one such fast
- * trap is legal for any interrupt, and it must be a hardware interrupt.
- */
-void
-intr_fasttrap(level, vec)
-	int level;
-	void (*vec) __P((void));
+static void
+ih_remove(struct intrhand **head, struct intrhand *ih)
+{
+	struct intrhand **p, *q;
+
+	for (p = head; (q = *p) != ih; p = &q->ih_next)
+		continue;
+	if (q == NULL)
+		panic("intr_remove: intrhand %p fun %p arg %p",
+			ih, ih->ih_fun, ih->ih_arg);
+
+	*p = q->ih_next;
+	q->ih_next = NULL;
+}
+
+static int fastvec;		/* marks fast vectors (see below) */
+extern int sparc_interrupt4m[];
+extern int sparc_interrupt44c[];
+
+#ifdef DIAGNOSTIC
+static void
+check_tv(int level)
 {
 	struct trapvec *tv;
-	u_long hi22, lo10;
-#ifdef DIAGNOSTIC
-	int displ;	/* suspenders, belt, and buttons too */
-#endif
-	int s;
+	int displ;
 
+	/* double check for legal hardware interrupt */
 	tv = &trapbase[T_L1INT - 1 + level];
-	hi22 = ((u_long)vec) >> 10;
-	lo10 = ((u_long)vec) & 0x3ff;
-	s = splhigh();
-	if ((fastvec & (1 << level)) != 0 || intrhand[level] != NULL)
-		panic("intr_fasttrap: already handling level %d interrupts",
-		    level);
-#ifdef DIAGNOSTIC
-	displ = (CPU_ISSUN4M)
+	displ = (CPU_ISSUN4M || CPU_ISSUN4D)
 		? &sparc_interrupt4m[0] - &tv->tv_instr[1]
 		: &sparc_interrupt44c[0] - &tv->tv_instr[1];
 
@@ -436,20 +518,278 @@ intr_fasttrap(level, vec)
 	if (tv->tv_instr[0] != I_MOVi(I_L3, level) ||
 	    tv->tv_instr[1] != I_BA(0, displ) ||
 	    tv->tv_instr[2] != I_RDPSR(I_L0))
-		panic("intr_fasttrap(%d, %p)\n0x%x 0x%x 0x%x != 0x%x 0x%x 0x%x",
-		    level, vec,
+		panic("intr_establish(%d)\n0x%x 0x%x 0x%x != 0x%x 0x%x 0x%x",
+		    level,
 		    tv->tv_instr[0], tv->tv_instr[1], tv->tv_instr[2],
 		    I_MOVi(I_L3, level), I_BA(0, displ), I_RDPSR(I_L0));
+}
 #endif
+
+/*
+ * Wire a fast trap vector.  Only one such fast trap is legal for any
+ * interrupt, and it must be a hardware interrupt.
+ */
+static void
+inst_fasttrap(int level, void (*vec)(void))
+{
+	struct trapvec *tv;
+	u_long hi22, lo10;
+	int s;
+
+	if (CPU_ISSUN4 || CPU_ISSUN4C) {
+		/* Can't wire to softintr slots */
+		if (level == 1 || level == 4 || level == 6)
+			return;
+	}
+
+#ifdef DIAGNOSTIC
+	check_tv(level);
+#endif
+
+	tv = &trapbase[T_L1INT - 1 + level];
+	hi22 = ((u_long)vec) >> 10;
+	lo10 = ((u_long)vec) & 0x3ff;
+	s = splhigh();
+
 	/* kernel text is write protected -- let us in for a moment */
-	pmap_changeprot(pmap_kernel(), (vaddr_t)tv,
-	    VM_PROT_READ|VM_PROT_WRITE, 1);
+	pmap_kprotect((vaddr_t)tv & -PAGE_SIZE, PAGE_SIZE,
+	    VM_PROT_READ|VM_PROT_WRITE);
 	cpuinfo.cache_flush_all();
 	tv->tv_instr[0] = I_SETHI(I_L3, hi22);	/* sethi %hi(vec),%l3 */
 	tv->tv_instr[1] = I_JMPLri(I_G0, I_L3, lo10);/* jmpl %l3+%lo(vec),%g0 */
 	tv->tv_instr[2] = I_RDPSR(I_L0);	/* mov %psr, %l0 */
-	pmap_changeprot(pmap_kernel(), (vaddr_t)tv, VM_PROT_READ, 1);
+	pmap_kprotect((vaddr_t)tv & -PAGE_SIZE, PAGE_SIZE, VM_PROT_READ);
 	cpuinfo.cache_flush_all();
 	fastvec |= 1 << level;
 	splx(s);
+}
+
+/*
+ * Uninstall a fast trap handler.
+ */
+static void
+uninst_fasttrap(int level)
+{
+	struct trapvec *tv;
+	int displ;	/* suspenders, belt, and buttons too */
+	int s;
+
+	tv = &trapbase[T_L1INT - 1 + level];
+	s = splhigh();
+	displ = (CPU_ISSUN4M || CPU_ISSUN4D)
+		? &sparc_interrupt4m[0] - &tv->tv_instr[1]
+		: &sparc_interrupt44c[0] - &tv->tv_instr[1];
+
+	/* kernel text is write protected -- let us in for a moment */
+	pmap_kprotect((vaddr_t)tv & -PAGE_SIZE, PAGE_SIZE,
+	    VM_PROT_READ|VM_PROT_WRITE);
+	cpuinfo.cache_flush_all();
+	tv->tv_instr[0] = I_MOVi(I_L3, level);
+	tv->tv_instr[1] = I_BA(0, displ);
+	tv->tv_instr[2] = I_RDPSR(I_L0);
+	pmap_kprotect((vaddr_t)tv & -PAGE_SIZE, PAGE_SIZE, VM_PROT_READ);
+	cpuinfo.cache_flush_all();
+	fastvec &= ~(1 << level);
+	splx(s);
+}
+
+/*
+ * Attach an interrupt handler to the vector chain for the given level.
+ * This is not possible if it has been taken away as a fast vector.
+ */
+void
+intr_establish(int level, int classipl,
+	       struct intrhand *ih, void (*vec)(void))
+{
+	int s = splhigh();
+
+#ifdef DIAGNOSTIC
+	if (CPU_ISSUN4C) {
+		/*
+		 * Check reserved softintr slots on SUN4C only.
+		 * No check for SUN4, as 4/300's have
+		 * esp0 at level 4 and le0 at level 6.
+		 */
+		if (level == 1 || level == 4 || level == 6)
+			panic("intr_establish: reserved softintr level");
+	}
+#endif
+
+	/*
+	 * If a `fast vector' is currently tied to this level, we must
+	 * first undo that.
+	 */
+	if (fastvec & (1 << level)) {
+		printf("intr_establish: untie fast vector at level %d\n",
+		    level);
+		uninst_fasttrap(level);
+	} else if (vec != NULL &&
+		   intrhand[level] == NULL && sintrhand[level] == NULL) {
+		inst_fasttrap(level, vec);
+	}
+
+	if (classipl == 0)
+		classipl = level;
+
+	/* A requested IPL cannot exceed its device class level */
+	if (classipl < level)
+		panic("intr_establish: class lvl (%d) < pil (%d)\n",
+			classipl, level);
+
+	/* pre-shift to PIL field in %psr */
+	ih->ih_classipl = (classipl << 8) & PSR_PIL;
+
+	ih_insert(&intrhand[level], ih);
+	splx(s);
+}
+
+void
+intr_disestablish(int level, struct intrhand *ih)
+{
+
+	ih_remove(&intrhand[level], ih);
+}
+
+/*
+ * This is a softintr cookie.  NB that sic_pilreq MUST be the
+ * first element in the struct, because the softintr_schedule()
+ * macro in intr.h casts cookies to int * to get it.  On a
+ * sun4m, sic_pilreq is an actual processor interrupt level that
+ * is passed to raise(), and on a sun4 or sun4c sic_pilreq is a
+ * bit to set in the interrupt enable register with ienab_bis().
+ */
+struct softintr_cookie {
+	int sic_pilreq;		/* CPU-specific bits; MUST be first! */
+	int sic_pil;		/* Actual machine PIL that is used */
+	struct intrhand sic_hand;
+};
+
+/*
+ * softintr_init(): initialise the MI softintr system.
+ */
+void
+sparc_softintr_init(void)
+{
+
+#if defined(MULTIPROCESSOR) && (defined(SUN4M) || defined(SUN4D))
+	/* Establish a standard soft interrupt handler for cross calls */
+	xcall_cookie = sparc_softintr_establish(13, xcallintr, NULL);
+#endif
+}
+
+/*
+ * softintr_establish(): MI interface.  establish a func(arg) as a
+ * software interrupt.
+ */
+void *
+sparc_softintr_establish(int level, void (*fun)(void *), void *arg)
+{
+	struct softintr_cookie *sic;
+	struct intrhand *ih;
+	int pilreq;
+	int pil;
+
+	/*
+	 * On a sun4m, the processor interrupt level is stored
+	 * in the softintr cookie to be passed to raise().
+	 *
+	 * On a sun4 or sun4c the appropriate bit to set
+	 * in the interrupt enable register is stored in
+	 * the softintr cookie to be passed to ienab_bis().
+	 */
+	pil = pilreq = level;
+	if (CPU_ISSUN4 || CPU_ISSUN4C) {
+		/* Select the most suitable of three available softint levels */
+		if (level >= 1 && level < 4) {
+			pil = 1;
+			pilreq = IE_L1;
+		} else if (level >= 4 && level < 6) {
+			pil = 4;
+			pilreq = IE_L4;
+		} else {
+			pil = 6;
+			pilreq = IE_L6;
+		}
+	}
+
+	sic = malloc(sizeof(*sic), M_DEVBUF, 0);
+	sic->sic_pil = pil;
+	sic->sic_pilreq = pilreq;
+	ih = &sic->sic_hand;
+	ih->ih_fun = (int (*)(void *))fun;
+	ih->ih_arg = arg;
+
+	/*
+	 * Always run the handler at the requested level, which might
+	 * be higher than the hardware can provide.
+	 *
+	 * pre-shift to PIL field in %psr
+	 */
+	ih->ih_classipl = (level << 8) & PSR_PIL;
+
+	if (fastvec & (1 << pil)) {
+		printf("softintr_establish: untie fast vector at level %d\n",
+		    pil);
+		uninst_fasttrap(level);
+	}
+
+	ih_insert(&sintrhand[pil], ih);
+	return (void *)sic;
+}
+
+/*
+ * softintr_disestablish(): MI interface.  disestablish the specified
+ * software interrupt.
+ */
+void
+sparc_softintr_disestablish(void *cookie)
+{
+	struct softintr_cookie *sic = cookie;
+
+	ih_remove(&sintrhand[sic->sic_pil], &sic->sic_hand);
+	free(cookie, M_DEVBUF);
+}
+
+#if 0
+void
+sparc_softintr_schedule(void *cookie)
+{
+	struct softintr_cookie *sic = cookie;
+	if (CPU_ISSUN4M || CPU_ISSUN4D) {
+#if defined(SUN4M) || defined(SUN4D)
+		extern void raise(int,int);
+		raise(0, sic->sic_pilreq);
+#endif
+	} else {
+#if defined(SUN4) || defined(SUN4C)
+		ienab_bis(sic->sic_pilreq);
+#endif
+	}
+}
+#endif
+
+#ifdef MULTIPROCESSOR
+/*
+ * Called by interrupt stubs, etc., to lock/unlock the kernel.
+ */
+void
+intr_lock_kernel(void)
+{
+
+	KERNEL_LOCK(1, NULL);
+}
+
+void
+intr_unlock_kernel(void)
+{
+
+	KERNEL_UNLOCK_ONE(NULL);
+}
+#endif
+
+bool
+cpu_intr_p(void)
+{
+
+	return curcpu()->ci_idepth != 0;
 }

@@ -1,4 +1,4 @@
-.\"	$NetBSD: cron.8,v 1.2 1997/03/13 06:19:10 mikel Exp $
+.\"	$NetBSD: cron.8,v 1.8 2007/12/29 13:21:57 wiz Exp $
 .\"
 .\"/* Copyright 1988,1990,1993 by Paul Vixie
 .\" * All rights reserved
@@ -16,48 +16,114 @@
 .\" * I'll try to keep a version up to date.  I can be reached as follows:
 .\" * Paul Vixie          <paul@vix.com>          uunet!decwrl!vixie!paul
 .\" */
-.\" 
+.\"
 .\" Id: cron.8,v 2.2 1993/12/28 08:34:43 vixie Exp
-.\" 
-.TH CRON 8 "20 December 1993"
-.UC 4
-.SH NAME
-cron \- daemon to execute scheduled commands (Vixie Cron)
-.SH SYNOPSIS
-cron
-.SH DESCRIPTION
-.I Cron
-should be started from /etc/rc or /etc/rc.local.  It will return immediately,
-so you don't need to start it with '&'.
-.PP
-.I Cron
-searches /var/cron/tabs for crontab files which are named after accounts in
-/etc/passwd; crontabs found are loaded into memory.
-.I Cron
-also searches for /etc/crontab which is in a different format (see
-.IR crontab(5)).
-.I Cron
+.\"
+.Dd December 29, 2007
+.Dt CRON 8
+.Os
+.Sh NAME
+.Nm cron
+.Nd daemon to execute scheduled commands (Vixie Cron)
+.Sh SYNOPSIS
+.Nm
+.Op Fl x Ar debugflags
+.Sh DESCRIPTION
+.Nm
+is normally started during system boot by
+.Xr rc.d 8
+framework, if cron is switched on in
+.Xr rc.conf 5 .
+.Pp
+.Nm
+searches
+.Pa /var/cron/tabs
+for crontab files which are named after accounts in
+.Pa /etc/passwd .
+Crontabs found are loaded into memory.
+.Nm
+also searches for
+.Pa /etc/crontab
+which is in a different format (see
+.Xr crontab 5 ) .
+.Nm
 then wakes up every minute, examining all stored crontabs, checking each
-command to see if it should be run in the current minute.  When executing
-commands, any output is mailed to the owner of the crontab (or to the user
-named in the MAILTO environment variable in the crontab, if such exists).
-.PP
+command to see if it should be run in the current minute.
+When executing commands, any output is mailed to the owner of the
+crontab (or to the user named in the
+.Ev MAILTO
+environment variable in the crontab, if such exists).
+.Pp
+Events such as
+.Dv START
+and
+.Dv FINISH
+are recorded in the
+.Pa /var/log/cron
+log file with date and time details.
+This information is useful for a number of reasons, such as
+determining the amount of time required to run a particular job.
+By default, root has an hourly job that rotates these log files
+with compression to preserve disk space.
+.Pp
 Additionally,
-.I cron
+.Nm
 checks each minute to see if its spool directory's modtime (or the modtime
 on
-.IR /etc/crontab)
+.Pa /etc/crontab )
 has changed, and if it has,
-.I cron
+.Nm
 will then examine the modtime on all crontabs and reload those which have
-changed.  Thus
-.I cron
-need not be restarted whenever a crontab file is modified.  Note that the
-.IR Crontab (1)
+changed.
+Thus
+.Nm
+need not be restarted whenever a crontab file is modified.
+Note that the
+.Xr crontab 1
 command updates the modtime of the spool directory whenever it changes a
 crontab.
-.SH "SEE ALSO"
-crontab(1), crontab(5)
-.SH AUTHOR
-.nf
-Paul Vixie <paul@vix.com>
+.Pp
+The
+.Fl x
+flag turns on some debugging flags.
+.Ar debugflags
+is comma-separated list of debugging flags to turn on.
+If a flag is turned on,
+.Nm
+writes some additional debugging information to system log during
+its work.
+Available debugging flags are:
+.Bl -tag -width proc -compact
+.It Ar sch
+scheduling
+.It Ar proc
+process control
+.It Ar pars
+parsing
+.It Ar load
+database loading
+.It Ar misc
+miscellaneous
+.It Ar test
+test mode - do not actually execute any commands
+.It Ar bit
+show how various bits are set (long)
+.It Ar ext
+print extended debugging information
+.El
+.Sh FILES
+.Bl -tag -width /var/cron/tabs -compact
+.It Pa /var/cron/tabs
+.Nm
+spool directory
+.It Pa /etc/crontab
+system crontab
+.It Pa /var/log/cron
+log file for cron events
+.El
+.Sh SEE ALSO
+.Xr crontab 1 ,
+.Xr crontab 5
+.Sh AUTHORS
+.An Paul Vixie
+.Aq paul@vix.com

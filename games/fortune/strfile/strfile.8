@@ -1,8 +1,8 @@
-.\"	$NetBSD: strfile.8,v 1.7 1999/09/09 06:30:10 simonb Exp $
+.\"	$NetBSD: strfile.8,v 1.12 2004/09/09 22:03:21 wiz Exp $
 .\"
 .\" Copyright (c) 1989, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
-.\" 
+.\"
 .\" This code is derived from software contributed to Berkeley by
 .\" Ken Arnold.
 .\"
@@ -14,11 +14,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -52,7 +48,7 @@
 .Nm unstr
 .Ar source_file
 .Sh DESCRIPTION
-.Nm Strfile
+.Nm
 reads a file containing groups of lines separated by a line containing
 a single percent
 .Ql \&%
@@ -92,7 +88,7 @@ field to be set.
 Run silently; don't give a summary message when finished.
 .It Fl x
 Note that each alphabetic character in the groups of lines is rotated
-13 positions in a simple caesar cypher.
+13 positions in a simple caesar cipher.
 This option causes the
 .Dv STR_ROTATED
 bit in the header
@@ -101,7 +97,7 @@ field to be set.
 .El
 .Pp
 The format of the header is:
-.Bd -literal
+.Bd -literal -offset indent
 #define	VERSION	1
 unsigned long	str_version;	/* version number */
 unsigned long	str_numstr;	/* # of strings in the file */
@@ -122,9 +118,8 @@ is to undo the work of
 .Nm strfile .
 It prints out the strings contained in the file
 .Ar source_file
-in the order that they are listed in
-the header file
-.Ar source_file Ns Pa .dat
+in the order that they are listed in the header file
+.Ar source_file Ns Sy .dat
 to standard output.
 It is possible to create sorted versions of input files by using
 .Fl o
@@ -133,14 +128,14 @@ when
 is run and then using
 .Nm unstr
 to dump them out in the table order.
-.Sh SEE ALSO
-.Xr byteorder 3 ,
-.Xr fortune 6
 .Sh FILES
 .Bl -tag -width strfile.out -compact
 .It Pa strfile.out
 default output file.
 .El
+.Sh SEE ALSO
+.Xr byteorder 3 ,
+.Xr fortune 6
 .Sh HISTORY
 The
 .Nm strfile

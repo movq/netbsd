@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_io.c,v 1.8 1999/03/25 18:48:51 mrg Exp $	*/
+/*	$NetBSD: uvm_io.c,v 1.24 2007/03/04 06:03:48 christos Exp $	*/
 
 /*
  *
@@ -38,16 +38,15 @@
  * uvm_io.c: uvm i/o ops
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: uvm_io.c,v 1.24 2007/03/04 06:03:48 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mman.h>
 #include <sys/proc.h>
 #include <sys/malloc.h>
 #include <sys/uio.h>
-
-#include <vm/vm.h>
-#include <vm/vm_page.h>
-#include <vm/vm_kern.h>
 
 #include <uvm/uvm.h>
 
@@ -63,13 +62,11 @@
  */
 
 int
-uvm_io(map, uio)
-	vm_map_t map;
-	struct uio *uio;
+uvm_io(struct vm_map *map, struct uio *uio)
 {
 	vaddr_t baseva, endva, pageoffset, kva;
 	vsize_t chunksz, togo, sz;
-	vm_map_entry_t dead_entries;
+	struct vm_map_entry *dead_entries;
 	int error;
 
 	/*
@@ -95,7 +92,7 @@ uvm_io(map, uio)
 		togo = togo - (endva - VM_MAXUSER_ADDRESS + 1);
 	pageoffset = baseva & PAGE_MASK;
 	baseva = trunc_page(baseva);
-	chunksz = min(round_page(togo + pageoffset), MAXBSIZE);
+	chunksz = MIN(round_page(togo + pageoffset), trunc_page(MAXPHYS));
 	error = 0;
 
 	/*
@@ -109,7 +106,7 @@ uvm_io(map, uio)
 		 */
 
 		error = uvm_map_extract(map, baseva, chunksz, kernel_map, &kva,
-			    UVM_EXTRACT_QREF | UVM_EXTRACT_CONTIG | 
+			    UVM_EXTRACT_QREF | UVM_EXTRACT_CONTIG |
 			    UVM_EXTRACT_FIXPROT);
 		if (error) {
 
@@ -131,29 +128,23 @@ uvm_io(map, uio)
 		sz = chunksz - pageoffset;
 		if (sz > togo)
 			sz = togo;
-		error = uiomove((caddr_t) (kva + pageoffset), sz, uio);
-		if (error)
-			break;
+		error = uiomove((void *) (kva + pageoffset), sz, uio);
 		togo -= sz;
 		baseva += chunksz;
-
 
 		/*
 		 * step 4: unmap the area of kernel memory
 		 */
 
 		vm_map_lock(kernel_map);
-		(void)uvm_unmap_remove(kernel_map, kva, kva+chunksz,
-		    &dead_entries);
+		uvm_unmap_remove(kernel_map, kva, kva + chunksz, &dead_entries,
+		    NULL, 0);
 		vm_map_unlock(kernel_map);
-
 		if (dead_entries != NULL)
 			uvm_unmap_detach(dead_entries, AMAP_REFALL);
+
+		if (error)
+			break;
 	}
-
-	/*
-	 * done
-	 */
-
 	return (error);
 }

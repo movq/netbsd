@@ -1,4 +1,4 @@
-/*	$NetBSD: sunmon.c,v 1.9 1998/02/26 19:30:59 gwr Exp $	*/
+/*	$NetBSD: sunmon.c,v 1.19 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,28 +29,32 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: sunmon.c,v 1.19 2008/04/28 20:23:38 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/reboot.h>
+#include <sys/boot_flag.h>
 
 #include <machine/mon.h>
+#include <machine/mc68851.h>
 
 #include <sun3/sun3/machdep.h>
 #include <sun3/sun3/interreg.h>
-#include <sun3/sun3/vector.h>
+#include <sun68k/sun68k/vector.h>
 
 static void **sunmon_vbr;
 static void *sunmon_vcmd;	/* XXX: always 0? */
 
-static void tracedump __P((int));
-static void v_handler __P((int addr, char *str));
-
+static void tracedump(int);
+static void v_handler(int, char *);
 
 /*
  * Prepare for running the PROM monitor
  */
 static void
-_mode_monitor __P((void))
+_mode_monitor(void)
 {
 	/* Disable our level-5 clock. */
 	set_clk_mode(0, IREG_CLOCK_ENAB_5, 0);
@@ -72,7 +69,7 @@ _mode_monitor __P((void))
  * Prepare for running the kernel
  */
 static void
-_mode_kernel __P((void))
+_mode_kernel(void)
 {
 	/* Disable the PROM NMI clock. */
 	set_clk_mode(0, IREG_CLOCK_ENAB_7, 0);
@@ -90,32 +87,51 @@ _mode_kernel __P((void))
  * also put our hardware state back into place after
  * the PROM "c" (continue) command is given.
  */
-void sunmon_abort()
+void 
+sunmon_abort(void)
 {
 	int s = splhigh();
+#ifdef	_SUN3X_
+	struct mmu_rootptr crp;
+#endif
 
 	_mode_monitor();
 	delay(100000);
+
+#ifdef	_SUN3X_
+	getcrp(&crp);
+	loadcrp(&mon_crp);
+#endif
 
 	/*
 	 * Drop into the PROM in a way that allows a continue.
 	 * Already setup "trap #14" in sunmon_init().
 	 */
-	asm(" trap #14 ; _sunmon_continued: nop");
+
+	__asm(" trap #14 ; _sunmon_continued: nop");
 
 	/* We have continued from a PROM abort! */
-
+#ifdef	_SUN3X_
+	loadcrp(&crp);
+#endif
 	_mode_kernel();
 	splx(s);
 }
 
-void sunmon_halt()
+void 
+sunmon_halt(void)
 {
 	(void) splhigh();
 	_mode_monitor();
 	*romVectorPtr->vector_cmd = sunmon_vcmd;
 #ifdef	_SUN3X_
 	loadcrp(&mon_crp);
+	/*
+	 * The PROM monitor "exit_to_mon" function appears to have problems...
+	 * SunOS uses the "abort" function when you halt (bug work-around?)
+	 * so we might as well do the same.
+	 */
+	__asm(" trap #14"); /* mon_exit_to_mon() provokes PROM monitor bug */
 #endif
 	mon_exit_to_mon();
 	/*NOTREACHED*/
@@ -124,8 +140,8 @@ void sunmon_halt()
 /*
  * Caller must pass a string that is in our data segment.
  */
-void sunmon_reboot(bs)
-	char *bs;
+void 
+sunmon_reboot(const char *bs)
 {
 
 	(void) splhigh();
@@ -152,9 +168,8 @@ struct funcall_frame {
 	int fr_arg[1];
 };
 /*VARARGS0*/
-static void
-tracedump(x1)
-	int x1;
+static void 
+tracedump(int x1)
 {
 	struct funcall_frame *fp = (struct funcall_frame *)(&x1 - 2);
 	u_int stackpage = ((u_int)fp) & ~PGOFSET;
@@ -179,10 +194,8 @@ tracedump(x1)
  * commands and a printf hack.
  * [lifted from freed cmu mach3 sun3 port]
  */
-static void
-v_handler(addr, str)
-	int addr;
-	char *str;
+static void 
+v_handler(int addr, char *str)
 {
 
 	switch (*str) {
@@ -242,8 +255,8 @@ v_handler(addr, str)
  * argv[1] = options	(i.e. "-ds" or NULL)
  * argv[2] = NULL
  */
-void
-sunmon_init()
+void 
+sunmon_init(void)
 {
 	struct sunromvec *rvec;
 	struct bootparam *bp;
@@ -279,19 +292,8 @@ sunmon_init()
 #ifdef	DEBUG
 		mon_printf("boot option: %s\n", p);
 #endif
-		for (++p; *p; p++) {
-			switch (*p) {
-			case 'a':
-				boothowto |= RB_ASKNAME;
-				break;
-			case 's':
-				boothowto |= RB_SINGLE;
-				break;
-			case 'd':
-				boothowto |= RB_KDB;
-				break;
-			}
-		}
+		for (++p; *p; p++)
+			BOOT_FLAG(*p, boothowto);
 		argp++;
 	}
 

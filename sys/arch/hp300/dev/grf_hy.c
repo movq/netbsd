@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_hy.c,v 1.12 1998/06/25 23:57:33 thorpej Exp $	*/
+/*	$NetBSD: grf_hy.c,v 1.37 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,45 @@
  */
 
 /*
- * Copyright (c) 1991 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department and Mark Davies of the Department of Computer
+ * Science, Victoria University of Wellington, New Zealand.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: grf_hy.c 1.2 93/08/13$
+ *
+ *	@(#)grf_hy.c	8.4 (Berkeley) 1/12/94
+ */
+
+/*
+ * Copyright (c) 1991 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -83,7 +112,8 @@
  * Graphics routines for HYPERION frame buffer
  */
 
-#include "opt_compat_hpux.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: grf_hy.c,v 1.37 2008/04/28 20:23:19 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,11 +125,14 @@
 #include <sys/tty.h>
 #include <sys/uio.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
 
 #include <dev/cons.h>
 
+#include <hp300/dev/dioreg.h>
 #include <hp300/dev/diovar.h>
 #include <hp300/dev/diodevs.h>
 #include <hp300/dev/intiovar.h>
@@ -114,82 +147,77 @@
 
 #include "ite.h"
 
-caddr_t badhyaddr = (caddr_t) -1;
+static int	hy_init(struct grf_data *gp, int, uint8_t *);
+static int	hy_mode(struct grf_data *gp, int, void *);
 
-int	hy_init __P((struct grf_data *gp, int, caddr_t));
-int	hy_mode __P((struct grf_data *gp, int, caddr_t));
-void	hyper_ite_fontinit __P((struct ite_data *));
+static int	hyper_dio_match(device_t, cfdata_t, void *);
+static void	hyper_dio_attach(device_t, device_t, void *);
 
-int	hyper_dio_match __P((struct device *, struct cfdata *, void *));
-void	hyper_dio_attach __P((struct device *, struct device *, void *));
+int	hypercnattach(bus_space_tag_t, bus_addr_t, int);
 
-int	hyper_console_scan __P((int, caddr_t, void *));
-void	hypercnprobe __P((struct consdev *cp));
-void	hypercninit __P((struct consdev *cp));
-
-struct cfattach hyper_dio_ca = {
-	sizeof(struct grfdev_softc), hyper_dio_match, hyper_dio_attach
-};
+CFATTACH_DECL_NEW(hyper_dio, sizeof(struct grfdev_softc),
+    hyper_dio_match, hyper_dio_attach, NULL, NULL);
 
 /* Hyperion grf switch */
-struct grfsw hyper_grfsw = {
+static struct grfsw hyper_grfsw = {
 	GID_HYPERION, GRFHYPERION, "hyperion", hy_init, hy_mode
 };
 
+static int hyperconscode;
+static void *hyperconaddr;
+
 #if NITE > 0
-void	hyper_init __P((struct ite_data *));
-void	hyper_deinit __P((struct ite_data *));
-void	hyper_int_fontinit __P((struct ite_data *));
-void	hyper_putc __P((struct ite_data *, int, int, int, int));
-void	hyper_cursor __P((struct ite_data *, int));
-void	hyper_clear __P((struct ite_data *, int, int, int, int));
-void	hyper_scroll __P((struct ite_data *, int, int, int, int));
-void	hyper_windowmove __P((struct ite_data *, int, int, int, int,
-		int, int, int));
+static void	hyper_init(struct ite_data *);
+static void	hyper_deinit(struct ite_data *);
+static void	hyper_ite_fontinit(struct ite_data *);
+static void	hyper_putc(struct ite_data *, int, int, int, int);
+static void	hyper_cursor(struct ite_data *, int);
+static void	hyper_clear(struct ite_data *, int, int, int, int);
+static void	hyper_scroll(struct ite_data *, int, int, int, int);
+static void	hyper_windowmove(struct ite_data *, int, int, int, int,
+			int, int, int);
 
 /* Hyperion ite switch */
-struct itesw hyper_itesw = {
+static struct itesw hyper_itesw = {
 	hyper_init, hyper_deinit, hyper_clear, hyper_putc,
 	hyper_cursor, hyper_scroll, ite_readbyte, ite_writeglyph
 };
 #endif /* NITE > 0 */
 
-int
-hyper_dio_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+hyper_dio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct dio_attach_args *da = aux;
 
 	if (da->da_id == DIO_DEVICE_ID_FRAMEBUFFER &&
 	    da->da_secid == DIO_DEVICE_SECID_HYPERION)
-		return (1);
+		return 1;
 
-	return (0);
+	return 0;
 }
 
-void
-hyper_dio_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+hyper_dio_attach(device_t parent, device_t self, void *aux)
 {
-	struct grfdev_softc *sc = (struct grfdev_softc *)self;
+	struct grfdev_softc *sc = device_private(self);
 	struct dio_attach_args *da = aux;
-	caddr_t grf;
+	bus_space_handle_t bsh;
+	void *grf;
 
+	sc->sc_dev = self;
 	sc->sc_scode = da->da_scode;
-	if (sc->sc_scode == conscode)
-		grf = conaddr;
+	if (sc->sc_scode == hyperconscode)
+		grf = hyperconaddr;
 	else {
-		grf = iomap(dio_scodetopa(sc->sc_scode), da->da_size);
-		if (grf == 0) {
-			printf("%s: can't map framebuffer\n",
-			    sc->sc_dev.dv_xname);
+		if (bus_space_map(da->da_bst, da->da_addr, da->da_size,
+		    0, &bsh)) {
+			aprint_error(": can't map framebuffer\n");
 			return;
 		}
+		grf = bus_space_vaddr(da->da_bst, bsh);
 	}
 
+	sc->sc_isconsole = (sc->sc_scode == hyperconscode);
 	grfdev_attach(sc, hy_init, grf, &hyper_grfsw);
 }
 
@@ -198,13 +226,10 @@ hyper_dio_attach(parent, self, aux)
  * Must fill in the grfinfo structure in g_softc.
  * Returns 0 if hardware not present, non-zero ow.
  */
-int
-hy_init(gp, scode, addr)
-	struct grf_data *gp;
-	int scode;
-	caddr_t addr;
+static int
+hy_init(struct grf_data *gp, int scode, uint8_t *addr)
 {
-	struct hyboxfb *hy = (struct hyboxfb *) addr;
+	struct hyboxfb *hy = (struct hyboxfb *)addr;
 	struct grfinfo *gi = &gp->g_display;
 	int fboff;
 
@@ -212,9 +237,9 @@ hy_init(gp, scode, addr)
 	 * If the console has been initialized, and it was us, there's
 	 * no need to repeat this.
 	 */
-	if (consinit_active || (scode != conscode)) {
+	if (scode != hyperconscode) {
 		if (ISIIOVA(addr))
-			gi->gd_regaddr = (caddr_t) IIOP(addr);
+			gi->gd_regaddr = (void *)IIOP(addr);
 		else
 			gi->gd_regaddr = dio_scodetopa(scode);
 		gi->gd_regsize = 0x20000;
@@ -222,21 +247,21 @@ hy_init(gp, scode, addr)
 		gi->gd_fbheight = (hy->fbhmsb << 8) | hy->fbhlsb;
 		gi->gd_fbsize = (gi->gd_fbwidth * gi->gd_fbheight) >> 3;
 		fboff = (hy->fbomsb << 8) | hy->fbolsb;
-		gi->gd_fbaddr = (caddr_t) (*((u_char *)addr + fboff) << 16);
-		if (gi->gd_regaddr >= (caddr_t)DIOIIBASE) {
+		gi->gd_fbaddr = (void *)(*(addr + fboff) << 16);
+		if ((vaddr_t)gi->gd_regaddr >= DIOIIBASE) {
 			/*
 			 * For DIO II space the fbaddr just computed is
 			 * the offset from the select code base (regaddr)
 			 * of the framebuffer.  Hence it is also implicitly
 			 * the size of the register set.
 			 */
-			gi->gd_regsize = (int) gi->gd_fbaddr;
-			gi->gd_fbaddr += (int) gi->gd_regaddr;
+			gi->gd_regsize = (int)gi->gd_fbaddr;
+			gi->gd_fbaddr += (int)gi->gd_regaddr;
 			gp->g_regkva = addr;
 			gp->g_fbkva = addr + gi->gd_regsize;
 		} else {
 			/*
-			 * For DIO space we need to map the seperate
+			 * For DIO space we need to map the separate
 			 * framebuffer.
 			 */
 			gp->g_regkva = addr;
@@ -247,7 +272,7 @@ hy_init(gp, scode, addr)
 		gi->gd_planes = hy->num_planes;
 		gi->gd_colors = 1 << gi->gd_planes;
 	}
-	return(1);
+	return 1;
 }
 
 /*
@@ -256,11 +281,8 @@ hy_init(gp, scode, addr)
  * Return a UNIX error number or 0 for success.
  * Function may not be needed anymore.
  */
-int
-hy_mode(gp, cmd, data)
-	struct grf_data *gp;
-	int cmd;
-	caddr_t data;
+static int
+hy_mode(struct grf_data *gp, int cmd, void *data)
 {
 	int error = 0;
 
@@ -281,48 +303,11 @@ hy_mode(gp, cmd, data)
 		gp->g_data = 0;
 		break;
 
-#ifdef COMPAT_HPUX
-	case GM_DESCRIBE:
-	{
-		struct grf_fbinfo *fi = (struct grf_fbinfo *)data;
-		struct grfinfo *gi = &gp->g_display;
-		int i;
-
-		/* feed it what HP-UX expects */
-		fi->id = gi->gd_id;
-		fi->mapsize = gi->gd_fbsize;
-		fi->dwidth = gi->gd_dwidth;
-		fi->dlength = gi->gd_dheight;
-		fi->width = gi->gd_fbwidth;
-		fi->length = gi->gd_fbheight;
-		fi->bpp = NBBY;
-		fi->xlen = (fi->width * fi->bpp) / NBBY;
-		fi->npl = gi->gd_planes;
-		fi->bppu = fi->npl;
-		fi->nplbytes = fi->xlen * ((fi->length * fi->bpp) / NBBY);
-		bcopy("A1096A", fi->name, 7);	/* ?? */
-		fi->attr = 0;			/* ?? */
-		/*
-		 * If mapped, return the UVA where mapped.
-		 */
-		if (gp->g_data) {
-			fi->regbase = gp->g_data;
-			fi->fbbase = fi->regbase + gp->g_display.gd_regsize;
-		} else {
-			fi->fbbase = 0;
-			fi->regbase = 0;
-		}
-		for (i = 0; i < 6; i++)
-			fi->regions[i] = 0;
-		break;
-	}
-#endif
-
 	default:
 		error = EINVAL;
 		break;
 	}
-	return(error);
+	return error;
 }
 
 #if NITE > 0
@@ -338,9 +323,8 @@ hy_mode(gp, cmd, data)
 #define	charX(ip,c)	\
 	(((c) % (ip)->cpl) * ((((ip)->ftwidth + 7) / 8) * 8) + (ip)->fontx)
 
-void
-hyper_init(ip)
-	struct ite_data *ip;
+static void
+hyper_init(struct ite_data *ip)
 {
 	int width;
 
@@ -378,21 +362,20 @@ hyper_init(ip)
 			 ip->ftwidth, RR_COPYINVERTED);
 }
 
-void
-hyper_deinit(ip)
-	struct ite_data *ip;
+static void
+hyper_deinit(struct ite_data *ip)
 {
 	hyper_windowmove(ip, 0, 0, 0, 0, ip->fbheight, ip->fbwidth, RR_CLEAR);
 
 	REGBASE->nblank = 0x05;
-   	ip->flags &= ~ITE_INITED;
+	ip->flags &= ~ITE_INITED;
 }
 
-void
-hyper_ite_fontinit(ip)
-	struct ite_data *ip;
+static void
+hyper_ite_fontinit(struct ite_data *ip)
 {
-	u_char *fbmem, *dp;
+	volatile u_char *fbmem;
+	u_char *dp;
 	int c, l, b;
 	int stride, width;
 
@@ -402,7 +385,7 @@ hyper_ite_fontinit(ip)
 	width = (ip->ftwidth + 7) / 8;
 
 	for (c = 0; c < 128; c++) {
-		fbmem = (u_char *) FBBASE +
+		fbmem = FBBASE +
 			(ip->fonty + (c / ip->cpl) * ip->ftheight) *
 			stride;
 		fbmem += (ip->fontx >> 3) + (c % ip->cpl) * width;
@@ -417,22 +400,18 @@ hyper_ite_fontinit(ip)
 	}
 }
 
-void
-hyper_putc(ip, c, dy, dx, mode)
-	struct ite_data *ip;
-	int c, dy, dx, mode;
+static void
+hyper_putc(struct ite_data *ip, int c, int dy, int dx, int mode)
 {
-        int wmrr = ((mode == ATTR_INV) ? RR_COPYINVERTED : RR_COPY);
-	
+	int wmrr = ((mode == ATTR_INV) ? RR_COPYINVERTED : RR_COPY);
+
 	hyper_windowmove(ip, charY(ip, c), charX(ip, c),
 			 dy * ip->ftheight, dx * ip->ftwidth,
 			 ip->ftheight, ip->ftwidth, wmrr);
 }
 
-void
-hyper_cursor(ip, flag)
-	struct ite_data *ip;
-	int flag;
+static void
+hyper_cursor(struct ite_data *ip, int flag)
 {
 	if (flag == DRAW_CURSOR)
 		draw_cursor(ip)
@@ -444,21 +423,17 @@ hyper_cursor(ip, flag)
 		erase_cursor(ip)
 }
 
-void
-hyper_clear(ip, sy, sx, h, w)
-	struct ite_data *ip;
-	int sy, sx, h, w;
+static void
+hyper_clear(struct ite_data *ip, int sy, int sx, int h, int w)
 {
 	hyper_windowmove(ip, sy * ip->ftheight, sx * ip->ftwidth,
-			 sy * ip->ftheight, sx * ip->ftwidth, 
+			 sy * ip->ftheight, sx * ip->ftwidth,
 			 h  * ip->ftheight, w  * ip->ftwidth,
 			 RR_CLEAR);
 }
 
 void
-hyper_scroll(ip, sy, sx, count, dir)
-        struct ite_data *ip;
-        int sy, count, dir, sx;
+hyper_scroll(struct ite_data *ip, int sy, int sx, int count, int dir)
 {
 	int dy;
 	int dx = sx;
@@ -482,7 +457,7 @@ hyper_scroll(ip, sy, sx, count, dir)
 		dy = sy;
 		dx = sx - count;
 		width = ip->cols - sx;
-	}		
+	}
 
 	hyper_windowmove(ip, sy * ip->ftheight, sx * ip->ftwidth,
 			 dy * ip->ftheight, dx * ip->ftwidth,
@@ -498,8 +473,7 @@ hyper_scroll(ip, sy, sx, count, dir)
  * than having to do the multiple reads and masks that we'd
  * have to do if we thought it was partial.
  */
-int starttab[32] =
-    {
+static const int starttab[32] = {
 	0x00000000,
 	0x7FFFFFFF,
 	0x3FFFFFFF,
@@ -532,10 +506,9 @@ int starttab[32] =
 	0x00000007,
 	0x00000003,
 	0x00000001
-    };
+};
 
-int endtab[32] =
-    {
+static const int endtab[32] = {
 	0x00000000,
 	0x80000000,
 	0xC0000000,
@@ -568,297 +541,205 @@ int endtab[32] =
 	0xFFFFFFF8,
 	0xFFFFFFFC,
 	0xFFFFFFFE
-    };
+};
 
-void
-hyper_windowmove(ip, sy, sx, dy, dx, h, w, func)
-	struct ite_data *ip;
-	int sy, sx, dy, dx, h, w, func;
+static void
+hyper_windowmove(struct ite_data *ip, int sy, int sx, int dy, int dx, int h,
+    int w, int func)
 {
 	int width;		/* add to get to same position in next line */
 
 	unsigned int *psrcLine, *pdstLine;
-                                /* pointers to line with current src and dst */
-	unsigned int *psrc;  /* pointer to current src longword */
-	unsigned int *pdst;  /* pointer to current dst longword */
+				/* pointers to line with current src and dst */
+	unsigned int *psrc;	/* pointer to current src longword */
+	unsigned int *pdst;	/* pointer to current dst longword */
 
-                                /* following used for looping through a line */
+				/* following used for looping through a line */
 	unsigned int startmask, endmask;  /* masks for writing ends of dst */
 	int nlMiddle;		/* whole longwords in dst */
-	int nl;	/* temp copy of nlMiddle */
+	int nl;			/* temp copy of nlMiddle */
 	unsigned int tmpSrc;
-                                /* place to store full source word */
-	int xoffSrc;	/* offset (>= 0, < 32) from which to
-                                   fetch whole longwords fetched
-                                   in src */
+				/* place to store full source word */
+	int xoffSrc;		/* offset (>= 0, < 32) from which to
+				   fetch whole longwords fetched
+				   in src */
 	int nstart;		/* number of ragged bits at start of dst */
 	int nend;		/* number of ragged bits at end of dst */
+
 	int srcStartOver;	/* pulling nstart bits from src
-                                   overflows into the next word? */
+				   overflows into the next word? */
 
 	if (h == 0 || w == 0)
 		return;
 
 	width = ip->fbwidth >> 5;
 
-	if (sy < dy) /* start at last scanline of rectangle */
-	{
-	    psrcLine = ((unsigned int *) ip->fbbase) + ((sy+h-1) * width);
-	    pdstLine = ((unsigned int *) ip->fbbase) + ((dy+h-1) * width);
-	    width = -width;
-	}
-	else /* start at first scanline */
-	{
-	    psrcLine = ((unsigned int *) ip->fbbase) + (sy * width);
-	    pdstLine = ((unsigned int *) ip->fbbase) + (dy * width);
+	if (sy < dy) {
+		/* start at last scanline of rectangle */
+		psrcLine = ((unsigned int *) ip->fbbase) + ((sy+h-1) * width);
+		pdstLine = ((unsigned int *) ip->fbbase) + ((dy+h-1) * width);
+		width = -width;
+	} else {
+		/* start at first scanline */
+		psrcLine = ((unsigned int *) ip->fbbase) + (sy * width);
+		pdstLine = ((unsigned int *) ip->fbbase) + (dy * width);
 	}
 
 	/* x direction doesn't matter for < 1 longword */
-	if (w <= 32)
-	{
-	    int srcBit, dstBit;     /* bit offset of src and dst */
+	if (w <= 32) {
+		int srcBit, dstBit;     /* bit offset of src and dst */
 
-	    pdstLine += (dx >> 5);
-	    psrcLine += (sx >> 5);
-	    psrc = psrcLine;
-	    pdst = pdstLine;
-
-	    srcBit = sx & 0x1f;
-	    dstBit = dx & 0x1f;
-
-	    while(h--)
-	    {
-                getandputrop(psrc, srcBit, dstBit, w, pdst, func)
-	        pdst += width;
-		psrc += width;
-	    }
-	}
-	else
-        {
-	    maskbits(dx, w, startmask, endmask, nlMiddle)
-	    if (startmask)
-	      nstart = 32 - (dx & 0x1f);
-	    else
-	      nstart = 0;
-	    if (endmask)
-	      nend = (dx + w) & 0x1f;
-	    else
-	      nend = 0;
-
-	    xoffSrc = ((sx & 0x1f) + nstart) & 0x1f;
-	    srcStartOver = ((sx & 0x1f) + nstart) > 31;
-
-	    if (sx >= dx) /* move left to right */
-	    {
-	        pdstLine += (dx >> 5);
+		pdstLine += (dx >> 5);
 		psrcLine += (sx >> 5);
+		psrc = psrcLine;
+		pdst = pdstLine;
 
-		while (h--)
-		{
-		    psrc = psrcLine;
-		    pdst = pdstLine;
+		srcBit = sx & 0x1f;
+		dstBit = dx & 0x1f;
 
-		    if (startmask)
-		    {
-			getandputrop(psrc, (sx & 0x1f),
-				     (dx & 0x1f), nstart, pdst, func)
-			    pdst++;
-			if (srcStartOver)
-			    psrc++;
-		    }
-
-		    /* special case for aligned operations */
-		    if (xoffSrc == 0)
-		    {
-			nl = nlMiddle;
-			while (nl--)
-			{
-			    DoRop (*pdst, func, *psrc++, *pdst);
-			    pdst++;
-			}
-		    }
-		    else
-		    {
-			nl = nlMiddle + 1;
-			while (--nl)
-			{
-			    getunalignedword (psrc, xoffSrc, tmpSrc)
-				DoRop (*pdst, func, tmpSrc, *pdst);
-			    pdst++;
-			    psrc++;
-			}
-		    }
-
-		    if (endmask)
-		    {
-			getandputrop0(psrc, xoffSrc, nend, pdst, func);
-		    }
-
-		    pdstLine += width;
-		    psrcLine += width;
+		while (h--) {
+			getandputrop(psrc, srcBit, dstBit, w, pdst, func);
+			pdst += width;
+			psrc += width;
 		}
-	    }
-	    else /* move right to left */
-	    {
-		pdstLine += ((dx + w) >> 5);
-		psrcLine += ((sx + w) >> 5);
-		/* if fetch of last partial bits from source crosses
-		   a longword boundary, start at the previous longword
-		   */
-		if (xoffSrc + nend >= 32)
-		    --psrcLine;
+	} else {
+		maskbits(dx, w, startmask, endmask, nlMiddle);
+		if (startmask)
+			nstart = 32 - (dx & 0x1f);
+		else
+			nstart = 0;
+		if (endmask)
+			nend = (dx + w) & 0x1f;
+		else
+			nend = 0;
 
-		while (h--)
-		{
-		    psrc = psrcLine;
-		    pdst = pdstLine;
+		xoffSrc = ((sx & 0x1f) + nstart) & 0x1f;
+		srcStartOver = ((sx & 0x1f) + nstart) > 31;
 
-		    if (endmask)
-		    {
-			getandputrop0(psrc, xoffSrc, nend, pdst, func);
-		    }
+		if (sx >= dx) {
+			/* move left to right */
+			pdstLine += (dx >> 5);
+			psrcLine += (sx >> 5);
 
-		    nl = nlMiddle + 1;
-		    while (--nl)
-		    {
-			--psrc;
-			--pdst;
-			getunalignedword(psrc, xoffSrc, tmpSrc)
-                        DoRop(*pdst, func, tmpSrc, *pdst);
-		    }
+			while (h--) {
+				psrc = psrcLine;
+				pdst = pdstLine;
 
-		    if (startmask)
-		    {
-			if (srcStartOver)
-			    --psrc;
-			--pdst;
-			getandputrop(psrc, (sx & 0x1f),
-				     (dx & 0x1f), nstart, pdst, func)
-                    }
+				if (startmask) {
+					getandputrop(psrc, (sx & 0x1f),
+					    (dx & 0x1f), nstart, pdst, func);
+					pdst++;
+					if (srcStartOver)
+						psrc++;
+				}
 
-		    pdstLine += width;
-		    psrcLine += width;
-		}
-	    } /* move right to left */
+				/* special case for aligned operations */
+				if (xoffSrc == 0) {
+					nl = nlMiddle;
+					while (nl--) {
+						DoRop(*pdst, func, *psrc++,
+						    *pdst);
+						pdst++;
+					}
+				} else {
+					nl = nlMiddle + 1;
+					while (--nl) {
+						getunalignedword(psrc,
+						    xoffSrc, tmpSrc);
+						DoRop(*pdst, func, tmpSrc,
+						    *pdst);
+						pdst++;
+						psrc++;
+					}
+				}
+
+				if (endmask) {
+					getandputrop0(psrc, xoffSrc, nend,
+					    pdst, func);
+				}
+
+				pdstLine += width;
+				psrcLine += width;
+			}
+		} else {
+			/* move right to left */
+			pdstLine += ((dx + w) >> 5);
+			psrcLine += ((sx + w) >> 5);
+			/*
+			 * if fetch of last partial bits from source crosses
+			 * a longword boundary, start at the previous longword
+			 */
+			if (xoffSrc + nend >= 32)
+				--psrcLine;
+
+			while (h--) {
+				psrc = psrcLine;
+				pdst = pdstLine;
+
+				if (endmask) {
+					getandputrop0(psrc, xoffSrc, nend,
+					    pdst, func);
+				}
+
+				nl = nlMiddle + 1;
+				while (--nl) {
+					--psrc;
+					--pdst;
+					getunalignedword(psrc, xoffSrc, tmpSrc);
+					DoRop(*pdst, func, tmpSrc, *pdst);
+				}
+
+				if (startmask) {
+					if (srcStartOver)
+						--psrc;
+					--pdst;
+					getandputrop(psrc, (sx & 0x1f),
+					    (dx & 0x1f), nstart, pdst, func);
+				}
+
+				pdstLine += width;
+				psrcLine += width;
+			}
+		} /* move right to left */
 	}
 }
 
 /*
  * Hyperion console support
  */
-
 int
-hyper_console_scan(scode, va, arg)
-	int scode;
-	caddr_t va;
-	void *arg;
+hypercnattach(bus_space_tag_t bst, bus_addr_t addr, int scode)
 {
-	struct grfreg *grf = (struct grfreg *)va;
-	struct consdev *cp = arg;
-	u_char *dioiidev;
-	int force = 0, pri;
-
-	if ((grf->gr_id == GRFHWID) && (grf->gr_id2 == GID_HYPERION)) {
-		pri = CN_NORMAL;
-
-#ifdef CONSCODE
-		/*
-		 * Raise our prioity, if appropriate.
-		 */
-		if (scode == CONSCODE) {
-			pri = CN_REMOTE;
-			force = conforced = 1;
-		}
-#endif
-
-		/* Only raise priority. */
-		if (pri > cp->cn_pri)
-			cp->cn_pri = pri;
-
-		/*
-		 * If our priority is higher than the currently-remembered
-		 * console, stash our priority.
-		 */
-		if (((cn_tab == NULL) || (cp->cn_pri > cn_tab->cn_pri))
-		    || force) {
-			cn_tab = cp;
-			if (scode >= 132) {
-				dioiidev = (u_char *)va;
-				return ((dioiidev[0x101] + 1) * 0x100000);
-			}
-			return (DIOCSIZE);
-		}
-	}
-	return (0);
-}
-
-void
-hypercnprobe(cp)
-	struct consdev *cp;
-{
-	int maj;
-	caddr_t va;
+	bus_space_handle_t bsh;
+	void *va;
 	struct grfreg *grf;
-	int force = 0;
+	struct grf_data *gp = &grf_cn;
+	int size;
 
-	maj = ite_major();
-
-	/* initialize required fields */
-	cp->cn_dev = makedev(maj, 0);		/* XXX */
-	cp->cn_pri = CN_DEAD;
-
-	/* Abort early if console is already forced. */
-	if (conforced)
-		return;
-
-	/* Look for "internal" framebuffer. */
-	va = (caddr_t)IIOV(GRFIADDR);
+	if (bus_space_map(bst, addr, PAGE_SIZE, 0, &bsh))
+		return 1;
+	va = bus_space_vaddr(bst, bsh);
 	grf = (struct grfreg *)va;
-	if (!badaddr(va) &&
-	    ((grf->gr_id == GRFHWID) && (grf->gr_id2 == GID_HYPERION))) {
-		cp->cn_pri = CN_INTERNAL;
 
-#ifdef CONSCODE
-		/*
-		 * Raise our priority and save some work, if appropriate.
-		 */
-		if (CONSCODE == -1) {
-			cp->cn_pri = CN_REMOTE;
-			force = conforced = 1;
-		}
-#endif
-
-		/*
-		 * If our priority is higher than the currently
-		 * remembered console, stash our priority, and
-		 * unmap whichever device might be currently mapped.
-		 * Since we're internal, we set the saved size to 0
-		 * so they don't attempt to unmap our fixed VA later.
-		 */
-		if (((cn_tab == NULL) || (cp->cn_pri > cn_tab->cn_pri))
-		    || force) {
-			cn_tab = cp;
-			if (convasize)
-				iounmap(conaddr, convasize);
-			conscode = -1;
-			conaddr = va;
-			convasize = 0;
-		}
+	if (badaddr(va) ||
+	    (grf->gr_id != GRFHWID) || (grf->gr_id2 != GID_HYPERION)) {
+		bus_space_unmap(bst, bsh, PAGE_SIZE);
+		return 1;
 	}
 
-	console_scan(hyper_console_scan, cp);
-}
+	size = DIO_SIZE(scode, va);
 
-void
-hypercninit(cp)
-	struct consdev *cp;
-{
-	struct grf_data *gp = &grf_cn;
+	bus_space_unmap(bst, bsh, PAGE_SIZE);
+	if (bus_space_map(bst, addr, size, 0, &bsh))
+		return 1;
+	va = bus_space_vaddr(bst, bsh);
 
 	/*
 	 * Initialize the framebuffer hardware.
 	 */
-	(void)hy_init(gp, conscode, conaddr);
+	(void)hy_init(gp, scode, va);
+	hyperconscode = scode;
+	hyperconaddr = va;
 
 	/*
 	 * Set up required grf data.
@@ -870,7 +751,8 @@ hypercninit(cp)
 	/*
 	 * Initialize the terminal emulator.
 	 */
-	itecninit(gp, &hyper_itesw);
+	itedisplaycnattach(gp, &hyper_itesw);
+	return 0;
 }
 
 #endif /* NITE > 0 */

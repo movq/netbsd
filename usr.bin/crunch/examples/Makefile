@@ -1,4 +1,6 @@
-#	$NetBSD: Makefile,v 1.3 1999/02/13 02:54:55 lukem Exp $
+#	$NetBSD: Makefile,v 1.6 2003/07/10 11:21:51 lukem Exp $
+
+NOMAN=	# defined
 
 CRUNCHED=   fixit
 
@@ -11,7 +13,6 @@ CONF=	$(CRUNCHED).conf
 OUTMK=	$(CRUNCHED).mk
 OUTPUTS=  $(OUTMK) $(CRUNCHED).c $(CRUNCHED).cache
 
-MKMAN=	no
 CLEANFILES+=$(CRUNCHED) $(OUTPUTS) *.o *.lo *_stub.c
 
 all: $(CRUNCHED)
@@ -23,8 +24,8 @@ $(OUTPUTS): $(CONF)
 $(CRUNCHED): $(OUTPUTS) submake
 
 submake:
-	make -f $(OUTMK)
+	${MAKE} -f $(OUTMK)
 objs:
-	make -f $(OUTMK) objs
+	${MAKE} -f $(OUTMK) objs
 
 .include <bsd.prog.mk>

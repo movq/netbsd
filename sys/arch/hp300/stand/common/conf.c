@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.4 1999/12/14 20:55:27 thorpej Exp $	*/
+/*	$NetBSD: conf.c,v 1.12 2007/12/23 03:11:32 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -46,66 +42,44 @@
 #include <lib/libsa/nfs.h>
 #include <lib/libsa/ufs.h>
 
+#include <hp300/stand/common/conf.h>
 #include <hp300/stand/common/rawfs.h>
 #include <hp300/stand/common/samachdep.h>
 
 int	debug = 0;	/* XXX */
 
 #define xxstrategy	\
-	(int (*) __P((void *, int, daddr_t, size_t, void *, size_t *)))nullsys
-#define xxopen		(int (*) __P((struct open_file *, ...)))nodev
-#define xxclose		(int (*) __P((struct open_file *)))nullsys
+	(int (*)(void *, int, daddr_t, size_t, void *, size_t *))nullsys
+#define xxopen		(int (*)(struct open_file *, ...))nodev
+#define xxclose		(int (*)(struct open_file *))nullsys
 
 /*
  * Device configuration
  */
-#ifdef SUPPORT_ETHERNET
-int	netstrategy __P((void *, int, daddr_t, size_t, void *, size_t *));
-int	netopen __P((struct open_file *, ...));
-int	netclose __P((struct open_file *));
-#define netioctl	noioctl
-#else
+#ifndef SUPPORT_ETHERNET
 #define	netstrategy	xxstrategy
 #define	netopen		xxopen
 #define	netclose	xxclose
-#define	netioctl	noioctl
 #endif
+#define	netioctl	noioctl
 
-#ifdef SUPPORT_TAPE
-int	ctstrategy __P((void *, int, daddr_t, size_t, void *, size_t *));
-int	ctopen __P((struct open_file *, ...));
-int	ctclose __P((struct open_file *));
-#define	ctioctl		noioctl
-#else
+#ifndef SUPPORT_TAPE
 #define	ctstrategy	xxstrategy
 #define	ctopen		xxopen
 #define	ctclose		xxclose
-#define	ctioctl		noioctl
 #endif
+#define	ctioctl		noioctl
 
-#ifdef SUPPORT_DISK
-int	rdstrategy __P((void *, int, daddr_t, size_t, void *, size_t *));
-int	rdopen __P((struct open_file *, ...));
-int	rdclose __P((struct open_file *));
-#define rdioctl		noioctl
-#else
+#ifndef SUPPORT_DISK
 #define	rdstrategy	xxstrategy
 #define	rdopen		xxopen
 #define	rdclose		xxclose
-#define	rdioctl		noioctl
-#endif
-
-#ifdef SUPPORT_DISK
-int	sdstrategy __P((void *, int, daddr_t, size_t, void *, size_t *));
-int	sdopen __P((struct open_file *, ...));
-int	sdclose __P((struct open_file *));
-#define	sdioctl		noioctl
-#else
 #define	sdstrategy	xxstrategy
 #define	sdopen		xxopen
 #define	sdclose		xxclose
-#define	sdioctl		noioctl
 #endif
+#define rdioctl		noioctl
+#define	sdioctl		noioctl
 
 /*
  * Note: "le" isn't a major offset.
@@ -119,35 +93,30 @@ struct devsw devsw[] = {
 	{ "??",	xxstrategy,	xxopen,	xxclose,	noioctl }, /*5*/
 	{ "le",	netstrategy,	netopen, netclose,	netioctl },/*6*/
 };
-int	ndevs = (sizeof(devsw) / sizeof(devsw[0]));
+int	ndevs = __arraycount(devsw);
 
 #ifdef SUPPORT_ETHERNET
-extern struct netif_driver le_driver;
-
 struct netif_driver *netif_drivers[] = {
 	&le_driver,
 };
-int	n_netif_drivers = (sizeof(netif_drivers) / sizeof(netif_drivers[0]));
+int	n_netif_drivers = __arraycount(netif_drivers);
 #endif
 
 /*
  * Physical unit/lun detection.
  */
-int	punitzero __P((int, int, int *));
+static int punitzero(int, int, int *);
 
-int
-punitzero(ctlr, slave, punit)
-	int ctlr, slave, *punit;
+static int
+punitzero(int ctlr, int slave, int *punit)
 {
 
 	*punit = 0;
-	return (0);
+	return 0;
 }
 
 #define	xxpunit		punitzero
-#ifdef SUPPORT_TAPE
-extern int ctpunit __P((int, int, int *));
-#else
+#ifndef SUPPORT_TAPE
 #define	ctpunit		xxpunit
 #endif
 #define	rdpunit		punitzero
@@ -163,34 +132,25 @@ struct punitsw punitsw[] = {
 	{ xxpunit },
 	{ lepunit },
 };
-int	npunit = (sizeof(punitsw) / sizeof(punitsw[0]));
+int	npunit = __arraycount(punitsw);
 
 /*
  * Filesystem configuration
  */
-struct fs_ops file_system_rawfs[] = {
-	{ rawfs_open, rawfs_close, rawfs_read, rawfs_write, rawfs_seek,
-	    rawfs_stat },
-};
-
-struct fs_ops file_system_ufs[] = {
-	{ ufs_open, ufs_close, ufs_read, ufs_write, ufs_seek, ufs_stat },
-};
-
-struct fs_ops file_system_nfs[] = {
-	{ nfs_open, nfs_close, nfs_read, nfs_write, nfs_seek, nfs_stat },
-};
+struct fs_ops file_system_rawfs[] = { FS_OPS(rawfs) };
+struct fs_ops file_system_ufs[] = { FS_OPS(ufs) };
+struct fs_ops file_system_nfs[] = { FS_OPS(nfs) };
 
 struct fs_ops file_system[1];
 int	nfsys = 1;		/* we always know which one we want */
 
-
+#if 0
 /*
  * Inititalize controllers
- * 
+ *
  * XXX this should be a table
  */
-void ctlrinit()
+void ctlrinit(void)
 {
 #ifdef SUPPORT_ETHERNET
 	leinit();
@@ -200,3 +160,4 @@ void ctlrinit()
 	scsiinit();
 #endif
 }
+#endif

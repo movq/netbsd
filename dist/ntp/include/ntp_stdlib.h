@@ -1,9 +1,11 @@
-/*	$NetBSD: ntp_stdlib.h,v 1.1.1.1 2000/03/29 12:38:48 simonb Exp $	*/
+/*	$NetBSD: ntp_stdlib.h,v 1.5.18.1 2009/01/16 23:07:42 bouyer Exp $	*/
 
 /*
  * ntp_stdlib.h - Prototypes for NTP lib.
  */
 #include <sys/types.h>
+#include <sys/socket.h>
+#include "ntp_rfc2553.h"
 
 #include "ntp_types.h"
 #include "ntp_string.h"
@@ -29,64 +31,44 @@
 # include <stdarg.h>
 extern	void	msyslog		P((int, const char *, ...))
 				__attribute__((__format__(__printf__, 2, 3)));
+extern	void	netsyslog	P((int, const char *, ...))
+				__attribute__((__format__(__printf__, 2, 3)));
 #else
 # include <varargs.h>
 extern	void msyslog		P(());
+extern	void netsyslog		P(());
 #endif
 
-#if 0				/* HMS: These seem to be unused now */
-extern	void	auth_des	P((u_long *, u_char *));
 extern	void	auth_delkeys	P((void));
-extern	int	auth_parity	P((u_long *));
-extern	void	auth_setkey	P((u_long, u_long *));
-extern	void	auth_subkeys	P((u_long *, u_char *, u_char *));
-#endif
-
-extern	void	auth1crypt	P((u_long, u_int32 *, int));
-extern	int	auth2crypt	P((u_long, u_int32 *, int));
-extern	void	auth_delkeys	P((void));
-extern	int	auth_havekey	P((u_long));
-extern	int	authdecrypt	P((u_long, u_int32 *, int, int));
-extern	int	authencrypt	P((u_long, u_int32 *, int));
-extern	int	authhavekey	P((u_long));
-extern	int	authistrusted	P((u_long));
+extern	int	auth_havekey	P((keyid_t));
+extern	int	authdecrypt	P((keyid_t, u_int32 *, int, int));
+extern	int	authencrypt	P((keyid_t, u_int32 *, int));
+extern	int	authhavekey	P((keyid_t));
+extern	int	authistrusted	P((keyid_t));
 extern	int	authreadkeys	P((const char *));
-extern	void	authtrust	P((u_long, int));
-extern	int	authusekey	P((u_long, int, const u_char *));
+extern	void	authtrust	P((keyid_t, u_long));
+extern	int	authusekey	P((keyid_t, int, const u_char *));
 
-extern	u_long	calleapwhen	P((u_long));
 extern	u_long	calyearstart	P((u_long));
 extern	const char *clockname	P((int));
 extern	int	clocktime	P((int, int, int, int, int, u_long, u_long *, u_int32 *));
 #if defined SYS_WINNT && defined DEBUG
 # define emalloc(_c) debug_emalloc(_c, __FILE__, __LINE__)
-extern	void *	debug_emalloc		P((u_int, char *, int));
+extern	void *	debug_emalloc		P((size_t, char *, int));
 #else
-extern	void *	emalloc		P((u_int));
+extern	void *	emalloc		P((size_t));
 #endif
 extern	int	ntp_getopt	P((int, char **, const char *));
 extern	void	init_auth	P((void));
 extern	void	init_lib	P((void));
-extern	void	init_random	P((void));
-extern	struct savekey *auth_findkey P((u_long));
+extern	struct savekey *auth_findkey P((keyid_t));
 extern	int	auth_moremem	P((void));
 extern	int	ymd2yd		P((int, int, int));
 
-#ifdef	DES
-extern	int	DESauthdecrypt	P((u_char *, u_int32 *, int, int));
-extern	int	DESauthencrypt	P((u_char *, u_int32 *, int));
-extern	void	DESauth_setkey	P((u_long, const u_int32 *));
-extern	void	DESauth_subkeys	P((const u_int32 *, u_char *, u_char *));
-extern	void	DESauth_des	P((u_int32 *, u_char *));
-extern	int	DESauth_parity	P((u_int32 *));
-#endif	/* DES */
-
-#ifdef	MD5
 extern	int	MD5authdecrypt	P((u_char *, u_int32 *, int, int));
 extern	int	MD5authencrypt	P((u_char *, u_int32 *, int));
-extern	void	MD5auth_setkey	P((u_long, const u_char *, const int));
-extern	u_long	session_key	P((u_int32, u_int32, u_long, u_long));
-#endif	/* MD5 */
+extern	void	MD5auth_setkey	P((keyid_t, const u_char *, const int));
+extern	u_int32	addr2refid	P((struct sockaddr_storage *));
 
 extern	int	atoint		P((const char *, long *));
 extern	int	atouint		P((const char *, u_long *));
@@ -94,8 +76,8 @@ extern	int	hextoint	P((const char *, u_long *));
 extern	char *	humandate	P((u_long));
 extern	char *	humanlogtime	P((void));
 extern	char *	inttoa		P((long));
-extern	char *	mfptoa		P((u_long, u_long, int));
-extern	char *	mfptoms		P((u_long, u_long, int));
+extern	char *	mfptoa		P((u_long, u_long, short));
+extern	char *	mfptoms		P((u_long, u_long, short));
 extern	const char * modetoa	P((int));
 extern  const char * eventstr   P((int));
 extern  const char * ceventstr  P((int));
@@ -103,22 +85,24 @@ extern	char *	statustoa	P((int, int));
 extern  const char * sysstatstr P((int));
 extern  const char * peerstatstr P((int));
 extern  const char * clockstatstr P((int));
-extern	u_int32	netof		P((u_int32));
+extern	struct sockaddr_storage* netof P((struct sockaddr_storage*));
 extern	char *	numtoa		P((u_int32));
 extern	char *	numtohost	P((u_int32));
+extern char * socktoa           P((struct sockaddr_storage *));
+extern char * socktohost        P((struct sockaddr_storage *));
 extern	int	octtoint	P((const char *, u_long *));
 extern	u_long	ranp2		P((int));
-extern	char *	refnumtoa	P((u_int32));
+extern	char *	refnumtoa	P((struct sockaddr_storage *));
 extern	int	tsftomsu	P((u_long, int));
 extern	char *	uinttoa		P((u_long));
 
-extern	int	decodenetnum	P((const char *, u_int32 *));
+extern	int	decodenetnum	P((const char *, struct sockaddr_storage *));
 
 extern	const char *	FindConfig	P((const char *));
 
 extern	void	signal_no_reset P((int, RETSIGTYPE (*func)(int)));
 
-extern	void	getauthkeys 	P((char *));
+extern	void	getauthkeys 	P((const char *));
 extern	void	auth_agekeys	P((void));
 extern	void	rereadkeys	P((void));
 
@@ -145,13 +129,9 @@ extern int	authnumfreekeys;
 /*
  * The key cache. We cache the last key we looked at here.
  */
-extern u_long	cache_keyid;		/* key identifier */
+extern keyid_t	cache_keyid;		/* key identifier */
 extern u_char *	cache_key;		/* key pointer */
 extern u_int	cache_keylen;		/* key length */
-
-/* clocktypes.c */
-struct clktype;
-extern struct clktype clktypes[];
 
 /* getopt.c */
 extern char *	ntp_optarg;		/* global argument pointer */
@@ -166,9 +146,7 @@ extern HANDLE	hServDoneEvent;
 #endif
 
 /* systime.c */
-extern int	systime_10ms_ticks;	/* adj sysclock in 10ms increments */
-
-extern double	sys_maxfreq;		/* max frequency correction */
+extern double	sys_tick;		/* adjtime() resolution */
 
 /* version.c */
 extern const char *Version;		/* version declaration */

@@ -1,4 +1,4 @@
-/*	$NetBSD: whereis.c,v 1.10 1999/11/09 15:06:37 drochner Exp $	*/
+/*	$NetBSD: whereis.c,v 1.21 2008/10/17 10:53:26 apb Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)whereis.c	8.3 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: whereis.c,v 1.10 1999/11/09 15:06:37 drochner Exp $");
+__RCSID("$NetBSD: whereis.c,v 1.21 2008/10/17 10:53:26 apb Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -57,22 +53,32 @@ __RCSID("$NetBSD: whereis.c,v 1.10 1999/11/09 15:06:37 drochner Exp $");
 #include <string.h>
 #include <unistd.h>
 
-void usage __P((void));
-int main __P((int, char *[]));
+static void usage(void) __dead;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct stat sb;
 	size_t len;
-	int ch, sverrno, mib[2];
-	char *p, *t, *std, path[MAXPATHLEN];
-	int useenvpath = 0;
+	int ch, mib[2];
+	char *p, *std, path[MAXPATHLEN];
+	const char *t;
+	int which = strcmp(getprogname(), "which") == 0;
+	int useenvpath = which, found = 0;
+	gid_t egid = getegid();
+	uid_t euid = geteuid();
 
-	while ((ch = getopt(argc, argv, "p")) != -1)
+	/* To make access(2) do what we want */
+	if (setgid(egid) == -1)
+		err(1, "Can't set gid to %lu", (unsigned long)egid);
+	if (setuid(euid) == -1)
+		err(1, "Can't set uid to %lu", (unsigned long)euid);
+
+	while ((ch = getopt(argc, argv, "ap")) != -1)
 		switch (ch) {
+		case 'a':
+			which = 0;
+			break;
 		case 'p':
 			useenvpath = 1;	/* use environment for PATH */
 			break;
@@ -89,28 +95,35 @@ main(argc, argv)
 
  	if (useenvpath) {
  		if ((std = getenv("PATH")) == NULL)
- 			err(1, "getenv: PATH" );
+ 			errx(1, "PATH environment variable is not set");
 	} else {
 		/* Retrieve the standard path. */
 		mib[0] = CTL_USER;
 		mib[1] = USER_CS_PATH;
 		if (sysctl(mib, 2, NULL, &len, NULL, 0) == -1)
-			return (-1);
+			err(1, "sysctl: user.cs_path");
 		if (len == 0)
-			err(1, "user_cs_path: sysctl: zero length\n");
+			errx(1, "sysctl: user.cs_path (zero length)");
 		if ((std = malloc(len)) == NULL)
 			err(1, NULL);
-		if (sysctl(mib, 2, std, &len, NULL, 0) == -1) {
-			sverrno = errno;
-			free(std);
-			errno = sverrno;
-			err(1, "sysctl: user_cs_path");
-		}
+		if (sysctl(mib, 2, std, &len, NULL, 0) == -1)
+			err(1, "sysctl: user.cs_path");
 	}
 
 	/* For each path, for each program... */
-	for (; *argv; ++argv)
-		for (p = std;; *p++ = ':') {
+	for (; *argv; ++argv) {
+		if (**argv == '/') {
+			if (stat(*argv, &sb) == -1)
+				continue; /* next argv */
+			if (!S_ISREG(sb.st_mode))
+				continue; /* next argv */
+			if (access(*argv, X_OK) == -1)
+				continue; /* next argv */
+			(void)printf("%s\n", *argv);
+			found++;
+			if (which)
+				continue; /* next argv */
+		} else for (p = std; p; ) {
 			t = p;
 			if ((p = strchr(p, ':')) != NULL) {
 				*p = '\0';
@@ -120,19 +133,31 @@ main(argc, argv)
 				if (strlen(t) == 0)
 					t = ".";
 			(void)snprintf(path, sizeof(path), "%s/%s", t, *argv);
-			if (!stat(path, &sb))
-				(void)printf("%s\n", path);
-			if (p == NULL)
-				break;
+			len = snprintf(path, sizeof(path), "%s/%s", t, *argv);
+			if (p)
+				*p++ = ':';
+			if (len >= sizeof(path))
+				continue; /* next p */
+			if (stat(path, &sb) == -1)
+				continue; /* next p */
+			if (!S_ISREG(sb.st_mode))
+				continue; /* next p */
+			if (access(path, X_OK) == -1)
+				continue; /* next p */
+			(void)printf("%s\n", path);
+			found++;
+			if (which)
+				break; /* next argv */
 		}
-
-	return (0);
+	}
+	
+	return ((found == 0) ? 3 : ((found >= argc) ? 0 : 2));
 }
 
-void
-usage()
+static void
+usage(void)
 {
 
-	(void)fprintf(stderr, "usage: whereis [-p] program [...]\n");
-	exit (1);
+	(void)fprintf(stderr, "Usage: %s [-ap] program [...]\n", getprogname());
+	exit(1);
 }

@@ -1,13 +1,38 @@
-/*	$NetBSD: answer.c,v 1.3 1997/10/10 16:32:50 lukem Exp $	*/
+/*	$NetBSD: answer.c,v 1.9.14.1 2009/06/28 19:53:30 snj Exp $	*/
 /*
- *  Hunt
- *  Copyright (c) 1985 Conrad C. Huang, Gregory S. Couch, Kenneth C.R.C. Arnold
- *  San Francisco, California
+ * Copyright (c) 1983-2003, Regents of the University of California.
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions are 
+ * met:
+ * 
+ * + Redistributions of source code must retain the above copyright 
+ *   notice, this list of conditions and the following disclaimer.
+ * + Redistributions in binary form must reproduce the above copyright 
+ *   notice, this list of conditions and the following disclaimer in the 
+ *   documentation and/or other materials provided with the distribution.
+ * + Neither the name of the University of California, San Francisco nor 
+ *   the names of its contributors may be used to endorse or promote 
+ *   products derived from this software without specific prior written 
+ *   permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS 
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED 
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A 
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: answer.c,v 1.3 1997/10/10 16:32:50 lukem Exp $");
+__RCSID("$NetBSD: answer.c,v 1.9.14.1 2009/06/28 19:53:30 snj Exp $");
 #endif /* not lint */
 
 # include	<ctype.h>
@@ -30,13 +55,14 @@ answer()
 	static char		name[NAMELEN];
 	static char		team;
 	static int		enter_status;
-	static int		socklen;
-	static u_long		machine;
-	static u_long		uid;
+	static socklen_t	socklen;
+	static uint32_t		machine;
+	static uint32_t		uid;
 	static SOCKET		sockstruct;
 	char			*cp1, *cp2;
 	int			flags;
-	long			version;
+	u_int32_t		version;
+	int			i;
 
 # ifdef INTERNET
 	socklen = sizeof sockstruct;
@@ -66,7 +92,7 @@ answer()
 	version = htonl((u_int32_t) HUNT_VERSION);
 	(void) write(newsock, (char *) &version, LONGLEN);
 	(void) read(newsock, (char *) &uid, LONGLEN);
-	uid = ntohl((unsigned long) uid);
+	uid = ntohl(uid);
 	(void) read(newsock, name, NAMELEN);
 	(void) read(newsock, &team, 1);
 	(void) read(newsock, (char *) &enter_status, LONGLEN);
@@ -74,6 +100,12 @@ answer()
 	(void) read(newsock, Ttyname, NAMELEN);
 	(void) read(newsock, (char *) &mode, sizeof mode);
 	mode = ntohl(mode);
+
+	/*
+	 * Ensure null termination.
+	 */
+	name[sizeof(name)-1] = '\0';
+	Ttyname[sizeof(Ttyname)-1] = '\0';
 
 	/*
 	 * Turn off blocking I/O, so a slow or dead terminal won't stop
@@ -89,7 +121,7 @@ answer()
 	 * between driver and player processes
 	 */
 	for (cp1 = cp2 = name; *cp1 != '\0'; cp1++)
-		if (isprint(*cp1) || *cp1 == ' ')
+		if (isprint((unsigned char)*cp1) || *cp1 == ' ')
 			*cp2++ = *cp1;
 	*cp2 = '\0';
 
@@ -123,9 +155,10 @@ answer()
 # endif
 # ifdef MONITOR
 	if (mode == C_MONITOR)
-		if (End_monitor < &Monitor[MAXMON])
+		if (End_monitor < &Monitor[MAXMON]) {
 			pp = End_monitor++;
-		else {
+			i = pp - Monitor + MAXPL + 3;
+		} else {
 			socklen = 0;
 			(void) write(newsock, (char *) &socklen,
 				sizeof socklen);
@@ -134,9 +167,10 @@ answer()
 		}
 	else
 # endif
-		if (End_player < &Player[MAXPL])
+		if (End_player < &Player[MAXPL]) {
 			pp = End_player++;
-		else {
+			i = pp - Player + 3;
+		} else {
 			socklen = 0;
 			(void) write(newsock, (char *) &socklen,
 				sizeof socklen);
@@ -152,9 +186,8 @@ answer()
 	pp->p_output = fdopen(newsock, "w");
 	pp->p_death[0] = '\0';
 	pp->p_fd = newsock;
-	FD_SET(pp->p_fd, &Fds_mask);
-	if (pp->p_fd >= Num_fds)
-		Num_fds = pp->p_fd + 1;
+	fdset[i].fd = newsock;
+	fdset[i].events = POLLIN;
 
 	pp->p_y = 0;
 	pp->p_x = 0;
@@ -290,7 +323,7 @@ stplayer(newpp, enter_status)
 	y = STAT_PLAY_ROW + 1 + (newpp - Player);
 	for (pp = Player; pp < End_player; pp++) {
 		if (pp != newpp) {
-			char	smallbuf[10];
+			char	smallbuf[16];
 
 			pp->p_ammo += NSHOTS;
 			newpp->p_ammo += NSHOTS;
@@ -348,8 +381,8 @@ rand_dir()
  */
 IDENT *
 get_ident(machine, uid, name, team)
-	u_long	machine;
-	u_long	uid;
+	uint32_t machine;
+	uint32_t uid;
 	char	*name;
 	char	team;
 {

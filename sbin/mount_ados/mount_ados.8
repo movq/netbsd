@@ -1,6 +1,6 @@
-.\"	$NetBSD: mount_ados.8,v 1.7 1999/04/06 20:24:38 pk Exp $
+.\" $NetBSD: mount_ados.8,v 1.19 2007/07/30 05:00:55 rumble Exp $
 .\"
-.\" Copyright (c) 1993,1994 Christopher G. Demetriou
+.\" Copyright (c) 1993, 1994 Christopher G. Demetriou
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -13,9 +13,11 @@
 .\"    documentation and/or other materials provided with the distribution.
 .\" 3. All advertising materials mentioning features or use of this software
 .\"    must display the following acknowledgement:
-.\"      This product includes software developed by Christopher G. Demetriou.
+.\"          This product includes software developed for the
+.\"          NetBSD Project.  See http://www.NetBSD.org/ for
+.\"          information about NetBSD.
 .\" 4. The name of the author may not be used to endorse or promote products
-.\"    derived from this software without specific prior written permission
+.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,14 +30,16 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
+.\" <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
+.\"
 .Dd April 7, 1994
 .Dt MOUNT_ADOS 8
-.Os NetBSD 1.0
+.Os
 .Sh NAME
 .Nm mount_ados
 .Nd mount an AmigaDOS file system
 .Sh SYNOPSIS
-.Nm ""
+.Nm
 .Op Fl o Ar options
 .Op Fl u Ar uid
 .Op Fl g Ar gid
@@ -51,6 +55,11 @@ the device
 to the global filesystem namespace at the location
 indicated by
 .Pa node .
+Both
+.Ar special
+and
+.Ar node
+are converted to absolute paths before use.
 This command is normally executed by
 .Xr mount 8
 at boot time, but can be used by any user to mount an
@@ -97,12 +106,23 @@ directory on which the file system is being mounted.
 .Xr unmount 2 ,
 .Xr fstab 5 ,
 .Xr mount 8
-.Sh CAVEATS
-The
-.Sq ados
-filesystem currently supports the Amiga fast file system.
 .Sh HISTORY
 The
 .Nm
 utility first appeared in
 .Nx 1.0 .
+.Sh BUGS
+The
+.Sq ados
+filesystem currently supports the Amiga fast file system.
+.Pp
+The
+.Sq ados
+filesystem implementation currently is read-only.
+The
+.Nm
+utility silently retries the mount read-only, as if the
+.Ar ro
+option were specified, when it encounters the
+.Bq Er EROFS
+error.

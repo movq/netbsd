@@ -1,4 +1,4 @@
-/*	$NetBSD: mtree.c,v 1.14 1999/02/11 15:32:24 mrg Exp $	*/
+/*	$NetBSD: mtree.c,v 1.34 2008/07/21 13:36:59 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,57 +29,71 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+#if defined(__COPYRIGHT) && !defined(lint)
+__COPYRIGHT("@(#) Copyright (c) 1989, 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)mtree.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: mtree.c,v 1.14 1999/02/11 15:32:24 mrg Exp $");
+__RCSID("$NetBSD: mtree.c,v 1.34 2008/07/21 13:36:59 lukem Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
+
 #include <errno.h>
-#include <unistd.h>
 #include <stdio.h>
-#include <fts.h>
-#include "mtree.h"
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
 #include "extern.h"
 
-extern int crc_total;
+int	ftsoptions = FTS_PHYSICAL;
+int	cflag, Cflag, dflag, Dflag, eflag, iflag, lflag, mflag,
+    	rflag, sflag, tflag, uflag, Uflag;
+char	fullpath[MAXPATHLEN];
 
-int ftsoptions = FTS_PHYSICAL;
-int cflag, dflag, eflag, iflag, mflag, rflag, sflag, tflag, uflag, Uflag;
-int keys;
-char fullpath[MAXPATHLEN];
-
-	int	main __P((int, char **));
-static	void	usage __P((void));
+	int	main(int, char **);
+static	void	usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char **argv)
 {
-	int ch;
-	char *dir, *p;
-	int status;
+	int	ch, status;
+	char	*dir, *p;
+
+	setprogname(argv[0]);
 
 	dir = NULL;
-	keys = KEYDEFAULT;
-	while ((ch = getopt(argc, argv, "cdef:iK:k:mp:rs:tUux")) != -1)
+	init_excludes();
+
+	while ((ch = getopt(argc, argv, "cCdDeE:f:I:ik:K:lLmMN:p:PrR:s:tuUWxX:"))
+	    != -1) {
 		switch((char)ch) {
 		case 'c':
 			cflag = 1;
 			break;
+		case 'C':
+			Cflag = 1;
+			break;
 		case 'd':
 			dflag = 1;
+			break;
+		case 'D':
+			Dflag = 1;
+			break;
+		case 'E':
+			parsetags(&excludetags, optarg);
 			break;
 		case 'e':
 			eflag = 1;
@@ -95,10 +105,8 @@ main(argc, argv)
 		case 'i':
 			iflag = 1;
 			break;
-		case 'K':
-			while ((p = strsep(&optarg, " \t,")) != NULL)
-				if (*p != '\0')
-					keys |= parsekey(p, NULL);
+		case 'I':
+			parsetags(&includetags, optarg);
 			break;
 		case 'k':
 			keys = F_TYPE;
@@ -106,14 +114,44 @@ main(argc, argv)
 				if (*p != '\0')
 					keys |= parsekey(p, NULL);
 			break;
+		case 'K':
+			while ((p = strsep(&optarg, " \t,")) != NULL)
+				if (*p != '\0')
+					keys |= parsekey(p, NULL);
+			break;
+		case 'l':
+			lflag = 1;
+			break;
+		case 'L':
+			ftsoptions &= ~FTS_PHYSICAL;
+			ftsoptions |= FTS_LOGICAL;
+			break;
 		case 'm':
 			mflag = 1;
+			break;
+		case 'M':
+			mtree_Mflag = 1;
+			break;
+		case 'N':
+			if (! setup_getid(optarg))
+				mtree_err(
+			    "Unable to use user and group databases in `%s'",
+				    optarg);
 			break;
 		case 'p':
 			dir = optarg;
 			break;
+		case 'P':
+			ftsoptions &= ~FTS_LOGICAL;
+			ftsoptions |= FTS_PHYSICAL;
+			break;
 		case 'r':
 			rflag = 1;
+			break;
+		case 'R':
+			while ((p = strsep(&optarg, " \t,")) != NULL)
+				if (*p != '\0')
+					keys &= ~parsekey(p, NULL);
 			break;
 		case 's':
 			sflag = 1;
@@ -124,19 +162,26 @@ main(argc, argv)
 		case 't':
 			tflag = 1;
 			break;
-		case 'U':
-			Uflag = uflag = 1;
-			break;
 		case 'u':
 			uflag = 1;
 			break;
+		case 'U':
+			Uflag = uflag = 1;
+			break;
+		case 'W':
+			mtree_Wflag = 1;
+			break;
 		case 'x':
 			ftsoptions |= FTS_XDEV;
+			break;
+		case 'X':
+			read_excludes_file(optarg);
 			break;
 		case '?':
 		default:
 			usage();
 		}
+	}
 	argc -= optind;
 	argv += optind;
 
@@ -146,27 +191,40 @@ main(argc, argv)
 	if (dir && chdir(dir))
 		mtree_err("%s: %s", dir, strerror(errno));
 
-	if ((cflag || sflag) && !getcwd(fullpath, MAXPATHLEN))
+	if ((cflag || sflag) && !getcwd(fullpath, sizeof(fullpath)))
 		mtree_err("%s", strerror(errno));
 
-	if (iflag == 1 && mflag == 1)
+	if ((cflag && Cflag) || (cflag && Dflag) || (Cflag && Dflag))
+		mtree_err("-c, -C and -D flags are mutually exclusive");
+
+	if (iflag && mflag)
 		mtree_err("-i and -m flags are mutually exclusive");
+
+	if (lflag && uflag)
+		mtree_err("-l and -u flags are mutually exclusive");
 
 	if (cflag) {
 		cwalk();
 		exit(0);
 	}
+	if (Cflag || Dflag) {
+		dump_nodes("", spec(stdin), Dflag);
+		exit(0);
+	}
 	status = verify();
-	if (Uflag & (status == MISMATCHEXIT))
+	if (Uflag && (status == MISMATCHEXIT))
 		status = 0;
 	exit(status);
 }
 
 static void
-usage()
+usage(void)
 {
-	(void)fprintf(stderr,
-"usage: mtree [-cderUux] [-i|-m] [-f spec] [-K key] [-k key] [-p path]"
-    " [-s seed]\n");
+
+	fprintf(stderr,
+	    "usage: %s [-cCdDelLMPruUWx] [-i|-m] [-f spec] [-k key]\n"
+	    "\t\t[-K addkey] [-R removekey] [-I inctags] [-E exctags]\n"
+	    "\t\t[-N userdbdir] [-X exclude-file] [-p path] [-s seed]\n",
+	    getprogname());
 	exit(1);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: fabs.c,v 1.1 2000/01/05 14:07:31 msaitoh Exp $	*/
+/*	$NetBSD: fabs.c,v 1.3 2006/05/21 02:51:15 mrg Exp $	*/
 
 /*
  * Copyright (c) 1996 Mark Brinicombe
@@ -35,12 +35,10 @@
  * fabs(x) returns the absolute value of x.
  */
 
-#ifdef __STDC__
-double fabs(double x)
-#else
-double fabs(x)
-	double x;
-#endif
+double fabs(double x);
+
+double
+fabs(double x)
 {
 	if (x < 0)
 		x = -x;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ite.c,v 1.43 2000/03/23 06:37:23 thorpej Exp $	*/
+/*	$NetBSD: ite.c,v 1.82 2008/06/13 09:41:15 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,43 @@
  */
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: ite.c 1.28 92/12/20$
+ *
+ *	@(#)ite.c	8.2 (Berkeley) 1/12/94
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -84,6 +111,11 @@
  * the hardware dependent routines.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.82 2008/06/13 09:41:15 cegger Exp $");
+
+#include "hil.h"
+
 #include <sys/param.h>
 #include <sys/conf.h>
 #include <sys/proc.h>
@@ -92,8 +124,10 @@
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
+#include <sys/kauth.h>
 
 #include <machine/autoconf.h>
+#include <machine/bus.h>
 
 #include <dev/cons.h>
 
@@ -104,8 +138,7 @@
 #include <hp300/dev/itevar.h>
 #include <hp300/dev/kbdmap.h>
 
-/* prototypes for devsw entry points */
-cdev_decl(ite);
+#include "ioconf.h"
 
 #define set_attr(ip, attr)	((ip)->attribute |= (attr))
 #define clr_attr(ip, attr)	((ip)->attribute &= ~(attr))
@@ -118,40 +151,71 @@ cdev_decl(ite);
  */
 int	iteburst = 64;
 
-struct  ite_data *kbd_ite = NULL;
+static int	itematch(device_t, cfdata_t, void *);
+static void	iteattach(device_t, device_t, void *);
 
-int	itematch __P((struct device *, struct cfdata *, void *));
-void	iteattach __P((struct device *, struct device *, void *));
+CFATTACH_DECL_NEW(ite, sizeof(struct ite_softc),
+    itematch, iteattach, NULL, NULL);
 
-struct cfattach ite_ca = {
-	sizeof(struct ite_softc), itematch, iteattach
+/* XXX this has always been global, but shouldn't be */
+static struct kbdmap *ite_km;
+
+static dev_type_open(iteopen);
+static dev_type_close(iteclose);
+static dev_type_read(iteread);
+static dev_type_write(itewrite);
+static dev_type_ioctl(iteioctl);
+static dev_type_tty(itetty);
+static dev_type_poll(itepoll);
+
+const struct cdevsw ite_cdevsw = {
+	iteopen, iteclose, iteread, itewrite, iteioctl,
+	nostop, itetty, itepoll, nommap, ttykqfilter, D_TTY
 };
-
-extern struct cfdriver ite_cd;
 
 /*
  * Terminal emulator state information, statically allocated
  * for the benefit of the console.
  */
-struct	ite_data ite_cn;
+static struct	ite_data ite_cn;
 
-void	iteinit __P((struct ite_data *));
-void	iteputchar __P((int, struct ite_data *));
-void	itecheckwrap __P((struct ite_data *, struct itesw *));
-void	ite_dchar __P((struct ite_data *, struct itesw *));
-void	ite_ichar __P((struct ite_data *, struct itesw *));
-void	ite_dline __P((struct ite_data *, struct itesw *));
-void	ite_iline __P((struct ite_data *, struct itesw *));
-void	ite_clrtoeol __P((struct ite_data *, struct itesw *, int, int));
-void	ite_clrtoeos __P((struct ite_data *, struct itesw *));
-void	itestart __P((struct tty *));
+/*
+ * console stuff
+ */
+static struct consdev ite_cons = {
+	NULL,
+	NULL,
+	itecngetc,
+	itecnputc,
+	nullcnpollc,
+	NULL,
+	NULL,
+	NULL,
+	NODEV,
+	CN_NORMAL
+};
+static int console_kbd_attached;
+static int console_display_attached;
+static struct ite_kbdops *console_kbdops;
+static struct ite_kbdmap *console_kbdmap;
+
+static void	iteinit(struct ite_data *);
+static void	iteputchar(int, struct ite_data *);
+static void	itecheckwrap(struct ite_data *, struct itesw *);
+static void	ite_dchar(struct ite_data *, struct itesw *);
+static void	ite_ichar(struct ite_data *, struct itesw *);
+static void	ite_dline(struct ite_data *, struct itesw *);
+static void	ite_iline(struct ite_data *, struct itesw *);
+static void	ite_clrtoeol(struct ite_data *, struct itesw *, int, int);
+static void	ite_clrtoeos(struct ite_data *, struct itesw *);
+static void	itestart(struct tty *);
 
 /*
  * Primary attribute buffer to be used by the first bitmapped console
  * found. Secondary displays alloc the attribute buffer as needed.
  * Size is based on a 68x128 display, which is currently our largest.
  */
-u_char  ite_console_attributes[0x2200];
+static u_char  ite_console_attributes[0x2200];
 
 #define ite_erasecursor(ip, sp)	{ \
 	if ((ip)->flags & ITE_CURSORON) \
@@ -166,45 +230,41 @@ u_char  ite_console_attributes[0x2200];
 		(*(sp)->ite_cursor)((ip), MOVE_CURSOR); \
 }
 
-int
-itematch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+itematch(device_t parent, cfdata_t cf, void *aux)
 {
 
-	return (1);
+	return 1;
 }
 
-void
-iteattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+iteattach(device_t parent, device_t self, void *aux)
 {
-	struct ite_softc *ite = (struct ite_softc *)self;
-	struct grf_softc *grf = (struct grf_softc *)parent;
+	struct ite_softc *ite = device_private(self);
+	struct grf_softc *grf = device_private(parent);
 	struct grfdev_attach_args *ga = aux;
+
+	ite->sc_dev = self;
 
 	/* Allocate the ite_data. */
 	if (ga->ga_isconsole) {
 		ite->sc_data = &ite_cn;
-		printf(": console");
+		aprint_normal(": console");
 
 		/*
 		 * We didn't know which unit this would be during
 		 * the console probe, so we have to fixup cn_dev here.
 		 */
-		cn_tab->cn_dev = makedev(ite_major(), self->dv_unit);
+		cn_tab->cn_dev = makedev(cdevsw_lookup_major(&ite_cdevsw),
+		    device_unit(self));
 	} else {
-		ite->sc_data =
-		    (struct ite_data *)malloc(sizeof(struct ite_data),
-		    M_DEVBUF, M_NOWAIT);
+		ite->sc_data = malloc(sizeof(struct ite_data), M_DEVBUF,
+		    M_NOWAIT | M_ZERO);
 		if (ite->sc_data == NULL) {
-			printf("\n%s: malloc for ite_data failed\n",
-			    ite->sc_dev.dv_xname);
+			aprint_normal("\n");
+			aprint_error_dev(self, "malloc for ite_data failed\n");
 			return;
 		}
-		bzero(ite->sc_data, sizeof(struct ite_data));
 		ite->sc_data->flags = ITE_ALIVE;
 	}
 
@@ -214,20 +274,25 @@ iteattach(parent, self, aux)
 	ite->sc_grf = grf;
 	grf->sc_ite = ite;
 
-	printf("\n");
+	aprint_normal("\n");
+}
+
+void
+iteinstallkeymap(void *v)
+{
+
+	ite_km = (struct kbdmap *)v;
 }
 
 /*
  * Perform functions necessary to setup device as a terminal emulator.
  */
 int
-iteon(ip, flag)
-	struct ite_data *ip;
-	int flag;
+iteon(struct ite_data *ip, int flag)
 {
 
 	if ((ip->flags & ITE_ALIVE) == 0)
-		return(ENXIO);
+		return ENXIO;
 
 	/* force ite active, overriding graphics mode */
 	if (flag & 1) {
@@ -239,30 +304,27 @@ iteon(ip, flag)
 	if (flag & 2) {
 		ip->flags &= ~ITE_INGRF;
 		if ((ip->flags & ITE_ACTIVE) == 0)
-			return(0);
+			return 0;
 	}
 
 	ip->flags |= ITE_ACTIVE;
 	if (ip->flags & ITE_INGRF)
-		return(0);
+		return 0;
 
-	if (kbd_ite == NULL || kbd_ite == ip) {
-		kbd_ite = ip;
-		kbdenable(0);		/* XXX */
-	}
+	if (console_kbdops != NULL)
+		(*console_kbdops->enable)(console_kbdops->arg);
 
 	iteinit(ip);
-	return(0);
+	return 0;
 }
 
-void
-iteinit(ip)
-	struct ite_data *ip;
+static void
+iteinit(struct ite_data *ip)
 {
 
 	if (ip->flags & ITE_INITED)
 		return;
-	
+
 	ip->curx = 0;
 	ip->cury = 0;
 	ip->cursorx = 0;
@@ -274,9 +336,8 @@ iteinit(ip)
 
 	ip->attribute = 0;
 	if (ip->attrbuf == NULL)
-		ip->attrbuf = (u_char *)
-			malloc(ip->rows * ip->cols, M_DEVBUF, M_WAITOK);
-	bzero(ip->attrbuf, (ip->rows * ip->cols));
+		ip->attrbuf = (u_char *)malloc(ip->rows * ip->cols,
+		    M_DEVBUF, M_WAITOK | M_ZERO);
 
 	ip->imode = 0;
 	ip->flags |= ITE_INITED;
@@ -289,9 +350,7 @@ iteinit(ip)
  * screen when processing /etc/rc.
  */
 void
-iteoff(ip, flag)
-	struct ite_data *ip;
-	int flag;
+iteoff(struct ite_data *ip, int flag)
 {
 
 	if (flag & 2) {
@@ -316,11 +375,8 @@ iteoff(ip, flag)
 }
 
 /* ARGSUSED */
-int
-iteopen(dev, mode, devtype, p)
-	dev_t dev;
-	int mode, devtype;
-	struct proc *p;
+static int
+iteopen(dev_t dev, int mode, int devtype, struct lwp *l)
 {
 	int unit = ITEUNIT(dev);
 	struct tty *tp;
@@ -329,9 +385,9 @@ iteopen(dev, mode, devtype, p)
 	int error;
 	int first = 0;
 
-	if (unit >= ite_cd.cd_ndevs ||
-	    (sc = ite_cd.cd_devs[unit]) == NULL)
-		return (ENXIO);
+	sc = device_lookup_private(&ite_cd, unit);
+	if (sc == NULL)
+		return ENXIO;
 	ip = sc->sc_data;
 
 	if (ip->tty == NULL) {
@@ -339,13 +395,12 @@ iteopen(dev, mode, devtype, p)
 		tty_attach(tp);
 	} else
 		tp = ip->tty;
-	if ((tp->t_state&(TS_ISOPEN|TS_XCLUDE)) == (TS_ISOPEN|TS_XCLUDE)
-	    && p->p_ucred->cr_uid != 0)
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
 		return (EBUSY);
 	if ((ip->flags & ITE_ACTIVE) == 0) {
 		error = iteon(ip, 0);
 		if (error)
-			return (error);
+			return error;
 		first = 1;
 	}
 	tp->t_oproc = itestart;
@@ -361,27 +416,24 @@ iteopen(dev, mode, devtype, p)
 		tp->t_state = TS_ISOPEN|TS_CARR_ON;
 		ttsetwater(tp);
 	}
-	error = (*linesw[tp->t_line].l_open)(dev, tp);
+	error = (*tp->t_linesw->l_open)(dev, tp);
 	if (error == 0) {
 		tp->t_winsize.ws_row = ip->rows;
 		tp->t_winsize.ws_col = ip->cols;
 	} else if (first)
 		iteoff(ip, 0);
-	return (error);
+	return error;
 }
 
 /*ARGSUSED*/
-int
-iteclose(dev, flag, mode, p)
-	dev_t dev;
-	int flag, mode;
-	struct proc *p;
+static int
+iteclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct ite_softc *sc = ite_cd.cd_devs[ITEUNIT(dev)];
+	struct ite_softc *sc = device_lookup_private(&ite_cd,ITEUNIT(dev));
 	struct ite_data *ip = sc->sc_data;
 	struct tty *tp = ip->tty;
 
-	(*linesw[tp->t_line].l_close)(tp, flag);
+	(*tp->t_linesw->l_close)(tp, flag);
 	ttyclose(tp);
 	iteoff(ip, 0);
 #if 0
@@ -389,74 +441,67 @@ iteclose(dev, flag, mode, p)
 	ttyfree(tp);
 	ip->tty = (struct tty *)0;
 #endif
-	return(0);
+	return 0;
+}
+
+static int
+iteread(dev_t dev, struct uio *uio, int flag)
+{
+	struct ite_softc *sc = device_lookup_private(&ite_cd,ITEUNIT(dev));
+	struct tty *tp = sc->sc_data->tty;
+
+	return (*tp->t_linesw->l_read)(tp, uio, flag);
 }
 
 int
-iteread(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+itewrite(dev_t dev, struct uio *uio, int flag)
 {
-	struct ite_softc *sc = ite_cd.cd_devs[ITEUNIT(dev)];
+	struct ite_softc *sc = device_lookup_private(&ite_cd,ITEUNIT(dev));
 	struct tty *tp = sc->sc_data->tty;
 
-	return ((*linesw[tp->t_line].l_read)(tp, uio, flag));
+	return (*tp->t_linesw->l_write)(tp, uio, flag);
 }
 
 int
-itewrite(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+itepoll(dev_t dev, int events, struct lwp *l)
 {
-	struct ite_softc *sc = ite_cd.cd_devs[ITEUNIT(dev)];
+	struct ite_softc *sc = device_lookup_private(&ite_cd,ITEUNIT(dev));
 	struct tty *tp = sc->sc_data->tty;
 
-	return ((*linesw[tp->t_line].l_write)(tp, uio, flag));
+	return (*tp->t_linesw->l_poll)(tp, events, l);
 }
 
 struct tty *
-itetty(dev)
-	dev_t dev;
+itetty(dev_t dev)
 {
-	struct ite_softc *sc = ite_cd.cd_devs[ITEUNIT(dev)];
+	struct ite_softc *sc = device_lookup_private(&ite_cd,ITEUNIT(dev));
 
-	return (sc->sc_data->tty);
+	return sc->sc_data->tty;
 }
 
 int
-iteioctl(dev, cmd, addr, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t addr;
-	int flag;
-	struct proc *p;
+iteioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
-	struct ite_softc *sc = ite_cd.cd_devs[ITEUNIT(dev)];
+	struct ite_softc *sc = device_lookup_private(&ite_cd,ITEUNIT(dev));
 	struct ite_data *ip = sc->sc_data;
 	struct tty *tp = ip->tty;
 	int error;
 
-	error = (*linesw[tp->t_line].l_ioctl)(tp, cmd, addr, flag, p);
-	if (error >= 0)
-		return (error);
-	error = ttioctl(tp, cmd, addr, flag, p);
-	if (error >= 0)
-		return (error);
-	return (ENOTTY);
+	error = (*tp->t_linesw->l_ioctl)(tp, cmd, addr, flag, l);
+	if (error != EPASSTHROUGH)
+		return error;
+	return ttioctl(tp, cmd, addr, flag, l);
 }
 
-void
-itestart(tp)
-	struct tty *tp;
+static void
+itestart(struct tty *tp)
 {
 	int cc, s;
 	int hiwat = 0, hadcursor = 0;
 	struct ite_softc *sc;
 	struct ite_data *ip;
 
-	sc = ite_cd.cd_devs[ITEUNIT(tp->t_dev)];
+	sc = device_lookup_private(&ite_cd,ITEUNIT(tp->t_dev));
 	ip = sc->sc_data;
 
 	s = splkbd();
@@ -466,13 +511,7 @@ itestart(tp)
 	}
 	tp->t_state |= TS_BUSY;
 	cc = tp->t_outq.c_cc;
-	if (cc <= tp->t_lowat) {
-		if (tp->t_state & TS_ASLEEP) {
-			tp->t_state &= ~TS_ASLEEP;
-			wakeup((caddr_t)&tp->t_outq);
-		}
-		selwakeup(&tp->t_wsel);
-	}
+	ttypull(tp);
 	/*
 	 * Handle common (?) case
 	 */
@@ -504,7 +543,7 @@ itestart(tp)
 		}
 		if (hiwat) {
 			tp->t_state |= TS_TIMEOUT;
-			callout_reset(&tp->t_rstrt_ch, 1, ttrstrt, tp);
+			callout_schedule(&tp->t_rstrt_ch, 1);
 		}
 	}
 	tp->t_state &= ~TS_BUSY;
@@ -512,24 +551,18 @@ itestart(tp)
 }
 
 void
-itestop(tp, flag)
-	struct tty *tp;
-	int flag;
-{
-
-}
-
-void
-itefilter(stat, c)
-	char stat, c;
+itefilter(char stat, char c)
 {
 	static int capsmode = 0;
 	static int metamode = 0;
-	char code, *str;
-	struct tty *kbd_tty = kbd_ite->tty;
+	char code;
+	const char *str;
+	struct tty *kbd_tty;
 
-	if (kbd_tty == NULL)
+	if (ite_cn.tty == NULL)
 		return;
+
+	kbd_tty = ite_cn.tty;
 
 	switch (c & 0xFF) {
 	case KBD_CAPSLOCK:
@@ -540,7 +573,7 @@ itefilter(stat, c)
 	case KBD_EXT_RIGHT_DOWN:
 		metamode = 1;
 		return;
-		
+
 	case KBD_EXT_LEFT_UP:
 	case KBD_EXT_RIGHT_UP:
 		metamode = 0;
@@ -551,39 +584,38 @@ itefilter(stat, c)
 	switch ((stat>>KBD_SSHIFT) & KBD_SMASK) {
 	default:
 	case KBD_KEY:
-	        if (!capsmode) {
-			code = kbd_keymap[(int)c];
-			break;
-		}
-		/* FALLTHROUGH */
+		code = ite_km->kbd_keymap[(int)c];
+	        if (capsmode)
+			code = toupper(code);
+		break;
 
 	case KBD_SHIFT:
-		code = kbd_shiftmap[(int)c];
+		code = ite_km->kbd_shiftmap[(int)c];
+	        if (capsmode)
+			code = tolower(code);
 		break;
 
 	case KBD_CTRL:
-		code = kbd_ctrlmap[(int)c];
+		code = ite_km->kbd_ctrlmap[(int)c];
 		break;
-		
-	case KBD_CTRLSHIFT:	
-		code = kbd_ctrlshiftmap[(int)c];
-		break;
-        }
 
-	if (code == '\0' && (str = kbd_stringmap[(int)c]) != '\0') {
+	case KBD_CTRLSHIFT:
+		code = ite_km->kbd_ctrlshiftmap[(int)c];
+		break;
+	}
+
+	if (code == '\0' && (str = ite_km->kbd_stringmap[(int)c]) != NULL) {
 		while (*str)
-			(*linesw[kbd_tty->t_line].l_rint)(*str++, kbd_tty);
+			(*kbd_tty->t_linesw->l_rint)(*str++, kbd_tty);
 	} else {
 		if (metamode)
 			code |= 0x80;
-		(*linesw[kbd_tty->t_line].l_rint)(code, kbd_tty);
+		(*kbd_tty->t_linesw->l_rint)(code, kbd_tty);
 	}
 }
 
-void
-iteputchar(c, ip)
-	int c;
-	struct ite_data *ip;
+static void
+iteputchar(int c, struct ite_data *ip)
 {
 	struct itesw *sp = ip->isw;
 	int n;
@@ -667,7 +699,7 @@ doesc:
 			case 1:
 				if (c == 'A') {
 					switch (ip->hold) {
-	
+
 					case '0':
 						clr_attr(ip, ATTR_KPAD);
 						break;
@@ -807,7 +839,7 @@ ignore:
 			ite_movecursor(ip, sp);
 		}
 		break;
-	
+
 	case '\b':
 		if (--ip->curx < 0)
 			ip->curx = 0;
@@ -825,8 +857,8 @@ ignore:
 		break;
 
 	case CTRL('G'):
-		if (ip == kbd_ite)
-			kbdbell(0);	/* XXX */
+		if (console_kbdops != NULL)
+			(*console_kbdops->bell)(console_kbdops->arg);
 		break;
 
 	case ESC:
@@ -849,10 +881,8 @@ ignore:
 	}
 }
 
-void
-itecheckwrap(ip, sp)
-     struct ite_data *ip;
-     struct itesw *sp;
+static void
+itecheckwrap(struct ite_data *ip, struct itesw *sp)
 {
 	if (++ip->curx == ip->cols) {
 		ip->curx = 0;
@@ -868,10 +898,8 @@ itecheckwrap(ip, sp)
 	ite_movecursor(ip, sp);
 }
 
-void
-ite_dchar(ip, sp)
-     struct ite_data *ip;
-     struct itesw *sp;
+static void
+ite_dchar(struct ite_data *ip, struct itesw *sp)
 {
 	if (ip->curx < ip->cols - 1) {
 		ite_erasecursor(ip, sp);
@@ -884,10 +912,8 @@ ite_dchar(ip, sp)
 	ite_drawcursor(ip, sp);
 }
 
-void
-ite_ichar(ip, sp)
-     struct ite_data *ip;
-     struct itesw *sp;
+static void
+ite_ichar(struct ite_data *ip, struct itesw *sp)
 {
 	if (ip->curx < ip->cols - 1) {
 		ite_erasecursor(ip, sp);
@@ -900,10 +926,8 @@ ite_ichar(ip, sp)
 	ite_drawcursor(ip, sp);
 }
 
-void
-ite_dline(ip, sp)
-     struct ite_data *ip;
-     struct itesw *sp;
+static void
+ite_dline(struct ite_data *ip, struct itesw *sp)
 {
 	if (ip->cury < ip->rows - 1) {
 		ite_erasecursor(ip, sp);
@@ -914,10 +938,8 @@ ite_dline(ip, sp)
 	ite_clrtoeol(ip, sp, ip->rows - 1, 0);
 }
 
-void
-ite_iline(ip, sp)
-     struct ite_data *ip;
-     struct itesw *sp;
+static void
+ite_iline(struct ite_data *ip, struct itesw *sp)
 {
 	if (ip->cury < ip->rows - 1) {
 		ite_erasecursor(ip, sp);
@@ -928,11 +950,8 @@ ite_iline(ip, sp)
 	ite_clrtoeol(ip, sp, ip->cury, 0);
 }
 
-void
-ite_clrtoeol(ip, sp, y, x)
-     struct ite_data *ip;
-     struct itesw *sp;
-     int y, x;
+static void
+ite_clrtoeol(struct ite_data *ip, struct itesw *sp, int y, int x)
 {
 	(*sp->ite_clear)(ip, y, x, 1, ip->cols - x);
 	attrclr(ip, y, x, 1, ip->cols - x);
@@ -940,32 +959,14 @@ ite_clrtoeol(ip, sp, y, x)
 }
 
 void
-ite_clrtoeos(ip, sp)
-     struct ite_data *ip;
-     struct itesw *sp;
+ite_clrtoeos(struct ite_data *ip, struct itesw *sp)
 {
 	(*sp->ite_clear)(ip, ip->cury, 0, ip->rows - ip->cury, ip->cols);
 	attrclr(ip, ip->cury, 0, ip->rows - ip->cury, ip->cols);
 	ite_drawcursor(ip, sp);
 }
 
-int
-ite_major()
-{
-	static int itemaj, initialized;
 
-	/* Only compute once. */
-	if (initialized)
-		return (itemaj);
-	initialized = 1;
-
-	/* locate the major number */
-	for (itemaj = 0; itemaj < nchrdev; itemaj++)
-		if (cdevsw[itemaj].d_open == iteopen)
-			break;
-
-	return (itemaj);
-}
 
 /*
  * Console functions.  Console probes are done by the individual
@@ -973,9 +974,7 @@ ite_major()
  */
 
 void
-itecninit(gp, isw)
-	struct grf_data *gp;
-	struct itesw *isw;
+itedisplaycnattach(struct grf_data *gp, struct itesw *isw)
 {
 	struct ite_data *ip = &ite_cn;
 
@@ -987,46 +986,63 @@ itecninit(gp, isw)
 	ip->flags = ITE_ALIVE|ITE_CONSOLE|ITE_ACTIVE|ITE_ISCONS;
 	ip->attrbuf = ite_console_attributes;
 	iteinit(ip);
+	console_display_attached = 1;
 
-	/*
-	 * Initialize the console keyboard.
-	 */
-	kbdcninit();
+	if (console_kbd_attached && console_display_attached)
+		itecninit();
+}
 
-	kbd_ite = ip;		/* XXX */
+void
+itekbdcnattach(struct ite_kbdops *ops, struct ite_kbdmap *map)
+{
+
+	console_kbdops = ops;
+	console_kbdmap = map;
+	console_kbd_attached = 1;
+
+	if (console_kbd_attached && console_display_attached)
+		itecninit();
+}
+
+void
+itecninit(void)
+{
+
+	cn_tab = &ite_cons;
+	cn_tab->cn_dev = makedev(cdevsw_lookup_major(&ite_cdevsw), 0);
 }
 
 /*ARGSUSED*/
 int
-itecngetc(dev)
-	dev_t dev;
+itecngetc(dev_t dev)
 {
-	int c;
+	int c = 0;
 	int stat;
 
-	c = kbdgetc(&stat);
+	if (console_kbdops == NULL)
+		return -1;
+
+	c = (*console_kbdops->getc)(&stat);
 	switch ((stat >> KBD_SSHIFT) & KBD_SMASK) {
 	case KBD_SHIFT:
-		c = kbd_cn_shiftmap[c & KBD_CHARMASK];
+		c = console_kbdmap->shiftmap[c & KBD_CHARMASK];
 		break;
 	case KBD_CTRL:
-		c = kbd_cn_ctrlmap[c & KBD_CHARMASK];
+		c = console_kbdmap->ctrlmap[c & KBD_CHARMASK];
 		break;
 	case KBD_KEY:
-		c = kbd_cn_keymap[c & KBD_CHARMASK];
+		c = console_kbdmap->keymap[c & KBD_CHARMASK];
 		break;
 	default:
 		c = 0;
 		break;
 	}
-	return(c);
+	return c;
 }
 
 /* ARGSUSED */
 void
-itecnputc(dev, c)
-	dev_t dev;
-	int c;
+itecnputc(dev_t dev, int c)
 {
 	static int paniced = 0;
 	struct ite_data *ip = &ite_cn;

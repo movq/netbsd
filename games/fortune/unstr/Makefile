@@ -1,8 +1,10 @@
-#	$NetBSD: Makefile,v 1.5 1999/02/13 02:54:21 lukem Exp $
+#	$NetBSD: Makefile,v 1.8 2008/09/26 18:56:43 apb Exp $
 #	@(#)Makefile	8.1 (Berkeley) 5/31/93
 
+NOMAN=		# defined
+
 PROG=		unstr
-MKMAN=		no
 CPPFLAGS+=	-I${.CURDIR}/../strfile
 
+.include "../../Makefile.inc"
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: getbsize.c,v 1.13 2000/01/22 22:19:10 mycroft Exp $	*/
+/*	$NetBSD: getbsize.c,v 1.16 2005/11/29 03:11:59 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)getbsize.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: getbsize.c,v 1.13 2000/01/22 22:19:10 mycroft Exp $");
+__RCSID("$NetBSD: getbsize.c,v 1.16 2005/11/29 03:11:59 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -61,10 +57,8 @@ getbsize(headerlenp, blocksizep)
 {
 	static char header[20];
 	long n, max, mul, blocksize;
-	char *ep, *p, *form;
-
-	_DIAGASSERT(headerlenp != NULL);
-	_DIAGASSERT(blocksizep != NULL);
+	char *ep, *p;
+	const char *form;
 
 #define	KB	(1024L)
 #define	MB	(1024L * 1024L)
@@ -117,7 +111,10 @@ underflow:		warnx("%s: minimum blocksize is 512", p);
 	} else
 		blocksize = n = 512;
 
-	*headerlenp = snprintf(header, sizeof(header), "%ld%s-blocks", n, form);
-	*blocksizep = blocksize;
+	if (headerlenp)
+		*headerlenp =
+		    snprintf(header, sizeof(header), "%ld%s-blocks", n, form);
+	if (blocksizep)
+		*blocksizep = blocksize;
 	return (header);
 }

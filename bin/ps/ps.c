@@ -1,6 +1,35 @@
-/*	$NetBSD: ps.c,v 1.34 1999/12/04 01:23:09 hubertf Exp $	*/
+/*	$NetBSD: ps.c,v 1.71.4.1 2009/04/01 00:25:20 snj Exp $	*/
 
-/*-
+/*
+ * Copyright (c) 2000-2008 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Simon Burge.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
  * Copyright (c) 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -12,11 +41,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +60,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)ps.c	8.4 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: ps.c,v 1.34 1999/12/04 01:23:09 hubertf Exp $");
+__RCSID("$NetBSD: ps.c,v 1.71.4.1 2009/04/01 00:25:20 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,17 +76,20 @@ __RCSID("$NetBSD: ps.c,v 1.34 1999/12/04 01:23:09 hubertf Exp $");
 #include <sys/user.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/lwp.h>
 #include <sys/proc.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/sysctl.h>
 
+#include <stddef.h>
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <kvm.h>
 #include <limits.h>
+#include <locale.h>
 #include <nlist.h>
 #include <paths.h>
 #include <pwd.h>
@@ -72,57 +100,66 @@ __RCSID("$NetBSD: ps.c,v 1.34 1999/12/04 01:23:09 hubertf Exp $");
 
 #include "ps.h"
 
-#ifdef P_PPWAIT
-#define NEWVM
-#endif
+/*
+ * ARGOPTS must contain all option characters that take arguments
+ * (except for 't'!) - it is used in kludge_oldps_options()
+ */
+#define	GETOPTSTR	"aAcCeghjk:LlM:mN:O:o:p:rSsTt:U:uvW:wx"
+#define	ARGOPTS		"kMNOopUW"
 
-KINFO *kinfo;
-struct varent *vhead, *vtail;
+struct kinfo_proc2 *kinfo;
+struct varlist displaylist = SIMPLEQ_HEAD_INITIALIZER(displaylist);
+struct varlist sortlist = SIMPLEQ_HEAD_INITIALIZER(sortlist);
 
 int	eval;			/* exit value */
 int	rawcpu;			/* -C */
 int	sumrusage;		/* -S */
-int	dontuseprocfs=0;	/* -K */
 int	termwidth;		/* width of screen (0 == infinity) */
 int	totwidth;		/* calculated width of requested variables */
 
-int	needuser, needcomm, needenv, commandonly, use_procfs;
+int	needcomm, needenv, commandonly;
 uid_t	myuid;
 
-enum sort { DEFAULT, SORTMEM, SORTCPU } sortby = DEFAULT;
-
-static KINFO	*getkinfo_kvm __P((kvm_t *, int, int, int *, int));
-static char	*kludge_oldps_options __P((char *));
-static int	 pscomp __P((const void *, const void *));
-static void	 saveuser __P((KINFO *));
-static void	 scanvars __P((void));
-static void	 usage __P((void));
-int		 main __P((int, char *[]));
+static struct kinfo_lwp
+		*pick_representative_lwp(struct kinfo_proc2 *,
+		    struct kinfo_lwp *, int);
+static struct kinfo_proc2
+		*getkinfo_kvm(kvm_t *, int, int, int *);
+static char	*kludge_oldps_options(char *);
+static int	 pscomp(const void *, const void *);
+static void	 scanvars(void);
+static void	 usage(void);
+static int	 parsenum(const char *, const char *);
+int		 main(int, char *[]);
 
 char dfmt[] = "pid tt state time command";
 char jfmt[] = "user pid ppid pgid sess jobc state tt time command";
 char lfmt[] = "uid pid ppid cpu pri nice vsz rss wchan state tt time command";
-char   o1[] = "pid";
-char   o2[] = "tt state time command";
+char sfmt[] = "uid pid ppid cpu lid nlwp pri nice vsz rss wchan lstate tt "
+		"time command";
 char ufmt[] = "user pid %cpu %mem vsz rss tt state start time command";
 char vfmt[] = "pid state time sl re pagein vsz rss lim tsiz %cpu %mem command";
+
+const char *default_fmt = dfmt;
+
+struct varent *Opos = NULL; /* -O flag inserts after this point */
 
 kvm_t *kd;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct varent *vent;
 	struct winsize ws;
-	gid_t egid = getegid();
-	int ch, flag, i, fmt, lineno, nentries;
-	int prtheader, wflag, what, xflg;
+	struct kinfo_lwp *kl, *l;
+	int ch, flag, i, j, fmt, lineno, nentries, nlwps;
+	int prtheader, wflag, what, xflg, mode, showlwps;
 	char *nlistf, *memf, *swapf, errbuf[_POSIX2_LINE_MAX];
 	char *ttname;
 
-	(void)setegid(getgid());
+	setprogname(argv[0]);
+	(void)setlocale(LC_ALL, "");
+
 	if ((ioctl(STDOUT_FILENO, TIOCGWINSZ, (char *)&ws) == -1 &&
 	     ioctl(STDERR_FILENO, TIOCGWINSZ, (char *)&ws) == -1 &&
 	     ioctl(STDIN_FILENO,  TIOCGWINSZ, (char *)&ws) == -1) ||
@@ -131,16 +168,22 @@ main(argc, argv)
 	else
 		termwidth = ws.ws_col - 1;
 
+	setncpu();
+
 	if (argc > 1)
 		argv[1] = kludge_oldps_options(argv[1]);
 
-	fmt = prtheader = wflag = xflg = 0;
+	fmt = prtheader = wflag = xflg = showlwps = 0;
 	what = KERN_PROC_UID;
 	flag = myuid = getuid();
 	memf = nlistf = swapf = NULL;
-	while ((ch = getopt(argc, argv,
-	    "acCeghjKLlM:mN:O:o:p:rSTt:U:uvW:wx")) != -1)
+	mode = PRINTMODE;
+	while ((ch = getopt(argc, argv, GETOPTSTR)) != -1)
 		switch((char)ch) {
+		case 'A':
+			/* "-A" shows all processes, like "-ax" */
+			xflg = 1;
+			/*FALLTHROUGH*/
 		case 'a':
 			what = KERN_PROC_ALL;
 			flag = 0;
@@ -164,9 +207,11 @@ main(argc, argv)
 			fmt = 1;
 			jfmt[0] = '\0';
 			break;
-		case 'K':
-			dontuseprocfs=1;
+		case 'k':
+			parsesort(optarg);
 			break;
+		case 'K':
+			break;			/* no-op - was dontuseprocfs */
 		case 'L':
 			showkey();
 			exit(0);
@@ -180,16 +225,29 @@ main(argc, argv)
 			memf = optarg;
 			break;
 		case 'm':
-			sortby = SORTMEM;
+			parsesort("vsz");
 			break;
 		case 'N':
 			nlistf = optarg;
 			break;
 		case 'O':
-			parsefmt(o1);
-			parsefmt(optarg);
-			parsefmt(o2);
-			o1[0] = o2[0] = '\0';
+			/*
+			 * If this is not the first -O option, insert
+			 * just after the previous one.
+			 *
+			 * If there is no format yet, start with the default
+			 * format, and insert after the pid column.
+			 *
+			 * If there is already a format, insert after
+			 * the pid column, or at the end if there's no
+			 * pid column.
+			 */
+			if (!Opos) {
+				if (!fmt)
+					parsefmt(default_fmt);
+				Opos = varlist_find(&displaylist, "pid");
+			}
+			parsefmt_insert(optarg, &Opos);
 			fmt = 1;
 			break;
 		case 'o':
@@ -198,14 +256,19 @@ main(argc, argv)
 			break;
 		case 'p':
 			what = KERN_PROC_PID;
-			flag = atol(optarg);
+			flag = parsenum(optarg, "process id");
 			xflg = 1;
 			break;
 		case 'r':
-			sortby = SORTCPU;
+			parsesort("%cpu");
 			break;
 		case 'S':
 			sumrusage = 1;
+			break;
+		case 's':
+			/* -L was already taken... */
+			showlwps = 1;
+			default_fmt = sfmt;
 			break;
 		case 'T':
 			if ((ttname = ttyname(STDIN_FILENO)) == NULL)
@@ -215,51 +278,60 @@ main(argc, argv)
 			ttname = optarg;
 		tty: {
 			struct stat sb;
-			char *ttypath, pathbuf[MAXPATHLEN];
+			const char *ttypath;
+			char pathbuf[MAXPATHLEN];
 
-			if (strcmp(ttname, "co") == 0)
+			flag = 0;
+			ttypath = NULL;
+			if (strcmp(ttname, "?") == 0) {
+				flag = KERN_PROC_TTY_NODEV;
+				xflg = 1;
+			} else if (strcmp(ttname, "-") == 0)
+				flag = KERN_PROC_TTY_REVOKE;
+			else if (strcmp(ttname, "co") == 0)
 				ttypath = _PATH_CONSOLE;
-			else if (*ttname != '/')
-				(void)snprintf(ttypath = pathbuf,
+			else if (strncmp(ttname, "pts/", 4) == 0 ||
+				strncmp(ttname, "tty", 3) == 0) {
+				(void)snprintf(pathbuf,
+				    sizeof(pathbuf), "%s%s", _PATH_DEV, ttname);
+				ttypath = pathbuf;
+			} else if (*ttname != '/') {
+				(void)snprintf(pathbuf,
 				    sizeof(pathbuf), "%s%s", _PATH_TTY, ttname);
-			else
+				ttypath = pathbuf;
+			} else
 				ttypath = ttname;
-			if (stat(ttypath, &sb) == -1)
-				err(1, "%s", ttypath);
-			if (!S_ISCHR(sb.st_mode))
-				errx(1, "%s: not a terminal", ttypath);
 			what = KERN_PROC_TTY;
-			flag = sb.st_rdev;
+			if (flag == 0) {
+				if (stat(ttypath, &sb) == -1)
+					err(1, "%s", ttypath);
+				if (!S_ISCHR(sb.st_mode))
+					errx(1, "%s: not a terminal", ttypath);
+				flag = sb.st_rdev;
+			}
 			break;
 		}
 		case 'U':
 			if (*optarg != '\0') {
 				struct passwd *pw;
-				char *ep;
 
 				what = KERN_PROC_UID;
 				pw = getpwnam(optarg);
 				if (pw == NULL) {
-					errno = 0;
-					flag = strtoul(optarg, &ep, 10);
-					if (errno)
-						err(1, "%s", optarg);
-					if (*ep != '\0')
-						errx(1, "%s: illegal user name",
-						    optarg);
+					flag = parsenum(optarg, "user name");
 				} else
 					flag = pw->pw_uid;
 			}
 			break;
 		case 'u':
 			parsefmt(ufmt);
-			sortby = SORTCPU;
+			parsesort("%cpu");
 			fmt = 1;
 			ufmt[0] = '\0';
 			break;
 		case 'v':
 			parsefmt(vfmt);
-			sortby = SORTMEM;
+			parsesort("vsz");
 			fmt = 1;
 			vfmt[0] = '\0';
 			break;
@@ -294,200 +366,314 @@ main(argc, argv)
 		}
 	}
 #endif
-	/*
-	 * Discard setgid privileges.  If not the running kernel, we toss
-	 * them away totally so that bad guys can't print interesting stuff
-	 * from kernel memory, otherwise switch back to kmem for the
-	 * duration of the kvm_openfiles() call.
-	 */
-	if (nlistf != NULL || memf != NULL || swapf != NULL)
-		(void)setgid(getgid());
-	else
-		(void)setegid(egid);
 
-	kd = kvm_openfiles(nlistf, memf, swapf, O_RDONLY, errbuf);
-	if (kd == 0) {
-		if (dontuseprocfs)
-			errx(1, "%s", errbuf);
-		else {
-			warnx("kvm_openfiles: %s", errbuf);
-			fprintf(stderr, "ps: falling back to /proc-based lookup\n");
-		}
-	}
+	if (memf == NULL) {
+		kd = kvm_openfiles(NULL, NULL, NULL, KVM_NO_FILES, errbuf);
+		donlist_sysctl();
+	} else
+		kd = kvm_openfiles(nlistf, memf, swapf, O_RDONLY, errbuf);
 
-	if (nlistf == NULL && memf == NULL && swapf == NULL)
-		(void)setgid(getgid());
+	if (kd == 0)
+		errx(1, "%s", errbuf);
 
 	if (!fmt)
-		parsefmt(dfmt);
+		parsefmt(default_fmt);
+
+	/* Add default sort criteria */
+	parsesort("tdev,pid");
+	SIMPLEQ_FOREACH(vent, &sortlist, next) {
+		if (vent->var->flag & LWP || vent->var->type == UNSPECIFIED)
+			warnx("Cannot sort on %s, sort key ignored\n",
+				vent->var->name);
+	}
 
 	/*
-	 * scan requested variables, noting what structures are needed,
-	 * and adjusting header widths as appropiate.
+	 * scan requested variables, noting what structures are needed.
 	 */
 	scanvars();
 
 	/*
 	 * select procs
 	 */
-	if (!kd || !(kinfo = getkinfo_kvm(kd, what, flag, &nentries, needuser)))
-	{
-		/*  If/when the /proc-based code is ripped out
-		 *  again, make sure all references to the -K
-		 *  option are also pulled (getopt(), usage(),
-		 *  man page).  See the man page comments about
-		 *  this for more details.  */
-	  	/*  sysctl() ought to provide some sort of
-		 *  always-working-but-minimal-functionality
-		 *  method of providing at least some of the
-		 *  process information.  Unfortunately, such a
-		 *  change will require too much work to be put
-		 *  into 1.4.  For now, enable this experimental
-		 *  /proc-based support instead (if /proc is
-		 *  mounted) to grab as much information as we can.  
-		 *  The guts of emulating kvm_getprocs() is in
-		 *  the file procfs_ops.c.  */
-		if (kd)
-			warnx("%s.", kvm_geterr(kd));
-		if (dontuseprocfs) {
-			exit(1);
-		}
-		/*  procfs_getprocs supports all but the
-		 *  KERN_PROC_RUID flag.  */
-		kinfo = getkinfo_procfs(what, flag, &nentries);
-		if (kinfo == 0) {
-		  errx(1, "fallback /proc-based lookup also failed.  %s",
-				  "Giving up...");
-		}
-		fprintf(stderr, "%s%s",
-		    "Warning:  /proc does not provide ",
-		    "valid data for all fields.\n");
-		use_procfs = 1;
+	if (!(kinfo = getkinfo_kvm(kd, what, flag, &nentries)))
+		err(1, "%s", kvm_geterr(kd));
+	if (nentries == 0) {
+		printheader();
+		exit(1);
 	}
-
-	/*
-	 * print header
-	 */
-	printheader();
-	if (nentries == 0)
-		exit(0);
 	/*
 	 * sort proc list
 	 */
-	qsort(kinfo, nentries, sizeof(KINFO), pscomp);
+	qsort(kinfo, nentries, sizeof(struct kinfo_proc2), pscomp);
 	/*
-	 * for each proc, call each variable output function.
+	 * For each proc, call each variable output function in
+	 * "setwidth" mode to determine the widest element of
+	 * the column.
+	 */
+	if (mode == PRINTMODE)
+		for (i = 0; i < nentries; i++) {
+			struct kinfo_proc2 *ki = &kinfo[i];
+
+			if (xflg == 0 && (ki->p_tdev == NODEV ||
+			    (ki->p_flag & P_CONTROLT) == 0))
+				continue;
+
+			kl = kvm_getlwps(kd, ki->p_pid, ki->p_paddr,
+			    sizeof(struct kinfo_lwp), &nlwps);
+			if (kl == 0)
+				nlwps = 0;
+			if (showlwps == 0) {
+				l = pick_representative_lwp(ki, kl, nlwps);
+				SIMPLEQ_FOREACH(vent, &displaylist, next)
+					OUTPUT(vent, ki, l, WIDTHMODE);
+			} else {
+				/* The printing is done with the loops
+				 * reversed, but here we don't need that,
+				 * and this improves the code locality a bit.
+				 */
+				SIMPLEQ_FOREACH(vent, &displaylist, next)
+					for (j = 0; j < nlwps; j++)
+						OUTPUT(vent, ki, &kl[j],
+						    WIDTHMODE);
+			}
+		}
+	/*
+	 * Print header - AFTER determining process field widths.
+	 * printheader() also adds up the total width of all
+	 * fields the first time it's called.
+	 */
+	printheader();
+	/*
+	 * For each proc, call each variable output function in
+	 * print mode.
 	 */
 	for (i = lineno = 0; i < nentries; i++) {
-		KINFO *ki = &kinfo[i];
+		struct kinfo_proc2 *ki = &kinfo[i];
 
-		if (xflg == 0 && (KI_EPROC(ki)->e_tdev == NODEV ||
-		    (KI_PROC(ki)->p_flag & P_CONTROLT ) == 0))
+		if (xflg == 0 && (ki->p_tdev == NODEV ||
+		    (ki->p_flag & P_CONTROLT ) == 0))
 			continue;
-		for (vent = vhead; vent; vent = vent->next) {
-			(vent->var->oproc)(ki, vent);
-			if (vent->next != NULL)
-				(void)putchar(' ');
-		}
-		(void)putchar('\n');
-		if (prtheader && lineno++ == prtheader - 4) {
+		kl = kvm_getlwps(kd, ki->p_pid, (u_long)ki->p_paddr,
+		    sizeof(struct kinfo_lwp), &nlwps);
+		if (kl == 0)
+			nlwps = 0;
+		if (showlwps == 0) {
+			l = pick_representative_lwp(ki, kl, nlwps);
+			SIMPLEQ_FOREACH(vent, &displaylist, next) {
+				OUTPUT(vent, ki, l, mode);
+				if (SIMPLEQ_NEXT(vent, next) != NULL)
+					(void)putchar(' ');
+			}
 			(void)putchar('\n');
-			printheader();
-			lineno = 0;
+			if (prtheader && lineno++ == prtheader - 4) {
+				(void)putchar('\n');
+				printheader();
+				lineno = 0;
+			}
+		} else {
+			for (j = 0; j < nlwps; j++) {
+				SIMPLEQ_FOREACH(vent, &displaylist, next) {
+					OUTPUT(vent, ki, &kl[j], mode);
+					if (SIMPLEQ_NEXT(vent, next) != NULL)
+						(void)putchar(' ');
+				}
+				(void)putchar('\n');
+				if (prtheader && lineno++ == prtheader - 4) {
+					(void)putchar('\n');
+					printheader();
+					lineno = 0;
+				}
+			}
 		}
 	}
 	exit(eval);
 	/* NOTREACHED */
 }
 
-static KINFO *
-getkinfo_kvm(kd, what, flag, nentriesp, needuser)
-	kvm_t *kd;
-	int what, flag, *nentriesp, needuser;
+static struct kinfo_lwp *
+pick_representative_lwp(struct kinfo_proc2 *ki, struct kinfo_lwp *kl, int nlwps)
 {
-	struct kinfo_proc *kp;
-	KINFO *kinfo=NULL;
-	size_t i;
+	int i, onproc, running, sleeping, stopped, suspended;
+	static struct kinfo_lwp zero_lwp;
 
-	if ((kp = kvm_getprocs(kd, what, flag, nentriesp)) != 0)
-	{
-		if ((kinfo = malloc((*nentriesp) * sizeof(*kinfo))) == NULL)
-			err(1, NULL);
-		for (i = (*nentriesp); i-- > 0; kp++) {
-			kinfo[i].ki_p = kp;
-			if (needuser)
-				saveuser(&kinfo[i]);
+	if (kl == 0)
+		return &zero_lwp;
+
+	/* Trivial case: only one LWP */
+	if (nlwps == 1)
+		return kl;
+
+	switch (ki->p_realstat) {
+	case SSTOP:
+	case SACTIVE:
+		/* Pick the most live LWP */
+		onproc = running = sleeping = stopped = suspended = -1;
+		for (i = 0; i < nlwps; i++) {
+			switch (kl[i].l_stat) {
+			case LSONPROC:
+				onproc = i;
+				break;
+			case LSRUN:
+				running = i;
+				break;
+			case LSSLEEP:
+				sleeping = i;
+				break;
+			case LSSTOP:
+				stopped = i;
+				break;
+			case LSSUSPENDED:
+				suspended = i;
+				break;
+			}
 		}
+		if (onproc != -1)
+			return &kl[onproc];
+		if (running != -1)
+			return &kl[running];
+		if (sleeping != -1)
+			return &kl[sleeping];
+		if (stopped != -1)
+			return &kl[stopped];
+		if (suspended != -1)
+			return &kl[suspended];
+		break;
+	case SZOMB:
+		/* First will do */
+		return kl;
+		break;
 	}
+	/* Error condition! */
+	warnx("Inconsistent LWP state for process %d\n", ki->p_pid);
+	return kl;
+}
 
-	return (kinfo);
+
+static struct kinfo_proc2 *
+getkinfo_kvm(kvm_t *kdp, int what, int flag, int *nentriesp)
+{
+
+	return (kvm_getproc2(kdp, what, flag, sizeof(struct kinfo_proc2),
+	    nentriesp));
 }
 
 static void
-scanvars()
+scanvars(void)
 {
 	struct varent *vent;
 	VAR *v;
-	int i;
 
-	for (vent = vhead; vent; vent = vent->next) {
+	SIMPLEQ_FOREACH(vent, &displaylist, next) {
 		v = vent->var;
-		i = strlen(v->header);
-		if (v->width < i)
-			v->width = i;
-		totwidth += v->width + 1;	/* +1 for space */
-		if (v->flag & USER)
-			needuser = 1;
-		if (v->flag & COMM)
+		if (v->flag & COMM) {
 			needcomm = 1;
+			break;
+		}
 	}
-	totwidth--;
-}
-
-static void
-saveuser(ki)
-	KINFO *ki;
-{
-	struct pstats pstats;
-	struct usave *usp;
-
-	usp = &ki->ki_u;
-	if (kvm_read(kd, (u_long)&KI_PROC(ki)->p_addr->u_stats,
-	    (char *)&pstats, sizeof(pstats)) == sizeof(pstats)) {
-		/*
-		 * The u-area might be swapped out, and we can't get
-		 * at it because we have a crashdump and no swap.
-		 * If it's here fill in these fields, otherwise, just
-		 * leave them 0.
-		 */
-		usp->u_start = pstats.p_start;
-		usp->u_ru = pstats.p_ru;
-		usp->u_cru = pstats.p_cru;
-		usp->u_valid = 1;
-	} else
-		usp->u_valid = 0;
 }
 
 static int
-pscomp(a, b)
-	const void *a, *b;
+pscomp(const void *a, const void *b)
 {
-	int i;
-#ifdef NEWVM
-#define VSIZE(k) (KI_EPROC(k)->e_vm.vm_dsize + KI_EPROC(k)->e_vm.vm_ssize + \
-		  KI_EPROC(k)->e_vm.vm_tsize)
-#else
-#define VSIZE(k) ((k)->ki_p->p_dsize + (k)->ki_p->p_ssize + (k)->ki_e->e_xsize)
-#endif
+	const struct kinfo_proc2 *ka = (const struct kinfo_proc2 *)a;
+	const struct kinfo_proc2 *kb = (const struct kinfo_proc2 *)b;
 
-	if (sortby == SORTCPU)
-		return (getpcpu((KINFO *)b) - getpcpu((KINFO *)a));
-	if (sortby == SORTMEM)
-		return (VSIZE((KINFO *)b) - VSIZE((KINFO *)a));
-	i =  KI_EPROC((KINFO *)a)->e_tdev - KI_EPROC((KINFO *)b)->e_tdev;
-	if (i == 0)
-		i = KI_PROC((KINFO *)a)->p_pid - KI_PROC((KINFO *)b)->p_pid;
-	return (i);
+	int i;
+	int64_t i64;
+	VAR *v;
+	struct varent *ve;
+	const sigset_t *sa, *sb;
+
+#define	V_SIZE(k) ((k)->p_vm_msize)
+#define	RDIFF_N(t, n) \
+	if (((const t *)((const char *)ka + v->off))[n] > ((const t *)((const char *)kb + v->off))[n]) \
+		return 1; \
+	if (((const t *)((const char *)ka + v->off))[n] < ((const t *)((const char *)kb + v->off))[n]) \
+		return -1;
+
+#define	RDIFF(type) RDIFF_N(type, 0); continue
+
+	SIMPLEQ_FOREACH(ve, &sortlist, next) {
+		v = ve->var;
+		if (v->flag & LWP)
+			/* LWP structure not available (yet) */
+			continue;
+		/* Sort on pvar() fields, + a few others */
+		switch (v->type) {
+		case CHAR:
+			RDIFF(char);
+		case UCHAR:
+			RDIFF(u_char);
+		case SHORT:
+			RDIFF(short);
+		case USHORT:
+			RDIFF(ushort);
+		case INT:
+			RDIFF(int);
+		case UINT:
+			RDIFF(uint);
+		case LONG:
+			RDIFF(long);
+		case ULONG:
+			RDIFF(ulong);
+		case INT32:
+			RDIFF(int32_t);
+		case UINT32:
+			RDIFF(uint32_t);
+		case SIGLIST:
+			sa = (const void *)((const char *)a + v->off);
+			sb = (const void *)((const char *)b + v->off);
+			i = 0;
+			do {
+				if (sa->__bits[i] > sb->__bits[i])
+					return 1;
+				if (sa->__bits[i] < sb->__bits[i])
+					return -1;
+				i++;
+			} while (i < sizeof sa->__bits / sizeof sa->__bits[0]);
+			continue;
+		case INT64:
+			RDIFF(int64_t);
+		case KPTR:
+		case KPTR24:
+		case UINT64:
+			RDIFF(uint64_t);
+		case TIMEVAL:
+			/* compare xxx_sec then xxx_usec */
+			RDIFF_N(uint32_t, 0);
+			RDIFF_N(uint32_t, 1);
+			continue;
+		case CPUTIME:
+			i64 = ka->p_rtime_sec * 1000000 + ka->p_rtime_usec;
+			i64 -= kb->p_rtime_sec * 1000000 + kb->p_rtime_usec;
+			if (sumrusage) {
+				i64 += ka->p_uctime_sec * 1000000
+				    + ka->p_uctime_usec;
+				i64 -= kb->p_uctime_sec * 1000000
+				    + kb->p_uctime_usec;
+			}
+			if (i64 != 0)
+				return i64 > 0 ? 1 : -1;
+			continue;
+		case PCPU:
+			i = getpcpu(kb) - getpcpu(ka);
+			if (i != 0)
+				return i;
+			continue;
+		case VSIZE:
+			i = V_SIZE(kb) - V_SIZE(ka);
+			if (i != 0)
+				return i;
+			continue;
+
+		default:
+			/* Ignore everything else */
+			break;
+		}
+	}
+	return 0;
+
+#undef VSIZE
 }
 
 /*
@@ -502,8 +688,7 @@ pscomp(a, b)
  * feature is available with the option 'T', which takes no argument.
  */
 static char *
-kludge_oldps_options(s)
-	char *s;
+kludge_oldps_options(char *s)
 {
 	size_t len;
 	char *newopts, *ns, *cp;
@@ -521,18 +706,19 @@ kludge_oldps_options(s)
 	 */
 	cp = s + len - 1;
 	/*
-	 * if last letter is a 't' flag with no argument (in the context
-	 * of the oldps options -- option string NOT starting with a '-' --
-	 * then convert to 'T' (meaning *this* terminal, i.e. ttyname(0)).
+	 * if the last letter is a 't' flag and there are no other option
+	 * characters that take arguments (eg U, p, o) in the option
+	 * string and the option string doesn't start with a '-' then
+	 * convert to 'T' (meaning *this* terminal, i.e. ttyname(0)).
 	 */
-	if (*cp == 't' && *s != '-')
+	if (*cp == 't' && *s != '-' && strpbrk(s, ARGOPTS) == NULL)
 		*cp = 'T';
 	else {
 		/*
 		 * otherwise check for trailing number, which *may* be a
 		 * pid.
 		 */
-		while (cp >= s && isdigit(*cp))
+		while (cp >= s && isdigit((unsigned char)*cp))
 			--cp;
 	}
 	cp++;
@@ -542,25 +728,42 @@ kludge_oldps_options(s)
 	 * if there's a trailing number, and not a preceding 'p' (pid) or
 	 * 't' (tty) flag, then assume it's a pid and insert a 'p' flag.
 	 */
-	if (isdigit(*cp) &&
+	if (isdigit((unsigned char)*cp) &&
 	    (cp == s || (cp[-1] != 'U' && cp[-1] != 't' && cp[-1] != 'p' &&
-	     (cp - 1 == s || cp[-2] != 't'))))
+	    cp[-1] != '/' && (cp - 1 == s || cp[-2] != 't'))))
 		*ns++ = 'p';
 	/* and append the number */
-	(void)strcpy(ns, cp);		/* XXX strcpy is safe */
+	(void)strcpy(ns, cp);		/* XXX strcpy is safe here */
 
 	return (newopts);
 }
 
+static int
+parsenum(const char *str, const char *msg)
+{
+	char *ep;
+	unsigned long ul;
+
+	ul = strtoul(str, &ep, 0);
+
+	if (*str == '\0' || *ep != '\0')
+		errx(1, "Invalid %s: `%s'", msg, str);
+
+	if (ul > INT_MAX)
+		errx(1, "Out of range %s: `%s'", msg, str);
+
+	return (int)ul;
+}
+
 static void
-usage()
+usage(void)
 {
 
 	(void)fprintf(stderr,
 	    "usage:\t%s\n\t   %s\n\t%s\n",
-	    "ps [-aChjKlmrSTuvwx] [-O|o fmt] [-p pid] [-t tty]",
-	    "[-M core] [-N system] [-W swap] [-U username]",
-	    "ps [-L]");
+	    "ps [-AaCcehjlmrSsTuvwx] [-k key] [-M core] [-N system] [-O fmt]",
+	    "[-o fmt] [-p pid] [-t tty] [-U username] [-W swap]",
+	    "ps -L");
 	exit(1);
 	/* NOTREACHED */
 }

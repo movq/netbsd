@@ -1,4 +1,4 @@
-/*	$NetBSD: maccons.c,v 1.2 2000/02/14 07:01:47 scottr Exp $	*/
+/*	$NetBSD: maccons.c,v 1.9 2007/10/17 19:55:13 garbled Exp $	*/
 
 /*
  * Copyright (C) 1999 Scott Reynolds.  All rights reserved.
@@ -26,6 +26,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: maccons.c,v 1.9 2007/10/17 19:55:13 garbled Exp $");
+
 #include "wsdisplay.h"
 #include "wskbd.h"
 #include "zsc.h"
@@ -37,31 +40,26 @@
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
 
+#include <machine/video.h>
 #include <dev/cons.h>
 #include <dev/wscons/wskbdvar.h>
 #include <dev/wscons/wsdisplayvar.h>
 #include <mac68k/dev/macfbvar.h>
 #include <mac68k/dev/akbdvar.h>
 
-void maccnprobe __P((struct consdev *));
-void maccninit __P((struct consdev *));
-int maccngetc __P((dev_t));
-void maccnputc __P((dev_t, int));
-void maccnpollc __P((dev_t, int));
-
-#if NWSDISPLAY > 0
-cdev_decl(wsdisplay);
-#endif
+void maccnprobe(struct consdev *);
+void maccninit(struct consdev *);
+int maccngetc(dev_t);
+void maccnputc(dev_t, int);
+void maccnpollc(dev_t, int);
 
 static int	maccons_initted = (-1);
-
-/* From Booter via locore */
-extern u_int32_t	mac68k_vidphys;
 
 void
 maccnprobe(struct consdev *cp)
 {
 #if NWSDISPLAY > 0
+	extern const struct cdevsw wsdisplay_cdevsw;
 	int     maj, unit;
 #endif
 
@@ -70,12 +68,8 @@ maccnprobe(struct consdev *cp)
 
 #if NWSDISPLAY > 0
 	unit = 0;
-	for (maj = 0; maj < nchrdev; maj++) {
-		if (cdevsw[maj].d_open == wsdisplayopen) {
-			break;
-		}
-	}
-	if (maj != nchrdev) {
+	maj = cdevsw_lookup_major(&wsdisplay_cdevsw);
+	if (maj != -1) {
 		cp->cn_pri = CN_INTERNAL;
 		cp->cn_dev = makedev(maj, unit);
 	}
@@ -90,7 +84,7 @@ maccninit(struct consdev *cp)
 	 * note:  maccons_initted is initialized to (-1).
 	 */
 	if (++maccons_initted > 0) {
-		macfb_cnattach(mac68k_vidphys);
+		macfb_cnattach(mac68k_video.mv_phys);
 		akbd_cnattach();
 	}
 }
@@ -110,7 +104,7 @@ maccnputc(dev_t dev, int c)
 {
 #if NZSC > 0
 	extern dev_t mac68k_zsdev;
-	extern int zscnputc __P((dev_t dev, int c));
+	extern int zscnputc(dev_t, int);
 #endif
 
 #if NWSDISPLAY > 0

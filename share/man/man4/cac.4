@@ -1,10 +1,10 @@
-.\"	$NetBSD: cac.4,v 1.2 2000/03/21 13:11:45 ad Exp $
+.\"	$NetBSD: cac.4,v 1.13 2008/04/30 13:10:53 martin Exp $
 .\"
 .\" Copyright (c) 2000 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
-.\" by Andy Doran.
+.\" by Andrew Doran.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd March 9, 2000
+.Dd October 17, 2000
 .Dt CAC 4
 .Os
 .Sh NAME
@@ -42,48 +35,44 @@
 .Nd
 .Tn Compaq array controller driver
 .Sh SYNOPSIS
+.Cd "cac* at eisa? slot ?"
 .Cd "cac* at pci? dev ? function ?"
 .Sh DESCRIPTION
 The
 .Nm
 driver provides basic message passing and DMA support for Compaq array
-controllers.  Disk arrays are supported by the 
-.Nm ca
-device.
+controllers.
+Disk arrays are supported by the
+.Nm ld
+driver.
 .Sh HARDWARE
 The
 .Nm
 driver provides support for the following controllers:
 .Pp
-.Bl -tag -width -offset indent -compact
-.It Tn Compaq SMART-2/E
-.It Tn Compaq SMART-2/P
-.It Tn Compaq SMART-2DH
-.It Tn Compaq SMART-2SL
+.Bl -tag -width Dv -offset indent -compact
+.It Tn Compaq Integrated Array
+.It Tn Compaq IAES
+.It Tn Compaq IDA
+.It Tn Compaq IDA-2
+.It Tn Compaq RAID LC2
 .It Tn Compaq Smart Array 221
 .It Tn Compaq Smart Array 3100ES
 .It Tn Compaq Smart Array 3200
 .It Tn Compaq Smart Array 4200
 .It Tn Compaq Smart Array 4250ES
-.It Tn Compaq Integrated Array
+.It Tn Compaq Smart Array 431
+.It Tn Compaq SMART
+.It Tn Compaq SMART-2/E
+.It Tn Compaq SMART-2/P
+.It Tn Compaq SMART-2DH
+.It Tn Compaq SMART-2SL
 .El
 .Sh SEE ALSO
 .Xr intro 4 ,
-.Xr ca 4 .
-.Sh AUTHOR
-The
-.Nm
-driver was written by
-.An Andy Doran Aq ad@netbsd.org .
+.Xr ld 4
 .Sh HISTORY
 The
 .Nm cac
 driver first appeared in
 .Nx 1.5 .
-.Sh BUGS
-This manpage is inadaquate.
-.Pp
-A command pass-through interface and user space control tool are needed.
-.Pp
-ISA and EISA front-ends are needed.
-.Pp

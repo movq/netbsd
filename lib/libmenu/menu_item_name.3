@@ -1,4 +1,4 @@
-.\"	$NetBSD: menu_item_name.3,v 1.2 1999/11/24 12:43:17 kleink Exp $
+.\"	$NetBSD: menu_item_name.3,v 1.9 2003/04/16 13:35:10 wiz Exp $
 .\"
 .\" Copyright (c) 1999
 .\"	Brett Lymn - blymn@baea.com.au, brett_lymn@yahoo.com.au
@@ -29,19 +29,19 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd September, 1999
+.Dd September 10, 1999
 .Dt MENU_ITEM_NAME 3
-.Os BSD 4
+.Os
 .Sh NAME
 .Nm item_description ,
 .Nm item_name
-.Nd menu library
+.Nd get item name or description
 .Sh LIBRARY
 .Lb libmenu
 .Sh SYNOPSIS
-.Fd #include <menu.h>
+.In menu.h
 .Ft char *
-.Fn item_description "MENU *menu"
+.Fn item_description "ITEM *item"
 .Ft char *
 .Fn item_name "ITEM *item"
 .Sh DESCRIPTION
@@ -49,7 +49,8 @@ The
 .Fn item_description
 .Fa menu
 function returns the description string associated with the passed
-item.  The 
+item.
+The
 .Fn item_name
 function returns the name string associated with the passed item.
 .Sh RETURN VALUES
@@ -63,9 +64,8 @@ functions return NULL if the item pointer is not valid.
 .Xr menus 3
 .Sh NOTES
 The header
-.Xr <menus.h>
+.Pa \*[Lt]menu.h\*[Gt]
 automatically includes both
-.Xr <curses.h>
+.Pa \*[Lt]curses.h\*[Gt]
 and
-.Xr <eti.h>
-
+.Pa \*[Lt]eti.h\*[Gt] .

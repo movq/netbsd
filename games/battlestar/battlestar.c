@@ -1,4 +1,4 @@
-/*	$NetBSD: battlestar.c,v 1.9 1999/09/18 16:40:04 jsm Exp $	*/
+/*	$NetBSD: battlestar.c,v 1.16 2008/07/20 01:03:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif				/* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)battlestar.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: battlestar.c,v 1.9 1999/09/18 16:40:04 jsm Exp $");
+__RCSID("$NetBSD: battlestar.c,v 1.16 2008/07/20 01:03:21 lukem Exp $");
 #endif
 #endif				/* not lint */
 
@@ -56,26 +52,26 @@ __RCSID("$NetBSD: battlestar.c,v 1.9 1999/09/18 16:40:04 jsm Exp $");
 
 #include "extern.h"
 
-int main __P((int, char *[]));
-
 int
-main(argc, argv)
-	int     argc;
-	char  **argv;
+main(int argc, char **argv)
 {
 	char    mainbuf[LINELENGTH];
 	char   *next;
 
 	/* Open the score file then revoke setgid privileges */
 	open_score_file();
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
-	initialize((argc < 2) ? NULL : (strcmp(argv[1], "-r") ? argv[1]
-					: (argv[2] ? argv[2]
-					   : DEFAULT_SAVE_FILE)));
+	if (argc < 2)
+		initialize(NULL);
+	else if (strcmp(argv[1], "-r") == 0)
+		initialize((argc > 2) ? argv[2] : DEFAULT_SAVE_FILE);
+	else
+		initialize(argv[1]);
 start:
 	news();
-	beenthere[position]++;
+	if (beenthere[position] <= ROOMDESC)
+		beenthere[position]++;
 	if (notes[LAUNCHED])
 		crash();	/* decrements fuel & crash */
 	if (matchlight) {
@@ -92,7 +88,7 @@ start:
 run:
 	next = getcom(mainbuf, sizeof mainbuf, ">-: ",
 	    "Please type in something.");
-	for (wordcount = 0; next && wordcount < 20; wordcount++)
+	for (wordcount = 0; next && wordcount < NWORD - 1; wordcount++)
 		next = getword(next, words[wordcount], -1);
 	parse();
 	switch (cypher()) {

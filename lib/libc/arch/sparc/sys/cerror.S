@@ -1,4 +1,4 @@
-/*	$NetBSD: cerror.S,v 1.7 1999/03/31 18:14:27 kleink Exp $	*/
+/*	$NetBSD: cerror.S,v 1.10 2007/10/08 13:06:00 uwe Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,7 +40,7 @@
 #if 0
 	.asciz "@(#)cerror.s	8.1 (Berkeley) 6/4/93"
 #else
-	RCSID("$NetBSD: cerror.S,v 1.7 1999/03/31 18:14:27 kleink Exp $")
+	RCSID("$NetBSD: cerror.S,v 1.10 2007/10/08 13:06:00 uwe Exp $")
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -52,7 +48,7 @@
 
 #ifdef _REENTRANT
 FUNC(CERROR)
-	save	%sp, -96, %sp
+	save	%sp, -CCFSZ, %sp
 	call	_C_LABEL(__errno)
 	 nop
 	st	%i0, [%o0]
@@ -63,7 +59,8 @@ FUNC(CERROR)
 	.globl	_C_LABEL(errno)
 #ifdef PIC
 FUNC(CERROR)
-	ld	[%g1 + _C_LABEL(errno)], %g1
+	set	_C_LABEL(errno), %g2
+	ld	[%g1 + %g2], %g1
 	st	%o0, [%g1]
 	mov	-1, %o0
 	retl

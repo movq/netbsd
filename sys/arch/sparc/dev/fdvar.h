@@ -1,4 +1,4 @@
-/*	$NetBSD: fdvar.h,v 1.10 2000/01/21 13:22:02 pk Exp $	*/
+/*	$NetBSD: fdvar.h,v 1.14 2008/04/28 20:23:35 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,6 +44,7 @@ struct fdcio {
 	u_int	fdcio_reg_msr;
 	u_int	fdcio_reg_fifo;
 	u_int	fdcio_reg_dor;		/* 82077 only */
+	u_int	fdcio_reg_dir;		/* 82077 only */
 
 	/*
 	 * Interrupt state.
@@ -61,8 +55,8 @@ struct fdcio {
 	/*
 	 * IO state.
 	 */
-	char	*fdcio_data;		/* pseudo-dma data */
-	int	fdcio_tc;		/* pseudo-dma Terminal Count */
+	char	*fdcio_data;		/* pseudo-DMA data */
+	int	fdcio_tc;		/* pseudo-DMA Terminal Count */
 	u_char	fdcio_status[FDC_NSTATUS];	/* copy of registers */
 	int	fdcio_nstat;		/* # of valid status bytes */
 

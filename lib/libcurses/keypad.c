@@ -1,4 +1,4 @@
-/*      $Id: keypad.c,v 1.1 1999/04/13 14:08:18 mrg Exp $  */
+/*	$NetBSD: keypad.c,v 1.10 2007/01/21 13:25:36 jdc Exp $  */
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com)
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,14 +28,11 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)initscr.c	8.2 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: keypad.c,v 1.1 1999/04/13 14:08:18 mrg Exp $");
-#endif
+__RCSID("$NetBSD: keypad.c,v 1.10 2007/01/21 13:25:36 jdc Exp $");
 #endif				/* not lint */
 
 #include "curses.h"
+#include "curses_private.h"
 
 /*
  * keypad --
@@ -43,12 +40,18 @@ __RCSID("$NetBSD: keypad.c,v 1.1 1999/04/13 14:08:18 mrg Exp $");
  *	given window.
  */
 void
-keypad(win, bf)
-	WINDOW *win;
-	int     bf;
+keypad(WINDOW *win, bool bf)
 {
-	if (bf)
+#ifdef DEBUG
+	__CTRACE(__CTRACE_MISC,
+	    "keypad: win %p, %s\n", win, bf ? "TRUE" : "FALSE");
+#endif
+	if (bf) {
 		win->flags |= __KEYPAD;
-	else
+		if (!(curscr->flags & __KEYPAD)) {
+			tputs (__tc_ks, 0, __cputchar);
+			curscr->flags |= __KEYPAD;
+		}
+	} else
 		win->flags &= ~__KEYPAD;
 }

@@ -1,9 +1,9 @@
-/*	$NetBSD: common.c,v 1.6 2000/02/08 16:23:00 scottb Exp $	*/
+/* $NetBSD: common.c,v 1.17 2005/12/24 22:53:15 perry Exp $ */
 
 /*
  * Copyright (c) 1995 Christopher G. Demetriou
  * All rights reserved.
- *
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -14,11 +14,12 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed by Christopher G. Demetriou
- *	for the NetBSD Project.
+ *          This product includes software developed for the
+ *          NetBSD Project.  See http://www.NetBSD.org/ for
+ *          information about NetBSD.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
- *
+ *    derived from this software without specific prior written permission.
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -29,6 +30,8 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * 
+ * <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
  */
 
 /*
@@ -36,8 +39,7 @@
  */
 
 static char *
-_strrchr(p, ch)
-char *p, ch;
+_strrchr(char *p, int ch)
 {
 	char *save;
 
@@ -47,98 +49,29 @@ char *p, ch;
 		if (!*p)
 			return(save);
 	}
-/* NOTREACHED */
+	/* NOTREACHED */
 }
 
 #ifdef MCRT0
-asm ("  .text");
-asm ("_eprol:");
+__asm ("  .text");
+#ifdef EPROL_EXPORT
+EPROL_EXPORT;
+#endif
+__asm ("_eprol:");
 #endif
 
 #ifdef DYNAMIC
-#ifdef __weak_alias
-__weak_alias(dlopen,_dlopen);
-__weak_alias(dlclose,_dlclose);
-__weak_alias(dlsym,_dlsym);
-__weak_alias(dlerror,_dlerror);
-__weak_alias(dladdr,_dladdr);
-#endif
 
 void
-_rtld_setup(cleanup, obj)
-	void (*cleanup) __P((void));
-	const Obj_Entry *obj;
+_rtld_setup(void (*cleanup)(void), const Obj_Entry *obj)
 {
 
 	if ((obj == NULL) || (obj->magic != RTLD_MAGIC))
-		_FATAL("Corrupt Obj_Entry pointer in GOT");
+		_FATAL("Corrupt Obj_Entry pointer in GOT\n");
 	if (obj->version != RTLD_VERSION)
-		_FATAL("Dynamic linker version mismatch");
+		_FATAL("Dynamic linker version mismatch\n");
 
-	__mainprog_obj = obj;
 	atexit(cleanup);
 }
 
-void *
-dlopen(name, mode)
-	const char *name;
-	int mode;
-{
-
-	if (__mainprog_obj == NULL)
-		return NULL;
-	return (__mainprog_obj->dlopen)(name, mode);
-}
-
-int
-dlclose(fd)
-	void *fd;
-{
-
-	if (__mainprog_obj == NULL)
-		return -1;
-	return (__mainprog_obj->dlclose)(fd);
-}
-
-void *
-dlsym(fd, name)
-	void *fd;
-	const char *name;
-{
-
-	if (__mainprog_obj == NULL)
-		return NULL;
-	return (__mainprog_obj->dlsym)(fd, name);
-}
-
-#if 0 /* not supported for ELF shlibs, apparently */
-int
-dlctl(fd, cmd, arg)
-	void *fd, *arg;
-	int cmd;
-{
-
-	if (__mainprog_obj == NULL)
-		return -1;
-	return (__mainprog_obj->dlctl)(fd, cmd, arg);
-}
-#endif
-
-__aconst char *
-dlerror()
-{
-
-	if (__mainprog_obj == NULL)
-		return ("Dynamic linker interface not available");
-	return (__mainprog_obj->dlerror)();
-}
-
-int
-dladdr(const void *addr, Dl_info *dli)
-{
-
-	if (__mainprog_obj == NULL)
-		return -1;
-	return (__mainprog_obj->dladdr)(addr, dli);
-}
 #endif /* DYNAMIC */

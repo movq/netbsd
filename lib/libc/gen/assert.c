@@ -1,4 +1,4 @@
-/*	$NetBSD: assert.c,v 1.8 1999/09/15 23:57:21 lukem Exp $	*/
+/*	$NetBSD: assert.c,v 1.16 2005/02/09 21:35:46 kleink Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,10 +34,11 @@
 #if 0
 static char sccsid[] = "@(#)assert.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: assert.c,v 1.8 1999/09/15 23:57:21 lukem Exp $");
+__RCSID("$NetBSD: assert.c,v 1.16 2005/02/09 21:35:46 kleink Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
+#include "namespace.h"
 #include <sys/types.h>
 
 #include <assert.h>
@@ -50,15 +47,88 @@ __RCSID("$NetBSD: assert.c,v 1.8 1999/09/15 23:57:21 lukem Exp $");
 #include <syslog.h>
 
 void
+__assert13(file, line, function, failedexpr)
+	const char *file, *function, *failedexpr;
+	int line;
+{
+
+	(void)fprintf(stderr,
+	    "assertion \"%s\" failed: file \"%s\", line %d%s%s%s\n",
+	    failedexpr, file, line,
+	    function ? ", function \"" : "",
+	    function ? function : "",
+	    function ? "\"" : "");
+	abort();
+	/* NOTREACHED */
+}
+
+void
 __assert(file, line, failedexpr)
 	const char *file, *failedexpr;
 	int line;
 {
-	(void)fprintf(stderr,
-	    "assertion \"%s\" failed: file \"%s\", line %d\n",
-	    failedexpr, file, line);
-	abort();
+
+	__assert13(file, line, NULL, failedexpr);
 	/* NOTREACHED */
+}
+
+
+enum {
+	DIAGASSERT_ABORT =	1<<0,
+	DIAGASSERT_STDERR =	1<<1,
+	DIAGASSERT_SYSLOG =	1<<2
+};
+
+static int	diagassert_flags = -1;
+
+void
+__diagassert13(file, line, function, failedexpr)
+	const char *file, *function, *failedexpr;
+	int line;
+{
+	char buf[1024];
+
+	if (diagassert_flags == -1) {
+		char *p;
+
+		diagassert_flags = DIAGASSERT_SYSLOG;
+
+		for (p = getenv("LIBC_DIAGASSERT"); p && *p; p++) {
+			switch (*p) {
+			case 'a':
+				diagassert_flags |= DIAGASSERT_ABORT;
+				break;
+			case 'A':
+				diagassert_flags &= ~DIAGASSERT_ABORT;
+				break;
+			case 'e':
+				diagassert_flags |= DIAGASSERT_STDERR;
+				break;
+			case 'E':
+				diagassert_flags &= ~DIAGASSERT_STDERR;
+				break;
+			case 'l':
+				diagassert_flags |= DIAGASSERT_SYSLOG;
+				break;
+			case 'L':
+				diagassert_flags &= ~DIAGASSERT_SYSLOG;
+				break;
+			}
+		}
+	}
+
+	snprintf(buf, sizeof(buf),
+	    "assertion \"%s\" failed: file \"%s\", line %d%s%s%s",
+	    failedexpr, file, line,
+	    function ? ", function \"" : "",
+	    function ? function : "",
+	    function ? "\"" : "");
+	if (diagassert_flags & DIAGASSERT_STDERR)
+		(void)fprintf(stderr, "%s: %s\n", getprogname(), buf);
+	if (diagassert_flags & DIAGASSERT_SYSLOG)
+		syslog(LOG_DEBUG | LOG_USER, "%s", buf);
+	if (diagassert_flags & DIAGASSERT_ABORT)
+		abort();
 }
 
 void
@@ -66,16 +136,6 @@ __diagassert(file, line, failedexpr)
 	const char *file, *failedexpr;
 	int line;
 {
-	extern char *__progname;
 
-		/*
-		 * XXX: check $DIAGASSERT here, and do user-defined actions
-		 */
-	(void)fprintf(stderr,
-	    "%s: assertion \"%s\" failed: file \"%s\", line %d\n",
-	    __progname, failedexpr, file, line);
-	syslog(LOG_DEBUG|LOG_USER,
-	    "assertion \"%s\" failed: file \"%s\", line %d",
-	    failedexpr, file, line);
-	return;
+	__diagassert13(file, line, NULL, failedexpr);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: fprintf.c,v 1.8 1999/09/20 04:39:27 lukem Exp $	*/
+/*	$NetBSD: fprintf.c,v 1.11 2003/08/07 16:43:24 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,28 +37,17 @@
 #if 0
 static char sccsid[] = "@(#)fprintf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: fprintf.c,v 1.8 1999/09/20 04:39:27 lukem Exp $");
+__RCSID("$NetBSD: fprintf.c,v 1.11 2003/08/07 16:43:24 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
 #include <errno.h>
-#include <stdio.h>
-#if __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
+#include <stdio.h>
 
 int
-#if __STDC__
 fprintf(FILE *fp, const char *fmt, ...)
-#else
-fprintf(fp, fmt, va_alist)
-	FILE *fp;
-	char *fmt;
-	va_dcl
-#endif
 {
 	int ret;
 	va_list ap;
@@ -70,11 +55,7 @@ fprintf(fp, fmt, va_alist)
 	_DIAGASSERT(fp != NULL);
 	_DIAGASSERT(fmt != NULL);
 
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	ret = vfprintf(fp, fmt, ap);
 	va_end(ap);
 	return (ret);

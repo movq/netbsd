@@ -1,4 +1,4 @@
-/*	$NetBSD: parms.c,v 1.13 1999/02/23 10:47:40 christos Exp $	*/
+/*	$NetBSD: parms.c,v 1.23 2006/03/18 20:25:28 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -33,16 +33,18 @@
  * SUCH DAMAGE.
  */
 
-#if !defined(lint) && !defined(sgi) && !defined(__NetBSD__)
-static char sccsid[] __attribute__((unused)) = "@(#)if.c	8.1 (Berkeley) 6/5/93";
-#elif defined(__NetBSD__)
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: parms.c,v 1.13 1999/02/23 10:47:40 christos Exp $");
-#endif
-
 #include "defs.h"
 #include "pathnames.h"
 #include <sys/stat.h>
+
+#ifdef __NetBSD__
+__RCSID("$NetBSD: parms.c,v 1.23 2006/03/18 20:25:28 christos Exp $");
+#elif defined(__FreeBSD__)
+__RCSID("$FreeBSD$");
+#else
+__RCSID("Revision: 2.26 ");
+#ident "Revision: 2.26 "
+#endif
 
 
 struct parm *parms;
@@ -85,8 +87,10 @@ get_parms(struct interface *ifp)
 				ifp->int_rdisc_pref = parmp->parm_rdisc_pref;
 			if (parmp->parm_rdisc_int != 0)
 				ifp->int_rdisc_int = parmp->parm_rdisc_int;
-			if (parmp->parm_d_metric != 0)
-				ifp->int_d_metric = parmp->parm_d_metric;
+			if (parmp->parm_adj_inmetric != 0)
+			    ifp->int_adj_inmetric = parmp->parm_adj_inmetric;
+			if (parmp->parm_adj_outmetric != 0)
+			    ifp->int_adj_outmetric = parmp->parm_adj_outmetric;
 		}
 	}
 
@@ -279,7 +283,7 @@ gwkludge(void)
 			 * tables to prevent overriding them with something
 			 * else.
 			 */
-			strcpy(qual,"external");
+			strlcpy(qual, "external", sizeof(qual));
 			state = IS_REMOTE | IS_PASSIVE | IS_EXTERNAL;
 			if (metric == 0)
 				metric = 1;
@@ -313,7 +317,7 @@ gwkludge(void)
 		if (state & IS_PASSIVE)
 			state |= IS_NO_RIP;
 
-		ifp = check_dup(gate,dst,netmask,0);
+		ifp = check_dup(gate,dst,netmask,state);
 		if (ifp != 0) {
 			msglog("duplicate "_PATH_GATEWAYS" entry \"%s\"",lptr);
 			continue;
@@ -340,7 +344,8 @@ gwkludge(void)
 		if (!(state & IS_EXTERNAL)
 		    && ifp->int_mask != ifp->int_std_mask)
 			ifp->int_state |= IS_SUBNET;
-		(void)sprintf(ifp->int_name, "%s(%s)", type, gname);
+		(void)snprintf(ifp->int_name, sizeof(ifp->int_name),
+		    "%s(%s)", type, gname);
 		ifp->int_index = -1;
 
 		if_link(ifp);
@@ -444,15 +449,15 @@ parse_ts(time_t *tp,
 			    buf,bufsize)
 	    || buf[bufsize-1] != '\0'
 	    || buf[bufsize-2] != '\0') {
-		sprintf(buf,"bad timestamp %.25s", val0);
+		snprintf(buf, bufsize, "bad timestamp %.25s", val0);
 		return buf;
 	}
-	strcat(buf,"\n");
+	strlcat(buf, "\n", bufsize);
 	memset(&tm, 0, sizeof(tm));
 #if defined(sgi) || defined(__NetBSD__)
 	ptr = strptime(buf, "%y/%m/%d@%H:%M\n", &tm);
 	if (ptr == NULL || *ptr != '\0') {
-		sprintf(buf,"bad timestamp %.25s", val0);
+		snprintf(buf, bufsize, "bad timestamp %.25s", val0);
 		return buf;
 	}
 #else
@@ -461,7 +466,7 @@ parse_ts(time_t *tp,
 			&tm.tm_hour, &tm.tm_min)
 	    || tm.tm_mon < 1 || tm.tm_mon > 12
 	    || tm.tm_mday < 1 || tm.tm_mday > 31) {
-		sprintf(buf,"bad timestamp %.25s", val0);
+		snprintf(buf, bufsize, "bad timestamp %.25s", val0);
 		return buf;
 	}
 	tm.tm_mon--;
@@ -470,7 +475,7 @@ parse_ts(time_t *tp,
 #endif
 
 	if ((*tp = mktime(&tm)) == -1) {
-		sprintf(buf,"bad timestamp %.25s", val0);
+		snprintf(buf, bufsize, "bad timestamp %.25s", val0);
 		return buf;
 	}
 
@@ -523,12 +528,13 @@ get_passwd(char *tgt,
 		    || buf[sizeof(buf)-1] != '\0'
 		    || (l = strtoul(buf,&p,0)) > 255
 		    || *p != '\0') {
-			sprintf(buf,"bad KeyID \"%.20s\"", val0);
+			snprintf(buf, sizeof(buf), "bad KeyID \"%.20s\"", val0);
 			return buf;
 		}
 		for (ap2 = parmp->parm_auth; ap2 < ap; ap2++) {
 			if (ap2->keyid == l) {
-				sprintf(buf,"duplicate KeyID \"%.20s\"", val0);
+				snprintf(buf, sizeof(buf),
+				    "duplicate KeyID \"%.20s\"", val0);
 				return buf;
 			}
 		}
@@ -536,18 +542,18 @@ get_passwd(char *tgt,
 
 		if (delim == '|') {
 			val0 = ++val;
-			if (0 != (p = parse_ts(&k.start,&val,val0,&delim,
-					       buf,sizeof(buf))))
+			if (0 != (p = parse_ts(&k.start, &val, val0, &delim,
+			    buf, sizeof(buf))))
 				return p;
 			if (delim != '|')
 				return "missing second timestamp";
 			val0 = ++val;
-			if (0 != (p = parse_ts(&k.end,&val,val0,&delim,
-					       buf,sizeof(buf))))
+			if (0 != (p = parse_ts(&k.end, &val, val0, &delim,
+			    buf, sizeof(buf))))
 				return p;
 			if ((u_long)k.start > (u_long)k.end) {
-				sprintf(buf,"out of order timestamp %.30s",
-					val0);
+				snprintf(buf, sizeof(buf),
+				    "out of order timestamp %.30s", val0);
 				return buf;
 			}
 		}
@@ -565,7 +571,7 @@ bad_str(const char *estr)
 {
 	static char buf[100+8];
 
-	sprintf(buf, "bad \"%.100s\"", estr);
+	snprintf(buf, sizeof(buf), "bad \"%.100s\"", estr);
 	return buf;
 }
 
@@ -603,8 +609,10 @@ parse_parms(char *line,
 			intnetp->intnet_metric = (int)strtol(val+1,&p,0);
 			if (*p != '\0'
 			    || intnetp->intnet_metric <= 0
-			    || intnetp->intnet_metric >= HOPCNT_INFINITY)
+			    || intnetp->intnet_metric >= HOPCNT_INFINITY) {
+				free(intnetp);
 				return bad_str(line);
+			}
 		}
 		if (!getnet(buf, &intnetp->intnet_addr, &intnetp->intnet_mask)
 		    || intnetp->intnet_mask == HOST_MASK
@@ -674,7 +682,7 @@ parse_parms(char *line,
 			if (parm.parm_name[0] != '\0'
 			    || strlen(buf) > IF_NAME_LEN)
 				return bad_str(tgt);
-			strcpy(parm.parm_name, buf);
+			strlcpy(parm.parm_name, buf, sizeof(parm.parm_name));
 
 		} else if (PARSEQ("addr")) {
 			/* This is a bad idea, because the address based
@@ -683,7 +691,7 @@ parse_parms(char *line,
 			 * The parm_net stuff is needed to allow several
 			 * -F settings.
 			 */
-			if (!getnet(val0, &addr, &mask)
+			if (val0 == NULL || !getnet(val0, &addr, &mask)
 			    || parm.parm_name[0] != '\0')
 				return bad_str(tgt);
 			parm.parm_net = addr;
@@ -694,6 +702,8 @@ parse_parms(char *line,
 			/* since cleartext passwords are so weak allow
 			 * them anywhere
 			 */
+			if (val0 == NULL)
+				return bad_str("no passwd");
 			msg = get_passwd(tgt,val0,&parm,RIP_AUTH_PW,1);
 			if (msg) {
 				*val0 = '\0';
@@ -701,6 +711,8 @@ parse_parms(char *line,
 			}
 
 		} else if (PARSEQ("md5_passwd")) {
+			if (val0 == NULL)
+				return bad_str("no md5 passwd");
 			msg = get_passwd(tgt,val0,&parm,RIP_AUTH_MD5,safe);
 			if (msg) {
 				*val0 = '\0';
@@ -757,7 +769,7 @@ parse_parms(char *line,
 
 		} else if (PARS("passive")) {
 			CKF((GROUP_IS_SOL_OUT|GROUP_IS_ADV_OUT), IS_NO_RDISC);
-			parm.parm_int_state |= IS_NO_RIP;
+			parm.parm_int_state |= IS_NO_RIP | IS_PASSIVE;
 
 		} else if (PARSEQ("rdisc_pref")) {
 			if (parm.parm_rdisc_pref != 0
@@ -781,10 +793,24 @@ parse_parms(char *line,
 		} else if (PARSEQ("fake_default")) {
 			if (parm.parm_d_metric != 0
 			    || IS_RIP_OUT_OFF(parm.parm_int_state)
-			    || (parm.parm_d_metric = (int)strtoul(buf,&p,0),
-				*p != '\0')
-			    || parm.parm_d_metric > HOPCNT_INFINITY-1)
+			    || (i = strtoul(buf,&p,0), *p != '\0')
+			    || i > HOPCNT_INFINITY-1)
 				return bad_str(tgt);
+			parm.parm_d_metric = i;
+
+		} else if (PARSEQ("adj_inmetric")) {
+			if (parm.parm_adj_inmetric != 0
+			    || (i = strtoul(buf,&p,0), *p != '\0')
+			    || i > HOPCNT_INFINITY-1)
+				return bad_str(tgt);
+			parm.parm_adj_inmetric = i;
+
+		} else if (PARSEQ("adj_outmetric")) {
+			if (parm.parm_adj_outmetric != 0
+			    || (i = strtoul(buf,&p,0), *p != '\0')
+			    || i > HOPCNT_INFINITY-1)
+				return bad_str(tgt);
+			parm.parm_adj_outmetric = i;
 
 		} else if (PARSEQ("trust_gateway")) {
 			/* look for trust_gateway=x.y.z|net/mask|...) */
@@ -808,8 +834,10 @@ parse_parms(char *line,
 				    || !getnet(buf2, &tg->tgate_nets[i].net,
 					       &tg->tgate_nets[i].mask)
 				    || tg->tgate_nets[i].net == RIP_DEFAULT
-				    || tg->tgate_nets[i].mask == 0)
+				    || tg->tgate_nets[i].mask == 0) {
+					free(tg);
 					return bad_str(tgt);
+				}
 				i++;
 			}
 			tg->tgate_next = tgates;
@@ -894,9 +922,23 @@ check_parms(struct parm *new)
 			return ("conflicting, duplicate poor man's router"
 				" discovery or fake default metric");
 		}
+
+		if (new->parm_adj_inmetric != 0
+		    && parmp->parm_adj_inmetric != 0
+		    && new->parm_adj_inmetric != parmp->parm_adj_inmetric) {
+			return ("conflicting interface input "
+				"metric adjustments");
+		}
+
+		if (new->parm_adj_outmetric != 0
+		    && parmp->parm_adj_outmetric != 0
+		    && new->parm_adj_outmetric != parmp->parm_adj_outmetric) {
+			return ("conflicting interface output "
+				"metric adjustments");
+		}
 	}
 
-	/* link new entry on the so that when the entries are scanned,
+	/* link new entry on the list so that when the entries are scanned,
 	 * they affect the result in the order the operator specified.
 	 */
 	parmp = (struct parm*)rtmalloc(sizeof(*parmp), "check_parms");

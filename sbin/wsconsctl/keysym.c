@@ -1,4 +1,4 @@
-/*	$NetBSD: keysym.c,v 1.3 1999/02/08 11:08:23 hannken Exp $ */
+/*	$NetBSD: keysym.c,v 1.8 2008/04/28 20:23:09 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,12 @@
  */
 
 #include <dev/wscons/wsksymdef.h>
+
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+
 #include "keysym.h"
 #include "wsconsctl.h"
 
@@ -51,7 +47,7 @@ static struct ksym ksym_tab_by_ksym[NUMKSYMS];
 /* copied from dev/wscons/wskbdutil.c ... */
 
 static const u_char latin1_to_upper[256] = {
-/*      0  8  1  9  2  a  3  b  4  c  5  d  6  e  7  f               */
+/*	0  8  1  9  2  a  3  b  4  c  5  d  6  e  7  f		     */
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,		/* 0 */
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,		/* 0 */
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,		/* 1 */
@@ -86,47 +82,45 @@ static const u_char latin1_to_upper[256] = {
 	0xd8, 0xd9, 0xda, 0xdb, 0xdc, 0xdd, 0xde, 0x00,		/* f */
 };
 
-static int qcmp_name __P((const void *, const void *));
-static int qcmp_ksym __P((const void *, const void *));
-static int bcmp_name __P((const void *, const void *));
-static int bcmp_ksym __P((const void *, const void *));
+static int qcmp_name(const void *, const void *);
+static int qcmp_ksym(const void *, const void *);
+static int bcmp_name(const void *, const void *);
+static int bcmp_ksym(const void *, const void *);
 
-static void sort_ksym_tab __P((void));
+static void sort_ksym_tab(void);
 
 static int
-qcmp_name(a, b)
-	const void *a;
-	const void *b;
+qcmp_name(const void *a, const void *b)
 {
-	return(strcmp(((struct ksym *) a)->name, ((struct ksym *) b)->name));
+
+	return strcmp(((const struct ksym *) a)->name,
+	    ((const struct ksym *) b)->name);
 }
 
 static int
-qcmp_ksym(a, b)
-	const void *a;
-	const void *b;
+qcmp_ksym(const void *a, const void *b)
 {
-	return(((struct ksym *) b)->value - ((struct ksym *) a)->value);
+
+	return ((const struct ksym *) b)->value -
+	    ((const struct ksym *) a)->value;
 }
 
 static int
-bcmp_name(a, b)
-	const void *a;
-	const void *b;
+bcmp_name(const void *a, const void *b)
 {
-	return(strcmp((char *) a, ((struct ksym *) b)->name));
+
+	return strcmp((const char *) a, ((const struct ksym *) b)->name);
 }
 
 static int
-bcmp_ksym(a, b)
-	const void *a;
-	const void *b;
+bcmp_ksym(const void *a, const void *b)
 {
-	return(((struct ksym *) b)->value - *((int *) a));
+
+	return ((const struct ksym *) b)->value - *((const int *) a);
 }
 
 static void
-sort_ksym_tab()
+sort_ksym_tab(void)
 {
 	int i;
 
@@ -139,9 +133,8 @@ sort_ksym_tab()
 	first_time = 0;
 }
 
-char *
-ksym2name(k)
-	int k;
+const char *
+ksym2name(int k)
 {
 	static char tmp[20];
 	struct ksym *r;
@@ -153,16 +146,15 @@ ksym2name(k)
 		    NUMKSYMS, sizeof(struct ksym), bcmp_ksym);
 
 	if (r != NULL)
-		return(r->name);
+		return r->name;
 	else {
-		snprintf(tmp, sizeof(tmp), "unknown_%d", k);
-		return(tmp);
+		(void)snprintf(tmp, sizeof(tmp), "unknown_%d", k);
+		return tmp;
 	}
 }
 
 int
-name2ksym(n)
-	char *n;
+name2ksym(char *n)
 {
 	int res;
 	struct ksym *r;
@@ -174,23 +166,23 @@ name2ksym(n)
 		    NUMKSYMS, sizeof(struct ksym), bcmp_name);
 
 	if (r != NULL)
-		return(r->value);
+		return r->value;
 	else if (sscanf(n, "unknown_%d", &res) == 1)
-		return(res);
+		return res;
 	else
-		return(-1);
+		return -1;
 }
 
 keysym_t
-ksym_upcase(ksym)
-	keysym_t ksym;
+ksym_upcase(keysym_t ksym)
 {
+
 	if (ksym >= KS_f1 && ksym <= KS_f20)
-		return(KS_F1 - KS_f1 + ksym);
+		return KS_F1 - KS_f1 + ksym;
 
 	if (KS_GROUP(ksym) == KS_GROUP_Ascii && ksym <= 0xff &&
 	    latin1_to_upper[ksym] != 0x00)
-		return(latin1_to_upper[ksym]);
+		return latin1_to_upper[ksym];
 
-	return(ksym);
+	return ksym;
 }

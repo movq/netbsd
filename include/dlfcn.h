@@ -1,4 +1,4 @@
-/*	$NetBSD: dlfcn.h,v 1.12 2000/02/11 00:07:14 thorpej Exp $	*/
+/*	$NetBSD: dlfcn.h,v 1.19 2008/04/28 20:22:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,29 +32,30 @@
 #ifndef _DLFCN_H_
 #define _DLFCN_H_
 
+#include <sys/featuretest.h>
 #include <sys/cdefs.h>
 
-#if !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 typedef struct _dl_info {
 	const char	*dli_fname;	/* File defining the symbol */
 	void		*dli_fbase;	/* Base address */
 	const char	*dli_sname;	/* Symbol name */
 	const void	*dli_saddr;	/* Symbol address */
 } Dl_info;
-#endif /* !defined(_XOPEN_SOURCE) */
+#endif /* defined(_NETBSD_SOURCE) */
 
 /*
  * User interface to the run-time linker.
  */
 __BEGIN_DECLS
-extern void	*dlopen __P((const char *, int));
-extern int	dlclose __P((void *));
-extern void	*dlsym __P((void *, const char *));
-#if !defined(_XOPEN_SOURCE)
-extern int	dladdr __P((const void *, Dl_info *));
-extern int	dlctl __P((void *, int, void *));
+void	*dlopen(const char *, int);
+int	dlclose(void *);
+void	*dlsym(void * __restrict, const char * __restrict);
+#if defined(_NETBSD_SOURCE)
+int	dladdr(const void * __restrict, Dl_info * __restrict);
+int	dlctl(void *, int, void *);
 #endif
-extern __aconst char *dlerror __P((void));
+__aconst char *dlerror(void);
 __END_DECLS
 
 /* Values for dlopen `mode'. */
@@ -69,14 +63,21 @@ __END_DECLS
 #define RTLD_NOW	2
 #define RTLD_GLOBAL	0x100		/* Allow global searches in object */
 #define RTLD_LOCAL	0x200
-#if !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 #define DL_LAZY		RTLD_LAZY	/* Compat */
 #endif
+
+/* 
+ * Special handle arguments for dlsym().
+ */   
+#define	RTLD_NEXT	((void *) -1)	/* Search subsequent objects. */
+#define	RTLD_DEFAULT	((void *) -2)	/* Use default search algorithm. */
+#define	RTLD_SELF	((void *) -3)	/* Search the caller itself. */
 
 /*
  * dlctl() commands
  */
-#if !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 #define DL_GETERRNO	1
 #define DL_GETSYMBOL	2
 #if 0
@@ -85,6 +86,6 @@ __END_DECLS
 #define DL_GETREFCNT	x
 #define DL_GETLOADADDR	x
 #endif /* 0 */
-#endif /* !defined(_XOPEN_SOURCE) */
+#endif /* defined(_NETBSD_SOURCE) */
 
 #endif /* !defined(_DLFCN_H_) */

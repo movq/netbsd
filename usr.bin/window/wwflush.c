@@ -1,4 +1,4 @@
-/*	$NetBSD: wwflush.c,v 1.6 1997/11/21 08:37:21 lukem Exp $	*/
+/*	$NetBSD: wwflush.c,v 1.10 2006/12/18 20:04:55 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)wwflush.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: wwflush.c,v 1.6 1997/11/21 08:37:21 lukem Exp $");
+__RCSID("$NetBSD: wwflush.c,v 1.10 2006/12/18 20:04:55 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,7 +49,7 @@ __RCSID("$NetBSD: wwflush.c,v 1.6 1997/11/21 08:37:21 lukem Exp $");
 #include "xx.h"
 
 void
-wwflush()
+wwflush(void)
 {
 	int row, col;
 
@@ -74,13 +70,13 @@ wwflush()
 }
 
 void
-wwcheckpoint()
+wwcheckpoint(void)
 {
-	sigset_t sigset, osigset;
+	sigset_t nsigset, osigset;
 
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGALRM);
-	sigprocmask(SIG_BLOCK, &sigset, &osigset);
+	sigemptyset(&nsigset);
+	sigaddset(&nsigset, SIGALRM);
+	sigprocmask(SIG_BLOCK, &nsigset, &osigset);
 
 	tt.tt_ack = 0;
 	do {
@@ -109,8 +105,7 @@ wwcheckpoint()
 }
 
 void
-wwcopyscreen(s1, s2)
-	union ww_char **s1, **s2;
+wwcopyscreen(union ww_char **s1, union ww_char **s2)
 {
 	int i;
 	int s = wwncol * sizeof **s1;
@@ -120,8 +115,7 @@ wwcopyscreen(s1, s2)
 }
 
 void
-wwalarm(dummy)
-	int dummy;
+wwalarm(int dummy __unused)
 {
 	wwdocheckpoint = 1;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.2 1998/10/06 20:50:17 thorpej Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.6 2007/03/04 06:00:27 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Gordon W. Ross
@@ -34,20 +34,23 @@
 
 #include <sys/device.h>
 
+#include <machine/bus.h>
+
 /*
  * Autoconfiguration information.
  * From sun3 port--adapted for mac68k platform by Allen Briggs.
  * Adapted to next68k by Darrin Jewell
  */
 
+struct mainbus_attach_args {
+	bus_dma_tag_t	mba_dmat;
+};
+
 /* autoconf.c */
-void	setconf __P((void));
+void	setconf(void);
 
 /* machdep.c */
-void	cpu_dumpconf __P((void));
-int	badbaddr __P((register caddr_t addr));
-int	badwaddr __P((register caddr_t addr));
-int	badladdr __P((register caddr_t addr));
-
-/* macrom.c */
-void	mrg_init __P((void));
+void	cpu_dumpconf(void);
+int	badbaddr(void *);
+int	badwaddr(void *);
+int	badladdr(void *);

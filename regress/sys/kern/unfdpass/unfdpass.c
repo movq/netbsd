@@ -1,4 +1,4 @@
-/*	$NetBSD: unfdpass.c,v 1.5 1999/03/22 18:19:54 sommerfe Exp $	*/
+/*	$NetBSD: unfdpass.c,v 1.10 2008/04/28 20:23:07 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,28 +47,25 @@
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #define	SOCK_NAME	"test-sock"
 
-int	main __P((int, char *[]));
-void	child __P((void));
-void	catch_sigchld __P((int));
-void	usage __P((char *progname));
+int	main(int, char *[]);
+void	child(void);
+void	catch_sigchld(int);
+void	usage(char *progname);
 
 #define	FILE_SIZE	128
 #define	MSG_SIZE	-1
 #define	NFILES		24
 
-struct fdcmessage {
-	struct cmsghdr cm;
-	int files[NFILES];
-};
+#define	FDCM_DATASIZE	(sizeof(int) * NFILES)
+#define	CRCM_DATASIZE	(SOCKCREDSIZE(NGROUPS))
 
-struct crcmessage {
-	struct cmsghdr cm;
-	char creds[SOCKCREDSIZE(NGROUPS)];
-};
+#define	MESSAGE_SIZE	(CMSG_SPACE(FDCM_DATASIZE) +			\
+			 CMSG_SPACE(CRCM_DATASIZE))
 
 int chroot_rcvr = 0;
 int pass_dir = 0;
@@ -96,21 +86,21 @@ main(argc, argv)
 #endif
 	char *progname=argv[0];
 	struct msghdr msg;
-	int listensock, sock, fd, i, status;
+	int listensock, sock, fd, i;
 	char fname[16], buf[FILE_SIZE];
 	struct cmsghdr *cmp;
-	struct {
-		struct fdcmessage fdcm;
-		struct crcmessage crcm;
-	} message;
+	void *message;
 	int *files = NULL;
 	struct sockcred *sc = NULL;
 	struct sockaddr_un sun, csun;
-	int csunlen;
-	fd_set oob;
+	socklen_t csunlen;
 	pid_t pid;
 	int ch;
-	
+
+	message = malloc(CMSG_SPACE(MESSAGE_SIZE));
+	if (message == NULL)
+		err(1, "unable to malloc message buffer");
+	memset(message, 0, CMSG_SPACE(MESSAGE_SIZE));
 
 	while ((ch = getopt(argc, argv, "DESdepr")) != -1) {
 		switch(ch) {
@@ -211,6 +201,7 @@ main(argc, argv)
 	/*
 	 * Wait for the sender to connect.
 	 */
+	csunlen = sizeof(csun);
 	if ((sock = accept(listensock, (struct sockaddr *)&csun,
 	    &csunlen)) == -1)
 		err(1, "accept");
@@ -228,10 +219,11 @@ main(argc, argv)
 	 * Grab the descriptors and credentials passed to us.
 	 */
 
+	/* Expect 2 messages; descriptors and creds. */
 	do {
 		(void) memset(&msg, 0, sizeof(msg));
-		msg.msg_control = (caddr_t) &message;
-		msg.msg_controllen = sizeof(message);
+		msg.msg_control = message;
+		msg.msg_controllen = MESSAGE_SIZE;
 #if MSG_SIZE >= 0
 		iov.iov_base = buf;
 		iov.iov_len = MSG_SIZE;
@@ -243,7 +235,6 @@ main(argc, argv)
 			err(1, "recvmsg");
 
 		(void) close(sock);
-
 		sock = -1;
 
 		if (msg.msg_controllen == 0)
@@ -252,7 +243,6 @@ main(argc, argv)
 		if (msg.msg_flags & MSG_CTRUNC)
 			errx(1, "lost control message data");
 
-		cmp = CMSG_FIRSTHDR(&msg);
 		for (cmp = CMSG_FIRSTHDR(&msg); cmp != NULL;
 		     cmp = CMSG_NXTHDR(&msg, cmp)) {
 			if (cmp->cmsg_level != SOL_SOCKET)
@@ -261,15 +251,17 @@ main(argc, argv)
 
 			switch (cmp->cmsg_type) {
 			case SCM_RIGHTS:
-				if (cmp->cmsg_len != sizeof(message.fdcm))
-					errx(1, "bad fd control message length");
+				if (cmp->cmsg_len != CMSG_LEN(FDCM_DATASIZE))
+					errx(1, "bad fd control message "
+					    "length %d", cmp->cmsg_len);
 
 				files = (int *)CMSG_DATA(cmp);
 				break;
 
 			case SCM_CREDS:
-				if (cmp->cmsg_len < sizeof(struct sockcred))
-					errx(1, "bad cred control message length");
+				if (cmp->cmsg_len < CMSG_LEN(SOCKCREDSIZE(1)))
+					errx(1, "bad cred control message "
+					    "length %d", cmp->cmsg_len);
 
 				sc = (struct sockcred *)CMSG_DATA(cmp);
 				break;
@@ -279,7 +271,6 @@ main(argc, argv)
 				/* NOTREACHED */
 			}
 		}
-	
 
 		/*
 		 * Read the files and print their contents.
@@ -323,7 +314,6 @@ main(argc, argv)
 				printf("Credentials do NOT match.\n");
 		}
 	} while (sock != -1);
-	
 
 	/*
 	 * All done!
@@ -355,13 +345,21 @@ child()
 	struct iovec iov;
 #endif
 	struct msghdr msg;
-	char fname[16], buf[FILE_SIZE];
+	char fname[16];
 	struct cmsghdr *cmp;
-	struct fdcmessage fdcm;
-	int i, fd, sock, nfd;
+	void *fdcm;
+	int i, fd, sock, nfd, *files;
 	struct sockaddr_un sun;
 	int spair[2];
-	
+
+	fdcm = malloc(CMSG_SPACE(FDCM_DATASIZE));
+	if (fdcm == NULL)
+		err(1, "unable to malloc fd control message");
+	memset(fdcm, 0, CMSG_SPACE(FDCM_DATASIZE));
+
+	cmp = fdcm;
+	files = (int *)CMSG_DATA(fdcm);
+
 	/*
 	 * Create socket and connect to the receiver.
 	 */
@@ -380,10 +378,8 @@ child()
 	i = 0;
 
 	if (pass_sock) {
-		fdcm.files[i++] = sock;
+		files[i++] = sock;
 	}
-	
-
 
 	if (pass_dir)
 		nfd--;
@@ -397,7 +393,7 @@ child()
 		(void) sprintf(fname, "file%d", i + 1);
 		if ((fd = open(fname, O_RDONLY, 0666)) == -1)
 			err(1, "child open %s", fname);
-		fdcm.files[i] = fd;
+		files[i] = fd;
 	}
 	
 	if (pass_dir) {
@@ -407,12 +403,12 @@ child()
 		if ((fd = open(dirname, O_RDONLY, 0)) == -1) {
 			err(1, "child open directory %s", dirname);
 		}
-		fdcm.files[i] = fd;
+		files[i] = fd;
 	}
 	
 	(void) memset(&msg, 0, sizeof(msg));
-	msg.msg_control = (caddr_t) &fdcm;
-	msg.msg_controllen = sizeof(fdcm);
+	msg.msg_control = fdcm;
+	msg.msg_controllen = CMSG_LEN(FDCM_DATASIZE);
 #if MSG_SIZE >= 0
 	iov.iov_base = buf;
 	iov.iov_len = MSG_SIZE;
@@ -421,7 +417,7 @@ child()
 #endif
 
 	cmp = CMSG_FIRSTHDR(&msg);
-	cmp->cmsg_len = sizeof(fdcm);
+	cmp->cmsg_len = CMSG_LEN(FDCM_DATASIZE);
 	cmp->cmsg_level = SOL_SOCKET;
 	cmp->cmsg_type = SCM_RIGHTS;
 
@@ -433,14 +429,12 @@ child()
 		if (sendmsg(spair[0], &msg, 0) < 0)
 			err(1, "child prezel sendmsg");
 
-		close(fdcm.files[0]);
-		close(fdcm.files[1]);		
-		fdcm.files[0] = spair[0];
-		fdcm.files[1] = spair[1];		
+		close(files[0]);
+		close(files[1]);		
+		files[0] = spair[0];
+		files[1] = spair[1];		
 		make_pretzel--;
 	}
-	
-	
 
 	if (sendmsg(sock, &msg, 0) == -1)
 		err(1, "child sendmsg");

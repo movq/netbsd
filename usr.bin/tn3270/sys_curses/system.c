@@ -1,4 +1,4 @@
-/*	$NetBSD: system.c,v 1.14 2000/01/21 17:08:36 mycroft Exp $	*/
+/*	$NetBSD: system.c,v 1.21 2006/10/07 17:27:57 elad Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)system.c	4.5 (Berkeley) 4/26/91";
 #else
-__RCSID("$NetBSD: system.c,v 1.14 2000/01/21 17:08:36 mycroft Exp $");
+__RCSID("$NetBSD: system.c,v 1.21 2006/10/07 17:27:57 elad Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,34 +53,18 @@ __RCSID("$NetBSD: system.c,v 1.14 2000/01/21 17:08:36 mycroft Exp $");
 
 #include <sys/time.h>
 #include <sys/socket.h>
+#include <sys/poll.h>
 #include <netinet/in.h>
 #include <sys/wait.h>
-#ifdef __STDC__
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <string.h>
-#else
-#include <sys/file.h>
-extern char *crypt();
-#if	(!defined(sun)) || defined(BSD) && (BSD >= 43)
-extern uid_t geteuid();
-#endif	/* (!defined(sun)) || defined(BSD) && (BSD >= 43) */
-extern long random();
-#if	!defined(BSD4_4)
-extern char *mktemp();		/* NetBSD: NOT USED */
-#endif	/* !defined(BSD4_4) */
-extern char *strcpy();
-extern char *getenv();
-#endif
-
-
 #include <errno.h>
+#include <fcntl.h>
 #include <netdb.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <pwd.h>
+#include <unistd.h>
 
 #include "../general/general.h"
 #include "../ctlr/api.h"
@@ -135,13 +115,13 @@ static struct SREGS inputSregs;
 
 extern int apitrace;
 
-static void kill_connection __P((void));
-static int nextstore __P((void));
-static int doreject __P((char *));
-static int doassociate __P((void));
-static int getstorage __P((long, int, int));
-static int doconnect __P((void));
-static void child_died __P((int));
+static void kill_connection(void);
+static int nextstore(void);
+static int doreject(char *);
+static int doassociate(void);
+static int getstorage(long, int, int);
+static int doconnect(void);
+static void child_died(int);
 
 static void
 kill_connection()
@@ -225,8 +205,7 @@ doassociate()
     if (api_exch_intype(EXCH_TYPE_STORE_DESC, sizeof sd, (char *)&sd) == -1) {
 	return -1;
     }
-    sd.length = sd.length;
-    if (sd.length > sizeof buffer) {
+    if (sd.length >= sizeof buffer) {
 	doreject("(internal error) Authentication key too long");
 	return -1;
     }
@@ -489,23 +468,22 @@ int	copyout;
 static int
 doconnect()
 {
-    fd_set fdset;
+    struct pollfd set[1];
     int i;
 
     sock = -1;
-    FD_ZERO(&fdset);
+    set[0].fd = serversock;
+    set[0].events = POLLIN;
     while (shell_active && (sock == -1)) {
-	FD_SET(serversock, &fdset);
-	if ((i = select(serversock+1, &fdset,
-		    (fd_set *)0, (fd_set *)0, (struct timeval *)0)) < 0) {
+	if ((i = poll(set, 1, INFTIM)) < 0) {
 	    if (errno == EINTR) {
 		continue;
 	    } else {
-		perror("in select waiting for API connection");
+		perror("in poll waiting for API connection");
 		return -1;
 	    }
 	} else {
-	    i = accept(serversock, (struct sockaddr *)0, (int *)0);
+	    i = accept(serversock, (struct sockaddr *)0, (socklen_t *)0);
 	    if (i == -1) {
 		perror("accepting API connection");
 		return -1;
@@ -652,7 +630,7 @@ shell(argc,argv)
 int	argc;
 char	*argv[];
 {
-    int length;
+    socklen_t length;
     struct sockaddr_in server;
     char sockNAME[128];
     static char **whereAPI = 0;
@@ -770,7 +748,7 @@ char	*argv[];
 	    char *cmdname;
 
 	    cmdname = getenv("SHELL");
-	    execlp(cmdname, cmdname, 0);
+	    execlp(cmdname, cmdname, NULL);
 	    perror("Exec'ing new shell");
 	    _exit(1);
 	} else {

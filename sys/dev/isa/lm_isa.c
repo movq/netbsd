@@ -1,4 +1,4 @@
-/*	$NetBSD: lm_isa.c,v 1.2 2000/03/09 04:19:03 groo Exp $ */
+/*	$NetBSD: lm_isa.c,v 1.22 2008/10/12 23:07:32 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,97 +29,132 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: lm_isa.c,v 1.22 2008/10/12 23:07:32 pgoyette Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/proc.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
-#include <sys/errno.h>
 #include <sys/conf.h>
 
-#include <sys/envsys.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
 
-#include <machine/intr.h>
-#include <machine/bus.h>
+#include <dev/sysmon/sysmonvar.h>
 
 #include <dev/ic/nslm7xvar.h>
 
-#if defined(LMDEBUG)
-#define DPRINTF(x)		do { printf x; } while (0)
-#else
-#define DPRINTF(x)
-#endif
+int 	lm_isa_match(device_t, cfdata_t, void *);
+void 	lm_isa_attach(device_t, device_t, void *);
+int 	lm_isa_detach(device_t, int);
 
+uint8_t lm_isa_readreg(struct lm_softc *, int);
+void 	lm_isa_writereg(struct lm_softc *, int, int);
 
-int lm_isa_match __P((struct device *, struct cfdata *, void *));
-void lm_isa_attach __P((struct device *, struct device *, void *));
-
-struct cfattach lm_isa_ca = {
-	sizeof(struct lm_softc), lm_isa_match, lm_isa_attach
+struct lm_isa_softc {
+	struct lm_softc lmsc;
+	bus_space_tag_t lm_iot;
+	bus_space_handle_t lm_ioh;
 };
 
+CFATTACH_DECL_NEW(lm_isa, sizeof(struct lm_isa_softc),
+    lm_isa_match, lm_isa_attach, lm_isa_detach, NULL);
 
 int
-lm_isa_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+lm_isa_match(device_t parent, cfdata_t match, void *aux)
 {
-	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	struct isa_attach_args *ia = aux;
-	int iobase;
+	struct lm_isa_softc sc;
 	int rv;
 
 	/* Must supply an address */
-	if (ia->ia_iobase == ISACF_PORT_DEFAULT)
+	if (ia->ia_nio < 1)
 		return 0;
 
-	iot = ia->ia_iot;
-	iobase = ia->ia_iobase;
+	if (ISA_DIRECT_CONFIG(ia))
+		return 0;
 
-	if (bus_space_map(iot, iobase, 8, 0, &ioh))
-		return (0);
+	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+		return 0;
+
+	if (bus_space_map(ia->ia_iot, ia->ia_io[0].ir_addr, 8, 0, &ioh))
+		return 0;
 
 
 	/* Bus independent probe */
-	rv = lm_probe(iot, ioh);
+	sc.lm_iot = ia->ia_iot;
+	sc.lm_ioh = ioh;
+	sc.lmsc.lm_writereg = lm_isa_writereg;
+	sc.lmsc.lm_readreg = lm_isa_readreg;
+	rv = lm_probe(&sc.lmsc);
 
-	bus_space_unmap(iot, ioh, 8);
+	bus_space_unmap(ia->ia_iot, ioh, 8);
 
 	if (rv) {
-		ia->ia_iosize = 8;
-		ia->ia_msize = 0;
+		ia->ia_nio = 1;
+		ia->ia_io[0].ir_size = 8;
+
+		ia->ia_niomem = 0;
+		ia->ia_nirq = 0;
+		ia->ia_ndrq = 0;
 	}
 
-	return (rv);
+	return rv;
 }
 
 
 void
-lm_isa_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+lm_isa_attach(device_t parent, device_t self, void *aux)
 {
-	struct lm_softc *lmsc = (void *)self;
-	int iobase;
-	bus_space_tag_t iot;
+	struct lm_isa_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
 
-        iobase = ia->ia_iobase;
-	iot = lmsc->lm_iot = ia->ia_iot;
+	sc->lm_iot = ia->ia_iot;
 
-	if (bus_space_map(iot, iobase, 8, 0, &lmsc->lm_ioh)) {
-		printf(": can't map i/o space\n");
+	if (bus_space_map(ia->ia_iot, ia->ia_io[0].ir_addr, 8, 0,
+	    &sc->lm_ioh)) {
+		aprint_error(": can't map i/o space\n");
 		return;
 	}
 
-	/* Bus-independant attachment */
-	lm_attach(lmsc);
+	/* Bus-independent attachment */
+	sc->lmsc.sc_dev = self;
+	sc->lmsc.lm_writereg = lm_isa_writereg;
+	sc->lmsc.lm_readreg = lm_isa_readreg;
+
+	lm_attach(&sc->lmsc);
 }
+
+int
+lm_isa_detach(device_t self, int flags)
+{
+	struct lm_isa_softc *sc = device_private(self);
+
+	lm_detach(&sc->lmsc);
+	bus_space_unmap(sc->lm_iot, sc->lm_ioh, 8);
+	return 0;
+}
+
+uint8_t
+lm_isa_readreg(struct lm_softc *lmsc, int reg)
+{
+	struct lm_isa_softc *sc = (struct lm_isa_softc *)lmsc;
+
+	bus_space_write_1(sc->lm_iot, sc->lm_ioh, LMC_ADDR, reg);
+	return bus_space_read_1(sc->lm_iot, sc->lm_ioh, LMC_DATA);
+}
+
+
+void
+lm_isa_writereg(struct lm_softc *lmsc, int reg, int val)
+{
+	struct lm_isa_softc *sc = (struct lm_isa_softc *)lmsc;
+
+	bus_space_write_1(sc->lm_iot, sc->lm_ioh, LMC_ADDR, reg);
+	bus_space_write_1(sc->lm_iot, sc->lm_ioh, LMC_DATA, val);
+}
+

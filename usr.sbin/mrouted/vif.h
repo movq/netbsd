@@ -1,4 +1,4 @@
-/*	$NetBSD: vif.h,v 1.6 1995/12/10 10:07:20 mycroft Exp $	*/
+/*	$NetBSD: vif.h,v 1.8 2003/03/05 21:05:41 wiz Exp $	*/
 
 /*
  * The mrouted program is covered by the license in the accompanying file

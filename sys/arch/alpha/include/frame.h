@@ -1,4 +1,4 @@
-/* $NetBSD: frame.h,v 1.4 1997/04/06 08:47:27 cgd Exp $ */
+/* $NetBSD: frame.h,v 1.8 2008/04/24 10:03:08 he Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -31,6 +31,7 @@
 #define	_ALPHA_FRAME_H_
 
 #include <machine/alpha_cpu.h>
+#include <sys/signal.h>
 
 /*
  * Software trap, exception, and syscall frame.
@@ -90,5 +91,33 @@
 struct trapframe {
 	unsigned long	tf_regs[FRAME_SIZE];	/* See above */
 };
+
+#if (defined(COMPAT_16) || defined(COMPAT_OSF1)) && defined(_KERNEL)
+struct sigframe_sigcontext {
+	/*  ra address of trampoline */
+	/*  a0 signum for handler */
+	/*  a1 code for handler */
+	/*  a2 struct	sigcontext for handler */
+	struct sigcontext sf_sc; /* actual saved context */
+};
+#endif
+
+struct sigframe_siginfo {
+	/*  ra address of trampoline */
+        /*  a0 signal number arg for handler */
+	/*  a1 siginfo_t * arg for handler */
+	/*  a2 ucontext_t * arg for handler */
+	siginfo_t sf_si; /* actual saved siginfo */
+	ucontext_t sf_uc; /* actual saved ucontext */
+};
+
+#ifdef _KERNEL
+void *getframe(const struct lwp *, int, int *);
+void buildcontext(struct lwp *, const void *, const void *, const void *);
+void sendsig_siginfo(const ksiginfo_t *, const sigset_t *);
+#if defined(COMPAT_16) || defined(COMPAT_OSF1)
+void sendsig_sigcontext(const ksiginfo_t *, const sigset_t *);
+#endif
+#endif
 
 #endif /* _ALPHA_FRAME_H_ */

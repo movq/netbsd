@@ -1,4 +1,4 @@
-/*	$NetBSD: vasprintf.c,v 1.7 2000/01/21 19:51:37 mycroft Exp $	*/
+/*	$NetBSD: vasprintf.c,v 1.10 2005/02/09 21:35:47 kleink Exp $	*/
 
 /*
  * Copyright (c) 1997 Todd C. Miller <Todd.Miller@courtesan.com>
@@ -29,13 +29,15 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: vasprintf.c,v 1.7 2000/01/21 19:51:37 mycroft Exp $");
+__RCSID("$NetBSD: vasprintf.c,v 1.10 2005/02/09 21:35:47 kleink Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "reentrant.h"
+#include "local.h"
 
 int
 vasprintf(str, fmt, ap)
@@ -45,18 +47,20 @@ vasprintf(str, fmt, ap)
 {
 	int ret;
 	FILE f;
+	struct __sfileext fext;
 	unsigned char *_base;
 
 	_DIAGASSERT(str != NULL);
 	_DIAGASSERT(fmt != NULL);
 
+	_FILEEXT_SETUP(&f, &fext);
 	f._file = -1;
 	f._flags = __SWR | __SSTR | __SALC;
 	f._bf._base = f._p = (unsigned char *)malloc(128);
 	if (f._bf._base == NULL)
 		goto err;
 	f._bf._size = f._w = 127;		/* Leave room for the NUL */
-	ret = vfprintf(&f, fmt, ap);
+	ret = __vfprintf_unlocked(&f, fmt, ap);
 	if (ret == -1)
 		goto err;
 	*f._p = '\0';

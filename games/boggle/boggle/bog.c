@@ -1,4 +1,4 @@
-/*	$NetBSD: bog.c,v 1.15 1999/09/19 09:42:38 jsm Exp $	*/
+/*	$NetBSD: bog.c,v 1.22 2008/07/20 01:03:21 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)bog.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: bog.c,v 1.15 1999/09/19 09:42:38 jsm Exp $");
+__RCSID("$NetBSD: bog.c,v 1.22 2008/07/20 01:03:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,12 +53,13 @@ __RCSID("$NetBSD: bog.c,v 1.15 1999/09/19 09:42:38 jsm Exp $");
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/tty.h>
 
 #include "bog.h"
 #include "extern.h"
 
-static	int	compar __P((const void *, const void *));
-	int	main __P((int, char *[]));
+static	int	compar(const void *, const void *);
+	int	main(int, char *[]);
 
 struct dictindex dictindex[26];
 
@@ -126,16 +123,14 @@ int reuse;
 int tlimit;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	long seed;
 	int ch, done, i, selfuse, sflag;
 	char *bspec, *p;
 
 	/* revoke setgid privileges */
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
 	seed = 0;
 	batch = debug = reuse = selfuse = sflag = 0;
@@ -184,7 +179,7 @@ main(argc, argv)
 	}
 
 	if (argc > 0) {
-		if (islower(argv[0][0])) {
+		if (islower((unsigned char)argv[0][0])) {
 			if (strlen(argv[0]) != 16) {
 				usage();
 			} else {
@@ -248,9 +243,9 @@ main(argc, argv)
 		for (;;) {
 			ch = inputch();
 #ifdef NEW_STYLE
-			if (ch == '\033')
+			if (ch == '\e')
 				findword();
-			else if (ch == '\014' || ch == '\022')	/* ^l or ^r */
+			else if (ch == CTRL('l') || ch == CTRL('r'))
 				redraw();
 			else {
 				if (ch == 'q') {
@@ -261,9 +256,9 @@ main(argc, argv)
 				}
 			}
 #else
-			if (ch == '\033')
+			if (ch == '\e')
 				findword();
-			else if (ch == '\014' || ch == '\022')	/* ^l or ^r */
+			else if (ch == CTRL('l') || ch == CTRL('r'))
 				redraw();
 			else {
 				if (isupper(ch)) {
@@ -285,8 +280,7 @@ main(argc, argv)
  * Return a pointer to a legal word or a null pointer when EOF is reached
  */
 char *
-batchword(fp)
-	FILE *fp;
+batchword(FILE *fp)
 {
 	int *p, *q;
 	char *w;
@@ -314,7 +308,7 @@ batchword(fp)
  * Keep track of the running stats
  */
 void
-playgame()
+playgame(void)
 {
 	int i, *p, *q;
 	time_t t;
@@ -435,9 +429,7 @@ timesup: ;
  * Return 1 on success, -1 on failure
  */
 int
-checkword(word, prev, path)
-	const char *word;
-	int prev, *path;
+checkword(const char *word, int prev, int *path)
 {
 	const char *p;
 	char *q;
@@ -519,8 +511,7 @@ checkword(word, prev, path)
  * the current board
  */
 int
-validword(word)
-	const char *word;
+validword(const char *word)
 {
 	int j;
 	const char *q, *w;
@@ -554,7 +545,7 @@ validword(word)
  * Assume both the dictionary and the player's words are already sorted
  */
 void
-checkdict()
+checkdict(void)
 {
 	char *p, *w;
 	const char **pw;
@@ -634,8 +625,7 @@ checkdict()
  * in ascending cube order, oth. make a random board
  */
 void
-newgame(b)
-	const char *b;
+newgame(const char *b)
 {
 	int i, p, q;
 	const char *tmp;
@@ -704,14 +694,13 @@ newgame(b)
 }
 
 int
-compar(p, q)
-	const void *p, *q;
+compar(const void *p, const void *q)
 {
 	return (strcmp(*(const char *const *)p, *(const char *const *)q));
 }
 
 void
-usage()
+usage(void)
 {
 	(void) fprintf(stderr,
 	    "usage: bog [-bd] [-s#] [-t#] [-w#] [+[+]] [boardspec]\n");

@@ -1,4 +1,4 @@
-/*	$NetBSD: un.h,v 1.22 1999/06/24 14:07:44 kleink Exp $	*/
+/*	$NetBSD: un.h,v 1.44.4.1 2009/03/18 05:33:23 snj Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,52 +34,77 @@
 #ifndef _SYS_UN_H_
 #define _SYS_UN_H_
 
+#include <sys/ansi.h>
+#include <sys/featuretest.h>
+#include <sys/types.h>
+
+#ifndef sa_family_t
+typedef __sa_family_t	sa_family_t;
+#define sa_family_t	__sa_family_t
+#endif
+
 /*
  * Definitions for UNIX IPC domain.
  */
 struct	sockaddr_un {
-	u_char	sun_len;		/* total sockaddr length */
-	u_char	sun_family;		/* AF_LOCAL */
-	char	sun_path[104];		/* path name (gag) */
+	uint8_t		sun_len;	/* total sockaddr length */
+	sa_family_t	sun_family;	/* AF_LOCAL */
+	char		sun_path[104];	/* path name (gag) */
 };
 
 /*
  * Socket options for UNIX IPC domain.
  */
-#if !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 #define	LOCAL_CREDS	0x0001		/* pass credentials to receiver */
+#define	LOCAL_CONNWAIT	0x0002		/* connects block until accepted */
+#define	LOCAL_PEEREID	0x0003		/* get peer identification */
 #endif
+
+/*
+ * Data automatically stored inside connect() for use by LOCAL_PEEREID
+ */
+struct unpcbid {
+	pid_t unp_pid;		/* process id */
+	uid_t unp_euid;		/* effective user id */
+	gid_t unp_egid;		/* effective group id */
+};
 
 #ifdef _KERNEL
 struct unpcb;
 struct socket;
+struct sockopt;
 
-int	unp_attach __P((struct socket *so));
-int	unp_bind __P((struct unpcb *unp, struct mbuf *nam, struct proc *p));
-int	unp_connect __P((struct socket *so, struct mbuf *nam, struct proc *p));
-int	unp_connect2 __P((struct socket *so, struct socket *so2));
-void	unp_detach __P((struct unpcb *unp));
-void	unp_discard __P((struct file *fp));
-void	unp_disconnect __P((struct unpcb *unp));
-void	unp_drop __P((struct unpcb *unp, int errno));
-void	unp_gc __P((void));
-void	unp_mark __P((struct file *fp));
-void	unp_scan __P((struct mbuf *m0, void (*op)(struct file *), int));
-void	unp_shutdown __P((struct unpcb *unp));
-int 	unp_externalize __P((struct mbuf *));
-int	unp_internalize __P((struct mbuf *, struct proc *));
-void 	unp_dispose __P((struct mbuf *));
-int	unp_output __P((struct mbuf *, struct mbuf *, struct unpcb *,
-	    struct proc *));
-void	unp_setsockaddr __P((struct unpcb *, struct mbuf *));
-void	unp_setpeeraddr __P((struct unpcb *, struct mbuf *));
+int	uipc_usrreq(struct socket *, int, struct mbuf *,
+	    struct mbuf *, struct mbuf *, struct lwp *);
+int	uipc_ctloutput(int, struct socket *, struct sockopt *);
+void	uipc_init (void);
+kmutex_t *uipc_dgramlock (void);
+kmutex_t *uipc_streamlock (void);
+kmutex_t *uipc_rawlock (void);
+
+int	unp_attach (struct socket *);
+int	unp_bind (struct socket *, struct mbuf *, struct lwp *);
+int	unp_connect (struct socket *, struct mbuf *, struct lwp *);
+int	unp_connect2 (struct socket *, struct socket *, int);
+void	unp_detach (struct unpcb *);
+void	unp_discard (struct file *);
+void	unp_disconnect (struct unpcb *);
+bool	unp_drop (struct unpcb *, int);
+void	unp_shutdown (struct unpcb *);
+int 	unp_externalize (struct mbuf *, struct lwp *);
+int	unp_internalize (struct mbuf **);
+void 	unp_dispose (struct mbuf *);
+int	unp_output (struct mbuf *, struct mbuf *, struct unpcb *,
+	    struct lwp *);
+void	unp_setaddr (struct socket *, struct mbuf *, bool);
 #else /* !_KERNEL */
 
 /* actual length of an initialized sockaddr_un */
-#if !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 #define SUN_LEN(su) \
 	(sizeof(*(su)) - sizeof((su)->sun_path) + strlen((su)->sun_path))
-#endif /* !_XOPEN_SOURCE */
+#endif /* !_NetBSD_SOURCE */
 #endif /* _KERNEL */
 
 #endif /* !_SYS_UN_H_ */

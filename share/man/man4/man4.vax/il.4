@@ -1,4 +1,4 @@
-.\"	$NetBSD: il.4,v 1.6 1999/12/15 23:44:55 abs Exp $
+.\"	$NetBSD: il.4,v 1.10 2003/08/07 10:31:13 agc Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -40,7 +36,7 @@
 .Nm il
 .Nd Interlan NI1010 10 Mb/s Ethernet interface
 .Sh SYNOPSIS
-.Cd "il0 at uba0 csr 164000 vector ilrint ilcint"
+.Cd "il0 at uba0 csr 164000"
 .Sh DESCRIPTION
 The
 .Nm il
@@ -57,17 +53,6 @@ interface employs the address resolution protocol described in
 .Xr arp 4
 to dynamically map between Internet and Ethernet addresses on the local
 network.
-.Pp
-The interface normally tries to use a ``trailer'' encapsulation
-to minimize copying data on input and output.
-The use of trailers is negotiated with
-.Tn ARP .
-This negotiation may be disabled, on a per-interface basis,
-by setting the
-.Dv IFF_NOTRAILERS
-flag with an
-.Dv SIOCSIFFLAGS
-.Xr ioctl .
 .Sh DIAGNOSTICS
 .Bl -diag
 .It il%d: input error.
@@ -101,9 +86,9 @@ should indicate the nature of the failure.
 See the hardware manual for details.
 .El
 .Sh SEE ALSO
-.Xr netintro 4 ,
+.Xr arp 4 ,
 .Xr inet 4 ,
-.Xr arp 4
+.Xr netintro 4
 .Sh HISTORY
 The
 .Nm

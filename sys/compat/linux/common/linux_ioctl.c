@@ -1,7 +1,7 @@
-/*	$NetBSD: linux_ioctl.c,v 1.22 1998/12/15 10:32:16 augustss Exp $	*/
+/*	$NetBSD: linux_ioctl.c,v 1.55 2008/07/19 23:01:52 jmcneill Exp $	*/
 
 /*-
- * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1995, 1998, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: linux_ioctl.c,v 1.55 2008/07/19 23:01:52 jmcneill Exp $");
+
+#if defined(_KERNEL_OPT)
 #include "sequencer.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -57,43 +55,69 @@
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
 #include <compat/linux/common/linux_ioctl.h>
+#include <compat/linux/common/linux_ipc.h>
+#include <compat/linux/common/linux_sem.h>
 
 #include <compat/linux/linux_syscallargs.h>
 
 #include <compat/ossaudio/ossaudio.h>
-#define LINUX_TO_OSS(v) (v)	/* do nothing, same ioctl() encoding */
+#define LINUX_TO_OSS(v) ((const void *)(v))	/* do nothing, same ioctl() encoding */
 
 /*
  * Most ioctl command are just converted to their NetBSD values,
  * and passed on. The ones that take structure pointers and (flag)
- * values need some massaging. This is done the usual way by
- * allocating stackgap memory, letting the actual ioctl call do its
- * work there and converting back the data afterwards.
+ * values need some massaging.
  */
 int
-linux_sys_ioctl(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+linux_sys_ioctl(struct lwp *l, const struct linux_sys_ioctl_args *uap, register_t *retval)
 {
-	struct linux_sys_ioctl_args /* {
+	/* {
 		syscallarg(int) fd;
 		syscallarg(u_long) com;
-		syscallarg(caddr_t) data;
-	} */ *uap = v;
+		syscallarg(void *) data;
+	} */
+	int error;
 
 	switch (LINUX_IOCGROUP(SCARG(uap, com))) {
 	case 'M':
-		return oss_ioctl_mixer(p, LINUX_TO_OSS(v), retval);
+		error = oss_ioctl_mixer(l, LINUX_TO_OSS(uap), retval);
+		break;
 	case 'Q':
-		return oss_ioctl_sequencer(p, LINUX_TO_OSS(v), retval);
+		error = oss_ioctl_sequencer(l, LINUX_TO_OSS(uap), retval);
+		break;
 	case 'P':
-		return oss_ioctl_audio(p, LINUX_TO_OSS(v), retval);
+		error = oss_ioctl_audio(l, LINUX_TO_OSS(uap), retval);
+		break;
+	case 'V':	/* video4linux2 */
+	case 'd':	/* drm */
+	{
+		struct sys_ioctl_args ua;
+		u_long com = 0;
+		if (SCARG(uap, com) & IOC_IN)
+			com |= IOC_OUT;
+		if (SCARG(uap, com) & IOC_OUT)
+			com |= IOC_IN;
+		SCARG(&ua, fd) = SCARG(uap, fd);
+		SCARG(&ua, com) = SCARG(uap, com);
+		SCARG(&ua, com) &= ~IOC_DIRMASK;
+		SCARG(&ua, com) |= com;
+		SCARG(&ua, data) = SCARG(uap, data);
+		error = sys_ioctl(l, (const void *)&ua, retval);
+		break;
+	}
+	case 'r': /* VFAT ioctls; not yet supported */
+		error = ENOSYS;
+		break;
 	case 'S':
-		return linux_ioctl_cdrom(p, uap, retval);
+		error = linux_ioctl_cdrom(l, uap, retval);
+		break;
 	case 't':
 	case 'f':
-		return linux_ioctl_termios(p, uap, retval);
+		error = linux_ioctl_termios(l, uap, retval);
+		break;
+	case 'm':
+		error = linux_ioctl_mtio(l, uap, retval);
+		break;
 	case 'T':
 	{
 #if NSEQUENCER > 0
@@ -105,31 +129,54 @@ linux_sys_ioctl(p, v, retval)
 		 * device number and check if that is the sequencer entry.
 		 */
 		struct file *fp;
-		struct filedesc *fdp;
 		struct vnode *vp;
 		struct vattr va;
-		extern int sequencerioctl 
-			__P((dev_t, u_long, caddr_t, int, struct proc *));
+		extern const struct cdevsw sequencer_cdevsw;
 
-		fdp = p->p_fd;
-		if ((u_int)SCARG(uap, fd) >= fdp->fd_nfiles ||
-		    (fp = fdp->fd_ofiles[SCARG(uap, fd)]) == NULL)
+		if ((fp = fd_getfile(SCARG(uap, fd))) == NULL)
 			return EBADF;
 		if (fp->f_type == DTYPE_VNODE &&
 		    (vp = (struct vnode *)fp->f_data) != NULL &&
 		    vp->v_type == VCHR &&
-		    VOP_GETATTR(vp, &va, p->p_ucred, p) == 0 &&
-		    major(va.va_rdev) < nchrdev &&
-		    cdevsw[major(va.va_rdev)].d_ioctl == &sequencerioctl)
-			return oss_ioctl_sequencer(p, (void*)LINUX_TO_OSS(uap),
+		    VOP_GETATTR(vp, &va, l->l_cred) == 0 &&
+		    cdevsw_lookup(va.va_rdev) == &sequencer_cdevsw) {
+			error = oss_ioctl_sequencer(l, (const void *)LINUX_TO_OSS(uap),
 						   retval);
-		else
+		}
+		else {
+			error = linux_ioctl_termios(l, uap, retval);
+		}
+		fd_putfile(SCARG(uap, fd));
+#else
+		error = linux_ioctl_termios(l, uap, retval);
 #endif
-			return linux_ioctl_termios(p, uap, retval);
 	}
+		break;
+	case '"':
+		error = linux_ioctl_sg(l, uap, retval);
+		break;
 	case 0x89:
-		return linux_ioctl_socket(p, uap, retval);
+		error = linux_ioctl_socket(l, uap, retval);
+		break;
+	case 0x03:
+		error = linux_ioctl_hdio(l, uap, retval);
+		break;
+	case 0x02:
+		error = linux_ioctl_fdio(l, uap, retval);
+		break;
+	case 0x12:
+		error = linux_ioctl_blkio(l, uap, retval);
+		break;
 	default:
-		return linux_machdepioctl(p, uap, retval);
+		error = linux_machdepioctl(l, uap, retval);
+		break;
 	}
+	if (error == EPASSTHROUGH) {
+		/*
+		 * linux returns EINVAL or ENOTTY for not supported ioctls.
+		 */ 
+		error = EINVAL;
+	}
+
+	return error;
 }

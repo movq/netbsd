@@ -1,7 +1,7 @@
-/*	$NetBSD: SYS.h,v 1.12 2000/03/23 04:58:59 mycroft Exp $ */
+/*	$NetBSD: SYS.h,v 1.18 2003/10/29 12:28:33 pooka Exp $ */
 
 /*-
- * Copyright (c) 1996 Jonathan STone
+ * Copyright (c) 1996 Jonathan Stone
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,11 +46,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -80,7 +76,7 @@
  * ii) Do interprocedure jumps indirectly via t9, with the side-effect of
  *     preserving the callee's entry address in t9.
  */
-#ifdef ABICALLS
+#ifdef __ABICALLS__
 	.abicalls
 # define PIC_PROLOGUE(x,sr)	.set noreorder; .cpload sr; .set reorder
 # define PIC_CALL(l,sr)		la sr, _C_LABEL(l); jr sr
@@ -109,6 +105,12 @@
 #define RSYSCALL(x)							\
 	PSEUDO(x,x)
 
+/*
+ * Do a syscall that has an internal name and a weak external alias.
+ */
+#define	WSYSCALL(weak,strong)						\
+	WEAK_ALIAS(weak,strong);					\
+	PSEUDO(strong,weak)
 
 /*
  * Do a renamed or pseudo syscall (e.g., _exit()), where the entrypoint

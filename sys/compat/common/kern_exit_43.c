@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_exit_43.c,v 1.4 1997/09/03 21:06:50 jonathan Exp $	*/
+/*	$NetBSD: kern_exit_43.c,v 1.21 2007/12/20 23:02:44 dsl Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,22 +36,22 @@
  *	@(#)kern_exit.c	8.7 (Berkeley) 2/12/94
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: kern_exit_43.c,v 1.21 2007/12/20 23:02:44 dsl Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/map.h>
 #include <sys/ioctl.h>
 #include <sys/proc.h>
 #include <sys/tty.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/kernel.h>
-#include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/wait.h>
 #include <sys/file.h>
 #include <sys/vnode.h>
 #include <sys/syslog.h>
-#include <sys/malloc.h>
 #include <sys/resourcevar.h>
 #include <sys/ptrace.h>
 #include <sys/acct.h>
@@ -63,12 +59,10 @@
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 #include <machine/reg.h>
 #include <compat/common/compat_util.h>
 
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
 #ifdef m68k
 #include <machine/psl.h>		/* only m68k ports use PSL_ALLCC */
 #include <machine/frame.h>
@@ -78,36 +72,28 @@
 #endif
 
 int
-compat_43_sys_wait(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_43_sys_wait(struct lwp *l, const void *v, register_t *retval)
 {
-	caddr_t sg = stackgap_init(p->p_emul);
-	int error;
+	int error, status, was_zombie;
+	int child_pid = WAIT_ANY;
 
-	struct sys_wait4_args /* {
-		syscallarg(int) pid;
-		syscallarg(int *) status;
-		syscallarg(int) options;
-		syscallarg(struct rusage *) rusage;
-	} */ a;
 
 #ifdef PSL_ALLCC
-	if ((GETPS(p->p_md.md_regs) & PSL_ALLCC) != PSL_ALLCC) {
-		SCARG(&a, options) = 0;
-		SCARG(&a, rusage) = NULL;
+#else
+#endif
+
+#ifdef PSL_ALLCC
+	if ((GETPS(l->l_md.md_regs) & PSL_ALLCC) != PSL_ALLCC) {
+		error = do_sys_wait(l, &child_pid, &status, 0, NULL, &was_zombie);
 	} else {
-		SCARG(&a, options) = p->p_md.md_regs[R0];
-		SCARG(&a, rusage) = (struct rusage *)p->p_md.md_regs[R1];
+		error = do_sys_wait(l, &child_pid, &status,
+		    l->l_md.md_regs[R0], (struct rusage *)l->l_md.md_regs[R1],
+		    &was_zombie);
 	}
 #else
-	SCARG(&a, options) = 0;
-	SCARG(&a, rusage) = NULL;
+	error = do_sys_wait(l, &child_pid, &status, 0, NULL, &was_zombie);
 #endif
-	SCARG(&a, pid) = WAIT_ANY;
-	SCARG(&a, status) = stackgap_alloc(&sg, sizeof(SCARG(&a, status)));
-	if ((error = sys_wait4(p, &a, retval)) != 0)
-		return error;
-	return copyin(SCARG(&a, status), &retval[1], sizeof(retval[1]));
+	retval[0] = child_pid;
+	retval[1] = status;
+	return error;
 }

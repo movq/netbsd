@@ -1,11 +1,11 @@
-/*	$NetBSD: ucomvar.h,v 1.2 2000/02/08 09:18:02 augustss Exp $	*/
+/*	$NetBSD: ucomvar.h,v 1.17 2008/05/24 16:40:58 cube Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Lennart Augustsson (augustss@carlstedt.se) at
+ * by Lennart Augustsson (lennart@augustsson.net) at
  * Carlstedt Research & Technology.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,29 +31,25 @@
  */
 
 
-/* Macros to clear/set/test flags. */
-#define SET(t, f)       (t) |= (f)
-#define CLR(t, f)       (t) &= ~(f)
-#define ISSET(t, f)     ((t) & (f))
-
-#include "locators.h"
-#define ucomcf_portno cf_loc[UCOMBUSCF_PORTNO]
-#define UCOM_UNK_PORTNO UCOMBUSCF_PORTNO_DEFAULT
+/* just for ucom_attach_args, not in the config namespace */
+#define UCOM_UNK_PORTNO (-1)
 
 struct	ucom_softc;
 
 struct ucom_methods {
-	void (*ucom_get_status)__P((void *sc, int portno, 
-				    u_char *lsr, u_char *msr));
-	void (*ucom_set)__P((void *sc, int portno, int reg, int onoff));
+	void (*ucom_get_status)(void *sc, int portno, u_char *lsr, u_char *msr);
+	void (*ucom_set)(void *sc, int portno, int reg, int onoff);
 #define UCOM_SET_DTR 1
 #define UCOM_SET_RTS 2
 #define UCOM_SET_BREAK 3
-	int (*ucom_param)__P((void *sc, int portno, struct termios *));
-	int (*ucom_ioctl)__P((void *sc, int portno, u_long cmd, 
-			      caddr_t data, int flag, struct proc *p));
-	void (*ucom_open)__P((void *sc, int portno));
-	void (*ucom_close)__P((void *sc, int portno));
+	int (*ucom_param)(void *sc, int portno, struct termios *);
+	int (*ucom_ioctl)(void *sc, int portno, u_long cmd,
+			  void *data, int flag, usb_proc_ptr p);
+	int (*ucom_open)(void *sc, int portno);
+	void (*ucom_close)(void *sc, int portno);
+	void (*ucom_read)(void *sc, int portno, u_char **ptr, u_int32_t *count);
+	void (*ucom_write)(void *sc, int portno, u_char *to, u_char *from,
+			   u_int32_t *count);
 };
 
 /* modem control register */
@@ -93,12 +82,17 @@ struct ucom_attach_args {
 	int portno;
 	int bulkin;
 	int bulkout;
+	u_int ibufsize;
+	u_int ibufsizepad;
+	u_int obufsize;
+	u_int opkthdrlen;
+	const char *info;	/* attach message */
 	usbd_device_handle device;
 	usbd_interface_handle iface;
 	struct ucom_methods *methods;
 	void *arg;
 };
 
-int ucomprint __P((void *aux, const char *pnp));
-int ucomsubmatch __P((struct device *parent, struct cfdata *cf, void *aux));
-void ucom_status_change __P((struct ucom_softc *sc));
+int ucomprint(void *, const char *);
+int ucomsubmatch(device_t t, cfdata_t, const int *, void *);
+void ucom_status_change(struct ucom_softc *);

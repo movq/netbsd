@@ -1,4 +1,4 @@
-/*	$NetBSD: parties.c,v 1.6 1999/02/10 00:45:46 hubertf Exp $	*/
+/*	$NetBSD: parties.c,v 1.11 2003/08/07 09:37:43 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,16 +34,15 @@
 #if 0
 static char sccsid[] = "@(#)parties.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: parties.c,v 1.6 1999/02/10 00:45:46 hubertf Exp $");
+__RCSID("$NetBSD: parties.c,v 1.11 2003/08/07 09:37:43 agc Exp $");
 #endif
 #endif /* not lint */
 
+#include <sys/types.h>
 #include "extern.h"
 
 int
-meleeing(from, to)
-struct ship *from;
-struct ship *to;
+meleeing(struct ship *from, struct ship *to)
 {
 	struct BP *p = from->file->OBP;
 	struct BP *q = p + NBP;
@@ -59,9 +54,7 @@ struct ship *to;
 }
 
 int
-boarding(from, isdefense)
-struct ship *from;
-char isdefense;
+boarding(struct ship *from, int isdefense)
 {
 	struct BP *p = isdefense ? from->file->DBP : from->file->OBP;
 	struct BP *q = p + NBP;
@@ -73,9 +66,7 @@ char isdefense;
 }
 
 void
-unboard(ship, to, isdefense)
-struct ship *ship, *to;
-char isdefense;
+unboard(struct ship *ship, struct ship *to, int isdefense)
 {
 	struct BP *p = isdefense ? ship->file->DBP : ship->file->OBP;
 	int n;

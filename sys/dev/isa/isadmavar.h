@@ -1,4 +1,4 @@
-/*	$NetBSD: isadmavar.h,v 1.16 2000/02/07 22:07:31 thorpej Exp $	*/
+/*	$NetBSD: isadmavar.h,v 1.23 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -93,50 +86,53 @@ struct isa_mem {
 	int chan;
 	bus_size_t size;
 	bus_addr_t addr;
-	caddr_t kva;
+	void *kva;
 	struct isa_mem *next;
 };
 
 #ifdef _KERNEL
 struct proc;
+struct malloc_type;
 
-void	   _isa_dmainit __P((struct isa_dma_state *, bus_space_tag_t,
-	       bus_dma_tag_t, struct device *));
+void	   _isa_dmainit(struct isa_dma_state *, bus_space_tag_t,
+	       bus_dma_tag_t, struct device *);
 
-int	   _isa_dmacascade __P((struct isa_dma_state *, int));
+int	   _isa_dmacascade(struct isa_dma_state *, int);
 
-bus_size_t _isa_dmamaxsize __P((struct isa_dma_state *, int));
+bus_size_t _isa_dmamaxsize(struct isa_dma_state *, int);
 
-int	   _isa_dmamap_create __P((struct isa_dma_state *, int,
-	       bus_size_t, int));
-void	   _isa_dmamap_destroy __P((struct isa_dma_state *, int));
+int	   _isa_dmamap_create(struct isa_dma_state *, int, bus_size_t, int);
+void	   _isa_dmamap_destroy(struct isa_dma_state *, int);
 
-int	   _isa_dmastart __P((struct isa_dma_state *, int, void *, bus_size_t,
-	       struct proc *, int, int));
-void	   _isa_dmaabort __P((struct isa_dma_state *, int));
-bus_size_t _isa_dmacount __P((struct isa_dma_state *, int));
-int	   _isa_dmafinished __P((struct isa_dma_state *, int));
-void	   _isa_dmadone __P((struct isa_dma_state *, int));
+int	   _isa_dmastart(struct isa_dma_state *, int, void *, bus_size_t,
+	       struct proc *, int, int);
+void	   _isa_dmaabort(struct isa_dma_state *, int);
+bus_size_t _isa_dmacount(struct isa_dma_state *, int);
+int	   _isa_dmafinished(struct isa_dma_state *, int);
+void	   _isa_dmadone(struct isa_dma_state *, int);
 
-void	   _isa_dmafreeze __P((struct isa_dma_state *));
-void	   _isa_dmathaw __P((struct isa_dma_state *));
+void	   _isa_dmafreeze(struct isa_dma_state *);
+void	   _isa_dmathaw(struct isa_dma_state *);
 
-int	   _isa_dmamem_alloc __P((struct isa_dma_state *, int, bus_size_t,
-	       bus_addr_t *, int));
-void	   _isa_dmamem_free __P((struct isa_dma_state *, int, bus_addr_t,
-	       bus_size_t));
-int	   _isa_dmamem_map __P((struct isa_dma_state *, int, bus_addr_t,
-	       bus_size_t, caddr_t *, int));
-void	   _isa_dmamem_unmap __P((struct isa_dma_state *, int, caddr_t,
-	       size_t));
-int	   _isa_dmamem_mmap __P((struct isa_dma_state *, int, bus_addr_t,
-	       bus_size_t, int, int, int));
+int	   _isa_dmamem_alloc(struct isa_dma_state *, int, bus_size_t,
+	       bus_addr_t *, int);
+void	   _isa_dmamem_free(struct isa_dma_state *, int, bus_addr_t,
+	       bus_size_t);
+int	   _isa_dmamem_map(struct isa_dma_state *, int, bus_addr_t,
+	       bus_size_t, void **, int);
+void	   _isa_dmamem_unmap(struct isa_dma_state *, int, void *,
+	       size_t);
+paddr_t	   _isa_dmamem_mmap(struct isa_dma_state *, int, bus_addr_t,
+	       bus_size_t, off_t, int, int);
 
-int	   _isa_drq_isfree __P((struct isa_dma_state *, int));
+int	   _isa_drq_alloc(struct isa_dma_state *, int);
+int	   _isa_drq_free(struct isa_dma_state *, int);
+int	   _isa_drq_isfree(struct isa_dma_state *, int);
 
-void      *_isa_malloc __P((struct isa_dma_state *, int, size_t, int, int));
-void	   _isa_free __P((void *, int));
-int	   _isa_mappage __P((void *, int, int));
+void      *_isa_malloc(struct isa_dma_state *, int, size_t,
+		struct malloc_type *, int);
+void	   _isa_free(void *, struct malloc_type *);
+paddr_t	   _isa_mappage(void *, off_t, int);
 #endif /* _KERNEL */
 
 #endif /* _DEV_ISA_ISADMAVAR_H_ */

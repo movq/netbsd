@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_oldmmap.c,v 1.50 1998/10/07 23:06:17 erh Exp $	*/
+/*	$NetBSD: linux_oldmmap.c,v 1.70 2008/06/18 12:24:17 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,14 +29,24 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: linux_oldmmap.c,v 1.70 2008/06/18 12:24:17 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mount.h>
 
+#include <sys/sched.h>
 #include <sys/syscallargs.h>
 
-#include <vm/vm.h>
-#include <vm/vm_param.h>
+#include <uvm/uvm_param.h>
+
+#ifdef __amd64__
+#include <compat/netbsd32/netbsd32.h>
+
+#include <compat/linux32/common/linux32_types.h>
+#include <compat/linux32/common/linux32_machdep.h>
+#endif
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_mmap.h>
@@ -53,7 +56,15 @@
 #include <compat/linux/linux_syscallargs.h>
 
 /* Used on: arm, i386, m68k */
+/* Used for linux32 on: amd64 */
 /* Not used on: alpha, mips, pcc, sparc, sparc64 */
+
+#undef DPRINTF
+#ifdef DEBUG_LINUX
+#define DPRINTF(a)	uprintf a
+#else
+#define DPRINTF(a)
+#endif
 
 /*
  * Linux wants to pass everything to a syscall in registers.
@@ -61,14 +72,11 @@
  * They just pass everything in a structure.
  */
 int
-linux_sys_old_mmap(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+linux_sys_old_mmap(struct lwp *l, const struct linux_sys_old_mmap_args *uap, register_t *retval)
 {
-	struct linux_sys_old_mmap_args /* {
+	/* {
 		syscallarg(struct linux_oldmmap *) lmp;
-	} */ *uap = v;
+	} */
 	struct linux_oldmmap lmap;
 	struct linux_sys_mmap_args nlmap;
 	int error;
@@ -76,13 +84,18 @@ linux_sys_old_mmap(p, v, retval)
 	if ((error = copyin(SCARG(uap, lmp), &lmap, sizeof lmap)))
 		return error;
 
-	SCARG(&nlmap,addr) = (unsigned long)lmap.lm_addr;
+	if (lmap.lm_offset & PAGE_MASK)
+		return EINVAL;
+
+	SCARG(&nlmap,addr) = lmap.lm_addr;
 	SCARG(&nlmap,len) = lmap.lm_len;
 	SCARG(&nlmap,prot) = lmap.lm_prot;
 	SCARG(&nlmap,flags) = lmap.lm_flags;
 	SCARG(&nlmap,fd) = lmap.lm_fd;
-	SCARG(&nlmap,offset) = lmap.lm_pos;
-
-	return linux_sys_mmap(p, &nlmap, retval);
+	SCARG(&nlmap,offset) = lmap.lm_offset;
+	DPRINTF(("old_mmap(%#x, %u, %u, %u, %d, %u)\n",
+	    lmap.lm_addr, lmap.lm_len, lmap.lm_prot, lmap.lm_flags,
+	    lmap.lm_fd, lmap.lm_offset));
+	return linux_sys_mmap(l, &nlmap, retval);
 }
 

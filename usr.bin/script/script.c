@@ -1,4 +1,4 @@
-/*	$NetBSD: script.c,v 1.7 1998/12/19 21:53:56 christos Exp $	*/
+/*	$NetBSD: script.c,v 1.16 2008/07/21 14:19:25 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)script.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: script.c,v 1.7 1998/12/19 21:53:56 christos Exp $");
+__RCSID("$NetBSD: script.c,v 1.16 2008/07/21 14:19:25 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -51,6 +47,8 @@ __RCSID("$NetBSD: script.c,v 1.7 1998/12/19 21:53:56 christos Exp $");
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
+#include <sys/param.h>
+#include <sys/uio.h>
 
 #include <err.h>
 #include <errno.h>
@@ -66,42 +64,66 @@ __RCSID("$NetBSD: script.c,v 1.7 1998/12/19 21:53:56 christos Exp $");
 #include <unistd.h>
 #include <util.h>
 
+#define	DEF_BUF	65536
+
+struct stamp {
+	uint64_t scr_len;	/* amount of data */
+	uint64_t scr_sec;	/* time it arrived in seconds... */
+	uint32_t scr_usec;	/* ...and microseconds */
+	uint32_t scr_direction;	/* 'i', 'o', etc (also indicates endianness) */
+};
+
 FILE	*fscript;
 int	master, slave;
 int	child, subchild;
 int	outcc;
+int	usesleep, rawout;
 char	*fname;
 
 struct	termios tt;
 
-void	done __P((void));
-void	dooutput __P((void));
-void	doshell __P((void));
-void	fail __P((void));
-void	finish __P((int));
-int	main __P((int, char **));
-void	scriptflush __P((int));
+void	done(void);
+void	dooutput(void);
+void	doshell(void);
+void	fail(void);
+void	finish(int);
+int	main(int, char **);
+void	scriptflush(int);
+void	record(FILE *, char *, size_t, int);
+void	consume(FILE *, off_t, char *, int);
+void	playback(FILE *);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int cc;
 	struct termios rtt;
 	struct winsize win;
-	int aflg, ch;
+	int aflg, pflg, ch;
 	char ibuf[BUFSIZ];
 
 	aflg = 0;
-	while ((ch = getopt(argc, argv, "a")) != -1)
+	pflg = 0;
+	usesleep = 1;
+	rawout = 0;
+	while ((ch = getopt(argc, argv, "adpr")) != -1)
 		switch(ch) {
 		case 'a':
 			aflg = 1;
 			break;
+		case 'd':
+			usesleep = 0;
+			break;
+		case 'p':
+			pflg = 1;
+			break;
+		case 'r':
+			rawout = 1;
+			break;
 		case '?':
 		default:
-			(void)fprintf(stderr, "usage: script [-a] [file]\n");
+			(void)fprintf(stderr, "usage: %s [-adpr] [file]\n",
+			    getprogname());
 			exit(1);
 		}
 	argc -= optind;
@@ -112,8 +134,11 @@ main(argc, argv)
 	else
 		fname = "typescript";
 
-	if ((fscript = fopen(fname, aflg ? "a" : "w")) == NULL)
+	if ((fscript = fopen(fname, pflg ? "r" : aflg ? "a" : "w")) == NULL)
 		err(1, "fopen %s", fname);
+
+	if (pflg)
+		playback(fscript);
 
 	(void)tcgetattr(STDIN_FILENO, &tt);
 	(void)ioctl(STDIN_FILENO, TIOCGWINSZ, &win);
@@ -144,17 +169,20 @@ main(argc, argv)
 			doshell();
 	}
 
-	(void)fclose(fscript);
-	while ((cc = read(STDIN_FILENO, ibuf, BUFSIZ)) > 0)
+	if (!rawout)
+		(void)fclose(fscript);
+	while ((cc = read(STDIN_FILENO, ibuf, BUFSIZ)) > 0) {
+		if (rawout)
+			record(fscript, ibuf, cc, 'i');
 		(void)write(master, ibuf, cc);
+	}
 	done();
 	/* NOTREACHED */
 	return (0);
 }
 
 void
-finish(signo)
-	int signo;
+finish(int signo)
 {
 	int die, pid, status;
 
@@ -177,7 +205,10 @@ dooutput()
 
 	(void)close(STDIN_FILENO);
 	tvec = time(NULL);
-	(void)fprintf(fscript, "Script started on %s", ctime(&tvec));
+	if (rawout)
+		record(fscript, NULL, 0, 's');
+	else
+		(void)fprintf(fscript, "Script started on %s", ctime(&tvec));
 
 	(void)signal(SIGALRM, scriptflush);
 	value.it_interval.tv_sec = SECSPERMIN / 2;
@@ -189,15 +220,17 @@ dooutput()
 		if (cc <= 0)
 			break;
 		(void)write(1, obuf, cc);
-		(void)fwrite(obuf, 1, cc, fscript);
+		if (rawout)
+			record(fscript, obuf, cc, 'o');
+		else
+			(void)fwrite(obuf, 1, cc, fscript);
 		outcc += cc;
 	}
 	done();
 }
 
 void
-scriptflush(signo)
-	int signo;
+scriptflush(int signo)
 {
 	if (outcc) {
 		(void)fflush(fscript);
@@ -237,12 +270,141 @@ done()
 
 	if (subchild) {
 		tvec = time(NULL);
-		(void)fprintf(fscript,"\nScript done on %s", ctime(&tvec));
+		if (rawout)
+			record(fscript, NULL, 0, 'e');
+		else
+			(void)fprintf(fscript,"\nScript done on %s",
+			    ctime(&tvec));
 		(void)fclose(fscript);
 		(void)close(master);
 	} else {
 		(void)tcsetattr(STDIN_FILENO, TCSAFLUSH, &tt);
 		(void)printf("Script done, output file is %s\n", fname);
 	}
+	exit(0);
+}
+
+void
+record(FILE *fscript, char *buf, size_t cc, int direction)
+{
+	struct iovec iov[2];
+	struct stamp stamp;
+	struct timeval tv;
+
+	(void)gettimeofday(&tv, NULL);
+	stamp.scr_len = cc;
+	stamp.scr_sec = tv.tv_sec;
+	stamp.scr_usec = tv.tv_usec;
+	stamp.scr_direction = direction;
+	iov[0].iov_len = sizeof(stamp);
+	iov[0].iov_base = &stamp;
+	iov[1].iov_len = cc;
+	iov[1].iov_base = buf;
+	if (writev(fileno(fscript), &iov[0], 2) == -1)
+		err(1, "writev");
+}
+
+void
+consume(FILE *fscript, off_t len, char *buf, int reg)
+{
+	size_t l;
+
+	if (reg) {
+		if (fseeko(fscript, len, SEEK_CUR) == -1)
+			err(1, NULL);
+	}
+	else {
+		while (len > 0) {
+			l = MIN(DEF_BUF, len);
+			if (fread(buf, sizeof(char), l, fscript) != l)
+				err(1, "cannot read buffer");
+			len -= l;
+		}
+	}
+}
+
+#define swapstamp(stamp) do { \
+	if (stamp.scr_direction > 0xff) { \
+		stamp.scr_len = bswap64(stamp.scr_len); \
+		stamp.scr_sec = bswap64(stamp.scr_sec); \
+		stamp.scr_usec = bswap32(stamp.scr_usec); \
+		stamp.scr_direction = bswap32(stamp.scr_direction); \
+	} \
+} while (0/*CONSTCOND*/)
+
+void
+playback(FILE *fscript)
+{
+	struct timespec tsi, tso;
+	struct stamp stamp;
+	struct stat pst;
+	char buf[DEF_BUF];
+	off_t nread, save_len;
+	size_t l;
+	time_t clock;
+	int reg;
+
+	if (fstat(fileno(fscript), &pst) == -1)
+		err(1, "fstat failed");	
+
+	reg = S_ISREG(pst.st_mode);
+
+	for (nread = 0; !reg || nread < pst.st_size; nread += save_len) {
+		if (fread(&stamp, sizeof(stamp), 1, fscript) != 1) {
+			if (reg)
+				err(1, "reading playback header");
+			else
+				break;
+		}
+		swapstamp(stamp);
+		save_len = sizeof(stamp);
+
+		if (reg && stamp.scr_len >
+		    (uint64_t)(pst.st_size - save_len) - nread)
+			err(1, "invalid stamp");
+
+		save_len += stamp.scr_len;
+		clock = stamp.scr_sec;
+		tso.tv_sec = stamp.scr_sec;
+		tso.tv_nsec = stamp.scr_usec * 1000;
+
+		switch (stamp.scr_direction) {
+		case 's':
+			(void)printf("Script started on %s", ctime(&clock));
+			tsi = tso;
+			(void)consume(fscript, stamp.scr_len, buf, reg);
+			break;
+		case 'e':
+			(void)printf("\nScript done on %s", ctime(&clock));
+			(void)consume(fscript, stamp.scr_len, buf, reg);
+			break;
+		case 'i':
+			/* throw input away */
+			(void)consume(fscript, stamp.scr_len, buf, reg);
+			break;
+		case 'o':
+			tsi.tv_sec = tso.tv_sec - tsi.tv_sec;
+			tsi.tv_nsec = tso.tv_nsec - tsi.tv_nsec;
+			if (tsi.tv_nsec < 0) {
+				tsi.tv_sec -= 1;
+				tsi.tv_nsec += 1000000000;
+			}
+			if (usesleep)
+				(void)nanosleep(&tsi, NULL);
+			tsi = tso;
+			while (stamp.scr_len > 0) {
+				l = MIN(DEF_BUF, stamp.scr_len);
+				if (fread(buf, sizeof(char), l, fscript) != l)
+					err(1, "cannot read buffer");
+
+				(void)write(STDOUT_FILENO, buf, l);
+				stamp.scr_len -= l;
+			}
+			break;
+		default:
+			err(1, "invalid direction");
+		}
+	}
+	(void)fclose(fscript);
 	exit(0);
 }

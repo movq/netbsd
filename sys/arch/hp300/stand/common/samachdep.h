@@ -1,4 +1,4 @@
-/*	$NetBSD: samachdep.h,v 1.5 1999/12/14 20:57:44 thorpej Exp $	*/
+/*	$NetBSD: samachdep.h,v 1.16 2008/07/16 13:44:51 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,8 +31,10 @@
  *	@(#)samachdep.h	8.1 (Berkeley) 6/10/93
  */
 
-#include <sys/types.h>
+#include <sys/param.h>
 #include <machine/hp300spu.h>
+#include <m68k/frame.h>
+#include <lib/libsa/stand.h>
 
 #define	NHPIB		4
 #define	NSCSI		2
@@ -60,22 +58,61 @@
 #define MHZ_33		4
 #define MHZ_50		6
 
-extern	int cpuspeed, machineid, mmuid;
-extern	int howto;
+/* autoconf.c */
+extern int cpuspeed;
+#ifdef PRINTROMINFO
+void printrominvo(void);
+#endif
+void configure(void);
+int sctoaddr(int);
+
+/* clock.c */
+void read_bbc(void);
+u_char read_bbc_reg(int);
+
+/* cons.c */
 extern	int cons_scode;
+void cninit(void);
+int cngetc(void);
+int cnputc(int);
+
+/* devopen.c */
 extern	u_int opendev;
-extern	u_int bootdev;
-extern	char *getmachineid();
+int atoi(char *);
 
+/* exec.c */
+void exec_hp300(char *, u_long, int);
+
+/* machdep.c */
 extern	int userom;
-extern	void romputchar __P((int));
+char *getmachineid(void);
+void romputchar(int);
+void transfer(char *, int, int, int, char *, char *);
+int trap(struct trapframe *);
 
-void	transfer __P((char *entry, int howto, int opendev, int conscode,
-	    char *lowram, char *esym));
-void	_transfer __P((char *entry, int howto, int opendev, int conscode,
-	    char *lowram, char *esym));
+/* prf.c */
+int tgetchar(void);
 
-#define DELAY(n)	{ register int N = cpuspeed * (n); while (--N > 0); }
+/* srt0.S */
+extern	u_int bootdev;
+extern	int machineid, mmuid;
+extern	int howto;
+int badaddr(void *);
+void call_req_reboot(void);
+void romout(int, char *);
+void _transfer(char *, int, int, int, char *, char *);
+
+/* tget.c */
+int tgets(char *);
+
+
+#define DELAY(n)							\
+do {									\
+	register int __N = cpuspeed * (n);				\
+	do {								\
+		__asm("subql #1, %0" : "=r" (__N) : "0" (__N));		\
+	} while (__N > 0);						\
+} while (/* CONSTCOND */ 0)
 
 /* bogon grfinfo structure to keep grf_softc happy */
 struct grfinfo {
@@ -86,20 +123,13 @@ struct grfinfo {
  * Switch we use to set punit in devopen.
  */
 struct punitsw {
-	int	(*p_punit) __P((int, int, int *));
+	int	(*p_punit)(int, int, int *);
 };
 extern	struct punitsw punitsw[];
 extern	int npunit;
-
-extern	struct devsw devsw_net[];
-extern	int ndevs_net;
-
-extern	struct devsw devsw_general[];
-extern	int ndevs_general;
 
 extern	struct fs_ops file_system_rawfs[];
 extern	struct fs_ops file_system_ufs[];
 extern	struct fs_ops file_system_nfs[];
 
-extern	char bootprog_name[], bootprog_rev[], bootprog_date[],
-	    bootprog_maker[];
+extern	char bootprog_name[], bootprog_rev[], bootprog_kernrev[];

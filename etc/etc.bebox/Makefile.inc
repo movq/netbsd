@@ -1,8 +1,11 @@
-#	$NetBSD: Makefile.inc,v 1.2 1999/02/05 03:01:51 cjs Exp $
+#	$NetBSD: Makefile.inc,v 1.5 2007/07/24 10:49:24 pavel Exp $
 #
 #	etc.bebox/Makefile.inc -- bebox-specific etc Makefile targets
 #
 
-# Set this for any kernels beyond GENERIC you want to include
-# in the distribution.
-#EXTRA_KERNELS+=
+# If you change the list of distributed kernels, don't forget
+# to update the release documentation in distrib/notes/common/contents
+
+KERNEL_SETS=		GENERIC
+
+BUILD_KERNELS=		INSTALL

@@ -1,11 +1,11 @@
-/*	$NetBSD: cacvar.h,v 1.2 2000/03/16 15:07:22 ad Exp $	*/
+/*	$NetBSD: cacvar.h,v 1.18 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Andy Doran.
+ * by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,19 +30,48 @@
  */
 
 #ifndef _IC_CACVAR_H_
-#define _IC_CACVAR_H_
+#define	_IC_CACVAR_H_
 
-#include "locators.h"
+#include <sys/mutex.h>
+#include <sys/condvar.h>
 
-#define	CAC_MAX_CCBS	64
-#define	CAC_MAX_XFER	1048576
-#define CAC_SG_SIZE	32
+#include <dev/sysmon/sysmonvar.h>
+#include <sys/envsys.h>
+
+#define	CAC_MAX_CCBS	256
+#define	CAC_MAX_XFER	(0xffff * 512)
+#define	CAC_SG_SIZE	32
+
+#define	cac_inb(sc, port) \
+	bus_space_read_1((sc)->sc_iot, (sc)->sc_ioh, port)
+#define	cac_inw(sc, port) \
+	bus_space_read_2((sc)->sc_iot, (sc)->sc_ioh, port)
+#define	cac_inl(sc, port) \
+	bus_space_read_4((sc)->sc_iot, (sc)->sc_ioh, port)
+#define	cac_outb(sc, port, val) \
+	bus_space_write_1((sc)->sc_iot, (sc)->sc_ioh, port, val)
+#define	cac_outw(sc, port, val) \
+	bus_space_write_2((sc)->sc_iot, (sc)->sc_ioh, port, val)
+#define	cac_outl(sc, port, val) \
+	bus_space_write_4((sc)->sc_iot, (sc)->sc_ioh, port, val)
+
+/*
+ * Stupid macros to deal with alignment/endianness issues.
+ */
+
+#define	CAC_GET1(x)							\
+	(((u_char *)&(x))[0])
+#define	CAC_GET2(x)							\
+	(((u_char *)&(x))[0] | (((u_char *)&(x))[1] << 8))
+#define	CAC_GET4(x)							\
+	((((u_char *)&(x))[0] | (((u_char *)&(x))[1] << 8)) |		\
+	(((u_char *)&(x))[2] << 16 | (((u_char *)&(x))[3] << 24)))
 
 struct cac_softc;
 struct cac_ccb;
 
 struct cac_context {
-	void		(*cc_handler) __P((struct cac_ccb *, int));
+	void		(*cc_handler)(struct device *, void *, int);
 	struct device	*cc_dv;
 	void 		*cc_context;
 };
@@ -69,50 +91,55 @@ struct cac_ccb {
 	struct cac_context ccb_context;
 };
 
-#define	CAC_CCB_DATA_IN		0x0001
-#define	CAC_CCB_DATA_OUT	0x0002
+#define	CAC_CCB_DATA_IN		0x0001	/* Map describes inbound xfer */
+#define	CAC_CCB_DATA_OUT	0x0002	/* Map describes outbound xfer */
+#define	CAC_CCB_ACTIVE		0x0004	/* Command submitted to controller */
 
 struct cac_linkage {
-	void	(*cl_submit) __P((struct cac_softc *, paddr_t));
-	paddr_t	(*cl_completed) __P((struct cac_softc *));
-	int	(*cl_intr_pending) __P((struct cac_softc *));
-	void	(*cl_intr_enable) __P((struct cac_softc *, int));
-	int	(*cl_fifo_full) __P((struct cac_softc *));
+	struct	cac_ccb *(*cl_completed)(struct cac_softc *);
+	int	(*cl_fifo_full)(struct cac_softc *);
+	void	(*cl_intr_enable)(struct cac_softc *, int);
+	int	(*cl_intr_pending)(struct cac_softc *);
+	void	(*cl_submit)(struct cac_softc *, struct cac_ccb *);
 };
 
 struct cac_softc {
 	struct device		sc_dv;
+	kmutex_t		sc_mutex;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 	bus_dma_tag_t		sc_dmat;
 	bus_dmamap_t		sc_dmamap;
+	int			sc_nunits;
 	void			*sc_ih;
-	struct cac_linkage	*sc_cl;
-	char			*sc_typestr;
-	caddr_t			sc_ccbs;
+	void *			sc_ccbs;
 	paddr_t			sc_ccbs_paddr;
-	SIMPLEQ_HEAD(, cac_ccb)	sc_ccb_free;	
+	SIMPLEQ_HEAD(, cac_ccb)	sc_ccb_free;
 	SIMPLEQ_HEAD(, cac_ccb)	sc_ccb_queue;
-	SIMPLEQ_ENTRY(cac_softc) sc_chain;
+	kcondvar_t		sc_ccb_cv;
+	struct cac_linkage	sc_cl;
+
+	/* scsi ioctl from sd device */
+	int			(*sc_ioctl)(struct device *, u_long, void *);
+
+	struct sysmon_envsys    *sc_sme;
+	envsys_data_t		*sc_sensor;
 };
+
+/* XXX These have to become spinlocks in case of fine SMP */
+#define	CAC_LOCK(sc) splbio()
+#define	CAC_UNLOCK(sc, lock) splx(lock)
+typedef	int cac_lock_t;
 
 struct cac_attach_args {
 	int		caca_unit;
 };
 
-#define CACACF_UNIT	0
+int	cac_cmd(struct cac_softc *, int, void *, int, int, int, int,
+		struct cac_context *);
+int	cac_init(struct cac_softc *, const char *, int);
+int	cac_intr(void *);
 
-#define	cacacf_unit	cf_loc[CACACF_UNIT]
-
-#define	CACACF_UNIT_UNKNOWN 	-1
-
-int	cac_cmd __P((struct cac_softc *, int, void *, int, int, int, int, 
-		struct cac_context *));
-void	cac_minphys __P((struct buf *));
-int	cac_intr __P((void *));
-int	cac_init __P((struct cac_softc *, const char *));
-void	cac_ccb_free __P((struct cac_softc *, struct cac_ccb *));
-int	cac_ccb_start __P((struct cac_softc *, struct cac_ccb *));
-struct	cac_ccb *cac_ccb_alloc __P((struct cac_softc *, int));
+extern const struct	cac_linkage cac_l0;
 
 #endif	/* !_IC_CACVAR_H_ */

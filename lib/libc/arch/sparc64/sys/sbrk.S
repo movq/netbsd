@@ -1,4 +1,4 @@
-/*	$NetBSD: sbrk.S,v 1.3 1999/03/31 11:53:08 kleink Exp $	*/
+/*	$NetBSD: sbrk.S,v 1.9 2003/08/07 16:42:30 agc Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,7 +40,7 @@
 #if 0
 	.asciz "@(#)sbrk.s	8.1 (Berkeley) 6/4/93"
 #else
-	RCSID("$NetBSD: sbrk.S,v 1.3 1999/03/31 11:53:08 kleink Exp $")
+	RCSID("$NetBSD: sbrk.S,v 1.9 2003/08/07 16:42:30 agc Exp $")
 #endif
 #endif /* SYSLIBC_SCCS and not lint */
 
@@ -53,37 +49,59 @@
 	.globl	_C_LABEL(__curbrk)
 	.globl	_C_LABEL(_end)
 
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(sbrk, _sbrk)
+#endif
+
 	.data
+	.align	8
 _C_LABEL(__curbrk):
-	.long	_C_LABEL(_end)
+	.xword	_C_LABEL(_end)
 	.text
 
-ENTRY(sbrk)
+ENTRY(_sbrk)
 #ifdef PIC
+#ifdef BIGPIC
 	PIC_PROLOGUE(%o5,%o4)
-	ld	[%o5 + _C_LABEL(__curbrk)], %o2
-	ld	[%o2], %o3			! %o3 = old break
-	add	%o3, %o0, %o4			! %o4 = new break
-	mov	%o4, %o0			! copy for syscall
+	set	_C_LABEL(__curbrk), %o3
+	ldx	[%o5 + %o3], %o2
+	ldx	[%o2], %o3			/* %o3 = old break */
+	add	%o3, %o0, %o4			/* %o4 = new break */
+	mov	%o4, %o0			/* copy for syscall */
 	mov	SYS_break, %g1
-	t	ST_SYSCALL			! break(new_break)
-	bcc,a	1f				! if success,
-	 mov	%o3, %o0			!    set return value
+	t	ST_SYSCALL			/* break(new_break) */
+	bcc,a	1f				/* if success, */
+	 mov	%o3, %o0			/*    set return value */
 	ERROR()
 1:
-	retl					! and update curbrk
-	 st	%o4, [%o2]
+	retl					/* and update curbrk */
+	 stx	%o4, [%o2]
+#else
+	PIC_PROLOGUE(%o5,%o4)
+	ldx	[%o5 + _C_LABEL(__curbrk)], %o2
+	ldx	[%o2], %o3			/* %o3 = old break */
+	add	%o3, %o0, %o4			/* %o4 = new break */
+	mov	%o4, %o0			/* copy for syscall */
+	mov	SYS_break, %g1
+	t	ST_SYSCALL			/* break(new_break) */
+	bcc,a	1f				/* if success, */
+	 mov	%o3, %o0			/*    set return value */
+	ERROR()
+1:
+	retl					/* and update curbrk */
+	 stx	%o4, [%o2]
+#endif
 #else
 	sethi	%hi(_C_LABEL(__curbrk)), %o2
-	ld	[%o2 + %lo(_C_LABEL(__curbrk))], %o3	! %o3 = old break
-	add	%o3, %o0, %o4			! %o4 = new break
-	mov	%o4, %o0			! copy for syscall
+	ldx	[%o2 + %lo(_C_LABEL(__curbrk))], %o3	/* %o3 = old break */
+	add	%o3, %o0, %o4			/* %o4 = new break */
+	mov	%o4, %o0			/* copy for syscall */
 	mov	SYS_break, %g1
-	t	ST_SYSCALL			! break(new_break)
-	bcc,a	1f				! if success,
-	 mov	%o3, %o0			!    set return value
+	t	ST_SYSCALL			/* break(new_break) */
+	bcc,a	1f				/* if success, */
+	 mov	%o3, %o0			/*    set return value */
 	ERROR()
 1:
-	retl					! and update curbrk
-	 st	%o4, [%o2 + %lo(_C_LABEL(__curbrk))]
+	retl					/* and update curbrk */
+	 stx	%o4, [%o2 + %lo(_C_LABEL(__curbrk))]
 #endif

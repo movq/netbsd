@@ -1,7 +1,7 @@
-/*	$NetBSD: ibcs2_machdep.c,v 1.10 2000/01/10 19:28:15 matt Exp $	*/
+/*	$NetBSD: ibcs2_machdep.c,v 1.36 2008/04/28 20:23:24 martin Exp $	*/
 
 /*-
- * Copyright (c) 1997 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.36 2008/04/28 20:23:24 martin Exp $");
+
+#if defined(_KERNEL_OPT)
 #include "opt_vm86.h"
+#include "opt_compat_ibcs2.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,18 +63,22 @@
 #include <compat/ibcs2/ibcs2_syscallargs.h>
 
 void
-ibcs2_setregs(p, epp, stack)
-	struct proc *p;
+ibcs2_setregs(l, epp, stack)
+	struct lwp *l;
 	struct exec_package *epp;
 	u_long stack;
 {
-	register struct pcb *pcb = &p->p_addr->u_pcb;
-	register struct trapframe *tf;
+	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct trapframe *tf;
 
-	setregs(p, epp, stack);
-	pcb->pcb_savefpu.sv_env.en_cw = __iBCS2_NPXCW__;
-	tf = p->p_md.md_regs;
+	setregs(l, epp, stack);
+	if (i386_use_fxsave)
+		pcb->pcb_savefpu.sv_xmm.sv_env.en_cw = __iBCS2_NPXCW__;
+	else
+		pcb->pcb_savefpu.sv_87.sv_env.en_cw = __iBCS2_NPXCW__;
+	tf = l->l_md.md_regs;
 	tf->tf_eax = 0x2000000;		/* XXX base of heap */
+	tf->tf_cs = GSEL(LUCODEBIG_SEL, SEL_UPL);
 }
 
 /*
@@ -89,39 +92,25 @@ ibcs2_setregs(p, epp, stack)
  * specified pc, psl.
  */
 void
-ibcs2_sendsig(catcher, sig, mask, code)
-	sig_t catcher;
-	int sig;
-	sigset_t *mask;
-	u_long code;
+ibcs2_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 {
+	int sig = ksi->ksi_signo;
+	u_long code = KSI_TRAPCODE(ksi);
+	struct lwp *l = curlwp;
+	struct proc *p = l->l_proc;
+	int onstack, error;
 	/* XXX Need SCO sigframe format. */
-	struct proc *p = curproc;
-	struct trapframe *tf;
-	struct sigframe *fp, frame;
-	struct sigacts *psp = p->p_sigacts;
-	int onstack;
+	struct sigframe_sigcontext *fp = getframe(l, sig, &onstack), frame;
+	sig_t catcher = SIGACTION(p, sig).sa_handler;
+	struct trapframe *tf = l->l_md.md_regs;
 
-	tf = p->p_md.md_regs;
-
-	/* Do we need to jump onto the signal stack? */
-	onstack =
-	    (psp->ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
-	    (psp->ps_sigact[sig].sa_flags & SA_ONSTACK) != 0;
-
-	/* Allocate space for the signal handler context. */
-	if (onstack)
-		fp = (struct sigframe *)((caddr_t)psp->ps_sigstk.ss_sp +
-		    psp->ps_sigstk.ss_size);
-	else
-		fp = (struct sigframe *)tf->tf_esp;
 	fp--;
 
 	/* Build stack frame for signal trampoline. */
-	frame.sf_signum = native_to_ibcs2_sig[sig];
+	frame.sf_ra = (int)p->p_sigctx.ps_sigcode;
+	frame.sf_signum = native_to_ibcs2_signo[sig];
 	frame.sf_code = code;
 	frame.sf_scp = &fp->sf_sc;
-	frame.sf_handler = catcher;
 
 	/* Save register context. */
 #ifdef VM86
@@ -130,12 +119,13 @@ ibcs2_sendsig(catcher, sig, mask, code)
 		frame.sf_sc.sc_fs = tf->tf_vm86_fs;
 		frame.sf_sc.sc_es = tf->tf_vm86_es;
 		frame.sf_sc.sc_ds = tf->tf_vm86_ds;
-		frame.sf_sc.sc_eflags = get_vflags(p);
+		frame.sf_sc.sc_eflags = get_vflags(l);
+		(*p->p_emul->e_syscall_intern)(p);
 	} else
 #endif
 	{
-		__asm("movl %%gs,%w0" : "=r" (frame.sf_sc.sc_gs));
-		__asm("movl %%fs,%w0" : "=r" (frame.sf_sc.sc_fs));
+		frame.sf_sc.sc_gs = tf->tf_gs;
+		frame.sf_sc.sc_fs = tf->tf_fs;
 		frame.sf_sc.sc_es = tf->tf_es;
 		frame.sf_sc.sc_ds = tf->tf_ds;
 		frame.sf_sc.sc_eflags = tf->tf_eflags;
@@ -155,59 +145,46 @@ ibcs2_sendsig(catcher, sig, mask, code)
 	frame.sf_sc.sc_err = tf->tf_err;
 
 	/* Save signal stack. */
-	frame.sf_sc.sc_onstack = psp->ps_sigstk.ss_flags & SS_ONSTACK;
+	frame.sf_sc.sc_onstack = l->l_sigstk.ss_flags & SS_ONSTACK;
 
 	/* Save signal mask. */
 	frame.sf_sc.sc_mask = *mask;
 
-	if (copyout(&frame, fp, sizeof(frame)) != 0) {
+	sendsig_reset(l, sig);
+
+	mutex_exit(p->p_lock);
+	error = copyout(&frame, fp, sizeof(frame));
+	mutex_enter(p->p_lock);
+
+	if (error != 0) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
 		 */
-		sigexit(p, SIGILL);
+		sigexit(l, SIGILL);
 		/* NOTREACHED */
 	}
 
-	/*
-	 * Build context to run handler in.
-	 */
-	__asm("movl %w0,%%gs" : : "r" (GSEL(GUDATA_SEL, SEL_UPL)));
-	__asm("movl %w0,%%fs" : : "r" (GSEL(GUDATA_SEL, SEL_UPL)));
-	tf->tf_es = GSEL(GUDATA_SEL, SEL_UPL);
-	tf->tf_ds = GSEL(GUDATA_SEL, SEL_UPL);
-	tf->tf_eip = (int)psp->ps_sigcode;
-	tf->tf_cs = GSEL(GUCODE_SEL, SEL_UPL);
-	tf->tf_eflags &= ~(PSL_T|PSL_VM|PSL_AC);
-	tf->tf_esp = (int)fp;
-	tf->tf_ss = GSEL(GUDATA_SEL, SEL_UPL);
+	buildcontext(l, GUCODEBIG_SEL, catcher, fp);
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
-		psp->ps_sigstk.ss_flags |= SS_ONSTACK;
+		l->l_sigstk.ss_flags |= SS_ONSTACK;
 }
 
 int
-ibcs2_sys_sysmachine(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+ibcs2_sys_sysmachine(struct lwp *l, const struct ibcs2_sys_sysmachine_args *uap, register_t *retval)
 {
-	struct ibcs2_sys_sysmachine_args /* {
+	/* {
 		syscallarg(int) cmd;
 		syscallarg(int) arg;
-	} */ *uap = v;
+	} */
 	int val, error;
 
 	switch (SCARG(uap, cmd)) {
 	case IBCS2_SI86FPHW:
-		val = IBCS2_FP_NO;
-#ifdef MATH_EMULATE
-		val = IBCS2_FP_SW;
-#else
-		val = IBCS2_FP_387;		/* a real coprocessor */
-#endif
-		if ((error = copyout((caddr_t)&val, (caddr_t)SCARG(uap, arg),
+		val = IBCS2_FP_387;
+		if ((error = copyout((void *)&val, (void *)SCARG(uap, arg),
 				     sizeof(val))))
 			return error;
 		break;

@@ -1,4 +1,4 @@
-/*	$NetBSD: dr_1.c,v 1.10 1999/09/30 18:01:33 jsm Exp $	*/
+/*	$NetBSD: dr_1.c,v 1.23 2008/01/28 01:58:01 dholland Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,21 @@
 #if 0
 static char sccsid[] = "@(#)dr_1.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: dr_1.c,v 1.10 1999/09/30 18:01:33 jsm Exp $");
+__RCSID("$NetBSD: dr_1.c,v 1.23 2008/01/28 01:58:01 dholland Exp $");
 #endif
 #endif /* not lint */
 
-#include "driver.h"
+#include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include "extern.h"
+#include "driver.h"
+
+static int	fightitout(struct ship *, struct ship *, int);
 
 void
-unfoul()
+unfoul(void)
 {
 	struct ship *sp;
 	struct ship *to;
@@ -62,14 +64,14 @@ unfoul()
 			    !is_toughmelee(sp, to, 0, 0))
 				continue;
 			for (i = fouled2(sp, to); --i >= 0;)
-				if (die() <= 2)
+				if (dieroll() <= 2)
 					cleanfoul(sp, to, 0);
 		}
 	}
 }
 
 void
-boardcomp()
+boardcomp(void)
 {
 	int crew[3];
 	struct ship *sp, *sq;
@@ -133,16 +135,14 @@ boardcomp()
 	}
 }
 
-int
-fightitout(from, to, key)
-struct ship *from, *to;
-int key;
+static int
+fightitout(struct ship *from, struct ship *to, int key)
 {
 	struct ship *fromcap, *tocap;
 	int crewfrom[3], crewto[3], menfrom, mento;
 	int pcto, pcfrom, fromstrength, strengthto, frominjured, toinjured;
 	int topoints;
-	int index, totalfrom = 0, totalto = 0;
+	int indx, totalfrom = 0, totalto = 0;
 	int count;
 	char message[60];
 
@@ -170,15 +170,15 @@ int key;
 	     ((fromstrength < strengthto * 3 && strengthto < fromstrength * 3)
 	      || fromstrength == -1) && count < 4;
 	     count++) {
-		index = fromstrength/10;
-		if (index > 8)
-			index = 8;
-		toinjured = MT[index][2 - die() / 3];
+		indx = fromstrength/10;
+		if (indx > 8)
+			indx = 8;
+		toinjured = MT[indx][2 - dieroll() / 3];
 		totalto += toinjured;
-		index = strengthto/10;
-		if (index > 8)
-			index = 8;
-		frominjured = MT[index][2 - die() / 3];
+		indx = strengthto/10;
+		if (indx > 8)
+			indx = 8;
+		frominjured = MT[indx][2 - dieroll() / 3];
 		totalfrom += frominjured;
 		menfrom -= frominjured;
 		mento -= toinjured;
@@ -187,18 +187,18 @@ int key;
 	}
 	if (fromstrength >= strengthto * 3 || count == 4) {
 		unboard(to, from, 0);
-		subtract(from, totalfrom, crewfrom, fromcap, pcfrom);
-		subtract(to, totalto, crewto, tocap, pcto);
+		subtract(from, fromcap, totalfrom, crewfrom, pcfrom);
+		subtract(to, tocap, totalto, crewto, pcto);
 		makemsg(from, "boarders from %s repelled", to->shipname);
-		(void) sprintf(message, "killed in melee: %d.  %s: %d",
+		sprintf(message, "killed in melee: %d.  %s: %d",
 			totalto, from->shipname, totalfrom);
 		Writestr(W_SIGNAL, to, message);
 		if (key)
 			return 1;
 	} else if (strengthto >= fromstrength * 3) {
 		unboard(from, to, 0);
-		subtract(from, totalfrom, crewfrom, fromcap, pcfrom);
-		subtract(to, totalto, crewto, tocap, pcto);
+		subtract(from, fromcap, totalfrom, crewfrom, pcfrom);
+		subtract(to, tocap, totalto, crewto, pcto);
 		if (key) {
 			if (fromcap != from)
 				Write(W_POINTS, fromcap,
@@ -219,13 +219,12 @@ int key;
 			Write(W_POINTS, to, topoints, 0, 0, 0);
 			mento = crewto[0] ? crewto[0] : crewto[1];
 			if (mento) {
-				subtract(to, mento, crewto, tocap, pcto);
-				subtract(from, - mento, crewfrom, to, 0);
+				subtract(to, tocap, mento, crewto, pcto);
+				subtract(from, to, - mento, crewfrom, 0);
 			}
-			(void) sprintf(message, "captured by the %s!",
-				to->shipname);
+			sprintf(message, "captured by the %s!", to->shipname);
 			Writestr(W_SIGNAL, from, message);
-			(void) sprintf(message, "killed in melee: %d.  %s: %d",
+			sprintf(message, "killed in melee: %d.  %s: %d",
 				totalto, from->shipname, totalfrom);
 			Writestr(W_SIGNAL, to, message);
 			mento = 0;
@@ -236,7 +235,7 @@ int key;
 }
 
 void
-resolve()
+resolve(void)
 {
 	int thwart;
 	struct ship *sp, *sq;
@@ -246,7 +245,7 @@ resolve()
 			continue;
 		for (sq = sp + 1; sq < ls; sq++)
 			if (sq->file->dir && meleeing(sp, sq) && meleeing(sq, sp))
-				(void) fightitout(sp, sq, 0);
+				fightitout(sp, sq, 0);
 		thwart = 2;
 		foreachship(sq) {
 			if (sq->file->dir && meleeing(sq, sp))
@@ -267,14 +266,14 @@ resolve()
 }
 
 void
-compcombat()
+compcombat(void)
 {
 	int n;
 	struct ship *sp;
 	struct ship *closest;
 	int crew[3], men = 0, target, temp;
 	int r, guns, ready, load, car;
-	int index, rakehim, sternrake;
+	int indx, rakehim, sternrake;
 	int shootat, hit;
 
 	foreachship(sp) {
@@ -346,21 +345,21 @@ compcombat()
 			if (temp > 8)
 				temp -= 8;
 			sternrake = temp > 4 && temp < 6;
-			index = guns;
+			indx = guns;
 			if (target < 3)
-				index += car;
-			index = (index - 1) / 3;
-			index = index > 8 ? 8 : index;
+				indx += car;
+			indx = (indx - 1) / 3;
+			indx = indx > 8 ? 8 : indx;
 			if (!rakehim)
-				hit = HDT[index][target-1];
+				hit = HDT[indx][target-1];
 			else
-				hit = HDTrake[index][target-1];
+				hit = HDTrake[indx][target-1];
 			if (rakehim && sternrake)
 				hit++;
-			hit += QUAL[index][capship(sp)->specs->qual - 1];
+			hit += QUAL[indx][capship(sp)->specs->qual - 1];
 			for (n = 0; n < 3 && sp->file->captured == 0; n++)
 				if (!crew[n]) {
-					if (index <= 5)
+					if (indx <= 5)
 						hit--;
 					else
 						hit -= 2;
@@ -370,18 +369,18 @@ compcombat()
 					sp->file->readyL &= ~R_INITIAL;
 				else
 					sp->file->readyR &= ~R_INITIAL;
-				if (index <= 3)
+				if (indx <= 3)
 					hit++;
 				else
 					hit += 2;
 			}
 			if (sp->file->captured != 0) {
-				if (index <= 1)
+				if (indx <= 1)
 					hit--;
 				else
 					hit -= 2;
 			}
-			hit += AMMO[index][load - 1];
+			hit += AMMO[indx][load - 1];
 			temp = sp->specs->class;
 			if ((temp >= 5 || temp == 1) && windspeed == 5)
 				hit--;
@@ -392,14 +391,14 @@ compcombat()
 			if (hit >= 0) {
 				if (load != L_GRAPE)
 					hit = hit > 10 ? 10 : hit;
-				table(shootat, load, hit, closest, sp, die());
+				table(sp, closest, shootat, load, hit, dieroll());
 			}
 		}
 	}
 }
 
 int
-next()
+next(void)
 {
 	if (++turn % 55 == 0) {
 		if (alive)
@@ -420,27 +419,24 @@ next()
 				bestship = s;
 			}
 		}
-		if (best > 0.0) {
+		if (best > 0.0 && bestship) {
 			char *tp = getenv("WOTD");
 			const char *p;
 			if (tp == 0)
 				p = "Driver";
 			else {
-				if (islower(*tp))
-					*tp = toupper(*tp);
+				*tp = toupper((unsigned char)*tp);
 				p = tp;
 			}
-			(void) strncpy(bestship->file->captain, p,
+			strlcpy(bestship->file->captain, p,
 				sizeof bestship->file->captain);
-			bestship->file->captain
-				[sizeof bestship->file->captain - 1] = 0;
 			logger(bestship);
 		}
 		return -1;
 	}
 	Write(W_TURN, SHIP(0), turn, 0, 0, 0);
-	if (turn % 7 == 0 && (die() >= cc->windchange || !windspeed)) {
-		switch (die()) {
+	if (turn % 7 == 0 && (dieroll() >= cc->windchange || !windspeed)) {
+		switch (dieroll()) {
 		case 1:
 			winddir = 1;
 			break;
@@ -464,7 +460,7 @@ next()
 		if (winddir < 1)
 			winddir += 8;
 		if (windspeed)
-			switch (die()) {
+			switch (dieroll()) {
 			case 1:
 			case 2:
 				windspeed--;

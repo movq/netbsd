@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_cb.h,v 1.12 1998/02/09 17:43:56 perry Exp $	*/
+/*	$NetBSD: raw_cb.h,v 1.20 2007/02/17 22:34:10 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -59,19 +55,20 @@ struct rawcb {
 #define	RAWRCVQ		8192
 
 #ifdef _KERNEL
-LIST_HEAD(, rawcb) rawcb;		/* head of list */
+LIST_HEAD(rawcbhead, rawcb);
+extern	struct	rawcbhead rawcb;		/* head of list */
 
-int	raw_attach __P((struct socket *, int));
-void	*raw_ctlinput __P((int, struct sockaddr *, void *));
-void	raw_detach __P((struct rawcb *));
-void	raw_disconnect __P((struct rawcb *));
-void	raw_init __P((void));
-void	raw_input __P((struct mbuf *, ...));
-int	raw_usrreq __P((struct socket *,
-	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *));
-void	raw_setsockaddr __P((struct rawcb *, struct mbuf *));
-void	raw_setpeeraddr __P((struct rawcb *, struct mbuf *));
+int	raw_attach(struct socket *, int);
+void	*raw_ctlinput(int, const struct sockaddr *, void *);
+void	raw_detach(struct rawcb *);
+void	raw_disconnect(struct rawcb *);
+void	raw_init(void);
+void	raw_input(struct mbuf *, ...);
+int	raw_usrreq(struct socket *,
+	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct lwp *);
+void	raw_setsockaddr(struct rawcb *, struct mbuf *);
+void	raw_setpeeraddr(struct rawcb *, struct mbuf *);
 
 #endif /* _KERNEL */
 
-#endif /* _NET_RAW_CB_H_ */
+#endif /* !_NET_RAW_CB_H_ */

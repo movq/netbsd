@@ -1,4 +1,4 @@
-/*	$NetBSD: dr_4.c,v 1.7 1999/02/10 00:45:45 hubertf Exp $	*/
+/*	$NetBSD: dr_4.c,v 1.13 2003/08/07 09:37:42 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,16 +34,15 @@
 #if 0
 static char sccsid[] = "@(#)dr_4.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: dr_4.c,v 1.7 1999/02/10 00:45:45 hubertf Exp $");
+__RCSID("$NetBSD: dr_4.c,v 1.13 2003/08/07 09:37:42 agc Exp $");
 #endif
 #endif /* not lint */
 
-#include "extern.h"
 #include <stdlib.h>
+#include "extern.h"
 
 void
-ungrap(from, to)
-struct ship *from, *to;
+ungrap(struct ship *from, struct ship *to)
 {
 	int k;
 	char friend;
@@ -56,7 +51,7 @@ struct ship *from, *to;
 		return;
 	friend = capship(from)->nationality == capship(to)->nationality;
 	while (--k >= 0) {
-		if (friend || die() < 3) {
+		if (friend || dieroll() < 3) {
 			cleangrapple(from, to, 0);
 			makesignal(from, "ungrappling $$", to);
 		}
@@ -64,10 +59,9 @@ struct ship *from, *to;
 }
 
 void
-grap(from, to)
-struct ship *from, *to;
+grap(struct ship *from, struct ship *to)
 {
-	if (capship(from)->nationality != capship(to)->nationality && die() > 2)
+	if (capship(from)->nationality != capship(to)->nationality && dieroll() > 2)
 		return;
 	Write(W_GRAP, from, to->file->index, 0, 0, 0);
 	Write(W_GRAP, to, from->file->index, 0, 0, 0);

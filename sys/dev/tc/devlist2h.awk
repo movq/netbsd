@@ -1,5 +1,5 @@
 #! /usr/bin/awk -f
-#	$NetBSD: devlist2h.awk,v 1.6 1998/01/09 06:56:23 thorpej Exp $
+#	$NetBSD: devlist2h.awk,v 1.10 2007/04/12 21:35:08 matt Exp $
 #
 # Copyright (c) 1995, 1996 Christopher G. Demetriou
 # All rights reserved.
@@ -30,15 +30,16 @@
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 BEGIN {
-	nproducts = 0
+	nproducts = ndevices = blanklines = 0
 	dfile="tcdevs_data.h"
 	hfile="tcdevs.h"
 }
 NR == 1 {
 	VERSION = $0
 	gsub("\\$", "", VERSION)
+	gsub(/ $/, "", VERSION)
 
-	printf("/*\t\$NetBSD\$\t*/\n\n") > dfile
+	printf("/*\t$NetBSD" "$\t*/\n\n") > dfile
 	printf("/*\n") > dfile
 	printf(" * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.\n") \
 	    > dfile
@@ -47,7 +48,7 @@ NR == 1 {
 	printf(" *\t%s\n", VERSION) > dfile
 	printf(" */\n") > dfile
 
-	printf("/*\t\$NetBSD\$\t*/\n\n") > hfile
+	printf("/*\t$NetBSD" "$\t*/\n\n") > hfile
 	printf("/*\n") > hfile
 	printf(" * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.\n") \
 	    > hfile
@@ -58,7 +59,7 @@ NR == 1 {
 
 	next
 }
-$1 == "device" {
+NF > 0 && $1 == "device" {
 	ndevices++
 
 	devices[ndevices, 0] = $2;		# devices id
@@ -122,7 +123,7 @@ END {
 
 	printf("\n") > dfile
 
-	printf("struct tc_knowndev tc_knowndevs[] = {\n") > dfile
+	printf("const struct tc_knowndev tc_knowndevs[] = {\n") > dfile
 	for (i = 1; i <= ndevices; i++) {
 		printf("\t{\n") > dfile
 		printf("\t    \"%-8s\",\n", devices[i, 0]) \
@@ -136,4 +137,6 @@ END {
 	}
 	printf("\t{ NULL, NULL, NULL, }\n") > dfile
 	printf("};\n") > dfile
+	close(dfile)
+	close(hfile)
 }

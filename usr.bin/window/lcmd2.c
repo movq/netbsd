@@ -1,4 +1,4 @@
-/*	$NetBSD: lcmd2.c,v 1.10 1998/10/14 00:58:47 wsanchez Exp $	*/
+/*	$NetBSD: lcmd2.c,v 1.14 2006/12/18 20:04:55 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)lcmd2.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: lcmd2.c,v 1.10 1998/10/14 00:58:47 wsanchez Exp $");
+__RCSID("$NetBSD: lcmd2.c,v 1.14 2006/12/18 20:04:55 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,13 +51,12 @@ __RCSID("$NetBSD: lcmd2.c,v 1.10 1998/10/14 00:58:47 wsanchez Exp $");
 #include "lcmd.h"
 #include "alias.h"
 
-int	printalias __P((void *, struct var *));
-int	printvar __P((void *, struct var *));
-char	*strtime __P((struct timeval *t));
+int	printalias(void *, struct var *);
+int	printvar(void *, struct var *);
+char	*strtime(struct timeval *t);
 
 void
-l_iostat(v, a)
-	struct value *v, *a;
+l_iostat(struct value *v __unused, struct value *a __unused)
 {
 	struct ww *w;
 
@@ -109,12 +104,11 @@ l_iostat(v, a)
 
 struct lcmd_arg arg_time[] = {
 	{ "who",	1,	ARG_STR },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_time(v, a)
-	struct value *v, *a;
+l_time(struct value *v __unused, struct value *a)
 {
 	struct ww *w;
 	struct rusage rusage;
@@ -155,8 +149,7 @@ l_time(v, a)
 }
 
 char *
-strtime(t)
-	struct timeval *t;
+strtime(struct timeval *t)
 {
 	char fill = 0;
 	static char buf[20];
@@ -178,14 +171,13 @@ strtime(t)
 		t->tv_sec %= 60;
 		fill++;
 	}
-	(void) sprintf(p, fill ? "%02ld.%02d" : "%ld.%02ld",
+	(void) sprintf(p, fill ? "%02ld.%02ld" : "%ld.%02ld",
 		t->tv_sec, t->tv_usec / 10000);
 	return buf;
 }
 
 void
-l_list(v, a)
-	struct value *v, *a;
+l_list(struct value *v __unused, struct value *a __unused)
 {
 	struct ww *w, *wp;
 	int i;
@@ -217,8 +209,7 @@ l_list(v, a)
 }
 
 void
-l_variable(v, a)
-	struct value *v, *a;
+l_variable(struct value *v __unused, struct value *a __unused)
 {
 	struct ww *w;
 
@@ -232,9 +223,7 @@ l_variable(v, a)
 }
 
 int
-printvar(vw, r)
-	void *vw;
-	struct var *r;
+printvar(void *vw, struct var *r)
 {
 	struct ww *w = vw;
 	if (more(w, 0) == 2)
@@ -256,12 +245,11 @@ printvar(vw, r)
 
 struct lcmd_arg arg_def_shell[] = {
 	{ "",	0,		ARG_ANY|ARG_LIST },
-	{ 0 }
+	{ NULL,	0,		0 }
 };
 
 void
-l_def_shell(v, a)
-	struct value *v, *a;
+l_def_shell(struct value *v, struct value *a)
 {
 	char **pp;
 	struct value *vp;
@@ -299,12 +287,11 @@ l_def_shell(v, a)
 struct lcmd_arg arg_alias[] = {
 	{ "",	0,		ARG_STR },
 	{ "",	0,		ARG_STR|ARG_LIST },
-	{ 0 }
+	{ NULL,	0,		0 }
 };
 
 void
-l_alias(v, a)
-	struct value *v, *a;
+l_alias(struct value *v, struct value *a)
 {
 	if (a->v_type == V_ERR) {
 		struct ww *w;
@@ -355,9 +342,7 @@ l_alias(v, a)
 }
 
 int
-printalias(vw, a)
-	void *vw;
-	struct alias *a;
+printalias(void *vw, struct var *a)
 {
 	struct ww *w = vw;
 	if (more(w, 0) == 2)
@@ -368,12 +353,11 @@ printalias(vw, a)
 
 struct lcmd_arg arg_unalias[] = {
 	{ "alias",	1,	ARG_STR },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_unalias(v, a)
-	struct value *v, *a;
+l_unalias(struct value *v, struct value *a)
 {
 	if (a->v_type == ARG_STR)
 		v->v_num = alias_unset(a->v_str);
@@ -383,12 +367,11 @@ l_unalias(v, a)
 struct lcmd_arg arg_echo[] = {
 	{ "window",	1,	ARG_NUM },
 	{ "",		0,	ARG_ANY|ARG_LIST },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_echo(v, a)
-	struct value *v, *a;
+l_echo(struct value *v __unused, struct value *a)
 {
 	char buf[20];
 	struct ww *w;

@@ -1,7 +1,8 @@
-/*	$NetBSD: cpu.c,v 1.6 2000/02/08 12:49:06 tsubai Exp $	*/
+/*	$NetBSD: cpu.c,v 1.48 2007/11/17 18:02:42 macallan Exp $	*/
 
 /*-
- * Copyright (C) 1998, 1999 Internet Research Institute, Inc.
+ * Copyright (c) 2001 Tsubai Masanari.
+ * Copyright (c) 1998, 1999, 2001 Internet Research Institute, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,25 +32,70 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.48 2007/11/17 18:02:42 macallan Exp $");
+
+#include "opt_ppcparam.h"
+#include "opt_multiprocessor.h"
+#include "opt_interrupt.h"
+#include "opt_altivec.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/types.h>
+#include <sys/lwp.h>
+#include <sys/user.h>
 
+#include <uvm/uvm_extern.h>
 #include <dev/ofw/openfirm.h>
+#include <powerpc/oea/hid.h>
+#include <powerpc/oea/bat.h>
+#include <powerpc/openpic.h>
+#include <powerpc/atomic.h>
+#include <powerpc/spr.h>
+#ifdef ALTIVEC
+#include <powerpc/altivec.h>
+#endif
+
+#ifdef MULTIPROCESSOR
+#include <arch/powerpc/pic/picvar.h>
+#include <arch/powerpc/pic/ipivar.h>
+#endif
+
 #include <machine/autoconf.h>
+#include <machine/fpu.h>
+#include <machine/pcb.h>
+#include <machine/pio.h>
+#include <machine/trap.h>
 
-static int cpumatch __P((struct device *, struct cfdata *, void *));
-static void cpuattach __P((struct device *, struct device *, void *));
+#include "pic_openpic.h"
 
-static void ohare_init __P((void));
-static void display_l2cr __P((void));
+#ifndef OPENPIC
+#if NPIC_OPENPIC > 0
+#define OPENPIC
+#endif /* NOPENPIC > 0 */
+#endif /* OPENPIC */
 
-struct cfattach cpu_ca = {
-	sizeof(struct device), cpumatch, cpuattach
-};
+int cpumatch(struct device *, struct cfdata *, void *);
+void cpuattach(struct device *, struct device *, void *);
+
+void identifycpu(char *);
+static void ohare_init(void);
+
+CFATTACH_DECL(cpu, sizeof(struct device),
+    cpumatch, cpuattach, NULL, NULL);
 
 extern struct cfdriver cpu_cd;
-extern int powersave;
+
+#define HH_INTR_SECONDARY	0xf80000c0
+#define HH_ARBCONF		0xf8000090
+
+extern uint32_t ticks_per_intr;
+
+#ifdef OPENPIC
+extern void openpic_set_priority(int, int);
+#endif
 
 int
 cpumatch(parent, cf, aux)
@@ -58,62 +104,88 @@ cpumatch(parent, cf, aux)
 	void *aux;
 {
 	struct confargs *ca = aux;
+	int *reg = ca->ca_reg;
+	int node;
 
-	if (strcmp(ca->ca_name, cpu_cd.cd_name))
+	if (strcmp(ca->ca_name, cpu_cd.cd_name) != 0)
 		return 0;
 
-	return 1;
+	node = OF_finddevice("/cpus");
+	if (node != -1) {
+		for (node = OF_child(node); node != 0; node = OF_peer(node)) {
+			uint32_t cpunum;
+			int l;
+			l = OF_getprop(node, "reg", &cpunum, sizeof(cpunum));
+			if (l == 4 && reg[0] == cpunum)
+				return 1;
+		}
+	}
+	switch (reg[0]) {
+	case 0:	/* primary CPU */
+		return 1;
+	case 1:	/* secondary CPU */
+		if (OF_finddevice("/hammerhead") != -1)
+			if (in32rb(HH_ARBCONF) & 0x02)
+				return 1;
+		break;
+	}
+
+	return 0;
 }
 
-#define MPC601		1
-#define MPC603		3
-#define MPC604		4
-#define MPC603e		6
-#define MPC603ev	7
-#define MPC750		8
-#define MPC7400		12
+void cpu_OFgetspeed(struct device *, struct cpu_info *);
 
-#define HID0_DOZE	0x00800000
-#define HID0_NAP	0x00400000
-#define HID0_SLEEP	0x00200000
-#define HID0_DPM	0x00100000	/* 1: DPM enable */
+void
+cpu_OFgetspeed(struct device *self, struct cpu_info *ci)
+{
+	int	node;
+
+	node = OF_finddevice("/cpus");
+	if (node != -1) {
+		for (node = OF_child(node); node; node = OF_peer(node)) {
+			uint32_t cpunum;
+			int l;
+			l = OF_getprop(node, "reg", &cpunum, sizeof(cpunum));
+			if (l == 4 && ci->ci_cpuid == cpunum) {
+				uint32_t cf;
+				l = OF_getprop(node, "clock-frequency",
+						&cf, sizeof(cf));
+				if (l == 4)
+					ci->ci_khz = cf / 1000;
+				break;
+			}
+		}
+	}
+}
 
 void
 cpuattach(parent, self, aux)
 	struct device *parent, *self;
 	void *aux;
 {
-	int hid0, pvr;
+	struct cpu_info *ci;
+	struct confargs *ca = aux;
+	int id = ca->ca_reg[0];
 
-	__asm __volatile ("mfpvr %0" : "=r"(pvr));
-	switch (pvr >> 16) {
-	case MPC603:
-	case MPC603e:
-	case MPC603ev:
-		/* Select DOZE power-saving mode. */
-		__asm __volatile ("mfspr %0,1008" : "=r"(hid0));
-		hid0 &= ~(HID0_DOZE | HID0_NAP | HID0_SLEEP);
-		hid0 |= HID0_DOZE | HID0_DPM;
-		__asm __volatile ("mtspr 1008,%0" :: "r"(hid0));
-		powersave = 1;
-		break;
-	case MPC750:
-	case MPC7400:
-		/* Select NAP power-saving mode. */
-		__asm __volatile ("mfspr %0,1008" : "=r"(hid0));
-		hid0 &= ~(HID0_DOZE | HID0_NAP | HID0_SLEEP);
-		hid0 |= HID0_NAP | HID0_DPM;
-		__asm __volatile ("mtspr 1008,%0" :: "r"(hid0));
-		powersave = 1;
-		break;
+	ci = cpu_attach_common(self, id);
+	if (ci == NULL)
+		return;
+
+	if (ci->ci_khz == 0) {
+		cpu_OFgetspeed(self, ci);
 	}
 
-	if ((pvr >> 16) == MPC750 || (pvr >> 16) == MPC7400)
-		display_l2cr();
-	else if (OF_finddevice("/bandit/ohare") != -1)
+	if (id > 0) {
+#ifdef MULTIPROCESSOR
+		cpu_spinup(self, ci);
+#endif
+		return;
+	}
+
+	if (OF_finddevice("/bandit/ohare") != -1) {
+		printf("%s", self->dv_xname);
 		ohare_init();
-	else
-		printf("\n");
+	}
 }
 
 #define CACHE_REG 0xf8000000
@@ -121,10 +193,10 @@ cpuattach(parent, self, aux)
 void
 ohare_init()
 {
-	u_int *cache_reg, x;
+	volatile uint32_t *cache_reg, x;
 
 	/* enable L2 cache */
-	cache_reg = mapiodev(CACHE_REG, NBPG);
+	cache_reg = mapiodev(CACHE_REG, PAGE_SIZE);
 	if (((cache_reg[2] >> 24) & 0x0f) >= 3) {
 		x = cache_reg[4];
 		if ((x & 0x10) == 0)
@@ -137,76 +209,132 @@ ohare_init()
 	}
 }
 
-#define L2CR 1017
+#ifdef MULTIPROCESSOR
 
-#define L2CR_L2E	0x80000000 /* 0: L2 enable */
-#define L2CR_L2PE	0x40000000 /* 1: L2 data parity enable */
-#define L2CR_L2SIZ	0x30000000 /* 2-3: L2 size */
-#define  L2SIZ_RESERVED		0x00000000
-#define  L2SIZ_256K		0x10000000
-#define  L2SIZ_512K		0x20000000
-#define  L2SIZ_1M	0x30000000
-#define L2CR_L2CLK	0x0e000000 /* 4-6 */
-#define L2CR_L2RAM	0x01800000 /* 7-8: L2 RAM type */
-#define  L2RAM_FLOWTHRU_BURST	0x00000000
-#define  L2RAM_PIPELINE_BURST	0x01000000
-#define  L2RAM_PIPELINE_LATE	0x01800000
-#define L2CR_L2DO	0x00400000 /* 9: L2 data-only.
-				      Setting this bit disables instruction
-				      caching. */
-#define L2CR_L2I	0x00200000 /* 10: L2 global invalidate. */
-#define L2CR_L2CTL	0x00100000 /* 11: L2 RAM control (ZZ enable).
-				      Enables automatic operation of the
-				      L2ZZ (low-power mode) signal. */
-#define L2CR_L2WT	0x00080000 /* 12: L2 write-through. */
-#define L2CR_L2TS	0x00040000 /* 13: L2 test support. */
-#define L2CR_L2OH	0x00030000 /* 14-15: L2 output hold. */
-#define L2CR_L2SL	0x00008000 /* 16: L2 DLL slow. */
-#define L2CR_L2DF	0x00004000 /* 17: L2 differential clock. */
-#define L2CR_L2BYP	0x00002000 /* 18: L2 DLL bypass. */
-#define L2CR_L2IP	0x00000001 /* 31: L2 global invalidate in progress
-				      (read only). */
+int
+md_setup_trampoline(volatile struct cpu_hatch_data *h, struct cpu_info *ci)
+{
+#ifdef OPENPIC
+	if (openpic_base) {
+		uint32_t kl_base = 0x80000000;	/* XXX */
+		uint32_t gpio = kl_base + 0x5c;	/* XXX */
+		u_int node, off;
+		char cpupath[32];
+
+		/* construct an absolute branch instruction */
+		*(u_int *)EXC_RST =		/* ba cpu_spinup_trampoline */
+		    0x48000002 | (u_int)cpu_spinup_trampoline;
+		__syncicache((void *)EXC_RST, 0x100);
+		h->running = -1;
+
+		/* see if there's an OF property for the reset register */
+		sprintf(cpupath, "/cpus/@%x", ci->ci_cpuid);
+		node = OF_finddevice(cpupath);
+		if (node == -1) {
+			printf(": no OF node for CPU %d?\n", ci->ci_cpuid);
+			return -1;
+		}
+		if (OF_getprop(node, "soft-reset", &off, 4) == 4) {
+			gpio = kl_base + off;
+		}
+
+		/* Start secondary CPU. */
+#if 1
+		out8(gpio, 4);
+		out8(gpio, 0);
+#else
+		openpic_write(OPENPIC_PROC_INIT, (1 << 1));
+#endif
+	} else {
+#endif /* OPENPIC */
+		/* Start secondary CPU and stop timebase. */
+		out32(0xf2800000, (int)cpu_spinup_trampoline);
+		ppc_send_ipi(1, PPC_IPI_NOMESG);
+#ifdef OPENPIC
+	}
+#endif
+	return 1;
+}
 
 void
-display_l2cr()
+md_presync_timebase(volatile struct cpu_hatch_data *h)
 {
-	u_int l2cr;
+#ifdef OPENPIC
+	if (openpic_base) {
+		uint64_t tb;
 
-	__asm __volatile ("mfspr %0, 1017" : "=r"(l2cr));
+		/* Sync timebase. */
+		tb = mftb();
+		tb += 100000;  /* 3ms @ 33MHz */
 
-	if (l2cr & L2CR_L2E) {
-		switch (l2cr & L2CR_L2SIZ) {
-		case L2SIZ_256K:
-			printf(": 256KB");
-			break;
-		case L2SIZ_512K:
-			printf(": 512KB");
-			break;
-		case L2SIZ_1M:
-			printf(": 1MB");
-			break;
-		default:
-			printf(": unknown size");
-		}
-#if 0
-		switch (l2cr & L2CR_L2RAM) {
-		case L2RAM_FLOWTHRU_BURST:
-			printf(" Flow-through synchronous burst SRAM");
-			break;
-		case L2RAM_PIPELINE_BURST:
-			printf(" Pipelined synchronous burst SRAM");
-			break;
-		case L2RAM_PIPELINE_LATE:
-			printf(" Pipelined synchronous late-write SRAM");
-			break;
-		default:
-			printf(" unknown type");
-		}
+		h->tbu = tb >> 32;
+		h->tbl = tb & 0xffffffff;
 
-		if (l2cr & L2CR_L2PE)
-			printf(" with parity");
-#endif
-		printf(" backside cache");
+		while (tb > mftb())
+			;
+
+		__asm volatile ("sync; isync");
+		h->running = 0;
+
+		delay(500000);
+	} else
+#endif /* OPENPIC */
+	{
+		/* sync timebase (XXX shouldn't be zero'ed) */
+		__asm volatile ("mttbl %0; mttbu %0; mttbl %0" :: "r"(0));
 	}
-	printf("\n");
 }
+
+void
+md_start_timebase(volatile struct cpu_hatch_data *h)
+{
+	int i;
+#ifdef OPENPIC
+	if (!openpic_base) {
+#endif
+		/*
+		 * wait for secondary spin up (1.5ms @ 604/200MHz)
+		 * XXX we cannot use delay() here because timebase is not
+		 * running.
+		 */
+		for (i = 0; i < 100000; i++)
+			if (h->running)
+				break;
+
+		/* Start timebase. */
+		out32(0xf2800000, 0x100);
+		ppc_send_ipi(1, PPC_IPI_NOMESG);
+#ifdef OPENPIC
+	}
+#endif
+}
+
+void
+md_sync_timebase(volatile struct cpu_hatch_data *h)
+{
+#ifdef OPENPIC
+	if (openpic_base) {
+		/* Sync timebase. */
+		u_int tbu = h->tbu;
+		u_int tbl = h->tbl;
+		while (h->running == -1)
+			;
+		__asm volatile ("sync; isync");
+		__asm volatile ("mttbl %0" :: "r"(0));
+		__asm volatile ("mttbu %0" :: "r"(tbu));
+		__asm volatile ("mttbl %0" :: "r"(tbl));
+	}
+#endif
+}
+
+void
+md_setup_interrupts(void)
+{
+#ifdef OPENPIC
+	if (openpic_base)
+		openpic_set_priority(cpu_number(), 0);
+	else
+#endif /* OPENPIC */
+		out32(HH_INTR_SECONDARY, ~0);	/* Reset interrupt. */
+}
+#endif /* MULTIPROCESSOR */

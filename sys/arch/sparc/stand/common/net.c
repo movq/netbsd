@@ -1,4 +1,4 @@
-/*	$NetBSD: net.c,v 1.5 2000/01/22 12:34:57 pk Exp $	*/
+/*	$NetBSD: net.c,v 1.8 2006/07/13 20:03:34 uwe Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
@@ -70,16 +70,15 @@ char		rootpath[FNAME_SIZE];
 int	netdev_sock = -1;
 static	int open_count;
 
-static int net_mountroot_bootparams __P((void));
-static int net_mountroot_bootp __P((void));
+static int net_mountroot_bootparams(void);
+static int net_mountroot_bootp(void);
 
 /*
  * Called by devopen after it sets f->f_dev to our devsw entry.
  * This opens the low-level device and sets f->f_devdata.
  */
 int
-net_open(pd)
-	struct promdata *pd;
+net_open(struct promdata *pd)
 {
 	int error = 0;
 
@@ -99,8 +98,7 @@ bad:
 }
 
 int
-net_close(pd)
-	struct promdata *pd;
+net_close(struct promdata *pd)
 {
 	/* On last close, do netif close, etc. */
 	if (open_count <= 0)
@@ -113,13 +111,14 @@ net_close(pd)
 }
 
 int
-net_mountroot_bootparams()
+net_mountroot_bootparams(void)
 {
+	printf("Trying BOOTPARAMS protocol... ");
+
 	/* Get our IP address.  (rarp.c) */
 	if (rarp_getipaddress(netdev_sock) == -1)
 		return (errno);
 
-	printf("Using BOOTPARAMS protocol: ");
 	printf("ip address: %s", inet_ntoa(myip));
 
 	/* Get our hostname, server IP address. */
@@ -136,14 +135,15 @@ net_mountroot_bootparams()
 }
 
 int
-net_mountroot_bootp()
+net_mountroot_bootp(void)
 {
+	printf("Trying BOOTP protocol... ");
+
 	bootp(netdev_sock);
 
 	if (myip.s_addr == 0)
 		return(ENOENT);
 
-	printf("Using BOOTP protocol: ");
 	printf("ip address: %s", inet_ntoa(myip));
 
 	if (hostname[0])
@@ -158,7 +158,7 @@ net_mountroot_bootp()
 }
 
 int
-net_mountroot()
+net_mountroot(void)
 {
 	int error;
 
@@ -173,11 +173,11 @@ net_mountroot()
 	 * and the more modern, BOOTP way. (RFC951, RFC1048)
 	 */
 
-	/* Historically, we've used BOOTPARAMS, so try that first */
-	error = net_mountroot_bootparams();
+	/* Try BOOTP first */
+	error = net_mountroot_bootp();
+	/* Historically, we've used BOOTPARAMS, so try that next */
 	if (error != 0)
-		/* Next, try BOOTP */
-		error = net_mountroot_bootp();
+		error = net_mountroot_bootparams();
 	if (error != 0)
 		return (error);
 

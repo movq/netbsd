@@ -1,4 +1,4 @@
-/*	$NetBSD: grfabs.c,v 1.10 1996/10/04 07:27:53 leo Exp $	*/
+/*	$NetBSD: grfabs.c,v 1.13 2005/12/11 12:16:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -33,6 +33,10 @@
 /*
  *  atari abstract graphics driver.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: grfabs.c,v 1.13 2005/12/11 12:16:54 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/queue.h>
@@ -93,7 +97,7 @@ u_long gra_def_color16[16] = {
 
 /*
  * XXX: called from ite console init routine.
- * Initialize list of posible video modes.
+ * Initialize list of possible video modes.
  */
 int
 grfabs_probe(probe_fun)

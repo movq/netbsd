@@ -1,4 +1,4 @@
-/*	$NetBSD: rndctl.c,v 1.5 1999/03/30 17:32:44 mycroft Exp $	*/
+/*	$NetBSD: rndctl.c,v 1.17.28.1 2009/01/08 23:00:16 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997 Michael Graff.
@@ -28,6 +28,16 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include <sys/cdefs.h>
+
+#ifndef lint
+__RCSID("$NetBSD: rndctl.c,v 1.17.28.1 2009/01/08 23:00:16 snj Exp $");
+#endif
+
+
+#include <sys/types.h>
+#include <sys/ioctl.h>
+#include <sys/rnd.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,37 +47,37 @@
 #include <err.h>
 #include <string.h>
 
-#include <sys/types.h>
-#include <sys/ioctl.h>
-#include <sys/rnd.h>
-
 typedef struct {
-	char *name;
-	u_int32_t   type;
+	const char *a_name;
+	u_int32_t a_type;
 } arg_t;
 
 arg_t source_types[] = {
-	{ "unknown", RND_TYPE_UNKNOWN },
+	{ "???",     RND_TYPE_UNKNOWN },
 	{ "disk",    RND_TYPE_DISK },
-	{ "network", RND_TYPE_NET },
 	{ "net",     RND_TYPE_NET },
 	{ "tape",    RND_TYPE_TAPE },
 	{ "tty",     RND_TYPE_TTY },
+	{ "rng",     RND_TYPE_RNG },
 	{ NULL,      0 }
 };
 
 static void usage(void);
 u_int32_t find_type(char *name);
-char *find_name(u_int32_t);
+const char *find_name(u_int32_t);
 void do_ioctl(rndctl_t *);
 char * strflags(u_int32_t);
 void do_list(int, u_int32_t, char *);
+void do_stats(void);
 
 static void
 usage(void)
 {
-	fprintf(stderr, "usage: rndctl -CEce [-t devtype] [-d devname]\n");
-	fprintf(stderr, "       rndctl -l [-t devtype] [-d devname]\n");
+
+	fprintf(stderr, "usage: %s -CEce [-d devname | -t devtype]\n",
+	    getprogname());
+	fprintf(stderr, "       %s -ls [-d devname | -t devtype]\n",
+	    getprogname());
 	exit(1);
 }
 
@@ -77,32 +87,32 @@ find_type(char *name)
 	arg_t *a;
 
 	a = source_types;
-	
-	while (a->name != NULL) {
-		if (strcmp(a->name, name) == 0)
-			return a->type;
+
+	while (a->a_name != NULL) {
+		if (strcmp(a->a_name, name) == 0)
+			return (a->a_type);
 		a++;
 	}
 
-	errx(1, "Error:  Device type %s unknown", name);
-	return 0;
+	errx(1, "device name %s unknown", name);
+	return (0);
 }
 
-char *
+const char *
 find_name(u_int32_t type)
 {
 	arg_t *a;
 
 	a = source_types;
-	
-	while (a->name != NULL) {
-		if (type == a->type)
-			return a->name;
+
+	while (a->a_name != NULL) {
+		if (type == a->a_type)
+			return (a->a_name);
 		a++;
 	}
 
-	errx(1, "Error:  Device type %u unknown", type);
-	return 0;
+	warnx("device type %u unknown", type);
+	return ("???");
 }
 
 void
@@ -128,51 +138,54 @@ strflags(u_int32_t fl)
 	static char str[512];
 
 	str[0] = 0;
-	strcat(str, "<");
-
 	if (fl & RND_FLAG_NO_ESTIMATE)
-		strcat(str, "no");
-	strcat(str, "estimate, ");
-	if (fl & RND_FLAG_NO_COLLECT)
-		strcat(str, "no");
-	strcat(str, "collect>");
+		;
+	else
+		strlcat(str, "estimate", sizeof(str));
 
-	return str;
+	if (fl & RND_FLAG_NO_COLLECT)
+		;
+	else {
+		if (str[0])
+			strlcat(str, ", ", sizeof(str));
+		strlcat(str, "collect", sizeof(str));
+	}
+
+	return (str);
 }
 
-#define HEADER "Device Name      Type           Bits Flags\n" \
-               "---------------- -------- ---------- -----\n"
+#define HEADER "Source                 Bits Type      Flags\n"
 
 void
 do_list(int all, u_int32_t type, char *name)
 {
-	rndstat_t       rstat;
-	rndstat_name_t  rstat_name;
-	int             fd;
-	int             res;
-	u_int32_t	start;
+	rndstat_t rstat;
+	rndstat_name_t rstat_name;
+	int fd;
+	int res;
+	u_int32_t start;
 
 	fd = open("/dev/urandom", O_RDONLY, 0644);
 	if (fd < 0)
 		err(1, "open");
 
 	if (all == 0 && type == 0xff) {
-		strncpy(rstat_name.name, name, 16);
+		strncpy(rstat_name.name, name, sizeof(rstat_name.name));
 		res = ioctl(fd, RNDGETSRCNAME, &rstat_name);
 		if (res < 0)
 			err(1, "ioctl(RNDGETSRCNAME)");
 		printf(HEADER);
-		printf("%-16s %-8s %10u %s\n",
-		       rstat_name.source.name,
-		       find_name(rstat_name.source.type),
-		       rstat_name.source.total,
-		       strflags(rstat_name.source.flags));
+		printf("%-16s %10u %-4s %s\n",
+		    rstat_name.source.name,
+		    rstat_name.source.total,
+		    find_name(rstat_name.source.type),
+		    strflags(rstat_name.source.flags));
 		close(fd);
 		return;
 	}
 
 	/*
-	 * run through all the devices present in the system, and either
+	 * Run through all the devices present in the system, and either
 	 * print out ones that match, or print out all of them.
 	 */
 	printf(HEADER);
@@ -183,18 +196,18 @@ do_list(int all, u_int32_t type, char *name)
 		res = ioctl(fd, RNDGETSRCNUM, &rstat);
 		if (res < 0)
 			err(1, "ioctl(RNDGETSRCNUM)");
-                        
+
 		if (rstat.count == 0)
 			break;
-                        
-		for (res = 0 ; res < rstat.count ; res++) {
-			if ((all != 0)
-			    || (type == rstat.source[res].type))
-				printf("%-16s %-8s %10u %s\n",
-				       rstat.source[res].name,
-				       find_name(rstat.source[res].type),
-				       rstat.source[res].total,
-				       strflags(rstat.source[res].flags));
+
+		for (res = 0; res < rstat.count; res++) {
+			if (all != 0 ||
+			    type == rstat.source[res].type)
+				printf("%-16s %10u %-4s %s\n",
+				    rstat.source[res].name,
+				    rstat.source[res].total,
+				    find_name(rstat.source[res].type),
+				    strflags(rstat.source[res].flags));
 		}
 		start += rstat.count;
 	}
@@ -202,16 +215,37 @@ do_list(int all, u_int32_t type, char *name)
 	close(fd);
 }
 
+void
+do_stats()
+{
+	rndpoolstat_t rs;
+	int fd;
+
+	fd = open("/dev/urandom", O_RDONLY, 0644);
+	if (fd < 0)
+		err(1, "open");
+
+	if (ioctl(fd, RNDGETPOOLSTAT, &rs) < 0)
+		err(1, "ioctl(RNDGETPOOLSTAT)");
+
+	printf("\t%9u bits mixed into pool\n", rs.added);
+	printf("\t%9u bits currently stored in pool (max %u)\n",
+	    rs.curentropy, rs.maxentropy);
+	printf("\t%9u bits of entropy discarded due to full pool\n",
+	    rs.discarded);
+	printf("\t%9u hard-random bits generated\n", rs.removed);
+	printf("\t%9u pseudo-random bits generated\n", rs.generated);
+
+	close(fd);
+}
+
 int
 main(int argc, char **argv)
 {
-	rndctl_t  rctl;
-	int       ch;
-	int       cmd;
-	int       lflag;
-	int       mflag;
+	rndctl_t rctl;
+	int ch, cmd, lflag, mflag, sflag;
 	u_int32_t type;
-	char      name[16];
+	char name[16];
 
 	rctl.mask = 0;
 	rctl.flags = 0;
@@ -219,10 +253,11 @@ main(int argc, char **argv)
 	cmd = 0;
 	lflag = 0;
 	mflag = 0;
+	sflag = 0;
 	type = 0xff;
 
-	while ((ch = getopt(argc, argv, "CEcelt:d:")) != -1)
-		switch(ch) {
+	while ((ch = getopt(argc, argv, "CEcelt:d:s")) != -1) {
+		switch (ch) {
 		case 'C':
 			rctl.flags |= RND_FLAG_NO_COLLECT;
 			rctl.mask |= RND_FLAG_NO_COLLECT;
@@ -259,47 +294,62 @@ main(int argc, char **argv)
 			cmd = 'd';
 
 			type = 0xff;
-			strncpy(name, optarg, 16);
+			strlcpy(name, optarg, sizeof(name));
+			break;
+		case 's':
+			sflag++;
 			break;
 		case '?':
 		default:
 			usage();
 		}
+	}
+	argc -= optind;
+	argv += optind;
 
 	/*
-	 * cannot list and modify at the same time
+	 * No leftover non-option arguments.
 	 */
-	if (lflag != 0 && mflag != 0)
+	if (argc > 0)
 		usage();
 
 	/*
-	 * bomb out on no-ops
+	 * Cannot list and modify at the same time.
 	 */
-	if (lflag == 0 && mflag == 0)
+	if ((lflag != 0 || sflag != 0) && mflag != 0)
 		usage();
 
 	/*
-	 * if not listing, we need a device name or a type
+	 * Bomb out on no-ops.
 	 */
-	if (lflag == 0 && cmd == 0)
+	if (lflag == 0 && mflag == 0 && sflag == 0)
 		usage();
 
 	/*
-	 * modify request
+	 * If not listing, we need a device name or a type.
+	 */
+	if (lflag == 0 && cmd == 0 && sflag == 0)
+		usage();
+
+	/*
+	 * Modify request.
 	 */
 	if (mflag != 0) {
 		rctl.type = type;
-		strncpy(rctl.name, name, 16);
+		strncpy(rctl.name, name, sizeof(rctl.name));
 		do_ioctl(&rctl);
 
 		exit(0);
 	}
 
 	/*
-	 * list sources
+	 * List sources.
 	 */
 	if (lflag != 0)
 		do_list(cmd == 0, type, name);
 
-	return 0;
+	if (sflag != 0)
+		do_stats();
+
+	exit(0);
 }

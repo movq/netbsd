@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_callback.c,v 1.3 1999/02/05 00:06:06 oster Exp $	*/
+/*	$NetBSD: rf_callback.c,v 1.20 2006/11/16 01:33:23 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -26,53 +26,46 @@
  * rights to redistribute these changes.
  */
 
-/*****************************************************************************************
+/*****************************************************************************
  *
  * callback.c -- code to manipulate callback descriptor
  *
- ****************************************************************************************/
+ ****************************************************************************/
 
 
-#include "rf_types.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rf_callback.c,v 1.20 2006/11/16 01:33:23 christos Exp $");
+
+#include <dev/raidframe/raidframevar.h>
+#include <sys/pool.h>
+
+#include "rf_archs.h"
 #include "rf_threadstuff.h"
 #include "rf_callback.h"
 #include "rf_debugMem.h"
-#include "rf_freelist.h"
+#include "rf_general.h"
 #include "rf_shutdown.h"
-
-static RF_FreeList_t *rf_callback_freelist;
+#include "rf_netbsd.h"
 
 #define RF_MAX_FREE_CALLBACK 64
-#define RF_CALLBACK_INC       4
-#define RF_CALLBACK_INITIAL   4
+#define RF_MIN_FREE_CALLBACK 32
 
 static void rf_ShutdownCallback(void *);
-static void 
-rf_ShutdownCallback(ignored)
-	void   *ignored;
+static void
+rf_ShutdownCallback(void *ignored)
 {
-	RF_FREELIST_DESTROY(rf_callback_freelist, next, (RF_CallbackDesc_t *));
+	pool_destroy(&rf_pools.callback);
 }
 
-int 
+int
 rf_ConfigureCallback(listp)
 	RF_ShutdownList_t **listp;
 {
-	int     rc;
 
-	RF_FREELIST_CREATE(rf_callback_freelist, RF_MAX_FREE_CALLBACK,
-	    RF_CALLBACK_INC, sizeof(RF_CallbackDesc_t));
-	if (rf_callback_freelist == NULL)
-		return (ENOMEM);
-	rc = rf_ShutdownCreate(listp, rf_ShutdownCallback, NULL);
-	if (rc) {
-		RF_ERRORMSG3("Unable to add to shutdown list file %s line %d rc=%d\n", __FILE__,
-		    __LINE__, rc);
-		rf_ShutdownCallback(NULL);
-		return (rc);
-	}
-	RF_FREELIST_PRIME(rf_callback_freelist, RF_CALLBACK_INITIAL, next,
-	    (RF_CallbackDesc_t *));
+	rf_pool_init(&rf_pools.callback, sizeof(RF_CallbackDesc_t),
+		     "rf_callbackpl", RF_MIN_FREE_CALLBACK, RF_MAX_FREE_CALLBACK);
+	rf_ShutdownCreate(listp, rf_ShutdownCallback, NULL);
+
 	return (0);
 }
 
@@ -81,13 +74,13 @@ rf_AllocCallbackDesc()
 {
 	RF_CallbackDesc_t *p;
 
-	RF_FREELIST_GET(rf_callback_freelist, p, next, (RF_CallbackDesc_t *));
+	p = pool_get(&rf_pools.callback, PR_WAITOK);
 	return (p);
 }
 
-void 
+void
 rf_FreeCallbackDesc(p)
 	RF_CallbackDesc_t *p;
 {
-	RF_FREELIST_FREE(rf_callback_freelist, p, next);
+	pool_put(&rf_pools.callback, p);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: tset.c,v 1.9 1999/12/20 14:36:11 kleink Exp $	*/
+/*	$NetBSD: tset.c,v 1.16 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)tset.c	8.1 (Berkeley) 6/9/93";
 #endif
-__RCSID("$NetBSD: tset.c,v 1.9 1999/12/20 14:36:11 kleink Exp $");
+__RCSID("$NetBSD: tset.c,v 1.16 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -66,10 +62,7 @@ void	usage __P((void));
 
 struct termios mode, oldmode;
 
-int	erasechar;		/* new erase character */
-int	intrchar;		/* new interrupt character */
 int	isreset;		/* invoked as reset */
-int	killchar;		/* new kill character */
 int	lines, columns;		/* window size */
 
 int
@@ -80,8 +73,10 @@ main(argc, argv)
 #ifdef TIOCGWINSZ
 	struct winsize win;
 #endif
-	int ch, noinit, noset, quiet, Sflag, sflag, showterm, usingupper;
-	char savech, *p, *t, *tcapbuf;
+	int ch, extended, noinit, noset, quiet, Sflag, sflag, showterm;
+	int erasechar = 0, intrchar = 0, killchar = 0;
+	int usingupper;
+	char savech, *p, *q, *t, *tcapbuf;
 	const char *ttype;
 
 	if (tcgetattr(STDERR_FILENO, &mode) < 0)
@@ -101,8 +96,8 @@ main(argc, argv)
 	}
 
 	obsolete(argv);
-	noinit = noset = quiet = Sflag = sflag = showterm = 0;
-	while ((ch = getopt(argc, argv, "-a:d:e:Ii:k:m:np:QSrs")) != -1) {
+	noinit = noset = quiet = Sflag = sflag = showterm = extended = 0;
+	while ((ch = getopt(argc, argv, "-a:d:e:EIi:k:m:np:QSrs")) != -1) {
 		switch (ch) {
 		case '-':		/* display term only */
 			noset = 1;
@@ -117,6 +112,9 @@ main(argc, argv)
 			erasechar = optarg[0] == '^' && optarg[1] != '\0' ?
 			    optarg[1] == '?' ? '\177' : CTRL(optarg[1]) :
 			    optarg[0];
+			break;
+		case 'E':
+			extended = 1;
 			break;
 		case 'I':		/* no initialization strings */
 			noinit = 1;
@@ -162,7 +160,7 @@ main(argc, argv)
 	if (argc > 1)
 		usage();
 
-	ttype = get_termcap_entry(*argv, &tcapbuf);
+	ttype = get_termcap_entry(*argv, &tcapbuf, extended);
 
 	if (!noset) {
 		columns = tgetnum("co");
@@ -171,14 +169,17 @@ main(argc, argv)
 #ifdef TIOCGWINSZ
 		/* Set window size */
 		(void)ioctl(STDERR_FILENO, TIOCGWINSZ, &win);
-		if (win.ws_row == 0 && win.ws_col == 0 &&
+		if (win.ws_row > 0 && win.ws_col > 0) {
+			lines = win.ws_row;
+			columns = win.ws_col;
+		} else if (win.ws_row == 0 && win.ws_col == 0 &&
 		    lines > 0 && columns > 0) {
 			win.ws_row = lines;
 			win.ws_col = columns;
 			(void)ioctl(STDERR_FILENO, TIOCSWINSZ, &win);
 		}
 #endif
-		set_control_chars();
+		set_control_chars(erasechar, intrchar, killchar);
 		set_conversions(usingupper);
 
 		if (!noinit)
@@ -230,15 +231,17 @@ main(argc, argv)
 		 */
 		if ((p = getenv("SHELL")) &&
 		    !strcmp(p + strlen(p) - 3, "csh")) {
-			p = "set noglob;\nsetenv TERM %s;\nsetenv TERMCAP '";
+			p = "set noglob;\nsetenv TERM ";
+			q = ";\nsetenv TERMCAP '";
 			t = "';\nunset noglob;\n";
 		} else {
-			p = "TERM=%s;\nTERMCAP='";
+			p = "TERM=";
+			q = ";\nTERMCAP='";
 			t = "';\nexport TERMCAP TERM;\n";
 		}
-		(void)printf(p, ttype);
+		(void)printf("%s%s%s", p, ttype, q);
 		wrtermcap(tcapbuf);
-		(void)printf(t);
+		(void)printf("%s", t);
 	}
 
 	exit(0);
@@ -309,6 +312,7 @@ void
 usage()
 {
 	(void)fprintf(stderr,
-"usage: tset [-IQrSs] [-] [-e ch] [-i ch] [-k ch] [-m mapping] [terminal]\n");
+"usage: %s [-EIQrSs] [-] [-e ch] [-i ch] [-k ch] [-m mapping] [terminal]\n",
+	getprogname());
 	exit(1);
 }

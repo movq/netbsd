@@ -1,4 +1,4 @@
-/*	$NetBSD: modload.c,v 1.27 2000/03/16 17:33:04 jdolecek Exp $	*/
+/*	$NetBSD: modload.c,v 1.51.28.1 2009/04/20 22:24:37 snj Exp $	*/
 
 /*
  * Copyright (c) 1993 Terrence R. Lambert.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: modload.c,v 1.27 2000/03/16 17:33:04 jdolecek Exp $");
+__RCSID("$NetBSD: modload.c,v 1.51.28.1 2009/04/20 22:24:37 snj Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -44,6 +44,8 @@ __RCSID("$NetBSD: modload.c,v 1.27 2000/03/16 17:33:04 jdolecek Exp $");
 #include <sys/lkm.h>
 #include <sys/stat.h>
 #include <sys/file.h>
+#include <sys/sysctl.h>
+#include <machine/cpu.h>
 #include <err.h>
 #include <errno.h>
 #include <stdio.h>
@@ -52,9 +54,6 @@ __RCSID("$NetBSD: modload.c,v 1.27 2000/03/16 17:33:04 jdolecek Exp $");
 #include <unistd.h>
 #include <nlist.h>
 #include "pathnames.h"
-
-#define TRUE 1
-#define FALSE 0
 
 #include "modload.h"
 
@@ -67,33 +66,35 @@ __RCSID("$NetBSD: modload.c,v 1.27 2000/03/16 17:33:04 jdolecek Exp $");
 
 int debug = 0;
 int verbose = 0;
+u_long force = 0;
 char *out = NULL;
 int symtab = 0;
 int Sflag;
 
-static	void	cleanup __P((void));
+static	void	cleanup(void);
 
 /* prelink the module */
 static int
-prelink(const char *kernel, 
-	const char *entry, 
-	const char *outfile, 
-	const void *address, 
-	const char *object)
+prelink(const char *kernel,
+	const char *entry,
+	const char *outfile,
+	const void *address,
+	const char *object,
+	const char *ldscript)
 {
-	char cmdbuf[1024];
+	char *cmd;
 	int error = 0;
 
-	linkcmd(cmdbuf, sizeof(cmdbuf), 
-		kernel, entry, outfile, address, object);
+	linkcmd(&cmd, kernel, entry, outfile, address,
+	    object, ldscript);
 
 	if (debug)
-		fprintf(stderr, "%s\n", cmdbuf);
+		fprintf(stderr, "%s\n", cmd);
 
-	switch (system(cmdbuf)) {
+	switch (system(cmd)) {
 	case 0:				/* SUCCESS! */
 		break;
-	case 1:				/* uninformitive error */
+	case 1:				/* uninformative error */
 		/*
 		 * Someone needs to fix the return values from the NetBSD
 		 * ld program -- it's totally uninformative.
@@ -110,6 +111,8 @@ prelink(const char *kernel,
 		break;
 	}
 
+	free(cmd);
+
 	return error;
 }
 
@@ -118,9 +121,10 @@ usage(void)
 {
 
 	fprintf(stderr, "usage:\n");
-	fprintf(stderr, "modload [-d] [-v] [-n] [-A <kernel>] [-e <entry>]\n");
+	fprintf(stderr, "modload [-dfnsSv] "
+	    "[-A <kernel>] [-e <entry>] [-p <postinstall>]\n");
 	fprintf(stderr,
-	    "        [-p <postinstall>] [-o <output file>] <input file>\n");
+	    "        [-o <output file>] [-T <linker_script>] <input file>\n");
 	exit(1);
 }
 
@@ -156,16 +160,16 @@ cleanup(void)
 }
 
 static int
-verify_entry(char *entry, char *filename)
+verify_entry(const char *entry, char *filename)
 {
 	struct	nlist	names[2];
 	int n;
 	char *s;
 
 	memset(names, 0, sizeof(names));
-	s = malloc(strlen(entry) + 2);
-	s[0] = '_';
-	strcpy(s + 1, entry);
+	asprintf(&s, "_%s", entry);
+	if (!s)
+		err(1, "malloc");
 #ifdef	_AOUT_INCLUDE_
 	names[0].n_un.n_name = s;
 #else
@@ -178,8 +182,8 @@ verify_entry(char *entry, char *filename)
 	return n;
 }
 
-/* 
- * Transfer data to kernel memory in chunks 
+/*
+ * Transfer data to kernel memory in chunks
  * of MODIOBUF size at a time.
  */
 void
@@ -188,12 +192,12 @@ loadbuf(void *buf, size_t len)
 	struct lmc_loadbuf ldbuf;
 	size_t n;
 	char *p = buf;
-	
+
 	while(len) {
 		n = MIN(len, MODIOBUF);
 		ldbuf.cnt = n;
 		ldbuf.data = p;
-		if(ioctl(devfd, LMLOADBUF, &ldbuf) == -1)
+		if (ioctl(devfd, LMLOADBUF, &ldbuf) == -1)
 			err(11, "error loading buffer");
 		len -= n;
 		p += n;
@@ -214,26 +218,52 @@ loadspace(size_t len)
 	}
 }
 
+/*
+ * Transfer symbol table to kernel memory in chunks
+ * of MODIOBUF size at a time.
+ */
+void
+loadsym(void *buf, size_t len)
+{
+	struct lmc_loadbuf ldbuf;
+	size_t n;
+	char *p = buf;
+
+	while(len) {
+		n = MIN(len, MODIOBUF);
+		ldbuf.cnt = n;
+		ldbuf.data = p;
+		if(ioctl(devfd, LMLOADSYMS, &ldbuf) == -1)
+			err(11, "error loading buffer");
+		len -= n;
+		p += n;
+	}
+}
+
 int
 main(int argc, char **argv)
 {
 	int c;
-	char *kname = _PATH_UNIX;
-	char *entry = DFLT_ENTRY;
+	const char *kname = NULL;
+	const char *entry = DFLT_ENTRY;
 	char *post = NULL;
+	const char *ldscript = NULL;
 	char *modobj;
-	char modout[80], *p;
+	char modout[MAXPATHLEN], *p;
 	struct stat stb;
 	int strtablen;
 	size_t modsize;	/* XXX */
-	void* modentry;	/* XXX */
-	int noready = 0, old = 0;
+	void *modentry;	/* XXX */
+	int noready = 0;
 
-	while ((c = getopt(argc, argv, "dnvsA:Se:p:o:")) != -1) {
+	while ((c = getopt(argc, argv, "dfnvse:p:o:A:ST:")) != -1) {
 		switch (c) {
 		case 'd':
 			debug = 1;
 			break;	/* debug */
+		case 'f':
+			force = 1;
+			break;	/* force load */
 		case 'v':
 			verbose = 1;
 			break;	/* verbose */
@@ -249,6 +279,9 @@ main(int argc, char **argv)
 		case 'o':
 			out = optarg;
 			break;	/* output file */
+		case 'T':
+			ldscript = optarg;
+			break;	/* linker script */
 		case 'n':
 			noready = 1;
 			break;
@@ -276,6 +309,9 @@ main(int argc, char **argv)
 
 	atexit(cleanup);
 
+	if (ldscript == NULL && access(_PATH_LDSCRIPT, R_OK) == 0)
+		ldscript = _PATH_LDSCRIPT;
+
 	/*
 	 * Open the virtual device device driver for exclusive use (needed
 	 * to write the new module to it as our means of getting it in the
@@ -285,8 +321,8 @@ main(int argc, char **argv)
 		err(3, _PATH_LKM);
 	fileopen |= DEV_OPEN;
 
-	strncpy(modout, modobj, sizeof(modout) - 1);
-	modout[sizeof(modout) - 1] = '\0';
+	if (strlcpy(modout, modobj, sizeof(modout)) >= sizeof(modout))
+		errx(1, "program name is too big for buffer");
 
 	p = strrchr(modout, '.');
 	if (!p || strcmp(p, ".o"))
@@ -302,15 +338,16 @@ main(int argc, char **argv)
 		/*
 		 * Try <modobj>_init if entry is DFLT_ENTRY.
 		 */
-		if (entry == DFLT_ENTRY) {
+		if (strcmp(entry, DFLT_ENTRY) == 0) {
+			char *nentry;
 			if ((p = strrchr(modout, '/')))
 				p++;
 			else
 				p = modout;
-			entry = malloc(strlen(p) + 
-			    strlen(DFLT_ENTRYEXT) + 1);
-			strcpy(entry, p);
-			strcat(entry, DFLT_ENTRYEXT);
+			asprintf(&nentry, "%s%s", p, DFLT_ENTRYEXT);
+			if (!nentry)
+				err(1, "malloc");
+			entry = nentry;
 			if (verify_entry(entry, modobj))
 				errx(1, "entry point _%s not found in %s",
 				    entry, modobj);
@@ -319,14 +356,55 @@ main(int argc, char **argv)
 			    modobj);
 	}
 
+#if 0
+	/*
+	 * Check if /dev/ksyms can be used.
+	 */
+	if (kname == NULL) {
+		int fd = open(_PATH_KSYMS, O_RDONLY);
+		if (fd < 0) {
+			warn("%s", _PATH_KSYMS);
+		} else {
+			close(fd);
+			kname = _PATH_KSYMS;
+		}
+	}
+#endif
+
+	/*
+	 * Determine name of kernel to use
+	 */
+	if (kname == NULL) {
+#ifdef CPU_BOOTED_KERNEL
+		/* 130 is 128 + '/' + '\0' */
+		static char booted_kernel[130];
+		int mib[2], rc;
+		size_t len;
+		struct stat st;
+
+		mib[0] = CTL_MACHDEP;
+		mib[1] = CPU_BOOTED_KERNEL;
+		booted_kernel[0] = '/';
+		booted_kernel[1] = '\0';
+		len = sizeof(booted_kernel) - 2;
+		rc = sysctl(&mib[0], 2, &booted_kernel[1], &len, NULL, 0);
+		booted_kernel[sizeof(booted_kernel) - 1] = '\0';
+		kname = (booted_kernel[1] == '/') ?
+		    &booted_kernel[1] : &booted_kernel[0];
+		if (rc != -1)
+			rc = stat(kname, &st);
+		if (rc == -1 || !S_ISREG(st.st_mode))
+#endif /* CPU_BOOTED_KERNEL */
+			kname = _PATH_UNIX;
+	}
 	/*
 	 * Prelink to get file size
 	 */
-	if (prelink(kname, entry, out, 0, modobj))
+	if (prelink(kname, entry, out, 0, modobj, ldscript))
 		errx(1, "can't prelink `%s' creating `%s'", modobj, out);
 	if (Sflag == 0)
 		fileopen |= OUTFILE_CREAT;
-  
+
  	/*
  	 * Pre-open the 0-linked module to get the size information
  	 */
@@ -363,23 +441,25 @@ main(int argc, char **argv)
 
 	if (verbose)
 		warnx("reserving %lu bytes of memory", (unsigned long)modsize);
-	if (ioctl(devfd, LMRESERV, &resrv) == -1) {
-	    if (symtab)
-		warn("not loading symbols: kernel does not support symbol table loading");
-	doold:
-	    symtab = 0;
-	    if (ioctl(devfd, LMRESERV_O, &resrv) == -1)
+	if (ioctl(devfd, LMRESERV, &resrv) == -1)
 		err(9, "can't reserve memory");
-	    old = TRUE;
-	}
+
 	fileopen |= PART_RESRV;
+
+	if (force) {
+		if (ioctl(devfd, LMFORCE, &force) == -1)
+			err(10, "can't force load");
+
+		warnx("Forced load of LKM '%s'. MAY CAUSE SYSTEM INSTABILITY.",
+			modout);
+	}
 
 	/*
 	 * Relink at kernel load address
 	 */
-	if (prelink(kname, entry, out, (void*)resrv.addr, modobj))
+	if (prelink(kname, entry, out, (void *)resrv.addr, modobj, ldscript))
 		errx(1, "can't link `%s' creating `%s' bound to %p",
-		     modobj, out, (void*)resrv.addr);
+		     modobj, out, (void *)resrv.addr);
 
 	/*
 	 * Open the relinked module to load it...
@@ -409,19 +489,9 @@ main(int argc, char **argv)
 	 * is maintained on success, or blow everything back to ground
 	 * zero on failure.
 	 */
-	if (ioctl(devfd, LMREADY, &modentry) == -1) {
-	  if (errno == EINVAL && !old) {
-	    if (fileopen & MOD_OPEN)
-	      close(modfd);
-	    /* PART_RESRV is not true since the kernel cleans up
-	       after a failed LMREADY */
-	    fileopen &= ~(MOD_OPEN|PART_RESRV);
-	    /* try using oldstyle */
-	    warn("module failed to load using new version; trying old version");
-	    goto doold;
-	  } else
+	if (ioctl(devfd, LMREADY, &modentry) == -1)
 	    err(14, "error initializing module");
-	}
+
 	/*
 	 * Success!
 	 */
@@ -433,21 +503,26 @@ main(int argc, char **argv)
 	 */
 	if (post) {
 		struct lmc_stat sbuf;
-		char id[16], type[16], offset[16];
+		char id[16], type[16];
 
 		sbuf.id = resrv.slot;
 		if (ioctl(devfd, LMSTAT, &sbuf) == -1)
 			err(15, "error fetching module stats for post-install");
 		(void)snprintf(id, sizeof(id), "%d", sbuf.id);
 		(void)snprintf(type, sizeof(type), "0x%x", sbuf.type);
-		(void)snprintf(offset, sizeof(offset), "%ld",
-		    (long)sbuf.offset);
-		/*
-		 * XXX
-		 * The modload docs say that drivers can install bdevsw &
-		 * cdevsw, but the interface only supports one at a time.
-		 */
-		execl(post, post, id, type, offset, 0);
+		if (sbuf.type == LM_DEV) {
+			char arg3[16], arg4[16];
+			int bmajor = LKM_BLOCK_MAJOR(sbuf.offset);
+			int cmajor = LKM_CHAR_MAJOR(sbuf.offset);
+			(void)snprintf(arg3, sizeof(arg3), "%d", cmajor);
+			(void)snprintf(arg4, sizeof(arg4), "%d", bmajor);
+			execl(post, post, id, type, arg3, arg4, NULL);
+		} else {
+			char arg3[16];
+			(void)snprintf(arg3, sizeof(arg3), "%ld",
+			    (long)sbuf.offset);
+			execl(post, post, id, type, arg3, NULL);
+		}
 		err(16, "can't exec `%s'", post);
 	}
 

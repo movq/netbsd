@@ -1,4 +1,4 @@
-/*	$NetBSD: cap_mkdb.c,v 1.10 1999/06/27 05:49:02 simonb Exp $	*/
+/*	$NetBSD: cap_mkdb.c,v 1.24 2008/07/21 14:19:21 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,17 +29,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#endif /* not lint */
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
 
-#ifndef lint
+#include <sys/cdefs.h>
+#if !defined(lint)
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)cap_mkdb.c	8.2 (Berkeley) 4/27/95";
 #endif
-__RCSID("$NetBSD: cap_mkdb.c,v 1.10 1999/06/27 05:49:02 simonb Exp $");
+__RCSID("$NetBSD: cap_mkdb.c,v 1.24 2008/07/21 14:19:21 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -51,24 +48,23 @@ __RCSID("$NetBSD: cap_mkdb.c,v 1.10 1999/06/27 05:49:02 simonb Exp $");
 
 #include <db.h>
 #include <err.h>
-#include <errno.h>
 #include <fcntl.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <ctype.h>
 
-void	db_build __P((char **));
-void	dounlink __P((void));
-int	main __P((int, char **));
-void	usage __P((void));
+static void	db_build(const char **);
+static void	dounlink(void);
+static void	usage(void) __unused;
+static int	count_records(char **);
 
-DB *capdbp;
-int verbose;
-char *capdb, *capname, buf[8 * 1024];
+static DB *capdbp;
+static int verbose;
+static char *capname, buf[8 * 1024];
 
-HASHINFO openinfo = {
+static HASHINFO openinfo = {
 	4096,		/* bsize */
 	16,		/* ffactor */
 	2048,		/* nelem */
@@ -85,9 +81,7 @@ HASHINFO openinfo = {
  * the correct record is stored.
  */
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int c, byteorder;
 
@@ -122,10 +116,16 @@ main(argc, argv)
 	openinfo.lorder = byteorder;
 
 	/*
+	 * Set nelem to twice the value returned by count_record().
+	 */
+	openinfo.nelem = count_records(argv) << 1;
+
+	/*
 	 * The database file is the first argument if no name is specified.
 	 * Make arrangements to unlink it if exit badly.
 	 */
-	(void)snprintf(buf, sizeof(buf), "%s.db", capname ? capname : *argv);
+	(void)snprintf(buf, sizeof(buf), "%s.db.tmp",
+	    capname ? capname : *argv);
 	if ((capname = strdup(buf)) == NULL)
 		err(1, "strdup");
 	if ((capdbp = dbopen(capname, O_CREAT | O_TRUNC | O_RDWR,
@@ -135,16 +135,20 @@ main(argc, argv)
 	if (atexit(dounlink))
 		err(1, "atexit");
 
-	db_build(argv);
+	db_build((const char **)argv);
 
 	if (capdbp->close(capdbp) < 0)
 		err(1, "%s", capname);
+	*strrchr(buf, '.') = '\0';
+	if (rename(capname, buf) == -1)
+		err(1, "rename");
+	free(capname);
 	capname = NULL;
-	exit(0);
+	return 0;
 }
 
-void
-dounlink()
+static void
+dounlink(void)
 {
 	if (capname != NULL)
 		(void)unlink(capname);
@@ -162,19 +166,18 @@ dounlink()
  * Db_build() builds the name and capabilty databases according to the
  * details above.
  */
-void
-db_build(ifiles)
-	char **ifiles;
+static void
+db_build(const char **ifiles)
 {
 	DBT key, data;
 	recno_t reccnt;
 	size_t len, bplen;
 	int st;
-	char *bp, *p, *t;
+	char *bp, *p, *t, *n;
 
 	data.data = NULL;
 	key.data = NULL;
-	for (reccnt = 0, bplen = 0; (st = cgetnext(&bp, ifiles)) > 0;) {
+	for (reccnt = 0, bplen = 0; (st = cgetnext(&bp, ifiles)) > 0; free(bp)){
 
 		/*
 		 * Allocate enough memory to store record, terminating
@@ -182,9 +185,11 @@ db_build(ifiles)
 		 */
 		len = strlen(bp);
 		if (bplen <= len + 2) {
-			bplen += MAX(256, len + 2);
-			if ((data.data = realloc(data.data, bplen)) == NULL)
+			if ((n = realloc(data.data,
+			    bplen + MAX(256, len + 2))) == NULL)
 				err(1, "realloc");
+			data.data = n;
+			bplen += MAX(256, len + 2);
 		}
 
 		/* Find the end of the name field. */
@@ -205,7 +210,7 @@ db_build(ifiles)
 		}
 
 		/* Create the stored record. */
-		memmove(&((u_char *)(data.data))[1], bp, len + 1);
+		(void)memmove(&((u_char *)(data.data))[1], bp, len + 1);
 		data.size = len + 2;
 
 		/* Store the record under the name field. */
@@ -229,7 +234,7 @@ db_build(ifiles)
 
 		/* The rest of the names reference the entire name. */
 		((char *)(data.data))[0] = SHADOW;
-		memmove(&((u_char *)(data.data))[1], key.data, key.size);
+		(void)memmove(&((u_char *)(data.data))[1], key.data, key.size);
 		data.size = key.size + 1;
 
 		/* Store references for other names. */
@@ -266,10 +271,51 @@ db_build(ifiles)
 		(void)printf("cap_mkdb: %d capability records\n", reccnt);
 }
 
-void
-usage()
+static void
+usage(void)
 {
 	(void)fprintf(stderr,
-	    "usage: cap_mkdb [-b|-l] [-v] [-f outfile] file1 [file2 ...]\n");
+	    "Usage: %s [-b|-l] [-v] [-f outfile] file1 [file2 ...]\n",
+	    getprogname());
 	exit(1);
+}
+
+/*
+ * Count number of records in input files. This does not need
+ * to be really accurate (the result is used only as a hint).
+ * It seems to match number of records should a cgetnext() be used, though.
+ */
+static int
+count_records(char **list)
+{
+	FILE *fp;
+	char *line;
+	size_t len;
+	int nelem, slash;
+
+	/* scan input files and count individual records */
+	for(nelem = 0, slash = 0; *list && (fp = fopen(*list++, "r")); ) {
+		while((line = fgetln(fp, &len)) != NULL) {
+			if (len < 2)
+				continue;
+			if (!isspace((unsigned char) *line) && *line != ':'
+				&& *line != '#' && !slash)
+				nelem++;
+
+			slash = (line[len - 2] == '\\');
+		}
+		(void)fclose(fp);
+	} 
+
+	if (nelem == 0) {
+		/* no records found; pass default size hint */
+		nelem = 1;
+	} else if (!powerof2(nelem)) {
+		/* set nelem to nearest bigger power-of-two number */
+		int bt = 1;
+		while(bt < nelem) bt <<= 1;
+		nelem = bt;
+	}
+
+	return nelem;
 }

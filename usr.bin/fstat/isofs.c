@@ -1,4 +1,4 @@
-/*	$NetBSD: isofs.c,v 1.1 1999/02/18 06:09:25 lukem Exp $	*/
+/*	$NetBSD: isofs.c,v 1.6 2006/05/11 11:56:38 yamt Exp $	*/
 /*-
  * Copyright (c) 1988, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,54 +29,23 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: isofs.c,v 1.1 1999/02/18 06:09:25 lukem Exp $");
+__RCSID("$NetBSD: isofs.c,v 1.6 2006/05/11 11:56:38 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/time.h>
-#include <sys/proc.h>
-#include <sys/user.h>
-#include <sys/stat.h>
 #include <sys/vnode.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
-#include <sys/domain.h>
-#include <sys/protosw.h>
-#include <sys/unpcb.h>
-#include <sys/sysctl.h>
-#include <sys/filedesc.h>
-#define	_KERNEL
-#include <sys/file.h>
 #include <sys/mount.h>
-#undef _KERNEL
-#define NFS
-#include <nfs/nfsproto.h>
-#include <nfs/rpcv2.h>
-#include <nfs/nfs.h>
-#include <nfs/nfsnode.h>
-#undef NFS
 
 #include <isofs/cd9660/iso.h>
 #include <isofs/cd9660/cd9660_extern.h>
 #include <isofs/cd9660/cd9660_node.h>
 
-#include <ctype.h>
-#include <errno.h>
 #include <kvm.h>
-#include <limits.h>
-#include <nlist.h>
-#include <paths.h>
-#include <pwd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 #include <err.h>
 #include "fstat.h"
 
 int
-isofs_filestat(vp, fsp)
-	struct vnode *vp;
-	struct filestat *fsp;
+isofs_filestat(struct vnode *vp, struct filestat *fsp)
 {
 	struct iso_node inode;
 

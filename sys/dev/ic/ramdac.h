@@ -1,4 +1,4 @@
-/* $NetBSD: ramdac.h,v 1.1 2000/03/04 10:23:39 elric Exp $ */
+/* $NetBSD: ramdac.h,v 1.8 2008/04/28 20:23:51 martin Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,31 +39,39 @@
 struct ramdac_cookie;
 
 struct ramdac_funcs {
-	char	*ramdac_name;
-	void	(*ramdac_init) __P((struct ramdac_cookie *));
+	const char	*ramdac_name;
+	struct ramdac_cookie *(*ramdac_register)(void *,
+		    int (*)(void *, void (*)(void *)),
+		    void (*)(void *, u_int, u_int8_t),
+		    u_int8_t (*)(void *, u_int));
+	void	(*ramdac_init)(struct ramdac_cookie *);
 
-	int	(*ramdac_set_cmap) __P((struct ramdac_cookie *,
-		    struct wsdisplay_cmap *));
-	int	(*ramdac_get_cmap) __P((struct ramdac_cookie *,
-		    struct wsdisplay_cmap *));
-	int	(*ramdac_set_cursor) __P((struct ramdac_cookie *,
-		    struct wsdisplay_cursor *));
-	int	(*ramdac_get_cursor) __P((struct ramdac_cookie *,
-		    struct wsdisplay_cursor *));
-	int	(*ramdac_set_curpos) __P((struct ramdac_cookie *,
-		    struct wsdisplay_curpos *));
-	int	(*ramdac_get_curpos) __P((struct ramdac_cookie *,
-		    struct wsdisplay_curpos *));
-	int	(*ramdac_get_curmax) __P((struct ramdac_cookie *,
-		    struct wsdisplay_curpos *));
+	int	(*ramdac_set_cmap)(struct ramdac_cookie *,
+		    struct wsdisplay_cmap *);
+	int	(*ramdac_get_cmap)(struct ramdac_cookie *,
+		    struct wsdisplay_cmap *);
+	int	(*ramdac_set_cursor)(struct ramdac_cookie *,
+		    struct wsdisplay_cursor *);
+	int	(*ramdac_get_cursor)(struct ramdac_cookie *,
+		    struct wsdisplay_cursor *);
+	int	(*ramdac_set_curpos)(struct ramdac_cookie *,
+		    struct wsdisplay_curpos *);
+	int	(*ramdac_get_curpos)(struct ramdac_cookie *,
+		    struct wsdisplay_curpos *);
+	int	(*ramdac_get_curmax)(struct ramdac_cookie *,
+		    struct wsdisplay_curpos *);
 
 	/* Only called from the TGA built-in cursor handling code. */
-	int	(*ramdac_check_curcmap) __P((struct ramdac_cookie *,
-		    struct wsdisplay_cursor *));
-	void	(*ramdac_set_curcmap) __P((struct ramdac_cookie *,
-		    struct wsdisplay_cursor *));
-	int	(*ramdac_get_curcmap) __P((struct ramdac_cookie *,
-		    struct wsdisplay_cursor *));
+	int	(*ramdac_check_curcmap)(struct ramdac_cookie *,
+		    struct wsdisplay_cursor *);
+	void	(*ramdac_set_curcmap)(struct ramdac_cookie *,
+		    struct wsdisplay_cursor *);
+	int	(*ramdac_get_curcmap)(struct ramdac_cookie *,
+		    struct wsdisplay_cursor *);
+
+	/* XXXrcd:  new test code for setting the DOTCLOCK */
+	int	(*ramdac_set_dotclock)(struct ramdac_cookie *,
+		    unsigned);
 };
 
 #endif

@@ -1,25 +1,23 @@
-#	$NetBSD: Makefile,v 1.7 1999/06/06 02:52:16 thorpej Exp $
+#	$NetBSD: Makefile,v 1.11 2003/01/05 19:24:08 sommerfeld Exp $
 
 PROG=	rpc.statd
 SRCS=	sm_inter_svc.c statd.c stat_proc.c
 MAN=	rpc.statd.8
 MLINKS=	rpc.statd.8 statd.8
 
-CPPFLAGS+= -I.
+CPPFLAGS+= -I. -I${DESTDIR}/usr/include/rpcsvc/
 
 DPADD=	${LIBRPCSVC} ${LIBUTIL}
 LDADD=	-lrpcsvc -lutil
 
-CLEANFILES+= sm_inter_svc.c sm_inter.x sm_inter.h test
+CLEANFILES+=	test
 
-sm_inter_svc.c: ${RPCSRC} ${DESTDIR}/usr/include/rpcsvc/sm_inter.x
-	rm -f sm_inter.x
-	ln -s ${DESTDIR}/usr/include/rpcsvc/sm_inter.x .
-	rm -f sm_inter.h
-	ln -s ${DESTDIR}/usr/include/rpcsvc/sm_inter.h .
-	rpcgen -C -L -m -o ${.TARGET} sm_inter.x
+RPC_SVCFILES=	sm_inter_svc.c
+RPC_SVCFLAGS=	-L -m
+RPC_XDIR=	${DESTDIR}/usr/include/rpcsvc/
+
+.include <bsd.rpc.mk>
+.include <bsd.prog.mk>
 
 test: ${.CURDIR}/test.c
 	cc -o test ${.CURDIR}/test.c -lrpcsvc
-
-.include <bsd.prog.mk>

@@ -1,12 +1,13 @@
-#	$NetBSD: Makefile,v 1.9 1997/10/10 19:51:16 christos Exp $
+#	$NetBSD: Makefile,v 1.14 2005/06/27 01:00:06 christos Exp $
 #	@(#)Makefile	8.4 (Berkeley) 3/27/94
 
+.include <bsd.own.mk>
+
 PROG=	mount_procfs
-SRCS=	mount_procfs.c getmntopts.c
+SRCS=	mount_procfs.c
 MAN=	mount_procfs.8
 
-MOUNT=	${.CURDIR}/../mount
-CPPFLAGS+= -I${MOUNT}
-.PATH:	${MOUNT}
+DPADD+=${LIBUTIL}
+LDADD+=-lutil
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: dmareg.h,v 1.3 1999/04/08 04:46:41 gwr Exp $ */
+/*	$NetBSD: dmareg.h,v 1.6 2007/02/03 05:17:30 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1994 Peter Galbavy.  All rights reserved.
@@ -30,8 +30,15 @@
 
 #define DMACSRBITS "\020\01INT\02ERR\03DR1\04DR2\05IEN\011WRITE\016ENCNT\017TC\032DMAON"
 
+#define DMAREG_SIZE		0x10
+
+#define DMA_REG_CSR		0x00
+#define DMA_REG_ADDR		0x04
+#define DMA_REG_BCNT		0x08
+#define DMA_REG_TEST		0x0c
+
 struct dma_regs {
-	u_int32_t	csr;		/* DMA CSR */
+	uint32_t	csr;		/* DMA CSR */
 	/* bits common to all revs. */
 #define  D_INT_PEND	0x00000001	/* interrupt pending */
 #define  D_ERR_PEND	0x00000002	/* error pending */
@@ -68,13 +75,13 @@ struct dma_regs {
 #define   DMAREV_PLUS	0x90000000	/* 'DMA+' */
 #define   DMAREV_2	0xa0000000	/* 'DMA2' */
 
-	u_int32_t	addr;
+	uint32_t	addr;
 #define DMA_D_ADDR		0x01		/* DMA ADDR (in longs) */
 
-	u_int32_t	bcnt;		/* DMA COUNT (in longs) */
+	uint32_t	bcnt;		/* DMA COUNT (in longs) */
 #define  D_BCNT_MASK		0x00ffffff	/* only 24 bits */
 
-	u_int32_t	test;		/* DMA TEST (in longs) */
+	uint32_t	test;		/* DMA TEST (in longs) */
 #define en_testcsr	addr			/* enet registers overlap */
 #define en_cachev	bcnt
 #define en_bar		test

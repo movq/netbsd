@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_palisade.h,v 1.1.1.1 2000/03/29 12:38:54 simonb Exp $	*/
+/*	$NetBSD: refclock_palisade.h,v 1.3 2006/06/11 19:34:12 kardel Exp $	*/
 
 /*
  * This software was developed by the Software and Component Technologies
@@ -61,9 +61,11 @@
 
 #if defined HAVE_SYS_MODEM_H
 #include <sys/modem.h>
+#ifndef __QNXNTO__
 #define TIOCMSET MCSETA
 #define TIOCMGET MCGETA
 #define TIOCM_RTS MRTS
+#endif
 #endif
 
 #ifdef HAVE_TERMIOS_H
@@ -148,6 +150,7 @@ struct palisade_unit {
 	char		rpt_status;	/* TSIP Parser State */
 	short 		rpt_cnt;	/* TSIP packet length so far */
 	char 		rpt_buf[BMAX]; 	 /* packet assembly buffer */
+	int		type;		/* Clock mode type */
 };
 
 /*

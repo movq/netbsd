@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_control.h,v 1.1.1.1 2000/03/29 12:38:48 simonb Exp $	*/
+/*	$NetBSD: ntp_control.h,v 1.3 2006/06/11 19:34:09 kardel Exp $	*/
 
 /*
  * ntp_control.h - definitions related to NTP mode 6 control messages
@@ -11,7 +11,7 @@ struct ntp_control {
 	u_char r_m_e_op;		/* response, more, error, opcode */
 	u_short sequence;		/* sequence number of request */
 	u_short status;			/* status word for association */
-	u_short associd;		/* association ID */
+	associd_t associd;		/* association ID */
 	u_short offset;			/* offset of this batch of data */
 	u_short count;			/* count of data in this packet */
 	u_char data[(480 + MAX_MAC_LEN)]; /* data + auth */
@@ -159,14 +159,29 @@ struct ntp_control {
 #define CS_STATE	10
 #define	CS_OFFSET	11
 #define	CS_DRIFT	12
-#define	CS_COMPLIANCE	13
-#define	CS_CLOCK	14
-#define	CS_PROCESSOR	15
-#define	CS_SYSTEM	16
-#define	CS_STABIL	17
-#define CS_VARLIST	18
-
+#define CS_JITTER	13
+#define CS_ERROR	14
+#define	CS_CLOCK	15
+#define	CS_PROCESSOR	16
+#define	CS_SYSTEM	17
+#define CS_VERSION	18
+#define	CS_STABIL	19
+#define CS_VARLIST	20
+#ifdef OPENSSL
+#define CS_FLAGS	21
+#define CS_HOST		22
+#define CS_PUBLIC	23
+#define	CS_CERTIF	24
+#define	CS_REVTIME	25
+#define CS_LEAPTAB	26
+#define CS_TAI		27
+#define	CS_DIGEST	28
+#define CS_IDENT	29
+#define	CS_REVOKE	30
+#define	CS_MAXCODE	CS_REVOKE
+#else
 #define	CS_MAXCODE	CS_VARLIST
+#endif /* OPENSSL */
 
 /*
  * Peer variables we understand
@@ -192,7 +207,7 @@ struct ntp_control {
 #define	CP_REC		19
 #define	CP_XMT		20
 #define	CP_REACH	21
-#define	CP_VALID	22
+#define	CP_UNREACH	22
 #define	CP_TIMER	23
 #define	CP_DELAY	24
 #define	CP_OFFSET	25
@@ -206,10 +221,21 @@ struct ntp_control {
 #define	CP_SENT		33
 #define	CP_FILTERROR	34
 #define	CP_FLASH	35
-#define CP_DISP		36
+#define CP_TTL		36
 #define CP_VARLIST	37
-
+#ifdef OPENSSL
+#define CP_FLAGS	38
+#define CP_HOST		39
+#define CP_VALID	40
+#define	CP_INITSEQ	41
+#define	CP_INITKEY	42
+#define	CP_INITTSP	43
+#define	CP_DIGEST	44
+#define CP_IDENT	45
+#define	CP_MAXCODE	CP_IDENT
+#else
 #define	CP_MAXCODE	CP_VARLIST
+#endif /* OPENSSL */
 
 /*
  * Clock variables we understand
@@ -235,7 +261,7 @@ struct ntp_control {
  * ntp_request.c wants to see this.
  */
 struct ctl_trap {
-	struct sockaddr_in tr_addr;	/* address of trap recipient */
+	struct sockaddr_storage tr_addr;/* address of trap recipient */
 	struct interface *tr_localaddr;	/* interface to send this through */
 	u_long tr_settime;		/* time trap was set */
 	u_long tr_count;		/* async messages sent to this guy */
@@ -245,6 +271,7 @@ struct ctl_trap {
 	u_char tr_flags;		/* trap flags */
 	u_char tr_version;		/* version number of trapper */
 };
+extern struct ctl_trap ctl_trap[];
 
 /*
  * Flag bits

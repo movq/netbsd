@@ -1,4 +1,4 @@
-/*	$NetBSD: logger.c,v 1.6 1998/12/19 19:45:09 christos Exp $	*/
+/*	$NetBSD: logger.c,v 1.10 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)logger.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: logger.c,v 1.6 1998/12/19 19:45:09 christos Exp $");
+__RCSID("$NetBSD: logger.c,v 1.10 2008/07/21 14:19:23 lukem Exp $");
 #endif /* not lint */
 
 #include <errno.h>
@@ -52,14 +48,15 @@ __RCSID("$NetBSD: logger.c,v 1.6 1998/12/19 19:45:09 christos Exp $");
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
+#include <err.h>
 
 #define	SYSLOG_NAMES
 #include <syslog.h>
 
-int	decode __P((char *, CODE *));
-int	pencode __P((char *));
-int	main __P((int, char **));
-void	usage __P((void));
+int	decode(const char *, const CODE *);
+int	pencode(char *);
+int	main(int, char **);
+void	usage(void);
 
 /*
  * logger -- read and log utility
@@ -68,12 +65,11 @@ void	usage __P((void));
  *	log.
  */
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int ch, logflags, pri;
-	char *tag, buf[1024];
+	const char *tag;
+	char buf[1024];
 
 	tag = NULL;
 	pri = LOG_NOTICE;
@@ -81,11 +77,8 @@ main(argc, argv)
 	while ((ch = getopt(argc, argv, "f:ip:st:")) != -1)
 		switch((char)ch) {
 		case 'f':		/* file to log */
-			if (freopen(optarg, "r", stdin) == NULL) {
-				(void)fprintf(stderr, "logger: %s: %s.\n",
-				    optarg, strerror(errno));
-				exit(1);
-			}
+			if (freopen(optarg, "r", stdin) == NULL)
+				err(EXIT_FAILURE, "%s", optarg);
 			break;
 		case 'i':		/* log process id also */
 			logflags |= LOG_PID;
@@ -107,15 +100,15 @@ main(argc, argv)
 	argv += optind;
 
 	/* setup for logging */
-	openlog(tag ? tag : getlogin(), logflags, 0);
-	(void) fclose(stdout);
+	openlog(tag != NULL ? tag : getlogin(), logflags, 0);
+	(void)fclose(stdout);
 
 	/* log input line if appropriate */
 	if (argc > 0) {
 		char *p, *endp;
 		int len;
 
-		for (p = buf, endp = buf + sizeof(buf) - 2; *argv;) {
+		for (p = buf, endp = buf + sizeof(buf) - 2; *argv != NULL;) {
 			len = strlen(*argv);
 			if (p + len > endp && p > buf) {
 				syslog(pri, "%s", buf);
@@ -135,64 +128,59 @@ main(argc, argv)
 	} else
 		while (fgets(buf, sizeof(buf), stdin) != NULL)
 			syslog(pri, "%s", buf);
-	exit(0);
+
+	exit(EXIT_SUCCESS);
+	/* NOTREACHED */
 }
 
 /*
  *  Decode a symbolic name to a numeric value
  */
 int
-pencode(s)
-	char *s;
+pencode(char *s)
 {
 	char *save;
 	int fac, lev;
 
-	for (save = s; *s && *s != '.'; ++s);
-	if (*s) {
+	for (save = s; *s != '\0' && *s != '.'; ++s)
+		;
+	if (*s != '\0') {
 		*s = '\0';
 		fac = decode(save, facilitynames);
-		if (fac < 0) {
-			(void)fprintf(stderr,
-			    "logger: unknown facility name: %s.\n", save);
-			exit(1);
-		}
+		if (fac < 0)
+			errx(EXIT_FAILURE, "unknown facility name: %s", save);
 		*s++ = '.';
-	}
-	else {
+	} else {
 		fac = 0;
 		s = save;
 	}
 	lev = decode(s, prioritynames);
-	if (lev < 0) {
-		(void)fprintf(stderr,
-		    "logger: unknown priority name: %s.\n", save);
-		exit(1);
-	}
+	if (lev < 0)
+		errx(EXIT_FAILURE, "unknown priority name: %s", s);
 	return ((lev & LOG_PRIMASK) | (fac & LOG_FACMASK));
 }
 
 int
-decode(name, codetab)
-	char *name;
-	CODE *codetab;
+decode(const char *name, const CODE *codetab)
 {
-	CODE *c;
+	const CODE *c;
 
 	if (isdigit((unsigned char)*name))
 		return (atoi(name));
 
-	for (c = codetab; c->c_name; c++)
-		if (!strcasecmp(name, c->c_name))
+	for (c = codetab; c->c_name != NULL; c++)
+		if (strcasecmp(name, c->c_name) == 0)
 			return (c->c_val);
 
 	return (-1);
 }
 
 void
-usage()
+usage(void)
 {
+
 	(void)fprintf(stderr,
-	    "logger: [-is] [-f file] [-p pri] [-t tag] [ message ... ]\n");
-	exit(1);
+	    "%s: [-is] [-f file] [-p pri] [-t tag] [ message ... ]\n",
+	    getprogname());
+	exit(EXIT_FAILURE);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntptimeset.c,v 1.1.1.1 2000/03/29 12:38:54 simonb Exp $	*/
+/*	$NetBSD: ntptimeset.c,v 1.5 2006/06/11 19:34:21 kardel Exp $	*/
 
 /*
  * ntptimeset - get/set the time via ntp
@@ -123,37 +123,7 @@
 # include <config.h>
 #endif
 
-#ifdef HAVE_SYS_TYPES_H
-# include <sys/types.h>
-#endif
-#ifdef HAVE_UNISTD_H
-# include <unistd.h>
-#endif
-
-#include <stdio.h>
-#include <signal.h>
-#include <ctype.h>
-#ifndef SYS_WINNT
-# include <netdb.h>
-# include <sys/signal.h>
-# include <sys/ioctl.h>
-#endif /* SYS_WINNT */
-#include <sys/time.h>
-#ifdef HAVE_SYS_RESOURCE_H
-# include <sys/resource.h>
-#endif /* HAVE_SYS_RESOURCE_H */
-
-#ifdef SYS_VXWORKS
-# include "ioLib.h"
-# include "sockLib.h"
-# include "timers.h"
-#endif
-
-
-#if defined(SYS_HPUX)
-# include <utmp.h>
-#endif
-
+#include "ntp_machine.h"
 #include "ntp_fp.h"
 #include "ntp.h"
 #include "ntp_io.h"
@@ -164,6 +134,33 @@
 #include "ntp_syslog.h"
 #include "ntp_select.h"
 #include "ntp_stdlib.h"
+
+#ifdef HAVE_UNISTD_H
+# include <unistd.h>
+#endif
+
+#include <stdio.h>
+#include <signal.h>
+#include <ctype.h>
+#ifndef SYS_WINNT
+# ifdef HAVE_SYS_SIGNAL_H
+#  include <sys/signal.h>
+# else
+#  include <signal.h>
+# endif
+# include <sys/ioctl.h>
+#endif /* SYS_WINNT */
+
+#ifdef HAVE_SYS_RESOURCE_H
+# include <sys/resource.h>
+#endif /* HAVE_SYS_RESOURCE_H */
+
+#ifdef SYS_VXWORKS
+# include "ioLib.h"
+# include "sockLib.h"
+# include "timers.h"
+#endif
+
 #include "recvbuff.h"
 
 #ifdef SYS_WINNT
@@ -310,7 +307,6 @@ u_long finish_time = 0;
 
 
 int	ntptimesetmain	P((int argc, char *argv[]));
-extern	void	loadservers	P((char *cfgpath));
 static	void	analysis	P((int final));
 static	int	have_enough	P((void));
 static	void	transmit	P((register struct server *server));
@@ -408,7 +404,7 @@ ntptimesetmain(
 	)
 {
 	int was_alarmed;
-	struct recvbuf *rbuflist;
+	int tot_recvbufs;
 	struct recvbuf *rbuf;
 	l_fp tmp;
 	int errflg;
@@ -651,7 +647,6 @@ ntptimesetmain(
 	 * yet to learn about anything else that is.
 	 */
 	was_alarmed = 0;
-	rbuflist = (struct recvbuf *)0;
 	while (finish_time > current_time) {
 #if !defined(HAVE_SIGNALED_IO) 
 		fd_set rdfdes;
@@ -660,7 +655,7 @@ ntptimesetmain(
 		block_io_and_alarm();
 #endif
 
-		rbuflist = getrecvbufs();	/* get received buffers */
+		tot_recvbufs = full_recvbuffs();	/* get received buffers */
 		if (printmsg) {
 			printmsg = 0;
 			analysis(0);
@@ -670,7 +665,7 @@ ntptimesetmain(
 			alarm_flag = 0;
 		}
 
-		if (!was_alarmed && rbuflist == (struct recvbuf *)0) {
+		if (!was_alarmed && tot_recvbufs > 0) {
 			/*
 			 * Nothing to do.  Wait for something.
 			 */
@@ -710,7 +705,7 @@ ntptimesetmain(
 				was_alarmed = 1;
 				alarm_flag = 0;
 			}
-			rbuflist = getrecvbufs();  /* get received buffers */
+			tot_recvbufs = full_recvbuffs();  /* get received buffers */
 		}
 #ifdef HAVE_SIGNALED_IO
 		unblock_io_and_alarm();
@@ -730,18 +725,13 @@ ntptimesetmain(
 		 * Call the data procedure to handle each received
 		 * packet.
 		 */
-		while (rbuflist != (struct recvbuf *)0)
+		rbuf = get_full_recv_buffer();
+		while (rbuf != NULL)
 		{
-			rbuf = rbuflist;
-			rbuflist = rbuf->next;
 			receive(rbuf);
 			freerecvbuf(rbuf);
+			rbuf = get_full_recv_buffer();
 		}
-#if defined DEBUG && defined SYS_WINNT
-		if (debug > 4)
-		    printf("getrecvbufs: %ld handler interrupts, %ld frames\n",
-			   handler_calls, handler_pkts);
-#endif
 
 		/*
 		 * Do we have enough information to stop now?
@@ -894,7 +884,7 @@ transmit(
 	if (sys_authenticate) {
 		int len;
 
-		xpkt.keyid1 = htonl(sys_authkey);
+		xpkt.exten[0] = htonl(sys_authkey);
 		get_systime(&server->xmt);
 		L_ADDUF(&server->xmt, sys_authdelay);
 		HTONL_FP(&server->xmt, &xpkt.xmt);
@@ -1015,7 +1005,7 @@ receive(
 
 	if ((PKT_MODE(rpkt->li_vn_mode) != MODE_SERVER
 	    && PKT_MODE(rpkt->li_vn_mode) != MODE_PASSIVE)
-	    || rpkt->stratum > NTP_MAXSTRATUM) {
+	    || rpkt->stratum >=STRATUM_UNSPEC) {
 		if (debug > 1)
 			printf("receive: mode %d stratum %d\n",
 			    PKT_MODE(rpkt->li_vn_mode), rpkt->stratum);
@@ -1053,11 +1043,11 @@ receive(
 
 		if (debug > 3)
 			printf("receive: rpkt keyid=%ld sys_authkey=%ld decrypt=%ld\n",
-			   (long int)ntohl(rpkt->keyid1), (long int)sys_authkey,
+			   (long int)ntohl(rpkt->exten[0]), (long int)sys_authkey,
 			   (long int)authdecrypt(sys_authkey, (u_int32 *)rpkt,
 				LEN_PKT_NOMAC, (int)(rbufp->recv_length - LEN_PKT_NOMAC)));
 
-		if (has_mac && ntohl(rpkt->keyid1) == sys_authkey &&
+		if (has_mac && ntohl(rpkt->exten[0]) == sys_authkey &&
 			authdecrypt(sys_authkey, (u_int32 *)rpkt, LEN_PKT_NOMAC,
 			(int)(rbufp->recv_length - LEN_PKT_NOMAC)))
 			is_authentic = 1;
@@ -1979,7 +1969,7 @@ sendpkt(
 	}
 
 
-	cc = sendto(fd, (char *)pkt, len, 0, (struct sockaddr *)dest,
+	cc = sendto(fd, (char *)pkt, (size_t)len, 0, (struct sockaddr *)dest,
 	    sizeof(struct sockaddr_in));
 #ifndef SYS_WINNT
 	if (cc == -1) {

@@ -1,4 +1,4 @@
-.\"	$NetBSD: ld.so.conf.5,v 1.13 1999/12/20 01:43:05 christos Exp $
+.\"	$NetBSD: ld.so.conf.5,v 1.18 2008/05/29 14:51:25 mrg Exp $
 .\"
 .\" Copyright (c) 1996 Matthew R. Green
 .\" All rights reserved.
@@ -11,8 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. The name of the author may not be used to endorse or promote products
-.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +24,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd August 24, 1997
+.Dd July 21, 2004
 .Dt LD.SO.CONF 5
 .Os
 .Sh NAME
@@ -40,7 +38,7 @@ normally
 .Dq /usr/lib
 ).
 .Pp
-On 
+On
 .Xr a.out 5
 systems, this file is scanned by
 .Xr ldconfig 8
@@ -48,8 +46,8 @@ to create the hints files used by the run-time linker
 .Pa /usr/libexec/ld.so
 to locate shared libraries.
 .Pp
-On elf
-.\" .Xr elf 5
+On
+.Xr elf 5
 systems, this file is scanned directly by the run-time linker
 .Pa /usr/libexec/ld.elf_so .
 .Pp
@@ -62,16 +60,18 @@ with '/' are stripped of leading whitespace and trailing comments
 together with any preceding whitespace, then treated as directories to be
 scanned for shared libraries to add to the hints.
 .Pp
-On elf
-.\" .Xr elf 5
+On
+.Xr elf 5
 lines that do not begin with a '/' are parsed as hardware dependent per
 library directives:
 .sp
 .nf
-<library_name> <sysctl_variable> <variable_value>[,...]:<library_name>[,...] ...
+\*[Lt]library_name\*[Gt] \*[Lt]sysctl_variable\*[Gt] \*[Lt]variable_value\*[Gt][,...]:\*[Lt]library_name\*[Gt][,...] ...
 .fi
 .sp
 If there is no match, the standard action is taken.
+.Sh FILES
+.Pa /etc/ld.so.conf
 .Sh EXAMPLES
 .sp
 .nf
@@ -81,19 +81,12 @@ libm.so.0	machdep.fpu_present	1:libm387.so.0,libm.so.0
 The above line loads both libm387 and libm when the
 .Xr sysctl 3
 variable fpu_present has the value 1.
-.Sh FILES
-.Pa /etc/ld.so.conf
 .Sh SEE ALSO
-.\" .Xr ld.elf_so 1
-.\" .Xr ld.aout_so 1
-.Xr a.out 5
-.\" .Xr elf 5
+.Xr ld.aout_so 1 ,
+.Xr ld.elf_so 1 ,
+.Xr a.out 5 ,
+.Xr elf 5 ,
 .Xr ldconfig 8
-.Sh BUGS
-Directory names containing the comment character
-.Pq Dq #
-and/or leading or trailing whitespace cannot be included.  (Embedded blanks
-are allowed, however.)
 .Sh HISTORY
 The
 .Nm
@@ -101,3 +94,8 @@ file appeared in
 .Nx 1.3 .
 The ELF support for it was added in
 .Nx 1.5 .
+.Sh BUGS
+Directory names containing the comment character
+.Pq Dq #
+and/or leading or trailing whitespace cannot be included.  (Embedded blanks
+are allowed, however.)

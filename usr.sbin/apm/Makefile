@@ -1,15 +1,22 @@
-#	$NetBSD: Makefile,v 1.8 1997/10/23 06:29:14 lukem Exp $
+#	$NetBSD: Makefile,v 1.15 2007/07/29 14:34:45 nonaka Exp $
 
-.if ${MACHINE} == "i386"
+.include <bsd.own.mk>
+
+.if (${MACHINE} == "i386" || \
+     ${MACHINE} == "hpcarm" || \
+     ${MACHINE} == "hpcmips" || \
+     ${MACHINE} == "hpcsh" || \
+     ${MACHINE} == "macppc" || \
+     ${MACHINE} == "sparc" || \
+     ${MACHINE} == "zaurus")
 PROG=	apm
 SRCS=	apm.c apmsubr.c
-.PATH:	${.CURDIR}/../apmd
-CPPFLAGS+=-I${.CURDIR}/../apmd
+.PATH:	${NETBSDSRCDIR}/usr.sbin/apmd
+CPPFLAGS+=-I${NETBSDSRCDIR}/usr.sbin/apmd
 LINKS=	${BINDIR}/apm ${BINDIR}/zzz
 .endif
 
 MAN=	apm.8
-MANSUBDIR=/i386
 MLINKS=	apm.8 zzz.8
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: edlabel.c,v 1.7 1998/11/12 16:19:48 christos Exp $	*/
+/*	$NetBSD: edlabel.c,v 1.16 2006/10/23 03:56:38 mrg Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
@@ -44,6 +44,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <util.h>
+#include <stdlib.h>
 
 /*
  * Machine dependent constants you want to retrieve only once...
@@ -54,7 +55,7 @@ int rawpartition, maxpartitions;
  * This is a data-driven program
  */
 struct field {
-	char *f_name;
+	const char *f_name;
 	int f_offset;
 	int f_type;	/* 1:char, 2:short, 4:int, >4:string */
 };
@@ -72,34 +73,30 @@ struct field label_head[] = {
   { "       cylinders", dloff(d_ncylinders), 4 },
   { "sectors/cylinder", dloff(d_secpercyl), 4 },
   /* Don't care about the others until later... */
-  { 0 },
+  { .f_name = NULL },
 };
 #undef dloff
 
-void	check_divisors __P((struct disklabel *));
-u_short	dkcksum __P((struct disklabel *));
-void	edit_geo __P((struct disklabel *));
-void	edit_head_all __P((struct disklabel *, int));
-void	edit_head_field __P((void *, struct field *, int));
-void	edit_partition __P((struct disklabel *, int, int));
-void	get_fstype __P((char *, u_int8_t *));
-void	get_val_cts __P((struct disklabel *, char *, u_int32_t *));
-void	label_modify __P((struct disklabel *, char *));
-void	label_print __P((struct disklabel *, char *));
-void	label_quit __P((struct disklabel *, char *));
-void	label_read __P((struct disklabel *, char *));
-void	label_write __P((struct disklabel *, char *));
-int	main __P((int, char *[]));
-void	menu __P((void));
-void	print_val_cts __P((struct disklabel *, u_long val));
+void	check_divisors(struct disklabel *);
+u_short	dkcksum(struct disklabel *);
+void	edit_geo(struct disklabel *);
+void	edit_head_all(struct disklabel *, int);
+void	edit_head_field(void *, struct field *, int);
+void	edit_partition(struct disklabel *, int, int);
+void	get_fstype(char *, u_int8_t *);
+void	get_val_cts(struct disklabel *, char *, u_int32_t *);
+void	label_modify(struct disklabel *, char *);
+void	label_print(struct disklabel *, char *);
+void	label_quit(struct disklabel *, char *);
+void	label_read(struct disklabel *, char *);
+void	label_write(struct disklabel *, char *);
+void	menu(void);
+void	print_val_cts(struct disklabel *, u_long val);
 
 char	tmpbuf[64];
 
 void
-edit_head_field(v, f, modify)
-	void *v;
-	struct field *f;
-	int modify;	/* also modify */
+edit_head_field(void *v, struct field *f, int modify /* also modify */)
 {
 	u_int8_t  *cp;
 	u_int tmp;
@@ -126,7 +123,7 @@ edit_head_field(v, f, modify)
 
 	default:
 		/* must be a string. */
-		strncpy(tmpbuf, (char*)cp, sizeof(tmpbuf));
+		strlcpy(tmpbuf, (char*)cp, sizeof(tmpbuf));
 		printf("%s", tmpbuf);
 		break;
 	}
@@ -174,9 +171,7 @@ edit_head_field(v, f, modify)
 }
 
 void
-edit_head_all(d, modify)
-	struct disklabel *d;
-	int modify;
+edit_head_all(struct disklabel *d, int modify)
 {
 	struct field *f;
 
@@ -186,8 +181,7 @@ edit_head_all(d, modify)
 }
 
 void
-edit_geo(d)
-	struct disklabel *d;
+edit_geo(struct disklabel *d)
 {
 	int nsect, ntrack, ncyl, spc;
 
@@ -217,9 +211,7 @@ edit_geo(d)
 }
 
 void
-print_val_cts(d, val)
-	struct disklabel *d;
-	u_long val;
+print_val_cts(struct disklabel *d, u_long val)
 {
 	int	sects, trks, cyls;
 	char	marker;
@@ -230,15 +222,13 @@ print_val_cts(d, val)
 	cyls   = val / d->d_nsectors;
 	trks   = cyls % d->d_ntracks;
 	cyls  /= d->d_ntracks;
-	sprintf(buf, "(%d/%02d/%02d)%c", cyls, trks, sects, marker);
+	snprintf(buf, sizeof(buf), "(%d/%02d/%02d)%c", cyls, trks, sects,
+	    marker);
 	printf(" %9ld %16s", val, buf);
 }
 
 void
-get_val_cts(d, buf, result)
-	struct disklabel *d;
-	char		 *buf;
-	u_int32_t	 *result;
+get_val_cts(struct disklabel *d, char *buf, u_int32_t *result)
 {
 	u_long tmp;
 	int	cyls, trks, sects;
@@ -257,17 +247,15 @@ get_val_cts(d, buf, result)
 }
 
 void
-get_fstype(tmpbuf, fstype)
-	char	 *tmpbuf;
-	u_int8_t *fstype;
+get_fstype(char *buf, u_int8_t *fstype)
 {
 	int	i, len;
 
 	/* An empty response retains previous value */
-	if (tmpbuf[0] == '\n')
+	if (buf[0] == '\n')
 		return;
-	for (i = 0, len = strlen(tmpbuf) - 1; i < FSMAXTYPES; i++) {
-		if (!strncasecmp(tmpbuf, fstypenames[i], len)) {
+	for (i = 0, len = strlen(buf) - 1; i < FSMAXTYPES; i++) {
+		if (!strncasecmp(buf, fstypenames[i], len)) {
 			*fstype = i;
 			return;
 		}
@@ -275,12 +263,11 @@ get_fstype(tmpbuf, fstype)
 }
 
 void
-edit_partition(d, idx, modify)
-	struct disklabel *d;
-	int idx, modify;
+edit_partition(struct disklabel *d, int idx, int modify)
 {
 	struct partition *p;
-	char letter, *comment;
+	char letter;
+	const char *comment;
 
 	if ((idx < 0) || (idx >= maxpartitions)) {
 		printf("bad partition index\n");
@@ -338,8 +325,7 @@ edit_partition(d, idx, modify)
 /*****************************************************************/
 
 void
-check_divisors(d)
-	struct disklabel *d;
+check_divisors(struct disklabel *d)
 {
 	if (d->d_nsectors == 0) {
 		d->d_nsectors = 1;
@@ -361,8 +347,7 @@ check_divisors(d)
 }
 
 u_short
-dkcksum(d)
-	struct disklabel *d;
+dkcksum(struct disklabel *d)
 {
 	u_short *start, *end;
 	u_short sum = 0;
@@ -375,9 +360,7 @@ dkcksum(d)
 }
 
 void
-label_write(d, dn)
-	struct disklabel *d;
-	char *dn;
+label_write(struct disklabel *d, char *dn)
 {
 	int fd;
 
@@ -398,9 +381,7 @@ label_write(d, dn)
 }
 
 void
-label_read(dl, dn)
-	struct disklabel *dl;
-	char *dn;
+label_read(struct disklabel *dl, char *dn)
 {
 	int fd;
 
@@ -426,9 +407,7 @@ label_read(dl, dn)
 /*****************************************************************/
 
 void
-label_print(dl, dn)
-	struct disklabel *dl;
-	char *dn;
+label_print(struct disklabel *dl, char *dn)
 {
 	int i;
 
@@ -448,9 +427,7 @@ char modify_cmds[] = "modify subcommands:\n\
  q   : quit this subcommand\n";
 
 void
-label_modify(dl, dn)
-	struct disklabel *dl;
-	char *dn;
+label_modify(struct disklabel *dl, char *dn)
 {
 	int c, i;
 	int scsi_fict = 0;
@@ -460,7 +437,7 @@ label_modify(dl, dn)
 		scsi_fict = 1;
 
 	printf(modify_cmds, 'a' + maxpartitions - 1,
-		scsi_fict ? " s   : standarize geometry\n" : "");
+		scsi_fict ? " s   : standardize geometry\n" : "");
 	for (;;) {
 		printf("edlabel/modify> ");
 		fflush(stdout);
@@ -482,7 +459,8 @@ label_modify(dl, dn)
 		}
 		if ((c < 'a') || (c > 'q')) {
 			printf("bad input.  ");
-			printf(modify_cmds);
+			printf(modify_cmds, 'a' + maxpartitions - 1,
+			    scsi_fict ? " s   : standardize geometry\n" : "");
 			continue;
 		}
 		edit_partition(dl, c - 'a', 1);
@@ -496,27 +474,25 @@ label_modify(dl, dn)
 }
 
 void
-label_quit(dl, dn)
-	struct disklabel *dl;
-	char *dn;
+label_quit(struct disklabel *dl, char *dn)
 {
 	exit(0);
 }
 
 struct cmd {
-	void (*cmd_func)__P((struct disklabel *, char *));
-	char *cmd_name;
-	char *cmd_descr;
+	void (*cmd_func)(struct disklabel *, char *);
+	const char *cmd_name;
+	const char *cmd_descr;
 } cmds[] = {
 	{ label_print,  "print",  "display the current disk label" },
 	{ label_modify, "modify", "prompt for changes to the label" },
 	{ label_write,  "write",  "write the new label to disk" },
 	{ label_quit,   "quit",   "terminate program" },
-	{ 0 },
+	{ .cmd_func = 0 },
 };
 
 void
-menu()
+menu(void)
 {
 	struct cmd *cmd;
 
@@ -526,24 +502,22 @@ menu()
 }
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	struct disklabel dl;
 	struct cmd *cmd;
-	char *devname;
+	char *dev_name;
 
 	if (argc != 2) {
 		fprintf(stderr, "usage: edlabel RAWDISK\n");
 		exit(1);
 	}
-	devname = argv[1];
+	dev_name = argv[1];
 
 	rawpartition = getrawpartition();
 	maxpartitions = getmaxpartitions();
 
-	label_read(&dl, devname);
+	label_read(&dl, dev_name);
 
 	menu();
 
@@ -560,7 +534,7 @@ main(argc, argv)
 		continue;
 
 	found:
-		cmd->cmd_func(&dl, devname);
+		cmd->cmd_func(&dl, dev_name);
 	}
 	exit(0);
 }

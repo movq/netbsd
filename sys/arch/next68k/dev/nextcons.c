@@ -1,4 +1,4 @@
-/*	$NetBSD: nextcons.c,v 1.2 1999/04/29 14:51:20 bad Exp $	*/
+/*	$NetBSD: nextcons.c,v 1.10 2008/01/05 00:31:55 ad Exp $	*/
 
 /*
  * Copyright (c) 1999 Darrin B. Jewell
@@ -31,6 +31,7 @@
  */
 
 #include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: nextcons.c,v 1.10 2008/01/05 00:31:55 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,26 +41,27 @@
 #include <sys/malloc.h>
 #include <sys/errno.h>
 #include <sys/queue.h>
-#include <sys/lock.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
 
 #include <machine/autoconf.h>
-#include <machine/cpu.h>
-#include <machine/intr.h>
-#include <machine/bus.h>
 
 #include <dev/cons.h>
 #include <dev/wscons/wskbdvar.h>
 #include <dev/wscons/wsdisplayvar.h>
+
+#include <next68k/dev/intiovar.h>
 #include <next68k/dev/nextdisplayvar.h>
 #include <next68k/dev/nextkbdvar.h>
 
 #include <next68k/next68k/nextrom.h>
 
-void nextcnprobe __P((struct consdev *));
-void nextcninit __P((struct consdev *));
-int nextcngetc __P((dev_t));
-void nextcnputc __P((dev_t, int));
-void nextcnpollc __P((dev_t, int));
+void nextcnprobe(struct consdev *);
+void nextcninit(struct consdev *);
+int nextcngetc(dev_t);
+void nextcnputc(dev_t, int);
+void nextcnpollc(dev_t, int);
 
 
 void
@@ -67,7 +69,10 @@ nextcnprobe(struct consdev *cp)
 {
 
 	if ((rom_machine_type == NeXT_WARP9)
-	    || (rom_machine_type == NeXT_X15))
+	    || (rom_machine_type == NeXT_X15)
+	    || (rom_machine_type == NeXT_WARP9C)
+	    || (rom_machine_type == NeXT_TURBO_MONO)
+	    || (rom_machine_type == NeXT_TURBO_COLOR))
 		cp->cn_pri = CN_INTERNAL;
 	else 
 		cp->cn_pri = CN_DEAD;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ddp_input.c,v 1.4 1999/03/27 01:24:50 aidan Exp $	 */
+/*	$NetBSD: ddp_input.c,v 1.19 2008/04/24 11:38:37 ad Exp $	 */
 
 /*
  * Copyright (c) 1990,1994 Regents of The University of Michigan.
@@ -26,7 +26,9 @@
  *	netatalk@umich.edu
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ddp_input.c,v 1.19 2008/04/24 11:38:37 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -44,6 +46,7 @@
 #include <netatalk/at_var.h>
 #include <netatalk/ddp.h>
 #include <netatalk/ddp_var.h>
+#include <netatalk/ddp_private.h>
 #include <netatalk/at_extern.h>
 
 int             ddp_forward = 1;
@@ -64,16 +67,18 @@ atintr()
 	struct at_ifaddr *aa;
 	int             s;
 
+	mutex_enter(softnet_lock);
 	for (;;) {
-		s = splimp();
+		s = splnet();
 
 		IF_DEQUEUE(&atintrq2, m);
 
 		splx(s);
 
-		if (m == 0) {	/* no more queued packets */
+		if (m == 0)	/* no more queued packets */
 			break;
-		}
+
+		m_claimm(m, &atalk_rx_mowner);
 		ifp = m->m_pkthdr.rcvif;
 		for (aa = at_ifaddr.tqh_first; aa; aa = aa->aa_list.tqe_next) {
 			if (aa->aa_ifp == ifp && (aa->aa_flags & AFA_PHASE2))
@@ -87,15 +92,17 @@ atintr()
 	}
 
 	for (;;) {
-		s = splimp();
+		s = splnet();
 
 		IF_DEQUEUE(&atintrq1, m);
 
 		splx(s);
 
-		if (m == 0) /* no more queued packets */
+		if (m == 0)	/* no more queued packets */
 
 			break;
+
+		m_claimm(m, &atalk_rx_mowner);
 		ifp = m->m_pkthdr.rcvif;
 		for (aa = at_ifaddr.tqh_first; aa; aa = aa->aa_list.tqe_next) {
 			if (aa->aa_ifp == ifp &&
@@ -108,7 +115,7 @@ atintr()
 		}
 		if (m->m_len < SZ_ELAPHDR &&
 		    ((m = m_pullup(m, SZ_ELAPHDR)) == 0)) {
-			ddpstat.ddps_tooshort++;
+			DDP_STATINC(DDP_STAT_TOOSHORT);
 			continue;
 		}
 		elhp = mtod(m, struct elaphdr *);
@@ -117,10 +124,11 @@ atintr()
 		if (elhp->el_type == ELAP_DDPEXTEND) {
 			ddp_input(m, ifp, (struct elaphdr *) NULL, 1);
 		} else {
-			bcopy((caddr_t) elhp, (caddr_t) & elh, SZ_ELAPHDR);
+			bcopy((void *) elhp, (void *) & elh, SZ_ELAPHDR);
 			ddp_input(m, ifp, &elh, 1);
 		}
 	}
+	mutex_exit(softnet_lock);
 }
 
 struct route    forwro;
@@ -132,6 +140,7 @@ ddp_input(m, ifp, elh, phase)
 	struct elaphdr *elh;
 	int             phase;
 {
+	struct rtentry *rt;
 	struct sockaddr_at from, to;
 	struct ddpshdr *dsh, ddps;
 	struct at_ifaddr *aa;
@@ -139,18 +148,22 @@ ddp_input(m, ifp, elh, phase)
 	struct ddpcb   *ddp;
 	int             dlen, mlen;
 	u_short         cksum = 0;
+	union {
+		struct sockaddr		dst;
+		struct sockaddr_at	dsta;
+	} u;
 
-	bzero((caddr_t) & from, sizeof(struct sockaddr_at));
+	bzero((void *) & from, sizeof(struct sockaddr_at));
 	if (elh) {
-		ddpstat.ddps_short++;
+		DDP_STATINC(DDP_STAT_SHORT);
 
 		if (m->m_len < sizeof(struct ddpshdr) &&
 		    ((m = m_pullup(m, sizeof(struct ddpshdr))) == 0)) {
-			ddpstat.ddps_tooshort++;
+			DDP_STATINC(DDP_STAT_TOOSHORT);
 			return;
 		}
 		dsh = mtod(m, struct ddpshdr *);
-		bcopy((caddr_t) dsh, (caddr_t) & ddps, sizeof(struct ddpshdr));
+		bcopy((void *) dsh, (void *) & ddps, sizeof(struct ddpshdr));
 		ddps.dsh_bytes = ntohl(ddps.dsh_bytes);
 		dlen = ddps.dsh_len;
 
@@ -174,20 +187,20 @@ ddp_input(m, ifp, elh, phase)
 			return;
 		}
 	} else {
-		ddpstat.ddps_long++;
+		DDP_STATINC(DDP_STAT_LONG);
 
 		if (m->m_len < sizeof(struct ddpehdr) &&
 		    ((m = m_pullup(m, sizeof(struct ddpehdr))) == 0)) {
-			ddpstat.ddps_tooshort++;
+			DDP_STATINC(DDP_STAT_TOOSHORT);
 			return;
 		}
 		deh = mtod(m, struct ddpehdr *);
-		bcopy((caddr_t) deh, (caddr_t) & ddpe, sizeof(struct ddpehdr));
+		bcopy((void *) deh, (void *) & ddpe, sizeof(struct ddpehdr));
 		ddpe.deh_bytes = ntohl(ddpe.deh_bytes);
 		dlen = ddpe.deh_len;
 
 		if ((cksum = ddpe.deh_sum) == 0) {
-			ddpstat.ddps_nosum++;
+			DDP_STATINC(DDP_STAT_NOSUM);
 		}
 		from.sat_addr.s_net = ddpe.deh_snet;
 		from.sat_addr.s_node = ddpe.deh_snode;
@@ -245,7 +258,7 @@ ddp_input(m, ifp, elh, phase)
          */
 	mlen = m->m_pkthdr.len;
 	if (mlen < dlen) {
-		ddpstat.ddps_toosmall++;
+		DDP_STATINC(DDP_STAT_TOOSMALL);
 		m_freem(m);
 		return;
 	}
@@ -262,43 +275,29 @@ ddp_input(m, ifp, elh, phase)
 			m_freem(m);
 			return;
 		}
-		if (forwro.ro_rt &&
-		    (satosat(&forwro.ro_dst)->sat_addr.s_net !=
-		     to.sat_addr.s_net ||
-		     satosat(&forwro.ro_dst)->sat_addr.s_node !=
-		     to.sat_addr.s_node)) {
-			RTFREE(forwro.ro_rt);
-			forwro.ro_rt = (struct rtentry *) 0;
-		}
-		if (forwro.ro_rt == (struct rtentry *) 0 ||
-		    forwro.ro_rt->rt_ifp == (struct ifnet *) 0) {
-			bzero(&forwro.ro_dst, sizeof(struct sockaddr_at));
-			forwro.ro_dst.sa_len = sizeof(struct sockaddr_at);
-			forwro.ro_dst.sa_family = AF_APPLETALK;
-			satosat(&forwro.ro_dst)->sat_addr.s_net =
-			    to.sat_addr.s_net;
-			satosat(&forwro.ro_dst)->sat_addr.s_node =
-			    to.sat_addr.s_node;
-			rtalloc(&forwro);
-		}
+		sockaddr_at_init(&u.dsta, &to.sat_addr, 0);
+		rt = rtcache_lookup(&forwro, &u.dst);
+#if 0		/* XXX The if-condition is always false.  What was this
+		 * actually trying to test?
+		 */
 		if (to.sat_addr.s_net !=
-		    satosat(&forwro.ro_dst)->sat_addr.s_net &&
+		    satocsat(rtcache_getdst(&forwro))->sat_addr.s_net &&
 		    ddpe.deh_hops == DDP_MAXHOPS) {
 			m_freem(m);
 			return;
 		}
-		if (ddp_firewall &&
-		    (forwro.ro_rt == NULL || forwro.ro_rt->rt_ifp != ifp)) {
+#endif
+		if (ddp_firewall && (rt == NULL || rt->rt_ifp != ifp)) {
 			m_freem(m);
 			return;
 		}
 		ddpe.deh_hops++;
 		ddpe.deh_bytes = htonl(ddpe.deh_bytes);
-		bcopy((caddr_t) & ddpe, (caddr_t) deh, sizeof(u_short));/*XXX*/
+		bcopy((void *) & ddpe, (void *) deh, sizeof(u_short));/*XXX*/
 		if (ddp_route(m, &forwro)) {
-			ddpstat.ddps_cantforward++;
+			DDP_STATINC(DDP_STAT_CANTFORWARD);
 		} else {
-			ddpstat.ddps_forward++;
+			DDP_STATINC(DDP_STAT_FORWARD);
 		}
 		return;
 	}
@@ -309,7 +308,7 @@ ddp_input(m, ifp, elh, phase)
 		m_adj(m, sizeof(struct ddpshdr));
 	} else {
 		if (ddp_cksum && cksum && cksum != at_cksum(m, sizeof(int))) {
-			ddpstat.ddps_badsum++;
+			DDP_STATINC(DDP_STAT_BADSUM);
 			m_freem(m);
 			return;
 		}
@@ -322,7 +321,7 @@ ddp_input(m, ifp, elh, phase)
 	}
 	if (sbappendaddr(&ddp->ddp_socket->so_rcv, (struct sockaddr *) & from,
 			 m, (struct mbuf *) 0) == 0) {
-		ddpstat.ddps_nosockspace++;
+		DDP_STATINC(DDP_STAT_NOSOCKSPACE);
 		m_freem(m);
 		return;
 	}
@@ -338,7 +337,6 @@ ddp_input(m, ifp, elh, phase)
 #define BPXLEN	48
 #define BPALEN	16
 #include <ctype.h>
-char            hexdig[] = "0123456789ABCDEF";
 
 static void
 bprint(data, len)
@@ -359,8 +357,8 @@ bprint(data, len)
 			printf("%s\n", "(end)");
 			break;
 		}
-		xout[(i * 3)] = hexdig[(*data & 0xf0) >> 4];
-		xout[(i * 3) + 1] = hexdig[*data & 0x0f];
+		xout[(i * 3)] = hexdigits[(*data & 0xf0) >> 4];
+		xout[(i * 3) + 1] = hexdigits[*data & 0x0f];
 
 		if ((u_char) * data < 0x7f && (u_char) * data > 0x20) {
 			aout[i] = *data;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ser.c,v 1.11 2000/03/29 14:19:23 leo Exp $	*/
+/*	$NetBSD: ser.c,v 1.39 2008/06/11 14:35:53 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -80,11 +73,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the University of
- *      California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -103,7 +92,12 @@
  *      @(#)com.c       7.5 (Berkeley) 5/16/91
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ser.c,v 1.39 2008/06/11 14:35:53 tsutsui Exp $");
+
 #include "opt_ddb.h"
+#include "opt_mbtype.h"
+#include "opt_serconsole.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -119,14 +113,31 @@
 #include <sys/syslog.h>
 #include <sys/types.h>
 #include <sys/device.h>
+#include <sys/kauth.h>
 
 #include <m68k/asm_single.h>
 
 #include <machine/iomap.h>
 #include <machine/mfp.h>
 #include <atari/atari/intr.h>
-#include <atari/dev/ym2149reg.h>
 #include <atari/dev/serreg.h>
+
+#if !defined(_MILANHW_)
+#include <atari/dev/ym2149reg.h>
+#else
+	/* MILAN has no ym2149 */
+#define ym2149_dtr(set) {					\
+	if (set)						\
+		single_inst_bset_b(MFP->mf_gpip, 0x08);		\
+	else single_inst_bclr_b(MFP->mf_gpip, 0x08);		\
+}
+
+#define ym2149_rts(set) {					\
+	if (set)						\
+		single_inst_bset_b(MFP->mf_gpip, 0x01);		\
+	else single_inst_bclr_b(MFP->mf_gpip, 0x01);		\
+}
+#endif /* _MILANHW_ */
 
 /* #define SER_DEBUG */
 
@@ -137,13 +148,6 @@
 #define	CONSBAUD	9600
 #define	CONSCFLAG	TTYDEF_CFLAG
 /* end XXX */
-
-/* Macros to clear/set/test flags. */
-#define SET(t, f)	(t) |= (f)
-#define CLR(t, f)	(t) &= ~(f)
-#define ISSET(t, f)	((t) & (f))
-
-#define	splserial()	spl6()
 
 /* Buffer size for character buffer */
 #define RXBUFSIZE 2048		/* More than enough..			*/
@@ -203,8 +207,6 @@ struct ser_softc {
  */
 #define	SER_HW_CONSOLE	0x01
 
-cdev_decl(ser);
-
 void	ser_break __P((struct ser_softc *, int));
 void	ser_hwiflow __P((struct ser_softc *, int));
 void	ser_iflush __P((struct ser_softc *));
@@ -214,7 +216,6 @@ void	serdiag __P((void *));
 int	serhwiflow __P((struct tty *, int));
 void	serinit __P((int));
 void	serinitcons __P((int));
-int	baud;
 int	sermintr __P((void *));
 int	sertrintr __P((void *));
 int	serparam __P((struct tty *, struct termios *));
@@ -235,7 +236,6 @@ static void sersoft __P((void *));
 static void sertxint __P((struct ser_softc *, struct tty*));
 
 static volatile int ser_softintr_scheduled = 0;
-static int	sermajor;
 
 /*
  * Autoconfig stuff
@@ -243,11 +243,24 @@ static int	sermajor;
 static void serattach __P((struct device *, struct device *, void *));
 static int  sermatch __P((struct device *, struct cfdata *, void *));
 
-struct cfattach ser_ca = {
-	sizeof(struct ser_softc), sermatch, serattach
-};
+CFATTACH_DECL(ser, sizeof(struct ser_softc),
+    sermatch, serattach, NULL, NULL);
 
 extern struct cfdriver ser_cd;
+
+dev_type_open(seropen);
+dev_type_close(serclose);
+dev_type_read(serread);
+dev_type_write(serwrite);
+dev_type_ioctl(serioctl);
+dev_type_stop(serstop);
+dev_type_tty(sertty);
+dev_type_poll(serpoll);
+
+const struct cdevsw ser_cdevsw = {
+	seropen, serclose, serread, serwrite, serioctl,
+	serstop, sertty, serpoll, nommap, ttykqfilter, D_TTY
+};
 
 /*ARGSUSED*/
 static	int
@@ -272,7 +285,7 @@ serattach(pdp, dp, auxp)
 struct	device *pdp, *dp;
 void	*auxp;
 {
-	struct ser_softc *sc = (void *)dp;
+	struct ser_softc *sc = device_private(dp);
 
 	if (intr_establish(1, USER_VEC, 0, (hw_ifun_t)sermintr, sc) == NULL)
 		printf("serattach: Can't establish interrupt (1)\n");
@@ -301,15 +314,15 @@ void	*auxp;
 	MFP->mf_imrb &= ~(IB_SCTS|IB_SDCD);
 	MFP->mf_imra &= ~(IA_RRDY|IA_RERR|IA_TRDY|IA_TERR);
 
-	callout_init(&sc->sc_diag_ch);
+	callout_init(&sc->sc_diag_ch, 0);
 
-#ifdef SERCONSOLE
+#if SERCONSOLE > 0
 	/*
 	 * Activate serial console when DCD present...
 	 */
 	if (!(MFP->mf_gpip & MCR_DCD))
 		SET(sc->sc_hwflags, SER_HW_CONSOLE);
-#endif /* SERCONSOLE */
+#endif /* SERCONSOLE > 0 */
 
 	printf("\n");
 	if (ISSET(sc->sc_hwflags, SER_HW_CONSOLE)) {
@@ -346,10 +359,10 @@ serstatus(sc, str)
 #endif /* SER_DEBUG */
 
 int
-seropen(dev, flag, mode, p)
+seropen(dev, flag, mode, l)
 	dev_t dev;
 	int flag, mode;
-	struct proc *p;
+	struct lwp *l;
 {
 	int unit = SERUNIT(dev);
 	struct ser_softc *sc;
@@ -357,10 +370,8 @@ seropen(dev, flag, mode, p)
 	int s, s2;
 	int error = 0;
  
-	if (unit >= ser_cd.cd_ndevs)
-		return (ENXIO);
-	sc = ser_cd.cd_devs[unit];
-	if (!sc)
+	sc = device_lookup_private(&ser_cd, unit);
+	if (sc == NULL)
 		return (ENXIO);
 
 	if (!sc->sc_tty) {
@@ -369,9 +380,7 @@ seropen(dev, flag, mode, p)
 	} else
 		tp = sc->sc_tty;
 
-	if (ISSET(tp->t_state, TS_ISOPEN) &&
-	    ISSET(tp->t_state, TS_XCLUDE) &&
-	    p->p_ucred->cr_uid != 0)
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
 		return (EBUSY);
 
 	s = spltty();
@@ -423,7 +432,7 @@ seropen(dev, flag, mode, p)
 	    (void) serparam(tp, &t);
 	    ttsetwater(tp);
 
-	    s2 = splserial();
+	    s2 = splhigh();
 
 	    /*
 	     * Turn on DTR.  We must always do this, even if carrier is not
@@ -453,7 +462,7 @@ seropen(dev, flag, mode, p)
 	if (error)
 		goto bad;
 
-	error = (*linesw[tp->t_line].l_open)(dev, tp);
+	error = (*tp->t_linesw->l_open)(dev, tp);
         if (error)
 		goto bad;
 
@@ -472,20 +481,20 @@ bad:
 }
  
 int
-serclose(dev, flag, mode, p)
+serclose(dev, flag, mode, l)
 	dev_t		dev;
 	int		flag, mode;
-	struct proc	*p;
+	struct lwp	*l;
 {
 	int unit = SERUNIT(dev);
-	struct ser_softc *sc = ser_cd.cd_devs[unit];
+	struct ser_softc *sc = device_lookup_private(&ser_cd, unit);
 	struct tty *tp = sc->sc_tty;
 
 	/* XXX This is for cons.c. */
 	if (!ISSET(tp->t_state, TS_ISOPEN))
 		return (0);
 
-	(*linesw[tp->t_line].l_close)(tp, flag);
+	(*tp->t_linesw->l_close)(tp, flag);
 	ttyclose(tp);
 
 	if (!ISSET(tp->t_state, TS_ISOPEN) && tp->t_wopen == 0) {
@@ -506,10 +515,10 @@ serread(dev, uio, flag)
 	struct uio *uio;
 	int flag;
 {
-	struct ser_softc *sc = ser_cd.cd_devs[SERUNIT(dev)];
+	struct ser_softc *sc = device_lookup_private(&ser_cd, SERUNIT(dev));
 	struct tty *tp = sc->sc_tty;
  
-	return ((*linesw[tp->t_line].l_read)(tp, uio, flag));
+	return ((*tp->t_linesw->l_read)(tp, uio, flag));
 }
  
 int
@@ -518,41 +527,53 @@ serwrite(dev, uio, flag)
 	struct uio *uio;
 	int flag;
 {
-	struct ser_softc *sc = ser_cd.cd_devs[SERUNIT(dev)];
+	struct ser_softc *sc = device_lookup_private(&ser_cd, SERUNIT(dev));
 	struct tty *tp = sc->sc_tty;
  
-	return ((*linesw[tp->t_line].l_write)(tp, uio, flag));
+	return ((*tp->t_linesw->l_write)(tp, uio, flag));
+}
+
+int
+serpoll(dev, events, l)
+	dev_t dev;
+	int events;
+	struct lwp *l;
+{
+	struct ser_softc *sc = device_lookup_private(&ser_cd, SERUNIT(dev));
+	struct tty *tp = sc->sc_tty;
+ 
+	return ((*tp->t_linesw->l_poll)(tp, events, l));
 }
 
 struct tty *
 sertty(dev)
 	dev_t dev;
 {
-	struct ser_softc *sc = ser_cd.cd_devs[SERUNIT(dev)];
+	struct ser_softc *sc = device_lookup_private(&ser_cd, SERUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return (tp);
 }
 
 int
-serioctl(dev, cmd, data, flag, p)
+serioctl(dev, cmd, data, flag, l)
 	dev_t dev;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 	int flag;
-	struct proc *p;
+	struct lwp *l;
 {
 	int unit = SERUNIT(dev);
-	struct ser_softc *sc = ser_cd.cd_devs[unit];
+	struct ser_softc *sc = device_lookup_private(&ser_cd, unit);
 	struct tty *tp = sc->sc_tty;
 	int error;
 
-	error = (*linesw[tp->t_line].l_ioctl)(tp, cmd, data, flag, p);
-	if (error >= 0)
+	error = (*tp->t_linesw->l_ioctl)(tp, cmd, data, flag, l);
+	if (error != EPASSTHROUGH)
 		return (error);
 
-	error = ttioctl(tp, cmd, data, flag, p);
-	if (error >= 0)
+	error = ttioctl(tp, cmd, data, flag, l);
+	if (error != EPASSTHROUGH)
 		return (error);
 
 	switch (cmd) {
@@ -577,7 +598,8 @@ serioctl(dev, cmd, data, flag, p)
 		break;
 
 	case TIOCSFLAGS:
-		error = suser(p->p_ucred, &p->p_acflag); 
+		error = kauth_authorize_device_tty(l->l_cred,
+		    KAUTH_DEVICE_TTY_PRIVSET, tp); 
 		if (error)
 			return (error); 
 		sc->sc_swflags = *(int *)data;
@@ -588,7 +610,7 @@ serioctl(dev, cmd, data, flag, p)
 	case TIOCMBIC:
 	case TIOCMGET:
 	default:
-		return (ENOTTY);
+		return (EPASSTHROUGH);
 	}
 
 #ifdef SER_DEBUG
@@ -605,7 +627,7 @@ ser_break(sc, onoff)
 {
 	int s;
 
-	s = splserial();
+	s = splhigh();
 	if (onoff)
 		SET(sc->sc_tsr, TSR_SBREAK);
 	else
@@ -629,7 +651,7 @@ ser_modem(sc, onoff)
 {
 	int s;
 
-	s = splserial();
+	s = splhigh();
 	if (onoff)
 		SET(sc->sc_mcr, sc->sc_mcr_dtr);
 	else
@@ -651,10 +673,12 @@ serparam(tp, t)
 	struct tty *tp;
 	struct termios *t;
 {
-	struct ser_softc *sc = ser_cd.cd_devs[SERUNIT(tp->t_dev)];
+	struct ser_softc *sc =
+	    device_lookup_private(&ser_cd, SERUNIT(tp->t_dev));
 	int ospeed = serspeed(t->c_ospeed);
 	u_char ucr;
 	int s;
+
 
 	/* check requested parameters */
 	if (ospeed < 0)
@@ -691,7 +715,7 @@ serparam(tp, t)
 	else
 		SET(ucr, UCR_STOPB1);
 
-	s = splserial();
+	s = splhigh();
 
 	sc->sc_ucr = ucr;
 
@@ -778,7 +802,7 @@ serparam(tp, t)
 	 * CLOCAL or MDMBUF.  We don't hang up here; we only do that if we
 	 * lose carrier while carrier detection is on.
 	 */
-	(void) (*linesw[tp->t_line].l_modem)(tp, ISSET(sc->sc_msr, MCR_DCD));
+	(void) (*tp->t_linesw->l_modem)(tp, ISSET(sc->sc_msr, MCR_DCD));
 
 #ifdef SER_DEBUG
 	serstatus(sc, "serparam ");
@@ -865,13 +889,14 @@ serhwiflow(tp, block)
 	struct tty *tp;
 	int block;
 {
-	struct ser_softc *sc = ser_cd.cd_devs[SERUNIT(tp->t_dev)];
+	struct ser_softc *sc =
+	    device_lookup_private(&ser_cd, SERUNIT(tp->t_dev));
 	int s;
 
 	if (sc->sc_mcr_rts == 0)
 		return (0);
 
-	s = splserial();
+	s = splhigh();
 	if (block) {
 		/*
 		 * The tty layer is asking us to block input.
@@ -924,7 +949,8 @@ void
 serstart(tp)
 	struct tty *tp;
 {
-	struct ser_softc *sc = ser_cd.cd_devs[SERUNIT(tp->t_dev)];
+	struct ser_softc *sc =
+	    device_lookup_private(&ser_cd, SERUNIT(tp->t_dev));
 	int s;
 
 	s = spltty();
@@ -935,16 +961,8 @@ serstart(tp)
 
 	if (sc->sc_tx_stopped)
 		goto stopped;
-
-	if (tp->t_outq.c_cc <= tp->t_lowat) {
-		if (ISSET(tp->t_state, TS_ASLEEP)) {
-			CLR(tp->t_state, TS_ASLEEP);
-			wakeup(&tp->t_outq);
-		}
-		selwakeup(&tp->t_wsel);
-		if (tp->t_outq.c_cc == 0)
-			goto stopped;
-	}
+	if (!ttypull(tp))
+		goto stopped;
 
 	/* Grab the first contiguous region of buffer space. */
 	{
@@ -954,7 +972,7 @@ serstart(tp)
 		tba = tp->t_outq.c_cf;
 		tbc = ndqb(&tp->t_outq, 0);
 
-		(void)splserial();
+		(void)splhigh();
 
 		sc->sc_tba = tba;
 		sc->sc_tbc = tbc;
@@ -971,8 +989,8 @@ serstart(tp)
 
 	/* Output the first char */
 	MFP->mf_udr = *sc->sc_tba;
-	sc->sc_tbc --;
-	sc->sc_tba ++;
+	sc->sc_tbc--;
+	sc->sc_tba++;
 
 	splx(s);
 	return;
@@ -996,10 +1014,11 @@ serstop(tp, flag)
 	struct tty *tp;
 	int flag;
 {
-	struct ser_softc *sc = ser_cd.cd_devs[SERUNIT(tp->t_dev)];
+	struct ser_softc *sc =
+	    device_lookup_private(&ser_cd, SERUNIT(tp->t_dev));
 	int s;
 
-	s = splserial();
+	s = splhigh();
 	if (ISSET(tp->t_state, TS_BUSY)) {
 		/* Stop transmitting at the next chunk. */
 		sc->sc_tbc = 0;
@@ -1018,7 +1037,7 @@ serdiag(arg)
 	int overflows, floods;
 	int s;
 
-	s = splserial();
+	s = splhigh();
 	overflows = sc->sc_overflows;
 	sc->sc_overflows = 0;
 	floods = sc->sc_floods;
@@ -1041,7 +1060,7 @@ void ser_shutdown(sc)
 	struct tty *tp = sc->sc_tty;
 
 
-	s = splserial();
+	s = splhigh();
 	
 	/* If we were asserting flow control, then deassert it. */
 	sc->sc_rx_blocked = 1;
@@ -1108,12 +1127,12 @@ serrxint(sc, tp)
 		}
 		code = sc->sc_rbuf[get] |
 		    lsrmap[(rsr & (RSR_BREAK|RSR_FERR|RSR_PERR)) >> 3];
-		(*linesw[tp->t_line].l_rint)(code, tp);
+		(*tp->t_linesw->l_rint)(code, tp);
 		get = (get + 1) & RXBUFMASK;
 	}
 
 	sc->sc_rbget = get;
-	s = splserial();
+	s = splhigh();
 	sc->sc_rbavail += scc;
 	/*
 	 * Buffers should be ok again, release possible block, but only if the
@@ -1137,7 +1156,7 @@ sertxint(sc, tp)
 		CLR(tp->t_state, TS_FLUSH);
 	else
 		ndflush(&tp->t_outq, (int)(sc->sc_tba - tp->t_outq.c_cf));
-	(*linesw[tp->t_line].l_start)(tp);
+	(*tp->t_linesw->l_start)(tp);
 }
 
 static void
@@ -1148,7 +1167,7 @@ sermsrint(sc, tp)
 	u_char msr, delta;
 	int s;
 
-	s = splserial();
+	s = splhigh();
 	msr = sc->sc_msr;
 	delta = sc->sc_msr_delta;
 	sc->sc_msr_delta = 0;
@@ -1158,14 +1177,14 @@ sermsrint(sc, tp)
 		/*
 		 * Inform the tty layer that carrier detect changed.
 		 */
-		(void) (*linesw[tp->t_line].l_modem)(tp, ISSET(msr, MCR_DCD));
+		(void) (*tp->t_linesw->l_modem)(tp, ISSET(msr, MCR_DCD));
 	}
 
 	if (ISSET(delta, sc->sc_msr_cts)) {
 		/* Block or unblock output according to flow control. */
 		if (ISSET(msr, sc->sc_msr_cts)) {
 			sc->sc_tx_stopped = 0;
-			(*linesw[tp->t_line].l_start)(tp);
+			(*tp->t_linesw->l_start)(tp);
 		} else {
 			sc->sc_tx_stopped = 1;
 			serstop(tp, 0);
@@ -1313,8 +1332,8 @@ sertrintr(arg)
 		/* Output the next character, if any. */
 		if (sc->sc_tbc > 0) {
 			MFP->mf_udr = *sc->sc_tba;
-			sc->sc_tbc --;
-			sc->sc_tba ++;
+			sc->sc_tbc--;
+			sc->sc_tba++;
 		} else if (sc->sc_tx_busy) {
 			sc->sc_tx_busy = 0;
 			sc->sc_tx_done = 1;
@@ -1374,7 +1393,7 @@ serspeed(speed)
 	}
 	return (-1);
 
-#undef	divrnd(n, q)
+#undef	divrnd
 }
 
 /*
@@ -1393,17 +1412,15 @@ sercnprobe(cp)
 		cp->cn_pri = CN_DEAD;
 		return;
 	}
-	for (sermajor = 0; sermajor < nchrdev; sermajor++)
-		if (cdevsw[sermajor].d_open == seropen)
-			break;
 
 	/* initialize required fields */
-	cp->cn_dev = makedev(sermajor, 0); /* XXX: LWP What unit? */
-#ifdef SERCONSOLE
+	/* XXX: LWP What unit? */
+	cp->cn_dev = makedev(cdevsw_lookup_major(&ser_cdevsw), 0);
+#if SERCONSOLE > 0
 	cp->cn_pri = CN_REMOTE;	/* Force a serial port console */
 #else
 	cp->cn_pri = CN_NORMAL;
-#endif
+#endif /* SERCONSOLE > 0 */
 }
 
 void
@@ -1454,7 +1471,7 @@ sercngetc(dev)
 	u_char	stat, c;
 	int	s;
 
-	s = splserial();
+	s = splhigh();
 	while (!ISSET(stat = MFP->mf_rsr, RSR_BFULL)) {
 		if (!ISSET(stat, RSR_ENAB)) /* XXX */
 			MFP->mf_rsr |= RSR_ENAB;

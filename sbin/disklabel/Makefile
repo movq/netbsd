@@ -1,22 +1,12 @@
-#	$NetBSD: Makefile,v 1.36 2000/01/31 16:01:06 soda Exp $
+#	$NetBSD: Makefile,v 1.61 2008/03/11 08:18:22 aymeric Exp $
 #	@(#)Makefile	8.2 (Berkeley) 3/17/94
 
 PROG=	disklabel
-SRCS=	disklabel.c dkcksum.c interact.c
+SRCS=	main.c dkcksum.c interact.c printlabel.c
 MAN=	disklabel.5 disklabel.8
-LDADD+= -lutil
+.if (${HOSTPROG:U} == "")
 DPADD+= ${LIBUTIL}
-
-.if (${MACHINE} == "i386")
-# recognize old partition ID for a while
-CPPFLAGS+= -DCOMPAT_386BSD_MBRPART
-# use MBR partition info
-CPPFLAGS+= -DUSE_MBR
-.endif
-
-.if (${MACHINE} == "hp300") || (${MACHINE} == "vax") \
-	|| (${MACHINE} == "arm32")
-CPPFLAGS+= -DNUMBOOT=1
+LDADD+= -lutil
 .endif
 
 # these have additional requirements on the alignment of a partition
@@ -25,20 +15,36 @@ CPPFLAGS+= -DNUMBOOT=1
 CPPFLAGS+= -DSTRICT_CYLINDER_ALIGNMENT
 .endif
 
-.if (${MACHINE} == "alpha")
-# read in the old boot area even though we don't support writing the boot
-# area with disklabel(8).
-CPPFLAGS+= -DSAVEBOOTAREA
-.endif
-
-.if (${MACHINE} == "hpcmips" || ${MACHINE} == "arc")
-# recognize old partition ID for a while
-CPPFLAGS+= -DCOMPAT_386BSD_MBRPART
+.if ( 0 \
+	|| ${MACHINE} == "acorn26" \
+	|| ${MACHINE} == "acorn32" \
+	|| ${MACHINE} == "amd64" \
+	|| ${MACHINE} == "arc" \
+	|| ${MACHINE} == "cats" \
+	|| ${MACHINE} == "cobalt" \
+	|| ${MACHINE} == "evbarm" \
+	|| ${MACHINE} == "hpcarm" \
+	|| ${MACHINE} == "hpcmips" \
+	|| ${MACHINE} == "hpcsh" \
+	|| ${MACHINE} == "i386" \
+	|| ${MACHINE} == "iyonix" \
+	|| ${MACHINE} == "landisk" \
+	|| ${MACHINE} == "macppc" \
+	|| ${MACHINE} == "netwinder" \
+	|| ${MACHINE} == "playstation2" \
+	|| ${MACHINE} == "prep" \
+	|| ${MACHINE} == "shark" \
+	|| ${MACHINE} == "zaurus" \
+    )
 # use MBR partition info
 CPPFLAGS+= -DUSE_MBR
-# read in the old boot area even though we don't support writing the boot
-# area with disklabel(8).
-CPPFLAGS+= -DSAVEBOOTAREA
+# recognize old MBR partition ID for a while
+CPPFLAGS+= -DCOMPAT_386BSD_MBRPART
+.endif
+
+.if (${MACHINE} == "acorn32" || ${MACHINE} == "acorn26")
+# Support FileCore boot block
+CPPFLAGS+= -DUSE_ACORN
 .endif
 
 .include <bsd.prog.mk>

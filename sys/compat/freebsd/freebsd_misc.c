@@ -1,4 +1,4 @@
-/*	$NetBSD: freebsd_misc.c,v 1.4 1998/05/02 18:14:06 christos Exp $	*/
+/*	$NetBSD: freebsd_misc.c,v 1.32 2007/12/20 23:02:47 dsl Exp $	*/
 
 /*
  * Copyright (c) 1995 Frank van der Linden
@@ -35,29 +35,40 @@
  * FreeBSD compatibility module. Try to deal with various FreeBSD system calls.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: freebsd_misc.c,v 1.32 2007/12/20 23:02:47 dsl Exp $");
+
+#if defined(_KERNEL_OPT)
+#include "opt_ntp.h"
+#endif
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/mount.h>
+#include <sys/signal.h>
+#include <sys/signalvar.h>
+#include <sys/malloc.h>
+#include <sys/mman.h>
+#include <sys/ktrace.h>
 
 #include <sys/syscallargs.h>
 
 #include <compat/freebsd/freebsd_syscallargs.h>
-#include <compat/freebsd/freebsd_util.h>
+#include <compat/common/compat_util.h>
 #include <compat/freebsd/freebsd_rtprio.h>
 #include <compat/freebsd/freebsd_timex.h>
+#include <compat/freebsd/freebsd_signal.h>
+#include <compat/freebsd/freebsd_mman.h>
 
 int
-freebsd_sys_msync(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+freebsd_sys_msync(struct lwp *l, const struct freebsd_sys_msync_args *uap, register_t *retval)
 {
-	struct freebsd_sys_msync_args /* {
-		syscallarg(caddr_t) addr;
+	/* {
+		syscallarg(void *) addr;
 		syscallarg(size_t) len;
 		syscallarg(int) flags;
-	} */ *uap = v;
+	} */
 	struct sys___msync13_args bma;
 
 	/*
@@ -68,57 +79,129 @@ freebsd_sys_msync(p, v, retval)
 	SCARG(&bma, addr) = SCARG(uap, addr);
 	SCARG(&bma, len) = SCARG(uap, len);
 	SCARG(&bma, flags) = SCARG(uap, flags);
-	return sys___msync13(p, &bma, retval);
+	return sys___msync13(l, &bma, retval);
+}
+
+int
+freebsd_sys_mmap(struct lwp *l, const struct freebsd_sys_mmap_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(void *) addr;
+		syscallarg(size_t) len;
+		syscallarg(int) prot;
+		syscallarg(int) flags;
+		syscallarg(int) fd;
+		syscallarg(long) pad;
+		syscallarg(off_t) pos;
+	} */
+	struct sys_mmap_args bma;
+	int flags, prot, fd;
+	off_t pos;
+
+	prot = SCARG(uap, prot);
+	flags = SCARG(uap, flags);
+	fd = SCARG(uap, fd);
+	pos = SCARG(uap, pos);
+
+	/*
+	 * If using MAP_STACK on FreeBSD:
+	 *
+	 * + fd has to be -1
+	 * + prot must have read and write
+	 * + MAP_STACK implies MAP_ANON
+	 * + MAP_STACK implies offset of 0
+	 */
+	if (flags & FREEBSD_MAP_STACK) {
+		if ((fd != -1)
+		    ||((prot & (PROT_READ|PROT_WRITE))!=(PROT_READ|PROT_WRITE)))
+			return (EINVAL);
+
+		flags |= (MAP_ANON | MAP_FIXED);
+		flags &= ~FREEBSD_MAP_STACK;
+
+		pos = 0;
+	}
+
+	SCARG(&bma, addr) = SCARG(uap, addr);
+	SCARG(&bma, len) = SCARG(uap, len);
+	SCARG(&bma, prot) = prot;
+	SCARG(&bma, flags) = flags;
+	SCARG(&bma, fd) = fd;
+	SCARG(&bma, pos) = pos;
+
+	return sys_mmap(l, &bma, retval);
 }
 
 /* just a place holder */
 
 int
-freebsd_sys_rtprio(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+freebsd_sys_rtprio(struct lwp *l, const struct freebsd_sys_rtprio_args *uap, register_t *retval)
 {
-#ifdef notyet
-	struct freebsd_sys_rtprio_args /* {
+	/* {
 		syscallarg(int) function;
 		syscallarg(pid_t) pid;
 		syscallarg(struct freebsd_rtprio *) rtp;
-	} */ *uap = v;
-#endif
+	} */
 
 	return ENOSYS;	/* XXX */
 }
 
+#ifdef NTP
 int
-freebsd_ntp_adjtime(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+freebsd_ntp_adjtime(struct lwp *l, const struct freebsd_ntp_adjtime_args *uap, register_t *retval)
 {
-#ifdef notyet
-	struct freebsd_ntp_adjtime_args /* {
+	/* {
 		syscallarg(struct freebsd_timex *) tp;
-	} */ *uap = v;
-#endif
+	} */
 
 	return ENOSYS;	/* XXX */
 }
+#endif
 
 int
-freebsd_sys_issetugid(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+freebsd_sys_sigaction4(struct lwp *l, const struct freebsd_sys_sigaction4_args *uap, register_t *retval)
 {
-	/*
-	 * Note: OpenBSD sets a P_SUGIDEXEC flag set at execve() time,
-	 * we use P_SUGID because we consider changing the owners as
-	 * "tainting" as well.
-	 * This is significant for procs that start as root and "become"
-	 * a user without an exec - programs cannot know *everything*
-	 * that libc *might* have put in their data segment.
-	 */
-	*retval = (p->p_flag & P_SUGID) != 0;
-	return 0;
+	/* {
+		syscallarg(int) signum;
+		syscallarg(const struct freebsd_sigaction4 *) nsa;
+		syscallarg(struct freebsd_sigaction4 *) osa;
+	} */
+	struct freebsd_sigaction4 nesa, oesa;
+	struct sigaction nbsa, obsa;
+	int error;
+
+	if (SCARG(uap, nsa)) {
+		error = copyin(SCARG(uap, nsa), &nesa, sizeof(nesa));
+		if (error)
+			return (error);
+		nbsa.sa_handler = nesa.freebsd_sa_handler;
+		nbsa.sa_mask    = nesa.freebsd_sa_mask;
+		nbsa.sa_flags   = nesa.freebsd_sa_flags;
+	}
+	error = sigaction1(l, SCARG(uap, signum),
+	    SCARG(uap, nsa) ? &nbsa : 0, SCARG(uap, osa) ? &obsa : 0,
+	    NULL, 0);
+	if (error)
+		return (error);
+	if (SCARG(uap, osa)) {
+		oesa.freebsd_sa_handler = obsa.sa_handler;
+		oesa.freebsd_sa_mask    = obsa.sa_mask;
+		oesa.freebsd_sa_flags   = obsa.sa_flags;
+		error = copyout(&oesa, SCARG(uap, osa), sizeof(oesa));
+		if (error)
+			return (error);
+	}
+	return (0);
+}
+
+int
+freebsd_sys_utrace(struct lwp *l, const struct freebsd_sys_utrace_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(void *) addr;
+		syscallarg(size_t) len;
+	} */
+
+	return ktruser("FreeBSD utrace", SCARG(uap, addr), SCARG(uap, len),
+	    0);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: n_acosh.c,v 1.4 1999/07/02 15:37:36 simonb Exp $	*/
+/*	$NetBSD: n_acosh.c,v 1.6 2003/08/07 16:44:50 agc Exp $	*/
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -75,6 +71,7 @@ static char sccsid[] = "@(#)acosh.c	8.1 (Berkeley) 6/4/93";
  * shown.
  */
 
+#define _LIBM_STATIC
 #include "mathimpl.h"
 
 vc(ln2hi, 6.9314718055829871446E-1  ,7217,4031,0000,f7d0,   0, .B17217F7D00000)
@@ -89,8 +86,7 @@ ic(ln2lo, 1.9082149292705877000E-10,-33, 1.A39EF35793C76)
 #endif
 
 double
-acosh(x)
-	double x;
+acosh(double x)
 {
 	double t,big=1.E20; /* big+1==big */
 

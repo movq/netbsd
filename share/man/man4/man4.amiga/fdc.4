@@ -1,4 +1,4 @@
-.\"	$NetBSD: fdc.4,v 1.2 1999/03/16 01:19:20 garbled Exp $
+.\"	$NetBSD: fdc.4,v 1.7 2008/04/30 13:10:55 martin Exp $
 .\"
 .\" Copyright (c) 1998 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,7 +44,7 @@ floppy disk drives on Amiga systems.
 .Pp
 The driver supports the following floppy diskette formats by using
 particular partitions:
-.Bl -tag -width -offset indent -compact
+.Bl -tag -width Dv -offset indent -compact
 .It "880KB " "3.5-inch " 11 sectors/track (``Amiga'') (a)
 .It "1.76MB" "3.5-inch " 22 sectors/track (``Amiga'') (a)
 .It "880KB " "5.25-inch" 11 sectors/track (``Amiga'') (a)
@@ -65,10 +58,13 @@ the driver automatically detects whether the inserted floppy diskette is
 either a double-density or a high-density medium.
 .Sh DIAGNOSTICS
 .Bl -diag
-.It "fdc: unable to allocate dma buffer"
+.It "fdc: unable to allocate DMA buffer"
 The driver found the controller, but was unable to allocate the
 amount of chip memory required for its DMA buffers.
 .El
+.Sh SEE ALSO
+.Xr fdformat 1 ,
+.Xr autoconf 4
 .Sh BUGS
 In order to detect a floppy disk drive's capability of using high-density
 media, a high-density diskette has to be inserted for the duration of the
@@ -79,8 +75,5 @@ The
 driver supports neither the
 .Xr fdformat 1
 facility nor the
-.Pa Aq sys/fdio.h
+.Aq Pa sys/fdio.h
 interface.
-.Sh SEE ALSO
-.Xr fdformat 1 ,
-.Xr autoconf 4

@@ -1,4 +1,4 @@
-/*	$NetBSD: smc93cx6.c,v 1.6 2000/03/15 02:08:30 fvdl Exp $	*/
+/*	$NetBSD: smc93cx6.c,v 1.14 2007/10/19 12:00:02 ad Exp $	*/
 
 /*
  * Interface for the 93C66/56/46/26/06 serial eeprom parts.
@@ -31,7 +31,7 @@
  *     -------------------------------------------------------------------
  *     READ        1    10   A5 - A0             Reads data stored in memory,
  *                                               starting at specified address
- *     EWEN        1    00   11XXXX              Write enable must preceed
+ *     EWEN        1    00   11XXXX              Write enable must precede
  *                                               all programming modes
  *     ERASE       1    11   A5 - A0             Erase register A5A4A3A2A1A0
  *     WRITE       1    01   A5 - A0   D15 - D0  Writes register
@@ -57,19 +57,21 @@
  *
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: smc93cx6.c,v 1.14 2007/10/19 12:00:02 ad Exp $");
+
 #ifndef __NetBSD__
 #include "opt_aic7xxx.h"
 #endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/bus.h>
 #ifdef __NetBSD__
-#include <machine/bus.h>
 #include <dev/ic/smc93cx6var.h>
 #else
 #include <machine/bus_memio.h>
 #include <machine/bus_pio.h>
-#include <machine/bus.h>
 #include <dev/aic7xxx/93cx6.h>
 #endif
 
@@ -82,16 +84,21 @@ static struct seeprom_cmd {
  	unsigned char bits[3];
 } seeprom_read = {3, {1, 1, 0}};
 
-/*
- * Wait for the SEERDY to go high; about 800 ns.
- */
-#define CLOCK_PULSE(sd, rdy)	{					\
-	int i = 1000;							\
-	while ((SEEPROM_STATUS_INB(sd) & rdy) == 0 && i-- > 0) {	\
+/* XXX bus barriers */
+#define CLOCK_PULSE(sd, rdy)	do {					\
+	/*								\
+	 * Wait for the SEERDY to go high; about 800 ns.		\
+	 */								\
+	int cpi = 1000;							\
+	if (rdy == 0) {							\
+		DELAY(4); /* more than long enough */			\
+		break;							\
+	}								\
+	while ((SEEPROM_STATUS_INB(sd) & rdy) == 0 && cpi-- > 0) {	\
 		;  /* Do nothing */					\
 	}								\
 	(void)SEEPROM_INB(sd);	/* Clear clock */			\
-}
+} while (0)
 
 /*
  * Read the serial EEPROM and returns 1 if successful and 0 if
@@ -107,7 +114,7 @@ read_seeprom(sd, buf, start_addr, count)
 	int i = 0;
 	u_int k = 0;
 	u_int16_t v;
-	u_int8_t temp;
+	u_int32_t temp;
 
 	/*
 	 * Read the requested registers of the seeprom.  The loop

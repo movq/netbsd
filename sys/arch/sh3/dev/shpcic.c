@@ -1,9 +1,8 @@
-/*	$NetBSD: shpcic.c,v 1.2 1999/09/14 10:22:35 tsubai Exp $	*/
-
-#define	SHPCICDEBUG
+/*	$NetBSD: shpcic.c,v 1.12 2008/03/27 02:05:43 uwe Exp $	*/
 
 /*
- * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
+ * Copyright (c) 2005 NONAKA Kimihiro
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -13,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Marc Horowitz.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,1067 +25,1210 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: shpcic.c,v 1.12 2008/03/27 02:05:43 uwe Exp $");
+
+#include "opt_pci.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/extent.h>
-#include <sys/kernel.h>
 #include <sys/malloc.h>
-#include <sys/kthread.h>
 
-#include <vm/vm.h>
+#include <dev/pci/pcireg.h>
+#include <dev/pci/pcivar.h>
+#include <dev/pci/pciconf.h>
+#include <dev/pci/pcidevs.h>
+
+#include <sh3/bscreg.h>
+#include <sh3/cache.h>
+#include <sh3/exception.h>
+#include <sh3/pcicreg.h>
 
 #include <machine/bus.h>
 #include <machine/intr.h>
+#include <machine/pci_machdep.h>
 
-#include <dev/pcmcia/pcmciareg.h>
-#include <dev/pcmcia/pcmciavar.h>
 
-#include <sh3/dev/shpcicreg.h>
-#include <sh3/dev/shpcicvar.h>
-
-#include "locators.h"
-
-#ifdef SHPCICDEBUG
-int	shpcic_debug = 0;
-#define	DPRINTF(arg) if (shpcic_debug) printf arg;
+#if defined(DEBUG) && !defined(SHPCIC_DEBUG)
+#define SHPCIC_DEBUG 0
+#endif
+#if defined(SHPCIC_DEBUG)
+int shpcic_debug = SHPCIC_DEBUG + 0;
+#define	DPRINTF(arg)	if (shpcic_debug) printf arg
 #else
 #define	DPRINTF(arg)
 #endif
 
-#define	PCIC_VENDOR_UNKNOWN		0
-#define	PCIC_VENDOR_HITACHI		1
+#define	PCI_MODE1_ENABLE	0x80000000UL
+
+
+static int	shpcic_match(device_t, cfdata_t, void *);
+static void	shpcic_attach(device_t, device_t, void *);
+
+CFATTACH_DECL_NEW(shpcic, 0,
+    shpcic_match, shpcic_attach, NULL, NULL);
+
+
+/* There can be only one. */
+static int shpcic_found = 0;
+
+/* PCIC intr priotiry */
+static int shpcic_intr_priority[2] = { IPL_BIO, IPL_BIO };
+
+
+static int
+shpcic_match(device_t parent, cfdata_t cf, void *aux)
+{
+	pcireg_t id;
+
+	if (shpcic_found)
+		return (0);
+
+	switch (cpu_product) {
+	case CPU_PRODUCT_7751:
+	case CPU_PRODUCT_7751R:
+		break;
+
+	default:
+		return (0);
+	}
+
+
+	id = _reg_read_4(SH4_PCICONF0);
+
+	switch (PCI_VENDOR(id)) {
+	case PCI_VENDOR_HITACHI:
+		break;
+
+	default:
+		return (0);
+	}
+
+
+	switch (PCI_PRODUCT(id)) {
+	case PCI_PRODUCT_HITACHI_SH7751: /* FALLTHROUGH */
+	case PCI_PRODUCT_HITACHI_SH7751R:
+		break;
+
+	default:
+		return (0);
+	}
+
+	if (_reg_read_2(SH4_BCR2) & BCR2_PORTEN)
+		return (0);
+
+	return (1);
+}
+
+static void
+shpcic_attach(device_t parent, device_t self, void *aux)
+{
+	struct pcibus_attach_args pba;
+#ifdef PCI_NETBSD_CONFIGURE
+	struct extent *ioext, *memext;
+#endif
+	pcireg_t id, class;
+	char devinfo[256];
+
+	shpcic_found = 1;
+
+	aprint_naive("\n");
+
+	id = _reg_read_4(SH4_PCICONF0);
+	class = _reg_read_4(SH4_PCICONF2);
+	pci_devinfo(id, class, 1, devinfo, sizeof(devinfo));
+	aprint_normal(": %s\n", devinfo);
+
+	/* allow PCIC request */
+	_reg_write_4(SH4_BCR1, _reg_read_4(SH4_BCR1) | BCR1_BREQEN);
+
+	/* Initialize PCIC */
+	_reg_write_4(SH4_PCICR, PCICR_BASE | PCICR_RSTCTL);
+	delay(10 * 1000);
+	_reg_write_4(SH4_PCICR, PCICR_BASE);
+
+	/* Class: Host-Bridge */
+	_reg_write_4(SH4_PCICONF2,
+	    PCI_CLASS_CODE(PCI_CLASS_BRIDGE, PCI_SUBCLASS_BRIDGE_HOST, 0x00));
+
+#if !defined(DONT_INIT_PCIBSC)
+#if defined(PCIBCR_BCR1_VAL)
+	_reg_write_4(SH4_PCIBCR1, PCIBCR_BCR1_VAL);
+#else
+	_reg_write_4(SH4_PCIBCR1, _reg_read_4(SH4_BCR1) | BCR1_MASTER);
+#endif
+#if defined(PCIBCR_BCR2_VAL)
+	_reg_write_4(SH4_PCIBCR2, PCIBCR_BCR2_VAL);
+#else
+	_reg_write_4(SH4_PCIBCR2, _reg_read_2(SH4_BCR2));
+#endif
+#if defined(SH4) && defined(SH7751R)
+	if (cpu_product == CPU_PRODUCT_7751R) {
+#if defined(PCIBCR_BCR3_VAL)
+		_reg_write_4(SH4_PCIBCR3, PCIBCR_BCR3_VAL);
+#else
+		_reg_write_4(SH4_PCIBCR3, _reg_read_2(SH4_BCR3));
+#endif
+	}
+#endif	/* SH4 && SH7751R && PCIBCR_BCR3_VAL */
+#if defined(PCIBCR_WCR1_VAL)
+	_reg_write_4(SH4_PCIWCR1, PCIBCR_WCR1_VAL);
+#else
+	_reg_write_4(SH4_PCIWCR1, _reg_read_4(SH4_WCR1));
+#endif
+#if defined(PCIBCR_WCR2_VAL)
+	_reg_write_4(SH4_PCIWCR2, PCIBCR_WCR2_VAL);
+#else
+	_reg_write_4(SH4_PCIWCR2, _reg_read_4(SH4_WCR2));
+#endif
+#if defined(PCIBCR_WCR3_VAL)
+	_reg_write_4(SH4_PCIWCR3, PCIBCR_WCR3_VAL);
+#else
+	_reg_write_4(SH4_PCIWCR3, _reg_read_4(SH4_WCR3));
+#endif
+#if defined(PCIBCR_MCR_VAL)
+	_reg_write_4(SH4_PCIMCR, PCIBCR_MCR_VAL);
+#else
+	_reg_write_4(SH4_PCIMCR, _reg_read_4(SH4_MCR));
+#endif
+#endif	/* !DONT_INIT_PCIBSC */
+
+	/* set PCI I/O, memory base address */
+	_reg_write_4(SH4_PCIIOBR, SH4_PCIC_IO);
+	_reg_write_4(SH4_PCIMBR, SH4_PCIC_MEM);
+
+	/* set PCI local address 0 */
+	_reg_write_4(SH4_PCILSR0, (64 - 1) << 20);
+	_reg_write_4(SH4_PCILAR0, 0xac000000);
+	_reg_write_4(SH4_PCICONF5, 0xac000000);
+
+	/* set PCI local address 1 */
+	_reg_write_4(SH4_PCILSR1, (64 - 1) << 20);
+	_reg_write_4(SH4_PCILAR1, 0xac000000);
+	_reg_write_4(SH4_PCICONF6, 0x8c000000);
+
+	/* Enable I/O, memory, bus-master */
+	_reg_write_4(SH4_PCICONF1, PCI_COMMAND_IO_ENABLE
+	                           | PCI_COMMAND_MEM_ENABLE
+	                           | PCI_COMMAND_MASTER_ENABLE
+	                           | PCI_COMMAND_STEPPING_ENABLE
+				   | PCI_STATUS_DEVSEL_MEDIUM);
+
+	/* Initialize done. */
+	_reg_write_4(SH4_PCICR, PCICR_BASE | PCICR_CFINIT);
+
+	/* set PCI controller interrupt priority */
+	intpri_intr_priority(SH4_INTEVT_PCIERR, shpcic_intr_priority[0]);
+	intpri_intr_priority(SH4_INTEVT_PCISERR, shpcic_intr_priority[1]);
+
+	/* PCI bus */
+#ifdef PCI_NETBSD_CONFIGURE
+	ioext  = extent_create("pciio",
+	    SH4_PCIC_IO, SH4_PCIC_IO + SH4_PCIC_IO_SIZE - 1,
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	memext = extent_create("pcimem",
+	    SH4_PCIC_MEM, SH4_PCIC_MEM + SH4_PCIC_MEM_SIZE - 1,
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+
+	pci_configure_bus(NULL, ioext, memext, NULL, 0, sh_cache_line_size);
+
+	extent_destroy(ioext);
+	extent_destroy(memext);
+#endif
+
+	/* PCI bus */
+	memset(&pba, 0, sizeof(pba));
+	pba.pba_iot = shpcic_get_bus_io_tag();
+	pba.pba_memt = shpcic_get_bus_mem_tag();
+	pba.pba_dmat = shpcic_get_bus_dma_tag();
+	pba.pba_dmat64 = NULL;
+	pba.pba_pc = NULL;
+	pba.pba_bus = 0;
+	pba.pba_bridgetag = NULL;
+	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	config_found(self, &pba, NULL);
+}
+
+int
+shpcic_bus_maxdevs(void *v, int busno)
+{
+
+	/*
+	 * Bus number is irrelevant.  Configuration Mechanism 1 is in
+	 * use, can have devices 0-32 (i.e. the `normal' range).
+	 */
+	return (32);
+}
+
+pcitag_t
+shpcic_make_tag(void *v, int bus, int device, int function)
+{
+	pcitag_t tag;
+
+	if (bus >= 256 || device >= 32 || function >= 8)
+		panic("pci_make_tag: bad request");
+
+	tag = PCI_MODE1_ENABLE |
+		    (bus << 16) | (device << 11) | (function << 8);
+
+	return (tag);
+}
+
+void
+shpcic_decompose_tag(void *v, pcitag_t tag, int *bp, int *dp, int *fp)
+{
+
+	if (bp != NULL)
+		*bp = (tag >> 16) & 0xff;
+	if (dp != NULL)
+		*dp = (tag >> 11) & 0x1f;
+	if (fp != NULL)
+		*fp = (tag >> 8) & 0x7;
+}
+
+pcireg_t
+shpcic_conf_read(void *v, pcitag_t tag, int reg)
+{
+	pcireg_t data;
+	int s;
+
+	s = splhigh();
+	_reg_write_4(SH4_PCIPAR, tag | reg);
+	data = _reg_read_4(SH4_PCIPDR);
+	_reg_write_4(SH4_PCIPAR, 0);
+	splx(s);
+
+	return data;
+}
+
+void
+shpcic_conf_write(void *v, pcitag_t tag, int reg, pcireg_t data)
+{
+	int s;
+
+	s = splhigh();
+	_reg_write_4(SH4_PCIPAR, tag | reg);
+	_reg_write_4(SH4_PCIPDR, data);
+	_reg_write_4(SH4_PCIPAR, 0);
+	splx(s);
+}
+
+int
+shpcic_set_intr_priority(int intr, int level)
+{
+	int evtcode;
+
+	if ((intr != 0) && (intr != 1)) {
+		return (-1);
+	}
+	if ((level < IPL_NONE) || (level > IPL_HIGH)) {
+		return (-1);
+	}
+
+	if (intr == 0) {
+		evtcode = SH4_INTEVT_PCIERR;
+	} else {
+		evtcode = SH4_INTEVT_PCISERR;
+	}
+
+	intpri_intr_priority(evtcode, shpcic_intr_priority[intr]);
+	shpcic_intr_priority[intr] = level;
+
+	return (0);
+}
+
+void *
+shpcic_intr_establish(int evtcode, int (*ih_func)(void *), void *ih_arg)
+{
+	int level;
+
+	switch (evtcode) {
+	case SH4_INTEVT_PCISERR:
+		level = shpcic_intr_priority[1];
+		break;
+
+	case SH4_INTEVT_PCIDMA3:
+	case SH4_INTEVT_PCIDMA2:
+	case SH4_INTEVT_PCIDMA1:
+	case SH4_INTEVT_PCIDMA0:
+	case SH4_INTEVT_PCIPWON:
+	case SH4_INTEVT_PCIPWDWN:
+	case SH4_INTEVT_PCIERR:
+		level = shpcic_intr_priority[0];
+		break;
+
+	default:
+		printf("shpcic_intr_establish: unknown evtcode = 0x%08x\n",
+		    evtcode);
+		return NULL;
+	}
+
+	return intc_intr_establish(evtcode, IST_LEVEL, level, ih_func, ih_arg);
+}
+
+void
+shpcic_intr_disestablish(void *ih)
+{
+
+	intc_intr_disestablish(ih);
+}
 
 /*
- * Individual drivers will allocate their own memory and io regions. Memory
- * regions must be a multiple of 4k, aligned on a 4k boundary.
+ * shpcic bus space
  */
-
-#define	SHPCIC_MEM_ALIGN	SHPCIC_MEM_PAGESIZE
-
-void	shpcic_attach_socket __P((struct shpcic_handle *));
-void	shpcic_init_socket __P((struct shpcic_handle *));
-
-int	shpcic_submatch __P((struct device *, struct cfdata *, void *));
-int	shpcic_print  __P((void *arg, const char *pnp));
-int	shpcic_intr_socket __P((struct shpcic_handle *));
-
-void	shpcic_attach_card __P((struct shpcic_handle *));
-void	shpcic_detach_card __P((struct shpcic_handle *, int));
-void	shpcic_deactivate_card __P((struct shpcic_handle *));
-
-void	shpcic_chip_do_mem_map __P((struct shpcic_handle *, int));
-void	shpcic_chip_do_io_map __P((struct shpcic_handle *, int));
-
-void	shpcic_create_event_thread __P((void *));
-void	shpcic_event_thread __P((void *));
-
-void	shpcic_queue_event __P((struct shpcic_handle *, int));
-
-/* static void	shpcic_wait_ready __P((struct shpcic_handle *)); */
-
 int
-shpcic_ident_ok(ident)
-	int ident;
-{
-	/* this is very empirical and heuristic */
-
-	if ((ident == 0) || (ident == 0xff) || (ident & SHPCIC_IDENT_ZERO))
-		return (0);
-
-	if ((ident & SHPCIC_IDENT_IFTYPE_MASK) != SHPCIC_IDENT_IFTYPE_MEM_AND_IO) {
-#ifdef DIAGNOSTIC
-		printf("shpcic: does not support memory and I/O cards, "
-		    "ignored (ident=%0x)\n", ident);
-#endif
-		return (0);
-	}
-	return (1);
-}
-
-int
-shpcic_vendor(h)
-	struct shpcic_handle *h;
-{
-	return (PCIC_VENDOR_HITACHI);
-}
-
-char *
-shpcic_vendor_to_string(vendor)
-	int vendor;
-{
-	switch (vendor) {
-	case PCIC_VENDOR_HITACHI:
-		return ("Hitachi SH");
-	}
-
-	return ("Unknown controller");
-}
-
-void
-shpcic_attach(sc)
-	struct shpcic_softc *sc;
-{
-	int vendor, count, i;
-
-	/* now check for each controller/socket */
-
-	/*
-	 * this could be done with a loop, but it would violate the
-	 * abstraction
-	 */
-
-	count = 0;
-
-#if 0
-	DPRINTF(("shpcic ident regs:"));
-#endif
-
-	sc->handle[0].sc = sc;
-	sc->handle[0].sock = C0SA;
-	sc->handle[0].flags = SHPCIC_FLAG_SOCKETP;
-	sc->handle[0].laststate = SHPCIC_LASTSTATE_EMPTY;
-	count++;
-
-	sc->handle[1].sc = sc;
-	sc->handle[1].sock = C0SB;
-	sc->handle[1].flags = 0;
-	sc->handle[1].laststate = SHPCIC_LASTSTATE_EMPTY;
-	count++;
-
-	sc->handle[2].sc = sc;
-	sc->handle[2].sock = C1SA;
-	sc->handle[2].flags = 0;
-	sc->handle[2].laststate = SHPCIC_LASTSTATE_EMPTY;
-
-	sc->handle[3].sc = sc;
-	sc->handle[3].sock = C1SB;
-	sc->handle[3].flags = 0;
-	sc->handle[3].laststate = SHPCIC_LASTSTATE_EMPTY;
-
-	if (count == 0)
-		panic("shpcic_attach: attach found no sockets");
-
-	/* establish the interrupt */
-
-	/* XXX block interrupts? */
-
-	for (i = 0; i < SHPCIC_NSLOTS; i++) {
-		/*
-		 * this should work, but w/o it, setting tty flags hangs at
-		 * boot time.
-		 */
-		if (sc->handle[i].flags & SHPCIC_FLAG_SOCKETP)
-		{
-			SIMPLEQ_INIT(&sc->handle[i].events);
-#if 0
-			shpcic_write(&sc->handle[i], SHPCIC_CSC_INTR, 0);
-			shpcic_read(&sc->handle[i], SHPCIC_CSC);
-#endif
-		}
-	}
-
-	if ((sc->handle[0].flags & SHPCIC_FLAG_SOCKETP) ||
-	    (sc->handle[1].flags & SHPCIC_FLAG_SOCKETP)) {
-		vendor = shpcic_vendor(&sc->handle[0]);
-
-		printf("%s: controller 0 (%s) has ", sc->dev.dv_xname,
-		       shpcic_vendor_to_string(vendor));
-
-		if ((sc->handle[0].flags & SHPCIC_FLAG_SOCKETP) &&
-		    (sc->handle[1].flags & SHPCIC_FLAG_SOCKETP))
-			printf("sockets A and B\n");
-		else if (sc->handle[0].flags & SHPCIC_FLAG_SOCKETP)
-			printf("socket A only\n");
-		else
-			printf("socket B only\n");
-
-		if (sc->handle[0].flags & SHPCIC_FLAG_SOCKETP)
-			sc->handle[0].vendor = vendor;
-		if (sc->handle[1].flags & SHPCIC_FLAG_SOCKETP)
-			sc->handle[1].vendor = vendor;
-	}
-}
-
-void
-shpcic_attach_sockets(sc)
-	struct shpcic_softc *sc;
-{
-	int i;
-
-	for (i = 0; i < SHPCIC_NSLOTS; i++)
-		if (sc->handle[i].flags & SHPCIC_FLAG_SOCKETP)
-			shpcic_attach_socket(&sc->handle[i]);
-}
-
-void
-shpcic_attach_socket(h)
-	struct shpcic_handle *h;
-{
-	struct pcmciabus_attach_args paa;
-
-	/* initialize the rest of the handle */
-
-	h->shutdown = 0;
-	h->memalloc = 0;
-	h->ioalloc = 0;
-	h->ih_irq = 0;
-
-	/* now, config one pcmcia device per socket */
-
-	paa.pct = (pcmcia_chipset_tag_t) h->sc->pct;
-	paa.pch = (pcmcia_chipset_handle_t) h;
-	paa.iobase = h->sc->iobase;
-	paa.iosize = h->sc->iosize;
-
-	h->pcmcia = config_found_sm(&h->sc->dev, &paa, shpcic_print,
-	    shpcic_submatch);
-
-	/* if there's actually a pcmcia device attached, initialize the slot */
-
-	if (h->pcmcia)
-		shpcic_init_socket(h);
-}
-
-void
-shpcic_create_event_thread(arg)
-	void *arg;
-{
-	struct shpcic_handle *h = arg;
-	const char *cs;
-
-	switch (h->sock) {
-	case C0SA:
-		cs = "0,0";
-		break;
-	case C0SB:
-		cs = "0,1";
-		break;
-	case C1SA:
-		cs = "1,0";
-		break;
-	case C1SB:
-		cs = "1,1";
-		break;
-	default:
-		panic("shpcic_create_event_thread: unknown pcic socket");
-	}
-
-	if (kthread_create1(shpcic_event_thread, h, &h->event_thread,
-	    "%s,%s", h->sc->dev.dv_xname, cs)) {
-		printf("%s: unable to create event thread for sock 0x%02x\n",
-		    h->sc->dev.dv_xname, h->sock);
-		panic("shpcic_create_event_thread");
-	}
-}
-
-void
-shpcic_event_thread(arg)
-	void *arg;
-{
-	struct shpcic_handle *h = arg;
-	struct shpcic_event *pe;
-	int s;
-
-	while (h->shutdown == 0) {
-		s = splhigh();
-		if ((pe = SIMPLEQ_FIRST(&h->events)) == NULL) {
-			splx(s);
-			(void) tsleep(&h->events, PWAIT, "shpcicev", 0);
-			continue;
-		} else {
-			splx(s);
-			/* sleep .25s to be enqueued chatterling interrupts */
-			(void) tsleep((caddr_t)shpcic_event_thread, PWAIT, "shpcicss", hz/4);
-		}
-		s = splhigh();
-		SIMPLEQ_REMOVE_HEAD(&h->events, pe, pe_q);
-		splx(s);
-
-		switch (pe->pe_type) {
-		case SHPCIC_EVENT_INSERTION:
-			s = splhigh();
-			while (1) {
-				struct shpcic_event *pe1, *pe2;
-
-				if ((pe1 = SIMPLEQ_FIRST(&h->events)) == NULL)
-					break;
-				if (pe1->pe_type != SHPCIC_EVENT_REMOVAL)
-					break;
-				if ((pe2 = SIMPLEQ_NEXT(pe1, pe_q)) == NULL)
-					break;
-				if (pe2->pe_type == SHPCIC_EVENT_INSERTION) {
-					SIMPLEQ_REMOVE_HEAD(&h->events, pe1, pe_q);
-					free(pe1, M_TEMP);
-					SIMPLEQ_REMOVE_HEAD(&h->events, pe2, pe_q);
-					free(pe2, M_TEMP);
-				}
-			}
-			splx(s);
-
-			DPRINTF(("%s: insertion event\n", h->sc->dev.dv_xname));
-			shpcic_attach_card(h);
-			break;
-
-		case SHPCIC_EVENT_REMOVAL:
-			s = splhigh();
-			while (1) {
-				struct shpcic_event *pe1, *pe2;
-
-				if ((pe1 = SIMPLEQ_FIRST(&h->events)) == NULL)
-					break;
-				if (pe1->pe_type != SHPCIC_EVENT_INSERTION)
-					break;
-				if ((pe2 = SIMPLEQ_NEXT(pe1, pe_q)) == NULL)
-					break;
-				if (pe2->pe_type == SHPCIC_EVENT_REMOVAL) {
-					SIMPLEQ_REMOVE_HEAD(&h->events, pe1, pe_q);
-					free(pe1, M_TEMP);
-					SIMPLEQ_REMOVE_HEAD(&h->events, pe2, pe_q);
-					free(pe2, M_TEMP);
-				}
-			}
-			splx(s);
-
-			DPRINTF(("%s: removal event\n", h->sc->dev.dv_xname));
-			shpcic_detach_card(h, DETACH_FORCE);
-			break;
-
-		default:
-			panic("shpcic_event_thread: unknown event %d",
-			    pe->pe_type);
-		}
-		free(pe, M_TEMP);
-	}
-
-	h->event_thread = NULL;
-
-	/* In case parent is waiting for us to exit. */
-	wakeup(h->sc);
-
-	kthread_exit(0);
-}
-
-void
-shpcic_init_socket(h)
-	struct shpcic_handle *h;
-{
-	int reg;
-
-	/*
-	 * queue creation of a kernel thread to handle insert/removal events.
-	 */
-#ifdef DIAGNOSTIC
-	if (h->event_thread != NULL)
-		panic("shpcic_attach_socket: event thread");
-#endif
-	kthread_create(shpcic_create_event_thread, h);
-
-	/* if there's a card there, then attach it. */
-
-	reg = shpcic_read(h, SHPCIC_IF_STATUS);
-	reg &= ~SHPCIC_IF_STATUS_BUSWIDTH; /* Set bus width to 16bit */
-
-	if ((reg & SHPCIC_IF_STATUS_CARDDETECT_MASK) ==
-	    SHPCIC_IF_STATUS_CARDDETECT_PRESENT) {
-		int i;
-
-		/* reset the card */
-		shpcic_write(h, SHPCIC_IF_STATUS, reg|SHPCIC_IF_STATUS_RESET);
-		delay(1000); /* wait 1000 uSec */
-		shpcic_write(h, SHPCIC_IF_STATUS,
-			     reg & ~SHPCIC_IF_STATUS_RESET);
-		for (i = 0; i < 10000; i++)
-			delay(1000); /* wait 1 mSec */
-
-		shpcic_attach_card(h);
-		h->laststate = SHPCIC_LASTSTATE_PRESENT;
-	} else {
-		h->laststate = SHPCIC_LASTSTATE_EMPTY;
-	}
-}
-
-int
-shpcic_submatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+shpcic_iomem_map(void *v, bus_addr_t bpa, bus_size_t size,
+    int flags, bus_space_handle_t *bshp)
 {
 
-	struct pcmciabus_attach_args *paa = aux;
-	struct shpcic_handle *h = (struct shpcic_handle *) paa->pch;
-
-	switch (h->sock) {
-	case C0SA:
-#ifdef TODO
-		if (cf->cf_loc[PCMCIABUSCF_CONTROLLER] !=
-		    PCMCIABUSCF_CONTROLLER_DEFAULT &&
-		    cf->cf_loc[PCMCIABUSCF_CONTROLLER] != 0)
-			return 0;
-		if (cf->cf_loc[PCMCIABUSCF_SOCKET] !=
-		    PCMCIABUSCF_SOCKET_DEFAULT &&
-		    cf->cf_loc[PCMCIABUSCF_SOCKET] != 0)
-			return 0;
-#endif
-
-		break;
-	case C0SB:
-#ifdef TODO
-		if (cf->cf_loc[PCMCIABUSCF_CONTROLLER] !=
-		    PCMCIABUSCF_CONTROLLER_DEFAULT &&
-		    cf->cf_loc[PCMCIABUSCF_CONTROLLER] != 0)
-			return 0;
-		if (cf->cf_loc[PCMCIABUSCF_SOCKET] !=
-		    PCMCIABUSCF_SOCKET_DEFAULT &&
-		    cf->cf_loc[PCMCIABUSCF_SOCKET] != 1)
-			return 0;
-#endif
-
-		break;
-	case C1SA:
-		if (cf->cf_loc[PCMCIABUSCF_CONTROLLER] !=
-		    PCMCIABUSCF_CONTROLLER_DEFAULT &&
-		    cf->cf_loc[PCMCIABUSCF_CONTROLLER] != 1)
-			return 0;
-		if (cf->cf_loc[PCMCIABUSCF_SOCKET] !=
-		    PCMCIABUSCF_SOCKET_DEFAULT &&
-		    cf->cf_loc[PCMCIABUSCF_SOCKET] != 0)
-			return 0;
-
-		break;
-	case C1SB:
-		if (cf->cf_loc[PCMCIABUSCF_CONTROLLER] !=
-		    PCMCIABUSCF_CONTROLLER_DEFAULT &&
-		    cf->cf_loc[PCMCIABUSCF_CONTROLLER] != 1)
-			return 0;
-		if (cf->cf_loc[PCMCIABUSCF_SOCKET] !=
-		    PCMCIABUSCF_SOCKET_DEFAULT &&
-		    cf->cf_loc[PCMCIABUSCF_SOCKET] != 1)
-			return 0;
-
-		break;
-	default:
-		panic("unknown pcic socket");
-	}
-
-	return ((*cf->cf_attach->ca_match)(parent, cf, aux));
-}
-
-int
-shpcic_print(arg, pnp)
-	void *arg;
-	const char *pnp;
-{
-	struct pcmciabus_attach_args *paa = arg;
-	struct shpcic_handle *h = (struct shpcic_handle *) paa->pch;
-
-	/* Only "pcmcia"s can attach to "pcic"s... easy. */
-	if (pnp)
-		printf("pcmcia at %s", pnp);
-
-	switch (h->sock) {
-	case C0SA:
-		printf(" controller 0 socket 0");
-		break;
-	case C0SB:
-		printf(" controller 0 socket 1");
-		break;
-	case C1SA:
-		printf(" controller 1 socket 0");
-		break;
-	case C1SB:
-		printf(" controller 1 socket 1");
-		break;
-	default:
-		panic("unknown pcic socket");
-	}
-
-	return (UNCONF);
-}
-
-int
-shpcic_intr(arg)
-	void *arg;
-{
-	struct shpcic_softc *sc = arg;
-	int i, ret = 0;
-
-	DPRINTF(("%s: intr\n", sc->dev.dv_xname));
-
-	for (i = 0; i < SHPCIC_NSLOTS; i++)
-		if (sc->handle[i].flags & SHPCIC_FLAG_SOCKETP)
-			ret += shpcic_intr_socket(&sc->handle[i]);
-
-	return (ret ? 1 : 0);
-}
-
-int
-shpcic_intr_socket(h)
-	struct shpcic_handle *h;
-{
-	int cscreg;
-
-	cscreg = shpcic_read(h, SHPCIC_CSC);
-
-	cscreg &= (SHPCIC_CSC_GPI |
-		   SHPCIC_CSC_CD |
-		   SHPCIC_CSC_READY |
-		   SHPCIC_CSC_BATTWARN |
-		   SHPCIC_CSC_BATTDEAD);
-
-	if (cscreg & SHPCIC_CSC_GPI) {
-		DPRINTF(("%s: %02x GPI\n", h->sc->dev.dv_xname, h->sock));
-	}
-	if (cscreg & SHPCIC_CSC_CD) {
-		int statreg;
-
-		statreg = shpcic_read(h, SHPCIC_IF_STATUS);
-
-		DPRINTF(("%s: %02x CD %x\n", h->sc->dev.dv_xname, h->sock,
-		    statreg));
-
-		if ((statreg & SHPCIC_IF_STATUS_CARDDETECT_MASK) ==
-		    SHPCIC_IF_STATUS_CARDDETECT_PRESENT) {
-			if (h->laststate != SHPCIC_LASTSTATE_PRESENT) {
-				DPRINTF(("%s: enqueing INSERTION event\n",
-						 h->sc->dev.dv_xname));
-				shpcic_queue_event(h, SHPCIC_EVENT_INSERTION);
-			}
-			h->laststate = SHPCIC_LASTSTATE_PRESENT;
-		} else {
-			if (h->laststate == SHPCIC_LASTSTATE_PRESENT) {
-				/* Deactivate the card now. */
-				DPRINTF(("%s: deactivating card\n",
-						 h->sc->dev.dv_xname));
-				shpcic_deactivate_card(h);
-
-				DPRINTF(("%s: enqueing REMOVAL event\n",
-						 h->sc->dev.dv_xname));
-				shpcic_queue_event(h, SHPCIC_EVENT_REMOVAL);
-			}
-			h->laststate = ((statreg & SHPCIC_IF_STATUS_CARDDETECT_MASK) == 0)
-				? SHPCIC_LASTSTATE_EMPTY : SHPCIC_LASTSTATE_HALF;
-		}
-	}
-	if (cscreg & SHPCIC_CSC_READY) {
-		DPRINTF(("%s: %02x READY\n", h->sc->dev.dv_xname, h->sock));
-		/* shouldn't happen */
-	}
-	if (cscreg & SHPCIC_CSC_BATTWARN) {
-		DPRINTF(("%s: %02x BATTWARN\n", h->sc->dev.dv_xname, h->sock));
-	}
-	if (cscreg & SHPCIC_CSC_BATTDEAD) {
-		DPRINTF(("%s: %02x BATTDEAD\n", h->sc->dev.dv_xname, h->sock));
-	}
-	return (cscreg ? 1 : 0);
-}
-
-void
-shpcic_queue_event(h, event)
-	struct shpcic_handle *h;
-	int event;
-{
-	struct shpcic_event *pe;
-	int s;
-
-	pe = malloc(sizeof(*pe), M_TEMP, M_NOWAIT);
-	if (pe == NULL)
-		panic("shpcic_queue_event: can't allocate event");
-
-	pe->pe_type = event;
-	s = splhigh();
-	SIMPLEQ_INSERT_TAIL(&h->events, pe, pe_q);
-	splx(s);
-	wakeup(&h->events);
-}
-
-void
-shpcic_attach_card(h)
-	struct shpcic_handle *h;
-{
-
-	if (!(h->flags & SHPCIC_FLAG_CARDP)) {
-		/* call the MI attach function */
-		pcmcia_card_attach(h->pcmcia);
-
-		h->flags |= SHPCIC_FLAG_CARDP;
-	} else {
-		DPRINTF(("shpcic_attach_card: already attached"));
-	}
-}
-
-void
-shpcic_detach_card(h, flags)
-	struct shpcic_handle *h;
-	int flags;		/* DETACH_* */
-{
-
-	if (h->flags & SHPCIC_FLAG_CARDP) {
-		h->flags &= ~SHPCIC_FLAG_CARDP;
-
-		/* call the MI detach function */
-		pcmcia_card_detach(h->pcmcia, flags);
-	} else {
-		DPRINTF(("shpcic_detach_card: already detached"));
-	}
-}
-
-void
-shpcic_deactivate_card(h)
-	struct shpcic_handle *h;
-{
-
-	/* call the MI deactivate function */
-	pcmcia_card_deactivate(h->pcmcia);
-
-#if 0
-	/* power down the socket */
-	shpcic_write(h, SHPCIC_PWRCTL, 0);
-
-	/* reset the socket */
-	shpcic_write(h, SHPCIC_INTR, 0);
-#endif
-}
-
-int
-shpcic_chip_mem_alloc(pch, size, pcmhp)
-	pcmcia_chipset_handle_t pch;
-	bus_size_t size;
-	struct pcmcia_mem_handle *pcmhp;
-{
-	struct shpcic_handle *h = (struct shpcic_handle *) pch;
-	bus_space_handle_t memh = 0;
-	bus_addr_t addr;
-	bus_size_t sizepg;
-	int i, mask, mhandle;
-
-	/* out of sc->memh, allocate as many pages as necessary */
-
-	/* convert size to PCIC pages */
-	sizepg = (size + (SHPCIC_MEM_ALIGN - 1)) / SHPCIC_MEM_ALIGN;
-	if (sizepg > SHPCIC_MAX_MEM_PAGES)
-		return (1);
-
-	mask = (1 << sizepg) - 1;
-
-	addr = 0;		/* XXX gcc -Wuninitialized */
-	mhandle = 0;		/* XXX gcc -Wuninitialized */
-
-	for (i = 0; i <= SHPCIC_MAX_MEM_PAGES - sizepg; i++) {
-		if ((h->sc->subregionmask & (mask << i)) == (mask << i)) {
-#if 0
-			if (bus_space_subregion(h->sc->memt, h->sc->memh,
-			    i * SHPCIC_MEM_PAGESIZE,
-			    sizepg * SHPCIC_MEM_PAGESIZE, &memh))
-				return (1);
-#endif
-			memh = h->sc->memh;
-			mhandle = mask << i;
-			addr = h->sc->membase + (i * SHPCIC_MEM_PAGESIZE);
-			h->sc->subregionmask &= ~(mhandle);
-			pcmhp->memt = h->sc->memt;
-			pcmhp->memh = memh;
-			pcmhp->addr = addr;
-			pcmhp->size = size;
-			pcmhp->mhandle = mhandle;
-			pcmhp->realsize = sizepg * SHPCIC_MEM_PAGESIZE;
-			return (0);
-		}
-	}
-
-	return (1);
-}
-
-void
-shpcic_chip_mem_free(pch, pcmhp)
-	pcmcia_chipset_handle_t pch;
-	struct pcmcia_mem_handle *pcmhp;
-{
-	struct shpcic_handle *h = (struct shpcic_handle *) pch;
-
-	h->sc->subregionmask |= pcmhp->mhandle;
-}
-
-int
-shpcic_chip_mem_map(pch, kind, card_addr, size, pcmhp, offsetp, windowp)
-	pcmcia_chipset_handle_t pch;
-	int kind;
-	bus_addr_t card_addr;
-	bus_size_t size;
-	struct pcmcia_mem_handle *pcmhp;
-	bus_addr_t *offsetp;
-	int *windowp;
-{
-	struct shpcic_handle *h = (struct shpcic_handle *) pch;
-	bus_addr_t busaddr;
-	long card_offset;
-	int i, win;
-
-	win = -1;
-	for (i = 0; i < SHPCIC_WINS;
-	    i++) {
-		if ((h->memalloc & (1 << i)) == 0) {
-			win = i;
-			h->memalloc |= (1 << i);
-			break;
-		}
-	}
-
-	if (win == -1)
-		return (1);
-
-	*windowp = win;
-
-	/* XXX this is pretty gross */
-
-	if (h->sc->memt != pcmhp->memt)
-		panic("shpcic_chip_mem_map memt is bogus");
-
-	busaddr = pcmhp->addr;
-
-	/*
-	 * compute the address offset to the pcmcia address space for the
-	 * pcic.  this is intentionally signed.  The masks and shifts below
-	 * will cause TRT to happen in the pcic registers.  Deal with making
-	 * sure the address is aligned, and return the alignment offset.
-	 */
-
-	*offsetp = 0;
-	card_addr -= *offsetp;
-
-	DPRINTF(("shpcic_chip_mem_map window %d bus %lx+%lx+%lx at card addr "
-	    "%lx\n", win, (u_long) busaddr, (u_long) * offsetp, (u_long) size,
-	    (u_long) card_addr));
-
-	/*
-	 * include the offset in the size, and decrement size by one, since
-	 * the hw wants start/stop
-	 */
-	size += *offsetp - 1;
-
-	card_offset = (((long) card_addr) - ((long) busaddr));
-
-	h->mem[win].addr = busaddr;
-	h->mem[win].size = size;
-	h->mem[win].offset = card_offset;
-	h->mem[win].kind = kind;
-
-	if (kind == PCMCIA_MEM_ATTR) {
-		pcmhp->memh = h->sc->memh + card_addr;
-	} else {
-		pcmhp->memh = h->sc->memh + card_addr + SHPCIC_ATTRMEM_SIZE;
-	}
-#if 0
-	shpcic_chip_do_mem_map(h, win);
-#endif
+	*bshp = (bus_space_handle_t)bpa;
 
 	return (0);
 }
 
 void
-shpcic_chip_mem_unmap(pch, window)
-	pcmcia_chipset_handle_t pch;
-	int window;
+shpcic_iomem_unmap(void *v, bus_space_handle_t bsh, bus_size_t size)
 {
-	struct shpcic_handle *h = (struct shpcic_handle *) pch;
 
-	if (window >= SHPCIC_WINS)
-		panic("shpcic_chip_mem_unmap: window out of range");
-
-	h->memalloc &= ~(1 << window);
+	/* Nothing to do */
 }
 
 int
-shpcic_chip_io_alloc(pch, start, size, align, pcihp)
-	pcmcia_chipset_handle_t pch;
-	bus_addr_t start;
-	bus_size_t size;
-	bus_size_t align;
-	struct pcmcia_io_handle *pcihp;
+shpcic_iomem_subregion(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, bus_size_t size, bus_space_handle_t *nbshp)
 {
-	struct shpcic_handle *h = (struct shpcic_handle *) pch;
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
-	bus_addr_t ioaddr;
-	int flags = 0;
 
-	/*
-	 * Allocate some arbitrary I/O space.
-	 */
+	*nbshp = bsh + offset;
 
-	iot = h->sc->iot;
+	return (0);
+}
 
-	if (start) {
-		ioaddr = start;
-		if (bus_space_map(iot, start, size, 0, &ioh))
-			return (1);
-		DPRINTF(("shpcic_chip_io_alloc map port %lx+%lx\n",
-		    (u_long) ioaddr, (u_long) size));
-	} else {
-		flags |= PCMCIA_IO_ALLOCATED;
-		if (bus_space_alloc(iot, h->sc->iobase,
-		    h->sc->iobase + h->sc->iosize, size, align, 0, 0,
-		    &ioaddr, &ioh))
-			return (1);
-		DPRINTF(("shpcic_chip_io_alloc alloc port %lx+%lx\n",
-		    (u_long) ioaddr, (u_long) size));
-	}
+int
+shpcic_iomem_alloc(void *v, bus_addr_t rstart, bus_addr_t rend,
+    bus_size_t size, bus_size_t alignment, bus_size_t boundary, int flags,
+    bus_addr_t *bpap, bus_space_handle_t *bshp)
+{
 
-	pcihp->iot = iot;
-	pcihp->ioh = ioh + h->sc->memh + SHPCIC_ATTRMEM_SIZE;;
-	pcihp->addr = ioaddr;
-	pcihp->size = size;
-	pcihp->flags = flags;
+	*bshp = *bpap = rstart;
 
 	return (0);
 }
 
 void
-shpcic_chip_io_free(pch, pcihp)
-	pcmcia_chipset_handle_t pch;
-	struct pcmcia_io_handle *pcihp;
+shpcic_iomem_free(void *v, bus_space_handle_t bsh, bus_size_t size)
 {
-	bus_space_tag_t iot = pcihp->iot;
-	bus_space_handle_t ioh = pcihp->ioh;
-	bus_size_t size = pcihp->size;
 
-	if (pcihp->flags & PCMCIA_IO_ALLOCATED)
-		bus_space_free(iot, ioh, size);
-	else
-		bus_space_unmap(iot, ioh, size);
+	/* Nothing to do */
 }
 
-int
-shpcic_chip_io_map(pch, width, offset, size, pcihp, windowp)
-	pcmcia_chipset_handle_t pch;
-	int width;
-	bus_addr_t offset;
-	bus_size_t size;
-	struct pcmcia_io_handle *pcihp;
-	int *windowp;
+/*
+ * shpcic bus space io/mem read/write
+ */
+/* read */
+static inline uint8_t __shpcic_io_read_1(bus_space_handle_t bsh,
+    bus_size_t offset);
+static inline uint16_t __shpcic_io_read_2(bus_space_handle_t bsh,
+    bus_size_t offset);
+static inline uint32_t __shpcic_io_read_4(bus_space_handle_t bsh,
+    bus_size_t offset);
+static inline uint8_t __shpcic_mem_read_1(bus_space_handle_t bsh,
+    bus_size_t offset);
+static inline uint16_t __shpcic_mem_read_2(bus_space_handle_t bsh,
+    bus_size_t offset);
+static inline uint32_t __shpcic_mem_read_4(bus_space_handle_t bsh,
+    bus_size_t offset);
+
+static inline uint8_t
+__shpcic_io_read_1(bus_space_handle_t bsh, bus_size_t offset)
 {
-	struct shpcic_handle *h = (struct shpcic_handle *) pch;
-	bus_addr_t ioaddr = pcihp->addr + offset;
-	int i, win;
-#ifdef SHPCICDEBUG
-	static char *width_names[] = { "auto", "io8", "io16" };
-#endif
-	int reg;
+	u_long adr = (u_long)(bsh + offset) & SH4_PCIC_IO_MASK;
 
-	/* XXX Sanity check offset/size. */
+	return *(volatile uint8_t *)(SH4_PCIC_IO + adr);
+}
 
-#ifdef MMEYE
-	/* I/O width is hardwired to 16bit mode on mmeye. */
-	width = PCMCIA_WIDTH_IO16;
-#endif
+static inline uint16_t
+__shpcic_io_read_2(bus_space_handle_t bsh, bus_size_t offset)
+{
+	u_long adr = (u_long)(bsh + offset) & SH4_PCIC_IO_MASK;
 
-	win = -1;
-	for (i = 0; i < SHPCIC_IOWINS; i++) {
-		if ((h->ioalloc & (1 << i)) == 0) {
-			win = i;
-			h->ioalloc |= (1 << i);
-			break;
+	return *(volatile uint16_t *)(SH4_PCIC_IO + adr);
+}
+
+static inline uint32_t
+__shpcic_io_read_4(bus_space_handle_t bsh, bus_size_t offset)
+{
+	u_long adr = (u_long)(bsh + offset) & SH4_PCIC_IO_MASK;
+
+	return *(volatile uint32_t *)(SH4_PCIC_IO + adr);
+}
+
+static inline uint8_t
+__shpcic_mem_read_1(bus_space_handle_t bsh, bus_size_t offset)
+{
+	u_long adr = (u_long)(bsh + offset) & SH4_PCIC_MEM_MASK;
+
+	return *(volatile uint8_t *)(SH4_PCIC_MEM + adr);
+}
+
+static inline uint16_t
+__shpcic_mem_read_2(bus_space_handle_t bsh, bus_size_t offset)
+{
+	u_long adr = (u_long)(bsh + offset) & SH4_PCIC_MEM_MASK;
+
+	return *(volatile uint16_t *)(SH4_PCIC_MEM + adr);
+}
+
+static inline uint32_t
+__shpcic_mem_read_4(bus_space_handle_t bsh, bus_size_t offset)
+{
+	u_long adr = (u_long)(bsh + offset) & SH4_PCIC_MEM_MASK;
+
+	return *(volatile uint32_t *)(SH4_PCIC_MEM + adr);
+}
+
+/*
+ * read single
+ */
+uint8_t
+shpcic_io_read_1(void *v, bus_space_handle_t bsh, bus_size_t offset)
+{
+	uint8_t value;
+
+	value = __shpcic_io_read_1(bsh, offset);
+
+	return value;
+}
+
+uint16_t
+shpcic_io_read_2(void *v, bus_space_handle_t bsh, bus_size_t offset)
+{
+	uint16_t value;
+
+	value = __shpcic_io_read_2(bsh, offset);
+
+	return value;
+}
+
+uint32_t
+shpcic_io_read_4(void *v, bus_space_handle_t bsh, bus_size_t offset)
+{
+	uint32_t value;
+
+	value = __shpcic_io_read_4(bsh, offset);
+
+	return value;
+}
+
+uint8_t
+shpcic_mem_read_1(void *v, bus_space_handle_t bsh, bus_size_t offset)
+{
+	uint8_t value;
+
+	value = __shpcic_mem_read_1(bsh, offset);
+
+	return value;
+}
+
+uint16_t
+shpcic_mem_read_2(void *v, bus_space_handle_t bsh, bus_size_t offset)
+{
+	uint16_t value;
+
+	value = __shpcic_mem_read_2(bsh, offset);
+
+	return value;
+}
+
+uint32_t
+shpcic_mem_read_4(void *v, bus_space_handle_t bsh, bus_size_t offset)
+{
+	uint32_t value;
+
+	value = __shpcic_mem_read_4(bsh, offset);
+
+	return value;
+}
+
+/*
+ * read multi
+ */
+void
+shpcic_io_read_multi_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		*addr++ = __shpcic_io_read_1(bsh, offset);
+	}
+}
+
+void
+shpcic_io_read_multi_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		*addr++ = __shpcic_io_read_2(bsh, offset);
+	}
+}
+
+void
+shpcic_io_read_multi_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		*addr++ = __shpcic_io_read_4(bsh, offset);
+	}
+}
+
+void
+shpcic_mem_read_multi_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		*addr++ = __shpcic_mem_read_1(bsh, offset);
+	}
+}
+
+void
+shpcic_mem_read_multi_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		*addr++ = __shpcic_mem_read_2(bsh, offset);
+	}
+}
+
+void
+shpcic_mem_read_multi_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		*addr++ = __shpcic_mem_read_4(bsh, offset);
+	}
+}
+
+/*
+ *
+ * read region
+ */
+void
+shpcic_io_read_region_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		*addr++ = __shpcic_io_read_1(bsh, offset);
+		offset += 1;
+	}
+}
+
+void
+shpcic_io_read_region_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		*addr++ = __shpcic_io_read_2(bsh, offset);
+		offset += 2;
+	}
+}
+
+void
+shpcic_io_read_region_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		*addr++ = __shpcic_io_read_4(bsh, offset);
+		offset += 4;
+	}
+}
+
+void
+shpcic_mem_read_region_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		*addr++ = __shpcic_mem_read_1(bsh, offset);
+		offset += 1;
+	}
+}
+
+void
+shpcic_mem_read_region_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		*addr++ = __shpcic_mem_read_2(bsh, offset);
+		offset += 2;
+	}
+}
+
+void
+shpcic_mem_read_region_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		*addr++ = __shpcic_mem_read_4(bsh, offset);
+		offset += 4;
+	}
+}
+
+/* write */
+static inline void __shpcic_io_write_1(bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t value);
+static inline void __shpcic_io_write_2(bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t value);
+static inline void __shpcic_io_write_4(bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t value);
+static inline void __shpcic_mem_write_1(bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t value);
+static inline void __shpcic_mem_write_2(bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t value);
+static inline void __shpcic_mem_write_4(bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t value);
+
+static inline void
+__shpcic_io_write_1(bus_space_handle_t bsh, bus_size_t offset,
+    uint8_t value)
+{
+	u_long adr = (u_long)(bsh + offset) & SH4_PCIC_IO_MASK;
+
+	*(volatile uint8_t *)(SH4_PCIC_IO + adr) = value;
+}
+
+static inline void
+__shpcic_io_write_2(bus_space_handle_t bsh, bus_size_t offset,
+    uint16_t value)
+{
+	u_long adr = (u_long)(bsh + offset) & SH4_PCIC_IO_MASK;
+
+	*(volatile uint16_t *)(SH4_PCIC_IO + adr) = value;
+}
+
+static inline void
+__shpcic_io_write_4(bus_space_handle_t bsh, bus_size_t offset,
+    uint32_t value)
+{
+	u_long adr = (u_long)(bsh + offset) & SH4_PCIC_IO_MASK;
+
+	*(volatile uint32_t *)(SH4_PCIC_IO + adr) = value;
+}
+
+static inline void
+__shpcic_mem_write_1(bus_space_handle_t bsh, bus_size_t offset,
+    uint8_t value)
+{
+	u_long adr = (u_long)(bsh + offset) & SH4_PCIC_MEM_MASK;
+
+	*(volatile uint8_t *)(SH4_PCIC_MEM + adr) = value;
+}
+
+static inline void
+__shpcic_mem_write_2(bus_space_handle_t bsh, bus_size_t offset,
+    uint16_t value)
+{
+	u_long adr = (u_long)(bsh + offset) & SH4_PCIC_MEM_MASK;
+
+	*(volatile uint16_t *)(SH4_PCIC_MEM + adr) = value;
+}
+
+static inline void
+__shpcic_mem_write_4(bus_space_handle_t bsh, bus_size_t offset,
+    uint32_t value)
+{
+	u_long adr = (u_long)(bsh + offset) & SH4_PCIC_MEM_MASK;
+
+	*(volatile uint32_t *)(SH4_PCIC_MEM + adr) = value;
+}
+
+/*
+ * write single
+ */
+void
+shpcic_io_write_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t value)
+{
+
+	__shpcic_io_write_1(bsh, offset, value);
+}
+
+void
+shpcic_io_write_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t value)
+{
+
+	__shpcic_io_write_2(bsh, offset, value);
+}
+
+void
+shpcic_io_write_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t value)
+{
+
+	__shpcic_io_write_4(bsh, offset, value);
+}
+
+void
+shpcic_mem_write_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t value)
+{
+
+	__shpcic_mem_write_1(bsh, offset, value);
+}
+
+void
+shpcic_mem_write_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t value)
+{
+
+	__shpcic_mem_write_2(bsh, offset, value);
+}
+
+void
+shpcic_mem_write_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t value)
+{
+
+	__shpcic_mem_write_4(bsh, offset, value);
+}
+
+/*
+ * write multi
+ */
+void
+shpcic_io_write_multi_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint8_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_io_write_1(bsh, offset, *addr++);
+	}
+}
+
+void
+shpcic_io_write_multi_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint16_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_io_write_2(bsh, offset, *addr++);
+	}
+}
+
+void
+shpcic_io_write_multi_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint32_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_io_write_4(bsh, offset, *addr++);
+	}
+}
+
+void
+shpcic_mem_write_multi_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint8_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_mem_write_1(bsh, offset, *addr++);
+	}
+}
+
+void
+shpcic_mem_write_multi_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint16_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_mem_write_2(bsh, offset, *addr++);
+	}
+}
+
+void
+shpcic_mem_write_multi_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint32_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_mem_write_4(bsh, offset, *addr++);
+	}
+}
+
+/*
+ * write region
+ */
+void
+shpcic_io_write_region_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint8_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_io_write_1(bsh, offset, *addr++);
+		offset += 1;
+	}
+}
+
+void
+shpcic_io_write_region_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint16_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_io_write_2(bsh, offset, *addr++);
+		offset += 2;
+	}
+}
+
+void
+shpcic_io_write_region_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint32_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_io_write_4(bsh, offset, *addr++);
+		offset += 4;
+	}
+}
+
+void
+shpcic_mem_write_region_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint8_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_mem_write_1(bsh, offset, *addr++);
+		offset += 1;
+	}
+}
+
+void
+shpcic_mem_write_region_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint16_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_mem_write_2(bsh, offset, *addr++);
+		offset += 2;
+	}
+}
+
+void
+shpcic_mem_write_region_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint32_t *addr, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_mem_write_4(bsh, offset, *addr++);
+		offset += 4;
+	}
+}
+
+/*
+ * set multi
+ */
+void
+shpcic_io_set_multi_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t value, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_io_write_1(bsh, offset, value);
+	}
+}
+
+void
+shpcic_io_set_multi_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t value, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_io_write_2(bsh, offset, value);
+	}
+}
+
+void
+shpcic_io_set_multi_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t value, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_io_write_4(bsh, offset, value);
+	}
+}
+
+void
+shpcic_mem_set_multi_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t value, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_mem_write_1(bsh, offset, value);
+	}
+}
+
+void
+shpcic_mem_set_multi_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t value, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_mem_write_2(bsh, offset, value);
+	}
+}
+
+void
+shpcic_mem_set_multi_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t value, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_mem_write_4(bsh, offset, value);
+	}
+}
+
+/*
+ * set region
+ */
+void
+shpcic_io_set_region_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t value, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_io_write_1(bsh, offset, value);
+		offset += 1;
+	}
+}
+
+void
+shpcic_io_set_region_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t value, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_io_write_2(bsh, offset, value);
+		offset += 2;
+	}
+}
+
+void
+shpcic_io_set_region_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t value, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_io_write_4(bsh, offset, value);
+		offset += 4;
+	}
+}
+
+void
+shpcic_mem_set_region_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t value, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_mem_write_1(bsh, offset, value);
+		offset += 1;
+	}
+}
+
+void
+shpcic_mem_set_region_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t value, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_mem_write_2(bsh, offset, value);
+		offset += 2;
+	}
+}
+
+void
+shpcic_mem_set_region_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t value, bus_size_t count)
+{
+
+	while (count--) {
+		__shpcic_mem_write_4(bsh, offset, value);
+		offset += 4;
+	}
+}
+
+/*
+ * copy region
+ */
+void
+shpcic_io_copy_region_1(void *v, bus_space_handle_t bsh1,
+    bus_size_t off1, bus_space_handle_t bsh2, bus_size_t off2, bus_size_t count)
+{
+	u_long addr1 = bsh1 + off1;
+	u_long addr2 = bsh2 + off2;
+	uint8_t value;
+
+	if (addr1 >= addr2) {	/* src after dest: copy forward */
+		while (count--) {
+			value = __shpcic_io_read_1(bsh1, off1);
+			__shpcic_io_write_1(bsh2, off2, value);
+			off1 += 1;
+			off2 += 1;
+		}
+	} else {		/* dest after src: copy backwards */
+		off1 += (count - 1) * 1;
+		off2 += (count - 1) * 1;
+		while (count--) {
+			value = __shpcic_io_read_1(bsh1, off1);
+			__shpcic_io_write_1(bsh2, off2, value);
+			off1 -= 1;
+			off2 -= 1;
 		}
 	}
-
-	if (win == -1)
-		return (1);
-
-	*windowp = win;
-
-	/* XXX this is pretty gross */
-
-	if (h->sc->iot != pcihp->iot)
-		panic("shpcic_chip_io_map iot is bogus");
-
-	DPRINTF(("shpcic_chip_io_map window %d %s port %lx+%lx\n",
-		 win, width_names[width], (u_long) ioaddr, (u_long) size));
-
-	/* XXX wtf is this doing here? */
-
-	printf(" port 0x%lx", (u_long) ioaddr);
-	if (size > 1)
-		printf("-0x%lx", (u_long) ioaddr + (u_long) size - 1);
-
-	h->io[win].addr = ioaddr;
-	h->io[win].size = size;
-	h->io[win].width = width;
-
-	pcihp->ioh = h->sc->memh + SHPCIC_ATTRMEM_SIZE;
-
-	if (width == PCMCIA_WIDTH_IO8) { /* IO8 */
-		reg = shpcic_read(h, SHPCIC_IF_STATUS);
-		reg |= SHPCIC_IF_STATUS_BUSWIDTH; /* Set bus width to 8bit */
-		shpcic_write(h, SHPCIC_IF_STATUS, reg);
-	}
-
-#if 0
-	shpcic_chip_do_io_map(h, win);
-#endif
-
-	return (0);
 }
 
 void
-shpcic_chip_io_unmap(pch, window)
-	pcmcia_chipset_handle_t pch;
-	int window;
+shpcic_io_copy_region_2(void *v, bus_space_handle_t bsh1,
+    bus_size_t off1, bus_space_handle_t bsh2, bus_size_t off2, bus_size_t count)
 {
-	struct shpcic_handle *h = (struct shpcic_handle *) pch;
+	u_long addr1 = bsh1 + off1;
+	u_long addr2 = bsh2 + off2;
+	uint16_t value;
 
-	if (window >= SHPCIC_IOWINS)
-		panic("shpcic_chip_io_unmap: window out of range");
-
-	h->ioalloc &= ~(1 << window);
-}
-
-#if 0
-static void
-shpcic_wait_ready(h)
-	struct shpcic_handle *h;
-{
-	int i;
-
-	for (i = 0; i < 10000; i++) {
-		if (shpcic_read(h, SHPCIC_IF_STATUS) & SHPCIC_IF_STATUS_READY)
-			return;
-		delay(500);
-#ifdef SHPCICDEBUG
-		if (shpcic_debug) {
-			if ((i>5000) && (i%100 == 99))
-				printf(".");
+	if (addr1 >= addr2) {	/* src after dest: copy forward */
+		while (count--) {
+			value = __shpcic_io_read_2(bsh1, off1);
+			__shpcic_io_write_2(bsh2, off2, value);
+			off1 += 2;
+			off2 += 2;
 		}
-#endif
+	} else {		/* dest after src: copy backwards */
+		off1 += (count - 1) * 2;
+		off2 += (count - 1) * 2;
+		while (count--) {
+			value = __shpcic_io_read_2(bsh1, off1);
+			__shpcic_io_write_2(bsh2, off2, value);
+			off1 -= 2;
+			off2 -= 2;
+		}
 	}
-
-#ifdef DIAGNOSTIC
-	printf("shpcic_wait_ready: ready never happened, status = %02x\n",
-	    shpcic_read(h, SHPCIC_IF_STATUS));
-#endif
-}
-#endif
-
-void
-shpcic_chip_socket_enable(pch)
-	pcmcia_chipset_handle_t pch;
-{
-#if 0
-	struct shpcic_handle *h = (struct shpcic_handle *) pch;
-	int cardtype, reg, win;
-
-	/* this bit is mostly stolen from shpcic_attach_card */
-
-	/* power down the socket to reset it, clear the card reset pin */
-
-	shpcic_write(h, SHPCIC_PWRCTL, 0);
-
-	/*
-	 * wait 300ms until power fails (Tpf).  Then, wait 100ms since
-	 * we are changing Vcc (Toff).
-	 */
-	delay((300 + 100) * 1000);
-
-#ifdef VADEM_POWER_HACK
-	bus_space_write_1(h->sc->iot, h->sc->ioh, SHPCIC_REG_INDEX, 0x0e);
-	bus_space_write_1(h->sc->iot, h->sc->ioh, SHPCIC_REG_INDEX, 0x37);
-	printf("prcr = %02x\n", shpcic_read(h, 0x02));
-	printf("cvsr = %02x\n", shpcic_read(h, 0x2f));
-	printf("DANGER WILL ROBINSON!  Changing voltage select!\n");
-	shpcic_write(h, 0x2f, shpcic_read(h, 0x2f) & ~0x03);
-	printf("cvsr = %02x\n", shpcic_read(h, 0x2f));
-#endif
-
-	/* power up the socket */
-
-	shpcic_write(h, SHPCIC_PWRCTL, SHPCIC_PWRCTL_DISABLE_RESETDRV
-			   | SHPCIC_PWRCTL_PWR_ENABLE);
-
-	/*
-	 * wait 100ms until power raise (Tpr) and 20ms to become
-	 * stable (Tsu(Vcc)).
-	 *
-	 * some machines require some more time to be settled
-	 * (300ms is added here).
-	 */
-	delay((100 + 20 + 300) * 1000);
-
-	shpcic_write(h, SHPCIC_PWRCTL, SHPCIC_PWRCTL_DISABLE_RESETDRV | SHPCIC_PWRCTL_OE
-			   | SHPCIC_PWRCTL_PWR_ENABLE);
-	shpcic_write(h, SHPCIC_INTR, 0);
-
-	/*
-	 * hold RESET at least 10us.
-	 */
-	delay(10);
-
-	/* clear the reset flag */
-
-	shpcic_write(h, SHPCIC_INTR, SHPCIC_INTR_RESET);
-
-	/* wait 20ms as per pc card standard (r2.01) section 4.3.6 */
-
-	delay(20000);
-
-	/* wait for the chip to finish initializing */
-
-#ifdef DIAGNOSTIC
-	reg = shpcic_read(h, SHPCIC_IF_STATUS);
-	if (!(reg & SHPCIC_IF_STATUS_POWERACTIVE)) {
-		printf("shpcic_chip_socket_enable: status %x", reg);
-	}
-#endif
-
-	shpcic_wait_ready(h);
-
-	/* zero out the address windows */
-
-	shpcic_write(h, SHPCIC_ADDRWIN_ENABLE, 0);
-
-	/* set the card type */
-
-	cardtype = pcmcia_card_gettype(h->pcmcia);
-
-	reg = shpcic_read(h, SHPCIC_INTR);
-	reg &= ~(SHPCIC_INTR_CARDTYPE_MASK | SHPCIC_INTR_IRQ_MASK | SHPCIC_INTR_ENABLE);
-	reg |= ((cardtype == PCMCIA_IFTYPE_IO) ?
-		SHPCIC_INTR_CARDTYPE_IO :
-		SHPCIC_INTR_CARDTYPE_MEM);
-	reg |= h->ih_irq;
-	shpcic_write(h, SHPCIC_INTR, reg);
-
-	DPRINTF(("%s: shpcic_chip_socket_enable %02x cardtype %s %02x\n",
-	    h->sc->dev.dv_xname, h->sock,
-	    ((cardtype == PCMCIA_IFTYPE_IO) ? "io" : "mem"), reg));
-
-	/* reinstall all the memory and io mappings */
-
-	for (win = 0; win < SHPCIC_MEM_WINS; win++)
-		if (h->memalloc & (1 << win))
-			shpcic_chip_do_mem_map(h, win);
-
-	for (win = 0; win < SHPCIC_IO_WINS; win++)
-		if (h->ioalloc & (1 << win))
-			shpcic_chip_do_io_map(h, win);
-#endif
 }
 
 void
-shpcic_chip_socket_disable(pch)
-	pcmcia_chipset_handle_t pch;
+shpcic_io_copy_region_4(void *v, bus_space_handle_t bsh1,
+    bus_size_t off1, bus_space_handle_t bsh2, bus_size_t off2, bus_size_t count)
 {
-#if 0
-	struct shpcic_handle *h = (struct shpcic_handle *) pch;
+	u_long addr1 = bsh1 + off1;
+	u_long addr2 = bsh2 + off2;
+	uint32_t value;
 
-	DPRINTF(("shpcic_chip_socket_disable\n"));
+	if (addr1 >= addr2) {	/* src after dest: copy forward */
+		while (count--) {
+			value = __shpcic_io_read_4(bsh1, off1);
+			__shpcic_io_write_4(bsh2, off2, value);
+			off1 += 4;
+			off2 += 4;
+		}
+	} else {		/* dest after src: copy backwards */
+		off1 += (count - 1) * 4;
+		off2 += (count - 1) * 4;
+		while (count--) {
+			value = __shpcic_io_read_4(bsh1, off1);
+			__shpcic_io_write_4(bsh2, off2, value);
+			off1 -= 4;
+			off2 -= 4;
+		}
+	}
+}
 
-	/* power down the socket */
+void
+shpcic_mem_copy_region_1(void *v, bus_space_handle_t bsh1,
+    bus_size_t off1, bus_space_handle_t bsh2, bus_size_t off2, bus_size_t count)
+{
+	u_long addr1 = bsh1 + off1;
+	u_long addr2 = bsh2 + off2;
+	uint8_t value;
 
-	shpcic_write(h, SHPCIC_PWRCTL, 0);
+	if (addr1 >= addr2) {	/* src after dest: copy forward */
+		while (count--) {
+			value = __shpcic_mem_read_1(bsh1, off1);
+			__shpcic_mem_write_1(bsh2, off2, value);
+			off1 += 1;
+			off2 += 1;
+		}
+	} else {		/* dest after src: copy backwards */
+		off1 += (count - 1) * 1;
+		off2 += (count - 1) * 1;
+		while (count--) {
+			value = __shpcic_mem_read_1(bsh1, off1);
+			__shpcic_mem_write_1(bsh2, off2, value);
+			off1 -= 1;
+			off2 -= 1;
+		}
+	}
+}
 
-	/*
-	 * wait 300ms until power fails (Tpf).
-	 */
-	delay(300 * 1000);
-#endif
+void
+shpcic_mem_copy_region_2(void *v, bus_space_handle_t bsh1,
+    bus_size_t off1, bus_space_handle_t bsh2, bus_size_t off2, bus_size_t count)
+{
+	u_long addr1 = bsh1 + off1;
+	u_long addr2 = bsh2 + off2;
+	uint16_t value;
+
+	if (addr1 >= addr2) {	/* src after dest: copy forward */
+		while (count--) {
+			value = __shpcic_mem_read_2(bsh1, off1);
+			__shpcic_mem_write_2(bsh2, off2, value);
+			off1 += 2;
+			off2 += 2;
+		}
+	} else {		/* dest after src: copy backwards */
+		off1 += (count - 1) * 2;
+		off2 += (count - 1) * 2;
+		while (count--) {
+			value = __shpcic_mem_read_2(bsh1, off1);
+			__shpcic_mem_write_2(bsh2, off2, value);
+			off1 -= 2;
+			off2 -= 2;
+		}
+	}
+}
+
+void
+shpcic_mem_copy_region_4(void *v, bus_space_handle_t bsh1,
+    bus_size_t off1, bus_space_handle_t bsh2, bus_size_t off2, bus_size_t count)
+{
+	u_long addr1 = bsh1 + off1;
+	u_long addr2 = bsh2 + off2;
+	uint32_t value;
+
+	if (addr1 >= addr2) {	/* src after dest: copy forward */
+		while (count--) {
+			value = __shpcic_mem_read_4(bsh1, off1);
+			__shpcic_mem_write_4(bsh2, off2, value);
+			off1 += 4;
+			off2 += 4;
+		}
+	} else {		/* dest after src: copy backwards */
+		off1 += (count - 1) * 4;
+		off2 += (count - 1) * 4;
+		while (count--) {
+			value = __shpcic_mem_read_4(bsh1, off1);
+			__shpcic_mem_write_4(bsh2, off2, value);
+			off1 -= 4;
+			off2 -= 4;
+		}
+	}
 }

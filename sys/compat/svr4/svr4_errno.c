@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_errno.c,v 1.7 1998/10/23 04:06:00 erh Exp $	 */
+/*	$NetBSD: svr4_errno.c,v 1.10 2008/04/28 20:23:45 martin Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,10 +33,13 @@
  * Translate error codes.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: svr4_errno.c,v 1.10 2008/04/28 20:23:45 martin Exp $");
+
 #include <compat/svr4/svr4_errno.h>
 
 
-int native_to_svr4_errno[] = {
+const int native_to_svr4_errno[] = {
 	0,
 	SVR4_EPERM,
 	SVR4_ENOENT,

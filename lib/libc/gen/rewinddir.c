@@ -1,4 +1,4 @@
-/*	$NetBSD: rewinddir.c,v 1.9 2000/01/22 22:19:12 mycroft Exp $	*/
+/*	$NetBSD: rewinddir.c,v 1.12 2006/05/17 20:36:50 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,25 +34,38 @@
 #if 0
 static char sccsid[] = "@(#)rewinddir.c	8.1 (Berkeley) 6/8/93";
 #else
-__RCSID("$NetBSD: rewinddir.c,v 1.9 2000/01/22 22:19:12 mycroft Exp $");
+__RCSID("$NetBSD: rewinddir.c,v 1.12 2006/05/17 20:36:50 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
+#include "reentrant.h"
+#include "extern.h"
 #include <sys/types.h>
 
 #include <dirent.h>
+
+#include "dirent_private.h"
 
 #ifdef __weak_alias
 __weak_alias(rewinddir,_rewinddir)
 #endif
 
 void
-rewinddir(dirp)
-	DIR *dirp;
+rewinddir(DIR *dirp)
 {
+	struct dirpos *dp = dirp->dd_internal;
 
+	while (dp->dp_next)
+		dp = dp->dp_next;
 
-	__seekdir(dirp, dirp->dd_rewind);
-	dirp->dd_rewind = telldir(dirp);
+#ifdef _REENTRANT
+	if (__isthreaded) {
+		mutex_lock((mutex_t *)dirp->dd_lock);
+		_seekdir_unlocked(dirp, (long)(intptr_t)dp);
+		mutex_unlock((mutex_t *)dirp->dd_lock);
+		return;
+	}
+#endif
+	_seekdir_unlocked(dirp, (long)(intptr_t)dp);
 }

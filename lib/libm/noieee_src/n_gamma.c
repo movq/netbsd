@@ -1,4 +1,4 @@
-/*      $NetBSD: n_gamma.c,v 1.3 1998/10/20 02:26:11 matt Exp $ */
+/*      $NetBSD: n_gamma.c,v 1.6 2006/11/24 21:15:54 wiz Exp $ */
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@ static char sccsid[] = "@(#)gamma.c	8.1 (Berkeley) 6/4/93";
 /*
  * This code by P. McIlroy, Oct 1992;
  *
- * The financial support of UUNET Communications Services is greatfully
+ * The financial support of UUNET Communications Services is gratefully
  * acknowledged.
  */
 
@@ -79,11 +75,11 @@ static char sccsid[] = "@(#)gamma.c	8.1 (Berkeley) 6/4/93";
  *	Maximum observed error < 4ulp in 1,000,000 trials.
  */
 
-static double neg_gam __P((double));
-static double small_gam __P((double));
-static double smaller_gam __P((double));
-static struct Double large_gam __P((double));
-static struct Double ratfun_gam __P((double, double));
+static double neg_gam (double);
+static double small_gam (double);
+static double smaller_gam (double);
+static struct Double large_gam (double);
+static struct Double ratfun_gam (double, double);
 
 /*
  * Rational approximation, A0 + x*x*P(x)/Q(x), on the interval
@@ -124,7 +120,6 @@ static struct Double ratfun_gam __P((double, double));
 #define Pa7	-1.44705562421428915453880392761e-02
 
 static const double zero = 0., one = 1.0, tiny = 1e-300;
-static int endian;
 /*
  * TRUNC sets trailing bits in a floating-point number to zero.
  * is a temporary variable.
@@ -133,6 +128,7 @@ static int endian;
 #define _IEEE		0
 #define TRUNC(x)	x = (double) (float) (x)
 #else
+static int endian;
 #define _IEEE		1
 #define TRUNC(x)	*(((int *) &x) + endian) &= 0xf8000000
 #define infnan(x)	0.0
@@ -144,7 +140,9 @@ gamma(x)
 {
 	double b;
 	struct Double u;
-	endian = (*(int *) &one) ? 1 : 0;
+#if _IEEE
+	int endian = (*(int *) &one) ? 1 : 0;
+#endif
 
 	if (x >= 6) {
 		if(x > 171.63)
@@ -174,8 +172,7 @@ gamma(x)
  * Accurate to max(ulp(1/128) absolute, 2^-66 relative) error.
  */
 static struct Double
-large_gam(x)
-	double x;
+large_gam(double x)
 {
 	double z, p;
 	struct Double t, u, v;
@@ -203,8 +200,7 @@ large_gam(x)
  * It also has correct monotonicity.
  */
 static double
-small_gam(x)
-	double x;
+small_gam(double x)
 {
 	double y, ym1, t;
 	struct Double yy, r;
@@ -237,8 +233,7 @@ small_gam(x)
  * Good on (0, 1+x0+LEFT].  Accurate to 1ulp.
  */
 static double
-smaller_gam(x)
-	double x;
+smaller_gam(double x)
 {
 	double t, d;
 	struct Double r, xx;
@@ -266,8 +261,7 @@ smaller_gam(x)
  * returns (z+c)^2 * P(z)/Q(z) + a0
  */
 static struct Double
-ratfun_gam(z, c)
-	double z, c;
+ratfun_gam(double z, double c)
 {
 	double p, q;
 	struct Double r, t;
@@ -293,8 +287,7 @@ ratfun_gam(z, c)
 }
 
 static double
-neg_gam(x)
-	double x;
+neg_gam(double x)
 {
 	int sgn = 1;
 	struct Double lg, lsine;

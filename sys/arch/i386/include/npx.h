@@ -1,4 +1,4 @@
-/*	$NetBSD: npx.h,v 1.14 1999/01/26 14:25:02 christos Exp $	*/
+/*	$NetBSD: npx.h,v 1.22 2006/05/02 19:03:24 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -47,7 +43,7 @@
 #define	_I386_NPX_H_
 
 /* Environment information of floating point unit */
-struct	env87 {
+struct env87 {
 	long	en_cw;		/* control word (16bits) */
 	long	en_sw;		/* status word (16bits) */
 	long	en_tw;		/* tag word (16bits) */
@@ -59,7 +55,7 @@ struct	env87 {
 };
 
 /* Contents of each floating point accumulator */
-struct	fpacc87 {
+struct fpacc87 {
 #ifdef dontdef	/* too unportable */
 	u_long	fp_mantlo;	/* mantissa low (31:0) */
 	u_long	fp_manthi;	/* mantissa high (63:32) */
@@ -71,7 +67,7 @@ struct	fpacc87 {
 };
 
 /* Floating point context */
-struct	save87 {
+struct save87 {
 	struct	env87 sv_env;		/* floating point control/status */
 	struct	fpacc87	sv_ac[8];	/* accumulator contents, 0-7 */
 #ifndef dontdef
@@ -81,11 +77,48 @@ struct	save87 {
 #endif
 };
 
-/* Cyrix EMC memory - mapped coprocessor context switch information */
-struct	emcsts {
-	long	em_msw;		/* memory mapped status register when swtched */
-	long	em_tar;		/* memory mapped temp A register when swtched */
-	long	em_dl;		/* memory mapped D low register when swtched */
+/* Environment of FPU/MMX/SSE/SSE2. */
+struct envxmm {
+/*0*/	uint16_t en_cw;		/* FPU Control Word */
+	uint16_t en_sw;		/* FPU Status Word */
+	uint8_t  en_rsvd0;
+	uint8_t  en_tw;		/* FPU Tag Word (abridged) */
+	uint16_t en_opcode;	/* FPU Opcode */
+	uint32_t en_fip;	/* FPU Instruction Pointer */
+	uint16_t en_fcs;	/* FPU IP selector */
+	uint16_t en_rsvd1;
+/*16*/	uint32_t en_foo;	/* FPU Data pointer */
+	uint16_t en_fos;	/* FPU Data pointer selector */
+	uint16_t en_rsvd2;
+	uint32_t en_mxcsr;	/* MXCSR Register State */
+	uint32_t en_rsvd3;
+};
+
+/* FPU regsters in the extended save format. */
+struct fpaccxmm {
+	uint8_t fp_bytes[10];
+	uint8_t fp_rsvd[6];
+};
+
+/* SSE/SSE2 registers. */
+struct xmmreg {
+	uint8_t sse_bytes[16];
+};
+
+/* FPU/MMX/SSE/SSE2 context */
+struct savexmm {
+	struct envxmm sv_env;		/* control/status context */
+	struct fpaccxmm sv_ac[8];	/* ST/MM regs */
+	struct xmmreg sv_xmmregs[8];	/* XMM regs */
+	uint8_t sv_rsvd[16 * 14];
+	/* 512-bytes --- end of hardware portion of save area */
+	uint32_t sv_ex_sw;		/* saved SW from last exception */
+	uint32_t sv_ex_tw;		/* saved TW from last exception */
+} __aligned(16);
+
+union savefpu {
+	struct save87 sv_87;
+	struct savexmm sv_xmm;
 };
 
 /*
@@ -103,6 +136,27 @@ struct	emcsts {
 #define	__Linux_NPXCW__		0x037f
 /* SVR4 uses the same control word as iBCS2. */
 #define	__SVR4_NPXCW__		0x0262
+
+/*
+ * The default MXCSR value at reset is 0x1f80, IA-32 Instruction
+ * Set Reference, pg. 3-369.
+ */
+#define	__INITIAL_MXCSR__	0x1f80
+
+
+/*
+ * 80387 control word bits
+ */
+#define EN_SW_INVOP	0x0001  /* Invalid operation */
+#define EN_SW_DENORM	0x0002  /* Denormalized operand */
+#define EN_SW_ZERODIV	0x0004  /* Divide by zero */
+#define EN_SW_OVERFLOW	0x0008  /* Overflow */
+#define EN_SW_UNDERFLOW	0x0010  /* Underflow */
+#define EN_SW_PRECLOSS	0x0020  /* Loss of precision */
+#define EN_SW_DATACHAIN	0x0080	/* Data chain exception */
+#define EN_SW_CTL_PREC	0x0300	/* Precision control */
+#define EN_SW_CTL_ROUND	0x0c00	/* Rounding control */
+#define EN_SW_CTL_INF	0x1000	/* Infinity control */
 
 /*
  * The standard control word from finit is 0x37F, giving:
@@ -129,9 +183,12 @@ struct	emcsts {
 
 #ifdef _KERNEL
 
-void probeintr __P((void));
-void probetrap __P((void));
-int npx586bug1 __P((int, int));
+void	probeintr(void);
+void	probetrap(void);
+int	npx586bug1(int, int);
+void 	npxinit(struct cpu_info *);
+void	process_xmm_to_s87(const struct savexmm *, struct save87 *);
+void	process_s87_to_xmm(const struct save87 *, struct savexmm *);
 
 #endif
 

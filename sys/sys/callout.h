@@ -1,12 +1,12 @@
-/*	$NetBSD: callout.h,v 1.14 2000/03/24 11:57:16 enami Exp $	*/
+/*	$NetBSD: callout.h,v 1.31 2008/04/28 20:24:10 martin Exp $	*/
 
 /*-
- * Copyright (c) 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000, 2003, 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
  * by Jason R. Thorpe of the Numerical Aerospace Simulation Facility,
- * NASA Ames Research Center.
+ * NASA Ames Research Center, and by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,88 +30,90 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
- * (c) UNIX System Laboratories, Inc.
- * All or some portions of this file are derived from material licensed
- * to the University of California by American Telephone and Telegraph
- * Co. or Unix System Laboratories, Inc. and are reproduced herein with
- * the permission of UNIX System Laboratories, Inc.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	@(#)callout.h	8.2 (Berkeley) 1/21/94
- */
 #ifndef _SYS_CALLOUT_H_
 #define _SYS_CALLOUT_H_
 
-#include <sys/queue.h>
+#include <sys/types.h>
 
-TAILQ_HEAD(callout_queue, callout);
+/*
+ * The callout implementation is private to kern_timeout.c yet uses
+ * caller-supplied storage, as lightweight callout operations are
+ * critical to system performance.
+ *
+ * The size of callout_t must remain constant in order to ensure ABI
+ * compatibility for kernel modules: it may become smaller, but must
+ * not grow.  If more space is required, rearrange the members of
+ * callout_impl_t.
+ */
+typedef struct callout {
+	void	*_c_store[10];
+} callout_t;
 
-struct callout {
-	TAILQ_ENTRY(callout) c_link;
-	u_int64_t	c_time;			/* when callout fires */
-	void		*c_arg;			/* function argument */
-	void		(*c_func) __P((void *));/* functiuon to call */
-	int		c_flags;		/* state of this entry */
+/* Internal flags. */
+#define	CALLOUT_BOUND		0x0001	/* bound to a specific CPU */
+#define	CALLOUT_PENDING		0x0002	/* callout is on the queue */
+#define	CALLOUT_FIRED		0x0004	/* callout has fired */
+#define	CALLOUT_INVOKING	0x0008	/* callout function is being invoked */
+
+/* End-user flags. */
+#define	CALLOUT_MPSAFE		0x0100	/* does not need kernel_lock */
+#define	CALLOUT_FLAGMASK	0xff00
+
+#ifdef _CALLOUT_PRIVATE
+
+/* The following funkyness is to appease gcc3's strict aliasing. */
+struct callout_circq {
+	/* next element */
+	union {
+		struct callout_impl	*elem;
+		struct callout_circq	*list;
+	} cq_next;
+	/* previous element */
+	union {
+		struct callout_impl	*elem;
+		struct callout_circq	*list;
+	} cq_prev;
 };
+#define	cq_next_e	cq_next.elem
+#define	cq_prev_e	cq_prev.elem
+#define	cq_next_l	cq_next.list
+#define	cq_prev_l	cq_prev.list
 
-#define	CALLOUT_ACTIVE		0x0001	/* callout is active */
-#define	CALLOUT_PENDING		0x0002	/* callout time has not yet arrived */
+struct callout_cpu;
 
-#define	CALLOUT_INITIALIZER	{ { NULL, NULL }, 0, NULL, NULL, 0 }
+typedef struct callout_impl {
+	struct callout_circq c_list;		/* linkage on queue */
+	void	(*c_func)(void *);		/* function to call */
+	void	*c_arg;				/* function argument */
+	struct callout_cpu * volatile c_cpu;	/* associated CPU */
+	int	c_time;				/* when callout fires */
+	u_int	c_flags;			/* state of this entry */
+	u_int	c_magic;			/* magic number */
+} callout_impl_t;
+#define	CALLOUT_MAGIC		0x11deeba1
+
+#endif	/* _CALLOUT_PRIVATE */
 
 #ifdef _KERNEL
-extern struct callout_queue *callwheel;
-extern int callwheelsize, callwheelbits, callwheelmask;
-extern int ncallout;
+struct cpu_info;
 
-#ifdef CALLWHEEL_STATS
-extern int *callwheel_sizes;		/* for allocsys() */
-#endif
+void	callout_startup(void);
+void	callout_init_cpu(struct cpu_info *);
+void	callout_hardclock(void);
 
-void	callout_setsize __P((void));
-void	callout_startup __P((void));
-void	callout_init __P((struct callout *));
-void	callout_reset __P((struct callout *, int, void (*)(void *), void *));
-void	callout_stop __P((struct callout *));
-#ifdef CALLWHEEL_STATS
-void	callout_showstats __P((void));
-#endif
-
-#define	callout_active(c)	((c)->c_flags & CALLOUT_ACTIVE)
-#define	callout_pending(c)	((c)->c_flags & CALLOUT_PENDING)
-#define	callout_expired(c)	(callout_pending((c)) == 0)
-
-#define	callout_deactivate(c)	((c)->c_flags &= ~CALLOUT_ACTIVE)
-#endif /* _KERNEL */
+void	callout_init(callout_t *, u_int);
+void	callout_destroy(callout_t *);
+void	callout_setfunc(callout_t *, void (*)(void *), void *);
+void	callout_reset(callout_t *, int, void (*)(void *), void *);
+void	callout_schedule(callout_t *, int);
+bool	callout_stop(callout_t *);
+bool	callout_halt(callout_t *, void *);
+bool	callout_pending(callout_t *);
+bool	callout_expired(callout_t *);
+bool	callout_active(callout_t *);
+bool	callout_invoking(callout_t *);
+void	callout_ack(callout_t *);
+void	callout_bind(callout_t *, struct cpu_info *);
+#endif	/* _KERNEL */
 
 #endif /* !_SYS_CALLOUT_H_ */

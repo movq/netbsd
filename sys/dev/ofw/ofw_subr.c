@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_subr.c,v 1.6 2000/03/13 23:52:36 soren Exp $	*/
+/*	$NetBSD: ofw_subr.c,v 1.13 2007/11/07 19:26:45 garbled Exp $	*/
 
 /*
  * Copyright 1998
@@ -32,6 +32,9 @@
  *    negligence, tort, under statute, in equity, at law or otherwise,
  *    even if advised of the possibility of such damage.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ofw_subr.c,v 1.13 2007/11/07 19:26:45 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,7 +90,7 @@ of_decode_int(p)
  *			indicates compatibility.
  *
  * Return Value:
- *	-1 if none of the strings are found in phandle's "compatiblity"
+ *	-1 if none of the strings are found in phandle's "compatibility"
  *	property, or the index of the string in "strings" of the first
  *	string found in phandle's "compatibility" property.
  *
@@ -95,9 +98,7 @@ of_decode_int(p)
  *	None.
  */
 int
-of_compatible(phandle, strings)
-	int phandle;
-	const char * const *strings;
+of_compatible(int phandle, const char * const *strings)
 {
 	int len, allocated, rv;
 	char *buf;
@@ -138,7 +139,7 @@ out:
 	if (allocated)
 		free(buf, M_TEMP);
 	return (rv);
-	
+
 }
 
 /*
@@ -172,10 +173,7 @@ out:
  *	either case, the contents of 'buf' will be NUL-terminated.
  */
 int
-of_packagename(phandle, buf, bufsize)
-	int phandle;
-	char *buf;
-	int bufsize;
+of_packagename(int phandle, char *buf, int bufsize)
 {
 	char *pbuf;
 	const char *lastslash;
@@ -187,11 +185,10 @@ of_packagename(phandle, buf, bufsize)
 	/* check that we could get the name, and that it's not too long. */
 	if (l < 0 ||
 	    (l == OFW_PATH_BUF_SIZE && pbuf[OFW_PATH_BUF_SIZE - 1] != '\0')) {
-		/* XXX should use snprintf! */
 		if (bufsize >= 25)
-			sprintf(buf, "??? (phandle 0x%x)", phandle);
+			snprintf(buf, bufsize, "??? (phandle 0x%x)", phandle);
 		else if (bufsize >= 4)
-			strcpy(buf, "???");
+			strlcpy(buf, "???", bufsize);
 		else
 			panic("of_packagename: bufsize = %d is silly",
 			    bufsize);
@@ -199,12 +196,99 @@ of_packagename(phandle, buf, bufsize)
 	} else {
 		pbuf[l] = '\0';
 		lastslash = strrchr(pbuf, '/');
-		strncpy(buf, (lastslash == NULL) ? pbuf : (lastslash + 1),
+		strlcpy(buf, (lastslash == NULL) ? pbuf : (lastslash + 1),
 		    bufsize);
-		buf[bufsize - 1] = '\0'; /* in case it's fills the buffer. */
 		rv = 0;
 	}
 
 	free(pbuf, M_TEMP);
 	return (rv);
+}
+
+/* 
+ * Find the first child of a given node that matches name. Does not recurse.
+ */
+int
+of_find_firstchild_byname(int node, const char *name)
+{
+	char namex[32]; 
+	int nn;
+ 
+	for (nn = OF_child(node); nn; nn = OF_peer(nn)) {
+		memset(namex, 0, sizeof(namex));
+		if (OF_getprop(nn, "name", namex, sizeof(namex)) == -1)
+			continue;
+		if (strcmp(name, namex) == 0)
+			return nn;
+	}
+	return -1;
+}
+
+/*
+ * Find a give node by name.  Recurses, and seems to walk upwards too.
+ */
+
+int
+of_getnode_byname(int start, const char *target)
+{
+	int node, next;
+	char name[64];
+
+	if (start == 0)
+		start = OF_peer(0);
+
+	for (node = start; node; node = next) {
+		memset(name, 0, sizeof name);
+		OF_getprop(node, "name", name, sizeof name - 1);
+		if (strcmp(name, target) == 0)
+			break;
+
+		if ((next = OF_child(node)) != 0)
+			continue;
+
+		while (node) {
+			if ((next = OF_peer(node)) != 0)
+				break;
+			node = OF_parent(node);
+		}
+	}
+
+	/* XXX is this correct? */
+	return node;
+}
+
+/*
+ * Create a uint32_t integer property from an OFW node property.
+ */
+
+boolean_t
+of_to_uint32_prop(prop_dictionary_t dict, int node, const char *ofname,
+    const char *propname)
+{
+	uint32_t prop;
+
+	if (OF_getprop(node, ofname, &prop, sizeof(prop)) != sizeof(prop))
+		return FALSE;
+
+	return(prop_dictionary_set_uint32(dict, propname, prop));
+}
+
+/*
+ * Create a data property from an OFW node property.  Max size of 256bytes.
+ */
+
+boolean_t
+of_to_dataprop(prop_dictionary_t dict, int node, const char *ofname,
+    const char *propname)
+{
+	prop_data_t data;
+	int len;
+	uint8_t prop[256];
+
+	len = OF_getprop(node, ofname, prop, 256);
+	if (len < 1)
+		return FALSE;
+
+	data = prop_data_create_data(prop, len);
+	return(prop_dictionary_set(dict, propname, data));
 }

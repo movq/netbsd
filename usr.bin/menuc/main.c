@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.6 1999/06/20 05:41:45 cgd Exp $	*/
+/*	$NetBSD: main.c,v 1.10 2004/06/20 22:20:16 jmc Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -38,7 +38,19 @@
 
 /* main.c - main program for menu compiler. */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
+#include <sys/cdefs.h>
+
+#if defined(__RCSID) && !defined(lint)
+__RCSID("$NetBSD: main.c,v 1.10 2004/06/20 22:20:16 jmc Exp $");
+#endif
+
+
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #define MAIN

@@ -1,4 +1,4 @@
-/*	$NetBSD: fork.S,v 1.2 1998/05/25 15:28:03 ws Exp $	*/
+/*	$NetBSD: fork.S,v 1.5 2003/02/13 02:50:50 nathanw Exp $	*/
 
 /*
  * pid = fork();
@@ -9,7 +9,7 @@
 
 #include "SYS.h"
 
-SYSCALL(fork)
-	addi	4,4,-1		# from 1 to 0 in child, 0 to -1 in parent
-	and	3,3,4		# return 0 in child, pid in parent
+_SYSCALL(__fork,fork)
+	addi	%r4,%r4,-1	# from 1 to 0 in child, 0 to -1 in parent
+	and	%r3,%r3,%r4	# return 0 in child, pid in parent
 	blr

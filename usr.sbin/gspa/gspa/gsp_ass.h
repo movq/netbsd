@@ -1,4 +1,4 @@
-/*	$NetBSD: gsp_ass.h,v 1.5 1999/06/22 20:27:21 is Exp $	*/
+/*	$NetBSD: gsp_ass.h,v 1.11 2008/02/02 17:16:14 christos Exp $	*/
 /*
  * GSP assembler - definitions
  *
@@ -17,7 +17,7 @@
  *    must display the following acknowledgement:
  *      This product includes software developed by Paul Mackerras.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,7 +33,7 @@
 
 #include <stddef.h>
 #include <sys/types.h>
-/*#include <alloca.h>*/
+#include <err.h>
 
 #define MAXLINE		133
 
@@ -119,15 +119,14 @@ typedef struct operand {
 #define M_ABSOLUTE	6	/* @adr */
 
 /* Register names */
-#define A0	0x20
-#define B0	0x50
-#define SP	0x6F		/* (r1 & r2 & REGFILE) != 0 iff */
-#define REGFILE	0x60		/* r1 and r2 are in the same file */
+#define GSPA_A0	0x20
+#define GSPA_B0	0x50
+#define GSPA_SP	0x6F		/* (r1 & r2 & REGFILE) != 0 iff */
+#define GSPA_REGFILE	0x60	/* r1 and r2 are in the same file */
 
 /* Prototypes */
 operand abs_adr(expr);
 operand add_operand(operand, operand);
-char *alloc(size_t nbytes);
 expr bexpr(int, expr, expr);
 void do_asg(char *, expr, int flags);
 void do_list_pc(void);
@@ -145,8 +144,10 @@ void list_error(char *);
 void listing(void);
 symbol lookup(char *id, bool makeit);
 expr num_expr(int);
-void p1err(char *fmt, ...);
-void perr(char *fmt, ...);
+void p1err(char *fmt, ...)
+	__attribute__((__format__(__printf__, 1, 2)));
+void perr(char *fmt, ...)
+	__attribute__((__format__(__printf__, 1, 2)));
 void pseudo(int code, operand operands);
 void push_input(char *fn);
 void putcode(u_int16_t *, int);
@@ -180,10 +181,4 @@ extern char line[], *lineptr;
 #endif
 #endif
 
-#ifndef BSD
-#ifndef amiga
-#define bcopy(s, d, l) memcpy(d, s, l)
-#endif
-#endif
-
-#define new(x)	((x) = (typeof (x)) alloc (sizeof(*(x))))
+#define new(x)	((x) = emalloc(sizeof(*(x))))

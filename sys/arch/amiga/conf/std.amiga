@@ -1,12 +1,9 @@
-#	$NetBSD: std.amiga,v 1.17 1999/11/15 19:00:26 fvdl Exp $
+#	$NetBSD: std.amiga,v 1.21 2005/12/11 12:16:27 christos Exp $
 
 # standard amiga information
 
 machine amiga m68k
-
-prefix ../gnu/sys
-cinclude "conf/files.softdep"
-prefix
+include		"conf/std"	# MI standard options
 
 mainbus0	at root
 
@@ -14,5 +11,5 @@ clock0	at mainbus0
 kbd0	at mainbus0
 zbus0	at mainbus0
 
-options 	EXEC_AOUT
+options 	EXEC_ELF32
 options 	EXEC_SCRIPT

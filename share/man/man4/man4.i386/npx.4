@@ -1,3 +1,4 @@
+.\" $NetBSD: npx.4,v 1.18 2008/01/16 09:57:41 xtraeme Exp $
 .\"
 .\" Copyright (c) 1993 Christopher G. Demetriou
 .\" All rights reserved.
@@ -12,9 +13,11 @@
 .\"    documentation and/or other materials provided with the distribution.
 .\" 3. All advertising materials mentioning features or use of this software
 .\"    must display the following acknowledgement:
-.\"      This product includes software developed by Christopher G. Demetriou.
+.\"          This product includes software developed for the
+.\"          NetBSD Project.  See http://www.NetBSD.org/ for
+.\"          information about NetBSD.
 .\" 4. The name of the author may not be used to endorse or promote products
-.\"    derived from this software without specific prior written permission
+.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -27,50 +30,29 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.\"	$NetBSD: npx.4,v 1.7 1999/04/06 20:24:42 pk Exp $
+.\" <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
 .\"
-.Dd August 6, 1993
+.Dd January 16, 2008
 .Dt NPX 4 i386
 .Os
 .Sh NAME
 .Nm npx
-.Nd
-Numeric Processing Extension coprocessor and emulator
+.Nd Numeric Processing Extension coprocessor and emulator
 .Sh SYNOPSIS
-.Cd "options MATH_EMULATE"
 .\" XXX this is awful hackery to get it to work right... -- cgd
 .Cd "npx0 at isa? port" \&"IO_NPX0\&" irq 13
+.Cd "npx* at acpi?"
+.Cd "npx* at pnpbios? index ?"
 .Sh DESCRIPTION
 The
-.Nm npx
+.Nm
 driver enables the use of the system's Numeric Processing Extension
-coprocessor,
-if one is present.  Numeric processing extensions are present in
-systems with
-.Nm 486DX
-CPUs and in systems with
-.Nm 387
-or
-.Nm 487SX
-coprocessors.  The
-.Nm npx
+coprocessor.
+The
+.Nm
 driver is required for proper system functioning regardless
-of whether or not a NPX is present.
-.Pp
-If there is no NPX present in the system, the "MATH_EMULATE"
-option must be defined in the kernel configuration file.
-It will provide support for the instructions normally executed
-by the NPX.  If there is no NPX in the system and the kernel
-is not built with math emulation, the system will not boot.
-.Sh CAVEATS
-The emulator is much slower than the NPX coprocessor.
-This will result in poor floating-point math performance
-if the emulator must be used.
-.Sh BUGS
-There are lots of them, especially on cheap motherboards.  In particular,
-some motherboards do not have the interrupt lines from the NPX to
-the CPU wired properly.  If this is the case, the emulator must be used
-if consistent system operation is desired.
-.Pp
-Emulation of the transcendental functions instructions is incorrect.
-Emulation of other instructions is suspect.
+of whether or not an NPX is present.
+.Sh SEE ALSO
+.Xr acpi 4 ,
+.Xr isa 4 ,
+.Xr pnpbios 4

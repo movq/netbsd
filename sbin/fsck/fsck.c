@@ -1,4 +1,4 @@
-/*	$NetBSD: fsck.c,v 1.21 1999/04/22 04:20:53 abs Exp $	*/
+/*	$NetBSD: fsck.c,v 1.47 2008/02/23 21:41:47 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Christos Zoulas. All rights reserved.
@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsck.c,v 1.21 1999/04/22 04:20:53 abs Exp $");
+__RCSID("$NetBSD: fsck.c,v 1.47 2008/02/23 21:41:47 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -49,6 +45,7 @@ __RCSID("$NetBSD: fsck.c,v 1.21 1999/04/22 04:20:53 abs Exp $");
 #include <sys/wait.h>
 #define FSTYPENAMES
 #define FSCKNAMES
+#include <sys/disk.h>
 #include <sys/disklabel.h>
 #include <sys/ioctl.h>
 
@@ -62,9 +59,11 @@ __RCSID("$NetBSD: fsck.c,v 1.21 1999/04/22 04:20:53 abs Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <util.h>
 
 #include "pathnames.h"
 #include "fsutil.h"
+#include "exitvalues.h"
 
 static enum { IN_LIST, NOT_IN_LIST } which = NOT_IN_LIST;
 
@@ -80,30 +79,26 @@ static int maxrun = 0;
 static char *options = NULL;
 static int flags = 0;
 
-int main __P((int, char *[]));
-
-static int checkfs __P((const char *, const char *, const char *, void *,
-    pid_t *));
-static int selected __P((const char *));
-static void addoption __P((char *));
-static const char *getoptions __P((const char *));
-static void addentry __P((struct fstypelist *, const char *, const char *));
-static void maketypelist __P((char *));
-static void catopt __P((char **, const char *));
-static void mangle __P((char *, int *, const char ***, int *));
-static const char *getfslab __P((const char *));
-static void usage __P((void));
-static void *isok __P((struct fstab *));
+static int checkfs(const char *, const char *, const char *, void *, pid_t *);
+static int selected(const char *);
+static void addoption(char *);
+static const char *getoptions(const char *);
+static void addentry(struct fstypelist *, const char *, const char *);
+static void maketypelist(char *);
+static void catopt(char **, const char *);
+static void mangle(char *, int *, const char ** volatile *, int *);
+static const char *getfslab(const char *);
+static void usage(void);
+static void *isok(struct fstab *);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct fstab *fs;
-	int i, rval = 0;
+	int i, rval;
 	const char *vfstype = NULL;
 	char globopt[3];
+	int ret = FSCK_EXIT_OK;
 
 	globopt[0] = '-';
 	globopt[2] = '\0';
@@ -111,41 +106,53 @@ main(argc, argv)
 	TAILQ_INIT(&selhead);
 	TAILQ_INIT(&opthead);
 
-	while ((i = getopt(argc, argv, "dvpfnyl:t:T:")) != -1)
+	while ((i = getopt(argc, argv, "dfl:nPpqT:t:vy")) != -1) {
 		switch (i) {
 		case 'd':
 			flags |= CHECK_DEBUG;
+			continue;
+
+		case 'f':
+			flags |= CHECK_FORCE;
 			break;
 
-		case 'v':
-			flags |= CHECK_VERBOSE;
+		case 'n':
+			flags |= CHECK_NOFIX;
 			break;
 
 		case 'p':
 			flags |= CHECK_PREEN;
-			/*FALLTHROUGH*/
-		case 'n':
-		case 'f':
-		case 'y':
-			globopt[1] = i;
-			catopt(&options, globopt);
+			break;
+
+		case 'P':
+			flags |= CHECK_PROGRESS;
+			break;
+
+		case 'q':
 			break;
 
 		case 'l':
 			maxrun = atoi(optarg);
-			break;
+			continue;
 
 		case 'T':
 			if (*optarg)
 				addoption(optarg);
-			break;
+			continue;
 
 		case 't':
-			if (selhead.tqh_first != NULL)
+			if (TAILQ_FIRST(&selhead) != NULL)
 				errx(1, "only one -t option may be specified.");
 
 			maketypelist(optarg);
 			vfstype = optarg;
+			continue;
+
+		case 'v':
+			flags |= CHECK_VERBOSE;
+			continue;
+
+		case 'y':
 			break;
 
 		case '?':
@@ -153,6 +160,22 @@ main(argc, argv)
 			usage();
 			/* NOTREACHED */
 		}
+
+		/* Pass option to fsck_xxxfs */
+		globopt[1] = i;
+		catopt(&options, globopt);
+	}
+
+	/* Don't do progress meters if we're debugging. */
+	if (flags & CHECK_DEBUG)
+		flags &= ~CHECK_PROGRESS;
+
+	/*
+	 * If progress meters are being used, force max parallel to 1
+	 * so the progress meter outputs don't interfere with one another.
+	 */
+	if (flags & CHECK_PROGRESS)
+		maxrun = 1;
 
 	argc -= optind;
 	argv += optind;
@@ -186,21 +209,24 @@ main(argc, argv)
 			spec = fs->fs_spec;
 			type = fs->fs_vfstype;
 			if (BADTYPE(fs->fs_type))
-				errx(1, "%s has unknown file system type.",
+				errx(FSCK_EXIT_CHECK_FAILED,
+				    "%s has unknown file system type.",
 				    spec);
 		}
 
-		rval |= checkfs(type, blockcheck(spec), *argv, NULL, NULL);
+		rval = checkfs(type, blockcheck(spec), *argv, NULL, NULL);
+		if (rval > ret) 
+			ret = rval;
 	}
 
-	return rval;
+	return ret;
 }
 
 
 static void *
-isok(fs)
-	struct fstab *fs;
+isok(struct fstab *fs)
 {
+
 	if (fs->fs_passno == 0)
 		return NULL;
 
@@ -215,37 +241,36 @@ isok(fs)
 
 
 static int
-checkfs(vfstype, spec, mntpt, auxarg, pidp)
-	const char *vfstype, *spec, *mntpt;
-	void *auxarg;
-	pid_t *pidp;
+checkfs(const char *vfst, const char *spec, const char *mntpt, void *auxarg,
+    pid_t *pidp)
 {
 	/* List of directories containing fsck_xxx subcommands. */
 	static const char *edirs[] = {
+#ifdef RESCUEDIR
+		RESCUEDIR,
+#endif
 		_PATH_SBIN,
 		_PATH_USRSBIN,
 		NULL
 	};
-	const char **argv, **edir;
+	const char ** volatile argv, **edir;
+	const char * volatile vfstype = vfst;
 	pid_t pid;
 	int argc, i, status, maxargc;
-	char *optbuf, execname[MAXPATHLEN + 1], execbase[MAXPATHLEN];
+	char *optb;
+	char *volatile optbuf;
+	char execname[MAXPATHLEN + 1], execbase[MAXPATHLEN];
 	const char *extra = getoptions(vfstype);
-
-#ifdef __GNUC__
-	/* Avoid vfork clobbering */
-	(void) &optbuf;
-	(void) &vfstype;
-#endif
 
 	if (!strcmp(vfstype, "ufs"))
 		vfstype = MOUNT_UFS;
 
-	optbuf = NULL;
+	optb = NULL;
 	if (options)
-		catopt(&optbuf, options);
+		catopt(&optb, options);
 	if (extra)
-		catopt(&optbuf, extra);
+		catopt(&optb, extra);
+	optbuf = optb;
 
 	maxargc = 64;
 	argv = emalloc(sizeof(char *) * maxargc);
@@ -271,18 +296,40 @@ checkfs(vfstype, spec, mntpt, auxarg, pidp)
 		warn("vfork");
 		if (optbuf)
 			free(optbuf);
-		return (1);
+		free(argv);
+		return FSCK_EXIT_CHECK_FAILED;
 
 	case 0:					/* Child. */
+		if ((flags & CHECK_FORCE) == 0) {
+			struct statvfs	sfs;
+
+				/*
+				 * if mntpt is a mountpoint of a mounted file
+				 * system and it's mounted read-write, skip it
+				 * unless -f is given.
+				 */
+			if ((statvfs(mntpt, &sfs) == 0) &&
+			    (strcmp(mntpt, sfs.f_mntonname) == 0) &&
+			    ((sfs.f_flag & MNT_RDONLY) == 0)) {
+				printf(
+		"%s: file system is mounted read-write on %s; not checking\n",
+				    spec, mntpt);
+				if ((flags & CHECK_PREEN) && auxarg != NULL)
+					_exit(FSCK_EXIT_OK);	/* fsck -p */
+				else
+					_exit(FSCK_EXIT_CHECK_FAILED);	/* fsck [[-p] ...] */
+			}
+		}
+
 		if (flags & CHECK_DEBUG)
-			_exit(0);
+			_exit(FSCK_EXIT_OK);
 
 		/* Go find an executable. */
 		edir = edirs;
 		do {
 			(void)snprintf(execname,
 			    sizeof(execname), "%s/%s", *edir, execbase);
-			execv(execname, (char * const *)argv);
+			execv(execname, (char * const *)__UNCONST(argv));
 			if (errno != ENOENT) {
 				if (spec)
 					warn("exec %s for %s", execname, spec);
@@ -297,47 +344,47 @@ checkfs(vfstype, spec, mntpt, auxarg, pidp)
 			else
 				warn("exec %s", execname);
 		}
-		_exit(1);
+		_exit(FSCK_EXIT_CHECK_FAILED);
 		/* NOTREACHED */
 
 	default:				/* Parent. */
 		if (optbuf)
 			free(optbuf);
+		free(argv);
 
 		if (pidp) {
 			*pidp = pid;
-			return 0;
+			return FSCK_EXIT_OK;
 		}
 
 		if (waitpid(pid, &status, 0) < 0) {
 			warn("waitpid");
-			return (1);
+			return FSCK_EXIT_CHECK_FAILED;
 		}
 
 		if (WIFEXITED(status)) {
 			if (WEXITSTATUS(status) != 0)
-				return (WEXITSTATUS(status));
+				return WEXITSTATUS(status);
 		}
 		else if (WIFSIGNALED(status)) {
 			warnx("%s: %s", spec, strsignal(WTERMSIG(status)));
-			return (1);
+			return FSCK_EXIT_CHECK_FAILED;
 		}
 		break;
 	}
 
-	return (0);
+	return FSCK_EXIT_OK;
 }
 
 
 static int
-selected(type)
-	const char *type;
+selected(const char *type)
 {
 	struct entry *e;
 
 	/* If no type specified, it's always selected. */
-	for (e = selhead.tqh_first; e != NULL; e = e->entries.tqe_next)
-		if (!strncmp(e->type, type, MFSNAMELEN))
+	TAILQ_FOREACH(e, &selhead, entries)
+		if (!strcmp(e->type, type))
 			return which == IN_LIST ? 1 : 0;
 
 	return which == IN_LIST ? 0 : 1;
@@ -345,21 +392,19 @@ selected(type)
 
 
 static const char *
-getoptions(type)
-	const char *type;
+getoptions(const char *type)
 {
 	struct entry *e;
 
-	for (e = opthead.tqh_first; e != NULL; e = e->entries.tqe_next)
-		if (!strncmp(e->type, type, MFSNAMELEN))
+	TAILQ_FOREACH(e, &opthead, entries)
+		if (!strcmp(e->type, type))
 			return e->options;
 	return "";
 }
 
 
 static void
-addoption(optstr)
-	char *optstr;
+addoption(char *optstr)
 {
 	char *newoptions;
 	struct entry *e;
@@ -369,8 +414,8 @@ addoption(optstr)
 
 	*newoptions++ = '\0';
 
-	for (e = opthead.tqh_first; e != NULL; e = e->entries.tqe_next)
-		if (!strncmp(e->type, optstr, MFSNAMELEN)) {
+	TAILQ_FOREACH(e, &opthead, entries)
+		if (!strcmp(e->type, optstr)) {
 			catopt(&e->options, newoptions);
 			return;
 		}
@@ -379,10 +424,7 @@ addoption(optstr)
 
 
 static void
-addentry(list, type, opts)
-	struct fstypelist *list;
-	const char *type;
-	const char *opts;
+addentry(struct fstypelist *list, const char *type, const char *opts)
 {
 	struct entry *e;
 
@@ -394,8 +436,7 @@ addentry(list, type, opts)
 
 
 static void
-maketypelist(fslist)
-	char *fslist;
+maketypelist(char *fslist)
 {
 	char *ptr;
 
@@ -416,9 +457,7 @@ maketypelist(fslist)
 
 
 static void
-catopt(sp, o)
-	char **sp;
-	const char *o;
+catopt(char **sp, const char *o)
 {
 	char *s;
 	size_t i, j;
@@ -436,10 +475,7 @@ catopt(sp, o)
 
 
 static void
-mangle(options, argcp, argvp, maxargcp)
-	char *options;
-	int *argcp, *maxargcp;
-	const char ***argvp;
+mangle(char *opts, int *argcp, const char ** volatile *argvp, int *maxargcp)
 {
 	char *p, *s;
 	int argc, maxargc;
@@ -449,7 +485,7 @@ mangle(options, argcp, argvp, maxargcp)
 	argv = *argvp;
 	maxargc = *maxargcp;
 
-	for (s = options; (p = strsep(&s, ",")) != NULL;) {
+	for (s = opts; (p = strsep(&s, ",")) != NULL;) {
 		/* Always leave space for one more argument and the NULL. */
 		if (argc >= maxargc - 3) {
 			maxargc <<= 1;
@@ -475,20 +511,26 @@ mangle(options, argcp, argvp, maxargcp)
 	*maxargcp = maxargc;
 }
 
-
-const static char *
-getfslab(str)
-	const char *str;
+static const char *
+getfslab(const char *str)
 {
+	static struct dkwedge_info dkw;
 	struct disklabel dl;
 	int fd;
 	char p;
 	const char *vfstype;
 	u_char t;
 
-	/* deduce the filesystem type from the disk label */
+	/* deduce the file system type from the disk label */
 	if ((fd = open(str, O_RDONLY)) == -1)
 		err(1, "cannot open `%s'", str);
+
+	/* First check to see if it's a wedge. */
+	if (ioctl(fd, DIOCGWEDGEINFO, &dkw) == 0) {
+		/* Yup, this is easy. */
+		(void) close(fd);
+		return (dkw.dkw_ptype);
+	}
 
 	if (ioctl(fd, DIOCGDINFO, &dl) == -1)
 		err(1, "cannot get disklabel for `%s'", str);
@@ -513,13 +555,12 @@ getfslab(str)
 
 
 static void
-usage()
+usage(void)
 {
-	extern char *__progname;
 	static const char common[] =
-	    "[-dpvlyn] [-T fstype:fsoptions] [-t fstype]";
+	    "[-dfnPpqvy] [-l maxparallel] [-T fstype:fsoptions]\n\t\t[-t fstype]";
 
-	(void)fprintf(stderr, "Usage: %s %s [special|node]...\n",
-	    __progname, common);
-	exit(1);
+	(void)fprintf(stderr, "usage: %s %s [special|node]...\n",
+	    getprogname(), common);
+	exit(FSCK_EXIT_USAGE);
 }

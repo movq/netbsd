@@ -1,3 +1,5 @@
-/*	$NetBSD: types.h,v 1.2 1998/10/02 07:12:25 sakamoto Exp $	*/
+/*	$NetBSD: types.h,v 1.10 2008/01/20 18:09:08 joerg Exp $	*/
+
+#define	__HAVE_DEVICE_REGISTER
 
 #include <powerpc/types.h>

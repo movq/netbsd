@@ -1,4 +1,4 @@
-/*	$NetBSD: bha_pci.c,v 1.16 1998/08/15 10:10:53 mycroft Exp $	*/
+/*	$NetBSD: bha_pci.c,v 1.33 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,15 +29,16 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: bha_pci.c,v 1.33 2008/04/28 20:23:54 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
-#include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 
@@ -56,23 +50,14 @@
 
 #define	PCI_CBIO	0x10
 
-int	bha_pci_match __P((struct device *, struct cfdata *, void *));
-void	bha_pci_attach __P((struct device *, struct device *, void *));
-
-struct cfattach bha_pci_ca = {
-	sizeof(struct bha_softc), bha_pci_match, bha_pci_attach
-};
-
 /*
  * Check the slots looking for a board we recognise
  * If we find one, note it's address (slot) and call
  * the actual probe routine to check it out.
  */
-int
-bha_pci_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+bha_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	bus_space_tag_t iot;
@@ -91,7 +76,7 @@ bha_pci_match(parent, match, aux)
 	    NULL, &iosize))
 		return (0);
 
-	rv = bha_find(iot, ioh, NULL);
+	rv = bha_find(iot, ioh);
 
 	bus_space_unmap(iot, ioh, iosize);
 
@@ -101,20 +86,19 @@ bha_pci_match(parent, match, aux)
 /*
  * Attach all the sub-devices we can find
  */
-void
-bha_pci_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+bha_pci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	struct bha_softc *sc = (void *)self;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
-	struct bha_probe_data bpd;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pci_intr_handle_t ih;
 	pcireg_t csr;
 	const char *model, *intrstr;
+
+	aprint_naive(": SCSI controller\n");
 
 	if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_BUSLOGIC_MULTIMASTER_NC)
 		model = "BusLogic 9xxC SCSI";
@@ -122,19 +106,18 @@ bha_pci_attach(parent, self, aux)
 		model = "BusLogic 9xxC SCSI";
 	else
 		model = "unknown model!";
-	printf(": %s\n", model);
+	aprint_normal(": %s\n", model);
 
 	if (pci_mapreg_map(pa, PCI_CBIO, PCI_MAPREG_TYPE_IO, 0, &iot, &ioh,
 	    NULL, NULL)) {
-		printf("%s: unable to map device registers\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to map device registers\n");
 		return;
 	}
 
 	sc->sc_iot = iot;
 	sc->sc_ioh = ioh;
 	sc->sc_dmat = pa->pa_dmat;
-	if (!bha_find(iot, ioh, &bpd))
+	if (!bha_find(iot, ioh))
 		panic("bha_pci_attach: bha_find failed");
 
 	sc->sc_dmaflags = 0;
@@ -143,24 +126,25 @@ bha_pci_attach(parent, self, aux)
 	pci_conf_write(pc, pa->pa_tag, PCI_COMMAND_STATUS_REG,
 	    csr | PCI_COMMAND_MASTER_ENABLE | PCI_COMMAND_IO_ENABLE);
 
-	if (pci_intr_map(pc, pa->pa_intrtag, pa->pa_intrpin,
-	    pa->pa_intrline, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+	if (pci_intr_map(pa, &ih)) {
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_BIO, bha_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
-	bha_attach(sc, &bpd);
+	bha_attach(sc);
 
 	bha_disable_isacompat(sc);
 }
+
+CFATTACH_DECL(bha_pci, sizeof(struct bha_softc),
+    bha_pci_match, bha_pci_attach, NULL, NULL);

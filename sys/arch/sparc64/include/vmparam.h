@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.10 2000/02/11 19:30:30 thorpej Exp $ */
+/*	$NetBSD: vmparam.h,v 1.29 2006/01/27 18:37:49 cdi Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -48,30 +44,108 @@
  * Machine dependent constants for Sun-4c SPARC
  */
 
+#ifndef VMPARAM_H
+#define VMPARAM_H
+
 /*
- * USRTEXT is the start of the user text/data space, while USRSTACK
- * is the top (end) of the user stack.
+ * We use 8K VM pages on the Sun4U.  Override the PAGE_* definitions
+ * to be compile-time constants.
  */
-#define	USRTEXT		0x2000			/* Start of user text */
-#define	USRSTACK	KERNBASE		/* Start of user stack */
+#define	PAGE_SHIFT	13
+#define	PAGE_SIZE	(1 << PAGE_SHIFT)
+#define	PAGE_MASK	(PAGE_SIZE - 1)
+
+/*
+ * The kernel itself is mapped by the boot loader with 4Mb locked VM pages,
+ * so let's keep 4Mb definitions here as well.
+ */
+#define PAGE_SHIFT_4M	22
+#define PAGE_SIZE_4M	(1UL<<PAGE_SHIFT_4M)
+#define PAGE_MASK_4M	(PAGE_SIZE_4M-1)
+
+/*
+ * USRSTACK is the top (end) of the user stack.
+ */
+#define USRSTACK32	0xffffe000L
+#ifdef __arch64__
+#define USRSTACK	0xffffffffffffe000L
+#else
+#define USRSTACK	USRSTACK32
+#endif
 
 /*
  * Virtual memory related constants, all in bytes
  */
+/* #ifdef __arch64__ */
+#if 0
+/*
+ * 64-bit limits:
+ *
+ * Since the compiler generates `call' instructions we can't
+ * have more than 4GB in a single text segment.
+ *
+ * And since we only have a 40-bit adderss space, allow half
+ * of that for data and the other half for stack.
+ */
 #ifndef MAXTSIZ
-#define	MAXTSIZ		(64*1024*1024)		/* max text size */
+#define	MAXTSIZ		(4L*1024*1024*1024)	/* max text size */
 #endif
 #ifndef DFLDSIZ
-#define	DFLDSIZ		(64*1024*1024)		/* initial data size limit */
+#define	DFLDSIZ		(128L*1024*1024)	/* initial data size limit */
 #endif
 #ifndef MAXDSIZ
-#define	MAXDSIZ		(256*1024*1024)		/* max data size */
+#define	MAXDSIZ		(1L<<39)		/* max data size */
 #endif
 #ifndef	DFLSSIZ
-#define	DFLSSIZ		(512*1024)		/* initial stack size limit */
+#define	DFLSSIZ		(2*1024*1024)		/* initial stack size limit */
 #endif
 #ifndef	MAXSSIZ
 #define	MAXSSIZ		MAXDSIZ			/* max stack size */
+#endif
+#else
+/*
+ * 32-bit limits:
+ *
+ * We only have 4GB to play with.  Limit stack, data, and text
+ * each to half of that.
+ *
+ * This is silly.  Apparently if we go above these numbers
+ * integer overflows in other parts of the kernel cause hangs.
+ */
+#ifndef MAXTSIZ
+#define	MAXTSIZ		(1*1024*1024*1024)	/* max text size */
+#endif
+#ifndef DFLDSIZ
+#define	DFLDSIZ		(128*1024*1024)		/* initial data size limit */
+#endif
+#ifndef MAXDSIZ
+#define	MAXDSIZ		(1*1024*1024*1024)	/* max data size */
+#endif
+#ifndef	DFLSSIZ
+#define	DFLSSIZ		(2*1024*1024)		/* initial stack size limit */
+#endif
+#ifndef	MAXSSIZ
+#define	MAXSSIZ		(8*1024*1024)			/* max stack size */
+#endif
+#endif
+
+/*
+ * 32-bit emulation limits.
+ */
+#ifndef MAXTSIZ32
+#define	MAXTSIZ32	(1*1024*1024*1024)	/* max text size */
+#endif
+#ifndef DFLDSIZ32
+#define	DFLDSIZ32	(128*1024*1024)		/* initial data size limit */
+#endif
+#ifndef MAXDSIZ32
+#define	MAXDSIZ32	(1*1024*1024*1024)	/* max data size */
+#endif
+#ifndef	DFLSSIZ32
+#define	DFLSSIZ32	(2*1024*1024)		/* initial stack size limit */
+#endif
+#ifndef	MAXSSIZ32
+#define	MAXSSIZ32	(8*1024*1024)			/* max stack size */
 #endif
 
 /*
@@ -82,28 +156,17 @@
 #endif
 
 /*
- * The time for a process to be blocked before being very swappable.
- * This is a number of seconds which the system takes as being a non-trivial
- * amount of real time.  You probably shouldn't change this;
- * it is used in subtle ways (fractions and multiples of it are, that is, like
- * half of a ``long time'', almost a long time, etc.)
- * It is related to human patience and other factors which don't really
- * change over time.
- */
-#define	MAXSLP 		20
-
-/*
  * Mach derived constants
  */
 
 /*
- * User/kernel map constants.  Note that sparc64/vaddrs.h defines the
- * IO space virtual base, which must be the same as VM_MAX_KERNEL_ADDRESS:
- * tread with care.
+ * User/kernel map constants.
  */
 #define VM_MIN_ADDRESS		((vaddr_t)0)
-#define VM_MAX_ADDRESS		((vaddr_t)KERNBASE)
-#define VM_MAXUSER_ADDRESS	((vaddr_t)KERNBASE)
+#define VM_MAX_ADDRESS		((vaddr_t)-1)
+#define VM_MAXUSER_ADDRESS	((vaddr_t)-1)
+#define VM_MAXUSER_ADDRESS32	((vaddr_t)(0x00000000ffffffffL&~PGOFSET))
+
 #define VM_MIN_KERNEL_ADDRESS	((vaddr_t)KERNBASE)
 #define VM_MAX_KERNEL_ADDRESS	((vaddr_t)KERNEND)
 
@@ -114,16 +177,32 @@
 #define	VM_NFREELIST		1
 #define	VM_FREELIST_DEFAULT	0
 
+#ifdef _KERNEL
+
+#define	__HAVE_VM_PAGE_MD
+
 /*
- * pmap specific data stored in the vm_physmem[] array
+ * For each struct vm_page, there is a list of all currently valid virtual
+ * mappings of that page.  An entry is a pv_entry_t.
  */
+struct pmap;
+typedef struct pv_entry {
+	struct pv_entry	*pv_next;	/* next pv_entry */
+	struct pmap	*pv_pmap;	/* pmap where mapping lies */
+	vaddr_t		pv_va;		/* virtual address for mapping */
+} *pv_entry_t;
+/* PV flags encoded in the low bits of the VA of the first pv_entry */
 
-struct pmap_physseg {
-	/* NULL */
+struct vm_page_md {
+	struct pv_entry mdpg_pvh;
 };
+#define	VM_MDPAGE_INIT(pg)						\
+do {									\
+	(pg)->mdpage.mdpg_pvh.pv_next = NULL;				\
+	(pg)->mdpage.mdpg_pvh.pv_pmap = NULL;				\
+	(pg)->mdpage.mdpg_pvh.pv_va = 0;				\
+} while (/*CONSTCOND*/0)
 
-#if defined (_KERNEL) && !defined(_LOCORE)
-struct vm_map;
-vaddr_t		dvma_mapin __P((struct vm_map *, vaddr_t, int, int));
-void		dvma_mapout __P((vaddr_t, vaddr_t, int));
+#endif	/* _KERNEL */
+
 #endif

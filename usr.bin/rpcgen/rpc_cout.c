@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_cout.c,v 1.15 1998/12/19 21:19:11 christos Exp $	*/
+/*	$NetBSD: rpc_cout.c,v 1.29 2006/05/11 17:11:57 mrg Exp $	*/
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
  * unrestricted use provided that this legend is included on all tape
@@ -29,23 +29,27 @@
  * Mountain View, California  94043
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)rpc_cout.c 1.13 89/02/22 (C) 1987 SMI";
 #else
-__RCSID("$NetBSD: rpc_cout.c,v 1.15 1998/12/19 21:19:11 christos Exp $");
+__RCSID("$NetBSD: rpc_cout.c,v 1.29 2006/05/11 17:11:57 mrg Exp $");
 #endif
 #endif
 
 /*
  * rpc_cout.c, XDR routine outputter for the RPC protocol compiler
  */
-#include <stdio.h>
 #include <ctype.h>
+#include <err.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <err.h>
 #include "rpc_scan.h"
 #include "rpc_parse.h"
 #include "rpc_util.h"
@@ -108,7 +112,7 @@ emit(def)
 		break;
 	case DEF_PROGRAM:
 	case DEF_CONST:
-		errx(1, "Internal error %s, %d: Case %d not handled\n",
+		errx(1, "Internal error %s, %d: Case %d not handled",
 		    __FILE__, __LINE__, def->def_kind);
 		break;
 	}
@@ -193,6 +197,16 @@ print_ifopen(indent, name)
 	int     indent;
 	char   *name;
 {
+	char _t_kludge[32];
+	/*
+	 * XXX Solaris seems to strip the _t. No idea why.
+	 */
+	if (!strcmp(name, "rpcprog_t") || !strcmp(name, "rpcvers_t") ||
+	    !strcmp(name, "rpcproc_t") || !strcmp(name, "rpcprot_t") ||
+	    !strcmp(name, "rpcport_t") || !strcmp(name, "rpcpinline_t")) {
+		strncpy(_t_kludge, name, strlen(name) - 2);
+		name = _t_kludge;
+	}
 	tabify(fout, indent);
 	f_print(fout, "if (!xdr_%s(xdrs", name);
 }
@@ -210,9 +224,9 @@ print_ifsizeof(prefix, type)
 	char   *type;
 {
 	if (streq(type, "bool")) {
-		f_print(fout, ", sizeof(bool_t), (xdrproc_t)xdr_bool");
+		f_print(fout, ", (u_int)sizeof(bool_t), (xdrproc_t)xdr_bool");
 	} else {
-		f_print(fout, ", sizeof(");
+		f_print(fout, ", (u_int)sizeof(");
 		if (undefined(type) && prefix) {
 			f_print(fout, "%s ", prefix);
 		}
@@ -244,7 +258,7 @@ print_ifstat(indent, prefix, type, rel, amax, objname, name)
 	switch (rel) {
 	case REL_POINTER:
 		print_ifopen(indent, "pointer");
-		print_ifarg("(char **)");
+		print_ifarg("(char **)(void *)");
 		f_print(fout, "%s", objname);
 		print_ifsizeof(prefix, type);
 		break;
@@ -260,7 +274,7 @@ print_ifstat(indent, prefix, type, rel, amax, objname, name)
 			print_ifarg(objname);
 		} else {
 			print_ifopen(indent, "vector");
-			print_ifarg("(char *)");
+			print_ifarg("(char *)(void *)");
 			f_print(fout, "%s", objname);
 		}
 		print_ifarg(amax);
@@ -284,7 +298,7 @@ print_ifstat(indent, prefix, type, rel, amax, objname, name)
 			} else {
 				print_ifopen(indent, "array");
 			}
-			print_ifarg("(char **)");
+			print_ifarg("(char **)(void *)");
 			if (*objname == '&') {
 				f_print(fout, "%s.%s_val, (u_int *)%s.%s_len",
 				    objname, name, objname, name);
@@ -310,10 +324,17 @@ static void
 emit_enum(def)
 	definition *def;
 {
-	fprintf(fout, "\n");
-	print_ifopen(1, "enum");
-	print_ifarg("(enum_t *)objp");
-	print_ifclose(1);
+	tabify(fout, 1);
+	f_print(fout, "{\n");
+	tabify(fout, 2);
+	f_print(fout, "enum_t et = (enum_t)*objp;\n");
+	print_ifopen(2, "enum");
+	print_ifarg("&et");
+	print_ifclose(2);
+	tabify(fout, 2);
+	f_print(fout, "*objp = (%s)et;\n", def->def_name);
+	tabify(fout, 1);
+	f_print(fout, "}\n");
 }
 
 static void
@@ -346,8 +367,8 @@ emit_union(def)
 	case_list *cl;
 	declaration *cs;
 	char   *object;
-	char   *vecformat = "objp->%s_u.%s";
-	char   *format = "&objp->%s_u.%s";
+	static const char vecformat[] = "objp->%s_u.%s";
+	static const char format[] = "&objp->%s_u.%s";
 
 	f_print(fout, "\n");
 	print_stat(1, &def->def.un.enum_decl);
@@ -412,7 +433,7 @@ emit_struct(def)
 
 
 	if (doinline == 0) {
-		fprintf(fout, "\n");
+		f_print(fout, "\n");
 		for (dl = def->def.st.decls; dl != NULL; dl = dl->next)
 			print_stat(1, &dl->decl);
 		return;
@@ -441,7 +462,7 @@ emit_struct(def)
 		can_inline = 1;
 
 	if (can_inline == 0) {	/* can not inline, drop back to old mode */
-		fprintf(fout, "\n");
+		f_print(fout, "\n");
 		for (dl = def->def.st.decls; dl != NULL; dl = dl->next)
 			print_stat(1, &dl->decl);
 		return;
@@ -484,12 +505,15 @@ emit_struct(def)
 					if (sizestr == NULL)
 						sizestr = strdup(ptemp);
 					else {
-						sizestr = (char *) realloc(sizestr, strlen(sizestr) + strlen(ptemp) + 1);
-						if (sizestr == NULL) {
+						char *nsizestr;
+
+						nsizestr = (char *) realloc(sizestr, strlen(sizestr) + strlen(ptemp) + 1);
+						if (nsizestr == NULL) {
 
 							f_print(stderr, "Fatal error : no memory\n");
 							crash();
-						};
+						}
+						sizestr = nsizestr;
 						sizestr = strcat(sizestr, ptemp);	/* build up length of
 											 * array */
 
@@ -545,7 +569,10 @@ emit_struct(def)
 				}
 				size = 0;
 				i = 0;
-				sizestr = NULL;
+				if (sizestr) {
+					free(sizestr);
+					sizestr = NULL;
+				}
 				print_stat(2, &dl->decl);
 			}
 
@@ -619,7 +646,7 @@ emit_typedef(def)
 	char   *amax = def->def.ty.array_max;
 	relation rel = def->def.ty.rel;
 
-	fprintf(fout, "\n");
+	f_print(fout, "\n");
 	print_ifstat(1, prefix, type, rel, amax, "objp", def->def_name);
 }
 
@@ -669,7 +696,7 @@ emit_inline(decl, flag)
 		break;
 	case REL_ARRAY:
 	case REL_POINTER:
-		errx(1, "Internal error %s, %d: Case %d not handled\n",
+		errx(1, "Internal error %s, %d: Case %d not handled",
 		    __FILE__, __LINE__, decl->rel);
 	}
 }
@@ -697,12 +724,12 @@ emit_single_in_line(decl, flag, rel)
 	if (strcmp(upp_case, "INT") == 0) {
 		free(upp_case);
 		freed = 1;
-		upp_case = "LONG";
+		upp_case = "INT32";
 	}
 	if (strcmp(upp_case, "U_INT") == 0) {
 		free(upp_case);
 		freed = 1;
-		upp_case = "U_LONG";
+		upp_case = "U_INT32";
 	}
 	if (flag == PUT) {
 		if (rel == REL_ALIAS)
@@ -733,7 +760,7 @@ upcase(str)
 
 	hptr = ptr;
 	while (*str != '\0')
-		*ptr++ = toupper(*str++);
+		*ptr++ = toupper((unsigned char)*str++);
 
 	*ptr = '\0';
 	return (hptr);

@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.h,v 1.11 1999/01/20 00:15:08 pk Exp $ */
+/*	$NetBSD: trap.h,v 1.16 2005/12/11 12:19:06 christos Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -86,12 +82,14 @@
 #define	T_L14INT	0x1e	/* (14) level 14 interrupt */
 #define	T_L15INT	0x1f	/* (13) level 15 interrupt */
 /*			0x20	   unused */
-/*	through		0x23	   unused */
+#define	T_TEXTERROR	0x21	/* (3) address fault during instr fetch */
+/*			0x22	   unused */
+/*			0x23	   unused */
 #define	T_CPDISABLED	0x24	/* (5) coprocessor instr while disabled */
 #define	T_UNIMPLFLUSH	0x25	/* Unimplemented FLUSH */
 /*	through		0x27	   unused */
-#define	T_CPEXCEPTION	0x28	/* (9) coprocessor exception */
-/*			0x29	   unused */
+#define	T_CPEXCEPTION	0x28	/* (11) coprocessor exception */
+#define	T_DATAERROR	0x29	/* (12) address error during data fetch */
 #define T_IDIV0		0x2a	/* divide by zero (from hw [su]div instr) */
 #define T_STOREBUFFAULT	0x2b	/* SuperSPARC: Store buffer copy-back fault */
 /*			0x2c	   unused */
@@ -100,17 +98,22 @@
 /* beginning of `user' vectors (from trap instructions) - all priority 12 */
 #define	T_SUN_SYSCALL	0x80	/* system call */
 #define	T_BREAKPOINT	0x81	/* breakpoint `instruction' */
-#define	T_DIV0		0x82	/* division routine was handed 0 */
+#define	T_DIV0		0x82	/* explicitly signal division by zero */
 #define	T_FLUSHWIN	0x83	/* flush windows */
-#define	T_CLEANWIN	0x84	/* provide clean windows */
-#define	T_RANGECHECK	0x85	/* ? */
+#define	T_CLEANWIN	0x84	/* request new windows to be cleaned */
+#define	T_RANGECHECK	0x85	/* explicitly signal a range checking error */
 #define	T_FIXALIGN	0x86	/* fix up unaligned accesses */
-#define	T_INTOF		0x87	/* integer overflow ? */
+#define	T_INTOF		0x87	/* explicitly signal integer overflow */
 #define	T_SVR4_SYSCALL	0x88	/* SVR4 system call */
+
+/* 0x89..0x8f - reserved for the OS */
 #define	T_BSD_SYSCALL	0x89	/* BSD system call */
 #define	T_KGDB_EXEC	0x8a	/* for kernel gdb */
+#define	T_DBPAUSE	0x8b	/* for smp kernel debugging */
 
-/* 0x8b..0xff are currently unallocated, except the following */
+/* 0x90..0x9f - reserved, will never be specified */
+
+/* 0xa0..0xff are currently unallocated, except the following */
 #define T_SVR4_GETCC		0xa0
 #define T_SVR4_SETCC		0xa1
 #define T_SVR4_GETPSR		0xa2
@@ -133,9 +136,9 @@
  * `software trap' macros to keep people happy (sparc v8 manual says not
  * to set the upper bits).
  */
+#define	ST_SYSCALL	(T_SUN_SYSCALL & 0x7f)
 #define	ST_BREAKPOINT	(T_BREAKPOINT & 0x7f)
 #define	ST_DIV0		(T_DIV0 & 0x7f)
 #define	ST_FLUSHWIN	(T_FLUSHWIN & 0x7f)
-#define	ST_SYSCALL	(T_SUN_SYSCALL & 0x7f)
 
 #endif /* _MACHINE_TRAP_H_ */

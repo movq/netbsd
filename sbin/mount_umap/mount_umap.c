@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_umap.c,v 1.10 1999/07/08 03:04:40 wrstuden Exp $	*/
+/*	$NetBSD: mount_umap.c,v 1.22 2008/07/20 01:20:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mount_umap.c	8.5 (Berkeley) 4/26/95";
 #else
-__RCSID("$NetBSD: mount_umap.c,v 1.10 1999/07/08 03:04:40 wrstuden Exp $");
+__RCSID("$NetBSD: mount_umap.c,v 1.22 2008/07/20 01:20:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -62,7 +58,7 @@ __RCSID("$NetBSD: mount_umap.c,v 1.10 1999/07/08 03:04:40 wrstuden Exp $");
 #include <string.h>
 #include <unistd.h>
 
-#include "mntopts.h"
+#include <mntopts.h>
 
 #define ROOTUSER 0
 /*
@@ -82,18 +78,24 @@ __RCSID("$NetBSD: mount_umap.c,v 1.10 1999/07/08 03:04:40 wrstuden Exp $");
  * will, in turn, call the umap version of mount. 
  */
 
-const struct mntopt mopts[] = {
+static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
-	{ NULL }
+	MOPT_NULL,
 };
 
-int	main __P((int, char *[]));
-void	usage __P((void));
+int	mount_umap(int argc, char **argv);
+static void	usage(void);
+
+#ifndef MOUNT_NOMAIN
+int
+main(int argc, char **argv)
+{
+	return mount_umap(argc, argv);
+}
+#endif
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+mount_umap(int argc, char *argv[])
 {
 	static char not[] = "; not mounted.";
 	struct stat statbuf;
@@ -103,7 +105,9 @@ main(argc, argv)
 	u_long mapdata[MAPFILEENTRIES][2];
 	u_long gmapdata[GMAPFILEENTRIES][2];
 	int ch, count, gnentries, mntflags, nentries;
-	char *gmapfile, *mapfile, *source, *target, buf[20];
+	char *gmapfile, *mapfile, buf[20];
+	char source[MAXPATHLEN], target[MAXPATHLEN];
+	mntoptparse_t mp;
 
 	mntflags = 0;
 	mapfile = gmapfile = NULL;
@@ -113,7 +117,10 @@ main(argc, argv)
 			gmapfile = optarg;
 			break;
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			mp = getmntopts(optarg, mopts, &mntflags, 0);
+			if (mp == NULL)
+				err(1, "getmntopts");
+			freemntopts(mp);
 			break;
 		case 'u':
 			mapfile = optarg;
@@ -128,8 +135,19 @@ main(argc, argv)
 	if (argc != 2 || mapfile == NULL || gmapfile == NULL)
 		usage();
 
-	source = argv[0];
-	target = argv[1];
+	if (realpath(argv[0], source) == NULL)        /* Check source path */
+		err(1, "realpath %s", argv[0]);
+	if (strncmp(argv[0], source, MAXPATHLEN)) {
+		warnx("\"%s\" is a relative path.", argv[0]);
+		warnx("using \"%s\" instead.", source);
+	}
+
+	if (realpath(argv[1], target) == NULL)        /* Check mounton path */
+		err(1, "realpath %s", argv[1]);
+	if (strncmp(argv[1], target, MAXPATHLEN)) {
+		warnx("\"%s\" is a relative path.", argv[1]);
+		warnx("using \"%s\" instead.", target);
+	}
 
 	/* Read in uid mapping data. */
 	if ((fp = fopen(mapfile, "r")) == NULL)
@@ -229,15 +247,19 @@ main(argc, argv)
 	args.gnentries = gnentries;
 	args.gmapdata = gmapdata;
 
-	if (mount(MOUNT_UMAP, argv[1], mntflags, &args))
-		err(1, "%s on %s", source, argv[1]);
+	if (mount(MOUNT_UMAP, target, mntflags, &args, sizeof args) == -1)
+		err(1, "%s on %s", source, target);
+	if (mntflags & MNT_GETARGS) {
+		printf("nentries=%d, gnentries=%d\n", args.nentries,
+		    args.gnentries);
+	}
 	exit(0);
 }
 
-void
-usage()
+static void
+usage(void)
 {
 	(void)fprintf(stderr,
-"usage: mount_umap [-o options] -u usermap -g groupmap target_fs mount_point\n");
+"usage: mount_umap [-o options] -g groupmap -u usermap target_fs mount_point\n");
 	exit(1);
 }

@@ -1,4 +1,4 @@
-.\"	$NetBSD: shmat.2,v 1.10 1999/12/02 21:42:39 kleink Exp $	
+.\"	$NetBSD: shmat.2,v 1.17 2004/05/13 10:20:58 wiz Exp $
 .\"
 .\" Copyright (c) 1995 Frank van der Linden
 .\" All rights reserved.
@@ -29,7 +29,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd August 25, 1999
+.Dd June 17, 2002
 .Dt SHMAT 2
 .Os
 .Sh NAME
@@ -39,7 +39,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <sys/shm.h>
+.In sys/shm.h
 .Ft void *
 .Fn shmat "int shmid" "const void *shmaddr" "int shmflg"
 .Ft int
@@ -48,14 +48,16 @@
 .Fn shmat
 maps the shared memory segment associated with the shared memory identifier
 .Fa shmid
-into the address space of the calling process. The address at which the
-segment is mapped is determined by the
+into the address space of the calling process.
+The address at which the segment is mapped is determined by the
 .Fa shmaddr
-parameter. If it is equal to 0, the system will pick an address itself.
+parameter.
+If it is equal to 0, the system will pick an address itself.
 Otherwise, an attempt is made to map the shared memory segment at the
 address
 .Fa shmaddr
-specifies. If
+specifies.
+If
 .Dv SHM_RND
 is set in
 .Fa shmflg ,
@@ -78,7 +80,8 @@ from the calling process' address space.
 .Fa shmaddr
 must be a value returned by a prior
 .Fn shmat
-call. A shared memory segment will remain in existence until it is
+call.
+A shared memory segment will remain in existence until it is
 removed by a call to
 .Xr shmctl 2
 with the
@@ -87,10 +90,10 @@ command.
 .Sh RETURN VALUES
 .Fn shmat
 returns the address at which the shared memory segment has been mapped into
-the calling process' address space when successful, 
+the calling process' address space when successful,
 .Fn shmdt
-returns 0 on successful completion. Otherwise, a value of -1 is returned,
-and the global variable
+returns 0 on successful completion.
+Otherwise, a value of \-1 is returned, and the global variable
 .Va errno
 is set to indicate the error.
 .Sh ERRORS
@@ -120,6 +123,8 @@ will fail if:
 is not the start address of a mapped shared memory segment.
 .El
 .Sh SEE ALSO
+.Xr ipcrm 1 ,
+.Xr ipcs 1 ,
 .Xr mmap 2 ,
 .Xr shmctl 2 ,
 .Xr shmget 2

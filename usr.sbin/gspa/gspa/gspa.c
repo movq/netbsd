@@ -1,4 +1,4 @@
-/*	$NetBSD: gspa.c,v 1.5 1999/06/22 20:27:21 is Exp $	*/
+/*	$NetBSD: gspa.c,v 1.13 2006/12/18 20:12:21 christos Exp $	*/
 /*
  * GSP assembler main program
  *
@@ -17,7 +17,7 @@
  *    must display the following acknowledgement:
  *      This product includes software developed by Paul Mackerras.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: gspa.c,v 1.5 1999/06/22 20:27:21 is Exp $");
+__RCSID("$NetBSD: gspa.c,v 1.13 2006/12/18 20:12:21 christos Exp $");
 #endif
 
 #include <sys/param.h>
@@ -45,6 +45,7 @@ __RCSID("$NetBSD: gspa.c,v 1.5 1999/06/22 20:27:21 is Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <util.h>
 
 #include "gsp_ass.h"
 #include "gsp_gram.h"
@@ -90,13 +91,9 @@ void	c_dumpbuf(void);
 int
 main(int argc, char **argv)
 {
-	char *hex_name, *list_name;
+	char * volatile hex_name;
+	char * volatile list_name;
 	int c;
-
-#if __GNUC__		/* XXX: borken compilers... */
-	(void)&hex_name;
-	(void)&list_name;
-#endif
 
 	hex_name = list_name = 0;
 
@@ -128,10 +125,9 @@ main(int argc, char **argv)
 	argv += optind;
 	if (argc == 0) {
 		infile = stdin;
-		strcpy(in_name, "<stdin>");
+		strlcpy(in_name, "<stdin>", sizeof(in_name));
 	} else if (argc == 1) {
-		strncpy(in_name, *argv, PATH_MAX);
-		in_name[PATH_MAX] = 0;
+		strlcpy(in_name, *argv, sizeof(in_name));
 		if ((infile = fopen(in_name, "r")) == NULL)
 			err(1, "fopen");
 	} else 
@@ -225,11 +221,11 @@ push_input(char *fn)
 	new(p);
 	p->fp = current_infile;
 	p->lineno = lineno;
-	strcpy(p->name, in_name);
+	strlcpy(p->name, in_name, sizeof(p->name));
 	p->next = pending_input;
 	current_infile = f;
 	lineno = 1;
-	strcpy(in_name, fn);
+	strlcpy(in_name, fn, sizeof(in_name));
 	pending_input = p;
 }
 
@@ -244,7 +240,7 @@ get_line(char *lp, int maxlen)
 		/* pop the input stack */
 		fclose(current_infile);
 		current_infile = p->fp;
-		strcpy(in_name, p->name);
+		strlcpy(in_name, p->name, sizeof(in_name));
 		lineno = p->lineno;
 		pending_input = p->next;
 		free(p);
@@ -287,26 +283,14 @@ void
 yyerror(char *err)
 {
 
-	perr(err);
+	perr("%s", err);
 	longjmp(synerrjmp, 1);
-}
-
-char *
-alloc(size_t nbytes)
-{
-	char *p;
-
-	if( (p = malloc(nbytes)) == NULL ){
-		fprintf(stderr, "Insufficient memory at line %d\n", lineno);
-		exit(1);
-	}
-	return p;
 }
 
 void
 usage()
 {
 	fprintf(stderr,
-		"Usage: gspa [infile] [-c c_array_name|+o|-o hex_file] [+l|-l list_file]\n");
+		"Usage: gspa [-c c_array_name] [-l list_file] [-o hex_file] [infile]\n");
 	exit(1);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: reloc.h,v 1.6 1996/10/07 03:15:03 jonathan Exp $	*/
+/*	$NetBSD: reloc.h,v 1.9 2005/12/11 12:18:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -48,7 +44,7 @@ enum reloc_type {
 	MIPS_RELOC_WDISP16,	/* 16-bit signed pc-relative << 2 */
 	MIPS_RELOC_HI16,	/* 16-bit absolute << 16 */
 	MIPS_RELOC_HI16_S,	/* 16-bit absolute << 16 (+1 if needed) */
-	MIPS_RELOC_LO16,	/* 16-bit absolute */
+	MIPS_RELOC_LO16		/* 16-bit absolute */
 };
 
 /*

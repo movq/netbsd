@@ -1,7 +1,6 @@
-/*	$NetBSD: cbiiisc.c,v 1.5 1999/06/07 21:30:58 is Exp $	*/
+/*	$NetBSD: cbiiisc.c,v 1.16 2008/06/13 08:13:37 cegger Exp $ */
 
 /*
- * Copyright (c) 1994,1998 Michael L. Hitch
  * Copyright (c) 1982, 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -13,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,10 +31,42 @@
  *	@(#)dma.c
  */
 
+/*
+ * Copyright (c) 1994,1998 Michael L. Hitch
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ *	@(#)dma.c
+ */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: cbiiisc.c,v 1.16 2008/06/13 08:13:37 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
+
+#include <uvm/uvm_extern.h>
+
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
@@ -54,45 +81,24 @@
 #include <amiga/dev/siopvar.h>
 #include <amiga/dev/zbusvar.h>
 
-void cbiiiscattach __P((struct device *, struct device *, void *));
-int  cbiiiscmatch __P((struct device *, struct cfdata *, void *));
-int  cbiiisc_dmaintr __P((void *));
+void cbiiiscattach(struct device *, struct device *, void *);
+int  cbiiiscmatch(struct device *, struct cfdata *, void *);
+int  cbiiisc_dmaintr(void *);
 #ifdef DEBUG
-void cbiiisc_dump __P((void));
+void cbiiisc_dump(void);
 #endif
-
-#if 0
-struct scsipi_adapter cbiiisc_scsiswitch = {
-	siopng_scsicmd,
-	siopng_minphys,
-	NULL,			/* scsipi_ioctl */
-};
-#endif
-
-struct scsipi_device cbiiisc_scsidev = {
-	NULL,		/* use default error handler */
-	NULL,		/* do not have a start functio */
-	NULL,		/* have no async handler */
-	NULL,		/* Use default done routine */
-};
-
 
 #ifdef DEBUG
 #endif
 
-struct cfattach cbiiisc_ca = {
-	sizeof(struct siop_softc), cbiiiscmatch, cbiiiscattach
-};
+CFATTACH_DECL(cbiiisc, sizeof(struct siop_softc),
+    cbiiiscmatch, cbiiiscattach, NULL, NULL);
 
 /*
  * if we are a CyberStorm MK III SCSI
  */
 int
-cbiiiscmatch(pdp, cfp, auxp)
-	struct device *pdp;
-	struct cfdata *cfp;
-
-	void *auxp;
+cbiiiscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 
@@ -103,50 +109,55 @@ cbiiiscmatch(pdp, cfp, auxp)
 }
 
 void
-cbiiiscattach(pdp, dp, auxp)
-	struct device *pdp, *dp;
-	void *auxp;
+cbiiiscattach(struct device *pdp, struct device *dp, void *auxp)
 {
-	struct siop_softc *sc;
+	struct siop_softc *sc = (struct siop_softc *)dp;
 	struct zbus_args *zap;
 	siop_regmap_p rp;
+        struct scsipi_adapter *adapt = &sc->sc_adapter;
+        struct scsipi_channel *chan = &sc->sc_channel;
 
 	printf("\n");
 
 	zap = auxp;
 
-	sc = (struct siop_softc *)dp;
 	sc->sc_siopp = rp = ztwomap(0xf40000);
 	/* siopng_dump_registers(sc); */
 
 	/*
 	 * CTEST7 = 00
 	 */
-	sc->sc_clock_freq = 50;		/* Clock = 50 Mhz >> */
+	sc->sc_clock_freq = 50;		/* Clock = 50 MHz >> */
 	sc->sc_ctest7 = 0x00;
 	sc->sc_dcntl = 0x20;		/* XXX ?? */
 
 	alloc_sicallback();
 
-	sc->sc_adapter.scsipi_cmd = siopng_scsicmd;
-	sc->sc_adapter.scsipi_minphys = siopng_minphys;
+        /*
+         * Fill in the scsipi_adapter.
+         */
+        memset(adapt, 0, sizeof(*adapt));
+        adapt->adapt_dev = &sc->sc_dev;
+        adapt->adapt_nchannels = 1;
+        adapt->adapt_openings = 7;
+        adapt->adapt_max_periph = 1;
+        adapt->adapt_request = siopng_scsipi_request;
+        adapt->adapt_minphys = siopng_minphys;
 
-	sc->sc_link.scsipi_scsi.channel = SCSI_CHANNEL_ONLY_ONE;
-	sc->sc_link.adapter_softc = sc;
-	sc->sc_link.scsipi_scsi.adapter_target = 7;
-#if 0
-	sc->sc_link.adapter = &cbiiisc_scsiswitch;
-#endif
-	sc->sc_link.adapter = &sc->sc_adapter;
-	sc->sc_link.device = &cbiiisc_scsidev;
-	sc->sc_link.openings = 2;
-	sc->sc_link.scsipi_scsi.max_target = 15;
-	sc->sc_link.scsipi_scsi.max_lun = 7;
-	sc->sc_link.type = BUS_SCSI;
+        /*
+         * Fill in the scsipi_channel.
+         */
+        memset(chan, 0, sizeof(*chan));
+        chan->chan_adapter = adapt;
+        chan->chan_bustype = &scsi_bustype;
+        chan->chan_channel = 0;
+        chan->chan_ntargets = 16;
+        chan->chan_nluns = 8;
+        chan->chan_id = 7;
 
 	siopnginitialize(sc);
 
-	if (sc->sc_link.scsipi_scsi.max_target < 0)
+	if (sc->sc_channel.chan_ntargets < 0)
 		return;
 
 	sc->sc_isr.isr_intr = cbiiisc_dmaintr;
@@ -157,12 +168,11 @@ cbiiiscattach(pdp, dp, auxp)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(dp, &sc->sc_link, scsiprint);
+	config_found(dp, chan, scsiprint);
 }
 
 int
-cbiiisc_dmaintr(arg)
-	void *arg;
+cbiiisc_dmaintr(void *arg)
 {
 	struct siop_softc *sc = arg;
 	siop_regmap_p rp;
@@ -187,13 +197,16 @@ cbiiisc_dmaintr(arg)
 
 #ifdef DEBUG
 void
-cbiiisc_dump()
+cbiiisc_dump(void)
 {
 	extern struct cfdriver cbiiisc_cd;
+	struct siop_softc *sc;
 	int i;
 
-	for (i = 0; i < cbiiisc_cd.cd_ndevs; ++i)
-		if (cbiiisc_cd.cd_devs[i])
-			siopng_dump(cbiiisc_cd.cd_devs[i]);
+	for (i = 0; i < cbiiisc_cd.cd_ndevs; ++i) {
+		sc = device_lookup_private(&cbiiisc_cd, i);
+		if (sc != NULL)
+			siopng_dump(sc);
+	}
 }
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: screen.h,v 1.5 2000/01/01 10:15:17 jsm Exp $	*/
+/*	$NetBSD: screen.h,v 1.8 2004/01/27 20:30:30 jsm Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -49,10 +45,11 @@ extern char *SOstr;		/* begin standout mode */
  */
 #define	putpad(s)	tputs(s, 1, put)
 
-int	put __P((int));		/* just calls putchar; for tputs */
-void	scr_clear __P((void));
-void	scr_end __P((void));
-void	scr_init __P((void));
-void	scr_msg __P((char *, int));
-void	scr_set __P((void));
-void	scr_update __P((void));
+void    moveto(int, int);
+int	put(int);		/* just calls putchar; for tputs */
+void	scr_clear(void);
+void	scr_end(void);
+void	scr_init(void);
+void	scr_msg(char *, int);
+void	scr_set(void);
+void	scr_update(void);

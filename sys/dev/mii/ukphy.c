@@ -1,7 +1,7 @@
-/*	$NetBSD: ukphy.c,v 1.10 2000/03/06 20:56:57 thorpej Exp $	*/
+/*	$NetBSD: ukphy.c,v 1.35 2008/05/04 17:06:10 xtraeme Exp $	*/
 
 /*-
- * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,11 +63,15 @@
  * driver for generic unknown PHYs
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ukphy.c,v 1.35 2008/05/04 17:06:10 xtraeme Exp $");
+
+#include "opt_mii.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
 #include <sys/socket.h>
 #include <sys/errno.h>
 
@@ -84,21 +81,30 @@
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 
-int	ukphymatch __P((struct device *, struct cfdata *, void *));
-void	ukphyattach __P((struct device *, struct device *, void *));
+#ifdef MIIVERBOSE
+struct mii_knowndev {
+	int oui;
+	int model;
+	const char *descr;
+};
+#include <dev/mii/miidevs.h>
+#include <dev/mii/miidevs_data.h>
+#endif
 
-struct cfattach ukphy_ca = {
-	sizeof(struct mii_softc), ukphymatch, ukphyattach, mii_phy_detach,
-	    mii_phy_activate
+static int	ukphymatch(device_t, cfdata_t, void *);
+static void	ukphyattach(device_t, device_t, void *);
+
+CFATTACH_DECL_NEW(ukphy, sizeof(struct mii_softc),
+    ukphymatch, ukphyattach, mii_phy_detach, mii_phy_activate);
+
+static int	ukphy_service(struct mii_softc *, struct mii_data *, int);
+
+static const struct mii_phy_funcs ukphy_funcs = {
+	ukphy_service, ukphy_status, mii_phy_reset,
 };
 
-int	ukphy_service __P((struct mii_softc *, struct mii_data *, int));
-
-int
-ukphymatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+ukphymatch(device_t parent, cfdata_t match, void *aux)
 {
 
 	/*
@@ -107,55 +113,71 @@ ukphymatch(parent, match, aux)
 	return (1);
 }
 
-void
-ukphyattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+ukphyattach(device_t parent, device_t self, void *aux)
 {
-	struct mii_softc *sc = (struct mii_softc *)self;
+	struct mii_softc *sc = device_private(self);
 	struct mii_attach_args *ma = aux;
 	struct mii_data *mii = ma->mii_data;
+	int oui = MII_OUI(ma->mii_id1, ma->mii_id2);
+	int model = MII_MODEL(ma->mii_id2);
+	int rev = MII_REV(ma->mii_id2);
+#ifdef MIIVERBOSE
+	int i;
+#endif
 
-	printf(": Generic IEEE 802.3u media interface\n");
-	printf("%s: OUI 0x%06x, model 0x%04x, rev. %d\n",
-	    sc->mii_dev.dv_xname, MII_OUI(ma->mii_id1, ma->mii_id2),
-	    MII_MODEL(ma->mii_id2), MII_REV(ma->mii_id2));
+	aprint_naive(": Media interface\n");
+	aprint_normal(": Generic IEEE 802.3u media interface\n");
+#ifdef MIIVERBOSE
+	for (i = 0; mii_knowndevs[i].descr != NULL; i++)
+		if (mii_knowndevs[i].oui == oui &&
+		    mii_knowndevs[i].model == model)
+			break;
+	if (mii_knowndevs[i].descr != NULL)
+		aprint_normal_dev(self, "%s (OUI 0x%06x, model 0x%04x), rev. %d\n",
+		       mii_knowndevs[i].descr,
+		       oui, model, rev);
+	else
+#endif
+		aprint_normal_dev(self, "OUI 0x%06x, model 0x%04x, rev. %d\n",
+		       oui, model, rev);
 
+	sc->mii_dev = self;
 	sc->mii_inst = mii->mii_instance;
 	sc->mii_phy = ma->mii_phyno;
-	sc->mii_service = ukphy_service;
-	sc->mii_status = ukphy_status;
+	sc->mii_funcs = &ukphy_funcs;
 	sc->mii_pdata = mii;
-	sc->mii_flags = mii->mii_flags;
+	sc->mii_flags = ma->mii_flags;
+	sc->mii_anegticks = MII_ANEGTICKS;
 
 	/*
 	 * Don't do loopback on unknown PHYs.  It might confuse some of them.
 	 */
 	sc->mii_flags |= MIIF_NOLOOP;
 
-	mii_phy_reset(sc);
+	PHY_RESET(sc);
 
 	sc->mii_capabilities =
 	    PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
-	printf("%s: ", sc->mii_dev.dv_xname);
-	if ((sc->mii_capabilities & BMSR_MEDIAMASK) == 0)
-		printf("no media present");
+	if (sc->mii_capabilities & BMSR_EXTSTAT)
+		sc->mii_extcapabilities = PHY_READ(sc, MII_EXTSR);
+	aprint_normal_dev(self, "");
+	if ((sc->mii_capabilities & BMSR_MEDIAMASK) == 0 &&
+	    (sc->mii_extcapabilities & EXTSR_MEDIAMASK) == 0)
+		aprint_error("no media present");
 	else
 		mii_phy_add_media(sc);
-	printf("\n");
+	aprint_normal("\n");
+
+	if (!pmf_device_register(self, NULL, mii_phy_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
-int
-ukphy_service(sc, mii, cmd)
-	struct mii_softc *sc;
-	struct mii_data *mii;
-	int cmd;
+static int
+ukphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 {
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
 	int reg;
-
-	if ((sc->mii_dev.dv_flags & DVF_ACTIVE) == 0)
-		return (ENXIO);
 
 	switch (cmd) {
 	case MII_POLLSTAT:

@@ -1,13 +1,10 @@
-#       $NetBSD: Makefile,v 1.2 1999/11/23 05:50:08 mrg Exp $
+#       $NetBSD: Makefile,v 1.8 2008/08/03 07:50:54 lukem Exp $
 
 PROG=   rcorder
-SRCS=   ealloc.c hash.c rcorder.c
+SRCS=   hash.c rcorder.c
 MAN=	rcorder.8
 
-LDADD+=	-lutil
-DPADD+=	${LIBUTIL}
-
-# XXX hack for make's hash.[ch]
-CPPFLAGS+= -DORDER
+LDADD+=-lutil
+DPADD+=${LIBUTIL}
 
 .include <bsd.prog.mk>

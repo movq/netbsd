@@ -1,4 +1,4 @@
-/*	$NetBSD: event.c,v 1.5 1996/10/08 23:40:40 thorpej Exp $	*/
+/*	$NetBSD: event.c,v 1.12 2008/03/01 14:16:49 rmind Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -50,6 +46,9 @@
  * Internal `Firm_event' interface for the keyboard and mouse drivers.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: event.c,v 1.12 2008/03/01 14:16:49 rmind Exp $");
+
 #include <sys/param.h>
 #include <sys/fcntl.h>
 #include <sys/malloc.h>
@@ -72,8 +71,8 @@ ev_init(ev)
 
 	ev->ev_get = ev->ev_put = 0;
 	ev->ev_q = malloc((u_long)EV_QSIZE * sizeof(struct firm_event),
-	    M_DEVBUF, M_WAITOK);
-	bzero((caddr_t)ev->ev_q, EV_QSIZE * sizeof(struct firm_event));
+	    M_DEVBUF, M_WAITOK|M_ZERO);
+	selinit(&ev->ev_sel);
 }
 
 /*
@@ -84,6 +83,7 @@ ev_fini(ev)
 	register struct evvar *ev;
 {
 
+	seldestroy(&ev->ev_sel);
 	free(ev->ev_q, M_DEVBUF);
 }
 
@@ -111,7 +111,7 @@ ev_read(ev, uio, flags)
 			return (EWOULDBLOCK);
 		}
 		ev->ev_wanted = 1;
-		error = tsleep((caddr_t)ev, PEVENT | PCATCH, "firm_event", 0);
+		error = tsleep((void *)ev, PEVENT | PCATCH, "firm_event", 0);
 		if (error) {
 			splx(s);
 			return (error);
@@ -129,7 +129,7 @@ ev_read(ev, uio, flags)
 	n = howmany(uio->uio_resid, sizeof(struct firm_event));
 	if (cnt > n)
 		cnt = n;
-	error = uiomove((caddr_t)&ev->ev_q[ev->ev_get],
+	error = uiomove((void *)&ev->ev_q[ev->ev_get],
 	    cnt * sizeof(struct firm_event), uio);
 	n -= cnt;
 	/*
@@ -142,17 +142,17 @@ ev_read(ev, uio, flags)
 		return (error);
 	if (cnt > n)
 		cnt = n;
-	error = uiomove((caddr_t)&ev->ev_q[0],
+	error = uiomove((void *)&ev->ev_q[0],
 	    cnt * sizeof(struct firm_event), uio);
 	ev->ev_get = cnt;
 	return (error);
 }
 
 int
-ev_poll(ev, events, p)
+ev_poll(ev, events, l)
 	register struct evvar *ev;
 	int events;
-	struct proc *p;
+	struct lwp *l;
 {
 	int revents = 0;
 	int s = splev();
@@ -161,8 +161,66 @@ ev_poll(ev, events, p)
 		if (ev->ev_get != ev->ev_put)
 			revents |= events & (POLLIN | POLLRDNORM);
 		else
-			selrecord(p, &ev->ev_sel);
+			selrecord(l, &ev->ev_sel);
 	}
 	splx(s);
 	return (revents);
+}
+
+static void
+filt_evrdetach(struct knote *kn)
+{
+	struct evvar *ev = kn->kn_hook;
+	int s;
+
+	s = splev();
+	SLIST_REMOVE(&ev->ev_sel.sel_klist, kn, knote, kn_selnext);
+	splx(s);
+}
+
+static int
+filt_evread(struct knote *kn, long hint)
+{
+	struct evvar *ev = kn->kn_hook;
+
+	if (ev->ev_get == ev->ev_put)
+		return (0);
+
+	if (ev->ev_get < ev->ev_put)
+		kn->kn_data = ev->ev_put - ev->ev_get;
+	else
+		kn->kn_data = (EV_QSIZE - ev->ev_get) +
+		    ev->ev_put;
+
+	kn->kn_data *= sizeof(struct firm_event);
+
+	return (1);
+}
+
+static const struct filterops ev_filtops =
+	{ 1, NULL, filt_evrdetach, filt_evread };
+
+int
+ev_kqfilter(struct evvar *ev, struct knote *kn)
+{
+	struct klist *klist;
+	int s;
+
+	switch (kn->kn_filter) {
+	case EVFILT_READ:
+		klist = &ev->ev_sel.sel_klist;
+		kn->kn_fop = &ev_filtops;
+		break;
+
+	default:
+		return (1);
+	}
+
+	kn->kn_hook = ev;
+
+	s = splev();
+	SLIST_INSERT_HEAD(klist, kn, kn_selnext);
+	splx(s);
+
+	return (0);
 }

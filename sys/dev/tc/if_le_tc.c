@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_tc.c,v 1.11 2000/03/30 12:45:43 augustss Exp $	*/
+/*	$NetBSD: if_le_tc.c,v 1.21 2008/04/04 12:25:07 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1996 Carnegie-Mellon University.
@@ -30,6 +30,10 @@
 /*
  * LANCE on TurboChannel.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_le_tc.c,v 1.21 2008/04/04 12:25:07 tsutsui Exp $");
+
 #include "opt_inet.h"
 
 #include <sys/param.h>
@@ -56,22 +60,18 @@
 #include <dev/tc/if_levar.h>
 #include <dev/tc/tcvar.h>
 
-int	le_tc_match __P((struct device *, struct cfdata *, void *));
-void	le_tc_attach __P((struct device *, struct device *, void *));
+static int	le_tc_match(device_t, cfdata_t, void *);
+static void	le_tc_attach(device_t, device_t, void *);
 
-struct cfattach le_tc_ca = {
-	sizeof(struct le_softc), le_tc_match, le_tc_attach
-};
+CFATTACH_DECL_NEW(le_tc, sizeof(struct le_softc),
+    le_tc_match, le_tc_attach, NULL, NULL);
 
 #define	LE_OFFSET_RAM		0x0
 #define	LE_OFFSET_LANCE		0x100000
 #define	LE_OFFSET_ROM		0x1c0000
 
-int
-le_tc_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+le_tc_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct tc_attach_args *d = aux;
 
@@ -81,20 +81,21 @@ le_tc_match(parent, match, aux)
 	return (1);
 }
 
-void
-le_tc_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+le_tc_attach(device_t parent, device_t self, void *aux)
 {
-	struct le_softc *lesc = (void *)self;
+	struct le_softc *lesc = device_private(self);
 	struct lance_softc *sc = &lesc->sc_am7990.lsc;
 	struct tc_attach_args *d = aux;
+
+	sc->sc_dev = self;
 
 	/*
 	 * It's on the turbochannel proper, or a kn02
 	 * baseboard implementation of a TC option card.
 	 */
-	lesc->sc_r1 = (struct lereg1 *)(d->ta_addr + LE_OFFSET_LANCE);
+	lesc->sc_r1 = (struct lereg1 *)
+	    TC_DENSE_TO_SPARSE(TC_PHYS_TO_UNCACHED(d->ta_addr + LE_OFFSET_LANCE));
 	sc->sc_mem = (void *)(d->ta_addr + LE_OFFSET_RAM);
 
 	sc->sc_copytodesc = lance_copytobuf_contig;
@@ -110,7 +111,7 @@ le_tc_attach(parent, self, aux)
 	 */
 
 	dec_le_common_attach(&lesc->sc_am7990,
-			     (u_char *)(d->ta_addr + LE_OFFSET_ROM + 2));
+			     (uint8_t *)(d->ta_addr + LE_OFFSET_ROM + 2));
 
 	tc_intr_establish(parent, d->ta_cookie, TC_IPL_NET, am7990_intr, sc);
 }

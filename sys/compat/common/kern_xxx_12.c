@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_xxx_12.c,v 1.2 1997/03/26 23:44:27 gwr Exp $	*/
+/*	$NetBSD: kern_xxx_12.c,v 1.14 2008/04/23 13:40:17 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,6 +32,9 @@
  * from NetBSD: kern_xxx.c,v 1.32 1996/04/22 01:38:41 christos Exp
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: kern_xxx_12.c,v 1.14 2008/04/23 13:40:17 ad Exp $");
+
 /*#ifdef COMPAT_12*/
 
 #include <sys/param.h>
@@ -44,22 +43,23 @@
 #include <sys/reboot.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
+#include <sys/kauth.h>
 
 /* ARGSUSED */
 int
-compat_12_sys_reboot(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_12_sys_reboot(struct lwp *l, const struct compat_12_sys_reboot_args *uap, register_t *retval)
 {
-	struct compat_12_sys_reboot_args /* {
+	/* {
 		syscallarg(int) opt;
-	} */ *uap = v;
+	} */
 	int error;
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if ((error = kauth_authorize_system(l->l_cred,
+	    KAUTH_SYSTEM_REBOOT, 0, NULL, NULL, NULL)) != 0)
 		return (error);
+	KERNEL_LOCK(1, NULL);
 	cpu_reboot(SCARG(uap, opt), NULL);
+	KERNEL_UNLOCK_ONE(NULL);
 	return (0);
 }
 /*#endif COMPAT_12 */

@@ -1,19 +1,19 @@
-/*	$NetBSD: mc146818reg.h,v 1.2 1997/03/12 06:53:42 cgd Exp $	*/
+/*	$NetBSD: mc146818reg.h,v 1.9 2006/03/08 23:46:25 lukem Exp $	*/
 
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -27,7 +27,7 @@
 
 /*
  * Definitions for the Motorola MC146818A Real Time Clock.
- * They also apply for the (compatible) Dallas Semicontuctor DS1287A RTC.
+ * They also apply for the (compatible) Dallas Semiconductor DS1287A RTC.
  *
  * Though there are undoubtedly other (better) sources, this material was
  * culled from the DEC "KN121 System Module Programmer's Reference
@@ -60,6 +60,11 @@
  * 24-hour mode, the time-of-day and alarm registers are NOT
  * automatically reset; they must be reprogrammed with correct values.
  */
+
+/* XXX not yet all port switch to MI mc146818(4) with todr(9) support */
+#if defined(arc)
+#define USE_TODR_MCCLOCK
+#endif
 
 /*
  * The registers, and the bits within each register.
@@ -136,19 +141,19 @@
 /*
  * Time base (divisor select) constants (Control register A)
  */
-#define	MC_BASE_4_MHz	0x00		/* 4MHz crystal */
-#define	MC_BASE_1_MHz	0x10		/* 1MHz crystal */
-#define	MC_BASE_32_KHz	0x20		/* 32KHz crystal */
+#define	MC_BASE_4_MHz	0x00		/* 4 MHz crystal */
+#define	MC_BASE_1_MHz	0x10		/* 1 MHz crystal */
+#define	MC_BASE_32_KHz	0x20		/* 32 kHz crystal */
 #define	MC_BASE_NONE	0x60		/* actually, both of these reset */
 #define	MC_BASE_RESET	0x70
 
-
+#ifndef USE_TODR_MCCLOCK
 /*
  * RTC register/NVRAM read and write functions -- machine-dependent.
  * Appropriately manipulate RTC registers to get/put data values.
  */
-u_int mc146818_read __P((void *sc, u_int reg));
-void mc146818_write __P((void *sc, u_int reg, u_int datum));
+u_int mc146818_read(void *, u_int);
+void mc146818_write(void *, u_int, u_int);
 
 /*
  * A collection of TOD/Alarm registers.
@@ -192,3 +197,4 @@ typedef u_int mc_todregs[MC_NTODREGS];
 		mc146818_write(sc, MC_REGB,				\
 		    mc146818_read(sc, MC_REGB) & ~MC_REGB_SET);		\
 	} while (0);
+#endif /* USE_TODR_MCCLOCK */

@@ -1,4 +1,4 @@
-/*	$NetBSD: fputs.c,v 1.10 1999/09/20 04:39:28 lukem Exp $	*/
+/*	$NetBSD: fputs.c,v 1.14 2005/06/22 19:45:22 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)fputs.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: fputs.c,v 1.10 1999/09/20 04:39:28 lukem Exp $");
+__RCSID("$NetBSD: fputs.c,v 1.14 2005/06/22 19:45:22 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -49,8 +45,9 @@ __RCSID("$NetBSD: fputs.c,v 1.10 1999/09/20 04:39:28 lukem Exp $");
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include "fvwrite.h"
 #include "reentrant.h"
+#include "local.h"
+#include "fvwrite.h"
 
 /*
  * Write the given string to the given file.
@@ -67,12 +64,15 @@ fputs(s, fp)
 	_DIAGASSERT(s != NULL);
 	_DIAGASSERT(fp != NULL);
 
-	/* LINTED we don't touch s */
-	iov.iov_base = (void *)s;
+	if (s == NULL)
+		s = "(null)";
+
+	iov.iov_base = __UNCONST(s);
 	iov.iov_len = uio.uio_resid = strlen(s);
 	uio.uio_iov = &iov;
 	uio.uio_iovcnt = 1;
 	FLOCKFILE(fp);
+	_SET_ORIENTATION(fp, -1);
 	r = __sfvwrite(fp, &uio);
 	FUNLOCKFILE(fp);
 	return r;

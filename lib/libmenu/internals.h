@@ -1,4 +1,4 @@
-/*	$NetBSD: internals.h,v 1.5 2000/03/10 09:06:21 itohy Exp $	*/
+/*	$NetBSD: internals.h,v 1.8 2001/06/13 10:45:59 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com.au)
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -41,12 +41,13 @@
 
 /* function prototypes */
 
-void _menui_draw_item __P((MENU *, int));
-int _menui_draw_menu __P((MENU *));
-int _menui_goto_item __P((MENU *, ITEM *, int));
-int _menui_match_pattern __P((MENU *, int, int, int *));
-int _menui_match_items __P((MENU *, int, int *));
-void _menui_max_item_size __P((MENU *));
-int _menui_stitch_items __P((MENU *));
+void _menui_draw_item(MENU *menu, int item);
+int _menui_draw_menu(MENU *menu);
+int _menui_goto_item(MENU *menu, ITEM *item, int new_top_row);
+int _menui_match_pattern(MENU *menu, int c, int direction ,
+			 int *item_matched);
+int _menui_match_items(MENU *menu, int direction, int *item_matched);
+void _menui_max_item_size(MENU *menu);
+int _menui_stitch_items(MENU *menu);
 
 #endif

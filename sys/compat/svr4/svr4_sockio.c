@@ -1,7 +1,7 @@
-/*	$NetBSD: svr4_sockio.c,v 1.12 1999/09/07 18:20:19 christos Exp $	 */
+/*	$NetBSD: svr4_sockio.c,v 1.35 2008/04/28 20:23:45 martin Exp $	 */
 
 /*-
- * Copyright (c) 1995 The NetBSD Foundation, Inc.
+ * Copyright (c) 1995, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: svr4_sockio.c,v 1.35 2008/04/28 20:23:45 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
@@ -45,12 +41,14 @@
 #include <sys/termios.h>
 #include <sys/tty.h>
 #include <sys/socket.h>
-#include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <net/if.h>
 #include <sys/malloc.h>
 
 #include <sys/syscallargs.h>
+
+#include <compat/sys/socket.h>
+#include <compat/sys/sockio.h>
 
 #include <compat/svr4/svr4_types.h>
 #include <compat/svr4/svr4_util.h>
@@ -62,14 +60,13 @@
 #include <compat/svr4/svr4_ioctl.h>
 #include <compat/svr4/svr4_sockio.h>
 
-static int bsd_to_svr4_flags __P((int));
+static int bsd_to_svr4_flags(int);
 
 #define bsd_to_svr4_flag(a) \
 	if (bf & __CONCAT(I,a))	sf |= __CONCAT(SVR4_I,a)
 
 static int
-bsd_to_svr4_flags(bf)
-	int bf;
+bsd_to_svr4_flags(int bf)
 {
 	int sf = 0;
 	bsd_to_svr4_flag(FF_UP);
@@ -87,25 +84,50 @@ bsd_to_svr4_flags(bf)
 }
 
 int
-svr4_sock_ioctl(fp, p, retval, fd, cmd, data)
-	struct file *fp;
-	struct proc *p;
-	register_t *retval;
-	int fd;
-	u_long cmd;
-	caddr_t data;
+svr4_count_ifnum(struct ifnet *ifp)
+{
+	struct ifaddr *ifa;
+	int ifnum = 0;
+
+	IFADDR_FOREACH(ifa, ifp)
+		ifnum++;
+
+	return MAX(1, ifnum);
+}
+
+int
+svr4_sock_ioctl(file_t *fp, struct lwp *l, register_t *retval,
+    int fd, u_long cmd, void *data)
 {
 	int error;
-	int (*ctl) __P((struct file *, u_long,  caddr_t, struct proc *)) =
-			fp->f_ops->fo_ioctl;
+	int (*ctl)(file_t *, u_long,  void *) = fp->f_ops->fo_ioctl;
 
 	*retval = 0;
 
 	switch (cmd) {
+	case SVR4_SIOCGLIFNUM:
+		{
+			struct ifnet *ifp;
+			struct svr4_lifnum lifnum;
+
+			error = copyin(data, &lifnum, sizeof(lifnum));
+			if (error)
+				return error;
+
+			lifnum.lifn_count = 0;
+			/* XXX: We don't pay attention to family or flags */
+			IFNET_FOREACH(ifp)
+				lifnum.lifn_count += svr4_count_ifnum(ifp);
+
+			DPRINTF(("SIOCGLIFNUM [family=%d,flags=%d,count=%d]\n",
+			    lifnum.lifn_family, lifnum.lifn_flags,
+			    lifnum.lifn_count));
+			return copyout(&lifnum, data, sizeof(lifnum));
+		}
+
 	case SVR4_SIOCGIFNUM:
 		{
 			struct ifnet *ifp;
-			struct ifaddr *ifa;
 			int ifnum = 0;
 
 			/*
@@ -120,15 +142,8 @@ svr4_sock_ioctl(fp, p, retval, fd, cmd, data)
 			 * entry per physical interface?
 			 */
 
-			for (ifp = ifnet.tqh_first;
-			     ifp != 0; ifp = ifp->if_list.tqe_next)
-				if ((ifa = ifp->if_addrlist.tqh_first) == NULL)
-					ifnum++;
-				else
-					for (;ifa != NULL;
-					    ifa = ifa->ifa_list.tqe_next)
-						ifnum++;
-
+			IFNET_FOREACH(ifp)
+				ifnum += svr4_count_ifnum(ifp);
 
 			DPRINTF(("SIOCGIFNUM %d\n", ifnum));
 			return copyout(&ifnum, data, sizeof(ifnum));
@@ -136,7 +151,7 @@ svr4_sock_ioctl(fp, p, retval, fd, cmd, data)
 
 	case SVR4_SIOCGIFFLAGS:
 		{
-			struct ifreq br;
+			struct oifreq br;
 			struct svr4_ifreq sr;
 
 			if ((error = copyin(data, &sr, sizeof(sr))) != 0)
@@ -145,15 +160,14 @@ svr4_sock_ioctl(fp, p, retval, fd, cmd, data)
 			(void) strncpy(br.ifr_name, sr.svr4_ifr_name,
 			    sizeof(br.ifr_name));
 
-			if ((error = (*ctl)(fp, SIOCGIFFLAGS, 
-					    (caddr_t) &br, p)) != 0) {
-				DPRINTF(("SIOCGIFFLAGS %s: error %d\n", 
+			if ((error = (*ctl)(fp, SIOCGIFFLAGS, &br)) != 0) {
+				DPRINTF(("SIOCGIFFLAGS %s: error %d\n",
 					 sr.svr4_ifr_name, error));
 				return error;
 			}
 
 			sr.svr4_ifr_flags = bsd_to_svr4_flags(br.ifr_flags);
-			DPRINTF(("SIOCGIFFLAGS %s = %x\n", 
+			DPRINTF(("SIOCGIFFLAGS %s = %x\n",
 				sr.svr4_ifr_name, sr.svr4_ifr_flags));
 			return copyout(&sr, data, sizeof(sr));
 		}
@@ -165,12 +179,12 @@ svr4_sock_ioctl(fp, p, retval, fd, cmd, data)
 			if ((error = copyin(data, &sc, sizeof(sc))) != 0)
 				return error;
 
-			DPRINTF(("ifreq %d svr4_ifreq %d ifc_len %d\n",
-				sizeof(struct ifreq), sizeof(struct svr4_ifreq),
+			DPRINTF(("ifreq %ld svr4_ifreq %ld ifc_len %d\n",
+				(unsigned long)sizeof(struct oifreq),
+				(unsigned long)sizeof(struct svr4_ifreq),
 				sc.svr4_ifc_len));
 
-			if ((error = (*ctl)(fp, OSIOCGIFCONF,
-					    (caddr_t) &sc, p)) != 0)
+			if ((error = (*ctl)(fp, OOSIOCGIFCONF, &sc)) != 0)
 				return error;
 
 			DPRINTF(("SIOCGIFCONF\n"));

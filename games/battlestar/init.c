@@ -1,4 +1,4 @@
-/*	$NetBSD: init.c,v 1.11 1999/09/18 16:47:11 jsm Exp $	*/
+/*	$NetBSD: init.c,v 1.15 2005/07/01 06:04:54 jmc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,18 @@
 #if 0
 static char sccsid[] = "@(#)init.c	8.4 (Berkeley) 4/30/95";
 #else
-__RCSID("$NetBSD: init.c,v 1.11 1999/09/18 16:47:11 jsm Exp $");
+__RCSID("$NetBSD: init.c,v 1.15 2005/07/01 06:04:54 jmc Exp $");
 #endif
 #endif				/* not lint */
 
 #include "extern.h"
 
+static int checkout(const char *);
+static const char *getutmp(void);
+static int wizard(const char *);
+
 void
-initialize(filename)
-	const char   *filename;
+initialize(const char *filename)
 {
 	const struct objs *p;
 	char *savefile;
@@ -56,7 +55,7 @@ initialize(filename)
 	puts("Admiral D.W. Riggle\n");
 	location = dayfile;
 	srand(getpid());
-	getutmp(username);
+	username = getutmp();
 	wordinit();
 	if (filename == NULL) {
 		direction = NORTH;
@@ -77,17 +76,20 @@ initialize(filename)
 	signal(SIGINT, diesig);
 }
 
-void
-getutmp(uname)
-	char   *uname;
+static const char *
+getutmp(void)
 {
 	struct passwd *ptr;
 
 	ptr = getpwuid(getuid());
-	strncpy(uname, ptr ? ptr->pw_name : "", 8);
+	if (ptr == NULL)
+		return "";
+	else
+		return strdup(ptr->pw_name);
 }
 
-const char   *const list[] = {		/* hereditary wizards */
+/* Hereditary wizards.  A configuration file might make more sense. */
+static const char *const list[] = {
 	"riggle",
 	"chris",
 	"edward",
@@ -98,16 +100,15 @@ const char   *const list[] = {		/* hereditary wizards */
 	0
 };
 
-const char   *const badguys[] = {
+static const char *const badguys[] = {
 	"wnj",
 	"root",
 	"ted",
 	0
 };
 
-int
-wizard(uname)
-	const char   *uname;
+static int
+wizard(const char *uname)
 {
 	int     flag;
 
@@ -116,9 +117,8 @@ wizard(uname)
 	return flag;
 }
 
-int
-checkout(uname)
-	const char   *uname;
+static int
+checkout(const char *uname)
 {
 	const char  *const *ptr;
 

@@ -1,5 +1,6 @@
-# $NetBSD: Makefile,v 1.5 1999/12/13 15:25:59 itojun Exp $
+# $NetBSD: Makefile,v 1.12 2007/05/28 12:06:23 tls Exp $
 
+USE_FORT?= yes	# setuid
 PROG=	ping6
 MAN=	ping6.8
 
@@ -9,10 +10,7 @@ BINMODE=4555
 CPPFLAGS+=-DINET6
 CPPFLAGS+=-DIPSEC
 
-LDADD+=	-lipsec
-DPADD+=	${LIBIPSEC}
-
-# KAME scope id hack
-CPPFLAGS+=-DKAME_SCOPEID
+LDADD+=	-lipsec -lm
+DPADD+=	${LIBIPSEC} ${LIBM}
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/* $NetBSD: autoconf.c,v 1.2 2000/01/15 02:06:31 nisimura Exp $ */
+/* $NetBSD: autoconf.c,v 1.11 2008/05/03 23:55:54 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,19 +15,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
  * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
  * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
@@ -38,11 +31,10 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.2 2000/01/15 02:06:31 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.11 2008/05/03 23:55:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/map.h>
 #include <sys/buf.h>
 #include <sys/conf.h>
 #include <sys/reboot.h>
@@ -52,15 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.2 2000/01/15 02:06:31 nisimura Exp $"
 #include <machine/cpu.h>
 
 #include <luna68k/luna68k/isr.h>
-
-/*
- * The following several variables are related to
- * the configuration process, and are used in initializing
- * the machine.
- */
-struct device *booted_device;	/* set by device drivers (if found) */
-
-static struct device *find_dev_byname __P((char *));
 
 /*
  * Determine mass storage and memory configuration for a machine.
@@ -83,7 +66,8 @@ cpu_rootconf()
 {
 #if 1 /* XXX to be reworked with helps of 2nd stage loaders XXX */
 	int i;
-	char *devname, *cp;
+	const char *devname;
+	char *cp;
 	extern char bootarg[64];
 
 	cp = bootarg;
@@ -97,25 +81,11 @@ cpu_rootconf()
 		}
 		cp++;
 	}
-	booted_device = find_dev_byname(devname);
+	booted_device = device_find_by_xname(devname);
 
 #endif
 	printf("boot device: %s\n",
 		(booted_device) ? booted_device->dv_xname : "<unknown>");
 
 	setroot(booted_device, 0); /* XXX partition 'a' XXX */
-}
-
-static struct device *
-find_dev_byname(name)
-	char *name;
-{
-	struct device *dv;
-
-	for (dv = alldevs.tqh_first; dv != NULL; dv = dv->dv_list.tqe_next) {
-		if (!strcmp(dv->dv_xname, name)) {
-			return dv;
-		}
-	}
-	return NULL;
 }

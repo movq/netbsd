@@ -1,4 +1,4 @@
-/*	$NetBSD: version.c,v 1.5 1999/02/10 12:29:47 hubertf Exp $	*/
+/*	$NetBSD: version.c,v 1.7 2005/07/01 01:12:39 jmc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1987, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,11 +34,11 @@
 #if 0
 static char sccsid[] = "@(#)version.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: version.c,v 1.5 1999/02/10 12:29:47 hubertf Exp $");
+__RCSID("$NetBSD: version.c,v 1.7 2005/07/01 01:12:39 jmc Exp $");
 #endif
 #endif /* not lint */
 
-const char   *const message[] = {
+const char *const message[] = {
 	"Last updated on Friday, October 10, 1997.",
 	0
 };

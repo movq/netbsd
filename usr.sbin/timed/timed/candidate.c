@@ -10,11 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,13 +32,9 @@
 #if 0
 static char sccsid[] = "@(#)candidate.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: candidate.c,v 1.6 1997/10/17 14:19:17 lukem Exp $");
+__RCSID("$NetBSD: candidate.c,v 1.12 2007/01/26 16:12:41 christos Exp $");
 #endif
 #endif /* not lint */
-
-#ifdef sgi
-#ident "$Revision: 1.6 $"
-#endif
 
 #include "globals.h"
 
@@ -53,8 +45,7 @@ __RCSID("$NetBSD: candidate.c,v 1.6 1997/10/17 14:19:17 lukem Exp $");
  * candidate sends an election request, the candidature is withdrawn.
  */
 int
-election(net)
-	struct netinfo *net;
+election(struct netinfo *net)
 {
 	struct tsp *resp, msg;
 	struct timeval then, wait;
@@ -85,14 +76,10 @@ again:
 		fprintf(fd, "This machine is a candidate time master\n");
 	msg.tsp_type = TSP_ELECTION;
 	msg.tsp_vers = TSPVERSION;
-	(void)strcpy(msg.tsp_name, hostname);
+	set_tsp_name(&msg, hostname);
 	bytenetorder(&msg);
-	if (sendto(sock, (char *)&msg, sizeof(struct tsp), 0,
-		   (struct sockaddr*)&net->dest_addr,
-		   sizeof(struct sockaddr)) < 0) {
-		trace_sendto_err(net->dest_addr.sin_addr);
+	if (sendtsp(sock, &msg, &net->dest_addr) == -1)
 		return(SLAVE);
-	}
 
 	(void)gettimeofday(&then, 0);
 	then.tv_sec += 3;
@@ -144,7 +131,7 @@ again:
 			/* no master for another round */
 			htp = addmach(resp->tsp_name,&from,fromnet);
 			msg.tsp_type = TSP_REFUSE;
-			(void)strcpy(msg.tsp_name, hostname);
+			set_tsp_name(&msg, hostname);
 			answer = acksend(&msg, &htp->addr, htp->name,
 					 TSP_ACK, 0, htp->noanswer);
 			if (!answer) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: vis.h,v 1.11 1999/11/25 16:55:50 wennmach Exp $	*/
+/*	$NetBSD: vis.h,v 1.16 2005/09/13 01:44:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,6 +34,8 @@
 #ifndef _VIS_H_
 #define	_VIS_H_
 
+#include <sys/types.h>
+
 /*
  * to select alternate encoding format
  */
@@ -58,6 +56,7 @@
  * other
  */
 #define	VIS_NOSLASH	0x40	/* inhibit printing '\' */
+#define	VIS_HTTPSTYLE	0x80	/* http-style escape % HEX HEX */
 
 /*
  * unvis return codes
@@ -76,18 +75,16 @@
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-char	*vis __P((char *, int, int, int));
-char	*svis __P((char *, int, int, int, const char *));
-int	strvis __P((char *, const char *, int));
-int	strsvis __P((char *, const char *, int, const char *));
-int	strvisx __P((char *, const char *, size_t, int));
-int	strsvisx __P((char *, const char *, size_t, int, const char *));
-int	strunvis __P((char *, const char *));
-#ifdef __LIBC12_SOURCE__
-int	unvis __P((char *, int, int *, int));
-int	__unvis13 __P((char *, int, int *, int));
-#else
-int	unvis __P((char *, int, int *, int))	__RENAME(__unvis13);
+char	*vis(char *, int, int, int);
+char	*svis(char *, int, int, int, const char *);
+int	strvis(char *, const char *, int);
+int	strsvis(char *, const char *, int, const char *);
+int	strvisx(char *, const char *, size_t, int);
+int	strsvisx(char *, const char *, size_t, int, const char *);
+int	strunvis(char *, const char *);
+int	strunvisx(char *, const char *, int);
+#ifndef __LIBC12_SOURCE__
+int	unvis(char *, int, int *, int) __RENAME(__unvis13);
 #endif
 __END_DECLS
 

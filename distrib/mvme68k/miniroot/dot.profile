@@ -1,4 +1,4 @@
-#	$NetBSD: dot.profile,v 1.4 1999/11/23 22:43:25 simonb Exp $
+# $NetBSD: dot.profile,v 1.8 2003/07/26 17:06:50 salo Exp $
 #
 # Copyright (c) 1995 Jason R. Thorpe
 # Copyright (c) 1994 Christopher G. Demetriou
@@ -14,10 +14,12 @@
 #    documentation and/or other materials provided with the distribution.
 # 3. All advertising materials mentioning features or use of this software
 #    must display the following acknowledgement:
-#	This product includes software developed by Christopher G. Demetriou.
+#          This product includes software developed for the
+#          NetBSD Project.  See http://www.NetBSD.org/ for
+#          information about NetBSD.
 # 4. The name of the author may not be used to endorse or promote products
-#    derived from this software without specific prior written permission
-#
+#    derived from this software without specific prior written permission.
+# 
 # THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 # IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
 # OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -28,7 +30,8 @@
 # THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#
+# 
+# <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
 
 PATH=/sbin:/bin:/usr/bin:/usr/sbin:/
 export PATH
@@ -56,44 +59,61 @@ if [ "X${DONEPROFILE}" = "X" ]; then
 		fi
 	done
 
+	mount -t kernfs /kern /kern
+
 	# Installing or upgrading?
-	again="true"
 	echo "Welcome to the NetBSD/mvme68k installation miniroot."
 	echo
-	while [ $again = "true" ]; do
 
-		echo 'enter "install" to install NetBSD,'
-		echo '      "upgrade" to upgrade an existing NetBSD system,'
-		echo '   or "shell" for a shell prompt.'
-		echo
-		echo -n "your choice? "
-		read resp
+	_forceloop=""
+	while [ "X${_forceloop}" = X"" ]; do
+                cat <<'EOF'
 
-		case "$resp" in
-			install|upgrade|shell)
-				again="false"
+This installer now uses the new `sysinst' installer tool by default.  To
+use the old install or upgrade shell scripts instead, enter the options
+(OI) for Old Install or (OU) for Old Upgrade.
+
+The script-based installers may be removed in a future release.
+
+EOF
+		echo -n '(I)nstall/Upgrade, (H)alt or (S)hell? '
+		read _forceloop
+		case "$_forceloop" in
+			i*|I*|u*|U*)
+				# setup a writable /tmp directory
+				mount_mfs swap /tmp || continue
+				/sysinst
 				;;
-			"")
-				echo
+
+			oi*|OI*)
+				/install
 				;;
+
+			ou*|OU*)
+				/upgrade
+				;;
+
+			h*|H*)
+				#
+				# XXX - if we're piggybacking a microroot, then
+				# exit from this (chroot) environment: the
+				# microroot's .profile will halt the machine.
+				#
+				if [ "$BOOTFS_DONEPROFILE" = YES ]; then
+					exit
+				else
+					/sbin/halt
+				fi
+				;;
+
+			s*|S*)
+				/bin/sh
+				continue
+				;;
+
 			*)
-				echo	"Sorry, $resp isn't valid."
-				echo
+				_forceloop=""
 				;;
 		esac
 	done
-
-	case "$resp" in
-		install)
-			install
-			;;
-		upgrade)
-			upgrade
-			;;
-		shell)
-			echo 'If you want to run install or upgrade later,'
-			echo 'simply type "install" or "upgrade" at the'
-			echo 'shell prompt. Good luck!'
-			;;
-	esac
 fi

@@ -1,4 +1,4 @@
-/*	$NetBSD: fixunsdfsi.S,v 1.2 1999/04/04 21:01:39 eeh Exp $	*/
+/*	$NetBSD: fixunsdfsi.S,v 1.4 2003/08/07 16:42:27 agc Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -46,7 +42,7 @@
 #if 0
 	.asciz "@(#)fixunsdfsi.s	8.1 (Berkeley) 6/4/93"
 #else
-	RCSID("$NetBSD: fixunsdfsi.S,v 1.2 1999/04/04 21:01:39 eeh Exp $")
+	RCSID("$NetBSD: fixunsdfsi.S,v 1.4 2003/08/07 16:42:27 agc Exp $")
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -60,51 +56,15 @@
 
 	.align	8
 Lbig:
-	.word	0x41e00000		! .double 0r2147483648.0e+00
+	.word	0x43e00000		! .double 2^63
 	.word	0			! (who me, not trust the assembler?)
-
-ENTRY(__fixunsdfsi)
-	sub	%sp, 8, %sp
-	stx	%o0, [%sp + 64 + BIAS]	! get argument into fpu reg
-	ldd	[%sp + 64 + BIAS], %f0
-#ifdef PIC
-	PICCY_SET(Lbig, %g1, %o0)
-	ldd	[%g1], %f2
-#else
-	sethi	%hi(Lbig), %g1
-	ldd	[%g1 + %lo(Lbig)], %f2
-#endif
-	fcmped	%f0, %f2		! d < 2^31, or NaN, or -Inf?
-	nop				! (fpop2 delay)
-	fbul,a	1f			! if so, use fdtoi to convert to int
-	fdtoi	%f0, %f0		!        (this includes negatives!)
-
-	! d does not fit in an int, so subtract 2^31, convert,
-	! and add 2^31 again (sigh).  Just hope the intermediate
-	! fits (if not, the result is undefined anyway).
-
-	fsubd	%f0, %f2, %f0		! d -= 2^31
-	fdtoi	%f0, %f0		! convert to int
-	st	%f0, [%sp + 64 + BIAS]	! move into return reg
-	ld	[%sp + 64 + BIAS], %o0
-	sethi	%hi(0x80000000), %o1
-	add	%o0, %o1, %o0		! add 2^31
-	retl
-	add	%sp, 8, %sp
-
-1:
-	st	%f0, [%sp + 64 + BIAS]	! return result
-	ld	[%sp + 64 + BIAS], %o0
-	retl
-	add	%sp, 8, %sp
 
 /*
  * Same as above but to unsigned long
  */
 ENTRY(__dtoul)
-	sub	%sp, 8, %sp
-	stx	%o0, [%sp + 64 + BIAS]	! get argument into fpu reg
-	ldd	[%sp + 64 + BIAS], %f0
+	sub	%sp, 16, %sp
+	std	%f2, [%sp + 64 + BIAS + 8]
 #ifdef PIC
 	PICCY_SET(Lbig, %g1, %o0)
 	ldd	[%g1], %f2
@@ -112,26 +72,29 @@ ENTRY(__dtoul)
 	sethi	%hi(Lbig), %g1
 	ldd	[%g1 + %lo(Lbig)], %f2
 #endif
-	fcmped	%f0, %f2		! d < 2^31, or NaN, or -Inf?
+	fcmped	%f0, %f2		! d < 2^63, or NaN, or -Inf?
 	nop				! (fpop2 delay)
 	fbul,a	1f			! if so, use fdtoi to convert to int
-	fdtox	%f0, %f0		!        (this includes negatives!)
+	 fdtox	%f0, %f0		!        (this includes negatives!)
 
-	! d does not fit in an int, so subtract 2^31, convert,
-	! and add 2^31 again (sigh).  Just hope the intermediate
+	! d does not fit in an int, so subtract 2^63, convert,
+	! and add 2^63 again (sigh).  Just hope the intermediate
 	! fits (if not, the result is undefined anyway).
 
-	fsubd	%f0, %f2, %f0		! d -= 2^31
+	fsubd	%f0, %f2, %f0		! d -= 2^63
 	fdtox	%f0, %f0		! convert to int
 	std	%f0, [%sp + 64 + BIAS]	! move into return reg
 	ldx	[%sp + 64 + BIAS], %o0
 	sethi	%hi(0x80000000), %o1
-	add	%o0, %o1, %o0		! add 2^31
+	sllx	%o1, 32, %o1
+	add	%o0, %o1, %o0		! add 2^63
+	ldd	[%sp + 64 + BIAS + 8], %f2
 	retl
-	add	%sp, 8, %sp
+	 add	%sp, 16, %sp
 
 1:
 	std	%f0, [%sp + 64 + BIAS]	! return result
 	ldx	[%sp + 64 + BIAS], %o0
+	ldd	[%sp + 64 + BIAS + 8], %f2
 	retl
-	add	%sp, 8, %sp
+	 add	%sp, 16, %sp

@@ -1,7 +1,7 @@
-/*	$NetBSD: popen.c,v 1.20 2000/03/05 06:12:19 lukem Exp $	*/
+/*	$NetBSD: popen.c,v 1.34 2008/09/13 02:41:52 lukem Exp $	*/
 
 /*-
- * Copyright (c) 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999-2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,11 +44,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -78,7 +67,7 @@
 #if 0
 static char sccsid[] = "@(#)popen.c	8.3 (Berkeley) 4/6/94";
 #else
-__RCSID("$NetBSD: popen.c,v 1.20 2000/03/05 06:12:19 lukem Exp $");
+__RCSID("$NetBSD: popen.c,v 1.34 2008/09/13 02:41:52 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -88,7 +77,6 @@ __RCSID("$NetBSD: popen.c,v 1.20 2000/03/05 06:12:19 lukem Exp $");
 
 #include <errno.h>
 #include <glob.h>
-#include <setjmp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -114,13 +102,10 @@ __RCSID("$NetBSD: popen.c,v 1.20 2000/03/05 06:12:19 lukem Exp $");
 static int *pids;
 static int fds;
 
-extern int ls_main __P((int, char *[]));
+extern int ls_main(int, char *[]);
 
 FILE *
-ftpd_popen(argv, type, stderrfd)
-	char *argv[];
-	const char *type;
-	int stderrfd;
+ftpd_popen(char *argv[], const char *ptype, int stderrfd)
 {
 	FILE *iop;
 	int argc, pdes[2], pid, isls;
@@ -129,13 +114,13 @@ ftpd_popen(argv, type, stderrfd)
 
 	iop = NULL;
 	isls = 0;
-	if ((*type != 'r' && *type != 'w') || type[1])
+	if ((*ptype != 'r' && *ptype != 'w') || ptype[1])
 		return (NULL);
 
 	if (!pids) {
 		if ((fds = getdtablesize()) <= 0)
 			return (NULL);
-		if ((pids = (int *)malloc((u_int)(fds * sizeof(int)))) == NULL)
+		if ((pids = (int *)malloc((unsigned int)(fds * sizeof(int)))) == NULL)
 			return (NULL);
 		memset(pids, 0, fds * sizeof(int));
 	}
@@ -146,27 +131,34 @@ ftpd_popen(argv, type, stderrfd)
 		goto pfree;
 
 					/* glob each piece */
-	if (sl_add(sl, xstrdup(argv[0])) == -1)
+	if (sl_add(sl, ftpd_strdup(argv[0])) == -1)
 		goto pfree;
 	for (argc = 1; argv[argc]; argc++) {
 		glob_t gl;
-		int flags = GLOB_BRACE|GLOB_NOCHECK|GLOB_TILDE;
+		int flags = GLOB_BRACE|GLOB_NOCHECK|GLOB_TILDE|GLOB_LIMIT;
 
 		memset(&gl, 0, sizeof(gl));
 		if (glob(argv[argc], flags, NULL, &gl)) {
-			if (sl_add(sl, xstrdup(argv[argc])) == -1)
+			if (sl_add(sl, ftpd_strdup(argv[argc])) == -1) {
+				globfree(&gl);
 				goto pfree;
-		} else
-			for (pop = gl.gl_pathv; *pop; pop++) {
-				if (sl_add(sl, xstrdup(*pop)) == -1)
-					goto pfree;
 			}
+		} else {
+			for (pop = gl.gl_pathv; *pop; pop++) {
+				if (sl_add(sl, ftpd_strdup(*pop)) == -1) {
+					globfree(&gl);
+					goto pfree;
+				}
+			}
+		}
 		globfree(&gl);
 	}
 	if (sl_add(sl, NULL) == -1)
 		goto pfree;
 
+#ifndef NO_INTERNAL_LS
 	isls = (strcmp(sl->sl_str[0], INTERNAL_LS) == 0);
+#endif
 
 	pid = isls ? fork() : vfork();
 	switch (pid) {
@@ -176,7 +168,7 @@ ftpd_popen(argv, type, stderrfd)
 		goto pfree;
 		/* NOTREACHED */
 	case 0:				/* child */
-		if (*type == 'r') {
+		if (*ptype == 'r') {
 			if (pdes[1] != STDOUT_FILENO) {
 				dup2(pdes[1], STDOUT_FILENO);
 				(void)close(pdes[1]);
@@ -193,36 +185,39 @@ ftpd_popen(argv, type, stderrfd)
 			}
 			(void)close(pdes[1]);
 		}
+#ifndef NO_INTERNAL_LS
 		if (isls) {	/* use internal ls */
 			optreset = optind = optopt = 1;
 			closelog();
 			exit(ls_main(sl->sl_cur - 1, sl->sl_str));
 		}
+#endif
+
 		execv(sl->sl_str[0], sl->sl_str);
 		_exit(1);
 	}
 	/* parent; assume fdopen can't fail...  */
-	if (*type == 'r') {
-		iop = fdopen(pdes[0], type);
+	if (*ptype == 'r') {
+		iop = fdopen(pdes[0], ptype);
 		(void)close(pdes[1]);
 	} else {
-		iop = fdopen(pdes[1], type);
+		iop = fdopen(pdes[1], ptype);
 		(void)close(pdes[0]);
 	}
 	pids[fileno(iop)] = pid;
 
-pfree:	if (sl)
+ pfree:
+	if (sl)
 		sl_free(sl, 1);
 	return (iop);
 }
 
 int
-ftpd_pclose(iop)
-	FILE *iop;
+ftpd_pclose(FILE *iop)
 {
 	int fdes, status;
 	pid_t pid;
-	sigset_t sigset, osigset;
+	sigset_t nsigset, osigset;
 
 	/*
 	 * pclose returns -1 if stream is not associated with a
@@ -231,11 +226,11 @@ ftpd_pclose(iop)
 	if (pids == 0 || pids[fdes = fileno(iop)] == 0)
 		return (-1);
 	(void)fclose(iop);
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGINT);
-	sigaddset(&sigset, SIGQUIT);
-	sigaddset(&sigset, SIGHUP);
-	sigprocmask(SIG_BLOCK, &sigset, &osigset);
+	sigemptyset(&nsigset);
+	sigaddset(&nsigset, SIGINT);
+	sigaddset(&nsigset, SIGQUIT);
+	sigaddset(&nsigset, SIGHUP);
+	sigprocmask(SIG_BLOCK, &nsigset, &osigset);
 	while ((pid = waitpid(pids[fdes], &status, 0)) < 0 && errno == EINTR)
 		continue;
 	sigprocmask(SIG_SETMASK, &osigset, NULL);

@@ -1,4 +1,4 @@
-.\"	$NetBSD: fsplit.1,v 1.5 1999/03/22 18:16:37 garbled Exp $
+.\"	$NetBSD: fsplit.1,v 1.9 2003/08/07 11:13:50 agc Exp $
 .\"
 .\" Copyright (c) 1983, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -13,11 +13,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -55,7 +51,8 @@ form
 where
 .Ar name
 is the name of the program unit (e.g. function, subroutine, block data or
-program).  The name for unnamed block data subprograms has the form
+program).
+The name for unnamed block data subprograms has the form
 .Ar blkdtaNNN.f
 where NNN is three digits and a file of this name does not already exist.
 For unnamed main programs the name has the form
@@ -70,11 +67,13 @@ where
 does not already exist.
 .Pp
 .Bl -tag -width Fl
-.It Fl e Ar efile 
-Normally each subprogram unit is split into a separate file.  When the
+.It Fl e Ar efile
+Normally each subprogram unit is split into a separate file.
+When the
 .Fl e
 option is used, only the specified subprogram units are split into separate
-files.  E.g.:
+files.
+E.g.:
 .Pp
 .Dl fsplit -e readit -e doit prog.f
 .Pp
@@ -96,8 +95,9 @@ Asa Romberger and Jerry Berkman
 .Sh BUGS
 .Nm
 assumes the subprogram name is on the first noncomment line of the subprogram
-unit.  Nonstandard source formats may confuse
-.Nm "" .
+unit.
+Nonstandard source formats may confuse
+.Nm .
 .Pp
 It is hard to use
 .Fl e

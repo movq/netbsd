@@ -1,19 +1,19 @@
-/* $NetBSD: ioasicreg.h,v 1.2 2000/02/03 08:13:46 nisimura Exp $ */
+/* $NetBSD: ioasicreg.h,v 1.9 2005/12/11 12:24:00 christos Exp $ */
 
-/* 
+/*
  * Copyright (c) 1991,1990,1989,1994,1995 Carnegie Mellon University
  * All Rights Reserved.
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -41,11 +41,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -141,6 +137,7 @@
 #define IOASIC_CSR_DIAGDN		0x00008000	/* rw */
 #define IOASIC_CSR_TXDIS_2		0x00004000	/* rw - 3min,3max+ */
 #define IOASIC_CSR_TXDIS_1		0x00002000	/* rw - 3min,3max+ */
+#define IOASIC_CSR_ISDN_ENABLE		0x00001000	/* rw - 3000/maxine */
 #define IOASIC_CSR_SCC_ENABLE		0x00000800	/* rw */
 #define IOASIC_CSR_RTC_ENABLE		0x00000400	/* rw */
 #define IOASIC_CSR_SCSI_ENABLE		0x00000200	/* rw - DS */
@@ -156,12 +153,9 @@
 #define IOASIC_INTR_R2_HALF_PAGE	0x02000000	/* rz */
 #define IOASIC_INTR_R2_DMA_OVRUN	0x01000000	/* rz */
 #define IOASIC_INTR_FLOPPY_DMA_E	0x00800000	/* rz - maxine */
-#define IOASIC_INTR_ISDN_PTR_LOAD	0x00400000	/* rz - 3000 */
-#define IOASIC_INTR_ISDN_OVRUN		0x00200000	/* rz - 3000 */
-#define IOASIC_INTR_ISDN_READ_E		0x00100000	/* rz - 3000 */
-#define IOASIC_INTR_ISDN_DS_TXLOAD	0x00400000	/* rz - maxine */
-#define IOASIC_INTR_ISDN_DS_RXLOAD	0x00200000	/* rz - maxine */
-#define IOASIC_INTR_ISDN_DS_OVRUN	0x00100000	/* rz - maxine */
+#define IOASIC_INTR_ISDN_TXLOAD		0x00400000	/* rz - 3000/maxine */
+#define IOASIC_INTR_ISDN_RXLOAD		0x00200000	/* rz - 3000/maxine */
+#define IOASIC_INTR_ISDN_OVRUN		0x00100000	/* rz - 3000/maxine */
 #define IOASIC_INTR_SCSI_PTR_LOAD	0x00080000	/* rz - DS */
 #define IOASIC_INTR_SCSI_OVRUN		0x00040000	/* rz - DS */
 #define IOASIC_INTR_SCSI_READ_E		0x00020000	/* rz - DS */
@@ -169,7 +163,7 @@
 
 /* low 16 bits are model-dependent; see also model specific *.h */
 #define IOASIC_INTR_NVR_JUMPER		0x00004000	/* ro */
-#define IOASIC_INTR_ISDN		0x00002000	/* ro */
+#define IOASIC_INTR_ISDN		0x00002000	/* ro - 3000 */
 #define IOASIC_INTR_NRMOD_JUMPER	0x00000400	/* ro */
 #define IOASIC_INTR_SEC_CON		0x00000200	/* ro */
 #define IOASIC_INTR_SCSI		0x00000200	/* ro - DS */
@@ -182,13 +176,9 @@
 
 /* DMA pointer registers (SCSI, Comm, ...) */
 
-#define IOASIC_DMAPTR_MASK		0xffffffe0
-#define IOASIC_DMAPTR_SHIFT		5
-#define IOASIC_DMAPTR_SET(reg,val) \
-    (reg) = (((val)<<IOASIC_DMAPTR_SHIFT)&IOASIC_DMAPTR_MASK)
-#define IOASIC_DMAPTR_GET(reg,val) \
-    (val) = (((reg)&IOASIC_DMAPTR_MASK)>>IOASIC_DMAPTR_SHIFT)
-#define IOASIC_DMA_ADDR(p)		(((unsigned)p) << (5-2))
+#define	IOASIC_DMA_ADDR(p) \
+    ((((p) << 3) & ~0x1f) | (((p) >> 29) & 0x1f))
+#define	IOASIC_DMA_BLOCKSIZE		0x1000
 
 /* For the LANCE DMA pointer register initialization the above suffices */
 

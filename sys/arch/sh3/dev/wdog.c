@@ -1,4 +1,4 @@
-/* $NetBSD: wdog.c,v 1.2 2000/02/24 17:10:16 msaitoh Exp $ */
+/*	$NetBSD: wdog.c,v 1.16 2008/03/27 02:03:03 uwe Exp $ */
 
 /*-
  * Copyright (C) 2000 SAITOH Masanobu.  All rights reserved.
@@ -26,6 +26,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: wdog.c,v 1.16 2008/03/27 02:03:03 uwe Exp $");
+
 #include <sys/param.h>
 #include <sys/buf.h>
 #include <sys/systm.h>
@@ -37,56 +40,59 @@
 #include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/syslog.h>
+#include <sys/conf.h>
 
 #include <machine/cpu.h>
-#include <machine/conf.h>
-#include <sh3/shbvar.h>
+#include <machine/intr.h>
+
+#include <sh3/frame.h>
 #include <sh3/wdtreg.h>
 #include <sh3/wdogvar.h>
+#include <sh3/exception.h>
 
 struct wdog_softc {
-	struct device sc_dev;		/* generic device structures */
-	unsigned int iobase;
+	device_t sc_dev;
 	int flags;
 };
 
-static int wdogmatch __P((struct device *, struct cfdata *, void *));
-static void wdogattach __P((struct device *, struct device *, void *));
+static int wdogmatch(device_t, cfdata_t, void *);
+static void wdogattach(device_t, device_t, void *);
+static int wdogintr(void *);
 
-struct cfattach wdog_ca = {
-	sizeof(struct wdog_softc), wdogmatch, wdogattach
-};
+CFATTACH_DECL_NEW(wdog, sizeof(struct wdog_softc),
+    wdogmatch, wdogattach, NULL, NULL);
 
 extern struct cfdriver wdog_cd;
 
+dev_type_open(wdogopen);
+dev_type_close(wdogclose);
+dev_type_ioctl(wdogioctl);
+
+const struct cdevsw wdog_cdevsw = {
+	wdogopen, wdogclose, noread, nowrite, wdogioctl,
+	nostop, notty, nopoll, nommap, nokqfilter,
+};
+
 void
-wdog_wr_cnt(x)
-	unsigned char x;
+wdog_wr_cnt(unsigned char x)
 {
 
 	SHREG_WTCNT_W = WTCNT_W_M | (unsigned short) x;
 }
 
 void
-wdog_wr_csr(x)
-	unsigned char x;
+wdog_wr_csr(unsigned char x)
 {
 
 	SHREG_WTCSR_W = WTCSR_W_M | (unsigned short) x;
 }
 
 static int
-wdogmatch(parent, cfp, aux)
-	struct device *parent;
-	struct cfdata *cfp;
-	void *aux;
+wdogmatch(device_t parent, cfdata_t cfp, void *aux)
 {
-	struct shb_attach_args *sa = aux;
 
-	if (strcmp(cfp->cf_driver->cd_name, "wdog"))
-		return 0;
-
-	sa->ia_iosize = 4;	/* XXX */
+	if (strcmp(cfp->cf_name, "wdog"))
+		return (0);
 
 	return (1);
 }
@@ -96,30 +102,32 @@ wdogmatch(parent, cfp, aux)
  */
 /* ARGSUSED */
 static void
-wdogattach(parent, self, aux)
-	struct device	*parent, *self;
-	void		*aux;
+wdogattach(device_t parent, device_t self, void *aux)
 {
-	struct wdog_softc *sc = (struct wdog_softc *)self;
-	struct shb_attach_args *sa = aux;
+	struct wdog_softc *sc;
 
-	sc->iobase = sa->ia_iobase;
-	sc->flags = 0;
+	sc = device_private(self);
+	sc->sc_dev = self;
 
-	printf("\nwdog0: internal watchdog timer\n");
+	aprint_naive("\n");
+	aprint_normal(": internal watchdog timer\n");
+
+	wdog_wr_csr(WTCSR_WT | WTCSR_CKS_4096);	/* default to wt mode */
+
+	intc_intr_establish(SH_INTEVT_WDT_ITI, IST_LEVEL, IPL_SOFTCLOCK,
+	    wdogintr, 0);
 }
 
 /*ARGSUSED*/
 int
-wdogopen(dev, flag, mode, p)
-	dev_t dev;
-	int flag, mode;
-	struct proc *p;
+wdogopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct wdog_softc *sc = wdog_cd.cd_devs[0]; /* XXX */
+	struct wdog_softc *sc;
 
-	if (minor(dev) != 0)
+	sc = device_lookup_private(&wdog_cd, minor(dev));
+	if (sc == NULL)
 		return (ENXIO);
+
 	if (sc->flags & WDOGF_OPEN)
 		return (EBUSY);
 	sc->flags |= WDOGF_OPEN;
@@ -128,12 +136,11 @@ wdogopen(dev, flag, mode, p)
 
 /*ARGSUSED*/
 int
-wdogclose(dev, flag, mode, p)
-	dev_t dev;
-	int flag, mode;
-	struct proc *p;
+wdogclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct wdog_softc *sc = wdog_cd.cd_devs[0]; /* XXX */
+	struct wdog_softc *sc;
+
+	sc = device_lookup_private(&wdog_cd, minor(dev));
 
 	if (sc->flags & WDOGF_OPEN)
 		sc->flags = 0;
@@ -145,17 +152,27 @@ extern unsigned int maxwdog;
 
 /*ARGSUSED*/
 int
-wdogioctl (dev, cmd, data, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+wdogioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	int error = 0;
 	int request;
 
 	switch (cmd) {
+	case SIOWDOGSETMODE:
+		request = *(int *)data;
+
+		switch (request) {
+		case WDOGM_RESET:
+			wdog_wr_csr(SHREG_WTCSR_R | WTCSR_WT);
+			break;
+		case WDOGM_INTR:
+			wdog_wr_csr(SHREG_WTCSR_R & ~WTCSR_WT);
+			break;
+		default:
+			error = EINVAL;
+			break;
+		}
+		break;
 	case SIORESETWDOG:
 		wdog_wr_cnt(0);		/* reset to zero */
 		break;
@@ -166,7 +183,6 @@ wdogioctl (dev, cmd, data, flag, p)
 		break;
 	case SIOSTOPWDOG:
 		wdog_wr_csr(SHREG_WTCSR_R & ~WTCSR_TME); /* stop */
-		log(LOG_SYSTEM | LOG_DEBUG, "wdog: maxwdog = %u\n", maxwdog);
 		break;
 	case SIOSETWDOG:
 		request = *(int *)data;
@@ -182,4 +198,16 @@ wdogioctl (dev, cmd, data, flag, p)
 	}
 
 	return (error);
+}
+
+int
+wdogintr(void *arg)
+{
+	struct trapframe *frame = arg;
+
+	wdog_wr_csr(SHREG_WTCSR_R & ~WTCSR_IOVF); /* clear overflow bit */
+	wdog_wr_cnt(0);			/* reset to zero */
+	printf("wdog trapped: spc = %x\n", frame->tf_spc);
+
+	return (0);
 }

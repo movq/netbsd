@@ -1,4 +1,4 @@
-/*	$NetBSD: interactive.c,v 1.16 1999/02/09 08:55:24 erh Exp $	*/
+/*	$NetBSD: interactive.c,v 1.25 2006/12/18 20:07:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1985, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)interactive.c	8.5 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: interactive.c,v 1.16 1999/02/09 08:55:24 erh Exp $");
+__RCSID("$NetBSD: interactive.c,v 1.25 2006/12/18 20:07:32 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -86,20 +82,20 @@ struct arglist {
 	char	*cmd;		/* the current command */
 };
 
-static char	*copynext __P((char *, char *));
-static int	 fcmp __P((const void *, const void *));
-static void	 formatf __P((struct afile *, int));
-static void	 getcmd __P((char *, char *, char *, struct arglist *));
-struct dirent	*glob_readdir __P((RST_DIR *dirp));
-static int	 glob_stat __P((const char *, struct stat *));
-static void	 mkentry __P((char *, struct direct *, struct afile *));
-static void	 printlist __P((char *, char *));
+static char	*copynext(char *, char *);
+static int	 fcmp(const void *, const void *);
+static void	 formatf(struct afile *, int);
+static void	 getcmd(char *, char *, char *, struct arglist *);
+struct dirent	*glob_readdir(RST_DIR *dirp);
+static int	 glob_stat(const char *, struct stat *);
+static void	 mkentry(char *, struct direct *, struct afile *);
+static void	 printlist(char *, char *);
 
 /*
  * Read and execute commands from the terminal.
  */
 void
-runcmdshell()
+runcmdshell(void)
 {
 	struct entry *np;
 	ino_t ino;
@@ -139,6 +135,8 @@ loop:
 		ino = dirlookup(name);
 		if (ino == 0)
 			break;
+		if (ino == ROOTINO)
+			dotflag = 1;
 		if (mflag)
 			pathcheck(name);
 		treescan(name, ino, addfile);
@@ -308,11 +306,8 @@ loop:
  * eliminate any embedded ".." components.
  */
 static void
-getcmd(curdir, cmd, name, ap)
-	char *curdir, *cmd, *name;
-	struct arglist *ap;
+getcmd(char *curdir, char *cmd, char *name, struct arglist *ap)
 {
-	extern char *__progname;	/* from crt0.o */
 	char *cp;
 	static char input[BUFSIZ];
 	char output[BUFSIZ];
@@ -330,7 +325,7 @@ getcmd(curdir, cmd, name, ap)
 	 * Read a command line and trim off trailing white space.
 	 */
 	do	{
-		fprintf(stderr, "%s > ", __progname);
+		fprintf(stderr, "%s > ", getprogname());
 		(void) fflush(stderr);
 		(void) fgets(input, BUFSIZ, terminal);
 	} while (!feof(terminal) && input[0] == '\n');
@@ -413,8 +408,7 @@ retnext:
  * Strip off the next token of the input.
  */
 static char *
-copynext(input, output)
-	char *input, *output;
+copynext(char *input, char *output)
 {
 	char *cp, *bp;
 	char quote;
@@ -463,8 +457,7 @@ copynext(input, output)
  * remove any imbedded "." and ".." components.
  */
 void
-canon(rawname, canonname)
-	char *rawname, *canonname;
+canon(const char *rawname, char *canonname)
 {
 	char *cp, *np;
 
@@ -513,9 +506,7 @@ canon(rawname, canonname)
  * Do an "ls" style listing of a directory
  */
 static void
-printlist(name, basename)
-	char *name;
-	char *basename;
+printlist(char *name, char *basename)
 {
 	struct afile *fp, *list, *listp;
 	struct direct *dp;
@@ -596,10 +587,7 @@ printlist(name, basename)
  * Read the contents of a directory.
  */
 static void
-mkentry(name, dp, fp)
-	char *name;
-	struct direct *dp;
-	struct afile *fp;
+mkentry(char *name, struct direct *dp, struct afile *fp)
 {
 	char *cp;
 	struct entry *np;
@@ -659,9 +647,7 @@ mkentry(name, dp, fp)
  * Print out a pretty listing of a directory
  */
 static void
-formatf(list, nentry)
-	struct afile *list;
-	int nentry;
+formatf(struct afile *list, int nentry)
 {
 	struct afile *fp, *endlist;
 	int width, bigino, haveprefix, havepostfix;
@@ -701,7 +687,8 @@ formatf(list, nentry)
 		for (j = 0; j < columns; j++) {
 			fp = &list[j * lines + i];
 			if (vflag) {
-				fprintf(stderr, "%*d ", precision, fp->fnum);
+				fprintf(stderr, "%*llu ", precision,
+				    (unsigned long long)fp->fnum);
 				fp->len += precision + 1;
 			}
 			if (haveprefix) {
@@ -733,21 +720,20 @@ formatf(list, nentry)
 #undef d_ino
 
 struct dirent *
-glob_readdir(dirp)
-	RST_DIR *dirp;
+glob_readdir(RST_DIR *dirp)
 {
 	struct direct *dp;
 	static struct dirent adirent;
 
 	while ((dp = rst_readdir(dirp)) != NULL) {
-		if (!vflag && dp->d_ino == WINO)
+		if (!vflag && dp->d_fileno == WINO)
 			continue;
-		if (dflag || TSTINO(dp->d_ino, dumpmap))
+		if (dflag || TSTINO(dp->d_fileno, dumpmap))
 			break;
 	}
 	if (dp == NULL)
 		return (NULL);
-	adirent.d_fileno = dp->d_ino;
+	adirent.d_fileno = dp->d_fileno;
 	adirent.d_namlen = dp->d_namlen;
 	memmove(adirent.d_name, dp->d_name, dp->d_namlen + 1);
 	return (&adirent);
@@ -757,17 +743,15 @@ glob_readdir(dirp)
  * Return st_mode information in response to stat or lstat calls
  */
 static int
-glob_stat(name, stp)
-	const char *name;
-	struct stat *stp;
+glob_stat(const char *name, struct stat *stp)
 {
 	struct direct *dp;
 
 	dp = pathsearch(name);
-	if (dp == NULL || (!dflag && TSTINO(dp->d_ino, dumpmap) == 0) ||
-	    (!vflag && dp->d_ino == WINO))
+	if (dp == NULL || (!dflag && TSTINO(dp->d_fileno, dumpmap) == 0) ||
+	    (!vflag && dp->d_fileno == WINO))
 		return (-1);
-	if (inodetype(dp->d_ino) == NODE)
+	if (inodetype(dp->d_fileno) == NODE)
 		stp->st_mode = S_IFDIR;
 	else
 		stp->st_mode = S_IFREG;
@@ -778,19 +762,18 @@ glob_stat(name, stp)
  * Comparison routine for qsort.
  */
 static int
-fcmp(f1, f2)
-	const void *f1, *f2;
+fcmp(const void *f1, const void *f2)
 {
-	return (strcmp(((struct afile *)f1)->fname,
-	    ((struct afile *)f2)->fname));
+	return (strcmp(((const struct afile *)f1)->fname,
+	    ((const struct afile *)f2)->fname));
 }
 
 /*
  * respond to interrupts
  */
 void
-onintr(signo)
-	int signo;
+/*ARGSUSED*/
+onintr(int signo __unused)
 {
 	if (command == 'i' && runshell)
 		longjmp(reset, 1);

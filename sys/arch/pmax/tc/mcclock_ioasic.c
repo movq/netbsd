@@ -1,4 +1,4 @@
-/*	$NetBSD: mcclock_ioasic.c,v 1.14 2000/01/10 03:24:41 simonb Exp $ */
+/*	$NetBSD: mcclock_ioasic.c,v 1.19 2008/01/03 23:02:25 joerg Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -28,10 +28,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mcclock_ioasic.c,v 1.14 2000/01/10 03:24:41 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcclock_ioasic.c,v 1.19 2008/01/03 23:02:25 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
+#include <sys/systm.h>
+#include <dev/clock_subr.h>
 
 #include <dev/dec/mcclockvar.h>
 #include <dev/dec/mcclock_pad32.h>
@@ -44,12 +46,8 @@ static int	mcclock_ioasic_match __P((struct device *, struct cfdata *,
 static void	mcclock_ioasic_attach __P((struct device *, struct device *,
 		    void *));
 
-struct cfattach mcclock_ioasic_ca = {
-	sizeof (struct mcclock_pad32_softc),
-	mcclock_ioasic_match, mcclock_ioasic_attach, 
-};
-extern struct cfdriver ioasic_cd;
-
+CFATTACH_DECL(mcclock_ioasic, sizeof (struct mcclock_pad32_softc),
+    mcclock_ioasic_match, mcclock_ioasic_attach, NULL, NULL);
 
 static int
 mcclock_ioasic_match(parent, match, aux)
@@ -58,9 +56,6 @@ mcclock_ioasic_match(parent, match, aux)
 	void *aux;
 {
 	struct ioasicdev_attach_args *d = aux;
-
-	if (parent->dv_cfdata->cf_driver != &ioasic_cd)
-		return 0;
 
 	if (strcmp("mc146818", d->iada_modname) != 0)
 		return (0);

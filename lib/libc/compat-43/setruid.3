@@ -9,11 +9,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -30,7 +26,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)setruid.3	8.1 (Berkeley) 6/2/93
-.\"	$NetBSD: setruid.3,v 1.5 1999/03/22 19:44:36 garbled Exp $
+.\"	$NetBSD: setruid.3,v 1.10 2003/08/07 16:42:40 agc Exp $
 .\"
 .Dd June 2, 1993
 .Dt SETRUID 3
@@ -42,7 +38,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
+.In sys/types.h
 .Ft int
 .Fn setruid "uid_t ruid"
 .Ft int
@@ -65,18 +61,18 @@ functions return \-1.
 The use of these calls is not portable.
 Their use is discouraged; they will be removed in the future.
 .Sh SEE ALSO
-.Xr setuid 2 ,
-.Xr setgid 2 ,
-.Xr seteuid 2 ,
-.Xr setegid 2 ,
+.Xr getgid 2 ,
 .Xr getuid 2 ,
-.Xr getgid 2
+.Xr setegid 2 ,
+.Xr seteuid 2 ,
+.Xr setgid 2 ,
+.Xr setuid 2
 .Sh HISTORY
 The
 .Fn setruid
 and
 .Fn setrgid
-syscalls appeared in 
+syscalls appeared in
 .Bx 4.2
 and were dropped in
 .Bx 4.4 .

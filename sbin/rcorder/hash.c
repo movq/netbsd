@@ -1,7 +1,38 @@
-/*	$NetBSD: hash.c,v 1.1 1999/11/23 05:28:20 mrg Exp $	*/
+/*	$NetBSD: hash.c,v 1.5 2007/03/03 00:09:30 simonb Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Adam de Boor.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
+/*
  * Copyright (c) 1988, 1989 by Adam de Boor
  * Copyright (c) 1989 by Berkeley Softworks
  * All rights reserved.
@@ -39,14 +70,14 @@
  */
 
 #ifdef MAKE_BOOTSTRAP
-static char rcsid[] = "$NetBSD: hash.c,v 1.1 1999/11/23 05:28:20 mrg Exp $";
+static char rcsid[] = "$NetBSD: hash.c,v 1.5 2007/03/03 00:09:30 simonb Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)hash.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: hash.c,v 1.1 1999/11/23 05:28:20 mrg Exp $");
+__RCSID("$NetBSD: hash.c,v 1.5 2007/03/03 00:09:30 simonb Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -56,6 +87,8 @@ __RCSID("$NetBSD: hash.c,v 1.1 1999/11/23 05:28:20 mrg Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <err.h>
+#include <util.h>
 
 /* hash.c --
  *
@@ -64,19 +97,14 @@ __RCSID("$NetBSD: hash.c,v 1.1 1999/11/23 05:28:20 mrg Exp $");
  * 	table.  Hash tables grow automatically as the amount of
  * 	information increases.
  */
-#include "sprite.h"
-#ifndef ORDER
-#include "make.h"
-#endif /* ORDER */
 #include "hash.h"
-#include "ealloc.h"
 
 /*
  * Forward references to local procedures that are used before they're
  * defined:
  */
 
-static void RebuildTable __P((Hash_Table *));
+static void RebuildTable(Hash_Table *);
 
 /*
  * The following defines the ratio of # entries to # buckets
@@ -92,6 +120,13 @@ static void RebuildTable __P((Hash_Table *));
  *
  *	This routine just sets up the hash table.
  *
+ * Input:
+ *	t		Structure to use to hold table.
+ *	numBuckets	How many buckets to create for starters.  This number
+ *			is rounded up to a power of two.  If <= 0, a reasonable
+ *			default is chosen. The table will grow in size later
+ *			as needed.
+ *
  * Results:
  *	None.
  *
@@ -102,16 +137,10 @@ static void RebuildTable __P((Hash_Table *));
  */
 
 void
-Hash_InitTable(t, numBuckets)
-	register Hash_Table *t;	/* Structure to use to hold table. */
-	int numBuckets;		/* How many buckets to create for starters.
-				 * This number is rounded up to a power of
-				 * two.   If <= 0, a reasonable default is
-				 * chosen. The table will grow in size later
-				 * as needed. */
+Hash_InitTable(Hash_Table *t, int numBuckets)
 {
-	register int i;
-	register struct Hash_Entry **hp;
+	int i;
+	struct Hash_Entry **hp;
 
 	/*
 	 * Round up the size to a power of two.
@@ -149,19 +178,19 @@ Hash_InitTable(t, numBuckets)
  */
 
 void
-Hash_DeleteTable(t)
-	Hash_Table *t;
+Hash_DeleteTable(Hash_Table *t)
 {
-	register struct Hash_Entry **hp, *h, *nexth = NULL;
-	register int i;
+	struct Hash_Entry **hp, *h, *nexth;
+	int i;
 
+	nexth = NULL;
 	for (hp = t->bucketPtr, i = t->size; --i >= 0;) {
 		for (h = *hp++; h != NULL; h = nexth) {
 			nexth = h->next;
-			free((char *)h);
+			free(h);
 		}
 	}
-	free((char *)t->bucketPtr);
+	free(t->bucketPtr);
 
 	/*
 	 * Set up the hash table to cause memory faults on any future access
@@ -177,6 +206,10 @@ Hash_DeleteTable(t)
  *
  * 	Searches a hash table for an entry corresponding to key.
  *
+ * Input:
+ *	t	Hash table to search.
+ *	key	A hash key.
+ *
  * Results:
  *	The return value is a pointer to the entry for key,
  *	if key was present in the table.  If key was not
@@ -189,13 +222,11 @@ Hash_DeleteTable(t)
  */
 
 Hash_Entry *
-Hash_FindEntry(t, key)
-	Hash_Table *t;		/* Hash table to search. */
-	char *key;		/* A hash key. */
+Hash_FindEntry(Hash_Table *t, char *key)
 {
-	register Hash_Entry *e;
-	register unsigned h;
-	register char *p;
+	Hash_Entry *e;
+	unsigned h;
+	char *p;
 
 	for (h = 0, p = key; *p;)
 		h = (h << 5) - h + *p++;
@@ -214,6 +245,11 @@ Hash_FindEntry(t, key)
  *	Searches a hash table for an entry corresponding to
  *	key.  If no entry is found, then one is created.
  *
+ * Input:
+ * 	t	Hash table to search.
+ *	key	A hash key.
+ *	newPtr	Filled in with 1 if new entry created, 0 otherwise.
+ *
  * Results:
  *	The return value is a pointer to the entry.  If *newPtr
  *	isn't NULL, then *newPtr is filled in with TRUE if a
@@ -226,15 +262,11 @@ Hash_FindEntry(t, key)
  */
 
 Hash_Entry *
-Hash_CreateEntry(t, key, newPtr)
-	register Hash_Table *t;	/* Hash table to search. */
-	char *key;		/* A hash key. */
-	Boolean *newPtr;	/* Filled in with TRUE if new entry created,
-				 * FALSE otherwise. */
+Hash_CreateEntry(Hash_Table *t, char *key, int *newPtr)
 {
-	register Hash_Entry *e;
-	register unsigned h;
-	register char *p;
+	Hash_Entry *e;
+	unsigned h;
+	char *p;
 	int keylen;
 	struct Hash_Entry **hp;
 
@@ -249,7 +281,7 @@ Hash_CreateEntry(t, key, newPtr)
 	for (e = t->bucketPtr[h & t->mask]; e != NULL; e = e->next) {
 		if (e->namehash == h && strcmp(e->name, p) == 0) {
 			if (newPtr != NULL)
-				*newPtr = FALSE;
+				*newPtr = 0;
 			return (e);
 		}
 	}
@@ -271,7 +303,7 @@ Hash_CreateEntry(t, key, newPtr)
 	t->numEntries++;
 
 	if (newPtr != NULL)
-		*newPtr = TRUE;
+		*newPtr = 1;
 	return (e);
 }
 
@@ -293,11 +325,9 @@ Hash_CreateEntry(t, key, newPtr)
  */
 
 void
-Hash_DeleteEntry(t, e)
-	Hash_Table *t;
-	Hash_Entry *e;
+Hash_DeleteEntry(Hash_Table *t, Hash_Entry *e)
 {
-	register Hash_Entry **hp, *p;
+	Hash_Entry **hp, *p;
 
 	if (e == NULL)
 		return;
@@ -305,7 +335,7 @@ Hash_DeleteEntry(t, e)
 	     (p = *hp) != NULL; hp = &p->next) {
 		if (p == e) {
 			*hp = p->next;
-			free((char *)p);
+			free(p);
 			t->numEntries--;
 			return;
 		}
@@ -321,6 +351,10 @@ Hash_DeleteEntry(t, e)
  *	This procedure sets things up for a complete search
  *	of all entries recorded in the hash table.
  *
+ * Input:
+ *	t		Table to be searched.
+ *	searchPtr	Area in which to keep state about search.
+ *
  * Results:
  *	The return value is the address of the first entry in
  *	the hash table, or NULL if the table is empty.
@@ -334,11 +368,9 @@ Hash_DeleteEntry(t, e)
  */
 
 Hash_Entry *
-Hash_EnumFirst(t, searchPtr)
-	Hash_Table *t;			/* Table to be searched. */
-	register Hash_Search *searchPtr;/* Area in which to keep state
-					 * about search.*/
+Hash_EnumFirst(Hash_Table *t, Hash_Search *searchPtr)
 {
+
 	searchPtr->tablePtr = t;
 	searchPtr->nextIndex = 0;
 	searchPtr->hashEntryPtr = NULL;
@@ -364,11 +396,9 @@ Hash_EnumFirst(t, searchPtr)
  */
 
 Hash_Entry *
-Hash_EnumNext(searchPtr)
-	register Hash_Search *searchPtr; /* Area used to keep state about
-					    search. */
+Hash_EnumNext(Hash_Search *searchPtr)
 {
-	register Hash_Entry *e;
+	Hash_Entry *e;
 	Hash_Table *t = searchPtr->tablePtr;
 
 	/*
@@ -410,14 +440,14 @@ Hash_EnumNext(searchPtr)
  */
 
 static void
-RebuildTable(t)
-	register Hash_Table *t;
+RebuildTable(Hash_Table *t)
 {
-	register Hash_Entry *e, *next = NULL, **hp, **xp;
-	register int i, mask;
-        register Hash_Entry **oldhp;
+	Hash_Entry *e, *next, **hp, **xp;
+	int i, mask;
+        Hash_Entry **oldhp;
 	int oldsize;
 
+	next = NULL;
 	oldhp = t->bucketPtr;
 	oldsize = i = t->size;
 	i <<= 1;
@@ -434,5 +464,5 @@ RebuildTable(t)
 			*xp = e;
 		}
 	}
-	free((char *)oldhp);
+	free(oldhp);
 }

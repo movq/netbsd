@@ -1,13 +1,13 @@
-/*	$NetBSD: nanf.c,v 1.1 1999/12/23 10:15:09 kleink Exp $	*/
+/*	$NetBSD: nanf.c,v 1.3 2005/04/15 22:39:11 kleink Exp $	*/
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: nanf.c,v 1.1 1999/12/23 10:15:09 kleink Exp $");
+__RCSID("$NetBSD: nanf.c,v 1.3 2005/04/15 22:39:11 kleink Exp $");
 #endif /* LIBC_SCCS and not lint */
 
-/* nanf.c */
-
 #include <math.h>
+#include <machine/endian.h>
 
-/* bytes for quiet NaN on a PowerPC (IEEE single precision) */
-const char __nanf[] = { 0x7f, (char)0xc0, 0, 0 };
+/* bytes for quiet NaN (IEEE single precision) */
+const union __float_u __nanf =
+		{ { 0x7f, 0xc0,    0,    0 } };

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.5 1998/10/08 01:29:28 wsanchez Exp $	*/
+/*	$NetBSD: main.c,v 1.11 2008/07/21 14:19:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: main.c,v 1.5 1998/10/08 01:29:28 wsanchez Exp $");
+__RCSID("$NetBSD: main.c,v 1.11 2008/07/21 14:19:22 lukem Exp $");
 #endif /* not lint */
 
 #include <signal.h>
@@ -81,10 +77,10 @@ boolean	terse	= FALSE;	/* Terse output */
 
 char	*suffixlist = ".*";	/* initially, can touch any file */
 
-int	errorsort __P((const void *, const void *));
-void	forkvi __P((int, char **));
-int	main __P((int, char **));
-void	try __P((char *, int, char **));
+int	errorsort(const void *, const void *);
+void	forkvi(int, char **);
+int	main(int, char **);
+void	try(char *, int, char **);
 
 /*
  *	error [-I ignorename] [-n] [-q] [-t suffixlist] [-s] [-v] [infile]
@@ -101,7 +97,7 @@ void	try __P((char *, int, char **));
  *		file; if not specified, all files with hard, non
  *		ignorable errors are touched (assuming they can be).
  *
- *	-t:	touch only files ending with the list of suffices, each
+ *	-t:	touch only files ending with the list of suffixes, each
  *		suffix preceded by a dot.
  *		eg, -t .c.y.l
  *		will touch only files ending with .c, .y or .l
@@ -130,9 +126,7 @@ void	try __P((char *, int, char **));
  *		Default: stdin
  */
 int
-main(argc, argv)
-	int	argc;
-	char	*argv[];
+main(int argc, char **argv)
 {
 	char	*cp;
 	char	*ignorename = 0;
@@ -233,14 +227,13 @@ main(argc, argv)
 }
 
 void
-forkvi(argc, argv)
-	int	argc;
-	char	**argv;
+forkvi(int argc, char **argv)
 {
 	if (query){
 		switch(inquire(terse
 		    ? "Edit? "
 		    : "Do you still want to edit the files you touched? ")){
+		case Q_error:
 		case Q_NO:
 		case Q_no:
 			return;
@@ -250,7 +243,7 @@ forkvi(argc, argv)
 	}
 	/*
 	 *	ed_agument's first argument is
-	 *	a vi/ex compatabile search argument
+	 *	a vi/ex compatible search argument
 	 *	to find the first occurance of ###
 	 */
 	try("vi", argc, argv);
@@ -260,10 +253,7 @@ forkvi(argc, argv)
 }
 
 void
-try(name, argc, argv)
-	char	*name;
-	int	argc;
-	char	**argv;
+try(char *name, int argc, char **argv)
 {
 	argv[0] = name;
 	wordvprint(stdout, argc, argv);
@@ -278,8 +268,7 @@ try(name, argc, argv)
 	execvp(name, argv);
 }
 
-int errorsort(x1, x2)
-	const void *x1, *x2;
+int errorsort(const void *x1, const void *x2)
 {
 	Eptr	*epp1 = (Eptr *)x1, *epp2 = (Eptr *)x2;
 	Eptr	ep1, ep2;

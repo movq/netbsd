@@ -1,7 +1,9 @@
-#	$NetBSD: Makefile,v 1.12 1999/12/12 11:30:04 veego Exp $
+#	$NetBSD: Makefile,v 1.19 2005/01/01 13:56:21 lukem Exp $
 
-PROG=	ipfstat
-SRCS=	kmem.c fils.c opt.c parse.c facpri.c
-MAN=	ipfstat.8
+PROG=		ipfstat
+SRCS=		ipfstat.c
+MAN=		ipfstat.8
+DPADD+=  	${LIBCURSES}
+LDADD+=  	-lcurses
 
 .include <bsd.prog.mk>

@@ -1,22 +1,30 @@
-#	$NetBSD: Makefile,v 1.8 1999/07/20 09:35:18 mrg Exp $
-#
-# This directory contains an implementation of crypt(3) and associated
-# routines.  They have been modified so that decryption is no longer possible,
-# and thus are exportable.  They were taken from the 4.4BSD-Lite foreign
-# distribution.
+#	$NetBSD: Makefile,v 1.21 2008/08/29 00:02:22 gmcgarry Exp $
 
-SRCTOP=	../..
-.include <bsd.crypto.mk>
+USE_SHLIBDIR=	yes
 
 LIB=	crypt
 
-SRCS=	crypt.c
+SRCS=	crypt.c md5crypt.c bcrypt.c crypt-sha1.c util.c pw_gensalt.c
+SRCS+=	hmac_sha1.c
+
+WARNS=	4
 
 MAN=	crypt.3
 MLINKS= crypt.3 encrypt.3 crypt.3 setkey.3
 
-.if defined(CRYPTOPATH)
-.sinclude "${CRYPTOPATH}/lib/libcrypt/Makefile.frag"
+
+.if make(*.test)
+.SUFFIXES: .test
+.c.test:
+	${CC} -o $@ -DUNIT_TEST -DMAIN ${LDSTATIC} ${.IMPSRC} ${LDADD}
+LDADD+= -L${.OBJDIR} -l${LIB} -L${.OBJDIR}/../../libc
+DPADD+= lib${LIB}.a
+LDSTATIC?= -static
+.include <bsd.prog.mk>
+.else
+.include <bsd.lib.mk>
 .endif
 
-.include <bsd.lib.mk>
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
+COPTS.crypt-sha1.c+=	-Wno-pointer-sign
+.endif

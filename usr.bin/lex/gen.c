@@ -26,17 +26,14 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-/* $NetBSD: gen.c,v 1.14 1999/01/18 22:18:17 christos Exp $ */
+/* $NetBSD: gen.c,v 1.18 2004/04/05 21:17:27 christos Exp $ */
 
 #include "flexdef.h"
 
 
 /* declare functions that have forward references */
 
-void gen_next_state PROTO((int));
 void genecs PROTO((void));
-void indent_put2s PROTO((char [], char []));
-void indent_puts PROTO((char []));
 
 
 static int indent_level = 0; /* each level is 8 spaces */
@@ -603,17 +600,18 @@ int worry_about_NULs;
 	if ( worry_about_NULs && ! nultrans )
 		{
 		if ( useecs )
-			(void) sprintf( char_map,
+			(void) snprintf(char_map, sizeof(char_map),
 				"(*yy_cp ? yy_ec[YY_SC_TO_UI(*yy_cp)] : %d)",
 					NUL_ec );
 		else
-			(void) sprintf( char_map,
+			(void) snprintf(char_map, sizeof(char_map),
 				"(*yy_cp ? YY_SC_TO_UI(*yy_cp) : %d)", NUL_ec );
 		}
 
 	else
-		strcpy( char_map, useecs ?
-			"yy_ec[YY_SC_TO_UI(*yy_cp)]" : "YY_SC_TO_UI(*yy_cp)" );
+		strlcpy(char_map, useecs ?
+		    "yy_ec[YY_SC_TO_UI(*yy_cp)]" : "YY_SC_TO_UI(*yy_cp)",
+		    sizeof(char_map));
 
 	if ( worry_about_NULs && nultrans )
 		{
@@ -710,7 +708,7 @@ void gen_NUL_trans()
 		{
 		char NUL_ec_str[20];
 
-		(void) sprintf( NUL_ec_str, "%d", NUL_ec );
+		(void) snprintf(NUL_ec_str, sizeof(NUL_ec_str), "%d", NUL_ec);
 		gen_next_compressed_state( NUL_ec_str );
 
 		do_indent();
@@ -1438,7 +1436,7 @@ void make_tables()
 		indent_puts( "if ( yy_act == 0 )" );
 		indent_up();
 		indent_puts( C_plus_plus ?
-			"cerr << \"--scanner backing up\\n\";" :
+			"std::cerr << \"--scanner backing up\" << std::endl;" :
 			"fprintf( stderr, \"--scanner backing up\\n\" );" );
 		indent_down();
 
@@ -1449,9 +1447,9 @@ void make_tables()
 		if ( C_plus_plus )
 			{
 			indent_puts(
-	"cerr << \"--accepting rule at line \" << yy_rule_linenum[yy_act] <<" );
+	"std::cerr << \"--accepting rule at line \" << yy_rule_linenum[yy_act] <<" );
 			indent_puts(
-			"         \"(\\\"\" << yytext << \"\\\")\\n\";" );
+			"         \"(\\\"\" << yytext << \"\\\")\" << std::endl;" );
 			}
 		else
 			{
@@ -1471,7 +1469,7 @@ void make_tables()
 		if ( C_plus_plus )
 			{
 			indent_puts(
-"cerr << \"--accepting default rule (\\\"\" << yytext << \"\\\")\\n\";" );
+"std::cerr << \"--accepting default rule (\\\"\" << yytext << \"\\\")\" << std::endl;" );
 			}
 		else
 			{
@@ -1487,7 +1485,7 @@ void make_tables()
 		indent_up();
 
 		indent_puts( C_plus_plus ?
-			"cerr << \"--(end of buffer or a NUL)\\n\";" :
+			"std::cerr << \"--(end of buffer or a NUL)\" << std::endl;" :
 		"fprintf( stderr, \"--(end of buffer or a NUL)\\n\" );" );
 
 		indent_down();
@@ -1499,7 +1497,7 @@ void make_tables()
 		if ( C_plus_plus )
 			{
 			indent_puts(
-	"cerr << \"--EOF (start condition \" << YY_START << \")\\n\";" );
+	"std::cerr << \"--EOF (start condition \" << YY_START << \")\" << std::endl;" );
 			}
 		else
 			{

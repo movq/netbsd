@@ -1,4 +1,4 @@
-/*	$NetBSD: compress.c,v 1.4 1997/11/21 08:35:56 lukem Exp $	*/
+/*	$NetBSD: compress.c,v 1.6 2003/08/07 11:17:24 agc Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)compress.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: compress.c,v 1.4 1997/11/21 08:35:56 lukem Exp $");
+__RCSID("$NetBSD: compress.c,v 1.6 2003/08/07 11:17:24 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -171,19 +167,19 @@ long cc_time, cc_time0;
 
 char *cc_tt_ob, *cc_tt_obe;
 
-int	cc_compress __P((struct cc **, struct cc **, char));
-void	cc_compress_cleanup __P((struct cc **, int));
-void	cc_compress_phase __P((struct cc **, int, struct cc **, int));
-void	cc_compress_phase1 __P((struct cc **, struct cc **, int, int));
-void	cc_output_phase __P((char *, struct cc **, int));
-int	cc_sweep __P((char *, int, struct cc **, int));
-void	cc_sweep0 __P((char *, int, int));
-int	cc_sweep_phase __P((char *, int, struct cc **));
-void	cc_sweep_reverse __P((struct cc **, short *));
-int	cc_token_compare __P((const void *, const void *));
+int	cc_compress(struct cc **, struct cc **, char);
+void	cc_compress_cleanup(struct cc **, int);
+void	cc_compress_phase(struct cc **, int, struct cc **, int);
+void	cc_compress_phase1(struct cc **, struct cc **, int, int);
+void	cc_output_phase(char *, struct cc **, int);
+int	cc_sweep(char *, int, struct cc **, int);
+void	cc_sweep0(char *, int, int);
+int	cc_sweep_phase(char *, int, struct cc **);
+void	cc_sweep_reverse(struct cc **, short *);
+int	cc_token_compare(const void *, const void *);
 
 int
-ccinit()
+ccinit(void)
 {
 	int i, j;
 	struct cc *p;
@@ -307,7 +303,7 @@ nomem:
 }
 
 void
-ccstart()
+ccstart(void)
 {
 	ttflush();
 	tt_obp = tt_ob = cc_buffer;
@@ -321,7 +317,7 @@ ccstart()
 }
 
 void
-ccreset()
+ccreset(void)
 {
 	struct cc *p;
 
@@ -333,7 +329,7 @@ ccreset()
 }
 
 void
-ccend()
+ccend(void)
 {
 
 	ttflush();
@@ -347,7 +343,7 @@ ccend()
 }
 
 void
-ccflush()
+ccflush(void)
 {
 	int bufsize = tt_obp - tt_ob;
 	int n;
@@ -380,10 +376,7 @@ out:
 }
 
 int
-cc_sweep_phase(buffer, bufsize, tokens)
-	char *buffer;
-	int bufsize;
-	struct cc **tokens;
+cc_sweep_phase(char *buffer, int bufsize, struct cc **tokens)
 {
 	struct cc **pp = tokens;
 	int i, n;
@@ -439,9 +432,7 @@ cc_sweep_phase(buffer, bufsize, tokens)
 }
 
 void
-cc_sweep0(buffer, n, length)
-	char *buffer;
-	int n, length;
+cc_sweep0(char *buffer, int n, int length)
 {
 	char *p;
 	short *hc;
@@ -471,11 +462,7 @@ cc_sweep0(buffer, n, length)
 }
 
 int
-cc_sweep(buffer, bufsize, tokens, length)
-	char *buffer;
-	int bufsize;
-	struct cc **tokens;
-	int length;
+cc_sweep(char *buffer, int bufsize, struct cc **tokens, int length)
 {
 	struct cc *p;
 	char *cp;
@@ -648,9 +635,7 @@ cc_sweep(buffer, bufsize, tokens, length)
 }
 
 void
-cc_sweep_reverse(pp, places)
-	struct cc **pp;
-	short *places;
+cc_sweep_reverse(struct cc **pp, short int *places)
 {
 	struct cc *p;
 	short front, back, t;
@@ -669,11 +654,7 @@ cc_sweep_reverse(pp, places)
 }
 
 void
-cc_compress_phase(output, bufsize, tokens, ntoken)
-	struct cc **output;
-	int bufsize;
-	struct cc **tokens;
-	int ntoken;
+cc_compress_phase(struct cc **output, int bufsize, struct cc **tokens, int ntoken)
 {
 	int i;
 
@@ -686,10 +667,7 @@ cc_compress_phase(output, bufsize, tokens, ntoken)
 }
 
 void
-cc_compress_phase1(output, tokens, ntoken, flag)
-	struct cc **output;
-	struct cc **tokens;
-	int ntoken, flag;
+cc_compress_phase1(struct cc **output, struct cc **tokens, int ntoken, int flag)
 {
 	struct cc **pp;
 #ifdef STATS
@@ -739,9 +717,7 @@ cc_compress_phase1(output, tokens, ntoken, flag)
 }
 
 void
-cc_compress_cleanup(output, bufsize)
-	struct cc **output;
-	int bufsize;
+cc_compress_cleanup(struct cc **output, int bufsize)
 {
 	struct cc **end;
 
@@ -776,10 +752,7 @@ cc_compress_cleanup(output, bufsize)
 }
 
 int
-cc_compress(output, tokens, flag)
-	struct cc **output;
-	struct cc **tokens;
-	char flag;
+cc_compress(struct cc **output, struct cc **tokens, char flag)
 {
 	struct cc **pp = tokens;
 	struct cc *p = *pp++;
@@ -889,10 +862,7 @@ cc_compress(output, tokens, flag)
 }
 
 void
-cc_output_phase(buffer, output, bufsize)
-	char *buffer;
-	struct cc **output;
-	int bufsize;
+cc_output_phase(char *buffer, struct cc **output, int bufsize)
 {
 	int i;
 	struct cc *p, *p1;
@@ -931,8 +901,7 @@ cc_output_phase(buffer, output, bufsize)
 }
 
 int
-cc_token_compare(p1, p2)
-	const void *p1, *p2;
+cc_token_compare(const void *p1, const void *p2)
 {
 	const struct cc **vp1 = (void *)p1;
 	const struct cc **vp2 = (void *)p2;

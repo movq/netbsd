@@ -1,4 +1,4 @@
-.\"	$NetBSD: wdc.4,v 1.7 2000/03/01 16:28:34 hubertf Exp $
+.\"	$NetBSD: wdc.4,v 1.17 2003/10/08 11:20:09 bouyer Exp $
 .\"
 .\" Copyright (c) 1998 Manuel Bouyer.
 .\"
@@ -12,25 +12,22 @@
 .\"    documentation and/or other materials provided with the distribution.
 .\" 3. All advertising materials mentioning features or use of this software
 .\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
-.\"    may be used to endorse or promote products derived from this software
-.\"    without specific prior written permission.
+.\"	This product includes software developed by Manuel Bouyer.
+.\" 4. The name of the author may not be used to endorse or promote products
+.\"    derived from this software without specific prior written permission.
 .\"
-.\" THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
-.\" ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-.\" IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-.\" ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
-.\" FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-.\" DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
-.\" OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-.\" HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-.\" LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
-.\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
-.\" SUCH DAMAGE.
+.\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+.\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+.\" OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+.\" IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+.\" INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+.\" NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+.\" DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+.\" THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+.\" INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+.\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd October 15, 1998
+.Dd October 8, 2003
 .Dt WDC 4
 .Os
 .Sh NAME
@@ -41,6 +38,8 @@
 .Cd "wdc0 at isa? port 0x1f0 irq 14 flags 0x00"
 .Cd "wdc1 at isa? port 0x170 irq 15 flags 0x00"
 .Cd "wdc* at isapnp?"
+.Ss Open Firmware ISA
+.Cd "wdc* at ofisa?"
 .Ss PCMCIA controllers
 .Cd "wdc* at pcmcia? function ?"
 .Ss arm32
@@ -52,21 +51,35 @@
 .Sh DESCRIPTION
 The
 .Nm
-driver provides the basic functions for the
-.Xr wd 4
-and
-.Xr atapi 4
-drivers. This driver supports IDE and EIDE controllers, as well as MFM, RLL
+driver provides the interface with the hardware for the
+.Xr ata 4
+driver. This driver supports IDE and EIDE controllers, as well as MFM, RLL
 and ESDI on the ISA bus. PCI IDE controllers in legacy mode are also supported,
 but the
 .Xr pciide 4
-driver may provide more functionalities.
+driver may provide more functionality.
 .Pp
-For the ISA front-end, the 0x01 flag enables the 32 bits I/O negociation in
-the driver. This is known to cause problems with some motherboards.
+On the ISA front-end, the following flags are supported:
+.Bl -tag -compact -width "0x0000" -offset "xxxx"
+.It 0x0001
+Enables 32-bit I/O negotiation in the driver. This is known to cause
+problems with some motherboards.
+.It 0x0002
+Don't probe for the second drive.
+.It 0x0004
+Set WDC_CAPABILITY_ATA_NOSTREAM flag.
+.It 0x0008
+Set WDC_CAPABILITY_ATAPI_NOSTREAM flag.
+.El
 .Sh SEE ALSO
+.Xr ata 4 ,
 .Xr atapi 4 ,
 .Xr intro 4 ,
+.Xr isa 4 ,
+.Xr isapnp 4 ,
+.Xr mainbus 4 ,
+.Xr ofisa 4 ,
 .Xr pciide 4 ,
+.Xr pcmcia 4 ,
 .Xr scsi 4 ,
 .Xr wd 4

@@ -1,4 +1,4 @@
-/*	$NetBSD: nohup.c,v 1.8 1997/12/23 18:21:34 ross Exp $	*/
+/*	$NetBSD: nohup.c,v 1.13 2008/07/21 14:19:24 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,16 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-    "@(#) Copyright (c) 1989 The Regents of the University of California.\n\
- All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)nohup.c	5.4 (Berkeley) 6/1/90";
 #endif
-__RCSID("$NetBSD: nohup.c,v 1.8 1997/12/23 18:21:34 ross Exp $");
+__RCSID("$NetBSD: nohup.c,v 1.13 2008/07/21 14:19:24 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -64,7 +59,7 @@ int main __P((int, char **));
 
 /* nohup shall exit with one of the following values:
    126 - The utility was found but could not be invoked.
-   127 - An error occured in the nohup utility, or the utility could
+   127 - An error occurred in the nohup utility, or the utility could
          not be found. */
 #define EXIT_NOEXEC	126
 #define EXIT_NOTFOUND	127
@@ -77,7 +72,13 @@ main(argc, argv)
 {
 	int exit_status;
 
-	if (argc < 2)
+	while (getopt(argc, argv, "") != -1) {
+		usage();
+	}
+	argc -= optind;
+	argv += optind;
+
+	if (argc < 1)
 		usage();
 
 	if (isatty(STDOUT_FILENO))
@@ -92,9 +93,9 @@ main(argc, argv)
 	   except that SIGHUP shall be ignored. */
 	(void)signal(SIGHUP, SIG_IGN);
 
-	execvp(argv[1], &argv[1]);
+	execvp(argv[0], &argv[0]);
 	exit_status = (errno == ENOENT) ? EXIT_NOTFOUND : EXIT_NOEXEC;
-	(void)fprintf(stderr, "nohup: %s: %s\n", argv[1], strerror(errno));
+	(void)fprintf(stderr, "nohup: %s: %s\n", argv[0], strerror(errno));
 	exit(exit_status);
 }
 
@@ -118,9 +119,9 @@ dofile()
 	if ((fd = open(p, O_RDWR|O_CREAT|O_APPEND, S_IRUSR|S_IWUSR)) >= 0)
 		goto dupit;
 	if ((p = getenv("HOME")) != NULL) {
-		(void)strcpy(path, p);
-		(void)strcat(path, "/");
-		(void)strcat(path, FILENAME);
+		(void)strlcpy(path, p, sizeof(path));
+		(void)strlcat(path, "/", sizeof(path));
+		(void)strlcat(path, FILENAME, sizeof(path));
 		if ((fd = open(p = path, O_RDWR|O_CREAT|O_APPEND, S_IRUSR|S_IWUSR)) >= 0)
 			goto dupit;
 	}
@@ -138,6 +139,6 @@ dupit:	(void)lseek(fd, 0L, SEEK_END);
 static void
 usage()
 {
-	(void)fprintf(stderr, "usage: nohup command\n");
+	(void)fprintf(stderr, "usage: nohup utility [argument ...]\n");
 	exit(EXIT_MISC);
 }

@@ -1,4 +1,4 @@
-.\"	$NetBSD: tr.4,v 1.5 2000/02/12 09:47:03 fair Exp $
+.\"	$NetBSD: tr.4,v 1.15 2008/04/30 13:10:54 martin Exp $
 .\"
 .\" Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,13 +37,15 @@
 .Cd "tr0 at isa? port 0xa20 iomem 0xd800 irq ?"
 .Cd "tr* at isa? port ? irq ?"
 .Cd "tr* at isapnp?"
+.Cd "tr* at mca? slot ?"
+.Cd "tr* at pcmcia? function ?"
 .Sh DESCRIPTION
 The
 .Nm
 device driver supports TROPIC I based shared-memory Token-Ring cards.
 .Sh HARDWARE
-Supported cards include the  following IBM and 3COM models:
-.pP
+Supported cards include the following IBM and 3Com models:
+.Pp
 .Bl -tag -width xxxx -offset indent
 .It IBM
 Token-Ring Network PC Adapter
@@ -63,18 +58,38 @@ Token-Ring Network 16/4 Adapter
 .It IBM
 Token-Ring Network 16/4 Adapter/A
 .It IBM
+Token-Ring 16/4 Credit Card Adapter
+.It IBM
+Token Ring Auto 16/4 Credit Card Adapter
+.It IBM
+Turbo 16/4 Token Ring PC Card
+.It IBM
 16/4 ISA Adapter
 .It IBM
 Auto 16/4 Token-Ring ISA Adapter
-.It 3COM
+.It IBM
+Token Ring 16/4 Credit Card Adapter
+.It IBM
+Token Ring Auto 16/4 Credit Card Adapter
+.It IBM
+Turbo 16/4 Token Ring PC Card
+.It 3Com
 3C619 TokenLink
-.It 3COM
+.It 3Com
 3C319 TokenLink Velocity
+.It 3Com
+3C389 TokenLink Velocity PC Card
 .El
-.Sh "SOURCE ROUTING"
+.Sh SOURCE ROUTING
 Setting IFF_LINK0 enables Token-Ring source routing.  Setting
 IFF_LINK1 uses all-routes broadcasts otherwise single-route broadcasts
 are used.
+.Sh NOTES
+The MCA attachment has been only tested on
+IBM Token Ring 16/4 Adapter/A so far.
+It doesn't support
+.Xr ifmedia 4
+yet, too.
 .\".Sh MEDIA SELECTION
 .\".Sh DIAGNOSTICS
 .Sh SEE ALSO
@@ -82,6 +97,8 @@ are used.
 .Xr intro 4 ,
 .Xr isa 4 ,
 .Xr isapnp 4 ,
+.Xr mca 4 ,
+.Xr pcmcia 4 ,
 .Xr ifconfig 8
 .Sh HISTORY
 The
@@ -89,3 +106,7 @@ The
 driver
 appeared in
 .Nx 1.4 .
+.Sh BUGS
+The PCMCIA attachment does not work with the
+.Xr cbb 4
+CardBus driver.

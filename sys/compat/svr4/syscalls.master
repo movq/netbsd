@@ -1,4 +1,4 @@
-	$NetBSD: syscalls.master,v 1.44 1999/09/07 06:24:56 christos Exp $
+	$NetBSD: syscalls.master,v 1.58 2008/06/18 02:08:36 dogcow Exp $
 
 ;	@(#)syscalls.master	8.1 (Berkeley) 7/19/93
 
@@ -31,13 +31,17 @@
 ; #ifdef's, etc. may be included, and are copied to the output files.
 ; #include's are copied to the syscall names and switch definition files only.
 
+#if defined(_KERNEL_OPT)
+#include "opt_ntp.h"
 #include "opt_sysv.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/signal.h>
 #include <sys/mount.h>
 #include <sys/poll.h>
+#include <sys/sched.h>
 #include <sys/syscallargs.h>
 
 #include <compat/svr4/svr4_types.h>
@@ -49,6 +53,8 @@
 #include <compat/svr4/svr4_statvfs.h>
 #include <compat/svr4/svr4_resource.h>
 #include <compat/svr4/svr4_acl.h>
+#include <compat/svr4/svr4_schedctl.h>
+%%
 
 0	NOARGS		{ int sys_nosys(void); } syscall
 1	NOARGS		{ int sys_exit(int rval); }
@@ -70,16 +76,16 @@
 15	NOARGS		{ int sys_chmod(char *path, int mode); }
 16	NOARGS		{ int sys___posix_chown(char *path, int uid, \
 			    int gid); } chown
-17	STD		{ int svr4_sys_break(caddr_t nsize); }
+17	STD		{ int svr4_sys_break(void *nsize); }
 18	STD		{ int svr4_sys_stat(const char* path, \
 			    struct svr4_stat* ub); }
 19	NOARGS		{ long compat_43_sys_lseek(int fd, long offset, \
 			    int whence); }
-20	NOARGS		{ pid_t sys_getpid(void); }
+20	NOARGS 		{ pid_t sys_getpid(void); }
 21	UNIMPL		old_mount
 22	UNIMPL		System V umount
 23	NOARGS		{ int sys_setuid(uid_t uid); }
-24	NOARGS		{ uid_t sys_getuid(void); }
+24	NOARGS		{ uid_t sys_getuid_with_euid(void); }
 25	UNIMPL		stime
 26	UNIMPL		ptrace
 27	STD		{ int svr4_sys_alarm(unsigned sec); }
@@ -103,7 +109,7 @@
 44	UNIMPL		profil
 45	UNIMPL		plock
 46	NOARGS		{ int sys_setgid(gid_t gid); }
-47	NOARGS		{ gid_t sys_getgid(void); }
+47	NOARGS		{ gid_t sys_getgid_with_egid(void); }
 48	STD		{ int svr4_sys_signal(int signum, svr4_sig_t handler); }
 #ifdef SYSVMSG
 49	STD		{ int svr4_sys_msgsys(int what, int a2, int a3, \
@@ -126,7 +132,7 @@
 53	UNIMPL		semsys
 #endif
 54	STD		{ int svr4_sys_ioctl(int fd, u_long com, \
-			    caddr_t data); }
+			    void *data); }
 55	UNIMPL		uadmin
 56	UNIMPL		exch
 57	STD		{ int svr4_sys_utssys(void *a1, void *a2, int sel, \
@@ -216,7 +222,8 @@
 118	STD		{ int svr4_sys_fpathconf(int fd, int name); }
 119	NOARGS		{ int sys_vfork(void); }
 120	NOARGS		{ int sys_fchdir(int fd); }
-121	NOARGS		{ int sys_readv(int fd, struct iovec *iovp, u_int iovcnt); }
+121	NOARGS		{ int sys_readv(int fd, struct iovec *iovp, \
+			    u_int iovcnt); }
 122	NOARGS		{ int sys_writev(int fd, struct iovec *iovp, \
 			    u_int iovcnt); }
 123	STD		{ int svr4_sys_xstat(int two, const char *path, \
@@ -234,8 +241,8 @@
 			    struct svr4_rlimit *rlp); }
 130	NOARGS		{ int sys___posix_lchown(char *path, int uid, \
 			    int gid); } lchown
-131	STD		{ int svr4_sys_memcntl(void * addr, \
-			    svr4_size_t len, int cmd, void * arg, \
+131	STD		{ int svr4_sys_memcntl(void *addr, \
+			    svr4_size_t len, int cmd, void *arg, \
 			    int attr, int mask); }
 132	UNIMPL		getpmsg
 133	UNIMPL		putpmsg
@@ -328,7 +335,7 @@
 203	NOARGS		{ int sys_setregid(int rgid, int egid); }
 204	UNIMPL		install_utrap
 205	UNIMPL		signotify
-206	UNIMPL		schedctl
+206	STD		{ int svr4_sys_schedctl(unsigned int x, int y, void **z); }
 207	UNIMPL		pset
 208	UNIMPL
 209	STD		{ int svr4_sys_resolvepath(const char *path, \
@@ -379,14 +386,14 @@
 235	NOARGS		{ int sys_connect(int s, const struct sockaddr *name, \
 			    int namelen); }
 236	NOARGS		{ int sys_shutdown(int s, int how); }
-237	NOARGS		{ int compat_43_sys_recv(int s, caddr_t buf, int len, \
+237	NOARGS		{ int compat_43_sys_recv(int s, void *buf, int len, \
 			    int flags); }
 238	NOARGS		{ ssize_t compat_43_sys_recvfrom(int s, void *buf, \
 			    size_t len, int flags, struct sockaddr *from, \
 			    int *fromlenaddr); }
 239	NOARGS		{ ssize_t compat_43_sys_recvmsg(int s, \
 			    struct msghdr *msg, int flags); }
-240	NOARGS		{ int compat_43_sys_send(int s, caddr_t buf, int len, \
+240	NOARGS		{ int compat_43_sys_send(int s, void *buf, int len, \
 			    int flags); }
 241	NOARGS		{ ssize_t compat_43_sys_sendmsg(int s, \
 			    const struct msghdr *msg, int flags); }
@@ -402,5 +409,15 @@
 246	NOARGS		{ int sys_setsockopt(int s, int level, int name, \
 			    const void *val, int valsize); }
 247	UNIMPL		sockconfig
-248	NOARGS		{ int sys_ntp_gettime(struct ntptimeval *ntvp); }
+248	UNIMPL		{ int sys_ntp_gettime(struct ntptimeval *ntvp); }
+#if defined(NTP) || !defined(_KERNEL)
 249	NOARGS		{ int sys_ntp_adjtime(struct timex *tp); }
+#else
+249	EXCL		ntp_adjtime
+#endif
+250	UNIMPL		lwp_mutex_unlock
+251	UNIMPL		lwp_mutex_trylock
+252	UNIMPL		lwp_mutex_init
+253	UNIMPL		cladm
+254	UNIMPL		lwp_sigtimedwait
+255	UNIMPL		umount2

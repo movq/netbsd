@@ -1,4 +1,4 @@
-/*	$NetBSD: gsp_sym.c,v 1.5 1998/08/27 20:31:01 ross Exp $	*/
+/*	$NetBSD: gsp_sym.c,v 1.8 2006/08/26 18:15:37 christos Exp $	*/
 /*
  * GSP assembler - symbol table
  *
@@ -17,7 +17,7 @@
  *    must display the following acknowledgement:
  *      This product includes software developed by Paul Mackerras.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,11 +33,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: gsp_sym.c,v 1.5 1998/08/27 20:31:01 ross Exp $");
+__RCSID("$NetBSD: gsp_sym.c,v 1.8 2006/08/26 18:15:37 christos Exp $");
 #endif
 
 #include <stdio.h>
 #include <string.h>
+#include <util.h>
 #include "gsp_ass.h"
 
 #define NHASH	64		/* must be power of 2 */
@@ -64,7 +65,7 @@ lookup(char *id, bool makeit)
 			break;
 	if( !makeit )
 		return NULL;
-	ptr = (symbol) alloc (sizeof(struct symbol) + strlen(id));
+	ptr = emalloc(sizeof(struct symbol) + strlen(id));
 	ptr->ndefn = 0;
 	ptr->flags = 0;
 	ptr->value = 0;

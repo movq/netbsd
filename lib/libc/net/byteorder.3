@@ -1,4 +1,4 @@
-.\"	$NetBSD: byteorder.3,v 1.6 1999/03/22 19:44:49 garbled Exp $
+.\"	$NetBSD: byteorder.3,v 1.14 2006/02/04 22:47:28 uwe Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     @(#)byteorder.3	8.1 (Berkeley) 6/4/93
 .\"
-.Dd June 4, 1993
+.Dd June 10, 2004
 .Dt BYTEORDER 3
 .Os
 .Sh NAME
@@ -45,29 +41,22 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
-.Ft in_addr_t
-.Fn htonl "in_addr_t host32"
-.Ft in_port_t
-.Fn htons "in_port_t host16"
-.Ft in_addr_t
-.Fn ntohl "in_addr_t net32"
-.Ft in_port_t
-.Fn ntohs "in_port_t net16"
+.In arpa/inet.h
+.Ft uint32_t
+.Fn htonl "uint32_t host32"
+.Ft uint16_t
+.Fn htons "uint16_t host16"
+.Ft uint32_t
+.Fn ntohl "uint32_t net32"
+.Ft uint16_t
+.Fn ntohs "uint16_t net16"
 .Sh DESCRIPTION
 These routines convert 16 and 32 bit quantities between network
-byte order and host byte order. The types
-.Ft in_addr_t
-and
-.Ft in_port_t
-are defined by X/Open as:
-.Bd -literal -offset indent
-typedef u_int32_t in_addr_t;
-typedef u_int16_t in_port_t;
-.Ed
+byte order and host byte order.
 .Pp
 On machines which have a byte order which is the same as the network
-order, routines are defined as null macros.
+order, these routines are defined as macros that expand to the value of
+their argument.
 .Pp
 These routines are most often used in conjunction with Internet
 addresses and ports as returned by
@@ -77,16 +66,26 @@ and
 .Sh SEE ALSO
 .Xr gethostbyname 3 ,
 .Xr getservent 3
+.Sh STANDARDS
+The
+.Fn htonl ,
+.Fn htons ,
+.Fn ntohl ,
+and
+.Fn ntohs
+functions conform to
+.St -p1003.1-2001 .
+Their use of the fixed-width integer types
+.Fa uint16_t
+and
+.Fa uint32_t
+first appeared in
+.St -xns5 .
 .Sh HISTORY
 The
 .Nm byteorder
-functions appeared in 
+functions appeared in
 .Bx 4.2 .
 .Sh BUGS
-On the
-.Tn VAX
-bytes are handled backwards from most everyone else in
-the world.  This is not expected to be fixed in the near future.
-.Pp
 The `l' and `s' suffixes in the names are not meaningful in machines
 where long integers are not 32 bits.

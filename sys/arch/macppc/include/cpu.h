@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.10 1999/10/13 03:27:47 tsubai Exp $	*/
+/*	$NetBSD: cpu.h,v 1.18 2001/08/26 02:47:37 matt Exp $	*/
 
 /*
  * Copyright (C) 1995-1997 Wolfgang Solfrank.
@@ -33,34 +33,10 @@
 #ifndef	_MACHINE_CPU_H_
 #define	_MACHINE_CPU_H_
 
-#include <machine/frame.h>
-#include <machine/psl.h>
-#include <machine/intr.h>
-
-#define	CLKF_USERMODE(frame)	(((frame)->srr1 & PSL_PR) != 0)
-#define	CLKF_BASEPRI(frame)	((frame)->pri == 0)
-#define	CLKF_PC(frame)		((frame)->srr0)
-#define	CLKF_INTR(frame)	((frame)->depth > 0)
-
-#define	cpu_swapout(p)
-#define cpu_wait(p)
-#define	cpu_number()		0
-
-extern void delay __P((unsigned));
-#define	DELAY(n)		delay(n)
-
-extern __volatile int want_resched;
-extern __volatile int astpending;
-
-#define	need_resched()		(want_resched = 1, astpending = 1)
-#define	need_proftick(p)	((p)->p_flag |= P_OWEUPC, astpending = 1)
-#define	signotify(p)		(astpending = 1)
-
+#if defined(_KERNEL)
+#define	CPU_MAXNUM	2
 extern char bootpath[];
-
-#if defined(_KERNEL) || defined(_STANDALONE)
-#define	CACHELINESIZE	32
-#endif
+#endif /* _KERNEL */
 
 #include <powerpc/cpu.h>
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: glob.3,v 1.15 1998/06/19 22:53:57 kleink Exp $
+.\"	$NetBSD: glob.3,v 1.32 2008/02/22 18:33:51 christos Exp $
 .\"
 .\" Copyright (c) 1989, 1991, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -13,11 +13,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -35,7 +31,7 @@
 .\"
 .\"     @(#)glob.3	8.3 (Berkeley) 4/16/94
 .\"
-.Dd March 31, 1998
+.Dd February 22, 2008
 .Dt GLOB 3
 .Os
 .Sh NAME
@@ -45,9 +41,9 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <glob.h>
+.In glob.h
 .Ft int
-.Fn glob "const char *pattern" "int flags" "const int (*errfunc)(const char *, int)" "glob_t *pglob"
+.Fn glob "const char * restrict pattern" "int flags" "const int (*errfunc)(const char *, int)" "glob_t * restrict pglob"
 .Ft void
 .Fn globfree "glob_t *pglob"
 .Sh DESCRIPTION
@@ -64,9 +60,9 @@ defines the structure type
 which contains at least the following fields:
 .Bd -literal
 typedef struct {
-	int gl_pathc;		/* count of total paths so far */
-	int gl_matchc;		/* count of paths matching pattern */
-	int gl_offs;		/* reserved at beginning of gl_pathv */
+	size_t gl_pathc;	/* count of total paths so far */
+	size_t gl_matchc;	/* count of paths matching pattern */
+	size_t gl_offs;		/* reserved at beginning of gl_pathv */
 	int gl_flags;		/* returned flags */
 	char **gl_pathv;	/* list of paths matching pattern */
 } glob_t;
@@ -87,9 +83,9 @@ and read permission on each directory of any filename component of
 .Fa pattern
 that contains any of the special characters
 .Ql * ,
-.Ql ?
+.Ql \&?
 or
-.Ql [ .
+.Ql \&[ .
 .Pp
 The
 .Fn glob
@@ -186,7 +182,7 @@ does not match any pathname, then
 returns a list
 consisting of only
 .Fa pattern ,
-with the number of total pathnames is set to 1, and the number of matched
+with the number of total pathnames set to 1, and the number of matched
 pathnames set to 0.
 .It Dv GLOB_NOSORT
 By default, the pathnames are sorted in ascending
@@ -256,6 +252,23 @@ character for quoting.
 Expand patterns that start with
 .Ql ~
 to user name home directories.
+.It Dv GLOB_LIMIT
+Limit the amount of memory used by matches to
+.Li ARG_MAX .
+This option should be set for programs that can be coerced to a denial of
+service attack via patterns that expand to a very large number of matches,
+such as a long string of
+.Li */../*/..
+.It Dv GLOB_PERIOD
+Allow metacharacters to match a leading period in a filename.
+.It Dv GLOB_NO_DOTDIRS
+Hide
+.Sq Li \&.
+and
+.Sq Li \&..
+from metacharacter matches, regardless of whether
+.Dv GLOB_PERIOD
+is set and whether the pattern component begins with a literal period.
 .El
 .Pp
 If, during the search, a directory is encountered that cannot be opened
@@ -384,22 +397,29 @@ returned non-zero.
 .It Dv GLOB_NOMATCH
 The pattern does not match any existing pathname, and
 .Dv GLOB_NOCHECK
-was not set int
+was not set in
 .Dv flags .
 .It Dv GLOB_NOSPACE
-An attempt to allocate memory failed.
+An attempt to allocate memory failed, or if
+.Va errno
+was 0
+.Li GLOB_LIMIT
+was specified in the flags and
+.Li ARG_MAX
+patterns were matched.
 .El
 .Pp
 The historical
 .Dv GLOB_ABEND
-return constant is no longer supported.  Portable applications should use the
+return constant is no longer supported.
+Portable applications should use the
 .Dv GLOB_ABORTED
 constant instead.
 .Pp
 The arguments
-.Fa pglob\->gl_pathc
+.Fa pglob\-\*[Gt]gl_pathc
 and
-.Fa pglob\->gl_pathv
+.Fa pglob\-\*[Gt]gl_pathv
 are still set as specified above.
 .Sh ENVIRONMENT
 .Bl -tag -width HOME -compact
@@ -407,7 +427,7 @@ are still set as specified above.
 If defined, used as the home directory of the current user in
 tilde expansions.
 .El
-.Sh EXAMPLE
+.Sh EXAMPLES
 A rough equivalent of
 .Ql "ls -l *.c *.h"
 can be obtained with the
@@ -416,8 +436,8 @@ following code:
 glob_t g;
 
 g.gl_offs = 2;
-glob("*.c", GLOB_DOOFFS, NULL, &g);
-glob("*.h", GLOB_DOOFFS | GLOB_APPEND, NULL, &g);
+glob("*.c", GLOB_DOOFFS, NULL, \*[Am]g);
+glob("*.h", GLOB_DOOFFS | GLOB_APPEND, NULL, \*[Am]g);
 g.gl_pathv[0] = "ls";
 g.gl_pathv[1] = "-l";
 execvp("ls", g.gl_pathv);
@@ -433,12 +453,13 @@ function is expected to be
 .St -p1003.2
 compatible with the exception
 that the flags
-.Dv GLOB_ALTDIRFUNC,
-.Dv GLOB_BRACE
-.Dv GLOB_MAGCHAR,
-.Dv GLOB_NOMAGIC,
+.Dv GLOB_ALTDIRFUNC ,
+.Dv GLOB_BRACE ,
+.Dv GLOB_MAGCHAR ,
+.Dv GLOB_NOMAGIC ,
+.Dv GLOB_TILDE ,
 and
-.Dv GLOB_TILDE,
+.Dv GLOB_LIMIT
 and the fields
 .Fa gl_matchc
 and

@@ -1,4 +1,4 @@
-/*	$NetBSD: cnwctl.c,v 1.5 1999/12/01 03:40:51 sommerfeld Exp $	*/
+/*	$NetBSD: cnwctl.c,v 1.7 2008/05/02 19:59:19 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1997 Berkeley Software Design, Inc.
@@ -60,7 +60,8 @@ int
 main(int argc, char **argv)
 {
 	int c, domain, i, key, rate, sflag, Sflag, skt;
-	char *e, *interface;
+	const char *interface;
+	char *e;
 	struct ifreq ifr;
         struct cnwistats cnwis, onwis;
         struct cnwstatus cnws;
@@ -72,7 +73,7 @@ main(int argc, char **argv)
 	rate = 0;
 	interface = "cnw0";
 
-	while ((c = getopt(argc, argv, "d:i:k:sS")) != EOF)
+	while ((c = getopt(argc, argv, "d:i:k:sS")) != -1)
 		switch (c) {
 		case 'd':
 			domain = strtol(optarg, &e, 0);

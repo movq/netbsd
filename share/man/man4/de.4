@@ -1,4 +1,4 @@
-.\"	$NetBSD: de.4,v 1.3 2000/02/11 12:38:24 fair Exp $
+.\"	$NetBSD: de.4,v 1.9 2003/06/26 10:23:59 wiz Exp $
 .Dd February 11, 2000
 .Dt DE 4
 .Os
@@ -29,22 +29,22 @@ interfaces based on the Digital Equipment Corporation
 .Tn PCI
 bus.
 .Pp
-.Bl -hang -tag -compact
+.Bl -hang -compact
 .It 21040
-10base-T and AUI/BNC
+10BASE-T and AUI/BNC
 .It 21140
-10base-T and 100base-TX
+10BASE-T and 100BASE-TX
 .It 21141
-10base-T and 100base-TX
+10BASE-T and 100BASE-TX
 .It 21142
-10base-T and 100base-TX
+10BASE-T and 100BASE-TX
 .It 21143
-10base-T and 100base-TX
+10BASE-T and 100BASE-TX
 .El
 .Pp
 Supported Network Interface Cards (NIC) include, but are not limited to:
 .Pp
-.Bl -hang -tag -compact
+.Bl -hang -compact
 .It Tn Accton EN1207i
 .It Tn Cogent EM100
 .It Tn Asante AsanteFAST
@@ -62,7 +62,8 @@ bus, and the major controller chip has the
 logo on it, with one of the model numbers above, the
 .Nm
 driver should recognize and control it.
-Beware, however, that many NIC manufacturers change the ethernet
+Beware, however, that many NIC manufacturers change the
+.Tn Ethernet
 controller chip without changing the product model number, and
 a physical inspection of the NIC, or a probe of the NIC with a
 .Tn PCI
@@ -102,22 +103,23 @@ driver for the
 .Tn Ethernet
 controller for
 .Tn UniBus .
-.Sh "SEE ALSO"
-.Xr intro 4 ,
+.Sh SEE ALSO
 .Xr ifmedia 4 ,
+.Xr intro 4 ,
 .Xr mii 4 ,
 .Xr pci 4 ,
 .Xr tlp 4 ,
-.Xr ifconfig 8 
-.Pa http://www.adaptec.com/
-.Pa http://www.asante.com/
-.Pa http://www.smc.com/
+.Xr ifconfig 8
+.Pp
+.Pa http://www.adaptec.com/ ,
+.Pa http://www.asante.com/ ,
+.Pa http://www.smc.com/ ,
 .Pa http://www.znyx.com/
 .Sh HISTORY
 The
 .Nm
 driver first appeared in
 .Nx 1.1
-.Sh AUTHOR
+.Sh AUTHORS
 Matt Thomas
-.Aq matt@3am-software.com
+.Aq matt@3am-software.com .

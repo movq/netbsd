@@ -1,4 +1,4 @@
-/*	$NetBSD: reboot.c,v 1.25 2000/03/07 20:02:59 jdolecek Exp $	*/
+/*	$NetBSD: reboot.c,v 1.36 2008/07/20 01:20:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,15 +32,15 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1986, 1993\n"
-"	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1986, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)reboot.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: reboot.c,v 1.25 2000/03/07 20:02:59 jdolecek Exp $");
+__RCSID("$NetBSD: reboot.c,v 1.36 2008/07/20 01:20:23 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -61,27 +57,31 @@ __RCSID("$NetBSD: reboot.c,v 1.25 2000/03/07 20:02:59 jdolecek Exp $");
 #include <unistd.h>
 #include <util.h>
 
-int main __P((int, char *[]));
-void usage __P((void));
-
-extern char *__progname;
+int main(int, char *[]);
+void usage(void);
 
 int dohalt;
+int dopoweroff;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
+	const char *progname;
 	int i;
 	struct passwd *pw;
 	int ch, howto, lflag, nflag, qflag, sverrno, len;
 	const char *user;
 	char *bootstr, **av;
 
-	if (!strcmp(__progname, "halt") || !strcmp(__progname, "-halt")) {
+	progname = getprogname();
+	if (progname[0] == '-')
+		progname++;
+	if (strcmp(progname, "halt") == 0) {
 		dohalt = 1;
 		howto = RB_HALT;
+	} else if (strcmp(progname, "poweroff") == 0) {
+		dopoweroff = 1;
+		howto = RB_HALT | RB_POWERDOWN;
 	} else
 		howto = 0;
 	lflag = nflag = qflag = 0;
@@ -121,7 +121,7 @@ main(argc, argv)
 			strcat(bootstr, *av);
 			strcat(bootstr, " ");
 		}
-		bootstr[len] = '\0';		/* to kill last space */
+		bootstr[len - 1] = '\0';	/* to kill last space */
 		howto |= RB_STRING;
 	} else
 		bootstr = NULL;
@@ -140,10 +140,13 @@ main(argc, argv)
 			user = (pw = getpwuid(getuid())) ?
 			    pw->pw_name : "???";
 		if (dohalt) {
-			openlog("halt", 0, LOG_AUTH | LOG_CONS);
+			openlog("halt", LOG_CONS, LOG_AUTH);
 			syslog(LOG_CRIT, "halted by %s", user);
+		} else if (dopoweroff) {
+			openlog("poweroff", LOG_CONS, LOG_AUTH);
+			syslog(LOG_CRIT, "powered off by %s", user);
 		} else {
-			openlog("reboot", 0, LOG_AUTH | LOG_CONS);
+			openlog("reboot", LOG_CONS, LOG_AUTH);
 			if (bootstr)
 				syslog(LOG_CRIT, "rebooted by %s: %s", user,
 				    bootstr);
@@ -151,7 +154,12 @@ main(argc, argv)
 				syslog(LOG_CRIT, "rebooted by %s", user);
 		}
 	}
+#ifdef SUPPORT_UTMP
 	logwtmp("~", "shutdown", "");
+#endif
+#ifdef SUPPORT_UTMPX
+	logwtmpx("~", "shutdown", "", INIT_PROCESS, 0);
+#endif
 
 	/*
 	 * Do a sync early on, so disks start transfers while we're off
@@ -161,10 +169,6 @@ main(argc, argv)
 	if (!nflag)
 		sync();
 
-	/* Just stop init -- if we fail, we'll restart it. */
-	if (kill(1, SIGTSTP) == -1)
-		err(1, "SIGTSTP init");
-
 	/* 
 	 * Ignore signals that we can get as a result of killing
 	 * parents, group leaders, etc.
@@ -173,10 +177,17 @@ main(argc, argv)
 	(void)signal(SIGINT,  SIG_IGN);
 	(void)signal(SIGQUIT, SIG_IGN);
 	(void)signal(SIGTERM, SIG_IGN);
+	(void)signal(SIGTSTP, SIG_IGN);
 
-	/* If we're running in a pipeline, we don't want to die
-	 * after killing whatever we're writing to. */
+	/*
+	 * If we're running in a pipeline, we don't want to die
+	 * after killing whatever we're writing to.
+	 */
 	(void)signal(SIGPIPE, SIG_IGN);
+
+	/* Just stop init -- if we fail, we'll restart it. */
+	if (kill(1, SIGTSTP) == -1)
+		err(1, "SIGTSTP init");
 
 	/* Send a SIGTERM first, a chance to save the buffers. */
 	if (kill(-1, SIGTERM) == -1) {
@@ -186,7 +197,7 @@ main(argc, argv)
 		 * single-user mode.
 		 */
 		if (errno != ESRCH) {
-			warn("SIGTERM processes");
+			warn("SIGTERM all processes");
 			goto restart;
 		}
 	}
@@ -205,6 +216,7 @@ main(argc, argv)
 		if (kill(-1, SIGKILL) == -1) {
 			if (errno == ESRCH)
 				break;
+			warn("SIGKILL all processes");
 			goto restart;
 		}
 		if (i > 5) {
@@ -215,6 +227,7 @@ main(argc, argv)
 	}
 
 	reboot(howto, bootstr);
+	warn("reboot()");
 	/* FALLTHROUGH */
 
 restart:
@@ -225,11 +238,11 @@ restart:
 }
 
 void
-usage()
+usage(void)
 {
 	const char *pflag = dohalt ? "p" : "";
 
 	(void)fprintf(stderr, "usage: %s [-dln%sq] [-- <boot string>]\n",
-	    __progname, pflag);
+	    getprogname(), pflag);
 	exit(1);
 }

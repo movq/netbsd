@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.7 1999/12/07 18:42:06 wennmach Exp $	*/
+/*	$NetBSD: extern.h,v 1.30 2006/12/14 20:09:36 he Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,18 +33,48 @@
 
 #include "mtree.h"
 
-#ifdef __APPLE__
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#else 
+#define HAVE_STRUCT_STAT_ST_FLAGS 1
+#endif
+ 
+#include <err.h> 
 #include <fts.h>
+#include <util.h>
+
+#if HAVE_NETDB_H
+/* For MAXHOSTNAMELEN on some platforms. */
+#include <netdb.h>
 #endif
 
-int	 compare __P((char *, NODE *, FTSENT *));
-int	 crc __P((int, u_int32_t *, u_int32_t *));
-void	 cwalk __P((void));
-void	 mtree_err __P((const char *, ...));
-char	*inotype __P((u_int));
-u_int	 parsekey __P((char *, int *));
-char	*rlink __P((char *));
-NODE	*spec __P((void));
-int	 verify __P((void));
+#ifndef MAXHOSTNAMELEN
+#define MAXHOSTNAMELEN 256
+#endif
 
-#include "stat_flags.h"
+void	 addtag(slist_t *, char *);
+int	 check_excludes(const char *, const char *);
+int	 compare(NODE *, FTSENT *);
+int	 crc(int, u_int32_t *, u_int32_t *);
+void	 cwalk(void);
+void	 dump_nodes(const char *, NODE *, int);
+void	 init_excludes(void);
+int	 matchtags(NODE *);
+void	 mtree_err(const char *, ...)
+	    __attribute__((__format__(__printf__, 1, 2)));
+const char *nodetype(u_int);
+u_int	 parsekey(const char *, int *);
+void	 parsetags(slist_t *, char *);
+u_int	 parsetype(const char *);
+void	 read_excludes_file(const char *);
+const char *rlink(const char *);
+int	 verify(void);
+
+extern int	dflag, eflag, iflag, lflag, mflag, rflag, sflag, tflag, uflag;
+extern int	mtree_Mflag, mtree_Wflag;
+extern size_t	mtree_lineno;
+extern u_int32_t crc_total;
+extern int	ftsoptions, keys;
+extern char	fullpath[];
+extern slist_t	includetags, excludetags;
+

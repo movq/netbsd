@@ -1,4 +1,4 @@
-.\"	$NetBSD: tty.4,v 1.10 2000/03/23 19:48:29 mycroft Exp $
+.\"	$NetBSD: tty.4,v 1.25 2008/02/22 22:03:33 reed Exp $
 .\"
 .\" Copyright (c) 1991, 1992, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,41 +29,50 @@
 .\"
 .\"     @(#)tty.4	8.3 (Berkeley) 4/19/94
 .\"
-.Dd August 14, 1992
+.Dd October 7, 2006
 .Dt TTY 4
 .Os
 .Sh NAME
 .Nm tty
 .Nd general terminal interface
 .Sh SYNOPSIS
-.Fd #include <sys/ioctl.h>
+.In sys/ioctl.h
 .Sh DESCRIPTION
 This section describes the interface to the terminal drivers
 in the system.
 .Ss Terminal Special Files
 Each hardware terminal port on the system usually has two terminal special
-device files associated with it in the directory ``/dev/'' (for
-example, ``/dev/tty03'' and ``/dev/dty03'').
+device files associated with it in the directory
+.Pa /dev/
+(for example,
+.Pa /dev/tty03
+and
+.Pa /dev/dty03 ) .
 .Pp
-The ``/dev/ttyXX'' special file is used for dialin modems and terminals.
+The
+.Pa /dev/ttyXX
+special file is used for dial-in modems and terminals.
 When a user logs into
 the system on one of these hardware terminal ports, the system has already
 opened the associated device and prepared the line for normal interactive
 use (see
-.Xr getty 8 .)
+.Xr getty 8 ) .
 .Pp
-The ``/dev/dtyXX'' special file is a SunOS-compatible dialout device.  Unlike
-the dialin device, opening the dialout device never blocks.  If the
-corresponding dialin device is already opened (not blocked in the open waiting
-for carrier), then the dialout open will fail immediately; otherwise it will
-succeed immediately.  While the dialout device is open, the dialin device may
-not be opened.  If the dialin open is blocking, it will wait until the dialout
+The
+.Pa /dev/dtyXX
+special file is a SunOS-compatible dial-out device.  Unlike
+the dial-in device, opening the dial-out device never blocks.  If the
+corresponding dial-in device is already opened (not blocked in the open waiting
+for carrier), then the dial-out open will fail immediately; otherwise it will
+succeed immediately.  While the dial-out device is open, the dial-in device may
+not be opened.  If the dial-in open is blocking, it will wait until the dial-out
 device is closed (and carrier is detected); otherwise it will fail immediately.
 .Pp
 There is also a special case of a terminal file that connects not to
 a hardware terminal port, but to another program on the other side.
 These special terminal devices are called
 .Em ptys
+(pseudo terminals)
 and provide the mechanism necessary to give users the same interface to the
 system when logging in over a network (using
 .Xr rlogin 1 ,
@@ -85,7 +90,7 @@ these terminal special files (see
 .Pp
 When an interactive user logs in, the system prepares the line to
 behave in a certain way (called a
-.Em "line discipline" ) ,
+.Em line discipline ) ,
 the particular details of which is described in
 .Xr stty 1
 at the command level, and in
@@ -102,18 +107,18 @@ A terminal file is used like any other file in the system in that
 it can be opened, read, and written to using standard system
 calls.  For each existing terminal file, there is a software processing module
 called a
-.Em "line discipline"
-is associated with it.  The
-.Em "line discipline"
+.Em line discipline
+associated with it.  The
+.Em line discipline
 essentially glues the low level device driver code with the high
 level generic interface routines (such as
 .Xr read 2
 and
-.Xr write 2 ),
+.Xr write 2 ) ,
 and is responsible for implementing the semantics associated
 with the device.  When a terminal file is first opened by a program,
 the default
-.Em "line discipline"
+.Em line discipline
 called the
 .Dv termios
 line discipline is associated with the file.  This is the primary
@@ -128,7 +133,7 @@ semantics.
 The operations described here
 generally represent features common
 across all
-.Em "line disciplines" ,
+.Em line disciplines ,
 however some of these calls may not
 make sense in conjunction with a line discipline other than
 .Dv termios ,
@@ -158,41 +163,22 @@ name of the request, a description of its purpose, and the typed
 parameter (if any)
 are listed.  For example, the first entry says
 .Pp
-.D1 Em "TIOCSETD int *ldisc"
+.D1 Em TIOCSLINED char name[32]
 .Pp
 and would be called on the terminal associated with
 file descriptor zero by the following code fragment:
 .Bd -literal
-	int ldisc;
-
-	ldisc = TTYDISC;
-	ioctl(0, TIOCSETD, &ldisc);
+	ioctl(0, TIOCSLINED, "termios");
 .Ed
 .Ss Terminal File Request Descriptions
 .Bl -tag -width TIOCGWINSZ
-.It Dv TIOCSETD Fa int *ldisc
-Change to the new line discipline pointed to by
-.Fa ldisc .
-The available line disciplines are listed in
-.Pa Aq sys/ttycom.h
-and currently are:
+.It Dv TIOCSLINED Fa char name[32]
+Change to the new line discipline called
+.Fa name .
 .Pp
-.Bl -tag -width TIOCGWINSZ -compact
-.It TTYDISC
-Termios interactive line discipline.
-.It TABLDISC
-Tablet line discipline.
-.It SLIPDISC
-Serial IP line discipline.
-.It PPPDISC
-Point to Point Protocol line discipline.
-.It STRIPDISC
-Starmode Radio IP line discipline.
-.El
-.Pp
-.It Dv TIOCGETD Fa int *ldisc
-Return the current line discipline in the integer pointed to by
-.Fa ldisc .
+.It Dv TIOCGLINED Fa char name[32]
+Return the current line discipline in the string pointed to by
+.Fa name .
 .It Dv TIOCSBRK Fa void
 Set the terminal hardware into BREAK condition.
 .It Dv TIOCCBRK Fa void
@@ -206,29 +192,25 @@ Return the current process group the terminal is associated
 with in the integer pointed to by
 .Fa tpgrp .
 This is the underlying call that implements the
-.Xr termios 4
-.Fn tcgetattr
+.Xr tcgetpgrp 3
 call.
 .It Dv TIOCSPGRP Fa int *tpgrp
 Associate the terminal with the process group (as an integer) pointed to by
 .Fa tpgrp .
 This is the underlying call that implements the
-.Xr termios 4
-.Fn tcsetattr
+.Xr tcsetpgrp 3
 call.
 .It Dv TIOCGETA Fa struct termios *term
 Place the current value of the termios state associated with the
 device in the termios structure pointed to by
 .Fa term .
 This is the underlying call that implements the
-.Xr termios 4
-.Fn tcgetattr
+.Xr tcgetattr 3
 call.
 .It Dv TIOCSETA Fa struct termios *term
 Set the termios state associated with the device immediately.
 This is the underlying call that implements the
-.Xr termios 4
-.Fn tcsetattr
+.Xr tcsetattr 3
 call with the
 .Dv TCSANOW
 option.
@@ -236,8 +218,7 @@ option.
 First wait for any output to complete, then set the termios state
 associated with the device.
 This is the underlying call that implements the
-.Xr termios 4
-.Fn tcsetattr
+.Xr tcsetattr 3
 call with the
 .Dv TCSADRAIN
 option.
@@ -245,8 +226,7 @@ option.
 First wait for any output to complete, clear any pending input,
 then set the termios state associated with the device.
 This is the underlying call that implements the
-.Xr termios 4
-.Fn tcsetattr
+.Xr tcsetattr 3
 call with the
 .Dv TCSAFLUSH
 option.
@@ -313,7 +293,7 @@ If the value of the int pointed to by
 contains the
 .Dv FREAD
 bit as defined in
-.Pa Aq sys/fcntl.h ,
+.Aq Pa sys/fcntl.h ,
 then all characters in the input queue are cleared.  If it contains
 the
 .Dv FWRITE
@@ -334,7 +314,7 @@ and is the means by which most full\&-screen oriented programs determine the
 screen size.  The
 .Va winsize
 structure is defined in
-.Pa Aq sys/ioctl.h .
+.Aq Pa sys/ioctl.h .
 .It Dv TIOCSWINSZ Fa struct winsize *ws
 Set the window size associated with the terminal to be the value in
 the
@@ -355,8 +335,8 @@ to a particular window.
 .It Dv TIOCMSET Fa int *state
 The integer pointed to by
 .Fa state
-contains bits that correspond to modem state.  Following is a list
-of defined variables and the modem state they represent:
+contains bits that correspond to modem state.
+Following is a list of defined variables and the modem state they represent:
 .Pp
 .Bl -tag -width TIOCMXCTS -compact
 .It TIOCM_LE
@@ -374,7 +354,7 @@ Clear To Send.
 .It TIOCM_CAR
 Carrier Detect.
 .It TIOCM_CD
-Carier Detect (synonym).
+Carrier Detect (synonym).
 .It TIOCM_RNG
 Ring Indication.
 .It TIOCM_RI
@@ -405,18 +385,28 @@ is cleared in the terminal.
 .It Dv TIOCSFLAGS Fa int *state
 The bits in the integer pointed to by
 .Fa state
-contain bits that correspond to serial port state. Following is a list
-of defined variables and the serial port state they represent:
+contain bits that correspond to serial port state.
+Following is a list of defined flag values and the serial port state they
+represent:
 .Pp
 .Bl -tag -width TIOCFLAG_SOFTCAR -compact
 .It TIOCFLAG_SOFTCAR
 Ignore hardware carrier.
 .It TIOCFLAG_CLOCAL
-Set clocal on open.
+Set the
+.Xr termios 4
+.Dv CLOCAL
+flag on open.
 .It TIOCFLAG_CRTSCTS
-Set crtscts on open.
+Set the
+.Xr termios 4
+.Dv CRTSCTS
+flag on open.
 .It TIOCFLAG_MDMBUF
-Set mdmbuf on open.
+Set the
+.Xr termios 4
+.Dv MDMBUF
+flag on open.
 .El
 .Pp
 This call sets the serial port state to that represented by
@@ -427,13 +417,47 @@ Return the current state of the serial port as represented
 above in the integer pointed to by
 .Fa state .
 .El
+.Sh COMPATIBILITY
+Two ioctls are maintained for backwards compatibility.  They provide
+methods to get and set the current line discipline, but are not
+extensible.
+.Bl -tag -width TIOCGWINSZ
+.It Dv TIOCSETD Fa int *ldisc
+Change to the new line discipline pointed to by
+.Fa ldisc .
+The old list of available line disciplines are listed in
+.Aq Pa sys/ttycom.h
+and are:
+.Pp
+.Bl -tag -width TIOCGWINSZ -compact
+.It TTYDISC
+Termios interactive line discipline.
+.It TABLDISC
+Tablet line discipline.
+.It SLIPDISC
+Serial IP line discipline.
+.It PPPDISC
+Point to Point Protocol line discipline.
+.It STRIPDISC
+Starmode Radio IP line discipline.
+.El
+.Pp
+.It Dv TIOCGETD Fa int *ldisc
+Return the current line discipline in the integer pointed to by
+.Fa ldisc .
+.El
+.Sh SEE ALSO
+.Xr stty 1 ,
+.Xr ioctl 2 ,
+.Xr tcgetattr 3 ,
+.Xr tcsetattr 3 ,
+.Xr ttyaction 3 ,
+.Xr pty 4 ,
+.Xr termios 4 ,
+.Xr ttys 5 ,
+.Xr getty 8 ,
+.Xr linedisc 9
 .Sh HISTORY
-Separate dialout device files were implemented in SunOS 4.  They were cloned
+Separate dial-out device files were implemented in SunOS 4.  They were cloned
 by Charles M. Hannum for
 .Nx 1.4 .
-.Sh SEE ALSO
-.Xr getty 8 ,
-.Xr ioctl 2 ,
-.Xr pty 4 ,
-.Xr stty 1 ,
-.Xr termios 4

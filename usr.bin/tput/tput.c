@@ -1,4 +1,4 @@
-/*	$NetBSD: tput.c,v 1.11 1999/10/04 23:33:43 lukem Exp $	*/
+/*	$NetBSD: tput.c,v 1.19 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)tput.c	8.3 (Berkeley) 4/28/95";
 #endif
-__RCSID("$NetBSD: tput.c,v 1.11 1999/10/04 23:33:43 lukem Exp $");
+__RCSID("$NetBSD: tput.c,v 1.19 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
 #include <termios.h>
@@ -51,25 +47,22 @@ __RCSID("$NetBSD: tput.c,v 1.11 1999/10/04 23:33:43 lukem Exp $");
 #include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <termcap.h>
 #include <unistd.h>
 
-	int   main __P((int, char **));
-static int    outc __P((int));
-static void   prlongname __P((char *));
-static void   setospeed __P((void));
-static void   usage __P((void));
-static char **process __P((char *, char *, char **));
+static int    outc(int);
+static void   prlongname(char *);
+static void   setospeed(void);
+static void   usage(void) __dead;
+static char **process(const char *, char *, char **);
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
-	extern char *optarg;
-	extern int optind;
 	int ch, exitval, n;
-	char *cptr, *p, *term, buf[1024], tbuf[1024];
+	char *cptr, *term, buf[1024], tbuf[1024];
+	const char *p;
 
 	term = NULL;
 	while ((ch = getopt(argc, argv, "T:")) != -1)
@@ -85,7 +78,8 @@ main(argc, argv)
 	argv += optind;
 
 	if (!term && !(term = getenv("TERM")))
-errx(2, "no terminal type specified and no TERM environmental variable.");
+		errx(2, "No terminal type specified and no TERM "
+		    "variable set in the environment.");
 	if (tgetent(tbuf, term) != 1)
 		err(2, "tgetent failure");
 	setospeed();
@@ -121,12 +115,11 @@ errx(2, "no terminal type specified and no TERM environmental variable.");
 		if (argv == NULL)
 			break;
 	}
-	exit(argv ? exitval : 2);
+	return argv ? exitval : 2;
 }
 
 static void
-prlongname(buf)
-	char *buf;
+prlongname(char *buf)
 {
 	int savech;
 	char *p, *savep;
@@ -141,15 +134,14 @@ prlongname(buf)
 }
 
 static char **
-process(cap, str, argv)
-	char *cap, *str, **argv;
+process(const char *cap, char *str, char **argv)
 {
-	static char errfew[] =
-	    "not enough arguments (%d) for capability `%s'";
-	static char errmany[] =
-	    "too many arguments (%d) for capability `%s'";
-	static char erresc[] =
-	    "unknown %% escape `%c' for capability `%s'";
+	static const char errfew[] =
+	    "Not enough arguments (%d) for capability `%s'";
+	static const char errmany[] =
+	    "Too many arguments (%d) for capability `%s'";
+	static const char erresc[] =
+	    "Unknown %% escape `%c' for capability `%s'";
 	char *cp;
 	int arg_need, arg_rows, arg_cols;
 
@@ -202,17 +194,17 @@ process(cap, str, argv)
 			errx(2, errfew, 2, cap);
 		arg_cols = atoi(*argv);
 
-		(void) tputs(tgoto(str, arg_cols, arg_rows), arg_rows, outc);
+		(void)tputs(tgoto(str, arg_cols, arg_rows), arg_rows, outc);
 		break;
 
 	default:
 		errx(2, errmany, arg_need, cap);
 	}
-	return (argv);
+	return argv;
 }
 
 static void
-setospeed()
+setospeed(void)
 {
 #undef ospeed
 	extern short ospeed;
@@ -228,12 +220,14 @@ static int
 outc(c)
 	int c;
 {
-	return (putchar(c));
+	return putchar(c);
 }
 
 static void
-usage()
+usage(void)
 {
-	(void)fprintf(stderr, "usage: tput [-T term] attribute ...\n");
-	exit(1);
+	(void)fprintf(stderr,
+	    "Usage: %s [-T term] attribute [attribute-args] ...\n",
+	    getprogname());
+	exit(2);
 }

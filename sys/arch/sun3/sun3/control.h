@@ -1,4 +1,4 @@
-/*	$NetBSD: control.h,v 1.19 1998/02/05 04:57:30 gwr Exp $	*/
+/*	$NetBSD: control.h,v 1.23 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,23 +59,17 @@
 #if defined(_KERNEL) || defined(_STANDALONE)
 
 /* ctrlsp.S */
-int   get_control_byte __P((vm_offset_t));
-void  set_control_byte __P((vm_offset_t, int));
-u_int get_control_word __P((vm_offset_t));
-void  set_control_word __P((vm_offset_t, u_int));
+int   get_control_byte(vaddr_t);
+void  set_control_byte(vaddr_t, int);
+u_int get_control_word(vaddr_t);
+void  set_control_word(vaddr_t, u_int);
 
 /* control.c */
-int  get_context __P((void));
-void set_context __P((int));
+int  get_context(void);
+void set_context(int);
 
-int  get_segmap __P((vm_offset_t));
-void set_segmap __P((vm_offset_t, int));
-void set_segmap_allctx __P((vm_offset_t, int));
-
-#if 0
-/* Moved to pte.h (now a common interface). */
-int  get_pte __P((vm_offset_t));
-void set_pte __P((vm_offset_t, int));
-#endif
+int  get_segmap(vaddr_t);
+void set_segmap(vaddr_t, int);
+void set_segmap_allctx(vaddr_t, int);
 
 #endif	/* _KERNEL | _STANDALONE */

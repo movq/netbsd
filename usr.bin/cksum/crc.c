@@ -1,4 +1,4 @@
-/*	$NetBSD: crc.c,v 1.8 1997/10/17 11:37:03 lukem Exp $	*/
+/*	$NetBSD: crc.c,v 1.18 2006/09/04 20:01:10 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,12 +32,16 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)crc.c	8.1 (Berkeley) 6/17/93";
 #else
-__RCSID("$NetBSD: crc.c,v 1.8 1997/10/17 11:37:03 lukem Exp $");
+__RCSID("$NetBSD: crc.c,v 1.18 2006/09/04 20:01:10 dsl Exp $");
 #endif
 #endif /* not lint */
 
@@ -111,39 +111,52 @@ static const u_int32_t crctab[] = {
  * locations to store the crc and the number of bytes read.  It returns 0 on
  * success and 1 on failure.  Errno is set on failure.
  */
-u_int32_t crc_total = ~0;		/* The crc over a number of files. */
-
 int
-crc(fd, cval, clen)
-	register int fd;
-	u_int32_t *cval, *clen;
+crc(int fd, u_int32_t *cval, off_t *clen)
 {
-	register u_char *p;
-	register int nr;
-	register u_int32_t crc, len;
+	u_char *p;
+	int nr;
+	u_int32_t thecrc;
+	off_t len;
 	u_char buf[16 * 1024];
 
 #define	COMPUTE(var, ch)	(var) = (var) << 8 ^ crctab[(var) >> 24 ^ (ch)]
 
-	crc = len = 0;
-	crc_total = ~crc_total;
+	thecrc = 0;
+	len = 0;
 	while ((nr = read(fd, buf, sizeof(buf))) > 0)
 		for (len += nr, p = buf; nr--; ++p) {
-			COMPUTE(crc, *p);
-			COMPUTE(crc_total, *p);
+			COMPUTE(thecrc, *p);
 		}
 	if (nr < 0)
-		return (1);
+		return 1;
 
 	*clen = len;
 
 	/* Include the length of the file. */
 	for (; len != 0; len >>= 8) {
-		COMPUTE(crc, len & 0xff);
-		COMPUTE(crc_total, len & 0xff);
+		COMPUTE(thecrc, len & 0xff);
 	}
 
-	*cval = ~crc;
-	crc_total = ~crc_total;
-	return (0);
+	*cval = ~thecrc;
+	return 0;
+}
+
+/* These two are rather more useful to the outside world */
+
+uint32_t
+crc_buf(uint32_t thecrc, const void *buf, size_t len)
+{
+	const uint8_t *p = buf;
+
+	for (p = buf; len; p++, len--)
+		COMPUTE(thecrc, *p);
+	return thecrc;
+}
+
+uint32_t
+crc_byte(uint32_t thecrc, unsigned int byte_val)
+{
+	COMPUTE(thecrc, byte_val & 0xff);
+	return thecrc;
 }

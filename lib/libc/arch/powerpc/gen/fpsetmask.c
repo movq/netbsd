@@ -1,4 +1,4 @@
-/*	$NetBSD: fpsetmask.c,v 1.1 1999/07/07 01:55:08 danw Exp $	*/
+/*	$NetBSD: fpsetmask.c,v 1.9 2008/04/28 20:22:56 martin Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  * 
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,19 +29,34 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: fpsetmask.c,v 1.9 2008/04/28 20:22:56 martin Exp $");
+#endif /* LIBC_SCCS and not lint */
+
+#include "namespace.h"
+
 #include <sys/types.h>
 #include <ieeefp.h>
+#include <powerpc/fpu.h>
+
+#ifdef __weak_alias
+__weak_alias(fpsetmask,_fpsetmask)
+#endif
+
+#define	MASKBITS	(FPSCR_XE|FPSCR_ZE|FPSCR_UE|FPSCR_OE|FPSCR_VE)
+#define	MASKSHFT	3
 
 fp_except
-fpsetmask(mask)
-	fp_except mask;
+fpsetmask(fp_except mask)
 {
-	u_int64_t fpscr;
-	fp_rnd old;
+	uint64_t fpscr;
+	fp_except old;
 
-	__asm__ __volatile("mffs %0" : "=f"(fpscr));
-	old = (fpscr >> 3) & 0x1f;
-	fpscr = (fpscr & 0xffffff07) | (mask << 3);
-	__asm__ __volatile("mtfsf 0xff,%0" :: "f"(fpscr));
+	__asm volatile("mffs %0" : "=f"(fpscr));
+	old = ((uint32_t)fpscr & MASKBITS) >> MASKSHFT;
+	fpscr &= ~MASKBITS;
+	fpscr |= ((uint32_t)mask << MASKSHFT) & MASKBITS;
+	__asm volatile("mtfsf 0xff,%0" :: "f"(fpscr));
 	return (old);
 }

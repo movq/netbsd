@@ -1,4 +1,4 @@
-/*	$NetBSD: devopen.c,v 1.3 1999/06/28 01:20:44 sakamoto Exp $	*/
+/*	$NetBSD: devopen.c,v 1.9 2008/05/26 16:28:39 kiyohara Exp $	*/
 
 /*-
  *  Copyright (c) 1993 John Brezak
@@ -14,7 +14,7 @@
  *     documentation and/or other materials provided with the distribution.
  *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR `AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -28,55 +28,53 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stand.h>
+#include <lib/libsa/stand.h>
+#include <lib/libkern/libkern.h>
 #include <sys/param.h>
 #include <sys/reboot.h>
 
 #define	ispart(c)	((c) >= 'a' && (c) <= 'h')
 
-int
-atoi(cp)
-	char *cp;
+static int atoi(char *);
+static int devlookup(char *);
+static int devparse(const char *, int *, int *, int *, int *, int *, char **);
+
+
+static int
+atoi(char *cp)
 {
 	int val = 0;
 
 	while (isdigit(*cp))
 		val = val * 10 + (*cp++ - '0');
-	return (val);
+	return val;
 }
 
-int
-devlookup(d)
-	char *d;
+static int
+devlookup(char *d)
 {
 	struct devsw *dp = devsw;
 	int i;
 
 	for (i = 0; i < ndevs; i++, dp++)
 		if (dp->dv_name && strcmp(dp->dv_name, d) == 0)
-			return (i);
+			return i;
 
 	printf("No such device - Configured devices are:\n");
 	for (dp = devsw, i = 0; i < ndevs; i++, dp++)
 		if (dp->dv_name)
 			printf(" %s", dp->dv_name);
 	printf("\n");
-	return (-1);
+	return -1;
 }
 
 /*
  * Parse a device spec in one of two forms.
  *   dev(ctlr, unit, part)file
  */
-int
-devparse(fname, dev, adapt, ctlr, unit, part, file)
-	const char *fname;
-	int *dev;
-	int *adapt;
-	int *ctlr;
-	int *unit;
-	int *part;
-	char **file;
+static int
+devparse(const char *fname, int *dev, int *adapt, int *ctlr, int *unit,
+	 int *part, char **file)
 {
 	int argc, flag;
 	char *s, *args[3];
@@ -90,7 +88,7 @@ devparse(fname, dev, adapt, ctlr, unit, part, file)
 	if (*s == '(') {
 		/* lookup device and get index */
 		*s = NULL;
-		if ((*dev = devlookup(nametmp, s - nametmp)) < 0)
+		if ((*dev = devlookup(nametmp)) < 0)
 		    goto baddev;
 
 		/* tokenize device ident */
@@ -112,31 +110,28 @@ devparse(fname, dev, adapt, ctlr, unit, part, file)
 
 		switch (argc) {
 		case 3:
-		    *part = atoi(args[2]);
-		    /* FALL THROUGH */
+			*part = atoi(args[2]);
+			/* FALLTHROUGH */
 		case 2:
-		    *unit = atoi(args[1]);
-		    /* FALL THROUGH */
+			*unit = atoi(args[1]);
+			/* FALLTHROUGH */
 		case 1:
-		    *ctlr = atoi(args[0]);
-		    break;
+			*ctlr = atoi(args[0]);
+			break;
 		}
 		*file = ++s;
 	} else {
 		/* no device present */
 		*file = (char *)fname;
 	}
-	return (0);
+	return 0;
 
 baddev:
-	return (EINVAL);
+	return EINVAL;
 }
 
 int
-devopen(f, fname, file)
-	struct open_file *f;
-	const char *fname;
-	char **file;
+devopen(struct open_file *f, const char *fname, char **file)
 {
 	int error;
 	int dev = 0, ctlr = 0, unit = 0, part = 0;
@@ -145,18 +140,18 @@ devopen(f, fname, file)
 
 	if ((error =
 	    devparse(fname, &dev, &adapt, &ctlr, &unit, &part, file)) != 0)
-		return (error);
+		return error;
 
 	dp = &devsw[dev];
 	if (!dp->dv_open)
-		return (ENODEV);
+		return ENODEV;
 
 	f->f_dev = dp;
 	if ((error = (*dp->dv_open)(f, ctlr, unit, part)) == 0)
-		return (0);
+		return 0;
 
 	printf("%s(%d,%d,%d): %s\n", devsw[dev].dv_name,
 		ctlr, unit, part, strerror(error));
 
-	return (error);
+	return error;
 }

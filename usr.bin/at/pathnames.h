@@ -1,4 +1,4 @@
-/*	$NetBSD: pathnames.h,v 1.4 1998/06/27 21:15:08 christos Exp $	*/
+/* $NetBSD: pathnames.h,v 1.8 2008/04/05 16:26:57 christos Exp $ */
 
 /*
  * Copyright (c) 1993 Christopher G. Demetriou
@@ -14,9 +14,11 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed by Christopher G. Demetriou.
+ *          This product includes software developed for the
+ *          NetBSD Project.  See http://www.NetBSD.org/ for
+ *          information about NetBSD.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,6 +30,8 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
  *
  * From: $OpenBSD: pathnames.h,v 1.3 1997/03/01 23:40:11 millert Exp $
  */
@@ -44,4 +48,4 @@
 #define _PATH_AT_ALLOW	"/var/at/at.allow"
 #define _PATH_AT_DENY	"/var/at/at.deny"
 
-#endif				/* !_PATHNAMES_H_ */
+#endif /* _PATHNAMES_H_ */

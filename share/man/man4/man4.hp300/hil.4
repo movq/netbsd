@@ -1,4 +1,4 @@
-.\"	$NetBSD: hil.4,v 1.5 1997/10/19 12:57:00 mrg Exp $
+.\"	$NetBSD: hil.4,v 1.11 2003/08/07 10:31:06 agc Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -15,11 +15,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -43,6 +39,8 @@
 .Sh NAME
 .Nm hil
 .Nd Human Interface Link device driver
+.Sh SYNOPSIS
+.Cd "hil*	at intio?"
 .Sh DESCRIPTION
 The Human Interface Link
 .Pq Tn HIL
@@ -50,7 +48,7 @@ is the interface used by the Series
 300 computers to connect devices such as keyboards, mice, control knobs,
 and
 .Tn ID
-modules to the machine. 
+modules to the machine.
 .Pp
 Special files
 .Pa /dev/hil[1-7]
@@ -239,7 +237,7 @@ Use
 semantics for gathering data from this device.  This call must be used
 before anything can be read from the descriptor.
 .El
-.Sh "PACKET FORMAT"
+.Sh PACKET FORMAT
 When reading data from a device, events are received as data packets,
 with a header as described above.  Here we provide (very rudimentary)
 documentation for the format of the device-dependent data, for at least
@@ -293,11 +291,9 @@ bits are listed):
 .It 0x0c
 .Sq CTRL
 .It 0x0e
-.Sm off
 .Sq Break
 /
 .Sq Reset
-.Sm on
 .It 0x10
 4, on the numeric keypad.
 .It 0x12
@@ -342,11 +338,9 @@ X
 .It 0x38
 Z
 .It 0x3e
-.Sm off
 .Sq ESC
 /
 .Sq DEL
-.Sm on
 .It 0x42
 The second (counting from the left) of the four unmarked keys at the
 top right.
@@ -426,17 +420,13 @@ Right mouse button.
 .It 0x9c
 .Sq Stop
 .It 0x9e
-.Sm off
 .Sq Enter
 /
 .Sq Print
-.Sm on
 .It 0xa0
-.Sm off
 .Sq System
 /
 .Sq User
-.Sm on
 .It 0xa2
 .Sq F5
 .It 0xa4
@@ -544,7 +534,7 @@ device open, and is using it in
 mode.
 .It Bq Er EINVAL
 Invalid
-.Xr ioctl
+.Xr ioctl 2
 specification.
 .El
 .Sh BUGS
@@ -553,8 +543,8 @@ Requiring
 to be able to read anything is gross.  It is probably not worth fixing,
 though, because the whole hil/ite mechanism will probably be replaced
 with a more-or-less port-independent scheme in the foreseeable future.
-.Sh HISTORY
-The
-.Nm
-interface is
-.Ud
+.\" .Sh HISTORY
+.\" The
+.\" .Nm
+.\" interface is
+.\" .Ud

@@ -1,8 +1,8 @@
-/*	$NetBSD: grf_cv.c,v 1.27 1999/03/25 23:20:00 is Exp $	*/
+/*	$NetBSD: grf_cv.c,v 1.46 2007/10/17 19:53:15 garbled Exp $ */
 
 /*
  * Copyright (c) 1995 Michael Teske
- * All rights reserved. 
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,6 +31,10 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "opt_amigacons.h"
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: grf_cv.c,v 1.46 2007/10/17 19:53:15 garbled Exp $");
+
 #include "grfcv.h"
 #if NGRFCV > 0
 
@@ -64,37 +68,47 @@
 #include <amiga/dev/grf_cvreg.h>
 #include <amiga/dev/zbusvar.h>
 
-int	grfcvmatch  __P((struct device *, struct cfdata *, void *));
-void	grfcvattach __P((struct device *, struct device *, void *));
-int	grfcvprint  __P((void *, const char *));
+/*
+ * finish all bus operations, flush pipelines
+ * XXX is this really needed?
+ */
+#if defined(__m68k__)
+#define cpu_sync() __asm volatile ("nop")
+#elif defined(__powerpc__)
+#define cpu_sync() __asm volatile ("sync; isync")
+#endif
 
-int	cvintr __P((void *));
-static int cv_has_4mb __P((volatile caddr_t));
-static unsigned short cv_compute_clock __P((unsigned long));
-void	cv_boardinit __P((struct grf_softc *));
-int	cv_getvmode __P((struct grf_softc *, struct grfvideo_mode *));
-int	cv_setvmode __P((struct grf_softc *, unsigned int));
-int	cv_blank __P((struct grf_softc *, int *));
-int	cv_mode __P((register struct grf_softc *, u_long, void *, u_long, int));
-int	cv_ioctl __P((register struct grf_softc *gp, u_long cmd, void *data));
-int	cv_setmonitor __P((struct grf_softc *, struct grfvideo_mode *));
-int	cv_getcmap __P((struct grf_softc *, struct grf_colormap *));
-int	cv_putcmap __P((struct grf_softc *, struct grf_colormap *));
-int	cv_toggle __P((struct grf_softc *));
-int	cv_mondefok __P((struct grfvideo_mode *));
-int	cv_load_mon __P((struct grf_softc *, struct grfcvtext_mode *));
-void	cv_inittextmode __P((struct grf_softc *));
-static	__inline void cv_write_port __P((unsigned short, volatile caddr_t));
-static	__inline void cvscreen __P((int, volatile caddr_t));
-static	__inline void gfx_on_off __P((int, volatile caddr_t));
+int	grfcvmatch(struct device *, struct cfdata *, void *);
+void	grfcvattach(struct device *, struct device *, void *);
+int	grfcvprint(void *, const char *);
+
+int	cvintr(void *);
+static int cv_has_4mb(volatile void *);
+static unsigned short cv_compute_clock(unsigned long);
+void	cv_boardinit(struct grf_softc *);
+int	cv_getvmode(struct grf_softc *, struct grfvideo_mode *);
+int	cv_setvmode(struct grf_softc *, unsigned int);
+int	cv_blank(struct grf_softc *, int *);
+int	cv_mode(register struct grf_softc *, u_long, void *, u_long, int);
+int	cv_ioctl(register struct grf_softc *gp, u_long cmd, void *data);
+int	cv_setmonitor(struct grf_softc *, struct grfvideo_mode *);
+int	cv_getcmap(struct grf_softc *, struct grf_colormap *);
+int	cv_putcmap(struct grf_softc *, struct grf_colormap *);
+int	cv_toggle(struct grf_softc *);
+int	cv_mondefok(struct grfvideo_mode *);
+int	cv_load_mon(struct grf_softc *, struct grfcvtext_mode *);
+void	cv_inittextmode(struct grf_softc *);
+static	inline void cv_write_port(unsigned short, volatile void *);
+static	inline void cvscreen(int, volatile void *);
+static	inline void gfx_on_off(int, volatile void *);
 
 #ifndef CV_NO_HARDWARE_CURSOR
-int	cv_getspritepos __P((struct grf_softc *, struct grf_position *));
-int	cv_setspritepos __P((struct grf_softc *, struct grf_position *));
-int	cv_getspriteinfo __P((struct grf_softc *,struct grf_spriteinfo *));
-void	cv_setup_hwc __P((struct grf_softc *));
-int	cv_setspriteinfo __P((struct grf_softc *,struct grf_spriteinfo *));
-int	cv_getspritemax  __P((struct grf_softc *,struct grf_position *));
+int	cv_getspritepos(struct grf_softc *, struct grf_position *);
+int	cv_setspritepos(struct grf_softc *, struct grf_position *);
+int	cv_getspriteinfo(struct grf_softc *,struct grf_spriteinfo *);
+void	cv_setup_hwc(struct grf_softc *);
+int	cv_setspriteinfo(struct grf_softc *,struct grf_spriteinfo *);
+int	cv_getspritemax(struct grf_softc *,struct grf_position *);
 #endif	/* !CV_NO_HARDWARE_CURSOR */
 
 /*
@@ -234,7 +248,7 @@ static unsigned char clocks[]={
 
 
 /* Board Address of CV64 */
-static volatile caddr_t cv_boardaddr;
+static volatile void *cv_boardaddr;
 static int cv_fbsize;
 
 /*
@@ -253,9 +267,8 @@ long cv_memclk = 50000000;
 #endif
 
 /* standard driver stuff */
-struct cfattach grfcv_ca = {
-	sizeof(struct grf_cv_softc), grfcvmatch, grfcvattach
-};
+CFATTACH_DECL(grfcv, sizeof(struct grf_cv_softc),
+    grfcvmatch, grfcvattach, NULL, NULL);
 
 static struct cfdata *cfdata;
 
@@ -281,15 +294,14 @@ static short curs_update_flag = 0;
  */
 
 int
-cvintr(arg)
-	void * arg;
+cvintr(void *arg)
 {
 #ifndef CV_NO_HARDWARE_CURSOR
-	register unsigned long *csrc, *cdest;
+	volatile unsigned long *csrc, *cdest;
 	int i;
 #endif
 	struct grf_softc *gp = arg;
-	volatile caddr_t ba = gp->g_regkva;
+	volatile void *ba = gp->g_regkva;
 	unsigned char test;
 	unsigned char cridx; /* Save the cr Register index */
 
@@ -302,39 +314,39 @@ cvintr(arg)
 		/* Save old CR index */
 		cridx = vgar (ba, CRT_ADDRESS);
 
-#if 0
+#if !defined(__m68k__)
 		test = RCrt(ba, CRT_ID_END_VER_RETR);
 		/* Clear int (bit 4) */
 		test &= ~0x10;
 		WCrt(ba, CRT_ID_END_VER_RETR, test);
 #else
 		vgaw(ba, CRT_ADDRESS, CRT_ID_END_VER_RETR);
-		asm volatile("bclr #4,%0@(0x3d5);nop" : : "a" (ba));
+		__asm volatile("bclr #4,%0@(0x3d5);nop" : : "a" (ba));
 #endif
 
 #ifndef CV_NO_HARDWARE_CURSOR
 		/* update the hardware cursor, if necessary */
 		if (curs_update_flag) {
 			csrc = (unsigned long *)cv_cursor_storage;
-			cdest = (unsigned long *)((volatile char *)gp->g_fbkva
-				 + HWC_OFF);
+			cdest = (volatile unsigned long *)
+				((volatile char*)gp->g_fbkva + HWC_OFF);
 			for (i = 0; i < HWC_SIZE / sizeof(long); i++)
 				*cdest++ = *csrc++;
 			curs_update_flag = 0;
 		}
 		/* Reenable int */
-#if 0
+#if !defined(__m68k__)
 		test |= 0x10;
 		WCrt(ba, CRT_ID_END_VER_RETR, test);
 #else
 		/* I don't trust the optimizer here... */
-		asm volatile("bset #4,%0@(0x3d5);nop" : : "a" (ba));
+		__asm volatile("bset #4,%0@(0x3d5);nop" : : "a" (ba));
 #endif
 		cv_setspritepos (gp, NULL);
 
 		/* Restore the old CR index */
 		vgaw(ba, CRT_ADDRESS, cridx);
-		asm volatile("nop");
+		cpu_sync();
 #endif  /* !CV_NO_HARDWARE_CURSOR */
 		return (1);
 	}
@@ -348,42 +360,38 @@ cvintr(arg)
  * Return 0 for 2MB, 1 for 4MB
  */
 static int
-cv_has_4mb(fb)
-	volatile caddr_t fb;
+cv_has_4mb(volatile void *fb)
 {
 	volatile unsigned long *testfbw, *testfbr;
 
 	/* write patterns in memory and test if they can be read */
 	testfbw = (volatile unsigned long *)fb;
-	testfbr = (volatile unsigned long *)(fb + 0x02000000);
+	testfbr = (volatile unsigned long *)((volatile char*)fb + 0x02000000);
 	*testfbw = 0x87654321;
-	asm volatile("nop");
+	cpu_sync();
 	if (*testfbr != 0x87654321)
 		return (0);
 
 	/* upper memory region */
-	testfbw = (volatile unsigned long *)(fb + 0x00200000);
-	testfbr = (volatile unsigned long *)(fb + 0x02200000);
+	testfbw = (volatile unsigned long *)((volatile char*)fb + 0x00200000);
+	testfbr = (volatile unsigned long *)((volatile char*)fb + 0x02200000);
 	*testfbw = 0x87654321;
-	asm volatile("nop");
+	cpu_sync();
 	if (*testfbr != 0x87654321)
 		return (0);
 	*testfbw = 0xAAAAAAAA;
-	asm volatile("nop");
+	cpu_sync();
 	if (*testfbr != 0xAAAAAAAA)
 		return (0);
 	*testfbw = 0x55555555;
-	asm volatile("nop");
+	cpu_sync();
 	if (*testfbr != 0x55555555)
 		return (0);
 	return (1);
 }
 
 int
-grfcvmatch(pdp, cfp, auxp)
-	struct device *pdp;
-	struct cfdata *cfp;
-	void *auxp;
+grfcvmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 #ifdef CV64CONSOLE
 	static int cvcons_unit = -1;
@@ -415,9 +423,7 @@ grfcvmatch(pdp, cfp, auxp)
 }
 
 void
-grfcvattach(pdp, dp, auxp)
-	struct device *pdp, *dp;
-	void *auxp;
+grfcvattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	static struct grf_cv_softc congrf;
 	struct zbus_args *zap;
@@ -427,9 +433,9 @@ grfcvattach(pdp, dp, auxp)
 
 	zap = auxp;
 
-	/* 
+	/*
 	 * This function is called twice, once on console init (dp == NULL)
-	 * and once on "normal" grf5 init. 
+	 * and once on "normal" grf5 init.
 	 */
 
 	if (dp == NULL) /* console init */
@@ -457,8 +463,8 @@ grfcvattach(pdp, dp, auxp)
 		add_isr(&gcp->gcs_isr);
 		remove_isr(&congrf.gcs_isr);
 	} else {
-		gp->g_regkva = (volatile caddr_t)cv_boardaddr + 0x02000000;
-		gp->g_fbkva = (volatile caddr_t)cv_boardaddr + 0x01400000;
+		gp->g_regkva = (volatile char *)cv_boardaddr + 0x02000000;
+		gp->g_fbkva = (volatile char *)cv_boardaddr + 0x01400000;
 
 		gp->g_unit = GRF_CV64_UNIT;
 		gp->g_mode = cv_mode;
@@ -495,12 +501,10 @@ grfcvattach(pdp, dp, auxp)
 }
 
 int
-grfcvprint(auxp, pnp)
-	void *auxp;
-	const char *pnp;
+grfcvprint(void *auxp, const char *pnp)
 {
 	if (pnp)
-		printf("ite at %s: ", pnp);
+		aprint_normal("ite at %s: ", pnp);
 	return (UNCONF);
 }
 
@@ -517,8 +521,7 @@ grfcvprint(auxp, pnp)
  */
 
 static unsigned short
-cv_compute_clock(freq)
-	unsigned long freq;
+cv_compute_clock(unsigned long freq)
 {
 	static unsigned char *mnr, *save;	/* M, N + R vals */
 	unsigned long work_freq, r;
@@ -560,10 +563,9 @@ cv_compute_clock(freq)
 
 
 void
-cv_boardinit(gp)
-	struct grf_softc *gp;
+cv_boardinit(struct grf_softc *gp)
 {
-	volatile caddr_t ba;
+	volatile void *ba;
 	unsigned char test;
 	unsigned int clockpar;
 	int i;
@@ -572,10 +574,11 @@ cv_boardinit(gp)
 	ba = gp->g_regkva;
 	/* Reset board */
 	for (i = 0; i < 6; i++)
-		cv_write_port (0xff, ba - 0x02000000);	/* Clear all bits */
+		/* Clear all bits */
+		cv_write_port (0xff, (volatile char*)ba - 0x02000000);
 
 	/* Return to operational Mode */
-	cv_write_port(0x8004, ba - 0x02000000);
+	cv_write_port(0x8004, (volatile char*)ba - 0x02000000);
 
 	/* Wakeup Chip */
 	vgaw(ba, SREG_VIDEO_SUBS_ENABLE, 0x10);
@@ -596,7 +599,7 @@ cv_boardinit(gp)
 #endif
 
 	/* Enable board interrupts */
-	cv_write_port(0x8008, ba - 0x02000000);
+	cv_write_port(0x8008, (volatile char*)ba - 0x02000000);
 
 	test = RCrt(ba, CRT_ID_SYSTEM_CONFIG);
 	test = test | 0x01;	/* enable enhaced register access */
@@ -605,15 +608,15 @@ cv_boardinit(gp)
 
 	/*
 	 * bit 1=1: enable enhanced mode functions
-	 * bit 4=1: enable linear adressing
+	 * bit 4=1: enable linear addressing
 	 * bit 5=1: enable MMIO
 	 */
 	vgaw(ba, ECR_ADV_FUNC_CNTL, 0x31);
 
-	/* enable color mode (bit0), cpu acess (bit1), high 64k page (bit5) */
+	/* enable color mode (bit0), CPU access (bit1), high 64k page (bit5) */
 	vgaw(ba, GREG_MISC_OUTPUT_W, 0xe3);
 
-	/* Cpu base addr */
+	/* CPU base addr */
 	WCrt(ba, CRT_ID_EXT_SYS_CNTL_4, 0x00);
 
 	/* Reset. This does nothing, but everyone does it:) */
@@ -692,7 +695,7 @@ cv_boardinit(gp)
 	WCrt(ba, CRT_ID_CURSOR_START, 0x00);
 	WCrt(ba, CRT_ID_CURSOR_END, 0x00);
 
-	/* Display start adress */
+	/* Display start address */
 	WCrt(ba, CRT_ID_START_ADDR_HIGH, 0x00);
 	WCrt(ba, CRT_ID_START_ADDR_LOW, 0x00);
 
@@ -754,8 +757,8 @@ cv_boardinit(gp)
 
 	vgaw(ba, VDAC_MASK, 0xFF);	/* DAC Mask */
 
-	*((unsigned long *)(ba + ECR_FRGD_COLOR)) = 0xFF;
-	*((unsigned long *)(ba + ECR_BKGD_COLOR)) = 0;
+	*((volatile unsigned long *)((volatile char*)ba + ECR_FRGD_COLOR)) = 0xFF;
+	*((volatile unsigned long *)((volatile char*)ba + ECR_BKGD_COLOR)) = 0;
 
 	/* colors initially set to greyscale */
 
@@ -773,7 +776,7 @@ cv_boardinit(gp)
 	WCrt(ba, CRT_ID_LAW_CNTL, 0x13);
 
 	/* find *correct* fbsize of z3 board */
-	if (cv_has_4mb((volatile caddr_t)cv_boardaddr + 0x01400000)) {
+	if (cv_has_4mb((volatile char *)cv_boardaddr + 0x01400000)) {
 		cv_fbsize = 1024 * 1024 * 4;
 		WCrt(ba, CRT_ID_LAW_CNTL, 0x13); /* 4 MB */
 	} else {
@@ -821,17 +824,15 @@ cv_boardinit(gp)
 	WAttr(ba, 0x33, 0);
 
 	gi = &gp->g_display;
-	gi->gd_regaddr	= (caddr_t) kvtop (ba);
+	gi->gd_regaddr	= (void *) kvtop (__UNVOLATILE(ba));
 	gi->gd_regsize	= 64 * 1024;
-	gi->gd_fbaddr	= (caddr_t) kvtop (gp->g_fbkva);
+	gi->gd_fbaddr	= (void *) kvtop (__UNVOLATILE(gp->g_fbkva));
 	gi->gd_fbsize	= cv_fbsize;
 }
 
 
 int
-cv_getvmode(gp, vm)
-	struct grf_softc *gp;
-	struct grfvideo_mode *vm;
+cv_getvmode(struct grf_softc *gp, struct grfvideo_mode *vm)
 {
 	struct grfvideo_mode *gv;
 
@@ -867,9 +868,7 @@ cv_getvmode(gp, vm)
 
 
 int
-cv_setvmode(gp, mode)
-	struct grf_softc *gp;
-	unsigned mode;
+cv_setvmode(struct grf_softc *gp, unsigned mode)
 {
 
 	if (!mode || (mode > monitor_def_max) ||
@@ -883,11 +882,9 @@ cv_setvmode(gp, mode)
 
 
 int
-cv_blank(gp, on)
-	struct grf_softc *gp;
-	int *on;
+cv_blank(struct grf_softc *gp, int *on)
 {
-	volatile caddr_t ba;
+	volatile void *ba;
 
 	ba = gp->g_regkva;
 	gfx_on_off(*on > 0 ? 0 : 1, ba);
@@ -900,12 +897,8 @@ cv_blank(gp, on)
  * Return a UNIX error number or 0 for success.
  */
 int
-cv_mode(gp, cmd, arg, a2, a3)
-	register struct grf_softc *gp;
-	u_long cmd;
-	void *arg;
-	u_long a2;
-	int a3;
+cv_mode(register struct grf_softc *gp, u_long cmd, void *arg, u_long a2,
+        int a3)
 {
 	int error;
 
@@ -948,15 +941,12 @@ cv_mode(gp, cmd, arg, a2, a3)
 		break;
 	}
 
-	return (EINVAL);
+	return (EPASSTHROUGH);
 }
 
 
 int
-cv_ioctl (gp, cmd, data)
-	register struct grf_softc *gp;
-	u_long cmd;
-	void *data;
+cv_ioctl(register struct grf_softc *gp, u_long cmd, void *data)
 {
 	switch (cmd) {
 #ifndef CV_NO_HARDWARE_CURSOR
@@ -1001,14 +991,12 @@ cv_ioctl (gp, cmd, data)
 	    case GRFIOCBLANK:
 		return (cv_blank (gp, (int *)data));
 	}
-	return (EINVAL);
+	return (EPASSTHROUGH);
 }
 
 
 int
-cv_setmonitor(gp, gv)
-	struct grf_softc *gp;
-	struct grfvideo_mode *gv;
+cv_setmonitor(struct grf_softc *gp, struct grfvideo_mode *gv)
 {
 	struct grfvideo_mode *md;
 
@@ -1058,11 +1046,9 @@ cv_setmonitor(gp, gv)
 
 
 int
-cv_getcmap(gfp, cmap)
-	struct grf_softc *gfp;
-	struct grf_colormap *cmap;
+cv_getcmap(struct grf_softc *gfp, struct grf_colormap *cmap)
 {
-	volatile caddr_t ba;
+	volatile void *ba;
 	u_char red[256], green[256], blue[256], *rp, *gp, *bp;
 	short x;
 	int error;
@@ -1071,7 +1057,7 @@ cv_getcmap(gfp, cmap)
 	if (cmap->count == 0 || cmap->index >= 256)
 		return (0);
 
-	if (cmap->index + cmap->count > 256)
+	if (cmap->count > 256 - cmap->index)
 		cmap->count = 256 - cmap->index;
 
 	/* first read colors out of the chip, then copyout to userspace */
@@ -1098,11 +1084,9 @@ cv_getcmap(gfp, cmap)
 
 
 int
-cv_putcmap(gfp, cmap)
-	struct grf_softc *gfp;
-	struct grf_colormap *cmap;
+cv_putcmap(struct grf_softc *gfp, struct grf_colormap *cmap)
 {
-	volatile caddr_t ba;
+	volatile void *ba;
 	u_char red[256], green[256], blue[256], *rp, *gp, *bp;
 	short x;
 	int error;
@@ -1111,7 +1095,7 @@ cv_putcmap(gfp, cmap)
 	if (cmap->count == 0 || cmap->index >= 256)
 		return (0);
 
-	if (cmap->index + cmap->count > 256)
+	if (cmap->count > 256 - cmap->index)
 		cmap->count = 256 - cmap->index;
 
 	/* first copy the colors into kernelspace */
@@ -1137,10 +1121,9 @@ cv_putcmap(gfp, cmap)
 
 
 int
-cv_toggle(gp)
-	struct grf_softc *gp;
+cv_toggle(struct grf_softc *gp)
 {
-	volatile caddr_t ba;
+	volatile void *ba;
 
 	ba = gp->g_regkva;
 #ifndef CV64CONSOLE
@@ -1148,10 +1131,10 @@ cv_toggle(gp)
 #endif /* !CV64CONSOLE */
 
 	if (cv_pass_toggle) {
-		cvscreen(0, ba - 0x02000000);
+		cvscreen(0, (volatile char*)ba - 0x02000000);
 		cv_pass_toggle = 0;
 	} else {
-		cvscreen(1, ba - 0x02000000);
+		cvscreen(1, (volatile char*)ba - 0x02000000);
 		cv_pass_toggle = 1;
 	}
 
@@ -1160,8 +1143,7 @@ cv_toggle(gp)
 
 
 int
-cv_mondefok(gv)
-	struct grfvideo_mode *gv;
+cv_mondefok(struct grfvideo_mode *gv)
 {
 	unsigned long maxpix;
 
@@ -1225,13 +1207,11 @@ cv_mondefok(gv)
 
 
 int
-cv_load_mon(gp, md)
-	struct grf_softc *gp;
-	struct grfcvtext_mode *md;
+cv_load_mon(struct grf_softc *gp, struct grfcvtext_mode *md)
 {
 	struct grfvideo_mode *gv;
 	struct grfinfo *gi;
-	volatile caddr_t ba, fb;
+	volatile void *ba, *fb;
 	unsigned short mnr;
 	unsigned short HT, HDE, HBS, HBE, HSS, HSE, VDE, VBS, VBE, VSS,
 		VSE, VT;
@@ -1264,8 +1244,8 @@ cv_load_mon(gp, md)
 	/* turn gfx off, don't mess up the display */
 	gfx_on_off(1, ba);
 
-	/* provide all needed information in grf device-independant locations */
-	gp->g_data		= (caddr_t) gv;
+	/* provide all needed information in grf device-independent locations */
+	gp->g_data		= (void *) gv;
 	gi = &gp->g_display;
 	gi->gd_colors		= 1 << gv->depth;
 	gi->gd_planes		= gv->depth;
@@ -1629,19 +1609,19 @@ cv_load_mon(gp, md)
 #endif
 
 	/* Pass-through */
-	cvscreen(0, ba - 0x02000000);
+	cvscreen(0, (volatile char*)ba - 0x02000000);
 
 	return (1);
 }
 
 
 void
-cv_inittextmode(gp)
-	struct grf_softc *gp;
+cv_inittextmode(struct grf_softc *gp)
 {
 	struct grfcvtext_mode *tm = (struct grfcvtext_mode *)gp->g_data;
-	volatile caddr_t ba, fb;
-	unsigned char *c, *f, y;
+	volatile void *ba, *fb;
+	volatile unsigned char *c;
+	unsigned char *f, y;
 	unsigned short z;
 
 	ba = gp->g_regkva;
@@ -1649,14 +1629,14 @@ cv_inittextmode(gp)
 
 	/* load text font into beginning of display memory.
 	 * Each character cell is 32 bytes long (enough for 4 planes)
-	 * In linear adressing text mode, the memory is organized
+	 * In linear addressing text mode, the memory is organized
 	 * so, that the Bytes of all 4 planes are interleaved.
 	 * 1st byte plane 0, 1st byte plane 1, 1st byte plane 2,
 	 * 1st byte plane 3, 2nd byte plane 0, 2nd byte plane 1,...
 	 * The font is loaded in plane 2.
 	 */
 
-	c = (unsigned char *) fb;
+	c = (volatile unsigned char *) fb;
 
 	/* clear screen */
 	for (z = 0; z < tm->cols * tm->rows * 3; z++) {
@@ -1666,7 +1646,7 @@ cv_inittextmode(gp)
 		*c++ = 0;
 	}
 
-	c = (unsigned char *) (fb) + (32 * tm->fdstart * 4 + 2);
+	c = (volatile unsigned char *)fb + (32 * tm->fdstart * 4 + 2);
 	f = tm->fdata;
 	for (z = tm->fdstart; z <= tm->fdend; z++, c += (32 - tm->fy) * 4)
 		for (y = 0; y < tm->fy; y++) {
@@ -1675,7 +1655,7 @@ cv_inittextmode(gp)
 		}
 
 	/* print out a little init msg */
-	c = (unsigned char *)(fb) + (tm->cols - 6) * 4;
+	c = (volatile unsigned char *)fb + (tm->cols - 6) * 4;
 	*c++ = 'C';
 	*c++ = 0x0a;
 	c +=2;
@@ -1690,15 +1670,13 @@ cv_inittextmode(gp)
 }
 
 
-static __inline void
-cv_write_port(bits, BoardAddr)
-	unsigned short bits;
-	volatile caddr_t BoardAddr;
+static inline void
+cv_write_port(unsigned short bits, volatile void *BoardAddr)
 {
-	volatile caddr_t addr;
+	volatile char *addr;
 	static unsigned char CVPortBits = 0;	/* mirror port bits here */
 
-	addr = BoardAddr + 0x40001;
+	addr = (volatile char*)BoardAddr + 0x40001;
 	if (bits & 0x8000)
 		CVPortBits |= bits & 0xFF;	/* Set bits */
 	else {
@@ -1717,10 +1695,8 @@ cv_write_port(bits, BoardAddr)
  *  1 = Amiga Signal,
  * ba = boardaddr
  */
-static __inline void
-cvscreen(toggle, ba)
-	int toggle;
-	volatile caddr_t ba;
+static inline void
+cvscreen(int toggle, volatile void *ba)
 {
 
 	if (toggle == 1)
@@ -1732,10 +1708,8 @@ cvscreen(toggle, ba)
 
 /* 0 = on, 1= off */
 /* ba= registerbase */
-static __inline void
-gfx_on_off(toggle, ba)
-	int toggle;
-	volatile caddr_t ba;
+static inline void
+gfx_on_off(int toggle, volatile void *ba)
 {
 	int r;
 
@@ -1757,12 +1731,10 @@ static char cv_cursor_on = 0;
 /* Hardware Cursor handling routines */
 
 int
-cv_getspritepos(gp, pos)
-	struct grf_softc *gp;
-	struct grf_position *pos;
+cv_getspritepos(struct grf_softc *gp, struct grf_position *pos)
 {
 	int hi,lo;
-	volatile caddr_t ba = gp->g_regkva;
+	volatile void *ba = gp->g_regkva;
 
 	hi = RCrt(ba, CRT_ID_HWGC_ORIGIN_Y_HI);
 	lo = RCrt(ba, CRT_ID_HWGC_ORIGIN_Y_LO);
@@ -1776,11 +1748,9 @@ cv_getspritepos(gp, pos)
 
 
 int
-cv_setspritepos(gp, pos)
-	struct grf_softc *gp;
-	struct grf_position *pos;
+cv_setspritepos(struct grf_softc *gp, struct grf_position *pos)
 {
-	volatile caddr_t ba = gp->g_regkva;
+	volatile void *ba = gp->g_regkva;
 	short x, y;
 	static short savex, savey;
 	short xoff, yoff;
@@ -1821,17 +1791,16 @@ cv_setspritepos(gp, pos)
 	return(0);
 }
 
-static __inline short
-M2I(short val) {
+static inline short
+M2I(short val)
+{
 	return ( ((val & 0xff00) >> 8) | ((val & 0xff) << 8));
 }
 
 int
-cv_getspriteinfo(gp, info)
-	struct grf_softc *gp;
-	struct grf_spriteinfo *info;
+cv_getspriteinfo(struct grf_softc *gp, struct grf_spriteinfo *info)
 {
-	volatile caddr_t ba, fb;
+	volatile void *ba, *fb;
 
 	ba = gp->g_regkva;
 	fb = gp->g_fbkva;
@@ -1877,11 +1846,10 @@ cv_getspriteinfo(gp, info)
 
 
 void
-cv_setup_hwc(gp)
-	struct grf_softc *gp;
+cv_setup_hwc(struct grf_softc *gp)
 {
-	volatile caddr_t ba = gp->g_regkva;
-	volatile caddr_t hwc;
+	volatile void *ba = gp->g_regkva;
+	volatile char *hwc;
 	int test;
 
 	if (gp->g_display.gd_planes <= 4)
@@ -1890,28 +1858,28 @@ cv_setup_hwc(gp)
 		return;
 
 	/* reset colour stack */
-#if 0
+#if !defined(__m68k__)
 	test = RCrt(ba, CRT_ID_HWGC_MODE);
-	asm volatile("nop");
+	cpu_sync();
 #else
 	/* do it in assembler, the above does't seem to work */
-	asm volatile ("moveb #0x45, %1@(0x3d4); \
-		moveb %1@(0x3d5),%0" : "=r" (test) : "a" (ba));
+	__asm volatile ("moveb #0x45, %1@(0x3d4); \
+		moveb %1@(0x3d5),%0" : "=d" (test) : "a" (ba));
 #endif
 
 	WCrt (ba, CRT_ID_HWGC_FG_STACK, 0);
 
-	hwc = ba + CRT_ADDRESS_W;
+	hwc = (volatile char*)ba + CRT_ADDRESS_W;
 	*hwc = 0;
 	*hwc = 0;
 
-#if 0
+#if !defined(__m68k__)
 	test = RCrt(ba, CRT_ID_HWGC_MODE);
-	asm volatile("nop");
+	cpu_sync();
 #else
 	/* do it in assembler, the above does't seem to work */
-	asm volatile ("moveb #0x45, %1@(0x3d4); \
-		moveb %1@(0x3d5),%0" : "=r" (test) : "a" (ba));
+	__asm volatile ("moveb #0x45, %1@(0x3d4); \
+		moveb %1@(0x3d5),%0" : "=d" (test) : "a" (ba));
 #endif
 	switch (gp->g_display.gd_planes) {
 	    case 8:
@@ -1957,11 +1925,9 @@ cv_setup_hwc(gp)
 
 
 int
-cv_setspriteinfo (gp, info)
-	struct grf_softc *gp;
-	struct grf_spriteinfo *info;
+cv_setspriteinfo(struct grf_softc *gp, struct grf_spriteinfo *info)
 {
-	volatile caddr_t ba, fb;
+	volatile void *ba, *fb;
 	int depth = gp->g_display.gd_planes;
 
 	ba = gp->g_regkva;
@@ -2146,47 +2112,47 @@ cv_setspriteinfo (gp, info)
 #endif	/* CV_NO_INT */
 	}
 	if (info->set & GRFSPRSET_CMAP) {
-		volatile caddr_t hwc;
+		volatile char *hwc;
 		int test;
 
 		/* reset colour stack */
 		test = RCrt(ba, CRT_ID_HWGC_MODE);
-		asm volatile("nop");
+		cpu_sync();
 		switch (depth) {
 		    case 8:
 		    case 15:
 		    case 16:
 			WCrt (ba, CRT_ID_HWGC_FG_STACK, 0);
-			hwc = ba + CRT_ADDRESS_W;
+			hwc = (volatile char*)ba + CRT_ADDRESS_W;
 			*hwc = 0;
 			break;
 		    case 32:
 		    case 24:
 			WCrt (ba, CRT_ID_HWGC_FG_STACK, 0);
-			hwc = ba + CRT_ADDRESS_W;
+			hwc = (volatile char*)ba + CRT_ADDRESS_W;
 			*hwc = 0;
 			*hwc = 0;
 			break;
 		}
 
 		test = RCrt(ba, CRT_ID_HWGC_MODE);
-		asm volatile("nop");
+		cpu_sync();
 		switch (depth) {
 		    case 8:
 			WCrt (ba, CRT_ID_HWGC_BG_STACK, 1);
-			hwc = ba + CRT_ADDRESS_W;
+			hwc = (volatile char*)ba + CRT_ADDRESS_W;
 			*hwc = 1;
 			break;
 		    case 15:
 		    case 16:
 			WCrt (ba, CRT_ID_HWGC_BG_STACK, 0xff);
-			hwc = ba + CRT_ADDRESS_W;
+			hwc = (volatile char*)ba + CRT_ADDRESS_W;
 			*hwc = 0xff;
 			break;
 		    case 32:
 		    case 24:
 			WCrt (ba, CRT_ID_HWGC_BG_STACK, 0xff);
-			hwc = ba + CRT_ADDRESS_W;
+			hwc = (volatile char*)ba + CRT_ADDRESS_W;
 			*hwc = 0xff;
 			*hwc = 0xff;
 			break;
@@ -2214,9 +2180,7 @@ cv_setspriteinfo (gp, info)
 
 
 int
-cv_getspritemax (gp, pos)
-	struct grf_softc *gp;
-	struct grf_position *pos;
+cv_getspritemax (struct grf_softc *gp, struct grf_position *pos)
 {
 
 	pos->x = 64;

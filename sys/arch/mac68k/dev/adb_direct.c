@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_direct.c,v 1.42 2000/03/23 06:39:55 thorpej Exp $	*/
+/*	$NetBSD: adb_direct.c,v 1.63 2008/04/04 09:16:59 yamt Exp $	*/
 
 /* From: adb_direct.c 2.02 4/18/97 jpw */
 
@@ -60,18 +60,22 @@
  */
 
 #ifdef __NetBSD__
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: adb_direct.c,v 1.63 2008/04/04 09:16:59 yamt Exp $");
+
 #include "opt_adb.h"
 
 #include <sys/param.h>
-#include <sys/cdefs.h>
 #include <sys/pool.h>
 #include <sys/queue.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
 
 #include <machine/viareg.h>
 #include <machine/param.h>
-#include <machine/cpu.h>
 #include <machine/adbsys.h>			/* required for adbvar.h */
 #include <machine/iopreg.h>			/* required for IOP support */
 
@@ -173,7 +177,7 @@
  * A structure for storing information about each ADB device.
  */
 struct ADBDevEntry {
-	void	(*ServiceRtPtr) __P((void));
+	void	(*ServiceRtPtr)(void);
 	void	*DataAreaAddr;
 	int	devType;
 	int	origAddr;
@@ -209,7 +213,7 @@ struct adbCommand {
 /*
  * Text representations of each hardware class
  */
-char	*adbHardwareDescr[MAX_ADB_HW + 1] = {
+const char	*adbHardwareDescr[MAX_ADB_HW + 1] = {
 	"unknown",
 	"II series",
 	"IIsi series",
@@ -267,56 +271,57 @@ int	tickle_count = 0;		/* how many tickles seen for this packet? */
 int	tickle_serial = 0;		/* the last packet tickled */
 int	adb_cuda_serial = 0;		/* the current packet */
 
-struct callout adb_cuda_tickle_ch = CALLOUT_INITIALIZER;
+callout_t adb_cuda_tickle_ch;
+
+void *adb_softintr_cookie;
 
 extern struct mac68k_machine_S mac68k_machine;
 
-void	pm_setup_adb __P((void));
-void	pm_hw_setup __P((void));
-void	pm_check_adb_devices __P((int));
-void	pm_intr __P((void *));
-int	pm_adb_op __P((u_char *, void *, void *, int));
-void	pm_init_adb_device __P((void));
+void	pm_setup_adb(void);
+void	pm_hw_setup(void);
+void	pm_check_adb_devices(int);
+void	pm_intr(void *);
+int	pm_adb_op(u_char *, void *, void *, int);
+void	pm_init_adb_device(void);
 
 /*
  * The following are private routines.
  */
 #ifdef ADB_DEBUG
-void	print_single __P((u_char *));
+void	print_single(u_char *);
 #endif
-void	adb_intr __P((void *));
-void	adb_intr_II __P((void *));
-void	adb_intr_IIsi __P((void *));
-void	adb_intr_cuda __P((void *));
-void	adb_soft_intr __P((void));
-int	send_adb_II __P((u_char *, u_char *, void *, void *, int));
-int	send_adb_IIsi __P((u_char *, u_char *, void *, void *, int));
-int	send_adb_cuda __P((u_char *, u_char *, void *, void *, int));
-void	adb_intr_cuda_test __P((void));
-void	adb_cuda_tickle __P((void));
-void	adb_pass_up __P((struct adbCommand *));
-void	adb_op_comprout __P((void));
-void	adb_reinit __P((void));
-int	count_adbs __P((void));
-int	get_ind_adb_info __P((ADBDataBlock *, int));
-int	get_adb_info __P((ADBDataBlock *, int));
-int	set_adb_info __P((ADBSetInfoBlock *, int));
-void	adb_setup_hw_type __P((void));
-int	adb_op __P((Ptr, Ptr, Ptr, short));
-int	adb_op_sync __P((Ptr, Ptr, Ptr, short));
-void	adb_read_II __P((u_char *));
-void	adb_hw_setup __P((void));
-void	adb_hw_setup_IIsi __P((u_char *));
-void	adb_comp_exec __P((void));
-int	adb_cmd_result __P((u_char *));
-int	adb_cmd_extra __P((u_char *));
-int	adb_guess_next_device __P((void));
-int	adb_prog_switch_enable __P((void));
-int	adb_prog_switch_disable __P((void));
+void	adb_intr(void *);
+void	adb_intr_II(void *);
+void	adb_intr_IIsi(void *);
+void	adb_intr_cuda(void *);
+void	adb_soft_intr(void);
+int	send_adb_II(u_char *, u_char *, void *, void *, int);
+int	send_adb_IIsi(u_char *, u_char *, void *, void *, int);
+int	send_adb_cuda(u_char *, u_char *, void *, void *, int);
+void	adb_intr_cuda_test(void);
+void	adb_cuda_tickle(void);
+void	adb_pass_up(struct adbCommand *);
+void	adb_op_comprout(void);
+void	adb_reinit(void);
+int	count_adbs(void);
+int	get_ind_adb_info(ADBDataBlock *, int);
+int	get_adb_info(ADBDataBlock *, int);
+int	set_adb_info(ADBSetInfoBlock *, int);
+void	adb_setup_hw_type(void);
+int	adb_op(Ptr, Ptr, Ptr, short);
+void	adb_read_II(u_char *);
+void	adb_hw_setup(void);
+void	adb_hw_setup_IIsi(u_char *);
+void	adb_comp_exec(void);
+int	adb_cmd_result(u_char *);
+int	adb_cmd_extra(u_char *);
+int	adb_guess_next_device(void);
+int	adb_prog_switch_enable(void);
+int	adb_prog_switch_disable(void);
 /* we should create this and it will be the public version */
-int	send_adb __P((u_char *, void *, void *));
-void	adb_iop_recv __P((IOP *, struct iop_msg *));
-int	send_adb_iop __P((int, u_char *, void *, void *));
+int	send_adb(u_char *, void *, void *);
+void	adb_iop_recv(IOP *, struct iop_msg *);
+int	send_adb_iop(int, u_char *, void *, void *);
 
 #ifdef ADB_DEBUG
 /*
@@ -326,8 +331,7 @@ int	send_adb_iop __P((int, u_char *, void *, void *));
  * is in [0].
  */
 void
-print_single(str)
-	u_char *str;
+print_single(u_char *str)
 {
 	int x;
 
@@ -598,6 +602,7 @@ switch_start:
 		if (adb_debug)
 			printf_intr("intr: unknown ADB state\n");
 #endif
+		break;
 	}
 
 	ADB_VIA_INTR_ENABLE();	/* enable ADB interrupt on IIs. */
@@ -609,7 +614,7 @@ switch_start:
 
 
 int
-send_adb_cuda(u_char * in, u_char * buffer, void *compRout, void *data, int
+send_adb_cuda(u_char *in, u_char *buffer, void *compRout, void *data, int
 	command)
 {
 	int s, len;
@@ -1041,6 +1046,7 @@ switch_start:
 		if (adb_debug)
 			printf_intr("adb: unknown ADB state (during intr)\n");
 #endif
+		break;
 	}
 
 	ADB_VIA_INTR_ENABLE();	/* enable ADB interrupt on IIs. */
@@ -1056,7 +1062,7 @@ switch_start:
  * send_adb version for II series machines
  */
 int
-send_adb_II(u_char * in, u_char * buffer, void *compRout, void *data, int command)
+send_adb_II(u_char *in, u_char *buffer, void *compRout, void *data, int command)
 {
 	int s, len;
 
@@ -1413,6 +1419,7 @@ switch_start:
 		if (adb_debug)
 			printf_intr("intr: unknown ADB state\n");
 #endif
+		break;
 	}
 
 	ADB_VIA_INTR_ENABLE();	/* enable ADB interrupt on IIs. */
@@ -1438,7 +1445,7 @@ switch_start:
  *
  */
 int
-send_adb_IIsi(u_char * in, u_char * buffer, void *compRout, void *data, int
+send_adb_IIsi(u_char *in, u_char *buffer, void *compRout, void *data, int
 	command)
 {
 	int s, len;
@@ -1721,7 +1728,7 @@ adb_pass_up(struct adbCommand *in)
 	if (adb_polling)
 		adb_soft_intr();
 	else
-		setsoftadb();
+		softint_schedule(adb_softintr_cookie);
 
 	return;
 }
@@ -1783,13 +1790,14 @@ adb_soft_intr(void)
 		/* call default completion routine if it's valid */
 		if (comprout) {
 #ifdef __NetBSD__
-			asm("	movml #0xffff,sp@-	| save all registers
-				movl %0,a2 		| compdata
-				movl %1,a1 		| comprout
-				movl %2,a0 		| buffer
-				movl %3,d0 		| cmd
-				jbsr a1@ 		| go call the routine
-				movml sp@+,#0xffff	| restore all registers"
+			__asm volatile (
+			"	movml #0xffff,%%sp@- \n" /* save all regs */
+			"	movl %0,%%a2	\n" 	/* compdata */
+			"	movl %1,%%a1	\n" 	/* comprout */
+			"	movl %2,%%a0 	\n"	/* buffer */
+			"	movl %3,%%d0 	\n"	/* cmd */
+			"	jbsr %%a1@ 	\n"	/* go call routine */
+			"	movml %%sp@+,#0xffff"	/* restore all regs */
 			    :
 			    : "g"(compdata), "g"(comprout),
 				"g"(buffer), "g"(cmd)
@@ -1806,6 +1814,7 @@ adb_soft_intr(void)
 				movem.l(a7)+, d0/a2/a1/a0
 			}
 #endif
+
 		}
 
 		s = splhigh();
@@ -2028,7 +2037,7 @@ adb_hw_setup(void)
  *
  */
 void
-adb_hw_setup_IIsi(u_char * buffer)
+adb_hw_setup_IIsi(u_char *buffer)
 {
 	int i;
 	int dummy;
@@ -2103,6 +2112,14 @@ adb_reinit(void)
 	int saveptr;		/* point to next free relocation address */
 	int device;
 	int nonewtimes;		/* times thru loop w/o any new devices */
+	static bool again;
+
+	if (!again) {
+		callout_init(&adb_cuda_tickle_ch, 0);
+		again = true;
+	}
+
+	adb_setup_hw_type();	/* setup hardware type */
 
 	/* Make sure we are not interrupted while building the table. */
 	/* ints must be on for PB & IOP (at least, for now) */
@@ -2120,17 +2137,17 @@ adb_reinit(void)
 	 * Initialize the ADB table.  For now, we'll always use the same table
 	 * that is defined at the beginning of this file - no mallocs.
 	 */
-	for (i = 0; i < 16; i++)
+	for (i = 0; i < 16; i++) {
 		ADBDevTable[i].devType = 0;
-
-	adb_setup_hw_type();	/* setup hardware type */
+		ADBDevTable[i].origAddr = ADBDevTable[i].currentAddr = 0;
+	}
 
 	adb_hw_setup();		/* init the VIA bits and hard reset ADB */
 
 	delay(1000);
 
 	/* send an ADB reset first */
-	adb_op_sync((Ptr)0, (Ptr)0, (Ptr)0, (short)0x00);
+	(void)adb_op_sync((Ptr)0, (Ptr)0, (Ptr)0, (short)0x00);
 	delay(3000);
 
 	/*
@@ -2156,16 +2173,7 @@ adb_reinit(void)
 		result = adb_op_sync((Ptr)send_string, (Ptr)0,
 		    (Ptr)0, (short)command);
 
-		if (send_string[0] != 0) {
-			/* check for valid device handler */
-			switch (send_string[2]) {
-			case 0:
-			case 0xfd:
-			case 0xfe:
-			case 0xff:
-				continue;	/* invalid, skip */
-			}
-
+		if (result == 0 && send_string[0] != 0) {
 			/* found a device */
 			++ADBNumDevices;
 			KASSERT(ADBNumDevices < 16);
@@ -2195,7 +2203,7 @@ adb_reinit(void)
 
 	nonewtimes = 0;		/* no loops w/o new devices */
 	while (saveptr > 0 && nonewtimes++ < 11) {
-		for (i = 1; i <= ADBNumDevices; i++) {
+		for (i = 1;saveptr > 0 && i <= ADBNumDevices; i++) {
 			device = ADBDevTable[i].currentAddr;
 #ifdef ADB_DEBUG
 			if (adb_debug & 0x80)
@@ -2205,7 +2213,7 @@ adb_reinit(void)
 
 			/* send TALK R3 to address */
 			command = ADBTALK(device, 3);
-			adb_op_sync((Ptr)send_string, (Ptr)0,
+			(void)adb_op_sync((Ptr)send_string, (Ptr)0,
 			    (Ptr)0, (short)command);
 
 			/* move device to higher address */
@@ -2213,38 +2221,43 @@ adb_reinit(void)
 			send_string[0] = 2;
 			send_string[1] = (u_char)(saveptr | 0x60);
 			send_string[2] = 0xfe;
-			adb_op_sync((Ptr)send_string, (Ptr)0,
+			(void)adb_op_sync((Ptr)send_string, (Ptr)0,
 			    (Ptr)0, (short)command);
-			delay(500);
+			delay(1000);
 
 			/* send TALK R3 - anthing at new address? */
 			command = ADBTALK(saveptr, 3);
-			adb_op_sync((Ptr)send_string, (Ptr)0,
+			send_string[0] = 0;
+			result = adb_op_sync((Ptr)send_string, (Ptr)0,
 			    (Ptr)0, (short)command);
-			delay(500);
+			delay(1000);
 
-			if (send_string[0] == 0) {
+			if (result != 0 || send_string[0] == 0) {
+				/*
+				 * maybe there's a communication breakdown;
+				 * just in case, move it back from whence it
+				 * came, and we'll try again later
+				 */
+				command = ADBLISTEN(saveptr, 3);
+				send_string[0] = 2;
+				send_string[1] = (u_char)(device | 0x60);
+				send_string[2] = 0x00;
+				(void)adb_op_sync((Ptr)send_string, (Ptr)0,
+				    (Ptr)0, (short)command);
 #ifdef ADB_DEBUG
 				if (adb_debug & 0x80)
 					printf_intr("failed, continuing\n");
 #endif
+				delay(1000);
 				continue;
 			}
 
 			/* send TALK R3 - anything at old address? */
 			command = ADBTALK(device, 3);
+			send_string[0] = 0;
 			result = adb_op_sync((Ptr)send_string, (Ptr)0,
 			    (Ptr)0, (short)command);
-			if (send_string[0] != 0) {
-				/* check for valid device handler */
-				switch (send_string[2]) {
-				case 0:
-				case 0xfd:
-				case 0xfe:
-				case 0xff:
-					continue;	/* invalid, skip */
-				}
-
+			if (result == 0 && send_string[0] != 0) {
 				/* new device found */
 				/* update data for previously moved device */
 				ADBDevTable[i].currentAddr = saveptr;
@@ -2298,7 +2311,7 @@ adb_reinit(void)
 				send_string[0] = 2;
 				send_string[1] = (u_char)(device | 0x60);
 				send_string[2] = 0xfe;
-				adb_op_sync((Ptr)send_string, (Ptr)0,
+				(void)adb_op_sync((Ptr)send_string, (Ptr)0,
 				    (Ptr)0, (short)command);
 				delay(1000);
 			}
@@ -2358,13 +2371,14 @@ adb_comp_exec(void)
 {
 	if ((long)0 != adbCompRout) /* don't call if empty return location */
 #ifdef __NetBSD__
-		asm("	movml #0xffff,sp@-	| save all registers
-			movl %0,a2		| adbCompData
-			movl %1,a1		| adbCompRout
-			movl %2,a0		| adbBuffer
-			movl %3,d0		| adbWaitingCmd
-			jbsr a1@		| go call the routine
-			movml sp@+,#0xffff	| restore all registers"
+		__asm volatile(
+		"	movml #0xffff,%%sp@- \n" /* save all registers */
+		"	movl %0,%%a2 \n"	/* adbCompData */
+		"	movl %1,%%a1 \n"	/* adbCompRout */
+		"	movl %2,%%a0 \n"	/* adbBuffer */
+		"	movl %3,%%d0 \n"	/* adbWaitingCmd */
+		"	jbsr %%a1@ \n"		/* go call the routine */
+		"	movml %%sp@+,#0xffff"	/* restore all registers */
 		    :
 		    : "g"(adbCompData), "g"(adbCompRout),
 			"g"(adbBuffer), "g"(adbWaitingCmd)
@@ -2463,50 +2477,6 @@ adb_cmd_extra(u_char *in)
 }
 
 
-/*
- * adb_op_sync
- *
- * This routine does exactly what the adb_op routine does, except that after
- * the adb_op is called, it waits until the return value is present before
- * returning.
- *
- * NOTE: The user specified compRout is ignored, since this routine specifies
- * it's own to adb_op, which is why you really called this in the first place
- * anyway.
- */
-int
-adb_op_sync(Ptr buffer, Ptr compRout, Ptr data, short command)
-{
-	int result;
-	volatile int flag = 0;
-
-	result = adb_op(buffer, (void *)adb_op_comprout,
-	    (void *)&flag, command);	/* send command */
-	if (result == 0)		/* send ok? */
-		while (0 == flag)
-			/* wait for compl. routine */;
-
-	return result;
-}
-
-
-/*
- * adb_op_comprout
- *
- * This function is used by the adb_op_sync routine so it knows when the
- * function is done.
- */
-void 
-adb_op_comprout(void)
-{
-#ifdef __NetBSD__
-	asm("movw	#1,a2@			| update flag value");
-#else				/* for macos based testing */
-	asm {
-		move.w #1,(a2) }		/* update flag value */
-#endif
-}
-
 void 
 adb_setup_hw_type(void)
 {
@@ -2553,7 +2523,6 @@ adb_setup_hw_type(void)
 
 	case MACH_MACPB140:		/* PowerBook 140 */
 	case MACH_MACPB145:		/* PowerBook 145 */
-	case MACH_MACPB150:		/* PowerBook 150 */
 	case MACH_MACPB160:		/* PowerBook 160 */
 	case MACH_MACPB165:		/* PowerBook 165 */
 	case MACH_MACPB165C:		/* PowerBook 165c */
@@ -2568,6 +2537,7 @@ adb_setup_hw_type(void)
 #endif
 		break;
 
+	case MACH_MACPB150:		/* PowerBook 150 */
 	case MACH_MACPB210:		/* PowerBook Duo 210 */
 	case MACH_MACPB230:		/* PowerBook Duo 230 */
 	case MACH_MACPB250:		/* PowerBook Duo 250 */
@@ -2575,6 +2545,8 @@ adb_setup_hw_type(void)
 	case MACH_MACPB280:		/* PowerBook Duo 280 */
 	case MACH_MACPB280C:		/* PowerBook Duo 280c */
 	case MACH_MACPB500:		/* PowerBook 500 series */
+	case MACH_MACPB190:		/* PowerBook 190 */
+	case MACH_MACPB190CS:		/* PowerBook 190cs */
 		adbHardware = ADB_HW_PB;
 		pm_setup_adb();
 #ifdef ADB_DEBUG
@@ -2657,14 +2629,14 @@ count_adbs(void)
 	found = 0;
 
 	for (i = 1; i < 16; i++)
-		if (0 != ADBDevTable[i].devType)
+		if (0 != ADBDevTable[i].currentAddr)
 			found++;
 
 	return found;
 }
 
 int 
-get_ind_adb_info(ADBDataBlock * info, int index)
+get_ind_adb_info(ADBDataBlock *info, int index)
 {
 	if ((index < 1) || (index > 15))	/* check range 1-15 */
 		return (-1);
@@ -2686,7 +2658,7 @@ get_ind_adb_info(ADBDataBlock * info, int index)
 }
 
 int 
-get_adb_info(ADBDataBlock * info, int adbAddr)
+get_adb_info(ADBDataBlock *info, int adbAddr)
 {
 	int i;
 
@@ -2706,7 +2678,7 @@ get_adb_info(ADBDataBlock * info, int adbAddr)
 }
 
 int 
-set_adb_info(ADBSetInfoBlock * info, int adbAddr)
+set_adb_info(ADBSetInfoBlock *info, int adbAddr)
 {
 	int i;
 
@@ -2740,10 +2712,10 @@ mrg_pmintr(void)
 	return 1;	/* mimic mrg_pmintr in macrom.h just in case */
 }
 
-/* caller should really use machine-independant version: getPramTime */
+/* caller should really use machine-independent version: getPramTime */
 /* this version does pseudo-adb access only */
 int 
-adb_read_date_time(unsigned long *time)
+adb_read_date_time(unsigned long *curtime)
 {
 	u_char output[ADB_MAX_MSG_LENGTH];
 	int result;
@@ -2761,14 +2733,15 @@ adb_read_date_time(unsigned long *time)
 		output[1] = 0x01;	/* to pram/rtc device */
 		output[2] = 0x03;	/* read date/time */
 		result = send_adb_IIsi((u_char *)output, (u_char *)output,
-		    (void *)adb_op_comprout, (int *)&flag, (int)0);
+		    (void *)adb_op_comprout, __UNVOLATILE(&flag), (int)0);
 		if (result != 0)	/* exit if not sent */
 			return -1;
 
-		while (0 == flag)	/* wait for result */
-			;
+		adb_spin(&flag);	/* wait for result */
+		if (flag == 0)		/* exit it timeout */
+			return -1;
 
-		*time = (long)(*(long *)(output + 1));
+		*curtime = (long)(*(long *)(output + 1));
 		return 0;
 
 	case ADB_HW_PB:
@@ -2779,14 +2752,15 @@ adb_read_date_time(unsigned long *time)
 		output[1] = 0x01;	/* to pram/rtc device */
 		output[2] = 0x03;	/* read date/time */
 		result = send_adb_cuda((u_char *)output, (u_char *)output,
-		    (void *)adb_op_comprout, (void *)&flag, (int)0);
+		    (void *)adb_op_comprout, __UNVOLATILE(&flag), (int)0);
 		if (result != 0)	/* exit if not sent */
 			return -1;
 
-		while (0 == flag)	/* wait for result */
-			;
+		adb_spin(&flag);	/* wait for result */
+		if (flag == 0)		/* exit it timeout */
+			return -1;
 
-		*time = (long)(*(long *)(output + 1));
+		*curtime = (long)(*(long *)(output + 1));
 		return 0;
 
 	case ADB_HW_UNKNOWN:
@@ -2795,10 +2769,10 @@ adb_read_date_time(unsigned long *time)
 	}
 }
 
-/* caller should really use machine-independant version: setPramTime */
+/* caller should really use machine-independent version: setPramTime */
 /* this version does pseudo-adb access only */
 int 
-adb_set_date_time(unsigned long time)
+adb_set_date_time(unsigned long curtime)
 {
 	u_char output[ADB_MAX_MSG_LENGTH];
 	int result;
@@ -2815,17 +2789,18 @@ adb_set_date_time(unsigned long time)
 		output[0] = 0x06;	/* 6 byte message */
 		output[1] = 0x01;	/* to pram/rtc device */
 		output[2] = 0x09;	/* set date/time */
-		output[3] = (u_char)(time >> 24);
-		output[4] = (u_char)(time >> 16);
-		output[5] = (u_char)(time >> 8);
-		output[6] = (u_char)(time);
+		output[3] = (u_char)(curtime >> 24);
+		output[4] = (u_char)(curtime >> 16);
+		output[5] = (u_char)(curtime >> 8);
+		output[6] = (u_char)(curtime);
 		result = send_adb_IIsi((u_char *)output, (u_char *)0,
-		    (void *)adb_op_comprout, (void *)&flag, (int)0);
+		    (void *)adb_op_comprout, __UNVOLATILE(&flag), (int)0);
 		if (result != 0)	/* exit if not sent */
 			return -1;
 
-		while (0 == flag)	/* wait for send to finish */
-			;
+		adb_spin(&flag);	/* wait for result */
+		if (flag == 0)		/* exit it timeout */
+			return -1;
 
 		return 0;
 
@@ -2836,17 +2811,18 @@ adb_set_date_time(unsigned long time)
 		output[0] = 0x06;	/* 6 byte message */
 		output[1] = 0x01;	/* to pram/rtc device */
 		output[2] = 0x09;	/* set date/time */
-		output[3] = (u_char)(time >> 24);
-		output[4] = (u_char)(time >> 16);
-		output[5] = (u_char)(time >> 8);
-		output[6] = (u_char)(time);
+		output[3] = (u_char)(curtime >> 24);
+		output[4] = (u_char)(curtime >> 16);
+		output[5] = (u_char)(curtime >> 8);
+		output[6] = (u_char)(curtime);
 		result = send_adb_cuda((u_char *)output, (u_char *)0,
-		    (void *)adb_op_comprout, (void *)&flag, (int)0);
+		    (void *)adb_op_comprout, __UNVOLATILE(&flag), (int)0);
 		if (result != 0)	/* exit if not sent */
 			return -1;
 
-		while (0 == flag)	/* wait for send to finish */
-			;
+		adb_spin(&flag);	/* wait for result */
+		if (flag == 0)		/* exit it timeout */
+			return -1;
 
 		return 0;
 
@@ -2920,12 +2896,13 @@ adb_prog_switch_enable(void)
 		output[2] = 0x1c;	/* prog. switch control */
 		output[3] = 0x01;	/* enable */
 		result = send_adb_IIsi((u_char *)output, (u_char *)0,
-		    (void *)adb_op_comprout, (void *)&flag, (int)0);
+		    (void *)adb_op_comprout, __UNVOLATILE(&flag), (int)0);
 		if (result != 0)	/* exit if not sent */
 			return -1;
 
-		while (0 == flag)	/* wait for send to finish */
-			;
+		adb_spin(&flag);	/* wait for result */
+		if (flag == 0)		/* exit it timeout */
+			return -1;
 
 		return 0;
 
@@ -2955,12 +2932,13 @@ adb_prog_switch_disable(void)
 		output[2] = 0x1c;	/* prog. switch control */
 		output[3] = 0x01;	/* disable */
 		result = send_adb_IIsi((u_char *)output, (u_char *)0,
-			(void *)adb_op_comprout, (void *)&flag, (int)0);
+			(void *)adb_op_comprout, __UNVOLATILE(&flag), (int)0);
 		if (result != 0)	/* exit if not sent */
 			return -1;
 
-		while (0 == flag)	/* wait for send to finish */
-			;
+		adb_spin(&flag);	/* wait for result */
+		if (flag == 0)		/* exit it timeout */
+			return -1;
 
 		return 0;
 
@@ -2989,19 +2967,19 @@ ADBReInit(void)
 }
 
 int 
-GetIndADB(ADBDataBlock * info, int index)
+GetIndADB(ADBDataBlock *info, int index)
 {
 	return (get_ind_adb_info(info, index));
 }
 
 int 
-GetADBInfo(ADBDataBlock * info, int adbAddr)
+GetADBInfo(ADBDataBlock *info, int adbAddr)
 {
 	return (get_adb_info(info, adbAddr));
 }
 
 int 
-SetADBInfo(ADBSetInfoBlock * info, int adbAddr)
+SetADBInfo(ADBSetInfoBlock *info, int adbAddr)
 {
 	return (set_adb_info(info, adbAddr));
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: apbus_subr.c,v 1.2 1999/12/23 06:52:30 tsubai Exp $	*/
+/*	$NetBSD: apbus_subr.c,v 1.8 2008/04/09 15:40:30 tsutsui Exp $	*/
 
 /*-
  * Copyright (C) 1999 SHIMIZU Ryo.  All rights reserved.
@@ -26,14 +26,18 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: apbus_subr.c,v 1.8 2008/04/09 15:40:30 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 
 #include <newsmips/apbus/apbusvar.h>
 
+static void apctl_dump(struct apbus_ctl *);
+
 void *
-apbus_device_to_hwaddr(apbus_dev)
-	struct apbus_dev *apbus_dev;
+apbus_device_to_hwaddr(struct apbus_dev *apbus_dev)
 {
 	struct apbus_ctl *ctl;
 
@@ -48,8 +52,7 @@ apbus_device_to_hwaddr(apbus_dev)
 }
 
 struct apbus_dev *
-apbus_lookupdev(devname)
-	char *devname;
+apbus_lookupdev(char *devname)
 {
 	struct apbus_dev *dp;
 
@@ -59,7 +62,7 @@ apbus_lookupdev(devname)
 
 	/* search apbus_dev named 'devname' */
 	while (dp) {
-		if (strcmp(devname,dp->apbd_name) == 0)
+		if (strcmp(devname, dp->apbd_name) == 0)
 			return dp;
 
 		dp = dp->apbd_link;
@@ -68,9 +71,8 @@ apbus_lookupdev(devname)
 	return NULL;
 }
 
-void
-apctl_dump(apctl)
-	struct apbus_ctl *apctl;
+static void
+apctl_dump(struct apbus_ctl *apctl)
 {
 	unsigned int *p;
 
@@ -86,14 +88,13 @@ apctl_dump(apctl)
 	printf("	softc:		%p\n", apctl->apbc_softc);
 	printf("	Slot:		%d\n", apctl->apbc_sl);
 	printf("\n");
-	
+
 	if (apctl->apbc_link)
 		apctl_dump(apctl->apbc_link);
 }
 
 void
-apdevice_dump(apdev)
-	struct apbus_dev *apdev;
+apdevice_dump(struct apbus_dev *apdev)
 {
 	struct apbus_ctl *apctl;
 

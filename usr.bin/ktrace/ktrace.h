@@ -1,4 +1,4 @@
-/*	$NetBSD: ktrace.h,v 1.6 1998/06/27 21:24:22 christos Exp $	*/
+/*	$NetBSD: ktrace.h,v 1.19 2008/02/16 07:19:23 matt Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,15 +32,16 @@
  */
 
 #define DEF_POINTS (KTRFAC_SYSCALL | KTRFAC_SYSRET | KTRFAC_NAMEI | \
-		  KTRFAC_GENIO | KTRFAC_PSIG | KTRFAC_EMUL)
+		  KTRFAC_GENIO | KTRFAC_PSIG | KTRFAC_EMUL | KTRFAC_USER | \
+		  KTRFAC_MMSG | KTRFAC_MOOL)
 
-#define ALL_POINTS (DEF_POINTS | KTRFAC_CSW)
+#define ALL_POINTS KTRFAC_MASK
 
 #define DEF_TRACEFILE	"ktrace.out"
 
 #include <sys/cdefs.h>
 
-int	 getpoints __P((char *));
-char	*ioctlname __P((long));
-void dumpfile __P((char *, int, int));
-void setemul __P((char *));
+int	getpoints(int, char *);
+const char	*ioctlname(u_long);
+const char	*siginfocodename(int, int);
+void	dumpfile(const char *, int, int);

@@ -1,4 +1,4 @@
-.\"	$NetBSD: crypt.3,v 1.7 1999/07/02 15:18:37 simonb Exp $
+.\"	$NetBSD: crypt.3,v 1.20 2005/09/05 03:37:15 hubertf Exp $
 .\"
 .\" Copyright (c) 1989, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -31,9 +27,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)crypt.3	8.1.1.1 (Berkeley) 8/18/93
+.\"     @(#)crypt.3	8.2 (Berkeley) 12/11/93
 .\"
-.Dd August 18, 1993
+.Dd September 4, 2005
 .Dt CRYPT 3
 .Os
 .Sh NAME
@@ -42,11 +38,11 @@
 .Nm encrypt ,
 .Nm des_setkey ,
 .Nm des_cipher
-.Nd DES encryption
+.Nd password encryption
 .Sh LIBRARY
 .Lb libcrypt
 .Sh SYNOPSIS
-.Fd #include <unistd.h>
+.In unistd.h
 .Ft char
 .Fn *crypt "const char *key" "const char *setting"
 .Ft int
@@ -55,7 +51,7 @@
 .Fn des_setkey "const char *key"
 .Ft int
 .Fn des_cipher "const char *in" "char *out" "long salt" "int count"
-.Fd #include <stdlib.h>
+.In stdlib.h
 .Ft int
 .Fn setkey "const char *key"
 .Sh DESCRIPTION
@@ -63,20 +59,39 @@ The
 .Fn crypt
 function
 performs password encryption.
-It is derived from the
+The encryption scheme used by
+.Fn crypt
+is dependent upon the contents of the
+.Dv NUL Ns -terminated
+string
+.Ar setting .
+If it begins
+with a string character
+.Pq Ql $
+and a number then a different algorithm is used depending on the number.
+At the moment a
+.Ql $1
+chooses MD5 hashing and a
+.Ql $2
+chooses Blowfish hashing; see below for more information.
+If
+.Ar setting
+begins with the ``_'' character, DES encryption with a user specified number
+of perturbations is selected.
+If
+.Ar setting
+begins with any other character, DES encryption with a fixed number
+of perturbations is selected.
+.Ss DES encryption
+The DES encryption scheme is derived from the
 .Tn NBS
 Data Encryption Standard.
-Additional code has been added to deter
-key search attempts.
-The first argument to
-.Nm crypt
-is
-a
-.Dv NUL Ns -terminated
-string (normally a password typed by a user).
-The second is a character array, 9 bytes in length, consisting of an
-underscore (``_'') followed by 4 bytes of iteration count and 4 bytes
-of salt.
+Additional code has been added to deter key search attempts and to use
+stronger hashing algorithms.
+In the DES case, the second argument to
+.Fn crypt
+is a character array, 9 bytes in length, consisting of an underscore (``_'')
+followed by 4 bytes of iteration count and 4 bytes of salt.
 Both the iteration
 .Fa count
 and the
@@ -167,8 +182,9 @@ If the value of
 is 0,
 the argument
 .Fa block
-is encrypted, otherwise it fails.
-The encryption is returned in the original
+is encrypted, otherwise it
+is decrypted.
+The encryption or decryption is returned in the original
 array
 .Fa block
 after using the
@@ -194,7 +210,9 @@ significant bit in each character is ignored and the next 7 bits of each
 character are concatenated to yield a 56-bit key.
 The function
 .Fn des_cipher
-encrypts the 64-bits stored in the 8 characters at
+encrypts (or decrypts if
+.Fa count
+is negative) the 64-bits stored in the 8 characters at
 .Fa in
 using
 .Xr abs 3
@@ -209,7 +227,58 @@ The
 specifies perturbations to
 .Tn DES
 as described above.
+.Ss MD5 encryption
+For the
+.Tn MD5
+encryption scheme, the version number (in this case ``1''),
+.Fa salt
+and the hashed password are separated
+by the ``$'' character.
+A valid password looks like this:
 .Pp
+``$1$2qGr5PPQ$eT08WBFev3RPLNChixg0H.''.
+.Pp
+The entire password string is passed as
+.Fa setting
+for interpretation.
+.Ss "Blowfish" crypt
+The
+.Tn Blowfish
+version of crypt has 128 bits of
+.Fa salt
+in order to make building dictionaries of common passwords space consuming.
+The initial state of the
+.Tn Blowfish
+cipher is expanded using the
+.Fa salt
+and the
+.Fa password
+repeating the process a variable number of rounds, which is encoded in
+the password string.
+The maximum password length is 72.
+The final Blowfish password entry is created by encrypting the string
+.Pp
+.Dq OrpheanBeholderScryDoubt
+.Pp
+with the
+.Tn Blowfish
+state 64 times.
+.Pp
+The version number, the logarithm of the number of rounds and
+the concatenation of salt and hashed password are separated by the
+.Ql $
+character.
+An encoded
+.Sq 8
+would specify 256 rounds.
+A valid Blowfish password looks like this:
+.Pp
+.Dq $2a$12$eIAq8PR8sIUnJ1HaohxX2O9x9Qlm2vK97LJ5dsXdmB.eXF42qjchC .
+.Pp
+The whole Blowfish password string is passed as
+.Fa setting
+for interpretation.
+.Sh RETURN VALUES
 The function
 .Fn crypt
 returns a pointer to the encrypted value on success and NULL on failure.
@@ -232,9 +301,11 @@ usual political silliness.
 .Sh SEE ALSO
 .Xr login 1 ,
 .Xr passwd 1 ,
+.Xr pwhash 1 ,
 .Xr getpass 3 ,
-.Xr passwd 5
-.sp
+.Xr md5 3 ,
+.Xr passwd 5 ,
+.Xr passwd.conf 5
 .Rs
 .%T "Mathematical Cryptology for Computer Scientists and Mathematicians"
 .%A Wayne Patterson

@@ -1,7 +1,7 @@
-/*	$NetBSD: hbvar.h,v 1.2 2000/02/08 16:17:31 tsutsui Exp $	*/
+/*	$NetBSD: hbvar.h,v 1.6 2008/05/14 13:29:28 tsutsui Exp $	*/
 
 /*-
- * Copyright (C) 1999 Izumi Tsutsui.  All rights reserved.
+ * Copyright (c) 1999 Izumi Tsutsui.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -22,9 +20,11 @@
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
  * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <machine/bus.h>
 
 /* Shorthand for locators. */
 #include "locators.h"
@@ -36,11 +36,13 @@
  * Structure used to attach hb devices.
  */
 struct hb_attach_args {
-	char	*ha_name;	/* name of device */
-	u_long	ha_address;	/* device address */
-	int	ha_ipl;		/* interrupt level */
-	int	ha_vect;	/* interrupt vector */
+	const char	*ha_name;	/* name of device */
+	bus_space_tag_t	ha_bust;	/* bus space tag */
+	bus_addr_t	ha_address;	/* device address */
+	bus_size_t	ha_size;	/* device space */
+	int		ha_ipl;		/* interrupt level */
+	int		ha_vect;	/* interrupt vector */
 };
 
-void	hb_intr_establish __P((int, int (*)(void *), int, void *));
-void	hb_intr_disestablish __P((int));
+void hb_intr_establish(int, int (*)(void *), int, void *);
+void hb_intr_disestablish(int);

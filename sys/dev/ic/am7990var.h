@@ -1,4 +1,4 @@
-/*	$NetBSD: am7990var.h,v 1.21 1998/08/15 10:51:17 mycroft Exp $	*/
+/*	$NetBSD: am7990var.h,v 1.24 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,6 +30,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _DEV_IC_AM7990VAR_H_
+#define	_DEV_IC_AM7990VAR_H_
+
 /*
  * Ethernet software status per device.
  *
@@ -50,5 +46,7 @@ struct am7990_softc {
 	struct lance_softc lsc;
 };
 
-void am7990_config __P((struct am7990_softc *));
-int am7990_intr __P((void *));
+void	am7990_config(struct am7990_softc *);
+int	am7990_intr(void *);
+
+#endif /* _DEV_IC_AM7990VAR_H_ */

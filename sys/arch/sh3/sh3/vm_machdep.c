@@ -1,8 +1,43 @@
-/*	$NetBSD: vm_machdep.c,v 1.8 2000/03/26 20:42:36 kleink Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.62 2008/02/15 03:02:43 uwe Exp $	*/
+
+/*-
+ * Copyright (c) 2002 The NetBSD Foundation, Inc. All rights reserved.
+ * Copyright (c) 1982, 1986 The Regents of the University of California.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department, and William Jolitz.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)vm_machdep.c	7.3 (Berkeley) 5/13/91
+ */
 
 /*-
  * Copyright (c) 1995 Charles M. Hannum.  All rights reserved.
- * Copyright (c) 1982, 1986 The Regents of the University of California.
  * Copyright (c) 1989, 1990 William Jolitz
  * All rights reserved.
  *
@@ -45,6 +80,12 @@
  *	Utah $Hdr: vm_machdep.c 1.16.1.1 89/06/23$
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.62 2008/02/15 03:02:43 uwe Exp $");
+
+#include "opt_kstack_debug.h"
+#include "opt_coredump.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -55,128 +96,226 @@
 #include <sys/core.h>
 #include <sys/exec.h>
 #include <sys/ptrace.h>
+#include <sys/syscall.h>
+#include <sys/ktrace.h>
 
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
+#include <uvm/uvm_extern.h>
 
-#include <machine/cpu.h>
-#include <machine/reg.h>
+#include <sh3/locore.h>
+#include <sh3/cpu.h>
+#include <sh3/reg.h>
+#include <sh3/mmu.h>
+#include <sh3/cache.h>
+#include <sh3/userret.h>
 
-void	setredzone __P((u_short *, caddr_t));
+extern void lwp_trampoline(void);
+extern void lwp_setfunc_trampoline(void);
+
+static void sh3_setup_uarea(struct lwp *);
+
 
 /*
- * Finish a fork operation, with process p2 nearly set up.
- * Copy and update the pcb and trap frame, making the child ready to run.
- * 
- * Rig the child's kernel stack so that it will start out in
- * proc_trampoline() and call child_return() with p2 as an
- * argument. This causes the newly-created child process to go
- * directly to user level with an apparent return value of 0 from
- * fork(), while the parent process returns normally.
+ * Finish a fork operation, with lwp l2 nearly set up.  Copy and
+ * update the pcb and trap frame, making the child ready to run.
  *
- * p1 is the process being forked; if p1 == &proc0, we are creating
- * a kernel thread, and the return path will later be changed in cpu_set_kpc.
+ * Rig the child's kernel stack so that it will start out in
+ * lwp_trampoline() and call child_return() with l2 as an argument.
+ * This causes the newly-created lwp to go directly to user level with
+ * an apparent return value of 0 from fork(), while the parent lwp
+ * returns normally.
+ *
+ * l1 is the lwp being forked; if l1 == &lwp0, we are creating a
+ * kernel thread, and the return path and argument are specified with
+ * `func' and `arg'.
  *
  * If an alternate user-level stack is requested (with non-zero values
- * in both the stack and stacksize args), set up the user stack pointer
- * accordingly.
+ * in both the stack and stacksize args), set up the user stack
+ * pointer accordingly.
  */
 void
-cpu_fork(p1, p2, stack, stacksize)
-	register struct proc *p1, *p2;
-	void *stack;
-	size_t stacksize;
+cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack,
+    size_t stacksize, void (*func)(void *), void *arg)
 {
-	register struct pcb *pcb = &p2->p_addr->u_pcb;
-	register struct trapframe *tf;
-	register struct switchframe *sf;
+	struct switchframe *sf;
 
-#ifdef sh3_debug
-	printf("cpu_fork:p1(%p),p2(%p)\n", p1, p2);
+#if 0 /* FIXME: probably wrong for yamt-idlelwp */
+	KDASSERT(l1 == curlwp || l1 == &lwp0);
 #endif
 
-	p2->p_md.md_flags = p1->p_md.md_flags;
+	sh3_setup_uarea(l2);
 
-	/* Copy pcb from proc p1 to p2. */
-	if (p1 == curproc) {
-		/* Sync the PCB before we copy it. */
-		savectx(curpcb);
-	}
-#ifdef DIAGNOSTIC
-	else if (p1 != &proc0)
-		panic("cpu_fork: curproc");
-#endif
-	*pcb = p1->p_addr->u_pcb;
-	pmap_activate(p2);
+	l2->l_md.md_flags = l1->l_md.md_flags;
+	l2->l_md.md_astpending = 0;
 
-	/* set up the kernel stack pointer */
-	pcb->kr15 = (int)p2->p_addr + USPACE - sizeof(struct trapframe);
-
-	/*
-	 * Copy the trapframe, and arrange for the child to return directly
-	 * through rei().
-	 */
-	p2->p_md.md_regs = tf = (struct trapframe *)pcb->kr15 - 1;
-	*tf = *p1->p_md.md_regs;
-
-	/*
-	 * If specified, give the child a different stack.
-	 */
+	/* Copy user context, may be give a different stack */
+	memcpy(l2->l_md.md_regs, l1->l_md.md_regs, sizeof(struct trapframe));
 	if (stack != NULL)
-		tf->tf_r15 = (u_int)stack + stacksize;
+		l2->l_md.md_regs->tf_r15 = (u_int)stack + stacksize;
 
-	sf = (struct switchframe *)tf - 1;
-	sf->sf_ppl = 0;
-	sf->sf_r12 = (int)child_return;
-	sf->sf_r11 = (int)p2;
-	sf->sf_pr = (int)proc_trampoline;
-	pcb->r15 = (int)sf;
-
-	/* convert r15, kr15 to physical address , because tlb miss must not
-	   be occured when accessing kernel stack */
-	pcb->r15 = vtophys(pcb->r15);
-	pcb->kr15 = vtophys(pcb->kr15);
+	/* When l2 is switched to, jump to the trampoline */
+	sf = &l2->l_md.md_pcb->pcb_sf;
+	sf->sf_pr  = (int)lwp_trampoline;
+	sf->sf_r10 = (int)l2;	/* "new" lwp for lwp_startup() */
+	sf->sf_r11 = (int)arg;	/* hook function/argument */
+	sf->sf_r12 = (int)func;
 }
 
-void
-cpu_set_kpc(p, pc, arg)
-	struct proc *p;
-	void (*pc) __P((void *));
-	void *arg;
-{
-	struct switchframe *sf = (struct switchframe *)p->p_addr->u_pcb.r15;
-	struct trapframe *tf;
-
-	sf->sf_r12 = (int) pc;
-	sf->sf_r11 = (int) arg;
-	sf->sf_pr  = (int) proc_trampoline;
-
-	tf = (struct trapframe *)(sf+1);
-	tf->tf_ssr |= PSL_IMASK; /* disable external interrupt */
-}
-
-void
-cpu_swapout(p)
-	struct proc *p;
-{
-
-}
 
 /*
- * cpu_exit is called as the last action during exit.
+ * Reset the stack pointer for the lwp and arrange for it to call the
+ * specified function with the specified argument on next switch.
  *
- * We clean up a little and then call switch_exit() with the old proc as an
- * argument.  switch_exit() first switches to proc0's context, and finally
- * jumps into switch() to wait for another process to wake up.
+ * XXX: Scheduler activations relics!  Not used anymore but keep
+ * around for reference in case we gonna revive SA.
  */
 void
-cpu_exit(p)
-	register struct proc *p;
+cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 {
-	uvmexp.swtch++;
-	switch_exit(p);
+	struct switchframe *sf;
+
+	sh3_setup_uarea(l);
+
+	l->l_md.md_regs->tf_ssr = PSL_USERSET;
+
+	/* When lwp is switched to, jump to the trampoline */
+	sf = &l->l_md.md_pcb->pcb_sf;
+	sf->sf_pr  = (int)lwp_setfunc_trampoline;
+	sf->sf_r11 = (int)arg;	/* hook function/argument */
+	sf->sf_r12 = (int)func;
 }
 
+
+static void
+sh3_setup_uarea(struct lwp *l)
+{
+	struct pcb *pcb;
+	struct trapframe *tf;
+	struct switchframe *sf;
+	vaddr_t spbase, fptop;
+#define	P1ADDR(x)	(SH3_PHYS_TO_P1SEG(*__pmap_kpte_lookup(x) & PG_PPN))
+
+	pcb = &l->l_addr->u_pcb;
+#ifdef SH3
+	/*
+	 * Accessing context store space must not cause exceptions.
+	 * SH4 can make wired TLB entries so P3 address for PCB is ok.
+	 * SH3 cannot, so we need to convert to P1.  P3/P1 conversion
+	 * doesn't cause virtual-aliasing.
+	 */
+	if (CPU_IS_SH3)
+		pcb = (struct pcb *)P1ADDR((vaddr_t)pcb);
+#endif /* SH3 */
+	l->l_md.md_pcb = pcb;
+
+	/* stack for trapframes */
+	fptop = (vaddr_t)pcb + PAGE_SIZE;
+	tf = (struct trapframe *)fptop - 1;
+	l->l_md.md_regs = tf;
+
+	/* set up the kernel stack pointer */
+	spbase = (vaddr_t)l->l_addr + PAGE_SIZE;
+#ifdef P1_STACK
+	/*
+	 * wbinv u-area to avoid cache-aliasing, since kernel stack
+	 * is accessed from P1 instead of P3.
+	 */
+	if (SH_HAS_VIRTUAL_ALIAS)
+		sh_dcache_wbinv_range((vaddr_t)l->l_addr, USPACE);
+	spbase = P1ADDR(spbase);
+#else /* !P1_STACK */
+#ifdef SH4
+	/* Prepare u-area PTEs */
+	if (CPU_IS_SH4)
+		sh4_switch_setup(l);
+#endif
+#endif /* !P1_STACK */
+
+#ifdef KSTACK_DEBUG
+	/* Fill magic number for tracking */
+	memset((char *)fptop - PAGE_SIZE + sizeof(struct user), 0x5a,
+	    PAGE_SIZE - sizeof(struct user));
+	memset((char *)spbase, 0xa5, (USPACE - PAGE_SIZE));
+	memset(&pcb->pcb_sf, 0xb4, sizeof(struct switchframe));
+#endif /* KSTACK_DEBUG */
+
+	/* Setup kernel stack and trapframe stack */
+	sf = &pcb->pcb_sf;
+	sf->sf_r6_bank = (vaddr_t)tf;
+	sf->sf_r7_bank = spbase + USPACE - PAGE_SIZE;
+	sf->sf_r15 = sf->sf_r7_bank;
+
+	/*
+	 * Enable interrupts when switch frame is restored, since
+	 * kernel thread begins to run without restoring trapframe.
+	 */
+	sf->sf_sr = PSL_MD;	/* kernel mode, interrupt enable */
+}
+
+
+/*
+ * fork &co pass this routine to newlwp to finish off child creation
+ * (see cpu_lwp_fork above and lwp_trampoline for details).
+ *
+ * When this function returns, new lwp returns to user mode.
+ */
+void
+child_return(void *arg)
+{
+	struct lwp *l = arg;
+	struct trapframe *tf = l->l_md.md_regs;
+
+	tf->tf_r0 = 0;		/* fork(2) returns 0 in child */
+	tf->tf_ssr |= PSL_TBIT; /* syscall succeeded */
+
+	userret(l);
+	ktrsysret(SYS_fork, 0, 0);
+}
+
+
+/*
+ * struct emul e_startlwp (for _lwp_create(2))
+ */
+void
+startlwp(void *arg)
+{
+	ucontext_t *uc = arg;
+	struct lwp *l = curlwp;
+	int error;
+
+	error = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
+#ifdef DIAGNOSTIC
+	if (error)
+		printf("startlwp: error %d from cpu_setmcontext()", error);
+#endif
+	pool_put(&lwp_uc_pool, uc);
+
+	userret(l);
+}
+
+
+/*
+ * Exit hook
+ */
+void
+cpu_lwp_free(struct lwp *l, int proc)
+{
+
+	/* Nothing to do */
+}
+
+
+/*
+ * lwp_free() hook
+ */
+void
+cpu_lwp_free2(struct lwp *l)
+{
+
+	/* Nothing to do */
+}
+
+
+#ifdef COREDUMP
 /*
  * Dump the machine specific segment at the start of a core dump.
  */
@@ -185,94 +324,39 @@ struct md_core {
 };
 
 int
-cpu_coredump(p, vp, cred, chdr)
-	struct proc *p;
-	struct vnode *vp;
-	struct ucred *cred;
-	struct core *chdr;
+cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
 {
 	struct md_core md_core;
 	struct coreseg cseg;
 	int error;
 
-	CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
-	chdr->c_hdrsize = ALIGN(sizeof(*chdr));
-	chdr->c_seghdrsize = ALIGN(sizeof(cseg));
-	chdr->c_cpusize = sizeof(md_core);
+	if (iocookie == NULL) {
+		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
+		chdr->c_hdrsize = ALIGN(sizeof(*chdr));
+		chdr->c_seghdrsize = ALIGN(sizeof(cseg));
+		chdr->c_cpusize = sizeof(md_core);
+		chdr->c_nseg++;
+		return 0;
+	}
 
 	/* Save integer registers. */
-	error = process_read_regs(p, &md_core.intreg);
+	error = process_read_regs(l, &md_core.intreg);
 	if (error)
 		return error;
-
 
 	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
 	cseg.c_addr = 0;
 	cseg.c_size = chdr->c_cpusize;
 
-	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
-	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT, cred,
-	    (int *)0, p);
+	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
+	    chdr->c_seghdrsize);
 	if (error)
 		return error;
 
-	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&md_core, sizeof(md_core),
-	    (off_t)(chdr->c_hdrsize + chdr->c_seghdrsize), UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, (int *)0, p);
-	if (error)
-		return error;
-
-	chdr->c_nseg++;
-	return 0;
+	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
+	    sizeof(md_core));
 }
-
-#if 0
-/*
- * Set a red zone in the kernel stack after the u. area.
- */
-void
-setredzone(pte, vaddr)
-	u_short *pte;
-	caddr_t vaddr;
-{
-/* eventually do this by setting up an expand-down stack segment
-   for ss0: selector, allowing stack access down to top of u.
-   this means though that protection violations need to be handled
-   thru a double fault exception that must do an integral task
-   switch to a known good context, within which a dump can be
-   taken. a sensible scheme might be to save the initial context
-   used by sched (that has physical memory mapped 1:1 at bottom)
-   and take the dump while still in mapped mode */
-}
-#endif
-
-/*
- * Move pages from one kernel virtual address to another.
- * Both addresses are assumed to reside in the Sysmap,
- * and size must be a multiple of CLSIZE.
- */
-void
-pagemove(from, to, size)
-	register caddr_t from, to;
-	size_t size;
-{
-	register pt_entry_t *fpte, *tpte;
-
-	if (size % NBPG)
-		panic("pagemove");
-	fpte = kvtopte(from);
-	tpte = kvtopte(to);
-	while (size > 0) {
-		*tpte++ = *fpte;
-		*fpte++ = 0;
-		from += NBPG;
-		to += NBPG;
-		size -= NBPG;
-	}
-	pmap_update();
-}
-
-extern vm_map_t phys_map;
+#endif /* COREDUMP */
 
 /*
  * Map an IO request into kernel virtual address space.  Requests fall into
@@ -294,25 +378,25 @@ extern vm_map_t phys_map;
  */
 
 void
-vmapbuf(bp, len)
-	struct buf *bp;
-	vsize_t len;
+vmapbuf(struct buf *bp, vsize_t len)
 {
 	vaddr_t faddr, taddr, off;
 	paddr_t fpa;
+	pmap_t kpmap, upmap;
 
 	if ((bp->b_flags & B_PHYS) == 0)
 		panic("vmapbuf");
-	faddr = trunc_page((vaddr_t)bp->b_saveaddr = bp->b_data);
+	bp->b_saveaddr = bp->b_data;
+	faddr = trunc_page((vaddr_t)bp->b_data);
 	off = (vaddr_t)bp->b_data - faddr;
 	len = round_page(off + len);
-	taddr= uvm_km_valloc_wait(phys_map, len);
-	bp->b_data = (caddr_t)(taddr + off);
+	taddr = uvm_km_alloc(phys_map, len, 0, UVM_KMF_VAONLY | UVM_KMF_WAITVA);
+	bp->b_data = (void *)(taddr + off);
 	/*
 	 * The region is locked, so we expect that pmap_pte() will return
 	 * non-NULL.
 	 * XXX: unwise to expect this in a multithreaded environment.
-	 * anything can happen to a pmap between the time we lock a 
+	 * anything can happen to a pmap between the time we lock a
 	 * region, release the pmap lock, and then relock it for
 	 * the pmap_extract().
 	 *
@@ -320,15 +404,17 @@ vmapbuf(bp, len)
 	 * where we we just allocated (TLB will be flushed when our
 	 * mapping is removed).
 	 */
+	upmap = vm_map_pmap(&bp->b_proc->p_vmspace->vm_map);
+	kpmap = vm_map_pmap(phys_map);
 	while (len) {
-		pmap_extract(vm_map_pmap(&bp->b_proc->p_vmspace->vm_map),
-			     faddr, &fpa);
-		pmap_enter(vm_map_pmap(phys_map), taddr, fpa,
-			   VM_PROT_READ|VM_PROT_WRITE, PMAP_WIRED);
+		pmap_extract(upmap, faddr, &fpa);
+		pmap_enter(kpmap, taddr, fpa,
+		    VM_PROT_READ | VM_PROT_WRITE, PMAP_WIRED);
 		faddr += PAGE_SIZE;
 		taddr += PAGE_SIZE;
 		len -= PAGE_SIZE;
 	}
+	pmap_update(kpmap);
 }
 
 /*
@@ -336,18 +422,20 @@ vmapbuf(bp, len)
  * We also invalidate the TLB entries and restore the original b_addr.
  */
 void
-vunmapbuf(bp, len)
-	struct buf *bp;
-	vsize_t len;
+vunmapbuf(struct buf *bp, vsize_t len)
 {
 	vaddr_t addr, off;
+	pmap_t kpmap;
 
 	if ((bp->b_flags & B_PHYS) == 0)
 		panic("vunmapbuf");
 	addr = trunc_page((vaddr_t)bp->b_data);
 	off = (vaddr_t)bp->b_data - addr;
 	len = round_page(off + len);
-	uvm_km_free_wakeup(phys_map, addr, len);
+	kpmap = vm_map_pmap(phys_map);
+	pmap_remove(kpmap, addr, addr + len);
+	pmap_update(kpmap);
+	uvm_km_free(phys_map, addr, len, UVM_KMF_VAONLY);
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = 0;
 }

@@ -1,10 +1,69 @@
-/* $NetBSD: disksubr.c,v 1.7 2000/03/07 15:59:24 tsutsui Exp $ */
+/* $NetBSD: disksubr.c,v 1.23 2007/10/17 19:55:04 garbled Exp $ */
+
+/*
+ * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * Credits:
+ * This file was based mostly on the i386/disksubr.c file:
+ *  	@(#)ufs_disksubr.c	7.16 (Berkeley) 5/4/91
+ * The functions: disklabel_sun_to_bsd, disklabel_bsd_to_sun
+ * were originally taken from arch/sparc/scsi/sun_disklabel.c
+ * (which was written by Theo de Raadt) and then substantially
+ * rewritten by Gordon W. Ross.
+ */
+
+/*
+ * Copyright (c) 1994 Theo de Raadt.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
 
 /*
  * Copyright (c) 1994, 1995 Gordon W. Ross
- * Copyright (c) 1994 Theo de Raadt
- * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
- * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -43,6 +102,9 @@
  * rewritten by Gordon W. Ross.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.23 2007/10/17 19:55:04 garbled Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
@@ -80,25 +142,28 @@
  * It is found that LUNA Mach2.5 has BSD label embedded at offset 64
  * retaining UniOS/ISI label at the end of label block.  LUNA Mach
  * manipulates BSD disklabel in the same manner as 4.4BSD.  It's
- * uncertain LUNA Mach can create a disklabel on fresh disks;
- * writedisklabel fails when no BSD label is found.
+ * uncertain LUNA Mach can create a disklabel on fresh disks since
+ * Mach writedisklabel logic seems to fail when no BSD label is found.
  *
- * NetBSD/luna68k (1) creates UniOS/ISI label with BSD label
- * embedded at offset 64, (2) reads BSD label if found, (3) falls
- * back to reading UniOS/ISI label when no BSD label is found.  Plus,
- * (4) reads SunOS label if found in place of UniOS/ISI label.
+ * Kernel handles disklabel in this way;
+ *	- searchs BSD label at offset 64
+ *	- if not found, searchs UniOS/ISI label at the end of block
+ *	- kernel can distinguish whether it was SunOS label or UniOS/ISI
+ *	  label and understand both
+ *	- kernel writes UniOS/ISI label combined with BSD label to update
+ *	  the label block
  */
 
 #if LABELSECTOR != 0
 #error	"Default value of LABELSECTOR no longer zero?"
 #endif
 
-static char *disklabel_om_to_bsd __P((char *, struct disklabel *));
+static const char *disklabel_om_to_bsd __P((char *, struct disklabel *));
 static int disklabel_bsd_to_om __P((struct disklabel *, char *));
 
 /*
  * Attempt to read a disk label from a device
- * using the indicated stategy routine.
+ * using the indicated strategy routine.
  * The label must be partly set up before this:
  * secpercyl, secsize and anything required for a block i/o read
  * operation in the driver's strategy/start routines
@@ -108,7 +173,7 @@ static int disklabel_bsd_to_om __P((struct disklabel *, char *));
  *
  * Returns null on success and an error string on failure.
  */
-char *
+const char *
 readdisklabel(dev, strat, lp, clp)
 	dev_t dev;
 	void (*strat) __P((struct buf *));
@@ -136,17 +201,16 @@ readdisklabel(dev, strat, lp, clp)
 	bp->b_blkno = LABELSECTOR;
 	bp->b_cylinder = 0;
 	bp->b_bcount = lp->d_secsize;
-	bp->b_flags = B_BUSY | B_READ;
+	bp->b_flags |= B_READ;
 	(*strat)(bp);
 
 	/* if successful, locate disk label within block and validate */
 	error = biowait(bp);
 	if (!error) {
 		/* Save the whole block in case it has info we need. */
-		bcopy(bp->b_un.b_addr, clp->cd_block, sizeof(clp->cd_block));
+		bcopy(bp->b_data, clp->cd_block, sizeof(clp->cd_block));
 	}
-	bp->b_flags = B_INVAL | B_AGE | B_READ;
-	brelse(bp);
+	brelse(bp, 0);
 	if (error)
 		return ("disk label read error");
 
@@ -242,86 +306,19 @@ writedisklabel(dev, strat, lp, clp)
 
 	/* Get a buffer and copy the new label into it. */
 	bp = geteblk((int)lp->d_secsize);
-	bcopy(clp->cd_block, bp->b_un.b_addr, sizeof(clp->cd_block));
+	bcopy(clp->cd_block, bp->b_data, sizeof(clp->cd_block));
 
 	/* Write out the updated label. */
 	bp->b_dev = dev;
 	bp->b_blkno = LABELSECTOR;
 	bp->b_cylinder = 0;
 	bp->b_bcount = lp->d_secsize;
-	bp->b_flags = B_WRITE;
+	bp->b_flags |= B_WRITE;
 	(*strat)(bp);
 	error = biowait(bp);
-	brelse(bp);
+	brelse(bp, 0);
 
 	return (error);
-}
-
-/*
- * Determine the size of the transfer, and make sure it is
- * within the boundaries of the partition. Adjust transfer
- * if needed, and signal errors or early completion.
- */
-int
-bounds_check_with_label(bp, lp, wlabel)
-	struct buf *bp;
-	struct disklabel *lp;
-	int wlabel;
-{
-	struct partition *p;
-	int sz, maxsz;
-
-	p = lp->d_partitions + DISKPART(bp->b_dev);
-	maxsz = p->p_size;
-	sz = (bp->b_bcount + DEV_BSIZE - 1) >> DEV_BSHIFT;
-
-	/* overwriting disk label ? */
-	/* XXX should also protect bootstrap in first 8K */
-	/* XXX PR#2598: labelsect is always sector zero. */
-	if (((bp->b_blkno + p->p_offset) <= LABELSECTOR) &&
-	    ((bp->b_flags & B_READ) == 0) && (wlabel == 0))
-	{
-		bp->b_error = EROFS;
-		goto bad;
-	}
-
-	/* beyond partition? */
-	if (bp->b_blkno < 0 || bp->b_blkno + sz > maxsz) {
-		/* if exactly at end of disk, return an EOF */
-		if (bp->b_blkno == maxsz) {
-			bp->b_resid = bp->b_bcount;
-			return (0);
-		}
-		/* or truncate if part of it fits */
-		sz = maxsz - bp->b_blkno;
-		if (sz <= 0) {
-			bp->b_error = EINVAL;
-			goto bad;
-		}
-		bp->b_bcount = sz << DEV_BSHIFT;
-	}
-
-	/* calculate cylinder for disksort to order transfers with */
-	bp->b_cylinder = (bp->b_blkno + p->p_offset) / lp->d_secpercyl;
-	return (1);
-
-bad:
-	bp->b_flags |= B_ERROR;
-	return (-1);
-}
-
-/*
- * This function appears to be called by each disk driver.
- * Aparently this is to give this MD code a chance to do
- * additional "device registration" types of work. (?)
- * For example, the sparc port uses this to record the
- * device node for the PROM-specified boot device.
- */
-void
-dk_establish(dk, dev)
-	struct disk *dk;
-	struct device *dev;
-{
 }
 
 /************************************************************************
@@ -350,7 +347,7 @@ sun_fstypes[8] = {
  *
  * The BSD label is cleared out before this is called.
  */
-static char *
+static const char *
 disklabel_om_to_bsd(cp, lp)
 	char *cp;
 	struct disklabel *lp;
@@ -372,7 +369,7 @@ disklabel_om_to_bsd(cp, lp)
 	if (cksum != 0)
 		return ("UniOS disk label, bad checksum");
 
-	memset((caddr_t)lp, 0, sizeof(struct disklabel));
+	memset((void *)lp, 0, sizeof(struct disklabel));
 	/* Format conversion. */
 	lp->d_magic = DISKMAGIC;
 	lp->d_magic2 = DISKMAGIC;

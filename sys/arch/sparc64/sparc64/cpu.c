@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.5 1999/11/06 20:18:13 eeh Exp $ */
+/*	$NetBSD: cpu.c,v 1.78 2008/10/18 04:41:14 nakayama Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -51,95 +51,150 @@
  *
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.78 2008/10/18 04:41:14 nakayama Exp $");
+
+#include "opt_multiprocessor.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/kernel.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
 #include <machine/reg.h>
-#include <machine/ctlreg.h>
 #include <machine/trap.h>
 #include <machine/pmap.h>
+#include <machine/sparc64.h>
+#include <machine/openfirm.h>
 
 #include <sparc64/sparc64/cache.h>
 
-/* This is declared here so that you must include a CPU for the cache code. */
-struct cacheinfo cacheinfo;
+int ecache_min_line_size;
+
+/* Linked list of all CPUs in system. */
+int sparc_ncpus = 0;
+struct cpu_info *cpus = NULL;
+
+volatile sparc64_cpuset_t cpus_active;/* set of active cpus */
+struct cpu_bootargs *cpu_args;	/* allocated very early in pmap_bootstrap. */
+struct pool_cache *fpstate_cache;
+
+static struct cpu_info *alloc_cpuinfo(u_int);
 
 /* The following are used externally (sysctl_hw). */
 char	machine[] = MACHINE;		/* from <machine/param.h> */
 char	machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
-char	cpu_model[100];
+char	cpu_model[100];			/* machine model (primary CPU) */
+extern char machine_model[];
+
+#ifdef MULTIPROCESSOR
+static const char *ipi_evcnt_names[IPI_EVCNT_NUM] = IPI_EVCNT_NAMES;
+#endif
+
+static void cpu_reset_fpustate(void);
 
 /* The CPU configuration driver. */
-static void cpu_attach __P((struct device *, struct device *, void *));
-int  cpu_match __P((struct device *, struct cfdata *, void *));
+void cpu_attach(struct device *, struct device *, void *);
+int cpu_match(struct device *, struct cfdata *, void *);
 
-struct cfattach cpu_ca = {
-	sizeof(struct device), cpu_match, cpu_attach
-};
+CFATTACH_DECL(cpu, sizeof(struct device),
+    cpu_match, cpu_attach, NULL, NULL);
 
-extern struct cfdriver cpu_cd;
+struct cpu_info *
+alloc_cpuinfo(u_int cpu_node)
+{
+	paddr_t pa0, pa;
+	vaddr_t va, va0;
+	vsize_t sz = 8 * PAGE_SIZE;
+	int portid;
+	struct cpu_info *cpi, *ci;
+	extern paddr_t cpu0paddr;
 
-#if defined(SUN4C) || defined(SUN4M)
-static char *psrtoname __P((int, int, int, char *));
+	/*
+	 * Check for UPAID in the cpus list.
+	 */
+	if (OF_getprop(cpu_node, "upa-portid", &portid, sizeof(portid)) <= 0)
+		panic("alloc_cpuinfo: upa-portid");
+
+	for (cpi = cpus; cpi != NULL; cpi = cpi->ci_next)
+		if (cpi->ci_cpuid == portid)
+			return cpi;
+
+	/* Allocate the aligned VA and determine the size. */
+	va = uvm_km_alloc(kernel_map, sz, 8 * PAGE_SIZE, UVM_KMF_VAONLY);
+	if (!va)
+		panic("alloc_cpuinfo: no virtual space");
+	va0 = va;
+
+	pa0 = cpu0paddr;
+	cpu0paddr += sz;
+
+	for (pa = pa0; pa < cpu0paddr; pa += PAGE_SIZE, va += PAGE_SIZE)
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
+
+	pmap_update(pmap_kernel());
+
+	cpi = (struct cpu_info *)(va0 + CPUINFO_VA - INTSTACK);
+
+	memset((void *)va0, 0, sz);
+
+	/*
+	 * Initialize cpuinfo structure.
+	 *
+	 * Arrange pcb, idle stack and interrupt stack in the same
+	 * way as is done for the boot CPU in pmap.c.
+	 */
+	cpi->ci_next = NULL;
+	cpi->ci_curlwp = NULL;
+	cpi->ci_cpuid = portid;
+	cpi->ci_fplwp = NULL;
+	cpi->ci_spinup = NULL;
+	cpi->ci_paddr = pa0;
+	cpi->ci_self = cpi;
+	cpi->ci_node = cpu_node;
+	cpi->ci_idepth = -1;
+	memset(cpi->ci_intrpending, -1, sizeof(cpi->ci_intrpending));
+
+	/*
+	 * Finally, add itself to the list of active cpus.
+	 */
+	for (ci = cpus; ci->ci_next != NULL; ci = ci->ci_next)
+		;
+#ifdef MULTIPROCESSOR
+	ci->ci_next = cpi;
 #endif
-static char *fsrtoname __P((int, int, int, char *));
-
-#define	IU_IMPL(v)	((((u_int64_t)(v))&VER_IMPL) >> VER_IMPL_SHIFT)
-#define	IU_VERS(v)	((((u_int64_t)(v))&VER_MASK) >> VER_MASK_SHIFT)
-
-#ifdef notdef
-/*
- * IU implementations are parceled out to vendors (with some slight
- * glitches).  Printing these is cute but takes too much space.
- */
-static char *iu_vendor[16] = {
-	"Fujitsu",	/* and also LSI Logic */
-	"ROSS",		/* ROSS (ex-Cypress) */
-	"BIT",
-	"LSIL",		/* LSI Logic finally got their own */
-	"TI",		/* Texas Instruments */
-	"Matsushita",
-	"Philips",
-	"Harvest",	/* Harvest VLSI Design Center */
-	"SPEC",		/* Systems and Processes Engineering Corporation */
-	"Weitek",
-	"vendor#10",
-	"vendor#11",
-	"vendor#12",
-	"vendor#13",
-	"vendor#14",
-	"vendor#15"
-};
-#endif
-
-/*
- * 4/110 comment: the 4/110 chops off the top 4 bits of an OBIO address.
- *	this confuses autoconf.  for example, if you try and map
- *	0xfe000000 in obio space on a 4/110 it actually maps 0x0e000000.
- *	this is easy to verify with the PROM.   this causes problems
- *	with devices like "esp0 at obio0 addr 0xfa000000" because the
- *	4/110 treats it as esp0 at obio0 addr 0x0a000000" which is the
- *	address of the 4/110's "sw0" scsi chip.   the same thing happens
- *	between zs1 and zs2.    since the sun4 line is "closed" and
- *	we know all the "obio" devices that will ever be on it we just
- *	put in some special case "if"'s in the match routines of esp,
- *	dma, and zs.
- */
+	return (cpi);
+}
 
 int
-cpu_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+cpu_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
-	return (strcmp(cf->cf_driver->cd_name, ma->ma_name) == 0);
+	return (strcmp(cf->cf_name, ma->ma_name) == 0);
+}
+
+static void
+cpu_reset_fpustate(void)
+{
+	struct fpstate64 *fpstate;
+	struct fpstate64 fps[2];
+
+	/* This needs to be 64-byte aligned */
+	fpstate = ALIGNFPSTATE(&fps[1]);
+
+	/*
+	 * Get the FSR and clear any exceptions.  If we do not unload
+	 * the queue here and it is left over from a previous crash, we
+	 * will panic in the first loadfpstate(), due to a sequence error,
+	 * so we need to dump the whole state anyway.
+	 */
+	fpstate->fs_fsr = 7 << FSR_VER_SHIFT;	/* 7 is reserved for "none" */
+	savefpstate(fpstate);
 }
 
 /*
@@ -147,252 +202,224 @@ cpu_match(parent, cf, aux)
  * Discover interesting goop about the virtual address cache
  * (slightly funny place to do it, but this is where it is to be found).
  */
-static void
-cpu_attach(parent, dev, aux)
-	struct device *parent;
-	struct device *dev;
-	void *aux;
+void
+cpu_attach(struct device *parent, struct device *dev, void *aux)
 {
 	int node;
 	long clk;
-	int impl, vers, fver;
-	char *fpuname;
 	struct mainbus_attach_args *ma = aux;
-	struct fpstate64 *fpstate;
-	struct fpstate64 fps[2];
-	char *sep;
-	char fpbuf[40];
+	struct cpu_info *ci;
+	const char *sep;
 	register int i, l;
-	u_int64_t ver;
-	extern u_int64_t cpu_clockrate[];
-
-	/* This needs to be 64-bit aligned */
-	fpstate = ALIGNFPSTATE(&fps[1]);
-	/*
-	 * Get the FSR and clear any exceptions.  If we do not unload
-	 * the queue here and it is left over from a previous crash, we
-	 * will panic in the first loadfpstate(), due to a sequence error,
-	 * so we need to dump the whole state anyway.
-	 *
-	 * If there is no FPU, trap.c will advance over all the stores,
-	 * so we initialize fs_fsr here.
-	 */
-	fpstate->fs_fsr = 7 << FSR_VER_SHIFT;	/* 7 is reserved for "none" */
-	savefpstate(fpstate);
-	fver = (fpstate->fs_fsr >> FSR_VER_SHIFT) & (FSR_VER >> FSR_VER_SHIFT);
-	ver = getver();
-	impl = IU_IMPL(ver);
-	vers = IU_VERS(ver);
-	if (fver != 7) {
-		foundfpu = 1;
-		fpuname = fsrtoname(impl, vers, fver, fpbuf);
-	} else
-		fpuname = "no";
+	int bigcache, cachesize;
+	char buf[100];
+	int 	totalsize = 0;
+	int 	linesize;
+	static bool passed = false;
 
 	/* tell them what we have */
 	node = ma->ma_node;
 
-	clk = getpropint(node, "clock-frequency", 0);
+	/*
+	 * Allocate cpu_info structure if needed.
+	 */
+	ci = alloc_cpuinfo((u_int)node);
+
+	/*
+	 * Only do this on the boot cpu.  Other cpu's call
+	 * cpu_reset_fpustate() from cpu_hatch() before they
+	 * call into the idle loop.
+	 * For other cpus, we need to call mi_cpu_attach()
+	 * and complete setting up cpcb.
+	 */
+	if (!passed) {
+		passed = true;
+		fpstate_cache = pool_cache_init(sizeof(struct fpstate64),
+					BLOCK_SIZE, 0, 0, "fpstate", NULL,
+					IPL_NONE, NULL, NULL, NULL);
+		cpu_reset_fpustate();
+	}
+#ifdef MULTIPROCESSOR
+	else {
+		mi_cpu_attach(ci);
+		ci->ci_cpcb = (struct pcb *)ci->ci_data.cpu_idlelwp->l_addr;
+	}
+	for (i = 0; i < IPI_EVCNT_NUM; ++i)
+		evcnt_attach_dynamic(&ci->ci_ipi_evcnt[i], EVCNT_TYPE_MISC,
+				     NULL, device_xname(dev), ipi_evcnt_names[i]);
+#endif
+	evcnt_attach_dynamic(&ci->ci_tick_evcnt, EVCNT_TYPE_MISC, NULL,
+			     device_xname(dev), "timer");
+
+	clk = prom_getpropint(node, "clock-frequency", 0);
 	if (clk == 0) {
 		/*
 		 * Try to find it in the OpenPROM root...
 		 */
-		clk = getpropint(findroot(), "clock-frequency", 0);
+		clk = prom_getpropint(findroot(), "clock-frequency", 0);
 	}
 	if (clk) {
-		cpu_clockrate[0] = clk; /* Tell OS what frequency we run on */
-		cpu_clockrate[1] = clk/1000000;
+		/* Tell OS what frequency we run on */
+		ci->ci_cpu_clockrate[0] = clk;
+		ci->ci_cpu_clockrate[1] = clk / 1000000;
 	}
-	sprintf(cpu_model, "%s @ %s MHz, %s FPU",
-		getpropstring(node, "name"),
-		clockfreq(clk), fpuname);
-	printf(": %s\n", cpu_model);
 
-	cacheinfo.c_physical = 1; /* Dunno... */
-	cacheinfo.c_split = 1;
-	cacheinfo.ic_linesize = l = getpropint(node, "icache-line-size", 0);
+	snprintf(buf, sizeof buf, "%s @ %s MHz",
+		prom_getpropstring(node, "name"), clockfreq(clk));
+	snprintf(cpu_model, sizeof cpu_model, "%s (%s)", machine_model, buf);
+
+	printf(": %s, UPA id %d\n", buf, ci->ci_cpuid);
+	printf("%s:", device_xname(dev));
+
+	bigcache = 0;
+
+	linesize = l =
+		prom_getpropint(node, "icache-line-size", 0);
 	for (i = 0; (1 << i) < l && l; i++)
 		/* void */;
 	if ((1 << i) != l && l)
 		panic("bad icache line size %d", l);
-	cacheinfo.ic_l2linesize = i;
-	cacheinfo.ic_totalsize = l *
-		getpropint(node, "icache-nlines", 64) *
-		getpropint(node, "icache-associativity", 1);
-	
-	cacheinfo.dc_linesize = l =
-		getpropint(node, "dcache-line-size",0);
+	totalsize =
+		prom_getpropint(node, "icache-size", 0) *
+		prom_getpropint(node, "icache-associativity", 1);
+	if (totalsize == 0)
+		totalsize = l *
+			prom_getpropint(node, "icache-nlines", 64) *
+			prom_getpropint(node, "icache-associativity", 1);
+
+	cachesize = totalsize /
+	    prom_getpropint(node, "icache-associativity", 1);
+	bigcache = cachesize;
+
+	sep = " ";
+	if (totalsize > 0) {
+		printf("%s%ldK instruction (%ld b/l)", sep,
+		       (long)totalsize/1024,
+		       (long)linesize);
+		sep = ", ";
+	}
+
+	linesize = l =
+		prom_getpropint(node, "dcache-line-size",0);
 	for (i = 0; (1 << i) < l && l; i++)
 		/* void */;
 	if ((1 << i) != l && l)
 		panic("bad dcache line size %d", l);
-	cacheinfo.dc_l2linesize = i;
-	cacheinfo.dc_totalsize = l *
-		getpropint(node, "dcache-nlines", 128) *
-		getpropint(node, "dcache-associativity", 1);
-	
-	cacheinfo.ec_linesize = l =
-		getpropint(node, "ecache-line-size", 0);
+	totalsize =
+		prom_getpropint(node, "dcache-size", 0) *
+		prom_getpropint(node, "dcache-associativity", 1);
+	if (totalsize == 0)
+		totalsize = l *
+			prom_getpropint(node, "dcache-nlines", 128) *
+			prom_getpropint(node, "dcache-associativity", 1);
+
+	cachesize = totalsize /
+	    prom_getpropint(node, "dcache-associativity", 1);
+	if (cachesize > bigcache)
+		bigcache = cachesize;
+
+	if (totalsize > 0) {
+		printf("%s%ldK data (%ld b/l)", sep,
+		       (long)totalsize/1024,
+		       (long)linesize);
+		sep = ", ";
+	}
+
+	linesize = l =
+		prom_getpropint(node, "ecache-line-size", 0);
 	for (i = 0; (1 << i) < l && l; i++)
 		/* void */;
 	if ((1 << i) != l && l)
 		panic("bad ecache line size %d", l);
-	cacheinfo.ec_l2linesize = i;
-	cacheinfo.ec_totalsize = l *
-		getpropint(node, "ecache-nlines", 32768) *
-		getpropint(node, "ecache-associativity", 1);
-	
-	/*
-	 * XXX - The following will have to do until
-	 * we have per-cpu cache handling.
-	 */
-	cacheinfo.c_l2linesize =
-		min(cacheinfo.ic_l2linesize,
-		    cacheinfo.dc_l2linesize);
-	cacheinfo.c_linesize =
-		min(cacheinfo.ic_linesize,
-		    cacheinfo.dc_linesize);
-	cacheinfo.c_totalsize =
-		cacheinfo.ic_totalsize +
-		cacheinfo.dc_totalsize;
+	totalsize = 
+		prom_getpropint(node, "ecache-size", 0) *
+		prom_getpropint(node, "ecache-associativity", 1);
+	if (totalsize == 0)
+		totalsize = l *
+			prom_getpropint(node, "ecache-nlines", 32768) *
+			prom_getpropint(node, "ecache-associativity", 1);
 
-	if (cacheinfo.c_totalsize == 0)
-		return;
-	
-	sep = " ";
-	printf("%s: physical", dev->dv_xname);
-	if (cacheinfo.ic_totalsize > 0) {
-		printf("%s%ldK instruction (%ld b/l)", sep,
-		       (long)cacheinfo.ic_totalsize/1024,
-		       (long)cacheinfo.ic_linesize);
-		sep = ", ";
-	}
-	if (cacheinfo.dc_totalsize > 0) {
-		printf("%s%ldK data (%ld b/l)", sep,
-		       (long)cacheinfo.dc_totalsize/1024,
-		       (long)cacheinfo.dc_linesize);
-		sep = ", ";
-	}
-	if (cacheinfo.ec_totalsize > 0) {
+	cachesize = totalsize /
+	     prom_getpropint(node, "ecache-associativity", 1);
+	if (cachesize > bigcache)
+		bigcache = cachesize;
+
+	if (totalsize > 0) {
 		printf("%s%ldK external (%ld b/l)", sep,
-		       (long)cacheinfo.ec_totalsize/1024,
-		       (long)cacheinfo.ec_linesize);
+		       (long)totalsize/1024,
+		       (long)linesize);
 	}
-	printf(" \n");
-	cache_enable();
+	printf("\n");
+
+	if (ecache_min_line_size == 0 ||
+	    linesize < ecache_min_line_size)
+		ecache_min_line_size = linesize;
+
+	/*
+	 * Now that we know the size of the largest cache on this CPU,
+	 * re-color our pages.
+	 */
+	uvm_page_recolor(atop(bigcache)); /* XXX */
+
 }
+
+#if defined(MULTIPROCESSOR)
+vaddr_t cpu_spinup_trampoline;
 
 /*
- * The following tables convert <IU impl, IU version, FPU version> triples
- * into names for the CPU and FPU chip.  In most cases we do not need to
- * inspect the FPU version to name the IU chip, but there is one exception
- * (for Tsunami), and this makes the tables the same.
- *
- * The table contents (and much of the structure here) are from Guy Harris.
- *
+ * Start secondary processors in motion.
  */
-struct info {
-	u_char	valid;
-	u_char	iu_impl;
-	u_char	iu_vers;
-	u_char	fpu_vers;
-	char	*name;
-};
-
-#define	ANY	0xff	/* match any FPU version (or, later, IU version) */
-
-#if defined(SUN4C) || defined(SUN4M)
-static struct info iu_types[] = {
-	{ 1, 0x0, 0x4, 4,   "MB86904" },
-	{ 1, 0x0, 0x0, ANY, "MB86900/1A or L64801" },
-	{ 1, 0x1, 0x0, ANY, "RT601 or L64811 v1" },
-	{ 1, 0x1, 0x1, ANY, "RT601 or L64811 v2" },
-	{ 1, 0x1, 0x3, ANY, "RT611" },
-	{ 1, 0x1, 0xf, ANY, "RT620" },
-	{ 1, 0x2, 0x0, ANY, "B5010" },
-	{ 1, 0x4, 0x0,   0, "TMS390Z50 v0 or TMS390Z55" },
-	{ 1, 0x4, 0x1,   0, "TMS390Z50 v1" },
-	{ 1, 0x4, 0x1,   4, "TMS390S10" },
-	{ 1, 0x5, 0x0, ANY, "MN10501" },
-	{ 1, 0x9, 0x0, ANY, "W8601/8701 or MB86903" },
-	{ 0 }
-};
-
-static char *
-psrtoname(impl, vers, fver, buf)
-	register int impl, vers, fver;
-	char *buf;
+void
+cpu_boot_secondary_processors()
 {
-	register struct info *p;
+	int i, pstate;
+	struct cpu_info *ci;
 
-	for (p = iu_types; p->valid; p++)
-		if (p->iu_impl == impl && p->iu_vers == vers &&
-		    (p->fpu_vers == fver || p->fpu_vers == ANY))
-			return (p->name);
+	sparc64_ipi_init();
 
-	/* Not found. */
-	sprintf(buf, "IU impl 0x%x vers 0x%x", impl, vers);
-	return (buf);
+	for (ci = cpus; ci != NULL; ci = ci->ci_next) {
+		if (ci->ci_cpuid == CPU_UPAID)
+			continue;
+
+		cpu_pmap_prepare(ci, false);
+		cpu_args->cb_node = ci->ci_node;
+		cpu_args->cb_cpuinfo = ci->ci_paddr;
+		membar_sync();
+
+		/* Disable interrupts and start another CPU. */
+		pstate = getpstate();
+		setpstate(PSTATE_KERN);
+
+		prom_startcpu(ci->ci_node, (void *)cpu_spinup_trampoline, 0);
+
+		for (i = 0; i < 2000; i++) {
+			membar_sync();
+			if (CPUSET_HAS(cpus_active, ci->ci_index))
+				break;
+			delay(10000);
+		}
+		setpstate(pstate);
+
+		if (!CPUSET_HAS(cpus_active, ci->ci_index))
+			printf("cpu%d: startup failed\n", ci->ci_cpuid);
+	}
 }
-#endif /* SUN4C || SUN4M */
 
-/* NB: table order matters here; specific numbers must appear before ANY. */
-static struct info fpu_types[] = {
-	/*
-	 * Vendor 0, IU Fujitsu0.
-	 */
-	{ 1, 0x0, ANY, 0, "MB86910 or WTL1164/5" },
-	{ 1, 0x0, ANY, 1, "MB86911 or WTL1164/5" },
-	{ 1, 0x0, ANY, 2, "L64802 or ACT8847" },
-	{ 1, 0x0, ANY, 3, "WTL3170/2" },
-	{ 1, 0x0, 4,   4, "on-chip" },		/* Swift */
-	{ 1, 0x0, ANY, 4, "L64804" },
-
-	/*
-	 * Vendor 1, IU ROSS0/1 or Pinnacle.
-	 */
-	{ 1, 0x1, 0xf, 0, "on-chip" },		/* Pinnacle */
-	{ 1, 0x1, ANY, 0, "L64812 or ACT8847" },
-	{ 1, 0x1, ANY, 1, "L64814" },
-	{ 1, 0x1, ANY, 2, "TMS390C602A" },
-	{ 1, 0x1, ANY, 3, "RT602 or WTL3171" },
-
-	/*
-	 * Vendor 2, IU BIT0.
-	 */
-	{ 1, 0x2, ANY, 0, "B5010 or B5110/20 or B5210" },
-
-	/*
-	 * Vendor 4, Texas Instruments.
-	 */
-	{ 1, 0x4, ANY, 0, "on-chip" },		/* Viking */
-	{ 1, 0x4, ANY, 4, "on-chip" },		/* Tsunami */
-
-	/*
-	 * Vendor 5, IU Matsushita0.
-	 */
-	{ 1, 0x5, ANY, 0, "on-chip" },
-
-	/*
-	 * Vendor 9, Weitek.
-	 */
-	{ 1, 0x9, ANY, 3, "on-chip" },
-
-	{ 0 }
-};
-
-static char *
-fsrtoname(impl, vers, fver, buf)
-	register int impl, vers, fver;
-	char *buf;
+void
+cpu_hatch()
 {
-	register struct info *p;
+	char *v = (char*)CPUINFO_VA;
+	int i;
 
-	for (p = fpu_types; p->valid; p++)
-		if (p->iu_impl == impl &&
-		    (p->iu_vers == vers || p->iu_vers == ANY) &&
-		    (p->fpu_vers == fver))
-			return (p->name);
-	sprintf(buf, "version %x", fver);
-	return (buf);
+	for (i = 0; i < 4*PAGE_SIZE; i += sizeof(long))
+		flush(v + i);
+
+	cpu_pmap_init(curcpu());
+	CPUSET_ADD(cpus_active, cpu_number());
+	cpu_reset_fpustate();
+	curlwp = curcpu()->ci_data.cpu_idlelwp;
+	membar_sync();
+	tickintr_establish(PIL_CLOCK, tickintr);
+	spl0();
 }
+#endif /* MULTIPROCESSOR */

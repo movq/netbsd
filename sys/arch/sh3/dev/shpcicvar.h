@@ -1,7 +1,8 @@
-/*	$NetBSD: shpcicvar.h,v 1.1 1999/09/13 10:31:13 itojun Exp $	*/
+/*	$NetBSD: shpcicvar.h,v 1.6 2005/12/11 12:18:58 christos Exp $	*/
 
-/*
- * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
+/*-
+ * Copyright (c) 2005 NONAKA Kimihiro
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,192 +12,176 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Marc Horowitz.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  */
 
-struct proc;
+#ifndef	_SH3_SHPCICVAR_H_
+#define	_SH3_SHPCICVAR_H_
 
-struct shpcic_event {
-	SIMPLEQ_ENTRY(shpcic_event) pe_q;
-	int pe_type;
-};
+#include <machine/bus.h>
 
-/* pe_type */
-#define SHPCIC_EVENT_INSERTION	0
-#define SHPCIC_EVENT_REMOVAL	1
+bus_space_tag_t shpcic_get_bus_io_tag(void);
+bus_space_tag_t shpcic_get_bus_mem_tag(void);
+bus_dma_tag_t shpcic_get_bus_dma_tag(void);
 
-struct shpcic_handle {
-	struct shpcic_softc *sc;
-	int	vendor;
-	int	sock;
-	int	flags;
-	int	laststate;
-	int	memalloc;
-	struct {
-		bus_addr_t	addr;
-		bus_size_t	size;
-		long		offset;
-		int		kind;
-	} mem[SHPCIC_MEM_WINS];
-	int	ioalloc;
-	struct {
-		bus_addr_t	addr;
-		bus_size_t	size;
-		int		width;
-	} io[SHPCIC_IO_WINS];
-	int	ih_irq;
-	struct device *pcmcia;
+int shpcic_bus_maxdevs(void *v, int busno);
+pcitag_t shpcic_make_tag(void *v, int bus, int device, int function);
+void shpcic_decompose_tag(void *v, pcitag_t tag, int *bp, int *dp, int *fp);
+pcireg_t shpcic_conf_read(void *v, pcitag_t tag, int reg);
+void shpcic_conf_write(void *v, pcitag_t tag, int reg, pcireg_t data);
 
-	int	shutdown;
-	struct proc *event_thread;
-	SIMPLEQ_HEAD(, shpcic_event) events;
-};
-
-/* These four lines are MMTA specific */
-#define SHPCIC_IRQ1 10
-#define SHPCIC_IRQ2 9
-#define SHPCIC_SLOT1_ADDR 0xb8000000
-#define SHPCIC_SLOT2_ADDR 0xb9000000
-
-#define	SHPCIC_FLAG_SOCKETP	0x0001
-#define	SHPCIC_FLAG_CARDP		0x0002
-
-#define SHPCIC_LASTSTATE_PRESENT	0x0002
-#define SHPCIC_LASTSTATE_HALF		0x0001
-#define SHPCIC_LASTSTATE_EMPTY		0x0000
-
-#define	C0SA SHPCIC_CHIP0_BASE+SHPCIC_SOCKETA_INDEX
-#define	C0SB SHPCIC_CHIP0_BASE+SHPCIC_SOCKETB_INDEX
-#define	C1SA SHPCIC_CHIP1_BASE+SHPCIC_SOCKETA_INDEX
-#define	C1SB SHPCIC_CHIP1_BASE+SHPCIC_SOCKETB_INDEX
+int shpcic_set_intr_priority(int intr, int level);
+void *shpcic_intr_establish(int evtcode, int (*ih_func)(void *), void *ih_arg);
+void shpcic_intr_disestablish(void *ih);
 
 /*
- * This is sort of arbitrary.  It merely needs to be "enough". It can be
- * overridden in the conf file, anyway.
+ * shpcic io/mem bus space
  */
+int shpcic_iomem_map(void *v, bus_addr_t bpa, bus_size_t size, int flags,
+    bus_space_handle_t *bshp);
+void shpcic_iomem_unmap(void *v, bus_space_handle_t bsh, bus_size_t size);
+int shpcic_iomem_subregion(void *v, bus_space_handle_t bsh, bus_size_t offset,
+    bus_size_t size, bus_space_handle_t *nbshp);
+int shpcic_iomem_alloc(void *v, bus_addr_t rstart, bus_addr_t rend,
+    bus_size_t size, bus_size_t alignment, bus_size_t boundary, int flags,
+    bus_addr_t *bpap, bus_space_handle_t *bshp);
+void shpcic_iomem_free(void *v, bus_space_handle_t bsh, bus_size_t size);
 
-#define	SHPCIC_MEM_PAGES	4
-#define	SHPCIC_MEMSIZE	SHPCIC_MEM_PAGES*SHPCIC_MEM_PAGESIZE
+/* read single */
+uint8_t shpcic_io_read_1(void *v, bus_space_handle_t bsh, bus_size_t offset);
+uint16_t shpcic_io_read_2(void *v, bus_space_handle_t bsh, bus_size_t offset);
+uint32_t shpcic_io_read_4(void *v, bus_space_handle_t bsh, bus_size_t offset);
+uint8_t shpcic_mem_read_1(void *v, bus_space_handle_t bsh, bus_size_t offset);
+uint16_t shpcic_mem_read_2(void *v, bus_space_handle_t bsh, bus_size_t offset);
+uint32_t shpcic_mem_read_4(void *v, bus_space_handle_t bsh, bus_size_t offset);
 
-#define	SHPCIC_NSLOTS	4
+/* read multi */
+void shpcic_io_read_multi_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t *addr, bus_size_t count);
+void shpcic_io_read_multi_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t *addr, bus_size_t count);
+void shpcic_io_read_multi_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t *addr, bus_size_t count);
+void shpcic_mem_read_multi_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t *addr, bus_size_t count);
+void shpcic_mem_read_multi_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t *addr, bus_size_t count);
+void shpcic_mem_read_multi_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t *addr, bus_size_t count);
 
-#define SHPCIC_WINS     5
-#define SHPCIC_IOWINS     2
+/* read region */
+void shpcic_io_read_region_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t *addr, bus_size_t count);
+void shpcic_io_read_region_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t *addr, bus_size_t count);
+void shpcic_io_read_region_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t *addr, bus_size_t count);
+void shpcic_mem_read_region_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t *addr, bus_size_t count);
+void shpcic_mem_read_region_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t *addr, bus_size_t count);
+void shpcic_mem_read_region_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t *addr, bus_size_t count);
 
-struct shpcic_softc {
-	struct device dev;
+/* write single */
+void shpcic_io_write_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t data);
+void shpcic_io_write_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t data);
+void shpcic_io_write_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t data);
+void shpcic_mem_write_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t data);
+void shpcic_mem_write_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t data);
+void shpcic_mem_write_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t data);
 
-	bus_space_tag_t memt;
-	bus_space_handle_t memh;
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
+/* write multi */
+void shpcic_io_write_multi_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint8_t *addr, bus_size_t count);
+void shpcic_io_write_multi_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint16_t *addr, bus_size_t count);
+void shpcic_io_write_multi_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint32_t *addr, bus_size_t count);
+void shpcic_mem_write_multi_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint8_t *addr, bus_size_t count);
+void shpcic_mem_write_multi_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint16_t *addr, bus_size_t count);
+void shpcic_mem_write_multi_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint32_t *addr, bus_size_t count);
 
-	/* XXX isa_chipset_tag_t, pci_chipset_tag_t, etc. */
-	void	*intr_est;
+/* write region */
+void shpcic_io_write_region_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint8_t *addr, bus_size_t count);
+void shpcic_io_write_region_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint16_t *addr, bus_size_t count);
+void shpcic_io_write_region_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint32_t *addr, bus_size_t count);
+void shpcic_mem_write_region_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint8_t *addr, bus_size_t count);
+void shpcic_mem_write_region_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint16_t *addr, bus_size_t count);
+void shpcic_mem_write_region_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, const uint32_t *addr, bus_size_t count);
 
-	pcmcia_chipset_tag_t pct;
+/* set multi */
+void shpcic_io_set_multi_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t val, bus_size_t count);
+void shpcic_io_set_multi_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t val, bus_size_t count);
+void shpcic_io_set_multi_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t val, bus_size_t count);
+void shpcic_mem_set_multi_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t val, bus_size_t count);
+void shpcic_mem_set_multi_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t val, bus_size_t count);
+void shpcic_mem_set_multi_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t val, bus_size_t count);
 
-	/* this needs to be large enough to hold PCIC_MEM_PAGES bits */
-	int	subregionmask;
-#define SHPCIC_MAX_MEM_PAGES (8 * sizeof(int))
+/* set region */
+void shpcic_io_set_region_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t val, bus_size_t count);
+void shpcic_io_set_region_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t val, bus_size_t count);
+void shpcic_io_set_region_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t val, bus_size_t count);
+void shpcic_mem_set_region_1(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint8_t val, bus_size_t count);
+void shpcic_mem_set_region_2(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint16_t val, bus_size_t count);
+void shpcic_mem_set_region_4(void *v, bus_space_handle_t bsh,
+    bus_size_t offset, uint32_t val, bus_size_t count);
 
-	/* used by memory window mapping functions */
-	bus_addr_t membase;
+/* copy region */
+void shpcic_io_copy_region_1(void *v, bus_space_handle_t bsh1,
+    bus_size_t off1, bus_space_handle_t bsh2, bus_size_t off2,
+    bus_size_t count);
+void shpcic_io_copy_region_2(void *v, bus_space_handle_t bsh1,
+    bus_size_t off1, bus_space_handle_t bsh2, bus_size_t off2,
+    bus_size_t count);
+void shpcic_io_copy_region_4(void *v, bus_space_handle_t bsh1,
+    bus_size_t off1, bus_space_handle_t bsh2, bus_size_t off2,
+    bus_size_t count);
+void shpcic_mem_copy_region_1(void *v, bus_space_handle_t bsh1,
+    bus_size_t off1, bus_space_handle_t bsh2, bus_size_t off2,
+    bus_size_t count);
+void shpcic_mem_copy_region_2(void *v, bus_space_handle_t bsh1,
+    bus_size_t off1, bus_space_handle_t bsh2, bus_size_t off2,
+    bus_size_t count);
+void shpcic_mem_copy_region_4(void *v, bus_space_handle_t bsh1,
+    bus_size_t off1, bus_space_handle_t bsh2, bus_size_t off2,
+    bus_size_t count);
 
-	/*
-	 * used by io window mapping functions.  These can actually overlap
-	 * with another pcic, since the underlying extent mapper will deal
-	 * with individual allocations.  This is here to deal with the fact
-	 * that different busses have different real widths (different pc
-	 * hardware seems to use 10 or 12 bits for the I/O bus).
-	 */
-	bus_addr_t iobase;
-	bus_addr_t iosize;
-
-	int	irq;
-	void	*ih;
-
-	struct shpcic_handle handle[SHPCIC_NSLOTS];
-};
-
-
-int	shpcic_ident_ok __P((int));
-int	shpcic_vendor __P((struct shpcic_handle *));
-char	*shpcic_vendor_to_string __P((int));
-
-void	shpcic_attach __P((struct shpcic_softc *));
-void	shpcic_attach_sockets __P((struct shpcic_softc *));
-int	shpcic_intr __P((void *arg));
-
-static inline int shpcic_read __P((struct shpcic_handle *, int));
-static inline void shpcic_write __P((struct shpcic_handle *, int, int));
-
-int	shpcic_chip_mem_alloc __P((pcmcia_chipset_handle_t, bus_size_t,
-	    struct pcmcia_mem_handle *));
-void	shpcic_chip_mem_free __P((pcmcia_chipset_handle_t,
-	    struct pcmcia_mem_handle *));
-int	shpcic_chip_mem_map __P((pcmcia_chipset_handle_t, int, bus_addr_t,
-	    bus_size_t, struct pcmcia_mem_handle *, bus_addr_t *, int *));
-void	shpcic_chip_mem_unmap __P((pcmcia_chipset_handle_t, int));
-
-int	shpcic_chip_io_alloc __P((pcmcia_chipset_handle_t, bus_addr_t,
-	    bus_size_t, bus_size_t, struct pcmcia_io_handle *));
-void	shpcic_chip_io_free __P((pcmcia_chipset_handle_t,
-	    struct pcmcia_io_handle *));
-int	shpcic_chip_io_map __P((pcmcia_chipset_handle_t, int, bus_addr_t,
-	    bus_size_t, struct pcmcia_io_handle *, int *));
-void	shpcic_chip_io_unmap __P((pcmcia_chipset_handle_t, int));
-
-void	shpcic_chip_socket_enable __P((pcmcia_chipset_handle_t));
-void	shpcic_chip_socket_disable __P((pcmcia_chipset_handle_t));
-
-static __inline int shpcic_read __P((struct shpcic_handle *, int));
-static __inline int
-shpcic_read(h, idx)
-	struct shpcic_handle *h;
-	int idx;
-{
-	static int prev_idx = 0;
-
-	if (idx == -1){
-		idx = prev_idx;
-	}
-	prev_idx = idx;
-	return (bus_space_read_stream_2(h->sc->iot, h->sc->ioh, idx));
-}
-
-static __inline void shpcic_write __P((struct shpcic_handle *, int, int));
-static __inline void
-shpcic_write(h, idx, data)
-	struct shpcic_handle *h;
-	int idx;
-	int data;
-{
-	static int prev_idx;
-	if (idx == -1){
-		idx = prev_idx;
-	}
-	prev_idx = idx;
-	bus_space_write_stream_2(h->sc->iot, h->sc->ioh, idx, (data));
-}
-
-void	*pcic_shb_chip_intr_establish __P((pcmcia_chipset_handle_t,
-	    struct pcmcia_function *, int, int (*) (void *), void *));
-void	pcic_shb_chip_intr_disestablish __P((pcmcia_chipset_handle_t, void *));
-void pcic_shb_bus_width_probe __P((struct shpcic_softc *, bus_space_tag_t,
-				   bus_space_handle_t, bus_addr_t, u_int32_t));
+#endif	/* _SH3_SHPCICVAR_H_ */

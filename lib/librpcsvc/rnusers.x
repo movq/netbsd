@@ -33,11 +33,11 @@
 
 #ifndef RPC_HDR
 %#include <sys/cdefs.h>
-%#ifndef lint
+%#ifndef __lint__
 %/*static char sccsid[] = "from: @(#)rnusers.x 1.2 87/09/20 Copyr 1987 Sun Micro";*/
 %/*static char sccsid[] = "from: @(#)rnusers.x	2.1 88/08/01 4.0 RPCSRC";*/
-%__RCSID("$NetBSD: rnusers.x,v 1.9 1999/07/02 15:44:13 simonb Exp $");
-%#endif /* not lint */
+%__RCSID("$NetBSD: rnusers.x,v 1.13 2006/05/11 17:11:57 mrg Exp $");
+%#endif /* not __lint__ */
 #endif
 
 
@@ -114,7 +114,7 @@
 %	struct ru_utmp *objp;
 %{
 %	char *ptr;
-%	int size;
+%	u_int size;
 %
 %	/*
 %	 * We are using a non-malloc allocated array,
@@ -123,15 +123,15 @@
 %	if (xdrs->x_op == XDR_FREE)
 %		return (TRUE);
 %	ptr  = objp->ut_line;
-%	size = sizeof(objp->ut_line);
+%	size = (u_int)sizeof(objp->ut_line);
 %	if (!xdr_bytes(xdrs, &ptr, &size, size))
 %		return (FALSE);
 %	ptr  = objp->ut_name;
-%	size = sizeof(objp->ut_name);
+%	size = (u_int)sizeof(objp->ut_name);
 %	if (!xdr_bytes(xdrs, &ptr, &size, size))
 %		return (FALSE);
 %	ptr  = objp->ut_host;
-%	size = sizeof(objp->ut_host);
+%	size = (u_int)sizeof(objp->ut_host);
 %	if (!xdr_bytes(xdrs, &ptr, &size, size))
 %		return (FALSE);
 %	if (!xdr_long(xdrs, &objp->ut_time))
@@ -145,7 +145,7 @@
 %	struct ru_utmp **objpp;
 %{
 %
-%	if (!xdr_reference(xdrs, (char **) objpp, sizeof (struct ru_utmp),
+%	if (!xdr_reference(xdrs, (char **) objpp, (u_int)sizeof(struct ru_utmp),
 %			   xdr_utmp))
 %		return (FALSE);
 %	return (TRUE);
@@ -157,8 +157,9 @@
 %	struct utmparr *objp;
 %{
 %
-%	if (!xdr_array(xdrs, (char **)&objp->uta_arr, (u_int *)&objp->uta_cnt,
-%		       MAXUSERS, sizeof(struct utmp *), xdr_utmpptr))
+%	if (!xdr_array(xdrs, (char **)(void *)&objp->uta_arr,
+%		       (u_int *)&objp->uta_cnt, MAXUSERS,
+%		       (u_int)sizeof(struct utmp *), xdr_utmpptr))
 %		return (FALSE);
 %	return (TRUE);
 %}
@@ -182,8 +183,8 @@
 %	struct utmpidle **objpp;
 %{
 %
-%	if (!xdr_reference(xdrs, (char **) objpp, sizeof (struct utmpidle),
-%			   xdr_utmpidle))
+%	if (!xdr_reference(xdrs, (char **) objpp,
+%			   (u_int)sizeof(struct utmpidle), xdr_utmpidle))
 %		return (FALSE);
 %	return (TRUE);
 %}
@@ -194,8 +195,9 @@
 %	struct utmpidlearr *objp;
 %{
 %
-%	if (!xdr_array(xdrs, (char **)&objp->uia_arr, (u_int *)&objp->uia_cnt,
-%		       MAXUSERS, sizeof(struct utmpidle *), xdr_utmpidleptr))
+%	if (!xdr_array(xdrs, (char **)(void *)&objp->uia_arr,
+%	 	       (u_int *)&objp->uia_cnt, MAXUSERS,
+%		       (u_int)sizeof(struct utmpidle *), xdr_utmpidleptr))
 %		return (FALSE);
 %	return (TRUE);
 %}

@@ -1,4 +1,4 @@
-/*	$NetBSD: funopen.c,v 1.7 1998/11/15 17:19:53 christos Exp $	*/
+/*	$NetBSD: funopen.c,v 1.10 2005/11/29 03:12:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,12 +37,13 @@
 #if 0
 static char sccsid[] = "@(#)funopen.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: funopen.c,v 1.7 1998/11/15 17:19:53 christos Exp $");
+__RCSID("$NetBSD: funopen.c,v 1.10 2005/11/29 03:12:00 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdio.h>
 #include <errno.h>
+#include "reentrant.h"
 #include "local.h"
 
 FILE *
@@ -76,8 +73,7 @@ funopen(cookie, readfn, writefn, seekfn, closefn)
 		return (NULL);
 	fp->_flags = flags;
 	fp->_file = -1;
-	/* LINTED we don't play with cookie */
-	fp->_cookie = (void *)cookie;
+	fp->_cookie = __UNCONST(cookie);
 	fp->_read = readfn;
 	fp->_write = writefn;
 	fp->_seek = seekfn;

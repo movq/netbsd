@@ -1,4 +1,4 @@
-/*	$NetBSD: romcalls.S,v 1.2 1999/12/17 07:33:20 tsubai Exp $	*/
+/*	$NetBSD: romcalls.S,v 1.5 2003/04/18 18:52:27 tsutsui Exp $	*/
 
 /*-
  * Copyright (C) 1999 Tsubai Masanari.  All rights reserved.
@@ -34,8 +34,7 @@
 	.align	2
 	.set	noreorder
 
-	.globl	halt
-halt:
+LEAF_NOPROFILE(rom_halt)
 	addu	sp, sp, -16
 	li	a0, 8		# RB_HALT
 	sw	a0, 0(sp)
@@ -43,9 +42,9 @@ halt:
 	move	a1, sp
 	syscall
 	nop
+END(rom_halt)
 
-	.globl	rom_open
-rom_open:
+LEAF_NOPROFILE(rom_open)
 	addu	sp, sp, -32
 	sw	ra, 28(sp)
 
@@ -61,9 +60,9 @@ rom_open:
 	addu	sp, sp, 32
 	j	ra
 	nop
+END(rom_open)
 
-	.globl	rom_close
-rom_close:
+LEAF_NOPROFILE(rom_close)
 	addu	sp, sp, -32
 	sw	ra, 28(sp)
 
@@ -78,9 +77,9 @@ rom_close:
 	addu	sp, sp, 32
 	j	ra
 	nop
+END(rom_close)
 
-	.globl	rom_read
-rom_read:
+LEAF_NOPROFILE(rom_read)
 	addu	sp, sp, -32
 	sw	ra, 28(sp)
 
@@ -97,9 +96,9 @@ rom_read:
 	addu	sp, sp, 32
 	j	ra
 	nop
+END(rom_read)
 
-	.globl	rom_write
-rom_write:
+LEAF_NOPROFILE(rom_write)
 	addu	sp, sp, -32
 	sw	ra, 28(sp)
 
@@ -116,10 +115,9 @@ rom_write:
 	addu	sp, sp, 32
 	j	ra
 	nop
+END(rom_write)
 
-
-	.globl	rom_lseek
-rom_lseek:
+LEAF_NOPROFILE(rom_lseek)
 	addu	sp, sp, -32
 	sw	ra, 28(sp)
 
@@ -136,3 +134,23 @@ rom_lseek:
 	addu	sp, sp, 32
 	j	ra
 	nop
+END(rom_lseek)
+
+LEAF_NOPROFILE(rom_ioctl)
+	addu	sp, sp, -32
+	sw	ra, 28(sp)
+
+	sw	a0, 16(sp)
+	sw	a1, 20(sp)
+	sw	a2, 24(sp)
+
+	li	a0, SYS_ioctl
+	addu	a1, sp, 16
+	syscall
+	nop
+
+	lw	ra, 28(sp)
+	addu	sp, sp, 32
+	j	ra
+	nop
+END(rom_ioctl)

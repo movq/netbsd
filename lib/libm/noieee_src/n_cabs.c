@@ -1,4 +1,4 @@
-/*      $NetBSD: n_cabs.c,v 1.3 1999/07/02 15:37:36 simonb Exp $ */
+/*      $NetBSD: n_cabs.c,v 1.5 2003/08/07 16:44:50 agc Exp $ */
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -88,6 +84,7 @@ static char sccsid[] = "@(#)cabs.c	8.1 (Berkeley) 6/4/93";
  * from decimal to binary accurately enough to produce the hexadecimal values
  * shown.
  */
+#define _LIBM_STATIC
 #include "mathimpl.h"
 
 vc(r2p1hi, 2.4142135623730950345E0   ,8279,411a,ef32,99fc,   2, .9A827999FCEF32)
@@ -105,8 +102,7 @@ ic(sqrt2,  1.4142135623730951455E0   ,   0, 1.6A09E667F3BCD)
 #endif
 
 double
-hypot(x,y)
-double x, y;
+hypot(double x, double y)
 {
 	static const double zero=0, one=1,
 		      small=1.0E-18;	/* fl(1+small)==1 */

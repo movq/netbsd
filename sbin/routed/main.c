@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.24 2000/03/02 20:59:40 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.40 2008/07/20 01:20:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -33,16 +33,6 @@
  * SUCH DAMAGE.
  */
 
-#if !defined(lint) && !defined(sgi) && !defined(__NetBSD__)
-static char sccsid[] __attribute__((unused)) = "@(#)main.c	8.1 (Berkeley) 6/5/93";
-#define __COPYRIGHT(a) char copyright[] = a;
-#elif defined(__NetBSD__)
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: main.c,v 1.24 2000/03/02 20:59:40 christos Exp $");
-#endif
-__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-
 #include "defs.h"
 #include "pathnames.h"
 #ifdef sgi
@@ -51,6 +41,17 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\n\
 #include <signal.h>
 #include <fcntl.h>
 #include <sys/file.h>
+
+__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
+#ifdef __NetBSD__
+__RCSID("$NetBSD: main.c,v 1.40 2008/07/20 01:20:23 lukem Exp $");
+#elif defined(__FreeBSD__)
+__RCSID("$FreeBSD$");
+#else
+__RCSID("Revision: 2.27 ");
+#ident "Revision: 2.27 "
+#endif
 
 #if defined(__NetBSD__)
 #include <util.h>
@@ -83,11 +84,13 @@ time_t	now_expire;
 time_t	now_garbage;
 
 struct timeval next_bcast;		/* next general broadcast */
-struct timeval no_flash = {EPOCH+SUPPLY_INTERVAL};  /* inhibit flash update */
+struct timeval no_flash = {		/* inhibit flash update */
+	EPOCH+SUPPLY_INTERVAL, 0
+};
 
 struct timeval flush_kern_timer;
 
-fd_set	fdbits;
+fd_set	*fdbitsp;
 int	sock_max;
 int	rip_sock = -1;			/* RIP socket */
 struct interface *rip_sock_mcast;	/* current multicast interface */
@@ -108,7 +111,7 @@ main(int argc,
 	const char *cp;
 	struct timeval wtime, t2;
 	time_t dt;
-	fd_set ibits;
+	fd_set *ibitsp = NULL;
 	naddr p_net, p_mask;
 	struct interface *ifp;
 	struct parm parm;
@@ -120,7 +123,7 @@ main(int argc,
 	 */
 	signal(SIGHUP, SIG_IGN);
 
-	openlog("routed", LOG_PID | LOG_ODELAY, LOG_DAEMON);
+	openlog("routed", LOG_PID, LOG_DAEMON);
 	ftrace = stdout;
 
 	gettimeofday(&clk, 0);
@@ -136,7 +139,7 @@ main(int argc,
 	(void)gethostname(myname, sizeof(myname) - 1);
 	(void)gethost(myname, &myaddr);
 
-	while ((n = getopt(argc, argv, "sqdghmpAtvT:F:P:")) != -1) {
+	while ((n = getopt(argc, argv, "sqdghmAtvT:F:P:")) != -1) {
 		switch (n) {
 		case 's':
 			supplier = 1;
@@ -222,7 +225,7 @@ main(int argc,
 		case 'v':
 			/* display version */
 			verbose++;
-			msglog("version 2.19");
+			msglog("version 2.28");
 			break;
 
 		default:
@@ -240,8 +243,8 @@ main(int argc,
 		goto usage;
 	if (argc != 0) {
 usage:
-		logbad(0, "usage: routed [-sqdghmpAtv] [-T tracefile]"
-		       " [-F net[,metric]] [-P parms]");
+		logbad(0, "usage: routed [-sqdghmAtv] [-T tracefile]"
+		       " [-F net[/mask[,metric]]] [-P parms]");
 	}
 	if (geteuid() != 0) {
 		if (verbose)
@@ -299,7 +302,6 @@ usage:
 	pidfile(NULL);
 #endif
 	mypid = getpid();
-	srandom((int)(clk.tv_sec ^ clk.tv_usec ^ mypid));
 
 	/* prepare socket connected to the kernel.
 	 */
@@ -317,7 +319,7 @@ usage:
 
 
 	if (tracename != 0) {
-		strncpy(inittracename, tracename, sizeof(inittracename)-1);
+		strlcpy(inittracename, tracename, sizeof(inittracename));
 		set_tracefile(inittracename, "%s", -1);
 	} else {
 		tracelevel_msg("%s", -1);   /* turn on tracing to stdio */
@@ -507,30 +509,37 @@ usage:
 		/* wait for input or a timer to expire.
 		 */
 		trace_flush();
-		ibits = fdbits;
-		n = select(sock_max, &ibits, 0, 0, &wtime);
+		if (ibitsp)
+			free(ibitsp);
+		ibitsp = (fd_set *)calloc(howmany(sock_max, NFDBITS),
+		    sizeof(fd_mask));
+		if (ibitsp == NULL)
+			BADERR(1, "calloc");
+		memcpy(ibitsp, fdbitsp, howmany(sock_max, NFDBITS) *
+		    sizeof(fd_mask));
+		n = select(sock_max, ibitsp, 0, 0, &wtime);
 		if (n <= 0) {
 			if (n < 0 && errno != EINTR && errno != EAGAIN)
 				BADERR(1,"select");
 			continue;
 		}
 
-		if (FD_ISSET(rt_sock, &ibits)) {
+		if (FD_ISSET(rt_sock, ibitsp)) {
 			read_rt();
 			n--;
 		}
-		if (rdisc_sock >= 0 && FD_ISSET(rdisc_sock, &ibits)) {
+		if (rdisc_sock >= 0 && FD_ISSET(rdisc_sock, ibitsp)) {
 			read_d();
 			n--;
 		}
-		if (rip_sock >= 0 && FD_ISSET(rip_sock, &ibits)) {
+		if (rip_sock >= 0 && FD_ISSET(rip_sock, ibitsp)) {
 			read_rip(rip_sock, 0);
 			n--;
 		}
 
 		for (ifp = ifnet; n > 0 && 0 != ifp; ifp = ifp->int_next) {
 			if (ifp->int_rip_sock >= 0
-			    && FD_ISSET(ifp->int_rip_sock, &ibits)) {
+			    && FD_ISSET(ifp->int_rip_sock, ibitsp)) {
 				read_rip(ifp->int_rip_sock, ifp);
 				n--;
 			}
@@ -565,30 +574,38 @@ fix_select(void)
 {
 	struct interface *ifp;
 
-
-	FD_ZERO(&fdbits);
 	sock_max = 0;
 
-	FD_SET(rt_sock, &fdbits);
 	if (sock_max <= rt_sock)
-		sock_max = rt_sock+1;
-	if (rip_sock >= 0) {
-		FD_SET(rip_sock, &fdbits);
+		sock_max = rt_sock + 1;
+	if (rip_sock >= 0)
 		if (sock_max <= rip_sock)
-			sock_max = rip_sock+1;
-	}
+			sock_max = rip_sock + 1;
 	for (ifp = ifnet; 0 != ifp; ifp = ifp->int_next) {
-		if (ifp->int_rip_sock >= 0) {
-			FD_SET(ifp->int_rip_sock, &fdbits);
+		if (ifp->int_rip_sock >= 0)
 			if (sock_max <= ifp->int_rip_sock)
-				sock_max = ifp->int_rip_sock+1;
-		}
+				sock_max = ifp->int_rip_sock + 1;
 	}
-	if (rdisc_sock >= 0) {
-		FD_SET(rdisc_sock, &fdbits);
+	if (rdisc_sock >= 0)
 		if (sock_max <= rdisc_sock)
-			sock_max = rdisc_sock+1;
+			sock_max = rdisc_sock + 1;
+
+	if (fdbitsp)
+		free(fdbitsp);
+	fdbitsp = (fd_set *)calloc(howmany(sock_max, NFDBITS),
+	    sizeof(fd_mask));
+	if (fdbitsp == NULL)
+		BADERR(1, "calloc");
+
+	FD_SET(rt_sock, fdbitsp);
+	if (rip_sock >= 0)
+		FD_SET(rip_sock, fdbitsp);
+	for (ifp = ifnet; 0 != ifp; ifp = ifp->int_next) {
+		if (ifp->int_rip_sock >= 0)
+			FD_SET(ifp->int_rip_sock, fdbitsp);
 	}
+	if (rdisc_sock >= 0)
+		FD_SET(rdisc_sock, fdbitsp);
 }
 
 
@@ -642,7 +659,7 @@ static int				/* <0 or file descriptor */
 get_rip_sock(naddr addr,
 	     int serious)		/* 1=failure to bind is serious */
 {
-	struct sockaddr_in sin;
+	struct sockaddr_in rsin;
 	unsigned char ttl;
 	int s;
 
@@ -650,14 +667,14 @@ get_rip_sock(naddr addr,
 	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
 		BADERR(1,"rip_sock = socket()");
 
-	memset(&sin, 0, sizeof(sin));
+	memset(&rsin, 0, sizeof(rsin));
 #ifdef _HAVE_SIN_LEN
-	sin.sin_len = sizeof(sin);
+	rsin.sin_len = sizeof(rsin);
 #endif
-	sin.sin_family = AF_INET;
-	sin.sin_port = htons(RIP_PORT);
-	sin.sin_addr.s_addr = addr;
-	if (bind(s, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
+	rsin.sin_family = AF_INET;
+	rsin.sin_port = htons(RIP_PORT);
+	rsin.sin_addr.s_addr = addr;
+	if (bind(s, (struct sockaddr *)&rsin, sizeof(rsin)) < 0) {
 		if (serious)
 			BADERR(errno != EADDRINUSE, "bind(rip_sock)");
 		return -1;
@@ -721,9 +738,13 @@ rip_mcast_on(struct interface *ifp)
 #endif
 	    && !(ifp->int_state & IS_ALIAS)) {
 		m.imr_multiaddr.s_addr = htonl(INADDR_RIP_GROUP);
+#ifdef MCAST_IFINDEX
+		m.imr_interface.s_addr = htonl(ifp->int_index);
+#else
 		m.imr_interface.s_addr = ((ifp->int_if_flags & IFF_POINTOPOINT)
 					  ? ifp->int_dstaddr
 					  : ifp->int_addr);
+#endif
 		if (setsockopt(rip_sock,IPPROTO_IP, IP_ADD_MEMBERSHIP,
 			       &m, sizeof(m)) < 0)
 			LOGERR("setsockopt(IP_ADD_MEMBERSHIP RIP)");
@@ -814,8 +835,8 @@ intvl_random(struct timeval *tp,	/* put value here */
 {
 	tp->tv_sec = (time_t)(hi == lo
 			      ? lo
-			      : (lo + random() % ((hi - lo))));
-	tp->tv_usec = random() % 1000000;
+			      : (lo + arc4random() % ((hi - lo))));
+	tp->tv_usec = arc4random() % 1000000;
 }
 
 
@@ -858,11 +879,14 @@ msglog(const char *p, ...)
 
 	va_start(args, p);
 	vsyslog(LOG_ERR, p, args);
+	va_end(args);
 
 	if (ftrace != 0) {
 		if (ftrace == stdout)
 			(void)fputs("routed: ", ftrace);
+		va_start(args, p);
 		(void)vfprintf(ftrace, p, args);
+		va_end(args);
 		(void)fputc('\n', ftrace);
 	}
 }
@@ -882,8 +906,6 @@ msglim(struct msg_limit *lim, naddr addr, const char *p, ...)
 	int i;
 	struct msg_sub *ms1, *ms;
 	const char *p1;
-
-	va_start(args, p);
 
 	/* look for the oldest slot in the table
 	 * or the slot for the bad router.
@@ -919,13 +941,17 @@ msglim(struct msg_limit *lim, naddr addr, const char *p, ...)
 		trace_flush();
 		for (p1 = p; *p1 == ' '; p1++)
 			continue;
+		va_start(args, p);
 		vsyslog(LOG_ERR, p1, args);
+		va_end(args);
 	}
 
 	/* always display the message if tracing */
 	if (ftrace != 0) {
+		va_start(args, p);
 		(void)vfprintf(ftrace, p, args);
 		(void)fputc('\n', ftrace);
+		va_end(args);
 	}
 }
 
@@ -939,9 +965,12 @@ logbad(int dump, const char *p, ...)
 
 	va_start(args, p);
 	vsyslog(LOG_ERR, p, args);
+	va_end(args);
 
 	(void)fputs("routed: ", stderr);
+	va_start(args, p);
 	(void)vfprintf(stderr, p, args);
+	va_end(args);
 	(void)fputs("; giving up\n",stderr);
 	(void)fflush(stderr);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: mktime.c,v 1.1.1.1 2000/03/29 12:38:49 simonb Exp $	*/
+/*	$NetBSD: mktime.c,v 1.4 2006/06/11 19:34:10 kardel Exp $	*/
 
 /*
  * Copyright (c) 1987, 1989 Regents of the University of California.
@@ -36,7 +36,6 @@
  * SUCH DAMAGE.  */
 
 /*static char *sccsid = "from: @(#)ctime.c	5.26 (Berkeley) 2/23/91";*/
-/*static char *rcsid = "mktime.c,v 1.1.1.3 1998/11/15 19:23:34 kardel RELEASE_19990228_A";*/
 
 /*
  * This implementation of mktime is lifted straight from the NetBSD (BSD 4.4)
@@ -62,9 +61,9 @@
  * by hand.  Sorry about that.
  */
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
+#include "ntp_machine.h"
+
+#if !defined(HAVE_MKTIME) || !defined(HAVE_TIMEGM)
 
 #ifndef DSTMINUTES
 #define DSTMINUTES 60
@@ -85,14 +84,6 @@
 #define MONSPERYEAR     12
 #define TM_YEAR_BASE    1900
 #define isleap(y) ((((y) % 4) == 0 && ((y) % 100) != 0) || ((y) % 400) == 0)
-
-#ifdef HAVE_SYS_TYPES_H
-# include <sys/types.h>
-#endif
-
-#include <time.h>
-
-extern time_t	time();
 
 static int	mon_lengths[2][MONSPERYEAR] = {
 	{ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 },
@@ -187,7 +178,8 @@ tmcomp(
 static time_t
 time2(
 	struct tm *	tmp,
-	int * 		okayp
+	int * 		okayp,
+	int		usezn
 	)
 {
 	register int			dir;
@@ -235,7 +227,10 @@ time2(
 	*/
 	t = (t < 0) ? 0 : ((time_t) 1 << bits);
 	for ( ; ; ) {
-	        mytm = *localtime(&t);
+		if (usezn)
+	        	mytm = *localtime(&t);
+		else
+	        	mytm = *gmtime(&t);
 		dir = tmcomp(&mytm, &yourtm);
 		if (dir != 0) {
 			if (bits-- < 0)
@@ -253,11 +248,18 @@ time2(
 		return WRONG;
 	}
 	t += saved_seconds;
-	*tmp = *localtime(&t);
+	if (usezn)
+		*tmp = *localtime(&t);
+	else
+		*tmp = *gmtime(&t);
 	*okayp = TRUE;
 	return t;
 }
+#else
+int mktime_bs;
+#endif /* !HAVE_MKTIME || !HAVE_TIMEGM */
 
+#ifndef HAVE_MKTIME
 static time_t
 time1(
 	struct tm * tmp
@@ -268,7 +270,7 @@ time1(
 
 	if (tmp->tm_isdst > 1)
 		tmp->tm_isdst = 1;
-	t = time2(tmp, &okay);
+	t = time2(tmp, &okay, 1);
 	if (okay || tmp->tm_isdst < 0)
 		return t;
 
@@ -282,3 +284,22 @@ mktime(
 {
 	return time1(tmp);
 }
+#endif /* !HAVE_MKTIME */
+
+#ifndef HAVE_TIMEGM
+time_t
+timegm(
+	struct tm * tmp
+	)
+{
+	register time_t			t;
+	int				okay;
+
+	tmp->tm_isdst = 0;
+	t = time2(tmp, &okay, 0);
+	if (okay || tmp->tm_isdst < 0)
+		return t;
+
+	return WRONG;
+}
+#endif /* !HAVE_TIMEGM */

@@ -1,3 +1,5 @@
+/*	$NetBSD: SYS.h,v 1.13 2003/08/07 16:42:26 agc Exp $	*/
+
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -14,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,7 +35,6 @@
  *	@(#)SYS.h	8.1 (Berkeley) 6/4/93
  *
  *	from: Header: SYS.h,v 1.2 92/07/03 18:57:00 torek Exp
- *	$NetBSD: SYS.h,v 1.2 1999/01/14 22:48:22 kleink Exp $
  */
 
 #include <machine/asm.h>
@@ -55,38 +52,57 @@
  * change it to be position independent later, if need be.
  */
 #ifdef PIC
-#define	ERROR() \
-	PIC_PROLOGUE(%g1,%g2); \
-	ld [%g1+_C_LABEL(__cerror)],%g2; jmp %g2; nop
+#ifdef BIGPIC
+#define	JUMP(name) \
+	PIC_PROLOGUE(%g1,%g5); \
+	sethi %hi(_C_LABEL(name)),%g5; \
+	or %g5,%lo(_C_LABEL(name)),%g5; \
+	ldx [%g1+%g5],%g5; \
+	jmp %g5; \
+	nop
 #else
-#define	ERROR() \
-	sethi %hi(_C_LABEL(__cerror)),%g1; or %lo(_C_LABEL(__cerror)),%g1,%g1; \
-	jmp %g1; nop
+#define	JUMP(name) \
+	PIC_PROLOGUE(%g1,%g5); \
+	ldx [%g1+_C_LABEL(name)],%g5; jmp %g5; nop
 #endif
-
+#else
+#define	JUMP(name)	set _C_LABEL(name),%g1; jmp %g1; nop
+#endif
+#define	ERROR()		JUMP(__cerror)
 /*
  * SYSCALL is used when further action must be taken before returning.
  * Note that it adds a `nop' over what we could do, if we only knew what
  * came at label 1....
  */
+#define	_SYSCALL(x,y) \
+	ENTRY(x); mov _CAT(SYS_,y),%g1; t ST_SYSCALL; bcc 1f; nop; ERROR(); 1:
+
 #define	SYSCALL(x) \
-	ENTRY(x); mov _CAT(SYS_,x),%g1; t ST_SYSCALL; bcc 1f; nop; ERROR(); 1:
+	_SYSCALL(x,x)
 
 /*
  * RSYSCALL is used when the system call should just return.  Here
- * we use the SYSCALL_G2RFLAG to put the `success' return address in %g2
+ * we use the SYSCALL_G7RFLAG to put the `success' return address in %g7
  * and avoid a branch.
  */
 #define	RSYSCALL(x) \
-	ENTRY(x); mov (_CAT(SYS_,x))|SYSCALL_G2RFLAG,%g1; add %o7,8,%g2; \
+	ENTRY(x); mov (_CAT(SYS_,x))|SYSCALL_G7RFLAG,%g1; add %o7,8,%g7; \
 	t ST_SYSCALL; ERROR()
 
 /*
  * PSEUDO(x,y) is like RSYSCALL(y) except that the name is x.
  */
 #define	PSEUDO(x,y) \
-	ENTRY(x); mov (_CAT(SYS_,y))|SYSCALL_G2RFLAG,%g1; add %o7,8,%g2; \
+	ENTRY(x); mov (_CAT(SYS_,y))|SYSCALL_G7RFLAG,%g1; add %o7,8,%g7; \
 	t ST_SYSCALL; ERROR()
+
+/*
+ * WSYSCALL(weak,strong) is like RSYSCALL(weak), except that weak is
+ * a weak internal alias for the strong symbol.
+ */
+#define	WSYSCALL(weak,strong) \
+	WEAK_ALIAS(weak,strong); \
+	PSEUDO(strong,weak)
 
 /*
  * SYSCALL_NOERROR is like SYSCALL, except it's used for syscalls 
@@ -104,14 +120,16 @@
  * XXX - This should be optimized.
  */
 #define RSYSCALL_NOERROR(x) \
-	ENTRY(x); mov (_CAT(SYS_,x))|SYSCALL_G2RFLAG,%g1; add %o7,8,%g2; \
+	ENTRY(x); mov (_CAT(SYS_,x))|SYSCALL_G7RFLAG,%g1; add %o7,8,%g7; \
 	t ST_SYSCALL
 
 /*
  * PSEUDO_NOERROR(x,y) is like RSYSCALL_NOERROR(y) except that the name is x.
  */
 #define PSEUDO_NOERROR(x,y) \
-	ENTRY(x); mov (_CAT(SYS_,y))|SYSCALL_G2RFLAG,%g1; add %o7,8,%g2; \
+	ENTRY(x); mov (_CAT(SYS_,y))|SYSCALL_G7RFLAG,%g1; add %o7,8,%g7; \
 	t ST_SYSCALL
+
+	.register	%g7,#scratch
 
 	.globl	_C_LABEL(__cerror)

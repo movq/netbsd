@@ -1,4 +1,4 @@
-/*	$NetBSD: apilib.c,v 1.4 1998/03/04 13:16:04 christos Exp $	*/
+/*	$NetBSD: apilib.c,v 1.7 2003/08/07 11:16:24 agc Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,11 +30,11 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)apilib.c	4.2 (Berkeley) 4/26/91";
 #else
-__RCSID("$NetBSD: apilib.c,v 1.4 1998/03/04 13:16:04 christos Exp $");
+__RCSID("$NetBSD: apilib.c,v 1.7 2003/08/07 11:16:24 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -60,9 +56,9 @@ static int
 
 
 /* apilib.c */
-static int api_issue_regs __P((int, int , int , int , int , int , char *, int,
-    union REGS *, struct SREGS *));
-static int api_issue __P((int, int , int , int , int , int , char *, int));
+static int api_issue_regs(int, int , int , int , int , int , char *, int,
+    union REGS *, struct SREGS *);
+static int api_issue(int, int , int , int , int , int , char *, int);
 
 /*
  * Issue an API request, with reg structures supplied by the caller.

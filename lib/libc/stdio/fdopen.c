@@ -1,4 +1,4 @@
-/*	$NetBSD: fdopen.c,v 1.11 2000/01/22 22:19:19 mycroft Exp $	*/
+/*	$NetBSD: fdopen.c,v 1.15 2008/03/13 15:40:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)fdopen.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: fdopen.c,v 1.11 2000/01/22 22:19:19 mycroft Exp $");
+__RCSID("$NetBSD: fdopen.c,v 1.15 2008/03/13 15:40:00 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -53,7 +49,9 @@ __RCSID("$NetBSD: fdopen.c,v 1.11 2000/01/22 22:19:19 mycroft Exp $");
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <limits.h>
 
+#include "reentrant.h"
 #include "local.h"
 
 #ifdef __weak_alias
@@ -70,6 +68,18 @@ fdopen(fd, mode)
 
 	_DIAGASSERT(fd != -1);
 
+	/*
+	 * File descriptors are a full int, but _file is only a short.
+	 * If we get a valid file descriptor that is greater or equal to
+	 * USHRT_MAX, then the fd will get sign-extended into an
+	 * invalid file descriptor.  Handle this case by failing the
+	 * open. (We treat the short as unsigned, and special-case -1).
+	 */
+	if (fd >= USHRT_MAX) {
+		errno = EMFILE;
+		return NULL;
+	}
+
 	if ((flags = __sflags(mode, &oflags)) == 0)
 		return (NULL);
 
@@ -80,6 +90,17 @@ fdopen(fd, mode)
 	if (tmp != O_RDWR && (tmp != (oflags & O_ACCMODE))) {
 		errno = EINVAL;
 		return (NULL);
+	}
+
+	if (oflags & O_NONBLOCK) {
+		struct stat st;
+		if (fstat(fd, &st) == -1) {
+			return (NULL);
+		}
+		if (!S_ISREG(st.st_mode)) {
+			errno = EFTYPE;
+			return (NULL);
+		}
 	}
 
 	if ((fp = __sfp()) == NULL)

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_zbus.c,v 1.5 2000/01/23 21:06:13 aymeric Exp $	*/
+/*	$NetBSD: if_ne_zbus.c,v 1.13 2008/04/28 20:23:12 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_ne_zbus.c,v 1.13 2008/04/28 20:23:12 martin Exp $");
 
 /*
  * Thanks to Village Tronic for giving me a card.
@@ -60,7 +56,7 @@
 
 #include <dev/ic/ne2000reg.h>
 #include <dev/ic/ne2000var.h>
- 
+
 #include <dev/ic/rtl80x9reg.h>
 #include <dev/ic/rtl80x9var.h>
 
@@ -69,8 +65,8 @@
 
 #include <amiga/dev/zbusvar.h>
 
-int	ne_zbus_match __P((struct device *, struct cfdata *, void *));
-void	ne_zbus_attach __P((struct device *, struct device *, void *));
+int	ne_zbus_match(device_t, cfdata_t , void *);
+void	ne_zbus_attach(device_t, device_t, void *);
 
 struct ne_zbus_softc {
 	struct ne2000_softc	sc_ne2000;
@@ -78,12 +74,11 @@ struct ne_zbus_softc {
 	struct isr		sc_isr;
 };
 
-struct cfattach ne_zbus_ca = {
-	sizeof(struct ne_zbus_softc), ne_zbus_match, ne_zbus_attach
-};
+CFATTACH_DECL_NEW(ne_zbus, sizeof(struct ne_zbus_softc),
+    ne_zbus_match, ne_zbus_attach, NULL, NULL);
 
 /*
- * The Amiga address are shifted by one bit to the ISA-Bus, but 
+ * The Amiga address are shifted by one bit to the ISA-Bus, but
  * this is handled by the bus_space functions.
  */
 #define	NE_ARIADNE_II_NPORTS	0x20
@@ -93,10 +88,7 @@ struct cfattach ne_zbus_ca = {
 #define	NE_ARIADNE_II_ASICSIZE	0x10
 
 int
-ne_zbus_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+ne_zbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct zbus_args *zap = aux;
 
@@ -104,7 +96,7 @@ ne_zbus_match(parent, cf, aux)
 	if (zap->manid == 2167 && zap->prodid == 202)
 		return (1);
 
-	/* X-serv ethernet card */
+	/* X-surf ethernet card */
 	if (zap->manid == 4626 && zap->prodid == 23)
 		return (1);
 
@@ -115,11 +107,9 @@ ne_zbus_match(parent, cf, aux)
  * Install interface into kernel networking data structures
  */
 void
-ne_zbus_attach(parent, self, aux)
-	struct device *parent, *self;
-	void   *aux;
+ne_zbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct ne_zbus_softc *zsc = (struct ne_zbus_softc *)self;
+	struct ne_zbus_softc *zsc = device_private(self);
 	struct ne2000_softc *nsc = &zsc->sc_ne2000;
 	struct dp8390_softc *dsc = &nsc->sc_dp8390;
 	struct zbus_args *zap = aux;
@@ -127,14 +117,12 @@ ne_zbus_attach(parent, self, aux)
 	bus_space_handle_t nich;
 	bus_space_tag_t asict = nict;
 	bus_space_handle_t asich;
-	int *media, nmedia, defmedia;
 
-	media = NULL;
-	nmedia = defmedia = 0;
-
+	dsc->sc_dev = self;
 	dsc->sc_mediachange = rtl80x9_mediachange;
 	dsc->sc_mediastatus = rtl80x9_mediastatus;
 	dsc->init_card = rtl80x9_init_card;
+	dsc->sc_media_init = rtl80x9_media_init;
 
 	zsc->sc_bst.base = (u_long)zap->va + 0;
 	if (zap->manid == 4626)
@@ -142,18 +130,18 @@ ne_zbus_attach(parent, self, aux)
 
 	zsc->sc_bst.absm = &amiga_bus_stride_2;
 
-	printf("\n");
+	aprint_normal("\n");
 
 	/* Map i/o space. */
 	if (bus_space_map(nict, NE_ARIADNE_II_NICBASE, NE_ARIADNE_II_NPORTS, 0, &nich)) {
-		printf("%s: can't map nic i/o space\n", dsc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't map nic i/o space\n");
 		return;
 	}
 
 	if (bus_space_subregion(nict, nich, NE2000_ASIC_OFFSET, NE_ARIADNE_II_ASICSIZE,
 	    &asich)) {
-		printf("%s: can't map asic i/o space\n", dsc->sc_dev.dv_xname);
-		return; 
+		aprint_error_dev(self, "can't map asic i/o space\n");
+		return;
 	}
 
 	dsc->sc_regt = nict;
@@ -162,9 +150,6 @@ ne_zbus_attach(parent, self, aux)
 	nsc->sc_asict = asict;
 	nsc->sc_asich = asich;
 
-	/* Initialize media. */
-	rtl80x9_init_media(dsc, &media, &nmedia, &defmedia);
-
 	/* This interface is always enabled. */
 	dsc->sc_enabled = 1;
 
@@ -172,7 +157,7 @@ ne_zbus_attach(parent, self, aux)
 	 * Do generic NE2000 attach.  This will read the station address
 	 * from the EEPROM.
 	 */
-	ne2000_attach(nsc, NULL, media, nmedia, defmedia);
+	ne2000_attach(nsc, NULL);
 
 	zsc->sc_isr.isr_intr = dp8390_intr;
 	zsc->sc_isr.isr_arg = dsc;

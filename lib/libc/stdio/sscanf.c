@@ -1,4 +1,4 @@
-/*	$NetBSD: sscanf.c,v 1.11 1999/09/20 04:39:33 lukem Exp $	*/
+/*	$NetBSD: sscanf.c,v 1.16 2005/11/29 03:12:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,19 +37,17 @@
 #if 0
 static char sccsid[] = "@(#)sscanf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: sscanf.c,v 1.11 1999/09/20 04:39:33 lukem Exp $");
+__RCSID("$NetBSD: sscanf.c,v 1.16 2005/11/29 03:12:00 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#if __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
+
+#include "reentrant.h"
 #include "local.h"
 
 static int eofread __P((void *, char *, int));
@@ -70,35 +64,25 @@ eofread(cookie, buf, len)
 }
 
 int
-#if __STDC__
 sscanf(const char *str, char const *fmt, ...)
-#else
-sscanf(str, fmt, va_alist)
-	const char *str;
-	char *fmt;
-	va_dcl
-#endif
 {
 	int ret;
 	va_list ap;
 	FILE f;
+	struct __sfileext fext;
 
 	_DIAGASSERT(str != NULL);
 	_DIAGASSERT(fmt != NULL);
 
+	_FILEEXT_SETUP(&f, &fext);
 	f._flags = __SRD;
-	/* LINTED we don't touch the string */
-	f._bf._base = f._p = (unsigned char *)str;
+	f._bf._base = f._p = __UNCONST(str);
 	f._bf._size = f._r = strlen(str);
 	f._read = eofread;
-	f._ub._base = NULL;
+	_UB(&f)._base = NULL;
 	f._lb._base = NULL;
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
-	ret = __svfscanf(&f, fmt, ap);
+	ret = __svfscanf_unlocked(&f, fmt, ap);
 	va_end(ap);
 	return (ret);
 }

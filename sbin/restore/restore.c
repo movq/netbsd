@@ -1,4 +1,4 @@
-/*	$NetBSD: restore.c,v 1.12 1997/09/15 08:04:35 lukem Exp $	*/
+/*	$NetBSD: restore.c,v 1.20 2006/12/18 20:07:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)restore.c	8.3 (Berkeley) 9/13/94";
 #else
-__RCSID("$NetBSD: restore.c,v 1.12 1997/09/15 08:04:35 lukem Exp $");
+__RCSID("$NetBSD: restore.c,v 1.20 2006/12/18 20:07:32 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,24 +49,21 @@ __RCSID("$NetBSD: restore.c,v 1.12 1997/09/15 08:04:35 lukem Exp $");
 #include "restore.h"
 #include "extern.h"
 
-static char *keyval __P((int));
+static char *keyval(int);
 
 /*
  * This implements the 't' option.
  * List entries on the tape.
  */
 long
-listfile(name, ino, type)
-	char *name;
-	ino_t ino;
-	int type;
+listfile(const char *name, ino_t ino, int type)
 {
 	long descend = hflag ? GOOD : FAIL;
 
 	if (TSTINO(ino, dumpmap) == 0)
 		return (descend);
 	vprintf(stdout, "%s", type == LEAF ? "leaf" : "dir ");
-	fprintf(stdout, "%10d\t%s\n", ino, name);
+	fprintf(stdout, "%10llu\t%s\n", (unsigned long long)ino, name);
 	return (descend);
 }
 
@@ -79,10 +72,7 @@ listfile(name, ino, type)
  * Request that new entries be extracted.
  */
 long
-addfile(name, ino, type)
-	char *name;
-	ino_t ino;
-	int type;
+addfile(const char *name, ino_t ino, int type)
 {
 	struct entry *ep;
 	long descend = hflag ? GOOD : FAIL;
@@ -95,7 +85,8 @@ addfile(name, ino, type)
 	if (ino == WINO && command == 'i' && !vflag)
 		return (descend);
 	if (!mflag) {
-		(void) snprintf(buf, sizeof(buf), "./%u", ino);
+		(void) snprintf(buf, sizeof(buf), "./%llu",
+		    (unsigned long long)ino);
 		name = buf;
 		if (type == NODE) {
 			(void) genliteraldir(name, ino);
@@ -123,10 +114,7 @@ addfile(name, ino, type)
  */
 /* ARGSUSED */
 long
-deletefile(name, ino, type)
-	char *name;
-	ino_t ino;
-	int type;
+deletefile(const char *name, ino_t ino, int type __unused)
 {
 	long descend = hflag ? GOOD : FAIL;
 	struct entry *ep;
@@ -164,7 +152,7 @@ static struct entry *removelist;
  *	Remove directories from the lookup chains.
  */
 void
-removeoldleaves()
+removeoldleaves(void)
 {
 	struct entry *ep, *nextep;
 	ino_t i, mydirino;
@@ -217,10 +205,7 @@ removeoldleaves()
  *	Renames are done at the same time.
  */
 long
-nodeupdates(name, ino, type)
-	char *name;
-	ino_t ino;
-	int type;
+nodeupdates(const char *name, ino_t ino, int type)
 {
 	struct entry *ep, *np, *ip;
 	long descend = GOOD;
@@ -475,9 +460,9 @@ nodeupdates(name, ino, type)
 	 * for it, we discard the name knowing that it will be on the
 	 * next incremental tape.
 	 */
-	case NULL:
-		fprintf(stderr, "%s: (inode %d) not found on tape\n",
-			name, ino);
+	case 0:
+		fprintf(stderr, "%s: (inode %llu) not found on tape\n",
+			name, (unsigned long long)ino);
 		break;
 
 	/*
@@ -507,8 +492,7 @@ nodeupdates(name, ino, type)
  * Calculate the active flags in a key.
  */
 static char *
-keyval(key)
-	int key;
+keyval(int key)
 {
 	static char keybuf[32];
 
@@ -529,7 +513,7 @@ keyval(key)
  * Find unreferenced link names.
  */
 void
-findunreflinks()
+findunreflinks(void)
 {
 	struct entry *ep, *np;
 	ino_t i;
@@ -577,7 +561,7 @@ findunreflinks()
  * time O(N).
  */
 void
-removeoldnodes()
+removeoldnodes(void)
 {
 	struct entry *ep, **prev;
 	long change;
@@ -606,8 +590,7 @@ removeoldnodes()
  * Extract new leaves.
  */
 void
-createleaves(symtabfile)
-	char *symtabfile;
+createleaves(const char *symtabfile)
 {
 	struct entry *ep;
 	ino_t first;
@@ -633,7 +616,8 @@ createleaves(symtabfile)
 		while (first < curfile.ino) {
 			ep = lookupino(first);
 			if (ep == NULL)
-				panic("%d: bad first\n", first);
+				panic("%llu: bad first\n",
+				    (unsigned long long)first);
 			fprintf(stderr, "%s: not found on tape\n", myname(ep));
 			ep->e_flags &= ~(NEW|EXTRACT);
 			first = lowerbnd(first);
@@ -646,8 +630,9 @@ createleaves(symtabfile)
 		 * on the next incremental tape.
 		 */
 		if (first != curfile.ino) {
-			fprintf(stderr, "expected next file %d, got %d\n",
-				first, curfile.ino);
+			fprintf(stderr, "expected next file %llu, got %llu\n",
+			    (unsigned long long)first,
+			    (unsigned long long)curfile.ino);
 			skipfile();
 			goto next;
 		}
@@ -686,7 +671,7 @@ createleaves(symtabfile)
  * Efficiently extract a subset of the files on a tape.
  */
 void
-createfiles()
+createfiles(void)
 {
 	ino_t first, next, last;
 	struct entry *ep;
@@ -699,6 +684,12 @@ createfiles()
 	skipdirs();
 	first = lowerbnd(ROOTINO);
 	last = upperbnd(maxino - 1);
+
+new_volume:
+	/*
+	 * Decide on the next inode needed in this volume.
+	 */
+	next = lowerbnd(curfile.ino);
 	for (;;) {
 		first = lowerbnd(first);
 		last = upperbnd(last);
@@ -711,19 +702,20 @@ createfiles()
 		 * Reject any volumes with inodes greater
 		 * than the last one needed
 		 */
-		while (curfile.ino > last) {
-			curfile.action = SKIP;
-			getvol((long)0);
-			skipmaps();
-			skipdirs();
+		if (curfile.ino > last) {
+			do {
+				curfile.action = SKIP;
+				getvol((long)0);
+				skipmaps();
+				skipdirs();
+			} while (curfile.ino > last);
+			goto new_volume;
 		}
 		/*
-		 * Decide on the next inode needed.
-		 * Skip across the inodes until it is found
+		 * Skip across the inodes until the next inode is found
 		 * or an out of order volume change is encountered
 		 */
-		next = lowerbnd(curfile.ino);
-		do	{
+		do {
 			curvol = volno;
 			while (next > curfile.ino && volno == curvol)
 				skipfile();
@@ -735,7 +727,7 @@ createfiles()
 		 * current state must be recalculated
 		 */
 		if (volno != curvol)
-			continue;
+			goto new_volume;
 		/*
 		 * If the current inode is greater than the one we were
 		 * looking for then we missed the one we were looking for.
@@ -764,8 +756,17 @@ createfiles()
 				panic("corrupted symbol table\n");
 			(void) extractfile(myname(ep));
 			ep->e_flags &= ~NEW;
-			if (volno != curvol)
+			if (volno != curvol) {
 				skipmaps();
+				goto new_volume;
+			}
+			/*
+			 * Decide the next inode.  Note that curfile.ino
+			 * already updated to the next file on the tape,
+			 * and we can't used it since it may be greater
+			 * than `next'.
+			 */
+			next = lowerbnd(next);
 		}
 	}
 }
@@ -774,7 +775,7 @@ createfiles()
  * Add links.
  */
 void
-createlinks()
+createlinks(void)
 {
 	struct entry *np, *ep;
 	ino_t i;
@@ -814,7 +815,7 @@ createlinks()
  * that no temporary names remain.
  */
 void
-checkrestore()
+checkrestore(void)
 {
 	struct entry *ep;
 	ino_t i;
@@ -836,10 +837,7 @@ checkrestore()
  * A paranoid check that things are as they should be.
  */
 long
-verifyfile(name, ino, type)
-	char *name;
-	ino_t ino;
-	int type;
+verifyfile(const char *name, ino_t ino, int type)
 {
 	struct entry *np, *ep;
 	long descend = GOOD;
@@ -856,7 +854,7 @@ verifyfile(name, ino, type)
 		if (np == ep)
 			break;
 	if (np == NULL)
-		panic("missing inumber %d\n", ino);
+		panic("missing inumber %llu\n", (unsigned long long)ino);
 	if (ep->e_type == LEAF && type != LEAF)
 		badentry(ep, "type should be LEAF");
 	return (descend);

@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.8 1999/03/29 05:12:39 mrg Exp $	*/
+/*	$NetBSD: misc.c,v 1.11 2003/08/07 09:37:25 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,18 +34,14 @@
 #if 0
 static char sccsid[] = "@(#)misc.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: misc.c,v 1.8 1999/03/29 05:12:39 mrg Exp $");
+__RCSID("$NetBSD: misc.c,v 1.11 2003/08/07 09:37:25 agc Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/file.h>
 #include <termios.h>
 
-#if __STDC__
-#include	<stdarg.h>
-#else
-#include	<varargs.h>
-#endif
+#include <stdarg.h>
 
 #include	"mille.h"
 #ifndef	unctrl
@@ -64,24 +56,14 @@ __RCSID("$NetBSD: misc.c,v 1.8 1999/03/29 05:12:39 mrg Exp $");
 #define	NUMSAFE	4
 
 bool
-#if __STDC__
 error(const char *str, ...)
-#else
-error(str, va_alist)
-	const char *str;
-	va_dcl
-#endif
 {
 	va_list ap;
 
-#if __STDC__
 	va_start(ap, str);
-#else
-	va_start(ap);
-#endif
 	wmove(Score, ERR_Y, ERR_X);
 	vwprintw(Score, str, ap);
-	clrtoeol();
+	wclrtoeol(Score);
 	putchar('\07');
 	refresh();
 	va_end(ap);

@@ -1,7 +1,5 @@
-#	$NetBSD: Makefile,v 1.4 1997/10/17 10:38:11 lukem Exp $
+#	$NetBSD: Makefile,v 1.6 2002/06/06 23:00:56 thorpej Exp $
 
-SUBDIR=	common mopa.out mopchk mopd mopprobe moptrace
-
-all-mopa.out all-mopchk all-mopd all-mopprobe all-moptrace: all-common
+SUBDIR=	common .WAIT mopcopy mopchk mopd mopprobe moptrace
 
 .include <bsd.subdir.mk>

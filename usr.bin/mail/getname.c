@@ -1,4 +1,4 @@
-/*	$NetBSD: getname.c,v 1.6 1998/07/26 22:07:27 mycroft Exp $	*/
+/*	$NetBSD: getname.c,v 1.11 2006/11/28 18:45:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)getname.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: getname.c,v 1.6 1998/07/26 22:07:27 mycroft Exp $");
+__RCSID("$NetBSD: getname.c,v 1.11 2006/11/28 18:45:32 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -48,16 +44,15 @@ __RCSID("$NetBSD: getname.c,v 1.6 1998/07/26 22:07:27 mycroft Exp $");
 /* Getname / getuserid for those with hashed passwd data base). */
 
 /*
- * Search the passwd file for a uid.  Return name on success, NOSTR on failure
+ * Search the passwd file for a uid.  Return name on success, NULL on failure
  */
-const char *
-getname(uid)
-	int uid;
+PUBLIC const char *
+getname(uid_t uid)
 {
 	struct passwd *pw;
 
 	if ((pw = getpwuid(uid)) == NULL)
-		return NOSTR;
+		return NULL;
 	return pw->pw_name;
 }
 
@@ -65,9 +60,8 @@ getname(uid)
  * Convert the passed name to a user id and return it.  Return -1
  * on error.
  */
-int
-getuserid(name)
-	char name[];
+PUBLIC int
+getuserid(char name[])
 {
 	struct passwd *pw;
 

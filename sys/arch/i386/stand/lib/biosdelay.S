@@ -1,4 +1,4 @@
-/*	$NetBSD: biosdelay.S,v 1.1.1.1 1997/03/14 02:40:32 perry Exp $	*/
+/*	$NetBSD: biosdelay.S,v 1.4 2005/12/11 12:17:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997
@@ -34,21 +34,19 @@
 
 #include <machine/asm.h>
 
-#define data32	.byte 0x66
-
 	.text
 
 /*
-# BIOS call "INT 15H Function 86H" to sleep for a set number of microseconds
-#	Call with	%ah = 0x86
-#			%cx = time interval (high)
-#			%dx = time interval (low)
-#	Return:	
-#		If error
-#			CF  = set
-#		else
-#			CF  = clear
-*/
+ * BIOS call "INT 15H Function 86H" to sleep for a set number of microseconds
+ *	Call with	%ah = 0x86
+ *			%cx = time interval (high)
+ *			%dx = time interval (low)
+ *	Return:
+ *		If error
+ *			CF  = set
+ *		else
+ *			CF  = clear
+ */
 ENTRY(delay)
 	pushl	%ebp
 	pushl	%ebx
@@ -59,6 +57,7 @@ ENTRY(delay)
 	movw	22(%esp), %cx
 
 	call	_C_LABEL(prot_to_real)
+	.code16
 
 	movb	$0x86, %ah
 	int	$0x15
@@ -66,8 +65,8 @@ ENTRY(delay)
 
 	movb	%ah, %bl	# real_to_prot uses %eax
 
-	data32
-	call	_C_LABEL(real_to_prot)
+	calll	_C_LABEL(real_to_prot)
+	.code32
 
 	xorl	%eax, %eax
 	movb	%bl, %al

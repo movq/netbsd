@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.2 1998/07/04 19:31:05 mrg Exp $	*/
+/*	$NetBSD: extern.h,v 1.4 2007/01/08 17:51:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -40,7 +40,7 @@ void print_response __P((char *, CTL_RESPONSE *));
 /* process.c */
 void process_request __P((CTL_MSG *, CTL_RESPONSE *));
 void do_announce __P((CTL_MSG *, CTL_RESPONSE *));
-int find_user __P((char *, char *));
+int find_user __P((char *, char *, size_t));
 
 /* table.c */
 CTL_MSG *find_match __P((CTL_MSG *));
@@ -52,3 +52,4 @@ int delete_invite __P((int));
 /* talkd.c */
 extern int debug;
 extern int logging;
+void tsa2sa __P((struct sockaddr *, const struct talkd_sockaddr *));

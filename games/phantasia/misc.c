@@ -1,10 +1,12 @@
-/*	$NetBSD: misc.c,v 1.6 1999/09/08 21:57:19 jsm Exp $	*/
+/*	$NetBSD: misc.c,v 1.15 2008/01/28 06:20:15 dholland Exp $	*/
 
 /*
  * misc.c  Phantasia miscellaneous support routines
  */
 
 #include "include.h"
+#undef bool
+#include <curses.h>
 
 
 void
@@ -63,7 +65,7 @@ movelevel()
 const char   *
 descrlocation(playerp, shortflag)
 	struct player *playerp;
-	bool    shortflag;
+	phbool  shortflag;
 {
 	double  circle;		/* corresponding circle for coordinates */
 	int     quadrant;	/* quandrant of grid */
@@ -426,7 +428,7 @@ allstatslist()
 	mvprintw(13, 0, "Sin       : %9.5f", Player.p_sin);
 	mvprintw(14, 0, "Poison    : %9.5f", Player.p_poison);
 	mvprintw(15, 0, "Gems      : %9.0f", Player.p_gems);
-	mvprintw(16, 0, "Age       : %9d", Player.p_age);
+	mvprintw(16, 0, "Age       : %9ld", Player.p_age);
 	mvprintw(10, 40, "Holy Water: %9d", Player.p_holywater);
 	mvprintw(11, 40, "Amulets   : %9d", Player.p_amulets);
 	mvprintw(12, 40, "Charms    : %9d", Player.p_charms);
@@ -445,7 +447,7 @@ allstatslist()
 const char   *
 descrtype(playerp, shortflag)
 	struct player *playerp;
-	bool    shortflag;
+	phbool  shortflag;
 {
 	int     type;		/* for caluculating result subscript */
 	static const char *const results[] =/* description table */
@@ -671,7 +673,7 @@ death(how)
 	if (ch == 'Y') {
 		cleanup(FALSE);
 		execl(_PATH_GAMEPROG, "phantasia", "-s",
-		    (Wizard ? "-S" : (char *) NULL), 0);
+		    (Wizard ? "-S" : (char *) NULL), (char *) NULL);
 		exit(0);
 		/* NOTREACHED */
 	}
@@ -790,7 +792,7 @@ adjuststats()
 
 	/* calculate effective quickness */
 	dtemp = ((Player.p_gold + Player.p_gems / 2.0) - 1000.0) / Statptr->c_goldtote
-	    - Player.p_level;;
+	    - Player.p_level;
 	dtemp = MAX(0.0, dtemp);/* gold slows player down */
 	Player.p_speed = Player.p_quickness + Player.p_quksilver - dtemp;
 
@@ -937,7 +939,7 @@ void
 error(whichfile)
 	const char   *whichfile;
 {
-	int     (*funcp) __P((const char *,...));
+	int     (*funcp)(const char *,...);
 
 	if (Windows) {
 		funcp = printw;
@@ -945,20 +947,20 @@ error(whichfile)
 	} else
 		funcp = printf;
 
-	(*funcp) ("An unrecoverable error has occurred reading %s.  (errno = %d)\n", whichfile, errno);
+	(*funcp) ("An unrecoverable error has occurred reading %s.  (%s)\n", whichfile, strerror(errno));
 	(*funcp) ("Please run 'setup' to determine the problem.\n");
 	cleanup(TRUE);
 	/* NOTREACHED */
 }
 
 double
-distance(x1, x2, y1, y2)
-	double  x1, x2, y1, y2;
+distance(x_1, x_2, y_1, y_2)
+	double  x_1, x_2, y_1, y_2;
 {
 	double  deltax, deltay;
 
-	deltax = x1 - x2;
-	deltay = y1 - y2;
+	deltax = x_1 - x_2;
+	deltay = y_1 - y_2;
 	return (sqrt(deltax * deltax + deltay * deltay));
 }
 

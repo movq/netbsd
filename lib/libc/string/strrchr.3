@@ -13,11 +13,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -34,9 +30,9 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)strrchr.3	8.1 (Berkeley) 6/4/93
-.\"	$NetBSD: strrchr.3,v 1.5 1998/02/05 18:50:54 perry Exp $
+.\"	$NetBSD: strrchr.3,v 1.10 2006/10/16 08:48:45 wiz Exp $
 .\"
-.Dd June 4, 1993
+.Dd August 11, 2002
 .Dt STRRCHR 3
 .Os
 .Sh NAME
@@ -45,7 +41,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <string.h>
+.In string.h
 .Ft char *
 .Fn strrchr "const char *s" "int c"
 .Sh DESCRIPTION
@@ -69,11 +65,22 @@ The
 .Fn strrchr
 function
 returns a pointer to the character,
-or a null
-pointer if
+or a null pointer if
 .Fa c
 does not occur anywhere in
 .Fa s .
+.Sh EXAMPLES
+After the following call to
+.Fn strrchr ,
+.Va p
+will point to the string
+.Qq obar :
+.Bd -literal -offset indent
+char *p;
+char *s = "foobar";
+
+p = strrchr(s, 'o');
+.Ed
 .Sh SEE ALSO
 .Xr index 3 ,
 .Xr memchr 3 ,

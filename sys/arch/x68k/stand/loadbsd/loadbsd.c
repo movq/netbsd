@@ -8,7 +8,6 @@
  *
  *	loadbsd options:
  *		-h	help
- *		-v	verbose
  *		-V	print version and exit
  *
  *	kernel options:
@@ -16,21 +15,23 @@
  *		-s	single user boot (default)
  *		-D	enter kernel debugger
  *		-b	ask root device
- *		-d	use compiled-in rootdev
  *		-r	specify root device
+ *		-q	quiet boot
+ *		-v	verbose boot (also turn on verbosity of loadbsd)
  *
- *	$NetBSD: loadbsd.c,v 1.4 1999/09/23 15:14:59 minoura Exp $
+ *	$NetBSD: loadbsd.c,v 1.9 2005/12/24 22:45:40 perry Exp $
  */
 
 #include <sys/cdefs.h>
 
-__RCSID("$NetBSD: loadbsd.c,v 1.4 1999/09/23 15:14:59 minoura Exp $");
-#define VERSION	"$Revision: 1.4 $ $Date: 1999/09/23 15:14:59 $"
+__RCSID("$NetBSD: loadbsd.c,v 1.9 2005/12/24 22:45:40 perry Exp $");
+#define VERSION	"$Revision: 1.9 $ $Date: 2005/12/24 22:45:40 $"
 
 #include <sys/types.h>		/* ntohl */
 #include <sys/reboot.h>
 #include <sys/param.h>		/* ALIGN, ALIGNBYTES */
 #include <a.out.h>
+#include <sys/exec_elf.h>
 #include <string.h>
 #include <machine/bootinfo.h>
 
@@ -59,6 +60,7 @@ int main __P((int argc, char *argv[]));
 
 int opt_v;
 int opt_N;
+const char *kernel_fn;
 
 const struct hatbl {
 	char name[4];
@@ -278,12 +280,15 @@ found:	major = devtable[u].major;
 	return dev;
 }
 
+#define LOADBSD
+#include "../common/exec_sub.c"
+
 /*
  * read kernel and create trampoline
  *
  *	|----------------------| <- allocated buf addr
  *	| kernel image         |
- *	~ (header is excluded) ~
+ *	~ (exec file contents) ~
  *	|                      |
  *	|----------------------| <- return value (entry addr of trampoline)
  *	| struct tramparg      |
@@ -301,12 +306,12 @@ read_kernel(fn)
 	union dos_fcb *fcb;
 	size_t filesize, nread;
 	void *buf;
-	struct exec hdr;
-	int i;
 	struct tramparg *arg;
 	size_t size_tramp = end_trampoline - trampoline;
 
-	if ((fd = DOS_OPEN(fn, 0x20)) < 0)	/* RO, share READ */
+	kernel_fn = fn;
+
+	if ((fd = DOS_OPEN(fn, 0x00)) < 0)	/* read only */
 		xerr(1, "%s: open", fn);
 
 	if ((int)(fcb = DOS_GET_FCB_ADR(fd)) < 0)
@@ -322,38 +327,18 @@ read_kernel(fn)
 	/*filesize = fcb->blk.size;*/
 	filesize = IOCS_B_LPEEK(&fcb->blk.size);
 
-	/*
-	 * read a.out header
-	 */
-	if ((nread = DOS_READ(fd, (void *) &hdr, sizeof hdr)) != sizeof hdr) {
-		if ((int)nread < 0)
-			xerr(1, "%s: read header", fn);
-		else
-			xerrx(1, "%s: Not an a.out", fn);
-	}
-	/*
-	 * check header
-	 */
-	if (N_GETMAGIC(hdr) != NMAGIC)
-		xerrx(1, "%s: Bad magic number", fn);
-	if ((i = N_GETMID(hdr)) != MID_M68K)
-		xerrx(1, "%s: Wrong architecture (mid %d)", fn, i);
-
-	if (opt_v)
-		xwarnx("%s: %u bytes; text %u, data %u, bss %u, sym %u",
-			fn, filesize, hdr.a_text, hdr.a_data,
-			hdr.a_bss, hdr.a_syms);
+	if (filesize < sizeof(Elf32_Ehdr))
+		xerrx(1, "%s: Unknown format", fn);
 
 	/*
-	 * then, read entire body
+	 * read entire file
 	 */
-	if ((int)(buf = DOS_MALLOC(filesize + ALIGNBYTES - sizeof hdr
+	if ((int)(buf = DOS_MALLOC(filesize + ALIGNBYTES
 				   + sizeof(struct tramparg)
 				   + size_tramp + SIZE_TMPSTACK)) < 0)
 		xerr(1, "read_kernel");
 
-	if ((nread = DOS_READ(fd, buf, filesize - sizeof hdr))
-					!= filesize - sizeof hdr) {
+	if ((nread = DOS_READ(fd, buf, filesize)) != filesize) {
 		if ((int)nread < 0)
 			xerr(1, "%s: read", fn);
 		else
@@ -364,35 +349,34 @@ read_kernel(fn)
 		xerr(1, "%s: close", fn);
 
 	/*
-	 * create argument for trampoline code
+	 * address for argument for trampoline code
 	 */
-	arg = (struct tramparg *) ALIGN(buf + nread);
+	arg = (struct tramparg *) ALIGN((char *) buf + nread);
 
 	if (opt_v)
 		xwarnx("trampoline arg at %p", arg);
 
+	xk_load(&arg->xk, buf, 0 /* XXX load addr should not be fixed */);
+
+	/*
+	 * create argument for trampoline code
+	 */
 	arg->bsr_inst = TRAMP_BSR + sizeof(struct tramparg) - 2;
 	arg->tmp_stack = (char *) arg + sizeof(struct tramparg)
 				+ size_tramp + SIZE_TMPSTACK;
 	arg->mpu_type = IOCS_MPU_STAT() & 0xff;
-	arg->xk.image_top = buf;
-	arg->xk.load_addr = 0x00000000;	/* XXX should not be a fixed addr */
-	arg->xk.text_size = hdr.a_text;
-	arg->xk.data_size = hdr.a_data;
-	arg->xk.bss_size = hdr.a_bss;
-	arg->xk.symbol_size = hdr.a_syms;
+
 	arg->xk.d5 = IOCS_BOOTINF();	/* unused for now */
 #if 0
 	/* filled afterwards */
 	arg->xk.rootdev = 
 	arg->xk.boothowto = 
 #endif
-	arg->xk.entry_addr = hdr.a_entry;
 
 	if (opt_v)
 		xwarnx("args: mpu %d, image %p, load 0x%x, entry 0x%x",
-			arg->mpu_type, arg->xk.image_top, arg->xk.load_addr,
-			arg->xk.entry_addr);
+			arg->mpu_type, arg->xk.sec[0].sec_image,
+			arg->xk.load_addr, arg->xk.entry_addr);
 
 	/*
 	 * copy trampoline code
@@ -413,16 +397,16 @@ read_kernel(fn)
 static int
 chkmpu()
 {
-	register int ret asm("d0");
+	register int ret __asm("%d0");
 
-	asm("| %0 <- this must be d0\n\
-	moveq	#1,d0\n\
-	.long	0x103B02FF	| foo: moveb pc@((foo+1)-foo-2:B,d0:W:2),d0\n\
+	__asm("| %0 <- this must be %%d0\n\
+	moveq	#1,%%d0\n\
+	.long	0x103B02FF	| foo: moveb %%pc@((foo+1)-foo-2:B,d0:W:2),%%d0\n\
 	|	      ^ ^\n\
-	| d0.b	= 0x02	(68000/010)\n\
+	| %%d0.b	= 0x02	(68000/010)\n\
 	|	= 0xff	(68020 and later)\n\
 	bmis	1f\n\
-	moveq	#0,d0		| 68000/010\n\
+	moveq	#0,%%d0		| 68000/010\n\
 1:"	: "=d" (ret));
 
 	return ret;
@@ -451,7 +435,6 @@ kernel options:\n\
 \t-s	single user boot (default)\n\
 \t-D	enter kernel debugger\n\
 \t-b	ask root device\n\
-\t-d	use compiled-in rootdev\n\
 \t-r	specify root device (default %s)\n\
 \t	format:  [/interface/]device@unit[,lun][:partition]\n\
 \t	    interface: one of  spc@0, spc@1, mha@0\n\
@@ -494,6 +477,7 @@ main(argc, argv)
 				break;
 			case 'v':
 				opt_v = 1;
+				boothowto |= AB_VERBOSE; /* XXX */
 				break;
 			case 'V':
 				xprintf("loadbsd %s\n", VERSION);
@@ -510,9 +494,6 @@ main(argc, argv)
 				else
 					rootdevname = *arg;
 				break;
-			case 'd':
-				boothowto |= RB_DFLTROOT;
-				break;
 			case 'b':
 				boothowto |= RB_ASKNAME;
 				break;
@@ -524,6 +505,9 @@ main(argc, argv)
 				break;
 			case 'D':
 				boothowto |= RB_KDB;
+				break;
+			case 'q':
+				boothowto |= AB_QUIET;
 				break;
 
 			default:

@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_machdep.c,v 1.2 1999/09/23 16:37:04 frueauf Exp $	*/
+/*	$NetBSD: svr4_machdep.c,v 1.29 2008/04/28 20:23:27 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.29 2008/04/28 20:23:27 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -47,8 +43,9 @@
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 #include <sys/exec_elf.h>
+#include <sys/kauth.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 #include <sys/sysctl.h>
 
 #include <compat/svr4/svr4_types.h>
@@ -64,30 +61,24 @@
 #include <machine/vmparam.h>
 
 extern short exframesize[];
-extern void	m68881_restore __P((struct fpframe *));
-extern void	m68881_save __P((struct fpframe *));
-static void	svr4_getsiginfo __P((union svr4_siginfo *, int, unsigned long,
-		    caddr_t));
+extern void	m68881_restore(struct fpframe *);
+extern void	m68881_save(struct fpframe *);
+static void	svr4_getsiginfo(union svr4_siginfo *, int, unsigned long,
+		    void *);
 
 void
-svr4_setregs(p, epp, stack)
-	struct proc *p;
-	struct exec_package *epp;
-	unsigned long stack;
+svr4_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
 {
-	struct frame *frame = (struct frame *)p->p_md.md_regs;
+	struct frame *frame = (struct frame *)l->l_md.md_regs;
 
-	setregs(p, epp, stack);
+	setregs(l, epp, stack);
 	frame->f_regs[FP] = (int)stack;
 }
 
 void *
-svr4_getmcontext(p, mc, flags)
-	struct proc *p;
-	svr4_mcontext_t *mc;
-	unsigned long *flags;
+svr4_getmcontext(struct lwp *l, svr4_mcontext_t *mc, u_long *flags)
 {
-	struct frame *frame = (struct frame *)p->p_md.md_regs;
+	struct frame *frame = (struct frame *)l->l_md.md_regs;
 	unsigned int format = frame->f_format;
 	svr4_greg_t *r = mc->gregs;
 
@@ -117,7 +108,7 @@ svr4_getmcontext(p, mc, flags)
 		mc->mc_pad.frame.vector = frame->f_vector;
 		(void)memcpy(&mc->mc_pad.frame.exframe, &frame->F_u,
 		    (size_t)exframesize[format]);
-		
+
 		frame->f_stackadj += exframesize[format];
 		frame->f_format = frame->f_vector = 0;
 	}
@@ -143,23 +134,20 @@ svr4_getmcontext(p, mc, flags)
 }
 
 int
-svr4_setmcontext(p, mc, flags)
-	struct proc *p;
-	svr4_mcontext_t *mc;
-	unsigned long flags;
+svr4_setmcontext(struct lwp *l, svr4_mcontext_t *mc, u_long flags)
 {
-	struct frame *frame = (struct frame *)p->p_md.md_regs;
+	struct frame *frame = (struct frame *)l->l_md.md_regs;
 	unsigned int format = mc->mc_pad.frame.format;
 	svr4_greg_t *r = mc->gregs;
 	int sz;
-	
-	if ((flags & SVR4_UC_CPU) != 0) {	
+
+	if ((flags & SVR4_UC_CPU) != 0) {
 		/* Validate general register context. */
 		if ((r[SVR4_M68K_PS] & (PSL_MBZ|PSL_IPL|PSL_S)) != 0 ||
 		    format > 0xf || (sz = exframesize[format]) < 0) {
 			return (EINVAL);
 		}
-		
+
 		/* Restore exception frame information. */
 		if (format >= FMT4) {
 			if (frame->f_stackadj == 0) {
@@ -215,15 +203,11 @@ svr4_setmcontext(p, mc, flags)
 		m68881_restore(&fpf);
 	}
 
-	return (0);
+	return 0;
 }
 
 static void
-svr4_getsiginfo(sip, sig, code, addr)
-	union svr4_siginfo *	sip;
-	int			sig;
-	unsigned long		code;
-	caddr_t			addr;
+svr4_getsiginfo(union svr4_siginfo *sip, int sig, u_long code, void *addr)
 {
 
 	/*
@@ -237,42 +221,29 @@ svr4_getsiginfo(sip, sig, code, addr)
 	 * at a place near you.
 	 */
 
-	sip->si_signo = native_to_svr4_sig[sig];
+	sip->si_signo = native_to_svr4_signo[sig];
 	sip->si_errno = 0;
 	sip->si_code  = 0;	/* reserved, `no information' */
 	sip->si_addr  = addr;	/* XXX not necessarily correct */
 }
 
 void
-svr4_sendsig(catcher, sig, mask, code)
-	sig_t catcher;
-	int sig;
-	sigset_t *mask;
-	unsigned long code;
+svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 {
-	struct proc *p = curproc;
-	struct frame *frame;
-	struct svr4_sigframe *sfp, sf;
-	struct sigacts *psp = p->p_sigacts;
-	int onstack;
+	u_long code = KSI_TRAPCODE(ksi);
+	int sig = ksi->ksi_signo;
+	struct lwp *l = curlwp;
+	struct proc *p = l->l_proc;
+	struct frame *frame = (struct frame *)l->l_md.md_regs;
+	int onstack, error;
+	struct svr4_sigframe *sfp = getframe(l, sig, &onstack), sf;
+	sig_t catcher = SIGACTION(p, sig).sa_handler;
 
-	frame = (struct frame *)p->p_md.md_regs;
-
-	onstack =
-	    (psp->ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
-	    (psp->ps_sigact[sig].sa_flags & SA_ONSTACK) != 0;
-
-	/* Allocate space for the signal handler context. */
-	if (onstack)
-		sfp = (struct svr4_sigframe *)((caddr_t)psp->ps_sigstk.ss_sp +
-		    psp->ps_sigstk.ss_size);
-	else
-		sfp = (struct svr4_sigframe *)frame->f_regs[SP];
 	sfp--;
 
-	svr4_getcontext(p, &sf.sf_uc, mask);
+	svr4_getcontext(l, &sf.sf_uc);
 	/* Passing the PC is *wrong*! */
-	svr4_getsiginfo(&sf.sf_si, sig, code, (caddr_t)frame->f_pc);
+	svr4_getsiginfo(&sf.sf_si, sig, code, (void *)frame->f_pc);
 
 	/* Build stack frame for signal trampoline. */
 	sf.sf_signum = sf.sf_si.si_signo;
@@ -283,57 +254,55 @@ svr4_sendsig(catcher, sig, mask, code)
 #ifdef DEBUG_SVR4
 	printf("sig = %d, sip %p, ucp = %p, handler = %p\n",
 	    sf.sf_signum, sf.sf_sip, sf.sf_ucp, sf.sf_handler);
-#endif  
+#endif
 
-	if(copyout(&sf, sfp, sizeof (sf)) != 0) {
+	sendsig_reset(l, sig);
+	mutex_exit(p->p_lock);
+	error = copyout(&sf, sfp, sizeof (sf));
+	mutex_enter(p->p_lock);
+
+	if (error != 0) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
 		 */
-		sigexit(p, SIGILL);
+		sigexit(l, SIGILL);
 		/* NOTREACHED */
 	}
 
-	/* Set up the registers to return to sigcode. */
-	frame->f_regs[SP] = (int)sfp;
-	frame->f_pc = (int)psp->ps_sigcode;
+	buildcontext(l, p->p_sigctx.ps_sigcode, sfp);
 
 	if (onstack)
-		psp->ps_sigstk.ss_flags |= SS_ONSTACK;
+		l->l_sigstk.ss_flags |= SS_ONSTACK;
 }
 
 /*
  * sysm68k()
  */
 int
-svr4_sys_sysarch(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+svr4_sys_sysarch(struct lwp *l, const struct svr4_sys_sysarch_args *uap, register_t *retval)
 {
-	struct svr4_sys_sysarch_args /* {
+	/* {
 		syscallarg(int) op;
 		syscallarg(void *) a1;
-	} */ *uap = v;
+	} */
 	char tmp[MAXHOSTNAMELEN];
 	size_t len;
-	int error, name;
+	int error, name[2];
 
 	switch (SCARG(uap, op)) {
 	case SVR4_SYSARCH_SETNAME:
-		if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-			return (error);
 		if ((error = copyinstr(SCARG(uap, a1), tmp, sizeof (tmp), &len))
 		    != 0)
-			return (error);
-		name = KERN_HOSTNAME;
-		return (kern_sysctl(&name, 1, NULL, NULL, SCARG(uap, a1), len,
-		    p));
+			return error;
+		name[0] = CTL_KERN;
+		name[1] = KERN_HOSTNAME;
+		return old_sysctl(&name[0], 2, NULL, NULL, tmp, len, NULL);
 	default:
 		printf("uninplemented svr4_sysarch(%d), a1 %p\n",
 		    SCARG(uap, op), SCARG(uap, a1));
 		error = EINVAL;
 	}
 
-	return (error);
+	return error;
 }

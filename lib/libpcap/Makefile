@@ -1,28 +1,50 @@
-#	$NetBSD: Makefile,v 1.19 1999/07/02 16:03:41 simonb Exp $
+# $NetBSD: Makefile,v 1.31 2008/07/12 12:29:42 gmcgarry Exp $	
 
-LIB=	pcap
-MAN=	pcap.3
+.include <bsd.own.mk>
 
-LEX=	flex
+USE_FORT?= yes	# network protocol library
 
-CPPFLAGS+=-I. -I${.CURDIR} -DYYBISON
-CPPFLAGS+=-DINET6
-CPPFLAGS+=-DHAVE_MALLOC_H=1 -DHAVE_SYS_IOCCOM_H=1 -DHAVE_SYS_SOCKIO_H=1
-CPPFLAGS+=-DHAVE_ETHER_HOSTTON=1 -DHAVE_STRERROR=1 -DHAVE_SOCKADDR_SA_LEN=1
-CFPPLAGS+=-DLBL_ALIGN=1
-LPREFIX=pcap_
-YPREFIX=pcap_
-YHEADER=1
+SRCDIR=		${NETBSDSRCDIR}/dist/libpcap
+.PATH:		${SRCDIR}
+
+LIB=		pcap
+MAN=		pcap.3
+
+WARNS?=		3
+
+CPPFLAGS+=	-I${.CURDIR} -I. -I${SRCDIR}
+CPPFLAGS+=	-DYYBISON
+LPREFIX=	pcap_
+YPREFIX=	pcap_
+YHEADER=	1
+
+CPPFLAGS+=	-DHAVE_CONFIG_H
+
+.if defined(HAVE_PCC)
+CPPFLAGS+=	-D_U_=""
+.elif defined(HAVE_GCC)
+CPPFLAGS+=	-D_U_="__attribute__((unused))"
+.endif
+
+.if (${USE_INET6} != "no")
+CPPFLAGS+=	-DINET6
+.endif
 
 SRCS=	scanner.l savefile.c pcap.c pcap-bpf.c optimize.c nametoaddr.c \
-	inet.c grammar.y gencode.c etherent.c bpf_image.c
-SRCS+=	bpf_filter.c version.c
+	inet.c grammar.y gencode.c fad-getad.c etherent.c bpf_image.c \
+	bpf_dump.c version.c
 
-.PATH:	${.CURDIR}/../../sys/net
+.PATH:	${NETBSDSRCDIR}/sys/net
+SRCS+=	bpf_filter.c
 
-INCS=	pcap-namedb.h pcap.h
-INCSDIR=/usr/include
+INCS=		pcap-namedb.h pcap.h
+INCSDIR=	/usr/include
 
-scanner.c: grammar.h
+scanner.d scanner.o: tokdefs.h
+
+tokdefs.h: grammar.h
+	cp $? $@
+
+CLEANFILES+=	tokdefs.h
 
 .include <bsd.lib.mk>

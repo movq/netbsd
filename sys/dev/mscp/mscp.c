@@ -1,9 +1,41 @@
-/*	$NetBSD: mscp.c,v 1.12 2000/03/30 12:45:34 augustss Exp $	*/
+/*	$NetBSD: mscp.c,v 1.29 2008/04/08 20:10:44 cegger Exp $	*/
+
+/*
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Chris Torek.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)mscp.c	7.5 (Berkeley) 12/16/90
+ */
 
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
- * Copyright (c) 1988 Regents of the University of California.
- * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -43,14 +75,19 @@
  * MSCP generic driver routines
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mscp.c,v 1.29 2008/04/08 20:10:44 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/buf.h>
+#include <sys/bufq.h>
+#include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/mscp/mscp.h>
 #include <dev/mscp/mscpreg.h>
@@ -71,7 +108,7 @@ mscp_getcp(mi, canwait)
 #define mri	(&mi->mi_cmd)
 	struct mscp *mp;
 	int i;
-	int s = splimp();
+	int s = spluba();
 
 again:
 	/*
@@ -84,7 +121,7 @@ again:
 			return (NULL);
 		}
 		mi->mi_wantcredits = 1;
-		sleep((caddr_t) &mi->mi_wantcredits, PCMD);
+		(void) tsleep(&mi->mi_wantcredits, PCMD, "mscpwcrd", 0);
 		goto again;
 	}
 	i = mri->mri_next;
@@ -94,7 +131,7 @@ again:
 			return (NULL);
 		}
 		mi->mi_wantcmd = 1;
-		sleep((caddr_t) &mi->mi_wantcmd, PCMD);
+		(void) tsleep(&mi->mi_wantcmd, PCMD, "mscpwcmd", 0);
 		goto again;
 	}
 	mi->mi_credits--;
@@ -139,7 +176,6 @@ mscp_dorsp(mi)
 	struct mscp_xi *mxi;
 	int nextrsp;
 	int st, error;
-	extern int cold;
 	extern struct mscp slavereply;
 
 	nextrsp = mi->mi_rsp.mri_next;
@@ -153,7 +189,7 @@ loop:
 		mi->mi_rsp.mri_next = nextrsp;
 		if (mi->mi_wantcredits && mi->mi_credits > MSCP_MINCREDITS) {
 			mi->mi_wantcredits = 0;
-			wakeup((caddr_t) &mi->mi_wantcredits);
+			wakeup((void *) &mi->mi_wantcredits);
 		}
 		return;
 	}
@@ -169,7 +205,7 @@ loop:
 			mi->mi_flags |= MSC_READY;
 		} else {
 			printf("%s: SETCTLRC failed: %d ",
-			    mi->mi_dev.dv_xname, mp->mscp_status);
+			    device_xname(&mi->mi_dev), mp->mscp_status);
 			mscp_printevent(mp);
 		}
 		goto done;
@@ -180,13 +216,13 @@ loop:
 	 * nothing else to do, jump to `done' to get the next response.
 	 */
 	if (mp->mscp_unit >= mi->mi_driveno) { /* Must expand drive table */
-		int tmpno = ((mp->mscp_unit + 32) & 0xffe0) * sizeof(void *);
+		int tmpno = (mp->mscp_unit + 32) & ~31;
 		struct device **tmp = (struct device **)
-		    malloc(tmpno, M_DEVBUF, M_NOWAIT);
-		bzero(tmp, tmpno);
+		    malloc(tmpno * sizeof(tmp[0]), M_DEVBUF, M_NOWAIT|M_ZERO);
+		/* XXX tmp should be checked for NULL */
 		if (mi->mi_driveno) {
-			bcopy(mi->mi_dp, tmp, mi->mi_driveno);
-			free(mi->mi_dp, mi->mi_driveno);
+			memcpy(tmp, mi->mi_dp, mi->mi_driveno * sizeof(tmp[0]));
+			free(mi->mi_dp, M_DEVBUF);
 		}
 		mi->mi_driveno = tmpno;
 		mi->mi_dp = tmp;
@@ -209,7 +245,7 @@ loop:
 	case MSCPT_MAINTENANCE:
 	default:
 		printf("%s: unit %d: unknown message type 0x%x ignored\n",
-			mi->mi_dev.dv_xname, mp->mscp_unit,
+			device_xname(&mi->mi_dev), mp->mscp_unit,
 			MSCP_MSGTYPE(mp->mscp_msgtc));
 		goto done;
 	}
@@ -230,7 +266,7 @@ loop:
 		 * invalid commands), but that is the way of it.
 		 */
 		if (st == M_ST_INVALCMD && mp->mscp_cmdref != 0) {
-			printf("%s: bad lbn (%d)?\n", drive->dv_xname,
+			printf("%s: bad lbn (%d)?\n", device_xname(drive),
 				(int)mp->mscp_seq.seq_lbn);
 			error = EIO;
 			goto rwend;
@@ -314,7 +350,7 @@ rwend:
 			 * No buffer means there is a bug somewhere!
 			 */
 			printf("%s: io done, but bad xfer number?\n",
-			    drive->dv_xname);
+			    device_xname(drive));
 			mscp_hexdump(mp);
 			break;
 		}
@@ -333,24 +369,11 @@ rwend:
 		 * WHAT STATUS WILL THESE HAVE?	 IT SURE WOULD BE NICE
 		 * IF DEC SOLD DOCUMENTATION FOR THEIR OWN CONTROLLERS.
 		 */
-		if (error) {
-			bp->b_flags |= B_ERROR;
-			bp->b_error = error;
-		}
+		bp->b_error = error;
 		if (st == M_ST_OFFLINE || st == M_ST_AVAILABLE) {
 #ifdef notyet
 			(*md->md_offline)(ui, mp);
 #endif
-		}
-
-		/*
-		 * If the transfer has something to do with bad
-		 * block forwarding, let the driver handle the
-		 * rest.
-		 */
-		if ((bp->b_flags & B_BAD) != 0 && me->me_bb != NULL) {
-			(*me->me_bb)(drive, mp, bp);
-			goto out;
 		}
 
 		/*
@@ -381,20 +404,20 @@ rwend:
 		bp->b_resid = bp->b_bcount - mp->mscp_seq.seq_bytecount;
 		bus_dmamap_unload(mi->mi_dmat, mxi->mxi_dmam);
 
-		(*mc->mc_ctlrdone)(mi->mi_dev.dv_parent);
+		(*mc->mc_ctlrdone)(device_parent(&mi->mi_dev));
 		(*me->me_iodone)(drive, bp);
 out:
 		mxi->mxi_inuse = 0;
 		mi->mi_mxiuse |= (1 << mp->mscp_cmdref);
 		break;
-		
+
 	case M_OP_REPLACE | M_OP_END:
 		/*
 		 * A replace operation finished.  Just let the driver
 		 * handle it (if it does replaces).
 		 */
 		if (me->me_replace == NULL)
-			printf("%s: bogus REPLACE end\n", drive->dv_xname);
+			printf("%s: bogus REPLACE end\n", device_xname(drive));
 		else
 			(*me->me_replace)(drive, mp);
 		break;
@@ -406,7 +429,7 @@ out:
 		 */
 unknown:
 		printf("%s: unknown opcode 0x%x status 0x%x ignored\n",
-			drive->dv_xname, mp->mscp_opcode, mp->mscp_status);
+			device_xname(drive), mp->mscp_opcode, mp->mscp_status);
 #ifdef DIAGNOSTIC
 		mscp_hexdump(mp);
 #endif

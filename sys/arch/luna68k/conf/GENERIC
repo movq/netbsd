@@ -1,15 +1,33 @@
-#	$NetBSD: GENERIC,v 1.4 2000/02/12 03:33:30 thorpej Exp $
+# $NetBSD: GENERIC,v 1.84 2008/08/10 15:31:21 tls Exp $
 #
-#	GENERIC LUNA68K
+# GENERIC machine description file
+# 
+# This machine description file is used to generate the default NetBSD
+# kernel.  The generic kernel does not include all options, subsystems
+# and device drivers, but should be useful for most applications.
 #
+# The machine description file can be customised for your specific
+# machine to reduce the kernel size and improve its performance.
+#
+# For further information on compiling NetBSD kernels, see the config(8)
+# man page.
+#
+# For further information on hardware support for this architecture, see
+# the intro(4) man page.  For further information about kernel options
+# for this architecture, see the options(4) man page.  For an explanation
+# of each device driver in this file see the section 4 man page for the
+# device.
+
 include		"arch/luna68k/conf/std.luna68k"
 
-#ident 		"GENERIC-$Revision: 1.4 $"
+options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
+
+#ident 		"GENERIC-$Revision: 1.84 $"
 
 maxusers	8
 
-options		M68030
-#options	M68040
+options 	M68030
+#options 	M68040
 #options 	FPSP	# on m68040 to emulate some missing FP instructions
 
 # Needs to be set per system.  i.e change these as you see fit
@@ -20,25 +38,41 @@ options 	KTRACE
 #options 	SYSVMSG			# System V message queues
 #options 	SYSVSEM			# System V semaphores
 #options 	SYSVSHM			# System V shared memory
-#optoins 	SHMMAXPGS=1024		# 1024 pages is the default
+#options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 #options 	LKM			# loadable kernel modules
-#options 	UCONSOLE		# users can redirect console (unsafe)
+options 	USERCONF		# userconf(4) support
+#options	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
+options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
+
+# Enable experimental buffer queue strategy for better responsiveness under 
+# high disk I/O load. Use it with caution - it's not proven to be stable yet.
+#options 	BUFQ_READPRIO
+#options 	BUFQ_PRIOCSCAN
 
 # Debugging options
 options 	DDB
 #options 	DDB_HISTORY_SIZE=100	# enable history editing in DDB
-#options	SYMTAB_SPACE=72000	# place DDB symbols in data segment
+#options 	SYMTAB_SPACE=72000	# place DDB symbols in data segment
 #options 	DEBUG			# extra kernel debugging support
 #options 	DIAGNOSTIC		# extra kernel sanity checking
 #options 	SCSIVERBOSE		# Verbose SCSI errors
 #options 	SCSIDEBUG
 #makeoptions	DEBUG="-g"		# compile full symbol table
 
-# Compatability options
+# Compatibility options
 options 	COMPAT_43	# and 4.3BSD and ...
 options 	COMPAT_12	# NetBSD 1.2 binary compatibility
 options 	COMPAT_13	# NetBSD 1.3 binary compatibility
 options 	COMPAT_14	# NetBSD 1.4 binary compatibility
+options 	COMPAT_15	# NetBSD 1.5 binary compatibility
+options 	COMPAT_16	# NetBSD 1.6 binary compatibility
+options 	COMPAT_20	# NetBSD 2.0 binary compatibility
+options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
+#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
+options 	COMPAT_AOUT_M68K # support for NetBSD a.out executables
+options 	EXEC_AOUT	# support for a.out executables
+options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # Filesystem options
 file-system 	FFS		# ufs file system
@@ -55,51 +89,58 @@ file-system 	NULLFS		# loopback file system
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
 #file-system	CODA		# Coda File System; also needs vcode (below)
+file-system	PTYFS		# /dev/pts/N support
+#file-system	TMPFS		# Efficient memory file-system
+#file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 #options 	NFSSERVER	# nfs server support
 #options 	QUOTA		# ffs quotas
-#options 	FFS_EI		# ffs endian independant support
-#options	SOFTDEP		# ffs soft updates support
-
-# Pull in config fragments for kernel crypto. This is required for
-# options IPSEC etc. to work. If you want to run with IPSEC, uncomment
-# one of these, based on whether you use crypto-us or crypto-intl, and
-# adjust the prefixes as necessary.
-
-#prefix ../crypto-us/sys
-#cinclude "conf/files.crypto-us"
-#prefix
-
-#prefix ../crypto-intl/sys
-#cinclude "conf/files.crypto-intl"
-#prefix
+#options 	FFS_EI		# ffs endian independent support
+options 	SOFTDEP		# ffs soft updates support
+options 	WAPBL		# File system journaling support - Experimental
+#options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+#options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 
 # Networking options
-options 	INET		# IP prototol stack support
+options 	INET		# IP protocol stack support
 #options 	INET6		# IPV6
 #options 	IPSEC		# IP security
-#options 	IPSEC_ESP	# IP securyty (encryption part; define w/IPSEC)
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
+#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
-#options	GATEWAY		# IP packet forwarding
+#options 	GATEWAY		# IP packet forwarding
 #options 	MROUTING	# IP multicast routing
-#options 	TCP_COMPAT_42	# TCP bug compatibility with 4.2BSD
-#options 	NS		# XNS
-#options 	NSIP		# XNS tunneling over IP
+#options 	PIM		# Protocol Independent Multicast
 #options 	ISO,TPIP	# OSI
 #options 	EON		# OSI tunneling over IP
-#options 	CCITT,LLC,HDLC	# X.25
 #options 	NETATALK	# AppleTalk networking protocols
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
 #options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	IPFILTER_LOG	# ipmon(8) log support
+#options 	IPFILTER_LOOKUP	# ippool(8) support
+#options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 options 	NFS_BOOT_DHCP	# superset of BOOTP
+#options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
+
+#options 	ALTQ		# Manipulate network interfaces' output queues
+#options 	ALTQ_BLUE	# Stochastic Fair Blue
+#options 	ALTQ_CBQ	# Class-Based Queueing
+#options 	ALTQ_CDNR	# Diffserv Traffic Conditioner
+#options 	ALTQ_FIFOQ	# First-In First-Out Queue
+#options 	ALTQ_FLOWVALVE	# RED/flow-valve (red-penalty-box)
+#options 	ALTQ_HFSC	# Hierarchical Fair Service Curve
+#options 	ALTQ_LOCALQ	# Local queueing discipline
+#options 	ALTQ_PRIQ	# Priority Queueing
+#options 	ALTQ_RED	# Random Early Detection
+#options 	ALTQ_RIO	# RED with IN/OUT
+#options 	ALTQ_WFQ	# Weighted Fair Queueing
 
 # WS console uses SUN or VT100 terminal emulation
 options 	WSEMUL_VT100
 
-config		netbsd root on ? type nfs
+config		netbsd root on ? type ?
 
 mainbus0 at root
 
@@ -120,7 +161,7 @@ fb0	at mainbus0		# 16 or 256 pseudo color
 # Workstation Console attachments
 wsdisplay*	at fb?
 wskbd*		at ws? console ?
-#wsmouse*	at ws?		# not supported, yet...
+wsmouse*	at ws?
 
 # SCSI bus support
 scsibus* at spc?
@@ -133,19 +174,51 @@ st* at scsibus? target ? lun ?		# SCSI tapes
 #ss* at scsibus? target ? lun ?		# SCSI scanners
 #uk* at scsibus? target ? lun ?		# unknown SCSI devices
 
-pseudo-device	bpfilter	2	# Berkeley Packet Filter
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
+
+pseudo-device	bpfilter		# Berkeley Packet Filter
+#pseudo-device	carp			# Common Address Redundancy Protocol
 #pseudo-device	ccd		2	# concatenated and striped disks
-#pseudo-device	gre		2	# generic L3 over IP tunnel
+#pseudo-device	cgd		2	# cryptographic disks
+#pseudo-device	gre			# generic L3 over IP tunnel
 #pseudo-device	ipfilter	1	# ip filter
 pseudo-device	loop		1	# loopback interface; required
 pseudo-device	md		1	# memory disk device
-#pseudo-device	ppp		1	# PPP interfaces
-pseudo-device	pty		32	# pseudo-terminals
+#pseudo-device	ppp			# PPP interfaces
+#pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
+pseudo-device	pty			# pseudo-terminals
 #pseudo-device	raid		2	# RAIDframe disk driver
-#pseudo-device	sl		1	# SLIP interfaces
-#pseudo-device	tun		2	# Network "tunnel" device
-#pseudo-device	vnd		2	# disk-like interface to files
+pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	sl			# SLIP interfaces
+#pseudo-device	tun			# Network "tunnel" device
+#pseudo-device	tap			# virtual Ethernet
+pseudo-device	vlan			# IEEE 802.1q encapsulation
+pseudo-device	bridge			# simple inter-network bridging
+#options	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
+pseudo-device	agr			# IEEE 802.3ad link aggregation
+#pseudo-device	vnd			# disk-like interface to files
+#options 	VND_COMPRESSION		# compressed vnd(4)
+pseudo-device	rnd			# /dev/random and in-kernel generator
+pseudo-device	clockctl		# user control of clock subsystem
+pseudo-device	ksyms			# /dev/ksyms
+#pseudo-device	pf			# PF packet filter
+#pseudo-device	pflog			# PF log if
 
-# rnd is EXPERIMENTAL
-#pseudo-device	rnd			# /dev/random and in-kernel generator
-#options 	RND_COM			# use "com" randomness too
+# Veriexec
+#
+# a pseudo device needed for veriexec
+#pseudo-device	veriexec		1
+#
+# Uncomment the fingerprint methods below that are desired. Note that
+# removing fingerprint methods will have almost no impact on the kernel
+# code size.
+#
+#options VERIFIED_EXEC_FP_RMD160
+#options VERIFIED_EXEC_FP_SHA256
+#options VERIFIED_EXEC_FP_SHA384
+#options VERIFIED_EXEC_FP_SHA512
+#options VERIFIED_EXEC_FP_SHA1
+#options VERIFIED_EXEC_FP_MD5

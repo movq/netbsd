@@ -1,11 +1,10 @@
-#	$NetBSD: Makefile,v 1.4 1999/02/13 02:54:43 lukem Exp $
+#	$NetBSD: Makefile,v 1.9 2005/12/11 12:17:02 christos Exp $
 
+BTYPE=	STD
 PROG=	wdboot
-SRCS=	${.CURDIR}/wdboot.s
-MKMAN=	no
+SRCS=	wdboot.S
+NOMAN=	# defined
 LIBCRT0=
-INCL=	-I${.CURDIR} -I${.CURDIR}/..
 
-CPPFLAGS+= ${INCL}
-
+.include <../Makefile.xxboot>
 .include <bsd.prog.mk>

@@ -1,4 +1,6 @@
-#	$NetBSD: Makefile,v 1.4 2000/01/08 13:30:59 lukem Exp $
+#	$NetBSD: Makefile,v 1.6 2001/12/12 12:24:22 lukem Exp $
+
+NOOBJ=	# defined
 
 .include <bsd.own.mk>
 
@@ -6,6 +8,5 @@
 FILES=	ftpd.conf ftpusers
 FILESDIR=/usr/share/examples/ftpd
 .endif
-MKOBJ=	no
 
 .include <bsd.prog.mk>

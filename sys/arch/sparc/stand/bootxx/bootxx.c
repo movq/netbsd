@@ -1,4 +1,4 @@
-/*	$NetBSD: bootxx.c,v 1.8 2000/03/13 23:52:33 soren Exp $ */
+/*	$NetBSD: bootxx.c,v 1.20 2008/04/28 20:23:36 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,10 @@
  */
 
 #include <sys/param.h>
-#include <sys/time.h>
 #include <sys/exec.h>
+#include <sys/bootblock.h>
 
+#include <lib/libkern/libkern.h>
 #include <lib/libsa/stand.h>
 
 #include <machine/promlib.h>
@@ -55,25 +49,27 @@ const char		progname[] = "bootxx";
 struct open_file	io;
 
 /*
- * The contents of the block_* variables below is set by installboot(8)
+ * The contents of the bbinfo below are set by installboot(8)
  * to hold the filesystem data of the second-stage boot program
  * (typically `/boot'): filesystem block size, # of filesystem
  * blocks and the block numbers themselves.
  */
-#define MAXBLOCKNUM	256	/* enough for a 2MB boot program (bs 8K) */
-int32_t			block_size = 0;
-int32_t			block_count = MAXBLOCKNUM;
-daddr_t			block_table[MAXBLOCKNUM] = { 0 };
+struct shared_bbinfo bbinfo = {
+	{ SPARC_BBINFO_MAGIC },
+	0,
+	SHARED_BBINFO_MAXBLOCKS,
+	{ 0 }
+};
 
-
-int	main __P((void));
-void	loadboot __P((struct open_file *, caddr_t));
+int	main(void);
+void	loadboot(struct open_file *, char *);
 
 int
-main()
+main(void)
 {
-	char	*dummy;
-	void (*entry)__P((void *)) = (void (*)__P((void *)))PROM_LOADADDR;
+	char	*dummy1;
+	const char	*dummy;
+	void (*entry)(void *) = (void (*)(void *))PROM_LOADADDR;
 	void	*arg;
 
 #ifdef HEAP_VARIABLE
@@ -83,25 +79,25 @@ main()
 	}
 #endif
 	prom_init();
-	prom_bootdevice = prom_getbootpath();
+	dummy = prom_getbootpath();
+	if (dummy && *dummy != '\0')
+		strcpy(prom_bootdevice, dummy);
 	io.f_flags = F_RAW;
-	if (devopen(&io, 0, &dummy)) {
+	if (devopen(&io, 0, &dummy1)) {
 		panic("%s: can't open device `%s'", progname,
 			prom_bootdevice != NULL ? prom_bootdevice : "unknown");
 	}
 
-	(void)loadboot(&io, (caddr_t)PROM_LOADADDR);
+	(void)loadboot(&io, (void *)PROM_LOADADDR);
 	(io.f_dev->dv_close)(&io);
 
-	arg = (prom_version() == PROM_OLDMON) ? (caddr_t)PROM_LOADADDR : romp;
+	arg = (prom_version() == PROM_OLDMON) ? (void *)PROM_LOADADDR : romp;
 	(*entry)(arg);
 	_rtt();
 }
 
 void
-loadboot(f, addr)
-	struct open_file	*f;
-	char			*addr;
+loadboot(struct open_file *f, char *addr)
 {
 	int	i;
 	char	*buf;
@@ -113,24 +109,24 @@ loadboot(f, addr)
 	 * needed for sun4 architecture, but use it for all machines
 	 * to keep code size down as much as possible.
 	 */
-	buf = alloc(block_size);
+	buf = alloc(bbinfo.bbi_block_size);
 	if (buf == NULL)
 		panic("%s: alloc failed", progname);
 
-	for (i = 0; i < block_count; i++) {
-		if ((blk = block_table[i]) == 0)
+	for (i = 0; i < bbinfo.bbi_block_count; i++) {
+		if ((blk = bbinfo.bbi_block_table[i]) == 0)
 			panic("%s: block table corrupt", progname);
 
 #ifdef DEBUG
 		printf("%s: block # %d = %d\n", progname, i, blk);
 #endif
-		if ((f->f_dev->dv_strategy)(f->f_devdata, F_READ,
-					    blk, block_size, buf, &n)) {
+		if ((f->f_dev->dv_strategy)(f->f_devdata, F_READ, blk,
+		    bbinfo.bbi_block_size, buf, &n)) {
 			printf("%s: read failure", progname);
 			_rtt();
 		}
-		bcopy(buf, addr, block_size);
-		if (n != block_size)
+		bcopy(buf, addr, bbinfo.bbi_block_size);
+		if (n != bbinfo.bbi_block_size)
 			panic("%s: short read", progname);
 		if (i == 0) {
 			int m = N_GETMAGIC(*(struct exec *)addr);
@@ -150,10 +146,7 @@ loadboot(f, addr)
  * of bcopy() provides. We DO need code compactness..
  */
 void
-bcopy(src, dst, n)
-	const void *src;
-	void *dst;
-	size_t n;
+bcopy(const void *src, void *dst, size_t n)
 {
 	const char *p = src;
 	char *q = dst;

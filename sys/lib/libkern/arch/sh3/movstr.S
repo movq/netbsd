@@ -1,4 +1,4 @@
-/*	$NetBSD: movstr.S,v 1.1 1999/09/13 10:31:38 itojun Exp $	*/
+/*	$NetBSD: movstr.S,v 1.8 2006/05/22 21:34:08 uwe Exp $	*/
 
 /*-
  * Copyright (C) 1999 Tsubai Masanari.  All rights reserved.
@@ -26,16 +26,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-	.text
-	.align 2
+#include <machine/asm.h>
 
-	.global	___movstr
-___movstr:
+NENTRY(__movstr)
 	mov	#16, r0
 	cmp/gt	r0, r6
 	bf	loop2
 
-	.align 2
+	.align	2
 loop1:
 	mov.l	@r5+, r0
 	mov.l	r0, @r4
@@ -78,7 +76,7 @@ loop1:
 
 loop2:
 	add	#-32, r6
-	.align 2
+	.align	2
 1:
 	mov.l	@r5+, r0
 	mov.l	r0, @r4
@@ -87,5 +85,9 @@ loop2:
 	tst	r6, r6
 	bf	1b
 
-	rts	
-	nop
+	rts
+	 nop
+
+
+/* gcc4 uses movmem, older versions use movstr */
+STRONG_ALIAS(__movmem, __movstr)

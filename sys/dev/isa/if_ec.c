@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ec.c,v 1.11 1999/03/23 21:41:08 drochner Exp $	*/
+/*	$NetBSD: if_ec.c,v 1.33 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,10 +47,8 @@
  * Device driver for the 3Com Etherlink II (3c503).
  */
 
-#include "opt_inet.h"
-#include "opt_ns.h"
-#include "bpfilter.h"
-#include "rnd.h" 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.33 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,26 +64,8 @@
 
 #include <net/if_ether.h>
 
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/in_var.h> 
-#include <netinet/ip.h>
-#include <netinet/if_inarp.h> 
-#endif 
-
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
-#endif
-
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -113,26 +86,27 @@ struct ec_softc {
 	void *sc_ih;			/* interrupt handle */
 };
 
-int	ec_probe __P((struct device *, struct cfdata *, void *));
-void	ec_attach __P((struct device *, struct device *, void *));
+int	ec_probe(device_t, cfdata_t, void *);
+void	ec_attach(device_t, device_t, void *);
 
-struct cfattach ec_ca = {
-	sizeof(struct ec_softc), ec_probe, ec_attach
-};
+CFATTACH_DECL_NEW(ec, sizeof(struct ec_softc),
+    ec_probe, ec_attach, NULL, NULL);
 
-int	ec_set_media __P((struct ec_softc *, int));
+int	ec_set_media(struct ec_softc *, int);
 
-int	ec_mediachange __P((struct dp8390_softc *));
-void	ec_mediastatus __P((struct dp8390_softc *, struct ifmediareq *));
+void	ec_media_init(struct dp8390_softc *);
 
-void	ec_init_card __P((struct dp8390_softc *));
-int	ec_write_mbuf __P((struct dp8390_softc *, struct mbuf *, int));
-int	ec_ring_copy __P((struct dp8390_softc *, int, caddr_t, u_short));
-void	ec_read_hdr __P((struct dp8390_softc *, int, struct dp8390_ring *));
-int	ec_fake_test_mem __P((struct dp8390_softc *));
-int	ec_test_mem __P((struct dp8390_softc *));
+int	ec_mediachange(struct dp8390_softc *);
+void	ec_mediastatus(struct dp8390_softc *, struct ifmediareq *);
 
-__inline void ec_readmem __P((struct ec_softc *, int, u_int8_t *, int));
+void	ec_init_card(struct dp8390_softc *);
+int	ec_write_mbuf(struct dp8390_softc *, struct mbuf *, int);
+int	ec_ring_copy(struct dp8390_softc *, int, void *, u_short);
+void	ec_read_hdr(struct dp8390_softc *, int, struct dp8390_ring *);
+int	ec_fake_test_mem(struct dp8390_softc *);
+int	ec_test_mem(struct dp8390_softc *);
+
+inline void ec_readmem(struct ec_softc *, int, u_int8_t *, int);
 
 static const int ec_iobase[] = {
 	0x2e0, 0x2a0, 0x280, 0x250, 0x350, 0x330, 0x310, 0x300,
@@ -140,23 +114,13 @@ static const int ec_iobase[] = {
 #define	NEC_IOBASE	(sizeof(ec_iobase) / sizeof(ec_iobase[0]))
 
 static const int ec_membase[] = {
-	MADDRUNK, MADDRUNK, MADDRUNK, MADDRUNK, 0xc8000, 0xcc000,
-	0xd8000, 0xdc000,
+	-1, -1, -1, -1,
+	0xc8000, 0xcc000, 0xd8000, 0xdc000,
 };
 #define	NEC_MEMBASE	(sizeof(ec_membase) / sizeof(ec_membase[0]))
 
-int ec_media[] = {
-	IFM_ETHER|IFM_10_2,
-	IFM_ETHER|IFM_10_5,
-};
-#define	NEC_MEDIA	(sizeof(ec_media) / sizeof(ec_media[0]))
-#define	EC_DEFMEDIA	(IFM_ETHER|IFM_10_2)
-
 int
-ec_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ec_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t nict, asict, memt;
@@ -177,45 +141,55 @@ ec_probe(parent, match, aux)
 	 */
 	memsize = 8192;
 
+	if (ia->ia_nio < 1)
+		return (0);
+	if (ia->ia_niomem < 1)
+		return (0);
+	if (ia->ia_nirq < 1)
+		return (0);
+
+	if (ISA_DIRECT_CONFIG(ia))
+		return (0);
+
 	/* Disallow wildcarded i/o addresses. */
-	if (ia->ia_iobase == ISACF_PORT_DEFAULT)
+	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
 		return (0);
 
 	/* Disallow wildcarded mem address. */
-	if (ia->ia_maddr == ISACF_IOMEM_DEFAULT)
+	if (ia->ia_iomem[0].ir_addr == ISA_UNKNOWN_IOMEM)
 		return (0);
 
 	/* Validate the i/o base. */
 	for (i = 0; i < NEC_IOBASE; i++)
-		if (ia->ia_iobase == ec_iobase[i])
+		if (ia->ia_io[0].ir_addr == ec_iobase[i])
 			break;
 	if (i == NEC_IOBASE)
 		return (0);
 
 	/* Validate the mem base. */
 	for (i = 0; i < NEC_MEMBASE; i++) {
-		if (ec_membase[i] == MADDRUNK)
+		if (ec_membase[i] == -1)
 			continue;
-		if (ia->ia_maddr == ec_membase[i])
+		if (ia->ia_iomem[0].ir_addr == ec_membase[i])
 			break;
 	}
 	if (i == NEC_MEMBASE)
 		return (0);
 
 	/* Attempt to map the NIC space. */
-	if (bus_space_map(nict, ia->ia_iobase + ELINK2_NIC_OFFSET,
+	if (bus_space_map(nict, ia->ia_io[0].ir_addr + ELINK2_NIC_OFFSET,
 	    ELINK2_NIC_PORTS, 0, &nich))
 		goto out;
 	nich_valid = 1;
 
 	/* Attempt to map the ASIC space. */
-	if (bus_space_map(asict, ia->ia_iobase + ELINK2_ASIC_OFFSET,
+	if (bus_space_map(asict, ia->ia_io[0].ir_addr + ELINK2_ASIC_OFFSET,
 	    ELINK2_ASIC_PORTS, 0, &asich))
 		goto out;
 	asich_valid = 1;
 
 	/* Attempt to map the memory space. */
-	if (bus_space_map(memt, ia->ia_maddr, memsize, 0, &memh))
+	if (bus_space_map(memt, ia->ia_iomem[0].ir_addr, memsize, 0, &memh))
 		goto out;
 	memh_valid = 1;
 
@@ -231,7 +205,7 @@ ec_probe(parent, match, aux)
 	if (x == 0 || (x & (x - 1)) != 0)
 		goto out;
 	i = ffs(x) - 1;
-	if (ia->ia_iobase != ec_iobase[i])
+	if (ia->ia_io[0].ir_addr != ec_iobase[i])
 		goto out;
 
 	/*
@@ -242,12 +216,20 @@ ec_probe(parent, match, aux)
 	if (x == 0 || (x & (x - 1)) != 0)
 		goto out;
 	i = ffs(x) - 1;
-	if (ia->ia_maddr != ec_membase[i])
+	if (ia->ia_iomem[0].ir_addr != ec_membase[i])
 		goto out;
 
 	/* So, we say we've found it! */
-	ia->ia_iosize = ELINK2_NIC_PORTS;
-	ia->ia_msize = memsize;
+	ia->ia_nio = 1;		/* XXX Really 2! */
+	ia->ia_io[0].ir_size = ELINK2_NIC_PORTS;
+
+	ia->ia_niomem = 1;
+	ia->ia_iomem[0].ir_size = memsize;
+
+	ia->ia_nirq = 1;
+
+	ia->ia_ndrq = 0;
+
 	rv = 1;
 
  out:
@@ -261,11 +243,9 @@ ec_probe(parent, match, aux)
 }
 
 void
-ec_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ec_attach(device_t parent, device_t self, void *aux)
 {
-	struct ec_softc *esc = (struct ec_softc *)self;
+	struct ec_softc *esc = device_private(self);
 	struct dp8390_softc *sc = &esc->sc_dp8390;
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t nict, asict, memt;
@@ -274,7 +254,8 @@ ec_attach(parent, self, aux)
 	u_int8_t tmp;
 	int i;
 
-	printf("\n");
+	sc->sc_dev = self;
+	aprint_normal("\n");
 
 	nict = asict = ia->ia_iot;
 	memt = ia->ia_memt;
@@ -283,28 +264,25 @@ ec_attach(parent, self, aux)
 	 * Hmm, a 16-bit card has 16k of memory, but only an 8k window
 	 * to it.
 	 */
-	memsize = 8192;
+	memsize = ia->ia_iomem[0].ir_size;
 
 	/* Map the NIC space. */
-	if (bus_space_map(nict, ia->ia_iobase + ELINK2_NIC_OFFSET,
+	if (bus_space_map(nict, ia->ia_io[0].ir_addr + ELINK2_NIC_OFFSET,
 	    ELINK2_NIC_PORTS, 0, &nich)) {
-		printf("%s: can't map nic i/o space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't map nic i/o space\n");
 		return;
 	}
 
 	/* Map the ASIC space. */
-	if (bus_space_map(asict, ia->ia_iobase + ELINK2_ASIC_OFFSET,
+	if (bus_space_map(asict, ia->ia_io[0].ir_addr + ELINK2_ASIC_OFFSET,
 	    ELINK2_ASIC_PORTS, 0, &asich)) {
-		printf("%s: can't map asic i/o space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't map asic i/o space\n");
 		return;
 	}
 
 	/* Map the memory space. */
-	if (bus_space_map(memt, ia->ia_maddr, memsize, 0, &memh)) {
-		printf("%s: can't map shared memory\n",
-		    sc->sc_dev.dv_xname);
+	if (bus_space_map(memt, ia->ia_iomem[0].ir_addr, memsize, 0, &memh)) {
+		aprint_error_dev(self, "can't map shared memory\n");
 		return;
 	}
 
@@ -361,7 +339,7 @@ ec_attach(parent, self, aux)
 
 	/*
 	 * Unmap PROM - select NIC registers.  The proper setting of the
-	 * transciever is set in later in ec_init_card() via dp8390_init().
+	 * transceiver is set in later in ec_init_card() via dp8390_init().
 	 */
 	bus_space_write_1(asict, asich, ELINK2_CR, ELINK2_CR_XSEL);
 
@@ -385,8 +363,8 @@ ec_attach(parent, self, aux)
 	else
 		esc->sc_16bitp = 0;
 
-	printf("%s: 3Com 3c503 Ethernet (%s-bit)\n",
-	    sc->sc_dev.dv_xname, esc->sc_16bitp ? "16" : "8");
+	aprint_normal_dev(self, "3Com 3c503 Ethernet (%s-bit)\n",
+	    esc->sc_16bitp ? "16" : "8");
 
 	/* Select page 0 registers. */
 	NIC_PUT(nict, nich, ED_P2_CR, ED_CR_RD2 | ED_CR_PAGE_0 | ED_CR_STP);
@@ -410,6 +388,8 @@ ec_attach(parent, self, aux)
 	sc->read_hdr = ec_read_hdr;
 	sc->init_card = ec_init_card;
 
+	sc->sc_media_init = ec_media_init;
+
 	sc->sc_mediachange = ec_mediachange;
 	sc->sc_mediastatus = ec_mediastatus;
 
@@ -417,8 +397,8 @@ ec_attach(parent, self, aux)
 	sc->mem_size = memsize;
 
 	/* Do generic parts of attach. */
-	if (dp8390_config(sc, ec_media, NEC_MEDIA, EC_DEFMEDIA)) {
-		printf("%s: configuration failed\n", sc->sc_dev.dv_xname);
+	if (dp8390_config(sc)) {
+		aprint_error_dev(self, " configuration failed\n");
 		return;
 	}
 
@@ -435,14 +415,15 @@ ec_attach(parent, self, aux)
 	 * we optimize for linear transfers of same-size packets.)
 	 */
 	if (esc->sc_16bitp) {
-		if (sc->sc_dev.dv_cfdata->cf_flags & DP8390_NO_MULTI_BUFFERING)
+		if (device_cfdata(sc->sc_dev)->cf_flags &
+		    DP8390_NO_MULTI_BUFFERING)
 			sc->txb_cnt = 1;
 		else
 			sc->txb_cnt = 2;
 
 		sc->tx_page_start = ELINK2_TX_PAGE_OFFSET_16BIT;
 		sc->rec_page_start = ELINK2_RX_PAGE_OFFSET_16BIT;
-		sc->rec_page_stop = (memsize >> ED_PAGE_SHIFT) + 
+		sc->rec_page_stop = (memsize >> ED_PAGE_SHIFT) +
 		    sc->rec_page_start;
 		sc->mem_ring = sc->mem_start;
 	} else {
@@ -465,21 +446,20 @@ ec_attach(parent, self, aux)
 	/*
 	 * Program the IRQ.
 	 */
-	switch (ia->ia_irq) {
+	switch (ia->ia_irq[0].ir_irq) {
 	case 9:	tmp = ELINK2_IDCFR_IRQ2; break;
 	case 3:	tmp = ELINK2_IDCFR_IRQ3; break;
 	case 4:	tmp = ELINK2_IDCFR_IRQ4; break;
 	case 5:	tmp = ELINK2_IDCFR_IRQ5; break;
 		break;
 
-	case IRQUNK:
-		printf("%s: wildcarded IRQ is not allowed\n",
-		    sc->sc_dev.dv_xname);
+	case ISA_UNKNOWN_IRQ:
+		aprint_error_dev(self, "wildcarded IRQ is not allowed\n");
 		return;
 
 	default:
-		printf("%s: invalid IRQ %d, must be 3, 4, 5, or 9\n",
-		    sc->sc_dev.dv_xname, ia->ia_irq);
+		aprint_error_dev(self, "invalid IRQ %d, must be 3, 4, 5, "
+		    "or 9\n", ia->ia_irq[0].ir_irq);
 		return;
 	}
 
@@ -495,7 +475,7 @@ ec_attach(parent, self, aux)
 	/*
 	 * Intialize "Vector Pointer" registers.  These gawd-awful things
 	 * are compared to 20 bits of the address on the ISA, and if they
-	 * match, the shared memory is disabled.  We se them to 0xffff0...
+	 * match, the shared memory is disabled.  We set them to 0xffff0...
 	 * allegedly the reset vector.
 	 */
 	bus_space_write_1(asict, asich, ELINK2_VPTR2, 0xff);
@@ -506,20 +486,19 @@ ec_attach(parent, self, aux)
 	 * Now run the real memory test.
 	 */
 	if (ec_test_mem(sc)) {
-		printf("%s: memory test failed\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "memory test failed\n");
 		return;
 	}
 
 	/* Establish interrupt handler. */
-	esc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq, IST_EDGE,
-	    IPL_NET, dp8390_intr, sc);
+	esc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
+	    IST_EDGE, IPL_NET, dp8390_intr, sc);
 	if (esc->sc_ih == NULL)
-		printf("%s: can't establish interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't establish interrupt\n");
 }
 
 int
-ec_fake_test_mem(sc)
-	struct dp8390_softc *sc;
+ec_fake_test_mem(struct dp8390_softc *sc)
 {
 
 	/*
@@ -532,8 +511,7 @@ ec_fake_test_mem(sc)
 }
 
 int
-ec_test_mem(sc)
-	struct dp8390_softc *sc;
+ec_test_mem(struct dp8390_softc *sc)
 {
 	struct ec_softc *esc = (struct ec_softc *)sc;
 	bus_space_tag_t memt = sc->sc_buft;
@@ -561,8 +539,8 @@ ec_test_mem(sc)
 	return (0);
 
  fail:
-	printf("%s: failed to clear shared memory at offset 0x%x\n",
-	    sc->sc_dev.dv_xname, i);
+	aprint_error_dev(sc->sc_dev,
+	    "failed to clear shared memory at offset 0x%x\n", i);
 	return (1);
 }
 
@@ -571,12 +549,8 @@ ec_test_mem(sc)
  * copy 'len' from NIC to host using shared memory.  The 'len' is rounded
  * up to a word - ok as long as mbufs are word-sized.
  */
-__inline void
-ec_readmem(esc, from, to, len)
-	struct ec_softc *esc;
-	int from;
-	u_int8_t *to;
-	int len;
+inline void
+ec_readmem(struct ec_softc *esc, int from, uint8_t *to, int len)
 {
 	bus_space_tag_t memt = esc->sc_dp8390.sc_buft;
 	bus_space_handle_t memh = esc->sc_dp8390.sc_bufh;
@@ -592,10 +566,7 @@ ec_readmem(esc, from, to, len)
 }
 
 int
-ec_write_mbuf(sc, m, buf)
-	struct dp8390_softc *sc;
-	struct mbuf *m;
-	int buf;
+ec_write_mbuf(struct dp8390_softc *sc, struct mbuf *m, int buf)
 {
 	struct ec_softc *esc = (struct ec_softc *)sc;
 	bus_space_tag_t asict = esc->sc_asict;
@@ -618,6 +589,11 @@ ec_write_mbuf(sc, m, buf)
 		for (; m != NULL; buf += m->m_len, m = m->m_next)
 			bus_space_write_region_1(memt, memh, buf,
 			    mtod(m, u_int8_t *), m->m_len);
+		if (savelen < ETHER_MIN_LEN - ETHER_CRC_LEN) {
+			bus_space_set_region_1(memt, memh, buf,
+			    0, ETHER_MIN_LEN - ETHER_CRC_LEN - savelen);
+			savelen = ETHER_MIN_LEN - ETHER_CRC_LEN;
+		}
 		return (savelen);
 	}
 
@@ -689,6 +665,12 @@ ec_write_mbuf(sc, m, buf)
 	if (leftover) {
 		savebyte[1] = 0;
 		bus_space_write_2(memt, memh, buf, *(u_int16_t *)savebyte);
+		buf += 2;
+	}
+	if (savelen < ETHER_MIN_LEN - ETHER_CRC_LEN) {
+		bus_space_set_region_2(memt, memh, buf,
+		    0, (ETHER_MIN_LEN - ETHER_CRC_LEN - savelen) >> 1);
+		savelen = ETHER_MIN_LEN - ETHER_CRC_LEN;
 	}
 
 	/*
@@ -697,16 +679,12 @@ ec_write_mbuf(sc, m, buf)
 	if (esc->sc_16bitp)
 		bus_space_write_1(asict, asich, ELINK2_GACFR,
 		    ELINK2_GACFR_RSEL | ELINK2_GACFR_MBS0);
-	
+
 	return (savelen);
 }
 
 int
-ec_ring_copy(sc, src, dst, amount)
-	struct dp8390_softc *sc;
-	int src;
-	caddr_t dst;
-	u_short amount;
+ec_ring_copy(struct dp8390_softc *sc, int src, void *dst, u_short amount)
 {
 	struct ec_softc *esc = (struct ec_softc *)sc;
 	u_short tmp_amount;
@@ -720,7 +698,7 @@ ec_ring_copy(sc, src, dst, amount)
 
 		amount -= tmp_amount;
 		src = sc->mem_ring;
-		dst += tmp_amount;
+		dst = (char *)dst + tmp_amount;
 	}
 
 	ec_readmem(esc, src, dst, amount);
@@ -729,10 +707,8 @@ ec_ring_copy(sc, src, dst, amount)
 }
 
 void
-ec_read_hdr(sc, packet_ptr, packet_hdrp)
-	struct dp8390_softc *sc;
-	int packet_ptr;
-	struct dp8390_ring *packet_hdrp;
+ec_read_hdr(struct dp8390_softc *sc, int packet_ptr,
+    struct dp8390_ring *packet_hdrp)
 {
 	struct ec_softc *esc = (struct ec_softc *)sc;
 
@@ -743,9 +719,18 @@ ec_read_hdr(sc, packet_ptr, packet_hdrp)
 #endif
 }
 
+void
+ec_media_init(struct dp8390_softc *sc)
+{
+
+	ifmedia_init(&sc->sc_media, 0, dp8390_mediachange, dp8390_mediastatus);
+	ifmedia_add(&sc->sc_media, IFM_ETHER|IFM_10_2, 0, NULL);
+	ifmedia_add(&sc->sc_media, IFM_ETHER|IFM_10_5, 0, NULL);
+	ifmedia_set(&sc->sc_media, IFM_ETHER|IFM_10_2);
+}
+
 int
-ec_mediachange(sc)
-	struct dp8390_softc *sc;
+ec_mediachange(struct dp8390_softc *sc)
 {
 	struct ec_softc *esc = (struct ec_softc *)sc;
 	struct ifmedia *ifm = &sc->sc_media;
@@ -754,9 +739,7 @@ ec_mediachange(sc)
 }
 
 void
-ec_mediastatus(sc, ifmr)
-	struct dp8390_softc *sc;
-	struct ifmediareq *ifmr;
+ec_mediastatus(struct dp8390_softc *sc, struct ifmediareq *ifmr)
 {
 	struct ifmedia *ifm = &sc->sc_media;
 
@@ -767,8 +750,7 @@ ec_mediastatus(sc, ifmr)
 }
 
 void
-ec_init_card(sc)
-	struct dp8390_softc *sc;
+ec_init_card(struct dp8390_softc *sc)
 {
 	struct ec_softc *esc = (struct ec_softc *)sc;
 	struct ifmedia *ifm = &sc->sc_media;
@@ -777,9 +759,7 @@ ec_init_card(sc)
 }
 
 int
-ec_set_media(esc, media)
-	struct ec_softc *esc;
-	int media;
+ec_set_media(struct ec_softc *esc, int media)
 {
 	u_int8_t new;
 

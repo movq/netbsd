@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.42 1999/12/30 15:51:35 eeh Exp $	*/
+/*	$NetBSD: types.h,v 1.80 2008/02/26 13:37:09 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993, 1994
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,13 +39,65 @@
 #ifndef _SYS_TYPES_H_
 #define	_SYS_TYPES_H_
 
+#include <sys/featuretest.h>
+
 /* Machine type dependent parameters. */
 #include <machine/types.h>
 
 #include <machine/ansi.h>
+#include <machine/int_types.h>
+
+
+#include <sys/ansi.h>
+
+#ifndef	int8_t
+typedef	__int8_t	int8_t;
+#define	int8_t		__int8_t
+#endif
+
+#ifndef	uint8_t
+typedef	__uint8_t	uint8_t;
+#define	uint8_t		__uint8_t
+#endif
+
+#ifndef	int16_t
+typedef	__int16_t	int16_t;
+#define	int16_t		__int16_t
+#endif
+
+#ifndef	uint16_t
+typedef	__uint16_t	uint16_t;
+#define	uint16_t	__uint16_t
+#endif
+
+#ifndef	int32_t
+typedef	__int32_t	int32_t;
+#define	int32_t		__int32_t
+#endif
+
+#ifndef	uint32_t
+typedef	__uint32_t	uint32_t;
+#define	uint32_t	__uint32_t
+#endif
+
+#ifndef	int64_t
+typedef	__int64_t	int64_t;
+#define	int64_t		__int64_t
+#endif
+
+#ifndef	uint64_t
+typedef	__uint64_t	uint64_t;
+#define	uint64_t	__uint64_t
+#endif
+
+typedef	uint8_t		u_int8_t;
+typedef	uint16_t	u_int16_t;
+typedef	uint32_t	u_int32_t;
+typedef	uint64_t	u_int64_t;
+
 #include <machine/endian.h>
 
-#if !defined(_POSIX_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 typedef	unsigned char	u_char;
 typedef	unsigned short	u_short;
 typedef	unsigned int	u_int;
@@ -59,36 +107,119 @@ typedef unsigned char	unchar;		/* Sys V compatibility */
 typedef	unsigned short	ushort;		/* Sys V compatibility */
 typedef	unsigned int	uint;		/* Sys V compatibility */
 typedef unsigned long	ulong;		/* Sys V compatibility */
-
-typedef	u_long		cpuid_t;
 #endif
 
-typedef	u_int64_t	u_quad_t;	/* quads */
+typedef	uint64_t	u_quad_t;	/* quads */
 typedef	int64_t		quad_t;
 typedef	quad_t *	qaddr_t;
 
-typedef	quad_t		longlong_t;	/* ANSI long long type */
-typedef	u_quad_t	u_longlong_t;	/* ANSI unsigned long long type */
+/*
+ * The types longlong_t and u_longlong_t exist for use with the
+ * Sun-derived XDR routines involving these types, and their usage
+ * in other contexts is discouraged.  Further note that these types
+ * may not be equivalent to "long long" and "unsigned long long",
+ * they are only guaranteed to be signed and unsigned 64-bit types
+ * respectively.  Portable programs that need 64-bit types should use
+ * the C99 types int64_t and uint64_t instead.
+ */
+
+typedef	int64_t		longlong_t;	/* for XDR */
+typedef	uint64_t	u_longlong_t;	/* for XDR */
 
 typedef	int64_t		blkcnt_t;	/* fs block count */
-typedef	u_int32_t	blksize_t;	/* fs optimal block size */
-typedef	char *		caddr_t;	/* core address */
-typedef	int32_t		daddr_t;	/* disk address */
-typedef	u_int32_t	dev_t;		/* device number */
-typedef	u_int32_t	fixpt_t;	/* fixed point number */
-typedef	u_int32_t	gid_t;		/* group id */
-typedef	u_int32_t	id_t;		/* group id, process id or user id */
-typedef	u_int32_t	ino_t;		/* inode number */
+typedef	uint32_t	blksize_t;	/* fs optimal block size */
+
+#ifndef	fsblkcnt_t
+typedef	__fsblkcnt_t	fsblkcnt_t;	/* fs block count (statvfs) */
+#define fsblkcnt_t	__fsblkcnt_t
+#endif
+
+#ifndef	fsfilcnt_t
+typedef	__fsfilcnt_t	fsfilcnt_t;	/* fs file count */
+#define fsfilcnt_t	__fsfilcnt_t
+#endif
+
+#if !defined(_KERNEL) && !defined(_STANDALONE)
+/* We don't and shouldn't use caddr_t in the kernel anymore */
+#ifndef	caddr_t
+typedef	__caddr_t	caddr_t;	/* core address */
+#define	caddr_t		__caddr_t
+#endif
+#endif
+
+#ifdef __daddr_t
+typedef	__daddr_t	daddr_t;	/* disk address */
+#undef __daddr_t
+#else
+typedef	int64_t		daddr_t;	/* disk address */
+#endif
+
+typedef	uint32_t	dev_t;		/* device number */
+typedef	uint32_t	fixpt_t;	/* fixed point number */
+
+#ifndef	gid_t
+typedef	__gid_t		gid_t;		/* group id */
+#define	gid_t		__gid_t
+#endif
+
+typedef	int		idtype_t;	/* type of the id */
+typedef	uint32_t	id_t;		/* group id, process id or user id */
+typedef	uint64_t	ino_t;		/* inode number */
 typedef	long		key_t;		/* IPC key (for Sys V IPC) */
-typedef	u_int32_t	mode_t;		/* permissions */
-typedef	u_int32_t	nlink_t;	/* link count */
-typedef	quad_t		off_t;		/* file offset */
-typedef	int32_t		pid_t;		/* process id */
+
+#ifndef	mode_t
+typedef	__mode_t	mode_t;		/* permissions */
+#define	mode_t		__mode_t
+#endif
+
+typedef	uint32_t	nlink_t;	/* link count */
+
+#ifndef	off_t
+typedef	__off_t		off_t;		/* file offset */
+#define	off_t		__off_t
+#endif
+
+#ifndef	pid_t
+typedef	__pid_t		pid_t;		/* process id */
+#define	pid_t		__pid_t
+#endif
+typedef int32_t		lwpid_t;	/* LWP id */
 typedef quad_t		rlim_t;		/* resource limit */
 typedef	int32_t		segsz_t;	/* segment size */
 typedef	int32_t		swblk_t;	/* swap offset */
-typedef	u_int32_t	uid_t;		/* user id */
-typedef	int32_t		dtime_t;	/* on-disk time_t */
+
+#ifndef	uid_t
+typedef	__uid_t		uid_t;		/* user id */
+#define	uid_t		__uid_t
+#endif
+
+typedef int		mqd_t;
+
+typedef	unsigned long	cpuid_t;
+
+typedef	int		psetid_t;
+
+#if defined(_KERNEL) || defined(_STANDALONE)
+/*
+ * Boolean type definitions for the kernel environment.  User-space
+ * boolean definitions are found in <stdbool.h>.
+ */
+#define bool	_Bool
+#define true	1
+#define false	0
+
+/*
+ * Deprecated Mach-style boolean_t type.  Should not be used by new code.
+ */
+typedef int	boolean_t;
+#ifndef TRUE
+#define	TRUE	1
+#endif
+#ifndef FALSE
+#define	FALSE	0
+#endif
+
+#endif /* _KERNEL || _STANDALONE */
 
 #if defined(_KERNEL) || defined(_LIBC)
 /*
@@ -101,6 +232,9 @@ union __semun {
 	struct semid_ds	*buf;		/* buffer for IPC_STAT & IPC_SET */
 	unsigned short	*array;		/* array for GETALL & SETALL */
 };
+/* For the same reason as above */
+#include <sys/stdint.h>
+typedef intptr_t semid_t;
 #endif /* _KERNEL || _LIBC */
 
 /*
@@ -108,18 +242,21 @@ union __semun {
  * long arguments will be promoted to off_t if the program fails to
  * include that header or explicitly cast them to off_t.
  */
-#if !defined(_POSIX_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
+#ifndef __OFF_T_SYSCALLS_DECLARED
+#define __OFF_T_SYSCALLS_DECLARED
 #ifndef _KERNEL
 #include <sys/cdefs.h>
 __BEGIN_DECLS
-off_t	 lseek __P((int, off_t, int));
-int	 ftruncate __P((int, off_t));
-int	 truncate __P((const char *, off_t));
+off_t	 lseek(int, off_t, int);
+int	 ftruncate(int, off_t);
+int	 truncate(const char *, off_t);
 __END_DECLS
 #endif /* !_KERNEL */
-#endif /* !defined(_POSIX_SOURCE) ... */
+#endif /* __OFF_T_SYSCALLS_DECLARED */
+#endif /* defined(_NETBSD_SOURCE) */
 
-#if !defined(_POSIX_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 /* Major, minor numbers, dev_t's. */
 #define	major(x)	((int32_t)((((x) & 0x000fff00) >>  8)))
 #define	minor(x)	((int32_t)((((x) & 0xfff00000) >> 12) | \
@@ -170,35 +307,15 @@ typedef	_BSD_USECONDS_T_	useconds_t;
 #undef	_BSD_USECONDS_T_
 #endif
 
-#if !defined(_POSIX_SOURCE) && !defined(_XOPEN_SOURCE)
-#define	NBBY	8		/* number of bits in a byte */
+#ifdef _NETBSD_SOURCE
+#include <sys/fd_set.h>
+#define	NBBY	__NBBY
 
-/*
- * Select uses bit masks of file descriptors in longs.  These macros
- * manipulate such bit fields (the filesystem macros use chars).
- * FD_SETSIZE may be defined by the user, but the default here should
- * be enough for most uses.
- */
-#ifndef	FD_SETSIZE
-#define	FD_SETSIZE	256
+typedef struct kauth_cred *kauth_cred_t;
+
+typedef int pri_t;
+
 #endif
-
-typedef int32_t	fd_mask;
-#define NFDBITS	(sizeof(fd_mask) * NBBY)	/* bits per mask */
-
-#ifndef howmany
-#define	howmany(x, y)	(((x) + ((y) - 1)) / (y))
-#endif
-
-typedef	struct fd_set {
-	fd_mask	fds_bits[howmany(FD_SETSIZE, NFDBITS)];
-} fd_set;
-
-#define	FD_SET(n, p)	((p)->fds_bits[(n)/NFDBITS] |= (1 << ((n) % NFDBITS)))
-#define	FD_CLR(n, p)	((p)->fds_bits[(n)/NFDBITS] &= ~(1 << ((n) % NFDBITS)))
-#define	FD_ISSET(n, p)	((p)->fds_bits[(n)/NFDBITS] & (1 << ((n) % NFDBITS)))
-#define	FD_COPY(f, t)	(void)memcpy((t), (f), sizeof(*(f)))
-#define	FD_ZERO(p)	(void)memset((p), 0, sizeof(*(p)))
 
 #if defined(__STDC__) && defined(_KERNEL)
 /*
@@ -206,15 +323,33 @@ typedef	struct fd_set {
  * common structures that cross subsystem boundaries here; others are mostly
  * used in the same place that the structure is defined.
  */
+struct	lwp;
+typedef struct lwp lwp_t;
+struct	user;
+struct	__ucontext;
 struct	proc;
+typedef struct proc proc_t;
 struct	pgrp;
-struct	ucred;
 struct	rusage;
 struct	file;
+typedef struct file file_t;
 struct	buf;
+typedef struct buf buf_t;
 struct	tty;
 struct	uio;
 #endif
 
-#endif /* !defined(_POSIX_SOURCE) ... */
+#ifdef _KERNEL
+#define SET(t, f)	((t) |= (f))
+#define	ISSET(t, f)	((t) & (f))
+#define	CLR(t, f)	((t) &= ~(f))
+#endif
+
+#if !defined(_KERNEL) && !defined(_STANDALONE)
+#if (_POSIX_C_SOURCE - 0L) >= 199506L || (_XOPEN_SOURCE - 0) >= 500 || \
+    defined(_NETBSD_SOURCE)
+#include <pthread_types.h>
+#endif
+#endif
+
 #endif /* !_SYS_TYPES_H_ */

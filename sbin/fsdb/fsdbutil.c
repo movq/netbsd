@@ -1,4 +1,4 @@
-/*	$NetBSD: fsdbutil.c,v 1.10 1998/04/01 16:08:26 kleink Exp $	*/
+/*	$NetBSD: fsdbutil.c,v 1.19 2008/07/08 07:53:08 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsdbutil.c,v 1.10 1998/04/01 16:08:26 kleink Exp $");
+__RCSID("$NetBSD: fsdbutil.c,v 1.19 2008/07/08 07:53:08 simonb Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -46,7 +39,6 @@ __RCSID("$NetBSD: fsdbutil.c,v 1.10 1998/04/01 16:08:26 kleink Exp $");
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/mount.h>
-#include <ctype.h>
 #include <fcntl.h>
 #include <grp.h>
 #include <pwd.h>
@@ -64,9 +56,7 @@ __RCSID("$NetBSD: fsdbutil.c,v 1.10 1998/04/01 16:08:26 kleink Exp $");
 #include "fsck.h"
 
 char  **
-crack(line, argc)
-	char   *line;
-	int    *argc;
+crack(char *line, int *argc)
 {
 	static char *argv[8];
 	int     i;
@@ -84,10 +74,7 @@ crack(line, argc)
 }
 
 int
-argcount(cmdp, argc, argv)
-	struct cmdtable *cmdp;
-	int     argc;
-	char   *argv[];
+argcount(struct cmdtable *cmdp, int argc, char *argv[])
 {
 	if (cmdp->minargc == cmdp->maxargc)
 		warnx("command `%s' takes %u arguments", cmdp->cmd,
@@ -101,18 +88,24 @@ argcount(cmdp, argc, argv)
 }
 
 void
-printstat(cp, inum, dp)
-	const char *cp;
-	ino_t   inum;
-	struct dinode *dp;
+printstat(const char *cp, ino_t inum, union dinode *dp)
 {
 	struct group *grp;
 	struct passwd *pw;
 	time_t  t;
 	char   *p;
+	uint64_t size, blocks;
+	uint16_t mode;
+	uint32_t rdev;
+	uint32_t uid, gid;
+
+	size = iswap64(DIP(dp, size));
+	blocks = is_ufs2 ? iswap64(DIP(dp, blocks)) : iswap32(DIP(dp, blocks));
+	mode = iswap16(DIP(dp, mode));
+	rdev = iswap32(DIP(dp, rdev));
 
 	printf("%s: ", cp);
-	switch (iswap16(dp->di_mode) & IFMT) {
+	switch (mode & IFMT) {
 	case IFDIR:
 		puts("directory");
 		break;
@@ -120,20 +113,19 @@ printstat(cp, inum, dp)
 		puts("regular file");
 		break;
 	case IFBLK:
-		printf("block special (%d,%d)",
-		    major(iswap32(dp->di_rdev)), minor(iswap32(dp->di_rdev)));
+		printf("block special (%d,%d)", major(rdev), minor(rdev));
 		break;
 	case IFCHR:
-		printf("character special (%d,%d)",
-		    major(iswap32(dp->di_rdev)), minor(iswap32(dp->di_rdev)));
+		printf("character special (%d,%d)", major(rdev), minor(rdev));
 		break;
 	case IFLNK:
 		fputs("symlink", stdout);
-		if (iswap64(dp->di_size) > 0 && iswap64(dp->di_size) < MAXSYMLINKLEN &&
-		    dp->di_blocks == 0)
-			printf(" to `%.*s'\n", (int)iswap64(dp->di_size),
-			    (char *)dp->di_shortlink);
-		else
+		if (size > 0 && size < sblock->fs_maxsymlinklen &&
+		    DIP(dp, blocks) == 0) {
+			p = is_ufs2 ? (char *)dp->dp2.di_db :
+			    (char *)dp->dp1.di_db;
+			printf(" to `%.*s'\n", (int)size, p);
+		} else
 			putchar('\n');
 		break;
 	case IFSOCK:
@@ -143,66 +135,78 @@ printstat(cp, inum, dp)
 		puts("fifo");
 		break;
 	}
-	printf("I=%u MODE=%o SIZE=%qu", inum, iswap16(dp->di_mode),
-	    (unsigned long long)iswap64(dp->di_size));
-	t = iswap32(dp->di_mtime);
+	printf("I=%llu MODE=%o SIZE=%llu", (unsigned long long)inum, mode,
+	    (unsigned long long)size);
+	t = is_ufs2 ? iswap64(dp->dp2.di_mtime) : iswap32(dp->dp1.di_mtime);
 	p = ctime(&t);
 	printf("\n\tMTIME=%15.15s %4.4s [%d nsec]", &p[4], &p[20],
-	    iswap32(dp->di_mtimensec));
-	t = iswap32(dp->di_ctime);
+	    iswap32(DIP(dp, mtimensec)));
+	t = is_ufs2 ? iswap64(dp->dp2.di_ctime) : iswap32(dp->dp1.di_ctime);
 	p = ctime(&t);
 	printf("\n\tCTIME=%15.15s %4.4s [%d nsec]", &p[4], &p[20],
-	    iswap32(dp->di_ctimensec));
-	t = iswap32(dp->di_atime);
+	    iswap32(DIP(dp, ctimensec)));
+	t = is_ufs2 ? iswap64(dp->dp2.di_atime) : iswap32(dp->dp1.di_atime);
 	p = ctime(&t);
 	printf("\n\tATIME=%15.15s %4.4s [%d nsec]\n", &p[4], &p[20],
-	    iswap32(dp->di_atimensec));
+	    iswap32(DIP(dp,atimensec)));
 
-	if ((pw = getpwuid(iswap32(dp->di_uid))) != NULL)
+	if (!is_ufs2 && sblock->fs_old_inodefmt < FS_44INODEFMT)
+		uid = iswap16(dp->dp1.di_ouid);
+	else
+		uid = iswap32(DIP(dp, uid));
+	if ((pw = getpwuid(uid)) != NULL)
 		printf("OWNER=%s ", pw->pw_name);
 	else
-		printf("OWNUID=%u ", iswap32(dp->di_uid));
-	if ((grp = getgrgid(iswap32(dp->di_gid))) != NULL)
+		printf("OWNUID=%u ", uid);
+	if (!is_ufs2 && sblock->fs_old_inodefmt < FS_44INODEFMT)
+		gid = iswap16(dp->dp1.di_ogid);
+	else
+		gid = iswap32(DIP(dp, gid));
+	if ((grp = getgrgid(gid)) != NULL)
 		printf("GRP=%s ", grp->gr_name);
 	else
-		printf("GID=%u ", iswap32(dp->di_gid));
+		printf("GID=%u ", gid);
 
-	printf("LINKCNT=%hd FLAGS=0x%#x BLKCNT=0x%x GEN=0x%x\n",
-		iswap16(dp->di_nlink),
-	    iswap32(dp->di_flags), iswap32(dp->di_blocks),
-		iswap32(dp->di_gen));
+	printf("LINKCNT=%hd FLAGS=0x%x BLKCNT=0x%llx GEN=0x%x\n",
+		iswap16(DIP(dp, nlink)),
+	    iswap32(DIP(dp, flags)), (unsigned long long)blocks,
+		iswap32(DIP(dp, gen)));
 }
 
 int
-checkactive()
+checkactive(void)
 {
 	if (!curinode) {
-		warnx("no current inode\n");
+		warnx("no current inode");
 		return 0;
 	}
 	return 1;
 }
 
 int
-checkactivedir()
+checkactivedir(void)
 {
 	if (!curinode) {
-		warnx("no current inode\n");
+		warnx("no current inode");
 		return 0;
 	}
-	if ((iswap16(curinode->di_mode) & IFMT) != IFDIR) {
-		warnx("inode %d not a directory", curinum);
+	if ((iswap16(DIP(curinode, mode)) & IFMT) != IFDIR) {
+		warnx("inode %llu not a directory",
+		    (unsigned long long)curinum);
 		return 0;
 	}
 	return 1;
 }
 
 int
-printactive()
+printactive(void)
 {
+	uint16_t mode;
+
 	if (!checkactive())
 		return 1;
-	switch (iswap16(curinode->di_mode) & IFMT) {
+	mode = iswap16(DIP(curinode, mode));
+	switch (mode & IFMT) {
 	case IFDIR:
 	case IFREG:
 	case IFBLK:
@@ -213,12 +217,12 @@ printactive()
 		printstat("current inode", curinum, curinode);
 		break;
 	case 0:
-		printf("current inode %d: unallocated inode\n", curinum);
+		printf("current inode %llu: unallocated inode\n",
+		    (unsigned long long)curinum);
 		break;
 	default:
-		printf("current inode %d: screwy itype 0%o (mode 0%o)?\n",
-		    curinum, iswap16(curinode->di_mode) & IFMT,
-			iswap16(curinode->di_mode));
+		printf("current inode %llu: screwy itype 0%o (mode 0%o)?\n",
+		    (unsigned long long)curinum, mode & IFMT, mode);
 		break;
 	}
 	return 0;

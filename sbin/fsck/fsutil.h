@@ -1,4 +1,4 @@
-/*	$NetBSD: fsutil.h,v 1.4 1998/07/26 20:02:36 mycroft Exp $	*/
+/*	$NetBSD: fsutil.h,v 1.13 2007/09/15 14:35:33 ragge Exp $	*/
 
 /*
  * Copyright (c) 1996 Christos Zoulas.  All rights reserved.
@@ -29,29 +29,34 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-void perror __P((const char *));
-void errexit __P((const char *, ...))
+#include <stdarg.h>
+
+void errexit(const char *, ...)
     __attribute__((__noreturn__,__format__(__printf__,1,2)));  
-void pfatal __P((const char *, ...))
+void pfatal(const char *, ...)
     __attribute__((__format__(__printf__,1,2)));  
-void pwarn __P((const char *, ...))
+void pwarn(const char *, ...)
     __attribute__((__format__(__printf__,1,2)));  
-void panic __P((const char *, ...))
+void perr(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));  
+void panic(const char *, ...)
     __attribute__((__noreturn__,__format__(__printf__,1,2)));  
-const char *rawname __P((const char *));
-const char *unrawname __P((const char *));
-const char *blockcheck __P((const char *));
-const char *cdevname __P((void));
-void setcdevname __P((const char *, int));
-int  hotroot __P((void));
-void *emalloc __P((size_t));
-void *erealloc __P((void *, size_t));
-char *estrdup __P((const char *));
+void vmsg(int, const char *, va_list)
+     __attribute__((__format__(__printf__,2,0)));
+const char *rawname(const char *);
+const char *unrawname(const char *);
+const char *blockcheck(const char *);
+const char *cdevname(void);
+void setcdevname(const char *, int);
+int  hotroot(void);
 
 #define CHECK_PREEN	1
 #define	CHECK_VERBOSE	2
 #define	CHECK_DEBUG	4
+#define	CHECK_FORCE	8
+#define	CHECK_PROGRESS	16
+#define	CHECK_NOFIX	32
 
 struct fstab;
-int checkfstab __P((int, int, void *(*)(struct fstab *), 
-    int (*) (const char *, const char *, const char *, void *, pid_t *)));
+int checkfstab(int, int, void *(*)(struct fstab *), 
+    int (*) (const char *, const char *, const char *, void *, pid_t *));

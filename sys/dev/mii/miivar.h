@@ -1,7 +1,7 @@
-/*	$NetBSD: miivar.h,v 1.18 2000/03/23 07:01:36 thorpej Exp $	*/
+/*	$NetBSD: miivar.h,v 1.52.10.1 2009/04/23 02:19:40 snj Exp $	*/
 
 /*-
- * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
 #include <sys/callout.h>
 
 /*
- * Media Independent Interface datat structure defintions.
+ * Media Independent Interface datat structure definitions.
  */
 
 struct mii_softc;
@@ -52,9 +45,9 @@ struct mii_softc;
 /*
  * Callbacks from MII layer into network interface device driver.
  */
-typedef	int (*mii_readreg_t) __P((struct device *, int, int));
-typedef	void (*mii_writereg_t) __P((struct device *, int, int, int));
-typedef	void (*mii_statchg_t) __P((struct device *));
+typedef	int (*mii_readreg_t)(struct device *, int, int);
+typedef	void (*mii_writereg_t)(struct device *, int, int, int);
+typedef	void (*mii_statchg_t)(struct device *);
 
 /*
  * A network interface driver has one of these structures in its softc.
@@ -73,13 +66,13 @@ struct mii_data {
 	 * request is made.
 	 */
 	LIST_HEAD(mii_listhead, mii_softc) mii_phys;
-	int mii_instance;
+	u_int mii_instance;
 
 	/*
 	 * PHY driver fills this in with active media status.
 	 */
 	int mii_media_status;
-	int mii_media_active;
+	u_int mii_media_active;
 
 	/*
 	 * Calls from MII layer into network interface driver.
@@ -91,15 +84,13 @@ struct mii_data {
 typedef struct mii_data mii_data_t;
 
 /*
- * This call is used by the MII layer to call into the PHY driver
- * to perform a `service request'.
+ * Functions provided by the PHY to perform various functions.
  */
-typedef	int (*mii_downcall_t) __P((struct mii_softc *, struct mii_data *, int));
-
-/*
- * This is a call back into the PHY driver made by a `status request'.
- */
-typedef void (*mii_statusreq_t) __P((struct mii_softc *));
+struct mii_phy_funcs {
+	int (*pf_service)(struct mii_softc *, struct mii_data *, int);
+	void (*pf_status)(struct mii_softc *);
+	void (*pf_reset)(struct mii_softc *);
+};
 
 /*
  * Requests that can be made to the downcall.
@@ -115,36 +106,51 @@ typedef void (*mii_statusreq_t) __P((struct mii_softc *));
  * XXX BSDI used, and we would like to have the same interface.
  */
 struct mii_softc {
-	struct device mii_dev;		/* generic device glue */
-	
+	device_t mii_dev;		/* generic device glue */
+
 	LIST_ENTRY(mii_softc) mii_list;	/* entry on parent's PHY list */
 
+	u_int32_t mii_mpd_model;	/* the PHY's model (MII_MODEL())*/
 	int mii_phy;			/* our MII address */
 	int mii_offset;			/* first PHY, second PHY, etc. */
-	int mii_inst;			/* instance for ifmedia */
+	u_int mii_inst;			/* instance for ifmedia */
 
-	mii_downcall_t mii_service;	/* our downcall */
-	mii_statusreq_t mii_status;	/* our status request fn */
+	/* Our PHY functions. */
+	const struct mii_phy_funcs *mii_funcs;
+
 	struct mii_data *mii_pdata;	/* pointer to parent's mii_data */
 
 	int mii_flags;			/* misc. flags; see below */
 	int mii_capabilities;		/* capabilities from BMSR */
+	int mii_extcapabilities;	/* extended capabilities */
 	int mii_ticks;			/* MII_TICK counter */
+	int mii_anegticks;		/* ticks before retrying aneg */
 
 	struct callout mii_nway_ch;	/* NWAY callout */
 
-	int mii_media_active;		/* last active media */
+	u_int mii_media_active;		/* last active media */
 	int mii_media_status;		/* last active status */
 };
 typedef struct mii_softc mii_softc_t;
+
+/* Default mii_anegticks values. */
+#define	MII_ANEGTICKS		5
+#define	MII_ANEGTICKS_GIGE	10
 
 /* mii_flags */
 #define	MIIF_INITDONE	0x0001		/* has been initialized (mii_data) */
 #define	MIIF_NOISOLATE	0x0002		/* do not isolate the PHY */
 #define	MIIF_NOLOOP	0x0004		/* no loopback capability */
 #define	MIIF_DOINGAUTO	0x0008		/* doing autonegotiation (mii_softc) */
+#define MIIF_AUTOTSLEEP	0x0010		/* use tsleep(), not callout() */
+#define MIIF_HAVEFIBER	0x0020		/* from parent: has fiber interface */
+#define	MIIF_HAVE_GTCR	0x0040		/* has 100base-T2/1000base-T CR */
+#define	MIIF_IS_1000X	0x0080		/* is a 1000BASE-X device */
+#define	MIIF_DOPAUSE	0x0100		/* advertise PAUSE capability */
+#define	MIIF_IS_HPNA	0x0200		/* is a HomePNA device */
+#define	MIIF_FORCEANEG	0x0400		/* force auto-negotiation */
 
-#define	MIIF_INHERIT_MASK	(MIIF_NOISOLATE|MIIF_NOLOOP)
+#define	MIIF_INHERIT_MASK	(MIIF_NOISOLATE|MIIF_NOLOOP|MIIF_AUTOTSLEEP)
 
 /*
  * Special `locators' passed to mii_attach().  If one of these is not
@@ -160,12 +166,21 @@ typedef struct mii_softc mii_softc_t;
 struct mii_attach_args {
 	struct mii_data *mii_data;	/* pointer to parent data */
 	int mii_phyno;			/* MII address */
-	int mii_id1;			/* PHY ID register 1 */
-	int mii_id2;			/* PHY ID register 2 */
+	u_int mii_id1;			/* PHY ID register 1 */
+	u_int mii_id2;			/* PHY ID register 2 */
 	int mii_capmask;		/* capability mask from BMSR */
 	int mii_flags;			/* flags from parent */
 };
 typedef struct mii_attach_args mii_attach_args_t;
+
+/*
+ * Used to match a PHY.
+ */
+struct mii_phydesc {
+	u_int32_t mpd_oui;		/* the PHY's OUI */
+	u_int32_t mpd_model;		/* the PHY's model */
+	const char *mpd_name;		/* the PHY's name */
+};
 
 /*
  * An array of these structures map MII media types to BMCR/ANAR settings.
@@ -173,6 +188,7 @@ typedef struct mii_attach_args mii_attach_args_t;
 struct mii_media {
 	int	mm_bmcr;		/* BMCR settings for this media */
 	int	mm_anar;		/* ANAR settings for this media */
+	int	mm_gtcr;		/* 100base-T2 or 1000base-T CR */
 };
 
 #define	MII_MEDIA_NONE		0
@@ -181,46 +197,71 @@ struct mii_media {
 #define	MII_MEDIA_100_T4	3
 #define	MII_MEDIA_100_TX	4
 #define	MII_MEDIA_100_TX_FDX	5
-#define	MII_NMEDIA		6
+#define	MII_MEDIA_1000_X	6
+#define	MII_MEDIA_1000_X_FDX	7
+#define	MII_MEDIA_1000_T	8
+#define	MII_MEDIA_1000_T_FDX	9
+#define	MII_NMEDIA		10
 
 #ifdef _KERNEL
-#include "locators.h"
 
 #define	PHY_READ(p, r) \
-	(*(p)->mii_pdata->mii_readreg)((p)->mii_dev.dv_parent, \
+	(*(p)->mii_pdata->mii_readreg)(device_parent((p)->mii_dev), \
 	    (p)->mii_phy, (r))
 
 #define	PHY_WRITE(p, r, v) \
-	(*(p)->mii_pdata->mii_writereg)((p)->mii_dev.dv_parent, \
+	(*(p)->mii_pdata->mii_writereg)(device_parent((p)->mii_dev), \
 	    (p)->mii_phy, (r), (v))
 
-void	mii_attach __P((struct device *, struct mii_data *, int, int,
-	    int, int));
-void	mii_activate __P((struct mii_data *, enum devact, int, int));
-void	mii_detach __P((struct mii_data *, int, int));
+#define	PHY_SERVICE(p, d, o) \
+	(*(p)->mii_funcs->pf_service)((p), (d), (o))
 
-int	mii_mediachg __P((struct mii_data *));
-void	mii_tick __P((struct mii_data *));
-void	mii_pollstat __P((struct mii_data *));
-void	mii_down __P((struct mii_data *));
+#define	PHY_STATUS(p) \
+	(*(p)->mii_funcs->pf_status)((p))
 
-int	mii_phy_activate __P((struct device *, enum devact));
-int	mii_phy_detach __P((struct device *, int));
+#define	PHY_RESET(p) \
+	(*(p)->mii_funcs->pf_reset)((p))
 
-void	mii_phy_add_media __P((struct mii_softc *));
-void	mii_phy_delete_media __P((struct mii_softc *));
+void	mii_attach(device_t, struct mii_data *, int, int, int, int);
+void	mii_activate(struct mii_data *, enum devact, int, int);
+void	mii_detach(struct mii_data *, int, int);
+bool	mii_phy_resume(device_t PMF_FN_PROTO);
 
-void	mii_phy_setmedia __P((struct mii_softc *));
-int	mii_phy_auto __P((struct mii_softc *, int));
-void	mii_phy_reset __P((struct mii_softc *));
-void	mii_phy_down __P((struct mii_softc *));
-int	mii_phy_tick __P((struct mii_softc *));
+int	mii_mediachg(struct mii_data *);
+void	mii_tick(struct mii_data *);
+void	mii_pollstat(struct mii_data *);
+void	mii_down(struct mii_data *);
+int	mii_anar(int);
 
-void	mii_phy_status __P((struct mii_softc *));
-void	mii_phy_update __P((struct mii_softc *, int));
-void	mii_phy_statusmsg __P((struct mii_softc *));
+int mii_ifmedia_change(struct mii_data *);
 
-void	ukphy_status __P((struct mii_softc *));
+int	mii_phy_activate(device_t, enum devact);
+int	mii_phy_detach(device_t, int);
+
+const struct mii_phydesc *mii_phy_match(const struct mii_attach_args *,
+	    const struct mii_phydesc *);
+
+void	mii_phy_add_media(struct mii_softc *);
+void	mii_phy_delete_media(struct mii_softc *);
+
+void	mii_phy_setmedia(struct mii_softc *);
+int	mii_phy_auto(struct mii_softc *, int);
+void	mii_phy_reset(struct mii_softc *);
+void	mii_phy_down(struct mii_softc *);
+int	mii_phy_tick(struct mii_softc *);
+
+void	mii_phy_status(struct mii_softc *);
+void	mii_phy_update(struct mii_softc *, int);
+
+u_int	mii_phy_flowstatus(struct mii_softc *);
+
+void	ukphy_status(struct mii_softc *);
+
+u_int	mii_oui(u_int, u_int);
+#define	MII_OUI(id1, id2)	mii_oui(id1, id2)
+#define	MII_MODEL(id2)		(((id2) & IDR2_MODEL) >> 4)
+#define	MII_REV(id2)		((id2) & IDR2_REV)
+
 #endif /* _KERNEL */
 
 #endif /* _DEV_MII_MIIVAR_H_ */

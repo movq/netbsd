@@ -43,6 +43,7 @@ Cambridge, MA 02139, USA.  */
 #endif
 
 #include <stdio.h>
+#include <string.h>
 
 /* Comment out all this code if we are using the GNU C Library, and are not
    actually compiling the library itself.  This code is part of the GNU C
@@ -159,14 +160,13 @@ static enum
 /* Value of POSIXLY_CORRECT environment variable.  */
 static char *posixly_correct;
 
-#if defined(__GNU_LIBRARY__)  || defined(__NetBSD__)
+#ifdef	__GNU_LIBRARY__
 /* We want to avoid inclusion of string.h with non-GNU libraries
    because there are many ways it can cause trouble.
    On some systems, it contains special magic macros that don't work
    in GCC.  */
 #include <string.h>
 #define	my_index	strchr
-#include <stdlib.h>
 #else
 
 /* Avoid depending on library functions or files

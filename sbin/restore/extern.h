@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.6 1997/09/15 08:04:30 lukem Exp $	*/
+/*	$NetBSD: extern.h,v 1.15 2008/02/16 17:58:01 matt Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,78 +31,85 @@
  *	@(#)extern.h	8.2 (Berkeley) 1/7/94
  */
 
-struct entry	*addentry __P((char *, ino_t, int));
-long		 addfile __P((char *, ino_t, int));
-int		 addwhiteout __P((char *));
-void		 badentry __P((struct entry *, char *));
-void	 	 canon __P((char *, char *));
-void		 checkrestore __P((void));
-void 		 cleanup __P((void));
-void		 closemt __P((void));
-void		 createfiles __P((void));
-void		 createleaves __P((char *));
-void		 createlinks __P((void));
-long		 deletefile __P((char *, ino_t, int));
-void		 deleteino __P((ino_t));
-void		 delwhiteout __P((struct entry *));
-ino_t		 dirlookup __P((const char *));
-void		 dumpsymtable __P((char *, int32_t));
-void	 	 extractdirs __P((int));
-int		 extractfile __P((char *));
-void		 findunreflinks __P((void));
-char		*flagvalues __P((struct entry *));
-void		 freeentry __P((struct entry *));
-void		 freename __P((char *));
-int	 	 genliteraldir __P((char *, ino_t));
-char		*gentempname __P((struct entry *));
-void		 getfile __P((void (*)(char *, long), void (*)(char *, long)));
-void		 getvol __P((int));
-void		 initsymtable __P((char *));
-int	 	 inodetype __P((ino_t));
-int		 linkit __P((char *, char *, int));
-struct entry	*lookupino __P((ino_t));
-struct entry	*lookupname __P((char *));
-long		 listfile __P((char *, ino_t, int));
-ino_t		 lowerbnd __P((ino_t));
-void		 mktempname __P((struct entry *));
-void		 moveentry __P((struct entry *, char *));
-void		 msg __P((const char *, ...));
-char		*myname __P((struct entry *));
-void		 newnode __P((struct entry *));
-void		 newtapebuf __P((long));
-long		 nodeupdates __P((char *, ino_t, int));
-void	 	 onintr __P((int));
-void		 panic __P((const char *, ...));
-void		 pathcheck __P((char *));
-struct direct	*pathsearch __P((const char *));
-void		 printdumpinfo __P((void));
-void		 removeleaf __P((struct entry *));
-void		 removenode __P((struct entry *));
-void		 removeoldleaves __P((void));
-void		 removeoldnodes __P((void));
-void		 renameit __P((char *, char *));
-int		 reply __P((char *));
-RST_DIR		*rst_opendir __P((const char *));
-struct direct	*rst_readdir __P((RST_DIR *));
-void		 rst_closedir __P((RST_DIR *dirp));
-void	 	 runcmdshell __P((void));
-char		*savename __P((char *));
-void	 	 setdirmodes __P((int));
-void		 setinput __P((char *));
-void		 setup __P((void));
-void	 	 skipdirs __P((void));
-void		 skipfile __P((void));
-void		 skipmaps __P((void));
-void		 swabst __P((u_char *, u_char *));
-void	 	 treescan __P((char *, ino_t, long (*)(char *, ino_t, int)));
-ino_t		 upperbnd __P((ino_t));
-long		 verifyfile __P((char *, ino_t, int));
-void		 xtrnull __P((char *, long));
+struct entry	*addentry(const char *, ino_t, int);
+long		 addfile(const char *, ino_t, int);
+int		 addwhiteout(char *);
+void		 badentry(struct entry *, const char *);
+void	 	 canon(const char *, char *);
+void		 checkrestore(void);
+void 		 cleanup(void);
+void		 closemt(void);
+void		 createfiles(void);
+void		 createleaves(const char *);
+void		 createlinks(void);
+long		 deletefile(const char *, ino_t, int);
+void		 deleteino(ino_t);
+void		 delwhiteout(struct entry *);
+const struct digest_desc *
+		 digest_lookup(const char *);
+ino_t		 dirlookup(const char *);
+void		 dumpsymtable(const char *, int32_t);
+void	 	 extractdirs(int);
+int		 extractfile(char *);
+void		 findunreflinks(void);
+char		*flagvalues(struct entry *);
+void		 freeentry(struct entry *);
+void		 freename(char *);
+int	 	 genliteraldir(const char *, ino_t);
+char		*gentempname(struct entry *);
+void		 getfile(void (*)(char *, long), void (*)(char *, long));
+void		 getvol(int);
+void		 initsymtable(const char *);
+int	 	 inodetype(ino_t);
+int		 linkit(char *, char *, int);
+struct entry	*lookupino(ino_t);
+struct entry	*lookupname(const char *);
+long		 listfile(const char *, ino_t, int);
+ino_t		 lowerbnd(ino_t);
+void		 mktempname(struct entry *);
+void		 moveentry(struct entry *, const char *);
+void		 msg(const char *, ...)
+     __attribute__((__format__(__printf__,1,2)));
+char		*myname(struct entry *);
+void		 newnode(struct entry *);
+void		 newtapebuf(long);
+long		 nodeupdates(const char *, ino_t, int);
+void	 	 onintr(int);
+void		 panic(const char *, ...)
+     __attribute__((__format__(__printf__,1,2)));
+void		 pathcheck(char *);
+struct direct	*pathsearch(const char *);
+void		 printdumpinfo(void);
+void		 removeleaf(struct entry *);
+void		 removenode(struct entry *);
+void		 removeoldleaves(void);
+void		 removeoldnodes(void);
+void		 renameit(char *, const char *);
+int		 reply(const char *);
+RST_DIR		*rst_opendir(const char *);
+struct direct	*rst_readdir(RST_DIR *);
+void		 rst_closedir(RST_DIR *);
+void	 	 runcmdshell(void);
+char		*savename(const char *);
+void	 	 setdirmodes(int);
+void		 setinput(const char *);
+void		 setup(void);
+void	 	 skipdirs(void);
+void		 skipfile(void);
+void		 skipmaps(void);
+void		 swabst(u_char *, u_char *);
+void	 	 treescan(const char *, ino_t,
+    long (*)(const char *, ino_t, int));
+ino_t		 upperbnd(ino_t);
+long		 verifyfile(const char *, ino_t, int);
+void		 writemtree(const char *, const char *, const uid_t,
+				const gid_t, const mode_t, const u_long);
+void		 xtrnull(char *, long);
 
 /* From ../dump/dumprmt.c */
-void		rmtclose __P((void));
-int		rmthost __P((char *));
-int		rmtioctl __P((int, int));
-int		rmtopen __P((char *, int));
-int		rmtread __P((char *, int));
-int		rmtseek __P((int, int));
+void		rmtclose(void);
+int		rmthost(const char *);
+int		rmtioctl(int, int);
+int		rmtopen(const char *, int, int);
+int		rmtread(char *, int);
+int		rmtseek(int, int);

@@ -1,4 +1,4 @@
-/*	$NetBSD: ses.c,v 1.4 2000/02/20 21:30:44 mjacob Exp $ */
+/*	$NetBSD: ses.c,v 1.40 2008/06/08 18:18:34 tsutsui Exp $ */
 /*
  * Copyright (C) 2000 National Aeronautics & Space Administration
  * All rights reserved.
@@ -25,10 +25,11 @@
  * Author:	mjacob@nas.nasa.gov
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ses.c,v 1.40 2008/06/08 18:18:34 tsutsui Exp $");
 
 #include "opt_scsi.h"
 
-#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -49,10 +50,11 @@
 #include <machine/stdarg.h>
 
 #include <dev/scsipi/scsipi_all.h>
-#include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_disk.h>
+#include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsi_disk.h>
-#include <dev/scsipi/scsiconf.h>
+#include <dev/scsipi/scsipiconf.h>
+#include <dev/scsipi/scsipi_base.h>
 #include <dev/scsipi/ses.h>
 
 /*
@@ -70,12 +72,12 @@ typedef enum {
 struct ses_softc;
 typedef struct ses_softc ses_softc_t;
 typedef struct {
-	int (*softc_init) 	__P((ses_softc_t *, int));
-	int (*init_enc)		__P((ses_softc_t *));
-	int (*get_encstat)	__P((ses_softc_t *, int));
-	int (*set_encstat)	__P((ses_softc_t *, ses_encstat, int));
-	int (*get_objstat)	__P((ses_softc_t *, ses_objstat *, int));
-	int (*set_objstat)	__P((ses_softc_t *, ses_objstat *, int));
+	int (*softc_init)(ses_softc_t *, int);
+	int (*init_enc)(ses_softc_t *);
+	int (*get_encstat)(ses_softc_t *, int);
+	int (*set_encstat)(ses_softc_t *, ses_encstat, int);
+	int (*get_objstat)(ses_softc_t *, ses_objstat *, int);
+	int (*set_objstat)(ses_softc_t *, ses_objstat *, int);
 } encvec;
 
 #define	ENCI_SVALID	0x80
@@ -92,23 +94,23 @@ typedef struct {
 #define	SEN_ID		"UNISYS           SUN_SEN"
 #define	SEN_ID_LEN	24
 
-static enctyp ses_type __P((void *, int));
+static enctyp ses_type(struct scsipi_inquiry_data *);
 
 
 /* Forward reference to Enclosure Functions */
-static int ses_softc_init __P((ses_softc_t *, int));
-static int ses_init_enc __P((ses_softc_t *));
-static int ses_get_encstat __P((ses_softc_t *, int));
-static int ses_set_encstat __P((ses_softc_t *, uint8_t, int));
-static int ses_get_objstat __P((ses_softc_t *, ses_objstat *, int));
-static int ses_set_objstat __P((ses_softc_t *, ses_objstat *, int));
+static int ses_softc_init(ses_softc_t *, int);
+static int ses_init_enc(ses_softc_t *);
+static int ses_get_encstat(ses_softc_t *, int);
+static int ses_set_encstat(ses_softc_t *, uint8_t, int);
+static int ses_get_objstat(ses_softc_t *, ses_objstat *, int);
+static int ses_set_objstat(ses_softc_t *, ses_objstat *, int);
 
-static int safte_softc_init __P((ses_softc_t *, int));
-static int safte_init_enc __P((ses_softc_t *));
-static int safte_get_encstat __P((ses_softc_t *, int));
-static int safte_set_encstat __P((ses_softc_t *, uint8_t, int));
-static int safte_get_objstat __P((ses_softc_t *, ses_objstat *, int));
-static int safte_set_objstat __P((ses_softc_t *, ses_objstat *, int));
+static int safte_softc_init(ses_softc_t *, int);
+static int safte_init_enc(ses_softc_t *);
+static int safte_get_encstat(ses_softc_t *, int);
+static int safte_set_encstat(ses_softc_t *, uint8_t, int);
+static int safte_get_objstat(ses_softc_t *, ses_objstat *, int);
+static int safte_set_objstat(ses_softc_t *, ses_objstat *, int);
 
 /*
  * Platform implementation defines/functions for SES internal kernel stuff
@@ -124,19 +126,25 @@ static int safte_set_objstat __P((ses_softc_t *, ses_objstat *, int));
 #endif
 #define	SES_MALLOC(amt)		malloc(amt, M_DEVBUF, M_NOWAIT)
 #define	SES_FREE(ptr, amt)	free(ptr, M_DEVBUF)
-#define	MEMZERO			bzero
-#define	MEMCPY(dest, src, amt)	bcopy(src, dest, amt)
+#define	MEMZERO(dest, amt)	memset(dest, 0, amt)
+#define	MEMCPY(dest, src, amt)	memcpy(dest, src, amt)
 #define	RECEIVE_DIAGNOSTIC	0x1c
 #define	SEND_DIAGNOSTIC		0x1d
 #define	WRITE_BUFFER		0x3b
 #define	READ_BUFFER		0x3c
 
-int sesopen __P((dev_t, int, int, struct proc *));
-int sesclose __P((dev_t, int, int, struct proc *));
-int sesioctl __P((dev_t, u_long, caddr_t, int, struct proc *));
+static dev_type_open(sesopen);
+static dev_type_close(sesclose);
+static dev_type_ioctl(sesioctl);
 
-static int ses_runcmd	__P((struct ses_softc *, char *, int, char *, int *));
-static void ses_log	__P((struct ses_softc *, const char *, ...));
+const struct cdevsw ses_cdevsw = {
+	sesopen, sesclose, noread, nowrite, sesioctl,
+	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER,
+};
+
+static int ses_runcmd(struct ses_softc *, char *, int, char *, int *);
+static void ses_log(struct ses_softc *, const char *, ...)
+     __attribute__((__format__(__printf__, 2, 3)));
 
 /*
  * General NetBSD kernel stuff.
@@ -144,7 +152,7 @@ static void ses_log	__P((struct ses_softc *, const char *, ...));
 
 struct ses_softc {
 	struct device	sc_device;
-	struct scsipi_link *sc_link;
+	struct scsipi_periph *sc_periph;
 	enctyp		ses_type;	/* type of enclosure */
 	encvec		ses_vec;	/* vector to handlers */
 	void *		ses_private;	/* per-type private data */
@@ -159,28 +167,25 @@ struct ses_softc {
 
 #define SESUNIT(x)       (minor((x)))
 
-static int ses_match __P((struct device *, struct cfdata *, void *));
-static void ses_attach __P((struct device *, struct device *, void *));
-static enctyp ses_device_type __P((struct scsipibus_attach_args *));
+static int ses_match(struct device *, struct cfdata *, void *);
+static void ses_attach(struct device *, struct device *, void *);
+static enctyp ses_device_type(struct scsipibus_attach_args *);
 
-struct cfattach ses_ca = {
-	sizeof (struct ses_softc), ses_match, ses_attach
-};
+CFATTACH_DECL(ses, sizeof (struct ses_softc),
+    ses_match, ses_attach, NULL, NULL);
+
 extern struct cfdriver ses_cd;
 
-struct scsipi_device ses_switch = {
+static const struct scsipi_periphsw ses_switch = {
 	NULL,
 	NULL,
 	NULL,
 	NULL
 };
 
-
-int
-ses_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+ses_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct scsipibus_attach_args *sa = aux;
 
@@ -207,22 +212,19 @@ ses_match(parent, match, aux)
  * it's not until the return from the match routine that we have
  * the softc available to set stuff in.
  */
-void
-ses_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+static void
+ses_attach(struct device *parent, struct device *self, void *aux)
 {
-	char *tname;
-	struct ses_softc *softc = (void *)self;
+	const char *tname;
+	struct ses_softc *softc = device_private(self);
 	struct scsipibus_attach_args *sa = aux;
-	struct scsipi_link *sc_link = sa->sa_sc_link;
+	struct scsipi_periph *periph = sa->sa_periph;
 
-	SC_DEBUG(sc_link, SDEV_DB2, ("ssattach: "));
-	softc->sc_link = sa->sa_sc_link;
-	sc_link->device = &ses_switch;
-	sc_link->device_softc = softc;
-	sc_link->openings = 1;
+	SC_DEBUG(periph, SCSIPI_DB2, ("ssattach: "));
+	softc->sc_periph = periph;
+	periph->periph_dev = &softc->sc_device;
+	periph->periph_switch = &ses_switch;
+	periph->periph_openings = 1;
 
 	softc->ses_type = ses_device_type(sa);
 	switch (softc->ses_type) {
@@ -272,64 +274,29 @@ ses_attach(parent, self, aux)
 		tname = "SAF-TE Compliant Device";
 		break;
 	}
-	printf("\n%s: %s\n", softc->sc_device.dv_xname, tname);
+	printf("\n%s: %s\n", device_xname(&softc->sc_device), tname);
 }
 
 
-#define	NETBSD_SAFTE_END	50
-
 static enctyp
-ses_device_type(sa)
-	struct scsipibus_attach_args *sa;
+ses_device_type(struct scsipibus_attach_args *sa)
 {
 	struct scsipi_inquiry_data *inqp = sa->sa_inqptr;
-	int length;
- 
+
 	if (inqp == NULL)
 		return (SES_NONE);
 
-	/*
-	 * If we can get longer data to check for the
-	 * presence of a  SAF-TE device, try and do so.
-	 *
-	 * Because we do deferred target attach in NetBSD,
-	 * we don't have to run this as a polled command.
-	 */
-
-	if (inqp->additional_length >= NETBSD_SAFTE_END-4) {
-		size_t amt = inqp->additional_length + 4;
-		struct scsipi_generic cmd;
-		static u_char more[64];
-
-		bzero(&cmd, sizeof(cmd));
-		cmd.opcode = INQUIRY;
-		cmd.bytes[3] = amt;
-		if (scsipi_command(sa->sa_sc_link, &cmd, 6, more, amt,
-		    SCSIPIRETRIES, 10000, NULL,
-		    XS_CTL_DATA_IN | XS_CTL_DISCOVERY) == 0) {
-			length = amt;
-			inqp = (struct scsipi_inquiry_data *) more;
-		}
-	} else {
-		length = sizeof (struct scsipi_inquiry_data);
-	}
-	return (ses_type(inqp, length));
+	return (ses_type(inqp));
 }
 
-int
-sesopen(dev, flags, fmt, p)
-	dev_t dev;
-	int flags;
-	int fmt;
-	struct proc *p;
+static int
+sesopen(dev_t dev, int flags, int fmt, struct lwp *l)
 {
 	struct ses_softc *softc;
 	int error, unit;
 
 	unit = SESUNIT(dev);
-	if (unit >= ses_cd.cd_ndevs)
-		return (ENXIO);
-	softc = ses_cd.cd_devs[unit];
+	softc = device_lookup_private(&ses_cd, unit);
 	if (softc == NULL)
 		return (ENXIO);
 
@@ -345,7 +312,8 @@ sesopen(dev, flags, fmt, p)
 		error = ENXIO;
 		goto out;
 	}
-	error = scsipi_adapter_addref(softc->sc_link);
+	error = scsipi_adapter_addref(
+	    softc->sc_periph->periph_channel->chan_adapter);
 	if (error != 0)
                 goto out;
 
@@ -363,51 +331,41 @@ out:
 	return (error);
 }
 
-int
-sesclose(dev, flags, fmt, p)
-	dev_t dev;
-	int flags;
-	int fmt;
-	struct proc *p;
+static int
+sesclose(dev_t dev, int flags, int fmt,
+    struct lwp *l)
 {
 	struct ses_softc *softc;
 	int unit;
 
 	unit = SESUNIT(dev);
-	if (unit >= ses_cd.cd_ndevs)
-		return (ENXIO);
-	softc = ses_cd.cd_devs[unit];
+	softc = device_lookup_private(&ses_cd, unit);
 	if (softc == NULL)
 		return (ENXIO);
 
-	scsipi_wait_drain(softc->sc_link);
-	scsipi_adapter_delref(softc->sc_link);
+	scsipi_wait_drain(softc->sc_periph);
+	scsipi_adapter_delref(softc->sc_periph->periph_channel->chan_adapter);
 	softc->ses_flags &= ~SES_FLAG_OPEN;
 	return (0);
 }
 
-int
-sesioctl(dev, cmd, arg_addr, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t arg_addr;
-	int flag;       
-	struct proc *p;
+static int
+sesioctl(dev_t dev, u_long cmd, void *arg_addr, int flag, struct lwp *l)
 {
 	ses_encstat tmp;
 	ses_objstat objs;
 	ses_object obj, *uobj;
-	struct ses_softc *ssc = ses_cd.cd_devs[SESUNIT(dev)];
+	struct ses_softc *ssc = device_lookup_private(&ses_cd, SESUNIT(dev));
 	void *addr;
 	int error, i;
 
 
 	if (arg_addr)
-		addr = *((caddr_t *) arg_addr);
+		addr = *((void **) arg_addr);
 	else
 		addr = NULL;
 
-	SC_DEBUG(ssc->sc_link, SDEV_DB2, ("sesioctl 0x%lx ", cmd));
+	SC_DEBUG(ssc->sc_periph, SCSIPI_DB2, ("sesioctl 0x%lx ", cmd));
 
 	/*
 	 * Now check to see whether we're initialized or not.
@@ -436,11 +394,15 @@ sesioctl(dev, cmd, arg_addr, flag, p)
 
 	switch (cmd) {
 	case SESIOC_GETNOBJ:
+		if (addr == NULL)
+			return EINVAL;
 		error = copyout(&ssc->ses_nobjects, addr,
 		    sizeof (ssc->ses_nobjects));
 		break;
-		
+
 	case SESIOC_GETOBJMAP:
+		if (addr == NULL)
+			return EINVAL;
 		for (uobj = addr, i = 0; i != ssc->ses_nobjects; i++, uobj++) {
 			obj.obj_id = i;
 			obj.subencid = ssc->ses_objmap[i].subenclosure;
@@ -453,6 +415,8 @@ sesioctl(dev, cmd, arg_addr, flag, p)
 		break;
 
 	case SESIOC_GETENCSTAT:
+		if (addr == NULL)
+			return EINVAL;
 		error = (*ssc->ses_vec.get_encstat)(ssc, 1);
 		if (error)
 			break;
@@ -462,6 +426,8 @@ sesioctl(dev, cmd, arg_addr, flag, p)
 		break;
 
 	case SESIOC_SETENCSTAT:
+		if (addr == NULL)
+			return EINVAL;
 		error = copyin(addr, &tmp, sizeof (ses_encstat));
 		if (error)
 			break;
@@ -469,6 +435,8 @@ sesioctl(dev, cmd, arg_addr, flag, p)
 		break;
 
 	case SESIOC_GETOBJSTAT:
+		if (addr == NULL)
+			return EINVAL;
 		error = copyin(addr, &objs, sizeof (ses_objstat));
 		if (error)
 			break;
@@ -487,6 +455,8 @@ sesioctl(dev, cmd, arg_addr, flag, p)
 		break;
 
 	case SESIOC_SETOBJSTAT:
+		if (addr == NULL)
+			return EINVAL;
 		error = copyin(addr, &objs, sizeof (ses_objstat));
 		if (error)
 			break;
@@ -509,7 +479,8 @@ sesioctl(dev, cmd, arg_addr, flag, p)
 		break;
 
 	default:
-		error = scsipi_do_ioctl(ssc->sc_link, dev, cmd, addr, flag, p);
+		error = scsipi_do_ioctl(ssc->sc_periph,
+			    dev, cmd, arg_addr, flag, l);
 		break;
 	}
 	return (error);
@@ -536,11 +507,11 @@ ses_runcmd(struct ses_softc *ssc, char *cdb, int cdbl, char *dptr, int *dlenp)
 	if (cdbl > sizeof (struct scsipi_generic)) {
 		cdbl = sizeof (struct scsipi_generic);
 	}
-	bcopy(cdb, &sgen, cdbl);
+	memcpy(&sgen, cdb, cdbl);
 #ifndef	SCSIDEBUG
 	flg |= XS_CTL_SILENT;
 #endif
-	error = scsipi_command(ssc->sc_link, &sgen, cdbl,
+	error = scsipi_command(ssc->sc_periph, &sgen, cdbl,
 	    (u_char *) dptr, dl, SCSIPIRETRIES, 30000, NULL, flg);
 
 	if (error == 0 && dptr)
@@ -549,32 +520,16 @@ ses_runcmd(struct ses_softc *ssc, char *cdb, int cdbl, char *dptr, int *dlenp)
 	return (error);
 }
 
-#ifdef	__STDC__
 static void
 ses_log(struct ses_softc *ssc, const char *fmt, ...)
 {
 	va_list ap;
 
-	printf("%s: ", ssc->sc_device.dv_xname);
+	printf("%s: ", device_xname(&ssc->sc_device));
 	va_start(ap, fmt);
 	vprintf(fmt, ap);
 	va_end(ap);
 }
-#else
-static void
-ses_log(ssc, fmt, va_alist)
-	struct ses_softc *ssc;
-	char *fmt;
-	va_dcl
-{
-	va_list ap;
-
-	printf("%s: ", ssc->sc_device.dv_xname);
-	va_start(ap, fmt);
-	vprintf(fmt, ap);
-	va_end(ap);
-}
-#endif
 
 /*
  * The code after this point runs on many platforms,
@@ -595,17 +550,17 @@ ses_log(ssc, fmt, va_alist)
 #define	SAFTE_LEN	SAFTE_END-SAFTE_START
 
 static enctyp
-ses_type(void *buf, int buflen)
+ses_type(struct scsipi_inquiry_data *inqp)
 {
-	unsigned char *iqd = buf;
+	size_t	given_len = inqp->additional_length + 4;
 
-	if (buflen < 8+SEN_ID_LEN)
+	if (given_len < 8+SEN_ID_LEN)
 		return (SES_NONE);
 
-	if ((iqd[0] & 0x1f) == T_ENCLOSURE) {
-		if (STRNCMP(&iqd[8], SEN_ID, SEN_ID_LEN) == 0) {
+	if ((inqp->device & SID_TYPE) == T_ENCLOSURE) {
+		if (STRNCMP(inqp->vendor, SEN_ID, SEN_ID_LEN) == 0) {
 			return (SES_SEN);
-		} else if ((iqd[2] & 0x7) > 2) {
+		} else if ((inqp->version & SID_ANSII) > 2) {
 			return (SES_SES);
 		} else {
 			return (SES_SES_SCSI2);
@@ -614,7 +569,7 @@ ses_type(void *buf, int buflen)
 	}
 
 #ifdef	SES_ENABLE_PASSTHROUGH
-	if ((iqd[6] & 0x40) && (iqd[2] & 0x7) >= 2) {
+	if ((inqp->flags2 & SID_EncServ) && (inqp->version & SID_ANSII) >= 2) {
 		/*
 		 * PassThrough Device.
 		 */
@@ -627,13 +582,15 @@ ses_type(void *buf, int buflen)
 	 * some vendors were chopping it short.
 	 */
 
-	if (buflen < SAFTE_END - 2) {
+	if (given_len < SAFTE_END - 2) {
 		return (SES_NONE);
 	}
 
-	if (STRNCMP((char *)&iqd[SAFTE_START], "SAF-TE", SAFTE_LEN - 2) == 0) {
+	if (STRNCMP((char *)&inqp->vendor_specific[8], "SAF-TE",
+			SAFTE_LEN - 2) == 0) {
 		return (SES_SAFT);
 	}
+
 	return (SES_NONE);
 }
 
@@ -985,7 +942,7 @@ ses_getconfig(ses_softc_t *ssc)
 	maxima = cf.Nsubenc + 1;
 	cdp = (SesEncDesc *) storage;
 	for (ntype = i = 0; i < maxima; i++) {
-		MEMZERO((caddr_t)cdp, sizeof (*cdp));
+		MEMZERO((void *)cdp, sizeof (*cdp));
 		if (ses_enchdr((uint8_t *) sdata, amt, i, &hd)) {
 			SES_LOG(ssc, "Cannot Extract Enclosure Header %d\n", i);
 			SES_FREE(sdata, SCSZ);
@@ -1079,7 +1036,8 @@ ses_getconfig(ses_softc_t *ssc)
 }
 
 static int
-ses_getputstat(ses_softc_t *ssc, int objid, SesComStat *sp, int slp, int in)
+ses_getputstat(ses_softc_t *ssc, int objid, SesComStat *sp, int slp,
+    int in)
 {
 	struct sscfg *cc;
 	int err, amt, bufsiz, tidx, oidx;
@@ -1145,7 +1103,7 @@ ses_getputstat(ses_softc_t *ssc, int objid, SesComStat *sp, int slp, int in)
 			cdb[4] = bufsiz & 0xff;
 			cdb[5] = 0;
 			amt = -bufsiz;
-			err = ses_runcmd(ssc, cdb, 6, sdata, &amt);   
+			err = ses_runcmd(ssc, cdb, 6, sdata, &amt);
 		}
 	}
 	SES_FREE(sdata, bufsiz);
@@ -1426,7 +1384,7 @@ ses_encode(char *b, int amt, uint8_t *ep, int elt, int elm, SesComStat *sp)
  */
 
 static int safte_getconfig(ses_softc_t *);
-static int safte_rdstat(ses_softc_t *, int);;
+static int safte_rdstat(ses_softc_t *, int);
 static int set_objstat_sel(ses_softc_t *, ses_objstat *, int);
 static int wrbuf16(ses_softc_t *, uint8_t, uint8_t, uint8_t, uint8_t, int);
 static void wrslot_stat(ses_softc_t *, int);
@@ -1494,7 +1452,7 @@ struct scfg {
 #define	SAFT_FLG2_LOCKDOOR	0x4
 #define	SAFT_PRIVATE		sizeof (struct scfg)
 
-static char *safte_2little = "Too Little Data Returned (%d) at line %d\n";
+static const char safte_2little[] = "Too Little Data Returned (%d) at line %d\n";
 #define	SAFT_BAIL(r, x, k, l)	\
 	if (r >= x) { \
 		SES_LOG(ssc, safte_2little, x, __LINE__);\
@@ -1503,7 +1461,7 @@ static char *safte_2little = "Too Little Data Returned (%d) at line %d\n";
 	}
 
 
-int
+static int
 safte_softc_init(ses_softc_t *ssc, int doinit)
 {
 	int err, i, r;
@@ -1580,7 +1538,7 @@ safte_softc_init(ses_softc_t *ssc, int doinit)
 	return (0);
 }
 
-int
+static int
 safte_init_enc(ses_softc_t *ssc)
 {
 	int err, amt;
@@ -1606,13 +1564,13 @@ safte_init_enc(ses_softc_t *ssc)
 	return (err);
 }
 
-int
+static int
 safte_get_encstat(ses_softc_t *ssc, int slpflg)
 {
 	return (safte_rdstat(ssc, slpflg));
 }
 
-int
+static int
 safte_set_encstat(ses_softc_t *ssc, uint8_t encstat, int slpflg)
 {
 	struct scfg *cc = ssc->ses_private;
@@ -1636,7 +1594,7 @@ safte_set_encstat(ses_softc_t *ssc, uint8_t encstat, int slpflg)
 	return (wrbuf16(ssc, SAFTE_WT_GLOBAL, cc->flag1, cc->flag2, 0, slpflg));
 }
 
-int
+static int
 safte_get_objstat(ses_softc_t *ssc, ses_objstat *obp, int slpflg)
 {
 	int i = (int)obp->obj_id;
@@ -1655,7 +1613,7 @@ safte_get_objstat(ses_softc_t *ssc, ses_objstat *obp, int slpflg)
 }
 
 
-int
+static int
 safte_set_objstat(ses_softc_t *ssc, ses_objstat *obp, int slp)
 {
 	int idx, err;
@@ -2118,26 +2076,28 @@ safte_rdstat(ses_softc_t *ssc, int slpflg)
 		 * Hmm- we'll state that 'normal' operating
 		 * is 10 to 40 deg Celsius.
 		 */
+
+		/*
+		 * Actually.... All of the units that people out in the world
+		 * seem to have do not come even close to setting a value that
+		 * complies with this spec.
+		 *
+		 * The closest explanation I could find was in an
+		 * LSI-Logic manual, which seemed to indicate that
+		 * this value would be set by whatever the I2C code
+		 * would interpolate from the output of an LM75
+		 * temperature sensor.
+		 *
+		 * This means that it is impossible to use the actual
+		 * numeric value to predict anything. But we don't want
+		 * to lose the value. So, we'll propagate the *uncorrected*
+		 * value and set SES_OBJSTAT_NOTAVAIL. We'll depend on the
+		 * temperature flags for warnings.
+		 */
+		ssc->ses_objmap[oid].encstat[0] = SES_OBJSTAT_NOTAVAIL;
 		ssc->ses_objmap[oid].encstat[1] = 0;
-		ssc->ses_objmap[oid].encstat[2] =
-		    ((unsigned int) sdata[r]) - 10;
-		if (sdata[r] < 20) {
-			ssc->ses_objmap[oid].encstat[0] = SES_OBJSTAT_CRIT;
-			/*
-			 * Set 'under temperature' failure.
-			 */
-			ssc->ses_objmap[oid].encstat[3] = 2;
-			ssc->ses_encstat |= SES_ENCSTAT_CRITICAL;
-		} else if (sdata[r] > 30) {
-			ssc->ses_objmap[oid].encstat[0] = SES_OBJSTAT_CRIT;
-			/*
-			 * Set 'over temperature' failure.
-			 */
-			ssc->ses_objmap[oid].encstat[3] = 8;
-			ssc->ses_encstat |= SES_ENCSTAT_CRITICAL;
-		} else {
-			ssc->ses_objmap[oid].encstat[0] = SES_OBJSTAT_OK;
-		}
+		ssc->ses_objmap[oid].encstat[2] = sdata[r];
+		ssc->ses_objmap[oid].encstat[3] = 0;
 		ssc->ses_objmap[oid++].svalid = 1;
 		r++;
 	}

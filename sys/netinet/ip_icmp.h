@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_icmp.h,v 1.14 1999/11/20 00:37:59 thorpej Exp $	*/
+/*	$NetBSD: ip_icmp.h,v 1.25 2008/09/08 23:36:55 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -50,7 +46,7 @@
 struct icmp_ra_addr {
 	u_int32_t ira_addr;
 	u_int32_t ira_preference;
-} __attribute__((__packed__));
+} __packed;
 
 /*
  * Structure of an icmp header.
@@ -65,20 +61,20 @@ struct icmp {
 		struct ih_idseq {
 			  n_short icd_id;
 			  n_short icd_seq;
-		} ih_idseq __attribute__((__packed__));
+		} ih_idseq __packed;
 		int32_t   ih_void;
 
 		/* ICMP_UNREACH_NEEDFRAG -- Path MTU Discovery (RFC1191) */
 		struct ih_pmtu {
-			  n_short ipm_void;    
+			  n_short ipm_void;
 			  n_short ipm_nextmtu;
-		} ih_pmtu __attribute__((__packed__));
+		} ih_pmtu __packed;
 		struct ih_rtradv {
 			u_int8_t irt_num_addrs;
 			u_int8_t irt_wpa;
 			u_int16_t irt_lifetime;
-		} ih_rtradv __attribute__((__packed__));
-	} icmp_hun /* XXX __attribute__((__packed__)) ??? */;
+		} ih_rtradv __packed;
+	} icmp_hun /* XXX __packed ??? */;
 #define	icmp_pptr	  icmp_hun.ih_pptr
 #define	icmp_gwaddr	  icmp_hun.ih_gwaddr
 #define	icmp_id		  icmp_hun.ih_idseq.icd_id
@@ -94,15 +90,15 @@ struct icmp {
 			  n_time its_otime;
 			  n_time its_rtime;
 			  n_time its_ttime;
-		} id_ts __attribute__((__packed__));
+		} id_ts __packed;
 		struct id_ip  {
 			  struct ip idi_ip;
 			  /* options and then 64 bits of data */
-		} id_ip __attribute__((__packed__));
+		} id_ip /* XXX: __packed ??? */;
 		struct icmp_ra_addr id_radv;
 		u_int32_t id_mask;
 		int8_t	  id_data[1];
-	} icmp_dun /* XXX __attribute__((__packed__)) ??? */;
+	} icmp_dun /* XXX __packed ??? */;
 #define	icmp_otime	  icmp_dun.id_ts.its_otime
 #define	icmp_rtime	  icmp_dun.id_ts.its_rtime
 #define	icmp_ttime	  icmp_dun.id_ts.its_ttime
@@ -179,12 +175,16 @@ struct icmp {
 	(type) == ICMP_MASKREQ || (type) == ICMP_MASKREPLY)
 
 #ifdef _KERNEL
-void	icmp_error __P((struct mbuf *, int, int, n_long, struct ifnet *));
-void	icmp_input __P((struct mbuf *, ...));
-void	icmp_reflect __P((struct mbuf *));
-void	icmp_send __P((struct mbuf *, struct mbuf *));
-int	icmp_sysctl __P((int *, u_int, void *, size_t *, void *, size_t));
+void	icmp_error(struct mbuf *, int, int, n_long, int);
+void	icmp_mtudisc(struct icmp *, struct in_addr);
+void	icmp_input(struct mbuf *, ...);
+void	icmp_init(void);
+void	icmp_reflect(struct mbuf *);
+void	icmp_send(struct mbuf *, struct mbuf *);
+int	icmp_sysctl(int *, u_int, void *, size_t *, void *, size_t);
+
+void	icmp_mtudisc_callback_register(void (*)(struct in_addr));
 #endif
 
 
-#endif /* _NETINET_IP_ICMP_H_ */
+#endif /* !_NETINET_IP_ICMP_H_ */

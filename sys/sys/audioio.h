@@ -1,4 +1,4 @@
-/*	$NetBSD: audioio.h,v 1.24 1998/08/13 06:28:41 mrg Exp $	*/
+/*	$NetBSD: audioio.h,v 1.32 2007/06/11 13:05:47 joerg Exp $	*/
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -36,6 +36,13 @@
 
 #ifndef _SYS_AUDIOIO_H_
 #define _SYS_AUDIOIO_H_
+
+#include <sys/types.h>
+#include <sys/ioccom.h>
+
+#ifndef _KERNEL
+#include <string.h>	/* Required for memset(3) prototype (AUDIO_INITINFO) */
+#endif /* _KERNEL */
 
 /*
  * Audio device
@@ -178,6 +185,7 @@ typedef struct audio_encoding {
 #define  AUDIO_PROP_FULLDUPLEX	0x01
 #define  AUDIO_PROP_MMAP	0x02
 #define  AUDIO_PROP_INDEPENDENT	0x04
+#define AUDIO_GETBUFINFO	_IOR('A', 35, struct audio_info)
 
 /*
  * Mixer device
@@ -231,6 +239,7 @@ typedef struct mixer_devinfo {
 		struct audio_mixer_value {
 			audio_mixer_name_t units;
 			int num_channels;
+			int delta;
 		} v;
 	} un;
 } mixer_devinfo_t;
@@ -294,10 +303,14 @@ typedef struct mixer_ctrl {
 #define AudioNagc	"agc"
 #define AudioNdelay	"delay"
 #define AudioNselect	"select" /* select destination */
+#define AudioNvideo     "video"
+#define AudioNcenter    "center"
+#define AudioNdepth     "depth"
+#define AudioNlfe       "lfe"
 
 #define AudioEmulaw		"mulaw"
 #define AudioEalaw		"alaw"
-#define AudioEadpcm 		"adpcm"
+#define AudioEadpcm		"adpcm"
 #define AudioEslinear		"slinear"
 #define AudioEslinear_le	"slinear_le"
 #define AudioEslinear_be	"slinear_be"
@@ -316,5 +329,6 @@ typedef struct mixer_ctrl {
 #define AudioCrecord	"record"
 #define AudioCmonitor	"monitor"
 #define AudioCequalization	"equalization"
+#define AudioCmodem	"modem"
 
 #endif /* !_SYS_AUDIOIO_H_ */

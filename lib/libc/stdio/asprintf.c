@@ -1,4 +1,4 @@
-/*	$NetBSD: asprintf.c,v 1.7 2000/01/21 19:51:36 mycroft Exp $	*/
+/*	$NetBSD: asprintf.c,v 1.15 2007/01/26 00:27:54 cbiere Exp $	*/
 
 /*
  * Copyright (c) 1997 Todd C. Miller <Todd.Miller@courtesan.com>
@@ -29,53 +29,48 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: asprintf.c,v 1.7 2000/01/21 19:51:36 mycroft Exp $");
+__RCSID("$NetBSD: asprintf.c,v 1.15 2007/01/26 00:27:54 cbiere Exp $");
 #endif /* LIBC_SCCS and not lint */
 
+#include "namespace.h"
 #include <assert.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
-#if __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
+
+#include "reentrant.h"
+#include "local.h"
+
+#ifdef __weak_alias
+__weak_alias(asprintf, _asprintf)
 #endif
 
 int
-#if __STDC__
 asprintf(char **str, char const *fmt, ...)
-#else
-asprintf(str, fmt, va_alist)
-	char **str;
-	const char *fmt;
-	va_dcl
-#endif
 {
 	int ret;
 	va_list ap;
 	FILE f;
+	struct __sfileext fext;
 	unsigned char *_base;
 
 	_DIAGASSERT(str != NULL);
 
-#if __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
+	_FILEEXT_SETUP(&f, &fext);
 	f._file = -1;
 	f._flags = __SWR | __SSTR | __SALC;
-	f._bf._base = f._p = (unsigned char *)malloc(128);
+	f._bf._base = f._p = malloc((size_t)128);
 	if (f._bf._base == NULL)
 		goto err;
 	f._bf._size = f._w = 127;		/* Leave room for the NUL */
-	ret = vfprintf(&f, fmt, ap);
-	if (ret == -1)
+	va_start(ap, fmt);
+	ret = __vfprintf_unlocked(&f, fmt, ap);
+	va_end(ap);
+	if (ret < 0)
 		goto err;
 	*f._p = '\0';
-	va_end(ap);
-	_base = realloc(f._bf._base, (size_t)(ret + 1));
+	_base = realloc(f._bf._base, (size_t)ret + 1);
 	if (_base == NULL)
 		goto err;
 	*str = (char *)_base;

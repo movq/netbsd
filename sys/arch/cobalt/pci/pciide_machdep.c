@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide_machdep.c,v 1.2 2000/03/31 14:51:55 soren Exp $	*/
+/*	$NetBSD: pciide_machdep.c,v 1.7 2006/04/05 15:50:48 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -25,6 +25,9 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.7 2006/04/05 15:50:48 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -34,13 +37,11 @@
 #include <dev/pci/pciidereg.h>
 #include <dev/pci/pciidevar.h>
 
+#include <machine/intr.h>
+
 void *
-pciide_machdep_compat_intr_establish(dev, pa, chan, func, arg)
-	struct device *dev;
-	struct pci_attach_args *pa;
-	int chan;
-	int (*func)(void *);
-	void *arg;
+pciide_machdep_compat_intr_establish(struct device *dev,
+    struct pci_attach_args *pa, int chan, int (*func)(void *), void *arg)
 {
 	int irq;
 	void *cookie;
@@ -48,8 +49,8 @@ pciide_machdep_compat_intr_establish(dev, pa, chan, func, arg)
 	irq = PCIIDE_COMPAT_IRQ(chan);
 	cookie = icu_intr_establish(irq, IST_EDGE, IPL_BIO, func, arg);
 	if (cookie == NULL)
-		return (NULL);
+		return NULL;
 	printf("%s: %s channel interrupting at irq %d\n", dev->dv_xname,
 	    PCIIDE_CHANNEL_NAME(chan), irq);
-	return (cookie);
+	return cookie;
 }

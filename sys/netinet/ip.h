@@ -1,4 +1,4 @@
-/*	$NetBSD: ip.h,v 1.20 1999/11/20 00:37:59 thorpej Exp $	*/
+/*	$NetBSD: ip.h,v 1.31 2007/12/25 18:33:46 perry Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -49,18 +45,19 @@
  */
 struct ip {
 #if BYTE_ORDER == LITTLE_ENDIAN
-	u_int8_t  ip_hl:4,		/* header length */
-		  ip_v:4;		/* version */
+	unsigned int ip_hl:4,		/* header length */
+		     ip_v:4;		/* version */
 #endif
 #if BYTE_ORDER == BIG_ENDIAN
-	u_int8_t  ip_v:4,		/* version */
-		  ip_hl:4;		/* header length */
+	unsigned int ip_v:4,		/* version */
+		     ip_hl:4;		/* header length */
 #endif
 	u_int8_t  ip_tos;		/* type of service */
 	u_int16_t ip_len;		/* total length */
 	u_int16_t ip_id;		/* identification */
 	u_int16_t ip_off;		/* fragment offset field */
 #define	IP_RF 0x8000			/* reserved fragment flag */
+#define	IP_EF 0x8000			/* evil flag, per RFC 3514 */
 #define	IP_DF 0x4000			/* dont fragment flag */
 #define	IP_MF 0x2000			/* more fragments flag */
 #define	IP_OFFMASK 0x1fff		/* mask for fragmenting bits */
@@ -68,9 +65,10 @@ struct ip {
 	u_int8_t  ip_p;			/* protocol */
 	u_int16_t ip_sum;		/* checksum */
 	struct	  in_addr ip_src, ip_dst; /* source and dest address */
-} __attribute__((__packed__));
+} __packed;
 
 #define	IP_MAXPACKET	65535		/* maximum packet size */
+#define	IP_MINFRAGSIZE	69		/* minumum size that can be fraged */
 
 /*
  * Definitions for IP type of service (ip_tos)
@@ -79,11 +77,6 @@ struct ip {
 #define	IPTOS_THROUGHPUT	0x08
 #define	IPTOS_RELIABILITY	0x04
 /*	IPTOS_LOWCOST		0x02 XXX */
-#if 1
-/* ECN bits proposed by Sally Floyd */
-#define IPTOS_CE		0x01	/* congestion experienced */
-#define IPTOS_ECT		0x02	/* ECN-capable transport */
-#endif
 
 /*
  * Definitions for IP precedence (also in ip_tos) (hopefully unused)
@@ -96,6 +89,16 @@ struct ip {
 #define	IPTOS_PREC_IMMEDIATE		0x40
 #define	IPTOS_PREC_PRIORITY		0x20
 #define	IPTOS_PREC_ROUTINE		0x00
+
+/*
+ * ECN (Explicit Congestion Notification) codepoints in RFC3168
+ * mapped to the lower 2 bits of the TOS field.
+ */
+#define	IPTOS_ECN_NOTECT	0x00	/* not-ECT */
+#define	IPTOS_ECN_ECT1		0x01	/* ECN-capable transport (1) */
+#define	IPTOS_ECN_ECT0		0x02	/* ECN-capable transport (0) */
+#define	IPTOS_ECN_CE		0x03	/* congestion experienced */
+#define	IPTOS_ECN_MASK		0x03	/* ECN field mask */
 
 /*
  * Definitions for options.
@@ -135,21 +138,21 @@ struct	ip_timestamp {
 	u_int8_t ipt_len;		/* size of structure (variable) */
 	u_int8_t ipt_ptr;		/* index of current entry */
 #if BYTE_ORDER == LITTLE_ENDIAN
-	u_int8_t ipt_flg:4,		/* flags, see below */
-		 ipt_oflw:4;		/* overflow counter */
+	unsigned int ipt_flg:4,		/* flags, see below */
+		     ipt_oflw:4;	/* overflow counter */
 #endif
 #if BYTE_ORDER == BIG_ENDIAN
-	u_int8_t ipt_oflw:4,		/* overflow counter */
-		 ipt_flg:4;		/* flags, see below */
+	unsigned int ipt_oflw:4,	/* overflow counter */
+		     ipt_flg:4;		/* flags, see below */
 #endif
 	union ipt_timestamp {
 		 n_time	ipt_time[1];
 		 struct	ipt_ta {
 			struct in_addr ipt_addr;
 			n_time ipt_time;
-		 } ipt_ta[1] __attribute__((__packed__));
-	} ipt_timestamp /* XXX __attribute__((__packed__)) ??? */;
-};
+		 } ipt_ta[1] __packed;
+	} ipt_timestamp __packed;
+} __packed;
 
 /* flag bits for ipt_flg */
 #define	IPOPT_TS_TSONLY		0		/* timestamps only */
@@ -175,4 +178,17 @@ struct	ip_timestamp {
 
 #define	IP_MSS		576		/* default maximum segment size */
 
-#endif /* _NETINET_IP_H_ */
+/*
+ * This is the real IPv4 pseudo header, used for computing the TCP and UDP
+ * checksums. For the Internet checksum, struct ipovly can be used instead.
+ * For stronger checksums, the real thing must be used.
+ */
+struct ippseudo {
+	struct	in_addr	ippseudo_src;	/* source internet address */
+	struct	in_addr	ippseudo_dst;	/* destination internet address */
+	u_int8_t	ippseudo_pad;	/* pad, must be zero */
+	u_int8_t	ippseudo_p;	/* protocol */
+	u_int16_t	ippseudo_len;	/* protocol length */
+} __packed;
+#endif /* !_NETINET_IP_H_ */
+

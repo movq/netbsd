@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_ipccall.c,v 1.19 1999/01/10 15:05:36 tron Exp $	*/
+/*	$NetBSD: linux_ipccall.c,v 1.31 2008/04/28 20:23:43 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,11 +29,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if defined(_KERNEL) && !defined(_LKM)
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: linux_ipccall.c,v 1.31 2008/04/28 20:23:43 martin Exp $");
+
+#if defined(_KERNEL_OPT)
 #include "opt_sysv.h"
 #endif
 
-#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/shm.h>
 #include <sys/sem.h>
@@ -84,25 +79,22 @@
  */
 
 int
-linux_sys_ipc(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+linux_sys_ipc(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *retval)
 {
-	struct linux_sys_ipc_args /* {
+	/* {
 		syscallarg(int) what;
 		syscallarg(int) a1;
 		syscallarg(int) a2;
 		syscallarg(int) a3;
-		syscallarg(caddr_t) ptr;
-	} */ *uap = v;
+		syscallarg(void *) ptr;
+	} */
 
 	switch (SCARG(uap, what)) {
 #ifdef SYSVSEM
 	case LINUX_SYS_semop:
-		return linux_semop(p, uap, retval);
+		return linux_semop(l, uap, retval);
 	case LINUX_SYS_semget:
-		return linux_semget(p, uap, retval);
+		return linux_semget(l, uap, retval);
 	case LINUX_SYS_semctl: {
 		struct linux_sys_semctl_args bsa;
 		union linux_semun arg;
@@ -116,16 +108,16 @@ linux_sys_ipc(p, v, retval)
 			return error;
 		SCARG(&bsa, arg) = arg;
 
-		return linux_sys_semctl(p, &bsa, retval);
+		return linux_sys_semctl(l, &bsa, retval);
 	    }
 #endif
 #ifdef SYSVMSG
 	case LINUX_SYS_msgsnd:
-		return linux_msgsnd(p, uap, retval);
+		return linux_msgsnd(l, uap, retval);
 	case LINUX_SYS_msgrcv:
-		return linux_msgrcv(p, uap, retval);
+		return linux_msgrcv(l, uap, retval);
 	case LINUX_SYS_msgget:
-		return linux_msgget(p, uap, retval);
+		return linux_msgget(l, uap, retval);
 	case LINUX_SYS_msgctl: {
 		struct linux_sys_msgctl_args bsa;
 
@@ -133,25 +125,25 @@ linux_sys_ipc(p, v, retval)
 		SCARG(&bsa, cmd) = SCARG(uap, a2);
 		SCARG(&bsa, buf) = (struct linux_msqid_ds *)SCARG(uap, ptr);
 
-		return linux_sys_msgctl(p, &bsa, retval);
+		return linux_sys_msgctl(l, &bsa, retval);
 	    }
 #endif
 #ifdef SYSVSHM
 	case LINUX_SYS_shmat: {
 		struct linux_sys_shmat_args bsa;
-	
+
 		SCARG(&bsa, shmid) = SCARG(uap, a1);
 		SCARG(&bsa, shmaddr) = (void *)SCARG(uap, ptr);
 		SCARG(&bsa, shmflg) = SCARG(uap, a2);
 		/* XXX passing pointer inside int here */
 		SCARG(&bsa, raddr) = (u_long *)SCARG(uap, a3);
 
-		return linux_sys_shmat(p, &bsa, retval);
+		return linux_sys_shmat(l, &bsa, retval);
 	    }
 	case LINUX_SYS_shmdt:
-		return linux_shmdt(p, uap, retval);
+		return linux_shmdt(l, uap, retval);
 	case LINUX_SYS_shmget:
-		return linux_shmget(p, uap, retval);
+		return linux_shmget(l, uap, retval);
 	case LINUX_SYS_shmctl: {
 		struct linux_sys_shmctl_args bsa;
 
@@ -159,7 +151,7 @@ linux_sys_ipc(p, v, retval)
 		SCARG(&bsa, cmd) = SCARG(uap, a2);
 		SCARG(&bsa, buf) = (struct linux_shmid_ds *)SCARG(uap, ptr);
 
-		return linux_sys_shmctl(p, &bsa, retval);
+		return linux_sys_shmctl(l, &bsa, retval);
 	    }
 #endif
 	default:
@@ -169,45 +161,41 @@ linux_sys_ipc(p, v, retval)
 
 #ifdef SYSVSEM
 inline int
-linux_semop(p, uap, retval)
-	struct proc *p;
-	struct linux_sys_ipc_args /* {
+linux_semop(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *retval)
+{
+	/* {
 		syscallarg(int) what;
 		syscallarg(int) a1;
 		syscallarg(int) a2;
 		syscallarg(int) a3;
-		syscallarg(caddr_t) ptr;
-	} */ *uap;
-	register_t *retval;
-{
+		syscallarg(void *) ptr;
+	} */
 	struct sys_semop_args bsa;
 
 	SCARG(&bsa, semid) = SCARG(uap, a1);
 	SCARG(&bsa, sops) = (struct sembuf *)SCARG(uap, ptr);
 	SCARG(&bsa, nsops) = SCARG(uap, a2);
 
-	return sys_semop(p, &bsa, retval);
+	return sys_semop(l, &bsa, retval);
 }
 
 inline int
-linux_semget(p, uap, retval)
-	struct proc *p;
-	struct linux_sys_ipc_args /* {
+linux_semget(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *retval)
+{
+	/* {
 		syscallarg(int) what;
 		syscallarg(int) a1;
 		syscallarg(int) a2;
 		syscallarg(int) a3;
-		syscallarg(caddr_t) ptr;
-	} */ *uap;
-	register_t *retval;
-{
+		syscallarg(void *) ptr;
+	} */
 	struct sys_semget_args bsa;
 
 	SCARG(&bsa, key) = (key_t)SCARG(uap, a1);
 	SCARG(&bsa, nsems) = SCARG(uap, a2);
 	SCARG(&bsa, semflg) = SCARG(uap, a3);
 
-	return sys_semget(p, &bsa, retval);
+	return sys_semget(l, &bsa, retval);
 }
 
 #endif /* SYSVSEM */
@@ -215,16 +203,7 @@ linux_semget(p, uap, retval)
 #ifdef SYSVMSG
 
 inline int
-linux_msgsnd(p, uap, retval)
-	struct proc *p;
-	struct linux_sys_ipc_args /* {
-		syscallarg(int) what;
-		syscallarg(int) a1;
-		syscallarg(int) a2;
-		syscallarg(int) a3;
-		syscallarg(caddr_t) ptr;
-	} */ *uap;
-	register_t *retval;
+linux_msgsnd(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *retval)
 {
 	struct sys_msgsnd_args bma;
 
@@ -233,20 +212,11 @@ linux_msgsnd(p, uap, retval)
 	SCARG(&bma, msgsz) = SCARG(uap, a2);
 	SCARG(&bma, msgflg) = SCARG(uap, a3);
 
-	return sys_msgsnd(p, &bma, retval);
+	return sys_msgsnd(l, &bma, retval);
 }
 
 inline int
-linux_msgrcv(p, uap, retval)
-	struct proc *p;
-	struct linux_sys_ipc_args /* {
-		syscallarg(int) what;
-		syscallarg(int) a1;
-		syscallarg(int) a2;
-		syscallarg(int) a3;
-		syscallarg(caddr_t) ptr;
-	} */ *uap;
-	register_t *retval;
+linux_msgrcv(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *retval)
 {
 	struct sys_msgrcv_args bma;
 	struct linux_msgrcv_msgarg kluge;
@@ -261,27 +231,18 @@ linux_msgrcv(p, uap, retval)
 	SCARG(&bma, msgtyp) = kluge.type;
 	SCARG(&bma, msgflg) = SCARG(uap, a3);
 
-	return sys_msgrcv(p, &bma, retval);
+	return sys_msgrcv(l, &bma, retval);
 }
 
 inline int
-linux_msgget(p, uap, retval)
-	struct proc *p;
-	struct linux_sys_ipc_args /* {
-		syscallarg(int) what;
-		syscallarg(int) a1;
-		syscallarg(int) a2;
-		syscallarg(int) a3;
-		syscallarg(caddr_t) ptr;
-	} */ *uap;
-	register_t *retval;
+linux_msgget(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *retval)
 {
 	struct sys_msgget_args bma;
 
 	SCARG(&bma, key) = (key_t)SCARG(uap, a1);
 	SCARG(&bma, msgflg) = SCARG(uap, a2);
 
-	return sys_msgget(p, &bma, retval);
+	return sys_msgget(l, &bma, retval);
 }
 
 #endif /* SYSVMSG */
@@ -292,46 +253,28 @@ linux_msgget(p, uap, retval)
  * the extra indirection by the linux_ipc system call.
  */
 inline int
-linux_shmdt(p, uap, retval)
-	struct proc *p;
-	struct linux_sys_ipc_args /* {
-		syscallarg(int) what;
-		syscallarg(int) a1;
-		syscallarg(int) a2;
-		syscallarg(int) a3;
-		syscallarg(caddr_t) ptr;
-	} */ *uap;
-	register_t *retval;
+linux_shmdt(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *retval)
 {
 	struct sys_shmdt_args bsa;
 
 	SCARG(&bsa, shmaddr) = SCARG(uap, ptr);
 
-	return sys_shmdt(p, &bsa, retval);
+	return sys_shmdt(l, &bsa, retval);
 }
 
 /*
  * Same story as shmdt.
  */
 inline int
-linux_shmget(p, uap, retval)
-	struct proc *p;
-	struct linux_sys_ipc_args /* {
-		syscallarg(int) what;
-		syscallarg(int) a1;
-		syscallarg(int) a2;
-		syscallarg(int) a3;
-		syscallarg(caddr_t) ptr;
-	} */ *uap;
-	register_t *retval;
+linux_shmget(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *retval)
 {
-	struct sys_shmget_args bsa;
+	struct linux_sys_shmget_args bsa;
 
 	SCARG(&bsa, key) = SCARG(uap, a1);
 	SCARG(&bsa, size) = SCARG(uap, a2);
 	SCARG(&bsa, shmflg) = SCARG(uap, a3);
 
-	return sys_shmget(p, &bsa, retval);
+	return linux_sys_shmget(l, &bsa, retval);
 }
 
 #endif /* SYSVSHM */

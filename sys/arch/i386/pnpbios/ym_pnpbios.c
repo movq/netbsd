@@ -1,4 +1,4 @@
-/* $NetBSD: ym_pnpbios.c,v 1.2 1999/11/14 02:15:51 thorpej Exp $ */
+/* $NetBSD: ym_pnpbios.c,v 1.14 2008/04/04 22:18:05 cegger Exp $ */
 /*
  * Copyright (c) 1999
  *	Matthias Drochner.  All rights reserved.
@@ -25,6 +25,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ym_pnpbios.c,v 1.14 2008/04/04 22:18:05 cegger Exp $");
 
 #include "mpu_ym.h"
 
@@ -58,18 +61,15 @@
 #include <dev/isa/wssreg.h>
 #include <dev/isa/ymvar.h>
 
-int ym_pnpbios_match __P((struct device *, struct cfdata *, void *));
-void ym_pnpbios_attach __P((struct device *, struct device *, void *));
+int ym_pnpbios_match(struct device *, struct cfdata *, void *);
+void ym_pnpbios_attach(struct device *, struct device *, void *);
 
-struct cfattach ym_pnpbios_ca = {
-	sizeof(struct ym_softc), ym_pnpbios_match, ym_pnpbios_attach
-};
+CFATTACH_DECL(ym_pnpbios, sizeof(struct ym_softc),
+    ym_pnpbios_match, ym_pnpbios_attach, NULL, NULL);
 
 int
-ym_pnpbios_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ym_pnpbios_match(struct device *parent,
+    struct cfdata *match, void *aux)
 {
 	struct pnpbiosdev_attach_args *aa = aux;
 
@@ -80,9 +80,8 @@ ym_pnpbios_match(parent, match, aux)
 }
 
 void
-ym_pnpbios_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ym_pnpbios_attach(struct device *parent, struct device *self,
+    void *aux)
 {
 	struct ym_softc *sc = (void *)self;
 	struct ad1848_softc *ac = &sc->sc_ad1848.sc_ad1848;
@@ -118,7 +117,7 @@ ym_pnpbios_attach(parent, self, aux)
 
 	sc->sc_ic = aa->ic;
 
-	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->ym_irq)) {
+	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->ym_irq, NULL)) {
 		printf(": can't get IRQ\n");
 		return;
 	}
@@ -128,22 +127,21 @@ ym_pnpbios_attach(parent, self, aux)
 		return;
 	}
 	if (pnpbios_getdmachan(aa->pbt, aa->resc, 1, &sc->ym_recdrq))
-		sc->ym_recdrq = -1;
+		sc->ym_recdrq = sc->ym_playdrq;	/* half-duplex mode */
 
 	printf("\n");
 	pnpbios_print_devres(self, aa);
 
-	printf("%s", self->dv_xname);
+	printf("%s", device_xname(self));
 
 	ac->sc_iot = sc->sc_iot;
 	if (bus_space_subregion(sc->sc_iot, sc->sc_ioh, WSS_CODEC, AD1848_NPORT,
 	    &ac->sc_ioh)) {
-		printf("%s: bus_space_subregion failed\n", self->dv_xname);
+		aprint_error_dev(self, "bus_space_subregion failed\n");
 		return;
 	}
 	ac->mode = 2;
 	ac->MCE_bit = MODE_CHANGE_ENABLE;
-	ac->chip_name = "OPL3-SA3";
 
 	sc->sc_ad1848.sc_ic  = sc->sc_ic;
 

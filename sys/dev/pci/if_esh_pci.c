@@ -1,14 +1,14 @@
-/*	$NetBSD: if_esh_pci.c,v 1.6 2000/01/21 23:39:59 thorpej Exp $	*/
+/*	$NetBSD: if_esh_pci.c,v 1.24 2008/04/28 20:23:55 martin Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code contributed to The NetBSD Foundation by Kevin M. Lahey
- * of the Numerical Aerospace Simulation Facility, NASA Ames Research 
+ * of the Numerical Aerospace Simulation Facility, NASA Ames Research
  * Center.
  *
- * Partially based on a HIPPI driver written by Essential Communications 
+ * Partially based on a HIPPI driver written by Essential Communications
  * Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -19,13 +19,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,48 +33,29 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_esh_pci.c,v 1.24 2008/04/28 20:23:55 martin Exp $");
 
-#include "opt_inet.h"
-#include "opt_ns.h"
-#include "bpfilter.h" 
- 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/mbuf.h> 
-#include <sys/socket.h> 
+#include <sys/mbuf.h>
+#include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 #include <sys/syslog.h>
 #include <sys/select.h>
 #include <sys/device.h>
 #include <sys/buf.h>
+#include <sys/bufq.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_hippi.h>
 #include <net/if_media.h>
 
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/in_var.h>
-#include <netinet/ip.h> 
-#include <netinet/if_inarp.h>
-#endif
- 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
-  
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
-#endif
-
-#include <machine/cpu.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/ic/rrunnerreg.h>
 #include <dev/ic/rrunnervar.h>
@@ -99,21 +73,18 @@
 
 #define MEM_MAP_REG	0x10
 
-int esh_pci_match __P((struct device *, struct cfdata *, void *));
-void esh_pci_attach __P((struct device *, struct device *, void *));
-static u_int8_t esh_pci_bist_read __P((struct esh_softc *));
-static void esh_pci_bist_write __P((struct esh_softc *, u_int8_t));
+static int	esh_pci_match(struct device *, struct cfdata *, void *);
+static void	esh_pci_attach(struct device *, struct device *, void *);
+static u_int8_t	esh_pci_bist_read(struct esh_softc *);
+static void	esh_pci_bist_write(struct esh_softc *, u_int8_t);
 
 
-struct cfattach esh_pci_ca = {
-	sizeof(struct esh_softc), esh_pci_match, esh_pci_attach
-};
+CFATTACH_DECL(esh_pci, sizeof(struct esh_softc),
+    esh_pci_match, esh_pci_attach, NULL, NULL);
 
-int
-esh_pci_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+esh_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
@@ -130,22 +101,22 @@ esh_pci_match(parent, match, aux)
 	return 1;
 }
 
-void
-esh_pci_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+esh_pci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct esh_softc *sc = (void *)self;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pci_intr_handle_t ih;
-	char *model;
+	const char *model;
 	const char *intrstr = NULL;
+
+	aprint_naive(": HIPPI controller\n");
 
 	if (pci_mapreg_map(pa, MEM_MAP_REG,
 			   PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_32BIT, 0,
 			   &sc->sc_iot, &sc->sc_ioh, NULL, NULL) != 0) {
-	    printf(": unable to map memory device registers\n");
+	    aprint_error(": unable to map memory device registers\n");
 	    return;
 	}
 
@@ -163,7 +134,7 @@ esh_pci_attach(parent, self, aux)
 		break;
 	}
 
-	printf(": %s\n", model);
+	aprint_normal(": %s\n", model);
 
 	sc->sc_bist_read = esh_pci_bist_read;
 	sc->sc_bist_write = esh_pci_bist_write;
@@ -176,50 +147,44 @@ esh_pci_attach(parent, self, aux)
 	    PCI_COMMAND_MASTER_ENABLE);
 
 	/* Map and establish the interrupt. */
-	if (pci_intr_map(pc, pa->pa_intrtag, pa->pa_intrpin,
-	    pa->pa_intrline, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+	if (pci_intr_map(pa, &ih)) {
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, eshintr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 }
 
-u_int8_t
-esh_pci_bist_read(sc)
-    struct esh_softc *sc;
+static u_int8_t
+esh_pci_bist_read(struct esh_softc *sc)
 {
-    bus_space_tag_t iot = sc->sc_iot;
-    bus_space_handle_t ioh = sc->sc_ioh;
-    u_int32_t pci_bist;
+	bus_space_tag_t iot = sc->sc_iot;
+	bus_space_handle_t ioh = sc->sc_ioh;
+	u_int32_t pci_bist;
 
-    pci_bist = bus_space_read_4(iot, ioh, RR_PCI_BIST);
+	pci_bist = bus_space_read_4(iot, ioh, RR_PCI_BIST);
 
-    return ((u_int8_t) (pci_bist >> 24));
+	return ((u_int8_t) (pci_bist >> 24));
 }
 
-void
-esh_pci_bist_write(sc, value)
-    struct esh_softc *sc;
-    u_int8_t value;
+static void
+esh_pci_bist_write(struct esh_softc *sc, u_int8_t value)
 {
-    bus_space_tag_t iot = sc->sc_iot;
-    bus_space_handle_t ioh = sc->sc_ioh;
-    u_int32_t pci_bist;
-    u_int32_t new_bist;
+	bus_space_tag_t iot = sc->sc_iot;
+	bus_space_handle_t ioh = sc->sc_ioh;
+	u_int32_t pci_bist;
+	u_int32_t new_bist;
 
-    pci_bist = bus_space_read_4(iot, ioh, RR_PCI_BIST);
-    new_bist = ((u_int32_t) value << 24) | (pci_bist & 0x00ffffff);
+	pci_bist = bus_space_read_4(iot, ioh, RR_PCI_BIST);
+	new_bist = ((u_int32_t) value << 24) | (pci_bist & 0x00ffffff);
 
-    bus_space_write_4(iot, ioh, RR_PCI_BIST, new_bist);
+	bus_space_write_4(iot, ioh, RR_PCI_BIST, new_bist);
 }
-

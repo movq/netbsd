@@ -1,4 +1,4 @@
-/*	$NetBSD: primes.c,v 1.9 1999/09/08 21:17:55 jsm Exp $	*/
+/*	$NetBSD: primes.c,v 1.16 2008/07/20 01:03:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)primes.c	8.5 (Berkeley) 5/10/95";
 #else
-__RCSID("$NetBSD: primes.c,v 1.9 1999/09/08 21:17:55 jsm Exp $");
+__RCSID("$NetBSD: primes.c,v 1.16 2008/07/20 01:03:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -107,23 +103,26 @@ extern const ubig *pr_limit;		/* largest prime in the prime array */
 extern const char pattern[];
 extern const int pattern_size;	/* length of pattern array */
 
-int	main __P((int, char *[]));
-void	primes __P((ubig, ubig));
-ubig	read_num_buf __P((void));
-void	usage __P((void)) __attribute__((__noreturn__));
+int	dflag;
+
+int	main(int, char *[]);
+void	primes(ubig, ubig);
+ubig	read_num_buf(void);
+void	usage(void) __dead;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	ubig start;		/* where to start generating */
 	ubig stop;		/* don't generate at or above this value */
 	int ch;
 	char *p;
 
-	while ((ch = getopt(argc, argv, "")) != -1)
+	while ((ch = getopt(argc, argv, "d")) != -1)
 		switch (ch) {
+		case 'd':
+			dflag++;
+			break;
 		case '?':
 		default:
 			usage();
@@ -190,7 +189,7 @@ main(argc, argv)
  *	This routine returns a number n, where 0 <= n && n <= BIG.
  */
 ubig
-read_num_buf()
+read_num_buf(void)
 {
 	ubig val;
 	char *p, buf[100];		/* > max number of digits. */
@@ -218,17 +217,20 @@ read_num_buf()
 
 /*
  * primes - sieve and print primes from start up to and but not including stop
+ *
+ *	start	where to start generating
+ *	stop	don't generate at or above this value
  */
 void
-primes(start, stop)
-	ubig start;	/* where to start generating */
-	ubig stop;	/* don't generate at or above this value */
+primes(ubig start, ubig stop)
 {
 	char *q;		/* sieve spot */
 	ubig factor;		/* index and factor */
 	char *tab_lim;		/* the limit to sieve on the table */
 	const ubig *p;		/* prime table pointer */
 	ubig fact_lim;		/* highest prime for current block */
+	ubig mod;		/* temp storage for mod */
+	ubig prev = 0;
 
 	/*
 	 * A number of systems can not convert double values into unsigned
@@ -263,8 +265,14 @@ primes(start, stop)
 		for (p = &prime[0], factor = prime[0];
 		    factor < stop && p <= pr_limit; factor = *(++p)) {
 			if (factor >= start) {
-				printf("%lu\n", (unsigned long) factor);
+				printf("%lu", (unsigned long) factor);
+				if (dflag) {
+					printf(" (%lu)",
+					    (unsigned long) factor - prev);
+				}
+				putchar('\n');
 			}
+			prev = factor;
 		}
 		/* return early if we are done */
 		if (p <= pr_limit) {
@@ -309,13 +317,13 @@ primes(start, stop)
 		p = &prime[7];	/* 19 is next prime, pi(19)=7 */
 		do {
 			/* determine the factor's initial sieve point */
-			q = (char *)(start%factor); /* temp storage for mod */
-			if ((long)q & 0x1) {
-				q = &table[(factor-(long)q)/2];
+			mod = start%factor;
+			if (mod & 0x1) {
+				q = &table[(factor-mod)/2];
 			} else {
-				q = &table[q ? factor-((long)q/2) : 0];
+				q = &table[mod ? factor-(mod/2) : 0];
 			}
-			/* sive for our current factor */
+			/* sieve for our current factor */
 			for ( ; q < tab_lim; q += factor) {
 				*q = '\0'; /* sieve out a spot */
 			}
@@ -326,15 +334,21 @@ primes(start, stop)
 		 */
 		for (q = table; q < tab_lim; ++q, start+=2) {
 			if (*q) {
-				printf("%lu\n", (unsigned long) start);
+				printf("%lu", (unsigned long) start);
+				if (dflag) {
+					printf(" (%lu)",
+					    (unsigned long) start - prev);
+					prev = start;
+				}
+				putchar('\n');
 			}
 		}
 	}
 }
 
 void
-usage()
+usage(void)
 {
-	(void)fprintf(stderr, "usage: primes [start [stop]]\n");
+	(void)fprintf(stderr, "usage: primes [-d] [start [stop]]\n");
 	exit(1);
 }

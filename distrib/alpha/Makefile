@@ -1,32 +1,18 @@
-#	$NetBSD: Makefile,v 1.6 2000/03/08 14:28:54 cjs Exp $
+#	$NetBSD: Makefile,v 1.23 2008/06/23 02:16:53 matt Exp $
 
-.include <bsd.own.mk>		# Use /etc/mk.conf.
+.include <bsd.own.mk>
+.include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
-SUBDIR=	instkernel #floppy-GENERIC
+SUBDIR=		instkernel cdroms # floppy-GENERIC
+TARGETS+=	release
 
-ITARGET=	${RELEASEDIR}/installation
-IINST=		${INSTALL} ${RENAME} ${PRESERVE} ${COPY}	\
-		-o ${BINOWN} -g ${BINGRP} -m ${NONBINMODE}
-
-.ifndef RELEASEDIR
-release:
-	@echo setenv RELEASEDIR first
-	@false
-.else
-CDHDTAPEOBJ != cd instkernel/cd-hd-tape; make print-objdir
-FDSETOBJ != cd instkernel/fdset; make print-objdir
-INSTKERNOBJ != cd instkernel/instkernel; make print-objdir
-GENERICOBJ != cd floppy-GENERIC; make print-objdir
-
-release:
-.for i in floppy diskimage instkernel tapeimage
-	${IINST} README.files ${ITARGET}/$i/.
+release: check_RELEASEDIR .WAIT README.files
+.for i in floppy diskimage instkernel
+	${RELEASE_INSTALL} ${.CURDIR}/README.files \
+	    ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/$i
 .endfor
-	${IINST} ${CDHDTAPEOBJ}/cdhdtape ${ITARGET}/diskimage/.
-	${IINST} ${FDSETOBJ}/disk1of2 ${ITARGET}/floppy/.
-	${IINST} ${FDSETOBJ}/disk2of2 ${ITARGET}/floppy/.
-	${IINST} ${INSTKERNOBJ}/netbsd.gz ${ITARGET}/instkernel/.
-	#${IINST} ${GENERICOBJ}/GENERIC.fs ${ITARGET}/misc/.
-.endif
+
+iso_image:
+	${MAKEDIRTARGET} cdroms iso_image
 
 .include <bsd.subdir.mk>

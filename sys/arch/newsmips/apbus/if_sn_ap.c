@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sn_ap.c,v 1.2 1999/12/23 06:52:30 tsubai Exp $	*/
+/*	$NetBSD: if_sn_ap.c,v 1.11 2008/04/09 15:40:30 tsutsui Exp $	*/
 
 /*
  * Copyright (C) 1997 Allen Briggs
@@ -30,6 +30,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_sn_ap.c,v 1.11 2008/04/09 15:40:30 tsutsui Exp $");
+
 #include "opt_inet.h"
 
 #include <sys/param.h>
@@ -56,19 +59,15 @@
 #define SONIC_APBUS_MEM_OFFSET	0x00020000
 #define SONIC_APBUS_CTL_OFFSET	(-0x00100000)
 
-static int	sn_ap_match __P((struct device *, struct cfdata *, void *));
-static void	sn_ap_attach __P((struct device *, struct device *, void *));
-static int	sn_ap_getaddr __P((struct sn_softc *, u_int8_t *));
+static int	sn_ap_match(device_t, cfdata_t, void *);
+static void	sn_ap_attach(device_t, device_t, void *);
+static int	sn_ap_getaddr(struct sn_softc *, uint8_t *);
 
-struct cfattach sn_ap_ca = {
-	sizeof(struct sn_softc), sn_ap_match, sn_ap_attach
-};
+CFATTACH_DECL_NEW(sn_ap, sizeof(struct sn_softc),
+    sn_ap_match, sn_ap_attach, NULL, NULL);
 
 static int
-sn_ap_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+sn_ap_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct apbus_attach_args *apa = aux;
 
@@ -82,20 +81,19 @@ sn_ap_match(parent, cf, aux)
  * Install interface into kernel networking data structures
  */
 static void
-sn_ap_attach(parent, self, aux)
-	struct device *parent, *self;
-	void   *aux;
+sn_ap_attach(device_t parent, device_t self, void *aux)
 {
-	struct sn_softc *sc = (void *)self;
+	struct sn_softc *sc = device_private(self);
 	struct apbus_attach_args *apa = aux;
-	u_int8_t myaddr[ETHER_ADDR_LEN];
+	uint8_t myaddr[ETHER_ADDR_LEN];
 	u_int intrmask;
 
-	sc->sc_hwbase = (caddr_t)apa->apa_hwbase;
+	sc->sc_dev = self;
+	sc->sc_hwbase = (void *)apa->apa_hwbase;
 	sc->sc_regbase = (void *)(apa->apa_hwbase + SONIC_APBUS_REG_OFFSET);
 	sc->space = (void *)(apa->apa_hwbase + SONIC_APBUS_MEM_OFFSET);
 
-	printf(" slot%d addr 0x%lx", apa->apa_slotno, apa->apa_hwbase);
+	aprint_normal(" slot%d addr 0x%lx", apa->apa_slotno, apa->apa_hwbase);
 
 	sc->snr_dcr = DCR_WAIT0 | DCR_DMABLOCK | DCR_RFT16 | DCR_TFT16;
 	sc->snr_dcr2 = 0;
@@ -103,34 +101,33 @@ sn_ap_attach(parent, self, aux)
 	sc->bitmode = 1;
 
 	if (sn_ap_getaddr(sc, myaddr)) {
-		printf(": failed to get MAC address\n");
+		aprint_error(": failed to get MAC address\n");
 		return;
 	}
 
-	printf("\n");
+	aprint_normal("\n");
 
 	/* snsetup returns 1 if something fails */
 	if (snsetup(sc, myaddr))
 		return;
 
 	intrmask = (apa->apa_slotno == 0) ?
-		NEWS5000_INT0_SONIC : SLOTTOMASK(apa->apa_slotno);
+	    NEWS5000_INT0_SONIC : SLOTTOMASK(apa->apa_slotno);
 
 	apbus_intr_establish(0, /* interrupt level (0 or 1) */
-			     intrmask,
-			     0, /* priority */
-			     snintr, sc, apa->apa_name, apa->apa_ctlnum);
+	    intrmask,
+	    0, /* priority */
+	    snintr, sc, apa->apa_name, apa->apa_ctlnum);
 }
 
 int
-sn_ap_getaddr(sc, lladdr)
-	struct sn_softc	*sc;
-	u_int8_t *lladdr;
+sn_ap_getaddr(struct sn_softc *sc, uint8_t *lladdr)
 {
-	u_int *p = (u_int *)(sc->sc_hwbase + SONIC_MACROM_OFFSET);
+	uint32_t *p;
 	int i;
 
-	for (i = 0; i < 6; i++) {
+	p = (uint32_t *)((uint8_t *)sc->sc_hwbase + SONIC_MACROM_OFFSET);
+	for (i = 0; i < ETHER_ADDR_LEN; i++) {
 		int h = *p++ & 0x0f;
 		int l = *p++ & 0x0f;
 		*lladdr++ = (h << 4) + l;
@@ -140,12 +137,12 @@ sn_ap_getaddr(sc, lladdr)
 }
 
 #define APSONIC_INT_MASK	0x00007f00	/* XXX */
+#define	APSONIC_INT_REG(base)	(((u_long)(base) & 0xffc00000) | 0x00100000)
 
 void
-sn_md_init(sc)
-	struct sn_softc *sc;
+sn_md_init(struct sn_softc *sc)
 {
-	u_int *reg = (u_int *)(sc->sc_hwbase - 0x00100000);
+	volatile uint32_t *reg = (uint32_t *)APSONIC_INT_REG(sc->sc_hwbase);
 
 	*reg = APSONIC_INT_MASK;
 	wbflush();

@@ -1,4 +1,4 @@
-/*	$NetBSD: tempnam.c,v 1.13 1998/11/15 17:19:53 christos Exp $	*/
+/*	$NetBSD: tempnam.c,v 1.19 2005/07/27 13:23:07 drochner Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)tempnam.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: tempnam.c,v 1.13 1998/11/15 17:19:53 christos Exp $");
+__RCSID("$NetBSD: tempnam.c,v 1.19 2005/07/27 13:23:07 drochner Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -50,47 +46,54 @@ __RCSID("$NetBSD: tempnam.c,v 1.13 1998/11/15 17:19:53 christos Exp $");
 #include <string.h>
 #include <unistd.h>
 #include <paths.h>
+#include "reentrant.h"
 #include "local.h"
 
 __warn_references(tempnam,
     "warning: tempnam() possibly used unsafely, use mkstemp() or mkdtemp()")
 
+static const char *
+trailsl(const char *f)
+{
+	const char *s = f;
+	while (*s)
+		s++;
+	return (f != s && s[-1] == '/') ? "" : "/";
+}
+
+static char *
+gentemp(char *name, size_t len, const char *tmp, const char  *pfx)
+{
+	(void)snprintf(name, len, "%s%s%sXXXXXXXXXX", tmp, trailsl(tmp), pfx);
+	return _mktemp(name);
+}
+
 char *
-tempnam(dir, pfx)
-	const char *dir, *pfx;
+tempnam(const char *dir, const char *pfx)
 {
 	int sverrno;
-	char *f, *name;
+	char *name, *f;
+	const char *tmp;
 
-	if (!(name = malloc(MAXPATHLEN)))
-		return(NULL);
+	if (!(name = malloc((size_t)MAXPATHLEN)))
+		return NULL;
 
 	if (!pfx)
 		pfx = "tmp.";
 
-	if ((f = getenv("TMPDIR")) != NULL) {
-		(void)snprintf(name, MAXPATHLEN, "%s%s%sXXXXXXX", f,
-		    *(f + strlen(f) - 1) == '/'? "": "/", pfx);
-		if ((f = _mktemp(name)) != NULL)
-			return(f);
-	}
+	if ((tmp = getenv("TMPDIR")) != NULL &&
+	    (f = gentemp(name, (size_t)MAXPATHLEN, tmp, pfx)) != NULL)
+		return f;
 
-	if ((/* LINTED */f = (char *)dir) != NULL) {
-		(void)snprintf(name, MAXPATHLEN, "%s%s%sXXXXXXX", f,
-		    *(f + strlen(f) - 1) == '/'? "": "/", pfx);
-		if ((f = _mktemp(name)) != NULL)
-			return(f);
-	}
+	if (dir != NULL &&
+	    (f = gentemp(name, (size_t)MAXPATHLEN, dir, pfx)) != NULL)
+		return f;
 
-	f = P_tmpdir;
-	(void)snprintf(name, MAXPATHLEN, "%s%sXXXXXXX", f, pfx);
-	if ((f = _mktemp(name)) != NULL)
-		return(f);
+	if ((f = gentemp(name, (size_t)MAXPATHLEN, P_tmpdir, pfx)) != NULL)
+		return f;
 
-	f = _PATH_TMP;
-	(void)snprintf(name, MAXPATHLEN, "%s%sXXXXXXX", f, pfx);
-	if ((f = _mktemp(name)) != NULL)
-		return(f);
+	if ((f = gentemp(name, (size_t)MAXPATHLEN, _PATH_TMP, pfx)) != NULL)
+		return f;
 
 	sverrno = errno;
 	free(name);

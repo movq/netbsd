@@ -1,4 +1,4 @@
-.\"	$NetBSD: ar.5,v 1.1 1998/08/22 05:29:57 tv Exp $
+.\"	$NetBSD: ar.5,v 1.7 2003/08/07 10:31:16 agc Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -40,7 +36,7 @@
 .Nm ar
 .Nd a.out archive (library) file format
 .Sh SYNOPSIS
-.Fd #include <ar.h>
+.In ar.h
 .Sh DESCRIPTION
 The archive command
 .Nm
@@ -51,7 +47,10 @@ loaded using the link-editor
 .Pp
 A file created with
 .Nm
-begins with the ``magic'' string "!<arch>\en".
+begins with the
+.Dq magic
+string
+.Dq Li "!\*[Lt]arch\*[Gt]\en" .
 The rest of the archive is made up of objects, each of which is composed
 of a header for a file, a possible file name, and the file contents.
 The header is portable between machine architectures, and, if the file
@@ -102,7 +101,8 @@ If any fields are their particular maximum number of characters in
 length, there will be no separation between the fields.
 .Pp
 Objects in the archive are always an even number of bytes long; files
-which are an odd number of bytes long are padded with a newline (``\en'')
+which are an odd number of bytes long are padded with a newline
+.Pq Dq \en
 character, although the size in the header does not reflect this.
 .Sh SEE ALSO
 .Xr ar 1 ,
@@ -111,8 +111,9 @@ character, although the size in the header does not reflect this.
 There have been at least four
 .Nm
 formats.
-The first was denoted by the leading ``magic'' number 0177555 (stored as
-type int).
+The first was denoted by the leading
+.Dq magic
+number 0177555 (stored as type int).
 These archives were almost certainly created on a 16-bit machine, and
 contain headers made up of five fields.
 The fields are the object name (8 characters), the file last modification
@@ -120,8 +121,9 @@ time (type long), the user id (type char), the file mode (type char) and
 the file size (type unsigned int).
 Files were padded to an even number of bytes.
 .Pp
-The second was denoted by the leading ``magic'' number 0177545 (stored as
-type int).
+The second was denoted by the leading
+.Dq magic
+number 0177545 (stored as type int).
 These archives may have been created on either 16 or 32-bit machines, and
 contain headers made up of six fields.
 The fields are the object name (14 characters), the file last modification
@@ -150,10 +152,9 @@ ELF systems use the
 format specified by the
 .At V.4
 ABI, with the same headers but different long file name handling.
-.Pp
 .Sh BUGS
 The
-.Tn <ar.h>
+.Tn \*[Lt]ar.h\*[Gt]
 header file, and the
-.Xr ar 5
+.Nm
 manual page, do not currently describe the ELF archive format.

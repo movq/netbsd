@@ -1,4 +1,4 @@
-/*	$NetBSD: __strsignal.c,v 1.19 1999/09/20 04:39:44 lukem Exp $	*/
+/*	$NetBSD: __strsignal.c,v 1.24 2003/08/07 16:43:46 agc Exp $	*/
 
 /*
  * Copyright (c) 1988 Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char *sccsid = "@(#)strerror.c	5.6 (Berkeley) 5/4/91";
 #else
-__RCSID("$NetBSD: __strsignal.c,v 1.19 1999/09/20 04:39:44 lukem Exp $");
+__RCSID("$NetBSD: __strsignal.c,v 1.24 2003/08/07 16:43:46 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -50,9 +46,13 @@ __RCSID("$NetBSD: __strsignal.c,v 1.19 1999/09/20 04:39:44 lukem Exp $");
 
 #include <assert.h>
 #include <stdio.h>
-#include <signal.h>
 #include <string.h>
 #include "extern.h"
+#include <signal.h>
+#ifndef SIGRTMIN	/* XXX: Until we remove the #ifdef _KERNEL */
+#define SIGRTMIN	33
+#define SIGRTMAX	63
+#endif
 
 /* ARGSUSED */
 const char *
@@ -62,27 +62,34 @@ __strsignal(num, buf, buflen)
 	size_t buflen;
 {
 #define	UPREFIX	"Unknown signal: %u"
+#define RPREFIX "Real time signal %u"
 	unsigned int signum;
 
 #ifdef NLS
 	nl_catd catd ;
-	catd = catopen("libc", 0);
+	catd = catopen("libc", NL_CAT_LOCALE);
 #endif
 
 	_DIAGASSERT(buf != NULL);
 
 	signum = num;				/* convert to unsigned */
-	if (signum < sys_nsig) {
+	if (signum < (unsigned int) sys_nsig) {
 #ifdef NLS
-		(void)strncpy(buf, catgets(catd, 2, (int)signum,
-		    sys_siglist[signum]), NL_TEXTMAX); 
-		buf[NL_TEXTMAX - 1] = '\0';
+		(void)strlcpy(buf, catgets(catd, 2, (int)signum,
+		    sys_siglist[signum]), buflen); 
 #else
 		return((char *)sys_siglist[signum]);
 #endif
+	} else if (signum >= SIGRTMIN && signum <= SIGRTMAX) {
+#ifdef NLS
+		(void)snprintf(buf, buflen, 
+	            catgets(catd, 2, SIGRTMIN, RPREFIX), signum);
+#else
+		(void)snprintf(buf, buflen, RPREFIX, signum);
+#endif
 	} else {
 #ifdef NLS
-		(void)snprintf(buf, NL_TEXTMAX, 
+		(void)snprintf(buf, buflen, 
 	            catgets(catd, 1, 0xffff, UPREFIX), signum);
 #else
 		(void)snprintf(buf, buflen, UPREFIX, signum);

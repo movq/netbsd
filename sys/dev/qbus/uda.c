@@ -1,7 +1,40 @@
-/*	$NetBSD: uda.c,v 1.33 2000/03/30 12:45:39 augustss Exp $	*/
+/*	$NetBSD: uda.c,v 1.58 2008/03/11 05:34:02 matt Exp $	*/
+/*
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Chris Torek.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)uda.c	7.32 (Berkeley) 2/13/91
+ */
+
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
- * Copyright (c) 1988 Regents of the University of California.
  * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -42,14 +75,18 @@
  * UDA50 disk device driver
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: uda.c,v 1.58 2008/03/11 05:34:02 matt Exp $");
+
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/buf.h>
+#include <sys/bufq.h>
 #include <sys/malloc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/sid.h>
 
 #include <dev/qbus/ubavar.h>
@@ -64,41 +101,34 @@
  * Software status, per controller.
  */
 struct	uda_softc {
-	struct	device sc_dev;	/* Autoconfig info */
+	device_t sc_dev;	/* Autoconfig info */
+	struct uba_softc *sc_uh;
+	struct	evcnt sc_intrcnt; /* Interrupt counting */
 	struct	uba_unit sc_unit; /* Struct common for UBA to communicate */
-	struct	buf_queue sc_bufq;	/* bufs awaiting for resources */
-	struct	mscp_pack *sc_uuda;	/* Unibus address of uda struct */
-	struct	mscp_pack sc_uda;	/* Struct for uda communication */
+	struct	ubinfo sc_ui;
 	bus_dma_tag_t		sc_dmat;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_iph;
 	bus_space_handle_t	sc_sah;
-	bus_dmamap_t		sc_cmap;/* Control structures */
-	struct	mscp *sc_mscp;		/* Keep pointer to active mscp */
 	struct	mscp_softc *sc_softc;	/* MSCP info (per mscpvar.h) */
-	int	sc_wticks;	/* watchdog timer ticks */
 	int	sc_inq;
 };
 
-static	int	udamatch __P((struct device *, struct cfdata *, void *));
-static	void	udaattach __P((struct device *, struct device *, void *));
-static	void	udareset __P((int));
-static	void	mtcreset __P((int));
-static	void	reset __P((struct uda_softc *));
-static	void	intr __P((void *));
-int	udaready __P((struct uba_unit *));
-void	udactlrdone __P((struct device *));
-int	udaprint __P((void *, const char *));
-void	udasaerror __P((struct device *, int));
-void	udago __P((struct device *, struct mscp_xi *));
+static	int udamatch(device_t, cfdata_t, void *);
+static	void udaattach(device_t, device_t, void *);
+static	void udareset(device_t );
+static	void udaintr(void *);
+static	int udaready(struct uba_unit *);
+static	void udactlrdone(device_t );
+static	int udaprint(void *, const char *);
+static	void udasaerror(device_t, int);
+static	void udago(device_t, struct mscp_xi *);
 
-struct	cfattach mtc_ca = {
-	sizeof(struct uda_softc), udamatch, udaattach
-};
+CFATTACH_DECL_NEW(mtc, sizeof(struct uda_softc),
+    udamatch, udaattach, NULL, NULL);
 
-struct	cfattach uda_ca = {
-	sizeof(struct uda_softc), udamatch, udaattach
-};
+CFATTACH_DECL_NEW(uda, sizeof(struct uda_softc),
+    udamatch, udaattach, NULL, NULL);
 
 /*
  * More driver definitions, for generic MSCP code.
@@ -109,18 +139,11 @@ struct	mscp_ctlr uda_mscp_ctlr = {
 	udasaerror,
 };
 
-/*
- * Miscellaneous private variables.
- */
-static	int	ivec_no;
-
 int
-udaprint(aux, name)
-	void	*aux;
-	const char	*name;
+udaprint(void *aux, const char *name)
 {
 	if (name)
-		printf("%s: mscpbus", name);
+		aprint_normal("%s: mscpbus", name);
 	return UNCONF;
 }
 
@@ -128,19 +151,14 @@ udaprint(aux, name)
  * Poke at a supposed UDA50 to see if it is there.
  */
 int
-udamatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+udamatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct	uba_attach_args *ua = aux;
+	struct	uba_softc *uh = device_private(parent);
 	struct	mscp_softc mi;	/* Nice hack */
-	struct	uba_softc *ubasc;
 	int	tries;
 
 	/* Get an interrupt vector. */
-	ubasc = (void *)parent;
-	ivec_no = ubasc->uh_lastiv - 4;
 
 	mi.mi_iot = ua->ua_iot;
 	mi.mi_iph = ua->ua_ioh;
@@ -162,22 +180,17 @@ again:
 	if (mscp_waitstep(&mi, MP_STEP1, MP_STEP1) == 0)
 		return 0; /* Nothing here... */
 
-	bus_space_write_2(mi.mi_iot, mi.mi_sah, 0, 
-	    MP_ERR | (NCMDL2 << 11) | (NRSPL2 << 8) | MP_IE | (ivec_no >> 2));
+	bus_space_write_2(mi.mi_iot, mi.mi_sah, 0,
+	    MP_ERR | (NCMDL2 << 11) | (NRSPL2 << 8) | MP_IE |
+	    ((uh->uh_lastiv - 4) >> 2));
 
 	if (mscp_waitstep(&mi, MP_STEP2, MP_STEP2) == 0) {
-		printf("udaprobe: init step2 no change. sa=%x\n", 
+		printf("udaprobe: init step2 no change. sa=%x\n",
 		    bus_space_read_2(mi.mi_iot, mi.mi_sah, 0));
 		goto bad;
 	}
 
 	/* should have interrupted by now */
-	if (strcmp(cf->cf_driver->cd_name, mtc_cd.cd_name)) {
-		ua->ua_reset = udareset;
-	} else {
-		ua->ua_reset = mtcreset;
-	}
-
 	return 1;
 bad:
 	if (++tries < 2)
@@ -186,34 +199,35 @@ bad:
 }
 
 void
-udaattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+udaattach(device_t parent, device_t self, void *aux)
 {
-	struct	uda_softc *sc = (void *)self;
+	struct	uda_softc *sc = device_private(self);
 	struct	uba_attach_args *ua = aux;
-	struct	uba_softc *uh = (void *)parent;
 	struct	mscp_attach_args ma;
-	int	ctlr, error, rseg;
-	bus_dma_segment_t seg;
+	int	error;
 
 	printf("\n");
 
-	uh->uh_lastiv -= 4;	/* remove dynamic interrupt vector */
+	sc->sc_dev = self;
+	sc->sc_uh = device_private(parent);
 
-	uba_intr_establish(ua->ua_icookie, ua->ua_cvec, intr, sc);
+	sc->sc_uh->uh_lastiv -= 4;	/* remove dynamic interrupt vector */
+
+	uba_intr_establish(ua->ua_icookie, ua->ua_cvec,
+		udaintr, sc, &sc->sc_intrcnt);
+	uba_reset_establish(udareset, sc->sc_dev);
+	evcnt_attach_dynamic(&sc->sc_intrcnt, EVCNT_TYPE_INTR, ua->ua_evcnt,
+		device_xname(sc->sc_dev), "intr");
 
 	sc->sc_iot = ua->ua_iot;
 	sc->sc_iph = ua->ua_ioh;
 	sc->sc_sah = ua->ua_ioh + 2;
 	sc->sc_dmat = ua->ua_dmat;
-	ctlr = sc->sc_dev.dv_unit;
-	BUFQ_INIT(&sc->sc_bufq);
 
 	/*
 	 * Fill in the uba_unit struct, so we can communicate with the uba.
 	 */
-	sc->sc_unit.uu_softc = sc;	/* Backpointer to softc */
+	sc->sc_unit.uu_dev = self;	/* Backpointer to softc */
 	sc->sc_unit.uu_ready = udaready;/* go routine called from adapter */
 	sc->sc_unit.uu_keepbdp = vax_cputype == VAX_750 ? 1 : 0;
 
@@ -221,33 +235,11 @@ udaattach(parent, self, aux)
 	 * Map the communication area and command and
 	 * response packets into Unibus space.
 	 */
-	if ((error = bus_dmamem_alloc(sc->sc_dmat, sizeof(struct mscp_pack),
-	    NBPG, 0, &seg, 1, &rseg, BUS_DMA_NOWAIT)) != 0) {
-		printf("Alloc ctrl area %d\n", error);
-		return;
-	}
-	if ((error = bus_dmamem_map(sc->sc_dmat, &seg, rseg,
-	    sizeof(struct mscp_pack), (caddr_t *) &sc->sc_uda,
-	    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
-		printf("Map ctrl area %d\n", error);
-err:		bus_dmamem_free(sc->sc_dmat, &seg, rseg);
-		return;
-	}
-	if ((error = bus_dmamap_create(sc->sc_dmat, sizeof(struct mscp_pack),
-	    1, sizeof(struct mscp_pack), 0, BUS_DMA_NOWAIT, &sc->sc_cmap))) {
-		printf("Create DMA map %d\n", error);
-err2:		bus_dmamem_unmap(sc->sc_dmat, (caddr_t)&sc->sc_uda,
-		    sizeof(struct mscp_pack));
-		goto err;
-	}
-	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_cmap, 
-	    &sc->sc_uda, sizeof(struct mscp_pack), 0, BUS_DMA_NOWAIT))) {
-		printf("Load ctrl map %d\n", error);
-		bus_dmamap_destroy(sc->sc_dmat, sc->sc_cmap);
-		goto err2;
-	}
+	sc->sc_ui.ui_size = sizeof(struct mscp_pack);
+	if ((error = ubmemalloc(sc->sc_uh, &sc->sc_ui, UBA_CANTWAIT)))
+		return printf("ubmemalloc failed: %d\n", error);
 
-	bzero(&sc->sc_uda, sizeof (struct mscp_pack));
+	bzero(sc->sc_ui.ui_vaddr, sizeof (struct mscp_pack));
 
 	/*
 	 * The only thing that differ UDA's and Tape ctlr's is
@@ -255,23 +247,22 @@ err2:		bus_dmamem_unmap(sc->sc_dmat, (caddr_t)&sc->sc_uda,
 	 * ctlr type it is, we check what is generated and later
 	 * set the correct vcid.
 	 */
-	ma.ma_type = (strcmp(self->dv_cfdata->cf_driver->cd_name,
-	    mtc_cd.cd_name) ? MSCPBUS_DISK : MSCPBUS_TAPE);
+	ma.ma_type = (device_is_a(self, "mtc") ? MSCPBUS_TAPE : MSCPBUS_DISK);
 
 	ma.ma_mc = &uda_mscp_ctlr;
 	ma.ma_type |= MSCPBUS_UDA;
-	ma.ma_uda = &sc->sc_uda;
+	ma.ma_uda = (struct mscp_pack *)sc->sc_ui.ui_vaddr;
 	ma.ma_softc = &sc->sc_softc;
 	ma.ma_iot = sc->sc_iot;
 	ma.ma_iph = sc->sc_iph;
 	ma.ma_sah = sc->sc_sah;
 	ma.ma_swh = sc->sc_sah;
 	ma.ma_dmat = sc->sc_dmat;
-	ma.ma_dmam = sc->sc_cmap;
-	ma.ma_ivec = ivec_no;
+	ma.ma_dmam = sc->sc_ui.ui_dmam;
+	ma.ma_ivec = sc->sc_uh->uh_lastiv;
 	ma.ma_ctlrnr = (ua->ua_iaddr == 0172150 ? 0 : 1);	/* XXX */
-	ma.ma_adapnr = uh->uh_nr;
-	config_found(&sc->sc_dev, &ma, udaprint);
+	ma.ma_adapnr = sc->sc_uh->uh_nr;
+	config_found(sc->sc_dev, &ma, udaprint);
 }
 
 /*
@@ -280,11 +271,9 @@ err2:		bus_dmamem_unmap(sc->sc_dmat, (caddr_t)&sc->sc_uda,
  * Called from mscp routines.
  */
 void
-udago(usc, mxi)
-	struct device *usc;
-	struct mscp_xi *mxi;
+udago(device_t dv, struct mscp_xi *mxi)
 {
-	struct uda_softc *sc = (void *)usc;
+	struct uda_softc *sc = device_private(dv);
 	struct uba_unit *uu;
 	struct buf *bp = mxi->mxi_bp;
 	int err;
@@ -295,18 +284,18 @@ udago(usc, mxi)
 	 */
 	if (sc->sc_inq == 0) {
 		err = bus_dmamap_load(sc->sc_dmat, mxi->mxi_dmam,
-		    bp->b_un.b_addr,
-		    bp->b_bcount, bp->b_proc, BUS_DMA_NOWAIT);
+		    bp->b_data, bp->b_bcount,
+		    (bp->b_flags & B_PHYS ? bp->b_proc : 0), BUS_DMA_NOWAIT);
 		if (err == 0) {
 			mscp_dgo(sc->sc_softc, mxi);
 			return;
 		}
 	}
-	uu = malloc(sizeof(struct uba_unit), M_DEVBUF, M_NOWAIT);
-	if (uu == 0)
+	uu = malloc(sizeof(struct uba_unit), M_DEVBUF, M_NOWAIT|M_ZERO);
+	if (uu == NULL)
 		panic("udago: no mem");
 	uu->uu_ready = udaready;
-	uu->uu_softc = sc;
+	uu->uu_dev = dv;
 	uu->uu_ref = mxi;
 	uba_enqueue(uu);
 	sc->sc_inq++;
@@ -314,21 +303,22 @@ udago(usc, mxi)
 
 /*
  * Called if we have been blocked for resources, and resources
- * have been freed again. Return 1 if we could start all 
+ * have been freed again. Return 1 if we could start all
  * transfers again, 0 if we still are waiting.
  * Called from uba resource free routines.
  */
 int
-udaready(uu)
-	struct uba_unit *uu;
+udaready(struct uba_unit *uu)
 {
-	struct uda_softc *sc = uu->uu_softc;
+	struct uda_softc *sc = device_private(uu->uu_dev);
 	struct mscp_xi *mxi = uu->uu_ref;
 	struct buf *bp = mxi->mxi_bp;
 	int err;
 
-	err = bus_dmamap_load(sc->sc_dmat, mxi->mxi_dmam, bp->b_un.b_addr,
-	    bp->b_bcount, bp->b_proc, BUS_DMA_NOWAIT);
+	err = bus_dmamap_load(sc->sc_dmat, mxi->mxi_dmam, bp->b_data,
+	    bp->b_bcount, (bp->b_flags & B_PHYS ? bp->b_proc : 0),
+	    BUS_DMA_NOWAIT);
+
 	if (err)
 		return 0;
 	mscp_dgo(sc->sc_softc, mxi);
@@ -337,9 +327,9 @@ udaready(uu)
 	return 1;
 }
 
-static struct saerr {
+static const struct saerr {
 	int	code;		/* error code (including UDA_ERR) */
-	char	*desc;		/* what it means: Efoo => foo error */
+	const char	*desc;		/* what it means: Efoo => foo error */
 } saerr[] = {
 	{ 0100001, "Eunibus packet read" },
 	{ 0100002, "Eunibus packet write" },
@@ -387,22 +377,19 @@ static struct saerr {
  * then (optionally) reset the controller and requeue pending transfers.
  */
 void
-udasaerror(usc, doreset)
-	struct device *usc;
-	int doreset;
+udasaerror(device_t dev, int doreset)
 {
-	struct	uda_softc *sc = (void *)usc;
+	struct	uda_softc *sc = device_private(dev);
 	int code = bus_space_read_2(sc->sc_iot, sc->sc_sah, 0);
-	struct saerr *e;
+	const struct saerr *e;
 
 	if ((code & MP_ERR) == 0)
 		return;
 	for (e = saerr; e->code; e++)
 		if (e->code == code)
 			break;
-	printf("%s: controller error, sa=0%o (%s%s)\n",
-		sc->sc_dev.dv_xname, code, e->desc + 1,
-		*e->desc == 'E' ? " error" : "");
+	aprint_error_dev(sc->sc_dev, "controller error, sa=0%o (%s%s)\n",
+		code, e->desc + 1, *e->desc == 'E' ? " error" : "");
 #if 0 /* XXX we just avoid panic when autoconfig non-existent KFQSA devices */
 	if (doreset) {
 		mscp_requeue(sc->sc_softc);
@@ -417,33 +404,28 @@ udasaerror(usc, doreset)
  * interrupts, and process responses.
  */
 static void
-intr(arg)
-	void *arg;
+udaintr(void *arg)
 {
 	struct uda_softc *sc = arg;
-	struct uba_softc *uh;
-	struct mscp_pack *ud;
-
-	sc->sc_wticks = 0;	/* reset interrupt watchdog */
 
 	/* ctlr fatal error */
 	if (bus_space_read_2(sc->sc_iot, sc->sc_sah, 0) & MP_ERR) {
-		udasaerror(&sc->sc_dev, 1);
+		udasaerror(sc->sc_dev, 1);
 		return;
 	}
-	ud = &sc->sc_uda;
 	/*
 	 * Handle buffer purge requests.
 	 * XXX - should be done in bus_dma_sync().
 	 */
-	uh = (void *)sc->sc_dev.dv_parent;
+#ifdef notyet
 	if (ud->mp_ca.ca_bdp) {
-		if (uh->uh_ubapurge)
-			(*uh->uh_ubapurge)(uh, ud->mp_ca.ca_bdp);
-		ud->mp_ca.ca_bdp = 0;
+		if (sc->sc_uh->uh_ubapurge)
+			(*sc->sc_uh->uh_ubapurge)(sc->sc_uh,
+			    ud->mp_ca.ca_bdp);
 		/* signal purge complete */
 		bus_space_write_2(sc->sc_iot, sc->sc_sah, 0, 0);
 	}
+#endif
 
 	mscp_intr(sc->sc_softc);
 }
@@ -452,26 +434,10 @@ intr(arg)
  * A Unibus reset has occurred on UBA uban.  Reinitialise the controller(s)
  * on that Unibus, and requeue outstanding I/O.
  */
-void
-udareset(ctlr)
-	int ctlr;
-{
-	reset(uda_cd.cd_devs[ctlr]);
-}
-
-void
-mtcreset(ctlr)
-	int ctlr;
-{
-	reset(mtc_cd.cd_devs[ctlr]);
-}
-
 static void
-reset(sc)
-	struct uda_softc *sc;
+udareset(device_t dev)
 {
-	printf(" %s", sc->sc_dev.dv_xname);
-
+	struct uda_softc *sc = device_private(dev);
 	/*
 	 * Our BDP (if any) is gone; our command (if any) is
 	 * flushed; the device is no longer mapped; and the
@@ -496,10 +462,12 @@ reset(sc)
 }
 
 void
-udactlrdone(usc)
-	struct device *usc;
+udactlrdone(device_t dev)
 {
-	struct uda_softc *sc = (void *)usc;
+	struct uda_softc *sc = device_private(dev);
+	int s;
 
-	uba_done((struct uba_softc *)sc->sc_dev.dv_parent);
+	s = spluba();
+	uba_done(sc->sc_uh);
+	splx(s);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: getch.c,v 1.15 1999/12/07 03:53:11 simonb Exp $	*/
+/*	$NetBSD: getch.c,v 1.51.8.1 2009/02/18 01:13:54 snj Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)getch.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: getch.c,v 1.15 1999/12/07 03:53:11 simonb Exp $");
+__RCSID("$NetBSD: getch.c,v 1.51.8.1 2009/02/18 01:13:54 snj Exp $");
 #endif
 #endif					/* not lint */
 
@@ -47,77 +43,128 @@ __RCSID("$NetBSD: getch.c,v 1.15 1999/12/07 03:53:11 simonb Exp $");
 #include <unistd.h>
 #include <stdio.h>
 #include "curses.h"
+#include "curses_private.h"
+#include "keymap.h"
 
-#define DEFAULT_DELAY 2			/* default delay for timeout() */
-
-/*
- * Keyboard input handler.  Do this by snarfing
- * all the info we can out of the termcap entry for TERM and putting it
- * into a set of keymaps.  A keymap is an array the size of all the possible
- * single characters we can get, the contents of the array is a structure
- * that contains the type of entry this character is (i.e. part/end of a
- * multi-char sequence or a plain char) and either a pointer which will point
- * to another keymap (in the case of a multi-char sequence) OR the data value
- * that this key should return.
- *
- */
-
-/* private data structures for holding the key definitions */
-typedef struct keymap keymap_t;
-typedef struct key_entry key_entry_t;
-
-struct key_entry {
-	short   type;		/* type of key this is */
-	union {
-		keymap_t *next;	/* next keymap is key is multi-key sequence */
-		int     symbol;	/* key symbol if key is a leaf entry */
-	} value;
-};
-/* Types of key structures we can have */
-#define KEYMAP_MULTI  1		/* part of a multi char sequence */
-#define KEYMAP_LEAF   2		/* key has a symbol associated with it, either
-				 * it is the end of a multi-char sequence or a
-				 * single char key that generates a symbol */
-
-/* The max number of different chars we can receive */
-#define MAX_CHAR 256
-
-struct keymap {
-	int	count;		/* count of number of key structs allocated */
-	short	mapping[MAX_CHAR]; /* mapping of key to allocated structs */
-	key_entry_t **key;	/* dynamic array of keys */};
-
-
-/* Key buffer */
-#define INBUF_SZ 16		/* size of key buffer - must be larger than
-				 * longest multi-key sequence */
-static char    inbuf[INBUF_SZ];
-static int     start, end, working; /* pointers for manipulating inbuf data */
-
-#define INC_POINTER(ptr)  do {	\
-	(ptr)++;		\
-	ptr %= INBUF_SZ;	\
-} while(/*CONSTCOND*/0)
-
-static short	state;		/* state of the inkey function */
-
-#define INKEY_NORM	 0	/* no key backlog to process */
-#define INKEY_ASSEMBLING 1	/* assembling a multi-key sequence */
-#define INKEY_BACKOUT	 2	/* recovering from an unrecognised key */
-#define INKEY_TIMEOUT	 3	/* multi-key sequence timeout */
-
-/* The termcap data we are interested in and the symbols they map to */
-struct tcdata {
-	char	*name;		/* name of termcap entry */
-	int	symbol;		/* the symbol associated with it */
-};
+short	state;		/* state of the inkey function */
 
 static const struct tcdata tc[] = {
+	{"!1", KEY_SSAVE},
+	{"!2", KEY_SSUSPEND},
+	{"!3", KEY_SUNDO},
+	{"#1", KEY_SHELP},
+	{"#2", KEY_SHOME},
+	{"#3", KEY_SIC},
+	{"#4", KEY_SLEFT},
+	{"%0", KEY_REDO},
+	{"%1", KEY_HELP},
+	{"%2", KEY_MARK},
+	{"%3", KEY_MESSAGE},
+	{"%4", KEY_MOVE},
+	{"%5", KEY_NEXT},
+	{"%6", KEY_OPEN},
+	{"%7", KEY_OPTIONS},
+	{"%8", KEY_PREVIOUS},
+	{"%9", KEY_PRINT},
+	{"%a", KEY_SMESSAGE},
+	{"%b", KEY_SMOVE},
+	{"%c", KEY_SNEXT},
+	{"%d", KEY_SOPTIONS},
+	{"%e", KEY_SPREVIOUS},
+	{"%f", KEY_SPRINT},
+	{"%g", KEY_SREDO},
+	{"%h", KEY_SREPLACE},
+	{"%i", KEY_SRIGHT},
+	{"%j", KEY_SRSUME},
+	{"&0", KEY_SCANCEL},
+	{"&1", KEY_REFERENCE},
+	{"&2", KEY_REFRESH},
+	{"&3", KEY_REPLACE},
+	{"&4", KEY_RESTART},
+	{"&5", KEY_RESUME},
+	{"&6", KEY_SAVE},
+	{"&7", KEY_SUSPEND},
+	{"&8", KEY_UNDO},
+	{"&9", KEY_SBEG},
+	{"*0", KEY_SFIND},
+	{"*1", KEY_SCOMMAND},
+	{"*2", KEY_SCOPY},
+	{"*3", KEY_SCREATE},
+	{"*4", KEY_SDC},
+	{"*5", KEY_SDL},
+	{"*6", KEY_SELECT},
+	{"*7", KEY_SEND},
+	{"*8", KEY_SEOL},
+	{"*9", KEY_SEXIT},
+	{"@0", KEY_FIND},
+	{"@1", KEY_BEG},
+	{"@2", KEY_CANCEL},
+	{"@3", KEY_CLOSE},
+	{"@4", KEY_COMMAND},
+	{"@5", KEY_COPY},
+	{"@6", KEY_CREATE},
+	{"@7", KEY_END},
+	{"@8", KEY_ENTER},
+	{"@9", KEY_EXIT},
+	{"F1", KEY_F(11)},
+	{"F2", KEY_F(12)},
+	{"F3", KEY_F(13)},
+	{"F4", KEY_F(14)},
+	{"F5", KEY_F(15)},
+	{"F6", KEY_F(16)},
+	{"F7", KEY_F(17)},
+	{"F8", KEY_F(18)},
+	{"F9", KEY_F(19)},
+	{"FA", KEY_F(20)},
+	{"FB", KEY_F(21)},
+	{"FC", KEY_F(22)},
+	{"FD", KEY_F(23)},
+	{"FE", KEY_F(24)},
+	{"FF", KEY_F(25)},
+	{"FG", KEY_F(26)},
+	{"FH", KEY_F(27)},
+	{"FI", KEY_F(28)},
+	{"FJ", KEY_F(29)},
+	{"FK", KEY_F(30)},
+	{"FL", KEY_F(31)},
+	{"FM", KEY_F(32)},
+	{"FN", KEY_F(33)},
+	{"FO", KEY_F(34)},
+	{"FP", KEY_F(35)},
+	{"FQ", KEY_F(36)},
+	{"FR", KEY_F(37)},
+	{"FS", KEY_F(38)},
+	{"FT", KEY_F(39)},
+	{"FU", KEY_F(40)},
+	{"FV", KEY_F(41)},
+	{"FW", KEY_F(42)},
+	{"FX", KEY_F(43)},
+	{"FY", KEY_F(44)},
+	{"FZ", KEY_F(45)},
+	{"Fa", KEY_F(46)},
+	{"Fb", KEY_F(47)},
+	{"Fc", KEY_F(48)},
+	{"Fd", KEY_F(49)},
+	{"Fe", KEY_F(50)},
+	{"Ff", KEY_F(51)},
+	{"Fg", KEY_F(52)},
+	{"Fh", KEY_F(53)},
+	{"Fi", KEY_F(54)},
+	{"Fj", KEY_F(55)},
+	{"Fk", KEY_F(56)},
+	{"Fl", KEY_F(57)},
+	{"Fm", KEY_F(58)},
+	{"Fn", KEY_F(59)},
+	{"Fo", KEY_F(60)},
+	{"Fp", KEY_F(61)},
+	{"Fq", KEY_F(62)},
+	{"Fr", KEY_F(63)},
 	{"K1", KEY_A1},
 	{"K2", KEY_B2},
 	{"K3", KEY_A3},
 	{"K4", KEY_C1},
 	{"K5", KEY_C3},
+	{"Km", KEY_MOUSE},
 	{"k0", KEY_F0},
 	{"k1", KEY_F(1)},
 	{"k2", KEY_F(2)},
@@ -128,8 +175,10 @@ static const struct tcdata tc[] = {
 	{"k7", KEY_F(7)},
 	{"k8", KEY_F(8)},
 	{"k9", KEY_F(9)},
+	{"k;", KEY_F(10)},
 	{"kA", KEY_IL},
 	{"ka", KEY_CATAB},
+	{"kB", KEY_BTAB},
 	{"kb", KEY_BACKSPACE},
 	{"kC", KEY_CLEAR},
 	{"kD", KEY_DC},
@@ -141,6 +190,7 @@ static const struct tcdata tc[] = {
 	{"kI", KEY_IC},
 	{"kL", KEY_DL},
 	{"kl", KEY_LEFT},
+	{"kM", KEY_EIC},
 	{"kN", KEY_NPAGE},
 	{"kP", KEY_PPAGE},
 	{"kR", KEY_SR},
@@ -153,14 +203,235 @@ static const struct tcdata tc[] = {
 /* Number of TC entries .... */
 static const int num_tcs = (sizeof(tc) / sizeof(struct tcdata));
 
-/* The root keymap */
+int	ESCDELAY = 300;		/* Delay in ms between keys for esc seq's */
 
-static keymap_t *base_keymap;
+/* Key buffer */
+#define INBUF_SZ 16		/* size of key buffer - must be larger than
+				 * longest multi-key sequence */
+static wchar_t	inbuf[INBUF_SZ];
+static int	start, end, working; /* pointers for manipulating inbuf data */
 
 /* prototypes for private functions */
-static keymap_t		*new_keymap(void);	/* create a new keymap */
-static key_entry_t	*new_key(void);		/* create a new key entry */
-static unsigned		inkey(int, int);
+static void add_key_sequence(SCREEN *screen, char *sequence, int key_type);
+static key_entry_t *add_new_key(keymap_t *current, char ch, int key_type,
+        int symbol);
+static void delete_key_sequence(keymap_t *current, int key_type);
+static void do_keyok(keymap_t *current, int key_type, bool flag, int *retval);
+static keymap_t *new_keymap(void); /* create a new keymap */
+static key_entry_t *new_key(void); /* create a new key entry */
+static wchar_t		inkey(int to, int delay);
+
+/*
+ * Free the storage associated with the given keymap
+ */
+void
+_cursesi_free_keymap(keymap_t *map)
+{
+	int i;
+
+	  /* check for, and free, child keymaps */
+	for (i = 0; i < MAX_CHAR; i++) {
+		if (map->mapping[i] >= 0) {
+			if (map->key[map->mapping[i]]->type == KEYMAP_MULTI)
+				_cursesi_free_keymap(
+					map->key[map->mapping[i]]->value.next);
+		}
+	}
+
+	  /* now free any allocated keymap structs */
+	for (i = 0; i < map->count; i += KEYMAP_ALLOC_CHUNK) {
+		free(map->key[i]);
+	}
+
+	free(map->key);
+	free(map);
+}
+
+
+/*
+ * Add a new key entry to the keymap pointed to by current.  Entry
+ * contains the character to add to the keymap, type is the type of
+ * entry to add (either multikey or leaf) and symbol is the symbolic
+ * value for a leaf type entry.  The function returns a pointer to the
+ * new keymap entry.
+ */
+static key_entry_t *
+add_new_key(keymap_t *current, char chr, int key_type, int symbol)
+{
+	key_entry_t *the_key;
+        int i, ki;
+
+#ifdef DEBUG
+	__CTRACE(__CTRACE_MISC,
+	    "Adding character %s of type %d, symbol 0x%x\n",
+	    unctrl(chr), key_type, symbol);
+#endif
+	if (current->mapping[(unsigned char) chr] < 0) {
+		if (current->mapping[(unsigned char) chr] == MAPPING_UNUSED) {
+			  /* first time for this char */
+			current->mapping[(unsigned char) chr] =
+				current->count;	/* map new entry */
+			ki = current->count;
+
+			  /* make sure we have room in the key array first */
+			if ((current->count & (KEYMAP_ALLOC_CHUNK - 1)) == 0)
+			{
+				if ((current->key =
+				     realloc(current->key,
+					     ki * sizeof(key_entry_t *)
+					     + KEYMAP_ALLOC_CHUNK * sizeof(key_entry_t *))) == NULL) {
+					fprintf(stderr,
+					  "Could not malloc for key entry\n");
+					exit(1);
+				}
+
+				the_key = new_key();
+				for (i = 0; i < KEYMAP_ALLOC_CHUNK; i++) {
+					current->key[ki + i] = &the_key[i];
+				}
+			}
+                } else {
+			  /* the mapping was used but freed, reuse it */
+			ki = - current->mapping[(unsigned char) chr];
+			current->mapping[(unsigned char) chr] = ki;
+		}
+
+		current->count++;
+
+		  /* point at the current key array element to use */
+		the_key = current->key[ki];
+
+		the_key->type = key_type;
+
+		switch (key_type) {
+		  case KEYMAP_MULTI:
+			    /* need for next key */
+#ifdef DEBUG
+			  __CTRACE(__CTRACE_MISC, "Creating new keymap\n");
+#endif
+			  the_key->value.next = new_keymap();
+			  the_key->enable = TRUE;
+			  break;
+
+		  case KEYMAP_LEAF:
+				/* the associated symbol for the key */
+#ifdef DEBUG
+			  __CTRACE(__CTRACE_MISC, "Adding leaf key\n");
+#endif
+			  the_key->value.symbol = symbol;
+			  the_key->enable = TRUE;
+			  break;
+
+		  default:
+			  fprintf(stderr, "add_new_key: bad type passed\n");
+			  exit(1);
+		}
+	} else {
+		  /* the key is already known - just return the address. */
+#ifdef DEBUG
+		__CTRACE(__CTRACE_MISC, "Keymap already known\n");
+#endif
+		the_key = current->key[current->mapping[(unsigned char) chr]];
+	}
+
+        return the_key;
+}
+
+/*
+ * Delete the given key symbol from the key mappings for the screen.
+ *
+ */
+void
+delete_key_sequence(keymap_t *current, int key_type)
+{
+	key_entry_t *key;
+	int i;
+
+	  /*
+	   * we need to iterate over all the keys as there may be
+	   * multiple instances of the leaf symbol.
+	   */
+	for (i = 0; i < MAX_CHAR; i++) {
+		if (current->mapping[i] < 0)
+			continue; /* no mapping for the key, next! */
+
+		key = current->key[current->mapping[i]];
+
+		if (key->type == KEYMAP_MULTI) {
+			  /* have not found the leaf, recurse down */
+			delete_key_sequence(key->value.next, key_type);
+			  /* if we deleted the last key in the map, free */
+			if (key->value.next->count == 0)
+				_cursesi_free_keymap(key->value.next);
+		} else if ((key->type == KEYMAP_LEAF)
+			   && (key->value.symbol == key_type)) {
+			  /*
+			   * delete the mapping by negating the current
+			   * index - this "holds" the position in the
+			   * allocation just in case we later re-add
+			   * the key for that mapping.
+			   */
+			current->mapping[i] = - current->mapping[i];
+			current->count--;
+		}
+	}
+}
+
+/*
+ * Add the sequence of characters given in sequence as the key mapping
+ * for the given key symbol.
+ */
+void
+add_key_sequence(SCREEN *screen, char *sequence, int key_type)
+{
+	key_entry_t *tmp_key;
+	keymap_t *current;
+	int length, j, key_ent;
+
+#ifdef DEBUG
+	__CTRACE(__CTRACE_MISC, "add_key_sequence: add key sequence: %s(%s)\n",
+	    sequence, keyname(key_type));
+#endif /* DEBUG */
+	current = screen->base_keymap;	/* always start with
+					 * base keymap. */
+	length = (int) strlen(sequence);
+
+	/*
+	 * OK - we really should never get a zero length string here, either
+	 * the termcap entry is there and it has a value or we are not called
+	 * at all.  Unfortunately, if someone assigns a termcap string to the
+	 * ^@ value we get passed a null string which messes up our length.
+	 * So, if we get a null string then just insert a leaf value in
+	 * the 0th char position of the root keymap.  Note that we are
+	 * totally screwed if someone terminates a multichar sequence
+	 * with ^@... oh well.
+	 */
+	if (length == 0)
+		length = 1;
+
+	for (j = 0; j < length - 1; j++) {
+		  /* add the entry to the struct */
+		tmp_key = add_new_key(current, sequence[j], KEYMAP_MULTI, 0);
+
+		  /* index into the key array - it's
+		     clearer if we stash this */
+		key_ent = current->mapping[(unsigned char) sequence[j]];
+
+		current->key[key_ent] = tmp_key;
+
+		  /* next key uses this map... */
+		current = current->key[key_ent]->value.next;
+	}
+
+	/*
+	 * This is the last key in the sequence (it may have been the
+	 * only one but that does not matter) this means it is a leaf
+	 * key and should have a symbol associated with it.
+	 */
+	tmp_key = add_new_key(current, sequence[length - 1], KEYMAP_LEAF,
+			      key_type);
+	current->key[current->mapping[(int)sequence[length - 1]]] = tmp_key;
+}
 
 /*
  * Init_getch - initialise all the pointers & structures needed to make
@@ -168,92 +439,43 @@ static unsigned		inkey(int, int);
  *
  */
 void
-__init_getch(sp)
-	char   *sp;
+__init_getch(SCREEN *screen)
 {
-static	char termcap[1024];
-	char entry[1024], termname[1024], *p;
-	int i, j, length;
-	keymap_t *current;
-	key_entry_t *the_key;
+	char entry[1024], *p;
+	int     i;
+	size_t limit;
+#ifdef DEBUG
+	int k, length;
+#endif
 
 	/* init the inkey state variable */
 	state = INKEY_NORM;
 
 	/* init the base keymap */
-	base_keymap = new_keymap();
+	screen->base_keymap = new_keymap();
 
 	/* key input buffer pointers */
 	start = end = working = 0;
 
 	/* now do the termcap snarfing ... */
-	strncpy(termname, sp, 1022);
-	termname[1023] = 0;
-
-	if (tgetent(termcap, termname) <= 0)
-		return;
 
 	for (i = 0; i < num_tcs; i++) {
-
 		p = entry;
-		if (tgetstr(tc[i].name, &p) == NULL)
-			continue;
-
-		current = base_keymap;	/* always start with base keymap. */
-		length = strlen(entry);
-
-		for (j = 0; j < length - 1; j++) {
-			if (current->mapping[(unsigned) entry[j]] < 0) {
-				/* first time for this char */
-				current->mapping[(unsigned) entry[j]] = current->count;	/* map new entry */
-				the_key = new_key();
-				/* multikey coz we are here */
-				the_key->type = KEYMAP_MULTI;
-
-				/* need for next key */
-				the_key->value.next = new_keymap();
-
-				/* put into key array */
-				if ((current->key = realloc(current->key, (current->count + 1) * sizeof(key_entry_t *))) == NULL) {
-					fprintf(stderr,
-						"Could not malloc for key entry\n");
-					exit(1);
-				}
-
-				current->key[current->count++] = the_key;
-
-			}
-			/* next key uses this map... */
-			current = current->key[current->mapping[(unsigned) entry[j]]]->value.next;
+		limit = 1023;
+		if (t_getstr(screen->cursesi_genbuf, tc[i].name,
+			     &p, &limit) != (char *) NULL) {
+#ifdef DEBUG
+			__CTRACE(__CTRACE_INIT,
+			    "Processing termcap entry %s, sequence ",
+			    tc[i].name);
+			length = (int) strlen(entry);
+			for (k = 0; k <= length -1; k++)
+				__CTRACE(__CTRACE_INIT, "%s", unctrl(entry[k]));
+			__CTRACE(__CTRACE_INIT, "\n");
+#endif
+			add_key_sequence(screen, entry, tc[i].symbol);
 		}
 
-		/*
-		 * This is the last key in the sequence (it may have been
-		 * the only one but that does not matter) this means it is
-		 * a leaf key and should have a symbol associated with it.
-		 */
-		if (current->count > 0) {
-			/*
-			 * If there were other keys then we need to
-			 * extend the mapping array.
-			 */
-			if ((current->key =
-				realloc(current->key,
-					(current->count + 1) *
-					sizeof(key_entry_t *))) == NULL) {
-
-				fprintf(stderr,
-					"Could not malloc for key entry\n");
-				exit(1);
-			}
-		}
-		current->mapping[(unsigned) entry[length - 1]] = current->count;
-		the_key = new_key();
-		the_key->type = KEYMAP_LEAF;	/* leaf key */
-
-		/* the associated symbol */
-		the_key->value.symbol = tc[i].symbol;
-		current->key[current->count++] = the_key;
 	}
 }
 
@@ -277,16 +499,13 @@ new_keymap(void)
 	/* Initialise the new map */
 	new_map->count = 0;
 	for (i = 0; i < MAX_CHAR; i++) {
-		new_map->mapping[i] = -1;	/* no mapping for char */
+		new_map->mapping[i] = MAPPING_UNUSED; /* no mapping for char */
 	}
 
-	/* one does assume there will be at least one key mapped.... */
-	if ((new_map->key = malloc(sizeof(key_entry_t *))) == NULL) {
-		perror("Could not malloc first key ent");
-		exit(1);
-	}
+	/* key array will be allocated when first key is added */
+	new_map->key = NULL;
 
-	return (new_map);
+	return new_map;
 }
 
 /*
@@ -298,15 +517,20 @@ static key_entry_t *
 new_key(void)
 {
 	key_entry_t *new_one;
+	int i;
 
-	if ((new_one = malloc(sizeof(key_entry_t))) == NULL) {
-		perror("inkey: Cannot allocate new key entry");
+	if ((new_one = malloc(KEYMAP_ALLOC_CHUNK * sizeof(key_entry_t)))
+	    == NULL) {
+		perror("inkey: Cannot allocate new key entry chunk");
 		exit(2);
 	}
-	new_one->type = 0;
-	new_one->value.next = NULL;
 
-	return (new_one);
+	for (i = 0; i < KEYMAP_ALLOC_CHUNK; i++) {
+		new_one[i].type = 0;
+		new_one[i].value.next = NULL;
+	}
+
+	return new_one;
 }
 
 /*
@@ -315,29 +539,37 @@ new_key(void)
  *
  */
 
-unsigned
-inkey(to, delay)
-	int     to, delay;
+wchar_t
+inkey(int to, int delay)
 {
-	int     k, nchar;
-	char    c;
-	keymap_t *current = base_keymap;
+	wchar_t		 k;
+	int              c, mapping;
+	keymap_t	*current = _cursesi_screen->base_keymap;
+	FILE            *infd = _cursesi_screen->infd;
 
+	k = 0;		/* XXX gcc -Wuninitialized */
+
+#ifdef DEBUG
+	__CTRACE(__CTRACE_INPUT, "inkey (%d, %d)\n", to, delay);
+#endif
 	for (;;) {		/* loop until we get a complete key sequence */
 reread:
 		if (state == INKEY_NORM) {
 			if (delay && __timeout(delay) == ERR)
 				return ERR;
-			if ((nchar = read(STDIN_FILENO, &c, sizeof(char))) < 0)
+			c = getchar();
+			if (c == EOF) {
+				clearerr(infd);
 				return ERR;
+			}
+
 			if (delay && (__notimeout() == ERR))
 				return ERR;
-			if (nchar == 0)
-				return ERR;	/* just in case we are nodelay
-						 * mode */
-			k = (unsigned int) c;
+
+			k = (wchar_t) c;
 #ifdef DEBUG
-			__CTRACE("inkey (state normal) got '%s'\n", unctrl(k));
+			__CTRACE(__CTRACE_INPUT,
+			    "inkey (state normal) got '%s'\n", unctrl(k));
 #endif
 
 			working = start;
@@ -353,31 +585,36 @@ reread:
 						 * out of keys in the
 						 * backlog */
 
-				/* if we have then switch to
-				   assembling */
+				/* if we have then switch to assembling */
 				state = INKEY_ASSEMBLING;
 			}
 		} else if (state == INKEY_ASSEMBLING) {
 			/* assembling a key sequence */
 			if (delay) {
-				if (__timeout(to ? DEFAULT_DELAY : delay) == ERR)
-						return ERR;
+				if (__timeout(to ? (ESCDELAY / 100) : delay)
+				    == ERR)
+					return ERR;
 			} else {
-				if (to && (__timeout(DEFAULT_DELAY) == ERR))
+				if (to && (__timeout(ESCDELAY / 100) == ERR))
 					return ERR;
 			}
-			if ((nchar = read(STDIN_FILENO, &c,
-					  sizeof(char))) < 0)
+
+			c = getchar();
+			if (ferror(infd)) {
+				clearerr(infd);
 				return ERR;
+			}
+
 			if ((to || delay) && (__notimeout() == ERR))
 					return ERR;
 
-			k = (unsigned int) c;
 #ifdef DEBUG
-			__CTRACE("inkey (state assembling) got '%s'\n", unctrl(k));
+			__CTRACE(__CTRACE_INPUT,
+			    "inkey (state assembling) got '%s'\n", unctrl(k));
 #endif
-			if (nchar == 0) {	/* inter-char timeout,
-						 * start backing out */
+			if (feof(infd) || c == -1) {	/* inter-char timeout,
+							 * start backing out */
+				clearerr(infd);
 				if (start == end)
 					/* no chars in the buffer, restart */
 					goto reread;
@@ -385,6 +622,7 @@ reread:
 				k = inbuf[start];
 				state = INKEY_TIMEOUT;
 			} else {
+				k = (wchar_t) c;
 				inbuf[working] = k;
 				INC_POINTER(working);
 				end = working;
@@ -394,8 +632,14 @@ reread:
 			exit(2);
 		}
 
-		/* Check key has no special meaning and we have not timed out */
-		if ((current->mapping[k] < 0) || (state == INKEY_TIMEOUT)) {
+		  /*
+		   * Check key has no special meaning and we have not
+		   * timed out and the key has not been disabled
+		   */
+		mapping = current->mapping[k];
+		if (((state == INKEY_TIMEOUT) || (mapping < 0))
+			|| ((current->key[mapping]->type == KEYMAP_LEAF)
+			    && (current->key[mapping]->enable == FALSE))) {
 			/* return the first key we know about */
 			k = inbuf[start];
 
@@ -438,26 +682,153 @@ reread:
 	}
 }
 
+#ifndef _CURSES_USE_MACROS
+/*
+ * getch --
+ *	Read in a character from stdscr.
+ */
+int
+getch(void)
+{
+	return wgetch(stdscr);
+}
+
+/*
+ * mvgetch --
+ *      Read in a character from stdscr at the given location.
+ */
+int
+mvgetch(int y, int x)
+{
+	return mvwgetch(stdscr, y, x);
+}
+
+/*
+ * mvwgetch --
+ *      Read in a character from stdscr at the given location in the
+ *      given window.
+ */
+int
+mvwgetch(WINDOW *win, int y, int x)
+{
+	if (wmove(win, y, x) == ERR)
+		return ERR;
+
+	return wgetch(win);
+}
+
+#endif
+
+/*
+ * keyok --
+ *      Set the enable flag for a keysym, if the flag is false then
+ * getch will not return this keysym even if the matching key sequence
+ * is seen.
+ */
+int
+keyok(int key_type, bool flag)
+{
+	int result = ERR;
+
+	do_keyok(_cursesi_screen->base_keymap, key_type, flag, &result);
+	return result;
+}
+
+/*
+ * do_keyok --
+ *       Does the actual work for keyok, we need to recurse through the
+ * keymaps finding the passed key symbol.
+ */
+void
+do_keyok(keymap_t *current, int key_type, bool flag, int *retval)
+{
+	key_entry_t *key;
+	int i;
+
+	  /*
+	   * we need to iterate over all the keys as there may be
+	   * multiple instances of the leaf symbol.
+	   */
+	for (i = 0; i < MAX_CHAR; i++) {
+		if (current->mapping[i] < 0)
+			continue; /* no mapping for the key, next! */
+
+		key = current->key[current->mapping[i]];
+
+		if (key->type == KEYMAP_MULTI)
+			do_keyok(key->value.next, key_type, flag, retval);
+		else if ((key->type == KEYMAP_LEAF)
+			 && (key->value.symbol == key_type)) {
+			key->enable = flag;
+			*retval = OK; /* we found at least one instance, ok */
+		}
+	}
+}
+
+/*
+ * define_key --
+ *      Add a custom mapping of a key sequence to key symbol.
+ *
+ */
+int
+define_key(char *sequence, int symbol)
+{
+
+	if (symbol <= 0)
+		return ERR;
+
+	if (sequence == NULL)
+		delete_key_sequence(_cursesi_screen->base_keymap, symbol);
+	else
+		add_key_sequence(_cursesi_screen, sequence, symbol);
+
+	return OK;
+}
+
 /*
  * wgetch --
  *	Read in a character from the window.
  */
 int
-wgetch(win)
-	WINDOW *win;
+wgetch(WINDOW *win)
 {
-	int     inp, weset;
-	int	nchar;
-	char    c;
+	int inp, weset;
+	int c;
+	FILE *infd = _cursesi_screen->infd;
 
+#ifdef DEBUG
+	__CTRACE(__CTRACE_INPUT, "wgetch: win(%p)\n", win);
+#endif
 	if (!(win->flags & __SCROLLOK) && (win->flags & __FULLWIN)
 	    && win->curx == win->maxx - 1 && win->cury == win->maxy - 1
 	    && __echoit)
 		return (ERR);
+
+	if (is_wintouched(win))
+		wrefresh(win);
 #ifdef DEBUG
-	__CTRACE("wgetch: __echoit = %d, __rawmode = %d\n",
-	    __echoit, __rawmode);
+	__CTRACE(__CTRACE_INPUT, "wgetch: __echoit = %d, "
+	    "__rawmode = %d, __nl = %d, flags = %#.4x, delay = %d\n",
+	    __echoit, __rawmode, _cursesi_screen->nl, win->flags, win->delay);
 #endif
+	if (_cursesi_screen->resized) {
+		_cursesi_screen->resized = 0;
+#ifdef DEBUG
+		__CTRACE(__CTRACE_INPUT, "wgetch returning KEY_RESIZE\n");
+#endif
+		return KEY_RESIZE;
+	}
+	if (_cursesi_screen->unget_pos) {
+#ifdef DEBUG
+		__CTRACE(__CTRACE_INPUT, "wgetch returning char at %d\n",
+		    _cursesi_screen->unget_pos);
+#endif
+		_cursesi_screen->unget_pos--;
+		c = _cursesi_screen->unget_list[_cursesi_screen->unget_pos];
+		if (__echoit)
+			waddch(win, (chtype) c);
+		return c;
+	}
 	if (__echoit && !__rawmode) {
 		cbreak();
 		weset = 1;
@@ -473,7 +844,10 @@ wgetch(win)
 			inp = inkey (win->flags & __NOTIMEOUT ? 0 : 1, 0);
 			break;
 		case 0:
-			if (__nodelay() == ERR) return ERR;
+			if (__nodelay() == ERR) {
+				__restore_termios();
+				return ERR;
+			}
 			inp = inkey(0, 0);
 			break;
 		default:
@@ -484,6 +858,10 @@ wgetch(win)
 		switch (win->delay)
 		{
 		case -1:
+			if (__delay() == ERR) {
+				__restore_termios();
+				return ERR;
+			}
 			break;
 		case 0:
 			if (__nodelay() == ERR) {
@@ -499,14 +877,18 @@ wgetch(win)
 			break;
 		}
 
-		if ((nchar = read(STDIN_FILENO, &c, sizeof(char))) < 0) {
+		c = getchar();
+		if (feof(infd)) {
+			clearerr(infd);
+			__restore_termios();
+			return ERR;	/* we have timed out */
+		}
+
+		if (ferror(infd)) {
+			clearerr(infd);
 			inp = ERR;
 		} else {
-			if (nchar == 0) {
-				__restore_termios();
-				return ERR;	/* we have timed out */
-			}
-			inp = (unsigned int) c;
+			inp = c;
 		}
 	}
 #ifdef DEBUG
@@ -515,9 +897,9 @@ wgetch(win)
 		  /* XXXX perhaps __unctrl should be expanded to include
 		   * XXXX the keysyms in the table....
 		   */
-		__CTRACE("wgetch assembled keysym 0x%x\n", inp);
+		__CTRACE(__CTRACE_INPUT, "wgetch assembled keysym 0x%x\n", inp);
 	else
-		__CTRACE("wgetch got '%s'\n", unctrl(inp));
+		__CTRACE(__CTRACE_INPUT, "wgetch got '%s'\n", unctrl(inp));
 #endif
 	if (win->delay > -1) {
 		if (__delay() == ERR) {
@@ -527,13 +909,63 @@ wgetch(win)
 	}
 
 	__restore_termios();
-	if (__echoit) {
-		mvwaddch(curscr,
-		    (int) (win->cury + win->begy), (int) (win->curx + win->begx), inp);
-		waddch(win, inp);
-	}
+
+	if (__echoit)
+		waddch(win, (chtype) inp);
+
 	if (weset)
 		nocbreak();
 
+	if (_cursesi_screen->nl && inp == 13)
+		inp = 10;
+
 	return ((inp < 0) || (inp == ERR) ? ERR : inp);
+}
+
+/*
+ * ungetch --
+ *     Put the character back into the input queue.
+ */
+int
+ungetch(int c)
+{
+	return __unget((wint_t) c);
+}
+
+/*
+ * __unget --
+ *    Do the work for ungetch() and unget_wch();
+ */
+int
+__unget(wint_t c)
+{
+	wchar_t	*p;
+	int	len;
+
+#ifdef DEBUG
+	__CTRACE(__CTRACE_INPUT, "__unget(%x)\n", c);
+#endif
+	if (_cursesi_screen->unget_pos >= _cursesi_screen->unget_len) {
+		len = _cursesi_screen->unget_len + 32;
+		if ((p = realloc(_cursesi_screen->unget_list,
+		    sizeof(wchar_t) * len)) == NULL) {
+			/* Can't realloc(), so just lose the oldest entry */
+			memmove(_cursesi_screen->unget_list,
+			    _cursesi_screen->unget_list + sizeof(wchar_t),
+			    _cursesi_screen->unget_len - 1);
+			_cursesi_screen->unget_list[_cursesi_screen->unget_len
+			    - 1] = c;
+			_cursesi_screen->unget_pos =
+			    _cursesi_screen->unget_len;
+			return OK;
+		} else {
+			_cursesi_screen->unget_pos =
+			    _cursesi_screen->unget_len;
+			_cursesi_screen->unget_len = len;
+			_cursesi_screen->unget_list = p;
+		}
+	}
+	_cursesi_screen->unget_list[_cursesi_screen->unget_pos] = c;
+	_cursesi_screen->unget_pos++;
+	return OK;
 }

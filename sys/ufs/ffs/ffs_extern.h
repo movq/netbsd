@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_extern.h,v 1.15 2000/03/16 18:20:06 jdolecek Exp $	*/
+/*	$NetBSD: ffs_extern.h,v 1.70 2008/10/10 09:21:58 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,6 +31,9 @@
  *	@(#)ffs_extern.h	8.6 (Berkeley) 3/30/95
  */
 
+#ifndef _UFS_FFS_FFS_EXTERN_H_
+#define _UFS_FFS_FFS_EXTERN_H_
+
 /*
  * Sysctl values for the fast filesystem.
  */
@@ -42,126 +41,192 @@
 #define FFS_CLUSTERWRITE	2	/* cluster writing enabled */
 #define FFS_REALLOCBLKS		3	/* block reallocation enabled */
 #define FFS_ASYNCFREE		4	/* asynchronous block freeing enabled */
-#define FFS_MAXID		5	/* number of valid ffs ids */
-
-#define FFS_NAMES { \
-	{ 0, 0 }, \
-	{ "doclusterread", CTLTYPE_INT }, \
-	{ "doclusterwrite", CTLTYPE_INT }, \
-	{ "doreallocblks", CTLTYPE_INT }, \
-	{ "doasyncfree", CTLTYPE_INT }, \
-}
+#define FFS_LOG_CHANGEOPT	5	/* log optimalization strategy change */
+#define FFS_MAXID		6	/* number of valid ffs ids */
 
 struct buf;
 struct fid;
 struct fs;
 struct inode;
-struct dinode;
+struct ufs1_dinode;
+struct ufs2_dinode;
 struct mount;
 struct nameidata;
-struct proc;
-struct statfs;
+struct lwp;
+struct statvfs;
 struct timeval;
-struct ucred;
+struct timespec;
 struct ufsmount;
 struct uio;
 struct vnode;
 struct mbuf;
 struct cg;
 
-extern struct pool ffs_inode_pool;		/* memory pool for inodes */
+#if defined(_KERNEL)
+
+#include <sys/pool.h>
+
+#define FFS_NOBLK		((daddr_t)-1)
+
+#define	FFS_ITIMES(ip, acc, mod, cre) \
+	while ((ip)->i_flag & (IN_ACCESS | IN_CHANGE | IN_UPDATE | IN_MODIFY)) \
+		ffs_itimes(ip, acc, mod, cre)
+
+extern pool_cache_t ffs_inode_cache;	/* memory pool for inodes */
+extern pool_cache_t ffs_dinode1_cache;	/* memory pool for UFS1 dinodes */
+extern pool_cache_t ffs_dinode2_cache;	/* memory pool for UFS2 dinodes */
+
+#endif /* defined(_KERNEL) */
 
 __BEGIN_DECLS
 
+#if defined(_KERNEL)
+
+#include <sys/param.h>
+#include <sys/mount.h>
+#include <sys/wapbl.h>
+
 /* ffs_alloc.c */
-int ffs_alloc __P((struct inode *, ufs_daddr_t, ufs_daddr_t , int, struct ucred *,
-		   ufs_daddr_t *));
-int ffs_realloccg __P((struct inode *, ufs_daddr_t, ufs_daddr_t, int, int ,
-		       struct ucred *, struct buf **));
-int ffs_reallocblks __P((void *));
-int ffs_valloc __P((void *));
-ufs_daddr_t ffs_blkpref __P((struct inode *, ufs_daddr_t, int, ufs_daddr_t *));
-void ffs_blkfree __P((struct inode *, ufs_daddr_t, long));
-int ffs_vfree __P((void *));
-void ffs_clusteracct __P((struct fs *, struct cg *, ufs_daddr_t, int));
+int	ffs_alloc(struct inode *, daddr_t, daddr_t , int, int, kauth_cred_t,
+		  daddr_t *);
+int	ffs_realloccg(struct inode *, daddr_t, daddr_t, int, int ,
+		      kauth_cred_t, struct buf **, daddr_t *);
+#if 0
+int	ffs_reallocblks(void *);
+#endif
+int	ffs_valloc(struct vnode *, int, kauth_cred_t, struct vnode **);
+daddr_t	ffs_blkpref_ufs1(struct inode *, daddr_t, int, int, int32_t *);
+daddr_t	ffs_blkpref_ufs2(struct inode *, daddr_t, int, int, int64_t *);
+int	ffs_blkalloc(struct inode *, daddr_t, long);
+void	ffs_blkfree(struct fs *, struct vnode *, daddr_t, long, ino_t);
+int	ffs_vfree(struct vnode *, ino_t, int);
+void	ffs_clusteracct(struct fs *, struct cg *, int32_t, int);
+int	ffs_checkfreefile(struct fs *, struct vnode *, ino_t);
 
 /* ffs_balloc.c */
-int ffs_balloc __P((void *));
-
-/* ffs_bswap.c */
-void ffs_sb_swap __P((struct fs*, struct fs *, int));
-void ffs_dinode_swap __P((struct dinode *, struct dinode *));
-void ffs_csum_swap __P((struct csum *, struct csum *, int));
+int	ffs_balloc(struct vnode *, off_t, int, kauth_cred_t, int,
+    struct buf **);
 
 /* ffs_inode.c */
-int ffs_update __P((void *));
-int ffs_truncate __P((void *));
-
-/* ffs_subr.c */
-int ffs_blkatoff __P((void *));
-int ffs_freefile __P((void *));
-void ffs_fragacct __P((struct fs *, int, int32_t[], int, int));
-#ifdef DIAGNOSTIC
-void	ffs_checkoverlap __P((struct buf *, struct inode *));
-#endif
-int ffs_isblock __P((struct fs *, unsigned char *, ufs_daddr_t));
-int ffs_isfreeblock __P((struct fs *, unsigned char *, ufs_daddr_t));
-void ffs_clrblock __P((struct fs *, u_char *, ufs_daddr_t));
-void ffs_setblock __P((struct fs *, unsigned char *, ufs_daddr_t));
+int	ffs_update(struct vnode *, const struct timespec *,
+    const struct timespec *, int);
+int	ffs_truncate(struct vnode *, off_t, int, kauth_cred_t);
 
 /* ffs_vfsops.c */
-void ffs_init __P((void));
-void ffs_done __P((void));
-int ffs_mountroot __P((void));
-int ffs_mount __P((struct mount *, const char *, void *, struct nameidata *,
-		   struct proc *));
-int ffs_reload __P((struct mount *, struct ucred *, struct proc *));
-int ffs_mountfs __P((struct vnode *, struct mount *, struct proc *));
-int ffs_oldfscompat __P((struct fs *));
-int ffs_unmount __P((struct mount *, int, struct proc *));
-int ffs_flushfiles __P((struct mount *, int, struct proc *));
-int ffs_statfs __P((struct mount *, struct statfs *, struct proc *));
-int ffs_sync __P((struct mount *, int, struct ucred *, struct proc *));
-int ffs_vget __P((struct mount *, ino_t, struct vnode **));
-int ffs_fhtovp __P((struct mount *, struct fid *, struct vnode **));
-int ffs_vptofh __P((struct vnode *, struct fid *));
-int ffs_sysctl __P((int *, u_int, void *, size_t *, void *, size_t,
-		    struct proc *));
-int ffs_sbupdate __P((struct ufsmount *, int));
-int ffs_cgupdate __P((struct ufsmount *, int));
+VFS_PROTOS(ffs);
+
+int     ffs_reload(struct mount *, kauth_cred_t, struct lwp *);
+int     ffs_mountfs(struct vnode *, struct mount *, struct lwp *);
+int	ffs_flushfiles(struct mount *, int, struct lwp *);
+int	ffs_sbupdate(struct ufsmount *, int);
+int	ffs_cgupdate(struct ufsmount *, int);
 
 /* ffs_vnops.c */
-int ffs_read __P((void *));
-int ffs_write __P((void *));
-int ffs_fsync __P((void *));
-int ffs_reclaim __P((void *));
-__END_DECLS
+int	ffs_read(void *);
+int	ffs_write(void *);
+int	ffs_fsync(void *);
+int	ffs_reclaim(void *);
+int	ffs_getpages(void *);
+void	ffs_gop_size(struct vnode *, off_t, off_t *, int);
+int	ffs_openextattr(void *);
+int	ffs_closeextattr(void *);
+int	ffs_getextattr(void *);
+int	ffs_setextattr(void *);
+int	ffs_listextattr(void *);
+int	ffs_deleteextattr(void *);
+int	ffs_lock(void *);
+int	ffs_unlock(void *);
+int	ffs_islocked(void *);
+int	ffs_full_fsync(struct vnode *, int);
 
- 
+/*
+ * Snapshot function prototypes.
+ */
+int	ffs_snapshot_init(struct ufsmount *);
+void	ffs_snapshot_fini(struct ufsmount *);
+int	ffs_snapblkfree(struct fs *, struct vnode *, daddr_t, long, ino_t);
+void	ffs_snapremove(struct vnode *);
+int	ffs_snapshot(struct mount *, struct vnode *, struct timespec *);
+void	ffs_snapshot_mount(struct mount *);
+void	ffs_snapshot_unmount(struct mount *);
+void	ffs_snapgone(struct inode *);
+int	ffs_snapshot_read(struct vnode *, struct uio *, int);
+
 /*
  * Soft dependency function prototypes.
  */
-void	softdep_initialize __P((void));
-int	softdep_mount __P((struct vnode *, struct mount *, struct fs *,
-	    struct ucred *));
-int	softdep_flushfiles __P((struct mount *, int, struct proc *));
-void	softdep_update_inodeblock __P((struct inode *, struct buf *, int));
-void	softdep_load_inodeblock __P((struct inode *));
-void	softdep_freefile __P((void *));
-void	softdep_setup_freeblocks __P((struct inode *, off_t));
-void	softdep_setup_inomapdep __P((struct buf *, struct inode *, ino_t));
-void	softdep_setup_blkmapdep __P((struct buf *, struct fs *, ufs_daddr_t));
-void	softdep_setup_allocdirect __P((struct inode *, ufs_lbn_t, ufs_daddr_t,
-	    ufs_daddr_t, long, long, struct buf *));
-void	softdep_setup_allocindir_meta __P((struct buf *, struct inode *,
-	    struct buf *, int, ufs_daddr_t));
-void	softdep_setup_allocindir_page __P((struct inode *, ufs_lbn_t,
-	    struct buf *, int, ufs_daddr_t, ufs_daddr_t, struct buf *));
-void	softdep_fsync_mountdev __P((struct vnode *));
-int	softdep_sync_metadata __P((void *));
+void	softdep_initialize(void);
+void	softdep_reinitialize(void);
+int	softdep_mount(struct vnode *, struct mount *, struct fs *,
+		      kauth_cred_t);
+void	softdep_unmount(struct mount *);
+int	softdep_flushworklist(struct mount *, int *, struct lwp *);
+int	softdep_flushfiles(struct mount *, int, struct lwp *);
+void	softdep_update_inodeblock(struct inode *, struct buf *, int);
+void	softdep_load_inodeblock(struct inode *);
+void	softdep_freefile(struct vnode *, ino_t, int);
+void	softdep_setup_freeblocks(struct inode *, off_t, int);
+void	softdep_setup_inomapdep(struct buf *, struct inode *, ino_t);
+void	softdep_setup_blkmapdep(struct buf *, struct fs *, daddr_t);
+void	softdep_setup_allocdirect(struct inode *, daddr_t, daddr_t,
+				  daddr_t, long, long, struct buf *);
+void	softdep_setup_allocindir_meta(struct buf *, struct inode *,
+				      struct buf *, int, daddr_t);
+void	softdep_setup_allocindir_page(struct inode *, daddr_t,
+				      struct buf *, int, daddr_t, daddr_t,
+				      struct buf *);
+void	softdep_fsync_mountdev(struct vnode *);
+int	softdep_sync_metadata(struct vnode *);
 
-extern int (**ffs_vnodeop_p) __P((void *));
-extern int (**ffs_specop_p) __P((void *));
-extern int (**ffs_fifoop_p) __P((void *));
+/* Write Ahead Physical Block Logging */
+void	ffs_wapbl_verify_inodes(struct mount *, const char *);
+void	ffs_wapbl_replay_finish(struct mount *);
+int	ffs_wapbl_start(struct mount *);
+int	ffs_wapbl_stop(struct mount *, int);
+int	ffs_wapbl_replay_start(struct mount *, struct fs *, struct vnode *);
+void	ffs_wapbl_blkalloc(struct fs *, struct vnode *, daddr_t, int);
 
+void	ffs_wapbl_sync_metadata(struct mount *, daddr_t *, int *, int);
+void	ffs_wapbl_abort_sync_metadata(struct mount *, daddr_t *, int *, int);
 
+extern int (**ffs_vnodeop_p)(void *);
+extern int (**ffs_specop_p)(void *);
+extern int (**ffs_fifoop_p)(void *);
+
+#endif /* defined(_KERNEL) */
+
+/* ffs_appleufs.c */
+struct appleufslabel;
+u_int16_t ffs_appleufs_cksum(const struct appleufslabel *);
+int	ffs_appleufs_validate(const char*, const struct appleufslabel *,
+			      struct appleufslabel *);
+void	ffs_appleufs_set(struct appleufslabel *, const char *, time_t,
+			 uint64_t);
+
+/* ffs_bswap.c */
+void	ffs_sb_swap(struct fs*, struct fs *);
+void	ffs_dinode1_swap(struct ufs1_dinode *, struct ufs1_dinode *);
+void	ffs_dinode2_swap(struct ufs2_dinode *, struct ufs2_dinode *);
+struct csum;
+void	ffs_csum_swap(struct csum *, struct csum *, int);
+struct csum_total;
+void	ffs_csumtotal_swap(struct csum_total *, struct csum_total *);
+void	ffs_cg_swap(struct cg *, struct cg *, struct fs *);
+
+/* ffs_subr.c */
+#if defined(_KERNEL)
+void	ffs_load_inode(struct buf *, struct inode *, struct fs *, ino_t);
+int	ffs_getblk(struct vnode *, daddr_t, daddr_t, int, bool, buf_t **);
+#endif /* defined(_KERNEL) */
+int	ffs_freefile(struct fs *, struct vnode *, ino_t, int);
+void	ffs_fragacct(struct fs *, int, int32_t[], int, int);
+int	ffs_isblock(struct fs *, u_char *, int32_t);
+int	ffs_isfreeblock(struct fs *, u_char *, int32_t);
+void	ffs_clrblock(struct fs *, u_char *, int32_t);
+void	ffs_setblock(struct fs *, u_char *, int32_t);
+void	ffs_itimes(struct inode *, const struct timespec *,
+    const struct timespec *, const struct timespec *);
+
+__END_DECLS
+
+#endif /* !_UFS_FFS_FFS_EXTERN_H_ */

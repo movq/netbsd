@@ -1,4 +1,4 @@
-/*	$NetBSD: lance.c,v 1.11 2000/03/30 12:45:31 augustss Exp $	*/
+/*	$NetBSD: lance.c,v 1.41 2008/04/28 20:23:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -52,11 +45,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -75,16 +64,15 @@
  *	@(#)if_le.c	8.2 (Berkeley) 11/16/93
  */
 
-#include "opt_inet.h"
-#include "opt_ccitt.h"
-#include "opt_llc.h"
-#include "opt_ns.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: lance.c,v 1.41 2008/04/28 20:23:50 martin Exp $");
+
 #include "bpfilter.h"
 #include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/mbuf.h> 
+#include <sys/mbuf.h>
 #include <sys/syslog.h>
 #include <sys/socket.h>
 #include <sys/device.h>
@@ -100,26 +88,6 @@
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/if_inarp.h>
-#include <netinet/in_systm.h>
-#include <netinet/in_var.h>
-#include <netinet/ip.h>
-#endif
-
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
-
-#if defined(CCITT) && defined(LLC)
-#include <sys/socketvar.h>
-#include <netccitt/x25.h>
-#include <netccitt/pk.h>
-#include <netccitt/pk_var.h>
-#include <netccitt/pk_extern.h>
-#endif
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -129,7 +97,7 @@
 #include <dev/ic/lancereg.h>
 #include <dev/ic/lancevar.h>
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
 #endif
 
@@ -137,26 +105,26 @@
 #define	integrate
 #define hide
 #else
-#define	integrate	static __inline
+#define	integrate	static inline
 #define hide		static
 #endif
 
-integrate struct mbuf *lance_get __P((struct lance_softc *, int, int));
+integrate struct mbuf *lance_get(struct lance_softc *, int, int);
 
-hide void lance_shutdown __P((void *));
+hide void lance_shutdown(void *);
 
-int lance_mediachange __P((struct ifnet *));
-void lance_mediastatus __P((struct ifnet *, struct ifmediareq *));
+int lance_mediachange(struct ifnet *);
+void lance_mediastatus(struct ifnet *, struct ifmediareq *);
 
-static inline u_int16_t ether_cmp __P((void *, void *));
+static inline u_int16_t ether_cmp(void *, void *);
 
-void lance_stop __P((struct lance_softc *));
-int lance_ioctl __P((struct ifnet *, u_long, caddr_t));
-void lance_watchdog __P((struct ifnet *));
+void lance_stop(struct ifnet *, int);
+int lance_ioctl(struct ifnet *, u_long, void *);
+void lance_watchdog(struct ifnet *);
 
 /*
  * Compare two Ether/802 addresses for equality, inlined and
- * unrolled for speed.  Use this like bcmp().
+ * unrolled for speed.  Use this like memcmp().
  *
  * XXX: Add <machine/inlines.h> for stuff like this?
  * XXX: or maybe add it to libkern.h instead?
@@ -168,13 +136,12 @@ void lance_watchdog __P((struct ifnet *));
  * Please do NOT tweak this without looking at the actual
  * assembly code generated before and after your tweaks!
  */
-static inline u_int16_t
-ether_cmp(one, two)
-	void *one, *two;
+static inline uint16_t
+ether_cmp(void *one, void *two)
 {
-	u_int16_t *a = (u_short *) one;
-	u_int16_t *b = (u_short *) two;
-	u_int16_t diff;
+	uint16_t *a = (uint16_t *)one;
+	uint16_t *b = (uint16_t *)two;
+	uint16_t diff;
 
 #ifdef	m68k
 	/*
@@ -201,31 +168,29 @@ ether_cmp(one, two)
 
 #ifdef LANCE_REVC_BUG
 /* Make sure this is short-aligned, for ether_cmp(). */
-static u_int16_t bcast_enaddr[3] = { ~0, ~0, ~0 };
+static uint16_t bcast_enaddr[3] = { ~0, ~0, ~0 };
 #endif
 
-#define	ifp	(&sc->sc_ethercom.ec_if)
-
 void
-lance_config(sc)
-	struct lance_softc *sc;
+lance_config(struct lance_softc *sc)
 {
-	int i;
-
-	/* Make sure the chip is stopped. */
-	lance_stop(sc);
+	int i, nbuf;
+	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
 	/* Initialize ifnet structure. */
-	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
+	strcpy(ifp->if_xname, device_xname(sc->sc_dev));
 	ifp->if_softc = sc;
 	ifp->if_start = sc->sc_start;
 	ifp->if_ioctl = lance_ioctl;
 	ifp->if_watchdog = lance_watchdog;
+	ifp->if_init = lance_init;
+	ifp->if_stop = lance_stop;
 	ifp->if_flags =
 	    IFF_BROADCAST | IFF_SIMPLEX | IFF_NOTRAILERS | IFF_MULTICAST;
 #ifdef LANCE_REVC_BUG
 	ifp->if_flags &= ~IFF_MULTICAST;
 #endif
+	IFQ_SET_READY(&ifp->if_snd);
 
 	/* Initialize ifmedia structures. */
 	ifmedia_init(&sc->sc_media, 0, lance_mediachange, lance_mediastatus);
@@ -265,22 +230,27 @@ lance_config(sc)
 		sc->sc_ntbuf = 32;
 		break;
 	default:
-		panic("lance_config: weird memory size");
+		/* weird memory size; cope with it */
+		nbuf = sc->sc_memsize / LEBLEN;
+		sc->sc_ntbuf = nbuf / 5;
+		sc->sc_nrbuf = nbuf - sc->sc_ntbuf;
 	}
 
-	printf(": address %s\n", ether_sprintf(sc->sc_enaddr));
-	printf("%s: %d receive buffers, %d transmit buffers\n",
-	    sc->sc_dev.dv_xname, sc->sc_nrbuf, sc->sc_ntbuf);
+	aprint_normal(": address %s\n", ether_sprintf(sc->sc_enaddr));
+	aprint_normal_dev(sc->sc_dev,
+	    "%d receive buffers, %d transmit buffers\n",
+	    sc->sc_nrbuf, sc->sc_ntbuf);
 
+	/* Make sure the chip is stopped. */
+	lance_stop(ifp, 0);
+
+	/* claim 802.1q capability */
+	sc->sc_ethercom.ec_capabilities |= ETHERCAP_VLAN_MTU;
 	/* Attach the interface. */
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->sc_enaddr);
 
-#if NBPFILTER > 0
-	bpfattach(&ifp->if_bpf, ifp, DLT_EN10MB, sizeof(struct ether_header));
-#endif
-
-	sc->sc_sh = shutdownhook_establish(lance_shutdown, sc);
+	sc->sc_sh = shutdownhook_establish(lance_shutdown, ifp);
 	if (sc->sc_sh == NULL)
 		panic("lance_config: can't establish shutdownhook");
 	sc->sc_rbufaddr = malloc(sc->sc_nrbuf * sizeof(int), M_DEVBUF,
@@ -289,26 +259,25 @@ lance_config(sc)
 					M_WAITOK);
 
 #if NRND > 0
-	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
+	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 			  RND_TYPE_NET, 0);
 #endif
 }
 
 void
-lance_reset(sc)
-	struct lance_softc *sc;
+lance_reset(struct lance_softc *sc)
 {
 	int s;
 
 	s = splnet();
-	lance_init(sc);
+	lance_init(&sc->sc_ethercom.ec_if);
 	splx(s);
 }
 
 void
-lance_stop(sc)
-	struct lance_softc *sc;
+lance_stop(struct ifnet *ifp, int disable)
 {
+	struct lance_softc *sc = ifp->if_softc;
 
 	(*sc->sc_wrcsr)(sc, LE_CSR0, LE_C0_STOP);
 }
@@ -317,10 +286,10 @@ lance_stop(sc)
  * Initialization of interface; set up initialization block
  * and transmit/receive descriptor rings.
  */
-void
-lance_init(sc)
-	struct lance_softc *sc;
+int
+lance_init(struct ifnet *ifp)
 {
+	struct lance_softc *sc = ifp->if_softc;
 	int timo;
 	u_long a;
 
@@ -353,17 +322,18 @@ lance_init(sc)
 
 	if ((*sc->sc_rdcsr)(sc, LE_CSR0) & LE_C0_IDON) {
 		/* Start the LANCE. */
-		(*sc->sc_wrcsr)(sc, LE_CSR0, LE_C0_INEA | LE_C0_STRT |
-		    LE_C0_IDON);
+		(*sc->sc_wrcsr)(sc, LE_CSR0, LE_C0_INEA | LE_C0_STRT);
 		ifp->if_flags |= IFF_RUNNING;
 		ifp->if_flags &= ~IFF_OACTIVE;
 		ifp->if_timer = 0;
 		(*sc->sc_start)(ifp);
 	} else
 		printf("%s: controller failed to initialize\n",
-			sc->sc_dev.dv_xname);
+			device_xname(sc->sc_dev));
 	if (sc->sc_hwinit)
 		(*sc->sc_hwinit)(sc);
+
+	return (0);
 }
 
 /*
@@ -371,10 +341,7 @@ lance_init(sc)
  * network buffer memory.
  */
 int
-lance_put(sc, boff, m)
-	struct lance_softc *sc;
-	int boff;
-	struct mbuf *m;
+lance_put(struct lance_softc *sc, int boff, struct mbuf *m)
 {
 	struct mbuf *n;
 	int len, tlen = 0;
@@ -385,7 +352,7 @@ lance_put(sc, boff, m)
 			MFREE(m, n);
 			continue;
 		}
-		(*sc->sc_copytobuf)(sc, mtod(m, caddr_t), boff, len);
+		(*sc->sc_copytobuf)(sc, mtod(m, void *), boff, len);
 		boff += len;
 		tlen += len;
 		MFREE(m, n);
@@ -404,9 +371,7 @@ lance_put(sc, boff, m)
  * we copy into clusters.
  */
 integrate struct mbuf *
-lance_get(sc, boff, totlen)
-	struct lance_softc *sc;
-	int boff, totlen;
+lance_get(struct lance_softc *sc, int boff, int totlen)
 {
 	struct mbuf *m, *m0, *newm;
 	int len;
@@ -414,7 +379,7 @@ lance_get(sc, boff, totlen)
 	MGETHDR(m0, M_DONTWAIT, MT_DATA);
 	if (m0 == 0)
 		return (0);
-	m0->m_pkthdr.rcvif = ifp;
+	m0->m_pkthdr.rcvif = &sc->sc_ethercom.ec_if;
 	m0->m_pkthdr.len = totlen;
 	len = MHLEN;
 	m = m0;
@@ -428,7 +393,7 @@ lance_get(sc, boff, totlen)
 		}
 
 		if (m == m0) {
-			caddr_t newdata = (caddr_t)
+			char *newdata = (char *)
 			    ALIGN(m->m_data + sizeof(struct ether_header)) -
 			    sizeof(struct ether_header);
 			len -= newdata - m->m_data;
@@ -436,7 +401,7 @@ lance_get(sc, boff, totlen)
 		}
 
 		m->m_len = len = min(totlen, len);
-		(*sc->sc_copyfrombuf)(sc, mtod(m, caddr_t), boff, len);
+		(*sc->sc_copyfrombuf)(sc, mtod(m, void *), boff, len);
 		boff += len;
 
 		totlen -= len;
@@ -460,18 +425,19 @@ bad:
  * Pass a packet to the higher levels.
  */
 void
-lance_read(sc, boff, len)
-	struct lance_softc *sc;
-	int boff, len;
+lance_read(struct lance_softc *sc, int boff, int len)
 {
 	struct mbuf *m;
+	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct ether_header *eh;
 
 	if (len <= sizeof(struct ether_header) ||
-	    len > ETHERMTU + sizeof(struct ether_header)) {
+	    len > ((sc->sc_ethercom.ec_capenable & ETHERCAP_VLAN_MTU) ?
+		ETHER_VLAN_ENCAP_LEN + ETHERMTU + sizeof(struct ether_header) :
+		ETHERMTU + sizeof(struct ether_header))) {
 #ifdef LEDEBUG
 		printf("%s: invalid packet size %d; dropping\n",
-		    sc->sc_dev.dv_xname, len);
+		    device_xname(sc->sc_dev), len);
 #endif
 		ifp->if_ierrors++;
 		return;
@@ -486,32 +452,7 @@ lance_read(sc, boff, len)
 
 	ifp->if_ipackets++;
 
-	/* We assume that the header fit entirely in one mbuf. */
 	eh = mtod(m, struct ether_header *);
-
-#if NBPFILTER > 0
-	/*
-	 * Check if there's a BPF listener on this interface.
-	 * If so, hand off the raw packet to BPF.
-	 */
-	if (ifp->if_bpf) {
-		bpf_mtap(ifp->if_bpf, m);
-
-#ifndef LANCE_REVC_BUG
-		/*
-		 * Note that the interface cannot be in promiscuous mode if
-		 * there are no BPF listeners.  And if we are in promiscuous
-		 * mode, we have to check if this packet is really ours.
-		 */
-		if ((ifp->if_flags & IFF_PROMISC) != 0 &&
-		    (eh->ether_dhost[0] & 1) == 0 && /* !mcast and !bcast */
-		    ETHER_CMP(eh->ether_dhost, sc->sc_enaddr)) {
-			m_freem(m);
-			return;
-		}
-#endif
-	}
-#endif
 
 #ifdef LANCE_REVC_BUG
 	/*
@@ -528,6 +469,24 @@ lance_read(sc, boff, len)
 	}
 #endif
 
+	/*
+	 * Some lance device does not present IFF_SIMPLEX behavior on multicast
+	 * packets.  Make sure to drop it if it is from ourselves.
+	 */
+	if (!ETHER_CMP(eh->ether_shost, sc->sc_enaddr)) {
+		m_freem(m);
+		return;
+	}
+
+#if NBPFILTER > 0
+	/*
+	 * Check if there's a BPF listener on this interface.
+	 * If so, hand off the raw packet to BPF.
+	 */
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, m);
+#endif
+
 	/* Pass the packet up. */
 	(*ifp->if_input)(ifp, m);
 }
@@ -535,20 +494,18 @@ lance_read(sc, boff, len)
 #undef	ifp
 
 void
-lance_watchdog(ifp)
-	struct ifnet *ifp;
+lance_watchdog(struct ifnet *ifp)
 {
 	struct lance_softc *sc = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
+	log(LOG_ERR, "%s: device timeout\n", device_xname(sc->sc_dev));
 	++ifp->if_oerrors;
 
 	lance_reset(sc);
 }
 
 int
-lance_mediachange(ifp)
-	struct ifnet *ifp;
+lance_mediachange(struct ifnet *ifp)
 {
 	struct lance_softc *sc = ifp->if_softc;
 
@@ -558,9 +515,7 @@ lance_mediachange(ifp)
 }
 
 void
-lance_mediastatus(ifp, ifmr)
-	struct ifnet *ifp;
-	struct ifmediareq *ifmr;
+lance_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr)
 {
 	struct lance_softc *sc = ifp->if_softc;
 
@@ -579,108 +534,28 @@ lance_mediastatus(ifp, ifmr)
  * Process an ioctl request.
  */
 int
-lance_ioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	caddr_t data;
+lance_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct lance_softc *sc = ifp->if_softc;
-	struct ifaddr *ifa = (struct ifaddr *)data;
 	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error = 0;
 
 	s = splnet();
 
 	switch (cmd) {
-
 	case SIOCSIFADDR:
-		ifp->if_flags |= IFF_UP;
-
-		switch (ifa->ifa_addr->sa_family) {
-#ifdef INET
-		case AF_INET:
-			lance_init(sc);
-			arp_ifinit(ifp, ifa);
-			break;
-#endif
-#ifdef NS
-		case AF_NS:
-		    {
-			struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
-
-			if (ns_nullhost(*ina))
-				ina->x_host =
-				    *(union ns_host *)LLADDR(ifp->if_sadl);
-			else {
-				bcopy(ina->x_host.c_host,
-				    LLADDR(ifp->if_sadl),
-				    sizeof(sc->sc_enaddr));
-			}	
-			/* Set new address. */
-			lance_init(sc);
-			break;
-		    }
-#endif
-		default:
-			lance_init(sc);
-			break;
-		}
-		break;
-
-#if defined(CCITT) && defined(LLC)
-	case SIOCSIFCONF_X25:
-		ifp->if_flags |= IFF_UP;
-		ifa->ifa_rtrequest = cons_rtrequest; /* XXX */
-		error = x25_llcglue(PRC_IFUP, ifa->ifa_addr);
-		if (error == 0)
-			lance_init(sc);
-		break;
-#endif /* CCITT && LLC */
-
 	case SIOCSIFFLAGS:
-		if ((ifp->if_flags & IFF_UP) == 0 &&
-		    (ifp->if_flags & IFF_RUNNING) != 0) {
-			/*
-			 * If interface is marked down and it is running, then
-			 * stop it.
-			 */
-			lance_stop(sc);
-			ifp->if_flags &= ~IFF_RUNNING;
-		} else if ((ifp->if_flags & IFF_UP) != 0 &&
-		    	   (ifp->if_flags & IFF_RUNNING) == 0) {
-			/*
-			 * If interface is marked up and it is stopped, then
-			 * start it.
-			 */
-			lance_init(sc);
-		} else if ((ifp->if_flags & IFF_UP) != 0) {
-			/*
-			 * Reset the interface to pick up changes in any other
-			 * flags that affect hardware registers.
-			 */
-			/*lance_stop(sc);*/
-			lance_init(sc);
-		}
-#ifdef LEDEBUG
-		if (ifp->if_flags & IFF_DEBUG)
-			sc->sc_debug = 1;
-		else
-			sc->sc_debug = 0;
-#endif
+		error = ether_ioctl(ifp, cmd, data);
 		break;
-
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		error = (cmd == SIOCADDMULTI) ?
-		    ether_addmulti(ifr, &sc->sc_ethercom) :
-		    ether_delmulti(ifr, &sc->sc_ethercom);
-
-		if (error == ENETRESET) {
+		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 			/*
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			lance_reset(sc);
+			if (ifp->if_flags & IFF_RUNNING)
+				lance_reset(sc);
 			error = 0;
 		}
 		break;
@@ -700,32 +575,21 @@ lance_ioctl(ifp, cmd, data)
 }
 
 hide void
-lance_shutdown(arg)
-	void *arg;
+lance_shutdown(void *arg)
 {
 
-	lance_stop((struct lance_softc *)arg);
+	lance_stop((struct ifnet *)arg, 0);
 }
 
 /*
  * Set up the logical address filter.
  */
 void
-lance_setladrf(ac, af)
-	struct ethercom *ac;
-	u_int16_t *af;
+lance_setladrf(struct ethercom *ac, uint16_t *af)
 {
 	struct ifnet *ifp = &ac->ec_if;
 	struct ether_multi *enm;
-	u_char *cp;
-	u_int32_t crc;
-	static const u_int32_t crctab[] = {
-		0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac,
-		0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
-		0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c,
-		0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c
-	};
-	int len;
+	uint32_t crc;
 	struct ether_multistep step;
 
 	/*
@@ -754,13 +618,8 @@ lance_setladrf(ac, af)
 			goto allmulti;
 		}
 
-		cp = enm->enm_addrlo;
-		crc = 0xffffffff;
-		for (len = sizeof(enm->enm_addrlo); --len >= 0;) {
-			crc ^= *cp++;
-			crc = (crc >> 4) ^ crctab[crc & 0xf];
-			crc = (crc >> 4) ^ crctab[crc & 0xf];
-		}
+		crc = ether_crc32_le(enm->enm_addrlo, ETHER_ADDR_LEN);
+
 		/* Just want the 6 most significant bits. */
 		crc >>= 26;
 
@@ -794,44 +653,36 @@ allmulti:
  */
 
 void
-lance_copytobuf_contig(sc, from, boff, len)
-	struct lance_softc *sc;
-	void *from;
-	int boff, len;
+lance_copytobuf_contig(struct lance_softc *sc, void *from, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
+	uint8_t *buf = sc->sc_mem;
 
 	/*
-	 * Just call bcopy() to do the work.
+	 * Just call memcpy() to do the work.
 	 */
-	bcopy(from, buf + boff, len);
+	memcpy(buf + boff, from, len);
 }
 
 void
-lance_copyfrombuf_contig(sc, to, boff, len)
-	struct lance_softc *sc;
-	void *to;
-	int boff, len;
+lance_copyfrombuf_contig(struct lance_softc *sc, void *to, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
+	uint8_t *buf = sc->sc_mem;
 
 	/*
-	 * Just call bcopy() to do the work.
+	 * Just call memcpy() to do the work.
 	 */
-	bcopy(buf + boff, to, len);
+	memcpy(to, buf + boff, len);
 }
 
 void
-lance_zerobuf_contig(sc, boff, len)
-	struct lance_softc *sc;
-	int boff, len;
+lance_zerobuf_contig(struct lance_softc *sc, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
+	uint8_t *buf = sc->sc_mem;
 
 	/*
-	 * Just let bzero() do the work
+	 * Just let memset() do the work
 	 */
-	bzero(buf + boff, len);
+	memset(buf + boff, 0, len);
 }
 
 #if 0
@@ -848,24 +699,20 @@ lance_zerobuf_contig(sc, boff, len)
  */
 
 void
-lance_copytobuf_gap2(sc, fromv, boff, len)
-	struct lance_softc *sc;
-	void *fromv;
-	int boff;
-	int len;
+lance_copytobuf_gap2(struct lance_softc *sc, void *fromv, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
-	caddr_t from = fromv;
-	volatile u_int16_t *bptr;
+	volatile void *buf = sc->sc_mem;
+	void *from = fromv;
+	volatile uint16_t *bptr;
 
 	if (boff & 0x1) {
 		/* handle unaligned first byte */
-		bptr = ((volatile u_int16_t *)buf) + (boff - 1);
+		bptr = ((volatile uint16_t *)buf) + (boff - 1);
 		*bptr = (*from++ << 8) | (*bptr & 0xff);
 		bptr += 2;
 		len--;
 	} else
-		bptr = ((volatile u_int16_t *)buf) + boff;
+		bptr = ((volatile uint16_t *)buf) + boff;
 	while (len > 1) {
 		*bptr = (from[1] << 8) | (from[0] & 0xff);
 		bptr += 2;
@@ -873,28 +720,25 @@ lance_copytobuf_gap2(sc, fromv, boff, len)
 		len -= 2;
 	}
 	if (len == 1)
-		*bptr = (u_int16_t)*from;
+		*bptr = (uint16_t)*from;
 }
 
 void
-lance_copyfrombuf_gap2(sc, tov, boff, len)
-	struct lance_softc *sc;
-	void *tov;
-	int boff, len;
+lance_copyfrombuf_gap2(struct lance_softc *sc, void *tov, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
-	caddr_t to = tov;
-	volatile u_int16_t *bptr;
-	u_int16_t tmp;
+	volatile void *buf = sc->sc_mem;
+	void *to = tov;
+	volatile uint16_t *bptr;
+	uint16_t tmp;
 
 	if (boff & 0x1) {
 		/* handle unaligned first byte */
-		bptr = ((volatile u_int16_t *)buf) + (boff - 1);
+		bptr = ((volatile uint16_t *)buf) + (boff - 1);
 		*to++ = (*bptr >> 8) & 0xff;
 		bptr += 2;
 		len--;
 	} else
-		bptr = ((volatile u_int16_t *)buf) + boff;
+		bptr = ((volatile uint16_t *)buf) + boff;
 	while (len > 1) {
 		tmp = *bptr;
 		*to++ = tmp & 0xff;
@@ -907,20 +751,18 @@ lance_copyfrombuf_gap2(sc, tov, boff, len)
 }
 
 void
-lance_zerobuf_gap2(sc, boff, len)
-	struct lance_softc *sc;
-	int boff, len;
+lance_zerobuf_gap2(struct lance_softc *sc, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
-	volatile u_int16_t *bptr;
+	volatile void *buf = sc->sc_mem;
+	volatile uint16_t *bptr;
 
-	if ((unsigned)boff & 0x1) {
-		bptr = ((volatile u_int16_t *)buf) + (boff - 1);
+	if ((unsigned int)boff & 0x1) {
+		bptr = ((volatile uint16_t *)buf) + (boff - 1);
 		*bptr &= 0xff;
 		bptr += 2;
 		len--;
 	} else
-		bptr = ((volatile u_int16_t *)buf) + boff;
+		bptr = ((volatile uint16_t *)buf) + boff;
 	while (len > 0) {
 		*bptr = 0;
 		bptr += 2;
@@ -935,22 +777,18 @@ lance_zerobuf_gap2(sc, boff, len)
  */
 
 void
-lance_copytobuf_gap16(sc, fromv, boff, len)
-	struct lance_softc *sc;
-	void *fromv;
-	int boff;
-	int len;
+lance_copytobuf_gap16(struct lance_softc *sc, void *fromv, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
-	caddr_t from = fromv;
-	caddr_t bptr;
+	volatile uint8_t *buf = sc->sc_mem;
+	void *from = fromv;
+	uint8_t *bptr;
 	int xfer;
 
 	bptr = buf + ((boff << 1) & ~0x1f);
 	boff &= 0xf;
 	xfer = min(len, 16 - boff);
 	while (len > 0) {
-		bcopy(from, bptr + boff, xfer);
+		memcpy(bptr + boff, from, xfer);
 		from += xfer;
 		bptr += 32;
 		boff = 0;
@@ -960,21 +798,18 @@ lance_copytobuf_gap16(sc, fromv, boff, len)
 }
 
 void
-lance_copyfrombuf_gap16(sc, tov, boff, len)
-	struct lance_softc *sc;
-	void *tov;
-	int boff, len;
+lance_copyfrombuf_gap16(struct lance_softc *sc, void *tov, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
-	caddr_t to = tov;
-	caddr_t bptr;
+	volatile uint8_t *buf = sc->sc_mem;
+	void *to = tov;
+	uint8_t *bptr;
 	int xfer;
 
 	bptr = buf + ((boff << 1) & ~0x1f);
 	boff &= 0xf;
 	xfer = min(len, 16 - boff);
 	while (len > 0) {
-		bcopy(bptr + boff, to, xfer);
+		memcpy(to, bptr + boff, xfer);
 		to += xfer;
 		bptr += 32;
 		boff = 0;
@@ -984,19 +819,17 @@ lance_copyfrombuf_gap16(sc, tov, boff, len)
 }
 
 void
-lance_zerobuf_gap16(sc, boff, len)
-	struct lance_softc *sc;
-	int boff, len;
+lance_zerobuf_gap16(struct lance_softc *sc, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
-	caddr_t bptr;
+	volatile uint8_t *buf = sc->sc_mem;
+	uint8_t *bptr;
 	int xfer;
 
 	bptr = buf + ((boff << 1) & ~0x1f);
 	boff &= 0xf;
 	xfer = min(len, 16 - boff);
 	while (len > 0) {
-		bzero(bptr + boff, xfer);
+		memset(bptr + boff, 0, xfer);
 		bptr += 32;
 		boff = 0;
 		len -= xfer;

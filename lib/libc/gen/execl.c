@@ -1,4 +1,4 @@
-/*	$NetBSD: execl.c,v 1.7 2000/01/22 22:19:09 mycroft Exp $	*/
+/*	$NetBSD: execl.c,v 1.16 2008/01/09 11:26:03 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,22 +34,16 @@
 #if 0
 static char sccsid[] = "@(#)exec.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: execl.c,v 1.7 2000/01/22 22:19:09 mycroft Exp $");
+__RCSID("$NetBSD: execl.c,v 1.16 2008/01/09 11:26:03 simonb Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
+#include <errno.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include "reentrant.h"
-
-#if __STDC__
-#include <stdarg.h>
-#define VA_START(ap, last)	va_start(ap, last)
-#else
-#include <varargs.h>
-#define VA_START(ap, last)	va_start(ap)
-#endif
 
 #ifdef __weak_alias
 __weak_alias(execl,_execl)
@@ -61,47 +51,36 @@ __weak_alias(execl,_execl)
 
 
 extern char **environ;
-#ifdef _REENT
-extern rwlock_t __environ_lock;
-#endif
 
 int
-#if __STDC__
 execl(const char *name, const char *arg, ...)
-#else
-execl(name, arg, va_alist)
-	const char *name;
-	const char *arg;
-	va_dcl
-#endif
 {
 	int r;
-#if defined(__i386__) || defined(__m68k__) || defined(__ns32k__)
-	rwlock_rdlock(&__environ_lock);
-	r = execve(name, (char **) &arg, environ);
-	rwlock_unlock(&__environ_lock);
-	return (r);
+#if defined(__i386__) || defined(__m68k__)
+	r = execve(name, __UNCONST(&arg), environ);
+	return r;
 #else
 	va_list ap;
 	char **argv;
 	int i;
 
-	VA_START(ap, arg);
+	va_start(ap, arg);
 	for (i = 2; va_arg(ap, char *) != NULL; i++)
-		;
+		continue;
 	va_end(ap);
 
-	argv = alloca (i * sizeof (char *));
+	if ((argv = alloca(i * sizeof (char *))) == NULL) {
+		errno = ENOMEM;
+		return -1;
+	}
 	
-	VA_START(ap, arg);
-	argv[0] = (char *) arg;
-	for (i = 1; (argv[i] = (char *) va_arg(ap, char *)) != NULL; i++) 
-		;
+	va_start(ap, arg);
+	argv[0] = __UNCONST(arg);
+	for (i = 1; (argv[i] = va_arg(ap, char *)) != NULL; i++) 
+		continue;
 	va_end(ap);
 	
-	rwlock_rdlock(&__environ_lock);
 	r = execve(name, argv, environ);
-	rwlock_unlock(&__environ_lock);
-	return (r);
+	return r;
 #endif
 }

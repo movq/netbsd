@@ -12,7 +12,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: w_lgamma_r.c,v 1.8 1999/07/02 15:37:44 simonb Exp $");
+__RCSID("$NetBSD: w_lgamma_r.c,v 1.10 2002/05/26 22:02:02 wiz Exp $");
 #endif
 
 /*
@@ -22,15 +22,8 @@ __RCSID("$NetBSD: w_lgamma_r.c,v 1.8 1999/07/02 15:37:44 simonb Exp $");
 #include "math.h"
 #include "math_private.h"
 
-double lgamma_r __P((double, int *));
-
-
-#ifdef __STDC__
-	double lgamma_r(double x, int *signgamp) /* wrapper lgamma_r */
-#else
-	double lgamma_r(x,signgamp)              /* wrapper lgamma_r */
-        double x; int *signgamp;
-#endif
+double
+lgamma_r(double x, int *signgamp) /* wrapper lgamma_r */
 {
 #ifdef _IEEE_LIBM
 	return __ieee754_lgamma_r(x,signgamp);

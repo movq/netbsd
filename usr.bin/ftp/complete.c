@@ -1,7 +1,7 @@
-/*	$NetBSD: complete.c,v 1.37 2000/01/20 13:19:46 lukem Exp $	*/
+/*	$NetBSD: complete.c,v 1.44 2008/09/30 03:41:53 lukem Exp $	*/
 
 /*-
- * Copyright (c) 1997-1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997-2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: complete.c,v 1.37 2000/01/20 13:19:46 lukem Exp $");
+__RCSID("$NetBSD: complete.c,v 1.44 2008/09/30 03:41:53 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -58,18 +51,17 @@ __RCSID("$NetBSD: complete.c,v 1.37 2000/01/20 13:19:46 lukem Exp $");
 
 #ifndef NO_EDITCOMPLETE
 
-static int	     comparstr		__P((const void *, const void *));
-static unsigned char complete_ambiguous	__P((char *, int, StringList *));
-static unsigned char complete_command	__P((char *, int));
-static unsigned char complete_local	__P((char *, int));
-static unsigned char complete_option	__P((char *, int));
-static unsigned char complete_remote	__P((char *, int));
+static int	     comparstr		(const void *, const void *);
+static unsigned char complete_ambiguous	(char *, int, StringList *);
+static unsigned char complete_command	(char *, int);
+static unsigned char complete_local	(char *, int);
+static unsigned char complete_option	(char *, int);
+static unsigned char complete_remote	(char *, int);
 
 static int
-comparstr(a, b)
-	const void *a, *b;
+comparstr(const void *a, const void *b)
 {
-	return (strcmp(*(const char **)a, *(const char **)b));
+	return (strcmp(*(const char * const *)a, *(const char * const *)b));
 }
 
 /*
@@ -84,10 +76,7 @@ comparstr(a, b)
  * Returns a result as per el_set(EL_ADDFN, ...)
  */
 static unsigned char
-complete_ambiguous(word, list, words)
-	char *word;
-	int list;
-	StringList *words;
+complete_ambiguous(char *word, int list, StringList *words)
 {
 	char insertstr[MAXPATHLEN];
 	char *lastmatch, *p;
@@ -140,23 +129,21 @@ complete_ambiguous(word, list, words)
  * Complete a command
  */
 static unsigned char
-complete_command(word, list)
-	char *word;
-	int list;
+complete_command(char *word, int list)
 {
 	struct cmd *c;
 	StringList *words;
 	size_t wordlen;
 	unsigned char rv;
 
-	words = xsl_init();
+	words = ftp_sl_init();
 	wordlen = strlen(word);
 
 	for (c = cmdtab; c->c_name != NULL; c++) {
 		if (wordlen > strlen(c->c_name))
 			continue;
 		if (strncmp(word, c->c_name, wordlen) == 0)
-			xsl_add(words, c->c_name);
+			ftp_sl_add(words, c->c_name);
 	}
 
 	rv = complete_ambiguous(word, list, words);
@@ -172,9 +159,7 @@ complete_command(word, list)
  * Complete a local file
  */
 static unsigned char
-complete_local(word, list)
-	char *word;
-	int list;
+complete_local(char *word, int list)
 {
 	StringList *words;
 	char dir[MAXPATHLEN];
@@ -208,7 +193,7 @@ complete_local(word, list)
 	if ((dd = opendir(dir)) == NULL)
 		return (CC_ERROR);
 
-	words = xsl_init();
+	words = ftp_sl_init();
 	len = strlen(file);
 
 	for (dp = readdir(dd); dp != NULL; dp = readdir(dd)) {
@@ -225,8 +210,8 @@ complete_local(word, list)
 		if (strncmp(file, dp->d_name, len) == 0) {
 			char *tcp;
 
-			tcp = xstrdup(dp->d_name);
-			xsl_add(words, tcp);
+			tcp = ftp_strdup(dp->d_name);
+			ftp_sl_add(words, tcp);
 		}
 	}
 	closedir(dd);
@@ -256,23 +241,21 @@ complete_local(word, list)
  * Complete an option
  */
 static unsigned char
-complete_option(word, list)
-	char *word;
-	int list;
+complete_option(char *word, int list)
 {
 	struct option *o;
 	StringList *words;
 	size_t wordlen;
 	unsigned char rv;
 
-	words = xsl_init();
+	words = ftp_sl_init();
 	wordlen = strlen(word);
 
 	for (o = optiontab; o->name != NULL; o++) {
 		if (wordlen > strlen(o->name))
 			continue;
 		if (strncmp(word, o->name, wordlen) == 0)
-			xsl_add(words, o->name);
+			ftp_sl_add(words, o->name);
 	}
 
 	rv = complete_ambiguous(word, list, words);
@@ -288,9 +271,7 @@ complete_option(word, list)
  * Complete a remote file
  */
 static unsigned char
-complete_remote(word, list)
-	char *word;
-	int list;
+complete_remote(char *word, int list)
 {
 	static StringList *dirlist;
 	static char	 lastdir[MAXPATHLEN];
@@ -316,11 +297,11 @@ complete_remote(word, list)
 
 	if (dirchange || dirlist == NULL ||
 	    strcmp(dir, lastdir) != 0) {		/* dir not cached */
-		char *emesg;
+		const char *emesg;
 
 		if (dirlist != NULL)
 			sl_free(dirlist, 1);
-		dirlist = xsl_init();
+		dirlist = ftp_sl_init();
 
 		mflag = 1;
 		emesg = NULL;
@@ -338,8 +319,8 @@ complete_remote(word, list)
 				tcp++;
 			else
 				tcp = cp;
-			tcp = xstrdup(tcp);
-			xsl_add(dirlist, tcp);
+			tcp = ftp_strdup(tcp);
+			ftp_sl_add(dirlist, tcp);
 		}
 		if (emesg != NULL) {
 			fprintf(ttyout, "\n%s\n", emesg);
@@ -349,13 +330,13 @@ complete_remote(word, list)
 		dirchange = 0;
 	}
 
-	words = xsl_init();
+	words = ftp_sl_init();
 	for (i = 0; i < dirlist->sl_cur; i++) {
 		cp = dirlist->sl_str[i];
 		if (strlen(file) > strlen(cp))
 			continue;
 		if (strncmp(file, cp, strlen(file)) == 0)
-			xsl_add(words, cp);
+			ftp_sl_add(words, cp);
 	}
 	rv = complete_ambiguous(file, list, words);
 	sl_free(words, 0);
@@ -366,9 +347,7 @@ complete_remote(word, list)
  * Generic complete routine
  */
 unsigned char
-complete(el, ch)
-	EditLine *el;
-	int ch;
+complete(EditLine *el, int ch)
 {
 	static char word[FTPBUFLEN];
 	static int lastc_argc, lastc_argo;
@@ -440,7 +419,8 @@ complete(el, ch)
 			}
 			return (complete_remote(word, dolist));
 		default:
-			errx(1, "unknown complete type `%c'", cmpltype);
+			errx(1, "complete: unknown complete type `%c'",
+			    cmpltype);
 			return (CC_ERROR);
 	}
 	/* NOTREACHED */

@@ -1,15 +1,18 @@
-#	$NetBSD: Makefile,v 1.4 2000/02/07 16:27:00 tsubai Exp $
+#	$NetBSD: Makefile,v 1.11 2005/12/11 12:18:06 christos Exp $
 
-PROG= bootxx
-MKMAN=	no
+PROG=		bootxx
+NOMAN=		# defined
+BINMODE=	444
+
+CFLAGS=		-Os -mmultiple -Wall -msoft-float -ffreestanding
+CPPFLAGS+=	-D_STANDALONE -DPPC_OEA
 STRIPFLAG=
-BINMODE=444
+LINKFLAGS=	-x -N -Ttext 4000 -e _start
+CLEANFILES+=	${PROG}.sym
 
-CFLAGS= -O2 -Wall -msoft-float
-CPPFLAGS+= -D_STANDALONE
-
-${PROG}: ${PROG}.o
-	${LD} -o bootxx -x -N -Ttext 4000 -e _start ${PROG}.o
-	@${SIZE} ${PROG}
+${PROG}: ${OBJS}
+	${_MKTARGET_LINK}
+	${LD} -o ${.TARGET}.sym ${LINKFLAGS} ${OBJS}
+	${OBJCOPY} -O binary ${.TARGET}.sym ${.TARGET}
 
 .include <bsd.prog.mk>

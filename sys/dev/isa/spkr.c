@@ -1,4 +1,37 @@
-/*	$NetBSD: spkr.c,v 1.3 2000/03/30 12:45:33 augustss Exp $	*/
+/*	$NetBSD: spkr.c,v 1.28 2008/03/04 14:59:35 cube Exp $	*/
+
+/*
+ * Copyright (c) 1990 Eric S. Raymond (esr@snark.thyrsus.com)
+ * Copyright (c) 1990 Andrew A. Chernov (ache@astral.msk.su)
+ * Copyright (c) 1990 Lennart Augustsson (lennart@augustsson.net)
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Eric S. Raymond
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*
  * spkr.c -- device driver for console speaker on 80386
@@ -8,6 +41,9 @@
  *      386bsd only clean version, all SYSV stuff removed
  *      use hz value from param.c
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: spkr.c,v 1.28 2008/03/04 14:59:35 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -20,39 +56,44 @@
 #include <sys/ioctl.h>
 #include <sys/conf.h>
 
+#include <sys/bus.h>
+
 #include <dev/isa/pcppivar.h>
 
 #include <dev/isa/spkrio.h>
 
-cdev_decl(spkr);
+int spkrprobe(device_t, cfdata_t, void *);
+void spkrattach(device_t, device_t, void *);
 
-int spkrprobe __P((struct device *, struct cfdata *, void *));
-void spkrattach __P((struct device *, struct device *, void *));
+CFATTACH_DECL_NEW(spkr, 0,
+    spkrprobe, spkrattach, NULL, NULL);
 
-struct spkr_softc {
-	struct device sc_dev;
-};
+dev_type_open(spkropen);
+dev_type_close(spkrclose);
+dev_type_write(spkrwrite);
+dev_type_ioctl(spkrioctl);
 
-struct cfattach spkr_ca = {
-	sizeof(struct spkr_softc), spkrprobe, spkrattach
+const struct cdevsw spkr_cdevsw = {
+	spkropen, spkrclose, noread, spkrwrite, spkrioctl,
+	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER,
 };
 
 static pcppi_tag_t ppicookie;
 
 #define SPKRPRI (PZERO - 1)
 
-static void tone __P((u_int, u_int));
-static void rest __P((int));
-static void playinit __P((void));
-static void playtone __P((int, int, int));
-static void playstring __P((char *, int));
+static void tone(u_int, u_int);
+static void rest(int);
+static void playinit(void);
+static void playtone(int, int, int);
+static void playstring(char *, int);
 
 static
-void tone(hz, ticks)
+void tone(xhz, ticks)
 /* emit tone of frequency hz for given number of ticks */
-    u_int hz, ticks;
+    u_int xhz, ticks;
 {
-	pcppi_bell(ppicookie, hz, ticks, PCPPI_BELL_SLEEP);
+	pcppi_bell(ppicookie, xhz, ticks, PCPPI_BELL_SLEEP);
 }
 
 static void
@@ -80,12 +121,6 @@ rest(ticks)
  * except possibly at physical block boundaries.
  */
 
-typedef int	bool;
-#define TRUE	1
-#define FALSE	0
-
-#define toupper(c)	((c) - ' ' * (((c) >= 'a') && ((c) <= 'z')))
-#define isdigit(c)	(((c) >= '0') && ((c) <= '9'))
 #define dtoi(c)		((c) - '0')
 
 static int octave;	/* currently selected octave */
@@ -114,7 +149,7 @@ static bool octprefix;	/* override current octave-tracking state? */
 #define DENOM_MULT	2	/* denominator of dot multiplier */
 
 /* letter to half-tone:  A   B  C  D  E  F  G */
-static int notetab[8] = {9, 11, 0, 2, 4, 5, 7};
+static const int notetab[8] = {9, 11, 0, 2, 4, 5, 7};
 
 /*
  * This is the American Standard A440 Equal-Tempered scale with frequencies
@@ -122,7 +157,7 @@ static int notetab[8] = {9, 11, 0, 2, 4, 5, 7};
  * our octave 0 is standard octave 2.
  */
 #define OCTAVE_NOTES	12	/* semitones per octave */
-static int pitchtab[] =
+static const int pitchtab[] =
 {
 /*        C     C#    D     D#    E     F     F#    G     G#    A     A#    B*/
 /* 0 */   65,   69,   73,   78,   82,   87,   93,   98,  103,  110,  117,  123,
@@ -133,7 +168,7 @@ static int pitchtab[] =
 /* 5 */ 2093, 2217, 2349, 2489, 2637, 2794, 2960, 3136, 3322, 3520, 3729, 3951,
 /* 6 */ 4186, 4435, 4698, 4978, 5274, 5588, 5920, 6272, 6644, 7040, 7459, 7902,
 };
-#define NOCTAVES (sizeof(pitchtab) / sizeof(pitchtab[0]) / OCTAVE_NOTES)
+#define NOCTAVES (__arraycount(pitchtab) / OCTAVE_NOTES)
 
 static void
 playinit()
@@ -142,14 +177,14 @@ playinit()
     whole = (hz * SECS_PER_MIN * WHOLE_NOTE) / DFLT_TEMPO;
     fill = NORMAL;
     value = DFLT_VALUE;
-    octtrack = FALSE;
-    octprefix = TRUE;	/* act as though there was an initial O(n) */
+    octtrack = false;
+    octprefix = true;	/* act as though there was an initial O(n) */
 }
 
 static void
-playtone(pitch, value, sustain)
+playtone(pitch, val, sustain)
 /* play tone of proper duration for current rhythm signature */
-    int	pitch, value, sustain;
+    int	pitch, val, sustain;
 {
     int	sound, silence, snum = 1, sdenom = 1;
 
@@ -161,12 +196,12 @@ playtone(pitch, value, sustain)
     }
 
     if (pitch == -1)
-	rest(whole * snum / (value * sdenom));
+	rest(whole * snum / (val * sdenom));
     else
     {
-	sound = (whole * snum) / (value * sdenom)
-		- (whole * (FILLTIME - fill)) / (value * FILLTIME);
-	silence = whole * (FILLTIME-fill) * snum / (FILLTIME * value * sdenom);
+	sound = (whole * snum) / (val * sdenom)
+		- (whole * (FILLTIME - fill)) / (val * FILLTIME);
+	silence = whole * (FILLTIME-fill) * snum / (FILLTIME * val * sdenom);
 
 #ifdef SPKRDEBUG
 	printf("playtone: pitch %d for %d ticks, rest for %d ticks\n",
@@ -228,17 +263,21 @@ playstring(cp, slen)
 	    {
 		if (abs(pitch-lastpitch) > abs(pitch+OCTAVE_NOTES-lastpitch))
 		{
-		    ++octave;
-		    pitch += OCTAVE_NOTES;
+		    if (octave < NOCTAVES - 1) {
+			++octave;
+			pitch += OCTAVE_NOTES;
+		    }
 		}
 
 		if (abs(pitch-lastpitch) > abs((pitch-OCTAVE_NOTES)-lastpitch))
 		{
-		    --octave;
-		    pitch -= OCTAVE_NOTES;
+		    if (octave > 0) {
+			--octave;
+			pitch -= OCTAVE_NOTES;
+		    }
 		}
 	    }
-	    octprefix = FALSE;
+	    octprefix = false;
 	    lastpitch = pitch;
 
 	    /* ...which may in turn be followed by an override time value */
@@ -260,13 +299,13 @@ playstring(cp, slen)
 	case 'O':
 	    if (slen > 0 && (cp[1] == 'N' || cp[1] == 'n'))
 	    {
-		octprefix = octtrack = FALSE;
+		octprefix = octtrack = false;
 		++cp;
 		slen--;
 	    }
 	    else if (slen > 0 && (cp[1] == 'L' || cp[1] == 'l'))
 	    {
-		octtrack = TRUE;
+		octtrack = true;
 		++cp;
 		slen--;
 	    }
@@ -275,20 +314,20 @@ playstring(cp, slen)
 		GETNUM(cp, octave);
 		if (octave >= NOCTAVES)
 		    octave = DFLT_OCTAVE;
-		octprefix = TRUE;
+		octprefix = true;
 	    }
 	    break;
 
 	case '>':
 	    if (octave < NOCTAVES - 1)
 		octave++;
-	    octprefix = TRUE;
+	    octprefix = true;
 	    break;
 
 	case '<':
 	    if (octave > 0)
 		octave--;
-	    octprefix = TRUE;
+	    octprefix = true;
 	    break;
 
 	case 'N':
@@ -364,31 +403,27 @@ static void *spkr_inbuf;
 static int spkr_attached = 0;
 
 int
-spkrprobe (parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+spkrprobe(device_t parent, cfdata_t match, void *aux)
 {
 	return (!spkr_attached);
 }
 
 void
-spkrattach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+spkrattach(device_t parent, device_t self, void *aux)
 {
 	printf("\n");
 	ppicookie = ((struct pcppi_attach_args *)aux)->pa_cookie;
 	spkr_attached = 1;
+        if (!device_pmf_is_registered(self))
+		if (!pmf_device_register(self, NULL, NULL))
+			aprint_error_dev(self,
+			    "couldn't establish power handler\n"); 
+
 }
 
 int
-spkropen(dev, flags, mode, p)
-    dev_t dev;
-    int	flags;
-    int mode;
-    struct proc *p;
+spkropen(dev_t dev, int	flags, int mode,
+    struct lwp *l)
 {
 #ifdef SPKRDEBUG
     printf("spkropen: entering with dev = %x\n", dev);
@@ -408,10 +443,7 @@ spkropen(dev, flags, mode, p)
 }
 
 int
-spkrwrite(dev, uio, flags)
-    dev_t dev;
-    struct uio *uio;
-    int flags;
+spkrwrite(dev_t dev, struct uio *uio, int flags)
 {
     int n;
     int error;
@@ -432,11 +464,8 @@ spkrwrite(dev, uio, flags)
     }
 }
 
-int spkrclose(dev, flags, mode, p)
-    dev_t	dev;
-    int flags;
-    int mode;
-    struct proc *p;
+int spkrclose(dev_t dev, int flags, int mode,
+    struct lwp *l)
 {
 #ifdef SPKRDEBUG
     printf("spkrclose: entering with dev = %x\n", dev);
@@ -453,12 +482,8 @@ int spkrclose(dev, flags, mode, p)
     return(0);
 }
 
-int spkrioctl(dev, cmd, data, flag, p)
-    dev_t dev;
-    u_long cmd;
-    caddr_t data;
-    int	flag;
-    struct proc *p;
+int spkrioctl(dev_t dev, u_long cmd, void *data, int	flag,
+    struct lwp *l)
 {
 #ifdef SPKRDEBUG
     printf("spkrioctl: entering with dev = %x, cmd = %lx\n", dev, cmd);
@@ -477,7 +502,7 @@ int spkrioctl(dev, cmd, data, flag, p)
     }
     else if (cmd == SPKRTUNE)
     {
-	tone_t  *tp = (tone_t *)(*(caddr_t *)data);
+	tone_t  *tp = (tone_t *)(*(void **)data);
 	tone_t ttp;
 	int error;
 

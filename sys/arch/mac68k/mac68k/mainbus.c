@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.9 1998/01/12 19:22:23 thorpej Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.20 2008/04/28 20:23:27 martin Exp $	*/
 
 /*
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,23 +29,47 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.20 2008/04/28 20:23:27 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 
-static int	mainbus_match __P((struct device *, struct cfdata *, void *));
-static void	mainbus_attach __P((struct device *, struct device *, void *));
-static int	mainbus_search __P((struct device *, struct cfdata *, void *));
+#define _M68K_BUS_DMA_PRIVATE
+#include <machine/autoconf.h>
 
-struct cfattach mainbus_ca = {
-	sizeof(struct device), mainbus_match, mainbus_attach
+static int	mainbus_match(struct device *, struct cfdata *, void *);
+static void	mainbus_attach(struct device *, struct device *, void *);
+static int	mainbus_search(struct device *, struct cfdata *,
+			       const int *ldesc, void *);
+
+CFATTACH_DECL(mainbus, sizeof(struct device),
+    mainbus_match, mainbus_attach, NULL, NULL);
+
+struct m68k_bus_dma_tag mac68k_bus_dma_tag = {
+	NULL,					/* _cookie */
+
+	0,					/* _boundary */
+
+	_bus_dmamap_create,			/* _dmamap_create */
+	_bus_dmamap_destroy,			/* _dmamap_destroy */
+	_bus_dmamap_load_direct,		/* _dmamap_load */
+	_bus_dmamap_load_mbuf_direct,		/* _dmamap_load_mbuf */
+	_bus_dmamap_load_uio_direct,		/* _dmamap_load_uio */
+	_bus_dmamap_load_raw_direct,		/* _dmamap_load_raw */
+	_bus_dmamap_unload,			/* _dmamap_unload */
+	_bus_dmamap_sync,			/* _dmamap_sync */
+  
+	_bus_dmamem_alloc,			/* _dmamem_alloc */
+	_bus_dmamem_free,			/* _dmamem_free */
+	_bus_dmamem_map,			/* _dmamem_map */
+	_bus_dmamem_unmap,			/* _dmamem_unmap */
+	_bus_dmamem_mmap			/* _dmamem_mmap */
 };
 
 static int
-mainbus_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	static int mainbus_matched = 0;
 
@@ -65,23 +82,24 @@ mainbus_match(parent, cf, aux)
 }
 
 static void
-mainbus_attach(parent, self, aux)
-	struct device	*parent, *self;
-	void		*aux;
+mainbus_attach(struct device *parent, struct device *self, void *aux)
 {
+	struct mainbus_attach_args	mba;
+
 	printf("\n");
 
+	mba.mba_bst = MAC68K_BUS_SPACE_MEM;
+	mba.mba_dmat = &mac68k_bus_dma_tag;
+
 	/* Search for and attach children. */
-	config_search(mainbus_search, self, NULL);
+	config_search_ia(mainbus_search, self, "mainbus", &mba);
 }
 
 static int
-mainbus_search(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+mainbus_search(struct device *parent, struct cfdata *cf,
+	       const int *ldesc, void *aux)
 {
-	if ((*cf->cf_attach->ca_match)(parent, cf, NULL) > 0)
-		config_attach(parent, cf, NULL, NULL);
+	if (config_match(parent, cf, aux) > 0)
+		config_attach(parent, cf, aux, NULL);
 	return 0;
 }

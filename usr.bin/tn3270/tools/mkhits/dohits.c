@@ -1,4 +1,4 @@
-/*	$NetBSD: dohits.c,v 1.7 1998/09/06 02:54:48 lukem Exp $	*/
+/*	$NetBSD: dohits.c,v 1.14 2006/04/22 18:02:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,12 +29,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#ifndef lint
+#include <ctype.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)dohits.c	4.2 (Berkeley) 4/26/91";
 #else
-__RCSID("$NetBSD: dohits.c,v 1.7 1998/09/06 02:54:48 lukem Exp $");
+__RCSID("$NetBSD: dohits.c,v 1.14 2006/04/22 18:02:26 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -60,15 +61,6 @@ __RCSID("$NetBSD: dohits.c,v 1.7 1998/09/06 02:54:48 lukem Exp $");
  * all fields are separated by a single space.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <err.h>
-#include <ctype.h>
-#ifdef __STDC__
-#include <stdlib.h>
-#else
-extern char *malloc();
-#endif
 #include "../general/general.h"
 #include "../api/asc_ebc.h"
 #include "../api/ebc_disp.h"
@@ -80,16 +72,16 @@ struct Hits Hits[256];		/* one for each of 0x00-0xff */
 
 struct thing *table[100];
 
-static void add __P((char *, char *, int));
-static void scanwhite __P((char *, char *));
-static void scandefine __P((char *, char *));
-static char *savechr __P((unsigned int));
-static char *doit __P((struct hit *, unsigned char *, struct Hits *));
+static void add(const char *, const char *, int);
+static void scanwhite(const char *, const char *);
+static void scandefine(const char *, const char *);
+static char *savechr(unsigned int);
+static char *doit(struct hit *, unsigned char *, struct Hits *);
 
 unsigned int
 dohash(seed, string)
 unsigned int seed;
-char *string;
+const char *string;
 {
     unsigned int i = seed;
     unsigned char c;
@@ -107,13 +99,14 @@ char *string;
 
 static void
 add(first, second, value)
-char *first, *second;
+const char *first, *second;
 int value;
 {
     struct thing **item, *this;
 
     item = &firstentry(second);
     this = (struct thing *) malloc(sizeof *this);
+    this->hits = 0;
     this->next = *item;
     *item = this;
     this->value = value;
@@ -123,7 +116,7 @@ int value;
 
 static void
 scanwhite(file, prefix)
-char *file,		/* Name of file to scan for whitespace prefix */
+const char *file,	/* Name of file to scan for whitespace prefix */
      *prefix;		/* prefix of what should be picked up */
 {
     FILE *ourfile;
@@ -132,8 +125,10 @@ char *file,		/* Name of file to scan for whitespace prefix */
     char line[200];
 
     (void) snprintf(compare, sizeof(compare), " %s%%[^,\t \n]", prefix);
-    if ((ourfile = fopen(file, "r")) == NULL)
-	err(1, "Cannot open `%s'", file);
+    if ((ourfile = fopen(file, "r")) == NULL) {
+	fprintf(stderr, "Cannot open `%s': %s\n", file, strerror(errno));
+	exit(1);
+    }
     while (!feof(ourfile)) {
 	if (fscanf(ourfile, compare,  what) == 1) {
 	    add(prefix, what, 0);
@@ -141,17 +136,18 @@ char *file,		/* Name of file to scan for whitespace prefix */
 	do {
 	    if (fgets(line, sizeof line, ourfile) == NULL) {
 		if (!feof(ourfile)) {
-		    warn("fgets failed");
+		    fprintf(stderr, "fgets failed: %s\n", strerror(errno));
 		}
 		break;
 	    }
 	} while (line[strlen(line)-1] != '\n');
     }
+    (void)fclose(ourfile);
 }
 
 static void
 scandefine(file, prefix)
-char *file,		/* Name of file to scan for #define prefix */
+const char *file,	/* Name of file to scan for #define prefix */
      *prefix;		/* prefix of what should be picked up */
 {
     FILE *ourfile;
@@ -161,8 +157,10 @@ char *file,		/* Name of file to scan for #define prefix */
     int whatitis;
 
     snprintf(compare, sizeof(compare), "#define %s%%s %%s", prefix);
-    if ((ourfile = fopen(file, "r")) == NULL)
-	err(1, "Cannot open `%s'", file);
+    if ((ourfile = fopen(file, "r")) == NULL) {
+	fprintf(stderr, "Cannot open `%s': %s\n", file, strerror(errno));
+	exit(1);
+    }
 
     while (!feof(ourfile)) {
 	if (fscanf(ourfile, compare,  what, value) == 2) {
@@ -180,20 +178,24 @@ char *file,		/* Name of file to scan for #define prefix */
 	do {
 	    if (fgets(line, sizeof line, ourfile) == NULL) {
 		if (!feof(ourfile)) {
-		    warn("End of file with error");
+		    fprintf(stderr, "End of file with error: %s\n",
+			strerror(errno));
 		}
 		break;
 	    }
 	} while (line[strlen(line)-1] != '\n');
     }
+    (void)fclose(ourfile);
 }
 
 static char *savechr(c)
 unsigned int c;
 {
     char *foo = malloc(sizeof(unsigned char));
-    if (foo == NULL)
-	err(1, "No room for ascii characters");
+    if (foo == NULL) {
+	fprintf(stderr, "No room for ascii characters\n");
+	exit(1);
+    }
     *foo = c;
     return foo;
 }
@@ -227,7 +229,7 @@ struct Hits *hits;
 		return this->name;
 	    }
 	}
-	warnx("Unknown type %s.", type);
+	fprintf(stderr, "Unknown type %s.\n", type);
 	return 0;
     }
 }
@@ -235,7 +237,7 @@ struct Hits *hits;
 
 void
 dohits(aidfile, fcnfile)
-char	*aidfile, *fcnfile;
+const char *aidfile, *fcnfile;
 {
     unsigned char plain[100], shifted[100], alted[100], shiftalted[100];
     unsigned char line[200];
@@ -278,12 +280,12 @@ char	*aidfile, *fcnfile;
 	    continue;
 	}
 	if (scancode >= 256) {
-	    warnx("Scancode 0x%02x for keynumber %d", scancode,
+	    fprintf(stderr, "Scancode 0x%02x for keynumber %d\n", scancode,
 		keynumber);
 	    break;
 	}
 	if (Hits[scancode].hits.hit[0].ctlrfcn != undefined) {
-	    warnx("Duplicate scancode 0x%02x for keynumber %d",
+	    fprintf(stderr, "Duplicate scancode 0x%02x for keynumber %d\n",
 		scancode, keynumber);
 	    break;
 	}

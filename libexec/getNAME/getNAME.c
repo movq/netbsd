@@ -1,7 +1,7 @@
-/*	$NetBSD: getNAME.c,v 1.17 1999/11/09 15:06:33 drochner Exp $	*/
+/*	$NetBSD: getNAME.c,v 1.26 2008/07/20 01:09:07 lukem Exp $	*/
 
 /*-
- * Copyright (c) 1997, Christos Zoulas
+ * Copyright (c) 1997, Christos Zoulas.  All rights reserved.
  * Copyright (c) 1980, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -13,12 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- *	This product includes software developed by Christos Zoulas.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,12 +32,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)getNAME.c	8.1 (Berkeley) 6/30/93";
 #else
-__RCSID("$NetBSD: getNAME.c,v 1.17 1999/11/09 15:06:33 drochner Exp $");
+__RCSID("$NetBSD: getNAME.c,v 1.26 2008/07/20 01:09:07 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -72,26 +67,24 @@ static char *linebuf = NULL;
 static size_t maxlen = 0;
 
 
-static void doname __P((char *));
-static void dorefname __P((char *));
-static void getfrom __P((char *));
-static void oldman __P((char *, char *));
-static void newman __P((char *, char *));
-static void remcomma __P((char *, size_t *));
-static void remquote __P((char *, size_t *));
-static void fixxref __P((char *, size_t *));
-static void split __P((char *, char *));
-static void usage __P((void));
+static void doname(char *);
+static void dorefname(char *);
+static void getfrom(char *);
+static void oldman(char *, char *);
+static void newman(char *, char *);
+static void remcomma(char *, size_t *);
+static void remquote(char *, size_t *);
+static void fixxref(char *, size_t *);
+static void split(char *, char *);
+static void usage(void);
 
-int main __P((int, char *[]));
+int main(int, char *[]);
 
 /* The .SH NAMEs that are allowed. */
-char *names[] = { "name", "namn", 0 };
+static const char *names[] = { "name", "namn", 0 };
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int ch;
 
@@ -121,12 +114,11 @@ main(argc, argv)
 
 	for (; *argv; ++argv)
 		getfrom(*argv);
-	exit(0);
+	return 0;
 }
 
-void
-getfrom(pathname)
-	char *pathname;
+static void
+getfrom(char *pathname)
 {
 	char *name;
 	char *line;
@@ -143,31 +135,39 @@ getfrom(pathname)
 	for (;;) {
 		if ((line = fgetln(stdin, &len)) == NULL) {
 			if (typeflag)
-				printf("%-60s\tUNKNOWN\n", pathname);
+				(void)printf("%-60s\tUNKNOWN\n", pathname);
+			if (verbose)
+				warnx("missing .TH or .Dt section in `%s'",
+				    pathname);
 			return;
 		}
+		if (len < 3)
+			continue;
 		if (line[0] != '.')
 			continue;
 		if ((line[1] == 'T' && line[2] == 'H') ||
-		    (line[1] == 't' && line[2] == 'h'))
-			return oldman(pathname, name);
-		if (line[1] == 'D' && line[2] == 't')
-			return newman(pathname, name);
+		    (line[1] == 't' && line[2] == 'h')) {
+			oldman(pathname, name);
+			return;
+		}
+		if (line[1] == 'D' && line[2] == 't') {
+			newman(pathname, name);
+			return;
+		}
 	}
-	if (verbose)
-		warnx("missing .TH or .Dt section in `%s'", pathname);
 }
 
 static void
-oldman(pathname, name)
-	char *pathname, *name;
+oldman(char *pathname, char *name)
 {
-	char *line, *ext, *s;
+	char *line, *ext, *s, *newlinebuf;
 	size_t len, i, extlen;
 	size_t curlen = 0;
+	size_t newmaxlen;
+	size_t ocurlen = -1;
 
 	if (typeflag) {
-		printf("%-60s\tOLD\n", pathname);
+		(void)printf("%-60s\tOLD\n", pathname);
 		return;
 	}
 	for (;;) {
@@ -176,6 +176,8 @@ oldman(pathname, name)
 				warnx("missing .SH section in `%s'", pathname);
 			return;
 		}
+		if (len < 4)
+			continue;
 		if (line[0] != '.')
 			continue;
 		if (line[1] == 'S' && line[2] == 'H')
@@ -199,6 +201,7 @@ oldman(pathname, name)
 		return;
 	}
 
+ again:
 	if (tocrc)
 		doname(name);
 
@@ -214,6 +217,14 @@ oldman(pathname, name)
 				break;
 			if (line[1] == 'P' && line[2] == 'P')
 				break;
+			if (line[1] == 'b' && line[2] == 'r') {
+				if (intro)
+					split(linebuf, name);
+				else
+					(void)printf("%s\n", linebuf);
+				curlen = ocurlen;
+				goto again;
+			}
 		}
 		if (line[len - 1] == '\n') {
 			line[len - 1] = '\0';
@@ -227,13 +238,16 @@ oldman(pathname, name)
 			extlen = 0;
 
 		if (maxlen + extlen < curlen + len + SLOP) {
-			maxlen = 2 * (curlen + len) + SLOP + extlen;
-			if ((linebuf = realloc(linebuf, maxlen)) == NULL)
+			newmaxlen = 2 * (curlen + len) + SLOP + extlen;
+			if ((newlinebuf = realloc(linebuf, newmaxlen)) == NULL)
 				err(1, NULL);
+			linebuf = newlinebuf;
+			maxlen = newmaxlen;
 		}
 		if (i != 0)
 			linebuf[curlen++] = ' ';
 		(void)memcpy(&linebuf[curlen], line, len);
+		ocurlen = curlen;
 		curlen += len;
 		linebuf[curlen] = '\0';
 		
@@ -259,20 +273,20 @@ oldman(pathname, name)
 	if (intro)
 		split(linebuf, name);
 	else
-		printf("%s\n", linebuf);
+		(void)printf("%s\n", linebuf);
 	return;
 }
 
 static void
-newman(pathname, name)
-	char *pathname, *name;
+newman(char *pathname, char *name)
 {
-	char *line, *ext, *s;
+	char *line, *ext, *s, *newlinebuf;
 	size_t len, i, extlen;
 	size_t curlen = 0;
+	size_t newmaxlen;
 
 	if (typeflag) {
-		printf("%-60s\tNEW\n", pathname);
+		(void)printf("%-60s\tNEW\n", pathname);
 		return;
 	}
 	for (;;) {
@@ -328,9 +342,11 @@ newman(pathname, name)
 			extlen = 0;
 
 		if (maxlen + extlen < curlen + len + SLOP) {
-			maxlen = 2 * (curlen + len) + SLOP + extlen;
-			if ((linebuf = realloc(linebuf, maxlen)) == NULL)
+			newmaxlen = 2 * (curlen + len) + SLOP + extlen;
+			if ((newlinebuf = realloc(linebuf, newmaxlen)) == NULL)
 				err(1, NULL);
+			linebuf = newlinebuf;
+			maxlen = newmaxlen;
 		}
 
 		if (i != 0)
@@ -375,16 +391,14 @@ newman(pathname, name)
 	if (intro)
 		split(linebuf, name);
 	else
-		printf("%s\n", linebuf);
+		(void)printf("%s\n", linebuf);
 }
 
 /*
  * convert " ," -> " "
  */
 static void
-remcomma(line, len)
-	char *line;
-	size_t *len;
+remcomma(char *line, size_t *len)
 {
 	char *pline = line, *loc;
 	size_t plen = *len;
@@ -404,10 +418,8 @@ remcomma(line, len)
 /*
  * Get rid of quotes in macros.
  */
-static
-void remquote(line, len)
-	char *line;
-	size_t *len;
+static void
+remquote(char *line, size_t *len)
 {
 	char *loc;
 	char *pline = &line[4];
@@ -428,9 +440,7 @@ void remquote(line, len)
  * Handle cross references
  */
 static void
-fixxref(line, len)
-	char *line;
-	size_t *len;
+fixxref(char *line, size_t *len)
 {
 	char *loc;
 	char *pline = &line[4];
@@ -450,35 +460,34 @@ fixxref(line, len)
 }
 
 static void
-doname(name)
-	char *name;
+doname(char *name)
 {
 	char *dp = name, *ep;
 
 again:
 	while (*dp && *dp != '.')
-		putchar(*dp++);
+		(void)putchar(*dp++);
 	if (*dp)
 		for (ep = dp+1; *ep; ep++)
 			if (*ep == '.') {
-				putchar(*dp++);
+				(void)putchar(*dp++);
 				goto again;
 			}
-	putchar('(');
+	(void)putchar('(');
 	if (*dp)
 		dp++;
 	while (*dp)
-		putchar (*dp++);
-	putchar(')');
-	putchar(' ');
+		(void)putchar(*dp++);
+	(void)putchar(')');
+	(void)putchar(' ');
 }
 
 static void
-split(line, name)
-	char *line, *name;
+split(char *line, char *name)
 {
 	char *cp, *dp;
-	char *sp, *sep;
+	char *sp;
+	const char *sep;
 
 	cp = strchr(line, '-');
 	if (cp == 0)
@@ -500,39 +509,38 @@ split(line, name)
 			for (++cp; *cp == ' ' || *cp == '\t'; cp++)
 				;
 		}
-		printf("%s%s\t", sep, dp);
+		(void)printf("%s%s\t", sep, dp);
 		dorefname(name);
-		printf("\t- %s", sp);
+		(void)printf("\t- %s", sp);
 	}
-	putchar('\n');
+	(void)putchar('\n');
 }
 
 static void
-dorefname(name)
-	char *name;
+dorefname(char *name)
 {
 	char *dp = name, *ep;
 
 again:
 	while (*dp && *dp != '.')
-		putchar(*dp++);
+		(void)putchar(*dp++);
 	if (*dp)
 		for (ep = dp+1; *ep; ep++)
 			if (*ep == '.') {
-				putchar(*dp++);
+				(void)putchar(*dp++);
 				goto again;
 			}
-	putchar('.');
+	(void)putchar('.');
 	if (*dp)
 		dp++;
 	while (*dp)
-		putchar (*dp++);
+		(void)putchar(*dp++);
 }
 
 static void
-usage()
+usage(void)
 {
-	extern char *__progname;
-	(void)fprintf(stderr, "Usage: %s [-itw] file ...\n", __progname);
+
+	(void)fprintf(stderr, "Usage: %s [-itw] file ...\n", getprogname());
 	exit(1);
 }

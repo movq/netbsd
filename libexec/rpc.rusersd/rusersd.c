@@ -1,4 +1,4 @@
-/*	$NetBSD: rusersd.c,v 1.12 1999/01/31 08:51:53 mrg Exp $	*/
+/*	$NetBSD: rusersd.c,v 1.17 2007/12/15 19:44:46 perry Exp $	*/
 
 /*-
  *  Copyright (c) 1993 John Brezak
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rusersd.c,v 1.12 1999/01/31 08:51:53 mrg Exp $");
+__RCSID("$NetBSD: rusersd.c,v 1.17 2007/12/15 19:44:46 perry Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -47,68 +47,80 @@ __RCSID("$NetBSD: rusersd.c,v 1.12 1999/01/31 08:51:53 mrg Exp $");
 
 int from_inetd = 1;
 
-static void cleanup __P((int));
-int main __P((int, char *[]));
+static void cleanup(int) __dead;
 
 static void
-cleanup(n)
-	int n;
+/*ARGSUSED*/
+cleanup(int n)
 {
 
-	(void) pmap_unset(RUSERSPROG, RUSERSVERS_3);
-	(void) pmap_unset(RUSERSPROG, RUSERSVERS_IDLE);
+	(void) rpcb_unset(RUSERSPROG, RUSERSVERS_3, NULL);
+	(void) rpcb_unset(RUSERSPROG, RUSERSVERS_IDLE, NULL);
 	exit(0);
 }
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+/*ARGSUSED*/
+main(int argc, char *argv[])
 {
 	SVCXPRT *transp;
-	int sock = 0;
-	int proto = 0;
-	struct sockaddr_in from;
-	int fromlen;
+	struct sockaddr_storage from;
+	socklen_t fromlen;
 
 	/*
 	 * See if inetd started us
 	 */
 	fromlen = sizeof(from);
-	if (getsockname(0, (struct sockaddr *)&from, &fromlen) < 0) {
+	if (getsockname(0, (struct sockaddr *)(void *)&from, &fromlen) == -1)
 		from_inetd = 0;
-		sock = RPC_ANYSOCK;
-		proto = IPPROTO_UDP;
-	}
 	
 	if (!from_inetd) {
-		daemon(0, 0);
+		(void)daemon(0, 0);
 
-		(void) pmap_unset(RUSERSPROG, RUSERSVERS_3);
-		(void) pmap_unset(RUSERSPROG, RUSERSVERS_IDLE);
+		(void)rpcb_unset(RUSERSPROG, RUSERSVERS_3, NULL);
+		(void)rpcb_unset(RUSERSPROG, RUSERSVERS_IDLE, NULL);
 
-		(void) signal(SIGINT, cleanup);
-		(void) signal(SIGTERM, cleanup);
-		(void) signal(SIGHUP, cleanup);
+		(void)signal(SIGINT, cleanup);
+		(void)signal(SIGTERM, cleanup);
+		(void)signal(SIGHUP, cleanup);
 	}
 
 	openlog("rpc.rusersd", LOG_PID, LOG_DAEMON);
-	
-	transp = svcudp_create(sock);
-	if (transp == NULL) {
-		syslog(LOG_ERR, "cannot create udp service.");
-		exit(1);
-	}
-	if (!svc_register(transp, RUSERSPROG, RUSERSVERS_3, rusers_service, proto)) {
-		syslog(LOG_ERR, "unable to register (RUSERSPROG, RUSERSVERS_3, %s).", proto?"udp":"(inetd)");
-		exit(1);
-	}
-	if (!svc_register(transp, RUSERSPROG, RUSERSVERS_IDLE, rusers_service, proto)) {
-		syslog(LOG_ERR, "unable to register (RUSERSPROG, RUSERSVERS_IDLE, %s).", proto?"udp":"(inetd)");
-		exit(1);
+
+	if (from_inetd) {
+		transp = svc_dg_create(0, 0, 0);
+		if (transp == NULL) {
+			syslog(LOG_ERR, "cannot create udp service.");
+			return 1;
+		}
+		if (!svc_reg(transp, RUSERSPROG, RUSERSVERS_3, rusers_service,
+		    NULL)) {
+			syslog(LOG_ERR, "unable to register "
+			    "(RUSERSPROG, RUSERSVERS_3).");
+			return 1;
+		}
+		if (!svc_reg(transp, RUSERSPROG, RUSERSVERS_IDLE,
+		    rusers_service, NULL)) {
+			syslog(LOG_ERR, "unable to register "
+			    "(RUSERSPROG, RUSERSVERS_IDLE).");
+			return 1;
+		}
+	} else {
+		if (!svc_create(rusers_service, RUSERSPROG, RUSERSVERS_3,
+		    "udp")) {
+			syslog(LOG_ERR, "unable to create "
+			    "(RUSERSPROG, RUSERSVERS_3).");
+			return 1;
+		}
+		if (!svc_create(rusers_service, RUSERSPROG, RUSERSVERS_IDLE,
+		    "udp")) {
+			syslog(LOG_ERR, "unable to create "
+			    "(RUSERSPROG, RUSERSVERS_IDLE).");
+			return 1;
+		}
 	}
 
 	svc_run();
 	syslog(LOG_ERR, "svc_run returned");
-	exit(1);
+	return 1;
 }

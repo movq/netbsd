@@ -1,4 +1,4 @@
-/*	$NetBSD: makebuf.c,v 1.12 1999/09/20 04:39:30 lukem Exp $	*/
+/*	$NetBSD: makebuf.c,v 1.15 2008/03/13 15:40:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)makebuf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: makebuf.c,v 1.12 1999/09/20 04:39:30 lukem Exp $");
+__RCSID("$NetBSD: makebuf.c,v 1.15 2008/03/13 15:40:00 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -53,6 +49,7 @@ __RCSID("$NetBSD: makebuf.c,v 1.12 1999/09/20 04:39:30 lukem Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include "reentrant.h"
 #include "local.h"
 
 /*
@@ -89,7 +86,7 @@ __smakebuf(fp)
 	flags |= __SMBF;
 	fp->_bf._base = fp->_p = p;
 	fp->_bf._size = size;
-	if (couldbetty && isatty(fp->_file))
+	if (couldbetty && isatty(__sfileno(fp)))
 		flags |= __SLBF;
 	fp->_flags |= flags;
 }
@@ -109,7 +106,7 @@ __swhatbuf(fp, bufsize, couldbetty)
 	_DIAGASSERT(bufsize != NULL);
 	_DIAGASSERT(couldbetty != NULL);
 
-	if (fp->_file < 0 || fstat(fp->_file, &st) < 0) {
+	if (__sfileno(fp) == -1 || fstat(__sfileno(fp), &st) < 0) {
 		*couldbetty = 0;
 		*bufsize = BUFSIZ;
 		return (__SNPT);

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fddi.h,v 1.8 1999/11/19 20:41:19 thorpej Exp $	*/
+/*	$NetBSD: if_fddi.h,v 1.14 2007/12/25 18:33:45 perry Exp $	*/
 
 /*
  * Copyright (c) 1995 Matt Thomas (thomas@lkg.dec.com)
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -37,7 +37,7 @@ struct	fddi_header {
 	u_char	fddi_fc;
 	u_char	fddi_dhost[6];
 	u_char	fddi_shost[6];
-} __attribute__((__packed__));
+} __packed;
 
 #define	FDDIIPMTU		4352
 #define	FDDIMTU			4470
@@ -83,15 +83,13 @@ struct	fddi_header {
 #define	fddibroadcastaddr	etherbroadcastaddr
 #define	fddi_ipmulticast_min	ether_ipmulticast_min
 #define	fddi_ipmulticast_max	ether_ipmulticast_max
-#define	fddi_addmulti		ether_addmulti
-#define	fddi_delmulti		ether_delmulti
 #define	fddi_sprintf		ether_sprintf
 
 #if defined(__NetBSD__)
-void    fddi_ifattach __P((struct ifnet *, caddr_t));
+void    fddi_ifattach(struct ifnet *, void *);
 #else
-void    fddi_ifattach __P((struct ifnet *));
+void    fddi_ifattach(struct ifnet *);
 #endif
 #endif
 
-#endif
+#endif /* !_NET_IF_FDDI_H_ */

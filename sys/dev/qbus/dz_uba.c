@@ -1,4 +1,4 @@
-/*	$NetBSD: dz_uba.c,v 1.9 2000/03/30 12:45:37 augustss Exp $ */
+/*	$NetBSD: dz_uba.c,v 1.28 2008/03/15 00:57:15 matt Exp $ */
 /*
  * Copyright (c) 1998 Ludd, University of Lule}, Sweden. All rights reserved.
  * Copyright (c) 1996  Ken C. Wellsch.  All rights reserved.
@@ -13,7 +13,7 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed at Ludd, University of 
+ *      This product includes software developed at Ludd, University of
  *      Lule}, Sweden and its contributors.
  * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission
@@ -30,12 +30,14 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: dz_uba.c,v 1.28 2008/03/15 00:57:15 matt Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/ioctl.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/map.h>
 #include <sys/buf.h>
 #include <sys/conf.h>
 #include <sys/file.h>
@@ -44,33 +46,29 @@
 #include <sys/syslog.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/pte.h>
 #include <machine/trap.h>
 #include <machine/scb.h>
 
 #include <dev/qbus/ubavar.h>
 
-#include <dev/qbus/dzreg.h>
-#include <dev/qbus/dzvar.h>
+#include <dev/dec/dzreg.h>
+#include <dev/dec/dzvar.h>
 
 #include "ioconf.h"
 
-static	int	dz_uba_match __P((struct device *, struct cfdata *, void *));
-static	void	dz_uba_attach __P((struct device *, struct device *, void *));
+static	int	dz_uba_match(device_t, cfdata_t, void *);
+static	void	dz_uba_attach(device_t, device_t, void *);
 
-struct	cfattach dz_uba_ca = {
-	sizeof(struct dz_softc), dz_uba_match, dz_uba_attach
-};
+CFATTACH_DECL_NEW(dz_uba, sizeof(struct dz_softc),
+    dz_uba_match, dz_uba_attach, NULL, NULL);
 
 /* Autoconfig handles: setup the controller to interrupt, */
 /* then complete the housecleaning for full operation */
 
 static int
-dz_uba_match(parent, cf, aux)
-        struct device *parent;
-	struct cfdata *cf;
-        void *aux;
+dz_uba_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct uba_attach_args *ua = aux;
 	bus_space_tag_t	iot = ua->ua_iot;
@@ -105,17 +103,16 @@ dz_uba_match(parent, cf, aux)
 	/* Register the TX interrupt handler */
 
 
-       	return (1);
+	return (1);
 }
 
 static void
-dz_uba_attach(parent, self, aux)
-        struct device *parent, *self;
-        void *aux;
+dz_uba_attach(device_t parent, device_t self, void *aux)
 {
-	struct	dz_softc *sc = (void *)self;
+	struct dz_softc *sc = device_private(self);
 	struct uba_attach_args *ua = aux;
 
+	sc->sc_dev = self;
 	sc->sc_iot = ua->ua_iot;
 	sc->sc_ioh = ua->ua_ioh;
 
@@ -128,11 +125,17 @@ dz_uba_attach(parent, self, aux)
 	sc->sc_dr.dr_dcd = DZ_UBA_DCD;
 	sc->sc_dr.dr_ring = DZ_UBA_RING;
 
+	sc->sc_dr.dr_firstreg = DZ_UBA_FIRSTREG;
+	sc->sc_dr.dr_winsize = DZ_UBA_WINSIZE;
+
 	sc->sc_type = DZ_DZ;
 
 	/* Now register the TX & RX interrupt handlers */
-	uba_intr_establish(ua->ua_icookie, ua->ua_cvec, dzxint, sc);
-	uba_intr_establish(ua->ua_icookie, ua->ua_cvec - 4, dzrint, sc);
+	uba_intr_establish(ua->ua_icookie, ua->ua_cvec,
+		dzxint, sc, &sc->sc_tintrcnt);
+	uba_intr_establish(ua->ua_icookie, ua->ua_cvec - 4,
+		dzrint, sc, &sc->sc_rintrcnt);
+	uba_reset_establish(dzreset, self);
 
-	dzattach(sc);
+	dzattach(sc, ua->ua_evcnt, -1);
 }

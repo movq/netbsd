@@ -1,4 +1,6 @@
-#	$NetBSD: Makefile,v 1.3 1999/02/13 02:54:35 lukem Exp $
+#	$NetBSD: Makefile,v 1.5 2001/12/12 12:24:21 lukem Exp $
+
+NOOBJ=	# defined
 
 .include <bsd.own.mk>
 
@@ -6,6 +8,5 @@
 FILES=	SVR4_MAKEDEV netconfig nsswitch.conf
 FILESDIR=/usr/share/examples/emul/svr4/etc
 .endif
-MKOBJ=	no
 
 .include <bsd.prog.mk>

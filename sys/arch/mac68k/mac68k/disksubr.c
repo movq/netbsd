@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.33 2000/01/18 19:43:23 thorpej Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.57 2008/01/02 11:48:26 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -68,25 +64,18 @@
  *
  */
 
-/* rewritten, 2-5-93 MLF */
-/* its alot cleaner now, and adding support for new partition types
- * isn't a bitch anymore
- * known bugs:
- * 1) when only an HFS_PART part exists on a drive it gets assigned to "B"
- * this is because of line 623 of sd.c, I think this line should go.
- * 2) /sbin/disklabel expects the whole disk to be in "D", we put it in
- * "C" (I think) and we don't set that position in the disklabel structure
- * as used.  Again, not my fault.
- */
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.57 2008/01/02 11:48:26 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/disk.h>
 #include <sys/disklabel.h>
-#include <sys/disklabel_mbr.h>
+#include <sys/bootblock.h>
 #include <sys/syslog.h>
 
-#include <machine/bswap.h>
+#include <sys/bswap.h>
 
 #define NUM_PARTS 32
 
@@ -96,38 +85,37 @@
 #define HFS_PART 4
 #define SCRATCH_PART 5
 
-int fat_types[] = { MBR_PTYPE_FAT12, MBR_PTYPE_FAT16S,
-		    MBR_PTYPE_FAT16B, MBR_PTYPE_FAT32,
-		    MBR_PTYPE_FAT32L, MBR_PTYPE_FAT16L,
-		    -1 };
+int fat_types[] = {
+	MBR_PTYPE_FAT12, MBR_PTYPE_FAT16S,
+	MBR_PTYPE_FAT16B, MBR_PTYPE_FAT32,
+	MBR_PTYPE_FAT32L, MBR_PTYPE_FAT16L,
+	-1
+};
 
-static int getFreeLabelEntry __P((struct disklabel *));
-static int whichType __P((struct part_map_entry *));
-static void setpartition __P((struct part_map_entry *,
-		struct partition *, int));
-static int getNamedType __P((struct part_map_entry *, int,
-		struct disklabel *, int, int, int *));
-static char *read_mac_label __P((dev_t, void (*)(struct buf *),
-		struct disklabel *, struct cpu_disklabel *));
-static char *read_dos_label __P((dev_t, void (*)(struct buf *),
-		struct disklabel *, struct cpu_disklabel *));
+static int getFreeLabelEntry(struct disklabel *);
+static int whichType(struct part_map_entry *);
+static void setpartition(struct part_map_entry *, struct partition *, int);
+static int getNamedType(struct part_map_entry *, int, struct disklabel *, int,
+	    int, int *);
+static char *read_mac_label(char *, struct disklabel *, int *);
+static char *read_mbr_label(char *, struct disklabel *, int *);
+static const char *read_bsd_label(char *, struct disklabel *, int *);
+
 
 /*
  * Find an entry in the disk label that is unused and return it
  * or -1 if no entry
  */
 static int
-getFreeLabelEntry(lp)
-	struct disklabel *lp;
+getFreeLabelEntry(struct disklabel *lp)
 {
-	int i = 0;
+	int i;
 
 	for (i = 0; i < MAXPARTITIONS; i++) {
 		if ((i != RAW_PART)
 		    && (lp->d_partitions[i].p_fstype == FS_UNUSED))
 			return i;
 	}
-
 	return -1;
 }
 
@@ -135,8 +123,7 @@ getFreeLabelEntry(lp)
  * figure out what the type of the given part is and return it
  */
 static int
-whichType(part)
-	struct part_map_entry *part;
+whichType(struct part_map_entry *part)
 {
 	struct blockzeroblock *bzb;
 	char typestr[32], *s;
@@ -179,9 +166,7 @@ whichType(part)
 }
 
 static void
-setpartition(part, pp, fstype)
-	struct part_map_entry *part;
-	struct partition *pp;
+setpartition(struct part_map_entry *part, struct partition *pp, int fstype)
 {
 	pp->p_size = part->pmPartBlkCnt;
 	pp->p_offset = part->pmPyPartStart;
@@ -191,15 +176,11 @@ setpartition(part, pp, fstype)
 }
 
 static int
-getNamedType(part, num_parts, lp, type, alt, maxslot)
-	struct part_map_entry *part;
-	int num_parts;
-	struct disklabel *lp;
-	int type, alt;
-	int *maxslot;
+getNamedType(struct part_map_entry *part, int num_parts, struct disklabel *lp,
+    int type, int alt, int *maxslot)
 {
 	struct blockzeroblock *bzb;
-	int i = 0;
+	int i;
 
 	for (i = 0; i < num_parts; i++) {
 		if (whichType(part + i) != type)
@@ -255,36 +236,34 @@ getNamedType(part, num_parts, lp, type, alt, maxslot)
  *	NetBSD to live on cluster 0--regardless of the actual order on the
  *	disk.  This whole algorithm should probably be changed in the future.
  */
+
+/*
+ * This uses sector zero.  If this contains what looks like a valid
+ * Macintosh boot sector, we attempt to fill in the disklabel structure
+ * with the partition data from block #1 on.
+ */
 static char *
-read_mac_label(dev, strat, lp, osdep)
-	dev_t dev;
-	void (*strat)(struct buf *);
-	struct disklabel *lp;
-	struct cpu_disklabel *osdep;
+read_mac_label(char *dlbuf, struct disklabel *lp, int *match)
 {
+	u_int16_t *sbSigp;
 	struct part_map_entry *part;
 	struct partition *pp;
-	struct buf *bp;
-	char *msg = NULL;
-	int i, slot, maxslot = 0;
+	char *msg;
+	int i, slot, maxslot;
 
-	/* get buffer and initialize it */
-	bp = geteblk((int)lp->d_secsize * NUM_PARTS);
-	bp->b_dev = dev;
+	maxslot = 0;
+	*match = 0;
+	msg = NULL;
 
-	/* read partition map */
-	bp->b_blkno = 1;	/* partition map starts at blk 1 */
-	bp->b_bcount = lp->d_secsize * NUM_PARTS;
-	bp->b_flags = B_BUSY | B_READ;
-	bp->b_cylinder = 1 / lp->d_secpercyl;
-	(*strat)(bp);
+	sbSigp = (u_int16_t *)dlbuf;
+	if (*sbSigp != DRIVER_MAP_MAGIC)
+		return msg;
 
-	if (biowait(bp)) {
-		msg = "Macintosh partition map I/O error";
-		goto done;
-	}
+	/* Found Macintosh partition magic number; set up disklabel */
+	*match = (-1);
 
-	part = (struct part_map_entry *)bp->b_data;
+	/* the Macintosh partition table starts at sector #1 */
+	part = (struct part_map_entry *)(dlbuf + DEV_BSIZE);
 
 	/* Fill in standard partitions */
 	lp->d_npartitions = RAW_PART + 1;
@@ -328,143 +307,154 @@ read_mac_label(dev, strat, lp, osdep)
 			maxslot = slot;
 	}
 	lp->d_npartitions = ((maxslot >= RAW_PART) ? maxslot : RAW_PART) + 1;
-
-done:
-	bp->b_flags |= B_INVAL;
-	brelse(bp);
-
 	return msg;
 }
 
-/* Read MS-DOS partition table.
+/*
+ * Scan the disk buffer for a DOS style master boot record.
+ * Return if no match; otherwise, set up an in-core disklabel .
  *
- * XXX -
+ * XXX stuff like this really should be MI
+ *
  * Since FFS is endian sensitive, we pay no effort in attempting to
  * dig up *BSD/i386 disk labels that may be present on the disk.
  * Hence anything but DOS partitions is treated as unknown FS type, but
  * this should suffice to mount_msdos Zip and other removable media.
  */
 static char *
-read_dos_label(dev, strat, lp, osdep)
-	dev_t dev;
-	void (*strat)(struct buf *);
-	struct disklabel *lp;
-	struct cpu_disklabel *osdep;
+read_mbr_label(char *dlbuf, struct disklabel *lp, int *match)
 {
 	struct mbr_partition *dp;
 	struct partition *pp;
-	struct buf *bp;
-	char *msg = NULL;
-	int i, *ip, slot, maxslot = 0;
+	char *msg;
+	size_t mbr_lbl_off;
+	int i, *ip, slot, maxslot;
 
-	/* get a buffer and initialize it */
-	bp = geteblk((int)lp->d_secsize);
-	bp->b_dev = dev;
+	maxslot = 0;
+	*match = 0;
+	msg = NULL;
 
-	/* read master boot record */
-	bp->b_blkno = MBR_BBSECTOR;
-	bp->b_bcount = lp->d_secsize;
-	bp->b_flags = B_BUSY | B_READ;
-	bp->b_cylinder = MBR_BBSECTOR / lp->d_secpercyl;
-	(*strat)(bp);
+	if (MBR_MAGIC != bswap16(*(u_int16_t *)(dlbuf + MBR_MAGIC_OFFSET)))
+		return msg;
 
-	/* if successful, wander through dos partition table */
-	if (biowait(bp)) {
-		msg = "dos partition I/O error";
-		goto done;
-	} else {
-		/* XXX */
-		dp = (struct mbr_partition *)(bp->b_data + MBR_PARTOFF);
-		for (i = 0; i < NMBRPART; i++, dp++) {
-			if (dp->mbrp_typ != 0) {
-				slot = getFreeLabelEntry(lp);
-				if (slot > maxslot)
-					maxslot = slot;
-
-				pp = &lp->d_partitions[slot];
-				pp->p_fstype = FS_OTHER;
-				pp->p_offset = bswap32(dp->mbrp_start);
-				pp->p_size = bswap32(dp->mbrp_size);
-
-				for (ip = fat_types; *ip != -1; ip++) {
-					if (dp->mbrp_typ == *ip) {
-						pp->p_fstype = FS_MSDOS;
-						break;
-					}
-				}
+	/* Found MBR magic number; set up disklabel */
+	*match = (-1);
+	mbr_lbl_off = MBR_BBSECTOR * lp->d_secsize + MBR_PART_OFFSET;
+	
+	dp = (struct mbr_partition *)(dlbuf + mbr_lbl_off);
+	for (i = 0; i < MBR_PART_COUNT; i++, dp++) {
+		if (dp->mbrp_type == 0)
+			continue;
+		
+		slot = getFreeLabelEntry(lp);
+		maxslot = (slot > maxslot) ? maxslot : slot;
+		
+		pp = &lp->d_partitions[slot];
+		pp->p_fstype = FS_OTHER;
+		pp->p_offset = bswap32(dp->mbrp_start);
+		pp->p_size = bswap32(dp->mbrp_size);
+		
+		for (ip = fat_types; *ip != -1; ip++) {
+			if (dp->mbrp_type == *ip) {
+				pp->p_fstype = FS_MSDOS;
+				break;
 			}
 		}
 	}
 	lp->d_npartitions = ((maxslot >= RAW_PART) ? maxslot : RAW_PART) + 1;
-
- done:
-	bp->b_flags |= B_INVAL;
-	brelse(bp);
-	return (msg);
+	return msg;
 }
 
 /*
- * Attempt to read a disk label from a device using the indicated stategy
+ * Scan the disk buffer in four byte steps for a native BSD disklabel
+ * (different ports have variable-sized bootcode before the label)
+ */
+static const char *
+read_bsd_label(char *dlbuf, struct disklabel *lp, int *match)
+{
+	struct disklabel *dlp;
+	const char *msg;
+	struct disklabel *blk_start, *blk_end;
+	
+	*match = 0;
+	msg = NULL;
+
+	blk_start = (struct disklabel *)dlbuf;
+	blk_end = (struct disklabel *)(dlbuf + (NUM_PARTS << DEV_BSHIFT) -
+	    sizeof(struct disklabel));
+
+	for (dlp = blk_start; dlp <= blk_end; 
+	     dlp = (struct disklabel *)((char *)dlp + sizeof(long))) {
+		if (dlp->d_magic == DISKMAGIC && dlp->d_magic2 == DISKMAGIC) {
+			/* Sanity check */
+			if (dlp->d_npartitions <= MAXPARTITIONS && 
+			    dkcksum(dlp) == 0) {
+				*lp = *dlp;
+				*match = (-1);
+			} else
+				msg = "Disk label corrupted";
+			break;
+		}
+	}
+	return msg;
+}
+
+/*
+ * Attempt to read a disk label from a device using the indicated strategy
  * routine.  The label must be partly set up before this: secpercyl and
  * anything required in the strategy routine (e.g., sector size) must be
  * filled in before calling us.  Returns null on success and an error
  * string on failure.
- *
- * This will read sector zero.  If this contains what looks like a valid
- * Macintosh boot sector, we attempt to fill in the disklabel structure.
- * If the first longword of the disk is a NetBSD disk label magic number,
- * then we assume that it's a real disklabel and return it.
  */
-char *
-readdisklabel(dev, strat, lp, osdep)
-	dev_t dev;
-	void (*strat)(struct buf *);
-	struct disklabel *lp;
-	struct cpu_disklabel *osdep;
+const char *
+readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
+    struct cpu_disklabel *osdep)
 {
 	struct buf *bp;
-	char *msg = NULL;
-	struct disklabel *dlp;
+	const char *msg;
+	int size;
 
 	if (lp->d_secperunit == 0)
 		lp->d_secperunit = 0x1fffffff;
 
-	if (lp->d_secpercyl == 0) {
+	if (lp->d_secpercyl == 0)
 		return msg = "Zero secpercyl";
-	}
-	bp = geteblk((int)lp->d_secsize);
+
+	msg = NULL;
+
+	/* 
+	 * Read in the first #(NUM_PARTS + 1) blocks of the disk.
+	 * The native Macintosh partition table starts at 
+	 * sector #1, but we want #0 too for the BSD label.
+	 */
+
+	size = roundup((NUM_PARTS + 1) << DEV_BSHIFT, lp->d_secsize);
+	bp = geteblk(size);
 
 	bp->b_dev = dev;
 	bp->b_blkno = 0;
 	bp->b_resid = 0;
-	bp->b_bcount = lp->d_secsize;
-	bp->b_flags = B_BUSY | B_READ;
+	bp->b_bcount = size;
+	bp->b_flags |= B_READ;
 	bp->b_cylinder = 1 / lp->d_secpercyl;
 	(*strat)(bp);
 
 	if (biowait(bp)) {
 		msg = "I/O error reading block zero";
 	} else {
-		u_int16_t *sbSigp;
+		int match;
 
-		sbSigp = (u_int16_t *)bp->b_un.b_addr;
-		if (*sbSigp == 0x4552) {
-			msg = read_mac_label(dev, strat, lp, osdep);
-		} else if (bswap16(*(u_int16_t *)(bp->b_data + MBR_MAGICOFF))
-			   == MBR_MAGIC) {
-			msg = read_dos_label(dev, strat, lp, osdep);
-		} else {
-			dlp = (struct disklabel *)(bp->b_un.b_addr + 0);
-			if (dlp->d_magic == DISKMAGIC) {
-				*lp = *dlp;
-			} else {
-				msg = "no disk label -- NetBSD or Macintosh";
-			}
-		}
+		/* Add any offsets in the table handlers */
+		msg = read_mac_label(bp->b_data, lp, &match);
+		if (!match && msg == NULL)
+			msg = read_mbr_label(bp->b_data, lp, &match);
+		if (!match && msg == NULL)
+			msg = read_bsd_label(bp->b_data, lp, &match);
+		if (!match && msg == NULL)
+			msg = "no disk label";
 	}
 
-	bp->b_flags |= B_INVAL;
-	brelse(bp);
+	brelse(bp, 0);
 	return (msg);
 }
 
@@ -472,19 +462,34 @@ readdisklabel(dev, strat, lp, osdep)
  * Check new disk label for sensibility before setting it.
  */
 int
-setdisklabel(olp, nlp, openmask, osdep)
-	struct disklabel *olp, *nlp;
-	u_long openmask;
-	struct cpu_disklabel *osdep;
+setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask,
+    struct cpu_disklabel *osdep)
 {
 #if 0
 	int i;
 	struct partition *opp, *npp;
 
+	/* sanity clause */
+	if (nlp->d_secpercyl == 0 || nlp->d_secsize == 0 ||
+	    (nlp->d_secsize % DEV_BSIZE) != 0)
+		return(EINVAL);
+
+	/* special case to allow disklabel to be invalidated */
+	if (nlp->d_magic == 0xffffffff) {
+		*olp = *nlp;
+		return (0);
+	}
+
 	if (nlp->d_magic != DISKMAGIC || nlp->d_magic2 != DISKMAGIC ||
 	    dkcksum(nlp) != 0)
 		return (EINVAL);
-	while ((i = ffs((long)openmask)) != 0) {
+
+	/*
+	 * XXX We are missing any sort of check if other partition types,
+	 * e.g. Macintosh or (PC) BIOS, will be overwritten.
+	 */
+
+	while ((i = ffs(openmask)) != 0) {
 		i--;
 		openmask &= ~(1 << i);
 		if (nlp->d_npartitions <= i)
@@ -518,11 +523,8 @@ setdisklabel(olp, nlp, openmask, osdep)
  *  we want to write dos disklabels some day. Really!
  */
 int
-writedisklabel(dev, strat, lp, osdep)
-	dev_t dev;
-	void (*strat)(struct buf *);
-	struct disklabel *lp;
-	struct cpu_disklabel *osdep;
+writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
+    struct cpu_disklabel *osdep)
 {
 #if 0
 	struct buf *bp;
@@ -540,18 +542,20 @@ writedisklabel(dev, strat, lp, osdep)
 	bp->b_dev = MAKEDISKDEV(major(dev), DISKUNIT(dev), labelpart);
 	bp->b_blkno = LABELSECTOR;
 	bp->b_bcount = lp->d_secsize;
-	bp->b_flags = B_READ;
+	bp->b_flags |= B_READ;
 	(*strat)(bp);
 	if (error = biowait(bp))
 		goto done;
-	for (dlp = (struct disklabel *)bp->b_un.b_addr;
+	for (dlp = (struct disklabel *)bp->b_data;
 	    dlp <= (struct disklabel *)
-	    (bp->b_un.b_addr + lp->d_secsize - sizeof(*dlp));
+	    ((char *)bp->b_data + lp->d_secsize - sizeof(*dlp));
 	    dlp = (struct disklabel *)((char *)dlp + sizeof(long))) {
 		if (dlp->d_magic == DISKMAGIC && dlp->d_magic2 == DISKMAGIC &&
 		    dkcksum(dlp) == 0) {
 			*dlp = *lp;
-			bp->b_flags = B_WRITE;
+			bp->b_oflags &= ~(BO_DONE);
+			bp->b_flags &= ~(B_READ);
+			bp->b_flags |= B_WRITE;
 			(*strat)(bp);
 			error = biowait(bp);
 			goto done;
@@ -559,75 +563,27 @@ writedisklabel(dev, strat, lp, osdep)
 	}
 	error = ESRCH;
 done:
-	brelse(bp);
+	brelse(bp, 0);
 	return (error);
 #else
-	return 0;
-#endif
-}
+	int i;
 
-/*
- * Determine the size of the transfer, and make sure it is
- * within the boundaries of the partition. Adjust transfer
- * if needed, and signal errors or early completion.
- */
-int
-bounds_check_with_label(bp, lp, wlabel)
-	struct buf *bp;
-	struct disklabel *lp;
-	int wlabel;
-{
-	struct partition *p = lp->d_partitions + DISKPART(bp->b_dev);
-#if 0
-	int labelsector = lp->d_partitions[2].p_offset + LABELSECTOR;
-#endif
-	int sz;
-
-	sz = howmany(bp->b_bcount, lp->d_secsize);
-
-	if (bp->b_blkno + sz > p->p_size) {
-		sz = p->p_size - bp->b_blkno;
-		if (sz == 0) {
-			/* If exactly at end of disk, return EOF. */
-			bp->b_resid = bp->b_bcount;
-			goto done;
-		}
-		if (sz < 0) {
-			/* If past end of disk, return EINVAL. */
-			bp->b_error = EINVAL;
-			goto bad;
-		}
-		/* Otherwise, truncate request. */
-		bp->b_bcount = sz << DEV_BSHIFT;
+	/*
+	 * Clear and re-analyze the ondisk Apple Disk Partition Map,
+	 * then recompute the faked incore disk label. This is necessary
+	 * for sysinst, which may have modified the disk layout. We don't
+	 * (yet?) support writing real BSD disk labels, so this hack
+	 * instead causes the DIOCWDINFO ioctl invoked by sysinst to
+	 * update the in-core disk label when it is "written" to disk.
+	 * This code was originally developed by Bob Nestor on 9/13/99.
+	 */
+	lp->d_npartitions = 0;
+	for (i = 0; i < MAXPARTITIONS; i++) {
+		lp->d_partitions[i].p_fstype = FS_UNUSED;
+		lp->d_partitions[i].p_offset = 0;
+		if (i != RAW_PART)
+			lp->d_partitions[i].p_size = 0;
 	}
-
-#if 0
-	/* Overwriting disk label? */
-	if (bp->b_blkno + p->p_offset <= labelsector &&
-#if LABELSECTOR != 0
-	    bp->b_blkno + p->p_offset + sz > labelsector &&
+	return (readdisklabel(dev, strat, lp, osdep) ? EINVAL : 0);
 #endif
-	    (bp->b_flags & B_READ) == 0 && !wlabel) {
-		bp->b_error = EROFS;
-		goto bad;
-	}
-#endif
-
-	/* calculate cylinder for disksort to order transfers with */
-	bp->b_cylinder = (bp->b_blkno + p->p_offset) /
-	    (lp->d_secsize / DEV_BSIZE) / lp->d_secpercyl;
-	return (1);
-
-bad:
-	bp->b_flags |= B_ERROR;
-done:
-	return (0);
-}
-
-void
-dk_establish(dk, dev)
-	struct disk *dk;
-	struct device *dev;
-{
-	/* Empty for now. -- XXX */
 }

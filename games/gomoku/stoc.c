@@ -1,4 +1,4 @@
-/*	$NetBSD: stoc.c,v 1.5 1999/09/08 21:17:50 jsm Exp $	*/
+/*	$NetBSD: stoc.c,v 1.9 2005/04/19 20:17:12 rillig Exp $	*/
 
 /*
  * Copyright (c) 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,12 +37,13 @@
 #if 0
 static char sccsid[] = "@(#)stoc.c	8.1 (Berkeley) 7/24/94";
 #else
-__RCSID("$NetBSD: stoc.c,v 1.5 1999/09/08 21:17:50 jsm Exp $");
+__RCSID("$NetBSD: stoc.c,v 1.9 2005/04/19 20:17:12 rillig Exp $");
 #endif
 #endif /* not lint */
 
 #include <ctype.h>
 #include <stdlib.h>
+#include <string.h>
 #include "gomoku.h"
 
 const char	*letters	= "<ABCDEFGHJKLMNOPQRST>";
@@ -91,12 +88,12 @@ ctos(mp)
 	for (i = 0; mv[i].m_code >= 0; i++)
 		if (strcmp(mp, mv[i].m_text) == 0)
 			return(mv[i].m_code);
-	if (!isalpha(mp[0]))
+	if (!isalpha((unsigned char)mp[0]))
 		return(ILLEGAL);
 	i = atoi(&mp[1]);
 	if (i < 1 || i > 19)
 		return(ILLEGAL);
-	return(PT(lton(mp[0]), i));
+	return(PT(lton((unsigned char)mp[0]), i));
 }
 
 /*

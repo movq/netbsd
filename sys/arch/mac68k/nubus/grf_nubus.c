@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_nubus.c,v 1.57 2000/03/18 20:53:24 scottr Exp $	*/
+/*	$NetBSD: grf_nubus.c,v 1.75 2007/10/17 19:55:15 garbled Exp $	*/
 
 /*
  * Copyright (c) 1995 Allen Briggs.  All rights reserved.
@@ -11,10 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Allen Briggs.
- * 4. The name of the author may not be used to endorse or promote products
+ * 3. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
@@ -31,6 +28,9 @@
 /*
  * Device-specific routines for handling Nubus-based video cards.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: grf_nubus.c,v 1.75 2007/10/17 19:55:15 garbled Exp $");
 
 #include <sys/param.h>
 
@@ -50,63 +50,63 @@
 #include <mac68k/nubus/nubus.h>
 #include <mac68k/dev/grfvar.h>
 
-static void	load_image_data __P((caddr_t data, struct image_data *image));
+static void	load_image_data(void *, struct image_data *);
 
-static void	grfmv_intr_generic_write1 __P((void *vsc));
-static void	grfmv_intr_generic_write4 __P((void *vsc));
-static void	grfmv_intr_generic_or4 __P((void *vsc));
+static void	grfmv_intr_generic_write1(void *);
+static void	grfmv_intr_generic_write4(void *);
+static void	grfmv_intr_generic_or4(void *);
 
-static void	grfmv_intr_cb264 __P((void *vsc));
-static void	grfmv_intr_cb364 __P((void *vsc));
-static void	grfmv_intr_cmax __P((void *vsc));
-static void	grfmv_intr_cti __P((void *vsc));
-static void	grfmv_intr_radius __P((void *vsc));
-static void	grfmv_intr_radius24 __P((void *vsc));
-static void	grfmv_intr_supermacgfx __P((void *vsc));
-static void	grfmv_intr_lapis __P((void *vsc));
-static void	grfmv_intr_formac __P((void *vsc));
-static void	grfmv_intr_vimage __P((void *vsc));
-static void	grfmv_intr_gvimage __P((void *vsc));
-static void	grfmv_intr_radius_gsc __P((void *vsc));
+static void	grfmv_intr_cb264(void *);
+static void	grfmv_intr_cb364(void *);
+static void	grfmv_intr_cmax(void *);
+static void	grfmv_intr_cti(void *);
+static void	grfmv_intr_radius(void *);
+static void	grfmv_intr_radius24(void *);
+static void	grfmv_intr_supermacgfx(void *);
+static void	grfmv_intr_lapis(void *);
+static void	grfmv_intr_formac(void *);
+static void	grfmv_intr_vimage(void *);
+static void	grfmv_intr_gvimage(void *);
+static void	grfmv_intr_radius_gsc(void *);
+static void	grfmv_intr_radius_gx(void *);
+static void	grfmv_intr_relax_200(void *);
+static void	grfmv_intr_mvc(void *);
+static void	grfmv_intr_viltro_340(void *);
 
-static int	grfmv_mode __P((struct grf_softc *gp, int cmd, void *arg));
-static int	grfmv_match __P((struct device *, struct cfdata *, void *));
-static void	grfmv_attach __P((struct device *, struct device *, void *));
+static int	grfmv_mode(struct grf_softc *, int, void *);
+static int	grfmv_match(struct device *, struct cfdata *, void *);
+static void	grfmv_attach(struct device *, struct device *, void *);
 
-struct cfattach macvid_ca = {
-	sizeof(struct grfbus_softc), grfmv_match, grfmv_attach
-};
+CFATTACH_DECL(macvid, sizeof(struct grfbus_softc),
+    grfmv_match, grfmv_attach, NULL, NULL);
 
 static void
-load_image_data(data, image)
-	caddr_t	data;
-	struct	image_data *image;
+load_image_data(void *	data, struct image_data *image)
 {
-	bcopy(data     , &image->size,       4);
-	bcopy(data +  4, &image->offset,     4);
-	bcopy(data +  8, &image->rowbytes,   2);
-	bcopy(data + 10, &image->top,        2);
-	bcopy(data + 12, &image->left,       2);
-	bcopy(data + 14, &image->bottom,     2);
-	bcopy(data + 16, &image->right,      2);
-	bcopy(data + 18, &image->version,    2);
-	bcopy(data + 20, &image->packType,   2);
-	bcopy(data + 22, &image->packSize,   4);
-	bcopy(data + 26, &image->hRes,       4);
-	bcopy(data + 30, &image->vRes,       4);
-	bcopy(data + 34, &image->pixelType,  2);
-	bcopy(data + 36, &image->pixelSize,  2);
-	bcopy(data + 38, &image->cmpCount,   2);
-	bcopy(data + 40, &image->cmpSize,    2);
-	bcopy(data + 42, &image->planeBytes, 4);
+	char *d = (char*)data;
+
+	memcpy(&image->size,       d     , 4);
+	memcpy(&image->offset,     d +  4, 4);
+	memcpy(&image->rowbytes,   d +  8, 2);
+	memcpy(&image->top,        d + 10, 2);
+	memcpy(&image->left,       d + 12, 2);
+	memcpy(&image->bottom,     d + 14, 2);
+	memcpy(&image->right,      d + 16, 2);
+	memcpy(&image->version,    d + 18, 2);
+	memcpy(&image->packType,   d + 20, 2);
+	memcpy(&image->packSize,   d + 22, 4);
+	memcpy(&image->hRes,       d + 26, 4);
+	memcpy(&image->vRes,       d + 30, 4);
+	memcpy(&image->pixelType,  d + 34, 2);
+	memcpy(&image->pixelSize,  d + 36, 2);
+	memcpy(&image->cmpCount,   d + 38, 2);
+	memcpy(&image->cmpSize,    d + 40, 2);
+	memcpy(&image->planeBytes, d + 42, 4);
 }
 
 
 static int
-grfmv_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+grfmv_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct nubus_attach_args *na = (struct nubus_attach_args *)aux;
 
@@ -130,9 +130,7 @@ grfmv_match(parent, cf, aux)
 }
 
 static void
-grfmv_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+grfmv_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct grfbus_softc *sc = (struct grfbus_softc *)self;
 	struct nubus_attach_args *na = (struct nubus_attach_args *)aux;
@@ -143,7 +141,7 @@ grfmv_attach(parent, self, aux)
 	nubus_dir dir, mode_dir;
 	int mode;
 
-	bcopy(na->fmt, &sc->sc_slot, sizeof(nubus_slot));
+	memcpy(&sc->sc_slot, na->fmt, sizeof(nubus_slot));
 
 	sc->sc_tag = na->na_tag;
 	sc->card_id = na->drhw;
@@ -190,14 +188,14 @@ bad:
 	}
 
 	if (nubus_get_ind_data(sc->sc_tag, sc->sc_handle, &sc->sc_slot,
-	    &dirent, (caddr_t)&image_store, sizeof(struct image_data)) <= 0) {
+	    &dirent, (void *)&image_store, sizeof(struct image_data)) <= 0) {
 		printf(": probe failed to get indirect mode data.\n");
 		goto bad;
 	}
 
 	/* Need to load display info (and driver?), etc... (?) */
 
-	load_image_data((caddr_t)&image_store, &image);
+	load_image_data((void *)&image_store, &image);
 
 	gm = &sc->curr_mode;
 	gm->mode_id = mode;
@@ -209,7 +207,7 @@ bad:
 	gm->hres = image.hRes;
 	gm->vres = image.vRes;
 	gm->fbsize = gm->height * gm->rowbytes;
-	gm->fbbase = (caddr_t)sc->sc_handle;	/* XXX evil hack */
+	gm->fbbase = (void *)(sc->sc_handle.base);	/* XXX evil hack */
 	gm->fboff = image.offset;
 
 	strncpy(cardname, nubus_get_card_name(sc->sc_tag, sc->sc_handle,
@@ -222,7 +220,7 @@ bad:
 		 * This is the Toby card, but apparently some manufacturers
 		 * (like Cornerstone) didn't bother to get/use their own
 		 * value here, even though the cards are different, so we
-		 * so we try to differentiate here.
+		 * try to differentiate here.
 		 */
 		if (strncmp(cardname, "Samsung 768", 11) == 0)
 			sc->card_id = NUBUS_DRHW_SAM768;
@@ -274,6 +272,7 @@ bad:
 		add_nubus_intr(na->slot, grfmv_intr_radius, sc);
 		break;
 	case NUBUS_DRHW_RPC24X:
+	case NUBUS_DRHW_BOOGIE:
 		sc->cli_value = 0x64;
 		add_nubus_intr(na->slot, grfmv_intr_radius, sc);
 		break;
@@ -282,6 +281,9 @@ bad:
 		break;
 	case NUBUS_DRHW_RADGSC:
 		add_nubus_intr(na->slot, grfmv_intr_radius_gsc, sc);
+		break;
+	case NUBUS_DRHW_RDCGX:
+		add_nubus_intr(na->slot, grfmv_intr_radius_gx, sc);
 		break;
 	case NUBUS_DRHW_FIILX:
 	case NUBUS_DRHW_FIISXDSP:
@@ -304,6 +306,10 @@ bad:
 	case NUBUS_DRHW_LAPIS:
 		add_nubus_intr(na->slot, grfmv_intr_lapis, sc);
 		break;
+	case NUBUS_DRHW_RELAX200:
+		add_nubus_intr(na->slot, grfmv_intr_relax_200, sc);
+		break;
+	case NUBUS_DRHW_BAER:
 	case NUBUS_DRHW_FORMAC:
 		add_nubus_intr(na->slot, grfmv_intr_formac, sc);
 		break;
@@ -312,6 +318,11 @@ bad:
 	case NUBUS_DRHW_ROPS24MXTV:
 		sc->cli_offset = 0xfb0010;
 		sc->cli_value = 0x00;
+		add_nubus_intr(na->slot, grfmv_intr_generic_write4, sc);
+		break;
+	case NUBUS_DRHW_ROPSPPGT:
+		sc->cli_offset = 0xf50010;
+		sc->cli_value = 0x02;
 		add_nubus_intr(na->slot, grfmv_intr_generic_write4, sc);
 		break;
 	case NUBUS_DRHW_VIMAGE:
@@ -330,6 +341,12 @@ bad:
 		sc->cli_value = 0;
 		add_nubus_intr(na->slot, grfmv_intr_generic_write4, sc);
 		break;
+	case NUBUS_DRHW_MVC:
+		add_nubus_intr(na->slot, grfmv_intr_mvc, sc);
+		break;
+	case NUBUS_DRHW_VILTRO340:
+		add_nubus_intr(na->slot, grfmv_intr_viltro_340, sc);
+		break;
 	default:
 		printf("%s: Unknown video card ID 0x%x --",
 		    sc->sc_dev.dv_xname, sc->card_id);
@@ -342,10 +359,7 @@ bad:
 }
 
 static int
-grfmv_mode(gp, cmd, arg)
-	struct grf_softc *gp;
-	int cmd;
-	void *arg;
+grfmv_mode(struct grf_softc *gp, int cmd, void *arg)
 {
 	switch (cmd) {
 	case GM_GRFON:
@@ -369,8 +383,7 @@ grfmv_mode(gp, cmd, arg)
  */
 /*ARGSUSED*/
 static void
-grfmv_intr_generic_write1(vsc)
-	void	*vsc;
+grfmv_intr_generic_write1(void *vsc)
 {
 	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
 
@@ -385,8 +398,7 @@ grfmv_intr_generic_write1(vsc)
  */
 /*ARGSUSED*/
 static void
-grfmv_intr_generic_write4(vsc)
-	void	*vsc;
+grfmv_intr_generic_write4(void *vsc)
 {
 	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
 
@@ -401,8 +413,7 @@ grfmv_intr_generic_write4(vsc)
  */
 /*ARGSUSED*/
 static void
-grfmv_intr_generic_or4(vsc)
-	void	*vsc;
+grfmv_intr_generic_or4(void *vsc)
 {
 	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
 	unsigned long	scratch;
@@ -417,8 +428,7 @@ grfmv_intr_generic_or4(vsc)
  */
 /*ARGSUSED*/
 static void
-grfmv_intr_radius(vsc)
-	void	*vsc;
+grfmv_intr_radius(void *vsc)
 {
 	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
 	u_int8_t c;
@@ -437,8 +447,7 @@ grfmv_intr_radius(vsc)
  */
 /*ARGSUSED*/
 static void
-grfmv_intr_radius24(vsc)
-	void	*vsc;
+grfmv_intr_radius24(void *vsc)
 {
 	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
 	u_int8_t c;
@@ -460,8 +469,7 @@ grfmv_intr_radius24(vsc)
  */
 /*ARGSUSED*/
 static void
-grfmv_intr_cti(vsc)
-	void	*vsc;
+grfmv_intr_cti(void *vsc)
 {
 	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
 	u_int8_t c;
@@ -475,50 +483,50 @@ grfmv_intr_cti(vsc)
 
 /*ARGSUSED*/
 static void
-grfmv_intr_cb264(vsc)
-	void	*vsc;
+grfmv_intr_cb264(void *vsc)
 {
 	struct grfbus_softc *sc;
 	volatile char *slotbase;
 
 	sc = (struct grfbus_softc *)vsc;
-	slotbase = (volatile char *)sc->sc_handle;	/* XXX evil hack */
-	asm volatile("	movl	%0,a0
-			movl	a0@(0xff6028),d0
-			andl	#0x2,d0
-			beq	_mv_intr0
-			movql	#0x3,d0
-		_mv_intr0:
-			movl	a0@(0xff600c),d1
-			andl	#0x3,d1
-			cmpl	d1,d0
-			beq	_mv_intr_fin
-			movl	d0,a0@(0xff600c)
-			nop
-			tstb	d0
-			beq	_mv_intr1
-			movl	#0x0002,a0@(0xff6040)
-			movl	#0x0102,a0@(0xff6044)
-			movl	#0x0105,a0@(0xff6048)
-			movl	#0x000e,a0@(0xff604c)
-			movl	#0x001c,a0@(0xff6050)
-			movl	#0x00bc,a0@(0xff6054)
-			movl	#0x00c3,a0@(0xff6058)
-			movl	#0x0061,a0@(0xff605c)
-			movl	#0x0012,a0@(0xff6060)
-			bra	_mv_intr_fin
-		_mv_intr1:
-			movl	#0x0002,a0@(0xff6040)
-			movl	#0x0209,a0@(0xff6044)
-			movl	#0x020c,a0@(0xff6048)
-			movl	#0x000f,a0@(0xff604c)
-			movl	#0x0027,a0@(0xff6050)
-			movl	#0x00c7,a0@(0xff6054)
-			movl	#0x00d7,a0@(0xff6058)
-			movl	#0x006b,a0@(0xff605c)
-			movl	#0x0029,a0@(0xff6060)
-		_mv_intr_fin:
-			movl	#0x1,a0@(0xff6014)"
+	slotbase = (volatile char *)(sc->sc_handle.base); /* XXX evil hack */
+	__asm volatile(
+		"	movl	%0,%%a0				\n"
+		"	movl	%%a0@(0xff6028),%%d0		\n"
+		"	andl	#0x2,%%d0			\n"
+		"	beq	_mv_intr0			\n"
+		"	movql	#0x3,%%d0			\n"
+		"_mv_intr0:					\n"
+		"	movl	%%a0@(0xff600c),%%d1		\n"
+		"	andl	#0x3,%%d1			\n"
+		"	cmpl	%%d1,%%d0			\n"
+		"	beq	_mv_intr_fin			\n"
+		"	movl	%%d0,%%a0@(0xff600c)		\n"
+		"	nop					\n"
+		"	tstb	%%d0				\n"
+		"	beq	_mv_intr1			\n"
+		"	movl	#0x0002,%%a0@(0xff6040)		\n"
+		"	movl	#0x0102,%%a0@(0xff6044)		\n"
+		"	movl	#0x0105,%%a0@(0xff6048)		\n"
+		"	movl	#0x000e,%%a0@(0xff604c)		\n"
+		"	movl	#0x001c,%%a0@(0xff6050)		\n"
+		"	movl	#0x00bc,%%a0@(0xff6054)		\n"
+		"	movl	#0x00c3,%%a0@(0xff6058)		\n"
+		"	movl	#0x0061,%%a0@(0xff605c)		\n"
+		"	movl	#0x0012,%%a0@(0xff6060)		\n"
+		"	bra	_mv_intr_fin			\n"
+		"_mv_intr1:					\n"
+		"	movl	#0x0002,%%a0@(0xff6040)		\n"
+		"	movl	#0x0209,%%a0@(0xff6044)		\n"
+		"	movl	#0x020c,%%a0@(0xff6048)		\n"
+		"	movl	#0x000f,%%a0@(0xff604c)		\n"
+		"	movl	#0x0027,%%a0@(0xff6050)		\n"
+		"	movl	#0x00c7,%%a0@(0xff6054)		\n"
+		"	movl	#0x00d7,%%a0@(0xff6058)		\n"
+		"	movl	#0x006b,%%a0@(0xff605c)		\n"
+		"	movl	#0x0029,%%a0@(0xff6060)		\n"
+		"_mv_intr_fin:					\n"
+		"	movl	#0x1,%%a0@(0xff6014)"
 		: : "g" (slotbase) : "a0","d0","d1");
 }
 
@@ -529,87 +537,87 @@ grfmv_intr_cb264(vsc)
  */
 /*ARGSUSED*/
 static void
-grfmv_intr_cb364(vsc)
-	void	*vsc;
+grfmv_intr_cb364(void *vsc)
 {
 	struct grfbus_softc *sc;
 	volatile char *slotbase;
 
 	sc = (struct grfbus_softc *)vsc;
-	slotbase = (volatile char *)sc->sc_handle;	/* XXX evil hack */
-	asm volatile("	movl	%0,a0
-			movl	a0@(0xfe6028),d0
-			andl	#0x2,d0
-			beq	_cb364_intr4
-			movql	#0x3,d0
-			movl	a0@(0xfe6018),d1
-			movl	#0x3,a0@(0xfe6018)
-			movw	a0@(0xfe7010),d2
-			movl	d1,a0@(0xfe6018)
-			movl	a0@(0xfe6020),d1
-			btst	#0x06,d2
-			beq	_cb364_intr0
-			btst	#0x00,d1
-			beq	_cb364_intr5
-			bsr	_cb364_intr1
-			bra	_cb364_intr_out
-		_cb364_intr0:
-			btst	#0x00,d1
-			bne	_cb364_intr5
-			bsr	_cb364_intr1
-			bra	_cb364_intr_out
-		_cb364_intr1:
-			movl	d0,a0@(0xfe600c)
-			nop
-			tstb	d0
-			beq	_cb364_intr3
-			movl	#0x0002,a0@(0xfe6040)
-			movl	#0x0105,a0@(0xfe6048)
-			movl	#0x000e,a0@(0xfe604c)
-			movl	#0x00c3,a0@(0xfe6058)
-			movl	#0x0061,a0@(0xfe605c)
-			btst	#0x06,d2
-			beq	_cb364_intr2
-			movl	#0x001c,a0@(0xfe6050)
-			movl	#0x00bc,a0@(0xfe6054)
-			movl	#0x0012,a0@(0xfe6060)
-			movl	#0x000e,a0@(0xfe6044)
-			movl	#0x00c3,a0@(0xfe6064)
-			movl	#0x0061,a0@(0xfe6020)
-			rts
-		_cb364_intr2:
-			movl	#0x0016,a0@(0xfe6050)
-			movl	#0x00b6,a0@(0xfe6054)
-			movl	#0x0011,a0@(0xfe6060)
-			movl	#0x0101,a0@(0xfe6044)
-			movl	#0x00bf,a0@(0xfe6064)
-			movl	#0x0001,a0@(0xfe6020)
-			rts
-		_cb364_intr3:
-			movl	#0x0002,a0@(0xfe6040)
-			movl	#0x0209,a0@(0xfe6044)
-			movl	#0x020c,a0@(0xfe6048)
-			movl	#0x000f,a0@(0xfe604c)
-			movl	#0x0027,a0@(0xfe6050)
-			movl	#0x00c7,a0@(0xfe6054)
-			movl	#0x00d7,a0@(0xfe6058)
-			movl	#0x006b,a0@(0xfe605c)
-			movl	#0x0029,a0@(0xfe6060)
-			oril	#0x0040,a0@(0xfe6064)
-			movl	#0x0000,a0@(0xfe6020)
-			rts
-		_cb364_intr4:
-			movq	#0x00,d0
-		_cb364_intr5:
-			movl	a0@(0xfe600c),d1
-			andl	#0x3,d1
-			cmpl	d1,d0
-			beq	_cb364_intr_out
-			bsr	_cb364_intr1
-		_cb364_intr_out:
-			movl	#0x1,a0@(0xfe6014)
-		_cb364_intr_quit:
-		" : : "g" (slotbase) : "a0","d0","d1","d2");
+	slotbase = (volatile char *)(sc->sc_handle.base); /* XXX evil hack */
+	__asm volatile(
+		"	movl	%0,%%a0				\n"
+		"	movl	%%a0@(0xfe6028),%%d0		\n"
+		"	andl	#0x2,%%d0			\n"
+		"	beq	_cb364_intr4			\n"
+		"	movql	#0x3,%%d0			\n"
+		"	movl	%%a0@(0xfe6018),%%d1		\n"
+		"	movl	#0x3,%%a0@(0xfe6018)		\n"
+		"	movw	%%a0@(0xfe7010),%%d2		\n"
+		"	movl	%%d1,%%a0@(0xfe6018)		\n"
+		"	movl	%%a0@(0xfe6020),%%d1		\n"
+		"	btst	#0x06,%%d2			\n"
+		"	beq	_cb364_intr0			\n"
+		"	btst	#0x00,%%d1			\n"
+		"	beq	_cb364_intr5			\n"
+		"	bsr	_cb364_intr1			\n"
+		"	bra	_cb364_intr_out			\n"
+		"_cb364_intr0:					\n"
+		"	btst	#0x00,%%d1			\n"
+		"	bne	_cb364_intr5			\n"
+		"	bsr	_cb364_intr1			\n"
+		"	bra	_cb364_intr_out			\n"
+		"_cb364_intr1:					\n"
+		"	movl	%%d0,%%a0@(0xfe600c)		\n"
+		"	nop					\n"
+		"	tstb	%%d0				\n"
+		"	beq	_cb364_intr3			\n"
+		"	movl	#0x0002,%%a0@(0xfe6040)		\n"
+		"	movl	#0x0105,%%a0@(0xfe6048)		\n"
+		"	movl	#0x000e,%%a0@(0xfe604c)		\n"
+		"	movl	#0x00c3,%%a0@(0xfe6058)		\n"
+		"	movl	#0x0061,%%a0@(0xfe605c)		\n"
+		"	btst	#0x06,%%d2			\n"
+		"	beq	_cb364_intr2			\n"
+		"	movl	#0x001c,%%a0@(0xfe6050)		\n"
+		"	movl	#0x00bc,%%a0@(0xfe6054)		\n"
+		"	movl	#0x0012,%%a0@(0xfe6060)		\n"
+		"	movl	#0x000e,%%a0@(0xfe6044)		\n"
+		"	movl	#0x00c3,%%a0@(0xfe6064)		\n"
+		"	movl	#0x0061,%%a0@(0xfe6020)		\n"
+		"	rts					\n"
+		"_cb364_intr2:					\n"
+		"	movl	#0x0016,%%a0@(0xfe6050)		\n"
+		"	movl	#0x00b6,%%a0@(0xfe6054)		\n"
+		"	movl	#0x0011,%%a0@(0xfe6060)		\n"
+		"	movl	#0x0101,%%a0@(0xfe6044)		\n"
+		"	movl	#0x00bf,%%a0@(0xfe6064)		\n"
+		"	movl	#0x0001,%%a0@(0xfe6020)		\n"
+		"	rts					\n"
+		"_cb364_intr3:					\n"
+		"	movl	#0x0002,%%a0@(0xfe6040)		\n"
+		"	movl	#0x0209,%%a0@(0xfe6044)		\n"
+		"	movl	#0x020c,%%a0@(0xfe6048)		\n"
+		"	movl	#0x000f,%%a0@(0xfe604c)		\n"
+		"	movl	#0x0027,%%a0@(0xfe6050)		\n"
+		"	movl	#0x00c7,%%a0@(0xfe6054)		\n"
+		"	movl	#0x00d7,%%a0@(0xfe6058)		\n"
+		"	movl	#0x006b,%%a0@(0xfe605c)		\n"
+		"	movl	#0x0029,%%a0@(0xfe6060)		\n"
+		"	oril	#0x0040,%%a0@(0xfe6064)		\n"
+		"	movl	#0x0000,%%a0@(0xfe6020)		\n"
+		"	rts					\n"
+		"_cb364_intr4:					\n"
+		"	movq	#0x00,%%d0			\n"
+		"_cb364_intr5:					\n"
+		"	movl	%%a0@(0xfe600c),%%d1		\n"
+		"	andl	#0x3,%%d1			\n"
+		"	cmpl	%%d1,%%d0			\n"
+		"	beq	_cb364_intr_out			\n"
+		"	bsr	_cb364_intr1			\n"
+		"_cb364_intr_out:				\n"
+		"	movl	#0x1,%%a0@(0xfe6014)		\n"
+		"_cb364_intr_quit:"
+		: : "g" (slotbase) : "a0","d0","d1","d2");
 }
 
 /*
@@ -617,8 +625,7 @@ grfmv_intr_cb364(vsc)
  */
 /*ARGSUSED*/
 static void
-grfmv_intr_supermacgfx(vsc)
-	void	*vsc;
+grfmv_intr_supermacgfx(void *vsc)
 {
 	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
 	u_int8_t dummy;
@@ -631,8 +638,7 @@ grfmv_intr_supermacgfx(vsc)
  */
 /*ARGSUSED*/
 static void
-grfmv_intr_cmax(vsc)
-	void	*vsc;
+grfmv_intr_cmax(void *vsc)
 {
 	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
 	u_int32_t dummy;
@@ -647,8 +653,7 @@ grfmv_intr_cmax(vsc)
  */
 /*ARGSUSED*/
 static void
-grfmv_intr_lapis(vsc)
-	void	*vsc;
+grfmv_intr_lapis(void *vsc)
 {
 	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
 
@@ -657,12 +662,12 @@ grfmv_intr_lapis(vsc)
 }
 
 /*
- * Routine to clear interrupts for the Formac Color Card II
+ * Routine to clear interrupts for the Formac ProNitron 80.IVb
+ * and Color Card II
  */
 /*ARGSUSED*/
 static void
-grfmv_intr_formac(vsc)
-	void	*vsc;
+grfmv_intr_formac(void *vsc)
 {
 	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
 	u_int8_t dummy;
@@ -676,8 +681,7 @@ grfmv_intr_formac(vsc)
  */
 /*ARGSUSED*/
 static void
-grfmv_intr_vimage(vsc)
-	void	*vsc;
+grfmv_intr_vimage(void *vsc)
 {
 	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
 
@@ -690,8 +694,7 @@ grfmv_intr_vimage(vsc)
  */
 /*ARGSUSED*/
 static void
-grfmv_intr_gvimage(vsc)
-	void	*vsc;
+grfmv_intr_gvimage(void *vsc)
 {
 	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
 	u_int8_t dummy;
@@ -704,8 +707,7 @@ grfmv_intr_gvimage(vsc)
  */
 /*ARGSUSED*/
 static void
-grfmv_intr_radius_gsc(vsc)
-	void	*vsc;
+grfmv_intr_radius_gsc(void *vsc)
 {
 	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
 	u_int8_t dummy;
@@ -714,3 +716,57 @@ grfmv_intr_radius_gsc(vsc)
 	bus_space_write_1(sc->sc_tag, sc->sc_handle, 0xfb802, 0xff);
 }
 
+/*
+ * Routine to clear interrupts for the Radius GS/C
+ */
+/*ARGSUSED*/
+static void
+grfmv_intr_radius_gx(void *vsc)
+{
+	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
+
+	bus_space_write_1(sc->sc_tag, sc->sc_handle, 0x600000, 0x00);
+	bus_space_write_1(sc->sc_tag, sc->sc_handle, 0x600000, 0x20);
+}
+
+/*
+ * Routine to clear interrupts for the Relax 19" model 200.
+ */
+/*ARGSUSED*/
+static void
+grfmv_intr_relax_200(void *vsc)
+{
+	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
+	unsigned long	scratch;
+
+	/* The board ROM driver code has a tst.l here. */
+	scratch = bus_space_read_4(sc->sc_tag, sc->sc_handle, 0x000D0040);
+}
+
+/*
+ * Routine to clear interrupts for the Apple Mac II Monochrome Video Card.
+ */
+/*ARGSUSED*/
+static void
+grfmv_intr_mvc(void *vsc)
+{
+	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
+
+	bus_space_write_4(sc->sc_tag, sc->sc_handle, 0x00040000, 0);
+	bus_space_write_4(sc->sc_tag, sc->sc_handle, 0x00020000, 0);	
+}
+
+/*
+ * Routine to clear interrupts for the VillageTronic Mac Picasso 340.
+ */
+/*ARGSUSED*/
+static void
+grfmv_intr_viltro_340(void *vsc)
+{
+	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
+	u_int8_t scratch;
+
+	/* Yes, two read accesses to the same spot. */
+	scratch = bus_space_read_1(sc->sc_tag, sc->sc_handle, 0x0500);
+	scratch = bus_space_read_1(sc->sc_tag, sc->sc_handle, 0x0500);
+}

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.25 2000/01/23 22:21:26 mycroft Exp $
+#	$NetBSD: Makefile,v 1.30 2008/10/25 22:27:35 apb Exp $
 
 .include <bsd.own.mk>
 
@@ -19,10 +19,10 @@ VERSION=3.95
 GNATS_ROOT =
 
 # Email address to which people should submit bugs.
-GNATS_ADDR = gnats-bugs@gnats.netbsd.org
+GNATS_ADDR = gnats-bugs@gnats.NetBSD.org
 
 # The default release for this send-pr.
-DEFAULT_RELEASE = <NetBSD-current source date>
+DEFAULT_RELEASE = `uname -s` `uname -r`
 
 # The default organization for this send-pr.
 DEFAULT_ORGANIZATION =
@@ -55,7 +55,8 @@ CLEANFILES=	send-pr send-pr.1 send-pr.el install-sid
 realall:	send-pr send-pr.1 send-pr.el install-sid
 
 send-pr:	send-pr.sh Makefile
-	sed -e 's,xVERSIONx,$(VERSION),' \
+	${_MKTARGET_CREATE}
+	${TOOL_SED} -e 's,xVERSIONx,$(VERSION),' \
             -e 's,xGNATS_ROOTx,$(GNATS_ROOT),' \
             -e 's,xGNATS_ADDRx,$(GNATS_ADDR),' \
             -e 's,xGNATS_SITEx,$(GNATS_SITE),' \
@@ -70,13 +71,15 @@ send-pr:	send-pr.sh Makefile
 	chmod 755 $@
 
 install-sid:	install-sid.sh Makefile
-	sed -e 's,xBINDIRx,$(bindir),g' \
+	${_MKTARGET_CREATE}
+	${TOOL_SED} -e 's,xBINDIRx,$(bindir),g' \
 	    -e 's,xVERSIONx,$(VERSION),g' $(srcdir)/install-sid.sh > $@-t
 	mv -f $@-t $@
 	chmod 755 $@
 
 send-pr.el:	send-pr-el.in Makefile
-	sed -e 's,xVERSIONx,$(VERSION),' \
+	${_MKTARGET_CREATE}
+	${TOOL_SED} -e 's,xVERSIONx,$(VERSION),' \
             -e 's,xGNATS_ROOTx,$(GNATS_ROOT),' \
             -e 's,xGNATS_SITEx,$(GNATS_SITE),' \
             -e 's,xDATADIRx,$(datadir),' \
@@ -87,7 +90,8 @@ send-pr.el:	send-pr-el.in Makefile
 	mv -f $@-t $@
 
 send-pr.1:	send-pr.man Makefile
-	sed -e 's,xGNATS_ROOTx,$(GNATS_ROOT),g' \
+	${_MKTARGET_CREATE}
+	${TOOL_SED} -e 's,xGNATS_ROOTx,$(GNATS_ROOT),g' \
 	    -e 's,xVERSIONx,$(VERSION),g' $(srcdir)/send-pr.man > $@-t
 	mv -f $@-t $@
 

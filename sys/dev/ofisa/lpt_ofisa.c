@@ -1,4 +1,4 @@
-/*	$NetBSD: lpt_ofisa.c,v 1.2 1998/03/21 02:06:17 cgd Exp $	*/
+/*	$NetBSD: lpt_ofisa.c,v 1.14 2008/04/08 20:11:36 cegger Exp $	*/
 
 /*
  * Copyright 1997, 1998
@@ -37,13 +37,16 @@
  * OFW Attachment for 'lpt' parallel port driver
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: lpt_ofisa.c,v 1.14 2008/04/08 20:11:36 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 #include <sys/tty.h>
 
-#include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/intr.h>
+#include <sys/bus.h>
 
 #include <dev/ofw/openfirm.h>
 #include <dev/isa/isavar.h>
@@ -59,21 +62,17 @@ struct lpt_ofisa_softc {
 	void	*sc_ih;			/* interrupt handler */
 };
 
-int lpt_ofisa_probe __P((struct device *, struct cfdata *, void *));
-void lpt_ofisa_attach __P((struct device *, struct device *, void *));
+int lpt_ofisa_probe(device_t, cfdata_t , void *);
+void lpt_ofisa_attach(device_t, device_t, void *);
 
-struct cfattach lpt_ofisa_ca = {
-	sizeof(struct lpt_ofisa_softc), lpt_ofisa_probe, lpt_ofisa_attach
-};
+CFATTACH_DECL_NEW(lpt_ofisa, sizeof(struct lpt_ofisa_softc),
+    lpt_ofisa_probe, lpt_ofisa_attach, NULL, NULL);
 
 int
-lpt_ofisa_probe(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+lpt_ofisa_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ofisa_attach_args *aa = aux;
-	const char *compatible_strings[] = { "pnpPNP,401", NULL };
+	static const char *const compatible_strings[] = { "pnpPNP,401", NULL };
 	int rv = 0;
 
 	if (of_compatible(aa->oba.oba_phandle, compatible_strings) != -1)
@@ -86,11 +85,9 @@ lpt_ofisa_probe(parent, cf, aux)
 }
 
 void
-lpt_ofisa_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+lpt_ofisa_attach(device_t parent, device_t self, void *aux)
 {
-	struct lpt_ofisa_softc *osc = (void *)self;
+	struct lpt_ofisa_softc *osc = device_private(self);
         struct lpt_softc *sc = &osc->sc_lpt;
 	struct ofisa_attach_args *aa = aux;
 	struct ofisa_reg_desc reg;
@@ -104,16 +101,18 @@ lpt_ofisa_attach(parent, self, aux)
 	 * We expect exactly one register region and one interrupt.
 	 */
 
+	sc->sc_dev = self;
+
 	n = ofisa_reg_get(aa->oba.oba_phandle, &reg, 1);
 #ifdef _LPT_OFISA_MD_REG_FIXUP
 	n = lpt_ofisa_md_reg_fixup(parent, self, aux, &reg, 1, n);
 #endif
 	if (n != 1) {
-		printf(": error getting register data\n");
+		aprint_error(": error getting register data\n");
 		return;
 	}
 	if (reg.len != 4 && reg.len != 8) {
-		printf(": weird register size (%lu, expected 4 or 8)\n",
+		aprint_error(": weird register size (%lu, expected 4 or 8)\n",
 		    (unsigned long)reg.len);
 		return;
 	}
@@ -123,28 +122,28 @@ lpt_ofisa_attach(parent, self, aux)
 	n = lpt_ofisa_md_intr_fixup(parent, self, aux, &intr, 1, n);
 #endif
 	if (n != 1) {
-		printf(": error getting interrupt data\n");
+		aprint_error(": error getting interrupt data\n");
 		return;
 	}
 
 	sc->sc_iot = (reg.type == OFISA_REG_TYPE_IO) ? aa->iot : aa->memt;
 	if (bus_space_map(sc->sc_iot, reg.addr, reg.len, 0, &sc->sc_ioh)) {
-		printf(": can't map register space\n");
+		aprint_error(": can't map register space\n");
                 return;
         }
 
 	osc->sc_ih = isa_intr_establish(aa->ic, intr.irq, intr.share,
 	    IPL_TTY, lptintr, sc);
 
-	printf("\n");
+	aprint_normal("\n");
 
-	lpt_attach_subr(sc);	
+	lpt_attach_subr(sc);
 
 #if 0
-	printf("%s: registers: ", sc->sc_dev.dv_xname);
+	printf("%s: registers: ", device_xname(&sc->sc_dev));
 	ofisa_reg_print(&reg, 1);
 	printf("\n");
-	printf("%s: interrupts: ", sc->sc_dev.dv_xname);
+	printf("%s: interrupts: ", device_xname(&sc->sc_dev));
 	ofisa_intr_print(&intr, 1);
 	printf("\n");
 #endif

@@ -1,9 +1,10 @@
-#	$NetBSD: Makefile,v 1.4 1999/02/13 02:54:21 lukem Exp $
+#	$NetBSD: Makefile,v 1.6 2002/09/18 06:16:40 lukem Exp $
 #	@(#)Makefile	8.1 (Berkeley) 5/31/93
 
-PROG=	morse
-MKMAN=	no
-HIDEGAME=hidegame
+NOMAN=		# defined
+
+PROG=		morse
+HIDEGAME=	hidegame
 
 .include <bsd.prog.mk>
 

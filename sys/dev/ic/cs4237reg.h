@@ -1,11 +1,11 @@
-/*	$NetBSD: cs4237reg.h,v 1.1 1999/09/06 17:07:05 rh Exp $ */
+/*	$NetBSD: cs4237reg.h,v 1.5 2008/04/28 20:23:49 martin Exp $ */
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Rene Hexel (rh@netbsd.org).
+ * by Rene Hexel (rh@NetBSD.org).
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -60,8 +53,8 @@
 #define CS_X_RIGHT_DSP_SER_VOL	0x98	/* Right DSP Serial Port Volume */
 #define CS_X_RIGHT_LOOPBACK_VOL	0xa8	/* Right Loopback Monitor Volume */
 #define CS_X_DAC_MUTE_IFSE_EN	0xb8	/* DAC Mute and IFSE Enable */
-#define CS_X_INDEP_ADC_FREQ	0xc8	/* Independendt ADC Sample Freq */
-#define CS_X_INDEP_DAC_FREQ	0xd8	/* Independendt DAC Sample Freq */
+#define CS_X_INDEP_ADC_FREQ	0xc8	/* Independent ADC Sample Freq */
+#define CS_X_INDEP_DAC_FREQ	0xd8	/* Independent DAC Sample Freq */
 #define CS_X_LEFT_DIGITAL_VOL	0xe8	/* Left Master Digital Audio Volume */
 #define CS_X_RIGHT_DIGITAL_VOL	0xf8	/* Right Master Digital Audio Volume */
 #define CS_X_LEFT_WAVE_SER_VOL	0x0c	/* Left Wavetable Serial Port Volume */

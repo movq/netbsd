@@ -1,4 +1,4 @@
-/*	$NetBSD: sdivsi3.S,v 1.2 2000/01/03 02:40:04 msaitoh Exp $	*/
+/*	$NetBSD: sdivsi3.S,v 1.8 2006/05/22 20:56:44 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,11 +36,12 @@
 
 #include <machine/asm.h>
 #if defined(LIBC_SCCS)
-	RCSID("$NetBSD: sdivsi3.S,v 1.2 2000/01/03 02:40:04 msaitoh Exp $")
+	RCSID("$NetBSD: sdivsi3.S,v 1.8 2006/05/22 20:56:44 uwe Exp $")
 #endif
 
+
 /* r0 <= r4 / r5 */
-ENTRY(__sdivsi3)
+NENTRY(__sdivsi3)
 	mov	r4, r0
 	mov	r5, r1
 
@@ -66,27 +63,35 @@ ENTRY(__sdivsi3)
 	rotcl	r0
 
 	rts
-	addc	r2, r0		/* delay slot */
+	 addc	r2, r0
 
 div_by_zero:
 #ifdef _KERNEL
 	rts
-	mov	#0, r0		/* delay slot */
+	 mov	#0, r0
 #else
 	mov.l	r14, @-r15
 	sts.l	pr, @-r15
 	mov	r15, r14
 
 	mov.l	L_raise, r1
+#ifdef PIC
+1:	bsrf	r1
+#else
 	jsr	@r1
-	mov	#8, r4		/* delay slot */
+#endif
+	 mov	#8, r4		/* delay slot.  8 <- SIGFPE. */
 	mov	#0, r0
 
 	lds.l	@r15+, pr
 	rts
-	mov.l	@r15+, r14	/* delay slot */
+	 mov.l	@r15+, r14
 
-	.align 2
+	.align	2
 L_raise:
-	.long	_raise
+#ifdef PIC
+	.long	_C_LABEL(raise)-(1b+4)
+#else
+	.long	_C_LABEL(raise)
+#endif
 #endif

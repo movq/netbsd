@@ -1,4 +1,4 @@
-.\"	$NetBSD: getmntinfo.3,v 1.9 1998/04/29 19:13:09 fair Exp $
+.\"	$NetBSD: getmntinfo.3,v 1.15 2004/05/05 08:48:36 jdolecek Exp $
 .\"
 .\" Copyright (c) 1989, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     @(#)getmntinfo.3	8.1 (Berkeley) 6/9/93
 .\"
-.Dd June 9, 1993
+.Dd April 14, 2004
 .Dt GETMNTINFO 3
 .Os
 .Sh NAME
@@ -42,18 +38,17 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <sys/param.h>
-.Fd #include <sys/ucred.h>
-.Fd #include <sys/mount.h>
+.In sys/types.h
+.In sys/statvfs.h
 .Ft int
-.Fn getmntinfo "struct statfs **mntbufp" "int flags"
+.Fn getmntinfo "struct statvfs **mntbufp" "int flags"
 .Sh DESCRIPTION
 The
 .Fn getmntinfo
 function returns an array of
-.Em statfs
+.Em statvfs
 structures describing each currently mounted file system (see
-.Xr statfs 2 ) .
+.Xr statvfs 2 ) .
 .Pp
 The
 .Fn getmntinfo
@@ -61,7 +56,7 @@ function
 passes its
 .Fa flags
 parameter transparently to
-.Xr getfsstat 2 .
+.Xr getvfsstat 2 .
 .Sh RETURN VALUES
 On successful completion,
 .Fn getmntinfo
@@ -84,19 +79,25 @@ function
 may fail and set
 .Va errno
 for any of the errors specified for the library routines
-.Xr getfsstat 2
+.Xr getvfsstat 2
 or
 .Xr malloc 3 .
 .Sh SEE ALSO
-.Xr getfsstat 2 ,
-.Xr statfs 2 ,
+.Xr getvfsstat 2 ,
 .Xr mount 2 ,
+.Xr statvfs 2 ,
 .Xr mount 8
 .Sh HISTORY
 The
 .Fn getmntinfo
 function first appeared in
 .Bx 4.4 .
+It was converted from using
+.Xr getfsstat 2
+to
+.Xr getvfsstat 2
+in
+.Nx 3.0 .
 .Sh BUGS
 The
 .Fn getmntinfo

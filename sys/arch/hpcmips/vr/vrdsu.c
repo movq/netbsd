@@ -1,4 +1,4 @@
-/*	$NetBSD: vrdsu.c,v 1.2 1999/12/14 04:21:10 sato Exp $	*/
+/*	$NetBSD: vrdsu.c,v 1.9 2005/12/11 12:17:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 Shin Takemura All rights reserved.
@@ -26,13 +26,17 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: vrdsu.c,v 1.9 2005/12/11 12:17:34 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <uvm/uvm_param.h>
 
 #include <machine/bus.h>
 
-#include <hpcmips/vr/vripvar.h>
+#include <hpcmips/vr/vripif.h>
 #include <hpcmips/vr/dsureg.h>
 #include <hpcmips/vr/vrdsuvar.h>
 
@@ -42,56 +46,47 @@ struct vrdsu_softc {
 	bus_space_handle_t sc_ioh;
 };
 
-static int vrdsumatch __P((struct device *, struct cfdata *, void *));
-static void vrdsuattach __P((struct device *, struct device *, void *));
+static int vrdsumatch(struct device *, struct cfdata *, void *);
+static void vrdsuattach(struct device *, struct device *, void *);
 
-static void vrdsu_write __P((struct vrdsu_softc *, int, unsigned short));
-static unsigned short vrdsu_read __P((struct vrdsu_softc *, int));
+static void vrdsu_write(struct vrdsu_softc *, int, unsigned short);
+static unsigned short vrdsu_read(struct vrdsu_softc *, int);
 
-struct cfattach vrdsu_ca = {
-	sizeof(struct vrdsu_softc), vrdsumatch, vrdsuattach
-};
+CFATTACH_DECL(vrdsu, sizeof(struct vrdsu_softc),
+    vrdsumatch, vrdsuattach, NULL, NULL);
 
 struct vrdsu_softc *the_dsu_sc = NULL;
 
 static inline void
-vrdsu_write(sc, port, val)
-	struct vrdsu_softc *sc;
-	int port;
-	unsigned short val;
+vrdsu_write(struct vrdsu_softc *sc, int port, unsigned short val)
 {
+
 	bus_space_write_2(sc->sc_iot, sc->sc_ioh, port, val);
 }
 
 static inline unsigned short
-vrdsu_read(sc, port)
-	struct vrdsu_softc *sc;
-	int port;
+vrdsu_read(struct vrdsu_softc *sc, int port)
 {
-	return bus_space_read_2(sc->sc_iot, sc->sc_ioh, port);
+
+	return (bus_space_read_2(sc->sc_iot, sc->sc_ioh, port));
 }
 
 static int
-vrdsumatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+vrdsumatch(struct device *parent, struct cfdata *cf, void *aux)
 {
-	return 1;
+
+	return (1);
 }
 
 static void
-vrdsuattach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+vrdsuattach(struct device *parent, struct device *self, void *aux)
 {
 	struct vrdsu_softc *sc = (struct vrdsu_softc *)self;
 	struct vrip_attach_args *va = aux;
 
 	sc->sc_iot = va->va_iot;
 	if (bus_space_map(va->va_iot, va->va_addr, va->va_size,
-			  0, &sc->sc_ioh)) {
+	    0, &sc->sc_ioh)) {
 		printf(": can't map bus space\n");
 		return;
 	}
@@ -102,10 +97,15 @@ vrdsuattach(parent, self, aux)
 void
 vrdsu_reset()
 {
+
 	if (the_dsu_sc) {
 		splhigh();
 		vrdsu_write(the_dsu_sc, DSUSET_REG_W, 1); /* 1 sec */
 		vrdsu_write(the_dsu_sc, DSUCNT_REG_W, DSUCNT_DSWEN);
+		/*
+		 * wipe out all physical memory for clean WinCE boot.
+		 */
+		memset((void *)MIPS_PHYS_TO_KSEG1(0), 0, ptoa(physmem) - 0);
 		while (1);
 	} else {
 		printf("%s(%d): There is no DSU.", __FILE__, __LINE__);

@@ -1,4 +1,4 @@
-/*	$NetBSD: hangman.h,v 1.10 1999/09/17 20:45:49 jsm Exp $	*/
+/*	$NetBSD: hangman.h,v 1.13 2004/01/27 20:30:29 jsm Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -73,6 +69,7 @@ extern char Word[], Known[];
 extern const char *const Noose_pict[];
 
 extern int Errors, Wordnum;
+extern unsigned int Minlen;
 
 extern double Average;
 
@@ -84,14 +81,14 @@ extern FILE *Dict;
 
 extern off_t Dict_size;
 
-void    die __P((int)) __attribute__((__noreturn__));
-void    endgame __P((void));
-int	main __P((int, char *[]));
-void	getguess __P((void));
-void	getword __P((void));
-void	playgame __P((void));
-void	prdata __P((void));
-void	prman __P((void));
-void	prword __P((void));
-int	readch __P((void));
-void	setup __P((void));
+void    die(int) __attribute__((__noreturn__));
+void    endgame(void);
+int	main(int, char *[]);
+void	getguess(void);
+void	getword(void);
+void	playgame(void);
+void	prdata(void);
+void	prman(void);
+void	prword(void);
+int	readch(void);
+void	setup(void);

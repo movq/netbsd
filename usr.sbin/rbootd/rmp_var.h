@@ -1,10 +1,48 @@
-/*	$NetBSD: rmp_var.h,v 1.8 1995/11/14 08:41:44 thorpej Exp $	*/
+/*	$NetBSD: rmp_var.h,v 1.10 2003/08/07 11:25:41 agc Exp $	*/
+
+/*
+ * Copyright (c) 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Center for Software Science of the University of Utah Computer
+ * Science Department.  CSS requests users of this software to return
+ * to css-dist@cs.utah.edu any improvements that they make and grant
+ * CSS redistribution rights.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	from: @(#)rmp_var.h	8.1 (Berkeley) 6/4/93
+ *
+ * from: Utah Hdr: rmp_var.h 3.1 92/07/06
+ * Author: Jeff Forys, University of Utah CSS
+ */
 
 /*
  * Copyright (c) 1988, 1992 The University of Utah and the Center
  *	for Software Science (CSS).
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Center for Software Science of the University of Utah Computer
@@ -119,9 +157,11 @@ typedef char	restofpkt;
 
 /*
  * Due to the RMP packet layout, we'll run into alignment problems
- * on machines that can't access (or don't, by default, align) words
- * on half-word boundaries.  If you know that your machine does not suffer
- * from this problem, add it to the vax/tahoe/m68k #define below.
+ * on machines that can't access (or don't, by default, align) 32-bit words
+ * on half-word (16-bit) boundaries.  If you know that your machine does
+ * not suffer from this problem, add it to the vax/tahoe/m68k #define below.
+ * Don't confuse this with structure packing, which for ELF objects we
+ * need to specify regardless.
  *
  * The following macros are used to deal with this problem:
  *	WORDZE(w)	Return True if u_word `w' is zero, False otherwise.
@@ -184,7 +224,7 @@ struct rmp_boot_req {		/* boot request */
 	char	  rmp_machtype[RMP_MACHLEN];	/* machine type */
 	u_int8_t  rmp_flnmsize;		/* length of rmp_flnm */
 	restofpkt rmp_flnm;		/* name of file to be read */
-};
+} __attribute__((__packed__));
 
 struct rmp_boot_repl {		/* boot reply */
 	u_int8_t  rmp_type;		/* packet type (RMP_BOOT_REPL) */
@@ -194,7 +234,7 @@ struct rmp_boot_repl {		/* boot reply */
 	u_int16_t rmp_version;		/* protocol version (RMP_VERSION) */
 	u_int8_t  rmp_flnmsize;		/* length of rmp_flnm */
 	restofpkt rmp_flnm;		/* name of file (from boot req) */
-};
+} __attribute__((__packed__));
 
 struct rmp_read_req {		/* read request */
 	u_int8_t  rmp_type;		/* packet type (RMP_READ_REQ) */
@@ -202,7 +242,7 @@ struct rmp_read_req {		/* read request */
 	u_word	  rmp_offset;		/* file relative byte offset */
 	u_int16_t rmp_session;		/* session id (from boot repl) */
 	u_int16_t rmp_size;		/* max no of bytes to send */
-};
+} __attribute__((__packed__));
 
 struct rmp_read_repl {		/* read reply */
 	u_int8_t  rmp_type;		/* packet type (RMP_READ_REPL) */
@@ -211,14 +251,14 @@ struct rmp_read_repl {		/* read reply */
 	u_int16_t rmp_session;		/* session id (from read req) */
 	restofpkt rmp_data;		/* data (max size from read req) */
 	u_int8_t  rmp_unused;		/* padding to 16-bit boundary */
-};
+} __attribute__((__packed__));
 
 struct rmp_boot_done {		/* boot complete */
 	u_int8_t  rmp_type;		/* packet type (RMP_BOOT_DONE) */
 	u_int8_t  rmp_retcode;		/* return code (0) */
 	u_word	  rmp_unused;		/* not used (0) */
 	u_int16_t rmp_session;		/* session id (from read repl) */
-};
+} __attribute__((__packed__));
 
 struct rmp_packet {
 	struct hp_hdr hp_hdr;

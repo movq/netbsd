@@ -1,11 +1,11 @@
-/* 	$NetBSD: rasops.h,v 1.11 1999/12/14 22:25:13 ad Exp $ */
+/* 	$NetBSD: rasops.h,v 1.22 2008/04/28 20:23:56 martin Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Andy Doran.
+ * by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,7 +28,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #ifndef _RASOPS_H_
 #define _RASOPS_H_ 1
 
@@ -50,6 +43,7 @@ struct wsdisplay_font;
 #define RI_CENTER	0x20	/* center onscreen output */
 #define RI_CURSORCLIP	0x40	/* cursor is currently clipped */
 #define RI_CFGDONE	0x80	/* rasops_reconfig() completed successfully */
+#define RI_ROTATE_CW	0x100	/* display is rotated, quarter clockwise */
 
 struct rasops_info {
 	/* These must be filled in by the caller */
@@ -59,7 +53,13 @@ struct rasops_info {
 	int	ri_height;	/* height (pels) */
 	int	ri_stride;	/* stride in bytes */
 
-	/* 
+	/*
+	 * If you want shadow framebuffer support, point ri_hwbits
+	 * to the real framebuffer, and ri_bits to the shadow framebuffer
+	 */
+	u_char	*ri_hwbits;
+
+	/*
 	 * These can optionally be left zeroed out. If you fill ri_font,
 	 * but aren't using wsfont, set ri_wsfcookie to -1.
 	 */
@@ -69,9 +69,9 @@ struct rasops_info {
 	int	ri_crow;	/* cursor row */
 	int	ri_ccol;	/* cursor column */
 	int	ri_flg;		/* various operational flags */
-	
-	/* 
-	 * These are optional and will default if zero. Meaningless 
+
+	/*
+	 * These are optional and will default if zero. Meaningless
 	 * on depths other than 15, 16, 24 and 32 bits per pel. On
 	 * 24 bit displays, ri_{r,g,b}num must be 8.
 	 */
@@ -101,45 +101,55 @@ struct rasops_info {
 	/* The emulops you need to use, and the screen caps for wscons */
 	struct	wsdisplay_emulops ri_ops;
 	int	ri_caps;
-	
+
 	/* Callbacks so we can share some code */
-	void	(*ri_do_cursor) __P((struct rasops_info *));
+	void	(*ri_do_cursor)(struct rasops_info *);
+
+#if NRASOPS_ROTATION > 0
+	/* Used to intercept putchar to permit display rotation */
+	struct	wsdisplay_emulops ri_real_ops;
+#endif
 };
 
-#define DELTA(p, d, cast) ((p) = (cast)((caddr_t)(p) + (d)))
+#define DELTA(p, d, cast) ((p) = (cast)((char *)(p) + (d)))
 
-/* 
+#define CHAR_IN_FONT(c,font) 					\
+       ((c) >= (font)->firstchar && 				\
+	((c) - (font)->firstchar) < (font)->numchars)
+
+/*
  * rasops_init().
  *
- * Integer parameters are the number of rows and columns we'd *like*. 
+ * Integer parameters are the number of rows and columns we'd *like*.
  *
  * In terms of optimization, fonts that are a multiple of 8 pixels wide
  * work the best.
  *
- * rasops_init() takes care of rasops_reconfig(). The parameters to both 
+ * rasops_init() takes care of rasops_reconfig(). The parameters to both
  * are the same. If calling rasops_reconfig() to change the font and
  * ri_wsfcookie >= 0, you must call wsfont_unlock() on it, and reset it
  * to -1 (or a new, valid cookie).
  */
 
-/* 
- * Per-depth initalization functions. These should not be called outside
+/*
+ * Per-depth initialization functions. These should not be called outside
  * the rasops code.
  */
-void	rasops1_init __P((struct rasops_info *));
-void	rasops2_init __P((struct rasops_info *));
-void	rasops8_init __P((struct rasops_info *));
-void	rasops15_init __P((struct rasops_info *));
-void	rasops24_init __P((struct rasops_info *));
-void	rasops32_init __P((struct rasops_info *));
+void	rasops1_init(struct rasops_info *);
+void	rasops2_init(struct rasops_info *);
+void	rasops4_init(struct rasops_info *);
+void	rasops8_init(struct rasops_info *);
+void	rasops15_init(struct rasops_info *);
+void	rasops24_init(struct rasops_info *);
+void	rasops32_init(struct rasops_info *);
 
 /* rasops.c */
-int	rasops_init __P((struct rasops_info *, int, int));
-int	rasops_reconfig __P((struct rasops_info *, int, int));
-void	rasops_unpack_attr __P((long, int *, int *, int *));
-void	rasops_eraserows __P((void *, int, int, long));
-void	rasops_erasecols __P((void *, int, int, int, long));
-void	rasops_copycols __P((void *, int, int, int, int));
+int	rasops_init(struct rasops_info *, int, int);
+int	rasops_reconfig(struct rasops_info *, int, int);
+void	rasops_unpack_attr(long, int *, int *, int *);
+void	rasops_eraserows(void *, int, int, long);
+void	rasops_erasecols(void *, int, int, int, long);
+void	rasops_copycols(void *, int, int, int, int);
 
 extern const u_char	rasops_isgray[16];
 extern const u_char	rasops_cmap[256*3];

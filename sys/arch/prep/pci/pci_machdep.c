@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.2 2000/03/25 04:12:20 nonaka Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.32 2007/10/17 19:56:51 garbled Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -38,237 +38,182 @@
  * up a few function pointers to access the correct method directly.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.32 2007/10/17 19:56:51 garbled Exp $");
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/systm.h>
 #include <sys/errno.h>
+#include <sys/extent.h>
 #include <sys/device.h>
+#include <sys/malloc.h>
 
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
+#include <uvm/uvm_extern.h>
 
-#define _PREP_BUS_DMA_PRIVATE
+#define _POWERPC_BUS_DMA_PRIVATE
 #include <machine/bus.h>
-#include <machine/pio.h>
 #include <machine/intr.h>
+#include <machine/platform.h>
+#include <machine/pnp.h>
 
 #include <dev/isa/isavar.h>
+
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcidevs.h>
+#include <dev/pci/pciconf.h>
 
-#define	PCI_MODE1_ENABLE	0x80000000UL
-#define	PCI_MODE1_ADDRESS_REG	(PREP_BUS_SPACE_IO + 0xcf8)
-#define	PCI_MODE1_DATA_REG	(PREP_BUS_SPACE_IO + 0xcfc)
+/* 0 == direct 1 == indirect */
+int prep_pci_config_mode = 1;
+extern struct genppc_pci_chipset *genppc_pct;
+extern u_int32_t prep_pci_baseaddr;
+extern u_int32_t prep_pci_basedata;
 
-/*
- * PCI constants.
- * XXX These should be in a common file!
- */
-#define	PCI_CBIO	0x10
+static void
+prep_pci_get_chipset_tag_indirect(pci_chipset_tag_t pc)
+{
 
-/*
- * PCI doesn't have any special needs; just use the generic versions
- * of these functions.
- */
-struct prep_bus_dma_tag pci_bus_dma_tag = {
-	0,			/* _bounce_thresh */
-	_bus_dmamap_create,
-	_bus_dmamap_destroy,
-	_bus_dmamap_load,
-	_bus_dmamap_load_mbuf,
-	_bus_dmamap_load_uio,
-	_bus_dmamap_load_raw,
-	_bus_dmamap_unload,
-	NULL,			/* _dmamap_sync */
-	_bus_dmamem_alloc,
-	_bus_dmamem_free,
-	_bus_dmamem_map,
-	_bus_dmamem_unmap,
-	_bus_dmamem_mmap,
-};
+	pc->pc_conf_v = (void *)pc;
+
+	pc->pc_attach_hook = genppc_pci_indirect_attach_hook;
+	pc->pc_bus_maxdevs = prep_pci_bus_maxdevs;
+	pc->pc_make_tag = genppc_pci_indirect_make_tag;
+	pc->pc_conf_read = genppc_pci_indirect_conf_read;
+	pc->pc_conf_write = genppc_pci_indirect_conf_write;
+
+	pc->pc_intr_v = (void *)pc;
+
+	pc->pc_intr_map = prep_pci_intr_map;
+	pc->pc_intr_string = genppc_pci_intr_string;
+	pc->pc_intr_evcnt = genppc_pci_intr_evcnt;
+	pc->pc_intr_establish = genppc_pci_intr_establish;
+	pc->pc_intr_disestablish = genppc_pci_intr_disestablish;
+
+	pc->pc_conf_interrupt = genppc_pci_conf_interrupt;
+	pc->pc_decompose_tag = genppc_pci_indirect_decompose_tag;
+	pc->pc_conf_hook = prep_pci_conf_hook;
+
+	pc->pc_addr = mapiodev(prep_pci_baseaddr, 4);
+	pc->pc_data = mapiodev(prep_pci_basedata, 4);
+	pc->pc_bus = 0;
+	pc->pc_node = 0;
+	pc->pc_memt = 0;
+	pc->pc_iot = 0;
+}
 
 void
-pci_attach_hook(parent, self, pba)
-	struct device *parent, *self;
-	struct pcibus_attach_args *pba;
+prep_pci_get_chipset_tag(pci_chipset_tag_t pc)
 {
-	pci_chipset_tag_t pc;
-	int bus, device, maxndevs, function, nfunctions;
+	int i;
 
-	pc = pba->pba_pc;
-	bus = pba->pba_bus;
+	i = pci_chipset_tag_type();
 
-	maxndevs = pci_bus_maxdevs(pba->pba_pc, pba->pba_bus);
+	if (i == PCIBridgeIndirect || i == PCIBridgeRS6K) {
+		prep_pci_config_mode = 1;
+		prep_pci_get_chipset_tag_indirect(pc);
+	} else if (i == PCIBridgeDirect) {
+		prep_pci_get_chipset_tag_direct(pc);
+		prep_pci_config_mode = 0;
+	} else
+		panic("Unknown PCI chipset tag configuration method");
+}
 
-	for (device = 0; device < maxndevs; device++) {
-		pcitag_t tag;
-		pcireg_t id, intr, bhlcr, csr, address;
-		int line;
+int
+prep_pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
+{
+	struct genppc_pci_chipset_businfo *pbi;
+	prop_object_t busmax;
 
-		tag = pci_make_tag(pc, bus, device, 0);
-		id = pci_conf_read(pc, tag, PCI_ID_REG);
+	pbi = SIMPLEQ_FIRST(&genppc_pct->pc_pbi);
+	while (busno--)
+		pbi = SIMPLEQ_NEXT(pbi, next);
+	if (pbi == NULL)
+		return 32;
 
-		/* Invalid vendor ID value? */
-		if (PCI_VENDOR(id) == PCI_VENDOR_INVALID)
-			continue;
-		/* XXX Not invalid, but we've done this ~forever. */
-		if (PCI_VENDOR(id) == 0)
-			continue;
+	busmax = prop_dictionary_get(pbi->pbi_properties,
+	    "prep-pcibus-maxdevices");
+	if (busmax == NULL)
+		return 32;
+	else
+		return prop_number_integer_value(busmax);
 
-		bhlcr = pci_conf_read(pc, tag, PCI_BHLC_REG);
-		if (PCI_HDRTYPE_MULTIFN(bhlcr))
-			nfunctions = 8;
-		else
-			nfunctions = 1;
+	return 32;
+}
 
-		for (function = 0; function < nfunctions; function++) {
-			int i;
+int
+prep_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+{
+	struct genppc_pci_chipset_businfo *pbi;
+	prop_dictionary_t dict, devsub;
+	prop_object_t pinsub;
+	prop_number_t pbus;
+	int busno, bus, pin, line, swiz, dev, origdev, i;
+	char key[20];
 
-			tag = pci_make_tag(pc, bus, device, function);
-			id = pci_conf_read(pc, tag, PCI_ID_REG);
+	pin = pa->pa_intrpin;
+	line = pa->pa_intrline;
+	bus = busno = pa->pa_bus;
+	swiz = pa->pa_intrswiz;
+	origdev = dev = pa->pa_device;
+	i = 0;
 
-			/* Invalid vendor ID value? */
-			if (PCI_VENDOR(id) == PCI_VENDOR_INVALID)
-                                continue;
-			/* XXX Not invalid, but we've done this ~forever. */
-			if (PCI_VENDOR(id) == 0)
-				continue;
+	pbi = SIMPLEQ_FIRST(&genppc_pct->pc_pbi);
+	while (busno--)
+		pbi = SIMPLEQ_NEXT(pbi, next);
+	KASSERT(pbi != NULL);
 
-			/* Enable io/mem */
-			/* XXX: ibm_machdep : ppc830 depend */
-			switch (device) {
-			case 12:
-			case 18:
-			case 22:
-				csr = pci_conf_read(pc, tag, PCI_COMMAND_STATUS_REG);
-				csr |= (PCI_COMMAND_IO_ENABLE|PCI_COMMAND_MEM_ENABLE);
-				pci_conf_write(pc, tag, PCI_COMMAND_STATUS_REG, csr);
-				break;
-			}
+	dict = prop_dictionary_get(pbi->pbi_properties, "prep-pci-intrmap");
 
-			/* Fixup insane address */
-			for (i = 0; i < 6; i ++) {
-			address = pci_conf_read(pc, tag, PCI_CBIO + i * 4);
-				if (address > 0x10000000) {
-					address &= 0x00ffffff;
-					address |= 0x01000000;
-					pci_conf_write(pc, tag, PCI_CBIO + i * 4, address);
-				}
-			}
+	if (dict != NULL)
+		i = prop_dictionary_count(dict);
 
-			/* Fixup intr */
-			/* XXX: ibm_machdep : ppc830 depend */
-			switch (device) {
-			case 12:
-			case 18:
-			case 22:
-				line = 15;
-				break;
-			default:
-				line = 0;
-				break;
-			}
+	if (dict == NULL || i == 0) {
+		/* We have a non-PReP bus.  now it gets hard */
+		pbus = prop_dictionary_get(pbi->pbi_properties,
+		    "prep-pcibus-parent");
+		if (pbus == NULL)
+			goto bad;
+		busno = prop_number_integer_value(pbus);
+		pbus = prop_dictionary_get(pbi->pbi_properties,
+		    "prep-pcibus-rawdevnum");
+		dev = prop_number_integer_value(pbus);
 
-			if (line) {
-				intr = pci_conf_read(pc, tag, PCI_INTERRUPT_REG);
-				pci_conf_write(pc, tag, PCI_INTERRUPT_REG,
-				    (intr & ~0xff) | line);
-			}
-		}
+		/* now that we know the parent bus, we need to find it's pbi */
+		pbi = SIMPLEQ_FIRST(&genppc_pct->pc_pbi);
+		while (busno--)
+			pbi = SIMPLEQ_NEXT(pbi, next);
+		KASSERT(pbi != NULL);
+
+		/* swizzle the pin */
+		pin = ((pin + origdev - 1) & 3) + 1;
+
+		/* now we have the pbi, ask for dict again */
+		dict = prop_dictionary_get(pbi->pbi_properties,
+		    "prep-pci-intrmap");
+		if (dict == NULL)
+			goto bad;
 	}
-}
 
-int
-pci_bus_maxdevs(pc, busno)
-	pci_chipset_tag_t pc;
-	int busno;
-{
-
-	/*
-	 * Bus number is irrelevant.  Configuration Mechanism 1 is in
-	 * use, can have devices 0-32 (i.e. the `normal' range).
-	 */
-	return (32);
-}
-
-pcitag_t
-pci_make_tag(pc, bus, device, function)
-	pci_chipset_tag_t pc;
-	int bus, device, function;
-{
-	pcitag_t tag;
-
-	if (bus >= 256 || device >= 32 || function >= 8)
-		panic("pci_make_tag: bad request");
-
-	tag = PCI_MODE1_ENABLE |
-		    (bus << 16) | (device << 11) | (function << 8);
-	return tag;
-}
-
-void
-pci_decompose_tag(pc, tag, bp, dp, fp)
-	pci_chipset_tag_t pc;
-	pcitag_t tag;
-	int *bp, *dp, *fp;
-{
-
-	if (bp != NULL)
-		*bp = (tag >> 16) & 0xff;
-	if (dp != NULL)
-		*dp = (tag >> 11) & 0x1f;
-	if (fp != NULL)
-		*fp = (tag >> 8) & 0x7;
-	return;
-}
-
-pcireg_t
-pci_conf_read(pc, tag, reg)
-	pci_chipset_tag_t pc;
-	pcitag_t tag;
-	int reg;
-{
-	pcireg_t data;
-
-	out32rb(PCI_MODE1_ADDRESS_REG, tag | reg);
-	data = in32rb(PCI_MODE1_DATA_REG);
-	out32rb(PCI_MODE1_ADDRESS_REG, 0);
-	return data;
-}
-
-void
-pci_conf_write(pc, tag, reg, data)
-	pci_chipset_tag_t pc;
-	pcitag_t tag;
-	int reg;
-	pcireg_t data;
-{
-
-	out32rb(PCI_MODE1_ADDRESS_REG, tag | reg);
-	out32rb(PCI_MODE1_DATA_REG, data);
-	out32rb(PCI_MODE1_ADDRESS_REG, 0);
-}
-
-int
-pci_intr_map(pc, intrtag, pin, line, ihp)
-	pci_chipset_tag_t pc;
-	pcitag_t intrtag;
-	int pin, line;
-	pci_intr_handle_t *ihp;
-{
-
-	if (pin == 0) {
-		/* No IRQ used. */
+	/* No IRQ used. */
+	if (pin == 0)
 		goto bad;
-	}
-
 	if (pin > 4) {
-		printf("pci_intr_map: bad interrupt pin %d\n", pin);
+		aprint_error("pci_intr_map: bad interrupt pin %d\n", pin);
 		goto bad;
 	}
 
+	sprintf(key, "devfunc-%d", dev);
+	devsub = prop_dictionary_get(dict, key);
+	if (devsub == NULL)
+		goto bad;
+	sprintf(key, "pin-%c", 'A' + (pin-1));
+	pinsub = prop_dictionary_get(devsub, key);
+	if (pinsub == NULL)
+		goto bad;
+	line = prop_number_integer_value(pinsub);
+	
 	/*
 	* Section 6.2.4, `Miscellaneous Functions', says that 255 means
 	* `unknown' or `no connection' on a PC.  We assume that a device with
@@ -284,15 +229,17 @@ pci_intr_map(pc, intrtag, pin, line, ihp)
 	* the BIOS has not configured the device.
 	*/
 	if (line == 0 || line == 255) {
-		printf("pci_intr_map: no mapping for pin %c\n", '@' + pin);
+		aprint_error("pci_intr_map: no mapping for pin %c\n",
+		    '@' + pin);
 		goto bad;
 	} else {
 		if (line >= ICU_LEN) {
-			printf("pci_intr_map: bad interrupt line %d\n", line);
+			aprint_error("pci_intr_map: bad interrupt line %d\n",
+			    line);
 			goto bad;
 		}
 		if (line == IRQ_SLAVE) {
-			printf("pci_intr_map: changed line 2 to line 9\n");
+			aprint_verbose("pci_intr_map: changed line 2 to line 9\n");
 			line = 9;
 		}
 	}
@@ -305,40 +252,97 @@ bad:
 	return 1;
 }
 
-const char *
-pci_intr_string(pc, ih)
-	pci_chipset_tag_t pc;
-	pci_intr_handle_t ih;
+extern pcitag_t prep_pci_direct_make_tag(void *, int, int, int);
+extern pcitag_t genppc_pci_indirect_make_tag(void *, int, int, int);
+extern pcireg_t prep_pci_direct_conf_read(void *, pcitag_t, int);
+extern pcireg_t genppc_pci_indirect_conf_read(void *, pcitag_t, int);
+
+int
+prep_pci_conf_hook(pci_chipset_tag_t pct, int bus, int dev, int func,
+	pcireg_t id)
 {
-	static char irqstr[8];		/* 4 + 2 + NULL + sanity */
+	struct genppc_pci_chipset_businfo *pbi;
+	prop_number_t bmax, pbus;
+	pcitag_t tag;
+	pcireg_t class;
 
-	if (ih == 0 || ih >= ICU_LEN || ih == IRQ_SLAVE)
-		panic("pci_intr_string: bogus handle 0x%x\n", ih);
+	/*
+	 * The P9100 board found in some IBM machines cannot be
+	 * over-configured.
+	 */
+	if (PCI_VENDOR(id) == PCI_VENDOR_WEITEK &&
+	    PCI_PRODUCT(id) == PCI_PRODUCT_WEITEK_P9100)
+		return 0;
 
-	sprintf(irqstr, "irq %d", ih);
-	return (irqstr);
-	
-}
+	/* We have already mapped the MPIC2 if we have one, so leave it
+	   alone */
+	if (PCI_VENDOR(id) == PCI_VENDOR_IBM &&
+	    PCI_PRODUCT(id) == PCI_PRODUCT_IBM_MPIC2)
+		return 0;
 
-void *
-pci_intr_establish(pc, ih, level, func, arg)
-	pci_chipset_tag_t pc;
-	pci_intr_handle_t ih;
-	int level, (*func) __P((void *));
-	void *arg;
-{
+	if (PCI_VENDOR(id) == PCI_VENDOR_IBM &&
+	    PCI_PRODUCT(id) == PCI_PRODUCT_IBM_MPIC)
+		return 0;
 
-	if (ih == 0 || ih >= ICU_LEN || ih == IRQ_SLAVE)
-		panic("pci_intr_establish: bogus handle 0x%x\n", ih);
+	if (PCI_VENDOR(id) == PCI_VENDOR_INTEL &&
+	    PCI_PRODUCT(id) == PCI_PRODUCT_INTEL_PCEB)
+		return 0;
 
-	return isa_intr_establish(NULL, ih, IST_LEVEL, level, func, arg);
-}
+	if (PCI_VENDOR(id) == PCI_VENDOR_MOT &&
+	    PCI_PRODUCT(id) == PCI_PRODUCT_MOT_RAVEN)
+		return (PCI_CONF_ALL & ~PCI_CONF_MAP_MEM);
 
-void
-pci_intr_disestablish(pc, cookie)
-	pci_chipset_tag_t pc;
-	void *cookie;
-{
+	/* NOTE, all device specific stuff must be above this line */
+	/* don't do this on the primary host bridge */
+	if (bus == 0 && dev == 0 && func == 0)
+		return PCI_CONF_DEFAULT;
 
-	return isa_intr_disestablish(NULL, cookie);
+	if (prep_pci_config_mode) {
+		tag = genppc_pci_indirect_make_tag(pct, bus, dev, func);
+		class = genppc_pci_indirect_conf_read(pct, tag,
+		    PCI_CLASS_REG);
+	} else {
+		tag = prep_pci_direct_make_tag(pct, bus, dev, func);
+		class = prep_pci_direct_conf_read(pct, tag,
+		    PCI_CLASS_REG);
+	}
+
+	/*
+	 * PCI bridges have special needs.  We need to discover where they
+	 * came from, and wire them appropriately.
+	 */
+	if (PCI_CLASS(class) == PCI_CLASS_BRIDGE &&
+	    PCI_SUBCLASS(class) == PCI_SUBCLASS_BRIDGE_PCI) {
+		pbi = malloc(sizeof(struct genppc_pci_chipset_businfo),
+		    M_DEVBUF, M_NOWAIT);
+		KASSERT(pbi != NULL);
+		pbi->pbi_properties = prop_dictionary_create();
+		KASSERT(pbi->pbi_properties != NULL);
+		setup_pciintr_map(pbi, bus, dev, func);
+
+		/* record the parent bus, and the parent device number */
+		pbus = prop_number_create_integer(bus);
+		prop_dictionary_set(pbi->pbi_properties, "prep-pcibus-parent",
+		    pbus);
+		prop_object_release(pbus);
+		pbus = prop_number_create_integer(dev);
+		prop_dictionary_set(pbi->pbi_properties,
+		    "prep-pcibus-rawdevnum", pbus);
+		prop_object_release(pbus);
+
+		/* now look for bus quirks */
+
+		if (PCI_VENDOR(id) == PCI_VENDOR_DEC &&
+		    PCI_PRODUCT(id) == PCI_PRODUCT_DEC_21154) {
+			bmax = prop_number_create_integer(8);
+			KASSERT(bmax != NULL);
+			prop_dictionary_set(pbi->pbi_properties,
+			    "prep-pcibus-maxdevices", bmax);
+			prop_object_release(bmax);
+		}
+
+		SIMPLEQ_INSERT_TAIL(&genppc_pct->pc_pbi, pbi, next);
+	}
+
+	return (PCI_CONF_DEFAULT);
 }

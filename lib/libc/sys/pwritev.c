@@ -1,4 +1,4 @@
-/*	$NetBSD: pwritev.c,v 1.3 1998/11/15 17:23:00 christos Exp $	*/
+/*	$NetBSD: pwritev.c,v 1.6 2007/11/23 12:39:16 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,13 +31,15 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: pwritev.c,v 1.3 1998/11/15 17:23:00 christos Exp $");
+__RCSID("$NetBSD: pwritev.c,v 1.6 2007/11/23 12:39:16 uebayasi Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <sys/uio.h>
 #include <unistd.h>
+
+ssize_t __pwritev(int, const struct iovec *, int, int, off_t);
 
 /*
  * This function provides 64-bit offset padding that
@@ -54,14 +52,6 @@ pwritev(fd, iovp, iovcnt, offset)
 	int iovcnt;
 	off_t offset;
 {
-	quad_t q;
-	int rv;
 
-	q = __syscall((quad_t)SYS_pwritev, fd, iovp, iovcnt, 0, offset);
-	if (/* LINTED constant */ sizeof (quad_t) == sizeof (register_t) ||
-	    /* LINTED constant */ BYTE_ORDER == LITTLE_ENDIAN)
-		rv = (int)q;
-	else
-		rv = (int)((u_quad_t)q >> 32);
-	return rv;
+	return __pwritev(fd, iovp, iovcnt, 0, offset);
 }

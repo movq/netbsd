@@ -1,4 +1,4 @@
-/* $NetBSD: tcasic.c,v 1.28 2000/03/26 10:32:52 nisimura Exp $ */
+/* $NetBSD: tcasic.c,v 1.40 2007/12/03 15:33:09 ad Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: tcasic.c,v 1.28 2000/03/26 10:32:52 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcasic.c,v 1.40 2007/12/03 15:33:09 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,7 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: tcasic.c,v 1.28 2000/03/26 10:32:52 nisimura Exp $")
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
 #include <machine/alpha.h>
-#include <machine/intrcnt.h>
 
 #include <dev/tc/tcvar.h>
 #include <alpha/tc/tc_conf.h>
@@ -50,9 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD: tcasic.c,v 1.28 2000/03/26 10:32:52 nisimura Exp $")
 int	tcasicmatch(struct device *, struct cfdata *, void *);
 void	tcasicattach(struct device *, struct device *, void *);
 
-struct cfattach tcasic_ca = {
-	sizeof (struct device), tcasicmatch, tcasicattach,
-};
+CFATTACH_DECL(tcasic, sizeof (struct device),
+    tcasicmatch, tcasicattach, NULL, NULL);
 
 extern struct cfdriver tcasic_cd;
 
@@ -113,6 +111,7 @@ tcasicattach(parent, self, aux)
 			tba.tba_nbuiltins = tc_3000_500_nographics_nbuiltins;
 			tba.tba_builtins = tc_3000_500_nographics_builtins;
 		}
+		tba.tba_intr_evcnt = tc_3000_500_intr_evcnt;
 		tba.tba_intr_establish = tc_3000_500_intr_establish;
 		tba.tba_intr_disestablish = tc_3000_500_intr_disestablish;
 		tba.tba_get_dma_tag = tc_dma_get_tag_3000_500;
@@ -133,6 +132,7 @@ tcasicattach(parent, self, aux)
 		tba.tba_slots = tc_3000_300_slots;
 		tba.tba_nbuiltins = tc_3000_300_nbuiltins;
 		tba.tba_builtins = tc_3000_300_builtins;
+		tba.tba_intr_evcnt = tc_3000_300_intr_evcnt;
 		tba.tba_intr_establish = tc_3000_300_intr_establish;
 		tba.tba_intr_disestablish = tc_3000_300_intr_disestablish;
 		tba.tba_get_dma_tag = tc_dma_get_tag_3000_300;
@@ -149,7 +149,9 @@ tcasicattach(parent, self, aux)
 	tc_dma_init();
 
 	(*intr_setup)();
-	set_iointr(iointr);
+
+	/* They all come in at 0x800. */
+	scb_set(0x800, iointr, NULL, IPL_VM);
 
 	config_found(self, &tba, tcasicprint);
 }
@@ -162,7 +164,7 @@ tcasicprint(aux, pnp)
 
 	/* only TCs can attach to tcasics; easy. */
 	if (pnp)
-		printf("tc at %s", pnp);
+		aprint_normal("tc at %s", pnp);
 	return (UNCONF);
 }
 
@@ -170,12 +172,53 @@ tcasicprint(aux, pnp)
 
 #if NWSDISPLAY > 0
 
-#include "cfb.h"
 #include "sfb.h"
+#include "sfbp.h"
+#include "cfb.h"
+#include "mfb.h"
+#include "tfb.h"
+#include "px.h"
+#include "pxg.h"
 
-extern int	sfb_cnattach __P((tc_addr_t));
-extern int	cfb_cnattach __P((tc_addr_t));
+extern void	sfb_cnattach __P((tc_addr_t));
+extern void	sfbp_cnattach __P((tc_addr_t));
+extern void	cfb_cnattach __P((tc_addr_t));
+extern void	mfb_cnattach __P((tc_addr_t));
+extern void	tfb_cnattach __P((tc_addr_t));
+extern void	px_cnattach __P((tc_addr_t));
+extern void	pxg_cnattach __P((tc_addr_t));
 extern int	tc_checkslot __P((tc_addr_t, char *));
+
+struct cnboards {
+	const char	*cb_tcname;
+	void	(*cb_cnattach)(tc_addr_t);
+} static const cnboards[] = {
+#if NSFB > 0
+	{ "PMAGB-BA", sfb_cnattach },
+#endif
+#if NSFBP > 0
+	{ "PMAGD   ", sfbp_cnattach },
+#endif
+#if NCFB > 0
+	{ "PMAG-BA ", cfb_cnattach },
+#endif
+#if NMFB > 0
+	{ "PMAG-AA ", mfb_cnattach },
+#endif
+#if NTFB > 0
+	{ "PMAG-JA ", tfb_cnattach },
+#endif
+#if NPX > 0
+	{ "PMAG-CA ", px_cnattach },
+#endif
+#if NPXG > 0
+	{ "PMAG-DA ", pxg_cnattach },
+	{ "PMAG-FA ", pxg_cnattach },
+	{ "PMAG-FB ", pxg_cnattach },
+	{ "PMAGB-FA", pxg_cnattach },
+	{ "PMAGB-FB", pxg_cnattach },
+#endif
+};
 
 /*
  * tc_fb_cnattach --
@@ -187,23 +230,19 @@ tc_fb_cnattach(tcaddr)
 	tc_addr_t tcaddr;
 {
 	char tcname[TC_ROM_LLEN];
+	int i;
 
-	if (tc_badaddr(tcaddr) || (tc_checkslot(tcaddr, tcname) == 0)) {
-		return EINVAL;
-	}
+	if (tc_badaddr(tcaddr) || (tc_checkslot(tcaddr, tcname) == 0))
+		return (EINVAL);
 
-#if NSFB > 0
-	if (strncmp("PMAGB-BA", tcname, TC_ROM_LLEN) == 0) {
-		sfb_cnattach(tcaddr);
-		return 0;
-	}
-#endif
-#if NCFB > 0
-	if (strncmp("PMAG-BA ", tcname, TC_ROM_LLEN) == 0) {
-		cfb_cnattach(tcaddr);
-		return 0;
-	}
-#endif
-	return ENXIO;
+	for (i = 0; i < sizeof(cnboards) / sizeof(cnboards[0]); i++)
+		if (strncmp(tcname, cnboards[i].cb_tcname, TC_ROM_LLEN) == 0)
+			break;
+
+	if (i == sizeof(cnboards) / sizeof(cnboards[0]))
+		return (ENXIO);
+
+	(cnboards[i].cb_cnattach)(tcaddr);
+	return (0);
 }
 #endif /* if NWSDISPLAY > 0 */

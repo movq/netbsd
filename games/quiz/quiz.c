@@ -1,4 +1,4 @@
-/*	$NetBSD: quiz.c,v 1.17 1999/12/16 13:45:48 jsm Exp $	*/
+/*	$NetBSD: quiz.c,v 1.23 2008/07/20 01:03:22 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,15 +35,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)quiz.c	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: quiz.c,v 1.17 1999/12/16 13:45:48 jsm Exp $");
+__RCSID("$NetBSD: quiz.c,v 1.23 2008/07/20 01:03:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,7 +54,6 @@ __RCSID("$NetBSD: quiz.c,v 1.17 1999/12/16 13:45:48 jsm Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include <err.h>
 #include <time.h>
 #include <unistd.h>
@@ -69,16 +64,16 @@ static QE qlist;
 static int catone, cattwo, tflag;
 static u_int qsize;
 
-char	*appdstr __P((char *, const char *, size_t));
-void	 downcase __P((char *));
-void	 get_cats __P((char *, char *));
-void	 get_file __P((const char *));
-int	 main __P((int, char *[]));
-const char	*next_cat __P((const char *));
-void	 quiz __P((void));
-void	 score __P((u_int, u_int, u_int));
-void	 show_index __P((void));
-void	 usage __P((void)) __attribute__((__noreturn__));
+char	*appdstr(char *, const char *, size_t);
+void	 downcase(char *);
+void	 get_cats(char *, char *);
+void	 get_file(const char *);
+int	 main(int, char *[]);
+const char	*next_cat(const char *);
+void	 quiz(void);
+void	 score(u_int, u_int, u_int);
+void	 show_index(void);
+void	 usage(void) __dead;
 
 int
 main(argc, argv)
@@ -89,7 +84,7 @@ main(argc, argv)
 	const char *indexfile;
 
 	/* Revoke setgid privileges */
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
 	indexfile = _PATH_QUIZIDX;
 	while ((ch = getopt(argc, argv, "i:t")) != -1)

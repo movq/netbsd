@@ -1,4 +1,4 @@
-/*	$NetBSD: setmode.c,v 1.28 2000/01/25 15:43:43 enami Exp $	*/
+/*	$NetBSD: setmode.c,v 1.31 2005/10/01 20:08:01 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)setmode.c	8.2 (Berkeley) 3/25/94";
 #else
-__RCSID("$NetBSD: setmode.c,v 1.28 2000/01/25 15:43:43 enami Exp $");
+__RCSID("$NetBSD: setmode.c,v 1.31 2005/10/01 20:08:01 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -54,6 +50,7 @@ __RCSID("$NetBSD: setmode.c,v 1.28 2000/01/25 15:43:43 enami Exp $");
 #include <errno.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <unistd.h>
 
 #ifdef SETMODE_DEBUG
@@ -80,7 +77,7 @@ typedef struct bitcmd {
 #define	CMD2_OBITS	0x08
 #define	CMD2_UBITS	0x10
 
-static BITCMD	*addcmd __P((BITCMD *, int, int, int, u_int));
+static BITCMD	*addcmd __P((BITCMD *, mode_t, mode_t, mode_t, mode_t));
 static void	 compress_mode __P((BITCMD *));
 #ifdef SETMODE_DEBUG
 static void	 dumpmode __P((BITCMD *));
@@ -169,15 +166,13 @@ common:			if (set->cmd2 & CMD2_CLR) {
 		BITCMD *newset;						\
 		setlen += SET_LEN_INCR;					\
 		newset = realloc(saveset, sizeof(BITCMD) * setlen);	\
-		if (newset == NULL) {					\
-			free(saveset);					\
-			return (NULL);					\
-		}							\
+		if (newset == NULL)					\
+			goto out;					\
 		set = newset + (set - saveset);				\
 		saveset = newset;					\
 		endset = newset + (setlen - 2);				\
 	}								\
-	set = addcmd(set, (a), (b), (c), (d));				\
+	set = addcmd(set, (mode_t)(a), (mode_t)(b), (mode_t)(c), (d));	\
 } while (/*CONSTCOND*/0)
 
 #define	STANDARD_BITS	(S_ISUID|S_ISGID|S_IRWXU|S_IRWXG|S_IRWXO)
@@ -186,16 +181,19 @@ void *
 setmode(p)
 	const char *p;
 {
-	int perm, who;
+	int serrno;
 	char op, *ep;
 	BITCMD *set, *saveset, *endset;
-	sigset_t sigset, sigoset;
-	mode_t mask;
+	sigset_t signset, sigoset;
+	mode_t mask, perm, permXbits, who;
+	long lval;
 	int equalopdone = 0;	/* pacify gcc */
-	int permXbits, setlen;
+	int setlen;
 
-	if (!*p)
-		return (NULL);
+	if (!*p) {
+		errno = EINVAL;
+		return NULL;
+	}
 
 	/*
 	 * Get a copy of the mask for the permissions that are mask relative.
@@ -203,8 +201,8 @@ setmode(p)
 	 * the caller is opening files inside a signal handler, protect them
 	 * as best we can.
 	 */
-	sigfillset(&sigset);
-	(void)sigprocmask(SIG_BLOCK, &sigset, &sigoset);
+	sigfillset(&signset);
+	(void)sigprocmask(SIG_BLOCK, &signset, &sigoset);
 	(void)umask(mask = umask(0));
 	mask = ~mask;
 	(void)sigprocmask(SIG_SETMASK, &sigoset, NULL);
@@ -221,11 +219,19 @@ setmode(p)
 	 * or illegal bits.
 	 */
 	if (isdigit((unsigned char)*p)) {
-		perm = (mode_t)strtol(p, &ep, 8);
-		if (*ep || perm & ~(STANDARD_BITS|S_ISTXT)) {
-			free(saveset);
-			return (NULL);
+		errno = 0;
+		lval = strtol(p, &ep, 8);
+		if (*ep) {
+			errno = EINVAL;
+			goto out;
 		}
+		if (errno == ERANGE && (lval == LONG_MAX || lval == LONG_MIN))
+			goto out;
+		if (lval & ~(STANDARD_BITS|S_ISTXT)) {
+			errno = EINVAL;
+			goto out;
+		}
+		perm = (mode_t)lval;
 		ADDCMD('=', (STANDARD_BITS|S_ISTXT), perm, mask);
 		set->cmd = 0;
 		return (saveset);
@@ -257,8 +263,8 @@ setmode(p)
 		}
 
 getop:		if ((op = *p++) != '+' && op != '-' && op != '=') {
-			free(saveset);
-			return (NULL);
+			errno = EINVAL;
+			goto out;
 		}
 		if (op == '=')
 			equalopdone = 0;
@@ -353,14 +359,17 @@ apply:		if (!*p)
 	dumpmode(saveset);
 #endif
 	return (saveset);
+out:
+	serrno = errno;
+	free(saveset);
+	errno = serrno;
+	return NULL;
 }
 
 static BITCMD *
 addcmd(set, op, who, oparg, mask)
 	BITCMD *set;
-	int oparg, who;
-	int op;
-	u_int mask;
+	mode_t oparg, who, op, mask;
 {
 
 	_DIAGASSERT(set != NULL);

@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_tty.c,v 1.16 2000/03/30 09:27:14 augustss Exp $	*/
+/*	$NetBSD: tty_tty.c,v 1.37 2008/04/24 15:35:30 ad Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993, 1995
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,6 +34,10 @@
 /*
  * Indirect driver for controlling tty.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: tty_tty.c,v 1.37 2008/04/24 15:35:30 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/ioctl.h>
@@ -46,18 +46,16 @@
 #include <sys/vnode.h>
 #include <sys/file.h>
 #include <sys/conf.h>
+#include <sys/kauth.h>
 
-
-#define cttyvp(p) ((p)->p_flag & P_CONTROLT ? (p)->p_session->s_ttyvp : NULL)
+/* XXXSMP */
+#define cttyvp(p) ((p)->p_lflag & PL_CONTROLT ? (p)->p_session->s_ttyvp : NULL)
 
 /*ARGSUSED*/
-int
-cttyopen(dev, flag, mode, p)
-	dev_t dev;
-	int flag, mode;
-	struct proc *p;
+static int
+cttyopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct vnode *ttyvp = cttyvp(p);
+	struct vnode *ttyvp = cttyvp(l->l_proc);
 	int error;
 
 	if (ttyvp == NULL)
@@ -68,27 +66,24 @@ cttyopen(dev, flag, mode, p)
 	 * Since group is tty and mode is 620 on most terminal lines
 	 * and since sessions protect terminals from processes outside
 	 * your session, this check is probably no longer necessary.
-	 * Since it inhibits setuid root programs that later switch 
+	 * Since it inhibits setuid root programs that later switch
 	 * to another user from accessing /dev/tty, we have decided
 	 * to delete this test. (mckusick 5/93)
 	 */
 	error = VOP_ACCESS(ttyvp,
-	  (flag&FREAD ? VREAD : 0) | (flag&FWRITE ? VWRITE : 0), p->p_ucred, p);
+	  (flag&FREAD ? VREAD : 0) | (flag&FWRITE ? VWRITE : 0), l->l_cred, l);
 	if (!error)
 #endif /* PARANOID */
-		error = VOP_OPEN(ttyvp, flag, NOCRED, p);
+		error = VOP_OPEN(ttyvp, flag, NOCRED);
 	VOP_UNLOCK(ttyvp, 0);
 	return (error);
 }
 
 /*ARGSUSED*/
-int
-cttyread(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+static int
+cttyread(dev_t dev, struct uio *uio, int flag)
 {
-	struct vnode *ttyvp = cttyvp(uio->uio_procp);
+	struct vnode *ttyvp = cttyvp(curproc);
 	int error;
 
 	if (ttyvp == NULL)
@@ -100,13 +95,10 @@ cttyread(dev, uio, flag)
 }
 
 /*ARGSUSED*/
-int
-cttywrite(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+static int
+cttywrite(dev_t dev, struct uio *uio, int flag)
 {
-	struct vnode *ttyvp = cttyvp(uio->uio_procp);
+	struct vnode *ttyvp = cttyvp(curproc);
 	int error;
 
 	if (ttyvp == NULL)
@@ -118,40 +110,53 @@ cttywrite(dev, uio, flag)
 }
 
 /*ARGSUSED*/
-int
-cttyioctl(dev, cmd, addr, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t addr;
-	int flag;
-	struct proc *p;
+static int
+cttyioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
-	struct vnode *ttyvp = cttyvp(p);
+	struct vnode *ttyvp = cttyvp(l->l_proc);
+	int rv;
 
 	if (ttyvp == NULL)
 		return (EIO);
 	if (cmd == TIOCSCTTY)		/* XXX */
 		return (EINVAL);
 	if (cmd == TIOCNOTTY) {
-		if (!SESS_LEADER(p)) {
-			p->p_flag &= ~P_CONTROLT;
-			return (0);
+		mutex_enter(proc_lock);
+		if (!SESS_LEADER(l->l_proc)) {
+			l->l_proc->p_lflag &= ~PL_CONTROLT;
+			rv = 0;
 		} else
-			return (EINVAL);
+			rv = EINVAL;
+		mutex_exit(proc_lock);
+		return (rv);
 	}
-	return (VOP_IOCTL(ttyvp, cmd, addr, flag, NOCRED, p));
+	return (VOP_IOCTL(ttyvp, cmd, addr, flag, NOCRED));
 }
 
 /*ARGSUSED*/
-int
-cttypoll(dev, events, p)
-	dev_t dev;
-	int events;
-	struct proc *p;
+static int
+cttypoll(dev_t dev, int events, struct lwp *l)
 {
+	struct vnode *ttyvp = cttyvp(l->l_proc);
+
+	if (ttyvp == NULL)
+		return (seltrue(dev, events, l));
+	return (VOP_POLL(ttyvp, events));
+}
+
+static int
+cttykqfilter(dev_t dev, struct knote *kn)
+{
+	/* This is called from filt_fileattach() by the attaching process. */
+	struct proc *p = curproc;
 	struct vnode *ttyvp = cttyvp(p);
 
 	if (ttyvp == NULL)
-		return (seltrue(dev, events, p));
-	return (VOP_POLL(ttyvp, events, p));
+		return (1);
+	return (VOP_KQFILTER(ttyvp, kn));
 }
+
+const struct cdevsw ctty_cdevsw = {
+	cttyopen, nullclose, cttyread, cttywrite, cttyioctl,
+	nullstop, notty, cttypoll, nommap, cttykqfilter, D_TTY
+};

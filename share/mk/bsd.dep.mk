@@ -1,62 +1,80 @@
-#	$NetBSD: bsd.dep.mk,v 1.30 2000/01/22 19:31:00 mycroft Exp $
+#	$NetBSD: bsd.dep.mk,v 1.68 2008/10/25 22:27:36 apb Exp $
 
-.PHONY:		cleandepend
-cleandir distclean: cleandepend
+##### Basic targets
+cleandir:	cleandepend
+realdepend:	beforedepend .depend afterdepend
+.ORDER:		beforedepend .depend afterdepend
 
-MKDEP?=		mkdep
+beforedepend .depend afterdepend: # ensure existence
 
+##### Default values
+MKDEP?=			mkdep
+MKDEP_SUFFIXES?=	.o
+
+##### Build rules
 # some of the rules involve .h sources, so remove them from mkdep line
-realdepend: beforedepend
+
+.if defined(SRCS)							# {
+_TRADITIONAL_CPP?=-traditional-cpp
+__acpp_flags=	${_TRADITIONAL_CPP}
+
+__DPSRCS.all=	${SRCS:C/\.(c|m|s|S|C|cc|cpp|cxx)$/.d/} \
+		${DPSRCS:C/\.(c|m|s|S|C|cc|cpp|cxx)$/.d/}
+__DPSRCS.d=	${__DPSRCS.all:O:u:M*.d}
+__DPSRCS.notd=	${__DPSRCS.all:O:u:N*.d}
+
+.NOPATH: .depend ${__DPSRCS.d}
+
+.if !empty(__DPSRCS.d)							# {
+${__DPSRCS.d}: ${__DPSRCS.notd} ${DPSRCS}
+.endif									# }
+
+.depend: ${__DPSRCS.d}
+	${_MKTARGET_CREATE}
+	rm -f .depend
+	${MKDEP} -d -f ${.TARGET} -s ${MKDEP_SUFFIXES:Q} ${__DPSRCS.d}
+
+.SUFFIXES: .d .s .S .c .C .cc .cpp .cxx .m
+
+.c.d:
+	${_MKTARGET_CREATE}
+	${MKDEP} -f ${.TARGET} -- ${MKDEPFLAGS} \
+	    ${CFLAGS:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
+	    ${CPPFLAGS} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC}
+
+.m.d:
+	${_MKTARGET_CREATE}
+	${MKDEP} -f ${.TARGET} -- ${MKDEPFLAGS} \
+	    ${OBJCFLAGS:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
+	    ${CPPFLAGS} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC}
+
+.s.d .S.d:
+	${_MKTARGET_CREATE}
+	${MKDEP} -f ${.TARGET} -- ${MKDEPFLAGS} \
+	    ${AFLAGS:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
+	    ${CPPFLAGS} ${CPPFLAGS.${.IMPSRC:T}} ${__acpp_flags} ${.IMPSRC}
+
+.C.d .cc.d .cpp.d .cxx.d:
+	${_MKTARGET_CREATE}
+	${MKDEP} -f ${.TARGET} -- ${MKDEPFLAGS} \
+	    ${CXXFLAGS:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
+	    ${DESTDIR:D-nostdinc++ ${CPPFLAG_ISYSTEMXX} \
+			${DESTDIR}/usr/include/g++} \
+	    ${CPPFLAGS} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC}
+
+.endif # defined(SRCS)							# }
+
+##### Clean rules
+cleandepend: .PHONY
 .if defined(SRCS)
-realdepend: .depend
-.NOPATH: .depend
-.depend: ${SRCS} ${DPSRCS}
-	@rm -f .depend
-	@files="${.ALLSRC:M*.s} ${.ALLSRC:M*.S}"; \
-	if [ "$$files" != " " ]; then \
-	  echo ${MKDEP} -a ${MKDEPFLAGS} \
-	    ${AFLAGS:M-[ID]*:Q} ${CPPFLAGS:Q} -traditional-cpp ${AINC:Q} \
-	    $$files; \
-	  ${MKDEP} -a ${MKDEPFLAGS} \
-	    ${AFLAGS:M-[ID]*} ${CPPFLAGS} -traditional-cpp ${AINC} $$files; \
-	fi
-	@files="${.ALLSRC:M*.c}"; \
-	if [ "$$files" != "" ]; then \
-	  echo ${MKDEP} -a ${MKDEPFLAGS} \
-	    ${CFLAGS:M-[ID]*:Q} ${CPPFLAGS:Q} $$files; \
-	  ${MKDEP} -a ${MKDEPFLAGS} \
-	    ${CFLAGS:M-[ID]*} ${CPPFLAGS} $$files; \
-	fi
-	@files="${.ALLSRC:M*.m}"; \
-	if [ "$$files" != "" ]; then \
-	  echo ${MKDEP} -a ${MKDEPFLAGS} \
-	    ${OBJCFLAGS:M-[ID]*:Q} ${CPPFLAGS:Q} $$files; \
-	  ${MKDEP} -a ${MKDEPFLAGS} \
-	    ${OBJCFLAGS:M-[ID]*} ${CPPFLAGS} $$files; \
-	fi
-	@files="${.ALLSRC:M*.cc} ${.ALLSRC:M*.C} ${.ALLSRC:M*.cxx}"; \
-	if [ "$$files" != "  " ]; then \
-	  echo ${MKDEP} -a ${MKDEPFLAGS} \
-	    ${CXXFLAGS:M-[ID]*:Q} ${CPPFLAGS:Q} $$files; \
-	  ${MKDEP} -a ${MKDEPFLAGS} \
-	    ${CXXFLAGS:M-[ID]*} ${CPPFLAGS} $$files; \
-	fi
-cleandepend:
-	rm -f .depend ${.CURDIR}/tags ${CLEANDEPEND}
-.else
-cleandepend:
+	rm -f .depend ${__DPSRCS.d} ${.CURDIR}/tags ${CLEANDEPEND}
 .endif
-realdepend: afterdepend
 
-beforedepend:
-afterdepend:
-
+##### Custom rules
 .if !target(tags)
-.if defined(SRCS)
 tags: ${SRCS}
+.if defined(SRCS)
 	-cd ${.CURDIR}; ctags -f /dev/stdout ${.ALLSRC:N*.h} | \
-	    sed "s;\${.CURDIR}/;;" > tags
-.else
-tags:
+	    ${TOOL_SED} "s;\${.CURDIR}/;;" > tags
 .endif
 .endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: am7990reg.h,v 1.6 1998/08/15 10:18:14 mycroft Exp $	*/
+/*	$NetBSD: am7990reg.h,v 1.13 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,11 +44,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -88,7 +77,7 @@ struct lermd {
 #endif
 	int16_t	  rmd2;
 	u_int16_t rmd3;
-};
+} __packed;
 
 /*
  * Transmit message descriptor
@@ -104,7 +93,7 @@ struct letmd {
 #endif
 	int16_t	  tmd2;
 	u_int16_t tmd3;
-};
+} __packed;
 
 /*
  * Initialization block
@@ -118,9 +107,9 @@ struct leinit {
 	u_int16_t init_tdra;		/* +0x0014 */
 	u_int16_t init_tlen;		/* +0x0016 */
 	int16_t	  pad0[4];		/* Pad to 16 shorts */
-};
+} __packed;
 
-/* Receive message descriptor 1 (rmd1_bits) */ 
+/* Receive message descriptor 1 (rmd1_bits) */
 #define	LE_R1_OWN	0x80		/* LANCE owns the packet */
 #define	LE_R1_ERR	0x40		/* error summary */
 #define	LE_R1_FRAM	0x20		/* framing error */
@@ -133,19 +122,19 @@ struct leinit {
 #define	LE_R1_BITS \
     "\20\10OWN\7ERR\6FRAM\5OFLO\4CRC\3BUFF\2STP\1ENP"
 
-/* Transmit message descriptor 1 (tmd1_bits) */ 
+/* Transmit message descriptor 1 (tmd1_bits) */
 #define	LE_T1_OWN	0x80		/* LANCE owns the packet */
 #define	LE_T1_ERR	0x40		/* error summary */
 #define	LE_T1_MORE	0x10		/* multiple collisions */
 #define	LE_T1_ONE	0x08		/* single collision */
-#define	LE_T1_DEF	0x04		/* defferred transmit */
+#define	LE_T1_DEF	0x04		/* deferred transmit */
 #define	LE_T1_STP	0x02		/* start of packet */
 #define	LE_T1_ENP	0x01		/* end of packet */
 
 #define	LE_T1_BITS \
     "\20\10OWN\7ERR\6RES\5MORE\4ONE\3DEF\2STP\1ENP"
 
-/* Transmit message descriptor 3 (tmd3) */ 
+/* Transmit message descriptor 3 (tmd3) */
 #define	LE_T3_BUFF	0x8000		/* buffer error */
 #define	LE_T3_UFLO	0x4000		/* underflow error */
 #define	LE_T3_LCOL	0x1000		/* late collision */

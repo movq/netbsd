@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.6 1999/09/09 17:30:18 jsm Exp $	*/
+/*	$NetBSD: extern.h,v 1.9 2005/07/01 16:38:24 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,39 +33,40 @@
 
 #include <time.h>
 
-void	 addword __P((const char *));
-void	 badword __P((void));
-char	*batchword __P((FILE *));
-void	 checkdict __P((void));
-int	 checkword __P((const char *, int, int *));
-void	 cleanup __P((void));
-void	 delay __P((int));
-long	 dictseek __P((FILE *, long, int));
-void	 findword __P((void));
-void	 flushin __P((FILE *));
-char	*getline __P((char *));
-void	 getword __P((char *));
-int	 help __P((void));
-int	 inputch __P((void));
-int	 loaddict __P((FILE *));
-int	 loadindex __P((const char *));
-void	 newgame __P((const char *));
-char	*nextword __P((FILE *));
-FILE	*opendict __P((const char *));
-void	 playgame __P((void));
-void	 prompt __P((const char *));
-void	 prtable __P((const char *const [],
-	    int, int, int, void (*)(const char *const [], int), int (*)(const char *const [], int)));
-void	 putstr __P((const char *));
-void	 redraw __P((void));
-void	 results __P((void));
-int	 setup __P((int, time_t));
-void	 showboard __P((const char *));
-void	 showstr __P((const char *, int));
-void	 showword __P((int));
-void	 starttime __P((void));
-void	 startwords __P((void));
-void	 stoptime __P((void));
-int	 timerch __P((void));
-void	 usage __P((void)) __attribute__((__noreturn__));
-int	 validword __P((const char *));
+void	 addword(const char *);
+void	 badword(void);
+char	*batchword(FILE *);
+void	 checkdict(void);
+int	 checkword(const char *, int, int *);
+void	 cleanup(void);
+void	 delay(int);
+long	 dictseek(FILE *, long, int);
+void	 findword(void);
+void	 flushin(FILE *);
+char	*getline(char *);
+void	 getword(char *);
+int	 help(void);
+int	 inputch(void);
+int	 loaddict(FILE *);
+int	 loadindex(const char *);
+void	 newgame(const char *);
+char	*nextword(FILE *);
+FILE	*opendict(const char *);
+void	 playgame(void);
+void	 prompt(const char *);
+void	 prtable(const char *const [],
+	    int, int, int, void (*)(const char *const [], int), 
+	    int (*)(const char *const [], int));
+void	 putstr(const char *);
+void	 redraw(void);
+void	 results(void);
+int	 setup(int, time_t);
+void	 showboard(const char *);
+void	 showstr(const char *, int);
+void	 showword(int);
+void	 starttime(void);
+void	 startwords(void);
+void	 stoptime(void);
+int	 timerch(void);
+void	 usage(void) __attribute__((__noreturn__));
+int	 validword(const char *);

@@ -1,4 +1,4 @@
-/*	$NetBSD: rup.c,v 1.19 2000/03/08 12:10:28 jdolecek Exp $	*/
+/*	$NetBSD: rup.c,v 1.27 2007/12/15 19:44:53 perry Exp $	*/
 
 /*-
  * Copyright (c) 1993, John Brezak
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rup.c,v 1.19 2000/03/08 12:10:28 jdolecek Exp $");
+__RCSID("$NetBSD: rup.c,v 1.27 2007/12/15 19:44:53 perry Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -58,44 +58,78 @@ __RCSID("$NetBSD: rup.c,v 1.19 2000/03/08 12:10:28 jdolecek Exp $");
 
 #define HOST_WIDTH 24
 
-int printtime;			/* print the remote host(s)'s time */
+static int printtime;		/* print the remote host(s)'s time */
 
-struct host_list {
+static struct host_list {
 	struct host_list *next;
-	struct in_addr addr;
+	int family;
+	union {
+		struct in6_addr _addr6;
+		struct in_addr _addr4;
+	} addr;
 } *hosts;
 
-int search_host __P((struct in_addr));
-void remember_host __P((struct in_addr));
+#define addr6 addr._addr6
+#define addr4 addr._addr4
 
-int
-search_host(addr)
-	struct in_addr addr;
+static int search_host(struct sockaddr *);
+static void remember_host(struct sockaddr *);
+
+static int
+search_host(struct sockaddr *sa)
 {
 	struct host_list *hp;
 	
 	if (!hosts)
-		return(0);
+		return 0;
 
 	for (hp = hosts; hp != NULL; hp = hp->next) {
-		if (hp->addr.s_addr == addr.s_addr)
-			return(1);
+		switch (hp->family) {
+		case AF_INET6:
+			if (!memcmp(&hp->addr6,
+			    &((struct sockaddr_in6 *)(void *)sa)->sin6_addr,
+			    sizeof (struct in6_addr)))
+				return 1;
+			break;
+		case AF_INET:
+			if (!memcmp(&hp->addr4,
+			    &((struct sockaddr_in *)(void *)sa)->sin_addr,
+			    sizeof (struct in_addr)))
+				return 1;
+			break;
+		default:
+			break;
+		}
 	}
-	return(0);
+	return 0;
 }
 
-void
-remember_host(addr)
-	struct in_addr addr;
+static void
+remember_host(struct sockaddr *sa)
 {
 	struct host_list *hp;
 
-	if (!(hp = (struct host_list *)malloc(sizeof(struct host_list)))) {
+	if ((hp = malloc(sizeof(struct host_list))) == NULL) {
 		err(1, "malloc");
 		/* NOTREACHED */
 	}
-	hp->addr.s_addr = addr.s_addr;
+	hp->family = sa->sa_family;
 	hp->next = hosts;
+	switch (sa->sa_family) {
+	case AF_INET6:
+		(void)memcpy(&hp->addr6,
+		    &((struct sockaddr_in6 *)(void *)sa)->sin6_addr,
+		    sizeof (struct in6_addr));
+		break;
+	case AF_INET:
+		(void)memcpy(&hp->addr4,
+		    &((struct sockaddr_in *)(void *)sa)->sin_addr,
+		    sizeof (struct in_addr));
+		break;
+	default:
+		errx(1, "unknown address family");
+		/* NOTREACHED */
+	}
 	hosts = hp;
 }
 
@@ -103,9 +137,9 @@ struct rup_data {
 	const char *host;
 	struct statstime statstime;
 };
-struct rup_data *rup_data;
-int rup_data_idx = 0;
-int rup_data_max = 0;
+static struct rup_data *rup_data;
+static size_t rup_data_idx = 0;
+static size_t rup_data_max = 0;
 
 enum sort_type { 
 	SORT_NONE,
@@ -113,50 +147,50 @@ enum sort_type {
 	SORT_LDAV,
 	SORT_UPTIME
 };
-enum sort_type sort_type;
+static enum sort_type sort_type;
 
-int compare __P((struct rup_data *, struct rup_data *));
-void remember_rup_data __P((const char *, struct statstime *));
-int rstat_reply __P((char *, struct sockaddr_in *));
-int print_rup_data __P((const char *, statstime *));
-void onehost __P((char *));
-void allhosts __P((void));
-int main __P((int, char *[]));
-void usage __P((void));
+static int compare(struct rup_data *, struct rup_data *);
+static void remember_rup_data(const char *, struct statstime *);
+static int rstat_reply(char *, struct netbuf *, struct netconfig *);
+static void print_rup_data(const char *, statstime *);
+static int onehost(char *);
+static void allhosts(void);
+static void usage(void) __dead;
+int main(int, char *[]);
 
 int
-compare(d1, d2)
-	struct rup_data *d1;
-	struct rup_data *d2;
+compare(struct rup_data *d1, struct rup_data *d2)
 {
 	switch(sort_type) {
 	case SORT_HOST:
 		return strcmp(d1->host, d2->host);
 	case SORT_LDAV:
 		return d1->statstime.avenrun[0] 
-			- d2->statstime.avenrun[0];
+		    - d2->statstime.avenrun[0];
 	case SORT_UPTIME:
 		return d1->statstime.boottime.tv_sec 
-			- d2->statstime.boottime.tv_sec;
+		    - d2->statstime.boottime.tv_sec;
 	default:
 		/* something's really wrong here */
 		abort();
+		/*NOTREACHED*/
 	}
 }
 
-void
-remember_rup_data(host, st)
-	const char *host;
-	struct statstime *st;
+static void
+remember_rup_data(const char *host, struct statstime *st)
 {
+	struct rup_data *n;
+
         if (rup_data_idx >= rup_data_max) {
-                rup_data_max += 16;
-                rup_data = realloc (rup_data, 
-				rup_data_max * sizeof(struct rup_data));
-                if (rup_data == NULL) {
+                n = realloc(rup_data,
+                    (rup_data_max + 16) * sizeof(struct rup_data));
+                if (n == NULL) {
                         err (1, "realloc");
 			/* NOTREACHED */
                 }
+		rup_data = n;
+                rup_data_max += 16;
         }
 	
 	rup_data[rup_data_idx].host = strdup(host);
@@ -165,25 +199,20 @@ remember_rup_data(host, st)
 }
 
 
-int
-rstat_reply(replyp, raddrp)
-	char *replyp;
-	struct sockaddr_in *raddrp;
+static int
+/*ARGSUSED*/
+rstat_reply(char *replyp, struct netbuf *raddrp, struct netconfig *nconf)
 {
-	struct hostent *hp;
-	char *host;
-	statstime *host_stat = (statstime *)replyp;
+	char host[NI_MAXHOST];
+	statstime *host_stat = (statstime *)(void *)replyp;
+	struct sockaddr *sa = raddrp->buf;
 
-	if (!search_host(raddrp->sin_addr)) {
-		hp = gethostbyaddr((char *)&raddrp->sin_addr.s_addr,
-			sizeof(struct in_addr), AF_INET);
+	if (!search_host(sa)) {
+		if (getnameinfo(sa, (socklen_t)sa->sa_len, host, sizeof host,
+		    NULL, 0, 0))
+			return 0;
 
-		if (hp)
-			host = hp->h_name;
-		else
-			host = inet_ntoa(raddrp->sin_addr);
-
-		remember_host(raddrp->sin_addr);
+		remember_host(sa);
 
 		if (sort_type != SORT_NONE) {
 			remember_rup_data(host, host_stat);
@@ -192,72 +221,71 @@ rstat_reply(replyp, raddrp)
 		}
 	}
 
-	return (0);
+	return 0;
 }
 
 
-int
-print_rup_data(host, host_stat)
-	const char *host;
-	statstime *host_stat;
+static void
+print_rup_data(const char *host, statstime *host_stat)
 {
 	struct tm *tmp_time;
 	struct tm host_time;
-	unsigned ups=0,upm=0,uph=0,upd=0;
+	unsigned ups = 0, upm = 0, uph = 0, upd = 0;
+	time_t now;
 
 	char days_buf[16];
 	char hours_buf[16];
 
 	if (printtime)
-		printf("%-*.*s", HOST_WIDTH-4, HOST_WIDTH-4, host);
+		(void)printf("%-*.*s", HOST_WIDTH-4, HOST_WIDTH-4, host);
 	else
-		printf("%-*.*s", HOST_WIDTH, HOST_WIDTH, host);
+		(void)printf("%-*.*s", HOST_WIDTH, HOST_WIDTH, host);
 
-	tmp_time = localtime((time_t *)&host_stat->curtime.tv_sec);
+	now = host_stat->curtime.tv_sec;
+	tmp_time = localtime(&now);
 	host_time = *tmp_time;
 
 	host_stat->curtime.tv_sec -= host_stat->boottime.tv_sec;
 
 	ups=host_stat->curtime.tv_sec;
-	upd=ups/(3600*24);
-	ups-=upd*3600*24;
-	uph=ups/3600;
-	ups-=uph*3600;
-	upm=ups/60;
+	upd=ups / (3600 * 24);
+	ups-=upd * 3600 * 24;
+	uph=ups / 3600;
+	ups-=uph * 3600;
+	upm=ups / 60;
 
 	if (upd != 0)
-		sprintf(days_buf, "%3u day%s, ", upd,
-			(upd > 1) ? "s" : "");
+		(void)snprintf(days_buf, sizeof(days_buf), "%3u day%s, ", upd,
+		    (upd > 1) ? "s" : "");
 	else
 		days_buf[0] = '\0';
 
 	if (uph != 0)
-		sprintf(hours_buf, "%2u:%02u, ",
-			uph, upm);
+		(void)snprintf(hours_buf, sizeof(hours_buf), "%2u:%02u, ",
+		    uph, upm);
 	else
 		if (upm != 0)
-			sprintf(hours_buf, "%2u min%s ", upm,
-			    (upm == 1) ? ", " : "s,");
+			(void)snprintf(hours_buf, sizeof(hours_buf),
+			    "%2u min%s ", upm, (upm == 1) ? ", " : "s,");
+		else if (ups < 60)
+			(void)snprintf(hours_buf, sizeof(hours_buf),
+			    "%2u secs ", ups);
 		else
 			hours_buf[0] = '\0';
 	if (printtime)
-		printf(" %2d:%02d%cm",
+		(void)printf(" %2d:%02d%cm",
 		    (host_time.tm_hour % 12) ? (host_time.tm_hour % 12) : 12,
 		    host_time.tm_min, (host_time.tm_hour >= 12) ? 'p' : 'a');
 
-	printf(" up %9.9s%9.9s load average: %.2f %.2f %.2f\n",
-		days_buf, hours_buf,
-		(double)host_stat->avenrun[0]/FSCALE,
-		(double)host_stat->avenrun[1]/FSCALE,
-		(double)host_stat->avenrun[2]/FSCALE);
-
-	return(0);
+	(void)printf(" up %9.9s%9.9s load average: %.2f %.2f %.2f\n",
+	    days_buf, hours_buf, (double)host_stat->avenrun[0]/FSCALE,
+	    (double)host_stat->avenrun[1]/FSCALE,
+	    (double)host_stat->avenrun[2]/FSCALE);
 }
 
 
-void
-onehost(host)
-	char *host;
+static int
+onehost(char *host)
 {
 	CLIENT *rstat_clnt;
 	statstime host_stat;
@@ -266,41 +294,42 @@ onehost(host)
 	rstat_clnt = clnt_create(host, RSTATPROG, RSTATVERS_TIME, "udp");
 	if (rstat_clnt == NULL) {
 		warnx("%s", clnt_spcreateerror(host));
-		return;
+		return 1;
 	}
 
-	memset((char *)&host_stat, 0, sizeof(host_stat));
-	if (clnt_call(rstat_clnt, RSTATPROC_STATS, xdr_void, NULL, xdr_statstime, &host_stat, timeout) != RPC_SUCCESS) {
+	(void)memset(&host_stat, 0, sizeof(host_stat));
+	if (clnt_call(rstat_clnt, RSTATPROC_STATS, xdr_void, NULL,
+	    xdr_statstime, &host_stat, timeout) != RPC_SUCCESS) {
 		warnx("%s",  clnt_sperror(rstat_clnt, host));
-		return;
+		clnt_destroy(rstat_clnt);
+		return 1;
 	}
 
 	print_rup_data(host, &host_stat);
 	clnt_destroy(rstat_clnt);
+	return 0;
 }
 
-void
-allhosts()
+static void
+allhosts(void)
 {
 	statstime host_stat;
 	enum clnt_stat clnt_stat;
 	size_t i;
 
 	if (sort_type != SORT_NONE) {
-		printf("collecting responses...");
-		fflush(stdout);
+		(void)printf("collecting responses...");
+		(void)fflush(stdout);
 	}
 
-	clnt_stat = clnt_broadcast(RSTATPROG, RSTATVERS_TIME, RSTATPROC_STATS,
-				   xdr_void, NULL,
-				   xdr_statstime, (char*)&host_stat, rstat_reply);
-	if (clnt_stat != RPC_SUCCESS && clnt_stat != RPC_TIMEDOUT) {
-		warnx("%s", clnt_sperrno(clnt_stat));
-		exit(1);
-	}
+	clnt_stat = rpc_broadcast(RSTATPROG, RSTATVERS_TIME, RSTATPROC_STATS,
+	    xdr_void, NULL, xdr_statstime, (caddr_t)(void *)&host_stat,
+	    (resultproc_t)rstat_reply, "udp");
+	if (clnt_stat != RPC_SUCCESS && clnt_stat != RPC_TIMEDOUT)
+		errx(1, "%s", clnt_sperrno(clnt_stat));
 
 	if (sort_type != SORT_NONE) {
-		putchar('\n');
+		(void)putchar('\n');
 		qsort(rup_data, rup_data_idx, sizeof(struct rup_data),
 		      (int (*)(const void*, const void*))compare);
 
@@ -311,14 +340,13 @@ allhosts()
 }
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-	int ch;
-	extern int optind;
+	int ch, retval;
 
+	setprogname(*argv);
 	sort_type = SORT_NONE;
+	retval = 0;
 	while ((ch = getopt(argc, argv, "dhlt")) != -1)
 		switch (ch) {
 		case 'd':
@@ -338,21 +366,22 @@ main(argc, argv)
 			/*NOTREACHED*/
 		}
 	
-	setlinebuf(stdout);
+	(void)setlinebuf(stdout);
 
 	if (argc == optind)
 		allhosts();
 	else {
 		for (; optind < argc; optind++)
-			onehost(argv[optind]);
+			retval += onehost(argv[optind]);
 	}
 
-	exit(0);
+	return retval ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 void
-usage()
+usage(void)
 {
-	fprintf(stderr, "Usage: rup [-dhlt] [hosts ...]\n");
-	exit(1);
+	(void)fprintf(stderr, "Usage: %s [-dhlt] [hosts ...]\n",
+	    getprogname());
+	exit(EXIT_SUCCESS);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: vme_machdep.c,v 1.7 2000/01/19 13:13:18 leo Exp $	*/
+/*	$NetBSD: vme_machdep.c,v 1.15 2008/04/28 20:23:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -33,6 +26,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: vme_machdep.c,v 1.15 2008/04/28 20:23:15 martin Exp $");
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/time.h>
@@ -40,8 +36,7 @@
 #include <sys/errno.h>
 #include <sys/device.h>
 
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/bus.h>
 #include <machine/cpu.h>
@@ -55,9 +50,10 @@ static int	vmebusprint __P((void *auxp, const char *));
 static int	vmebusmatch __P((struct device *, struct cfdata *, void *));
 static void	vmebusattach __P((struct device *, struct device *, void *));
 
-struct cfattach avmebus_ca = {
-	sizeof(struct device), vmebusmatch, vmebusattach
-};
+CFATTACH_DECL(avmebus, sizeof(struct device),
+    vmebusmatch, vmebusattach, NULL, NULL);
+
+int vmebus_attached;
 
 int
 vmebusmatch(pdp, cfp, auxp)
@@ -67,7 +63,7 @@ void		*auxp;
 {
 	if(atari_realconfig == 0)
 		return (0);
-	if (strcmp((char *)auxp, "avmebus") || cfp->cf_unit != 0)
+	if (strcmp((char *)auxp, "avmebus") || vmebus_attached)
 		return(0);
 	return(machineid & ATARI_FALCON ? 0 : 1);
 }
@@ -78,6 +74,8 @@ struct device	*pdp, *dp;
 void		*auxp;
 {
 	struct vmebus_attach_args	vba;
+
+	vmebus_attached = 1;
 
 	vba.vba_busname = "vme";
 	vba.vba_iot     = beb_alloc_bus_space_tag(NULL);

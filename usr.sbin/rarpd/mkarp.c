@@ -1,4 +1,4 @@
-/*	$NetBSD: mkarp.c,v 1.3 2000/02/11 11:27:20 abs Exp $ */
+/*	$NetBSD: mkarp.c,v 1.7 2008/07/21 13:36:59 lukem Exp $ */
 
 /*
  * Copyright (c) 1984, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1984, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1984, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)arp.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: mkarp.c,v 1.3 2000/02/11 11:27:20 abs Exp $");
+__RCSID("$NetBSD: mkarp.c,v 1.7 2008/07/21 13:36:59 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -80,8 +76,12 @@ __RCSID("$NetBSD: mkarp.c,v 1.3 2000/02/11 11:27:20 abs Exp $");
 
 #include "mkarp.h"
 
-int	rtmsg __P((int, int, struct rt_msghdr *, struct sockaddr_inarp *, 
-		   struct sockaddr_dl *));
+/* Roundup the same way rt_xaddrs does */
+#define ROUNDUP(a) \
+       ((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
+
+int	rtmsg(int, int, struct rt_msghdr *, struct sockaddr_inarp *, 
+	      struct sockaddr_dl *);
 struct	{
 	struct	rt_msghdr m_rtm;
 	char	m_space[512];
@@ -91,9 +91,7 @@ struct	{
  * Set an individual arp entry 
  */
 int
-mkarp(haddr, ipaddr)
-	u_char *haddr;
-	u_int32_t ipaddr;
+mkarp(u_char *haddr, u_int32_t ipaddr)
 {
 	static struct sockaddr_inarp blank_sin = {sizeof(blank_sin), AF_INET };
 	static struct sockaddr_dl blank_sdl = {sizeof(blank_sdl), AF_LINK };
@@ -177,12 +175,8 @@ overwrite:
 }
 
 int
-rtmsg(cmd, s, rtm, sin_m, sdl_m)
-	int cmd;
-	int s;
-	struct rt_msghdr *rtm;
-	struct sockaddr_inarp *sin_m;
-	struct sockaddr_dl *sdl_m;
+rtmsg(int cmd, int s, struct rt_msghdr *rtm, struct sockaddr_inarp *sin_m,
+      struct sockaddr_dl *sdl_m)
 {
 	static int seq;
 	int rlen;
@@ -219,7 +213,7 @@ rtmsg(cmd, s, rtm, sin_m, sdl_m)
 #define NEXTADDR(w, s) \
 	if (rtm->rtm_addrs & (w)) { \
 		(void)memcpy(cp, s, ((struct sockaddr *)s)->sa_len); \
-		cp += ((struct sockaddr *)s)->sa_len;}
+                cp += ROUNDUP(((struct sockaddr *)s)->sa_len);}
 
 	NEXTADDR(RTA_DST, sin_m);
 	NEXTADDR(RTA_GATEWAY, sdl_m);

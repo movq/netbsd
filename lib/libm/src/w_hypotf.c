@@ -15,23 +15,23 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: w_hypotf.c,v 1.5 1999/07/02 15:37:44 simonb Exp $");
+__RCSID("$NetBSD: w_hypotf.c,v 1.7 2007/08/10 21:20:36 drochner Exp $");
 #endif
 
 /*
  * wrapper hypotf(x,y)
  */
 
+#include "namespace.h"
 #include "math.h"
 #include "math_private.h"
 
-
-#ifdef __STDC__
-	float hypotf(float x, float y)	/* wrapper hypotf */
-#else
-	float hypotf(x,y)		/* wrapper hypotf */
-	float x,y;
+#ifdef __weak_alias
+__weak_alias(hypotf, _hypotf)
 #endif
+
+float
+hypotf(float x, float y)	/* wrapper hypotf */
 {
 #ifdef _IEEE_LIBM
 	return __ieee754_hypotf(x,y);

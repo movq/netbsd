@@ -1,7 +1,7 @@
-/*	$NetBSD: autoconf.c,v 1.49 1999/09/17 19:59:42 thorpej Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.91 2008/06/22 16:29:36 tsutsui Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,6 @@
  */
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -47,6 +39,51 @@
  *
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This software was developed by the Computer Systems Engineering group
+ * at Lawrence Berkeley Laboratory under DARPA contract BG 91-66 and
+ * contributed to Berkeley.
+ *
+ * All advertising materials mentioning features or use of this software
+ * must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Lawrence Berkeley Laboratory.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: autoconf.c 1.36 92/12/20$
+ *
+ *	@(#)autoconf.c	8.2 (Berkeley) 1/12/94
+ */
+
+/*
+ * Copyright (c) 1988 University of Utah.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
  *
  * This software was developed by the Computer Systems Engineering group
  * at Lawrence Berkeley Laboratory under DARPA contract BG 91-66 and
@@ -98,21 +135,40 @@
  * and the drivers are initialized.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.91 2008/06/22 16:29:36 tsutsui Exp $");
+
+#include "hil.h"
+#include "dvbox.h"
+#include "gbox.h"
+#include "hyper.h"
+#include "rbox.h"
+#include "topcat.h"
+#include "com_dio.h"
+#include "com_frodo.h"
+#include "dcm.h"
+#include "ite.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/conf.h>
 #include <sys/device.h>
-#include <sys/device.h>
 #include <sys/disklabel.h>
 #include <sys/malloc.h>
-#include <sys/map.h>
+#include <sys/extent.h>
 #include <sys/mount.h>
 #include <sys/queue.h>
 #include <sys/reboot.h>
 #include <sys/tty.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <dev/cons.h>
+
+#include <dev/scsipi/scsi_all.h>
+#include <dev/scsipi/scsipi_all.h>
+#include <dev/scsipi/scsiconf.h>
 
 #include <machine/autoconf.h>
 #include <machine/vmparam.h>
@@ -125,27 +181,50 @@
 #include <hp300/dev/diovar.h>
 #include <hp300/dev/diodevs.h>
 
+#include <hp300/dev/intioreg.h>
 #include <hp300/dev/dmavar.h>
+#include <hp300/dev/frodoreg.h>
 #include <hp300/dev/grfreg.h>
 #include <hp300/dev/hilreg.h>
 #include <hp300/dev/hilioctl.h>
 #include <hp300/dev/hilvar.h>
 
 #include <hp300/dev/hpibvar.h>
-#include <hp300/dev/scsivar.h>
 
-/* XXX must be allocated statically because of early console init */
-struct	map extiomap[EIOMAPSIZE/16];
+#if NCOM_DIO > 0
+#include <hp300/dev/com_diovar.h>
+#endif
+#if NCOM_FRODO > 0
+#include <hp300/dev/com_frodovar.h>
+#endif
 
-extern	caddr_t internalhpib;
-extern	char *extiobase;
+/* should go away with a cleanup */
+extern int dcmcnattach(bus_space_tag_t, bus_addr_t, int);
+extern int dvboxcnattach(bus_space_tag_t, bus_addr_t, int);
+extern int gboxcnattach(bus_space_tag_t, bus_addr_t, int);
+extern int rboxcnattach(bus_space_tag_t, bus_addr_t, int);
+extern int hypercnattach(bus_space_tag_t, bus_addr_t, int);
+extern int topcatcnattach(bus_space_tag_t, bus_addr_t, int);
+extern int dnkbdcnattach(bus_space_tag_t, bus_addr_t);
 
-/* The boot device. */
-struct	device *booted_device;
-int	booted_partition;
+static int	dio_scan(int (*func)(bus_space_tag_t, bus_addr_t, int));
+static int	dio_scode_probe(int,
+		    int (*func)(bus_space_tag_t, bus_addr_t, int));
+
+extern	void *internalhpib;
 
 /* How we were booted. */
 u_int	bootdev;
+
+/*
+ * Extent map to manage the external I/O (DIO/DIO-II) space.  We
+ * allocate storate for 8 regions in the map.  extio_ex_malloc_safe
+ * will indicate that it's safe to use malloc() to dynamically allocate
+ * region descriptors in case we run out.
+ */
+static long extio_ex_storage[EXTENT_FIXED_STORAGE_SIZE(8) / sizeof(long)];
+struct extent *extio_ex;
+int extio_ex_malloc_safe;
 
 /*
  * This information is built during the autoconfig process.
@@ -188,70 +267,61 @@ struct dev_data {
 	int			dd_punit; /* and punit... */
 };
 typedef LIST_HEAD(, dev_data) ddlist_t;
-ddlist_t	dev_data_list;	  	/* all dev_datas */
-ddlist_t	dev_data_list_hpib;	/* hpib controller dev_datas */
-ddlist_t	dev_data_list_scsi;	/* scsi controller dev_datas */
+static ddlist_t	dev_data_list;	  	/* all dev_datas */
+static ddlist_t	dev_data_list_hpib;	/* hpib controller dev_datas */
+static ddlist_t	dev_data_list_scsi;	/* scsi controller dev_datas */
 
-void	findbootdev __P((void));
-void	findbootdev_slave __P((ddlist_t *, int, int, int));
-void	setbootdev __P((void));
+static void	findbootdev(void);
+static void	findbootdev_slave(ddlist_t *, int, int, int);
+static void	setbootdev(void);
 
-static	struct dev_data *dev_data_lookup __P((struct device *));
-static	void dev_data_insert __P((struct dev_data *, ddlist_t *));
+static struct dev_data *dev_data_lookup(struct device *);
+static void	dev_data_insert(struct dev_data *, ddlist_t *);
 
-int	mainbusmatch __P((struct device *, struct cfdata *, void *));
-void	mainbusattach __P((struct device *, struct device *, void *));
-int	mainbussearch __P((struct device *, struct cfdata *, void *));
+static int	mainbusmatch(device_t, cfdata_t, void *);
+static void	mainbusattach(device_t, device_t, void *);
+static int	mainbussearch(device_t, cfdata_t, const int *, void *);
 
-struct cfattach mainbus_ca = {
-	sizeof(struct device), mainbusmatch, mainbusattach
-};
+CFATTACH_DECL_NEW(mainbus, 0,
+    mainbusmatch, mainbusattach, NULL, NULL);
 
-int
-mainbusmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+mainbusmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	static int mainbus_matched = 0;
 
 	/* Allow only one instance. */
 	if (mainbus_matched)
-		return (0);
+		return 0;
 
 	mainbus_matched = 1;
-	return (1);
+	return 1;
 }
 
-void
-mainbusattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+mainbusattach(device_t parent, device_t self, void *aux)
 {
 
-	printf("\n");
+	aprint_normal("\n");
 
 	/* Search for and attach children. */
-	config_search(mainbussearch, self, NULL);
+	config_search_ia(mainbussearch, self, "mainbus", NULL);
 }
 
-int
-mainbussearch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+static int
+mainbussearch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 
-	if ((*cf->cf_attach->ca_match)(parent, cf, NULL) > 0)
+	if (config_match(parent, cf, NULL) > 0)
 		config_attach(parent, cf, NULL, NULL);
-	return (0);
+	return 0;
 }
 
 /*
  * Determine the device configuration for the running system.
  */
 void
-cpu_configure()
+cpu_configure(void)
 {
 
 	/*
@@ -261,25 +331,14 @@ cpu_configure()
 	LIST_INIT(&dev_data_list_hpib);
 	LIST_INIT(&dev_data_list_scsi);
 
-	/*
-	 * XXX In order for the HIL to configure, interrupts need to be
-	 * XXX enabled.  However, we need to initialize the HIL driver's
-	 * XXX software state prior to that, since a pending interrupt
-	 * XXX might cause the HIL's interrupt handler to be run in an
-	 * XXX uninitialized environment otherwise.
-	 *
-	 * XXX These should be consolidated into some kind of table.
-	 */
-	hilsoftinit(0, HILADDR);
-	(void)spl0();
-	hilinit(0, HILADDR);
-
+	/* Kick off autoconfiguration. */
 	(void)splhigh();
-	if (config_rootfound("mainbus", "mainbus") == NULL)
-		panic("no mainbus found");
-	(void)spl0();
 
-	intr_printlevels();
+	if (config_rootfound("mainbus", NULL) == NULL)
+		panic("no mainbus found");
+
+	/* Configuration is finished, turn on interrupts. */
+	(void)spl0();
 }
 
 /**********************************************************************
@@ -287,9 +346,8 @@ cpu_configure()
  **********************************************************************/
 
 void
-cpu_rootconf()
+cpu_rootconf(void)
 {
-	extern int (*mountroot) __P((void));
 	struct dev_data *dd;
 	struct device *dv;
 	struct vfsops *vops;
@@ -324,9 +382,9 @@ cpu_rootconf()
 	if (rootspec == NULL) {
 		vops = vfs_getopsbyname("nfs");
 		if (vops != NULL && vops->vfs_mountroot == mountroot) {
-			for (dd = dev_data_list.lh_first;
-			    dd != NULL; dd = dd->dd_list.le_next) {
-				if (dd->dd_dev->dv_class == DV_IFNET) {
+			for (dd = LIST_FIRST(&dev_data_list);
+			    dd != NULL; dd = LIST_NEXT(dd, dd_list)) {
+				if (device_class(dd->dd_dev) == DV_IFNET) {
 					/* Got it! */
 					dv = dd->dd_dev;
 					break;
@@ -348,7 +406,7 @@ cpu_rootconf()
 	/*
 	 * If we booted from tape, ask the user.
 	 */
-	if (booted_device != NULL && booted_device->dv_class == DV_TAPE)
+	if (booted_device != NULL && device_class(booted_device) == DV_TAPE)
 		boothowto |= RB_ASKNAME;
 
 	setroot(dv, booted_partition);
@@ -366,9 +424,7 @@ cpu_rootconf()
  * used to attach it.  This is used to find the boot device.
  */
 void
-device_register(dev, aux)
-	struct device *dev;
-	void *aux;
+device_register(struct device *dev, void *aux)
 {
 	struct dev_data *dd;
 	static int seen_netdevice = 0;
@@ -381,11 +437,10 @@ device_register(dev, aux)
 	 * Note that we only really care about devices that
 	 * we can mount as root.
 	 */
-	dd = (struct dev_data *)malloc(sizeof(struct dev_data),
-	    M_DEVBUF, M_NOWAIT);
+
+	dd = malloc(sizeof(struct dev_data), M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (dd == NULL)
 		panic("device_register: can't allocate dev_data");
-	bzero(dd, sizeof(struct dev_data));
 
 	dd->dd_dev = dev;
 
@@ -394,7 +449,7 @@ device_register(dev, aux)
 	 * using the lowest select code network interface,
 	 * so we ignore all but the first.
 	 */
-	if (dev->dv_class == DV_IFNET && seen_netdevice == 0) {
+	if (device_class(dev) == DV_IFNET && seen_netdevice == 0) {
 		struct dio_attach_args *da = aux;
 
 		seen_netdevice = 1;
@@ -402,16 +457,16 @@ device_register(dev, aux)
 		goto linkup;
 	}
 
-	if (bcmp(dev->dv_xname, "fhpib", 5) == 0 ||
-	    bcmp(dev->dv_xname, "nhpib", 5) == 0 ||
-	    bcmp(dev->dv_xname, "oscsi", 5) == 0) {
+	if (device_is_a(dev, "fhpib") ||
+	    device_is_a(dev, "nhpib") ||
+	    device_is_a(dev, "spc")) {
 		struct dio_attach_args *da = aux;
 
 		dd->dd_scode = da->da_scode;
 		goto linkup;
 	}
 
-	if (bcmp(dev->dv_xname, "rd", 2) == 0) {
+	if (device_is_a(dev, "rd")) {
 		struct hpibbus_attach_args *ha = aux;
 
 		dd->dd_slave = ha->ha_slave;
@@ -419,11 +474,11 @@ device_register(dev, aux)
 		goto linkup;
 	}
 
-	if (bcmp(dev->dv_xname, "sd", 2) == 0) {
-		struct oscsi_attach_args *osa = aux;
+	if (device_is_a(dev, "sd")) {
+		struct scsipibus_attach_args *sa = aux;
 
-		dd->dd_slave = osa->osa_target;
-		dd->dd_punit = osa->osa_lun;
+		dd->dd_slave = sa->sa_periph->periph_target;
+		dd->dd_punit = sa->sa_periph->periph_lun;
 		goto linkup;
 	}
 
@@ -436,20 +491,20 @@ device_register(dev, aux)
  linkup:
 	LIST_INSERT_HEAD(&dev_data_list, dd, dd_list);
 
-	if (bcmp(dev->dv_xname, "fhpib", 5) == 0 ||
-	    bcmp(dev->dv_xname, "nhpib", 5) == 0) {
+	if (device_is_a(dev, "fhpib") ||
+	    device_is_a(dev, "nhpib")) {
 		dev_data_insert(dd, &dev_data_list_hpib);
 		return;
 	}
 
-	if (bcmp(dev->dv_xname, "oscsi", 5) == 0) {
+	if (device_is_a(dev, "spc")) {
 		dev_data_insert(dd, &dev_data_list_scsi);
 		return;
 	}
 }
 
-void
-findbootdev()
+static void
+findbootdev(void)
 {
 	int type, ctlr, slave, punit, part;
 	int scsiboot, hpibboot, netboot;
@@ -481,9 +536,9 @@ findbootdev()
 	 * always starts at scode 0 and works its way up.
 	 */
 	if (netboot) {
-		for (dd = dev_data_list.lh_first; dd != NULL;
-		    dd = dd->dd_list.le_next) {
-			if (dd->dd_dev->dv_class == DV_IFNET) {
+		for (dd = LIST_FIRST(&dev_data_list); dd != NULL;
+		    dd = LIST_NEXT(dd, dd_list)) {
+			if (device_class(dd->dd_dev) == DV_IFNET) {
 				/*
 				 * Found it!
 				 */
@@ -506,8 +561,8 @@ findbootdev()
 		/*
 		 * Sanity check.
 		 */
-		if ((type == 0 && bcmp(booted_device->dv_xname, "ct", 2)) ||
-		    (type == 2 && bcmp(booted_device->dv_xname, "rd", 2))) {
+		if ((type == 0 && !device_is_a(booted_device, "ct")) ||
+		    (type == 2 && !device_is_a(booted_device, "rd"))) {
 			printf("WARNING: boot device/type mismatch!\n");
 			printf("device = %s, type = %d\n",
 			    booted_device->dv_xname, type);
@@ -522,17 +577,17 @@ findbootdev()
 	if (scsiboot) {
 		findbootdev_slave(&dev_data_list_scsi, ctlr,
 		     slave, punit);
-		if (booted_device == NULL)  
-			return; 
+		if (booted_device == NULL)
+			return;
 
 		/*
 		 * Sanity check.
 		 */
-		if ((type == 4 && bcmp(booted_device->dv_xname, "sd", 2))) {
+		if ((type == 4 && !device_is_a(booted_device, "sd"))) {
 			printf("WARNING: boot device/type mismatch!\n");
 			printf("device = %s, type = %d\n",
 			    booted_device->dv_xname, type);
-			booted_device = NULL; 
+			booted_device = NULL;
 		}
 		goto out;
 	}
@@ -545,18 +600,16 @@ findbootdev()
 		booted_partition = part;
 }
 
-void
-findbootdev_slave(ddlist, ctlr, slave, punit)
-	ddlist_t *ddlist;
-	int ctlr, slave, punit;
+static void
+findbootdev_slave(ddlist_t *ddlist, int ctlr, int slave, int punit)
 {
 	struct dev_data *cdd, *dd;
 
 	/*
 	 * Find the booted controller.
 	 */
-	for (cdd = ddlist->lh_first; ctlr != 0 && cdd != NULL;
-	    cdd = cdd->dd_clist.le_next)
+	for (cdd = LIST_FIRST(ddlist); ctlr != 0 && cdd != NULL;
+	    cdd = LIST_NEXT(cdd, dd_clist))
 		ctlr--;
 	if (cdd == NULL) {
 		/*
@@ -569,26 +622,14 @@ findbootdev_slave(ddlist, ctlr, slave, punit)
 	 * Now find the device with the right slave/punit
 	 * that's a child of the controller.
 	 */
-	for (dd = dev_data_list.lh_first; dd != NULL;
-	    dd = dd->dd_list.le_next) {
+	for (dd = LIST_FIRST(&dev_data_list); dd != NULL;
+	    dd = LIST_NEXT(dd, dd_list)) {
 		/*
-		 * XXX We don't yet have the extra bus indirection
-		 * XXX for SCSI, so we have to do a little bit of
-		 * XXX extra work.
+		 * "sd" -> "scsibus" -> "spc"
+		 * "rd" -> "hpibbus" -> "fhpib"
 		 */
-		if (bcmp(dd->dd_dev->dv_xname, "sd", 2) == 0) {
-			/*
-			 * "sd" -> "oscsi"
-			 */
-			if (dd->dd_dev->dv_parent != cdd->dd_dev)
-				continue;
-		} else {
-			/*
-			 * "rd" -> "hpibbus" -> "fhpib"
-			 */
-			if (dd->dd_dev->dv_parent->dv_parent != cdd->dd_dev)
-				continue;
-		}
+		if (device_parent(device_parent(dd->dd_dev)) != cdd->dd_dev)
+			continue;
 
 		if (dd->dd_slave == slave &&
 		    dd->dd_punit == punit) {
@@ -601,8 +642,8 @@ findbootdev_slave(ddlist, ctlr, slave, punit)
 	}
 }
 
-void
-setbootdev()
+static void
+setbootdev(void)
 {
 	struct dev_data *cdd, *dd;
 	int type, ctlr;
@@ -626,13 +667,11 @@ setbootdev()
 	 */
 	bootdev = 0;
 
-	dd = dev_data_lookup(root_device);
-
 	/*
 	 * If the root device is network, we're done
 	 * early.
 	 */
-	if (root_device->dv_class == DV_IFNET) {
+	if (device_class(root_device) == DV_IFNET) {
 		bootdev = MAKEBOOTDEV(6, 0, 0, 0, 0);
 		goto out;
 	}
@@ -640,44 +679,33 @@ setbootdev()
 	/*
 	 * Determine device type.
 	 */
-	if (bcmp(root_device->dv_xname, "rd", 2) == 0)
+	if (device_is_a(root_device, "rd"))
 		type = 2;
-	else if (bcmp(root_device->dv_xname, "sd", 2) == 0)
+	else if (device_is_a(root_device, "sd"))
 		type = 4;
+	else if (device_is_a(root_device, "md"))
+		goto out;
 	else {
 		printf("WARNING: strange root device!\n");
 		goto out;
 	}
 
+	dd = dev_data_lookup(root_device);
+
 	/*
 	 * Get parent's info.
 	 */
 	switch (type) {
-	case 2:
+	case 2: /* rd */
+	case 4: /* sd */
 		/*
 		 * "rd" -> "hpibbus" -> "fhpib"
+		 * "sd" -> "scsibus" -> "spc"
 		 */
-		for (cdd = dev_data_list_hpib.lh_first, ctlr = 0;
-		    cdd != NULL; cdd = cdd->dd_clist.le_next, ctlr++) {
-			if (cdd->dd_dev == root_device->dv_parent->dv_parent) {
-				/*
-				 * Found it!
-				 */
-				bootdev = MAKEBOOTDEV(type,
-				    ctlr, dd->dd_slave, dd->dd_punit,
-				    DISKPART(rootdev));
-				break;
-			}
-		}
-		break;
-
-	case 4:
-		/*
-		 * "sd" -> "oscsi"
-		 */
-		for (cdd = dev_data_list_scsi.lh_first, ctlr = 0;
-		    cdd != NULL; cdd = cdd->dd_clist.le_next, ctlr++) { 
-			if (cdd->dd_dev == root_device->dv_parent) {
+		for (cdd = LIST_FIRST(&dev_data_list_hpib), ctlr = 0;
+		    cdd != NULL; cdd = LIST_NEXT(cdd, dd_clist), ctlr++) {
+			if (cdd->dd_dev ==
+			    device_parent(device_parent(root_device))) {
 				/*
 				 * Found it!
 				 */
@@ -692,9 +720,9 @@ setbootdev()
 
  out:
 	/* Don't need this anymore. */
-	for (dd = dev_data_list.lh_first; dd != NULL; ) {
+	for (dd = LIST_FIRST(&dev_data_list); dd != NULL; ) {
 		cdd = dd;
-		dd = dd->dd_list.le_next;
+		dd = LIST_NEXT(dd, dd_list);
 		free(cdd, M_DEVBUF);
 	}
 }
@@ -703,14 +731,14 @@ setbootdev()
  * Return the dev_data corresponding to the given device.
  */
 static struct dev_data *
-dev_data_lookup(dev)
-	struct device *dev;
+dev_data_lookup(struct device *dev)
 {
 	struct dev_data *dd;
 
-	for (dd = dev_data_list.lh_first; dd != NULL; dd = dd->dd_list.le_next)
+	for (dd = LIST_FIRST(&dev_data_list); dd != NULL;
+	    dd = LIST_NEXT(dd, dd_list))
 		if (dd->dd_dev == dev)
-			return (dd);
+			return dd;
 
 	panic("dev_data_lookup");
 }
@@ -719,9 +747,7 @@ dev_data_lookup(dev)
  * Insert a dev_data into the provided list, sorted by select code.
  */
 static void
-dev_data_insert(dd, ddlist)
-	struct dev_data *dd;
-	ddlist_t *ddlist;
+dev_data_insert(struct dev_data *dd, ddlist_t *ddlist)
 {
 	struct dev_data *de;
 
@@ -732,7 +758,7 @@ dev_data_insert(dd, ddlist)
 	}
 #endif
 
-	de = ddlist->lh_first;
+	de = LIST_FIRST(ddlist);
 
 	/*
 	 * Just insert at head if list is empty.
@@ -747,7 +773,7 @@ dev_data_insert(dd, ddlist)
 	 * is greater than ours.  When we find it, insert ourselves
 	 * into the list before it.
 	 */
-	for (; de->dd_clist.le_next != NULL; de = de->dd_clist.le_next) {
+	for (; LIST_NEXT(de, dd_clist) != NULL; de = LIST_NEXT(de, dd_clist)) {
 		if (de->dd_scode > dd->dd_scode) {
 			LIST_INSERT_BEFORE(de, dd, dd_clist);
 			return;
@@ -765,153 +791,196 @@ dev_data_insert(dd, ddlist)
  * Code to find and initialize the console
  **********************************************************************/
 
-/*
- * Scan all select codes, passing the corresponding VA to (*func)().
- * (*func)() is a driver-specific routine that looks for the console
- * hardware.
- */
 void
-console_scan(func, arg)
-	int (*func) __P((int, caddr_t, void *));
-	void *arg;
+hp300_cninit(void)
 {
-	int size, scode, sctop;
-	caddr_t pa, va;
+	struct bus_space_tag tag;
+	bus_space_tag_t bst;
+
+	bst = &tag;
+	memset(bst, 0, sizeof(struct bus_space_tag));
+	bst->bustype = HP300_BUS_SPACE_INTIO;
 
 	/*
-	 * Scan all select codes.  Check each location for some
-	 * hardware.  If there's something there, call (*func)().
+	 * Look for serial consoles first.
 	 */
+#if NCOM_FRODO > 0
+	if (!com_frodo_cnattach(bst, FRODO_BASE + FRODO_APCI_OFFSET(1), -1))
+		return;
+#endif
+#if NCOM_DIO > 0
+	if (!dio_scan(com_dio_cnattach))
+		return;
+#endif
+#if NDCM > 0
+	if (!dio_scan(dcmcnattach))
+		return;
+#endif
+
+#if NITE > 0
+#ifndef CONSCODE
+	/*
+	 * Look for internal framebuffers.
+	 */
+#if NDVBOX > 0
+	if (!dvboxcnattach(bst, FB_BASE,-1))
+		goto find_kbd;
+#endif
+#if NGBOX > 0
+	if (!gboxcnattach(bst, FB_BASE,-1))
+		goto find_kbd;
+#endif
+#if NRBOX > 0
+	if (!rboxcnattach(bst, FB_BASE,-1))
+		goto find_kbd;
+#endif
+#if NTOPCAT > 0
+	if (!topcatcnattach(bst, FB_BASE,-1))
+		goto find_kbd;
+#endif
+#endif	/* CONSCODE */
+
+	/*
+	 * Look for external framebuffers.
+	 */
+#if NDVBOX > 0
+	if (!dio_scan(dvboxcnattach))
+		goto find_kbd;
+#endif
+#if NGBOX > 0
+	if (!dio_scan(gboxcnattach))
+		goto find_kbd;
+#endif
+#if NHYPER > 0
+	if (!dio_scan(hypercnattach))
+		goto find_kbd;
+#endif
+#if NRBOX > 0
+	if (!dio_scan(rboxcnattach))
+		goto find_kbd;
+#endif
+#if NTOPCAT > 0
+	if (!dio_scan(topcatcnattach))
+		goto find_kbd;
+#endif
+
+find_kbd:
+
+#if NDNKBD > 0
+	dnkbdcnattach(bst, FRODO_BASE + FRODO_APCI_OFFSET(0))
+#endif
+
+#if NHIL > 0
+	hilkbdcnattach(bst, HIL_BASE);
+#endif
+#endif	/* NITE */
+}
+
+static int
+dio_scan(int (*func)(bus_space_tag_t, bus_addr_t, int))
+{
+#ifndef CONSCODE
+	int scode, sctop;
+
 	sctop = DIO_SCMAX(machineid);
 	for (scode = 0; scode < sctop; ++scode) {
-		/*
-		 * Abort mission if console has been forced.
-		 */
-		if (conforced)
-			return;
-
-		/*
-		 * Skip over the select code hole and
-		 * the internal HP-IB controller.
-		 */
-		if (((scode >= 32) && (scode < 132)) ||
-		    ((scode == 7) && internalhpib))
+		if (DIO_INHOLE(scode) || ((scode == 7) && internalhpib))
 			continue;
-
-		/* Map current PA. */
-		pa = dio_scodetopa(scode);
-		va = iomap(pa, NBPG);
-		if (va == 0)
-			continue;
-
-		/* Check to see if hardware exists. */
-		if (badaddr(va)) {
-			iounmap(va, NBPG);
-			continue;
-		}
-
-		/*
-		 * Hardware present, call callback.  Driver returns
-		 * size of region to map if console probe successful
-		 * and worthwhile.
-		 */
-		size = (*func)(scode, va, arg);
-		iounmap(va, NBPG);
-		if (size) {
-			/* Free last mapping. */
-			if (convasize)
-				iounmap(conaddr, convasize);
-			convasize = 0;
-
-			/* Remap to correct size. */
-			va = iomap(pa, size);
-			if (va == 0)
-				continue;
-
-			/* Save this state for next time. */
-			conscode = scode;
-			conaddr = va;
-			convasize = size;
-		}
+		if (!dio_scode_probe(scode, func))
+			return 0;
 	}
+#else
+		if (!dio_scode_probe(CONSCODE, func))
+			return 0;
+#endif
+
+	return 1;
 }
 
-/*
- * Special version of cninit().  Actually, crippled somewhat.
- * This version lets the drivers assign cn_tab.
- */
-void
-hp300_cninit()
+static int
+dio_scode_probe(int scode, int (*func)(bus_space_tag_t, bus_addr_t, int))
 {
-	struct consdev *cp;
-	extern struct consdev constab[];
+	struct bus_space_tag tag;
+	bus_space_tag_t bst;
+	void *pa, *va;
 
-	cn_tab = NULL;
+	bst = &tag;
+	memset(bst, 0, sizeof(struct bus_space_tag));
+	bst->bustype = HP300_BUS_SPACE_DIO;
+	pa = dio_scodetopa(scode);
+	va = iomap(pa, PAGE_SIZE);
+	if (va == 0)
+		return 1;
+	if (badaddr(va)) {
+		iounmap(va, PAGE_SIZE);
+		return 1;
+	}
+	iounmap(va, PAGE_SIZE);
 
-	/*
-	 * Call all of the console probe functions.
-	 */
-	for (cp = constab; cp->cn_probe; cp++)
-		(*cp->cn_probe)(cp);
-
-	/*
-	 * No console, we can handle it.
-	 */
-	if (cn_tab == NULL)
-		return;
-
-	/*
-	 * Turn on the console.
-	 */
-	(*cn_tab->cn_init)(cn_tab);
+	return (*func)(bst, (bus_addr_t)pa, scode);
 }
+
 
 /**********************************************************************
  * Mapping functions
  **********************************************************************/
 
 /*
+ * Initialize the external I/O extent map.
+ */
+void
+iomap_init(void)
+{
+
+	/* extiobase is initialized by pmap_bootstrap(). */
+	extio_ex = extent_create("extio", (u_long) extiobase,
+	    (u_long) extiobase + (ptoa(EIOMAPSIZE) - 1), M_DEVBUF,
+	    (void *) extio_ex_storage, sizeof(extio_ex_storage),
+	    EX_NOCOALESCE|EX_NOWAIT);
+}
+
+/*
  * Allocate/deallocate a cache-inhibited range of kernel virtual address
  * space mapping the indicated physical address range [pa - pa+size)
  */
-caddr_t
-iomap(pa, size)
-	caddr_t pa;
-	int size;
+void *
+iomap(void *pa, int size)
 {
-	int ix, npf;
-	caddr_t kva;
+	u_long kva;
+	int error;
 
 #ifdef DEBUG
 	if (((int)pa & PGOFSET) || (size & PGOFSET))
 		panic("iomap: unaligned");
 #endif
-	npf = btoc(size);
-	ix = rmalloc(extiomap, npf);
-	if (ix == 0)
-		return(0);
-	kva = extiobase + ctob(ix-1);
-	physaccess(kva, pa, size, PG_RW|PG_CI);
-	return(kva);
+
+	error = extent_alloc(extio_ex, size, PAGE_SIZE, 0,
+	    EX_FAST | EX_NOWAIT | (extio_ex_malloc_safe ? EX_MALLOCOK : 0),
+	    &kva);
+	if (error)
+		return 0;
+
+	physaccess((void *) kva, pa, size, PG_RW|PG_CI);
+	return (void *)kva;
 }
 
 /*
  * Unmap a previously mapped device.
  */
 void
-iounmap(kva, size)
-	caddr_t kva;
-	int size;
+iounmap(void *kva, int size)
 {
-	int ix;
 
 #ifdef DEBUG
-	if (((int)kva & PGOFSET) || (size & PGOFSET))
+	if (((vaddr_t)kva & PGOFSET) || (size & PGOFSET))
 		panic("iounmap: unaligned");
-	if (kva < extiobase || kva >= extiobase + ctob(EIOMAPSIZE))
+	if ((uint8_t *)kva < extiobase ||
+	    (uint8_t *)kva >= extiobase + ptoa(EIOMAPSIZE))
 		panic("iounmap: bad address");
 #endif
 	physunaccess(kva, size);
-	ix = btoc(kva - extiobase) + 1;
-	rmfree(extiomap, btoc(size), ix);
+	if (extent_free(extio_ex, (vaddr_t)kva, size,
+	    EX_NOWAIT | (extio_ex_malloc_safe ? EX_MALLOCOK : 0)))
+		printf("iounmap: kva %p size 0x%x: can't free region\n",
+		    kva, size);
 }

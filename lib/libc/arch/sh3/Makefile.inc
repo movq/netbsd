@@ -1,8 +1,6 @@
-#	$NetBSD: Makefile.inc,v 1.1 2000/01/05 14:07:29 msaitoh Exp $
+#	$NetBSD: Makefile.inc,v 1.6 2006/06/17 18:04:23 uwe Exp $
 
-KMINCLUDES=	arch/sh3/SYS.h
-CPPFLAGS+=      -DSOFTFLOAT
+SRCS+=	__sigaction14_sigtramp.c __sigtramp2.S
 
-.include <fplib/Makefile.inc>
-#KMSRCS=	bcmp.S bzero.S ffs.S strcat.S strcmp.S strcpy.S strlen.S \
-#	htonl.S htons.S ntohl.S ntohs.S
+CPPFLAGS+=      -DSOFTFLOAT # -DSOFTFLOAT_NEED_FIXUNS
+.include <softfloat/Makefile.inc>

@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.h,v 1.5 1997/07/09 14:31:14 leo Exp $	*/
+/*	$NetBSD: installboot.h,v 1.8.88.1 2009/01/16 22:57:33 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens
@@ -31,6 +31,8 @@
  */
 
 #define	PATH_MDEC	"/usr/mdec/"
+#define	PATH_STD	"std/"
+#define	PATH_MILAN	"milan/"
 #define	PATH_NVRAM	"/dev/nvram"
 #define	NVRAM_BOOTPREF	1
 #define	BOOTPREF_NETBSD	0x20
@@ -41,7 +43,7 @@
 /*
  * Should match 'bootversion' in locore.s to make installboot work.
  */
-#define	BOOTVERSION	0x02
+#define	BOOTVERSION	0x03
 
 u_int	dkcksum __P((struct disklabel *));
-daddr_t	readdisklabel __P((char *, struct disklabel *));
+u_int32_t readdisklabel __P((char *, struct disklabel *));

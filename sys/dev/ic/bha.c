@@ -1,4 +1,4 @@
-/*	$NetBSD: bha.c,v 1.36 2000/03/30 12:45:30 augustss Exp $	*/
+/*	$NetBSD: bha.c,v 1.71 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -52,9 +45,11 @@
  * functioning of this software in any circumstances.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: bha.c,v 1.71 2008/04/28 20:23:49 martin Exp $");
+
 #include "opt_ddb.h"
 
-#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
@@ -67,10 +62,10 @@
 #include <sys/proc.h>
 #include <sys/user.h>
 
-#include <vm/vm.h>			/* for PAGE_SIZE */
+#include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -89,38 +84,34 @@
 int     bha_debug = 0;
 #endif /* BHADEBUG */
 
-int	bha_cmd __P((bus_space_tag_t, bus_space_handle_t, struct bha_softc *,
-	    int, u_char *, int, u_char *));
+static int	bha_cmd(bus_space_tag_t, bus_space_handle_t, const char *, int,
+			u_char *, int, u_char *);
 
-int	bha_scsi_cmd __P((struct scsipi_xfer *));
-void	bha_minphys __P((struct buf *));
+static void	bha_scsipi_request(struct scsipi_channel *,
+				   scsipi_adapter_req_t, void *);
+static void	bha_minphys(struct buf *);
 
-void	bha_done __P((struct bha_softc *, struct bha_ccb *));
-int	bha_poll __P((struct bha_softc *, struct scsipi_xfer *, int));
-void	bha_timeout __P((void *arg));
+static void	bha_get_xfer_mode(struct bha_softc *,
+				  struct scsipi_xfer_mode *);
 
-int	bha_init __P((struct bha_softc *));
+static void	bha_done(struct bha_softc *, struct bha_ccb *);
+static int	bha_poll(struct bha_softc *, struct scsipi_xfer *, int);
+static void	bha_timeout(void *arg);
 
-int	bha_create_mailbox __P((struct bha_softc *));
-void	bha_collect_mbo __P((struct bha_softc *));
+static int	bha_init(struct bha_softc *);
 
-void	bha_queue_ccb __P((struct bha_softc *, struct bha_ccb *));
-void	bha_start_ccbs __P((struct bha_softc *));
-void	bha_finish_ccbs __P((struct bha_softc *));
+static int	bha_create_mailbox(struct bha_softc *);
+static void	bha_collect_mbo(struct bha_softc *);
 
-struct bha_ccb *bha_ccb_phys_kv __P((struct bha_softc *, bus_addr_t));
-void	bha_create_ccbs __P((struct bha_softc *, int));
-int	bha_init_ccb __P((struct bha_softc *, struct bha_ccb *));
-struct bha_ccb *bha_get_ccb __P((struct bha_softc *, int));
-void	bha_free_ccb __P((struct bha_softc *, struct bha_ccb *));
+static void	bha_queue_ccb(struct bha_softc *, struct bha_ccb *);
+static void	bha_start_ccbs(struct bha_softc *);
+static void	bha_finish_ccbs(struct bha_softc *);
 
-/* the below structure is so we have a default dev struct for out link struct */
-struct scsipi_device bha_dev = {
-	NULL,			/* Use default error handler */
-	NULL,			/* have a queue, served by this */
-	NULL,			/* have no async handler */
-	NULL,			/* Use default 'done' routine */
-};
+static struct bha_ccb *bha_ccb_phys_kv(struct bha_softc *, bus_addr_t);
+static void	bha_create_ccbs(struct bha_softc *, int);
+static int	bha_init_ccb(struct bha_softc *, struct bha_ccb *);
+static struct bha_ccb *bha_get_ccb(struct bha_softc *);
+static void	bha_free_ccb(struct bha_softc *, struct bha_ccb *);
 
 #define BHA_RESET_TIMEOUT	2000	/* time to wait for reset (mSec) */
 #define	BHA_ABORT_TIMEOUT	2000	/* time to wait for abort (mSec) */
@@ -128,17 +119,10 @@ struct scsipi_device bha_dev = {
 /*
  * Number of CCBs in an allocation group; must be computed at run-time.
  */
-int	bha_ccbs_per_group;
+static int	bha_ccbs_per_group;
 
-__inline struct bha_mbx_out *bha_nextmbo __P((struct bha_softc *,
-	struct bha_mbx_out *));
-__inline struct bha_mbx_in *bha_nextmbi __P((struct bha_softc *,
-	struct bha_mbx_in *));
-
-__inline struct bha_mbx_out *
-bha_nextmbo(sc, mbo)
-	struct bha_softc *sc;
-	struct bha_mbx_out *mbo;
+static inline struct bha_mbx_out *
+bha_nextmbo(struct bha_softc *sc, struct bha_mbx_out *mbo)
 {
 
 	if (mbo == &sc->sc_mbo[sc->sc_mbox_count - 1])
@@ -146,12 +130,9 @@ bha_nextmbo(sc, mbo)
 	return (mbo + 1);
 }
 
-__inline struct bha_mbx_in *
-bha_nextmbi(sc, mbi)
-	struct bha_softc *sc;
-	struct bha_mbx_in *mbi;
+static inline struct bha_mbx_in *
+bha_nextmbi(struct bha_softc *sc, struct bha_mbx_in *mbi)
 {
-
 	if (mbi == &sc->sc_mbi[sc->sc_mbox_count - 1])
 		return (&sc->sc_mbi[0]);
 	return (mbi + 1);
@@ -163,10 +144,10 @@ bha_nextmbi(sc, mbi)
  *	Finish attaching a Buslogic controller, and configure children.
  */
 void
-bha_attach(sc, bpd)
-	struct bha_softc *sc;
-	struct bha_probe_data *bpd;
+bha_attach(struct bha_softc *sc)
 {
+	struct scsipi_adapter *adapt = &sc->sc_adapter;
+	struct scsipi_channel *chan = &sc->sc_channel;
 	int initial_ccbs;
 
 	/*
@@ -177,51 +158,52 @@ bha_attach(sc, bpd)
 
 	initial_ccbs = bha_info(sc);
 	if (initial_ccbs == 0) {
-		printf("%s: unable to get adapter info\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to get adapter info\n");
 		return;
 	}
 
 	/*
-	 * Fill in the adapter.
+	 * Fill in the scsipi_adapter.
 	 */
-	sc->sc_adapter.scsipi_cmd = bha_scsi_cmd;
-	sc->sc_adapter.scsipi_minphys = bha_minphys;
+	memset(adapt, 0, sizeof(*adapt));
+	adapt->adapt_dev = &sc->sc_dev;
+	adapt->adapt_nchannels = 1;
+	/* adapt_openings initialized below */
+	adapt->adapt_max_periph = sc->sc_mbox_count;
+	adapt->adapt_request = bha_scsipi_request;
+	adapt->adapt_minphys = bha_minphys;
 
 	/*
-	 * fill in the prototype scsipi_link.
+	 * Fill in the scsipi_channel.
 	 */
-	sc->sc_link.scsipi_scsi.channel = SCSI_CHANNEL_ONLY_ONE;
-	sc->sc_link.adapter_softc = sc;
-	sc->sc_link.scsipi_scsi.adapter_target = sc->sc_scsi_id;
-	sc->sc_link.adapter = &sc->sc_adapter;
-	sc->sc_link.device = &bha_dev;
-	sc->sc_link.openings = 4;
-	sc->sc_link.scsipi_scsi.max_target =
-	    (sc->sc_flags & BHAF_WIDE) ? 15 : 7;
-	sc->sc_link.scsipi_scsi.max_lun =
-	    (sc->sc_flags & BHAF_WIDE_LUN) ? 31 : 7;
-	sc->sc_link.type = BUS_SCSI;
+	memset(chan, 0, sizeof(*chan));
+	chan->chan_adapter = adapt;
+	chan->chan_bustype = &scsi_bustype;
+	chan->chan_channel = 0;
+	chan->chan_flags = SCSIPI_CHAN_CANGROW;
+	chan->chan_ntargets = (sc->sc_flags & BHAF_WIDE) ? 16 : 8;
+	chan->chan_nluns = (sc->sc_flags & BHAF_WIDE_LUN) ? 32 : 8;
+	chan->chan_id = sc->sc_scsi_id;
 
 	TAILQ_INIT(&sc->sc_free_ccb);
 	TAILQ_INIT(&sc->sc_waiting_ccb);
 	TAILQ_INIT(&sc->sc_allocating_ccbs);
-	TAILQ_INIT(&sc->sc_queue);
 
 	if (bha_create_mailbox(sc) != 0)
 		return;
 
 	bha_create_ccbs(sc, initial_ccbs);
 	if (sc->sc_cur_ccbs < 2) {
-		printf("%s: not enough CCBs to run\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "not enough CCBs to run\n");
 		return;
 	}
+
+	adapt->adapt_openings = sc->sc_cur_ccbs;
 
 	if (bha_init(sc) != 0)
 		return;
 
-	(void) config_found(&sc->sc_dev, &sc->sc_link, scsiprint);
+	(void) config_found(&sc->sc_dev, &sc->sc_channel, scsiprint);
 }
 
 /*
@@ -230,8 +212,7 @@ bha_attach(sc, bpd)
  *	Interrupt service routine.
  */
 int
-bha_intr(arg)
-	void *arg;
+bha_intr(void *arg)
 {
 	struct bha_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -239,11 +220,11 @@ bha_intr(arg)
 	u_char sts;
 
 #ifdef BHADEBUG
-	printf("%s: bha_intr ", sc->sc_dev.dv_xname);
+	printf("%s: bha_intr ", device_xname(&sc->sc_dev));
 #endif /* BHADEBUG */
 
 	/*
-	 * First acknowlege the interrupt, Then if it's not telling about
+	 * First acknowledge the interrupt, Then if it's not telling about
 	 * a completed operation just return.
 	 */
 	sts = bus_space_read_1(iot, ioh, BHA_INTR_PORT);
@@ -262,7 +243,7 @@ bha_intr(arg)
 
 		toggle.cmd.opcode = BHA_MBO_INTR_EN;
 		toggle.cmd.enable = 0;
-		bha_cmd(iot, ioh, sc,
+		bha_cmd(iot, ioh, device_xname(&sc->sc_dev),
 		    sizeof(toggle.cmd), (u_char *)&toggle.cmd,
 		    0, (u_char *)0);
 		bha_start_ccbs(sc);
@@ -280,208 +261,196 @@ bha_intr(arg)
  *****************************************************************************/
 
 /*
- * bha_scsi_cmd:
+ * bha_scsipi_request:
  *
- *	Start a SCSI operation.
+ *	Perform a request for the SCSIPI layer.
  */
-int
-bha_scsi_cmd(xs)
-	struct scsipi_xfer *xs;
+static void
+bha_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
+    void *arg)
 {
-	struct scsipi_link *sc_link = xs->sc_link;
-	struct bha_softc *sc = sc_link->adapter_softc;
+	struct scsipi_adapter *adapt = chan->chan_adapter;
+	struct bha_softc *sc = (void *)adapt->adapt_dev;
+	struct scsipi_xfer *xs;
+	struct scsipi_periph *periph;
 	bus_dma_tag_t dmat = sc->sc_dmat;
 	struct bha_ccb *ccb;
 	int error, seg, flags, s;
-	int fromqueue = 0, dontqueue = 0, nowait = 0;
 
-	SC_DEBUG(sc_link, SDEV_DB2, ("bha_scsi_cmd\n"));
+	switch (req) {
+	case ADAPTER_REQ_RUN_XFER:
+		xs = arg;
+		periph = xs->xs_periph;
+		flags = xs->xs_control;
 
-	s = splbio();		/* protect the queue */
+		SC_DEBUG(periph, SCSIPI_DB2, ("bha_scsipi_request\n"));
 
-	/*
-	 * If we're running the queue from bha_done(), we've been
-	 * called with the first queue entry as our argument.
-	 */
-	if (xs == TAILQ_FIRST(&sc->sc_queue)) {
-		TAILQ_REMOVE(&sc->sc_queue, xs, adapter_q);
-		fromqueue = 1;
-		nowait = 1;
-		goto get_ccb;
-	}
-
-	/* Polled requests can't be queued for later. */
-	dontqueue = xs->xs_control & XS_CTL_POLL;
-
-	/*
-	 * If there are jobs in the queue, run them first.
-	 */
-	if (TAILQ_FIRST(&sc->sc_queue) != NULL) {
+		/* Get a CCB to use. */
+		ccb = bha_get_ccb(sc);
+#ifdef DIAGNOSTIC
 		/*
-		 * If we can't queue, we have to abort, since
-		 * we have to preserve order.
+		 * This should never happen as we track the resources
+		 * in the mid-layer.
 		 */
-		if (dontqueue) {
-			splx(s);
-			xs->error = XS_DRIVER_STUFFUP;
-			return (TRY_AGAIN_LATER);
+		if (ccb == NULL) {
+			scsipi_printaddr(periph);
+			printf("unable to allocate ccb\n");
+			panic("bha_scsipi_request");
 		}
+#endif
+
+		ccb->xs = xs;
+		ccb->timeout = xs->timeout;
 
 		/*
-		 * Swap with the first queue entry.
+		 * Put all the arguments for the xfer in the ccb
 		 */
-		TAILQ_INSERT_TAIL(&sc->sc_queue, xs, adapter_q);
-		xs = TAILQ_FIRST(&sc->sc_queue);
-		TAILQ_REMOVE(&sc->sc_queue, xs, adapter_q);
-		fromqueue = 1;
-	}
-
- get_ccb:
-	/*
-	 * get a ccb to use. If the transfer
-	 * is from a buf (possibly from interrupt time)
-	 * then we can't allow it to sleep
-	 */
-	flags = xs->xs_control;
-	if (nowait)
-		flags |= XS_CTL_NOSLEEP;
-	if ((ccb = bha_get_ccb(sc, flags)) == NULL) {
-		/*
-		 * If we can't queue, we lose.
-		 */
-		if (dontqueue) {
-			splx(s);
-			xs->error = XS_DRIVER_STUFFUP;
-			return (TRY_AGAIN_LATER);
-		}
-
-		/*
-		 * Stuff ourselves into the queue, in front
-		 * if we came off in the first place.
-		 */
-		if (fromqueue)
-			TAILQ_INSERT_HEAD(&sc->sc_queue, xs, adapter_q);
-		else
-			TAILQ_INSERT_TAIL(&sc->sc_queue, xs, adapter_q);
-		splx(s);
-		return (SUCCESSFULLY_QUEUED);
-	}
-
-	splx(s);		/* done playing with the queue */
-
-	ccb->xs = xs;
-	ccb->timeout = xs->timeout;
-
-	/*
-	 * Put all the arguments for the xfer in the ccb
-	 */
-	if (flags & XS_CTL_RESET) {
-		ccb->opcode = BHA_RESET_CCB;
-		ccb->scsi_cmd_length = 0;
-	} else {
-		/* can't use S/G if zero length */
-		ccb->opcode = (xs->datalen ? BHA_INIT_SCAT_GATH_CCB
-					   : BHA_INITIATOR_CCB);
-		bcopy(xs->cmd, &ccb->scsi_cmd,
-		    ccb->scsi_cmd_length = xs->cmdlen);
-	}
-
-	if (xs->datalen) {
-		/*
-		 * Map the DMA transfer.
-		 */
-#ifdef TFS
-		if (flags & XS_CTL_DATA_UIO) {
-			error = bus_dmamap_load_uio(dmat,
-			    ccb->dmamap_xfer, (struct uio *)xs->data,
-			    (flags & XS_CTL_NOSLEEP) ? BUS_DMA_NOWAIT :
-			    BUS_DMA_WAITOK);
-		} else
-#endif /* TFS */
-		{
-			error = bus_dmamap_load(dmat,
-			    ccb->dmamap_xfer, xs->data, xs->datalen, NULL,
-			    (flags & XS_CTL_NOSLEEP) ? BUS_DMA_NOWAIT :
-			    BUS_DMA_WAITOK);
-		}
-
-		if (error) {
-			if (error == EFBIG) {
-				printf("%s: bha_scsi_cmd, more than %d"
-				    " dma segments\n",
-				    sc->sc_dev.dv_xname, BHA_NSEG);
-			} else {
-				printf("%s: bha_scsi_cmd, error %d loading"
-				    " dma map\n",
-				    sc->sc_dev.dv_xname, error);
+		if (flags & XS_CTL_RESET) {
+			ccb->opcode = BHA_RESET_CCB;
+			ccb->scsi_cmd_length = 0;
+		} else {
+			/* can't use S/G if zero length */
+			if (xs->cmdlen > sizeof(ccb->scsi_cmd)) {
+				printf("%s: cmdlen %d too large for CCB\n",
+				    device_xname(&sc->sc_dev), xs->cmdlen);
+				xs->error = XS_DRIVER_STUFFUP;
+				goto out_bad;
 			}
-			goto bad;
+			ccb->opcode = (xs->datalen ? BHA_INIT_SCAT_GATH_CCB
+						   : BHA_INITIATOR_CCB);
+			memcpy(&ccb->scsi_cmd, xs->cmd,
+			    ccb->scsi_cmd_length = xs->cmdlen);
 		}
 
-		bus_dmamap_sync(dmat, ccb->dmamap_xfer, 0,
-		    ccb->dmamap_xfer->dm_mapsize,
-		    (flags & XS_CTL_DATA_IN) ? BUS_DMASYNC_PREREAD :
-		    BUS_DMASYNC_PREWRITE);
+		if (xs->datalen) {
+			/*
+			 * Map the DMA transfer.
+			 */
+#ifdef TFS
+			if (flags & XS_CTL_DATA_UIO) {
+				error = bus_dmamap_load_uio(dmat,
+				    ccb->dmamap_xfer, (struct uio *)xs->data,
+				    ((flags & XS_CTL_NOSLEEP) ? BUS_DMA_NOWAIT :
+				     BUS_DMA_WAITOK) | BUS_DMA_STREAMING |
+				     ((flags & XS_CTL_DATA_IN) ? BUS_DMA_READ :
+				      BUS_DMA_WRITE));
+			} else
+#endif /* TFS */
+			{
+				error = bus_dmamap_load(dmat,
+				    ccb->dmamap_xfer, xs->data, xs->datalen,
+				    NULL,
+				    ((flags & XS_CTL_NOSLEEP) ? BUS_DMA_NOWAIT :
+				     BUS_DMA_WAITOK) | BUS_DMA_STREAMING |
+				     ((flags & XS_CTL_DATA_IN) ? BUS_DMA_READ :
+				      BUS_DMA_WRITE));
+			}
 
-		/*
-		 * Load the hardware scatter/gather map with the
-		 * contents of the DMA map.
-		 */
-		for (seg = 0; seg < ccb->dmamap_xfer->dm_nsegs; seg++) {
-			ltophys(ccb->dmamap_xfer->dm_segs[seg].ds_addr,
-			    ccb->scat_gath[seg].seg_addr);
-			ltophys(ccb->dmamap_xfer->dm_segs[seg].ds_len,
-			    ccb->scat_gath[seg].seg_len);
+			switch (error) {
+			case 0:
+				break;
+
+			case ENOMEM:
+			case EAGAIN:
+				xs->error = XS_RESOURCE_SHORTAGE;
+				goto out_bad;
+
+			default:
+				xs->error = XS_DRIVER_STUFFUP;
+				aprint_error_dev(&sc->sc_dev, "error %d loading DMA map\n", error);
+ out_bad:
+				bha_free_ccb(sc, ccb);
+				scsipi_done(xs);
+				return;
+			}
+
+			bus_dmamap_sync(dmat, ccb->dmamap_xfer, 0,
+			    ccb->dmamap_xfer->dm_mapsize,
+			    (flags & XS_CTL_DATA_IN) ? BUS_DMASYNC_PREREAD :
+			    BUS_DMASYNC_PREWRITE);
+
+			/*
+			 * Load the hardware scatter/gather map with the
+			 * contents of the DMA map.
+			 */
+			for (seg = 0; seg < ccb->dmamap_xfer->dm_nsegs; seg++) {
+				ltophys(ccb->dmamap_xfer->dm_segs[seg].ds_addr,
+				    ccb->scat_gath[seg].seg_addr);
+				ltophys(ccb->dmamap_xfer->dm_segs[seg].ds_len,
+				    ccb->scat_gath[seg].seg_len);
+			}
+
+			ltophys(ccb->hashkey + offsetof(struct bha_ccb,
+			    scat_gath), ccb->data_addr);
+			ltophys(ccb->dmamap_xfer->dm_nsegs *
+			    sizeof(struct bha_scat_gath), ccb->data_length);
+		} else {
+			/*
+			 * No data xfer, use non S/G values.
+			 */
+			ltophys(0, ccb->data_addr);
+			ltophys(0, ccb->data_length);
 		}
 
-		ltophys(ccb->hashkey + offsetof(struct bha_ccb, scat_gath),
-		    ccb->data_addr);
-		ltophys(ccb->dmamap_xfer->dm_nsegs *
-		    sizeof(struct bha_scat_gath), ccb->data_length);
-	} else {
+		if (XS_CTL_TAGTYPE(xs) != 0) {
+			ccb->tag_enable = 1;
+			ccb->tag_type = xs->xs_tag_type & 0x03;
+		} else {
+			ccb->tag_enable = 0;
+			ccb->tag_type = 0;
+		}
+
+		ccb->data_out = 0;
+		ccb->data_in = 0;
+		ccb->target = periph->periph_target;
+		ccb->lun = periph->periph_lun;
+		ltophys(ccb->hashkey + offsetof(struct bha_ccb, scsi_sense),
+		    ccb->sense_ptr);
+		ccb->req_sense_length = sizeof(ccb->scsi_sense);
+		ccb->host_stat = 0x00;
+		ccb->target_stat = 0x00;
+		ccb->link_id = 0;
+		ltophys(0, ccb->link_addr);
+
+		BHA_CCB_SYNC(sc, ccb, BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
+
+		s = splbio();
+		bha_queue_ccb(sc, ccb);
+		splx(s);
+
+		SC_DEBUG(periph, SCSIPI_DB3, ("cmd_sent\n"));
+		if ((flags & XS_CTL_POLL) == 0)
+			return;
+
 		/*
-		 * No data xfer, use non S/G values.
+		 * If we can't use interrupts, poll on completion
 		 */
-		ltophys(0, ccb->data_addr);
-		ltophys(0, ccb->data_length);
-	}
-
-	ccb->data_out = 0;
-	ccb->data_in = 0;
-	ccb->target = sc_link->scsipi_scsi.target;
-	ccb->lun = sc_link->scsipi_scsi.lun;
-	ltophys(ccb->hashkey + offsetof(struct bha_ccb, scsi_sense),
-	    ccb->sense_ptr);
-	ccb->req_sense_length = sizeof(ccb->scsi_sense);
-	ccb->host_stat = 0x00;
-	ccb->target_stat = 0x00;
-	ccb->link_id = 0;
-	ltophys(0, ccb->link_addr);
-
-	BHA_CCB_SYNC(sc, ccb, BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
-
-	s = splbio();
-	bha_queue_ccb(sc, ccb);
-	splx(s);
-
-	SC_DEBUG(sc_link, SDEV_DB3, ("cmd_sent\n"));
-	if ((flags & XS_CTL_POLL) == 0)
-		return (SUCCESSFULLY_QUEUED);
-
-	/*
-	 * If we can't use interrupts, poll on completion
-	 */
-	if (bha_poll(sc, xs, ccb->timeout)) {
-		bha_timeout(ccb);
-		if (bha_poll(sc, xs, ccb->timeout))
+		if (bha_poll(sc, xs, ccb->timeout)) {
 			bha_timeout(ccb);
-	}
-	return (COMPLETE);
+			if (bha_poll(sc, xs, ccb->timeout))
+				bha_timeout(ccb);
+		}
+		return;
 
- bad:
-	xs->error = XS_DRIVER_STUFFUP;
-	bha_free_ccb(sc, ccb);
-	return (COMPLETE);
+	case ADAPTER_REQ_GROW_RESOURCES:
+		if (sc->sc_cur_ccbs == sc->sc_max_ccbs) {
+			chan->chan_flags &= ~SCSIPI_CHAN_CANGROW;
+			return;
+		}
+		seg = sc->sc_cur_ccbs;
+		bha_create_ccbs(sc, bha_ccbs_per_group);
+		adapt->adapt_openings += sc->sc_cur_ccbs - seg;
+		return;
+
+	case ADAPTER_REQ_SET_XFER_MODE:
+		/*
+		 * Can't really do this on the Buslogic.  It has its
+		 * own setup info.  But we do know how to query what
+		 * the settings are.
+		 */
+		bha_get_xfer_mode(sc, (struct scsipi_xfer_mode *)arg);
+		return;
+	}
 }
 
 /*
@@ -490,8 +459,7 @@ bha_scsi_cmd(xs)
  *	Limit a transfer to our maximum transfer size.
  */
 void
-bha_minphys(bp)
-	struct buf *bp;
+bha_minphys(struct buf *bp)
 {
 
 	if (bp->b_bcount > BHA_MAXXFER)
@@ -504,32 +472,135 @@ bha_minphys(bp)
  *****************************************************************************/
 
 /*
+ * bha_get_xfer_mode;
+ *
+ *	Negotiate the xfer mode for the specified periph, and report
+ *	back the mode to the midlayer.
+ *
+ *	NOTE: we must be called at splbio().
+ */
+static void
+bha_get_xfer_mode(struct bha_softc *sc, struct scsipi_xfer_mode *xm)
+{
+	struct bha_setup hwsetup;
+	struct bha_period hwperiod;
+	struct bha_sync *bs;
+	int toff = xm->xm_target & 7, tmask = (1 << toff);
+	int wide, period, offset, rlen;
+
+	/*
+	 * Issue an Inquire Setup Information.  We can extract
+	 * sync and wide information from here.
+	 */
+	rlen = sizeof(hwsetup.reply) +
+	    ((sc->sc_flags & BHAF_WIDE) ? sizeof(hwsetup.reply_w) : 0);
+	hwsetup.cmd.opcode = BHA_INQUIRE_SETUP;
+	hwsetup.cmd.len = rlen;
+	bha_cmd(sc->sc_iot, sc->sc_ioh, device_xname(&sc->sc_dev),
+	    sizeof(hwsetup.cmd), (u_char *)&hwsetup.cmd,
+	    rlen, (u_char *)&hwsetup.reply);
+
+	xm->xm_mode = 0;
+	xm->xm_period = 0;
+	xm->xm_offset = 0;
+
+	/*
+	 * First check for wide.  On later boards, we can check
+	 * directly in the setup info if wide is currently active.
+	 *
+	 * On earlier boards, we have to make an educated guess.
+	 */
+	if (sc->sc_flags & BHAF_WIDE) {
+		if (strcmp(sc->sc_firmware, "5.06L") >= 0) {
+			if (xm->xm_target > 7) {
+				wide =
+				    hwsetup.reply_w.high_wide_active & tmask;
+			} else {
+				wide =
+				    hwsetup.reply_w.low_wide_active & tmask;
+			}
+			if (wide)
+				xm->xm_mode |= PERIPH_CAP_WIDE16;
+		} else {
+			/* XXX Check `wide permitted' in the config info. */
+			xm->xm_mode |= PERIPH_CAP_WIDE16;
+		}
+	}
+
+	/*
+	 * Now get basic sync info.
+	 */
+	bs = (xm->xm_target > 7) ?
+	     &hwsetup.reply_w.sync_high[toff] :
+	     &hwsetup.reply.sync_low[toff];
+
+	if (bs->valid) {
+		xm->xm_mode |= PERIPH_CAP_SYNC;
+		period = (bs->period * 50) + 20;
+		offset = bs->offset;
+
+		/*
+		 * On boards that can do Fast and Ultra, use the Inquire Period
+		 * command to get the period.
+		 */
+		if (sc->sc_firmware[0] >= '3') {
+			rlen = sizeof(hwperiod.reply) +
+			    ((sc->sc_flags & BHAF_WIDE) ?
+			      sizeof(hwperiod.reply_w) : 0);
+			hwperiod.cmd.opcode = BHA_INQUIRE_PERIOD;
+			hwperiod.cmd.len = rlen;
+			bha_cmd(sc->sc_iot, sc->sc_ioh, device_xname(&sc->sc_dev),
+			    sizeof(hwperiod.cmd), (u_char *)&hwperiod.cmd,
+			    rlen, (u_char *)&hwperiod.reply);
+
+			if (xm->xm_target > 7)
+				period = hwperiod.reply_w.period[toff];
+			else
+				period = hwperiod.reply.period[toff];
+
+			period *= 10;
+		}
+
+		xm->xm_period =
+		    scsipi_sync_period_to_factor(period * 100);
+		xm->xm_offset = offset;
+	}
+
+	/*
+	 * Now check for tagged queueing support.
+	 *
+	 * XXX Check `tags permitted' in the config info.
+	 */
+	if (sc->sc_flags & BHAF_TAGGED_QUEUEING)
+		xm->xm_mode |= PERIPH_CAP_TQING;
+
+	scsipi_async_event(&sc->sc_channel, ASYNC_EVENT_XFER_MODE, xm);
+}
+
+/*
  * bha_done:
  *
  *	A CCB has completed execution.  Pass the status back to the
  *	upper layer.
  */
-void
-bha_done(sc, ccb)
-	struct bha_softc *sc;
-	struct bha_ccb *ccb;
+static void
+bha_done(struct bha_softc *sc, struct bha_ccb *ccb)
 {
 	bus_dma_tag_t dmat = sc->sc_dmat;
 	struct scsipi_xfer *xs = ccb->xs;
 
-	SC_DEBUG(xs->sc_link, SDEV_DB2, ("bha_done\n"));
+	SC_DEBUG(xs->xs_periph, SCSIPI_DB2, ("bha_done\n"));
 
 #ifdef BHADIAG
 	if (ccb->flags & CCB_SENDING) {
 		printf("%s: exiting ccb still in transit!\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(&sc->sc_dev));
 		Debugger();
 		return;
 	}
 #endif
 	if ((ccb->flags & CCB_ALLOC) == 0) {
-		printf("%s: exiting ccb not allocated!\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "exiting ccb not allocated!\n");
 		Debugger();
 		return;
 	}
@@ -554,7 +625,7 @@ bha_done(sc, ccb)
 				break;
 			default:	/* Other scsi protocol messes */
 				printf("%s: host_stat %x\n",
-				    sc->sc_dev.dv_xname, ccb->host_stat);
+				    device_xname(&sc->sc_dev), ccb->host_stat);
 				xs->error = XS_DRIVER_STUFFUP;
 				break;
 			}
@@ -571,7 +642,7 @@ bha_done(sc, ccb)
 				break;
 			default:
 				printf("%s: target_stat %x\n",
-				    sc->sc_dev.dv_xname, ccb->target_stat);
+				    device_xname(&sc->sc_dev), ccb->target_stat);
 				xs->error = XS_DRIVER_STUFFUP;
 				break;
 			}
@@ -580,20 +651,7 @@ bha_done(sc, ccb)
 	}
 
 	bha_free_ccb(sc, ccb);
-
-	xs->xs_status |= XS_STS_DONE;
 	scsipi_done(xs);
-
-	/*
-	 * If there are queue entries in the software queue, try to
-	 * run the first one.  We should be more or less guaranteed
-	 * to succeed, since we just freed a CCB.
-	 *
-	 * NOTE: bha_scsi_cmd() relies on our calling it with
-	 * the first entry in the queue.
-	 */
-	if ((xs = TAILQ_FIRST(&sc->sc_queue)) != NULL)
-		(void) bha_scsi_cmd(xs);
 }
 
 /*
@@ -601,11 +659,8 @@ bha_done(sc, ccb)
  *
  *	Poll for completion of the specified job.
  */
-int
-bha_poll(sc, xs, count)
-	struct bha_softc *sc;
-	struct scsipi_xfer *xs;
-	int count;
+static int
+bha_poll(struct bha_softc *sc, struct scsipi_xfer *xs, int count)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -632,17 +687,17 @@ bha_poll(sc, xs, count)
  *
  *	CCB timeout handler.
  */
-void
-bha_timeout(arg)
-	void *arg;
+static void
+bha_timeout(void *arg)
 {
 	struct bha_ccb *ccb = arg;
 	struct scsipi_xfer *xs = ccb->xs;
-	struct scsipi_link *sc_link = xs->sc_link;
-	struct bha_softc *sc = sc_link->adapter_softc;
+	struct scsipi_periph *periph = xs->xs_periph;
+	struct bha_softc *sc =
+	    (void *)periph->periph_channel->chan_adapter->adapt_dev;
 	int s;
 
-	scsi_print_addr(sc_link);
+	scsipi_printaddr(periph);
 	printf("timed out");
 
 	s = splbio();
@@ -653,7 +708,7 @@ bha_timeout(arg)
 	 */
 	bha_collect_mbo(sc);
 	if (ccb->flags & CCB_SENDING) {
-		printf("%s: not taking commands!\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "not taking commands!\n");
 		Debugger();
 	}
 #endif
@@ -688,24 +743,14 @@ bha_timeout(arg)
  *
  *	Send a command to the Buglogic controller.
  */
-int
-bha_cmd(iot, ioh, sc, icnt, ibuf, ocnt, obuf)
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
-	struct bha_softc *sc;
-	int icnt, ocnt;
-	u_char *ibuf, *obuf;
+static int
+bha_cmd(bus_space_tag_t iot, bus_space_handle_t ioh, const char *name, int icnt,
+    u_char *ibuf, int ocnt, u_char *obuf)
 {
-	const char *name;
 	int i;
 	int wait;
 	u_char sts;
 	u_char opcode = ibuf[0];
-
-	if (sc != NULL)
-		name = sc->sc_dev.dv_xname;
-	else
-		name = "(bha probe)";
 
 	/*
 	 * Calculate a reasonable timeout for the command.
@@ -745,7 +790,7 @@ bha_cmd(iot, ioh, sc, icnt, ibuf, ocnt, obuf)
 	if (ocnt) {
 		while ((bus_space_read_1(iot, ioh, BHA_STAT_PORT)) &
 		    BHA_STAT_DF)
-			bus_space_read_1(iot, ioh, BHA_DATA_PORT);
+			(void)bus_space_read_1(iot, ioh, BHA_DATA_PORT);
 	}
 
 	/*
@@ -780,9 +825,11 @@ bha_cmd(iot, ioh, sc, icnt, ibuf, ocnt, obuf)
 			delay(50);
 		}
 		if (!i) {
+#ifdef BHADEBUG
 			if (opcode != BHA_INQUIRE_REVISION)
 				printf("%s: bha_cmd, cmd/data port empty %d\n",
 				    name, ocnt);
+#endif /* BHADEBUG */
 			goto bad;
 		}
 		*obuf++ = bus_space_read_1(iot, ioh, BHA_DATA_PORT);
@@ -818,19 +865,14 @@ bad:
 /*
  * bha_find:
  *
- *	Find the board and determine it's irq/drq.
+ *	Find the board.
  */
 int
-bha_find(iot, ioh, sc)
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
-	struct bha_probe_data *sc;
+bha_find(bus_space_tag_t iot, bus_space_handle_t ioh)
 {
 	int i;
 	u_char sts;
 	struct bha_extended_inquire inquire;
-	struct bha_config config;
-	int irq, drq;
 
 	/* Check something is at the ports we need to access */
 	sts = bus_space_read_1(iot, ioh, BHA_STAT_PORT);
@@ -862,7 +904,7 @@ bha_find(iot, ioh, sc)
 
 	/*
 	 * The BusLogic cards implement an Adaptec 1542 (aha)-compatible
-	 * interface. The native bha interface is not compatible with 
+	 * interface. The native bha interface is not compatible with
 	 * an aha. 1542. We need to ensure that we never match an
 	 * Adaptec 1542. We must also avoid sending Adaptec-compatible
 	 * commands to a real bha, lest it go into 1542 emulation mode.
@@ -884,7 +926,7 @@ bha_find(iot, ioh, sc)
 	delay(1000);
 	inquire.cmd.opcode = BHA_INQUIRE_EXTENDED;
 	inquire.cmd.len = sizeof(inquire.reply);
-	i = bha_cmd(iot, ioh, (struct bha_softc *)0,
+	i = bha_cmd(iot, ioh, "(bha_find)",
 	    sizeof(inquire.cmd), (u_char *)&inquire.cmd,
 	    sizeof(inquire.reply), (u_char *)&inquire.reply);
 
@@ -917,13 +959,29 @@ bha_find(iot, ioh, sc)
 		return (0);
 	}
 
+	return (1);
+}
+
+
+/*
+ * bha_inquire_config:
+ *
+ *	Determine irq/drq.
+ */
+int
+bha_inquire_config(bus_space_tag_t iot, bus_space_handle_t ioh,
+	    struct bha_probe_data *sc)
+{
+	int irq, drq;
+	struct bha_config config;
+
 	/*
-	 * Assume we have a board at this stage setup dma channel from
+	 * Assume we have a board at this stage setup DMA channel from
 	 * jumpers and save int level
 	 */
 	delay(1000);
 	config.cmd.opcode = BHA_INQUIRE_CONFIG;
-	bha_cmd(iot, ioh, (struct bha_softc *)0,
+	bha_cmd(iot, ioh, "(bha_inquire_config)",
 	    sizeof(config.cmd), (u_char *)&config.cmd,
 	    sizeof(config.reply), (u_char *)&config.reply);
 	switch (config.reply.chan) {
@@ -943,7 +1001,7 @@ bha_find(iot, ioh, sc)
 		drq = 7;
 		break;
 	default:
-		printf("bha_find: illegal drq setting %x\n",
+		printf("bha: illegal drq setting %x\n",
 		    config.reply.chan);
 		return (0);
 	}
@@ -968,7 +1026,7 @@ bha_find(iot, ioh, sc)
 		irq = 15;
 		break;
 	default:
-		printf("bha_find: illegal irq setting %x\n",
+		printf("bha: illegal irq setting %x\n",
 		    config.reply.intr);
 		return (0);
 	}
@@ -982,21 +1040,27 @@ bha_find(iot, ioh, sc)
 	return (1);
 }
 
+int
+bha_probe_inquiry(bus_space_tag_t iot, bus_space_handle_t ioh,
+    struct bha_probe_data *bpd)
+{
+	return bha_find(iot, ioh) && bha_inquire_config(iot, ioh, bpd);
+}
+
 /*
  * bha_disable_isacompat:
  *
- *	Disable the ISA-compatiblity ioports on PCI bha devices,
+ *	Disable the ISA-compatibility ioports on PCI bha devices,
  *	to ensure they're not autoconfigured a second time as an ISA bha.
  */
 int
-bha_disable_isacompat(sc)
-	struct bha_softc *sc;
+bha_disable_isacompat(struct bha_softc *sc)
 {
 	struct bha_isadisable isa_disable;
 
 	isa_disable.cmd.opcode = BHA_MODIFY_IOPORT;
 	isa_disable.cmd.modifier = BHA_IOMODIFY_DISABLE1;
-	bha_cmd(sc->sc_iot, sc->sc_ioh, sc,
+	bha_cmd(sc->sc_iot, sc->sc_ioh, device_xname(&sc->sc_dev),
 	    sizeof(isa_disable.cmd), (u_char*)&isa_disable.cmd,
 	    0, (u_char *)0);
 	return (0);
@@ -1009,8 +1073,7 @@ bha_disable_isacompat(sc)
  *	return the initial number of CCBs, 0 if we failed.
  */
 int
-bha_info(sc)
-	struct bha_softc *sc;
+bha_info(struct bha_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1022,6 +1085,7 @@ bha_info(sc)
 	struct bha_revision revision;
 	struct bha_digit digit;
 	int i, j, initial_ccbs, rlen;
+	const char *name = device_xname(&sc->sc_dev);
 	char *p;
 
 	/*
@@ -1029,7 +1093,7 @@ bha_info(sc)
 	 */
 	inquire.cmd.opcode = BHA_INQUIRE_EXTENDED;
 	inquire.cmd.len = sizeof(inquire.reply);
-	bha_cmd(iot, ioh, sc,
+	bha_cmd(iot, ioh, name,
 	    sizeof(inquire.cmd), (u_char *)&inquire.cmd,
 	    sizeof(inquire.reply), (u_char *)&inquire.reply);
 
@@ -1037,7 +1101,7 @@ bha_info(sc)
 	 * Fetch the configuration information.
 	 */
 	config.cmd.opcode = BHA_INQUIRE_CONFIG;
-	bha_cmd(iot, ioh, sc,
+	bha_cmd(iot, ioh, name,
 	    sizeof(config.cmd), (u_char *)&config.cmd,
 	    sizeof(config.reply), (u_char *)&config.reply);
 
@@ -1048,14 +1112,14 @@ bha_info(sc)
 	 */
 	p = sc->sc_firmware;
 	revision.cmd.opcode = BHA_INQUIRE_REVISION;
-	bha_cmd(iot, ioh, sc,
+	bha_cmd(iot, ioh, name,
 	    sizeof(revision.cmd), (u_char *)&revision.cmd,
 	    sizeof(revision.reply), (u_char *)&revision.reply);
 	*p++ = revision.reply.firm_revision;
 	*p++ = '.';
 	*p++ = revision.reply.firm_version;
 	digit.cmd.opcode = BHA_INQUIRE_REVISION_3;
-	bha_cmd(iot, ioh, sc,
+	bha_cmd(iot, ioh, name,
 	    sizeof(digit.cmd), (u_char *)&digit.cmd,
 	    sizeof(digit.reply), (u_char *)&digit.reply);
 	*p++ = digit.reply.digit;
@@ -1063,7 +1127,7 @@ bha_info(sc)
 	    (revision.reply.firm_revision == '3' &&
 	     revision.reply.firm_version >= '3')) {
 		digit.cmd.opcode = BHA_INQUIRE_REVISION_4;
-		bha_cmd(iot, ioh, sc,
+		bha_cmd(iot, ioh, name,
 		    sizeof(digit.cmd), (u_char *)&digit.cmd,
 		    sizeof(digit.reply), (u_char *)&digit.reply);
 		*p++ = digit.reply.digit;
@@ -1083,7 +1147,7 @@ bha_info(sc)
 	 *
 	 * The firmware version indicates:
 	 *
-	 *	5.xx	BusLogic "W" Series Hose Adapters
+	 *	5.xx	BusLogic "W" Series Host Adapters
 	 *		BT-948/958/958D
 	 *
 	 *	4.xx	BusLogic "C" Series Host Adapters
@@ -1100,20 +1164,20 @@ bha_info(sc)
 	 */
 	if (inquire.reply.bus_type == BHA_BUS_TYPE_24BIT &&
 	    sc->sc_firmware[0] < '3')
-		sprintf(sc->sc_model, "542B");
+		snprintf(sc->sc_model, sizeof(sc->sc_model), "542B");
 	else if (inquire.reply.bus_type == BHA_BUS_TYPE_32BIT &&
 	    sc->sc_firmware[0] == '2' &&
 	    (sc->sc_firmware[2] == '1' ||
 	     (sc->sc_firmware[2] == '2' && sc->sc_firmware[3] == '0')))
-		sprintf(sc->sc_model, "742A");
+		snprintf(sc->sc_model, sizeof(sc->sc_model), "742A");
 	else if (inquire.reply.bus_type == BHA_BUS_TYPE_32BIT &&
 	    sc->sc_firmware[0] == '0')
-		sprintf(sc->sc_model, "747A");
+		snprintf(sc->sc_model, sizeof(sc->sc_model), "747A");
 	else {
 		p = sc->sc_model;
 		model.cmd.opcode = BHA_INQUIRE_MODEL;
 		model.cmd.len = sizeof(model.reply);
-		bha_cmd(iot, ioh, sc,
+		bha_cmd(iot, ioh, name,
 		    sizeof(model.cmd), (u_char *)&model.cmd,
 		    sizeof(model.reply), (u_char *)&model.reply);
 		*p++ = model.reply.id[0];
@@ -1149,7 +1213,7 @@ bha_info(sc)
 	sc->sc_max_dmaseg = inquire.reply.sg_limit;
 
 	/*
-	 * Determine the maximum CCB cound and whether or not
+	 * Determine the maximum CCB count and whether or not
 	 * tagged queueing is available on this host adapter.
 	 *
 	 * Tagged queueing works on:
@@ -1167,15 +1231,15 @@ bha_info(sc)
 	 */
 	switch (sc->sc_firmware[0]) {
 	case '5':
-		sc->sc_hw_ccbs = 192;
-		sc->sc_flags |= BHAF_TAGGED_QUEUEING;      
+		sc->sc_max_ccbs = 192;
+		sc->sc_flags |= BHAF_TAGGED_QUEUEING;
 		break;
 
 	case '4':
 		if (sc->sc_model[0] == '5')
-			sc->sc_hw_ccbs = 50;
+			sc->sc_max_ccbs = 50;
 		else
-			sc->sc_hw_ccbs = 100;
+			sc->sc_max_ccbs = 100;
 		if (strcmp(sc->sc_firmware, "4.22") >= 0)
 			sc->sc_flags |= BHAF_TAGGED_QUEUEING;
 		break;
@@ -1186,40 +1250,20 @@ bha_info(sc)
 		/* FALLTHROUGH */
 
 	default:
-		sc->sc_hw_ccbs = 30;
+		sc->sc_max_ccbs = 30;
 	}
 
 	/*
-	 * Set the mailbox size to be just larger than the internal
-	 * CCB count.
+	 * Set the mailbox count to precisely the number of HW CCBs
+	 * available.  A mailbox isn't required while a CCB is executing,
+	 * but this allows us to actually enqueue up to our resource
+	 * limit.
 	 *
-	 * XXX We should consider making this a large number on
-	 * boards with strict round-robin mode, as it would allow
-	 * us to expand the openings available to the upper layer.
-	 * The CCB count is what the host adapter can process
-	 * concurrently, but we can queue up to 255 in the mailbox
-	 * regardless.
+	 * This will keep the mailbox count small on boards which don't
+	 * have strict round-robin (they have to scan the entire set of
+	 * mailboxes each time they run a command).
 	 */
-	if (sc->sc_flags & BHAF_STRICT_ROUND_ROBIN) {
-#if 0
-		sc->sc_mbox_count = 255;
-#else
-		sc->sc_mbox_count = sc->sc_hw_ccbs + 8;
-#endif
-	} else {
-		/*
-		 * Only 32 in this case; non-strict round-robin must
-		 * scan the entire mailbox for new commands, which
-		 * is not very efficient.
-		 */
-		sc->sc_mbox_count = 32;
-	}
-
-	/*
-	 * The maximum number of CCBs we allow is the number we can
-	 * enqueue.
-	 */
-	sc->sc_max_ccbs = sc->sc_mbox_count;
+	sc->sc_mbox_count = sc->sc_max_ccbs;
 
 	/*
 	 * Obtain setup information.
@@ -1228,29 +1272,29 @@ bha_info(sc)
 	    ((sc->sc_flags & BHAF_WIDE) ? sizeof(setup.reply_w) : 0);
 	setup.cmd.opcode = BHA_INQUIRE_SETUP;
 	setup.cmd.len = rlen;
-	bha_cmd(iot, ioh, sc,
+	bha_cmd(iot, ioh, name,
 	    sizeof(setup.cmd), (u_char *)&setup.cmd,
 	    rlen, (u_char *)&setup.reply);
 
-	printf("%s: model BT-%s, firmware %s\n", sc->sc_dev.dv_xname,
+	aprint_normal_dev(&sc->sc_dev, "model BT-%s, firmware %s\n",
 	    sc->sc_model, sc->sc_firmware);
 
-	printf("%s: %d H/W CCBs", sc->sc_dev.dv_xname, sc->sc_hw_ccbs);
+	aprint_normal_dev(&sc->sc_dev, "%d H/W CCBs", sc->sc_max_ccbs);
 	if (setup.reply.sync_neg)
-		printf(", sync");
+		aprint_normal(", sync");
 	if (setup.reply.parity)
-		printf(", parity");
+		aprint_normal(", parity");
 	if (sc->sc_flags & BHAF_TAGGED_QUEUEING)
-		printf(", tagged queueing");
+		aprint_normal(", tagged queueing");
 	if (sc->sc_flags & BHAF_WIDE_LUN)
-		printf(", wide LUN support");
-	printf("\n");
+		aprint_normal(", wide LUN support");
+	aprint_normal("\n");
 
 	/*
 	 * Poll targets 0 - 7.
 	 */
 	devices.cmd.opcode = BHA_INQUIRE_DEVICES;
-	bha_cmd(iot, ioh, sc,
+	bha_cmd(iot, ioh, name,
 	    sizeof(devices.cmd), (u_char *)&devices.cmd,
 	    sizeof(devices.reply), (u_char *)&devices.reply);
 
@@ -1268,7 +1312,7 @@ bha_info(sc)
 	 */
 	if (sc->sc_flags & BHAF_WIDE) {
 		devices.cmd.opcode = BHA_INQUIRE_DEVICES_2;
-		bha_cmd(iot, ioh, sc,
+		bha_cmd(iot, ioh, name,
 		    sizeof(devices.cmd), (u_char *)&devices.cmd,
 		    sizeof(devices.reply), (u_char *)&devices.reply);
 
@@ -1303,10 +1347,10 @@ bha_info(sc)
  *
  *	Initialize the board.
  */
-int
-bha_init(sc)
-	struct bha_softc *sc;
+static int
+bha_init(struct bha_softc *sc)
 {
+	const char *name = device_xname(&sc->sc_dev);
 	struct bha_toggle toggle;
 	struct bha_mailbox mailbox;
 	struct bha_mbx_out *mbo;
@@ -1338,7 +1382,7 @@ bha_init(sc)
 	if (sc->sc_flags & BHAF_STRICT_ROUND_ROBIN) {
 		toggle.cmd.opcode = BHA_ROUND_ROBIN;
 		toggle.cmd.enable = 1;
-		bha_cmd(sc->sc_iot, sc->sc_ioh, sc,
+		bha_cmd(sc->sc_iot, sc->sc_ioh, name,
 		    sizeof(toggle.cmd), (u_char *)&toggle.cmd,
 		    0, NULL);
 	}
@@ -1349,7 +1393,7 @@ bha_init(sc)
 	mailbox.cmd.opcode = BHA_MBX_INIT_EXTENDED;
 	mailbox.cmd.nmbx = sc->sc_mbox_count;
 	ltophys(sc->sc_dmamap_mbox->dm_segs[0].ds_addr, mailbox.cmd.addr);
-	bha_cmd(sc->sc_iot, sc->sc_ioh, sc,
+	bha_cmd(sc->sc_iot, sc->sc_ioh, name,
 	    sizeof(mailbox.cmd), (u_char *)&mailbox.cmd,
 	    0, (u_char *)0);
 
@@ -1365,10 +1409,8 @@ bha_init(sc)
  *
  *	Queue a CCB to be sent to the controller, and send it if possible.
  */
-void
-bha_queue_ccb(sc, ccb)
-	struct bha_softc *sc;
-	struct bha_ccb *ccb;
+static void
+bha_queue_ccb(struct bha_softc *sc, struct bha_ccb *ccb)
 {
 
 	TAILQ_INSERT_TAIL(&sc->sc_waiting_ccb, ccb, chain);
@@ -1380,9 +1422,8 @@ bha_queue_ccb(sc, ccb)
  *
  *	Send as many CCBs as we have empty mailboxes for.
  */
-void
-bha_start_ccbs(sc)
-	struct bha_softc *sc;
+static void
+bha_start_ccbs(struct bha_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1413,7 +1454,7 @@ bha_start_ccbs(sc)
 
 				toggle.cmd.opcode = BHA_MBO_INTR_EN;
 				toggle.cmd.enable = 1;
-				bha_cmd(iot, ioh, sc,
+				bha_cmd(iot, ioh, device_xname(&sc->sc_dev),
 				    sizeof(toggle.cmd), (u_char *)&toggle.cmd,
 				    0, (u_char *)0);
 				break;
@@ -1444,7 +1485,7 @@ bha_start_ccbs(sc)
 
 		if ((ccb->xs->xs_control & XS_CTL_POLL) == 0)
 			callout_reset(&ccb->xs->xs_callout,
-			    (ccb->timeout * hz) / 1000, bha_timeout, ccb);
+			    mstohz(ccb->timeout), bha_timeout, ccb);
 
 		++sc->sc_mbofull;
 		mbo = bha_nextmbo(sc, mbo);
@@ -1458,9 +1499,8 @@ bha_start_ccbs(sc)
  *
  *	Finalize the execution of CCBs in our incoming mailbox.
  */
-void
-bha_finish_ccbs(sc)
-	struct bha_softc *sc;
+static void
+bha_finish_ccbs(struct bha_softc *sc)
 {
 	struct bha_mbx_in *mbi;
 	struct bha_ccb *ccb;
@@ -1473,8 +1513,14 @@ bha_finish_ccbs(sc)
 	if (mbi->comp_stat == BHA_MBI_FREE) {
 		for (i = 0; i < sc->sc_mbox_count; i++) {
 			if (mbi->comp_stat != BHA_MBI_FREE) {
+#ifdef BHADIAG
+				/*
+				 * This can happen in normal operation if
+				 * we use all mailbox slots.
+				 */
 				printf("%s: mbi not in round-robin order\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(&sc->sc_dev));
+#endif
 				goto again;
 			}
 			mbi = bha_nextmbi(sc, mbi);
@@ -1483,7 +1529,7 @@ bha_finish_ccbs(sc)
 		}
 #ifdef BHADIAGnot
 		printf("%s: mbi interrupt with no full mailboxes\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(&sc->sc_dev));
 #endif
 		return;
 	}
@@ -1492,8 +1538,8 @@ bha_finish_ccbs(sc)
 	do {
 		ccb = bha_ccb_phys_kv(sc, phystol(mbi->ccb_addr));
 		if (ccb == NULL) {
-			printf("%s: bad mbi ccb pointer 0x%08x; skipping\n",
-			    sc->sc_dev.dv_xname, phystol(mbi->ccb_addr));
+			aprint_error_dev(&sc->sc_dev, "bad mbi ccb pointer 0x%08x; skipping\n",
+			    phystol(mbi->ccb_addr));
 			goto next;
 		}
 
@@ -1502,11 +1548,10 @@ bha_finish_ccbs(sc)
 
 #ifdef BHADEBUG
 		if (bha_debug) {
-			struct scsi_generic *cmd = &ccb->scsi_cmd;
+			u_char *cp = ccb->scsi_cmd;
 			printf("op=%x %x %x %x %x %x\n",
-			    cmd->opcode, cmd->bytes[0], cmd->bytes[1],
-			    cmd->bytes[2], cmd->bytes[3], cmd->bytes[4]);
-			printf("comp_stat %x for mbi addr = 0x%p, ",
+			    cp[0], cp[1], cp[2], cp[3], cp[4], cp[5]);
+			printf("comp_stat %x for mbi addr = %p, ",
 			    mbi->comp_stat, mbi);
 			printf("ccb addr = %p\n", ccb);
 		}
@@ -1532,13 +1577,13 @@ bha_finish_ccbs(sc)
 		case BHA_MBI_UNKNOWN:
 			/*
 			 * Even if the CCB wasn't found, we clear it anyway.
-			 * See preceeding comment.
+			 * See preceding comment.
 			 */
 			break;
 
 		default:
-			printf("%s: bad mbi comp_stat %02x; skipping\n",
-			    sc->sc_dev.dv_xname, mbi->comp_stat);
+			aprint_error_dev(&sc->sc_dev, "bad mbi comp_stat %02x; skipping\n",
+			    mbi->comp_stat);
 			goto next;
 		}
 
@@ -1573,9 +1618,8 @@ bha_finish_ccbs(sc)
  *		mailbox_out[mailbox_size]
  *		mailbox_in[mailbox_size]
  */
-int
-bha_create_mailbox(sc)
-	struct bha_softc *sc;
+static int
+bha_create_mailbox(struct bha_softc *sc)
 {
 	bus_dma_segment_t seg;
 	size_t size;
@@ -1587,16 +1631,16 @@ bha_create_mailbox(sc)
 	error = bus_dmamem_alloc(sc->sc_dmat, size, PAGE_SIZE, 0, &seg,
 	    1, &rseg, sc->sc_dmaflags);
 	if (error) {
-		printf("%s: unable to allocate mailboxes, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to allocate mailboxes, error = %d\n",
+		    error);
 		goto bad_0;
 	}
 
 	error = bus_dmamem_map(sc->sc_dmat, &seg, rseg, size,
-	    (caddr_t *)&sc->sc_mbo, sc->sc_dmaflags | BUS_DMA_COHERENT);
+	    (void **)&sc->sc_mbo, sc->sc_dmaflags | BUS_DMA_COHERENT);
 	if (error) {
-		printf("%s: unable to map mailboxes, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to map mailboxes, error = %d\n",
+		    error);
 		goto bad_1;
 	}
 
@@ -1605,16 +1649,17 @@ bha_create_mailbox(sc)
 	error = bus_dmamap_create(sc->sc_dmat, size, 1, size, 0,
 	    sc->sc_dmaflags, &sc->sc_dmamap_mbox);
 	if (error) {
-		printf("%s: unable to create mailbox DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev,
+		    "unable to create mailbox DMA map, error = %d\n",
+		    error);
 		goto bad_2;
 	}
 
 	error = bus_dmamap_load(sc->sc_dmat, sc->sc_dmamap_mbox,
 	    sc->sc_mbo, size, NULL, 0);
 	if (error) {
-		printf("%s: unable to load mailbox DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to load mailbox DMA map, error = %d\n",
+		    error);
 		goto bad_3;
 	}
 
@@ -1625,7 +1670,7 @@ bha_create_mailbox(sc)
  bad_3:
 	bus_dmamap_destroy(sc->sc_dmat, sc->sc_dmamap_mbox);
  bad_2:
-	bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->sc_mbo, size);
+	bus_dmamem_unmap(sc->sc_dmat, (void *)sc->sc_mbo, size);
  bad_1:
 	bus_dmamem_free(sc->sc_dmat, &seg, rseg);
  bad_0:
@@ -1637,15 +1682,14 @@ bha_create_mailbox(sc)
  *
  *	Garbage collect mailboxes that are no longer in use.
  */
-void
-bha_collect_mbo(sc)
-	struct bha_softc *sc;
+static void
+bha_collect_mbo(struct bha_softc *sc)
 {
 	struct bha_mbx_out *mbo;
 #ifdef BHADIAG
 	struct bha_ccb *ccb;
 #endif
-	
+
 	mbo = sc->sc_cmbo;
 
 	while (sc->sc_mbofull > 0) {
@@ -1670,11 +1714,8 @@ bha_collect_mbo(sc)
  * CCB management functions
  *****************************************************************************/
 
-__inline void bha_reset_ccb __P((struct bha_ccb *));
-
-__inline void
-bha_reset_ccb(ccb)
-	struct bha_ccb *ccb;
+static inline void
+bha_reset_ccb(struct bha_ccb *ccb)
 {
 
 	ccb->flags = 0;
@@ -1688,11 +1729,12 @@ bha_reset_ccb(ccb)
  *	We determine the target CCB count, and then keep creating them
  *	until we reach the target, or fail.  CCBs that are allocated
  *	but not "created" are left on the allocating list.
+ *
+ *	XXX AB_QUIET/AB_SILENT lossage here; this is called during
+ *	boot as well as at run-time.
  */
-void
-bha_create_ccbs(sc, count)
-	struct bha_softc *sc;
-	int count;
+static void
+bha_create_ccbs(struct bha_softc *sc, int count)
 {
 	struct bha_ccb_group *bcg;
 	struct bha_ccb *ccb;
@@ -1726,17 +1768,17 @@ bha_create_ccbs(sc, count)
 	error = bus_dmamem_alloc(sc->sc_dmat, PAGE_SIZE,
 	    PAGE_SIZE, 0, &seg, 1, &rseg, sc->sc_dmaflags | BUS_DMA_NOWAIT);
 	if (error) {
-		printf("%s: unable to allocate CCB group, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to allocate CCB group, error = %d\n",
+		    error);
 		goto bad_0;
 	}
 
 	error = bus_dmamem_map(sc->sc_dmat, &seg, rseg, PAGE_SIZE,
-	    (caddr_t *)&bcg,
+	    (void *)&bcg,
 	    sc->sc_dmaflags | BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
 	if (error) {
-		printf("%s: unable to map CCB group, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to map CCB group, error = %d\n",
+		    error);
 		goto bad_1;
 	}
 
@@ -1745,16 +1787,16 @@ bha_create_ccbs(sc, count)
 	error = bus_dmamap_create(sc->sc_dmat, PAGE_SIZE,
 	    1, PAGE_SIZE, 0, sc->sc_dmaflags | BUS_DMA_NOWAIT, &ccbmap);
 	if (error) {
-		printf("%s: unable to create CCB group DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to create CCB group DMA map, error = %d\n",
+		    error);
 		goto bad_2;
 	}
 
 	error = bus_dmamap_load(sc->sc_dmat, ccbmap, bcg, PAGE_SIZE, NULL,
 	    sc->sc_dmaflags | BUS_DMA_NOWAIT);
 	if (error) {
-		printf("%s: unable to load CCB group DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to load CCB group DMA map, error = %d\n",
+		    error);
 		goto bad_3;
 	}
 
@@ -1802,7 +1844,7 @@ bha_create_ccbs(sc, count)
  bad_3:
 	bus_dmamap_destroy(sc->sc_dmat, ccbmap);
  bad_2:
-	bus_dmamem_unmap(sc->sc_dmat, (caddr_t)bcg, PAGE_SIZE);
+	bus_dmamem_unmap(sc->sc_dmat, (void *)bcg, PAGE_SIZE);
  bad_1:
 	bus_dmamem_free(sc->sc_dmat, &seg, rseg);
  bad_0:
@@ -1814,10 +1856,8 @@ bha_create_ccbs(sc, count)
  *
  *	Initialize a CCB; helper function for bha_create_ccbs().
  */
-int
-bha_init_ccb(sc, ccb)
-	struct bha_softc *sc;
-	struct bha_ccb *ccb;
+static int
+bha_init_ccb(struct bha_softc *sc, struct bha_ccb *ccb)
 {
 	struct bha_ccb_group *bcg = BHA_CCB_GROUP(ccb);
 	int hashnum, error;
@@ -1832,8 +1872,8 @@ bha_init_ccb(sc, ccb)
 	    BHA_MAXXFER, 0, BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW | sc->sc_dmaflags,
 	    &ccb->dmamap_xfer);
 	if (error) {
-		printf("%s: unable to create CCB DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to create CCB DMA map, error = %d\n",
+		    error);
 		return (error);
 	}
 
@@ -1848,7 +1888,7 @@ bha_init_ccb(sc, ccb)
 	ccb->nexthash = sc->sc_ccbhash[hashnum];
 	sc->sc_ccbhash[hashnum] = ccb;
 	bha_reset_ccb(ccb);
-	
+
 	TAILQ_INSERT_HEAD(&sc->sc_free_ccb, ccb, chain);
 	sc->sc_cur_ccbs++;
 
@@ -1861,30 +1901,18 @@ bha_init_ccb(sc, ccb)
  *	Get a CCB for the SCSI operation.  If there are none left,
  *	wait until one becomes available, if we can.
  */
-struct bha_ccb *
-bha_get_ccb(sc, flags)
-	struct bha_softc *sc;
-	int flags;
+static struct bha_ccb *
+bha_get_ccb(struct bha_softc *sc)
 {
 	struct bha_ccb *ccb;
 	int s;
 
 	s = splbio();
-
-	for (;;) {
-		ccb = TAILQ_FIRST(&sc->sc_free_ccb);
-		if (ccb) {
-			TAILQ_REMOVE(&sc->sc_free_ccb, ccb, chain);
-			break;
-		}
-		if ((flags & XS_CTL_NOSLEEP) != 0)
-			goto out;
-		tsleep(&sc->sc_free_ccb, PRIBIO, "bhaccb", 0);
+	ccb = TAILQ_FIRST(&sc->sc_free_ccb);
+	if (ccb != NULL) {
+		TAILQ_REMOVE(&sc->sc_free_ccb, ccb, chain);
+		ccb->flags |= CCB_ALLOC;
 	}
-
-	ccb->flags |= CCB_ALLOC;
-
-out:
 	splx(s);
 	return (ccb);
 }
@@ -1894,25 +1922,14 @@ out:
  *
  *	Put a CCB back onto the free list.
  */
-void
-bha_free_ccb(sc, ccb)
-	struct bha_softc *sc;
-	struct bha_ccb *ccb;
+static void
+bha_free_ccb(struct bha_softc *sc, struct bha_ccb *ccb)
 {
 	int s;
 
 	s = splbio();
-
 	bha_reset_ccb(ccb);
 	TAILQ_INSERT_HEAD(&sc->sc_free_ccb, ccb, chain);
-
-	/*
-	 * If there were none, wake anybody waiting for one to come free,
-	 * starting with queued entries.
-	 */
-	if (TAILQ_NEXT(ccb, chain) == NULL)
-		wakeup(&sc->sc_free_ccb);
-
 	splx(s);
 }
 
@@ -1921,10 +1938,8 @@ bha_free_ccb(sc, ccb)
  *
  *	Given a CCB DMA address, locate the CCB in kernel virtual space.
  */
-struct bha_ccb *
-bha_ccb_phys_kv(sc, ccb_phys)
-	struct bha_softc *sc;
-	bus_addr_t ccb_phys;
+static struct bha_ccb *
+bha_ccb_phys_kv(struct bha_softc *sc, bus_addr_t ccb_phys)
 {
 	int hashnum = CCB_HASH(ccb_phys);
 	struct bha_ccb *ccb = sc->sc_ccbhash[hashnum];

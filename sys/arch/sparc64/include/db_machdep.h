@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.h,v 1.10 2000/03/16 02:36:58 eeh Exp $ */
+/*	$NetBSD: db_machdep.h,v 1.25.4.1 2008/11/27 03:46:31 snj Exp $ */
 
 /*
  * Mach Operating System
@@ -26,24 +26,24 @@
  * the rights to redistribute these changes.
  */
 
-#ifndef	_SPARC_DB_MACHDEP_H_
-#define	_SPARC_DB_MACHDEP_H_
+#ifndef	_SPARC64_DB_MACHDEP_H_
+#define	_SPARC64_DB_MACHDEP_H_
 
 /*
  * Machine-dependent defines for new kernel debugger.
  */
 
+#include <uvm/uvm_extern.h>
 
-#include <vm/vm.h>
 #include <machine/frame.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
 #include <machine/reg.h>
 
-/* end of mangling */
 
+/* use 64-bit types explicitly for 32-bit kernels */
 typedef	vaddr_t		db_addr_t;	/* address - unsigned */
-typedef	long		db_expr_t;	/* expression - signed */
+typedef	int64_t		db_expr_t;	/* expression - signed */
 
 struct trapstate {
 	int64_t tstate;
@@ -51,52 +51,38 @@ struct trapstate {
 	int64_t	tnpc;
 	int64_t	tt;
 };
-#if 1
+
 typedef struct {
-	struct trapframe64	ddb_tf;
-	struct frame64		ddb_fr;
-	struct trapstate	ddb_ts[5];
-	int			ddb_tl;
+	struct trapframe64	db_tf;
+	struct frame64		db_fr;
+	struct trapstate	db_ts[5];
+	int			db_tl;
+	struct fpstate64	db_fpstate __aligned(BLOCK_SIZE);
 } db_regs_t;
-#else
-typedef struct db_regs {
-	struct trapregs dbr_traps[4];
-	int		dbr_y;
-	char		dbr_tl;
-	char		dbr_canrestore;
-	char		dbr_cansave;
-	char		dbr_cleanwin;
-	char		dbr_cwp;
-	char		dbr_wstate;
-	int64_t		dbr_g[8];
-	int64_t		dbr_ag[8];
-	int64_t		dbr_ig[8];
-	int64_t		dbr_mg[8];
-	int64_t		dbr_out[8];
-	int64_t		dbr_local[8];
-	int64_t		dbr_in[8];
-} db_regs_t;
-#endif
 
-db_regs_t		ddb_regs;	/* register state */
-#define	DDB_REGS	(&ddb_regs)
-#define	DDB_TF		(&ddb_regs.ddb_tf)
-#define	DDB_FR		(&ddb_regs.ddb_fr)
+/* Current CPU register state */
+#define	DDB_REGS	((db_regs_t*)__UNVOLATILE(curcpu()->ci_ddb_regs))
+#define	DDB_TF		(&DDB_REGS->db_tf)
+#define	DDB_FP		(&DDB_REGS->db_fpstate)
 
-#if defined(lint)
-#define	PC_REGS(regs)	((regs)->ddb_tf.tf_pc)
-#else
-#define	PC_REGS(regs)	((db_addr_t)(regs)->ddb_tf.tf_pc)
-#endif
+/* DDB commands not in db_interface.c */
+void	db_dump_ts(db_expr_t, bool, db_expr_t, const char *);
+void	db_dump_trap(db_expr_t, bool, db_expr_t, const char *);
+void	db_dump_fpstate(db_expr_t, bool, db_expr_t, const char *);
+void	db_dump_window(db_expr_t, bool, db_expr_t, const char *);
+void	db_dump_stack(db_expr_t, bool, db_expr_t, const char *);
+
+#define	PC_REGS(regs)	((regs)->db_tf.tf_pc)
 #define	PC_ADVANCE(regs) do {				\
-	vaddr_t n = (regs)->ddb_tf.tf_npc;		\
-	(regs)->ddb_tf.tf_pc = n;			\
-	(regs)->ddb_tf.tf_npc = n + 4;			\
+	vaddr_t n = (regs)->db_tf.tf_npc;		\
+	(regs)->db_tf.tf_pc = n;			\
+	(regs)->db_tf.tf_npc = n + 4;			\
 } while(0)
 
+#define	BKPT_ADDR(addr)	(addr)		/* breakpoint address */
 #define	BKPT_INST	0x91d02001	/* breakpoint instruction */
 #define	BKPT_SIZE	(4)		/* size of breakpoint inst */
-#define	BKPT_SET(inst)	(BKPT_INST)
+#define	BKPT_SET(inst, addr)	(BKPT_INST)
 
 #define	IS_BREAKPOINT_TRAP(type, code)	\
 	((type) == T_BREAKPOINT || (type) == T_KGDB_EXEC)
@@ -108,14 +94,14 @@ db_regs_t		ddb_regs;	/* register state */
  */
 #define SOFTWARE_SSTEP
 
-boolean_t	db_inst_trap_return __P((int inst));
-boolean_t	db_inst_return __P((int inst));
-boolean_t	db_inst_call __P((int inst));
-boolean_t	db_inst_branch __P((int inst));
-int		db_inst_load __P((int inst));
-int		db_inst_store __P((int inst));
-boolean_t	db_inst_unconditional_flow_transfer __P((int inst));
-db_addr_t	db_branch_taken __P((int inst, db_addr_t pc, db_regs_t *regs));
+bool		db_inst_trap_return(int inst);
+bool		db_inst_return(int inst);
+bool		db_inst_call(int inst);
+bool		db_inst_branch(int inst);
+int		db_inst_load(int inst);
+int		db_inst_store(int inst);
+bool		db_inst_unconditional_flow_transfer(int inst);
+db_addr_t	db_branch_taken(int inst, db_addr_t pc, db_regs_t *regs);
 
 #define inst_trap_return(ins)	db_inst_trap_return(ins)
 #define inst_return(ins)	db_inst_return(ins)
@@ -130,12 +116,11 @@ db_addr_t	db_branch_taken __P((int inst, db_addr_t pc, db_regs_t *regs));
 
 /* see note in db_interface.c about reversed breakpoint addrs */
 #define next_instr_address(pc, bd) \
-	((bd) ? (pc) : ddb_regs.ddb_tf.tf_npc)
+	((bd) ? (pc) : DDB_REGS->db_tf.tf_npc)
 
 #define DB_MACHINE_COMMANDS
 
-void db_machine_init __P((void));
-int kdb_trap __P((int, struct trapframe64 *));
+int kdb_trap(int, struct trapframe64 *);
 
 /*
  * We will use elf symbols in DDB when they work.
@@ -154,7 +139,7 @@ int kdb_trap __P((int, struct trapframe64 *));
  * KGDB definitions
  */
 typedef u_long		kgdb_reg_t;
-#define KGDB_NUMREGS	72
-#define KGDB_BUFLEN	1024
+#define KGDB_NUMREGS	125
+#define KGDB_BUFLEN	2048
 
-#endif	/* _SPARC_DB_MACHDEP_H_ */
+#endif	/* _SPARC64_DB_MACHDEP_H_ */

@@ -1,6 +1,7 @@
-/*	$NetBSD: if_trtcm_isa.c,v 1.3 1999/04/30 15:29:24 bad Exp $	*/
+/*	$NetBSD: if_trtcm_isa.c,v 1.15 2008/04/28 20:23:52 martin Exp $	*/
 
-#undef TRTCMISADEBUG
+/* XXXJRT verify doens't change isa_attach_args too early */
+
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -16,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by The NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its 
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,6 +31,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_trtcm_isa.c,v 1.15 2008/04/28 20:23:52 martin Exp $");
+
+#undef TRTCMISADEBUG
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/socket.h>
@@ -47,7 +46,7 @@
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isavar.h>
 #include <dev/isa/elink.h>
@@ -57,26 +56,26 @@
 
 #include <dev/ic/elink3reg.h>
 
-u_int16_t	tcmreadeeprom __P((bus_space_tag_t, bus_space_handle_t, int));
+u_int16_t	tcmreadeeprom(bus_space_tag_t, bus_space_handle_t, int);
 #ifdef TRTCMISADEBUG
-void	tcmdumpeeprom __P((bus_space_tag_t, bus_space_handle_t));
+void	tcmdumpeeprom(bus_space_tag_t, bus_space_handle_t);
 #endif
 
-int	trtcm_isa_probe __P((struct device *, struct cfdata *, void *));
+int	trtcm_isa_probe(struct device *, struct cfdata *, void *);
 
-int	trtcm_isa_mediachange __P((struct tr_softc *));
-void	trtcm_isa_mediastatus __P((struct tr_softc *, struct ifmediareq *));
+int	trtcm_isa_mediachange(struct tr_softc *);
+void	trtcm_isa_mediastatus(struct tr_softc *, struct ifmediareq *);
 
 /*
  * TODO:
- * 
+ *
  * if_media handling in the 3com case
  * mediachange() and mediastatus() function
  * certain newer cards can set their speed on the fly via
  * DIR_SET_DEFAULT_RING_SPEED or set the speed in the eeprom ??
  */
 
-static	void tcmaddcard __P((int, int, int, int, u_int, int, int));
+static	void tcmaddcard(int, int, int, int, u_int, int, int);
 
 /*
  * This keeps track of which ISAs have been through a 3com probe sequence.
@@ -109,9 +108,9 @@ static struct tcmcard {
 static int ntcmcards = 0;
 
 static void
-tcmaddcard(bus, iobase, irq, maddr, msize, model, pnpmode)
+tcmaddcard(bus, iobase, irq, maddr, msiz, model, pnpmode)
 	int bus, iobase, irq, maddr;
-	u_int msize;
+	u_int msiz;
 	int model, pnpmode;
 {
 
@@ -121,7 +120,7 @@ tcmaddcard(bus, iobase, irq, maddr, msize, model, pnpmode)
 	tcmcards[ntcmcards].iobase = iobase;
 	tcmcards[ntcmcards].irq = irq;
 	tcmcards[ntcmcards].maddr = maddr;
-	tcmcards[ntcmcards].msize = msize;
+	tcmcards[ntcmcards].msize = msiz;
 	tcmcards[ntcmcards].model = model;
 	tcmcards[ntcmcards].available = 1;
 	tcmcards[ntcmcards].pnpmode = pnpmode;
@@ -183,8 +182,7 @@ tcmdumpeeprom(iot, ioh)
 #endif
 
 int
-trtcm_isa_mediachange(sc)
-	struct tr_softc *sc;
+trtcm_isa_mediachange(struct tr_softc *sc)
 {
 	return EINVAL;
 }
@@ -202,20 +200,21 @@ trtcm_isa_mediastatus(sc, ifmr)
 /* XXX hard coded constants in readeeprom elink_idseq */
 
 int
-trtcm_isa_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+trtcm_isa_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args	*ia = aux;
-	int	bus = parent->dv_unit;
+	int	bus = device_unit(parent);
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
-	u_int	msize;
+	u_int	msiz;
 	int slot, iobase, irq, i, maddr, rsrccfg, pnpmode;
 	u_int16_t vendor, model;
 	struct tcm_isa_done_probe *tcm;
 	static int irqs[] = { 7, 15, 6, 11, 3, 10, 9, 5 };
+
+	if (ISA_DIRECT_CONFIG(ia))
+		return (0);
 
 	if (tcm_isa_probes_initialized == 0) {
 		LIST_INIT(&tcm_isa_all_probes);
@@ -287,7 +286,7 @@ trtcm_isa_probe(parent, match, aux)
 
 		maddr = ((tcmreadeeprom(iot, ioh, EEPROM_OEM_ADDR0) & 0xfc00)
 		    << 3) + 0x80000;
-		msize = 65536 >> ((tcmreadeeprom(iot, ioh, 8) & 0x0c) >> 2);
+		msiz = 65536 >> ((tcmreadeeprom(iot, ioh, 8) & 0x0c) >> 2);
 
 		irq = tcmreadeeprom(iot, ioh, EEPROM_ADDR_CFG) & 0x180;
 		irq |= (tcmreadeeprom(iot, ioh, EEPROM_RESOURCE_CFG) & 0x40);
@@ -319,22 +318,29 @@ trtcm_isa_probe(parent, match, aux)
 			bus_space_write_1(iot, ioh, 0,
 			    ACTIVATE_ADAPTER_TO_CONFIG);
 		}
-		tcmaddcard(bus, iobase, irq, maddr, msize, model, pnpmode);
+		tcmaddcard(bus, iobase, irq, maddr, msiz, model, pnpmode);
 	}
 	bus_space_unmap(iot, ioh, 1);
 
 bus_probed:
+
+	if (ia->ia_nio < 1)
+		return (0);
+	if (ia->ia_niomem < 1)
+		return (0);
+	if (ia->ia_nirq < 1)
+		return (0);
 
 	for (i = 0; i < ntcmcards; i++) {
 		if (tcmcards[i].bus != bus)
 			continue;
 		if (tcmcards[i].available == 0)
 			continue;
-		if (ia->ia_iobase != IOBASEUNK &&
-		    ia->ia_iobase != tcmcards[i].iobase)
+		if (ia->ia_io[0].ir_addr != ISA_UNKNOWN_PORT &&
+		    ia->ia_io[0].ir_addr != tcmcards[i].iobase)
 			continue;
-		if (ia->ia_irq != IRQUNK &&
-		    ia->ia_irq != tcmcards[i].irq)
+		if (ia->ia_irq[0].ir_irq != ISA_UNKNOWN_IRQ &&
+		    ia->ia_irq[0].ir_irq != tcmcards[i].irq)
 			continue;
 		goto good;
 	}
@@ -344,15 +350,24 @@ good:
 	tcmcards[i].available = 0;
 	if (tcmcards[i].pnpmode)
 		return -1;	/* XXX Don't actually probe this card. */
-	ia->ia_iobase = tcmcards[i].iobase;
-	ia->ia_irq = tcmcards[i].irq;
+
+	ia->ia_nio = 1;
+	ia->ia_io[0].ir_addr = tcmcards[i].iobase;
 	/* XXX probably right, but ...... */
-	if (ia->ia_iobase == 0xa20 || ia->ia_iobase == 0x0a24)
-		ia->ia_iosize = 4;
+	if (ia->ia_io[0].ir_addr == 0xa20 || ia->ia_io[0].ir_addr == 0xa24)
+		ia->ia_io[0].ir_size = 4;
 	else
-		ia->ia_iosize = 16;
-	ia->ia_maddr = tcmcards[i].maddr;
-	ia->ia_msize = tcmcards[i].msize;
+		ia->ia_io[0].ir_size = 16;
+
+	ia->ia_niomem = 1;
+	ia->ia_iomem[0].ir_addr = tcmcards[i].maddr;
+	ia->ia_iomem[0].ir_size = tcmcards[i].msize;
+
+	ia->ia_nirq = 1;
+	ia->ia_irq[0].ir_irq = tcmcards[i].irq;
+
+	ia->ia_ndrq = 0;
+
 	ia->ia_aux = (void *) tcmcards[i].model;
 	return 1;
 }

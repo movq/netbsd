@@ -1,15 +1,22 @@
-#	$NetBSD: Makefile,v 1.7 1999/05/18 04:49:41 jwise Exp $
+# $NetBSD: Makefile,v 1.11 2005/04/03 22:15:32 peter Exp $
 
+.include <bsd.own.mk>
+
+WARNS=	4
 PROG=	identd
-MAN=	identd.8 
+SRCS=	identd.c
+MAN=	identd.8
 
-CPPFLAGS+= -DINCLUDE_EXTENSIONS -DSTRONG_LOG -DALLOW_FORMAT
-.ifdef DEFAULT_LIE_USER
-CPPFLAGS+= -DDEFAULT_LIE_USER=\"${DEFAULT_LIE_USER}\"
+# Build with IP Filter support?
+.if (${MKIPFILTER} != "no")
+SRCS+=	ipf.c
+CPPFLAGS+=-I${NETBSDSRCDIR}/sys/dist/ipf -DWITH_IPF
 .endif
-LDADD+=	-lutil -lkvm
-DPADD+=	${LIBUTIL} ${LIBKVM}
 
-SRCS=	netbsd.c version.c proxy.c config.c parse.c identd.c 
+# Build with pf support?
+.if (${MKPF} != "no")
+SRCS+=	pf.c
+CPPFLAGS+=-DWITH_PF
+.endif
 
 .include <bsd.prog.mk>

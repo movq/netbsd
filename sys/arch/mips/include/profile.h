@@ -1,4 +1,4 @@
-/*	$NetBSD: profile.h,v 1.13 2000/03/28 02:58:46 simonb Exp $	*/
+/*	$NetBSD: profile.h,v 1.20 2005/12/24 23:24:01 perry Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -46,9 +42,9 @@
   *  Declare non-profiled _splhigh() /_splx() entrypoints for _mcount.
   *  see MCOUNT_ENTER and MCOUNT_EXIT.
   */
-#define	_KERNEL_MCOUNT_DECL 		\
-	int _splhigh __P((void));	\
-	int _splx __P((int));
+#define	_KERNEL_MCOUNT_DECL		\
+	int _splraise_noprof(int);	\
+	int _splset_noprof(int);
 #else   /* !_KERNEL */
 /* Make __mcount static. */
 #define	_KERNEL_MCOUNT_DECL	static
@@ -66,12 +62,13 @@
     void __attribute__((unused)) __mcount
 
 #define	MCOUNT \
-	__asm__(".globl _mcount;" \
+	__asm(".globl _mcount;" \
 	".type _mcount,@function;" \
 	"_mcount:;" \
 	".set noreorder;" \
 	".set noat;" \
 	_PROF_CPLOAD \
+	"addu $29,$29,-16;" \
 	"sw $4,8($29);" \
 	"sw $5,12($29);" \
 	"sw $6,16($29);" \
@@ -79,15 +76,16 @@
 	"sw $1,0($29);" \
 	"sw $31,4($29);" \
 	"move $5,$31;" \
-	"jal __mcount;" \
 	"move $4,$1;" \
+	"jal __mcount;" \
+	"nop;" \
 	"lw $4,8($29);" \
 	"lw $5,12($29);" \
 	"lw $6,16($29);" \
 	"lw $7,20($29);" \
 	"lw $31,4($29);" \
 	"lw $1,0($29);" \
-	"addu $29,$29,8;" \
+	"addu $29,$29,24;" \
 	"j $31;" \
 	"move $31,$1;" \
 	".set reorder;" \
@@ -96,13 +94,13 @@
 #ifdef _KERNEL
 /*
  * The following two macros do splhigh and splx respectively.
- * They have to be defined this way because these are real
- * functions on the MIPS, and we do not want to invoke mcount
- * recursively.
+ * We use versions of _splraise() and _splset that don't
+ * including profiling support.
  */
-#define	MCOUNT_ENTER	s = _splhigh()
 
-#define	MCOUNT_EXIT	_splx(s)
+#define	MCOUNT_ENTER	s = _splraise_noprof(MIPS_INT_MASK)
+
+#define	MCOUNT_EXIT	(void)_splset_noprof(s)
 #endif /* _KERNEL */
 
 #endif /* _MIPS_PROFILE_H_ */

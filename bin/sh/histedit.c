@@ -1,4 +1,4 @@
-/*	$NetBSD: histedit.c,v 1.22 2000/01/27 23:39:40 christos Exp $	*/
+/*	$NetBSD: histedit.c,v 1.41 2008/02/13 12:57:16 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)histedit.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: histedit.c,v 1.22 2000/01/27 23:39:40 christos Exp $");
+__RCSID("$NetBSD: histedit.c,v 1.41 2008/02/13 12:57:16 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -73,20 +69,26 @@ History *hist;	/* history cookie */
 EditLine *el;	/* editline cookie */
 int displayhist;
 static FILE *el_in, *el_out;
+unsigned char _el_fn_complete(EditLine *, int);
 
-STATIC const char *fc_replace __P((const char *, char *, char *));
+STATIC const char *fc_replace(const char *, char *, char *);
+
+#ifdef DEBUG
+extern FILE *tracefile;
+#endif
 
 /*
  * Set history and editing status.  Called whenever the status may
  * have changed (figures out what to do).
  */
 void
-histedit()
+histedit(void)
 {
+	FILE *el_err;
 
 #define editing (Eflag || Vflag)
 
-	if (iflag) {
+	if (iflag == 1) {
 		if (!hist) {
 			/*
 			 * turn history on
@@ -104,6 +106,8 @@ histedit()
 			/*
 			 * turn editing on
 			 */
+			char *term, *shname;
+
 			INTOFF;
 			if (el_in == NULL)
 				el_in = fdopen(0, "r");
@@ -111,11 +115,28 @@ histedit()
 				el_out = fdopen(2, "w");
 			if (el_in == NULL || el_out == NULL)
 				goto bad;
-			el = el_init(arg0, el_in, el_out, el_out);
+			el_err = el_out;
+#if DEBUG
+			if (tracefile)
+				el_err = tracefile;
+#endif
+			term = lookupvar("TERM");
+			if (term)
+				setenv("TERM", term, 1);
+			else
+				unsetenv("TERM");
+			shname = arg0;
+			if (shname[0] == '-')
+				shname++;
+			el = el_init(shname, el_in, el_out, el_err);
 			if (el != NULL) {
 				if (hist)
 					el_set(el, EL_HIST, history, hist);
 				el_set(el, EL_PROMPT, getprompt);
+				el_set(el, EL_SIGNAL, 1);
+				el_set(el, EL_ADDFN, "rl-complete",
+				    "ReadLine compatible completion function",
+				    _el_fn_complete);
 			} else {
 bad:
 				out2str("sh: can't initialize editing\n");
@@ -132,6 +153,9 @@ bad:
 				el_set(el, EL_EDITOR, "vi");
 			else if (Eflag)
 				el_set(el, EL_EDITOR, "emacs");
+			el_set(el, EL_BIND, "^I", 
+			    tabcomplete ? "rl-complete" : "ed-insert", NULL);
+			el_source(el, NULL);
 		}
 	} else {
 		INTOFF;
@@ -149,8 +173,7 @@ bad:
 
 
 void
-sethistsize(hs)
-	const char *hs;
+sethistsize(const char *hs)
 {
 	int histsize;
 	HistEvent he;
@@ -160,12 +183,12 @@ sethistsize(hs)
 		   (histsize = atoi(hs)) < 0)
 			histsize = 100;
 		history(hist, &he, H_SETSIZE, histsize);
+		history(hist, &he, H_SETUNIQUE, 1);
 	}
 }
 
 void
-setterm(term)
-	const char *term;
+setterm(const char *term)
 {
 	if (el != NULL && term != NULL)
 		if (el_set(el, EL_TERMINAL, term) != 0) {
@@ -174,21 +197,39 @@ setterm(term)
 		}
 }
 
+int
+inputrc(argc, argv)
+	int argc;
+	char **argv;
+{
+	if (argc != 2) {
+		out2str("usage: inputrc file\n");
+		return 1;
+	}
+	if (el != NULL) {
+		if (el_source(el, argv[1])) {
+			out2str("inputrc: failed\n");
+			return 1;
+		} else
+			return 0;
+	} else {
+		out2str("sh: inputrc ignored, not editing\n");
+		return 1;
+	}
+}
+
 /*
  *  This command is provided since POSIX decided to standardize
  *  the Korn shell fc command.  Oh well...
  */
 int
-histcmd(argc, argv)
-	int argc;
-	char **argv;
+histcmd(int argc, char **argv)
 {
-	extern char *optarg;
-	extern int optind, optopt, optreset;
 	int ch;
-	const char *editor = NULL;
+	const char * volatile editor = NULL;
 	HistEvent he;
-	int lflg = 0, nflg = 0, rflg = 0, sflg = 0;
+	int lflg = 0;
+	volatile int nflg = 0, rflg = 0, sflg = 0;
 	int i, retval;
 	const char *firststr, *laststr;
 	int first, last, direction;
@@ -199,19 +240,8 @@ histcmd(argc, argv)
 	char editfile[MAXPATHLEN + 1];
 	FILE *efp;
 #ifdef __GNUC__
-	/* Avoid longjmp clobbering */
-	(void) &editor;
-	(void) &lflg;
-	(void) &nflg;
-	(void) &rflg;
-	(void) &sflg;
-	(void) &firststr;
-	(void) &laststr;
-	(void) &pat;
-	(void) &repl;
-	(void) &efp;
-	(void) &argc;
-	(void) &argv;
+	repl = NULL;	/* XXX gcc4 */
+	efp = NULL;	/* XXX gcc4 */
 #endif
 
 	if (hist == NULL)
@@ -225,7 +255,7 @@ histcmd(argc, argv)
 	      (ch = getopt(argc, argv, ":e:lnrs")) != -1)
 		switch ((char)ch) {
 		case 'e':
-			editor = optarg;
+			editor = optionarg;
 			break;
 		case 'l':
 			lflg = 1;
@@ -297,6 +327,13 @@ histcmd(argc, argv)
 		*repl++ = '\0';
 		argc--, argv++;
 	}
+
+	/*
+	 * If -s is specified, accept only one operand
+	 */
+	if (sflg && argc >= 2)
+		error("too many args");
+
 	/*
 	 * determine [first] and [last]
 	 */
@@ -341,7 +378,7 @@ histcmd(argc, argv)
 	if (editor) {
 		int fd;
 		INTOFF;		/* easier */
-		sprintf(editfile, "%s_shXXXXXX", _PATH_TMP);
+		snprintf(editfile, sizeof(editfile), "%s_shXXXXXX", _PATH_TMP);
 		if ((fd = mkstemp(editfile)) < 0)
 			error("can't create temporary file %s", editfile);
 		if ((efp = fdopen(fd, "w")) == NULL) {
@@ -368,7 +405,6 @@ histcmd(argc, argv)
 		} else {
 			const char *s = pat ?
 			   fc_replace(he.str, pat, repl) : he.str;
-			char *sp;
 
 			if (sflg) {
 				if (displayhist) {
@@ -376,7 +412,6 @@ histcmd(argc, argv)
 				}
 
 				evalstring(strcpy(stalloc(strlen(s) + 1), s), 0);
-				free(sp);
 				if (displayhist && hist) {
 					/*
 					 *  XXX what about recursive and
@@ -384,6 +419,8 @@ histcmd(argc, argv)
 					 */
 					history(hist, &he, H_ENTER, s);
 				}
+
+				break;
 			} else
 				fputs(s, efp);
 		}
@@ -414,9 +451,7 @@ histcmd(argc, argv)
 }
 
 STATIC const char *
-fc_replace(s, p, r)
-	const char *s;
-	char *p, *r;
+fc_replace(const char *s, char *p, char *r)
 {
 	char *dest;
 	int plen = strlen(p);
@@ -438,8 +473,7 @@ fc_replace(s, p, r)
 }
 
 int
-not_fcnumber(s)
-        char *s;
+not_fcnumber(char *s)
 {
 	if (s == NULL)
 		return 0;
@@ -449,9 +483,7 @@ not_fcnumber(s)
 }
 
 int
-str_to_event(str, last)
-	const char *str;
-	int last;
+str_to_event(const char *str, int last)
 {
 	HistEvent he;
 	const char *s = str;
@@ -500,9 +532,13 @@ str_to_event(str, last)
 }
 #else
 int
-histcmd(argc, argv)
-	int argc;
-	char **argv;
+histcmd(int argc, char **argv)
+{
+	error("not compiled with history support");
+	/* NOTREACHED */
+}
+int
+inputrc(int argc, char **argv)
 {
 	error("not compiled with history support");
 	/* NOTREACHED */

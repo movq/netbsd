@@ -1,4 +1,4 @@
-/*	$NetBSD: shell.h,v 1.10 1996/10/16 15:21:49 christos Exp $	*/
+/*	$NetBSD: shell.h,v 1.17 2003/08/07 09:05:38 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,30 +40,32 @@
  *	SHORTNAMES -> 1 if your linker cannot handle long names.
  *	define BSD if you are running 4.2 BSD or later.
  *	define SYSV if you are running under System V.
- *	define DEBUG=1 to compile in debugging (set global "debug" to turn on)
+ *	define DEBUG=1 to compile in debugging ('set -o debug' to turn on)
  *	define DEBUG=2 to compile in and turn on debugging.
+ *	define DO_SHAREDVFORK to indicate that vfork(2) shares its address
+ *	       with its parent.
  *
- * When debugging is on, debugging info will be written to $HOME/trace and
+ * When debugging is on, debugging info will be written to ./trace and
  * a quit signal will generate a core dump.
  */
 
+#include <sys/param.h>
 
 #define JOBS 1
 #ifndef BSD
 #define BSD 1
 #endif
 
-#ifdef __STDC__
+#ifndef DO_SHAREDVFORK
+#if __NetBSD_Version__ >= 104000000
+#define DO_SHAREDVFORK
+#endif
+#endif
+
 typedef void *pointer;
 #ifndef NULL
 #define NULL (void *)0
 #endif
-#else /* not __STDC__ */
-typedef char *pointer;
-#ifndef NULL
-#define NULL 0
-#endif
-#endif /*  not __STDC__ */
 #define STATIC	/* empty */
 #define MKINIT	/* empty */
 
@@ -78,6 +76,8 @@ extern char nullstr[1];		/* null string */
 
 #ifdef DEBUG
 #define TRACE(param)	trace param
+#define TRACEV(param)	tracev param
 #else
 #define TRACE(param)
+#define TRACEV(param)
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: clri.c,v 1.13 1998/08/25 19:18:13 ross Exp $	*/
+/*	$NetBSD: clri.c,v 1.20 2008/07/20 01:20:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)clri.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: clri.c,v 1.13 1998/08/25 19:18:13 ross Exp $");
+__RCSID("$NetBSD: clri.c,v 1.20 2008/07/20 01:20:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -66,23 +62,27 @@ __RCSID("$NetBSD: clri.c,v 1.13 1998/08/25 19:18:13 ross Exp $");
 #include <stdio.h>
 #include <unistd.h>
 
-int	main __P((int, char *[]));
+/*
+ * Possible superblock locations ordered from most to least likely.
+ */
+static off_t sblock_try[] = SBLOCKSEARCH;
+off_t sblockloc;
+
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct fs *sbp;
-	struct dinode *ip;
+	struct ufs1_dinode *ip1;
+	struct ufs2_dinode *ip2;
 	int fd;
-	struct dinode ibuf[MAXBSIZE / sizeof (struct dinode)];
+	char *ibuf[MAXBSIZE];
 	int32_t generation;
 	off_t offset;
 	size_t bsize;
 	int inonum;
-	char *fs, sblock[SBSIZE];
-	int needswap = 0;
+	char *fs, sblock[SBLOCKSIZE];
+	int needswap = 0, is_ufs2 = 0;
 	int i, imax;
 
 	if (argc < 3) {
@@ -96,18 +96,40 @@ main(argc, argv)
 	/* get the superblock. */
 	if ((fd = open(fs, O_RDWR, 0)) < 0)
 		err(1, "%s", fs);
-	if (lseek(fd, (off_t)(SBLOCK * DEV_BSIZE), SEEK_SET) < 0)
-		err(1, "%s", fs);
-	if (read(fd, sblock, sizeof(sblock)) != sizeof(sblock))
-		errx(1, "%s: can't read superblock", fs);
+	for (i = 0;; i++) {
+		sblockloc = sblock_try[i];
+		if (sblockloc == -1)
+			errx(1, "%s: can't find superblock", fs);
+		if (pread(fd, sblock, sizeof(sblock), sblockloc) != sizeof(sblock))
+			errx(1, "%s: can't read superblock", fs);
 
-	sbp = (struct fs *)sblock;
-	if (sbp->fs_magic != FS_MAGIC) {
-		if (sbp->fs_magic == bswap32(FS_MAGIC))
+		sbp = (struct fs *)sblock;
+		switch(sbp->fs_magic) {
+		case FS_UFS2_MAGIC:
+			is_ufs2 = 1;
+			/*FALLTHROUGH*/
+		case FS_UFS1_MAGIC:
+			break;
+		case FS_UFS2_MAGIC_SWAPPED:
+			is_ufs2 = 1;
+			/*FALLTHROUGH*/
+		case FS_UFS1_MAGIC_SWAPPED:
 			needswap = 1;
-		else
-			errx(1, "%s: superblock magic number 0x%x, not 0x%x",
-		    	fs, sbp->fs_magic, FS_MAGIC);
+			break;
+		default:
+			continue;
+		}
+
+		/* check we haven't found an alternate */
+		if (is_ufs2 || sbp->fs_old_flags & FS_FLAGS_UPDATED) {
+			if (sblockloc != ufs_rw64(sbp->fs_sblockloc, needswap))
+				continue;
+		} else {
+			if (sblockloc == SBLOCK_UFS2)
+				continue;
+		}
+
+		break;
 	}
 
 	/* check that inode numbers are valid */
@@ -118,17 +140,16 @@ main(argc, argv)
 			errx(1, "%s is not a valid inode number", argv[i]);
 
 	/* delete clean flag in the superblok */
-	sbp->fs_clean = ufs_rw32(
-						ufs_rw32(sbp->fs_clean, needswap) << 1,
-						needswap);
-	if (lseek(fd, (off_t)(SBLOCK * DEV_BSIZE), SEEK_SET) < 0)
+	sbp->fs_clean = ufs_rw32(ufs_rw32(sbp->fs_clean, needswap) << 1,
+				needswap);
+	if (lseek(fd, sblockloc, SEEK_SET) < 0)
 		err(1, "%s", fs);
 	if (write(fd, sblock, sizeof(sblock)) != sizeof(sblock))
 		errx(1, "%s: can't rewrite superblock", fs);
 	(void)fsync(fd);
 
 	if (needswap)
-		ffs_sb_swap(sbp, sbp, 0);
+		ffs_sb_swap(sbp, sbp);
 	bsize = sbp->fs_bsize;
 
 	/* remaining arguments are inode numbers. */
@@ -149,12 +170,21 @@ main(argc, argv)
 			err(1, "%s", fs);
 
 		/* get the inode within the block. */
-		ip = &ibuf[ino_to_fsbo(sbp, inonum)];
-
-		/* clear the inode, and bump the generation count. */
-		generation = ip->di_gen + 1;
-		memset(ip, 0, sizeof(*ip));
-		ip->di_gen = generation;
+		if (is_ufs2) {
+			ip2 = &((struct ufs2_dinode *)ibuf)
+			    [ino_to_fsbo(sbp, inonum)];
+			/* clear the inode, and bump the generation count. */
+			generation = ip2->di_gen + 1;
+			memset(ip2, 0, sizeof(*ip2));
+			ip2->di_gen = generation;
+		} else {
+			ip1 = &((struct ufs1_dinode *)ibuf)
+			    [ino_to_fsbo(sbp, inonum)];
+			/* clear the inode, and bump the generation count. */
+			generation = ip1->di_gen + 1;
+			memset(ip1, 0, sizeof(*ip1));
+			ip1->di_gen = generation;
+		}
 
 		/* backup and write the block */
 		if (lseek(fd, offset, SEEK_SET) < 0)

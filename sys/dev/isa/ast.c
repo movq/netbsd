@@ -1,4 +1,4 @@
-/*	$NetBSD: ast.c,v 1.45 1998/09/18 14:38:48 enami Exp $	*/
+/*	$NetBSD: ast.c,v 1.61 2008/05/30 10:59:42 martin Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -33,13 +33,16 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ast.c,v 1.61 2008/05/30 10:59:42 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/termios.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
@@ -57,30 +60,25 @@ struct ast_softc {
 	int sc_iobase;
 
 	int sc_alive;			/* mask of slave units attached */
-	void *sc_slaves[NSLAVES];	/* com device unit numbers */
+	void *sc_slaves[NSLAVES];	/* com device softc pointers */
 	bus_space_handle_t sc_slaveioh[NSLAVES];
 };
 
-int astprobe __P((struct device *, struct cfdata *, void *));
-void astattach __P((struct device *, struct device *, void *));
-int astintr __P((void *));
-int astprint __P((void *, const char *));
+int astprobe(struct device *, struct cfdata *, void *);
+void astattach(struct device *, struct device *, void *);
+int astintr(void *);
 
-struct cfattach ast_ca = {
-	sizeof(struct ast_softc), astprobe, astattach
-};
+CFATTACH_DECL(ast, sizeof(struct ast_softc),
+    astprobe, astattach, NULL, NULL);
 
 int
-astprobe(parent, self, aux)
-	struct device *parent;
-	struct cfdata *self;
-	void *aux;
+astprobe(struct device *parent, struct cfdata *self,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
-	int iobase = ia->ia_iobase;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
-	int i, rv = 1;
+	int i, iobase, rv = 1;
 
 	/*
 	 * Do the normal com probe for the first UART and assume
@@ -89,15 +87,26 @@ astprobe(parent, self, aux)
 	 * XXX Needs more robustness.
 	 */
 
+	if (ia->ia_nio < 1)
+		return (0);
+	if (ia->ia_nirq < 1)
+		return (0);
+
+	if (ISA_DIRECT_CONFIG(ia))
+		return (0);
+
 	/* Disallow wildcarded i/o address. */
-	if (ia->ia_iobase == ISACF_PORT_DEFAULT)
+	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+		return (0);
+
+	if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ)
 		return (0);
 
 	/* if the first port is in use as console, then it. */
-	if (com_is_console(iot, iobase, 0))
+	if (com_is_console(iot, ia->ia_io[0].ir_addr, 0))
 		goto checkmappings;
 
-	if (bus_space_map(iot, iobase, COM_NPORTS, 0, &ioh)) {
+	if (bus_space_map(iot, ia->ia_io[0].ir_addr, COM_NPORTS, 0, &ioh)) {
 		rv = 0;
 		goto out;
 	}
@@ -107,7 +116,7 @@ astprobe(parent, self, aux)
 		goto out;
 
 checkmappings:
-	for (i = 1; i < NSLAVES; i++) {
+	for (i = 1, iobase = ia->ia_io[0].ir_addr; i < NSLAVES; i++) {
 		iobase += COM_NPORTS;
 
 		if (com_is_console(iot, iobase, 0))
@@ -121,47 +130,39 @@ checkmappings:
 	}
 
 out:
-	if (rv)
-		ia->ia_iosize = NSLAVES * COM_NPORTS;
+	if (rv) {
+		ia->ia_nio = 1;
+		ia->ia_io[0].ir_size = NSLAVES * COM_NPORTS;
+
+		ia->ia_nirq = 1;
+
+		ia->ia_niomem = 0;
+		ia->ia_ndrq = 0;
+	}
 	return (rv);
 }
 
-int
-astprint(aux, pnp)
-	void *aux;
-	const char *pnp;
-{
-	struct commulti_attach_args *ca = aux;
-
-	if (pnp)
-		printf("com at %s", pnp);
-	printf(" slave %d", ca->ca_slave);
-	return (UNCONF);
-}
-
 void
-astattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+astattach(struct device *parent, struct device *self, void *aux)
 {
-	struct ast_softc *sc = (void *)self;
+	struct ast_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
 	struct commulti_attach_args ca;
 	bus_space_tag_t iot = ia->ia_iot;
 	int i, iobase;
+	device_t slave;
 
 	printf("\n");
 
 	sc->sc_iot = ia->ia_iot;
-	sc->sc_iobase = ia->ia_iobase;
+	sc->sc_iobase = ia->ia_io[0].ir_addr;
 
 	for (i = 0; i < NSLAVES; i++) {
 		iobase = sc->sc_iobase + i * COM_NPORTS;
 		if (!com_is_console(iot, iobase, &sc->sc_slaveioh[i]) &&
 		    bus_space_map(iot, iobase, COM_NPORTS, 0,
 			&sc->sc_slaveioh[i])) {
-			printf("%s: can't map i/o space for slave %d\n",
-			    sc->sc_dev.dv_xname, i);
+			aprint_error_dev(&sc->sc_dev, "can't map i/o space for slave %d\n", i);
 			return;
 		}
 	}
@@ -169,7 +170,7 @@ astattach(parent, self, aux)
 	/*
 	 * Enable the master interrupt.
 	 */
-	bus_space_write_1(iot, sc->sc_slaveioh[3], 7, 0x80);
+	bus_space_write_1(iot, sc->sc_slaveioh[3], com_scratch, 0x80);
 
 	for (i = 0; i < NSLAVES; i++) {
 		ca.ca_slave = i;
@@ -178,13 +179,15 @@ astattach(parent, self, aux)
 		ca.ca_iobase = sc->sc_iobase + i * COM_NPORTS;
 		ca.ca_noien = 1;
 
-		sc->sc_slaves[i] = config_found(self, &ca, astprint);
-		if (sc->sc_slaves[i] != NULL)
+		slave = config_found(self, &ca, commultiprint);
+		if (slave != NULL) {
 			sc->sc_alive |= 1 << i;
+			sc->sc_slaves[i] = device_private(slave);
+		}
 	}
 
-	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq, IST_EDGE,
-	    IPL_SERIAL, astintr, sc);
+	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
+	    IST_EDGE, IPL_SERIAL, astintr, sc);
 }
 
 int
@@ -196,7 +199,7 @@ astintr(arg)
 	int alive = sc->sc_alive;
 	int bits;
 
-	bits = ~bus_space_read_1(iot, sc->sc_slaveioh[3], 7) & alive;
+	bits = ~bus_space_read_1(iot, sc->sc_slaveioh[3], com_scratch) & alive;
 	if (bits == 0)
 		return (0);
 
@@ -209,7 +212,8 @@ astintr(arg)
 		TRY(2);
 		TRY(3);
 #undef TRY
-		bits = ~bus_space_read_1(iot, sc->sc_slaveioh[3], 7) & alive;
+		bits = ~bus_space_read_1(iot, sc->sc_slaveioh[3],
+		    com_scratch) & alive;
 		if (bits == 0)
 			return (1);
  	}

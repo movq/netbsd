@@ -1,7 +1,7 @@
-#	$NetBSD: install.md,v 1.11 1999/06/29 20:32:54 is Exp $
+#	$NetBSD: install.md,v 1.26 2008/04/30 13:10:47 martin Exp $
 #
 #
-# Copyright (c) 1996 The NetBSD Foundation, Inc.
+# Copyright (c) 1996,2006 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
 #
 
 # Machine-dependent install sets
-MDSETS="xbase xcomp xcontrib xfont xserver"
+MDSETS="kern-GENERIC xbase xcomp xetc xfont xserver"
 
 md_set_term() {
 	if [ ! -z "$TERM" ]; then
@@ -65,11 +58,10 @@ __mount_kernfs() {
 
 md_makerootwritable() {
 	# Mount root rw for convenience of the tester ;-)
-	if [ ! -e /tmp/.root_writable ]; then
+	if ! cp /dev/null /tmp/.root_writable >/dev/null 2>&1; then
 		__mount_kernfs
 		# XXX: Use /kern/rootdev instead?
-		mount -u /kern/rootdev / > /dev/null 2>&1
-		cp /dev/null /tmp/.root_writable
+		mount -t ffs -u /kern/rootdev / > /dev/null 2>&1
 	fi
 }
 
@@ -93,16 +85,17 @@ md_get_partition_range() {
 }
 
 md_installboot() {
-	if [ -x /mnt/usr/mdec/installboot ]; then
+	if [ -x /mnt/usr/sbin/installboot ]; then
 		echo -n "Should a boot block be installed? [y] "
 		getresp "y"
 		case "$resp" in
 			y*|Y*)
 				echo "Installing boot block..."
-				chroot /mnt /usr/mdec/installboot /usr/mdec/xxboot /dev/r${1}a
+				chroot /mnt /usr/sbin/installboot /dev/r${1}a /usr/mdec/bootxx_ffs
+				cp -p /mnt/usr/mdec/boot.amiga /mnt/
 				;;
 			*)
-				echo "No bootblock installed..."
+				echo "No bootblock installed."
 				;;
 		esac
 	elif [ "$MODE" = "install" ]; then
@@ -127,6 +120,10 @@ md_native_fsopts() {
 }
 
 md_prep_disklabel() {
+}
+
+md_view_labels_possible=1
+md_view_labels() {
 	_DKDEVS=`md_get_diskdevs`
 	echo "If you like, you can now examine the labels of your disks."
 	echo ""
@@ -239,6 +236,20 @@ md_copy_kernel() {
 	fi
 
 	if [ -e /netbsd ]; then
+		if [ -e /mnt/netbsd ]; then
+			echo "On the installation filesystem there is this kernel: "
+			ls -l /netbsd
+			echo "The already installed kernel is: "
+			ls -l /mnt/netbsd
+			echo	"Do you want to replace the already installed kernel by the kernel"
+			echo -n "on the installation filesystem? (y/n) [n] "
+			resp="n"
+			getresp ""
+			if [ "${resp}" != "y" -a "${resp}" != "Y" ]; then
+				return
+			fi
+		fi
+
 		echo -n "Copying kernel..."
 		cp -p /netbsd /mnt/netbsd
 		echo "done."
@@ -312,3 +323,124 @@ __md_copy_kernel_1
 	done
 	umount -f /mnt2 > /dev/null 2>&1
 }
+
+md_lib_is_aout() {
+	local r
+	test -h $1 && return 1
+	test -f $1 || return 1
+
+	r=`file $1 | sed -n -e '/ELF/p'`
+	test -z "$r" || return 1
+	return 0
+}
+
+
+md_mv_usr_lib() {
+	local root
+	root=$1
+	for f in $root/usr/lib/lib*.so.[0-9]*.[0-9]* ; do
+		md_lib_is_aout $f || continue
+		mv -f $f $root/emul/aout/usr/lib || return 1
+	done
+	return 0
+}
+
+md_x_shlib_set_14=" \
+	libICE.so.6.3 \
+	libPEX5.so.6.0 \
+	libSM.so.6.0 \
+	libX11.so.6.1 \
+	libXIE.so.6.0 \
+	libXaw.so.6.1 \
+	libXext.so.6.3 \
+	libXi.so.6.0 \
+	libXmu.so.6.0 \
+	libXp.so.6.2 \
+	libXt.so.6.0 \
+	libXtst.so.6.1 \
+	liboldX.so.6.0"
+
+md_mv_x_lib() {
+	local root xlibdir
+	root=$1
+	xlibdir=$2
+	for f in $md_x_shlib_set_14; do
+		md_lib_is_aout $root/$xlibdir/$f || continue
+		mv -f $root/$xlibdir/$f $root/emul/aout/$xlibdir || return 1
+	done
+	return 0
+}
+
+md_mv_aout_libs()
+{
+	local root xlibdir
+
+	root=/mnt	# XXX - should be global
+
+	if [ -d $root/emul/aout/. ]; then
+		echo "Using existing /emul/aout directory"
+	else
+		echo "Creating /emul/aout hierachy"
+		mkdir -p $root/usr/aout || return 1
+
+		if [ ! -d $root/emul ]; then
+			mkdir $root/emul || return 1
+		fi
+
+		if [ -h $root/emul/aout ]; then
+			echo "Preserving existing symbolic link from /emul/aout"
+			mv -f $root/emul/aout $root/emul/aout.old || return 1
+		fi
+
+		ln -s ../usr/aout $root/emul/aout || return 1
+	fi
+
+	# Create /emul/aout/etc and /emul/aout/usr/lib
+	if [ ! -d $root/emul/aout/etc ]; then
+		mkdir $root/emul/aout/etc || return 1
+	fi
+	if [ ! -d $root/emul/aout/usr/lib ]; then
+		mkdir -p $root/emul/aout/usr/lib || return 1
+	fi
+
+	# Move ld.so.conf
+	if [ -f $root/etc/ld.so.conf ]; then
+		mv -f $root/etc/ld.so.conf $root/emul/aout/etc || return 1
+	fi
+
+	# Finally, move the aout shared libraries from /usr/lib
+	md_mv_usr_lib $root || return 1
+
+	# If X11 is installed, move the those libraries as well
+	xlibdir="/usr/X11R6/lib"
+	if [ -d $root/$xlibdir/. ]; then
+		mkdir -p $root/emul/aout/$xlibdir || return 1
+		md_mv_x_lib $root $xlibdir || return 1
+	fi
+
+	echo "a.out emulation environment setup completed."
+}
+
+md_prepare_upgrade()  
+{
+cat << 'EOF'
+This release uses the ELF binary object format. Existing (a.out) binaries
+can still be used on your system after it has been upgraded, provided
+that the shared libraries needed by those binaries are made available
+in the filesystem hierarchy rooted at /emul/aout.
+
+This upgrade procedure will now establish this hierarchy by moving all
+shared libraries in a.out format found in /usr/lib to /emul/aout/usr/lib.
+It will also move the X11 shared libraries in a.out format from previous
+NetBSD/amiga X11 installation sets, if they are installed.
+
+EOF
+	md_mv_aout_libs || {
+		echo "Failed to setup a.out emulation environment"
+		return 1
+	}
+	return 0
+}
+
+# Flag to notify upgrade.sh of the existence of md_prepare_upgrade()
+md_upgrade_prep_needed=1

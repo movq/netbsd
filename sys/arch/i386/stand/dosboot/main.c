@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.14 2000/03/13 10:51:22 martin Exp $	 */
+/*	$NetBSD: main.c,v 1.24 2008/09/26 14:12:49 christos Exp $	 */
 
 /*
  * Copyright (c) 1996, 1997
@@ -45,13 +45,12 @@
 #include <libi386.h>
 
 #ifdef SUPPORT_LYNX
-extern int exec_lynx __P((const char*, int));
+extern int exec_lynx(const char*, int);
 #endif
 
 int errno;
 
-extern	char bootprog_name[], bootprog_rev[], bootprog_date[],
-	bootprog_maker[];
+extern	char bootprog_name[], bootprog_rev[], bootprog_kernrev[];
 
 #define MAXDEVNAME 16
 
@@ -60,19 +59,19 @@ static char    *default_devname;
 static int      default_unit, default_partition;
 static char    *default_filename;
 
-char *sprint_bootsel __P((const char *));
-static void bootit __P((const char *, int, int));
-void usage __P((void));
-int main __P((int, char **));
+char *sprint_bootsel(const char *);
+static void bootit(const char *, int, int);
+void usage(void);
+int main(int, char **);
 
-void	command_help __P((char *));
-void	command_ls __P((char *));
-void	command_quit __P((char *));
-void	command_boot __P((char *));
-void	command_mode __P((char *));
-void	command_dev __P((char *));
+void	command_help(char *);
+void	command_ls(char *);
+void	command_quit(char *);
+void	command_boot(char *);
+void	command_mode(char *);
+void	command_dev(char *);
 
-struct bootblk_command commands[] = {
+const struct bootblk_command commands[] = {
 	{ "help",	command_help },
 	{ "?",		command_help },
 	{ "ls",		command_ls },
@@ -88,7 +87,7 @@ parsebootfile(fname, fsmode, devname, unit, partition, file)
 	const char     *fname;
 	char          **fsmode; /* out */
 	char          **devname; /* out */
-	unsigned int   *unit, *partition; /* out */
+	int            *unit, *partition; /* out */
 	const char    **file; /* out */
 {
 	const char     *col, *help;
@@ -182,6 +181,7 @@ bootit(filename, howto, tell)
 	const char     *filename;
 	int             howto, tell;
 {
+	int floppy = strncmp(default_devname, "fd", 2) == 0;
 	if (tell) {
 		printf("booting %s", sprint_bootsel(filename));
 		if (howto)
@@ -189,7 +189,7 @@ bootit(filename, howto, tell)
 		printf("\n");
 	}
 #ifdef SUPPORT_LYNX
-	if(exec_netbsd(filename, 0, howto) < 0)
+	if(exec_netbsd(filename, 0, howto, floppy) < 0)
 		printf("boot netbsd: %s: %s\n", sprint_bootsel(filename),
 		       strerror(errno));
 	else {
@@ -202,7 +202,7 @@ bootit(filename, howto, tell)
 	else
 		printf("boot lynx returned\n");
 #else
-	if (exec_netbsd(filename, 0, howto) < 0)
+	if (exec_netbsd(filename, 0, howto, floppy) < 0)
 		printf("boot: %s: %s\n", sprint_bootsel(filename),
 		       strerror(errno));
 	else
@@ -226,16 +226,17 @@ print_banner(void)
 		 * xmsmem is a few kB less than the actual size, but
 		 *  better than nothing.
 		 */
-		if (xmsmem > extmem)
+		if ((int)xmsmem > extmem)
 			extmem = xmsmem;
 		s = "(xms) ";
 	}
 #endif
 
-	printf("\n");
-	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
-	printf(">> Memory: %d/%d %sk\n", getbasemem(), extmem, s);
+	printf("\n"
+	       ">> %s, Revision %s (from NetBSD %s)\n"
+	       ">> Memory: %d/%d %sk\n",
+	       bootprog_name, bootprog_rev, bootprog_kernrev,
+	       getbasemem(), extmem, s);
 }
 
 void 
@@ -314,7 +315,7 @@ command_help(arg)
 	char *arg;
 {
 	printf("commands are:\n"
-	       "boot [xdNx:][filename] [-adrs]\n"
+	       "boot [xdNx:][filename] [-acdqsv]\n"
 	       "     (ex. \"sd0a:netbsd.old -s\"\n"
 	       "ls [path]\n"
 	       "mode ufs|dos\n"

@@ -1,8 +1,11 @@
-/*	$NetBSD: sc_wrap.c,v 1.15 2000/03/23 06:42:12 thorpej Exp $	*/
+/*	$NetBSD: sc_wrap.c,v 1.31 2008/04/09 15:40:30 tsutsui Exp $	*/
 
 /*
  * This driver is slow!  Need to rewrite.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: sc_wrap.c,v 1.31 2008/04/09 15:40:30 tsutsui Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -13,104 +16,102 @@
 #include <sys/buf.h>
 #include <sys/malloc.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 #include <dev/scsipi/scsi_message.h>
 
+#include <newsmips/dev/hbvar.h>
 #include <newsmips/dev/scsireg.h>
 #include <newsmips/dev/dmac_0448.h>
 #include <newsmips/dev/screg_1185.h>
 
-#include <machine/locore.h>
 #include <machine/adrsmap.h>
 #include <machine/autoconf.h>
 #include <machine/machConst.h>
 
-static int cxd1185_match __P((struct device *, struct cfdata *, void *));
-static void cxd1185_attach __P((struct device *, struct device *, void *));
+#include <mips/cache.h>
 
-struct cfattach sc_ca = {
-	sizeof(struct sc_softc), cxd1185_match, cxd1185_attach
-};
+static int cxd1185_match(device_t, cfdata_t, void *);
+static void cxd1185_attach(device_t, device_t, void *);
 
-void cxd1185_init __P((struct sc_softc *));
-static void free_scb __P((struct sc_softc *, struct sc_scb *));
-static struct sc_scb *get_scb __P((struct sc_softc *, int));
-static int sc_scsi_cmd __P((struct scsipi_xfer *));
-static int sc_poll __P((struct sc_softc *, int, int));
-static void sc_sched __P((struct sc_softc *));
-void sc_done __P((struct sc_scb *));
-int sc_intr __P((void *));
-static void cxd1185_timeout __P((void *));
+CFATTACH_DECL_NEW(sc, sizeof(struct sc_softc),
+    cxd1185_match, cxd1185_attach, NULL, NULL);
 
-extern void sc_send __P((struct sc_scb *, int, int));
-extern int scintr __P((void));
-extern void scsi_hardreset __P((void));
-extern int sc_busy __P((struct sc_softc *, int));
-extern paddr_t kvtophys __P((vaddr_t));
+void cxd1185_init(struct sc_softc *);
+static void free_scb(struct sc_softc *, struct sc_scb *);
+static struct sc_scb *get_scb(struct sc_softc *, int);
+static void sc_scsipi_request(struct scsipi_channel *,
+    scsipi_adapter_req_t, void *);
+static int sc_poll(struct sc_softc *, int, int);
+static void sc_sched(struct sc_softc *);
+void sc_done(struct sc_scb *);
+int sc_intr(void *);
+static void cxd1185_timeout(void *);
+
+extern void sc_send(struct sc_scb *, int, int);
+extern int scintr(void);
+extern void scsi_hardreset(void);
+extern int sc_busy(struct sc_softc *, int);
+extern paddr_t kvtophys(vaddr_t);
 
 static int sc_disconnect = IDT_DISCON;
 
-struct scsipi_device cxd1185_dev = {
-	NULL,
-	NULL,
-	NULL,
-	NULL
-};
-
 int
-cxd1185_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+cxd1185_match(device_t parent, cfdata_t cf, void *aux)
 {
-	struct confargs *ca = aux;
+	struct hb_attach_args *ha = aux;
 
-	if (strcmp(ca->ca_name, "sc"))
+	if (strcmp(ha->ha_name, "sc"))
 		return 0;
 
 	return 1;
 }
 
 void
-cxd1185_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+cxd1185_attach(device_t parent, device_t self, void *aux)
 {
-	struct sc_softc *sc = (void *)self;
+	struct sc_softc *sc = device_private(self);
+	struct hb_attach_args *ha = aux;
 	struct sc_scb *scb;
 	int i, intlevel;
 
-	intlevel = sc->sc_dev.dv_cfdata->cf_level;
+	sc->sc_dev = self;
+
+	intlevel = ha->ha_level;
 	if (intlevel == -1) {
 #if 0
-		printf(": interrupt level not configured\n");
+		aprint_error(": interrupt level not configured\n");
 		return;
 #else
-		printf(": interrupt level not configured; using");
+		aprint_normal(": interrupt level not configured; using");
 		intlevel = 0;
 #endif
 	}
-	printf(" level %d\n", intlevel);
+	aprint_normal(" level %d\n", intlevel);
 
 	if (sc_idenr & 0x08)
 		sc->scsi_1185AQ = 1;
 	else
 		sc->scsi_1185AQ = 0;
 
-	sc->sc_adapter.scsipi_cmd = sc_scsi_cmd;
-	sc->sc_adapter.scsipi_minphys = minphys;
+	sc->sc_adapter.adapt_dev = self;
+	sc->sc_adapter.adapt_nchannels = 1;
+	sc->sc_adapter.adapt_openings = 7;
+	sc->sc_adapter.adapt_max_periph = 1;
+	sc->sc_adapter.adapt_ioctl = NULL;
+	sc->sc_adapter.adapt_minphys = minphys;
+	sc->sc_adapter.adapt_request = sc_scsipi_request;
 
-	sc->sc_link.scsipi_scsi.channel = SCSI_CHANNEL_ONLY_ONE;
-	sc->sc_link.adapter_softc = sc;
-	sc->sc_link.scsipi_scsi.adapter_target = 7;
-	sc->sc_link.adapter = &sc->sc_adapter;
-	sc->sc_link.device = &cxd1185_dev;
-	sc->sc_link.openings = 2;
-	sc->sc_link.scsipi_scsi.max_target = 7;
-	sc->sc_link.scsipi_scsi.max_lun = 7;
-	sc->sc_link.type = BUS_SCSI;
+	memset(&sc->sc_channel, 0, sizeof(sc->sc_channel));
+	sc->sc_channel.chan_adapter = &sc->sc_adapter;
+	sc->sc_channel.chan_bustype = &scsi_bustype;
+	sc->sc_channel.chan_channel = 0;
+	sc->sc_channel.chan_ntargets = 8;
+	sc->sc_channel.chan_nluns = 8;
+	sc->sc_channel.chan_id = 7;
 
 	TAILQ_INIT(&sc->ready_list);
 	TAILQ_INIT(&sc->free_list);
@@ -124,14 +125,13 @@ cxd1185_attach(parent, self, aux)
 	cxd1185_init(sc);
 	DELAY(100000);
 
-	hb_intr_establish(intlevel, IPL_BIO, sc_intr, sc);
+	hb_intr_establish(intlevel, INTEN1_DMA, IPL_BIO, sc_intr, sc);
 
-	config_found(&sc->sc_dev, &sc->sc_link, scsiprint);
+	config_found(self, &sc->sc_channel, scsiprint);
 }
 
 void
-cxd1185_init(sc)
-	struct sc_softc *sc;
+cxd1185_init(struct sc_softc *sc)
 {
 	int i;
 
@@ -142,9 +142,7 @@ cxd1185_init(sc)
 }
 
 void
-free_scb(sc, scb)
-	struct sc_softc *sc;
-	struct sc_scb *scb;
+free_scb(struct sc_softc *sc, struct sc_scb *scb)
 {
 	int s;
 
@@ -163,9 +161,7 @@ free_scb(sc, scb)
 }
 
 struct sc_scb *
-get_scb(sc, flags)
-	struct sc_softc *sc;
-	int flags;
+get_scb(struct sc_softc *sc, int flags)
 {
 	int s;
 	struct sc_scb *scb;
@@ -183,64 +179,70 @@ get_scb(sc, flags)
 	return scb;
 }
 
-int
-sc_scsi_cmd(xs)
-	struct scsipi_xfer *xs;
+void
+sc_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
+    void *arg)
 {
-	struct scsipi_link *sc_link = xs->sc_link;
-	struct sc_softc *sc = sc_link->adapter_softc;
+	struct scsipi_xfer *xs;
+	struct scsipi_periph *periph;
+	struct sc_softc *sc = device_private(chan->chan_adapter->adapt_dev);
 	struct sc_scb *scb;
 	int flags, s;
-	int chan;
+	int target;
 
-	flags = xs->xs_control;
-	if ((scb = get_scb(sc, flags)) == NULL)
-		return TRY_AGAIN_LATER;
+	switch (req) {
+	case ADAPTER_REQ_RUN_XFER:
+		xs = arg;
+		periph = xs->xs_periph;
 
-	scb->xs = xs;
-	scb->flags = 0;
-	scb->sc_ctag = 0;
-	scb->sc_coffset = 0;
-	scb->istatus = 0;
-	scb->tstatus = 0;
-	scb->message = 0;
-	bzero(scb->msgbuf, sizeof(scb->msgbuf));
+		flags = xs->xs_control;
+		if ((scb = get_scb(sc, flags)) == NULL)
+			panic("%s: no scb", __func__);
 
-	s = splbio();
+		scb->xs = xs;
+		scb->flags = 0;
+		scb->sc_ctag = 0;
+		scb->sc_coffset = 0;
+		scb->istatus = 0;
+		scb->tstatus = 0;
+		scb->message = 0;
+		memset(scb->msgbuf, 0, sizeof(scb->msgbuf));
 
-	TAILQ_INSERT_TAIL(&sc->ready_list, scb, chain);
-	sc_sched(sc);
-	splx(s);
+		s = splbio();
 
-	if ((flags & XS_CTL_POLL) == 0)
-		return SUCCESSFULLY_QUEUED;
+		TAILQ_INSERT_TAIL(&sc->ready_list, scb, chain);
+		sc_sched(sc);
+		splx(s);
 
-	chan = sc_link->scsipi_scsi.target;
-
-	if (sc_poll(sc, chan, xs->timeout)) {
-		printf("sc: timeout (retry)\n");
-		if (sc_poll(sc, chan, xs->timeout)) {
-			printf("sc: timeout\n");
-			return COMPLETE;
+		if (flags & XS_CTL_POLL) {
+			target = periph->periph_target;
+			if (sc_poll(sc, target, xs->timeout)) {
+				printf("sc: timeout (retry)\n");
+				if (sc_poll(sc, target, xs->timeout)) {
+					printf("sc: timeout\n");
+				}
+			}
+			/* called during autoconfig only... */
+			mips_dcache_wbinv_all();	/* Flush DCache */
 		}
+		return;
+	case ADAPTER_REQ_GROW_RESOURCES:
+		/* XXX Not supported. */
+		return;
+	case ADAPTER_REQ_SET_XFER_MODE:
+		/* XXX Not supported. */
+		return;
 	}
-
-	/* called during autoconfig only... */
-
-	MachFlushCache(); /* Flush all caches */
-	return COMPLETE;
 }
 
 /*
  * Used when interrupt driven I/O isn't allowed, e.g. during boot.
  */
 int
-sc_poll(sc, chan, count)
-	struct sc_softc *sc;
-	int chan, count;
+sc_poll(struct sc_softc *sc, int chan, int count)
 {
-	volatile u_char *int_stat = (void *)INTST1;
-	volatile u_char *int_clear = (void *)INTCLR1;
+	volatile uint8_t *int_stat = (void *)INTST1;
+	volatile uint8_t *int_clear = (void *)INTCLR1;
 
 	while (sc_busy(sc, chan)) {
 		if (*int_stat & INTST1_DMA) {
@@ -264,11 +266,10 @@ sc_poll(sc, chan, count)
 }
 
 void
-sc_sched(sc)
-	struct sc_softc *sc;
+sc_sched(struct sc_softc *sc)
 {
 	struct scsipi_xfer *xs;
-	struct scsipi_link *sc_link;
+	struct scsipi_periph *periph;
 	int ie = 0;
 	int flags;
 	int chan, lun;
@@ -280,12 +281,9 @@ start:
 		return;
 
 	xs = scb->xs;
-	sc_link = xs->sc_link;
-	chan = sc_link->scsipi_scsi.target;
+	periph = xs->xs_periph;
+	chan = periph->periph_target;
 	flags = xs->xs_control;
-
-	if (cold)
-		flags |= XS_CTL_POLL;
 
 	if (sc->inuse[chan]) {
 		scb = scb->chain.tqe_next;
@@ -296,30 +294,32 @@ start:
 	if (flags & XS_CTL_RESET)
 		printf("SCSI RESET\n");
 
-	lun = sc_link->scsipi_scsi.lun;
+	lun = periph->periph_lun;
 
 	scb->identify = MSG_IDENT | sc_disconnect | (lun & IDT_DRMASK);
 	scb->sc_ctrnscnt = xs->datalen;
 
-	/* make va->pa mapping table for dma */
+	/* make va->pa mapping table for DMA */
 	if (xs->datalen > 0) {
-		int pages, offset;
-		int i, pn;
+		uint32_t pn, pages, offset;
+		int i;
 		vaddr_t va;
 
-		/* bzero(&sc->sc_map[chan], sizeof(struct sc_map)); */
+#if 0
+		memset(&sc->sc_map[chan], 0, sizeof(struct sc_map));
+#endif
 
 		va = (vaddr_t)xs->data;
 
 		offset = va & PGOFSET;
-		pages = (offset + xs->datalen + NBPG -1 ) >> PGSHIFT;
+		pages = (offset + xs->datalen + PAGE_SIZE -1 ) >> PGSHIFT;
 		if (pages >= NSCMAP)
 			panic("sc_map: Too many pages");
 
 		for (i = 0; i < pages; i++) {
 			pn = kvtophys(va) >> PGSHIFT;
 			sc->sc_map[chan].mp_addr[i] = pn;
-			va += NBPG;
+			va += PAGE_SIZE;
 		}
 
 		sc->sc_map[chan].mp_offset = offset;
@@ -350,19 +350,18 @@ start:
 }
 
 void
-sc_done(scb)
-	struct sc_scb *scb;
+sc_done(struct sc_scb *scb)
 {
 	struct scsipi_xfer *xs = scb->xs;
-	struct scsipi_link *sc_link = xs->sc_link;
-	struct sc_softc *sc = sc_link->adapter_softc;
+	struct scsipi_periph *periph = xs->xs_periph;
+	struct sc_softc *sc;
 
-	xs->xs_status |= XS_STS_DONE;
+	sc = device_private(periph->periph_channel->chan_adapter->adapt_dev);
 	xs->resid = 0;
 	xs->status = 0;
 
 	if (scb->istatus != INST_EP) {
-		if (scb->istatus == INST_EP|INST_TO)
+		if (scb->istatus == (INST_EP|INST_TO))
 			xs->error = XS_SELTIMEOUT;
 		else {
 			printf("SC(i): [istatus=0x%x, tstatus=0x%x]\n",
@@ -377,16 +376,10 @@ sc_done(scb)
 		break;
 
 	case TGST_CC:
-		break;		/* XXX */
-#if 0
-		chan = sc_link->scsipi_scsi.target;
-		lun = sc_link->scsipi_scsi.lun;
-		scop_rsense(chan, scb, lun, SCSI_INTDIS, 18, 0);
-		if (scb->tstatus != TGST_GOOD) {
-			printf("SC(t2): [istatus=0x%x, tstatus=0x%x]\n",
-				scb->istatus, scb->tstatus);
-		}
-#endif
+		xs->status = SCSI_CHECK;
+		if (xs->error == 0)
+			xs->error = XS_BUSY;
+		break;
 
 	default:
 		printf("SC(t): [istatus=0x%x, tstatus=0x%x]\n",
@@ -396,16 +389,15 @@ sc_done(scb)
 
 	scsipi_done(xs);
 	free_scb(sc, scb);
-	sc->inuse[sc_link->scsipi_scsi.target] = 0;
+	sc->inuse[periph->periph_target] = 0;
 	sc_sched(sc);
 }
 
 int
-sc_intr(v)
-	void *v;
+sc_intr(void *v)
 {
 	/* struct sc_softc *sc = v; */
-	volatile u_char *gsp = (u_char *)DMAC_GSTAT;
+	volatile uint8_t *gsp = (uint8_t *)DMAC_GSTAT;
 	u_int gstat = *gsp;
 	int mrqb, i;
 
@@ -424,7 +416,7 @@ sc_intr(v)
 		for (i = 0; i < 50; i++)
 			;
 		if (*gsp & mrqb)
-			printf("sc_intr: MRQ\n");
+			printf("%s: MRQ\n", __func__);
 	}
 	scintr();
 
@@ -437,19 +429,15 @@ sc_intr(v)
  * SCOP_RSENSE request
  */
 void
-scop_rsense(intr, sc_param, lun, ie, count, param)
-	register int intr;
-	register struct scsi *sc_param;
-	register int lun;
-	register int ie;
-	register int count;
-	register caddr_t param;
+scop_rsense(int intr, struct scsi *sc_param, int lun, int ie, int count,
+    void *param)
 {
-	bzero(sc_param, sizeof(struct scsi));
+
+	memset(sc_param, 0, sizeof(struct scsi));
 	sc_param->identify = MSG_IDENT | sc_disconnect | (lun & IDT_DRMASK);
 	sc_param->sc_lun = lun;
 
-	sc_param->sc_cpoint = (u_char *)param;
+	sc_param->sc_cpoint = (uint8_t *)param;
 	sc_param->sc_ctrnscnt = count;
 
 	/* sc_cdb */
@@ -461,15 +449,14 @@ scop_rsense(intr, sc_param, lun, ie, count, param)
 #endif
 
 void
-cxd1185_timeout(arg)
-	void *arg;
+cxd1185_timeout(void *arg)
 {
 	struct sc_scb *scb = arg;
 	struct scsipi_xfer *xs = scb->xs;
-	struct scsipi_link *sc_link = xs->sc_link;
+	struct scsipi_periph *periph = xs->xs_periph;
 	int chan;
 
-	chan = sc_link->scsipi_scsi.target;
+	chan = periph->periph_target;
 
 	printf("sc: timeout ch=%d\n", chan);
 

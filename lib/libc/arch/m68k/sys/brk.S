@@ -1,4 +1,4 @@
-/*	$NetBSD: brk.S,v 1.10 1999/10/25 23:48:17 thorpej Exp $	*/
+/*	$NetBSD: brk.S,v 1.15 2003/12/26 11:21:48 martin Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,20 +39,25 @@
 #if 0
 	RCSID("from: @(#)brk.s	5.1 (Berkeley) 5/12/90")
 #else
-	RCSID("$NetBSD: brk.S,v 1.10 1999/10/25 23:48:17 thorpej Exp $")
+	RCSID("$NetBSD: brk.S,v 1.15 2003/12/26 11:21:48 martin Exp $")
 #endif
 #endif /* LIBC_SCCS and not lint */
 
-	.globl	_C_LABEL(end)
+	.globl	_end
 	.globl	_C_LABEL(__minbrk)
 	.globl	CURBRK
 
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(brk, _brk)
+#endif
+
 	.data
 _C_LABEL(__minbrk):
-	.long	_C_LABEL(end)
+	.long	_end
+
 	.text
 
-ENTRY(brk)
+ENTRY(_brk)
 #ifdef	PIC
 #ifdef	__ELF__
 	lea	%pc@(_GLOBAL_OFFSET_TABLE_@GOTPC),%a1
@@ -71,7 +72,7 @@ ENTRY(brk)
 	movl	_C_LABEL(__minbrk),%d0
 #endif
 	cmpl	%sp@(4),%d0
-	jle	ok
+	jls	ok
 	movl	%d0,%sp@(4)
 ok:
 	movl	#SYS_break,%d0

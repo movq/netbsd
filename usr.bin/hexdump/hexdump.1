@@ -1,4 +1,4 @@
-.\"	$NetBSD: hexdump.1,v 1.10 1999/03/07 11:29:59 mycroft Exp $
+.\"	$NetBSD: hexdump.1,v 1.18 2003/08/07 11:14:03 agc Exp $
 .\"
 .\" Copyright (c) 1989, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -40,7 +36,7 @@
 .Nm hexdump
 .Nd ascii, decimal, hexadecimal, octal dump
 .Sh SYNOPSIS
-.Nm ""
+.Nm
 .Op Fl bcCdovx
 .Bk -words
 .Op Fl e Ar format_string
@@ -82,14 +78,14 @@ same sixteen bytes in %_p format enclosed in ``|'' characters.
 Display the input offset in hexadecimal, followed by eight
 space-separated, five column, zero-filled, two-byte units
 of input data, in unsigned decimal, per line.
-.It Fl e Ar format_string 
+.It Fl e Ar format_string
 Specify a format string to be used for displaying data.
-.It Fl f Ar format_file 
+.It Fl f Ar format_file
 Specify a file that contains one or more newline separated format strings.
 Empty lines and lines whose first non-blank character is a hash mark
 .Pf ( Cm \&# )
 are ignored.
-.It Fl n Ar length 
+.It Fl n Ar length
 Interpret only
 .Ar length
 bytes of input.
@@ -98,7 +94,7 @@ bytes of input.
 Display the input offset in hexadecimal, followed by eight
 space-separated, six column, zero-filled, two byte quantities of
 input data, in octal, per line.
-.It Fl s Ar offset 
+.It Fl s Ar offset
 Skip
 .Ar offset
 bytes from the beginning of the input.
@@ -136,7 +132,7 @@ Without the
 .Fl v
 option, any number of groups of output lines, which would be
 identical to the immediately preceding group of output lines (except
-for the input offsets), are replaced with a line comprised of a
+for the input offsets), are replaced with a line containing a
 single asterisk.
 .It Fl x
 .Em Two-byte hexadecimal display .
@@ -195,22 +191,22 @@ not supported.
 The single character escape sequences
 described in the C standard are supported:
 .Bd -ragged -offset indent -compact
-.Bl -column <alert_character>
+.Bl -column \*[Lt]alert_character\*[Gt]
 .It NUL	\e0
-.It <alert character>	\ea
-.It <backspace>	\eb
-.It <form-feed>	\ef
-.It <newline>	\en
-.It <carriage return>	\er
-.It <tab>	\et
-.It <vertical tab>	\ev
+.It \*[Lt]alert character\*[Gt]	\ea
+.It \*[Lt]backspace\*[Gt]	\eb
+.It \*[Lt]form-feed\*[Gt]	\ef
+.It \*[Lt]newline\*[Gt]	\en
+.It \*[Lt]carriage return\*[Gt]	\er
+.It \*[Lt]tab\*[Gt]	\et
+.It \*[Lt]vertical tab\*[Gt]	\ev
 .El
 .Ed
 .El
 .Pp
 Hexdump also supports the following additional conversion strings:
 .Bl -tag -width Fl
-.It Cm \&_a Ns Op Cm dox 
+.It Cm \&_a Ns Op Cm dox
 Display the input offset, cumulative across input files, of the
 next byte to be displayed.
 The appended characters
@@ -220,7 +216,7 @@ and
 .Cm x
 specify the display base
 as decimal, octal or hexadecimal respectively.
-.It Cm \&_A Ns Op Cm dox 
+.It Cm \&_A Ns Op Cm dox
 Identical to the
 .Cm \&_a
 conversion string except that it is only performed
@@ -256,13 +252,11 @@ are as follows:
 .It Li \&%_c , \&%_p , \&%_u , \&%c
 One byte counts only.
 .It Xo
-.Li \&%d , \&%i , \&%o ,
-.Li \&%u , \&%X , \&%x 
+.Li \&%d , \&%i , \&%o , \&%u , \&%X , \&%x
 .Xc
-Four byte default, one, two and four byte counts supported.
+Four byte default, one, two, four and eight byte counts supported.
 .It Xo
-.Li \&%E , \&%e , \&%f ,
-.Li \&%G , \&%g 
+.Li \&%E , \&%e , \&%f , \&%G , \&%g
 .Xc
 Eight byte default, four byte counts supported.
 .El
@@ -319,7 +313,7 @@ to specifying the
 option.
 .Pp
 .Nm
-exits 0 on success and >0 if an error occurred.
+exits 0 on success and \*[Gt]0 if an error occurred.
 .Sh EXAMPLES
 Display the input in perusal format:
 .Bd -literal -offset indent
@@ -333,9 +327,3 @@ Implement the \-x option:
 "%07.7_Ax\en"
 "%07.7_ax  " 8/2 "%04x " "\en"
 .Ed
-.Sh STANDARDS
-The
-.Nm
-utility is expected to be
-.St -p1003.2
-compatible.

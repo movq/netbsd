@@ -1,4 +1,4 @@
-/*	$NetBSD: list.c,v 1.4 1997/10/10 02:07:23 lukem Exp $	*/
+/*	$NetBSD: list.c,v 1.7 2005/07/01 00:48:34 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -50,22 +46,20 @@
 #if 0
 static char sccsid[] = "@(#)list.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: list.c,v 1.4 1997/10/10 02:07:23 lukem Exp $");
+__RCSID("$NetBSD: list.c,v 1.7 2005/07/01 00:48:34 jmc Exp $");
 #endif
 #endif /* not lint */
 
 #include "include.h"
 
-PLANE	*
-newplane()
+PLANE *
+newplane(void)
 {
 	return ((PLANE *) calloc(1, sizeof (PLANE)));
 }
 
 void
-append(l, p)
-	LIST	*l;
-	PLANE	*p;
+append(LIST *l, PLANE *p)
 {
 	PLANE 	*q = NULL, *r = NULL;
 
@@ -102,12 +96,10 @@ append(l, p)
 }
 
 void
-delete(l, p)
-	LIST	*l;
-	PLANE	*p;
+delete(LIST *l, PLANE *p)
 {
 	if (l->head == NULL)
-		loser(p, "deleted a non-existant plane! Get help!");
+		loser(p, "deleted a non-existent plane! Get help!");
 	
 	if (l->head == p && l->tail == p)
 		l->head = l->tail = NULL;

@@ -1,4 +1,4 @@
-/*	$NetBSD: redir.c,v 1.20 1999/02/04 16:17:39 christos Exp $	*/
+/*	$NetBSD: redir.c,v 1.30 2008/01/21 06:43:03 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)redir.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: redir.c,v 1.20 1999/02/04 16:17:39 christos Exp $");
+__RCSID("$NetBSD: redir.c,v 1.30 2008/01/21 06:43:03 msaitoh Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,9 +54,11 @@ __RCSID("$NetBSD: redir.c,v 1.20 1999/02/04 16:17:39 christos Exp $");
  * Code for dealing with input/output redirection.
  */
 
+#include "main.h"
 #include "shell.h"
 #include "nodes.h"
 #include "jobs.h"
+#include "options.h"
 #include "expand.h"
 #include "redir.h"
 #include "output.h"
@@ -92,8 +90,8 @@ MKINIT struct redirtab *redirlist;
 */
 int fd0_redirected = 0;
 
-STATIC void openredirect __P((union node *, char[10 ]));
-STATIC int openhere __P((union node *));
+STATIC void openredirect(union node *, char[10], int);
+STATIC int openhere(union node *);
 
 
 /*
@@ -105,10 +103,8 @@ STATIC int openhere __P((union node *));
  */
 
 void
-redirect(redir, flags)
-	union node *redir;
-	int flags;
-	{
+redirect(union node *redir, int flags)
+{
 	union node *n;
 	struct redirtab *sv = NULL;
 	int i;
@@ -120,6 +116,9 @@ redirect(redir, flags)
 		memory[i] = 0;
 	memory[1] = flags & REDIR_BACKQ;
 	if (flags & REDIR_PUSH) {
+		/* We don't have to worry about REDIR_VFORK here, as
+		 * flags & REDIR_PUSH is never true if REDIR_VFORK is set.
+		 */
 		sv = ckmalloc(sizeof (struct redirtab));
 		for (i = 0 ; i < 10 ; i++)
 			sv->renamed[i] = EMPTY;
@@ -140,7 +139,7 @@ again:
 				switch (errno) {
 				case EBADF:
 					if (!try) {
-						openredirect(n, memory);
+						openredirect(n, memory, flags);
 						try++;
 						goto again;
 					}
@@ -162,7 +161,7 @@ again:
                 if (fd == 0)
                         fd0_redirected++;
 		if (!try)
-			openredirect(n, memory);
+			openredirect(n, memory, flags);
 	}
 	if (memory[1])
 		out1 = &memout;
@@ -172,13 +171,12 @@ again:
 
 
 STATIC void
-openredirect(redir, memory)
-	union node *redir;
-	char memory[10];
-	{
+openredirect(union node *redir, char memory[10], int flags)
+{
 	int fd = redir->nfile.fd;
 	char *fname;
 	int f;
+	int oflags = O_WRONLY|O_CREAT|O_TRUNC, eflags;
 
 	/*
 	 * We suppress interrupts so that we won't leave open file
@@ -190,8 +188,14 @@ openredirect(redir, memory)
 	switch (redir->nfile.type) {
 	case NFROM:
 		fname = redir->nfile.expfname;
-		if ((f = open(fname, O_RDONLY)) < 0)
+		if (flags & REDIR_VFORK)
+			eflags = O_NONBLOCK;
+		else
+			eflags = 0;
+		if ((f = open(fname, O_RDONLY|eflags)) < 0)
 			goto eopen;
+		if (eflags)
+			(void)fcntl(f, F_SETFL, fcntl(f, F_GETFL, 0) & ~eflags);
 		break;
 	case NFROMTO:
 		fname = redir->nfile.expfname;
@@ -199,26 +203,18 @@ openredirect(redir, memory)
 			goto ecreate;
 		break;
 	case NTO:
+		if (Cflag)
+			oflags |= O_EXCL;
+		/* FALLTHROUGH */
+	case NCLOBBER:
 		fname = redir->nfile.expfname;
-#ifdef O_CREAT
-		if ((f = open(fname, O_WRONLY|O_CREAT|O_TRUNC, 0666)) < 0)
+		if ((f = open(fname, oflags, 0666)) < 0)
 			goto ecreate;
-#else
-		if ((f = creat(fname, 0666)) < 0)
-			goto ecreate;
-#endif
 		break;
 	case NAPPEND:
 		fname = redir->nfile.expfname;
-#ifdef O_APPEND
 		if ((f = open(fname, O_WRONLY|O_CREAT|O_APPEND, 0666)) < 0)
 			goto ecreate;
-#else
-		if ((f = open(fname, O_WRONLY)) < 0
-		 && (f = creat(fname, 0666)) < 0)
-			goto ecreate;
-		lseek(f, (off_t)0, 2);
-#endif
 		break;
 	case NTOFD:
 	case NFROMFD:
@@ -245,8 +241,10 @@ openredirect(redir, memory)
 	INTON;
 	return;
 ecreate:
+	exerrno = 1;
 	error("cannot create %s: %s", fname, errmsg(errno, E_CREAT));
 eopen:
+	exerrno = 1;
 	error("cannot open %s: %s", fname, errmsg(errno, E_OPEN));
 }
 
@@ -258,9 +256,8 @@ eopen:
  */
 
 STATIC int
-openhere(redir)
-	union node *redir;
-	{
+openhere(union node *redir)
+{
 	int pip[2];
 	int len = 0;
 
@@ -300,7 +297,8 @@ out:
  */
 
 void
-popredir() {
+popredir(void)
+{
 	struct redirtab *rp = redirlist;
 	int i;
 
@@ -335,7 +333,7 @@ RESET {
 }
 
 SHELLPROC {
-	clearredir();
+	clearredir(0);
 }
 
 #endif
@@ -351,7 +349,9 @@ fd0_redirected_p () {
  */
 
 void
-clearredir() {
+clearredir(vforked)
+	int vforked;
+{
 	struct redirtab *rp;
 	int i;
 
@@ -360,7 +360,8 @@ clearredir() {
 			if (rp->renamed[i] >= 0) {
 				close(rp->renamed[i]);
 			}
-			rp->renamed[i] = EMPTY;
+			if (!vforked)
+				rp->renamed[i] = EMPTY;
 		}
 	}
 }
@@ -374,9 +375,7 @@ clearredir() {
  */
 
 int
-copyfd(from, to)
-	int from;
-	int to;
+copyfd(int from, int to)
 {
 	int newfd;
 

@@ -145,7 +145,7 @@ been inspected.  (You have 15 minutes.)
 HISTORY
 	Describe the history of the papacy from its origins to the present
 day, concentrating especially, but not exclusively, on its social, political,
-economic, religious and philisophical impact upon Europe, Asia, America, and
+economic, religious and philosophical impact upon Europe, Asia, America, and
 Africa.  Be brief, concise, and specific.
 
 BIOLOGY
@@ -428,7 +428,7 @@ I found a thesis topic:
 		-- Sister Mary Elephant,
 		"Student Statement for Black Friday"
 %
-	      1/2
+	      1/3
 	 /\(3)
 	 |     2			  1/3
 	 |    z dz cos(3 * PI / 9) = ln (e   )
@@ -436,22 +436,10 @@ I found a thesis topic:
 	\/ 1
 
 The integral of z squared, dz
-From 1 to the square root of 3
+From 1 to the cube root of 3
 	Times the cosine
 	Of 3 PI over nine
 Is the log of the cube root of e
-%
-	   (1/2)
-	/ 3
-	|       2         3 x 3.14            (1/2)
-	|      z dz  cos (--------)   =  ln(e     )
-	/ 1		     9
-
-The integral, from one to root three,
-Of z to the second dz,
-	Times the cosine
-	Of 3 pi over nine
-Is the log of the third root of e.
 %
 	   THE DAILY PLANET
 
@@ -686,7 +674,7 @@ days old.  He heard that a foal and his mummy are soon parted.
 long-distance caw.
 	A musical reviewer admitted he always praised the first show of a
 new theatrical season.  "Who am I to stone the first cast?"
-	A hard-luck actor who appeared in one coloossal disaster after another
+	A hard-luck actor who appeared in one colossal disaster after another
 finally got a break, a broken leg to be exact.  Someone pointed out that it's
 the first time the poor fellow's been in the same cast for more than a week.
 %
@@ -830,7 +818,7 @@ take it I assign ten programmers to it?"
 completed," he said.
 		-- Geoffrey James, "The Tao of Programming"
 %
-	A manger went to his programmers and told them: "As regards to your
+	A manager went to his programmers and told them: "As regards to your
 work hours: you are going to have to come in at nine in the morning and leave
 at five in the afternoon."  At this, all of them became angry and several
 resigned on the spot.
@@ -1044,7 +1032,7 @@ with social conventions?"
 %
 	A ranger was walking through the forest and encountered a hunter
 carrying a shotgun and a dead loon.  "What in the world do you think you're
-doing?  Don't you know that the loon is on the endagered species list?"
+doing?  Don't you know that the loon is on the endangered species list?"
 	Instead of answering, the hunter showed the ranger his game bag,
 which contained twelve more loons.
 	"Why would you shoot loons?", the ranger asked.
@@ -1117,12 +1105,12 @@ going to it is so large.
 electronics more likely to leak than say Bosch?  Hmmm...  Aha!!!  Lucas is
 British, and all things British leak!  British convertible tops leak water,
 British engines leak oil, British displacer units leak hydrostatic fluid, and
-I might add Brititsh tires leak air, and the British defense unit leaks
+I might add British tires leak air, and the British defense unit leaks
 secrets... so naturally British electronics leak smoke.
 		-- Jack Banton, PCC Automotive Electrical School
 %
 	A shy teenage boy finally worked up the nerve to give a gift to
-Maddona, a young puppy.  It hitched its waggin' to a star.
+Madonna, a young puppy.  It hitched its waggin' to a star.
 	A girl spent a couple hours on the phone talking to her two best
 friends, Maureen Jones, and Maureen Brown.  When asked by her father why she
 had been on the phone so long, she responded "I heard a funny story today
@@ -1194,7 +1182,7 @@ favorite robot, faithful old Yewtoo Artoo, to carry his gear and do assorted
 camp chores.
 	The Israelites soon got over their initial fear of the robot and,
 	as the months passed, became very fond of him.  Patriarchs took to
-discussing abtruse theological problems with him, and each evening the
+discussing abstruse theological problems with him, and each evening the
 children all gathered to hear the many stories with which he was programmed.
 Therefore it came as a great shock to them when, just as their journey was
 ending, he abruptly wore out.  Even Feghoot couldn't console them.
@@ -1261,10 +1249,10 @@ screams: "Anybody got a match?"
 	knows he doesn't know what he's doing, so he does it carefully
 and with great restraint.
 	As he designs the first work, frill after frill and
-	embellishment after embellishment occur to him.  These get
-stored away to be used "next time."  Sooner or later the first system
-is finished, and the architect, with firm confidence and a demonstrated
-mastery of that class of systems, is ready to build a second system.
+embellishment after embellishment occur to him.  These get stored away
+to be used "next time."  Sooner or later the first system is finished,
+and the architect, with firm confidence and a demonstrated mastery of
+that class of systems, is ready to build a second system.
 	This second is the most dangerous system a man ever designs.
 When he does his third and later ones, his prior experiences will
 confirm each other as to the general characteristics of such systems,
@@ -1379,10 +1367,10 @@ posh hotel.
 a postcard?"
 %
 	"Anything else you wish to draw to my attention, Mr. Holmes ?"
-	"The curious incident of the stable dog in the nightime."
+	"The curious incident of the stable dog in the nighttime."
 	"But the dog did nothing in the nighttime."
 	"That was the curious incident."
-		-- A. Conan Doyle, "Silver Blaze"
+		-- Sir Arthur Conan Doyle, "Silver Blaze"
 %
 	Approaching the gates of the monastery, Hakuin found Ken the Zen
 preaching to a group of disciples.
@@ -1454,7 +1442,7 @@ Chinese ideogram for NO-THING.)
 	}
 %
 	Brian Kernighan has an automobile which he helped design.
-Unlike most automobiles, it has neither speedometer, nor gas guage, nor
+Unlike most automobiles, it has neither speedometer, nor gas gauge, nor
 any of the numerous idiot lights which plague the modern driver.
 Rather, if the driver makes any mistake, a giant "?" lights up in the
 center of the dashboard.  "The experienced driver", he says, "will
@@ -1656,7 +1644,7 @@ far to the corner and they have added a hill.  I have given up running for
 the bus; it leaves earlier than it used to.
 	It seems to me they are making the stairs steeper than in the old
 days.  And have you noticed the smaller print they use in the newspapers?
-	There is no sense in asking anyone to read aloud anymore, as everbody
+	There is no sense in asking anyone to read aloud anymore, as everybody
 speaks in such a low voice I can hardly hear them.
 	The material in dresses is so skimpy now, especially around the hips
 and waist, that it is almost impossible to reach one's shoelaces.  And the
@@ -1692,22 +1680,6 @@ message about facing challengehood tomorrow-wise.  I dozed off during this,
 but the import seems to be that dinosaurs don't have anything to do with
 energy policy and neither do you."
 		-- P.J. O'Rourke, "Holidays in Hell"
-%
-	For example, in Year 1 that useless letter 'c' would be dropped to be
-replased either by 'k' or 's', and likewise 'x' would no longer be part of the
-alphabet. The only kase in which 'c' would be retained would be the 'ch'
-formation, which will be dealt with later. Year 2 might reform 'w' spelling,
-so that 'which' and 'one' would take the same konsonant, wile Year 3 might
-well abolish 'y' replasing it with 'i' and Iear 4 might fiks the 'g-j'
-anomali wonse and for all.
-	Jenerally, then, the improvement would kontinue iear bai iear with
-Iear 5 doing awai with useless double konsonants, and Iears 6-12 or so
-modifaiing vowlz and the rimeining voist and unvoist konsonants.  Bai
-Iear 15 or sou, it wud fainali bi posibl tu meik ius ov thi ridandant letez
-'c', 'y' and 'x' - bai now jast a memori in the maindz ov ould doderez - tu
-riplais 'ch', 'sh', and 'th' rispektivli.
-	Fainali, xen, aafte sam 20 iers ov orxogrefkl riform, wi wud hev a
-lojikl, kohirnt speling in ius xrewawt xe Ingliy-spiking werld.
 %
 	"Found it," the Mouse replied rather crossly:
 "of course you know what 'it' means."
@@ -1745,7 +1717,7 @@ had the same fiancee, and told him.  "Get out of our lives you rascal.  We'll
 teach you that you can't have your Kate and Edith, too."
 	A domineering man married a mere wisp of a girl.  He came back from
 his honeymoon a chastened man.  He'd become aware of the will of the wisp.
-	A young husband with an inferiorty complex insisted he was just a
+	A young husband with an inferiority complex insisted he was just a
 little pebble on the beach.  The marriage counselor told him, "If you wish to
 save your marriage, you'd better be a little boulder."
 %
@@ -1857,7 +1829,7 @@ hope in it.  Approaching him at the club bar one day, one of them said,
 found his wife in bed with another man, shot them both, and then turned
 the gun on himself!"
 	"Terrible," said Harry.  "But it could have been worse."
-	"How in hell," demanded his dumfounded friend, "could it possibly
+	"How in hell," demanded his dumbfounded friend, "could it possibly
 have been worse?"
 	"Well," said Harry, "if it had happened the night before, I'd be
 dead right now."
@@ -2048,7 +2020,7 @@ I think very probably he might be cured."
 things that are called the eyes, and which exist to make an agreeable soft
 depression in the face, are diseased, in the case of Bogota, in such a way
 as to affect his brain.  They are greatly distended, he has eyelashes, and
-his eyelids move, and cosequently his brain is in a state of constant
+his eyelids move, and consequently his brain is in a state of constant
 irritation and distraction."
 	"Yes?" said old Yacob.  "Yes?"
 	"And I think I may say with reasonable certainty that, in order
@@ -2069,7 +2041,7 @@ at present".
 myself the pleasure of contradicting him abruptly, and of showing him
 immediately some absurdity in his proposition.  In answering I began by
 observing that in certain cases or circumstances his opinion would be right,
-but in the present case there appeared or semed to me some difference, etc.
+but in the present case there appeared or seemed to me some difference, etc.
 	I soon found the advantage of this change in my manner; the
 conversations I engaged in went on more pleasantly.  The modest way in which I
 proposed my opinions procured them a readier reception and less contradiction.
@@ -2108,7 +2080,7 @@ closing the book.
 		-- Susan Brownmiller, "Against Our Will"
 %
 	[I plan] to see, hear, touch, and destroy everything in my path,
-including beets, rutabegas, and most random vegetables, but excluding yams,
+including beets, rutabagas, and most random vegetables, but excluding yams,
 as I am absolutely terrified of yams...
 	Actually, I think my fear of yams began in my early youth, when many
 of my young comrades pelted me with same for singing songs of far-off lands
@@ -2187,7 +2159,7 @@ I'm on my way."
 %
 	I'm sure that VMS is completely documented, I just haven't found the
 right manual yet.  I've been working my way through the manuals in the document
-library and I'm half way through the second cabnet, (3 shelves to go), so I
+library and I'm half way through the second cabinet, (3 shelves to go), so I
 should find what I'm looking for by mid May.  I hope I can remember what it
 was by the time I find it.
 	I had this idea for a new horror film, "VMS Manuals from Hell" or maybe
@@ -2237,7 +2209,7 @@ pie-bakers and pie-dividers is way out of whack."  Could Dick Butcher have
 been an efficiency expert?
 		-- Motor Trend, May 1983
 %
-	In the begining, God created the Earth and he said, "Let there be
+	In the beginning, God created the Earth and he said, "Let there be
 mud."
 	And there was mud.
 	And God said, "Let Us make living creatures out of mud, so the mud
@@ -2261,7 +2233,7 @@ evening and there was morning, one interrupt.
 		-- Rico Tudor, "The Story of Creation or, The Myth of Urk"
 %
 	In the beginning there was only one kind of Mathematician, created by
-the Great Mathamatical Spirit form the Book: the Topologist.  And they grew to
+the Great Mathematical Spirit form the Book: the Topologist.  And they grew to
 large numbers and prospered.
 	One day they looked up in the heavens and desired to reach up as far
 as the eye could see.  So they set out in building a Mathematical edifice that
@@ -2270,7 +2242,7 @@ until one night the edifice collapsed under the weight of paradox.
 	The following morning saw only rubble where there once was a huge
 structure reaching to the heavens.  One by one, the Mathematicians climbed
 out from under the rubble.  It was a miracle that nobody was killed; but when
-they began to speak to one another, SUPRISE of all suprises! they could not
+they began to speak to one another, SURPRISE of all surprises! they could not
 understand each other.  They all spoke different languages.  They all fought
 amongst themselves and each went about their own way.  To this day the
 Topologists remain the original Mathematicians.
@@ -2294,12 +2266,12 @@ sat hacking at the PDP-6.
 	At this Minsky shut his eyes, and Sussman asked his teacher "Why do
 you close your eyes?"
 	"So that the room will be empty."
-	At that momment, Sussman was enlightened.
+	At that moment, Sussman was enlightened.
 %
 	In the east there is a shark which is larger than all other fish.  It
 changes into a bird whose winds are like clouds filling the sky.  When this
 bird moves across the land, it brings a message from Corporate Headquarters.
-This message it drops into the midst of the program mers, like a seagull
+This message it drops into the midst of the programmers, like a seagull
 making its mark upon the beach.  Then the bird mounts on the wind and, with
 the blue sky at its back, returns home.
 	The novice programmer stares in wonder at the bird, for he understands
@@ -2322,7 +2294,7 @@ Fish heads, fish heads, eat them up. Yum!
 	They can't play baseball; they don't wear sweaters;
 	They aren't good dancers; they can't play drums.
 (chorus):
-	Roly-poly fish heads are NEVER seen drinking cappucino in
+	Roly-poly fish heads are NEVER seen drinking cappuccino in
 	Italian restaurants with Oriental women.
 (chorus):
 	Fishy!
@@ -2673,13 +2645,13 @@ spits in the sergeants face.
 	"Murray!" Esther cries.  "Please!  Don't make trouble."
 		-- Arthur Naiman
 %
-	My friends, I am here to tell you of the wonderous continent known as
+	My friends, I am here to tell you of the wondrous continent known as
 Africa.  Well we left New York drunk and early on the morning of February 31.
 We were 15 days on the water, and 3 on the boat when we finally arrived in
 Africa.  Upon our arrival we immediately set up a rigorous schedule:  Up at
 6:00, breakfast, and back in bed by 7:00.  Pretty soon we were back in bed by
 6:30.  Now Africa is full of big game.  The first day I shot two bucks.  That
-was the biggest game we had.  Africa is primerally inhabited by Elks, Moose
+was the biggest game we had.  Africa is primarily inhabited by Elks, Moose
 and Knights of Pithiests.
 	The elks live up in the mountains and come down once a year for their
 annual conventions.  And you should see them gathered around the water hole,
@@ -2688,7 +2660,7 @@ weren't looking for a water hole.  They were looking for an alck hole.
 	One morning I shot an elephant in my pajamas, how he got in my
 pajamas, I don't know.  Then we tried to remove the tusks.  That's a tough
 word to say, tusks.  As I said we tried to remove the tusks, but they were
-imbedded so firmly we couldn't get them out.  But in Alabama the Tusks are
+embedded so firmly we couldn't get them out.  But in Alabama the Tusks are
 looser, but that is totally irrelephant to what I was saying.
 	We took some pictures of the native girls, but they weren't developed.
 So we're going back in a few years...
@@ -2726,7 +2698,7 @@ audience, either."
 	Never ask your lover if he'd dive in front of an oncoming train for
 you.  He doesn't know.  Never ask your lover if she'd dive in front of an
 oncoming band of Hell's Angels for you.  She doesn't know.  Never ask how many
-cigarettes your lover has smoked today.  Cancer is a personal committment.
+cigarettes your lover has smoked today.  Cancer is a personal commitment.
 	Never ask to see pictures of your lover's former lovers -- especially
 the ones who dived in front of trains.  If you look like one of them, you are
 repeating history's mistakes.  If you don't, you'll wonder what he or she saw
@@ -2879,7 +2851,7 @@ and it was very juicy.  I stood up and took aim, and went into the windup,
 when my mother at the kitchen window called my name in a sharp voice.  I had
 to decide quickly.  I decided.
 	A rotten Big Boy hitting the target is a memorable sound, like a fat
-man doing a belly-flop.  With a whoop and a yell the tomatoee came after
+man doing a belly-flop.  With a whoop and a yell the tomato came after
 faster than I knew she could run, and grabbed my shirt and was about to brain
 me when Mother called her name in a sharp voice.  And my sister, who was a
 good person, obeyed and let go -- and burst into tears.  I guess she knew that
@@ -2971,7 +2943,7 @@ biggest, strongest fish he had ever caught.  He fought with it for hours,
 until, finally, he managed to bring it to the surface.  Looking of the edge
 of the boat, he saw the head of this huge fish breaking the surface.  Smiling
 with pride, he reached over the edge to pull the fish up.  Unfortunately, he
-accidently caught his watch on the edge, and, before he knew it, there was a
+accidentally caught his watch on the edge, and, before he knew it, there was a
 snap, and his watch tumbled into the water next to the fish with a loud
 "sploosh!"  Distracted by this shiny object, the fish made a sudden lunge,
 simultaneously snapping the line, and swallowing the watch.  Sadly, the
@@ -3134,7 +3106,7 @@ body functions.
 	Penn's aunts made great apple pies at low prices.  No one else in
 town could compete with the pie rates of Penn's aunts.
 	During the American Revolution, a Britisher tried to raid a farm.  He
-stumbled across a rock on the ground and fell, whereupon an agressive Rhode
+stumbled across a rock on the ground and fell, whereupon an aggressive Rhode
 Island Red hopped on top.  Seeing this, the farmer commented, "Chicken catch
 a Tory!"
 	A wife started serving chopped meat, Monday hamburger, Tuesday meat
@@ -3365,26 +3337,6 @@ provoked wry comments on the rather patchy papal infallibility, and
 Pope Sixtus had no recourse but to order the return and destruction of
 every copy.
 %
-	So Richard and I decided to try to catch [the small shark].  With
-a great deal of strategy and effort and shouting, we managed to maneuver
-the shark, over the course of about a half-hour, to a sort of corner of the
-lagoon, so that it had no way to escape other than to flop up onto the land
-and evolve.  Richard and I were inching toward it, sort of crouched over,
-when all of a sudden it turned around and -- I can still remember the
-sensation I felt at that moment, primarily in the armpit area -- headed
-right straight toward us.
-	Many people would have panicked at this point.  But Richard and I
-were not "many people."  We were experienced waders, and we kept our heads.
-We did exactly what the textbook says you should do when you're unarmed and
-a shark that is nearly two feet long turns on you in water up to your lower
-calves: We sprinted I would say 600 yards in the opposite direction, using
-a sprinting style such that the bottoms of our feet never once went below
-the surface of the water.  We ran all the way to the far shore, and if we
-had been in a Warner Brothers cartoon we would have run right INTO the beach,
-and you would have seen these two mounds of sand racing across the island
-until they bonked into trees and coconuts fell onto their heads.
-		-- Dave Barry, "The Wonders of Sharks on TV"
-%
 	So Richard and I decided to try to catch [the small shark].
 With a great deal of strategy and effort and shouting, we managed to
 maneuver the shark, over the course of about a half-hour, to a sort of
@@ -3484,7 +3436,7 @@ to the Berkeley UNIX version of `ls'?"
 %
 	Strange memories on this nervous night in Las Vegas.  Five years later?
 Six?  It seems like a lifetime, or at least a Main Era -- the kind of peak that
-never comes again.  San Fransisco in the middle sixties was a very special time
+never comes again.  San Francisco in the middle sixties was a very special time
 and place to be a part of.  Maybe it meant something.  Maybe not, in the long
 run...  There was madness in any direction, at any hour.  If not across the
 Bay, then up the Golden Gate or down 101 to Los Altos or La Honda...  You could
@@ -3533,24 +3485,6 @@ the only thing which the mind can never exhaust, never alienate, never be
 tortured by, never fear or distrust, and never dream of regretting.  Learning
 is the only thing for you.  Look what a lot of things there are to learn."
 		-- T.H. White, "The Once and Future King"
-%
-	The big problem with pornography is defining it.  You can't just
-say it's pictures of people naked.  For example, you have these primitive
-African tribes that exist by chasing the wildebeest on foot, and they have
-to go around largely naked, because, as the old tribal saying goes: "N'wam
-k'honi soit qui mali," which means, "If you think you can catch a wildebeest
-in this climate and wear clothes at the same time, then I have some beach
-front property in the desert region of Northern Mali that you may be
-interested in."
-	So it's not considered pornographic when National Geographic publishes
-color photographs of these people hunting the wildebeest naked, or pounding
-one rock onto another rock for some primitive reason naked, or whatever.
-But if National Geographic were to publish an article entitled "The Girls
-of the California Junior College System Hunt the Wildebeest Naked," some
-people would call it pornography.  But others would not.  And still others,
-such as the Spectacularly Rev. Jerry Falwell, would get upset about seeing
-the wildebeest naked.
-		-- Dave Barry, "Pornography"
 %
 	The big problem with pornography is defining it.  You can't just
 say it's pictures of people naked.  For example, you have these
@@ -3661,7 +3595,7 @@ As he turned away, he heard the man say, "Ouch!".
 -- well, I'll be damned.  There goes another one!"
 %
 	The General disliked trying to explain the highly technical
-innerworkings of the U.S. Air Force.
+inner workings of the U.S. Air Force.
 	"$7,662 for a ten cup coffee maker, General?" the Senator asked.
 	In his head he ran through his standard explanations.  "It's not so,"
 he thought.  "It's a deterrent."  Soon he came up with, "It's computerized,
@@ -4077,7 +4011,7 @@ they're carrying upstairs!"
 %
 	There was a mad scientist (a mad... social... scientist) who kidnapped
 three colleagues, an engineer, a physicist, and a mathematician, and locked 
-each of them in seperate cells with plenty of canned food and water but no
+each of them in separate cells with plenty of canned food and water but no
 can opener.
 	A month later, returning, the mad scientist went to the engineer's
 cell and found it long empty.  The engineer had constructed a can opener from
@@ -4087,7 +4021,7 @@ and escaped.
 off the tin cans by throwing them against the wall.  She was developing a good
 pitching arm and a new quantum theory.
 	The mathematician had stacked the unopened cans into a surprising
-solution to the kissing problem; his dessicated corpse was propped calmly
+solution to the kissing problem; his dessiccated corpse was propped calmly
 against a wall, and this was inscribed on the floor:
 	Theorem: If I can't open these cans, I'll die.
 	Proof: assume the opposite...
@@ -4354,7 +4288,7 @@ explain the failure of your three marriages."
 product."
 		-- Jules Feiffer
 %
-	Well, he thought, since neither Aristotilian Logic nor the disciplines
+	Well, he thought, since neither Aristotelian Logic nor the disciplines
 of Science seemed to offer much hope, it's time to go beyond them...
 	Drawing a few deep even breaths, he entered a mental state practiced
 only by Masters of the Universal Way of Zen.  In it his mind floated freely,
@@ -4682,7 +4616,7 @@ There, that ought to patch it.  Dist it out, wouldja?"
 	"The famous scientific criminal, as famous among crooks as --"
 	"My blushes, Watson," Holmes murmured, in a deprecating voice.  "I
 was about to say 'as he is unknown to the public.'"
-		-- A. Conan Doyle, "The Valley of Fear"
+		-- Sir Arthur Conan Doyle, "The Valley of Fear"
 %
 	"You know, it's at times like this when I'm trapped in a Vogon
 airlock with a man from Betelgeuse and about to die of asphyxiation in
@@ -5096,16 +5030,6 @@ of this article.)
 "... bleakness... desolation... plastic forks..."
 		-- Zippy the Pinhead
 %
-... But if we laugh with derision, we will never understand.  Human
-intellectual capacity has not altered for thousands of years so far as we
-can tell.  If intelligent people invested intense energy in issues that now
-seem foolish to us, then the failure lies in our understanding of their
-world, not in their distorted perceptions.  Even the standard example of
-ancient nonsense -- the debate about angels on pinheads -- makes sense once
-you realize that theologians were not discussing whether five or eighteen
-would fit, but whether a pin could house a finite or an infinite number.
-		-- S. J. Gould, "Wide Hats and Narrow Minds"
-%
 ... C++ offers even more flexible control over the visibility of member
 objects and member functions.  Specifically, members may be placed in the
 public, private, or protected parts of a class.  Members declared in the
@@ -5121,7 +5045,7 @@ civilization began has seen six orders of magnitude in performance-price
 gain in 30 years.
 		-- Fred Brooks
 %
-... difference of opinion is advantagious in religion.  The several sects
+... difference of opinion is advantageous in religion.  The several sects
 perform the office of a common censor morum over each other.  Is uniformity
 attainable?  Millions of innocent men, women, and children, since the
 introduction of Christianity, have been burnt, tortured, fined, imprisoned;
@@ -5262,7 +5186,7 @@ awareness of the great goals for Man and the society he conspired to erect.
 	canine with innovative maneuvers.
 -- Eschew the implement of correction and vitiate the scion.
 -- The temperature of the aqueous content of an unremittingly
-	galled saucepan does not reach 212 degrees Farenheit.
+	galled saucepan does not reach 212 degrees Fahrenheit.
 %
 ... So the documentary-makers stick with sharks.  Generally, their
 procedure is to scatter bleeding fish pieces around their boat, so as
@@ -5320,7 +5244,7 @@ discuss our recent efforts to apply wisdom engineering to oil exploration.
 	optimal cachinnation.
 -- Eleemosynary deeds have their initial incidence intramurally.
 %
-... there are about 5,000 people who are part of that commitee.  These guys
+... there are about 5,000 people who are part of that committee.  These guys
 have a hard time sorting out what day to meet, and whether to eat croissants
 or doughnuts for breakfast -- let alone how to define how all these complex
 layers that are going to be agreed upon.
@@ -6076,7 +6000,7 @@ with the possible exceptions of handguns and Tequilla.
 %
 A computer salesman visits a company president for the purpose of selling
 the president one of the latest talking computers.
-Salesman:	"This machine knows everything. I can ask it any quesstion
+Salesman:	"This machine knows everything. I can ask it any question
 		and it'll give the correct answer.  Computer, what is the
 		speed of light?"
 Computer:	186,000 miles per second.
@@ -6427,7 +6351,7 @@ Engineer: Well, I've invented a way to weave metallic threads into the saddle
 	  blanket so that they will act as the plates of a battery and provide
 	  electrical shock to the horse.
 G:	  That's very good!  But let's hear from the chemist.
-Chemist:  I've synthesized a powerful stimulant that disolves
+Chemist:  I've synthesized a powerful stimulant that dissolves
 	  into simple blood sugars after ten minutes and therefore
 	  cannot be detected in post-race tests.
 G:	  Excellent, excellent!  But I want to hear from the physicist before
@@ -6451,7 +6375,7 @@ when a girl gives a boy a dead squid, *that had to mean SOMETHING!*
 A girl and a boy bump into each other -- surely an accident.
 A girl and a boy bump and her handkerchief drops -- surely another accident.
 But when a girl gives a boy a dead squid -- *that had to mean something*.
-		-- S. Morganstern, "The Silent Gondoliers"
+		-- S. Morgenstern, "The Silent Gondoliers"
 %
 A girl with a future avoids the man with a past.
 		-- Evan Esar, "The Humor of Humor"
@@ -6522,10 +6446,6 @@ A government that is big enough to give you all you want is big enough
 to take it all away.
 		-- Barry Goldwater
 %
-A government that is big enough to give you all you want is big enough
-to take it all away.
-	-- Barry Goldwater
-%
 A grammarian's life is always intense.
 %
 A great empire, like a great cake, is most easily diminished at the edges.
@@ -6537,7 +6457,7 @@ when they are merely rearranging their prejudices.
 %
 A green hunting cap squeezed the top of the fleshy balloon of a head.  The
 green earflaps, full of large ears and uncut hair and the fine bristles that
-grew in the ears themselvse, stuck out on either side like turn signals
+grew in the ears themselves, stuck out on either side like turn signals
 indicating two directions at once.  Full, pursed lips protruded beneath the
 bushy black moustache and, at their corners, sank into little folds filled
 with disapproval and potato chip crumbs.  In the shadow under the green visor
@@ -6598,10 +6518,6 @@ her cluckings, and are regularly brooded at night beneath her wings.
 		-- Sacramento Daily Union, July 2, 1861
 %
 A hermit is a deserter from the army of humanity.
-%
-A highly intelligent man should take a primitive woman.  Imagine if on top
-of everything else, I had a woman who interfered with my work.
-		-- Adolf Hitler
 %
 A holding company is a thing where you hand
 an accomplice the goods while the policeman searches you.
@@ -7153,7 +7069,7 @@ but to protect the writer.
 %
 A method of solution is perfect if we can forsee from the start,
 and even prove, that following that method we shall attain our aim.
-		-- Leibnitz
+		-- Leibniz
 %
 A Mexican newspaper reports that bored Royal Air Force pilots stationed
 on the Falkland Islands have devised what they consider a marvelous new
@@ -7587,7 +7503,7 @@ might be made an Archbishop."
 	"Is there any way that you might go higher than that?"
 	"If all the Saints should smile, I guess I could be made a Cardinal."
 	"Could you be anything higher than a Cardinal?"
-	Hesitating a little bit, the priest said, "I supose that I could
+	Hesitating a little bit, the priest said, "I suppose that I could
 be elected Pope, but only if it's God's will."
 	"And could you be anything higher than that, is there any way to go
 up from being the Pope?"
@@ -7665,7 +7581,7 @@ banana, and on the other end a weight equal to the weight of the monkey.
 The banana weighs two ounces per inch.  The rope is as long (in feet) as
 the age of the monkey (in years), and the weight of the monkey (in ounces)
 is the same as the age of the monkey's mother.  The combined age of the
-monkey and its mother is thirdy years.  One half of the weight of the monkey,
+monkey and its mother is thirty years.  One half of the weight of the monkey,
 plus the weight of the banana, is one forth as much as the weight of the
 weight and the weight of the rope.  The monkey's mother is half as old as
 the monkey will be when it is three times as old as its mother was when she
@@ -7703,13 +7619,13 @@ I don't know what it's about.  I'm just the drummer.  Ask Peter.
 A Scholar asked his Master, "Master, would you advise me of a proper
 vocation?"
 	The Master replied, "Some men can earn their keep with the power of
-their minds.  Others must use thier strong backs, legs and hands.  This is
+their minds.  Others must use their strong backs, legs and hands.  This is
 the same in nature as it is with man.  Some animals acquire their food easily,
 such as rabbits, hogs and goats.  Other animals must fiercely struggle for
 their sustenance, like beavers, moles and ants.  So you see, the nature of
 the vocation must fit the individual.
 	"But I have no abilities, desires, or imagination, Master," the
-scholer sobbed.
+scholar sobbed.
 	Queried the Master... "Have you thought of becoming a salesperson?"
 %
 A scientific truth does not triumph by convincing its opponents and
@@ -7723,7 +7639,7 @@ the vexation of thinking.
 %
 A sense of desolation and uncertainty, of futility, of the baselessness
 of aspirations, of the vanity of endeavor, and a thirst for a life giving
-water which seems suddenly to have failed, are the signs in conciousness
+water which seems suddenly to have failed, are the signs in consciousness
 of this necessary reorganization of our lives.
 
 It is difficult to believe that this state of mind can be produced by the
@@ -7918,7 +7834,7 @@ A Tale of Two Cities LITE(tm)
 	lady who knits.
 
 Crime and Punishment LITE(tm)
-	-- by Fyodor Dostoevski
+	-- by Fyodor Dostoyevsky
 
 	A man sends a nasty letter to a pawnbroker, but later
 	feels guilty and apologizes.
@@ -7958,7 +7874,7 @@ sitting in the yard watching the pig.
 	"Sure is, son," the farmer replied.  "Why, two years ago, my daughter
 was swimming in the lake and bumped her head and damned near drowned, but that
 pig swam out and dragged her back to shore."
-	"Amazing!"  the salesman exlaimed.
+	"Amazing!"  the salesman exclaimed.
 	"And that's not the only thing.  Last fall I was cuttin' wood up on
 the north forty when a tree fell on me.  Pinned me to the ground, it did.  
 That pig run up and wiggled underneath that tree and lifted it off of me.
@@ -7986,7 +7902,7 @@ when the faculty loses interest in students.
 %
 A vacuum is a hell of a lot better
 than some of the stuff that nature replaces it with.
-		-- Tenessee Williams
+		-- Tennessee Williams
 %
 A verbal contract isn't worth the paper it's written on.
 		-- Samuel Goldwyn
@@ -8037,15 +7953,6 @@ A wise person makes his own decisions, a weak one obeys public opinion.
 A witty saying proves nothing.
 		-- Voltaire
 %
-"A wizard cannot do everything; a fact most magicians are recticent to admit,
-let alone discuss with prospective clients.  Still, the fact remains that 
-there are certain objects, and people, that are, for one reason or another, 
-completely immune to any direct magical spell.  It is for this group of
-beings that the magician learns the subtleties of using indirect spells.
-It also does no harm, in dealing with these matters, to carry a large club
-near your person at all times."
-		-- The Teachings of Ebenezum, Volume VIII
-%
 A wizard cannot do everything; a fact most magicians are reticent to admit,
 let alone discuss with prospective clients.  Still, the fact remains that
 there are certain objects, and people, that are, for one reason or another,
@@ -8084,25 +7991,9 @@ A woman is like your shadow; follow her, she flies; fly from her,
 she follows.
 		-- Chamfort
 %
-A woman is like your shadow; follow her,
-she flies; fly from her, she follows.
-		-- Chamfort
-%
-A woman may very well form a friendship with a man, but for this to endure,
-it must be assisted by a little physical antipathy.
-		-- Nietzsche
-%
 A woman may very well form a friendship with a man, but for this to
 endure, it must be assisted by a little physical antipathy.
 		-- Nietzsche
-%
-A woman must be a cute, cuddly, naive little thing -- tender, sweet,
-and stupid.
-		-- Adolf Hitler
-%
-A woman must be a cute, cuddly, naive
-little thing -- tender, sweet, and stupid.
-		-- Adolf Hitler
 %
 A woman of generous character will sacrifice her life a thousand times
 over for her lover, but will break with him for ever over a question of
@@ -8262,7 +8153,7 @@ About the time we think we can make ends meet, somebody moves the ends.
 %
 About the use of language: it is impossible to sharpen a pencil with a blunt
 ax.  It is equally vain to try to do it with ten blunt axes instead.
-		-- Edsger Dijkstra
+		-- Edsger W. Dijkstra
 %
 Above all else - sky.
 %
@@ -8422,12 +8313,6 @@ Here in New York we really don't care too much.  Because we know that we could
 beat up their city anytime.
 		-- David Letterman
 %
-According to the Rand McNally Places-Rated Almanac, the best place to live in
-America is the city of Pittsburgh.  The city of New York came in twenty-fifth.
-Here in New York we really don't care too much. Because we know that we could
-beat up their city anytime. 
-		-- David Letterman
-%
 ACCORDION:
 	A bagpipe with pleats.
 %
@@ -8477,7 +8362,7 @@ Actually, my goal is to have a sandwich named after me.
 Actually, the probability is 100% that the elevator
 will be going in the right direction.  Proof by induction:
 
-N=1.	Trivialy true, since both you and the elevator
+N=1.	Trivially true, since both you and the elevator
 	only have one floor to go to.
 
 Assume true for N, prove for N+1:
@@ -8856,7 +8741,7 @@ Al didn't smile for forty years.  You've got to admire a man like that.
 Alan Turing thought about criteria to settle the question of whether
 machines can think, a question of which we now know that it is about
 as relevant as the question of whether submarines can swim.
-		-- Dijkstra
+		-- Edsger W. Dijkstra
 %
 Alas, how love can trifle with itself!
 		-- William Shakespeare, "The Two Gentlemen of Verona"
@@ -8883,12 +8768,6 @@ The surest poison is time.
 %
 Alcohol is the anesthesia by which we endure the operation of life.
 		-- George Bernard Shaw
-%
-Alden's Laws:
-	(1)  Giving away baby clothes and furniture is the major cause
-	     of pregnancy.
-	(2)  Always be backlit.
-	(3)  Sit down whenever possible.
 %
 Alden's Laws:
 	1: Giving away baby clothes and furniture is the major cause
@@ -9361,7 +9240,7 @@ Liberties Union gets indignant, and I hope this will always be so.
 		 -- Senator Adlai E. Stevenson
 
 The ACLU has stood foursquare against the recurring tides of hysteria that
-from time to time threaten freedoms everyhere... Indeed, it is difficult
+from time to time threaten freedoms everywhere... Indeed, it is difficult
 to appreciate how far our freedoms might have eroded had it not been for the
 Union's valiant representation in the courts of the constitutional rights
 of people of all persuasions, no matter how unpopular or even despised
@@ -9488,11 +9367,6 @@ R:		"We take tanks."
 %
 An American's a person who isn't afraid to criticize
 the president but is always polite to traffic cops.
-%
-An anthropologist at Tulane has just come back from a field trip to New
-Guinea with reports of a tribe so primitive that they have Tide but not
-new Tide with lemon-fresh Borax.
-		-- David Letterman
 %
 An anthropologist at Tulane has just come back from a field trip to
 New Guinea with reports of a tribe so primitive that they have Tide but
@@ -9673,7 +9547,7 @@ An idealist is one who helps the other fellow to make a profit.
 %
 An idle mind is worth two in the bush.
 %
-An infallible method of concilliating a tiger
+An infallible method of conciliating a tiger
 is to allow oneself to be devoured.
 		-- Konrad Adenauer
 %
@@ -9989,13 +9863,6 @@ loose waves of hair, an inch of which would be a keepsake beyond price:
 in short, I should have liked, I do confess, to have had the lightest
 license of a child, and yet been man enough to know its value.
 		-- Charles Dickens
-%
-And yet, seasons must be taken with a grain of salt, for they too have a
-sense of humor, as does history.  Corn stalks comedy, comedy stalks tragedy,
-and this too is historic.  And yet, still, when corn meets tragedy face to
-face, we have politics.
-		-- Dalglish, Larsen and Sutherland, "Root Crops and
-		   Ground Cover"
 %
 And yet, seasons must be taken with a grain of salt, for they too have
 a sense of humor, as does history.  Corn stalks comedy, comedy stalks
@@ -10512,9 +10379,6 @@ Are you making all this up as you go along?
 Are you sure the back door is locked?
 %
 "Are you sure you're not an encyclopedia salesman?"
-"No, Ma'am.  Just a burglar, come to ransack the flat."
-%
-"Are you sure you're not an encyclopedia salesman?"
 No, Ma'am.  Just a burglar, come to ransack the flat."
 		-- Monty Python
 %
@@ -10654,11 +10518,6 @@ interested in the basic nature of humor.  "What kind of a sick perverted
 disgusting person are you," these letters typically ask, "that you make
 jokes about setting fire to a goat?" 
 		-- Dave Barry
-%
-As an adolescent I aspired to lasting fame, I craved factual certainty, and I
-thirsted for a meaningful vision of human life -- so I became a scientist.
-This is like becoming an archbishop so you can meet girls.
-		-- M. Cartmill
 %
 As an adolescent I aspired to lasting fame, I craved factual certainty, and
 I thirsted for a meaningful vision of human life -- so I became a scientist.
@@ -10841,7 +10700,7 @@ Answer each of the following items "true" or "false"
  2. I use shoe polish to excess.
  3. God is love.
  4. I like mannish children.
- 5. I have always been diturbed by the sight of Lincoln's ears.
+ 5. I have always been disturbed by the sight of Lincoln's ears.
  6. I always let people get ahead of me at swimming pools.
  7. Most of the time I go to sleep without saying goodbye.
  8. I am not afraid of picking up door knobs.
@@ -11098,7 +10957,7 @@ field on track.
 At the hospital, a doctor is training an intern on how to announce bad news
 to the patients.  The doctor tells the intern "This man in 305 is going to
 die in six months.  Go in and tell him."  The intern boldly walks into the
-room, over to the man's bedisde and tells him "Seems like you're gonna die!"
+room, over to the man's bedside and tells him "Seems like you're gonna die!"
 The man has a heart attack and is rushed into surgery on the spot.  The doctor
 grabs the intern and screams at him, "What!?!? are you some kind of moron?
 You've got to take it easy, work your way up to the subject.  Now this man in
@@ -11143,7 +11002,7 @@ AUCTION:
 Audacity, and again, audacity, and always audacity.
 		-- G.J. Danton
 %
-audophile, n:
+audiophile, n:
 	Someone who listens to the equipment instead of the music.
 %
 Auribus teneo lupum.
@@ -11220,9 +11079,6 @@ never really caught on.
 %
 Back when I was a boy, it was 40 miles to everywhere, 
 uphill both ways and it was always snowing.
-%
-Back when I was a boy, it was 40 miles to everywhere, uphill both ways
-and it was always snowing.
 %
 BACKWARD CONDITIONING:
 	Putting saliva in a dog's mouth in an attempt to make a bell ring.
@@ -11559,7 +11415,7 @@ belief, n:
 %
 Believe everything you hear about the world; nothing is too
 impossibly bad.
-		-- Honore DeBalzac
+		-- Honore de Balzac
 %
 Bell Labs Unix - Reach out and grep someone.
 %
@@ -11750,7 +11606,7 @@ Beware of the man who knows the answer before he understands the question.
 himself no wiser than before," Bokonon tells us.  "He is full of murderous
 resentment of people who are ignorant without having come by their
 ignorance the hard way."
-		-- Vonnegut
+		-- Kurt Vonnegut
 %
 Beware of the Turing Tar-pit in which everything
 is possible but nothing of interest is easy.
@@ -13129,7 +12985,7 @@ COBOL:
 	Completely Over and Beyond reason Or Logic.
 %
 COBOL is for morons.
-		-- E.W. Dijkstra
+		-- Edsger W. Dijkstra
 %
 Cobol programmers are down in the dumps.
 %
@@ -13323,8 +13179,8 @@ Coming together is a beginning;
 Commit the oldest sins the newest kind of ways.
 		-- William Shakespeare, "Henry IV"
 %
-COMMITTMENT:
-	Committment can be illustrated by a breakfast of ham and eggs.
+COMMITMENT:
+	Commitment can be illustrated by a breakfast of ham and eggs.
 	The chicken was involved, the pig was committed.
 %
 Common sense is instinct, and enough of it is genius.
@@ -14795,7 +14651,7 @@ just whipped out a quarter?
 %
 "Do you think there's a God?"
 "Well, SOMEbody's out to get me!"
-		-- Calvin and Hobbs
+		-- Calvin and Hobbes
 %
 "Do you think what we're doing is wrong?"
 "Of course it's wrong!  It's illegal!"
@@ -14830,9 +14686,6 @@ Documentation:
 %
 Documentation is the castor oil of programming.  Managers know it must
 be good because the programmers hate it so much.
-%
-Documentation is the castor oil of programming.
-Managers know it must be good because the programmers hate it so much.
 %
 Does a good farmer neglect a crop he has planted?
 Does a good teacher overlook even the most humble student?
@@ -14877,12 +14730,6 @@ I chase the bright elusive butterfly of love.
 %
 Don't be humble, you're not that great.
 		-- Golda Meir
-%
-Don't be humble, you're not that great.
-                -- Golda Meir
-%
-Don't be irreplaceable.  If you can't
-be replaced, you cannot be promoted.
 %
 Don't be irreplaceable, if you can't be replaced, you can't be promoted.
 %
@@ -15326,9 +15173,6 @@ production of great leaders has been discontinued.
 Due to circumstances beyond your control, you are master of your
 fate and captain of your soul.
 %
-Due to circumstances beyond your control,
-you are master of your fate and captain of your soul.
-%
 Dungeons and Dragons is just a lot of Saxon Violence.
 %
 During almost fifteen centuries the legal establishment of Christianity has
@@ -15362,7 +15206,7 @@ Duty, n:
 %
 Dying is a very dull, dreary affair.  My advice to you is to have
 nothing whatever to do with it.
-		-- W. Somerset Maughm, his last words
+		-- W. Somerset Maugham, his last words
 %
 Dying is easy.  Comedy is difficult.
 		-- Actor Edmond Gween, on his deathbed.
@@ -15386,7 +15230,7 @@ imagery and Appledom.  Even words look like decorative filigrees in exotic
 typefaces.  The greatest icon of all, the inviolable Apple itself, stands in
 the dominate position at the upper-left corner of the screen.  A central
 corporate headquarters decrees the form of all rites and practices.
-Infalliable doctrine issues from one executive officer whose selection occurs
+Infallible doctrine issues from one executive officer whose selection occurs
 in a sealed boardroom.  Should anyone in his curia question his powers, the
 offender is excommunicated into outer darkness.  The expelled heretic founds
 a new company, mutters obscurely of the coming age and the next computer,
@@ -15729,7 +15573,7 @@ Enjoy your life; be pleasant and gay, like the birds in May.
 %
 Enjoy yourself while you're still old.
 %
-Entreprenuer, n:
+Entrepreneur, n:
 	A high-rolling risk taker who would rather
 	be a spectacular failure than a dismal success.
 %
@@ -15786,7 +15630,7 @@ Etymology, n:
 	hard to swallow."
 		-- Mike Kellen
 %
-Euch ist becannt, was wir beduerfen;
+Euch ist bekannt, was wir beduerfen;
 Wir wollen stark Getraenke schluerfen.
 		-- Goethe, "Faust"
 %
@@ -15972,7 +15816,7 @@ question."
 %
 Everlasting peace will come to the world when the last man has slain
 the last but one.
-		-- Adolph Hitler
+		-- Adolf Hitler
 %
 Every 4 seconds a woman has a baby.
 Our problem is to find this woman and stop her.
@@ -16147,7 +15991,7 @@ Everybody is given the same amount of hormones, at birth, and
 if you want to use yours for growing hair, that's fine with me.
 %
 Everybody is somebody else's weirdo.
-		-- Dykstra
+		-- Edsger W. Dijkstra
 %
 Everybody knows that the dice are loaded.  Everybody rolls with their
 fingers crossed.  Everybody knows the war is over.  Everybody knows the
@@ -16273,13 +16117,6 @@ There are no absolute continuums.  There are no surfaces.  There are no
 straight lines.
 	-- R. Buckminster Fuller
 %
-Everything you've learned in school as "obvious" becomes less and less
-obvious as you begin to study the universe.  For example, there are no
-solids in the universe. There's not even a suggestion of a solid.  There
-are no absolute continuums.  There are no surfaces.  There are no
-straight lines.
-		-- R. Buckminster Fuller
-%
 Everything's great in this good old world;
 (This is the stuff they can always use.)
 God's in his heaven, the hill's dew-pearled;
@@ -16345,10 +16182,6 @@ Excess on occasion is exhilarating.  It prevents moderation from
 acquiring the deadening effect of a habit.
 		-- W. Somerset Maugham
 %
-Excess on occasion is exhilarating.  It prevents
-moderation from acquiring the deadening effect of a habit.
-		-- W. Somerset Maugham
-%
 Excessive login messages is a sure sign of senility.
 %
 Execute every act of thy life as though it were thy last.
@@ -16411,13 +16244,13 @@ Extraordinary claims demand extraordinary proof.  There are many examples
 of outsiders who eventually overthrew entrenched scientific orthodoxies,
 but they prevailed with irrefutable data.  More often, egregious findings
 that contradict well-established research turn out to be artifacts.  I have
-argued that accepting psychic powers, reincarnation, "cosmic conciousness,"
+argued that accepting psychic powers, reincarnation, "cosmic consciousness,"
 and the like, would entail fundamental revisions of the foundations of
 neuroscience.  Before abandoning materialist theories of mind that have paid
 handsome dividends, we should insist on better evidence for psi phenomena
 than presently exists, especially when neurology and psychology themselves
 offer more plausible alternatives.
-		-- Barry L. Beyerstein, "The Brain and Conciousness:
+		-- Barry L. Beyerstein, "The Brain and Consciousness:
 		   Implications for Psi Phenomena".
 %
 Extreme fear can neither fight nor fly.
@@ -16615,7 +16448,7 @@ Fear is the greatest salesman.
 		-- Robert Klein
 %
 feature, n:
-	A surprising property of a program.  Occasionaly documented.  To
+	A surprising property of a program.  Occasionally documented.  To
 	call a property a feature sometimes means the author did not
 	consider that case, and the program makes an unexpected, though
 	not necessarily wrong response.  See BUG.  "That's not a bug, it's
@@ -16632,16 +16465,16 @@ Feeling amorous, she looked under the sheets and cried, "Oh, no,
 it's Microsoft!"
 %
 Felix Catus is your taxonomic nomenclature,
-An endothermic quadroped, carniverous by nature.
+An endothermic quadruped, carnivorous by nature.
 Your visual, olfactory, and auditory senses
 Contribute to your hunting skills and natural defenses.
 I find myself intrigued by your sub-vocal oscillations,
 A singular development of cat communications
-That obviates your basic hedonistic predelection
+That obviates your basic hedonistic predilection
 For a rhythmic stroking of your fur to demonstrate affection.
 A tail is quite essential for your acrobatic talents:
 You would not be so agile if you lacked its counterbalance;
-And when not being utilitized to aid in locomotion,
+And when not being utilised to aid in locomotion,
 It often serves to illustrate the state of your emotion.
 Oh Spot, the complex levels of behavior you display
 Connote a fairly well-developed cognitive array.
@@ -16917,7 +16750,7 @@ flowchart, n. & v.
 	[From flow "to ripple down in rich profusion, as hair" + chart
 	"a cryptic hidden-treasure map designed to mislead the uninitiated."]
 	1. n. The solution, if any, to a class of Mascheroni
-	construction problems in which given algoritms require geometrical
+	construction problems in which given algorithms require geometrical
 	representation using only the 35 basic ideograms of the ANSI
 	template.  2. n. Neronic doodling while the system burns.
 	3. n. A low-cost substitute for wallpaper.  4. n.  The innumerate
@@ -17240,7 +17073,7 @@ FORTRAN, "the infantile disorder", by now nearly 20 years old, is
 hopelessly inadequate for whatever computer application you have
 in mind today: it is now too clumsy, too risky, and too expensive
 to use.
-		-- E.W. Dijkstra
+		-- Edsger W. Dijkstra
 %
 [FORTRAN] will persist for some time --
 probably for at least the next decade.
@@ -17833,7 +17666,7 @@ FORTUNE'S FUN FACTS TO KNOW AND TELL:		#1
 	A firefly is not a fly, but a beetle.
 	A giant panda bear is really a member of the racoon family.
 	A black panther is really a leopard that has a solid black coat
-	    rather then a spotted one.
+	    rather than a spotted one.
 	Peanuts are not really nuts.  The majority of nuts grow on trees
 		while peauts grow underground.  They are classified as a
 		legume-part of the pea family.
@@ -18123,7 +17956,7 @@ Come I to make this gig at Caeser's laying down.
 %
 Friendships last when each friend thinks he has a slight superiority
 over the other.
-		-- Honore DeBalzac
+		-- Honore de Balzac
 %
 Frisbeetarianism is the belief that when you die,
 your soul goes up on the roof and gets stuck.
@@ -18199,9 +18032,6 @@ furbling, v:
 	Having to wander through a maze of ropes at an airport or bank
 	even when you are the only person in line.
 		-- Rich Hall, "Sniglets"
-%
-Furious activity is no substitute for understanding.
-		-- H. H. Williams
 %
 Furious activity is no substitute for understanding.
 		-- H.H. Williams
@@ -18328,10 +18158,10 @@ Each item and every farthing has been accounted for, with two regrettable
 exceptions for which I beg your indulgence.
 	Unfortunately the sum of one shilling and ninepence remains unaccounted
 for in one infantry battalion's petty cash and there has been a hideous
-confusion as the number of jars of raspberry jam issued to one cavalry regiment
-during a sandstorm in western Spain.  This reprehensible carelessness may be
-related to the pressure of circumstance, since we are war with France, a fact
-which may come as a bit of a surprise to you gentlemen in Whitehall.
+confusion as to the number of jars of raspberry jam issued to one cavalry
+regiment during a sandstorm in western Spain.  This reprehensible carelessness
+may be related to the pressure of circumstance, since we are war with France,
+a fact which may come as a bit of a surprise to you gentlemen in Whitehall.
 	This brings me to my present purpose, which is to request elucidation of
 my instructions from His Majesty's Government so that I may better understand
 why I am dragging an army over these barren plains.  I construe that perforce it
@@ -18910,9 +18740,6 @@ Good night, Mrs. Calabash, wherever you are.
 Good night to spend with family, but avoid arguments with your mate's
 new lover.
 %
-Good night to spend with family,
-but avoid arguments with your mate's new lover.
-%
 Good salesmen and good repairmen will never go hungry.
 		-- R.E. Schenk
 %
@@ -19233,10 +19060,6 @@ Hacker's Law:
 	The belief that enhanced understanding will necessarily stir
 	a nation to action is one of mankind's oldest illusions.
 %
-Hacker's Law:
-	The belief that enhanced understanding will necessarily stir a
-	nation to action is one of mankind's oldest illusions.
-%
 Hackers of the world, unite!
 %
 Hacker's Quicky #313:
@@ -19352,10 +19175,6 @@ Hanlon's Razor:
 Hanson's Treatment of Time:
 	There are never enough hours in a day,
 	but always too many days before Saturday.
-%
-Hanson's Treatment of Time:
-	There are never enough hours in a day, but always too many days
-	before Saturday.
 %
 Happiness adds and multiplies as we divide it with others.
 %
@@ -19924,7 +19743,7 @@ He who despises himself nevertheless esteems himself as a self-despiser.
 		-- Friedrich Nietzsche
 %
 He who enters his wife's dressing room is a philosopher or a fool.
-		-- Balzac
+		-- Honore de Balzac
 %
 He who fears the unknown may one day flee from his own backside.
 		-- Sinbad
@@ -20433,9 +20252,9 @@ Hideously disfigured by an ancient Indian curse?
 
 Call (511) 338-0959 for an immediate appointment.
 %
-Hier liegt ein Mann ganz obnegleich;
-Im Leibe dick, an Suden reich.
-Wir haben ihn in das Grab gesteckt,	Here lies a man with sundry flaws
+Hier liegt ein Mann ganz ohnegleich;
+Im Leibe dick, an Suenden reich.
+Wir haben ihn ins Grab gesteckt,	Here lies a man with sundry flaws
 Weil es uns dunkt er sei verreckt.	And numerous Sins upon his head;
 					We buried him today because
 					As far as we can tell, he's dead.
@@ -22032,7 +21851,7 @@ I have a theory that it's impossible to prove anything,
 but I can't prove it.
 %
 I have a very small mind and must live with it.
-		-- E. Dijkstra
+		-- Edsger W. Dijkstra
 %
 I have a very strange feeling about this...
 		-- Luke Skywalker
@@ -22205,7 +22024,7 @@ declare the construction of such machinery impracticable...
 	And at a period when the progress of physical science is obstructed
 by that exhausting intellectual and manual labor, indispensable for its
 advancement, which it is the object of the Analytical Engine to relieve, I
-think the application of machinery in aid of the most complicated and abtruse
+think the application of machinery in aid of the most complicated and abstruse
 calculations can no longer be deemed unworthy of the attention of the country.
 In fact, there is no reason why mental as well as bodily labor should not
 be economized by the aid of machinery.
@@ -22315,8 +22134,8 @@ take one along that worked.
 		-- Raymond Chandler
 %
 I know if you been talkin' you done said
-just how suprised you wuz by the living dead.
-You wuz suprised that they could understand you words
+just how surprised you wuz by the living dead.
+You wuz surprised that they could understand you words
 and never respond once to all the truth they heard.
 But don't you get square!
 There ain't no rule that says they got to care.
@@ -22462,7 +22281,7 @@ but for what I am when I am with you.
 %
 I loved her with a love thirsty and desperate. I felt that we two might
 commit some act so atrocious that the world, seeing us, would find it
-irresistable.
+irresistible.
 		-- Gene Wolfe, "The Shadow of the Torturer"
 %
 I married beneath me.  All women do.
@@ -22499,8 +22318,6 @@ week sometimes to make it up.
 		-- Mark Twain, "The Innocents Abroad"
 %
 I must have slipped a disk -- my pack hurts!
-%
-I must have slipped a disk; my pack hurts.
 %
 I myself have dreamed up a structure intermediate between Dyson spheres
 and planets.  Build a ring 93 million miles in radius -- one Earth orbit
@@ -22868,7 +22685,7 @@ I shall give a propagandist reason for starting the war, no matter whether
 it is plausible or not.  The victor will not be asked afterwards whether
 he told the truth or not.  When starting and waging war it is not right
 that matters, but victory.
-		-- Adolph Hitler
+		-- Adolf Hitler
 %
 I shot an arrow in to the air, and it stuck.
 		-- graffito in Los Angeles
@@ -22929,7 +22746,7 @@ I stopped believing in Santa Claus when my mother took me to see him in a
 department store, and he asked for my autograph.
 		-- Shirley Temple
 %
-I suggest a new stategy, Artoo: let the Wookiee win.
+I suggest a new strategy, Artoo: let the Wookiee win.
 		-- CP30
 %
 I suppose I could collect my books and get on back to school,
@@ -23267,10 +23084,6 @@ loving anyone.  Thinking you'll be loved in return is what's foolish.
 I used to think that the brain was the most wonderful organ in
 my body.  Then I realized who was telling me this.
 		-- Emo Phillips
-%
-I used to work in a fire hydrant factory.  You couldn't park anywhere near
-the place.
-		-- Steven Wright
 %
 I used to work in a fire hydrant factory.  You couldn't park anywhere
 near the place.
@@ -23887,11 +23700,6 @@ If a train station is a place where a train stops, what's a workstation?
 If addiction is judged by how long a dumb animal will sit pressing a lever
 to get a "fix" of something, to its own detriment, then I would conclude
 that netnews is far more addictive than cocaine.
-		-- Rob Stampfli
-%
-If addiction is judged by how long a dumb animal will sit pressing a lever
-to get a "fix" of something, to its own detriment, then I would conclude
-that netnews is far more addictive than cocaine.
 	-- Rob Stampfli
 %
 If all be true that I do think,
@@ -24333,8 +24141,6 @@ If it doesn't smell yet, it's pretty fresh.
 If it happens once, it's a bug.
 If it happens twice, it's a feature.
 If it happens more than twice, it's a design philosophy.
-%
-If it has syntax, it isn't user friendly.
 %
 If it has syntax, it isn't user-friendly.
 %
@@ -25002,12 +24808,12 @@ If you don't strike oil in twenty minutes, stop boring.
 If you drink, don't park.  Accidents make people.
 %
 If you ever want to have a lot of fun, I recommend that you go off and program
-an imbedded system.  The salient characteristic of an imbedded system is that
+an embedded system.  The salient characteristic of an embedded system is that
 it cannot be allowed to get into a state from which only direct intervention
-will suffice to remove it.  An imbedded system can't permanently trust anything
+will suffice to remove it.  An embedded system can't permanently trust anything
 it hears from the outside world.  It must sniff around, adapt, consider, sniff
 around, and adapt again.  I'm not talking about ordinary modular programming
-carefulness here.  No.  Programming an imbedded system calls for undiluted
+carefulness here.  No.  Programming an embedded system calls for undiluted
 raging maniacal paranoia.  For example, our ethernet front ends need to know
 what network number they are on so that they can address and route PUPs
 properly.  How do you find out what your network number is?  Easy, you ask a
@@ -25167,9 +24973,6 @@ but there's only one Maltese Falcon.
 %
 If you lose your temper at a newspaper columnist, he'll get rich, 
 or famous or both.
-%
-If you lose your temper at a newspaper columnist,
-he'll get rich or famous or both.
 %
 If you love someone, set them free.
 If they don't come back, then call them up when you're drunk.
@@ -29267,18 +29070,8 @@ L'etat c'est moi.
 Let's do it.
 		-- Gary Gilmore, to his firing squad
 %
-Let's just be friends and make no special effort to ever see each other again.
-%
 Let's just be friends and make no special
 effort to ever see each other again.
-%
-Let's just say that where a change was required, I adjusted.  In every
-relationship that exists, people have to seek a way to survive.  If you
-really care about the person, you do what's necessary, or that's the end.
-For the first time, I found that I really could change, and the qualities
-I most admired in myself I gave up.  I stopped being loud and bossy ...
-Oh, all right.  I was still loud and bossy, but only behind his back.
-		-- Kate Hepburn, on Tracy and Hepburn
 %
 Let's just say that where a change was required, I adjusted.  In every
 relationship that exists, people have to seek a way to survive.  If you
@@ -29713,12 +29506,6 @@ Charlie Brown:
 	No, that's giving up.  I'm still hoping that yesterday
 	will get better.
 %
-Linus:	I guess it's wrong always to be worrying about tomorrow.  Maybe
-	we should think only about today.
-Charlie Brown:
-	No, that's giving up.  I'm still hoping that yesterday will get
-	better.
-%
 Linus' Law:
 	There is no heavier burden than a great potential.
 %
@@ -30107,10 +29894,6 @@ Love is always open arms.  With arms open you allow love to come and
 go as it wills, freely, for it will do so anyway.  If you close your
 arms about love you'll find you are left only holding yourself.
 %
-Love is an ideal thing, marriage a real thing; a confusion of the real
-with the ideal never goes unpunished.
-		-- Goethe
-%
 Love is an ideal thing, marriage a real thing; a confusion of the
 real with the ideal never goes unpunished.
 		-- Goethe
@@ -30460,10 +30243,6 @@ Man is a military animal,
 Glories in gunpowder, and loves parade.
 		-- P.J. Bailey
 %
-Man is a rational animal who always loses his temper when he is called upon
-to act in accordance with the dictates of reason.
-		-- Oscar Wilde
-%
 Man is a rational animal who always loses his temper when he
 is called upon to act in accordance with the dictates of reason.
 		-- Oscar Wilde
@@ -30729,8 +30508,8 @@ Mark's Dental-Chair Discovery:
 %
 MARRIAGE:
 	An old, established institution, entered into by two people deeply
-	in love and desiring to make a committment to each other expressing
-	that love.  In short, committment to an institution.
+	in love and desiring to make a commitment to each other expressing
+	that love.  In short, commitment to an institution.
 %
 MARRIAGE:
 	Convertible bonds.
@@ -31067,7 +30846,7 @@ MEETINGS:
 %
 Meetings are an addictive, highly self indulgent activity that
 corporations and other large organizations habitually engage
-in only becuase they cannot actually masturbate.
+in only because they cannot actually masturbate.
 		-- Dave Barry
 %
 MEMO:
@@ -31776,7 +31555,7 @@ MSDOS is not dead, it just smells that way.
 %
 Much of the excitement we get out of our work
 is that we don't really know what we are doing.
-		-- E. Dijkstra
+		-- Edsger W. Dijkstra
 %
 Much to his Mum and Dad's dismay, Horace ate himself one day.
 He didn't stop to say his grace, he just sat down and ate his face.
@@ -31952,10 +31731,6 @@ In better spirits night and day.
 %
 My doctor told me to stop having intimate dinners for four.  
 Unless there are three other people.
-		-- Orson Welles
-%
-My doctor told me to stop having intimate dinners for four.  Unless there
-are three other people.
 		-- Orson Welles
 %
 My doctorate's in Literature, but it seems like a pretty good pulse to me.
@@ -32747,10 +32522,6 @@ And tapes mixed up on the racks --
 Ninety percent of the politicians give the other ten percent a bad reputation.
 		-- Henry Kissinger
 %
-Ninety percent of the time things turn out worse than you thought they would.
-The other ten percent of the time you had no right to expect that much.
-		-- Augustine
-%
 Ninety percent of the time things turn out worse than you thought they
 would.  The other ten percent of the time you had no right to expect
 that much.
@@ -33427,13 +33198,6 @@ and/or frogs falling from the sky.
 %
 Note to myself: use real bullets next time.
 %
-Notes for a ballet, "The Spell:"  ... Suddenly Sigmund hears the
-flutter of wings, and a group of wild swans flies across the moon ...
-Sigmund is astounded to see that their leader is part swan and part
-woman -- unfortunately, divided lengthwise.  She enchants Sigmund, who
-is careful not to make any poultry jokes...
-		-- Woody Allen
-%
 Notes for a ballet, "The Spell": ... Suddenly Sigmund hears the flutter of
 wings, and a group of wild swans flies across the moon ... Sigmund is
 astounded to see that their leader is part swan and part woman --
@@ -33546,10 +33310,6 @@ Nothing succeeds like the appearance of success.
 		-- Christopher Lascl
 %
 Nothing takes the taste out of peanut butter quite like unrequited love.
-		-- Charlie Brown
-%
-Nothing takes the taste out of peanut
-butter quite like unrequited love.
 		-- Charlie Brown
 %
 Nothing that's forced can ever be right,
@@ -34289,8 +34049,6 @@ girl knelt by her bed to say her prayers.  "God bless Mommy and Daddy and
 Keith and Kim," she said.  As she began to get up, she quickly added, "Oh,
 and God, this is goodbye.  We're moving to Hollywood."
 %
-On the road, ZIPPY is a pinhead without a purpose, but never without a POINT.
-%
 On the road, ZIPPY is a pinhead without
 a purpose, but never without a POINT.
 %
@@ -34402,7 +34160,7 @@ Once Law was sitting on the bench
 	And Mercy knelt a-weeping.
 "Clear out!" he cried, "disordered wench!
 	Nor come before me creeping.
-Upon you knees if you appear,
+Upon your knees if you appear,
 'Tis plain you have no standing here."
 
 Then Justice came.  His Honor cried:
@@ -34990,7 +34748,7 @@ Oppernockity tunes but once.
 Opportunities are usually disguised as hard
 work, so most people don't recognize them.
 %
-Oprah Winfrey has an incredible talent for getting the wierdest people to
+Oprah Winfrey has an incredible talent for getting the weirdest people to
 talk to.  And you just HAVE to watch it.  "Blind, masochistic minority,
 crippled, depressed, government latrine diggers, and the women who love
 them too much on the next Oprah Winfrey."
@@ -35290,7 +35048,7 @@ Pandora's Rule:
 %
 panic: can't find /
 %
-panic: kernal segmentation violation. core dumped		(only kidding)
+panic: kernel segmentation violation. core dumped		(only kidding)
 %
 Paprika Measure:
 
@@ -35572,7 +35330,7 @@ People love high ideals, but they got to be about 33-percent plausible.
 %
 People never lie so much as after a hunt, during a war, or before an
 election.
-		-- Otto Von Bismarck
+		-- Otto von Bismarck
 %
 People of privilege will always risk their complete destruction
 rather than surrender any material part of their advantage.
@@ -35622,10 +35380,6 @@ People who go to conferences are the ones who shouldn't.
 People who have no faults are terrible;
 there is no way of taking advantage of them.
 %
-People who have what they want are very fond of telling people who haven't
-what they want that they don't want it.
-		-- Ogden Nash
-%
 People who have what they want are very fond of telling
 people who haven't what they want that they don't want it.
 		-- Ogden Nash
@@ -35641,9 +35395,6 @@ cold baths.
 %
 People who think they know everything
 greatly annoy those of us who do.
-%
-People will accept your ideas much more readily if you tell them that Benjamin
-Franklin said it first.
 %
 People will accept your ideas much more readily if
 you tell them that Benjamin Franklin said it first.
@@ -35876,7 +35627,7 @@ So I piped with merry cheer.
 So I piped: he wept to hear.
 		-- William Blake, "Songs of Innocence"
 %
-Pipo was born with few complications, but then the doctor accidently dropped
+Pipo was born with few complications, but then the doctor accidentally dropped
 the infant on her head provoking her drunken father to drag the physician
 outside where he would beat him to death with a live ocelot.
 		-- Love and Rockets
@@ -35910,7 +35661,7 @@ P-K4
 %
 PL/1, "the fatal disease", belongs more
 to the problem set than to the solution set.
-		-- E.W. Dijkstra
+		-- Edsger W. Dijkstra
 %
 Plagiarize, plagiarize,
 Let no man's work evade your eyes,
@@ -36422,7 +36173,7 @@ SAMPLE:  Proof of induction without proof of induction.
 for every natural number less than n.  N is arbitrary, so we can take n 
 as large as we want.  If n is sufficiently large, the case of n+1 is 
 trivially equivalent, so the only important n are n less than n.  We can
-take n = n (from above), so it's true for n+1 becuase it's just about n.
+take n = n (from above), so it's true for n+1 because it's just about n.
 	QED.	(QED translates from the Latin as "So what?")
 %
 Proof techniques #2: Proof by Oddity.
@@ -37562,9 +37313,6 @@ Everything I am today I owe to people, whom it is now
 to late to punish.
 %
 QOTD:
-I haven't come far enough and don't call me baby.
-%
-QOTD:
 I looked out my window, and saw Kyle Pettys' car upside down,
 then I thought 'One of us is in real trouble'.
 	-- Davey Allison, on a 150 m.p.h. crash
@@ -37834,10 +37582,6 @@ Reality must take precedence over public relations, for Mother Nature
 cannot be fooled.
 		-- R.P. Feynman
 %
-Reality must take precedence over public
-relations, for Mother Nature cannot be fooled.
-		-- R.P. Feynman
-%
 Really??  What a coincidence, I'm shallow too!!
 %
 Reappraisal, n:
@@ -37877,20 +37621,6 @@ Recession is when your neighbor loses his job. Depression is when you
 lose your job.  These economic downturns are very difficult to predict,
 but sophisticated econometric modeling houses like Data Resources and
 Chase Econometrics have successfully predicted 14 of the last 3 recessions.
-%
-Recipe for a Pan Galactic Gargle Blaster:
-	(1) Take the juice from one bottle of Ol' Janx Spirit
-	(2) Pour into it one measure of water from the seas of
-		Santraginus V  (Oh, those Santraginean fish!)
-	(3) Allow 3 cubes of Arcturan Mega-gin to melt into the
-		mixture (properly iced or the benzine is lost.)
-	(4) Allow four liters of Fallian marsh gas to bubble through it.
-	(5) Over the back of a silver spoon, float a measure of
-		Qualactin Hypermint extract.
-	(6) Drop in the tooth of an Algolian Suntiger.  Watch it dissolve.
-	(7) Sprinkle Zamphuor.
-	(8) Add an olive.
-	(9) Drink... but... very carefully...
 %
 Recipe for a Pan Galactic Gargle Blaster:
 	(1) Take the juice from one bottle of Ol' Janx Spirit
@@ -38164,17 +37894,6 @@ Rhode's Law:
 	adhered to as absolute truth to be undeniably, universally, immutably,
 	and infinitely so, until such time as it becomes advantageous to
 	assume otherwise, maybe.
-%
-Rhode's Law:
-	When any principle, law, tenet, probability, happening, circumstance,
-or result can in no way be directly, indirectly, empirically, or circuitously
-proven, derived, implied, inferred, induced, deducted, estimated, or
-scientifically guessed, it will always for the purpose of convenience,
-expediency, political advantage, material gain, or personal comfort, or any
-combination of the above, or none of the above, be unilaterally and
-unequivocally assumed, proclaimed, and adhered to as absolute truth to be
-undeniably, universally, immutably, and infinitely so, until such time as
-it becomes advantageous to assume otherwise, maybe.
 %
 Rich bachelors should be heavily taxed.  It is not fair that some men
 should be happier than others.
@@ -38893,7 +38612,7 @@ the second one should have seen it.
 Seeing a commotion in Harvard Square, a man strolled over and asked what
 was going on.  One of the onlookers explained to him that there was a Mooney
 who had immersed himself in gasoline and was threatening to set fire to
-himself to demonstrate his committment to the Rev. Moon.  The man gasped and
+himself to demonstrate his commitment to the Rev. Moon.  The man gasped and
 asked what was being done to defuse the obviously dangerous situation.
 	"Well", replied the onlooker, "we're taking up a collection -- so
 far I've got two Bics, four Zippos and eighteen books of matches."
@@ -39242,11 +38961,6 @@ night, and they found his car this morning in the smokestack of a British
 aircraft carrier in the Formosa Straits.'
 		-- Grand Panjandrum's Special Award, 1985 Bulwer-Lytton
 		   bad fiction contest.
-%
-Sherry [Thomas Sheridan] is dull, naturally dull; but it must have taken
-him a great deal of pains to become what we now see him.  Such an excess of
-stupidity, sir, is not in Nature.
-		-- Samuel Johnson
 %
 Sherry [Thomas Sheridan] is dull, naturally dull; but it must have taken
 him a great deal of pains to become what we now see him.  Such an excess
@@ -39675,15 +39389,6 @@ into this.
 	   composed for Linda Wertheimer of National Public Radio.
 	   From SPY Magazine, November 1992
 %
-So she went into the garden to cut a cabbage leaf to make an apple pie; and
-at the same time a great she-bear, coming up the street pops its head into
-the shop. "What! no soap?"  So he died, and she very imprudently married
-the barber; and there were present the Picninnies, and the Grand Panjandrum
-himself, with the little round button at top, and they all fell to playing
-the game of catch as catch can, till the gunpowder ran out at the heels of
-their boots.
-		-- Samuel Foote
-%
 So she went into the garden to cut a cabbage leaf to make an apple pie;
 and at the same time a great she-bear, coming up the street pops its head
 into the shop. "What! no soap?"  So he died, and she very imprudently
@@ -39747,14 +39452,6 @@ So...
 "Friday, then?"
 "Why not, David, it might even be fun."
 		-- Dating in Minnesota
-%
-So you see Antonio, why worry about one little core dump, eh?  In reality all
-core dumps happen at the same instant, so the core dump you will have tomorrow,
-why, it already happened.  You see, its just a little universal recursive joke
-which threads our lives through the infinite potential of the instant.  So go
-to sleep, Antonio, your thread could break any moment and cast you out of the
-safe security of the instant into the dark void of eternity, the anti-time.
-So go to sleep, ...
 %
 So you see Antonio, why worry about one little core dump, eh?  In reality
 all core dumps happen at the same instant, so the core dump you will have
@@ -40573,9 +40270,6 @@ editor will delete it and the writing will be just as it should be.
 Subtlety is the art of saying what you think and getting out of the
 way before it is understood.
 %
-Subtlety is the art of saying what you think
-and getting out of the way before it is understood
-%
 Suburbia is where the developer bulldozes out the trees, then names
 the streets after them.
 		-- Bill Vaughn
@@ -40594,7 +40288,7 @@ made of things.
 Success is something I will dress for when I get there, and not until.
 %
 Success is the sole earthly judge of right and wrong.
-		-- Adolph Hitler, "Mein Kampf"
+		-- Adolf Hitler, "Mein Kampf"
 %
 Succumb to natural tendencies.  Be hateful and boring.
 %
@@ -40985,10 +40679,6 @@ TAXES:
 	Of life's two certainties,
 	the only one for which you can get an extension.
 %
-TAXES:
-	Of life's two certainties, the only one for
-	which you can get an extension.
-%
 Taxes are not levied for the benefit of the taxed.
 %
 TCP/IP Slang Glossary, #1:
@@ -41185,8 +40875,8 @@ Test for paraquat:
 	bicarbonate and sodium dithionite. If paraquat is present,
 	the solution will turn blue-green.
 %
-Testing can show the presense of bugs, but not their absence.
-		-- Dijkstra
+Testing can show the presence of bugs, but not their absence.
+		-- Edsger W. Dijkstra
 %
 Test-tube babies shouldn't throw stones.
 %
@@ -42229,7 +41919,7 @@ it to his master.
 %
 The duration of passion is proportionate with the original resistance
 of the woman.
-		-- Honore DeBalzac
+		-- Honore de Balzac
 %
 The eagle may soar, but the weasel never gets sucked into a jet engine.
 %
@@ -42385,7 +42075,7 @@ utterly absurd; indeed, in view of the silliness of the majority of mankind,
 a widespread belief is more often likely to be foolish than sensible.
 		-- Bertrand Russell, in "Marriage and Morals", 1929
 %
-The fact that hitler was a politcal genius unmasks the nature of politics
+The fact that Hitler was a political genius unmasks the nature of politics
 in general as no other can.
 	-- Wilhelm Reich
 %
@@ -42432,7 +42122,7 @@ either a Q-KR5 check or the loss of his queen.
 		-- Stephen Pile, "The Book of Heroic Failures"
 %
 The father, passing through his son's college town late one evening on a
-business trip, thought he would pay his boy a suprise visit.  Arriving at the
+business trip, thought he would pay his boy a surprise visit.  Arriving at the
 lad's fraternity house, dad rapped loudly on the door.  After several minutes
 of knocking, a sleepy voice drifted down from a second-floor window,
 	"Whaddaya want?"
@@ -42471,9 +42161,6 @@ The final delusion is the belief that one has lost all delusions.
 		-- Maurice Chapelain, "Main courante"
 %
 The finest eloquence is that which gets things done.
-%
-The first 90% of a project takes 90% of the time,
-the last 10% takes the other 90% of the time.
 %
 The first and almost the only Book deserving of universal attention is
 the Bible.
@@ -42521,10 +42208,6 @@ Understand?
 %
 The first half of our lives is ruined by our parents and the second half
 by our children.
-		-- Clarence Darrow
-%
-The first half of our lives is ruined by our parents,
-and the second half by our children.
 		-- Clarence Darrow
 %
 The first marriage is the triumph of imagination over intelligence,
@@ -42635,7 +42318,7 @@ if the character does not have fire resistance.
 		-- README file from the NetHack game
 %
 [The French Riviera is] a sunny place for shady people.
-		-- Somerset Maugham
+		-- W. Somerset Maugham
 %
 The full impact of parenthood doesn't hit you until you multiply the
 number of your kids by thirty-two teeth.
@@ -43761,7 +43444,7 @@ The major sin is the sin of being born.
 %
 The majority of husbands remind me of an orangutang trying to play
 the violin.
-		-- Honore DeBalzac
+		-- Honore de Balzac
 %
 The majority of the stupid is invincible and guaranteed for all time.
 The terror of their tyranny, however, is alleviated by their lack of
@@ -44775,7 +44458,7 @@ for incompetence.
 The problems of business administration in general, and database management in
 particular are much to difficult for people that think in IBMese, compounded
 with sloppy english.
-		-- Edsger Dijkstra
+		-- Edsger W. Dijkstra
 %
 The profession of book writing makes horse racing seem like a solid,
 stable business.
@@ -44914,7 +44597,7 @@ depends on the unreasonable man.
 		-- George Bernard Shaw
 %
 The reasons that each of these countries has had to renege on its
-financial committments were all somewhat different: Argentina because of
+financial commitments were all somewhat different: Argentina because of
 a war, Poland because of its vast misguided overinvestment in heavy
 industry, Honduras because the coffeee price went sour, Zaire because
 nobody in the government there has a clue as to how to run a country.
@@ -44950,10 +44633,6 @@ The haves get more, the have-nots die.
 %
 The right half of the brain controls the left half of the body.
 This means that only left handed people are in their right mind.
-%
-The right to be heard does not automatically include the right to be
-taken seriously.
-		-- Hubert Humphrey
 %
 The right to be heard does not automatically include the right to be
 taken seriously.
@@ -45284,7 +44963,7 @@ The strong give up and move on, while the weak give up and stay.
 %
 The strong individual loves the earth so much he lusts for recurrence.  He
 can smile in the face of the most terrible thought: meaningless, aimless
-existance recurring eternally.  The second characteristic of such a man is
+existence recurring eternally.  The second characteristic of such a man is
 that he has the strength to recognise -- and to live with the recognition --
 that the world is valueless in itself and that all values are human ones.
 He creates himself by fashoning his own values; he has the pride to live
@@ -45322,7 +45001,7 @@ the inferior man understands what will sell.
 The superpowers often behave like two heavily armed blind men feeling their
 way around a room, each believing himself in mortal peril from the other,
 whom he assumes to have perfect vision.  Each tends to ascribe to the other
-side a consistency, forsight and coherence that its own experience belies.
+side a consistency, foresight and coherence that its own experience belies.
 Of course, even two blind men can do enormous damage to each other, not to
 speak of the room.
 		-- Henry Kissinger
@@ -45575,10 +45254,6 @@ The trouble with opportunity is that it
 always comes disguised as hard work.
 		-- Herbert V. Prochnow
 %
-The trouble with some women is that they get all excited about nothing --
-and then marry him.
-		-- Cher
-%
 The trouble with some women is that they get
 all excited about nothing -- and then marry him.
 		-- Cher
@@ -45715,7 +45390,7 @@ world put together.
 %
 The use of anthropomorphic terminology when dealing with computing systems
 is a symptom of professional immaturity.
-		-- Edsger Dijkstra
+		-- Edsger W. Dijkstra
 %
 The use of COBOL cripples the mind; its teaching should, therefore, be
 regarded as a criminal offence.
@@ -45723,7 +45398,7 @@ regarded as a criminal offence.
 %
 The use of COBOL cripples the mind;
 its teaching should, therefore, be regarded as a criminal offense.
-		-- E.W. Dijkstra
+		-- Edsger W. Dijkstra
 %
 The use of money is all the advantage there is to having money.
 		-- B. Franklin
@@ -45732,7 +45407,7 @@ The value of a program is proportional to the weight of its output.
 %
 The very first essential for success is a perpetually
 constant and regular employment of violence.
-		-- Adolph Hitler, "Mein Kampf"
+		-- Adolf Hitler, "Mein Kampf"
 %
 The very powerful and the very stupid have one thing in common.  Instead of
 altering their views to fit the facts, they alter the facts to fit their
@@ -46110,7 +45785,7 @@ wants and not give in to it, to spend years in silent hurt wondering
 if something could have materialized -- and never knowing.
 		-- David Viscott
 %
-The Wright Bothers weren't the first to fly.
+The Wright Brothers weren't the first to fly.
 They were just the first not to crash.
 %
 The yankees, son, are up north.  
@@ -46398,13 +46073,6 @@ wonder.  There are also those who believe that if you stick your fingers up
 your nose and blow, it will increase your intelligence.
 			-- The Teachings of Ebenezum, Volume VII
 %
-"There are those who claim that magic is like the tide; that it swells and
-fades over the surface of the earth, collecting in concentrated pools here
-and there, almost disappearing from other spots, leaving them parched for
-wonder.  There are also those who believe that if you stick your fingers up
-your nose and blow, it will increase your intelligence."
-		-- The Teachings of Ebenezum, Volume VII
-%
 There are three kinds of lies: lies, damned lies and statistics.
 		-- Benjamin Disraeli
 %
@@ -46483,10 +46151,6 @@ tell me more!"
 and bad news.  The good news is that these guys are in top form.  I mean
 I have *never* heard them sound better.  They are *wailing* up here."
 	"The bad news is that God has this girlfriend that sings..."
-%
-There are two kinds of fool.  One says, "This is old, and therefore good."
-And one says "This is new, and therefore better."
-		-- John Brunner, "The Shockwave Rider"
 %
 There are two kinds of fool. One says, "This is old, and therefore good."
 And one says, "This is new, and therefore better"
@@ -47105,9 +46769,6 @@ Josh Gibson.  Only one thing is keeping them out of the big leagues, the
 pigmentation of their skin.  They happen to be colored.
 		-- Shirley Povich, 1941
 %
-There's a fine line between courage and foolishness.  Too bad it's not
-a fence.
-%
 There's a fine line between courage and foolishness.
 Too bad it's not a fence.
 %
@@ -47167,16 +46828,9 @@ along -- quite gracefully.
 There's a whole WORLD in a mud puddle!
 		-- Doug Clifford
 %
-There's always free cheese in a mouse trap.
-%
 There's always free cheese in a mousetrap.
 %
 There's an old proverb that says just about whatever you want it to.
-%
-There's been no top authority saying what marijuana does to you.  I really
-don't know that much about it.  I tried it once but it didn't do anything
-to me.
-		-- John Wayne
 %
 There's been no top authority saying what marijuana does to you.
 I really don't know that much about it.  I tried it once but it
@@ -48951,9 +48605,6 @@ Try to relax and enjoy the crisis.
 %
 Try to value useful qualities in one who loves you.
 %
-Trying to be happy is like trying to build a machine for which the only
-specification is that it should run noiselessly.
-%
 Trying to be happy is like trying to build a machine for
 which the only specification is that it should run noiselessly.
 %
@@ -49981,12 +49632,6 @@ socialism, because socialism is defunct.  It dies all by itself.  The bad
 thing is that socialism, being a victim of its ... Did I say socialism?
 		-- Fidel Castro
 %
-We are going to give a little something, a few little years more, to
-socialism, because socialism is defunct.  It dies all by itself.  The
-bad thing is that socialism, being a victim of its...
-Did I say socialism?
-		-- Fidel Castro
-%
 We are going to have peace even if we have to fight for it.
 		-- Dwight D. Eisenhower
 %
@@ -50043,7 +49688,7 @@ We can embody the truth, but we cannot know it.
 %
 We can found no scientific discipline, nor a healthy profession on the
 technical mistakes of the Department of Defense and IBM.
-		-- Edsger Dijkstra
+		-- Edsger W. Dijkstra
 %
 We cannot command nature except by obeying her.
 		-- Sir Francis Bacon
@@ -51060,9 +50705,6 @@ What good is an obscenity trial except to popularize literature?
 What good is having someone who can walk on water if you don't follow
 in his footsteps?
 %
-What good is having someone who can walk
-on water if you don't follow in his footsteps?
-%
 What good is it if you talk in flowers, and they think in pastry?
 		-- Ashleigh Brilliant
 %
@@ -51217,7 +50859,7 @@ goest thou?  Whither goest thou, America, in thy shiny car in the night?
 		-- Jack Kerouac
 %
 What luck for the rulers that men do not think.
-		-- Adolph Hitler
+		-- Adolf Hitler
 %
 What makes the Universe so hard to comprehend
 is that there's nothing to compare it with.
@@ -51591,10 +51233,6 @@ the wall, she may be in the wrong rest room.
 When a girl marries she exchanges the attentions of many men for the
 inattentions of one.
 		-- Helen Rowland
-%
-When a girl marries, she exchanges the attentions
-of many men for the inattentions of one.
-		Helen Rowland
 %
 When a lion meets another with a louder roar,
 the first lion thinks the last a bore.
@@ -52136,6 +51774,7 @@ Till somebody we like can be elected.	We hate that expression!
 %
 When someone says "I want a programming language in
 which I need only say what I wish done," give him a lollipop.
+		-- Alan Perlis
 %
 When speculation has done its worst, two plus two still equals four.
 		-- S. Johnson
@@ -52165,9 +51804,6 @@ When the ax entered the forest, the trees said, "The handle is one of us!"
 %
 When the blind lead the blind they will both fall over the cliff.
 		-- Chinese proverb
-%
-When the bosses talk about improving productivity, they are never talking
-about themselves.
 %
 When the bosses talk about improving productivity, they are never
 talking about themselves.
@@ -52278,7 +51914,7 @@ is to believe the one in which people appear at their worst.
 		-- H. Allen Smith, "Let the Crabgrass Grow"
 %
 When there is an old maid in the house, a watch dog is unnecessary.
-		-- Balzac
+		-- Honore de Balzac
 %
 When things go well, expect something to
 explode, erode, collapse or just disappear.
@@ -52334,7 +51970,7 @@ When women kiss it always reminds one of prize fighters shaking hands.
 When women love us, they forgive us everything, even our crimes;
 when they do not love us, they give us credit for nothing, not
 even our virtues.
-		-- Balzac
+		-- Honore de Balzac
 %
 When you are about to die, a wombat is better than no company at all.
 		-- Roger Zelazny, "Doorways in the Sand"
@@ -52478,7 +52114,7 @@ and everything will fall into place.
 %
 When you say that you agree to a thing in principle, you mean that
 you have not the slightest intention of carrying it out in practice.
-		-- Otto Von Bismarck
+		-- Otto von Bismarck
 %
 When you speak to others for their own good it's advice;
 when they speak to you for your own good it's interference.
@@ -52603,9 +52239,9 @@ Whenever you find that you are on the
 side of the majority, it is time to reform.
 		-- Mark Twain
 %
-Where a calculator on the ENIAC is equpped with 18,000 vaccuum tubes and
-weighs 30 tons, computers in the future may have only 1,000 vaccuum tubes
-and perhaps weight 1 1/2 tons.
+Where a calculator on the ENIAC is equipped with 18,000 vacuum tubes and
+weighs 30 tons, computers in the future may have only 1,000 vacuum tubes
+and perhaps weigh 1 1/2 tons.
 		-- Popular Mechanics, March 1949
 %
 Where am I?  Who am I?  Am I?  I
@@ -53472,15 +53108,15 @@ than being slapped is when you get on your knees and say you're sorry.
 %
 Women waste men's lives and think they have
 indemnified them by a few gracious words.
-		-- Balzac
+		-- Honore de Balzac
 %
 Women, when they are not in love, have all
 the cold blood of an experienced attorney.
-		-- Balzac
+		-- Honore de Balzac
 %
 Women, when they have made a sheep of a man,
 always tell him that he is a lion with a will of iron.
-		-- Balzac
+		-- Honore de Balzac
 %
 Women who desire to be like men, lack ambition.
 %
@@ -53720,7 +53356,7 @@ Would you *really* want to get on a non-stop flight?
 %
 "Would you tell me, please, which way I ought to go from here?"
 "That depends a good deal on where you want to get to," said the Cat.
-		-- Lewis Carrol
+		-- Lewis Carroll
 %
 Wouldn't this be a great world if being insecure and desperate were
 a turn-on?
@@ -54154,11 +53790,6 @@ Sigh!  There's so little hope for advancement.
 Yesterday upon the stair
 I met a man who wasn't there.
 He wasn't there again today --
-I think he's from the CIA.
-%
-Yesterday upon the stair
-I met a man who wasn't there.
-He wasn't there again today.
 I think he's from the CIA.
 %
 Ye've also got to remember that ... respectable people do the most
@@ -55370,11 +55001,6 @@ You will reach the highest possible point in your business or profession.
 You will receive a legacy which will place you above want.
 %
 You will remember something that you should not have forgotten.
-%
-You will remember, Watson, how the dreadful business of the Abernetty family
-was first brought to my notice by the depth which the parsley had sunk into
-the butter upon a hot day.
-		-- Sherlock Holmes
 %
 You will remember, Watson, how the dreadful business of the Abernetty
 family was first brought to my notice by the |depth which the parsley

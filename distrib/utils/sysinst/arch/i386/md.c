@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.33 2000/03/14 22:42:51 fvdl Exp $ */
+/*	$NetBSD: md.c,v 1.119 2008/10/07 09:58:15 abs Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -38,159 +38,340 @@
 
 /* md.c -- Machine specific code for i386 */
 
-#include <stdio.h>
-#include <util.h>
 #include <sys/param.h>
-#include <machine/cpu.h>
 #include <sys/sysctl.h>
+#include <sys/exec.h>
+#include <sys/utsname.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <machine/cpu.h>
+#include <stdio.h>
+#include <stddef.h>
+#include <util.h>
+#include <dirent.h>
 #include "defs.h"
 #include "md.h"
+#include "endian.h"
 #include "msg_defs.h"
 #include "menu_defs.h"
 
+#ifdef NO_LBA_READS		/* for testing */
+#undef BIFLAG_EXTINT13
+#define BIFLAG_EXTINT13	0
+#endif
 
-char mbr[512];
-int mbr_present, mbr_len;
-int c1024_resp;
-struct disklist *disklist = NULL;
-struct nativedisk_info *nativedisk;
-struct biosdisk_info *biosdisk = NULL;
-int netbsd_mbr_installed = 0;
-int netbsd_bootsel_installed = 0;
-
-static int md_read_bootcode __P((char *, char *, size_t));
-static int count_mbr_parts __P((struct mbr_partition *));
-static int mbr_part_above_chs __P((struct mbr_partition *));
-static int mbr_partstart_above_chs __P((struct mbr_partition *));
-static void configure_bootsel __P((void));
-static void md_upgrade_mbrtype __P((void));
-
-struct mbr_bootsel *mbs;
-int defbootselpart, defbootseldisk;
-
+static struct biosdisk_info *biosdisk = NULL;
 
 /* prototypes */
 
+static int mbr_root_above_chs(void);
+static void md_upgrade_mbrtype(void);
+static int md_read_bootcode(const char *, struct mbr_sector *);
+static unsigned int get_bootmodel(void);
+static char *md_bootxx_name(void);
+
 
 int
-md_get_info()
+md_get_info(void)
 {
-	read_mbr(diskdev, mbr, sizeof mbr);
-	if (!valid_mbr(mbr)) {
-		memset(&mbr[MBR_PARTOFF], 0,
-		    NMBRPART * sizeof (struct mbr_partition));
-		/* XXX check result and give up if < 0 */
-		mbr_len = md_read_bootcode(_PATH_MBR, mbr, sizeof mbr);
-		netbsd_mbr_installed = 1;
-	} else
-		mbr_len = MBR_SECSIZE;
+	mbr_info_t *ext;
+	struct mbr_partition *p;
+	const char *bootcode;
+	int i;
+	int names, fl, ofl;
+#define	ACTIVE_FOUND	0x0100
+#define	NETBSD_ACTIVE	0x0200
+#define	NETBSD_NAMED	0x0400
+#define	ACTIVE_NAMED	0x0800
+
+	if (no_mbr)
+		return 1;
+
+	if (read_mbr(diskdev, &mbr) < 0)
+		memset(&mbr.mbr, 0, sizeof mbr.mbr - 2);
 	md_bios_info(diskdev);
 
 edit:
-	edit_mbr((struct mbr_partition *)&mbr[MBR_PARTOFF]);
+	if (edit_mbr(&mbr) == 0)
+		return 0;
 
-	if (mbr_part_above_chs(part) &&
+	root_limit = 0;
+	if (biosdisk == NULL || !(biosdisk->bi_flags & BIFLAG_EXTINT13)) {
+		if (mbr_root_above_chs()) {
+			msg_display(MSG_partabovechs);
+			process_menu(MENU_noyes, NULL);
+			if (!yesno)
+				goto edit;
+			/* The user is shooting themselves in the foot here...*/
+		} else
+			root_limit = bcyl * bhead * bsec;
+	}
+
+	/*
+	 * Ensure the install partition (at sector ptstart) and the active
+	 * partition are bootable.
+	 * Determine whether the bootselect code is needed.
+	 * Note that MBR_BS_NEWMBR is always set, so we ignore it!
+	 */
+	fl = 0;
+	names = 0;
+	for (ext = &mbr; ext != NULL; ext = ext->extended) {
+		p = ext->mbr.mbr_parts;
+		for (i = 0; i < MBR_PART_COUNT; p++, i++) {
+			if (p->mbrp_flag == MBR_PFLAG_ACTIVE) {
+				fl |= ACTIVE_FOUND;
+			    if (ext->sector + p->mbrp_start == ptstart)
+				fl |= NETBSD_ACTIVE;
+			}
+			if (ext->mbrb.mbrbs_nametab[i][0] == 0) {
+				/* No bootmenu label... */
+				if (ext->sector == 0)
+					continue;
+				if (ext->sector + p->mbrp_start == ptstart)
+					/*
+					 * Have installed into an extended ptn
+					 * force name & bootsel...
+					 */
+					names++;
+				continue;
+			}
+			/* Partition has a bootmenu label... */
+			if (ext->sector != 0)
+				fl |= MBR_BS_EXTLBA;
+			if (ext->sector + p->mbrp_start == ptstart)
+				fl |= NETBSD_NAMED;
+			else if (p->mbrp_flag == MBR_PFLAG_ACTIVE)
+				fl |= ACTIVE_NAMED;
+			else
+				names++;
+		}
+	}
+	if (!(fl & ACTIVE_FOUND))
+		fl |= NETBSD_ACTIVE;
+	if (fl & NETBSD_NAMED && fl & NETBSD_ACTIVE)
+		fl |= ACTIVE_NAMED;
+
+	if ((names > 0 || !(fl & NETBSD_ACTIVE)) && 
+	    (!(fl & NETBSD_NAMED) || !(fl & ACTIVE_NAMED))) {
+		/*
+		 * There appear to be multiple bootable partitions, but they
+		 * don't all have bootmenu texts.
+		 */
+		msg_display(MSG_missing_bootmenu_text);
+		process_menu(MENU_yesno, NULL);
+		if (yesno)
+			goto edit;
+	}
+
+	if ((fl & MBR_BS_EXTLBA) &&
 	    (biosdisk == NULL || !(biosdisk->bi_flags & BIFLAG_EXTINT13))) {
-		msg_display(MSG_partabovechs);
-		process_menu(MENU_noyes);
+		/* Need unsupported LBA reads to read boot sectors */
+		msg_display(MSG_no_extended_bootmenu);
+		process_menu(MENU_noyes, NULL);
 		if (!yesno)
 			goto edit;
 	}
 
-	if (count_mbr_parts(part) > 1) {
-		msg_display(MSG_installbootsel);
-		process_menu(MENU_yesno);
-		if (yesno) {
-			mbr_len =
-			    md_read_bootcode(_PATH_BOOTSEL, mbr, sizeof mbr);
-			configure_bootsel();
-			netbsd_mbr_installed = netbsd_bootsel_installed = 1;
-		}
-	}
+	/* Sort out the name of the mbr code we need */
+	if (names > 0 || fl & (NETBSD_NAMED | ACTIVE_NAMED)) {
+		/* Need bootselect code */
+		fl |= MBR_BS_ACTIVE;
+		bootcode = fl & MBR_BS_EXTLBA ? _PATH_BOOTEXT : _PATH_BOOTSEL;
+	} else
+		bootcode = _PATH_MBR;
 
-	if (mbr_partstart_above_chs(part) && !netbsd_mbr_installed) {
-		msg_display(MSG_installmbr);
-		process_menu(MENU_yesno);
-		if (yesno) {
-			mbr_len = md_read_bootcode(_PATH_MBR, mbr, sizeof mbr);
-			netbsd_mbr_installed = 1;
-		}
+	fl &=  MBR_BS_ACTIVE | MBR_BS_EXTLBA;
+
+	/* Look at what is installed */
+	ofl = mbr.mbrb.mbrbs_flags;
+	if (ofl == 0) {
+		/* Check there is some bootcode at all... */
+		if (mbr.mbr.mbr_magic != htole16(MBR_MAGIC) ||
+		    mbr.mbr.mbr_jmpboot[0] == 0 ||
+		    mbr_root_above_chs())
+			/* Existing won't do, force update */
+			fl |= MBR_BS_NEWMBR;
 	}
+	ofl = mbr.oflags & (MBR_BS_ACTIVE | MBR_BS_EXTLBA);
+
+	if (fl & ~ofl || (fl == 0 && ofl & MBR_BS_ACTIVE)) {
+		/* Existing boot code isn't the right one... */
+		if (fl & MBR_BS_ACTIVE)
+			msg_display(MSG_installbootsel);
+		else
+			msg_display(MSG_installmbr);
+	} else
+		/* Existing code would (probably) be ok */
+		msg_display(MSG_updatembr);
+
+	process_menu(MENU_yesno, NULL);
+	if (!yesno)
+		/* User doesn't want to update mbr code */
+		return 1;
+
+	if (md_read_bootcode(bootcode, &mbr.mbr) == 0)
+		/* update suceeded - to memory copy */
+		return 1;
+
+	/* This shouldn't happen since the files are in the floppy fs... */
+	msg_display("Can't find %s", bootcode);
+	process_menu(MENU_yesno, NULL);
 
 	return 1;
 }
 
 /*
- * Read MBR code from a file. It may be a maximum of "len" bytes
- * long. This function skips the partition table. Space for this
- * is assumed to be in the file, but a table already in the buffer
- * is not overwritten.
+ * Read MBR code from a file.
+ * The existing partition table and bootselect configuration is kept.
  */
 static int
-md_read_bootcode(path, buf, len)
-	char *path, *buf;
-	size_t len;
+md_read_bootcode(const char *path, struct mbr_sector *mbrs)
 {
-	int fd, cc;
+	int fd;
 	struct stat st;
+	size_t len;
+	struct mbr_sector new_mbr;
+	uint32_t dsn;
 
 	fd = open(path, O_RDONLY);
 	if (fd < 0)
 		return -1;
 
-	if (fstat(fd, &st) < 0 || st.st_size > len || st.st_size < MBR_SECSIZE){
+	if (fstat(fd, &st) < 0 || st.st_size != sizeof *mbrs) {
 		close(fd);
 		return -1;
 	}
-	if (read(fd, buf, MBR_PARTOFF) != MBR_PARTOFF) {
-		close(fd);
-		return -1;
-	}
-	if (lseek(fd, MBR_MAGICOFF, SEEK_SET) < 0) {
-		close(fd);
-		return -1;
-	}
-	cc = read(fd, &buf[MBR_MAGICOFF], st.st_size - MBR_MAGICOFF);
 
+	if (read(fd, &new_mbr, sizeof new_mbr) != sizeof new_mbr) {
+		close(fd);
+		return -1;
+	}
 	close(fd);
 
-	return (cc + MBR_MAGICOFF);
+	if (new_mbr.mbr_bootsel_magic != htole16(MBR_BS_MAGIC))
+		return -1;
+
+	if (mbrs->mbr_bootsel_magic == htole16(MBR_BS_MAGIC)) {
+		len = offsetof(struct mbr_sector, mbr_bootsel);
+	} else
+		len = offsetof(struct mbr_sector, mbr_parts);
+
+	/* Preserve the 'drive serial number' - especially for Vista */
+	dsn = mbrs->mbr_dsn;
+	memcpy(mbrs, &new_mbr, len);
+	mbrs->mbr_dsn = dsn;
+
+	/* Keep flags from object file - indicate the properties */
+	mbrs->mbr_bootsel.mbrbs_flags = new_mbr.mbr_bootsel.mbrbs_flags;
+	mbrs->mbr_magic = htole16(MBR_MAGIC);
+
+	return 0;
 }
 
 int
-md_pre_disklabel()
+md_pre_disklabel(void)
 {
+	if (no_mbr)
+		return 0;
+
 	msg_display(MSG_dofdisk);
 
 	/* write edited MBR onto disk. */
-	if (write_mbr(diskdev, mbr, sizeof mbr, 1) != 0) {
+	if (write_mbr(diskdev, &mbr, 1) != 0) {
 		msg_display(MSG_wmbrfail);
-		process_menu(MENU_ok);
+		process_menu(MENU_ok, NULL);
 		return 1;
 	}
-	md_upgrade_mbrtype();
 	return 0;
 }
 
 int
 md_post_disklabel(void)
 {
-	/* Sector forwarding / badblocks ... */
-	if (*doessf) {
-		msg_display(MSG_dobad144);
-		return run_prog(0, 1, NULL, "/usr/sbin/bad144 %s 0", diskdev);
-	}
+	if (get_ramsize() <= 32)
+		set_swap(diskdev, bsdlabel);
+
 	return 0;
 }
 
 int
 md_post_newfs(void)
 {
-	/* boot blocks ... */
+	int ret;
+	size_t len;
+	int td, sd;
+	char bootxx[8192 + 4];
+	char *bootxx_filename;
+	/*
+	 * XXX - should either find some way to pull this automatically
+	 * from sys/arch/i386/stand/lib/boot_params.S, or just bite the
+	 * bullet and include /sbin/installboot on the ramdisk
+	 */
+	static struct x86_boot_params boottype =
+		{sizeof boottype, 0, 5, 0, 9600, { '\0' }, "", 0};
+	static int conmib[] = {CTL_MACHDEP, CPU_CONSDEV};
+	struct termios t;
+	dev_t condev;
+#define bp (*(struct x86_boot_params *)(bootxx + 512 * 2 + 8))
+
+	/*
+	 * Get console device, should either be ttyE0 or tty0n.
+	 * Too hard to double check, so just 'know' the device numbers.
+	 */
+	len = sizeof condev;
+	if (sysctl(conmib, nelem(conmib), &condev, &len, NULL, 0) != -1
+	    && (condev & ~3) == 0x800) {
+		/* Motherboard serial port */
+		boottype.bp_consdev = (condev & 3) + 1;
+		/* Defaulting the baud rate to that of stdin should suffice */
+		if (tcgetattr(0, &t) != -1)
+			boottype.bp_conspeed = t.c_ispeed;
+	}
+
+	process_menu(MENU_getboottype, &boottype);
 	msg_display(MSG_dobootblks, diskdev);
-	return run_prog(0, 1, NULL,
-	    "/usr/mdec/installboot -v /usr/mdec/biosboot.sym /dev/r%sa",
-	    diskdev);
+	if (bp.bp_consdev == ~0)
+		return 0;
+
+	ret = cp_to_target("/usr/mdec/boot", "/boot");
+	if (ret)
+		return ret;
+
+	/* Copy bootstrap in by hand - /sbin/installboot explodes ramdisks */
+	ret = 1;
+
+	snprintf(bootxx, sizeof bootxx, "/dev/r%s%c", diskdev, 'a' + rootpart);
+	td = open(bootxx, O_RDWR, 0);
+	bootxx_filename = md_bootxx_name();
+	if (bootxx_filename != NULL) {
+		sd = open(bootxx_filename, O_RDONLY);
+		free(bootxx_filename);
+	} else
+		sd = -1;
+	if (td == -1 || sd == -1)
+		goto bad_bootxx;
+	len = read(sd, bootxx, sizeof bootxx);
+	if (len < 2048 || len > 8192)
+		goto bad_bootxx;
+
+	if (*(uint32_t *)(bootxx + 512 * 2 + 4) != X86_BOOT_MAGIC_1)
+		goto bad_bootxx;
+
+	boottype.bp_length = bp.bp_length;
+	memcpy(&bp, &boottype, min(boottype.bp_length, sizeof boottype));
+
+	if (pwrite(td, bootxx, 512, 0) != 512)
+		goto bad_bootxx;
+	len -= 512 * 2;
+	if (pwrite(td, bootxx + 512 * 2, len, 2 * (off_t)512) != len)
+		goto bad_bootxx;
+	ret = 0;
+
+    bad_bootxx:
+	close(td);
+	close(sd);
+
+	return ret;
 }
 
 int
@@ -203,223 +384,35 @@ md_copy_filesystem(void)
 int
 md_make_bsd_partitions(void)
 {
-	FILE *f;
-	int i;
-	int part;
-	int maxpart = getmaxpartitions();
-	int remain;
 
-editlab:
-	/* Ask for layout type -- standard or special */
-	msg_display(MSG_layout,
-			(1.0*fsptsize*sectorsize)/MEG,
-			(1.0*minfsdmb*sectorsize)/MEG,
-			(1.0*minfsdmb*sectorsize)/MEG+rammb+XNEEDMB);
-	process_menu(MENU_layout);
+	return make_bsd_partitions();
+}
 
-	if (layoutkind == 3) {
-		ask_sizemult(dlcylsize);
-	} else {
-		sizemult = MEG / sectorsize;
-		multname = msg_string(MSG_megname);
-	}
+int
+md_pre_update(void)
+{
+	if (get_ramsize() <= 8)
+		set_swap(diskdev, NULL);
+	return 1;
+}
 
+/*
+ * any additional partition validation
+ */
+int
+md_check_partitions(void)
+{
+	int rval;
+	char *bootxx;
 
-	/* Build standard partitions */
-	emptylabel(bsdlabel);
-
-	/* Partitions C and D are predefined. */
-	bsdlabel[C].pi_fstype = FS_UNUSED;
-	bsdlabel[C].pi_offset = ptstart;
-	bsdlabel[C].pi_size = fsptsize;
-	
-	bsdlabel[D].pi_fstype = FS_UNUSED;
-	bsdlabel[D].pi_offset = 0;
-	bsdlabel[D].pi_size = fsdsize;
-
-	/* Standard fstypes */
-	bsdlabel[A].pi_fstype = FS_BSDFFS;
-	bsdlabel[B].pi_fstype = FS_SWAP;
-	bsdlabel[E].pi_fstype = FS_UNUSED;
-	bsdlabel[F].pi_fstype = FS_UNUSED;
-	bsdlabel[G].pi_fstype = FS_UNUSED;
-	bsdlabel[H].pi_fstype = FS_UNUSED;
-
-	switch (layoutkind) {
-	case 1: /* standard: a root, b swap, c/d "unused", e /usr */
-	case 2: /* standard X: a root, b swap (big), c/d "unused", e /usr */
-		partstart = ptstart;
-
-		/* check that we have enouth space */
-		i = NUMSEC(20+2*rammb, MEG/sectorsize, dlcylsize);
-		i += NUMSEC(layoutkind * 2 * (rammb < 16 ? 16 : rammb),
-			   MEG/sectorsize, dlcylsize);
-		if ( i > fsptsize) {
-			msg_display(MSG_disktoosmall);
-			process_menu(MENU_ok);
-			goto custom;
-		}
-		/* Root */
-		i = NUMSEC(20+2*rammb, MEG/sectorsize, dlcylsize) + partstart;
-		partsize = NUMSEC (i/(MEG/sectorsize)+1, MEG/sectorsize,
-				   dlcylsize) - partstart;
-		bsdlabel[A].pi_offset = partstart;
-		bsdlabel[A].pi_size = partsize;
-		bsdlabel[A].pi_bsize = 8192;
-		bsdlabel[A].pi_fsize = 1024;
-		strcpy (fsmount[A], "/");
-		partstart += partsize;
-
-		/* swap */
-		i = NUMSEC(layoutkind * 2 * (rammb < 16 ? 16 : rammb),
-			   MEG/sectorsize, dlcylsize) + partstart;
-		partsize = NUMSEC (i/(MEG/sectorsize)+1, MEG/sectorsize,
-			   dlcylsize) - partstart;
-		bsdlabel[B].pi_offset = partstart;
-		bsdlabel[B].pi_size = partsize;
-		partstart += partsize;
-
-		/* /usr */
-		partsize = fsptsize - (partstart - ptstart);
-		bsdlabel[E].pi_fstype = FS_BSDFFS;
-		bsdlabel[E].pi_offset = partstart;
-		bsdlabel[E].pi_size = partsize;
-		bsdlabel[E].pi_bsize = 8192;
-		bsdlabel[E].pi_fsize = 1024;
-		strcpy (fsmount[E], "/usr");
-		break;
-
-	case 3: /* custom: ask user for all sizes */
-custom:		ask_sizemult(dlcylsize);
-		msg_display(MSG_defaultunit, multname);
-		partstart = ptstart;
-		remain = fsptsize;
-
-		/* root */
-		i = NUMSEC(20+2*rammb, MEG/sectorsize, dlcylsize) + partstart;
-		partsize = NUMSEC (i/(MEG/sectorsize)+1, MEG/sectorsize,
-				   dlcylsize) - partstart;
-		if (partsize > remain)
-			partsize = remain;
-		msg_display_add(MSG_askfsroot1, remain/sizemult, multname);
-		partsize = getpartsize(MSG_askfsroot2, partstart, partsize);
-		bsdlabel[A].pi_offset = partstart;
-		bsdlabel[A].pi_size = partsize;
-		bsdlabel[A].pi_bsize = 8192;
-		bsdlabel[A].pi_fsize = 1024;
-		strcpy (fsmount[A], "/");
-		partstart += partsize;
-		remain -= partsize;
-		
-		/* swap */
-		i = NUMSEC( 2 * (rammb < 16 ? 16 : rammb),
-			   MEG/sectorsize, dlcylsize) + partstart;
-		partsize = NUMSEC (i/(MEG/sectorsize)+1, MEG/sectorsize,
-			   dlcylsize) - partstart;
-		if (partsize > remain)
-			partsize = remain;
-		msg_display(MSG_askfsswap1, remain/sizemult, multname);
-		partsize = getpartsize(MSG_askfsswap2, partstart, partsize);
-		bsdlabel[B].pi_offset = partstart;
-		bsdlabel[B].pi_size = partsize;
-		partstart += partsize;
-		remain -= partsize;
-		
-		/* Others E, F, G, H */
-		part = E;
-		if (remain > 0)
-			msg_display (MSG_otherparts);
-		while (remain > 0 && part <= H) {
-			msg_display_add(MSG_askfspart1, diskdev,
-			    partition_name(part), remain/sizemult, multname);
-			partsize = getpartsize(MSG_askfspart2, partstart,
-			    remain);
-			if (partsize > 0) {
-				if (remain - partsize < sizemult)
-					partsize = remain;
-				bsdlabel[part].pi_fstype = FS_BSDFFS;
-				bsdlabel[part].pi_offset = partstart;
-				bsdlabel[part].pi_size = partsize;
-				bsdlabel[part].pi_bsize = 8192;
-				bsdlabel[part].pi_fsize = 1024;
-				if (part == E)
-					strcpy (fsmount[E], "/usr");
-				msg_prompt_add (MSG_mountpoint, fsmount[part],
-						fsmount[part], 20);
-				partstart += partsize;
-				remain -= partsize;
-			}
-			part++;
-		}
-		
-		break;
-	}
-
-	/*
-	 * OK, we have a partition table. Give the user the chance to
-	 * edit it and verify it's OK, or abort altogether.
-	 */
-	if (edit_and_check_label(bsdlabel, maxpart, RAW_PART, RAW_PART) == 0) {
-		msg_display(MSG_abort);
-		return 0;
-	}
-
-	/*
-	 * XXX check for int13 extensions.
-	 */
-	if ((bsdlabel[A].pi_offset + bsdlabel[A].pi_size) / bcylsize > 1024 &&
-	    (biosdisk == NULL || !(biosdisk->bi_flags & BIFLAG_EXTINT13))) {
-		process_menu(MENU_cyl1024);
-		/* XXX UGH! need arguments to process_menu */
-		switch (c1024_resp) {
-		case 1:
-			edit_mbr((struct mbr_partition *)&mbr[MBR_PARTOFF]);
-			/*FALLTHROUGH*/
-		case 2:
-			goto editlab;
-		default:
-			break;
-		}
-	}
-
-	/* Disk name */
-	msg_prompt (MSG_packname, "mydisk", bsddiskname, DISKNAME_SIZE);
-
-	/* Create the disktab.preinstall */
-	run_prog (0, 0, NULL, "cp /etc/disktab.preinstall /etc/disktab");
-#ifdef DEBUG
-	f = fopen ("/tmp/disktab", "a");
-#else
-	f = fopen ("/etc/disktab", "a");
-#endif
-	if (f == NULL) {
-		endwin();
-		(void) fprintf (stderr, "Could not open /etc/disktab");
-		exit (1);
-	}
-	(void)fprintf (f, "%s|NetBSD installation generated:\\\n", bsddiskname);
-	(void)fprintf (f, "\t:dt=%s:ty=winchester:\\\n", disktype);
-	(void)fprintf (f, "\t:nc#%d:nt#%d:ns#%d:\\\n", dlcyl, dlhead, dlsec);
-	(void)fprintf (f, "\t:sc#%d:su#%d:\\\n", dlhead*dlsec, dlsize);
-	(void)fprintf (f, "\t:se#%d:%s\\\n", sectorsize, doessf);
-	for (i=0; i<8; i++) {
-		(void)fprintf (f, "\t:p%c#%d:o%c#%d:t%c=%s:",
-			       'a'+i, bsdlabel[i].pi_size,
-			       'a'+i, bsdlabel[i].pi_offset,
-			       'a'+i, fstypenames[bsdlabel[i].pi_fstype]);
-		if (bsdlabel[i].pi_fstype == FS_BSDFFS)
-			(void)fprintf (f, "b%c#%d:f%c#%d",
-				       'a'+i, bsdlabel[i].pi_bsize,
-				       'a'+i, bsdlabel[i].pi_fsize);
-		if (i < 7)
-			(void)fprintf (f, "\\\n");
-		else
-			(void)fprintf (f, "\n");
-	}
-	fclose (f);
-
-	/* Everything looks OK. */
-	return (1);
+	/* check we have boot code for the root partition type */
+	bootxx = md_bootxx_name();
+	rval = access(bootxx, R_OK);
+	free(bootxx);
+	if (rval == 0)
+		return 1;
+	process_menu(MENU_ok, deconst(MSG_No_Bootcode));
+	return 0;
 }
 
 
@@ -427,38 +420,43 @@ custom:		ask_sizemult(dlcylsize);
 int
 md_update(void)
 {
-	endwin();
+	move_aout_libs();
+	/* endwin(); */
 	md_copy_filesystem();
 	md_post_newfs();
 	md_upgrade_mbrtype();
-	puts(CL);		/* XXX */
+	wrefresh(curscr);
+	wmove(stdscr, 0, 0);
 	wclear(stdscr);
 	wrefresh(stdscr);
 	return 1;
 }
 
 void
-md_upgrade_mbrtype()
+md_upgrade_mbrtype(void)
 {
 	struct mbr_partition *mbrp;
 	int i, netbsdpart = -1, oldbsdpart = -1, oldbsdcount = 0;
 
-	if (read_mbr(diskdev, mbr, sizeof mbr) < 0)
+	if (no_mbr)
 		return;
 
-	mbrp = (struct mbr_partition *)&mbr[MBR_PARTOFF];
+	if (read_mbr(diskdev, &mbr) < 0)
+		return;
 
-	for (i = 0; i < NMBRPART; i++) {
-		if (mbrp[i].mbrp_typ == MBR_PTYPE_386BSD) {
+	mbrp = &mbr.mbr.mbr_parts[0];
+
+	for (i = 0; i < MBR_PART_COUNT; i++) {
+		if (mbrp[i].mbrp_type == MBR_PTYPE_386BSD) {
 			oldbsdpart = i;
 			oldbsdcount++;
-		} else if (mbrp[i].mbrp_typ == MBR_PTYPE_NETBSD)
+		} else if (mbrp[i].mbrp_type == MBR_PTYPE_NETBSD)
 			netbsdpart = i;
 	}
 
 	if (netbsdpart == -1 && oldbsdcount == 1) {
-		mbrp[oldbsdpart].mbrp_typ = MBR_PTYPE_NETBSD;
-		write_mbr(diskdev, mbr, sizeof mbr, 0);
+		mbrp[oldbsdpart].mbrp_type = MBR_PTYPE_NETBSD;
+		write_mbr(diskdev, &mbr, 0);
 	}
 }
 
@@ -467,149 +465,195 @@ md_upgrade_mbrtype()
 void
 md_cleanup_install(void)
 {
-	char realfrom[STRSIZE];
-	char realto[STRSIZE];
-	char sedcmd[STRSIZE];
 
-	strncpy(realfrom, target_expand("/etc/rc.conf"), STRSIZE);
-	strncpy(realto, target_expand("/etc/rc.conf.install"), STRSIZE);
+	enable_rc_conf();
+	
+	add_rc_conf("wscons=YES\n");
 
-	sprintf(sedcmd, "sed 's/rc_configured=NO/rc_configured=YES/' < %s > %s",
-	    realfrom, realto);
-	if (logging)
-		(void)fprintf(log, "%s\n", sedcmd);
-	if (scripting)
-		(void)fprintf(script, "%s\n", sedcmd);
-	do_system(sedcmd);
+#if defined(__i386__) && defined(SET_KERNEL_TINY)
+	/*
+	 * For GENERIC_TINY, do not enable any extra screens or wsmux.
+	 * Otherwise, run getty on 4 VTs.
+	 */
+	if (get_kernel_set() == SET_KERNEL_TINY)
+		run_program(RUN_CHROOT,
+                            "sed -an -e '/^screen/s/^/#/;/^mux/s/^/#/;"
+			    "H;$!d;g;w /etc/wscons.conf' /etc/wscons.conf");
+	else
+#endif
+		run_program(RUN_CHROOT,
+			    "sed -an -e '/^ttyE[1-9]/s/off/on/;"
+			    "H;$!d;g;w /etc/ttys' /etc/ttys");
 
-	run_prog(1, 0, NULL, "mv -f %s %s", realto, realfrom);
-	run_prog(0, 0, NULL, "rm -f %s", target_expand("/sysinst"));
-	run_prog(0, 0, NULL, "rm -f %s", target_expand("/.termcap"));
-	run_prog(0, 0, NULL, "rm -f %s", target_expand("/.profile"));
 }
 
 int
 md_bios_info(dev)
 	char *dev;
 {
-	int mib[2], i, len;
+	static struct disklist *disklist = NULL;
+	static int mib[2] = {CTL_MACHDEP, CPU_DISKINFO};
+	int i;
+	size_t len;
 	struct biosdisk_info *bip;
 	struct nativedisk_info *nip = NULL, *nat;
 	int cyl, head, sec;
 
 	if (disklist == NULL) {
-		mib[0] = CTL_MACHDEP;
-		mib[1] = CPU_DISKINFO;
 		if (sysctl(mib, 2, NULL, &len, NULL, 0) < 0)
 			goto nogeom;
-		disklist = (struct disklist *)malloc(len);
+		disklist = malloc(len);
+		if (disklist == NULL) {
+			fprintf(stderr, "Out of memory\n");
+			return -1;
+		}
 		sysctl(mib, 2, disklist, &len, NULL, 0);
 	}
-
-	nativedisk = NULL;
 
 	for (i = 0; i < disklist->dl_nnativedisks; i++) {
 		nat = &disklist->dl_nativedisks[i];
 		if (!strcmp(dev, nat->ni_devname)) {
-			nativedisk = nip = nat;
+			nip = nat;
 			break;
 		}
 	}
 	if (nip == NULL || nip->ni_nmatches == 0) {
 nogeom:
 		msg_display(MSG_nobiosgeom, dlcyl, dlhead, dlsec);
-		if (guess_biosgeom_from_mbr(mbr, &cyl, &head, &sec) >= 0) {
+		if (guess_biosgeom_from_mbr(&mbr, &cyl, &head, &sec) >= 0)
 			msg_display_add(MSG_biosguess, cyl, head, sec);
-			set_bios_geom(cyl, head, sec);
-		} else
-			set_bios_geom(dlcyl, dlhead, dlsec);
 		biosdisk = NULL;
-	} else if (nip->ni_nmatches == 1) {
-		bip = &disklist->dl_biosdisks[nip->ni_biosmatches[0]];
-		msg_display(MSG_onebiosmatch);
-		msg_table_add(MSG_onebiosmatch_header);
-		msg_table_add(MSG_onebiosmatch_row, bip->bi_dev - 0x80,
-		    bip->bi_cyl, bip->bi_head, bip->bi_sec);
-		process_menu(MENU_biosonematch);
 	} else {
-		msg_display(MSG_biosmultmatch);
-		msg_table_add(MSG_biosmultmatch_header);
-		for (i = 0; i < nip->ni_nmatches; i++) {
-			bip = &disklist->dl_biosdisks[nip->ni_biosmatches[i]];
-			msg_table_add(MSG_biosmultmatch_row, i,
-			    bip->bi_dev - 0x80, bip->bi_cyl, bip->bi_head,
-			    bip->bi_sec);
+		guess_biosgeom_from_mbr(&mbr, &cyl, &head, &sec);
+		if (nip->ni_nmatches == 1) {
+			bip = &disklist->dl_biosdisks[nip->ni_biosmatches[0]];
+			msg_display(MSG_onebiosmatch);
+			msg_table_add(MSG_onebiosmatch_header);
+			msg_table_add(MSG_onebiosmatch_row, bip->bi_dev,
+			    bip->bi_cyl, bip->bi_head, bip->bi_sec,
+			    (unsigned)bip->bi_lbasecs,
+			    (unsigned)(bip->bi_lbasecs / (1000000000 / 512)));
+			msg_display_add(MSG_biosgeom_advise);
+			biosdisk = bip;
+			process_menu(MENU_biosonematch, &biosdisk);
+		} else {
+			msg_display(MSG_biosmultmatch);
+			msg_table_add(MSG_biosmultmatch_header);
+			for (i = 0; i < nip->ni_nmatches; i++) {
+				bip = &disklist->dl_biosdisks[
+							nip->ni_biosmatches[i]];
+				msg_table_add(MSG_biosmultmatch_row, i,
+				    bip->bi_dev, bip->bi_cyl, bip->bi_head,
+				    bip->bi_sec, (unsigned)bip->bi_lbasecs,
+				    (unsigned)bip->bi_lbasecs/(1000000000/512));
+			}
+			process_menu(MENU_biosmultmatch, &i);
+			if (i == -1)
+				biosdisk = NULL;
+			else
+				biosdisk = &disklist->dl_biosdisks[
+							nip->ni_biosmatches[i]];
 		}
-		process_menu(MENU_biosmultmatch);
 	}
-	if (biosdisk != NULL && (biosdisk->bi_flags & BIFLAG_EXTINT13))
-		bsize = dlsize;
-	else
-		bsize = bcyl * bhead * bsec;
-	bcylsize = bhead * bsec;
+	if (biosdisk == NULL)
+		set_bios_geom(cyl, head, sec);
+	else {
+		bcyl = biosdisk->bi_cyl;
+		bhead = biosdisk->bi_head;
+		bsec = biosdisk->bi_sec;
+	}
 	return 0;
 }
 
 static int
-count_mbr_parts(pt)
-	struct mbr_partition *pt;
+mbr_root_above_chs(void)
 {
-	int i, count = 0;;
 
-	for (i = 0; i < NMBRPART; i++)
-		if (pt[i].mbrp_typ != 0)
-			count++;
-
-	return count;
+	return ptstart + DEFROOTSIZE * (MEG / 512) >= bcyl * bhead * bsec;
 }
 
-static int
-mbr_part_above_chs(pt)
-	struct mbr_partition *pt;
+unsigned int
+get_bootmodel(void)
 {
-	return ((pt[bsdpart].mbrp_start + pt[bsdpart].mbrp_size) >=
-		bcyl * bhead * bsec);
-}
+#if defined(__i386__)
+	struct utsname ut;
+#ifdef DEBUG
+	char *envstr;
 
-static int
-mbr_partstart_above_chs(pt)
-	struct mbr_partition *pt;
-{
-	return (pt[bsdpart].mbrp_start >= bcyl * bhead * bsec);
-}
+	envstr = getenv("BOOTMODEL");
+	if (envstr != NULL)
+		return atoi(envstr);
+#endif
 
-static void
-configure_bootsel()
-{
-	struct mbr_partition *parts =
-	    (struct mbr_partition *)&mbr[MBR_PARTOFF];
-	int i;
+	if (uname(&ut) < 0)
+		ut.version[0] = 0;
 
-
-	mbs = (struct mbr_bootsel *)&mbr[MBR_BOOTSELOFF];
-	mbs->flags = BFL_SELACTIVE;
-
-	process_menu(MENU_configbootsel);
-
-	for (i = 0; i < NMBRPART; i++) {
-		if (parts[i].mbrp_typ != 0 &&
-		   parts[i].mbrp_start >= (bcyl * bhead * bsec)) {
-			mbs->flags |= BFL_EXTINT13;
-			break;
-		}
-	}
+#if defined(SET_KERNEL_TINY)
+	if (strstr(ut.version, "TINY") != NULL)
+		return SET_KERNEL_TINY;
+#endif
+#if defined(SET_KERNEL_PS2)
+	if (strstr(ut.version, "PS2") != NULL)
+		return SET_KERNEL_PS2;
+#endif
+#endif
+	return SET_KERNEL_GENERIC;
 }
 
 void
-disp_bootsel(part, mbsp)
-	struct mbr_partition *part;
-	struct mbr_bootsel *mbsp;
+md_init(void)
 {
-	int i;
+}
 
-	msg_table_add(MSG_bootsel_header);
-	for (i = 0; i < 4; i++) {
-		msg_table_add(MSG_bootsel_row,
-		    i, get_partname(i), mbs->nametab[i]);
-	}
+void
+md_init_set_status(int minimal)
+{
+	(void)minimal;
+
+	/* Default to install same type of kernel as we are running */
+	set_kernel_set(get_bootmodel());
+}
+
+static char *
+md_bootxx_name(void)
+{
+	int fstype;
+	const char *bootfs = 0;
+	char *bootxx;
+
+	/* check we have boot code for the root partition type */
+	fstype = bsdlabel[rootpart].pi_fstype;
+	if (fstype == FS_BSDFFS)
+		if (bsdlabel[rootpart].pi_flags & PIF_FFSv2)
+			bootfs = "ffsv2";
+		else
+			bootfs = "ffsv1";
+	else if (fstype == FS_BSDLFS)
+			bootfs = "lfsv2";
+	else
+		bootfs = mountnames[fstype];
+
+	if (bootfs == NULL)
+		return NULL;
+
+	asprintf(&bootxx, "/usr/mdec/bootxx_%s", bootfs);
+	return bootxx;
+}
+
+int
+md_post_extract(void)
+{
+	return 0;
+}
+
+int
+md_check_mbr(mbr_info_t *mbri)
+{
+	return 2;
+}
+
+int
+md_mbr_use_wholedisk(mbr_info_t *mbri)
+{
+	return mbr_use_wholedisk(mbri);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: tutor.h,v 1.6 1999/02/10 12:29:48 hubertf Exp $	*/
+/*	$NetBSD: tutor.h,v 1.8 2004/01/27 20:30:28 jsm Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -66,7 +62,7 @@ extern	const char	*const stragy[];
 extern	const struct situatn	test[];
 
 
-int	brdeq __P((const int *, const int *));
-void	clrest __P((void));
-void	leave __P((void)) __attribute__((__noreturn__));
-void	tutor __P((void)) __attribute__((__noreturn__));
+int	brdeq(const int *, const int *);
+void	clrest(void);
+void	leave(void) __attribute__((__noreturn__));
+void	tutor(void) __attribute__((__noreturn__));

@@ -1,16 +1,68 @@
-/*	$NetBSD: npx.c,v 1.70 1999/10/06 20:03:51 fvdl Exp $	*/
+/*	$NetBSD: npx.c,v 1.129.10.5 2008/11/27 03:37:02 snj Exp $	*/
 
-#if 0
-#define IPRINTF(x)	printf x
-#else
-#define	IPRINTF(x)
-#endif
+/*-
+ * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software developed for The NetBSD Foundation
+ * by Andrew Doran.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*-
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)npx.c	7.2 (Berkeley) 5/12/91
+ */
 
 /*-
  * Copyright (c) 1994, 1995, 1998 Charles M. Hannum.  All rights reserved.
  * Copyright (c) 1990 William Jolitz.
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -43,6 +95,18 @@
  *	@(#)npx.c	7.2 (Berkeley) 5/12/91
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: npx.c,v 1.129.10.5 2008/11/27 03:37:02 snj Exp $");
+
+#if 0
+#define IPRINTF(x)	printf x
+#else
+#define	IPRINTF(x)
+#endif
+
+#include "opt_multiprocessor.h"
+#include "opt_xen.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
@@ -52,103 +116,137 @@
 #include <sys/ioctl.h>
 #include <sys/device.h>
 #include <sys/vmmeter.h>
-
-#include <vm/vm.h>
+#include <sys/kernel.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/cpu.h>
-#include <machine/intr.h>
-#include <machine/pio.h>
 #include <machine/cpufunc.h>
 #include <machine/pcb.h>
 #include <machine/trap.h>
 #include <machine/specialreg.h>
+#include <machine/pio.h>
+#include <machine/i8259.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
-#include <i386/isa/icu.h>
+
+#include <i386/isa/npxvar.h>
 
 /*
  * 387 and 287 Numeric Coprocessor Extension (NPX) Driver.
  *
  * We do lazy initialization and switching using the TS bit in cr0 and the
- * MDP_USEDFPU bit in mdproc.
+ * MDL_USEDFPU bit in mdlwp.
  *
  * DNA exceptions are handled like this:
  *
  * 1) If there is no NPX, return and go to the emulator.
  * 2) If someone else has used the NPX, save its state into that process's PCB.
- * 3a) If MDP_USEDFPU is not set, set it and initialize the NPX.
+ * 3a) If MDL_USEDFPU is not set, set it and initialize the NPX.
  * 3b) Otherwise, reload the process's previous NPX state.
  *
  * When a process is created or exec()s, its saved cr0 image has the TS bit
- * set and the MDP_USEDFPU bit clear.  The MDP_USEDFPU bit is set when the
+ * set and the MDL_USEDFPU bit clear.  The MDL_USEDFPU bit is set when the
  * process first gets a DNA and the NPX is initialized.  The TS bit is turned
  * off when the NPX is used, and turned on again later when the process's NPX
  * state is saved.
  */
 
-#define	fldcw(addr)		__asm("fldcw %0" : : "m" (*addr))
-#define	fnclex()		__asm("fnclex")
-#define	fninit()		__asm("fninit")
-#define	fnsave(addr)		__asm("fnsave %0" : "=m" (*addr))
-#define	fnstcw(addr)		__asm("fnstcw %0" : "=m" (*addr))
-#define	fnstsw(addr)		__asm("fnstsw %0" : "=m" (*addr))
-#define	fp_divide_by_0()	__asm("fldz; fld1; fdiv %st,%st(1); fwait")
-#define	frstor(addr)		__asm("frstor %0" : : "m" (*addr))
-#define	fwait()			__asm("fwait")
-#define	read_eflags()		({register u_long ef; \
-				  __asm("pushfl; popl %0" : "=r" (ef)); \
-				  ef;})
-#define	write_eflags(x)		({register u_long ef = (x); \
-				  __asm("pushl %0; popfl" : : "r" (ef));})
-#define	clts()			__asm("clts")
-#define	stts()			lcr0(rcr0() | CR0_TS)
+static int	x86fpflags_to_ksiginfo(uint32_t flags);
+static int	npxdna(struct cpu_info *);
 
-int npxdna __P((struct proc *));
-void npxexit __P((void));
-int npxintr __P((void *));
-static int npxprobe1 __P((struct isa_attach_args *));
-static void npxsave1 __P((void));
-
-struct npx_softc {
-	struct device sc_dev;
-	void *sc_ih;
-};
-
-int npxprobe __P((struct device *, struct cfdata *, void *));
-void npxattach __P((struct device *, struct device *, void *));
-
-struct cfattach npx_ca = {
-	sizeof(struct npx_softc), npxprobe, npxattach
-};
-
-enum npx_type {
-	NPX_NONE = 0,
-	NPX_INTERRUPT,
-	NPX_EXCEPTION,
-	NPX_BROKEN,
-};
-
-struct proc	*npxproc;
+#ifdef XEN
+#define	clts()
+#define	stts()
+#endif
 
 static	enum npx_type		npx_type;
-static	int			npx_nointr;
 volatile u_int			npx_intrs_while_probing;
 volatile u_int			npx_traps_while_probing;
 
-extern int			i386_fpu_present;
+extern int i386_fpu_present;
+extern int i386_fpu_exception;
+extern int i386_fpu_fdivbug;
 
-static inline int
-npxprobe1(ia)
-	struct isa_attach_args *ia;
+struct npx_softc		*npx_softc;
+
+static inline void
+fpu_save(union savefpu *addr)
 {
+	if (i386_use_fxsave)
+	{
+                fxsave(&addr->sv_xmm);
+
+		/* FXSAVE doesn't FNINIT like FNSAVE does -- so do it here. */
+		fninit();
+	} else
+		fnsave(&addr->sv_87);
+}
+
+static int
+npxdna_empty(struct cpu_info *ci)
+{
+
+#ifndef XEN
+	panic("npxdna vector not initialized");
+#endif
+	return 0;
+}
+
+
+int    (*npxdna_func)(struct cpu_info *) = npxdna_empty;
+
+#ifndef XEN
+/*
+ * This calls i8259_* directly, but currently we can count on systems
+ * having a i8259 compatible setup all the time. Maybe have to change
+ * that in the future.
+ */
+enum npx_type
+npxprobe1(bus_space_tag_t iot, bus_space_handle_t ioh, int irq)
+{
+	struct gate_descriptor save_idt_npxintr;
+	struct gate_descriptor save_idt_npxtrap;
+	enum npx_type rv = NPX_NONE;
+	u_long	save_eflags;
 	int control;
 	int status;
+	unsigned irqmask;
 
-	ia->ia_iosize = 16;
-	ia->ia_msize = 0;
+	if (cpu_feature & CPUID_FPU) {
+		i386_fpu_exception = 1;
+		return NPX_CPUID;
+	}
+	save_eflags = x86_read_psl();
+	x86_disable_intr();
+	save_idt_npxintr = idt[NRSVIDT + irq];
+	save_idt_npxtrap = idt[16];
+	setgate(&idt[NRSVIDT + irq], probeintr, 0, SDT_SYS386IGT, SEL_KPL,
+	    GSEL(GCODE_SEL, SEL_KPL));
+	setgate(&idt[16], probetrap, 0, SDT_SYS386TGT, SEL_KPL,
+	    GSEL(GCODE_SEL, SEL_KPL));
+
+	irqmask = i8259_setmask(~((1 << IRQ_SLAVE) | (1 << irq)));
+
+	/*
+	 * Partially reset the coprocessor, if any.  Some BIOS's don't reset
+	 * it after a warm boot.
+	 */
+	/* full reset on some systems, NOP on others */
+	bus_space_write_1(iot, ioh, 1, 0);
+	delay(1000);
+	/* clear BUSY# latch */
+	bus_space_write_1(iot, ioh, 0, 0);
+
+	/*
+	 * We set CR0 in locore to trap all ESC and WAIT instructions.
+	 * We have to turn off the CR0_EM bit temporarily while probing.
+	 */
+	lcr0(rcr0() & ~(CR0_EM|CR0_TS));
+	x86_enable_intr();
 
 	/*
 	 * Finish resetting the coprocessor, if any.  If there is an error
@@ -168,7 +266,7 @@ npxprobe1(ia)
 		/*
 		 * Good, now check for a proper control word.
 		 */
-		control = 0x5a5a;	
+		control = 0x5a5a;
 		fnstcw(&control);
 		if ((control & 0x1f3f) == 0x033f) {
 			/*
@@ -183,130 +281,79 @@ npxprobe1(ia)
 				/*
 				 * Good, exception 16 works.
 				 */
-				npx_type = NPX_EXCEPTION;
-				ia->ia_irq = IRQUNK;	/* zap the interrupt */
+				rv = NPX_EXCEPTION;
+				i386_fpu_exception = 1;
 			} else if (npx_intrs_while_probing != 0) {
 				/*
 				 * Bad, we are stuck with IRQ13.
 				 */
-				npx_type = NPX_INTERRUPT;
+				rv = NPX_INTERRUPT;
 			} else {
 				/*
 				 * Worse, even IRQ13 is broken.  Use emulator.
 				 */
-				npx_type = NPX_BROKEN;
-				ia->ia_irq = IRQUNK;
+				rv = NPX_BROKEN;
 			}
-			return 1;
 		}
 	}
-	/*
-	 * Probe failed.  There is no usable FPU.
-	 */
-	npx_type = NPX_NONE;
-	return 0;
-}
 
-/*
- * Probe routine.  Initialize cr0 to give correct behaviour for [f]wait
- * whether the device exists or not (XXX should be elsewhere).  Set flags
- * to tell npxattach() what to do.  Modify device struct if npx doesn't
- * need to use interrupts.  Return 1 if device exists.
- */
-int
-npxprobe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
-{
-	struct	isa_attach_args *ia = aux;
-	int	irq;
-	int	result;
-	u_long	save_eflags;
-	unsigned save_imen;
-	struct	gate_descriptor save_idt_npxintr;
-	struct	gate_descriptor save_idt_npxtrap;
-
-	/*
-	 * This routine is now just a wrapper for npxprobe1(), to install
-	 * special npx interrupt and trap handlers, to enable npx interrupts
-	 * and to disable other interrupts.  Someday isa_configure() will
-	 * install suitable handlers and run with interrupts enabled so we
-	 * won't need to do so much here.
-	 */
-	irq = NRSVIDT + ia->ia_irq;
-	save_eflags = read_eflags();
-	disable_intr();
-	save_idt_npxintr = idt[irq].gd;
-	save_idt_npxtrap = idt[16].gd;
-	setgate(&idt[irq].gd, probeintr, 0, SDT_SYS386IGT, SEL_KPL);
-	setgate(&idt[16].gd, probetrap, 0, SDT_SYS386TGT, SEL_KPL);
-	save_imen = imen;
-	imen = ~((1 << IRQ_SLAVE) | (1 << ia->ia_irq));
-	SET_ICUS();
-
-	/*
-	 * Partially reset the coprocessor, if any.  Some BIOS's don't reset
-	 * it after a warm boot.
-	 */
-	outb(0xf1, 0);		/* full reset on some systems, NOP on others */
-	delay(1000);
-	outb(0xf0, 0);		/* clear BUSY# latch */
-
-	/*
-	 * We set CR0 in locore to trap all ESC and WAIT instructions.
-	 * We have to turn off the CR0_EM bit temporarily while probing.
-	 */
-	lcr0(rcr0() & ~(CR0_EM|CR0_TS));
-	enable_intr();
-	result = npxprobe1(ia);
-	disable_intr();
+	x86_disable_intr();
 	lcr0(rcr0() | (CR0_EM|CR0_TS));
 
-	imen = save_imen;
-	SET_ICUS();
-	idt[irq].gd = save_idt_npxintr;
-	idt[16].gd = save_idt_npxtrap;
-	write_eflags(save_eflags);
-	return (result);
+	irqmask = i8259_setmask(irqmask);
+
+	idt[NRSVIDT + irq] = save_idt_npxintr;
+
+	idt[16] = save_idt_npxtrap;
+	x86_write_psl(save_eflags);
+
+	return (rv);
 }
 
-
-/*
- * Attach routine - announce which it is, and wire into system
- */
-void
-npxattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+void npxinit(struct cpu_info *ci)
 {
-	struct npx_softc *sc = (void *)self;
-	struct isa_attach_args *ia = aux;
-
-	switch (npx_type) {
-	case NPX_INTERRUPT:
-		printf("\n");
-		lcr0(rcr0() & ~CR0_NE);
-		sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq,
-		    IST_EDGE, IPL_NONE, npxintr, 0);
-		break;
-	case NPX_EXCEPTION:
-		printf(": using exception 16\n");
-		break;
-	case NPX_BROKEN:
-		printf(": error reporting broken; not using\n");
-		npx_type = NPX_NONE;
-		return;
-	case NPX_NONE:
-		return;
-	}
-
 	lcr0(rcr0() & ~(CR0_EM|CR0_TS));
 	fninit();
-	if (npx586bug1(4195835, 3145727) != 0)
-		printf("WARNING: Pentium FDIV bug detected!\n");
+	if (npx586bug1(4195835, 3145727) != 0) {
+		i386_fpu_fdivbug = 1;
+		aprint_normal_dev(ci->ci_dev,
+		    "WARNING: Pentium FDIV bug detected!\n");
+	}
 	lcr0(rcr0() | (CR0_TS));
+}
+#endif
+
+/*
+ * Common attach routine.
+ */
+void
+npxattach(struct npx_softc *sc)
+{
+
+	npx_softc = sc;
+	npx_type = sc->sc_type;
+
+#ifndef XEN
+	npxinit(&cpu_info_primary);
+#endif
 	i386_fpu_present = 1;
+	npxdna_func = npxdna;
+
+	if (!pmf_device_register(sc->sc_dev, NULL, NULL))
+		aprint_error_dev(sc->sc_dev, "couldn't establish power handler\n");
+}
+
+int
+npxdetach(device_t self, int flags)
+{
+	struct npx_softc *sc = device_private(self);
+
+	if (sc->sc_type == NPX_INTERRUPT)
+		return EBUSY;
+
+	pmf_device_deregister(self);
+	
+	return 0;
 }
 
 /*
@@ -325,59 +372,77 @@ npxattach(parent, self, aux)
  * IRQ13 exception handling makes exceptions even less precise than usual.
  */
 int
-npxintr(arg)
-	void *arg;
+npxintr(void *arg, struct intrframe *frame)
 {
-	register struct proc *p = npxproc;
-	register struct save87 *addr;
-	struct intrframe *frame = arg;
-	int code;
+	struct cpu_info *ci = curcpu();
+	struct lwp *l = ci->ci_fpcurlwp;
+	union savefpu *addr;
+	struct npx_softc *sc;
+	ksiginfo_t ksi;
+
+	sc = npx_softc;
+
+	kpreempt_disable();
+#ifndef XEN
+	KASSERT((x86_read_psl() & PSL_I) == 0);
+	x86_enable_intr();
+#endif
 
 	uvmexp.traps++;
-	IPRINTF(("Intr"));
+	IPRINTF(("%s: fp intr\n", device_xname(ci->ci_dev)));
 
-	if (p == 0 || npx_type == NPX_NONE) {
-		printf("npxintr: p = %p, curproc = %p, npx_type = %d\n",
-		    p, curproc, npx_type);
-		panic("npxintr: came from nowhere");
-	}
-
+#ifndef XEN
 	/*
 	 * Clear the interrupt latch.
 	 */
-	outb(0xf0, 0);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, 0, 0);
+#endif
 
 	/*
 	 * If we're saving, ignore the interrupt.  The FPU will generate
 	 * another one when we restore the state later.
 	 */
-	if (npx_nointr != 0)
+	if (ci->ci_fpsaving) {
+		kpreempt_enable();
 		return (1);
+	}
+
+	if (l == NULL || npx_type == NPX_NONE) {
+		printf("npxintr: l = %p, curproc = %p, npx_type = %d\n",
+		    l, curproc, npx_type);
+		printf("npxintr: came from nowhere");
+		kpreempt_enable();
+		return 1;
+	}
 
 #ifdef DIAGNOSTIC
 	/*
-	 * At this point, npxproc should be curproc.  If it wasn't, the TS bit
-	 * should be set, and we should have gotten a DNA exception.
+	 * At this point, fpcurlwp should be curlwp.  If it wasn't, the TS
+	 * bit should be set, and we should have gotten a DNA exception.
 	 */
-	if (p != curproc)
+	if (l != curlwp)
 		panic("npxintr: wrong process");
 #endif
 
 	/*
-	 * Find the address of npxproc's saved FPU state.  (Given the invariant
-	 * above, this is always the one in curpcb.)
+	 * Find the address of fpcurproc's saved FPU state.  (Given the
+	 * invariant above, this is always the one in curpcb.)
 	 */
-	addr = &p->p_addr->u_pcb.pcb_savefpu;
+	addr = &l->l_addr->u_pcb.pcb_savefpu;
 	/*
 	 * Save state.  This does an implied fninit.  It had better not halt
-	 * the cpu or we'll hang.
+	 * the CPU or we'll hang.
 	 */
-	fnsave(addr);
+	fpu_save(addr);
 	fwait();
-	/*
-	 * Restore control word (was clobbered by fnsave).
-	 */
-	fldcw(&addr->sv_env.en_cw);
+        if (i386_use_fxsave) {
+		fldcw(&addr->sv_xmm.sv_env.en_cw);
+		/*
+		 * FNINIT doesn't affect MXCSR or the XMM registers;
+		 * no need to re-load MXCSR here.
+		 */
+        } else
+                fldcw(&addr->sv_87.sv_env.en_cw);
 	fwait();
 	/*
 	 * Remember the exception status word and tag word.  The current
@@ -387,9 +452,13 @@ npxintr(arg)
 	 * preserved the control word and will copy the status and tag
 	 * words, so the complete exception state can be recovered.
 	 */
-	addr->sv_ex_sw = addr->sv_env.en_sw;
-	addr->sv_ex_tw = addr->sv_env.en_tw;
-
+        if (i386_use_fxsave) {
+		addr->sv_xmm.sv_ex_sw = addr->sv_xmm.sv_env.en_sw;
+		addr->sv_xmm.sv_ex_tw = addr->sv_xmm.sv_env.en_tw;
+	} else {
+		addr->sv_87.sv_ex_sw = addr->sv_87.sv_env.en_sw;
+		addr->sv_87.sv_ex_tw = addr->sv_87.sv_env.en_tw;
+	}
 	/*
 	 * Pass exception to process.
 	 */
@@ -405,17 +474,28 @@ npxintr(arg)
 		 * in doreti, and the frame for that could easily be set up
 		 * just before it is used).
 		 */
-		p->p_md.md_regs = (struct trapframe *)&frame->if_es;
-#ifdef notyet
+		l->l_md.md_regs = (struct trapframe *)&frame->if_gs;
+
+		KSI_INIT_TRAP(&ksi);
+		ksi.ksi_signo = SIGFPE;
+		ksi.ksi_addr = (void *)frame->if_eip;
+
 		/*
 		 * Encode the appropriate code for detailed information on
 		 * this exception.
 		 */
-		code = XXX_ENCODE(addr->sv_ex_sw);
-#else
-		code = 0;	/* XXX */
-#endif
-		trapsignal(p, SIGFPE, code);
+
+		if (i386_use_fxsave) {
+			ksi.ksi_code =
+				x86fpflags_to_ksiginfo(addr->sv_xmm.sv_ex_sw);
+			ksi.ksi_trap = (int)addr->sv_xmm.sv_ex_sw;
+		} else {
+			ksi.ksi_code =
+				x86fpflags_to_ksiginfo(addr->sv_87.sv_ex_sw);
+			ksi.ksi_trap = (int)addr->sv_87.sv_ex_sw;
+		}
+
+		trapsignal(l, &ksi);
 	} else {
 		/*
 		 * This is a nested interrupt.  This should only happen when
@@ -426,133 +506,224 @@ npxintr(arg)
 		 * Currently, we treat this like an asynchronous interrupt, but
 		 * this has disadvantages.
 		 */
-		psignal(p, SIGFPE);
+		psignal(l->l_proc, SIGFPE);
 	}
 
+	kpreempt_enable();
 	return (1);
 }
 
-/*
- * Wrapper for the fnsave instruction.  We set the TS bit in the saved CR0 for
- * this process, so that it will get a DNA exception on the FPU instruction and
- * force a reload.  This routine is always called with npx_nointr set, so that
- * any pending exception will be thrown away.  (It will be caught again if/when
- * the FPU state is restored.)
- *
- * This routine is always called at spl0.  If it might called with the NPX
- * interrupt masked, it would be necessary to forcibly unmask the NPX interrupt
- * so that it could succeed.
- */
-static inline void
-npxsave1()
+/* map x86 fp flags to ksiginfo fp codes 		*/
+/* see table 8-4 of the IA-32 Intel Architecture	*/
+/* Software Developer's Manual, Volume 1		*/
+/* XXX punting on the stack fault with FLTINV		*/
+static int
+x86fpflags_to_ksiginfo(uint32_t flags)
 {
-	struct proc *p = npxproc;
-
-	fnsave(&p->p_addr->u_pcb.pcb_savefpu);
-	p->p_addr->u_pcb.pcb_cr0 |= CR0_TS;
-	fwait();
+	int i;
+	static int x86fp_ksiginfo_table[] = {
+		FPE_FLTINV, /* bit 0 - invalid operation */
+		FPE_FLTRES, /* bit 1 - denormal operand */
+		FPE_FLTDIV, /* bit 2 - divide by zero	*/
+		FPE_FLTOVF, /* bit 3 - fp overflow	*/
+		FPE_FLTUND, /* bit 4 - fp underflow	*/ 
+		FPE_FLTRES, /* bit 5 - fp precision	*/
+		FPE_FLTINV, /* bit 6 - stack fault	*/
+	};
+					     
+	for(i=0;i < sizeof(x86fp_ksiginfo_table)/sizeof(int); i++) {
+		if (flags & (1 << i))
+			return(x86fp_ksiginfo_table[i]);
+	}
+	/* punt if flags not set */
+	return(0);
 }
 
 /*
  * Implement device not available (DNA) exception
  *
- * If the we were the last process to use the FPU, we can simply return.
- * Otherwise, we save the previous state, if necessary, and restore our last
- * saved state.
+ * If we were the last lwp to use the FPU, we can simply return.
+ * Otherwise, we save the previous state, if necessary, and restore
+ * our last saved state.
  */
-int
-npxdna(p)
-	struct proc *p;
+static int
+npxdna(struct cpu_info *ci)
 {
+	struct lwp *l, *fl;
+	int s;
 
-	if (npx_type == NPX_NONE) {
-		IPRINTF(("Emul"));
-		return (0);
+	if (ci->ci_fpsaving) {
+		/* Recursive trap. */
+		return 1;
 	}
 
-#ifdef DIAGNOSTIC
-	if (cpl != 0 || npx_nointr != 0)
-		panic("npxdna: masked");
+	/* Lock out IPIs and disable preemption. */
+	s = splhigh();
+#ifndef XEN
+	x86_enable_intr();
 #endif
 
-	p->p_addr->u_pcb.pcb_cr0 &= ~CR0_TS;
-	clts();
+	/* Save state on current CPU. */
+	l = ci->ci_curlwp;
+	fl = ci->ci_fpcurlwp;
+	if (fl != NULL) {
+		/*
+		 * It seems we can get here on Xen even if we didn't
+		 * switch lwp.  In this case do nothing
+		 */
+		if (fl == l) {
+			KASSERT(l->l_addr->u_pcb.pcb_fpcpu == ci);
+			ci->ci_fpused = 1;
+			clts();
+			splx(s);
+			return 1;
+		}
+		KASSERT(fl != l);
+		npxsave_cpu(true);
+		KASSERT(ci->ci_fpcurlwp == NULL);
+	}
+
+	/* Save our state if on a remote CPU. */
+	if (l->l_addr->u_pcb.pcb_fpcpu != NULL) {
+		/* Explicitly disable preemption before dropping spl. */
+		KPREEMPT_DISABLE(l);
+		splx(s);
+		npxsave_lwp(l, true);
+		KASSERT(l->l_addr->u_pcb.pcb_fpcpu == NULL);
+		s = splhigh();
+		KPREEMPT_ENABLE(l);
+	}
 
 	/*
-	 * Initialize the FPU state to clear any exceptions.  If someone else
-	 * was using the FPU, save their state (which does an implicit
-	 * initialization).
+	 * Restore state on this CPU, or initialize.  Ensure that
+	 * the entire update is atomic with respect to FPU-sync IPIs.
 	 */
-	npx_nointr = 1;
-	if (npxproc != 0 && npxproc != p) {
-		IPRINTF(("Save"));
-		npxsave1();
-	} else {
-		IPRINTF(("Init"));
-		fninit();
-		fwait();
-	}
-	npx_nointr = 0;
-	npxproc = p;
-
-	if ((p->p_md.md_flags & MDP_USEDFPU) == 0) {
-		fldcw(&p->p_addr->u_pcb.pcb_savefpu.sv_env.en_cw);
-		p->p_md.md_flags |= MDP_USEDFPU;
-	} else {
-		/*
-		 * The following frstor may cause an IRQ13 when the state being
-		 * restored has a pending error.  The error will appear to have
-		 * been triggered by the current (npx) user instruction even
-		 * when that instruction is a no-wait instruction that should
-		 * not trigger an error (e.g., fnclex).  On at least one 486
-		 * system all of the no-wait instructions are broken the same
-		 * as frstor, so our treatment does not amplify the breakage.
-		 * On at least one 386/Cyrix 387 system, fnclex works correctly
-		 * while frstor and fnsave are broken, so our treatment breaks
-		 * fnclex if it is the first FPU instruction after a context
-		 * switch.
-		 */
-		frstor(&p->p_addr->u_pcb.pcb_savefpu);
-	}
-
-	return (1);
-}
-
-/*
- * Drop the current FPU state on the floor.
- */
-void
-npxdrop()
-{
-	struct proc *p = npxproc;
-
-	npxproc = 0;
-	stts();
-	p->p_addr->u_pcb.pcb_cr0 |= CR0_TS;
-}
-
-/*
- * Save npxproc's FPU state.
- *
- * The FNSAVE instruction clears the FPU state.  Rather than reloading the FPU
- * immediately, we clear npxproc and turn on CR0_TS to force a DNA and a reload
- * of the FPU state the next time we try to use it.  This routine is only
- * called when forking or core dumping, so the lazy reload at worst forces us
- * to trap once per fork(), and at best saves us a reload once per fork().
- */
-void
-npxsave()
-{
-
-#ifdef DIAGNOSTIC
-	if (cpl != 0 || npx_nointr != 0)
-		panic("npxsave: masked");
-#endif
-	IPRINTF(("Fork"));
 	clts();
-	npx_nointr = 1;
-	npxsave1();
-	npx_nointr = 0;
-	npxproc = 0;
+	ci->ci_fpcurlwp = l;
+	l->l_addr->u_pcb.pcb_fpcpu = ci;
+	ci->ci_fpused = 1;
+
+	if ((l->l_md.md_flags & MDL_USEDFPU) == 0) {
+		fninit();
+		if (i386_use_fxsave) {
+			fldcw(&l->l_addr->u_pcb.pcb_savefpu.
+			    sv_xmm.sv_env.en_cw);
+		} else {
+			fldcw(&l->l_addr->u_pcb.pcb_savefpu.
+			    sv_87.sv_env.en_cw);
+		}
+		l->l_md.md_flags |= MDL_USEDFPU;
+	} else if (i386_use_fxsave) {
+		/*
+		 * AMD FPU's do not restore FIP, FDP, and FOP on fxrstor,
+		 * leaking other process's execution history. Clear them
+		 * manually.
+		 */
+		static const double zero = 0.0;
+		int status;
+		/*
+		 * Clear the ES bit in the x87 status word if it is currently
+		 * set, in order to avoid causing a fault in the upcoming load.
+		 */
+		fnstsw(&status);
+		if (status & 0x80)
+			fnclex();
+		/*
+		 * Load the dummy variable into the x87 stack.  This mangles
+		 * the x87 stack, but we don't care since we're about to call
+		 * fxrstor() anyway.
+		 */
+		fldummy(&zero);
+		fxrstor(&l->l_addr->u_pcb.pcb_savefpu.sv_xmm);
+	} else {
+		frstor(&l->l_addr->u_pcb.pcb_savefpu.sv_87);
+	}
+
+	KASSERT(ci == curcpu());
+	splx(s);
+	return 1;
+}
+
+/*
+ * Save current CPU's FPU state.  Must be called at IPL_HIGH.
+ */
+void
+npxsave_cpu(bool save)
+{
+	struct cpu_info *ci;
+	struct lwp *l;
+
+	KASSERT(curcpu()->ci_ilevel == IPL_HIGH);
+
+	ci = curcpu();
+	l = ci->ci_fpcurlwp;
+	if (l == NULL)
+		return;
+
+	if (save) {
+		 /*
+		  * Set ci->ci_fpsaving, so that any pending exception will
+		  * be thrown away.  It will be caught again if/when the
+		  * FPU state is restored.
+		  */
+		KASSERT(ci->ci_fpsaving == 0);
+		clts();
+		ci->ci_fpsaving = 1;
+		if (i386_use_fxsave) {
+			fxsave(&l->l_addr->u_pcb.pcb_savefpu.sv_xmm);
+		} else {
+			fnsave(&l->l_addr->u_pcb.pcb_savefpu.sv_87);
+		}
+		ci->ci_fpsaving = 0;
+	}
+
 	stts();
+	l->l_addr->u_pcb.pcb_fpcpu = NULL;
+	ci->ci_fpcurlwp = NULL;
+	ci->ci_fpused = 1;
+}
+
+/*
+ * Save l's FPU state, which may be on this processor or another processor.
+ * It may take some time, so we avoid disabling preemption where possible.
+ * Caller must know that the target LWP is stopped, otherwise this routine
+ * may race against it.
+ */
+void
+npxsave_lwp(struct lwp *l, bool save)
+{
+	struct cpu_info *oci;
+	int s, spins, ticks;
+
+	spins = 0;
+	ticks = hardclock_ticks;
+	for (;;) {
+		s = splhigh();
+		oci = l->l_addr->u_pcb.pcb_fpcpu;
+		if (oci == NULL) {
+			splx(s);
+			break;
+		}
+		if (oci == curcpu()) {
+			KASSERT(oci->ci_fpcurlwp == l);
+			npxsave_cpu(save);
+			splx(s);
+			break;
+		}
+		splx(s);
+		x86_send_ipi(oci, X86_IPI_SYNCH_FPU);
+		while (l->l_addr->u_pcb.pcb_fpcpu == oci &&
+		    ticks == hardclock_ticks) {
+			x86_pause();
+			spins++;
+		}
+		if (spins > 100000000) {
+			panic("npxsave_lwp: did not");
+		}
+	}
+
+	if (!save) {
+		/* Ensure we restart with a clean slate. */
+	 	l->l_md.md_flags &= ~MDL_USEDFPU;
+	}
 }

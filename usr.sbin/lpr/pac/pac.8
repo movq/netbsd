@@ -1,4 +1,4 @@
-.\"	$NetBSD: pac.8,v 1.7 1999/03/22 18:44:01 garbled Exp $
+.\"	$NetBSD: pac.8,v 1.11 2003/08/07 11:25:32 agc Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -40,7 +36,7 @@
 .Nm pac
 .Nd printer/plotter accounting information
 .Sh SYNOPSIS
-.Nm ""
+.Nm
 .Op Fl cmrs
 .Bk -words
 .Op Fl P Ar printer
@@ -88,6 +84,21 @@ Statistics are only printed for user(s)
 .Ar name ;
 usually, statistics are printed for every user who has used any paper.
 .El
+.Sh OUTPUT FORMAT
+.Nm
+formats the output into simple table, using four columns - number of feets
+or pages (column "pages/feet"), how many copies were made (column "runs"),
+total price for this print (column "price") and user login with host name
+(column "login" or "host name and login"). If argument
+.Ar name
+was not used and hence
+.Nm
+is printing information for all users,
+a summary line with print totals (runs, pages, price) is appended.
+.Pp
+Note that
+.Nm
+on other system might print the price as price per copy.
 .Sh FILES
 .Bl -tag -width /var/account/?_sum -compact
 .It Pa /var/account/?acct
@@ -99,11 +110,11 @@ printer capability data base
 .El
 .Sh SEE ALSO
 .Xr printcap 5
-.Sh BUGS
-The relationship between the computed price and reality is
-as yet unknown.
 .Sh HISTORY
 The
 .Nm
 command appeared in
 .Bx 4.0 .
+.Sh BUGS
+The relationship between the computed price and reality is
+as yet unknown.

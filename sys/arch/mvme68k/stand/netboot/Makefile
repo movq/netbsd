@@ -1,34 +1,23 @@
-#	$NetBSD: Makefile,v 1.4 1998/06/12 23:11:46 cgd Exp $
+#	$NetBSD: Makefile,v 1.15 2002/04/10 18:43:21 scw Exp $
 
-RELOC=0x3F0000
-
-S=	${.CURDIR}/../../../..
 DEFS= -DSUN_BOOTPARAMS
-INCPATH=-I${.CURDIR} -I${.CURDIR}/../libsa -I${.CURDIR}/../libbug \
-	-I${S} -I${S}/lib/libsa
-CFLAGS=	-O2 ${INCPATH} ${DEFS} ${COPTS}
-CLEANFILES+=netboot netboot.bin
 
-.include "${S}/arch/mvme68k/stand/bugcrt/Makefile.inc"
-.include "${S}/arch/mvme68k/stand/libbug/Makefile.inc"
-.include "${S}/arch/mvme68k/stand/libsa/Makefile.inc"
-
-SRCS=   boot.c conf.c version.c devopen.c dev_net.c
+SRCS=   boot.c conf.c devopen.c
 SRCS+=	if_ie.c if_le.c
-OBJS=  ${SRCS:S/.c/.o/g}
+PROG=	netboot
+LIBS=	${LIBSA} ${LIBBUG}
+DPADD=	${LIBS}
+CLEANFILES+= netboot.bin
 
-all:	netboot.bin
+netboot.bin: ${PROG}
+	${OBJCOPY} -O binary ${.OBJDIR}/netboot ${.TARGET}
 
-netboot: ${OBJS} ${LIBSA} ${BUGCRT} ${LIBBUG}
-	${LD} -s -N -T ${RELOC} -o $@ \
-		${SRTOBJ} ${BUGCRT} ${OBJS} ${LIBSA} ${LIBBUG}
-	@size $@
+.include "../Makefile.booters"
 
-netboot.bin: netboot
-	dd ibs=32 skip=1 if=netboot of=$@
+all realall: netboot.bin
 
-install:
-	${INSTALL} ${COPY} -o ${LIBOWN} -g ${LIBGRP} -m ${LIBMODE} \
-	  netboot.bin ${DESTDIR}${MDEC_DIR}/netboot
+install: netboot.bin
+	${INSTALL_FILE} ${STRIPFLAG} -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \
+		${.OBJDIR}/netboot.bin ${DESTDIR}${MDEC_DIR}/netboot
 
 .include <bsd.prog.mk>

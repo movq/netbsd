@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,15 +32,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "from: @(#)edquota.c	8.3 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: edquota.c,v 1.20 2000/01/21 17:08:37 mycroft Exp $");
+__RCSID("$NetBSD: edquota.c,v 1.29 2008/07/21 13:36:58 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -70,9 +66,9 @@ __RCSID("$NetBSD: edquota.c,v 1.20 2000/01/21 17:08:37 mycroft Exp $");
 #include <unistd.h>
 #include "pathnames.h"
 
-char *qfname = QUOTAFILENAME;
-char *qfextension[] = INITQFNAMES;
-char *quotagroup = QUOTAGROUP;
+const char *qfname = QUOTAFILENAME;
+const char *qfextension[] = INITQFNAMES;
+const char *quotagroup = QUOTAGROUP;
 char tmpfil[] = _PATH_TMP;
 
 struct quotause {
@@ -84,11 +80,13 @@ struct quotause {
 };
 #define	FOUND	0x01
 
+#define MAX_TMPSTR	(100+MAXPATHLEN)
+
 int	main __P((int, char **));
 void	usage __P((void));
-int	getentry __P((char *, int));
+int	getentry __P((const char *, int));
 struct quotause *
-	getprivs __P((long, int));
+	getprivs __P((long, int, char *));
 void	putprivs __P((long, int, struct quotause *));
 int	editit __P((char *));
 int	writeprivs __P((struct quotause *, int, char *, int));
@@ -98,7 +96,7 @@ int	readtimes __P((struct quotause *, int));
 char *	cvtstoa __P((time_t));
 int	cvtatos __P((time_t, char *, time_t *));
 void	freeprivs __P((struct quotause *));
-int	alldigits __P((char *));
+int	alldigits __P((const char *));
 int	hasquota __P((struct fstab *, int, char **));
 
 int
@@ -107,11 +105,11 @@ main(argc, argv)
 	char **argv;
 {
 	struct quotause *qup, *protoprivs, *curprivs;
-	extern char *optarg;
-	extern int optind;
 	long id, protoid;
 	int quotatype, tmpfd;
 	char *protoname;
+	char *soft = NULL, *hard = NULL;
+	char *fs = NULL;
 	int ch;
 	int tflag = 0, pflag = 0;
 
@@ -121,7 +119,7 @@ main(argc, argv)
 		errx(1, "permission denied");
 	protoname = NULL;
 	quotatype = USRQUOTA;
-	while ((ch = getopt(argc, argv, "ugtp:")) != -1) {
+	while ((ch = getopt(argc, argv, "ugtp:s:h:f:")) != -1) {
 		switch(ch) {
 		case 'p':
 			protoname = optarg;
@@ -136,6 +134,15 @@ main(argc, argv)
 		case 't':
 			tflag++;
 			break;
+		case 's':
+			soft = optarg;
+			break;
+		case 'h':
+			hard = optarg;
+			break;
+		case 'f':
+			fs = optarg;
+			break;
 		default:
 			usage();
 		}
@@ -143,9 +150,11 @@ main(argc, argv)
 	argc -= optind;
 	argv += optind;
 	if (pflag) {
+		if (soft || hard)
+			usage();
 		if ((protoid = getentry(protoname, quotatype)) == -1)
 			exit(1);
-		protoprivs = getprivs(protoid, quotatype);
+		protoprivs = getprivs(protoid, quotatype, fs);
 		for (qup = protoprivs; qup; qup = qup->next) {
 			qup->dqblk.dqb_btime = 0;
 			qup->dqblk.dqb_itime = 0;
@@ -157,10 +166,58 @@ main(argc, argv)
 		}
 		exit(0);
 	}
+	if (soft || hard) {
+		struct quotause *lqup;
+		u_int32_t softb, hardb, softi, hardi;
+		if (tflag)
+			usage();
+		if (soft) {
+			if (sscanf(soft, "%d/%d", &softb, &softi) != 2)
+				usage();
+			softb = btodb((u_quad_t)softb * 1024);
+		}
+		if (hard) {
+			if (sscanf(hard, "%d/%d", &hardb, &hardi) != 2)
+				usage();
+			hardb = btodb((u_quad_t)hardb * 1024);
+		}
+		for ( ; argc > 0; argc--, argv++) {
+			if ((id = getentry(*argv, quotatype)) == -1)
+				continue;
+			curprivs = getprivs(id, quotatype, fs);
+			for (lqup = curprivs; lqup; lqup = lqup->next) {
+				if (soft) {
+					if (softb &&
+					    lqup->dqblk.dqb_curblocks >= softb &&
+					    (lqup->dqblk.dqb_bsoftlimit == 0 ||
+					    lqup->dqblk.dqb_curblocks <
+					    lqup->dqblk.dqb_bsoftlimit))
+						lqup->dqblk.dqb_btime = 0;
+					if (softi &&
+					    lqup->dqblk.dqb_curinodes >= softi &&
+					    (lqup->dqblk.dqb_isoftlimit == 0 ||
+					    lqup->dqblk.dqb_curinodes <
+					    lqup->dqblk.dqb_isoftlimit))
+						lqup->dqblk.dqb_itime = 0;
+					lqup->dqblk.dqb_bsoftlimit = softb;
+					lqup->dqblk.dqb_isoftlimit = softi;
+				}
+				if (hard) {
+					lqup->dqblk.dqb_bhardlimit = hardb;
+					lqup->dqblk.dqb_ihardlimit = hardi;
+				}
+			}
+			putprivs(id, quotatype, curprivs);
+			freeprivs(curprivs);
+		}
+		exit(0);
+	}
 	tmpfd = mkstemp(tmpfil);
 	fchown(tmpfd, getuid(), getgid());
 	if (tflag) {
-		protoprivs = getprivs(0, quotatype);
+		if (soft || hard)
+			usage();
+		protoprivs = getprivs(0, quotatype, fs);
 		if (writetimes(protoprivs, tmpfd, quotatype) == 0)
 			exit(1);
 		if (editit(tmpfil) && readtimes(protoprivs, tmpfd))
@@ -171,7 +228,7 @@ main(argc, argv)
 	for ( ; argc > 0; argc--, argv++) {
 		if ((id = getentry(*argv, quotatype)) == -1)
 			continue;
-		curprivs = getprivs(id, quotatype);
+		curprivs = getprivs(id, quotatype, fs);
 		if (writeprivs(curprivs, tmpfd, *argv, quotatype) == 0)
 			continue;
 		if (editit(tmpfil) && readprivs(curprivs, tmpfd))
@@ -186,10 +243,14 @@ main(argc, argv)
 void
 usage()
 {
-	fprintf(stderr, "%s%s%s%s",
-		"Usage: edquota [-u] [-p username] username ...\n",
-		"\tedquota -g [-p groupname] groupname ...\n",
-		"\tedquota [-u] -t\n", "\tedquota -g -t\n");
+	fprintf(stderr,
+	    "usage: edquota [-u] [-p username] [-f filesystem] username ...\n"
+	    "\tedquota -g [-p groupname] [-f filesystem] groupname ...\n"
+	    "\tedquota [-u] [-f filesystem] [-s b#/i#] [-h b#/i#] username ...\n"
+	    "\tedquota -g [-f filesystem] [-s b#/i#] [-h b#/i#] groupname ...\n"
+	    "\tedquota [-u] [-f filesystem] -t\n"
+	    "\tedquota -g [-f filesystem] -t\n"
+	    );
 	exit(1);
 }
 
@@ -200,7 +261,7 @@ usage()
  */
 int
 getentry(name, quotatype)
-	char *name;
+	const char *name;
 	int quotatype;
 {
 	struct passwd *pw;
@@ -231,9 +292,10 @@ getentry(name, quotatype)
  * Collect the requested quota information.
  */
 struct quotause *
-getprivs(id, quotatype)
+getprivs(id, quotatype, filesys)
 	long id;
 	int quotatype;
+	char *filesys;
 {
 	struct fstab *fs;
 	struct quotause *qup, *quptail;
@@ -248,6 +310,9 @@ getprivs(id, quotatype)
 	qcmd = QCMD(Q_GETQUOTA, quotatype);
 	while ((fs = getfsent()) != NULL) {
 		if (strcmp(fs->fs_vfstype, "ffs"))
+			continue;
+		if (filesys && strcmp(fs->fs_spec, filesys) != 0 &&
+		    strcmp(fs->fs_file, filesys) != 0)
 			continue;
 		if (!hasquota(fs, quotatype, &qfpathname))
 			continue;
@@ -344,11 +409,12 @@ putprivs(id, quotatype, quplist)
  * Take a list of privileges and get it edited.
  */
 int
-editit(tmpfile)
-	char *tmpfile;
+editit(ltmpfile)
+	char *ltmpfile;
 {
 	long omask;
-	int pid, stat;
+	int pid, lst;
+	char p[MAX_TMPSTR];
 
 	omask = sigblock(sigmask(SIGINT)|sigmask(SIGQUIT)|sigmask(SIGHUP));
  top:
@@ -366,19 +432,23 @@ editit(tmpfile)
 		return (0);
 	}
 	if (pid == 0) {
-		char *ed;
+		const char *ed;
 
 		sigsetmask(omask);
 		setgid(getgid());
 		setuid(getuid());
 		if ((ed = getenv("EDITOR")) == (char *)0)
 			ed = _PATH_VI;
-		execlp(ed, ed, tmpfile, 0);
+		if (strlen(ed) + strlen(ltmpfile) + 2 >= MAX_TMPSTR) {
+			err (1, "%s", "editor or filename too long");
+		}
+		snprintf (p, MAX_TMPSTR, "%s %s", ed, ltmpfile);
+		execlp(_PATH_BSHELL, _PATH_BSHELL, "-c", p, NULL);
 		err(1, "%s", ed);
 	}
-	waitpid(pid, &stat, 0);
+	waitpid(pid, &lst, 0);
 	sigsetmask(omask);
-	if (!WIFEXITED(stat) || WEXITSTATUS(stat) != 0)
+	if (!WIFEXITED(lst) || WEXITSTATUS(lst) != 0)
 		return (0);
 	return (1);
 }
@@ -444,12 +514,12 @@ readprivs(quplist, infd)
 	       fgets(line2, sizeof (line2), fd) != NULL) {
 		if ((fsp = strtok(line1, " \t:")) == NULL) {
 			warnx("%s: bad format", line1);
-			return (0);
+			goto out;
 		}
 		if ((cp = strtok((char *)0, "\n")) == NULL) {
 			warnx("%s: %s: bad format", fsp,
 			    &fsp[strlen(fsp) + 1]);
-			return (0);
+			goto out;
 		}
 		cnt = sscanf(cp,
 		    " blocks in use: %d, limits (soft = %d, hard = %d)",
@@ -457,7 +527,7 @@ readprivs(quplist, infd)
 		    &dqblk.dqb_bhardlimit);
 		if (cnt != 3) {
 			warnx("%s:%s: bad format", fsp, cp);
-			return (0);
+			goto out;
 		}
 		dqblk.dqb_curblocks = btodb((u_quad_t)
 		    dqblk.dqb_curblocks * 1024);
@@ -467,7 +537,7 @@ readprivs(quplist, infd)
 		    dqblk.dqb_bhardlimit * 1024);
 		if ((cp = strtok(line2, "\n")) == NULL) {
 			warnx("%s: %s: bad format", fsp, line2);
-			return (0);
+			goto out;
 		}
 		cnt = sscanf(cp,
 		    "\tinodes in use: %d, limits (soft = %d, hard = %d)",
@@ -475,7 +545,7 @@ readprivs(quplist, infd)
 		    &dqblk.dqb_ihardlimit);
 		if (cnt != 3) {
 			warnx("%s: %s: bad format", fsp, line2);
-			return (0);
+			goto out;
 		}
 		for (qup = quplist; qup; qup = qup->next) {
 			if (strcmp(fsp, qup->fsname))
@@ -510,6 +580,7 @@ readprivs(quplist, infd)
 			break;
 		}
 	}
+out:
 	fclose(fd);
 	/*
 	 * Disable quotas for any filesystems that have not been found.
@@ -586,26 +657,29 @@ readtimes(quplist, infd)
 	while (fgets(line1, sizeof (line1), fd) != NULL) {
 		if ((fsp = strtok(line1, " \t:")) == NULL) {
 			warnx("%s: bad format", line1);
-			return (0);
+			goto bad;
 		}
 		if ((cp = strtok((char *)0, "\n")) == NULL) {
 			warnx("%s: %s: bad format", fsp,
 			    &fsp[strlen(fsp) + 1]);
-			return (0);
+			goto bad;
 		}
 		cnt = sscanf(cp,
 		    " block grace period: %ld %s file grace period: %ld %s",
 		    &lbtime, bunits, &litime, iunits);
 		if (cnt != 4) {
 			warnx("%s:%s: bad format", fsp, cp);
-			return (0);
+			goto bad;
 		}
 		itime = (time_t)litime;
 		btime = (time_t)lbtime;
 		if (cvtatos(btime, bunits, &bseconds) == 0)
+			goto bad;
+		if (cvtatos(itime, iunits, &iseconds) == 0) {
+bad:
+			(void)fclose(fd);
 			return (0);
-		if (cvtatos(itime, iunits, &iseconds) == 0)
-			return (0);
+		}
 		for (qup = quplist; qup; qup = qup->next) {
 			if (strcmp(fsp, qup->fsname))
 				continue;
@@ -615,7 +689,7 @@ readtimes(quplist, infd)
 			break;
 		}
 	}
-	fclose(fd);
+	(void)fclose(fd);
 	/*
 	 * reset default grace periods for any filesystems
 	 * that have not been found.
@@ -635,23 +709,23 @@ readtimes(quplist, infd)
  * Convert seconds to ASCII times.
  */
 char *
-cvtstoa(time)
-	time_t time;
+cvtstoa(ltime)
+	time_t ltime;
 {
 	static char buf[20];
 
-	if (time % (24 * 60 * 60) == 0) {
-		time /= 24 * 60 * 60;
-		snprintf(buf, sizeof buf, "%ld day%s", (long)time,
-		    time == 1 ? "" : "s");
-	} else if (time % (60 * 60) == 0) {
-		time /= 60 * 60;
-		sprintf(buf, "%ld hour%s", (long)time, time == 1 ? "" : "s");
-	} else if (time % 60 == 0) {
-		time /= 60;
-		sprintf(buf, "%ld minute%s", (long)time, time == 1 ? "" : "s");
+	if (ltime % (24 * 60 * 60) == 0) {
+		ltime /= 24 * 60 * 60;
+		snprintf(buf, sizeof buf, "%ld day%s", (long)ltime,
+		    ltime == 1 ? "" : "s");
+	} else if (ltime % (60 * 60) == 0) {
+		ltime /= 60 * 60;
+		sprintf(buf, "%ld hour%s", (long)ltime, ltime == 1 ? "" : "s");
+	} else if (ltime % 60 == 0) {
+		ltime /= 60;
+		sprintf(buf, "%ld minute%s", (long)ltime, ltime == 1 ? "" : "s");
 	} else
-		sprintf(buf, "%ld second%s", (long)time, time == 1 ? "" : "s");
+		sprintf(buf, "%ld second%s", (long)ltime, ltime == 1 ? "" : "s");
 	return (buf);
 }
 
@@ -659,20 +733,20 @@ cvtstoa(time)
  * Convert ASCII input times to seconds.
  */
 int
-cvtatos(time, units, seconds)
-	time_t time;
+cvtatos(ltime, units, seconds)
+	time_t ltime;
 	char *units;
 	time_t *seconds;
 {
 
 	if (memcmp(units, "second", 6) == 0)
-		*seconds = time;
+		*seconds = ltime;
 	else if (memcmp(units, "minute", 6) == 0)
-		*seconds = time * 60;
+		*seconds = ltime * 60;
 	else if (memcmp(units, "hour", 4) == 0)
-		*seconds = time * 60 * 60;
+		*seconds = ltime * 60 * 60;
 	else if (memcmp(units, "day", 3) == 0)
-		*seconds = time * 24 * 60 * 60;
+		*seconds = ltime * 24 * 60 * 60;
 	else {
 		printf("%s: bad units, specify %s\n", units,
 		    "days, hours, minutes, or seconds");
@@ -701,7 +775,7 @@ freeprivs(quplist)
  */
 int
 alldigits(s)
-	char *s;
+	const char *s;
 {
 	int c;
 

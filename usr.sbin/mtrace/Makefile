@@ -1,8 +1,12 @@
-#	$NetBSD: Makefile,v 1.6 1997/10/25 06:58:24 lukem Exp $
+#	$NetBSD: Makefile,v 1.10 2007/05/28 12:06:38 tls Exp $
 #	from: Id: Makefile,v 1.5 1993/06/24 05:11:16 deering Exp
 
-.PATH: ${.CURDIR}/../mrouted
-CPPFLAGS+= -I${.CURDIR}/../mrouted
+.include <bsd.own.mk>
+
+USE_FORT?= yes	# network client *and* setuid
+
+.PATH: ${NETBSDSRCDIR}/usr.sbin/mrouted
+CPPFLAGS+= -I${NETBSDSRCDIR}/usr.sbin/mrouted
 
 PROG=	mtrace
 SRCS=	igmp.c inet.c kern.c mtrace.c

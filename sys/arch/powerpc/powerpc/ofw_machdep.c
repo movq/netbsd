@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_machdep.c,v 1.4 1998/02/24 05:46:07 mycroft Exp $	*/
+/*	$NetBSD: ofw_machdep.c,v 1.18 2008/03/27 18:01:08 phx Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.
@@ -30,6 +30,10 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ofw_machdep.c,v 1.18 2008/03/27 18:01:08 phx Exp $");
+
 #include <sys/param.h>
 #include <sys/buf.h>
 #include <sys/conf.h>
@@ -45,6 +49,7 @@
 #include <dev/ofw/openfirm.h>
 
 #include <machine/powerpc.h>
+#include <machine/autoconf.h>
 
 #define	OFMEM_REGIONS	32
 static struct mem_region OFmem[OFMEM_REGIONS + 1], OFavail[OFMEM_REGIONS + 3];
@@ -57,241 +62,134 @@ static struct mem_region OFmem[OFMEM_REGIONS + 1], OFavail[OFMEM_REGIONS + 3];
  * to provide space for two additional entry beyond the terminating one.
  */
 void
-mem_regions(memp, availp)
-	struct mem_region **memp, **availp;
+mem_regions(struct mem_region **memp, struct mem_region **availp)
 {
-	int phandle, i, j, cnt;
-	
+	int phandle, i, cnt, regcnt;
+	struct mem_region_avail {
+		paddr_t start;
+		paddr_t size;
+	} OFavail_G5[OFMEM_REGIONS + 3] __attribute((unused));
+
 	/*
 	 * Get memory.
 	 */
-	if ((phandle = OF_finddevice("/memory")) == -1
-	    || OF_getprop(phandle, "reg",
-			  OFmem, sizeof OFmem[0] * OFMEM_REGIONS)
-	       <= 0
-	    || OF_getprop(phandle, "available",
-			  OFavail, sizeof OFavail[0] * OFMEM_REGIONS)
-	       <= 0)
-		panic("no memory?");
+	if ((phandle = OF_finddevice("/memory")) == -1)
+		goto error;
+
+	memset(OFmem, 0, sizeof OFmem);
+	regcnt = OF_getprop(phandle, "reg",
+		OFmem, sizeof OFmem[0] * OFMEM_REGIONS);
+	if (regcnt <= 0)
+		goto error;
+
+	/* Remove zero sized entry in the returned data. */
+	regcnt /= sizeof OFmem[0];
+	for (i = 0; i < regcnt; )
+		if (OFmem[i].size == 0) {
+			memmove(&OFmem[i], &OFmem[i + 1],
+				(regcnt - i) * sizeof OFmem[0]);
+			regcnt--;
+		} else
+			i++;
+
+#if defined (PMAC_G5)
+	/* XXXSL: the G5 implementation of OFW is defines the /memory reg/available
+	 * properties differently. Try to fix it up here with minimal damage to the
+	 * rest of the code
+ 	 */
+	{
+		int count;
+		memset(OFavail_G5, 0, sizeof OFavail_G5);
+		count = OF_getprop(phandle, "available",
+			OFavail_G5, sizeof OFavail_G5[0] * OFMEM_REGIONS);
+
+		if (count <= 0)
+			goto error;
+
+		count /= sizeof OFavail_G5[0];
+		cnt = count * sizeof(OFavail[0]);
+
+		for (i = 0; i < count; i++ )
+		{
+			OFavail[i].start_hi = 0;
+			OFavail[i].start = OFavail_G5[i].start;
+			OFavail[i].size = OFavail_G5[i].size;
+		}
+	}
+#else
+	memset(OFavail, 0, sizeof OFavail);
+	cnt = OF_getprop(phandle, "available",
+		OFavail, sizeof OFavail[0] * OFMEM_REGIONS);
+#endif
+	if (cnt <= 0)
+		goto error;
+
+	cnt /= sizeof OFavail[0];
+	for (i = 0; i < cnt; ) {
+		if (OFavail[i].size == 0) {
+			memmove(&OFavail[i], &OFavail[i + 1],
+				(cnt - i) * sizeof OFavail[0]);
+			cnt--;
+		} else
+			i++;
+	}
+
+	if (strncmp(model_name, "Pegasos", 7) == 0) {
+		/*
+		 * Some versions of SmartFirmware, only recognize the first
+		 * 256MB segment as available. Work around it and add an
+		 * extra entry to OFavail[] to account for this.
+		 */
+#define AVAIL_THRESH (0x10000000-1)
+		if (((OFavail[cnt-1].start + OFavail[cnt-1].size +
+		    AVAIL_THRESH) & ~AVAIL_THRESH) <
+		    (OFmem[regcnt-1].start + OFmem[regcnt-1].size)) {
+
+			OFavail[cnt].start =
+			    (OFavail[cnt-1].start + OFavail[cnt-1].size +
+			    AVAIL_THRESH) & ~AVAIL_THRESH;
+			OFavail[cnt].size =
+			    OFmem[regcnt-1].size - OFavail[cnt].start;
+			aprint_normal("WARNING: add memory segment %lx - %lx,"
+			    "\nWARNING: which was not recognized by "
+			    "the Firmware.\n",
+			    (unsigned long)OFavail[cnt].start,
+			    (unsigned long)OFavail[cnt].start +
+			    OFavail[cnt].size);
+			cnt++;
+		}
+	}
+
 	*memp = OFmem;
 	*availp = OFavail;
+	return;
+
+error:
+#if defined (MAMBO)
+	printf("no memory, assuming 512MB\n");
+
+	OFmem[0].start = 0x0;
+	OFmem[0].size = 0x20000000;
+	
+	OFavail[0].start = 0x3000;
+	OFavail[0].size = 0x20000000 - 0x3000;
+
+	*memp = OFmem;
+	*availp = OFavail;
+#else
+	panic("no memory?");
+#endif
+	return;
 }
 
 void
-ppc_exit()
+ppc_exit(void)
 {
 	OF_exit();
 }
 
 void
-ppc_boot(str)
-	char *str;
+ppc_boot(char *str)
 {
 	OF_boot(str);
-}
-
-/*
- * Establish a list of all available disks to allow specifying the
- * root/swap/dump dev.
- */
-struct ofb_disk {
-	LIST_ENTRY(ofb_disk) ofb_list;
-	struct disk *ofb_dk;
-	struct device *ofb_dev;
-	int ofb_phandle;
-	int ofb_unit;
-};
-
-static LIST_HEAD(ofb_list, ofb_disk) ofb_head;	/* LIST_INIT?		XXX */
-
-void
-dk_establish(dk, dev)
-	struct disk *dk;
-	struct device *dev;
-{
-	struct ofb_disk *od;
-	struct ofb_softc *ofp = (void *)dev;
-
-	MALLOC(od, struct ofb_disk *, sizeof *od, M_TEMP, M_NOWAIT);
-	if (!od)
-		panic("dk_establish");
-	od->ofb_dk = dk;
-	od->ofb_dev = dev;
-	od->ofb_phandle = ofp->sc_phandle;
-	if (dev->dv_class == DV_DISK)				/* XXX */
-		od->ofb_unit = ofp->sc_unit;
-	else
-		od->ofb_unit = -1;
-	LIST_INSERT_HEAD(&ofb_head, od, ofb_list);
-}
-
-/*
- * Cleanup the list.
- */
-void
-dk_cleanup()
-{
-	struct ofb_disk *od, *nd;
-
-	for (od = ofb_head.lh_first; od; od = nd) {
-		nd = od->ofb_list.le_next;
-		LIST_REMOVE(od, ofb_list);
-		FREE(od, M_TEMP);
-	}
-}
-
-static void
-dk_setroot(od, part)
-	struct ofb_disk *od;
-	int part;
-{
-	char type[8];
-	int maj, unit;
-	struct disklabel *lp;
-	dev_t tmpdev;
-	char *cp;
-
-	if (OF_getprop(od->ofb_phandle, "device_type", type, sizeof type) < 0)
-		panic("OF_getproperty");
-
-	if (strcmp(type, "block") == 0) {
-		for (maj = 0; maj < nblkdev; maj++) {
-			if (bdevsw[maj].d_strategy ==
-			    od->ofb_dk->dk_driver->d_strategy)
-				break;
-		}
-		if (maj >= nblkdev)
-			panic("dk_setroot: impossible");
-
-		/*
-		 * Find the unit.
-		 */
-		unit = 0;
-		for (cp = od->ofb_dk->dk_name; *cp; cp++) {
-			if (*cp >= '0' && *cp <= '9')
-				unit = unit * 10 + *cp - '0';
-			else
-				/* Start anew */
-				unit = 0;
-		}
-
-		/*
-		 * Find a default partition; try partition `a', then
-		 * fall back on RAW_PART.
-		 */
-		if (part == -1) {
-			/*
-			 * Open the disk to force an update of the in-core
-			 * disklabel.  Use RAW_PART because all disk
-			 * drivers allow RAW_PART to be opened.
-			 */
-			tmpdev = MAKEDISKDEV(maj, unit, RAW_PART);
-
-			if (bdevsw[maj].d_open(tmpdev, FREAD, S_IFBLK, 0)) {
-				/*
-				 * Open failed.  Device is probably not
-				 * configured.  setroot() can handle this.
-				 */
-				return;
-			}
-			(void)bdevsw[maj].d_close(tmpdev, FREAD, S_IFBLK, 0);
-			lp = od->ofb_dk->dk_label;
-
-			/* Check for a valid `a' partition. */
-			if (lp->d_partitions[0].p_size > 0 &&
-			    lp->d_partitions[0].p_fstype != FS_UNUSED)
-				part = 0;
-			else
-				part = RAW_PART;
-		}
-		booted_device = od->ofb_dev;
-		booted_partition = part;
-	} else if (strcmp(type, "network") == 0) {
-		booted_device = od->ofb_dev;
-		booted_partition = 0;
-	}
-
-	/* "Not found."  setroot() will ask for the root device. */
-}
-
-/*
- * Try to find a disk with the given name.
- * This allows either the OpenFirmware device name,
- * or the NetBSD device name, both with optional trailing partition.
- */
-int
-dk_match(name)
-	char *name;
-{
-	struct ofb_disk *od;
-	char *cp;
-	int phandle;
-	int part, unit;
-	int l;
-
-	for (od = ofb_head.lh_first; od; od = od->ofb_list.le_next) {
-		/*
-		 * First try the NetBSD name.
-		 */
-		l = strlen(od->ofb_dev->dv_xname);
-		if (!bcmp(name, od->ofb_dev->dv_xname, l)) {
-			if (name[l] == '\0') {
-				/* Default partition, (or none at all) */
-				dk_setroot(od, -1);
-				return 0;
-			}
-			if (name[l + 1] == '\0') {
-				switch (name[l]) {
-				case '*':
-					/* Default partition */
-					dk_setroot(od, -1);
-					return 0;
-				default:
-					if (name[l] >= 'a'
-					    && name[l] < 'a' + MAXPARTITIONS) {
-						/* specified partition */
-						dk_setroot(od, name[l] - 'a');
-						return 0;
-					}
-					break;
-				}
-			}
-		}
-	}
-	/*
-	 * Now try the OpenFirmware name
-	 */
-	l = strlen(name);
-	for (cp = name + l; --cp >= name;)
-		if (*cp == '/' || *cp == ':')
-			break;
-	if (cp >= name && *cp == ':')
-		*cp++ = 0;
-	else
-		cp = name + l;
-	part = *cp >= 'a' && *cp < 'a' + MAXPARTITIONS
-		? *cp - 'a'
-		: -1;
-	while (cp > name && cp[-1] != '@' && cp[-1] != '/')
-		--cp;
-	if (cp > name && cp[-1] == '@') {
-		for (unit = 0; *++cp >= '0' && *cp <= '9';)
-			unit = unit * 10 + *cp - '0';
-	} else
-		unit = -1;
-
-	if ((phandle = OF_finddevice(name)) != -1) {
-		for (od = ofb_head.lh_first; od; od = od->ofb_list.le_next) {
-			if (phandle == od->ofb_phandle) {
-				/* Check for matching units */
-				if (od->ofb_dk &&
-				    unit != -1 &&
-				    od->ofb_unit != unit)
-					continue;
-				dk_setroot(od, part);
-				return 0;
-			}
-		}
-	}
-	return ENODEV;
 }

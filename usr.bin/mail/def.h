@@ -1,4 +1,4 @@
-/*	$NetBSD: def.h,v 1.11 1998/04/02 10:31:09 kleink Exp $	*/
+/*	$NetBSD: def.h,v 1.26 2007/10/27 15:14:50 christos Exp $	*/
 /*
  * Copyright (c) 1980, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -32,7 +28,7 @@
  * SUCH DAMAGE.
  *
  *	@(#)def.h	8.4 (Berkeley) 4/20/95
- *	$NetBSD: def.h,v 1.11 1998/04/02 10:31:09 kleink Exp $
+ *	$NetBSD: def.h,v 1.26 2007/10/27 15:14:50 christos Exp $
  */
 
 /*
@@ -40,6 +36,9 @@
  *
  * Author: Kurt Shoens (UCB) March 25, 1978
  */
+
+#ifndef __DEF_H__
+#define __DEF_H__
 
 #include <sys/types.h>
 #include <sys/file.h>
@@ -66,25 +65,94 @@
 
 #define	APPEND				/* New mail goes to end of mailbox */
 
+#define COMMENT_CHAR	'#'		/* Comment character when sourcing */
 #define	ESCAPE		'~'		/* Default escape for sending */
 #define	NMLSIZE		1024		/* max names in a message list */
 #define	PATHSIZE	MAXPATHLEN	/* Size of pathnames throughout */
 #define	HSHSIZE		59		/* Hash size for aliases and vars */
 #define	LINESIZE	BUFSIZ		/* max readable line width */
-#define	STRINGSIZE	((unsigned) 128)/* Dynamic allocation units */
 #define	MAXARGC		1024		/* Maximum list of raw strings */
-#define	NOSTR		((char *) 0)	/* Null string pointer */
 #define	MAXEXP		25		/* Maximum expansion of aliases */
 
+#define PUBLIC			/* make it easy to find the entry points */
+
+/*
+ * User environment variable names.
+ * See complete.h, mime.h, and thread.h for names specific to those modules.
+ */
+#define	ENAME_INDENT_POSTSCRIPT	"indentpostscript"
+#define	ENAME_INDENT_PREAMBLE	"indentpreamble"
+#define ENAME_APPEND		"append"
+#define ENAME_ASK		"ask"
+#define ENAME_ASKBCC		"askbcc"
+#define ENAME_ASKCC		"askcc"
+#define ENAME_ASKSUB		"asksub"
+#define ENAME_AUTOINC		"autoinc"
+#define ENAME_AUTOPRINT		"autoprint"
+#define ENAME_CRT		"crt"
+#define ENAME_DEAD		"DEAD"
+#define ENAME_DEBUG		"debug"
+#define ENAME_DONTSENDEMPTY	"dontsendempty"
+#define ENAME_DOT		"dot"
+#define ENAME_EDITOR		"EDITOR"
+#define ENAME_ENABLE_PIPES	"enable-pipes"
+#define ENAME_ESCAPE		"escape"
+#define ENAME_FOLDER		"folder"
+#define ENAME_HEADER_FORMAT	"header-format"
+#define ENAME_HOLD		"hold"
+#define ENAME_IGNORE		"ignore"
+#define ENAME_IGNOREEOF		"ignoreeof"
+#define ENAME_INDENTPREFIX	"indentprefix"
+#define ENAME_INTERACTIVE	"interactive"
+#define ENAME_KEEP		"keep"
+#define ENAME_KEEPSAVE		"keepsave"
+#define ENAME_LISTER		"LISTER"
+#define ENAME_MBOX		"MBOX"
+#define ENAME_METOO		"metoo"
+#define ENAME_NOHEADER		"noheader"
+#define ENAME_NOSAVE		"nosave"
+#define ENAME_PAGER		"PAGER"
+#define ENAME_PAGER_OFF		"pager-off"
+#define ENAME_PROMPT		"prompt"
+#define ENAME_QUIET		"quiet"
+#define ENAME_RECORD		"record"
+#define ENAME_REGEX_SEARCH	"regex-search"
+#define ENAME_REPLYALL		"Replyall"
+#define ENAME_REPLYASRECIPIENT	"ReplyAsRecipient"
+#define ENAME_SCREEN		"screen"
+#define ENAME_SCREENHEIGHT	"screenheight"
+#define ENAME_SCREENWIDTH	"screenwidth"
+#define ENAME_SEARCHHEADERS	"searchheaders"
+#define ENAME_SENDMAIL		"sendmail"
+#define ENAME_SHELL		"SHELL"
+#define ENAME_SHOW_RCPT		"show-rcpt"
+#define ENAME_SMOPTS_VERIFY	"smopts-verify"
+#define ENAME_TOPLINES		"toplines"
+#define ENAME_VERBOSE		"verbose"
+#define ENAME_VISUAL		"VISUAL"
+
+#define sizeofarray(a)	(sizeof(a)/sizeof(*a))
 #define	equal(a, b)	(strcmp(a,b)==0)/* A nice function to string compare */
 
 struct message {
 	short	m_flag;			/* flags, see below */
-	long	m_block;		/* block number of this message */
 	short	m_offset;		/* offset in block of message */
-	long	m_size;			/* Bytes in the message */
+	long	m_block;		/* block number of this message */
 	long	m_lines;		/* Lines in the message */
+	off_t	m_size;			/* Bytes in the message */
+	long	m_blines;		/* Body (non-header) lines */
+
+	/*
+	 * threading fields
+	 */
+	int		m_index;	/* message index in this thread */
+	int		m_depth;	/* depth in thread */
+	struct message *m_flink;	/* link to next message */
+	struct message *m_blink;	/* link to previous message */
+	struct message *m_clink;	/* link to child of this message */
+	struct message *m_plink;	/* link to parent of thread */
 };
+typedef struct mime_info mime_info_t;	/* phantom structure only to attach.c */
 
 /*
  * flag bits.
@@ -96,17 +164,18 @@ struct message {
 #define	MTOUCH		(1<<3)		/* entry has been noticed */
 #define	MPRESERVE	(1<<4)		/* keep entry in sys mailbox */
 #define	MMARK		(1<<5)		/* message is marked! */
-#define	MODIFY		(1<<6)		/* message has been modified */
+#define	MMODIFY		(1<<6)		/* message has been modified */
 #define	MNEW		(1<<7)		/* message has never been seen */
 #define	MREAD		(1<<8)		/* message has been read sometime. */
 #define	MSTATUS		(1<<9)		/* message status has changed */
 #define	MBOX		(1<<10)		/* Send this to mbox, regardless */
+#define MTAGGED		(1<<11)		/* message has been tagged */
 
 /*
  * Given a file address, determine the block number it represents.
  */
 #define blockof(off)			((int) ((off) / 4096))
-#define offsetof(off)			((int) ((off) % 4096))
+#define blkoffsetof(off)		((int) ((off) % 4096))
 #define positionof(block, offset)	((off_t)(block) * 4096 + (offset))
 
 /*
@@ -115,8 +184,15 @@ struct message {
  * in lex.c
  */
 struct cmd {
-	char	*c_name;		/* Name of command */
-	int	(*c_func) __P((void *));/* Implementor of the command */
+	const char *c_name;		/* Name of command */
+	int	(*c_func)(void *);	/* Implementor of the command */
+	int	c_pipe;			/* Pipe output through the pager */
+# define C_PIPE_PAGER	1		/* enable use of pager */
+# define C_PIPE_CRT	2		/* use the pager if CRT is defined */
+# define C_PIPE_SHELL	4		/* enable shell pipes */
+#ifdef USE_EDITLINE
+	const char *c_complete;		/* String describing completion */
+#endif
 	short	c_argtype;		/* Type of arglist (see below) */
 	short	c_msgflag;		/* Required flags of messages */
 	short	c_msgmask;		/* Relevant flags of messages */
@@ -137,13 +213,14 @@ struct cmd {
 #define	NOLIST	 3		/* Just plain 0 */
 #define	NDMLIST	 4		/* Message list, no defaults */
 
-#define	P	040		/* Autoprint dot after command */
-#define	I	0100		/* Interactive command bit */
-#define	M	0200		/* Legal from send mode bit */
-#define	W	0400		/* Illegal when read only bit */
-#define	F	01000		/* Is a conditional command */
-#define	T	02000		/* Is a transparent command */
-#define	R	04000		/* Cannot be called from collect */
+#define	P	0x010		/* Autoprint dot after command */
+#define	I	0x020		/* Interactive command bit */
+#define	M	0x040		/* Legal from send mode bit */
+#define	W	0x080		/* Illegal when read only bit */
+#define	F	0x100		/* Is a conditional command */
+#define	T	0x200		/* Is a transparent command */
+#define	R	0x400		/* Cannot be called from collect */
+#define ARGTYPE_MASK	~(P|I|M|W|F|T|R)
 
 /*
  * Oft-used mask values
@@ -163,16 +240,77 @@ struct headline {
 	char	*l_date;	/* The entire date string */
 };
 
-#define	GTO	1		/* Grab To: line */
-#define	GSUBJECT 2		/* Likewise, Subject: line */
-#define	GCC	4		/* And the Cc: line */
-#define	GBCC	8		/* And also the Bcc: line */
-#define	GMASK	(GTO|GSUBJECT|GCC|GBCC)
+#define	GTO	 0x001		/* Grab To: line */
+#define	GSUBJECT 0x002		/* Likewise, Subject: line */
+#define	GCC	 0x004		/* And the Cc: line */
+#define	GBCC	 0x008		/* And also the Bcc: line */
+#define GSMOPTS  0x010		/* Grab the sendmail options */
+#define GMISC	 0x020		/* miscellaneous extra fields for sending */
+#ifdef MIME_SUPPORT
+#define GMIME    0x040		/* mime flag */
+#endif
+#define	GMASK	(GTO|GSUBJECT|GCC|GBCC|GSMOPTS)
 				/* Mask of places from whence */
 
-#define	GNL	16		/* Print blank line after */
-#define	GDEL	32		/* Entity removed from list */
-#define	GCOMMA	64		/* detract puts in commas */
+#define	GNL	 0x100		/* Print blank line after */
+#define	GDEL	 0x200		/* Entity removed from list */
+#define	GCOMMA	 0x400		/* detract puts in commas */
+
+#ifdef MIME_SUPPORT
+/*
+ * Structure of MIME content.
+ */
+struct Content {
+	const char *C_type;		/* content type */
+	const char *C_encoding;		/* content transfer encoding */
+	const char *C_disposition;	/* content disposition */
+	const char *C_description;	/* content description */
+	const char *C_id;		/* content id */
+};
+/* Header strings corresponding to the above Content fields. */
+#define MIME_HDR_TYPE		"Content-Type"
+#define MIME_HDR_ENCODING	"Content-Transfer-Encoding"
+#define MIME_HDR_DISPOSITION	"Content-Disposition"
+#define MIME_HDR_ID		"Content-ID"
+#define MIME_HDR_DESCRIPTION	"Content-Description"
+#define MIME_HDR_VERSION	"MIME-Version"
+/* the value of the MIME-Version field */
+#define MIME_VERSION		"1.0"
+
+typedef enum {
+	ATTACH_INVALID = 0,	/* do not use! */
+	ATTACH_FNAME = 1,
+	ATTACH_MSG = 2,
+	ATTACH_FILENO = 3
+} attach_t;
+
+/*
+ * Structure of a MIME attachment.
+ */
+struct attachment {
+	struct attachment *a_flink;	/* Forward link in list. */
+	struct attachment *a_blink;	/* Backward list link */
+
+	attach_t a_type;		/* attachment type */
+#if 1
+	union {
+		char *u_name;		/* file name */
+		struct message *u_msg;	/* message */
+		int u_fileno;		/* file number */
+	} a_u;
+
+	#define a_name		a_u.u_name
+	#define a_msg		a_u.u_msg
+	#define a_fileno	a_u.u_fileno
+#else
+	char *a_name;			/* file name */
+	struct message *a_msg;		/* message */
+	int a_fileno;			/* file number */
+#endif
+
+	struct Content a_Content;	/* MIME content strings */
+};
+#endif /* MIME_SUPPORT */
 
 /*
  * Structure used to pass about the current
@@ -185,6 +323,14 @@ struct header {
 	struct name *h_cc;		/* Carbon copies string */
 	struct name *h_bcc;		/* Blind carbon copies */
 	struct name *h_smopts;		/* Sendmail options */
+	char *h_in_reply_to;
+	struct name *h_references;
+	char *h_extra;			/* extra lines to output */
+#ifdef MIME_SUPPORT
+	char *h_mime_boundary;		/* MIME multipart boundary string */
+	struct Content h_Content;	/* MIME content for message */
+	struct attachment *h_attach;	/* MIME attachments */
+#endif
 };
 
 /*
@@ -223,17 +369,17 @@ struct grouphead {
 	struct	group *g_list;		/* Users in group. */
 };
 
-#define	NIL	((struct name *) 0)	/* The nil pointer for namelists */
-#define	NONE	((struct cmd *) 0)	/* The nil pointer to command tab */
-#define	NOVAR	((struct var *) 0)	/* The nil pointer to variables */
-#define	NOGRP	((struct grouphead *) 0)/* The nil grouphead pointer */
-#define	NOGE	((struct group *) 0)	/* The nil group pointer */
+struct smopts_s {
+	struct smopts_s *s_link;	/* Link to next smopts_s in list */
+	char *s_name;			/* Name of this smopts_s */
+	struct name *s_smopts;		/* sendmail options name list */
+};
 
 /*
  * Structure of the hash table of ignored header fields
  */
 struct ignoretab {
-	int i_count;			/* Number of entries */
+	size_t i_count;			/* Number of entries */
 	struct ignore {
 		struct ignore *i_link;	/* Next ignored field in bucket */
 		char *i_field;		/* This ignored field */
@@ -241,40 +387,30 @@ struct ignoretab {
 };
 
 /*
- * Token values returned by the scanner used for argument lists.
- * Also, sizes of scanner-related things.
+ * Constants for conditional commands.  These control whether we
+ * should be executing commands or not.
  */
+struct cond_stack_s {
+	struct cond_stack_s *c_next;
+	int c_cond;
+};
+#define	CNONE		0x00		/* Execute everything */
+#define	CSKIP		0x01		/* Do not execute commands */
+#define	CIF		0x02		/* Inside if/endif block */
+#define	CELSE		0x04		/* The last conditional was else */
+#define	CIGN		0x08		/* Conditional in a skipped block */
 
-#define	TEOL	0			/* End of the command line */
-#define	TNUMBER	1			/* A message number */
-#define	TDASH	2			/* A simple dash */
-#define	TSTRING	3			/* A string (possibly containing -) */
-#define	TDOT	4			/* A "." */
-#define	TUP	5			/* An "^" */
-#define	TDOLLAR	6			/* A "$" */
-#define	TSTAR	7			/* A "*" */
-#define	TOPEN	8			/* An '(' */
-#define	TCLOSE	9			/* A ')' */
-#define TPLUS	10			/* A '+' */
-#define TERROR	11			/* A lexical error */
-
-#define	REGDEP	2			/* Maximum regret depth. */
-#define	STRINGLEN	1024		/* Maximum length of string token */
-
-/*
- * Constants for conditional commands.  These describe whether
- * we should be executing stuff or not.
- */
-
-#define	CANY		0		/* Execute in send or receive mode */
-#define	CRCV		1		/* Execute in receive mode only */
-#define	CSEND		2		/* Execute in send mode only */
+enum mailmode_e {
+	mm_receiving,			/* receiving mail mode */
+	mm_sending,			/* sending mail mode */
+	mm_hdrsonly			/* headers only mode */
+};
 
 /*
  * Kludges to handle the change from setexit / reset to setjmp / longjmp
  */
 
-#define	setexit()	setjmp(srbuf)
+#define	setexit()	(void)setjmp(srbuf)
 #define	reset(x)	longjmp(srbuf, x)
 
 /*
@@ -286,3 +422,36 @@ struct ignoretab {
 	(void)fflush(stream); 						\
 	(void)ftruncate(fileno(stream), (off_t)ftell(stream));		\
 }
+
+/*
+ * White Space (WSP) as specified in see RFC 2822.
+ *
+ * NOTE: Use this in place of isblank() so it is inline.  Also, unlike
+ * the table implemented ctype(3) routines, this does not have input
+ * range issues caused by sign extensions.
+ *
+ * See mime_header.h for the related is_FWS().
+ */
+static inline int
+is_WSP(int c)
+{
+	return c == ' ' || c == '\t';
+}
+
+static inline char*
+skip_WSP(const char *cp)
+{
+	while (is_WSP(*cp))
+		cp++;
+	return __UNCONST(cp);
+}
+
+static inline char*
+skip_space(char *p)
+{
+	while (isspace((unsigned char)*p))
+		p++;
+	return p;
+}
+
+#endif /* __DEF_H__ */

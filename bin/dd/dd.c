@@ -1,4 +1,4 @@
-/*	$NetBSD: dd.c,v 1.14 1999/11/09 15:06:31 drochner Exp $	*/
+/*	$NetBSD: dd.c,v 1.42 2008/07/20 00:52:39 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,15 +35,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)dd.c	8.5 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: dd.c,v 1.14 1999/11/09 15:06:31 drochner Exp $");
+__RCSID("$NetBSD: dd.c,v 1.42 2008/07/20 00:52:39 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,48 +51,67 @@ __RCSID("$NetBSD: dd.c,v 1.14 1999/11/09 15:06:31 drochner Exp $");
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/mtio.h>
+#include <sys/time.h>
 
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
 
 #include "dd.h"
 #include "extern.h"
 
-static void dd_close __P((void));
-static void dd_in __P((void));
-static void getfdtype __P((IO *));
-static void setup __P((void));
+static void dd_close(void);
+static void dd_in(void);
+static void getfdtype(IO *);
+static int redup_clean_fd(int);
+static void setup(void);
 
-int main __P((int, char *[]));
+int main(int, char *[]);
 
-IO	in, out;		/* input/output state */
-STAT	st;			/* statistics */
-void	(*cfunc) __P((void));	/* conversion function */
-u_long	cpy_cnt;		/* # of blocks to copy */
-u_int	ddflags;		/* conversion options */
-u_int	cbsz;			/* conversion block size */
-u_int	files_cnt = 1;		/* # of files to copy */
-int	progress = 0;		/* display sign of life */
-const u_char	*ctab;		/* conversion table */
+IO		in, out;		/* input/output state */
+STAT		st;			/* statistics */
+void		(*cfunc)(void);		/* conversion function */
+uint64_t	cpy_cnt;		/* # of blocks to copy */
+static off_t	pending = 0;		/* pending seek if sparse */
+u_int		ddflags;		/* conversion options */
+uint64_t	cbsz;			/* conversion block size */
+u_int		files_cnt = 1;		/* # of files to copy */
+uint64_t	progress = 0;		/* display sign of life */
+const u_char	*ctab;			/* conversion table */
+sigset_t	infoset;		/* a set blocking SIGINFO */
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
+	int ch;
+
+	setprogname(argv[0]);
+	(void)setlocale(LC_ALL, "");
+
+	while ((ch = getopt(argc, argv, "")) != -1) {
+		switch (ch) {
+		default:
+			errx(EXIT_FAILURE, "usage: dd [operand ...]");
+			/* NOTREACHED */
+		}
+	}
+	argc -= (optind - 1);
+	argv += (optind - 1);
+
 	jcl(argv);
 	setup();
 
 	(void)signal(SIGINFO, summaryx);
 	(void)signal(SIGINT, terminate);
+	(void)sigemptyset(&infoset);
+	(void)sigaddset(&infoset, SIGINFO);
 
 	(void)atexit(summary);
 
@@ -109,9 +124,8 @@ main(argc, argv)
 }
 
 static void
-setup()
+setup(void)
 {
-	u_int cnt;
 
 	if (in.name == NULL) {
 		in.name = "stdin";
@@ -119,13 +133,19 @@ setup()
 	} else {
 		in.fd = open(in.name, O_RDONLY, 0);
 		if (in.fd < 0)
-			err(1, "%s", in.name);
+			err(EXIT_FAILURE, "%s", in.name);
+			/* NOTREACHED */
+
+		/* Ensure in.fd is outside the stdio descriptor range */
+		in.fd = redup_clean_fd(in.fd);
 	}
 
 	getfdtype(&in);
 
-	if (files_cnt > 1 && !(in.flags & ISTAPE))
-		errx(1, "files is not supported for non-tape devices");
+	if (files_cnt > 1 && !(in.flags & ISTAPE)) {
+		errx(EXIT_FAILURE, "files is not supported for non-tape devices");
+		/* NOTREACHED */
+	}
 
 	if (out.name == NULL) {
 		/* No way to check for read access here. */
@@ -144,8 +164,13 @@ setup()
 			out.fd = open(out.name, O_WRONLY | OFLAGS, DEFFILEMODE);
 			out.flags |= NOREAD;
 		}
-		if (out.fd < 0)
-			err(1, "%s", out.name);
+		if (out.fd < 0) {
+			err(EXIT_FAILURE, "%s", out.name);
+			/* NOTREACHED */
+		}
+
+		/* Ensure out.fd is outside the stdio descriptor range */
+		out.fd = redup_clean_fd(out.fd);
 	}
 
 	getfdtype(&out);
@@ -155,13 +180,17 @@ setup()
 	 * record oriented I/O, only need a single buffer.
 	 */
 	if (!(ddflags & (C_BLOCK|C_UNBLOCK))) {
-		if ((in.db = malloc(out.dbsz + in.dbsz - 1)) == NULL)
-			err(1, NULL);
+		if ((in.db = malloc(out.dbsz + in.dbsz - 1)) == NULL) {
+			err(EXIT_FAILURE, NULL);
+			/* NOTREACHED */
+		}
 		out.db = in.db;
 	} else if ((in.db =
 	    malloc((u_int)(MAX(in.dbsz, cbsz) + cbsz))) == NULL ||
-	    (out.db = malloc((u_int)(out.dbsz + cbsz))) == NULL)
-		err(1, NULL);
+	    (out.db = malloc((u_int)(out.dbsz + cbsz))) == NULL) {
+		err(EXIT_FAILURE, NULL);
+		/* NOTREACHED */
+	}
 	in.dbp = in.db;
 	out.dbp = out.db;
 
@@ -186,22 +215,25 @@ setup()
 	if (ddflags & (C_LCASE|C_UCASE)) {
 #ifdef	NO_CONV
 		/* Should not get here, but just in case... */
-		errx(1, "case conv and -DNO_CONV");
+		errx(EXIT_FAILURE, "case conv and -DNO_CONV");
+		/* NOTREACHED */
 #else	/* NO_CONV */
+		u_int cnt;
+
 		if (ddflags & C_ASCII || ddflags & C_EBCDIC) {
 			if (ddflags & C_LCASE) {
-				for (cnt = 0; cnt < 0377; ++cnt)
+				for (cnt = 0; cnt < 256; ++cnt)
 					casetab[cnt] = tolower(ctab[cnt]);
 			} else {
-				for (cnt = 0; cnt < 0377; ++cnt)
+				for (cnt = 0; cnt < 256; ++cnt)
 					casetab[cnt] = toupper(ctab[cnt]);
 			}
 		} else {
 			if (ddflags & C_LCASE) {
-				for (cnt = 0; cnt < 0377; ++cnt)
+				for (cnt = 0; cnt < 256; ++cnt)
 					casetab[cnt] = tolower(cnt);
 			} else {
-				for (cnt = 0; cnt < 0377; ++cnt)
+				for (cnt = 0; cnt < 256; ++cnt)
 					casetab[cnt] = toupper(cnt);
 			}
 		}
@@ -210,28 +242,61 @@ setup()
 #endif	/* NO_CONV */
 	}
 
-	(void)time(&st.start);			/* Statistics timestamp. */
+	(void)gettimeofday(&st.start, NULL);	/* Statistics timestamp. */
 }
 
 static void
-getfdtype(io)
-	IO *io;
+getfdtype(IO *io)
 {
 	struct mtget mt;
 	struct stat sb;
 
-	if (fstat(io->fd, &sb))
-		err(1, "%s", io->name);
+	if (fstat(io->fd, &sb)) {
+		err(EXIT_FAILURE, "%s", io->name);
+		/* NOTREACHED */
+	}
 	if (S_ISCHR(sb.st_mode))
 		io->flags |= ioctl(io->fd, MTIOCGET, &mt) ? ISCHR : ISTAPE;
 	else if (lseek(io->fd, (off_t)0, SEEK_CUR) == -1 && errno == ESPIPE)
 		io->flags |= ISPIPE;		/* XXX fixed in 4.4BSD */
 }
 
-static void
-dd_in()
+/*
+ * Move the parameter file descriptor to a descriptor that is outside the
+ * stdio descriptor range, if necessary.  This is required to avoid
+ * accidentally outputting completion or error messages into the
+ * output file that were intended for the tty.
+ */
+static int
+redup_clean_fd(int fd)
 {
-	int flags, n;
+	int newfd;
+
+	if (fd != STDIN_FILENO && fd != STDOUT_FILENO &&
+	    fd != STDERR_FILENO)
+		/* File descriptor is ok, return immediately. */
+		return fd;
+
+	/*
+	 * 3 is the first descriptor greater than STD*_FILENO.  Any
+	 * free descriptor valued 3 or above is acceptable...
+	 */
+	newfd = fcntl(fd, F_DUPFD, 3);
+	if (newfd < 0) {
+		err(EXIT_FAILURE, "dupfd IO");
+		/* NOTREACHED */
+	}
+
+	close(fd);
+
+	return newfd;
+}
+
+static void
+dd_in(void)
+{
+	int flags;
+	int64_t n;
 
 	for (flags = ddflags;;) {
 		if (cpy_cnt && (st.in_full + st.in_part) >= cpy_cnt)
@@ -259,12 +324,15 @@ dd_in()
 
 		/* Read error. */
 		if (n < 0) {
+
 			/*
 			 * If noerror not specified, die.  POSIX requires that
 			 * the warning message be followed by an I/O display.
 			 */
-			if (!(flags & C_NOERROR))
-				err(1, "%s", in.name);
+			if (!(flags & C_NOERROR)) {
+				err(EXIT_FAILURE, "%s", in.name);
+				/* NOTREACHED */
+			}
 			warn("%s", in.name);
 			summary();
 
@@ -314,7 +382,7 @@ dd_in()
 		}
 
 		if (ddflags & C_SWAB) {
-			if ((n = in.dbcnt) & 1) {
+			if ((n = in.dbrcnt) & 1) {
 				++st.swab;
 				--n;
 			}
@@ -327,12 +395,13 @@ dd_in()
 }
 
 /*
- * Cleanup any remaining I/O and flush output.  If necesssary, output file
+ * Cleanup any remaining I/O and flush output.  If necessary, output file
  * is truncated.
  */
 static void
-dd_close()
+dd_close(void)
 {
+
 	if (cfunc == def)
 		def_close();
 	else if (cfunc == block)
@@ -343,16 +412,40 @@ dd_close()
 		(void)memset(out.dbp, 0, out.dbsz - out.dbcnt);
 		out.dbcnt = out.dbsz;
 	}
+	/* If there are pending sparse blocks, make sure
+	 * to write out the final block un-sparse
+	 */
+	if ((out.dbcnt == 0) && pending) {
+		memset(out.db, 0, out.dbsz);
+		out.dbcnt = out.dbsz;
+		out.dbp = out.db + out.dbcnt;
+		pending -= out.dbsz;
+	}
 	if (out.dbcnt)
 		dd_out(1);
+
+	/*
+	 * Reporting nfs write error may be defered until next
+	 * write(2) or close(2) system call.  So, we need to do an
+	 * extra check.  If an output is stdout, the file structure
+	 * may be shared among with other processes and close(2) just
+	 * decreases the reference count.
+	 */
+	if (out.fd == STDOUT_FILENO && fsync(out.fd) == -1 && errno != EINVAL) {
+		err(EXIT_FAILURE, "fsync stdout");
+		/* NOTREACHED */
+	}
+	if (close(out.fd) == -1) {
+		err(EXIT_FAILURE, "close");
+		/* NOTREACHED */
+	}
 }
 
 void
-dd_out(force)
-	int force;
+dd_out(int force)
 {
 	static int warned;
-	int cnt, n, nw;
+	int64_t cnt, n, nw;
 	u_char *outp;
 
 	/*
@@ -374,13 +467,44 @@ dd_out(force)
 	outp = out.db;
 	for (n = force ? out.dbcnt : out.dbsz;; n = out.dbsz) {
 		for (cnt = n;; cnt -= nw) {
-			nw = write(out.fd, outp, cnt);
+
+			if (!force && ddflags & C_SPARSE) {
+				int sparse, i;
+				sparse = 1;	/* Is buffer sparse? */
+				for (i = 0; i < cnt; i++)
+					if (outp[i] != 0) {
+						sparse = 0;
+						break;
+					}
+				if (sparse) {
+					pending += cnt;
+					outp += cnt;
+					nw = 0;
+					break;
+				}
+			}
+			if (pending != 0) {
+				if (lseek(out.fd, pending, SEEK_CUR) ==
+				    -1)
+					err(EXIT_FAILURE, "%s: seek error creating sparse file",
+					    out.name);
+			}
+			nw = bwrite(out.fd, outp, cnt);
 			if (nw <= 0) {
 				if (nw == 0)
-					errx(1, "%s: end of device", out.name);
+					errx(EXIT_FAILURE,
+						"%s: end of device", out.name);
+					/* NOTREACHED */
 				if (errno != EINTR)
-					err(1, "%s", out.name);
+					err(EXIT_FAILURE, "%s", out.name);
+					/* NOTREACHED */
 				nw = 0;
+			}
+			if (pending) {
+				st.bytes += pending;
+				st.sparse += pending/out.dbsz;
+				st.out_full += pending/out.dbsz;
+				pending = 0;
 			}
 			outp += nw;
 			st.bytes += nw;
@@ -396,11 +520,13 @@ dd_out(force)
 				break;
 			if (out.flags & ISCHR && !warned) {
 				warned = 1;
-				warnx("%s: short write on character device",
-				    out.name);
+				warnx("%s: short write on character device", out.name);
 			}
 			if (out.flags & ISTAPE)
-				errx(1, "%s: short write on tape device", out.name);
+				errx(EXIT_FAILURE,
+					"%s: short write on tape device", out.name);
+				/* NOTREACHED */
+
 		}
 		if ((out.dbcnt -= n) < out.dbsz)
 			break;
@@ -411,6 +537,24 @@ dd_out(force)
 		(void)memmove(out.db, out.dbp - out.dbcnt, out.dbcnt);
 	out.dbp = out.db + out.dbcnt;
 
-	if (progress)
+	if (progress && (st.out_full + st.out_part) % progress == 0)
 		(void)write(STDERR_FILENO, ".", 1);
+}
+
+/*
+ * A protected against SIGINFO write
+ */
+ssize_t
+bwrite(int fd, const void *buf, size_t len)
+{
+	sigset_t oset;
+	ssize_t rv;
+	int oerrno;
+
+	(void)sigprocmask(SIG_BLOCK, &infoset, &oset);
+	rv = write(fd, buf, len);
+	oerrno = errno;
+	(void)sigprocmask(SIG_SETMASK, &oset, NULL);
+	errno = oerrno;
+	return (rv);
 }

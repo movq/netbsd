@@ -1,4 +1,4 @@
-/* $NetBSD: autoconf.c,v 1.36 1999/09/17 19:59:35 thorpej Exp $ */
+/* $NetBSD: autoconf.c,v 1.44 2007/12/03 15:33:04 ad Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -46,7 +42,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.36 1999/09/17 19:59:35 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.44 2007/12/03 15:33:04 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,16 +50,16 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.36 1999/09/17 19:59:35 thorpej Exp $"
 #include <sys/disklabel.h>
 #include <sys/reboot.h>
 #include <sys/device.h>
+#include <sys/conf.h>
 #include <dev/cons.h>
 
 #include <machine/autoconf.h>
 #include <machine/alpha.h>
 #include <machine/cpu.h>
 #include <machine/prom.h>
-#include <machine/conf.h>
+#include <machine/cpuconf.h>
+#include <machine/intr.h>
 
-struct device		*booted_device;
-int			booted_partition;
 struct bootdev_data	*bootdev_data;
 
 void	parse_prom_bootdev __P((void));
@@ -86,7 +82,7 @@ cpu_configure()
 	 * during autoconfig.
 	 */
 	(void)alpha_pal_swpipl(ALPHA_PSL_IPL_HIGH);
-	if (config_rootfound("mainbus", "mainbus") == NULL)
+	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("no mainbus found");
 	(void)spl0();
 
@@ -119,7 +115,7 @@ parse_prom_bootdev()
 	booted_partition = 0;
 	bootdev_data = NULL;
 
-	bcopy(bootinfo.booted_dev, hacked_boot_dev,
+	memcpy(hacked_boot_dev, bootinfo.booted_dev,
 	    min(sizeof bootinfo.booted_dev, sizeof hacked_boot_dev));
 #if 0
 	printf("parse_prom_bootdev: boot dev = \"%s\"\n", hacked_boot_dev);

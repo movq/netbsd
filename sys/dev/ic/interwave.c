@@ -1,4 +1,4 @@
-/*	$NetBSD: interwave.c,v 1.12 2000/02/07 22:07:30 thorpej Exp $	*/
+/*	$NetBSD: interwave.c,v 1.33 2008/04/28 20:23:50 martin Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999 The NetBSD Foundation, Inc.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: interwave.c,v 1.33 2008/04/28 20:23:50 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/errno.h>
@@ -47,10 +43,9 @@
 #include <sys/malloc.h>
 #include <sys/kernel.h>
 
-#include <machine/cpu.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
 #include <machine/pio.h>
-#include <machine/cpufunc.h>
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
 #include <dev/mulaw.h>
@@ -62,30 +57,30 @@
 #include <dev/ic/interwavevar.h>
 
 
-static void iwreset __P((struct iw_softc *, int));
+static void iwreset(struct iw_softc *, int);
 
-static int iw_set_speed __P((struct iw_softc *, u_long, char));
-static u_long iw_set_format __P((struct iw_softc *, u_long, int));
-static void iw_mixer_line_level __P((struct iw_softc *, int, int, int));
-static void iw_trigger_dma __P((struct iw_softc *, u_char));
-static void iw_stop_dma __P((struct iw_softc *, u_char, u_char));
-static void iw_dma_count __P((struct iw_softc *, u_short, int));
-static int iwintr __P((void *));
-static void iw_meminit __P((struct iw_softc *));
-static void iw_mempoke __P((struct iw_softc *, u_long, u_char));
-static u_char iw_mempeek __P((struct iw_softc *, u_long));
+static int iw_set_speed(struct iw_softc *, u_long, char);
+static u_long iw_set_format(struct iw_softc *, u_long, int);
+static void iw_mixer_line_level(struct iw_softc *, int, int, int);
+static void iw_trigger_dma(struct iw_softc *, u_char);
+static void iw_stop_dma(struct iw_softc *, u_char, u_char);
+static void iw_dma_count(struct iw_softc *, u_short, int);
+static int iwintr(void *);
+static void iw_meminit(struct iw_softc *);
+static void iw_mempoke(struct iw_softc *, u_long, u_char);
+static u_char iw_mempeek(struct iw_softc *, u_long);
 
 #ifdef USE_WAVETABLE
-static void iw_set_voice_place __P((struct iw_softc *, u_char, u_long));
-static void iw_voice_pan __P((struct iw_softc *, u_char, u_short, u_short));
-static void iw_voice_freq __P((struct iw_softc *, u_char, u_long));
-static void iw_set_loopmode __P((struct iw_softc *, u_char, u_char, u_char));
-static void iw_set_voice_pos __P((struct iw_softc *, u_short, u_long, u_long));
-static void iw_start_voice __P((struct iw_softc *, u_char));
-static void iw_play_voice __P((struct iw_softc *, u_long, u_long, u_short));
-static void iw_stop_voice __P((struct iw_softc *, u_char));
-static void iw_move_voice_end __P((struct iw_softc *, u_short, u_long));
-static void iw_initvoices __P((struct iw_softc *));
+static void iw_set_voice_place(struct iw_softc *, u_char, u_long);
+static void iw_voice_pan(struct iw_softc *, u_char, u_short, u_short);
+static void iw_voice_freq(struct iw_softc *, u_char, u_long);
+static void iw_set_loopmode(struct iw_softc *, u_char, u_char, u_char);
+static void iw_set_voice_pos(struct iw_softc *, u_short, u_long, u_long);
+static void iw_start_voice(struct iw_softc *, u_char);
+static void iw_play_voice(struct iw_softc *, u_long, u_long, u_short);
+static void iw_stop_voice(struct iw_softc *, u_char);
+static void iw_move_voice_end(struct iw_softc *, u_short, u_long);
+static void iw_initvoices(struct iw_softc *);
 #endif
 
 struct audio_device iw_device = {
@@ -110,13 +105,15 @@ static int      iw_inints = 0;
 #endif
 
 int
-iwintr(arg)
-	void	*arg;
+iwintr(void *arg)
 {
-	struct	iw_softc *sc = arg;
-	int	val = 0;
-	u_char	intrs = 0;
+	struct	iw_softc *sc;
+	int	val;
+	u_char	intrs;
 
+	sc = arg;
+	val = 0;
+	intrs = 0;
 	IW_READ_DIRECT_1(6, sc->p2xr_h, intrs);	/* UISR */
 
 	/* codec ints */
@@ -124,7 +121,7 @@ iwintr(arg)
 	/*
 	 * The proper order to do this seems to be to read CSR3 to get the
 	 * int cause and fifo over underrrun status, then deal with the ints
-	 * (new dma set up), and to clear ints by writing the respective bit
+	 * (new DMA set up), and to clear ints by writing the respective bit
 	 * to 0.
 	 */
 
@@ -142,7 +139,6 @@ iwintr(arg)
 #ifdef DIAGNOSTIC
 		iw_inints++;
 #endif
-		sc->sc_reclocked = 0;
 		if (sc->sc_recintr != 0)
 			sc->sc_recintr(sc->sc_recarg);
 		val = 1;
@@ -151,7 +147,6 @@ iwintr(arg)
 #ifdef DIAGNOSTIC
 		iw_ints++;
 #endif
-		sc->sc_playlocked = 0;
 		if (sc->sc_playintr != 0)
 			sc->sc_playintr(sc->sc_playarg);
 		val = 1;
@@ -161,12 +156,12 @@ iwintr(arg)
 }
 
 void
-iwattach(sc)
-	struct	iw_softc *sc;
+iwattach(struct iw_softc *sc)
 {
-	int	got_irq = 0;
+	int	got_irq;
 
 	DPRINTF(("iwattach sc %p\n", sc));
+	got_irq = 0;
 
 	sc->cdatap = 1;		/* relative offsets in region */
 	sc->csr1r = 2;
@@ -188,9 +183,6 @@ iwattach(sc)
 
 	sc->sc_fullduplex = 1;
 
-	sc->sc_reclocked = 0;
-	sc->sc_playlocked = 0;
-
 	sc->sc_dma_flags = 0;
 
 	/*
@@ -200,8 +192,7 @@ iwattach(sc)
 
 	if (sc->sc_irq > 0) {
 		sc->sc_ih = isa_intr_establish(sc->sc_p2xr_ic,
-					       sc->sc_irq,
-					   IST_EDGE, IPL_AUDIO, iwintr, sc);
+		    sc->sc_irq, IST_EDGE, IPL_AUDIO, iwintr, sc);
 		got_irq = 1;
 	}
 	if (!got_irq) {
@@ -213,27 +204,15 @@ iwattach(sc)
 	iw_set_format(sc, AUDIO_ENCODING_ULAW, 0);
 	iw_set_format(sc, AUDIO_ENCODING_ULAW, 1);
 	printf("%s: interwave version %s\n",
-		sc->sc_dev.dv_xname, iw_device.version);
+	    device_xname(&sc->sc_dev), iw_device.version);
 	audio_attach_mi(sc->iw_hw_if, sc, &sc->sc_dev);
- }
+}
 
-int 
-iwopen(sc, flags)
-	struct	iw_softc *sc;
-	int	flags;
+int
+iwopen(struct iw_softc *sc, int flags)
 {
-	int	s;
 
-	s = splaudio();
-	if (sc->sc_open) {
-		splx(s);
-		DPRINTF(("iwopen: open %x sc %p\n", sc->sc_open, sc));
-		return EBUSY;
-	} else
-		sc->sc_open = 1;
-	splx(s);
-
-	DPRINTF(("iwopen: open %x sc %p\n", sc->sc_open, sc));
+	DPRINTF(("iwopen: sc %p\n", sc));
 
 #ifdef DIAGNOSTIC
 	outputs = 0;
@@ -244,62 +223,26 @@ iwopen(sc, flags)
 
 	iwreset(sc, 1);
 
-	/* READ/WRITE or both */
-
-	if (flags == FREAD) {
-		sc->sc_mode |= IW_READ;
-		sc->sc_reclocked = 0;
-	}
-	if (flags == FWRITE) {
-		sc->sc_mode |= IW_WRITE;
-		sc->sc_playlocked = 0;
-	}
-	sc->sc_playdma_cnt = 0;
-	sc->sc_recdma_cnt = 0;
-	sc->playfirst = 1;
-	sc->sc_playintr = 0;
-	sc->sc_recintr = 0;
-
 	return 0;
 }
 
-
-
-void 
-iwclose(addr)
-	void	*addr;
+void
+iwclose(void *addr)
 {
-	struct	iw_softc *sc = addr;
 
-	DPRINTF(("iwclose sc %p\n", sc));
-
+	DPRINTF(("iwclose sc %p\n", addr));
 #ifdef DIAGNOSTIC
 	DPRINTF(("iwclose: outputs %d ints %d inputs %d in_ints %d\n",
 		outputs, iw_ints, inputs, iw_inints));
 #endif
-
-	/* close hardware */
-	sc->sc_open = 0;
-	sc->sc_flags = 0;
-	sc->sc_mode = 0;
-	sc->sc_playlocked = 0;
-	sc->sc_reclocked = 0;
-
-	iw_stop_dma(sc, IW_DMA_PLAYBACK, 1);
-	iw_stop_dma(sc, IW_DMA_RECORD, 1);
-
-	sc->sc_playdma_cnt = 0;
-	sc->sc_recdma_cnt = 0;
 }
 
-#define RAM_STEP          64*1024
+#define RAM_STEP	64*1024
 
-static void 
-iw_mempoke(sc, addy, val)
-	struct	iw_softc *sc;
-	u_long	addy;
-	u_char	val;
+static void
+iw_mempoke(struct iw_softc *sc, u_long addy, u_char val)
 {
+
 	IW_WRITE_GENERAL_2(LMALI, (u_short) addy);
 	IW_WRITE_GENERAL_1(LMAHI, (u_char) (addy >> 16));
 
@@ -307,10 +250,8 @@ iw_mempoke(sc, addy, val)
 	IW_WRITE_DIRECT_1(sc->p3xr + 7, sc->p3xr_h, val);
 }
 
-static u_char 
-iw_mempeek(sc, addy)
-	struct	iw_softc *sc;
-	u_long	addy;
+static u_char
+iw_mempeek(struct iw_softc *sc, u_long addy)
 {
 	u_char	ret;
 
@@ -322,15 +263,20 @@ iw_mempeek(sc, addy)
 }
 
 static void
-iw_meminit(sc)
-	struct iw_softc *sc;
+iw_meminit(struct iw_softc *sc)
 {
-	u_long          bank[4] = {0L, 0L, 0L, 0L};
-	u_long          addr = 0L, base = 0L, cnt = 0L;
-	u_char          i, ram = 0 /* ,memval=0 */ ;
-	u_short         lmcfi;
-	u_long          temppi;
-	u_long         *lpbanks = &temppi;
+	u_long	bank[4] = {0L, 0L, 0L, 0L};
+	u_long	addr, base, cnt;
+	u_char	i, ram /* ,memval=0 */ ;
+	u_short	lmcfi;
+	u_long	temppi;
+	u_long	*lpbanks;
+
+	addr = 0L;
+	base = 0L;
+	cnt = 0L;
+	ram = 0;
+	lpbanks = &temppi;
 
 	IW_WRITE_GENERAL_1(LDMACI, 0x00);
 
@@ -353,12 +299,12 @@ iw_meminit(sc)
 		addr += RAM_STEP;
 	}
 
-	printf("%s:", sc->sc_dev.dv_xname);
+	printf("%s:", device_xname(&sc->sc_dev));
 
 	for (i = 0; i < 4; i++) {
 		iw_mempoke(sc, base, 0xAA);	/* mark start of bank */
 		iw_mempoke(sc, base + 1L, 0x55);
-		if (iw_mempeek(sc, base) == 0xAA  && 
+		if (iw_mempeek(sc, base) == 0xAA  &&
 		    iw_mempeek(sc, base + 1L) == 0x55)
 			ram = 1;
 		if (ram) {
@@ -388,20 +334,18 @@ iw_meminit(sc)
 	 * configurations that aren't really supported by Interwave...beware
 	 * of holes! Also, we don't use the memory for anything in this
 	 * version of the driver.
-	 * 
+	 *
 	 * we've configured for 4M-4M-4M-4M
 	 */
 }
 
-
-static
-void 
-iwreset(sc, warm)
-	struct iw_softc *sc;
-	int             warm;
+static void
+iwreset(struct iw_softc *sc, int warm)
 {
-	u_char          reg, cmode, val = 0, mixer_image = 0;
+	u_char	reg, cmode, val, mixer_image;
 
+	val = 0;
+	mixer_image = 0;
 	reg = 0;		/* XXX gcc -Wall */
 
 	cmode = 0x6c;		/* enhanced codec mode (full duplex) */
@@ -460,7 +404,7 @@ iwreset(sc, warm)
 
 	IW_WRITE_DIRECT_1(sc->codec_index + 2, sc->p2xr_h, 0x00);
 
-	IW_WRITE_CODEC_1(CFIG1I | IW_MCE, 0x00);	/* dma 2 chan access */
+	IW_WRITE_CODEC_1(CFIG1I | IW_MCE, 0x00);	/* DMA 2 chan access */
 	IW_WRITE_CODEC_1(CEXTI, 0x00);	/* disable ints for now */
 
 
@@ -471,7 +415,7 @@ iwreset(sc, warm)
 					 * don't center output in case or
 					 * FIFO underrun */
 	IW_WRITE_CODEC_1(CFIG3I, 0xc0);	/* enable record/playback irq (still
-					 * turned off from CEXTI), max dma
+					 * turned off from CEXTI), max DMA
 					 * rate */
 	IW_WRITE_CODEC_1(CSR3I, 0x00);	/* clear status 3 reg */
 
@@ -484,7 +428,8 @@ iwreset(sc, warm)
 
 	sc->vers = reg >> 4;
 	if (!warm)
-		sprintf(iw_device.version, "%d.%d", sc->vers, sc->revision);
+		snprintf(iw_device.version, sizeof(iw_device.version), "%d.%d",
+		    sc->vers, sc->revision);
 
 	IW_WRITE_GENERAL_1(IDECI, 0x7f);	/* irqs and codec decode
 						 * enable */
@@ -523,7 +468,7 @@ iwreset(sc, warm)
 	 * (from codec?) bit 1 = 0 -> output on bit 2 = 1 -> mic in on bit 3
 	 * = 1 -> irq&drq pin enable bit 4 = 1 -> channel interrupts to chan
 	 * 1 bit 5 = 1 -> enable midi loop back bit 6 = 0 -> irq latches
-	 * URCR[2:0] bit 6 = 1 -> dma latches URCR[2:0]
+	 * URCR[2:0] bit 6 = 1 -> DMA latches URCR[2:0]
 	 */
 
 
@@ -540,10 +485,7 @@ struct iw_codec_freq {
 };
 
 int
-iw_set_speed(sc, freq, in)
-	struct	iw_softc *sc;
-	u_long	freq;
-	char	in;
+iw_set_speed(struct iw_softc *sc, u_long freq, char in)
 {
 	u_char	var, cfig3, reg;
 
@@ -568,17 +510,17 @@ iw_set_speed(sc, freq, in)
 	cfig3 = 0;		/* XXX gcc -Wall */
 
 	/*
-	 * if the frequency is between 3493Hz and 32KHz we can use a more
+	 * if the frequency is between 3493 Hz and 32 kHz we can use a more
 	 * accurate frequency than the ones listed above base on the formula
 	 * FREQ/((16*(48+x))) where FREQ is either FREQ_1 (24576000Hz) or
 	 * FREQ_2 (16934400Hz) and x is the value to be written to either
 	 * CPVFI or CRVFI. To enable this option, bit 2 in CFIG3 needs to be
 	 * set high
-	 * 
+	 *
 	 * NOT IMPLEMENTED!
-	 * 
-	 * Note that if you have a 'bad' XTAL_1 (higher than 18.5 MHz), 44.8KHz
-	 * and 38.4KHz modes will provide wrong frequencies to output.
+	 *
+	 * Note that if you have a 'bad' XTAL_1 (higher than 18.5 MHz), 44.8 kHz
+	 * and 38.4 kHz modes will provide wrong frequencies to output.
 	 */
 
 
@@ -628,10 +570,8 @@ iw_set_speed(sc, freq, in)
 }
 
 /* Encoding. */
-int 
-iw_query_encoding(addr, fp)
-	void	*addr;
-	struct	audio_encoding *fp;
+int
+iw_query_encoding(void *addr, audio_encoding_t *fp)
 {
 	/*
 	 * LINEAR, ALAW, ULAW, ADPCM in HW, we'll use linear unsigned
@@ -639,7 +579,7 @@ iw_query_encoding(addr, fp)
 	 */
 
 	/*
-	 * except in wavetable synth. there we have only ulaw and 8 and 16
+	 * except in wavetable synth. there we have only mu-law and 8 and 16
 	 * bit linear data
 	 */
 
@@ -681,19 +621,14 @@ iw_query_encoding(addr, fp)
 		fp->flags = 0;
 		break;
 	default:
-		return (EINVAL);
+		return EINVAL;
 		/* NOTREACHED */
 	}
-	return (0);
+	return 0;
 }
 
-
-
 u_long
-iw_set_format(sc, precision, in)
-	struct	iw_softc *sc;
-	u_long	precision;
-	int	in;
+iw_set_format(struct iw_softc *sc, u_long precision, int in)
 {
 	u_char	data;
 	int	encoding, channels;
@@ -743,7 +678,7 @@ iw_set_format(sc, precision, in)
 		/* This will zero the normal codec frequency,
 		 * iw_set_speed should always be called afterwards.
 		 */
-		IW_WRITE_CODEC_1(CRDFI | IW_MCE, data);	
+		IW_WRITE_CODEC_1(CRDFI | IW_MCE, data);
 	} else {
 		/* out */
 		sc->playfmtbits = data;
@@ -755,36 +690,34 @@ iw_set_format(sc, precision, in)
 	return encoding;
 }
 
-
-
 int
-iw_set_params(addr, setmode, usemode, p, q)
-	void	*addr;
-	int	setmode;
-	int	usemode;
-	struct	audio_params *p;
-	struct	audio_params *q;
+iw_set_params(void *addr, int setmode, int usemode, audio_params_t *p,
+    audio_params_t *q, stream_filter_list_t *pfil, stream_filter_list_t *rfil)
 {
-	struct	iw_softc *sc = addr;
-	void	(*swcode)__P((void *, u_char * buf, int cnt)) = NULL;
-	int	factor = 1;
-	DPRINTF(("iw_setparams: code %d, prec %d, rate %d, chan %d\n",
-		(int) p->encoding, (int) p->precision, (int) p->sample_rate,
-		(int) p->channels));
+	audio_params_t phw, rhw;
+	struct iw_softc *sc;
+	stream_filter_factory_t *swcode;
 
-
+	DPRINTF(("iw_setparams: code %u, prec %u, rate %u, chan %u\n",
+	    p->encoding, p->precision, p->sample_rate, p->channels));
+	sc = addr;
+	swcode = NULL;
+	phw = *p;
+	rhw = *q;
 	switch (p->encoding) {
 	case AUDIO_ENCODING_ULAW:
 		if (p->precision != 8)
 			return EINVAL;
-		swcode = setmode & AUMODE_PLAY ? mulaw_to_ulinear8 : ulinear8_to_mulaw;
-		factor = 1;
+		phw.encoding = AUDIO_ENCODING_ULINEAR_LE;
+		rhw.encoding = AUDIO_ENCODING_ULINEAR_LE;
+		swcode = setmode & AUMODE_PLAY ? mulaw_to_linear8 : linear8_to_mulaw;
 		break;
 	case AUDIO_ENCODING_ALAW:
 		if (p->precision != 8)
 			return EINVAL;
-		swcode = setmode & AUMODE_PLAY ? alaw_to_ulinear8 : ulinear8_to_alaw;
-		factor = 1;
+		phw.encoding = AUDIO_ENCODING_ULINEAR_LE;
+		rhw.encoding = AUDIO_ENCODING_ULINEAR_LE;
+		swcode = setmode & AUMODE_PLAY ? alaw_to_linear8 : linear8_to_alaw;
 		break;
 	case AUDIO_ENCODING_ADPCM:
 		if (p->precision != 8)
@@ -806,13 +739,15 @@ iw_set_params(addr, setmode, usemode, p, q)
 
 	if (setmode & AUMODE_PLAY) {
 		sc->play_channels = p->channels;
-	        sc->play_encoding = p->encoding;
+		sc->play_encoding = p->encoding;
 		sc->play_precision = p->precision;
-		p->factor = factor;
-		p->sw_code = swcode;
 		iw_set_format(sc, p->precision, 0);
-		q->sample_rate = p->sample_rate = sc->sc_orate = 
+		q->sample_rate = p->sample_rate = sc->sc_orate =
 			iw_set_speed(sc, p->sample_rate, 0);
+		if (swcode != NULL) {
+			phw.sample_rate = p->sample_rate;
+			pfil->append(pfil, swcode, &phw);
+		}
 	} else {
 #if 0
 		q->channels = sc->rec_channels = p->channels;
@@ -822,31 +757,30 @@ iw_set_params(addr, setmode, usemode, p, q)
 		sc->rec_channels = q->channels;
 		sc->rec_encoding = q->encoding;
 		sc->rec_precision = q->precision;
-		q->factor = factor;
-		q->sw_code = swcode;
 
 		iw_set_format(sc, p->precision, 1);
-		q->sample_rate = sc->sc_irate = 
+		q->sample_rate = sc->sc_irate =
 			iw_set_speed(sc, q->sample_rate, 1);
+		if (swcode != NULL) {
+			rhw.sample_rate = q->sample_rate;
+			rfil->append(rfil, swcode, &rhw);
+		}
 	}
 	return 0;
 }
 
 
 int
-iw_round_blocksize(addr, blk)
-	void	*addr;
-	int	blk;
+iw_round_blocksize(void *addr, int blk, int mode,
+    const audio_params_t *param)
 {
+
 	/* Round to a multiple of the biggest sample size. */
 	return blk &= -4;
 }
 
 void
-iw_mixer_line_level(sc, line, levl, levr)
-	struct	iw_softc *sc;
-	int	line;
-	int	levl, levr;
+iw_mixer_line_level(struct iw_softc *sc, int line, int levl, int levr)
 {
 	u_char	gainl, gainr, attenl, attenr;
 
@@ -941,17 +875,14 @@ iw_mixer_line_level(sc, line, levl, levr)
 }
 
 int
-iw_commit_settings(addr)
-	void	*addr;
+iw_commit_settings(void *addr)
 {
+
 	return 0;
 }
 
-
 void
-iw_trigger_dma(sc, io)
-	struct	iw_softc *sc;
-	u_char	io;
+iw_trigger_dma(struct iw_softc *sc, u_char io)
 {
 	u_char	reg;
 	int	s;
@@ -973,9 +904,7 @@ iw_trigger_dma(sc, io)
 }
 
 void
-iw_stop_dma(sc, io, hard)
-	struct	iw_softc *sc;
-	u_char	io, hard;
+iw_stop_dma(struct iw_softc *sc, u_char io, u_char hard)
 {
 	u_char	reg;
 
@@ -991,11 +920,9 @@ iw_stop_dma(sc, io, hard)
 }
 
 void
-iw_dma_count(sc, count, io)
-	struct	iw_softc *sc;
-	u_short	count;
-	int	io;
+iw_dma_count(struct iw_softc *sc, u_short count, int io)
 {
+
 	if (io == IW_DMA_PLAYBACK) {
 		IW_WRITE_CODEC_1(CLPCTI, (u_char) (count & 0x00ff));
 		IW_WRITE_CODEC_1(CUPCTI, (u_char) ((count >> 8) & 0x00ff));
@@ -1006,71 +933,52 @@ iw_dma_count(sc, count, io)
 }
 
 int
-iw_init_output(addr, buf, cc)
+iw_init_output(addr, sbuf, cc)
 	void	*addr;
-	void	*buf;
+	void	*sbuf;
 	int	cc;
 {
 	struct iw_softc *sc = (struct iw_softc *) addr;
 
 	DPRINTF(("iw_init_output\n"));
 
-	isa_dmastart(sc->sc_ic, sc->sc_playdrq, buf,
+	isa_dmastart(sc->sc_ic, sc->sc_playdrq, sbuf,
 		     cc, NULL, DMAMODE_WRITE | DMAMODE_LOOP, BUS_DMA_NOWAIT);
 	return 0;
 }
 
 int
-iw_init_input(addr, buf, cc)
-	void	*addr;
-	void	*buf;
-	int	cc;
+iw_init_input(void *addr, void *sbuf, int cc)
 {
-	struct	iw_softc *sc = (struct iw_softc *) addr;
+	struct	iw_softc *sc;
 
 	DPRINTF(("iw_init_input\n"));
-
-	isa_dmastart(sc->sc_ic, sc->sc_recdrq, buf,
+	sc = (struct iw_softc *) addr;
+	isa_dmastart(sc->sc_ic, sc->sc_recdrq, sbuf,
 		     cc, NULL, DMAMODE_READ | DMAMODE_LOOP, BUS_DMA_NOWAIT);
 	return 0;
 }
 
 
 int
-iw_start_output(addr, p, cc, intr, arg)
-	void	*addr;
-	void	*p;
-	int	cc;
-	void	(*intr)__P((void *));
-	void	*arg;
+iw_start_output(void *addr, void *p, int cc, void (*intr)(void *), void *arg)
 {
-	struct	iw_softc *sc = addr;
-	int	counter;
+	struct	iw_softc *sc;
 
-#ifdef AUDIO_DEBUG
-	if (sc->sc_playlocked) {
-		DPRINTF(("iw_start_output: playback dma already going on\n"));
-		/* return 0; */
-	}
-#endif
-
-	sc->sc_playlocked = 1;
 #ifdef DIAGNOSTIC
 	if (!intr) {
 		printf("iw_start_output: no callback!\n");
 		return 1;
 	}
 #endif
-
+	sc = addr;
 	sc->sc_playintr = intr;
 	sc->sc_playarg = arg;
 	sc->sc_dma_flags |= DMAMODE_WRITE;
 	sc->sc_playdma_bp = p;
 
-	counter = 0;
-
 	isa_dmastart(sc->sc_ic, sc->sc_playdrq, sc->sc_playdma_bp,
-		     cc, NULL, DMAMODE_WRITE, BUS_DMA_NOWAIT);
+	    cc, NULL, DMAMODE_WRITE, BUS_DMA_NOWAIT);
 
 
 	if (sc->play_encoding == AUDIO_ENCODING_ADPCM)
@@ -1082,7 +990,6 @@ iw_start_output(addr, p, cc, intr, arg)
 		cc >>= 1;
 
 	cc -= iw_cc;
-
 
 	/* iw_dma_access(sc,1); */
 	if (cc != sc->sc_playdma_cnt) {
@@ -1097,46 +1004,30 @@ iw_start_output(addr, p, cc, intr, arg)
 		printf("iw_start_output: out %d, int %d\n", outputs, iw_ints);
 	outputs++;
 #endif
+
 	return 0;
 }
 
 
 int
-iw_start_input(addr, p, cc, intr, arg)
-	void	*addr;
-	void	*p;
-	int	cc;
-	void	(*intr)__P((void *));
-	void	*arg;
+iw_start_input(void *addr, void *p, int cc, void (*intr)(void *), void *arg)
 {
-	struct	iw_softc *sc = addr;
-	int	counter;
+	struct	iw_softc *sc;
 
-#if AUDIO_DEBUG
-	if (sc->sc_reclocked) {
-		DPRINTF(("iw_start_input: record dma already going on\n"));
-		/* return 0; */
-	}
-#endif
-
-	sc->sc_reclocked = 1;
 #ifdef DIAGNOSTIC
 	if (!intr) {
 		printf("iw_start_input: no callback!\n");
 		return 1;
 	}
 #endif
-
-
+	sc = addr;
 	sc->sc_recintr = intr;
 	sc->sc_recarg = arg;
 	sc->sc_dma_flags |= DMAMODE_READ;
 	sc->sc_recdma_bp = p;
 
-	counter = 0;
-
 	isa_dmastart(sc->sc_ic, sc->sc_recdrq, sc->sc_recdma_bp,
-		     cc, NULL, DMAMODE_READ, BUS_DMA_NOWAIT);
+	    cc, NULL, DMAMODE_READ, BUS_DMA_NOWAIT);
 
 
 	if (sc->rec_encoding == AUDIO_ENCODING_ADPCM)
@@ -1168,34 +1059,33 @@ iw_start_input(addr, p, cc, intr, arg)
 
 
 int
-iw_halt_output(addr)
-	void	*addr;
+iw_halt_output(void *addr)
 {
-	struct	iw_softc *sc = addr;
+	struct	iw_softc *sc;
+
+	sc = addr;
 	iw_stop_dma(sc, IW_DMA_PLAYBACK, 0);
-	/* sc->sc_playlocked = 0; */
 	return 0;
 }
 
 
 int
-iw_halt_input(addr)
-	void	*addr;
+iw_halt_input(void *addr)
 {
-	struct	iw_softc *sc = addr;
+	struct	iw_softc *sc;
+
+	sc = addr;
 	iw_stop_dma(sc, IW_DMA_RECORD, 0);
-	/* sc->sc_reclocked = 0; */
 	return 0;
 }
 
-
 int
-iw_speaker_ctl(addr, newstate)
-	void	*addr;
-	int	newstate;
+iw_speaker_ctl(void *addr, int newstate)
 {
-	struct	iw_softc *sc = addr;
-	u_char          reg;
+	struct iw_softc *sc;
+	u_char reg;
+
+	sc = addr;
 	if (newstate == SPKR_ON) {
 		sc->sc_dac.off = 0;
 		IW_READ_CODEC_1(CLDACI, reg);
@@ -1213,36 +1103,33 @@ iw_speaker_ctl(addr, newstate)
 	return 0;
 }
 
-
 int
-iw_getdev(addr, retp)
-	void	*addr;
-	struct	audio_device *retp;
+iw_getdev(void *addr, struct audio_device *retp)
 {
+
 	*retp = iw_device;
 	return 0;
 }
 
-
 int
-iw_setfd(addr, flag)
-	void	*addr;
-	int	flag;
+iw_setfd(void *addr, int flag)
 {
+
 	return 0;
 }
 
-
 /* Mixer (in/out ports) */
 int
-iw_set_port(addr, cp)
-	void	*addr;
-	mixer_ctrl_t *cp;
+iw_set_port(void *addr, mixer_ctrl_t *cp)
 {
-	struct	iw_softc *sc = addr;
-	u_char	vall = 0, valr = 0;
-	int	error = EINVAL;
+	struct iw_softc *sc;
+	u_char vall, valr;
+	int error;
 
+	sc = addr;
+	vall = 0;
+	valr = 0;
+	error = EINVAL;
 	switch (cp->dev) {
 	case IW_MIC_IN_LVL:
 		if (cp->type == AUDIO_MIXER_VALUE) {
@@ -1384,14 +1271,13 @@ iw_set_port(addr, cp)
 
 
 int
-iw_get_port(addr, cp)
-	void	*addr;
-	mixer_ctrl_t *cp;
+iw_get_port(void *addr, mixer_ctrl_t *cp)
 {
-	struct	iw_softc *sc = addr;
+	struct iw_softc *sc;
+	int error;
 
-	int	error = EINVAL;
-
+	sc = addr;
+	error = EINVAL;
 	switch (cp->dev) {
 	case IW_MIC_IN_LVL:
 		if (cp->type == AUDIO_MIXER_VALUE) {
@@ -1477,9 +1363,7 @@ iw_get_port(addr, cp)
 
 
 int
-iw_query_devinfo(addr, dip)
-	void	*addr;
-	mixer_devinfo_t *dip;
+iw_query_devinfo(void *addr, mixer_devinfo_t *dip)
 {
 
 	switch (dip->index) {
@@ -1609,40 +1493,33 @@ iw_query_devinfo(addr, dip)
 
 
 void *
-iw_malloc(addr, direction, size, pool, flags)
-	void	*addr;
-	int	direction;
-	size_t	size;
-	int	pool, flags;
+iw_malloc(void *addr, int direction, size_t size,
+    struct malloc_type *pool, int flags)
 {
-	struct iw_softc *sc = addr;
+	struct iw_softc *sc;
 	int drq;
 
+	sc = addr;
 	if (direction == AUMODE_PLAY)
 		drq = sc->sc_playdrq;
 	else
 		drq = sc->sc_recdrq;
-	return (isa_malloc(sc->sc_ic, drq, size, pool, flags));
+	return isa_malloc(sc->sc_ic, drq, size, pool, flags);
 }
 
 void
-iw_free(addr, ptr, pool)
-	void	*addr;
-	void	*ptr;
-	int	pool;
+iw_free(void *addr, void *ptr, struct malloc_type *pool)
 {
 	isa_free(ptr, pool);
 }
 
 size_t
-iw_round_buffersize(addr, direction, size)
-	void	*addr;
-	int	direction;
-	size_t	size;
+iw_round_buffersize(void *addr, int direction, size_t size)
 {
-	struct iw_softc *sc = addr;
+	struct iw_softc *sc;
 	bus_size_t maxsize;
 
+	sc = addr;
 	if (direction == AUMODE_PLAY)
 		maxsize = sc->sc_play_maxsize;
 	else
@@ -1650,24 +1527,22 @@ iw_round_buffersize(addr, direction, size)
 
 	if (size > maxsize)
 		size = maxsize;
-	return (size);
+	return size;
 }
 
-int
-iw_mappage(addr, mem, off, prot)
-	void	*addr;
-	void	*mem;
-	int	off;
-	int	prot;
+paddr_t
+iw_mappage(void *addr, void *mem, off_t off, int prot)
 {
+
 	return isa_mappage(mem, off, prot);
 }
 
 int
-iw_get_props(addr)
-	void	*addr;
+iw_get_props(void *addr)
 {
-	struct iw_softc *sc = addr;
+	struct iw_softc *sc;
+
+	sc = addr;
 	return AUDIO_PROP_MMAP |
 		(sc->sc_fullduplex ? AUDIO_PROP_FULLDUPLEX : 0);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: consinit.c,v 1.2 2000/03/06 21:36:11 thorpej Exp $	*/
+/*	$NetBSD: consinit.c,v 1.24 2007/10/17 19:57:28 garbled Exp $	*/
 
 /*-
  * Copyright (c) 1999 Eduardo E. Horvath
@@ -28,12 +28,12 @@
  * SUCH DAMAGE.
  */
 
-/*
- * Default console driver.  Uses the PROM or whatever
- * driver(s) are appropriate.
- */
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.24 2007/10/17 19:57:28 garbled Exp $");
 
 #include "opt_ddb.h"
+#include "pcons.h"
+#include "ukbd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,25 +50,23 @@
 #include <machine/autoconf.h>
 #include <machine/openfirm.h>
 #include <machine/bsd_openprom.h>
-#include <machine/conf.h>
 #include <machine/cpu.h>
 #include <machine/eeprom.h>
 #include <machine/psl.h>
 #include <machine/z8530var.h>
+#include <machine/sparc64.h>
 
 #include <dev/cons.h>
 
-#include <sparc64/sparc64/vaddrs.h>
-#include <sparc64/sparc64/auxreg.h>
 #include <sparc64/dev/cons.h>
 
+#include <dev/usb/ukbdvar.h>
 
-
-static void prom_cninit __P((struct consdev *));
-static int  prom_cngetc __P((dev_t));
-static void prom_cnputc __P((dev_t, int));
-
-int stdin = NULL, stdout = NULL;
+static void prom_cnprobe(struct consdev *);
+static void prom_cninit(struct consdev *);
+int  prom_cngetc(dev_t);
+static void prom_cnputc(dev_t, int);
+static void prom_cnpollc(dev_t, int);
 
 /*
  * The console is set to this one initially,
@@ -76,12 +74,11 @@ int stdin = NULL, stdout = NULL;
  * is called to select a real console.
  */
 struct consdev consdev_prom = {
-	nullcnprobe,
-	prom_cninit,
-	prom_cngetc,
-	prom_cnputc,
-	nullcnpollc,
-	NULL,
+	.cn_probe = prom_cnprobe,
+	.cn_init = prom_cninit,
+	.cn_getc = prom_cngetc,
+	.cn_putc = prom_cnputc,
+	.cn_pollc = prom_cnpollc,
 };
 
 /*
@@ -92,72 +89,84 @@ struct consdev consdev_prom = {
 struct consdev *cn_tab = &consdev_prom;
 
 void
-nullcnprobe(cn)
-	struct consdev *cn;
+prom_cnprobe(struct consdev *cd)
 {
+#if NPCONS > 0
+	int maj;
+	extern const struct cdevsw pcons_cdevsw;
+
+	maj = cdevsw_lookup_major(&pcons_cdevsw);
+	cd->cn_dev = makedev(maj, 0);
+	cd->cn_pri = CN_INTERNAL;
+#endif
+}
+
+int
+prom_cngetc(dev_t dev)
+{
+	unsigned char ch = '\0';
+	int l;
+#ifdef DDB
+	static int nplus = 0;
+#endif
+
+	while ((l = prom_read(prom_stdin(), &ch, 1)) != 1)
+		/* void */;
+#ifdef DDB
+	if (ch == '+') {
+		if (nplus++ > 3) Debugger();
+	} else nplus = 0;
+#endif
+	if (ch == '\r')
+		ch = '\n';
+	return ch;
 }
 
 static void
-prom_cninit(cn)
-	struct consdev *cn;
+prom_cninit(struct consdev *cn)
 {
-	if (!stdin) {
-		int node = OF_finddevice("/chosen");
-		OF_getprop(node, "stdin",  &stdin, sizeof(stdin));
-	}
-	if (!stdout) {
-		int node = OF_finddevice("/chosen");
-		OF_getprop(node, "stdout",  &stdout, sizeof(stdout));
-	}
-}
-
-/*
- * PROM console input putchar.
- * (dummy - this is output only)
- */
-static int
-prom_cngetc(dev)
-	dev_t dev;
-{
-	char c0;
-
-	if (!stdin) {
-		int node = OF_finddevice("/chosen");
-		OF_getprop(node, "stdin",  &stdin, sizeof(stdin));
-	}
-	if (OF_read(stdin, &c0, 1) == 1)
-		return (c0);
-	return -1;
 }
 
 /*
  * PROM console output putchar.
  */
 static void
-prom_cnputc(dev, c)
-	dev_t dev;
-	int c;
+prom_cnputc(dev_t dev, int c)
 {
 	int s;
 	char c0 = (c & 0x7f);
 
-	if (!stdout) {
-		int node = OF_finddevice("/chosen");
-		OF_getprop(node, "stdout",  &stdout, sizeof(stdout));
-	}
-
 	s = splhigh();
-	OF_write(stdout, &c0, 1);
+	prom_write(prom_stdout(), &c0, 1);
 	splx(s);
+}
+
+void
+prom_cnpollc(dev_t dev, int on)
+{
+	if (on) {
+                /* Entering debugger. */
+#if NFB > 0
+                fb_unblank();
+#endif
+	} else {
+                /* Resuming kernel. */
+	}
+#if NPCONS > 0
+	pcons_cnpollc(dev, on);
+#endif
 }
 
 /*****************************************************************/
 
 #ifdef	DEBUG
-#define	DBPRINT(x)	printf x
+#define	DBPRINT(x)	prom_printf x
 #else
 #define	DBPRINT(x)
 #endif
+
+int prom_stdin_node;
+int prom_stdout_node;
 
 /*
  * This function replaces sys/dev/cninit.c
@@ -167,44 +176,49 @@ prom_cnputc(dev, c)
 void
 consinit()
 {
-	register int chosen;
+	int chosen;
 	char buffer[128];
-	extern int stdinnode, fbnode;
-	char *consname = "unknown";
-	
+	const char *consname = "unknown";
+
 	DBPRINT(("consinit()\r\n"));
-	if (cn_tab != &consdev_prom) return;
-	
-	DBPRINT(("setting up stdin\r\n"));
-	chosen = OF_finddevice("/chosen");
-	OF_getprop(chosen, "stdin",  &stdin, sizeof(stdin));
-	DBPRINT(("stdin instance = %x\r\n", stdin));
-	
-	if ((stdinnode = OF_instance_to_package(stdin)) == 0) {
+
+	if (cn_tab != &consdev_prom)
+		return;
+
+	chosen = prom_finddevice("/chosen");
+
+	if ((prom_stdin_node = prom_instance_to_package(prom_stdin())) == 0) {
 		printf("WARNING: no PROM stdin\n");
-	} 
-		
-	DBPRINT(("setting up stdout\r\n"));
-	OF_getprop(chosen, "stdout", &stdout, sizeof(stdout));
-	
-	DBPRINT(("stdout instance = %x\r\n", stdout));
-	
-	if ((fbnode = OF_instance_to_package(stdout)) == 0)
+	}
+	DBPRINT(("stdin node = %x\r\n", prom_stdin_node));
+
+	if ((prom_stdout_node = prom_instance_to_package(prom_stdout())) == 0)
 		printf("WARNING: no PROM stdout\n");
-	
-	DBPRINT(("stdout package = %x\r\n", fbnode));
-	
-	if (stdinnode && (OF_getproplen(stdinnode,"keyboard") >= 0)) {
-#if NKBD > 0		
-		printf("cninit: kdb/display not configured\n");
+	DBPRINT(("stdout package = %x\r\n", prom_stdout_node));
+
+	DBPRINT(("buffer @ %p\r\n", buffer));
+
+	if (prom_stdin_node != 0 &&
+	    (prom_getproplen(prom_stdin_node, "keyboard") >= 0)) {
+#if NUKBD > 0
+		if ((OF_instance_to_path(prom_stdin(), buffer, sizeof(buffer)) >= 0) &&
+		    (strstr(buffer, "/usb@") != NULL)) {
+			/*
+		 	* If we have a USB keyboard, it will show up as (e.g.)
+		 	*   /pci@1f,0/usb@c,3/keyboard@1	(Blade 100)
+		 	*/
+			consname = "usb-keyboard/display";
+			ukbd_cnattach();
+		} else
 #endif
-		consname = "keyboard/display";
-	} else if (fbnode && 
-		   (OF_instance_to_path(stdinnode, buffer, sizeof(buffer) >= 0))) {
+			consname = "sun-keyboard/display";
+	} else if (prom_stdin_node != 0 &&
+		   (OF_instance_to_path(prom_stdin(), buffer, sizeof(buffer)) >= 0)) {
 		consname = buffer;
 	}
-	printf("console is %s\n", consname);
- 
-	/* Defer the rest to the device attach */
-}
+	DBPRINT(("console is %s\n", consname));
 
+	/* Initialize PROM console */
+	(*cn_tab->cn_probe)(cn_tab);
+	(*cn_tab->cn_init)(cn_tab);
+}

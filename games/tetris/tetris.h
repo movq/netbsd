@@ -1,4 +1,4 @@
-/*	$NetBSD: tetris.h,v 1.8 2000/01/01 10:15:17 jsm Exp $	*/
+/*	$NetBSD: tetris.h,v 1.10 2004/01/27 20:30:30 jsm Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -173,6 +169,6 @@ extern gid_t	gid, egid;
 extern char	key_msg[100];
 extern int	showpreview;
 
-int	fits_in __P((const struct shape *, int));
-void	place __P((const struct shape *, int, int));
-void	stop __P((const char *)) __attribute__((__noreturn__));
+int	fits_in(const struct shape *, int);
+void	place(const struct shape *, int, int);
+void	stop(const char *) __attribute__((__noreturn__));

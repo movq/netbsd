@@ -1,4 +1,4 @@
-/*	$NetBSD: api_exch.c,v 1.5 1998/07/26 22:38:15 mycroft Exp $	*/
+/*	$NetBSD: api_exch.c,v 1.8 2003/08/07 11:16:24 agc Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,20 +30,18 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)api_exch.c	4.2 (Berkeley) 4/26/91";
 #else
-__RCSID("$NetBSD: api_exch.c,v 1.5 1998/07/26 22:38:15 mycroft Exp $");
+__RCSID("$NetBSD: api_exch.c,v 1.8 2003/08/07 11:16:24 agc Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdio.h>
-#ifdef __STDC__
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
-#endif
 
 #include "../general/general.h"
 
@@ -82,13 +76,13 @@ char obuffer[4000], *obuf_next;
 #define	OBUFROOM()		(obuffer+sizeof obuffer-obuf_next)
 
 
-static int outflush __P((void));
-static int iget __P((char *, int));
-static char *exch_to_ascii __P((int));
-static int send_state __P((void));
-static int receive_state __P((void));
-static int enter_receive __P((void));
-static int enter_send __P((void));
+static int outflush(void);
+static int iget(char *, int);
+static char *exch_to_ascii(int);
+static int send_state(void);
+static int receive_state(void);
+static int enter_receive(void);
+static int enter_send(void);
 
 static int
 outflush()

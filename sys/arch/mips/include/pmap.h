@@ -1,9 +1,41 @@
-/*	$NetBSD: pmap.h,v 1.27 1999/05/18 01:36:51 nisimura Exp $	*/
+/*	$NetBSD: pmap.h,v 1.54 2007/12/26 16:01:34 ad Exp $	*/
+
+/*
+ * Copyright (c) 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Ralph Campbell.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)pmap.h	8.1 (Berkeley) 6/10/93
+ */
 
 /*
  * Copyright (c) 1987 Carnegie-Mellon University
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Ralph Campbell.
@@ -39,8 +71,8 @@
  *	@(#)pmap.h	8.1 (Berkeley) 6/10/93
  */
 
-#ifndef	_PMAP_MACHINE_
-#define	_PMAP_MACHINE_
+#ifndef	_MIPS_PMAP_H_
+#define	_MIPS_PMAP_H_
 
 #include <mips/cpuregs.h>	/* for KSEG0 below */
 
@@ -83,7 +115,7 @@ struct segtab {
  */
 typedef struct pmap {
 	int			pm_count;	/* pmap reference count */
-	simple_lock_data_t	pm_lock;	/* lock on pmap */
+	kmutex_t		pm_lock;	/* lock on pmap */
 	struct pmap_statistics	pm_stats;	/* pmap statistics */
 	unsigned		pm_asid;	/* TLB address space tag */
 	unsigned		pm_asidgen;	/* its generation number */
@@ -91,7 +123,7 @@ typedef struct pmap {
 } *pmap_t;
 
 /*
- * For each vm_page_t, there is a list of all currently valid virtual
+ * For each struct vm_page, there is a list of all currently valid virtual
  * mappings of that page.  An entry is a pv_entry_t, the list is pv_table.
  * XXX really should do this as a part of the higher level code.
  */
@@ -116,40 +148,57 @@ extern struct pmap kernel_pmap_store;
 #define	pmap_wired_count(pmap) 	((pmap)->pm_stats.wired_count)
 #define pmap_resident_count(pmap) ((pmap)->pm_stats.resident_count)
 
+#define	pmap_update(pmap)	/* nothing (yet) */
+#define pmap_phys_address(x)	mips_ptob(x)
+
+static __inline void
+pmap_remove_all(struct pmap *pmap)
+{
+	/* Nothing. */
+}
+
 /*
  *	Bootstrap the system enough to run with virtual memory.
  */
-void	pmap_bootstrap __P((void));
+void	pmap_bootstrap(void);
 
-void	pmap_set_modified __P((paddr_t));
+void	pmap_set_modified(paddr_t);
 
-void	pmap_procwr __P((struct proc *, vaddr_t, size_t));
+void	pmap_procwr(struct proc *, vaddr_t, size_t);
 #define	PMAP_NEED_PROCWR
 
 /*
- * pmap_prefer()  helps reduce virtual-coherency exceptions in
+ * pmap_prefer() helps reduce virtual-coherency exceptions in
  * the virtually-indexed cache on mips3 CPUs.
  */
-#ifdef MIPS3
-#define PMAP_PREFER(pa, va)             pmap_prefer((pa), (va))
-void	pmap_prefer __P((vaddr_t, vaddr_t *));
-#endif /* MIPS3 */
+#ifdef MIPS3_PLUS
+#define PMAP_PREFER(pa, va, sz, td)	pmap_prefer((pa), (va), (td))
+void	pmap_prefer(vaddr_t, vaddr_t *, int);
+#endif /* MIPS3_PLUS */
 
 #define	PMAP_STEAL_MEMORY	/* enable pmap_steal_memory() */
 
 /*
  * Alternate mapping hooks for pool pages.  Avoids thrashing the TLB.
  */
-#define	PMAP_MAP_POOLPAGE(pa)	MIPS_PHYS_TO_KSEG0((pa))
-#define	PMAP_UNMAP_POOLPAGE(va)	MIPS_KSEG0_TO_PHYS((va))
+vaddr_t mips_pmap_map_poolpage(paddr_t);
+paddr_t mips_pmap_unmap_poolpage(vaddr_t);
+#define	PMAP_MAP_POOLPAGE(pa)	mips_pmap_map_poolpage(pa)
+#define	PMAP_UNMAP_POOLPAGE(va)	mips_pmap_unmap_poolpage(va)
 
 /*
- * Kernel cache operations for the user-space API
+ * Other hooks for the pool allocator.
  */
-int mips_user_cacheflush __P((struct proc *p, vaddr_t va, int nbytes,
-	int whichcache));
-int mips_user_cachectl   __P((struct proc *p, vaddr_t va, int nbytes,
-	int ctl));
+#define	POOL_VTOPHYS(va)	MIPS_KSEG0_TO_PHYS((vaddr_t)(va))
+
+/*
+ * Select CCA to use for unmanaged pages.
+ */
+#define	PMAP_CCA_FOR_PA(pa)	2		/* uncached */
+
+#if defined(_MIPS_PADDR_T_64BIT) || defined(_LP64)
+#define PMAP_NOCACHE	0x4000000000000000ULL
+#endif
 
 #endif	/* _KERNEL */
-#endif	/* _PMAP_MACHINE_ */
+#endif	/* _MIPS_PMAP_H_ */

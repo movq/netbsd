@@ -1,9 +1,43 @@
-/*	$NetBSD: autoconf.c,v 1.53 2000/03/06 03:15:28 mhitch Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.71 2007/12/03 15:34:09 ad Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department and Ralph Campbell.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah Hdr: autoconf.c 1.31 91/01/21
+ *
+ *	@(#)autoconf.c	8.1 (Berkeley) 6/10/93
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -43,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.53 2000/03/06 03:15:28 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.71 2007/12/03 15:34:09 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,7 +89,7 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.53 2000/03/06 03:15:28 mhitch Exp $")
 #include <machine/intr.h>
 #include <machine/sysconf.h>
 
-#include <pmax/dev/device.h>
+#include <pmax/pmax/pmaxtype.h>
 
 #include <dev/tc/tcvar.h>
 
@@ -63,15 +97,13 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.53 2000/03/06 03:15:28 mhitch Exp $")
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 
-#include "rz.h"
-#include "xasc_ioasic.h"
-#include "xasc_pmaz.h"
+#include "opt_dec_3100.h"
+#include "opt_dec_5100.h"
 
-struct intrhand intrtab[MAX_DEV_NCOOKIES];
-struct device *booted_device;
-static struct device *booted_controller;
-static int	booted_slot, booted_unit, booted_partition;
-static char	*booted_protocol;
+struct intrhand		 intrtab[MAX_DEV_NCOOKIES];
+static struct device	*booted_controller;
+static int		 booted_slot, booted_unit;
+static const char	*booted_protocol;
 
 /*
  * Configure all devices on system
@@ -81,7 +113,12 @@ cpu_configure()
 {
 	/* Kick off autoconfiguration. */
 	(void)splhigh();
-	if (config_rootfound("mainbus", "mainbus") == NULL)
+
+	evcnt_attach_static(&pmax_clock_evcnt);
+	evcnt_attach_static(&pmax_fpu_evcnt);
+	evcnt_attach_static(&pmax_memerr_evcnt);
+
+	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("no mainbus found");
 
 	/* Reset any bus errors due to probing nonexistent devices. */
@@ -89,17 +126,13 @@ cpu_configure()
 
 	/* Configuration is finished, turn on interrupts. */
 	_splnone();	/* enable all source forcing SOFT_INTs cleared */
-#if NRZ > 0
-	printf("Beginning old-style SCSI device autoconfiguration\n");
-	configure_scsi();
-#endif
 }
 
 /*
  * Look at the string 'cp' and decode the boot device.  Boot names
  * can be something like 'rz(0,0,0)vmunix' or '5/rz0/vmunix'.
  *
- * 3100 allows abbrivation;
+ * 2100/3100/5100 allows abbrivation;
  *	dev(controller[,uni-number[,partition-number]]])[filename]
  */
 void
@@ -110,6 +143,7 @@ makebootdev(cp)
 	booted_slot = booted_unit = booted_partition = 0;
 	booted_protocol = NULL;
 
+#if defined(DEC_3100) || defined(DEC_5100)
 	if (cp[0] == 'r' && cp[1] == 'z' && cp[2] == '(') {
 		cp += 3;
 		if (*cp >= '0' && *cp <= '9')
@@ -125,6 +159,16 @@ makebootdev(cp)
 		booted_protocol = "SCSI";
 		return;
 	}
+	if (strncmp(cp, "tftp(", 5) == 0) {
+		booted_protocol = "BOOTP";
+		return;
+	}
+	if (strncmp(cp, "mop(", 4) == 0) {
+		booted_protocol = "MOP";
+		return;
+	}
+#endif
+
 	if (cp[0] >= '0' && cp[0] <= '9' && cp[1] == '/') {
 		booted_slot = cp[0] - '0';
 		if (cp[2] == 'r' && cp[3] == 'z'
@@ -142,26 +186,6 @@ makebootdev(cp)
 void
 cpu_rootconf()
 {
-#if NRZ > 0
-	struct device *dv;
-	char name[5];
-
-	if (booted_device == NULL && strcmp(booted_protocol, "SCSI") == 0) {
-		int ctlr_no;
-
-		if (booted_controller)
-			ctlr_no = booted_controller->dv_unit;
-		else
-			ctlr_no = 0;
-		snprintf(name, sizeof(name), "rz%d", booted_unit + ctlr_no * 8);
-		for (dv = TAILQ_FIRST(&alldevs); dv; dv = TAILQ_NEXT(dv, dv_list)) {
-			if (dv->dv_class == DV_DISK && !strcmp(dv->dv_xname, name)) {
-				booted_device = dv;
-				break;
-			}
-		}
-	}
-#endif
 	printf("boot device: %s\n",
 	    booted_device ? booted_device->dv_xname : "<unknown>");
 
@@ -178,9 +202,7 @@ device_register(dev, aux)
 {
 	static int found, initted, scsiboot, netboot;
 	static struct device *ioasicdev;
-	struct device *parent = dev->dv_parent;
-	struct cfdata *cf = dev->dv_cfdata;
-	struct cfdriver *cd = cf->cf_driver;
+	struct device *parent = device_parent(dev);
 
 	if (found)
 		return;
@@ -195,7 +217,7 @@ device_register(dev, aux)
 	/*
 	 * Check if IOASIC was the boot slot.
 	 */
-	if (strcmp(cd->cd_name, "ioasic") == 0) {
+	if (device_is_a(dev, "ioasic")) {
 		struct tc_attach_args *ta = aux;
 
 		if (ta->ta_slot == booted_slot)
@@ -206,9 +228,7 @@ device_register(dev, aux)
 	/*
 	 * Check for ASC controller on either IOASIC or TC option card.
 	 */
-	if (scsiboot && (
-	    strcmp(cd->cd_name, "asc") == 0 ||
-	    strcmp(cd->cd_name, "xasc") == 0)) {
+	if (scsiboot && device_is_a(dev, "asc")) {
 		struct tc_attach_args *ta = aux;
 
 		/*
@@ -228,9 +248,7 @@ device_register(dev, aux)
 	 * If an SII device is configured, it's currently the only
 	 * possible SCSI boot device.
 	 */
-	if (scsiboot && (
-	    strcmp(cd->cd_name, "sii") == 0 ||
-	    strcmp(cd->cd_name, "xsii") == 0)) {
+	if (scsiboot && device_is_a(dev, "sii")) {
 		booted_controller = dev;
 		return;
 	}
@@ -239,14 +257,15 @@ device_register(dev, aux)
 	 * If we found the boot controller, if check disk/tape/cdrom device
 	 * on that controller matches.
 	 */
-	if (booted_controller && (strcmp(cd->cd_name, "sd") == 0 ||
-	    strcmp(cd->cd_name, "st") == 0 ||
-	    strcmp(cd->cd_name, "cd") == 0)) {
+	if (booted_controller &&
+	    (device_is_a(dev, "sd") ||
+	     device_is_a(dev, "st") ||
+	     device_is_a(dev, "cd"))) {
 		struct scsipibus_attach_args *sa = aux;
 
-		if (parent->dv_parent != booted_controller)
+		if (device_parent(parent) != booted_controller)
 			return;
-		if (booted_unit != sa->sa_sc_link->scsipi_scsi.target)
+		if (booted_unit != sa->sa_periph->periph_target)
 			return;
 		booted_device = dev;
 		found = 1;
@@ -254,27 +273,27 @@ device_register(dev, aux)
 	}
 
 	/*
-	 * XXX rz devices don't call device_register?
-	 */
-	if (booted_controller && (strcmp(cd->cd_name, "rz") == 0 ||
-	    strcmp(cd->cd_name, "tz") == 0)) {
-		int sd_ctlr = (int)aux;
-
-		if (booted_unit == (dev->dv_unit & 7)) {
-			if (booted_controller->dv_unit == sd_ctlr)
-				booted_device = dev;
-				found = 1;
-				return;
-		}
-	}
-
-	/*
 	 * Check if netboot device.
 	 */
-	if (netboot && strcmp(cd->cd_name, "le") == 0) {
+	if (netboot) {
 		struct tc_attach_args *ta = aux;
 
-		if (parent == ioasicdev ||
+		if ((
+#if defined(DEC_3100) || defined(DEC_5100)
+		     /* Only one Ethernet interface on 2100/3100/5100. */
+		     systype == DS_PMAX || systype == DS_MIPSMATE ||
+#endif
+		     /* Only one Ethernet interface at IOASIC. */
+		     parent == ioasicdev)
+		    && device_is_a(dev, "le")) {
+			booted_device = dev;
+			found = 1;
+			return;
+		}
+
+		/* allow any TC network adapter */
+		if (device_class(dev) == DV_IFNET &&
+		    device_is_a(parent, "tc") &&
 		    ta->ta_slot == booted_slot) {
 			booted_device = dev;
 			found = 1;

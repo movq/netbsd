@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socketcall.h,v 1.5 1999/03/25 04:26:45 sommerfe Exp $	*/
+/*	$NetBSD: linux_socketcall.h,v 1.15 2008/04/28 20:23:44 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -71,8 +64,9 @@
 #define _LINUX_SOCKETCALL_H
 
 /* Alpha does not use the socketcall multiplexer */
-#if !defined(__alpha__)
+#if !defined(__alpha__) && !defined(__amd64__) && !defined(COMPAT_LINUX32)
 /* Used on: arm, i386, m68k, mips, ppc, sparc, sparc64 */
+/* Used for COMPAT_LINUX32 on amd64 */
 /* Not used on: alpha */
 
 /*
@@ -109,7 +103,7 @@
 /* !!!: This should be at least as large as any other struct here. */
 struct linux_socketcall_dummy_args {
 	int dummy_ints[4];		/* Max 4 ints */
-	void * dummy_ptrs[3];		/* Max 3 pointers */
+	void *dummy_ptrs[3];		/* Max 3 pointers */
 };
 
 struct linux_sys_socket_args {
@@ -120,7 +114,7 @@ struct linux_sys_socket_args {
 
 struct linux_sys_socketpair_args {
 	syscallarg(int) domain;
-	syscallarg(int) type;	
+	syscallarg(int) type;
 	syscallarg(int) protocol;
 	syscallarg(int *) rsv;
 };
@@ -130,7 +124,7 @@ struct linux_sys_sendto_args {
 	syscallarg(void *) msg;
 	syscallarg(int) len;
 	syscallarg(int) flags;
-	syscallarg(struct sockaddr *) to;
+	syscallarg(struct osockaddr *) to;
 	syscallarg(int) tolen;
 };
 
@@ -139,8 +133,8 @@ struct linux_sys_recvfrom_args {
 	syscallarg(void *) buf;
 	syscallarg(int) len;
 	syscallarg(int) flags;
-	syscallarg(struct sockaddr *) from;
-	syscallarg(int *) fromlen;
+	syscallarg(struct osockaddr *) from;
+	syscallarg(int *) fromlenaddr;
 };
 
 struct linux_sys_setsockopt_args {
@@ -159,60 +153,34 @@ struct linux_sys_getsockopt_args {
 	syscallarg(int *) optlen;
 };
 
-/* These are only used for their size: */
-
 struct linux_sys_bind_args {
 	syscallarg(int) s;
-	syscallarg(struct sockaddr *) name;
+	syscallarg(struct osockaddr *) name;
 	syscallarg(int) namelen;
 };
 
 struct linux_sys_connect_args {
 	syscallarg(int) s;
-	syscallarg(struct sockaddr *) name;
+	syscallarg(struct osockaddr *) name;
 	syscallarg(int) namelen;
-};
-
-struct linux_sys_listen_args {
-	syscallarg(int) s;
-	syscallarg(int) backlog;
 };
 
 struct linux_sys_accept_args {
 	syscallarg(int) s;
-	syscallarg(struct sockaddr *) addr;
-	syscallarg(int *) namelen;
+	syscallarg(struct osockaddr *) name;
+	syscallarg(int *) anamelen;
 };
 
 struct linux_sys_getsockname_args {
-	syscallarg(int) s;
-	syscallarg(struct sockaddr *) addr;
-	syscallarg(int *) namelen;
+	syscallarg(int) fdes;
+	syscallarg(struct osockaddr *) asa;
+	syscallarg(int *) alen;
 };
 
 struct linux_sys_getpeername_args {
-	syscallarg(int) s;
-	syscallarg(struct sockaddr *) addr;
-	syscallarg(int *) namelen;
-};
-
-struct linux_sys_send_args {
-	syscallarg(int) s;
-	syscallarg(void *) msg;
-	syscallarg(int) len;
-	syscallarg(int) flags;
-};
-
-struct linux_sys_recv_args {
-	syscallarg(int) s;
-	syscallarg(void *) msg;
-	syscallarg(int) len;
-	syscallarg(int) flags;
-};
-
-struct linux_sys_shutdown_args {
-	syscallarg(int) s;
-	syscallarg(int) how;
+	syscallarg(int) fdes;
+	syscallarg(struct osockaddr *) asa;
+	syscallarg(int *) alen;
 };
 
 struct linux_sys_sendmsg_args {
@@ -227,15 +195,51 @@ struct linux_sys_recvmsg_args {
 	syscallarg(u_int) flags;
 };
 
+struct linux_sys_send_args {
+	syscallarg(int) s;
+	syscallarg(void *) buf;
+	syscallarg(int) len;
+	syscallarg(int) flags;
+};
+
+struct linux_sys_recv_args {
+	syscallarg(int) s;
+	syscallarg(void *) buf;
+	syscallarg(int) len;
+	syscallarg(int) flags;
+};
+
+/* These are only used for their size: */
+
+struct linux_sys_listen_args {
+	syscallarg(int) s;
+	syscallarg(int) backlog;
+};
+
+struct linux_sys_shutdown_args {
+	syscallarg(int) s;
+	syscallarg(int) how;
+};
+
 # ifdef _KERNEL
 __BEGIN_DECLS
-int linux_sys_socket __P((struct proc *, void *, register_t *));
-int linux_sys_socketpair __P((struct proc *, void *, register_t *));
-int linux_sys_sendto __P((struct proc *, void *, register_t *));
-int linux_sys_recvfrom __P((struct proc *, void *, register_t *));
-int linux_sys_setsockopt __P((struct proc *, void *, register_t *));
-int linux_sys_getsockopt __P((struct proc *, void *, register_t *));
-int linux_sys_connect __P((struct proc *, void *, register_t *));
+#define SYS_DEF(foo) int foo(struct lwp *, const struct foo##_args *, register_t *);
+SYS_DEF(linux_sys_socket)
+SYS_DEF(linux_sys_socketpair)
+SYS_DEF(linux_sys_sendto)
+SYS_DEF(linux_sys_recvfrom)
+SYS_DEF(linux_sys_setsockopt)
+SYS_DEF(linux_sys_getsockopt)
+SYS_DEF(linux_sys_connect)
+SYS_DEF(linux_sys_bind)
+SYS_DEF(linux_sys_getsockname)
+SYS_DEF(linux_sys_getpeername)
+SYS_DEF(linux_sys_sendmsg)
+SYS_DEF(linux_sys_recvmsg)
+SYS_DEF(linux_sys_recv)
+SYS_DEF(linux_sys_send)
+SYS_DEF(linux_sys_accept)
+#undef SYS_DEF
 __END_DECLS
 # endif /* !_KERNEL */
 

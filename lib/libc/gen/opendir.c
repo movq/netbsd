@@ -1,4 +1,4 @@
-/*	$NetBSD: opendir.c,v 1.20 2000/01/22 22:19:11 mycroft Exp $	*/
+/*	$NetBSD: opendir.c,v 1.33 2008/01/10 09:49:04 elad Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,11 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)opendir.c	8.7 (Berkeley) 12/10/94";
 #else
-__RCSID("$NetBSD: opendir.c,v 1.20 2000/01/22 22:19:11 mycroft Exp $");
+__RCSID("$NetBSD: opendir.c,v 1.33 2008/01/10 09:49:04 elad Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
+#include "reentrant.h"
+#include "extern.h"
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
@@ -55,16 +53,15 @@ __RCSID("$NetBSD: opendir.c,v 1.20 2000/01/22 22:19:11 mycroft Exp $");
 #include <string.h>
 #include <unistd.h>
 
-#ifdef __weak_alias
-__weak_alias(opendir,_opendir)
-#endif
+#include "dirent_private.h"
+
+#define	MAXITERATIONS	100
 
 /*
  * Open a directory.
  */
 DIR *
-opendir(name)
-	const char *name;
+opendir(const char *name)
 {
 
 	_DIAGASSERT(name != NULL);
@@ -73,32 +70,29 @@ opendir(name)
 }
 
 DIR *
-__opendir2(name, flags)
-	const char *name;
-	int flags;
+__opendir2(const char *name, int flags)
 {
-	DIR *dirp;
+	DIR *dirp = NULL;
 	int fd;
+	int serrno;
 	struct stat sb;
 	int pagesz;
 	int incr;
 	int unionstack, nfsdir;
-	struct statfs sfb;
+	struct statvfs sfb;
 
 	_DIAGASSERT(name != NULL);
 
-	if ((fd = open(name, O_RDONLY | O_NONBLOCK)) == -1)
-		return (NULL);
+	if ((fd = open(name, O_RDONLY | O_NONBLOCK)) == -1 ||
+	    fcntl(fd, F_SETFD, FD_CLOEXEC) == -1)
+		goto error;
 	if (fstat(fd, &sb) || !S_ISDIR(sb.st_mode)) {
 		errno = ENOTDIR;
-		close(fd);
-		return (NULL);
+		goto error;
 	}
-	if (fcntl(fd, F_SETFD, FD_CLOEXEC) == -1 ||
-	    (dirp = (DIR *)malloc(sizeof(DIR))) == NULL) {
-		close(fd);
-		return (NULL);
-	}
+	if ((dirp = (DIR *)malloc(sizeof(DIR))) == NULL)
+		goto error;
+	dirp->dd_buf = NULL;
 
 	/*
 	 * If the machine's page size is an exact multiple of DIRBLKSIZ,
@@ -115,28 +109,26 @@ __opendir2(name, flags)
 	 * Determine whether this directory is the top of a union stack.
 	 */
 
-	if (fstatfs(fd, &sfb) < 0) {
-		free(dirp);
-		close(fd);
-		return (NULL);
-	}
+	if (fstatvfs1(fd, &sfb, ST_NOWAIT) < 0)
+		goto error;
 
 	if (flags & DTF_NODUP)
 		unionstack = !(strncmp(sfb.f_fstypename, MOUNT_UNION,
-		    MFSNAMELEN)) || (sfb.f_flags & MNT_UNION);
+		    sizeof(sfb.f_fstypename))) || (sfb.f_flag & MNT_UNION);
 	else
 		unionstack = 0;
 
-	nfsdir = !(strncmp(sfb.f_fstypename, MOUNT_NFS, MFSNAMELEN));
+	nfsdir = !(strncmp(sfb.f_fstypename, MOUNT_NFS, sizeof(sfb.f_fstypename)));
 
 	if (unionstack || nfsdir) {
 		size_t len;
 		size_t space;
-		char *buf;
+		char *buf, *nbuf;
 		char *ddptr;
 		char *ddeptr;
 		int n;
 		struct dirent **dpv;
+		int i;
 
 		/*
 		 * The strategy here for directories on top of a union stack
@@ -151,6 +143,7 @@ __opendir2(name, flags)
 		 * the directory was modified). These errors should not
 		 * happen often, but need to be dealt with.
 		 */
+		i = 0;
 retry:
 		len = 0;
 		space = 0;
@@ -165,12 +158,12 @@ retry:
 			if (space < DIRBLKSIZ) {
 				space += incr;
 				len += incr;
-				buf = realloc(buf, len);
-				if (buf == NULL) {
-					free(dirp);
-					close(fd);
-					return (NULL);
+				nbuf = realloc(buf, len);
+				if (nbuf == NULL) {
+					dirp->dd_buf = buf;
+					goto error;
 				}
+				buf = nbuf;
 				ddptr = buf + (len - space);
 			}
 
@@ -185,6 +178,8 @@ retry:
 			if (n == -1 && errno == EINVAL && nfsdir) {
 				free(buf);
 				lseek(fd, (off_t)0, SEEK_SET);
+				if (++i > MAXITERATIONS)
+					goto error;
 				goto retry;
 			}
 			if (n > 0) {
@@ -205,10 +200,10 @@ retry:
 		 */
 		if (flags & DTF_REWIND) {
 			(void) close(fd);
-			if ((fd = open(name, O_RDONLY)) == -1) {
-				free(buf);
-				free(dirp);
-				return (NULL);
+			if ((fd = open(name, O_RDONLY)) == -1 ||
+			    fcntl(fd, F_SETFD, FD_CLOEXEC) == -1) {
+				dirp->dd_buf = buf;
+				goto error;
 			}
 		}
 
@@ -231,7 +226,7 @@ retry:
 					struct dirent *dp;
 
 					dp = (struct dirent *)(void *)ddptr;
-					if ((long)dp & 03)
+					if ((long)dp & _DIRENT_ALIGN(dp))
 						break;
 					/*
 					 * d_reclen is unsigned,
@@ -281,7 +276,8 @@ retry:
 					free(dpv);
 					break;
 				} else {
-					dpv = malloc((n+1) * sizeof(struct dirent *));
+					dpv = malloc((n + 1) *
+					    sizeof(struct dirent *));
 					if (dpv == NULL)
 						break;
 				}
@@ -293,11 +289,8 @@ retry:
 	} else {
 		dirp->dd_len = incr;
 		dirp->dd_buf = malloc((size_t)dirp->dd_len);
-		if (dirp->dd_buf == NULL) {
-			free(dirp);
-			close (fd);
-			return (NULL);
-		}
+		if (dirp->dd_buf == NULL)
+			goto error;
 		dirp->dd_seek = 0;
 		flags &= ~DTF_REWIND;
 	}
@@ -309,7 +302,24 @@ retry:
 	/*
 	 * Set up seek point for rewinddir.
 	 */
-	dirp->dd_rewind = telldir(dirp);
-
+#ifdef _REENTRANT
+	if (__isthreaded) {
+		if ((dirp->dd_lock = malloc(sizeof(mutex_t))) == NULL)
+			goto error;
+		mutex_init((mutex_t *)dirp->dd_lock, NULL);
+	}
+#endif
+	dirp->dd_internal = NULL;
+	(void)_telldir_unlocked(dirp);
 	return (dirp);
+error:
+	serrno = errno;
+	if (dirp && dirp->dd_buf)
+		free(dirp->dd_buf);
+	if (dirp)
+		free(dirp);
+	if (fd != -1)
+		(void)close(fd);
+	errno = serrno;
+	return NULL;
 }

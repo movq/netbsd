@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.1 1997/06/30 22:20:32 christos Exp $	*/
+/*	$NetBSD: extern.h,v 1.13 2006/08/26 22:03:47 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -29,4 +29,34 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-void mkfs __P((struct partition *, char *, int, int));
+/* prototypes */
+void mkfs(const char *, int, int, mode_t, uid_t, gid_t);
+
+/* * variables set up by front end. */
+extern int	mfs;		/* run as the memory based filesystem */
+extern int	Nflag;		/* run mkfs without writing file system */
+extern int	Oflag;		/* format as an 4.3BSD file system */
+extern int	verbosity;	/* amount of printf() output */
+extern int64_t	fssize;		/* file system size */
+extern int	sectorsize;	/* bytes/sector */
+extern int	rpm;		/* revolutions/minute of drive */
+extern int	fsize;		/* fragment size */
+extern int	bsize;		/* block size */
+extern int	maxbsize;
+extern int	cpg;		/* cylinders/cylinder group */
+extern int	cpgflg;		/* cylinders/cylinder group flag was given */
+extern int	minfree;	/* free space threshold */
+extern int	opt;		/* optimization preference (space or time) */
+extern int	density;	/* number of bytes per inode */
+extern int	num_inodes;	/* number of inodes (overrides density) */
+extern int	maxcontig;	/* max contiguous blocks to allocate */
+extern int	maxbpg;		/* maximum blocks per file in a cyl group */
+extern int	maxblkspercg;
+extern int	nrpos;		/* # of distinguished rotational positions */
+extern int	avgfilesize;	/* expected average file size */
+extern int	avgfpdir;	/* expected number of files per directory */
+extern u_long	memleft;	/* virtual memory available */
+extern caddr_t	membase;	/* start address of memory based filesystem */
+extern int	needswap;	/* Filesystem not in native byte order */
+extern int	isappleufs; /* Filesystem is Apple UFS */
+extern char	*appleufs_volname;	/* Apple UFS volume name */

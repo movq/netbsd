@@ -1,13 +1,38 @@
-/*	$NetBSD: driver.c,v 1.5 1997/10/20 00:37:16 lukem Exp $	*/
+/*	$NetBSD: driver.c,v 1.13 2008/01/28 03:23:29 dholland Exp $	*/
 /*
- *  Hunt
- *  Copyright (c) 1985 Conrad C. Huang, Gregory S. Couch, Kenneth C.R.C. Arnold
- *  San Francisco, California
+ * Copyright (c) 1983-2003, Regents of the University of California.
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions are 
+ * met:
+ * 
+ * + Redistributions of source code must retain the above copyright 
+ *   notice, this list of conditions and the following disclaimer.
+ * + Redistributions in binary form must reproduce the above copyright 
+ *   notice, this list of conditions and the following disclaimer in the 
+ *   documentation and/or other materials provided with the distribution.
+ * + Neither the name of the University of California, San Francisco nor 
+ *   the names of its contributors may be used to endorse or promote 
+ *   products derived from this software without specific prior written 
+ *   permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS 
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED 
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A 
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: driver.c,v 1.5 1997/10/20 00:37:16 lukem Exp $");
+__RCSID("$NetBSD: driver.c,v 1.13 2008/01/28 03:23:29 dholland Exp $");
 #endif /* not lint */
 
 # include	<sys/ioctl.h>
@@ -43,13 +68,13 @@ u_short	stat_port;		/* port # of statistics tcp socket */
 # define	DAEMON_SIZE	(sizeof Daemon - 1)
 # endif
 
-static	void	clear_scores __P((void));
-static	int	havechar __P((PLAYER *));
-static	void	init __P((void));
-	int	main __P((int, char *[], char *[]));
-static	void	makeboots __P((void));
-static	void	send_stats __P((void));
-static	void	zap __P((PLAYER *, FLAG));
+static	void	clear_scores(void);
+static	int	havechar(PLAYER *, int);
+static	void	init(void);
+	int	main(int, char *[], char *[]);
+static	void	makeboots(void);
+static	void	send_stats(void);
+static	void	zap(PLAYER *, FLAG, int);
 
 
 /*
@@ -62,20 +87,16 @@ main(ac, av, ep)
 	char	**av, **ep;
 {
 	PLAYER	*pp;
-	int	had_char;
 # ifdef INTERNET
 	u_short	msg;
 	short	port_num, reply;
-	int	namelen;
+	socklen_t	namelen;
 	SOCKET	test;
 # endif
-	static fd_set	read_fds;
 	static FLAG	first = TRUE;
 	static FLAG	server = FALSE;
-	extern int	optind;
-	extern char	*optarg;
-	int		c;
-	static struct timeval	linger = {	90, 0	};
+	int		c, i;
+	const int	linger = 90 * 1000;
 
 	First_arg = av[0];
 	if (ep == NULL || *ep == NULL)
@@ -109,21 +130,19 @@ erred:
 
 again:
 	do {
-		read_fds = Fds_mask;
 		errno = 0;
-		while (select(Num_fds, &read_fds, NULL, NULL, NULL) < 0)
+		while (poll(fdset, 3+MAXPL+MAXMON, INFTIM) < 0)
 		{
 			if (errno != EINTR)
 # ifdef LOG
-				syslog(LOG_WARNING, "select: %m");
+				syslog(LOG_WARNING, "poll: %m");
 # else
-				warn("select");
+				warn("poll");
 # endif
 			errno = 0;
 		}
-		Have_inp = read_fds;
 # ifdef INTERNET
-		if (FD_ISSET(Test_socket, &read_fds)) {
+		if (fdset[2].revents & POLLIN) {
 			namelen = DAEMON_SIZE;
 			port_num = htons(sock_port);
 			(void) recvfrom(Test_socket, (char *) &msg, sizeof msg,
@@ -155,39 +174,34 @@ again:
 			}
 		}
 # endif
-		for (;;) {
-			had_char = FALSE;
-			for (pp = Player; pp < End_player; pp++)
-				if (havechar(pp)) {
+		{
+			for (pp = Player, i = 0; pp < End_player; pp++, i++)
+				if (havechar(pp, i + 3)) {
 					execute(pp);
 					pp->p_nexec++;
-					had_char++;
 				}
 # ifdef MONITOR
-			for (pp = Monitor; pp < End_monitor; pp++)
-				if (havechar(pp)) {
+			for (pp = Monitor, i = 0; pp < End_monitor; pp++, i++)
+				if (havechar(pp, i + MAXPL + 3)) {
 					mon_execute(pp);
 					pp->p_nexec++;
-					had_char++;
 				}
 # endif
-			if (!had_char)
-				break;
 			moveshots();
-			for (pp = Player; pp < End_player; )
+			for (pp = Player, i = 0; pp < End_player; )
 				if (pp->p_death[0] != '\0')
-					zap(pp, TRUE);
+					zap(pp, TRUE, i + 3);
 				else
-					pp++;
+					pp++, i++;
 # ifdef MONITOR
-			for (pp = Monitor; pp < End_monitor; )
+			for (pp = Monitor, i = 0; pp < End_monitor; )
 				if (pp->p_death[0] != '\0')
-					zap(pp, FALSE);
+					zap(pp, FALSE, i + MAXPL + 3);
 				else
-					pp++;
+					pp++, i++;
 # endif
 		}
-		if (FD_ISSET(Socket, &read_fds))
+		if (fdset[0].revents & POLLIN)
 			if (answer()) {
 # ifdef INTERNET
 				if (first && standard_port)
@@ -195,17 +209,17 @@ again:
 # endif
 				first = FALSE;
 			}
-		if (FD_ISSET(Status, &read_fds))
+		if (fdset[1].revents & POLLIN)
 			send_stats();
-		for (pp = Player; pp < End_player; pp++) {
-			if (FD_ISSET(pp->p_fd, &read_fds))
+		for (pp = Player, i = 0; pp < End_player; pp++, i++) {
+			if (fdset[i + 3].revents & POLLIN)
 				sendcom(pp, READY, pp->p_nexec);
 			pp->p_nexec = 0;
 			(void) fflush(pp->p_output);
 		}
 # ifdef MONITOR
-		for (pp = Monitor; pp < End_monitor; pp++) {
-			if (FD_ISSET(pp->p_fd, &read_fds))
+		for (pp = Monitor, i = 0; pp < End_monitor; pp++, i++) {
+			if (fdset[i + MAXPL + 3].revents & POLLIN)
 				sendcom(pp, READY, pp->p_nexec);
 			pp->p_nexec = 0;
 			(void) fflush(pp->p_output);
@@ -213,8 +227,7 @@ again:
 # endif
 	} while (Nplayer > 0);
 
-	read_fds = Fds_mask;
-	if (select(Num_fds, &read_fds, NULL, NULL, &linger) > 0) {
+	if (poll(fdset, 3+MAXPL+MAXMON, linger) > 0) {
 		goto again;
 	}
 	if (server) {
@@ -229,8 +242,8 @@ again:
 	}
 
 # ifdef MONITOR
-	for (pp = Monitor; pp < End_monitor; )
-		zap(pp, FALSE);
+	for (pp = Monitor, i = 0; pp < End_monitor; i++)
+		zap(pp, FALSE, i + MAXPL + 3);
 # endif
 	cleanup(0);
 	/* NOTREACHED */
@@ -248,7 +261,7 @@ init()
 # ifdef	INTERNET
 	SOCKET	test_port;
 	int	msg;
-	int	len;
+	socklen_t	len;
 # endif
 
 # ifndef DEBUG
@@ -268,10 +281,10 @@ init()
 
 # ifdef LOG
 # ifdef	SYSLOG_43
-	openlog("HUNT", LOG_PID, LOG_DAEMON);
+	openlog("huntd", LOG_PID, LOG_DAEMON);
 # endif
 # ifdef	SYSLOG_42
-	openlog("HUNT", LOG_PID);
+	openlog("huntd", LOG_PID);
 # endif
 # endif
 
@@ -365,12 +378,12 @@ init()
 # endif
 
 	/*
-	 * Initialize minimal select mask
+	 * Initialize minimal poll mask
 	 */
-	FD_ZERO(&Fds_mask);
-	FD_SET(Socket, &Fds_mask);
-	FD_SET(Status, &Fds_mask);
-	Num_fds = ((Socket > Status) ? Socket : Status) + 1;
+	fdset[0].fd = Socket;
+	fdset[0].events = POLLIN;
+	fdset[1].fd = Status;
+	fdset[1].events = POLLIN;
 
 # ifdef INTERNET
 	len = sizeof (SOCKET);
@@ -399,9 +412,10 @@ init()
 		(void) listen(Test_socket, 5);
 	}
 
-	FD_SET(Test_socket, &Fds_mask);
-	if (Test_socket + 1 > Num_fds)
-		Num_fds = Test_socket + 1;
+	fdset[2].fd = Test_socket;
+	fdset[2].events = POLLIN;
+# else
+	fdset[2].fd = -1;
 # endif
 
 	Seed = getpid() + time((time_t *) NULL);
@@ -450,18 +464,18 @@ makeboots()
  *	Check the damage to the given player, and see if s/he is killed
  */
 void
-checkdam(ouch, gotcha, credit, amt, shot_type)
+checkdam(ouch, gotcha, credit, amt, this_shot_type)
 	PLAYER	*ouch, *gotcha;
 	IDENT	*credit;
 	int	amt;
-	char	shot_type;
+	char	this_shot_type;
 {
-	char	*cp;
+	const char	*cp;
 
 	if (ouch->p_death[0] != '\0')
 		return;
 # ifdef BOOTS
-	if (shot_type == SLIME)
+	if (this_shot_type == SLIME)
 		switch (ouch->p_nboots) {
 		  default:
 			break;
@@ -483,7 +497,7 @@ checkdam(ouch, gotcha, credit, amt, shot_type)
 	}
 
 	/* Someone DIED */
-	switch (shot_type) {
+	switch (this_shot_type) {
 	  default:
 		cp = "Killed";
 		break;
@@ -528,7 +542,7 @@ checkdam(ouch, gotcha, credit, amt, shot_type)
 	}
 	if (credit == NULL) {
 		(void) sprintf(ouch->p_death, "| %s by %s |", cp,
-			(shot_type == MINE || shot_type == GMINE) ?
+			(this_shot_type == MINE || this_shot_type == GMINE) ?
 			"a mine" : "act of God");
 		return;
 	}
@@ -584,11 +598,12 @@ checkdam(ouch, gotcha, credit, amt, shot_type)
  *	Kill off a player and take him out of the game.
  */
 static void
-zap(pp, was_player)
+zap(pp, was_player, i)
 	PLAYER	*pp;
 	FLAG	was_player;
+	int	i;
 {
-	int	i, len;
+	int	n, len;
 	BULLET	*bp;
 	PLAYER	*np;
 	int	x, y;
@@ -605,8 +620,8 @@ zap(pp, was_player)
 	x = (WIDTH - len) / 2;
 	cgoto(pp, HEIGHT / 2, x);
 	outstr(pp, pp->p_death, len);
-	for (i = 1; i < len; i++)
-		pp->p_death[i] = '-';
+	for (n = 1; n < len; n++)
+		pp->p_death[n] = '-';
 	pp->p_death[0] = '+';
 	pp->p_death[len - 1] = '+';
 	cgoto(pp, HEIGHT / 2 - 1, x);
@@ -627,22 +642,22 @@ zap(pp, was_player)
 				bp->b_over = SPACE;
 		}
 
-		i = rand_num(pp->p_ammo);
+		n = rand_num(pp->p_ammo);
 		x = rand_num(pp->p_ammo);
-		if (x > i)
-			i = x;
+		if (x > n)
+			n = x;
 		if (pp->p_ammo == 0)
 			x = 0;
-		else if (i == pp->p_ammo - 1) {
+		else if (n == pp->p_ammo - 1) {
 			x = pp->p_ammo;
 			len = SLIME;
 		}
 		else {
 			for (x = MAXBOMB - 1; x > 0; x--)
-				if (i >= shot_req[x])
+				if (n >= shot_req[x])
 					break;
 			for (y = MAXSLIME - 1; y > 0; y--)
-				if (i >= slime_req[y])
+				if (n >= slime_req[y])
 					break;
 			if (y >= 0 && slime_req[y] > shot_req[x]) {
 				x = slime_req[y];
@@ -730,31 +745,34 @@ zap(pp, was_player)
 		End_player--;
 		if (pp != End_player) {
 			memcpy(pp, End_player, sizeof (PLAYER));
+			fdset[i] = fdset[End_player - Player + 3];
+			fdset[End_player - Player + 3].fd = -1;
 			(void) sprintf(Buf, "%5.2f%c%-10.10s %c",
 				pp->p_ident->i_score, stat_char(pp),
 				pp->p_ident->i_name, pp->p_ident->i_team);
-			i = STAT_PLAY_ROW + 1 + (pp - Player);
+			n = STAT_PLAY_ROW + 1 + (pp - Player);
 			for (np = Player; np < End_player; np++) {
-				cgoto(np, i, STAT_NAME_COL);
+				cgoto(np, n, STAT_NAME_COL);
 				outstr(np, Buf, STAT_NAME_LEN);
 			}
 # ifdef MONITOR
 			for (np = Monitor; np < End_monitor; np++) {
-				cgoto(np, i, STAT_NAME_COL);
+				cgoto(np, n, STAT_NAME_COL);
 				outstr(np, Buf, STAT_NAME_LEN);
 			}
 # endif
-		}
+		} else
+			fdset[i].fd = -1;
 
 		/* Erase the last player */
-		i = STAT_PLAY_ROW + 1 + Nplayer;
+		n = STAT_PLAY_ROW + 1 + Nplayer;
 		for (np = Player; np < End_player; np++) {
-			cgoto(np, i, STAT_NAME_COL);
+			cgoto(np, n, STAT_NAME_COL);
 			ce(np);
 		}
 # ifdef MONITOR
 		for (np = Monitor; np < End_monitor; np++) {
-			cgoto(np, i, STAT_NAME_COL);
+			cgoto(np, n, STAT_NAME_COL);
 			ce(np);
 		}
 	}
@@ -766,50 +784,34 @@ zap(pp, was_player)
 		End_monitor--;
 		if (pp != End_monitor) {
 			memcpy(pp, End_monitor, sizeof (PLAYER));
+			fdset[i] = fdset[End_monitor - Monitor + MAXPL + 3];
+			fdset[End_monitor - Monitor + MAXPL + 3].fd = -1;
 			(void) sprintf(Buf, "%5.5s %-10.10s %c", " ",
 				pp->p_ident->i_name, pp->p_ident->i_team);
-			i = STAT_MON_ROW + 1 + (pp - Player);
+			n = STAT_MON_ROW + 1 + (pp - Player);
 			for (np = Player; np < End_player; np++) {
-				cgoto(np, i, STAT_NAME_COL);
+				cgoto(np, n, STAT_NAME_COL);
 				outstr(np, Buf, STAT_NAME_LEN);
 			}
 			for (np = Monitor; np < End_monitor; np++) {
-				cgoto(np, i, STAT_NAME_COL);
+				cgoto(np, n, STAT_NAME_COL);
 				outstr(np, Buf, STAT_NAME_LEN);
 			}
-		}
+		} else
+			fdset[i].fd = -1;
 
 		/* Erase the last monitor */
-		i = STAT_MON_ROW + 1 + (End_monitor - Monitor);
+		n = STAT_MON_ROW + 1 + (End_monitor - Monitor);
 		for (np = Player; np < End_player; np++) {
-			cgoto(np, i, STAT_NAME_COL);
+			cgoto(np, n, STAT_NAME_COL);
 			ce(np);
 		}
 		for (np = Monitor; np < End_monitor; np++) {
-			cgoto(np, i, STAT_NAME_COL);
+			cgoto(np, n, STAT_NAME_COL);
 			ce(np);
 		}
-
 	}
 # endif
-
-	FD_CLR(savefd, &Fds_mask);
-	if (Num_fds == savefd + 1) {
-		Num_fds = Socket;
-# ifdef INTERNET
-		if (Test_socket > Socket)
-			Num_fds = Test_socket;
-# endif
-		for (np = Player; np < End_player; np++)
-			if (np->p_fd > Num_fds)
-				Num_fds = np->p_fd;
-# ifdef MONITOR
-		for (np = Monitor; np < End_monitor; np++)
-			if (np->p_fd > Num_fds)
-				Num_fds = np->p_fd;
-# endif
-		Num_fds++;
-	}
 }
 
 /*
@@ -830,15 +832,15 @@ rand_num(range)
  *	FALSE.
  */
 static int
-havechar(pp)
+havechar(pp, i)
 	PLAYER	*pp;
+	int	i;
 {
 
 	if (pp->p_ncount < pp->p_nchar)
 		return TRUE;
-	if (!FD_ISSET(pp->p_fd, &Have_inp))
+	if (!(fdset[i].revents & POLLIN))
 		return FALSE;
-	FD_CLR(pp->p_fd, &Have_inp);
 check_again:
 	errno = 0;
 	if ((pp->p_nchar = read(pp->p_fd, pp->p_cbuf, sizeof pp->p_cbuf)) <= 0)
@@ -894,7 +896,7 @@ send_stats()
 	FILE	*fp;
 	int	s;
 	SOCKET	sockstruct;
-	int	socklen;
+	socklen_t	socklen;
 
 	/*
 	 * Get the output stream ready
@@ -909,7 +911,7 @@ send_stats()
 		if (errno == EINTR)
 			return;
 # ifdef LOG
-		syslog(LOG_ERR, "accept: %m");
+		syslog(LOG_WARNING, "accept: %m");
 # else
 		warn("accept");
 # endif
@@ -918,7 +920,7 @@ send_stats()
 	fp = fdopen(s, "w");
 	if (fp == NULL) {
 # ifdef LOG
-		syslog(LOG_ERR, "fdopen: %m");
+		syslog(LOG_WARNING, "fdopen: %m");
 # else
 		warn("fdopen");
 # endif

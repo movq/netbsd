@@ -1,4 +1,4 @@
-/*	$NetBSD: cchar.c,v 1.13 1998/07/28 11:51:47 mycroft Exp $	*/
+/* $NetBSD: cchar.c,v 1.16 2006/10/16 00:37:55 christos Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)cchar.c	8.5 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: cchar.c,v 1.13 1998/07/28 11:51:47 mycroft Exp $");
+__RCSID("$NetBSD: cchar.c,v 1.16 2006/10/16 00:37:55 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -79,30 +75,27 @@ const struct cchar cchars1[] = {
 	{ "susp",	VSUSP,		CSUSP },
 	{ "time",	VTIME,		CTIME },
 	{ "werase",	VWERASE,	CWERASE },
-	{ NULL },
+	{ .name = NULL },
 };
 
 const struct cchar cchars2[] = {
 	{ "brk",	VEOL,		CEOL },
 	{ "flush",	VDISCARD, 	CDISCARD },
 	{ "rprnt",	VREPRINT, 	CREPRINT },
-	{ NULL },
+	{ .name = NULL },
 };
 
-static int c_cchar __P((const void *, const void *));
+static int c_cchar(const void *, const void *);
 
 static int
-c_cchar(a, b)
-        const void *a, *b;
+c_cchar(const void *a, const void *b)
 {
         return (strcmp(((const struct cchar *)a)->name,
 	    ((const struct cchar *)b)->name));
 }
 
 int
-csearch(argvp, ip)
-	char ***argvp;
-	struct info *ip;
+csearch(char ***argvp, struct info *ip)
 {
 	struct cchar *cp, tmp;
 	long val;

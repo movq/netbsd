@@ -1,4 +1,4 @@
-/*	$NetBSD: gen_subs.c,v 1.17 2000/02/17 03:12:24 itohy Exp $	*/
+/*	$NetBSD: gen_subs.c,v 1.34 2008/02/24 20:42:46 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,12 +33,16 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if !defined(lint)
 #if 0
 static char sccsid[] = "@(#)gen_subs.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: gen_subs.c,v 1.17 2000/02/17 03:12:24 itohy Exp $");
+__RCSID("$NetBSD: gen_subs.c,v 1.34 2008/02/24 20:42:46 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,13 +54,13 @@ __RCSID("$NetBSD: gen_subs.c,v 1.17 2000/02/17 03:12:24 itohy Exp $");
 #include <ctype.h>
 #include <grp.h>
 #include <pwd.h>
+#include <vis.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <tzfile.h>
 #include <unistd.h>
-#include <utmp.h>
 
 #include "pax.h"
 #include "extern.h"
@@ -87,15 +87,8 @@ __RCSID("$NetBSD: gen_subs.c,v 1.17 2000/02/17 03:12:24 itohy Exp $");
  *	list the members of an archive in ls format
  */
 
-#if __STDC__
 void
-ls_list(ARCHD *arcn, time_t now)
-#else
-void
-ls_list(arcn, now)
-	ARCHD *arcn;
-	time_t now;
-#endif
+ls_list(ARCHD *arcn, time_t now, FILE *fp)
 {
 	struct stat *sbp;
 	char f_mode[MODELEN];
@@ -106,8 +99,8 @@ ls_list(arcn, now)
 	 * if not verbose, just print the file name
 	 */
 	if (!vflag) {
-		(void)printf("%s\n", arcn->name);
-		(void)fflush(stdout);
+		(void)fprintf(fp, "%s\n", arcn->name);
+		(void)fflush(fp);
 		return;
 	}
 
@@ -117,17 +110,13 @@ ls_list(arcn, now)
 	sbp = &(arcn->sb);
 	strmode(sbp->st_mode, f_mode);
 
-	if (ltmfrmt == NULL) {
-		/*
-		 * no locale specified format. time format based on age
-		 * compared to the time pax was started.
-		 */
-		if ((sbp->st_mtime + SIXMONTHS) <= now)
-			timefrmt = OLDFRMT;
-		else
-			timefrmt = CURFRMT;
-	} else
-		timefrmt = ltmfrmt;
+	/*
+	 * time format based on age compared to the time pax was started.
+	 */
+	if ((sbp->st_mtime + SIXMONTHS) <= now)
+		timefrmt = OLDFRMT;
+	else
+		timefrmt = CURFRMT;
 
 	/*
 	 * print file mode, link count, uid, gid and time
@@ -136,40 +125,31 @@ ls_list(arcn, now)
 		f_date[0] = '\0';
 	user = user_from_uid(sbp->st_uid, 0);
 	group = group_from_gid(sbp->st_gid, 0);
-	(void)printf("%s%2lu %-*s %-*s ", f_mode, (unsigned long)sbp->st_nlink,
+	(void)fprintf(fp, "%s%2lu %-*s %-*s ", f_mode,
+	    (unsigned long)sbp->st_nlink,
 	    UT_NAMESIZE, user ? user : "", UT_GRPSIZE, group ? group : "");
 
 	/*
 	 * print device id's for devices, or sizes for other nodes
 	 */
 	if ((arcn->type == PAX_CHR) || (arcn->type == PAX_BLK))
-#		ifdef NET2_STAT
-		(void)printf("%4u,%4u ", MAJOR(sbp->st_rdev),
-		    MINOR(sbp->st_rdev));
-#		else
-		(void)printf("%4lu,%4lu ", (long) MAJOR(sbp->st_rdev),
+		(void)fprintf(fp, "%4lu,%4lu ", (long) MAJOR(sbp->st_rdev),
 		    (long) MINOR(sbp->st_rdev));
-#		endif
 	else {
-#		ifdef NET2_STAT
-		(void)printf("%9lu ", sbp->st_size);
-#		else
-		(void)printf("%9qu ", (long long)sbp->st_size);
-#		endif
+		(void)fprintf(fp, OFFT_FP("9") " ", (OFFT_T)sbp->st_size);
 	}
 
 	/*
 	 * print name and link info for hard and soft links
 	 */
-	(void)printf("%s %s", f_date, arcn->name);
+	(void)fprintf(fp, "%s %s", f_date, arcn->name);
 	if ((arcn->type == PAX_HLK) || (arcn->type == PAX_HRG))
-		(void)printf(" == %s\n", arcn->ln_name);
+		(void)fprintf(fp, " == %s\n", arcn->ln_name);
 	else if (arcn->type == PAX_SLK)
-		(void)printf(" => %s\n", arcn->ln_name);
+		(void)fprintf(fp, " -> %s\n", arcn->ln_name);
 	else
-		(void)putchar('\n');
-	(void)fflush(stdout);
-	return;
+		(void)fputc('\n', fp);
+	(void)fflush(fp);
 }
 
 /*
@@ -177,29 +157,17 @@ ls_list(arcn, now)
  *	print a short summary of file to tty.
  */
 
-#if __STDC__
 void
 ls_tty(ARCHD *arcn)
-#else
-void
-ls_tty(arcn)
-	ARCHD *arcn;
-#endif
 {
 	char f_date[DATELEN];
 	char f_mode[MODELEN];
 	const char *timefrmt;
 
-	if (ltmfrmt == NULL) {
-		/*
-		 * no locale specified format
-		 */
-		if ((arcn->sb.st_mtime + SIXMONTHS) <= time((time_t *)NULL))
-			timefrmt = OLDFRMT;
-		else
-			timefrmt = CURFRMT;
-	} else
-		timefrmt = ltmfrmt;
+	if ((arcn->sb.st_mtime + SIXMONTHS) <= time((time_t *)NULL))
+		timefrmt = OLDFRMT;
+	else
+		timefrmt = CURFRMT;
 
 	/*
 	 * convert time to string, and print
@@ -212,64 +180,23 @@ ls_tty(arcn)
 	return;
 }
 
-/*
- * zf_strncpy()
- *	copy src to dest up to len chars (stopping at first '\0'), when src is
- *	shorter than len, pads to len with '\0'. big performance win (and
- *	a lot easier to code) over strncpy(), then a strlen() then a
- *	memset(). (or doing the memset() first).
- */
-
-#if __STDC__
 void
-zf_strncpy(char *dest, const char *src, int len)
-#else
-void
-zf_strncpy(dest, src, len)
-	char *dest;
-	char *src;
-	int len;
-#endif
+safe_print(const char *str, FILE *fp)
 {
-	char *stop;
+	char visbuf[5];
+	const char *cp;
 
-	stop = dest + len;
-	while ((dest < stop) && (*src != '\0'))
-		*dest++ = *src++;
-	while (dest < stop)
-		*dest++ = '\0';
-	return;
-}
-
-/*
- * l_strncpy()
- *	copy src to dest up to len chars (stopping at first '\0')
- * Return:
- *	number of chars copied. (Note this is a real performance win over
- *	doing a strncpy() then a strlen()
- */
-
-#if __STDC__
-int
-l_strncpy(char *dest, const char *src, int len)
-#else
-int
-l_strncpy(dest, src, len)
-	char *dest;
-	char *src;
-	int len;
-#endif
-{
-	char *stop;
-	char *start;
-
-	stop = dest + len;
-	start = dest;
-	while ((dest < stop) && (*src != '\0'))
-		*dest++ = *src++;
-	if (dest < stop)
-		*dest = '\0';
-	return(dest - start);
+	/*
+	 * if printing to a tty, use vis(3) to print special characters.
+	 */
+	if (isatty(fileno(fp))) {
+		for (cp = str; *cp; cp++) {
+			(void)vis(visbuf, cp[0], VIS_CSTYLE, cp[1]);
+			(void)fputs(visbuf, fp);
+		}
+	} else {
+		(void)fputs(str, fp);
+	}
 }
 
 /*
@@ -282,16 +209,8 @@ l_strncpy(dest, src, len)
  *	unsigned long value
  */
 
-#if __STDC__
 u_long
 asc_ul(char *str, int len, int base)
-#else
-u_long
-asc_ul(str, len, base)
-	char *str;
-	int len;
-	int base;
-#endif
 {
 	char *stop;
 	u_long tval = 0;
@@ -323,7 +242,7 @@ asc_ul(str, len, base)
 		while ((str < stop) && (*str >= '0') && (*str <= '7'))
 			tval = (tval << 3) + (*str++ - '0');
 	}
-	return(tval);
+	return tval;
 }
 
 /*
@@ -333,17 +252,8 @@ asc_ul(str, len, base)
  *	NOTE: the string created is NOT TERMINATED.
  */
 
-#if __STDC__
 int
 ul_asc(u_long val, char *str, int len, int base)
-#else
-int
-ul_asc(val, str, len, base)
-	u_long val;
-	char *str;
-	int len;
-	int base;
-#endif
 {
 	char *pt;
 	u_long digit;
@@ -381,34 +291,26 @@ ul_asc(val, str, len, base)
 	while (pt >= str)
 		*pt-- = '0';
 	if (val != (u_long)0)
-		return(-1);
-	return(0);
+		return -1;
+	return 0;
 }
 
-#ifndef NET2_STAT
+#if !defined(_LP64)
 /*
- * asc_uqd()
- *	convert hex/octal character string into a u_quad_t. We do not have to
- *	check for overflow! (the headers in all supported formats are not large
- *	enough to create an overflow).
+ * asc_ull()
+ *	convert hex/octal character string into a unsigned long long. We do
+ *	not have to to check for overflow! (the headers in all supported
+ *	formats are not large enough to create an overflow).
  *	NOTE: strings passed to us are NOT TERMINATED.
  * Return:
- *	u_quad_t value
+ *	unsigned long long value
  */
 
-#if __STDC__
-u_quad_t
-asc_uqd(char *str, int len, int base)
-#else
-u_quad_t
-asc_uqd(str, len, base)
-	char *str;
-	int len;
-	int base;
-#endif
+unsigned long long
+asc_ull(char *str, int len, int base)
 {
 	char *stop;
-	u_quad_t tval = 0;
+	unsigned long long tval = 0;
 
 	stop = str + len;
 
@@ -437,30 +339,21 @@ asc_uqd(str, len, base)
 		while ((str < stop) && (*str >= '0') && (*str <= '7'))
 			tval = (tval << 3) + (*str++ - '0');
 	}
-	return(tval);
+	return tval;
 }
 
 /*
- * uqd_asc()
- *	convert an u_quad_t into a hex/oct ascii string. pads with LEADING
- *	ascii 0's to fill string completely
+ * ull_asc()
+ *	convert an unsigned long long into a hex/oct ascii string. pads with
+ *	LEADING ascii 0's to fill string completely
  *	NOTE: the string created is NOT TERMINATED.
  */
 
-#if __STDC__
 int
-uqd_asc(u_quad_t val, char *str, int len, int base)
-#else
-int
-uqd_asc(val, str, len, base)
-	u_quad_t val;
-	char *str;
-	int len;
-	int base;
-#endif
+ull_asc(unsigned long long val, char *str, int len, int base)
 {
 	char *pt;
-	u_quad_t digit;
+	unsigned long long digit;
 
 	/*
 	 * WARNING str is not '\0' terminated by this routine
@@ -478,13 +371,13 @@ uqd_asc(val, str, len, base)
 				*pt-- = '0' + (char)digit;
 			else
 				*pt-- = 'a' + (char)(digit - 10);
-			if ((val = (val >> 4)) == (u_quad_t)0)
+			if ((val = (val >> 4)) == (unsigned long long)0)
 				break;
 		}
 	} else {
 		while (pt >= str) {
 			*pt-- = '0' + (char)(val & 0x7);
-			if ((val = (val >> 3)) == (u_quad_t)0)
+			if ((val = (val >> 3)) == (unsigned long long)0)
 				break;
 		}
 	}
@@ -494,19 +387,22 @@ uqd_asc(val, str, len, base)
 	 */
 	while (pt >= str)
 		*pt-- = '0';
-	if (val != (u_quad_t)0)
-		return(-1);
-	return(0);
+	if (val != (unsigned long long)0)
+		return -1;
+	return 0;
 }
 #endif
 
 int
-check_Aflag(void) {
+check_Aflag(void)
+{
+
 	if (Aflag > 0)
 		return 1;
 	if (Aflag == 0) {
 		Aflag = -1;
-		tty_warn(0, "Removing leading / from absolute path names in the archive");
+		tty_warn(0,
+		 "Removing leading / from absolute path names in the archive");
 	}
 	return 0;
 }

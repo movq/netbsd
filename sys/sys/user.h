@@ -1,4 +1,4 @@
-/*	$NetBSD: user.h,v 1.13 1999/04/30 21:23:50 thorpej Exp $	*/
+/*	$NetBSD: user.h,v 1.17 2006/05/11 11:54:37 yamt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,29 +35,16 @@
 #define _SYS_USER_H_
 
 #include <machine/pcb.h>
-#ifndef _KERNEL
-/* stuff that *used* to be included by user.h, or is now needed */
-#include <errno.h>
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <sys/ucred.h>
-#include <sys/uio.h>
-#endif
-#include <sys/resourcevar.h>
-#include <sys/signalvar.h>
-
 
 /*
- * Per process structure containing data that isn't needed in core
- * when the process isn't running (esp. when swapped out).
+ * Per lwp structure containing data that isn't needed in core
+ * when the lwp isn't running (esp. when swapped out).
  * This structure may or may not be at the same kernel address
  * in all processes.
  */
 
-struct	user {
-	struct	pcb u_pcb;
-
-	struct	pstats u_stats;		/* p_stats points here (use it!) */
+struct user {
+	struct pcb u_pcb;
 };
 
 #endif /* !_SYS_USER_H_ */

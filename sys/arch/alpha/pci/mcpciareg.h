@@ -1,4 +1,4 @@
-/* $NetBSD: mcpciareg.h,v 1.3 1999/04/15 22:27:40 thorpej Exp $ */
+/* $NetBSD: mcpciareg.h,v 1.7 2006/05/17 21:32:59 drochner Exp $ */
 
 /*
  * Copyright (c) 1998 by Matthew Jacob
@@ -77,7 +77,7 @@
  *      1.11111 = Unused                (128MB on MCBUS)
  *
  * ------------------------------------------------------------
- * Cpu to PCI Address Mapping for MCBUS-PCIy Bridge on MCBUS x:
+ * CPU to PCI Address Mapping for MCBUS-PCIy Bridge on MCBUS x:
  * ------------------------------------------------------------    
  * 
  * CPU Address Range            PCI Address Range       PCI Address Space
@@ -139,12 +139,12 @@
  * Address Space Cookies
  */
 
-#define	MCPCIA_PCI_SPARSE	0x000000000LL
-#define	MCPCIA_PCI_DENSE	0x100000000LL
-#define	MCPCIA_PCI_IOSPACE	0x180000000LL
-#define	MCPCIA_PCI_CONF		0x1C0000000LL
-#define	MCPCIA_PCI_BRIDGE	0x1E0000000LL
-#define	MCPCIA_PCI_IACK		0x1F0000000LL
+#define	MCPCIA_PCI_SPARSE	0x000000000UL
+#define	MCPCIA_PCI_DENSE	0x100000000UL
+#define	MCPCIA_PCI_IOSPACE	0x180000000UL
+#define	MCPCIA_PCI_CONF		0x1C0000000UL
+#define	MCPCIA_PCI_BRIDGE	0x1E0000000UL
+#define	MCPCIA_PCI_IACK		0x1F0000000UL
 
 /*
  * MCPCIA Bus Bridge Registers
@@ -329,7 +329,7 @@ struct mcpcia_iodsnap {
 #define	PCI_LAT_SHIFT	8	/* it's in the 2nd byte. */
 
 /*
- * CAP Control Register Defintions
+ * CAP Control Register Definitions
  */
 #define	CAP_LED_ON	0x00000001	/* Selftest LED passed */
 #define	CAP_EV56_BW_EN	0x00000002	/* BW Enables (EV56, EV6 only) */

@@ -1,11 +1,11 @@
-/*	$NetBSD: sequencervar.h,v 1.6 2000/03/23 07:01:27 thorpej Exp $	*/
+/*	$NetBSD: sequencervar.h,v 1.13 2008/04/28 20:23:47 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Lennart Augustsson (augustss@netbsd.org).
+ * by Lennart Augustsson (augustss@NetBSD.org).
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,16 +34,17 @@
 struct midi_softc;
 
 struct syn_timer {
-	struct	timeval start, stop;
-	int	tempo, timebase;
-	u_long	last;
-	u_long	tick;
-	int	running;
+	struct	timeval reftime, stoptime;
+	uint16_t	tempo_beatpermin, timebase_divperbeat;
+	uint32_t	usperdiv;
+	uint32_t	divs_lastevent;
+	uint32_t	divs_lastchange;
+	int		running;
 };
 
 #define SEQ_MAXQ 256
 struct sequencer_queue {
-	seq_event_rec buf[SEQ_MAXQ];
+	seq_event_t buf[SEQ_MAXQ];
 	u_int	in;		/* input index in buf */
 	u_int	out;		/* output index in buf */
 	u_int	count;		/* filled slots in buf */
@@ -66,15 +60,15 @@ struct sequencer_softc;
 
 #define MAXCHAN 16
 struct midi_dev {
-	char	*name;
+	const char *name;
 	int	subtype;
 	int	capabilities;
 	int	nr_voices;
 	int	instr_bank_size;
 	int	unit;
-	u_char	last_cmd;
 	struct	sequencer_softc *seq;
 	struct	midi_softc *msc;
+	char	doingsysex;	/* doing a SEQ_SYSEX */
 };
 
 struct sequencer_softc {
@@ -91,8 +85,7 @@ struct sequencer_softc {
 	struct	selinfo wsel;	/* write selector */
 	struct	selinfo rsel;	/* read selector */
 	struct	proc *async;	/* process who wants audio SIGIO */
-
-	char	doingsysex;	/* doing a SEQ_SYSEX */
+	void	*sih;
 
 	int	nmidi;		/* number of MIDI devices */
 	struct	midi_dev **devs;
@@ -106,7 +99,7 @@ struct sequencer_softc {
 	u_long	input_stamp;
 };
 
-void seq_event_intr __P((void *, seq_event_rec *));
+void seq_event_intr(void *, seq_event_t *);
 
 #define SEQUENCERUNIT(d) ((d) & 0x7f)
 #define SEQ_IS_OLD(d) ((d) & 0x80)

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.15 2000/01/19 19:43:42 jsm Exp $	*/
+/*	$NetBSD: main.c,v 1.24 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,21 +31,24 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.15 2000/01/19 19:43:42 jsm Exp $");
+__RCSID("$NetBSD: main.c,v 1.24 2008/08/08 16:10:47 drochner Exp $");
 #endif
 #endif /* not lint */
 
 # include	"robots.h"
 
-int main __P((int, char **));
+int main(int, char **);
+
+extern const char	*Scorefile;
+extern int	Max_per_uid;
 
 int
 main(ac, av)
@@ -59,8 +58,6 @@ main(ac, av)
 	const char	*sp;
 	bool	bad_arg;
 	bool	show_only;
-	extern const char	*Scorefile;
-	extern int	Max_per_uid;
 	int		score_wfd; /* high score writable file descriptor */
 	int		score_err = 0; /* hold errno from score file open */
 
@@ -71,7 +68,7 @@ main(ac, av)
 		exit(1);
 
 	/* Revoke setgid privileges */
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
 	show_only = FALSE;
 	Num_games = 1;
@@ -79,7 +76,7 @@ main(ac, av)
 		bad_arg = FALSE;
 		for (++av; ac > 1 && *av[0]; av++, ac--)
 			if (av[0][0] != '-')
-				if (isdigit(av[0][0]))
+				if (isdigit((unsigned char)av[0][0]))
 					Max_per_uid = atoi(av[0]);
 				else {
 					Scorefile = av[0];
@@ -149,9 +146,10 @@ main(ac, av)
 		sleep(2);
 	}
 
-	initscr();
+	if (!initscr())
+		errx(0, "couldn't initialize screen");
 	signal(SIGINT, quit);
-	crmode();
+	cbreak();
 	noecho();
 	nonl();
 	if (LINES != Y_SIZE || COLS != X_SIZE) {
@@ -200,7 +198,7 @@ main(ac, av)
  */
 void
 quit(dummy)
-	int dummy __attribute__((__unused__));
+	int dummy __unused;
 {
 	endwin();
 	exit(0);

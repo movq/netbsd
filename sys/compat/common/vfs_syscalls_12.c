@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls_12.c,v 1.6 2000/03/30 11:27:15 augustss Exp $	*/
+/*	$NetBSD: vfs_syscalls_12.c,v 1.26 2008/06/24 11:18:15 ad Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,6 +36,9 @@
  *	From: @(#)vfs_syscalls.c	8.28 (Berkeley) 12/10/94
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_12.c,v 1.26 2008/06/24 11:18:15 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/namei.h>
@@ -52,20 +51,18 @@
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/uio.h>
-#include <sys/malloc.h>
 #include <sys/dirent.h>
+#include <sys/vfs_syscalls.h>
 
 #include <sys/syscallargs.h>
 
-static void cvtstat __P((struct stat *, struct stat12 *));
+#include <compat/sys/stat.h>
 
 /*
  * Convert from a new to an old stat structure.
  */
-static void
-cvtstat(st, ost)
-	struct stat *st;
-	struct stat12 *ost;
+void
+compat_12_stat_conv(const struct stat *st, struct stat12 *ost)
 {
 
 	ost->st_dev = st->st_dev;
@@ -92,23 +89,20 @@ cvtstat(st, ost)
  * Read a block of directory entries in a file system independent format.
  */
 int
-compat_12_sys_getdirentries(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_12_sys_getdirentries(struct lwp *l, const struct compat_12_sys_getdirentries_args *uap, register_t *retval)
 {
-	struct compat_12_sys_getdirentries_args /* {
+	/* {
 		syscallarg(int) fd;
 		syscallarg(char *) buf;
 		syscallarg(u_int) count;
 		syscallarg(long *) basep;
-	} */ *uap = v;
+	} */
 	struct file *fp;
 	int error, done;
 	long loff;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return error;
 	if ((fp->f_flag & FREAD) == 0) {
 		error = EBADF;
@@ -118,12 +112,12 @@ compat_12_sys_getdirentries(p, v, retval)
 	loff = fp->f_offset;
 
 	error = vn_readdir(fp, SCARG(uap, buf), UIO_USERSPACE,
-			SCARG(uap, count), &done, p, 0, 0);
+			SCARG(uap, count), &done, l, 0, 0);
 
 	error = copyout(&loff, SCARG(uap, basep), sizeof(long));
 	*retval = done;
  out:
-	FILE_UNUSE(fp, p);
+	fd_putfile(SCARG(uap, fd));
 	return error;
 }
 
@@ -132,29 +126,20 @@ compat_12_sys_getdirentries(p, v, retval)
  */
 /* ARGSUSED */
 int
-compat_12_sys_stat(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_12_sys_stat(struct lwp *l, const struct compat_12_sys_stat_args *uap, register_t *retval)
 {
-	struct compat_12_sys_stat_args /* {
+	/* {
 		syscallarg(const char *) path;
 		syscallarg(struct stat12 *) ub;
-	} */ *uap = v;
+	} */
 	struct stat sb;
 	struct stat12 osb;
 	int error;
-	struct nameidata nd;
 
-	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_USERSPACE,
-	    SCARG(uap, path), p);
-	if ((error = namei(&nd)) != 0)
-		return (error);
-	error = vn_stat(nd.ni_vp, &sb, p);
-	vput(nd.ni_vp);
+	error = do_sys_stat(SCARG(uap, path), FOLLOW, &sb);
 	if (error)
 		return (error);
-	cvtstat(&sb, &osb);
+	compat_12_stat_conv(&sb, &osb);
 	error = copyout(&osb, SCARG(uap, ub), sizeof (osb));
 	return (error);
 }
@@ -165,29 +150,20 @@ compat_12_sys_stat(p, v, retval)
  */
 /* ARGSUSED */
 int
-compat_12_sys_lstat(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_12_sys_lstat(struct lwp *l, const struct compat_12_sys_lstat_args *uap, register_t *retval)
 {
-	struct compat_12_sys_lstat_args /* {
+	/* {
 		syscallarg(const char *) path;
 		syscallarg(struct stat12 *) ub;
-	} */ *uap = v;
+	} */
 	struct stat sb;
 	struct stat12 osb;
 	int error;
-	struct nameidata nd;
 
-	NDINIT(&nd, LOOKUP, NOFOLLOW | LOCKLEAF, UIO_USERSPACE,
-	    SCARG(uap, path), p);
-	if ((error = namei(&nd)) != 0)
-		return (error);
-	error = vn_stat(nd.ni_vp, &sb, p);
-	vput(nd.ni_vp);
+	error = do_sys_stat(SCARG(uap, path), NOFOLLOW, &sb);
 	if (error)
 		return (error);
-	cvtstat(&sb, &osb);
+	compat_12_stat_conv(&sb, &osb);
 	error = copyout(&osb, SCARG(uap, ub), sizeof (osb));
 	return (error);
 }
@@ -197,41 +173,24 @@ compat_12_sys_lstat(p, v, retval)
  */
 /* ARGSUSED */
 int
-compat_12_sys_fstat(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_12_sys_fstat(struct lwp *l, const struct compat_12_sys_fstat_args *uap, register_t *retval)
 {
-	struct compat_12_sys_fstat_args /* {
+	/* {
 		syscallarg(int) fd;
 		syscallarg(struct stat12 *) sb;
-	} */ *uap = v;
+	} */
 	int fd = SCARG(uap, fd);
-	struct filedesc *fdp = p->p_fd;
 	struct file *fp;
 	struct stat ub;
 	struct stat12 oub;
 	int error;
 
-	if ((u_int)fd >= fdp->fd_nfiles ||
-	    (fp = fdp->fd_ofiles[fd]) == NULL)
+	if ((fp = fd_getfile(fd)) == NULL)
 		return (EBADF);
-	switch (fp->f_type) {
-
-	case DTYPE_VNODE:
-		error = vn_stat((struct vnode *)fp->f_data, &ub, p);
-		break;
-
-	case DTYPE_SOCKET:
-		error = soo_stat((struct socket *)fp->f_data, &ub);
-		break;
-
-	default:
-		panic("compat_12_sys_fstat");
-		/*NOTREACHED*/
-	}
+	error = (*fp->f_ops->fo_stat)(fp, &ub);
+	fd_putfile(fd);
 	if (error == 0) {
-		cvtstat(&ub, &oub);
+		compat_12_stat_conv(&ub, &oub);
 		error = copyout(&oub, SCARG(uap, sb), sizeof (oub));
 	}
 	return (error);

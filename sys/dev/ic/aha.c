@@ -1,13 +1,4 @@
-/*	$NetBSD: aha.c,v 1.28 2000/03/30 12:45:28 augustss Exp $	*/
-
-#include "opt_ddb.h"
-
-#undef AHADIAG
-#ifdef DDB
-#define	integrate
-#else
-#define	integrate	static inline
-#endif
+/*	$NetBSD: aha.c,v 1.57 2008/04/28 20:23:48 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -25,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -61,7 +45,13 @@
  * functioning of this software in any circumstances.
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: aha.c,v 1.57 2008/04/28 20:23:48 martin Exp $");
+
+#include "opt_ddb.h"
+
+#undef AHADIAG
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
@@ -74,8 +64,10 @@
 #include <sys/proc.h>
 #include <sys/user.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <uvm/uvm_extern.h>
+
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -94,33 +86,25 @@
 int	aha_debug = 1;
 #endif /* AHADEBUG */
 
-int aha_cmd __P((bus_space_tag_t, bus_space_handle_t, struct aha_softc *, int,
-    u_char *, int, u_char *));
-integrate void aha_finish_ccbs __P((struct aha_softc *));
-integrate void aha_reset_ccb __P((struct aha_softc *, struct aha_ccb *));
-void aha_free_ccb __P((struct aha_softc *, struct aha_ccb *));
-integrate int aha_init_ccb __P((struct aha_softc *, struct aha_ccb *));
-struct aha_ccb *aha_get_ccb __P((struct aha_softc *, int));
-struct aha_ccb *aha_ccb_phys_kv __P((struct aha_softc *, u_long));
-void aha_queue_ccb __P((struct aha_softc *, struct aha_ccb *));
-void aha_collect_mbo __P((struct aha_softc *));
-void aha_start_ccbs __P((struct aha_softc *));
-void aha_done __P((struct aha_softc *, struct aha_ccb *));
-int aha_init __P((struct aha_softc *));
-void aha_inquire_setup_information __P((struct aha_softc *));
-void ahaminphys __P((struct buf *));
-int aha_scsi_cmd __P((struct scsipi_xfer *));
-int aha_poll __P((struct aha_softc *, struct scsipi_xfer *, int));
-void aha_timeout __P((void *arg));
-int aha_create_ccbs __P((struct aha_softc *, struct aha_ccb *, int));
-
-/* the below structure is so we have a default dev struct for out link struct */
-struct scsipi_device aha_dev = {
-	NULL,			/* Use default error handler */
-	NULL,			/* have a queue, served by this */
-	NULL,			/* have no async handler */
-	NULL,			/* Use default 'done' routine */
-};
+static int	aha_cmd(bus_space_tag_t, bus_space_handle_t,
+			struct aha_softc *, int, u_char *, int, u_char *);
+static void	aha_finish_ccbs(struct aha_softc *);
+static void	aha_free_ccb(struct aha_softc *, struct aha_ccb *);
+static int	aha_init_ccb(struct aha_softc *, struct aha_ccb *);
+static struct aha_ccb *aha_get_ccb(struct aha_softc *);
+static struct aha_ccb *aha_ccb_phys_kv(struct aha_softc *, u_long);
+static void	aha_queue_ccb(struct aha_softc *, struct aha_ccb *);
+static void	aha_collect_mbo(struct aha_softc *);
+static void	aha_start_ccbs(struct aha_softc *);
+static void	aha_done(struct aha_softc *, struct aha_ccb *);
+static int	aha_init(struct aha_softc *);
+static void	aha_inquire_setup_information(struct aha_softc *);
+static void	ahaminphys(struct buf *);
+static void	aha_scsipi_request(struct scsipi_channel *,
+				   scsipi_adapter_req_t, void *);
+static int	aha_poll(struct aha_softc *, struct scsipi_xfer *, int);
+static void	aha_timeout(void *arg);
+static int	aha_create_ccbs(struct aha_softc *, struct aha_ccb *, int);
 
 #define AHA_RESET_TIMEOUT	2000	/* time to wait for reset (mSec) */
 #define	AHA_ABORT_TIMEOUT	2000	/* time to wait for abort (mSec) */
@@ -136,16 +120,12 @@ struct scsipi_device aha_dev = {
  *    wait:   number of seconds to wait for response
  *
  * Performs an adapter command through the ports.  Not to be confused with a
- * scsi command, which is read in via the dma; one of the adapter commands
+ * scsi command, which is read in via the DMA; one of the adapter commands
  * tells it to read in a scsi command.
  */
-int
-aha_cmd(iot, ioh, sc, icnt, ibuf, ocnt, obuf)
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
-	struct aha_softc *sc;
-	int icnt, ocnt;
-	u_char *ibuf, *obuf;
+static int
+aha_cmd(bus_space_tag_t iot, bus_space_handle_t ioh, struct aha_softc *sc,
+    int icnt, u_char *ibuf, int ocnt, u_char *obuf)
 {
 	const char *name;
 	int i;
@@ -154,7 +134,7 @@ aha_cmd(iot, ioh, sc, icnt, ibuf, ocnt, obuf)
 	u_char opcode = ibuf[0];
 
 	if (sc != NULL)
-		name = sc->sc_dev.dv_xname;
+		name = device_xname(&sc->sc_dev);
 	else
 		name = "(aha probe)";
 
@@ -262,29 +242,33 @@ aha_attach(sc, apd)
 	struct aha_softc *sc;
 	struct aha_probe_data *apd;
 {
+	struct scsipi_adapter *adapt = &sc->sc_adapter;
+	struct scsipi_channel *chan = &sc->sc_channel;
 
 	TAILQ_INIT(&sc->sc_free_ccb);
 	TAILQ_INIT(&sc->sc_waiting_ccb);
-	TAILQ_INIT(&sc->sc_queue);
 
 	/*
-	 * Fill in the adapter.
+	 * Fill in the scsipi_adapter.
 	 */
-	sc->sc_adapter.scsipi_cmd = aha_scsi_cmd;
-	sc->sc_adapter.scsipi_minphys = ahaminphys;
+	memset(adapt, 0, sizeof(*adapt));
+	adapt->adapt_dev = &sc->sc_dev;
+	adapt->adapt_nchannels = 1;
+	/* adapt_openings initialized below */
+	/* adapt_max_periph initialized below */
+	adapt->adapt_request = aha_scsipi_request;
+	adapt->adapt_minphys = ahaminphys;
 
 	/*
-	 * fill in the prototype scsipi_link.
+	 * Fill in the scsipi_channel.
 	 */
-	sc->sc_link.scsipi_scsi.channel = SCSI_CHANNEL_ONLY_ONE;
-	sc->sc_link.adapter_softc = sc;
-	sc->sc_link.scsipi_scsi.adapter_target = apd->sc_scsi_dev;
-	sc->sc_link.adapter = &sc->sc_adapter;
-	sc->sc_link.device = &aha_dev;
-	sc->sc_link.openings = 2;
-	sc->sc_link.scsipi_scsi.max_target = 7;
-	sc->sc_link.scsipi_scsi.max_lun = 7;
-	sc->sc_link.type = BUS_SCSI;
+	memset(chan, 0, sizeof(*chan));
+	chan->chan_adapter = adapt;
+	chan->chan_bustype = &scsi_bustype;
+	chan->chan_channel = 0;
+	chan->chan_ntargets = 8;
+	chan->chan_nluns = 8;
+	chan->chan_id = apd->sc_scsi_dev;
 
 	aha_inquire_setup_information(sc);
 	if (aha_init(sc) != 0) {
@@ -295,12 +279,11 @@ aha_attach(sc, apd)
 	/*
 	 * ask the adapter what subunits are present
 	 */
-	config_found(&sc->sc_dev, &sc->sc_link, scsiprint);
+	config_found(&sc->sc_dev, &sc->sc_channel, scsiprint);
 }
 
-integrate void
-aha_finish_ccbs(sc)
-	struct aha_softc *sc;
+static void
+aha_finish_ccbs(struct aha_softc *sc)
 {
 	struct aha_mbx_in *wmbi;
 	struct aha_ccb *ccb;
@@ -316,7 +299,7 @@ aha_finish_ccbs(sc)
 		for (i = 0; i < AHA_MBX_SIZE; i++) {
 			if (wmbi->stat != AHA_MBI_FREE) {
 				printf("%s: mbi not in round-robin order\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(&sc->sc_dev));
 				goto AGAIN;
 			}
 			aha_nextmbx(wmbi, wmbx, mbi);
@@ -326,7 +309,7 @@ aha_finish_ccbs(sc)
 		}
 #ifdef AHADIAGnot
 		printf("%s: mbi interrupt with no full mailboxes\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(&sc->sc_dev));
 #endif
 		return;
 	}
@@ -336,7 +319,7 @@ AGAIN:
 		ccb = aha_ccb_phys_kv(sc, phystol(wmbi->ccb_addr));
 		if (!ccb) {
 			printf("%s: bad mbi ccb pointer; skipping\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(&sc->sc_dev));
 			goto next;
 		}
 
@@ -346,12 +329,12 @@ AGAIN:
 
 #ifdef AHADEBUG
 		if (aha_debug) {
-			u_char *cp = &ccb->scsi_cmd;
+			u_char *cp = ccb->scsi_cmd;
 			printf("op=%x %x %x %x %x %x\n",
 			    cp[0], cp[1], cp[2], cp[3], cp[4], cp[5]);
-			printf("stat %x for mbi addr = 0x%08x, ",
+			printf("stat %x for mbi addr = %p, ",
 			    wmbi->stat, wmbi);
-			printf("ccb addr = 0x%x\n", ccb);
+			printf("ccb addr = %p\n", ccb);
 		}
 #endif /* AHADEBUG */
 
@@ -375,13 +358,13 @@ AGAIN:
 		case AHA_MBI_UNKNOWN:
 			/*
 			 * Even if the CCB wasn't found, we clear it anyway.
-			 * See preceeding comment.
+			 * See preceding comment.
 			 */
 			break;
 
 		default:
 			printf("%s: bad mbi status %02x; skipping\n",
-			    sc->sc_dev.dv_xname, wmbi->stat);
+			    device_xname(&sc->sc_dev), wmbi->stat);
 			goto next;
 		}
 
@@ -395,7 +378,7 @@ AGAIN:
 		    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 		aha_nextmbx(wmbi, wmbx, mbi);
 		bus_dmamap_sync(sc->sc_dmat, sc->sc_dmamap_control,
-		    AHA_MBI_OFF(wmbi), sizeof(struct aha_mbx_in), 
+		    AHA_MBI_OFF(wmbi), sizeof(struct aha_mbx_in),
 		    BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
 	} while (wmbi->stat != AHA_MBI_FREE);
 
@@ -415,11 +398,11 @@ aha_intr(arg)
 	u_char sts;
 
 #ifdef AHADEBUG
-	printf("%s: aha_intr ", sc->sc_dev.dv_xname);
+	printf("%s: aha_intr ", device_xname(&sc->sc_dev));
 #endif /*AHADEBUG */
 
 	/*
-	 * First acknowlege the interrupt, Then if it's not telling about
+	 * First acknowledge the interrupt, Then if it's not telling about
 	 * a completed operation just return.
 	 */
 	sts = bus_space_read_1(iot, ioh, AHA_INTR_PORT);
@@ -451,10 +434,8 @@ aha_intr(arg)
 	return (1);
 }
 
-integrate void
-aha_reset_ccb(sc, ccb)
-	struct aha_softc *sc;
-	struct aha_ccb *ccb;
+static inline void
+aha_reset_ccb(struct aha_softc *sc, struct aha_ccb *ccb)
 {
 
 	ccb->flags = 0;
@@ -463,32 +444,19 @@ aha_reset_ccb(sc, ccb)
 /*
  * A ccb is put onto the free list.
  */
-void
-aha_free_ccb(sc, ccb)
-	struct aha_softc *sc;
-	struct aha_ccb *ccb;
+static void
+aha_free_ccb(struct aha_softc *sc, struct aha_ccb *ccb)
 {
 	int s;
 
 	s = splbio();
-
 	aha_reset_ccb(sc, ccb);
 	TAILQ_INSERT_HEAD(&sc->sc_free_ccb, ccb, chain);
-
-	/*
-	 * If there were none, wake anybody waiting for one to come free,
-	 * starting with queued entries.
-	 */
-	if (ccb->chain.tqe_next == 0)
-		wakeup(&sc->sc_free_ccb);
-
 	splx(s);
 }
 
-integrate int
-aha_init_ccb(sc, ccb)
-	struct aha_softc *sc;
-	struct aha_ccb *ccb;
+static int
+aha_init_ccb(struct aha_softc *sc, struct aha_ccb *ccb)
 {
 	bus_dma_tag_t dmat = sc->sc_dmat;
 	int hashnum, error;
@@ -499,8 +467,8 @@ aha_init_ccb(sc, ccb)
 	error = bus_dmamap_create(dmat, AHA_MAXXFER, AHA_NSEG, AHA_MAXXFER,
 	    0, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW, &ccb->dmamap_xfer);
 	if (error) {
-		printf("%s: unable to create ccb DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to create ccb DMA map, error = %d\n",
+		    error);
 		return (error);
 	}
 
@@ -521,21 +489,18 @@ aha_init_ccb(sc, ccb)
  * Create a set of ccbs and add them to the free list.  Called once
  * by aha_init().  We return the number of CCBs successfully created.
  */
-int
-aha_create_ccbs(sc, ccbstore, count)
-	struct aha_softc *sc;
-	struct aha_ccb *ccbstore;
-	int count;
+static int
+aha_create_ccbs(struct aha_softc *sc, struct aha_ccb *ccbstore, int count)
 {
 	struct aha_ccb *ccb;
 	int i, error;
 
-	bzero(ccbstore, sizeof(struct aha_ccb) * count);
+	memset(ccbstore, 0, sizeof(struct aha_ccb) * count);
 	for (i = 0; i < count; i++) {
 		ccb = &ccbstore[i];
 		if ((error = aha_init_ccb(sc, ccb)) != 0) {
-			printf("%s: unable to initialize ccb, error = %d\n",
-			    sc->sc_dev.dv_xname, error);
+			aprint_error_dev(&sc->sc_dev, "unable to initialize ccb, error = %d\n",
+			    error);
 			goto out;
 		}
 		TAILQ_INSERT_TAIL(&sc->sc_free_ccb, ccb, chain);
@@ -551,33 +516,17 @@ aha_create_ccbs(sc, ccbstore, count)
  * the hash table too otherwise either return an error or sleep.
  */
 struct aha_ccb *
-aha_get_ccb(sc, flags)
-	struct aha_softc *sc;
-	int flags;
+aha_get_ccb(struct aha_softc *sc)
 {
 	struct aha_ccb *ccb;
 	int s;
 
 	s = splbio();
-
-	/*
-	 * If we can and have to, sleep waiting for one to come free
-	 * but only if we can't allocate a new one.
-	 */
-	for (;;) {
-		ccb = sc->sc_free_ccb.tqh_first;
-		if (ccb) {
-			TAILQ_REMOVE(&sc->sc_free_ccb, ccb, chain);
-			break;
-		}
-		if ((flags & XS_CTL_NOSLEEP) != 0)
-			goto out;
-		tsleep(&sc->sc_free_ccb, PRIBIO, "ahaccb", 0);
+	ccb = TAILQ_FIRST(&sc->sc_free_ccb);
+	if (ccb != NULL) {
+		TAILQ_REMOVE(&sc->sc_free_ccb, ccb, chain);
+		ccb->flags |= CCB_ALLOC;
 	}
-
-	ccb->flags |= CCB_ALLOC;
-
-out:
 	splx(s);
 	return (ccb);
 }
@@ -585,10 +534,8 @@ out:
 /*
  * Given a physical address, find the ccb that it corresponds to.
  */
-struct aha_ccb *
-aha_ccb_phys_kv(sc, ccb_phys)
-	struct aha_softc *sc;
-	u_long ccb_phys;
+static struct aha_ccb *
+aha_ccb_phys_kv(struct aha_softc *sc, u_long ccb_phys)
 {
 	int hashnum = CCB_HASH(ccb_phys);
 	struct aha_ccb *ccb = sc->sc_ccbhash[hashnum];
@@ -604,10 +551,8 @@ aha_ccb_phys_kv(sc, ccb_phys)
 /*
  * Queue a CCB to be sent to the controller, and send it if possible.
  */
-void
-aha_queue_ccb(sc, ccb)
-	struct aha_softc *sc;
-	struct aha_ccb *ccb;
+static void
+aha_queue_ccb(struct aha_softc *sc, struct aha_ccb *ccb)
 {
 
 	TAILQ_INSERT_TAIL(&sc->sc_waiting_ccb, ccb, chain);
@@ -617,9 +562,8 @@ aha_queue_ccb(sc, ccb)
 /*
  * Garbage collect mailboxes that are no longer in use.
  */
-void
-aha_collect_mbo(sc)
-	struct aha_softc *sc;
+static void
+aha_collect_mbo(struct aha_softc *sc)
 {
 	struct aha_mbx_out *wmbo;	/* Mail Box Out pointer */
 #ifdef AHADIAG
@@ -650,9 +594,8 @@ aha_collect_mbo(sc)
 /*
  * Send as many CCBs as we have empty mailboxes for.
  */
-void
-aha_start_ccbs(sc)
-	struct aha_softc *sc;
+static void
+aha_start_ccbs(struct aha_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -698,7 +641,7 @@ aha_start_ccbs(sc)
 
 		if ((ccb->xs->xs_control & XS_CTL_POLL) == 0)
 			callout_reset(&ccb->xs->xs_callout,
-			    (ccb->timeout * hz) / 1000, aha_timeout, ccb);
+			    mstohz(ccb->timeout), aha_timeout, ccb);
 
 		++sc->sc_mbofull;
 		aha_nextmbx(wmbo, wmbx, mbo);
@@ -712,16 +655,14 @@ aha_start_ccbs(sc)
  * adaptor, now we look to see how the operation
  * went. Wake up the owner if waiting
  */
-void
-aha_done(sc, ccb)
-	struct aha_softc *sc;
-	struct aha_ccb *ccb;
+static void
+aha_done(struct aha_softc *sc, struct aha_ccb *ccb)
 {
 	bus_dma_tag_t dmat = sc->sc_dmat;
-	struct scsipi_sense_data *s1, *s2;
+	struct scsi_sense_data *s1, *s2;
 	struct scsipi_xfer *xs = ccb->xs;
 
-	SC_DEBUG(xs->sc_link, SDEV_DB2, ("aha_done\n"));
+	SC_DEBUG(xs->xs_periph, SCSIPI_DB2, ("aha_done\n"));
 
 	/*
 	 * If we were a data transfer, unload the map that described
@@ -741,13 +682,13 @@ aha_done(sc, ccb)
 	 */
 #ifdef AHADIAG
 	if (ccb->flags & CCB_SENDING) {
-		printf("%s: exiting ccb still in transit!\n", sc->sc_dev.dv_xname);
+		printf("%s: exiting ccb still in transit!\n", device_xname(&sc->sc_dev));
 		Debugger();
 		return;
 	}
 #endif
 	if ((ccb->flags & CCB_ALLOC) == 0) {
-		printf("%s: exiting ccb not allocated!\n", sc->sc_dev.dv_xname);
+		printf("%s: exiting ccb not allocated!\n", device_xname(&sc->sc_dev));
 		Debugger();
 		return;
 	}
@@ -759,14 +700,14 @@ aha_done(sc, ccb)
 				break;
 			default:	/* Other scsi protocol messes */
 				printf("%s: host_stat %x\n",
-				    sc->sc_dev.dv_xname, ccb->host_stat);
+				    device_xname(&sc->sc_dev), ccb->host_stat);
 				xs->error = XS_DRIVER_STUFFUP;
 				break;
 			}
 		} else if (ccb->target_stat != SCSI_OK) {
 			switch (ccb->target_stat) {
 			case SCSI_CHECK:
-				s1 = (struct scsipi_sense_data *) (((char *) (&ccb->scsi_cmd)) +
+				s1 = (struct scsi_sense_data *) (((char *) (&ccb->scsi_cmd)) +
 				    ccb->scsi_cmd_length);
 				s2 = &xs->sense.scsi_sense;
 				*s2 = *s1;
@@ -777,7 +718,7 @@ aha_done(sc, ccb)
 				break;
 			default:
 				printf("%s: target_stat %x\n",
-				    sc->sc_dev.dv_xname, ccb->target_stat);
+				    device_xname(&sc->sc_dev), ccb->target_stat);
 				xs->error = XS_DRIVER_STUFFUP;
 				break;
 			}
@@ -785,19 +726,7 @@ aha_done(sc, ccb)
 			xs->resid = 0;
 	}
 	aha_free_ccb(sc, ccb);
-	xs->xs_status |= XS_STS_DONE;
 	scsipi_done(xs);
-
-	/*
-	 * If there are queue entries in the software queue, try to
-	 * run the first one.  We should be more or less guaranteed
-	 * to succeed, since we just freed a CCB.
-	 *
-	 * NOTE: aha_scsi_cmd() relies on our calling it with
-	 * the first entry in the queue.
-	 */
-	if ((xs = TAILQ_FIRST(&sc->sc_queue)) != NULL)
-		(void) aha_scsi_cmd(xs);
 }
 
 /*
@@ -813,6 +742,19 @@ aha_find(iot, ioh, sc)
 	u_char sts;
 	struct aha_config config;
 	int irq, drq;
+
+	/*
+	 * assume invalid status means the board is not present.
+	 */
+
+	sts = bus_space_read_1(iot, ioh, AHA_STAT_PORT);
+	if (sts == 0)
+		return (0);
+	if ((sts & (AHA_STAT_STST|AHA_STAT_RSVD|AHA_STAT_CDF)) != 0)
+		return (0);
+	sts = bus_space_read_1(iot, ioh, AHA_INTR_PORT);
+	if ((sts & AHA_INTR_RSVD) != 0)
+		return (0);
 
 	/*
 	 * reset board, If it doesn't respond, assume
@@ -837,7 +779,7 @@ aha_find(iot, ioh, sc)
 	}
 
 	/*
-	 * setup dma channel from jumpers and save int
+	 * setup DMA channel from jumpers and save int
 	 * level
 	 */
 	delay(1000);		/* for Bustek 545 */
@@ -902,9 +844,8 @@ aha_find(iot, ioh, sc)
 /*
  * Start the board, ready for normal operation
  */
-int
-aha_init(sc)
-	struct aha_softc *sc;
+static int
+aha_init(struct aha_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -925,7 +866,7 @@ aha_init(sc)
 		struct aha_extbios extbios;
 		struct aha_unlock unlock;
 
-		printf("%s: unlocking mailbox interface\n", sc->sc_dev.dv_xname);
+		printf("%s: unlocking mailbox interface\n", device_xname(&sc->sc_dev));
 		extbios.cmd.opcode = AHA_EXT_BIOS;
 		aha_cmd(iot, ioh, sc,
 		    sizeof(extbios.cmd), (u_char *)&extbios.cmd,
@@ -933,7 +874,7 @@ aha_init(sc)
 
 #ifdef AHADEBUG
 		printf("%s: flags=%02x, mailboxlock=%02x\n",
-		    sc->sc_dev.dv_xname,
+		    device_xname(&sc->sc_dev),
 		    extbios.reply.flags, extbios.reply.mailboxlock);
 #endif /* AHADEBUG */
 
@@ -947,7 +888,7 @@ aha_init(sc)
 
 #if 0
 	/*
-	 * Change the bus on/off times to not clash with other dma users.
+	 * Change the bus on/off times to not clash with other DMA users.
 	 */
 	aha_cmd(iot, ioh, 1, 0, 0, 0, AHA_BUS_ON_TIME_SET, 7);
 	aha_cmd(iot, ioh, 1, 0, 0, 0, AHA_BUS_OFF_TIME_SET, 4);
@@ -967,11 +908,11 @@ aha_init(sc)
 				initial_ccbs += 1;
 		}
 	}
-	initial_ccbs *= sc->sc_link.openings;
+	initial_ccbs *= 2;
 	if (initial_ccbs > AHA_CCB_MAX)
 		initial_ccbs = AHA_CCB_MAX;
 	if (initial_ccbs == 0)	/* yes, this can happen */
-		initial_ccbs = sc->sc_link.openings;
+		initial_ccbs = 2;
 
 	/* Obtain setup information from. */
 	setup.cmd.opcode = AHA_INQUIRE_SETUP;
@@ -981,7 +922,7 @@ aha_init(sc)
 	    sizeof(setup.reply), (u_char *)&setup.reply);
 
 	printf("%s: %s, %s\n",
-	    sc->sc_dev.dv_xname,
+	    device_xname(&sc->sc_dev),
 	    setup.reply.sync_neg ? "sync" : "async",
 	    setup.reply.parity ? "parity" : "no parity");
 
@@ -990,7 +931,7 @@ aha_init(sc)
 		    (!setup.reply.sync[i].offset && !setup.reply.sync[i].period))
 			continue;
 		printf("%s targ %d: sync, offset %d, period %dnsec\n",
-		    sc->sc_dev.dv_xname, i,
+		    device_xname(&sc->sc_dev), i,
 		    setup.reply.sync[i].offset, setup.reply.sync[i].period * 50 + 200);
 	}
 
@@ -998,16 +939,15 @@ aha_init(sc)
 	 * Allocate the mailbox and control blocks.
 	 */
 	if ((error = bus_dmamem_alloc(sc->sc_dmat, sizeof(struct aha_control),
-	    NBPG, 0, &seg, 1, &rseg, BUS_DMA_NOWAIT)) != 0) {
-		printf("%s: unable to allocate control structures, "
-		    "error = %d\n", sc->sc_dev.dv_xname, error);
+	    PAGE_SIZE, 0, &seg, 1, &rseg, BUS_DMA_NOWAIT)) != 0) {
+		aprint_error_dev(&sc->sc_dev, "unable to allocate control structures, "
+		    "error = %d\n", error);
 		return (error);
 	}
 	if ((error = bus_dmamem_map(sc->sc_dmat, &seg, rseg,
-	    sizeof(struct aha_control), (caddr_t *)&sc->sc_control,
+	    sizeof(struct aha_control), (void **)&sc->sc_control,
 	    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
-		printf("%s: unable to map control structures, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to map control structures, error = %d\n", error);
 		return (error);
 	}
 
@@ -1018,15 +958,15 @@ aha_init(sc)
 	if ((error = bus_dmamap_create(sc->sc_dmat, sizeof(struct aha_control),
 	    1, sizeof(struct aha_control), 0, BUS_DMA_NOWAIT,
 	    &sc->sc_dmamap_control)) != 0) {
-		printf("%s: unable to create control DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to create control DMA map, error = %d\n",
+		    error);
 		return (error);
 	}
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_dmamap_control,
 	    sc->sc_control, sizeof(struct aha_control), NULL,
 	    BUS_DMA_NOWAIT)) != 0) {
-		printf("%s: unable to load control DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to load control DMA map, error = %d\n",
+		    error);
 		return (error);
 	}
 
@@ -1035,13 +975,15 @@ aha_init(sc)
 	 */
 	i = aha_create_ccbs(sc, sc->sc_control->ac_ccbs, initial_ccbs);
 	if (i == 0) {
-		printf("%s: unable to create control blocks\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to create control blocks\n");
 		return (ENOMEM);
 	} else if (i != initial_ccbs) {
 		printf("%s: WARNING: only %d of %d control blocks created\n",
-		    sc->sc_dev.dv_xname, i, initial_ccbs);
+		    device_xname(&sc->sc_dev), i, initial_ccbs);
 	}
+
+	sc->sc_adapter.adapt_openings = i;
+	sc->sc_adapter.adapt_max_periph = sc->sc_adapter.adapt_openings;
 
 	/*
 	 * Set up initial mail box for round-robin operation.
@@ -1071,9 +1013,8 @@ aha_init(sc)
 	return (0);
 }
 
-void
-aha_inquire_setup_information(sc)
-	struct aha_softc *sc;
+static void
+aha_inquire_setup_information(struct aha_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1118,7 +1059,7 @@ aha_inquire_setup_information(sc)
 
 #ifdef AHADEBUG
 	printf("%s: inquire %x, %x, %x, %x\n",
-	    sc->sc_dev.dv_xname,
+	    device_xname(&sc->sc_dev),
 	    revision.reply.boardid, revision.reply.spec_opts,
 	    revision.reply.revision_1, revision.reply.revision_2);
 #endif /* AHADEBUG */
@@ -1157,13 +1098,12 @@ aha_inquire_setup_information(sc)
 
 noinquire:
 	printf("%s: model AHA-%s, firmware %s\n",
-	       sc->sc_dev.dv_xname,
+	       device_xname(&sc->sc_dev),
 	       sc->sc_model, sc->sc_firmware);
 }
 
-void
-ahaminphys(bp)
-	struct buf *bp;
+static void
+ahaminphys(struct buf *bp)
 {
 
 	if (bp->b_bcount > AHA_MAXXFER)
@@ -1175,218 +1115,193 @@ ahaminphys(bp)
  * start a scsi operation given the command and the data address. Also needs
  * the unit, target and lu.
  */
-int
-aha_scsi_cmd(xs)
-	struct scsipi_xfer *xs;
+
+static void
+aha_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
+    void *arg)
 {
-	struct scsipi_link *sc_link = xs->sc_link;
-	struct aha_softc *sc = sc_link->adapter_softc;
+	struct scsipi_xfer *xs;
+	struct scsipi_periph *periph;
+	struct aha_softc *sc = (void *)chan->chan_adapter->adapt_dev;
 	bus_dma_tag_t dmat = sc->sc_dmat;
 	struct aha_ccb *ccb;
 	int error, seg, flags, s;
-	int fromqueue = 0, dontqueue = 0, nowait = 0;
 
-	SC_DEBUG(sc_link, SDEV_DB2, ("aha_scsi_cmd\n"));
 
-	s = splbio();		/* protect the queue */
+	switch (req) {
+	case ADAPTER_REQ_RUN_XFER:
+		xs = arg;
+		periph = xs->xs_periph;
+		flags = xs->xs_control;
 
-	/*
-	 * If we're running the queue from aha_done(), we've been
-	 * called with the first queue entry as our argument.
-	 */
-	if (xs == TAILQ_FIRST(&sc->sc_queue)) {
-		TAILQ_REMOVE(&sc->sc_queue, xs, adapter_q);
-		fromqueue = 1;
-		nowait = 1;
-		goto get_ccb;
-	}
+		SC_DEBUG(periph, SCSIPI_DB2, ("aha_scsipi_request\n"));
 
-	/* Polled requests can't be queued for later. */
-	dontqueue = xs->xs_control & XS_CTL_POLL;
-
-	/*
-	 * If there are jobs in the queue, run them first.
-	 */
-	if (TAILQ_FIRST(&sc->sc_queue) != NULL) {
+		/* Get a CCB to use. */
+		ccb = aha_get_ccb(sc);
+#ifdef DIAGNOSTIC
 		/*
-		 * If we can't queue, we have to abort, since
-		 * we have to preserve order.
+		 * This should never happen as we track the resources
+		 * in the mid-layer.
 		 */
-		if (dontqueue) {
-			splx(s);
-			xs->error = XS_DRIVER_STUFFUP;
-			return (TRY_AGAIN_LATER);
+		if (ccb == NULL) {
+			scsipi_printaddr(periph);
+			printf("unable to allocate ccb\n");
+			panic("aha_scsipi_request");
 		}
-
-		/*
-		 * Swap with the first queue entry.
-		 */
-		TAILQ_INSERT_TAIL(&sc->sc_queue, xs, adapter_q);
-		xs = TAILQ_FIRST(&sc->sc_queue);
-		TAILQ_REMOVE(&sc->sc_queue, xs, adapter_q);
-		fromqueue = 1;
-	}
-
- get_ccb:
-	/*
-	 * get a ccb to use. If the transfer
-	 * is from a buf (possibly from interrupt time)
-	 * then we can't allow it to sleep
-	 */
-	flags = xs->xs_control;
-	if (nowait)
-		flags |= XS_CTL_NOSLEEP;
-	if ((ccb = aha_get_ccb(sc, flags)) == NULL) {
-		/*
-		 * If we can't queue, we lose.
-		 */
-		if (dontqueue) {
-			splx(s);
-			xs->error = XS_DRIVER_STUFFUP;
-			return (TRY_AGAIN_LATER);
-		}
-
-		/*
-		 * Stuff ourselves into the queue, in front
-		 * if we came off in the first place.
-		 */
-		if (fromqueue)
-			TAILQ_INSERT_HEAD(&sc->sc_queue, xs, adapter_q);
-		else
-			TAILQ_INSERT_TAIL(&sc->sc_queue, xs, adapter_q);
-		splx(s);
-		return (SUCCESSFULLY_QUEUED);
-	}
-
-	splx(s);		/* done playing with the queue */
-
-	ccb->xs = xs;
-	ccb->timeout = xs->timeout;
-
-	/*
-	 * Put all the arguments for the xfer in the ccb
-	 */
-	if (flags & XS_CTL_RESET) {
-		ccb->opcode = AHA_RESET_CCB;
-		ccb->scsi_cmd_length = 0;
-	} else {
-		/* can't use S/G if zero length */
-		ccb->opcode = (xs->datalen ? AHA_INIT_SCAT_GATH_CCB
-					   : AHA_INITIATOR_CCB);
-		bcopy(xs->cmd, &ccb->scsi_cmd,
-		    ccb->scsi_cmd_length = xs->cmdlen);
-	}
-
-	if (xs->datalen) {
-		/*
-		 * Map the DMA transfer.
-		 */
-#ifdef TFS
-		if (flags & XS_CTL_DATA_UIO) {
-			error = bus_dmamap_load_uio(dmat,
-			    ccb->dmamap_xfer, (struct uio *)xs->data,
-			    (flags & XS_CTL_NOSLEEP) ? BUS_DMA_NOWAIT :
-			    BUS_DMA_WAITOK);
-		} else
 #endif
-		{
-			error = bus_dmamap_load(dmat,
-			    ccb->dmamap_xfer, xs->data, xs->datalen, NULL,
-			    (flags & XS_CTL_NOSLEEP) ? BUS_DMA_NOWAIT :
-			    BUS_DMA_WAITOK);
-		}
-		
-		if (error) {
-			if (error == EFBIG) {
-				printf("%s: aha_scsi_cmd, more than %d"
-				    " dma segments\n",
-				    sc->sc_dev.dv_xname, AHA_NSEG);
-			} else {
-				printf("%s: aha_scsi_cmd, error %d loading"
-				    " dma map\n",
-				    sc->sc_dev.dv_xname, error);
+
+		ccb->xs = xs;
+		ccb->timeout = xs->timeout;
+
+		/*
+		 * Put all the arguments for the xfer in the ccb
+		 */
+		if (flags & XS_CTL_RESET) {
+			ccb->opcode = AHA_RESET_CCB;
+			ccb->scsi_cmd_length = 0;
+		} else {
+			/* can't use S/G if zero length */
+			if (xs->cmdlen > sizeof(ccb->scsi_cmd)) {
+				printf("%s: cmdlen %d too large for CCB\n",
+				    device_xname(&sc->sc_dev), xs->cmdlen);
+				xs->error = XS_DRIVER_STUFFUP;
+				goto out_bad;
 			}
-			goto bad;
+			ccb->opcode = (xs->datalen ? AHA_INIT_SCAT_GATH_CCB
+						   : AHA_INITIATOR_CCB);
+			memcpy(&ccb->scsi_cmd, xs->cmd,
+			    ccb->scsi_cmd_length = xs->cmdlen);
 		}
 
-		bus_dmamap_sync(dmat, ccb->dmamap_xfer, 0,
-		    ccb->dmamap_xfer->dm_mapsize,
-		    (flags & XS_CTL_DATA_IN) ? BUS_DMASYNC_PREREAD :
-		    BUS_DMASYNC_PREWRITE);
+		if (xs->datalen) {
+			/*
+			 * Map the DMA transfer.
+			 */
+#ifdef TFS
+			if (flags & XS_CTL_DATA_UIO) {
+				error = bus_dmamap_load_uio(dmat,
+				    ccb->dmamap_xfer, (struct uio *)xs->data,
+				    ((flags & XS_CTL_NOSLEEP) ? BUS_DMA_NOWAIT :
+				     BUS_DMA_WAITOK) | BUS_DMA_STREAMING |
+				     ((flags & XS_CTL_DATA_IN) ? BUS_DMA_READ :
+				      BUS_DMA_WRITE));
+			} else
+#endif
+			{
+				error = bus_dmamap_load(dmat,
+				    ccb->dmamap_xfer, xs->data, xs->datalen,
+				    NULL,
+				    ((flags & XS_CTL_NOSLEEP) ? BUS_DMA_NOWAIT :
+				     BUS_DMA_WAITOK) | BUS_DMA_STREAMING |
+				     ((flags & XS_CTL_DATA_IN) ? BUS_DMA_READ :
+				      BUS_DMA_WRITE));
+			}
 
-		/*
-		 * Load the hardware scatter/gather map with the
-		 * contents of the DMA map.
-		 */
-		for (seg = 0; seg < ccb->dmamap_xfer->dm_nsegs; seg++) {
-			ltophys(ccb->dmamap_xfer->dm_segs[seg].ds_addr,
-			    ccb->scat_gath[seg].seg_addr);
-			ltophys(ccb->dmamap_xfer->dm_segs[seg].ds_len,
-			    ccb->scat_gath[seg].seg_len);
+			switch (error) {
+			case 0:
+				break;
+
+			case ENOMEM:
+			case EAGAIN:
+				xs->error = XS_RESOURCE_SHORTAGE;
+				goto out_bad;
+
+			default:
+				xs->error = XS_DRIVER_STUFFUP;
+				if (error == EFBIG) {
+					printf("%s: aha_scsi_cmd, more than %d"
+					    " DMA segments\n",
+					    device_xname(&sc->sc_dev), AHA_NSEG);
+				} else {
+					aprint_error_dev(&sc->sc_dev, "error %d loading DMA map\n",
+					    error);
+				}
+out_bad:
+				aha_free_ccb(sc, ccb);
+				scsipi_done(xs);
+				return;
+			}
+
+			bus_dmamap_sync(dmat, ccb->dmamap_xfer, 0,
+			    ccb->dmamap_xfer->dm_mapsize,
+			    (flags & XS_CTL_DATA_IN) ? BUS_DMASYNC_PREREAD :
+			    BUS_DMASYNC_PREWRITE);
+
+			/*
+			 * Load the hardware scatter/gather map with the
+			 * contents of the DMA map.
+			 */
+			for (seg = 0; seg < ccb->dmamap_xfer->dm_nsegs; seg++) {
+				ltophys(ccb->dmamap_xfer->dm_segs[seg].ds_addr,
+				    ccb->scat_gath[seg].seg_addr);
+				ltophys(ccb->dmamap_xfer->dm_segs[seg].ds_len,
+				    ccb->scat_gath[seg].seg_len);
+			}
+
+			ltophys(sc->sc_dmamap_control->dm_segs[0].ds_addr +
+			    AHA_CCB_OFF(ccb) +
+			    offsetof(struct aha_ccb, scat_gath),
+			    ccb->data_addr);
+			ltophys(ccb->dmamap_xfer->dm_nsegs *
+			    sizeof(struct aha_scat_gath), ccb->data_length);
+		} else {
+			/*
+			 * No data xfer, use non S/G values.
+			 */
+			ltophys(0, ccb->data_addr);
+			ltophys(0, ccb->data_length);
 		}
 
-		ltophys(sc->sc_dmamap_control->dm_segs[0].ds_addr +
-		    AHA_CCB_OFF(ccb) + offsetof(struct aha_ccb, scat_gath),
-		    ccb->data_addr);
-		ltophys(ccb->dmamap_xfer->dm_nsegs *
-		    sizeof(struct aha_scat_gath), ccb->data_length);
-	} else {
-		/*
-		 * No data xfer, use non S/G values.
-		 */
-		ltophys(0, ccb->data_addr);
-		ltophys(0, ccb->data_length);
-	}
+		ccb->data_out = 0;
+		ccb->data_in = 0;
+		ccb->target = periph->periph_target;
+		ccb->lun = periph->periph_lun;
+		ccb->req_sense_length = sizeof(ccb->scsi_sense);
+		ccb->host_stat = 0x00;
+		ccb->target_stat = 0x00;
+		ccb->link_id = 0;
+		ltophys(0, ccb->link_addr);
 
-	ccb->data_out = 0;
-	ccb->data_in = 0;
-	ccb->target = sc_link->scsipi_scsi.target;
-	ccb->lun = sc_link->scsipi_scsi.lun;
-	ccb->req_sense_length = sizeof(ccb->scsi_sense);
-	ccb->host_stat = 0x00;
-	ccb->target_stat = 0x00;
-	ccb->link_id = 0;
-	ltophys(0, ccb->link_addr);
+		bus_dmamap_sync(sc->sc_dmat, sc->sc_dmamap_control,
+		    AHA_CCB_OFF(ccb), sizeof(struct aha_ccb),
+		    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 
-	bus_dmamap_sync(sc->sc_dmat, sc->sc_dmamap_control,
-	    AHA_CCB_OFF(ccb), sizeof(struct aha_ccb),
-	    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
+		s = splbio();
+		aha_queue_ccb(sc, ccb);
+		splx(s);
 
-	s = splbio();
-	aha_queue_ccb(sc, ccb);
-	splx(s);
+		SC_DEBUG(periph, SCSIPI_DB3, ("cmd_sent\n"));
+		if ((flags & XS_CTL_POLL) == 0)
+			return;
 
-	/*
-	 * Usually return SUCCESSFULLY QUEUED
-	 */
-	SC_DEBUG(sc_link, SDEV_DB3, ("cmd_sent\n"));
-	if ((flags & XS_CTL_POLL) == 0)
-		return (SUCCESSFULLY_QUEUED);
-
-	/*
-	 * If we can't use interrupts, poll on completion
-	 */
-	if (aha_poll(sc, xs, ccb->timeout)) {
-		aha_timeout(ccb);
-		if (aha_poll(sc, xs, ccb->timeout))
+		/* Not allowed to use interrupts, poll for completion. */
+		if (aha_poll(sc, xs, ccb->timeout)) {
 			aha_timeout(ccb);
-	}
-	return (COMPLETE);
+			if (aha_poll(sc, xs, ccb->timeout))
+				aha_timeout(ccb);
+		}
+		return;
 
-bad:
-	xs->error = XS_DRIVER_STUFFUP;
-	aha_free_ccb(sc, ccb);
-	return (COMPLETE);
+	case ADAPTER_REQ_GROW_RESOURCES:
+		/* XXX Not supported. */
+		return;
+
+	case ADAPTER_REQ_SET_XFER_MODE:
+		/*
+		 * Can't really do this on the Adaptec; it has
+		 * its own config mechanism, but we do know how
+		 * to query what the firmware negotiated.
+		 */
+		/* XXX XXX XXX */
+		return;
+	}
 }
 
 /*
  * Poll a particular unit, looking for a particular xs
  */
-int
-aha_poll(sc, xs, count)
-	struct aha_softc *sc;
-	struct scsipi_xfer *xs;
-	int count;
+static int
+aha_poll(struct aha_softc *sc, struct scsipi_xfer *xs, int count)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1407,17 +1322,17 @@ aha_poll(sc, xs, count)
 	return (1);
 }
 
-void
-aha_timeout(arg)
-	void *arg;
+static void
+aha_timeout(void *arg)
 {
 	struct aha_ccb *ccb = arg;
 	struct scsipi_xfer *xs = ccb->xs;
-	struct scsipi_link *sc_link = xs->sc_link;
-	struct aha_softc *sc = sc_link->adapter_softc;
+	struct scsipi_periph *periph = xs->xs_periph;
+	struct aha_softc *sc =
+	    (void *)periph->periph_channel->chan_adapter->adapt_dev;
 	int s;
 
-	scsi_print_addr(sc_link);
+	scsipi_printaddr(periph);
 	printf("timed out");
 
 	s = splbio();
@@ -1428,7 +1343,7 @@ aha_timeout(arg)
 	 */
 	aha_collect_mbo(sc);
 	if (ccb->flags & CCB_SENDING) {
-		printf("%s: not taking commands!\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "not taking commands!\n");
 		Debugger();
 	}
 #endif

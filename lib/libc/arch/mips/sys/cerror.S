@@ -1,4 +1,4 @@
-/*	$NetBSD: cerror.S,v 1.7 1999/01/14 22:48:20 kleink Exp $	*/
+/*	$NetBSD: cerror.S,v 1.13 2003/08/07 16:42:17 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,17 +36,34 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 	ASMSTR("from: @(#)cerror.s	8.1 (Berkeley) 6/16/93")
-	ASMSTR("$NetBSD: cerror.S,v 1.7 1999/01/14 22:48:20 kleink Exp $")
+	ASMSTR("$NetBSD: cerror.S,v 1.13 2003/08/07 16:42:17 agc Exp $")
 #endif /* LIBC_SCCS and not lint */
 
-#ifdef ABICALLS
-	.abicalls
-#endif
+#ifdef _REENTRANT
+	.globl	_C_LABEL(__errno)
+NESTED_NOPROFILE(__cerror, CALLFRAME_SIZ, ra)
+	PIC_PROLOGUE(__cerror, t9)
+	subu	sp, sp, CALLFRAME_SIZ
+	.mask	0x80000000, (CALLFRAME_RA - CALLFRAME_SIZ)
+	sw	ra, CALLFRAME_RA(sp)
+	sw	v0, 12(sp)		# save errno value
 
+	la	t9, _C_LABEL(__errno)	# locate address of errno
+	jalr	t9
+
+	lw	t0, 12(sp)
+	lw	ra, CALLFRAME_RA(sp)
+	sw	t0, 0(v0)		# update errno value
+	addiu	sp, sp, CALLFRAME_SIZ
+	li	v0, -1
+	li	v1, -1
+	j	ra
+END(__cerror)
+#else		
 	.globl	_C_LABEL(errno)
-LEAF(__cerror)
+LEAF_NOPROFILE(__cerror)
 	.set	noreorder
-#ifdef ABICALLS
+#ifdef __ABICALLS__
 	.cpload t9
 #endif
 	sw	v0, _C_LABEL(errno)
@@ -58,3 +71,4 @@ LEAF(__cerror)
 	j	ra
 	li	v1, -1
 END(__cerror)
+#endif /* _REENTRANT */

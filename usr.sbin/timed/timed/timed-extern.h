@@ -1,4 +1,4 @@
-/*	$NetBSD: timed-extern.h,v 1.3 1998/01/09 08:12:07 perry Exp $	*/
+/*	$NetBSD: timed-extern.h,v 1.9 2007/02/04 21:17:01 cbiere Exp $	*/
 
 /*-
  * Copyright (c) 1993 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -63,13 +59,13 @@ int	 election(struct netinfo *);
 void	 get_goodgroup(int);
 int	 good_host_name(char *);
 void	 ignoreack(void);
-int	 in_cksum(u_short *, int);
+int	 in_cksum(const void *, int);
 void	 lookformaster(struct netinfo *);
 void	 makeslave(struct netinfo *);
-int	 master(void);
+void	 master(void);
 void	 masterack(void);
 void	 masterup(struct netinfo *);
-int	 measure(u_long, u_long, char *, struct sockaddr_in *, int);
+int	 measure(u_long, u_long, const char *, const struct sockaddr_in *, int);
 void	 msterup(struct netinfo *);
 void	 mstotvround(struct timeval *, long);
 long	 networkdelta(void);
@@ -83,6 +79,10 @@ void	 slaveack(void);
 void	 spreadtime(void);
 void	 suppress(struct sockaddr_in *, char *, struct netinfo *);
 void	 synch(long);
-void	 traceoff(char *);
+void	 traceoff(const char *);
 void	 traceon(void);
 void	 xmit(int, u_short, struct sockaddr_in *);
+void	 set_tsp_name(struct tsp *, const char *);
+void	 get_tsp_name(const struct tsp *, char *, size_t);
+void	 update_time(struct timeval *, const struct tsp *);
+int	 sendtsp(int , struct tsp *, struct sockaddr_in *);

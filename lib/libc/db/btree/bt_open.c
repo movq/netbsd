@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_open.c,v 1.13 1998/12/09 12:42:46 christos Exp $	*/
+/*	$NetBSD: bt_open.c,v 1.24 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,14 +32,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_open.c	8.10 (Berkeley) 8/17/94";
-#else
-__RCSID("$NetBSD: bt_open.c,v 1.13 1998/12/09 12:42:46 christos Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: bt_open.c,v 1.24 2008/09/11 12:58:00 joerg Exp $");
 
 /*
  * Implementation of btree access method for 4.4BSD.
@@ -54,9 +48,9 @@ __RCSID("$NetBSD: bt_open.c,v 1.13 1998/12/09 12:42:46 christos Exp $");
  */
 
 #include "namespace.h"
-#include <sys/param.h>
 #include <sys/stat.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -75,9 +69,9 @@ __RCSID("$NetBSD: bt_open.c,v 1.13 1998/12/09 12:42:46 christos Exp $");
 #define	MINPSIZE	128
 #endif
 
-static int byteorder __P((void));
-static int nroot __P((BTREE *));
-static int tmp __P((void));
+static int byteorder(void);
+static int nroot(BTREE *);
+static int tmp(void);
 
 /*
  * __BT_OPEN -- Open a btree.
@@ -96,12 +90,8 @@ static int tmp __P((void));
  *
  */
 DB *
-__bt_open(fname, flags, mode, openinfo, dflags)
-	const char *fname;
-	int flags;
-	mode_t mode;
-	const BTREEINFO *openinfo;
-	int dflags;
+__bt_open(const char *fname, int flags, mode_t mode, const BTREEINFO *openinfo,
+    int dflags)
 {
 	struct stat sb;
 	BTMETA m;
@@ -110,6 +100,7 @@ __bt_open(fname, flags, mode, openinfo, dflags)
 	DB *dbp;
 	pgno_t ncache;
 	ssize_t nr;
+	size_t temp;
 	int machine_lorder;
 
 	t = NULL;
@@ -212,9 +203,10 @@ __bt_open(fname, flags, mode, openinfo, dflags)
 			goto einval;
 		}
 		
-		if ((t->bt_fd = open(fname, flags, mode)) < 0)
+		if ((t->bt_fd = open(fname, flags, mode)) == -1)
 			goto err;
-
+		if (fcntl(t->bt_fd, F_SETFD, FD_CLOEXEC) == -1)
+			goto err;
 	} else {
 		if ((flags & O_ACCMODE) != O_RDWR)
 			goto einval;
@@ -223,7 +215,7 @@ __bt_open(fname, flags, mode, openinfo, dflags)
 		F_SET(t, B_INMEM);
 	}
 
-	if (fcntl(t->bt_fd, F_SETFD, 1) == -1)
+	if (fcntl(t->bt_fd, F_SETFD, FD_CLOEXEC) == -1)
 		goto err;
 
 	if (fstat(t->bt_fd, &sb))
@@ -308,8 +300,10 @@ __bt_open(fname, flags, mode, openinfo, dflags)
 	 * a key/data pair won't fit even if both key and data are on overflow
 	 * pages.
 	 */
-	t->bt_ovflsize = (t->bt_psize - BTDATAOFF) / b.minkeypage -
+	temp = (t->bt_psize - BTDATAOFF) / b.minkeypage -
 	    (sizeof(indx_t) + NBLEAFDBT(0, 0));
+	_DBFIT(temp, indx_t);
+	t->bt_ovflsize = (indx_t)temp;
 	if (t->bt_ovflsize < NBLEAFDBT(NOVFLSIZE, NOVFLSIZE) + sizeof(indx_t))
 		t->bt_ovflsize =
 		    NBLEAFDBT(NOVFLSIZE, NOVFLSIZE) + sizeof(indx_t);
@@ -361,8 +355,7 @@ err:	if (t) {
  *	RET_ERROR, RET_SUCCESS
  */
 static int
-nroot(t)
-	BTREE *t;
+nroot(BTREE *t)
 {
 	PAGE *meta, *root;
 	pgno_t npg;
@@ -395,33 +388,42 @@ nroot(t)
 }
 
 static int
-tmp()
+tmp(void)
 {
 	sigset_t set, oset;
+	size_t len;
 	int fd;
 	char *envtmp;
-	char path[MAXPATHLEN];
+	char path[PATH_MAX];
 
-	envtmp = getenv("TMPDIR");
-	(void)snprintf(path,
+	if (issetugid())
+		envtmp = NULL;
+	else
+		envtmp = getenv("TMPDIR");
+
+	len = snprintf(path,
 	    sizeof(path), "%s/bt.XXXXXX", envtmp ? envtmp : _PATH_TMP);
-
+	if (len >= sizeof(path))
+		return -1;
+	
 	(void)sigfillset(&set);
 	(void)sigprocmask(SIG_BLOCK, &set, &oset);
-	if ((fd = mkstemp(path)) != -1)
+	if ((fd = mkstemp(path)) != -1) {
 		(void)unlink(path);
+		(void)fcntl(fd, F_SETFD, FD_CLOEXEC);
+	}
 	(void)sigprocmask(SIG_SETMASK, &oset, NULL);
 	return(fd);
 }
 
 static int
-byteorder()
+byteorder(void)
 {
-	u_int32_t x;
-	u_char *p;
+	uint32_t x;
+	uint8_t *p;
 
 	x = 0x01020304;
-	p = (u_char *)(void *)&x;
+	p = (uint8_t *)(void *)&x;
 	switch (*p) {
 	case 1:
 		return (BIG_ENDIAN);
@@ -433,8 +435,7 @@ byteorder()
 }
 
 int
-__bt_fd(dbp)
-        const DB *dbp;
+__bt_fd(const DB *dbp)
 {
 	BTREE *t;
 

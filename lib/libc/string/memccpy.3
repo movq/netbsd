@@ -9,11 +9,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -30,7 +26,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)memccpy.3	8.1 (Berkeley) 6/9/93
-.\"	$NetBSD: memccpy.3,v 1.6 1998/02/05 18:50:30 perry Exp $
+.\"	$NetBSD: memccpy.3,v 1.10 2006/10/16 08:48:45 wiz Exp $
 .\"
 .Dd June 9, 1993
 .Dt MEMCCPY 3
@@ -41,7 +37,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <string.h>
+.In string.h
 .Ft void *
 .Fn memccpy "void *dst" "const void *src" "int c" "size_t len"
 .Sh DESCRIPTION
@@ -63,7 +59,7 @@ in the string
 is returned.
 Otherwise,
 .Fa len
-bytes are copied, and a NULL pointer is returned.
+bytes are copied, and a null pointer is returned.
 .Sh SEE ALSO
 .Xr bcopy 3 ,
 .Xr memcpy 3 ,

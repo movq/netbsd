@@ -1,4 +1,4 @@
-/*	$NetBSD: siopvar.h,v 1.18 1999/03/26 22:50:26 mhitch Exp $	*/
+/*	$NetBSD: siopvar.h,v 1.25 2005/12/11 12:16:28 christos Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,11 +38,11 @@
 
 /*
  * The largest single request will be MAXPHYS bytes which will require
- * at most MAXPHYS/NBPG+1 chain elements to describe, i.e. if none of
- * the buffer pages are physically contiguous (MAXPHYS/NBPG) and the
+ * at most MAXPHYS/PAGE_SIZE+1 chain elements to describe, i.e. if none of
+ * the buffer pages are physically contiguous (MAXPHYS/PAGE_SIZE) and the
  * buffer is not page aligned (+1).
  */
-#define	DMAMAXIO	(MAXPHYS/NBPG+1)
+#define	DMAMAXIO	(MAXPHYS/PAGE_SIZE+1)
 
 /*
  * Data Structure for SCRIPTS program
@@ -88,8 +84,7 @@ struct siop_acb {
 #define ACB_FREE	0x00
 #define ACB_ACTIVE	0x01
 #define ACB_DONE	0x04
-#define ACB_CHKSENSE	0x08
-	struct scsi_generic cmd;  /* SCSI command block */
+	struct scsipi_generic cmd;  /* SCSI command block */
 	struct siop_ds ds;
 	void	*iob_buf;
 	u_long	iob_curbuf;
@@ -114,12 +109,11 @@ struct siop_tinfo {
 	int	dconns;		/* #disconnects */
 	int	touts;		/* #timeouts */
 	int	perrs;		/* #parity errors */
-	int	senses;		/* #request sense commands sent */
 	ushort	lubusy;		/* What local units/subr. are busy? */
 	u_char  flags;
 	u_char  period;		/* Period suggestion */
 	u_char  offset;		/* Offset suggestion */
-} tinfo_t;
+};
 
 struct	siop_softc {
 	struct	device sc_dev;
@@ -135,8 +129,8 @@ struct	siop_softc {
 	u_short	sc_sist;
 #endif
 	u_long	sc_intcode;
-	struct	scsipi_link sc_link;	/* proto for sub devices */
 	struct	scsipi_adapter sc_adapter;
+	struct	scsipi_channel sc_channel;
 	u_long	sc_scriptspa;		/* physical address of scripts */
 	siop_regmap_p	sc_siopp;	/* the SIOP */
 	u_long	sc_active;		/* number of active I/O's */
@@ -216,24 +210,26 @@ struct	siop_softc {
 #define	STS_EXT		0x80	/* Extended status valid */
 
 #ifdef ARCH_720
-void siopng_minphys __P((struct buf *bp));
-int siopng_scsicmd __P((struct scsipi_xfer *));
-void siopnginitialize __P((struct siop_softc *));
-void siopngintr __P((struct siop_softc *));
-void siopng_dump_registers __P((struct siop_softc *));
+void siopng_minphys(struct buf *bp);
+void siopng_scsipi_request(struct scsipi_channel *,
+			scsipi_adapter_req_t, void *);
+void siopnginitialize(struct siop_softc *);
+void siopngintr(struct siop_softc *);
+void siopng_dump_registers(struct siop_softc *);
 #ifdef DEBUG
-void siopng_dump __P((struct siop_softc *));
+void siopng_dump(struct siop_softc *);
 #endif
 
 #else
 
-void siop_minphys __P((struct buf *bp));
-int siop_scsicmd __P((struct scsipi_xfer *));
-void siopinitialize __P((struct siop_softc *));
-void siopintr __P((struct siop_softc *));
-void siop_dump_registers __P((struct siop_softc *));
+void siop_minphys(struct buf *bp);
+void siop_scsipi_request(struct scsipi_channel *,
+			scsipi_adapter_req_t, void *);
+void siopinitialize(struct siop_softc *);
+void siopintr(struct siop_softc *);
+void siop_dump_registers(struct siop_softc *);
 #ifdef DEBUG
-void siop_dump __P((struct siop_softc *));
+void siop_dump(struct siop_softc *);
 #endif
 #endif
 

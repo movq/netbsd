@@ -1,5 +1,5 @@
 #!/bin/sh
-#	$NetBSD: install.sub,v 1.33 2000/02/20 00:23:10 mrg Exp $
+#	$NetBSD: install.sub,v 1.45 2008/04/30 13:10:48 martin Exp $
 #
 # Copyright (c) 1996 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -15,13 +15,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -161,6 +154,10 @@ dir_has_sets() {
 		if [ -f $_dir/${_file}.tgz ]; then
 			return 0
 		fi
+		# Try for uncompressed files
+		if [ -f $_dir/${_file}.tar ]; then
+			return 0
+		fi
 		# Try for split files
 		if [ -f $_dir/${_file}${VERSION}.aa ]; then
 			return 0
@@ -289,9 +286,11 @@ addhostent() {
 	# $1 - IP address
 	# $2 - symbolic name
 
+	local fqdn
+
 	# Create an entry in the hosts table.  If no host table
 	# exists, create one.  If the IP address already exists,
-	# replace it's entry.
+	# replace its entry.
 	if [ ! -f /tmp/hosts ]; then
 		echo "127.0.0.1 localhost" > /tmp/hosts
 	fi
@@ -299,7 +298,10 @@ addhostent() {
 	sed "/^$1 /d" < /tmp/hosts > /tmp/hosts.new
 	mv /tmp/hosts.new /tmp/hosts
 
-	echo "$1 $2 $2.$FQDN" >> /tmp/hosts
+	if [ X${FQDN} != X ]; then
+		fqdn=$2.$FQDN
+	fi
+	echo "$1 $2 $fqdn" >> /tmp/hosts
 }
 
 addifconfig() {
@@ -307,16 +309,12 @@ addifconfig() {
 	# $2 - interface symbolic name
 	# $3 - interface IP address
 	# $4 - interface netmask
-	# $5 - (optional) interface link-layer medium
+	# $5 - (optional) interface link-layer medium, preceded by "media ", else ""
 	# $6 - (optional) interface link-layer directives
 	local _m
 
-	_m=""
-	if [ "$5" != "" ]; then
-		_m="media $5"
-	fi
 	# Create a ifconfig.* file for the interface.
-	echo "inet $2 netmask $4 $_m $6" > /tmp/ifconfig.$1
+	echo "inet $2 netmask $4 $5 $6" > /tmp/ifconfig.$1
 
 	addhostent $3 $2
 }
@@ -338,7 +336,7 @@ configurenetwork() {
 	cat << \__configurenetwork_1
 
 You may configure the following network interfaces (the interfaces
-marked with [X] have been succesfully configured):
+marked with [X] have been successfully configured):
 
 __configurenetwork_1
 
@@ -473,7 +471,7 @@ configure_ifs() {
 			    "${_interface_symname}" \
 			    "${_interface_ip}" \
 			    "${_interface_mask}" \
-			    "${_interface_mediumtype}" \
+			    "${_m}" \
 			    "${_interface_extra}"
 			return 0
 		fi
@@ -485,27 +483,37 @@ configure_ifs() {
 		    "${_interface_symname}" \
 		    "${_interface_ip}" \
 		    "${_interface_mask}" \
-		    "${_interface_mediumtype}" \
+		    "${_m}" \
 		    "${_interface_extra}"
 	fi
 	return 1
 }
 
-# Much of this is gratuitously stolen from /etc/netstart.
+# Much of this is gratuitously stolen from /etc/rc.d/network.
 enable_network() {
 
 	# Set up the hostname.
-	if [ ! -f /mnt/etc/myname ]; then
+	if [ -f /mnt/etc/myname ]; then
+		hostname=`cat /mnt/etc/myname`
+	elif [ -f /mnt/etc/rc.conf ];then
+		hostname=`sh -c '. /mnt/etc/rc.conf ; echo $hostname'`
+	else
 		echo "ERROR: no /etc/myname!"
 		return 1
 	fi
-	hostname=`cat /mnt/etc/myname`
+	if [ -z "$hostname" ];then
+		echo "ERROR: hostname not set in /etc/myname or /etc/rc.conf!"
+		return 1
+	fi
 	hostname $hostname
 
 	# configure all the interfaces which we know about.
 if [ -f /mnt/etc/rc.conf ]; then
 (
 	# assume network interface configuration style 1.2D and up
+	if [ -f /mnt/etc/defaults/rc.conf ]; then
+		. /mnt/etc/defaults/rc.conf
+	fi
 	. /mnt/etc/rc.conf
 
 	if [ "$net_interfaces" != NO ]; then
@@ -620,7 +628,7 @@ install_ftp() {
 	echo "while read line; do"	>> /tmp/fname_filter.sh
 	echo "    case \$line in"	>> /tmp/fname_filter.sh
 	for _f in $THESETS; do
-		echo "    $_f.tar.gz|$_f.tgz|$_f.${VERSION}.aa)" \
+		echo "    $_f.tar.gz|$_f.tgz|$_f.tar|$_f.${VERSION}.aa)" \
 					>> /tmp/fname_filter.sh
 		echo '        echo -n "$line ";;' \
 					>> /tmp/fname_filter.sh
@@ -700,7 +708,7 @@ __install_ftp_2
 		# Make a copy of this script that lists the directory
 		# contents, and use that to determine the files to get.
 		cat /tmp/ftp-script.sh	>  /tmp/ftp-dir.sh
-		echo "ls"		>> /tmp/ftp-dir.sh
+		echo "nlist"		>> /tmp/ftp-dir.sh
 		echo "quit"		>> /tmp/ftp-dir.sh
 		echo "__end_commands"	>> /tmp/ftp-dir.sh
 
@@ -812,6 +820,8 @@ install_from_mounted_fs() {
 			_sets="$_sets ${_f}.tar.gz"
 		elif [ -f ${_dirname}/${_f}.tgz ]; then
 			_sets="$_sets ${_f}.tgz"
+		elif [ -f ${_dirname}/${_f}.tar ]; then
+			_sets="$_sets ${_f}.tar"
 		elif [ -f ${_dirname}/${_f}${VERSION}.aa ]; then
 			_sets="$_sets ${_f}${VERSION}"
 		fi
@@ -873,7 +883,15 @@ install_from_mounted_fs() {
 
 			# Extract file
 			echo "Extracting the $_f set:"
-			cat $_filename | (cd /mnt; pax -zr${verbose_flag}pe)
+			case "$_filename" in
+			*.tar)
+				(cd /mnt; pax -r${verbose_flag}pe < $_filename)
+				;;
+			*)
+				cat $_filename | \
+					(cd /mnt; pax -zr${verbose_flag}pe)
+				;;
+			esac
 			echo "Extraction complete."
 			_setsdone="$_f $_setsdone"
 		done
@@ -1136,7 +1154,19 @@ install_nfs() {
 			;;
 
 		*)
-			_nfs_tcp=""
+			echo -n "Use small NFS transfers (needed when server "
+			echo "or client"
+			echo -n "has a slow network card)? [n] "
+			getresp "n"
+			case "$resp" in
+			y*|Y*)
+				_nfs_tcp="-r 1024 -w 1024"
+				;;
+
+			*)
+				_nfs_tcp=""
+				;;
+			esac
 			;;
 	esac
 
@@ -1265,7 +1295,7 @@ get_timezone() {
 cat << \__get_timezone_1
 
 Select a time zone for your location. Timezones are represented on the
-system by a directory structure rooted in "/usr/share/timezone". Most
+system by a directory structure rooted in "/usr/share/zoneinfo". Most
 timezones can be selected by entering a token like "MET" or "GMT-6".
 Other zones are grouped by continent, with detailed zone information
 separated by a slash ("/"), e.g. "US/Pacific".
@@ -1342,7 +1372,7 @@ __install_sets_1
 		verbose_flag=v
 		;;
 	*)
-		echo "Not using verbose listing.."
+		echo "Not using verbose listing."
 		verbose_flag=""
 		;;
 	esac

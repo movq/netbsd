@@ -1,4 +1,4 @@
-/*	$NetBSD: dc21040reg.h,v 1.15 1998/05/22 18:50:59 matt Exp $	*/
+/*	$NetBSD: dc21040reg.h,v 1.19 2005/12/11 12:21:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 1994, 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -155,7 +155,7 @@ typedef struct {
 #define	TULIP_STS_FULDPLXSHRT	0x00000800L		/* (RW)  Full Duplex Short Fram Rcvd (21040) */
 #define	TULIP_STS_GPTIMEOUT	0x00000800L		/* (RW)  General Purpose Timeout (21140) */
 #define	TULIP_STS_AUI		0x00000400L		/* (RW)  AUI/TP Switch (21040) */
-#define	TULIP_STS_RXTIMEOUT	0x00000200L		/* (RW)  Receive Watchbog Timeout */
+#define	TULIP_STS_RXTIMEOUT	0x00000200L		/* (RW)  Receive Watchdog Timeout */
 #define	TULIP_STS_RXSTOPPED	0x00000100L		/* (RW)  Receive Process Stopped */
 #define	TULIP_STS_RXNOBUF	0x00000080L		/* (RW)  Receive Buffer Unavailable */
 #define	TULIP_STS_RXINTR	0x00000040L		/* (RW)  Receive Interrupt */
@@ -176,7 +176,7 @@ typedef struct {
 #define	TULIP_CMD_STOREFWD	0x00200000L		/* (RW)  Store and Foward (21140) */
 #define	TULIP_CMD_NOHEARTBEAT	0x00080000L		/* (RW)  No Heartbeat (21140) */
 #define	TULIP_CMD_PORTSELECT	0x00040000L		/* (RW)  Post Select (100Mb) (21140) */
-#define	TULIP_CMD_ENHCAPTEFFCT	0x00040000L		/* (RW)  Enhanced Capture Effecty (21041) */
+#define	TULIP_CMD_ENHCAPTEFFCT	0x00040000L		/* (RW)  Enhanced Capture Effect (21041) */
 #define	TULIP_CMD_CAPTREFFCT	0x00020000L		/* (RW)  Capture Effect (!802.3) */
 #define	TULIP_CMD_BACKPRESSURE	0x00010000L		/* (RW)  Back Pressure (!802.3) (21040) */
 #define	TULIP_CMD_THRESHOLDCTL	0x0000C000L		/* (RW)  Threshold Control */
@@ -327,7 +327,7 @@ typedef struct {
 
 #define	TULIP_GP_PINSET			0x00000100L
 /*
- * These are the defintitions used for the DEC 21140
+ * These are the definitions used for the DEC 21140
  * evaluation board.
  */
 #define	TULIP_GP_EB_PINS		0x0000001F	/* General Purpose Pin directions */
@@ -336,7 +336,7 @@ typedef struct {
 #define	TULIP_GP_EB_INIT		0x0000000B	/* No loopback --- point-to-point */
 
 /*
- * These are the defintitions used for the SMC9332 (21140) board.
+ * These are the definitions used for the SMC9332 (21140) board.
  */
 #define	TULIP_GP_SMC_9332_PINS		0x0000003F	/* General Purpose Pin directions */
 #define	TULIP_GP_SMC_9332_OK10		0x00000080	/* 10 Mb/sec Signal Detect gep<7> */
@@ -362,7 +362,7 @@ typedef struct {
 #define	TULIP_GP_DE500_FORCE_100	0x00000001L
 
 /*
- * These are the defintitions used for the Cogent EM100
+ * These are the definitions used for the Cogent EM100
  * 21140 board.
  */
 #define	TULIP_GP_EM100_PINS		0x0000003F	/* General Purpose Pin directions */
@@ -375,7 +375,7 @@ typedef struct {
 
 
 /*
- * These are the defintitions used for the Znyx ZX342
+ * These are the definitions used for the Znyx ZX342
  * 10/100 board
  */
 #define	TULIP_OUI_ZNYX_0		0x00
@@ -416,7 +416,7 @@ typedef struct {
 #define	TULIP_GP_ZX346_FULLDUPLEX	0x00000004	/* Full Duplex Sensed */
 #define	TULIP_GP_ZX34X_LB102		0x00000002	/* 100tx twister LB */
 #define	TULIP_GP_ZX34X_NLB101		0x00000001	/* PDT/PDR LB */
-#define	TULIP_GP_ZX34X_INIT		0x00000009	
+#define	TULIP_GP_ZX34X_INIT		0x00000009
 
 /*
  * Compex's OUI.  We need to twiddle a bit on their 21041 card.

@@ -1,4 +1,4 @@
-/*	$NetBSD: wwdump.c,v 1.6 1997/11/21 08:37:14 lukem Exp $	*/
+/*	$NetBSD: wwdump.c,v 1.8 2003/08/07 11:17:38 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)wwdump.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: wwdump.c,v 1.6 1997/11/21 08:37:14 lukem Exp $");
+__RCSID("$NetBSD: wwdump.c,v 1.8 2003/08/07 11:17:38 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,8 +49,7 @@ __RCSID("$NetBSD: wwdump.c,v 1.6 1997/11/21 08:37:14 lukem Exp $");
 static char cmap[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 void
-wwdumpwin(w)
-	struct ww *w;
+wwdumpwin(struct ww *w)
 {
 	int i, j;
 
@@ -68,8 +63,7 @@ wwdumpwin(w)
 }
 
 void
-wwdumpnvis(w)
-	struct ww *w;
+wwdumpnvis(struct ww *w)
 {
 	int i;
 	char buf[20];
@@ -84,7 +78,7 @@ wwdumpnvis(w)
 }
 
 void
-wwdumpsmap()
+wwdumpsmap(void)
 {
 	int i, j;
 
@@ -98,7 +92,7 @@ wwdumpsmap()
 }
 
 void
-wwdumpns()
+wwdumpns(void)
 {
 	int i, j;
 
@@ -113,7 +107,7 @@ wwdumpns()
 }
 
 void
-wwdumpos()
+wwdumpos(void)
 {
 	int i, j;
 

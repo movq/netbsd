@@ -1,4 +1,4 @@
-/* $NetBSD: login_cap.h,v 1.2 2000/02/04 02:17:16 mjl Exp $ */
+/*	$NetBSD: login_cap.h,v 1.10 2007/10/07 01:23:17 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995,1997 Berkeley Software Design, Inc. All rights reserved.
@@ -42,7 +42,7 @@
 #define	LOGIN_DEFUMASK		022
 #define	_PATH_LOGIN_CONF	"/etc/login.conf"
 
-#define	LOGIN_SETGROUP		0x0001	/* Set group */
+#define	LOGIN_OSETGROUP		0x0001	/* Obsolete setgroup */
 #define	LOGIN_SETLOGIN		0x0002	/* Set login */
 #define	LOGIN_SETPATH		0x0004	/* Set path */
 #define	LOGIN_SETPRIORITY	0x0008	/* Set priority */
@@ -50,7 +50,10 @@
 #define	LOGIN_SETUMASK		0x0020	/* Set umask */
 #define	LOGIN_SETUSER		0x0040	/* Set user */
 #define	LOGIN_SETENV		0x0080	/* Set user environment */
-#define	LOGIN_SETALL 		0x00ff	/* Set all. */
+#define	LOGIN_SETGID		0x0100	/* Set group id */
+#define	LOGIN_SETGROUPS		0x0200	/* Set group membership (initgroups) */
+#define	LOGIN_SETALL		0x03fe	/* Set all. 0x0001 is obsolete! */
+#define	LOGIN_SETGROUP		(LOGIN_SETGID|LOGIN_SETGROUPS) /* Set group */
 
 typedef struct {
 	char	*lc_class;
@@ -58,24 +61,26 @@ typedef struct {
 	char	*lc_style;
 } login_cap_t;
 
+typedef int (*envfunc_t)(void *, const char *, const char *, int);
+
 #include <sys/cdefs.h>
 __BEGIN_DECLS
 struct passwd;
 
-login_cap_t *login_getclass __P((char *));
-login_cap_t *login_getpwclass __P((const struct passwd *));
-void	 login_close __P((login_cap_t *));
-int	 login_getcapbool __P((login_cap_t *, char *, u_int));
-quad_t	 login_getcapnum __P((login_cap_t *, char *, quad_t, quad_t));
-quad_t	 login_getcapsize __P((login_cap_t *, char *, quad_t, quad_t));
-char	*login_getcapstr __P((login_cap_t *, char *, char *, char *));
-quad_t	 login_getcaptime __P((login_cap_t *, char *, quad_t, quad_t));
+login_cap_t *login_getclass(const char *);
+login_cap_t *login_getpwclass(const struct passwd *);
+void	 login_close(login_cap_t *);
+int	 login_getcapbool(login_cap_t *, const char *, u_int);
+quad_t	 login_getcapnum(login_cap_t *, const char *, quad_t, quad_t);
+quad_t	 login_getcapsize(login_cap_t *, const char *, quad_t, quad_t);
+char	*login_getcapstr(login_cap_t *, const char *, char *, char *);
+quad_t	 login_getcaptime(login_cap_t *, const char *, quad_t, quad_t);
 
-int	secure_path __P((char *));
-int	setclasscontext __P((char *, u_int));
-int	setusercontext __P((login_cap_t *, struct passwd *, uid_t, u_int));
+int	setclasscontext(const char *, u_int);
+int	setusercontext(login_cap_t *, struct passwd *, uid_t, u_int);
+void	setuserpath(login_cap_t *, const char *, envfunc_t, void *);
+int	setuserenv(login_cap_t *, envfunc_t, void *);
 
 __END_DECLS
 
-#endif
-
+#endif	/* !_LOGIN_CAP_H_ */

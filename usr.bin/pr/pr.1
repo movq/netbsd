@@ -1,4 +1,4 @@
-.\"	$NetBSD: pr.1,v 1.9 1999/11/19 22:29:26 kristerw Exp $
+.\"	$NetBSD: pr.1,v 1.16 2003/10/13 07:41:22 agc Exp $
 .\"
 .\" Copyright (c) 1991 Keith Muller.
 .\" Copyright (c) 1993
@@ -15,11 +15,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -36,7 +32,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)pr.1	8.1 (Berkeley) 6/6/93
-.\"	$NetBSD: pr.1,v 1.9 1999/11/19 22:29:26 kristerw Exp $
+.\"	$NetBSD: pr.1,v 1.16 2003/10/13 07:41:22 agc Exp $
 .\"
 .Dd June 6, 1993
 .Dt PR 1
@@ -45,7 +41,7 @@
 .Nm pr
 .Nd print files
 .Sh SYNOPSIS
-.Nm ""
+.Nm
 .Bk -words
 .Op Ar \&+page
 .Ek
@@ -81,6 +77,9 @@
 .Op Fl s
 .Op Ar char
 .Oc
+.Ek
+.Bk -words
+.Op Fl T Ar timefmt
 .Ek
 .Bk -words
 .Oo
@@ -119,20 +118,19 @@ utility has completed processing.
 When multiple column output is specified,
 text columns are of equal width.
 By default text columns are separated by at least one
-.Em <blank>.
+.Em \*[Lt]blank\*[Gt] .
 Input lines that do not fit into a text column are truncated.
 Lines are not truncated under single column output.
 .Sh OPTIONS
-.Pp
 In the following option descriptions, column, lines, offset, page, and
 width are positive decimal integers and gap is a nonnegative decimal integer.
 .Bl -tag -width 4n
 .It Ar \&+page
-Begin output at page number 
+Begin output at page number
 .Ar page
 of the formatted input.
 .It Fl Ar column
-Produce output that is 
+Produce output that is
 .Ar columns
 wide (default is 1) that is written vertically
 down each column in the order in which the text
@@ -148,7 +146,7 @@ When used with
 .Fl t ,
 the minimum number of lines is used to display the output.
 .It Fl a
-Modify the effect of the 
+Modify the effect of the
 .Fl column
 option so that the columns are filled across the page in a round-robin order
 (e.g., when column is 2, the first input line heads column
@@ -159,64 +157,64 @@ This option requires the use of the
 option.
 .It Fl d
 Produce output that is double spaced. An extra
-.Em <newline>
-character is output following every <newline> found in the input.
+.Em \*[Lt]newline\*[Gt]
+character is output following every \*[Lt]newline\*[Gt] found in the input.
 .It Fl e Ar \&[char\&]\&[gap\&]
-Expand each input <tab> to the next greater column
-position specified by the formula 
+Expand each input \*[Lt]tab\*[Gt] to the next greater column
+position specified by the formula
 .Ar n*gap+1 ,
-where 
+where
 .Em n
-is an integer > 0.
+is an integer \*[Gt] 0.
 If
 .Ar gap
 is zero or is omitted the default is 8.
-All 
-.Em <tab>
+All
+.Em \*[Lt]tab\*[Gt]
 characters in the input are expanded into the appropriate
 number of
-.Em <space>s .
+.Em \*[Lt]space\*[Gt]s .
 If any nondigit character,
 .Ar char ,
 is specified, it is used as the input tab character.
 .It Fl F
 Use a
-.Em <form-feed>
+.Em \*[Lt]form-feed\*[Gt]
 character for new pages,
 instead of the default behavior that uses a
 sequence of
-.Em <newline>
+.Em \*[Lt]newline\*[Gt]
 characters.
 .It Fl h Ar header
-Use the string 
+Use the string
 .Ar header
 to replace the
 .Ar file name
 in the header line.
 .It Fl i Ar \&[char\&]\&[gap\&]
-In output, replace multiple <space>s with <tab>s whenever two or more
-adjacent <space>s reach column positions
+In output, replace multiple \*[Lt]space\*[Gt]s with \*[Lt]tab\*[Gt]s whenever two or more
+adjacent \*[Lt]space\*[Gt]s reach column positions
 .Ar gap+1 ,
 .Ar 2*gap+1 ,
 etc.
 If
 .Ar gap
 is zero or omitted, default
-.Em <tab>
+.Em \*[Lt]tab\*[Gt]
 settings at every eighth column position
 is used.
 If any nondigit character,
 .Ar char ,
 is specified, it is used as the output
-.Em <tab>
+.Em \*[Lt]tab\*[Gt]
 character.
 .It Fl l Ar lines
-Override the 66 line default and reset the page length to 
-.Ar lines.
+Override the 66 line default and reset the page length to
+.Ar lines .
 If
 .Ar lines
 is not greater than the sum of both the header and trailer
-depths (in lines), the 
+depths (in lines), the
 .Nm
 utility suppresses output of both the header and trailer, as if the
 .Fl t
@@ -239,7 +237,7 @@ are assumed.
 Provide
 .Ar width
 digit line numbering.
-The default for 
+The default for
 .Ar width ,
 if not specified, is 5.
 The number occupies the first
@@ -253,14 +251,14 @@ If
 separate it from whatever follows. The default for
 .Ar char
 is a
-.Em <tab> .
+.Em \*[Lt]tab\*[Gt] .
 Line numbers longer than
 .Ar width
 columns are truncated.
 .It Fl o Ar offset
 Each line of output is preceded by
 .Ar offset
-.Em <spaces>s .
+.Em \*[Lt]spaces\*[Gt]s .
 If the
 .Fl o
 option is not specified, the default is zero.
@@ -271,12 +269,17 @@ Write no diagnostic reports on failure to open a file.
 Separate text columns by the single character
 .Ar char
 instead of by the appropriate number of
-.Em <space>s
-(default for 
+.Em \*[Lt]space\*[Gt]s
+(default for
 .Ar char
 is the
-.Em <tab>
+.Em \*[Lt]tab\*[Gt]
 character).
+.It Fl T
+Specify an
+.Xr strftime 3
+format string to be used to format the date and time information in the page
+header.
 .It Fl t
 Print neither the five-line identifying
 header nor the five-line trailer usually supplied for each page.
@@ -324,7 +327,6 @@ and
 require that both arguments, if present, not be separated from the option
 letter.
 .Sh ERRORS
-.Pp
 If
 .Nm
 receives an interrupt while printing to a terminal, it
@@ -340,7 +342,8 @@ process (if output is redirected) or after all successful
 file printing is complete (when printing to a terminal).
 .Sh SEE ALSO
 .Xr cat 1 ,
-.Xr more 1
+.Xr more 1 ,
+.Xr strftime 3
 .Sh STANDARDS
 The
 .Nm

@@ -1,4 +1,4 @@
-/*	$NetBSD: cd.c,v 1.27 1999/07/09 03:05:49 christos Exp $	*/
+/*	$NetBSD: cd.c,v 1.39 2006/05/04 11:16:53 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)cd.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: cd.c,v 1.27 1999/07/09 03:05:49 christos Exp $");
+__RCSID("$NetBSD: cd.c,v 1.39 2006/05/04 11:16:53 simonb Exp $");
 #endif
 #endif /* not lint */
 
@@ -70,39 +66,63 @@ __RCSID("$NetBSD: cd.c,v 1.27 1999/07/09 03:05:49 christos Exp $");
 #include "show.h"
 #include "cd.h"
 
-STATIC int docd __P((char *, int));
-STATIC char *getcomponent __P((void));
-STATIC void updatepwd __P((char *));
+STATIC int docd(const char *, int);
+STATIC char *getcomponent(void);
+STATIC void updatepwd(const char *);
+STATIC void find_curdir(int noerror);
 
 char *curdir = NULL;		/* current working directory */
 char *prevdir;			/* previous working directory */
 STATIC char *cdcomppath;
 
 int
-cdcmd(argc, argv)
-	int argc;
-	char **argv;
+cdcmd(int argc, char **argv)
 {
 	const char *dest;
-	const char *path;
-	char *p;
+	const char *path, *p;
+	char *d;
 	struct stat statb;
-	int print = 0;
+	int print = cdprint;	/* set -cdprint to enable */
 
 	nextopt(nullstr);
-	if ((dest = *argptr) == NULL && (dest = bltinlookup("HOME", 1)) == NULL)
-		error("HOME not set");
-	if (*dest == '\0')
-	        dest = ".";
+
+	/*
+	 * Try (quite hard) to have 'curdir' defined, nothing has set
+	 * it on entry to the shell, but we want 'cd fred; cd -' to work.
+	 */
+	getpwd(1);
+	dest = *argptr;
+	if (dest == NULL) {
+		dest = bltinlookup("HOME", 1);
+		if (dest == NULL)
+			error("HOME not set");
+	} else {
+		if (argptr[1]) {
+			/* Do 'ksh' style substitution */
+			if (!curdir)
+				error("PWD not set");
+			p = strstr(curdir, dest);
+			if (!p)
+				error("bad substitution");
+			d = stalloc(strlen(curdir) + strlen(argptr[1]) + 1);
+			memcpy(d, curdir, p - curdir);
+			strcpy(d + (p - curdir), argptr[1]);
+			strcat(d, p + strlen(dest));
+			dest = d;
+			print = 1;
+		}
+	}
+
 	if (dest[0] == '-' && dest[1] == '\0') {
 		dest = prevdir ? prevdir : curdir;
 		print = 1;
-		if (dest)
-		        print = 1;
-		else
-		        dest = ".";
 	}
-	if (*dest == '/' || (path = bltinlookup("CDPATH", 1)) == NULL)
+	if (*dest == '\0')
+	        dest = ".";
+	p = dest;
+	if (*p == '.' && *++p == '.')
+	    p++;
+	if (*p == 0 || *p == '/' || (path = bltinlookup("CDPATH", 1)) == NULL)
 		path = nullstr;
 	while ((p = padvance(&path, dest)) != NULL) {
 		if (stat(p, &statb) >= 0 && S_ISDIR(statb.st_mode)) {
@@ -111,8 +131,9 @@ cdcmd(argc, argv)
 				 * XXX - rethink
 				 */
 				if (p[0] == '.' && p[1] == '/' && p[2] != '\0')
-					p += 2;
-				print = strcmp(p, dest);
+					print = strcmp(p + 2, dest);
+				else
+					print = strcmp(p, dest);
 			}
 			if (docd(p, print) >= 0)
 				return 0;
@@ -130,9 +151,7 @@ cdcmd(argc, argv)
  */
 
 STATIC int
-docd(dest, print)
-	char *dest;
-	int print;
+docd(const char *dest, int print)
 {
 	char *p;
 	char *q;
@@ -184,7 +203,7 @@ docd(dest, print)
 	}
 	updatepwd(badstat ? NULL : dest);
 	INTON;
-	if (print && iflag && curdir)
+	if (print && iflag == 1 && curdir)
 		out1fmt("%s\n", curdir);
 	return 0;
 }
@@ -196,7 +215,8 @@ docd(dest, print)
  */
 
 STATIC char *
-getcomponent() {
+getcomponent(void)
+{
 	char *p;
 	char *start;
 
@@ -223,9 +243,8 @@ getcomponent() {
  */
 
 STATIC void
-updatepwd(dir)
-	char *dir;
-	{
+updatepwd(const char *dir)
+{
 	char *new;
 	char *p;
 
@@ -242,9 +261,12 @@ updatepwd(dir)
 		INTOFF;
 		prevdir = curdir;
 		curdir = NULL;
-		getpwd();
-		setvar("PWD", curdir, VEXPORT|VTEXTFIXED);
+		getpwd(1);
 		INTON;
+		if (curdir)
+			setvar("PWD", curdir, VEXPORT);
+		else
+			unsetvar("PWD", 0);
 		return;
 	}
 	cdcomppath = stalloc(strlen(dir) + 1);
@@ -274,18 +296,35 @@ updatepwd(dir)
 		ckfree(prevdir);
 	prevdir = curdir;
 	curdir = savestr(stackblock());
-	setvar("PWD", curdir, VEXPORT|VTEXTFIXED);
+	setvar("PWD", curdir, VEXPORT);
 	INTON;
 }
 
-
+/*
+ * Posix says the default should be 'pwd -L' (as below), however
+ * the 'cd' command (above) does something much nearer to the
+ * posix 'cd -P' (not the posix default of 'cd -L').
+ * If 'cd' is changed to support -P/L then the default here
+ * needs to be revisited if the historic behaviour is to be kept.
+ */
 
 int
-pwdcmd(argc, argv)
-	int argc;
-	char **argv;
+pwdcmd(int argc, char **argv)
 {
-	getpwd();
+	int i;
+	char opt = 'L';
+
+	while ((i = nextopt("LP")) != '\0')
+		opt = i;
+	if (*argptr)
+		error("unexpected argument");
+
+	if (opt == 'L')
+		getpwd(0);
+	else
+		find_curdir(0);
+
+	setvar("PWD", curdir, VEXPORT);
 	out1str(curdir);
 	out1c('\n');
 	return 0;
@@ -293,6 +332,15 @@ pwdcmd(argc, argv)
 
 
 
+void
+initpwd(void)
+{
+	getpwd(1);
+	if (curdir)
+		setvar("PWD", curdir, VEXPORT);
+	else
+		sh_warnx("Cannot determine current working directory");
+}
 
 #define MAXPWD 256
 
@@ -301,12 +349,38 @@ pwdcmd(argc, argv)
  * directory, this routine returns immediately.
  */
 void
-getpwd()
+getpwd(int noerror)
 {
-	char buf[MAXPWD];
+	char *pwd;
+	struct stat stdot, stpwd;
+	static int first = 1;
 
 	if (curdir)
 		return;
+
+	if (first) {
+		first = 0;
+		pwd = getenv("PWD");
+		if (pwd && *pwd == '/' && stat(".", &stdot) != -1 &&
+		    stat(pwd, &stpwd) != -1 &&
+		    stdot.st_dev == stpwd.st_dev &&
+		    stdot.st_ino == stpwd.st_ino) {
+			curdir = savestr(pwd);
+			return;
+		}
+	}
+
+	find_curdir(noerror);
+
+	return;
+}
+
+STATIC void
+find_curdir(int noerror)
+{
+	int i;
+	char *pwd;
+
 	/*
 	 * Things are a bit complicated here; we could have just used
 	 * getcwd, but traditionally getcwd is implemented using popen
@@ -320,29 +394,28 @@ getpwd()
 	 * /bin/pwd.
 	 */
 #if defined(__NetBSD__) || defined(__SVR4)
-		
-	if (getcwd(buf, sizeof(buf)) == NULL) {
-		char *pwd = getenv("PWD");
-		struct stat stdot, stpwd;
 
-		if (pwd && *pwd == '/' && stat(".", &stdot) != -1 &&
-		    stat(pwd, &stpwd) != -1 &&
-		    stdot.st_dev == stpwd.st_dev &&
-		    stdot.st_ino == stpwd.st_ino) {
+	for (i = MAXPWD;; i *= 2) {
+		pwd = stalloc(i);
+		if (getcwd(pwd, i) != NULL) {
 			curdir = savestr(pwd);
 			return;
 		}
-		error("getcwd() failed: %s", strerror(errno));
+		stunalloc(pwd);
+		if (errno == ERANGE)
+			continue;
+		if (!noerror)
+			error("getcwd() failed: %s", strerror(errno));
+		return;
 	}
-	curdir = savestr(buf);
 #else
 	{
 		char *p;
-		int i;
 		int status;
 		struct job *jp;
 		int pip[2];
 
+		pwd = stalloc(MAXPWD);
 		INTOFF;
 		if (pipe(pip) < 0)
 			error("Pipe call failed");
@@ -359,8 +432,8 @@ getpwd()
 		}
 		(void) close(pip[1]);
 		pip[1] = -1;
-		p = buf;
-		while ((i = read(pip[0], p, buf + MAXPWD - p)) > 0
+		p = pwd;
+		while ((i = read(pip[0], p, pwd + MAXPWD - p)) > 0
 		     || (i == -1 && errno == EINTR)) {
 			if (i > 0)
 				p += i;
@@ -370,11 +443,17 @@ getpwd()
 		status = waitforjob(jp);
 		if (status != 0)
 			error((char *)0);
-		if (i < 0 || p == buf || p[-1] != '\n')
+		if (i < 0 || p == pwd || p[-1] != '\n') {
+			if (noerror) {
+				INTON;
+				return;
+			}
 			error("pwd command failed");
+		}
 		p[-1] = '\0';
+		INTON;
+		curdir = savestr(pwd);
+		return;
 	}
-	curdir = savestr(buf);
-	INTON;
 #endif
 }

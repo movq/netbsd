@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_fifo.c,v 1.5 2000/03/04 03:27:13 oster Exp $	*/
+/*	$NetBSD: rf_fifo.c,v 1.15 2006/11/16 01:33:23 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -35,7 +35,11 @@
  *
  ***************************************************/
 
-#include "rf_types.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rf_fifo.c,v 1.15 2006/11/16 01:33:23 christos Exp $");
+
+#include <dev/raidframe/raidframevar.h>
+
 #include "rf_alloclist.h"
 #include "rf_stripelocks.h"
 #include "rf_layout.h"
@@ -45,28 +49,23 @@
 #include "rf_general.h"
 #include "rf_options.h"
 #include "rf_raid.h"
-#include "rf_types.h"
 
 /* just malloc a header, zero it (via calloc), and return it */
 /*ARGSUSED*/
 void   *
-rf_FifoCreate(sectPerDisk, clList, listp)
-	RF_SectorCount_t sectPerDisk;
-	RF_AllocListElem_t *clList;
-	RF_ShutdownList_t **listp;
+rf_FifoCreate(RF_SectorCount_t sectPerDisk, RF_AllocListElem_t *clList,
+	      RF_ShutdownList_t **listp)
 {
 	RF_FifoHeader_t *q;
 
-	RF_CallocAndAdd(q, 1, sizeof(RF_FifoHeader_t), (RF_FifoHeader_t *), clList);
+	RF_MallocAndAdd(q, sizeof(RF_FifoHeader_t),
+				(RF_FifoHeader_t *), clList);
 	q->hq_count = q->lq_count = 0;
 	return ((void *) q);
 }
 
-void 
-rf_FifoEnqueue(q_in, elem, priority)
-	void   *q_in;
-	RF_DiskQueueData_t *elem;
-	int     priority;
+void
+rf_FifoEnqueue(void *q_in, RF_DiskQueueData_t *elem, int priority)
 {
 	RF_FifoHeader_t *q = (RF_FifoHeader_t *) q_in;
 
@@ -85,10 +84,12 @@ rf_FifoEnqueue(q_in, elem, priority)
 		q->hq_count++;
 	} else {
 		RF_ASSERT(elem->next == NULL);
+#if RF_DEBUG_QUEUE
 		if (rf_fifoDebug) {
-			printf("raid%d: fifo: ENQ lopri\n", 
+			printf("raid%d: fifo: ENQ lopri\n",
 			       elem->raidPtr->raidid);
 		}
+#endif
 		if (!q->lq_tail) {
 			RF_ASSERT(q->lq_count == 0 && q->lq_head == NULL);
 			q->lq_head = q->lq_tail = elem;
@@ -102,18 +103,16 @@ rf_FifoEnqueue(q_in, elem, priority)
 	if ((q->hq_count + q->lq_count) != elem->queue->queueLength) {
 		printf("Queue lengths differ!: %d %d %d\n",
 		    q->hq_count, q->lq_count, (int) elem->queue->queueLength);
-		printf("%d %d %d %d\n",
+		printf("%d %d %d\n",
 		    (int) elem->queue->numOutstanding,
 		    (int) elem->queue->maxOutstanding,
-		    (int) elem->queue->row,
 		    (int) elem->queue->col);
 	}
 	RF_ASSERT((q->hq_count + q->lq_count) == elem->queue->queueLength);
 }
 
 RF_DiskQueueData_t *
-rf_FifoDequeue(q_in)
-	void   *q_in;
+rf_FifoDequeue(void *q_in)
 {
 	RF_FifoHeader_t *q = (RF_FifoHeader_t *) q_in;
 	RF_DiskQueueData_t *nd;
@@ -136,10 +135,12 @@ rf_FifoDequeue(q_in)
 				q->lq_tail = NULL;
 			nd->next = NULL;
 			q->lq_count--;
+#if RF_DEBUG_QUEUE
 			if (rf_fifoDebug) {
-				printf("raid%d: fifo: DEQ lopri %lx\n", 
+				printf("raid%d: fifo: DEQ lopri %lx\n",
 				       nd->raidPtr->raidid, (long) nd);
 			}
+#endif
 		} else {
 			RF_ASSERT(q->hq_count == 0 && q->lq_count == 0 && q->hq_tail == NULL && q->lq_tail == NULL);
 			nd = NULL;
@@ -171,11 +172,9 @@ rf_FifoPeek(void *q_in)
  * the low priority queue to the end of the normal priority queue.
  * We assume the queue is locked upon entry.
  */
-int 
-rf_FifoPromote(q_in, parityStripeID, which_ru)
-	void   *q_in;
-	RF_StripeNum_t parityStripeID;
-	RF_ReconUnitNum_t which_ru;
+int
+rf_FifoPromote(void *q_in, RF_StripeNum_t parityStripeID,
+	       RF_ReconUnitNum_t which_ru)
 {
 	RF_FifoHeader_t *q = (RF_FifoHeader_t *) q_in;
 	RF_DiskQueueData_t *lp = q->lq_head, *pt = NULL;	/* lp = lo-pri queue
@@ -209,7 +208,7 @@ rf_FifoPromote(q_in, parityStripeID, which_ru)
 				q->hq_tail->next = lp;
 				q->hq_tail = lp;
 			}
-			 /* append to hi-priority queue */ 
+			 /* append to hi-priority queue */
 			else {
 				q->hq_head = q->hq_tail = lp;
 			}

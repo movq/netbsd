@@ -1,14 +1,12 @@
-/*	$NetBSD: iplang_l.l,v 1.2 1999/12/11 23:47:02 veego Exp $	*/
+/*	$NetBSD: iplang_l.l,v 1.5 2004/03/28 09:00:55 martti Exp $	*/
 
 %{
 /*
  * Copyright (C) 1997-1998 by Darren Reed.
  *
- * Redistribution and use in source and binary forms are permitted
- * provided that this notice is preserved and due credit is given
- * to the original author and the contributors.
+ * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: iplang_l.l,v 2.1 1999/08/04 17:30:53 darrenr Exp
+ * Id: iplang_l.l,v 2.8 2003/07/28 01:15:31 darrenr Exp
  */
 #include <stdio.h>
 #include <string.h>
@@ -20,7 +18,6 @@
 #include <netinet/in_systm.h>
 #include <netinet/in.h>
 #include "iplang_y.h"
-#include "ip_compat.h"
 #include "ipf.h"
 
 #ifndef	__P
@@ -33,7 +30,7 @@
 
 extern int opts;
 
-int lineNum = 0, proto = 0, oldproto = 0, next = -1, laststate = 0;
+int lineNum = 0, ipproto = 0, oldipproto = 0, next = -1, laststate = 0;
 int *prstack = NULL, numpr = 0, state = 0, token = 0;
 
 void    yyerror __P((char *));
@@ -45,13 +42,13 @@ int	save_token __P((void));
 void	swallow __P((void));
 int	yylex __P((void));
 
-struct	wordtab	{
+struct	lwordtab	{
 	char	*word;
 	int	state;
 	int	next;
 };
 
-struct	wordtab	words[] = {
+struct	lwordtab	words[] = {
 	{ "interface",	IL_INTERFACE,		-1 },
 	{ "iface",	IL_INTERFACE,		-1 },
 	{ "name",	IL_IFNAME,		IL_TOKEN },
@@ -199,14 +196,14 @@ void push_proto()
 		prstack = (int *)malloc(sizeof(int));
 	else
 		prstack = (int *)realloc((char *)prstack, numpr * sizeof(int));
-	prstack[numpr - 1] = oldproto;
+	prstack[numpr - 1] = oldipproto;
 }
 
 
 void pop_proto()
 {
 	numpr--;
-	proto = prstack[numpr];
+	ipproto = prstack[numpr];
 	if (!numpr) {
 		free(prstack);
 		prstack = NULL;
@@ -219,7 +216,7 @@ void pop_proto()
 int save_token()
 {
 
-	yylval.str = strdup(yytext);
+	yylval.str = strdup((char *)yytext);
 	return IL_TOKEN;
 }
 
@@ -227,7 +224,7 @@ int save_token()
 int next_item(nstate)
 int nstate;
 {
-	struct	wordtab	*wt;
+	struct	lwordtab	*wt;
 
 	if (opts & OPT_DEBUG)
 		printf("text=[%s] id=%d next=%d\n", yytext, nstate, next);
@@ -238,13 +235,13 @@ int nstate;
 	token++;
 
 	for (wt = words; wt->word; wt++)
-		if (!strcasecmp(wt->word, yytext))
+		if (!strcasecmp(wt->word, (char *)yytext))
 			return next_state(wt->state, wt->next);
 	if (opts & OPT_DEBUG)
 		printf("unknown keyword=[%s]\n", yytext);
 	next = -1;
 	if (nstate == IL_NUMBER)
-		yylval.num = atoi(yytext);
+		yylval.num = atoi((char *)yytext);
 	token++;
 	return nstate;
 }
@@ -264,45 +261,45 @@ int nstate, fornext;
 	case IL_DATA :
 	case IL_INTERFACE :
 	case IL_ARP :
-		oldproto = proto;
-		proto = nstate;
+		oldipproto = ipproto;
+		ipproto = nstate;
 		break;
 	case IL_SUM :
-		if (proto == IL_IPV4)
+		if (ipproto == IL_IPV4)
 			nstate = IL_V4SUM;
-		else if (proto == IL_TCP)
+		else if (ipproto == IL_TCP)
 			nstate = IL_TCPSUM;
-		else if (proto == IL_UDP)
+		else if (ipproto == IL_UDP)
 			nstate = IL_UDPSUM;
 		break;
 	case IL_OPT :
-		if (proto == IL_IPV4)
+		if (ipproto == IL_IPV4)
 			nstate = IL_V4OPT;
-		else if (proto == IL_TCP)
+		else if (ipproto == IL_TCP)
 			nstate = IL_TCPOPT;
 		break;
 	case IL_IPO_NOP :
-		if (proto == IL_TCP)
+		if (ipproto == IL_TCP)
 			nstate = IL_TCPO_NOP;
 		break;
 	case IL_IPO_EOL :
-		if (proto == IL_TCP)
+		if (ipproto == IL_TCP)
 			nstate = IL_TCPO_EOL;
 		break;
 	case IL_IPO_TS :
-		if (proto == IL_TCP)
+		if (ipproto == IL_TCP)
 			nstate = IL_TCPO_TS;
 		break;
 	case IL_OFF :
-		if (proto == IL_IPV4)
+		if (ipproto == IL_IPV4)
 			nstate = IL_V4OFF;
-		else if (proto == IL_TCP)
+		else if (ipproto == IL_TCP)
 			nstate = IL_TCPOFF;
 		break;
 	case IL_LEN :
-		if (proto == IL_IPV4)
+		if (ipproto == IL_IPV4)
 			nstate = IL_V4LEN;
-		else if (proto == IL_UDP)
+		else if (ipproto == IL_UDP)
 			nstate = IL_UDPLEN;
 		break;
 	}
@@ -320,5 +317,6 @@ void swallow()
 		while ((c != '\n') && (c != EOF))
 			c = input();
 	}
-	unput(c);
+	if (c != EOF)
+		unput(c);
 }

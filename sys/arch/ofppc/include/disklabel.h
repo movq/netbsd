@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.5 1999/01/27 21:33:20 thorpej Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.7 2007/10/17 19:56:07 garbled Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -39,13 +39,17 @@
 #define	MAXPARTITIONS	16		/* number of partitions */
 #define	RAW_PART	2		/* raw partition: XX?c */
 
-struct cpu_disklabel {
-	int cd_start;		/* Offset to NetBSD partition in blocks */
-};
+#if HAVE_NBTOOL_CONFIG_H
+#include <nbinclude/sys/bootblock.h> /* Pull in MBR partition definitions. */
+#include <nbinclude/sys/dkbad.h>
+#else
+#include <sys/bootblock.h> /* Pull in MBR partition definitions. */
+#include <sys/dkbad.h>
+#endif /* HAVE_NBTOOL_CONFIG_H */
 
-#ifdef	_KERNEL
-struct disklabel;
-int bounds_check_with_label __P((struct buf *bp, struct disklabel *lp, int wlabel));
-#endif	/* _KERNEL */
+struct cpu_disklabel {
+	struct mbr_partition dosparts[MBR_PART_COUNT];
+	struct dkbad bad;
+};
 
 #endif	/* _MACHINE_DISKLABEL_H_ */

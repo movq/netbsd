@@ -1,4 +1,4 @@
-/*	$NetBSD: SYS.h,v 1.5 1998/10/20 06:46:19 matt Exp $ */
+/*	$NetBSD: SYS.h,v 1.10 2003/08/07 16:42:30 agc Exp $ */
 /*
  * Copyright (c) 1983, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -48,7 +44,7 @@
 	SYSTRAP(y)
 
 #define _SYSCALL(x,y)							\
-	err: nop; nop; jmp cerror+2;					\
+	err: nop; nop; jmp CERROR+2;					\
 	_SYSCALL_NOERROR(x,y);						\
 	jcs err+2
 
@@ -72,6 +68,23 @@
 #define RSYSCALL(x)							\
 	PSEUDO(x,x)
 
+#ifdef WEAK_ALIAS
+#define	WSYSCALL(weak,strong)						\
+	WEAK_ALIAS(weak,strong);					\
+	PSEUDO(strong,weak)
+#else
+#define	WSYSCALL(weak,strong)						\
+	PSEUDO(weak,weak)
+#endif
+
 #define	ASMSTR		.asciz
 
-	.globl	cerror
+#ifdef __ELF__
+#define	CERROR	_C_LABEL(__cerror)
+#define	CURBRK	_C_LABEL(__curbrk)
+#else
+#define	CERROR	_ASM_LABEL(cerror)
+#define	CURBRK	_ASM_LABEL(curbrk)
+#endif
+
+	.globl	CERROR

@@ -1,4 +1,4 @@
-/*	$NetBSD: post.c,v 1.4 1999/12/22 14:38:12 kleink Exp $	*/
+/*	$NetBSD: post.c,v 1.12 2003/04/19 12:52:39 blymn Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com.au)
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,6 +26,9 @@
  *
  */
 
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: post.c,v 1.12 2003/04/19 12:52:39 blymn Exp $");
+
 #include <menu.h>
 #include <stdlib.h>
 #include "internals.h"
@@ -35,8 +38,7 @@
  * draw the menu on the screen.
  */
 int
-post_menu(menu)
-	MENU *menu;
+post_menu(MENU *menu)
 {
 	int maxx, maxy, i;
 	
@@ -50,20 +52,8 @@ post_menu(menu)
 		return E_NOT_CONNECTED;
 	if (*menu->items == NULL)
 		return E_NOT_CONNECTED;
-	if (menu->menu_win == NULL)
-		return E_BAD_ARGUMENT;
-
-	getmaxyx(menu->menu_subwin, maxy, maxx);
-	if ((maxx == ERR) || (maxy == ERR)) return E_SYSTEM_ERROR;
 
 	menu->in_init = 1;
-	menu->cur_item = 0; /* reset current item in case it was set before */
-	menu->top_row = 0; /* and the top row too */
-	if (menu->pattern != NULL) { /* and the pattern buffer....sigh */
-		free(menu->pattern);
-		menu->plen = 0;
-		menu->match_len = 0;
-	}
 	
 	if (menu->menu_init != NULL)
 		menu->menu_init(menu);
@@ -72,24 +62,18 @@ post_menu(menu)
 
 	menu->in_init = 0;
 
-	if (menu->menu_subwin == NULL) {
-		menu->we_created = 1;
-		menu->menu_subwin = subwin(menu->menu_win, menu->rows,
-					   menu->cols * menu->max_item_width,
-					   0, 0);
-		if (menu->menu_subwin == NULL) {
-			menu->we_created = 0;
-			return E_SYSTEM_ERROR;
-		}
-	}
+	getmaxyx(menu->scrwin, maxy, maxx);
+	if ((maxx == ERR) || (maxy == ERR)) return E_SYSTEM_ERROR;
 
 	if ((menu->cols * menu->max_item_width + menu->cols - 1) > maxx)
 		return E_NO_ROOM;
 
-	for (i = 0; i < menu->item_count; i++) {
-		menu->items[i]->selected = 0;
+	if ((menu->opts & O_RADIO) != O_RADIO) {
+		for (i = 0; i < menu->item_count; i++) {
+			menu->items[i]->selected = 0;
+		}
 	}
-
+	
 	menu->posted = 1;
 	return _menui_draw_menu(menu);
 	
@@ -100,8 +84,7 @@ post_menu(menu)
  * menu from the screen.
  */
 int
-unpost_menu(menu)
-	MENU *menu;
+unpost_menu(MENU *menu)
 {
 	if (menu == NULL)
 		return E_BAD_ARGUMENT;
@@ -109,11 +92,6 @@ unpost_menu(menu)
 		return E_NOT_POSTED;
 	if (menu->in_init == 1)
 		return E_BAD_STATE;
-	if (menu->menu_subwin == NULL)
-		return E_SYSTEM_ERROR;
-	if (menu->menu_win == NULL)
-		return E_SYSTEM_ERROR;
-
 	if (menu->item_term != NULL)
 		menu->item_term(menu);
 
@@ -121,11 +99,8 @@ unpost_menu(menu)
 		menu->menu_term(menu);
 
 	menu->posted = 0;
-	werase(menu->menu_subwin);
-	wrefresh(menu->menu_subwin);
-	delwin(menu->menu_subwin);
-	if (menu->we_created == 1) menu->menu_subwin = NULL;
-	wrefresh(menu->menu_win);
+	werase(menu->scrwin);
+	wrefresh(menu->scrwin);
 	return E_OK;
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_output.c,v 1.19 2000/03/30 13:10:14 augustss Exp $	*/
+/*	$NetBSD: tp_output.c,v 1.35 2008/08/06 15:01:23 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -65,6 +61,9 @@ SOFTWARE.
  * In here is tp_ctloutput(), the guy called by [sg]etsockopt(),
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: tp_output.c,v 1.35 2008/08/06 15:01:23 plunky Exp $");
+
 #include "opt_inet.h"
 #include "opt_iso.h"
 
@@ -78,8 +77,10 @@ SOFTWARE.
 #include <sys/time.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
+#include <sys/kauth.h>
 
 #include <netiso/tp_param.h>
+#include <netiso/tp_var.h>
 #include <netiso/tp_user.h>
 #include <netiso/tp_stat.h>
 #include <netiso/tp_ip.h>
@@ -88,7 +89,6 @@ SOFTWARE.
 #include <netiso/argo_debug.h>
 #include <netiso/tp_pcb.h>
 #include <netiso/tp_trace.h>
-#include <netiso/tp_var.h>
 
 #define TPDUSIZESHIFT 24
 #define CLASSHIFT 16
@@ -104,7 +104,7 @@ SOFTWARE.
  *	using the parameters passed in via (param).
  *	(cmd) may be TP_STRICT or TP_FORCE or both.
  *  Force means it will set all the values in (tpcb) to those in
- *  the input arguements iff no errors were encountered.
+ *  the input arguments iff no errors were encountered.
  *  Strict means that no inconsistency will be tolerated.  If it's
  *  not used, checksum and tpdusize inconsistencies will be tolerated.
  *  The reason for this is that in some cases, when we're negotiating down
@@ -118,10 +118,7 @@ SOFTWARE.
  */
 
 int
-tp_consistency(tpcb, cmd, param)
-	u_int           cmd;
-	struct tp_conn_param *param;
-	struct tp_pcb  *tpcb;
+tp_consistency(struct tp_pcb *tpcb, u_int cmd, struct tp_conn_param *param)
 {
 	int    error = EOK;
 	int             class_to_use = tp_mask_to_num(param->p_class);
@@ -353,10 +350,11 @@ done:
 }
 
 /*
- * NAME: 	tp_ctloutput()
+ * NAME: 	tp_ctloutput1()
  *
  * CALLED FROM:
  * 	[sg]etsockopt(), via so[sg]etopt().
+ *	via tp_ctloutput() below
  *
  * FUNCTION and ARGUMENTS:
  * 	Implements the socket options at transport level.
@@ -388,16 +386,14 @@ done:
  *
  * NOTES:
  */
-int
-tp_ctloutput(cmd, so, level, optname, mp)
-	int             cmd, level, optname;
-	struct socket  *so;
-	struct mbuf   **mp;
+static int
+tp_ctloutput1(int cmd, struct socket  *so, int level, int optname,
+	struct mbuf **mp)
 {
-	struct proc *p = curproc;		/* XXX */
+	struct lwp *l = curlwp;		/* XXX */
 	struct tp_pcb  *tpcb = sototpcb(so);
 	int             s = splsoftnet();
-	caddr_t         value;
+	void *        value;
 	unsigned        val_len;
 	int             error = 0;
 
@@ -418,7 +414,7 @@ tp_ctloutput(cmd, so, level, optname, mp)
 		error = ENOTSOCK;
 		goto done;
 	}
-	if (*mp == MNULL) {
+	if (mp && *mp == NULL) {
 		struct mbuf *m;
 
 		MGET(m, M_DONTWAIT, TPMT_SONAME);	/* does off, type, next */
@@ -427,7 +423,7 @@ tp_ctloutput(cmd, so, level, optname, mp)
 			return ENOBUFS;
 		}
 		m->m_len = 0;
-		m->m_act = 0;
+		m->m_nextpkt = 0;
 		*mp = m;
 	}
 	/*
@@ -450,7 +446,7 @@ tp_ctloutput(cmd, so, level, optname, mp)
 			    tpcb->tp_state == TP_OPEN &&
 			    (old_credit < tpcb->tp_maxlcredit))
 				tp_emit(AK_TPDU_type, tpcb,
-					tpcb->tp_rcvnxt, 0, MNULL);
+					tpcb->tp_rcvnxt, 0, NULL);
 			tpcb->tp_rhiwat = so->so_rcv.sb_hiwat;
 		}
 		goto done;
@@ -496,7 +492,7 @@ tp_ctloutput(cmd, so, level, optname, mp)
 			goto done;
 		}
 	}
-	value = mtod(*mp, caddr_t);	/* it's aligned, don't worry, but
+	value = mtod(*mp, void *);	/* it's aligned, don't worry, but
 					 * lint complains about it */
 	val_len = (*mp)->m_len;
 
@@ -506,7 +502,8 @@ tp_ctloutput(cmd, so, level, optname, mp)
 #define INA(t) (((struct inpcb *)(t->tp_npcb))->inp_laddr.s_addr)
 #define ISOA(t) (((struct isopcb *)(t->tp_npcb))->isop_laddr->siso_addr)
 
-		if (p == 0 || (error = suser(p->p_ucred, &p->p_acflag))) {
+		if (l == 0 || (error = kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, NULL))) {
 			error = EPERM;
 		} else if (cmd != PRCO_SETOPT || tpcb->tp_state != TP_CLOSED ||
 			   (tpcb->tp_flags & TPF_GENERAL_ADDR) ||
@@ -538,7 +535,7 @@ tp_ctloutput(cmd, so, level, optname, mp)
 			tpcb->tp_lsuffixlen = 0;
 			tpcb->tp_state = TP_LISTENING;
 			error = 0;
-			remque(tpcb);
+			iso_remque(tpcb);
 			tpcb->tp_next = tpcb->tp_prev = tpcb;
 			tpcb->tp_nextlisten = tp_listeners;
 			tp_listeners = tpcb;
@@ -548,7 +545,7 @@ tp_ctloutput(cmd, so, level, optname, mp)
 	case TPOPT_MY_TSEL:
 		if (cmd == PRCO_GETOPT) {
 			ASSERT(tpcb->tp_lsuffixlen <= MAX_TSAP_SEL_LEN);
-			bcopy((caddr_t) tpcb->tp_lsuffix, value, tpcb->tp_lsuffixlen);
+			bcopy((void *) tpcb->tp_lsuffix, value, tpcb->tp_lsuffixlen);
 			(*mp)->m_len = tpcb->tp_lsuffixlen;
 		} else {	/* cmd == PRCO_SETOPT  */
 			if ((val_len > MAX_TSAP_SEL_LEN) || (val_len <= 0)) {
@@ -556,7 +553,7 @@ tp_ctloutput(cmd, so, level, optname, mp)
 				    val_len, (*mp));
 				error = EINVAL;
 			} else {
-				bcopy(value, (caddr_t) tpcb->tp_lsuffix, val_len);
+				bcopy(value, (void *) tpcb->tp_lsuffix, val_len);
 				tpcb->tp_lsuffixlen = val_len;
 			}
 		}
@@ -565,7 +562,7 @@ tp_ctloutput(cmd, so, level, optname, mp)
 	case TPOPT_PEER_TSEL:
 		if (cmd == PRCO_GETOPT) {
 			ASSERT(tpcb->tp_fsuffixlen <= MAX_TSAP_SEL_LEN);
-			bcopy((caddr_t) tpcb->tp_fsuffix, value, tpcb->tp_fsuffixlen);
+			bcopy((void *) tpcb->tp_fsuffix, value, tpcb->tp_fsuffixlen);
 			(*mp)->m_len = tpcb->tp_fsuffixlen;
 		} else {	/* cmd == PRCO_SETOPT  */
 			if ((val_len > MAX_TSAP_SEL_LEN) || (val_len <= 0)) {
@@ -573,7 +570,7 @@ tp_ctloutput(cmd, so, level, optname, mp)
 				    val_len, (*mp));
 				error = EINVAL;
 			} else {
-				bcopy(value, (caddr_t) tpcb->tp_fsuffix, val_len);
+				bcopy(value, (void *) tpcb->tp_fsuffix, val_len);
 				tpcb->tp_fsuffixlen = val_len;
 			}
 		}
@@ -585,7 +582,7 @@ tp_ctloutput(cmd, so, level, optname, mp)
 			printf("%s TPOPT_FLAGS value %p *value 0x%x, flags 0x%x \n",
 			       cmd == PRCO_GETOPT ? "GET" : "SET",
 			       value,
-			       *value,
+			       *(unsigned char *)value,
 			       tpcb->tp_flags);
 		}
 #endif
@@ -643,7 +640,7 @@ tp_ctloutput(cmd, so, level, optname, mp)
 			goto done;
 		}
 		if (tpcb->tp_perf_on) {
-			MCLGET(*mp, M_WAITOK);
+			m_clget(*mp, M_WAIT);
 			if (((*mp)->m_flags & M_EXT) == 0) {
 				error = ENOBUFS; goto done;
 			}
@@ -694,8 +691,8 @@ tp_ctloutput(cmd, so, level, optname, mp)
 				error = EMSGSIZE;
 				goto done;
 			}
-			(*mp)->m_next = MNULL;
-			(*mp)->m_act = 0;
+			(*mp)->m_next = NULL;
+			(*mp)->m_nextpkt = 0;
 			if (tpcb->tp_ucddata)
 				m_cat(tpcb->tp_ucddata, *mp);
 			else
@@ -711,7 +708,7 @@ tp_ctloutput(cmd, so, level, optname, mp)
 			      tpcb->tp_flags, so->so_snd.sb_cc, val_len, 0);
 			}
 #endif
-			*mp = MNULL;
+			*mp = NULL;
 			if (optname == TPOPT_CFRM_DATA && (so->so_state & SS_ISCONFIRMING))
 				(void) tp_confirm(tpcb);
 		}
@@ -754,7 +751,7 @@ done:
 	if (*mp) {
 		if (cmd == PRCO_SETOPT) {
 			m_freem(*mp);
-			*mp = MNULL;
+			*mp = NULL;
 		} else {
 			ASSERT(m_compress(*mp, mp) <= MLEN);
 			if (error)
@@ -768,4 +765,41 @@ done:
 	}
 	splx(s);
 	return error;
+}
+
+/*
+ * temporary sockopt wrapper, the above needs to be worked through
+ */
+int
+tp_ctloutput(int cmd, struct socket  *so, struct sockopt *sopt)
+{
+	struct mbuf *m;
+	int err;
+
+	switch(cmd) {
+	case PRCO_SETOPT:
+		m = sockopt_getmbuf(sopt);
+		if (m == NULL) {
+			err = ENOMEM;
+			break;
+		}
+
+		err = tp_ctloutput1(cmd, so, sopt->sopt_level, sopt->sopt_name, &m);
+		break;
+
+	case PRCO_GETOPT:
+		m = NULL;
+		err = tp_ctloutput1(cmd, so, sopt->sopt_level, sopt->sopt_name, &m);
+		if (err)
+			break;
+
+		err = sockopt_setmbuf(sopt, m);
+		break;
+
+	default:
+		err = ENOPROTOOPT;
+		break;
+	}
+
+	return err;
 }

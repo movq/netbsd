@@ -1,4 +1,4 @@
-/* $NetBSD: header.h,v 1.12 1997/10/25 01:40:48 thorpej Exp $	 */
+/* $NetBSD: header.h,v 1.22 2008/08/29 00:37:38 gmcgarry Exp $	 */
 
 /* header.h		Larn is copyrighted 1986 by Noah Morgan. */
 
@@ -18,7 +18,7 @@
 #define MAXMONST 56
 /* maximum # monsters in the dungeon	 */
 #define SPNUM 38
-/* maximum number of spells in existance	 */
+/* maximum number of spells in existence	 */
 #define MAXSCROLL 28
 /* maximum number of scrolls that are possible	 */
 #define MAXPOTION 35
@@ -32,7 +32,7 @@
 
 /* this is the structure definition of the monster data	 */
 struct monst {
-	char           *name;
+	const char     *name;
 	char            level;
 	short           armorclass;
 	char            damage;
@@ -321,7 +321,9 @@ struct sphere {
 #define DEMONLORD 57
 #define DEMONPRINCE 64
 
+#ifndef NULL
 #define NULL 0
+#endif
 #define BUFBIG	4096		/* size of the output buffer */
 #define MAXIBUF	4096		/* size of the input buffer */
 #define LOGNAMESIZE 40		/* max size of the players name */
@@ -329,36 +331,39 @@ struct sphere {
 
 #ifndef NODEFS
 extern char     VERSION, SUBVERSION;
-extern u_char   alpha[], beenhere[], boldon, cheat, ckpflag;
-extern u_char  *class[], course[];
+extern u_char   beenhere[], boldon, cheat, ckpflag;
+extern const char *class[];
+extern u_char   course[];
 extern char     diagfile[], helpfile[], ckpfile[], larnlevels[],
-		playerids[], optsfile[], psname[], savefilename[],
+		playerids[], optsfile[1024], psname[], savefilename[],
 		scorefile[];
-extern u_char  *inbuffer, is_alpha[], is_digit[];
+extern u_char  *inbuffer;
 extern u_char   item[MAXX][MAXY], iven[], know[MAXX][MAXY];
-extern char    *levelname[], logfile[], loginname[], logname[],
-                lastmonst[];
+extern const char *levelname[];
+extern char     logfile[], loginname[], logname[], lastmonst[];
 extern u_char  *lpbuf, *lpend;
 extern u_char  *lpnt, moved[MAXX][MAXY], mitem[MAXX][MAXY], monstlevel[];
 extern char     monstnamelist[], objnamelist[];
 extern u_char   nch[], ndgg[], nlpts[], nomove, nosignal, nowelcome;
 extern u_char   nplt[], nsw[];
-extern char    *objectname[], *potionhide[], *potionname[],
-               *spelcode[], *spelname[], *spelmes[], aborted[],
-	        spelweird[MAXMONST + 8][SPNUM];
+extern const char *objectname[];
+extern const char *potionhide[], *potionname[];
+extern const char *spelcode[], *spelname[], *spelmes[];
+extern char     aborted[], spelweird[MAXMONST + 8][SPNUM];
 extern u_char   potprob[];
 extern u_char   predostuff, restorflag, scprob[];
 extern u_char   screen[MAXX][MAXY], sex;
-extern char    *speldescript[], *scrollhide[], *scrollname[];
+extern const char *speldescript[];
+extern const char *scrollhide[], *scrollname[];
 extern u_char   spelknow[];
-extern u_char   splev[], stealth[MAXX][MAXY], to_lower[], to_upper[], wizard;
+extern u_char   splev[], stealth[MAXX][MAXY], wizard;
 extern short    diroffx[], diroffy[], hitflag, hit2flag, hit3flag, hitp[MAXX][MAXY];
 extern short    iarg[MAXX][MAXY], ivenarg[], lasthx, lasthy, lastnum, lastpx,
                 lastpy;
 extern short    nobeep, oldx, oldy, playerx, playery, level;
-extern int      dayplay, enable_scroll, srcount, yrepcount, userid, wisid,
-                lfd, fd;
-extern uid_t    uid, euid;
+extern int      enable_scroll, srcount, yrepcount, userid, wisid,
+		io_outfd, io_infd;
+extern gid_t    gid, egid;
 extern long     outstanding_taxes, skill[], gltime, c[], cbak[];
 extern time_t	initialtime;
 extern unsigned long randx;
@@ -366,7 +371,7 @@ extern struct cel *cell;
 extern struct monst monster[];
 extern struct sphere *spheres;
 extern struct _itm itm[];
-extern int      rmst, maxitm, lasttime;
+extern int      rmst, lasttime;
 
 /* macro to create scroll #'s with probability of occurrence */
 #define newscroll() (scprob[rund(81)])
@@ -424,10 +429,10 @@ extern int      rmst, maxitm, lasttime;
 #endif	/* VT100 */
 
 /* macro to output one byte to the output buffer */
-#define lprc(ch) ((lpnt>=lpend)?(*lpnt++ =(ch), lflush()):(*lpnt++ =(ch)))
+#define lprc(ch) ((lpnt>=lpend)?(void)(*lpnt++ = (ch), lflush()):(void)(*lpnt++ = (ch)))
 
 /* macro to seed the random number generator */
-#define srand(x) (randx=x)
+#define seedrand(x) (randx=x)
 #ifdef MACRORND
 /* macros to generate random numbers   1<=rnd(N)<=N   0<=rund(N)<=N-1 */
 #define rnd(x)  ((((randx=randx*1103515245+12345)>>7)%(x))+1)
@@ -436,10 +441,4 @@ extern int      rmst, maxitm, lasttime;
 /* macros for miscellaneous data conversion */
 #define min(x,y) (((x)>(y))?(y):(x))
 #define max(x,y) (((x)>(y))?(x):(y))
-#define isalpha(x) (is_alpha[x])
-#define isdigit(x) (is_digit[x])
-#define tolower(x) (to_lower[x])
-#define toupper(x) (to_upper[x])
-#define lcc(x) (to_lower[x])
-#define ucc(x) (to_upper[x])
 #endif	/* NODEFS */

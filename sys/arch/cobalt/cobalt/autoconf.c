@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.2 2000/03/31 14:51:49 soren Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.28 2008/03/22 18:32:20 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -25,6 +25,9 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.28 2008/03/22 18:32:20 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
@@ -32,79 +35,80 @@
 #include <sys/device.h>
 
 #include <machine/cpu.h>
+#include <machine/intr.h>
 
-static void	findroot(struct device **, int *);
+#include <dev/pci/pcivar.h>
+#include <dev/ata/atavar.h>
 
-int		cpuspeed = 100;		/* Until we know more precisely. */
+extern char	bootstring[];
+extern int	netboot;
+extern int	bootunit;
+extern int	bootpart;
 
 void
-cpu_configure()
+cpu_configure(void)
 {
+
 	(void)splhigh();
 
-	if (config_rootfound("mainbus", "mainbus") == NULL)
+	intr_init();
+
+	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("no mainbus found");
 
-	_splnone();
+	/*
+	 * Hardware interrupts will be enabled in
+	 * sys/arch/mips/mips/mips3_clockintr.c:mips3_initclocks()
+	 * to avoid hardclock(9) by CPU INT5 before softclockintr is
+	 * initialized in initclocks().
+	 */
 }
 
 void
-cpu_rootconf()
+cpu_rootconf(void)
 {
-	struct device *booted_device;
-	int booted_partition;
-
-	findroot(&booted_device, &booted_partition);
 
 	printf("boot device: %s\n",
-		booted_device ? booted_device->dv_xname : "<unknown>");
+	    booted_device ? booted_device->dv_xname : "<unknown>");
 
 	setroot(booted_device, booted_partition);
 }
 
-struct device *booted_device;
-
-extern char	bootstring[];
-extern int	netboot;
-
 void
-findroot(devpp, partp)
-	struct device **devpp;
-	int *partp;
+device_register(struct device *dev, void *aux)
 {
-	struct device *dv;
 
-	if (booted_device) {
-		*devpp = booted_device;
+	if (booted_device != NULL)
 		return;
-	}              
 
-	/*
-	 * Default to "not found".
-	 */
-	*devpp = NULL;
+	if (netboot == 1) {
+		/* check tlp0 on netboot */
+		if (device_class(dev) == DV_IFNET &&
+		    device_is_a(dev, "tlp")) {
+			struct pci_attach_args *pa = aux;
 
-	if ((booted_device == NULL) && netboot == 0)
-		for (dv = alldevs.tqh_first; dv != NULL;
-		     dv = dv->dv_list.tqe_next)
-			if (dv->dv_class == DV_DISK &&
-			    !strcmp(dv->dv_cfdata->cf_driver->cd_name, "wd"))
-				    *devpp = dv;
+			if (pa->pa_bus == 0 &&
+			    pa->pa_device == 7 &&
+			    pa->pa_function == 0)
+				booted_device = dev;
+		}
+	} else {
+		/* check wd channel and drive */
+		if (device_class(dev) == DV_DISK &&
+		    device_is_a(dev, "wd")) {
+			struct ata_device *adev = aux;
+			int unit;
 
-	/*
-	 * XXX Match up MBR boot specification with BSD disklabel for root?
-	 */
-	*partp = 0;
-
-	return;
-}
-
-void
-device_register(dev, aux)
-	struct device *dev;
-	void *aux;
-{
-	if ((booted_device == NULL) && (netboot == 1))
-		if (dev->dv_class == DV_IFNET)
-			booted_device = dev;
+			unit = adev->adev_channel * 2 +
+			    adev->adev_drv_data->drive;
+			if (unit == bootunit) {
+				booted_device = dev;
+			}
+		}
+		/*
+		 * XXX Match up MBR boot specification with BSD disklabel
+		 *     for root?
+		 */
+		booted_partition = 0;
+	}
 }

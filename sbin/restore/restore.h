@@ -1,4 +1,4 @@
-/*	$NetBSD: restore.h,v 1.10 1998/06/24 19:56:11 christos Exp $	*/
+/*	$NetBSD: restore.h,v 1.18 2005/06/27 01:55:52 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -45,13 +41,15 @@
  */
 extern int	cvtflag;	/* convert from old to new tape format */
 extern int	bflag;		/* set input block size */
+extern int	Dflag;		/* output digest of files */
 extern int	dflag;		/* print out debugging info */
-extern int	hflag;		/* restore heirarchies */
+extern int	hflag;		/* restore hierarchies */
 extern int	mflag;		/* restore by name instead of inode number */
 extern int	Nflag;		/* do not write the disk */
 extern int	vflag;		/* print out actions taken */
 extern int	uflag;		/* unlink file before writing to it */
 extern int	yflag;		/* always try to recover from tape errors */
+extern int	dotflag;	/* restore owner/mode of "." directory */
 /*
  * Global variables
  */
@@ -64,10 +62,23 @@ extern int32_t	ntrec;		/* number of TP_BSIZE records per tape block */
 extern time_t	dumptime;	/* time that this dump begins */
 extern time_t	dumpdate;	/* time that this dump was made */
 extern char	command;	/* opration being performed */
+extern size_t	pagesize;	/* system page size */
 extern FILE	*terminal;	/* file descriptor for the terminal input */
-extern char	*tmpdir;	/* where to store temporary files */
+extern const char *tmpdir;	/* where to store temporary files */
 extern int	oldinofmt;	/* reading tape with old format inodes */
 extern int	Bcvt;		/* need byte swapping on inodes and dirs */
+extern FILE	*Mtreefile;	/* file descriptor for the mtree file */
+
+struct digest_desc {
+	const char *dd_name;
+	void (*dd_init)(void *);
+	void (*dd_update)(void *, const u_char *, u_int);
+	char *(*dd_end)(void *, void *);
+};
+extern const struct digest_desc *ddesc;
+extern const struct digest_desc md5_desc;
+extern const struct digest_desc rmd160_desc;
+extern const struct digest_desc sha1_desc;
 
 /*
  * Each file in the file system is described by one of these entries
@@ -108,10 +119,21 @@ struct entry {
  * The entry describes the next file available on the tape
  */
 struct context {
-	char	*name;		/* name of file */
+	short	action;		/* action being taken on this file */
+	mode_t	mode;		/* mode of file */
 	ino_t	ino;		/* inumber of file */
-	struct	dinode *dip;	/* pointer to inode */
-	char	action;		/* action being taken on this file */
+	uid_t	uid;		/* file owner */
+	gid_t	gid;		/* file group */
+	int	file_flags;	/* status flags (chflags) */
+	int	rdev;		/* device number of file */
+	time_t	atime_sec;	/* access time seconds */
+	time_t	mtime_sec;	/* modified time seconds */
+	time_t	birthtime_sec;	/* creation time seconds */
+	int	atime_nsec;	/* access time nanoseconds */
+	int	mtime_nsec;	/* modified time nanoseconds */
+	int	birthtime_nsec;	/* creation time nanoseconds */
+	off_t	size;		/* size of file */
+	const char *name;	/* name of file */
 } curfile;
 /* actions */
 #define	USING	1	/* extracting from the tape */

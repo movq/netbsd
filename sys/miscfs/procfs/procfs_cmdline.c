@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_cmdline.c,v 1.6 1999/07/22 18:13:38 thorpej Exp $	*/
+/*	$NetBSD: procfs_cmdline.c,v 1.27 2008/04/28 20:24:08 martin Exp $	*/
 
 /*
  * Copyright (c) 1999 Jaromir Dolecek <dolecek@ics.muni.cz>
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,8 +30,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: procfs_cmdline.c,v 1.27 2008/04/28 20:24:08 martin Exp $");
+
 #include <sys/param.h>
-#include <sys/types.h>
 #include <sys/systm.h>
 #include <sys/syslimits.h>
 #include <sys/proc.h>
@@ -47,25 +42,25 @@
 #include <sys/malloc.h>
 #include <miscfs/procfs/procfs.h>
 
-#include <vm/vm.h>
-
 #include <uvm/uvm_extern.h>
 
 /*
  * code for returning process's command line arguments
  */
 int
-procfs_docmdline(curp, p, pfs, uio)
-	struct proc *curp;
-	struct proc *p;
-	struct pfsnode *pfs;
-	struct uio *uio;
+procfs_docmdline(
+    struct lwp *curl,
+    struct proc *p,
+    struct pfsnode *pfs,
+    struct uio *uio
+)
 {
 	struct ps_strings pss;
-	int xlen, count, error, i;
-	size_t len, upper_bound;
+	int count, error;
+	size_t i, len, xlen, upper_bound;
 	struct uio auio;
 	struct iovec aiov;
+	struct vmspace *vm;
 	vaddr_t argv;
 	char *arg;
 
@@ -83,13 +78,15 @@ procfs_docmdline(curp, p, pfs, uio)
 	 * System processes also don't have a user stack.  This is what
 	 * ps(1) would display.
 	 */
-	if (P_ZOMBIE(p) || (p->p_flag & P_SYSTEM) != 0) {
-		len = snprintf(arg, PAGE_SIZE, "(%s)", p->p_comm);
-		goto doio;
+	if (P_ZOMBIE(p) || (p->p_flag & PK_SYSTEM) != 0) {
+		len = snprintf(arg, PAGE_SIZE, "(%s)", p->p_comm) + 1;
+		error = uiomove_frombuf(arg, len, uio);
+		free(arg, M_TEMP);
+		return (error);
 	}
 
 	/*
-	 * NOTE: Don't bother doing a procfs_checkioperm() here
+	 * NOTE: Don't bother doing a process_checkioperm() here
 	 * because the psstrings info is available by using ps(1),
 	 * so it's not like there's anything to protect here.
 	 */
@@ -97,11 +94,10 @@ procfs_docmdline(curp, p, pfs, uio)
 	/*
 	 * Lock the process down in memory.
 	 */
-	/* XXXCDC: how should locking work here? */
-	if ((p->p_flag & P_WEXIT) || (p->p_vmspace->vm_refcnt < 1))
-		return (EFAULT);
-	PHOLD(p);
-	p->p_vmspace->vm_refcnt++;	/* XXX */
+	if ((error = proc_vmspace_getref(p, &vm)) != 0) {
+		free(arg, M_TEMP);
+		return (error);
+	}
 
 	/*
 	 * Read in the ps_strings structure.
@@ -110,12 +106,11 @@ procfs_docmdline(curp, p, pfs, uio)
 	aiov.iov_len = sizeof(pss);
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
-	auio.uio_offset = (vaddr_t)PS_STRINGS;
+	auio.uio_offset = (vaddr_t)p->p_psstr;
 	auio.uio_resid = sizeof(pss);
-	auio.uio_segflg = UIO_SYSSPACE;
 	auio.uio_rw = UIO_READ;
-	auio.uio_procp = NULL;
-	error = uvm_io(&p->p_vmspace->vm_map, &auio);
+	UIO_SETUP_SYSSPACE(&auio);
+	error = uvm_io(&vm->vm_map, &auio);
 	if (error)
 		goto bad;
 
@@ -128,10 +123,9 @@ procfs_docmdline(curp, p, pfs, uio)
 	auio.uio_iovcnt = 1;
 	auio.uio_offset = (vaddr_t)pss.ps_argvstr;
 	auio.uio_resid = sizeof(argv);
-	auio.uio_segflg = UIO_SYSSPACE;
-	auio.uio_rw = UIO_READ; 
-	auio.uio_procp = NULL;
-	error = uvm_io(&p->p_vmspace->vm_map, &auio);
+	auio.uio_rw = UIO_READ;
+	UIO_SETUP_SYSSPACE(&auio);
+	error = uvm_io(&vm->vm_map, &auio);
 	if (error)
 		goto bad;
 
@@ -142,54 +136,41 @@ procfs_docmdline(curp, p, pfs, uio)
 	 */
 	len = 0;
 	count = pss.ps_nargvstr;
-	upper_bound = round_page(uio->uio_offset + 1);
-	for (; count && len < upper_bound; len += PAGE_SIZE) {
+	upper_bound = round_page(uio->uio_offset + uio->uio_resid);
+	for (; count && len < upper_bound; len += xlen) {
 		aiov.iov_base = arg;
 		aiov.iov_len = PAGE_SIZE;
 		auio.uio_iov = &aiov;
 		auio.uio_iovcnt = 1;
 		auio.uio_offset = argv + len;
-		auio.uio_resid = PAGE_SIZE;
-		auio.uio_segflg = UIO_SYSSPACE;
+		xlen = PAGE_SIZE - ((argv + len) & PAGE_MASK);
+		auio.uio_resid = xlen;
 		auio.uio_rw = UIO_READ;
-		auio.uio_procp = NULL;
-		error = uvm_io(&p->p_vmspace->vm_map, &auio);
+		UIO_SETUP_SYSSPACE(&auio);
+		error = uvm_io(&vm->vm_map, &auio);
 		if (error)
 			goto bad;
 
-		for (i = len; i < (len + PAGE_SIZE) && count != 0; i++) {
+		for (i = 0; i < xlen && count != 0; i++) {
 			if (arg[i] == '\0')
 				count--;	/* one full string */
 		}
 
-		if (count == 0) {
-			/* No more argv strings, set up len and break. */
-			len = i;
-			break;
+		if (len + i > uio->uio_offset) {
+			/* Have data in this page, copy it out */
+			error = uiomove(arg + uio->uio_offset - len,
+			    i + len - uio->uio_offset, uio);
+			if (error || uio->uio_resid <= 0)
+				break;
 		}
 	}
-	if (len > 0)
-		len--;			/* exclude last NUL */
 
+ bad:
 	/*
 	 * Release the process.
 	 */
-	PRELE(p);
-	uvmspace_free(p->p_vmspace);
+	uvmspace_free(vm);
 
- doio:
-	xlen = len - uio->uio_offset;
-	if (xlen <= 0) 
-		error = 0;
-	else
-		error = uiomove(arg + trunc_page(len), xlen, uio);
-
-	free(arg, M_TEMP);
-	return (error);
-
- bad:
-	PRELE(p);
-	uvmspace_free(p->p_vmspace);
 	free(arg, M_TEMP);
 	return (error);
 }

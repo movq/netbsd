@@ -1,13 +1,13 @@
-/*	$NetBSD: cnode.h,v 1.7 1999/10/17 23:39:15 cgd Exp $	*/
+/*	$NetBSD: cnode.h,v 1.17 2008/03/21 17:59:57 plunky Exp $	*/
 
 /*
- * 
+ *
  *             Coda: an Experimental Distributed File System
  *                              Release 3.1
- * 
+ *
  *           Copyright (c) 1987-1998 Carnegie Mellon University
  *                          All Rights Reserved
- * 
+ *
  * Permission  to  use, copy, modify and distribute this software and its
  * documentation is hereby granted,  provided  that  both  the  copyright
  * notice  and  this  permission  notice  appear  in  all  copies  of the
@@ -16,22 +16,22 @@
  * that credit is given to Carnegie Mellon University  in  all  documents
  * and publicity pertaining to direct or indirect use of this code or its
  * derivatives.
- * 
+ *
  * CODA IS AN EXPERIMENTAL SOFTWARE SYSTEM AND IS  KNOWN  TO  HAVE  BUGS,
  * SOME  OF  WHICH MAY HAVE SERIOUS CONSEQUENCES.  CARNEGIE MELLON ALLOWS
  * FREE USE OF THIS SOFTWARE IN ITS "AS IS" CONDITION.   CARNEGIE  MELLON
  * DISCLAIMS  ANY  LIABILITY  OF  ANY  KIND  FOR  ANY  DAMAGES WHATSOEVER
  * RESULTING DIRECTLY OR INDIRECTLY FROM THE USE OF THIS SOFTWARE  OR  OF
  * ANY DERIVATIVE WORK.
- * 
+ *
  * Carnegie  Mellon  encourages  users  of  this  software  to return any
  * improvements or extensions that  they  make,  and  to  grant  Carnegie
  * Mellon the rights to redistribute these changes without encumbrance.
- * 
- * 	@(#) coda/cnode.h,v 1.1.1.1 1998/08/29 21:26:46 rvb Exp $ 
+ *
+ * 	@(#) coda/cnode.h,v 1.1.1.1 1998/08/29 21:26:46 rvb Exp $
  */
 
-/* 
+/*
  * Mach Operating System
  * Copyright (c) 1990 Carnegie-Mellon University
  * Copyright (c) 1989 Carnegie-Mellon University
@@ -48,11 +48,11 @@
 #define	_CNODE_H_
 
 #include <sys/vnode.h>
+#ifdef _KERNEL
+#include <sys/mallocvar.h>
 
-/*
- * tmp below since we need struct queue
- */
-#include <coda/coda_kernel.h>
+MALLOC_DECLARE(M_CODA);
+#endif
 
 /*
  * Cnode lookup stuff.
@@ -66,7 +66,7 @@ do {                                                                      \
     if (ptr == 0) {                                                       \
 	panic("kernel malloc returns 0 at %s:%d\n", __FILE__, __LINE__);  \
     }                                                                     \
-} while (0)
+} while (/*CONSTCOND*/ 0)
 
 #define CODA_FREE(ptr, size)  free((ptr), M_CODA)
 
@@ -92,12 +92,12 @@ do {                            \
     if (coda_printf_delay)       \
 	DELAY(coda_printf_delay);\
     printf args ;               \
-} while (0)
+} while (/*CONSTCOND*/ 0)
 
 struct cnode {
     struct vnode	*c_vnode;
     u_short		 c_flags;	/* flags (see below) */
-    ViceFid		 c_fid;		/* file handle */
+    CodaFid		 c_fid;		/* file handle */
     struct vnode	*c_ovp;		/* open vnode pointer */
     u_short		 c_ocount;	/* count of openers */
     u_short		 c_owrite;	/* count of open for write */
@@ -109,6 +109,7 @@ struct cnode {
     struct cnode	*c_next;	/* links if on NetBSD machine */
 };
 #define	VTOC(vp)	((struct cnode *)(vp)->v_data)
+#define	SET_VTOC(vp)	((vp)->v_data)
 #define	CTOV(cp)	((struct vnode *)((cp)->c_vnode))
 
 /* flags */
@@ -123,16 +124,19 @@ struct cnode {
 #define VALID_SYMLINK(cp)	((cp->c_flags) & C_SYMLINK)
 #define IS_UNMOUNTING(cp)	((cp)->c_flags & C_UNMOUNTING)
 
+struct vmsg;
+
 struct vcomm {
-	u_long		vc_seq;
-	struct selinfo	vc_selproc;
-	struct queue	vc_requests;
-	struct queue	vc_replys;
+	u_long			vc_seq;
+	int			vc_open;
+	struct selinfo		vc_selproc;
+	TAILQ_HEAD(,vmsg)	vc_requests;
+	TAILQ_HEAD(,vmsg)	vc_replies;
 };
 
-#define	VC_OPEN(vcp)	    ((vcp)->vc_requests.forw != NULL)
-#define MARK_VC_CLOSED(vcp) (vcp)->vc_requests.forw = NULL;
-#define MARK_VC_OPEN(vcp)    /* MT */
+#define VC_OPEN(vcp)		((vcp)->vc_open == 1)
+#define MARK_VC_CLOSED(vcp)	((vcp)->vc_open = 0)
+#define MARK_VC_OPEN(vcp)	((vcp)->vc_open = 1)
 
 struct coda_clstat {
 	int	ncalls;			/* client requests */
@@ -148,6 +152,7 @@ struct coda_mntinfo {
     struct vnode	*mi_rootvp;
     struct mount	*mi_vfsp;
     struct vcomm	 mi_vcomm;
+    int			 mi_started;
 };
 extern struct coda_mntinfo coda_mnttbl[]; /* indexed by minor device number */
 
@@ -155,7 +160,8 @@ extern struct coda_mntinfo coda_mnttbl[]; /* indexed by minor device number */
  * vfs pointer to mount info
  */
 #define vftomi(vfsp)    ((struct coda_mntinfo *)(vfsp->mnt_data))
-#define	CODA_MOUNTED(vfsp)   (vftomi((vfsp)) != (struct coda_mntinfo *)0)
+#define	CODA_MOUNTED(vfsp)   ((vftomi(vfsp) != (struct coda_mntinfo *)0) \
+	&& (vftomi(vfsp)->mi_started))
 
 /*
  * vnode pointer to mount info
@@ -171,7 +177,7 @@ extern struct vnode *coda_ctlvp;
  				 && ((vp) == vtomi((vp))->mi_rootvp)    \
 				 && strncmp(name, CODA_CONTROL, l) == 0)
 
-/* 
+/*
  * An enum to tell us whether something that will remove a reference
  * to a cnode was a downcall or not
  */
@@ -181,7 +187,7 @@ enum dc_status {
 };
 
 /* cfs_psdev.h */
-extern int coda_call(struct coda_mntinfo *mntinfo, int inSize, int *outSize, caddr_t buffer);
+extern int coda_call(struct coda_mntinfo *mntinfo, int inSize, int *outSize, void *buffer);
 extern int coda_kernel_version;
 
 /* cfs_subr.h */
@@ -190,7 +196,7 @@ extern void coda_unmounting(struct mount *whoIam);
 extern int  coda_vmflush(struct cnode *cp);
 
 /* cfs_vnodeops.h */
-extern struct cnode *make_coda_node(ViceFid *fid, struct mount *vfsp, short type);
+extern struct cnode *make_coda_node(CodaFid *fid, struct mount *vfsp, short type);
 extern int coda_vnodeopstats_init(void);
 
 /* coda_vfsops.h */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_machdep.c,v 1.1 2000/01/10 03:06:44 matt Exp $	*/
+/*	$NetBSD: ibcs2_machdep.c,v 1.10 2008/04/28 20:23:39 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.10 2008/04/28 20:23:39 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,13 +50,10 @@
 #include <compat/ibcs2/ibcs2_signal.h>
 
 void
-ibcs2_setregs(p, epp, stack)
-	struct proc *p;
-	struct exec_package *epp;
-	u_long stack;
+ibcs2_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
 {
 	/* Don't need to anything special */
-	setregs(p, epp, stack);
+	setregs(l, epp, stack);
 }
 
 /*
@@ -74,20 +67,19 @@ ibcs2_setregs(p, epp, stack)
  * specified pc, psl.
  */
 void
-ibcs2_sendsig(catcher, sig, mask, code)
-	sig_t catcher;
-	int sig;
-	sigset_t *mask;
-	u_long code;
+ibcs2_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 {
-	sendsig(catcher, native_to_ibcs2_sig[sig], mask, code);
+	ksiginfo_t nksi;
+	if (ksi->ksi_signo != native_to_ibcs2_signo[ksi->ksi_signo]) {
+		nksi = *ksi;
+		nksi.ksi_signo = native_to_ibcs2_signo[ksi->ksi_signo];
+		ksi = &nksi;
+	}
+	sendsig(ksi, mask);
 }
 
 int
-ibcs2_sys_sysmachine(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+ibcs2_sys_sysmachine(struct lwp *l, void *v, register_t *retval)
 {
 	return EINVAL;
 }

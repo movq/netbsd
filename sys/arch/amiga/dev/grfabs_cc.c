@@ -1,4 +1,4 @@
-/*	$NetBSD: grfabs_cc.c,v 1.19 1999/03/25 21:55:17 is Exp $	*/
+/*	$NetBSD: grfabs_cc.c,v 1.30 2007/10/17 19:53:16 garbled Exp $ */
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -37,11 +37,15 @@
 
 #include "opt_amigaccgrf.h"
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: grfabs_cc.c,v 1.30 2007/10/17 19:53:16 garbled Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/errno.h>
-#include <sys/cdefs.h>
 #include <sys/queue.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <amiga/amiga/custom.h>
 #include <amiga/amiga/cc.h>
@@ -51,7 +55,7 @@
 
 monitor_t *m_this;
 mdata_t *m_this_data;
-char   *monitor_name = "CCMONITOR";
+const char *monitor_name = "CCMONITOR";
 monitor_t monitor;
 mdata_t monitor_data;
 cop_t  *null_mode_copper_list;
@@ -150,16 +154,16 @@ dmdata_t *h_this_data;
 #define AGA_VGA31KHZ	0x0020
 
 int aga_enable = 0;	/* set by start_c(), or can be patched */
-colormap_t *cc_alloc_aga_colormap __P((int));
-int cc_use_aga_colormap __P((view_t *, colormap_t *));
+colormap_t *cc_alloc_aga_colormap(int);
+int cc_use_aga_colormap(view_t *, colormap_t *);
 #endif
 
 /* monitor functions. */
 monitor_t *
-cc_init_monitor()
+cc_init_monitor(void)
 {
 	cop_t  *cp;
-	
+
 	if (m_this)
 		return(m_this);
 
@@ -206,8 +210,7 @@ cc_init_monitor()
 }
 
 void
-monitor_vbl_handler(m)
-	monitor_t *m;
+monitor_vbl_handler(monitor_t *m)
 {
 	dmdata_t *dmd;
 
@@ -220,7 +223,7 @@ monitor_vbl_handler(m)
 }
 
 dmode_t *
-get_current_mode()
+get_current_mode(void)
 {
 	if (m_this_data->current_mode)
 		return(m_this_data->current_mode);
@@ -229,8 +232,7 @@ get_current_mode()
 }
 
 dmode_t *
-get_next_mode(d)
-	dmode_t *d;
+get_next_mode(dmode_t *d)
 {
 	if (d)
 		return(d->link.le_next);
@@ -239,9 +241,7 @@ get_next_mode(d)
 
 /* XXX needs to have more control attributes */
 dmode_t *
-get_best_mode(size, depth)
-	dimen_t *size;
-	u_char depth;
+get_best_mode(dimen_t *size, u_char depth)
 {
 	dmode_t *save;
 	dmode_t *dm;
@@ -278,8 +278,7 @@ get_best_mode(size, depth)
 }
 /* bitmap functions */
 bmap_t *
-alloc_bitmap(width, height, depth, flags)
-	u_short width, height, depth, flags;
+alloc_bitmap(u_short width, u_short height, u_short depth, u_short flags)
 {
 	int     i;
 	u_long  total_size;
@@ -305,16 +304,19 @@ alloc_bitmap(width, height, depth, flags)
 
 	/* Sigh, it seems for mapping to work we need the bitplane data to 1:
 	 * be aligned on a page boundry. 2: be n pages large.
-	 * 
-	 * why? becuase the user gets a page aligned address, if this is before
+	 *
+	 * why? because the user gets a page aligned address, if this is before
 	 * your allocation, too bad.  Also it seems that the mapping routines
 	 * do not watch to closely to the allowable length. so if you go over
 	 * n pages by less than another page, the user gets to write all over
 	 * the entire page.  Since you did not allocate up to a page boundry
 	 * (or more) the user writes into someone elses memory. -ch */
+#ifdef __powerpc__
+#define m68k_round_page(x)	((((unsigned)(x)) + PGOFSET) & ~PGOFSET)
+#endif
 	total_size = m68k_round_page(plane_size * depth) +	/* for length */
 	    (temp_size) + (array_size) + sizeof(bmap_t) +
-	    NBPG;		/* for alignment */
+	    PAGE_SIZE;		/* for alignment */
 	bm = alloc_chipmem(total_size);
 	if (bm) {
 		if (flags & BMF_CLEAR) {
@@ -347,19 +349,21 @@ alloc_bitmap(width, height, depth, flags)
 
 
 void
-free_bitmap(bm)
-	bmap_t *bm;
+free_bitmap(bmap_t *bm)
 {
-	if (bm) 
+	if (bm)
 		free_chipmem(bm);
 }
 /* load a new mode into the current display, if NULL shut display off. */
 void
-cc_load_mode(d)
-	dmode_t *d;
+cc_load_mode(dmode_t *d)
 {
 	if (d) {
 		m_this_data->current_mode = d;
+#ifdef __powerpc__	/* XXX ???? */
+		custom.cop1lc = PREP_DMA_MEM(DMDATA(d)->frames[F_LONG]);
+		custom.copjmp1 = 0;
+#endif
 		return;
 	}
 	/* turn off display */
@@ -367,6 +371,7 @@ cc_load_mode(d)
 	wait_tof();
 	wait_tof();
 	custom.cop1lc = PREP_DMA_MEM(null_mode_copper_list);
+	custom.copjmp1 = 0;
 }
 /*
  * CC Mode Stuff.
@@ -402,7 +407,7 @@ dmode_t *(*mode_init_funcs[]) (void) = {
 };
 
 int
-cc_init_modes()
+cc_init_modes(void)
 {
 	int     i = 0;
 	int     error = 0;
@@ -414,25 +419,20 @@ cc_init_modes()
 }
 
 monitor_t *
-cc_get_monitor(d)
-	dmode_t *d;
+cc_get_monitor(dmode_t *d)
 {
 	return (DMDATA(d)->monitor);
 }
 
 view_t *
-cc_get_current_view(d)
-	dmode_t *d;
+cc_get_current_view(dmode_t *d)
 {
 	return (DMDATA(d)->current_view);
 }
 
 
 view_t *
-cc_alloc_view(mode, dim, depth)
-	dmode_t *mode;
-	dimen_t *dim;
-	u_char   depth;
+cc_alloc_view(dmode_t *mode, dimen_t *dim, u_char depth)
 {
 	view_t *v = alloc_chipmem(sizeof(*v) + sizeof(vdata_t));
 	if (v) {
@@ -456,8 +456,7 @@ cc_alloc_view(mode, dim, depth)
 }
 
 colormap_t *
-cc_alloc_colormap(depth)
-	int depth;
+cc_alloc_colormap(int depth)
 {
 	u_long  size = 1U << depth, i;
 	colormap_t *cm = alloc_chipmem(sizeof(u_long) * size + sizeof(*cm));
@@ -480,8 +479,7 @@ cc_alloc_colormap(depth)
 
 #ifdef GRF_AGA
 colormap_t *
-cc_alloc_aga_colormap(depth)
-	int depth;
+cc_alloc_aga_colormap(int depth)
 {
 	u_long  size = 1U << depth, i;
 	colormap_t *cm = alloc_chipmem(sizeof(u_long) * size + sizeof(*cm));
@@ -505,9 +503,7 @@ cc_alloc_aga_colormap(depth)
 #endif
 
 int
-cc_colormap_checkvals(vcm, cm, use)
-	colormap_t *vcm, *cm;
-	int         use;
+cc_colormap_checkvals(colormap_t *vcm, colormap_t *cm, int use)
 {
 	if (use) {
 		/* check to see if its the view's colormap, if so just do
@@ -541,11 +537,10 @@ cc_colormap_checkvals(vcm, cm, use)
 	}
 	return (1);
 }
+
 /* does sanity check on values */
 int
-cc_get_colormap(v, cm)
-	view_t *v;
-	colormap_t *cm;
+cc_get_colormap(view_t *v, colormap_t *cm)
 {
 	colormap_t *vcm = VDATA(v)->colormap;
 	int     i;
@@ -575,9 +570,7 @@ cc_get_colormap(v, cm)
 
 /* does sanity check on values */
 int
-cc_use_colormap(v, cm)
-	view_t *v;
-	colormap_t *cm;
+cc_use_colormap(view_t *v, colormap_t *cm)
 {
 	colormap_t *vcm = VDATA(v)->colormap;
 	int     s, i;
@@ -622,9 +615,7 @@ cc_use_colormap(v, cm)
 #ifdef GRF_AGA
 /* does sanity check on values */
 int
-cc_use_aga_colormap(v, cm)
-	view_t *v;
-	colormap_t *cm;
+cc_use_aga_colormap(view_t *v, colormap_t *cm)
 {
 	colormap_t *vcm = VDATA(v)->colormap;
 	int     s, i;
@@ -679,8 +670,7 @@ cc_use_aga_colormap(v, cm)
 
 #if defined (GRF_A2024)
 colormap_t *
-cc_a2024_alloc_colormap(depth)
-	int depth;
+cc_a2024_alloc_colormap(int depth)
 {
 	u_long  size = 1U << depth, i;
 	colormap_t *cm = alloc_chipmem(sizeof(u_long) * size + sizeof(*cm));
@@ -700,18 +690,14 @@ cc_a2024_alloc_colormap(depth)
 }
 
 int
-cc_a2024_get_colormap(v, cm)
-	view_t *v;
-	colormap_t *cm;
+cc_a2024_get_colormap(view_t *v, colormap_t *cm)
 {
 	/* there are no differences (yet) in the way the cm's are stored */
 	return (cc_get_colormap(v, cm));
 }
 
 int
-cc_a2024_use_colormap(v, cm)
-	view_t *v;
-	colormap_t *cm;
+cc_a2024_use_colormap(view_t *v, colormap_t *cm)
 {
 	colormap_t *vcm = VDATA(v)->colormap;
 	int     s, i;
@@ -760,11 +746,7 @@ cc_a2024_use_colormap(v, cm)
  */
 
 void
-cc_init_view(v, bm, mode, dbox)
-	view_t *v;
-	bmap_t *bm;
-	dmode_t *mode;
-	box_t *dbox;
+cc_init_view(view_t *v, bmap_t *bm, dmode_t *mode, box_t *dbox)
 {
 	vdata_t *vd = VDATA(v);
 	v->bitmap = bm;
@@ -780,8 +762,7 @@ cc_init_view(v, bm, mode, dbox)
 }
 
 void
-cc_free_view(v)
-	view_t *v;
+cc_free_view(view_t *v)
 {
 	if (v) {
 		v->remove_view(v);
@@ -792,8 +773,7 @@ cc_free_view(v)
 }
 
 void
-cc_remove_view(v)
-	view_t *v;
+cc_remove_view(view_t *v)
 {
 	dmode_t *mode = VDATA(v)->mode;
 
@@ -809,15 +789,13 @@ cc_remove_view(v)
 }
 
 dmode_t *
-cc_get_display_mode(v)
-	view_t *v;
+cc_get_display_mode(view_t *v)
 {
 	return (VDATA(v)->mode);
 }
 
 void
-cc_mode_vbl_handler(d)
-	dmode_t *d;
+cc_mode_vbl_handler(dmode_t *d)
 {
 	u_short vp = ((custom.vposr & 0x0007) << 8) | ((custom.vhposr) >> 8);
 
@@ -828,8 +806,7 @@ cc_mode_vbl_handler(d)
 }
 
 void
-cc_lace_mode_vbl_handler(d)
-	dmode_t *d;
+cc_lace_mode_vbl_handler(dmode_t *d)
 {
 	u_short vp = ((custom.vposr & 0x0007) << 8) | ((custom.vhposr) >> 8);
 
@@ -854,7 +831,7 @@ cc_lace_mode_vbl_handler(d)
 #if defined (GRF_NTSC)
 
 dmode_t *
-cc_init_ntsc_hires()
+cc_init_ntsc_hires(void)
 {
 	/* this function should only be called once. */
 	if (!h_this) {
@@ -916,8 +893,7 @@ cc_init_ntsc_hires()
 }
 
 void
-display_hires_view(v)
-	view_t *v;
+display_hires_view(view_t *v)
 {
 	if (h_this_data->current_view != v) {
 		vdata_t *vd = VDATA(v);
@@ -982,7 +958,7 @@ display_hires_view(v)
 #if defined (GRF_ECS) || defined (GRF_AGA)
 		tmp = find_copper_inst(cp, CI_MOVE(R_BPLCON3));
 		tmp->cp.inst.operand = 0x0020;
-#if defined GRF_AGA
+#if defined (GRF_AGA)
 		tmp = find_copper_inst(cp, CI_MOVE(R_FMODE));
 		tmp->cp.inst.operand = 0;
 #endif
@@ -1037,7 +1013,7 @@ display_hires_view(v)
 }
 
 dmode_t *
-cc_init_ntsc_hires_lace()
+cc_init_ntsc_hires_lace(void)
 {
 	/* this function should only be called once. */
 	if (!hl_this) {
@@ -1110,8 +1086,7 @@ cc_init_ntsc_hires_lace()
 }
 
 void
-display_hires_lace_view(v)
-	view_t *v;
+display_hires_lace_view(view_t *v)
 {
 	if (hl_this_data->current_view != v) {
 		vdata_t *vd = VDATA(v);
@@ -1178,7 +1153,7 @@ display_hires_lace_view(v)
 #if defined (GRF_ECS) || defined (GRF_AGA)
 		tmp = find_copper_inst(cp, CI_MOVE(R_BPLCON3));
 		tmp->cp.inst.operand = 0x0020;
-#if defined GRF_AGA
+#if defined (GRF_AGA)
 		tmp = find_copper_inst(cp, CI_MOVE(R_FMODE));
 		tmp->cp.inst.operand = 0;
 #endif
@@ -1264,7 +1239,7 @@ display_hires_lace_view(v)
 #if defined (GRF_A2024)
 
 dmode_t *
-cc_init_ntsc_hires_dlace()
+cc_init_ntsc_hires_dlace(void)
 {
 	/* this function should only be called once. */
 	if (!hdl_this) {
@@ -1340,8 +1315,7 @@ cc_init_ntsc_hires_dlace()
 }
 
 void
-display_hires_dlace_view(v)
-	view_t *v;
+display_hires_dlace_view(view_t *v)
 {
 	if (hdl_this_data->current_view != v) {
 		vdata_t *vd = VDATA(v);
@@ -1409,7 +1383,7 @@ display_hires_dlace_view(v)
 #if defined (GRF_ECS) || defined (GRF_AGA)
 		tmp = find_copper_inst(cp, CI_MOVE(R_BPLCON3));
 		tmp->cp.inst.operand = 0x0020;
-#if defined GRF_AGA
+#if defined (GRF_AGA)
 		tmp = find_copper_inst(cp, CI_MOVE(R_FMODE));
 		tmp->cp.inst.operand = 0;
 #endif
@@ -1519,7 +1493,7 @@ display_hires_dlace_view(v)
 
 
 dmode_t *
-cc_init_ntsc_a2024()
+cc_init_ntsc_a2024(void)
 {
 	/* this function should only be called once. */
 	if (!a24_this) {
@@ -1532,7 +1506,7 @@ cc_init_ntsc_a2024()
 		bzero(a24_this, sizeof(dmode_t));
 		bzero(a24_this_data, sizeof(dmdata_t));
 
-		a24_this->name = "ntsc: A2024 15khz";
+		a24_this->name = "ntsc: A2024 15 kHz";
 		a24_this->nominal_size.width = 1024;
 		a24_this->nominal_size.height = 800;
 		a24_this_data->max_size.width = 1024;
@@ -1598,8 +1572,7 @@ cc_init_ntsc_a2024()
 }
 
 void
-display_a2024_view(v)
-	view_t *v;
+display_a2024_view(view_t *v)
 {
 	if (a24_this_data->current_view != v) {
 		vdata_t *vd = VDATA(v);
@@ -1793,8 +1766,7 @@ display_a2024_view(v)
 }
 
 void
-a2024_mode_vbl_handler(d)
-	dmode_t *d;
+a2024_mode_vbl_handler(dmode_t *d)
 {
 	u_short vp = ((custom.vposr & 0x0007) << 8) | ((custom.vhposr) >> 8);
 
@@ -1811,7 +1783,7 @@ a2024_mode_vbl_handler(d)
 #if defined (GRF_AGA)
 
 dmode_t *
-cc_init_ntsc_aga()
+cc_init_ntsc_aga(void)
 {
 	/* this function should only be called once. */
 	if (!aga_this && (custom.deniseid & 0xff) == 0xf8 &&
@@ -1859,9 +1831,9 @@ cc_init_ntsc_aga()
 								 * shres. */
 #ifdef GRF_AGA_VGA
 		aga_this_data->std_start_x = 0x40 /*STANDARD_VIEW_X*/;
-#else 
+#else
 		aga_this_data->std_start_x = 0x4f /*STANDARD_VIEW_X*/;
-#endif 
+#endif
 		aga_this_data->std_start_y = 0x2b /*STANDARD_VIEW_Y*/;
 		aga_this_data->vbl_handler = (vbl_handler_func *) cc_mode_vbl_handler;
 		aga_this_data->beamcon0 = SPECIAL_BEAMCON ^ VSYNCTRUE;
@@ -1880,13 +1852,13 @@ int	AGA_hsstrt = 0xc;
 int	AGA_hsstop = 0x16;
 int	AGA_hbstrt = 0x5;
 int	AGA_vtotal = 0x1c1;
-#else 
+#else
 int	AGA_htotal = 0x79;
 int	AGA_hsstrt = 0xe;
 int	AGA_hsstop = 0x1c;
 int	AGA_hbstrt = 0x8;
 int	AGA_vtotal = 0x1ec;
-#endif 
+#endif
 int	AGA_hbstop = 0x1e;
 int	AGA_vsstrt = 0x3;
 int	AGA_vsstop = 0x6;
@@ -1895,8 +1867,7 @@ int	AGA_vbstop = 0x19;
 int	AGA_hcenter = 0x4a;
 
 void
-display_aga_view(v)
-	view_t *v;
+display_aga_view(view_t *v)
 {
 	if (aga_this_data->current_view != v) {
 		vdata_t *vd = VDATA(v);
@@ -2122,7 +2093,7 @@ display_aga_view(v)
 
 #if defined (GRF_SUPER72)
 dmode_t *
-cc_init_super72()
+cc_init_super72(void)
 {
 	/* this function should only be called once. */
 	if (!super72_this && (custom.deniseid & 0xff) == 0xf8) {
@@ -2231,8 +2202,7 @@ int	super72_startx = 100;
 int	super72_starty = 27;
 
 void
-display_super72_view(v)
-	view_t *v;
+display_super72_view(view_t *v)
 {
 	if (super72_this_data->current_view != v) {
 		vdata_t *vd = VDATA(v);
@@ -2300,25 +2270,25 @@ display_super72_view(v)
 		tmp = find_copper_inst(cp, CI_MOVE(R_FMODE));
 		tmp->cp.inst.operand = 0x8003;
 		tmp = find_copper_inst(cp, CI_MOVE(R_HTOTAL));
-		tmp->cp.inst.operand = super72_htotal; 
+		tmp->cp.inst.operand = super72_htotal;
 		tmp = find_copper_inst(cp, CI_MOVE(R_HBSTRT));
-		tmp->cp.inst.operand = super72_hbstrt; 
+		tmp->cp.inst.operand = super72_hbstrt;
 		tmp = find_copper_inst(cp, CI_MOVE(R_HSSTRT));
-		tmp->cp.inst.operand = super72_hsstrt; 
+		tmp->cp.inst.operand = super72_hsstrt;
 		tmp = find_copper_inst(cp, CI_MOVE(R_HSSTOP));
-		tmp->cp.inst.operand = super72_hsstop; 
+		tmp->cp.inst.operand = super72_hsstop;
 		tmp = find_copper_inst(cp, CI_MOVE(R_HBSTOP));
-		tmp->cp.inst.operand = super72_hbstop; 
+		tmp->cp.inst.operand = super72_hbstop;
 		tmp = find_copper_inst(cp, CI_MOVE(R_HCENTER));
 		tmp->cp.inst.operand = super72_hcenter;
 		tmp = find_copper_inst(cp, CI_MOVE(R_VBSTRT));
-		tmp->cp.inst.operand = super72_vbstrt; 
+		tmp->cp.inst.operand = super72_vbstrt;
 		tmp = find_copper_inst(cp, CI_MOVE(R_VSSTRT));
-		tmp->cp.inst.operand = super72_vsstrt; 
+		tmp->cp.inst.operand = super72_vsstrt;
 		tmp = find_copper_inst(cp, CI_MOVE(R_VSSTOP));
-		tmp->cp.inst.operand = super72_vsstop; 
+		tmp->cp.inst.operand = super72_vsstop;
 		tmp = find_copper_inst(cp, CI_MOVE(R_VBSTOP));
-		tmp->cp.inst.operand = super72_vbstop; 
+		tmp->cp.inst.operand = super72_vbstop;
 		tmp = find_copper_inst(cp, CI_MOVE(R_VTOTAL));
 		tmp->cp.inst.operand = super72_vtotal;
 
@@ -2415,7 +2385,7 @@ display_super72_view(v)
 #if defined (GRF_PAL)
 
 dmode_t *
-cc_init_pal_hires()
+cc_init_pal_hires(void)
 {
 	/* this function should only be called once. */
 	if (!ph_this) {
@@ -2473,8 +2443,7 @@ cc_init_pal_hires()
 }
 
 void
-display_pal_hires_view(v)
-	view_t *v;
+display_pal_hires_view(view_t *v)
 {
 	if (ph_this_data->current_view != v) {
 		vdata_t *vd = VDATA(v);
@@ -2535,7 +2504,7 @@ display_pal_hires_view(v)
 
 		cp = ph_this_data->frames[F_STORE_LONG];
 #if defined (GRF_ECS) || defined (GRF_AGA)
-#if defined GRF_AGA
+#if defined (GRF_AGA)
 		tmp = find_copper_inst(cp, CI_MOVE(R_FMODE));
 		tmp->cp.inst.operand = 0;
 #endif
@@ -2585,7 +2554,7 @@ display_pal_hires_view(v)
 }
 
 dmode_t *
-cc_init_pal_hires_lace()
+cc_init_pal_hires_lace(void)
 {
 	/* this function should only be called once. */
 	if (!phl_this) {
@@ -2649,8 +2618,7 @@ cc_init_pal_hires_lace()
 }
 
 void
-display_pal_hires_lace_view(v)
-	view_t *v;
+display_pal_hires_lace_view(view_t *v)
 {
 	if (phl_this_data->current_view != v) {
 		vdata_t *vd = VDATA(v);
@@ -2712,7 +2680,7 @@ display_pal_hires_lace_view(v)
 
 		cp = phl_this_data->frames[F_LACE_STORE_LONG];
 #if defined (GRF_ECS) || defined (GRF_AGA)
-#if defined GRF_AGA
+#if defined (GRF_AGA)
 		tmp = find_copper_inst(cp, CI_MOVE(R_FMODE));
 		tmp->cp.inst.operand = 0;
 #endif
@@ -2786,7 +2754,7 @@ display_pal_hires_lace_view(v)
 #if defined (GRF_A2024)
 
 dmode_t *
-cc_init_pal_hires_dlace()
+cc_init_pal_hires_dlace(void)
 {
 	/* this function should only be called once. */
 	if (!phdl_this) {
@@ -2850,8 +2818,7 @@ cc_init_pal_hires_dlace()
 }
 
 void
-display_pal_hires_dlace_view(v)
-	view_t *v;
+display_pal_hires_dlace_view(view_t *v)
 {
 	if (phdl_this_data->current_view != v) {
 		vdata_t *vd = VDATA(v);
@@ -2914,7 +2881,7 @@ display_pal_hires_dlace_view(v)
 
 		cp = phdl_this_data->frames[F_LACE_STORE_LONG];
 #if defined (GRF_ECS) || defined (GRF_AGA)
-#if defined GRF_AGA
+#if defined (GRF_AGA)
 		tmp = find_copper_inst(cp, CI_MOVE(R_FMODE));
 		tmp->cp.inst.operand = 0;
 #endif
@@ -3004,7 +2971,7 @@ display_pal_hires_dlace_view(v)
 }
 
 dmode_t *
-cc_init_pal_a2024()
+cc_init_pal_a2024(void)
 {
 	/* this function should only be called once. */
 	if (!p24_this) {
@@ -3017,7 +2984,7 @@ cc_init_pal_a2024()
 		bzero(p24_this, sizeof(dmode_t));
 		bzero(p24_this_data, sizeof(dmdata_t));
 
-		p24_this->name = "pal: A2024 15khz";
+		p24_this->name = "pal: A2024 15 kHz";
 		p24_this->nominal_size.width = 1024;
 		p24_this->nominal_size.height = 1024;
 		p24_this_data->max_size.width = 1024;
@@ -3077,8 +3044,7 @@ cc_init_pal_a2024()
 }
 
 void
-display_pal_a2024_view(v)
-	view_t *v;
+display_pal_a2024_view(view_t *v)
 {
 	if (p24_this_data->current_view != v) {
 		vdata_t *vd = VDATA(v);
@@ -3226,8 +3192,7 @@ display_pal_a2024_view(v)
 }
 
 void
-pal_a2024_mode_vbl_handler(d)
-	dmode_t *d;
+pal_a2024_mode_vbl_handler(dmode_t *d)
 {
 	u_short vp = ((custom.vposr & 0x0007) << 8) | ((custom.vhposr) >> 8);
 
@@ -3243,7 +3208,7 @@ pal_a2024_mode_vbl_handler(d)
 #if defined (GRF_AGA)
 
 dmode_t *
-cc_init_pal_aga()
+cc_init_pal_aga(void)
 {
 	/* this function should only be called once. */
 	if (!paga_this && (custom.deniseid & 0xff) == 0xf8 &&
@@ -3322,8 +3287,7 @@ int	pAGA_vsstop  = 0x008;
 int	pAGA_vbstrt  = 0x000;
 
 void
-display_pal_aga_view(v)
-	view_t *v;
+display_pal_aga_view(view_t *v)
 {
 	if (paga_this_data->current_view != v) {
 		vdata_t *vd = VDATA(v);

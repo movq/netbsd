@@ -1,26 +1,29 @@
-#	$NetBSD: Makefile,v 1.13 1999/12/21 14:22:54 drochner Exp $
+#	$NetBSD: Makefile,v 1.25 2008/10/11 11:06:20 joerg Exp $
 
 S?=	${.CURDIR}/../../../../
 
 LIB= i386
-MKPIC=no
-MKPROFILE=no
+NOPIC=# defined
+NOPROFILE=# defined
 
 I386_INCLUDE_DISK?= yes
 I386_INCLUDE_DOS?= no
 I386_INCLUDE_BUS?= no
+I386_INCLUDE_PS2?= yes
 
 CPPFLAGS= -I$S/lib/libsa ${I386CPPFLAGS} ${I386MISCCPPFLAGS}
 #CPPFLAGS+= -DDISK_DEBUG
 #CPPFLAGS+= -DNO_DISKLABEL
 #CPPFLAGS+= -DSAVE_MEMORY
 
-SRCS= pcio.c conio.S comio.S comio_direct.c
+SRCS= pcio.c conio.S comio.S comio_direct.c biosvideomode.S
 SRCS+= getsecs.c biosgetrtc.S biosdelay.S biosreboot.S gatea20.c
 SRCS+= biosmem.S getextmemx.c biosmemx.S printmemlist.c
 SRCS+= pread.c menuutils.c parseutils.c
 SRCS+= bootinfo.c bootinfo_biosgeom.c bootinfo_memmap.c
-SRCS+= startprog.S netbsd_opts.c panic.c
+SRCS+= startprog.S multiboot.S panic.c
+SRCS+= biosgetsystime.S cpufunc.S
+SRCS+= realprot.S message.S dump_eax.S pvcopy.S putstr.S
 .if (${I386_INCLUDE_DISK} == "yes")
 SRCS+= biosdisk.c biosdisk_ll.c bios_disk.S
 .endif
@@ -33,7 +36,12 @@ SRCS+= diskbuf.c
 .if (${I386_INCLUDE_BUS} == "yes")
 SRCS+= biospci.c bios_pci.S isapnp.c isadma.c
 .endif
+.if (${I386_INCLUDE_PS2} == "yes")
+SRCS+= biosmca.S biosmemps2.S
+.endif
 
+.include <bsd.own.mk>
+.undef DESTDIR
 .include <bsd.lib.mk>
 
 lib${LIB}.o:: ${OBJS}

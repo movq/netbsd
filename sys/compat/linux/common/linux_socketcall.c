@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socketcall.c,v 1.19 1999/03/25 04:26:45 sommerfe Exp $	*/
+/*	$NetBSD: linux_socketcall.c,v 1.39 2008/07/03 14:07:09 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: linux_socketcall.c,v 1.39 2008/07/03 14:07:09 njoly Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -55,8 +51,11 @@
 #include <sys/proc.h>
 #include <sys/vnode.h>
 #include <sys/device.h>
+#include <sys/ktrace.h>
 
 #include <sys/syscallargs.h>
+
+#include <compat/sys/socket.h>
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_util.h>
@@ -68,8 +67,15 @@
 
 #include <compat/linux/linux_syscallargs.h>
 
+#undef DPRINTF
+#ifdef DEBUG_LINUX
+#define DPRINTF(a)	uprintf a
+#else
+#define DPRINTF(a)
+#endif
+
 /* Used on: arm, i386, m68k, mips, ppc, sparc, sparc64 */
-/* Not used on: alpha */
+/* Not used on: alpha, amd64 */
 
 /*
  * This file contains the linux_socketcall() multiplexer.  Arguments
@@ -79,25 +85,28 @@
  */
 
 /* The sizes of the arguments.  Used for copyin. */
-int linux_socketcall_argsize[] = {
-	-1,
-	sizeof(struct linux_sys_socket_args),		/* 1 */
-	sizeof(struct linux_sys_bind_args),
-	sizeof(struct linux_sys_connect_args),
-	sizeof(struct linux_sys_listen_args),
-	sizeof(struct linux_sys_accept_args),		/* 5 */
-	sizeof(struct linux_sys_getsockname_args),
-	sizeof(struct linux_sys_getpeername_args),
-	sizeof(struct linux_sys_socketpair_args),
-	sizeof(struct linux_sys_send_args),
-	sizeof(struct linux_sys_recv_args),		/* 10 */
-	sizeof(struct linux_sys_sendto_args),
-	sizeof(struct linux_sys_recvfrom_args),
-	sizeof(struct linux_sys_shutdown_args),
-	sizeof(struct linux_sys_setsockopt_args),
-	sizeof(struct linux_sys_getsockopt_args),	/* 15 */
-	sizeof(struct linux_sys_sendmsg_args),
-	sizeof(struct linux_sys_recvmsg_args),		/* 17 */
+static const struct {
+	const char *name;
+	int argsize;
+} linux_socketcall[LINUX_MAX_SOCKETCALL+1] = {
+	{"invalid",	-1},						/* 0 */
+	{"socket",	sizeof(struct linux_sys_socket_args)},		/* 1 */
+	{"bind",	sizeof(struct linux_sys_bind_args)},		/* 2 */
+	{"connect",	sizeof(struct linux_sys_connect_args)},		/* 3 */
+	{"listen",	sizeof(struct linux_sys_listen_args)},		/* 4 */
+	{"accept",	sizeof(struct linux_sys_accept_args)},		/* 5 */
+	{"getsockname",	sizeof(struct linux_sys_getsockname_args)},	/* 6 */
+	{"getpeername",	sizeof(struct linux_sys_getpeername_args)},	/* 7 */
+	{"socketpair",	sizeof(struct linux_sys_socketpair_args)},	/* 8 */
+	{"send",	sizeof(struct linux_sys_send_args)},		/* 9 */
+	{"recv",	sizeof(struct linux_sys_recv_args)},		/* 10 */
+	{"sendto",	sizeof(struct linux_sys_sendto_args)},		/* 11 */
+	{"recvfrom",	sizeof(struct linux_sys_recvfrom_args)},	/* 12 */
+	{"shutdown",	sizeof(struct linux_sys_shutdown_args)},	/* 13 */
+	{"setsockopt",	sizeof(struct linux_sys_setsockopt_args)},	/* 14 */
+	{"getsockopt",	sizeof(struct linux_sys_getsockopt_args)},	/* 15 */
+	{"sendmsg",	sizeof(struct linux_sys_sendmsg_args)},		/* 16 */
+	{"recvmsg",	sizeof(struct linux_sys_recvmsg_args)},		/* 17 */
 };
 
 /*
@@ -105,61 +114,112 @@ int linux_socketcall_argsize[] = {
  * make and take appropriate action.
  */
 int
-linux_sys_socketcall(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+linux_sys_socketcall(struct lwp *l, const struct linux_sys_socketcall_args *uap, register_t *retval)
 {
-	struct linux_sys_socketcall_args /* {
+	/* {
 		syscallarg(int) what;
 		syscallarg(void *) args;
-	} */ *uap = v;
+	} */
 	struct linux_socketcall_dummy_args lda;
 	int error;
 
-	if (SCARG(uap, what) > LINUX_MAX_SOCKETCALL)
+	if (SCARG(uap, what) < 0 || SCARG(uap, what) > LINUX_MAX_SOCKETCALL)
 		return ENOSYS;
 
-	if ((error = copyin((caddr_t) SCARG(uap, args), (caddr_t) &lda,
-	    linux_socketcall_argsize[SCARG(uap, what)])))
+	if ((error = copyin(SCARG(uap, args), &lda,
+	    linux_socketcall[SCARG(uap, what)].argsize))) {
+		DPRINTF(("copyin for %s failed %d\n",
+		linux_socketcall[SCARG(uap, what)].name, error));
 		return error;
+	}
+
+	ktrkuser(linux_socketcall[SCARG(uap, what)].name, &lda,
+	    linux_socketcall[SCARG(uap, what)].argsize);
+
+#ifdef DEBUG_LINUX
+	/* dump the passed argument data */
+	{
+        	DPRINTF(("linux_socketcall('%s'): ",
+		    linux_socketcall[SCARG(uap, what)].name));
+
+		if (SCARG(uap, what) == LINUX_SYS_socket) {
+			DPRINTF(("[dom %d type %d proto %d]\n",
+				lda.dummy_ints[0],
+				lda.dummy_ints[1],
+				lda.dummy_ints[2]));
+		} else {
+			int i, sz;
+			u_int8_t *data = (u_int8_t *)&lda.dummy_ints[1];
+
+			sz = linux_socketcall[SCARG(uap, what)].argsize
+			    - sizeof(lda.dummy_ints[0]);
+
+			DPRINTF(("socket %d [", lda.dummy_ints[0]));
+			for(i=0; i < sz; i++)
+				DPRINTF(("%02x ", data[i]));
+			DPRINTF(("]\n"));
+		}
+	}
+#endif
 
 	switch (SCARG(uap, what)) {
 	case LINUX_SYS_socket:
-		return linux_sys_socket(p, (void *)&lda, retval);
+		error = linux_sys_socket(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_bind:
-		return sys_bind(p, (void *)&lda, retval);
+		error = linux_sys_bind(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_connect:
-		return linux_sys_connect(p, (void *)&lda, retval);
+		error = linux_sys_connect(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_listen:
-		return sys_listen(p, (void *)&lda, retval);
+		error = sys_listen(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_accept:
-		return compat_43_sys_accept(p, (void *)&lda, retval);
+		error = linux_sys_accept(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_getsockname:
-		return compat_43_sys_getsockname(p, (void *)&lda, retval);
+		error = linux_sys_getsockname(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_getpeername:
-		return compat_43_sys_getpeername(p, (void *)&lda, retval);
+		error = linux_sys_getpeername(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_socketpair:
-		return linux_sys_socketpair(p, (void *)&lda, retval);
+		error = linux_sys_socketpair(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_send:
-		return compat_43_sys_send(p, (void *)&lda, retval);
+		error = linux_sys_send(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_recv:
-		return compat_43_sys_recv(p, (void *)&lda, retval);
+		error = linux_sys_recv(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_sendto:
-		return linux_sys_sendto(p, (void *)&lda, retval);
+		error = linux_sys_sendto(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_recvfrom:
-		return linux_sys_recvfrom(p, (void *)&lda, retval);
+		error = linux_sys_recvfrom(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_shutdown:
-		return sys_shutdown(p, (void *)&lda, retval);
+		error = sys_shutdown(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_setsockopt:
-		return linux_sys_setsockopt(p, (void *)&lda, retval);
+		error = linux_sys_setsockopt(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_getsockopt:
-		return linux_sys_getsockopt(p, (void *)&lda, retval);
+		error = linux_sys_getsockopt(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_sendmsg:
-		return sys_sendmsg(p, (void *)&lda, retval);
+		error = linux_sys_sendmsg(l, (void *)&lda, retval);
+		break;
 	case LINUX_SYS_recvmsg:
-		return sys_recvmsg(p, (void *)&lda, retval);
+		error = linux_sys_recvmsg(l, (void *)&lda, retval);
+		break;
 	default:
-		return ENOSYS;
+		error = ENOSYS;
+		break;
 	}
+
+	DPRINTF(("sys_%s() = %d\n", linux_socketcall[SCARG(uap, what)].name,
+	    error));
+	return error;
 }

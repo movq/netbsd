@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.35 2000/01/27 23:39:40 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.52 2008/10/16 14:55:28 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,22 +34,24 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.7 (Berkeley) 7/19/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.35 2000/01/27 23:39:40 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.52 2008/10/16 14:55:28 dholland Exp $");
 #endif
 #endif /* not lint */
 
+#include <errno.h>
 #include <stdio.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <locale.h>
 #include <fcntl.h>
 
 
@@ -82,17 +80,14 @@ __RCSID("$NetBSD: main.c,v 1.35 2000/01/27 23:39:40 christos Exp $");
 
 int rootpid;
 int rootshell;
-STATIC union node *curcmd;
-STATIC union node *prevcmd;
-extern int errno;
 #if PROFILE
 short profile_buf[16384];
 extern int etext();
 #endif
 
-STATIC void read_profile __P((const char *));
-STATIC char *find_dot_file __P((char *));
-int main __P((int, char **));
+STATIC void read_profile(const char *);
+STATIC char *find_dot_file(char *);
+int main(int, char **);
 
 /*
  * Main routine.  We initialize things, parse the arguments, execute
@@ -103,14 +98,14 @@ int main __P((int, char **));
  */
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	struct jmploc jmploc;
 	struct stackmark smark;
 	volatile int state;
 	char *shinit;
+
+	setlocale(LC_ALL, "");
 
 #if PROFILE
 	monitor(4, etext, profile_buf, sizeof profile_buf, 50);
@@ -143,8 +138,8 @@ main(argc, argv)
 		}
 
 		if (exception != EXSHELLPROC) {
-		    if (state == 0 || iflag == 0 || ! rootshell)
-			    exitshell(exitstatus);
+			if (state == 0 || iflag == 0 || ! rootshell)
+				exitshell(exitstatus);
 		}
 		reset();
 		if (exception == EXINT
@@ -168,12 +163,16 @@ main(argc, argv)
 	}
 	handler = &jmploc;
 #ifdef DEBUG
+#if DEBUG == 2
+	debug = 1;
+#endif
 	opentrace();
 	trputs("Shell args:  ");  trargs(argv);
 #endif
 	rootpid = getpid();
 	rootshell = 1;
 	init();
+	initpwd();
 	setstackmark(&smark);
 	procargs(argc, argv);
 	if (argv[0] && argv[0][0] == '-') {
@@ -205,7 +204,7 @@ state3:
 		int i;
 
 		for (i = 0; i < SIGSSIZE; i++)
-		    setsignal(sigs[i]);
+		    setsignal(sigs[i], 0);
 	}
 
 	if (minusc)
@@ -229,8 +228,7 @@ state4:	/* XXX ??? - why isn't this before the "if" statement */
  */
 
 void
-cmdloop(top)
-	int top;
+cmdloop(int top)
 {
 	union node *n;
 	struct stackmark smark;
@@ -243,11 +241,11 @@ cmdloop(top)
 		if (pendingsigs)
 			dotrap();
 		inter = 0;
-		if (iflag && top) {
-			inter++;
-			showjobs(1);
+		if (iflag == 1 && top) {
+			inter = 1;
+			showjobs(out2, SHOW_CHANGED);
 			chkmail(0);
-			flushout(&output);
+			flushout(&errout);
 		}
 		n = parsecmd(inter);
 		/* showtree(n); DEBUG */
@@ -266,12 +264,13 @@ cmdloop(top)
 			evaltree(n, 0);
 		}
 		popstackmark(&smark);
+		setstackmark(&smark);
 		if (evalskip == SKIPFILE) {
 			evalskip = 0;
 			break;
 		}
 	}
-	popstackmark(&smark);		/* unnecessary */
+	popstackmark(&smark);
 }
 
 
@@ -281,8 +280,7 @@ cmdloop(top)
  */
 
 STATIC void
-read_profile(name)
-	const char *name;
+read_profile(const char *name)
 {
 	int fd;
 	int xflag_set = 0;
@@ -318,8 +316,7 @@ read_profile(name)
  */
 
 void
-readcmdfile(name)
-	char *name;
+readcmdfile(char *name)
 {
 	int fd;
 
@@ -336,14 +333,13 @@ readcmdfile(name)
 
 
 /*
- * Take commands from a file.  To be compatable we should do a path
+ * Take commands from a file.  To be compatible we should do a path
  * search for the file, which is necessary to find sub-commands.
  */
 
 
 STATIC char *
-find_dot_file(basename)
-	char *basename;
+find_dot_file(char *basename)
 {
 	char *fullname;
 	const char *path = pathval();
@@ -370,15 +366,9 @@ find_dot_file(basename)
 }
 
 int
-dotcmd(argc, argv)
-	int argc;
-	char **argv;
+dotcmd(int argc, char **argv)
 {
-	struct strlist *sp;
 	exitstatus = 0;
-
-	for (sp = cmdenviron; sp ; sp = sp->next)
-		setvareq(savestr(sp->text), VSTRFIXED|VTEXTFIXED);
 
 	if (argc >= 2) {		/* That's what SVR2 does */
 		char *fullname;
@@ -397,18 +387,12 @@ dotcmd(argc, argv)
 
 
 int
-exitcmd(argc, argv)
-	int argc;
-	char **argv;
+exitcmd(int argc, char **argv)
 {
-	extern int oexitstatus;
-
 	if (stoppedjobs())
 		return 0;
 	if (argc > 1)
 		exitstatus = number(argv[1]);
-	else
-		exitstatus = oexitstatus;
 	exitshell(exitstatus);
 	/* NOTREACHED */
 }

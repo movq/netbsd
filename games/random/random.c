@@ -1,4 +1,4 @@
-/*	$NetBSD: random.c,v 1.7 2000/01/18 16:12:25 jsm Exp $	*/
+/*	$NetBSD: random.c,v 1.12 2008/07/20 01:03:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)random.c	8.6 (Berkeley) 6/1/94";
 #else
-__RCSID("$NetBSD: random.c,v 1.7 2000/01/18 16:12:25 jsm Exp $");
+__RCSID("$NetBSD: random.c,v 1.12 2008/07/20 01:03:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -63,8 +59,8 @@ __RCSID("$NetBSD: random.c,v 1.7 2000/01/18 16:12:25 jsm Exp $");
 
 #define MAXRANDOM	2147483647
 
-int  main __P((int, char **));
-void usage __P((void)) __attribute__((__noreturn__));
+int  main(int, char **);
+void usage(void) __dead;
 
 int
 main(argc, argv)
@@ -113,7 +109,7 @@ main(argc, argv)
 	}
 
 	(void)gettimeofday(&tp, NULL);
-	srandom((u_int)(tp.tv_usec + tp.tv_sec + getpid()));
+	srandom((unsigned long)tp.tv_usec + tp.tv_sec + getpid());
 
 	/* Compute a random exit status between 0 and denom - 1. */
 	if (random_exit)
@@ -148,6 +144,8 @@ main(argc, argv)
 	if (ferror(stdin))
 		err(2, "stdin");
 	exit (0);
+
+	return 0;
 }
 
 void

@@ -1,4 +1,4 @@
-/*	$NetBSD: addch.c,v 1.9 1999/04/13 14:08:17 mrg Exp $	*/
+/*	$NetBSD: addch.c,v 1.15 2007/05/28 15:01:53 blymn Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,11 +34,50 @@
 #if 0
 static char sccsid[] = "@(#)addch.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: addch.c,v 1.9 1999/04/13 14:08:17 mrg Exp $");
+__RCSID("$NetBSD: addch.c,v 1.15 2007/05/28 15:01:53 blymn Exp $");
 #endif
 #endif				/* not lint */
 
 #include "curses.h"
+#include "curses_private.h"
+
+#ifndef _CURSES_USE_MACROS
+
+/*
+ * addch --
+ *	Add the character to the current position in stdscr.
+ *
+ */
+int
+addch(chtype ch)
+{
+	return waddch(stdscr, ch);
+}
+
+/*
+ * mvaddch --
+ *      Add the character to stdscr at the given location.
+ */
+int
+mvaddch(int y, int x, chtype ch)
+{
+	return mvwaddch(stdscr, y, x, ch);
+}
+
+/*
+ * mvwaddch --
+ *      Add the character to the given window at the given location.
+ */
+int
+mvwaddch(WINDOW *win, int y, int x, chtype ch)
+{
+	if (wmove(win, y, x) == ERR)
+		return ERR;
+
+	return waddch(win, ch);
+}
+
+#endif
 
 /*
  * waddch --
@@ -50,24 +85,46 @@ __RCSID("$NetBSD: addch.c,v 1.9 1999/04/13 14:08:17 mrg Exp $");
  *
  */
 int
-waddch(win, ch)
-	WINDOW *win;
-	int	 ch;
+waddch(WINDOW *win, chtype ch)
 {
+#ifdef HAVE_WCHAR
+	cchar_t cc;
+#else
 	__LDATA buf;
+#endif
 
-	buf.ch = ch;
-	buf.attr = 0;
+#ifdef HAVE_WCHAR
+	cc.vals[0] = ch & __CHARTEXT;
+	cc.elements = 1;
+	cc.attributes = ch & __ATTRIBUTES;
+#else
+	buf.ch = (wchar_t) ch & __CHARTEXT;
+	buf.attr = (attr_t) ch & __ATTRIBUTES;
+#endif
+
+#ifdef DEBUG
+#ifdef HAVE_WCHAR
+	__CTRACE(__CTRACE_INPUT,
+		 "addch: %d : 0x%x (adding char as wide char)\n",
+		 cc.vals[0], cc.attributes);
+#else
+	__CTRACE(__CTRACE_INPUT, "addch: %d : 0x%x\n", buf.ch, buf.attr);
+#endif
+#endif
+
+#ifdef HAVE_WCHAR
+	return (wadd_wch(win, &cc));
+#else
 	return (__waddch(win, &buf));
+#endif
 }
 
 int
-__waddch(win, dp)
-	WINDOW *win;
-	__LDATA *dp;
+__waddch(WINDOW *win, __LDATA *dp)
 {
 	char	buf[2];
 
 	buf[0] = dp->ch;
+	buf[1] = '\0';
 	return (__waddbytes(win, buf, 1, dp->attr));
 }

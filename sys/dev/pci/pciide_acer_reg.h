@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide_acer_reg.h,v 1.2 1999/08/29 17:20:10 bouyer Exp $	*/
+/*	$NetBSD: pciide_acer_reg.h,v 1.11 2007/12/25 18:33:41 perry Exp $	*/
 
 /*
  * Copyright (c) 1999 Manuel Bouyer.
@@ -13,23 +13,20 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
 
@@ -37,6 +34,20 @@
 #define ACER_CCAR1	0x43
 #define ACER_CHANSTATUS_RO            0x40
 #define PCIIDE_CHAN_RO(chan)            (0x20 >> (chan))
+
+/* from Linux, 80 pins cable detect */
+#define ACER_0x4A	0x4a
+/*
+ * bit 0 is 0 -> primary has 80 pin cable
+ * bit 1 is 0 -> secondary has 80 pin cable
+ */
+#define ACER_0x4A_80PIN(chan)	(0x1 << (chan))
+
+/* From FreeBSD, for UDMA mode > 2 */
+#define ACER_0x4B	0x4b
+#define ACER_0x4B_UDMA66	0x01
+/* From Linux */
+#define ACER_0x4B_CDETECT	0x08
 
 /* class code attribute register 2 (1 byte) */
 #define ACER_CCAR2	0x4d
@@ -74,14 +85,27 @@
 #define ACER_CHIDS_DRV(channel)	((0x4) << (channel))
 #define ACER_CHIDS_INT(channel)	((0x1) << (channel))
 
+/* Linux: south-bridge's enable bit (m1533) */
+#define ACER_0x79	0x79
+#define ACER_0x79_REVC2_EN	0x4
+#define ACER_0x79_EN		0x2
+
+/* OpenSolaris: channel enable/disable in the PCI-ISA bridge */
+#define ACER_PCIB_CTRL	0x58
+#define ACER_PCIB_CTRL_ENCHAN(chan) (0x4 << (chan))
+
 /*
  * IDE bus frequency (1 byte)
  * This should be setup by the BIOS - can we rely on this ?
  */
-#define ACER_IDE_CLK	0x78 
+#define ACER_IDE_CLK	0x78
 
-static int8_t acer_udma[] = {0x4, 0x3, 0x2};
-static int8_t acer_pio[] = {0x0c, 0x58, 0x44, 0x33, 0x31};
+/* acer UDMA3/4/5 from FreeBSD */
+static const int8_t acer_udma[] __unused =
+    {0x4, 0x3, 0x2, 0x1, 0x0, 0x7};
+static const int8_t acer_pio[] __unused =
+    {0x0c, 0x58, 0x44, 0x33, 0x31};
 #ifdef unused
-static int8_t acer_dma[] = {0x08, 0x33, 0x31};
+static const int8_t acer_dma[] __unused =
+    {0x08, 0x33, 0x31};
 #endif

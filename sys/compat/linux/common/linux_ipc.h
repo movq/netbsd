@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_ipc.h,v 1.5 1999/01/03 03:52:22 erh Exp $	*/
+/*	$NetBSD: linux_ipc.h,v 1.9 2008/04/28 20:23:43 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 #ifndef _LINUX_IPC_H
 #define _LINUX_IPC_H
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_sysv.h"
 #endif
 
@@ -67,18 +60,38 @@ struct linux_ipc_perm {
 	ushort		l_seq;
 };
 
+struct linux_ipc64_perm {
+	linux_key_t	l_key;
+	uint		l_uid;
+	uint		l_gid;
+	uint		l_cuid;
+	uint		l_cgid;
+	ushort		l_mode;
+	ushort		l___pad1;
+	ushort		l_seq;
+	ushort		l___pad2;
+	ulong		l___unused1;
+	ulong		l___unused2;
+};
+
 #define LINUX_IPC_RMID	0
 #define LINUX_IPC_SET	1
 #define LINUX_IPC_STAT	2
 #define LINUX_IPC_INFO	3
 
+#define LINUX_IPC_64	0x100
+
 #if defined (SYSVSEM) || defined(SYSVSHM) || defined(SYSVMSG)
 #ifdef _KERNEL
 __BEGIN_DECLS
-void linux_to_bsd_ipc_perm __P((struct linux_ipc_perm *,
-				       struct ipc_perm *));
-void bsd_to_linux_ipc_perm __P((struct ipc_perm *,
-				       struct linux_ipc_perm *));
+void linux_to_bsd_ipc_perm(struct linux_ipc_perm *,
+				       struct ipc_perm *);
+void linux_to_bsd_ipc64_perm(struct linux_ipc64_perm *,
+				       struct ipc_perm *);
+void bsd_to_linux_ipc_perm(struct ipc_perm *,
+				       struct linux_ipc_perm *);
+void bsd_to_linux_ipc64_perm(struct ipc_perm *,
+				       struct linux_ipc64_perm *);
 __END_DECLS
 #endif	/* !_KERNEL */
 #endif	/* !SYSVSEM, !SYSVSHM, !SYSVMSG */

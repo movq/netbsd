@@ -1,10 +1,9 @@
+/*	$NetBSD: nodes.h,v 1.1.1.5 2008/09/02 07:49:51 christos Exp $	*/
+
 /* nodes.h -- How we represent nodes internally.
-   $Id: nodes.h,v 1.1.1.1 1999/02/11 03:57:21 tv Exp $
+   Id: nodes.h,v 1.3 2004/04/11 17:56:46 karl Exp
 
-   This file is part of GNU Info, a program for reading online documentation
-   stored in Info format.
-
-   Copyright (C) 1993, 97 Free Software Foundation, Inc.
+   Copyright (C) 1993, 1997, 1998, 2002, 2004 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -22,16 +21,12 @@
 
    Written by Brian Fox (bfox@ai.mit.edu). */
 
-#if !defined (NODES_H)
+#ifndef NODES_H
 #define NODES_H
 
 #include "info.h"
 
-/* **************************************************************** */
-/*                                                                  */
-/*                    User Code Interface                           */
-/*                                                                  */
-/* **************************************************************** */
+/* User code interface.  */
 
 /* Callers generally only want the node itself.  This structure is used
    to pass node information around.  None of the information in this
@@ -47,6 +42,7 @@ typedef struct {
   char *nodename;               /* The name of this node. */
   char *contents;               /* Characters appearing in this node. */
   long nodelen;                 /* The length of the CONTENTS member. */
+  unsigned long display_pos;    /* Where to display at, if nonzero.  */
   int flags;                    /* See immediately below. */
 } NODE;
 
@@ -57,18 +53,14 @@ typedef struct {
 #define N_IsCompressed 0x08     /* The file is compressed on disk. */
 #define N_IsInternal   0x10     /* This node was made by Info. */
 #define N_CannotGC     0x20     /* File buffer cannot be gc'ed. */
-#define N_IsManPage    0x40     /* This node is a Un*x manpage. */
+#define N_IsManPage    0x40     /* This node is a manpage. */
+#define N_FromAnchor   0x80     /* Synthesized for an anchor reference. */
 
-/* **************************************************************** */
-/*                                                                  */
-/*                     Internal Data Structures                     */
-/*                                                                  */
-/* **************************************************************** */
+/* Internal data structures.  */
 
-/* Some defines describing details about Info file contents. */
-
-/* String Constants. */
+/* String constants. */
 #define INFO_FILE_LABEL                 "File:"
+#define INFO_REF_LABEL                  "Ref:"
 #define INFO_NODE_LABEL                 "Node:"
 #define INFO_PREV_LABEL                 "Prev:"
 #define INFO_ALTPREV_LABEL              "Previous:"
@@ -82,7 +74,7 @@ typedef struct {
 #define INDIRECT_TAGS_TABLE_LABEL       "Indirect:\n"
 #define TAGS_TABLE_IS_INDIRECT_LABEL    "(Indirect)"
 
-/* Character Constants. */
+/* Character constants. */
 #define INFO_COOKIE '\037'
 #define INFO_FF     '\014'
 #define INFO_TAGSEP '\177'
@@ -119,12 +111,8 @@ typedef struct {
   int tags_slots;               /* Number of slots allocated for TAGS. */
   int flags;                    /* Various flags.  Mimics of N_* flags. */
 } FILE_BUFFER;
-
-/* **************************************************************** */
-/*                                                                  */
-/*                  Externally Visible Functions                    */
-/*                                                                  */
-/* **************************************************************** */
+
+/* Externally visible functions.  */
 
 /* Array of FILE_BUFFER * which represents the currently loaded info files. */
 extern FILE_BUFFER **info_loaded_files;
@@ -137,33 +125,34 @@ extern int info_loaded_files_slots;
    already, or it may not.  If it does not already appear, find the file,
    and add it to the list of loaded files.  If the file cannot be found,
    return a NULL FILE_BUFFER *. */
-extern FILE_BUFFER *info_find_file ();
+extern FILE_BUFFER *info_find_file (char *filename);
 
 /* Force load the file named FILENAME, and return the information structure
    describing this file.  Even if the file was already loaded, this loads
    a new buffer, rebuilds tags and nodes, and returns a new FILE_BUFFER *. */
-extern FILE_BUFFER *info_load_file ();
+extern FILE_BUFFER *info_load_file (char *filename);
 
 /* Return a pointer to a NODE structure for the Info node (FILENAME)NODENAME.
    FILENAME can be passed as NULL, in which case the filename of "dir" is used.
    NODENAME can be passed as NULL, in which case the nodename of "Top" is used.
    If the node cannot be found, return a NULL pointer. */
-extern NODE *info_get_node ();
+extern NODE *info_get_node (char *filename, char *nodename);
 
 /* Return a pointer to a NODE structure for the Info node NODENAME in
    FILE_BUFFER.  NODENAME can be passed as NULL, in which case the
    nodename of "Top" is used.  If the node cannot be found, return a
    NULL pointer. */
-extern NODE *info_get_node_of_file_buffer ();
+extern NODE *info_get_node_of_file_buffer (char *nodename,
+    FILE_BUFFER *file_buffer);
 
 /* Grovel FILE_BUFFER->contents finding tags and nodes, and filling in the
    various slots.  This can also be used to rebuild a tag or node table. */
-extern void build_tags_and_nodes ();
+extern void build_tags_and_nodes (FILE_BUFFER *file_buffer);
 
 /* When non-zero, this is a string describing the most recent file error. */
 extern char *info_recent_file_error;
 
 /* Create a new, empty file buffer. */
-extern FILE_BUFFER *make_file_buffer ();
+extern FILE_BUFFER *make_file_buffer (void);
 
-#endif /* !NODES_H */
+#endif /* not NODES_H */

@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_log.c,v 1.6 1999/05/30 20:17:48 briggs Exp $	*/
+/*	$NetBSD: fpu_log.c,v 1.9 2005/12/11 12:17:52 christos Exp $	*/
 
 /*
  * Copyright (c) 1995  Ken Nakata
@@ -30,6 +30,9 @@
  *
  *	@(#)fpu_log.c	10/8/95
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: fpu_log.c,v 1.9 2005/12/11 12:17:52 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>
@@ -314,8 +317,7 @@ __fpu_logn(fe)
 #endif
 
 	/* index to the table */
-	i = ((F.fp_mant[0] << (7 - FP_LG)) |
-	     (F.fp_mant[1] >> (32 - (7 - FP_LG)))) & 0x7e;
+	i = (F.fp_mant[0] >> (FP_LG - 7)) & 0x7e;
 
 #if FPE_DEBUG
 	printf("__fpu_logn: index to logtbl i=%d(%x)\n", i, i);

@@ -1,4 +1,4 @@
-/*	$NetBSD: mkastosc.c,v 1.6 1998/09/06 02:54:48 lukem Exp $	*/
+/*	$NetBSD: mkastosc.c,v 1.12 2008/07/21 14:19:26 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,25 +29,22 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1988 The Regents of the University of California.\n\
- All rights reserved.\n");
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+#if defined(__COPYRIGHT) && !defined(lint)
+__COPYRIGHT("@(#) Copyright (c) 1988\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)mkastosc.c	4.2 (Berkeley) 4/26/91";
 #else
-__RCSID("$NetBS$");
+__RCSID("$NetBSD: mkastosc.c,v 1.12 2008/07/21 14:19:26 lukem Exp $");
 #endif
 #endif /* not lint */
-
-#include <stdio.h>
-#include <string.h>
-#include <err.h>
-#include <ctype.h>
 
 #include "../general/general.h"
 #include "../ctlr/function.h"
@@ -62,12 +55,12 @@ static struct tbl {
     unsigned char
 	scancode,
 	used;
-    char
+    const char
 	*shiftstate;
 } tbl[128];
 
 
-int main __P((int, char *[]));
+int main(int, char *[]);
 
 int
 main(argc, argv)
@@ -83,7 +76,7 @@ char	*argv[];
     struct thing *this;
     struct thing **attable;
     struct tbl *Pt;
-    static char *shiftof[] =
+    static const char *shiftof[] =
 	    { "0", "SHIFT_UPSHIFT", "SHIFT_ALT", "SHIFT_ALT|SHIFT_UPSHIFT" };
     char *aidfile = 0, *fcnfile = 0;
 
@@ -124,8 +117,8 @@ char	*argv[];
     for (Pt = tbl, asciicode = 0; Pt <= tbl+highestof(tbl); Pt++, asciicode++) {
 	if (Pt->used == 0) {
 	    if (isprint(asciicode) && (asciicode != ' ')) {
-		warnx("Unable to produce scancode sequence for"
-		    " ASCII character [%c]!", asciicode);
+		fprintf(stderr, "mkastosc: Unable to produce scancode sequence"
+		    " for ASCII character [%c]!", asciicode);
 	    }
 	    printf("\t{ 0, 0, undefined, 0 },\t");
 	} else {

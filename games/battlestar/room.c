@@ -1,4 +1,4 @@
-/*	$NetBSD: room.c,v 1.7 1999/02/10 01:36:50 hubertf Exp $	*/
+/*	$NetBSD: room.c,v 1.12 2005/07/01 06:04:54 jmc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,26 +34,29 @@
 #if 0
 static char sccsid[] = "@(#)room.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: room.c,v 1.7 1999/02/10 01:36:50 hubertf Exp $");
+__RCSID("$NetBSD: room.c,v 1.12 2005/07/01 06:04:54 jmc Exp $");
 #endif
 #endif				/* not lint */
 
 #include "extern.h"
 
 void
-writedes()
+writedes(void)
 {
 	int     compass;
 	const char   *p;
 	int     c;
 
 	printf("\n\t%s\n", location[position].name);
-	if (beenthere[position] < 3) {
+	if (beenthere[position] < ROOMDESC || verbose) {
 		compass = NORTH;
 		for (p = location[position].desc; (c = *p++) != 0;)
-			if (c != '-' && c != '*' && c != '+')
-				putchar(c);
-			else {
+			if (c != '-' && c != '*' && c != '+') {
+				if (c == '=')
+					putchar('-');
+				else
+					putchar(c);
+			} else {
 				if (c != '*')
 					printf(truedirec(compass, c));
 				compass++;
@@ -66,7 +65,7 @@ writedes()
 }
 
 void
-printobjs()
+printobjs(void)
 {
 	unsigned int *p = location[position].objects;
 	int     n;
@@ -78,8 +77,7 @@ printobjs()
 }
 
 void
-whichway(here)
-	struct room here;
+whichway(struct room here)
 {
 	switch (direction) {
 
@@ -114,10 +112,8 @@ whichway(here)
 	}
 }
 
-const char   *
-truedirec(way, option)
-	int     way;
-	char    option;
+const char *
+truedirec(int way, int option)
 {
 	switch (way) {
 
@@ -174,14 +170,14 @@ truedirec(way, option)
 		}
 
 	default:
-		printf("Error: room %d.  More than four directions wanted.", position);
+		printf("Error: room %d.  More than four directions wanted.", 
+		    position);
 		return ("!!");
 	}
 }
 
 void
-newway(thisway)
-	int     thisway;
+newway(int thisway)
 {
 	switch (direction) {
 

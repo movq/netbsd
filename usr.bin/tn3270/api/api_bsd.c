@@ -1,4 +1,4 @@
-/*	$NetBSD: api_bsd.c,v 1.7 1998/11/06 20:00:07 christos Exp $	*/
+/*	$NetBSD: api_bsd.c,v 1.13 2006/05/24 16:57:12 christos Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,29 +30,24 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)api_bsd.c	4.2 (Berkeley) 4/26/91";
 #else
-__RCSID("$NetBSD: api_bsd.c,v 1.7 1998/11/06 20:00:07 christos Exp $");
+__RCSID("$NetBSD: api_bsd.c,v 1.13 2006/05/24 16:57:12 christos Exp $");
 #endif
 #endif /* not lint */
 
 #if	defined(unix)
 
-#ifdef __STDC__
-#include <stdlib.h>
-#include <unistd.h>
-#else
-extern char *getenv();
-extern char *gepass();
-#endif
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "../ctlr/api.h"
 #include "api_exch.h"
@@ -99,7 +90,7 @@ char	*string;		/* if non-zero, where to connect to */
 	}
     }
 
-    if (sscanf(string, "%[^:]:%d:%s", thehostname,
+    if (sscanf(string, "%[^:]:%d:%99s", thehostname,
 				(int *)&port, keyname) != 3) {
 	fprintf(stderr, "API3270 environmental variable has bad format.\n");
 	return -1;
@@ -137,16 +128,16 @@ char	*string;		/* if non-zero, where to connect to */
 	perror("fopen");
 	return -1;
     }
-    if (fscanf(keyfile, "%s\n", inkey) != 1) {
+    if (fscanf(keyfile, "%99s\n", inkey) != 1) {
 	perror("fscanf");
-	return -1;
+	goto out;
     }
     sd.length = strlen(inkey)+1;
     if (api_exch_outtype(EXCH_TYPE_STORE_DESC, sizeof sd, (char *)&sd) == -1) {
-	return -1;
+	goto out;
     }
     if (api_exch_outtype(EXCH_TYPE_BYTES, sd.length, inkey) == -1) {
-	return -1;
+	goto out;
     }
     while ((i = api_exch_nextcommand()) != EXCH_CMD_ASSOCIATED) {
 	int passwd_length;
@@ -157,32 +148,32 @@ char	*string;		/* if non-zero, where to connect to */
 	case EXCH_CMD_REJECTED:
 	    if (api_exch_intype(EXCH_TYPE_STORE_DESC,
 					sizeof sd, (char *)&sd) == -1) {
-		return -1;
+		goto out;
 	    }
 	    if (api_exch_intype(EXCH_TYPE_BYTES, sd.length, buffer) == -1) {
-		return -1;
+		goto out;
 	    }
 	    buffer[sd.length] = 0;
 	    fprintf(stderr, "%s\n", buffer);
 	    if (api_exch_outcommand(EXCH_CMD_ASSOCIATE) == -1) {
-		return -1;
+		goto out;
 	    }
 	    break;
 	case EXCH_CMD_SEND_AUTH:
 	    if (api_exch_intype(EXCH_TYPE_STORE_DESC, sizeof sd, (char *)&sd) == -1) {
-		return -1;
+		goto out;
 	    }
 	    if (api_exch_intype(EXCH_TYPE_BYTES, sd.length, buffer) == -1) {
-		return -1;
+		goto out;
 	    }
 	    buffer[sd.length] = 0;
 	    passwd = getpass(buffer);		/* Go to terminal */
 	    passwd_length = strlen(passwd);
 	    if (api_exch_intype(EXCH_TYPE_STORE_DESC, sizeof sd, (char *)&sd) == -1) {
-		return -1;
+		goto out;
 	    }
 	    if (api_exch_intype(EXCH_TYPE_BYTES, sd.length, buffer) == -1) {
-		return -1;
+		goto out;
 	    }
 	    buffer[sd.length] = 0;
 	    if (sd.length) {
@@ -199,17 +190,17 @@ char	*string;		/* if non-zero, where to connect to */
 	    }
 	    sd.length = passwd_length;
 	    if (api_exch_outcommand(EXCH_CMD_AUTH) == -1) {
-		return -1;
+		goto out;
 	    }
 	    if (api_exch_outtype(EXCH_TYPE_STORE_DESC, sizeof sd, (char *)&sd) == -1) {
-		return -1;
+		goto out;
 	    }
 	    if (api_exch_outtype(EXCH_TYPE_BYTES, passwd_length, passwd) == -1) {
-		return -1;
+		goto out;
 	    }
 	    break;
 	case -1:
-	    return -1;
+	    goto out;
 	default:
 	    fprintf(stderr,
 		    "Waiting for connection indicator, received 0x%x.\n", i);
@@ -217,7 +208,12 @@ char	*string;		/* if non-zero, where to connect to */
 	}
     }
     /* YEAH */
+    fclose(keyfile);
     return 0;		/* Happiness! */
+    /* NOPE */
+out:
+    fclose(keyfile);
+    return -1;
 }
 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: procs.c,v 1.4 1994/06/29 06:41:12 cgd Exp $	*/
+/*	$NetBSD: procs.c,v 1.12 2007/01/18 12:43:38 cbiere Exp $	*/
 
 /*
  * This code is such a kludge that I don't want to put my name on it.
@@ -6,8 +6,12 @@
  * However it does work...
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: procs.c,v 1.12 2007/01/18 12:43:38 cbiere Exp $");
+
 #include <stdio.h>
 #include <strings.h>
+#include <unistd.h>
 #include "malloc.h"
 #include "main.h"
 #include "debug.h"
@@ -36,7 +40,11 @@ struct Predicate **Predlist;
 struct Stateent **Statelist;
 extern FILE *astringfile;
 
-end_events() {
+int predtable();
+
+void
+end_events()
+{
 	int size, part;
 	char *addr;
 
@@ -47,28 +55,28 @@ end_events() {
 			protocol);
 	ENDDEBUG
 	/* NOSTRICT */
-	Statelist = 
+	Statelist =
 	  (struct Stateent **) Malloc((Nstates+1) * sizeof(struct Statent *));
 	/* NOSTRICT */
-	Predlist =  
-	  (struct Predicate **) 
+	Predlist =
+	  (struct Predicate **)
 	  Malloc ( (((Nevents)<<Eventshift)+Nstates)*sizeof(struct Predicate *) );
 
 	size = (((Nevents)<<Eventshift)+Nstates)*sizeof(struct Predicate *) ;
 	addr = (char *)Predlist;
 	IFDEBUG(N)
-		fprintf(OUT, "Predlist at 0x%x, sbrk 0x%x bzero size %d at addr 0x%x\n",
+		fprintf(OUT, "Predlist at %p, sbrk %p bzero size %d at addr %p\n",
 		Predlist, sbrk(0), size, addr);
 	ENDDEBUG
 #define BZSIZE 8192
 	while(size) {
 		part = size>BZSIZE?BZSIZE:size;
 	IFDEBUG(N)
-		fprintf(OUT, "bzero addr 0x%x part %d size %d\n",addr, part, size);
+		fprintf(OUT, "bzero addr %p part %d size %d\n",addr, part, size);
 	ENDDEBUG
 		bzero(addr, part);
 	IFDEBUG(N)
-		fprintf(OUT, "after bzero addr 0x%x part %d size %d\n",addr, part, size);
+		fprintf(OUT, "after bzero addr %p part %d size %d\n",addr, part, size);
 	ENDDEBUG
 		addr += part;
 		size -= part;
@@ -79,11 +87,12 @@ end_events() {
 	ENDDEBUG
 }
 
-int acttable(f,actstring)
-char *actstring;
-FILE *f;
+int
+acttable(f,actstring)
+	char *actstring;
+	FILE *f;
 {
-	static Actindex = 0;
+	static int Actindex = 0;
 	extern FILE *astringfile;
 	extern int pgoption;
 
@@ -116,11 +125,11 @@ FILE *f;
 					fputc('n', astringfile);
 				} else if (*actstring == '\\') {
 					fputc('\\', astringfile);
-					len ++;
+					len++;
 					fputc('\\', astringfile);
 				} else if (*actstring == '\"') {
 					fputc('\\', astringfile);
-					len ++;
+					len++;
 					fputc('\"', astringfile);
 				} else fputc(*actstring, astringfile);
 				actstring++;
@@ -138,15 +147,16 @@ FILE *f;
 
 static int Npred=0, Ndefpred=0, Ntrans=0, Ndefevent=0, Nnulla=0;
 
+void
 statetable(string, oldstate, newstate, action, event)
-char *string;
-int action;
-struct Object *oldstate, *newstate, *event; 
+	char *string;
+	int action;
+	struct Object *oldstate, *newstate, *event;
 {
 	register int different;
 
 	IFDEBUG(a)
-		fprintf(OUT,"statetable(0x%x, 0x%x,0x%x, 0x%x)\n",
+		fprintf(OUT,"statetable(%p, %p,%p, 0x%x)\n",
 			string, oldstate, newstate, action);
 		fprintf(OUT,"statetable(%s, %s,%s, 0x%x)\n",
 			string, oldstate->obj_name, newstate->obj_name, action);
@@ -166,35 +176,38 @@ struct Object *oldstate, *newstate, *event;
 	ENDDEBUG
 }
 
-stateentry(index, oldstate, newstate, action)
-int index, action;
-int oldstate, newstate; 
+void
+stateentry(idx, oldstate, newstate, action)
+	int idx, action;
+	int oldstate, newstate;
 {
 	extern FILE *statevalfile;
 
 	IFDEBUG(a)
-		fprintf(OUT,"stateentry(0x%x,0x%x,0x%x,0x%x) Statelist@0x%x, val 0x%x\n",
-			index, oldstate, newstate,action, &Statelist, Statelist);
+		fprintf(OUT,"stateentry(0x%x,0x%x,0x%x,0x%x) Statelist@%p, val %p\n",
+			idx, oldstate, newstate,action, &Statelist, Statelist);
 	ENDDEBUG
 
 
 	fprintf(statevalfile, "{0x%x,0x%x},\n", newstate, action);
 }
 
-int predtable(os, oe, str, action, newstate)
-struct Object *os, *oe;
-char *str;
-int action, newstate;
+int
+predtable(os, oe, str, action, newstate)
+	struct Object *os, *oe;
+	char *str;
+	int action, newstate;
 {
 	register struct Predicate *p, **q;
 	register int event, state;
 	register struct Object *e, *s;
 	struct Object *firste;
+	extern FILE *statevalfile;
 
 	if (oe == (struct Object *)0 ) {
-		Ndefevent ++;
+		Ndefevent++;
 		fprintf(stderr, "DEFAULT EVENTS aren't implemented; trans ignored\n");
-		return;
+		return (-1);
 	}
 	Ntrans++;
 	IFDEBUG(g)
@@ -232,18 +245,18 @@ int action, newstate;
 					state, event, Index);
 					fflush(stdout);
 				ENDDEBUG
-			} else 
+			} else
 				Npred++;
 			/* put at END of list */
 #ifndef LINT
 			IFDEBUG(g)
-				fprintf(stdout, 
-				"predicate for event 0x%x, state 0x%x is 0x%x, %s\n", 
+				fprintf(stdout,
+				"predicate for event 0x%x, state 0x%x is 0x%x, %s\n",
 				event, state, Index, str);
 				fflush(stdout);
 			ENDDEBUG
-#endif LINT
-			for( ((q = &Predlist[(event<<Eventshift)+state]), 
+#endif /* LINT */
+			for( ((q = &Predlist[(event<<Eventshift)+state]),
 					 (p = Predlist[(event<<Eventshift)+state]));
 							p ; p = p->p_next ) {
 				q = &p->p_next;
@@ -257,8 +270,8 @@ int action, newstate;
 			*q = p;
 
 			IFDEBUG(g)
-				fprintf(stdout, 
-			  	  "predtable index 0x%x, transno %d, E 0x%x, S 0x%x\n",
+				fprintf(stdout,
+			  	  "predtable index 0x%x, transno %d, E %p, S %p\n",
 					 Index, transno, e, s);
 			ENDDEBUG
 
@@ -269,12 +282,13 @@ int action, newstate;
 	return Index ;
 }
 
+void
 printprotoerrs()
 {
 	register int e,s;
 
 	fprintf(stderr, "[ Event, State ] without any transitions :\n");
-	for(e = 0; e < Nevents; e++) { 
+	for(e = 0; e < Nevents; e++) {
 		fprintf(stderr, "Event 0x%x: states ", e);
 		for(s = 0; s < Nstates; s++) {
 			if( Predlist[(e<<Eventshift)+s] == 0 )
@@ -285,22 +299,24 @@ printprotoerrs()
 }
 
 #ifndef LINT
+void
 dump_predtable(f)
-FILE *f;
+	FILE *f;
 {
 	struct Predicate *p;
 	register int e,s, hadapred;
 	int defaultindex;
 	int defaultItrans;
+
+#ifdef notdef
 	extern int bytesmalloced;
 	extern int byteswasted;
 
-#ifdef notdef
 	fprintf(stdout,
-		" Xebec used %8d bytes of storage, wasted %8d bytes\n", 
+		" Xebec used %8d bytes of storage, wasted %8d bytes\n",
 		bytesmalloced, byteswasted);
-#endif notdef
-	fprintf(stdout, 
+#endif /* notdef */
+	fprintf(stdout,
 		" %8d states\n %8d events\n %8d transitions\n",
 		Nstates, Nevents, Ntrans);
 	fprintf(stdout,
@@ -325,11 +341,11 @@ FILE *f;
 					if(!hadapred)
 						fprintf(f, "case 0x%x:\n\t", (e<<Eventshift) + s);
 					hadapred = 1;
-					fprintf(f, "if %s return 0x%x;\n\t else ", 
+					fprintf(f, "if %s return 0x%x;\n\t else ",
 					p->p_str, p->p_index);
 				} else {
 					if(defaultindex) {
-						fprintf(stderr, 
+						fprintf(stderr,
 "\nConflict between transitions %d and %d: duplicate default \n",
 						p->p_transno, defaultItrans);
 						Exit(-1);
@@ -345,9 +361,9 @@ FILE *f;
 			IFDEBUG(d)
 				fflush(f);
 			ENDDEBUG
-		} 
+		}
 		IFDEBUG(g)
-		fprintf(stdout, 
+		fprintf(stdout,
 		"loop: e 0x%x s 0x%x hadapred 0x%x dindex 0x%x for trans 0x%x\n",
 			e, s, hadapred, defaultindex, defaultItrans);
 		ENDDEBUG
@@ -368,30 +384,30 @@ FILE *f;
 	fprintf(f, "default: return 0;\n} /* end switch */\n");
 #ifdef notdef
 	fprintf(f, "/*NOTREACHED*/return 0;\n} /* _Xebec_index() */\n");
-#else notdef
+#else /* !notdef */
 	fprintf(f, "} /* _Xebec_index() */\n");
-#endif notdef
+#endif /* notdef */
 	fprintf(f, "static int inx[%d][%d] = { {", Nevents+1,Nstates);
 	for(s = 0; s< Nstates; s++) fprintf(f, "0,"); /* event 0 */
 	fprintf(f, "},\n");
 
-	for(e = 0; e < Nevents; e++) { 
-		fprintf(f, " {"); 
+	for(e = 0; e < Nevents; e++) {
+		fprintf(f, " {");
 		for(s = 0; s < Nstates; s++) {
 			register struct Predicate *xyz = Predlist[(e<<Eventshift)+s];
 			/* this kludge is to avoid a lint msg. concerning
-			 * loss of bits 
+			 * loss of bits
 			 */
 			if (xyz == (struct Predicate *)(-1))
 				fprintf(f, "-1,");
 			else
-				fprintf(f, "0x%x,", Predlist[(e<<Eventshift)+s]);
+				fprintf(f, "%p,", Predlist[(e<<Eventshift)+s]);
 		}
-		fprintf(f, " },\n"); 
+		fprintf(f, " },\n");
 	}
 	fprintf(f, "};");
 }
-#endif LINT
+#endif /* LINT */
 
 char *
 stash(buf)
@@ -405,11 +421,11 @@ char *buf;
 	c = Malloc(len+1);
 #ifdef LINT
 	c =
-#endif LINT
+#endif /* LINT */
 	strcpy(c, buf);
 
 	IFDEBUG(z)
-		fprintf(stdout,"stash %s at 0x%x\n", c,c);
+		fprintf(stdout,"stash %s at %p\n", c,c);
 	ENDDEBUG
 	return(c);
 }
@@ -420,18 +436,18 @@ int event,state;
 {
 	register struct Predicate *p, **q;
 
-	for( 
-	((q = &Predlist[(event<<Eventshift) +state]), 
+	for(
+	((q = &Predlist[(event<<Eventshift) +state]),
 	 (p = Predlist[(event<<Eventshift) + state]));
 		p!= (struct Predicate *)0 ; p = p->p_next ) {
 #ifndef LINT
 		IFDEBUG(a)
-			fprintf(OUT, 
-			"dump_pentry for event 0x%x, state 0x%x is 0x%x\n", 
+			fprintf(OUT,
+			"dump_pentry for event 0x%x, state 0x%x is 0x%x\n",
 			 event, state, p);
 		ENDDEBUG
-#endif LINT
+#endif /* LINT */
 		q = &p->p_next;
 	}
 }
-#endif notdef
+#endif /* notdef */

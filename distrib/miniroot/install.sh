@@ -1,7 +1,7 @@
 #!/bin/sh
-#	$NetBSD: install.sh,v 1.21 1999/10/07 00:07:05 sjg Exp $
+#	$NetBSD: install.sh,v 1.24 2008/04/30 13:10:48 martin Exp $
 #
-# Copyright (c) 1996 The NetBSD Foundation, Inc.
+# Copyright (c) 1996,1997,1999,2000,2006 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -63,6 +56,11 @@ MODE="install"
 #	md_native_fstype()	- native filesystem type for disk installs
 #	md_native_fsopts()	- native filesystem options for disk installs
 #	md_makerootwritable()	- make root writable (at least /tmp)
+
+# The following are optional:
+#	md_view_labels_possible	- variable: md_view_labels defined
+#	md_view_labels		- peek at preexisting disk labels, to 
+#				  better identify disks
 
 # we need to make sure .'s below work if this directory is not in $PATH
 # dirname may not be available but expr is
@@ -113,6 +111,8 @@ md_makerootwritable
 # Install the shadowed disktab file; lets us write to it for temporary
 # purposes without mounting the miniroot read-write.
 cp /etc/disktab.shadow /tmp/disktab.shadow
+
+test "$md_view_labels_possible" && md_view_labels
 
 while [ "X${ROOTDISK}" = "X" ]; do
 	getrootdisk
@@ -246,11 +246,10 @@ case "$resp" in
 		echo $resp > /tmp/myname
 
 		echo -n "Enter DNS domain name: "
-		resp=""		# force at least one iteration
-		while [ "X${resp}" = X"" ]; do
-			getresp ""
-		done
-		FQDN=$resp
+		getresp "none"
+		if [ "X${resp}" != X"none" ]; then
+			FQDN=$resp
+		fi
 
 		configurenetwork
 
@@ -263,8 +262,11 @@ case "$resp" in
 			fi
 		fi
 
-		echo -n	"Enter IP address of primary nameserver: [none] "
-		getresp "none"
+		resp="none"
+		if [ X${FQDN} != X ]; then
+			echo -n	"Enter IP address of primary nameserver: [none] "
+			getresp "none"
+		fi
 		if [ "X${resp}" != X"none" ]; then
 			echo "domain $FQDN" > /tmp/resolv.conf
 			echo "nameserver $resp" >> /tmp/resolv.conf

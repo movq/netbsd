@@ -1,4 +1,4 @@
-/*	$NetBSD: iodevice.h,v 1.6 1999/03/16 16:30:23 minoura Exp $	*/
+/*	$NetBSD: iodevice.h,v 1.11 2007/10/17 19:58:04 garbled Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994, 1995 Masaru Oki
@@ -59,7 +59,7 @@ struct dmac {
 			unsigned char csr;
 			unsigned char cer;
 	char pad0[2];	unsigned char dcr;
-  			unsigned char ocr;
+			unsigned char ocr;
 			unsigned char scr;
 			unsigned char ccr;
 	char pad1[2];	unsigned short mtc;
@@ -358,7 +358,7 @@ struct IODEVICE
 
 #ifdef _KERNEL
 #ifndef LOCORE
-volatile struct IODEVICE *IODEVbase;
+extern volatile struct IODEVICE *IODEVbase;
 #endif
 
 #define mfp     (IODEVbase->io_mfp)
@@ -371,12 +371,11 @@ volatile struct IODEVICE *IODEVbase;
 #endif
 
 #if 0
-/* 
+/*
  * devices that need to configure before console use this
- * *and know it* (i.e. everything is really tight certain params won't be 
+ * *and know it* (i.e. everything is really tight certain params won't be
  * passed in some cases and the devices will deal with it)
  */
 #include <sys/device.h>
-int x68k_config_found __P((struct cfdata *, struct device *,
-			   void *, cfprint_t));
+int x68k_config_found(struct cfdata *, struct device *, void *, cfprint_t);
 #endif

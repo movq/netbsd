@@ -1,4 +1,4 @@
-/*	$NetBSD: fread.c,v 1.13 1999/09/20 04:39:28 lukem Exp $	*/
+/*	$NetBSD: fread.c,v 1.16 2003/08/07 16:43:25 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)fread.c	8.2 (Berkeley) 12/11/93";
 #else
-__RCSID("$NetBSD: fread.c,v 1.13 1999/09/20 04:39:28 lukem Exp $");
+__RCSID("$NetBSD: fread.c,v 1.16 2003/08/07 16:43:25 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -49,8 +45,8 @@ __RCSID("$NetBSD: fread.c,v 1.13 1999/09/20 04:39:28 lukem Exp $");
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include "local.h"
 #include "reentrant.h"
+#include "local.h"
 
 size_t
 fread(buf, size, count, fp)
@@ -63,16 +59,17 @@ fread(buf, size, count, fp)
 	int r;
 	size_t total;
 
-	_DIAGASSERT(buf != NULL);
 	_DIAGASSERT(fp != NULL);
-
 	/*
 	 * The ANSI standard requires a return value of 0 for a count
-	 * or a size of 0.  Peculiarily, it imposes no such requirements
-	 * on fwrite; it only requires fread to be broken.
+	 * or a size of 0.  Whilst ANSI imposes no such requirements on
+	 * fwrite, the SUSv2 does.
 	 */
 	if ((resid = count * size) == 0)
 		return (0);
+
+	_DIAGASSERT(buf != NULL);
+
 	FLOCKFILE(fp);
 	if (fp->_r < 0)
 		fp->_r = 0;

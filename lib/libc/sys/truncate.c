@@ -1,4 +1,4 @@
-/*	$NetBSD: truncate.c,v 1.9 1998/11/15 17:23:00 christos Exp $	*/
+/*	$NetBSD: truncate.c,v 1.12 2007/11/23 12:39:16 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,13 +34,15 @@
 #if 0
 static char sccsid[] = "@(#)truncate.c	8.1 (Berkeley) 6/17/93";
 #else
-__RCSID("$NetBSD: truncate.c,v 1.9 1998/11/15 17:23:00 christos Exp $");
+__RCSID("$NetBSD: truncate.c,v 1.12 2007/11/23 12:39:16 uebayasi Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+
+int __truncate(const char *, int, off_t);
 
 /*
  * This function provides 64-bit offset padding that
@@ -55,14 +53,6 @@ truncate(path, length)
 	const char *path;
 	off_t length;
 {
-	quad_t q;
-	int rv;
 
-	q = __syscall((quad_t)SYS_truncate, path, 0, length);
-	if (/* LINTED constant */ sizeof (quad_t) == sizeof (register_t) ||
-	    /* LINTED constant */ BYTE_ORDER == LITTLE_ENDIAN)
-		rv = (int)q;
-	else
-		rv = (int)((u_quad_t)q >> 32);
-	return rv;
+	return __truncate(path, 0, length);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.2 1999/11/21 07:04:33 uch Exp $	*/
+/*	$NetBSD: intr.h,v 1.22 2008/01/04 22:03:25 ad Exp $	*/
 
 /*
  * Copyright (c) 1998 Jonathan Stone.  All rights reserved.
@@ -34,18 +34,24 @@
 #define _HPCMIPS_INTR_H_
 
 #define	IPL_NONE	0	/* disable only this interrupt */
-#define	IPL_BIO		1	/* disable block I/O interrupts */
-#define	IPL_NET		2	/* disable network interrupts */
-#define	IPL_TTY		3	/* disable terminal interrupts */
-#define	IPL_CLOCK	4	/* disable clock interrupts */
-#define	IPL_STATCLOCK	5	/* disable profiling interrupts */
-#if 0 /* XXX */
-#define	IPL_SERIAL	6	/* disable serial hardware interrupts */
-#endif
-#define	IPL_DMA		7	/* disable DMA reload interrupts */
-#define	IPL_HIGH	8	/* disable all interrupts */
+#define	IPL_SOFTCLOCK	1	/* clock software interrupts (SI 0) */
+#define	IPL_SOFTBIO	1	/* bio software interrupts (SI 0) */
+#define	IPL_SOFTNET	2	/* network software interrupts (SI 1) */
+#define	IPL_SOFTSERIAL	2	/* serial software interrupts (SI 1) */
+#define	IPL_VM		3
+#define	IPL_SCHED	4
+#define	IPL_HIGH	4	/* disable all interrupts */
+
+#define	_IPL_N		5
+
+#define	_IPL_SI0_FIRST	IPL_SOFTCLOCK
+#define	_IPL_SI0_LAST	IPL_SOFTBIO
+
+#define	_IPL_SI1_FIRST	IPL_SOFTNET
+#define	_IPL_SI1_LAST	IPL_SOFTSERIAL
 
 /* Interrupt sharing types. */
+#define	IST_UNUSABLE	-1	/* interrupt cannot be used */
 #define	IST_NONE	0	/* none */
 #define	IST_PULSE	1	/* pulsed */
 #define	IST_EDGE	2	/* edge-triggered */
@@ -53,85 +59,36 @@
 
 #ifdef _KERNEL
 #ifndef _LOCORE
-
 #include <mips/cpuregs.h>
+#include <mips/locore.h>
 
-extern int _splraise __P((int));
-extern int _spllower __P((int));
-extern int _splset __P((int));
-extern int _splget __P((void));
-extern void _splnone __P((void));
-extern void _setsoftintr __P((int));
-extern void _clrsoftintr __P((int));
+extern const u_int32_t *ipl_sr_bits;
 
-#define setsoftclock()	_setsoftintr(MIPS_SOFT_INT_MASK_0)
-#define setsoftnet()	_setsoftintr(MIPS_SOFT_INT_MASK_1)
-#define clearsoftclock() _clrsoftintr(MIPS_SOFT_INT_MASK_0)
-#define clearsoftnet()	 _clrsoftintr(MIPS_SOFT_INT_MASK_1)
+void	intr_init(void);
 
-#define splhigh()	_splraise(MIPS_INT_MASK)
-#define spl0()		(void)_spllower(0)
-#define splx(s)		(void)_splset(s)
-#define splbio()	(_splraise(splvec.splbio))
-#define splnet()	(_splraise(splvec.splnet))
-#define spltty()	(_splraise(splvec.spltty))
-#define splimp()	(_splraise(splvec.splimp))
-#define splpmap()	(_splraise(splvec.splimp))
-#define splclock()	(_splraise(splvec.splclock))
-#define splstatclock()	(_splraise(splvec.splstatclock))
-#define spllowersoftclock() _spllower(MIPS_SOFT_INT_MASK_0)
-#define splsoftclock()	_splraise(MIPS_SOFT_INT_MASK_0)
-#define splsoftnet()	_splraise(MIPS_SOFT_INT_MASK_1) 
+#define	spl0()		(void) _spllower(0)
+#define	splx(s)		(void) _splset(s)
 
-struct splvec {
-	int	splbio;
-	int	splnet;
-	int	spltty;
-	int	splimp;
-	int	splclock;
-	int	splstatclock;
-};
-extern struct splvec splvec;
+typedef int ipl_t;
+typedef struct {
+	ipl_t _sr;
+} ipl_cookie_t;
 
-/* Conventionals ... */
+static inline ipl_cookie_t
+makeiplcookie(ipl_t ipl)
+{
 
-#define MIPS_SPLHIGH (MIPS_INT_MASK)
-#define MIPS_SPL0 (MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK_0|MIPS_SOFT_INT_MASK_1)
-#define MIPS_SPL1 (MIPS_INT_MASK_1|MIPS_SOFT_INT_MASK_0|MIPS_SOFT_INT_MASK_1)
-#define MIPS_SPL2 (MIPS_INT_MASK_2|MIPS_SOFT_INT_MASK_0|MIPS_SOFT_INT_MASK_1)
-#define MIPS_SPL3 (MIPS_INT_MASK_3|MIPS_SOFT_INT_MASK_0|MIPS_SOFT_INT_MASK_1)
-#define MIPS_SPL4 (MIPS_INT_MASK_4|MIPS_SOFT_INT_MASK_0|MIPS_SOFT_INT_MASK_1)
-#define MIPS_SPL_0_1	 (MIPS_INT_MASK_1|MIPS_SPL0)
-#define MIPS_SPL_0_1_2	 (MIPS_INT_MASK_2|MIPS_SPL_0_1)
-#define MIPS_SPL_0_1_3	 (MIPS_INT_MASK_3|MIPS_SPL_0_1)
-#define MIPS_SPL_0_1_2_3 (MIPS_INT_MASK_3|MIPS_SPL_0_1_2)
-#define MIPS_SPL_2_4     (MIPS_INT_MASK_4|MIPS_SPL2)
+	return (ipl_cookie_t){._sr = ipl_sr_bits[ipl]};
+}
 
-/*
- * Index into intrcnt[], which is defined in locore
- */
-extern u_long intrcnt[];
+static inline int
+splraiseipl(ipl_cookie_t icookie)
+{
 
-#define	SOFTCLOCK_INTR	0
-#define	SOFTNET_INTR	1
-#define	SERIAL0_INTR	2
-#define	SERIAL1_INTR	3
-#define	SERIAL2_INTR	4
-#define	LANCE_INTR	5
-#define	SCSI_INTR	6
-#define	ERROR_INTR	7
-#define	HARDCLOCK	8
-#define	FPU_INTR	9
-#define	SLOT0_INTR	10
-#define	SLOT1_INTR	11
-#define	SLOT2_INTR	12
-#define	DTOP_INTR	13
-#define	ISDN_INTR	14
-#define	FLOPPY_INTR	15
-#define	STRAY_INTR	16
+	return _splraise(icookie._sr);
+}
 
-/* handle i/o device interrupts */
-extern int (*mips_hardware_intr) __P((unsigned, unsigned, unsigned, unsigned));
+#include <sys/spl.h>
 
 #endif /* !_LOCORE */
 #endif /* _KERNEL */

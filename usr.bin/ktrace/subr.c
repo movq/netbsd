@@ -1,4 +1,4 @@
-/*	$NetBSD: subr.c,v 1.7 1997/07/23 05:40:20 mikel Exp $	*/
+/*	$NetBSD: subr.c,v 1.16 2007/02/09 22:08:49 ad Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)subr.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: subr.c,v 1.7 1997/07/23 05:40:20 mikel Exp $");
+__RCSID("$NetBSD: subr.c,v 1.16 2007/02/09 22:08:49 ad Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
-#include <sys/file.h>
-#include <sys/user.h>
-#include <sys/proc.h>
 #include <sys/time.h>
+#include <sys/uio.h>
 #include <sys/ktrace.h>
 
 #include <stdio.h>
@@ -54,38 +48,74 @@ __RCSID("$NetBSD: subr.c,v 1.7 1997/07/23 05:40:20 mikel Exp $");
 #include "ktrace.h"
 
 int
-getpoints(s)
-	char *s;
+getpoints(int facs, char *s)
 {
-	int facs = 0;
+	int fac;
+	int add = 1;
 
-	while (*s) {
-		switch(*s) {
+	/* Make -t-x equivalent to -t+-x since that is rather more useful */
+	if (*s == '-' && (facs & ALL_POINTS) == 0)
+		facs |= DEF_POINTS;
+
+	for (;;) {
+		switch (*s++) {
+		case 0:
+			return facs;
+		case 'A':
+			fac = ALL_POINTS;
+			break;
+		case 'a':
+			fac = KTRFAC_EXEC_ARG;
+			break;
 		case 'c':
-			facs |= KTRFAC_SYSCALL | KTRFAC_SYSRET;
+			fac = KTRFAC_SYSCALL | KTRFAC_SYSRET;
 			break;
 		case 'e':
-			facs |= KTRFAC_EMUL;
-			break;
-		case 'n':
-			facs |= KTRFAC_NAMEI;
+			fac = KTRFAC_EMUL;
 			break;
 		case 'i':
-			facs |= KTRFAC_GENIO;
+			fac = KTRFAC_GENIO;
+			break;
+		case 'n':
+			fac = KTRFAC_NAMEI;
+			break;
+		case 'm':
+			fac = KTRFAC_MMSG;
+			break;
+		case 'l':
+			fac = KTRFAC_MOOL;
 			break;
 		case 's':
-			facs |= KTRFAC_PSIG;
+			fac = KTRFAC_PSIG;
+			break;
+		case 'u':
+			fac = KTRFAC_USER;
+			break;
+		case 'S':
+			fac = KTRFAC_MIB;
+			break;
+		case 'v':
+			fac = KTRFAC_EXEC_ENV;
 			break;
 		case 'w':
-			facs |= KTRFAC_CSW;
+			fac = KTRFAC_CSW;
 			break;
 		case '+':
-			facs |= DEF_POINTS;
+			if (!add) {
+				add = 1;
+				continue;
+			}
+			fac = DEF_POINTS;
 			break;
+		case '-':
+			add = 0;
+			continue;
 		default:
 			return (-1);
 		}
-		s++;
+		if (add)
+			facs |= fac;
+		else
+			facs &= ~fac;
 	}
-	return (facs);
 }

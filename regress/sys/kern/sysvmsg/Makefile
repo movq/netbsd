@@ -1,11 +1,12 @@
-#	$NetBSD: Makefile,v 1.1 1999/08/24 22:08:56 thorpej Exp $
+#	$NetBSD: Makefile,v 1.4 2002/09/18 05:41:55 lukem Exp $
 
-PROG=	msgtest
-MKMAN=	no
-WARNS=	1
+NOMAN=		# defined
+
+PROG=		msgtest
+WARNS=		1
 
 regress:
-	@if ./msgtest ${.OBJDIR}/msgtest; then \
+	@if ./msgtest ./msgtest; then \
 		echo "PASSED"; \
 	else \
 		echo "FAILED"; \

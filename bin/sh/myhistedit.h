@@ -1,4 +1,4 @@
-/*	$NetBSD: myhistedit.h,v 1.7 1999/07/09 03:05:50 christos Exp $	*/
+/*	$NetBSD: myhistedit.h,v 1.10 2003/08/07 09:05:35 agc Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,10 +37,11 @@ extern History *hist;
 extern EditLine *el;
 extern int displayhist;
 
-void histedit __P((void));
-void sethistsize __P((const char *));
-void setterm __P((const char *));
-int histcmd __P((int, char **));
-int not_fcnumber __P((char *));
-int str_to_event __P((const char *, int));
+void histedit(void);
+void sethistsize(const char *);
+void setterm(const char *);
+int histcmd(int, char **);
+int inputrc(int, char **);
+int not_fcnumber(char *);
+int str_to_event(const char *, int);
 

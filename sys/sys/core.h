@@ -1,4 +1,4 @@
-/*	$NetBSD: core.h,v 1.8 1999/12/30 15:45:09 eeh Exp $	*/
+/*	$NetBSD: core.h,v 1.11 2008/04/28 20:24:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +59,7 @@
 
 /*
  * A core file consists of a header followed by a number of segments.
- * Each segment is preceeded by a `coreseg' structure giving the
+ * Each segment is preceded by a `coreseg' structure giving the
  * segment's type, the virtual address where the bits resided in
  * process address space and the size of the segment.
  *
@@ -76,12 +69,12 @@
  */
 
 struct core {
-	u_int32_t c_midmag;		/* magic, id, flags */
-	u_int16_t c_hdrsize;		/* Size of this header (machdep algn) */
-	u_int16_t c_seghdrsize;		/* Size of a segment header */
-	u_int32_t c_nseg;		/* # of core segments */
+	uint32_t c_midmag;		/* magic, id, flags */
+	uint16_t c_hdrsize;		/* Size of this header (machdep algn) */
+	uint16_t c_seghdrsize;		/* Size of a segment header */
+	uint32_t c_nseg;		/* # of core segments */
 	char	c_name[MAXCOMLEN+1];	/* Copy of p->p_comm */
-	u_int32_t c_signo;		/* Killing signal */
+	uint32_t c_signo;		/* Killing signal */
 	u_long	c_ucode;		/* Hmm ? */
 	u_long	c_cpusize;		/* Size of machine dependent segment */
 	u_long	c_tsize;		/* Size of traditional text segment */
@@ -90,7 +83,7 @@ struct core {
 };
 
 struct coreseg {
-	u_int32_t c_midmag;		/* magic, id, flags */
+	uint32_t c_midmag;		/* magic, id, flags */
 	u_long	c_addr;			/* Virtual address of segment */
 	u_long	c_size;			/* Size of this segment */
 };
@@ -99,12 +92,12 @@ struct coreseg {
  * 32-bit versions of the above.
  */
 struct core32 {
-	u_int32_t c_midmag;		/* magic, id, flags */
-	u_int16_t c_hdrsize;		/* Size of this header (machdep algn) */
-	u_int16_t c_seghdrsize;		/* Size of a segment header */
-	u_int32_t c_nseg;		/* # of core segments */
+	uint32_t c_midmag;		/* magic, id, flags */
+	uint16_t c_hdrsize;		/* Size of this header (machdep algn) */
+	uint16_t c_seghdrsize;		/* Size of a segment header */
+	uint32_t c_nseg;		/* # of core segments */
 	char	c_name[MAXCOMLEN+1];	/* Copy of p->p_comm */
-	u_int32_t c_signo;		/* Killing signal */
+	uint32_t c_signo;		/* Killing signal */
 	u_int	c_ucode;		/* Hmm ? */
 	u_int	c_cpusize;		/* Size of machine dependent segment */
 	u_int	c_tsize;		/* Size of traditional text segment */
@@ -113,7 +106,7 @@ struct core32 {
 };
 
 struct coreseg32 {
-	u_int32_t c_midmag;		/* magic, id, flags */
+	uint32_t c_midmag;		/* magic, id, flags */
 	u_int	c_addr;			/* Virtual address of segment */
 	u_int	c_size;			/* Size of this segment */
 };

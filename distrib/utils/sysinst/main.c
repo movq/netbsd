@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.19 1999/06/22 15:04:15 cgd Exp $	*/
+/*	$NetBSD: main.c,v 1.52.28.1 2009/01/22 22:45:15 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -46,40 +46,92 @@
 #include <curses.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <dirent.h>
+#include <locale.h>
 
-#define MAIN
 #include "defs.h"
 #include "md.h"
 #include "msg_defs.h"
 #include "menu_defs.h"
 #include "txtwalk.h"
 
-int main __P((int argc, char **argv));
-static void usage __P((void));
-static void miscsighandler __P((int));
-static void ttysighandler __P((int));
-static void cleanup __P((void));
-static void process_f_flag __P((char *));
+int main(int, char **);
+static void select_language(void);
+static void usage(void);
+static void miscsighandler(int);
+static void ttysighandler(int);
+static void cleanup(void);
+static void process_f_flag(char *);
 
 static int exit_cleanly = 0;	/* Did we finish nicely? */
 int logging;			/* are we logging everything? */
 int scripting;			/* are we building a script? */
-FILE *log;			/* log file */
+FILE *logfp;			/* log file */
 FILE *script;			/* script file */
 
 #ifdef DEBUG
-extern int log_flip __P((void));
+extern int log_flip(void);
 #endif
 
+/* String defaults and stuff for processing the -f file argument. */
+
+struct f_arg {
+	const char *name;
+	const char *dflt;
+	char *var;
+	int size;
+};
+
+static const struct f_arg fflagopts[] = {
+	{"release", REL, rel, sizeof rel},
+	{"machine", MACH, machine, sizeof machine},
+	{"xfer dir", "/usr/INSTALL", xfer_dir, sizeof xfer_dir},
+	{"ext dir", "", ext_dir, sizeof ext_dir},
+	{"ftp host", SYSINST_FTP_HOST, ftp.host, sizeof ftp.host},
+	{"ftp dir", SYSINST_FTP_DIR, ftp.dir, sizeof ftp.dir},
+	{"ftp prefix", "/" MACH "/binary/sets", set_dir, sizeof set_dir},
+	{"ftp user", "ftp", ftp.user, sizeof ftp.user},
+	{"ftp pass", "", ftp.pass, sizeof ftp.pass},
+	{"ftp proxy", "", ftp.proxy, sizeof ftp.proxy},
+	{"nfs host", "", nfs_host, sizeof nfs_host},
+	{"nfs dir", "/bsd/release", nfs_dir, sizeof nfs_dir},
+	{"cd dev", "cd0a", cdrom_dev, sizeof cdrom_dev},
+	{"fd dev", "/dev/fd0a", fd_dev, sizeof fd_dev},
+	{"local dev", "", localfs_dev, sizeof localfs_dev},
+	{"local fs", "ffs", localfs_fs, sizeof localfs_fs},
+	{"local dir", "release", localfs_dir, sizeof localfs_dir},
+	{"targetroot mount", "/targetroot", targetroot_mnt, sizeof targetroot_mnt},
+	{"dist postfix", ".tgz", dist_postfix, sizeof dist_postfix},
+	{"diskname", "mydisk", bsddiskname, sizeof bsddiskname},
+
+	{NULL, NULL, NULL, 0}
+};
+
+static void
+init(void)
+{
+	const struct f_arg *arg;
+
+	sizemult = 1;
+	disktype = "unknown";
+	tmp_mfs_size = 0;
+	doessf = "";
+	clean_xfer_dir = 0;
+	mnt2_mounted = 0;
+	fd_type = "msdos";
+
+	for (arg = fflagopts; arg->name != NULL; arg++)
+		strlcpy(arg->var, arg->dflt, arg->size);
+}
+
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	WINDOW *win;
 	int ch;
 
 	logging = 0; /* shut them off unless turned on by the user */
+	init();
 #ifdef DEBUG
 	log_flip();
 #endif
@@ -88,35 +140,40 @@ main(argc, argv)
 	/* Check for TERM ... */
 	if (!getenv("TERM")) {
 		(void)fprintf(stderr,
-			 "sysinst: environment varible TERM not set.\n");
+			 "sysinst: environment variable TERM not set.\n");
 		exit(1);
 	}
 
 	/* argv processing */
-	while ((ch = getopt(argc, argv, "r:f:")) != -1)
+	while ((ch = getopt(argc, argv, "Dr:f:")) != -1)
 		switch(ch) {
+		case 'D':	/* set to get past certain errors in testing */
+			debug = 1;
+			break;
 		case 'r':
 			/* Release name other than compiled in release. */
-			strncpy(rel, optarg, SSTRSIZE);
+			strncpy(rel, optarg, sizeof rel);
 			break;
 		case 'f':
 			/* Definition file to read. */
-			process_f_flag (optarg);
+			process_f_flag(optarg);
 			break;
 		case '?':
 		default:
 			usage();
 		}
-	
+
+	md_init();
 
 	/* initialize message window */
 	if (menu_init()) {
 		__menu_initerror();
 		exit(1);
 	}
+
 	/*
-	 * XXX the following is bogus.  if screen is too small, message
-	 * XXX window will be overwritten by menus.
+	 * Put 'messages' in a window that has a one-character border
+	 * on the real screen.
 	 */
 	win = newwin(getmaxy(stdscr) - 2, getmaxx(stdscr) - 2, 1, 1);
 	if (win == NULL) {
@@ -124,11 +181,15 @@ main(argc, argv)
 			 "sysinst: screen too small\n");
 		exit(1);
 	}
-	if (msg_window(win) != 0) {
-		(void)fprintf(stderr,
-			 "sysinst: couldn't initialize message window\n");
-		exit(1);
+	if (has_colors()) {
+		/*
+		 * XXX This color trick should be done so much better,
+		 * but is it worth it?
+		 */
+		wbkgd(win, COLOR_PAIR(1));
+		wattrset(win, COLOR_PAIR(1));
 	}
+	msg_window(win);
 
 	/* Watch for signals and clean up */
 	(void)atexit(cleanup);
@@ -136,21 +197,135 @@ main(argc, argv)
 	(void)signal(SIGQUIT, ttysighandler);
 	(void)signal(SIGHUP, miscsighandler);
 
+	/* redraw screen */
+	touchwin(stdscr);
+	refresh();
+
+	/* Ensure we have mountpoint for target filesystems */
+	mkdir(targetroot_mnt, S_IRWXU| S_IRGRP|S_IXGRP | S_IROTH|S_IXOTH);
+
+	select_language();
+	get_kb_encoding();
+
 	/* Menu processing */
-	process_menu(MENU_netbsd);
+	process_menu(MENU_netbsd, NULL);
 	
 	exit_cleanly = 1;
-	exit(0);
+	return 0;
 }
-	
+
+static int
+set_language(menudesc *m, void *arg)
+{
+	char **fnames = arg;
+
+	msg_file(fnames[m->cursel]);
+	return 1;
+}
+
+static void
+select_language(void)
+{
+	DIR *dir;
+	struct dirent *dirent;
+	char **lang_msg, **fnames;
+	int max_lang = 16, num_lang = 0;
+	const char *cp;
+	menu_ent *opt = 0;
+	int lang_menu = -1;
+	int lang;
+
+	dir = opendir(".");
+	if (!dir)
+		return;
+
+	lang_msg = malloc(max_lang * sizeof *lang_msg);
+	fnames = malloc(max_lang * sizeof *fnames);
+	if (!lang_msg || !fnames)
+		goto done;
+
+	lang_msg[0] = strdup(msg_string(MSG_sysinst_message_language));
+	fnames[0] = 0;
+	num_lang = 1;
+
+	while ((dirent = readdir(dir)) != 0) {
+		if (memcmp(dirent->d_name, "sysinstmsgs.", 12))
+			continue;
+		if (msg_file(dirent->d_name))
+			continue;
+		cp = msg_string(MSG_sysinst_message_language);
+		if (!strcmp(cp, lang_msg[0]))
+			continue;
+		if (num_lang == max_lang) {
+			char **new;
+			max_lang *= 2;
+			new = realloc(lang_msg, max_lang * sizeof *lang_msg);
+			if (!new)
+				break;
+			lang_msg = new;
+			new = realloc(fnames, max_lang * sizeof *fnames);
+			if (!new)
+				break;
+			fnames = new;
+		}
+		fnames[num_lang] = strdup(dirent->d_name);
+		lang_msg[num_lang++] = strdup(cp);
+	}
+	msg_file(0);
+	closedir(dir);
+	dir = 0;
+
+	if (num_lang == 1)
+		goto done;
+
+	opt = calloc(num_lang, sizeof *opt);
+	if (!opt)
+		goto done;
+
+	for (lang = 0; lang < num_lang; lang++) {
+		opt[lang].opt_name = lang_msg[lang];
+		opt[lang].opt_menu = OPT_NOMENU;
+		opt[lang].opt_action = set_language;
+	}
+
+	lang_menu = new_menu(NULL, opt, num_lang, -1, 12, 0, 0, MC_NOEXITOPT,
+		NULL, NULL, NULL, NULL, NULL);
+
+	if (lang_menu != -1) {
+		msg_display(MSG_hello);
+		process_menu(lang_menu, fnames);
+	}
+
+    done:
+	if (dir)
+		closedir(dir);
+	if (lang_menu != -1)
+		free_menu(lang_menu);
+	free(opt);
+	while (num_lang) {
+		free(lang_msg[--num_lang]);
+		free(fnames[num_lang]);
+	}
+	free(lang_msg);
+	free(fnames);
+
+	/* set locale according to selected language */
+	cp = msg_string(MSG_sysinst_message_locale);
+	if (cp) {
+		setlocale(LC_CTYPE, cp);
+		setenv("LC_CTYPE", cp, 1);
+	}
+}
 
 /* toplevel menu handler ... */
 void
-toplevel()
+toplevel(void)
 {
 
-	/* Display banner message in (english, francais, deutche..) */
+	/* Display banner message in (english, francais, deutsch..) */
 	msg_display(MSG_hello);
+	msg_display_add(MSG_md_hello);
+	msg_display_add(MSG_thanks);
 
 	/* 
 	 * Undo any stateful side-effects of previous menu choices.
@@ -165,7 +340,7 @@ toplevel()
 /* The usage ... */
 
 static void
-usage()
+usage(void)
 {
 
 	(void)fprintf(stderr, msg_string(MSG_usage));
@@ -174,8 +349,7 @@ usage()
 
 /* ARGSUSED */
 static void
-miscsighandler(signo)
-	int signo;
+miscsighandler(int signo)
 {
 
 	/*
@@ -186,8 +360,7 @@ miscsighandler(signo)
 }
 
 static void
-ttysighandler(signo)
-	int signo;
+ttysighandler(int signo)
 {
 
 	/*
@@ -216,21 +389,30 @@ ttysighandler(signo)
 }
 
 static void
-cleanup()
+cleanup(void)
 {
 	time_t tloc;
 
 	(void)time(&tloc);
+
+#if 0
+	restore_etc();
+#endif
+	/* Ensure we aren't inside the target tree */
+	chdir(getenv("HOME"));
 	unwind_mounts();
-	run_prog(0, 0, NULL, "/sbin/umount /mnt2");
+	umount_mnt2();
+
 	endwin();
+
 	if (logging) {
-		fprintf(log, "Log ended at: %s\n", asctime(localtime(&tloc)));
-		fflush(log);
-		fclose(log);
+		fprintf(logfp, "Log ended at: %s\n", asctime(localtime(&tloc)));
+		fflush(logfp);
+		fclose(logfp);
 	}
 	if (scripting) {
-		fprintf(script, "# Script ended at: %s\n", asctime(localtime(&tloc)));
+		fprintf(script, "# Script ended at: %s\n",
+		    asctime(localtime(&tloc)));
 		fflush(script);
 		fclose(script);
 	}
@@ -240,107 +422,43 @@ cleanup()
 }
 
 
-/* Stuff for processing the -f file argument. */
-
-/* Data definitions ... */
-
-static char *rel_ptr = rel;
-static char *machine_ptr = machine;
-static char *dist_dir_ptr = dist_dir;
-static char *ext_dir_ptr = ext_dir;
-static char *ftp_host_ptr = ftp_host;
-static char *ftp_dir_ptr = ftp_dir;
-static char *ftp_prefix_ptr = ftp_prefix;
-static char *ftp_user_ptr = ftp_user;
-static char *ftp_pass_ptr = ftp_pass;
-static char *nfs_host_ptr = nfs_host;
-static char *nfs_dir_ptr = nfs_dir;
-static char *cdrom_dev_ptr = cdrom_dev;
-static char *cdrom_dir_ptr = cdrom_dir;
-static char *localfs_dev_ptr = localfs_dev;
-static char *localfs_fs_ptr = localfs_fs;
-static char *localfs_dir_ptr = localfs_dir;
-static char *targetroot_mnt_ptr = targetroot_mnt;
-static char *distfs_mnt_ptr = distfs_mnt;
-static char *dist_postfix_ptr = dist_postfix;
-
-struct lookfor fflagopts[] = {
-	{"release", "release = %s", "a $0", &rel_ptr, 1, SSTRSIZE, NULL},
-	{"machine", "machine = %s", "a $0", &machine_ptr, 1, SSTRSIZE, NULL},
-	{"dist dir", "dist dir = %s", "a $0", &dist_dir_ptr, 1, STRSIZE, NULL},
-	{"ext dir", "ext dir = %s", "a $0", &ext_dir_ptr, 1, STRSIZE, NULL},
-	{"ftp host", "ftp host = %s", "a $0", &ftp_host_ptr, 1, STRSIZE, NULL},
-	{"ftp dir", "ftp dir = %s", "a $0", &ftp_dir_ptr, 1, STRSIZE, NULL},
-	{"ftp prefix", "ftp prefix = %s", "a $0", &ftp_prefix_ptr, 1,
-		STRSIZE, NULL},
-	{"ftp user", "ftp user = %s", "a $0", &ftp_user_ptr, 1, STRSIZE, NULL},
-	{"ftp pass", "ftp pass = %s", "a $0", &ftp_pass_ptr, 1, STRSIZE, NULL},
-	{"nfs host", "nfs host = %s", "a $0", &nfs_host_ptr, 1, STRSIZE, NULL},
-	{"nfs dir", "ftp dir = %s", "a $0", &nfs_dir_ptr, 1, STRSIZE, NULL},
-	{"cd dev", "cd dev = %s", "a $0", &cdrom_dev_ptr, 1, STRSIZE, NULL},
-	{"cd dir", "cd dir = %s", "a $0", &cdrom_dir_ptr, 1, STRSIZE, NULL},
-	{"local dev", "local dev = %s", "a $0", &localfs_dev_ptr, 1, STRSIZE,
-		NULL},
-	{"local fs", "local fs = %s", "a $0", &localfs_fs_ptr, 1, STRSIZE,
-		NULL},
-	{"local dir", "local dir = %s", "a $0", &localfs_dir_ptr, 1, STRSIZE,
-		NULL},
-	{"targetroot mount", "targetroot mount = %s", "a $0",
-		&targetroot_mnt_ptr, 1, STRSIZE, NULL},
-	{"distfs mount", "distfs mount = %s", "a $0", &distfs_mnt_ptr, 1,
-		STRSIZE, NULL},
-	{"dist postfix", "dist postfix = %s", "a $0", &dist_postfix_ptr, 1,
-		STRSIZE, NULL},
-};
-
 /* process function ... */
 
-void process_f_flag (char *f_name)
+void
+process_f_flag(char *f_name)
 {
-  char *buffer;
-  struct stat statinfo;
-  int fd;
+	char buffer[STRSIZE];
+	int len;
+	const struct f_arg *arg;
+	FILE *fp;
+	char *cp, *cp1;
 
-  /* stat the file (error reported) */
+	/* open the file */
+	fp = fopen(f_name, "r");
+	if (fp == NULL) {
+		fprintf(stderr, msg_string(MSG_config_open_error), f_name);
+		exit(1);
+	}
 
-  if (stat(f_name, &statinfo) < 0) {
-	perror (f_name);			/* XXX -- better message? */
-	exit (1);
-  }
+	while (fgets(buffer, sizeof buffer, fp) != NULL) {
+		cp = buffer + strspn(buffer, " \t");
+		if (strchr("#\r\n", *cp) != NULL)
+			continue;
+		for (arg = fflagopts; arg->name != NULL; arg++) {
+			len = strlen(arg->name);
+			if (memcmp(cp, arg->name, len) != 0)
+				continue;
+			cp1 = cp + len;
+			cp1 += strspn(cp1, " \t");
+			if (*cp1++ != '=')
+				continue;
+			cp1 += strspn(cp1, " \t");
+			len = strcspn(cp1, " \n\r\t");
+			cp1[len] = 0;
+			strlcpy(arg->var, cp1, arg->size);
+			break;
+		}
+	}
 
-  if ((statinfo.st_mode & S_IFMT) != S_IFREG) {
-	fprintf (stderr, msg_string(MSG_not_regular_file), f_name);
-  	exit (1);
-  }
-
-  /* allocate buffer (error reported) */
-  buffer = (char *) malloc ((size_t)statinfo.st_size+1);
-  if (buffer == NULL) {
-	fprintf (stderr, msg_string(MSG_out_of_memory));
-  	exit (1); 
-  }
-
-  /* open the file */
-  fd = open (f_name, O_RDONLY, 0);
-  if (fd < 0) {
-	fprintf (stderr, msg_string(MSG_config_open_error), f_name);
-  	exit (1);
-  }
-
-  /* read the file */
-  if (read (fd,buffer,(size_t)statinfo.st_size) != (size_t)statinfo.st_size) {
-	fprintf (stderr, msg_string(MSG_config_read_error), f_name);
-  	exit (1);
-  }
-  buffer[statinfo.st_size] = 0;
-
-  /* close the file */
-  close (fd);
-
-  /* Walk the buffer */
-  walk (buffer, (size_t)statinfo.st_size, fflagopts,
-	sizeof(fflagopts)/sizeof(struct lookfor));
-
-  /* free the buffer */
-  free (buffer);
+	fclose(fp);
 }

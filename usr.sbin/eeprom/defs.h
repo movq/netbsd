@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.4 1997/07/30 22:54:17 jtc Exp $	*/
+/*	$NetBSD: defs.h,v 1.11 2008/04/28 20:24:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,14 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#ifdef USE_OPENFIRM
+#include <dev/ofw/openfirmio.h>
+#endif
+
+#ifdef USE_PREPNVRAM
+#include <machine/nvram.h>
+#endif
 
 #undef BUFSIZE
 #define BUFSIZE		1024
@@ -61,7 +62,7 @@
 struct	keytabent {
 	char	*kt_keyword;		/* keyword for this entry */
 	u_int	kt_offset;		/* offset into prom of value */
-	void	(*kt_handler) __P((struct keytabent *, char *));
+	void	(*kt_handler) (struct keytabent *, char *);
 					/* handler function for this entry */
 };
 
@@ -83,36 +84,65 @@ struct	opiocdesc;
  */
 struct	extabent {
 	char	*ex_keyword;		/* keyword for this entry */
-	void	(*ex_handler) __P((struct extabent *,
-		    struct opiocdesc *, char *));
+	void	(*ex_handler) (struct extabent *,
+		    struct opiocdesc *, char *);
 					/* handler function for this entry */
 };
 #endif /* __sparc__ */
 
-/* date parser */
-struct	timeb;
-time_t	get_date __P((char *, struct timeb *));
+#ifdef USE_OPENFIRM
+struct	extabent {
+	char	*ex_keyword;		/* keyword for this entry */
+	void	(*ex_handler) (struct extabent *,
+		    struct ofiocdesc *, char *);
+					/* handler function for this entry */
+};
+#endif
+
+#ifdef USE_PREPNVRAM
+struct	extabent {
+	char	*ex_keyword;		/* keyword for this entry */
+	void	(*ex_handler) (struct extabent *,
+		    struct pnviocdesc *, char *);
+					/* handler function for this entry */
+};
+#endif
+
 
 /* Sun 3/4 EEPROM handlers. */
-void	ee_hwupdate __P((struct keytabent *, char *));
-void	ee_num8 __P((struct keytabent *, char *));
-void	ee_num16 __P((struct keytabent *, char *));
-void	ee_screensize __P((struct keytabent *, char *));
-void	ee_truefalse __P((struct keytabent *, char *));
-void	ee_bootdev __P((struct keytabent *, char *));
-void	ee_kbdtype __P((struct keytabent *, char *));
-void	ee_constype __P((struct keytabent *, char *));
-void	ee_diagpath __P((struct keytabent *, char *));
-void	ee_banner __P((struct keytabent *, char *));
-void	ee_notsupp __P((struct keytabent *, char *));
+void	ee_action (char *, char *);
+void	ee_dump (void);
+void	ee_hwupdate (struct keytabent *, char *);
+void	ee_num8 (struct keytabent *, char *);
+void	ee_num16 (struct keytabent *, char *);
+void	ee_screensize (struct keytabent *, char *);
+void	ee_truefalse (struct keytabent *, char *);
+void	ee_bootdev (struct keytabent *, char *);
+void	ee_kbdtype (struct keytabent *, char *);
+void	ee_constype (struct keytabent *, char *);
+void	ee_diagpath (struct keytabent *, char *);
+void	ee_banner (struct keytabent *, char *);
+void	ee_notsupp (struct keytabent *, char *);
 
 /* Sun 3/4 EEPROM checksum routines. */
-u_char	ee_checksum __P((u_char *, size_t));
-void	ee_updatechecksums __P((void));
-void	ee_verifychecksums __P((void));
+u_char	ee_checksum (u_char *, size_t);
+void	ee_updatechecksums (void);
+void	ee_verifychecksums (void);
 
 #ifdef __sparc__
 /* Sparc Openprom handlers. */
-char	*op_handler __P((char *, char *));
-void	op_dump __P((void));
+char	*op_handler (char *, char *);
+void	op_action (char *, char *);
+void	op_dump (void);
+int	check_for_openprom (void);
 #endif /* __sparc__ */
+
+/* OpenFirmware handlers. */
+char	*of_handler (char *, char *);
+void	of_action (char *, char *);
+void	of_dump (void);
+
+/* PReP nvram handlers. */
+char	*prep_handler (char *, char *);
+void	prep_action (char *, char *);
+void	prep_dump (void);

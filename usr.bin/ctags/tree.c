@@ -1,4 +1,4 @@
-/*	$NetBSD: tree.c,v 1.6 1998/11/06 23:06:30 christos Exp $	*/
+/*	$NetBSD: tree.c,v 1.12 2006/04/05 19:38:47 dsl Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,12 +29,16 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)tree.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: tree.c,v 1.6 1998/11/06 23:06:30 christos Exp $");
+__RCSID("$NetBSD: tree.c,v 1.12 2006/04/05 19:38:47 dsl Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,17 +50,15 @@ __RCSID("$NetBSD: tree.c,v 1.6 1998/11/06 23:06:30 christos Exp $");
 
 #include "ctags.h"
 
-static void	add_node __P((NODE *, NODE *));
-static void	free_tree __P((NODE *));
+static void	add_node(NODE *, NODE *);
+static void	free_tree(NODE *);
 
 /*
  * pfnote --
  *	enter a new node in the tree
  */
 void
-pfnote(name, ln)
-	char	*name;
-	int	ln;
+pfnote(const char *name, int ln)
 {
 	NODE	*np;
 	char	*fp;
@@ -80,7 +78,7 @@ pfnote(name, ln)
 			fp = curfile;
 		else
 			++fp;
-		(void)sprintf(nbuf, "M%s", fp);
+		(void)snprintf(nbuf, sizeof(nbuf), "M%s", fp);
 		fp = strrchr(nbuf, '.');
 		if (fp && !fp[2])
 			*fp = EOS;
@@ -100,9 +98,7 @@ pfnote(name, ln)
 }
 
 static void
-add_node(node, cur_node)
-	NODE	*node,
-		*cur_node;
+add_node(NODE *node, NODE *cur_node)
 {
 	int	dif;
 
@@ -132,13 +128,18 @@ add_node(node, cur_node)
 }
 
 static void
-free_tree(node)
-	NODE	*node;
+free_tree(NODE *node)
 {
-	while (node) {
-		if (node->right)
-			free_tree(node->right);
+	NODE *nnode;
+
+	for (; node != NULL; node = nnode) {
+		nnode = node->left;
+		if (node->right) {
+			if (nnode == NULL)
+				nnode = node->right;
+			else
+				free_tree(node->right);
+		}
 		free(node);
-		node = node->left;
 	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: fatal.c,v 1.1 1999/12/05 22:10:57 jdolecek Exp $	*/
+/*	$NetBSD: fatal.c,v 1.5 2005/11/28 03:26:06 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,39 +36,26 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fatal.c,v 1.1 1999/12/05 22:10:57 jdolecek Exp $");
+__RCSID("$NetBSD: fatal.c,v 1.5 2005/11/28 03:26:06 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/dirent.h>
-#include <stdio.h>
-
-#ifdef __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "lp.h"
 
 void
-#ifdef __STDC__
 fatal(const char *msg, ...)
-#else
-fatal(msg, va_alist)
-	char *msg;
-        va_dcl
-#endif
 {
 	va_list ap;
-#ifdef __STDC__
+
 	va_start(ap, msg);
-#else
-	va_start(ap);
-#endif
 	if (from != host)
 		(void)printf("%s: ", host);
-	(void)printf("%s: ", name);
+	(void)printf("%s: ", getprogname());
 	if (printer)
 		(void)printf("%s: ", printer);
 	(void)vprintf(msg, ap);

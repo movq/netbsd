@@ -10,11 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,14 +29,18 @@
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
 	/* .asciz "@(#)pipe.s	8.1 (Berkeley) 6/4/93" */
-	.asciz "$NetBSD: pipe.S,v 1.1 1995/04/17 12:24:02 ragge Exp $"
+	.asciz "$NetBSD: pipe.S,v 1.4 2003/08/07 16:42:33 agc Exp $"
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
 
-SYSCALL(pipe)
-	movl	4(ap),r2
-	movl	r0,(r2)+
-	movl	r1,(r2)
-	clrl	r0
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(pipe, _pipe)
+#endif
+
+_SYSCALL(_pipe,pipe)
+	movl	4(%ap),%r2
+	movl	%r0,(%r2)+
+	movl	%r1,(%r2)
+	clrl	%r0
 	ret

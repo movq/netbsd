@@ -1,4 +1,4 @@
-/*	$NetBSD: tipout.c,v 1.7 1998/07/12 09:59:30 mrg Exp $	*/
+/*	$NetBSD: tipout.c,v 1.14 2006/12/14 17:09:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,11 +30,12 @@
  */
 
 #include <sys/cdefs.h>
+#include <poll.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)tipout.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: tipout.c,v 1.7 1998/07/12 09:59:30 mrg Exp $");
+__RCSID("$NetBSD: tipout.c,v 1.14 2006/12/14 17:09:43 christos Exp $");
 #endif /* not lint */
 
 #include "tip.h"
@@ -49,25 +46,21 @@ __RCSID("$NetBSD: tipout.c,v 1.7 1998/07/12 09:59:30 mrg Exp $");
  *  reading from the remote host
  */
 
-static	jmp_buf sigbuf;
-
-void	intEMT __P((int));
-void	intIOT __P((int));
-void	intSYS __P((int));
-void	intTERM __P((int));
+void	intEMT(void);
+void	intIOT(void);
+void	intSYS(void);
+void	intTERM(int);
 
 /*
  * TIPOUT wait state routine --
  *   sent by TIPIN when it wants to posses the remote host
  */
 void
-intIOT(dummy)
-	int dummy;
+intIOT(void)
 {
 
-	write(repdes[1],&ccc,1);
-	read(fildes[0], &ccc,1);
-	longjmp(sigbuf, 1);
+	(void)write(repdes[1],&ccc,1);	/* We got the message */
+	(void)read(fildes[0], &ccc,1);	/* Now wait for coprocess */
 }
 
 /*
@@ -75,21 +68,20 @@ intIOT(dummy)
  *  accepts script file name over the pipe and acts accordingly
  */
 void
-intEMT(dummy)
-	int dummy;
+intEMT(void)
 {
 	char c, line[256];
 	char *pline = line;
 	char reply;
 
-	read(fildes[0], &c, 1);
+	(void)read(fildes[0], &c, 1);		/* We got the message */
 	while (c != '\n' && line + sizeof line - pline > 0) {
 		*pline++ = c;
-		read(fildes[0], &c, 1);
+		(void)read(fildes[0], &c, 1);
 	}
 	*pline = '\0';
 	if (boolean(value(SCRIPT)) && fscript != NULL)
-		fclose(fscript);
+		(void)fclose(fscript);
 	if (pline == line) {
 		setboolean(value(SCRIPT), FALSE);
 		reply = 'y';
@@ -101,73 +93,95 @@ intEMT(dummy)
 			setboolean(value(SCRIPT), TRUE);
 		}
 	}
-	write(repdes[1], &reply, 1);
-	longjmp(sigbuf, 1);
+	(void)write(repdes[1], &reply, 1);	/* Now coprocess waits for us */
 }
 
 void
-intTERM(dummy)
-	int dummy;
+/*ARGSUSED*/
+intTERM(int dummy __unused)
 {
 
 	if (boolean(value(SCRIPT)) && fscript != NULL)
-		fclose(fscript);
+		(void)fclose(fscript);
 	exit(0);
 }
 
 void
-intSYS(dummy)
-	int dummy;
+intSYS(void)
 {
 
 	setboolean(value(BEAUTIFY), !boolean(value(BEAUTIFY)));
-	longjmp(sigbuf, 1);
 }
 
 /*
  * ****TIPOUT   TIPOUT****
  */
 void
-tipout()
+tipout(void)
 {
 	char buf[BUFSIZ];
 	char *cp;
 	int cnt;
 	int omask;
+	struct pollfd pfd[2];
 
-	signal(SIGINT, SIG_IGN);
-	signal(SIGQUIT, SIG_IGN);
-	signal(SIGEMT, intEMT);		/* attention from TIPIN */
-	signal(SIGTERM, intTERM);	/* time to go signal */
-	signal(SIGIOT, intIOT);		/* scripting going on signal */
-	signal(SIGHUP, intTERM);	/* for dial-ups */
-	signal(SIGSYS, intSYS);		/* beautify toggle */
-	(void) setjmp(sigbuf);
-	for (omask = 0;; sigsetmask(omask)) {
-		cnt = read(FD, buf, BUFSIZ);
-		if (cnt <= 0) {
-			/* lost carrier */
-			if (cnt < 0 && errno == EIO) {
-				sigblock(sigmask(SIGTERM));
-				intTERM(0);
-				/*NOTREACHED*/
+	(void)signal(SIGINT, SIG_IGN);
+	(void)signal(SIGQUIT, SIG_IGN);
+	(void)signal(SIGHUP, intTERM);	/* for dial-ups */
+	(void)signal(SIGTERM, intTERM);	/* time to go signal*/
+
+	pfd[0].fd = attndes[0];
+	pfd[0].events = POLLIN;
+	pfd[1].fd = FD;
+	pfd[1].events = POLLIN|POLLHUP;
+
+	for (omask = 0;; (void)sigsetmask(omask)) {
+
+	if (poll(pfd, 2, -1) > 0) {
+
+	if (pfd[0].revents & POLLIN)
+		if (read(attndes[0], &ccc, 1) > 0) {
+			switch(ccc) {
+			case 'W':
+				intIOT();	/* TIPIN wants us to wait */
+				break;
+			case 'S':
+				intEMT();	/* TIPIN wants us to script */
+				break;
+			case 'B':
+				intSYS();	/* "Beautify" value toggle */
+				break;
+			default:
+				break;
 			}
-			continue;
 		}
-#define	ALLSIGS	sigmask(SIGEMT)|sigmask(SIGTERM)|sigmask(SIGIOT)|sigmask(SIGSYS)
-		omask = sigblock(ALLSIGS);
-		for (cp = buf; cp < buf + cnt; cp++)
-			*cp &= STRIP_PAR;
-		write(1, buf, cnt);
-		if (boolean(value(SCRIPT)) && fscript != NULL) {
-			if (!boolean(value(BEAUTIFY))) {
-				fwrite(buf, 1, cnt, fscript);
+	}
+
+	if (pfd[1].revents & (POLLIN|POLLHUP)) {
+			cnt = read(FD, buf, BUFSIZ);
+			if (cnt <= 0) {
+				/* lost carrier || EOF */
+				if ((cnt < 0 && errno == EIO) || (cnt == 0)) {
+					(void)sigblock(sigmask(SIGTERM));
+					intTERM(0);
+					/*NOTREACHED*/
+				}
 				continue;
 			}
+			omask = sigblock(SIGTERM);
 			for (cp = buf; cp < buf + cnt; cp++)
-				if ((*cp >= ' ' && *cp <= '~') ||
-				    any(*cp, value(EXCEPTIONS)))
-					putc(*cp, fscript);
+				*cp &= STRIP_PAR;
+			(void)write(1, buf, (size_t)cnt);
+			if (boolean(value(SCRIPT)) && fscript != NULL) {
+				if (!boolean(value(BEAUTIFY))) {
+					(void)fwrite(buf, 1, (size_t)cnt, fscript);
+					continue;
+				}
+				for (cp = buf; cp < buf + cnt; cp++)
+					if ((*cp >= ' ' && *cp <= '~') ||
+					    any(*cp, value(EXCEPTIONS)))
+						(void)putc(*cp, fscript);
+			}
 		}
 	}
 }

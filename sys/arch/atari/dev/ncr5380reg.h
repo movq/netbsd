@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr5380reg.h,v 1.13 1998/11/19 21:45:39 thorpej Exp $	*/
+/*	$NetBSD: ncr5380reg.h,v 1.19 2005/12/11 12:16:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -158,7 +158,7 @@
 
 struct	ncr_softc {
 	struct	device		sc_dev;
-	struct	scsipi_link	sc_link;
+	struct	scsipi_channel	sc_channel;
 	struct	scsipi_adapter	sc_adapter;
 
 	/*
@@ -175,9 +175,9 @@ struct	ncr_softc {
 };
 
 /*
- * Max. number of dma-chains per request
+ * Max. number of DMA-chains per request
  */
-#define	MAXDMAIO	(MAXPHYS/NBPG + 1)
+#define	MAXDMAIO	(MAXPHYS/PAGE_SIZE + 1)
 
 /*
  * Some requests are not contiguous in physical memory. We need to break them
@@ -205,11 +205,12 @@ typedef struct	req_q {
     u_char		*bounceb;   /* allocated bounce buffer		    */
     u_char		*bouncerp;  /* bounce read-pointer		    */
     struct dma_chain	dm_chain[MAXDMAIO];
-    struct dma_chain	*dm_cur;    /* current dma-request		    */
-    struct dma_chain	*dm_last;   /* last dma-request			    */
+    struct dma_chain	*dm_cur;    /* current DMA-request		    */
+    struct dma_chain	*dm_last;   /* last DMA-request			    */
     long		xdata_len;  /* length of transfer		    */
     u_char		*xdata_ptr; /* virtual address of transfer	    */
-    struct scsi_generic	xcmd;	    /* command to execute		    */
+    struct scsipi_generic xcmd;	    /* command to execute		    */
+    int                 xcmd_len;   /* command length                       */
 } SC_REQ;
 
 /*
@@ -232,16 +233,15 @@ static SC_REQ	*connected = NULL;	/* Command currently connected	*/
 static void ack_message __P((void));
 static int  check_autosense __P((SC_REQ *, int));
 static int  check_intr __P((struct ncr_softc *));
-static int  command_size __P((u_char));
 static int  dma_ready __P((void));
 static void finish_req __P((SC_REQ *));
 static int  handle_message __P((SC_REQ *, u_int));
 static int  information_transfer __P((struct ncr_softc *));
 static void nack_message __P((SC_REQ *, u_char));
-static void ncr_aprint __P((struct ncr_softc *, char *, ...));
+static void ncr_aprint __P((struct ncr_softc *, const char *, ...));
 static void ncr_ctrl_intr __P((struct ncr_softc *));
 static void ncr_dma_intr __P((struct ncr_softc *));
-static void ncr_tprint __P((SC_REQ *, char *, ...));
+static void ncr_tprint __P((SC_REQ *, const char *, ...));
 static int  reach_msg_out __P((struct ncr_softc *, u_long));
 static void reselect __P((struct ncr_softc *));
 static void run_main __P((struct ncr_softc *));
@@ -251,7 +251,7 @@ static void scsi_reset_verbose __P((struct ncr_softc *, const char *));
 static int  scsi_select __P((SC_REQ *, int));
 static void show_data_sense __P((struct scsipi_xfer *));
 static void show_phase __P((SC_REQ *, int));
-static void show_request __P((SC_REQ *, char *));
+static void show_request __P((SC_REQ *, const char *));
 static void show_signals __P((u_char, u_char));
 static void transfer_dma __P((SC_REQ *, u_int, int));
 static int  transfer_pio __P((u_char *, u_char *, u_long *, int));

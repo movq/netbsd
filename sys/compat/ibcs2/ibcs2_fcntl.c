@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_fcntl.c,v 1.9 2000/03/30 11:27:16 augustss Exp $	*/
+/*	$NetBSD: ibcs2_fcntl.c,v 1.34 2008/03/21 21:54:58 ad Exp $	*/
 
 /*
  * Copyright (c) 1995 Scott Bartram
@@ -27,6 +27,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_fcntl.c,v 1.34 2008/03/21 21:54:58 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/namei.h>
@@ -37,9 +40,9 @@
 #include <sys/ioctl.h>
 #include <sys/kernel.h>
 #include <sys/mount.h>
-#include <sys/malloc.h>
 #include <sys/syscallargs.h>
 #include <sys/vnode.h>
+#include <sys/kauth.h>
 
 #include <compat/ibcs2/ibcs2_types.h>
 #include <compat/ibcs2/ibcs2_fcntl.h>
@@ -48,15 +51,14 @@
 #include <compat/ibcs2/ibcs2_syscallargs.h>
 #include <compat/ibcs2/ibcs2_util.h>
 
-static int cvt_o_flags __P((int));
-static void cvt_flock2iflock __P((struct flock *, struct ibcs2_flock *));
-static void cvt_iflock2flock __P((struct ibcs2_flock *, struct flock *));
-static int ioflags2oflags __P((int));
-static int oflags2ioflags __P((int));
+static int cvt_o_flags(int);
+static void cvt_flock2iflock(struct flock *, struct ibcs2_flock *);
+static void cvt_iflock2flock(struct ibcs2_flock *, struct flock *);
+static int ioflags2oflags(int);
+static int oflags2ioflags(int);
 
 static int
-cvt_o_flags(flags)
-	int flags;
+cvt_o_flags(int flags)
 {
 	int r = 0;
 
@@ -73,9 +75,7 @@ cvt_o_flags(flags)
 }
 
 static void
-cvt_flock2iflock(flp, iflp)
-	struct flock *flp;
-	struct ibcs2_flock *iflp;
+cvt_flock2iflock(struct flock *flp, struct ibcs2_flock *iflp)
 {
 	switch (flp->l_type) {
 	case F_RDLCK:
@@ -96,9 +96,7 @@ cvt_flock2iflock(flp, iflp)
 }
 
 static void
-cvt_iflock2flock(iflp, flp)
-	struct ibcs2_flock *iflp;
-	struct flock *flp;
+cvt_iflock2flock(struct ibcs2_flock *iflp, struct flock *flp)
 {
 	flp->l_start = (off_t)iflp->l_start;
 	flp->l_len = (off_t)iflp->l_len;
@@ -119,11 +117,10 @@ cvt_iflock2flock(iflp, flp)
 
 /* convert iBCS2 mode into NetBSD mode */
 static int
-ioflags2oflags(flags)
-	int flags;
+ioflags2oflags(int flags)
 {
 	int r = 0;
-	
+
 	if (flags & IBCS2_O_RDONLY) r |= O_RDONLY;
 	if (flags & IBCS2_O_WRONLY) r |= O_WRONLY;
 	if (flags & IBCS2_O_RDWR) r |= O_RDWR;
@@ -140,11 +137,10 @@ ioflags2oflags(flags)
 
 /* convert NetBSD mode into iBCS2 mode */
 static int
-oflags2ioflags(flags)
-	int flags;
+oflags2ioflags(int flags)
 {
 	int r = 0;
-	
+
 	if (flags & O_RDONLY) r |= IBCS2_O_RDONLY;
 	if (flags & O_WRONLY) r |= IBCS2_O_WRONLY;
 	if (flags & O_RDWR) r |= IBCS2_O_RDWR;
@@ -160,97 +156,78 @@ oflags2ioflags(flags)
 }
 
 int
-ibcs2_sys_open(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+ibcs2_sys_open(struct lwp *l, const struct ibcs2_sys_open_args *uap, register_t *retval)
 {
-	struct ibcs2_sys_open_args /* {
+	/* {
 		syscallarg(char *) path;
 		syscallarg(int) flags;
 		syscallarg(int) mode;
-	} */ *uap = v;
+	} */
+	struct proc *p = l->l_proc;
+	struct sys_open_args bsd_ua;
 	int noctty = SCARG(uap, flags) & IBCS2_O_NOCTTY;
 	int ret;
-	caddr_t sg = stackgap_init(p->p_emul);
 
-	SCARG(uap, flags) = cvt_o_flags(SCARG(uap, flags));
-	if (SCARG(uap, flags) & O_CREAT)
-		IBCS2_CHECK_ALT_CREAT(p, &sg, SCARG(uap, path));
-	else
-		IBCS2_CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
-	ret = sys_open(p, uap, retval);
+	SCARG(&bsd_ua, path) = SCARG(uap, path);
+	SCARG(&bsd_ua, flags) = cvt_o_flags(SCARG(uap, flags));
+	SCARG(&bsd_ua, mode) = SCARG(uap, mode);
+	ret = sys_open(l, &bsd_ua, retval);
 
-	if (!ret && !noctty && SESS_LEADER(p) && !(p->p_flag & P_CONTROLT)) {
-		struct filedesc *fdp = p->p_fd;
-		struct file *fp = fdp->fd_ofiles[*retval];
+	if (!ret && !noctty && SESS_LEADER(p) && !(p->p_lflag & PL_CONTROLT)) {
+		file_t *fp;
 
-		/* ignore any error, just give it a try */
-		if (fp->f_type == DTYPE_VNODE)
-			(fp->f_ops->fo_ioctl)(fp, TIOCSCTTY, (caddr_t) 0, p);
+		if ((fp = fd_getfile(*retval)) != NULL) {
+			/* ignore any error, just give it a try */
+			if (fp->f_type == DTYPE_VNODE)
+				(fp->f_ops->fo_ioctl)(fp, TIOCSCTTY, NULL);
+			fd_putfile(*retval);
+		}
 	}
 	return ret;
 }
 
 int
-ibcs2_sys_creat(p, v, retval)
-        struct proc *p;  
-	void *v;
-	register_t *retval;
-{       
-	struct ibcs2_sys_creat_args /* {
+ibcs2_sys_creat(struct lwp *l, const struct ibcs2_sys_creat_args *uap, register_t *retval)
+{
+	/* {
 		syscallarg(char *) path;
 		syscallarg(int) mode;
-	} */ *uap = v;
-	struct sys_open_args cup;   
-	caddr_t sg = stackgap_init(p->p_emul);
+	} */
+	struct sys_open_args cup;
 
-	IBCS2_CHECK_ALT_CREAT(p, &sg, SCARG(uap, path));
 	SCARG(&cup, path) = SCARG(uap, path);
 	SCARG(&cup, mode) = SCARG(uap, mode);
 	SCARG(&cup, flags) = O_WRONLY | O_CREAT | O_TRUNC;
-	return sys_open(p, &cup, retval);
-}       
-
-int
-ibcs2_sys_access(p, v, retval)
-        struct proc *p;
-	void *v;
-        register_t *retval;
-{
-	struct ibcs2_sys_access_args /* {
-		syscallarg(char *) path;
-		syscallarg(int) flags;
-	} */ *uap = v;
-        struct sys_access_args cup;
-        caddr_t sg = stackgap_init(p->p_emul);
-
-        IBCS2_CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
-        SCARG(&cup, path) = SCARG(uap, path);
-        SCARG(&cup, flags) = SCARG(uap, flags);
-        return sys_access(p, &cup, retval);
+	return sys_open(l, &cup, retval);
 }
 
 int
-ibcs2_sys_eaccess(p, v, retval)
-        struct proc *p;
-	void *v;
-        register_t *retval;
+ibcs2_sys_access(struct lwp *l, const struct ibcs2_sys_access_args *uap, register_t *retval)
 {
-	struct ibcs2_sys_eaccess_args /* {
+	/* {
 		syscallarg(char *) path;
 		syscallarg(int) flags;
-	} */ *uap = v;
-	struct ucred *cred = p->p_ucred;
+	} */
+        struct sys_access_args cup;
+
+        SCARG(&cup, path) = SCARG(uap, path);
+        SCARG(&cup, flags) = SCARG(uap, flags);
+        return sys_access(l, &cup, retval);
+}
+
+int
+ibcs2_sys_eaccess(struct lwp *l, const struct ibcs2_sys_eaccess_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(char *) path;
+		syscallarg(int) flags;
+	} */
 	struct vnode *vp;
         int error, flags;
         struct nameidata nd;
-        caddr_t sg = stackgap_init(p->p_emul);
 
-        IBCS2_CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
-
-        NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_USERSPACE,
-            SCARG(uap, path), p);
+        NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | TRYEMULROOT, UIO_USERSPACE,
+            SCARG(uap, path));
         if ((error = namei(&nd)) != 0)
                 return error;
         vp = nd.ni_vp;
@@ -265,49 +242,47 @@ ibcs2_sys_eaccess(p, v, retval)
                 if (SCARG(uap, flags) & IBCS2_X_OK)
 			flags |= VEXEC;
                 if ((flags & VWRITE) == 0 || (error = vn_writechk(vp)) == 0)
-                        error = VOP_ACCESS(vp, flags, cred, p);
+                        error = VOP_ACCESS(vp, flags, l->l_cred);
         }
         vput(vp);
         return error;
 }
 
 int
-ibcs2_sys_fcntl(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+ibcs2_sys_fcntl(struct lwp *l, const struct ibcs2_sys_fcntl_args *uap, register_t *retval)
 {
-	struct ibcs2_sys_fcntl_args /* {
+	/* {
 		syscallarg(int) fd;
 		syscallarg(int) cmd;
 		syscallarg(char *) arg;
-	} */ *uap = v;
-	int error;
+	} */
 	struct sys_fcntl_args fa;
-	struct flock *flp;
+	struct flock fl;
 	struct ibcs2_flock ifl;
-	
+	int error;
+	int cmd;
+
 	switch(SCARG(uap, cmd)) {
 	case IBCS2_F_DUPFD:
 		SCARG(&fa, fd) = SCARG(uap, fd);
 		SCARG(&fa, cmd) = F_DUPFD;
 		SCARG(&fa, arg) = SCARG(uap, arg);
-		return sys_fcntl(p, &fa, retval);
+		return sys_fcntl(l, &fa, retval);
 	case IBCS2_F_GETFD:
 		SCARG(&fa, fd) = SCARG(uap, fd);
 		SCARG(&fa, cmd) = F_GETFD;
 		SCARG(&fa, arg) = SCARG(uap, arg);
-		return sys_fcntl(p, &fa, retval);
+		return sys_fcntl(l, &fa, retval);
 	case IBCS2_F_SETFD:
 		SCARG(&fa, fd) = SCARG(uap, fd);
 		SCARG(&fa, cmd) = F_SETFD;
 		SCARG(&fa, arg) = SCARG(uap, arg);
-		return sys_fcntl(p, &fa, retval);
+		return sys_fcntl(l, &fa, retval);
 	case IBCS2_F_GETFL:
 		SCARG(&fa, fd) = SCARG(uap, fd);
 		SCARG(&fa, cmd) = F_GETFL;
 		SCARG(&fa, arg) = SCARG(uap, arg);
-		error = sys_fcntl(p, &fa, retval);
+		error = sys_fcntl(l, &fa, retval);
 		if (error)
 			return error;
 		*retval = oflags2ioflags(*retval);
@@ -316,57 +291,29 @@ ibcs2_sys_fcntl(p, v, retval)
 		SCARG(&fa, fd) = SCARG(uap, fd);
 		SCARG(&fa, cmd) = F_SETFL;
 		SCARG(&fa, arg) = (void *)ioflags2oflags((int) SCARG(uap, arg));
-		return sys_fcntl(p, &fa, retval);
+		return sys_fcntl(l, &fa, retval);
 
 	case IBCS2_F_GETLK:
-	    {
-		caddr_t sg = stackgap_init(p->p_emul);
-		flp = stackgap_alloc(&sg, sizeof(*flp));
-		error = copyin((caddr_t)SCARG(uap, arg), (caddr_t)&ifl,
-			       ibcs2_flock_len);
-		if (error)
-			return error;
-		cvt_iflock2flock(&ifl, flp);
-		SCARG(&fa, fd) = SCARG(uap, fd);
-		SCARG(&fa, cmd) = F_GETLK;
-		SCARG(&fa, arg) = (void *)flp;
-		error = sys_fcntl(p, &fa, retval);
-		if (error)
-			return error;
-		cvt_flock2iflock(flp, &ifl);
-		return copyout((caddr_t)&ifl, (caddr_t)SCARG(uap, arg),
-			       ibcs2_flock_len);
-	    }
-
+		cmd = F_GETLK;
+		goto lock;
 	case IBCS2_F_SETLK:
-	    {
-		caddr_t sg = stackgap_init(p->p_emul);
-		flp = stackgap_alloc(&sg, sizeof(*flp));
-		error = copyin((caddr_t)SCARG(uap, arg), (caddr_t)&ifl,
-			       ibcs2_flock_len);
-		if (error)
-			return error;
-		cvt_iflock2flock(&ifl, flp);
-		SCARG(&fa, fd) = SCARG(uap, fd);
-		SCARG(&fa, cmd) = F_SETLK;
-		SCARG(&fa, arg) = (void *)flp;
-		return sys_fcntl(p, &fa, retval);
-	    }
-
+		cmd = F_SETLK;
+		goto lock;
 	case IBCS2_F_SETLKW:
-	    {
-		caddr_t sg = stackgap_init(p->p_emul);
-		flp = stackgap_alloc(&sg, sizeof(*flp));
-		error = copyin((caddr_t)SCARG(uap, arg), (caddr_t)&ifl,
-			       ibcs2_flock_len);
+		cmd = F_SETLKW;
+	    lock:
+		error = copyin(SCARG(uap, arg), &ifl, ibcs2_flock_len);
 		if (error)
 			return error;
-		cvt_iflock2flock(&ifl, flp);
-		SCARG(&fa, fd) = SCARG(uap, fd);
-		SCARG(&fa, cmd) = F_SETLKW;
-		SCARG(&fa, arg) = (void *)flp;
-		return sys_fcntl(p, &fa, retval);
-	    }
+		cvt_iflock2flock(&ifl, &fl);
+		error = do_fcntl_lock(SCARG(uap, fd), cmd, &fl);
+		if (cmd != F_GETLK || error != 0)
+			return error;
+		cvt_flock2iflock(&fl, &ifl);
+		return copyout(&ifl, SCARG(uap, arg), ibcs2_flock_len);
+
+	default:
+		return ENOSYS;
 	}
-	return ENOSYS;
+
 }

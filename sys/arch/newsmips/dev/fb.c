@@ -1,10 +1,7 @@
-/*	$NetBSD: fb.c,v 1.3 1999/02/15 04:36:33 hubertf Exp $	*/
-/*
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
- * This code is derived from software contributed to Berkeley by
- * Sony Corp. and Kazumasa Utashiro of Software Research Associates, Inc.
+/*	$NetBSD: fb.c,v 1.24 2008/04/09 15:40:30 tsutsui Exp $	*/
+
+/*-
+ * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -14,575 +11,483 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: $Hdr: fb.c,v 4.300 91/06/27 20:43:06 root Rel41 $ SONY
- *
- *	@(#)fb.c	8.1 (Berkeley) 6/11/93
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "fb.h"
-#if NFB > 0
-/*
- * Frame buffer driver
- */
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: fb.c,v 1.24 2008/04/09 15:40:30 tsutsui Exp $");
 
 #include <sys/param.h>
-#include <sys/types.h>
 #include <sys/device.h>
+#include <sys/ioctl.h>
+#include <sys/malloc.h>
 #include <sys/systm.h>
-#include <sys/proc.h>
 
-#include <machine/cpu.h>
-#include <machine/autoconf.h>
-#include <machine/framebuf.h>
+#include <uvm/uvm_extern.h>
 
-#include <newsmips/dev/fbreg.h>
+#include <machine/adrsmap.h>
 
-#define FB_USED		1
-#define VIDEO_USED	2
+#include <newsmips/dev/hbvar.h>
+
+#include <dev/wscons/wsconsio.h>
+#include <dev/wscons/wsdisplayvar.h>
+#include <dev/rasops/rasops.h>
+
+struct fb_devconfig {
+	u_char *dc_fbbase;		/* VRAM base address */
+	struct rasops_info dc_ri;
+};
 
 struct fb_softc {
-	struct device sc_dev;
-	int fbs_state;
-	int fbs_device;
-	lScrType fbs_type;
-	int fbs_flag;
-	struct fbreg fbreg;
+	device_t sc_dev;
+	struct fb_devconfig *sc_dc;
+	int sc_nscreens;
 };
 
-static int	fbmatch __P((struct device *, struct cfdata *, void *));
-static void	fbattach __P((struct device *, struct device *, void *));
-static void	fblock __P((void));
-static void	fbunlock __P((int));
-static int	fbinit __P((struct fbreg *));
-static void	fbreset __P((struct fbreg *));
+int fb_match(device_t, cfdata_t, void *);
+void fb_attach(device_t, device_t, void *);
 
-struct cfattach fb_ca = {
-	sizeof(struct fb_softc), fbmatch, fbattach
+int fb_common_init(struct fb_devconfig *);
+int fb_is_console(void);
+
+int fb_ioctl(void *, void *, u_long, void *, int, struct lwp *);
+paddr_t fb_mmap(void *, void *, off_t, int);
+int fb_alloc_screen(void *, const struct wsscreen_descr *, void **, int *,
+    int *, long *);
+void fb_free_screen(void *, void *);
+int fb_show_screen(void *, void *, int, void (*)(void *, int, int), void *);
+
+void fb_cnattach(void);
+
+static void fb253_init(void);
+
+CFATTACH_DECL_NEW(fb, sizeof(struct fb_softc),
+    fb_match, fb_attach, NULL, NULL);
+
+struct fb_devconfig fb_console_dc;
+
+struct wsdisplay_accessops fb_accessops = {
+	fb_ioctl,
+	fb_mmap,
+	fb_alloc_screen,
+	fb_free_screen,
+	fb_show_screen,
+	NULL	/* load_font */
 };
 
-extern struct cfdriver fb_cd;
-
-static char *devname[] = {
-/* 0*/	"",
-/* 1*/	"NWB-512",
-/* 2*/	"NWB-225",
-/* 3*/	"POP-MONO",
-/* 4*/	"POP-COLOR",
-/* 5*/	"NWB-514",
-/* 6*/	"NWB-251",
-/* 7*/	"LCD-MONO",
-/* 8*/	"LDC-COLOR",
-/* 9*/	"NWB-518",
-/*10*/	"NWB-252",
-/*11*/	"NWB-253",
-/*12*/	"NWB-254",
-/*13*/	"NWB-255",
-/*14*/	"SLB-101",
-/*15*/	"NWB-256",
-/*16*/	"NWB-257",
+struct wsscreen_descr fb_stdscreen = {
+	"std",
+	0, 0,
+	0,
+	0, 0,
+	WSSCREEN_REVERSE
 };
 
-static int fbstate = 0;
+const struct wsscreen_descr *fb_scrlist[] = {
+	&fb_stdscreen
+};
 
-extern int fb253_probe();
-extern void bmcnattach();
-extern int fbstart __P((struct fbreg *, int));
-extern int search_fbdev __P((int, int));
-extern int fbgetscrtype();
-extern int fbsetpalette();
-extern int fbgetpalette();
-extern int fbsetcursor();
-extern int fbnsetcursor();
-extern int fbsetxy();
+struct wsscreen_list fb_screenlist = {
+	__arraycount(fb_scrlist), fb_scrlist
+};
 
-static int
-fbmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+#define NWB253_VRAM   ((uint8_t *) 0x88000000)
+#define NWB253_CTLREG ((uint16_t *)0xb8ff0000)
+#define NWB253_CRTREG ((uint16_t *)0xb8fe0000)
+
+static const char *devname[8] = { "NWB-512", "NWB-518", "NWE-501" }; /* XXX ? */
+
+int
+fb_match(device_t parent, cfdata_t cf, void *aux)
 {
-	struct confargs *ca = aux;
-	struct fbreg fbreg;
-	struct fbreg *fbp = &fbreg;
-	int unit = cf->cf_unit;
+	struct hb_attach_args *ha = aux;
 
-	if (strcmp(ca->ca_name, "fb"))
+	if (strcmp(ha->ha_name, "fb") != 0)
 		return 0;
 
-	fbp->fb_command = FB_CPROBE;
-	fbp->fb_device = 0;
-	fbp->fb_unit = unit;
-	fbp->fb_data = -1;
-	fbstart(fbp, 1);
-
-	if (fbp->fb_result != FB_ROK)
+	if (hb_badaddr(NWB253_CTLREG, 2) || hb_badaddr(NWB253_CRTREG, 2))
+		return 0;
+	if ((*(volatile uint16_t *)NWB253_CTLREG & 7) != 4)
 		return 0;
 
 	return 1;
 }
 
-static void
-fbattach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+void
+fb_attach(device_t parent, device_t self, void *aux)
 {
-	struct fb_softc *fb = (struct fb_softc *)self;
-	struct fbreg *fbp = &fb->fbreg;
-	int unit = fb->sc_dev.dv_cfdata->cf_unit;
-	extern int tty00_is_console;
+	struct fb_softc *sc = device_private(self);
+	struct wsemuldisplaydev_attach_args waa;
+	struct fb_devconfig *dc;
+	struct rasops_info *ri;
+	int console;
+	volatile u_short *ctlreg = NWB253_CTLREG;
+	int id;
 
-	fb->fbs_device = unit;
+	sc->sc_dev = self;
 
-	fbp->fb_command = FB_CATTACH;
-	fbp->fb_device = fb->fbs_device;
-	fbstart(fbp, 1);
-	fb->fbs_type = fbp->fb_scrtype;
+	console = fb_is_console();
 
-	if (fb->fbs_type.type) {
-		fb->fbs_state = 0;
-		fb->fbs_flag = 0;
-		printf(": %s",
-			(fb->fbs_type.type < sizeof(devname)/sizeof(*devname))
-				? devname[(int)fb->fbs_type.type] : "UNKNOWN");
-		printf(" (%d x %d %d plane)",
-				fb->fbs_type.visiblerect.extent.x,
-				fb->fbs_type.visiblerect.extent.y,
-				fb->fbs_type.plane);
+	if (console) {
+		dc = &fb_console_dc;
+		ri = &dc->dc_ri;
+		sc->sc_nscreens = 1;
+	} else {
+		dc = malloc(sizeof(struct fb_devconfig), M_DEVBUF,
+		    M_WAITOK|M_ZERO);
+
+		dc->dc_fbbase = NWB253_VRAM;
+		fb_common_init(dc);
+		ri = &dc->dc_ri;
+
+		/* clear screen */
+		(*ri->ri_ops.eraserows)(ri, 0, ri->ri_rows, 0);
+
+		fb253_init();
 	}
+	sc->sc_dc = dc;
 
-	if (! tty00_is_console) {	/* XXX */
-		printf(" (console)");
-		bmcnattach();
-	}
-	printf("\n");
+	id = (*ctlreg >> 8) & 0xf;
+	aprint_normal(": %s, %d x %d, %dbpp\n", devname[id],
+	    ri->ri_width, ri->ri_height, ri->ri_depth);
+
+	waa.console = console;
+	waa.scrdata = &fb_screenlist;
+	waa.accessops = &fb_accessops;
+	waa.accesscookie = sc;
+
+	config_found(self, &waa, wsemuldisplaydevprint);
 }
 
 int
-fbopen(dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
+fb_common_init(struct fb_devconfig *dc)
 {
-	register int unit = FBUNIT(dev);
-	register struct fb_softc *fb = fb_cd.cd_devs[unit];
-	register struct fbreg *fbp = &fb->fbreg;
+	struct rasops_info *ri = &dc->dc_ri;
+	volatile uint16_t *ctlreg = NWB253_CTLREG;
+	int id;
+	int width, height, xoff, yoff, cols, rows;
 
-	if (unit >= NFB)
-		return ENXIO;
-	if (fb->fbs_flag && !FBVIDEO(dev))
-		return EBUSY;
+	id = (*ctlreg >> 8) & 0xf;
 
-	if (fb->fbs_state == 0) {
-		fbp->fb_device = fb->fbs_device;
-		if (fbinit(fbp))
-			return EBUSY;
+	/* initialize rasops */
+	switch (id) {
+	case 0:
+		width = 816;
+		height = 1024;
+		break;
+	case 1:
+	case 2:
+	default:
+		width = 1024;
+		height = 768;
+		break;
 	}
 
-        fb->fbs_state |= FBVIDEO(dev) ? VIDEO_USED : FB_USED;
+	ri->ri_width = width;
+	ri->ri_height = height;
+	ri->ri_depth = 1;
+	ri->ri_stride = 2048 / 8;
+	ri->ri_bits = dc->dc_fbbase;
+	ri->ri_flg = RI_FULLCLEAR;
+
+	rasops_init(ri, 24, 80);
+	rows = (height - 2) / ri->ri_font->fontheight;
+	cols = ((width - 2) / ri->ri_font->fontwidth) & ~7;
+	xoff = ((width - cols * ri->ri_font->fontwidth) / 2 / 8) & ~3;
+	yoff = (height - rows * ri->ri_font->fontheight) / 2;
+	rasops_reconfig(ri, rows, cols);
+
+	ri->ri_xorigin = xoff;
+	ri->ri_yorigin = yoff;
+	ri->ri_bits = dc->dc_fbbase + xoff + ri->ri_stride * yoff;
+
+	fb_stdscreen.nrows = ri->ri_rows;
+	fb_stdscreen.ncols = ri->ri_cols; 
+	fb_stdscreen.textops = &ri->ri_ops;
+	fb_stdscreen.capabilities = ri->ri_caps;
 
 	return 0;
 }
 
 int
-fbclose(dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
+fb_is_console(void)
 {
-	register int unit = FBUNIT(dev);
-	register struct fb_softc *fb = fb_cd.cd_devs[unit];
-	register struct fbreg *fbp = &fb->fbreg;
+	volatile u_int *dipsw = (void *)DIP_SWITCH;
 
-	if (unit >= NFB)
-		return ENXIO;
-
-	if (fb->fbs_state == 0)
-		return 0;
-
-	if (!FBVIDEO(dev))
-		fb->fbs_flag = 0;
-
-	fb->fbs_state &= ~(FBVIDEO(dev) ? VIDEO_USED : FB_USED);
-
-	if (fb->fbs_state == 0) {
-		fbp->fb_device = fb->fbs_device;
-		fbreset(fbp);
-	}
+	if (*dipsw & 7)					/* XXX right? */
+		return 1;
 
 	return 0;
 }
 
 int
-fbioctl(dev, cmd, data, flags, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flags;
-	struct proc *p;
+fb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	register int unit = FBUNIT(dev);
-	register struct fb_softc *fb = fb_cd.cd_devs[unit];
-	register struct fbreg *fbp = &fb->fbreg;
-	register int error = 0;
-
-	if (unit >= NFB)
-		return ENXIO;
-
-	fblock();
-
-	fbp->fb_device = fb->fbs_device;
+	struct fb_softc *sc = v;
+	struct fb_devconfig *dc = sc->sc_dc;
+	struct wsdisplay_fbinfo *wdf;
 
 	switch (cmd) {
-	case FBIOCENABLE:
-		fb->fbs_flag = 0;
-		break;
-	case FBIOCDISABLE:
-		fb->fbs_flag = 1;
-		break;
-	case FBIOCAUTODIM:
-		fbp->fb_command = FB_CAUTODIM;
-		fbp->fb_data = *((int *)data);
-		fbstart(fbp, 0);
-		break;
-	case FBIOCSETDIM:
-		fbp->fb_command = FB_CSETDIM;
-		fbp->fb_data = *((int*)data);
-		fbstart(fbp, 0);
-		break;
-	case FBIOCGETDIM:
-		fbp->fb_command = FB_CGETDIM;
-		fbstart(fbp, 1);
-		*((int*)data) = fbp->fb_data;
-		break;
-#ifdef notyet
-	case FBIOCBITBLT:
-		error = fbbitblt(fbp, (sBitblt *)data);
-		break;
-	case FBIOCNBITBLT:
-		error = fbnbitblt(fbp, (lBitblt *)data, UIO_USERSPACE);
-		break;
-	case FBIOCBATCHBITBLT:
-		error = fbbatchbitblt(fbp, (sBatchBitblt*)data, UIO_USERSPACE);
-		break;
-	case FBIOCNBATCHBITBLT:
-		error = fbnbatchbitblt(fbp, (lBatchBitblt*)data, UIO_USERSPACE);
-		break;
-	case FBIOCTILEBITBLT:
-		error = fbtilebitblt(fbp, (sTileBitblt *)data);
-		break;
-	case FBIOCNTILEBITBLT:
-		error = fbntilebitblt(fbp, (lTileBitblt *)data);
-		break;
-	case FBIOCBITBLT3:
-		error = fbbitblt3(fbp, (sBitblt3 *)data);
-		break;
-	case FBIOCNBITBLT3:
-		error = fbnbitblt3(fbp, (lBitblt3 *)data);
-		break;
-	case FBIOCPOLYLINE:
-		error = fbpolyline(fbp, (sPrimLine *)data, 0);
-		break;
-	case FBIOCNPOLYLINE:
-		error = fbnpolyline(fbp, (lPrimLine *)data, 0, UIO_USERSPACE);
-		break;
-	case FBIOCDJPOLYLINE:
-		error = fbpolyline(fbp, (sPrimLine *)data, 1);
-		break;
-	case FBIOCNDJPOLYLINE:
-		error = fbnpolyline(fbp, (lPrimLine *)data, 1, UIO_USERSPACE);
-		break;
-	case FBIOCPOLYMARKER:
-		error = fbpolymarker(fbp, (sPrimMarker *)data);
-		break;
-	case FBIOCNPOLYMARKER:
-		error = fbnpolymarker(fbp, (lPrimMarker *)data, UIO_USERSPACE);
-		break;
-	case FBIOCRECTANGLE:
-		error = fbrectangle(fbp, (sPrimRect *)data);
-		break;
-	case FBIOCNRECTANGLE:
-		error = fbnrectangle(fbp, (lPrimRect *)data);
-		break;
-	case FBIOCFILLSCAN:
-		error = fbfillscan(fbp, (sPrimFill *)data);
-		break;
-	case FBIOCNFILLSCAN:
-		error = fbnfillscan(fbp, (lPrimFill *)data, UIO_USERSPACE);
-		break;
-	case FBIOCTEXT:
-		error = fbtext(fbp, (sPrimText *)data);
-		break;
-	case FBIOCNTEXT:
-		error = fbntext(fbp, (lPrimText *)data);
-		break;
-	case FBIOCPOLYDOT:
-		error = fbpolydot(fbp, (sPrimDot *)data);
-		break;
-	case FBIOCNPOLYDOT:
-		error = fbnpolydot(fbp, (lPrimDot *)data, UIO_USERSPACE);
-		break;
-#endif
+	case WSDISPLAYIO_GTYPE:
+		*(int *)data = WSDISPLAY_TYPE_UNKNOWN;	/* XXX */
+		return 0;
 
-	case FBIOCGETSCRTYPE:
-		fbgetscrtype(fbp, (sScrType *)data);
-		break;
-	case FBIOCNGETSCRTYPE:
-		fbp->fb_command = FB_CGETSCRTYPE;
-		fbstart(fbp, 1);
-		*((lScrType*)data) = fbp->fb_scrtype;
-		break;
-	case FBIOCSETPALETTE:
-		fbsetpalette(fbp, (sPalette *)data);
-		break;
-#ifdef notyet
-	case FBIOCNSETPALETTE:
-		error = fbnsetpalette(fbp, (lPalette *)data);
-		break;
-#endif
-	case FBIOCGETPALETTE:
-		fbgetpalette(fbp, (sPalette *)data);
-		break;
-#ifdef notyet
-	case FBIOCNGETPALETTE:
-		error = fbngetpalette(fbp, (lPalette *)data);
-		break;
-#endif
-	case FBIOCSETCURSOR:
-		fbsetcursor(fbp, (sCursor *)data);
-		break;
-	case FBIOCNSETCURSOR:
-		fbnsetcursor(fbp, (lCursor *)data);
-		break;
-	case FBIOCNSETCURSOR2:
-		fbp->fb_command = FB_CSETCURSOR;
-		fbp->fb_cursor = *((lCursor2 *)data);
-		fbstart(fbp, 0);
-		break;
-	case FBIOCUNSETCURSOR:
-		fbp->fb_command = FB_CUNSETCURSOR;
-		fbstart(fbp, 0);
-		break;
-	case FBIOCNUNSETCURSOR:
-		fbp->fb_command = FB_CUNSETCURSOR;
-		fbstart(fbp, 0);
-		break;
-	case FBIOCSHOWCURSOR:
-		fbp->fb_command = FB_CSHOWCURSOR;
-		fbstart(fbp, 0);
-		break;
-	case FBIOCNSHOWCURSOR:
-		fbp->fb_command = FB_CSHOWCURSOR;
-		fbstart(fbp, 0);
-		break;
-	case FBIOCHIDECURSOR:
-		fbp->fb_command = FB_CHIDECURSOR;
-		fbstart(fbp, 0);
-		break;
-	case FBIOCNHIDECURSOR:
-		fbp->fb_command = FB_CHIDECURSOR;
-		fbstart(fbp, 0);
-		break;
-	case FBIOCSETXY:
-		fbsetxy(fbp, (sPoint *)data);
-		break;
-	case FBIOCNSETXY:
-		fbp->fb_command = FB_CSETXY;
-		fbp->fb_point = *((lPoint *)data);
-		fbstart(fbp, 0);
-		break;
-	case FBIOCNSETPALETTEMODE:
-		fbp->fb_command = FB_CSETPMODE;
-		fbp->fb_data = *((int*)data);
-		fbstart(fbp, 0);
-		break;
-	case FBIOCNGETPALETTEMODE:
-		fbp->fb_command = FB_CGETPMODE;
-		fbstart(fbp, 1);
-		*((int*)data) = fbp->fb_data;
-		break;
-	case FBIOCNSETVIDEO:
-		fbp->fb_command = FB_CSETVIDEO;
-		fbp->fb_videoctl = *((lVideoCtl*)data);
-		fbstart(fbp, 0);
-		break;
-	case FBIOCNGETVIDEO:
-		fbp->fb_command = FB_CGETVIDEO;
-		fbp->fb_videostatus.request = VIDEO_STATUS;
-		fbstart(fbp, 1);
-		*((lVideoStatus*)data) = fbp->fb_videostatus;
-		error = fbp->fb_result;
-		break;
-	case FBIOCNIOCTL:
-		fbp->fb_command = FB_CIOCTL;
-		fbp->fb_fbioctl = *((lFbIoctl*)data);
-		fbstart(fbp, 1);
-		*((lFbIoctl*)data) = fbp->fb_fbioctl;
-		if (fbp->fb_result == FB_RERROR)
-			error = EINVAL;
-		break;
+	case WSDISPLAYIO_GINFO:
+		wdf = (void *)data;
+		wdf->height = dc->dc_ri.ri_height;
+		wdf->width = dc->dc_ri.ri_width;
+		wdf->depth = dc->dc_ri.ri_depth;
+		wdf->cmsize = 2;
+		return 0;
 
-	default:
-		error = ENXIO;
+	case WSDISPLAYIO_SVIDEO:
+		if (*(int *)data == WSDISPLAYIO_VIDEO_OFF) {
+			volatile u_short *ctlreg = NWB253_CTLREG;
+			*ctlreg = 0;			/* stop crtc */
+		} else
+			fb253_init();
+		return 0;
+
+	case WSDISPLAYIO_GETCMAP:
+	case WSDISPLAYIO_PUTCMAP:
 		break;
 	}
+	return EPASSTHROUGH;
+}
 
-	fbunlock(error);
+paddr_t
+fb_mmap(void *v, void *vs, off_t offset, int prot)
+{
+	struct fb_softc *sc = v;
+	struct fb_devconfig *dc = sc->sc_dc;
 
-	return error;
+	if (offset >= 2048 * 2048 / 8 || offset < 0)
+		return -1;
+
+	return mips_btop((int)dc->dc_fbbase + offset);
 }
 
 int
-fbmmap(dev, off, prot)
-	dev_t dev;
-	int off, prot;
+fb_alloc_screen(void *v, const struct wsscreen_descr *scrdesc, void **cookiep,
+    int *ccolp, int *crowp, long *attrp)
 {
-	register int unit = FBUNIT(dev);
-	register struct fb_softc *fb = fb_cd.cd_devs[unit];
-	register struct fbreg *fbp = &fb->fbreg;
-	register int page;
+	struct fb_softc *sc = v;
+	struct rasops_info *ri = &sc->sc_dc->dc_ri;
+	long defattr;
 
-	if (unit >= NFB)
-		return -1;
+	if (sc->sc_nscreens > 0)
+		return ENOMEM;
 
-        if (off & PGOFSET)
-                return -1;
+	*cookiep = ri;
+	*ccolp = *crowp = 0;
+	(*ri->ri_ops.allocattr)(ri, 0, 0, 0, &defattr);
+	*attrp = defattr;
+	sc->sc_nscreens++;
 
-	if (off < 0)
-		return -1;
-
-	fblock();
-	fbp->fb_device = fb->fbs_device;
-	fbp->fb_command = FB_CGETPAGE;
-	fbp->fb_data = off;
-	fbstart(fbp, 1);
-	page = fbp->fb_data;
-	if (fbp->fb_result == FB_RERROR)
-		page = -1;
-	else
-		fb->fbs_flag = 1;
-	fbunlock(fbp->fb_result);
-
-	return page;
+	return 0;
 }
 
-#if 0	/* not needed? */
+void
+fb_free_screen(void *v, void *cookie)
+{
+	struct fb_softc *sc = v;
+
+	if (sc->sc_dc == &fb_console_dc)
+		panic("%s: console", __func__);
+
+	sc->sc_nscreens--;
+}
+
 int
-fbpoll(dev, events, p)
-	dev_t dev;
-	int events;
-	struct proc *p;
+fb_show_screen(void *v, void *cookie, int waitok, void (*cb)(void *, int, int),
+    void *cbarg)
 {
-	return -1;
+
+	return 0;
 }
-#endif
+
+void
+fb_cnattach(void)
+{
+	struct fb_devconfig *dc = &fb_console_dc;
+	struct rasops_info *ri = &dc->dc_ri;
+	long defattr;
+
+	if (!fb_is_console())
+		return;
+
+	dc->dc_fbbase = NWB253_VRAM;
+	fb_common_init(dc);
+
+	(*ri->ri_ops.allocattr)(ri, 0, 0, 0, &defattr);
+	wsdisplay_cnattach(&fb_stdscreen, ri, 0, ri->ri_rows - 1, defattr);
+}
+
+static const uint8_t
+nwp512_data1[] = {
+	0x00, 0x44,
+	0x01, 0x33,
+	0x02, 0x3c,
+	0x03, 0x38,
+	0x04, 0x84,
+	0x05, 0x03,
+	0x06, 0x80,
+	0x07, 0x80,
+	0x08, 0x10,
+	0x09, 0x07,
+	0x0a, 0x20,
+	0x0c, 0x00,
+	0x0d, 0x00,
+	0x1b, 0x03
+};
+
+static const uint8_t
+nwp512_data2[] = {
+	0x1e, 0x08,
+	0x20, 0x08,
+	0x21, 0x0d
+};
+
+static const uint8_t
+nwp518_data1[] = {
+	0x00, 0x52,
+	0x01, 0x40,
+	0x02, 0x4a,
+	0x03, 0x49,
+	0x04, 0x63,
+	0x05, 0x02,
+	0x06, 0x60,
+	0x07, 0x60,
+	0x08, 0x10,
+	0x09, 0x07,
+	0x0a, 0x20,
+	0x0c, 0x00,
+	0x0d, 0x00,
+	0x1b, 0x04
+};
+
+static const uint8_t
+nwp518_data2[] = {
+	0x1e, 0x08,
+	0x20, 0x00,
+	0x21, 0x00
+};
+
+static const uint8_t
+nwe501_data1[] = {
+	0x00, 0x4b,
+	0x01, 0x40,
+	0x02, 0x4a,
+	0x03, 0x43,
+	0x04, 0x64,
+	0x05, 0x02,
+	0x06, 0x60,
+	0x07, 0x60,
+	0x08, 0x10,
+	0x09, 0x07,
+	0x0a, 0x20,
+	0x0c, 0x00,
+	0x0d, 0x00,
+	0x1b, 0x04
+};
+
+static const uint8_t
+nwe501_data2[] = {
+	0x1e, 0x08,
+	0x20, 0x00,
+	0x21, 0x00
+};
+
+static const uint8_t
+*crtc_data[3][2] = {
+	{ nwp512_data1, nwp512_data2 },
+	{ nwp518_data1, nwp518_data2 },
+	{ nwe501_data1, nwe501_data2 }
+};
 
 static void
-fblock()
+fb253_init(void)
 {
-	int s;
+	volatile uint16_t *ctlreg = NWB253_CTLREG;
+	volatile uint16_t *crtreg = NWB253_CRTREG;
+	int id = (*ctlreg >> 8) & 0xf;
+	const uint8_t *p;
+	int i;
 
-#ifdef USE_RAW_INTR
-	fbwait();
+	*ctlreg = 0;			/* stop crtc */
+	delay(10);
+
+	/* initialize crtc without R3{0,1,2} */
+	p = crtc_data[id][0];
+	for (i = 0; i < 28; i++) {
+		*crtreg++ = *p++;
+		delay(10);
+	}
+
+	*ctlreg = 0x02;			/* start crtc */
+	delay(10);
+
+	/* set crtc control reg */
+	p = crtc_data[id][1];
+	for (i = 0; i < 6; i++) {
+		*crtreg++ = *p++;
+		delay(10);
+	}
+}
+
+#if 0
+static struct wsdisplay_font newsrom8x16;
+static struct wsdisplay_font newsrom12x24;
+static char fontarea16[96][32];
+static char fontarea24[96][96];
+
+void
+initfont(struct rasops_info *ri)
+{
+	int c, x;
+
+	for (c = 0; c < 96; c++) {
+		x = ((c & 0x1f) | ((c & 0xe0) << 2)) << 7;
+		memcpy(fontarea16 + c, (char *)0xb8e00000 + x + 96, 32);
+		memcpy(fontarea24 + c, (char *)0xb8e00000 + x, 96);
+	}		      
+
+	newsrom8x16.name = "rom8x16";
+	newsrom8x16.firstchar = 32;
+	newsrom8x16.numchars = 96;
+	newsrom8x16.encoding = WSDISPLAY_FONTENC_ISO;
+	newsrom8x16.fontwidth = 8;
+	newsrom8x16.fontheight = 16;
+	newsrom8x16.stride = 2;
+	newsrom8x16.bitorder = WSDISPLAY_FONTORDER_L2R;
+	newsrom8x16.byteorder = WSDISPLAY_FONTORDER_L2R;
+	newsrom8x16.data = fontarea16;
+
+	newsrom12x24.name = "rom12x24";
+	newsrom12x24.firstchar = 32;
+	newsrom12x24.numchars = 96;
+	newsrom12x24.encoding = WSDISPLAY_FONTENC_ISO;
+	newsrom12x24.fontwidth = 12;
+	newsrom12x24.fontheight = 24;
+	newsrom12x24.stride = 4;
+	newsrom12x24.bitorder = WSDISPLAY_FONTORDER_L2R;
+	newsrom12x24.byteorder = WSDISPLAY_FONTORDER_L2R;
+	newsrom12x24.data = fontarea24;
+
+	ri->ri_font = &newsrom8x16;
+	ri->ri_font = &newsrom12x24;
+	ri->ri_wsfcookie = -1;		/* not using wsfont */
+}
 #endif
-	s = splfb();
-	while (fbstate & FB_BUSY) {
-		fbstate |= FB_WANTED;
-		tsleep(&fbstate, FBPRI | PCATCH, "fblock", 0);
-	}
-	fbstate |= FB_BUSY;
-	splx(s);
-}
-
-static void
-fbunlock(error)
-	int error;
-{
-	int s = splfb();
-
-#ifdef CPU_SINGLE
-	fbstate &= ~FB_BUSY;
-	if (fbstate & FB_WANTED) {
-		fbstate &= ~FB_WANTED;
-		wakeup(&fbstate);
-	}
-#else
-#ifdef USE_RAW_INTR
-	fbstate &= ~FB_BUSY;
-	if (fbstate & FB_WANTED) {
-		fbstate &= ~FB_WANTED;
-		wakeup(&fbstate);
-	}
-#else
-	if (error || (fbstate & FB_DELAY) == 0) {
-		fbstate &= ~(FB_BUSY | FB_WAIT | FB_DELAY);
-		if (fbstate & FB_WANTED) {
-			fbstate &= ~FB_WANTED;
-			wakeup(&fbstate);
-		}
-	}
-	if (fbstate & FB_DELAY) {
-		fbstate &= ~FB_DELAY;
-		fbstate |= FB_DELAY2;
-	}
-#endif
-#endif /* CPU_SINGLE */
-	splx(s);
-}
-
-static int
-fbinit(fbp)
-	struct fbreg *fbp;
-{
-	fblock();
-
-	fbp->fb_command = FB_COPEN;
-	fbstart(fbp, 1);
-	if (fbp->fb_result != FB_ROK) {
-		fbunlock(0);
-		return FB_RERROR;
-	}
-
-	fbp->fb_command = FB_CUNSETCURSOR;
-	fbstart(fbp, 0);
-
-	fbunlock(0);
-
-	return FB_ROK;
-}
-
-static void
-fbreset(fbp)
-	struct fbreg *fbp;
-{
-	fblock();
-
-	fbp->fb_command = FB_CUNSETCURSOR;
-	fbstart(fbp, 1);
-
-	fbp->fb_command = FB_CCLOSE;
-	fbstart(fbp, 0);
-
-	fbunlock(0);
-}
-#endif /* NFB > 0 */

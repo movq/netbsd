@@ -33,7 +33,7 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-  /* $NetBSD: parse.y,v 1.9 1998/01/05 05:15:57 perry Exp $ */
+  /* $NetBSD: parse.y,v 1.11 2003/07/14 11:36:49 itojun Exp $ */
 
 
 /* Some versions of bison are broken in that they use alloca() but don't
@@ -291,7 +291,7 @@ flexrule	:  '^' rule
 						scon_stk[++scon_stk_ptr] = i;
 
 				if ( scon_stk_ptr == 0 )
-					warn(
+					lwarn(
 			"all start conditions already have <<EOF>> rules" );
 
 				else
@@ -386,7 +386,7 @@ rule		:  re2 re
 				 * erroneously.
 				 */
 				if ( ! varlength || headcnt != 0 )
-					warn(
+					lwarn(
 		"trailing context made variable due to preceding '|' action" );
 
 				/* Mark as variable. */
@@ -440,7 +440,7 @@ rule		:  re2 re
 				/* See the comment in the rule for "re2 re"
 				 * above.
 				 */
-				warn(
+				lwarn(
 		"trailing context made variable due to preceding '|' action" );
 
 				varlength = true;
@@ -794,8 +794,8 @@ void build_eof_action()
 		else
 			{
 			sceof[scon_stk[i]] = true;
-			sprintf( action_text, "case YY_STATE_EOF(%s):\n",
-				scname[scon_stk[i]] );
+			snprintf(action_text, sizeof(action_text),
+			    "case YY_STATE_EOF(%s):\n", scname[scon_stk[i]]);
 			add_action( action_text );
 			}
 		}
@@ -819,7 +819,7 @@ char msg[], arg[];
 	{
 	char errmsg[MAXLINE];
 
-	(void) sprintf( errmsg, msg, arg );
+	(void) snprintf(errmsg, sizeof(errmsg), msg, arg);
 	synerr( errmsg );
 	}
 
@@ -841,14 +841,14 @@ char msg[], arg[];
 	{
 	char warn_msg[MAXLINE];
 
-	(void) sprintf( warn_msg, msg, arg );
-	warn( warn_msg );
+	(void) snprintf(warn_msg, sizeof(warn_msg), msg, arg);
+	lwarn( warn_msg );
 	}
 
 
-/* warn - report a warning, unless -w was given */
+/* lwarn - report a warning, unless -w was given */
 
-void warn( str )
+void lwarn( str )
 char str[];
 	{
 	line_warning( str, linenum );
@@ -863,7 +863,7 @@ char msg[], arg[];
 	{
 	char errmsg[MAXLINE];
 
-	(void) sprintf( errmsg, msg, arg );
+	(void) snprintf(errmsg, sizeof(errmsg), msg, arg);
 	pinpoint_message( errmsg );
 	}
 
@@ -887,7 +887,7 @@ int line;
 
 	if ( ! nowarn )
 		{
-		sprintf( warning, "warning, %s", str );
+		snprintf(warning, sizeof(warning), "warning, %s", str);
 		line_pinpoint( warning, line );
 		}
 	}

@@ -1,11 +1,10 @@
-/*	$NetBSD: snit.c,v 1.1.1.1 1999/12/11 22:24:10 veego Exp $	*/
+/*	$NetBSD: snit.c,v 1.3 2004/03/28 09:00:56 martti Exp $	*/
 
 /*
  * (C)opyright 1992-1998 Darren Reed. (from tcplog)
  *
- * Redistribution and use in source and binary forms are permitted
- * provided that this notice is preserved and due credit is given
- * to the original author and the contributors.
+ * See the IPFILTER.LICENCE file for details on licencing.
+ *
  */
 
 #include <stdio.h>
@@ -42,7 +41,7 @@
 
 #if !defined(lint)
 static const char sccsid[] = "@(#)snit.c	1.5 1/11/96 (C)1995 Darren Reed";
-static const char rcsid[] = "@(#)Id: snit.c,v 2.1 1999/08/04 17:31:15 darrenr Exp";
+static const char rcsid[] = "@(#)Id: snit.c,v 2.3 2001/06/09 17:09:26 darrenr Exp";
 #endif
 
 #define	CHUNKSIZE	8192
@@ -58,9 +57,9 @@ static const char rcsid[] = "@(#)Id: snit.c,v 2.1 1999/08/04 17:31:15 darrenr Ex
 static	int	timeout;
 
 
-int	initdevice(device, sport, tout)
+int	initdevice(device, tout)
 char	*device;
-int	sport, tout;
+int	tout;
 {
 	struct	strioctl si;
 	struct	timeval to;

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_lebuffer.c,v 1.5 2000/01/11 12:59:43 pk Exp $	*/
+/*	$NetBSD: if_le_lebuffer.c,v 1.24 2008/04/28 20:23:57 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,6 +30,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_le_lebuffer.c,v 1.24 2008/04/28 20:23:57 martin Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -58,8 +53,9 @@
 #include <netinet/if_inarp.h>
 #endif
 
+#include <sys/bus.h>
+#include <sys/intr.h>
 #include <machine/autoconf.h>
-#include <machine/cpu.h>
 
 #include <dev/sbus/sbusvar.h>
 #include <dev/sbus/lebuffervar.h>
@@ -68,6 +64,8 @@
 #include <dev/ic/lancevar.h>
 #include <dev/ic/am7990reg.h>
 #include <dev/ic/am7990var.h>
+
+#include "ioconf.h"
 
 /*
  * LANCE registers.
@@ -84,8 +82,8 @@ struct	le_softc {
 };
 
 
-int	lematch_lebuffer __P((struct device *, struct cfdata *, void *));
-void	leattach_lebuffer __P((struct device *, struct device *, void *));
+int	lematch_lebuffer(device_t, cfdata_t, void *);
+void	leattach_lebuffer(device_t, device_t, void *);
 
 /*
  * Media types supported.
@@ -93,38 +91,27 @@ void	leattach_lebuffer __P((struct device *, struct device *, void *));
 static int lemedia[] = {
 	IFM_ETHER|IFM_10_T,
 };
-#define NLEMEDIA	(sizeof(lemedia) / sizeof(lemedia[0]))
+#define NLEMEDIA	__arraycount(lemedia)
 
-struct cfattach le_lebuffer_ca = {
-	sizeof(struct le_softc), lematch_lebuffer, leattach_lebuffer
-};
+CFATTACH_DECL_NEW(le_lebuffer, sizeof(struct le_softc),
+    lematch_lebuffer, leattach_lebuffer, NULL, NULL);
 
-extern struct cfdriver le_cd;
-
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
 #endif
 
-#ifdef DDB
-#define	integrate
-#define hide
-#else
-#define	integrate	static __inline
-#define hide		static
-#endif
-
-static void lewrcsr __P((struct lance_softc *, u_int16_t, u_int16_t));
-static u_int16_t lerdcsr __P((struct lance_softc *, u_int16_t));
+static void lewrcsr(struct lance_softc *, uint16_t, uint16_t);
+static uint16_t lerdcsr(struct lance_softc *, uint16_t);
 
 static void
-lewrcsr(sc, port, val)
-	struct lance_softc *sc;
-	u_int16_t port, val;
+lewrcsr(struct lance_softc *sc, uint16_t port, uint16_t val)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
+	bus_space_tag_t t = lesc->sc_bustag;
+	bus_space_handle_t h = lesc->sc_reg;
 
-	bus_space_write_2(lesc->sc_bustag, lesc->sc_reg, LEREG1_RAP, port);
-	bus_space_write_2(lesc->sc_bustag, lesc->sc_reg, LEREG1_RDP, val);
+	bus_space_write_2(t, h, LEREG1_RAP, port);
+	bus_space_write_2(t, h, LEREG1_RDP, val);
 
 #if defined(SUN4M)
 	/*
@@ -132,59 +119,48 @@ lewrcsr(sc, port, val)
 	 * easily be accomplished by reading back the register that we
 	 * just wrote (thanks to Chris Torek for this solution).
 	 */
-	if (CPU_ISSUN4M) {
-		volatile u_int16_t discard;
-		discard = bus_space_read_2(lesc->sc_bustag, lesc->sc_reg,
-					   LEREG1_RDP);
-	}
+	(void)bus_space_read_2(t, h, LEREG1_RDP);
 #endif
 }
 
-static u_int16_t
-lerdcsr(sc, port)
-	struct lance_softc *sc;
-	u_int16_t port;
+static uint16_t
+lerdcsr(struct lance_softc *sc, uint16_t port)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
+	bus_space_tag_t t = lesc->sc_bustag;
+	bus_space_handle_t h = lesc->sc_reg;
 
-	bus_space_write_2(lesc->sc_bustag, lesc->sc_reg, LEREG1_RAP, port);
-	return (bus_space_read_2(lesc->sc_bustag, lesc->sc_reg, LEREG1_RDP));
+	bus_space_write_2(t, h, LEREG1_RAP, port);
+	return (bus_space_read_2(t, h, LEREG1_RDP));
 }
 
 int
-lematch_lebuffer(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+lematch_lebuffer(device_t parent, cfdata_t cf, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
 
-	return (strcmp(cf->cf_driver->cd_name, sa->sa_name) == 0);
+	return (strcmp(cf->cf_name, sa->sa_name) == 0);
 }
 
 
 void
-leattach_lebuffer(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+leattach_lebuffer(device_t parent, device_t self, void *aux)
 {
-	struct sbus_attach_args *sa = aux;
-	struct le_softc *lesc = (struct le_softc *)self;
+	struct le_softc *lesc = device_private(self);
 	struct lance_softc *sc = &lesc->sc_am7990.lsc;
-	struct lebuf_softc *lebuf = (struct lebuf_softc *)parent;
-	/* XXX the following declarations should be elsewhere */
-	extern void myetheraddr __P((u_char *));
+	struct lebuf_softc *lebuf = device_private(parent);
+	struct sbus_attach_args *sa = aux;
 
+	sc->sc_dev = self;
 	lesc->sc_bustag = sa->sa_bustag;
 	lesc->sc_dmatag = sa->sa_dmatag;
 
-	if (bus_space_map2(sa->sa_bustag,
-			   sa->sa_slot,
-			   sa->sa_offset,
-			   sa->sa_size,
-			   BUS_SPACE_MAP_LINEAR,
-			   0, &lesc->sc_reg)) {
-		printf("%s @ lebuffer: cannot map registers\n", self->dv_xname);
+	if (sbus_bus_map(sa->sa_bustag,
+			 sa->sa_slot,
+			 sa->sa_offset,
+			 sa->sa_size,
+			 0, &lesc->sc_reg)) {
+		aprint_error(": cannot map registers\n");
 		return;
 	}
 
@@ -194,7 +170,7 @@ leattach_lebuffer(parent, self, aux)
 	lebuf->attached = 1;
 
 	/* That old black magic... */
-	sc->sc_conf3 = getpropint(sa->sa_node, "busmaster-regval",
+	sc->sc_conf3 = prom_getpropint(sa->sa_node, "busmaster-regval",
 				  LE_C3_BSWP | LE_C3_ACON | LE_C3_BCON);
 
 	/* Assume SBus is grandparent */
@@ -205,7 +181,7 @@ leattach_lebuffer(parent, self, aux)
 	sc->sc_nsupmedia = NLEMEDIA;
 	sc->sc_defaultmedia = lemedia[0];
 
-	myetheraddr(sc->sc_enaddr);
+	prom_getether(sa->sa_node, sc->sc_enaddr);
 
 	sc->sc_copytodesc = lance_copytobuf_contig;
 	sc->sc_copyfromdesc = lance_copyfrombuf_contig;
@@ -220,6 +196,6 @@ leattach_lebuffer(parent, self, aux)
 
 	/* Establish interrupt handler */
 	if (sa->sa_nintr != 0)
-		(void)bus_intr_establish(lesc->sc_bustag, sa->sa_pri, 0,
-					 am7990_intr, sc);
+		(void)bus_intr_establish(lesc->sc_bustag, sa->sa_pri,
+					 IPL_NET, am7990_intr, sc);
 }

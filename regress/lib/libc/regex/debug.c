@@ -1,4 +1,30 @@
-/*	$NetBSD: debug.c,v 1.2 1995/04/20 22:39:42 cgd Exp $	*/
+/*	$NetBSD: debug.c,v 1.5 2008/04/28 20:23:05 martin Exp $	*/
+
+/*-
+ * Copyright (c) 1993 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include <stdio.h>
 #include <string.h>
@@ -21,10 +47,10 @@ regprint(r, d)
 regex_t *r;
 FILE *d;
 {
-	register struct re_guts *g = r->re_g;
-	register int i;
-	register int c;
-	register int last;
+	struct re_guts *g = r->re_g;
+	int i;
+	int c;
+	int last;
 	int nincat[NC];
 
 	fprintf(d, "%ld states, %d categories", (long)g->nstates,
@@ -87,21 +113,21 @@ FILE *d;
 
 /*
  - s_print - print the strip for debugging
- == static void s_print(register struct re_guts *g, FILE *d);
+ == static void s_print(struct re_guts *g, FILE *d);
  */
 static void
 s_print(g, d)
-register struct re_guts *g;
+struct re_guts *g;
 FILE *d;
 {
-	register sop *s;
-	register cset *cs;
-	register int i;
-	register int done = 0;
-	register sop opnd;
-	register int col = 0;
-	register int last;
-	register sopno offset = 2;
+	sop *s;
+	cset *cs;
+	int i;
+	int done = 0;
+	sop opnd;
+	int col = 0;
+	int last;
+	sopno offset = 2;
 #	define	GAP()	{	if (offset % 5 == 0) { \
 					if (col > 40) { \
 						fprintf(d, "\n\t"); \

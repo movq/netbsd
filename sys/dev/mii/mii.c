@@ -1,4 +1,4 @@
-/*	$NetBSD: mii.c,v 1.20 2000/03/23 07:01:36 thorpej Exp $	*/
+/*	$NetBSD: mii.c,v 1.48 2008/05/05 01:37:56 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,9 +32,11 @@
 
 /*
  * MII bus layer, glues MII-capable network interface drivers to sharable
- * PHY drivers.  This exports an interface compatible with BSD/OS 3.0's,
- * plus some NetBSD extensions.
+ * PHY drivers.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mii.c,v 1.48 2008/05/05 01:37:56 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -54,25 +49,25 @@
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 
-int	mii_print __P((void *, const char *));
-int	mii_submatch __P((struct device *, struct cfdata *, void *));
+#include "locators.h"
+
+static int	mii_print(void *, const char *);
 
 /*
  * Helper function used by network interface drivers, attaches PHYs
  * to the network interface driver parent.
  */
 void
-mii_attach(parent, mii, capmask, phyloc, offloc, flags)
-	struct device *parent;
-	struct mii_data *mii;
-	int capmask, phyloc, offloc, flags;
+mii_attach(device_t parent, struct mii_data *mii, int capmask,
+    int phyloc, int offloc, int flags)
 {
 	struct mii_attach_args ma;
 	struct mii_softc *child;
 	int bmsr, offset = 0;
 	int phymin, phymax;
+	int locs[MIICF_NLOCS];
 
-	if (phyloc != MII_PHY_ANY && offloc != MII_PHY_ANY)
+	if (phyloc != MII_PHY_ANY && offloc != MII_OFFSET_ANY)
 		panic("mii_attach: phyloc and offloc specified");
 
 	if (phyloc == MII_PHY_ANY) {
@@ -92,8 +87,7 @@ mii_attach(parent, mii, capmask, phyloc, offloc, flags)
 		 * address.  This allows mii_attach() to be called
 		 * multiple times.
 		 */
-		for (child = LIST_FIRST(&mii->mii_phys); child != NULL;
-		     child = LIST_NEXT(child, mii_list)) {
+		LIST_FOREACH(child, &mii->mii_phys, mii_list) {
 			if (child->mii_phy == ma.mii_phyno) {
 				/*
 				 * Yes, there is already something
@@ -111,7 +105,7 @@ mii_attach(parent, mii, capmask, phyloc, offloc, flags)
 		 */
 		bmsr = (*mii->mii_readreg)(parent, ma.mii_phyno, MII_BMSR);
 		if (bmsr == 0 || bmsr == 0xffff ||
-		    (bmsr & BMSR_MEDIAMASK) == 0) {
+		    (bmsr & (BMSR_EXTSTAT|BMSR_MEDIAMASK)) == 0) {
 			/* Assume no PHY at this address. */
 			continue;
 		}
@@ -137,14 +131,17 @@ mii_attach(parent, mii, capmask, phyloc, offloc, flags)
 
 		ma.mii_data = mii;
 		ma.mii_capmask = capmask;
-		ma.mii_flags = flags;
+		ma.mii_flags = flags | (mii->mii_flags & MIIF_INHERIT_MASK);
 
-		if ((child = (struct mii_softc *)config_found_sm(parent, &ma,
-		    mii_print, mii_submatch)) != NULL) {
+		locs[MIICF_PHY] = ma.mii_phyno;
+
+		child = device_private(config_found_sm_loc(parent, "mii",
+			locs, &ma, mii_print, config_stdsubmatch));
+		if (child) {
 			/*
 			 * Link it up in the parent's MII data.
 			 */
-			callout_init(&child->mii_nway_ch);
+			callout_init(&child->mii_nway_ch, 0);
 			LIST_INSERT_HEAD(&mii->mii_phys, child, mii_list);
 			child->mii_offset = offset;
 			mii->mii_instance++;
@@ -154,21 +151,17 @@ mii_attach(parent, mii, capmask, phyloc, offloc, flags)
 }
 
 void
-mii_activate(mii, act, phyloc, offloc)
-	struct mii_data *mii;
-	enum devact act;
-	int phyloc, offloc;
+mii_activate(struct mii_data *mii, enum devact act, int phyloc, int offloc)
 {
 	struct mii_softc *child;
 
-	if (phyloc != MII_PHY_ANY && offloc != MII_PHY_ANY)
+	if (phyloc != MII_PHY_ANY && offloc != MII_OFFSET_ANY)
 		panic("mii_activate: phyloc and offloc specified");
 
 	if ((mii->mii_flags & MIIF_INITDONE) == 0)
 		return;
 
-	for (child = LIST_FIRST(&mii->mii_phys);
-	     child != NULL; child = LIST_NEXT(child, mii_list)) {
+	LIST_FOREACH(child, &mii->mii_phys, mii_list) {
 		if (phyloc != MII_PHY_ANY || offloc != MII_OFFSET_ANY) {
 			if (phyloc != MII_PHY_ANY &&
 			    phyloc != child->mii_phy)
@@ -183,17 +176,15 @@ mii_activate(mii, act, phyloc, offloc)
 			break;
 
 		case DVACT_DEACTIVATE:
-			if (config_deactivate(&child->mii_dev) != 0)
-				panic("%s: config_activate(%d) failed\n",
-				    child->mii_dev.dv_xname, act);
+			if (config_deactivate(child->mii_dev) != 0)
+				panic("%s: config_activate(%d) failed",
+				    device_xname(child->mii_dev), act);
 		}
 	}
 }
 
 void
-mii_detach(mii, phyloc, offloc)
-	struct mii_data *mii;
-	int phyloc, offloc;
+mii_detach(struct mii_data *mii, int phyloc, int offloc)
 {
 	struct mii_softc *child, *nchild;
 
@@ -214,48 +205,43 @@ mii_detach(mii, phyloc, offloc)
 			    offloc != child->mii_offset)
 				continue;
 		}
-		LIST_REMOVE(child, mii_list);
-		(void) config_detach(&child->mii_dev, DETACH_FORCE);
+		(void)config_detach(child->mii_dev, DETACH_FORCE);
 	}
 }
 
-int
-mii_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+static int
+mii_print(void *aux, const char *pnp)
 {
 	struct mii_attach_args *ma = aux;
 
 	if (pnp != NULL)
-		printf("OUI 0x%06x model 0x%04x rev %d at %s",
+		aprint_normal("OUI 0x%06x model 0x%04x rev %d at %s",
 		    MII_OUI(ma->mii_id1, ma->mii_id2), MII_MODEL(ma->mii_id2),
 		    MII_REV(ma->mii_id2), pnp);
 
-	printf(" phy %d", ma->mii_phyno);
+	aprint_normal(" phy %d", ma->mii_phyno);
 	return (UNCONF);
 }
 
-int
-mii_submatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+static inline int
+phy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 {
-	struct mii_attach_args *ma = aux;
+	if (!device_is_active(sc->mii_dev))
+		return ENXIO;
+	return PHY_SERVICE(sc, mii, cmd);
+}
 
-	if (ma->mii_phyno != cf->cf_loc[MIICF_PHY] &&
-	    cf->cf_loc[MIICF_PHY] != MIICF_PHY_DEFAULT)
-		return (0);
-
-	return ((*cf->cf_attach->ca_match)(parent, cf, aux));
+int
+mii_ifmedia_change(struct mii_data *mii)
+{
+	return ifmedia_change(&mii->mii_media, mii->mii_ifp);
 }
 
 /*
  * Media changed; notify all PHYs.
  */
 int
-mii_mediachg(mii)
-	struct mii_data *mii;
+mii_mediachg(struct mii_data *mii)
 {
 	struct mii_softc *child;
 	int rv;
@@ -263,9 +249,8 @@ mii_mediachg(mii)
 	mii->mii_media_status = 0;
 	mii->mii_media_active = IFM_NONE;
 
-	for (child = LIST_FIRST(&mii->mii_phys); child != NULL;
-	     child = LIST_NEXT(child, mii_list)) {
-		rv = (*child->mii_service)(child, mii, MII_MEDIACHG);
+	LIST_FOREACH(child, &mii->mii_phys, mii_list) {
+		rv = phy_service(child, mii, MII_MEDIACHG);
 		if (rv)
 			return (rv);
 	}
@@ -276,43 +261,59 @@ mii_mediachg(mii)
  * Call the PHY tick routines, used during autonegotiation.
  */
 void
-mii_tick(mii)
-	struct mii_data *mii;
+mii_tick(struct mii_data *mii)
 {
 	struct mii_softc *child;
 
-	for (child = LIST_FIRST(&mii->mii_phys); child != NULL;
-	     child = LIST_NEXT(child, mii_list))
-		(void) (*child->mii_service)(child, mii, MII_TICK);
+	LIST_FOREACH(child, &mii->mii_phys, mii_list)
+		(void)phy_service(child, mii, MII_TICK);
 }
 
 /*
  * Get media status from PHYs.
  */
 void
-mii_pollstat(mii)
-	struct mii_data *mii;
+mii_pollstat(struct mii_data *mii)
 {
 	struct mii_softc *child;
 
 	mii->mii_media_status = 0;
 	mii->mii_media_active = IFM_NONE;
 
-	for (child = LIST_FIRST(&mii->mii_phys); child != NULL;
-	     child = LIST_NEXT(child, mii_list))
-		(void) (*child->mii_service)(child, mii, MII_POLLSTAT);
+	LIST_FOREACH(child, &mii->mii_phys, mii_list)
+		(void)phy_service(child, mii, MII_POLLSTAT);
 }
 
 /*
  * Inform the PHYs that the interface is down.
  */
 void
-mii_down(mii)
-	struct mii_data *mii;
+mii_down(struct mii_data *mii)
 {
 	struct mii_softc *child;
 
-	for (child = LIST_FIRST(&mii->mii_phys); child != NULL;
-	     child = LIST_NEXT(child, mii_list))
-		(void) (*child->mii_service)(child, mii, MII_DOWN);
+	LIST_FOREACH(child, &mii->mii_phys, mii_list)
+		(void)phy_service(child, mii, MII_DOWN);
+}
+
+static unsigned char
+bitreverse(unsigned char x)
+{
+	static unsigned char nibbletab[16] = {
+		0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15
+	};
+
+	return ((nibbletab[x & 15] << 4) | nibbletab[x >> 4]);
+}
+
+u_int
+mii_oui(u_int id1, u_int id2)
+{
+	u_int h;
+
+	h = (id1 << 6) | (id2 >> 10);
+
+	return ((bitreverse(h >> 16) << 16) |
+		(bitreverse((h >> 8) & 255) << 8) |
+		bitreverse(h & 255));
 }

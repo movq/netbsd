@@ -1,9 +1,34 @@
-/*	$NetBSD: hunt.h,v 1.6 2000/01/21 17:08:34 mycroft Exp $	*/
+/*	$NetBSD: hunt.h,v 1.12 2008/01/28 03:23:29 dholland Exp $	*/
 
 /*
- *  Hunt
- *  Copyright (c) 1985 Conrad C. Huang, Gregory S. Couch, Kenneth C.R.C. Arnold
- *  San Francisco, California
+ * Copyright (c) 1983-2003, Regents of the University of California.
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions are 
+ * met:
+ * 
+ * + Redistributions of source code must retain the above copyright 
+ *   notice, this list of conditions and the following disclaimer.
+ * + Redistributions in binary form must reproduce the above copyright 
+ *   notice, this list of conditions and the following disclaimer in the 
+ *   documentation and/or other materials provided with the distribution.
+ * + Neither the name of the University of California, San Francisco nor 
+ *   the names of its contributors may be used to endorse or promote 
+ *   products derived from this software without specific prior written 
+ *   permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS 
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED 
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A 
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 # include "bsd.h"
@@ -20,7 +45,7 @@
 # endif
 # include	<sys/types.h>
 # include	<sys/uio.h>
-# include	<sys/socket.h>
+# include	<sys/poll.h>
 # ifdef	INTERNET
 # include	<netinet/in.h>
 # include	<netdb.h>
@@ -81,6 +106,7 @@
 # define	MAXMON		1
 # else
 # define	MAXPL		17
+# define	MAXMON		0
 # endif
 # define	SHORTLEN	2		/* sizeof (network short) */
 # define	LONGLEN		4		/* sizeof (network long) */
@@ -264,8 +290,8 @@ typedef struct sockaddr_un	SOCKET;
 struct ident_def {
 	char	i_name[NAMELEN];
 	char	i_team;
-	long	i_machine;
-	long	i_uid;
+	uint32_t i_machine;
+	uint32_t i_uid;
 	float	i_kills;
 	int	i_entries;
 	float	i_score;
@@ -344,15 +370,15 @@ extern FLAG	Last_player;
 
 extern char	Buf[BUFSIZ], Maze[HEIGHT][WIDTH2], Orig_maze[HEIGHT][WIDTH2];
 
-extern char	*Sock_name, *Driver;
+extern const char *Driver;
 
-extern int	Nplayer, Num_fds, Socket, Status;
-extern fd_set	Fds_mask, Have_inp;
+extern int	Nplayer, Socket, Status;
+extern struct	pollfd fdset[];
 
 # ifdef INTERNET
 extern u_short	Test_port;
 # else
-extern char	*Sock_name;
+extern char	*Sock_name, *Stat_name;
 # endif
 
 # ifdef VOLCANO
@@ -389,66 +415,67 @@ extern FLAG	no_beep;
  * function types
  */
 
-void		add_shot __P((int, int, int, char, int, PLAYER *, int, char));
-int		answer __P((void));
-void		bad_con __P((void));
-void		bad_ver __P((void));
-int		broadcast_vec __P((int, struct	sockaddr **));
-void		ce __P((PLAYER *));
-void		cgoto __P((PLAYER *, int, int));
-void		check __P((PLAYER *, int, int));
-void		checkdam __P((PLAYER *, PLAYER *, IDENT *, int, char));
-void		clearwalls __P((void));
-void		clear_eol __P((void));
-void		clear_the_screen __P((void));
-void		clrscr __P((PLAYER *));
-BULLET	       *create_shot __P((int, int, int, char, int, int, PLAYER *,
-		    IDENT *, int, char));
-void		do_connect __P((char *, char, long));
-void		do_message __P((void));
-void		drawmaze __P((PLAYER *));
-void		drawplayer __P((PLAYER *, FLAG));
-void		drawstatus __P((PLAYER *));
-void		execute __P((PLAYER *));
-void		faketalk __P((void));
-void		find_driver __P((FLAG));
-void		fixshots __P((int, int, char));
-IDENT	       *get_ident __P((u_long, u_long, char *, char));
-void		get_local_name __P((char *));
-int		get_remote_name __P((char *));
-BULLET	       *is_bullet __P((int, int));
-void		look __P((PLAYER *));
-void		makemaze __P((void));
-void		message __P((PLAYER *, char *));
-void		mon_execute __P((PLAYER *));
-void		moveshots __P((void));
-void		open_ctl __P((void));
-int		opposite __P((int, char));
-void		otto __P((int, int, char));
-void		outch __P((PLAYER *, int));
-void		outstr __P((PLAYER *, char *, int));
-int		player_sym __P((PLAYER *, int, int));
-PLAYER	       *play_at __P((int, int));
-void		playit __P((void));
-void		put_ch __P((char));
-void		put_str __P((char *));
-int		quit __P((int));
-int		rand_dir __P((void));
-int		rand_num __P((int));
-void		redraw_screen __P((void));
-void		rmnl __P((char *));
-void		rollexpl __P((void));
-void		see __P((PLAYER *, int));
-void		sendcom __P((PLAYER *, int, ...));
-void		showexpl __P((int, int, char));
-void		showstat __P((PLAYER *));
-void		start_driver __P((void));
-void		stmonitor __P((PLAYER *));
-void		stplayer __P((PLAYER *, int));
-char		translate __P((char));
-SIGNAL_TYPE	cleanup __P((int)) __attribute__((__noreturn__));
-SIGNAL_TYPE	intr __P((int));
-SIGNAL_TYPE	sigalrm __P((int));
-SIGNAL_TYPE	sigemt __P((int));
-SIGNAL_TYPE	sigterm __P((int));
-SIGNAL_TYPE	tstp __P((int));
+void		add_shot(int, int, int, char, int, PLAYER *, int, char);
+int		answer(void);
+void		bad_con(void) __attribute__((__noreturn__));
+void		bad_ver(void) __attribute__((__noreturn__));
+int		broadcast_vec(int, struct	sockaddr **);
+void		ce(PLAYER *);
+void		cgoto(PLAYER *, int, int);
+void		check(PLAYER *, int, int);
+void		checkdam(PLAYER *, PLAYER *, IDENT *, int, char);
+void		clearwalls(void);
+void		clear_eol(void);
+void		clear_the_screen(void);
+void		clrscr(PLAYER *);
+BULLET	       *create_shot(int, int, int, char, int, int, PLAYER *,
+		    IDENT *, int, char);
+void		do_connect(char *, char, long);
+void		do_message(void);
+void		drawmaze(PLAYER *);
+void		drawplayer(PLAYER *, FLAG);
+void		drawstatus(PLAYER *);
+void		execute(PLAYER *);
+void		faketalk(void);
+void		find_driver(FLAG);
+void		fixshots(int, int, char);
+IDENT	       *get_ident(uint32_t, uint32_t, char *, char);
+void		get_local_name(char *);
+int		get_remote_name(char *);
+BULLET	       *is_bullet(int, int);
+void		look(PLAYER *);
+void		makemaze(void);
+void		message(PLAYER *, const char *);
+void		mon_execute(PLAYER *);
+void		moveshots(void);
+void		open_ctl(void);
+int		opposite(int, char);
+void		otto(int, int, char);
+void		outch(PLAYER *, int);
+void		outstr(PLAYER *, const char *, int);
+int		player_sym(PLAYER *, int, int);
+PLAYER	       *play_at(int, int);
+void		playit(void);
+void		put_ch(char);
+void		put_str(char *);
+int		quit(int);
+int		rand_dir(void);
+int		rand_num(int);
+void		redraw_screen(void);
+void		rmnl(char *);
+void		rollexpl(void);
+void		see(PLAYER *, int);
+void		sendcom(PLAYER *, int, ...);
+void		showexpl(int, int, char);
+void		showstat(PLAYER *);
+void		start_driver(void);
+void		stmonitor(PLAYER *);
+void		stplayer(PLAYER *, int);
+char		translate(char);
+SIGNAL_TYPE	cleanup(int) __attribute__((__noreturn__));
+SIGNAL_TYPE	intr(int);
+SIGNAL_TYPE	sigalrm(int);
+SIGNAL_TYPE	sigemt(int) __attribute__((__noreturn__));
+SIGNAL_TYPE	sigterm(int) __attribute__((__noreturn__));
+SIGNAL_TYPE	sigusr1(int) __attribute__((__noreturn__));
+SIGNAL_TYPE	tstp(int);

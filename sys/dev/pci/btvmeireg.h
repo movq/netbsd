@@ -1,4 +1,4 @@
-/* $NetBSD: btvmeireg.h,v 1.1 1999/06/30 17:45:38 drochner Exp $ */
+/* $NetBSD: btvmeireg.h,v 1.5 2005/12/11 12:22:48 christos Exp $ */
 
 #ifndef _bit3reg_h_
 #define _bit3reg_h_
@@ -64,8 +64,8 @@
 #define LOC_CMD1             (0x00)                /* Local Command Register */
 
 #define LC1_CLR_ERROR        (1<<7)     /* w,   Clear status error bits (1 Shot) */
-#define LC1_CLR_PR_INT       (1<<6)     /* w,   Clear PR (PS) Interupt (1 Shot)  */
-#define LC1_SND_PT_INT       (1<<5)     /* r/w, Set PT Interupt                  */
+#define LC1_CLR_PR_INT       (1<<6)     /* w,   Clear PR (PS) Interrupt (1 Shot)  */
+#define LC1_SND_PT_INT       (1<<5)     /* r/w, Set PT Interrupt                  */
 
 /******************************************************************************
 **
@@ -80,7 +80,7 @@
 
 #define LIC_INT_PENDING      (1<<7)     /* r  , Adaptor asserting INT on PCI bus */
 #define LIC_INT_ENABLE       (1<<6)     /* r/w, Normal (PR & CINT) INT Enable */
-#define LIC_ERR_INT_ENABLE   (1<<5)     /* r/w, Error Interupt Enable         */
+#define LIC_ERR_INT_ENABLE   (1<<5)     /* r/w, Error Interrupt Enable         */
 
 #define LIC_PT_CINT_SEL2     (1<<2)     /* r/w, PT CINT Line Selection Bit 2  */
 #define LIC_PT_CINT_SEL1     (1<<1)     /* r/w, PT CINT Line Selection Bit 1  */
@@ -100,7 +100,7 @@
 
 #define LSR_PARITY_ERR       (1<<7)     /* Interface Parity Error PCI->REM.   */
 #define LSR_REMBUS_ERR       (1<<6)     /* BERR from VME on PCI->REM. xfer    */
-#define LSR_PR_STATUS        (1<<5)     /* PR interrupt recieved from REMOTE  */
+#define LSR_PR_STATUS        (1<<5)     /* PR interrupt received from REMOTE  */
 #define LSR_TIMEOUT_ERR      (1<<2)     /* Interface Timeout error PCI->REM   */
 #define LSR_LRC_ERR          (1<<1)     /* LRC error (DMA master only)        */
 #define LSR_NO_CONNECT       (1<<0)     /* REM. bus power or I/O cable is off */
@@ -361,7 +361,7 @@
 
 #define RSS_PARITY_ERR       (1<<7)     /* Interface Parity Error Remote->PCI */
 #define RSS_REMBUS_ERR       (1<<6)     /* Invalid mapping RAM access or a    */
-                                        /*     data parity error occured      */
+                                        /*     data parity error occurred      */
 #define RSS_PR_STATUS        (1<<5)     /* PR interrupt set on the VME card   */
 #define RSS_TIMEOUT_ERR      (1<<2)     /* Interface Timeout error on DMA xfer */
 #define RSS_PT_STATUS        (1<<1)     /* PT interrupt set on the VME card   */

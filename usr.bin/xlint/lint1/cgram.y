@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: cgram.y,v 1.15 1998/11/23 14:37:08 christos Exp $	*/
+/* $NetBSD: cgram.y,v 1.41 2008/04/25 22:18:34 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -34,8 +34,8 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD");
+#if defined(__RCSID) && !defined(lint)
+__RCSID("$NetBSD: cgram.y,v 1.41 2008/04/25 22:18:34 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -44,6 +44,7 @@ __RCSID("$NetBSD");
 
 #include "lint1.h"
 
+extern char *yytext;
 /*
  * Contains the level of current declaration. 0 is extern.
  * Used for symbol table entries.
@@ -64,47 +65,49 @@ int	mblklev;
  */
 static int onowarn = -1;
 
-static	int	toicon __P((tnode_t *));
-static	void	idecl __P((sym_t *, int, sbuf_t *));
-static	void	ignuptorp __P((void));
+static	int	toicon(tnode_t *, int);
+static	void	idecl(sym_t *, int, sbuf_t *);
+static	void	ignuptorp(void);
 
 #ifdef DEBUG
-static __inline void CLRWFLGS __P((void));
-static __inline void CLRWFLGS()
+static inline void CLRWFLGS(const char *file, size_t line);
+static inline void CLRWFLGS(const char *file, size_t line)
 {
-	printf("%s, %d: clear flags %s %d\n", curr_pos.p_file,
-	    curr_pos.p_line, __FILE__, __LINE__);
+	printf("%s, %d: clear flags %s %zu\n", curr_pos.p_file,
+	    curr_pos.p_line, file, line);
 	clrwflgs();
 	onowarn = -1;
 }
 
-static __inline void SAVE __P((void));
-static __inline void SAVE()
+static inline void SAVE(const char *file, size_t line);
+static inline void SAVE(const char *file, size_t line)
 {
 	if (onowarn != -1)
 		abort();
-	printf("%s, %d: save flags %s %d = %d\n", curr_pos.p_file,
-	    curr_pos.p_line, __FILE__, __LINE__, nowarn);
+	printf("%s, %d: save flags %s %zu = %d\n", curr_pos.p_file,
+	    curr_pos.p_line, file, line, nowarn);
 	onowarn = nowarn;
 }
 
-static __inline void RESTORE __P((void));
-static __inline void RESTORE()
+static inline void RESTORE(const char *file, size_t line);
+static inline void RESTORE(const char *file, size_t line)
 {
 	if (onowarn != -1) {
 		nowarn = onowarn;
-		printf("%s, %d: restore flags %s %d = %d\n", curr_pos.p_file,
-		    curr_pos.p_line, __FILE__, __LINE__, nowarn);
+		printf("%s, %d: restore flags %s %zu = %d\n", curr_pos.p_file,
+		    curr_pos.p_line, file, line, nowarn);
 		onowarn = -1;
 	} else
-		CLRWFLGS();
+		CLRWFLGS(file, line);
 }
 #else
-#define CLRWFLGS() clrwflgs(), onowarn = -1
-#define SAVE()	onowarn = nowarn
-#define RESTORE() (void)(onowarn == -1 ? (clrwflgs(), 0) : (nowarn = onowarn))
+#define CLRWFLGS(f, l) clrwflgs(), onowarn = -1
+#define SAVE(f, l)	onowarn = nowarn
+#define RESTORE(f, l) (void)(onowarn == -1 ? (clrwflgs(), 0) : (nowarn = onowarn))
 #endif
 %}
+
+%expect 1
 
 %union {
 	int	y_int;
@@ -117,6 +120,7 @@ static __inline void RESTORE()
 	tqual_t	y_tqual;
 	type_t	*y_type;
 	tnode_t	*y_tnode;
+	range_t	y_range;
 	strg_t	*y_strg;
 	pqinf_t	*y_pqinf;
 };
@@ -144,6 +148,8 @@ static __inline void RESTORE()
 %token			T_COMMA
 %token			T_SEMI
 %token			T_ELLIPSE
+%token			T_REAL
+%token			T_IMAG
 
 /* storage classes (extern, static, auto, register and typedef) */
 %token	<y_scl>		T_SCLASS
@@ -189,7 +195,7 @@ static __inline void RESTORE()
 %left	T_SHFTOP
 %left	T_ADDOP
 %left	T_MULT T_DIVOP
-%right	T_UNOP T_INCDEC T_SIZEOF
+%right	T_UNOP T_INCDEC T_SIZEOF T_REAL T_IMAG
 %left	T_LPARN T_LBRACK T_STROP
 
 %token	<y_sb>		T_NAME
@@ -242,6 +248,8 @@ static __inline void RESTORE()
 %type	<y_sym>		parameter_type_list
 %type	<y_sym>		parameter_declaration
 %type	<y_tnode>	expr
+%type	<y_tnode>	expr_stmnt_val
+%type	<y_tnode>	expr_stmnt_list
 %type	<y_tnode>	term
 %type	<y_tnode>	func_arg_list
 %type	<y_op>		point_or_arrow
@@ -252,6 +260,8 @@ static __inline void RESTORE()
 %type	<y_strg>	string
 %type	<y_strg>	string2
 %type	<y_sb>		opt_asm_or_symbolrename
+%type	<y_range>	range
+%type	<y_range>	lorange
 
 
 %%
@@ -278,11 +288,11 @@ ext_decl:
 	  asm_stmnt
 	| func_def {
 		glclup(0);
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 	  }
 	| data_def {
 		glclup(0);
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 	  }
 	;
 
@@ -326,7 +336,7 @@ data_def:
 	  }
 	| declspecs deftyp type_init_decls T_SEMI
 	| error T_SEMI {
-		globclup();		
+		globclup();
 	  }
 	| error T_RBRACE {
 		globclup();
@@ -337,7 +347,7 @@ func_def:
 	  func_decl {
 		if ($1->s_type->t_tspec != FUNC) {
 			/* syntax error */
-			error(249);
+			error(249, yytext);
 			YYERROR;
 		}
 		if ($1->s_type->t_typedef) {
@@ -348,6 +358,8 @@ func_def:
 		funcdef($1);
 		blklev++;
 		pushdecl(ARG);
+		if (nowarn)
+			$1->s_used = 1;
 	  } opt_arg_declaration_list {
 		popdecl();
 		blklev--;
@@ -681,12 +693,12 @@ notype_member_decl:
 		$$ = $1;
 	  }
 	| notype_decl T_COLON constant {
-		$$ = bitfield($1, toicon($3));
+		$$ = bitfield($1, toicon($3, 1));
 	  }
 	| {
 		symtyp = FVFT;
 	  } T_COLON constant {
-		$$ = bitfield(NULL, toicon($3));
+		$$ = bitfield(NULL, toicon($3, 1));
 	  }
 	;
 
@@ -695,12 +707,12 @@ type_member_decl:
 		$$ = $1;
 	  }
 	| type_decl T_COLON constant {
-		$$ = bitfield($1, toicon($3));
+		$$ = bitfield($1, toicon($3, 1));
 	  }
 	| {
 		symtyp = FVFT;
 	  } T_COLON constant {
-		$$ = bitfield(NULL, toicon($3));
+		$$ = bitfield(NULL, toicon($3, 1));
 	  }
 	;
 
@@ -760,7 +772,7 @@ enums_with_opt_comma:
 			error(54);
 		} else {
 			/* trailing "," prohibited in enum declaration */
-			warning(54);
+			(void)gnuism(54);
 		}
 		$$ = $1;
 	  }
@@ -783,7 +795,7 @@ enumerator:
 		$$ = ename($1, enumval, 1);
 	  }
 	| ename T_ASSIGN constant {
-		$$ = ename($1, toicon($3), 0);
+		$$ = ename($1, toicon($3, 1), 0);
 	  }
 	;
 
@@ -848,7 +860,7 @@ notype_direct_decl:
 		$$ = addarray($1, 0, 0);
 	  }
 	| notype_direct_decl T_LBRACK constant T_RBRACK {
-		$$ = addarray($1, 1, toicon($3));
+		$$ = addarray($1, 1, toicon($3, 0));
 	  }
 	| notype_direct_decl param_list {
 		$$ = addfunc($1, $2);
@@ -877,7 +889,7 @@ type_direct_decl:
 		$$ = addarray($1, 0, 0);
 	  }
 	| type_direct_decl T_LBRACK constant T_RBRACK {
-		$$ = addarray($1, 1, toicon($3));
+		$$ = addarray($1, 1, toicon($3, 0));
 	  }
 	| type_direct_decl param_list {
 		$$ = addfunc($1, $2);
@@ -913,7 +925,7 @@ direct_param_decl:
 		$$ = addarray($1, 0, 0);
 	  }
 	| direct_param_decl T_LBRACK constant T_RBRACK {
-		$$ = addarray($1, 1, toicon($3));
+		$$ = addarray($1, 1, toicon($3, 0));
 	  }
 	| direct_param_decl param_list {
 		$$ = addfunc($1, $2);
@@ -942,7 +954,7 @@ direct_notype_param_decl:
 		$$ = addarray($1, 0, 0);
 	  }
 	| direct_notype_param_decl T_LBRACK constant T_RBRACK {
-		$$ = addarray($1, 1, toicon($3));
+		$$ = addarray($1, 1, toicon($3, 0));
 	  }
 	| direct_notype_param_decl param_list {
 		$$ = addfunc($1, $2);
@@ -1120,6 +1132,7 @@ init_expr:
 	  expr				%prec T_COMMA {
 		mkinit($1);
 	  }
+	| init_by_name init_expr	%prec T_COMMA
 	| init_lbrace init_expr_list init_rbrace
 	| init_lbrace init_expr_list T_COMMA init_rbrace
 	| error
@@ -1128,6 +1141,38 @@ init_expr:
 init_expr_list:
 	  init_expr			%prec T_COMMA
 	| init_expr_list T_COMMA init_expr
+	;
+
+lorange: 
+	  constant T_ELLIPSE {
+		$$.lo = toicon($1, 1);
+	  }
+	;
+range:
+	constant {
+		$$.lo = toicon($1, 1);
+		$$.hi = $$.lo + 1;
+	  }
+	| lorange constant {
+		$$.lo = $1.lo;
+		$$.hi = toicon($2, 1);
+	  }
+	;
+
+init_by_name:
+	  T_LBRACK range T_RBRACK T_ASSIGN {
+		if (!Sflag)
+			warning(321);
+	  }
+	| point identifier T_ASSIGN {
+		if (!Sflag)
+			warning(313);
+		memberpush($2);
+	  }
+	| identifier T_COLON {
+		gnuism(315);
+		memberpush($1);
+	  }
 	;
 
 init_lbrace:
@@ -1186,13 +1231,13 @@ direct_abs_decl:
 		$$ = addarray(aname(), 0, 0);
 	  }
 	| T_LBRACK constant T_RBRACK {
-		$$ = addarray(aname(), 1, toicon($2));
+		$$ = addarray(aname(), 1, toicon($2, 0));
 	  }
 	| direct_abs_decl T_LBRACK T_RBRACK {
 		$$ = addarray($1, 0, 0);
 	  }
 	| direct_abs_decl T_LBRACK constant T_RBRACK {
-		$$ = addarray($1, 1, toicon($3));
+		$$ = addarray($1, 1, toicon($3, 0));
 	  }
 	| abs_decl_param_list {
 		$$ = addfunc(aname(), $1);
@@ -1206,9 +1251,8 @@ direct_abs_decl:
 	  }
 	;
 
-stmnt:
+non_expr_stmnt:
 	  labeled_stmnt
-	| expr_stmnt
 	| comp_stmnt
 	| selection_stmnt
 	| iteration_stmnt
@@ -1216,6 +1260,10 @@ stmnt:
 		ftflg = 0;
 	  }
 	| asm_stmnt
+
+stmnt:
+	  expr_stmnt
+	| non_expr_stmnt
 	;
 
 labeled_stmnt:
@@ -1230,7 +1278,12 @@ label:
 	| T_CASE constant T_COLON {
 		label(T_CASE, NULL, $2);
 		ftflg = 1;
-	  }
+	}
+	| T_CASE constant T_ELLIPSE constant T_COLON {
+		/* XXX: We don't fill all cases */
+		label(T_CASE, NULL, $2);
+		ftflg = 1;
+	}
 	| T_DEFAULT T_COLON {
 		label(T_DEFAULT, NULL, NULL);
 		ftflg = 1;
@@ -1238,11 +1291,11 @@ label:
 	;
 
 comp_stmnt:
-	  compstmnt_lbrace declaration_list opt_stmnt_list compstmnt_rbrace
-	| compstmnt_lbrace opt_stmnt_list compstmnt_rbrace
+	  comp_stmnt_lbrace declaration_list opt_stmnt_list comp_stmnt_rbrace
+	| comp_stmnt_lbrace opt_stmnt_list comp_stmnt_rbrace
 	;
 
-compstmnt_lbrace:
+comp_stmnt_lbrace:
 	  T_LBRACE {
 		blklev++;
 		mblklev++;
@@ -1250,7 +1303,7 @@ compstmnt_lbrace:
 	  }
 	;
 
-compstmnt_rbrace:
+comp_stmnt_rbrace:
 	  T_RBRACE {
 		popdecl();
 		freeblk();
@@ -1268,14 +1321,14 @@ opt_stmnt_list:
 stmnt_list:
 	  stmnt
 	| stmnt_list stmnt {
-		RESTORE();
+		RESTORE(__FILE__, __LINE__);
 	  }
 	| stmnt_list error T_SEMI
 	;
 
 expr_stmnt:
 	  expr T_SEMI {
-		expr($1, 0, 0);
+		expr($1, 0, 0, 1);
 		ftflg = 0;
 	  }
 	| T_SEMI {
@@ -1283,29 +1336,56 @@ expr_stmnt:
 	  }
 	;
 
+/*
+ * The following two productions are used to implement 
+ * ({ [[decl-list] stmt-list] }).
+ * XXX: This is not well tested.
+ */
+expr_stmnt_val:
+	  expr T_SEMI {
+		/* XXX: We should really do that only on the last name */
+		if ($1->tn_op == NAME)
+			$1->tn_sym->s_used = 1;
+		$$ = $1;
+		expr($1, 0, 0, 0);
+		ftflg = 0;
+	  }
+	| non_expr_stmnt {
+		$$ = getnode();
+		$$->tn_type = gettyp(VOID);
+	}
+	;
+
+expr_stmnt_list:
+	  expr_stmnt_val
+	| expr_stmnt_list expr_stmnt_val {
+		$$ = $2;
+	}
+	;
+
 selection_stmnt:
 	  if_without_else {
-		SAVE();
+		SAVE(__FILE__, __LINE__);
 		if2();
 		if3(0);
 	  }
 	| if_without_else T_ELSE {
-		SAVE();
+		SAVE(__FILE__, __LINE__);
 		if2();
 	  } stmnt {
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 		if3(1);
 	  }
 	| if_without_else T_ELSE error {
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 		if3(0);
 	  }
 	| switch_expr stmnt {
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 		switch2();
 	  }
 	| switch_expr error {
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 		switch2();
 	  }
 	;
@@ -1318,30 +1398,30 @@ if_without_else:
 if_expr:
 	  T_IF T_LPARN expr T_RPARN {
 		if1($3);
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 	  }
 	;
 
 switch_expr:
 	  T_SWITCH T_LPARN expr T_RPARN {
 		switch1($3);
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 	  }
 	;
 
 do_stmnt:
 	  do stmnt {
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 	  }
 	;
 
 iteration_stmnt:
 	  while_expr stmnt {
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 		while2();
 	  }
 	| while_expr error {
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 		while2();
 	  }
 	| do_stmnt do_while_expr {
@@ -1349,15 +1429,15 @@ iteration_stmnt:
 		ftflg = 0;
 	  }
 	| do error {
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 		do2(NULL);
 	  }
 	| for_exprs stmnt {
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 		for2();
 	  }
 	| for_exprs error {
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 		for2();
 	  }
 	;
@@ -1365,7 +1445,7 @@ iteration_stmnt:
 while_expr:
 	  T_WHILE T_LPARN expr T_RPARN {
 		while1($3);
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 	  }
 	;
 
@@ -1384,7 +1464,7 @@ do_while_expr:
 for_exprs:
 	  T_FOR T_LPARN opt_expr T_SEMI opt_expr T_SEMI opt_expr T_RPARN {
 		for1($3, $5, $7);
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 	  }
 	;
 
@@ -1442,10 +1522,10 @@ read_until_rparn:
 
 declaration_list:
 	  declaration {
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 	  }
 	| declaration_list declaration {
-		CLRWFLGS();
+		CLRWFLGS(__FILE__, __LINE__);
 	  }
 	;
 
@@ -1508,7 +1588,7 @@ expr:
 
 term:
 	  T_NAME {
-		/* XXX realy neccessary? */
+		/* XXX really necessary? */
 		if (yychar < 0)
 			yychar = yylex();
 		$$ = getnnode(getsym($1), yychar);
@@ -1524,6 +1604,26 @@ term:
 			$2->tn_parn = 1;
 		$$ = $2;
 	  }
+	| T_LPARN comp_stmnt_lbrace declaration_list expr_stmnt_list {
+		blklev--;
+		mblklev--;
+		initsym = mktempsym(duptyp($4->tn_type));
+		mblklev++;
+		blklev++;
+		gnuism(320);
+	} comp_stmnt_rbrace T_RPARN {
+		$$ = getnnode(initsym, 0);
+	}
+	| T_LPARN comp_stmnt_lbrace expr_stmnt_list {
+		blklev--;
+		mblklev--;
+		initsym = mktempsym($3->tn_type);
+		mblklev++;
+		blklev++;
+		gnuism(320);
+	} comp_stmnt_rbrace T_RPARN {
+		$$ = getnnode(initsym, 0);
+	}
 	| term T_INCDEC {
 		$$ = build($2 == INC ? INCAFT : DECAFT, $1, NULL);
 	  }
@@ -1569,6 +1669,18 @@ term:
 			$$ = NULL;
 		}
 	  }
+	| T_REAL term {
+		$$ = build(REAL, $2, NULL);
+	  }
+	| T_IMAG term {
+		$$ = build(IMAG, $2, NULL);
+	  }
+	| T_REAL T_LPARN term T_RPARN {
+		$$ = build(REAL, $3, NULL);
+	  }
+	| T_IMAG T_LPARN term T_RPARN {
+		$$ = build(IMAG, $3, NULL);
+	  }
 	| T_SIZEOF term					%prec T_SIZEOF {
 		if (($$ = $2 == NULL ? NULL : bldszof($2->tn_type)) != NULL)
 			chkmisc($2, 0, 0, 0, 0, 0, 1);
@@ -1578,6 +1690,14 @@ term:
 	  }
 	| T_LPARN type_name T_RPARN term		%prec T_UNOP {
 		$$ = cast($4, $2);
+	  }
+	| T_LPARN type_name T_RPARN 			%prec T_UNOP {
+		sym_t *tmp = mktempsym($2);
+		idecl(tmp, 1, NULL);
+	  } init_lbrace init_expr_list init_rbrace {
+		if (!Sflag)
+			gnuism(319);
+		$$ = getnnode(initsym, 0);
 	  }
 	;
 
@@ -1619,6 +1739,13 @@ point_or_arrow:
 	  }
 	;
 
+point:
+	  T_STROP {
+		if ($1 != POINT)
+			error(249, yytext);
+	  }
+	;
+
 identifier:
 	  T_NAME {
 		$$ = $1;
@@ -1632,29 +1759,26 @@ identifier:
 
 /* ARGSUSED */
 int
-yyerror(msg)
-	char	*msg;
+yyerror(char *msg)
 {
-	error(249);
+	error(249, yytext);
 	if (++sytxerr >= 5)
 		norecover();
 	return (0);
 }
 
-static inline int uq_gt(u_quad_t, u_quad_t);
-static inline int q_gt(quad_t, quad_t);
+static __inline int uq_gt(uint64_t, uint64_t);
+static __inline int q_gt(int64_t, int64_t);
 
-static inline int
-uq_gt(a, b)
-	u_quad_t a, b;
+static __inline int
+uq_gt(uint64_t a, uint64_t b)
 {
 
 	return (a > b);
 }
 
-static inline int
-q_gt(a, b)
-	quad_t a, b;
+static __inline int
+q_gt(int64_t a, int64_t b)
 {
 
 	return (a > b);
@@ -1672,14 +1796,13 @@ q_gt(a, b)
  * expressions, it frees the memory used for the expression.
  */
 static int
-toicon(tn)
-	tnode_t	*tn;
+toicon(tnode_t *tn, int required)
 {
 	int	i;
 	tspec_t	t;
 	val_t	*v;
 
-	v = constant(tn);
+	v = constant(tn, required);
 
 	/*
 	 * Abstract declarations are used inside expression. To free
@@ -1695,13 +1818,14 @@ toicon(tn)
 	} else {
 		i = (int)v->v_quad;
 		if (isutyp(t)) {
-			if (uq_gt((u_quad_t)v->v_quad, (u_quad_t)INT_MAX)) {
+			if (uq_gt((uint64_t)v->v_quad,
+				  (uint64_t)INT_MAX)) {
 				/* integral constant too large */
 				warning(56);
 			}
 		} else {
-			if (q_gt(v->v_quad, (quad_t)INT_MAX) ||
-			    q_lt(v->v_quad, (quad_t)INT_MIN)) {
+			if (q_gt(v->v_quad, (int64_t)INT_MAX) ||
+			    q_lt(v->v_quad, (int64_t)INT_MIN)) {
 				/* integral constant too large */
 				warning(56);
 			}
@@ -1712,10 +1836,7 @@ toicon(tn)
 }
 
 static void
-idecl(decl, initflg, rename)
-	sym_t	*decl;
-	int	initflg;
-	sbuf_t	*rename;
+idecl(sym_t *decl, int initflg, sbuf_t *rename)
 {
 	char *s;
 
@@ -1726,7 +1847,7 @@ idecl(decl, initflg, rename)
 	case EXTERN:
 		if (rename != NULL) {
 			if (decl->s_rename != NULL)
-				lerror("idecl() 1");
+				LERROR("idecl()");
 
 			s = getlblk(1, rename->sb_len + 1);
 	                (void)memcpy(s, rename->sb_name, rename->sb_len + 1);
@@ -1754,7 +1875,7 @@ idecl(decl, initflg, rename)
 		decl1loc(decl, initflg);
 		break;
 	default:
-		lerror("idecl() 2");
+		LERROR("idecl()");
 	}
 
 	if (initflg && !initerr)
@@ -1765,8 +1886,8 @@ idecl(decl, initflg, rename)
  * Discard all input tokens up to and including the next
  * unmatched right paren
  */
-void
-ignuptorp()
+static void
+ignuptorp(void)
 {
 	int	level;
 

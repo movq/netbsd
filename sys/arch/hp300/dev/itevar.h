@@ -1,9 +1,43 @@
-/*	$NetBSD: itevar.h,v 1.14 1997/03/31 07:37:27 scottr Exp $	*/
+/*	$NetBSD: itevar.h,v 1.27 2008/03/29 06:47:08 tsutsui Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: itevar.h 1.15 92/12/20$
+ *
+ *	@(#)itevar.h	8.1 (Berkeley) 6/10/93
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -59,7 +93,7 @@ struct ite_data {
 	struct	tty *tty;
 	struct  itesw *isw;
 	struct  grf_data *grf;
-	caddr_t regbase, fbbase;
+	uint8_t	*regbase, *fbbase;
 	short	curx, cury;
 	short   cursorx, cursory;
 	short   cblankx, cblanky;
@@ -74,22 +108,22 @@ struct ite_data {
 	short	planemask;
 	short	pos;
 	char	imode, escape, fpd, hold;
-	caddr_t	devdata;			/* display dependent data */
+	void *	devdata;			/* display dependent data */
 };
 
 struct itesw {
-	void	(*ite_init) __P((struct ite_data *));
-	void	(*ite_deinit) __P((struct ite_data *));
-	void	(*ite_clear) __P((struct ite_data *, int, int, int, int));
-	void	(*ite_putc) __P((struct ite_data *, int, int, int, int));
-	void	(*ite_cursor) __P((struct ite_data *, int));
-	void	(*ite_scroll) __P((struct ite_data *, int, int, int, int));
-	u_char	(*ite_readbyte) __P((struct ite_data *, int));
-	void	(*ite_writeglyph) __P((struct ite_data *, u_char *, u_char *));
+	void	(*ite_init)(struct ite_data *);
+	void	(*ite_deinit)(struct ite_data *);
+	void	(*ite_clear)(struct ite_data *, int, int, int, int);
+	void	(*ite_putc)(struct ite_data *, int, int, int, int);
+	void	(*ite_cursor)(struct ite_data *, int);
+	void	(*ite_scroll)(struct ite_data *, int, int, int, int);
+	u_char	(*ite_readbyte)(struct ite_data *, int);
+	void	(*ite_writeglyph)(struct ite_data *, volatile u_char *, u_char *);
 };
 
 struct ite_softc {
-	struct	device sc_dev;		/* generic device info */
+	device_t sc_dev;		/* generic device info */
 	struct	ite_data *sc_data;	/* terminal state info */
 	struct	grf_softc *sc_grf;	/* pointer to framebuffer */
 };
@@ -109,7 +143,7 @@ struct ite_softc {
 
 #define attrclr(ip, sy, sx, h, w) \
 	bzero(ip->attrbuf + ((sy) * ip->cols) + (sx), (h) * (w))
-  
+
 #define attrmov(ip, sy, sx, dy, dx, h, w) \
 	bcopy(ip->attrbuf + ((sy) * ip->cols) + (sx), \
 	      ip->attrbuf + ((dy) * ip->cols) + (dx), \
@@ -120,7 +154,7 @@ struct ite_softc {
 
 #define attrset(ip, attr) \
 	((* (u_char *) attrloc(ip, ip->cury, ip->curx)) = attr)
-  
+
 /*
  * X and Y location of character 'c' in the framebuffer, in pixels.
  */
@@ -138,11 +172,11 @@ struct ite_softc {
 		    ip->cury * ip->ftheight, \
 		    ip->curx * ip->ftwidth, \
 		    ip->ftheight, ip->ftwidth, RR_XOR); \
-        ip->cursorx = ip->curx; \
+	ip->cursorx = ip->curx; \
 	ip->cursory = ip->cury; }
 
 #define erase_cursor(ip) \
-  	WINDOWMOVER(ip, ip->cblanky, ip->cblankx, \
+	WINDOWMOVER(ip, ip->cblanky, ip->cblankx, \
 		    ip->cursory * ip->ftheight, \
 		    ip->cursorx * ip->ftwidth, \
 		    ip->ftheight, ip->ftwidth, RR_XOR);
@@ -155,7 +189,7 @@ struct ite_softc {
 
 /* Keyboard attributes */
 #define ATTR_KPAD	0x4		/* keypad transmit */
-  
+
 /* Replacement Rules */
 #define RR_CLEAR		0x0
 #define RR_COPY			0x3
@@ -188,28 +222,39 @@ struct ite_softc {
 #define KBD_EXT_RIGHT_UP      0x93
 
 #define	TABSIZE		8
-#define	TABEND(ip)	((ip)->tty->t_winsize.ws_col - TABSIZE)
+#define	TABEND(ip)	\
+	(((ip)->tty ? (ip)->tty->t_winsize.ws_col : (ip)->cols) - TABSIZE)
 
 #ifdef _KERNEL
-extern	struct ite_data ite_cn;		/* ite_data for console device */
-extern	struct ite_data *kbd_ite;	/* XXX */
-extern	struct ite_softc ite_softc[];
-extern	struct itesw itesw[];
-extern	int nitesw;
+
+struct ite_kbdops {
+	int (*getc)(int *);
+	void (*enable)(void *);
+	void (*bell)(void *);
+	void *arg;
+};
+
+struct ite_kbdmap {
+	u_char *keymap;
+	u_char *shiftmap;
+	u_char *ctrlmap;
+};
 
 /* ite.c prototypes */
-void	ite_attach_grf __P((int, int));
-int	iteon __P((struct ite_data *, int));
-void	iteoff __P((struct ite_data *, int));
-void	itefilter __P((char, char));
-void	itecninit __P((struct grf_data *, struct itesw *));
-int	itecngetc __P((dev_t));
-void	itecnputc __P((dev_t, int));
-int	ite_major __P((void));
+int	iteon(struct ite_data *, int);
+void	iteoff(struct ite_data *, int);
+void	iteinstallkeymap(void *);
+void	itefilter(char, char);
+
+void	itedisplaycnattach(struct grf_data *, struct itesw *);
+void	itekbdcnattach(struct ite_kbdops *, struct ite_kbdmap *);
+void	itecninit(void);
+int	itecngetc(dev_t);
+void	itecnputc(dev_t, int);
 
 /* ite_subr.c prototypes */
-void	ite_fontinfo __P((struct ite_data *));
-void	ite_fontinit __P((struct ite_data *));
-u_char	ite_readbyte __P((struct ite_data *, int));
-void	ite_writeglyph __P((struct ite_data *, u_char *, u_char *));
+void	ite_fontinfo(struct ite_data *);
+void	ite_fontinit(struct ite_data *);
+u_char	ite_readbyte(struct ite_data *, int);
+void	ite_writeglyph(struct ite_data *, volatile u_char *, u_char *);
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: eonvar.h,v 1.7 1996/09/08 14:28:10 mycroft Exp $	*/
+/*	$NetBSD: eonvar.h,v 1.18 2008/10/24 17:07:33 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -62,6 +58,16 @@ SOFTWARE.
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
 
+#ifndef _NETISO_EONVAR_H_
+#define _NETISO_EONVAR_H_
+
+#include <sys/ansi.h>
+
+#ifndef sa_family_t
+typedef __sa_family_t	sa_family_t;
+#define sa_family_t	__sa_family_t
+#endif
+
 #define EON_986_VERSION 0x3
 #define EON_VERSION 0x1
 
@@ -79,7 +85,7 @@ SOFTWARE.
 
 struct sockaddr_eon {
 	u_char          seon_len;	/* Length */
-	u_char          seon_family;	/* AF_ISO */
+	sa_family_t     seon_family;	/* AF_ISO */
 	u_char          seon_status;	/* overlays session suffixlen */
 #define EON_ESLINK_UP		0x1
 #define EON_ESLINK_DOWN		0x2
@@ -170,13 +176,15 @@ struct eon_llinfo {
 #define el_eonhdr el_ei.ei_eh
 
 #ifdef _KERNEL
-void eonprotoinit __P((void));
-void eonattach   __P((void));
-int eonioctl    __P((struct ifnet *, u_long, caddr_t));
-void eoniphdr    __P((struct eon_iphdr *, caddr_t, struct route *, int, int));
-void eonrtrequest __P((int, struct rtentry *, struct sockaddr *));
-int eonoutput   __P((struct ifnet *, struct mbuf *, struct sockaddr *,
-		     struct rtentry *));
-void eoninput    __P((struct mbuf *, ...));
-void *eonctlinput __P((int, struct sockaddr *, void *));
+void eonprotoinit (void);
+void eonattach   (void);
+int eonioctl    (struct ifnet *, u_long, void *);
+void eoniphdr(struct eon_iphdr *, const void *, struct route *, int);
+void eonrtrequest (int, struct rtentry *, const struct rt_addrinfo *);
+int eonoutput(struct ifnet *, struct mbuf *, const struct sockaddr *,
+		     struct rtentry *);
+void eoninput    (struct mbuf *, ...);
+void *eonctlinput(int, const struct sockaddr *, void *);
 #endif
+
+#endif /* !_NETISO_EONVAR_H_ */

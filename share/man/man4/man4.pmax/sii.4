@@ -27,9 +27,9 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.\"	$NetBSD: sii.4,v 1.6 1999/12/15 23:44:53 abs Exp $
+.\"	$NetBSD: sii.4,v 1.10 2001/09/21 09:11:48 gmcgarry Exp $
 .\"
-.Dd August 6, 1996
+.Dd August 26, 2001
 .Dt SII 4 pmax
 .Os
 .Sh NAME
@@ -37,7 +37,8 @@
 .Nd
 SII SCSI adaptor
 .Sh SYNOPSIS
-.Cd "sii0 at mainbus0"
+.Cd "sii* at ibus0 addr ?
+.Cd "scsibus* at sii?"
 .Sh DESCRIPTION
 The
 .Nm
@@ -49,7 +50,7 @@ the DECstation 2100, 3100, and 5100, and in the VAXstation 3100.
 The
 .Nm
 is a medium-performance implementation of the SCSI-I common command set
-supporting synchronous and asychronous SCSI devices.
+supporting synchronous and asynchronous SCSI devices.
 .Pp
 The SII cabling is unusual: the bulkhead connector is very similar
 to a standard submicro wide SCSI-II connector, but has the other gender.
@@ -60,36 +61,14 @@ chip only supports DMA to or from a fixed window in memory.
 The driver uses this "window" area as a bounce buffer, copying data
 to and from the DMA region.
 .Sh SEE ALSO
-.Xr intro 4 ,
-.Xr rz 4 ,
-.Xr tz 4 ,
-.Xr sd 4 ,
-.Xr st 4 ,
 .Xr cd 4 ,
-.Xr ch 4 .
+.Xr ch 4 ,
+.Xr ibus 4 ,
+.Xr intro 4 ,
+.Xr sd 4 ,
+.Xr st 4
 .Sh HISTORY
 The
 .Nm
 driver first appeared in
 .Bx 4.4 .
-.Sh BUGS
-The
-.Nm
-driver only supports the
-.Nm oldscsibus
-higher-level layer, and the
-.Nm rz
-and
-.Nm tz
-devices, which first appeared in 
-.Bx 4.4 /pmax.
-It should be re-written to support the
-.Nm scsibus
-machine-independent higher-level SCSI layer and the
-.Nm sd ,
-.Nm st ,
-and
-.Nm cd
-drivers.
-This is
-.Ud .

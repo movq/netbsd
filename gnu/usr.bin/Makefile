@@ -1,32 +1,29 @@
-#	$NetBSD: Makefile,v 1.91 2000/01/02 11:20:51 msaitoh Exp $
+#	$NetBSD: Makefile,v 1.128 2008/09/24 02:19:45 dogcow Exp $
 
 # for OBJECT_FMT
 .include <bsd.own.mk>
 
-SUBDIR+=	bc binutils cpio dc diff diff3 egcs gawk grep gprof groff
-SUBDIR+=	gzip ld.new rcs sdiff send-pr sort tar texinfo
+SUBDIR+=	bc
+.if ${MKBINUTILS} != "no"
+SUBDIR+=	binutils
+.endif
+SUBDIR+=	c89 c99
+.if ${MKCVS} != "no"
+SUBDIR+=	xcvs
+.endif
+SUBDIR+=	dc diffutils gkermit grep
+SUBDIR+=	groff rcs send-pr texinfo
 
-.if (${MACHINE_ARCH} != "powerpc") && \
-    (${MACHINE_ARCH} != "sh3") && \
-    (${MACHINE_ARCH} != "sparc64")
-SUBDIR+=	gdb
+SUBDIR+=	gettext
+
+.if ${MKGDB} != "no"
+.if ${HAVE_GDB} == "6"
+SUBDIR+=	gdb6
+.endif
 .endif
 
-.if (${MACHINE_ARCH} == "m68k" && ${OBJECT_FMT} != "ELF") ||	\
-    (${MACHINE_ARCH} == "ns32k")
-SUBDIR+=	gas
-.else
-SUBDIR+=	gas.new
-.endif
-
-.if (${OBJECT_FMT} != "ELF") &&		\
-    ((${MACHINE_ARCH} == "arm32") ||	\
-     (${MACHINE_ARCH} == "i386") ||	\
-     (${MACHINE_ARCH} == "m68k") ||	\
-     (${MACHINE_ARCH} == "ns32k") ||	\
-     (${MACHINE_ARCH} == "sparc") ||	\
-     (${MACHINE_ARCH} == "vax"))
-SUBDIR+=	ld
+.if ${MKGCCCMDS} != "no"
+SUBDIR+=	gcc4
 .endif
 
 .include <bsd.subdir.mk>

@@ -10,11 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,7 +29,7 @@
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
 	/* .asciz "@(#)Ovfork.s	8.1 (Berkeley) 6/4/93" */
-	.asciz "$NetBSD: __vfork14.S,v 1.2 2000/02/05 21:02:51 kleink Exp $"
+	.asciz "$NetBSD: __vfork14.S,v 1.5 2003/08/07 16:42:33 agc Exp $"
 #endif /* SYSLIBC_SCCS and not lint */
 
 /*
@@ -46,8 +42,8 @@
 /*
  * pid = vfork();
  *
- * r1 == 0 in parent process, r1 == 1 in child process.
- * r0 == pid of child in parent, r0 == pid of parent in child.
+ * %r1 == 0 in parent process, %r1 == 1 in child process.
+ * %r0 == pid of child in parent, %r0 == pid of parent in child.
  *
  * trickery here, due to keith sklower, uses ret to clear the stack,
  * and then returns with a jump indirect, since only one person can return
@@ -55,26 +51,26 @@
  */
 
 ENTRY(__vfork14, 0)
-	movl	16(fp),r2	# save return address before we smash it
-	movab	here,16(fp)
+	movl	16(%fp),%r2	# save return address before we smash it
+	movab	here,16(%fp)
 	ret
 here:
 	chmk	$ SYS___vfork14
 	bcs	err		# if failed, set errno and return -1
 	/* this next trick is Chris Torek's fault */
-	mnegl	r1,r1		# r1 = 0xffffffff if child, 0 if parent
-	bicl2	r1,r0		# r0 &= ~r1, i.e., 0 if child, else unchanged
-	jmp	(r2)
+	mnegl	%r1,%r1		# %r1 = 0xffffffff if child, 0 if parent
+	bicl2	%r1,%r0		# %r0 &= ~%r1, i.e., 0 if child, else unchanged
+	jmp	(%r2)
 
 err:
 #ifdef _REENTRANT
 	pushr	$0x5
-	calls	$0,___errno
-	movl	(sp)+,(r0)
-	mnegl	$1,r0
+	calls	$0,_C_LABEL(__errno)
+	movl	(%sp)+,(%r0)
+	mnegl	$1,%r0
 	rsb
 #else
-	movl	r0,_errno
-	mnegl	$1,r0
-	jmp	(r2)
+	movl	%r0,_C_LABEL(errno)
+	mnegl	$1,%r0
+	jmp	(%r2)
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: uhcireg.h,v 1.9 1999/11/20 00:57:09 augustss Exp $	*/
+/*	$NetBSD: uhcireg.h,v 1.19 2008/04/28 20:23:59 martin Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/uhcireg.h,v 1.12 1999/11/17 22:33:42 n_hibma Exp $ */
 
 /*
@@ -6,7 +6,7 @@
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Lennart Augustsson (augustss@carlstedt.se) at
+ * by Lennart Augustsson (lennart@augustsson.net) at
  * Carlstedt Research & Technology.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -50,7 +43,17 @@
 #define  PCI_USBREV_1_1		0x11
 
 #define PCI_LEGSUP		0xc0	/* Legacy Support register */
+#define  PCI_LEGSUP_A20PTS	0x8000	/* End of A20GATE passthru status */
 #define  PCI_LEGSUP_USBPIRQDEN	0x2000	/* USB PIRQ D Enable */
+#define  PCI_LEGSUP_USBIRQS	0x1000	/* USB IRQ status */
+#define  PCI_LEGSUP_TBY64W	0x0800	/* Trap by 64h write status */
+#define  PCI_LEGSUP_TBY64R	0x0400	/* Trap by 64h read status */
+#define  PCI_LEGSUP_TBY60W	0x0200	/* Trap by 60h write status */
+#define  PCI_LEGSUP_TBY60R	0x0100	/* Trap by 60h read status */
+#define  PCI_LEGSUP_SMIEPTE	0x0080	/* SMI at end of passthru enable */
+#define  PCI_LEGSUP_PSS		0x0040	/* Passthru status */
+#define  PCI_LEGSUP_A20PTEN	0x0020	/* A20GATE passthru enable */
+#define  PCI_LEGSUP_USBSMIEN	0x0010	/* Enable SMI# generation */
 
 #define PCI_CBIO		0x20	/* configuration base IO */
 
@@ -75,6 +78,7 @@
 #define  UHCI_STS_HSE		0x0008
 #define  UHCI_STS_HCPE		0x0010
 #define  UHCI_STS_HCH		0x0020
+#define  UHCI_STS_ALLINTRS	0x003f
 
 #define UHCI_INTR		0x04
 #define  UHCI_INTR_TOCRCIE	0x0001
@@ -84,7 +88,7 @@
 
 #define UHCI_FRNUM		0x06
 #define  UHCI_FRNUM_MASK	0x03ff
- 
+
 
 #define UHCI_FLBASEADDR		0x08
 
@@ -106,6 +110,9 @@
 #define UHCI_PORTSC_OCIC	0x0800
 #define UHCI_PORTSC_SUSP	0x1000
 
+#define URWMASK(x) \
+  ((x) & (UHCI_PORTSC_SUSP | UHCI_PORTSC_PR | UHCI_PORTSC_RD | UHCI_PORTSC_PE))
+
 #define UHCI_FRAMELIST_COUNT	1024
 #define UHCI_FRAMELIST_ALIGN	4096
 
@@ -114,12 +121,19 @@
 
 typedef u_int32_t uhci_physaddr_t;
 #define UHCI_PTR_T		0x00000001
-#define UHCI_PTR_Q		0x00000002
+#define UHCI_PTR_TD		0x00000000
+#define UHCI_PTR_QH		0x00000002
 #define UHCI_PTR_VF		0x00000004
 
 /*
- * The Queue Heads and Transfer Descriptors and accessed
- * by both the CPU and the USB controller which runs
+ * Wait this long after a QH has been removed.  This gives that HC a
+ * chance to stop looking at it before it's recycled.
+ */
+#define UHCI_QH_REMOVE_DELAY	5
+
+/*
+ * The Queue Heads and Transfer Descriptors are accessed
+ * by both the CPU and the USB controller which run
  * concurrently.  This means that they have to be accessed
  * with great care.  As long as the data structures are
  * not linked into the controller's frame list they cannot
@@ -130,8 +144,8 @@ typedef u_int32_t uhci_physaddr_t;
  */
 
 typedef struct {
-	uhci_physaddr_t td_link;
-	u_int32_t td_status;
+	volatile uhci_physaddr_t td_link;
+	volatile u_int32_t td_status;
 #define UHCI_TD_GET_ACTLEN(s)	(((s) + 1) & 0x3ff)
 #define UHCI_TD_ZERO_ACTLEN(t)	((t) | 0x3ff)
 #define UHCI_TD_BITSTUFF	0x00020000
@@ -147,7 +161,7 @@ typedef struct {
 #define UHCI_TD_GET_ERRCNT(s)	(((s) >> 27) & 3)
 #define UHCI_TD_SET_ERRCNT(n)	((n) << 27)
 #define UHCI_TD_SPD		0x20000000
-	u_int32_t td_token;
+	volatile u_int32_t td_token;
 #define UHCI_TD_PID_IN		0x00000069
 #define UHCI_TD_PID_OUT		0x000000e1
 #define UHCI_TD_PID_SETUP	0x0000002d
@@ -161,7 +175,7 @@ typedef struct {
 #define UHCI_TD_SET_MAXLEN(l)	(((l)-1) << 21)
 #define UHCI_TD_GET_MAXLEN(s)	((((s) >> 21) + 1) & 0x7ff)
 #define UHCI_TD_MAXLEN_MASK	0xffe00000
-	u_int32_t td_buffer;
+	volatile u_int32_t td_buffer;
 } uhci_td_t;
 
 #define UHCI_TD_ERROR (UHCI_TD_BITSTUFF|UHCI_TD_CRCTO|UHCI_TD_BABBLE|UHCI_TD_DBUFFER|UHCI_TD_STALLED)
@@ -176,8 +190,8 @@ typedef struct {
      UHCI_TD_SET_DT(dt))
 
 typedef struct {
-	uhci_physaddr_t qh_hlink;
-	uhci_physaddr_t qh_elink;
+	volatile uhci_physaddr_t qh_hlink;
+	volatile uhci_physaddr_t qh_elink;
 } uhci_qh_t;
 
 #endif /* _DEV_PCI_UHCIREG_H_ */

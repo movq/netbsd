@@ -1,10 +1,10 @@
-/*	$NetBSD: lex.h,v 1.3 1999/10/20 15:09:59 hubertf Exp $	*/
+/*	$NetBSD: lex.h,v 1.7 2005/09/11 22:16:00 christos Exp $	*/
 
 /*
  * Source input, lexer and parser
  */
 
-/* $Id: lex.h,v 1.3 1999/10/20 15:09:59 hubertf Exp $ */
+/* $Id: lex.h,v 1.7 2005/09/11 22:16:00 christos Exp $ */
 
 #define	IDENT	64
 
@@ -22,7 +22,7 @@ struct source {
 	char	ugbuf[2];	/* buffer for ungetsc() (SREREAD) and
 				 * alias (SALIAS) */
 	int	line;		/* line number */
-	int	errline;	/* line the error occured on (0 if not set) */
+	int	errline;	/* line the error occurred on (0 if not set) */
 	const char *file;	/* input file name */
 	int	flags;		/* SF_* */
 	Area	*areap;
@@ -37,7 +37,7 @@ struct source {
 #define	SSTRING		3	/* string */
 #define	SWSTR		4	/* string without \n */
 #define	SWORDS		5	/* string[] */
-#define	SWORDSEP	6	/* string[] seperator */
+#define	SWORDSEP	6	/* string[] separator */
 #define	SALIAS		7	/* alias expansion */
 #define SREREAD		8	/* read ahead to be re-scanned */
 
@@ -115,6 +115,7 @@ typedef union {
 #define ESACONLY BIT(7)		/* only accept esac keyword */
 #define CMDWORD BIT(8)		/* parsing simple command (alias related) */
 #define HEREDELIM BIT(9)	/* parsing <<,<<- delimiter */
+#define HEREDOC BIT(10)		/* parsing heredoc */
 
 #define	HERES	10		/* max << in line */
 
@@ -126,7 +127,7 @@ EXTERN	char	ident [IDENT+1];
 #ifdef HISTORY
 # define HISTORYSIZE	128	/* size of saved history */
 
-EXTERN	char  **history;	/* saved commands */
+EXTERN	char  **histlist;	/* saved commands */
 EXTERN	char  **histptr;	/* last history item */
 EXTERN	int	histsize;	/* history size */
 #endif /* HISTORY */

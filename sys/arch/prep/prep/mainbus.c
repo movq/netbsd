@@ -1,5 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.1 2000/02/29 15:21:47 nonaka Exp $	*/
-
+/*	$NetBSD: mainbus.c,v 1.28 2008/04/28 19:01:45 garbled Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -31,43 +30,61 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.28 2008/04/28 19:01:45 garbled Exp $");
+
+#include "opt_pci.h"
+#include "opt_residual.h"
+
+#include "pnpbus.h"
+#include "pci.h"
+#include "isa.h"
+
 #include <sys/param.h>
+#include <sys/extent.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/malloc.h>
 
 #include <machine/autoconf.h>
 #include <machine/bus.h>
+#include <machine/isa_machdep.h>
 
-#include "pci.h"
 #include <dev/pci/pcivar.h>
+#include <dev/pci/pciconf.h>
 
+#include <prep/pnpbus/pnpbusvar.h>
 
-int	mainbus_match __P((struct device *, struct cfdata *, void *));
-void	mainbus_attach __P((struct device *, struct device *, void *));
+#include <machine/platform.h>
+#include <machine/residual.h>
 
-struct cfattach mainbus_ca = {
-	sizeof(struct device), mainbus_match, mainbus_attach
-};
+int	mainbus_match(struct device *, struct cfdata *, void *);
+void	mainbus_attach(struct device *, struct device *, void *);
 
-int	mainbus_print __P((void *, const char *));
+CFATTACH_DECL(mainbus, sizeof(struct device),
+    mainbus_match, mainbus_attach, NULL, NULL);
+
+int	mainbus_print(void *, const char *);
 
 union mainbus_attach_args {
 	const char *mba_busname;		/* first elem of all */
 	struct pcibus_attach_args mba_pba;
+	struct pnpbus_attach_args mba_paa;
 };
+
+/* There can be only one. */
+int mainbus_found = 0;
+struct powerpc_isa_chipset genppc_ict;
+struct genppc_pci_chipset *genppc_pct;
 
 /*
  * Probe for the mainbus; always succeeds.
  */
 int
-mainbus_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+mainbus_match(struct device *parent, struct cfdata *match, void *aux)
 {
-	struct cfdata *cf = match;
 
-	if (cf->cf_unit > 0)
+	if (mainbus_found)
 		return 0;
 	return 1;
 }
@@ -76,19 +93,31 @@ mainbus_match(parent, match, aux)
  * Attach the mainbus.
  */
 void
-mainbus_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+mainbus_attach(struct device *parent, struct device *self, void *aux)
 {
 	union mainbus_attach_args mba;
 	struct confargs ca;
+	int i;
+#if NPCI > 0
+	struct genppc_pci_chipset_businfo *pbi;
+#ifdef PCI_NETBSD_CONFIGURE
+	struct extent *ioext, *memext;
+#endif
+#endif
 
-	printf("\n");
+	mainbus_found = 1;
 
-	ca.ca_name = "cpu";
-	ca.ca_node = 0;
-	config_found(self, &ca, mainbus_print);
+	aprint_normal("\n");
+
+#if defined(RESIDUAL_DATA_DUMP)
+	print_residual_device_info();
+#endif
+
+	for (i = 0; i < CPU_MAXNUM; i++) {
+		ca.ca_name = "cpu";
+		ca.ca_node = i;
+		config_found_ia(self, "mainbus", &ca, NULL);
+	}
 
 	/*
 	 * XXX Note also that the presence of a PCI bus should
@@ -97,28 +126,73 @@ mainbus_attach(parent, self, aux)
 	 * XXX that's not currently possible.
 	 */
 #if NPCI > 0
-	mba.mba_pba.pba_busname = "pci";
-	mba.mba_pba.pba_iot = (bus_space_tag_t)PREP_BUS_SPACE_IO;
-	mba.mba_pba.pba_memt = (bus_space_tag_t)PREP_BUS_SPACE_MEM;
+	genppc_pct = malloc(sizeof(struct genppc_pci_chipset), M_DEVBUF,
+	    M_NOWAIT);
+	KASSERT(genppc_pct != NULL);
+	prep_pci_get_chipset_tag(genppc_pct);
+
+	pbi = malloc(sizeof(struct genppc_pci_chipset_businfo),
+	    M_DEVBUF, M_NOWAIT);
+	KASSERT(pbi != NULL);
+	pbi->pbi_properties = prop_dictionary_create();
+        KASSERT(pbi->pbi_properties != NULL);
+
+	SIMPLEQ_INIT(&genppc_pct->pc_pbi);
+	SIMPLEQ_INSERT_TAIL(&genppc_pct->pc_pbi, pbi, next);
+
+	/* find the primary host bridge */
+	setup_pciintr_map(pbi, 0, 0, 0);
+
+#ifdef PCI_NETBSD_CONFIGURE
+	ioext  = extent_create("pciio",  0x00008000, 0x0000ffff, M_DEVBUF,
+	    NULL, 0, EX_NOWAIT);
+	memext = extent_create("pcimem", 0x00000000, 0x0fffffff, M_DEVBUF,
+	    NULL, 0, EX_NOWAIT);
+
+	pci_configure_bus(genppc_pct, ioext, memext, NULL, 0, CACHELINESIZE);
+
+	extent_destroy(ioext);
+	extent_destroy(memext);
+#endif /* PCI_NETBSD_CONFIGURE */
+#endif /* NPCI */
+
+/* scan pnpbus first */
+#if NPNPBUS > 0
+	mba.mba_paa.paa_name = "pnpbus";
+	mba.mba_paa.paa_iot = &genppc_isa_io_space_tag;
+	mba.mba_paa.paa_memt = &genppc_isa_mem_space_tag;
+	mba.mba_paa.paa_ic = &genppc_ict;
+	mba.mba_paa.paa_dmat = &isa_bus_dma_tag;
+	config_found_ia(self, "mainbus", &mba.mba_pba, mainbus_print);
+#endif /* NPNPBUS */
+
+#if NPCI > 0
+	bzero(&mba, sizeof(mba));
+	mba.mba_pba._pba_busname = NULL;
+	mba.mba_pba.pba_iot = &prep_io_space_tag;
+	mba.mba_pba.pba_memt = &prep_mem_space_tag;
 	mba.mba_pba.pba_dmat = &pci_bus_dma_tag;
+	mba.mba_pba.pba_dmat64 = NULL;
+	mba.mba_pba.pba_pc = genppc_pct;
 	mba.mba_pba.pba_bus = 0;
-	mba.mba_pba.pba_flags = PCI_FLAGS_IO_ENABLED |
-	    PCI_FLAGS_MEM_ENABLED;
-	config_found(self, &mba.mba_pba, mainbus_print);
+	mba.mba_pba.pba_bridgetag = NULL;
+	mba.mba_pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	config_found_ia(self, "pcibus", &mba.mba_pba, pcibusprint);
+#endif /* NPCI */
+
+#ifdef RESIDUAL_DATA_DUMP
+	SIMPLEQ_FOREACH(pbi, &genppc_pct->pc_pbi, next)
+		printf("%s\n", prop_dictionary_externalize(pbi->pbi_properties));
 #endif
 }
 
 int
-mainbus_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+mainbus_print(void *aux, const char *pnp)
 {
 	union mainbus_attach_args *mba = aux;
 
 	if (pnp)
-		printf("%s at %s", mba->mba_busname, pnp);
-	if (!strcmp(mba->mba_busname, "pci"))
-		printf(" bus %d", mba->mba_pba.pba_bus);
+		aprint_normal("%s at %s", mba->mba_busname, pnp);
 
 	return (UNCONF);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: vsscanf.c,v 1.10 1999/09/20 04:39:35 lukem Exp $	*/
+/*	$NetBSD: vsscanf.c,v 1.14 2005/11/29 03:12:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)vsscanf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: vsscanf.c,v 1.10 1999/09/20 04:39:35 lukem Exp $");
+__RCSID("$NetBSD: vsscanf.c,v 1.14 2005/11/29 03:12:00 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -49,6 +45,8 @@ __RCSID("$NetBSD: vsscanf.c,v 1.10 1999/09/20 04:39:35 lukem Exp $");
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include "reentrant.h"
+#include "local.h"
 
 static int eofread __P((void *, char *, int));
 
@@ -69,16 +67,17 @@ vsscanf(str, fmt, ap)
 	_BSD_VA_LIST_ ap;
 {
 	FILE f;
+	struct __sfileext fext;
 
 	_DIAGASSERT(str != NULL);
 	_DIAGASSERT(fmt != NULL);
 
+	_FILEEXT_SETUP(&f, &fext);
 	f._flags = __SRD;
-	/* LINTED we don't touch str */
-	f._bf._base = f._p = (unsigned char *)str;
+	f._bf._base = f._p = __UNCONST(str);
 	f._bf._size = f._r = strlen(str);
 	f._read = eofread;
-	f._ub._base = NULL;
+	_UB(&f)._base = NULL;
 	f._lb._base = NULL;
-	return (__svfscanf(&f, fmt, ap));
+	return (__svfscanf_unlocked(&f, fmt, ap));
 }

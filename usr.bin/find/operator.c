@@ -1,4 +1,4 @@
-/*	$NetBSD: operator.c,v 1.7 1999/01/02 02:34:15 lukem Exp $	*/
+/*	$NetBSD: operator.c,v 1.9 2006/10/11 19:51:10 apb Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "from: @(#)operator.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: operator.c,v 1.7 1999/01/02 02:34:15 lukem Exp $");
+__RCSID("$NetBSD: operator.c,v 1.9 2006/10/11 19:51:10 apb Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,27 +48,26 @@ __RCSID("$NetBSD: operator.c,v 1.7 1999/01/02 02:34:15 lukem Exp $");
 #include <stdio.h>
 
 #include "find.h"
-    
-static PLAN *yanknode __P((PLAN **));
-static PLAN *yankexpr __P((PLAN **));
+
+static PLAN *yanknode(PLAN **);
+static PLAN *yankexpr(PLAN **);
 
 /*
  * yanknode --
  *	destructively removes the top from the plan
  */
 static PLAN *
-yanknode(planp)    
-	PLAN **planp;		/* pointer to top of plan (modified) */
+yanknode(PLAN **planp)		/* pointer to top of plan (modified) */
 {
 	PLAN *node;		/* top node removed from the plan */
-    
+
 	if ((node = (*planp)) == NULL)
 		return (NULL);
 	(*planp) = (*planp)->next;
 	node->next = NULL;
 	return (node);
 }
- 
+
 /*
  * yankexpr --
  *	Removes one expression from the plan.  This is used mainly by
@@ -80,18 +75,17 @@ yanknode(planp)
  *	simple node or a N_EXPR node containing a list of simple nodes.
  */
 static PLAN *
-yankexpr(planp)    
-	PLAN **planp;		/* pointer to top of plan (modified) */
+yankexpr(PLAN **planp)		/* pointer to top of plan (modified) */
 {
 	PLAN *next;		/* temp node holding subexpression results */
 	PLAN *node;		/* pointer to returned node or expression */
 	PLAN *tail;		/* pointer to tail of subplan */
 	PLAN *subplan;		/* pointer to head of ( ) expression */
-    
+
 	/* first pull the top node from the plan */
 	if ((node = yanknode(planp)) == NULL)
 		return (NULL);
-    
+
 	/*
 	 * If the node is an '(' then we recursively slurp up expressions
 	 * until we find its associated ')'.  If it's a closing paren we
@@ -128,19 +122,18 @@ yankexpr(planp)
 		}
 	return (node);
 }
- 
+
 /*
  * paren_squish --
  *	replaces "parentheisized" plans in our search plan with "expr" nodes.
  */
 PLAN *
-paren_squish(plan)
-	PLAN *plan;		/* plan with ( ) nodes */
+paren_squish(PLAN *plan)	/* plan with ( ) nodes */
 {
 	PLAN *expr;		/* pointer to next expression */
 	PLAN *tail;		/* pointer to tail of result plan */
 	PLAN *result;		/* pointer to head of result plan */
-    
+
 	result = tail = NULL;
 
 	/*
@@ -166,22 +159,21 @@ paren_squish(plan)
 	}
 	return (result);
 }
- 
+
 /*
  * not_squish --
  *	compresses "!" expressions in our search plan.
  */
 PLAN *
-not_squish(plan)
-	PLAN *plan;		/* plan to process */
+not_squish(PLAN *plan)		/* plan to process */
 {
 	PLAN *next;		/* next node being processed */
 	PLAN *node;		/* temporary node used in N_NOT processing */
 	PLAN *tail;		/* pointer to tail of result plan */
 	PLAN *result;		/* pointer to head of result plan */
-    
+
 	tail = result = next = NULL;
-    
+
 	while ((next = yanknode(&plan)) != NULL) {
 		/*
 		 * if we encounter a ( expression ) then look for nots in
@@ -226,21 +218,20 @@ not_squish(plan)
 	}
 	return (result);
 }
- 
+
 /*
  * or_squish --
  *	compresses -o expressions in our search plan.
  */
 PLAN *
-or_squish(plan)
-	PLAN *plan;		/* plan with ors to be squished */
+or_squish(PLAN *plan)		/* plan with ors to be squished */
 {
 	PLAN *next;		/* next node being processed */
 	PLAN *tail;		/* pointer to tail of result plan */
 	PLAN *result;		/* pointer to head of result plan */
-    
+
 	tail = result = next = NULL;
-    
+
 	while ((next = yanknode(&plan)) != NULL) {
 		/*
 		 * if we encounter a ( expression ) then look for or's in

@@ -1,4 +1,4 @@
-/* $NetBSD: sesd.c,v 1.2 2000/02/22 06:06:08 mjacob Exp $ */
+/* $NetBSD: sesd.c,v 1.4 2001/01/11 02:46:21 lukem Exp $ */
 /* $FreeBSD: $ */
 /* $OpenBSD: $ */
 /*
@@ -56,7 +56,7 @@ main(a, v)
 	int a;
 	char **v;
 {
-	static char *usage =
+	static const char usage[] =
 	    "usage: %s [ -d ] [ -t pollinterval ] device [ device ]\n";
 	int fd, polltime, dev, devbase, nodaemon;
 	ses_encstat stat, *carray;
@@ -111,9 +111,9 @@ main(a, v)
 			perror("daemon");
 			return (1);
 		}
-		openlog("sesd", LOG_CONS, LOG_USER);
+		openlog("sesd", 0, LOG_USER);
 	} else {
-		openlog("sesd", LOG_CONS|LOG_PERROR, LOG_USER);
+		openlog("sesd", LOG_PERROR, LOG_USER);
 	}
 
 	for (;;) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: hpib.c,v 1.19 1998/01/12 18:31:00 thorpej Exp $	*/
+/*	$NetBSD: hpib.c,v 1.38 2008/06/13 09:41:15 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,11 +41,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -75,6 +64,9 @@
  * HP-IB bus driver
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: hpib.c,v 1.38 2008/06/13 09:41:15 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
@@ -88,24 +80,25 @@
 #include <machine/cpu.h>
 #include <machine/hp300spu.h>
 
-int	hpibbusmatch __P((struct device *, struct cfdata *, void *));
-void	hpibbusattach __P((struct device *, struct device *, void *));
+#include "ioconf.h"
 
-struct cfattach hpibbus_ca = {
-	sizeof(struct hpibbus_softc), hpibbusmatch, hpibbusattach
-};
+static int	hpibbusmatch(device_t, cfdata_t, void *);
+static void	hpibbusattach(device_t, device_t, void *);
 
-extern struct cfdriver hpibbus_cd;
+CFATTACH_DECL_NEW(hpibbus, sizeof(struct hpibbus_softc),
+    hpibbusmatch, hpibbusattach, NULL, NULL);
 
-void	hpibbus_attach_children __P((struct hpibbus_softc *));
-int	hpibbussearch __P((struct device *, struct cfdata *, void *));
-int	hpibbusprint __P((void *, const char *));
+static void	hpibbus_attach_children(struct hpibbus_softc *);
+static int	hpibbussearch(device_t, cfdata_t, const int *, void *);
+static int	hpibbusprint(void *, const char *);
 
-int	hpibbus_alloc __P((struct hpibbus_softc *, int, int));
-void	hpibbus_free __P((struct hpibbus_softc *, int, int));
+static int	hpibbus_alloc(struct hpibbus_softc *, int, int);
+#if 0
+static void	hpibbus_free(struct hpibbus_softc *, int, int);
+#endif
 
-void	hpibstart __P((void *));
-void	hpibdone __P((void *));
+static void	hpibstart(void *);
+static void	hpibdone(void *);
 
 int	hpibtimeout = 100000;	/* # of status tests before we give up */
 int	hpibidtimeout = 10000;	/* # of status tests for hpibid() calls */
@@ -141,25 +134,21 @@ int	hpibdmathresh = 3;	/* byte count beyond which to attempt dma */
  * This is evil, but what can you do?
  */
 
-int
-hpibbusmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+hpibbusmatch(device_t parent, cfdata_t cf, void *aux)
 {
 
-	return (1);
+	return 1;
 }
 
-void
-hpibbusattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+hpibbusattach(device_t parent, device_t self, void *aux)
 {
-	struct hpibbus_softc *sc = (struct hpibbus_softc *)self;
+	struct hpibbus_softc *sc = device_private(self);
 	struct hpibdev_attach_args *ha = aux;
 
-	printf("\n");
+	sc->sc_dev = self;
+	aprint_normal("\n");
 
 	/* Get the operations vector for the controller. */
 	sc->sc_ops = ha->ha_ops;
@@ -167,15 +156,14 @@ hpibbusattach(parent, self, aux)
 	sc->sc_ba = ha->ha_ba;
 	*(ha->ha_softcpp) = sc;			/* XXX */
 
-	hpibreset(self->dv_unit);		/* XXX souldn't be here */
+	hpibreset(device_unit(self));		/* XXX souldn't be here */
 
 	/*
 	 * Initialize the DMA queue entry.
 	 */
-	sc->sc_dq = (struct dmaqueue *)malloc(sizeof(struct dmaqueue),
-	    M_DEVBUF, M_NOWAIT);
+	sc->sc_dq = malloc(sizeof(struct dmaqueue), M_DEVBUF, M_NOWAIT);
 	if (sc->sc_dq == NULL) {
-		printf("%s: can't allocate DMA queue entry\n", self->dv_xname);
+		aprint_error_dev(self, "can't allocate DMA queue entry\n");
 		return;
 	}
 	sc->sc_dq->dq_softc = sc;
@@ -189,9 +177,8 @@ hpibbusattach(parent, self, aux)
 	hpibbus_attach_children(sc);
 }
 
-void
-hpibbus_attach_children(sc)
-	struct hpibbus_softc *sc;
+static void
+hpibbus_attach_children(struct hpibbus_softc *sc)
 {
 	struct hpibbus_attach_args ha;
 	int slave;
@@ -202,7 +189,7 @@ hpibbus_attach_children(sc)
 		 * Plotters won't identify themselves, and
 		 * get the same value as non-existent devices.
 		 */
-		ha.ha_id = hpibid(sc->sc_dev.dv_unit, slave);
+		ha.ha_id = hpibid(device_unit(sc->sc_dev), slave);
 
 		ha.ha_slave = slave;	/* not to be modified by children */
 		ha.ha_punit = 0;	/* children modify this */
@@ -210,23 +197,20 @@ hpibbus_attach_children(sc)
 		/*
 		 * Search though all configured children for this bus.
 		 */
-		(void)config_search(hpibbussearch, &sc->sc_dev, &ha);
+		config_search_ia(hpibbussearch, sc->sc_dev, "hpibbus", &ha);
 	}
 }
 
-int
-hpibbussearch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+static int
+hpibbussearch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
-	struct hpibbus_softc *sc = (struct hpibbus_softc *)parent;
+	struct hpibbus_softc *sc = device_private(parent);
 	struct hpibbus_attach_args *ha = aux;
 
 	/* Make sure this is in a consistent state. */
 	ha->ha_punit = 0;
 
-	if ((*cf->cf_attach->ca_match)(parent, cf, ha) > 0) {
+	if (config_match(parent, cf, ha) > 0) {
 		/*
 		 * The device probe has succeeded, and filled in
 		 * the punit information.  Make sure the configuration
@@ -252,78 +236,68 @@ hpibbussearch(parent, cf, aux)
 		config_attach(parent, cf, ha, hpibbusprint);
 	}
  out:
-	return (0);
+	return 0;
 }
 
-int
-hpibbusprint(aux, pnp)
-	void *aux;
-	const char *pnp;
+static int
+hpibbusprint(void *aux, const char *pnp)
 {
 	struct hpibbus_attach_args *ha = aux;
 
-	printf(" slave %d punit %d", ha->ha_slave, ha->ha_punit);
-	return (UNCONF);
+	aprint_normal(" slave %d punit %d", ha->ha_slave, ha->ha_punit);
+	return UNCONF;
 }
 
 int
-hpibdevprint(aux, pnp)
-	void *aux;
-	const char *pnp;
+hpibdevprint(void *aux, const char *pnp)
 {
 
 	/* only hpibbus's can attach to hpibdev's -- easy. */
 	if (pnp != NULL)
-		printf("hpibbus at %s", pnp);
-	return (UNCONF);
+		aprint_normal("hpibbus at %s", pnp);
+	return UNCONF;
 }
 
 void
-hpibreset(unit)
-	int unit;
+hpibreset(int unit)
 {
-	struct hpibbus_softc *sc = hpibbus_cd.cd_devs[unit];
+	struct hpibbus_softc *sc = device_lookup_private(&hpibbus_cd,unit);
 
 	(*sc->sc_ops->hpib_reset)(sc);
 }
 
 int
-hpibreq(pdev, hq)
-	struct device *pdev;
-	struct hpibqueue *hq;
+hpibreq(struct device *pdev, struct hpibqueue *hq)
 {
-	struct hpibbus_softc *sc = (struct hpibbus_softc *)pdev;
+	struct hpibbus_softc *sc = device_private(pdev);
 	int s;
 
 	s = splhigh();	/* XXXthorpej */
 	TAILQ_INSERT_TAIL(&sc->sc_queue, hq, hq_list);
 	splx(s);
 
-	if (sc->sc_queue.tqh_first == hq)
-		return (1);
+	if (TAILQ_FIRST(&sc->sc_queue) == hq)
+		return 1;
 
-	return (0);
+	return 0;
 }
 
 void
-hpibfree(pdev, hq)
-	struct device *pdev;
-	struct hpibqueue *hq;
+hpibfree(struct device *pdev, struct hpibqueue *hq)
 {
-	struct hpibbus_softc *sc = (struct hpibbus_softc *)pdev;
+	struct hpibbus_softc *sc = device_private(pdev);
 	int s;
 
 	s = splhigh();	/* XXXthorpej */
 	TAILQ_REMOVE(&sc->sc_queue, hq, hq_list);
 	splx(s);
 
-	if ((hq = sc->sc_queue.tqh_first) != NULL)
+	if ((hq = TAILQ_FIRST(&sc->sc_queue)) != NULL)
 		(*hq->hq_start)(hq->hq_softc);
 }
 
 int
-hpibid(unit, slave)
-	int unit, slave;
+hpibid(int unit, int slave)
 {
 	short id;
 	int ohpibtimeout;
@@ -337,118 +311,102 @@ hpibid(unit, slave)
 	if (hpibrecv(unit, 31, slave, &id, 2) != 2)
 		id = 0;
 	hpibtimeout = ohpibtimeout;
-	return(id);
+	return id;
 }
 
 int
-hpibsend(unit, slave, sec, addr, cnt)
-	int unit, slave, sec, cnt;
-	void *addr;
+hpibsend(int unit, int slave, int sec, void *addr, int cnt)
 {
-	struct hpibbus_softc *sc = hpibbus_cd.cd_devs[unit];
+	struct hpibbus_softc *sc = device_lookup_private(&hpibbus_cd,unit);
 
-	return ((*sc->sc_ops->hpib_send)(sc, slave, sec, addr, cnt));
+	return (*sc->sc_ops->hpib_send)(sc, slave, sec, addr, cnt);
 }
 
 int
-hpibrecv(unit, slave, sec, addr, cnt)
-	int unit, slave, sec, cnt;
-	void *addr;
+hpibrecv(int unit, int slave, int sec, void *addr, int cnt)
 {
-	struct hpibbus_softc *sc = hpibbus_cd.cd_devs[unit];
+	struct hpibbus_softc *sc = device_lookup_private(&hpibbus_cd,unit);
 
-	return ((*sc->sc_ops->hpib_recv)(sc, slave, sec, addr, cnt));
+	return (*sc->sc_ops->hpib_recv)(sc, slave, sec, addr, cnt);
 }
 
 int
-hpibpptest(unit, slave)
-	int unit;
-	int slave;
+hpibpptest(int unit, int slave)
 {
-	struct hpibbus_softc *sc = hpibbus_cd.cd_devs[unit];
+	struct hpibbus_softc *sc = device_lookup_private(&hpibbus_cd,unit);
 
-	return ((*sc->sc_ops->hpib_ppoll)(sc) & (0x80 >> slave));
+	return (*sc->sc_ops->hpib_ppoll)(sc) & (0x80 >> slave);
 }
 
 void
-hpibppclear(unit)
-	int unit;
+hpibppclear(int unit)
 {
-	struct hpibbus_softc *sc = hpibbus_cd.cd_devs[unit];
+	struct hpibbus_softc *sc = device_lookup_private(&hpibbus_cd,unit);
 
 	sc->sc_flags &= ~HPIBF_PPOLL;
 }
 
 void
-hpibawait(unit)
-	int unit;
+hpibawait(int unit)
 {
-	struct hpibbus_softc *sc = hpibbus_cd.cd_devs[unit];
+	struct hpibbus_softc *sc = device_lookup_private(&hpibbus_cd, unit);
 
 	sc->sc_flags |= HPIBF_PPOLL;
 	(*sc->sc_ops->hpib_ppwatch)(sc);
 }
 
 int
-hpibswait(unit, slave)
-	int unit;
-	int slave;
+hpibswait(int unit, int slave)
 {
-	struct hpibbus_softc *sc = hpibbus_cd.cd_devs[unit];
+	struct hpibbus_softc *sc = device_lookup_private(&hpibbus_cd, unit);
 	int timo = hpibtimeout;
-	int mask, (*ppoll) __P((struct hpibbus_softc *));
+	int mask, (*ppoll)(struct hpibbus_softc *);
 
 	ppoll = sc->sc_ops->hpib_ppoll;
 	mask = 0x80 >> slave;
 	while (((*ppoll)(sc) & mask) == 0) {
 		if (--timo == 0) {
-			printf("%s: swait timeout\n", sc->sc_dev.dv_xname);
-			return(-1);
+			printf("%s: swait timeout\n", device_xname(sc->sc_dev));
+			return -1;
 		}
 	}
-	return(0);
+	return 0;
 }
 
 int
-hpibustart(unit)
-	int unit;
+hpibustart(int unit)
 {
-	struct hpibbus_softc *sc = hpibbus_cd.cd_devs[unit];
+	struct hpibbus_softc *sc = device_lookup_private(&hpibbus_cd,unit);
 
 	if (sc->sc_type == HPIBA)
 		sc->sc_dq->dq_chan = DMA0;
 	else
 		sc->sc_dq->dq_chan = DMA0 | DMA1;
 	if (dmareq(sc->sc_dq))
-		return(1);
-	return(0);
+		return 1;
+	return 0;
 }
 
-void
-hpibstart(arg)
-	void *arg;
+static void
+hpibstart(void *arg)
 {
 	struct hpibbus_softc *sc = arg;
 	struct hpibqueue *hq;
 
-	hq = sc->sc_queue.tqh_first;
+	hq = TAILQ_FIRST(&sc->sc_queue);
 	(*hq->hq_go)(hq->hq_softc);
 }
 
 void
-hpibgo(unit, slave, sec, vbuf, count, rw, timo)
-	int unit, slave, sec;
-	void *vbuf;
-	int count, rw, timo;
+hpibgo(int unit, int slave, int sec, void *vbuf, int count, int rw, int timo)
 {
-	struct hpibbus_softc *sc = hpibbus_cd.cd_devs[unit];
+	struct hpibbus_softc *sc = device_lookup_private(&hpibbus_cd,unit);
 
 	(*sc->sc_ops->hpib_go)(sc, slave, sec, vbuf, count, rw, timo);
 }
 
-void
-hpibdone(arg)
-	void *arg;
+static void
+hpibdone(void *arg)
 {
 	struct hpibbus_softc *sc = arg;
 
@@ -456,18 +414,15 @@ hpibdone(arg)
 }
 
 int
-hpibintr(arg)
-	void *arg;
+hpibintr(void *arg)
 {
 	struct hpibbus_softc *sc = arg;
 
-	return ((sc->sc_ops->hpib_intr)(arg));
+	return (sc->sc_ops->hpib_intr)(arg);
 }
 
-int
-hpibbus_alloc(sc, slave, punit)
-	struct hpibbus_softc *sc;
-	int slave, punit;
+static int
+hpibbus_alloc(struct hpibbus_softc *sc, int slave, int punit)
 {
 
 	if (slave >= HPIB_NSLAVES ||
@@ -476,15 +431,14 @@ hpibbus_alloc(sc, slave, punit)
 
 	if (sc->sc_rmap[slave][punit] == 0) {
 		sc->sc_rmap[slave][punit] = 1;
-		return (0);
+		return 0;
 	}
-	return (1);
+	return 1;
 }
 
-void
-hpibbus_free(sc, slave, punit)
-	struct hpibbus_softc *sc;
-	int slave, punit;
+#if 0
+static void
+hpibbus_free(struct hpibbus_softc *sc, int slave, int punit)
 {
 
 	if (slave >= HPIB_NSLAVES ||
@@ -498,3 +452,4 @@ hpibbus_free(sc, slave, punit)
 
 	sc->sc_rmap[slave][punit] = 0;
 }
+#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_pci.c,v 1.26 1998/10/02 00:20:52 fvdl Exp $	*/
+/*	$NetBSD: if_le_pci.c,v 1.49 2008/04/28 20:23:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -52,11 +45,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -75,8 +64,8 @@
  *	@(#)if_le.c	8.2 (Berkeley) 11/16/93
  */
 
-#include "opt_inet.h"
-#include "bpfilter.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_le_pci.c,v 1.49 2008/04/28 20:23:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,24 +74,15 @@
 #include <sys/socket.h>
 #include <sys/device.h>
 
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
-#include <vm/vm_param.h>
+#include <uvm/uvm_extern.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/if_inarp.h>
-#endif
-
-#include <vm/vm.h>
-
-#include <machine/cpu.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -115,28 +95,12 @@
 
 #include <dev/pci/if_levar.h>
 
-int le_pci_match __P((struct device *, struct cfdata *, void *));
-void le_pci_attach __P((struct device *, struct device *, void *));
-int le_pci_mediachange __P((struct lance_softc *));
+static int	le_pci_match(device_t, cfdata_t, void *);
+static void	le_pci_attach(device_t, device_t, void *);
+static int	le_pci_mediachange(struct lance_softc *);
 
-struct cfattach le_pci_ca = {
-	sizeof(struct le_softc), le_pci_match, le_pci_attach
-};
-
-#if defined(_KERNEL) && !defined(_LKM)
-#include "opt_ddb.h"
-#endif
-
-#ifdef DDB
-#define	integrate
-#define hide
-#else
-#define	integrate	static __inline
-#define hide		static
-#endif
-
-hide void le_pci_wrcsr __P((struct lance_softc *, u_int16_t, u_int16_t));
-hide u_int16_t le_pci_rdcsr __P((struct lance_softc *, u_int16_t));
+CFATTACH_DECL_NEW(le_pci, sizeof(struct le_softc),
+    le_pci_match, le_pci_attach, NULL, NULL);
 
 /*
  * PCI constants.
@@ -155,10 +119,8 @@ static int le_pci_supmedia[] = {
 	IFM_ETHER|IFM_10_5|IFM_FDX,
 };
 
-hide void
-le_pci_wrcsr(sc, port, val)
-	struct lance_softc *sc;
-	u_int16_t port, val;
+static void
+le_pci_wrcsr(struct lance_softc *sc, uint16_t port, uint16_t val)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
 	bus_space_tag_t iot = lesc->sc_iot;
@@ -168,30 +130,27 @@ le_pci_wrcsr(sc, port, val)
 	bus_space_write_2(iot, ioh, lesc->sc_rdp, val);
 }
 
-hide u_int16_t
-le_pci_rdcsr(sc, port)
-	struct lance_softc *sc;
-	u_int16_t port;
+static uint16_t
+le_pci_rdcsr(struct lance_softc *sc, uint16_t port)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
 	bus_space_tag_t iot = lesc->sc_iot;
 	bus_space_handle_t ioh = lesc->sc_ioh;
-	u_int16_t val;
+	uint16_t val;
 
 	bus_space_write_2(iot, ioh, lesc->sc_rap, port);
 	val = bus_space_read_2(iot, ioh, lesc->sc_rdp);
 	return (val);
 }
 
-int
-le_pci_mediachange(sc)
-	struct lance_softc *sc;
+static int
+le_pci_mediachange(struct lance_softc *sc)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
 	bus_space_tag_t iot = lesc->sc_iot;
 	bus_space_handle_t ioh = lesc->sc_ioh;
 	int newmedia = sc->sc_media.ifm_media;
-	u_int16_t reg;
+	uint16_t reg;
 
 	if (IFM_SUBTYPE(newmedia) !=
 	    IFM_SUBTYPE(lesc->sc_currentmedia)) {
@@ -209,7 +168,7 @@ le_pci_mediachange(sc)
 				sc->sc_initmodemedia = 1; /* UTP */
 			else
 				sc->sc_initmodemedia = 0; /* AUI */
-			lance_init(sc);
+			lance_init(&sc->sc_ethercom.ec_if);
 
 			if (IFM_SUBTYPE(lesc->sc_currentmedia) == IFM_AUTO) {
 				/* take away autoselect - BCR2 bit 1 */
@@ -220,7 +179,7 @@ le_pci_mediachange(sc)
 				bus_space_write_2(iot, ioh, PCNET_PCI_BDP, reg);
 			}
 		}
-		
+
 	}
 
 	if ((IFM_OPTIONS(newmedia) ^ IFM_OPTIONS(lesc->sc_currentmedia))
@@ -230,7 +189,7 @@ le_pci_mediachange(sc)
 		reg = bus_space_read_2(iot, ioh, PCNET_PCI_BDP);
 		if (IFM_OPTIONS(newmedia) & IFM_FDX) {
 			reg |= 1; /* FDEN */
-			/* allow FDX on AUI only if explicitely chosen,
+			/* allow FDX on AUI only if explicitly chosen,
 			 not in autoselect mode */
 			if (IFM_SUBTYPE(newmedia) == IFM_10_5)
 				reg |= 2; /* AUIFD */
@@ -246,11 +205,8 @@ le_pci_mediachange(sc)
 	return (0);
 }
 
-int
-le_pci_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+le_pci_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -265,12 +221,10 @@ le_pci_match(parent, match, aux)
 	return (0);
 }
 
-void
-le_pci_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+le_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct le_softc *lesc = (void *)self;
+	struct le_softc *lesc = device_private(self);
 	struct lance_softc *sc = &lesc->sc_am79900.lsc;
 	struct pci_attach_args *pa = aux;
 	pci_intr_handle_t ih;
@@ -283,6 +237,8 @@ le_pci_attach(parent, self, aux)
 	int i, rseg;
 	const char *model, *intrstr;
 
+	sc->sc_dev = self;
+
 	switch (PCI_PRODUCT(pa->pa_id)) {
 	case PCI_PRODUCT_AMD_PCNET_PCI:
 		model = "PCnet-PCI Ethernet";
@@ -294,11 +250,11 @@ le_pci_attach(parent, self, aux)
 		model = "unknown model!";
 	}
 
-	printf(": %s\n", model);
+	aprint_normal(": %s\n", model);
 
 	if (pci_mapreg_map(pa, PCI_CBIO, PCI_MAPREG_TYPE_IO, 0,
 	    &iot, &ioh, NULL, NULL)) {
-		printf("%s: can't map I/O space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't map I/O space\n");
 		return;
 	}
 
@@ -315,17 +271,15 @@ le_pci_attach(parent, self, aux)
 	/*
 	 * Allocate a DMA area for the card.
 	 */
-	if (bus_dmamem_alloc(dmat, LE_PCI_MEMSIZE, NBPG, 0, &seg, 1,
+	if (bus_dmamem_alloc(dmat, LE_PCI_MEMSIZE, PAGE_SIZE, 0, &seg, 1,
 	    &rseg, BUS_DMA_NOWAIT)) {
-		printf("%s: couldn't allocate memory for card\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't allocate memory for card\n");
 		return;
 	}
 	if (bus_dmamem_map(dmat, &seg, rseg, LE_PCI_MEMSIZE,
-	    (caddr_t *)&sc->sc_mem,
+	    (void **)&sc->sc_mem,
 	    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) {
-		printf("%s: couldn't map memory for card\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't map memory for card\n");
 		return;
 	}
 
@@ -334,15 +288,13 @@ le_pci_attach(parent, self, aux)
 	 */
 	if (bus_dmamap_create(dmat, LE_PCI_MEMSIZE, 1,
 	    LE_PCI_MEMSIZE, 0, BUS_DMA_NOWAIT, &lesc->sc_dmam)) {
-		printf("%s: couldn't create DMA map\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't create DMA map\n");
 		bus_dmamem_free(dmat, &seg, rseg);
 		return;
 	}
 	if (bus_dmamap_load(dmat, lesc->sc_dmam,
 	    sc->sc_mem, LE_PCI_MEMSIZE, NULL, BUS_DMA_NOWAIT)) {
-		printf("%s: coundn't load DMA map\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "coundn't load DMA map\n");
 		bus_dmamem_free(dmat, &seg, rseg);
 		return;
 	}
@@ -367,7 +319,7 @@ le_pci_attach(parent, self, aux)
 	sc->sc_mediachange = le_pci_mediachange;
 	lesc->sc_currentmedia = le_pci_supmedia[0];
 
-	printf("%s", sc->sc_dev.dv_xname);
+	aprint_normal("%s", device_xname(self));
 	am79900_config(&lesc->sc_am79900);
 
 	/* Chip is stopped. Set "software style" to 32-bit. */
@@ -381,20 +333,18 @@ le_pci_attach(parent, self, aux)
 	    csr | PCI_COMMAND_MASTER_ENABLE);
 
 	/* Map and establish the interrupt. */
-	if (pci_intr_map(pc, pa->pa_intrtag, pa->pa_intrpin,
-	    pa->pa_intrline, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+	if (pci_intr_map(pa, &ih)) {
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	lesc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, am79900_intr, sc);
 	if (lesc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 }

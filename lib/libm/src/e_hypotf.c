@@ -15,20 +15,16 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: e_hypotf.c,v 1.7 1999/07/02 15:37:39 simonb Exp $");
+__RCSID("$NetBSD: e_hypotf.c,v 1.9 2008/04/25 22:21:53 christos Exp $");
 #endif
 
 #include "math.h"
 #include "math_private.h"
 
-#ifdef __STDC__
-	float __ieee754_hypotf(float x, float y)
-#else
-	float __ieee754_hypot(x,y)
-	float x, y;
-#endif
+float
+__ieee754_hypotf(float x, float y)
 {
-	float a=x,b=y,t1,t2,y1,y2,w;
+	float a=x,b=y,t1,t2,yy1,y2,w;
 	int32_t j,k,ha,hb;
 
 	GET_FLOAT_WORD(ha,x);
@@ -75,11 +71,11 @@ __RCSID("$NetBSD: e_hypotf.c,v 1.7 1999/07/02 15:37:39 simonb Exp $");
 	    w  = __ieee754_sqrtf(t1*t1-(b*(-b)-t2*(a+t1)));
 	} else {
 	    a  = a+a;
-	    SET_FLOAT_WORD(y1,hb&0xfffff000);
-	    y2 = b - y1;
+	    SET_FLOAT_WORD(yy1,hb&0xfffff000);
+	    y2 = b - yy1;
 	    SET_FLOAT_WORD(t1,ha+0x00800000);
 	    t2 = a - t1;
-	    w  = __ieee754_sqrtf(t1*y1-(w*(-w)-(t1*y2+t2*b)));
+	    w  = __ieee754_sqrtf(t1*yy1-(w*(-w)-(t1*y2+t2*b)));
 	}
 	if(k!=0) {
 	    SET_FLOAT_WORD(t1,0x3f800000+(k<<23));

@@ -1,4 +1,4 @@
-/*	$NetBSD: i82586var.h,v 1.12 1999/08/23 12:12:43 pk Exp $	*/
+/*	$NetBSD: i82586var.h,v 1.22 2008/04/28 20:23:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -97,7 +90,9 @@
  * This sun version based on i386 version 1.30.
  */
 
+#ifndef I82586_DEBUG
 #define I82586_DEBUG 0
+#endif
 
 /* Debug elements */
 #define	IED_RINT	0x01
@@ -121,6 +116,7 @@
 #define INTR_ENTER	0		/* intr hook called on ISR entry */
 #define INTR_EXIT	1		/* intr hook called on ISR exit */
 #define INTR_LOOP	2		/* intr hook called on ISR loop */
+#define INTR_ACK	3		/* intr hook called on ie_ack */
 
 #define CHIP_PROBE	0		/* reset called from chip probe */
 #define CARD_RESET	1		/* reset called from card reset */
@@ -140,7 +136,7 @@
  *
  * The front-end is required to manage the SCP and ISCP structures. i.e.
  * allocate room for them on the board's memory, and arrange to point the
- * chip at the SCB stucture, the offset of which is passed to the MI
+ * chip at the SCB structure, the offset of which is passed to the MI
  * driver in `sc_scb'.
  *
  * The following functions provide the glue necessary to deal with
@@ -164,6 +160,8 @@
 			  `offset' argument will be 16-bit aligned
  *	bus_write24	- write a 24-bit i82586 pointer
 			  `offset' argument will be 32-bit aligned
+ *	bus_barrier	- perform a bus barrier operation, forcing
+			  all outstanding reads/writes to complete
  *
  */
 
@@ -172,6 +170,8 @@ struct ie_softc {
 
 	bus_space_tag_t	bt;	/* bus-space tag of card memory */
 	bus_space_handle_t bh;	/* bus-space handle of card memory */
+
+	bus_dmamap_t	sc_dmamap;	/* bus dma handle */
 
 	void	*sc_iobase;	/* (MD) KVA of base of 24 bit addr space */
 	void	*sc_maddr;	/* (MD) KVA of base of chip's RAM
@@ -183,24 +183,22 @@ struct ie_softc {
 	struct	ifmedia sc_media;	/* supported media information */
 
 	/* Bus glue */
-	void	(*hwreset) __P((struct ie_softc *, int));
-	void	(*hwinit) __P((struct ie_softc *));
-	void	(*chan_attn) __P((struct ie_softc *));
-	int	(*intrhook) __P((struct ie_softc *, int where));
+	void	(*hwreset)(struct ie_softc *, int);
+	void	(*hwinit)(struct ie_softc *);
+	void	(*chan_attn)(struct ie_softc *, int);
+	int	(*intrhook)(struct ie_softc *, int);
 
-	void	(*memcopyin) __P((struct ie_softc *, void *, int, size_t));
-	void	(*memcopyout) __P((struct ie_softc *, const void *,
-				   int, size_t));
-	u_int16_t (*ie_bus_read16) __P((struct ie_softc *, int offset));
-	void	(*ie_bus_write16) __P((struct ie_softc *, int offset,
-					u_int16_t value));
-	void	(*ie_bus_write24) __P((struct ie_softc *, int offset,
-					int addr));
+	void	(*memcopyin)(struct ie_softc *, void *, int, size_t);
+	void	(*memcopyout)(struct ie_softc *, const void *, int, size_t);
+	u_int16_t (*ie_bus_read16)(struct ie_softc *, int);
+	void	(*ie_bus_write16)(struct ie_softc *, int, u_int16_t);
+	void	(*ie_bus_write24)(struct ie_softc *, int, int);
+	void	(*ie_bus_barrier)(struct ie_softc *, int, int, int);
 
 	/* Media management */
-        int  (*sc_mediachange) __P((struct ie_softc *));
+        int  (*sc_mediachange)(struct ie_softc *);
 				/* card dependent media change */
-        void (*sc_mediastatus) __P((struct ie_softc *, struct ifmediareq *));
+        void (*sc_mediastatus)(struct ie_softc *, struct ifmediareq *);
 				/* card dependent media status */
 
 
@@ -257,7 +255,18 @@ struct ie_softc {
 };
 
 /* Exported functions */
-int 	i82586_intr	__P((void *));
-int 	i82586_proberam __P((struct ie_softc *));
-void 	i82586_attach 	__P((struct ie_softc *, char *, u_int8_t *, 
-			     int*, int, int));
+int 	i82586_intr(void *);
+int 	i82586_proberam(struct ie_softc *);
+void 	i82586_attach(struct ie_softc *, const char *, u_int8_t *, int*, int,
+    int);
+
+/* Shortcut macros to optional (driver uses default if unspecified) callbacks */
+#define IE_BUS_BARRIER(sc, offset, length, flags)			  \
+do { 	    								  \
+	if ((sc)->ie_bus_barrier) 					  \
+		((sc)->ie_bus_barrier)((sc), (offset), (length), (flags));\
+	else 								  \
+		bus_space_barrier((sc)->bt, (sc)->bh, (offset), (length), \
+							        (flags)); \
+} while (0)
+

@@ -1,9 +1,10 @@
-/*	$NetBSD: udp6_var.h,v 1.7 2000/02/28 12:08:25 itojun Exp $	*/
+/*	$NetBSD: udp6_var.h,v 1.23 2008/04/24 11:38:38 ad Exp $	*/
+/*	$KAME: udp6_var.h,v 1.11 2000/06/05 00:14:31 itojun Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -15,7 +16,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -41,11 +42,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -70,47 +67,49 @@
 /*
  * UDP Kernel structures and variables.
  */
-struct	udp6stat {
-				/* input statistics: */
-	u_quad_t udp6s_ipackets;	/* total input packets */
-	u_quad_t udp6s_hdrops;		/* packet shorter than header */
-	u_quad_t udp6s_badsum;		/* checksum error */
-	u_quad_t udp6s_nosum;		/* no checksum */
-	u_quad_t udp6s_badlen;		/* data length larger than packet */
-	u_quad_t udp6s_noport;		/* no socket on port */
-	u_quad_t udp6s_noportmcast;	/* of above, arrived as broadcast */
-	u_quad_t udp6s_fullsock;	/* not delivered, input socket full */
-	u_quad_t udp6ps_pcbcachemiss;	/* input packets missing pcb cache */
-				/* output statistics: */
-	u_quad_t udp6s_opackets;	/* total output packets */
-};
+
+#define	UDP6_STAT_IPACKETS	0	/* total input packets */
+#define	UDP6_STAT_HDROPS	1	/* packet shorter than header */
+#define	UDP6_STAT_BADSUM	2	/* checksum error */
+#define	UDP6_STAT_NOSUM		3	/* no checksum */
+#define	UDP6_STAT_BADLEN	4	/* data length larger than packet */
+#define	UDP6_STAT_NOPORT	5	/* no socket on port */
+#define	UDP6_STAT_NOPORTMCAST	6	/* of above, arrived as multicast */
+#define	UDP6_STAT_FULLSOCK	7	/* not delivered, input socket full */
+#define	UDP6_STAT_PCBCACHEMISS	8	/* input packets missing pcb cache */
+#define	UDP6_STAT_OPACKETS	9	/* total output packets */
+
+#define	UDP6_NSTATS		10
 
 /*
- * Names for UDP sysctl objects
+ * Names for UDP6 sysctl objects
  */
-#define UDP6CTL_SENDMAX		1	/* default send buffer */
+#define UDP6CTL_SENDSPACE	1	/* default send buffer */
 #define UDP6CTL_RECVSPACE	2	/* default recv buffer */
-#define UDP6CTL_MAXID		3
+#define	UDP6CTL_LOOPBACKCKSUM	3	/* do UDP checksum on loopback? */
+#define UDP6CTL_STATS		4	/* udp6 statistics */
+#define UDP6CTL_MAXID		5
 
 #define UDP6CTL_NAMES { \
 	{ 0, 0 }, \
-	{ "sendmax", CTLTYPE_INT }, \
+	{ "sendspace", CTLTYPE_INT }, \
 	{ "recvspace", CTLTYPE_INT }, \
+	{ "do_loopback_cksum", CTLTYPE_INT }, \
+	{ "stats", CTLTYPE_STRUCT }, \
 }
 
 #ifdef _KERNEL
-struct	in6pcb udb6;
-struct	udp6stat udp6stat;
-
-void	udp6_ctlinput __P((int, struct sockaddr *, void *));
-void	udp6_init __P((void));
-int	udp6_input __P((struct mbuf **, int *, int));
-int	udp6_output __P((struct in6pcb *,
-			 struct mbuf *, struct mbuf *, struct mbuf *));
-int	udp6_sysctl __P((int *, u_int, void *, size_t *, void *, size_t));
-int	udp6_usrreq __P((struct socket *,
+void	*udp6_ctlinput(int, const struct sockaddr *, void *);
+void	udp6_init(void);
+int	udp6_input(struct mbuf **, int *, int);
+int	udp6_output(struct in6pcb *, struct mbuf *, struct mbuf *,
+	struct mbuf *, struct lwp *);
+int	udp6_sysctl(int *, u_int, void *, size_t *, void *, size_t);
+int	udp6_usrreq(struct socket *,
 			 int, struct mbuf *, struct mbuf *, struct mbuf *,
-			 struct proc *));
+			 struct lwp *);
+
+void	udp6_statinc(u_int);
 #endif /* _KERNEL */
 
-#endif /*_NETINET6_UDP6_VAR_H_*/
+#endif /* !_NETINET6_UDP6_VAR_H_ */

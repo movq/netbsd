@@ -1,4 +1,4 @@
-/*	$NetBSD: am79c950.c,v 1.7 1999/05/18 23:52:53 thorpej Exp $	*/
+/*	$NetBSD: am79c950.c,v 1.23 2007/10/17 19:55:17 garbled Exp $	*/
 
 /*-
  * Copyright (c) 1997 David Huang <khym@bga.com>
@@ -33,10 +33,11 @@
  * Driver for the AMD Am79C940 (MACE) ethernet chip, used for onboard
  * ethernet on the Centris/Quadra 660av and Quadra 840av.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: am79c950.c,v 1.23 2007/10/17 19:55:17 garbled Exp $");
+
 #include "opt_inet.h"
-#include "opt_ccitt.h"
-#include "opt_llc.h"
-#include "opt_ns.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,6 +49,8 @@
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 #include <sys/device.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -62,28 +65,12 @@
 #include <netinet/ip.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
-
-#if defined(CCITT) && defined(LLC)
-#include <sys/socketvar.h>
-#include <netccitt/x25.h>
-#include <netccitt/pk.h>
-#include <netccitt/pk_var.h>
-#include <netccitt/pk_extern.h>
-#endif
-
-#include <vm/vm.h>
-
 #include "bpfilter.h"
 #if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
 #endif
 
-#include <machine/pio.h>
 #include <machine/bus.h>
 
 #include <macppc/dev/am79c950reg.h>
@@ -92,14 +79,14 @@
 hide void	mcwatchdog __P((struct ifnet *));
 hide int	mcinit __P((struct mc_softc *sc));
 hide int	mcstop __P((struct mc_softc *sc));
-hide int	mcioctl __P((struct ifnet *ifp, u_long cmd, caddr_t data));
+hide int	mcioctl __P((struct ifnet *ifp, u_long cmd, void *data));
 hide void	mcstart __P((struct ifnet *ifp));
 hide void	mcreset __P((struct mc_softc *sc));
 
 integrate u_int	maceput __P((struct mc_softc *sc, struct mbuf *m0));
 integrate void	mc_tint __P((struct mc_softc *sc));
-integrate void	mace_read __P((struct mc_softc *, caddr_t, int));
-integrate struct mbuf *mace_get __P((struct mc_softc *, caddr_t, int));
+integrate void	mace_read __P((struct mc_softc *, uint8_t *, int));
+integrate struct mbuf *mace_get __P((struct mc_softc *, uint8_t *, int));
 static void mace_calcladrf __P((struct ethercom *ac, u_int8_t *af));
 static inline u_int16_t ether_cmp __P((void *, void *));
 static int mc_mediachange __P((struct ifnet *));
@@ -107,7 +94,7 @@ static void mc_mediastatus __P((struct ifnet *, struct ifmediareq *));
 
 /*
  * Compare two Ether/802 addresses for equality, inlined and
- * unrolled for speed.  Use this like bcmp().
+ * unrolled for speed.  Use this like memcmp().
  *
  * XXX: Add <machine/inlines.h> for stuff like this?
  * XXX: or maybe add it to libkern.h instead?
@@ -167,20 +154,16 @@ mcsetup(sc, lladdr)
 	DELAY(100);
 	NIC_PUT(sc, MACE_IMR, ~0);
 
-	bcopy(lladdr, sc->sc_enaddr, ETHER_ADDR_LEN);
+	memcpy(sc->sc_enaddr, lladdr, ETHER_ADDR_LEN);
 	printf(": address %s\n", ether_sprintf(lladdr));
 
-	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
+	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_ioctl = mcioctl;
 	ifp->if_start = mcstart;
 	ifp->if_flags =
 	    IFF_BROADCAST | IFF_SIMPLEX | IFF_NOTRAILERS | IFF_MULTICAST;
 	ifp->if_watchdog = mcwatchdog;
-
-#if NBPFILTER > 0
-	bpfattach(&ifp->if_bpf, ifp, DLT_EN10MB, sizeof(struct ether_header));
-#endif
 
 	/* initialize ifmedia structures */
 	ifmedia_init(&sc->sc_media, 0, mc_mediachange, mc_mediastatus);
@@ -197,14 +180,13 @@ hide int
 mcioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 {
 	struct mc_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa;
 	struct ifreq *ifr;
 
 	int	s = splnet(), err = 0;
-	int	temp;
 
 	switch (cmd) {
 
@@ -217,24 +199,6 @@ mcioctl(ifp, cmd, data)
 			mcinit(sc);
 			arp_ifinit(ifp, ifa);
 			break;
-#endif
-#ifdef NS
-		case AF_NS:
-		    {
-			register struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
-
-			if (ns_nullhost(*ina))
-				ina->x_host =
-				    *(union ns_host *)LLADDR(ifp->if_sadl);
-			else {
-				bcopy(ina->x_host.c_host,
-				    LLADDR(ifp->if_sadl),
-				    sizeof(sc->sc_enaddr));
-			}
-			/* Set new address. */
-			mcinit(sc);
-			break;
-		    }
 #endif
 		default:
 			mcinit(sc);
@@ -263,28 +227,20 @@ mcioctl(ifp, cmd, data)
 			 * reset the interface to pick up any other changes
 			 * in flags
 			 */
-			temp = ifp->if_flags & IFF_UP;
 			mcreset(sc);
-			ifp->if_flags |= temp;
 			mcstart(ifp);
 		}
 		break;
 
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		ifr = (struct ifreq *) data;
-		err = (cmd == SIOCADDMULTI) ?
-		    ether_addmulti(ifr, &sc->sc_ethercom) :
-		    ether_delmulti(ifr, &sc->sc_ethercom);
-
-		if (err == ENETRESET) {
+		if ((err = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 			/*
 			 * Multicast list has changed; set the hardware
 			 * filter accordingly. But remember UP flag!
 			 */
-			temp = ifp->if_flags & IFF_UP;
-			mcreset(sc);
-			ifp->if_flags |= temp;
+			if (ifp->if_flags & IFF_RUNNING)
+				mcreset(sc);
 			err = 0;
 		}
 		break;
@@ -438,7 +394,7 @@ mcstop(sc)
 	DELAY(100);
 
 	sc->sc_if.if_timer = 0;
-	sc->sc_if.if_flags &= ~(IFF_RUNNING | IFF_UP);
+	sc->sc_if.if_flags &= ~IFF_RUNNING;
 
 	splx(s);
 	return (0);
@@ -454,12 +410,9 @@ mcwatchdog(ifp)
 	struct ifnet *ifp;
 {
 	struct mc_softc *sc = ifp->if_softc;
-	int temp;
 
 	printf("mcwatchdog: resetting chip\n");
-	temp = ifp->if_flags & IFF_UP;
 	mcreset(sc);
-	ifp->if_flags |= temp;
 }
 
 /*
@@ -480,18 +433,18 @@ maceput(sc, m)
 		u_char *data = mtod(m, u_char *);
 		len = m->m_len;
 		totlen += len;
-		bcopy(data, buff, len);
+		memcpy(buff, data, len);
 		buff += len;
 		MFREE(m, n);
 	}
 
-	if (totlen > NBPG)
+	if (totlen > PAGE_SIZE)
 		panic("%s: maceput: packet overflow", sc->sc_dev.dv_xname);
 
 #if 0
 	if (totlen < ETHERMIN + sizeof(struct ether_header)) {
 		int pad = ETHERMIN + sizeof(struct ether_header) - totlen;
-		bzero(sc->sc_txbuf + totlen, pad);
+		memset(sc->sc_txbuf + totlen, 0, pad);
 		totlen = ETHERMIN + sizeof(struct ether_header);
 	}
 #endif
@@ -640,11 +593,10 @@ mc_rint(sc)
 integrate void
 mace_read(sc, pkt, len)
 	struct mc_softc *sc;
-	caddr_t pkt;
+	uint8_t *pkt;
 	int len;
 {
 	struct ifnet *ifp = &sc->sc_if;
-	struct ether_header *eh = (struct ether_header *)pkt;
 	struct mbuf *m;
 
 	if (len <= sizeof(struct ether_header) ||
@@ -657,20 +609,6 @@ mace_read(sc, pkt, len)
 		return;
 	}
 
-#if NBPFILTER > 0
-	/*
-	 * Check if there's a bpf filter listening on this interface.
-	 * If so, hand off the raw packet to enet, then discard things
-	 * not destined for us (but be sure to keep broadcast/multicast).
-	 */
-	if (ifp->if_bpf) {
-		bpf_tap(ifp->if_bpf, pkt, len);
-		if ((ifp->if_flags & IFF_PROMISC) != 0 &&
-		    (eh->ether_dhost[0] & 1) == 0 && /* !mcast and !bcast */
-		    ETHER_CMP(eh->ether_dhost, sc->sc_enaddr))
-			return;
-	}
-#endif
 	m = mace_get(sc, pkt, len);
 	if (m == NULL) {
 		ifp->if_ierrors++;
@@ -678,6 +616,12 @@ mace_read(sc, pkt, len)
 	}
 
 	ifp->if_ipackets++;
+
+#if NBPFILTER > 0 
+	/* Pass this up to any BPF listeners. */
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, m); 
+#endif
 
 	/* Pass the packet up. */
 	(*ifp->if_input)(ifp, m);
@@ -692,7 +636,7 @@ mace_read(sc, pkt, len)
 integrate struct mbuf *
 mace_get(sc, pkt, totlen)
 	struct mc_softc *sc;
-	caddr_t pkt;
+	uint8_t *pkt;
 	int totlen;
 {
 	register struct mbuf *m;
@@ -727,7 +671,7 @@ mace_get(sc, pkt, totlen)
 			len = MCLBYTES;
 		}
 		m->m_len = len = min(totlen, len);
-		bcopy(pkt, mtod(m, caddr_t), len);
+		memcpy(mtod(m, void *), pkt, len);
 		pkt += len;
 		totlen -= len;
 		*mp = m;

@@ -1,4 +1,4 @@
-/*	$NetBSD: move.c,v 1.9 1999/09/08 21:17:57 jsm Exp $	*/
+/*	$NetBSD: move.c,v 1.12 2004/08/27 09:07:08 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)move.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: move.c,v 1.9 1999/09/08 21:17:57 jsm Exp $");
+__RCSID("$NetBSD: move.c,v 1.12 2004/08/27 09:07:08 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -94,9 +90,13 @@ get_move()
 #endif
 		else {
 over:
-			if (Auto_bot)
+			if (Auto_bot) {
 				c = automove();
-			else
+				if (!Jump) {
+					usleep(10000);
+					refresh();
+				}
+			} else
 				c = getchar();
 			if (isdigit(c)) {
 				Count = (c - '0');
@@ -175,13 +175,17 @@ teleport:
 			Running = FALSE;
 			mvaddch(My_pos.y, My_pos.x, ' ');
 			My_pos = *rnd_pos();
+			telmsg(1);
+			refresh();
+			sleep(1);
+			telmsg(0);
 			mvaddch(My_pos.y, My_pos.x, PLAYER);
 			leaveok(stdscr, FALSE);
 			refresh();
 			flush_in();
 			goto ret;
 		  case CTRL('L'):
-			wrefresh(curscr);
+			refresh();
 			break;
 		  case EOF:
 			break;

@@ -1,7 +1,7 @@
-/*	$NetBSD: nsphy.c,v 1.26 2000/03/06 20:56:57 thorpej Exp $	*/
+/*	$NetBSD: nsphy.c,v 1.54 2008/05/04 17:06:10 xtraeme Exp $	*/
 
 /*-
- * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -71,11 +64,13 @@
  * Data Sheet available from www.national.com
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: nsphy.c,v 1.54 2008/05/04 17:06:10 xtraeme Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
 #include <sys/socket.h>
 #include <sys/errno.h>
 
@@ -88,74 +83,79 @@
 
 #include <dev/mii/nsphyreg.h>
 
-int	nsphymatch __P((struct device *, struct cfdata *, void *));
-void	nsphyattach __P((struct device *, struct device *, void *));
+static int	nsphymatch(device_t, cfdata_t, void *);
+static void	nsphyattach(device_t, device_t, void *);
 
-struct cfattach nsphy_ca = {
-	sizeof(struct mii_softc), nsphymatch, nsphyattach, mii_phy_detach,
-	    mii_phy_activate
+CFATTACH_DECL_NEW(nsphy, sizeof(struct mii_softc),
+    nsphymatch, nsphyattach, mii_phy_detach, mii_phy_activate);
+
+static int	nsphy_service(struct mii_softc *, struct mii_data *, int);
+static void	nsphy_status(struct mii_softc *);
+static void	nsphy_reset(struct mii_softc *sc);
+
+static const struct mii_phy_funcs nsphy_funcs = {
+	nsphy_service, nsphy_status, nsphy_reset,
 };
 
-int	nsphy_service __P((struct mii_softc *, struct mii_data *, int));
-void	nsphy_status __P((struct mii_softc *));
+static const struct mii_phydesc nsphys[] = {
+	{ MII_OUI_xxNATSEMI,		MII_MODEL_xxNATSEMI_DP83840,
+	  MII_STR_xxNATSEMI_DP83840 },
 
-int
-nsphymatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+	{ 0,				0,
+	  NULL },
+};
+
+static int
+nsphymatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mii_attach_args *ma = aux;
 
-	if (MII_OUI(ma->mii_id1, ma->mii_id2) == MII_OUI_NATSEMI &&
-	    MII_MODEL(ma->mii_id2) == MII_MODEL_NATSEMI_DP83840)
+	if (mii_phy_match(ma, nsphys) != NULL)
 		return (10);
 
 	return (0);
 }
 
-void
-nsphyattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+nsphyattach(device_t parent, device_t self, void *aux)
 {
-	struct mii_softc *sc = (struct mii_softc *)self;
+	struct mii_softc *sc = device_private(self);
 	struct mii_attach_args *ma = aux;
 	struct mii_data *mii = ma->mii_data;
+	const struct mii_phydesc *mpd;
 
-	printf(": %s, rev. %d\n", MII_STR_NATSEMI_DP83840,
-	    MII_REV(ma->mii_id2));
+	mpd = mii_phy_match(ma, nsphys);
+	aprint_naive(": Media interface\n");
+	aprint_normal(": %s, rev. %d\n", mpd->mpd_name, MII_REV(ma->mii_id2));
 
+	sc->mii_dev = self;
 	sc->mii_inst = mii->mii_instance;
 	sc->mii_phy = ma->mii_phyno;
-	sc->mii_service = nsphy_service;
-	sc->mii_status = nsphy_status;
+	sc->mii_funcs = &nsphy_funcs;
 	sc->mii_pdata = mii;
-	sc->mii_flags = mii->mii_flags;
+	sc->mii_flags = ma->mii_flags;
+	sc->mii_anegticks = MII_ANEGTICKS;
 
-	mii_phy_reset(sc);
+	PHY_RESET(sc);
 
 	sc->mii_capabilities =
 	    PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
-	printf("%s: ", sc->mii_dev.dv_xname);
+	aprint_normal_dev(self, "");
 	if ((sc->mii_capabilities & BMSR_MEDIAMASK) == 0)
-		printf("no media present");
+		aprint_error("no media present");
 	else
 		mii_phy_add_media(sc);
-	printf("\n");
+	aprint_normal("\n");
+
+	if (!pmf_device_register(self, NULL, mii_phy_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
-int
-nsphy_service(sc, mii, cmd)
-	struct mii_softc *sc;
-	struct mii_data *mii;
-	int cmd;
+static int
+nsphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 {
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
 	int reg;
-
-	if ((sc->mii_dev.dv_flags & DVF_ACTIVE) == 0)
-		return (ENXIO);
 
 	switch (cmd) {
 	case MII_POLLSTAT:
@@ -192,7 +192,7 @@ nsphy_service(sc, mii, cmd)
 		reg |= PCR_LED4MODE;
 
 		/*
-		 * Make sure Carrier Intgrity Monitor function is
+		 * Make sure Carrier Integrity Monitor function is
 		 * disabled (normal for Node operation, but sometimes
 		 * it's not set?!)
 		 */
@@ -204,14 +204,17 @@ nsphy_service(sc, mii, cmd)
 		 */
 		reg |= PCR_FLINK100;
 
-#if 0
 		/*
 		 * Mystery bits which are supposedly `reserved',
 		 * but we seem to need to set them when the PHY
-		 * is connected to some interfaces!
+		 * is connected to some interfaces:
+		 *
+		 * 0x0400 is needed for fxp
+		 *        (Intel EtherExpress Pro 10+/100B, 82557 chip)
+		 *        (nsphy with a DP83840 chip)
+		 * 0x0100 may be needed for some other card
 		 */
 		reg |= 0x0100 | 0x0400;
-#endif
 
 		PHY_WRITE(sc, MII_NSPHY_PCR, reg);
 
@@ -242,9 +245,8 @@ nsphy_service(sc, mii, cmd)
 	return (0);
 }
 
-void
-nsphy_status(sc)
-	struct mii_softc *sc;
+static void
+nsphy_status(struct mii_softc *sc)
 {
 	struct mii_data *mii = sc->mii_pdata;
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
@@ -318,4 +320,42 @@ nsphy_status(sc)
 #endif
 	} else
 		mii->mii_media_active = ife->ifm_media;
+}
+
+static void
+nsphy_reset(struct mii_softc *sc)
+{
+	int reg, i;
+
+	if (sc->mii_flags & MIIF_NOISOLATE)
+		reg = BMCR_RESET;
+	else
+		reg = BMCR_RESET | BMCR_ISO;
+	PHY_WRITE(sc, MII_BMCR, reg);
+
+	/*
+	 * Give it a little time to settle in case we just got power.
+	 * The DP83840A data sheet suggests that a soft reset not happen
+	 * within 500us of power being applied.  Be conservative.
+	 */
+	delay(1000);
+
+	/*
+	 * Wait another 2s for it to complete.
+	 * This is only a little overkill as under normal circumstances
+	 * the PHY can take up to 1s to complete reset.
+	 * This is also a bit odd because after a reset, the BMCR will
+	 * clear the reset bit and simply reports 0 even though the reset
+	 * is not yet complete.
+	 */
+	for (i = 0; i < 1000; i++) {
+		reg = PHY_READ(sc, MII_BMCR);
+		if (reg && ((reg & BMCR_RESET) == 0))
+			break;
+		delay(2000);
+	}
+
+	if (sc->mii_inst != 0 && ((sc->mii_flags & MIIF_NOISOLATE) == 0)) {
+		PHY_WRITE(sc, MII_BMCR, reg | BMCR_ISO);
+	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: i82365_isapnp.c,v 1.8 2000/02/23 17:22:11 soren Exp $	*/
+/*	$NetBSD: i82365_isapnp.c,v 1.26 2008/06/26 12:33:17 drochner Exp $	*/
 
 /*
  * Copyright (c) 1998 Bill Sommerfeld.  All rights reserved.
@@ -30,18 +30,17 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: i82365_isapnp.c,v 1.26 2008/06/26 12:33:17 drochner Exp $");
 
-#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/extent.h>
 #include <sys/malloc.h>
 
-#include <vm/vm.h>
-
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -66,14 +65,13 @@ int	pcicisapnp_debug = 0 /* XXX */ ;
 #define	DPRINTF(arg)
 #endif
 
-int pcic_isapnp_match __P((struct device *, struct cfdata *, void *));
-void	pcic_isapnp_attach __P((struct device *, struct device *, void *));
+int pcic_isapnp_match(struct device *, struct cfdata *, void *);
+void	pcic_isapnp_attach(struct device *, struct device *, void *);
 
-struct cfattach pcic_isapnp_ca = {
-	sizeof(struct pcic_isa_softc), pcic_isapnp_match, pcic_isapnp_attach
-};
+CFATTACH_DECL(pcic_isapnp, sizeof(struct pcic_isa_softc),
+    pcic_isapnp_match, pcic_isapnp_attach, NULL, NULL);
 
-static struct pcmcia_chip_functions pcic_isa_functions = {
+static const struct pcmcia_chip_functions pcic_isa_functions = {
 	pcic_chip_mem_alloc,
 	pcic_chip_mem_free,
 	pcic_chip_mem_map,
@@ -89,13 +87,13 @@ static struct pcmcia_chip_functions pcic_isa_functions = {
 
 	pcic_chip_socket_enable,
 	pcic_chip_socket_disable,
+	pcic_chip_socket_settype,
+	NULL,
 };
 
 int
-pcic_isapnp_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+pcic_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -106,12 +104,11 @@ pcic_isapnp_match(parent, match, aux)
 }
 
 void
-pcic_isapnp_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+pcic_isapnp_attach(struct device *parent, struct device *self,
+    void *aux)
 {
-	struct pcic_softc *sc = (void *) self;
-	struct pcic_isa_softc *isc = (void *) self;
+	struct pcic_softc *sc = device_private(self);
+	struct pcic_isa_softc *isc = device_private(self);
 	struct isapnp_attach_args *ipa = aux;
 	isa_chipset_tag_t ic = ipa->ipa_ic;
 	bus_space_tag_t iot = ipa->ipa_iot;
@@ -125,17 +122,16 @@ pcic_isapnp_attach(parent, self, aux)
 	printf("\n");
 
 	if (isapnp_config(iot, memt, ipa)) {
-		printf("%s: error in region allocation\n", sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "error in region allocation\n");
 		return;
 	}
 
-	printf("%s: %s %s", sc->dev.dv_xname, ipa->ipa_devident,
+	printf("%s: %s %s", device_xname(&sc->dev), ipa->ipa_devident,
 	    ipa->ipa_devclass);
 
 	/* sanity check that we get at least one hunk of IO space.. */
 	if (ipa->ipa_nio < 1) {
-		printf("%s: failed to get one chunk of i/o space\n",
-		       sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "failed to get one chunk of i/o space\n");
 		return;
 	}
 
@@ -180,7 +176,7 @@ pcic_isapnp_attach(parent, self, aux)
 	if (ipa->ipa_nirq > 0)
 		sc->irq = ipa->ipa_irq[0].num;
 	else
-		sc->irq = IRQUNK;
+		sc->irq = -1;
 
 	printf("\n");
 

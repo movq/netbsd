@@ -1,7 +1,10 @@
-/* $NetBSD: netisr_dispatch.h,v 1.1 2000/02/21 20:36:14 erh Exp $ */
+/* $NetBSD: netisr_dispatch.h,v 1.14 2007/07/14 21:02:42 ad Exp $ */
+
+#ifndef _NET_NETISR_DISPATCH_H_
+#define _NET_NETISR_DISPATCH_H_
 
 /*
- * netisr_dispatch: This file is included by the 
+ * netisr_dispatch: This file is included by the
  *	machine dependant softnet function.  The
  *	DONETISR macro should be set before including
  *	this file.  i.e.:
@@ -14,15 +17,17 @@
  *	...do cleanup stuff.
  * }
  */
-#include "opt_inet.h"
-#include "opt_atalk.h"
-#include "opt_ccitt.h"
-#include "opt_iso.h"
-#include "opt_ns.h"
-#include "opt_natm.h"
-#include "ppp.h"
+
+#ifndef _NET_NETISR_H_
+#error <net/netisr.h> must be included before <net/netisr_dispatch.h>
+#endif
+
+/*
+ * When adding functions to this list, be sure to add headers to provide
+ * their prototypes in <net/netisr.h> (if necessary).
+ */
+
 #ifdef INET
-#include "arp.h"
 #if NARP > 0
 	DONETISR(NETISR_ARP,arpintr);
 #endif
@@ -34,18 +39,11 @@
 #ifdef NETATALK
 	DONETISR(NETISR_ATALK,atintr);
 #endif
-#ifdef NS
-	DONETISR(NETISR_NS,nsintr);
-#endif
 #ifdef ISO
 	DONETISR(NETISR_ISO,clnlintr);
-#endif
-#ifdef CCITT
-	DONETISR(NETISR_CCITT,ccittintr);
 #endif
 #ifdef NATM
 	DONETISR(NETISR_NATM,natmintr);
 #endif
-#if NPPP > 0
-	DONETISR(NETISR_PPP,pppintr);
-#endif
+
+#endif /* !_NET_NETISR_DISPATCH_H_ */

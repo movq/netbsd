@@ -1,4 +1,4 @@
-/*	$NetBSD: cdvar.h,v 1.12 2000/01/21 23:40:00 thorpej Exp $	*/
+/*	$NetBSD: cdvar.h,v 1.28 2008/03/24 18:27:06 cube Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.  All rights reserved.
@@ -13,7 +13,7 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *	This product includes software developed by Charles M. Hannum.
+ *	This product includes software developed by Manuel Bouyer.
  * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
  *
@@ -31,43 +31,28 @@
 
 #define	CDRETRIES	4
 
-struct cd_ops;
-
 struct cd_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct disk sc_dk;
+	kmutex_t sc_lock;
 
 	int flags;
-#define	CDF_LOCKED	0x01
-#define	CDF_WANTED	0x02
 #define	CDF_WLABEL	0x04		/* label is writable */
 #define	CDF_LABELLING	0x08		/* writing label */
 #define	CDF_ANCIENT	0x10		/* disk is ancient; for minphys */
-	struct scsipi_link *sc_link;	/* contains our targ, lun, etc. */
+
+	struct scsipi_periph *sc_periph;
+
 	struct cd_parms {
-		int blksize;
+		u_int blksize;
 		u_long disksize;	/* total number sectors */
+		u_long disksize512;	/* total number sectors */
 	} params;
-	struct buf_queue buf_queue;
-	char name[16]; /* product name, for default disklabel */
-	const struct cd_ops *sc_ops;	/* our bus-dependent ops vector */
+
+	struct bufq_state *buf_queue;
+	struct callout sc_callout;
 
 #if NRND > 0
 	rndsource_element_t	rnd_source;
 #endif
 };
-
-struct cd_ops {
-	int	(*cdo_setchan) __P((struct cd_softc *, int, int, int, int,
-		    int));
-	int	(*cdo_getvol) __P((struct cd_softc *, struct ioc_vol *, int));
-	int	(*cdo_setvol) __P((struct cd_softc *, const struct ioc_vol *,
-		    int));
-	int	(*cdo_set_pa_immed) __P((struct cd_softc *, int));
-	int	(*cdo_load_unload) __P((struct cd_softc *, int, int));
-};
-
-void cdattach __P((struct device *, struct cd_softc *, struct scsipi_link *,
-    const struct cd_ops *));
-int cdactivate __P((struct device *, enum devact));
-int cddetach __P((struct device *, int));

@@ -1,4 +1,4 @@
-/*	$NetBSD: vgrindefs.c,v 1.8 1998/10/16 22:01:57 kleink Exp $	*/
+/*	$NetBSD: vgrindefs.c,v 1.10 2003/08/07 11:17:02 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)vgrindefs.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: vgrindefs.c,v 1.8 1998/10/16 22:01:57 kleink Exp $");
+__RCSID("$NetBSD: vgrindefs.c,v 1.10 2003/08/07 11:17:02 agc Exp $");
 #endif /* not lint */
 
 #define	BUFSIZ	1024
@@ -158,7 +154,7 @@ tnchktc()
 	/* p now points to beginning of last field */
 	if (p[0] != 't' || p[1] != 'c')
 		return(1);
-	strcpy(tcname,p+3);
+	strlcpy(tcname, p + 3, sizeof(tcname));
 	q = tcname;
 	while (q && *q != ':')
 		q++;
@@ -169,14 +165,14 @@ tnchktc()
 	}
 	if (tgetent(tcbuf, tcname, filename) != 1)
 		return(0);
-	for (q=tcbuf; *q != ':'; q++)
+	for (q = tcbuf; *q != ':'; q++)
 		;
 	l = p - holdtbuf + strlen(q);
 	if (l > BUFSIZ) {
 		write(2, "Vgrind entry too long\n", 23);
-		q[BUFSIZ - (p-tbuf)] = 0;
+		q[BUFSIZ - (p - tbuf)] = 0;
 	}
-	strcpy(p, q+1);
+	strcpy(p, q + 1);
 	tbuf = holdtbuf;
 	return(1);
 }

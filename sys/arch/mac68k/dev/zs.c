@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.32 1999/11/02 06:51:45 scottr Exp $	*/
+/*	$NetBSD: zs.c,v 1.56 2008/03/29 19:15:34 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1996-1998 Bill Studenmund
@@ -44,14 +44,17 @@
  * With NetBSD 1.1, port-mac68k started using a port of the port-sparc
  * (port-sun3?) zs.c driver (which was in turn based on code in the
  * Berkeley 4.4 Lite release). Bill Studenmund did the port, with
- * help from Allen Briggs and Gordon Ross <gwr@netbsd.org>. Noud de
+ * help from Allen Briggs and Gordon Ross <gwr@NetBSD.org>. Noud de
  * Brouwer field-tested the driver at a local ISP.
  *
- * Bill Studenmund and Gordon Ross then ported the machine-independant
+ * Bill Studenmund and Gordon Ross then ported the machine-independent
  * z8530 driver to work with port-mac68k. NetBSD 1.2 contained an
  * intermediate version (mac68k using a local, patched version of
  * the m.i. drivers), with NetBSD 1.3 containing a full version.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.56 2008/03/29 19:15:34 tsutsui Exp $");
 
 #include "opt_ddb.h"
 #include "opt_mac68k.h"
@@ -67,9 +70,10 @@
 #include <sys/time.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
 
 #include <machine/autoconf.h>
-#include <machine/cpu.h>
 #include <machine/psc.h>
 #include <machine/viareg.h>
 
@@ -85,13 +89,10 @@
 
 #define	PCLK	(9600 * 384)
 
-#include "zsc.h"	/* get the # of zs chips defined */
-
 /*
  * Some warts needed by z8530tty.c -
  */
 int zs_def_cflag = (CREAD | CS8 | HUPCL);
-int zs_major = 12;
 
 /*
  * abort detection on console will now timeout after iterating on a loop
@@ -113,27 +114,25 @@ int zs_major = 12;
 
 /* The layout of this is hardware-dependent (padding, order). */
 struct zschan {
-	volatile u_char	zc_csr;		/* ctrl,status, and indirect access */
-	u_char		zc_xxx0;
-	u_char		zc_xxx1;	/* part of the other channel lives here! */
-	u_char		zc_xxx2;	/* Yea Apple! */
-	volatile u_char	zc_data;	/* data */
-	u_char		zc_xxx3;
-	u_char		zc_xxx4;
-	u_char		zc_xxx5;
+	volatile uint8_t zc_csr;	/* ctrl,status, and indirect access */
+	uint8_t		zc_xxx0;
+	uint8_t		zc_xxx1;	/* part of the other channel lives here! */
+	uint8_t		zc_xxx2;	/* Yea Apple! */
+	volatile uint8_t zc_data;	/* data */
+	uint8_t		zc_xxx3;
+	uint8_t		zc_xxx4;
+	uint8_t		zc_xxx5;
 };
 
-/* Saved PROM mappings */
-static char *zsaddr[NZSC];	/* See zs_init() */
 /* Flags from cninit() */
-static int zs_hwflags[NZSC][2];
+static int zs_hwflags[2];
 /* Default speed for each channel */
-static int zs_defspeed[NZSC][2] = {
-	{ 9600, 	/* tty00 */
-	  9600 },	/* tty01 */
+static int zs_defspeed[2] = {
+	9600,	 	/* tty00 */
+	9600,		/* tty01 */
 };
 /* console stuff */
-void	*zs_conschan = 0;
+void	*zs_conschan;
 int	zs_consunit;
 #ifdef	ZS_CONSOLE_ABORT
 int	zs_cons_canabort = 1;
@@ -143,9 +142,9 @@ int	zs_cons_canabort = 0;
 /* device to which the console is attached--if serial. */
 dev_t	mac68k_zsdev;
 /* Mac stuff */
-volatile unsigned char *sccA = 0;
+extern volatile unsigned char *sccA;
 
-int	zs_cn_check_speed __P((int bps));
+int	zs_cn_check_speed(int);
 
 /*
  * Even though zsparam will set up the clock multiples, etc., we
@@ -154,7 +153,7 @@ int	zs_cn_check_speed __P((int bps));
  * attach.
  */
 
-static u_char zs_init_reg[16] = {
+static uint8_t zs_init_reg[16] = {
 	0,	/* 0: CMD (reset, etc.) */
 	0,	/* 1: No interrupts yet. */
 	0x18 + ZSHARD_PRI,	/* IVECT */
@@ -174,17 +173,12 @@ static u_char zs_init_reg[16] = {
 };
 
 struct zschan *
-zs_get_chan_addr(zsc_unit, channel)
-	int zsc_unit, channel;
+zs_get_chan_addr(int channel)
 {
 	char *addr;
 	struct zschan *zc;
 
-	if (zsc_unit >= NZSC)
-		return NULL;
-	addr = zsaddr[zsc_unit];
-	if (addr == NULL)
-		return NULL;
+	addr = (char *)__UNVOLATILE(sccA);
 	if (channel == 0) {
 		zc = (struct zschan *)(addr + 2);
 		/* handle the fact the ports are intertwined. */
@@ -201,12 +195,9 @@ int zsinited = 0; /* 0 = not, 1 = inited, not attached, 2= attached */
 void
 zs_init()
 {
-	if ((zsinited == 2)&&(zsaddr[0] != (char *) sccA))
-		panic("Moved zs0 address after attached!");
-	zsaddr[0] = (char *) sccA;
 	zsinited = 1;
 	if (zs_conschan != 0){ /* we might have moved io under the console */
-		zs_conschan = zs_get_chan_addr(0, zs_consunit);
+		zs_conschan = zs_get_chan_addr(zs_consunit);
 		/* so recalc the console port */
 	}
 }	
@@ -217,29 +208,26 @@ zs_init()
  ****************************************************************/
 
 /* Definition of the driver for autoconfig. */
-static int	zsc_match __P((struct device *, struct cfdata *, void *));
-static void	zsc_attach __P((struct device *, struct device *, void *));
-static int  zsc_print __P((void *, const char *name));
+static int	zsc_match(device_t, cfdata_t, void *);
+static void	zsc_attach(device_t, device_t, void *);
+static int	zsc_print(void *, const char *);
 
-struct cfattach zsc_ca = {
-	sizeof(struct zsc_softc), zsc_match, zsc_attach
-};
+CFATTACH_DECL_NEW(zsc, sizeof(struct zsc_softc),
+    zsc_match, zsc_attach, NULL, NULL);
 
 extern struct cfdriver zsc_cd;
 
-int zshard __P((void *));
-int zssoft __P((void *));
-
+int zshard(void *);
 
 /*
  * Is the zs chip present?
  */
 static int
-zsc_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+zsc_match(device_t parent, cfdata_t cf, void *aux)
 {
+	if (zsinited == 2)
+		return 0;
+
 	return 1;
 }
 
@@ -250,56 +238,48 @@ zsc_match(parent, cf, aux)
  * not set up the keyboard as ttya, etc.
  */
 static void
-zsc_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+zsc_attach(device_t parent, device_t self, void *aux)
 {
-	struct zsc_softc *zsc = (void *) self;
+	struct zsc_softc *zsc = device_private(self);
 	struct zsc_attach_args zsc_args;
 	volatile struct zschan *zc;
 	struct xzs_chanstate *xcs;
 	struct zs_chanstate *cs;
-	int zsc_unit, channel;
-	int s, chip, theflags;
+	int s, chip, theflags, channel;
 
+	zsc->zsc_dev = self;
 	if (!zsinited)
 		zs_init();
 	zsinited = 2;
 
-	zsc_unit = zsc->zsc_dev.dv_unit;
-
-	/* Make sure everything's inited ok. */
-	if (zsaddr[zsc_unit] == NULL)
-		panic("zs_attach: zs%d not mapped\n", zsc_unit);
-
 	chip = 0; /* We'll deal with chip types post 1.2 */
-	printf(" chip type %d \n",chip);
+	aprint_normal(" chip type %d \n",chip);
 
 	/*
 	 * Initialize software state for each channel.
 	 */
 	for (channel = 0; channel < 2; channel++) {
 		zsc_args.channel = channel;
-		zsc_args.hwflags = zs_hwflags[zsc_unit][channel];
+		zsc_args.hwflags = zs_hwflags[channel];
 		xcs = &zsc->xzsc_xcs_store[channel];
 		cs  = &xcs->xzs_cs;
 		zsc->zsc_cs[channel] = cs;
 
+		zs_lock_init(cs);
 		cs->cs_channel = channel;
 		cs->cs_private = NULL;
 		cs->cs_ops = &zsops_null;
 
-		zc = zs_get_chan_addr(zsc_unit, channel);
+		zc = zs_get_chan_addr(channel);
 		cs->cs_reg_csr  = &zc->zc_csr;
 		cs->cs_reg_data = &zc->zc_data;
 
-		bcopy(zs_init_reg, cs->cs_creg, 16);
-		bcopy(zs_init_reg, cs->cs_preg, 16);
+		memcpy(cs->cs_creg, zs_init_reg, 16);
+		memcpy(cs->cs_preg, zs_init_reg, 16);
 
 		/* Current BAUD rate generator clock. */
 		cs->cs_brg_clk = PCLK / 16;	/* RTxC is 230400*16, so use 230400 */
-		cs->cs_defspeed = zs_defspeed[zsc_unit][channel];
+		cs->cs_defspeed = zs_defspeed[channel];
 		cs->cs_defcflag = zs_def_cflag;
 
 		/* Make these correspond to cs_defcflag (-crtscts) */
@@ -341,7 +321,7 @@ zsc_attach(parent, self, aux)
 			zsc_args.hwflags |= ZS_HWFLAG_NO_CTS;
 
 		printf("zsc%d channel %d: d_speed %6d DCD clk %ld CTS clk %ld",
-				zsc_unit, channel, cs->cs_defspeed,
+				device_unit(self), channel, cs->cs_defspeed,
 				xcs->cs_clocks[1].clk, xcs->cs_clocks[2].clk);
 
 		/* Set defaults in our "extended" chanstate. */
@@ -390,7 +370,7 @@ zsc_attach(parent, self, aux)
 		 */
 		if (!config_found(self, (void *)&zsc_args, zsc_print)) {
 			/* No sub-driver.  Just reset it. */
-			u_char reset = (channel == 0) ?
+			uint8_t reset = (channel == 0) ?
 				ZSWR9_A_RESET : ZSWR9_B_RESET;
 			s = splzs();
 			zs_write_reg(cs,  9, reset);
@@ -404,6 +384,8 @@ zsc_attach(parent, self, aux)
 	} else {
 		intr_establish(zshard, zsc, ZSHARD_PRI);
 	}
+	zsc->zsc_softintr_cookie = softint_establish(SOFTINT_SERIAL,
+	    (void (*)(void *))zsc_intr_soft, zsc);
 
 	/* Now safe to enable interrupts. */
 
@@ -421,37 +403,31 @@ zsc_attach(parent, self, aux)
 }
 
 static int
-zsc_print(aux, name)
-	void *aux;
-	const char *name;
+zsc_print(void *aux, const char *name)
 {
 	struct zsc_attach_args *args = aux;
 
 	if (name != NULL)
-		printf("%s: ", name);
+		aprint_normal("%s: ", name);
 
 	if (args->channel != -1)
-		printf(" channel %d", args->channel);
+		aprint_normal(" channel %d", args->channel);
 
 	return UNCONF;
 }
 
 int
-zsmdioctl(cs, cmd, data)
-	struct zs_chanstate *cs;
-	u_long cmd;
-	caddr_t data;
+zsmdioctl(struct zs_chanstate *cs, u_long cmd, void *data)
 {
 	switch (cmd) {
 	default:
-		return (-1);
+		return (EPASSTHROUGH);
 	}
 	return (0);
 }
 
 void
-zsmd_setclock(cs)
-	struct zs_chanstate *cs;
+zsmd_setclock(struct zs_chanstate *cs)
 {
 	struct xzs_chanstate *xcs = (void *)cs;
 
@@ -465,17 +441,14 @@ zsmd_setclock(cs)
 	via_set_modem((xcs->cs_pclk_flag & ZSC_EXTERN) ? 1 : 0);
 }
 
-static int zssoftpending;
-
 /*
  * Do the minimum work to pull data off of the chip and queue it up
  * for later processing.
  */
 int
-zshard(arg)
-	void *arg;
+zshard(void *arg)
 {
-	struct zsc_softc *zsc = (struct zsc_softc *)arg;
+	struct zsc_softc *zsc = arg;
 	int rval;
 
 	if (zsc == NULL)
@@ -483,45 +456,10 @@ zshard(arg)
 
 	rval = zsc_intr_hard(zsc);
 	if ((zsc->zsc_cs[0]->cs_softreq) || (zsc->zsc_cs[1]->cs_softreq)) {
-		/* zsc_req_softint(zsc); */
-		/* We are at splzs here, so no need to lock. */
-		if (zssoftpending == 0) {
-			zssoftpending = 1;
-			setsoftserial();
-		}
+		softint_schedule(zsc->zsc_softintr_cookie);
 	}
 	return (rval);
 }
-
-/*
- * Look at all of the zsc softint queues.
- */
-int
-zssoft(arg)
-	void *arg;
-{
-	struct zsc_softc *zsc;
-	int unit;
-
-	/* This is not the only ISR on this IPL. */
-	if (zssoftpending == 0)
-		return (0);
-
-	/*
-	 * The soft intr. bit will be set by zshard only if
-	 * the variable zssoftpending is zero.
-	 */
-	zssoftpending = 0;
-
-	for (unit = 0; unit < zsc_cd.cd_ndevs; ++unit) {
-		zsc = zsc_cd.cd_devs[unit];
-		if (zsc == NULL)
-			continue;
-		(void) zsc_intr_soft(zsc);
-	}
-	return (1);
-}
-
 
 #ifndef ZS_TOLERANCE
 #define ZS_TOLERANCE 51
@@ -537,8 +475,7 @@ zssoft(arg)
  * != 0 means ok.
  */
 int
-zs_cn_check_speed(bps)
-	int bps;	/* target rate */
+zs_cn_check_speed(int bps)
 {
 	int tc, rate;
 
@@ -565,9 +502,7 @@ zs_cn_check_speed(bps)
  * By Bill Studenmund, 1996-05-12
  */
 int
-zs_set_speed(cs, bps)
-	struct zs_chanstate *cs;
-	int bps;	/* bits per second */
+zs_set_speed(struct zs_chanstate *cs, int bps)
 {
 	struct xzs_chanstate *xcs = (void *) cs;
 	int i, tc, tc0 = 0, tc1, s, sf = 0;
@@ -588,7 +523,7 @@ zs_set_speed(cs, bps)
 	 */
 	for (i=0; i < xcs->cs_clock_count; i++) {
 		if (xcs->cs_clocks[i].clk <= 0)
-			continue;	/* skip non-existant or bad clocks */
+			continue;	/* skip non-existent or bad clocks */
 		if (xcs->cs_clocks[i].flags & ZSC_BRG) {
 			/* check out BRG at /16 */
 			tc1 = BPS_TO_TCONST(xcs->cs_clocks[i].clk >> 4, bps);
@@ -706,9 +641,7 @@ zs_set_speed(cs, bps)
 }
 
 int
-zs_set_modes(cs, cflag)
-	struct zs_chanstate *cs;
-	int cflag;	/* bits per second */
+zs_set_modes(struct zs_chanstate *cs, int cflag)
 {
 	struct xzs_chanstate *xcs = (void*)cs;
 	int s;
@@ -738,7 +671,7 @@ zs_set_modes(cs, cflag)
 		 * Enable only if nothing else will want the interrupt and
 		 * it's ok to enable interrupts on this line.
 		 */
-		if ((cflag & (CLOCAL & MDMBUF)) == CLOCAL)
+		if ((cflag & (CLOCAL | MDMBUF)) == CLOCAL)
 			cs->cs_rr0_pps = ZSRR0_DCD;
 	}
 	if ((xcs->cs_hwflags & ZS_HWFLAG_NO_CTS) && (cflag & (CRTSCTS | CDTRCTS)))
@@ -801,12 +734,10 @@ zs_set_modes(cs, cflag)
  */
 #define	ZS_DELAY()
 
-u_char
-zs_read_reg(cs, reg)
-	struct zs_chanstate *cs;
-	u_char reg;
+uint8_t
+zs_read_reg(struct zs_chanstate *cs, uint8_t reg)
 {
-	u_char val;
+	uint8_t val;
 
 	*cs->cs_reg_csr = reg;
 	ZS_DELAY();
@@ -816,9 +747,7 @@ zs_read_reg(cs, reg)
 }
 
 void
-zs_write_reg(cs, reg, val)
-	struct zs_chanstate *cs;
-	u_char reg, val;
+zs_write_reg(struct zs_chanstate *cs, uint8_t reg, uint8_t val)
 {
 	*cs->cs_reg_csr = reg;
 	ZS_DELAY();
@@ -826,10 +755,10 @@ zs_write_reg(cs, reg, val)
 	ZS_DELAY();
 }
 
-u_char zs_read_csr(cs)
-	struct zs_chanstate *cs;
+uint8_t
+zs_read_csr(struct zs_chanstate *cs)
 {
-	u_char val;
+	uint8_t val;
 
 	val = *cs->cs_reg_csr;
 	ZS_DELAY();
@@ -838,28 +767,26 @@ u_char zs_read_csr(cs)
 	return val;
 }
 
-void  zs_write_csr(cs, val)
-	struct zs_chanstate *cs;
-	u_char val;
+void
+zs_write_csr(struct zs_chanstate *cs, uint8_t val)
 {
 	/* Note, the csr does not write CTS... */
 	*cs->cs_reg_csr = val;
 	ZS_DELAY();
 }
 
-u_char zs_read_data(cs)
-	struct zs_chanstate *cs;
+uint8_t
+zs_read_data(struct zs_chanstate *cs)
 {
-	u_char val;
+	uint8_t val;
 
 	val = *cs->cs_reg_data;
 	ZS_DELAY();
 	return val;
 }
 
-void  zs_write_data(cs, val)
-	struct zs_chanstate *cs;
-	u_char val;
+void
+zs_write_data(struct zs_chanstate *cs, uint8_t val)
 {
 	*cs->cs_reg_data = val;
 	ZS_DELAY();
@@ -876,8 +803,7 @@ void  zs_write_data(cs, val)
 #define zscnpollc	nullcnpollc
 cons_decl(zs);
 
-static void	zscnsetup __P((void));
-extern int	zsopen __P(( dev_t dev, int flags, int mode, struct proc *p));
+static void	zscnsetup(void);
 
 /*
  * Console functions.
@@ -889,15 +815,15 @@ extern int	zsopen __P(( dev_t dev, int flags, int mode, struct proc *p));
  * correctly.
  */
 static void
-zscnsetup()
+zscnsetup(void)
 {
 	struct xzs_chanstate xcs;
 	struct zs_chanstate *cs;
 	struct zschan *zc;
-	int    tconst, s;
+	int tconst, s;
 
 	/* Setup temporary chanstate. */
-	bzero((caddr_t)&xcs, sizeof(xcs));
+	memset(&xcs, 0, sizeof(xcs));
 	cs = &xcs.xzs_cs;
 	zc = zs_conschan;
 	cs->cs_reg_csr  = &zc->zc_csr;
@@ -905,11 +831,10 @@ zscnsetup()
 	cs->cs_channel = zs_consunit;
 	cs->cs_brg_clk = PCLK / 16;
 
-	bcopy(zs_init_reg, cs->cs_preg, 16);
+	memcpy(cs->cs_preg, zs_init_reg, 16);
 	cs->cs_preg[5] |= ZSWR5_DTR | ZSWR5_RTS;
 	cs->cs_preg[15] = ZSWR15_BREAK_IE;
-	tconst = BPS_TO_TCONST(cs->cs_brg_clk,
-		zs_defspeed[0][zs_consunit]);
+	tconst = BPS_TO_TCONST(cs->cs_brg_clk, zs_defspeed[zs_consunit]);
 	cs->cs_preg[12] = tconst;
 	cs->cs_preg[13] = tconst >> 8;
 	/* can't use zs_set_speed as we haven't set up the
@@ -917,8 +842,8 @@ zscnsetup()
 	 */
 
 	/*
-	 * As zs_loadchannelregs doesn't touch reg 9 (interupt control),
-	 * we won't accidentally turn on interupts below
+	 * As zs_loadchannelregs doesn't touch reg 9 (interrupt control),
+	 * we won't accidentally turn on interrupts below
 	 */
 	s = splhigh();
 	zs_loadchannelregs(cs);
@@ -943,13 +868,10 @@ zscnprobe(struct consdev * cp)
 {
 	extern u_long   IOBase;
 	int     maj, unit, i;
+	extern const struct cdevsw zstty_cdevsw;
 
-	for (maj = 0; maj < nchrdev; maj++) {
-		if (cdevsw[maj].d_open == zsopen) {
-			break;
-		}
-	}
-	if (maj != nchrdev) {
+	maj = cdevsw_lookup_major(&zstty_cdevsw);
+	if (maj != -1) {
 		cp->cn_pri = CN_NORMAL;		 /* Lower than CN_INTERNAL */
 		if (mac68k_machine.serial_console != 0) {
 			cp->cn_pri = CN_REMOTE;	 /* Higher than CN_INTERNAL */
@@ -969,16 +891,16 @@ zscnprobe(struct consdev * cp)
 		 */
 		zs_conschan = (struct zschan *) -1; /* dummy flag for zs_init() */
 		zs_consunit = 1;
-		zs_hwflags[0][zs_consunit] = ZS_HWFLAG_CONSOLE;
+		zs_hwflags[zs_consunit] = ZS_HWFLAG_CONSOLE;
 	}
 
 	if ((i = mac68k_machine.modem_d_speed) > 0) {
 		if (zs_cn_check_speed(i))
-			zs_defspeed[0][0] = i;
+			zs_defspeed[0] = i;
 	}
 	if ((i = mac68k_machine.print_d_speed) > 0) {
 		if (zs_cn_check_speed(i))
-			zs_defspeed[0][1] = i;
+			zs_defspeed[1] = i;
 	}
 	mac68k_set_io_offsets(IOBase);
 	zs_init();
@@ -1003,10 +925,11 @@ zscnprobe(struct consdev * cp)
 }
 
 void
-zscninit(struct consdev * cp)
+zscninit(struct consdev *cp)
 {
 
-	zs_hwflags[0][zs_consunit] = ZS_HWFLAG_CONSOLE;
+	zs_hwflags[zs_consunit] = ZS_HWFLAG_CONSOLE;
+
 	/*
 	 * zsinit will set up the addresses of the scc. It will also, if
 	 * zs_conschan != 0, calculate the new address of the conschan for
@@ -1022,8 +945,7 @@ zscninit(struct consdev * cp)
  * Polled input char.
  */
 int
-zs_getc(arg)
-	void *arg;
+zs_getc(void *arg)
 {
 	volatile struct zschan *zc = arg;
 	int s, c, rr0;
@@ -1050,9 +972,7 @@ zs_getc(arg)
  * Polled output char.
  */
 void
-zs_putc(arg, c)
-	void *arg;
-	int c;
+zs_putc(void *arg, int c)
 {
 	volatile struct zschan *zc = arg;
 	int s, rr0;
@@ -1077,8 +997,7 @@ zs_putc(arg, c)
  * Polled console input putchar.
  */
 int
-zscngetc(dev)
-	dev_t dev;
+zscngetc(dev_t dev)
 {
 	struct zschan *zc = zs_conschan;
 	int c;
@@ -1091,9 +1010,7 @@ zscngetc(dev)
  * Polled console output putchar.
  */
 void
-zscnputc(dev, c)
-	dev_t dev;
-	int c;
+zscnputc(dev_t dev, int c)
 {
 	struct zschan *zc = zs_conschan;
 
@@ -1106,8 +1023,7 @@ zscnputc(dev, c)
  * Handle user request to enter kernel debugger.
  */
 void
-zs_abort(cs)
-	struct zs_chanstate *cs;
+zs_abort(struct zs_chanstate *cs)
 {
 	volatile struct zschan *zc = zs_conschan;
 	int rr0;
@@ -1131,4 +1047,3 @@ zs_abort(cs)
 	Debugger();
 #endif
 }
-

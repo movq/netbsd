@@ -1,4 +1,4 @@
-/*	$NetBSD: natm.c,v 1.5 1996/11/09 03:26:26 chuck Exp $	*/
+/*	$NetBSD: natm.c,v 1.16 2008/05/22 00:59:19 dyoung Exp $	*/
 
 /*
  *
@@ -36,6 +36,9 @@
  * natm.c: native mode ATM access (both aal0 and aal5).
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: natm.c,v 1.16 2008/05/22 00:59:19 dyoung Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -67,7 +70,9 @@ u_long natm0_recvspace = 16*1024;
  * user requests
  */
 
-#if defined(__NetBSD__) || defined(__OpenBSD__)
+#if defined(__NetBSD__)
+int natm_usrreq(so, req, m, nam, control, l)
+#elif defined(__OpenBSD__)
 int natm_usrreq(so, req, m, nam, control, p)
 #elif defined(__FreeBSD__)
 int natm_usrreq(so, req, m, nam, control)
@@ -76,7 +81,9 @@ int natm_usrreq(so, req, m, nam, control)
 struct socket *so;
 int req;
 struct mbuf *m, *nam, *control;
-#if defined(__NetBSD__) || defined(__OpenBSD__)
+#if defined(__NetBSD__)
+struct lwp *l;
+#elif deifned(__OpenBSD__)
 struct proc *p;
 #endif
 
@@ -98,7 +105,7 @@ struct proc *p;
     error = EINVAL;
     goto done;
   }
-    
+
 
   switch (req) {
     case PRU_ATTACH:			/* attach protocol to up */
@@ -109,7 +116,7 @@ struct proc *p;
       }
 
       if (so->so_snd.sb_hiwat == 0 || so->so_rcv.sb_hiwat == 0) {
-	if (proto == PROTO_NATMAAL5) 
+	if (proto == PROTO_NATMAAL5)
           error = soreserve(so, natm5_sendspace, natm5_recvspace);
 	else
           error = soreserve(so, natm0_sendspace, natm0_recvspace);
@@ -117,7 +124,7 @@ struct proc *p;
           break;
       }
 
-      so->so_pcb = (caddr_t) (npcb = npcb_alloc(M_WAITOK));
+      so->so_pcb = (void *) (npcb = npcb_alloc(M_WAITOK));
       npcb->npcb_socket = so;
 
       break;
@@ -130,7 +137,9 @@ struct proc *p;
 
       npcb_free(npcb, NPCB_DESTROY);	/* drain */
       so->so_pcb = NULL;
+      /* sofree drops the lock */
       sofree(so);
+      mutex_enter(softnet_lock);
 
       break;
 
@@ -190,9 +199,8 @@ struct proc *p;
       ATM_PH_VPI(&api.aph) = npcb->npcb_vpi;
       ATM_PH_SETVCI(&api.aph, npcb->npcb_vci);
       api.rxhand = npcb;
-      s2 = splimp();
-      if (ifp->if_ioctl == NULL || 
-	  ifp->if_ioctl(ifp, SIOCATMENA, (caddr_t) &api) != 0) {
+      s2 = splnet();
+      if (ifp->if_ioctl == NULL || ifp->if_ioctl(ifp, SIOCATMENA, &api) != 0) {
 	splx(s2);
 	npcb_free(npcb, NPCB_REMOVE);
         error = EIO;
@@ -221,9 +229,9 @@ struct proc *p;
       ATM_PH_VPI(&api.aph) = npcb->npcb_vpi;
       ATM_PH_SETVCI(&api.aph, npcb->npcb_vci);
       api.rxhand = npcb;
-      s2 = splimp();
+      s2 = splnet();
       if (ifp->if_ioctl != NULL)
-	  ifp->if_ioctl(ifp, SIOCATMDIS, (caddr_t) &api);
+	  ifp->if_ioctl(ifp, SIOCATMDIS, &api);
       splx(s);
 
       npcb_free(npcb, NPCB_REMOVE);
@@ -273,8 +281,8 @@ struct proc *p;
 #if defined(__NetBSD__) || defined(__OpenBSD__)
       bcopy(npcb->npcb_ifp->if_xname, snatm->snatm_if, sizeof(snatm->snatm_if));
 #elif defined(__FreeBSD__)
-      sprintf(snatm->snatm_if, "%s%d", npcb->npcb_ifp->if_name,
-	npcb->npcb_ifp->if_unit);
+      snprintf(snatm->snatm_if, sizeof(snatm->snatm_if), "%s%d",
+          npcb->npcb_ifp->if_name, npcb->npcb_ifp->if_unit);
 #endif
       snatm->snatm_vci = npcb->npcb_vci;
       snatm->snatm_vpi = npcb->npcb_vpi;
@@ -292,10 +300,9 @@ struct proc *p;
         }
         ario.npcb = npcb;
         ario.rawvalue = *((int *)nam);
-        error = npcb->npcb_ifp->if_ioctl(npcb->npcb_ifp, 
-				SIOCXRAWATM, (caddr_t) &ario);
+        error = npcb->npcb_ifp->if_ioctl(npcb->npcb_ifp, SIOCXRAWATM, &ario);
 	if (!error) {
-          if (ario.rawvalue) 
+          if (ario.rawvalue)
 	    npcb->npcb_flags |= NPCB_RAW;
 	  else
 	    npcb->npcb_flags &= ~(NPCB_RAW);
@@ -326,7 +333,7 @@ struct proc *p;
 #endif
       error = EOPNOTSUPP;
       break;
-   
+
     default: panic("natm usrreq");
   }
 
@@ -352,12 +359,15 @@ natmintr()
   struct socket *so;
   struct natmpcb *npcb;
 
+  mutex_enter(softnet_lock);
 next:
-  s = splimp();
+  s = splnet();
   IF_DEQUEUE(&natmintrq, m);
   splx(s);
-  if (m == NULL)
+  if (m == NULL) {
+    mutex_exit(softnet_lock);
     return;
+  }
 
 #ifdef DIAGNOSTIC
   if ((m->m_flags & M_PKTHDR) == 0)
@@ -367,7 +377,7 @@ next:
   npcb = (struct natmpcb *) m->m_pkthdr.rcvif; /* XXX: overloaded */
   so = npcb->npcb_socket;
 
-  s = splimp();			/* could have atm devs @ different levels */
+  s = splnet();			/* could have atm devs @ different levels */
   npcb->npcb_inq--;
   splx(s);
 
@@ -415,7 +425,8 @@ NETISR_SET(NETISR_NATM, natmintr);
 #endif
 
 
-/* 
+#ifdef notyet
+/*
  * natm0_sysctl: not used, but here in case we want to add something
  * later...
  */
@@ -436,7 +447,7 @@ size_t newlen;
   return (ENOPROTOOPT);
 }
 
-/* 
+/*
  * natm5_sysctl: not used, but here in case we want to add something
  * later...
  */
@@ -456,3 +467,4 @@ size_t newlen;
     return (ENOTDIR);
   return (ENOPROTOOPT);
 }
+#endif

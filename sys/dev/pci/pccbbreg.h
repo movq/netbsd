@@ -1,4 +1,4 @@
-/*	$NetBSD: pccbbreg.h,v 1.4 2000/01/13 08:46:46 joda Exp $	*/
+/*	$NetBSD: pccbbreg.h,v 1.14 2008/07/03 13:37:35 drochner Exp $	*/
 /*
  * Copyright (c) 1999 HAYAKAWA Koichi.  All rights reserved.
  *
@@ -36,13 +36,16 @@
 
 
 #define PCI_SOCKBASE 0x10	/* Socket Base Address Register */
+#define PCI_CBB_SECSTATUS 0x14	/* secondary status (starts at 0x16) */
 #define PCI_BUSNUM   0x18	/* latency timer, Subordinate bus number */
-#define PCI_BCR_INTR 0x3C	/* intr line, intr pin, bridge control regs */
 #define PCI_LEGACY 0x44		/* legacy IO register address (32 bits) */
+#define	PCI_SYSCTRL 0x80	/* System control */
 #define PCI_CBCTRL 0x90		/* Retry status, Card ctrl, Device ctrl */
 
 #define PCI_CLASS_INTERFACE_MASK  0xffffff00
 #define PCI_CLASS_INTERFACE_YENTA 0x06070000
+
+#define CBB_SECSTATUS_CBMABORT	0x20000000
 
 #define CB_SOCKET_EVENT 0x00	/* offset of cardbus socket event reg */
 #define CB_SOCKET_MASK  0x04	/* offset of cardbus socket mask register */
@@ -75,10 +78,26 @@
 
 
 /* PCI_BCR_INTR bits for generic PCI-CardBus bridge */
+#define CB_BCR_RESET_ENABLE     0x00400000
 #define CB_BCR_INTR_IREQ_ENABLE 0x00800000
 #define CB_BCR_PREFETCH_MEMWIN0 0x01000000
 #define CB_BCR_PREFETCH_MEMWIN1 0x02000000
 #define CB_BCR_WRITE_POST_ENABLE 0x04000000
+
+/* TI [14][245]xx */
+#define PCI12XX_MMCTRL			0x84
+
+/* TI 12xx/14xx/15xx (except 1250, 1251, 1251B/1450) */
+#define PCI12XX_MFUNC			0x8c
+#define PCI12XX_MFUNC_PIN0		0x0000000f
+#define PCI12XX_MFUNC_PIN0_INTA		0x02
+#define PCI12XX_MFUNC_PIN1		0x000000f0
+#define PCI12XX_MFUNC_PIN1_INTB		0x20
+#define PCI12XX_MFUNC_PIN2		0x00000f00
+#define PCI12XX_MFUNC_PIN3		0x0000f000
+#define PCI12XX_MFUNC_PIN4		0x000f0000
+#define PCI12XX_MFUNC_PIN5		0x00f00000
+#define PCI12XX_MFUNC_PIN6		0x0f000000
 
 /*  PCI_CBCTRL bits for TI PCI113X */
 #define PCI113X_CBCTRL_INT_SERIAL 0x040000
@@ -94,7 +113,18 @@
 #define PCI113X_CBCTRL_INTR_DET 0x0100 /* functional interrupt detect */
 
 /*  PCI_CBCTRL bits for TI PCI12XX */
-#define PCI12XX_CBCTRL_INT_SERIAL 0x040000
+#define PCI12XX_SYSCTRL_INTRTIE		0x20000000u
+#define PCI12XX_SYSCTRL_VCCPROT		0x200000
+#define PCI12XX_SYSCTRL_PWRSAVE		0x000040
+#define PCI12XX_SYSCTRL_SUBSYSRW	0x000020
+#define PCI12XX_SYSCTRL_CB_DPAR		0x000010
+#define PCI12XX_SYSCTRL_CDMA_EN		0x000008
+#define PCI12XX_SYSCTRL_KEEPCLK		0x000002
+#define PCI12XX_SYSCTRL_RIMUX		0x000001
+#define PCI12XX_CBCTRL_CSC		0x20000000u
+#define PCI12XX_CBCTRL_ASYNC_CSC	0x01000000u
+#define PCI12XX_CBCTRL_INT_SERIAL	0x060000
+#define PCI12XX_CBCTRL_INT_PCI_SERIAL	0x040000
 #define PCI12XX_CBCTRL_INT_ISA    0x020000
 #define PCI12XX_CBCTRL_INT_PCI    0x000000
 #define PCI12XX_CBCTRL_INT_MASK   0x060000
@@ -104,10 +134,22 @@
 #define PCI12XX_CBCTRL_SPK_ENA 0x0200 /* Speaker enable */
 #define PCI12XX_CBCTRL_INTR_DET 0x0100 /* functional interrupt detect */
 
+/* 1: permit burst read from CardBus (default: on) */
+#define	PCI1420_SYSCTRL_MRBURSTDN	__BIT(15)
+/* 1: permit burst read from PCI bus (default: off!) */
+#define	PCI1420_SYSCTRL_MRBURSTUP	__BIT(14)
+
+#define	PCI1420_SYSCTRL_MRBURST	\
+	(PCI1420_SYSCTRL_MRBURSTDN|PCI1420_SYSCTRL_MRBURSTUP)
 
 /* PCI_BCR_INTR additional bit for Rx5C46[567] */
 #define CB_BCRI_RL_3E0_ENA 0x08000000
 #define CB_BCRI_RL_3E2_ENA 0x10000000
+
+
+/* PCI configuration register definition for Ricoh 5C475 */
+#define RICOH_PCI_MISC_CTRL	0x82
+
 
 /*
  * Special resister definition for Toshiba ToPIC95/97
@@ -133,6 +175,9 @@
 # define TOPIC_SLOT_CTRL_CLOCK_2      0x00000800 /* PCI Clock/2 */
 # define TOPIC_SLOT_CTRL_CLOCK_1      0x00000400 /* PCI Clock */
 # define TOPIC_SLOT_CTRL_CLOCK_0      0x00000000 /* no clock */
+# define TOPIC97_SLOT_CTRL_STSIRQP    0x00000400 /* status change intr pulse */
+# define TOPIC97_SLOT_CTRL_IRQP       0x00000200 /* function intr pulse */
+# define TOPIC97_SLOT_CTRL_PCIINT     0x00000100 /* intr routing to PCI INT */
 
 # define TOPIC_SLOT_CTRL_CARDBUS      0x80000000
 # define TOPIC_SLOT_CTRL_VS1          0x04000000
@@ -186,8 +231,8 @@
 #define CB_SOCKET_STAT_YVCARD 0x02000 /* Y.Y V Card */
 #define CB_SOCKET_STAT_5VSOCK 0x10000000 /* 5 V Socket */
 #define CB_SOCKET_STAT_3VSOCK 0x20000000 /* 3.3 V Socket */
-#define CB_SOCKET_STAT_XVSOCK 0x20000000 /* X.X V Socket */
-#define CB_SOCKET_STAT_YVSOCK 0x20000000 /* Y.Y V Socket */
+#define CB_SOCKET_STAT_XVSOCK 0x40000000 /* X.X V Socket */
+#define CB_SOCKET_STAT_YVSOCK 0x80000000 /* Y.Y V Socket */
 
 /* socket force event register (CB_SOCKET_FORCE) elements */
 #define CB_SOCKET_FORCE_BADVCC 0x0200 /* Bad Vcc Request */

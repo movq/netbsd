@@ -1,4 +1,4 @@
-/*	$NetBSD: slcompress.h,v 1.12 1998/02/09 17:43:56 perry Exp $	*/
+/*	$NetBSD: slcompress.h,v 1.18 2008/02/20 17:05:53 matt Exp $	*/
 /*	Id: slcompress.h,v 1.4 1994/09/21 06:50:08 paulus Exp 	*/
 
 /*
@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -61,7 +57,7 @@
  * sequence number changes, one change per bit set in the header
  * (there may be no changes and there are two special cases where
  * the receiver implicitly knows what changed -- see below).
- * 
+ *
  * There are 5 numbers which can change (they are always inserted
  * in the following order): TCP urgent pointer, window,
  * acknowlegement, sequence number and IP ID.  (The urgent pointer
@@ -122,12 +118,14 @@
  */
 struct cstate {
 	struct cstate *cs_next;	/* next most recently used cstate (xmit only) */
-	u_int16_t cs_hlen;	/* size of hdr (receive only) */
+	uint16_t cs_hlen;	/* size of hdr (receive only) */
 	u_char cs_id;		/* connection # associated with this state */
 	u_char cs_filler;
 	union {
 		char csu_hdr[MAX_HDR];
+#ifdef INET
 		struct ip csu_ip;	/* ip/tcp hdr from most recent packet */
+#endif
 	} slcs_u;
 };
 #define cs_ip slcs_u.csu_ip
@@ -141,7 +139,7 @@ struct slcompress {
 	struct cstate *last_cs;	/* most recently used tstate */
 	u_char last_recv;	/* last rcvd conn. id */
 	u_char last_xmit;	/* last sent conn. id */
-	u_int16_t flags;
+	uint16_t flags;
 #ifndef SL_NO_STATS
 	int sls_packets;	/* outbound packets */
 	int sls_compressed;	/* outbound compressed packets */
@@ -158,12 +156,14 @@ struct slcompress {
 /* flag values */
 #define SLF_TOSS 1		/* tossing rcvd frames because of input err */
 
-void	sl_compress_init __P((struct slcompress *));
-void	sl_compress_setup __P((struct slcompress *, int));
-u_int	sl_compress_tcp __P((struct mbuf *,
-  	    struct ip *, struct slcompress *, int));
-int	sl_uncompress_tcp __P((u_char **, int, u_int, struct slcompress *));
-int	sl_uncompress_tcp_core __P((u_char *, int, int, u_int,
-  	    struct slcompress *, u_char **, u_int *));
+void	sl_compress_init(struct slcompress *);
+void	sl_compress_setup(struct slcompress *, int);
+#ifdef INET
+u_int	sl_compress_tcp(struct mbuf *,
+  	    struct ip *, struct slcompress *, int);
+#endif
+int	sl_uncompress_tcp(u_char **, int, u_int, struct slcompress *);
+int	sl_uncompress_tcp_core(u_char *, int, int, u_int,
+  	    struct slcompress *, u_char **, u_int *);
 
-#endif /* _NET_SLCOMPRESS_H_ */
+#endif /* !_NET_SLCOMPRESS_H_ */

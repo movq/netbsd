@@ -1,4 +1,5 @@
-/*	$NetBSD: advcap.c,v 1.4 2000/03/13 06:16:46 itojun Exp $	*/
+/*	$NetBSD: advcap.c,v 1.12 2006/03/18 22:07:15 dan Exp $	*/
+/*	$KAME: advcap.c,v 1.11 2003/05/19 09:46:50 keiichi Exp $	*/
 
 /*
  * Copyright (c) 1983 The Regents of the University of California.
@@ -12,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -95,7 +92,7 @@ int getent __P((char *, char *, char *));
 int tnchktc __P((void));
 int tnamatch __P((char *));
 static char *tskip __P((char *));
-int tgetnum __P((char *));
+int64_t tgetnum __P((char *));
 int tgetflag __P((char *));
 char *tgetstr __P((char *, char **));
 static char *tdecode __P((char *, char **));
@@ -119,8 +116,8 @@ int
 getent(bp, name, cp)
 	char *bp, *name, *cp;
 {
-	register int c;
-	register int i = 0, cnt = 0;
+	int c;
+	int i = 0, cnt = 0;
 	char ibuf[BUFSIZ];
 	int tf;
 
@@ -137,8 +134,8 @@ getent(bp, name, cp)
 		tf = open(RM = cp, O_RDONLY);
 	}
 	if (tf < 0) {
-		syslog(LOG_WARNING,
-		       "<%s> open: %s", __FUNCTION__, strerror(errno));
+		syslog(LOG_INFO,
+		       "<%s> open: %s", __func__, strerror(errno));
 		return (-2);
 	}
 	for (;;) {
@@ -160,7 +157,7 @@ getent(bp, name, cp)
 				}
 				break;
 			}
-			if (cp >= bp+BUFSIZ) {
+			if (cp >= bp + BUFSIZ) {
 				write(2,"Remcap entry too long\n", 23);
 				break;
 			} else
@@ -188,7 +185,7 @@ getent(bp, name, cp)
 int
 tnchktc()
 {
-	register char *p, *q;
+	char *p, *q;
 	char tcname[16];	/* name of similar terminal */
 	char tcbuf[BUFSIZ];
 	char *holdtbuf = tbuf;
@@ -196,7 +193,7 @@ tnchktc()
 
 	p = tbuf + strlen(tbuf) - 2;	/* before the last colon */
 	while (*--p != ':')
-		if (p<tbuf) {
+		if (p < tbuf) {
 			write(2, "Bad remcap entry\n", 18);
 			return (0);
 		}
@@ -204,7 +201,7 @@ tnchktc()
 	/* p now points to beginning of last field */
 	if (p[0] != 't' || p[1] != 'c')
 		return (1);
-	strcpy(tcname, p+3);
+	strlcpy(tcname, p + 3, sizeof tcname);
 	q = tcname;
 	while (*q && *q != ':')
 		q++;
@@ -238,7 +235,7 @@ int
 tnamatch(np)
 	char *np;
 {
-	register char *Np, *Bp;
+	char *Np, *Bp;
 
 	Bp = tbuf;
 	if (*Bp == '#')
@@ -263,7 +260,7 @@ tnamatch(np)
  */
 static char *
 tskip(bp)
-	register char *bp;
+	char *bp;
 {
 	int dquote;
 
@@ -278,13 +275,13 @@ tskip(bp)
 			break;
 		case '\\':
 			bp++;
-			if (isdigit(*bp)) {
-				while (isdigit(*bp++))
+			if (isdigit((unsigned char)*bp)) {
+				while (isdigit((unsigned char)*bp++))
 					;
 			} else
 				bp++;
 		case '"':
-			dquote = (dquote ? 1 : 0);
+			dquote = (dquote ? 0 : 1);
 			bp++;
 			break;
 		default:
@@ -306,13 +303,13 @@ breakbreak:
  * a # character.  If the option is not found we return -1.
  * Note that we handle octal numbers beginning with 0.
  */
-int
+int64_t
 tgetnum(id)
 	char *id;
 {
-	register long int i;
-	register int base;
-	register char *bp = tbuf;
+	int64_t i;
+	int base;
+	char *bp = tbuf;
 
 	for (;;) {
 		bp = tskip(bp);
@@ -330,7 +327,7 @@ tgetnum(id)
 		if (*bp == '0')
 			base = 8;
 		i = 0;
-		while (isdigit(*bp))
+		while (isdigit((unsigned char)*bp))
 			i *= base, i += *bp++ - '0';
 		return (i);
 	}
@@ -346,7 +343,7 @@ int
 tgetflag(id)
 	char *id;
 {
-	register char *bp = tbuf;
+	char *bp = tbuf;
 
 	for (;;) {
 		bp = tskip(bp);
@@ -374,7 +371,7 @@ char *
 tgetstr(id, area)
 	char *id, **area;
 {
-	register char *bp = tbuf;
+	char *bp = tbuf;
 
 	for (;;) {
 		bp = tskip(bp);
@@ -398,12 +395,12 @@ tgetstr(id, area)
  */
 static char *
 tdecode(str, area)
-	register char *str;
+	char *str;
 	char **area;
 {
-	register char *cp;
-	register int c;
-	register char *dp;
+	char *cp;
+	int c;
+	char *dp;
 	int i;
 	char term;
 
@@ -432,11 +429,11 @@ nextc:
 			dp++;
 			if (*dp)
 				goto nextc;
-			if (isdigit(c)) {
+			if (isdigit((unsigned char)c)) {
 				c -= '0', i = 2;
 				do
 					c <<= 3, c |= *str++ - '0';
-				while (--i && isdigit(*str));
+				while (--i && isdigit((unsigned char)*str));
 			}
 			break;
 		}

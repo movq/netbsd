@@ -1,4 +1,4 @@
-/* $NetBSD: sb_pnpbios.c,v 1.2 1999/11/14 02:15:51 thorpej Exp $ */
+/* $NetBSD: sb_pnpbios.c,v 1.15 2008/03/17 13:38:25 cube Exp $ */
 /*
  * Copyright (c) 1999
  * 	Matthias Drochner.  All rights reserved.
@@ -25,6 +25,9 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: sb_pnpbios.c,v 1.15 2008/03/17 13:38:25 cube Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/errno.h>
@@ -50,37 +53,33 @@
 
 #include <dev/isa/sbdspvar.h>
 
-int sb_pnpbios_match __P((struct device *, struct cfdata *, void *));
-void sb_pnpbios_attach __P((struct device *, struct device *, void *));
+int sb_pnpbios_match(device_t, cfdata_t, void *);
+void sb_pnpbios_attach(device_t, device_t, void *);
 
-struct cfattach sb_pnpbios_ca = {
-	sizeof(struct sbdsp_softc), sb_pnpbios_match, sb_pnpbios_attach
-};
+CFATTACH_DECL_NEW(sb_pnpbios, sizeof(struct sbdsp_softc),
+    sb_pnpbios_match, sb_pnpbios_attach, NULL, NULL);
 
 int
-sb_pnpbios_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+sb_pnpbios_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pnpbiosdev_attach_args *aa = aux;
 
-	if (strcmp(aa->idstr, "NMX2210"))
+	if (strcmp(aa->idstr, "NMX2210") &&
+	    strcmp(aa->idstr, "CRX0002"))	/* Cyrix XpressAudio */
 		return (0);
 
 	return (1);
 }
 
 void
-sb_pnpbios_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+sb_pnpbios_attach(device_t parent, device_t self, void *aux)
 {
-	struct sbdsp_softc *sc = (void *)self;
+	struct sbdsp_softc *sc = device_private(self);
 	struct pnpbiosdev_attach_args *aa = aux;
 
+	sc->sc_dev = self;
 	if (pnpbios_io_map(aa->pbt, aa->resc, 0, &sc->sc_iot, &sc->sc_ioh)) {
-		printf(": can't map i/o space\n");
+		aprint_error(": can't map i/o space\n");
 		return;
 	}
 
@@ -89,25 +88,26 @@ sb_pnpbios_attach(parent, self, aux)
 	/* XXX These are only for setting chip configuration registers. */
 	pnpbios_getiobase(aa->pbt, aa->resc, 0, 0, &sc->sc_iobase);
 
-	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->sc_irq)) {
-		printf(": can't get IRQ\n");
+	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->sc_irq,
+	    NULL)) {
+		aprint_error(": can't get IRQ\n");
 		return;
 	}
 
 	if (pnpbios_getdmachan(aa->pbt, aa->resc, 0, &sc->sc_drq8)) {
-		printf(": can't get DMA channel\n");
+		aprint_error(": can't get DMA channel\n");
 		return;
 	}
 	if (pnpbios_getdmachan(aa->pbt, aa->resc, 1, &sc->sc_drq16))
 		sc->sc_drq16 = -1;
 
-	printf("\n");
+	aprint_normal("\n");
 	pnpbios_print_devres(self, aa);
 
-	printf("%s", self->dv_xname);
+	aprint_normal("%s", device_xname(self));
 
-	if (!sbmatch(sc)) {
-		printf("%s: sbmatch failed\n", sc->sc_dev.dv_xname);
+	if (!sbmatch(sc, 0, device_cfdata(self))) {
+		aprint_error_dev(self, "sbmatch failed\n");
 		return;
 	}
 

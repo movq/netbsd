@@ -1,4 +1,4 @@
-.\"	$NetBSD: pty.4,v 1.7 1999/03/16 01:19:17 garbled Exp $
+.\"	$NetBSD: pty.4,v 1.12 2006/10/13 20:30:16 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     @(#)pty.4	8.2 (Berkeley) 11/30/93
 .\"
-.Dd November 30, 1993
+.Dd October 7, 2006
 .Dt PTY 4
 .Os
 .Sh NAME
@@ -66,8 +62,11 @@ presented as input on the master device.
 In configuring, if an optional
 .Ar count
 is given in
-the specification, that number of pseudo terminal pairs are configured;
-the default count is 32.
+the specification, that number of pseudo terminal pairs is initially configured;
+the default count is 16. Additional pseudo terminal pairs are allocated on
+as-needed basis, maximum number of them is controlled via
+.Em kern.maxptys
+sysctl (defaults to 992).
 .Pp
 The following
 .Xr ioctl 2
@@ -215,14 +214,21 @@ editing in a window manager, or whenever flow controlled input
 is required.
 .El
 .Sh FILES
-.Bl -tag -width /dev/tty[p-r][0-9a-f]x -compact
-.It Pa /dev/pty[p-r][0-9a-f]
+.Bl -tag -width /dev/tty[p-zP-T][0-9a-zA-Z]x -compact
+.It Pa /dev/pty[p-zP-T][0-9a-zA-Z]
 master pseudo terminals
-.It Pa /dev/tty[p-r][0-9a-f]
+.It Pa /dev/tty[p-zP-T][0-9a-zA-Z]
 slave pseudo terminals
 .El
 .Sh DIAGNOSTICS
 None.
+.Sh SEE ALSO
+.Xr ioctl 2 ,
+.Xr read 2 ,
+.Xr select 2 ,
+.Xr write 2 ,
+.Xr openpty 3 ,
+.Xr tty 4
 .Sh HISTORY
 The
 .Nm

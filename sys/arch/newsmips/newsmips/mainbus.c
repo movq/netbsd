@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.4 2000/01/23 15:58:04 tsubai Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.11 2008/04/09 15:40:30 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -28,6 +28,9 @@
  * rights to redistribute these changes.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.11 2008/04/09 15:40:30 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -36,28 +39,21 @@
 #include <machine/autoconf.h>
 #include <machine/apbus.h>
 
-struct mainbus_softc {
-	struct device sc_dev;
-};
-
 /* Definition of the mainbus driver. */
-static int	mbmatch __P((struct device *, struct cfdata *, void *));
-static void	mbattach __P((struct device *, struct device *, void *));
-static int	mbprint __P((void *, const char *));
+static int	mbmatch(device_t, cfdata_t, void *);
+static void	mbattach(device_t, device_t, void *);
+static int	mbprint(void *, const char *);
 
-struct cfattach mainbus_ca = {
-	sizeof(struct mainbus_softc), mbmatch, mbattach
-};
+CFATTACH_DECL_NEW(mainbus, 0,
+    mbmatch, mbattach, NULL, NULL);
 
 /* There can be only one. */
 static int mainbus_found;
 
 static int
-mbmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+mbmatch(device_t parent, cfdata_t cf, void *aux)
 {
+
 	if (mainbus_found)
 		return 0;
 
@@ -65,22 +61,15 @@ mbmatch(parent, cf, aux)
 }
 
 static void
-mbattach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+mbattach(device_t parent, device_t self, void *aux)
 {
-	register struct device *mb = self;
 	struct confargs nca;
 
 	mainbus_found = 1;
-	printf("\n");
+	aprint_normal("\n");
 
 	nca.ca_name = "cpu";
-	nca.ca_slot = 0;
-	nca.ca_offset = 0;
-	nca.ca_addr = 0;
-	config_found(mb, &nca, mbprint);
+	config_found(self, &nca, mbprint);
 
 	/* XXX */
 	if (_sip != NULL) {
@@ -93,9 +82,7 @@ mbattach(parent, self, aux)
 }
 
 static int
-mbprint(aux, pnp)
-	void *aux;
-	const char *pnp;
+mbprint(void *aux, const char *pnp)
 {
 
 	if (pnp)

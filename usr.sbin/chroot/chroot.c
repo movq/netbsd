@@ -1,3 +1,5 @@
+/*	$NetBSD: chroot.c,v 1.15 2008/07/21 13:36:57 lukem Exp $	*/
+
 /*
  * Copyright (c) 1988, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -10,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)chroot.c	8.1 (Berkeley) 6/9/93";
 #else
-__RCSID("$NetBSD: chroot.c,v 1.7 1998/10/06 03:47:51 mrg Exp $");
+__RCSID("$NetBSD: chroot.c,v 1.15 2008/07/21 13:36:57 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,103 +56,111 @@ __RCSID("$NetBSD: chroot.c,v 1.7 1998/10/06 03:47:51 mrg Exp $");
 #include <string.h>
 #include <unistd.h>
 
-int	main __P((int, char **));
-void	usage __P((void)) __attribute__((__noreturn__));
+int	main(int, char **);
+void	usage(void) __dead;
 
 char	*user;		/* user to switch to before running program */
 char	*group;		/* group to switch to ... */
 char	*grouplist;	/* group list to switch to ... */
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-	struct group *gp;
-	struct passwd *pw;
-	char *shell, *endp, *comma;
-	gid_t gid = 0, gidlist[NGROUPS_MAX];
-	uid_t uid = 0;
-	int ch, gids;
+	struct group	*gp;
+	struct passwd	*pw;
+	char		*endp, *p;
+	const char	*shell;
+	gid_t		gid, gidlist[NGROUPS_MAX];
+	uid_t		uid;
+	int		ch, gids;
 
-	while ((ch = getopt(argc, argv, "G:g:u:")) != -1)
+	gid = 0;
+	uid = 0;
+	while ((ch = getopt(argc, argv, "G:g:u:")) != -1) {
 		switch(ch) {
 		case 'u':
 			user = optarg;
+			if (*user == '\0')
+				usage();
 			break;
 		case 'g':
 			group = optarg;
+			if (*group == '\0')
+				usage();
 			break;
 		case 'G':
 			grouplist = optarg;
+			if (*grouplist == '\0')
+				usage();
 			break;
 		case '?':
 		default:
 			usage();
 		}
+	}
 	argc -= optind;
 	argv += optind;
 
 	if (argc < 1)
 		usage();
 
-	if (group) {
-		if (isdigit(*group)) {
-			gid = (gid_t)strtol(group, &endp, 0);
-			if (endp == group)
+	if (group != NULL) {
+		if (isdigit((unsigned char)*group)) {
+			gid = (gid_t)strtoul(group, &endp, 0);
+			if (*endp != '\0')
 				goto getgroup;
 		} else {
-getgroup:
-			if ((gp = getgrnam(group)))
+ getgroup:
+			if ((gp = getgrnam(group)) != NULL)
 				gid = gp->gr_gid;
 			else
-				errx(1, "no such group %s", group);
+				errx(1, "no such group `%s'", group);
 		}
 	}
 
-	for (gids = 0; grouplist; ) {
-		comma = strchr(grouplist, ',');
+	for (gids = 0;
+	    (p = strsep(&grouplist, ",")) != NULL && gids < NGROUPS_MAX; ) {
+		if (*p == '\0')
+			continue;
 
-		if (comma)
-			*comma++ = '\0';
-
-		if (isdigit(*grouplist)) {
-			gidlist[gids] = (gid_t)strtol(grouplist, &endp, 0);
-			if (endp == grouplist)
+		if (isdigit((unsigned char)*p)) {
+			gidlist[gids] = (gid_t)strtoul(p, &endp, 0);
+			if (*endp != '\0')
 				goto getglist;
 		} else {
-getglist:
-			if ((gp = getgrnam(grouplist)))
+ getglist:
+			if ((gp = getgrnam(p)) != NULL)
 				gidlist[gids] = gp->gr_gid;
 			else
-				errx(1, "no such group %s", group);
+				errx(1, "no such group `%s'", p);
 		}
 		gids++;
-		grouplist = comma;
 	}
+	if (p != NULL && gids == NGROUPS_MAX)
+		errx(1, "too many supplementary groups provided");
 
-	if (user) {
-		if (isdigit(*user)) {
-			uid = (uid_t)strtol(user, &endp, 0);
-			if (endp == user)
+	if (user != NULL) {
+		if (isdigit((unsigned char)*user)) {
+			uid = (uid_t)strtoul(user, &endp, 0);
+			if (*endp != '\0')
 				goto getuser;
 		} else {
-getuser:
-			if ((pw = getpwnam(user)))
+ getuser:
+			if ((pw = getpwnam(user)) != NULL)
 				uid = pw->pw_uid;
 			else
-				errx(1, "no such user %s", user);
+				errx(1, "no such user `%s'", user);
 		}
 	}
 
-	if (chdir(argv[0]) || chroot("."))
+	if (chdir(argv[0]) == -1 || chroot(".") == -1)
 		err(1, "%s", argv[0]);
 
-	if (gids && setgroups(gids, gidlist) < 0)
+	if (gids && setgroups(gids, gidlist) == -1)
 		err(1, "setgroups");
-	if (group && setgid(gid) < 0)
+	if (group && setgid(gid) == -1)
 		err(1, "setgid");
-	if (user && setuid(uid) < 0)
+	if (user && setuid(uid) == -1)
 		err(1, "setuid");
 
 	if (argv[1]) {
@@ -162,7 +168,7 @@ getuser:
 		err(1, "%s", argv[1]);
 	}
 
-	if (!(shell = getenv("SHELL")))
+	if ((shell = getenv("SHELL")) == NULL)
 		shell = _PATH_BSHELL;
 	execlp(shell, shell, "-i", NULL);
 	err(1, "%s", shell);
@@ -170,8 +176,9 @@ getuser:
 }
 
 void
-usage()
+usage(void)
 {
+
 	(void)fprintf(stderr, "usage: chroot [-g group] [-G group,group,...] "
 	    "[-u user] newroot [command]\n");
 	exit(1);

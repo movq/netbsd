@@ -1,4 +1,4 @@
-/*	$NetBSD: drbbc.c,v 1.6 2000/03/16 16:37:20 kleink Exp $	*/
+/*	$NetBSD: drbbc.c,v 1.17 2008/04/28 20:23:12 martin Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,10 +29,16 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: drbbc.c,v 1.17 2008/04/28 20:23:12 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/systm.h>
+
+#include <uvm/uvm_extern.h>
+
 #if 0
 #include <machine/psl.h>
 #endif
@@ -50,38 +49,32 @@
 #include <amiga/amiga/drcustom.h>
 #include <amiga/dev/rtc.h>
 
+#include <dev/clock_subr.h>
 #include <dev/ic/ds.h>
 
-int draco_ds_read_bit __P((void *));
-void draco_ds_write_bit __P((void *, int));
-void draco_ds_reset __P((void *));
+int draco_ds_read_bit(void *);
+void draco_ds_write_bit(void *, int);
+void draco_ds_reset(void *);
 
-void drbbc_attach __P((struct device *, struct device *, void *));
-int drbbc_match __P((struct device *, struct cfdata *, void *));
+void drbbc_attach(struct device *, struct device *, void *);
+int drbbc_match(struct device *, struct cfdata *, void *);
 
-int dracougettod __P((struct timeval *));
-#ifdef __NOTYET__
-int dracousettod __P((struct timeval *));
-#endif
+int dracougettod(todr_chip_handle_t, volatile struct timeval *);
+int dracousettod(todr_chip_handle_t, volatile struct timeval *);
 
+static struct todr_chip_handle dracotodr;
 struct drbbc_softc {
 	struct device sc_dev;
 	struct ds_handle sc_dsh;
 };
 
-struct cfattach drbbc_ca = {
-	sizeof(struct drbbc_softc),
-	drbbc_match,
-	drbbc_attach
-};
+CFATTACH_DECL(drbbc, sizeof(struct drbbc_softc),
+    drbbc_match, drbbc_attach, NULL, NULL);
 
 struct drbbc_softc *drbbc_sc;
 
 int
-drbbc_match(pdp, cfp, auxp)
-	struct device *pdp;
-	struct cfdata *cfp;
-	void *auxp;
+drbbc_match(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	static int drbbc_matched = 0;
 
@@ -94,9 +87,7 @@ drbbc_match(pdp, cfp, auxp)
 }
 
 void
-drbbc_attach(pdp, dp, auxp)
-	struct device *pdp, *dp;
-	void *auxp;
+drbbc_attach(struct device *pdp, struct device *dp, void *auxp)
 {
 	int i;
 	struct drbbc_softc *sc;
@@ -107,75 +98,72 @@ drbbc_attach(pdp, dp, auxp)
 	sc->sc_dsh.ds_read_bit = draco_ds_read_bit;
 	sc->sc_dsh.ds_write_bit = draco_ds_write_bit;
 	sc->sc_dsh.ds_reset = draco_ds_reset;
-	sc->sc_dsh.ds_hw_handle = (void *)(DRCCADDR + DRIOCTLPG*NBPG);
+	sc->sc_dsh.ds_hw_handle = (void *)(DRCCADDR + DRIOCTLPG*PAGE_SIZE);
 
 	sc->sc_dsh.ds_reset(sc->sc_dsh.ds_hw_handle);
 
 	ds_write_byte(&sc->sc_dsh, DS_ROM_READ);
-	for (i=0; i<8; ++i) 
+	for (i=0; i<8; ++i)
 		rombuf[i] = ds_read_byte(&sc->sc_dsh);
 
 	hostid = (rombuf[3] << 24) + (rombuf[2] << 16) +
 		(rombuf[1] << 8) + rombuf[7];
 
 	printf(": ROM %02x %02x%02x%02x%02x%02x%02x %02x (DraCo sernum %ld)\n",
-		rombuf[7], rombuf[6], rombuf[5], rombuf[4], 
+		rombuf[7], rombuf[6], rombuf[5], rombuf[4],
 		rombuf[3], rombuf[2], rombuf[1], rombuf[0],
-		hostid); 
-		
-	ugettod = dracougettod;
-	usettod = (void *)0;
+		hostid);
+
 	drbbc_sc = sc;
+	dracotodr.cookie = sc;
+	dracotodr.todr_gettime = dracougettod;
+	dracotodr.todr_settime = dracousettod;
+	todr_attach(&dracotodr);
 }
 
 int
-draco_ds_read_bit(p)
-	void *p;
+draco_ds_read_bit(void *p)
 {
-	struct drioct *draco_ioct;
+	struct drioct *draco_ioctl;
 
-	draco_ioct = p;
+	draco_ioctl = p;
 
-	while (draco_ioct->io_status & DRSTAT_CLKBUSY);
+	while (draco_ioctl->io_status & DRSTAT_CLKBUSY);
 
-	draco_ioct->io_clockw1 = 0;
+	draco_ioctl->io_clockw1 = 0;
 
-	while (draco_ioct->io_status & DRSTAT_CLKBUSY);
+	while (draco_ioctl->io_status & DRSTAT_CLKBUSY);
 
-	return (draco_ioct->io_status & DRSTAT_CLKDAT);
+	return (draco_ioctl->io_status & DRSTAT_CLKDAT);
 }
 
 void
-draco_ds_write_bit(p, b)
-	void *p;
-	int b;
+draco_ds_write_bit(void *p, int b)
 {
-	struct drioct *draco_ioct;
+	struct drioct *draco_ioctl;
 
-	draco_ioct = p;
+	draco_ioctl = p;
 
-	while (draco_ioct->io_status & DRSTAT_CLKBUSY);
+	while (draco_ioctl->io_status & DRSTAT_CLKBUSY);
 
 	if (b)
-		draco_ioct->io_clockw1 = 0;
+		draco_ioctl->io_clockw1 = 0;
 	else
-		draco_ioct->io_clockw0 = 0;
+		draco_ioctl->io_clockw0 = 0;
 }
 
 void
-draco_ds_reset(p)
-	void *p;
+draco_ds_reset(void *p)
 {
-	struct drioct *draco_ioct;
+	struct drioct *draco_ioctl;
 
-	draco_ioct = p;
+	draco_ioctl = p;
 
-	draco_ioct->io_clockrst = 0;
+	draco_ioctl->io_clockrst = 0;
 }
 
 int
-dracougettod(tvp)
-	struct timeval *tvp;
+dracougettod(todr_chip_handle_t h, volatile struct timeval *tvp)
 {
 	u_int32_t clkbuf;
 	u_int32_t usecs;
@@ -188,19 +176,25 @@ dracougettod(tvp)
 	/* address of seconds/256: */
 	ds_write_byte(&drbbc_sc->sc_dsh, 0x02);
 	ds_write_byte(&drbbc_sc->sc_dsh, 0x02);
-	
+
 	usecs = (ds_read_byte(&drbbc_sc->sc_dsh) * 1000000) / 256;
 	clkbuf = ds_read_byte(&drbbc_sc->sc_dsh)
 	    + (ds_read_byte(&drbbc_sc->sc_dsh)<<8)
 	    + (ds_read_byte(&drbbc_sc->sc_dsh)<<16)
 	    + (ds_read_byte(&drbbc_sc->sc_dsh)<<24);
 
-	/* BSD time is wr. 1.1.1970; AmigaOS time wrt. 1.1.1978 */
+	/* BSD time is wrt. 1.1.1970; AmigaOS time wrt. 1.1.1978 */
 
-	clkbuf += (8*365 + 2) * 86400;	
+	clkbuf += (8*365 + 2) * 86400;
 
 	tvp->tv_sec = clkbuf;
 	tvp->tv_usec = usecs;
 
-	return (1);
+	return (0);
+}
+
+int
+dracousettod(todr_chip_handle_t h, volatile struct timeval *tvp)
+{
+	return (ENXIO);
 }

@@ -1,7 +1,7 @@
-/*	$NetBSD: ibcs2_machdep.h,v 1.5 2000/01/10 03:03:54 matt Exp $	*/
+/*	$NetBSD: ibcs2_machdep.h,v 1.16 2008/04/28 20:23:24 martin Exp $	*/
 
 /*-
- * Copyright (c) 1997 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,15 +34,17 @@
 
 #define COFF_MAGIC_I386	0x14c
 #define	COFF_BADMAG(ex)	(ex->f_magic != COFF_MAGIC_I386)
+#define	COFF_LDPGSZ	4096
 
 #ifdef _KERNEL
 struct exec_package;
 struct exec_vmcmd;
 
-void	ibcs2_setregs __P((struct proc *, struct exec_package *, u_long));
-void	ibcs2_sendsig __P((sig_t, int, sigset_t *, u_long));
-int	ibcs2_sys_sysmachine __P((struct proc *, void *, register_t *retval));
+void	ibcs2_setregs(struct lwp *, struct exec_package *, u_long);
+struct	ibcs2_sys_sysmachine_args;
+int	ibcs2_sys_sysmachine(struct lwp *, const struct ibcs2_sys_sysmachine_args *, register_t *retval);
 
+void	ibcs2_syscall_intern(struct proc *);
 #endif /* _KERNEL */
 
 #endif /* !_I386_IBCS2_MACHDEP_H_ */

@@ -1,4 +1,4 @@
-/*      $NetBSD: lemacreg.h,v 1.1 1997/07/31 21:54:59 matt Exp $ */
+/*      $NetBSD: lemacreg.h,v 1.5 2005/12/11 12:21:27 christos Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1997 Matt Thomas <matt@3am-software.com>
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -120,7 +120,7 @@
 
 #define LEMAC_TX_ISA		0x01	/* Insert Source Address (no) */
 #define LEMAC_TX_IFC		0x02	/* Insert Frame Check (yes) */
-#define LEMAC_TX_PAD		0x04	/* Zero PAD to mininum length (yes) */
+#define LEMAC_TX_PAD		0x04	/* Zero PAD to minimum length (yes) */
 #define LEMAC_TX_LAB		0x08	/* Less Agressive Backoff (no) */
 #define LEMAC_TX_QMD		0x10	/* Q-Mode (yes) */
 #define LEMAC_TX_STP		0x20	/* Stop on Error (no) */
@@ -132,11 +132,11 @@
 
 /* Transmit Done Queue Status Definitions */
 
-#define	LEMAC_TDQ_COL		0x03	/* Collision Mask */ 
+#define	LEMAC_TDQ_COL		0x03	/* Collision Mask */
 #define	LEMAC_TDQ_NOCOL		0x00	/*   No Collisions */
 #define	LEMAC_TDQ_ONECOL	0x01	/*   One Collision */
 #define	LEMAC_TDQ_MULCOL	0x02	/*   Multiple Collisions */
-#define	LEMAC_TDQ_EXCCOL	0x03	/*   Excesive Collisions */
+#define	LEMAC_TDQ_EXCCOL	0x03	/*   Excessive Collisions */
 #define	LEMAC_TDQ_ID		0x04	/* Initially Deferred */
 #define	LEMAC_TDQ_LCL		0x08	/* Late Collision (will TX_STP) */
 #define	LEMAC_TDQ_NCL		0x10	/* No carrier loopback */

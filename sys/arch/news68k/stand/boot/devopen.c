@@ -1,4 +1,4 @@
-/*	$NetBSD: devopen.c,v 1.1 1999/12/09 14:53:22 tsutsui Exp $	*/
+/*	$NetBSD: devopen.c,v 1.9 2007/12/23 03:04:57 tsutsui Exp $	*/
 
 /*-
  * Copyright (C) 1999 Tsubai Masanari.  All rights reserved.
@@ -29,6 +29,7 @@
 #include <lib/libkern/libkern.h>
 #include <lib/libsa/stand.h>
 #include <lib/libsa/ufs.h>
+#include <lib/libsa/ustarfs.h>
 
 #include <machine/romcall.h>
 
@@ -38,29 +39,27 @@
 # define DPRINTF while (0) printf
 #endif
 
-int dkopen __P((struct open_file *, ...));
-int dkclose __P((struct open_file *));
-int dkstrategy __P((void *, int, daddr_t, size_t, void *, size_t *));
+int dkopen(struct open_file *, ...);
+int dkclose(struct open_file *);
+int dkstrategy(void *, int, daddr_t, size_t, void *, size_t *);
 
 struct devsw devsw[] = {
 	{ "dk", dkstrategy, dkopen, dkclose, noioctl }
 };
-int ndevs = sizeof(devsw) / sizeof(devsw[0]);
+int ndevs = __arraycount(devsw);
 
 struct fs_ops file_system[] = {
-	{ ufs_open, ufs_close, ufs_read, ufs_write, ufs_seek, ufs_stat }
+	FS_OPS(ufs),
+	FS_OPS(ustarfs),
 };
-int nfsys = sizeof(file_system) / sizeof(file_system[0]);
+int nfsys = __arraycount(file_system);
 
 struct romdev {
 	int fd;
 } romdev;
 
 int
-devopen(f, fname, file)
-	struct open_file *f;
-	const char *fname;
-	char **file;	/* out */
+devopen(struct open_file *f, const char *fname, char **file)
 {
 	int fd;
 	char devname[32];
@@ -89,13 +88,13 @@ devopen(f, fname, file)
 int
 dkopen(struct open_file *f, ...)
 {
+
 	DPRINTF("dkopen\n");
 	return 0;
 }
 
 int
-dkclose(f)
-	struct open_file *f;
+dkclose(struct open_file *f)
 {
 	struct romdev *dev = f->f_devdata;
 
@@ -105,13 +104,8 @@ dkclose(f)
 }
 
 int
-dkstrategy(devdata, rw, blk, size, buf, rsize)
-	void *devdata;
-	int rw;
-	daddr_t blk;
-	size_t size;
-	void *buf;
-	size_t *rsize;	/* out: number of bytes transfered */
+dkstrategy(void *devdata, int rw, daddr_t blk, size_t size, void *buf,
+    size_t *rsize)
 {
 	struct romdev *dev = devdata;
 

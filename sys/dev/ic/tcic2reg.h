@@ -1,4 +1,4 @@
-/*	$NetBSD: tcic2reg.h,v 1.1 1999/03/23 20:04:14 bad Exp $	*/
+/*	$NetBSD: tcic2reg.h,v 1.5 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -61,7 +54,7 @@
 /*
  * TCIC auxiliary registers.
  * These are all 16 bit registers.
- * They are accessed by selecting the approriate index in
+ * They are accessed by selecting the appropriate index in
  * bits 7:5 of the mode register.
  */
 #define	TCIC_AR_MASK		0xe0		/* for masking the mode reg. */
@@ -159,7 +152,7 @@
 #define	TCIC_SSTAT_BATLO	(2<<3)		/* battery is getting low */
 #define	TCIC_SSTAT_BATBAD2	(3<<3)		/* battery is low */
 #define	TCIC_SSTAT_RDY		(1<<5)		/* card is ready (not busy) */
-#define	TCIC_SSTAT_WP		(1<<6)		/* card is write-proteced */
+#define	TCIC_SSTAT_WP		(1<<6)		/* card is write-protected */
 #define	TCIC_SSTAT_CD		(1<<7)		/* card present */
 #define	TCIC_SSTAT_STAT_MASK	0xf8
 
@@ -195,7 +188,7 @@
 #define	TCIC_PWR_CLIMENA	(1 << 6)	/* the current-limit enable */
 #define	TCIC_PWR_CLIMSTAT	(1 << 7)	/* current limit sense (r/o) */
 
-/* Bits in the icsr reqister. */
+/* Bits in the icsr register. */
 #define	TCIC_ICSR_IOCHK		(1<<7)		/* I/O check */
 #define	TCIC_ICSR_CDCHG		(1<<6)		/* card status change, see SSTAT */
 #define	TCIC_ICSR_ERR		(1<<5)		/* error condition */
@@ -332,7 +325,7 @@
 	/*
 	 * If set, assume presence of an external buffer for MCS16:  operate
 	 * the driver as a totem-pole output.
-	 * 
+	 *
 	 * If clear, run in pseudo-ISA mode; output is open drain.  But note
 	 * that on the 082 the output buffers cannot drive a 300-ohm
 	 * load.
@@ -341,7 +334,7 @@
 	/*
 	 * If set, assume presence of an external buffer for IOCS16*; operate
 	 * the buffer as a totem-pole output.
-	 * 
+	 *
 	 * If clear, run in pseudo-ISA mode; output is open drain.  But note
 	 * that on the 082 the output buffers cannot drive a 300-ohm
 	 * load.
@@ -351,7 +344,7 @@
 	 * If set, disable the auto power-down sequencing.  The chip will
 	 * run card cycles somewhat more quickly (though perhaps not
 	 * significantly so); but it will dissipate significantly more power.
-	 * 
+	 *
 	 * If clear, the low-power operating modes are enabled.  This
 	 * causes the part to go into low-power mode automatically at
 	 * system reset.
@@ -418,27 +411,27 @@
 	 * then the busy light will be off, even if a socket is enabled.
 	 * If AUTOBUSY is clear, then the busy light will be on if either
 	 * socket is enabled.
-	 * 
+	 *
 	 * Note, that when in a programming mode, you should either clear this
 	 * bit (causing the busy light to be on whenever the socket is enabled)
 	 * or set both this bit and the ACC bit (causing the light to be on
 	 * all the time).
-	 * 
+	 *
 	 * On the '084 and '184, this bit is per-socket.
 	 */
 
-#define	TCIC_SYSCFG_ACC	(1<<15)	
+#define	TCIC_SYSCFG_ACC	(1<<15)
 	/*
 	 * This bit will be set automatically by the hardware whenever the CPU
 	 * accesses data on a card.  It can be cleared under software control.
-	 * 
+	 *
 	 * In AUTOBUSY mode, it has the additional effect of turning on the
 	 * busy light.
-	 * 
+	 *
 	 * Since we'll tristate the command lines as the card is going out of
 	 * the socket, and since the shared lines idle low, there's no real
 	 * danger if the busy light is off even though the socket is enabled.
-	 * 
+	 *
 	 * On the '084 and '184, this bit is per-socket.
 	 */
 
@@ -515,22 +508,22 @@
  *
  * In diagnostic mode, the high byte of the interlock register is defined
  * as the silicon identity byte.
- * 
+ *
  * In order to read this byte, the chip must be placed in diagnostic
  * mode by setting bit 15 of the TESTDIAG register.  (This may or may
  * not be enforced by the silicon.)
- * 
+ *
  * The layout is:
- * 
+ *
  * 	15 14 13 12 11 10 9 8    7 6 5 4 3 2 1 0
  * 	m  <-------ID------->	 <----ILOCK---->
- * 
+ *
  * The fields are:
- * 
+ *
  * m	Always reset.
- * 
+ *
  * ID	This field is one of the following:
- * 
+ *
  * 	0x02	the db86082
  * 	0x03	the db86082a
  * 	0x04	the db86084

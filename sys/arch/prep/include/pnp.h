@@ -220,7 +220,7 @@
 #define L1_8_16bit_mem           0x10   /* 8- and 16-bit supported            */
 #define L1_Decode_Hi             0x04   /* decode supports high address       */
 #define L1_Cache                 0x02   /* read cacheable, write-through      */
-#define L1_Writeable             0x01   /* Memory is writeable                */
+#define L1_Writable              0x01   /* Memory is writable                */
 #define L2_Packet                0x82   /* ANSI ID string                     */
 #define L3_Packet                0x83   /* Unicode ID string                  */
 #define L4_Packet                0x84   /* Vendor defined                     */
@@ -480,6 +480,31 @@ typedef enum _PnPItemName {
   MemoryRange32 = 5,
   MemoryRangeFixed32 = 6,
   } PnPItemName;
+
+typedef enum _PnPTagType {
+  PNP_SMALL = 0,
+  PNP_LARGE = 1,
+} PnPTagType;
+
+typedef enum _PnPLargeVendorItems {
+  LV_FloppyDrive = 1,
+  LV_L2Cache = 2,
+  LV_PCIBridge = 3,
+  LV_Display = 4,
+  LV_BridgeAddrTrans = 5,
+  LV_BusBridgeAttr = 6,
+  LV_SCSIController = 7,
+  LV_PowerManagement = 8,
+  LV_GenericAddress = 9,
+  LV_ISABridgeInfo = 10,
+  LV_VideoChannels = 11,
+  LV_PowerControl = 12,
+  LV_MemoryPDData = 13,
+  LV_SystemInterrupts = 14,
+  LV_ErrorLog = 15,
+  LV_ExtendedVPD = 16,
+  LV_TimebaseControl = 17,
+} PnPLargeVendorItems;
 
 /* Define a bunch of access functions for the bits in the tag field */
 

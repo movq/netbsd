@@ -1,4 +1,4 @@
-/*	$NetBSD: news3400.c,v 1.1 1999/12/22 05:53:21 tsubai Exp $	*/
+/*	$NetBSD: news3400.c,v 1.19 2007/12/03 15:34:05 ad Exp $	*/
 
 /*-
  * Copyright (C) 1999 Tsubai Masanari.  All rights reserved.
@@ -26,41 +26,59 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: news3400.c,v 1.19 2007/12/03 15:34:05 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/kernel.h>
+#include <sys/proc.h>
 #include <sys/systm.h>
 
 #include <machine/adrsmap.h>
 #include <machine/cpu.h>
 #include <machine/intr.h>
+#include <machine/psl.h>
 #include <newsmips/newsmips/machid.h>
 
-void level0_intr __P((void));
-void level1_intr __P((void));
-void hb_intr_dispatch __P((int));
+#include <newsmips/dev/hbvar.h>
 
-static int badaddr_flag;
+#if !defined(SOFTFLOAT)
+extern void MachFPInterrupt(unsigned, unsigned, unsigned, struct frame *);
+#endif
+
+int news3400_badaddr(void *, u_int);
+
+static void news3400_level0_intr(void);
+static void news3400_level1_intr(void);
+static void news3400_enable_intr(void);
+static void news3400_disable_intr(void);
+static void news3400_enable_timer(void);
+static void news3400_readidrom(uint8_t *);
+
+static volatile int badaddr_flag;
+
+#define INT_MASK_FPU MIPS_INT_MASK_3
 
 /*
  * Handle news3400 interrupts.
  */
-int
-news3400_intr(mask, pc, status, cause)
-	u_int mask;
-	u_int pc;	/* program counter where to continue */
-	u_int status;	/* status register at time of the exception */
-	u_int cause;	/* cause register at time of exception */
+void
+news3400_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
 {
 	struct clockframe cf;
+	struct cpu_info *ci;
+
+	ci = curcpu();
+	ci->ci_idepth++;
 
 	/* handle clock interrupts ASAP */
-	if (mask & MIPS_INT_MASK_2) {
-		register int stat;
+	if (ipending & MIPS_INT_MASK_2) {
+		int stat;
 
-		stat = *(volatile u_char *)INTST0;
+		stat = *(volatile uint8_t *)INTST0;
 		stat &= INTST0_TIMINT|INTST0_KBDINT|INTST0_MSINT;
 
-		*(volatile u_char *)INTCLR0 = stat;
+		*(volatile uint8_t *)INTCLR0 = stat;
 		if (stat & INTST0_TIMINT) {
 			cf.pc = pc;
 			cf.sr = status;
@@ -70,53 +88,67 @@ news3400_intr(mask, pc, status, cause)
 		}
 
 		if (stat)
-			hb_intr_dispatch(2);
+			hb_intr_dispatch(2, stat);
 
 		cause &= ~MIPS_INT_MASK_2;
 	}
 	/* If clock interrupts were enabled, re-enable them ASAP. */
-	splx(MIPS_SR_INT_IE | (status & MIPS_INT_MASK_2));
+	_splset(MIPS_SR_INT_IE | (status & MIPS_INT_MASK_2));
 
-	if (mask & MIPS_INT_MASK_5) {
-		*(volatile char *)INTCLR0 = INTCLR0_PERR;
+	if (ipending & MIPS_INT_MASK_5) {
+		*(volatile uint8_t *)INTCLR0 = INTCLR0_PERR;
 		printf("Memory error interrupt(?) at 0x%x\n", pc);
 		cause &= ~MIPS_INT_MASK_5;
 	}
 
 	/* asynchronous bus error */
-	if (mask & MIPS_INT_MASK_4) {
-		*(volatile char *)INTCLR0 = INTCLR0_BERR;
+	if (ipending & MIPS_INT_MASK_4) {
+		*(volatile uint8_t *)INTCLR0 = INTCLR0_BERR;
 		cause &= ~MIPS_INT_MASK_4;
 		badaddr_flag = 1;
 	}
 
-	if (mask & MIPS_INT_MASK_1) {
-		level1_intr();
+	if (ipending & MIPS_INT_MASK_1) {
+		news3400_level1_intr();
 		cause &= ~MIPS_INT_MASK_1;
 	}
 
-	if (mask & MIPS_INT_MASK_0) {
-		level0_intr();
+	if (ipending & MIPS_INT_MASK_0) {
+		news3400_level0_intr();
 		cause &= ~MIPS_INT_MASK_0;
 	}
 
-	return (status & ~cause & MIPS_HARD_INT_MASK) | MIPS_SR_INT_IE;
+	_splset((status & ~cause & MIPS_HARD_INT_MASK) | MIPS_SR_INT_IE);
+
+	/* FPU nofiticaition */
+	if (ipending & INT_MASK_FPU) {
+		if (!USERMODE(status))
+			panic("kernel used FPU: PC %x, CR %x, SR %x",
+			      pc, cause, status);
+
+		intrcnt[FPU_INTR]++;
+#if !defined(SOFTFLOAT)
+		MachFPInterrupt(status, cause, pc, curlwp->l_md.md_regs);
+#endif
+	}
+
+	ci->ci_idepth--;
 }
 
 #define LEVEL0_MASK \
 	(INTST1_DMA|INTST1_SLOT1|INTST1_SLOT3|INTST1_EXT1|INTST1_EXT3)
 
-void
-level0_intr()
+static void
+news3400_level0_intr(void)
 {
-	volatile u_char *istat1 = (void *)INTST1;
-	volatile u_char *iclr1 = (void *)INTCLR1;
-	int stat;
+	volatile uint8_t *intst1 = (void *)INTST1;
+	volatile uint8_t *intclr1 = (void *)INTCLR1;
+	uint8_t stat;
 
-	stat = *istat1 & LEVEL0_MASK;
-	*iclr1 = stat;
+	stat = *intst1 & LEVEL0_MASK;
+	*intclr1 = stat;
 
-	hb_intr_dispatch(0);
+	hb_intr_dispatch(0, stat);
 
 	if (stat & INTST1_SLOT1)
 		intrcnt[SLOT1_INTR]++;
@@ -127,26 +159,26 @@ level0_intr()
 #define LEVEL1_MASK0	(INTST0_CFLT|INTST0_CBSY)
 #define LEVEL1_MASK1	(INTST1_BEEP|INTST1_SCC|INTST1_LANCE)
 
-void
-level1_intr()
+static void
+news3400_level1_intr(void)
 {
-	volatile u_char *ien1 = (void *)INTEN1;
-	volatile u_char *istat1 = (void *)INTST1;
-	volatile u_char *iclr1 = (void *)INTCLR1;
-	int stat1, saved_ie1;
+	volatile uint8_t *inten1 = (void *)INTEN1;
+	volatile uint8_t *intst1 = (void *)INTST1;
+	volatile uint8_t *intclr1 = (void *)INTCLR1;
+	uint8_t stat1, saved_inten1;
 
-	saved_ie1 = *ien1;
+	saved_inten1 = *inten1;
 
-	*ien1 = 0;		/* disable BEEP, LANCE, and SCC */
+	*inten1 = 0;		/* disable BEEP, LANCE, and SCC */
 
-	stat1 = *istat1 & LEVEL1_MASK1;
-	*iclr1 = stat1;
+	stat1 = *intst1 & LEVEL1_MASK1;
+	*intclr1 = stat1;
 
-	stat1 &= saved_ie1;
+	stat1 &= saved_inten1;
 
-	hb_intr_dispatch(1);
+	hb_intr_dispatch(1, stat1);
 
-	*ien1 = saved_ie1;
+	*inten1 = saved_inten1;
 
 	if (stat1 & INTST1_SCC)
 		intrcnt[SERIAL0_INTR]++;
@@ -155,36 +187,34 @@ level1_intr()
 }
 
 int
-news3400_badaddr(addr, size)
-	void *addr;
-	u_int size;
+news3400_badaddr(void *addr, u_int size)
 {
-	volatile int x;
+	volatile u_int x;
 
 	badaddr_flag = 0;
 
 	switch (size) {
 	case 1:
-		x = *(volatile int8_t *)addr;
+		x = *(volatile uint8_t *)addr;
 		break;
 	case 2:
-		x = *(volatile int16_t *)addr;
+		x = *(volatile uint16_t *)addr;
 		break;
 	case 4:
-		x = *(volatile int32_t *)addr;
+		x = *(volatile uint32_t *)addr;
 		break;
 	}
 
 	return badaddr_flag;
 }
 
-void
-enable_intr_3400()
+static void
+news3400_enable_intr(void)
 {
-	volatile u_int8_t *inten0 = (void *)INTEN0;
-	volatile u_int8_t *inten1 = (void *)INTEN1;
-	volatile u_int8_t *intclr0 = (void *)INTCLR0;
-	volatile u_int8_t *intclr1 = (void *)INTCLR1;
+	volatile uint8_t *inten0 = (void *)INTEN0;
+	volatile uint8_t *inten1 = (void *)INTEN1;
+	volatile uint8_t *intclr0 = (void *)INTCLR0;
+	volatile uint8_t *intclr1 = (void *)INTCLR1;
 
 	/* clear all interrupts */
 	*intclr0 = 0xff;
@@ -206,22 +236,33 @@ enable_intr_3400()
 		  INTEN1_SLOT1 | INTEN1_SLOT3;
 }
 
-void
-disable_intr_3400()
+static void
+news3400_disable_intr(void)
 {
-	volatile u_int8_t *inten0 = (void *)INTEN0;
-	volatile u_int8_t *inten1 = (void *)INTEN1;
+
+	volatile uint8_t *inten0 = (void *)INTEN0;
+	volatile uint8_t *inten1 = (void *)INTEN1;
 
 	*inten0 = 0;
 	*inten1 = 0;
 }
 
-void
-readidrom_3400(rom)
-	register u_char *rom;
+static void
+news3400_enable_timer(void)
 {
-	register u_char *p = (u_char *)IDROM;
-	register int i;
+
+	/* initialize interval timer */
+	*(volatile uint8_t *)ITIMER = IOCLOCK / 6144 / 100 - 1;
+
+	/* enable timer interrupt */
+	*(volatile uint8_t *)INTEN0 |= (uint8_t)INTEN0_TIMINT;
+}
+
+static void
+news3400_readidrom(uint8_t *rom)
+{
+	uint8_t *p = (uint8_t *)IDROM;
+	int i;
 
 	for (i = 0; i < sizeof (struct idrom); i++, p += 2)
 		*rom++ = ((*p & 0x0f) << 4) + (*(p + 1) & 0x0f);
@@ -230,10 +271,13 @@ readidrom_3400(rom)
 extern struct idrom idrom;
 
 void
-news3400_init()
+news3400_init(void)
 {
-	enable_intr = enable_intr_3400;
-	disable_intr = disable_intr_3400;
 
-	readidrom_3400((u_char *)&idrom);
+	enable_intr = news3400_enable_intr;
+	disable_intr = news3400_disable_intr;
+	enable_timer = news3400_enable_timer;
+
+	news3400_readidrom((uint8_t *)&idrom);
+	hostid = idrom.id_serial;
 }

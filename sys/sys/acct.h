@@ -1,4 +1,4 @@
-/*	$NetBSD: acct.h,v 1.18 2000/03/10 01:13:20 enami Exp $	*/
+/*	$NetBSD: acct.h,v 1.26 2005/12/26 18:41:36 perry Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -48,7 +44,7 @@
  * exponent, 13 bit fraction ``floating point'' number.  Units are 1/AHZ
  * seconds.
  */
-typedef u_int16_t comp_t;
+typedef uint16_t comp_t;
 
 struct acct {
 	char	  ac_comm[10];	/* command name */
@@ -58,7 +54,7 @@ struct acct {
 	time_t	  ac_btime;	/* starting time */
 	uid_t	  ac_uid;	/* user id */
 	gid_t	  ac_gid;	/* group id */
-	u_int16_t ac_mem;	/* average memory usage */
+	uint16_t  ac_mem;	/* average memory usage */
 	comp_t	  ac_io;	/* count of IO blocks */
 	dev_t	  ac_tty;	/* controlling tty */
 
@@ -67,7 +63,7 @@ struct acct {
 #define	ACOMPAT	0x04		/* used compatibility mode */
 #define	ACORE	0x08		/* dumped core */
 #define	AXSIG	0x10		/* killed by a signal */
-	u_int8_t  ac_flag;	/* accounting flags */
+	uint8_t   ac_flag;	/* accounting flags */
 };
 
 /*
@@ -77,10 +73,8 @@ struct acct {
 #define	AHZ	64
 
 #ifdef _KERNEL
-struct vnode	*acctp;
-
-void	acct_init __P((void));
-int	acct_process __P((struct proc *p));
+void	acct_init(void);
+int	acct_process(struct lwp *);
 #endif
 
 #endif /* !_SYS_ACCT_H_ */

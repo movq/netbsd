@@ -1,4 +1,4 @@
-/*	$NetBSD: pow.c,v 1.8 2000/02/20 16:18:51 minoura Exp $	*/
+/*	$NetBSD: pow.c,v 1.17 2007/03/11 08:09:25 isaki Exp $	*/
 
 /*
  * Copyright (c) 1995 MINOURA Makoto.
@@ -37,6 +37,9 @@
  *  2. looking at the front or external power switch.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pow.c,v 1.17 2007/03/11 08:09:25 isaki Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -57,18 +60,24 @@
 
 struct pow_softc pows[NPOW];
 
-cdev_decl(pow);
+void powattach(int);
+void powintr(void);
+static int setalarm(struct x68k_alarminfo *);
 
-void powattach __P((int));
-void powintr __P((void));
-static int setalarm __P((struct x68k_alarminfo *));
+static void pow_check_switch(void *);
 
-static void pow_check_switch __P((void*));
+dev_type_open(powopen);
+dev_type_close(powclose);
+dev_type_ioctl(powioctl);
+
+const struct cdevsw pow_cdevsw = {
+	powopen, powclose, noread, nowrite, powioctl,
+	nostop, notty, nopoll, nommap, nokqfilter,
+};
 
 /* ARGSUSED */
 void
-powattach(num)
-	int num;
+powattach(int num)
 {
 	int minor;
 	int sw;
@@ -93,18 +102,18 @@ powattach(num)
 
 		printf("pow%d: started by ", minor);
 		if (sw & POW_EXTERNALSW)
-			printf ("external power switch.\n");
+			printf("external power switch.\n");
 		else if (sw & POW_FRONTSW)
-			printf ("front power switch.\n");
+			printf("front power switch.\n");
 		/* XXX: I don't know why POW_ALARMSW should not be checked */
 #if 0
 		else if ((sw & POW_ALARMSW) && sramtop[0x26] == 0)
-			printf ("RTC alarm.\n");
+			printf("RTC alarm.\n");
 		else
-			printf ("???.\n");
+			printf("???.\n");
 #else
 		else
-			printf ("RTC alarm.\n");
+			printf("RTC alarm.\n");
 #endif
 	}
 
@@ -113,10 +122,7 @@ powattach(num)
 
 /*ARGSUSED*/
 int
-powopen(dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
+powopen(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	struct pow_softc *sc = &pows[minor(dev)];
 
@@ -137,10 +143,7 @@ powopen(dev, flags, mode, p)
 
 /*ARGSUSED*/
 int
-powclose (dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
+powclose(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	struct pow_softc *sc = &pows[minor(dev)];
 
@@ -151,21 +154,21 @@ powclose (dev, flags, mode, p)
 	return 0;
 }
 
-#define SRAMINT(offset)	(*((int*) (&sramtop[offset])))
+#define SRAMINT(offset)	(*((volatile int *) (&sramtop[offset])))
 #define RTCWAIT DELAY(100)
 
 static int
-setalarm (bp)
-	struct x68k_alarminfo *bp;
+setalarm(struct x68k_alarminfo *bp)
 {
-	int s = splclock ();
-	int ontime;
+	int s, ontime;
+
+	s = splclock();
 
 	sysport.sramwp = 0x31;
 	if (bp->al_enable) {
-		SRAMINT (0x1e) = bp->al_dowhat;
-		SRAMINT (0x22) = bp->al_ontime;
-		SRAMINT (0x14) = (bp->al_offtime / 60) - 1;
+		SRAMINT(0x1e) = bp->al_dowhat;
+		SRAMINT(0x22) = bp->al_ontime;
+		SRAMINT(0x14) = (bp->al_offtime / 60) - 1;
 		sramtop[0x26] = 0;
 	} else {
 		sramtop[0x26] = 7;
@@ -222,45 +225,40 @@ setalarm (bp)
 
 /*ARGSUSED*/
 int
-powioctl (dev, cmd, addr, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t addr;
-	int flag;
-	struct proc *p;
+powioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
 	struct pow_softc *sc = &pows[minor(dev)];
 
 	switch (cmd) {
 	case POWIOCGPOWERINFO:
 		{
-			struct x68k_powerinfo *bp = (struct x68k_powerinfo*)addr;
+			struct x68k_powerinfo *bp = (void *)addr;
 			if (!(sc->rw & FREAD))
 				return EBADF;
 			bp->pow_switch_boottime = sc->sw;
 			bp->pow_switch_current = ~mfp.gpip & 7;
 			bp->pow_boottime = boottime.tv_sec;
-			bp->pow_bootcount = SRAMINT (0x44);
-			bp->pow_usedtotal = SRAMINT (0x40) * 60;
+			bp->pow_bootcount = SRAMINT(0x44);
+			bp->pow_usedtotal = SRAMINT(0x40) * 60;
 		}
 		break;
 
 	case POWIOCGALARMINFO:
 		{
-			struct x68k_alarminfo *bp = (struct x68k_alarminfo*) addr;
+			struct x68k_alarminfo *bp = (void *) addr;
 			if (!(sc->rw & FREAD))
 				return EBADF;
 			bp->al_enable = (sramtop[0x26] == 0);
-			bp->al_ontime = SRAMINT (0x22);
-			bp->al_dowhat = SRAMINT (0x1e);
-			bp->al_offtime = (SRAMINT (0x14) + 1) * 60;
+			bp->al_ontime = SRAMINT(0x22);
+			bp->al_dowhat = SRAMINT(0x1e);
+			bp->al_offtime = (SRAMINT(0x14) + 1) * 60;
 		}
 		break;
 
 	case POWIOCSALARMINFO:
 		if (!(sc->rw & FWRITE))
 			return EBADF;
-		return setalarm ((struct x68k_alarminfo*) addr);
+		return setalarm ((void *) addr);
 
 	case POWIOCSSIGNAL:
 		if (minor(dev) != 0)
@@ -268,13 +266,13 @@ powioctl (dev, cmd, addr, flag, p)
 		if (!(sc->rw & FWRITE))
 			return EBADF;
 		{
-			int signum = *(int*) addr;
+			int signum = *(int *) addr;
 			if (signum <= 0 || signum > 31)
 				return EINVAL;
 
 			sc->signum = signum;
-			sc->proc = p;
-			sc->pid = p->p_pid;
+			sc->proc = l->l_proc;
+			sc->pid = l->l_proc->p_pid;
 		}
 
 		break;
@@ -286,7 +284,7 @@ powioctl (dev, cmd, addr, flag, p)
 }
 
 void
-powintr()
+powintr(void)
 {
 	int sw;
 	int s;
@@ -304,8 +302,7 @@ powintr()
 }
 
 static void
-pow_check_switch(dummy)
-	void *dummy;
+pow_check_switch(void *dummy)
 {
 	extern int power_switch_is_off;
 

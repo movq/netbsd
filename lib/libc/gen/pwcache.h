@@ -1,4 +1,4 @@
-/*	$NetBSD: pwcache.h,v 1.1 1998/07/28 16:58:37 mycroft Exp $	*/
+/*	$NetBSD: pwcache.h,v 1.5 2003/11/10 08:51:51 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,7 +40,7 @@
  * caches. Traditional passwd/group cache routines perform quite poorly with
  * archives. The chances of hitting a valid lookup with an archive is quite a
  * bit worse than with files already resident on the file system. These misses
- * create a MAJOR performance cost. To adress this problem, these routines
+ * create a MAJOR performance cost. To address this problem, these routines
  * cache both hits and misses.
  *
  * NOTE:  name lengths must be as large as those stored in ANY PROTOCOL and
@@ -52,10 +48,10 @@
  */
 #define UNMLEN		32	/* >= user name found in any protocol */
 #define GNMLEN		32	/* >= group name found in any protocol */
-#define UID_SZ		317	/* size of user_name/uid cache */
-#define UNM_SZ		317	/* size of user_name/uid cache */
-#define GID_SZ		251	/* size of group_name/gid cache */
-#define GNM_SZ		251	/* size of group_name/gid cache */
+#define UID_SZ		317	/* size of uid to user_name cache */
+#define UNM_SZ		317	/* size of user_name to uid cache */
+#define GID_SZ		251	/* size of gid to group_name cache */
+#define GNM_SZ		251	/* size of group_name to gid cache */
 #define VALID		1	/* entry and name are valid */
 #define INVALID		2	/* entry valid, name NOT valid */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: c.h,v 1.2 1997/06/17 18:56:06 christos Exp $	*/
+/*	$NetBSD: c.h,v 1.5 2007/12/20 20:12:12 christos Exp $	*/
 
 /*
  * Copyright (c) 1991 Carnegie Mellon University
@@ -56,26 +56,23 @@
 #ifndef	_C_INCLUDE_
 #define	_C_INCLUDE_
 
-#define ABS(x) ((x)>=0?(x):-(x))
-#define	MIN(a,b) (((a)<(b))?(a):(b))
 #define	MAX(a,b) (((a)>(b))?(a):(b))
 
 #ifndef	FALSE
 #define FALSE	0
-#endif	FALSE
+#endif	/* FALSE */
 #ifndef	TRUE
 #define TRUE	1
-#endif	TRUE
+#endif	/* TRUE */
 
-#define	CERROR		(-1)
-
-#ifndef	bool
-typedef enum	{ false = 0, true = 1 } bool;
-#endif	bool
-
-#define	sizeofS(string)	(sizeof(string) - 1)
 #define sizeofA(array)	(sizeof(array)/sizeof(array[0]))
 
-#define caseE(enum_type)	case (int)(enum_type)
+#ifndef __unused
+#ifndef __GNUC__
+#define __unused
+#else
+#define __unused __attribute__((__unused__))
+#endif
+#endif
 
-#endif	_C_INCLUDE_
+#endif	/* _C_INCLUDE_ */

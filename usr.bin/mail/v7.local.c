@@ -1,4 +1,4 @@
-/*	$NetBSD: v7.local.c,v 1.10 1998/07/26 22:07:27 mycroft Exp $	*/
+/*	$NetBSD: v7.local.c,v 1.18 2006/11/28 18:45:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)v7.local.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: v7.local.c,v 1.10 1998/07/26 22:07:27 mycroft Exp $");
+__RCSID("$NetBSD: v7.local.c,v 1.18 2006/11/28 18:45:32 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,44 +53,48 @@ __RCSID("$NetBSD: v7.local.c,v 1.10 1998/07/26 22:07:27 mycroft Exp $");
  * Locate the user's mailbox file (ie, the place where new, unread
  * mail is queued).
  */
-void
-findmail(user, buf)
-	char *user, *buf;
+PUBLIC void
+findmail(const char *user, char *buf, size_t bufsize)
 {
 	char *mbox;
 
 	if (!(mbox = getenv("MAIL")))
-		(void)snprintf(buf, PATHSIZE, "%s/%s", _PATH_MAILDIR, user);
-	else {
-		(void)strncpy(buf, mbox, PATHSIZE - 1);
-		buf[PATHSIZE - 1] = '\0';
-	}
+		(void)snprintf(buf, bufsize, "%s/%s", _PATH_MAILDIR, user);
+	else
+		(void)strlcpy(buf, mbox, bufsize);
 }
 
 /*
  * Get rid of the queued mail.
  */
-void
-demail()
+PUBLIC void
+demail(void)
 {
 
-	if (value("keep") != NOSTR || rm(mailname) < 0)
-		(void)close(creat(mailname, 0600));
+	int fd;
+	/*
+	 * Do not remove the spool file, just truncate it to zero
+	 * bytes if possible, since we wouldn't preserve
+	 * owner/permissions otherwise.
+	 */
+	if (value(ENAME_KEEP) != NULL || truncate(mailname, (off_t)0) < 0)
+		if ((fd = creat(mailname, 0600)) != -1)
+			(void)close(fd);
 }
 
 /*
  * Discover user login name.
  */
-const char *
-username()
+PUBLIC const char *
+username(void)
 {
 	const char *np;
 	uid_t uid;
 
-	if ((np = getenv("USER")) != NOSTR)
+	if ((np = getenv("USER")) != NULL)
 		return np;
-	if ((np = getname(uid = getuid())) != NOSTR)
+	if ((np = getname(uid = getuid())) != NULL)
 		return np;
-	printf("Cannot associate a name with uid %u\n", (unsigned)uid);
-	return NOSTR;
+	(void)printf("Cannot associate a name with uid %u\n", (unsigned)uid);
+	return NULL;
 }

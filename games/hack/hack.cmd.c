@@ -1,25 +1,82 @@
-/*	$NetBSD: hack.cmd.c,v 1.4 1997/10/19 16:57:39 christos Exp $	*/
+/*	$NetBSD: hack.cmd.c,v 1.8 2008/01/28 06:55:41 dholland Exp $	*/
 
 /*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.cmd.c,v 1.4 1997/10/19 16:57:39 christos Exp $");
+__RCSID("$NetBSD: hack.cmd.c,v 1.8 2008/01/28 06:55:41 dholland Exp $");
 #endif				/* not lint */
 
 #include	"hack.h"
 #include	"extern.h"
 #include	"def.func_tab.h"
 
-struct func_tab cmdlist[] = {
+const struct func_tab cmdlist[] = {
 	{ '\020', doredotopl },
 	{ '\022', doredraw },
 	{ '\024', dotele },
 #ifdef SUSPEND
 	{ '\032', dosuspend },
-#endif	{ /* SUSPEND */
+#endif	/* SUSPEND */
 	{ 'a', doapply },
 	/* 'A' : UNUSED */
 	/* 'b', 'B' : go sw */
@@ -62,7 +119,7 @@ struct func_tab cmdlist[] = {
 	{ '?', dohelp },
 #ifdef SHELL
 	{ '!', dosh },
-#endif	{ /* SHELL */
+#endif	/* SHELL */
 	{ '.', donull },
 	{ ' ', donull },
 	{ ',', dopickup },
@@ -77,7 +134,7 @@ struct func_tab cmdlist[] = {
 	{ 0, 0 }
 };
 
-struct ext_func_tab extcmdlist[] = {
+const struct ext_func_tab extcmdlist[] = {
 	{ "dip", dodip },
 	{ "pray", dopray },
 	{ (char *) 0, donull }
@@ -85,9 +142,9 @@ struct ext_func_tab extcmdlist[] = {
 
 void
 rhack(cmd)
-	char  *cmd;
+	const char  *cmd;
 {
-	struct func_tab *tlist = cmdlist;
+	const struct func_tab *tlist = cmdlist;
 	boolean         firsttime = FALSE;
 	int res;
 
@@ -171,7 +228,7 @@ rush:
 	{
 		char            expcmd[10];
 		char  *cp = expcmd;
-		while (*cmd && cp - expcmd < sizeof(expcmd) - 2) {
+		while (*cmd && cp - expcmd < (int)sizeof(expcmd) - 2) {
 			if (*cmd >= 040 && *cmd < 0177)
 				*cp++ = *cmd++;
 			else {
@@ -190,7 +247,7 @@ doextcmd()
 {				/* here after # - now read a full-word
 				 * command */
 	char            buf[BUFSZ];
-	struct ext_func_tab *efp = extcmdlist;
+	const struct ext_func_tab *efp = extcmdlist;
 
 	pline("# ");
 	getlin(buf);

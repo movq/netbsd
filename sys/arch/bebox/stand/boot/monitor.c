@@ -1,4 +1,4 @@
-/*	$NetBSD: monitor.c,v 1.3 1999/06/28 01:20:44 sakamoto Exp $	*/
+/*	$NetBSD: monitor.c,v 1.9 2008/05/26 16:28:39 kiyohara Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,20 +29,22 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stand.h>
-#define NULL	0
+#include <lib/libsa/stand.h>
+#include <lib/libkern/libkern.h>
+
+#include "boot.h"
 
 extern int errno;
 extern char *name;
 
-void db_cmd_dump __P((int, char **));
-void db_cmd_get __P((int, char **));
-void db_cmd_mf __P((int, char **));
-void db_cmd_mt __P((int, char **));
-void db_cmd_put __P((int, char **));
-void db_cmd_help __P((int, char **));
+void db_cmd_dump(int, char **);
+void db_cmd_get(int, char **);
+void db_cmd_mf(int, char **);
+void db_cmd_mt(int, char **);
+void db_cmd_put(int, char **);
+void db_cmd_help(int, char **);
 
-extern void exec_kernel __P((char *, void *));
+int db_atob(char *);
 
 struct {
 	char *name;
@@ -65,19 +60,19 @@ struct {
 };
 
 int
-db_monitor()
+db_monitor(void)
 {
 	int tmp;
 	int argc, flag;
 	char *p, *argv[16];
 	char line[1024];
 
-	while(1) {
+	while (1) {
 		printf("db> ");
 		gets(line);
 
 		flag = 0;
-		for(p = line, argc = 0; *p != '\0'; p++) {
+		for (p = line, argc = 0; *p != '\0'; p++) {
 			if (*p != ' ' && *p != '\t') {
 				if (!flag) {
 					flag++;
@@ -111,17 +106,16 @@ db_monitor()
 }
 
 int
-db_atob(p)
-	char *p;
+db_atob(char *p)
 {
 	int b = 0, width, tmp, exp, x = 0;
-	
+
 	if (p[1] == 'x') {
 		p += 2;
 		x = 1;
 	}
 	width = strlen(p);
-	while(width--) {
+	while (width--) {
 		exp = 1;
 		for (tmp = 1; tmp <= width; tmp++)
 			exp *= (x ? 16 : 10);
@@ -137,9 +131,7 @@ db_atob(p)
 }
 
 void
-db_cmd_dump(argc, argv)
-	int argc;
-	char **argv;
+db_cmd_dump(int argc, char **argv)
 {
 	char *p, *r, *pp;
 	int mode, add, size, i;
@@ -205,15 +197,13 @@ db_cmd_dump(argc, argv)
 	printf("\n");
 	return;
 
-out:	
+out:
 	printf("dump [-b][-h][-w] address size\n");
 	return;
 }
 
 void
-db_cmd_get(argc, argv)
-	int argc;
-	char **argv;
+db_cmd_get(int argc, char **argv)
 {
 	char *p, *r;
 	int mode, add;
@@ -260,15 +250,13 @@ db_cmd_get(argc, argv)
 	printf("\n");
 	return;
 
-out:	
+out:
 	printf("get [-b][-h][-w] address\n");
 	return;
 }
 
 void
-db_cmd_put(argc, argv)
-	int argc;
-	char **argv;
+db_cmd_put(int argc, char **argv)
 {
 	char *p, *r, *pp;
 	int mode, add, data;
@@ -318,7 +306,7 @@ db_cmd_put(argc, argv)
 	printf("\n");
 	return;
 
-out:	
+out:
 	printf("put [-b][-h][-w] address data\n");
 	return;
 }
@@ -326,21 +314,22 @@ out:
 #define STR(x) #x
 
 #define	FUNC(x) \
+unsigned int mf ## x(void); \
+void mt ## x(unsigned int); \
 unsigned int mf ## x() { \
 	unsigned int tmp; \
-	asm volatile (STR(mf ## x %0) : STR(=r)(tmp)); \
+	__asm volatile (STR(mf ## x %0) : STR(=r)(tmp)); \
 	return (tmp); \
 } \
-void mt ## x(data) \
-unsigned int data; \
+void mt ## x(unsigned int data) \
 { \
-	asm volatile (STR(mt ## x %0) :: STR(r)(data)); \
+	__asm volatile (STR(mt ## x %0) :: STR(r)(data)); \
 } \
 
 #define DEF(x) \
 	{ #x, mf ## x, mt ## x }
 
-FUNC(msr);
+FUNC(msr)
 
 struct {
 	char *op;
@@ -352,9 +341,7 @@ struct {
 };
 
 void
-db_cmd_mf(argc, argv)
-	int argc;
-	char **argv;
+db_cmd_mf(int argc, char **argv)
 {
 	int i = 0;
 
@@ -376,9 +363,7 @@ db_cmd_mf(argc, argv)
 }
 
 void
-db_cmd_mt(argc, argv)
-	int argc;
-	char **argv;
+db_cmd_mt(int argc, char **argv)
 {
 	int i = 0;
 
@@ -401,9 +386,7 @@ db_cmd_mt(argc, argv)
 }
 
 void
-db_cmd_help(argc, argv)
-	int argc;
-	char **argv;
+db_cmd_help(int argc, char **argv)
 {
 	int i = 0;
 

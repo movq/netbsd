@@ -1,4 +1,4 @@
-/*	$NetBSD: cacheops_30.h,v 1.5 1999/11/06 17:42:32 thorpej Exp $	*/
+/*	$NetBSD: cacheops_30.h,v 1.9 2008/04/28 20:23:26 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,65 +32,58 @@
 /*
  * Invalidate entire TLB.
  */
-void TBIA_30 __P((void));
-extern __inline void
-TBIA_30()
+static __inline void __attribute__((__unused__))
+TBIA_30(void)
 {
 	int tmp = DC_CLEAR;
 
-	__asm __volatile (" pflusha;"
+	__asm volatile (" pflusha;"
 			  " movc %0,%%cacr" : : "d" (tmp));
 }
 	
 /*
  * Invalidate any TLB entry for given VA (TB Invalidate Single)
  */
-void TBIS_30 __P((vaddr_t));
-extern __inline void
-TBIS_30(va)
-	vaddr_t	va;
+static __inline void __attribute__((__unused__))
+TBIS_30(vaddr_t	va)
 {
-	__asm __volatile (" pflush #0,#0,%0@;"
+	__asm volatile (" pflush #0,#0,%0@;"
 			  " movc   %1,%%cacr" : : "a" (va), "d" (DC_CLEAR));
 }
 
 /*
  * Invalidate supervisor side of TLB
  */
-void TBIAS_30 __P((void));
-extern __inline void
-TBIAS_30()
+static __inline void __attribute__((__unused__))
+TBIAS_30(void)
 {
-	__asm __volatile (" pflush #4,#4;"
+	__asm volatile (" pflush #4,#4;"
 			  " movc   %0,%%cacr;" :: "d" (DC_CLEAR));
 }
 
 /*
  * Invalidate user side of TLB
  */
-void TBIAU_30 __P((void));
-extern __inline void
-TBIAU_30()
+static __inline void __attribute__((__unused__))
+TBIAU_30(void)
 {
-	__asm __volatile (" pflush #0,#4;"
+	__asm volatile (" pflush #0,#4;"
 			  " movc   %0,%%cacr;" :: "d" (DC_CLEAR));
 }
 
 /*
  * Invalidate instruction cache
  */
-void ICIA_30 __P((void));
-extern __inline void
-ICIA_30()
+static __inline void __attribute__((__unused__))
+ICIA_30(void)
 {
-	__asm __volatile (" movc %0,%%cacr;" : : "d" (IC_CLEAR));
+	__asm volatile (" movc %0,%%cacr;" : : "d" (IC_CLEAR));
 }
 
-void ICPA_30 __P((void));
-extern __inline void
-ICPA_30()
+static __inline void __attribute__((__unused__))
+ICPA_30(void)
 {
-	__asm __volatile (" movc %0,%%cacr;" : : "d" (IC_CLEAR));
+	__asm volatile (" movc %0,%%cacr;" : : "d" (IC_CLEAR));
 }
 
 /*
@@ -114,10 +100,8 @@ ICPA_30()
 #define	DCFA_30()
 #define	DCPA_30()
 
-
-void PCIA_30 __P((void));
-extern __inline void
-PCIA_30()
+static __inline void __attribute__((__unused__))
+PCIA_30(void)
 {
-	__asm __volatile (" movc %0,%%cacr;" : : "d" (DC_CLEAR));
+	__asm volatile (" movc %0,%%cacr;" : : "d" (DC_CLEAR));
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.5 2000/02/22 11:26:02 soda Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.9 2005/12/11 12:16:39 christos Exp $	*/
 /*	$OpenBSD: disklabel.h,v 1.14 1999/03/23 16:36:17 millert Exp $	*/
 /*	NetBSD: disklabel.h,v 1.3 1996/03/09 20:52:54 ghudson Exp 	*/
 
@@ -43,20 +43,20 @@
 #define	OPENBSD_RAW_PART 2		/* raw partition: XX?c */
 
 /* Pull in MBR partition definitions. */
-#include <sys/disklabel_mbr.h>
-/* XXX - should move to <sys/disklabel_mbr.h> */
-#define	MBR_PTYPE_OPENBSD	0xa6	/* OpenBSD partition type */
-#define MBR_PTYPE_ONTRACK	0x54
+#if HAVE_NBTOOL_CONFIG_H
+#include <nbinclude/sys/bootblock.h>
+#else
+#include <sys/bootblock.h>
+#endif /* HAVE_NBTOOL_CONFIG_H */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include <nbinclude/sys/dkbad.h>
+#else
 #include <sys/dkbad.h>
+#endif /* HAVE_NBTOOL_CONFIG_H */
 struct cpu_disklabel {
-	struct mbr_partition dosparts[NMBRPART];
+	struct mbr_partition dosparts[MBR_PART_COUNT];
 	struct dkbad bad;
 };
-
-#ifdef _KERNEL
-struct disklabel;
-int	bounds_check_with_label __P((struct buf *, struct disklabel *, int));
-#endif
 
 #endif /* _MACHINE_DISKLABEL_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ttcompat.c,v 1.10 1997/10/05 15:12:16 mrg Exp $	*/
+/*	$NetBSD: ttcompat.c,v 1.12 2003/08/07 11:25:28 agc Exp $	*/
 /*
  * Copyright (c) 1995
  *	The Regents of the University of California.  All rights reserved.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -58,12 +54,11 @@
 #define	CLR(t, f)	(t) &= ~(f)
 #define	ISSET(t, f)	((t) & (f))
 
-static int	sttygetoflags __P((struct termios *));
-static void	sttysetoflags __P((struct termios *, int));
+static int	sttygetoflags(struct termios *);
+static void	sttysetoflags(struct termios *, int);
 
 static int
-sttygetoflags(tp)
-	struct termios *tp;
+sttygetoflags(struct termios *tp)
 {
 	tcflag_t iflag = tp->c_iflag;
 	tcflag_t lflag = tp->c_lflag;
@@ -100,9 +95,7 @@ sttygetoflags(tp)
 }
 
 static void
-sttysetoflags(tp, flags)
-	struct termios *tp;
-	int flags;
+sttysetoflags(struct termios *tp, int flags)
 {
 	tcflag_t iflag = tp->c_iflag;
 	tcflag_t oflag = tp->c_oflag;
@@ -166,9 +159,7 @@ sttysetoflags(tp, flags)
 }
 
 void
-sttyclearflags(tp, flags)
-	struct termios *tp;
-	int flags;
+sttyclearflags(struct termios *tp, int flags)
 {
 	tcflag_t iflag = tp->c_iflag;
 	tcflag_t oflag = tp->c_oflag;
@@ -197,9 +188,7 @@ sttyclearflags(tp, flags)
 }
 
 void
-sttysetflags(tp, flags)
-	struct termios *tp;
-	int flags;
+sttysetflags(struct termios *tp, int flags)
 {
 	tcflag_t iflag = tp->c_iflag;
 	tcflag_t oflag = tp->c_oflag;
@@ -227,9 +216,7 @@ sttysetflags(tp, flags)
 }
 
 void
-sttyclearlflags(tp, flags)
-	struct termios *tp;
-	int flags;
+sttyclearlflags(struct termios *tp, int flags)
 {
 	tcflag_t iflag = tp->c_iflag;
 	tcflag_t oflag = tp->c_oflag;
@@ -264,9 +251,7 @@ sttyclearlflags(tp, flags)
 }
 
 void
-sttysetlflags(tp, flags)
-	struct termios *tp;
-	int flags;
+sttysetlflags(struct termios *tp, int flags)
 {
 	tcflag_t iflag = tp->c_iflag;
 	tcflag_t oflag = tp->c_oflag;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ldconfig.c,v 1.27 1999/07/16 22:23:29 christos Exp $	*/
+/*	$NetBSD: ldconfig.c,v 1.44 2008/04/28 20:23:08 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,12 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <sys/cdefs.h>
+
+#ifndef lint
+__RCSID("$NetBSD: ldconfig.c,v 1.44 2008/04/28 20:23:08 martin Exp $");
+#endif
+
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -42,6 +41,7 @@
 #include <sys/file.h>
 #include <sys/time.h>
 #include <sys/mman.h>
+#include <a.out.h>
 #include <ctype.h>
 #include <dirent.h>
 #include <err.h>
@@ -51,7 +51,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <link.h>
+#include <link_aout.h>
+#include <paths.h>
 
 #include "shlib.h"
 
@@ -59,8 +60,6 @@
 
 #undef major
 #undef minor
-
-extern char			*__progname;
 
 static int			verbose;
 static int			nostd;
@@ -82,19 +81,16 @@ struct shlib_list {
 static struct shlib_list	*shlib_head = NULL, **shlib_tail = &shlib_head;
 static char			*dir_list;
 
-static void	enter __P((char *, char *, char *, int *, int));
-static int	dodir __P((char *, int, int));
-static int	do_conf __P((void));
-static int	buildhints __P((void));
-static int	readhints __P((void));
-static void	listhints __P((void));
-static int	hinthash __P((char *, int, int));
-int		main __P((int, char *[]));
+static void	enter(char *, char *, char *, int *, int);
+static int	dodir(char *, int, int);
+static int	do_conf(void);
+static int	buildhints(void);
+static int	readhints(void);
+static void	listhints(void);
+static int	hinthash(char *, int, int);
 
 int
-main(argc, argv)
-	int	argc;
-	char	*argv[];
+main(int argc, char *argv[])
 {
 	int	i, c;
 	int	rval = 0;
@@ -121,8 +117,8 @@ main(argc, argv)
 			verbose = 1;
 			break;
 		default:
-			errx(1, "Usage: %s [-c][-m][-r][-s][-S][-v][dir ...]",
-				__progname);
+			errx(1, "usage: %s [-c][-m][-r][-s][-S][-v][dir ...]",
+				getprogname());
 			break;
 		}
 	}
@@ -158,23 +154,38 @@ main(argc, argv)
 }
 
 int
-do_conf ()
+do_conf(void)
 {
 	FILE		*conf;
 	char		*line, *c;
 	char		*cline = NULL;
 	size_t		len;
 	int		rval = 0;
+#ifdef __ELF__
+	char		*aout_conf;
 
+	aout_conf = xmalloc(sizeof(_PATH_EMUL_AOUT) +
+	    strlen(_PATH_LD_SO_CONF));
+	strcpy(aout_conf, _PATH_EMUL_AOUT);
+	strcat(aout_conf, _PATH_LD_SO_CONF);
+	if ((conf = fopen(aout_conf, "r")) == NULL) {
+		if (verbose)
+			warnx("can't open `%s'", aout_conf);
+		free(aout_conf);
+		return (0);
+	}
+	free(aout_conf);
+#else
 	if ((conf = fopen(_PATH_LD_SO_CONF, "r")) == NULL) {
 		if (verbose) {
 			warnx("can't open `%s'", _PATH_LD_SO_CONF);
 		}
 		return (0);
 	}
+#endif
 
 	while ((line = fgetln(conf, &len)) != NULL) {
-		if (*line == '#' || *line == '\n')
+		if (*line != '/')
 			continue;
 
 		if (line[len-1] == '\n') {
@@ -207,10 +218,7 @@ do_conf ()
 }
 
 int
-dodir(dir, silent, update_dir_list)
-	char	*dir;
-	int	silent;
-	int	update_dir_list;
+dodir(char *dir, int silent, int update_dir_list)
 {
 	DIR		*dd;
 	struct dirent	*dp;
@@ -218,6 +226,10 @@ dodir(dir, silent, update_dir_list)
 	int		dewey[MAXDEWEY], ndewey;
 
 	if ((dd = opendir(dir)) == NULL) {
+		/* /emul/aout directories are allowed to not exist.
+		 */
+		if (!strncmp(dir, _PATH_EMUL_AOUT, sizeof(_PATH_EMUL_AOUT)-1))
+			return 0;
 		if (!silent || errno != ENOENT)
 			warn("%s", dir);
 		return (-1);
@@ -232,7 +244,9 @@ dodir(dir, silent, update_dir_list)
 
 	while ((dp = readdir(dd)) != NULL) {
 		int n;
-		char *cp;
+		char *cp, *path;
+		FILE *fp;
+		struct exec ex;
 
 		/* Check for `lib' prefix */
 		if (dp->d_name[0] != 'l' ||
@@ -257,8 +271,20 @@ dodir(dir, silent, update_dir_list)
 		if (cp <= name)
 			continue;
 
+		path = concat(dir, "/", dp->d_name);
+		fp = fopen(path, "r");
+		free(path);
+		if (fp == NULL)
+			continue;
+		n = fread(&ex, 1, sizeof(ex), fp);
+		fclose(fp);
+		if (n != sizeof(ex)
+		    || N_GETMAGIC(ex) != ZMAGIC
+		    || (N_GETFLAG(ex) & EX_DYNAMIC) == 0)
+			continue;
+
 		*cp = '\0';
-		if (!isdigit(*(cp+4)))
+		if (!isdigit((unsigned char)*(cp+4)))
 			continue;
 
 		memset(dewey, 0, sizeof(dewey));
@@ -272,9 +298,7 @@ dodir(dir, silent, update_dir_list)
 }
 
 static void
-enter(dir, file, name, dewey, ndewey)
-	char	*dir, *file, *name;
-	int	dewey[], ndewey;
+enter(char *dir, char *file, char *name, int dewey[], int ndewey)
 {
 	struct shlib_list	*shp;
 
@@ -312,7 +336,7 @@ enter(dir, file, name, dewey, ndewey)
 	shp = (struct shlib_list *)xmalloc(sizeof *shp);
 	shp->name = strdup(name);
 	shp->path = concat(dir, "/", file);
-	memcpy(shp->dewey, dewey, MAXDEWEY);
+	memcpy(shp->dewey, dewey, sizeof(shp->dewey));
 	shp->ndewey = ndewey;
 	shp->next = NULL;
 
@@ -329,9 +353,7 @@ enter(dir, file, name, dewey, ndewey)
 
 /* XXX - should be a common function with rtld.c */
 int
-hinthash(cp, vmajor, vminor)
-	char	*cp;
-	int	vmajor, vminor;
+hinthash(char *cp, int vmajor, int vminor)
 {
 	int	k = 0;
 
@@ -347,7 +369,7 @@ hinthash(cp, vmajor, vminor)
 }
 
 int
-buildhints()
+buildhints(void)
 {
 	struct hints_header	hdr;
 	struct hints_bucket	*blist;
@@ -357,7 +379,7 @@ buildhints()
 	int			strtab_sz = 0;	/* Total length of strings */
 	int			nhints = 0;	/* Total number of hints */
 	int			fd;
-	char			*tmpfile;
+	char			*tempfile;
 
 	for (shp = shlib_head; shp; shp = shp->next) {
 		strtab_sz += 1 + strlen(shp->name);
@@ -398,15 +420,13 @@ buildhints()
 		  (hinthash(shp->name, shp->major, shp->minor) % hdr.hh_nbucket);
 
 		if (bp->hi_pathx) {
-			int	i;
-
 			for (i = 0; i < hdr.hh_nbucket; i++) {
 				if (blist[i].hi_pathx == 0)
 					break;
 			}
 			if (i == hdr.hh_nbucket) {
 				warnx("Bummer!");
-				return (-1);
+				goto out;
 			}
 			while (bp->hi_next != -1)
 				bp = &blist[bp->hi_next];
@@ -437,55 +457,61 @@ buildhints()
 		errx(1, "str_index(%d) != strtab_sz(%d)", str_index, strtab_sz);
 	}
 
-	tmpfile = concat(_PATH_LD_HINTS, ".XXXXXX", "");
-	if ((fd = mkstemp(tmpfile)) == -1) {
-		warn("%s", tmpfile);
-		return (-1);
+	tempfile = concat(_PATH_LD_HINTS, ".XXXXXX", "");
+	if ((fd = mkstemp(tempfile)) == -1) {
+		warn("%s", tempfile);
+		goto out;
 	}
 
 	if (write(fd, &hdr, sizeof(struct hints_header)) !=
 	    sizeof(struct hints_header)) {
 		warn("%s", _PATH_LD_HINTS);
-		return (-1);
+		goto out;
 	}
 	if (write(fd, blist, hdr.hh_nbucket * sizeof(struct hints_bucket)) !=
 		  hdr.hh_nbucket * sizeof(struct hints_bucket)) {
 		warn("%s", _PATH_LD_HINTS);
-		return (-1);
+		goto out;
 	}
 	if (write(fd, strtab, strtab_sz) != strtab_sz) {
 		warn("%s", _PATH_LD_HINTS);
-		return (-1);
+		goto out;
 	}
 	if (fchmod(fd, 0444) == -1) {
 		warn("%s", _PATH_LD_HINTS);
-		return (-1);
+		goto out;
 	}
 	if (close(fd) != 0) {
 		warn("%s", _PATH_LD_HINTS);
-		return (-1);
+		goto out;
 	}
 
 	/* Install it */
 	if (unlink(_PATH_LD_HINTS) != 0 && errno != ENOENT) {
 		warn("%s", _PATH_LD_HINTS);
-		return (-1);
+		goto out;
 	}
 
-	if (rename(tmpfile, _PATH_LD_HINTS) != 0) {
+	if (rename(tempfile, _PATH_LD_HINTS) != 0) {
 		warn("%s", _PATH_LD_HINTS);
-		return (-1);
+		goto out;
 	}
 
-	return (0);
+	free(blist);
+	free(strtab);
+	return 0;
+out:
+	free(blist);
+	free(strtab);
+	return -1;
 }
 
 static int
-readhints()
+readhints(void)
 {
 	int			fd;
 	void			*addr = (void *) -1;
-	size_t			msize;
+	size_t			msize = 0;
 	struct hints_header	*hdr;
 	struct hints_bucket	*blist;
 	char			*strtab;
@@ -571,7 +597,7 @@ done:
 }
 
 static void
-listhints()
+listhints(void)
 {
 	struct shlib_list	*shp;
 	int			i;

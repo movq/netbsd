@@ -1,18 +1,44 @@
-/*	$NetBSD: hunt.c,v 1.10 2000/03/02 18:22:31 kleink Exp $	*/
+/*	$NetBSD: hunt.c,v 1.27 2008/08/08 16:10:47 drochner Exp $	*/
 /*
- *  Hunt
- *  Copyright (c) 1985 Conrad C. Huang, Gregory S. Couch, Kenneth C.R.C. Arnold
- *  San Francisco, California
+ * Copyright (c) 1983-2003, Regents of the University of California.
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions are 
+ * met:
+ * 
+ * + Redistributions of source code must retain the above copyright 
+ *   notice, this list of conditions and the following disclaimer.
+ * + Redistributions in binary form must reproduce the above copyright 
+ *   notice, this list of conditions and the following disclaimer in the 
+ *   documentation and/or other materials provided with the distribution.
+ * + Neither the name of the University of California, San Francisco nor 
+ *   the names of its contributors may be used to endorse or promote 
+ *   products derived from this software without specific prior written 
+ *   permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS 
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED 
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A 
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hunt.c,v 1.10 2000/03/02 18:22:31 kleink Exp $");
+__RCSID("$NetBSD: hunt.c,v 1.27 2008/08/08 16:10:47 drochner Exp $");
 #endif /* not lint */
 
 # include	<sys/param.h>
 # include	<sys/stat.h>
 # include	<sys/time.h>
+# include	<sys/poll.h>
 # include	<ctype.h>
 # include	<err.h>
 # include	<errno.h>
@@ -25,6 +51,7 @@ __RCSID("$NetBSD: hunt.c,v 1.10 2000/03/02 18:22:31 kleink Exp $");
 static struct termios saved_tty;
 # endif
 # include	<unistd.h>
+# include	<ifaddrs.h>
 
 # include	"hunt.h"
 
@@ -47,10 +74,6 @@ static struct termios saved_tty;
 # define	put_ch		addch
 # define	put_str		addstr
 # endif
-
-#if !defined(BSD_RELEASE) || BSD_RELEASE < 44
-extern int	_putchar();
-#endif
 
 FLAG	Last_player = FALSE;
 # ifdef MONITOR
@@ -85,15 +108,18 @@ static int	in_visual;
 
 extern int	cur_row, cur_col;
 
-void	dump_scores __P((SOCKET));
-long	env_init __P((long));
-void	fill_in_blanks __P((void));
-void	leave __P((int, char *)) __attribute__((__noreturn__));
-int	main __P((int, char *[]));
+void	dump_scores(SOCKET);
+long	env_init(long);
+void	fill_in_blanks(void);
+void	leave(int, const char *) __dead;
+void	leavex(int, const char *) __dead;
+void	fincurs(void);
+int	main(int, char *[]);
 # ifdef INTERNET
-SOCKET *list_drivers __P((void));
+SOCKET *list_drivers(void);
 # endif
 
+extern int	Otto_mode;
 /*
  * main:
  *	Main program for local process
@@ -105,9 +131,6 @@ main(ac, av)
 {
 	char		*term;
 	int		c;
-	extern int	Otto_mode;
-	extern int	optind;
-	extern char	*optarg;
 	long		enter_status;
 
 	enter_status = env_init((long) Q_CLOAK);
@@ -119,7 +142,7 @@ main(ac, av)
 			break;
 		case 't':
 			team = *optarg;
-			if (!isdigit(team)) {
+			if (!isdigit((unsigned char)team)) {
 				warnx("Team names must be numeric");
 				team = ' ';
 			}
@@ -236,7 +259,8 @@ main(ac, av)
 	if (!isatty(0) || (term = getenv("TERM")) == NULL)
 		errx(1, "no terminal type");
 # ifdef USE_CURSES
-	initscr();
+	if (!initscr())
+		errx(0, "couldn't initialize screen");
 	(void) noecho();
 	(void) cbreak();
 # else /* !USE_CURSES */
@@ -255,11 +279,11 @@ main(ac, av)
 # endif /* !USE_CURSES */
 	in_visual = TRUE;
 	if (LINES < SCREEN_HEIGHT || COLS < SCREEN_WIDTH)
-		leave(1, "Need a larger window");
+		leavex(1, "Need a larger window");
 	clear_the_screen();
 	(void) signal(SIGINT, intr);
 	(void) signal(SIGTERM, sigterm);
-	(void) signal(SIGEMT, sigemt);
+	(void) signal(SIGUSR1, sigusr1);
 	(void) signal(SIGPIPE, SIG_IGN);
 #if !defined(USE_CURSES) && defined(SIGTSTP)
 	(void) signal(SIGTSTP, tstp);
@@ -270,7 +294,7 @@ main(ac, av)
 		find_driver(TRUE);
 
 		if (Daemon.sin_port == 0)
-			leave(1, "Game not found, try again");
+			leavex(1, "Game not found, try again");
 
 	jump_in:
 		do {
@@ -287,7 +311,6 @@ main(ac, av)
 			if (connect(Socket, (struct sockaddr *) &Daemon,
 			    DAEMON_SIZE) < 0) {
 				if (errno != ECONNREFUSED) {
-					warn("connect");
 					leave(1, "connect");
 				}
 			}
@@ -313,8 +336,7 @@ main(ac, av)
 		(void) strcpy(Daemon.sun_path, Sock_name);
 		if (connect(Socket, &Daemon, DAEMON_SIZE) < 0) {
 			if (errno != ENOENT) {
-				warn("connect");
-				leave(1, "connect2");
+				leavex(1, "connect2");
 			}
 			start_driver();
 
@@ -343,7 +365,7 @@ main(ac, av)
 		if ((enter_status = quit(enter_status)) == Q_QUIT)
 			break;
 	}
-	leave(0, (char *) NULL);
+	leavex(0, (char *) NULL);
 	/* NOTREACHED */
 	return(0);
 }
@@ -355,24 +377,30 @@ broadcast_vec(s, vector)
 	int			s;		/* socket */
 	struct	sockaddr	**vector;
 {
-	char			if_buf[BUFSIZ];
-	struct	ifconf		ifc;
-	struct	ifreq		*ifr;
-	unsigned int		n;
 	int			vec_cnt;
+	struct ifaddrs		*ifp, *ip;
 
 	*vector = NULL;
-	ifc.ifc_len = sizeof if_buf;
-	ifc.ifc_buf = if_buf;
-	if (ioctl(s, SIOCGIFCONF, (char *) &ifc) < 0)
+	if (getifaddrs(&ifp) < 0)
 		return 0;
+
 	vec_cnt = 0;
-	n = ifc.ifc_len / sizeof (struct ifreq);
-	*vector = (struct sockaddr *) malloc(n * sizeof (struct sockaddr));
-	for (ifr = ifc.ifc_req; n != 0; n--, ifr++)
-		if (ioctl(s, SIOCGIFBRDADDR, ifr) >= 0)
-			memcpy(&(*vector)[vec_cnt++], &ifr->ifr_addr,
-				sizeof (struct sockaddr));
+	for (ip = ifp; ip; ip = ip->ifa_next)
+		if ((ip->ifa_addr->sa_family == AF_INET) &&
+		    (ip->ifa_flags & IFF_BROADCAST))
+			vec_cnt++;
+
+	*vector = (struct sockaddr *)
+		malloc(vec_cnt * sizeof(struct sockaddr_in));
+
+	vec_cnt = 0;
+	for (ip = ifp; ip; ip = ip->ifa_next)
+		if ((ip->ifa_addr->sa_family == AF_INET) &&
+		    (ip->ifa_flags & IFF_BROADCAST))
+			memcpy(&(*vector)[vec_cnt++], ip->ifa_broadaddr,
+			       sizeof(struct sockaddr_in));
+
+	freeifaddrs(ifp);
 	return vec_cnt;
 }
 # endif
@@ -385,7 +413,7 @@ list_drivers()
 	u_short			port_num;
 	static SOCKET		test;
 	int			test_socket;
-	int			namelen;
+	socklen_t		namelen;
 	char			local_name[MAXHOSTNAMELEN + 1];
 	static int		initial = TRUE;
 	static struct in_addr	local_address;
@@ -397,23 +425,23 @@ list_drivers()
 	u_long			local_net;
 # endif
 	int			i;
+	unsigned		j;
 	static	SOCKET		*listv;
 	static	unsigned int	listmax;
 	unsigned int		listc;
-	fd_set			mask;
-	struct timeval		wait;
+	struct pollfd		set[1];
 
 	if (initial) {			/* do one time initialization */
 # ifndef BROADCAST
 		sethostent(1);		/* don't bother to close host file */
 # endif
 		if (gethostname(local_name, sizeof local_name) < 0) {
-			leave(1, "Sorry, I have no name.");
+			leavex(1, "Sorry, I have no name.");
 			/* NOTREACHED */
 		}
 		local_name[sizeof(local_name) - 1] = '\0';
 		if ((hp = gethostbyname(local_name)) == NULL) {
-			leave(1, "Can't find myself.");
+			leavex(1, "Can't find myself.");
 			/* NOTREACHED */
 		}
 		local_address = * ((struct in_addr *) hp->h_addr);
@@ -425,7 +453,6 @@ list_drivers()
 
 	test_socket = socket(SOCK_FAMILY, SOCK_DGRAM, 0);
 	if (test_socket < 0) {
-		warn("socket");
 		leave(1, "socket system call failed");
 		/* NOTREACHED */
 	}
@@ -435,7 +462,7 @@ list_drivers()
 
 	if (Sock_host != NULL) {	/* explicit host given */
 		if ((hp = gethostbyname(Sock_host)) == NULL) {
-			leave(1, "Unknown host");
+			leavex(1, "Unknown host");
 			/* NOTREACHED */
 		}
 		test.sin_addr = *((struct in_addr *) hp->h_addr);
@@ -452,20 +479,13 @@ list_drivers()
 
 # ifdef BROADCAST
 	if (initial)
-		brdc = broadcast_vec(test_socket, (struct sockaddr **) &brdv);
-
-	if (brdc <= 0) {
-		initial = FALSE;
-		test.sin_addr = local_address;
-		goto test_one_host;
-	}
+		brdc = broadcast_vec(test_socket, (void *) &brdv);
 
 # ifdef SO_BROADCAST
 	/* Sun's will broadcast even though this option can't be set */
 	option = 1;
 	if (setsockopt(test_socket, SOL_SOCKET, SO_BROADCAST,
 	    &option, sizeof option) < 0) {
-		warn("setsockopt broadcast");
 		leave(1, "setsockopt broadcast");
 		/* NOTREACHED */
 	}
@@ -477,10 +497,15 @@ list_drivers()
 		test.sin_addr = brdv[i].sin_addr;
 		if (sendto(test_socket, (char *) &msg, sizeof msg, 0,
 		    (struct sockaddr *) &test, DAEMON_SIZE) < 0) {
-			warn("sendto");
 			leave(1, "sendto");
 			/* NOTREACHED */
 		}
+	}
+	test.sin_addr = local_address;
+	if (sendto(test_socket, (char *) &msg, sizeof msg, 0,
+	    (struct sockaddr *) &test, DAEMON_SIZE) < 0) {
+		leave(1, "sendto");
+		/* NOTREACHED */
 	}
 # else /* !BROADCAST */
 	/* loop thru all hosts on local net and send msg to them. */
@@ -499,8 +524,8 @@ list_drivers()
 get_response:
 	namelen = DAEMON_SIZE;
 	errno = 0;
-	wait.tv_sec = 1;
-	wait.tv_usec = 0;
+	set[0].fd = test_socket;
+	set[0].events = POLLIN;
 	for (;;) {
 		if (listc + 1 >= listmax) {
 			listmax += 20;
@@ -508,9 +533,7 @@ get_response:
 						listmax * sizeof(SOCKET));
 		}
 
-		FD_ZERO(&mask);
-		FD_SET(test_socket, &mask);
-		if (select(test_socket + 1, &mask, NULL, NULL, &wait) == 1 &&
+		if (poll(set, 1, 1000) == 1 &&
 		    recvfrom(test_socket, (char *) &port_num, sizeof(port_num),
 		    0, (struct sockaddr *) &listv[listc], &namelen) > 0) {
 			/*
@@ -518,18 +541,17 @@ get_response:
 			 * order since the port number *should* be in network
 			 * order:
 			 */
-			for (i = 0; i < listc; i += 1)
+			for (j = 0; j < listc; j += 1)
 				if (listv[listc].sin_addr.s_addr
-				== listv[i].sin_addr.s_addr)
+				== listv[j].sin_addr.s_addr)
 					break;
-			if (i == listc)
+			if (j == listc)
 				listv[listc++].sin_port = port_num;
 			continue;
 		}
 
 		if (errno != 0 && errno != EINTR) {
-			warn("select/recvfrom");
-			leave(1, "select/recvfrom");
+			leave(1, "poll/recvfrom");
 			/* NOTREACHED */
 		}
 
@@ -651,7 +673,7 @@ start_driver()
 
 # ifdef MONITOR
 	if (Am_monitor) {
-		leave(1, "No one playing.");
+		leavex(1, "No one playing.");
 		/* NOTREACHED */
 	}
 # endif
@@ -674,7 +696,6 @@ start_driver()
 	refresh();
 	procid = fork();
 	if (procid == -1) {
-		warn("fork");
 		leave(1, "fork failed.");
 	}
 	if (procid == 0) {
@@ -690,7 +711,7 @@ start_driver()
 			execl(Driver, "HUNT", "-p", use_port, (char *) NULL);
 # endif
 		/* only get here if exec failed */
-		(void) kill(getppid(), SIGEMT);	/* tell mom */
+		(void) kill(getppid(), SIGUSR1);	/* tell mom */
 		_exit(1);
 	}
 # ifdef USE_CURSES
@@ -712,7 +733,7 @@ start_driver()
 void
 bad_con()
 {
-	leave(1, "The game is full.  Sorry.");
+	leavex(1, "The game is full.  Sorry.");
 	/* NOTREACHED */
 }
 
@@ -723,7 +744,7 @@ bad_con()
 void
 bad_ver()
 {
-	leave(1, "Version number mismatch. No go.");
+	leavex(1, "Version number mismatch. No go.");
 	/* NOTREACHED */
 }
 
@@ -733,22 +754,22 @@ bad_ver()
  */
 SIGNAL_TYPE
 sigterm(dummy)
-	int dummy;
+	int dummy __unused;
 {
-	leave(0, (char *) NULL);
+	leavex(0, (char *) NULL);
 	/* NOTREACHED */
 }
 
 
 /*
- * sigemt:
- *	Handle a emt signal - shouldn't happen on vaxes(?)
+ * sigusr1:
+ *	Handle a usr1 signal
  */
 SIGNAL_TYPE
-sigemt(dummy)
-	int dummy;
+sigusr1(dummy)
+	int dummy __unused;
 {
-	leave(1, "Unable to start driver.  Try again.");
+	leavex(1, "Unable to start driver.  Try again.");
 	/* NOTREACHED */
 }
 
@@ -759,7 +780,7 @@ sigemt(dummy)
  */
 SIGNAL_TYPE
 sigalrm(dummy)
-	int dummy;
+	int dummy __unused;
 {
 	return;
 }
@@ -786,7 +807,7 @@ rmnl(s)
  */
 SIGNAL_TYPE
 intr(dummy)
-	int dummy;
+	int dummy __unused;
 {
 	int	ch;
 	int	explained;
@@ -816,7 +837,7 @@ intr(dummy)
 				(void) write(Socket, "q", 1);
 				(void) close(Socket);
 			}
-			leave(0, (char *) NULL);
+			leavex(0, (char *) NULL);
 		}
 		else if (ch == 'n') {
 			(void) signal(SIGINT, intr);
@@ -840,15 +861,7 @@ intr(dummy)
 	}
 }
 
-/*
- * leave:
- *	Leave the game somewhat gracefully, restoring all current
- *	tty stats.
- */
-void
-leave(eval, mesg)
-	int	eval;
-	char	*mesg;
+void fincurs()
 {
 	if (in_visual) {
 # ifdef USE_CURSES
@@ -867,9 +880,32 @@ leave(eval, mesg)
 		_puts(TE);
 # endif /* !USE_CURSES */
 	}
-	if (mesg != NULL)
-		puts(mesg);
-	exit(eval);
+}
+
+/*
+ * leave:
+ *	Leave the game somewhat gracefully, restoring all current
+ *	tty stats, and print errno.
+ */
+void
+leave(int eval, const char *mesg)
+{
+	int serrno = errno;
+	fincurs();
+	errno = serrno;
+	err(eval, mesg ? mesg : "");
+}
+
+/*
+ * leavex:
+ *	Leave the game somewhat gracefully, restoring all current
+ *	tty stats.
+ */
+void
+leavex(int eval, const char *mesg)
+{
+	fincurs();
+	errx(eval, mesg ? mesg : "");
 }
 
 #if !defined(USE_CURSES) && defined(SIGTSTP)
@@ -1010,7 +1046,7 @@ env_init(enter_status)
 # endif
 			else if (strncmp(envp, "team=", s - envp + 1) == 0) {
 				team = *(s + 1);
-				if (!isdigit(team))
+				if (!isdigit((unsigned char)team))
 					team = ' ';
 				if ((s = strchr(envp, ',')) == NULL) {
 					*envp = '\0';
@@ -1073,7 +1109,7 @@ again:
 		goto again;
 	}
 	for (cp = name; *cp != '\0'; cp++)
-		if (!isprint(*cp)) {
+		if (!isprint((unsigned char)*cp)) {
 			name[0] = '\0';
 			printf("Illegal character in your code name.\n");
 			goto again;

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.15 2000/02/21 20:38:48 erh Exp $	*/
+/*	$NetBSD: intr.c,v 1.37.6.2 2008/12/27 04:00:19 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,11 +33,8 @@
  * Link and dispatch interrupts.
  */
 
-#include "opt_inet.h"
-#include "opt_atalk.h"
-#include "opt_ccitt.h"
-#include "opt_iso.h"
-#include "opt_ns.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.37.6.2 2008/12/27 04:00:19 snj Exp $");
 
 #define _HP300_INTR_H_PRIVATE
 
@@ -52,122 +42,58 @@
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/vmmeter.h>
-
-#include <vm/vm.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <net/netisr.h>
+/*
+ * The location and size of the autovectored interrupt portion
+ * of the vector table.
+ */
+#define ISRLOC		0x18
+#define NISR		8
 
-#include <machine/cpu.h>
-#include <machine/intr.h>
+struct hp300_intr hp300_intr_list[NISR];
+static const char *hp300_intr_names[NISR] = {
+	"spurious",
+	"lev1",
+	"lev2",
+	"lev3",
+	"lev4",
+	"lev5",
+	"clock",
+	"nmi",
+};
 
-typedef LIST_HEAD(, isr) isr_list_t;
-isr_list_t isr_list[NISR];
+const uint16_t ipl2psl_table[NIPL] = {
+	[IPL_NONE]       = 0,
+	[IPL_SOFTCLOCK]  = PSL_S|PSL_IPL1,
+	[IPL_SOFTNET]    = PSL_S|PSL_IPL1,
+	[IPL_SOFTSERIAL] = PSL_S|PSL_IPL1,
+	[IPL_SOFTBIO]    = PSL_S|PSL_IPL1,
+	[IPL_VM]         = PSL_S|PSL_IPL5,
+	[IPL_SCHED]      = PSL_S|PSL_IPL6,
+	[IPL_HIGH]       = PSL_S|PSL_IPL7,
+};
+int idepth;
 
-u_short hp300_ipls[HP300_NIPLS];
-
-extern	int intrcnt[];		/* from locore.s */
-
-void	intr_computeipl __P((void));
+void	netintr(void);
 
 void
-intr_init()
+intr_init(void)
 {
+	struct hp300_intr *hi;
 	int i;
 
 	/* Initialize the ISR lists. */
-	for (i = 0; i < NISR; ++i)
-		LIST_INIT(&isr_list[i]);
-
-	/* Default interrupt priorities. */
-	hp300_ipls[HP300_IPL_SOFT] = PSL_S|PSL_IPL1;
-	hp300_ipls[HP300_IPL_BIO] = PSL_S|PSL_IPL3;
-	hp300_ipls[HP300_IPL_NET] = PSL_S|PSL_IPL3;
-	hp300_ipls[HP300_IPL_TTY] = PSL_S|PSL_IPL3;
-	hp300_ipls[HP300_IPL_IMP] = PSL_S|PSL_IPL3;
-	hp300_ipls[HP300_IPL_CLOCK] = PSL_S|PSL_IPL6;
-	hp300_ipls[HP300_IPL_HIGH] = PSL_S|PSL_IPL7;
-}
-
-/*
- * Scan all of the ISRs, recomputing the interrupt levels for the spl*()
- * calls.  This doesn't have to be fast.
- */
-void
-intr_computeipl()
-{
-	struct isr *isr;
-	int ipl;
-
-	/* Start with low values. */
-	hp300_ipls[HP300_IPL_BIO] =
-	hp300_ipls[HP300_IPL_NET] =
-	hp300_ipls[HP300_IPL_TTY] =
-	hp300_ipls[HP300_IPL_IMP] = PSL_S|PSL_IPL3;
-
-	for (ipl = 0; ipl < NISR; ipl++) {
-		for (isr = isr_list[ipl].lh_first; isr != NULL;
-		    isr = isr->isr_link.le_next) {
-			/*
-			 * Bump up the level for a given priority,
-			 * if necessary.
-			 */
-			switch (isr->isr_priority) {
-			case IPL_BIO:
-				if (ipl > PSLTOIPL(hp300_ipls[HP300_IPL_BIO]))
-					hp300_ipls[HP300_IPL_BIO] =
-					    IPLTOPSL(ipl);
-				break;
-
-			case IPL_NET:
-				if (ipl > PSLTOIPL(hp300_ipls[HP300_IPL_NET]))
-					hp300_ipls[HP300_IPL_NET] =
-					    IPLTOPSL(ipl);
-				break;
-
-			case IPL_TTY:
-			case IPL_TTYNOBUF:
-				if (ipl > PSLTOIPL(hp300_ipls[HP300_IPL_TTY]))
-					hp300_ipls[HP300_IPL_TTY] =
-					    IPLTOPSL(ipl);
-				break;
-
-			default:
-				printf("priority = %d\n", isr->isr_priority);
-				panic("intr_computeipl: bad priority");
-			}
-		}
+	for (i = 0; i < NISR; ++i) {
+		hi = &hp300_intr_list[i];
+		LIST_INIT(&hi->hi_q);
+		evcnt_attach_dynamic(&hi->hi_evcnt, EVCNT_TYPE_INTR,
+		    NULL, hp300_intr_names[i], "intr");
 	}
 
-	/*
-	 * Enforce `bio <= net <= tty <= imp'
-	 */
-
-	if (hp300_ipls[HP300_IPL_NET] < hp300_ipls[HP300_IPL_BIO])
-		hp300_ipls[HP300_IPL_NET] = hp300_ipls[HP300_IPL_BIO];
-
-	if (hp300_ipls[HP300_IPL_TTY] < hp300_ipls[HP300_IPL_NET])
-		hp300_ipls[HP300_IPL_TTY] = hp300_ipls[HP300_IPL_NET];
-
-	if (hp300_ipls[HP300_IPL_IMP] < hp300_ipls[HP300_IPL_TTY])
-		hp300_ipls[HP300_IPL_IMP] = hp300_ipls[HP300_IPL_TTY];
-}
-
-void
-intr_printlevels()
-{
-
-#ifdef DEBUG
-	printf("psl: bio = 0x%x, net = 0x%x, tty = 0x%x, imp = 0x%x\n",
-	    hp300_ipls[HP300_IPL_BIO], hp300_ipls[HP300_IPL_NET],
-	    hp300_ipls[HP300_IPL_TTY], hp300_ipls[HP300_IPL_IMP]);
-#endif
-
-	printf("interrupt levels: bio = %d, net = %d, tty = %d\n",
-	    PSLTOIPL(hp300_ipls[HP300_IPL_BIO]),
-	    PSLTOIPL(hp300_ipls[HP300_IPL_NET]),
-	    PSLTOIPL(hp300_ipls[HP300_IPL_TTY]));
 }
 
 /*
@@ -175,27 +101,22 @@ intr_printlevels()
  * Called by driver attach functions.
  */
 void *
-intr_establish(func, arg, ipl, priority)
-	int (*func) __P((void *));
-	void *arg;
-	int ipl;
-	int priority;
+intr_establish(int (*func)(void *), void *arg, int ipl, int priority)
 {
-	struct isr *newisr, *curisr;
-	isr_list_t *list;
+	struct hp300_intrhand *newih, *curih;
 
 	if ((ipl < 0) || (ipl >= NISR))
 		panic("intr_establish: bad ipl %d", ipl);
 
-	newisr = (struct isr *)malloc(sizeof(struct isr), M_DEVBUF, M_NOWAIT);
-	if (newisr == NULL)
-		panic("intr_establish: can't allocate space for isr");
+	newih = malloc(sizeof(struct hp300_intrhand), M_DEVBUF, M_NOWAIT);
+	if (newih == NULL)
+		panic("intr_establish: can't allocate space for handler");
 
 	/* Fill in the new entry. */
-	newisr->isr_func = func;
-	newisr->isr_arg = arg;
-	newisr->isr_ipl = ipl;
-	newisr->isr_priority = priority;
+	newih->ih_fn = func;
+	newih->ih_arg = arg;
+	newih->ih_ipl = ipl;
+	newih->ih_priority = priority;
 
 	/*
 	 * Some devices are particularly sensitive to interrupt
@@ -211,10 +132,10 @@ intr_establish(func, arg, ipl, priority)
 	 * additional work is necessary; we simply insert ourselves
 	 * at the head of the list.
 	 */
-	list = &isr_list[ipl];
-	if (list->lh_first == NULL) {
-		LIST_INSERT_HEAD(list, newisr, isr_link);
-		goto compute;
+
+	if (LIST_FIRST(&hp300_intr_list[ipl].hi_q) == NULL) {
+		LIST_INSERT_HEAD(&hp300_intr_list[ipl].hi_q, newih, ih_q);
+		goto done;
 	}
 
 	/*
@@ -222,11 +143,13 @@ intr_establish(func, arg, ipl, priority)
 	 * and place ourselves after any ISRs with our current (or
 	 * higher) priority.
 	 */
-	for (curisr = list->lh_first; curisr->isr_link.le_next != NULL;
-	    curisr = curisr->isr_link.le_next) {
-		if (newisr->isr_priority > curisr->isr_priority) {
-			LIST_INSERT_BEFORE(curisr, newisr, isr_link);
-			goto compute;
+
+	for (curih = LIST_FIRST(&hp300_intr_list[ipl].hi_q);
+	    LIST_NEXT(curih,ih_q) != NULL;
+	    curih = LIST_NEXT(curih,ih_q)) {
+		if (newih->ih_priority > curih->ih_priority) {
+			LIST_INSERT_BEFORE(curih, newih, ih_q);
+			goto done;
 		}
 	}
 
@@ -234,26 +157,22 @@ intr_establish(func, arg, ipl, priority)
 	 * We're the least important entry, it seems.  We just go
 	 * on the end.
 	 */
-	LIST_INSERT_AFTER(curisr, newisr, isr_link);
+	LIST_INSERT_AFTER(curih, newih, ih_q);
 
- compute:
-	/* Compute new interrupt levels. */
-	intr_computeipl();
-	return (newisr);
+ done:
+	return newih;
 }
 
 /*
  * Disestablish an interrupt handler.
  */
 void
-intr_disestablish(arg)
-	void *arg;
+intr_disestablish(void *arg)
 {
-	struct isr *isr = arg;
+	struct hp300_intrhand *ih = arg;
 
-	LIST_REMOVE(isr, isr_link);
-	free(isr, M_DEVBUF);
-	intr_computeipl();
+	LIST_REMOVE(ih, ih_q);
+	free(ih, M_DEVBUF);
 }
 
 /*
@@ -261,24 +180,25 @@ intr_disestablish(arg)
  * assembly language interrupt routine.
  */
 void
-intr_dispatch(evec)
-	int evec;		/* format | vector offset */
+intr_dispatch(int evec /* format | vector offset */)
 {
-	struct isr *isr;
-	isr_list_t *list;
+	struct hp300_intrhand *ih;
+	struct hp300_intr *list;
 	int handled, ipl, vec;
 	static int straycount, unexpected;
 
 	vec = (evec & 0xfff) >> 2;
+#ifdef DIAGNOSTIC
 	if ((vec < ISRLOC) || (vec >= (ISRLOC + NISR)))
-		panic("isrdispatch: bad vec 0x%x\n", vec);
+		panic("intr_dispatch: bad vec 0x%x", vec);
+#endif
 	ipl = vec - ISRLOC;
 
-	intrcnt[ipl]++;
+	hp300_intr_list[ipl].hi_evcnt.ev_count++;
 	uvmexp.intrs++;
 
-	list = &isr_list[ipl];
-	if (list->lh_first == NULL) {
+	list = &hp300_intr_list[ipl];
+	if (LIST_FIRST(&list->hi_q) == NULL) {
 		printf("intr_dispatch: ipl %d unexpected\n", ipl);
 		if (++unexpected > 10)
 			panic("intr_dispatch: too many unexpected interrupts");
@@ -287,8 +207,9 @@ intr_dispatch(evec)
 
 	handled = 0;
 	/* Give all the handlers a chance. */
-	for (isr = list->lh_first ; isr != NULL; isr = isr->isr_link.le_next)
-		handled |= (*isr->isr_func)(isr->isr_arg);
+	for (ih = LIST_FIRST(&list->hi_q) ; ih != NULL;
+	    ih = LIST_NEXT(ih, ih_q))
+		handled |= (*ih->ih_fn)(ih->ih_arg);
 
 	if (handled)
 		straycount = 0;
@@ -296,42 +217,4 @@ intr_dispatch(evec)
 		panic("intr_dispatch: too many stray interrupts");
 	else
 		printf("intr_dispatch: stray level %d interrupt\n", ipl);
-}
-
-/*
- * XXX Why on earth isn't this in a common file?!
- */
-void	netintr __P((void));
-void	arpintr __P((void));
-void	atintr __P((void));
-void	ipintr __P((void));
-void	ip6intr __P((void));
-void	nsintr __P((void));
-void	clnlintr __P((void));
-void	ccittintr __P((void));
-void	pppintr __P((void));
-
-void
-netintr()
-{
-	int s, isr;
-
-	for (;;) {
-		s = splimp();
-		isr = netisr;
-		netisr = 0;
-		splx(s);
-
-		if (isr == 0)
-			return;
-
-#define DONETISR(bit, fn) do {		\
-	if (isr & (1 << bit))		\
-		fn();			\
-} while(0)
-
-#include <net/netisr_dispatch.h>
-
-#undef DONETISR
-	}
 }

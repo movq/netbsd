@@ -1,4 +1,4 @@
-/*	$NetBSD: get_addrs.c,v 1.5 1998/07/26 22:26:29 mycroft Exp $	*/
+/*	$NetBSD: get_addrs.c,v 1.8 2003/08/07 11:16:04 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,12 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)get_addrs.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: get_addrs.c,v 1.5 1998/07/26 22:26:29 mycroft Exp $");
+__RCSID("$NetBSD: get_addrs.c,v 1.8 2003/08/07 11:16:04 agc Exp $");
 #endif /* not lint */
 
 #include "talk.h"
 #include <netdb.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include "talk_ctl.h"
 
@@ -60,7 +57,7 @@ get_addrs(my_machine_name, his_machine_name)
 	if (hp == NULL) {
 		fprintf(stderr, "talk: %s: ", my_machine_name);
 		herror((char *)NULL);
-		exit(-1);
+		exit(1);
 	}
 	memmove((char *)&my_machine_addr, hp->h_addr, hp->h_length);
 	/*
@@ -72,7 +69,7 @@ get_addrs(my_machine_name, his_machine_name)
 		if (hp == NULL) {
 			fprintf(stderr, "talk: %s: ", his_machine_name);
 			herror((char *)NULL);
-			exit(-1);
+			exit(1);
 		}
 		memmove((char *) &his_machine_addr, hp->h_addr, hp->h_length);
 	} else
@@ -82,7 +79,7 @@ get_addrs(my_machine_name, his_machine_name)
 	if (sp == 0) {
 		fprintf(stderr, "talk: %s/%s: service is not registered.\n",
 		     "ntalk", "udp");
-		exit(-1);
+		exit(1);
 	}
 	daemon_port = sp->s_port;
 }

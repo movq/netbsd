@@ -1,4 +1,4 @@
-.\"	$NetBSD: tp.4,v 1.9 1999/10/08 19:55:44 msaitoh Exp $
+.\"	$NetBSD: tp.4,v 1.17 2005/05/25 00:13:24 snj Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -42,14 +38,13 @@
 .Tn ISO
 Transport Protocol
 .Sh SYNOPSIS
-.Fd #include <sys/socket.h>
-.Fd #include <netiso/iso_errno.h>
-.Fd #include <netiso/tp_param.h>
-.Fd #include <netiso/tp_user.h>
+.In sys/socket.h
+.In netiso/iso_errno.h
+.In netiso/tp_param.h
+.In netiso/tp_user.h
 .Ft int
 .Fn socket "[AF_INET, AF_ISO]" SOCK_SEQPACKET 0
 .Sh DESCRIPTION
-.Pp
 The
 .Tn TP
 protocol provides reliable, flow-controlled, two-way
@@ -65,10 +60,10 @@ protocol makes use of a standard
 address format,
 including a Network Service Access Point, and a Transport Service Entity
 Selector.
-Subclass 4 may make use of the internet
+Subclass 4 may make use of the
 Internet address format.
 .Pp
-Sockets utilizing the TP protocol are either
+Sockets using the TP protocol are either
 .Dq active
 or
 .Dq passive .
@@ -213,7 +208,7 @@ for the
 and
 .Dv TPOPT_CONN_DATA
 for
-.Va cmsg_type.
+.Va cmsg_type .
 .It Dv TPOPT_DISC_DATA \&#
 (char *) [none]
 .br
@@ -306,7 +301,7 @@ structure are
 described below.
 .El
 .Pp
-.Em Values for TPOPT_PARAMS:
+.Em Values for TPOPT_PARAMS :
 .Bl -tag -width p_sendack_ticks
 .It Ar p_Nretrans
 nonzero short integer [1]
@@ -406,7 +401,7 @@ implementation places upper bounds of
 .It Ar p_ack_strat
 .Dv TPACK_EACH
 or
-.Dv TPACK_WINDOW.
+.Dv TPACK_WINDOW .
 .Bq Dv TPACK_WINDOW
 .br
 This parameter applies only to class 4.
@@ -559,7 +554,7 @@ Its meaning is as follows.
 The bit numbering used is that of the RT PC, which means that bit
 0 is the most significant bit, while bit 8 is the least significant bit.
 .sp 1
-.Em Values for TPOPT_FLAGS:
+.Em Values for TPOPT_FLAGS :
 .Bl -tag -width Bitsx
 .It Sy Bits
 .Sy Description [Default]
@@ -585,8 +580,7 @@ set when expedited data are present
 .It 4\&..7
 Reserved.
 .El
-.Sh ERROR VALUES
-.Pp
+.Sh ERRORS
 The
 .Tn TP
 entity returns
@@ -620,7 +614,7 @@ If the signal is issued during a system call, the system call
 may be interrupted, in which case the
 .Va errno
 value upon return from the system call is
-.Er EINTR.
+.Er EINTR .
 If the signal
 .Dv SIGURG
 is being handled by reading
@@ -662,8 +656,7 @@ service
 .Dv SIGURG .
 It can use the
 .Fn getsockopt ...TPOPT_FLAGS...
-system
-call to see if the signal
+system call to see if the signal
 was due to the arrival of expedited data or due to a disconnection.
 In the latter case,
 .Xr getsockopt 2
@@ -672,15 +665,15 @@ will return
 .El
 .Sh SEE ALSO
 .Xr netstat 1 ,
-.Xr iso 4 ,
 .Xr clnp 4 ,
 .Xr cltp 4 ,
+.Xr iso 4 ,
 .Xr tcp 4 ,
-.Xr ifconfig 8 .
+.Xr ifconfig 8
 .Sh BUGS
 The protocol definition of expedited data is slightly problematic,
 in a way that renders expedited data almost useless,
-if two or more packets of expedited data are send within
+if two or more packets of expedited data are sent within
 time epsilon, where epsilon depends on the application.
 The problem is not of major significance since most applications
 do not use transport expedited data.

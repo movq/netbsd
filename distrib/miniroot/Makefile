@@ -1,91 +1,43 @@
-#	$NetBSD: Makefile,v 1.26 2000/03/07 08:41:35 pk Exp $
+#	$NetBSD: Makefile,v 1.66 2008/09/19 17:23:32 tsutsui Exp $
 
 .include <bsd.own.mk>
+.include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
-REV!=sh ${BSDSRCDIR}/sys/conf/osrelease.sh -s
+.include <bsd.kernobj.mk>
 
-CBIN=		instbin
 ARCHDIR=	${.CURDIR}/../${MACHINE}/miniroot
 
-.if exists(${ARCHDIR}/Makefile.inc)
-.include "${ARCHDIR}/Makefile.inc"
-.endif
-
-VND?=		vnd0c
-VND_DEV=	/dev/${VND}
-VND_RDEV=	/dev/r${VND}
-VND_GEOM?=
-IMAGE?=		miniroot.fs
-IMAGESIZE?=	14336 # 7MB in 512 byte blocks
-NEWFSOPTS?=
-MOUNT_POINT?=	/mnt
-BOOTINSTALL?=	true
-PRELABEL?=	true
-
-.ifdef DISKTYPE
-DISKTYPEARG=	-t ${DISKTYPE}
-.endif
-
+CRUNCHBIN=	instbin
+CRUNCHGEN_FLAGS= -d "${DBG}"
 LISTS=		${.CURDIR}/list ${ARCHDIR}/list
-CRUNCHCONF=	${CBIN}.conf
-MTREE=		${.CURDIR}/mtree.conf
-ICMD=		${INSTALL} ${RENAME} ${PRESERVE} ${COPY}	\
-			-o root -g wheel -m ${NONBINMODE} 
+MTREECONF=	${DISTRIBDIR}/common/mtree.common
+IMAGE=		miniroot.fs
+IMAGEDEPENDS=	${CRUNCHBIN} install.sub install.sh upgrade.sh \
+		${KERNSRCDIR}/conf/osrelease.sh \
+		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
+		${NETBSDSRCDIR}/etc/netconfig ${NETBSDSRCDIR}/etc/protocols \
+		${NETBSDSRCDIR}/distrib/common/services
+PARSELISTENV=	ARCHDIR=${ARCHDIR:Q} \
+		DISTRIBREV=${DISTRIBREV:Q} \
+		DISTRIBVER=${DISTRIBVER:Q} \
+		KERNOBJDIR=${KERNOBJDIR:Q}
 
-.ifndef DESTDIR
-all:
-	@echo setenv DESTDIR before making a miniroot!
-	@false
-.else
+IMAGE_RELEASEDIR=	installation/miniroot
 
-all: ${CBIN}
-	dd if=/dev/zero of=${IMAGE} count=${IMAGESIZE}
-	vnconfig ${DISKTYPEARG} -v -c ${VND_DEV} ${IMAGE} ${VND_GEOM}
-	${PRELABEL}
-	-newfs -m 0 -o space ${NEWFSOPTS} ${VND_RDEV} ${DISKTYPE}
-	${BOOTINSTALL}
-	mount -o async ${VND_DEV} ${MOUNT_POINT}
-	mtree -def ${MTREE} -p ${MOUNT_POINT}/ -u
-	REV=${REV} CURDIR=${.CURDIR} OBJDIR=${.OBJDIR} ARCHDIR=${ARCHDIR} \
-	    TARGDIR=${MOUNT_POINT} VND_RDEV=${VND_RDEV} \
-	    sh ${.CURDIR}/runlist.sh ${LISTS}
-	@echo ""
-	@df -i ${MOUNT_POINT}
-	@echo ""
-	umount ${MOUNT_POINT}
-	vnconfig -u ${VND_DEV}
+.include "${ARCHDIR}/Makefile.inc"
 
-unconfig:
-	-umount -f ${MOUNT_POINT}
-	-vnconfig -u ${VND_DEV}
-	-/bin/rm -f ${IMAGE}
+# Use stubs to eliminate some large stuff from libc
+HACKSRC=	${DISTRIBDIR}/utils/libhack
+.include	"${HACKSRC}/Makefile.inc"
+${CRUNCHBIN}:	libhack.o
 
-${CBIN}.conf: ${LISTS}
-	awk -f ${.CURDIR}/makeconf.awk CBIN=${CBIN} ${LISTS} > ${CBIN}.conf
+.include "${DISTRIBDIR}/common/Makefile.crunch"
+.if defined(MAKEDEVTARGETS)
+.include "${DISTRIBDIR}/common/Makefile.makedev"
+.endif
+.include "${DISTRIBDIR}/common/Makefile.image"
 
-${CBIN}.mk ${CBIN}.cache ${CBIN}.c: ${CRUNCHCONF}
-	crunchgen -D ${.CURDIR}/../.. -L ${DESTDIR}/usr/lib ${CRUNCHCONF}
+release:: check_RELEASEDIR .WAIT ${IMAGE}.gz
+	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/${IMAGE_RELEASEDIR} ${IMAGE}.gz
 
-${CBIN}: ${CBIN}.mk ${CBIN}.cache ${CBIN}.c
-	make -f ${CBIN}.mk all
-
-.ifndef RELEASEDIR
-release:
-	@echo setenv RELEASEDIR first
-	@false
-.else
-release: $(IMAGE)
-	mkdir -p $(RELEASEDIR)/installation/miniroot
-	gzip -c -9 < $(.OBJDIR)/miniroot.fs \
-		> $(RELEASEDIR)/installation/miniroot/miniroot.fs.gz
-	../sets/makesums -t $(RELEASEDIR)/installation/miniroot miniroot.fs
-		
-.endif	# RELEASEDIR check
-.endif	# DESTDIR check
-
-clean cleandir distclean:
-	/bin/rm -f core ${IMAGE} ${CBIN} ${CBIN}.mk ${CBIN}.cache \
-	${CBIN}.conf *.o *.cro *.c
-
-.include <bsd.obj.mk>
-.include <bsd.subdir.mk>
+.include <bsd.prog.mk>

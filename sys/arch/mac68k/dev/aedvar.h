@@ -1,4 +1,4 @@
-/*	$NetBSD: aedvar.h,v 1.4 2000/03/23 06:39:56 thorpej Exp $	*/
+/*	$NetBSD: aedvar.h,v 1.7 2005/12/11 12:18:02 christos Exp $	*/
 
 /*
  * Copyright (C) 1994	Bradley A. Grantham
@@ -72,10 +72,4 @@ struct aed_softc {
 /* Options */
 #define AED_MSEMUL	0x1		/* emulate mouse buttons */
 
-int	aed_input __P((adb_event_t *event));
-int	aedopen __P((dev_t dev, int flag, int mode, struct proc *p));
-int	aedclose __P((dev_t dev, int flag, int mode, struct proc *p));
-int	aedread __P((dev_t dev, struct uio *uio, int flag));
-int	aedwrite __P((dev_t dev, struct uio *uio, int flag));
-int	aedioctl __P((dev_t , int , caddr_t , int , struct proc *));
-int	aedpoll __P((dev_t dev, int events, struct proc *p));
+int	aed_input(adb_event_t *);

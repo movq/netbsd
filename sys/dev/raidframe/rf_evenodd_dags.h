@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_evenodd_dags.h,v 1.2 1999/02/05 00:06:11 oster Exp $	*/
+/*	$NetBSD: rf_evenodd_dags.h,v 1.4 2002/11/23 02:44:14 oster Exp $	*/
 /*
  * rf_evenodd_dags.h
  */
@@ -32,9 +32,8 @@
 #ifndef _RF__RF_EVENODD_DAGS_H_
 #define _RF__RF_EVENODD_DAGS_H_
 
-#include "rf_types.h"
+#include <dev/raidframe/raidframevar.h>
 
-#if RF_UTILITY == 0
 #include "rf_dag.h"
 
 /* extern decl's of the failure mode EO functions.
@@ -58,6 +57,5 @@ RF_CREATE_DAG_FUNC_DECL(rf_EO_DoubleDegRead);
 RF_CREATE_DAG_FUNC_DECL(rf_EOCreateSmallWriteDAG);
 RF_CREATE_DAG_FUNC_DECL(rf_EOCreateLargeWriteDAG);
 RF_CREATE_DAG_FUNC_DECL(rf_EO_200_CreateWriteDAG);
-#endif				/* RF_UTILITY == 0 */
 
 #endif				/* !_RF__RF_EVENODD_DAGS_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: pl_6.c,v 1.5 1999/02/10 00:45:46 hubertf Exp $	*/
+/*	$NetBSD: pl_6.c,v 1.11 2003/08/07 09:37:44 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,14 +34,18 @@
 #if 0
 static char sccsid[] = "@(#)pl_6.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: pl_6.c,v 1.5 1999/02/10 00:45:46 hubertf Exp $");
+__RCSID("$NetBSD: pl_6.c,v 1.11 2003/08/07 09:37:44 agc Exp $");
 #endif
 #endif /* not lint */
 
+#include <signal.h>
+#include "extern.h"
 #include "player.h"
 
+static int	turned(void);
+
 void
-repair()
+repair(void)
 {
 	char c;
 	char *repairs;
@@ -138,8 +138,8 @@ repair()
 	repaired = 1;
 }
 
-int
-turned()
+static int
+turned(void)
 {
 	char *p;
 
@@ -150,7 +150,7 @@ turned()
 }
 
 void
-loadplayer()
+loadplayer(void)
 {
 	char c;
 	int loadL, loadR, ready, load;

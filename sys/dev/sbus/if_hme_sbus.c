@@ -1,4 +1,4 @@
-/*	$NetBSD: if_hme_sbus.c,v 1.3 1999/11/21 15:01:51 pk Exp $	*/
+/*	$NetBSD: if_hme_sbus.c,v 1.24 2008/04/28 20:23:57 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,6 +33,9 @@
  * SBus front-end device driver for the HME ethernet device.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_hme_sbus.c,v 1.24 2008/04/28 20:23:57 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/syslog.h>
@@ -55,8 +51,9 @@
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 
+#include <sys/bus.h>
+#include <sys/intr.h>
 #include <machine/autoconf.h>
-#include <machine/cpu.h>
 
 #include <dev/sbus/sbusvar.h>
 #include <dev/ic/hmevar.h>
@@ -66,12 +63,11 @@ struct hmesbus_softc {
 	struct	sbusdev		hsc_sbus;	/* SBus device */
 };
 
-int	hmematch_sbus __P((struct device *, struct cfdata *, void *));
-void	hmeattach_sbus __P((struct device *, struct device *, void *));
+int	hmematch_sbus(struct device *, struct cfdata *, void *);
+void	hmeattach_sbus(struct device *, struct device *, void *);
 
-struct cfattach hme_sbus_ca = {
-	sizeof(struct hmesbus_softc), hmematch_sbus, hmeattach_sbus
-};
+CFATTACH_DECL(hme_sbus, sizeof(struct hmesbus_softc),
+    hmematch_sbus, hmeattach_sbus, NULL, NULL);
 
 int
 hmematch_sbus(parent, cf, aux)
@@ -81,7 +77,8 @@ hmematch_sbus(parent, cf, aux)
 {
 	struct sbus_attach_args *sa = aux;
 
-	return (strcmp(cf->cf_driver->cd_name, sa->sa_name) == 0 ||
+	return (strcmp(cf->cf_name, sa->sa_name) == 0 ||
+	    strcmp("SUNW,qfe", sa->sa_name) == 0 ||
 	    strcmp("SUNW,hme", sa->sa_name) == 0);
 }
 
@@ -96,8 +93,6 @@ hmeattach_sbus(parent, self, aux)
 	struct sbusdev *sd = &hsc->hsc_sbus;
 	u_int32_t burst, sbusburst;
 	int node;
-	/* XXX the following declarations should be elsewhere */
-	extern void myetheraddr __P((u_char *));
 
 	node = sa->sa_node;
 
@@ -105,9 +100,12 @@ hmeattach_sbus(parent, self, aux)
 	sc->sc_bustag = sa->sa_bustag;
 	sc->sc_dmatag = sa->sa_dmatag;
 
+	printf(": Sun Happy Meal Ethernet (%s)\n",
+	    sa->sa_name);
+
 	if (sa->sa_nreg < 5) {
 		printf("%s: only %d register sets\n",
-			self->dv_xname, sa->sa_nreg);
+			device_xname(self), sa->sa_nreg);
 		return;
 	}
 
@@ -122,50 +120,50 @@ hmeattach_sbus(parent, self, aux)
 	 *
 	 */
 	if (sbus_bus_map(sa->sa_bustag,
-			 (bus_type_t)sa->sa_reg[0].sbr_slot,
-			 (bus_addr_t)sa->sa_reg[0].sbr_offset,
-			 (bus_size_t)sa->sa_reg[0].sbr_size,
-			 BUS_SPACE_MAP_LINEAR, 0, &sc->sc_seb) != 0) {
-		printf("%s @ sbus: cannot map registers\n", self->dv_xname);
+			 sa->sa_reg[0].oa_space,
+			 sa->sa_reg[0].oa_base,
+			 (bus_size_t)sa->sa_reg[0].oa_size,
+			 0, &sc->sc_seb) != 0) {
+		aprint_error_dev(self, "cannot map SEB registers\n");
 		return;
 	}
 	if (sbus_bus_map(sa->sa_bustag,
-			 (bus_type_t)sa->sa_reg[1].sbr_slot,
-			 (bus_addr_t)sa->sa_reg[1].sbr_offset,
-			 (bus_size_t)sa->sa_reg[1].sbr_size,
-			 BUS_SPACE_MAP_LINEAR, 0, &sc->sc_etx) != 0) {
-		printf("%s @ sbus: cannot map registers\n", self->dv_xname);
+			 sa->sa_reg[1].oa_space,
+			 sa->sa_reg[1].oa_base,
+			 (bus_size_t)sa->sa_reg[1].oa_size,
+			 0, &sc->sc_etx) != 0) {
+		aprint_error_dev(self, "cannot map ETX registers\n");
 		return;
 	}
 	if (sbus_bus_map(sa->sa_bustag,
-			 (bus_type_t)sa->sa_reg[2].sbr_slot,
-			 (bus_addr_t)sa->sa_reg[2].sbr_offset,
-			 (bus_size_t)sa->sa_reg[2].sbr_size,
-			 BUS_SPACE_MAP_LINEAR, 0, &sc->sc_erx) != 0) {
-		printf("%s @ sbus: cannot map registers\n", self->dv_xname);
+			 sa->sa_reg[2].oa_space,
+			 sa->sa_reg[2].oa_base,
+			 (bus_size_t)sa->sa_reg[2].oa_size,
+			 0, &sc->sc_erx) != 0) {
+		aprint_error_dev(self, "cannot map ERX registers\n");
 		return;
 	}
 	if (sbus_bus_map(sa->sa_bustag,
-			 (bus_type_t)sa->sa_reg[3].sbr_slot,
-			 (bus_addr_t)sa->sa_reg[3].sbr_offset,
-			 (bus_size_t)sa->sa_reg[3].sbr_size,
-			 BUS_SPACE_MAP_LINEAR, 0, &sc->sc_mac) != 0) {
-		printf("%s @ sbus: cannot map registers\n", self->dv_xname);
+			 sa->sa_reg[3].oa_space,
+			 sa->sa_reg[3].oa_base,
+			 (bus_size_t)sa->sa_reg[3].oa_size,
+			 0, &sc->sc_mac) != 0) {
+		aprint_error_dev(self, "cannot map MAC registers\n");
 		return;
 	}
 	if (sbus_bus_map(sa->sa_bustag,
-			 (bus_type_t)sa->sa_reg[4].sbr_slot,
-			 (bus_addr_t)sa->sa_reg[4].sbr_offset,
-			 (bus_size_t)sa->sa_reg[4].sbr_size,
-			 BUS_SPACE_MAP_LINEAR, 0, &sc->sc_mif) != 0) {
-		printf("%s @ sbus: cannot map registers\n", self->dv_xname);
+			 sa->sa_reg[4].oa_space,
+			 sa->sa_reg[4].oa_base,
+			 (bus_size_t)sa->sa_reg[4].oa_size,
+			 0, &sc->sc_mif) != 0) {
+		aprint_error_dev(self, "cannot map MIF registers\n");
 		return;
 	}
 
 	sd->sd_reset = (void *)hme_reset;
 	sbus_establish(sd, self);
 
-	myetheraddr(sc->sc_enaddr);
+	prom_getether(node, sc->sc_enaddr);
 
 	/*
 	 * Get transfer burst size from PROM and pass it on
@@ -175,7 +173,7 @@ hmeattach_sbus(parent, self, aux)
 	if (sbusburst == 0)
 		sbusburst = SBUS_BURST_32 - 1; /* 1->16 */
 
-	burst = getpropint(node, "burst-sizes", -1);
+	burst = prom_getpropint(node, "burst-sizes", -1);
 	if (burst == -1)
 		/* take SBus burst sizes */
 		burst = sbusburst;
@@ -187,10 +185,11 @@ hmeattach_sbus(parent, self, aux)
 	sc->sc_burst =  (burst & SBUS_BURST_32) ? 32 :
 			(burst & SBUS_BURST_16) ? 16 : 0;
 
+	sc->sc_pci = 0; /* XXXXX should all be done in bus_dma. */
 	hme_config(sc);
 
 	/* Establish interrupt handler */
 	if (sa->sa_nintr != 0)
-		(void)bus_intr_establish(sa->sa_bustag, sa->sa_pri, 0,
+		(void)bus_intr_establish(sa->sa_bustag, sa->sa_pri, IPL_NET,
 					 hme_intr, sc);
 }

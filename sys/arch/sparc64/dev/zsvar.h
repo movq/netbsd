@@ -1,4 +1,4 @@
-/*	$NetBSD: zsvar.h,v 1.1.1.1 1998/06/20 04:58:51 eeh Exp $ */
+/*	$NetBSD: zsvar.h,v 1.6 2008/03/29 19:15:35 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -49,10 +45,10 @@
  */
 
 struct zschan {
-	volatile u_char	zc_csr;		/* ctrl,status, and indirect access */
-	u_char		zc_xxx0;
-	volatile u_char	zc_data;	/* data */
-	u_char		zc_xxx1;
+	volatile uint8_t zc_csr;	/* ctrl,status, and indirect access */
+	uint8_t		zc_xxx0;
+	volatile uint8_t zc_data;	/* data */
+	uint8_t		zc_xxx1;
 };
 
 struct zsdevice {
@@ -97,8 +93,8 @@ struct zs_chanstate {
 	struct	zs_chanstate *cs_next;	/* linked list for zshard() */
 	struct	zs_softc *cs_sc;	/* pointer to softc */
 	volatile struct zschan *cs_zc;	/* points to hardware regs */
-	int	cs_unit;		/* unit number */
 	struct	tty *cs_ttyp;		/* ### */
+	int	cs_unit;		/* unit number */
 
 	/*
 	 * We must keep a copy of the write registers as they are
@@ -113,10 +109,10 @@ struct zs_chanstate {
 	 * rather than (or in addition to) the pending value; for these
 	 * cs_creg[] contains the current value.
 	 */
-	u_char	cs_creg[16];		/* current values */
-	u_char	cs_preg[16];		/* pending values */
-	u_char	cs_heldchange;		/* change pending (creg != preg) */
-	u_char	cs_rr0;			/* last rr0 processed */
+	uint8_t	cs_creg[16];		/* current values */
+	uint8_t	cs_preg[16];		/* pending values */
+	uint8_t	cs_heldchange;		/* change pending (creg != preg) */
+	uint8_t	cs_rr0;			/* last rr0 processed */
 
 	/* pure software data, per channel */
 	char	cs_softcar;		/* software carrier */
@@ -134,8 +130,8 @@ struct zs_chanstate {
 	 * also be stopped for ^S; this sets TS_TTSTOP in tp->t_state.
 	 */
 	int	cs_tbc;			/* transmit byte count */
-	caddr_t	cs_tba;			/* transmit buffer address */
 	int	cs_heldtbc;		/* held tbc while xmission stopped */
+	void *	cs_tba;			/* transmit buffer address */
 
 	/*
 	 * Printing an overrun error message often takes long enough to

@@ -1,16 +1,42 @@
-/*	$NetBSD: playit.c,v 1.4 1997/10/20 00:37:15 lukem Exp $	*/
+/*	$NetBSD: playit.c,v 1.9 2008/01/28 03:23:29 dholland Exp $	*/
 /*
- *  Hunt
- *  Copyright (c) 1985 Conrad C. Huang, Gregory S. Couch, Kenneth C.R.C. Arnold
- *  San Francisco, California
+ * Copyright (c) 1983-2003, Regents of the University of California.
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions are 
+ * met:
+ * 
+ * + Redistributions of source code must retain the above copyright 
+ *   notice, this list of conditions and the following disclaimer.
+ * + Redistributions in binary form must reproduce the above copyright 
+ *   notice, this list of conditions and the following disclaimer in the 
+ *   documentation and/or other materials provided with the distribution.
+ * + Neither the name of the University of California, San Francisco nor 
+ *   the names of its contributors may be used to endorse or promote 
+ *   products derived from this software without specific prior written 
+ *   permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS 
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED 
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A 
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: playit.c,v 1.4 1997/10/20 00:37:15 lukem Exp $");
+__RCSID("$NetBSD: playit.c,v 1.9 2008/01/28 03:23:29 dholland Exp $");
 #endif /* not lint */
 
 # include	<sys/file.h>
+# include	<sys/poll.h>
 # include	<err.h>
 # include	<errno.h>
 # include	<curses.h>
@@ -68,8 +94,8 @@ static unsigned char	ibuf[256], *iptr = ibuf;
 extern int	_putchar();
 #endif
 
-static	unsigned char	getchr __P((void));
-static	void		send_stuff __P((void));
+static	unsigned char	getchr(void);
+static	void		send_stuff(void);
 
 /*
  * playit:
@@ -81,13 +107,13 @@ playit()
 {
 	int		ch;
 	int		y, x;
-	long		version;
+	u_int32_t	version;
 
 	if (read(Socket, (char *) &version, LONGLEN) != LONGLEN) {
 		bad_con();
 		/* NOTREACHED */
 	}
-	if (ntohl(version) != HUNT_VERSION) {
+	if (ntohl(version) != (u_int32_t)HUNT_VERSION) {
 		bad_ver();
 		/* NOTREACHED */
 	}
@@ -217,26 +243,23 @@ out:
 static unsigned char
 getchr()
 {
-	fd_set	readfds, s_readfds;
-	int	nfds, s_nfds;
+	struct	pollfd set[2];
+	int	nfds;
 
-	FD_ZERO(&s_readfds);
-	FD_SET(Socket, &s_readfds);
-	FD_SET(STDIN, &s_readfds);
-	s_nfds = (Socket > STDIN) ? Socket : STDIN;
-	s_nfds++;
+	set[0].fd = Socket;
+	set[0].events = POLLIN;
+	set[1].fd = STDIN;
+	set[1].events = POLLIN;
 
 one_more_time:
 	do {
 		errno = 0;
-		readfds = s_readfds;
-		nfds = s_nfds;
-		nfds = select(nfds, &readfds, NULL, NULL, NULL);
+		nfds = poll(set, 2, INFTIM);
 	} while (nfds <= 0 && errno == EINTR);
 
-	if (FD_ISSET(STDIN, &readfds))
+	if (set[1].revents && POLLIN)
 		send_stuff();
-	if (! FD_ISSET(Socket, &readfds))
+	if (! (set[0].revents & POLLIN))
 		goto one_more_time;
 	icnt = read(Socket, ibuf, sizeof ibuf);
 	if (icnt < 0) {
@@ -619,13 +642,13 @@ redraw_screen()
 void
 do_message()
 {
-	long	version;
+	u_int32_t	version;
 
 	if (read(Socket, (char *) &version, LONGLEN) != LONGLEN) {
 		bad_con();
 		/* NOTREACHED */
 	}
-	if (ntohl(version) != HUNT_VERSION) {
+	if (ntohl(version) != (u_int32_t)HUNT_VERSION) {
 		bad_ver();
 		/* NOTREACHED */
 	}

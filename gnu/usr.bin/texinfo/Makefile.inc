@@ -1,17 +1,24 @@
-#	$NetBSD: Makefile.inc,v 1.1 1999/02/11 15:42:14 tv Exp $
+#	$NetBSD: Makefile.inc,v 1.9 2008/09/02 14:46:53 christos Exp $
 
 .if !defined(__MAKEFILE_INC_INCLUDED__)
 __MAKEFILE_INC_INCLUDED__=1
 
-CPPFLAGS+=	-I${.CURDIR}/../common -I${DIST}/texinfo/intl -I${DIST}/texinfo/lib \
+.include <bsd.own.mk>
+
+DIST=		${NETBSDSRCDIR}/gnu/dist
+IDIST=		${DIST}/texinfo
+
+CPPFLAGS+=	-I${.CURDIR}/../common -I${IDIST}/lib \
 		-DLOCALEDIR=\"/usr/share/locale\" -DHAVE_CONFIG_H
 
+.if !defined(MAKEDOC)
 DPADD+=		${LIBCOMMONDIR}/libcommon.a
 LDADD+=		-L${LIBCOMMONDIR} -lcommon
 
-DIST=		${.CURDIR}/../../../dist
-.if !make(print-objdir)
-LIBCOMMONDIR!=	cd ${.CURDIR}/../common && ${MAKE} print-objdir
+DPADD+=		${LIBINTL}
+LDADD+=		-lintl
+
+LIBCOMMONDIR!=	cd ${.CURDIR}/../common && ${PRINTOBJDIR}
 .endif
 
 .if exists(${.CURDIR}/../../Makefile.inc)

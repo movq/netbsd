@@ -1,4 +1,4 @@
-/*	$NetBSD: com_puc.c,v 1.1 1998/06/26 18:52:41 cgd Exp $	*/
+/*	$NetBSD: com_puc.c,v 1.18 2008/03/14 15:09:11 cube Exp $	*/
 
 /*
  * Copyright (c) 1998 Christopher G. Demetriou.  All rights reserved.
@@ -37,18 +37,21 @@
  * Author: Christopher G. Demetriou, May 17, 1998.
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: com_puc.c,v 1.18 2008/03/14 15:09:11 cube Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/tty.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pucvar.h>
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
+#include <dev/pci/cybervar.h>
 
 struct com_puc_softc {
 	struct com_softc sc_com;	/* real "com" softc */
@@ -57,18 +60,8 @@ struct com_puc_softc {
 	void	*sc_ih;			/* interrupt handler */
 };
 
-int	com_puc_probe __P((struct device *, struct cfdata *, void *));
-void	com_puc_attach __P((struct device *, struct device *, void *));
-
-struct cfattach com_puc_ca = {
-	sizeof(struct com_puc_softc), com_puc_probe, com_puc_attach
-};
-
-int
-com_puc_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+com_puc_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct puc_attach_args *aa = aux;
 
@@ -81,15 +74,15 @@ com_puc_probe(parent, match, aux)
 	return (1);
 }
 
-void
-com_puc_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+com_puc_attach(device_t parent, device_t self, void *aux)
 {
-	struct com_puc_softc *psc = (void *)self;
+	struct com_puc_softc *psc = device_private(self);
 	struct com_softc *sc = &psc->sc_com;
 	struct puc_attach_args *aa = aux;
 	const char *intrstr;
+
+	sc->sc_dev = self;
 
 	/*
 	 * XXX This driver assumes that 'com' ports attached to 'puc'
@@ -105,23 +98,41 @@ com_puc_attach(parent, self, aux)
 	 * XXX directly on PCI.
 	 */
 
-	sc->sc_iobase = aa->a;
-	sc->sc_iot = aa->t;
-	sc->sc_ioh = aa->h;
-	sc->sc_frequency = COM_FREQ;
+	aprint_naive(": Serial port\n");
+
+	COM_INIT_REGS(sc->sc_regs, aa->t, aa->h, aa->a);
+	sc->sc_frequency = aa->flags & PUC_COM_CLOCKMASK;
+
+	/* Enable Cyberserial 8X clock. */
+	if (aa->flags & (PUC_COM_SIIG10x|PUC_COM_SIIG20x)) {
+		int usrregno;
+
+		if	(aa->flags & PUC_PORT_USR3) usrregno = 3;
+		else if (aa->flags & PUC_PORT_USR2) usrregno = 2;
+		else if (aa->flags & PUC_PORT_USR1) usrregno = 1;
+		else /* (aa->flags & PUC_PORT_USR0) */ usrregno = 0;
+
+		if (aa->flags & PUC_COM_SIIG10x)
+			write_siig10x_usrreg(aa->pc, aa->tag, usrregno, 1);
+		else
+			write_siig20x_usrreg(aa->pc, aa->tag, usrregno, 1);
+	}
 
 	intrstr = pci_intr_string(aa->pc, aa->intrhandle);
 	psc->sc_ih = pci_intr_establish(aa->pc, aa->intrhandle, IPL_SERIAL,
 	    comintr, sc);
 	if (psc->sc_ih == NULL) {
-		printf(": couldn't establish interrupt");
+		aprint_error(": couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
-	printf(": interrupting at %s\n", intrstr);
-	printf("%s", sc->sc_dev.dv_xname);
+	aprint_normal(": interrupting at %s\n", intrstr);
+	aprint_normal("%s", device_xname(self));
 
 	com_attach_subr(sc);
 }
+
+CFATTACH_DECL_NEW(com_puc, sizeof(struct com_puc_softc),
+    com_puc_probe, com_puc_attach, NULL, NULL);

@@ -1,4 +1,4 @@
-/*	$NetBSD: stdarg.h,v 1.5 2000/02/27 17:50:21 tsubai Exp $	*/
+/*	$NetBSD: stdarg.h,v 1.16 2008/06/21 00:56:39 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -48,9 +48,30 @@ typedef _BSD_VA_LIST_	va_list;
 
 #define va_start(ap, last)	((ap) = *(va_list *)0)
 #define va_arg(ap, type)	(*(type *)(void *)&(ap))
+#define va_end(ap)
+#define __va_copy(dest, src)	((dest) = (src))
+
+#elif __GNUC_PREREQ__(3, 0)
+
+#define va_start(ap, last)	__builtin_stdarg_start((ap), last)
+#define va_arg(ap, type)	__builtin_va_arg((ap), type)
+#define va_end(ap)		__builtin_va_end((ap))
+#define __va_copy(dest, src)	__builtin_va_copy((dest), (src))
+
+#elif defined(__PCC__)
+
+#define va_start(ap, last)	__builtin_stdarg_start((ap), last)
+#define va_arg(ap, type)	__builtin_va_arg((ap), type)
+#define va_end(ap)		__builtin_va_end((ap))
+#define __va_copy(dest, src)	__builtin_va_copy((dest), (src))
 
 #else
 
+#if __GNUC_PREREQ__(2, 95)
+#define va_start(ap, last)						\
+	(__builtin_next_arg(last),					\
+	 (ap) = *(va_list *)__builtin_saveregs())
+#else
 #define va_start(ap, last)						\
 	(__builtin_next_arg(last),					\
 	 (ap).__stack = __va_stack_args,				\
@@ -65,17 +86,31 @@ typedef _BSD_VA_LIST_	va_list;
 	 (__va_first_gpr >= 8 ? __va_first_gpr - 8 : 0) * sizeof(int))
 #define __va_reg_args							\
 	((char *)__builtin_frame_address(0) + __builtin_args_info(4))
+#endif /* 2.95 */
 
+/* From gcc/typeclass.h */
 #define __INTEGER_TYPE_CLASS	1
 #define __REAL_TYPE_CLASS	8
 #define __RECORD_TYPE_CLASS	12
 
+#if __GNUC_PREREQ__(2, 95)
+#define __va_longlong(type)						\
+	(sizeof(type) == 8 &&						\
+	 (__builtin_classify_type(*(type *)0) == __REAL_TYPE_CLASS ||	\
+	  __builtin_classify_type(*(type *)0) == __INTEGER_TYPE_CLASS))
+#else
+/* XXX gcc bug compatibility */
 #define __va_longlong(type)						\
 	(__builtin_classify_type(*(type *)0) == __INTEGER_TYPE_CLASS &&	\
 	 sizeof(type) == 8)
+#endif
 
+#ifdef _SOFT_FLOAT
+#define __va_double(type)	0
+#else
 #define __va_double(type)						\
 	(__builtin_classify_type(*(type *)0) == __REAL_TYPE_CLASS)
+#endif
 
 #define __va_struct(type)						\
 	(__builtin_classify_type(*(type *)0) >= __RECORD_TYPE_CLASS)
@@ -109,15 +144,15 @@ typedef _BSD_VA_LIST_	va_list;
 		   __va_double(type) ? __va_fpr(ap, type) :		\
 		   __va_gpr(ap, type)))
 
+#define va_end(ap)
+#define __va_copy(dest, src)	((dest) = (src))
+
 #endif /* __lint__ */
 
-#define va_end(ap)	
-
 #if !defined(_ANSI_SOURCE) &&						\
-    (!defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE) ||		\
-     defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L)
-#define va_copy(dest, src)						\
-	((dest) = (src))
+    (defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L ||	\
+     defined(_NETBSD_SOURCE))
+#define va_copy(dest, src)	__va_copy(dest, src)
 #endif
 
 #endif /* _POWERPC_STDARG_H_ */

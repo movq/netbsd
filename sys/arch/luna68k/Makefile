@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2000/01/05 08:48:53 nisimura Exp $
+#	$NetBSD: Makefile,v 1.3 2008/10/25 22:27:37 apb Exp $
 
 # Makefile for luna68k tags file
 
@@ -18,7 +18,8 @@ DLUNA68K=	dev include
 tags:
 	-ctags -wdtf ${TLUNA68K} ${SLUNA68K} ${COMM}
 	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${ALUNA68K} | \
-	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
+	    ${TOOL_SED} -e \
+		"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
 	    >> ${TLUNA68K}
 	sort -o ${TLUNA68K} ${TLUNA68K}
 
@@ -26,6 +27,6 @@ links:
 	-for i in ${DLUNA68K}; do \
 	    cd $$i && rm -f tags; ln -s ../tags tags; done
 
-SUBDIR=	include
+SUBDIR=	compile include
 
 .include <bsd.subdir.mk>

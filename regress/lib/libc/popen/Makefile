@@ -1,10 +1,9 @@
-#	$NetBSD: Makefile,v 1.1.1.1 1999/09/30 09:23:23 tron Exp $
+#	$NetBSD: Makefile,v 1.3 2002/09/18 05:41:40 lukem Exp $
 
-PROG=	popen
-SRCS=	popen.c
-NOMAN=	noman, no way, man
+NOMAN=		# defined
 
-CLEANFILES+= popen.data
+PROG=		popen
+CLEANFILES+=	popen.data
 
 regress: ${PROG}
 	./${PROG}

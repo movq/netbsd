@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_pcb.h,v 1.12 2000/03/23 07:03:31 thorpej Exp $	*/
+/*	$NetBSD: tp_pcb.h,v 1.22 2007/12/20 19:53:35 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -79,7 +75,7 @@ SOFTWARE.
 /*
  * NOTE: the code depends on REF_CLOSED > REF_OPEN > the rest, and on
  * REF_FREE being zero
- * 
+ *
  * Possible improvement: think about merging the tp_ref w/ the tpcb and doing a
  * search through the tpcb list, from tpb. This would slow down lookup during
  * data transfer It would be a little nicer also to have something based on
@@ -89,7 +85,7 @@ SOFTWARE.
  * independent of whether the timers are in the pcb or in an array.. Last,
  * would have to make the number of timers a function of the amount of mbufs
  * available, plus some for the frozen references.
- * 
+ *
  * Possible improvement: Might not need the ref_state stuff either... REF_FREE
  * could correspond to tp_state == CLOSED or nonexistend tpcb, REF_OPEN to
  * tp_state anywhere from AK_WAIT or CR_SENT to CLOSING REF_OPENING could
@@ -123,40 +119,40 @@ struct tp_refinfo {
 struct nl_protosw {
 	int		nlp_afamily;	/* address family */
 	void		(*nlp_putnetaddr)	/* puts addresses in nl pcb */
-				__P((void *, struct sockaddr *, int));
+				(void *, struct sockaddr *, int);
 	void		(*nlp_getnetaddr)	/* gets addresses from nl pcb */
-				__P((void *, struct mbuf *, int));
+				(void *, struct mbuf *, int);
 	int		(*nlp_cmpnetaddr)	/* compares address in pcb */
-				__P((void *, struct sockaddr *, int));
+				(void *, struct sockaddr *, int);
 						/* with sockaddr */
 	void		(*nlp_putsufx)		/* puts transport suffixes in */
-				__P((void *, caddr_t, int, int));
+				(void *, void *, int, int);
 						/* nl pcb */
 	void		(*nlp_getsufx)		/* gets transport suffixes */
-				__P((void *, u_short *, caddr_t, int));
+				(void *, u_short *, void *, int);
 						/* from nl pcb */
 	void		(*nlp_recycle_suffix)	/* clears suffix from nl pcb */
-				__P((void *));		 
+				(void *);
 	int		(*nlp_mtu)		/* figures out mtu based on */
-				__P((void *));	/* nl used */
+				(void *);	/* nl used */
 	int		(*nlp_pcbbind)		/* bind to pcb for net level */
-				__P((void *, struct mbuf *, struct proc *));
+				(void *, struct mbuf *, struct lwp *);
 	int		(*nlp_pcbconn)		/* connect for net level */
-				__P((void *, struct mbuf *));
+				(void *, struct mbuf *, struct lwp *);
 	void		(*nlp_pcbdisc)		/* disconnect net level */
-				__P((void *));
+				(void *);
 	void		(*nlp_pcbdetach)	/* detach net level pcb */
-				__P((void *));
+				(void *);
 	int		(*nlp_pcballoc)		/* allocate a net level pcb */
-				__P((struct socket *, void *));
+				(struct socket *, void *);
 	int		(*nlp_output)		/* prepare a packet to give */
-				__P((struct mbuf *, ...)); /* to nl */
+				(struct mbuf *, ...); /* to nl */
 	int		(*nlp_dgoutput)		/* prepare a packet to give */
-				__P((struct mbuf *, ...)); /*to nl*/
+				(struct mbuf *, ...); /*to nl*/
 	int		(*nlp_ctloutput)	/* hook for network set/get */
-				__P((int, int, caddr_t, struct mbuf *));
+				(int, int, void *, struct mbuf *);
 						/* options */
-	caddr_t		nlp_pcblist;	/* list of xx_pcb's for connections */
+	void *		nlp_pcblist;	/* list of xx_pcb's for connections */
 };
 
 
@@ -167,9 +163,9 @@ struct tp_pcb {
 	struct socket  *tp_sock;/* back ptr */
 	u_short		tp_state;	/* state of fsm */
 	short		tp_retrans;	/* # times can still retrans */
-	caddr_t		tp_npcb;/* to lower layer pcb */
+	void *		tp_npcb;/* to lower layer pcb */
 	struct nl_protosw *tp_nlproto;	/* lower-layer dependent routines */
-	struct rtentry **tp_routep;	/* obtain mtu; inside npcb */
+	struct route	*tp_routep;	/* obtain mtu; inside npcb */
 
 
 	RefNum		tp_lref;/* local reference */
@@ -261,7 +257,7 @@ struct tp_pcb {
 	int		tp_rtv; /* max round-trip time variance */
 	int		tp_rtt; /* smoothed round-trip time */
 	SeqNum		tp_rttseq;	/* packet being timed */
-	u_int64_t	tp_rttemit;	/* when emitted, in ticks */
+	int		tp_rttemit;	/* when emitted, in ticks */
 	int		tp_idle;/* last activity, in ticks */
 	short		tp_rxtcur;	/* current retransmit value */
 	short		tp_rxtshift;	/* log(2) of rexmt exp. backoff */
@@ -333,7 +329,7 @@ struct tp_pcb {
 
 };
 
-u_int		tp_start_win;
+extern	u_int	tp_start_win;
 
 #define ROUND(scaled_int) (((scaled_int) >> 8) + (((scaled_int) & 0x80) ? 1:0))
 
@@ -376,4 +372,4 @@ extern struct tp_pcb *tp_ftimeolist;
 #define tpcbtoso(tp)	((struct socket *)((tp)->tp_sock))
 #define tpcbtoref(tp)	((struct tp_ref *)((tp)->tp_ref))
 
-#endif /* _NETISO_TP_PCB_H_ */
+#endif /* !_NETISO_TP_PCB_H_ */

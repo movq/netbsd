@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fxp_cardbus.c,v 1.11 2000/03/22 00:17:46 thorpej Exp $	*/
+/*	$NetBSD: if_fxp_cardbus.c,v 1.34 2008/07/09 17:07:28 joerg Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,8 +33,10 @@
  * CardBus front-end for the Intel i82557 family of Ethernet chips.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_fxp_cardbus.c,v 1.34 2008/07/09 17:07:28 joerg Exp $");
+
 #include "opt_inet.h"
-#include "opt_ns.h"
 #include "bpfilter.h"
 #include "rnd.h"
 
@@ -75,13 +70,9 @@
 #include <netinet/if_inarp.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/mii/miivar.h>
 
@@ -93,14 +84,14 @@
 #include <dev/pci/pcidevs.h>
 
 #include <dev/cardbus/cardbusvar.h>
-#include <dev/cardbus/cardbusdevs.h>
+#include <dev/pci/pcidevs.h>
 
-static int fxp_cardbus_match __P((struct device *, struct cfdata *, void *));
-static void fxp_cardbus_attach __P((struct device *, struct device *, void *));
-static int fxp_cardbus_detach __P((struct device * self, int flags));
-static void fxp_cardbus_setup __P((struct fxp_softc * sc));
-static int fxp_cardbus_enable __P((struct fxp_softc * sc));
-static void fxp_cardbus_disable __P((struct fxp_softc * sc));
+static int fxp_cardbus_match(device_t, cfdata_t, void *);
+static void fxp_cardbus_attach(device_t, device_t, void *);
+static int fxp_cardbus_detach(device_t, int);
+static void fxp_cardbus_setup(struct fxp_softc *);
+static int fxp_cardbus_enable(struct fxp_softc *);
+static void fxp_cardbus_disable(struct fxp_softc *);
 
 struct fxp_cardbus_softc {
 	struct fxp_softc sc;
@@ -110,10 +101,8 @@ struct fxp_cardbus_softc {
 	bus_size_t size;
 };
 
-struct cfattach fxp_cardbus_ca = {
-	sizeof(struct fxp_cardbus_softc), fxp_cardbus_match, fxp_cardbus_attach,
-	    fxp_cardbus_detach, fxp_activate
-};
+CFATTACH_DECL_NEW(fxp_cardbus, sizeof(struct fxp_cardbus_softc),
+    fxp_cardbus_match, fxp_cardbus_attach, fxp_cardbus_detach, fxp_activate);
 
 #ifdef CBB_DEBUG
 #define DPRINTF(X) printf X
@@ -122,29 +111,24 @@ struct cfattach fxp_cardbus_ca = {
 #endif
 
 static int
-fxp_cardbus_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void   *aux;
+fxp_cardbus_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct cardbus_attach_args *ca = aux;
 
-	if (CARDBUS_VENDOR(ca->ca_id) == CARDBUS_VENDOR_INTEL &&
-	    CARDBUS_PRODUCT(ca->ca_id) == CARDBUS_PRODUCT_INTEL_82557)
+	if (CARDBUS_VENDOR(ca->ca_id) == PCI_VENDOR_INTEL &&
+	    CARDBUS_PRODUCT(ca->ca_id) == PCI_PRODUCT_INTEL_82557)
 		return (1);
 
 	return (0);
 }
 
 static void
-fxp_cardbus_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+fxp_cardbus_attach(struct device *parent, struct device *self,
+    void *aux)
 {
-	static const char __func__[] = "fxp_cardbus_attach";
-
-	struct fxp_softc *sc = (struct fxp_softc *) self;
-	struct fxp_cardbus_softc *csc = (struct fxp_cardbus_softc *) self;
+	struct fxp_cardbus_softc *csc = device_private(self);
+	struct fxp_softc *sc = &csc->sc;
 	struct cardbus_attach_args *ca = aux;
 	bus_space_tag_t iot, memt;
 	bus_space_handle_t ioh, memh;
@@ -152,6 +136,7 @@ fxp_cardbus_attach(parent, self, aux)
 	bus_addr_t adr;
 	bus_size_t size;
 
+	sc->sc_dev = self;
 	csc->ct = ca->ca_ct;
 
 	/*
@@ -173,7 +158,6 @@ fxp_cardbus_attach(parent, self, aux)
 	} else
 		panic("%s: failed to allocate mem and io space", __func__);
 
-
 	if (ca->ca_cis.cis1_info[0] && ca->ca_cis.cis1_info[1])
 		printf(": %s %s\n", ca->ca_cis.cis1_info[0],
 		    ca->ca_cis.cis1_info[1]);
@@ -188,20 +172,24 @@ fxp_cardbus_attach(parent, self, aux)
 	fxp_enable(sc);
 	fxp_attach(sc);
 	fxp_disable(sc);
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+	else
+		pmf_class_network_register(self, &sc->sc_ethercom.ec_if);
 }
 
 static void
 fxp_cardbus_setup(struct fxp_softc * sc)
 {
-	struct fxp_cardbus_softc *csc = (struct fxp_cardbus_softc *) sc;
-	struct cardbus_softc *psc =
-	    (struct cardbus_softc *) sc->sc_dev.dv_parent;
+	struct fxp_cardbus_softc *csc = (struct fxp_cardbus_softc *)sc;
+	struct cardbus_softc *psc = device_private(device_parent(sc->sc_dev));
 	cardbus_chipset_tag_t cc = psc->sc_cc;
 	cardbus_function_tag_t cf = psc->sc_cf;
 	pcireg_t command;
 
 	cardbustag_t tag = cardbus_make_tag(cc, cf, csc->ct->ct_bus,
-	    csc->ct->ct_dev, csc->ct->ct_func);
+	    csc->ct->ct_func);
 
 	command = Cardbus_conf_read(csc->ct, tag, CARDBUS_COMMAND_STATUS_REG);
 	if (csc->base0_reg) {
@@ -227,9 +215,8 @@ fxp_cardbus_setup(struct fxp_softc * sc)
 static int
 fxp_cardbus_enable(struct fxp_softc * sc)
 {
-	struct fxp_cardbus_softc *csc = (struct fxp_cardbus_softc *) sc;
-	struct cardbus_softc *psc =
-	    (struct cardbus_softc *) sc->sc_dev.dv_parent;
+	struct fxp_cardbus_softc *csc = (struct fxp_cardbus_softc *)sc;
+	struct cardbus_softc *psc = device_private(device_parent(sc->sc_dev));
 	cardbus_chipset_tag_t cc = psc->sc_cc;
 	cardbus_function_tag_t cf = psc->sc_cf;
 
@@ -242,13 +229,9 @@ fxp_cardbus_enable(struct fxp_softc * sc)
 	sc->sc_ih = cardbus_intr_establish(cc, cf, psc->sc_intrline, IPL_NET,
 	    fxp_intr, sc);
 	if (NULL == sc->sc_ih) {
-		printf("%s: couldn't establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt\n");
 		return 1;
 	}
-
-	printf("%s: interrupting at %d\n", sc->sc_dev.dv_xname,
-	    psc->sc_intrline);
 
 	return 0;
 }
@@ -256,30 +239,28 @@ fxp_cardbus_enable(struct fxp_softc * sc)
 static void
 fxp_cardbus_disable(struct fxp_softc * sc)
 {
-	struct cardbus_softc *psc =
-	    (struct cardbus_softc *) sc->sc_dev.dv_parent;
+	struct fxp_cardbus_softc *csc = (struct fxp_cardbus_softc *)sc;
+	struct cardbus_softc *psc = device_private(device_parent(sc->sc_dev));
 	cardbus_chipset_tag_t cc = psc->sc_cc;
 	cardbus_function_tag_t cf = psc->sc_cf;
 
 	/* Remove interrupt handler. */
 	cardbus_intr_disestablish(cc, cf, sc->sc_ih);
 
-	Cardbus_function_disable(((struct fxp_cardbus_softc *) sc)->ct);
+	Cardbus_function_disable(csc->ct);
 }
 
 static int
-fxp_cardbus_detach(self, flags)
-	struct device *self;
-	int flags;
+fxp_cardbus_detach(device_t self, int flags)
 {
-	struct fxp_softc *sc = (struct fxp_softc *) self;
-	struct fxp_cardbus_softc *csc = (struct fxp_cardbus_softc *) self;
+	struct fxp_cardbus_softc *csc = device_private(self);
+	struct fxp_softc *sc = &csc->sc;
 	struct cardbus_devfunc *ct = csc->ct;
 	int rv, reg;
 
 #ifdef DIAGNOSTIC
 	if (ct == NULL)
-		panic("%s: data structure lacks\n", sc->sc_dev.dv_xname);
+		panic("%s: data structure lacks", device_xname(self));
 #endif
 
 	rv = fxp_detach(sc);

@@ -1,9 +1,10 @@
-/*	$NetBSD: key_debug.h,v 1.5 2000/01/31 14:19:12 itojun Exp $	*/
+/*	$NetBSD: key_debug.h,v 1.11 2007/03/04 06:03:35 christos Exp $	*/
+/*	$KAME: key_debug.h,v 1.10 2001/08/05 08:37:52 itojun Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -15,7 +16,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -29,13 +30,10 @@
  * SUCH DAMAGE.
  */
 
-/* KAME Id: key_debug.h,v 1.3 2000/01/29 06:21:02 itojun Exp */
-
 #ifndef _NETKEY_KEY_DEBUG_H_
 #define _NETKEY_KEY_DEBUG_H_
 
-#if !defined(_KERNEL) || (defined(_KERNEL) && defined(IPSEC_DEBUG))
-
+#ifdef _KERNEL
 /* debug flags */
 #define KEYDEBUG_STAMP		0x00000001 /* path */
 #define KEYDEBUG_DATA		0x00000002 /* data */
@@ -55,9 +53,9 @@
 #define KEYDEBUG_IPSEC_DATA	(KEYDEBUG_IPSEC | KEYDEBUG_DATA)
 #define KEYDEBUG_IPSEC_DUMP	(KEYDEBUG_IPSEC | KEYDEBUG_DUMP)
 
-#define KEYDEBUG(lev,arg) if ((key_debug_level & (lev)) == (lev)) { arg; }
+#define KEYDEBUG(lev,arg) \
+	do { if ((key_debug_level & (lev)) == (lev)) { arg; } } while (/*CONSTCOND*/ 0)
 
-#ifdef _KERNEL
 extern u_int32_t key_debug_level;
 #endif /*_KERNEL*/
 
@@ -84,14 +82,7 @@ extern void kdebug_mbuf __P((struct mbuf *));
 struct sockaddr;
 extern void kdebug_sockaddr __P((struct sockaddr *));
 
-#else
+extern void ipsec_hexdump __P((void *, int));
+extern void ipsec_bindump __P((void *, int));
 
-#define KEYDEBUG(lev,arg)
-
-#endif /*!defined(_KERNEL) || (defined(_KERNEL) && defined(IPSEC_DEBUG))*/
-
-extern void ipsec_hexdump __P((caddr_t, int));
-extern void ipsec_bindump __P((caddr_t, int));
-
-#endif /* _NETKEY_KEY_DEBUG_H_ */
-
+#endif /* !_NETKEY_KEY_DEBUG_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: memreg.h,v 1.7 1998/09/21 10:32:01 pk Exp $ */
+/*	$NetBSD: memreg.h,v 1.9 2005/11/14 03:30:49 uwe Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -71,7 +67,7 @@ volatile u_int	*par_err_reg;	/* virtual address; NULL if not yet mapped */
  * sun4m ...
  */
 struct trapframe;
-void memerr4_4c __P((unsigned, u_int, u_int, u_int, u_int, struct trapframe *));
-void memerr4m __P((unsigned, u_int, u_int, struct trapframe *));
-void viking_memerr __P((unsigned, u_int, u_int, struct trapframe *));
-void hypersparc_memerr __P((unsigned, u_int, u_int, struct trapframe *));
+void memerr4_4c(unsigned, u_int, u_int, u_int, u_int, struct trapframe *);
+void memerr4m(unsigned, u_int, u_int, struct trapframe *);
+void viking_memerr(unsigned, u_int, u_int, struct trapframe *);
+void hypersparc_memerr(unsigned, u_int, u_int, struct trapframe *);

@@ -1,12 +1,12 @@
-/*	$NetBSD: msg.h,v 1.12 2000/03/28 05:14:04 simonb Exp $	*/
+/*	$NetBSD: msg.h,v 1.22 2008/04/28 20:24:11 martin Exp $	*/
 
 /*-
- * Copyright (c) 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
  * by Jason R. Thorpe of the Numerical Aerospace Simulation Facility,
- * NASA Ames Research Center.
+ * NASA Ames Research Center, and by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -59,7 +52,12 @@
 #ifndef _SYS_MSG_H_
 #define _SYS_MSG_H_
 
+#include <sys/featuretest.h>
 #include <sys/ipc.h>
+#ifdef _KERNEL
+#include <sys/condvar.h>
+#include <sys/mutex.h>
+#endif
 
 #ifdef _KERNEL
 struct __msg {
@@ -96,28 +94,7 @@ struct msqid_ds {
 	msglen_t	_msg_cbytes;	/* # of bytes currently in queue */
 };
 
-#ifdef _KERNEL
-/*
- * Old message queue data structure used before NetBSD 1.5.
- */
-struct msqid_ds14 {
-	struct	ipc_perm14 msg_perm;	/* msg queue permission bits */
-	struct	__msg *msg_first;	/* first message in the queue */
-	struct	__msg *msg_last;	/* last message in the queue */
-	u_long	msg_cbytes;	/* number of bytes in use on the queue */
-	u_long	msg_qnum;	/* number of msgs in the queue */
-	u_long	msg_qbytes;	/* max # of bytes on the queue */
-	pid_t	msg_lspid;	/* pid of last msgsnd() */
-	pid_t	msg_lrpid;	/* pid of last msgrcv() */
-	time_t	msg_stime;	/* time of last msgsnd() */
-	long	msg_pad1;
-	time_t	msg_rtime;	/* time of last msgrcv() */
-	long	msg_pad2;
-	time_t	msg_ctime;	/* time of last msgctl() */
-	long	msg_pad3;
-	long	msg_pad4[4];
-};
-
+#if defined(_NETBSD_SOURCE)
 /*
  * Based on the configuration parameters described in an SVR2 (yes, two)
  * config(1m) man page.
@@ -129,15 +106,35 @@ struct msqid_ds14 {
  * two between 8 and 1024 inclusive (and panic's if it isn't).
  */
 struct msginfo {
-	int	msgmax,		/* max chars in a message */
-		msgmni,		/* max message queue identifiers */
-		msgmnb,		/* max chars in a queue */
-		msgtql,		/* max messages in system */
-		msgssz,		/* size of a message segment
+	int32_t	msgmax;		/* max chars in a message */
+	int32_t	msgmni;		/* max message queue identifiers */
+	int32_t	msgmnb;		/* max chars in a queue */
+	int32_t	msgtql;		/* max messages in system */
+	int32_t	msgssz;		/* size of a message segment
 				   (see notes above) */
-		msgseg;		/* number of message segments */
+	int32_t	msgseg;		/* number of message segments */
 };
-extern struct msginfo msginfo;
+
+/* Warning: 64-bit structure padding is needed here */
+struct msgid_ds_sysctl {
+	struct		ipc_perm_sysctl msg_perm;
+	uint64_t	msg_qnum;
+	uint64_t	msg_qbytes;
+	uint64_t	_msg_cbytes;
+	pid_t		msg_lspid;
+	pid_t		msg_lrpid;
+	time_t		msg_stime;
+	time_t		msg_rtime;
+	time_t		msg_ctime;
+	int32_t		pad;
+};
+struct msg_sysctl_info {
+	struct	msginfo msginfo;
+	struct	msgid_ds_sysctl msgids[1];
+};
+#endif /* !_POSIX_C_SOURCE && !_XOPEN_SOURCE */
+
+#ifdef _KERNEL
 
 #ifndef MSGSSZ
 #define MSGSSZ	8		/* Each segment must be 2^N long */
@@ -173,10 +170,14 @@ struct msgmap {
     				/* 0..(MSGSEG-1) -> index of next segment */
 };
 
-char *msgpool;			/* MSGMAX byte long msg buffer pool */
-struct msgmap *msgmaps;		/* MSGSEG msgmap structures */
-struct __msg *msghdrs;		/* MSGTQL msg headers */
-struct msqid_ds *msqids;	/* MSGMNI msqid_ds struct's */
+typedef struct kmsq {
+	struct msqid_ds msq_u;
+	kcondvar_t	msq_cv;
+} kmsq_t;
+
+extern struct msginfo msginfo;
+extern kmsq_t	*msqs;		/* MSGMNI queues */
+extern kmutex_t	msgmutex;
 
 #define MSG_LOCKED	01000	/* Is this msqid_ds locked? */
 
@@ -186,19 +187,22 @@ struct msqid_ds *msqids;	/* MSGMNI msqid_ds struct's */
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int	msgctl __P((int, int, struct msqid_ds *)) __RENAME(__msgctl13);
-int	msgget __P((key_t, int));
-int	msgsnd __P((int, const void *, size_t, int));
-ssize_t	msgrcv __P((int, void *, size_t, long, int));
+int	msgctl(int, int, struct msqid_ds *) __RENAME(__msgctl13);
+int	msgget(key_t, int);
+int	msgsnd(int, const void *, size_t, int);
+ssize_t	msgrcv(int, void *, size_t, long, int);
 __END_DECLS
 #else
+#include <sys/systm.h>
+
 struct proc;
 
-void	msginit __P((void));
-int	msgctl1 __P((struct proc *, int, int, struct msqid_ds *));
-
-void	msqid_ds14_to_native __P((struct msqid_ds14 *, struct msqid_ds *));
-void	native_to_msqid_ds14 __P((struct msqid_ds *, struct msqid_ds14 *));
+void	msginit(void);
+int	msgctl1(struct lwp *, int, int, struct msqid_ds *);
+int	msgsnd1(struct lwp *, int, const char *, size_t, int, size_t,
+    copyin_t);
+int	msgrcv1(struct lwp *, int, char *, size_t, long, int, size_t,
+    copyout_t, register_t *);
 #endif /* !_KERNEL */
 
 #endif /* !_SYS_MSG_H_ */

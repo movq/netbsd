@@ -1,13 +1,15 @@
-#	$NetBSD: Makefile,v 1.2 2000/03/29 13:54:45 simonb Exp $
+#	$NetBSD: Makefile,v 1.6 2006/08/26 18:15:39 christos Exp $
 
 PROG=	ntpdate
 MAN=	ntpdate.8
 SRCS=	ntpdate.c
 
-SRCS+=	version.c
-CLEANFILES+=version.c version.o .version
+.include <bsd.own.mk>
+
+LDADD+=		-L${LIBISC} -lisc
+DPADD+=		${LIBISC}/libisc.a
+
+LDADD+=	-lutil -lm
+DPADD+=	${LIBUTIL} ${LIBM}
 
 .include <bsd.prog.mk>
-
-version.c: ${OBJS:S/version.o//} ${LIBNTP}/libntp.a
-	sh ${.CURDIR}/../scripts/mkver ntpd

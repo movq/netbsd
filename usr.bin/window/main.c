@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.9 1998/10/14 00:58:48 wsanchez Exp $	*/
+/*	$NetBSD: main.c,v 1.14 2008/07/21 14:19:28 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.2 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.9 1998/10/14 00:58:48 wsanchez Exp $");
+__RCSID("$NetBSD: main.c,v 1.14 2008/07/21 14:19:28 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -62,15 +58,11 @@ __RCSID("$NetBSD: main.c,v 1.9 1998/10/14 00:58:48 wsanchez Exp $");
 #include "char.h"
 #include "local.h"
 
-int	main __P((int, char **));
-void	usage __P((void));
-
-extern char *__progname;	/* from crt0.o */
+int	main(int, char **);
+void	usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	char *p;
 	char fflag = 0;
@@ -81,7 +73,7 @@ main(argc, argv)
 	int ch;
 
 	escapec = ESCAPEC;	
-	debug = strcmp(__progname, "a.out") == 0;
+	debug = strcmp(getprogname(), "a.out") == 0;
 	while ((ch = getopt(argc, argv, "fc:e:tdDx")) != -1) {
 		switch (ch) {
 		case 'f':
@@ -198,10 +190,10 @@ bad:
 }
 
 void
-usage()
+usage(void)
 {
 	(void) fprintf(stderr,
-	    "Usage: %s [-e escape-char] [-c command] [-t] [-f] [-d]\n",
-	    __progname);
+	    "usage: %s [-e escape-char] [-c command] [-t] [-f] [-d]\n",
+	    getprogname());
 	exit(1);
 }

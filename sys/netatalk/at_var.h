@@ -1,4 +1,4 @@
-/*	$NetBSD: at_var.h,v 1.2 2000/03/23 07:03:27 thorpej Exp $	 */
+/*	$NetBSD: at_var.h,v 1.7 2007/08/30 02:17:36 dyoung Exp $	 */
 
 /*
  * Copyright (c) 1990,1991 Regents of The University of Michigan.
@@ -27,7 +27,7 @@
  */
 
 #ifndef _NETATALK_AT_VAR_H_
-#define _NETATALK_AT_VAR_H_ 1
+#define _NETATALK_AT_VAR_H_
 
 #include <sys/callout.h>
 
@@ -60,16 +60,50 @@ struct at_aliasreq {
 #define AA_SAT(aa) \
     (&(aa->aa_addr))
 #define satosat(sa)	((struct sockaddr_at *)(sa))
+#define satocsat(sa)	((const struct sockaddr_at *)(sa))
 
 #define AFA_ROUTE	0x0001
 #define AFA_PROBING	0x0002
 #define AFA_PHASE2	0x0004
 
 #ifdef _KERNEL
+int sockaddr_at_cmp(const struct sockaddr *, const struct sockaddr *);
+
+static inline void
+sockaddr_at_init1(struct sockaddr_at *sat, const struct at_addr *addr,
+    uint8_t port)
+{
+	sat->sat_port = port;
+	sat->sat_addr = *addr;
+	memset(&sat->sat_range, 0, sizeof(sat->sat_range));
+}
+
+static inline void
+sockaddr_at_init(struct sockaddr_at *sat, const struct at_addr *addr,
+    uint8_t port)
+{
+	sat->sat_family = AF_APPLETALK;
+	sat->sat_len = sizeof(*sat);
+	sockaddr_at_init1(sat, addr, port);
+}
+
+static inline struct sockaddr *
+sockaddr_at_alloc(const struct at_addr *addr, uint8_t port, int flags)
+{
+	struct sockaddr *sa;
+
+	sa = sockaddr_alloc(AF_APPLETALK, sizeof(struct sockaddr_at), flags);
+
+	if (sa == NULL)
+		return NULL;
+
+	sockaddr_at_init1(satosat(sa), addr, port);
+
+	return sa;
+}
 TAILQ_HEAD(at_ifaddrhead, at_ifaddr);
 extern struct at_ifaddrhead at_ifaddr;
-struct ifqueue  atintrq1, atintrq2;
-int atdebug;
+extern struct ifqueue atintrq1, atintrq2;
 #endif
 
-#endif /* _NETATALK_AT_VAR_H_ */
+#endif /* !_NETATALK_AT_VAR_H_ */

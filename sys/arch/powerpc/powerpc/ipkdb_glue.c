@@ -1,4 +1,4 @@
-/*	$NetBSD: ipkdb_glue.c,v 1.2 1997/04/16 22:12:42 thorpej Exp $	*/
+/*	$NetBSD: ipkdb_glue.c,v 1.9 2007/01/24 13:08:14 hubertf Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,6 +32,8 @@
  */
 
 #include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ipkdb_glue.c,v 1.9 2007/01/24 13:08:14 hubertf Exp $");
+
 #include <sys/param.h>
 
 #include <ipkdb/ipkdb.h>
@@ -41,8 +43,11 @@
 #include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
+#include <machine/vmparam.h>
 
 int ipkdbregs[NREG];
+
+int ipkdb_trap_glue __P((struct trapframe *));
 
 #ifdef	IPKDBUSERHACK
 int ipkdbsr;			/* TEMPRORARY (Really needs some better mechanism)	XXX */
@@ -50,20 +55,19 @@ int savesr;
 #endif
 
 void
-ipkdbinit()
+ipkdbinit(void)
 {
 }
 
 int
-ipkdb_poll()
+ipkdb_poll(void)
 {
 	/* for now: */
 	return 0;
 }
 
 int
-ipkdb_trap_glue(frame)
-	struct trapframe *frame;
+ipkdb_trap_glue(struct trapframe *frame)
 {
 	if (!(frame->srr1 & PSL_PR)
 	    && (frame->exc == EXC_TRC
@@ -72,7 +76,7 @@ ipkdb_trap_glue(frame)
 		|| frame->exc == EXC_BPT)) {
 #ifdef	IPKDBUSERHACK
 		/* XXX see above */
-		asm ("mfsr %0,%1" : "=r"(savesr) : "n"(USER_SR));
+		__asm ("mfsr %0,%1" : "=r"(savesr) : "n"(USER_SR));
 #endif
 		ipkdbzero(ipkdbregs, sizeof ipkdbregs);
 		ipkdbcopy(frame->fixreg, &ipkdbregs[FIX], NFIX * sizeof(int));
@@ -100,7 +104,7 @@ ipkdb_trap_glue(frame)
 		frame->ctr = ipkdbregs[CTR];
 		frame->xer = ipkdbregs[XER];
 #ifdef	IPKDBUSERHACK
-		asm ("mtsr %0,%1; isync" :: "n"(USER_SR), "r"(savesr));
+		__asm ("mtsr %0,%1; isync" :: "n"(USER_SR), "r"(savesr));
 #endif
 		return 1;
 	}

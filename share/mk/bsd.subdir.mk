@@ -1,14 +1,9 @@
-#	$NetBSD: bsd.subdir.mk,v 1.32 2000/03/11 14:51:40 aidan Exp $
+#	$NetBSD: bsd.subdir.mk,v 1.49 2008/10/25 14:58:00 apb Exp $
 #	@(#)bsd.subdir.mk	8.1 (Berkeley) 6/8/93
 
-.if !target(__initialized__)
-__initialized__:
-.if exists(${.CURDIR}/../Makefile.inc)
-.include "${.CURDIR}/../Makefile.inc"
-.endif
-.include <bsd.own.mk>
-.MAIN:		all
-.endif
+.include <bsd.init.mk>
+
+.if !defined(NOSUBDIR)					# {
 
 .for dir in ${SUBDIR}
 .if exists(${dir}.${MACHINE})
@@ -18,25 +13,34 @@ __REALSUBDIR+=${dir}
 .endif
 .endfor
 
+__recurse: .USE
+	@${MAKEDIRTARGET} ${.TARGET:C/^[^-]*-//} ${.TARGET:C/-.*$//}
+
+.if make(cleandir)
+__RECURSETARG=	${TARGETS:Nclean}
+clean:
+.else
+__RECURSETARG=	${TARGETS}
+.endif
+
+# for obscure reasons, we can't do a simple .if ${dir} == ".WAIT"
+# but have to assign to __TARGDIR first.
+.for targ in ${__RECURSETARG}
 .for dir in ${__REALSUBDIR}
-.for targ in ${TARGETS}
-.PHONY: ${targ}-${dir}
-${targ}-${dir}: .MAKE
-	@case "${dir}" in /*) \
-		echo "${targ} ===> ${dir}"; \
-		cd ${dir}; \
-		${MAKE} "_THISDIR_=${dir}/" ${targ}; \
-		;; \
-	*) \
-		echo "${targ} ===> ${_THISDIR_}${dir}"; \
-		cd ${.CURDIR}/${dir}; \
-		${MAKE} "_THISDIR_=${_THISDIR_}${dir}/" ${targ}; \
-		;; \
-	esac
-subdir-${targ}: ${targ}-${dir}
-${targ}: subdir-${targ}
+__TARGDIR := ${dir}
+.if ${__TARGDIR} == ".WAIT"
+SUBDIR_${targ} += .WAIT
+.elif !commands(${targ}-${dir})
+${targ}-${dir}: .PHONY .MAKE __recurse
+SUBDIR_${targ} += ${targ}-${dir}
+.endif
 .endfor
+.if defined(__REALSUBDIR)
+subdir-${targ}: .PHONY ${SUBDIR_${targ}}
+${targ}: subdir-${targ}
+.endif
 .endfor
 
-# Make sure all of the standard targets are defined, even if they do nothing.
-${TARGETS}:
+.endif	# ! NOSUBDIR					# }
+
+${TARGETS}:	# ensure existence

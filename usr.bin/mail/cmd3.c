@@ -1,4 +1,4 @@
-/*	$NetBSD: cmd3.c,v 1.11 1999/02/09 04:51:30 dean Exp $	*/
+/*	$NetBSD: cmd3.c,v 1.39 2007/10/30 16:08:11 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,91 +34,75 @@
 #if 0
 static char sccsid[] = "@(#)cmd3.c	8.2 (Berkeley) 4/20/95";
 #else
-__RCSID("$NetBSD: cmd3.c,v 1.11 1999/02/09 04:51:30 dean Exp $");
+__RCSID("$NetBSD: cmd3.c,v 1.39 2007/10/30 16:08:11 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include "rcv.h"
+#include <assert.h>
+#include <util.h>
 #include "extern.h"
+#include "mime.h"
+#include "thread.h"
 
 /*
  * Mail -- a mail program
  *
  * Still more user commands.
  */
-static int diction __P((const void *, const void *));
+
 
 /*
- * Process a shell escape by saving signals, ignoring signals,
- * and forking a sh -c
+ * Do a dictionary order comparison of the arguments from
+ * qsort.
  */
-int
-shell(v)
-	void *v;
+static int
+diction(const void *a, const void *b)
 {
-	char *str = v;
-	sig_t sigint = signal(SIGINT, SIG_IGN);
-	char *shell;
-	char cmd[BUFSIZ];
-
-	(void) strcpy(cmd, str);
-	if (bangexp(cmd) < 0)
-		return 1;
-	if ((shell = value("SHELL")) == NOSTR)
-		shell = _PATH_CSHELL;
-	(void) run_command(shell, 0, -1, -1, "-c", cmd, NOSTR);
-	(void) signal(SIGINT, sigint);
-	printf("!\n");
-	return 0;
+	return strcmp(*(const char *const *)a, *(const char *const *)b);
 }
 
 /*
- * Fork an interactive shell.
+ * Sort the passed string vector into ascending dictionary
+ * order.
  */
-/*ARGSUSED*/
-int
-dosh(v)
-	void *v;
+PUBLIC void
+sort(const char **list)
 {
-	sig_t sigint = signal(SIGINT, SIG_IGN);
-	char *shell;
+	const char **ap;
 
-	if ((shell = value("SHELL")) == NOSTR)
-		shell = _PATH_CSHELL;
-	(void) run_command(shell, 0, -1, -1, NOSTR, NOSTR, NOSTR);
-	(void) signal(SIGINT, sigint);
-	putchar('\n');
-	return 0;
+	for (ap = list; *ap != NULL; ap++)
+		continue;
+	if (ap-list < 2)
+		return;
+	qsort(list, (size_t)(ap-list), sizeof(*list), diction);
 }
 
 /*
  * Expand the shell escape by expanding unescaped !'s into the
  * last issued command where possible.
  */
-
-char	lastbang[128];
-
-int
-bangexp(str)
-	char *str;
+static int
+bangexp(char *str)
 {
-	char bangbuf[BUFSIZ];
+	static char lastbang[128];
+	char bangbuf[LINESIZE];
 	char *cp, *cp2;
 	int n;
 	int changed = 0;
 
 	cp = str;
 	cp2 = bangbuf;
-	n = BUFSIZ;
+	n = sizeof(bangbuf);	/* bytes left in bangbuf */
 	while (*cp) {
 		if (*cp == '!') {
-			if (n < strlen(lastbang)) {
+			if (n < (int)strlen(lastbang)) {
 overf:
-				printf("Command buffer overflow\n");
-				return(-1);
+				(void)printf("Command buffer overflow\n");
+				return -1;
 			}
 			changed++;
-			strcpy(cp2, lastbang);
+			(void)strcpy(cp2, lastbang);
 			cp2 += strlen(lastbang);
 			n -= strlen(lastbang);
 			cp++;
@@ -141,76 +121,167 @@ overf:
 	}
 	*cp2 = 0;
 	if (changed) {
-		printf("!%s\n", bangbuf);
-		fflush(stdout);
+		(void)printf("!%s\n", bangbuf);
+		(void)fflush(stdout);
 	}
-	strcpy(str, bangbuf);
-	strncpy(lastbang, bangbuf, 128);
-	lastbang[127] = 0;
-	return(0);
+	(void)strcpy(str, bangbuf);
+	(void)strlcpy(lastbang, bangbuf, sizeof(lastbang));
+	return 0;
+}
+
+/*
+ * Process a shell escape by saving signals, ignoring signals,
+ * and forking a sh -c
+ */
+PUBLIC int
+shell(void *v)
+{
+	char *str = v;
+	sig_t sigint = signal(SIGINT, SIG_IGN);
+	const char *shellcmd;
+	char cmd[LINESIZE];
+
+	(void)strcpy(cmd, str);
+	if (bangexp(cmd) < 0)
+		return 1;
+	if ((shellcmd = value(ENAME_SHELL)) == NULL)
+		shellcmd = _PATH_CSHELL;
+	(void)run_command(shellcmd, 0, 0, 1, "-c", cmd, NULL);
+	(void)signal(SIGINT, sigint);
+	(void)printf("!\n");
+	return 0;
+}
+
+/*
+ * Fork an interactive shell.
+ */
+/*ARGSUSED*/
+PUBLIC int
+dosh(void *v __unused)
+{
+	sig_t sigint = signal(SIGINT, SIG_IGN);
+	const char *shellcmd;
+
+	if ((shellcmd = value(ENAME_SHELL)) == NULL)
+		shellcmd = _PATH_CSHELL;
+	(void)run_command(shellcmd, 0, 0, 1, NULL);
+	(void)signal(SIGINT, sigint);
+	(void)putchar('\n');
+	return 0;
 }
 
 /*
  * Print out a nice help message from some file or another.
  */
 
-int
-help(v)
-	void *v;
+/*ARGSUSED*/
+PUBLIC int
+help(void *v __unused)
 {
-	int c;
-	FILE *f;
-
-	if ((f = Fopen(_PATH_HELP, "r")) == NULL) {
-		perror(_PATH_HELP);
-		return(1);
-	}
-	while ((c = getc(f)) != EOF)
-		putchar(c);
-	Fclose(f);
-	return(0);
+	cathelp(_PATH_HELP);
+	return 0;
 }
 
 /*
  * Change user's working directory.
  */
-int
-schdir(v)
-	void *v;
+PUBLIC int
+schdir(void *v)
 {
 	char **arglist = v;
-	char *cp;
+	const char *cp;
 
-	if (*arglist == NOSTR)
+	if (*arglist == NULL)
 		cp = homedir;
 	else
-		if ((cp = expand(*arglist)) == NOSTR)
-			return(1);
+		if ((cp = expand(*arglist)) == NULL)
+			return 1;
 	if (chdir(cp) < 0) {
-		perror(cp);
-		return(1);
+		warn("%s", cp);
+		return 1;
 	}
 	return 0;
 }
 
-int
-respond(v)
-	void *v;
+/*
+ * Return the smopts field if "ReplyAsRecipient" is defined.
+ */
+static struct name *
+set_smopts(struct message *mp)
 {
-	int *msgvec = v;
-	if (value("Replyall") == NOSTR)
-		return (_respond(msgvec));
-	else
-		return (_Respond(msgvec));
+	char *cp;
+	struct name *np = NULL;
+	char *reply_as_recipient = value(ENAME_REPLYASRECIPIENT);
+
+	if (reply_as_recipient &&
+	    (cp = skin(hfield("to", mp))) != NULL &&
+	    extract(cp, GTO)->n_flink == NULL) {  /* check for one recipient */
+		char *p, *q;
+		size_t len = strlen(cp);
+		/*
+		 * XXX - perhaps we always want to ignore
+		 *       "undisclosed-recipients:;" ?
+		 */
+		for (p = q = reply_as_recipient; *p; p = q) {
+			while (*q != '\0' && *q != ',' && !is_WSP(*q))
+				q++;
+			if (p + len == q && strncasecmp(cp, p, len) == 0)
+				return np;
+			while (*q == ',' || is_WSP(*q))
+				q++;
+		}
+		np = extract(__UNCONST("-f"), GSMOPTS);
+		np = cat(np, extract(cp, GSMOPTS));
+	}
+
+	return np;
+}
+
+/*
+ * Modify the subject we are replying to to begin with Re: if
+ * it does not already.
+ */
+static char *
+reedit(char *subj, const char *pref)
+{
+	char *newsubj;
+	size_t preflen;
+
+	assert(pref != NULL);
+	if (subj == NULL)
+		return __UNCONST(pref);
+	preflen = strlen(pref);
+	if (strncasecmp(subj, pref, preflen) == 0)
+		return subj;
+	newsubj = salloc(strlen(subj) + preflen + 1 + 1);
+	(void)sprintf(newsubj, "%s %s", pref, subj);
+	return newsubj;
+}
+
+/*
+ * Set the "In-Reply-To" and "References" header fields appropriately.
+ * Used in replies.
+ */
+static void
+set_ident_fields(struct header *hp, struct message *mp)
+{
+	char *in_reply_to;
+	char *references;
+
+	in_reply_to = hfield("message-id", mp);
+	hp->h_in_reply_to = in_reply_to;
+
+	references = hfield("references", mp);
+	hp->h_references = extract(references, GMISC);
+	hp->h_references = cat(hp->h_references, extract(in_reply_to, GMISC));
 }
 
 /*
  * Reply to a list of messages.  Extract each name from the
  * message header and send them off to mail1()
  */
-int
-_respond(msgvec)
-	int *msgvec;
+static int
+respond_core(int *msgvec)
 {
 	struct message *mp;
 	char *cp, *rcv, *replyto;
@@ -218,21 +289,24 @@ _respond(msgvec)
 	struct name *np;
 	struct header head;
 
+	/* ensure that all header fields are initially NULL */
+	(void)memset(&head, 0, sizeof(head));
+
 	if (msgvec[1] != 0) {
-		printf("Sorry, can't reply to multiple messages at once\n");
-		return(1);
+		(void)printf("Sorry, can't reply to multiple messages at once\n");
+		return 1;
 	}
-	mp = &message[msgvec[0] - 1];
+	mp = get_message(msgvec[0]);
 	touch(mp);
 	dot = mp;
-	if ((rcv = skin(hfield("from", mp))) == NOSTR)
+	if ((rcv = skin(hfield("from", mp))) == NULL)
 		rcv = skin(nameof(mp, 1));
-	if ((replyto = skin(hfield("reply-to", mp))) != NOSTR)
+	if ((replyto = skin(hfield("reply-to", mp))) != NULL)
 		np = extract(replyto, GTO);
-	else if ((cp = skin(hfield("to", mp))) != NOSTR)
+	else if ((cp = skin(hfield("to", mp))) != NULL)
 		np = extract(cp, GTO);
 	else
-		np = NIL;
+		np = NULL;
 	np = elide(np);
 	/*
 	 * Delete my name from the reply list,
@@ -242,18 +316,18 @@ _respond(msgvec)
 	if (altnames)
 		for (ap = altnames; *ap; ap++)
 			np = delname(np, *ap);
-	if (np != NIL && replyto == NOSTR)
+	if (np != NULL && replyto == NULL)
 		np = cat(np, extract(rcv, GTO));
-	else if (np == NIL) {
-		if (replyto != NOSTR)
-			printf("Empty reply-to field -- replying to author\n");
+	else if (np == NULL) {
+		if (replyto != NULL)
+			(void)printf("Empty reply-to field -- replying to author\n");
 		np = extract(rcv, GTO);
 	}
 	head.h_to = np;
-	if ((head.h_subject = hfield("subject", mp)) == NOSTR)
+	if ((head.h_subject = hfield("subject", mp)) == NULL)
 		head.h_subject = hfield("subj", mp);
-	head.h_subject = reedit(head.h_subject);
-	if (replyto == NOSTR && (cp = skin(hfield("cc", mp))) != NOSTR) {
+	head.h_subject = reedit(head.h_subject, "Re:");
+	if (replyto == NULL && (cp = skin(hfield("cc", mp))) != NULL) {
 		np = elide(extract(cp, GCC));
 		np = delname(np, myname);
 		if (altnames != 0)
@@ -261,85 +335,296 @@ _respond(msgvec)
 				np = delname(np, *ap);
 		head.h_cc = np;
 	} else
-		head.h_cc = NIL;
-	head.h_bcc = NIL;
-	head.h_smopts = NIL;
+		head.h_cc = NULL;
+	head.h_bcc = NULL;
+	head.h_smopts = set_smopts(mp);
+#ifdef MIME_SUPPORT
+	head.h_attach = NULL;
+#endif
+	set_ident_fields(&head, mp);
 	mail1(&head, 1);
-	return(0);
+	return 0;
 }
 
 /*
- * Modify the subject we are replying to to begin with Re: if
- * it does not already.
+ * Reply to a series of messages by simply mailing to the senders
+ * and not messing around with the To: and Cc: lists as in normal
+ * reply.
  */
-char *
-reedit(subj)
-	char *subj;
+static int
+Respond_core(int msgvec[])
 {
-	char *newsubj;
+	struct header head;
+	struct message *mp;
+	int *ap;
+	char *cp;
 
-	if (subj == NOSTR)
-		return NOSTR;
-	if ((subj[0] == 'r' || subj[0] == 'R') &&
-	    (subj[1] == 'e' || subj[1] == 'E') &&
-	    subj[2] == ':')
-		return subj;
-	newsubj = salloc(strlen(subj) + 5);
-	strcpy(newsubj, "Re: ");
-	strcpy(newsubj + 4, subj);
-	return newsubj;
+	/* ensure that all header fields are initially NULL */
+	(void)memset(&head, 0, sizeof(head));
+
+	head.h_to = NULL;
+	for (ap = msgvec; *ap != 0; ap++) {
+		mp = get_message(*ap);
+		touch(mp);
+		dot = mp;
+		if ((cp = skin(hfield("from", mp))) == NULL)
+			cp = skin(nameof(mp, 2));
+		head.h_to = cat(head.h_to, extract(cp, GTO));
+	}
+	if (head.h_to == NULL)
+		return 0;
+	mp = get_message(msgvec[0]);
+	if ((head.h_subject = hfield("subject", mp)) == NULL)
+		head.h_subject = hfield("subj", mp);
+	head.h_subject = reedit(head.h_subject, "Re:");
+	head.h_cc = NULL;
+	head.h_bcc = NULL;
+	head.h_smopts = set_smopts(mp);
+#ifdef MIME_SUPPORT
+	head.h_attach = NULL;
+#endif
+	set_ident_fields(&head, mp);
+	mail1(&head, 1);
+	return 0;
+}
+
+PUBLIC int
+respond(void *v)
+{
+	int *msgvec = v;
+	if (value(ENAME_REPLYALL) == NULL)
+		return respond_core(msgvec);
+	else
+		return Respond_core(msgvec);
+}
+
+PUBLIC int
+Respond(void *v)
+{
+	int *msgvec = v;
+	if (value(ENAME_REPLYALL) == NULL)
+		return Respond_core(msgvec);
+	else
+		return respond_core(msgvec);
+}
+
+#ifdef MIME_SUPPORT
+static int
+forward_one(int msgno, struct name *h_to)
+{
+	struct attachment attach;
+	struct message *mp;
+	struct header hdr;
+
+	mp = get_message(msgno);
+	if (mp == NULL) {
+		(void)printf("no such message %d\n", msgno);
+		return 1;
+	}
+	(void)printf("message %d\n", msgno);
+
+	(void)memset(&attach, 0, sizeof(attach));
+	attach.a_type = ATTACH_MSG;
+	attach.a_msg = mp;
+	attach.a_Content = get_mime_content(&attach, 0);
+
+	(void)memset(&hdr, 0, sizeof(hdr));
+	hdr.h_to = h_to;
+	if ((hdr.h_subject = hfield("subject", mp)) == NULL)
+		hdr.h_subject = hfield("subj", mp);
+	hdr.h_subject = reedit(hdr.h_subject, "Fwd:");
+	hdr.h_attach = &attach;
+	hdr.h_smopts = set_smopts(mp);
+
+	set_ident_fields(&hdr, mp);
+	mail1(&hdr, 1);
+	return 0;
+}
+
+PUBLIC int
+forward(void *v)
+{
+	int *msgvec = v;
+	int *ip;
+	struct header hdr;
+	int rval;
+
+	if (forwardtab[0].i_count == 0) {
+		/* setup the forward tab */
+		add_ignore("Status", forwardtab);
+	}
+	(void)memset(&hdr, 0, sizeof(hdr));
+	if ((rval = grabh(&hdr, GTO)) != 0)
+		return rval;
+
+	if (hdr.h_to == NULL) {
+		(void)printf("address missing!\n");
+		return 1;
+	}
+	for ( ip = msgvec; *ip; ip++) {
+		int e;
+		if ((e = forward_one(*ip, hdr.h_to)) != 0)
+			return e;
+	}
+	return 0;
+}
+#endif /* MIME_SUPPORT */
+
+static int
+bounce_one(int msgno, const char **smargs, struct name *h_to)
+{
+	char mailtempname[PATHSIZE];
+	struct message *mp;
+	int fd;
+	FILE *obuf;
+	int rval;
+
+	rval = 0;
+
+	obuf = NULL;
+	(void)snprintf(mailtempname, sizeof(mailtempname),
+	    "%s/mail.RsXXXXXXXXXX", tmpdir);
+	if ((fd = mkstemp(mailtempname)) == -1 ||
+	    (obuf = Fdopen(fd, "w+")) == NULL) {
+		if (fd != -1)
+			(void)close(fd);
+		warn("%s", mailtempname);
+		rval = 1;
+		goto done;
+	}
+	(void)rm(mailtempname);
+
+	mp = get_message(msgno);
+
+	if (mp == NULL) {
+		(void)printf("no such message %d\n", msgno);
+		rval = 1;
+		goto done;
+	}
+	else {
+		char *cp;
+		char **ap;
+		struct name *np;
+		struct header hdr;
+
+		/*
+		 * Construct and output a new "To:" field:
+		 * Remove our address from anything in the old "To:" field
+		 * and append that list to the bounce address(es).
+		 */
+		np = NULL;
+		if ((cp = skin(hfield("to", mp))) != NULL)
+			np = extract(cp, GTO);
+		np = delname(np, myname);
+		if (altnames)
+			for (ap = altnames; *ap; ap++)
+				np = delname(np, *ap);
+		np = cat(h_to, np);
+		(void)memset(&hdr, 0, sizeof(hdr));
+		hdr.h_to = elide(np);
+		(void)puthead(&hdr, obuf, GTO | GCOMMA);
+	}
+	if (sendmessage(mp, obuf, bouncetab, NULL, NULL)) {
+		(void)printf("bounce failed for message %d\n", msgno);
+		rval = 1;
+		goto done;
+	}
+	rewind(obuf);	/* XXX - here or inside mail2() */
+	mail2(obuf, smargs);
+ done:
+	if (obuf)
+		(void)Fclose(obuf);
+	return rval;
+}
+
+PUBLIC int
+bounce(void *v)
+{
+	int *msgvec = v;
+	int *ip;
+	const char **smargs;
+	struct header hdr;
+	int rval;
+
+	if (bouncetab[0].i_count == 0) {
+		/* setup the bounce tab */
+		add_ignore("Status", bouncetab);
+		add_ignore("Delivered-To", bouncetab);
+		add_ignore("To", bouncetab);
+		add_ignore("X-Original-To", bouncetab);
+	}
+	(void)memset(&hdr, 0, sizeof(hdr));
+	if ((rval = grabh(&hdr, GTO)) != 0)
+		return rval;
+
+	if (hdr.h_to == NULL)
+		return 1;
+
+	smargs = unpack(hdr.h_to);
+	for ( ip = msgvec; *ip; ip++) {
+		int e;
+		if ((e = bounce_one(*ip, smargs, hdr.h_to)) != 0)
+			return e;
+	}
+	return 0;
 }
 
 /*
  * Preserve the named messages, so that they will be sent
  * back to the system mailbox.
  */
-int
-preserve(v)
-	void *v;
-{
-	int *msgvec = v;
-	struct message *mp;
-	int *ip, mesg;
-
-	if (edit) {
-		printf("Cannot \"preserve\" in edit mode\n");
-		return(1);
-	}
-	for (ip = msgvec; *ip != 0; ip++) {
-		mesg = *ip;
-		mp = &message[mesg-1];
-		mp->m_flag |= MPRESERVE;
-		mp->m_flag &= ~MBOX;
-		dot = mp;
-	}
-	return(0);
-}
-
-/*
- * Mark all given messages as unread.
- */
-int
-unread(v)
-	void *v;
+PUBLIC int
+preserve(void *v)
 {
 	int *msgvec = v;
 	int *ip;
 
-	for (ip = msgvec; *ip != 0; ip++) {
-		dot = &message[*ip-1];
-		dot->m_flag &= ~(MREAD|MTOUCH);
-		dot->m_flag |= MSTATUS;
+	if (edit) {
+		(void)printf("Cannot \"preserve\" in edit mode\n");
+		return 1;
 	}
-	return(0);
+	for (ip = msgvec; *ip != 0; ip++)
+		dot = set_m_flag(*ip, ~(MBOX | MPRESERVE), MPRESERVE);
+
+	return 0;
+}
+
+/*
+ * Mark all given messages as unread, preserving the new status.
+ */
+PUBLIC int
+unread(void *v)
+{
+	int *msgvec = v;
+	int *ip;
+
+	for (ip = msgvec; *ip != 0; ip++)
+		dot = set_m_flag(*ip, ~(MREAD | MTOUCH | MSTATUS), MSTATUS);
+
+	return 0;
+}
+
+/*
+ * Mark all given messages as read.
+ */
+PUBLIC int
+markread(void *v)
+{
+	int *msgvec = v;
+	int *ip;
+
+	for (ip = msgvec; *ip != 0; ip++)
+		dot = set_m_flag(*ip,
+		    ~(MNEW | MTOUCH | MREAD | MSTATUS), MREAD | MSTATUS);
+
+	return 0;
 }
 
 /*
  * Print the size of each message.
  */
-int
-messize(v)
-	void *v;
+PUBLIC int
+messize(void *v)
 {
 	int *msgvec = v;
 	struct message *mp;
@@ -347,22 +632,23 @@ messize(v)
 
 	for (ip = msgvec; *ip != 0; ip++) {
 		mesg = *ip;
-		mp = &message[mesg-1];
-		printf("%d: %ld/%ld\n", mesg, mp->m_lines, mp->m_size);
+		mp = get_message(mesg);
+		(void)printf("%d: %ld/%llu\n", mesg, mp->m_blines,
+		    (unsigned long long)mp->m_size);
 	}
-	return(0);
+	return 0;
 }
 
 /*
  * Quit quickly.  If we are sourcing, just pop the input level
  * by returning an error.
  */
-int
-rexit(v)
-	void *v;
+/*ARGSUSED*/
+PUBLIC int
+rexit(void *v __unused)
 {
 	if (sourcing)
-		return(1);
+		return 1;
 	exit(0);
 	/*NOTREACHED*/
 }
@@ -371,57 +657,60 @@ rexit(v)
  * Set or display a variable value.  Syntax is similar to that
  * of csh.
  */
-int
-set(v)
-	void *v;
+PUBLIC int
+set(void *v)
 {
-	char **arglist = v;
+	const char **arglist = v;
 	struct var *vp;
-	char *cp, *cp2;
-	char varbuf[BUFSIZ], **ap, **p;
+	const char *cp;
+	char varbuf[LINESIZE];
+	const char **ap, **p;
 	int errs, h, s;
+	size_t l;
 
-	if (*arglist == NOSTR) {
+	if (*arglist == NULL) {
 		for (h = 0, s = 1; h < HSHSIZE; h++)
-			for (vp = variables[h]; vp != NOVAR; vp = vp->v_link)
+			for (vp = variables[h]; vp != NULL; vp = vp->v_link)
 				s++;
-		ap = (char **) salloc(s * sizeof *ap);
+		ap = salloc(s * sizeof(*ap));
 		for (h = 0, p = ap; h < HSHSIZE; h++)
-			for (vp = variables[h]; vp != NOVAR; vp = vp->v_link)
+			for (vp = variables[h]; vp != NULL; vp = vp->v_link)
 				*p++ = vp->v_name;
-		*p = NOSTR;
+		*p = NULL;
 		sort(ap);
-		for (p = ap; *p != NOSTR; p++)
-			printf("%s\t%s\n", *p, value(*p));
-		return(0);
+		for (p = ap; *p != NULL; p++)
+			(void)printf("%s\t%s\n", *p, value(*p));
+		return 0;
 	}
 	errs = 0;
-	for (ap = arglist; *ap != NOSTR; ap++) {
+	for (ap = arglist; *ap != NULL; ap++) {
 		cp = *ap;
-		cp2 = varbuf;
 		while (*cp != '=' && *cp != '\0')
-			*cp2++ = *cp++;
-		*cp2 = '\0';
+			++cp;
+		l = cp - *ap;
+		if (l >= sizeof(varbuf))
+			l = sizeof(varbuf) - 1;
+		(void)strncpy(varbuf, *ap, l);
+		varbuf[l] = '\0';
 		if (*cp == '\0')
 			cp = "";
 		else
 			cp++;
 		if (equal(varbuf, "")) {
-			printf("Non-null variable name required\n");
+			(void)printf("Non-null variable name required\n");
 			errs++;
 			continue;
 		}
 		assign(varbuf, cp);
 	}
-	return(errs);
+	return errs;
 }
 
 /*
  * Unset a bunch of variable values.
  */
-int
-unset(v)
-	void *v;
+PUBLIC int
+unset(void *v)
 {
 	char **arglist = v;
 	struct var *vp, *vp2;
@@ -429,12 +718,12 @@ unset(v)
 	char **ap;
 
 	errs = 0;
-	for (ap = arglist; *ap != NOSTR; ap++) {
-		if ((vp2 = lookup(*ap)) == NOVAR) {
+	for (ap = arglist; *ap != NULL; ap++) {
+		if ((vp2 = lookup(*ap)) == NULL) {
 			if (getenv(*ap)) {
-				unsetenv(*ap);
+				(void)unsetenv(*ap);
 			} else if (!sourcing) {
-				printf("\"%s\": undefined variable\n", *ap);
+				(void)printf("\"%s\": undefined variable\n", *ap);
 				errs++;
 			}
 			continue;
@@ -444,57 +733,91 @@ unset(v)
 			variables[h] = variables[h]->v_link;
 			v_free(vp2->v_name);
                         v_free(vp2->v_value);
-			free((char *)vp2);
+			free(vp2);
 			continue;
 		}
 		for (vp = variables[h]; vp->v_link != vp2; vp = vp->v_link)
-			;
+			continue;
 		vp->v_link = vp2->v_link;
                 v_free(vp2->v_name);
                 v_free(vp2->v_value);
-		free((char *) vp2);
+		free(vp2);
 	}
-	return(errs);
+	return errs;
 }
+
+/*
+ * Show a variable value.
+ */
+PUBLIC int
+show(void *v)
+{
+	const char **arglist = v;
+	struct var *vp;
+	const char **ap, **p;
+	int h, s;
+
+	if (*arglist == NULL) {
+		for (h = 0, s = 1; h < HSHSIZE; h++)
+			for (vp = variables[h]; vp != NULL; vp = vp->v_link)
+				s++;
+		ap = salloc(s * sizeof(*ap));
+		for (h = 0, p = ap; h < HSHSIZE; h++)
+			for (vp = variables[h]; vp != NULL; vp = vp->v_link)
+				*p++ = vp->v_name;
+		*p = NULL;
+		sort(ap);
+		for (p = ap; *p != NULL; p++)
+			(void)printf("%s=%s\n", *p, value(*p));
+		return 0;
+	}
+
+	for (ap = arglist; *ap != NULL; ap++) {
+		char *val = value(*ap);
+		(void)printf("%s=%s\n", *ap, val ? val : "<null>");
+	}
+	return 0;
+}
+
 
 /*
  * Put add users to a group.
  */
-int
-group(v)
-	void *v;
+PUBLIC int
+group(void *v)
 {
-	char **argv = v;
+	const char **argv = v;
 	struct grouphead *gh;
 	struct group *gp;
 	int h;
 	int s;
-	char **ap, *gname, **p;
+	const char *gname;
+	const char **ap, **p;
 
-	if (*argv == NOSTR) {
+	if (*argv == NULL) {
 		for (h = 0, s = 1; h < HSHSIZE; h++)
-			for (gh = groups[h]; gh != NOGRP; gh = gh->g_link)
+			for (gh = groups[h]; gh != NULL; gh = gh->g_link)
 				s++;
-		ap = (char **) salloc(s * sizeof *ap);
+		ap = salloc(s * sizeof(*ap));
 		for (h = 0, p = ap; h < HSHSIZE; h++)
-			for (gh = groups[h]; gh != NOGRP; gh = gh->g_link)
+			for (gh = groups[h]; gh != NULL; gh = gh->g_link)
 				*p++ = gh->g_name;
-		*p = NOSTR;
+		*p = NULL;
 		sort(ap);
-		for (p = ap; *p != NOSTR; p++)
+		for (p = ap; *p != NULL; p++)
 			printgroup(*p);
-		return(0);
+		return 0;
 	}
-	if (argv[1] == NOSTR) {
+	if (argv[1] == NULL) {
 		printgroup(*argv);
-		return(0);
+		return 0;
 	}
 	gname = *argv;
 	h = hash(gname);
-	if ((gh = findgroup(gname)) == NOGRP) {
-		gh = (struct grouphead *) calloc(sizeof *gh, 1);
+	if ((gh = findgroup(gname)) == NULL) {
+		gh = ecalloc(1, sizeof(*gh));
 		gh->g_name = vcopy(gname);
-		gh->g_list = NOGE;
+		gh->g_list = NULL;
 		gh->g_link = groups[h];
 		groups[h] = gh;
 	}
@@ -505,51 +828,66 @@ group(v)
 	 * later anyway.
 	 */
 
-	for (ap = argv+1; *ap != NOSTR; ap++) {
-		gp = (struct group *) calloc(sizeof *gp, 1);
+	for (ap = argv + 1; *ap != NULL; ap++) {
+		gp = ecalloc(1, sizeof(*gp));
 		gp->ge_name = vcopy(*ap);
 		gp->ge_link = gh->g_list;
 		gh->g_list = gp;
 	}
-	return(0);
+	return 0;
 }
 
 /*
- * Sort the passed string vecotor into ascending dictionary
- * order.
+ * Delete the named group alias. Return zero if the group was
+ * successfully deleted, or -1 if there was no such group.
  */
-void
-sort(list)
-	char **list;
+static int
+delgroup(const char *name)
+{
+	struct grouphead *gh, *p;
+	struct group *g;
+	int h;
+
+	h = hash(name);
+	for (gh = groups[h], p = NULL; gh != NULL; p = gh, gh = gh->g_link)
+		if (strcmp(gh->g_name, name) == 0) {
+			if (p == NULL)
+				groups[h] = gh->g_link;
+			else
+				p->g_link = gh->g_link;
+			while (gh->g_list != NULL) {
+				g = gh->g_list;
+				gh->g_list = g->ge_link;
+				free(g->ge_name);
+				free(g);
+			}
+			free(gh->g_name);
+			free(gh);
+			return 0;
+		}
+	return -1;
+}
+
+/*
+ * The unalias command takes a list of alises
+ * and discards the remembered groups of users.
+ */
+PUBLIC int
+unalias(void *v)
 {
 	char **ap;
 
-	for (ap = list; *ap != NOSTR; ap++)
-		;
-	if (ap-list < 2)
-		return;
-	qsort(list, ap-list, sizeof(*list), diction);
-}
-
-/*
- * Do a dictionary order comparison of the arguments from
- * qsort.
- */
-static int
-diction(a, b)
-	const void *a, *b;
-{
-	return(strcmp(*(char **)a, *(char **)b));
+	for (ap = v; *ap != NULL; ap++)
+		(void)delgroup(*ap);
+	return 0;
 }
 
 /*
  * The do nothing command for comments.
  */
-
 /*ARGSUSED*/
-int
-null(v)
-	void *v;
+PUBLIC int
+null(void *v __unused)
 {
 	return 0;
 }
@@ -558,199 +896,211 @@ null(v)
  * Change to another file.  With no argument, print information about
  * the current file.
  */
-int
-file(v)
-	void *v;
+PUBLIC int
+file(void *v)
 {
 	char **argv = v;
 
-	if (argv[0] == NOSTR) {
-		newfileinfo(0);
+	if (argv[0] == NULL) {
+		(void)newfileinfo(0);
 		return 0;
 	}
 	if (setfile(*argv) < 0)
 		return 1;
 	announce();
+
 	return 0;
 }
 
 /*
  * Expand file names like echo
  */
-int
-echo(v)
-	void *v;
+PUBLIC int
+echo(void *v)
 {
 	char **argv = v;
 	char **ap;
-	char *cp;
+	const char *cp;
 
-	for (ap = argv; *ap != NOSTR; ap++) {
+	for (ap = argv; *ap != NULL; ap++) {
 		cp = *ap;
-		if ((cp = expand(cp)) != NOSTR) {
+		if ((cp = expand(cp)) != NULL) {
 			if (ap != argv)
-				putchar(' ');
-			printf("%s", cp);
+				(void)putchar(' ');
+			(void)printf("%s", cp);
 		}
 	}
-	putchar('\n');
+	(void)putchar('\n');
 	return 0;
-}
-
-int
-Respond(v)
-	void *v;
-{
-	int *msgvec = v;
-	if (value("Replyall") == NOSTR)
-		return (_Respond(msgvec));
-	else
-		return (_respond(msgvec));
 }
 
 /*
- * Reply to a series of messages by simply mailing to the senders
- * and not messing around with the To: and Cc: lists as in normal
- * reply.
+ * Routines to push and pop the condition code to support nested
+ * if/else/endif statements.
  */
-int
-_Respond(msgvec)
-	int msgvec[];
+static void
+push_cond(int c_cond)
 {
-	struct header head;
-	struct message *mp;
-	int *ap;
-	char *cp;
+	struct cond_stack_s *csp;
+	csp = emalloc(sizeof(*csp));
+	csp->c_cond = c_cond;
+	csp->c_next = cond_stack;
+	cond_stack = csp;
+}
 
-	head.h_to = NIL;
-	for (ap = msgvec; *ap != 0; ap++) {
-		mp = &message[*ap - 1];
-		touch(mp);
-		dot = mp;
-		if ((cp = skin(hfield("from", mp))) == NOSTR)
-			cp = skin(nameof(mp, 2));
-		head.h_to = cat(head.h_to, extract(cp, GTO));
-	}
-	if (head.h_to == NIL)
-		return 0;
-	mp = &message[msgvec[0] - 1];
-	if ((head.h_subject = hfield("subject", mp)) == NOSTR)
-		head.h_subject = hfield("subj", mp);
-	head.h_subject = reedit(head.h_subject);
-	head.h_cc = NIL;
-	head.h_bcc = NIL;
-	head.h_smopts = NIL;
-	mail1(&head, 1);
-	return 0;
+static int
+pop_cond(void)
+{
+	int c_cond;
+	struct cond_stack_s *csp;
+
+	if ((csp = cond_stack) == NULL)
+		return -1;
+
+	c_cond = csp->c_cond;
+	cond_stack = csp->c_next;
+	free(csp);
+	return c_cond;
 }
 
 /*
  * Conditional commands.  These allow one to parameterize one's
  * .mailrc and do some things if sending, others if receiving.
  */
-int
-ifcmd(v)
-	void *v;
+static int
+if_push(void)
+{
+	push_cond(cond);
+	cond &= ~CELSE;
+	if ((cond & (CIF | CSKIP)) == (CIF | CSKIP)) {
+		cond |= CIGN;
+		return 1;
+	}
+	return 0;
+}
+
+PUBLIC int
+ifcmd(void *v)
 {
 	char **argv = v;
-	char *cp;
+	char *keyword = argv[0];
+	static const struct modetbl_s {
+		const char *m_name;
+		enum mailmode_e m_mode;
+	} modetbl[] = {
+		{ "receiving",		mm_receiving },
+		{ "sending",		mm_sending },
+		{ "headersonly",	mm_hdrsonly },
+		{ NULL,			0 },
+	};
+	const struct modetbl_s *mtp;
 
-	if (cond != CANY) {
-		printf("Illegal nested \"if\"\n");
-		return(1);
+	if (if_push())
+		return 0;
+
+	cond = CIF;
+	for (mtp = modetbl; mtp->m_name; mtp++)
+		if (strcasecmp(keyword, mtp->m_name) == 0)
+			break;
+
+	if (mtp->m_name == NULL) {
+		cond = CNONE;
+		(void)printf("Unrecognized if-keyword: \"%s\"\n", keyword);
+		return 1;
 	}
-	cond = CANY;
-	cp = argv[0];
-	switch (*cp) {
-	case 'r': case 'R':
-		cond = CRCV;
-		break;
+	if (mtp->m_mode != mailmode)
+		cond |= CSKIP;
 
-	case 's': case 'S':
-		cond = CSEND;
-		break;
+	return 0;
+}
 
-	default:
-		printf("Unrecognized if-keyword: \"%s\"\n", cp);
-		return(1);
-	}
-	return(0);
+PUBLIC int
+ifdefcmd(void *v)
+{
+	char **argv = v;
+
+	if (if_push())
+		return 0;
+
+	cond = CIF;
+	if (value(argv[0]) == NULL)
+		cond |= CSKIP;
+
+	return 0;
+}
+
+PUBLIC int
+ifndefcmd(void *v)
+{
+	int rval;
+	rval = ifdefcmd(v);
+	cond ^= CSKIP;
+	return rval;
 }
 
 /*
  * Implement 'else'.  This is pretty simple -- we just
  * flip over the conditional flag.
  */
-int
-elsecmd(v)
-	void *v;
+/*ARGSUSED*/
+PUBLIC int
+elsecmd(void *v __unused)
 {
-
-	switch (cond) {
-	case CANY:
-		printf("\"Else\" without matching \"if\"\n");
-		return(1);
-
-	case CSEND:
-		cond = CRCV;
-		break;
-
-	case CRCV:
-		cond = CSEND;
-		break;
-
-	default:
-		printf("Mail's idea of conditions is screwed up\n");
-		cond = CANY;
-		break;
+	if (cond_stack == NULL || (cond & (CIF | CELSE)) != CIF) {
+		(void)printf("\"else\" without matching \"if\"\n");
+		cond = CNONE;
+		return 1;
 	}
-	return(0);
+	if ((cond & CIGN) == 0) {
+		cond ^= CSKIP;
+		cond |= CELSE;
+	}
+	return 0;
 }
 
 /*
  * End of if statement.  Just set cond back to anything.
  */
-int
-endifcmd(v)
-	void *v;
+/*ARGSUSED*/
+PUBLIC int
+endifcmd(void *v __unused)
 {
-
-	if (cond == CANY) {
-		printf("\"Endif\" without matching \"if\"\n");
-		return(1);
+	if (cond_stack == NULL || (cond & CIF) != CIF) {
+		(void)printf("\"endif\" without matching \"if\"\n");
+		cond = CNONE;
+		return 1;
 	}
-	cond = CANY;
-	return(0);
+	cond = pop_cond();
+	return 0;
 }
 
 /*
  * Set the list of alternate names.
  */
-int
-alternates(v)
-	void *v;
+PUBLIC int
+alternates(void *v)
 {
 	char **namelist = v;
-	int c;
+	size_t c;
 	char **ap, **ap2, *cp;
 
 	c = argcount(namelist) + 1;
 	if (c == 1) {
 		if (altnames == 0)
-			return(0);
+			return 0;
 		for (ap = altnames; *ap; ap++)
-			printf("%s ", *ap);
-		printf("\n");
-		return(0);
+			(void)printf("%s ", *ap);
+		(void)printf("\n");
+		return 0;
 	}
 	if (altnames != 0)
-		free((char *) altnames);
-	altnames = (char **) calloc((unsigned) c, sizeof (char *));
+		free(altnames);
+	altnames = ecalloc(c, sizeof(char *));
 	for (ap = namelist, ap2 = altnames; *ap; ap++, ap2++) {
-		cp = (char *) calloc((unsigned) strlen(*ap) + 1, sizeof (char));
-		strcpy(cp, *ap);
+		cp = ecalloc(strlen(*ap) + 1, sizeof(char));
+		(void)strcpy(cp, *ap);
 		*ap2 = cp;
 	}
 	*ap2 = 0;
-	return(0);
+	return 0;
 }

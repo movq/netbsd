@@ -1,4 +1,4 @@
-.\"	$NetBSD: chflags.1,v 1.9 1999/07/31 03:24:46 christos Exp $
+.\"	$NetBSD: chflags.1,v 1.17 2003/08/07 11:13:16 agc Exp $
 .\"
 .\" Copyright (c) 1989, 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -14,11 +14,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -48,8 +44,9 @@
 .Fl R
 .Op Fl H | Fl L | Fl P
 .Oc
+.Op Fl h
 .Ar flags
-.Ar file ...
+.Ar
 .Sh DESCRIPTION
 The
 .Nm
@@ -76,11 +73,16 @@ option is specified, no symbolic links are followed.
 .It Fl R
 Change the file flags for the file hierarchies rooted
 in the files instead of just the files themselves.
+.It Fl h
+If the
+.Ar file
+or a file encountered during directory traversal is a symbolic link,
+the file flags of the link itself is changed.
 .El
 .Pp
 Flags are a comma separated list of keywords.
 The following keywords are currently defined:
-.Bd -literal -offset indent compact
+.Bd -literal -offset indent -compact
 arch	set the archived flag (super-user only)
 opaque	set the opaque flag (owner or super-user only)
 nodump	set the nodump flag (owner or super-user only)
@@ -94,17 +96,10 @@ Putting the letters
 .Dq no
 before an option causes the flag to be turned off.
 For example:
-.Bd -literal -offset indent compact
+.Bd -literal -offset indent -compact
 nouchg	the immutable bit should be cleared
 .Ed
 .Pp
-Symbolic links do not have flags, so unless the
-.Fl H
-or
-.Fl L
-option is set,
-.Nm
-on a symbolic link always succeeds and has no effect.
 The
 .Fl H ,
 .Fl L
@@ -116,7 +111,7 @@ option is specified.
 In addition, these options override each other and the
 command's actions are determined by the last one specified.
 .Pp
-The 
+The
 .Fl o
 option
 of
@@ -125,14 +120,16 @@ is used to display the flags.
 .Pp
 The
 .Nm
-utility exits 0 on success, and >0 if an error occurs.
+utility exits 0 on success, and \*[Gt]0 if an error occurs.
 .Pp
 The kernel does not allow the flags on block and character
-devices to be changed except by the superuser.
+devices to be changed except by the super-user.
 .Sh SEE ALSO
 .Xr ls 1 ,
 .Xr chflags 2 ,
+.Xr lchflags 2 ,
 .Xr stat 2 ,
 .Xr fts 3 ,
 .Xr symlink 7 ,
-.Xr dump 8
+.Xr dump 8 ,
+.Xr init 8

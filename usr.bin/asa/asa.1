@@ -1,4 +1,4 @@
-.\"	$NetBSD: asa.1,v 1.7 1999/06/03 21:42:50 jwise Exp $
+.\"	$NetBSD: asa.1,v 1.11 2002/02/08 01:36:18 ross Exp $
 .\"
 .\" Copyright (c) 1993 Winning Strategies, Inc.
 .\" All rights reserved.
@@ -33,7 +33,7 @@
 .Os
 .Sh NAME
 .Nm asa
-.Nd interpret carriage-control characters.
+.Nd interpret carriage-control characters
 .Sh SYNOPSIS
 .Nm
 .Op Ar
@@ -47,33 +47,34 @@ and writes them to the standard output.
 .Pp
 The first character of each line is interpreted as a carriage-control
 character.  The following characters are interpreted as follows:
-.Bl -tag -width "<space>"
-.It <space>
+.Bl -tag -width "\*[Lt]space\*[Gt]"
+.It \*[Lt]space\*[Gt]
 Output the rest of the line without change.
 .It 0
-Output a <newline> character before printing the rest of the line.
+Output a \*[Lt]newline\*[Gt] character before printing the rest of the line.
 .It 1
-Output a <formfeed> character before printing the rest of the line.
+Output a \*[Lt]formfeed\*[Gt] character before printing the rest of the line.
 .It +
-The trailing <newline> of the previous line is replaced by a <carriage-return>
+The trailing \*[Lt]newline\*[Gt] of the previous line is replaced by a \*[Lt]carriage-return\*[Gt]
 before printing the rest of the line.
 .El
 .Pp
 Lines beginning with characters other than the above are treated as if they
-begin with <space>.
+begin with \*[Lt]space\*[Gt].
+.Sh EXIT STATUS
+The
+.Nm
+utility exit 0 on success, and \*[Gt]0 if an error occurs.
 .Sh EXAMPLES
 To view a file containing the output of a
-.Tn FORTRAN program:
+.Tn FORTRAN
+program:
 .Dl asa file
 .Pp
 To format the output of a
 .Tn FORTRAN
-program and redirect it to a line-printer.
+program and redirect it to a line-printer:
 .Dl a.out | asa | lpr
-.Sh DIAGNOSTICS
-The
-.Nm
-utility exit 0 on success, and >0 if an error occurs.
 .Sh SEE ALSO
 .Xr f77 1
 .Sh STANDARDS

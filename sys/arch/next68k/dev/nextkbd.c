@@ -1,4 +1,4 @@
-/* $NetBSD: nextkbd.c,v 1.3 1999/03/26 04:17:46 dbj Exp $ */
+/* $NetBSD: nextkbd.c,v 1.13 2008/01/05 00:31:56 ad Exp $ */
 /*
  * Copyright (c) 1998 Matt DeBergalis
  * All rights reserved.
@@ -29,6 +29,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: nextkbd.c,v 1.13 2008/01/05 00:31:56 ad Exp $");
+
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
 #include <sys/param.h>
@@ -39,22 +42,23 @@
 #include <sys/malloc.h>
 #include <sys/errno.h>
 #include <sys/queue.h>
-#include <sys/lock.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
 
 #include <machine/autoconf.h>
-#include <machine/cpu.h>
-#include <machine/intr.h>
-#include <machine/bus.h>
-
-#include <next68k/dev/nextkbdvar.h>
-#include <next68k/dev/wskbdmap_next.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wskbdvar.h>
 #include <dev/wscons/wsksymdef.h>
 #include <dev/wscons/wsksymvar.h>
 
+#include <next68k/dev/nextkbdvar.h>
+#include <next68k/dev/wskbdmap_next.h>
+
 #include <next68k/next68k/isr.h>
+
+#include <next68k/dev/intiovar.h>
 
 struct nextkbd_internal {
 	int num_ints; /* interrupt total */
@@ -73,18 +77,19 @@ struct mon_regs {
 	u_int32_t mon_data;
 };
 
-int nextkbd_match __P((struct device *, struct cfdata *, void *));
-void nextkbd_attach __P((struct device *, struct device *, void *));
+static int attached = 0;
 
-int nextkbc_cnattach __P((bus_space_tag_t));
+int nextkbd_match(struct device *, struct cfdata *, void *);
+void nextkbd_attach(struct device *, struct device *, void *);
 
-struct cfattach nextkbd_ca = {
-	sizeof(struct nextkbd_softc), nextkbd_match, nextkbd_attach
-};
+int nextkbc_cnattach(bus_space_tag_t);
 
-int	nextkbd_enable __P((void *, int));
-void	nextkbd_set_leds __P((void *, int));
-int	nextkbd_ioctl __P((void *, u_long, caddr_t, int, struct proc *));
+CFATTACH_DECL(nextkbd, sizeof(struct nextkbd_softc),
+    nextkbd_match, nextkbd_attach, NULL, NULL);
+
+int	nextkbd_enable(void *, int);
+void	nextkbd_set_leds(void *, int);
+int	nextkbd_ioctl(void *, u_long, void *, int, struct lwp *);
 
 const struct wskbd_accessops nextkbd_accessops = {
 	nextkbd_enable,
@@ -92,8 +97,8 @@ const struct wskbd_accessops nextkbd_accessops = {
 	nextkbd_ioctl,
 };
 
-void	nextkbd_cngetc __P((void *, u_int *, int *));
-void	nextkbd_cnpollc __P((void *, int));
+void	nextkbd_cngetc(void *, u_int *, int *);
+void	nextkbd_cnpollc(void *, int);
 
 const struct wskbd_consops nextkbd_consops = {
 	nextkbd_cngetc,
@@ -105,43 +110,44 @@ const struct wskbd_mapdata nextkbd_keymapdata = {
 	KB_US,
 };
 
-static int nextkbd_read_data __P((struct nextkbd_internal *));
-static int nextkbd_decode __P((struct nextkbd_internal *, int, u_int *, int *));
+static int nextkbd_read_data(struct nextkbd_internal *);
+static int nextkbd_decode(struct nextkbd_internal *, int, u_int *, int *);
 
 static struct nextkbd_internal nextkbd_consdata;
-static int nextkbd_is_console __P((bus_space_tag_t bst));
+static int nextkbd_is_console(bus_space_tag_t);
 
-int nextkbdhard __P((void *));
+int nextkbdhard(void *);
 
 static int
-nextkbd_is_console(bst)
-	bus_space_tag_t bst;
+nextkbd_is_console(bus_space_tag_t bst)
 {
-	return (nextkbd_consdata.isconsole
-			&& (bst == nextkbd_consdata.iot));
+	return (nextkbd_consdata.isconsole && (bst == nextkbd_consdata.iot));
 }
 
 int
-nextkbd_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+nextkbd_match(struct device *parent, struct cfdata *match, void *aux)
 {
-	return 1;
+	struct intio_attach_args *ia = (struct intio_attach_args *)aux;
+
+	if (attached)
+		return(0);
+
+	ia->ia_addr = (void *)NEXT_P_MON;
+
+	return(1);
 }
 
 void
-nextkbd_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+nextkbd_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct nextkbd_softc *sc = (struct nextkbd_softc *)self;
+	struct intio_attach_args *ia = (struct intio_attach_args *)aux;
 	int isconsole;
 	struct wskbddev_attach_args a;
 
 	printf("\n");
 
-	isconsole = nextkbd_is_console(NEXT68K_INTIO_BUS_SPACE); /* XXX */
+	isconsole = nextkbd_is_console(ia->ia_bst); /* XXX */
 
 	if (isconsole) {
 		sc->id = &nextkbd_consdata;
@@ -150,7 +156,7 @@ nextkbd_attach(parent, self, aux)
 				M_DEVBUF, M_WAITOK);
 
 		memset(sc->id, 0, sizeof(struct nextkbd_internal));
-		sc->id->iot = NEXT68K_INTIO_BUS_SPACE;
+		sc->id->iot = ia->ia_bst;
 		if (bus_space_map(sc->id->iot, NEXT_P_MON,
 				sizeof(struct mon_regs),
 				0, &sc->id->ioh)) {
@@ -162,7 +168,7 @@ nextkbd_attach(parent, self, aux)
 
 	sc->id->t_sc = sc; /* set back pointer */
 
-	isrlink_autovec(nextkbdhard, sc, NEXT_I_IPL(NEXT_I_KYBD_MOUSE), 0);
+	isrlink_autovec(nextkbdhard, sc, NEXT_I_IPL(NEXT_I_KYBD_MOUSE), 0, NULL);
 
 	INTR_ENABLE(NEXT_I_KYBD_MOUSE);
 
@@ -176,36 +182,53 @@ nextkbd_attach(parent, self, aux)
 	 * XXX XXX XXX
 	 */
 	sc->sc_wskbddev = config_found(self, &a, wskbddevprint);
+
+	attached = 1;
 }
 
 int
-nextkbd_enable(v, on)
-	void *v;
-	int on;
+nextkbd_enable(void *v, int on)
 {
 	/* XXX not sure if this should do anything */
 	/* printf("nextkbd_enable %d\n", on); */
 	return 0;
 }
 
-/* XXX not yet implemented */
 void
-nextkbd_set_leds(v, leds)
-	void *v;
-	int leds;
+nextkbd_set_leds(void *v, int leds)
 {
+	struct nextkbd_softc *sc = v;
+	uint32_t hw_leds = 0;
+	int s;
+
+	sc->sc_leds &= ~ NEXT_WSKBD_LEDS;
+	sc->sc_leds |= (leds & NEXT_WSKBD_LEDS);
+
+	if (sc->sc_leds & WSKBD_LED_CAPS) {
+		hw_leds |= 0x30000;
+	}
+
+	s = spltty();
+	bus_space_write_1(sc->id->iot, sc->id->ioh, 3, 0xc5);
+	/* @@@ need to add:
+	   if bit 7 of @ioh+0 set:
+	     repeat 2
+	       wait until bit 6 of @ioh+2 clears
+	*/
+	bus_space_write_4(sc->id->iot, sc->id->ioh, 4, hw_leds);
+	/* @@@ need to add:
+	   wait until bit 4 of @ioh+0 (@ioh+2 if bit 7 was set above)
+	     clears
+	*/
+	splx(s);
+
 	return;
 }
 
 int
-nextkbd_ioctl(v, cmd, data, flag, p)
-	void *v;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+nextkbd_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	/* XXX struct nextkbd_softc *nc = v; */
+	struct nextkbd_softc *sc = v;
 		 
 	switch (cmd) {
 	case WSKBDIO_GTYPE:
@@ -213,21 +236,21 @@ nextkbd_ioctl(v, cmd, data, flag, p)
 		*(int *)data = WSKBD_TYPE_NEXT;
 		return (0);
 	case WSKBDIO_SETLEDS:
+		nextkbd_set_leds (sc, *(int *)data);
 		return (0);
 	case WSKBDIO_GETLEDS:
-		*(int *)data = 0;
+		*(int *)data = sc->sc_leds & NEXT_WSKBD_LEDS;
 		return (0);
 	case WSKBDIO_COMPLEXBELL:
 		return (0);
 	}
-	return -1;
+	return EPASSTHROUGH;
 }
 
 int
-nextkbdhard(arg)
-	void *arg;
+nextkbdhard(void *arg)
 {
-	register struct nextkbd_softc *sc = arg;
+	struct nextkbd_softc *sc = arg;
 	int type, key, val;
 
 	if (!INTR_OCCURRED(NEXT_I_KYBD_MOUSE)) return 0;
@@ -255,8 +278,7 @@ nextkbdhard(arg)
 }
 
 int
-nextkbd_cnattach(bst)
-	bus_space_tag_t bst;
+nextkbd_cnattach(bus_space_tag_t bst)
 {
 	bus_space_handle_t bsh;
 
@@ -277,10 +299,7 @@ nextkbd_cnattach(bst)
 }
 
 void
-nextkbd_cngetc(v, type, data)
-	void *v;
-	u_int *type;
-	int *data;
+nextkbd_cngetc(void *v, u_int *type, int *data)
 {
 	struct nextkbd_internal *t = v;
 	int val;
@@ -295,9 +314,7 @@ nextkbd_cngetc(v, type, data)
 }
 
 void
-nextkbd_cnpollc(v, on)
-	void *v;
-	int on;
+nextkbd_cnpollc(void *v, int on)
 {
 	struct nextkbd_internal *t = v;
 
@@ -329,11 +346,8 @@ nextkbd_read_data(struct nextkbd_internal *id)
 }
 
 static int
-nextkbd_decode(id, datain, type, dataout)
-	struct nextkbd_internal *id;
-	int datain;
-	u_int *type;
-	int *dataout;
+nextkbd_decode(struct nextkbd_internal *id, int datain, u_int *type,
+    int *dataout)
 {
 	/* printf("datain %08x mods %08x\n", datain, id->mods); */
 

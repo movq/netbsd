@@ -1,9 +1,9 @@
-/*	$NetBSD: panic.c,v 1.2 1999/04/28 13:24:12 christos Exp $	*/
+/*	$NetBSD: panic.c,v 1.6 2007/11/24 13:20:56 isaki Exp $	*/
 
 /*-
  *  Copyright (c) 1993 John Brezak
  *  All rights reserved.
- * 
+ *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions
  *  are met:
@@ -14,7 +14,7 @@
  *     documentation and/or other materials provided with the distribution.
  *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR `AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -43,24 +43,24 @@ panic(fmt /*, va_alist */)
 	char *fmt;
 #endif
 {
-    va_list ap;
-#ifndef LIBSA_NO_CLOSE
-    static int paniced;
-    
-    if (!paniced) {
-        paniced = 1;
-        closeall();
-    }
+	va_list ap;
+#ifndef LIBSA_NO_FS_CLOSE
+	static int paniced;
+
+	if (!paniced) {
+		paniced = 1;
+		closeall();
+	}
 #endif
 
 #ifdef __STDC__
-    va_start(ap, fmt);
+	va_start(ap, fmt);
 #else
-    va_start(ap);
+	va_start(ap);
 #endif
-    vprintf(fmt, ap);
-    printf("\n");
-    va_end(ap);
-    _rtt();
-    /*NOTREACHED*/
+	vprintf(fmt, ap);
+	printf("\n");
+	va_end(ap);
+	_rtt();
+	/*NOTREACHED*/
 }

@@ -1,7 +1,8 @@
-#	$NetBSD: Makefile,v 1.1 1998/06/12 23:22:49 cgd Exp $
+#	$NetBSD: Makefile,v 1.4 2001/05/03 05:26:08 matt Exp $
 
 INCSDIR= /usr/include/dev/dec
 
-INCS=	clockvar.h lk201.h mcclock_pad32.h mcclockvar.h
+# Only install includes which are used by userland
+INCS=	lk201.h dec_boot.h
 
 .include <bsd.kinc.mk>

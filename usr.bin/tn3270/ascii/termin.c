@@ -1,4 +1,4 @@
-/*	$NetBSD: termin.c,v 1.5 1998/11/06 20:05:12 christos Exp $	*/
+/*	$NetBSD: termin.c,v 1.8 2003/08/07 11:16:28 agc Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)termin.c	4.2 (Berkeley) 4/26/91";
 #else
-__RCSID("$NetBSD: termin.c,v 1.5 1998/11/06 20:05:12 christos Exp $");
+__RCSID("$NetBSD: termin.c,v 1.8 2003/08/07 11:16:28 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -60,6 +56,8 @@ __RCSID("$NetBSD: termin.c,v 1.5 1998/11/06 20:05:12 christos Exp $");
 #include "map3270.h"
 
 #include "../general/globals.h"
+
+extern cc_t escape;			/* Escape to command mode */
 
 #define IsControl(c)	(!isprint((unsigned char)c) || (isspace((unsigned char)c) && ((c) != ' ')))
 
@@ -89,8 +87,8 @@ static state
 #define EmptyChar	(ourPTail == ourPHead)
 
 
-static void AddChar __P((int));
-static void FlushChar __P((void));
+static void AddChar(int);
+static void FlushChar(void);
 
 
 /*
@@ -202,7 +200,7 @@ char	*buffer;		/* the data read in */
 int	count;			/* how many bytes in this buffer */
 {
     state *regControlPointer;
-    char c;
+    int c;
     int result;
     int origCount;
     extern int bellwinup;
@@ -237,6 +235,17 @@ int	count;			/* how many bytes in this buffer */
     while (count) {
 	c = *buffer++&0x7f;
 	count--;
+
+	if (c == escape) {
+		if (count && (*buffer&0x7f) == escape) {
+			buffer++;
+			count--;
+		} else {
+			command(0, (char *)0, 0);
+			RefreshScreen();
+			continue;
+		}
+	}
 
 	if (!InControl && !IsControl(c)) {
 	    AddChar(c);			/* add ascii character */

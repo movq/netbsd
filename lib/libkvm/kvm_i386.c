@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_i386.c,v 1.15 1999/07/02 15:28:50 simonb Exp $	*/
+/*	$NetBSD: kvm_i386.c,v 1.26 2008/10/25 23:59:06 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1992, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_hp300.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: kvm_i386.c,v 1.15 1999/07/02 15:28:50 simonb Exp $");
+__RCSID("$NetBSD: kvm_i386.c,v 1.26 2008/10/25 23:59:06 mrg Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -52,24 +48,24 @@ __RCSID("$NetBSD: kvm_i386.c,v 1.15 1999/07/02 15:28:50 simonb Exp $");
 
 #include <sys/param.h>
 #include <sys/user.h>
-#include <sys/proc.h>
 #include <sys/stat.h>
 #include <sys/kcore.h>
-#include <machine/kcore.h>
+#include <i386/kcore.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <nlist.h>
 #include <kvm.h>
 
-#include <vm/vm.h>
-#include <vm/vm_param.h>
+#include <uvm/uvm_extern.h>
 
 #include <limits.h>
 #include <db.h>
 
 #include "kvm_private.h"
 
-#include <machine/pte.h>
+#include <i386/pmap.h>
+#include <i386/pte.h>
+#include <i386/vmparam.h>
 
 #ifndef btop
 #define	btop(x)		(((unsigned)(x)) >> PGSHIFT)	/* XXX */
@@ -121,8 +117,8 @@ _kvm_kvatop(kd, va, pa)
 	/*
 	 * Find and read the page directory entry.
 	 */
-	pde_pa = cpu_kh->ptdpaddr + (pdei(va) * sizeof(pd_entry_t));
-	if (pread(kd->pmfd, (void *)&pde, sizeof(pde),
+	pde_pa = cpu_kh->pdppaddr + (pl2_pi(va) * sizeof(pd_entry_t));
+	if (_kvm_pread(kd, kd->pmfd, (void *)&pde, sizeof(pde),
 	    _kvm_pa2off(kd, pde_pa)) != sizeof(pde)) {
 		_kvm_syserr(kd, 0, "could not read PDE");
 		goto lose;
@@ -135,8 +131,16 @@ _kvm_kvatop(kd, va, pa)
 		_kvm_err(kd, 0, "invalid translation (invalid PDE)");
 		goto lose;
 	}
-	pte_pa = (pde & PG_FRAME) + (ptei(va) * sizeof(pt_entry_t));
-	if (pread(kd->pmfd, (void *) &pte, sizeof(pte),
+	if ((pde & PG_PS) != 0) {
+		/*
+		 * This is a 4MB page.
+		 */
+		page_off = va & ~PG_LGFRAME;
+		*pa = (pde & PG_LGFRAME) + page_off;
+		return (int)(NBPD_L2 - page_off);
+	}
+	pte_pa = (pde & PG_FRAME) + (pl1_pi(va) * sizeof(pt_entry_t));
+	if (_kvm_pread(kd, kd->pmfd, (void *) &pte, sizeof(pte),
 	    _kvm_pa2off(kd, pte_pa)) != sizeof(pte)) {
 		_kvm_syserr(kd, 0, "could not read PTE");
 		goto lose;

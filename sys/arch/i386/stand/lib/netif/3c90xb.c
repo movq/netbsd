@@ -1,4 +1,4 @@
-/* $NetBSD: 3c90xb.c,v 1.5 1999/12/02 13:21:48 drochner Exp $ */
+/* $NetBSD: 3c90xb.c,v 1.13 2007/03/04 05:59:59 christos Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -65,7 +65,7 @@ static struct ex_dpd sndbuf;
 #define PCIDEVNO 4
 static pcihdl_t mytag = PCI_MODE1_ENABLE | (PCIBUSNO << 16) | (PCIDEVNO << 11);
 
-extern caddr_t mapmem __P((int, int));
+extern void *mapmem __P((int, int));
 void *dmamem; /* virtual */
 #define DMABASE 0x3ffd800
 #define DMASIZE 10240
@@ -89,7 +89,7 @@ void *dmamem; /* virtual */
 
 static int iobase;
 static u_char myethaddr[6];
-int ether_medium;
+unsigned ether_medium;
 
 static struct {
 	int did;
@@ -118,10 +118,10 @@ static struct btinfo_netif bi_netif;
 #endif
 
 #define ex_waitcmd() \
-	while (CSR_READ_2(ELINK_STATUS) & S_COMMAND_IN_PROGRESS);
+	while (CSR_READ_2(ELINK_STATUS) & COMMAND_IN_PROGRESS);
 
 void ex_reset __P((void));
-u_int16_t ex_read_eeprom __P((int));
+uint16_t ex_read_eeprom __P((int));
 static int ex_eeprom_busy __P((void));
 void ex_init __P((void));
 void ex_set_media __P((void));
@@ -130,7 +130,7 @@ void
 ex_reset()
 {
 	CSR_WRITE_2(ELINK_COMMAND, GLOBAL_RESET);
-	delay(1000);
+	delay(100000);
 	ex_waitcmd();
 }
 
@@ -138,11 +138,11 @@ ex_reset()
  * Read EEPROM data.
  * XXX what to do if EEPROM doesn't unbusy?
  */
-u_int16_t
+uint16_t
 ex_read_eeprom(offset)
 	int offset;
 {
-	u_int16_t data = 0;
+	uint16_t data = 0;
 
 	GO_WINDOW(0);
 	if (ex_eeprom_busy())
@@ -296,11 +296,11 @@ int
 EtherInit(myadr)
 	unsigned char *myadr;
 {
-	u_int32_t pcicsr;
-	u_int16_t val;
+	uint32_t pcicsr;
+	uint16_t val;
 	volatile struct ex_upd *upd;
 #ifndef _STANDALONE
-	u_int32_t id;
+	uint32_t id;
 #endif
 
 	if (pcicheck()) {
@@ -333,7 +333,7 @@ found:
 #endif
 
 	/* enable bus mastering in PCI command register */
-	if (pcicfgread(&mytag, 0x04, &pcicsr)
+	if (pcicfgread(&mytag, 0x04, (int *)&pcicsr)
 	    || pcicfgwrite(&mytag, 0x04, pcicsr | 4)) {
 		printf("cannot enable DMA\n");
 		return(0);
@@ -358,7 +358,7 @@ found:
 	val = ex_read_eeprom(EEPROM_OEM_ADDR2);
 	myethaddr[4] = val >> 8;
 	myethaddr[5] = val & 0xff;
-	bcopy(myethaddr, myadr, 6);
+	memcpy(myadr, myethaddr, 6);
 
 	upd = RECVBUF_VIRT;
 	upd->upd_nextptr = RECVBUF_PHYS;
@@ -388,7 +388,7 @@ EtherStop()
 	CSR_WRITE_2(ELINK_COMMAND, RX_DISABLE);
 	CSR_WRITE_2(ELINK_COMMAND, TX_DISABLE);
         CSR_WRITE_2(ELINK_COMMAND, STOP_TRANSCEIVER);
-	CSR_WRITE_2(ELINK_COMMAND, C_INTR_LATCH);
+	CSR_WRITE_2(ELINK_COMMAND, INTR_LATCH);
 }
 
 int
@@ -406,7 +406,7 @@ EtherSend(pkt, len)
 #ifdef _STANDALONE
 	dpd->dpd_frags[0].fr_addr = vtophys(pkt);
 #else
-	bcopy(pkt, SNDBUF_VIRT + 100, len);
+	memcpy(SNDBUF_VIRT + 100, pkt, len);
 	dpd->dpd_frags[0].fr_addr = SNDBUF_PHYS + 100;
 #endif
 	dpd->dpd_frags[0].fr_len = len | EX_FR_LAST;
@@ -444,7 +444,7 @@ EtherReceive(pkt, maxlen)
 	if (len > maxlen)
 		len = 0;
 	else
-		bcopy(RECVBUF_VIRT + 100, pkt, len);
+		memcpy(pkt, RECVBUF_VIRT + 100, len);
 
 	upd->upd_pktstatus = 1500;
 	CSR_WRITE_2(ELINK_COMMAND, ELINK_UPUNSTALL);

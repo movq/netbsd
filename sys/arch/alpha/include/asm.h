@@ -1,4 +1,4 @@
-/* $NetBSD: asm.h,v 1.22 1998/12/02 00:58:42 thorpej Exp $ */
+/* $NetBSD: asm.h,v 1.30 2007/02/09 21:55:01 ad Exp $ */
 
 /* 
  * Copyright (c) 1991,1990,1989,1994,1995,1996 Carnegie Mellon University
@@ -82,7 +82,7 @@
 #define t9	$23
 #define t10	$24
 #define t11	$25
-#define ra	$26	/* (T)		return address		*/
+#define ra	$26	/* (S)		return address		*/
 #define t12	$27	/* (T)		another temporary	*/
 #define at_reg	$28	/* (T)		assembler scratch	*/
 #define	gp	$29	/* (T)		(local) data pointer	*/
@@ -187,7 +187,7 @@
  * If no fp is set up then $30 should be used instead of $15.
  * Also, gdb expects to find a <lda sp,-framesize(sp)> at the beginning
  * of a procedure. Don't use things like sub sp,framesize,sp for this
- * reason. End Note 10/31/97. ross@netbsd.org
+ * reason. End Note 10/31/97. ross@NetBSD.org
  *
  * Note that registers should be saved starting at "old_sp-8", where the
  * return address should be stored. Other registers follow at -16-24-32..
@@ -247,7 +247,7 @@
 	ERSAVE()
 
 #define	ESETUP(_name_)						\
-	.loc	1 __LINE__;					\
+	/* .loc	1 __LINE__; */					\
 	.globl	_name_;						\
 	.ent	_name_ 0;					\
 _name_:;							\
@@ -262,7 +262,7 @@ _name_:;							\
 	stq	at_reg,(FRAME_AT*8)(sp);			\
 	.set	at;						\
 	stq	ra,(FRAME_RA*8)(sp);				\
-	.loc	1 __LINE__;					\
+	/* .loc	1 __LINE__; */					\
 	bsr	ra,exception_save_regs         /* jmp/CALL trashes pv/t12 */
 
 
@@ -412,7 +412,7 @@ _name_:
  *	Function invocation
  */
 #define	CALL(_name_)						\
-	.loc	1 __LINE__;					\
+	/* .loc	1 __LINE__; */					\
 	jsr	ra,_name_;					\
 	ldgp	gp,0(ra)
 /* but this would cover longer jumps
@@ -611,21 +611,22 @@ label:	ASCIZ msg;						\
 	ldgp	gp, 0(reg)
 
 /*
- * WEAK_ALIAS: create a weak alias (ELF only).
+ * WEAK_ALIAS: create a weak alias.
  */
-#ifdef __ELF__
-#if 0	/* No weak symbols in libc yet! */
 #define WEAK_ALIAS(alias,sym)					\
 	.weak alias;						\
 	alias = sym
-#endif
-#endif
 
 /*
- * WARN_REFERENCES: create a warning if the specified symbol is referenced
- * (ELF only).
+ * STRONG_ALIAS: create a strong alias.
  */
-#ifdef __ELF__
+#define STRONG_ALIAS(alias,sym)					\
+	.globl alias;						\
+	alias = sym
+
+/*
+ * WARN_REFERENCES: create a warning if the specified symbol is referenced.
+ */
 #ifdef __STDC__
 #define	WARN_REFERENCES(_sym,_msg)				\
 	.section .gnu.warning. ## _sym ; .ascii _msg ; .text
@@ -633,7 +634,6 @@ label:	ASCIZ msg;						\
 #define	WARN_REFERENCES(_sym,_msg)				\
 	.section .gnu.warning./**/_sym ; .ascii _msg ; .text
 #endif /* __STDC__ */
-#endif /* __ELF__ */
 
 /*
  * Kernel RCS ID tag and copyright macros
@@ -641,13 +641,8 @@ label:	ASCIZ msg;						\
 
 #ifdef _KERNEL
 
-#ifdef __ELF__
 #define	__KERNEL_SECTIONSTRING(_sec, _str)				\
 	.section _sec ; .asciz _str ; .text
-#else /* __ELF__ */
-#define	__KERNEL_SECTIONSTRING(_sec, _str)				\
-	.data ; .asciz _str ; .align 3 ; .text
-#endif /* __ELF__ */
 
 #define	__KERNEL_RCSID(_n, _s)		__KERNEL_SECTIONSTRING(.ident, _s)
 #define	__KERNEL_COPYRIGHT(_n, _s)	__KERNEL_SECTIONSTRING(.copyright, _s)
@@ -655,6 +650,49 @@ label:	ASCIZ msg;						\
 #ifdef NO_KERNEL_RCSIDS
 #undef __KERNEL_RCSID
 #define	__KERNEL_RCSID(_n, _s)		/* nothing */
+#endif
+
+#if defined(MULTIPROCESSOR)
+
+/*
+ * Get various per-cpu values.  A pointer to our cpu_info structure
+ * is stored in SysValue.  These macros clobber v0, t0, t8..t11.
+ *
+ * All return values are in v0.
+ */
+#define	GET_CPUINFO		call_pal PAL_OSF1_rdval
+
+#define	GET_CURLWP							\
+	call_pal PAL_OSF1_rdval					;	\
+	addq	v0, CPU_INFO_CURLWP, v0
+
+#define	GET_FPCURLWP							\
+	call_pal PAL_OSF1_rdval					;	\
+	addq	v0, CPU_INFO_FPCURLWP, v0
+
+#define	GET_CURPCB							\
+	call_pal PAL_OSF1_rdval					;	\
+	addq	v0, CPU_INFO_CURPCB, v0
+
+#define	GET_IDLE_PCB(reg)						\
+	call_pal PAL_OSF1_rdval					;	\
+	ldq	reg, CPU_INFO_IDLE_PCB_PADDR(v0)
+
+#else	/* if not MULTIPROCESSOR... */
+
+IMPORT(cpu_info_primary, CPU_INFO_SIZEOF)
+
+#define	GET_CPUINFO		lda v0, cpu_info_primary
+
+#define	GET_CURLWP		lda v0, cpu_info_primary + CPU_INFO_CURLWP
+
+#define	GET_FPCURLWP		lda v0, cpu_info_primary + CPU_INFO_FPCURLWP
+
+#define	GET_CURPCB		lda v0, cpu_info_primary + CPU_INFO_CURPCB
+
+#define	GET_IDLE_PCB(reg)						\
+	lda	reg, cpu_info_primary				;	\
+	ldq	reg, CPU_INFO_IDLE_PCB_PADDR(reg)
 #endif
 
 #endif /* _KERNEL */

@@ -1,4 +1,4 @@
-/*	$NetBSD: inkernel.c,v 1.1 2000/02/29 15:21:51 nonaka Exp $	*/
+/*	$NetBSD: inkernel.c,v 1.9 2008/04/28 20:23:33 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,35 +37,26 @@
 
 #define	KERNENTRY	(RELOC - 0x200000)
 
-#ifndef	HEAD_SIZE
-#define	HEAD_SIZE	0
-#endif
-
-#ifndef	KERN_OFFSET
-#define	KERN_OFFSET	0
-#endif 
-
-u_long head_size = HEAD_SIZE;
-u_long kern_offset = KERN_OFFSET;
-
 void
-init_in()
+init_in(u_long ladr)
 {
-	extern u_long ladr;
-	u_long p = ladr + kern_offset - head_size;
+	extern char _start[], _edata[];
+	char *p = (char *)(ladr + (_edata - _start));
+	u_int i;
 
-	if (memcmp((char *)p, magic, MAGICSIZE) == 0) {
-		kern_len = *(int *)(p + MAGICSIZE);
-		memcpy((char *)KERNENTRY,
-			(char *)(p + MAGICSIZE + KERNLENSIZE),
-			kern_len);
-	} else
-		printf("magic not found.\n");
+	for (i = 0; i < 4096; i++, p++) {
+		if (memcmp(p, prep_magic, PREP_MAGICSIZE) == 0) {
+			kern_len = *(int *)(p + PREP_MAGICSIZE);
+			memmove((char *)KERNENTRY,
+				p + PREP_MAGICSIZE + KERNLENSIZE, kern_len);
+			return;
+		}
+	}
+	printf("magic is not found.\n");
 }
 
 int
-inopen(p)
-	struct open_file *p;
+inopen(struct open_file *p)
 {
 
 	if (kern_len)
@@ -81,23 +65,18 @@ inopen(p)
 }
 
 int
-inclose(p)
-	struct open_file *p;
+inclose(struct open_file *p)
 {
+
 	return (0);
 }
 
 int
-instrategy(devdata, func, blk, size, buf, rsize)
-	void *devdata;	/* device uniq data */
-	int func;	/* function (read or write) */
-	daddr_t blk;	/* block number */
-	size_t size;	/* request size in bytes */
-	void *buf;	/* buffer */
-	size_t *rsize;	/* bytes transferred */
+instrategy(void *devdata, int func, daddr_t blk, size_t size, void *buf,
+	size_t *rsize)
 {
 
-	memcpy(buf, (char *)(KERNENTRY + blk * DEV_BSIZE), size);
+	memcpy(buf, (char *)KERNENTRY + ((long)blk * DEV_BSIZE), size);
 	*rsize = size;
 	return (0);
 }

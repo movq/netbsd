@@ -1,4 +1,4 @@
-/*	$NetBSD: brk.S,v 1.7 1999/06/03 20:14:58 kleink Exp $	*/
+/*	$NetBSD: brk.S,v 1.14.8.1 2008/11/07 23:27:24 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,7 +40,7 @@
 #if 0
 	.asciz "@(#)brk.s	8.1 (Berkeley) 6/4/93"
 #else
-	RCSID("$NetBSD: brk.S,v 1.7 1999/06/03 20:14:58 kleink Exp $")
+	RCSID("$NetBSD: brk.S,v 1.14.8.1 2008/11/07 23:27:24 snj Exp $")
 #endif
 #endif /* SYSLIBC_SCCS and not lint */
 
@@ -54,35 +50,40 @@
 	.globl	_C_LABEL(__minbrk)
 	.globl	_end
 
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(brk, _brk)
+#endif
+
 	.data
 _C_LABEL(__minbrk):
 	.long	_end			! lower brk limit; also for gmon code
 	.text
 
+ENTRY(_brk)
 #ifdef PIC
-ENTRY(brk)
 	PIC_PROLOGUE(%o5,%o4)
-	ld	[%o5 + _C_LABEL(__minbrk)], %o4
+	set	_C_LABEL(__minbrk), %o4
+	ld	[%o5 + %o4], %o4
 	ld	[%o4], %o1		! %o1 = minbrk
 	cmp	%o1, %o0		! if (minbrk > %o0)
-	bg,a	0f
+	bgu,a	0f
 	 mov	%o1, %o0		!	%o0 = minbrk
 0:
 	mov	%o0, %o2		! save argument to syscall
 	mov	SYS_break, %g1
 	t	ST_SYSCALL
+	set	CURBRK, %o3
 	bcc,a	1f
-	ld	[%o5 + CURBRK], %o4
+	 ld	[%o5 + %o3], %o4
 	ERROR()
 1:
 	retl				! success, return 0 & record new break
 	 st	%o2, [%o4]
 #else
-ENTRY(brk)
 	sethi	%hi(_C_LABEL(__minbrk)), %o1	! %o1 = minbrk
 	ld	[%o1 + %lo(_C_LABEL(__minbrk))], %o1
 	cmp	%o1, %o0		! if (minbrk > %o0)
-	bg,a	0f
+	bgu,a	0f
 	 mov	%o1, %o0		!	%o0 = minbrk
 0:
 	mov	%o0, %o2		! save argument to syscall

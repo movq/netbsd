@@ -1,4 +1,4 @@
-/*	$NetBSD: geom.c,v 1.2 1998/06/20 13:05:48 mrg Exp $	*/
+/*	$NetBSD: geom.c,v 1.9 2006/08/19 21:18:40 martin Exp $	*/
 
 /*
  * Copyright (c) 1995, 1997 Jason R. Thorpe.
@@ -40,27 +40,42 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <util.h>
+#include <errno.h>
 
-/* Visible functions */
-int get_geom __P((char *, struct disklabel *));
+#include "defs.h"
 
-int
-get_geom(disk, l)
-	char *disk;
-	struct disklabel *l;
+static int
+get_label(const char *disk, struct disklabel *l, unsigned long cmd)
 {
 	char diskpath[MAXPATHLEN];
 	int fd;
+	int sv_errno;
 
 	/* Open the disk. */
 	fd = opendisk(disk, O_RDONLY, diskpath, sizeof(diskpath), 0);
 	if (fd < 0) 
 		return 0;
 
-	if (ioctl(fd, DIOCGDEFLABEL, (char *)l) < 0) {
+	if (ioctl(fd, cmd, l) < 0) {
+		sv_errno = errno;
 		(void)close(fd);
+		errno = sv_errno;
 		return 0;
 	}
 	(void)close(fd);
 	return 1;
+}
+
+int
+get_geom(const char *disk, struct disklabel *l)
+{
+
+	return get_label(disk, l, DIOCGDEFLABEL);
+}
+
+int
+get_real_geom(const char *disk, struct disklabel *l)
+{
+
+	return get_label(disk, l, DIOCGDINFO);
 }

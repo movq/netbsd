@@ -1,4 +1,4 @@
-/*	$NetBSD: hostname.c,v 1.13 1998/07/28 05:31:24 mycroft Exp $	*/
+/* $NetBSD: hostname.c,v 1.16 2008/07/20 00:52:39 lukem Exp $ */
 
 /*
  * Copyright (c) 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)hostname.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: hostname.c,v 1.13 1998/07/28 05:31:24 mycroft Exp $");
+__RCSID("$NetBSD: hostname.c,v 1.16 2008/07/20 00:52:39 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,17 +51,16 @@ __RCSID("$NetBSD: hostname.c,v 1.13 1998/07/28 05:31:24 mycroft Exp $");
 #include <string.h>
 #include <unistd.h>
 
-void usage __P((void));
-int main __P((int, char *[]));
+void usage(void);
+int main(int, char *[]);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int ch, sflag;
 	char *p, hostname[MAXHOSTNAMELEN + 1];
 
+	setprogname(argv[0]);
 	sflag = 0;
 	while ((ch = getopt(argc, argv, "s")) != -1)
 		switch (ch) {
@@ -98,10 +93,10 @@ main(argc, argv)
 }
 
 void
-usage()
+usage(void)
 {
-
-	(void)fprintf(stderr, "usage: hostname [-s] [name-of-host]\n");
+	(void)fprintf(stderr, "usage: %s [-s] [name-of-host]\n",
+	    getprogname());
 	exit(1);
 	/* NOTREACHED */
 }

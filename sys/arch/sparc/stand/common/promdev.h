@@ -1,4 +1,4 @@
-/*	$NetBSD: promdev.h,v 1.7 1999/05/27 14:04:25 pk Exp $ */
+/*	$NetBSD: promdev.h,v 1.13 2008/04/28 20:23:36 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,32 +39,39 @@ struct promdata {
 #define DT_NET		2
 #define DT_BYTE		3
 	/* Hooks for netif.c */
-	ssize_t	(*xmit) __P((struct promdata *, void *, size_t));
-	ssize_t	(*recv) __P((struct promdata *, void *, size_t));
+	ssize_t	(*xmit)(struct promdata *, void *, size_t);
+	ssize_t	(*recv)(struct promdata *, void *, size_t);
 };
 
 #define DDB_MAGIC0	( ('D'<<24) | ('D'<<16) | ('B'<<8) | ('0') )
 #define DDB_MAGIC1	( ('D'<<24) | ('D'<<16) | ('B'<<8) | ('1') )
 #define DDB_MAGIC2	( ('D'<<24) | ('D'<<16) | ('B'<<8) | ('2') )
 
-extern time_t	getsecs __P((void));
-extern void	prom_getether __P((int, u_char *));
-extern char	*prom_bootdevice;
+extern time_t	getsecs(void);
+
+#define	MAX_PROM_PATH	128
+
+extern char	prom_bootdevice[MAX_PROM_PATH];
 extern int	cputyp, nbpg, pgofset, pgshift;
 extern int	debug;
 
 /* Note: dvma_*() routines are for "oldmon" machines only */
-extern void	dvma_init __P((void));
-extern char	*dvma_mapin __P((char *, size_t));
-extern char	*dvma_mapout __P((char *, size_t));
-extern char	*dvma_alloc __P((int));
-extern void	dvma_free __P((char *, int));
+extern void	dvma_init(void);
+extern char	*dvma_mapin(char *, size_t);
+extern char	*dvma_mapout(char *, size_t);
+extern char	*dvma_alloc(int);
+extern void	dvma_free(char *, int);
 
 /* In net.c: */
-extern int	net_open __P((struct promdata *));
-extern int	net_close __P((struct promdata *));
-extern int	net_mountroot __P((void));
+extern int	net_open(struct promdata *);
+extern int	net_close(struct promdata *);
+extern int	net_mountroot(void);
+
+/* In mmu.c */
+extern int	mmu_init(void);
+extern int	(*pmap_map)(vaddr_t, paddr_t, psize_t);
+extern int	(*pmap_extract)(vaddr_t, paddr_t *);
 
 /* In str0.S: */
-extern void	sparc_noop __P((void));
+extern void	sparc_noop(void);
 extern void	*romp;

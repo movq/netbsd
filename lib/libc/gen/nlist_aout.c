@@ -1,9 +1,36 @@
-/*	$NetBSD: nlist_aout.c,v 1.11 1999/09/20 04:39:03 lukem Exp $	*/
+/* $NetBSD: nlist_aout.c,v 1.16 2006/11/08 23:27:32 christos Exp $ */
+
+/*
+ * Copyright (c) 1989, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -39,7 +66,7 @@
 #if 0
 static char sccsid[] = "@(#)nlist.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: nlist_aout.c,v 1.11 1999/09/20 04:39:03 lukem Exp $");
+__RCSID("$NetBSD: nlist_aout.c,v 1.16 2006/11/08 23:27:32 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -54,6 +81,7 @@ __RCSID("$NetBSD: nlist_aout.c,v 1.11 1999/09/20 04:39:03 lukem Exp $");
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <a.out.h>			/* for 'struct nlist' declaration */
 
 #include "nlist_private.h"
@@ -72,6 +100,7 @@ __fdnlist_aout(fd, list)
 	struct nlist nbuf[1024];
 	struct exec exec;
 	struct stat st;
+	char *scoreboard, *scored;
 
 	_DIAGASSERT(fd != -1);
 	_DIAGASSERT(list != NULL);
@@ -120,10 +149,18 @@ __fdnlist_aout(fd, list)
 	}
 	if (lseek(fd, symoff, SEEK_SET) == -1)
 		return (-1);
+#if defined(__SSP__) || defined(__SSP_ALL__)
+	scoreboard = malloc((size_t)nent);
+#else
+	scoreboard = alloca((size_t)nent);
+#endif
+	if (scoreboard == NULL)
+		return (-1);
+	(void)memset(scoreboard, 0, (size_t)nent);
 
 	while (symsize > 0) {
 		cc = MIN(symsize, sizeof(nbuf));
-		if (read(fd, nbuf, cc) != cc)
+		if (read(fd, nbuf, cc) != (ssize_t) cc)
 			break;
 		symsize -= cc;
 		for (s = nbuf; cc > 0; ++s, cc -= sizeof(*s)) {
@@ -131,19 +168,25 @@ __fdnlist_aout(fd, list)
 
 			if (soff == 0 || (s->n_type & N_STAB) != 0)
 				continue;
-			for (p = list; !ISLAST(p); p++)
-				if (!strcmp(&strtab[(size_t)soff],
+			for (p = list, scored = scoreboard; !ISLAST(p);
+			    p++, scored++)
+				if (*scored == 0 &&
+				    !strcmp(&strtab[(size_t)soff],
 				    p->n_un.n_name)) {
 					p->n_value = s->n_value;
 					p->n_type = s->n_type;
 					p->n_desc = s->n_desc;
 					p->n_other = s->n_other;
+					*scored = 1;
 					if (--nent <= 0)
 						break;
 				}
 		}
 	}
 	munmap(strtab, strsize);
+#if defined(__SSP__) || defined(__SSP_ALL__)
+	free(scoreboard);
+#endif
 	return (nent);
 }
 #endif /* NLIST_AOUT */

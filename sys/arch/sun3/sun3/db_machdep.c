@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.c,v 1.14 1999/10/28 06:55:31 lukem Exp $	*/
+/*	$NetBSD: db_machdep.c,v 1.26 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,6 +33,9 @@
  * Machine-dependent functions used by ddb
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: db_machdep.c,v 1.26 2008/04/28 20:23:38 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/proc.h>
 
@@ -53,29 +49,20 @@
 
 #include <ddb/db_command.h>
 #include <ddb/db_output.h>
+#include <ddb/db_interface.h>
 
-static void db_mach_abort   __P((db_expr_t, int, db_expr_t, char *));
-static void db_mach_halt    __P((db_expr_t, int, db_expr_t, char *));
-static void db_mach_reboot  __P((db_expr_t, int, db_expr_t, char *));
-static void db_mach_pagemap __P((db_expr_t, int, db_expr_t, char *));
+static void db_mach_abort  (db_expr_t, bool, db_expr_t, const char *);
+static void db_mach_halt   (db_expr_t, bool, db_expr_t, const char *);
+static void db_mach_reboot (db_expr_t, bool, db_expr_t, const char *);
+static void db_mach_pagemap(db_expr_t, bool, db_expr_t, const char *);
 
-struct db_command db_machine_cmds[] = {
-	{ "abort",	db_mach_abort,	0,	0 },
-	{ "halt",	db_mach_halt,	0,	0 },
-	{ "pgmap",	db_mach_pagemap, 	CS_SET_DOT, 0 },
-	{ "reboot",	db_mach_reboot,	0,	0 },
-	{ (char *)0, }
+const struct db_command db_machine_command_table[] = {
+	{ DDB_ADD_CMD("abort",	db_mach_abort,	0,	NULL,NULL,NULL) },
+	{ DDB_ADD_CMD("halt",	db_mach_halt,	0,	NULL,NULL,NULL) },
+	{ DDB_ADD_CMD("pgmap",	db_mach_pagemap, 	CS_SET_DOT, NULL,NULL,NULL) },
+	{ DDB_ADD_CMD("reboot",	db_mach_reboot,	0,	NULL,NULL,NULL) },
+	{ DDB_ADD_CMD(NULL,NULL,0,NULL,NULL,NULL) }
 };
-
-/*
- * This is called before ddb_init() to install the
- * machine-specific command table. (see machdep.c)
- */
-void
-db_machine_init()
-{
-	db_machine_commands_install(db_machine_cmds);
-}
 
 /*
  * Machine-specific ddb commands for the sun3:
@@ -85,45 +72,35 @@ db_machine_init()
  *    pgmap:	Given addr, Print addr, segmap, pagemap, pte
  */
 
-static void
-db_mach_abort(addr, have_addr, count, modif)
-	db_expr_t	addr;
-	int		have_addr;
-	db_expr_t	count;
-	char *		modif;
+static void 
+db_mach_abort(db_expr_t addr, bool have_addr, db_expr_t count,
+    const char *modif)
 {
+
 	sunmon_abort();
 }
 
-static void
-db_mach_halt(addr, have_addr, count, modif)
-	db_expr_t	addr;
-	int		have_addr;
-	db_expr_t	count;
-	char *		modif;
+static void 
+db_mach_halt(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 {
+
 	sunmon_halt();
 }
 
-static void
-db_mach_reboot(addr, have_addr, count, modif)
-	db_expr_t	addr;
-	int		have_addr;
-	db_expr_t	count;
-	char *		modif;
+static void 
+db_mach_reboot(db_expr_t addr, bool have_addr, db_expr_t count,
+    const char *modif)
 {
+
 	sunmon_reboot("");
 }
 
 
-static void pte_print __P((int));
+static void pte_print(int);
 
-static void
-db_mach_pagemap(addr, have_addr, count, modif)
-	db_expr_t	addr;
-	int		have_addr;
-	db_expr_t	count;
-	char *		modif;
+static void 
+db_mach_pagemap(db_expr_t addr, bool have_addr, db_expr_t count,
+    const char *modif)
 {
 	u_long va = m68k_trunc_page((u_long)addr);
 	int pte;
@@ -131,26 +108,28 @@ db_mach_pagemap(addr, have_addr, count, modif)
 	int sme;
 
 	sme = get_segmap(va);
-	if (sme == 0xFF) pte = 0;
-	else pte = get_pte(va);
-	db_printf("0x%08x [%02x] 0x%08x", va, sme, pte);
+	if (sme == 0xFF) {
+		pte = 0;
+	} else {
+		pte = get_pte(va);
+	}
+	db_printf("0x%08lx [%02x] 0x%08x", va, sme, pte);
 #endif /* SUN3 */
 #ifdef	_SUN3X_
 	pte = get_pte(va);
-	db_printf("0x%08x 0x%08x", va, pte);
+	db_printf("0x%08lx 0x%08x", va, pte);
 #endif /* SUN3X */
 
 	pte_print(pte);
-	db_next = va + NBPG;
+	db_next = va + PAGE_SIZE;
 }
 
 #ifdef	_SUN3_
-static void
-pte_print(pte)
-	int pte;
+static void 
+pte_print(int pte)
 {
 	int t;
-	static char *pgt_names[] = {
+	static const char *pgt_names[] = {
 		"MEM", "OBIO", "VMES", "VMEL",
 	};
 
@@ -170,15 +149,14 @@ pte_print(pte)
 		t = (pte >> PG_TYPE_SHIFT) & 3;
 		db_printf(" %s", pgt_names[t]);
 		db_printf(" PA=0x%x\n", PG_PA(pte));
-	}
-	else db_printf(" INVALID\n");
+	} else
+		db_printf(" INVALID\n");
 }
 #endif	/* SUN3 */
 
 #ifdef	_SUN3X_
-static void
-pte_print(pte)
-	int pte;
+static void 
+pte_print(int pte)
 {
 
 	if (pte & MMU_SHORT_PTE_DT) {
@@ -191,7 +169,7 @@ pte_print(pte)
 		if (pte & MMU_SHORT_PTE_WP)
 			db_printf(" WP");
 		db_printf(" DT%d\n", pte & MMU_SHORT_PTE_DT);
-	}
-	else db_printf(" INVALID\n");
+	} else
+		db_printf(" INVALID\n");
 }
 #endif	/* SUN3X */

@@ -1,4 +1,4 @@
-/*	$NetBSD: input.c,v 1.32 1999/07/09 03:05:50 christos Exp $	*/
+/*	$NetBSD: input.c,v 1.41 2008/10/16 14:36:40 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)input.c	8.3 (Berkeley) 6/9/95";
 #else
-__RCSID("$NetBSD: input.c,v 1.32 1999/07/09 03:05:50 christos Exp $");
+__RCSID("$NetBSD: input.c,v 1.41 2008/10/16 14:36:40 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -99,27 +95,24 @@ struct parsefile {
 
 
 int plinno = 1;			/* input line number */
-MKINIT int parsenleft;		/* copy of parsefile->nleft */
+int parsenleft;			/* copy of parsefile->nleft */
 MKINIT int parselleft;		/* copy of parsefile->lleft */
 char *parsenextc;		/* copy of parsefile->nextc */
 MKINIT struct parsefile basepf;	/* top level input file */
-char basebuf[BUFSIZ];		/* buffer for top level input file */
+MKINIT char basebuf[BUFSIZ];	/* buffer for top level input file */
 struct parsefile *parsefile = &basepf;	/* current input file */
 int init_editline = 0;		/* editline library initialized? */
 int whichprompt;		/* 1 == PS1, 2 == PS2 */
 
-EditLine *el;			/* cookie for editline package */
-
-STATIC void pushfile __P((void));
-static int preadfd __P((void));
+STATIC void pushfile(void);
+static int preadfd(void);
 
 #ifdef mkinit
+INCLUDE <stdio.h>
 INCLUDE "input.h"
 INCLUDE "error.h"
 
 INIT {
-	extern char basebuf[];
-
 	basepf.nextc = basepf.buf = basebuf;
 }
 
@@ -140,9 +133,7 @@ SHELLPROC {
  */
 
 char *
-pfgets(line, len)
-	char *line;
-	int len;
+pfgets(char *line, int len)
 {
 	char *p = line;
 	int nleft = len;
@@ -171,14 +162,14 @@ pfgets(line, len)
  */
 
 int
-pgetc()
+pgetc(void)
 {
 	return pgetc_macro();
 }
 
 
 static int
-preadfd()
+preadfd(void)
 {
 	int nr;
 	char *buf =  parsefile->buf;
@@ -187,18 +178,28 @@ preadfd()
 retry:
 #ifndef SMALL
 	if (parsefile->fd == 0 && el) {
-		const char *rl_cp;
+		static const char *rl_cp;
+		static int el_len;
 
-		rl_cp = el_gets(el, &nr);
+		if (rl_cp == NULL)
+			rl_cp = el_gets(el, &el_len);
 		if (rl_cp == NULL)
 			nr = 0;
 		else {
-			/* XXX - BUFSIZE should redesign so not necessary */
-			(void) strcpy(buf, rl_cp);
+			nr = el_len;
+			if (nr > BUFSIZ - 8)
+				nr = BUFSIZ - 8;
+			memcpy(buf, rl_cp, nr);
+			if (nr != el_len) {
+				el_len -= nr;
+				rl_cp += nr;
+			} else
+				rl_cp = 0;
 		}
+
 	} else
 #endif
-		nr = read(parsefile->fd, buf, BUFSIZ - 1);
+		nr = read(parsefile->fd, buf, BUFSIZ - 8);
 
 
 	if (nr <= 0) {
@@ -232,7 +233,7 @@ retry:
  */
 
 int
-preadbuffer()
+preadbuffer(void)
 {
 	char *p, *q;
 	int more;
@@ -321,7 +322,8 @@ check:
  */
 
 void
-pungetc() {
+pungetc(void)
+{
 	parsenleft++;
 	parsenextc--;
 }
@@ -331,11 +333,8 @@ pungetc() {
  * We handle aliases this way.
  */
 void
-pushstring(s, len, ap)
-	char *s;
-	int len;
-	void *ap;
-	{
+pushstring(char *s, int len, void *ap)
+{
 	struct strpush *sp;
 
 	INTOFF;
@@ -358,7 +357,7 @@ pushstring(s, len, ap)
 }
 
 void
-popstring()
+popstring(void)
 {
 	struct strpush *sp = parsefile->strpush;
 
@@ -381,16 +380,30 @@ popstring()
  */
 
 void
-setinputfile(fname, push)
-	const char *fname;
-	int push;
+setinputfile(const char *fname, int push)
 {
+	unsigned char magic[4];
 	int fd;
 	int fd2;
 
 	INTOFF;
 	if ((fd = open(fname, O_RDONLY)) < 0)
 		error("Can't open %s", fname);
+
+	/* Since the message "Syntax error: "(" unexpected" is not very
+	 * helpful, we check if the file starts with the ELF magic to
+	 * avoid that message. The first lseek tries to make sure that
+	 * we can later rewind the file.
+	 */
+	if (lseek(fd, 0, SEEK_SET) == 0) {
+		if (read(fd, magic, 4) == 4) {
+			if (memcmp(magic, "\177ELF", 4) == 0)
+				error("Cannot execute ELF binary %s", fname);
+		}
+		if (lseek(fd, 0, SEEK_SET) != 0)
+			error("Cannot rewind the file %s", fname);
+	}
+
 	if (fd < 10) {
 		fd2 = copyfd(fd, 10);
 		close(fd);
@@ -409,8 +422,7 @@ setinputfile(fname, push)
  */
 
 void
-setinputfd(fd, push)
-	int fd, push;
+setinputfd(int fd, int push)
 {
 	(void) fcntl(fd, F_SETFD, FD_CLOEXEC);
 	if (push) {
@@ -432,10 +444,8 @@ setinputfd(fd, push)
  */
 
 void
-setinputstring(string, push)
-	char *string;
-	int push;
-	{
+setinputstring(char *string, int push)
+{
 	INTOFF;
 	if (push)
 		pushfile();
@@ -454,7 +464,8 @@ setinputstring(string, push)
  */
 
 STATIC void
-pushfile() {
+pushfile(void)
+{
 	struct parsefile *pf;
 
 	parsefile->nleft = parsenleft;
@@ -471,7 +482,8 @@ pushfile() {
 
 
 void
-popfile() {
+popfile(void)
+{
 	struct parsefile *pf = parsefile;
 
 	INTOFF;
@@ -496,7 +508,8 @@ popfile() {
  */
 
 void
-popallfiles() {
+popallfiles(void)
+{
 	while (parsefile != &basepf)
 		popfile();
 }
@@ -506,10 +519,22 @@ popallfiles() {
 /*
  * Close the file(s) that the shell is reading commands from.  Called
  * after a fork is done.
+ *
+ * Takes one arg, vfork, which tells it to not modify its global vars
+ * as it is still running in the parent.
+ *
+ * This code is (probably) unnecessary as the 'close on exec' flag is
+ * set and should be enough.  In the vfork case it is definitely wrong
+ * to close the fds as another fork() may be done later to feed data
+ * from a 'here' document into a pipe and we don't want to close the
+ * pipe!
  */
 
 void
-closescript() {
+closescript(int vforked)
+{
+	if (vforked)
+		return;
 	popallfiles();
 	if (parsefile->fd > 0) {
 		close(parsefile->fd);

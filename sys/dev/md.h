@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.6 2000/01/21 12:14:53 tsutsui Exp $	*/
+/*	$NetBSD: md.h,v 1.9 2008/05/02 13:02:31 ad Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
@@ -37,7 +37,7 @@
 #include <sys/ioccom.h>
 
 struct md_conf {
-	caddr_t md_addr;
+	void *md_addr;
 	size_t  md_size;
 	int     md_type;
 };
@@ -85,6 +85,9 @@ struct md_conf {
  * called by the ramdisk driver to allow machine-dependent to
  * match/configure and/or load each ramdisk unit.
  */
-extern void md_attach_hook __P((int unit, struct md_conf *));
-extern void md_open_hook   __P((int unit, struct md_conf *));
-#endif
+extern void md_attach_hook(int, struct md_conf *);
+extern void md_open_hook(int, struct md_conf *);
+extern void md_root_setconf(char *, size_t);
+
+extern int md_is_root;
+#endif /* _KERNEL */

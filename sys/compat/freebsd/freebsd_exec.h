@@ -1,4 +1,4 @@
-/*	$NetBSD: freebsd_exec.h,v 1.5 1999/04/30 23:07:01 cgd Exp $	*/
+/*	$NetBSD: freebsd_exec.h,v 1.15 2007/12/04 18:40:08 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -67,7 +63,7 @@
 #define FREEBSD_N_TXTADDR(ex) \
 	((FREEBSD_N_GETMAGIC(ex) == OMAGIC || \
 	  FREEBSD_N_GETMAGIC(ex) == NMAGIC || \
-	  FREEBSD_N_GETMAGIC(ex) == ZMAGIC) ? 0 : __LDPGSZ)
+	  FREEBSD_N_GETMAGIC(ex) == ZMAGIC) ? 0 : AOUT_LDPGSZ)
 
 /* Address of the bottom of the data segment. */
 #define FREEBSD_N_DATADDR(ex) \
@@ -75,8 +71,8 @@
 
 /* Text segment offset. */
 #define	FREEBSD_N_TXTOFF(ex) \
-	(FREEBSD_N_GETMAGIC(ex) == ZMAGIC ? __LDPGSZ : \
-	 FREEBSD_N_GETMAGIC(ex) == QMAGIC ? 0 : sizeof(struct exec)) 
+	(FREEBSD_N_GETMAGIC(ex) == ZMAGIC ? AOUT_LDPGSZ : \
+	 FREEBSD_N_GETMAGIC(ex) == QMAGIC ? 0 : sizeof(struct exec))
 
 /* Data segment offset. */
 #define	FREEBSD_N_DATOFF(ex) \
@@ -95,22 +91,21 @@
 
 #define	FREEBSD_AOUT_HDR_SIZE	sizeof(struct exec)
 
-int exec_freebsd_aout_makecmds __P((struct proc *, struct exec_package *));
+int exec_freebsd_aout_makecmds(struct lwp *, struct exec_package *);
 
 #endif /* EXEC_AOUT */
 
 #ifdef EXEC_ELF32
-#define FREEBSD_ELF_AUX_ARGSIZ	howmany(sizeof(AuxInfo) * 8, sizeof(char *))
-
 #define FREEBSD_ELF_BRAND_STRING "FreeBSD"
 #define FREEBSD_ELF_INTERP_PREFIX_STRING "/usr/libexec/ld-elf.so"
 
-int freebsd_elf32_probe __P((struct proc *, struct exec_package *, Elf32_Ehdr *,
-    char *, Elf32_Addr *));
+int freebsd_elf32_probe(struct lwp *, struct exec_package *, void *,
+    char *, vaddr_t *);
 #endif /* EXEC_ELF32 */
 
-void freebsd_setregs __P((struct proc *, struct exec_package *, u_long));
+void freebsd_setregs(struct lwp *, struct exec_package *, u_long);
 
 extern char freebsd_sigcode[], freebsd_esigcode[];
+extern const struct emul emul_freebsd;
 
 #endif /* !_FREEBSD_EXEC_H */

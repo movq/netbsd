@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos_machdep.c,v 1.7 1998/09/17 02:30:02 thorpej Exp $	*/
+/*	$NetBSD: sunos_machdep.c,v 1.22 2008/05/29 14:51:26 mrg Exp $	*/
 
 /*
  * Copyright (c) 1995 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,7 +26,12 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: sunos_machdep.c,v 1.22 2008/05/29 14:51:26 mrg Exp $");
+
+#if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,6 +41,9 @@
 #include <sys/mount.h>
 #include <sys/signal.h>
 #include <sys/signalvar.h>
+
+#include <compat/sys/signal.h>
+#include <compat/sys/signalvar.h>
 
 #include <sys/syscallargs.h>
 #include <compat/sunos/sunos.h>
@@ -62,21 +68,19 @@ struct sunos_sigframe {
 	struct	sigcontext13 sf_sc;	/* actual sigcontext */
 };
 
-void
-sunos_sendsig(catcher, sig, mask, code)
-	sig_t catcher;
-	int sig;
-	sigset_t *mask;
-	u_long code;
+void sunos_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 {
-	struct proc *p = curproc;
-	struct sigacts *psp = p->p_sigacts;
+	struct lwp *l = curlwp;
+	struct proc *p = l->l_proc;
 	struct sunos_sigframe *fp;
 	struct trapframe *tf;
-	int addr, onstack, oldsp, newsp;
+	int addr, onstack, oldsp, newsp, error;
+	int sig = ksi->ksi_signo;
+	u_long code = ksi->ksi_code;
+	sig_t catcher = SIGACTION(p, sig).sa_handler;
 	struct sunos_sigframe sf;
 
-	tf = p->p_md.md_tf;
+	tf = l->l_md.md_tf;
 	oldsp = tf->tf_out[6];
 
 	/*
@@ -84,12 +88,12 @@ sunos_sendsig(catcher, sig, mask, code)
 	 * one signal frame, and align.
 	 */
 	onstack =
-	    (psp->ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
-	    (psp->ps_sigact[sig].sa_flags & SA_ONSTACK) != 0;
+	    (l->l_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
+	    (SIGACTION(p, sig).sa_flags & SA_ONSTACK) != 0;
 
 	if (onstack)
 		fp = (struct sunos_sigframe *)
-		     ((caddr_t)psp->ps_sigstk.ss_sp + psp->ps_sigstk.ss_size);
+		     ((char *)l->l_sigstk.ss_sp + l->l_sigstk.ss_size);
 	else
 		fp = (struct sunos_sigframe *)oldsp;
 
@@ -113,7 +117,7 @@ sunos_sendsig(catcher, sig, mask, code)
 	/*
 	 * Build the signal context to be used by sigreturn.
 	 */
-	sf.sf_sc.sc_onstack = psp->ps_sigstk.ss_flags & SS_ONSTACK;
+	sf.sf_sc.sc_onstack = l->l_sigstk.ss_flags & SS_ONSTACK;
 	native_sigset_to_sigset13(mask, &sf.sf_sc.sc_mask);
 	sf.sf_sc.sc_sp = oldsp;
 	sf.sf_sc.sc_pc = tf->tf_pc;
@@ -131,10 +135,15 @@ sunos_sendsig(catcher, sig, mask, code)
 	 * joins seamlessly with the frame it was in when the signal occurred,
 	 * so that the debugger and _longjmp code can back up through it.
 	 */
+	sendsig_reset(l, sig);
+	mutex_exit(p->p_lock);
 	newsp = (int)fp - sizeof(struct rwindow);
 	write_user_windows();
-	if (rwindow_save(p) || copyout((caddr_t)&sf, (caddr_t)fp, sizeof sf) ||
-	    suword(&((struct rwindow *)newsp)->rw_in[6], oldsp)) {
+	error = (rwindow_save(l) || copyout((void *)&sf, (void *)fp, sizeof sf) ||
+	    suword(&((struct rwindow *)newsp)->rw_in[6], oldsp));
+	mutex_enter(p->p_lock);
+
+	if (error) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
@@ -143,7 +152,7 @@ sunos_sendsig(catcher, sig, mask, code)
 		if ((sunos_sigdebug & SDB_KSTACK) && p->p_pid == sunos_sigpid)
 			printf("sendsig: window save or copyout error\n");
 #endif
-		sigexit(p, SIGILL);
+		sigexit(l, SIGILL);
 		/* NOTREACHED */
 	}
 #ifdef DEBUG
@@ -162,7 +171,7 @@ sunos_sendsig(catcher, sig, mask, code)
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
-		psp->ps_sigstk.ss_flags |= SS_ONSTACK;
+		l->l_sigstk.ss_flags |= SS_ONSTACK;
 
 #ifdef DEBUG
 	if ((sunos_sigdebug & SDB_KSTACK) && p->p_pid == sunos_sigpid)
@@ -171,13 +180,9 @@ sunos_sendsig(catcher, sig, mask, code)
 }
 
 int
-sunos_sys_sigreturn(p, v, retval)
-        register struct proc *p;
-	void *v;
-	register_t *retval;
+sunos_sys_sigreturn(struct lwp *l, const struct sunos_sys_sigreturn_args *uap, register_t *retval)
 {
-	struct sunos_sys_sigreturn_args *uap = v;
 
-	return (compat_13_sys_sigreturn(p,
-			(struct compat_13_sys_sigreturn_args *)uap, retval));
+	return (compat_13_sys_sigreturn(l,
+			(const struct compat_13_sys_sigreturn_args *)uap, retval));
 }

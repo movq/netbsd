@@ -1,7 +1,11 @@
-/*	$NetBSD: fsirand.c,v 1.10 1998/10/23 01:27:51 thorpej Exp $	*/
+/*	$NetBSD: fsirand.c,v 1.28 2008/04/28 20:23:08 martin Exp $	*/
 
-/*
- * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
+/*-
+ * Copyright (c) 1997 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Christos Zoulas.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,147 +15,141 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Christos Zoulas.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsirand.c,v 1.10 1998/10/23 01:27:51 thorpej Exp $");
+__RCSID("$NetBSD: fsirand.c,v 1.28 2008/04/28 20:23:08 martin Exp $");
 #endif /* lint */
 
-#include <stdio.h>
-#include <string.h>
-#include <ctype.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <err.h>
-#include <stdlib.h>
-#include <unistd.h>
-
-#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/vnode.h>
 #include <sys/disklabel.h>
 #include <sys/ioctl.h>
 
-#include <ufs/ufs/quota.h>
-#include <ufs/ufs/inode.h>
+#include <ctype.h>
+#include <err.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <util.h>
+#include <signal.h>
+
 #include <ufs/ufs/ufs_bswap.h>
 
+#include <ufs/ufs/dinode.h>
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
 
-static void usage __P((void));
-static void getsblock __P((int, const char *, struct disklabel *, struct fs *));
-static void fixinodes __P((int, struct fs *, struct disklabel *, int, long));
+static void usage(void);
+static void getsblock(int, const char *, struct fs *);
+static void fixinodes(int, struct fs *, struct disklabel *, int, long);
+static void statussig(int);
 
-int main __P((int, char *[]));
-
-int needswap = 0;
+int	needswap, ino, imax, is_ufs2;
+time_t	tstart;
 
 static void
-usage()
+usage(void)
 {
-	extern char *__progname;
 
-	(void) fprintf(stderr, "%s: [-x <constant>] [-p] <special>\n",
-	    __progname);
+	(void) fprintf(stderr,
+	    "usage: %s [-F] [-p] [-x <constant>] <special>\n",
+	    getprogname());
 	exit(1);
 }
 
 
-/* getsblock():
+static const off_t sblock_try[] = SBLOCKSEARCH;
+
+/*
+ * getsblock():
  *	Return the superblock 
  */
 static void
-getsblock(fd, name, lab, fs)
-	int fd;
-	const char *name;
-	struct disklabel *lab;
-	struct fs *fs;
+getsblock(int fd, const char *name, struct fs *fs)
 {
-	struct partition *pp = NULL;
-	char p = name[strlen(name) - 1];
+	int i;
 
-	if (p >= 'a' && p <= 'h')
-		pp = &lab->d_partitions[p - 'a'];
-	else if (isdigit((unsigned char) p))
-		pp = &lab->d_partitions[0];
-	else
-		errx(1, "Invalid partition `%c'", p);
+	for (i = 0; ; i++) {
+		if (sblock_try[i] == -1)
+			errx(1, "%s: can't find superblock", name);
+		if (pread(fd, fs, SBLOCKSIZE, sblock_try[i]) != SBLOCKSIZE)
+			continue;
 
-	if (pp->p_fstype != FS_BSDFFS)
-		errx(1, "Not an FFS partition");
-
-	if (lseek(fd, (off_t) SBOFF , SEEK_SET) == (off_t) -1)
-		err(1, "Cannot seek to superblock");
-
-	if (read(fd, fs, SBSIZE) != SBSIZE)
-		err(1, "Cannot read superblock");
-
-	if (fs->fs_magic != FS_MAGIC)  {
-		if(fs->fs_magic == bswap32(FS_MAGIC)) {
+		switch(fs->fs_magic) {
+		case FS_UFS2_MAGIC:
+			is_ufs2 = 1;
+			/* FALLTHROUGH */
+		case FS_UFS1_MAGIC:
+			break;
+		case FS_UFS2_MAGIC_SWAPPED:
+			is_ufs2 = 1;
+			/* FALLTHROUGH */
+		case FS_UFS1_MAGIC_SWAPPED:
 			needswap = 1;
-			ffs_sb_swap(fs, fs, 0);
-		} else
-			errx(1, "Bad superblock magic number");
+			ffs_sb_swap(fs, fs);
+			break;
+		default:
+			continue;
+		}
+
+		if (!is_ufs2 && sblock_try[i] == SBLOCK_UFS2)
+			continue;
+		break;
 	}
 
 	if (fs->fs_ncg < 1)
-		errx(1, "Bad ncg in superblock");
+		errx(1, "%s: bad ncg in superblock", name);
 
-	if (fs->fs_cpg < 1)
-		errx(1, "Bad cpg in superblock");
-
-	if (fs->fs_ncg * fs->fs_cpg < fs->fs_ncyl ||
-	    (fs->fs_ncg - 1) * fs->fs_cpg >= fs->fs_ncyl)
-		errx(1, "Bad number of cylinders in superblock");
-
-	if (fs->fs_sbsize > SBSIZE)
-		errx(1, "Superblock too large");
+	if (fs->fs_sbsize > SBLOCKSIZE)
+		errx(1, "%s: superblock too large", name);
 }
 
-/* fixinodes():
+
+/*
+ * fixinodes():
  *	Randomize the inode generation numbers
  */
 static void
-fixinodes(fd, fs, lab, pflag, xorval)
-	int fd;
-	struct fs *fs;
-	struct disklabel *lab;
-	int pflag;
-	long xorval;
+fixinodes(int fd, struct fs *fs, struct disklabel *lab, int pflag, long xorval)
 {
 	int inopb = INOPB(fs);
-	int size = inopb * DINODE_SIZE;
+	int size;
 	caddr_t buf;
-	struct dinode *dip;
-	int i, ino, imax;
+	struct ufs1_dinode *dp1 = NULL;
+	struct ufs2_dinode *dp2 = NULL;
+	int i;
+
+	size = is_ufs2 ? inopb * sizeof (struct ufs2_dinode) :
+	    inopb * sizeof (struct ufs1_dinode);
 
 	if ((buf = malloc(size)) == NULL)
 		err(1, "Out of memory");
 
+	if (is_ufs2)
+		dp2 = (struct ufs2_dinode *)buf;
+	else
+		dp1 = (struct ufs1_dinode *)buf;
+
 	for (ino = 0, imax = fs->fs_ipg * fs->fs_ncg; ino < imax;) {
 		off_t sp;
-#if __GNUC__	/* XXX work around lame compiler problem (gcc 2.7.2) */
-		(void)&sp;
-#endif
 		sp = (off_t) fsbtodb(fs, ino_to_fsba(fs, ino)) *
 		     (off_t) lab->d_secsize;
 
@@ -162,12 +160,25 @@ fixinodes(fd, fs, lab, pflag, xorval)
 			err(1, "Reading inodes %d+%d failed", ino, inopb);
 
 		for (i = 0; i < inopb; i++) {
-			dip = (struct dinode *)(buf + (i * DINODE_SIZE));
-			if (pflag)
-				printf("ino %d gen 0x%x\n", ino,
-					ufs_rw32(dip->di_gen, needswap));
-			else
-				dip->di_gen = ufs_rw32(random() ^ xorval, needswap);
+			if (is_ufs2) {
+				if (pflag)
+					printf("inode %10d   gen 0x%08x\n",
+					    ino,
+					    ufs_rw32(dp2[i].di_gen, needswap));
+				else
+					dp2[i].di_gen =
+					    ufs_rw32((arc4random() & INT32_MAX)^ xorval,
+						needswap);
+			} else {
+				if (pflag)
+					printf("inode %10d   gen 0x%08x\n",
+					    ino,
+					    ufs_rw32(dp1[i].di_gen, needswap));
+				else
+					dp1[i].di_gen =
+					    ufs_rw32((arc4random() & INT32_MAX) ^ xorval,
+						needswap);
+			}
 			if (++ino > imax)
 				errx(1, "Exceeded number of inodes");
 		}
@@ -184,27 +195,56 @@ fixinodes(fd, fs, lab, pflag, xorval)
 	free(buf);
 }
 
-int
-main(argc, argv)
-	int	argc;
-	char	*argv[];
+/*
+ * statussig():
+ *	display current status
+ */
+void
+statussig(int dummy)
 {
-	char buf[SBSIZE];
+	char	msgbuf[256];
+	int	len, deltat;
+	time_t	tnow, elapsed;
+
+	(void)time(&tnow);
+	elapsed = tnow - tstart;
+	len = snprintf(msgbuf, sizeof(msgbuf),
+	    "fsirand: completed inode %d of %d (%3.2f%%)",
+	    ino, imax, (ino * 100.0) / imax);
+	if (imax - ino) {
+		deltat = tstart - tnow + (1.0 * (tnow - tstart)) / ino * imax;
+		len += snprintf(msgbuf + len, sizeof(msgbuf) - len,
+		    ", finished in %d:%02d\n", deltat / 60, deltat % 60);
+	} else {
+		len += snprintf(msgbuf + len, sizeof(msgbuf) - len, "\n");
+	}
+	write(STDERR_FILENO, msgbuf, len);
+}
+
+int
+main(int argc, char *argv[])
+{
+	const char *special;
+	char buf[SBLOCKSIZE], device[MAXPATHLEN];
 	struct fs *fs = (struct fs *) buf;
 	struct disklabel lab;
-	int fd, c;
-	long xorval = 0;
+	long xorval;
 	char *ep;
-	struct timeval tv;
+	int fd, c, Fflag, pflag, openflags;
 
-	int pflag = 0;
+	xorval = 0;
+	Fflag = pflag = 0;
 
-	while ((c = getopt(argc, argv, "px:")) != -1)
+	while ((c = getopt(argc, argv, "Fpx:")) != -1)
 		switch (c) {
+		case 'F':
+			Fflag++;
+			break;
 		case 'p':
 			pflag++;
 			break;
 		case 'x':
+			errno = 0;
 			xorval = strtol(optarg, &ep, 0);
 			if ((xorval == LONG_MIN || xorval == LONG_MAX) &&
 			    errno == ERANGE)
@@ -222,16 +262,28 @@ main(argc, argv)
 	if (argc != 1)
 		usage();
 
-	(void) gettimeofday(&tv, NULL);
-	srandom((unsigned) tv.tv_usec);
+	special = argv[0];
+	openflags = pflag ? O_RDONLY : O_RDWR;
+	if (Fflag)
+		fd = open(special, openflags);
+	else {
+		fd = opendisk(special, openflags, device, sizeof(device), 0);
+		special = device;
+	}
+	if (fd == -1)
+		err(1, "Cannot open `%s'", special);
 
-	if ((fd = open(argv[0], pflag ? O_RDONLY : O_RDWR)) == -1)
-		err(1, "Cannot open `%s'", argv[0]);
+	if (Fflag) {
+		memset(&lab, 0, sizeof(lab));
+		lab.d_secsize = DEV_BSIZE;	/* XXX */
+	} else {
+		if (ioctl(fd, DIOCGDINFO, &lab) == -1)
+			err(1, "%s: cannot get disklabel information", special);
+	}
 
-	if (ioctl(fd, DIOCGDINFO, &lab) == -1)
-		err(1, "Cannot get label information");
-
-	getsblock(fd, argv[0], &lab, fs);
+	time(&tstart);
+	(void)signal(SIGINFO, statussig);
+	getsblock(fd, special, fs);
 	fixinodes(fd, fs, &lab, pflag, xorval);
 
 	(void) close(fd);

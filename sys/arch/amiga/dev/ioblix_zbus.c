@@ -1,3 +1,5 @@
+/*	$NetBSD: ioblix_zbus.c,v 1.14 2008/04/28 20:23:12 martin Exp $ */
+
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -13,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,6 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ioblix_zbus.c,v 1.14 2008/04/28 20:23:12 martin Exp $");
+
 /* IOBlix Zorro driver */
 /* XXX to be done: we need to probe the com clock speed! */
 
@@ -45,7 +43,6 @@
 #include <sys/param.h>
 
 #include <machine/bus.h>
-#include <machine/conf.h>
 
 #include <amiga/include/cpu.h>
 
@@ -61,19 +58,16 @@ struct iobz_softc {
 	struct bus_space_tag sc_bst;
 };
 
-int iobzmatch __P((struct device *, struct cfdata *, void *));
-void iobzattach __P((struct device *, struct device *, void *));
-int iobzprint __P((void *auxp, const char *));
+int iobzmatch(struct device *, struct cfdata *, void *);
+void iobzattach(struct device *, struct device *, void *);
+int iobzprint(void *auxp, const char *);
+void iobz_shutdown(void *);
 
-struct cfattach iobl_zbus_ca = {
-	sizeof(struct iobz_softc), iobzmatch, iobzattach
-};
+CFATTACH_DECL(iobl_zbus, sizeof(struct iobz_softc),
+    iobzmatch, iobzattach, NULL, NULL);
 
 int
-iobzmatch(parent, cfp, auxp)
-	struct device *parent;
-	struct cfdata *cfp;
-	void *auxp;
+iobzmatch(struct device *parent, struct cfdata *cfp, void *auxp)
 {
 
 	struct zbus_args *zap;
@@ -90,11 +84,11 @@ iobzmatch(parent, cfp, auxp)
 }
 
 struct iobz_devs {
-	char *name;
+	const char *name;
 	unsigned off;
 	int arg;
 } iobzdevices[] = {
-	{ "com", 0x100, 24000000 },
+	{ "com", 0x100, 24000000 },	/* XXX see below */
 	{ "com", 0x108, 24000000 },
 	{ "com", 0x110, 24000000 },
 	{ "com", 0x118, 24000000 },
@@ -103,12 +97,13 @@ struct iobz_devs {
 	{ 0, 0, 0}
 };
 
-
+#ifndef IOBZCLOCK
+#define IOBZCLOCK 22118400;
+#endif
+int iobzclock = IOBZCLOCK;		/* patchable! */
 
 void
-iobzattach(parent, self, auxp)
-	struct device *parent, *self;
-	void *auxp;
+iobzattach(struct device *parent, struct device *self, void *auxp)
 {
 	struct iobz_softc *iobzsc;
 	struct iobz_devs  *iobzd;
@@ -135,19 +130,18 @@ iobzattach(parent, self, auxp)
 	while (iobzd->name) {
 		supa.supio_name = iobzd->name;
 		supa.supio_iobase = iobzd->off;
-		supa.supio_arg = iobzd->arg;
+		supa.supio_arg = iobzclock /* XXX iobzd->arg */;
 		config_found(self, &supa, iobzprint); /* XXX */
 		++iobzd;
 	}
 
 	p = (volatile u_int8_t *)zap->va + 2;
+	(void)shutdownhook_establish(iobz_shutdown, __UNVOLATILE(p));
 	*p = ((*p) & 0x1F) | 0x80;
 }
 
 int
-iobzprint(auxp, pnp)
-	void *auxp;
-	const char *pnp;
+iobzprint(void *auxp, const char *pnp)
 {
 	struct supio_attach_args *supa;
 	supa = auxp;
@@ -155,8 +149,21 @@ iobzprint(auxp, pnp)
 	if (pnp == NULL)
 		return(QUIET);
 
-	printf("%s at %s port 0x%02x",
+	aprint_normal("%s at %s port 0x%02x",
 	    supa->supio_name, pnp, supa->supio_iobase);
 
 	return(UNCONF);
+}
+
+/*
+ * Disable board interrupts at shutdown time.
+ */
+
+void
+iobz_shutdown(void *p) {
+	volatile int8_t *q;
+
+	q = p;
+
+	*q &= 0x1F;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: shapes.c,v 1.4 1999/09/08 21:18:01 jsm Exp $	*/
+/*	$NetBSD: shapes.c,v 1.7 2006/10/22 08:09:24 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -85,9 +81,9 @@ const struct shape shapes[] = {
 int
 fits_in(shape, pos)
 	const struct shape *shape;
-	register int pos;
+	int pos;
 {
-	register int *o = shape->off;
+	const int *o = shape->off;
 
 	if (board[pos] || board[pos + *o++] || board[pos + *o++] ||
 	    board[pos + *o])
@@ -102,9 +98,9 @@ fits_in(shape, pos)
 void
 place(shape, pos, onoff)
 	const struct shape *shape;
-	register int pos, onoff;
+	int pos, onoff;
 {
-	register int *o = shape->off;
+	const int *o = shape->off;
 
 	board[pos] = onoff;
 	board[pos + *o++] = onoff;

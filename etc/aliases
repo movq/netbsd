@@ -1,4 +1,4 @@
-#	$NetBSD: aliases,v 1.11 1998/02/02 06:14:45 mikel Exp $
+#	$NetBSD: aliases,v 1.21 2008/07/18 21:12:03 apb Exp $
 #
 #	from: @(#)aliases	8.2 (Berkeley) 3/5/94
 #
@@ -15,13 +15,15 @@ MAILER-DAEMON: postmaster
 postmaster: root
 
 # General redirections for pseudo accounts.
-bin:		root
-daemon:		root
-falken:		root
-games:		root
-ingres:		root
-nobody:		root
 toor:		root
+daemon:		root
+bin:		root
+games:		root
+postfix:	postmaster
+named:		root
+ntpd:		root
+sshd:		root
+nobody:		root
 
 # Well-known aliases -- these should be filled in!
 # root:
@@ -50,5 +52,5 @@ ftp:		root
 # don't enable this.
 # decode:	/dev/null
 
-# uncomment this for msgs:
+# uncomment this for msgs(1):
 # msgs: "|/usr/bin/msgs -s"

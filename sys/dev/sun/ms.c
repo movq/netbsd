@@ -1,4 +1,4 @@
-/*	$NetBSD: ms.c,v 1.18 2000/03/30 12:45:42 augustss Exp $	*/
+/*	$NetBSD: ms.c,v 1.37 2008/04/20 03:05:55 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -55,6 +51,9 @@
  * the "zsc" driver for a Sun mouse.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ms.c,v 1.37 2008/04/20 03:05:55 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
@@ -76,11 +75,24 @@
 #include <dev/sun/event_var.h>
 #include <dev/sun/msvar.h>
 
+#include <dev/wscons/wsconsio.h>
+#include <dev/wscons/wsmousevar.h>
+
+#include "ioconf.h"
 #include "locators.h"
+#include "wsmouse.h"
 
-cdev_decl(ms);	/* open, close, read, write, ioctl, stop, ... */
+dev_type_open(msopen);
+dev_type_close(msclose);
+dev_type_read(msread);
+dev_type_ioctl(msioctl);
+dev_type_poll(mspoll);
+dev_type_kqfilter(mskqfilter);
 
-extern struct cfdriver ms_cd;
+const struct cdevsw ms_cdevsw = {
+	msopen, msclose, msread, nowrite, msioctl,
+	nostop, notty, mspoll, nommap, mskqfilter, D_OTHER
+};
 
 /****************************************************************
  *  Entry points for /dev/mouse
@@ -88,121 +100,116 @@ extern struct cfdriver ms_cd;
  ****************************************************************/
 
 int
-msopen(dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
+msopen(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	struct ms_softc *ms;
-	int unit;
 
-	unit = minor(dev);
-	if (unit >= ms_cd.cd_ndevs)
-		return (ENXIO);
-	ms = ms_cd.cd_devs[unit];
+	ms = device_lookup_private(&ms_cd, minor(dev));
 	if (ms == NULL)
-		return (ENXIO);
+		return ENXIO;
 
 	/* This is an exclusive open device. */
 	if (ms->ms_events.ev_io)
-		return (EBUSY);
-	ms->ms_events.ev_io = p;
+		return EBUSY;
+
+	if (ms->ms_deviopen) {
+		int err;
+		err = (*ms->ms_deviopen)(ms->ms_dev, flags);
+		if (err)
+			return err;
+	}
+	ms->ms_events.ev_io = l->l_proc;
 	ev_init(&ms->ms_events);	/* may cause sleep */
 
 	ms->ms_ready = 1;		/* start accepting events */
-	return (0);
+	return 0;
 }
 
 int
-msclose(dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
+msclose(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	struct ms_softc *ms;
 
-	ms = ms_cd.cd_devs[minor(dev)];
+	ms = device_lookup_private(&ms_cd, minor(dev));
 	ms->ms_ready = 0;		/* stop accepting events */
 	ev_fini(&ms->ms_events);
 
 	ms->ms_events.ev_io = NULL;
-	return (0);
+	if (ms->ms_deviclose) {
+		int err;
+		err = (*ms->ms_deviclose)(ms->ms_dev, flags);
+		if (err)
+			return err;
+	}
+	return 0;
 }
 
 int
-msread(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+msread(dev_t dev, struct uio *uio, int flags)
 {
 	struct ms_softc *ms;
 
-	ms = ms_cd.cd_devs[minor(dev)];
-	return (ev_read(&ms->ms_events, uio, flags));
-}
-
-/* this routine should not exist, but is convenient to write here for now */
-int
-mswrite(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
-{
-
-	return (EOPNOTSUPP);
+	ms = device_lookup_private(&ms_cd, minor(dev));
+	return ev_read(&ms->ms_events, uio, flags);
 }
 
 int
-msioctl(dev, cmd, data, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+msioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct ms_softc *ms;
 
-	ms = ms_cd.cd_devs[minor(dev)];
+	ms = device_lookup_private(&ms_cd, minor(dev));
 
 	switch (cmd) {
 
 	case FIONBIO:		/* we will remove this someday (soon???) */
-		return (0);
+		return 0;
 
 	case FIOASYNC:
 		ms->ms_events.ev_async = *(int *)data != 0;
-		return (0);
+		return 0;
+
+	case FIOSETOWN:
+		if (-*(int *)data != ms->ms_events.ev_io->p_pgid
+		    && *(int *)data != ms->ms_events.ev_io->p_pid)
+			return EPERM;
+		return 0;
 
 	case TIOCSPGRP:
 		if (*(int *)data != ms->ms_events.ev_io->p_pgid)
-			return (EPERM);
-		return (0);
+			return EPERM;
+		return 0;
 
 	case VUIDGFORMAT:
 		/* we only do firm_events */
 		*(int *)data = VUID_FIRM_EVENT;
-		return (0);
+		return 0;
 
 	case VUIDSFORMAT:
 		if (*(int *)data != VUID_FIRM_EVENT)
-			return (EINVAL);
-		return (0);
+			return EINVAL;
+		return 0;
 	}
-	return (ENOTTY);
+	return ENOTTY;
 }
 
 int
-mspoll(dev, events, p)
-	dev_t dev;
-	int events;
-	struct proc *p;
+mspoll(dev_t dev, int events, struct lwp *l)
 {
 	struct ms_softc *ms;
 
-	ms = ms_cd.cd_devs[minor(dev)];
-	return (ev_poll(&ms->ms_events, events, p));
+	ms = device_lookup_private(&ms_cd, minor(dev));
+	return ev_poll(&ms->ms_events, events, l);
 }
 
+int
+mskqfilter(dev_t dev, struct knote *kn)
+{
+	struct ms_softc *ms;
+
+	ms = device_lookup_private(&ms_cd, minor(dev));
+	return ev_kqfilter(&ms->ms_events, kn);
+}
 
 /****************************************************************
  * Middle layer (translator)
@@ -212,9 +219,7 @@ mspoll(dev, events, p)
  * Called by our ms_softint() routine on input.
  */
 void
-ms_input(ms, c)
-	struct ms_softc *ms;
-	int c;
+ms_input(struct ms_softc *ms, int c)
 {
 	struct firm_event *fe;
 	int mb, ub, d, get, put, any;
@@ -231,7 +236,7 @@ ms_input(ms, c)
 		ms->ms_byteno = -1;
 		return;
 	}
-	if ((c & ~0x0f) == 0x80) {	/* if in 0x80..0x8f */
+	if ((c & 0xb0) == 0x80) {	/* if in 0x80..0x8f of 0xc0..0xcf */
 		if (c & 8) {
 			ms->ms_byteno = 1;	/* short form (3 bytes) */
 		} else {
@@ -290,6 +295,20 @@ ms_input(ms, c)
 		/* NOTREACHED */
 	}
 
+#if NWSMOUSE > 0
+	if (ms->ms_wsmousedev != NULL && ms->ms_ready == 2) {
+		mb = ((ms->ms_mb & 4) >> 2) |
+			(ms->ms_mb & 2) |
+			((ms->ms_mb & 1) << 2);
+		wsmouse_input(ms->ms_wsmousedev,
+				mb,
+				ms->ms_dx, ms->ms_dy, 0, 0,
+				WSMOUSE_INPUT_DELTA);
+		ms->ms_dx = 0;
+		ms->ms_dy = 0;
+		return;
+	}
+#endif
 	/*
 	 * We have at least one event (mouse button, delta-X, or
 	 * delta-Y; possibly all three, and possibly three separate
@@ -328,7 +347,7 @@ ms_input(ms, c)
 		d = to_one[d - 1];		/* from 1..7 to {1,2,4} */
 		fe->id = to_id[d - 1];		/* from {1,2,4} to ID */
 		fe->value = mb & d ? VKEY_DOWN : VKEY_UP;
-		fe->time = time;
+		getmicrotime(&fe->time);
 		ADVANCE;
 		ub ^= d;
 	}
@@ -336,7 +355,7 @@ ms_input(ms, c)
 		NEXT;
 		fe->id = LOC_X_DELTA;
 		fe->value = ms->ms_dx;
-		fe->time = time;
+		getmicrotime(&fe->time);
 		ADVANCE;
 		ms->ms_dx = 0;
 	}
@@ -344,7 +363,7 @@ ms_input(ms, c)
 		NEXT;
 		fe->id = LOC_Y_DELTA;
 		fe->value = ms->ms_dy;
-		fe->time = time;
+		getmicrotime(&fe->time);
 		ADVANCE;
 		ms->ms_dy = 0;
 	}

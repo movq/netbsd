@@ -1,4 +1,4 @@
-/*	$NetBSD: bpfdesc.h,v 1.15 1998/04/30 00:08:19 thorpej Exp $	*/
+/*	$NetBSD: bpfdesc.h,v 1.28 2008/04/24 15:35:30 ad Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -45,7 +41,9 @@
 #ifndef _NET_BPFDESC_H_
 #define _NET_BPFDESC_H_
 
-#include <sys/select.h>
+#include <sys/callout.h>
+#include <sys/selinfo.h>		/* for struct selinfo */
+#include <net/if.h>			/* for IFNAMSIZ */
 
 /*
  * Descriptor associated with each open bpf file.
@@ -61,9 +59,9 @@ struct bpf_d {
 	 *   fbuf (free) - When read is done, put cluster here.
 	 * On receiving, if sbuf is full and fbuf is 0, packet is dropped.
 	 */
-	caddr_t		bd_sbuf;	/* store slot */
-	caddr_t		bd_hbuf;	/* hold slot */
-	caddr_t		bd_fbuf;	/* free slot */
+	void *		bd_sbuf;	/* store slot */
+	void *		bd_hbuf;	/* hold slot */
+	void *		bd_fbuf;	/* free slot */
 	int 		bd_slen;	/* current length of store buffer */
 	int 		bd_hlen;	/* current length of hold buffer */
 
@@ -74,11 +72,13 @@ struct bpf_d {
 	struct bpf_insn *bd_filter; 	/* filter code */
 	u_long		bd_rcount;	/* number of packets received */
 	u_long		bd_dcount;	/* number of packets dropped */
+	u_long		bd_ccount;	/* number of packets captured */
 
 	u_char		bd_promisc;	/* true if listening promiscuously */
 	u_char		bd_state;	/* idle, waiting, or timed out */
 	u_char		bd_immediate;	/* true to return on packet arrival */
 	int		bd_hdrcmplt;	/* false to fill in src lladdr */
+	int		bd_seesent;	/* true if bpf should see sent packets */
 	int		bd_async;	/* non-zero if packet reception should generate signal */
 	pid_t		bd_pgid;	/* process or group id for signal */
 #if BSD < 199103
@@ -89,7 +89,36 @@ struct bpf_d {
 	u_char		bd_pad;		/* explicit alignment */
 	struct selinfo	bd_sel;		/* bsd select info */
 #endif
+	callout_t	bd_callout;	/* for BPF timeouts with select */
+	pid_t		bd_pid;		/* corresponding PID */
+	LIST_ENTRY(bpf_d) bd_list;	/* list of all BPF's */
+	void		*bd_sih;	/* soft interrupt handle */
 };
+
+
+/* Values for bd_state */
+#define BPF_IDLE	0		/* no select in progress */
+#define BPF_WAITING	1		/* waiting for read timeout in select */
+#define BPF_TIMED_OUT	2		/* read timeout has expired in select */
+
+/*
+ * Description associated with the external representation of each
+ * open bpf file.
+ */
+struct bpf_d_ext {
+	int32_t		bde_bufsize;
+	uint8_t		bde_promisc;
+	uint8_t		bde_state;
+	uint8_t		bde_immediate;
+	int32_t		bde_hdrcmplt;
+	int32_t		bde_seesent;
+	pid_t		bde_pid;
+	uint64_t	bde_rcount;		/* number of packets received */
+	uint64_t	bde_dcount;		/* number of packets dropped */
+	uint64_t	bde_ccount;		/* number of packets captured */
+	char		bde_ifname[IFNAMSIZ];
+};
+
 
 /*
  * Descriptor associated with each attached hardware interface.
@@ -107,4 +136,4 @@ struct bpf_if {
 int	 bpf_setf __P((struct bpf_d *, struct bpf_program *));
 #endif
 
-#endif /* _NET_BPFDESC_H_ */
+#endif /* !_NET_BPFDESC_H_ */

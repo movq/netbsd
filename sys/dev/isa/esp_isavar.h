@@ -1,4 +1,4 @@
-/*	$NetBSD: esp_isavar.h,v 1.2 2000/03/19 21:27:01 mycroft Exp $	*/
+/*	$NetBSD: esp_isavar.h,v 1.5 2008/04/13 04:55:53 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1997 Allen Briggs.
@@ -68,7 +68,7 @@ struct esp_isa_softc {
 	int		sc_datain;
 	size_t		sc_dmasize;
 	size_t		sc_dmatrans;
-	char		**sc_dmaaddr;
+	uint8_t		**sc_dmaaddr;
 	size_t		*sc_pdmalen;
 
 	bus_space_tag_t sc_iot;
@@ -91,14 +91,14 @@ struct esp_isa_probe_data {
 	int sc_parity;
 	int sc_sync;
 	int sc_id;
-	u_char sc_cfg4, sc_cfg5;
+	uint8_t sc_cfg4, sc_cfg5;
 };
 
 #define ESP_ISA_IOSIZE  16
 
-int	esp_isa_find  __P((bus_space_tag_t, bus_space_handle_t,
-	    struct esp_isa_probe_data *));
-void    esp_isa_init __P((struct esp_isa_softc *, struct esp_isa_probe_data *));
+int	esp_isa_find(bus_space_tag_t, bus_space_handle_t,
+	    struct esp_isa_probe_data *);
+void    esp_isa_init(struct esp_isa_softc *, struct esp_isa_probe_data *);
 
 #ifdef ESP_DEBUG
 extern int esp_isa_debug;

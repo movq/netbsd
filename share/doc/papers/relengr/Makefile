@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 1998/01/09 06:42:05 perry Exp $
+#	$NetBSD: Makefile,v 1.5 2003/07/10 10:34:29 lukem Exp $
 #
 #	@(#)Makefile	1.6 (Berkeley) 6/8/93
 
@@ -6,9 +6,9 @@ DIR=	papers/relengr
 SRCS=	0.t 1.t 2.t 3.t
 MACROS=	-ms
 EXTRA=	ref.bib tmac.srefs
-REFER=	refer -n -e -l -s -p ref.bib
 
 paper.ps: ${SRCS}
-	${REFER} ${SRCS} | ${ROFF} > ${.TARGET}
+	${TOOL_REFER} -n -e -l -s -p ref.bib ${SRCS} | \
+	    ${TOOL_ROFF_PS} ${MACROS} > ${.TARGET}
 
 .include <bsd.doc.mk>

@@ -26,7 +26,7 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-/* $NetBSD: misc.c,v 1.10 2000/03/13 23:22:51 soren Exp $ */
+/* $NetBSD: misc.c,v 1.13 2004/10/30 20:37:35 dsl Exp $ */
 
 #include "flexdef.h"
 
@@ -44,7 +44,7 @@ int value;
 		return;
 		}
 
-	sprintf( buf, "#define %s %d\n", defname, value );
+	snprintf(buf, sizeof(buf), "#define %s %d\n", defname, value);
 	add_action( buf );
 	}
 
@@ -70,7 +70,7 @@ char *new_text;
 			reallocate_character_array( action_array, action_size );
 		}
 
-	strcpy( &action_array[action_index], new_text );
+	strcpy(&action_array[action_index], new_text);
 
 	action_index += len;
 	}
@@ -101,7 +101,7 @@ register char *str;
 	{
 	while ( *str )
 		{
-		if ( ! isascii( (Char) *str ) || ! islower( *str ) )
+		if ( ! isascii( (Char) *str ) || ! islower( (Char)*str ) )
 			return 0;
 		++str;
 		}
@@ -117,7 +117,7 @@ register char *str;
 	{
 	while ( *str )
 		{
-		if ( ! isascii( (Char) *str ) || ! isupper( *str ) )
+		if ( ! isascii( (Char) *str ) || ! isupper( (Char)*str ) )
 			return 0;
 		++str;
 		}
@@ -362,7 +362,7 @@ const char msg[];
 int arg;
 	{
 	char errmsg[MAXLINE];
-	(void) sprintf( errmsg, msg, arg );
+	(void) snprintf(errmsg, sizeof(errmsg), msg, arg);
 	flexerror( errmsg );
 	}
 
@@ -374,7 +374,7 @@ const char msg[], arg[];
 	{
 	char errmsg[MAXLINE];
 
-	(void) sprintf( errmsg, msg, arg );
+	(void) snprintf(errmsg, sizeof(errmsg), msg, arg);
 	flexerror( errmsg );
 	}
 
@@ -387,7 +387,7 @@ int do_infile;
 	{
 	char directive[MAXLINE], filename[MAXLINE];
 	char *s1, *s2, *s3;
-	static char line_fmt[] = "#line %d \"%s\"\n";
+	static const char line_fmt[] = "#line %d \"%s\"\n";
 
 	if ( ! gen_line_dirs )
 		return;
@@ -412,14 +412,16 @@ int do_infile;
 	*s2 = '\0';
 
 	if ( do_infile )
-		sprintf( directive, line_fmt, linenum, filename );
+		snprintf(directive, sizeof(directive), line_fmt, linenum,
+		    filename);
 	else
 		{
 		if ( output_file == stdout )
 			/* Account for the line directive itself. */
 			++out_linenum;
 
-		sprintf( directive, line_fmt, out_linenum, filename );
+		snprintf(directive, sizeof(directive), line_fmt, out_linenum,
+		    filename);
 		}
 
 	/* If output_file is nil then we should put the directive in
@@ -580,7 +582,7 @@ Char array[];
 			int sptr = 2;
 
 			while ( isascii( array[sptr] ) &&
-				isxdigit( (char) array[sptr] ) )
+				isxdigit( (Char) array[sptr] ) )
 				/* Don't increment inside loop control
 				 * because if isdigit() is a macro it might
 				 * expand into multiple increments ...
@@ -731,7 +733,7 @@ register int c;
 #endif
 
 			default:
-				(void) sprintf( rform, "\\%.3o",
+				(void) snprintf(rform, sizeof(rform), "\\%.3o",
 						(unsigned int) c );
 				return rform;
 			}

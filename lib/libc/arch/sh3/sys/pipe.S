@@ -1,4 +1,4 @@
-/*	$NetBSD: pipe.S,v 1.2 2000/03/27 16:27:16 msaitoh Exp $	*/
+/*	$NetBSD: pipe.S,v 1.7 2006/01/06 05:23:46 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,14 +36,17 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: pipe.S,v 1.2 2000/03/27 16:27:16 msaitoh Exp $")
+	RCSID("$NetBSD: pipe.S,v 1.7 2006/01/06 05:23:46 uwe Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
 
-SYSCALL(pipe)
-	mov	r4, r2
-	mov.l	r0, @r2	
-	mov.l	r1, @(4,r2) 
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(pipe,_pipe)
+#endif
+
+_SYSCALL(_pipe,pipe)
+	mov.l	r0, @r4
+	mov.l	r1, @(4, r4)
 	rts
-	xor	r0, r0
+	 mov	#0, r0

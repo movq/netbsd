@@ -1,4 +1,4 @@
-/*	$NetBSD: vfslist.c,v 1.2 1997/09/16 12:22:47 lukem Exp $	*/
+/*	$NetBSD: vfslist.c,v 1.7 2008/08/05 20:57:45 pooka Exp $	*/
 
 /*
  * Copyright (c) 1995
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)vfslist.c	8.1 (Berkeley) 5/8/95";
 #else
-__RCSID("$NetBSD: vfslist.c,v 1.2 1997/09/16 12:22:47 lukem Exp $");
+__RCSID("$NetBSD: vfslist.c,v 1.7 2008/08/05 20:57:45 pooka Exp $");
 #endif
 #endif /* not lint */
 
@@ -47,14 +43,12 @@ __RCSID("$NetBSD: vfslist.c,v 1.2 1997/09/16 12:22:47 lukem Exp $");
 #include <string.h>
 #include <unistd.h>
 
-int		  checkvfsname __P((const char *, const char **));
-const char	**makevfslist __P((char *));
+#include "mountprog.h"
+
 static int	  skipvfs;
 
 int
-checkvfsname(vfsname, vfslist)
-	const char *vfsname;
-	const char **vfslist;
+checkvfsname(const char *vfsname, const char **vfslist)
 {
 
 	if (vfslist == NULL)
@@ -68,27 +62,32 @@ checkvfsname(vfsname, vfslist)
 }
 
 const char **
-makevfslist(fslist)
-	char *fslist;
+makevfslist(const char *fslist)
 {
 	const char **av;
-	int i;
-	char *nextcp;
+	size_t i;
+	char *nextcp, *fsl;
 
 	if (fslist == NULL)
-		return (NULL);
+		return NULL;
+
 	if (fslist[0] == 'n' && fslist[1] == 'o') {
 		fslist += 2;
 		skipvfs = 1;
 	}
-	for (i = 0, nextcp = fslist; *nextcp; nextcp++)
+	if ((fsl = strdup(fslist)) == NULL) {
+		warn("strdup");
+		return NULL;
+	}
+	for (i = 0, nextcp = fsl; *nextcp; nextcp++)
 		if (*nextcp == ',')
 			i++;
-	if ((av = malloc((size_t)(i + 2) * sizeof(char *))) == NULL) {
+	if ((av = malloc((i + 2) * sizeof(char *))) == NULL) {
 		warn("malloc");
-		return (NULL);
+		free(fsl);
+		return NULL;
 	}
-	nextcp = fslist;
+	nextcp = fsl;
 	i = 0;
 	av[i++] = nextcp;
 	while ((nextcp = strchr(nextcp, ',')) != NULL) {
@@ -96,5 +95,5 @@ makevfslist(fslist)
 		av[i++] = nextcp;
 	}
 	av[i++] = NULL;
-	return (av);
+	return av;
 }

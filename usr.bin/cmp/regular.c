@@ -1,4 +1,4 @@
-/*	$NetBSD: regular.c,v 1.8 2000/03/20 18:23:26 kleink Exp $	*/
+/*	$NetBSD: regular.c,v 1.20 2006/06/03 21:47:55 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)regular.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: regular.c,v 1.8 2000/03/20 18:23:26 kleink Exp $");
+__RCSID("$NetBSD: regular.c,v 1.20 2006/06/03 21:47:55 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,55 +51,68 @@ __RCSID("$NetBSD: regular.c,v 1.8 2000/03/20 18:23:26 kleink Exp $");
 #include "extern.h"
 
 void
-c_regular(fd1, file1, skip1, len1, fd2, file2, skip2, len2)
-	int fd1, fd2;
-	char *file1, *file2;
-	off_t skip1, len1, skip2, len2;
+c_regular(int fd1, char *file1, off_t skip1, off_t len1,
+    int fd2, char *file2, off_t skip2, off_t len2)
 {
 	u_char ch, *p1, *p2;
 	off_t byte, length, line;
 	int dfound;
+	size_t blk_sz, blk_cnt;
 
 	if (sflag && len1 != len2)
 		exit(1);
 
 	if (skip1 > len1)
-		eofmsg(file1);
+		eofmsg(file1, len1 + 1, 0);
 	len1 -= skip1;
 	if (skip2 > len2)
-		eofmsg(file2);
+		eofmsg(file2, len2 + 1, 0);
 	len2 -= skip2;
 
-	length = MIN(len1, len2);
-	if (length > SIZE_T_MAX)
-		return (c_special(fd1, file1, skip1, fd2, file2, skip2));
-
-	if ((p1 = (u_char *)mmap(NULL, (size_t)length,
-	    PROT_READ, MAP_PRIVATE|MAP_FILE, fd1, skip1)) == MAP_FAILED)
-		err(ERR_EXIT, "%s", file1);
-	(void)madvise(p1, (size_t)length, MADV_SEQUENTIAL);
-	if ((p2 = (u_char *)mmap(NULL, (size_t)length,
-	    PROT_READ, MAP_PRIVATE|MAP_FILE, fd2, skip2)) == MAP_FAILED)
-		err(ERR_EXIT, "%s", file2);
-	(void)madvise(p2, (size_t)length, MADV_SEQUENTIAL);
-
+	byte = line = 1;
 	dfound = 0;
-	for (byte = line = 1; length--; ++p1, ++p2, ++byte) {
-		if ((ch = *p1) != *p2) {
-			if (lflag) {
-				dfound = 1;
-				(void)printf("%6qd %3o %3o\n", (long long)byte,
-				    ch, *p2);
-			} else
-				diffmsg(file1, file2, byte, line);
-				/* NOTREACHED */
+	length = MIN(len1, len2);
+	for (blk_sz = 1024 * 1024; length != 0; length -= blk_sz) {
+		if (blk_sz > length)
+			blk_sz = length;
+		p1 = mmap(NULL, blk_sz, PROT_READ, MAP_FILE|MAP_SHARED,
+		    fd1, skip1);
+		if (p1 == MAP_FAILED)
+			goto mmap_failed;
+
+		p2 = mmap(NULL, blk_sz, PROT_READ, MAP_FILE|MAP_SHARED,
+		    fd2, skip2);
+		if (p2 == MAP_FAILED) {
+			munmap(p1, blk_sz);
+			goto mmap_failed;
 		}
-		if (ch == '\n')
-			++line;
+
+		blk_cnt = blk_sz;
+		for (; blk_cnt--; ++p1, ++p2, ++byte) {
+			if ((ch = *p1) != *p2) {
+				if (!lflag) {
+					diffmsg(file1, file2, byte, line);
+					/* NOTREACHED */
+				}
+				dfound = 1;
+				(void)printf("%6lld %3o %3o\n",
+				    (long long)byte, ch, *p2);
+			}
+			if (ch == '\n')
+				++line;
+		}
+		munmap(p1 - blk_sz, blk_sz);
+		munmap(p2 - blk_sz, blk_sz);
+		skip1 += blk_sz;
+		skip2 += blk_sz;
 	}
 
 	if (len1 != len2)
-		eofmsg (len1 > len2 ? file2 : file1);
+		eofmsg(len1 > len2 ? file2 : file1, byte, line);
 	if (dfound)
 		exit(DIFF_EXIT);
+	return;
+
+mmap_failed:
+	c_special(fd1, file1, skip1, fd2, file2, skip2);
 }

@@ -1,24 +1,32 @@
-/*	$NetBSD: genfs.h,v 1.10 1999/08/03 20:19:19 wrstuden Exp $	*/
+/*	$NetBSD: genfs.h,v 1.23 2008/01/28 14:31:18 dholland Exp $	*/
 
-int	genfs_badop		__P((void *));
-int	genfs_nullop		__P((void *));
-int	genfs_enoioctl		__P((void *));
-int	genfs_enoextops		__P((void *));
-int	genfs_einval		__P((void *));
-int	genfs_eopnotsupp	__P((void *));
-int	genfs_eopnotsupp_rele	__P((void *));
-int	genfs_ebadf		__P((void *));
-int	genfs_nolock		__P((void *));
-int	genfs_noislocked	__P((void *));
-int	genfs_nounlock		__P((void *));
+int	genfs_badop(void *);
+int	genfs_nullop(void *);
+int	genfs_enoioctl(void *);
+int	genfs_enoextops(void *);
+int	genfs_einval(void *);
+int	genfs_eopnotsupp(void *);
+int	genfs_ebadf(void *);
+int	genfs_nolock(void *);
+int	genfs_noislocked(void *);
+int	genfs_nounlock(void *);
 
-int	genfs_poll		__P((void *));
-int	genfs_fcntl		__P((void *));
-int	genfs_fsync		__P((void *));
-int	genfs_seek		__P((void *));
-int	genfs_abortop		__P((void *));
-int	genfs_revoke		__P((void *));
-int	genfs_lease_check	__P((void *));
-int	genfs_lock		__P((void *));
-int	genfs_islocked		__P((void *));
-int	genfs_unlock		__P((void *));
+int	genfs_poll(void *);
+int	genfs_kqfilter(void *);
+int	genfs_fcntl(void *);
+int	genfs_seek(void *);
+int	genfs_abortop(void *);
+int	genfs_revoke(void *);
+int	genfs_lock(void *);
+int	genfs_islocked(void *);
+int	genfs_unlock(void *);
+int	genfs_mmap(void *);
+int	genfs_getpages(void *);
+int	genfs_putpages(void *);
+int	genfs_null_putpages(void *);
+int	genfs_compat_getpages(void *);
+
+int	genfs_do_putpages(struct vnode *, off_t, off_t, int, struct vm_page **);
+
+int	genfs_renamelock_enter(struct mount *);
+void	genfs_renamelock_exit(struct mount *);

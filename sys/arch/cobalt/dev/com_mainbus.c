@@ -1,4 +1,4 @@
-/*	$NetBSD: com_mainbus.c,v 1.2 2000/03/31 14:51:52 soren Exp $	*/
+/*	$NetBSD: com_mainbus.c,v 1.17 2008/03/27 15:21:46 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -25,20 +25,13 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: com_mainbus.c,v 1.17 2008/03/27 15:21:46 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/ioctl.h>
-#include <sys/select.h>
-#include <sys/tty.h>
-#include <sys/proc.h>
-#include <sys/user.h>
-#include <sys/conf.h>
-#include <sys/file.h>
-#include <sys/uio.h>
-#include <sys/kernel.h>
-#include <sys/syslog.h>
-#include <sys/types.h>
 #include <sys/device.h>
+#include <sys/termios.h>
 
 #include <machine/autoconf.h>
 #include <machine/intr.h>
@@ -47,54 +40,74 @@
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
 
+#include <cobalt/cobalt/console.h>
+#include <cobalt/dev/com_mainbusvar.h>
 
 struct com_mainbus_softc {
 	struct com_softc sc_com;
 	void *sc_ih;
 };
 
-static int	com_mainbus_probe(struct device *, struct cfdata *, void *);
-static void	com_mainbus_attach(struct device *, struct device *, void *);
+#define COM_MAINBUS_FREQ	(COM_FREQ * 10)
+#define CONMODE ((TTYDEF_CFLAG & ~(CSIZE | CSTOPB | PARENB)) | CS8) /* 8N1 */
 
-struct cfattach com_mainbus_ca = {
-	sizeof(struct com_mainbus_softc), com_mainbus_probe, com_mainbus_attach
-};
+static int	com_mainbus_probe(device_t, cfdata_t , void *);
+static void	com_mainbus_attach(device_t, device_t, void *);
+
+CFATTACH_DECL_NEW(com_mainbus, sizeof(struct com_mainbus_softc),
+    com_mainbus_probe, com_mainbus_attach, NULL, NULL);
 
 int
-com_mainbus_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+com_mainbus_probe(device_t parent, cfdata_t match, void *aux)
 {
-	/* XXX probe */
 
-	return 1;
+	switch (cobalt_id) {
+	case COBALT_ID_RAQ:
+	case COBALT_ID_QUBE2:
+	case COBALT_ID_RAQ2:
+		return 1;
+	}
+
+	return 0;
 }
 
-struct com_softc *com0; /* XXX */
-
 void
-com_mainbus_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+com_mainbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct com_mainbus_softc *msc = (void *)self;
+	struct com_mainbus_softc *msc = device_private(self);
 	struct com_softc *sc = &msc->sc_com;
 	struct mainbus_attach_args *maa = aux;
+	bus_space_handle_t	ioh;
 
-	sc->sc_ioh = maa->ma_ioh;
-	sc->sc_iot = maa->ma_iot;
-	sc->sc_iobase = maa->ma_addr;
+	sc->sc_dev = self;
+	if (!com_is_console(maa->ma_iot, maa->ma_addr, &ioh) &&
+	    bus_space_map(maa->ma_iot, maa->ma_addr, COM_NPORTS, 0, &ioh)) {
+		aprint_error(": can't map i/o space\n");
+		return;
+	}
+	COM_INIT_REGS(sc->sc_regs, maa->ma_iot, ioh, maa->ma_addr);
 
-	sc->sc_frequency = COM_FREQ * 10;
-
-	/* XXX console check */
-	/* XXX map */
+	sc->sc_frequency = COM_MAINBUS_FREQ;
 
 	com_attach_subr(sc);
 
 	cpu_intr_establish(maa->ma_level, IPL_SERIAL, comintr, sc);
 
 	return;
+}
+
+void
+com_mainbus_cnprobe(struct consdev *cn)
+{
+
+	cn->cn_pri = (console_present != 0 && cobalt_id != COBALT_ID_QUBE2700)
+	    ? CN_NORMAL : CN_DEAD;
+}
+
+void
+com_mainbus_cninit(struct consdev *cn)
+{
+
+	comcnattach(0, COM_BASE, 115200, COM_MAINBUS_FREQ, COM_TYPE_NORMAL,
+	    CONMODE);
 }

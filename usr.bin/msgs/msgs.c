@@ -1,4 +1,4 @@
-/*	$NetBSD: msgs.c,v 1.15 1999/06/13 19:38:05 kleink Exp $	*/
+/*	$NetBSD: msgs.c,v 1.19 2008/07/21 14:19:24 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)msgs.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: msgs.c,v 1.15 1999/06/13 19:38:05 kleink Exp $");
+__RCSID("$NetBSD: msgs.c,v 1.19 2008/07/21 14:19:24 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -115,8 +111,8 @@ FILE	*msgsrc;
 FILE	*newmsg;
 char	*sep = "-";
 char	inbuf[BUFSIZ];
-char	fname[128];
-char	cmdbuf[128];
+char	fname[MAXPATHLEN];
+char	cmdbuf[MAXPATHLEN + 16];
 char	subj[128];
 char	from[128];
 char	date[128];
@@ -244,7 +240,7 @@ main(argc, argv)
 
 			default:
 				fprintf(stderr,
-					"usage: msgs [fhlopqr] [[-]number]\n");
+					"usage: msgs [cfhlopqrs] [[-]number]\n");
 				exit(1);
 			}
 		}
@@ -254,7 +250,7 @@ main(argc, argv)
 	/*
 	 * determine current message bounds
 	 */
-	sprintf(fname, "%s/%s", _PATH_MSGS, BOUNDS);
+	snprintf(fname, sizeof (fname), "%s/%s", _PATH_MSGS, BOUNDS);
 	bounds = fopen(fname, "r");
 
 	if (bounds != NULL) {
@@ -295,7 +291,8 @@ main(argc, argv)
 #endif
 
 			if (clean)
-				sprintf(inbuf, "%s/%s", _PATH_MSGS, cp);
+				snprintf(inbuf, sizeof (inbuf), "%s/%s", 
+				    _PATH_MSGS, cp);
 
 			while (isdigit((unsigned char)*cp))
 				i = i * 10 + *cp++ - '0';
@@ -351,7 +348,7 @@ main(argc, argv)
 		}
 
 		nextmsg = lastmsg + 1;
-		sprintf(fname, "%s/%d", _PATH_MSGS, nextmsg);
+		snprintf(fname, sizeof (fname), "%s/%d", _PATH_MSGS, nextmsg);
 		newmsg = fopen(fname, "w");
 		if (newmsg == NULL) {
 			perror(fname);
@@ -412,7 +409,12 @@ main(argc, argv)
 	totty = (isatty(fileno(stdout)) != 0);
 	use_pager = use_pager && totty;
 
-	sprintf(fname, "%s/%s", getenv("HOME"), MSGSRC);
+	{
+	    char *home = getenv("HOME");
+	    if(home == NULL || *home == '\0')
+		errx(1, "$HOME not set");
+	    snprintf(fname, sizeof (fname), "%s/%s", home, MSGSRC);
+	}
 	msgsrc = fopen(fname, "r");
 	if (msgsrc) {
 		newrc = NO;
@@ -478,7 +480,7 @@ main(argc, argv)
 	 */
 	for (msg = firstmsg; msg <= lastmsg; msg++) {
 
-		sprintf(fname, "%s/%d", _PATH_MSGS, msg);
+		snprintf(fname, sizeof (fname), "%s/%d", _PATH_MSGS, msg);
 		newmsg = fopen(fname, "r");
 		if (newmsg == NULL)
 			continue;
@@ -636,9 +638,10 @@ prmesg(length)
 		signal(SIGQUIT, SIG_IGN);
                 if ((env_pager = getenv("PAGER")) == NULL ||
 		    env_pager[0] == '\0') {
-                        sprintf(cmdbuf, _PATH_PAGER, Lpp);
+                        snprintf(cmdbuf, sizeof(cmdbuf), "%s -z%d", 
+                            _PATH_PAGER, Lpp);
                 } else {
-                        strcpy(cmdbuf, env_pager);
+                        strlcpy(cmdbuf, env_pager, sizeof (cmdbuf));
                 }
 		outf = popen(cmdbuf, "w");
 		if (!outf)
@@ -733,7 +736,7 @@ next(buf)
 {
 	int i;
 	sscanf(buf, "%d", &i);
-	sprintf(buf, "Goto %d", i);
+	snprintf(buf, sizeof (buf), "Goto %d", i);
 	return(--i);
 }
 
@@ -765,7 +768,7 @@ ask(prompt)
 			cmsg = atoi(&inbuf[1]);
 		else
 			cmsg = msg;
-		sprintf(fname, "%s/%d", _PATH_MSGS, cmsg);
+		snprintf(fname, sizeof (fname), "%s/%d", _PATH_MSGS, cmsg);
 
 		oldpos = ftell(newmsg);
 
@@ -785,17 +788,17 @@ ask(prompt)
 				fname[n] = '\0';
 			}
 			else
-				strcpy(fname, "Messages");
+				strlcpy(fname, "Messages", sizeof(fname));
 		}
 		else {
 			int	fd;
 
-			strcpy(fname, _PATH_TMP);
+			strlcpy(fname, _PATH_TMP, sizeof(fname));
 			fd = mkstemp(fname);
 			if (fd == -1)
 				err(1, "mkstemp failed");
 			close(fd);
-			sprintf(cmdbuf, _PATH_MAIL, fname);
+			snprintf(cmdbuf, sizeof (cmdbuf), _PATH_MAIL, fname);
 			mailing = YES;
 		}
 		cpto = fopen(fname, "a");

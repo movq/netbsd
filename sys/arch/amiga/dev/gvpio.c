@@ -1,4 +1,4 @@
-/*	$NetBSD: gvpio.c,v 1.5 2000/01/23 21:06:12 aymeric Exp $ */
+/*	$NetBSD: gvpio.c,v 1.16 2007/03/04 05:59:20 christos Exp $ */
 
 /*
  * Copyright (c) 1997 Ignatios Souvatzis
@@ -31,6 +31,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: gvpio.c,v 1.16 2007/03/04 05:59:20 christos Exp $");
+
 /*
  * GVP I/O Extender
  */
@@ -43,7 +46,6 @@
 #include <sys/param.h>
 
 #include <machine/bus.h>
-#include <machine/conf.h>
 #include <machine/intr.h>
 
 #include <amiga/include/cpu.h>
@@ -54,30 +56,26 @@
 #include <amiga/dev/supio.h>
 #include <amiga/dev/zbusvar.h>
 #include <amiga/dev/gvpbusvar.h>
-#include <amiga/dev/gvpiovar.h>
 
 struct gvpio_softc {
 	struct device sc_dev;
 	struct bus_space_tag sc_bst;
-	caddr_t sc_cntr;
+	void *sc_cntr;
 	LIST_HEAD(, gvpcom_int_hdl) sc_comhdls;
 	struct isr sc_comisr;
 };
 
-int gvpiomatch __P((struct device *, struct cfdata *, void *));
-void gvpioattach __P((struct device *, struct device *, void *));
-int gvpioprint __P((void *auxp, const char *));
-int gvp_com_intr __P((void *));
+int gvpiomatch(struct device *, struct cfdata *, void *);
+void gvpioattach(struct device *, struct device *, void *);
+int gvpioprint(void *auxp, const char *);
+int gvp_com_intr(void *);
+void gvp_com_intr_establish(struct device *, struct gvpcom_int_hdl *);
 
-struct cfattach gvpio_ca = {
-	sizeof(struct gvpio_softc), gvpiomatch, gvpioattach
-};
+CFATTACH_DECL(gvpio, sizeof(struct gvpio_softc),
+    gvpiomatch, gvpioattach, NULL, NULL);
 
 int
-gvpiomatch(parent, cfp, auxp)
-	struct device *parent;
-	struct cfdata *cfp;
-	void *auxp;
+gvpiomatch(struct device *parent, struct cfdata *cfp, void *auxp)
 {
 
 	struct gvpbus_args *gap;
@@ -103,15 +101,13 @@ struct gvpio_devs {
 };
 
 void
-gvpioattach(parent, self, auxp)
-	struct device *parent, *self;
-	void *auxp;
+gvpioattach(struct device *parent, struct device *self, void *auxp)
 {
 	struct gvpio_softc *giosc;
 	struct gvpio_devs  *giosd;
 	struct gvpbus_args *gap;
 	struct supio_attach_args supa;
-	volatile caddr_t gbase;
+	volatile void *gbase;
 	u_int16_t needpsl;
 
 	giosc = (struct gvpio_softc *)self;
@@ -123,7 +119,7 @@ gvpioattach(parent, self, auxp)
 	gbase = gap->zargs.va;
 	giosc->sc_cntr = &gbase[0x41];
 	giosc->sc_bst.base = (u_long)gbase + 1;
-	giosc->sc_bst.absm = amiga_bus_stride_2;
+	giosc->sc_bst.absm = &amiga_bus_stride_2;
 	LIST_INIT(&giosc->sc_comhdls);
 	giosd = gvpiodevs;
 
@@ -144,12 +140,14 @@ gvpioattach(parent, self, auxp)
 		++giosd;
 	}
 	if (giosc->sc_comhdls.lh_first) {
-		/* XXX this should be really in the interupt stuff */
+		/* XXX this should be really in the interrupt stuff */
 		needpsl = PSL_S|PSL_IPL6;
-		if (amiga_serialspl < needpsl) {
-			printf("%s: raising amiga_serialspl from 0x%x to 0x%x\n",
-			    giosc->sc_dev.dv_xname, amiga_serialspl, needpsl);
-			amiga_serialspl = needpsl;
+		if (ipl2spl_table[IPL_SERIAL] < needpsl) {
+			printf("%s: raising ipl2spl_table[IPL_SERIAL] "
+			    "from 0x%x to 0x%x\n",
+			    giosc->sc_dev.dv_xname, ipl2spl_table[IPL_SERIAL],
+			    needpsl);
+			ipl2spl_table[IPL_SERIAL] = needpsl;
 		}
 		giosc->sc_comisr.isr_intr = gvp_com_intr;
 		giosc->sc_comisr.isr_arg = giosc;
@@ -160,9 +158,7 @@ gvpioattach(parent, self, auxp)
 }
 
 int
-gvpioprint(auxp, pnp)
-	void *auxp;
-	const char *pnp;
+gvpioprint(void *auxp, const char *pnp)
 {
 	struct supio_attach_args *supa;
 	supa = auxp;
@@ -170,16 +166,14 @@ gvpioprint(auxp, pnp)
 	if (pnp == NULL)
 		return(QUIET);
 
-	printf("%s at %s port 0x%02x ipl %d",
+	aprint_normal("%s at %s port 0x%02x ipl %d",
 	    supa->supio_name, pnp, supa->supio_iobase, supa->supio_ipl);
 
 	return(UNCONF);
 }
 
 void
-gvp_com_intr_establish(self, p)
-	struct device *self;
-	struct gvpcom_int_hdl *p;
+gvp_com_intr_establish(struct device *self, struct gvpcom_int_hdl *p)
 {
 	struct gvpio_softc *sc;
 
@@ -189,12 +183,11 @@ gvp_com_intr_establish(self, p)
 }
 
 int
-gvp_com_intr(p)
-	void *p;
+gvp_com_intr(void *p)
 {
 	struct gvpio_softc *sc;
 	struct gvpcom_int_hdl *np;
-	volatile caddr_t cntr;
+	volatile void *cntr;
 
 	sc = (struct gvpio_softc *)p;
 

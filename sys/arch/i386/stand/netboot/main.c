@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.5 1997/09/17 18:52:41 drochner Exp $	 */
+/*	$NetBSD: main.c,v 1.12 2008/09/26 14:12:50 christos Exp $	 */
 
 /*
  * Copyright (c) 1996
@@ -45,8 +45,7 @@
 
 int errno;
 
-extern char	bootprog_name[], bootprog_rev[], bootprog_date[],
-		bootprog_maker[];
+extern char	bootprog_name[], bootprog_rev[], bootprog_kernrev[];
 
 #define TIMEOUT 5
 
@@ -54,7 +53,7 @@ void	command_help __P((char *));
 void	command_quit __P((char *));
 void	command_boot __P((char *));
 
-struct bootblk_command commands[] = {
+const struct bootblk_command commands[] = {
 	{ "help",	command_help },
 	{ "?",		command_help },
 	{ "quit",	command_quit },
@@ -62,32 +61,12 @@ struct bootblk_command commands[] = {
 	{ NULL,		NULL },
 };
 
-#ifdef COMPAT_OLDBOOT
-int
-parsebootfile(fname, fsname, devname, unit, partition, file)
-	const char     *fname;
-	char          **fsname;	/* out */
-	char          **devname;/* out */
-	unsigned int   *unit, *partition;	/* out */
-	const char    **file;	/* out */
-{
-	return (EINVAL);
-}
-
-int 
-biosdisk_gettype(f)
-	struct open_file *f;
-{
-	return (0);
-}
-#endif
-
 int 
 bootit(filename, howto)
 	const char     *filename;
 	int             howto;
 {
-	if (exec_netbsd(filename, 0, howto) < 0)
+	if (exec_netbsd(filename, 0, howto, 0) < 0)
 		printf("boot: %s\n", strerror(errno));
 	else
 		printf("boot returned\n");
@@ -99,13 +78,11 @@ print_banner(void)
 {
 
 	printf("\n"
-	       ">> %s, Revision %s\n"
-	       ">> (%s, %s)\n"
+	       ">> %s, Revision %s (from NetBSD %s)\n"
 	       ">> Memory: %d/%d k\n"
 	       "Press return to boot now, any other key for boot menu\n"
 	       "starting in ",
-	       bootprog_name, bootprog_rev,
-	       bootprog_maker, bootprog_date,
+	       bootprog_name, bootprog_rev, bootprog_kernrev,
 	       getbasemem(), getextmem());
 }
 
@@ -137,7 +114,7 @@ command_help(arg)
 	char *arg;
 {
 	printf("commands are:\n"
-	       "boot [filename] [-adrs]\n"
+	       "boot [filename] [-acdqsv]\n"
 	       "     (ex. \"netbsd.old -s\"\n"
 	       "help|?\n"
 	       "quit\n");

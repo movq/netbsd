@@ -1,4 +1,4 @@
-/*	$NetBSD: iwmreg.h,v 1.3 1999/03/27 05:45:20 scottr Exp $	*/
+/*	$NetBSD: iwmreg.h,v 1.8 2007/03/04 06:00:09 christos Exp $	*/
 
 /*
  * Copyright (c) 1996-99 Hauke Fath.  All rights reserved.
@@ -43,7 +43,7 @@ enum {
 	IWM_DS_DISK	= 0x01,
 	IWM_NO_DISK 	= 0x02,
 	IWM_MOTOR_OFF 	= 0x04,
-	IWM_WRITEABLE	= 0x08,
+	IWM_WRITABLE	= 0x08,
 	IWM_DD_DISK 	= 0x10,
 	IWM_NO_DRIVE 	= 0x80000000
 };
@@ -131,23 +131,14 @@ typedef struct cylCacheSlot cylCacheSlot_t;
 /*
  * Parameter (a6) offsets from <mac68k/obio/iwm_fdvar.h>
  *
- * int iwmReadSector __P((sectorHdr_t *hdr, cylCacheSlot_t *r_slots, 
- *			  caddr_t buf))
- * int iwmWriteSector __P((sectorHdr_t *hdr, cylCacheSlot_t *w_slots))
+ * int iwmReadSector(sectorHdr_t *hdr, cylCacheSlot_t *r_slots, void *buf)
+ * int iwmWriteSector(sectorHdr_t *hdr, cylCacheSlot_t *w_slots)
  */
 	.equ	o_hdr,		 8
 	.equ	o_rslots,	12
 	.equ	o_wslots,	12
 	.equ	o_buf,		16
 
-	
-/*
- * I/O base addresses
- */
-	.global	_Via1Base		/* in machdep.c */
-	.global	_IOBase
-	.global	_IWMBase		/* in iwm_fd.c  */
-		
 /*
  * Offsets from IWM base address
  * Lines are set by any memory access to corresponding address (IM III-34/-44).

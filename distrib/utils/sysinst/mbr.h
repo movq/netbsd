@@ -1,4 +1,4 @@
-/*	$NetBSD: mbr.h,v 1.8 1999/07/10 23:07:15 fvdl Exp $	*/
+/*	$NetBSD: mbr.h,v 1.22 2006/04/05 16:55:05 garbled Exp $	*/
 
 /*
  * Copyright 1997, 1988 Piermont Information Systems Inc.
@@ -36,6 +36,9 @@
  *
  */
 
+#ifndef _MBR_H
+#define _MBR_H
+
 /*
  * mbr.h -- definitions for reading, writing and editing DOS MBRs.
  * Use by including from md.h on ports  which use MBRs (i386, powerpc, arc)
@@ -44,45 +47,90 @@
 
 /* constants and defines */
 
-#include <sys/disklabel_mbr.h>
+#include <sys/bootblock.h>
 
 /*      
- * XXX  
+ * XXX  I (dsl) haven't the foggiest idea what the MBR extended chain
+ *	looks like if the sector size isn't 512.
  */     
 #define MBR_SECSIZE     512
 
 #define MBR_PUT_LSCYL(c)		((c) & 0xff)
 #define MBR_PUT_MSCYLANDSEC(c,s)	(((s) & 0x3f) | (((c) >> 2) & 0xc0))
 
+typedef struct mbr_info_t mbr_info_t;
+struct mbr_info_t {
+	struct mbr_sector	mbr;
+#ifdef BOOTSEL
+	struct mbr_bootsel	mbrb;	/* writeable for any mbr code */
+	uint		oflags;
+#endif
+	uint		sector;		/* where we read this from */
+	mbr_info_t	*extended;	/* next in extended partition list */
+	mbr_info_t	*prev_ext;	/* and back ptr */
+	const char	*last_mounted[MBR_PART_COUNT];
+	/* only in first item... */
+	int		opt;		/* entry being edited */
+	uint		install;	/* start sector of install partition */
+#ifdef BOOTSEL
+	uint		bootsec;	/* start sector of bootmenu default */
+#endif
+};
+
 /* incore fdisk (mbr, bios) geometry */
-EXTERN int bcyl, bhead, bsec, bsize, bcylsize;
+int bcyl, bhead, bsec;
 
-/* incore copy of  MBR partitions */
-EXTERN struct mbr_partition *part;
-EXTERN int activepart;
-EXTERN int bsdpart;			/* partition in use by NetBSD */
-EXTERN int usefull;			/* on install, clobber entire disk */
+mbr_info_t mbr;
 
-extern char mbr[];
+#ifdef BOOTSEL
+struct mbr_bootsel *mbs;
 
+	/* sync with src/sbin/fdisk/fdisk.c */
+#define	DEFAULT_BOOTDIR		"/usr/mdec"
+#define	DEFAULT_BOOTCODE	"mbr"
+#define	DEFAULT_BOOTSELCODE	"mbr_bootsel"
+#define	DEFAULT_BOOTEXTCODE	"mbr_ext"
+
+/* Scan values for the various keys we use, as returned by the BIOS */
+#define	SCAN_ENTER	0x1c
+#define	SCAN_F1		0x3b
+#define	SCAN_1		0x2
+
+#endif /* BOOTSEL */
 
 /* from mbr.c */
-void	set_fdisk_geom __P((void));	/* edit incore BIOS geometry */
-void	disp_cur_geom __P((void));
-int	check_geom __P((void));		/* primitive geometry sanity-check */
+void	set_fdisk_geom(void);	/* edit incore BIOS geometry */
+void	disp_cur_geom(void);
+int	check_geom(void);		/* primitive geometry sanity-check */
 
-void	disp_cur_part __P((struct mbr_partition *, int, int));
-int	edit_mbr __P((struct mbr_partition *));		
-int 	partsoverlap __P((struct mbr_partition *, int, int));
+void	disp_cur_part(struct mbr_partition *, int, int);
+int	edit_mbr(mbr_info_t *);
+int	mbr_use_wholedisk(mbr_info_t *);
+int 	partsoverlap(struct mbr_partition *, int, int);
 
 /* from mbr.c */
  
-int     read_mbr __P((char *, char *, int));
-int     write_mbr __P((char *, char *, int, int));
-int     valid_mbr __P((char *));
-int	guess_biosgeom_from_mbr __P((char *, int *, int *, int *));
-int	md_bios_info __P((char *));
-void	set_bios_geom __P((int, int, int));
-int	otherpart __P((int));
-int	ourpart __P((int));
-char	*get_partname __P((int));
+int     read_mbr(const char *, mbr_info_t *);
+int     write_mbr(const char *, mbr_info_t *, int);
+int     valid_mbr(struct mbr_sector *);
+int	guess_biosgeom_from_mbr(mbr_info_t *, int *, int *, int *);
+int	md_bios_info(char *);
+void	set_bios_geom(int, int, int);
+int	otherpart(int);
+int	ourpart(int);
+const char	*get_partname(int);
+void	edit_ptn_bounds(void);
+#ifdef BOOTSEL
+void	disp_bootsel(void);
+void	edit_bootsel_entry(int);
+void	edit_bootsel_timeout(void);
+void	edit_bootsel_default_ptn(int);
+void	edit_bootsel_default_disk(int);
+void	configure_bootsel(void);
+#endif
+
+/* Machine dependant mbr functions */
+int	md_mbr_use_wholedisk(mbr_info_t *mbri);
+int	md_check_mbr(mbr_info_t *mbri);
+
+#endif

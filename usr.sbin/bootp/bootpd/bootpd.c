@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bootpd.c,v 1.12 1999/01/31 19:12:27 briggs Exp $");
+__RCSID("$NetBSD: bootpd.c,v 1.22 2008/05/02 19:22:10 xtraeme Exp $");
 #endif
 
 /*
@@ -50,6 +50,7 @@ __RCSID("$NetBSD: bootpd.c,v 1.12 1999/01/31 19:12:27 briggs Exp $");
 #include <sys/file.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/poll.h>
 
 #include <net/if.h>
 #include <netinet/in.h>
@@ -62,6 +63,7 @@ __RCSID("$NetBSD: bootpd.c,v 1.12 1999/01/31 19:12:27 briggs Exp $");
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <errno.h>
 #include <ctype.h>
 #include <netdb.h>
@@ -75,14 +77,6 @@ __RCSID("$NetBSD: bootpd.c,v 1.12 1999/01/31 19:12:27 briggs Exp $");
 #ifdef	SVR4
 /* Using sigset() avoids the need to re-arm each time. */
 #define signal sigset
-#endif
-
-#ifndef	USE_BFUNCS
-# include <memory.h>
-/* Yes, memcpy is OK here (no overlapped copies). */
-# define bcopy(a,b,c)    memcpy(b,a,c)
-# define bzero(p,l)      memset(p,0,l)
-# define bcmp(a,b,c)     memcmp(a,b,c)
 #endif
 
 #include "bootp.h"
@@ -109,27 +103,19 @@ __RCSID("$NetBSD: bootpd.c,v 1.12 1999/01/31 19:12:27 briggs Exp $");
  * Externals, forward declarations, and global variables
  */
 
-#ifdef	__STDC__
-#define P(args) args
-#else
-#define P(args) ()
-#endif
+extern void dumptab(const char *);
 
-extern void dumptab P((char *));
-
-PRIVATE void catcher P((int));
-PRIVATE int chk_access P((char *, int32 *));
+PRIVATE void catcher(int);
+PRIVATE int chk_access(char *, int32 *);
 #ifdef VEND_CMU
-PRIVATE void dovend_cmu P((struct bootp *, struct host *));
+PRIVATE void dovend_cmu(struct bootp *, struct host *);
 #endif
-PRIVATE void dovend_rfc1048 P((struct bootp *, struct host *, int32));
-PRIVATE void handle_reply P((void));
-PRIVATE void handle_request P((void));
-PRIVATE void sendreply P((int forward, int32 dest_override));
-PRIVATE void usage P((void));
-int main P((int, char **));
-
-#undef	P
+PRIVATE void dovend_rfc1048(struct bootp *, struct host *, int32);
+PRIVATE void handle_reply(void);
+PRIVATE void handle_request(void);
+PRIVATE void sendreply(int forward, int32 dest_override);
+PRIVATE void usage(void);
+int main(int, char **);
 
 /*
  * IP port numbers for client and server obtained from /etc/services
@@ -151,11 +137,7 @@ struct sockaddr_in send_addr;	/*  destination */
  * option defaults
  */
 int debug = 0;					/* Debugging flag (level) */
-struct timeval actualtimeout =
-{								/* fifteen minutes */
-	15 * 60L,					/* tv_sec */
-	0							/* tv_usec */
-};
+int actualtimeout = 15 * 60000;			/* fifteen minutes */
 
 /*
  * General
@@ -164,7 +146,7 @@ struct timeval actualtimeout =
 int s;							/* Socket file descriptor */
 char *pktbuf;					/* Receive packet buffer */
 int pktlen;
-char *progname;
+const char *progname;
 char *chdir_path;
 char hostname[MAXHOSTNAMELEN + 1];	/* System host name */
 struct in_addr my_ip_addr;
@@ -177,8 +159,8 @@ PRIVATE int do_dumptab = 0;
  * Globals below are associated with the bootp database file (bootptab).
  */
 
-char *bootptab = CONFIG_FILE;
-char *bootpd_dump = DUMPTAB_FILE;
+const char *bootptab = CONFIG_FILE;
+const char *bootpd_dump = DUMPTAB_FILE;
 
 
 
@@ -188,17 +170,17 @@ char *bootpd_dump = DUMPTAB_FILE;
  */
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
-	struct timeval *timeout;
+	int timeout;
 	struct bootp *bp;
 	struct servent *servp;
 	struct hostent *hep;
 	char *stmp;
-	int n, ba_len, ra_len;
-	int nfound, readfds;
+	socklen_t ba_len, ra_len;
+	int n;
+	int nfound;
+	struct pollfd set[1];
 	int standalone;
 
 	progname = strrchr(argv[0], '/');
@@ -257,7 +239,7 @@ main(argc, argv)
 	 * Set defaults that might be changed by option switches.
 	 */
 	stmp = NULL;
-	timeout = &actualtimeout;
+	timeout = actualtimeout;
 
 	/*
 	 * Read switches.
@@ -319,7 +301,7 @@ main(argc, argv)
 						"bootpd: missing hostname\n");
 				break;
 			}
-			strncpy(hostname, stmp, sizeof(hostname)-1);
+			strlcpy(hostname, stmp, sizeof(hostname));
 			break;
 
 		case 'i':				/* inetd mode */
@@ -343,13 +325,13 @@ main(argc, argv)
 						"%s: invalid timeout specification\n", progname);
 				break;
 			}
-			actualtimeout.tv_sec = (int32) (60 * n);
+			actualtimeout = n * 60000;
 			/*
-			 * If the actual timeout is zero, pass a NULL pointer
-			 * to select so it blocks indefinitely, otherwise,
-			 * point to the actual timeout value.
+			 * If the actual timeout is zero, pass INFTIM
+			 * to poll so it blocks indefinitely, otherwise,
+			 * use the actual timeout value.
 			 */
-			timeout = (n > 0) ? &actualtimeout : NULL;
+			timeout = (n > 0) ? actualtimeout : INFTIM;
 			break;
 
 		default:
@@ -412,7 +394,7 @@ main(argc, argv)
 		/*
 		 * Nuke any timeout value
 		 */
-		timeout = NULL;
+		timeout = INFTIM;
 
 	} /* if standalone (1st) */
 
@@ -498,12 +480,13 @@ main(argc, argv)
 	/*
 	 * Process incoming requests.
 	 */
+	set[0].fd = s;
+	set[0].events = POLLIN;
 	for (;;) {
-		readfds = 1 << s;
-		nfound = select(s + 1, (fd_set *)&readfds, NULL, NULL, timeout);
+		nfound = poll(set, 1, timeout);
 		if (nfound < 0) {
 			if (errno != EINTR) {
-				report(LOG_ERR, "select: %s", get_errmsg());
+				report(LOG_ERR, "poll: %s", get_errmsg());
 			}
 			/*
 			 * Call readtab() or dumptab() here to avoid the
@@ -519,10 +502,11 @@ main(argc, argv)
 			}
 			continue;
 		}
-		if (!(readfds & (1 << s))) {
+		if (nfound == 0) {
 			if (debug > 1)
-				report(LOG_INFO, "exiting after %ld minutes of inactivity",
-					   actualtimeout.tv_sec / 60);
+				report(LOG_INFO, "exiting after %d minute%s of inactivity",
+					   actualtimeout / 60000,
+					   actualtimeout == 60000 ? "" : "s");
 			exit(0);
 		}
 		ra_len = sizeof(recv_addr);
@@ -564,7 +548,7 @@ main(argc, argv)
  */
 
 PRIVATE void
-usage()
+usage(void)
 {
 	fprintf(stderr,
 			"usage:  bootpd [-d level] [-i] [-s] [-t timeout] [configfile [dumpfile]]\n");
@@ -578,8 +562,7 @@ usage()
 
 /* Signal catchers */
 PRIVATE void
-catcher(sig)
-	int sig;
+catcher(int sig)
 {
 	if (sig == SIGHUP)
 		do_readtab = 1;
@@ -606,7 +589,7 @@ catcher(sig)
  * forward the request there.)
  */
 PRIVATE void
-handle_request()
+handle_request(void)
 {
 	struct bootp *bp = (struct bootp *) pktbuf;
 	struct host *hp = NULL;
@@ -614,7 +597,7 @@ handle_request()
 	int32 bootsize = 0;
 	unsigned hlen, hashcode;
 	int32 dest;
-	char realpath[1024];
+	char lrealpath[1024];
 	char *clntpath;
 	char *homedir, *bootfile;
 	int n;
@@ -637,7 +620,7 @@ ignoring request for server %s from client at %s address %s",
 			return;
 		}
 	} else {
-		strcpy(bp->bp_sname, hostname);
+		strlcpy(bp->bp_sname, hostname, sizeof(bp->bp_sname));
 	}
 
 	/* If it uses an unknown network type, ignore the request.  */
@@ -755,10 +738,10 @@ HW addr type is IEEE 802.  convert to %s and check again\n",
 	if (hp->flags.exec_file) {
 		char tst[100];
 		/* XXX - Check string lengths? -gwr */
-		strcpy (tst, hp->exec_file->string);
-		strcat (tst, " ");
-		strcat (tst, hp->hostname->string);
-		strcat (tst, " &");
+		strlcpy(tst, hp->exec_file->string, sizeof(tst));
+		strlcat(tst, " ", sizeof(tst));
+		strlcat(tst, hp->hostname->string, sizeof(tst));
+		strlcat(tst, " &", sizeof(tst));
 		if (debug)
 			report(LOG_INFO, "executing %s", tst);
 		system(tst);	/* Hope this finishes soon... */
@@ -826,12 +809,11 @@ HW addr type is IEEE 802.  convert to %s and check again\n",
 	 * daemon chroot directory (i.e. /tftpboot).
 	 */
 	if (hp->flags.tftpdir) {
-		strncpy(realpath, hp->tftpdir->string, sizeof(realpath) - 1);
-		realpath[sizeof(realpath) - 1] = '\0';
-		clntpath = &realpath[strlen(realpath)];
+		strlcpy(lrealpath, hp->tftpdir->string, sizeof(lrealpath));
+		clntpath = &lrealpath[strlen(lrealpath)];
 	} else {
-		realpath[0] = '\0';
-		clntpath = realpath;
+		lrealpath[0] = '\0';
+		clntpath = lrealpath;
 	}
 
 	/*
@@ -882,21 +864,18 @@ HW addr type is IEEE 802.  convert to %s and check again\n",
 	 * Construct bootfile path.
 	 */
 	if (homedir) {
-		if (homedir[0] != '/') {
-			strncat(realpath, "/", sizeof(realpath) - 1);
-			realpath[sizeof(realpath) - 1] = '\0';
-		}
-		strncat(realpath, homedir, sizeof(realpath) - 1);
-		realpath[sizeof(realpath) - 1] = '\0';
+		if (homedir[0] != '/')
+			strlcat(lrealpath, "/", sizeof(lrealpath));
+		strlcat(lrealpath, homedir, sizeof(lrealpath));
 		homedir = NULL;
 	}
 	if (bootfile) {
 		if (bootfile[0] != '/') {
-			strcat(realpath, "/");
-			realpath[sizeof(realpath) - 1] = '\0';
+			strlcat(lrealpath, "/", sizeof(lrealpath));
+			lrealpath[sizeof(lrealpath) - 1] = '\0';
 		}
-		strcat(realpath, bootfile);
-		realpath[sizeof(realpath) - 1] = '\0';
+		strlcat(lrealpath, bootfile, sizeof(lrealpath));
+		lrealpath[sizeof(lrealpath) - 1] = '\0';
 		bootfile = NULL;
 	}
 
@@ -904,11 +883,11 @@ HW addr type is IEEE 802.  convert to %s and check again\n",
 	 * First try to find the file with a ".host" suffix
 	 */
 	n = strlen(clntpath);
-	strcat(clntpath, ".");
-	strcat(clntpath, hp->hostname->string);
-	if (chk_access(realpath, &bootsize) < 0) {
+	strlcat(clntpath, ".", sizeof(clntpath));
+	strlcat(clntpath, hp->hostname->string, sizeof(clntpath));
+	if (chk_access(lrealpath, &bootsize) < 0) {
 		clntpath[n] = 0;			/* Try it without the suffix */
-		if (chk_access(realpath, &bootsize) < 0) {
+		if (chk_access(lrealpath, &bootsize) < 0) {
 			/* neither "file.host" nor "file" was found */
 #ifdef	CHECK_FILE_ACCESS
 
@@ -940,7 +919,7 @@ HW addr type is IEEE 802.  convert to %s and check again\n",
 #endif	/* CHECK_FILE_ACCESS */
 		}
 	}
-	strncpy(bp->bp_file, clntpath, BP_FILE_LEN);
+	strlcpy(bp->bp_file, clntpath, sizeof(bp->bp_file));
 	if (debug > 2)
 		report(LOG_INFO, "bootfile=\"%s\"", clntpath);
 
@@ -1006,7 +985,7 @@ null_file_name:
  * Process BOOTREPLY packet.
  */
 PRIVATE void
-handle_reply()
+handle_reply(void)
 {
 	if (debug) {
 		report(LOG_INFO, "processing boot reply");
@@ -1021,9 +1000,7 @@ handle_reply()
  * not the originator of this reply packet.
  */
 PRIVATE void
-sendreply(forward, dst_override)
-	int forward;
-	int32 dst_override;
+sendreply(int forward, int32 dst_override)
 {
 	struct bootp *bp = (struct bootp *) pktbuf;
 	struct in_addr dst;
@@ -1039,7 +1016,7 @@ sendreply(forward, dst_override)
 
 	/*
 	 * If the destination address was specified explicitly
-	 * (i.e. the broadcast address for HP compatiblity)
+	 * (i.e. the broadcast address for HP compatibility)
 	 * then send the response to that address.  Otherwise,
 	 * act in accordance with RFC951:
 	 *   If the client IP address is specified, use that
@@ -1134,9 +1111,7 @@ sendreply(forward, dst_override)
  */
 
 PRIVATE int
-chk_access(path, filesize)
-	char *path;
-	int32 *filesize;
+chk_access(char *path, int32 *filesize)
 {
 	struct stat st;
 
@@ -1164,9 +1139,7 @@ chk_access(path, filesize)
  */
 
 PRIVATE void
-dovend_cmu(bp, hp)
-	struct bootp *bp;
-	struct host *hp;
+dovend_cmu(struct bootp *bp, struct host *hp)
 {
 	struct cmu_vend *vendp;
 	struct in_addr_list *taddr;
@@ -1181,7 +1154,7 @@ dovend_cmu(bp, hp)
 	 * domain name server, ien name server, time server
 	 */
 	vendp = (struct cmu_vend *) bp->bp_vend;
-	strcpy(vendp->v_magic, (char *)vm_cmu);
+	strlcpy(vendp->v_magic, (char *)vm_cmu, sizeof(vendp->v_magic));
 	if (hp->flags.subnet_mask) {
 		(vendp->v_smask).s_addr = hp->subnet_mask.s_addr;
 		(vendp->v_flags) |= VF_SMASK;
@@ -1234,15 +1207,12 @@ dovend_cmu(bp, hp)
 		return; \
 	} while (0)
 PRIVATE void
-dovend_rfc1048(bp, hp, bootsize)
-	struct bootp *bp;
-	struct host *hp;
-	int32 bootsize;
+dovend_rfc1048(struct bootp *bp, struct host *hp, int32 bootsize)
 {
 	int bytesleft, len;
 	byte *vp;
 
-	static char noroom[] = "%s: No room for \"%s\" option";
+	static const char noroom[] = "%s: No room for \"%s\" option";
 
 	vp = bp->bp_vend;
 
@@ -1267,7 +1237,7 @@ dovend_rfc1048(bp, hp, bootsize)
 		 */
 		{
 			byte *p, *ep;
-			byte tag, len;
+			byte tag, llen;
 			short msgsz = 0;
 			
 			p = vp + 4;
@@ -1280,10 +1250,10 @@ dovend_rfc1048(bp, hp, bootsize)
 				if (tag == TAG_END)
 					break;
 				/* Now scan the length byte. */
-				len = *p++;
+				llen = *p++;
 				switch (tag) {
 				case TAG_MAX_MSGSZ:
-					if (len == 2) {
+					if (llen == 2) {
 						bcopy(p, (char*)&msgsz, 2);
 						msgsz = ntohs(msgsz);
 					}
@@ -1292,7 +1262,7 @@ dovend_rfc1048(bp, hp, bootsize)
 					/* XXX - Should preserve this if given... */
 					break;
 				} /* swtich */
-				p += len;
+				p += llen;
 			}
 
 			if (msgsz > sizeof(*bp)) {

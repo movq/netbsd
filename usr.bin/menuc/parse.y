@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.y,v 1.8 1999/07/26 06:19:01 christos Exp $	*/
+/*	$NetBSD: parse.y,v 1.15 2006/02/20 21:06:40 dsl Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -57,10 +57,10 @@ static optn_info *cur_optn;
 
 %token <i_value> X Y W H NO BOX SUB HELP MENU NEXT EXIT ACTION ENDWIN OPTION 
 %token <i_value> TITLE DEFAULT DISPLAY ERROR EXITSTRING ALLOW DYNAMIC MENUS
-		 SCROLLABLE
+		 SCROLLABLE SHORTCUT CLEAR MESSAGES ALWAYS SCROLL
 %token <s_value> STRING NAME CODE INT_CONST CHAR_CONST
 
-%type <s_value> init_code system helpstr
+%type <s_value> init_code system helpstr text
 %type <optn_value> option option_list
 %type <i_value> act_opt
 %type <a_value> action exitact
@@ -85,10 +85,14 @@ menu_list :  /* empty */
 	  |  menu_list default_def
 	  |  menu_list initerror_def
 	  |  menu_list dynamic_def
+	  |  menu_list msgxlat_def
 	  ;
 
 dynamic_def : ALLOW DYNAMIC MENUS ';'
 		{ do_dynamic = 1; }
+
+msgxlat_def : ALLOW DYNAMIC MESSAGES ';'
+		{ do_msgxlat = 1; }
 
 initerror_def : ERROR action ';'
 		{ error_act = $2; }
@@ -128,37 +132,55 @@ opt_list  : "," opt
 	  | opt_list "," opt
 	  ;
 
-opt	  : NO EXIT		{ cur_menu->info->mopt |= NOEXITOPT; }
-	  | EXIT		{ cur_menu->info->mopt &= ~NOEXITOPT; }
-	  | NO BOX		{ cur_menu->info->mopt |= NOBOX; }
-	  | BOX			{ cur_menu->info->mopt &= ~NOBOX; }
-	  | NO SCROLLABLE	{ cur_menu->info->mopt &= ~SCROLL; }
-	  | SCROLLABLE		{ cur_menu->info->mopt |= SCROLL; }
+text	  : NAME | STRING
+
+opt	  : NO EXIT		{ cur_menu->info->mopt |= MC_NOEXITOPT; }
+	  | EXIT		{ cur_menu->info->mopt &= ~MC_NOEXITOPT; }
+	  | NO BOX		{ cur_menu->info->mopt |= MC_NOBOX; }
+	  | BOX			{ cur_menu->info->mopt &= ~MC_NOBOX; }
+	  | NO SCROLLABLE	{ cur_menu->info->mopt &= ~MC_SCROLL; }
+	  | SCROLLABLE		{ cur_menu->info->mopt |= MC_SCROLL; }
+	  | NO SHORTCUT 	{ cur_menu->info->mopt |= MC_NOSHORTCUT; }
+	  | SHORTCUT 		{ cur_menu->info->mopt &= ~MC_NOSHORTCUT; }
+	  | NO CLEAR 		{ cur_menu->info->mopt |= MC_NOCLEAR; }
+	  | CLEAR 		{ cur_menu->info->mopt &= ~MC_NOCLEAR; }
+	  | NO DEFAULT EXIT	{ cur_menu->info->mopt &= ~MC_DFLTEXIT; }
+	  | DEFAULT EXIT 	{ cur_menu->info->mopt |= MC_DFLTEXIT; }
+	  | NO ALWAYS SCROLL	{ cur_menu->info->mopt &= ~MC_ALWAYS_SCROLL; }
+	  | ALWAYS SCROLL 	{ cur_menu->info->mopt |= MC_ALWAYS_SCROLL; }
+	  | NO SUB MENU		{ cur_menu->info->mopt &= ~MC_SUBMENU; }
+	  | SUB MENU 		{ cur_menu->info->mopt |= MC_SUBMENU; }
 	  | X "=" INT_CONST	{ cur_menu->info->x = atoi($3); }
 	  | Y "=" INT_CONST	{ cur_menu->info->y = atoi($3); }
 	  | W "=" INT_CONST	{ cur_menu->info->w = atoi($3); }
 	  | H "=" INT_CONST	{ cur_menu->info->h = atoi($3); }
-	  | TITLE STRING 	{ cur_menu->info->title = $2; }
-	  | EXITSTRING STRING	{ cur_menu->info->exitstr = $2; }
+	  | TITLE text	 	{ cur_menu->info->title = $2; }
+	  | EXITSTRING text	{ cur_menu->info->exitstr = $2;
+				  cur_menu->info->mopt &= ~MC_NOEXITOPT; }
 	  ;
 
 option_list : option
 	  | option_list option  { $2->next = $1; $$ = $2; }
 	  ;
 
-option	  : OPTION STRING ","
+option	  : OPTION
 		{ cur_optn = (optn_info *) malloc (sizeof(optn_info));
-		  cur_optn->name = $2;
 		  cur_optn->menu = -1;
+		  cur_optn->name = NULL;
+		  cur_optn->name_is_code = FALSE;
 		  cur_optn->issub = FALSE;
 		  cur_optn->doexit = FALSE;
 		  cur_optn->optact.code = "";
 		  cur_optn->optact.endwin = FALSE;
 		  cur_optn->next = NULL;
 		}
+	    option_legend ","
 	    elem_list ";"
 		{ $$ = cur_optn; }
 	  ;
+
+option_legend : text	{ cur_optn->name = $1; }
+	  | CODE	{ cur_optn->name = $1; cur_optn->name_is_code = TRUE;}
 
 elem_list : elem
 	  | elem_list "," elem
@@ -205,5 +227,6 @@ exitact	  : /* empty */ 	{ cur_menu->info->exitact.code = ""; }
 	  ;
 
 helpstr	  : /* empty */ 	{ cur_menu->info->helpstr = NULL; }
-	  | HELP CODE ";" 	{ cur_menu->info->helpstr = $2; } 
+	  | HELP CODE ";" 	{ asprintf(&cur_menu->info->helpstr, "\"%s\"", $2); } 
+	  | HELP text ";" 	{ cur_menu->info->helpstr = $2; } 
 	  ;

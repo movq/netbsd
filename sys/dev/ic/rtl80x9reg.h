@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl80x9reg.h,v 1.2 1998/10/31 00:31:43 thorpej Exp $	*/
+/*	$NetBSD: rtl80x9reg.h,v 1.7 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 /*
- * Registers on RealTek 8019 and 8029 NE2000-compatible network interfaces.
+ * Registers on Realtek 8019 and 8029 NE2000-compatible network interfaces.
  *
  * Data sheets for these chips can be found at:
  *
@@ -62,7 +55,7 @@
  */
 #define	NERTL_RTL3_EECR		0x01	/* EEPROM Command Register */
 #define	RTL3_EECR_EEM1		0x80	/* EEPROM Operating Mode */
-#define	RTL3_EECR_EEM0		0x40	
+#define	RTL3_EECR_EEM0		0x40
 					/* 0 0 Normal operation */
 					/* 0 1 Auto-load */
 					/* 1 0 9346 programming */
@@ -72,7 +65,7 @@
 #define	RTL3_EECR_EEDI		0x02	/* EEPROM Data In */
 #define	RTL3_EECR_EEDO		0x01	/* EEPROM Data Out */
 
-#define	NERTL_RTL3_BPAGE	0x02	/* BROM Page Regiseter (8019) */
+#define	NERTL_RTL3_BPAGE	0x02	/* BROM Page Register (8019) */
 
 #define	NERTL_RTL3_CONFIG0	0x03	/* Configuration 0 (ro) */
 #define	RTL3_CONFIG0_JP		0x08	/* jumper mode (8019) */
@@ -140,7 +133,7 @@
 #define	RTL3_CONFIG3_LEDS1	0x20	/* LED1/2 pin configuration */
 					/* 0 LED1 == LED_RX, LED2 == LED_TX */
 					/* 1 LED1 == LED_CRS, LED2 == MCSB */
-#define	RTL3_CONFIG3_LEDS0	0x10	/* LED0 pin configration */
+#define	RTL3_CONFIG3_LEDS0	0x10	/* LED0 pin configuration */
 					/* 0 LED0 pin == LED_COL */
 					/* 1 LED0 pin == LED_LINK */
 #define	RTL3_CONFIG3_SLEEP	0x04	/* Sleep mode */

@@ -1,4 +1,4 @@
-/*	$NetBSD: pipe.S,v 1.3 1999/10/25 23:48:17 thorpej Exp $	*/
+/*	$NetBSD: pipe.S,v 1.6 2003/08/07 16:42:14 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,11 +39,15 @@
 #if 0
 	RCSID("from: @(#)pipe.s	5.1 (Berkeley) 5/12/90")
 #else
-	RCSID("$NetBSD: pipe.S,v 1.3 1999/10/25 23:48:17 thorpej Exp $")
+	RCSID("$NetBSD: pipe.S,v 1.6 2003/08/07 16:42:14 agc Exp $")
 #endif
 #endif /* LIBC_SCCS and not lint */
 
-SYSCALL(pipe)
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(pipe, _pipe)
+#endif
+
+_SYSCALL(_pipe,pipe)
 	movl	%sp@(4),%a0
 	movl	%d0,%a0@+
 	movl	%d1,%a0@

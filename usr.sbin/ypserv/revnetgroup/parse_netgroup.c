@@ -1,4 +1,4 @@
-/*	$NetBSD: parse_netgroup.c,v 1.2 1997/10/06 06:54:13 lukem Exp $ */
+/*	$NetBSD: parse_netgroup.c,v 1.6 2003/08/07 11:25:51 agc Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: parse_netgroup.c,v 1.2 1997/10/06 06:54:13 lukem Exp $");
+__RCSID("$NetBSD: parse_netgroup.c,v 1.6 2003/08/07 11:25:51 agc Exp $");
 #endif
 
 /*
@@ -92,8 +88,8 @@ static struct {
 
 extern struct group_entry *gtable[];
 
-static int		parse_netgrp __P((const char *));
-static struct linelist *read_for_group __P((const char *));
+static int		parse_netgrp(const char *);
+static struct linelist *read_for_group(const char *);
 
 
 /*
@@ -103,8 +99,7 @@ static struct linelist *read_for_group __P((const char *));
  * most of the work.
  */
 void
-rng_setnetgrent(group)
-	const char *group;
+rng_setnetgrent(const char *group)
 {
 	/* Sanity check */
 
@@ -116,11 +111,8 @@ rng_setnetgrent(group)
 		rng_endnetgrent();
 		if (parse_netgrp(group))
 			rng_endnetgrent();
-		else {
-			grouphead.grname = (char *)
-				malloc(strlen(group) + 1);
-			strcpy(grouphead.grname, group);
-		}
+		else
+			grouphead.grname = strdup(group);
 	}
 	nextgrp = grouphead.gr;
 }
@@ -129,8 +121,7 @@ rng_setnetgrent(group)
  * Get the next netgroup off the list.
  */
 int
-rng_getnetgrent(hostp, userp, domp)
-	char **hostp, **userp, **domp;
+rng_getnetgrent(char **hostp, char **userp, char **domp)
 {
 	if (nextgrp) {
 		*hostp = nextgrp->ng_str[NG_HOST];
@@ -146,7 +137,7 @@ rng_getnetgrent(hostp, userp, domp)
  * rng_endnetgrent() - cleanup
  */
 void
-rng_endnetgrent()
+rng_endnetgrent(void)
 {
 	struct linelist *lp, *olp;
 	struct netgrp *gp, *ogp;
@@ -183,8 +174,7 @@ rng_endnetgrent()
  * Parse the netgroup file setting up the linked lists.
  */
 static int
-parse_netgrp(group)
-	const char *group;
+parse_netgrp(const char *group)
 {
 	char *spos, *epos;
 	int len, strpos;
@@ -210,7 +200,7 @@ parse_netgrp(group)
 #ifdef DEBUG
 		/*
 		 * This error message is largely superflous since the
-		 * code handles the error condition sucessfully, and
+		 * code handles the error condition successfully, and
 		 * spewing it out from inside libc can actually hose
 		 * certain programs.
 		 */
@@ -298,8 +288,7 @@ parse_netgrp(group)
  * is found. Return 1 if eof is encountered.
  */
 static struct linelist *
-read_for_group(group)
-	const char *group;
+read_for_group(const char *group)
 {
 	char *pos, *spos, *linep = NULL, *olinep = NULL;
 	int len, olen;
@@ -309,7 +298,7 @@ read_for_group(group)
 	char *data = NULL;
 
 	data = lookup (gtable, group);
-	sprintf(line, "%s %s", group, data);
+	snprintf(line, sizeof(line), "%s %s", group, data);
 	pos = (char *)&line;
 #ifdef CANT_HAPPEN
 	if (*pos == '#')

@@ -1,4 +1,4 @@
-/* $NetBSD: sgmap_typedep.h,v 1.4 1998/06/04 01:22:52 thorpej Exp $ */
+/* $NetBSD: sgmap_typedep.h,v 1.6 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,14 +38,14 @@
 
 extern	SGMAP_PTE_TYPE	__C(SGMAP_TYPE,_prefetch_spill_page_pte);
 
-void	__C(SGMAP_TYPE,_init_spill_page_pte) __P((void));
-int	__C(SGMAP_TYPE,_load) __P((bus_dma_tag_t, bus_dmamap_t,
-	    void *, bus_size_t, struct proc *, int, struct alpha_sgmap *));
-int	__C(SGMAP_TYPE,_load_mbuf) __P((bus_dma_tag_t, bus_dmamap_t,
-	    struct mbuf *, int, struct alpha_sgmap *));
-int	__C(SGMAP_TYPE,_load_uio) __P((bus_dma_tag_t, bus_dmamap_t,
-	    struct uio *, int, struct alpha_sgmap *));
-int	__C(SGMAP_TYPE,_load_raw) __P((bus_dma_tag_t, bus_dmamap_t,
-	    bus_dma_segment_t *, int, bus_size_t, int, struct alpha_sgmap *));
-void	__C(SGMAP_TYPE,_unload) __P((bus_dma_tag_t, bus_dmamap_t,
-	    struct alpha_sgmap *));
+void	__C(SGMAP_TYPE,_init_spill_page_pte)(void);
+int	__C(SGMAP_TYPE,_load)(bus_dma_tag_t, bus_dmamap_t,
+	    void *, bus_size_t, struct proc *, int, struct alpha_sgmap *);
+int	__C(SGMAP_TYPE,_load_mbuf)(bus_dma_tag_t, bus_dmamap_t,
+	    struct mbuf *, int, struct alpha_sgmap *);
+int	__C(SGMAP_TYPE,_load_uio)(bus_dma_tag_t, bus_dmamap_t,
+	    struct uio *, int, struct alpha_sgmap *);
+int	__C(SGMAP_TYPE,_load_raw)(bus_dma_tag_t, bus_dmamap_t,
+	    bus_dma_segment_t *, int, bus_size_t, int, struct alpha_sgmap *);
+void	__C(SGMAP_TYPE,_unload)(bus_dma_tag_t, bus_dmamap_t,
+	    struct alpha_sgmap *);

@@ -1,8 +1,40 @@
-/*	$NetBSD: mscpvar.h,v 1.8 2000/01/21 23:39:59 thorpej Exp $	*/
+/*	$NetBSD: mscpvar.h,v 1.15 2007/03/04 06:02:14 christos Exp $	*/
 /*
- * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * Copyright (c) 1988 Regents of the University of California.
  * All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Chris Torek.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)mscpvar.h	7.3 (Berkeley) 6/28/90
+ */
+
+/*
+ * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -81,34 +113,34 @@ struct mscp_xi {
 
 struct	mscp_ctlr {
 	void	(*mc_ctlrdone)		/* controller operation complete */
-	    __P((struct device *));
+	   (struct device *);
 	void	(*mc_go)		/* device-specific start routine */
-	    __P((struct device *, struct mscp_xi *));
+	   (struct device *, struct mscp_xi *);
 	void	(*mc_saerror)		/* ctlr error handling */
-	    __P((struct device *, int));
+	   (struct device *, int);
 };
 
 struct mscp_softc;
 
 struct	mscp_device {
 	void	(*me_dgram)	/* error datagram */
-	    __P((struct device *, struct mscp *, struct mscp_softc *));
+	   (struct device *, struct mscp *, struct mscp_softc *);
 	void	(*me_iodone)	/* normal I/O is done */
-	    __P((struct device *, struct buf *));
+	   (struct device *, struct buf *);
 	int	(*me_online)	/* drive on line */
-	    __P((struct device *, struct mscp *));
+	   (struct device *, struct mscp *);
 	int	(*me_gotstatus) /* got unit status */
-	    __P((struct device *, struct mscp *));
+	   (struct device *, struct mscp *);
 	void	(*me_replace)	/* replace done */
-	    __P((struct device *, struct mscp *));
+	   (struct device *, struct mscp *);
 	int	(*me_ioerr)	/* read or write failed */
-	    __P((struct device *, struct mscp *, struct buf *));
+	   (struct device *, struct mscp *, struct buf *);
 	void	(*me_bb)	/* B_BAD io done */
-	    __P((struct device *, struct mscp *, struct buf *));
+	   (struct device *, struct mscp *, struct buf *);
 	void	(*me_fillin)	/* Fill in mscp info for this drive */
-	    __P((struct buf *,struct mscp *));
+	   (struct buf *,struct mscp *);
 	void	(*me_cmddone)	/* Non-data transfer operation is done */
-	    __P((struct device *, struct mscp *));
+	   (struct device *, struct mscp *);
 };
 
 /*
@@ -191,7 +223,7 @@ struct mscp_softc {
 	bus_space_handle_t mi_iph;	/* initialisation and polling */
 	bus_space_handle_t mi_sah;	/* status & address (read part) */
 	bus_space_handle_t mi_swh;	/* status & address (write part) */
-	struct buf_queue mi_resq;	/* While waiting for packets */
+	struct bufq_state *mi_resq;	/* While waiting for packets */
 };
 
 /* mi_flags */
@@ -230,21 +262,21 @@ struct mscp_softc {
 #define MSCP_DOCMD(mi) { \
 	if ((mi)->mi_wantcmd) { \
 		(mi)->mi_wantcmd = 0; \
-		wakeup((caddr_t) &(mi)->mi_wantcmd); \
+		wakeup((void *) &(mi)->mi_wantcmd); \
 	} \
 }
 
 /* Prototypes */
-struct	mscp *mscp_getcp __P((struct mscp_softc *, int));
-void	mscp_printevent __P((struct mscp *));
-void	mscp_go __P((struct mscp_softc *, struct mscp *, int));
-void	mscp_requeue __P((struct mscp_softc *));
-void	mscp_dorsp __P((struct mscp_softc *));
-int	mscp_decodeerror __P((char *, struct mscp *, struct mscp_softc *));
-int	mscp_print __P((void *, const char *));
-void	mscp_hexdump __P((struct mscp *));
-void	mscp_strategy __P((struct buf *, struct device *));
-void	mscp_printtype __P((int, int));
-int	mscp_waitstep __P((struct mscp_softc *, int, int));
-void	mscp_dgo __P((struct mscp_softc *, struct mscp_xi *));
-void	mscp_intr __P((struct mscp_softc *));
+struct	mscp *mscp_getcp(struct mscp_softc *, int);
+void	mscp_printevent(struct mscp *);
+void	mscp_go(struct mscp_softc *, struct mscp *, int);
+void	mscp_requeue(struct mscp_softc *);
+void	mscp_dorsp(struct mscp_softc *);
+int	mscp_decodeerror(const char *, struct mscp *, struct mscp_softc *);
+int	mscp_print(void *, const char *);
+void	mscp_hexdump(struct mscp *);
+void	mscp_strategy(struct buf *, struct device *);
+void	mscp_printtype(int, int);
+int	mscp_waitstep(struct mscp_softc *, int, int);
+void	mscp_dgo(struct mscp_softc *, struct mscp_xi *);
+void	mscp_intr(struct mscp_softc *);

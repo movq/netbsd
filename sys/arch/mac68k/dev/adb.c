@@ -1,4 +1,4 @@
-/*	$NetBSD: adb.c,v 1.35 2000/03/19 06:07:05 scottr Exp $	*/
+/*	$NetBSD: adb.c,v 1.52 2008/04/03 05:03:23 scottr Exp $	*/
 
 /*
  * Copyright (C) 1994	Bradley A. Grantham
@@ -30,6 +30,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.52 2008/04/03 05:03:23 scottr Exp $");
+
 #include "opt_adb.h"
 
 #include <sys/param.h>
@@ -40,9 +43,10 @@
 #include <sys/proc.h>
 #include <sys/signalvar.h>
 #include <sys/systm.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
 
 #include <machine/autoconf.h>
-#include <machine/cpu.h>
 
 #include <mac68k/mac68k/macrom.h>
 #include <mac68k/dev/adbvar.h>
@@ -53,23 +57,19 @@
 /*
  * Function declarations.
  */
-static int	adbmatch __P((struct device *, struct cfdata *, void *));
-static void	adbattach __P((struct device *, struct device *, void *));
-static int	adbprint __P((void *, const char *));
-void		adb_config_interrupts __P((struct device *));
+static int	adbmatch(struct device *, struct cfdata *, void *);
+static void	adbattach(struct device *, struct device *, void *);
+static int	adbprint(void *, const char *);
+void		adb_config_interrupts(struct device *);
 
-extern void	adb_jadbproc __P((void));
+extern void	adb_jadbproc(void);
 
 /*
  * Global variables.
  */
 int	adb_polling = 0;	/* Are we polling?  (Debugger mode) */
 #ifdef ADB_DEBUG
-#if 1
-int	adb_debug = 0xff;
-#else
 int	adb_debug = 0;		/* Output debugging messages */
-#endif
 #endif /* ADB_DEBUG */
 
 extern struct	mac68k_machine_S mac68k_machine;
@@ -79,15 +79,11 @@ extern char	*adbHardwareDescr[];
 /*
  * Driver definition.
  */
-struct cfattach adb_ca = {
-	sizeof(struct device), adbmatch, adbattach
-};
+CFATTACH_DECL(adb, sizeof(struct device),
+    adbmatch, adbattach, NULL, NULL);
 
 static int
-adbmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+adbmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	static int adb_matched = 0;
 
@@ -100,10 +96,11 @@ adbmatch(parent, cf, aux)
 }
 
 static void
-adbattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+adbattach(struct device *parent, struct device *self, void *aux)
 {
+
+	adb_softintr_cookie = softint_establish(SOFTINT_SERIAL,
+	    (void (*)(void *))adb_soft_intr, NULL);
 	printf("\n");
 
 	/*
@@ -113,8 +110,7 @@ adbattach(parent, self, aux)
 }
 
 void
-adb_config_interrupts(self)
-	struct device *self;
+adb_config_interrupts(struct device *self)
 {
 	ADBDataBlock adbdata;
 	struct adb_attach_args aa_args;
@@ -190,9 +186,7 @@ adb_config_interrupts(self)
 
 
 int
-adbprint(args, name)
-	void *args;
-	const char *name;
+adbprint(void *args, const char *name)
 {
 	struct adb_attach_args *aa_args = (struct adb_attach_args *)args;
 	int rv = UNCONF;
@@ -201,23 +195,25 @@ adbprint(args, name)
 		rv = UNSUPP; /* most ADB device types are unsupported */
 
 		/* print out what kind of ADB device we have found */
-		printf("%s addr %d: ", name, aa_args->origaddr);
+		aprint_normal("%s addr %d: ", name, aa_args->adbaddr);
 		switch(aa_args->origaddr) {
 #ifdef DIAGNOSTIC
 		case 0:
-			printf("ADB event device");
+			aprint_normal("ADB event device");
 			rv = UNCONF;
 			break;
 		case ADBADDR_SECURE:
-			printf("security dongle (%d)", aa_args->handler_id);
+			aprint_normal("security dongle (%d)",
+			    aa_args->handler_id);
 			break;
 #endif
 		case ADBADDR_MAP:
-			printf("mapped device (%d)", aa_args->handler_id);
+			aprint_normal("mapped device (%d)",
+			    aa_args->handler_id);
 			rv = UNCONF;
 			break;
 		case ADBADDR_REL:
-			printf("relative positioning device (%d)",
+			aprint_normal("relative positioning device (%d)",
 			    aa_args->handler_id);
 			rv = UNCONF;
 			break;
@@ -225,37 +221,110 @@ adbprint(args, name)
 		case ADBADDR_ABS:
 			switch (aa_args->handler_id) {
 			case ADB_ARTPAD:
-				printf("WACOM ArtPad II");
+				aprint_normal("WACOM ArtPad II");
 				break;
 			default:
-				printf("absolute positioning device (%d)",
+				aprint_normal("absolute positioning device (%d)",
 				    aa_args->handler_id);
 				break;
 			}
 			break;
 		case ADBADDR_DATATX:
-			printf("data transfer device (modem?) (%d)",
+			aprint_normal("data transfer device (modem?) (%d)",
 			    aa_args->handler_id);
 			break;
 		case ADBADDR_MISC:
 			switch (aa_args->handler_id) {
 			case ADB_POWERKEY:
-				printf("Sophisticated Circuits PowerKey");
+				aprint_normal("Sophisticated Circuits PowerKey");
 				break;
 			default:
-				printf("misc. device (remote control?) (%d)",
+				aprint_normal("misc. device (remote control?) (%d)",
 				    aa_args->handler_id);
 				break;
 			}
 			break;
 		default:
-			printf("unknown type device, (handler %d)",
+			aprint_normal("unknown type device, (handler %d)",
 			    aa_args->handler_id);
 			break;
 #endif /* DIAGNOSTIC */
 		}
 	} else		/* a device matched and was configured */
-		printf(" addr %d: ", aa_args->origaddr);
+		aprint_normal(" addr %d: ", aa_args->adbaddr);
 
 	return (rv);
+}
+
+
+/*
+ * adb_op_sync
+ *
+ * This routine does exactly what the adb_op routine does, except that after
+ * the adb_op is called, it waits until the return value is present before
+ * returning.
+ *
+ * NOTE: The user specified compRout is ignored, since this routine specifies
+ * it's own to adb_op, which is why you really called this in the first place
+ * anyway.
+ */
+int
+adb_op_sync(Ptr buffer, Ptr compRout, Ptr data, short command)
+{
+	int result;
+	volatile int flag = 0;
+
+	result = ADBOp(buffer, (void *)adb_op_comprout, __UNVOLATILE(&flag), 
+	    command);	/* send command */
+	if (result == 0) {		/* send ok? */
+		adb_spin(&flag);
+		if (!flag)
+			result = -2;
+	}
+
+	return result;
+}
+
+/*
+ * adb_spin
+ *
+ * Implements a spin-wait with timeout to be used for synchronous
+ * operations on the ADB bus.
+ *
+ * Total time to wait is calculated as follows:
+ *  - Tlt (stop to start time): 260 usec
+ *  - start bit: 100 usec
+ *  - up to 8 data bytes: 64 * 100 usec = 6400 usec
+ *  - stop bit (with SRQ): 140 usec
+ * Total: 6900 usec
+ *
+ * This is the total time allowed by the specification.  Any device that
+ * doesn't conform to this will fail to operate properly on some Apple
+ * systems.  In spite of this we double the time to wait; Cuda-based
+ * systems apparently queue commands and allow the main CPU to continue
+ * processing (how radical!).  To be safe, allow time for two complete
+ * ADB transactions to occur.
+ */
+void
+adb_spin(volatile int *fp)
+{
+	int tmout;
+
+	for (tmout = 13800; *fp == 0 && tmout >= 10; tmout -= 10)
+		delay(10);
+	if (*fp == 0 && tmout > 0)
+		delay(tmout);
+}
+
+
+/*
+ * adb_op_comprout
+ *
+ * This function is used by the adb_op_sync routine so it knows when the
+ * function is done.
+ */
+void 
+adb_op_comprout(void)
+{
+	__asm("movw	#1,%a2@			| update flag value");
 }

@@ -1,12 +1,19 @@
-#	$NetBSD: Makefile,v 1.8 1997/10/24 09:01:16 lukem Exp $
+#	$NetBSD: Makefile,v 1.16 2008/01/11 00:38:10 lukem Exp $
 
-.PATH:	${.CURDIR}/../lint1
+.PATH:		${.CURDIR}/../lint1
+.PATH:		${.CURDIR}/../../mkdep
 
-PROG=	xlint
-PROGNAME= lint
-SRCS=	xlint.c mem.c
-MAN=	lint.1
+PROG=		xlint
+SRCS=		xlint.c mem.c findcc.c
+PROGNAME= 	lint
+MAN=		lint.1
 
-CPPFLAGS+=-I${.CURDIR}/../lint1
+CPPFLAGS+=	-I${.CURDIR}/../lint1
+CPPFLAGS+=	-I${.CURDIR}/../../mkdep
+
+.if (${HOSTPROG:U} == "")
+DPADD+=		${LIBUTIL}
+LDADD+=		-lutil
+.endif
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: fork.S,v 1.2 2000/03/27 16:27:16 msaitoh Exp $	*/
+/*	$NetBSD: fork.S,v 1.10 2006/01/06 05:11:29 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,30 +36,28 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: fork.S,v 1.2 2000/03/27 16:27:16 msaitoh Exp $")
+	RCSID("$NetBSD: fork.S,v 1.10 2006/01/06 05:11:29 uwe Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
 
-	.text 
-	.align 2
-2:	mov.l 1f, r3
-	jmp	@r3							
-	nop
-	_SYSCALL_NOERROR(fork,fork)
-	bf 2b
-	bra 3f
-	nop
-	.align 2
-	1: .long cerror
-3:	
-	add	#0xff, r1 /* from 1 to 0 in child, 0 to -1 in parent */
-	rts		/* pid = fork(); */
-	and	r1,r0
+/*
+ * pid = fork();
+ *
+ * r1 == 0 in parent process, r1 == 1 in child process.
+ * r0 == pid of child in parent, r0 == pid of parent in child.
+ *
+ */
+ENTRY(__fork)
+	mov	#SYS_fork, r0
+	trapa	#0x80
+	bf	err
 
-#if 0
-SYSCALL(fork)
-	decl	%edx	/* from 1 to 0 in child, 0 to -1 in parent */
-	andl	%edx,%eax
-	ret		/* pid = fork(); */
-#endif
+	add	#0xff, r1	/* from 1 to 0 in child, 0 to -1 in parent */
+	rts
+	 and	r1, r0		/* 0 in child, child pid in parent */
+
+err:
+	JUMP_CERROR
+
+	SET_ENTRY_SIZE(__fork)

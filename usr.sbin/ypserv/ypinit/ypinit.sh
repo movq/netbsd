@@ -1,12 +1,12 @@
 #!/bin/sh
 #
-#	$NetBSD: ypinit.sh,v 1.8 1998/06/08 06:29:25 lukem Exp $
+#	$NetBSD: ypinit.sh,v 1.12 2004/10/05 11:35:35 tron Exp $
 #
 # ypinit.sh - setup a master or slave YP server
 #
 # Originally written by Mats O Jansson <moj@stacken.kth.se>
-# Modified by Jason R. Thorpe <thorpej@NetBSD.ORG>
-# Reworked by Luke Mewburn <lukem@netbsd.org>
+# Modified by Jason R. Thorpe <thorpej@NetBSD.org>
+# Reworked by Luke Mewburn <lukem@NetBSD.org>
 #
 
 PATH=/bin:/usr/sbin:/usr/bin:${PATH}
@@ -20,9 +20,8 @@ YPXFR=/usr/sbin/ypxfr
 
 progname=`basename $0`
 yp_dir=/var/yp
-tmpfile=/tmp/ypservers.$$
-
-trap 'rm -f ${tmpfile} ; exit 0' 0 2 3
+tmpfile=`mktemp /tmp/ypservers.XXXXXX` || exit 1
+trap "rm -f ${tmpfile} ; exit 0" EXIT INT QUIT
 
 umask 077				# protect created directories
 
@@ -31,7 +30,7 @@ if [ `${ID} -u` != 0 ]; then
 	exit 1
 fi
 
-args=`getopt cms: $*`
+args=`getopt cl:ms: $*`
 if [ $? -eq 0 ]; then
 	set -- $args
 	for i; do
@@ -47,6 +46,12 @@ if [ $? -eq 0 ]; then
 		"-s")
 			servertype=slave
 			master=${2}
+			shift
+			shift
+			;;
+		"-l")
+			noninteractive=yes
+			serverlist=${2}
 			shift
 			shift
 			;;
@@ -67,9 +72,9 @@ fi
 
 if [ -z ${servertype} ]; then
 	cat 1>&2 << __usage 
-usage: 	${progname} -c [domainname]
-	${progname} -m [domainname]
-	${progname} -s master_server [domainname]
+usage: 	${progname} -c [domainname] [-l server1,...,serverN]
+	${progname} -m [domainname] [-l server1,...,serverN]
+	${progname} -s master_server [domainname] [-l server1,...,serverN]
 
 The \`-c' flag sets up a YP client, the \`-m' flag builds a master YP
 server, and the \`-s' flag builds a slave YP server.  When building a
@@ -124,72 +129,85 @@ echo ""
 
 binding_dir=${yp_dir}/binding
 if [ ! -d ${binding_dir} ]; then
+	cat 1>&2 << __no_dir
 $progname: The directory ${binding_dir} does not exist.
 	Restore it from the distribution.
 __no_dir
 	exit 1
 fi
 
-cat << __client_setup
+if [ -z "${noninteractive}" ]; then
+	cat << __client_setup
 A YP client needs a list of YP servers to bind to.
 Whilst ypbind supports -broadcast, its use is not recommended.
 __client_setup
 
-done=
-while [ -z "${done}" ]; do
-	rm -f ${tmpfile}
-	touch ${tmpfile}
-	cat <<__list_of_servers
+	done=
+	while [ -z "${done}" ]; do
+		> ${tmpfile}
+		cat <<__list_of_servers
 
 Please enter a list of YP servers, in order of preference.
 When finished, press RETURN on a blank line or enter EOF.
 
 __list_of_servers
 
+		if [ "${servertype}" != "client" ]; then
+			echo ${host} >> ${tmpfile}
+			echo "	next host: ${host}";
+		fi
+		echo -n "	next host: ";
+
+		while read nextserver ; test -n "${nextserver}"
+		do
+			echo ${nextserver} >> ${tmpfile}
+			echo -n "	next host: ";
+		done
+
+		if [ -s ${tmpfile} ]; then
+			echo ""
+			echo "The current servers are:"
+			echo ""
+			cat ${tmpfile}
+			echo ""
+			echo -n "Is this correct? [y/n: n] "
+			read DONE
+			case ${DONE} in
+			y*|Y*)
+				done=yes
+				;;
+			esac
+		else
+			echo    ""
+			echo    "You have not supplied any servers."
+		fi
+		if [ -z "${done}" ]; then
+			echo -n "Do you wish to abort? [y/n: n] "
+			read ABORT
+			case ${ABORT} in
+			y*|Y*)
+				exit 0
+				;;
+			esac
+		fi
+	done
+else # interacive
 	if [ "${servertype}" != "client" ]; then
 		echo ${host} >> ${tmpfile}
-		echo "	next host: ${host}";
 	fi
-	echo -n "	next host: ";
-
-	while read nextserver ; test -n "${nextserver}"
-	do
-		echo ${nextserver} >> ${tmpfile}
-		echo -n "	next host: ";
-	done
-
-	if [ -s ${tmpfile} ]; then
-		echo ""
-		echo "The current servers are:"
-		echo ""
-		cat ${tmpfile}
-		echo ""
-		echo -n "Is this correct? [y/n: n] "
-		read DONE
-		case ${DONE} in
-		y*|Y*)
-			done=yes
-			;;
-		esac
-	else
-		echo    ""
-		echo    "You have not supplied any servers."
-	fi
-	if [ -z "${done}" ]; then
-		echo -n "Do you wish to abort? [y/n: n] "
-		read ABORT
-		case ${ABORT} in
-		y*|Y*)
-			exit 0
-			;;
-		esac
-	fi
-done
+	echo "${serverlist}" | sed -e 's/,/\
+/g' >> ${tmpfile}
+#the above newline is required
+	echo ""
+	echo "The current servers are:"
+	echo ""
+	cat ${tmpfile}
+	echo ""
+fi # interactive
 
 if [ -s ${tmpfile} ]; then
 	${INSTALL} -c -m 0444 ${tmpfile} ${binding_dir}/${domain}.ypservers
 fi
-rm -f ${tmpfile}
 
 if [ "${servertype}" = "client" ]; then
 	exit 0

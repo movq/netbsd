@@ -1,4 +1,4 @@
-/*	$NetBSD: syncfs.h,v 1.3 2000/03/30 02:21:49 simonb Exp $	*/
+/*	$NetBSD: syncfs.h,v 1.11 2007/02/09 21:55:36 ad Exp $	*/
 
 /*
  * Copyright 1997 Marshall Kirk McKusick. All Rights Reserved.
@@ -31,26 +31,33 @@
  * SUCH DAMAGE.
  */
 
+#ifndef _MISCFS_SYNCFS_SYNCFS_H_
+#define _MISCFS_SYNCFS_SYNCFS_H_
+
 /*
  * Routines to create and manage a filesystem syncer vnode.
  */
 #define sync_close	genfs_nullop
-int	sync_fsync 	__P((void *));
-int	sync_inactive 	__P((void *));
-int	sync_reclaim 	__P((void *));
+int	sync_fsync(void *);
+int	sync_inactive(void *);
+int	sync_reclaim(void *);
 #define sync_lock	genfs_nolock
 #define sync_unlock	genfs_nounlock
-int	sync_print	__P((void *));
+int	sync_print(void *);
 #define sync_islocked	genfs_noislocked
+#define sync_putpages	genfs_null_putpages
 
-void sched_sync __P((void *));
-void vn_initialize_syncerd __P((void));
-int vfs_allocate_syncvnode __P((struct mount *));
+void sched_sync(void *);
+void vn_initialize_syncerd(void);
+int vfs_allocate_syncvnode(struct mount *);
+void vfs_deallocate_syncvnode(struct mount *);
 
-extern int (**sync_vnodeop_p) __P((void *));
+extern int (**sync_vnodeop_p)(void *);
 
 #define SYNCER_MAXDELAY       32
 
-extern int syncer_maxdelay;	/* maximum delay time */ 
-extern struct lock syncer_lock;	/* lock to freeze syncer during unmount */
-LIST_HEAD(synclist, vnode);
+extern int syncer_maxdelay;	/* maximum delay time */
+extern kmutex_t syncer_mutex;	/* lock to freeze syncer during unmount */
+TAILQ_HEAD(synclist, vnode);
+
+#endif /* _MISCFS_SYNCFS_SYNCFS_H_ */

@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: makeerrnos.sh,v 1.1 1999/07/12 04:13:34 mrg Exp $
+#	$NetBSD: makeerrnos.sh,v 1.5 2008/10/19 22:10:05 apb Exp $
 
 if [ $# -ne 3 ]; then
 	echo "usage: makeerrnos.sh errno.h signal.h output"
@@ -12,13 +12,17 @@ SIGNALH=$2
 CFILE=$3.c
 HFILE=$3.h
 
+: ${AWK:=awk}
+: ${CPP:=cpp}
+: ${CPPFLAGS:=}
+
 cat <<__EOF__ > $CFILE
 #include "misc.h"
 
 struct systab errnos[] = {
 __EOF__
-cat ${DESTDIR}/usr/include/sys/errno.h | cpp -dM |
-awk '
+cat ${ERRNOH} | ${CPP} ${CPPFLAGS} -dM |
+${AWK} '
 /^#[ 	]*define[ 	]*E[A-Z0-9]*[ 	]*[0-9-][0-9]*[ 	]*.*/ {
 	for (i = 1; i <= NF; i++)
 		if ($i ~ /define/) 
@@ -34,15 +38,15 @@ END {
 ' | sort -n +2 >> $CFILE
 echo "	{ 0L, 0},
 };" >> $CFILE
-lines=`wc -l $CFILE|awk ' { print $1; } ' -`
+lines=`wc -l $CFILE | ${AWK} ' { print $1; } ' -`
 lines=`expr $lines - 4`
 
 cat <<__EOF__ >> $CFILE
 
 struct systab signals[] = {
 __EOF__
-cat ${DESTDIR}/usr/include/sys/signal.h | cpp -dM |
-awk '
+cat ${SIGNALH} | ${CPP} ${CPPFLAGS} -dM |
+${AWK} '
 /^#[ 	]*define[ 	]*S[A-Z0-9]*[ 	]*[0-9-][0-9]*[ 	]*.*/ {
 	for (i = 1; i <= NF; i++)
 		if ($i ~ /define/) 
@@ -63,8 +67,8 @@ elines=`expr $elines + 1`
 
 cat <<__EOF__ >$HFILE
 struct	systab	{
-	char	*name;
-	int	value;
+	const char	*name;
+	int		value;
 };
 
 extern struct systab errnos[$lines + 1];

@@ -1,4 +1,4 @@
-/*	$NetBSD: parser.h,v 1.13 1999/07/09 03:05:50 christos Exp $	*/
+/*	$NetBSD: parser.h,v 1.17 2004/06/26 22:09:49 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,15 +35,18 @@
  */
 
 /* control characters in argument strings */
-#define CTLESC '\201'
-#define CTLVAR '\202'
+#define CTL_FIRST '\201'	/* first 'special' character */
+#define CTLESC '\201'		/* escape next character */
+#define CTLVAR '\202'		/* variable defn */
 #define CTLENDVAR '\203'
 #define CTLBACKQ '\204'
 #define CTLQUOTE 01		/* ored with CTLBACKQ code if in quotes */
 /*	CTLBACKQ | CTLQUOTE == '\205' */
-#define	CTLARI	'\206'
+#define	CTLARI	'\206'		/* arithmetic expression */
 #define	CTLENDARI '\207'
 #define	CTLQUOTEMARK '\210'
+#define	CTLQUOTEEND '\211'	/* only inside ${...} */
+#define	CTL_LAST '\211'		/* last 'special' character */
 
 /* variable substitution byte (follows CTLVAR) */
 #define VSTYPE	0x0f		/* type of variable substitution */
@@ -77,7 +76,7 @@ extern int tokpushback;
 extern int whichprompt;		/* 1 == PS1, 2 == PS2 */
 
 
-union node *parsecmd __P((int));
-void fixredir __P((union node *, const char *, int));
-int goodname __P((char *));
-const char *getprompt __P((void *));
+union node *parsecmd(int);
+void fixredir(union node *, const char *, int);
+int goodname(char *);
+const char *getprompt(void *);

@@ -1,4 +1,4 @@
-/*	$NetBSD: difftime.c,v 1.6 1998/11/15 17:11:06 christos Exp $	*/
+/*	$NetBSD: difftime.c,v 1.9 2002/01/29 12:58:32 kleink Exp $	*/
 
 /*
 ** This file is in the public domain, so clarified as of
@@ -6,15 +6,14 @@
 */
 
 #include <sys/cdefs.h>
-#ifndef lint
-#ifndef NOID
+#if defined(LIBC_SCCS) && !defined(lint)
 #if 0
-static char	elsieid[] = "@(#)difftime.c	7.7";
+static char	elsieid[] = "@(#)difftime.c	7.9";
 #else
-__RCSID("$NetBSD: difftime.c,v 1.6 1998/11/15 17:11:06 christos Exp $");
+__RCSID("$NetBSD: difftime.c,v 1.9 2002/01/29 12:58:32 kleink Exp $");
 #endif
-#endif /* !defined NOID */
-#endif /* !defined lint */
+#endif /* LIBC_SCCS and not lint */
+
 
 /*LINTLIBRARY*/
 
@@ -39,10 +38,22 @@ const time_t	time0;
 	time_t	delta;
 	time_t	hibit;
 
-	if (/* LINTED */sizeof(time_t) < sizeof(double))
-		return (double) time1 - (double) time0;
-	if (/* LINTED */sizeof(time_t) < sizeof(long_double))
-		return (long_double) time1 - (long_double) time0;
+	{
+		time_t		tt;
+		double		d;
+		long_double	ld;
+
+#ifdef __lint__
+		/* LINTED unused warning bug */&tt;
+		/* LINTED unused warning bug */&d;
+		/* LINTED unused warning bug */&ld;
+#endif
+
+		if (/* LINTED constant */sizeof tt < sizeof d)
+			return (double) time1 - (double) time0;
+		if (/* LINTED constant */sizeof tt < sizeof ld)
+			return (long_double) time1 - (long_double) time0;
+	}
 	if (time1 < time0)
 		return -difftime(time0, time1);
 	/*

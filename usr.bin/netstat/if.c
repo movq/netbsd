@@ -1,4 +1,4 @@
-/*	$NetBSD: if.c,v 1.39 2000/02/09 13:57:06 itojun Exp $	*/
+/*	$NetBSD: if.c,v 1.62 2008/04/23 15:35:37 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,27 +34,28 @@
 #if 0
 static char sccsid[] = "from: @(#)if.c	8.2 (Berkeley) 2/21/94";
 #else
-__RCSID("$NetBSD: if.c,v 1.39 2000/02/09 13:57:06 itojun Exp $");
+__RCSID("$NetBSD: if.c,v 1.62 2008/04/23 15:35:37 thorpej Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/protosw.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
 #include <netinet/in.h>
 #include <netinet/in_var.h>
-#include <netns/ns.h>
-#include <netns/ns_if.h>
 #include <netiso/iso.h>
 #include <netiso/iso_var.h>
 #include <arpa/inet.h>
 
+#include <kvm.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <netdb.h>
@@ -70,10 +67,6 @@ __RCSID("$NetBSD: if.c,v 1.39 2000/02/09 13:57:06 itojun Exp $");
 
 static void sidewaysintpr __P((u_int, u_long));
 static void catchalarm __P((int));
-
-#ifdef INET6
-char *netname6 __P((struct sockaddr_in6 *, struct in6_addr *));
-#endif
 
 /*
  * Print a description of the network interfaces.
@@ -93,20 +86,15 @@ intpr(interval, ifnetaddr, pfunc)
 #ifdef INET6
 		struct in6_ifaddr in6;
 #endif /* INET6 */
-		struct ns_ifaddr ns;
 		struct iso_ifaddr iso;
 	} ifaddr;
 	u_long ifaddraddr;
 	struct sockaddr *sa;
 	struct ifnet_head ifhead;	/* TAILQ_HEAD */
-	char name[IFNAMSIZ];
-#ifdef INET6
+	char name[IFNAMSIZ + 1];	/* + 1 for `*' */
 	char hbuf[NI_MAXHOST];		/* for getnameinfo() */
-#ifdef KAME_SCOPEID
-	const int niflag = NI_NUMERICHOST | NI_WITHSCOPEID;
-#else
+#ifdef INET6
 	const int niflag = NI_NUMERICHOST;
-#endif
 #endif
 
 	if (ifnetaddr == 0) {
@@ -174,21 +162,26 @@ intpr(interval, ifnetaddr, pfunc)
 			*cp = '\0';
 			ifaddraddr = (u_long)ifnet.if_addrlist.tqh_first;
 		}
-		printf("%-5.5s %-5llu ", name,
+		if (vflag)
+			n = strlen(name) < 5 ? 5 : strlen(name);
+		else
+			n = 5;
+		printf("%-*.*s %-5llu ", n, n, name,
 		    (unsigned long long)ifnet.if_mtu);
 		if (ifaddraddr == 0) {
 			printf("%-13.13s ", "none");
 			printf("%-17.17s ", "none");
 		} else {
 			char hexsep = '.';		/* for hexprint */
-			const char *hexfmt = "%x%c";	/* for hexprint */
+			static const char hexfmt[] = "%02x%c";	/* for hexprint */
 			if (kread(ifaddraddr, (char *)&ifaddr, sizeof ifaddr)) {
 				ifaddraddr = 0;
 				continue;
 			}
 #define CP(x) ((char *)(x))
 			cp = (CP(ifaddr.ifa.ifa_addr) - CP(ifaddraddr)) +
-				CP(&ifaddr); sa = (struct sockaddr *)cp;
+			    CP(&ifaddr);
+			sa = (struct sockaddr *)cp;
 			switch (sa->sa_family) {
 			case AF_UNSPEC:
 				printf("%-13.13s ", "none");
@@ -203,10 +196,10 @@ intpr(interval, ifnetaddr, pfunc)
 				 */
 				in = inet_makeaddr(ifaddr.in.ia_subnet,
 					INADDR_ANY);
-				cp = netname(in.s_addr,
+				cp = netname4(in.s_addr,
 					ifaddr.in.ia_subnetmask);
 #else
-				cp = netname(ifaddr.in.ia_subnet,
+				cp = netname4(ifaddr.in.ia_subnet,
 					ifaddr.in.ia_subnetmask);
 #endif
 				if (vflag)
@@ -214,7 +207,7 @@ intpr(interval, ifnetaddr, pfunc)
 				else
 					n = 13;
 				printf("%-*.*s ", n, n, cp);
-				cp = routename(sin->sin_addr.s_addr);
+				cp = routename4(sin->sin_addr.s_addr);
 				if (vflag)
 					n = strlen(cp) < 17 ? 17 : strlen(cp);
 				else
@@ -230,7 +223,7 @@ intpr(interval, ifnetaddr, pfunc)
 						kread(multiaddr, (char *)&inm,
 						   sizeof inm);
 						printf("\n%25s %-17.17s ", "",
-						   routename(
+						   routename4(
 						      inm.inm_addr.s_addr));
 						multiaddr =
 						   (u_long)inm.inm_list.le_next;
@@ -240,7 +233,7 @@ intpr(interval, ifnetaddr, pfunc)
 #ifdef INET6
 			case AF_INET6:
 				sin6 = (struct sockaddr_in6 *)sa;
-#ifdef KAME_SCOPEID
+#ifdef __KAME__
 				if (IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr)) {
 					sin6->sin6_scope_id =
 						ntohs(*(u_int16_t *)
@@ -253,7 +246,7 @@ intpr(interval, ifnetaddr, pfunc)
 				}
 #endif
 				cp = netname6(&ifaddr.in6.ia_addr,
-					&ifaddr.in6.ia_prefixmask.sin6_addr);
+					&ifaddr.in6.ia_prefixmask);
 				if (vflag)
 					n = strlen(cp) < 13 ? 13 : strlen(cp);
 				else
@@ -285,16 +278,21 @@ intpr(interval, ifnetaddr, pfunc)
 						sin6.sin6_len = sizeof(struct sockaddr_in6);
 						sin6.sin6_family = AF_INET6;
 						sin6.sin6_addr = inm.in6m_addr;
-						sin6.sin6_scope_id =
-						    ntohs(*(u_int16_t *)
-							&sin6.sin6_addr.s6_addr[2]);
-						sin6.sin6_addr.s6_addr[2] = 0;
-						sin6.sin6_addr.s6_addr[3] = 0;
+#ifdef __KAME__
+						if (IN6_IS_ADDR_MC_LINKLOCAL(&sin6.sin6_addr)) {
+							sin6.sin6_scope_id =
+							    ntohs(*(u_int16_t *)
+								&sin6.sin6_addr.s6_addr[2]);
+							sin6.sin6_addr.s6_addr[2] = 0;
+							sin6.sin6_addr.s6_addr[3] = 0;
+						}
+#endif
 						if (getnameinfo((struct sockaddr *)&sin6,
 						    sin6.sin6_len, hbuf,
 						    sizeof(hbuf), NULL, 0,
 						    niflag) != 0) {
-							strcpy(hbuf, "??");
+							strlcpy(hbuf, "??",
+							    sizeof(hbuf));
 						}
 						cp = hbuf;
 						if (vflag)
@@ -316,42 +314,28 @@ intpr(interval, ifnetaddr, pfunc)
 				       atalk_print(sa,0x10));
 				printf("%-17.17s ", atalk_print(sa,0x0b));
 				break;
-			case AF_NS:
-				{
-				struct sockaddr_ns *sns =
-					(struct sockaddr_ns *)sa;
-				u_long net;
-				char netnum[8];
-
-				*(union ns_net *)&net = sns->sns_addr.x_net;
-				(void)sprintf(netnum, "%xH",
-				    (u_int32_t)ntohl(net));
-				upHex(netnum);
-				printf("ns:%-10s ", netnum);
-				printf("%-17.17s ",
-				    ns_phost((struct sockaddr *)sns));
-				}
-				break;
 #endif
 			case AF_LINK:
-				{
-				struct sockaddr_dl *sdl =
-					(struct sockaddr_dl *)sa;
-				    cp = (char *)LLADDR(sdl);
-				    if (sdl->sdl_type == IFT_FDDI
-					|| sdl->sdl_type == IFT_ETHER)
-					    hexsep = ':', hexfmt = "%02x%c";
-				    n = sdl->sdl_alen;
-				}
-				m = printf("%-13.13s ", "<Link>");
-				goto hexprint;
+				printf("%-13.13s ", "<Link>");
+				if (getnameinfo(sa, sa->sa_len,
+				    hbuf, sizeof(hbuf), NULL, 0,
+				    NI_NUMERICHOST) != 0) {
+					cp = "?";
+				} else
+					cp = hbuf;
+				if (vflag)
+					n = strlen(cp) < 17 ? 17 : strlen(cp);
+				else
+					n = 17;
+				printf("%-*.*s ", n, n, cp);
+				break;
+
 			default:
 				m = printf("(%d)", sa->sa_family);
 				for (cp = sa->sa_len + (char *)sa;
 					--cp > sa->sa_data && (*cp == 0);) {}
 				n = cp - sa->sa_data + 1;
 				cp = sa->sa_data;
-			hexprint:
 				while (--n >= 0)
 					m += printf(hexfmt, *cp++ & 0xff,
 						    n > 0 ? hexsep : ' ');
@@ -384,15 +368,15 @@ intpr(interval, ifnetaddr, pfunc)
 
 #define	MAXIF	100
 struct	iftot {
-	char	ift_name[IFNAMSIZ];	/* interface name */
-	u_long	ift_ip;			/* input packets */
-	u_long	ift_ib;			/* input bytes */
-	u_long	ift_ie;			/* input errors */
-	u_long	ift_op;			/* output packets */
-	u_long	ift_ob;			/* output bytes */
-	u_long	ift_oe;			/* output errors */
-	u_long	ift_co;			/* collisions */
-	int	ift_dr;			/* drops */
+	char ift_name[IFNAMSIZ];	/* interface name */
+	u_quad_t ift_ip;		/* input packets */
+	u_quad_t ift_ib;		/* input bytes */
+	u_quad_t ift_ie;		/* input errors */
+	u_quad_t ift_op;		/* output packets */
+	u_quad_t ift_ob;		/* output bytes */
+	u_quad_t ift_oe;		/* output errors */
+	u_quad_t ift_co;		/* collisions */
+	int ift_dr;			/* drops */
 } iftot[MAXIF];
 
 u_char	signalled;			/* set if alarm goes off "early" */
@@ -408,6 +392,7 @@ sidewaysintpr(interval, off)
 	unsigned interval;
 	u_long off;
 {
+	struct itimerval it;
 	struct ifnet ifnet;
 	u_long firstifnet;
 	struct iftot *ip, *total;
@@ -443,14 +428,18 @@ sidewaysintpr(interval, off)
 	}
 	if (interesting == NULL) {
 		fprintf(stderr, "%s: %s: unknown interface\n",
-		    __progname, interface);
+		    getprogname(), interface);
 		exit(1);
 	}
 	lastif = ip;
 
 	(void)signal(SIGALRM, catchalarm);
 	signalled = NO;
-	(void)alarm(interval);
+
+	it.it_interval.tv_sec = it.it_value.tv_sec = interval;
+	it.it_interval.tv_usec = it.it_value.tv_usec = 0;
+	setitimer(ITIMER_REAL, &it, NULL);
+
 banner:
 	if (bflag)
 		printf("%7.7s in %8.8s %6.6s out %5.5s",
@@ -595,7 +584,6 @@ loop:
 	}
 	sigsetmask(oldmask);
 	signalled = NO;
-	(void)alarm(interval);
 	if (line == 21)
 		goto banner;
 	goto loop;

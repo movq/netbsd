@@ -1,4 +1,4 @@
-.\"	$NetBSD: nanosleep.2,v 1.2 1999/12/02 21:42:38 kleink Exp $
+.\"	$NetBSD: nanosleep.2,v 1.10 2004/05/13 10:20:58 wiz Exp $
 .\"
 .\" Copyright (c) 1986, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -35,45 +31,56 @@
 .\"
 .Dd April 17, 1997
 .Dt NANOSLEEP 2
-.Os 
+.Os
 .Sh NAME
 .Nm nanosleep
+.Nd high resolution sleep
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <time.h>
+.In time.h
 .Ft int
 .Fn nanosleep "const struct timespec *rqtp" "struct timespec *rmtp"
-.\" .Sh DESCRIPTION
-.Sh RETURN VALUE
-If the 
+.Sh DESCRIPTION
+The
+.Fn nanosleep
+suspends execution of the calling process until either the number of
+seconds and nanoseconds specified by
+.Fa rqtp
+have elapsed or a signal is delivered to the calling process and its
+action is to invoke a signal catching function or to terminate the
+process.
+The suspension time may be longer than requested due to the
+scheduling of other activity by the system.
+.Sh RETURN VALUES
+If the
 .Fn nanosleep
 function returns because the requested time has elapsed, the value
-returned will be zero.  
+returned will be zero.
 .Pp
-If the 
+If the
 .Fn nanosleep
 function returns due to the delivery of a signal, the value returned
-will be the -1, and the global variable
+will be the \-1, and the global variable
 .Va errno
 will be set to indicate the interruption.
-If 
+If
 .Fa rmtp
-is 
+is
 .Pf non- Dv NULL ,
 the timespec structure it references is updated to contain the
 unslept amount (the request time minus the time actually slept).
 .Sh ERRORS
 If any of the following conditions occur, the
-.Nm 
-function shall return -1 and set
+.Nm
+function shall return \-1 and set
 .Va errno
 to the corresponding value.
 .Bl -tag -width Er
 .It Bq Er EFAULT
 Either
 .Fa rqtp
-or 
+or
 .Fa rmtp
 points to memory that is not a valid part of the process
 address space.

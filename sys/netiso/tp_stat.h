@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_stat.h,v 1.6 1996/02/13 22:11:53 christos Exp $	*/
+/*	$NetBSD: tp_stat.h,v 1.9 2005/12/11 00:01:36 elad Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -187,10 +183,14 @@ struct tp_stat {
 	 * ACK_DONT 0 / ACK_STRAT_EACH 0x1 / ACK_STRAT_FULLWIN 0x4 ACK_DUP
 	 * 0x8 / ACK_EOT 0x10  / ACK_REORDER 0x20 ACK_USRRCV ** ACK_FCC **
 	 */
-}               tp_stat;
-#define 	TP_PM_MAX			0xa	/* 10 decimal */
+};
 
+#ifdef _KERNEL
+extern struct tp_stat tp_stat;
 #define IncStat(x) tp_stat./**/x/**/++
+#endif
+
+#define 	TP_PM_MAX			0xa	/* 10 decimal */
 
 #ifdef TP_PERF_MEAS
 
@@ -270,8 +270,7 @@ struct tp_pmeas {
 
 #else
 
-int             PStat_Junk;
-#define PStat(tpcb, x)  PStat_Junk
+#define PStat(tpcb, x)	 	0
 #define IncPStat(tpcb, x)	/* no-op */
 #define tpmeas(a,b,c,d,e,f) 0
 
@@ -280,4 +279,4 @@ int             PStat_Junk;
 
 #define  DOPERF(tpcb)  (tpcb->tp_perf_on && tpcb->tp_p_meas)
 
-#endif				/* _NETISO_TP_STAT_H_ */
+#endif /* !_NETISO_TP_STAT_H_ */

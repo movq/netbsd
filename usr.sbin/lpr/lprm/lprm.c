@@ -1,4 +1,4 @@
-/*	$NetBSD: lprm.c,v 1.10 1999/12/07 14:54:48 mrg Exp $	*/
+/*	$NetBSD: lprm.c,v 1.19 2008/07/21 13:36:58 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,12 +32,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)lprm.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: lprm.c,v 1.10 1999/12/07 14:54:48 mrg Exp $");
+__RCSID("$NetBSD: lprm.c,v 1.19 2008/07/21 13:36:58 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -83,13 +79,10 @@ uid_t	 uid, euid;		/* real and effective user id's */
 
 static char	luser[16];	/* buffer for person */
 
-static void usage __P((void));
-int main __P((int, char *[]));
+static void usage(void) __dead;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	char *arg;
 	struct passwd *p;
@@ -97,7 +90,7 @@ main(argc, argv)
 	uid = getuid();
 	euid = geteuid();
 	seteuid(uid);	/* be safe */
-	name = argv[0];
+	setprogname(*argv);
 	gethostname(host, sizeof(host));
 	host[sizeof(host) - 1] = '\0';
 	openlog("lpd", 0, LOG_LPR);
@@ -105,8 +98,7 @@ main(argc, argv)
 		fatal("Who are you?");
 	if (strlen(p->pw_name) >= sizeof(luser))
 		fatal("Your name is too long");
-	strncpy(luser, p->pw_name, sizeof(luser) - 1);
-	luser[sizeof(luser) - 1] = '\0';
+	strlcpy(luser, p->pw_name, sizeof(luser));
 	person = luser;
 	while (--argc) {
 		if ((arg = *++argv)[0] == '-')
@@ -127,8 +119,8 @@ main(argc, argv)
 					wait_time = atoi(*++argv);
 				}
 				if (wait_time < 0)
-					errx(1, "wait time must be postive: %s",
-					    optarg);
+					errx(1, "wait time must be positive: %d",
+					    wait_time);
 				if (wait_time < 30)
 				    warnx("warning: wait time less than 30 seconds");
 				break;
@@ -143,7 +135,7 @@ main(argc, argv)
 		else {
 			if (users < 0)
 				usage();
-			if (isdigit(arg[0])) {
+			if (isdigit((unsigned char)arg[0])) {
 				if (requests >= MAXREQUESTS)
 					fatal("Too many requests");
 				requ[requests++] = atoi(arg);
@@ -162,8 +154,10 @@ main(argc, argv)
 }
 
 static void
-usage()
+usage(void)
 {
-	fprintf(stderr, "usage: lprm [-] [-Pprinter] [[job #] [user] ...]\n");
+	(void)fprintf(stderr,
+	    "Usage: %s [-] [-Pprinter] [-w maxwait] [[job #] [user] ...]\n",
+	    getprogname());
 	exit(2);
 }

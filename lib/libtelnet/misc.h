@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.h,v 1.6 1998/07/27 01:45:10 mycroft Exp $	*/
+/*	$NetBSD: misc.h,v 1.8 2005/02/06 05:53:07 perry Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,9 +38,9 @@ extern const char *RemoteHostName;
 extern int ConnectedCount;
 extern int ReservedPort;
 
-int isprefix __P((char *, char *));
-char **genget __P((char *, char **, int));
-int Ambiguous __P((void *));
+int isprefix(char *, char *);
+char **genget(char *, char **, int);
+int Ambiguous(void *);
 __END_DECLS
 
 #include "misc-proto.h"

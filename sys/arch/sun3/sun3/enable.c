@@ -1,4 +1,4 @@
-/*	$NetBSD: enable.c,v 1.2 1998/02/05 04:57:32 gwr Exp $	*/
+/*	$NetBSD: enable.c,v 1.7 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,8 +29,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: enable.c,v 1.7 2008/04/28 20:23:38 martin Exp $");
+
 #include <sys/param.h>
-#include <machine/fbio.h>
+#include <dev/sun/fbio.h>
 #include <sun3/dev/fbvar.h>
 
 #include <sun3/sun3/control.h>
@@ -48,9 +44,8 @@
  * External interfaces to the system enable register.
  */
 
-void
-enable_fpu(on)
-	int on;
+void 
+enable_fpu(int on)
 {
 	int s, ena;
 
@@ -66,9 +61,8 @@ enable_fpu(on)
 	splx(s);
 }
 
-void
-enable_video(on)
-	int on;
+void 
+enable_video(int on)
 {
 	int s, ena;
 

@@ -1,10 +1,10 @@
-/*	$NetBSD: eisadevs_data.h,v 1.19 1999/09/29 17:45:22 ad Exp $	*/
+/*	$NetBSD: eisadevs_data.h,v 1.31 2005/12/11 12:21:20 christos Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: eisadevs,v 1.17 1999/09/29 17:40:18 ad Exp 
+ *	NetBSD: eisadevs,v 1.27 2005/02/27 00:26:59 perry Exp
  */
 
 /*
@@ -38,7 +38,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-struct eisa_knowndev eisa_knowndevs[] = {
+const struct eisa_knowndev eisa_knowndevs[] = {
 	{
 	    0,
 	    "ADP0000",
@@ -98,6 +98,51 @@ struct eisa_knowndev eisa_knowndevs[] = {
 	    0,
 	    "BUS4202",
 	    EISA_PRODUCT_BUS4202,
+	},
+	{
+	    0,
+	    "BUS6001",
+	    EISA_PRODUCT_BUS6001,
+	},
+	{
+	    0,
+	    "BUS6301",
+	    EISA_PRODUCT_BUS6301,
+	},
+	{
+	    0,
+	    "CPQ4001",
+	    EISA_PRODUCT_CPQ4001,
+	},
+	{
+	    0,
+	    "CPQ4002",
+	    EISA_PRODUCT_CPQ4002,
+	},
+	{
+	    0,
+	    "CPQ4010",
+	    EISA_PRODUCT_CPQ4010,
+	},
+	{
+	    0,
+	    "CPQ4020",
+	    EISA_PRODUCT_CPQ4020,
+	},
+	{
+	    0,
+	    "CPQ4030",
+	    EISA_PRODUCT_CPQ4030,
+	},
+	{
+	    0,
+	    "CPQ6101",
+	    EISA_PRODUCT_CPQ6101,
+	},
+	{
+	    0,
+	    "DEC4220",
+	    EISA_PRODUCT_DEC4220,
 	},
 	{
 	    0,
@@ -181,6 +226,16 @@ struct eisa_knowndev eisa_knowndevs[] = {
 	},
 	{
 	    0,
+	    "DTI0000",
+	    EISA_PRODUCT_DTI0000,
+	},
+	{
+	    0,
+	    "ETI1001",
+	    EISA_PRODUCT_ETI1001,
+	},
+	{
+	    0,
 	    "FSI2001",
 	    EISA_PRODUCT_FSI2001,
 	},
@@ -196,6 +251,61 @@ struct eisa_knowndev eisa_knowndevs[] = {
 	},
 	{
 	    0,
+	    "HWP0C70",
+	    EISA_PRODUCT_HWP0C70,
+	},
+	{
+	    0,
+	    "HWP0C80",
+	    EISA_PRODUCT_HWP0C80,
+	},
+	{
+	    0,
+	    "HWP1850",
+	    EISA_PRODUCT_HWP1850,
+	},
+	{
+	    0,
+	    "HWP1980",
+	    EISA_PRODUCT_HWP1980,
+	},
+	{
+	    0,
+	    "HWP2051",
+	    EISA_PRODUCT_HWP2051,
+	},
+	{
+	    0,
+	    "HWPC000",
+	    EISA_PRODUCT_HWPC000,
+	},
+	{
+	    0,
+	    "HWPC010",
+	    EISA_PRODUCT_HWPC010,
+	},
+	{
+	    0,
+	    "HWPC051",
+	    EISA_PRODUCT_HWPC051,
+	},
+	{
+	    0,
+	    "HWPC091",
+	    EISA_PRODUCT_HWPC091,
+	},
+	{
+	    0,
+	    "HWPC0D1",
+	    EISA_PRODUCT_HWPC0D1,
+	},
+	{
+	    0,
+	    "HWPC0E1",
+	    EISA_PRODUCT_HWPC0E1,
+	},
+	{
+	    0,
 	    "INP25D0",
 	    EISA_PRODUCT_INP25D0,
 	},
@@ -206,13 +316,78 @@ struct eisa_knowndev eisa_knowndevs[] = {
 	},
 	{
 	    0,
-	    "ETI1001",
-	    EISA_PRODUCT_ETI1001,
+	    "MDG0002",
+	    EISA_PRODUCT_MDG0002,
+	},
+	{
+	    0,
+	    "MLX0070",
+	    EISA_PRODUCT_MLX0070,
+	},
+	{
+	    0,
+	    "MLX0071",
+	    EISA_PRODUCT_MLX0071,
+	},
+	{
+	    0,
+	    "MLX0072",
+	    EISA_PRODUCT_MLX0072,
+	},
+	{
+	    0,
+	    "MLX0073",
+	    EISA_PRODUCT_MLX0073,
+	},
+	{
+	    0,
+	    "MLX0074",
+	    EISA_PRODUCT_MLX0074,
+	},
+	{
+	    0,
+	    "MLX0075",
+	    EISA_PRODUCT_MLX0075,
+	},
+	{
+	    0,
+	    "MLX0076",
+	    EISA_PRODUCT_MLX0076,
+	},
+	{
+	    0,
+	    "MLX0077",
+	    EISA_PRODUCT_MLX0077,
 	},
 	{
 	    0,
 	    "NEC8200",
 	    EISA_PRODUCT_NEC8200,
+	},
+	{
+	    0,
+	    "SMC8010",
+	    EISA_PRODUCT_SMC8010,
+	},
+	{
+	    0,
+	    "SMC0110",
+	    EISA_PRODUCT_SMC0110,
+	},
+	{
+	    0,
+	    "SMCA010",
+	    EISA_PRODUCT_SMCA010,
+	},
+	{
+	    0,
+	    "USC0240",
+	    EISA_PRODUCT_USC0240,
+	},
+	{
+	    0,
+	    "TCM5090",
+	    EISA_PRODUCT_TCM5090,
 	},
 	{
 	    0,
@@ -236,6 +411,16 @@ struct eisa_knowndev eisa_knowndevs[] = {
 	},
 	{
 	    0,
+	    "TCM5095",
+	    EISA_PRODUCT_TCM5095,
+	},
+	{
+	    0,
+	    "TCM5098",
+	    EISA_PRODUCT_TCM5098,
+	},
+	{
+	    0,
 	    "TCM5920",
 	    EISA_PRODUCT_TCM5920,
 	},
@@ -256,18 +441,8 @@ struct eisa_knowndev eisa_knowndevs[] = {
 	},
 	{
 	    0,
-	    "SMC8010",
-	    EISA_PRODUCT_SMC8010,
-	},
-	{
-	    0,
-	    "SMC0110",
-	    EISA_PRODUCT_SMC0110,
-	},
-	{
-	    0,
-	    "USC0240",
-	    EISA_PRODUCT_USC0240,
+	    "TCM6790",
+	    EISA_PRODUCT_TCM6790,
 	},
 	{
 	    EISA_KNOWNDEV_NOPROD,
@@ -291,6 +466,11 @@ struct eisa_knowndev eisa_knowndevs[] = {
 	},
 	{
 	    EISA_KNOWNDEV_NOPROD,
+	    "CPQ",
+	    "Compaq",
+	},
+	{
+	    EISA_KNOWNDEV_NOPROD,
 	    "DEC",
 	    "Digital Equipment",
 	},
@@ -298,6 +478,11 @@ struct eisa_knowndev eisa_knowndevs[] = {
 	    EISA_KNOWNDEV_NOPROD,
 	    "DPT",
 	    "Distributed Processing Technology",
+	},
+	{
+	    EISA_KNOWNDEV_NOPROD,
+	    "DTI",
+	    "DeskStation Technology, Inc.",
 	},
 	{
 	    EISA_KNOWNDEV_NOPROD,
@@ -323,6 +508,11 @@ struct eisa_knowndev eisa_knowndevs[] = {
 	    EISA_KNOWNDEV_NOPROD,
 	    "ETI",
 	    "Microdyne",
+	},
+	{
+	    EISA_KNOWNDEV_NOPROD,
+	    "MDG",
+	    "Madge Networks",
 	},
 	{
 	    EISA_KNOWNDEV_NOPROD,

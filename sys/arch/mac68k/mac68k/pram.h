@@ -1,4 +1,4 @@
-/*	$NetBSD: pram.h,v 1.4 1997/04/08 03:21:19 scottr Exp $	*/
+/*	$NetBSD: pram.h,v 1.7 2005/12/11 12:18:03 christos Exp $	*/
 
 /*
  * RTC toolkit version 1.08b, copyright 1995, erik vogan
@@ -56,29 +56,28 @@
  *	     warned!!
  */
 
-void readPram    (char *addr, int loc, int len);
-void writePram   (char *addr, int loc, int len);
-void readExtPram (char *addr, int loc, int len);
-void writeExtPram(char *addr, int loc, int len);
+void readPram(char *, int, int);
+void writePram(char *, int, int);
+void readExtPram(char *, int, int);
+void writeExtPram(char *, int, int);
 
 /*
  * The following routines are used to get/set the PRAM time
  * (which is stored as seconds since 1904).
  */
 
-unsigned long	getPramTime __P((void));
-void 		setPramTime __P((unsigned long time));
+unsigned long	getPramTime(void);
+void 		setPramTime(unsigned long);
 
-unsigned long	pram_readtime __P((void));
-void		pram_settime __P((unsigned long));
+unsigned long	pram_readtime(void);
+void		pram_settime(unsigned long);
 
 #ifndef MRG_ADB	
 /*
  * These functions only when we are not using
  * the MRG method of accessing the ADB/PRAM/RTC.
  */
-unsigned long	getPramTimeII __P((void));
-void		setPramTimeII __P((unsigned long));
+unsigned long	getPramTimeII(void);
+void		setPramTimeII(unsigned long);
 
 #endif /* !MRG_ADB */
-

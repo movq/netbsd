@@ -1,5 +1,36 @@
-/*	$NetBSD: otto.c,v 1.3 1999/04/18 03:29:01 simonb Exp $	*/
+/*	$NetBSD: otto.c,v 1.11 2007/12/15 19:44:41 perry Exp $	*/
 # ifdef OTTO
+/*
+ * Copyright (c) 1983-2003, Regents of the University of California.
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions are 
+ * met:
+ * 
+ * + Redistributions of source code must retain the above copyright 
+ *   notice, this list of conditions and the following disclaimer.
+ * + Redistributions in binary form must reproduce the above copyright 
+ *   notice, this list of conditions and the following disclaimer in the 
+ *   documentation and/or other materials provided with the distribution.
+ * + Neither the name of the University of California, San Francisco nor 
+ *   the names of its contributors may be used to endorse or promote 
+ *   products derived from this software without specific prior written 
+ *   permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS 
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED 
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A 
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 /*
  *	otto	- a hunt otto-matic player
  *
@@ -8,11 +39,13 @@
  *	automatic players to link to.  If you write your own "otto"
  *	please let us know what subroutines you would expect in the
  *	subroutine library.
+ *
+ *	Id: otto.c,v 1.14 2003/04/16 06:11:54 gregc Exp
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: otto.c,v 1.3 1999/04/18 03:29:01 simonb Exp $");
+__RCSID("$NetBSD: otto.c,v 1.11 2007/12/15 19:44:41 perry Exp $");
 #endif /* not lint */
 
 # include	<sys/time.h>
@@ -109,19 +142,21 @@ STATIC	int		num_turns;		/* for wandering */
 STATIC	char		been_there[HEIGHT][WIDTH2];
 STATIC	struct itimerval	pause_time	= { { 0, 0 }, { 0, 55000 }};
 
-STATIC	void		attack __P((int, struct item *));
-STATIC	void		duck __P((int));
-STATIC	void		face_and_move_direction __P((int, int));
-STATIC	int		go_for_ammo __P((char));
-STATIC	void		ottolook __P((int, struct item *));
-STATIC	void		look_around __P((void));
-STATIC	SIGNAL_TYPE	nothing __P((int));
-STATIC	int		stop_look __P((struct item *, char, int, int));
-STATIC	void		wander __P((void));
+STATIC	void		attack(int, struct item *);
+STATIC	void		duck(int);
+STATIC	void		face_and_move_direction(int, int);
+STATIC	int		go_for_ammo(char);
+STATIC	void		ottolook(int, struct item *);
+STATIC	void		look_around(void);
+STATIC	SIGNAL_TYPE	nothing(int);
+STATIC	int		stop_look(struct item *, char, int, int);
+STATIC	void		wander(void);
+
+extern	int	Otto_count;
 
 STATIC SIGNAL_TYPE
 nothing(dummy)
-	int dummy;
+	int dummy __unused;
 {
 }
 
@@ -131,7 +166,6 @@ otto(y, x, face)
 	char	face;
 {
 	int		i;
-	extern	int	Otto_count;
 	int		old_mask;
 
 # ifdef	DEBUG
@@ -301,7 +335,8 @@ ottolook(rel_dir, itemp)
 	cont_north:
 		if (itemp->flags & DEADEND) {
 			itemp->flags |= BEEN;
-			been_there[r][col] |= NORTH;
+			if (r >= 0)
+				been_there[r][col] |= NORTH;
 			for (r = row - 1; r > row - itemp->distance; r--)
 				been_there[r][col] = ALLDIRS;
 		}
@@ -321,7 +356,8 @@ ottolook(rel_dir, itemp)
 	cont_south:
 		if (itemp->flags & DEADEND) {
 			itemp->flags |= BEEN;
-			been_there[r][col] |= SOUTH;
+			if (r < HEIGHT)
+				been_there[r][col] |= SOUTH;
 			for (r = row + 1; r < row + itemp->distance; r++)
 				been_there[r][col] = ALLDIRS;
 		}
@@ -404,7 +440,7 @@ face_and_move_direction(rel_dir, distance)
 		int	i;
 		struct	item	items[NUMDIRECTIONS];
 
-		command[comlen++] = toupper(cmd);
+		command[comlen++] = toupper((unsigned char)cmd);
 		if (distance == 0) {
 			/* rotate ottolook's to be in right position */
 			for (i = 0; i < NUMDIRECTIONS; i++)
@@ -564,12 +600,15 @@ wander()
 		break;
 # endif
 	}
+# ifdef notdef
 	if (dir_count == 0) {
 		duck(random() % NUMDIRECTIONS);
 		num_turns = 0;
 		return;
 	} else if (dir_count == 1)
+# endif
 		rel_dir = ffs(dir_mask) - 1;
+# ifdef notdef
 	else {
 		rel_dir = ffs(dir_mask) - 1;
 		dir_mask &= ~(1 << rel_dir);
@@ -580,6 +619,7 @@ wander()
 			dir_mask &= ~(1 << i);
 		}
 	}
+# endif
 	if (rel_dir == FRONT)
 		num_turns++;
 	else

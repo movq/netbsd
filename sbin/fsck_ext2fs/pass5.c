@@ -1,7 +1,6 @@
-/*	$NetBSD: pass5.c,v 1.7 2000/01/28 16:01:46 bouyer Exp $	*/
+/*	$NetBSD: pass5.c,v 1.15 2008/03/16 23:17:55 lukem Exp $	*/
 
 /*
- * Copyright (c) 1997 Manuel Bouyer.
  * Copyright (c) 1980, 1986, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -13,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,12 +29,41 @@
  * SUCH DAMAGE.
  */
 
+/*
+ * Copyright (c) 1997 Manuel Bouyer.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)pass5.c	8.6 (Berkeley) 11/30/94";
 #else
-__RCSID("$NetBSD: pass5.c,v 1.7 2000/01/28 16:01:46 bouyer Exp $");
+__RCSID("$NetBSD: pass5.c,v 1.15 2008/03/16 23:17:55 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -48,7 +72,6 @@ __RCSID("$NetBSD: pass5.c,v 1.7 2000/01/28 16:01:46 bouyer Exp $");
 #include <ufs/ufs/dinode.h>
 #include <ufs/ext2fs/ext2fs_dinode.h>
 #include <ufs/ext2fs/ext2fs.h>
-#include <ufs/ext2fs/ext2fs_extern.h>
 #include <string.h>
 #include <malloc.h>
 #include <stdio.h>
@@ -58,10 +81,10 @@ __RCSID("$NetBSD: pass5.c,v 1.7 2000/01/28 16:01:46 bouyer Exp $");
 #include "extern.h"
 
 
-void print_bmap __P((u_char *,u_int32_t));
+void print_bmap(u_char *,u_int32_t);
 
 void
-pass5()
+pass5(void)
 {
 	int c;
 	struct m_ext2fs *fs = &sblock;
@@ -81,7 +104,7 @@ pass5()
 	ibmap = malloc(fs->e2fs_bsize);
 	bbmap = malloc(fs->e2fs_bsize);
 	if (ibmap == NULL || bbmap == NULL) {
-		errexit("out of memory\n");
+		errexit("out of memory");
 	}
 
 	for (c = 0; c < fs->e2fs_ncg; c++) {
@@ -144,7 +167,7 @@ pass5()
 				break;
 
 			default:
-				errexit("BAD STATE %d FOR INODE I=%ld\n",
+				errexit("BAD STATE %d FOR INODE I=%ld",
 				    statemap[j], j);
 			}
 		}
@@ -239,20 +262,20 @@ pass5()
 		fs->e2fs.e2fs_ficount = cs_nifree;
 		sbdirty();
 	}
+	free(ibmap);
+	free(bbmap);
 }
 
 void 
-print_bmap(map, size)
-	u_char *map;
-	u_int32_t size;
+print_bmap(u_char *map, u_int32_t size)
 {
 	int i, j;
 
 	i = 0;
 	while (i < size) {
-		printf("%u: ",i);
+		printf("%04x: ",i);
 		for (j = 0; j < 16; j++, i++)
-			printf("%2x ", (u_int)map[i] & 0xff);
+			printf("%02x ", (u_int)map[i] & 0xff);
 		printf("\n");
 	}
 }

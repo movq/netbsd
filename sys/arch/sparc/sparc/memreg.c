@@ -1,4 +1,4 @@
-/*	$NetBSD: memreg.c,v 1.28 1998/09/21 10:32:00 pk Exp $ */
+/*	$NetBSD: memreg.c,v 1.41 2008/05/21 14:10:28 ad Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -46,8 +46,14 @@
  *	@(#)memreg.c	8.1 (Berkeley) 6/11/93
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: memreg.c,v 1.41 2008/05/21 14:10:28 ad Exp $");
+
+#include "opt_sparc_arch.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/proc.h>
 #include <sys/device.h>
 
 #include <machine/autoconf.h>
@@ -58,38 +64,30 @@
 #include <sparc/sparc/asm.h>
 #include <sparc/sparc/cpuvar.h>
 
+#include <machine/pte.h>
 #include <machine/reg.h>	/* for trapframe */
 #include <machine/trap.h>	/* for trap types */
 
-static int	memregmatch_mainbus
-			__P((struct device *, struct cfdata *, void *));
-static int	memregmatch_obio
-			__P((struct device *, struct cfdata *, void *));
-static void	memregattach_mainbus
-			__P((struct device *, struct device *, void *));
-static void	memregattach_obio
-			__P((struct device *, struct device *, void *));
+static int	memregmatch_mainbus(struct device *, struct cfdata *, void *);
+static int	memregmatch_obio(struct device *, struct cfdata *, void *);
+static void	memregattach_mainbus(struct device *, struct device *, void *);
+static void	memregattach_obio(struct device *, struct device *, void *);
 
-struct cfattach memreg_mainbus_ca = {
-	sizeof(struct device), memregmatch_mainbus, memregattach_mainbus
-};
+CFATTACH_DECL(memreg_mainbus, sizeof(struct device),
+    memregmatch_mainbus, memregattach_mainbus, NULL, NULL);
 
-struct cfattach memreg_obio_ca = {
-	sizeof(struct device), memregmatch_obio, memregattach_obio
-};
+CFATTACH_DECL(memreg_obio, sizeof(struct device),
+    memregmatch_obio, memregattach_obio, NULL, NULL);
 
 #if defined(SUN4M)
-static void hardmemerr4m __P((unsigned, u_int, u_int, u_int, u_int));
+static void hardmemerr4m(unsigned, u_int, u_int, u_int, u_int);
 #endif
 
 /*
  * The OPENPROM calls this "memory-error".
  */
 static int
-memregmatch_mainbus(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+memregmatch_mainbus(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -97,10 +95,7 @@ memregmatch_mainbus(parent, cf, aux)
 }
 
 static int
-memregmatch_obio(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+memregmatch_obio(struct device *parent, struct cfdata *cf, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 
@@ -117,9 +112,7 @@ memregmatch_obio(parent, cf, aux)
 
 /* ARGSUSED */
 static void
-memregattach_mainbus(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+memregattach_mainbus(struct device *parent, struct device *self, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 	bus_space_handle_t bh;
@@ -130,12 +123,11 @@ memregattach_mainbus(parent, self, aux)
 		return;
 	}
 
-	if (bus_space_map2(ma->ma_bustag,
-			   ma->ma_iospace,
+	if (bus_space_map(ma->ma_bustag,
 			   ma->ma_paddr,
 			   sizeof(par_err_reg),
 			   BUS_SPACE_MAP_LINEAR,
-			   0, &bh) != 0) {
+			   &bh) != 0) {
 		printf("memregattach_mainbus: can't map register\n");
 		return;
 	}
@@ -144,9 +136,7 @@ memregattach_mainbus(parent, self, aux)
 
 /* ARGSUSED */
 static void
-memregattach_obio(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+memregattach_obio(struct device *parent, struct device *self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	bus_space_handle_t bh;
@@ -158,11 +148,10 @@ memregattach_obio(parent, self, aux)
 			return;
 		}
 
-		if (sbus_bus_map(sa->sa_bustag, sa->sa_slot,
-				 sa->sa_offset,
+		if (sbus_bus_map(sa->sa_bustag,
+				 sa->sa_slot, sa->sa_offset,
 				 sizeof(par_err_reg),
-				 BUS_SPACE_MAP_LINEAR,
-				 0, &bh) != 0) {
+				 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
 			printf("memregattach_obio: can't map register\n");
 			return;
 		}
@@ -184,12 +173,12 @@ memregattach_obio(parent, self, aux)
  */
 
 void
-memerr4_4c(issync, ser, sva, aer, ava, tf)
-	unsigned int issync;
-	u_int ser, sva, aer, ava;
-	struct trapframe *tf;	/* XXX - unused/invalid */
+memerr4_4c(unsigned int issync,
+	   u_int ser, u_int sva, u_int aer, u_int ava,
+	   struct trapframe *tf) /* XXX - unused/invalid */
 {
 	char bits[64];
+	u_int pte;
 
 	printf("%ssync mem arr: ser=%s sva=0x%x ",
 		issync ? "" : "a",
@@ -197,6 +186,21 @@ memerr4_4c(issync, ser, sva, aer, ava, tf)
 		sva);
 	printf("aer=%s ava=0x%x\n", bitmask_snprintf(aer & 0xff,
 		AER_BITS, bits, sizeof(bits)), ava);
+
+	pte = getpte4(sva);
+	if ((pte & PG_V) != 0 && (pte & PG_TYPE) == PG_OBMEM) {
+		u_int pa = (pte & PG_PFNUM) << PGSHIFT;
+		printf(" spa=0x%x, module location: %s\n", pa,
+			prom_pa_location(pa, 0));
+	}
+
+	pte = getpte4(ava);
+	if ((pte & PG_V) != 0 && (pte & PG_TYPE) == PG_OBMEM) {
+		u_int pa = (pte & PG_PFNUM) << PGSHIFT;
+		printf(" apa=0x%x, module location: %s\n", pa,
+			prom_pa_location(pa, 0));
+	}
+
 	if (par_err_reg)
 		printf("parity error register = %s\n",
 			bitmask_snprintf(*par_err_reg, PER_BITS,
@@ -210,12 +214,7 @@ memerr4_4c(issync, ser, sva, aer, ava, tf)
  * hardmemerr4m: called upon fatal memory error. Print a message and panic.
  */
 static void
-hardmemerr4m(type, sfsr, sfva, afsr, afva)
-	unsigned type;
-	u_int sfsr;
-	u_int sfva;
-	u_int afsr;
-	u_int afva;
+hardmemerr4m(unsigned type, u_int sfsr, u_int sfva, u_int afsr, u_int afva)
 {
 	char *s, bits[64];
 
@@ -242,19 +241,19 @@ hardmemerr4m(type, sfsr, sfva, afsr, afva)
  * once, and then fail if we get called again.
  */
 
+/* XXXSMP */
 static int addrold = (int) 0xdeadbeef; /* We pick an unlikely address */
 static int addroldtop = (int) 0xdeadbeef;
 static int oldtype = -1;
+/* XXXSMP */
 
 void
-hypersparc_memerr(type, sfsr, sfva, tf)
-	unsigned type;
-	u_int sfsr;
-	u_int sfva;
-	struct trapframe *tf;
+hypersparc_memerr(unsigned type, u_int sfsr, u_int sfva, struct trapframe *tf)
 {
 	u_int afsr;
 	u_int afva;
+
+	KERNEL_LOCK(1, NULL);
 
 	(*cpuinfo.get_asyncflt)(&afsr, &afva);
 	if ((afsr & AFSR_AFO) != 0) {	/* HS async fault! */
@@ -268,21 +267,23 @@ hypersparc_memerr(type, sfsr, sfva, tf)
 		oldtype = -1;
 		addrold = afva;
 		addroldtop = afsr & AFSR_AFA;
-		return;
 	}
+out:
+	KERNEL_UNLOCK_ONE(NULL);
+	return;
+
 hard:
 	hardmemerr4m(type, sfsr, sfva, afsr, afva);
+	goto out;
 }
 
 void
-viking_memerr(type, sfsr, sfva, tf)
-	unsigned type;
-	u_int sfsr;
-	u_int sfva;
-	struct trapframe *tf;
+viking_memerr(unsigned type, u_int sfsr, u_int sfva, struct trapframe *tf)
 {
 	u_int afsr=0;	/* No Async fault registers on the viking */
 	u_int afva=0;
+
+	KERNEL_LOCK(1, NULL);
 
 	if (type == T_STOREBUFFAULT) {
 
@@ -303,8 +304,6 @@ viking_memerr(type, sfsr, sfva, tf)
 		sta(SRMMU_PCR, ASI_SRMMU,
 		    lda(SRMMU_PCR, ASI_SRMMU) | VIKING_PCR_SB);
 
-		return;
-
 	} else if (type == T_DATAFAULT && (sfsr & SFSR_FAV) == 0) {
 		/*
 		 * bizarre.
@@ -316,21 +315,24 @@ viking_memerr(type, sfsr, sfva, tf)
 		if (oldtype == T_DATAFAULT)
 			goto hard;
 		oldtype = T_DATAFAULT;
-		return;
 	}
+
+out:
+	KERNEL_UNLOCK_ONE(NULL);
+	return;
+
 hard:
 	hardmemerr4m(type, sfsr, sfva, afsr, afva);
+	goto out;
 }
 
 void
-memerr4m(type, sfsr, sfva, tf)
-	unsigned type;
-	u_int sfsr;
-	u_int sfva;
-	struct trapframe *tf;
+memerr4m(unsigned type, u_int sfsr, u_int sfva, struct trapframe *tf)
 {
 	u_int afsr;
 	u_int afva;
+
+	KERNEL_LOCK(1, NULL);
 
 	/*
 	 * No known special cases.
@@ -340,5 +342,6 @@ memerr4m(type, sfsr, sfva, tf)
 		afsr = afva = 0;
 
 	hardmemerr4m(type, sfsr, sfva, afsr, afva);
+	KERNEL_UNLOCK_ONE(NULL);
 }
 #endif /* SUN4M */

@@ -1,5 +1,8 @@
-#	$NetBSD: Makefile.inc,v 1.2 1999/03/15 20:54:54 is Exp $
+#	$NetBSD: Makefile.inc,v 1.5 2003/05/02 22:40:19 he Exp $
 
-IMAGESIZE?=	5120 # 2.5MB in 512 byte blocks
-VND_GEOM?=	512/32/32/5 # (5) 512KB `cylinders'
-NEWFSOPTS?=	-i 8192 -B be
+IMAGESIZE=	4m
+IMAGEENDIAN=	be
+MAKEFS_FLAGS=	-o density=12k
+MAKEDEVTARGETS=	raminst
+IMAGEDEPENDS+=	${ARCHDIR}/dot.profile ${ARCHDIR}/install.md \
+		${ARCHDIR}/termcap

@@ -1,4 +1,4 @@
-/*	$NetBSD: revnetgroup.c,v 1.7 1999/07/25 09:01:05 lukem Exp $ */
+/*	$NetBSD: revnetgroup.c,v 1.13 2004/10/30 16:01:48 dsl Exp $ */
 
 /*
  * Copyright (c) 1995
@@ -41,7 +41,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: revnetgroup.c,v 1.7 1999/07/25 09:01:05 lukem Exp $");
+__RCSID("$NetBSD: revnetgroup.c,v 1.13 2004/10/30 16:01:48 dsl Exp $");
 #endif
 
 #include <ctype.h>
@@ -51,13 +51,12 @@ __RCSID("$NetBSD: revnetgroup.c,v 1.7 1999/07/25 09:01:05 lukem Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <util.h>
 
 #include "hash.h"
 #include "protos.h"
 
-int	main __P((int, char *[]));
-void	usage __P((void));
+int	main(int, char *[]);
+void	usage(void);
 
 
 
@@ -74,18 +73,15 @@ struct group_entry *gtable[TABLESIZE];
 struct member_entry *mtable[TABLESIZE];
 
 void
-usage()
+usage(void)
 {
-	extern char *__progname;		/* from crt0.o */
 
-	fprintf (stderr,"usage: %s -u|-h [-f netgroup file]\n", __progname);
+	fprintf (stderr,"usage: %s -u|-h [-f netgroup file]\n", getprogname());
 	exit(1);
 }
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct group_entry *gcur;
 	struct member_entry *mcur;
@@ -129,7 +125,7 @@ main(argc, argv)
 
 	if (strcmp(netgroup, "-")) {
 		if ((fp = fopen(netgroup, "r")) == NULL) {
-			err(1,netgroup);
+			err(1, "%s", netgroup);
 		}
 	} else {
 		fp = stdin;
@@ -143,9 +139,9 @@ main(argc, argv)
 			continue;
 		p = line;
 
-		for (key = p; *p && isspace(*p) == 0; p++)
+		for (key = p; *p && isspace((unsigned char)*p) == 0; p++)
 			;
-		while (*p && isspace(*p))
+		while (*p && isspace((unsigned char)*p))
 			*p++ = '\0';
 		store(gtable, key, p);
 	}
@@ -158,9 +154,9 @@ main(argc, argv)
 	 */
 	for (i = 0; i < TABLESIZE; i++) {
 		gcur = gtable[i];
-		while(gcur) {
+		while (gcur) {
 			rng_setnetgrent(gcur->key);
-			while(rng_getnetgrent(&host, &user, &domain) != NULL) {
+			while (rng_getnetgrent(&host, &user, &domain) != 0) {
 				if (hosts) {
 					if (!(host && !strcmp(host,"-"))) {
 						mstore(mtable,
@@ -187,11 +183,11 @@ main(argc, argv)
 	/* Spew out the results. */
 	for (i = 0; i < TABLESIZE; i++) {
 		mcur = mtable[i];
-		while(mcur) {
+		while (mcur) {
 			struct grouplist *tmp;
 			printf ("%s.%s\t", mcur->key, mcur->domain);
 			tmp = mcur->groups;
-			while(tmp) {
+			while (tmp) {
 				printf ("%s", tmp->groupname);
 				tmp = tmp->next;
 				if (tmp)

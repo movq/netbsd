@@ -1,4 +1,4 @@
-/*	$NetBSD: diskio.c,v 1.2 1997/06/28 21:36:45 leo Exp $	*/
+/*	$NetBSD: diskio.c,v 1.5 2006/08/04 01:50:30 mhitch Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens.
@@ -30,7 +30,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "stand.h"
+#include <lib/libsa/stand.h>
 #include "atari_stand.h"
 #include <sys/disklabel.h>
 
@@ -42,7 +42,7 @@ static int rootopen __P((struct open_file *, ...));
 static int rootclose __P((struct open_file *));
 static int rootioctl __P((struct open_file *, u_long, void *));
 
-static struct devsw devsw[] = {
+struct devsw devsw[] = {
 	{ "root", rootstrategy, rootopen, rootclose, rootioctl }
 };
 static bdevd_t	bootdev;

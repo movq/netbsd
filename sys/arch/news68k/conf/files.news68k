@@ -1,8 +1,6 @@
-#	$NetBSD: files.news68k,v 1.5 2000/03/25 15:27:55 tsutsui Exp $
+#	$NetBSD: files.news68k,v 1.31 2008/02/20 21:43:34 drochner Exp $
 
 #	NEWS68K-specific configuration info
-
-defopt	opt_fpuemulate.h	FPU_EMULATE
 
 # maxpartitions must be first item in files.${ARCH}.
 maxpartitions 8
@@ -13,22 +11,23 @@ device mainbus { [systype = -1] }
 attach mainbus at root
 
 file	arch/news68k/news68k/autoconf.c
-file	arch/news68k/news68k/conf.c
+file	arch/news68k/news68k/bus_space.c
+#file	arch/news68k/news68k/cons_machdep.c
 file	arch/news68k/news68k/clock.c
-file	arch/news68k/news68k/db_memrw.c		ddb | kgdb
 file	arch/news68k/news68k/disksubr.c		disk
 file	arch/news68k/news68k/isr.c
 file	arch/news68k/news68k/machdep.c
 file	arch/news68k/news68k/mainbus.c
 file	arch/news68k/news68k/mem.c
-file	arch/news68k/news68k/pmap.c
 file	arch/news68k/news68k/pmap_bootstrap.c	compile-with "${NOPROF_C}"
-file	arch/news68k/news68k/sys_machdep.c
 file	arch/news68k/news68k/trap.c
-file	arch/news68k/news68k/vm_machdep.c
+file	arch/m68k/m68k/cacheops.c
+file	arch/m68k/m68k/db_memrw.c		ddb | kgdb
+file	arch/m68k/m68k/pmap_motorola.c
+file	arch/m68k/m68k/procfs_machdep.c		procfs
+file	arch/m68k/m68k/sys_machdep.c
+file	arch/m68k/m68k/vm_machdep.c
 file	dev/cons.c
-
-major { vnd = 6 }
 
 # Emulation modules
 # 6888x emulator (FPU_EMULATE)
@@ -39,34 +38,46 @@ device hb { addr = 0, [ipl = -1], [vect = -1] }
 attach hb at mainbus
 file arch/news68k/dev/hb.c			hb
 
-# I/O Proccesser
+# I/O Processor
 #device iop { [addr = -1], [ipl = -1] }
 #attach iop at mainbus
 #file arch/news68k/dev/iop.c			iop
 
-# MK48T02 RTC and NVRAM
-device clock
-attach clock at hb with clock_hb
-file arch/news68k/dev/clock_hb.c		clock_hb
+# interval timer
+device timer
+attach timer at hb with timer_hb
+file arch/news68k/dev/timer_hb.c		timer_hb
+
+# MK48T02 TOD clock and NVRAM
+device mkclock: mk48txx
+attach mkclock at hb with mkclock_hb
+file arch/news68k/dev/mkclock_hb.c		mkclock_hb
 
 # Lance ethernet (device defined in sys/conf/files)
 #device le: ifnet, ether, arp
 attach le at hb: le24
 file arch/news68k/dev/if_le.c			le needs-count
 
-# mouse; not yet
-device ms
-attach ms at hb
-file arch/news68k/dev/ms.c			ms needs-flag
+# keyboard/mouse
 
-# keyboard; not yet
-device kb
-attach kb at hb
+device kbc {}
+attach kbc at hb
+file arch/news68k/dev/kbc.c			kbc
+
+device kb: wskbddev
 file arch/news68k/dev/kb.c			kb needs-flag
-file arch/news68k/dev/kbms_if.c			kb | ms
-file arch/news68k/dev/keyconf.c			kb
-file arch/news68k/dev/kb_ctrl.c			kb
-file arch/news68k/dev/kb_encode.c		kb
+file dev/news/newskeymap.c			kb
+attach kb at kbc with kb_kbc
+file arch/news68k/dev/kb_kbc.c			kb_kbc
+attach kb at hb with kb_hb
+file arch/news68k/dev/kb_hb.c			kb_hb
+
+device ms: wsmousedev
+file arch/news68k/dev/ms.c			ms needs-flag
+attach ms at kbc with ms_kbc
+file arch/news68k/dev/ms_kbc.c			ms_kbc
+attach ms at hb with ms_hb
+file arch/news68k/dev/ms_hb.c			ms_hb
 
 # serial
 device zsc { [channel = -1] }
@@ -78,24 +89,9 @@ device zstty: tty
 attach zstty at zsc
 file dev/ic/z8530tty.c				zstty needs-count
 
-# framebuffers; not yet
-device fb
-attach fb at hb
-file arch/news68k/dev/fb.c			fb needs-flag
-file arch/news68k/dev/fb_conf.c			fb
-file arch/news68k/dev/fb_mfbs.c			fb
-file arch/news68k/dev/fb_probe.c		fb
-file arch/news68k/dev/fb_start.c		fb
-file arch/news68k/dev/fb_sub.c			fb
-file arch/news68k/dev/fbbm_225.c		fb
-file arch/news68k/dev/fbbm_514.c		fb
-file arch/news68k/dev/bmcons.c			fb
-file arch/news68k/dev/bitmapif.c		fb
-file arch/news68k/dev/fnt.c			fb
-file arch/news68k/dev/fnt24.c			fb
-file arch/news68k/dev/vt100.c			fb
-file arch/news68k/dev/vt100esc.c		fb
-file arch/news68k/dev/vt100if.c			fb
+#device cfb: wsemuldisplaydev, rasops8
+#attach cfb at hb
+#file arch/news68k/dev/cfb.c			cfb needs-flag
 
 # floppy; not yet
 device fdc {}
@@ -106,10 +102,6 @@ file arch/news68k/dev/fd.c			fdc | fd needs-flag
 
 # Machine-independent SCSI driver
 include "dev/scsipi/files.scsipi"
-major { sd = 0 }
-major { fd = 1 }
-major { cd = 16 }
-major { st = 17 }
 
 # Sony CXD1180 SCSI controller
 device si: scsi, ncr5380sbc
@@ -117,15 +109,13 @@ file arch/news68k/dev/si.c			si needs-flag
 attach si at hb
 
 # memory disk
-major {md = 2}
-file	arch/news68k/dev/md_root.c		memory_disk_hooks
+file	dev/md_root.c				memory_disk_hooks
 
-# RAIDframe
-major {raid = 32}
+# NetBSD m68k a.out binary compatibility (COMPAT_AOUT_M68K)
+include "compat/aoutm68k/files.aoutm68k"
 
 # SVR4 Binary Compatibility (COMPAT_SVR4)
 include	"compat/svr4/files.svr4"
-
 
 # SunOS binary compatibility (COMPAT_SUNOS)
 include	"compat/sunos/files.sunos"
@@ -138,9 +128,9 @@ file	arch/m68k/m68k/sunos_machdep.c		compat_sunos
 # Linux binary compatibility (COMPAT_LINUX)
 include	"compat/linux/files.linux"
 include	"compat/linux/arch/m68k/files.linux_m68k"
-
-# a.out binary compatibility (COMPAT_AOUT)
-include "compat/aout/files.aout"
+file arch/m68k/m68k/linux_trap.c		compat_linux
 
 # OSS audio driver compatibility
 include	"compat/ossaudio/files.ossaudio"
+
+include "arch/news68k/conf/majors.news68k"

@@ -1,4 +1,4 @@
-/*	$NetBSD: comio_direct.c,v 1.4 2000/01/20 15:22:57 drochner Exp $	*/
+/*	$NetBSD: comio_direct.c,v 1.8 2005/11/11 22:25:09 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994, 1995, 1996, 1997
@@ -45,11 +45,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -73,8 +69,7 @@
 #include <machine/pio.h>
 #include <dev/ic/comreg.h>
 #include "comio_direct.h"
-
-static int comspeed __P((long speed));
+#include "libi386.h"
 
 /* preread buffer for xon/xoff handling */
 #define XON	0x11
@@ -87,42 +82,35 @@ static int stopped = 0;
 
 #define	ISSET(t,f)	((t) & (f))
 
+#define	divrnd(n, q)	(((n)*2/(q)+1)/2)	/* divide and round off */
+#define RATE_9600 divrnd((COM_FREQ / 16), 9600)
+
 /*
  * calculate divisor for a given speed
  */
 static int
-comspeed(speed)
-	long speed;
+comspeed(long speed)
 {
-#define	divrnd(n, q)	(((n)*2/(q)+1)/2)	/* divide and round off */
-
 	int x, err;
 
-#if 0
-	if (speed == 0)
-		return (0);
-#endif
 	if (speed <= 0)
-		return (-1);
+		speed = 9600;
 	x = divrnd((COM_FREQ / 16), speed);
 	if (x <= 0)
-		return (-1);
+		return RATE_9600;
 	err = divrnd((COM_FREQ / 16) * 1000, speed * x) - 1000;
 	if (err < 0)
 		err = -err;
 	if (err > COM_TOLERANCE)
-		return (-1);
+		return RATE_9600;
 	return (x);
-
-#undef	divrnd(n, q)
 }
 
 /*
  * get a character
  */
 int
-comgetc_d(combase)
-	int combase;
+comgetc_d(int combase)
 {
 	u_char stat, c;
 
@@ -151,12 +139,10 @@ comgetc_d(combase)
  * output a character, return nonzero on success
  */
 int
-computc_d(c, combase)
-	int c;
-	int combase;
+computc_d(int c, int combase)
 {
 	u_char stat;
-	register int timo;
+	int timo;
 
 	/* check for old XOFF */
 	while (stopped)
@@ -193,21 +179,29 @@ computc_d(c, combase)
 /*
  * Initialize UART to known state.
  */
-void
-cominit_d(combase)
-	int combase;
+int
+cominit_d(int combase, int speed)
 {
-	int rate;
+	int rate, err;
 
 	serbuf_read = 0;
 	serbuf_write = 0;
 
 	outb(combase + com_cfcr, LCR_DLAB);
-#ifdef CONSPEED
-	rate = comspeed(CONSPEED);
-#else
-	rate = comspeed(9600);
-#endif
+	if (speed == 0) {
+		/* Try to determine the current baud rate */
+		rate = inb(combase + com_dlbl) | inb(combase + com_dlbh) << 8;
+		if (rate == 0)
+			rate = RATE_9600;
+		speed = divrnd((COM_FREQ / 16), rate);
+		err = speed - (speed + 150)/300 * 300;
+		speed -= err;
+		if (err < 0)
+			err = -err;
+		if (err > 50)
+			speed = 9600;
+	}
+	rate = comspeed(speed);
 	outb(combase + com_dlbl, rate);
 	outb(combase + com_dlbh, rate >> 8);
 	outb(combase + com_cfcr, LCR_8BITS);
@@ -215,14 +209,15 @@ cominit_d(combase)
 	outb(combase + com_fifo,
 	    FIFO_ENABLE | FIFO_RCV_RST | FIFO_XMT_RST | FIFO_TRIGGER_1);
 	outb(combase + com_ier, 0);
+
+	return speed;
 }
 
 /*
  * return nonzero if input char available, do XON/XOFF handling
  */
 int
-comstatus_d(combase)
-	int combase;
+comstatus_d(int combase)
 {
 	/* check if any preread input is already there */
 	if (serbuf_read != serbuf_write) return 1;

@@ -1,4 +1,4 @@
-/*	$NetBSD: display.c,v 1.8 1999/11/09 15:06:36 drochner Exp $	*/
+/*	$NetBSD: display.c,v 1.20 2006/08/26 18:17:42 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,12 +29,16 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if !defined(lint)
 #if 0
 static char sccsid[] = "@(#)display.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: display.c,v 1.8 1999/11/09 15:06:36 drochner Exp $");
+__RCSID("$NetBSD: display.c,v 1.20 2006/08/26 18:17:42 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -48,10 +48,12 @@ __RCSID("$NetBSD: display.c,v 1.8 1999/11/09 15:06:36 drochner Exp $");
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <util.h>
 
 #include "hexdump.h"
 
@@ -60,10 +62,10 @@ enum _vflag vflag = FIRST;
 static off_t address;			/* address/offset in stream */
 static off_t eaddress;			/* end address */
 
-static inline void print __P((PR *, u_char *));
+static inline void print(PR *, u_char *);
 
 void
-display()
+display(void)
 {
 	FS *fs;
 	FU *fu;
@@ -108,32 +110,30 @@ display()
 		for (pr = endfu->nextpr; pr; pr = pr->nextpr)
 			switch(pr->flags) {
 			case F_ADDRESS:
-				(void)printf(pr->fmt, (quad_t)eaddress);
+				(void)printf(pr->fmt, (int64_t)eaddress);
 				break;
 			case F_TEXT:
-				(void)printf(pr->fmt);
+				(void)printf("%s", pr->fmt);
 				break;
 			}
 	}
 }
 
 static inline void
-print(pr, bp)
-	PR *pr;
-	u_char *bp;
+print(PR *pr, u_char *bp)
 {
 	   double f8;
 	    float f4;
 	  int16_t s2;
-	   int8_t s8;
 	  int32_t s4;
+	  int64_t s8;
 	u_int16_t u2;
 	u_int32_t u4;
 	u_int64_t u8;
 
 	switch(pr->flags) {
 	case F_ADDRESS:
-		(void)printf(pr->fmt, (quad_t)address);
+		(void)printf(pr->fmt, (int64_t)address);
 		break;
 	case F_BPAD:
 		(void)printf(pr->fmt, "");
@@ -159,15 +159,15 @@ print(pr, bp)
 	case F_INT:
 		switch(pr->bcnt) {
 		case 1:
-			(void)printf(pr->fmt, (quad_t)*bp);
+			(void)printf(pr->fmt, (int64_t)*bp);
 			break;
 		case 2:
 			memmove(&s2, bp, sizeof(s2));
-			(void)printf(pr->fmt, (quad_t)s2);
+			(void)printf(pr->fmt, (int64_t)s2);
 			break;
 		case 4:
 			memmove(&s4, bp, sizeof(s4));
-			(void)printf(pr->fmt, (quad_t)s4);
+			(void)printf(pr->fmt, (int64_t)s4);
 			break;
 		case 8:
 			memmove(&s8, bp, sizeof(s8));
@@ -182,7 +182,7 @@ print(pr, bp)
 		(void)printf(pr->fmt, (char *)bp);
 		break;
 	case F_TEXT:
-		(void)printf(pr->fmt);
+		(void)printf("%s", pr->fmt);
 		break;
 	case F_U:
 		conv_u(pr, bp);
@@ -190,15 +190,15 @@ print(pr, bp)
 	case F_UINT:
 		switch(pr->bcnt) {
 		case 1:
-			(void)printf(pr->fmt, (u_quad_t)*bp);
+			(void)printf(pr->fmt, (uint64_t)*bp);
 			break;
 		case 2:
 			memmove(&u2, bp, sizeof(u2));
-			(void)printf(pr->fmt, (u_quad_t)u2);
+			(void)printf(pr->fmt, (uint64_t)u2);
 			break;
 		case 4:
 			memmove(&u4, bp, sizeof(u4));
-			(void)printf(pr->fmt, (u_quad_t)u4);
+			(void)printf(pr->fmt, (uint64_t)u4);
 			break;
 		case 8:
 			memmove(&u8, bp, sizeof(u8));
@@ -210,8 +210,7 @@ print(pr, bp)
 }
 
 void
-bpad(pr)
-	PR *pr;
+bpad(PR *pr)
 {
 	static const char *spec = " -0+#";
 	char *p1, *p2;
@@ -231,7 +230,7 @@ bpad(pr)
 static char **_argv;
 
 u_char *
-get()
+get(void)
 {
 	static int ateof = 1;
 	static u_char *curp, *savp;
@@ -240,8 +239,8 @@ get()
 	u_char *tmpp;
 
 	if (!curp) {
-		curp = emalloc(blocksize);
-		savp = emalloc(blocksize);
+		curp = ecalloc(blocksize, 1);
+		savp = ecalloc(blocksize, 1);
 	} else {
 		tmpp = curp;
 		curp = savp;
@@ -257,7 +256,8 @@ get()
 		if (!length || (ateof && !next(NULL))) {
 			if (need == blocksize)
 				return(NULL);
-			if (vflag != ALL && !memcmp(curp, savp, nread)) {
+			if (!need && vflag != ALL &&
+			    !memcmp(curp, savp, nread)) {
 				if (vflag != DUP)
 					(void)printf("*\n");
 				return(NULL);
@@ -297,8 +297,7 @@ get()
 }
 
 int
-next(argv)
-	char **argv;
+next(char **argv)
 {
 	static int done;
 	int statok;
@@ -332,9 +331,7 @@ next(argv)
 }
 
 void
-doskip(fname, statok)
-	char *fname;
-	int statok;
+doskip(const char *fname, int statok)
 {
 	int cnt;
 	struct stat sb;
@@ -360,22 +357,4 @@ doskip(fname, statok)
 		address += cnt;
 		skip -= cnt;
 	}
-}
-
-void *
-emalloc(size)
-	int size;
-{
-	void *p;
-
-	if ((p = malloc((u_int)size)) == NULL)
-		nomem();
-	memset(p, 0, size);
-	return(p);
-}
-
-void
-nomem()
-{
-	err(1, NULL);
 }

@@ -1,4 +1,4 @@
-.\"	$NetBSD: printf.1,v 1.10 1998/08/22 14:54:48 garbled Exp $
+.\"	$NetBSD: printf.1,v 1.22 2008/09/01 09:20:41 dholland Exp $
 .\"
 .\" Copyright (c) 1989, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -14,11 +14,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -36,7 +32,7 @@
 .\"
 .\"	from: @(#)printf.1	8.1 (Berkeley) 6/6/93
 .\"
-.Dd November 5, 1993
+.Dd May 6, 2008
 .Dt PRINTF 1
 .Os
 .Sh NAME
@@ -64,7 +60,8 @@ The
 after the first are treated as strings if the corresponding format is
 either
 .Cm b ,
-.Cm c
+.Cm B ,
+.Cm c ,
 or
 .Cm s ;
 otherwise it is evaluated as a C constant, with the following extensions:
@@ -73,7 +70,7 @@ otherwise it is evaluated as a C constant, with the following extensions:
 .It
 A leading plus or minus sign is allowed.
 .It
-If the leading character is a single or double quote, the value is the 
+If the leading character is a single or double quote, the value is the
 .Tn ASCII
 code of the next character.
 .El
@@ -83,115 +80,170 @@ The format string is reused as often as necessary to satisfy the
 Any extra format specifications are evaluated with zero or the null
 string.
 .Pp
-Character escape sequences are in backslash notation as defined in 
+Character escape sequences are in backslash notation as defined in
 .St -ansiC .
-The characters and their meanings
-are as follows:
+The characters and their meanings are as follows:
 .Bl -tag -width Ds -offset indent
 .It Cm \ee
-Write an <escape> character.
+Write an
+.Aq escape
+character.
 .It Cm \ea
-Write a <bell> character.
+Write a
+.Aq bell
+character.
 .It Cm \eb
-Write a <backspace> character.
+Write a
+.Aq backspace
+character.
 .It Cm \ef
-Write a <form-feed> character.
+Write a
+.Aq form-feed
+character.
 .It Cm \en
-Write a <new-line> character.
+Write a
+.Aq new-line
+character.
 .It Cm \er
-Write a <carriage return> character.
+Write a
+.Aq carriage return
+character.
 .It Cm \et
-Write a <tab> character.
+Write a
+.Aq tab
+character.
 .It Cm \ev
-Write a <vertical tab> character.
+Write a
+.Aq vertical tab
+character.
 .It Cm \e\'
-Write a <single quote> character.
+Write a
+.Aq single quote
+character.
+.It Cm \e"
+Write a
+.Aq double quote
+character.
 .It Cm \e\e
 Write a backslash character.
-.It Cm \e Ns Ar num 
-Write an 8-bit character whose
+.It Cm \e Ns Ar num
+Write an 8\-bit character whose
 .Tn ASCII
-value is the 1-, 2-, or 3-digit
-octal number
+value is the 1\-, 2\-, or 3\-digit octal number
 .Ar num .
+.It Cm \ex Ns Ar xx
+Write an 8\-bit character whose
+.Tn ASCII
+value is the 1\- or 2\-digit hexadecimal number
+.Ar xx .
 .El
 .Pp
 Each format specification is introduced by the percent character
-(``%'').
+.Pq Dq \&% .
 The remainder of the format specification includes,
 in the following order:
 .Bl -tag -width Ds
-.It "Zero or more of the following flags:"
+.It Zero or more of the following flags :
 .Bl -tag -width Ds
 .It Cm #
-A `#' character
-specifying that the value should be printed in an ``alternative form''.
+A
+.Sq #
+character specifying that the value should be printed in an
+.Dq alternative form .
 For
-.Cm c  ,
+.Cm b ,
+.Cm c ,
 .Cm d ,
 and
-.Cm s  ,
-formats, this option has no effect.  For the
+.Cm s
+formats, this option has no effect.
+For the
 .Cm o
-formats the precision of the number is increased to force the first
-character of the output string to a zero.  For the
+format the precision of the number is increased to force the first
+character of the output string to a zero.
+For the
 .Cm x
 .Pq Cm X
 format, a non-zero result has the string
 .Li 0x
 .Pq Li 0X
-prepended to it.  For
-.Cm e  ,
+prepended to it.
+For
+.Cm e ,
 .Cm E ,
-.Cm f  ,
+.Cm f ,
 .Cm g ,
 and
-.Cm G  ,
+.Cm G
 formats, the result will always contain a decimal point, even if no
 digits follow the point (normally, a decimal point only appears in the
-results of those formats if a digit follows the decimal point).  For
+results of those formats if a digit follows the decimal point).
+For
 .Cm g
 and
 .Cm G
 formats, trailing zeros are not removed from the result as they
-would otherwise be;
+would otherwise be.
+.\" I turned this off - decided it isn't a valid use of '#'
+.\" For the
+.\" .Cm B
+.\" format, backslash-escape sequences are expanded first;
 .It Cm \&\-
-A minus sign `\-' which specifies
+A minus sign
+.Sq \-
+which specifies
 .Em left adjustment
 of the output in the indicated field;
 .It Cm \&+
-A `+' character specifying that there should always be
+A
+.Sq \&+
+character specifying that there should always be
 a sign placed before the number when using signed formats.
 .It Sq \&\ \&
 A space specifying that a blank should be left before a positive number
-for a signed format.  A `+' overrides a space if both are used;
+for a signed format.
+A
+.Sq \&+
+overrides a space if both are used;
 .It Cm \&0
 A zero `0' character indicating that zero-padding should be used
-rather than blank-padding.  A `\-' overrides a `0' if both are used;
+rather than blank-padding.
+A
+.Sq \-
+overrides a
+.Sq \&0
+if both are used;
 .El
-.It "Field Width:"
+.It Field Width :
 An optional digit string specifying a
 .Em field width ;
 if the output string has fewer characters than the field width it will
 be blank-padded on the left (or right, if the left-adjustment indicator
 has been given) to make up the field width (note that a leading zero
 is a flag, but an embedded zero is part of a field width);
-.It Precision:
+.It Precision :
 An optional period,
-.Sq Cm \&.\& ,
+.Sq Cm \&. ,
 followed by an optional digit string giving a
 .Em precision
 which specifies the number of digits to appear after the decimal point,
 for
 .Cm e
-and 
+and
 .Cm f
 formats, or the maximum number of characters to be printed
-from a string; if the digit string is missing, the precision is treated
+from a string
+.Sm off
+.Pf ( Cm b ,
+.Sm on
+.Cm B ,
+and
+.Cm s
+formats); if the digit string is missing, the precision is treated
 as zero;
-.It Format:
+.It Format :
 A character which indicates the type of format to use (one of
-.Cm diouxXfwEgGbcs ) .
+.Cm diouxXfwEgGbBcs ) .
 .El
 .Pp
 A field width or precision may be
@@ -211,7 +263,7 @@ or unsigned hexadecimal (X or x), respectively.
 .It Cm f
 The
 .Ar argument
-is printed in the style 
+is printed in the style
 .Sm off
 .Pf [\-]ddd Cm \&. No ddd
 .Sm on
@@ -223,7 +275,7 @@ is explicitly 0, no digits and no decimal point are printed.
 .It Cm eE
 The
 .Ar argument
-is printed in the style 
+is printed in the style
 .Sm off
 .Pf [\-]d Cm \&. No ddd Cm e No \\*(Pmdd
 .Sm on
@@ -231,7 +283,9 @@ where there
 is one digit before the decimal point and the number after is equal to
 the precision specification for the argument; when the precision is
 missing, 6 digits are produced.
-An upper-case E is used for an `E' format.
+An upper-case E is used for an
+.Sq E
+format.
 .It Cm gG
 The
 .Ar argument
@@ -245,6 +299,48 @@ whichever gives full precision in minimum space.
 Characters from the string
 .Ar argument
 are printed with backslash-escape sequences expanded.
+.br
+The following additional backslash-escape sequences are supported:
+.Bl -tag -width Ds
+.It Cm \ec
+Causes
+.Nm
+to ignore any remaining characters in the string operand containing it,
+any remaining string operands, and any additional characters in
+the format operand.
+.It Cm \e0 Ns Ar num
+Write an 8\-bit character whose
+.Tn ASCII
+value is the 1\-, 2\-, or 3\-digit
+octal number
+.Ar num .
+.It Cm \e^ Ns Ar c
+Write the control character
+.Ar c .
+Generates characters `\e000' through `\e037`, and `\e177' (from `\e^?').
+.It Cm \eM\- Ns Ar c
+Write the character
+.Ar c
+with the 8th bit set.
+Generates characters `\e241' through `\e376`.
+.It Cm \eM^ Ns Ar c
+Write the control character
+.Ar c
+with the 8th bit set.
+Generates characters `\e200' through `\e237`, and `\e377' (from `\eM^?').
+.El
+.It Cm B
+Characters from the string
+.Ar argument
+are printed with unprintable characters backslash-escaped using the
+.Sm off
+.Pf ` Cm \e Ar c No ',
+.Pf ` Cm \e^ Ar c No ',
+.Pf ` Cm \eM\- Ar c No '
+or
+.Pf ` Cm \eM^ Ar c No ',
+.Sm on
+formats described above.
 .It Cm c
 The first character of
 .Ar argument
@@ -253,8 +349,8 @@ is printed.
 Characters from the string
 .Ar argument
 are printed until the end is reached or until the number of characters
-indicated by the precision specification is reached; however if the
-precision is 0 or missing, all characters in the string are printed.
+indicated by the precision specification is reached; if the
+precision is omitted, all characters in the string are printed.
 .It Cm \&%
 Print a `%'; no argument is used.
 .El
@@ -262,19 +358,55 @@ Print a `%'; no argument is used.
 In no case does a non-existent or small field width cause truncation of
 a field; padding takes place only if the specified field width exceeds
 the actual width.
-.Sh RETURN VALUES
+.Sh EXIT STATUS
 .Nm
 exits 0 on success, 1 on failure.
 .Sh SEE ALSO
 .Xr echo 1 ,
-.Xr printf 3
+.Xr printf 3 ,
+.Xr vis 3 ,
+.Xr printf 9
 .Sh STANDARDS
 The
 .Nm
-utility conforms to 
-.St -p1003.2-92 .
+utility conforms to
+.St -p1003.1-2001 .
+.Pp
+Support for the floating point formats and `*' as a field width and precision
+are optional in POSIX.
+.Pp
+The behaviour of the %B format and the \e', \e", \exxx, \ee and
+\e[M][\-|^]c escape sequences are undefined in POSIX.
 .Sh BUGS
 Since the floating point numbers are translated from
 .Tn ASCII
 to floating-point and
 then back again, floating-point precision may be lost.
+.Pp
+Hexadecimal character constants are restricted to, and should be specified
+as, two character constants.
+This is contrary to the ISO C standard but
+does guarantee detection of the end of the constant.
+.Sh NOTES
+All formats which treat the
+.Ar argument
+as a number first convert the
+.Ar argument
+from its external representation as a character string
+to an internal numeric representation, and then apply the
+format to the internal numeric representation, producing
+another external character string representation.
+One might expect the
+.Cm \&%c
+format to do likewise, but in fact it does not.
+.Pp
+To convert a string representation of a decimal, octal, or hexadecimal
+number into the corresponding character, two nested
+.Nm
+invocations may be used, in which the inner invocation
+converts the input to an octal string, and the outer
+invocation uses the octal string as part of a format.
+For example, the following command outputs the character whose code
+is 0x0A, which is a newline in ASCII:
+.Pp
+.Dl printf \&"$(printf \&"\e\e%o" \&"0x0A")"

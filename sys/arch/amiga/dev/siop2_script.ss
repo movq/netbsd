@@ -1,4 +1,4 @@
-;	$NetBSD: siop2_script.ss,v 1.3 1999/03/26 22:50:23 mhitch Exp $
+;	$NetBSD: siop2_script.ss,v 1.6 2005/12/11 12:16:28 christos Exp $
 
 ;
 ; Copyright (c) 1998 Michael L. Hitch
@@ -79,6 +79,7 @@ scripts:
 	SELECT ATN FROM ds_Device, REL(reselect)
 ;
 switch:
+	MOVE GPREG | 0x10 TO GPREG
 	JUMP REL(msgin), WHEN MSG_IN
 	JUMP REL(msgout), IF MSG_OUT
 	JUMP REL(command_phase), IF CMD
@@ -110,12 +111,12 @@ ext_msg:
 	MOVE FROM ds_ExtMsg, WHEN MSG_IN
 	JUMP REL(neg_msg), IF 0x03	; extended message might be SDTR
 	JUMP REL(neg_msg), IF 0x02	; extended message might be WDTR
-	int err7			; extended message not SDTR
+	INT err7			; extended message not SDTR
 
 neg_msg:
 	CLEAR ACK
 	MOVE FROM ds_NegMsg, WHEN MSG_IN
-	int err11			; Let host handle the message
+	INT err11			; Let host handle the message
 ; If we continue from the interrupt, the host has set up a response
 ; message to be sent.  Set ATN, clear ACK, and continue.
 	SET ATN
@@ -124,10 +125,11 @@ neg_msg:
 
 disc:
 	MOVE SCNTL2 & 0x7f TO SCNTL2
+	MOVE GPREG & 0xEF TO GPREG
 	CLEAR ACK
 	WAIT DISCONNECT
 
-	int err2			; signal disconnect w/o save DP
+	INT err2			; signal disconnect w/o save DP
 
 msg_sdp:
 	CLEAR ACK			; acknowledge message
@@ -210,10 +212,11 @@ datain:
 
 end:
 	MOVE FROM ds_Status, WHEN STATUS
-	int err10, WHEN NOT MSG_IN	; status not followed by msg
+	INT err10, WHEN NOT MSG_IN	; status not followed by msg
 	MOVE FROM ds_Msg, WHEN MSG_IN
 	MOVE SCNTL2 & 0x7f TO SCNTL2
 	CLEAR ACK
 	WAIT DISCONNECT
+	MOVE GPREG & 0xEF TO GPREG
 	INT ok				; signal completion
 	JUMP REL(wait_reselect)

@@ -1,4 +1,4 @@
-/*	$NetBSD: nodes.c.pat,v 1.8 1997/04/11 23:03:09 christos Exp $	*/
+/*	$NetBSD: nodes.c.pat,v 1.12 2004/06/15 22:57:27 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -58,11 +54,11 @@ char   *funcstring;		/* block to allocate strings from */
 %SIZES
 
 
-STATIC void calcsize __P((union node *));
-STATIC void sizenodelist __P((struct nodelist *));
-STATIC union node *copynode __P((union node *));
-STATIC struct nodelist *copynodelist __P((struct nodelist *));
-STATIC char *nodesavestr __P((char *));
+STATIC void calcsize(union node *);
+STATIC void sizenodelist(struct nodelist *);
+STATIC union node *copynode(union node *);
+STATIC struct nodelist *copynodelist(struct nodelist *);
+STATIC char *nodesavestr(char *);
 
 
 
@@ -100,7 +96,7 @@ sizenodelist(lp)
 	struct nodelist *lp;
 {
 	while (lp) {
-		funcblocksize += ALIGN(sizeof(struct nodelist));
+		funcblocksize += SHELL_ALIGN(sizeof(struct nodelist));
 		calcsize(lp->n);
 		lp = lp->next;
 	}
@@ -129,7 +125,8 @@ copynodelist(lp)
 	lpp = &start;
 	while (lp) {
 		*lpp = funcblock;
-		funcblock = (char *) funcblock + ALIGN(sizeof(struct nodelist));
+		funcblock = (char *) funcblock +
+		    SHELL_ALIGN(sizeof(struct nodelist));
 		(*lpp)->n = copynode(lp->n);
 		lp = lp->next;
 		lpp = &(*lpp)->next;
@@ -148,7 +145,7 @@ nodesavestr(s)
 	register char *q = funcstring;
 	char   *rtn = funcstring;
 
-	while ((*q++ = *p++) != '\0')
+	while ((*q++ = *p++) != 0)
 		continue;
 	funcstring = q;
 	return rtn;

@@ -1,11 +1,11 @@
-/*	$NetBSD: overlay.h,v 1.2 2000/03/13 23:52:41 soren Exp $	*/
+/*	$NetBSD: overlay.h,v 1.8 2008/06/28 01:34:06 rumble Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
  * All rights reserved.
  *
- * This software was written by William Studnemund of the
- * Numerical Aerospace Similation Facility, NASA Ames Research Center.
+ * This software was written by William Studenmund of the
+ * Numerical Aerospace Simulation Facility, NASA Ames Research Center.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -48,11 +48,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -78,7 +74,7 @@ struct overlay_args {
 	struct	layer_args	la;	/* generic layerfs args */
 };
 /*
- * We leave ova_target for two reasons. One, We can tell the difference
+ * We leave ova_target for two reasons. One, we can tell the difference
  * between a mount_overlay -u and a call from mountd as the former will
  * pass a pointer to a string while the latter will pass NULL. Two,
  * filesystems based on the overlay layer might have use for it.
@@ -118,13 +114,13 @@ struct overlay_node {
 #define	VTOOVERLAY(vp) ((struct overlay_node *)(vp)->v_data)
 #define	OVERLAYTOV(xp) ((xp)->ov_vnode)
 #ifdef OVERLAYFS_DIAGNOSTIC
-extern struct vnode *layer_checkvp __P((struct vnode *vp, char *fil, int lno));
+extern struct vnode *layer_checkvp(struct vnode *vp, char *fil, int lno);
 #define	OVERLAYVPTOLOWERVP(vp) layer_checkvp((vp), __FILE__, __LINE__)
 #else
 #define	OVERLAYVPTOLOWERVP(vp) (VTOOVERLAY(vp)->ov_lowervp)
 #endif
 
-extern int (**overlay_vnodeop_p) __P((void *));
+extern int (**overlay_vnodeop_p)(void *);
 extern struct vfsops overlay_vfsops;
 
 #endif /* _KERNEL */

@@ -1,4 +1,4 @@
-/*	$NetBSD: sbrk.S,v 1.2 2000/03/27 16:27:16 msaitoh Exp $	*/
+/*	$NetBSD: sbrk.S,v 1.9 2006/01/06 03:58:31 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,7 +36,7 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: sbrk.S,v 1.2 2000/03/27 16:27:16 msaitoh Exp $")
+	RCSID("$NetBSD: sbrk.S,v 1.9 2006/01/06 03:58:31 uwe Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
@@ -48,31 +44,49 @@
 	.globl	_end
 	.globl	curbrk
 
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(sbrk,_sbrk)
+#endif
+
 	.data
 curbrk:	.long	_end
 	.text
 
-ENTRY(sbrk)
+ENTRY(_sbrk)
 	mov	r4, r2
+#ifdef PIC
+	mova	L_GOT, r0
+	mov.l	L_GOT, r3
+	add	r0, r3
 	mov.l	Lcurbrk, r0
-	mov.l	@r0, r0	
+	mov.l	@(r0, r3), r0
+#else
+	mov.l	Lcurbrk, r0
+#endif
+	mov.l	@r0, r0
 	add	r0, r4
 	mov.l	LSYS_break, r0
 	trapa	#0x80
 	bf	err
+#ifdef PIC
+	mov.l	Lcurbrk, r0
+	mov.l	@(r0, r3), r1
+#else
 	mov.l	Lcurbrk, r1
+#endif
 	mov.l	@r1, r0
 	add	r0, r2
 	rts
 	mov.l	r2, @r1
 err:
-	mov.l	Lcerror, r1
-	jmp	@r1
-	nop			
+	JUMP_CERROR
 
-	.align 2
-Lcurbrk:	.long	curbrk
+	.align	2
 LSYS_break:	.long	SYS_break
-Lcerror:	.long	cerror
-
-
+#ifdef PIC
+L_GOT:		.long	_GLOBAL_OFFSET_TABLE_
+Lcurbrk:	.long	curbrk@GOT
+#else
+Lcurbrk:	.long	curbrk
+#endif
+	SET_ENTRY_SIZE(_sbrk)

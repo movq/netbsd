@@ -1,4 +1,4 @@
-/* $NetBSD: pckbcvar.h,v 1.2 2000/03/23 07:01:32 thorpej Exp $ */
+/* $NetBSD: pckbcvar.h,v 1.15 2008/03/15 13:23:25 cube Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -37,17 +31,33 @@
 
 #include <sys/callout.h>
 
+#include <dev/pckbport/pckbportvar.h>
+
+#include "rnd.h"
+#if NRND > 0
+#include <sys/rnd.h>
+#endif
+
 typedef void *pckbc_tag_t;
 typedef int pckbc_slot_t;
 #define	PCKBC_KBD_SLOT	0
 #define	PCKBC_AUX_SLOT	1
 #define	PCKBC_NSLOTS	2
 
+/* Simple cmd/slot ringbuffer structure */
+struct pckbc_rbuf_item {
+	int data;
+	int slot;
+};
+
+#define	PCKBC_RBUF_SIZE	32	/* number of rbuf entries */
+
 /*
  * external representation (pckbc_tag_t),
  * needed early for console operation
  */
-struct pckbc_internal { 
+struct pckbc_internal {
+	pckbport_tag_t t_pt;
 	bus_space_tag_t t_iot;
 	bus_space_handle_t t_ioh_d, t_ioh_c; /* data port, cmd port */
 	bus_addr_t t_addr;
@@ -59,21 +69,22 @@ struct pckbc_internal {
 	struct pckbc_softc *t_sc; /* back pointer */
 
 	struct callout t_cleanup;
+
+	struct pckbc_rbuf_item rbuf[PCKBC_RBUF_SIZE];
+	int rbuf_read;
+	int rbuf_write;
 };
 
-typedef void (*pckbc_inputfcn) __P((void *, int));
+typedef void (*pckbc_inputfcn)(void *, int);
 
 /*
  * State per device.
  */
 struct pckbc_softc {
-	struct device sc_dv;
+	device_t sc_dv;
 	struct pckbc_internal *id;
 
-	pckbc_inputfcn inputhandler[PCKBC_NSLOTS];
-	void *inputarg[PCKBC_NSLOTS];
-
-	void (*intr_establish) __P((struct pckbc_softc *, pckbc_slot_t));
+	void (*intr_establish)(struct pckbc_softc *, pckbc_slot_t);
 };
 
 struct pckbc_attach_args {
@@ -81,32 +92,26 @@ struct pckbc_attach_args {
 	pckbc_slot_t pa_slot;
 };
 
-extern const char *pckbc_slot_names[];
+extern const char * const pckbc_slot_names[];
 extern struct pckbc_internal pckbc_consdata;
 extern int pckbc_console_attached;
 
-void pckbc_set_inputhandler __P((pckbc_tag_t, pckbc_slot_t,
-				 pckbc_inputfcn, void *));
+/* These functions are sometimes called by match routines */
+int pckbc_send_cmd(bus_space_tag_t, bus_space_handle_t, u_char);
+int pckbc_poll_data1(void *, pckbc_slot_t);
 
-void pckbc_flush __P((pckbc_tag_t, pckbc_slot_t));
-int pckbc_poll_cmd __P((pckbc_tag_t, pckbc_slot_t, u_char *, int,
-			int, u_char *, int));
-int pckbc_enqueue_cmd __P((pckbc_tag_t, pckbc_slot_t, u_char *, int,
-			   int, int, u_char *));
-int pckbc_send_cmd __P((bus_space_tag_t, bus_space_handle_t, u_char));
-int pckbc_poll_data __P((pckbc_tag_t, pckbc_slot_t));
-int pckbc_poll_data1 __P((bus_space_tag_t, bus_space_handle_t,
-			  bus_space_handle_t, pckbc_slot_t, int));
-void pckbc_set_poll __P((pckbc_tag_t, pckbc_slot_t, int));
-int pckbc_xt_translation __P((pckbc_tag_t, pckbc_slot_t, int));
-void pckbc_slot_enable __P((pckbc_tag_t, pckbc_slot_t, int));
-
-void pckbc_attach __P((struct pckbc_softc *));
-int pckbc_cnattach __P((bus_space_tag_t, bus_addr_t, pckbc_slot_t));
-int pckbc_is_console __P((bus_space_tag_t, bus_addr_t));
-int pckbcintr __P((void *));
+/* More normal calls from attach routines */
+void pckbc_attach(struct pckbc_softc *);
+int pckbc_cnattach(bus_space_tag_t, bus_addr_t, bus_size_t, pckbc_slot_t);
+int pckbc_is_console(bus_space_tag_t, bus_addr_t);
+int pckbcintr(void *);
+int pckbcintr_hard(void *);
+void pckbcintr_soft(void *);
 
 /* md hook for use without mi wscons */
-int pckbc_machdep_cnattach __P((pckbc_tag_t, pckbc_slot_t));
+int pckbc_machdep_cnattach(pckbc_tag_t, pckbc_slot_t);
+
+/* power management */
+bool pckbc_resume(device_t PMF_FN_PROTO);
 
 #endif /* _DEV_IC_PCKBCVAR_H_ */

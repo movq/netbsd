@@ -1,4 +1,4 @@
-/*	$NetBSD: obio.c,v 1.10 1998/05/02 16:45:31 scottr Exp $	*/
+/*	$NetBSD: obio.c,v 1.24 2008/04/28 20:23:27 martin Exp $	*/
 
 /*
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,28 +29,30 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.24 2008/04/28 20:23:27 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include "locators.h"
+
+#include <machine/autoconf.h>
 
 #include <mac68k/obio/obiovar.h>
 
-static int	obio_match __P((struct device *, struct cfdata *, void *));
-static void	obio_attach __P((struct device *, struct device *, void *));
-static int	obio_print __P((void *, const char *));
-static int	obio_search __P((struct device *, struct cfdata *, void *));
+static int	obio_match(struct device *, struct cfdata *, void *);
+static void	obio_attach(struct device *, struct device *, void *);
+static int	obio_print(void *, const char *);
+static int	obio_search(struct device *, struct cfdata *,
+			    const int *, void *);
 
-struct cfattach obio_ca = {
-	sizeof(struct device), obio_match, obio_attach
-};
+CFATTACH_DECL(obio, sizeof(struct device),
+    obio_match, obio_attach, NULL, NULL);
 
 static int
-obio_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+obio_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	static int obio_matched = 0;
 
@@ -70,44 +65,37 @@ obio_match(parent, cf, aux)
 }
 
 static void
-obio_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+obio_attach(struct device *parent, struct device *self, void *aux)
 {
 	printf("\n");
 
 	/* Search for and attach children. */
-	(void)config_search(obio_search, self, aux);
+	config_search_ia(obio_search, self, "obio", aux);
 }
 
 int
-obio_print(args, name)
-	void *args;
-	const char *name;
+obio_print(void *args, const char *name)
 {
 	struct obio_attach_args *oa = (struct obio_attach_args *)args;
 
 	if (oa->oa_addr != (-1))
-		printf(" addr %x", oa->oa_addr);
+		aprint_normal(" addr %x", oa->oa_addr);
 
 	return (UNCONF);
 }
 
 int
-obio_search(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+obio_search(struct device *parent, struct cfdata *cf,
+	    const int *ldesc, void *aux)
 {
+	struct mainbus_attach_args *mba = (struct mainbus_attach_args *) aux;
 	struct obio_attach_args oa;
 
-	oa.oa_addr = cf->cf_loc[0];
-	oa.oa_drq = cf->cf_loc[1];
-	oa.oa_hsk = cf->cf_loc[2];
-	oa.oa_tag = MAC68K_BUS_SPACE_MEM;
+	oa.oa_addr = cf->cf_loc[OBIOCF_ADDR];
+	oa.oa_tag = mba->mba_bst;
+	oa.oa_dmat = mba->mba_dmat;
 
-	if ((*cf->cf_attach->ca_match)(parent, cf, &oa) > 0)
+	if (config_match(parent, cf, &oa) > 0)
 		config_attach(parent, cf, &oa, obio_print);
 
 	return (0);

@@ -1,18 +1,75 @@
-/*	$NetBSD: hack.zap.c,v 1.4 1997/10/19 16:59:34 christos Exp $	*/
+/*	$NetBSD: hack.zap.c,v 1.7 2004/01/27 20:30:29 jsm Exp $	*/
 
 /*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.zap.c,v 1.4 1997/10/19 16:59:34 christos Exp $");
+__RCSID("$NetBSD: hack.zap.c,v 1.7 2004/01/27 20:30:29 jsm Exp $");
 #endif				/* not lint */
 
 #include "hack.h"
 #include "extern.h"
 
-char           *fl[] = {
+const char           *const fl[] = {
 	"magic missile",
 	"bolt of fire",
 	"sleep ray",
@@ -279,7 +336,7 @@ dozap()
 	return (1);
 }
 
-char           *
+const char           *
 exclam(force)
 	int             force;
 {
@@ -293,9 +350,9 @@ exclam(force)
 
 void
 hit(str, mtmp, force)
-	char           *str;
+	const char           *str;
 	struct monst   *mtmp;
-	char           *force;	/* usually either "." or "!" */
+	const char           *force;	/* usually either "." or "!" */
 {
 	if (!cansee(mtmp->mx, mtmp->my))
 		pline("The %s hits it.", str);
@@ -305,7 +362,7 @@ hit(str, mtmp, force)
 
 void
 miss(str, mtmp)
-	char           *str;
+	const char           *str;
 	struct monst   *mtmp;
 {
 	if (!cansee(mtmp->mx, mtmp->my))
@@ -329,8 +386,8 @@ bhit(ddx, ddy, range, sym, fhitm, fhito, obj)
 	int             ddx, ddy, range;	/* direction and range */
 	char            sym;	/* symbol displayed on path */
 	/* fns called when mon/obj hit */
-	void          (*fhitm) __P((struct monst *, struct obj *));
-	int	      (*fhito) __P((struct obj *, struct obj *));
+	void          (*fhitm)(struct monst *, struct obj *);
+	int	      (*fhito)(struct obj *, struct obj *);
 	struct obj     *obj;	/* 2nd arg to fhitm/fhito */
 {
 	struct monst   *mtmp;
@@ -374,7 +431,7 @@ bhit(ddx, ddy, range, sym, fhitm, fhito, obj)
 }
 
 struct monst   *
-boomhit(dx, dy)
+boomhit(int dx, int dy)
 {
 	int             i, ct;
 	struct monst   *mtmp;
@@ -441,7 +498,7 @@ buzz(type, sx, sy, dx, dy)
 	int             dx, dy;
 {
 	int             abstype = abs(type);
-	char           *fltxt = (type == -1) ? "blaze of fire" : fl[abstype];
+	const char     *fltxt = (type == -1) ? "blaze of fire" : fl[abstype];
 	struct rm      *lev;
 	xchar           range;
 	struct monst   *mon;

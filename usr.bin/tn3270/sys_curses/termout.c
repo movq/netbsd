@@ -1,4 +1,4 @@
-/*	$NetBSD: termout.c,v 1.10 1999/07/26 01:49:09 itohy Exp $	*/
+/*	$NetBSD: termout.c,v 1.15 2007/01/17 00:21:44 hubertf Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,21 +34,18 @@
 #if 0
 static char sccsid[] = "@(#)termout.c	4.3 (Berkeley) 4/26/91";
 #else
-__RCSID("$NetBSD: termout.c,v 1.10 1999/07/26 01:49:09 itohy Exp $");
+__RCSID("$NetBSD: termout.c,v 1.15 2007/01/17 00:21:44 hubertf Exp $");
 #endif
 #endif /* not lint */
 
 #if defined(unix)
 #include <signal.h>
 #include <termios.h>
-#ifdef __STDC__
 #include <unistd.h>
-#include <stdlib.h>
 #ifdef __NetBSD__
 #include <termcap.h>
 #else
-extern char *tgetstr __P((char *, char **));
-#endif
+extern char *tgetstr(char *, char **);
 #endif
 #endif
 #include <stdio.h>
@@ -67,9 +60,6 @@ extern char *tgetstr __P((char *, char **));
 #define nl()	 (_tty.sg_flags |= CRMOD,_pfast = _rawmode,stty(_tty_ch, &_tty))
 #define nonl()	 (_tty.sg_flags &= ~CRMOD, _pfast = TRUE, stty(_tty_ch, &_tty))
 #endif	/* defined(ultrix) */
-#if	defined(__SVR4) || defined(__svr4__)
-char *SE, *SO, *VB;
-#endif
 
 #include "../general/general.h"
 
@@ -104,15 +94,9 @@ static int max_changes_before_poll;	/* how many characters before looking */
 					/* at terminal and net again */
 
 static int needToRing;			/* need to ring terinal bell */
-static char *bellSequence = "\07";	/* bell sequence (may be replaced by
-					 * VB during initialization)
-					 */
+static char bellSequence[1024];		/* bell sequence */
 static WINDOW *bellwin = 0;		/* The window the bell message is in */
 int	bellwinup = 0;			/* Are we up with it or not */
-
-#if	defined(unix)
-static char *myKS, *myKE;
-#endif	/* defined(unix) */
 
 
 static int inHighlightMode = 0;
@@ -124,17 +108,17 @@ static int tcflag = -1;			/* transparent mode command flag */
 static int savefd[2];			/* for storing fds during transcom */
 extern int	tin, tout;		/* file descriptors */
 
-static void aborttc __P((int));
+static void aborttc(int);
 #endif	/* defined(unix) */
 
-static void OurExitString __P((char *, int));
-static void DoARefresh __P((void));
-static void GoAway __P((char *, int));
-static int WhereTermAttrByte __P((int));
-static void SlowScreen __P((void));
-static void FastScreen __P((void));
+static void OurExitString(char *, int);
+static void DoARefresh(void);
+static void GoAway(char *, int);
+static int WhereTermAttrByte(int);
+static void SlowScreen(void);
+static void FastScreen(void);
 #if 0
-static void ScreenOIA __P((OIA *));
+static void ScreenOIA(OIA *);
 #endif
 
 
@@ -650,7 +634,7 @@ int
 #else	/* defined(NOT43) */
 void
 #endif	/* defined(NOT43) */
-	(*TryToSend) __P((void)) = FastScreen;
+	(*TryToSend)(void) = FastScreen;
 
 #if 0
 /*ARGSUSED*/
@@ -671,14 +655,11 @@ InitTerminal()
     struct termios term;
     speed_t speed;
 #endif
+    char termbuf[1024];
+    char *bsp;
     
     InitMapping();		/* Go do mapping file (MAP3270) first */
     if (!screenInitd) { 	/* not initialized */
-#if	defined(unix)
-	char KSEbuffer[2050];
-	char *lotsofspace = KSEbuffer;
-#endif	/* defined(unix) */
-
 	if (initscr() == NULL) {	/* Initialize curses to get line size */
 	    ExitString("InitTerminal:  Error initializing curses", 1);
 	    /*NOTREACHED*/
@@ -688,7 +669,7 @@ InitTerminal()
 	ClearArray(Terminal);
 	terminalCursorAddress = SetBufferAddress(0,0);
 #if defined(unix)
-	signal(SIGHUP, (void (*)__P((int)))abort);
+	signal(SIGHUP, (void (*)(int))abort);
 #endif
 
 	TryToSend = FastScreen;
@@ -707,32 +688,19 @@ InitTerminal()
 	}
 #endif	/* defined(unix) */
 	setcommandmode();
-	/*
-	 * By now, initscr() (in curses) has been called (from telnet.c),
-	 * and the screen has been initialized.
-	 */
 #if defined(unix)
 	nonl();
-			/* the problem is that curses catches SIGTSTP to
-			 * be nice, but it messes us up.
-			 */
-	signal(SIGTSTP, SIG_DFL);
-	if ((myKS = tgetstr("ks", &lotsofspace)) != 0) {
-	    myKS = strsave(myKS);
-	    StringToTerminal(myKS);
-	}
-	if ((myKE = tgetstr("ke", &lotsofspace)) != 0) {
-	    myKE = strsave(myKE);
-	}
-	if (tgetstr("md", &lotsofspace) && tgetstr("me", &lotsofspace)) {
-	   SO = strsave(tgetstr("md", &lotsofspace));
-	   SE = strsave(tgetstr("me", &lotsofspace));
-	}
 #endif
 	DoARefresh();
 	setconnmode(0);
-	if (VB && *VB) {
-	    bellSequence = VB;		/* use visual bell */
+	if (tgetent(termbuf, getenv("TERM")) == 1) {
+	    bsp = bellSequence;
+	    if ((bsp = tgetstr("vb", &bsp)) == NULL) {	/* use visual bell */
+	        bsp = bellSequence;
+		if ((bsp = tgetstr("bl", &bsp)) == NULL) {
+		    strcpy (bellSequence, "\07");
+		}
+	    }
 	}
 	screenInitd = 1;
 	screenStopped = 0;		/* Not stopped */
@@ -751,14 +719,9 @@ int doNewLine;
 	standend();
 	inHighlightMode = 0;
 	DoARefresh();
-	setcommandmode();
 	endwin();
+	setcommandmode();
 	setconnmode(0);
-#if	defined(unix)
-	if (myKE) {
-	    StringToTerminal(myKE);
-	}
-#endif	/* defined(unix) */
 	if (doNewLine) {
 	    StringToTerminal("\r\n");
 	}
@@ -784,11 +747,6 @@ void
 ConnectScreen()
 {
     if (screenInitd) {
-#if	defined(unix)
-	if (myKS) {
-	    StringToTerminal(myKS);
-	}
-#endif	/* defined(unix) */
 	RefreshScreen();
 	(*TryToSend)();
 	screenStopped = 0;

@@ -1,4 +1,4 @@
-/* $NetBSD: proc.h,v 1.5 1999/08/10 23:35:47 thorpej Exp $ */
+/* $NetBSD: proc.h,v 1.17 2007/02/09 21:55:01 ad Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -27,14 +27,49 @@
  * rights to redistribute these changes.
  */
 
-/*
- * Machine-dependent part of the proc struct for the Alpha.
- */
+#ifndef _ALPHA_PROC_H
+#define _ALPHA_PROC_H
 
-struct mdproc {
+#include <machine/frame.h>
+
+/*
+ * Machine-dependent part of the lwp struct for the Alpha.
+ */
+struct mdlwp {
 	u_long	md_flags;
 	struct	trapframe *md_tf;	/* trap/syscall registers */
 	struct pcb *md_pcbpaddr;	/* phys addr of the pcb */
+	volatile int md_astpending;	/* AST pending for this process */
+};
+/*
+ * md_flags usage
+ * --------------
+ * MDP_FPUSED
+ * 	A largely unused bit indicating the presence of FPU history.
+ * 	Cleared on exec. Set but not used by the fpu context switcher
+ * 	itself.
+ * 
+ * MDP_FP_C
+ * 	The architected FP Control word. It should forever begin at bit 1,
+ * 	as the bits are AARM specified and this way it doesn't need to be
+ * 	shifted.
+ * 
+ * 	Until C99 there was never an IEEE 754 API, making most of the
+ * 	standard useless.  Because of overlapping AARM, OSF/1, NetBSD, and
+ * 	C99 API's, the use of the MDP_FP_C bits is defined variously in
+ * 	ieeefp.h and fpu.h.
+ */
+#define	MDP_FPUSED	0x00000001	/* Process used the FPU */
+#define	MDP_FP_C	0x007ffffe	/* Extended FP_C Quadword bits */
+
+/*
+ * Machine-dependent part of the proc struct for the Alpha.
+ */
+struct lwp;
+struct mdproc {
+					/* this process's syscall vector */
+	void	(*md_syscall)(struct lwp *, u_int64_t, struct trapframe *);
 };
 
-#define	MDP_FPUSED	0x0001		/* Process used the FPU */
+
+#endif /* !_ALPHA_PROC_H_ */

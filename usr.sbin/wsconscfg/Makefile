@@ -1,7 +1,7 @@
-#	$NetBSD: Makefile,v 1.1 1999/01/13 17:15:44 drochner Exp $
+#	$NetBSD: Makefile,v 1.3 2006/06/24 19:57:17 christos Exp $
 
+WARNS=4
 PROG=	wsconscfg
 MAN=	wsconscfg.8
-SRCS=	wsconscfg.c
 
 .include <bsd.prog.mk>

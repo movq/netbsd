@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_mips.c,v 1.12 1999/07/02 15:28:50 simonb Exp $	*/
+/* $NetBSD: kvm_mips.c,v 1.18 2008/01/15 13:57:42 ad Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: kvm_mips.c,v 1.12 1999/07/02 15:28:50 simonb Exp $");
+__RCSID("$NetBSD: kvm_mips.c,v 1.18 2008/01/15 13:57:42 ad Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -52,8 +52,7 @@ __RCSID("$NetBSD: kvm_mips.c,v 1.12 1999/07/02 15:28:50 simonb Exp $");
 #include <nlist.h>
 #include <kvm.h>
 
-#include <vm/vm.h>
-#include <vm/vm_param.h>
+#include <uvm/uvm_extern.h>
 
 #include <limits.h>
 #include <db.h>
@@ -61,6 +60,7 @@ __RCSID("$NetBSD: kvm_mips.c,v 1.12 1999/07/02 15:28:50 simonb Exp $");
 #include "kvm_private.h"
 
 #include <mips/cpuregs.h>
+#include <mips/vmparam.h>
 
 void
 _kvm_freevtop(kd)
@@ -146,8 +146,8 @@ _kvm_kvatop(kd, va, pa)
 	 */
 	pte_pa = cpu_kh->sysmappa +
 	    (((va - MIPS_KSEG2_START) >> PGSHIFT) * sizeof(u_int));
-	if (pread(kd->pmfd, &pte, sizeof(pte), _kvm_pa2off(kd, pte_pa)) !=
-	    sizeof(pte)) {
+	if (_kvm_pread(kd, kd->pmfd, &pte, sizeof(pte),
+	    _kvm_pa2off(kd, pte_pa)) != sizeof(pte)) {
 		_kvm_syserr(kd, 0, "could not read PTE");
 		goto lose;
 	}
@@ -169,7 +169,7 @@ _kvm_kvatop(kd, va, pa)
 }
 
 /*
- * Translate a physical address to a file-offset in the crash-dump.
+ * Translate a physical address to a file-offset in the crash dump.
  */
 off_t
 _kvm_pa2off(kd, pa)

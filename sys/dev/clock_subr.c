@@ -1,9 +1,44 @@
-/*	$NetBSD: clock_subr.c,v 1.4 1997/10/14 17:25:57 gwr Exp $	*/
+/*	$NetBSD: clock_subr.c,v 1.12 2005/12/11 12:20:53 christos Exp $	*/
+
+/*
+ * Copyright (c) 1982, 1990, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: clock.c 1.18 91/01/21$
+ *
+ *	@(#)clock.c	8.2 (Berkeley) 1/12/94
+ */
 
 /*
  * Copyright (c) 1988 University of Utah.
- * Copyright (c) 1982, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -48,15 +83,15 @@
  * Derived from arch/hp300/hp300/clock.c
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: clock_subr.c,v 1.12 2005/12/11 12:20:53 christos Exp $");
+
+#include <sys/param.h>
 #include <sys/systm.h>
 
 #include <dev/clock_subr.h>
 
-/* Traditional POSIX base year */
-#define	POSIX_BASE_YEAR	1970
-
-static inline int leapyear __P((int year));
+static inline int leapyear(int year);
 #define FEBRUARY	2
 #define	days_in_year(a) 	(leapyear(a) ? 366 : 365)
 #define	days_in_month(a) 	(month_days[(a) - 1])
@@ -94,7 +129,7 @@ time_t
 clock_ymdhms_to_secs(dt)
 	struct clock_ymdhms *dt;
 {
-	time_t secs;
+	uint64_t secs;
 	int i, year, days;
 
 	year = dt->dt_year;
@@ -103,6 +138,7 @@ clock_ymdhms_to_secs(dt)
 	 * Compute days since start of time
 	 * First from years, then from months.
 	 */
+	if (year < POSIX_BASE_YEAR) return -1;
 	days = 0;
 	for (i = POSIX_BASE_YEAR; i < year; i++)
 		days += days_in_year(i);
@@ -115,11 +151,12 @@ clock_ymdhms_to_secs(dt)
 	days += (dt->dt_day - 1);
 
 	/* Add hours, minutes, seconds. */
-	secs = ((days
+	secs = (((uint64_t)days
 	    * 24 + dt->dt_hour)
 	    * 60 + dt->dt_min)
 	    * 60 + dt->dt_sec;
 
+	if ((time_t)secs != secs) return -1;
 	return (secs);
 }
 
@@ -137,7 +174,7 @@ clock_secs_to_ymdhms(secs, dt)
 	 * so the copy can be modified (and thread-safe).
 	 * See the definition of days_in_month() above.
 	 */
-	bcopy(month_days, mthdays, sizeof(mthdays));
+	memcpy(mthdays, month_days, sizeof(mthdays));
 #define month_days mthdays
 
 	days = secs / SECDAY;

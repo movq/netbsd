@@ -1,6 +1,44 @@
-/*	$NetBSD: ffs_alloc.c,v 1.33 2000/03/30 12:41:12 augustss Exp $	*/
+/*	$NetBSD: ffs_alloc.c,v 1.113.4.1.2.1 2009/05/07 00:24:19 snj Exp $	*/
+
+/*-
+ * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Wasabi Systems, Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*
+ * Copyright (c) 2002 Networks Associates Technology, Inc.
+ * All rights reserved.
+ *
+ * This software was developed for the FreeBSD Project by Marshall
+ * Kirk McKusick and Network Associates Laboratories, the Security
+ * Research Division of Network Associates, Inc. under DARPA/SPAWAR
+ * contract N66001-01-C-8035 ("CBOSS"), as part of the DARPA CHATS
+ * research program
+ *
  * Copyright (c) 1982, 1986, 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -12,11 +50,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,7 +69,10 @@
  *	@(#)ffs_alloc.c	8.19 (Berkeley) 7/13/95
  */
 
-#if defined(_KERNEL) && !defined(_LKM)
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ffs_alloc.c,v 1.113.4.1.2.1 2009/05/07 00:24:19 snj Exp $");
+
+#if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
 #include "opt_quota.h"
 #endif
@@ -43,49 +80,55 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
-#include <sys/proc.h>
-#include <sys/vnode.h>
-#include <sys/mount.h>
+#include <sys/fstrans.h>
+#include <sys/kauth.h>
 #include <sys/kernel.h>
+#include <sys/mount.h>
+#include <sys/proc.h>
 #include <sys/syslog.h>
+#include <sys/vnode.h>
+#include <sys/wapbl.h>
 
-#include <vm/vm.h>
-
-#include <uvm/uvm_extern.h>
-
+#include <miscfs/specfs/specdev.h>
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/ufsmount.h>
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufs_extern.h>
 #include <ufs/ufs/ufs_bswap.h>
+#include <ufs/ufs/ufs_wapbl.h>
 
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
 
-static ufs_daddr_t ffs_alloccg __P((struct inode *, int, ufs_daddr_t, int));
-static ufs_daddr_t ffs_alloccgblk __P((struct inode *, struct buf *,
-					ufs_daddr_t));
-static ufs_daddr_t ffs_clusteralloc __P((struct inode *, int, ufs_daddr_t, int));
-static ino_t ffs_dirpref __P((struct fs *));
-static ufs_daddr_t ffs_fragextend __P((struct inode *, int, long, int, int));
-static void ffs_fserr __P((struct fs *, u_int, char *));
-static u_long ffs_hashalloc
-		__P((struct inode *, int, long, int,
-		     ufs_daddr_t (*)(struct inode *, int, ufs_daddr_t, int)));
-static ufs_daddr_t ffs_nodealloccg __P((struct inode *, int, ufs_daddr_t, int));
-static ufs_daddr_t ffs_mapsearch __P((struct fs *, struct cg *,
-				      ufs_daddr_t, int));
+static daddr_t ffs_alloccg(struct inode *, int, daddr_t, int, int);
+static daddr_t ffs_alloccgblk(struct inode *, struct buf *, daddr_t, int);
+#ifdef XXXUBC
+static daddr_t ffs_clusteralloc(struct inode *, int, daddr_t, int);
+#endif
+static ino_t ffs_dirpref(struct inode *);
+static daddr_t ffs_fragextend(struct inode *, int, daddr_t, int, int);
+static void ffs_fserr(struct fs *, u_int, const char *);
+static daddr_t ffs_hashalloc(struct inode *, int, daddr_t, int, int,
+    daddr_t (*)(struct inode *, int, daddr_t, int, int));
+static daddr_t ffs_nodealloccg(struct inode *, int, daddr_t, int, int);
+static int32_t ffs_mapsearch(struct fs *, struct cg *,
+				      daddr_t, int);
 #if defined(DIAGNOSTIC) || defined(DEBUG)
-static int ffs_checkblk __P((struct inode *, ufs_daddr_t, long size));
+#ifdef XXXUBC
+static int ffs_checkblk(struct inode *, daddr_t, long size);
+#endif
 #endif
 
+/* if 1, changes in optimalization strategy are logged */
+int ffs_log_changeopt = 0;
+
 /* in ffs_tables.c */
-extern int inside[], around[];
-extern u_char *fragtbl[];
+extern const int inside[], around[];
+extern const u_char * const fragtbl[];
 
 /*
  * Allocate a block in the file system.
- * 
+ *
  * The size of the requested block is given, which must be some
  * multiple of fs_fsize and <= fs_bsize.
  * A preference may be optionally specified. If a preference is given
@@ -95,30 +138,53 @@ extern u_char *fragtbl[];
  *   3) allocate a block in the same cylinder group.
  *   4) quadradically rehash into other cylinder groups, until an
  *      available block is located.
- * If no block preference is given the following heirarchy is used
+ * If no block preference is given the following hierarchy is used
  * to allocate a block:
  *   1) allocate a block in the cylinder group that contains the
  *      inode for the file.
  *   2) quadradically rehash into other cylinder groups, until an
  *      available block is located.
+ *
+ * => called with um_lock held
+ * => releases um_lock before returning
  */
 int
-ffs_alloc(ip, lbn, bpref, size, cred, bnp)
-	struct inode *ip;
-	ufs_daddr_t lbn, bpref;
-	int size;
-	struct ucred *cred;
-	ufs_daddr_t *bnp;
+ffs_alloc(struct inode *ip, daddr_t lbn, daddr_t bpref, int size, int flags,
+    kauth_cred_t cred, daddr_t *bnp)
 {
+	struct ufsmount *ump;
 	struct fs *fs;
-	ufs_daddr_t bno;
+	daddr_t bno;
 	int cg;
 #ifdef QUOTA
 	int error;
 #endif
-	
-	*bnp = 0;
+
 	fs = ip->i_fs;
+	ump = ip->i_ump;
+
+	KASSERT(mutex_owned(&ump->um_lock));
+
+#ifdef UVM_PAGE_TRKOWN
+	if (ITOV(ip)->v_type == VREG &&
+	    lblktosize(fs, (voff_t)lbn) < round_page(ITOV(ip)->v_size)) {
+		struct vm_page *pg;
+		struct uvm_object *uobj = &ITOV(ip)->v_uobj;
+		voff_t off = trunc_page(lblktosize(fs, lbn));
+		voff_t endoff = round_page(lblktosize(fs, lbn) + size);
+
+		mutex_enter(&uobj->vmobjlock);
+		while (off < endoff) {
+			pg = uvm_pagelookup(uobj, off);
+			KASSERT(pg != NULL);
+			KASSERT(pg->owner == curproc->p_pid);
+			off += PAGE_SIZE;
+		}
+		mutex_exit(&uobj->vmobjlock);
+	}
+#endif
+
+	*bnp = 0;
 #ifdef DIAGNOSTIC
 	if ((u_int)size > fs->fs_bsize || fragoff(fs, size) != 0) {
 		printf("dev = 0x%x, bsize = %d, size = %d, fs = %s\n",
@@ -126,26 +192,29 @@ ffs_alloc(ip, lbn, bpref, size, cred, bnp)
 		panic("ffs_alloc: bad size");
 	}
 	if (cred == NOCRED)
-		panic("ffs_alloc: missing credential\n");
+		panic("ffs_alloc: missing credential");
 #endif /* DIAGNOSTIC */
 	if (size == fs->fs_bsize && fs->fs_cstotal.cs_nbfree == 0)
 		goto nospace;
-	if (cred->cr_uid != 0 && freespace(fs, fs->fs_minfree) <= 0)
+	if (freespace(fs, fs->fs_minfree) <= 0 &&
+	    kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL) != 0)
 		goto nospace;
 #ifdef QUOTA
-	if ((error = chkdq(ip, (long)btodb(size), cred, 0)) != 0)
+	mutex_exit(&ump->um_lock);
+	if ((error = chkdq(ip, btodb(size), cred, 0)) != 0)
 		return (error);
+	mutex_enter(&ump->um_lock);
 #endif
+
 	if (bpref >= fs->fs_size)
 		bpref = 0;
 	if (bpref == 0)
 		cg = ino_to_cg(fs, ip->i_number);
 	else
 		cg = dtog(fs, bpref);
-	bno = (ufs_daddr_t)ffs_hashalloc(ip, cg, (long)bpref, size,
-	    			     ffs_alloccg);
+	bno = ffs_hashalloc(ip, cg, bpref, size, flags, ffs_alloccg);
 	if (bno > 0) {
-		ip->i_ffs_blocks += btodb(size);
+		DIP_ADD(ip, blocks, btodb(size));
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
 		*bnp = bno;
 		return (0);
@@ -154,10 +223,25 @@ ffs_alloc(ip, lbn, bpref, size, cred, bnp)
 	/*
 	 * Restore user's disk quota because allocation failed.
 	 */
-	(void) chkdq(ip, (long)-btodb(size), cred, FORCE);
+	(void) chkdq(ip, -btodb(size), cred, FORCE);
 #endif
+	if (flags & B_CONTIG) {
+		/*
+		 * XXX ump->um_lock handling is "suspect" at best.
+		 * For the case where ffs_hashalloc() fails early
+		 * in the B_CONTIG case we reach here with um_lock
+		 * already unlocked, so we can't release it again
+		 * like in the normal error path.  See kern/39206.
+		 *
+		 *
+		 * Fail silently - it's up to our caller to report
+		 * errors.
+		 */
+		return (ENOSPC);
+	}
 nospace:
-	ffs_fserr(fs, cred->cr_uid, "file system full");
+	mutex_exit(&ump->um_lock);
+	ffs_fserr(fs, kauth_cred_geteuid(cred), "file system full");
 	uprintf("\n%s: write failed, file system is full\n", fs->fs_fsmnt);
 	return (ENOSPC);
 }
@@ -169,23 +253,44 @@ nospace:
  * and new size is also specified. The allocator attempts to extend
  * the original block. Failing that, the regular block allocator is
  * invoked to get an appropriate block.
+ *
+ * => called with um_lock held
+ * => return with um_lock released
  */
 int
-ffs_realloccg(ip, lbprev, bpref, osize, nsize, cred, bpp)
-	struct inode *ip;
-	ufs_daddr_t lbprev;
-	ufs_daddr_t bpref;
-	int osize, nsize;
-	struct ucred *cred;
-	struct buf **bpp;
+ffs_realloccg(struct inode *ip, daddr_t lbprev, daddr_t bpref, int osize,
+    int nsize, kauth_cred_t cred, struct buf **bpp, daddr_t *blknop)
 {
+	struct ufsmount *ump;
 	struct fs *fs;
 	struct buf *bp;
 	int cg, request, error;
-	ufs_daddr_t bprev, bno;
+	daddr_t bprev, bno;
 
-	*bpp = 0;
 	fs = ip->i_fs;
+	ump = ip->i_ump;
+
+	KASSERT(mutex_owned(&ump->um_lock));
+
+#ifdef UVM_PAGE_TRKOWN
+	if (ITOV(ip)->v_type == VREG) {
+		struct vm_page *pg;
+		struct uvm_object *uobj = &ITOV(ip)->v_uobj;
+		voff_t off = trunc_page(lblktosize(fs, lbprev));
+		voff_t endoff = round_page(lblktosize(fs, lbprev) + osize);
+
+		mutex_enter(&uobj->vmobjlock);
+		while (off < endoff) {
+			pg = uvm_pagelookup(uobj, off);
+			KASSERT(pg != NULL);
+			KASSERT(pg->owner == curproc->p_pid);
+			KASSERT((pg->flags & PG_CLEAN) == 0);
+			off += PAGE_SIZE;
+		}
+		mutex_exit(&uobj->vmobjlock);
+	}
+#endif
+
 #ifdef DIAGNOSTIC
 	if ((u_int)osize > fs->fs_bsize || fragoff(fs, osize) != 0 ||
 	    (u_int)nsize > fs->fs_bsize || fragoff(fs, nsize) != 0) {
@@ -195,25 +300,38 @@ ffs_realloccg(ip, lbprev, bpref, osize, nsize, cred, bpp)
 		panic("ffs_realloccg: bad size");
 	}
 	if (cred == NOCRED)
-		panic("ffs_realloccg: missing credential\n");
+		panic("ffs_realloccg: missing credential");
 #endif /* DIAGNOSTIC */
-	if (cred->cr_uid != 0 && freespace(fs, fs->fs_minfree) <= 0)
+	if (freespace(fs, fs->fs_minfree) <= 0 &&
+	    kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL) != 0) {
+		mutex_exit(&ump->um_lock);
 		goto nospace;
-	if ((bprev = ufs_rw32(ip->i_ffs_db[lbprev], UFS_FSNEEDSWAP(fs))) == 0) {
-		printf("dev = 0x%x, bsize = %d, bprev = %d, fs = %s\n",
+	}
+	if (fs->fs_magic == FS_UFS2_MAGIC)
+		bprev = ufs_rw64(ip->i_ffs2_db[lbprev], UFS_FSNEEDSWAP(fs));
+	else
+		bprev = ufs_rw32(ip->i_ffs1_db[lbprev], UFS_FSNEEDSWAP(fs));
+
+	if (bprev == 0) {
+		printf("dev = 0x%x, bsize = %d, bprev = %" PRId64 ", fs = %s\n",
 		    ip->i_dev, fs->fs_bsize, bprev, fs->fs_fsmnt);
 		panic("ffs_realloccg: bad bprev");
 	}
+	mutex_exit(&ump->um_lock);
+
 	/*
 	 * Allocate the extra space in the buffer.
 	 */
-	if ((error = bread(ITOV(ip), lbprev, osize, NOCRED, &bp)) != 0) {
-		brelse(bp);
+	if (bpp != NULL &&
+	    (error = bread(ITOV(ip), lbprev, osize, NOCRED, 0, &bp)) != 0) {
+		brelse(bp, 0);
 		return (error);
 	}
 #ifdef QUOTA
-	if ((error = chkdq(ip, (long)btodb(nsize - osize), cred, 0)) != 0) {
-		brelse(bp);
+	if ((error = chkdq(ip, btodb(nsize - osize), cred, 0)) != 0) {
+		if (bpp != NULL) {
+			brelse(bp, 0);
+		}
 		return (error);
 	}
 #endif
@@ -221,15 +339,25 @@ ffs_realloccg(ip, lbprev, bpref, osize, nsize, cred, bpp)
 	 * Check for extension in the existing location.
 	 */
 	cg = dtog(fs, bprev);
-	if ((bno = ffs_fragextend(ip, cg, (long)bprev, osize, nsize)) != 0) {
-		if (bp->b_blkno != fsbtodb(fs, bno))
-			panic("bad blockno");
-		ip->i_ffs_blocks += btodb(nsize - osize);
+	mutex_enter(&ump->um_lock);
+	if ((bno = ffs_fragextend(ip, cg, bprev, osize, nsize)) != 0) {
+		DIP_ADD(ip, blocks, btodb(nsize - osize));
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
-		allocbuf(bp, nsize);
-		bp->b_flags |= B_DONE;
-		memset((char *)bp->b_data + osize, 0, (u_int)nsize - osize);
-		*bpp = bp;
+
+		if (bpp != NULL) {
+			if (bp->b_blkno != fsbtodb(fs, bno))
+				panic("bad blockno");
+			allocbuf(bp, nsize, 1);
+			memset((char *)bp->b_data + osize, 0, nsize - osize);
+			mutex_enter(bp->b_objlock);
+			KASSERT(!cv_has_waiters(&bp->b_done));
+			bp->b_oflags |= BO_DONE;
+			mutex_exit(bp->b_objlock);
+			*bpp = bp;
+		}
+		if (blknop != NULL) {
+			*blknop = bno;
+		}
 		return (0);
 	}
 	/*
@@ -240,8 +368,8 @@ ffs_realloccg(ip, lbprev, bpref, osize, nsize, cred, bpp)
 	switch ((int)fs->fs_optim) {
 	case FS_OPTSPACE:
 		/*
-		 * Allocate an exact sized fragment. Although this makes 
-		 * best use of space, we will waste time relocating it if 
+		 * Allocate an exact sized fragment. Although this makes
+		 * best use of space, we will waste time relocating it if
 		 * the file continues to grow. If the fragmentation is
 		 * less than half of the minimum free reserve, we choose
 		 * to begin optimizing for time.
@@ -251,10 +379,13 @@ ffs_realloccg(ip, lbprev, bpref, osize, nsize, cred, bpp)
 		    fs->fs_cstotal.cs_nffree >
 		    fs->fs_dsize * fs->fs_minfree / (2 * 100))
 			break;
-#ifdef DEBUG
-		log(LOG_NOTICE, "%s: optimization changed from SPACE to TIME\n",
-			fs->fs_fsmnt);
-#endif
+
+		if (ffs_log_changeopt) {
+			log(LOG_NOTICE,
+				"%s: optimization changed from SPACE to TIME\n",
+				fs->fs_fsmnt);
+		}
+
 		fs->fs_optim = FS_OPTTIME;
 		break;
 	case FS_OPTTIME:
@@ -272,10 +403,13 @@ ffs_realloccg(ip, lbprev, bpref, osize, nsize, cred, bpp)
 		if (fs->fs_cstotal.cs_nffree <
 		    fs->fs_dsize * (fs->fs_minfree - 2) / 100)
 			break;
-#ifdef DEBUG
-		log(LOG_NOTICE, "%s: optimization changed from TIME to SPACE\n",
-			fs->fs_fsmnt);
-#endif
+
+		if (ffs_log_changeopt) {
+			log(LOG_NOTICE,
+				"%s: optimization changed from TIME to SPACE\n",
+				fs->fs_fsmnt);
+		}
+
 		fs->fs_optim = FS_OPTSPACE;
 		break;
 	default:
@@ -284,67 +418,102 @@ ffs_realloccg(ip, lbprev, bpref, osize, nsize, cred, bpp)
 		panic("ffs_realloccg: bad optim");
 		/* NOTREACHED */
 	}
-	bno = (ufs_daddr_t)ffs_hashalloc(ip, cg, (long)bpref, request,
-	    			     ffs_alloccg);
+	bno = ffs_hashalloc(ip, cg, bpref, request, 0, ffs_alloccg);
 	if (bno > 0) {
-		bp->b_blkno = fsbtodb(fs, bno);
-		(void) uvm_vnp_uncache(ITOV(ip));
-		if (!DOINGSOFTDEP(ITOV(ip)))
-			ffs_blkfree(ip, bprev, (long)osize);
-		if (nsize < request)
-			ffs_blkfree(ip, bno + numfrags(fs, nsize),
-			    (long)(request - nsize));
-		ip->i_ffs_blocks += btodb(nsize - osize);
+		if (!DOINGSOFTDEP(ITOV(ip))) {
+			if ((ip->i_ump->um_mountp->mnt_wapbl) &&
+			    (ITOV(ip)->v_type != VREG)) {
+				UFS_WAPBL_REGISTER_DEALLOCATION(
+				    ip->i_ump->um_mountp, fsbtodb(fs, bprev),
+				    osize);
+			} else
+				ffs_blkfree(fs, ip->i_devvp, bprev, (long)osize,
+				    ip->i_number);
+		}
+		if (nsize < request) {
+			if ((ip->i_ump->um_mountp->mnt_wapbl) &&
+			    (ITOV(ip)->v_type != VREG)) {
+				UFS_WAPBL_REGISTER_DEALLOCATION(
+				    ip->i_ump->um_mountp,
+				    fsbtodb(fs, (bno + numfrags(fs, nsize))),
+				    request - nsize);
+			} else
+				ffs_blkfree(fs, ip->i_devvp,
+				    bno + numfrags(fs, nsize),
+				    (long)(request - nsize), ip->i_number);
+		}
+		DIP_ADD(ip, blocks, btodb(nsize - osize));
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
-		allocbuf(bp, nsize);
-		bp->b_flags |= B_DONE;
-		memset((char *)bp->b_data + osize, 0, (u_int)nsize - osize);
-		*bpp = bp;
+		if (bpp != NULL) {
+			bp->b_blkno = fsbtodb(fs, bno);
+			allocbuf(bp, nsize, 1);
+			memset((char *)bp->b_data + osize, 0, (u_int)nsize - osize);
+			mutex_enter(bp->b_objlock);
+			KASSERT(!cv_has_waiters(&bp->b_done));
+			bp->b_oflags |= BO_DONE;
+			mutex_exit(bp->b_objlock);
+			*bpp = bp;
+		}
+		if (blknop != NULL) {
+			*blknop = bno;
+		}
 		return (0);
 	}
+	mutex_exit(&ump->um_lock);
+
 #ifdef QUOTA
 	/*
 	 * Restore user's disk quota because allocation failed.
 	 */
-	(void) chkdq(ip, (long)-btodb(nsize - osize), cred, FORCE);
+	(void) chkdq(ip, -btodb(nsize - osize), cred, FORCE);
 #endif
-	brelse(bp);
+	if (bpp != NULL) {
+		brelse(bp, 0);
+	}
+
 nospace:
 	/*
 	 * no space available
 	 */
-	ffs_fserr(fs, cred->cr_uid, "file system full");
+	ffs_fserr(fs, kauth_cred_geteuid(cred), "file system full");
 	uprintf("\n%s: write failed, file system is full\n", fs->fs_fsmnt);
 	return (ENOSPC);
 }
 
+#if 0
 /*
  * Reallocate a sequence of blocks into a contiguous sequence of blocks.
  *
  * The vnode and an array of buffer pointers for a range of sequential
  * logical blocks to be made contiguous is given. The allocator attempts
- * to find a range of sequential blocks starting as close as possible to
- * an fs_rotdelay offset from the end of the allocation for the logical
- * block immediately preceeding the current range. If successful, the
- * physical block numbers in the buffer pointers and in the inode are
- * changed to reflect the new allocation. If unsuccessful, the allocation
- * is left unchanged. The success in doing the reallocation is returned.
- * Note that the error return is not reflected back to the user. Rather
- * the previous block allocation will be used.
+ * to find a range of sequential blocks starting as close as possible
+ * from the end of the allocation for the logical block immediately
+ * preceding the current range. If successful, the physical block numbers
+ * in the buffer pointers and in the inode are changed to reflect the new
+ * allocation. If unsuccessful, the allocation is left unchanged. The
+ * success in doing the reallocation is returned. Note that the error
+ * return is not reflected back to the user. Rather the previous block
+ * allocation will be used.
+
  */
+#ifdef XXXUBC
 #ifdef DEBUG
 #include <sys/sysctl.h>
 int prtrealloc = 0;
 struct ctldebug debug15 = { "prtrealloc", &prtrealloc };
 #endif
+#endif
+
+/*
+ * NOTE: when re-enabling this, it must be updated for UFS2 and WAPBL.
+ */
 
 int doasyncfree = 1;
-extern int doreallocblks;
 
 int
-ffs_reallocblks(v)
-	void *v;
+ffs_reallocblks(void *v)
 {
+#ifdef XXXUBC
 	struct vop_reallocblks_args /* {
 		struct vnode *a_vp;
 		struct cluster_save *a_buflist;
@@ -353,15 +522,22 @@ ffs_reallocblks(v)
 	struct inode *ip;
 	struct vnode *vp;
 	struct buf *sbp, *ebp;
-	ufs_daddr_t *bap, *sbap, *ebap = NULL;
+	int32_t *bap, *ebap = NULL, *sbap;	/* XXX ondisk32 */
 	struct cluster_save *buflist;
-	ufs_daddr_t start_lbn, end_lbn, soff, newblk, blkno;
+	daddr_t start_lbn, end_lbn, soff, newblk, blkno;
 	struct indir start_ap[NIADDR + 1], end_ap[NIADDR + 1], *idp;
 	int i, len, start_lvl, end_lvl, pref, ssize;
+	struct ufsmount *ump;
+#endif /* XXXUBC */
 
+	/* XXXUBC don't reallocblks for now */
+	return ENOSPC;
+
+#ifdef XXXUBC
 	vp = ap->a_vp;
 	ip = VTOI(vp);
 	fs = ip->i_fs;
+	ump = ip->i_ump;
 	if (fs->fs_contigsumsize <= 0)
 		return (ENOSPC);
 	buflist = ap->a_buflist;
@@ -397,20 +573,22 @@ ffs_reallocblks(v)
 	 * Get the starting offset and block map for the first block.
 	 */
 	if (start_lvl == 0) {
-		sbap = &ip->i_ffs_db[0];
+		sbap = &ip->i_ffs1_db[0];
 		soff = start_lbn;
 	} else {
 		idp = &start_ap[start_lvl - 1];
-		if (bread(vp, idp->in_lbn, (int)fs->fs_bsize, NOCRED, &sbp)) {
-			brelse(sbp);
+		if (bread(vp, idp->in_lbn, (int)fs->fs_bsize,
+		    NOCRED, B_MODIFY, &sbp)) {
+			brelse(sbp, 0);
 			return (ENOSPC);
 		}
-		sbap = (ufs_daddr_t *)sbp->b_data;
+		sbap = (int32_t *)sbp->b_data;
 		soff = idp->in_off;
 	}
 	/*
 	 * Find the preferred location for the cluster.
 	 */
+	mutex_enter(&ump->um_lock);
 	pref = ffs_blkpref(ip, start_lbn, soff, sbap);
 	/*
 	 * If the block range spans two block maps, get the second map.
@@ -423,16 +601,19 @@ ffs_reallocblks(v)
 			panic("ffs_reallocblk: start == end");
 #endif
 		ssize = len - (idp->in_off + 1);
-		if (bread(vp, idp->in_lbn, (int)fs->fs_bsize, NOCRED, &ebp))
+		if (bread(vp, idp->in_lbn, (int)fs->fs_bsize,
+		    NOCRED, B_MODIFY, &ebp))
 			goto fail;
-		ebap = (ufs_daddr_t *)ebp->b_data;
+		ebap = (int32_t *)ebp->b_data;	/* XXX ondisk32 */
 	}
 	/*
 	 * Search the block map looking for an allocation of the desired size.
 	 */
-	if ((newblk = (ufs_daddr_t)ffs_hashalloc(ip, dtog(fs, pref), (long)pref,
-	    len, ffs_clusteralloc)) == 0)
+	if ((newblk = (daddr_t)ffs_hashalloc(ip, dtog(fs, pref), (long)pref,
+	    len, flags, ffs_clusteralloc)) == 0) {
+		mutex_exit(&ump->um_lock);
 		goto fail;
+	}
 	/*
 	 * We have found a new contiguous block.
 	 *
@@ -447,12 +628,13 @@ ffs_reallocblks(v)
 #endif
 	blkno = newblk;
 	for (bap = &sbap[soff], i = 0; i < len; i++, blkno += fs->fs_frag) {
-		ufs_daddr_t ba;
+		daddr_t ba;
 
 		if (i == ssize) {
 			bap = ebap;
 			soff = -i;
 		}
+		/* XXX ondisk32 */
 		ba = ufs_rw32(*bap, UFS_FSNEEDSWAP(fs));
 #ifdef DIAGNOSTIC
 		if (!ffs_checkblk(ip,
@@ -466,7 +648,7 @@ ffs_reallocblks(v)
 			printf(" %d,", ba);
 #endif
  		if (DOINGSOFTDEP(vp)) {
- 			if (sbap == &ip->i_ffs_db[0] && i < ssize)
+ 			if (sbap == &ip->i_ffs1_db[0] && i < ssize)
  				softdep_setup_allocdirect(ip, start_lbn + i,
  				    blkno, ba, fs->fs_bsize, fs->fs_bsize,
  				    buflist->bs_children[i]);
@@ -475,13 +657,14 @@ ffs_reallocblks(v)
  				    i < ssize ? sbp : ebp, soff + i, blkno,
  				    ba, buflist->bs_children[i]);
  		}
-		*bap++ = ufs_rw32(blkno, UFS_FSNEEDSWAP(fs));
+		/* XXX ondisk32 */
+		*bap++ = ufs_rw32((u_int32_t)blkno, UFS_FSNEEDSWAP(fs));
 	}
 	/*
 	 * Next we must write out the modified inode and indirect blocks.
 	 * For strict correctness, the writes should be synchronous since
 	 * the old block values may have been written to disk. In practise
-	 * they are almost never written, but if we are concerned about 
+	 * they are almost never written, but if we are concerned about
 	 * strict correctness, the `doasyncfree' flag should be set to zero.
 	 *
 	 * The test on `doasyncfree' should be changed to test a flag
@@ -491,7 +674,7 @@ ffs_reallocblks(v)
 	 * We can then check below to see if it is set, and do the
 	 * synchronous write only when it has been cleared.
 	 */
-	if (sbap != &ip->i_ffs_db[0]) {
+	if (sbap != &ip->i_ffs1_db[0]) {
 		if (doasyncfree)
 			bdwrite(sbp);
 		else
@@ -499,7 +682,7 @@ ffs_reallocblks(v)
 	} else {
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
 		if (!doasyncfree)
-			VOP_UPDATE(vp, NULL, NULL, 1);
+			ffs_update(vp, NULL, NULL, 1);
 	}
 	if (ssize < len) {
 		if (doasyncfree)
@@ -516,9 +699,9 @@ ffs_reallocblks(v)
 #endif
 	for (blkno = newblk, i = 0; i < len; i++, blkno += fs->fs_frag) {
 		if (!DOINGSOFTDEP(vp))
-			ffs_blkfree(ip,
+			ffs_blkfree(fs, ip->i_devvp,
 			    dbtofsb(fs, buflist->bs_children[i]->b_blkno),
-			    fs->fs_bsize);
+			    fs->fs_bsize, ip->i_number);
 		buflist->bs_children[i]->b_blkno = fsbtodb(fs, blkno);
 #ifdef DEBUG
 		if (!ffs_checkblk(ip,
@@ -538,119 +721,260 @@ ffs_reallocblks(v)
 
 fail:
 	if (ssize < len)
-		brelse(ebp);
-	if (sbap != &ip->i_ffs_db[0])
-		brelse(sbp);
+		brelse(ebp, 0);
+	if (sbap != &ip->i_ffs1_db[0])
+		brelse(sbp, 0);
 	return (ENOSPC);
+#endif /* XXXUBC */
 }
+#endif /* 0 */
 
 /*
  * Allocate an inode in the file system.
- * 
+ *
  * If allocating a directory, use ffs_dirpref to select the inode.
  * If allocating in a directory, the following hierarchy is followed:
  *   1) allocate the preferred inode.
  *   2) allocate an inode in the same cylinder group.
  *   3) quadradically rehash into other cylinder groups, until an
  *      available inode is located.
- * If no inode preference is given the following heirarchy is used
+ * If no inode preference is given the following hierarchy is used
  * to allocate an inode:
  *   1) allocate an inode in cylinder group 0.
  *   2) quadradically rehash into other cylinder groups, until an
  *      available inode is located.
+ *
+ * => um_lock not held upon entry or return
  */
 int
-ffs_valloc(v)
-	void *v;
+ffs_valloc(struct vnode *pvp, int mode, kauth_cred_t cred,
+    struct vnode **vpp)
 {
-	struct vop_valloc_args /* {
-		struct vnode *a_pvp;
-		int a_mode;
-		struct ucred *a_cred;
-		struct vnode **a_vpp;
-	} */ *ap = v;
-	struct vnode *pvp = ap->a_pvp;
+	struct ufsmount *ump;
 	struct inode *pip;
 	struct fs *fs;
 	struct inode *ip;
-	mode_t mode = ap->a_mode;
+	struct timespec ts;
 	ino_t ino, ipref;
 	int cg, error;
-	
-	*ap->a_vpp = NULL;
+
+	UFS_WAPBL_JUNLOCK_ASSERT(pvp->v_mount);
+
+	*vpp = NULL;
 	pip = VTOI(pvp);
 	fs = pip->i_fs;
+	ump = pip->i_ump;
+
+	error = UFS_WAPBL_BEGIN(pvp->v_mount);
+	if (error) {
+		return error;
+	}
+	mutex_enter(&ump->um_lock);
 	if (fs->fs_cstotal.cs_nifree == 0)
 		goto noinodes;
 
 	if ((mode & IFMT) == IFDIR)
-		ipref = ffs_dirpref(fs);
+		ipref = ffs_dirpref(pip);
 	else
 		ipref = pip->i_number;
 	if (ipref >= fs->fs_ncg * fs->fs_ipg)
 		ipref = 0;
 	cg = ino_to_cg(fs, ipref);
-	ino = (ino_t)ffs_hashalloc(pip, cg, (long)ipref, mode, ffs_nodealloccg);
+	/*
+	 * Track number of dirs created one after another
+	 * in a same cg without intervening by files.
+	 */
+	if ((mode & IFMT) == IFDIR) {
+		if (fs->fs_contigdirs[cg] < 255)
+			fs->fs_contigdirs[cg]++;
+	} else {
+		if (fs->fs_contigdirs[cg] > 0)
+			fs->fs_contigdirs[cg]--;
+	}
+	ino = (ino_t)ffs_hashalloc(pip, cg, ipref, mode, 0, ffs_nodealloccg);
 	if (ino == 0)
 		goto noinodes;
-	error = VFS_VGET(pvp->v_mount, ino, ap->a_vpp);
+	UFS_WAPBL_END(pvp->v_mount);
+	error = VFS_VGET(pvp->v_mount, ino, vpp);
 	if (error) {
-		VOP_VFREE(pvp, ino, mode);
+		int err;
+		err = UFS_WAPBL_BEGIN(pvp->v_mount);
+		if (err == 0)
+			ffs_vfree(pvp, ino, mode);
+		if (err == 0)
+			UFS_WAPBL_END(pvp->v_mount);
 		return (error);
 	}
-	ip = VTOI(*ap->a_vpp);
-	if (ip->i_ffs_mode) {
+	KASSERT((*vpp)->v_type == VNON);
+	ip = VTOI(*vpp);
+	if (ip->i_mode) {
+#if 0
 		printf("mode = 0%o, inum = %d, fs = %s\n",
-		    ip->i_ffs_mode, ip->i_number, fs->fs_fsmnt);
+		    ip->i_mode, ip->i_number, fs->fs_fsmnt);
+#else
+		printf("dmode %x mode %x dgen %x gen %x\n",
+		    DIP(ip, mode), ip->i_mode,
+		    DIP(ip, gen), ip->i_gen);
+		printf("size %llx blocks %llx\n",
+		    (long long)DIP(ip, size), (long long)DIP(ip, blocks));
+		printf("ino %llu ipref %llu\n", (unsigned long long)ino,
+		    (unsigned long long)ipref);
+#if 0
+		error = bread(ump->um_devvp, fsbtodb(fs, ino_to_fsba(fs, ino)),
+		    (int)fs->fs_bsize, NOCRED, 0, &bp);
+#endif
+
+#endif
 		panic("ffs_valloc: dup alloc");
 	}
-	if (ip->i_ffs_blocks) {				/* XXX */
-		printf("free inode %s/%d had %d blocks\n",
-		    fs->fs_fsmnt, ino, ip->i_ffs_blocks);
-		ip->i_ffs_blocks = 0;
+	if (DIP(ip, blocks)) {				/* XXX */
+		printf("free inode %s/%llu had %" PRId64 " blocks\n",
+		    fs->fs_fsmnt, (unsigned long long)ino, DIP(ip, blocks));
+		DIP_ASSIGN(ip, blocks, 0);
 	}
-	ip->i_ffs_flags = 0;
+	ip->i_flag &= ~IN_SPACECOUNTED;
+	ip->i_flags = 0;
+	DIP_ASSIGN(ip, flags, 0);
 	/*
 	 * Set up a new generation number for this inode.
 	 */
-	ip->i_ffs_gen++;
+	ip->i_gen++;
+	DIP_ASSIGN(ip, gen, ip->i_gen);
+	if (fs->fs_magic == FS_UFS2_MAGIC) {
+		vfs_timestamp(&ts);
+		ip->i_ffs2_birthtime = ts.tv_sec;
+		ip->i_ffs2_birthnsec = ts.tv_nsec;
+	}
 	return (0);
 noinodes:
-	ffs_fserr(fs, ap->a_cred->cr_uid, "out of inodes");
+	mutex_exit(&ump->um_lock);
+	UFS_WAPBL_END(pvp->v_mount);
+	ffs_fserr(fs, kauth_cred_geteuid(cred), "out of inodes");
 	uprintf("\n%s: create/symlink failed, no inodes free\n", fs->fs_fsmnt);
 	return (ENOSPC);
 }
 
 /*
- * Find a cylinder to place a directory.
+ * Find a cylinder group in which to place a directory.
  *
- * The policy implemented by this algorithm is to select from
- * among those cylinder groups with above the average number of
- * free inodes, the one with the smallest number of directories.
+ * The policy implemented by this algorithm is to allocate a
+ * directory inode in the same cylinder group as its parent
+ * directory, but also to reserve space for its files inodes
+ * and data. Restrict the number of directories which may be
+ * allocated one after another in the same cylinder group
+ * without intervening allocation of files.
+ *
+ * If we allocate a first level directory then force allocation
+ * in another cylinder group.
  */
 static ino_t
-ffs_dirpref(fs)
-	struct fs *fs;
+ffs_dirpref(struct inode *pip)
 {
-	int cg, minndir, mincg, avgifree;
+	register struct fs *fs;
+	int cg, prefcg;
+	int64_t dirsize, cgsize, curdsz;
+	int avgifree, avgbfree, avgndir;
+	int minifree, minbfree, maxndir;
+	int mincg, minndir;
+	int maxcontigdirs;
+
+	KASSERT(mutex_owned(&pip->i_ump->um_lock));
+
+	fs = pip->i_fs;
 
 	avgifree = fs->fs_cstotal.cs_nifree / fs->fs_ncg;
-	minndir = fs->fs_ipg;
-	mincg = 0;
-	for (cg = 0; cg < fs->fs_ncg; cg++)
-		if (fs->fs_cs(fs, cg).cs_ndir < minndir &&
-		    fs->fs_cs(fs, cg).cs_nifree >= avgifree) {
-			mincg = cg;
-			minndir = fs->fs_cs(fs, cg).cs_ndir;
+	avgbfree = fs->fs_cstotal.cs_nbfree / fs->fs_ncg;
+	avgndir = fs->fs_cstotal.cs_ndir / fs->fs_ncg;
+
+	/*
+	 * Force allocation in another cg if creating a first level dir.
+	 */
+	if (ITOV(pip)->v_vflag & VV_ROOT) {
+		prefcg = random() % fs->fs_ncg;
+		mincg = prefcg;
+		minndir = fs->fs_ipg;
+		for (cg = prefcg; cg < fs->fs_ncg; cg++)
+			if (fs->fs_cs(fs, cg).cs_ndir < minndir &&
+			    fs->fs_cs(fs, cg).cs_nifree >= avgifree &&
+			    fs->fs_cs(fs, cg).cs_nbfree >= avgbfree) {
+				mincg = cg;
+				minndir = fs->fs_cs(fs, cg).cs_ndir;
+			}
+		for (cg = 0; cg < prefcg; cg++)
+			if (fs->fs_cs(fs, cg).cs_ndir < minndir &&
+			    fs->fs_cs(fs, cg).cs_nifree >= avgifree &&
+			    fs->fs_cs(fs, cg).cs_nbfree >= avgbfree) {
+				mincg = cg;
+				minndir = fs->fs_cs(fs, cg).cs_ndir;
+			}
+		return ((ino_t)(fs->fs_ipg * mincg));
+	}
+
+	/*
+	 * Count various limits which used for
+	 * optimal allocation of a directory inode.
+	 */
+	maxndir = min(avgndir + fs->fs_ipg / 16, fs->fs_ipg);
+	minifree = avgifree - fs->fs_ipg / 4;
+	if (minifree < 0)
+		minifree = 0;
+	minbfree = avgbfree - fragstoblks(fs, fs->fs_fpg) / 4;
+	if (minbfree < 0)
+		minbfree = 0;
+	cgsize = (int64_t)fs->fs_fsize * fs->fs_fpg;
+	dirsize = (int64_t)fs->fs_avgfilesize * fs->fs_avgfpdir;
+	if (avgndir != 0) {
+		curdsz = (cgsize - (int64_t)avgbfree * fs->fs_bsize) / avgndir;
+		if (dirsize < curdsz)
+			dirsize = curdsz;
+	}
+	if (cgsize < dirsize * 255)
+		maxcontigdirs = cgsize / dirsize;
+	else
+		maxcontigdirs = 255;
+	if (fs->fs_avgfpdir > 0)
+		maxcontigdirs = min(maxcontigdirs,
+				    fs->fs_ipg / fs->fs_avgfpdir);
+	if (maxcontigdirs == 0)
+		maxcontigdirs = 1;
+
+	/*
+	 * Limit number of dirs in one cg and reserve space for
+	 * regular files, but only if we have no deficit in
+	 * inodes or space.
+	 */
+	prefcg = ino_to_cg(fs, pip->i_number);
+	for (cg = prefcg; cg < fs->fs_ncg; cg++)
+		if (fs->fs_cs(fs, cg).cs_ndir < maxndir &&
+		    fs->fs_cs(fs, cg).cs_nifree >= minifree &&
+	    	    fs->fs_cs(fs, cg).cs_nbfree >= minbfree) {
+			if (fs->fs_contigdirs[cg] < maxcontigdirs)
+				return ((ino_t)(fs->fs_ipg * cg));
 		}
-	return ((ino_t)(fs->fs_ipg * mincg));
+	for (cg = 0; cg < prefcg; cg++)
+		if (fs->fs_cs(fs, cg).cs_ndir < maxndir &&
+		    fs->fs_cs(fs, cg).cs_nifree >= minifree &&
+	    	    fs->fs_cs(fs, cg).cs_nbfree >= minbfree) {
+			if (fs->fs_contigdirs[cg] < maxcontigdirs)
+				return ((ino_t)(fs->fs_ipg * cg));
+		}
+	/*
+	 * This is a backstop when we are deficient in space.
+	 */
+	for (cg = prefcg; cg < fs->fs_ncg; cg++)
+		if (fs->fs_cs(fs, cg).cs_nifree >= avgifree)
+			return ((ino_t)(fs->fs_ipg * cg));
+	for (cg = 0; cg < prefcg; cg++)
+		if (fs->fs_cs(fs, cg).cs_nifree >= avgifree)
+			break;
+	return ((ino_t)(fs->fs_ipg * cg));
 }
 
 /*
  * Select the desired position for the next block in a file.  The file is
  * logically divided into sections. The first section is composed of the
  * direct blocks. Each additional section contains fs_maxbpg blocks.
- * 
+ *
  * If no blocks have been allocated in the first section, the policy is to
  * request a block in the same cylinder group as the inode that describes
  * the file. If no blocks have been allocated in any other section, the
@@ -664,31 +988,49 @@ ffs_dirpref(fs)
  * indirect block, the information on the previous allocation is unavailable;
  * here a best guess is made based upon the logical block number being
  * allocated.
- * 
+ *
  * If a section is already partially allocated, the policy is to
  * contiguously allocate fs_maxcontig blocks.  The end of one of these
- * contiguous blocks and the beginning of the next is physically separated
- * so that the disk head will be in transit between them for at least
- * fs_rotdelay milliseconds.  This is to allow time for the processor to
- * schedule another I/O transfer.
+ * contiguous blocks and the beginning of the next is laid out
+ * contigously if possible.
+ *
+ * => um_lock held on entry and exit
  */
-ufs_daddr_t
-ffs_blkpref(ip, lbn, indx, bap)
-	struct inode *ip;
-	ufs_daddr_t lbn;
-	int indx;
-	ufs_daddr_t *bap;
+daddr_t
+ffs_blkpref_ufs1(struct inode *ip, daddr_t lbn, int indx, int flags,
+    int32_t *bap /* XXX ondisk32 */)
 {
 	struct fs *fs;
 	int cg;
 	int avgbfree, startcg;
-	ufs_daddr_t nextblk;
+
+	KASSERT(mutex_owned(&ip->i_ump->um_lock));
 
 	fs = ip->i_fs;
+
+	/*
+	 * If allocating a contiguous file with B_CONTIG, use the hints
+	 * in the inode extentions to return the desired block.
+	 *
+	 * For metadata (indirect blocks) return the address of where
+	 * the first indirect block resides - we'll scan for the next
+	 * available slot if we need to allocate more than one indirect
+	 * block.  For data, return the address of the actual block
+	 * relative to the address of the first data block.
+	 */
+	if (flags & B_CONTIG) {
+		KASSERT(ip->i_ffs_first_data_blk != 0);
+		KASSERT(ip->i_ffs_first_indir_blk != 0);
+		if (flags & B_METAONLY)
+			return ip->i_ffs_first_indir_blk;
+		else
+			return ip->i_ffs_first_data_blk + blkstofrags(fs, lbn);
+	}
+
 	if (indx % fs->fs_maxbpg == 0 || bap[indx - 1] == 0) {
 		if (lbn < NDADDR + NINDIR(fs)) {
 			cg = ino_to_cg(fs, ip->i_number);
-			return (fs->fs_fpg * cg + fs->fs_frag);
+			return (cgbase(fs, cg) + fs->fs_frag);
 		}
 		/*
 		 * Find a cylinder with greater than average number of
@@ -704,38 +1046,84 @@ ffs_blkpref(ip, lbn, indx, bap)
 		avgbfree = fs->fs_cstotal.cs_nbfree / fs->fs_ncg;
 		for (cg = startcg; cg < fs->fs_ncg; cg++)
 			if (fs->fs_cs(fs, cg).cs_nbfree >= avgbfree) {
-				fs->fs_cgrotor = cg;
-				return (fs->fs_fpg * cg + fs->fs_frag);
+				return (cgbase(fs, cg) + fs->fs_frag);
 			}
-		for (cg = 0; cg <= startcg; cg++)
+		for (cg = 0; cg < startcg; cg++)
 			if (fs->fs_cs(fs, cg).cs_nbfree >= avgbfree) {
-				fs->fs_cgrotor = cg;
-				return (fs->fs_fpg * cg + fs->fs_frag);
+				return (cgbase(fs, cg) + fs->fs_frag);
 			}
-		return (NULL);
+		return (0);
 	}
 	/*
-	 * One or more previous blocks have been laid out. If less
-	 * than fs_maxcontig previous blocks are contiguous, the
-	 * next block is requested contiguously, otherwise it is
-	 * requested rotationally delayed by fs_rotdelay milliseconds.
+	 * We just always try to lay things out contiguously.
 	 */
-	nextblk = ufs_rw32(bap[indx - 1], UFS_FSNEEDSWAP(fs)) + fs->fs_frag;
-	if (indx < fs->fs_maxcontig ||
-		ufs_rw32(bap[indx - fs->fs_maxcontig], UFS_FSNEEDSWAP(fs)) +
-	    blkstofrags(fs, fs->fs_maxcontig) != nextblk)
-		return (nextblk);
-	if (fs->fs_rotdelay != 0)
-		/*
-		 * Here we convert ms of delay to frags as:
-		 * (frags) = (ms) * (rev/sec) * (sect/rev) /
-		 *	((sect/frag) * (ms/sec))
-		 * then round up to the next block.
-		 */
-		nextblk += roundup(fs->fs_rotdelay * fs->fs_rps * fs->fs_nsect /
-		    (NSPF(fs) * 1000), fs->fs_frag);
-	return (nextblk);
+	return ufs_rw32(bap[indx - 1], UFS_FSNEEDSWAP(fs)) + fs->fs_frag;
 }
+
+daddr_t
+ffs_blkpref_ufs2(struct inode *ip, daddr_t lbn, int indx, int flags,
+    int64_t *bap)
+{
+	struct fs *fs;
+	int cg;
+	int avgbfree, startcg;
+
+	KASSERT(mutex_owned(&ip->i_ump->um_lock));
+
+	fs = ip->i_fs;
+
+	/*
+	 * If allocating a contiguous file with B_CONTIG, use the hints
+	 * in the inode extentions to return the desired block.
+	 *
+	 * For metadata (indirect blocks) return the address of where
+	 * the first indirect block resides - we'll scan for the next
+	 * available slot if we need to allocate more than one indirect
+	 * block.  For data, return the address of the actual block
+	 * relative to the address of the first data block.
+	 */
+	if (flags & B_CONTIG) {
+		KASSERT(ip->i_ffs_first_data_blk != 0);
+		KASSERT(ip->i_ffs_first_indir_blk != 0);
+		if (flags & B_METAONLY)
+			return ip->i_ffs_first_indir_blk;
+		else
+			return ip->i_ffs_first_data_blk + blkstofrags(fs, lbn);
+	}
+
+	if (indx % fs->fs_maxbpg == 0 || bap[indx - 1] == 0) {
+		if (lbn < NDADDR + NINDIR(fs)) {
+			cg = ino_to_cg(fs, ip->i_number);
+			return (cgbase(fs, cg) + fs->fs_frag);
+		}
+		/*
+		 * Find a cylinder with greater than average number of
+		 * unused data blocks.
+		 */
+		if (indx == 0 || bap[indx - 1] == 0)
+			startcg =
+			    ino_to_cg(fs, ip->i_number) + lbn / fs->fs_maxbpg;
+		else
+			startcg = dtog(fs,
+				ufs_rw64(bap[indx - 1], UFS_FSNEEDSWAP(fs)) + 1);
+		startcg %= fs->fs_ncg;
+		avgbfree = fs->fs_cstotal.cs_nbfree / fs->fs_ncg;
+		for (cg = startcg; cg < fs->fs_ncg; cg++)
+			if (fs->fs_cs(fs, cg).cs_nbfree >= avgbfree) {
+				return (cgbase(fs, cg) + fs->fs_frag);
+			}
+		for (cg = 0; cg < startcg; cg++)
+			if (fs->fs_cs(fs, cg).cs_nbfree >= avgbfree) {
+				return (cgbase(fs, cg) + fs->fs_frag);
+			}
+		return (0);
+	}
+	/*
+	 * We just always try to lay things out contiguously.
+	 */
+	return ufs_rw64(bap[indx - 1], UFS_FSNEEDSWAP(fs)) + fs->fs_frag;
+}
+
 
 /*
  * Implement the cylinder overflow algorithm.
@@ -744,26 +1132,30 @@ ffs_blkpref(ip, lbn, indx, bap)
  *   1) allocate the block in its requested cylinder group.
  *   2) quadradically rehash on the cylinder group number.
  *   3) brute force search for a free block.
+ *
+ * => called with um_lock held
+ * => returns with um_lock released on success, held on failure
+ *    (*allocator releases lock on success, retains lock on failure)
  */
 /*VARARGS5*/
-static u_long
-ffs_hashalloc(ip, cg, pref, size, allocator)
-	struct inode *ip;
-	int cg;
-	long pref;
-	int size;	/* size for data blocks, mode for inodes */
-	ufs_daddr_t (*allocator) __P((struct inode *, int, ufs_daddr_t, int));
+static daddr_t
+ffs_hashalloc(struct inode *ip, int cg, daddr_t pref,
+    int size /* size for data blocks, mode for inodes */,
+    int flags, daddr_t (*allocator)(struct inode *, int, daddr_t, int, int))
 {
 	struct fs *fs;
-	long result;
+	daddr_t result;
 	int i, icg = cg;
 
 	fs = ip->i_fs;
 	/*
 	 * 1: preferred cylinder group
 	 */
-	result = (*allocator)(ip, cg, pref, size);
+	result = (*allocator)(ip, cg, pref, size, flags);
 	if (result)
+		return (result);
+
+	if (flags & B_CONTIG)
 		return (result);
 	/*
 	 * 2: quadratic rehash
@@ -772,7 +1164,7 @@ ffs_hashalloc(ip, cg, pref, size, allocator)
 		cg += i;
 		if (cg >= fs->fs_ncg)
 			cg -= fs->fs_ncg;
-		result = (*allocator)(ip, cg, 0, size);
+		result = (*allocator)(ip, cg, 0, size, flags);
 		if (result)
 			return (result);
 	}
@@ -783,63 +1175,67 @@ ffs_hashalloc(ip, cg, pref, size, allocator)
 	 */
 	cg = (icg + 2) % fs->fs_ncg;
 	for (i = 2; i < fs->fs_ncg; i++) {
-		result = (*allocator)(ip, cg, 0, size);
+		result = (*allocator)(ip, cg, 0, size, flags);
 		if (result)
 			return (result);
 		cg++;
 		if (cg == fs->fs_ncg)
 			cg = 0;
 	}
-	return (NULL);
+	return (0);
 }
 
 /*
  * Determine whether a fragment can be extended.
  *
- * Check to see if the necessary fragments are available, and 
+ * Check to see if the necessary fragments are available, and
  * if they are, allocate them.
+ *
+ * => called with um_lock held
+ * => returns with um_lock released on success, held on failure
  */
-static ufs_daddr_t
-ffs_fragextend(ip, cg, bprev, osize, nsize)
-	struct inode *ip;
-	int cg;
-	long bprev;
-	int osize, nsize;
+static daddr_t
+ffs_fragextend(struct inode *ip, int cg, daddr_t bprev, int osize, int nsize)
 {
+	struct ufsmount *ump;
 	struct fs *fs;
 	struct cg *cgp;
 	struct buf *bp;
-	long bno;
+	daddr_t bno;
 	int frags, bbase;
 	int i, error;
+	u_int8_t *blksfree;
 
 	fs = ip->i_fs;
+	ump = ip->i_ump;
+
+	KASSERT(mutex_owned(&ump->um_lock));
+
 	if (fs->fs_cs(fs, cg).cs_nffree < numfrags(fs, nsize - osize))
-		return (NULL);
+		return (0);
 	frags = numfrags(fs, nsize);
 	bbase = fragnum(fs, bprev);
 	if (bbase > fragnum(fs, (bprev + frags - 1))) {
 		/* cannot extend across a block boundary */
-		return (NULL);
+		return (0);
 	}
+	mutex_exit(&ump->um_lock);
 	error = bread(ip->i_devvp, fsbtodb(fs, cgtod(fs, cg)),
-		(int)fs->fs_cgsize, NOCRED, &bp);
-	if (error) {
-		brelse(bp);
-		return (NULL);
-	}
+		(int)fs->fs_cgsize, NOCRED, B_MODIFY, &bp);
+	if (error)
+		goto fail;
 	cgp = (struct cg *)bp->b_data;
-	if (!cg_chkmagic(cgp, UFS_FSNEEDSWAP(fs))) {
-		brelse(bp);
-		return (NULL);
-	}
-	cgp->cg_time = ufs_rw32(time.tv_sec, UFS_FSNEEDSWAP(fs));
+	if (!cg_chkmagic(cgp, UFS_FSNEEDSWAP(fs)))
+		goto fail;
+	cgp->cg_old_time = ufs_rw32(time_second, UFS_FSNEEDSWAP(fs));
+	if ((fs->fs_magic != FS_UFS1_MAGIC) ||
+	    (fs->fs_old_flags & FS_FLAGS_UPDATED))
+		cgp->cg_time = ufs_rw64(time_second, UFS_FSNEEDSWAP(fs));
 	bno = dtogd(fs, bprev);
+	blksfree = cg_blksfree(cgp, UFS_FSNEEDSWAP(fs));
 	for (i = numfrags(fs, osize); i < frags; i++)
-		if (isclr(cg_blksfree(cgp, UFS_FSNEEDSWAP(fs)), bno + i)) {
-			brelse(bp);
-			return (NULL);
-		}
+		if (isclr(blksfree, bno + i))
+			goto fail;
 	/*
 	 * the current fragment can be extended
 	 * deduct the count on fragment being extended into
@@ -847,22 +1243,30 @@ ffs_fragextend(ip, cg, bprev, osize, nsize)
 	 * allocate the extended piece
 	 */
 	for (i = frags; i < fs->fs_frag - bbase; i++)
-		if (isclr(cg_blksfree(cgp, UFS_FSNEEDSWAP(fs)), bno + i))
+		if (isclr(blksfree, bno + i))
 			break;
 	ufs_add32(cgp->cg_frsum[i - numfrags(fs, osize)], -1, UFS_FSNEEDSWAP(fs));
 	if (i != frags)
 		ufs_add32(cgp->cg_frsum[i - frags], 1, UFS_FSNEEDSWAP(fs));
+	mutex_enter(&ump->um_lock);
 	for (i = numfrags(fs, osize); i < frags; i++) {
-		clrbit(cg_blksfree(cgp, UFS_FSNEEDSWAP(fs)), bno + i);
+		clrbit(blksfree, bno + i);
 		ufs_add32(cgp->cg_cs.cs_nffree, -1, UFS_FSNEEDSWAP(fs));
 		fs->fs_cstotal.cs_nffree--;
 		fs->fs_cs(fs, cg).cs_nffree--;
 	}
 	fs->fs_fmod = 1;
+	ACTIVECG_CLR(fs, cg);
+	mutex_exit(&ump->um_lock);
 	if (DOINGSOFTDEP(ITOV(ip)))
 		softdep_setup_blkmapdep(bp, fs, bprev);
 	bdwrite(bp);
 	return (bprev);
+
+ fail:
+ 	brelse(bp, 0);
+ 	mutex_enter(&ump->um_lock);
+ 	return (0);
 }
 
 /*
@@ -871,86 +1275,93 @@ ffs_fragextend(ip, cg, bprev, osize, nsize)
  * Check to see if a block of the appropriate size is available,
  * and if it is, allocate it.
  */
-static ufs_daddr_t
-ffs_alloccg(ip, cg, bpref, size)
-	struct inode *ip;
-	int cg;
-	ufs_daddr_t bpref;
-	int size;
+static daddr_t
+ffs_alloccg(struct inode *ip, int cg, daddr_t bpref, int size, int flags)
 {
+	struct ufsmount *ump;
+	struct fs *fs = ip->i_fs;
 	struct cg *cgp;
 	struct buf *bp;
-	ufs_daddr_t bno, blkno;
+	int32_t bno;
+	daddr_t blkno;
 	int error, frags, allocsiz, i;
-	struct fs *fs = ip->i_fs;
+	u_int8_t *blksfree;
 #ifdef FFS_EI
 	const int needswap = UFS_FSNEEDSWAP(fs);
 #endif
 
+	ump = ip->i_ump;
+
+	KASSERT(mutex_owned(&ump->um_lock));
+
 	if (fs->fs_cs(fs, cg).cs_nbfree == 0 && size == fs->fs_bsize)
-		return (NULL);
+		return (0);
+	mutex_exit(&ump->um_lock);
 	error = bread(ip->i_devvp, fsbtodb(fs, cgtod(fs, cg)),
-		(int)fs->fs_cgsize, NOCRED, &bp);
-	if (error) {
-		brelse(bp);
-		return (NULL);
-	}
+		(int)fs->fs_cgsize, NOCRED, B_MODIFY, &bp);
+	if (error)
+		goto fail;
 	cgp = (struct cg *)bp->b_data;
 	if (!cg_chkmagic(cgp, needswap) ||
-	    (cgp->cg_cs.cs_nbfree == 0 && size == fs->fs_bsize)) {
-		brelse(bp);
-		return (NULL);
-	}
-	cgp->cg_time = ufs_rw32(time.tv_sec, needswap);
+	    (cgp->cg_cs.cs_nbfree == 0 && size == fs->fs_bsize))
+		goto fail;
+	cgp->cg_old_time = ufs_rw32(time_second, needswap);
+	if ((fs->fs_magic != FS_UFS1_MAGIC) ||
+	    (fs->fs_old_flags & FS_FLAGS_UPDATED))
+		cgp->cg_time = ufs_rw64(time_second, needswap);
 	if (size == fs->fs_bsize) {
-		bno = ffs_alloccgblk(ip, bp, bpref);
+		mutex_enter(&ump->um_lock);
+		blkno = ffs_alloccgblk(ip, bp, bpref, flags);
+		ACTIVECG_CLR(fs, cg);
+		mutex_exit(&ump->um_lock);
 		bdwrite(bp);
-		return (bno);
+		return (blkno);
 	}
 	/*
 	 * check to see if any fragments are already available
 	 * allocsiz is the size which will be allocated, hacking
 	 * it down to a smaller size if necessary
 	 */
+	blksfree = cg_blksfree(cgp, needswap);
 	frags = numfrags(fs, size);
 	for (allocsiz = frags; allocsiz < fs->fs_frag; allocsiz++)
 		if (cgp->cg_frsum[allocsiz] != 0)
 			break;
 	if (allocsiz == fs->fs_frag) {
 		/*
-		 * no fragments were available, so a block will be 
+		 * no fragments were available, so a block will be
 		 * allocated, and hacked up
 		 */
-		if (cgp->cg_cs.cs_nbfree == 0) {
-			brelse(bp);
-			return (NULL);
-		}
-		bno = ffs_alloccgblk(ip, bp, bpref);
-		bpref = dtogd(fs, bno);
+		if (cgp->cg_cs.cs_nbfree == 0)
+			goto fail;
+		mutex_enter(&ump->um_lock);
+		blkno = ffs_alloccgblk(ip, bp, bpref, flags);
+		bno = dtogd(fs, blkno);
 		for (i = frags; i < fs->fs_frag; i++)
-			setbit(cg_blksfree(cgp, needswap), bpref + i);
+			setbit(blksfree, bno + i);
 		i = fs->fs_frag - frags;
 		ufs_add32(cgp->cg_cs.cs_nffree, i, needswap);
 		fs->fs_cstotal.cs_nffree += i;
 		fs->fs_cs(fs, cg).cs_nffree += i;
 		fs->fs_fmod = 1;
 		ufs_add32(cgp->cg_frsum[i], 1, needswap);
+		ACTIVECG_CLR(fs, cg);
+		mutex_exit(&ump->um_lock);
 		bdwrite(bp);
-		return (bno);
+		return (blkno);
 	}
 	bno = ffs_mapsearch(fs, cgp, bpref, allocsiz);
 #if 0
 	/*
 	 * XXX fvdl mapsearch will panic, and never return -1
-	 *          also: returning NULL as ufs_daddr_t ?
+	 *          also: returning NULL as daddr_t ?
 	 */
-	if (bno < 0) {
-		brelse(bp);
-		return (NULL);
-	}
+	if (bno < 0)
+		goto fail;
 #endif
 	for (i = 0; i < frags; i++)
-		clrbit(cg_blksfree(cgp, needswap), bno + i);
+		clrbit(blksfree, bno + i);
+	mutex_enter(&ump->um_lock);
 	ufs_add32(cgp->cg_cs.cs_nffree, -frags, needswap);
 	fs->fs_cstotal.cs_nffree -= frags;
 	fs->fs_cs(fs, cg).cs_nffree -= frags;
@@ -958,11 +1369,18 @@ ffs_alloccg(ip, cg, bpref, size)
 	ufs_add32(cgp->cg_frsum[allocsiz], -1, needswap);
 	if (frags != allocsiz)
 		ufs_add32(cgp->cg_frsum[allocsiz - frags], 1, needswap);
-	blkno = cg * fs->fs_fpg + bno;
+	blkno = cgbase(fs, cg) + bno;
+	ACTIVECG_CLR(fs, cg);
+	mutex_exit(&ump->um_lock);
 	if (DOINGSOFTDEP(ITOV(ip)))
 		softdep_setup_blkmapdep(bp, fs, blkno);
 	bdwrite(bp);
 	return blkno;
+
+ fail:
+ 	brelse(bp, 0);
+ 	mutex_enter(&ump->um_lock);
+ 	return (0);
 }
 
 /*
@@ -976,121 +1394,80 @@ ffs_alloccg(ip, cg, bpref, size)
  * Note that this routine only allocates fs_bsize blocks; these
  * blocks may be fragmented by the routine that allocates them.
  */
-static ufs_daddr_t
-ffs_alloccgblk(ip, bp, bpref)
-	struct inode *ip;
-	struct buf *bp;
-	ufs_daddr_t bpref;
+static daddr_t
+ffs_alloccgblk(struct inode *ip, struct buf *bp, daddr_t bpref, int flags)
 {
-	struct cg *cgp;
-	ufs_daddr_t bno, blkno;
-	int cylno, pos, delta;
-	short *cylbp;
-	int i;
+	struct ufsmount *ump;
 	struct fs *fs = ip->i_fs;
+	struct cg *cgp;
+	daddr_t blkno;
+	int32_t bno;
+	u_int8_t *blksfree;
 #ifdef FFS_EI
 	const int needswap = UFS_FSNEEDSWAP(fs);
 #endif
 
+	ump = ip->i_ump;
+
+	KASSERT(mutex_owned(&ump->um_lock));
+
 	cgp = (struct cg *)bp->b_data;
+	blksfree = cg_blksfree(cgp, needswap);
 	if (bpref == 0 || dtog(fs, bpref) != ufs_rw32(cgp->cg_cgx, needswap)) {
 		bpref = ufs_rw32(cgp->cg_rotor, needswap);
-		goto norot;
-	}
-	bpref = blknum(fs, bpref);
-	bpref = dtogd(fs, bpref);
-	/*
-	 * if the requested block is available, use it
-	 */
-	if (ffs_isblock(fs, cg_blksfree(cgp, needswap),
-		fragstoblks(fs, bpref))) {
-		bno = bpref;
-		goto gotit;
-	}
-	if (fs->fs_nrpos <= 1 || fs->fs_cpc == 0) {
+	} else {
+		bpref = blknum(fs, bpref);
+		bno = dtogd(fs, bpref);
 		/*
-		 * Block layout information is not available.
-		 * Leaving bpref unchanged means we take the
-		 * next available free block following the one 
-		 * we just allocated. Hopefully this will at
-		 * least hit a track cache on drives of unknown
-		 * geometry (e.g. SCSI).
+		 * if the requested block is available, use it
 		 */
-		goto norot;
-	}
-	/*
-	 * check for a block available on the same cylinder
-	 */
-	cylno = cbtocylno(fs, bpref);
-	if (cg_blktot(cgp, needswap)[cylno] == 0)
-		goto norot;
-	/*
-	 * check the summary information to see if a block is 
-	 * available in the requested cylinder starting at the
-	 * requested rotational position and proceeding around.
-	 */
-	cylbp = cg_blks(fs, cgp, cylno, needswap);
-	pos = cbtorpos(fs, bpref);
-	for (i = pos; i < fs->fs_nrpos; i++)
-		if (ufs_rw16(cylbp[i], needswap) > 0)
-			break;
-	if (i == fs->fs_nrpos)
-		for (i = 0; i < pos; i++)
-			if (ufs_rw16(cylbp[i], needswap) > 0)
-				break;
-	if (ufs_rw16(cylbp[i], needswap) > 0) {
+		if (ffs_isblock(fs, blksfree, fragstoblks(fs, bno)))
+			goto gotit;
 		/*
-		 * found a rotational position, now find the actual
-		 * block. A panic if none is actually there.
+		 * if the requested data block isn't available and we are
+		 * trying to allocate a contiguous file, return an error.
 		 */
-		pos = cylno % fs->fs_cpc;
-		bno = (cylno - pos) * fs->fs_spc / NSPB(fs);
-		if (fs_postbl(fs, pos)[i] == -1) {
-			printf("pos = %d, i = %d, fs = %s\n",
-			    pos, i, fs->fs_fsmnt);
-			panic("ffs_alloccgblk: cyl groups corrupted");
-		}
-		for (i = fs_postbl(fs, pos)[i];; ) {
-			if (ffs_isblock(fs, cg_blksfree(cgp, needswap), bno + i)) {
-				bno = blkstofrags(fs, (bno + i));
-				goto gotit;
-			}
-			delta = fs_rotbl(fs)[i];
-			if (delta <= 0 ||
-			    delta + i > fragstoblks(fs, fs->fs_fpg))
-				break;
-			i += delta;
-		}
-		printf("pos = %d, i = %d, fs = %s\n", pos, i, fs->fs_fsmnt);
-		panic("ffs_alloccgblk: can't find blk in cyl");
+		if ((flags & (B_CONTIG | B_METAONLY)) == B_CONTIG)
+			return (0);
 	}
-norot:
+
 	/*
-	 * no blocks in the requested cylinder, so take next
-	 * available one in this cylinder group.
+	 * Take the next available block in this cylinder group.
 	 */
 	bno = ffs_mapsearch(fs, cgp, bpref, (int)fs->fs_frag);
 	if (bno < 0)
-		return (NULL);
+		return (0);
 	cgp->cg_rotor = ufs_rw32(bno, needswap);
 gotit:
 	blkno = fragstoblks(fs, bno);
-	ffs_clrblock(fs, cg_blksfree(cgp, needswap), (long)blkno);
+	ffs_clrblock(fs, blksfree, blkno);
 	ffs_clusteracct(fs, cgp, blkno, -1);
 	ufs_add32(cgp->cg_cs.cs_nbfree, -1, needswap);
 	fs->fs_cstotal.cs_nbfree--;
 	fs->fs_cs(fs, ufs_rw32(cgp->cg_cgx, needswap)).cs_nbfree--;
-	cylno = cbtocylno(fs, bno);
-	ufs_add16(cg_blks(fs, cgp, cylno, needswap)[cbtorpos(fs, bno)], -1,
-	    needswap);
-	ufs_add32(cg_blktot(cgp, needswap)[cylno], -1, needswap);
+	if ((fs->fs_magic == FS_UFS1_MAGIC) &&
+	    ((fs->fs_old_flags & FS_FLAGS_UPDATED) == 0)) {
+		int cylno;
+		cylno = old_cbtocylno(fs, bno);
+		KASSERT(cylno >= 0);
+		KASSERT(cylno < fs->fs_old_ncyl);
+		KASSERT(old_cbtorpos(fs, bno) >= 0);
+		KASSERT(fs->fs_old_nrpos == 0 || old_cbtorpos(fs, bno) < fs->fs_old_nrpos);
+		ufs_add16(old_cg_blks(fs, cgp, cylno, needswap)[old_cbtorpos(fs, bno)], -1,
+		    needswap);
+		ufs_add32(old_cg_blktot(cgp, needswap)[cylno], -1, needswap);
+	}
 	fs->fs_fmod = 1;
 	blkno = ufs_rw32(cgp->cg_cgx, needswap) * fs->fs_fpg + bno;
-	if (DOINGSOFTDEP(ITOV(ip)))
+	if (DOINGSOFTDEP(ITOV(ip))) {
+		mutex_exit(&ump->um_lock);
 		softdep_setup_blkmapdep(bp, fs, blkno);
+		mutex_enter(&ump->um_lock);
+	}
 	return (blkno);
 }
 
+#ifdef XXXUBC
 /*
  * Determine whether a cluster can be allocated.
  *
@@ -1098,13 +1475,14 @@ gotit:
  * are multiple choices in the same cylinder group. Instead we just
  * take the first one that we find following bpref.
  */
-static ufs_daddr_t
-ffs_clusteralloc(ip, cg, bpref, len)
-	struct inode *ip;
-	int cg;
-	ufs_daddr_t bpref;
-	int len;
+
+/*
+ * This function must be fixed for UFS2 if re-enabled.
+ */
+static daddr_t
+ffs_clusteralloc(struct inode *ip, int cg, daddr_t bpref, int len)
 {
+	struct ufsmount *ump;
 	struct fs *fs;
 	struct cg *cgp;
 	struct buf *bp;
@@ -1113,10 +1491,14 @@ ffs_clusteralloc(ip, cg, bpref, len)
 	int32_t *lp;
 
 	fs = ip->i_fs;
+	ump = ip->i_ump;
+
+	KASSERT(mutex_owned(&ump->um_lock));
 	if (fs->fs_maxcluster[cg] < len)
-		return (NULL);
+		return (0);
+	mutex_exit(&ump->um_lock);
 	if (bread(ip->i_devvp, fsbtodb(fs, cgtod(fs, cg)), (int)fs->fs_cgsize,
-	    NOCRED, &bp))
+	    NOCRED, 0, &bp))
 		goto fail;
 	cgp = (struct cg *)bp->b_data;
 	if (!cg_chkmagic(cgp, UFS_FSNEEDSWAP(fs)))
@@ -1141,7 +1523,9 @@ ffs_clusteralloc(ip, cg, bpref, len)
 		for (i = len - 1; i > 0; i--)
 			if (ufs_rw32(*lp--, UFS_FSNEEDSWAP(fs)) > 0)
 				break;
+		mutex_enter(&ump->um_lock);
 		fs->fs_maxcluster[cg] = i;
+		mutex_exit(&ump->um_lock);
 		goto fail;
 	}
 	/*
@@ -1189,20 +1573,25 @@ ffs_clusteralloc(ip, cg, bpref, len)
 		    got - run + i))
 			panic("ffs_clusteralloc: map mismatch");
 #endif
-	bno = cg * fs->fs_fpg + blkstofrags(fs, got - run + 1);
+	bno = cgbase(fs, cg) + blkstofrags(fs, got - run + 1);
 	if (dtog(fs, bno) != cg)
 		panic("ffs_clusteralloc: allocated out of group");
 	len = blkstofrags(fs, len);
+	mutex_enter(&ump->um_lock);
 	for (i = 0; i < len; i += fs->fs_frag)
-		if ((got = ffs_alloccgblk(ip, bp, bno + i)) != bno + i)
+		if ((got = ffs_alloccgblk(ip, bp, bno + i, flags)) != bno + i)
 			panic("ffs_clusteralloc: lost block");
+	ACTIVECG_CLR(fs, cg);
+	mutex_exit(&ump->um_lock);
 	bdwrite(bp);
 	return (bno);
 
 fail:
-	brelse(bp);
+	brelse(bp, 0);
+	mutex_enter(&ump->um_lock);
 	return (0);
 }
+#endif /* XXXUBC */
 
 /*
  * Determine whether an inode can be allocated.
@@ -1213,48 +1602,87 @@ fail:
  *   2) allocate the next available inode after the requested
  *      inode in the specified cylinder group.
  */
-static ufs_daddr_t
-ffs_nodealloccg(ip, cg, ipref, mode)
-	struct inode *ip;
-	int cg;
-	ufs_daddr_t ipref;
-	int mode;
+static daddr_t
+ffs_nodealloccg(struct inode *ip, int cg, daddr_t ipref, int mode, int flags)
 {
-	struct cg *cgp;
-	struct buf *bp;
-	int error, start, len, loc, map, i;
+	struct ufsmount *ump = ip->i_ump;
 	struct fs *fs = ip->i_fs;
+	struct cg *cgp;
+	struct buf *bp, *ibp;
+	u_int8_t *inosused;
+	int error, start, len, loc, map, i;
+	int32_t initediblk;
+	daddr_t nalloc;
+	struct ufs2_dinode *dp2;
 #ifdef FFS_EI
 	const int needswap = UFS_FSNEEDSWAP(fs);
 #endif
 
+	KASSERT(mutex_owned(&ump->um_lock));
+	UFS_WAPBL_JLOCK_ASSERT(ip->i_ump->um_mountp);
+
 	if (fs->fs_cs(fs, cg).cs_nifree == 0)
-		return (NULL);
+		return (0);
+	mutex_exit(&ump->um_lock);
+	ibp = NULL;
+	initediblk = -1;
+retry:
 	error = bread(ip->i_devvp, fsbtodb(fs, cgtod(fs, cg)),
-		(int)fs->fs_cgsize, NOCRED, &bp);
-	if (error) {
-		brelse(bp);
-		return (NULL);
-	}
+		(int)fs->fs_cgsize, NOCRED, B_MODIFY, &bp);
+	if (error)
+		goto fail;
 	cgp = (struct cg *)bp->b_data;
-	if (!cg_chkmagic(cgp, needswap) || cgp->cg_cs.cs_nifree == 0) {
-		brelse(bp);
-		return (NULL);
+	if (!cg_chkmagic(cgp, needswap) || cgp->cg_cs.cs_nifree == 0)
+		goto fail;
+
+	if (ibp != NULL &&
+	    initediblk != ufs_rw32(cgp->cg_initediblk, needswap)) {
+		/* Another thread allocated more inodes so we retry the test. */
+		brelse(ibp, 0);
+		ibp = NULL;
 	}
-	cgp->cg_time = ufs_rw32(time.tv_sec, needswap);
+	/*
+	 * Check to see if we need to initialize more inodes.
+	 */
+	if (fs->fs_magic == FS_UFS2_MAGIC && ibp == NULL) {
+		initediblk = ufs_rw32(cgp->cg_initediblk, needswap);
+		nalloc = fs->fs_ipg - ufs_rw32(cgp->cg_cs.cs_nifree, needswap);
+		if (nalloc + INOPB(fs) > initediblk &&
+		    initediblk < ufs_rw32(cgp->cg_niblk, needswap)) {
+			/*
+			 * We have to release the cg buffer here to prevent
+			 * a deadlock when reading the inode block will
+			 * run a copy-on-write that might use this cg.
+			 */
+			brelse(bp, 0);
+			bp = NULL;
+			error = ffs_getblk(ip->i_devvp, fsbtodb(fs,
+			    ino_to_fsba(fs, cg * fs->fs_ipg + initediblk)),
+			    FFS_NOBLK, fs->fs_bsize, false, &ibp);
+			if (error)
+				goto fail;
+			goto retry;
+		}
+	}
+
+	cgp->cg_old_time = ufs_rw32(time_second, needswap);
+	if ((fs->fs_magic != FS_UFS1_MAGIC) ||
+	    (fs->fs_old_flags & FS_FLAGS_UPDATED))
+		cgp->cg_time = ufs_rw64(time_second, needswap);
+	inosused = cg_inosused(cgp, needswap);
 	if (ipref) {
 		ipref %= fs->fs_ipg;
-		if (isclr(cg_inosused(cgp, needswap), ipref))
+		if (isclr(inosused, ipref))
 			goto gotit;
 	}
 	start = ufs_rw32(cgp->cg_irotor, needswap) / NBBY;
 	len = howmany(fs->fs_ipg - ufs_rw32(cgp->cg_irotor, needswap),
 		NBBY);
-	loc = skpc(0xff, len, &cg_inosused(cgp, needswap)[start]);
+	loc = skpc(0xff, len, &inosused[start]);
 	if (loc == 0) {
 		len = start + 1;
 		start = 0;
-		loc = skpc(0xff, len, &cg_inosused(cgp, needswap)[0]);
+		loc = skpc(0xff, len, &inosused[0]);
 		if (loc == 0) {
 			printf("cg = %d, irotor = %d, fs = %s\n",
 			    cg, ufs_rw32(cgp->cg_irotor, needswap),
@@ -1264,7 +1692,7 @@ ffs_nodealloccg(ip, cg, ipref, mode)
 		}
 	}
 	i = start + len - loc;
-	map = cg_inosused(cgp, needswap)[i];
+	map = inosused[i];
 	ipref = i * NBBY;
 	for (i = 1; i < (1 << NBBY); i <<= 1, ipref++) {
 		if ((map & i) == 0) {
@@ -1276,9 +1704,30 @@ ffs_nodealloccg(ip, cg, ipref, mode)
 	panic("ffs_nodealloccg: block not in map");
 	/* NOTREACHED */
 gotit:
-	if (DOINGSOFTDEP(ITOV(ip)))
-		softdep_setup_inomapdep(bp, ip, cg * fs->fs_ipg + ipref);
-	setbit(cg_inosused(cgp, needswap), ipref);
+	UFS_WAPBL_REGISTER_INODE(ip->i_ump->um_mountp, cg * fs->fs_ipg + ipref,
+	    mode);
+	/*
+	 * Check to see if we need to initialize more inodes.
+	 */
+	if (ibp != NULL) {
+		KASSERT(initediblk == ufs_rw32(cgp->cg_initediblk, needswap));
+		memset(ibp->b_data, 0, fs->fs_bsize);
+		dp2 = (struct ufs2_dinode *)(ibp->b_data);
+		for (i = 0; i < INOPB(fs); i++) {
+			/*
+			 * Don't bother to swap, it's supposed to be
+			 * random, after all.
+			 */
+			dp2->di_gen = (arc4random() & INT32_MAX) / 2 + 1;
+			dp2++;
+		}
+		initediblk += INOPB(fs);
+		cgp->cg_initediblk = ufs_rw32(initediblk, needswap);
+	}
+
+	mutex_enter(&ump->um_lock);
+	ACTIVECG_CLR(fs, cg);
+	setbit(inosused, ipref);
 	ufs_add32(cgp->cg_cs.cs_nifree, -1, needswap);
 	fs->fs_cstotal.cs_nifree--;
 	fs->fs_cs(fs, cg).cs_nifree--;
@@ -1288,89 +1737,255 @@ gotit:
 		fs->fs_cstotal.cs_ndir++;
 		fs->fs_cs(fs, cg).cs_ndir++;
 	}
-	bdwrite(bp);
+	mutex_exit(&ump->um_lock);
+	if (DOINGSOFTDEP(ITOV(ip)))
+		softdep_setup_inomapdep(bp, ip, cg * fs->fs_ipg + ipref);
+	if (ibp != NULL) {
+		bwrite(bp);
+		bawrite(ibp);
+	} else
+		bdwrite(bp);
 	return (cg * fs->fs_ipg + ipref);
+ fail:
+	if (bp != NULL)
+		brelse(bp, 0);
+	if (ibp != NULL)
+		brelse(ibp, 0);
+	mutex_enter(&ump->um_lock);
+	return (0);
+}
+
+/*
+ * Allocate a block or fragment.
+ *
+ * The specified block or fragment is removed from the
+ * free map, possibly fragmenting a block in the process.
+ *
+ * This implementation should mirror fs_blkfree
+ *
+ * => um_lock not held on entry or exit
+ */
+int
+ffs_blkalloc(struct inode *ip, daddr_t bno, long size)
+{
+	struct ufsmount *ump = ip->i_ump;
+	struct fs *fs = ip->i_fs;
+	struct cg *cgp;
+	struct buf *bp;
+	int32_t fragno, cgbno;
+	int i, error, cg, blk, frags, bbase;
+	u_int8_t *blksfree;
+	const int needswap = UFS_FSNEEDSWAP(fs);
+
+	if ((u_int)size > fs->fs_bsize || fragoff(fs, size) != 0 ||
+	    fragnum(fs, bno) + numfrags(fs, size) > fs->fs_frag) {
+		printf("dev = 0x%x, bno = %" PRId64 " bsize = %d, "
+		       "size = %ld, fs = %s\n",
+		    ip->i_dev, bno, fs->fs_bsize, size, fs->fs_fsmnt);
+		panic("blkalloc: bad size");
+	}
+	cg = dtog(fs, bno);
+	if (bno >= fs->fs_size) {
+		printf("bad block %" PRId64 ", ino %" PRId64 "\n", bno,
+		    ip->i_number);
+		ffs_fserr(fs, ip->i_uid, "bad block");
+		return EINVAL;
+	}
+	error = bread(ip->i_devvp, fsbtodb(fs, cgtod(fs, cg)),
+		(int)fs->fs_cgsize, NOCRED, B_MODIFY, &bp);
+	if (error) {
+		brelse(bp, 0);
+		return error;
+	}
+	cgp = (struct cg *)bp->b_data;
+	if (!cg_chkmagic(cgp, needswap)) {
+		brelse(bp, 0);
+		return EIO;
+	}
+	cgp->cg_old_time = ufs_rw32(time_second, needswap);
+	cgp->cg_time = ufs_rw64(time_second, needswap);
+	cgbno = dtogd(fs, bno);
+	blksfree = cg_blksfree(cgp, needswap);
+
+	mutex_enter(&ump->um_lock);
+	if (size == fs->fs_bsize) {
+		fragno = fragstoblks(fs, cgbno);
+		if (!ffs_isblock(fs, blksfree, fragno)) {
+			mutex_exit(&ump->um_lock);
+			brelse(bp, 0);
+			return EBUSY;
+		}
+		ffs_clrblock(fs, blksfree, fragno);
+		ffs_clusteracct(fs, cgp, fragno, -1);
+		ufs_add32(cgp->cg_cs.cs_nbfree, -1, needswap);
+		fs->fs_cstotal.cs_nbfree--;
+		fs->fs_cs(fs, cg).cs_nbfree--;
+	} else {
+		bbase = cgbno - fragnum(fs, cgbno);
+
+		frags = numfrags(fs, size);
+		for (i = 0; i < frags; i++) {
+			if (isclr(blksfree, cgbno + i)) {
+				mutex_exit(&ump->um_lock);
+				brelse(bp, 0);
+				return EBUSY;
+			}
+		}
+		/*
+		 * if a complete block is being split, account for it
+		 */
+		fragno = fragstoblks(fs, bbase);
+		if (ffs_isblock(fs, blksfree, fragno)) {
+			ufs_add32(cgp->cg_cs.cs_nffree, fs->fs_frag, needswap);
+			fs->fs_cstotal.cs_nffree += fs->fs_frag;
+			fs->fs_cs(fs, cg).cs_nffree += fs->fs_frag;
+			ffs_clusteracct(fs, cgp, fragno, -1);
+			ufs_add32(cgp->cg_cs.cs_nbfree, -1, needswap);
+			fs->fs_cstotal.cs_nbfree--;
+			fs->fs_cs(fs, cg).cs_nbfree--;
+		}
+		/*
+		 * decrement the counts associated with the old frags
+		 */
+		blk = blkmap(fs, blksfree, bbase);
+		ffs_fragacct(fs, blk, cgp->cg_frsum, -1, needswap);
+		/*
+		 * allocate the fragment
+		 */
+		for (i = 0; i < frags; i++) {
+			clrbit(blksfree, cgbno + i);
+		}
+		ufs_add32(cgp->cg_cs.cs_nffree, -i, needswap);
+		fs->fs_cstotal.cs_nffree -= i;
+		fs->fs_cs(fs, cg).cs_nffree -= i;
+		/*
+		 * add back in counts associated with the new frags
+		 */
+		blk = blkmap(fs, blksfree, bbase);
+		ffs_fragacct(fs, blk, cgp->cg_frsum, 1, needswap);
+	}
+	fs->fs_fmod = 1;
+	ACTIVECG_CLR(fs, cg);
+	mutex_exit(&ump->um_lock);
+	bdwrite(bp);
+	return 0;
 }
 
 /*
  * Free a block or fragment.
  *
  * The specified block or fragment is placed back in the
- * free map. If a fragment is deallocated, a possible 
+ * free map. If a fragment is deallocated, a possible
  * block reassembly is checked.
+ *
+ * => um_lock not held on entry or exit
  */
 void
-ffs_blkfree(ip, bno, size)
-	struct inode *ip;
-	ufs_daddr_t bno;
-	long size;
+ffs_blkfree(struct fs *fs, struct vnode *devvp, daddr_t bno, long size,
+    ino_t inum)
 {
 	struct cg *cgp;
 	struct buf *bp;
-	ufs_daddr_t blkno;
+	struct ufsmount *ump;
+	int32_t fragno, cgbno;
+	daddr_t cgblkno;
 	int i, error, cg, blk, frags, bbase;
-	struct fs *fs = ip->i_fs;
+	u_int8_t *blksfree;
+	dev_t dev;
+	const bool devvp_is_snapshot = (devvp->v_type != VBLK);
 	const int needswap = UFS_FSNEEDSWAP(fs);
 
+	cg = dtog(fs, bno);
+	if (devvp_is_snapshot) {
+		dev = VTOI(devvp)->i_devvp->v_rdev;
+		ump = VFSTOUFS(devvp->v_mount);
+		cgblkno = fragstoblks(fs, cgtod(fs, cg));
+	} else {
+		dev = devvp->v_rdev;
+		ump = VFSTOUFS(devvp->v_specmountpoint);
+		cgblkno = fsbtodb(fs, cgtod(fs, cg));
+		if (ffs_snapblkfree(fs, devvp, bno, size, inum))
+			return;
+	}
 	if ((u_int)size > fs->fs_bsize || fragoff(fs, size) != 0 ||
 	    fragnum(fs, bno) + numfrags(fs, size) > fs->fs_frag) {
-		printf("dev = 0x%x, bno = %u bsize = %d, size = %ld, fs = %s\n",
-		    ip->i_dev, bno, fs->fs_bsize, size, fs->fs_fsmnt);
+		printf("dev = 0x%x, bno = %" PRId64 " bsize = %d, "
+		       "size = %ld, fs = %s\n",
+		    dev, bno, fs->fs_bsize, size, fs->fs_fsmnt);
 		panic("blkfree: bad size");
 	}
-	cg = dtog(fs, bno);
-	if ((u_int)bno >= fs->fs_size) {
-		printf("bad block %d, ino %d\n", bno, ip->i_number);
-		ffs_fserr(fs, ip->i_ffs_uid, "bad block");
+
+	if (bno >= fs->fs_size) {
+		printf("bad block %" PRId64 ", ino %llu\n", bno,
+		    (unsigned long long)inum);
+		ffs_fserr(fs, inum, "bad block");
 		return;
 	}
-	error = bread(ip->i_devvp, fsbtodb(fs, cgtod(fs, cg)),
-		(int)fs->fs_cgsize, NOCRED, &bp);
+	error = bread(devvp, cgblkno, (int)fs->fs_cgsize,
+	    NOCRED, B_MODIFY, &bp);
 	if (error) {
-		brelse(bp);
+		brelse(bp, 0);
 		return;
 	}
 	cgp = (struct cg *)bp->b_data;
 	if (!cg_chkmagic(cgp, needswap)) {
-		brelse(bp);
+		brelse(bp, 0);
 		return;
 	}
-	cgp->cg_time = ufs_rw32(time.tv_sec, needswap);
-	bno = dtogd(fs, bno);
+	cgp->cg_old_time = ufs_rw32(time_second, needswap);
+	if ((fs->fs_magic != FS_UFS1_MAGIC) ||
+	    (fs->fs_old_flags & FS_FLAGS_UPDATED))
+		cgp->cg_time = ufs_rw64(time_second, needswap);
+	cgbno = dtogd(fs, bno);
+	blksfree = cg_blksfree(cgp, needswap);
+	mutex_enter(&ump->um_lock);
 	if (size == fs->fs_bsize) {
-		blkno = fragstoblks(fs, bno);
-		if (!ffs_isfreeblock(fs, cg_blksfree(cgp, needswap), blkno)) {
-			printf("dev = 0x%x, block = %d, fs = %s\n",
-			    ip->i_dev, bno, fs->fs_fsmnt);
+		fragno = fragstoblks(fs, cgbno);
+		if (!ffs_isfreeblock(fs, blksfree, fragno)) {
+			if (devvp_is_snapshot) {
+				mutex_exit(&ump->um_lock);
+				brelse(bp, 0);
+				return;
+			}
+			printf("dev = 0x%x, block = %" PRId64 ", fs = %s\n",
+			    dev, bno, fs->fs_fsmnt);
 			panic("blkfree: freeing free block");
 		}
-		ffs_setblock(fs, cg_blksfree(cgp, needswap), blkno);
-		ffs_clusteracct(fs, cgp, blkno, 1);
+		ffs_setblock(fs, blksfree, fragno);
+		ffs_clusteracct(fs, cgp, fragno, 1);
 		ufs_add32(cgp->cg_cs.cs_nbfree, 1, needswap);
 		fs->fs_cstotal.cs_nbfree++;
 		fs->fs_cs(fs, cg).cs_nbfree++;
-		i = cbtocylno(fs, bno);
-		ufs_add16(cg_blks(fs, cgp, i, needswap)[cbtorpos(fs, bno)], 1,
-		    needswap);
-		ufs_add32(cg_blktot(cgp, needswap)[i], 1, needswap);
+		if ((fs->fs_magic == FS_UFS1_MAGIC) &&
+		    ((fs->fs_old_flags & FS_FLAGS_UPDATED) == 0)) {
+			i = old_cbtocylno(fs, cgbno);
+			KASSERT(i >= 0);
+			KASSERT(i < fs->fs_old_ncyl);
+			KASSERT(old_cbtorpos(fs, cgbno) >= 0);
+			KASSERT(fs->fs_old_nrpos == 0 || old_cbtorpos(fs, cgbno) < fs->fs_old_nrpos);
+			ufs_add16(old_cg_blks(fs, cgp, i, needswap)[old_cbtorpos(fs, cgbno)], 1,
+			    needswap);
+			ufs_add32(old_cg_blktot(cgp, needswap)[i], 1, needswap);
+		}
 	} else {
-		bbase = bno - fragnum(fs, bno);
+		bbase = cgbno - fragnum(fs, cgbno);
 		/*
 		 * decrement the counts associated with the old frags
 		 */
-		blk = blkmap(fs, cg_blksfree(cgp, needswap), bbase);
+		blk = blkmap(fs, blksfree, bbase);
 		ffs_fragacct(fs, blk, cgp->cg_frsum, -1, needswap);
 		/*
 		 * deallocate the fragment
 		 */
 		frags = numfrags(fs, size);
 		for (i = 0; i < frags; i++) {
-			if (isset(cg_blksfree(cgp, needswap), bno + i)) {
-				printf("dev = 0x%x, block = %d, fs = %s\n",
-				    ip->i_dev, bno + i, fs->fs_fsmnt);
+			if (isset(blksfree, cgbno + i)) {
+				printf("dev = 0x%x, block = %" PRId64
+				       ", fs = %s\n",
+				    dev, bno + i, fs->fs_fsmnt);
 				panic("blkfree: freeing free frag");
 			}
-			setbit(cg_blksfree(cgp, needswap), bno + i);
+			setbit(blksfree, cgbno + i);
 		}
 		ufs_add32(cgp->cg_cs.cs_nffree, i, needswap);
 		fs->fs_cstotal.cs_nffree += i;
@@ -1378,41 +1993,47 @@ ffs_blkfree(ip, bno, size)
 		/*
 		 * add back in counts associated with the new frags
 		 */
-		blk = blkmap(fs, cg_blksfree(cgp, needswap), bbase);
+		blk = blkmap(fs, blksfree, bbase);
 		ffs_fragacct(fs, blk, cgp->cg_frsum, 1, needswap);
 		/*
 		 * if a complete block has been reassembled, account for it
 		 */
-		blkno = fragstoblks(fs, bbase);
-		if (ffs_isblock(fs, cg_blksfree(cgp, needswap), blkno)) {
+		fragno = fragstoblks(fs, bbase);
+		if (ffs_isblock(fs, blksfree, fragno)) {
 			ufs_add32(cgp->cg_cs.cs_nffree, -fs->fs_frag, needswap);
 			fs->fs_cstotal.cs_nffree -= fs->fs_frag;
 			fs->fs_cs(fs, cg).cs_nffree -= fs->fs_frag;
-			ffs_clusteracct(fs, cgp, blkno, 1);
+			ffs_clusteracct(fs, cgp, fragno, 1);
 			ufs_add32(cgp->cg_cs.cs_nbfree, 1, needswap);
 			fs->fs_cstotal.cs_nbfree++;
 			fs->fs_cs(fs, cg).cs_nbfree++;
-			i = cbtocylno(fs, bbase);
-			ufs_add16(cg_blks(fs, cgp, i, needswap)[cbtorpos(fs,
-								bbase)], 1,
-			    needswap);
-			ufs_add32(cg_blktot(cgp, needswap)[i], 1, needswap);
+			if ((fs->fs_magic == FS_UFS1_MAGIC) &&
+			    ((fs->fs_old_flags & FS_FLAGS_UPDATED) == 0)) {
+				i = old_cbtocylno(fs, bbase);
+				KASSERT(i >= 0);
+				KASSERT(i < fs->fs_old_ncyl);
+				KASSERT(old_cbtorpos(fs, bbase) >= 0);
+				KASSERT(fs->fs_old_nrpos == 0 || old_cbtorpos(fs, bbase) < fs->fs_old_nrpos);
+				ufs_add16(old_cg_blks(fs, cgp, i, needswap)[old_cbtorpos(fs,
+				    bbase)], 1, needswap);
+				ufs_add32(old_cg_blktot(cgp, needswap)[i], 1, needswap);
+			}
 		}
 	}
 	fs->fs_fmod = 1;
+	ACTIVECG_CLR(fs, cg);
+	mutex_exit(&ump->um_lock);
 	bdwrite(bp);
 }
 
 #if defined(DIAGNOSTIC) || defined(DEBUG)
+#ifdef XXXUBC
 /*
  * Verify allocation of a block or fragment. Returns true if block or
  * fragment is allocated, false if it is free.
  */
 static int
-ffs_checkblk(ip, bno, size)
-	struct inode *ip;
-	ufs_daddr_t bno;
-	long size;
+ffs_checkblk(struct inode *ip, daddr_t bno, long size)
 {
 	struct fs *fs;
 	struct cg *cgp;
@@ -1425,17 +2046,17 @@ ffs_checkblk(ip, bno, size)
 		    fs->fs_bsize, size, fs->fs_fsmnt);
 		panic("checkblk: bad size");
 	}
-	if ((u_int)bno >= fs->fs_size)
+	if (bno >= fs->fs_size)
 		panic("checkblk: bad block %d", bno);
 	error = bread(ip->i_devvp, fsbtodb(fs, cgtod(fs, dtog(fs, bno))),
-		(int)fs->fs_cgsize, NOCRED, &bp);
+		(int)fs->fs_cgsize, NOCRED, 0, &bp);
 	if (error) {
-		brelse(bp);
+		brelse(bp, 0);
 		return 0;
 	}
 	cgp = (struct cg *)bp->b_data;
 	if (!cg_chkmagic(cgp, UFS_FSNEEDSWAP(fs))) {
-		brelse(bp);
+		brelse(bp, 0);
 		return 0;
 	}
 	bno = dtogd(fs, bno);
@@ -1450,91 +2071,144 @@ ffs_checkblk(ip, bno, size)
 		if (free != 0 && free != frags)
 			panic("checkblk: partially free fragment");
 	}
-	brelse(bp);
+	brelse(bp, 0);
 	return (!free);
 }
+#endif /* XXXUBC */
 #endif /* DIAGNOSTIC */
 
 /*
  * Free an inode.
  */
 int
-ffs_vfree(v)
-	void *v;
+ffs_vfree(struct vnode *vp, ino_t ino, int mode)
 {
-	struct vop_vfree_args /* {
-		struct vnode *a_pvp;
-		ino_t a_ino;
-		int a_mode;
-	} */ *ap = v;
 
-	if (DOINGSOFTDEP(ap->a_pvp)) {
-		softdep_freefile(ap);
+	if (DOINGSOFTDEP(vp)) {
+		softdep_freefile(vp, ino, mode);
 		return (0);
 	}
-	return (ffs_freefile(ap));
+	return ffs_freefile(VTOI(vp)->i_fs, VTOI(vp)->i_devvp, ino, mode);
 }
 
 /*
  * Do the actual free operation.
  * The specified inode is placed back in the free map.
+ *
+ * => um_lock not held on entry or exit
  */
 int
-ffs_freefile(v)
-	void *v;
+ffs_freefile(struct fs *fs, struct vnode *devvp, ino_t ino, int mode)
 {
-	struct vop_vfree_args /* {
-		struct vnode *a_pvp;
-		ino_t a_ino;
-		int a_mode;
-	} */ *ap = v;
+	struct ufsmount *ump;
 	struct cg *cgp;
-	struct inode *pip = VTOI(ap->a_pvp);
-	struct fs *fs = pip->i_fs;
-	ino_t ino = ap->a_ino;
 	struct buf *bp;
 	int error, cg;
+	daddr_t cgbno;
+	u_int8_t *inosused;
+	dev_t dev;
+	const bool devvp_is_snapshot = (devvp->v_type != VBLK);
 #ifdef FFS_EI
 	const int needswap = UFS_FSNEEDSWAP(fs);
 #endif
 
-	if ((u_int)ino >= fs->fs_ipg * fs->fs_ncg)
-		panic("ifree: range: dev = 0x%x, ino = %d, fs = %s\n",
-		    pip->i_dev, ino, fs->fs_fsmnt);
+	if (!devvp_is_snapshot) {
+		UFS_WAPBL_JLOCK_ASSERT(devvp->v_specinfo->si_mountpoint);
+	}
+
 	cg = ino_to_cg(fs, ino);
-	error = bread(pip->i_devvp, fsbtodb(fs, cgtod(fs, cg)),
-		(int)fs->fs_cgsize, NOCRED, &bp);
+	if (devvp_is_snapshot) {
+		dev = VTOI(devvp)->i_devvp->v_rdev;
+		ump = VFSTOUFS(devvp->v_mount);
+		cgbno = fragstoblks(fs, cgtod(fs, cg));
+	} else {
+		dev = devvp->v_rdev;
+		ump = VFSTOUFS(devvp->v_specmountpoint);
+		cgbno = fsbtodb(fs, cgtod(fs, cg));
+	}
+	if ((u_int)ino >= fs->fs_ipg * fs->fs_ncg)
+		panic("ifree: range: dev = 0x%x, ino = %llu, fs = %s",
+		    dev, (unsigned long long)ino, fs->fs_fsmnt);
+	error = bread(devvp, cgbno, (int)fs->fs_cgsize,
+	    NOCRED, B_MODIFY, &bp);
 	if (error) {
-		brelse(bp);
+		brelse(bp, 0);
 		return (error);
 	}
 	cgp = (struct cg *)bp->b_data;
 	if (!cg_chkmagic(cgp, needswap)) {
-		brelse(bp);
+		brelse(bp, 0);
 		return (0);
 	}
-	cgp->cg_time = ufs_rw32(time.tv_sec, needswap);
+	cgp->cg_old_time = ufs_rw32(time_second, needswap);
+	if ((fs->fs_magic != FS_UFS1_MAGIC) ||
+	    (fs->fs_old_flags & FS_FLAGS_UPDATED))
+		cgp->cg_time = ufs_rw64(time_second, needswap);
+	inosused = cg_inosused(cgp, needswap);
 	ino %= fs->fs_ipg;
-	if (isclr(cg_inosused(cgp, needswap), ino)) {
-		printf("dev = 0x%x, ino = %d, fs = %s\n",
-		    pip->i_dev, ino, fs->fs_fsmnt);
+	if (isclr(inosused, ino)) {
+		printf("ifree: dev = 0x%x, ino = %llu, fs = %s\n",
+		    dev, (unsigned long long)ino + cg * fs->fs_ipg,
+		    fs->fs_fsmnt);
 		if (fs->fs_ronly == 0)
 			panic("ifree: freeing free inode");
 	}
-	clrbit(cg_inosused(cgp, needswap), ino);
+	clrbit(inosused, ino);
+	if (!devvp_is_snapshot)
+		UFS_WAPBL_UNREGISTER_INODE(devvp->v_specmountpoint,
+		    ino + cg * fs->fs_ipg, mode);
 	if (ino < ufs_rw32(cgp->cg_irotor, needswap))
 		cgp->cg_irotor = ufs_rw32(ino, needswap);
 	ufs_add32(cgp->cg_cs.cs_nifree, 1, needswap);
+	mutex_enter(&ump->um_lock);
 	fs->fs_cstotal.cs_nifree++;
 	fs->fs_cs(fs, cg).cs_nifree++;
-	if ((ap->a_mode & IFMT) == IFDIR) {
+	if ((mode & IFMT) == IFDIR) {
 		ufs_add32(cgp->cg_cs.cs_ndir, -1, needswap);
 		fs->fs_cstotal.cs_ndir--;
 		fs->fs_cs(fs, cg).cs_ndir--;
 	}
 	fs->fs_fmod = 1;
+	ACTIVECG_CLR(fs, cg);
+	mutex_exit(&ump->um_lock);
 	bdwrite(bp);
 	return (0);
+}
+
+/*
+ * Check to see if a file is free.
+ */
+int
+ffs_checkfreefile(struct fs *fs, struct vnode *devvp, ino_t ino)
+{
+	struct cg *cgp;
+	struct buf *bp;
+	daddr_t cgbno;
+	int ret, cg;
+	u_int8_t *inosused;
+	const bool devvp_is_snapshot = (devvp->v_type != VBLK);
+
+	cg = ino_to_cg(fs, ino);
+	if (devvp_is_snapshot)
+		cgbno = fragstoblks(fs, cgtod(fs, cg));
+	else
+		cgbno = fsbtodb(fs, cgtod(fs, cg));
+	if ((u_int)ino >= fs->fs_ipg * fs->fs_ncg)
+		return 1;
+	if (bread(devvp, cgbno, (int)fs->fs_cgsize, NOCRED, 0, &bp)) {
+		brelse(bp, 0);
+		return 1;
+	}
+	cgp = (struct cg *)bp->b_data;
+	if (!cg_chkmagic(cgp, UFS_FSNEEDSWAP(fs))) {
+		brelse(bp, 0);
+		return 1;
+	}
+	inosused = cg_inosused(cgp, UFS_FSNEEDSWAP(fs));
+	ino %= fs->fs_ipg;
+	ret = isclr(inosused, ino);
+	brelse(bp, 0);
+	return ret;
 }
 
 /*
@@ -1543,20 +2217,19 @@ ffs_freefile(v)
  * It is a panic if a request is made to find a block if none are
  * available.
  */
-static ufs_daddr_t
-ffs_mapsearch(fs, cgp, bpref, allocsiz)
-	struct fs *fs;
-	struct cg *cgp;
-	ufs_daddr_t bpref;
-	int allocsiz;
+static int32_t
+ffs_mapsearch(struct fs *fs, struct cg *cgp, daddr_t bpref, int allocsiz)
 {
-	ufs_daddr_t bno;
+	int32_t bno;
 	int start, len, loc, i;
 	int blk, field, subfield, pos;
 	int ostart, olen;
+	u_int8_t *blksfree;
 #ifdef FFS_EI
 	const int needswap = UFS_FSNEEDSWAP(fs);
 #endif
+
+	/* KASSERT(mutex_owned(&ump->um_lock)); */
 
 	/*
 	 * find the fragment by searching through the free block
@@ -1566,24 +2239,28 @@ ffs_mapsearch(fs, cgp, bpref, allocsiz)
 		start = dtogd(fs, bpref) / NBBY;
 	else
 		start = ufs_rw32(cgp->cg_frotor, needswap) / NBBY;
+	blksfree = cg_blksfree(cgp, needswap);
 	len = howmany(fs->fs_fpg, NBBY) - start;
 	ostart = start;
 	olen = len;
-	loc = scanc((u_int)len, (u_char *)&cg_blksfree(cgp, needswap)[start],
-		(u_char *)fragtbl[fs->fs_frag],
-		(u_char)(1 << (allocsiz - 1 + (fs->fs_frag % NBBY))));
+	loc = scanc((u_int)len,
+		(const u_char *)&blksfree[start],
+		(const u_char *)fragtbl[fs->fs_frag],
+		(1 << (allocsiz - 1 + (fs->fs_frag & (NBBY - 1)))));
 	if (loc == 0) {
 		len = start + 1;
 		start = 0;
-		loc = scanc((u_int)len, (u_char *)&cg_blksfree(cgp, needswap)[0],
-			(u_char *)fragtbl[fs->fs_frag],
-			(u_char)(1 << (allocsiz - 1 + (fs->fs_frag % NBBY))));
+		loc = scanc((u_int)len,
+			(const u_char *)&blksfree[0],
+			(const u_char *)fragtbl[fs->fs_frag],
+			(1 << (allocsiz - 1 + (fs->fs_frag & (NBBY - 1)))));
 		if (loc == 0) {
 			printf("start = %d, len = %d, fs = %s\n",
 			    ostart, olen, fs->fs_fsmnt);
 			printf("offset=%d %ld\n",
 				ufs_rw32(cgp->cg_freeoff, needswap),
-				(long)cg_blksfree(cgp, needswap) - (long)cgp);
+				(long)blksfree - (long)cgp);
+			printf("cg %d\n", cgp->cg_cgx);
 			panic("ffs_alloccg: map corrupted");
 			/* NOTREACHED */
 		}
@@ -1595,7 +2272,7 @@ ffs_mapsearch(fs, cgp, bpref, allocsiz)
 	 * sift through the bits to find the selected frag
 	 */
 	for (i = bno + NBBY; bno < i; bno += fs->fs_frag) {
-		blk = blkmap(fs, cg_blksfree(cgp, needswap), bno);
+		blk = blkmap(fs, blksfree, bno);
 		blk <<= 1;
 		field = around[allocsiz];
 		subfield = inside[allocsiz];
@@ -1608,7 +2285,7 @@ ffs_mapsearch(fs, cgp, bpref, allocsiz)
 	}
 	printf("bno = %d, fs = %s\n", bno, fs->fs_fsmnt);
 	panic("ffs_alloccg: block not in map");
-	return (-1);
+	/* return (-1); */
 }
 
 /*
@@ -1617,11 +2294,7 @@ ffs_mapsearch(fs, cgp, bpref, allocsiz)
  * Cnt == 1 means free; cnt == -1 means allocating.
  */
 void
-ffs_clusteracct(fs, cgp, blkno, cnt)
-	struct fs *fs;
-	struct cg *cgp;
-	ufs_daddr_t blkno;
-	int cnt;
+ffs_clusteracct(struct fs *fs, struct cg *cgp, int32_t blkno, int cnt)
 {
 	int32_t *sump;
 	int32_t *lp;
@@ -1630,6 +2303,8 @@ ffs_clusteracct(fs, cgp, blkno, cnt)
 #ifdef FFS_EI
 	const int needswap = UFS_FSNEEDSWAP(fs);
 #endif
+
+	/* KASSERT(mutex_owned(&ump->um_lock)); */
 
 	if (fs->fs_contigsumsize <= 0)
 		return;
@@ -1709,16 +2384,14 @@ ffs_clusteracct(fs, cgp, blkno, cnt)
 
 /*
  * Fserr prints the name of a file system with an error diagnostic.
- * 
+ *
  * The form of the error message is:
  *	fs: error message
  */
 static void
-ffs_fserr(fs, uid, cp)
-	struct fs *fs;
-	u_int uid;
-	char *cp;
+ffs_fserr(struct fs *fs, u_int uid, const char *cp)
 {
 
-	log(LOG_ERR, "uid %d on %s: %s\n", uid, fs->fs_fsmnt, cp);
+	log(LOG_ERR, "uid %d, pid %d, command %s, on %s: %s\n",
+	    uid, curproc->p_pid, curproc->p_comm, fs->fs_fsmnt, cp);
 }

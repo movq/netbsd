@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,15 +32,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "from: @(#)fsplit.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: fsplit.c,v 1.7 1998/12/19 16:38:10 christos Exp $");
+__RCSID("$NetBSD: fsplit.c,v 1.13.4.1 2008/11/23 18:28:58 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,8 +49,10 @@ __RCSID("$NetBSD: fsplit.c,v 1.7 1998/12/19 16:38:10 christos Exp $");
 
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <err.h>
 
 /*
  *	usage:		fsplit [-e efile] ... [file]
@@ -94,7 +92,7 @@ int	getline __P((void));
 void	get_name __P((char *, int));
 int	main __P((int, char **));
 int	lend __P((void));
-int	lname __P((char *));
+int	lname __P((char *, size_t));
 char   *look __P((char *, char *));
 int	saveit __P((char *));
 int	scan_name __P((char *, char *));
@@ -121,7 +119,7 @@ main(argc, argv)
 	char *ptr;
 	int nflag;	/* 1 if got name of subprog., 0 otherwise */
 	int retval, i;
-	char name[20], *extrptr = extrbuf;
+	char name[80], *extrptr = extrbuf;
 
 	/*  scan -e options */
 	while ( argc > 1  && argv[1][0] == '-' && argv[1][1] == 'e') {
@@ -156,6 +154,9 @@ main(argc, argv)
 	/* look for a temp file that doesn't correspond to an existing file */
 	get_name(x, 3);
 	ofp = fopen(x, "w");
+	if (ofp == NULL) {
+		err(1, "%s", x);
+	}
 	nflag = 0;
 	rv = 0;
 	while (getline() > 0) {
@@ -164,7 +165,7 @@ main(argc, argv)
 		if (lend())		/* look for an 'end' statement */
 			break;
 		if (nflag == 0)		/* if no name yet, try and find one */
-			nflag = lname(name);
+			nflag = lname(name, sizeof(name));
 	}
 	fclose(ofp);
 	if (rv == 0) {			/* no lines in file, forget the file */
@@ -298,8 +299,9 @@ lend()
 		block datas and main programs.		*/
 
 int
-lname(s)
+lname(s, l)
 	char *s;
+	size_t l;
 {
 #	define LINESIZE 80 
 	char *ptr, *p;
@@ -320,7 +322,7 @@ lname(s)
 	/*  copy to buffer and converting to lower case */
 	p = ptr;
 	while (*p && p <= &buf[71] ) {
-	   *iptr = isupper((unsigned char)*p) ? tolower(*p) : *p;
+	   *iptr = tolower((unsigned char)*p);
 	   iptr++;
 	   p++;
 	}
@@ -330,21 +332,21 @@ lname(s)
 	    (ptr = look(line, "function")) != 0 ||
 	    (ptr = functs(line)) != 0) {
 		if(scan_name(s, ptr)) return(1);
-		strcpy( s, x);
+		strlcpy(s, x, l);
 	} else if((ptr = look(line, "program")) != 0) {
 		if(scan_name(s, ptr)) return(1);
-		get_name( mainp, 4);
-		strcpy( s, mainp);
+		get_name(mainp, 4);
+		strlcpy(s, mainp, l);
 	} else if((ptr = look(line, "blockdata")) != 0) {
 		if(scan_name(s, ptr)) return(1);
 		get_name( blkp, 6);
-		strcpy( s, blkp);
+		strlcpy(s, blkp, l);
 	} else if((ptr = functs(line)) != 0) {
 		if(scan_name(s, ptr)) return(1);
-		strcpy( s, x);
+		strlcpy(s, x, l);
 	} else {
-		get_name( mainp, 4);
-		strcpy( s, mainp);
+		get_name(mainp, 4);
+		strlcpy(s, mainp, l);
 	}
 	return(1);
 }
@@ -359,7 +361,7 @@ scan_name(s, ptr)
 	trim(ptr);
 	sptr = s;
 	while (*ptr != '(' && *ptr != '\n') {
-		if (*ptr != ' ' && *ptr != '\t')
+		if (*ptr != ' ' && *ptr != '\t' && *ptr != '/')
 			*sptr++ = *ptr;
 		ptr++;
 	}
