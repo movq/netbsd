@@ -1,7 +1,5 @@
-/*	$NetBSD: bpf_image.c,v 1.5 1997/10/03 15:53:02 christos Exp $	*/
-
 /*
- * Copyright (c) 1990, 1991, 1992, 1994, 1995, 1996
+ * Copyright (c) 1990, 1991, 1992, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -21,28 +19,19 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] =
-    "@(#) Header: bpf_image.c,v 1.22 96/09/26 23:27:56 leres Exp  (LBL)";
-#else
-__RCSID("$NetBSD: bpf_image.c,v 1.5 1997/10/03 15:53:02 christos Exp $");
-#endif
+static char rcsid[] =
+	"@(#) Header: bpf_image.c,v 1.12 94/01/31 03:22:34 leres Exp (LBL)";
 #endif
 
 #include <sys/types.h>
 #include <sys/time.h>
 
+#include <net/bpf.h>
+
+#include <pcap.h>
 #include <stdio.h>
 #include <string.h>
-
-#include "pcap-int.h"
-
-#include "gnuc.h"
-#ifdef HAVE_OS_PROTO_H
-#include "os-proto.h"
-#endif
 
 char *
 bpf_image(p, n)
@@ -146,7 +135,7 @@ bpf_image(p, n)
 	case BPF_JMP|BPF_JA:
 		op = "ja";
 		fmt = "%d";
-		v = n + 1 + p->k;
+		v = n + p->k;
 		break;
 
 	case BPF_JMP|BPF_JGT|BPF_K:
@@ -251,12 +240,12 @@ bpf_image(p, n)
 
 	case BPF_ALU|BPF_AND|BPF_K:
 		op = "and";
-		fmt = "#0x%x";
+		fmt = "#%d";
 		break;
 
 	case BPF_ALU|BPF_OR|BPF_K:
 		op = "or";
-		fmt = "#0x%x";
+		fmt = "#%d";
 		break;
 
 	case BPF_ALU|BPF_LSH|BPF_K:
@@ -284,8 +273,8 @@ bpf_image(p, n)
 		fmt = "";
 		break;
 	}
-	(void)snprintf(operand, sizeof operand, fmt, v);
-	(void)snprintf(image, sizeof image,
+	(void)sprintf(operand, fmt, v);
+	(void)sprintf(image,
 		      (BPF_CLASS(p->code) == BPF_JMP &&
 		       BPF_OP(p->code) != BPF_JA) ?
 		      "(%03d) %-8s %-16s jt %d\tjf %d"

@@ -1,8 +1,6 @@
-/*	$NetBSD: util.c,v 1.5 1996/05/20 00:41:19 fvdl Exp $	*/
-
 /*
- * Copyright (c) 1990, 1991, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988-1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that: (1) source code distributions
@@ -19,91 +17,83 @@
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ * 
+ * $Id: util.c,v 1.1 1993/11/14 21:21:15 deraadt Exp $
  */
 
 #ifndef lint
 static char rcsid[] =
-    "@(#) Header: util.c,v 1.28+ 94/06/12 14:30:31 leres Exp (LBL)";
+    "@(#) Header: util.c,v 1.12 91/10/28 22:09:31 mccanne Exp (LBL)";
 #endif
 
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/time.h>
-#include <sys/file.h>
-#include <sys/stat.h>
-
-#include <ctype.h>
-#ifdef SVR4
-#include <fcntl.h>
-#endif
+#include <stdio.h>
 #ifdef __STDC__
 #include <stdlib.h>
 #endif
-#include <stdio.h>
-#if __STDC__
-#include <stdarg.h>
-#else
+#include <sys/types.h>
+#include <sys/time.h>
+#include <ctype.h>
 #include <varargs.h>
-#endif
-#include <string.h>
-#include <unistd.h>
+#include <sys/file.h>
+#include <sys/stat.h>
 
 #include "interface.h"
 
-/*
- * Print out a filename (or other ascii string).
- * If ep is NULL, assume no truncation check is needed.
- * Return true if truncated.
- */
-int
-fn_print(register const u_char *s, register const u_char *ep)
+/* Hex digit to integer. */
+static inline int
+xdtoi(c)
 {
-	register int ret;
-	register u_char c;
-
-	ret = 1;			/* assume truncated */
-	putchar('"');
-	while (ep == NULL || s < ep) {
-		c = *s++;
-		if (c == '\0') {
-			ret = 0;
-			break;
-		}
-		if (!isascii(c)) {
-			c = toascii(c);
-			putchar('M');
-			putchar('-');
-		}
-		if (!isprint(c)) {
-			c ^= 0x40;	/* DEL to ?, others to alpha */
-			putchar('^');
-		}
-		putchar(c);
-	}
-	putchar('"');
-	return(ret);
+	if (isdigit(c))
+		return c - '0';
+	else if (islower(c))
+		return c - 'a' + 10;
+	else
+		return c - 'A' + 10;
 }
 
 /*
- * Print out a counted filename (or other ascii string).
- * If ep is NULL, assume no truncation check is needed.
+ * Convert string to integer.  Just like atoi(), but checks for 
+ * preceding 0x or 0 and uses hex or octal instead of decimal.
+ */
+int
+stoi(s)
+	char *s;
+{
+	int base = 10;
+	int n = 0;
+
+	if (*s == '0') {
+		if (s[1] == 'x' || s[1] == 'X') {
+			s += 2;
+			base = 16;
+		}
+		else {
+			base = 8;
+			s += 1;
+		}
+	}
+	while (*s)
+		n = n * base + xdtoi(*s++);
+
+	return n;
+}
+
+/*
+ * Print out a filename (or other ascii string).
  * Return true if truncated.
  */
 int
-fn_printn(register const u_char *s, register u_int n,
-	  register const u_char *ep)
+printfn(s, ep)
+	register u_char *s, *ep;
 {
-	register int ret;
 	register u_char c;
 
-	ret = 1;			/* assume truncated */
 	putchar('"');
-	while (ep == NULL || s < ep) {
-		if (n-- <= 0) {
-			ret = 0;
-			break;
+	while (c = *s++) {
+		if (s > ep) {
+			putchar('"');
+			return(1);
 		}
-		c = *s++;
 		if (!isascii(c)) {
 			c = toascii(c);
 			putchar('M');
@@ -116,77 +106,32 @@ fn_printn(register const u_char *s, register u_int n,
 		putchar(c);
 	}
 	putchar('"');
-	return(ret);
+	return(0);
 }
 
 /*
  * Print the timestamp
  */
 void
-ts_print(register const struct timeval *tvp)
+ts_print(tvp)
+	register struct timeval *tvp;
 {
-	register int s;
-	extern int32 thiszone;
+	register int i;
 
 	if (tflag > 0) {
 		/* Default */
-		s = (tvp->tv_sec + thiszone) % 86400;
+		i = (tvp->tv_sec + thiszone) % 86400;
 		(void)printf("%02d:%02d:%02d.%06d ",
-		    s / 3600, (s % 3600) / 60, s % 60, tvp->tv_usec);
+		    i / 3600, (i % 3600) / 60, i % 60, tvp->tv_usec);
 	} else if (tflag < 0) {
 		/* Unix timeval style */
 		(void)printf("%d.%06d ", tvp->tv_sec, tvp->tv_usec);
 	}
 }
 
-/*
- * Convert a token value to a string; use "fmt" if not found.
- */
-const char *
-tok2str(register const struct token *lp, register const char *fmt,
-	register int v)
-{
-	static char buf[128];
-
-	while (lp->s != NULL) {
-		if (lp->v == v)
-			return (lp->s);
-		++lp;
-	}
-	if (fmt == NULL)
-		fmt = "#%d";
-	(void)sprintf(buf, fmt, v);
-	return (buf);
-}
-
-/* A replacement for strdup() that cuts down on malloc() overhead */
-char *
-savestr(register const char *str)
-{
-	register u_int size;
-	register char *p;
-	static char *strptr = NULL;
-	static u_int strsize = 0;
-
-	size = strlen(str) + 1;
-	if (size > strsize) {
-		strsize = 1024;
-		if (strsize < size)
-			strsize = size;
-		strptr = (char *)malloc(strsize);
-		if (strptr == NULL)
-			error("savestr: malloc");
-	}
-	(void)strcpy(strptr, str);
-	p = strptr;
-	strptr += size;
-	strsize -= size;
-	return (p);
-}
-
 #ifdef NOVFPRINTF
 /*
- * Stock 4.3 doesn't have vfprintf.
+ * Stock 4.3 doesn't have vfprintf. 
  * This routine is due to Chris Torek.
  */
 vfprintf(f, fmt, args)
@@ -207,29 +152,34 @@ vfprintf(f, fmt, args)
 }
 #endif
 
-/* VARARGS */
-__dead void
-#if __STDC__ || defined(SOLARIS)
-error(char *fmt, ...)
-#else
-error(fmt, va_alist)
-	char *fmt;
-	va_dcl
-#endif
+static char *
+stripdir(s)
+	register char *s;
 {
+	register char *cp;
+	char *rindex();
+
+	cp = rindex(s, '/');
+	return (cp != 0) ? cp + 1 : s;
+}
+
+/* VARARGS */
+void
+error(va_alist)
+	va_dcl
+{
+	register char *cp;
 	va_list ap;
 
-	(void)fprintf(stderr, "%s: ", program_name);
-#if __STDC__
-	va_start(ap, fmt);
-#else
+	(void)fprintf(stderr, "%s: ", stripdir(program_name));
+
 	va_start(ap);
-#endif
-	(void)vfprintf(stderr, fmt, ap);
+	cp = va_arg(ap, char *);
+	(void)vfprintf(stderr, cp, ap);
 	va_end(ap);
-	if (*fmt) {
-		fmt += strlen(fmt);
-		if (fmt[-1] != '\n')
+	if (*cp) {
+		cp += strlen(cp);
+		if (cp[-1] != '\n')
 			(void)fputc('\n', stderr);
 	}
 	exit(1);
@@ -238,36 +188,32 @@ error(fmt, va_alist)
 
 /* VARARGS */
 void
-#if __STDC__ || defined(SOLARIS)
-warning(char *fmt, ...)
-#else
-warning(fmt, va_alist)
-	char *fmt;
+warning(va_alist)
 	va_dcl
-#endif
 {
+	register char *cp;
 	va_list ap;
 
-	(void)fprintf(stderr, "%s: warning: ", program_name);
-#if __STDC__
-	va_start(ap, fmt);
-#else
+	(void)fprintf(stderr, "%s: warning: ", stripdir(program_name));
+
 	va_start(ap);
-#endif
-	(void)vfprintf(stderr, fmt, ap);
+	cp = va_arg(ap, char *);
+	(void)vfprintf(stderr, cp, ap);
 	va_end(ap);
-	if (*fmt) {
-		fmt += strlen(fmt);
-		if (fmt[-1] != '\n')
+	if (*cp) {
+		cp += strlen(cp);
+		if (cp[-1] != '\n')
 			(void)fputc('\n', stderr);
 	}
 }
+
 
 /*
  * Copy arg vector into a new buffer, concatenating arguments with spaces.
  */
 char *
-copy_argv(register char **argv)
+copy_argv(argv)
+	register char **argv;
 {
 	register char **p;
 	register int len = 0;
@@ -281,12 +227,12 @@ copy_argv(register char **argv)
 	while (*p)
 		len += strlen(*p++) + 1;
 
-	buf = (char *)malloc(len);
+	buf = malloc(len);
 
 	p = argv;
 	dst = buf;
-	while ((src = *p++) != NULL) {
-		while ((*dst++ = *src++) != '\0')
+	while (src = *p++) {
+		while (*dst++ = *src++)
 			;
 		dst[-1] = ' ';
 	}
@@ -296,7 +242,8 @@ copy_argv(register char **argv)
 }
 
 char *
-read_infile(char *fname)
+read_infile(fname)
+	char *fname;
 {
 	struct stat buf;
 	int fd;
@@ -309,35 +256,25 @@ read_infile(char *fname)
 	if (fstat(fd, &buf) < 0)
 		error("can't state '%s'", fname);
 
-	p = (char *)malloc((u_int)buf.st_size);
+	p = malloc((unsigned)buf.st_size);
 	if (read(fd, p, (int)buf.st_size) != buf.st_size)
 		error("problem reading '%s'", fname);
-
+	
 	return p;
 }
 
-int
-gmt2local()
+/*
+ * Left justify 'addr' and return its resulting network mask.
+ */
+u_long
+net_mask(addr)
+	u_long *addr;
 {
-#ifndef SVR4
-	struct timeval tv;
-	struct timezone tz;
-	register struct tm *tm;
-	register int t;
+	register u_long m = 0xffffffff;
 
-	if (gettimeofday(&tv, &tz) < 0)
-		error("gettimeofday");
-	tm = localtime((time_t *)&tv.tv_sec);
-#ifndef SUNOS3
-	t = tm->tm_gmtoff;
-#else
-	t = tz.tz_minuteswest * -60;
-	if (tm->tm_isdst)
-		t += 3600;
-#endif
-	return (t);
-#else
-	tzset();
-	return (-altzone);
-#endif
+	if (*addr)
+		while ((*addr & 0xff000000) == 0)
+			*addr <<= 8, m <<= 8;
+
+	return m;
 }

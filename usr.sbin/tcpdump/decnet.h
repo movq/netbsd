@@ -1,5 +1,3 @@
-/*	$NetBSD: decnet.h,v 1.2 1995/03/06 19:09:58 mycroft Exp $	*/
-
 /*
  * Copyright (c) 1992, 1994
  *	The Regents of the University of California.  All rights reserved.

@@ -1,8 +1,6 @@
 %{
-/*	$NetBSD: grammar.y,v 1.5 1997/10/03 15:53:07 christos Exp $	*/
-
 /*
- * Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996
+ * Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -22,45 +20,26 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  *
  */
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] =
-    "@(#) Header: grammar.y,v 1.56 96/11/02 21:54:55 leres Exp  (LBL)";
-#else
-__RCSID("$NetBSD: grammar.y,v 1.5 1997/10/03 15:53:07 christos Exp $");
-#endif
+static char rcsid[] =
+    "@(#) Header: grammar.y,v 1.39 94/06/14 20:09:25 leres Exp (LBL)";
 #endif
 
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/socket.h>
 
-#if __STDC__
-struct mbuf;
-struct rtentry;
-#endif
-
 #include <net/if.h>
+#include <net/bpf.h>
 
 #include <netinet/in.h>
-#ifdef __NetBSD__
-#include <net/if_ether.h>
-#else
 #include <netinet/if_ether.h>
-#endif
 
 #include <stdio.h>
-
-#include "pcap-int.h"
-
-#include "gencode.h"
+#include <pcap.h>
 #include <pcap-namedb.h>
 
-#include "gnuc.h"
-#ifdef HAVE_OS_PROTO_H
-#include "os-proto.h"
-#endif
+#include "gencode.h"
 
 #define QSET(q, p, d, a) (q).proto = (p),\
 			 (q).dir = (d),\
@@ -74,14 +53,11 @@ static void
 yyerror(char *msg)
 {
 	++n_errors;
-	bpf_error("%s", msg);
+	bpf_error(msg);
 	/* NOTREACHED */
 }
 
 #ifndef YYBISON
-int yyparse(void);
-
-int
 pcap_parse()
 {
 	return (yyparse());
@@ -92,7 +68,7 @@ pcap_parse()
 
 %union {
 	int i;
-	bpf_u_int32 h;
+	u_long h;
 	u_char *e;
 	char *s;
 	struct stmt *stmt;
@@ -113,9 +89,9 @@ pcap_parse()
 %type	<rblk>	other
 
 %token  DST SRC HOST GATEWAY
-%token  NET MASK PORT LESS GREATER PROTO BYTE
-%token  ARP RARP IP TCP UDP ICMP IGMP IGRP
-%token  ATALK DECNET LAT SCA MOPRC MOPDL
+%token  NET PORT LESS GREATER PROTO BYTE
+%token  ARP RARP IP TCP UDP ICMP
+%token  DECNET LAT MOPRC MOPDL
 %token  TK_BROADCAST TK_MULTICAST
 %token  NUM INBOUND OUTBOUND
 %token  LINK
@@ -126,7 +102,7 @@ pcap_parse()
 
 %type	<s> ID
 %type	<e> EID
-%type	<s> HID
+%type	<h> HID
 %type	<i> NUM
 
 %left OR AND
@@ -157,24 +133,24 @@ and:	  AND			{ $$ = $<blk>0; }
 or:	  OR			{ $$ = $<blk>0; }
 	;
 id:	  nid
-	| pnum			{ $$.b = gen_ncode(NULL, (bpf_u_int32)$1,
+	| pnum			{ $$.b = gen_ncode((u_long)$1,
 						   $$.q = $<blk>0.q); }
 	| paren pid ')'		{ $$ = $2; }
 	;
 nid:	  ID			{ $$.b = gen_scode($1, $$.q = $<blk>0.q); }
-	| HID '/' NUM		{ $$.b = gen_mcode($1, NULL, $3,
-				    $$.q = $<blk>0.q); }
-	| HID MASK HID		{ $$.b = gen_mcode($1, $3, 0,
-				    $$.q = $<blk>0.q); }
 	| HID			{
 				  /* Decide how to parse HID based on proto */
 				  $$.q = $<blk>0.q;
 				  switch ($$.q.proto) {
 				  case Q_DECNET:
-					$$.b = gen_ncode($1, 0, $$.q);
+					$$.b =
+					    gen_ncode(__pcap_atodn((char *)$1),
+					    $$.q);
 					break;
 				  default:
-					$$.b = gen_ncode($1, 0, $$.q);
+					$$.b =
+					    gen_ncode(__pcap_atoin((char *)$1),
+					    $$.q);
 					break;
 				  }
 				}
@@ -189,7 +165,7 @@ pid:	  nid
 	| qid and id		{ gen_and($1.b, $3.b); $$ = $3; }
 	| qid or id		{ gen_or($1.b, $3.b); $$ = $3; }
 	;
-qid:	  pnum			{ $$.b = gen_ncode(NULL, (bpf_u_int32)$1,
+qid:	  pnum			{ $$.b = gen_ncode((u_long)$1,
 						   $$.q = $<blk>0.q); }
 	| pid
 	;
@@ -238,12 +214,8 @@ pname:	  LINK			{ $$ = Q_LINK; }
 	| TCP			{ $$ = Q_TCP; }
 	| UDP			{ $$ = Q_UDP; }
 	| ICMP			{ $$ = Q_ICMP; }
-	| IGMP			{ $$ = Q_IGMP; }
-	| IGRP			{ $$ = Q_IGRP; }
-	| ATALK			{ $$ = Q_ATALK; }
 	| DECNET		{ $$ = Q_DECNET; }
 	| LAT			{ $$ = Q_LAT; }
-	| SCA			{ $$ = Q_SCA; }
 	| MOPDL			{ $$ = Q_MOPDL; }
 	| MOPRC			{ $$ = Q_MOPRC; }
 	;

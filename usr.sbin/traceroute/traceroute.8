@@ -1,7 +1,5 @@
-.\"	$NetBSD: traceroute.8,v 1.7 1996/09/27 01:34:53 thorpej Exp $
-.\"
-.\" Copyright (c) 1990, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" Van Jacobson.
@@ -34,9 +32,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)traceroute.8	8.1 (Berkeley) 6/6/93
+.\"     @(#)traceroute.8	5.4 (Berkeley) 3/16/91
 .\"
-.Dd June 6, 1993
+.Dd March 16, 1991
 .Dt TRACEROUTE 8
 .Os BSD 4.3
 .Sh NAME
@@ -44,10 +42,6 @@
 .Nd print the route packets take to network host
 .Sh SYNOPSIS
 .Nm traceroute
-.Op Fl d
-.Op Fl D
-.Op Fl g Ar gateway_addr
-.Op Fl l
 .Op Fl m Ar max_ttl
 .Op Fl n
 .Op Fl p Ar port
@@ -79,18 +73,6 @@ name.
 .Pp
 Other options are:
 .Bl -tag -width Ds
-.It Fl d
-Turn on socket-level debugging.
-.It Fl D
-Dump the packet data to standard error before transmitting it.
-.It Fl g Ar gateway_addr
-Add
-.Ar gateway_addr
-to the list of addresses in the IP Loose Source Record Route (LSRR)
-option.  If no gateways are specified, the LSRR option is omitted.
-.It Fl l
-Display the ttl value of the returned packet.  This is useful for
-checking for assymetric routing.
 .It Fl m Ar max_ttl
 Set the max time-to-live (max number of hops) used in outgoing probe
 packets.  The default is 30 hops (the same default used for
@@ -193,7 +175,7 @@ flag) are sent at each ttl setting and a
 line is printed showing the ttl, address of the gateway and
 round trip time of each probe.  If the probe answers come from
 different gateways, the address of each responding system will
-be printed.  If there is no response within a 5 sec. timeout
+be printed.  If there is no response within a 3 sec. timeout
 interval (changed with the
 .Fl w
 flag), a "*" is printed for that
@@ -333,18 +315,6 @@ ever occur and the associated gateway is busted if you see one).  If
 almost all the probes result in some kind of unreachable,
 .Nm traceroute
 will give up and exit.
-.Pp
-.Bd -literal
-traceroute \-g 10.3.0.5 128.182.0.0
-
-.Ed
-will show the path from the Cambridge Mailbridge to PSC, while
-.Bd -literal
-traceroute \-g 192.5.146.4 \-g 10.3.0.5 35.0.0.0
-
-.Ed
-will show the path from the Cambridge Mailbridge to Merit, using PSC to
-reach the Mailbridge.
 .Pp
 This program is intended for use in network testing, measurement
 and management.

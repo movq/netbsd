@@ -1,8 +1,6 @@
-/*	$NetBSD: print-icmp.c,v 1.4 1997/03/15 18:37:51 is Exp $	*/
-
 /*
- * Copyright (c) 1988, 1989, 1990, 1991, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988-1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that: (1) source code distributions
@@ -19,63 +17,57 @@
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ * 
+ * $Id: print-icmp.c,v 1.1 1993/11/14 21:20:41 deraadt Exp $
  */
 
 #ifndef lint
 static char rcsid[] =
-    "@(#) Header: print-icmp.c,v 1.20 94/06/14 20:17:39 leres Exp (LBL)";
+    "@(#) Header: print-icmp.c,v 1.11 91/03/27 17:42:58 leres Exp (LBL)";
 #endif
+
+#include <stdio.h>
 
 #include <sys/param.h>
-#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-
 #include <net/if.h>
-
 #include <netinet/in.h>
-#ifdef __NetBSD__
-#include <net/if_ether.h>
-#else
 #include <netinet/if_ether.h>
-#endif
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
-#include <netinet/ip_icmp.h>
 #include <netinet/ip_var.h>
 #include <netinet/udp.h>
 #include <netinet/udp_var.h>
 #include <netinet/tcp.h>
 #include <netinet/tcpip.h>
 
-#include <stdio.h>
+#include <netinet/ip_icmp.h>
 
 #include "interface.h"
 #include "addrtoname.h"
 
 void
-icmp_print(register const u_char *bp, register const u_char *bp2)
+icmp_print(dp, ip)
+	register struct icmp *dp;
+	register struct ip *ip;
 {
-	register const struct icmp *dp;
-	register const struct ip *ip;
-	register const char *str;
-	register const struct ip *oip;
-	register const struct udphdr *ouh;
-	register int hlen, dport;
-	register const u_char *ep;
 	char buf[256];
+	register char *str = buf;
+	register struct ip *oip;
+	register struct udphdr *ouh;
+	register int hlen;
+	u_char *ep;
 
 #define TCHECK(var, l) if ((u_char *)&(var) > ep - l) goto trunc
 
-	dp = (struct icmp *)bp;
-	ip = (struct ip *)bp2;
-	str = buf;
 	/* 'ep' points to the end of avaible data. */
-	ep = snapend;
+	ep = (u_char *)snapend;
 
         (void)printf("%s > %s: ",
 		ipaddr_string(&ip->ip_src),
 		ipaddr_string(&ip->ip_dst));
+	strcpy(str, "[?]");
 
 	TCHECK(dp->icmp_code, sizeof(dp->icmp_code));
 	switch (dp->icmp_type) {
@@ -104,25 +96,25 @@ icmp_print(register const u_char *bp, register const u_char *bp2)
 			oip = &dp->icmp_ip;
 			hlen = oip->ip_hl * 4;
 			ouh = (struct udphdr *)(((u_char *)oip) + hlen);
-			dport = ntohs(ouh->uh_dport);
+			NTOHS(ouh->uh_dport);
 			switch (oip->ip_p) {
 			case IPPROTO_TCP:
 				(void)sprintf(buf,
 					"%s tcp port %s unreachable",
 					ipaddr_string(&oip->ip_dst),
-					tcpport_string(dport));
+					tcpport_string(ouh->uh_dport));
 				break;
 			case IPPROTO_UDP:
 				(void)sprintf(buf,
 					"%s udp port %s unreachable",
 					ipaddr_string(&oip->ip_dst),
-					udpport_string(dport));
+					udpport_string(ouh->uh_dport));
 				break;
 			default:
 				(void)sprintf(buf,
 					"%s protocol %d port %d unreachable",
 					ipaddr_string(&oip->ip_dst),
-					oip->ip_p, dport);
+					oip->ip_p, ouh->uh_dport);
 				break;
 			}
 			break;
@@ -206,11 +198,7 @@ icmp_print(register const u_char *bp, register const u_char *bp2)
 		break;
 	case ICMP_MASKREPLY:
 		TCHECK(dp->icmp_mask, sizeof(dp->icmp_mask));
-		(void)sprintf(buf, "address mask is 0x%08x",
-		    ntohl(dp->icmp_mask));
-		break;
-	default:
-		(void)sprintf(buf, "type-#%d", dp->icmp_type);
+		(void)sprintf(buf, "address mask is 0x%08x", dp->icmp_mask);
 		break;
 	}
         (void)printf("icmp: %s", str);

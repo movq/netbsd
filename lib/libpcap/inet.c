@@ -1,7 +1,5 @@
-/*	$NetBSD: inet.c,v 1.6 1997/10/03 15:53:08 christos Exp $	*/
-
 /*
- * Copyright (c) 1994, 1995, 1996, 1997
+ * Copyright (c) 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,28 +31,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] =
-    "@(#) Header: inet.c,v 1.21 97/07/17 14:24:58 leres Exp  (LBL)";
-#else
-__RCSID("$NetBSD: inet.c,v 1.6 1997/10/03 15:53:08 christos Exp $");
-#endif
+static char rcsid[] =
+    "@(#) Header: inet.c,v 1.4 94/06/07 01:16:50 leres Exp (LBL)";
 #endif
 
 #include <sys/param.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
-#ifdef HAVE_SYS_SOCKIO_H
+#ifdef SOLARIS
 #include <sys/sockio.h>
-#endif
-#include <sys/time.h>				/* concession to AIX */
-
-#if __STDC__
-struct mbuf;
-struct rtentry;
 #endif
 
 #include <net/if.h>
@@ -62,18 +49,11 @@ struct rtentry;
 
 #include <ctype.h>
 #include <errno.h>
-#include <memory.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#include "pcap-int.h"
-
-#include "gnuc.h"
-#ifdef HAVE_OS_PROTO_H
-#include "os-proto.h"
-#endif
+#include <pcap.h>
 
 /* Not all systems have IFF_LOOPBACK */
 #ifdef IFF_LOOPBACK
@@ -100,18 +80,15 @@ pcap_lookupdev(errbuf)
 
 	fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd < 0) {
-		(void)snprintf(errbuf, PCAP_ERRBUF_SIZE, "socket: %s",
-		    pcap_strerror(errno));
+		(void)sprintf(errbuf, "socket: %s", pcap_strerror(errno));
 		return (NULL);
 	}
 	ifc.ifc_len = sizeof ibuf;
 	ifc.ifc_buf = (caddr_t)ibuf;
 
-	memset((char *)ibuf, 0, sizeof(ibuf));
 	if (ioctl(fd, SIOCGIFCONF, (char *)&ifc) < 0 ||
 	    ifc.ifc_len < sizeof(struct ifreq)) {
-		(void)snprintf(errbuf, PCAP_ERRBUF_SIZE, "SIOCGIFCONF: %s",
-		    pcap_strerror(errno));
+		(void)sprintf(errbuf, "SIOCGIFCONF: %s", pcap_strerror(errno));
 		(void)close(fd);
 		return (NULL);
 	}
@@ -121,7 +98,7 @@ pcap_lookupdev(errbuf)
 	mp = NULL;
 	minunit = 666;
 	for (; ifrp < ifend; ifrp = ifnext) {
-#ifdef HAVE_SOCKADDR_SA_LEN
+#if BSD - 0 >= 199006
 		n = ifrp->ifr_addr.sa_len + sizeof(ifrp->ifr_name);
 		if (n < sizeof(*ifrp))
 			ifnext = ifrp + 1;
@@ -140,11 +117,7 @@ pcap_lookupdev(errbuf)
 		 */
 		strncpy(ifr.ifr_name, ifrp->ifr_name, sizeof(ifr.ifr_name));
 		if (ioctl(fd, SIOCGIFFLAGS, (char *)&ifr) < 0) {
-			if (errno == ENXIO)
-				continue;
-			(void)snprintf(errbuf, PCAP_ERRBUF_SIZE,
-			    "SIOCGIFFLAGS: %.*s: %s",
-			    (int)sizeof(ifr.ifr_name), ifr.ifr_name,
+			(void)sprintf(errbuf, "SIOCGIFFLAGS: %s",
 			    pcap_strerror(errno));
 			(void)close(fd);
 			return (NULL);
@@ -164,8 +137,7 @@ pcap_lookupdev(errbuf)
 	}
 	(void)close(fd);
 	if (mp == NULL) {
-		(void)strncpy(errbuf, "no suitable device found",
-		    PCAP_ERRBUF_SIZE - 1);
+		(void)strcpy(errbuf, "no suitable device found");
 		return (NULL);
 	}
 
@@ -177,7 +149,7 @@ pcap_lookupdev(errbuf)
 int
 pcap_lookupnet(device, netp, maskp, errbuf)
 	register char *device;
-	register bpf_u_int32 *netp, *maskp;
+	register u_long *netp, *maskp;
 	register char *errbuf;
 {
 	register int fd;
@@ -186,18 +158,12 @@ pcap_lookupnet(device, netp, maskp, errbuf)
 
 	fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd < 0) {
-		(void)snprintf(errbuf, PCAP_ERRBUF_SIZE, "socket: %s",
-		    pcap_strerror(errno));
+		(void)sprintf(errbuf, "socket: %s", pcap_strerror(errno));
 		return (-1);
 	}
-	memset(&ifr, 0, sizeof(ifr));
-#ifdef linux
-	/* XXX Work around Linux kernel bug */
-	ifr.ifr_addr.sa_family = AF_INET;
-#endif
 	(void)strncpy(ifr.ifr_name, device, sizeof(ifr.ifr_name));
 	if (ioctl(fd, SIOCGIFADDR, (char *)&ifr) < 0) {
-		(void)snprintf(errbuf, PCAP_ERRBUF_SIZE, "SIOCGIFADDR: %s: %s",
+		(void)sprintf(errbuf, "SIOCGIFADDR: %s: %s",
 		    device, pcap_strerror(errno));
 		(void)close(fd);
 		return (-1);
@@ -205,8 +171,8 @@ pcap_lookupnet(device, netp, maskp, errbuf)
 	sin = (struct sockaddr_in *)&ifr.ifr_addr;
 	*netp = sin->sin_addr.s_addr;
 	if (ioctl(fd, SIOCGIFNETMASK, (char *)&ifr) < 0) {
-		(void)snprintf(errbuf, PCAP_ERRBUF_SIZE,
-		    "SIOCGIFNETMASK: %s: %s", device, pcap_strerror(errno));
+		(void)sprintf(errbuf, "SIOCGIFNETMASK: %s: %s",
+		    device, pcap_strerror(errno));
 		(void)close(fd);
 		return (-1);
 	}
@@ -220,8 +186,8 @@ pcap_lookupnet(device, netp, maskp, errbuf)
 		else if (IN_CLASSC(*netp))
 			*maskp = IN_CLASSC_NET;
 		else {
-			(void)snprintf(errbuf, PCAP_ERRBUF_SIZE,
-			    "inet class for 0x%x unknown", *netp);
+			(void)sprintf(errbuf, "inet class for 0x%x unknown",
+			    *netp);
 			return (-1);
 		}
 	}

@@ -1,7 +1,5 @@
-/*	$NetBSD: gencode.h,v 1.5 1997/10/03 15:53:06 christos Exp $	*/
-
 /*
- * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1995, 1996
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -20,13 +18,14 @@
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  *
- * @(#) Header: gencode.h,v 1.36 96/07/17 00:11:34 leres Exp  (LBL)
+ * @(#) Header: gencode.h,v 1.20 94/06/12 14:29:30 leres Exp (LBL)
  */
 
-/*XXX*/
-#include "gnuc.h"
+/*
+ * filter.h must be included before this file.
+ */
 
-/* Address qualifiers. */
+/* Address qualifers. */
 
 #define Q_HOST		1
 #define Q_NET		2
@@ -43,18 +42,13 @@
 #define Q_TCP		5
 #define Q_UDP		6
 #define Q_ICMP		7
-#define Q_IGMP		8
-#define Q_IGRP		9
 
+#define	Q_DECNET	8
+#define	Q_LAT		9
+#define	Q_MOPRC		10
+#define	Q_MOPDL		11
 
-#define	Q_ATALK		10
-#define	Q_DECNET	11
-#define	Q_LAT		12
-#define Q_SCA		13
-#define	Q_MOPRC		14
-#define	Q_MOPDL		15
-
-/* Directional qualifiers. */
+/* Directional qualifers. */
 
 #define Q_SRC		1
 #define Q_DST		2
@@ -66,7 +60,7 @@
 
 struct stmt {
 	int code;
-	bpf_int32 k;
+	long k;
 };
 
 struct slist {
@@ -78,14 +72,14 @@ struct slist {
  * A bit vector to represent definition sets.  We assume TOT_REGISTERS
  * is smaller than 8*sizeof(atomset).
  */
-typedef bpf_u_int32 atomset;
+typedef u_long atomset;
 #define ATOMMASK(n) (1 << (n))
 #define ATOMELEM(d, n) (d & ATOMMASK(n))
 
 /*
  * An unbounded set.
  */
-typedef bpf_u_int32 *uset;
+typedef u_long *uset;
 
 /*
  * Total number of atomic entities, including accumulator (A) and index (X).
@@ -107,8 +101,6 @@ struct block {
 	struct slist *stmts;	/* side effect stmts */
 	struct stmt s;		/* branch stmt */
 	int mark;
-	int longjt;		/* jt branch requires long jump */
-	int longjf;		/* jf branch requires long jump */
 	int level;
 	int offset;
 	int sense;
@@ -122,8 +114,8 @@ struct block {
 	atomset def, kill;
 	atomset in_use;
 	atomset out_use;
-	int oval;
-	int val[N_ATOMS];
+	long oval;
+	long val[N_ATOMS];
 };
 
 struct arth {
@@ -139,6 +131,10 @@ struct qual {
 	unsigned char pad;
 };
 
+#ifndef __GNUC__
+#define volatile
+#endif
+
 struct arth *gen_loadi(int);
 struct arth *gen_load(int, struct arth *, int);
 struct arth *gen_loadlen(void);
@@ -149,10 +145,9 @@ void gen_and(struct block *, struct block *);
 void gen_or(struct block *, struct block *);
 void gen_not(struct block *);
 
-struct block *gen_scode(const char *, struct qual);
-struct block *gen_ecode(const u_char *, struct qual);
-struct block *gen_mcode(const char *, const char *, int, struct qual);
-struct block *gen_ncode(const char *, bpf_u_int32, struct qual);
+struct block *gen_scode(char *, struct qual);
+struct block *gen_ecode(u_char *, struct qual);
+struct block *gen_ncode(u_long, struct qual);
 struct block *gen_proto_abbrev(int);
 struct block *gen_relation(int, struct arth *, struct arth *, int);
 struct block *gen_less(int);
@@ -163,13 +158,10 @@ struct block *gen_multicast(int);
 struct block *gen_inbound(int);
 
 void bpf_optimize(struct block **);
-#if __STDC__
-__dead void bpf_error(const char *, ...)
-    __attribute__((volatile, format (printf, 1, 2)));
-#endif
+volatile void bpf_error(char *, ...);
 
 void finish_parse(struct block *);
-char *sdup(const char *);
+char *sdup(char *);
 
 struct bpf_insn *icode_to_fcode(struct block *, int *);
 int pcap_parse(void);

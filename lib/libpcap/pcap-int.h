@@ -1,7 +1,5 @@
-/*	$NetBSD: pcap-int.h,v 1.4 1997/10/03 15:53:13 christos Exp $	*/
-
 /*
- * Copyright (c) 1994, 1995, 1996
+ * Copyright (c) 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * @(#) Header: pcap-int.h,v 1.18 96/11/27 18:43:09 leres Exp  (LBL)
+ * @(#) Header: pcap-int.h,v 1.7 94/06/14 20:03:33 leres Exp (LBL)
  */
 
 #ifndef pcap_int_h
@@ -53,17 +51,13 @@ struct pcap_sf {
 
 struct pcap_md {
 	struct pcap_stat stat;
-	/*XXX*/
+#ifdef PCAP_PF
 	int use_bpf;
 	u_long	TotPkts;	/* can't oflow for 79 hrs on ether */
 	u_long	TotAccepted;	/* count accepted by filter */
 	u_long	TotDrops;	/* count of dropped packets */
 	long	TotMissed;	/* missed by i/f during this run */
 	long	OrigMissed;	/* missed by i/f before this run */
-#ifdef linux
-	int pad;
-	int skip;
-	char *device;
 #endif
 };
 
@@ -72,7 +66,6 @@ struct pcap {
 	int snapshot;
 	int linktype;
 	int tzoff;		/* timezone offset */
-	int offset;		/* offset for proper alignment */
 
 	struct pcap_sf sf;
 	struct pcap_md md;
@@ -99,21 +92,7 @@ struct pcap {
 	char errbuf[PCAP_ERRBUF_SIZE];
 };
 
-int	yylex(void);
-
-#ifndef min
-#define min(a, b) ((a) > (b) ? (b) : (a))
-#endif
-
 /* XXX should these be in pcap.h? */
 int	pcap_offline_read(pcap_t *, int, pcap_handler, u_char *);
 int	pcap_read(pcap_t *, int cnt, pcap_handler, u_char *);
-
-/* Ultrix pads to make everything line up on a nice boundary */
-#if defined(ultrix) || defined(__alpha)
-#define       PCAP_FDDIPAD 3
-#endif
-
-/* XXX */
-extern	int pcap_fddipad;
 #endif
