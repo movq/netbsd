@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 1999/08/19 21:41:35 is Exp $
+# $NetBSD: Makefile,v 1.1.1.1 1999/08/19 21:41:35 is Exp $
 
 M060SP=		../../../../sys/arch/m68k/060sp
 ASM2GAS=	${M060SP}/asm2gas

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# $NetBSD: makeas.sh,v 1.1 1999/08/19 21:41:35 is Exp $
+# $NetBSD: makeas.sh,v 1.1.1.1 1999/08/19 21:41:35 is Exp $
 
 # Copyright (c) 1999 Ignatios Souvatzis
 # All rights reserved.
