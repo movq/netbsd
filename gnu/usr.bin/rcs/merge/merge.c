@@ -1,6 +1,6 @@
 /* merge - three-way file merge */
 
-/* Copyright 1991, 1992, 1993, 1994 Paul Eggert
+/* Copyright 1991 by Paul Eggert
    Distributed under license by the Free Software Foundation, Inc.
 
 This file is part of RCS.
@@ -27,59 +27,44 @@ Report problems and direct all questions to:
 
 #include "rcsbase.h"
 
-static void badoption P((char const*));
 
 static char const usage[] =
- "\nmerge: usage: merge [-AeEpqxX3] [-L lab [-L lab [-L lab]]] file1 file2 file3";
+ "\nmerge: usage: merge [-p] [-q] [-L label1 [-L label3]] file1 file2 file3\n";
 
-	static void
+	static exiting void
 badoption(a)
 	char const *a;
 {
-	error("unknown option: %s%s", a, usage);
+	faterror("unknown option: %s%s", a-2, usage);
 }
 
 
-mainProg(mergeId, "merge", "$Id: merge.c,v 1.3 1995/02/24 02:25:21 mycroft Exp $")
+mainProg(mergeId, "merge", "merge.c,v 1.1.1.1 1993/06/18 04:22:14 jkh Exp")
 {
 	register char const *a;
-	char const *arg[3], *label[3], *edarg = 0;
+	char const *label[2], *arg[3];
 	int labels, tostdout;
 
 	labels = 0;
 	tostdout = false;
 
-	for (;  (a = *++argv)  &&  *a++ == '-';  --argc) {
+	while ((a = *++argv)  &&  *a++ == '-') {
 		switch (*a++) {
-			case 'A': case 'E': case 'e':
-				if (edarg  &&  edarg[1] != (*argv)[1])
-					error("%s and %s are incompatible",
-						edarg, *argv
-					);
-				edarg = *argv;
-				break;
-
 			case 'p': tostdout = true; break;
 			case 'q': quietflag = true; break;
-
 			case 'L':
-				if (3 <= labels)
+				if (1<labels)
 					faterror("too many -L options");
 				if (!(label[labels++] = *++argv))
 					faterror("-L needs following argument");
 				--argc;
 				break;
-
-			case 'V':
-				printf("RCS version %s\n", RCS_version_string);
-				exitmain(0);
-
 			default:
-				badoption(a - 2);
-				continue;
+				badoption(a);
 		}
 		if (*a)
-			badoption(a - 2);
+			badoption(a);
+		--argc;
 	}
 
 	if (argc != 4)
@@ -92,19 +77,19 @@ mainProg(mergeId, "merge", "$Id: merge.c,v 1.3 1995/02/24 02:25:21 mycroft Exp $
 	arg[1] = argv[1];
 	arg[2] = argv[2];
 
-	for (;  labels < 3;  labels++)
-		label[labels] = arg[labels];
+	switch (labels) {
+		case 0: label[0] = arg[0]; /* fall into */
+		case 1: label[1] = arg[2];
+	}
 
-	if (nerror)
-		exiterr();
-	exitmain(merge(tostdout, edarg, label, arg));
+	exitmain(merge(tostdout, label, arg));
 }
 
 
-#if RCS_lint
+#if lint
 #	define exiterr mergeExit
 #endif
-	void
+	exiting void
 exiterr()
 {
 	tempunlink();
