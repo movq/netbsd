@@ -6,7 +6,7 @@ This particular dir file is merely made available for your hacking
 If you have dir entries for Texinfo manuals you'd like to be added here,
   please send them to karl@gnu.org.
 
-$Id: dir-example,v 1.1 1999/02/11 03:57:15 tv Exp $
+$Id: dir-example,v 1.1.1.1 1999/02/11 03:57:15 tv Exp $
 
 File: dir,	Node: Top,	This is the top of the INFO tree.
 

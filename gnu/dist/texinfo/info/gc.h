@@ -1,5 +1,5 @@
 /* gc.h -- Functions for garbage collecting unused node contents.
-   $Id: gc.h,v 1.1 1999/02/11 03:57:20 tv Exp $
+   $Id: gc.h,v 1.1.1.1 1999/02/11 03:57:20 tv Exp $
 
    This file is part of GNU Info, a program for reading online documentation
    stored in Info format.

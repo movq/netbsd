@@ -1,5 +1,5 @@
 /* filesys.h -- External declarations of functions and vars in filesys.c.
-   $Id: filesys.h,v 1.1 1999/02/11 03:57:20 tv Exp $
+   $Id: filesys.h,v 1.1.1.1 1999/02/11 03:57:20 tv Exp $
 
    This file is part of GNU Info, a program for reading online documentation
    stored in Info format.

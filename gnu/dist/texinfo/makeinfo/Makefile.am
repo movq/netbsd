@@ -1,5 +1,5 @@
 ## Makefile.am for texinfo/makeinfo.
-## $Id: Makefile.am,v 1.1 1999/02/11 03:57:23 tv Exp $
+## $Id: Makefile.am,v 1.1.1.1 1999/02/11 03:57:23 tv Exp $
 ## Run automake in .. to produce Makefile.in from this.
 
 bin_PROGRAMS = makeinfo
