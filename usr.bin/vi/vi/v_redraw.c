@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1992, 1993, 1994
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,35 +32,24 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)v_redraw.c	8.4 (Berkeley) 3/8/94";
+static char sccsid[] = "@(#)v_redraw.c	8.2 (Berkeley) 8/25/93";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
-
-#include <bitstring.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "vcmd.h"
 
 /*
- * v_redraw -- ^R
+ * v_redraw --
  *	Redraw the screen.
  */
 int
-v_redraw(sp, ep, vp)
+v_redraw(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	F_SET(sp, S_REFRESH);
 	return (0);

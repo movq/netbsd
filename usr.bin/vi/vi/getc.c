@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1992, 1993, 1994
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,23 +32,12 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)getc.c	8.8 (Berkeley) 3/8/94";
+static char sccsid[] = "@(#)getc.c	8.6 (Berkeley) 10/26/93";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
 #include <ctype.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "vcmd.h"
@@ -136,8 +125,7 @@ cs_next(sp, ep, csp)
 		else
 			csp->cs_ch = csp->cs_bp[++csp->cs_cno];
 		break;
-	case CS_EOF:				/* EOF. */
-		break;
+	case CS_EOF:				/* EOF; only returned once. */
 	default:
 		abort();
 		/* NOTREACHED */
@@ -230,15 +218,11 @@ cs_prev(sp, ep, csp)
 		break;
 	case 0:
 		if (csp->cs_cno == 0)
-			if (csp->cs_lno == 1)
-				csp->cs_flags = CS_SOF;
-			else
-				csp->cs_flags = CS_EOL;
+			csp->cs_flags = CS_EOL;
 		else
 			csp->cs_ch = csp->cs_bp[--csp->cs_cno];
 		break;
-	case CS_SOF:				/* SOF. */
-		break;
+	case CS_SOF:				/* SOF; only returned once. */
 	default:
 		abort();
 		/* NOTREACHED */

@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1992, 1993, 1994
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,26 +32,18 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)ex_move.c	8.11 (Berkeley) 3/15/94";
+static char sccsid[] = "@(#)ex_move.c	8.6 (Berkeley) 1/9/94";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
 #include <string.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "excmd.h"
+
+enum which {COPY, MOVE};
+static int cm __P((SCR *, EXF *, EXCMDARG *, enum which));
 
 /*
  * ex_copy -- :[line [,line]] co[py] line [flags]
@@ -63,47 +55,11 @@ ex_copy(sp, ep, cmdp)
 	EXF *ep;
 	EXCMDARG *cmdp;
 {
-	CB cb;
-	MARK fm1, fm2, m, tm;
-	recno_t cnt;
-	int rval;
-
-	/*
-	 * It's possible to copy things into the area that's being
-	 * copied, e.g. "2,5copy3" is legitimate.  Save the text to
-	 * a cut buffer.
-	 */
-	fm1 = cmdp->addr1;
-	fm2 = cmdp->addr2;
-	memset(&cb, 0, sizeof(cb));
-	CIRCLEQ_INIT(&cb.textq);
-	if (cut(sp, ep, &cb, NULL, &fm1, &fm2, CUT_LINEMODE))
-		return (1);
-
-	/* Put the text into place. */
-	tm.lno = cmdp->lineno;
-	tm.cno = 0;
-	if (put(sp, ep, &cb, NULL, &tm, &m, 1))
-		rval = 1;
-	else {
-		/*
-		 * Copy puts the cursor on the last line copied.  The cursor
-		 * returned by the put routine is the first line put, not the
-		 * last, because that's the historic semantic of vi.
-		 */
-		cnt = (fm2.lno - fm1.lno) + 1;
-		sp->lno = m.lno + (cnt - 1);
-		sp->cno = 0;
-
-		sp->rptlines[L_COPIED] += cnt;
-		rval = 0;
-	}
-	text_lfree(&cb.textq);
-	return (rval);
+	return (cm(sp, ep, cmdp, COPY));
 }
 
 /*
- * ex_move -- :[line [,line]] mo[ve] line
+ * ex_move -- :[line [,line]] co[py] line
  *	Move selected lines.
  */
 int
@@ -112,98 +68,66 @@ ex_move(sp, ep, cmdp)
 	EXF *ep;
 	EXCMDARG *cmdp;
 {
-	LMARK *lmp;
-	MARK fm1, fm2;
-	recno_t cnt, diff, fl, tl, mfl, mtl;
-	size_t len;
-	int mark_reset;
-	char *p;
+	return (cm(sp, ep, cmdp, MOVE));
+}
 
-	/*
-	 * It's not possible to move things into the area that's being
-	 * moved.
-	 */
+static int
+cm(sp, ep, cmdp, cmd)
+	SCR *sp;
+	EXF *ep;
+	EXCMDARG *cmdp;
+	enum which cmd;
+{
+	CB cb;
+	MARK fm1, fm2, m, tm;
+	recno_t diff;
+	int rval;
+
 	fm1 = cmdp->addr1;
 	fm2 = cmdp->addr2;
-	if (cmdp->lineno >= fm1.lno && cmdp->lineno < fm2.lno) {
+	tm.lno = cmdp->lineno;
+	tm.cno = 0;
+
+	/* Make sure the destination is valid. */
+	if (cmd == MOVE && tm.lno >= fm1.lno && tm.lno < fm2.lno) {
 		msgq(sp, M_ERR, "Destination line is inside move range.");
 		return (1);
 	}
 
-	/*
-	 * Log the positions of any marks in the to-be-deleted lines.  This
-	 * has to work with the logging code.  What happens is that we log
-	 * the old mark positions, make the changes, then log the new mark
-	 * positions.  Then the marks end up in the right positions no matter
-	 * which way the log is traversed.
-	 *
-	 * XXX
-	 * Reset the MARK_USERSET flag so that the log can undo the mark.
-	 * This isn't very clean, and should probably be fixed.
-	 */
-	fl = fm1.lno;
-	tl = cmdp->lineno;
+	/* Save the text to a cut buffer. */
+	memset(&cb, 0, sizeof(cb));
+	CIRCLEQ_INIT(&cb.textq);
+	if (cut(sp, ep, &cb, NULL, &fm1, &fm2, CUT_LINEMODE))
+		return (1);
 
-	/* Log the old positions of the marks. */
-	mark_reset = 0;
-	for (lmp = ep->marks.lh_first; lmp != NULL; lmp = lmp->q.le_next)
-		if (lmp->name != ABSMARK1 &&
-		    lmp->lno >= fl && lmp->lno <= tl) {
-			mark_reset = 1;
-			F_CLR(lmp, MARK_USERSET);
-			(void)log_mark(sp, ep, lmp);
+	/* If we're not copying, delete the old text and adjust tm. */
+	if (cmd == MOVE) {
+		if (delete(sp, ep, &fm1, &fm2, 1)) {
+			rval = 1;
+			goto err;
 		}
-
-	/* Move the lines. */
-	diff = (fm2.lno - fm1.lno) + 1;
-	if (tl > fl) {				/* Destination > source. */
-		mfl = tl - diff;
-		mtl = tl;
-		for (cnt = diff; cnt--;) {
-			if ((p = file_gline(sp, ep, fl, &len)) == NULL)
-				return (1);
-			if (file_aline(sp, ep, 1, tl, p, len))
-				return (1);
-			if (mark_reset)
-				for (lmp = ep->marks.lh_first;
-				    lmp != NULL; lmp = lmp->q.le_next)
-					if (lmp->name != ABSMARK1 &&
-					    lmp->lno == fl)
-						lmp->lno = tl + 1;
-			if (file_dline(sp, ep, fl))
-				return (1);
-		}
-	} else {				/* Destination < source. */
-		mfl = tl;
-		mtl = tl + diff;
-		for (cnt = diff; cnt--;) {
-			if ((p = file_gline(sp, ep, fl, &len)) == NULL)
-				return (1);
-			if (file_aline(sp, ep, 1, tl++, p, len))
-				return (1);
-			if (mark_reset)
-				for (lmp = ep->marks.lh_first;
-				    lmp != NULL; lmp = lmp->q.le_next)
-					if (lmp->name != ABSMARK1 &&
-					    lmp->lno == fl)
-						lmp->lno = tl;
-			++fl;
-			if (file_dline(sp, ep, fl))
-				return (1);
-		}
+		if (tm.lno >= fm1.lno)
+			tm.lno -= (fm2.lno - fm1.lno) + 1;
 	}
-	sp->lno = tl;				/* Last line moved. */
+
+	/* Add the new text. */
+	if (put(sp, ep, &cb, NULL, &tm, &m, 1)) {
+		rval = 1;
+		goto err;
+	}
+
+	/*
+	 * Move and copy put the cursor on the last line moved or copied.
+	 * The returned cursor from the put routine is the first line put,
+	 * not the last, because that's the semantics of vi.
+	 */
+	diff = (fm2.lno - fm1.lno) + 1;
+	sp->lno = m.lno + (diff - 1);
 	sp->cno = 0;
 
-	/* Log the new positions of the marks. */
-	if (mark_reset)
-		for (lmp = ep->marks.lh_first;
-		    lmp != NULL; lmp = lmp->q.le_next)
-			if (lmp->name != ABSMARK1 &&
-			    lmp->lno >= mfl && lmp->lno <= mtl)
-				(void)log_mark(sp, ep, lmp);
+	sp->rptlines[cmd == COPY ? L_COPIED : L_MOVED] += diff;
+	rval = 0;
 
-
-	sp->rptlines[L_MOVED] += diff;
-	return (0);
+err:	(void)text_lfree(&cb.textq);
+	return (rval);
 }

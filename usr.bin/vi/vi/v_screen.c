@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1993, 1994
+ * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,35 +32,24 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)v_screen.c	8.10 (Berkeley) 3/8/94";
+static char sccsid[] = "@(#)v_screen.c	8.8 (Berkeley) 11/28/93";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
-
-#include <bitstring.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "vcmd.h"
 
 /*
- * v_screen -- ^W
+ * v_screen --
  *	Switch screens.
  */
 int
-v_screen(sp, ep, vp)
+v_screen(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	/*
 	 * Try for the next lower screen, or, go back to the first
@@ -78,7 +67,7 @@ v_screen(sp, ep, vp)
 	 * Display the old screen's status line so the user can
 	 * find the screen they want.
 	 */
-	(void)status(sp, ep, vp->m_start.lno, 0);
+	(void)status(sp, ep, fm->lno, 0);
 
 	/* Save the old screen's cursor information. */
 	sp->frp->lno = sp->lno;
