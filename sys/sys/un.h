@@ -1,4 +1,4 @@
-/*	$NetBSD: un.h,v 1.13 1997/01/22 07:09:28 mikel Exp $	*/
+/*	$NetBSD: un.h,v 1.13.4.1 1997/03/12 21:26:17 is Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -42,7 +42,7 @@
  * Definitions for UNIX IPC domain.
  */
 struct	sockaddr_un {
-	u_char	sun_len;		/* sockaddr len including null */
+	u_char	sun_len;		/* total sockaddr length */
 	u_char	sun_family;		/* AF_UNIX */
 	char	sun_path[104];		/* path name (gag) */
 };
