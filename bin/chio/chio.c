@@ -1,4 +1,4 @@
-/*	$NetBSD: chio.c,v 1.1 1996/04/03 00:34:38 thorpej Exp $	*/
+/*	$NetBSD: chio.c,v 1.1.1.1 1996/04/03 00:34:38 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1996 Jason R. Thorpe <thorpej@and.com>
