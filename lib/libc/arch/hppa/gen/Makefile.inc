@@ -1,7 +1,6 @@
-#	$NetBSD: Makefile.inc,v 1.12 2004/07/24 19:09:29 chs Exp $
+#	$NetBSD: Makefile.inc,v 1.10 2004/03/04 23:42:38 kleink Exp $
 
-SRCS+=	bswap16.c bswap32.c bswap64.c
-SRCS+=	__sigsetjmp14.S __setjmp14.S _setjmp.S __longjmp14.c
+SRCS+=	bswap16.c bswap32.c bswap64.c __sigsetjmp14.S __setjmp14.S _setjmp.S
 
 # Common ieee754 constants and functions
 SRCS+=	infinityf_ieee754.c infinity_ieee754.c infinityl_dbl_ieee754.c
@@ -14,7 +13,6 @@ SRCS+=	isnanf_ieee754.c isnand_ieee754.c
 SRCS+=	modf_ieee754.c
 SRCS+=	signbitf_ieee754.c signbitd_ieee754.c
 
-SRCS+=	makecontext.c resumecontext.c _resumecontext.S swapcontext.S _lwp.c
-
-SRCS+=	flt_rounds.c fpgetmask.c fpgetround.c fpgetsticky.c fpsetmask.c \
-	fpsetround.c fpsetsticky.c
+# XXX Missing:
+# fabs, flt_rounds, fpgetmask, fpgetround, fpgetsticky
+# fpsetmask, fpsetround, fpsetsticky

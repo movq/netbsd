@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL_SMALL,v 1.108 2004/11/10 17:25:22 christos Exp $
+#	$NetBSD: INSTALL_SMALL,v 1.102.2.1 2004/07/15 20:28:40 he Exp $
 #
 #	INSTALL_SMALL - Small Installation kernel.
 #
@@ -38,6 +38,9 @@ options 	MATH_EMULATE	# floating point emulation
 #options 	USER_LDT	# user-settable LDT; used by WINE
 # insert delay interrupts in I/O; recommended on very old machines
 options 	PIC_DELAY
+
+# Misc. i386-specific options
+#options 	XSERVER		# X server support in console drivers
 
 # This option allows you to force a serial console at the specified
 # I/O address.
@@ -99,7 +102,6 @@ options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	COMPAT_IBCS2	# binary compatibility with SCO and ISC
 #options 	COMPAT_LINUX	# binary compatibility with Linux
 #options 	COMPAT_FREEBSD	# binary compatibility with FreeBSD
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # File systems
 file-system 	FFS		# UFS
@@ -129,7 +131,6 @@ options 	VNODE_OP_NOINLINE	# Not inlining vnode op calls saves mem
 #options 	GATEWAY		# packet forwarding
 options 	INET		# IP + ICMP + TCP + UDP
 #options 	MROUTING	# IP multicast routing
-#options 	PIM		# Protocol Independent Multicast
 #options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 #options 	ISO,TPIP	# OSI
@@ -492,7 +493,6 @@ pseudo-device	loop			# network loopback
 
 # miscellaneous pseudo-devices
 pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
-options	NO_DEV_PTM
 #pseudo-device	tb		1	# tablet line discipline
 pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness as well (BROKEN)

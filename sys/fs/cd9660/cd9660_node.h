@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_node.h,v 1.6 2004/06/20 20:44:06 dillo Exp $	*/
+/*	$NetBSD: cd9660_node.h,v 1.5.2.1 2004/06/22 09:02:45 tron Exp $	*/
 
 /*-
  * Copyright (c) 1994

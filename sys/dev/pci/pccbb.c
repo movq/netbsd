@@ -1,4 +1,4 @@
-/*	$NetBSD: pccbb.c,v 1.110 2004/08/16 16:43:29 mrg Exp $	*/
+/*	$NetBSD: pccbb.c,v 1.96.2.2 2004/07/28 21:33:34 jmc Exp $	*/
 
 /*
  * Copyright (c) 1998, 1999 and 2000
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pccbb.c,v 1.110 2004/08/16 16:43:29 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pccbb.c,v 1.96.2.2 2004/07/28 21:33:34 jmc Exp $");
 
 /*
 #define CBB_DEBUG
@@ -184,13 +184,10 @@ STATIC void pccbb_pcmcia_intr_disestablish __P((pcmcia_chipset_handle_t,
     void *));
 STATIC void pccbb_pcmcia_socket_enable __P((pcmcia_chipset_handle_t));
 STATIC void pccbb_pcmcia_socket_disable __P((pcmcia_chipset_handle_t));
-STATIC void pccbb_pcmcia_socket_settype __P((pcmcia_chipset_handle_t, int));
 STATIC int pccbb_pcmcia_card_detect __P((pcmcia_chipset_handle_t pch));
 
-static int pccbb_pcmcia_wait_ready __P((struct pcic_handle *));
-static void pccbb_pcmcia_delay __P((struct pcic_handle *, int, const char *));
-
 static void pccbb_pcmcia_do_io_map __P((struct pcic_handle *, int));
+static int pccbb_pcmcia_wait_ready __P((struct pcic_handle *));
 static void pccbb_pcmcia_do_mem_map __P((struct pcic_handle *, int));
 static void pccbb_powerhook __P((int, void *));
 
@@ -245,7 +242,6 @@ static struct pcmcia_chip_functions pccbb_pcmcia_funcs = {
 	pccbb_pcmcia_intr_disestablish,
 	pccbb_pcmcia_socket_enable,
 	pccbb_pcmcia_socket_disable,
-	pccbb_pcmcia_socket_settype,
 	pccbb_pcmcia_card_detect
 };
 
@@ -441,7 +437,7 @@ pccbbattach(parent, self, aux)
 
 	sc->sc_chipset = cb_chipset(pa->pa_id, &flags);
 
-	pci_devinfo(pa->pa_id, 0, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, 0, 0, devinfo);
 	printf(": %s (rev. 0x%02x)", devinfo, PCI_REVISION(pa->pa_class));
 #ifdef CBB_DEBUG
 	printf(" (chipflags %x)", flags);
@@ -1356,18 +1352,42 @@ pccbb_power(ct, command)
 	status = bus_space_read_4(memt, memh, CB_SOCKET_STAT);
 
 	if (status & CB_SOCKET_STAT_BADVCC) {	/* bad Vcc request */
-		printf("%s: bad Vcc request. sock_ctrl 0x%x, sock_status 0x%x\n",
+		printf
+		    ("%s: bad Vcc request. sock_ctrl 0x%x, sock_status 0x%x\n",
 		    sc->sc_dev.dv_xname, sock_ctrl, status);
-		printf("%s: disabling socket\n", sc->sc_dev.dv_xname);
-		sock_ctrl &= ~CB_SOCKET_CTRL_VCCMASK;
-		sock_ctrl &= ~CB_SOCKET_CTRL_VPPMASK;
-		bus_space_write_4(memt, memh, CB_SOCKET_CTRL, sock_ctrl);
+		DPRINTF(("pccbb_power: %s and %s [0x%x]\n",
+		    (command & CARDBUS_VCCMASK) ==
+		    CARDBUS_VCC_UC ? "CARDBUS_VCC_UC" : (command &
+		    CARDBUS_VCCMASK) ==
+		    CARDBUS_VCC_5V ? "CARDBUS_VCC_5V" : (command &
+		    CARDBUS_VCCMASK) ==
+		    CARDBUS_VCC_3V ? "CARDBUS_VCC_3V" : (command &
+		    CARDBUS_VCCMASK) ==
+		    CARDBUS_VCC_XV ? "CARDBUS_VCC_XV" : (command &
+		    CARDBUS_VCCMASK) ==
+		    CARDBUS_VCC_YV ? "CARDBUS_VCC_YV" : (command &
+		    CARDBUS_VCCMASK) ==
+		    CARDBUS_VCC_0V ? "CARDBUS_VCC_0V" : "UNKNOWN",
+		    (command & CARDBUS_VPPMASK) ==
+		    CARDBUS_VPP_UC ? "CARDBUS_VPP_UC" : (command &
+		    CARDBUS_VPPMASK) ==
+		    CARDBUS_VPP_12V ? "CARDBUS_VPP_12V" : (command &
+		    CARDBUS_VPPMASK) ==
+		    CARDBUS_VPP_VCC ? "CARDBUS_VPP_VCC" : (command &
+		    CARDBUS_VPPMASK) ==
+		    CARDBUS_VPP_0V ? "CARDBUS_VPP_0V" : "UNKNOWN", command));
 #if 0
-		bus_space_write_4(memt, memh, CB_SOCKET_FORCE,
-		    CB_SOCKET_FORCE_BADVCC);
+		if (command == (CARDBUS_VCC_0V | CARDBUS_VPP_0V)) {
+			u_int32_t force =
+			    bus_space_read_4(memt, memh, CB_SOCKET_FORCE);
+			/* Reset Bad Vcc request */
+			force &= ~CB_SOCKET_FORCE_BADVCC;
+			bus_space_write_4(memt, memh, CB_SOCKET_FORCE, force);
+			printf("new status 0x%x\n", bus_space_read_4(memt, memh,
+			    CB_SOCKET_STAT));
+			return 1;
+		}
 #endif
-		printf("new status 0x%x\n", bus_space_read_4(memt, memh,
-		    CB_SOCKET_STAT));
 		return 0;
 	}
 
@@ -1380,6 +1400,16 @@ pccbb_power(ct, command)
 			reg_ctrl |= TOPIC97_REG_CTRL_CLKRUN_ENA;
 		pci_conf_write(sc->sc_pc, sc->sc_tag, TOPIC_REG_CTRL, reg_ctrl);
 	}
+
+	/*
+	 * XXX delay 300 ms: though the standard defines that the Vcc set-up
+	 * time is 20 ms, some PC-Card bridge requires longer duration.
+	 */
+#if 0	/* XXX called on interrupt context */
+	DELAY_MS(300, sc);
+#else
+	delay(300 * 1000);
+#endif
 
 	return 1;		       /* power changed correctly */
 }
@@ -2323,56 +2353,42 @@ pccbb_pcmcia_io_unmap(pch, win)
 	ph->ioalloc &= ~(1 << win);
 }
 
+/*
+ * static void pccbb_pcmcia_wait_ready(struct pcic_handle *ph)
+ *
+ * This function enables the card.  All information is stored in
+ * the first argument, pcmcia_chipset_handle_t.
+ */
 static int
 pccbb_pcmcia_wait_ready(ph)
 	struct pcic_handle *ph;
 {
-	u_int8_t stat;
+	u_char stat;
 	int i;
 
-	/* wait an initial 10ms for quick cards */
-	stat = Pcic_read(ph, PCIC_IF_STATUS);
-	if (stat & PCIC_IF_STATUS_READY)
-		return (0);
-	pccbb_pcmcia_delay(ph, 10, "pccwr0");
-	for (i = 0; i < 50; i++) {
+	DPRINTF(("entering pccbb_pcmcia_wait_ready: status 0x%02x\n",
+	    Pcic_read(ph, PCIC_IF_STATUS)));
+
+	for (i = 0; i < 2000; i++) {
 		stat = Pcic_read(ph, PCIC_IF_STATUS);
 		if (stat & PCIC_IF_STATUS_READY)
-			return (0);
+			return 1;
 		if ((stat & PCIC_IF_STATUS_CARDDETECT_MASK) !=
 		    PCIC_IF_STATUS_CARDDETECT_PRESENT)
-			return (ENXIO);
-		/* wait .1s (100ms) each iteration now */
-		pccbb_pcmcia_delay(ph, 100, "pccwr1");
+			return 0;
+		DELAY_MS(2, ph->ph_parent);
+#ifdef CBB_DEBUG
+		if ((i > 1000) && (i % 25 == 24))
+			printf(".");
+#endif
 	}
 
-	printf("pccbb_pcmcia_wait_ready: ready never happened, status=%02x\n", stat);
-	return (EWOULDBLOCK);
-}
-
-/*
- * Perform long (msec order) delay.
- */
-static void
-pccbb_pcmcia_delay(ph, timo, wmesg)
-	struct pcic_handle *ph;
-	int timo;                       /* in ms.  must not be zero */
-	const char *wmesg;
-{
-
 #ifdef DIAGNOSTIC
-	if (timo <= 0)
-		panic("pccbb_pcmcia_delay: called with timeout %d", timo);
-	if (!curlwp)
-		panic("pccbb_pcmcia_delay: called in interrupt context");
-#if 0
-	if (!ph->event_thread)
-		panic("pccbb_pcmcia_delay: no event thread");
+	printf("pcic_wait_ready: ready never happened, status = %02x\n",
+	    Pcic_read(ph, PCIC_IF_STATUS));
 #endif
-#endif
-	DPRINTF(("pccbb_pcmcia_delay: \"%s\" %p, sleep %d ms\n",
-	    wmesg, ph->event_thread, timo));
-	tsleep(pccbb_pcmcia_delay, PWAIT, wmesg, roundup(timo * hz, 1000) / 1000);
+
+	return 0;
 }
 
 /*
@@ -2387,19 +2403,17 @@ pccbb_pcmcia_socket_enable(pch)
 {
 	struct pcic_handle *ph = (struct pcic_handle *)pch;
 	struct pccbb_softc *sc = (struct pccbb_softc *)ph->ph_parent;
+	int cardtype, win;
+	u_int8_t power, intr;
 	pcireg_t spsr;
 	int voltage;
-	int win;
-	u_int8_t power, intr;
-#ifdef DIAGNOSTIC
-	int reg;
-#endif
 
 	/* this bit is mostly stolen from pcic_attach_card */
 
 	DPRINTF(("pccbb_pcmcia_socket_enable: "));
 
 	/* get card Vcc info */
+
 	spsr =
 	    bus_space_read_4(sc->sc_base_memt, sc->sc_base_memh,
 	    CB_SOCKET_STAT);
@@ -2414,66 +2428,104 @@ pccbb_pcmcia_socket_enable(pch)
 		return;
 	}
 
-	/* disable interrupts; assert RESET */
-	intr = Pcic_read(ph, PCIC_INTR);
-	intr &= PCIC_INTR_ENABLE;
-	Pcic_write(ph, PCIC_INTR, intr);
+	/* disable socket: negate output enable bit and power off */
 
-	/* zero out the address windows */
-	Pcic_write(ph, PCIC_ADDRWIN_ENABLE, 0);
-
-	/* power down the socket to reset it, clear the card reset pin */
-	pccbb_power(sc, CARDBUS_VCC_0V | CARDBUS_VPP_0V);
-
-	/* power off; assert output enable bit */
-	power = PCIC_PWRCTL_OE;
+	power = 0;
 	Pcic_write(ph, PCIC_PWRCTL, power);
 
-	/* power up the socket */
-	if (pccbb_power(sc, voltage) == 0)
-		return;
+	/* power down the socket to reset it, clear the card reset pin */
 
-	/*
-	 * Table 4-18 and figure 4-6 of the PC Card specifiction say:
-	 * Vcc Rising Time (Tpr) = 100ms
-	 * RESET Width (Th (Hi-z RESET)) = 1ms
-	 * RESET Width (Tw (RESET)) = 10us
-	 *
-	 * some machines require some more time to be settled
-	 * (100ms is added here).
+	pccbb_power(sc, CARDBUS_VCC_0V | CARDBUS_VPP_0V);
+
+	/* 
+	 * wait 200ms until power fails (Tpf).  Then, wait 100ms since
+	 * we are changing Vcc (Toff).
 	 */
-	pccbb_pcmcia_delay(ph, 200 + 1, "pccen1");
+	/* delay(300*1000); too much */
 
-	/* negate RESET */
-	intr |= PCIC_INTR_RESET;
+	/* assert reset bit */
+	intr = Pcic_read(ph, PCIC_INTR);
+	intr &= ~(PCIC_INTR_RESET | PCIC_INTR_CARDTYPE_MASK);
 	Pcic_write(ph, PCIC_INTR, intr);
 
-	/*
-	 * RESET Setup Time (Tsu (RESET)) = 20ms
-	 */
-	pccbb_pcmcia_delay(ph, 20, "pccen2");
+	/* power up the socket */
+	power = Pcic_read(ph, PCIC_PWRCTL);
+	Pcic_write(ph, PCIC_PWRCTL, (power & ~PCIC_PWRCTL_OE));
+	pccbb_power(sc, voltage);
 
-#ifdef DIAGNOSTIC
-	reg = Pcic_read(ph, PCIC_IF_STATUS);
-	if ((reg & PCIC_IF_STATUS_POWERACTIVE) == 0)
-		printf("pccbb_pcmcia_socket_enable: no power, status=%x\n", reg);
-#endif
+	/* now output enable */
+	power = Pcic_read(ph, PCIC_PWRCTL);
+	Pcic_write(ph, PCIC_PWRCTL, power | PCIC_PWRCTL_OE);
 
-	/* wait for the chip to finish initializing */
-	if (pccbb_pcmcia_wait_ready(ph)) {
-		/* XXX return a failure status?? */
+	if (pccbb_power(sc, voltage) == 0) {
+		power &= PCIC_PWRCTL_OE;
+		Pcic_write(ph, PCIC_PWRCTL, power);
+		intr |= PCIC_INTR_RESET;
+		Pcic_write(ph, PCIC_INTR, intr);
 		pccbb_power(sc, CARDBUS_VCC_0V | CARDBUS_VPP_0V);
-		Pcic_write(ph, PCIC_PWRCTL, 0);
 		return;
 	}
 
+	/* 
+	 * hold RESET at least 20 ms: the spec says only 10 us is
+	 * enough, but TI1130 requires at least 20 ms.
+	 */
+#if 0	/* XXX called on interrupt context */
+	DELAY_MS(20, sc);
+#else
+	delay(20 * 1000);
+#endif
+
+	/* clear the reset flag */
+
+	intr |= PCIC_INTR_RESET;
+	Pcic_write(ph, PCIC_INTR, intr);
+
+	/* wait 20ms as per pc card standard (r2.01) section 4.3.6 */
+
+#if 0	/* XXX called on interrupt context */
+	DELAY_MS(20, sc);
+#else
+	delay(20 * 1000);
+#endif
+
+	/* wait for the chip to finish initializing */
+
+	if (pccbb_pcmcia_wait_ready(ph) == 0) {
+		Pcic_write(ph, PCIC_ADDRWIN_ENABLE, 0);
+		pccbb_power(sc, CARDBUS_VCC_0V | CARDBUS_VPP_0V);
+		return;
+	}
+
+	/* zero out the address windows */
+
+	Pcic_write(ph, PCIC_ADDRWIN_ENABLE, 0);
+
+	/* set the card type */
+
+	cardtype = pcmcia_card_gettype(ph->pcmcia);
+
+	intr |= ((cardtype == PCMCIA_IFTYPE_IO) ?
+	    PCIC_INTR_CARDTYPE_IO : PCIC_INTR_CARDTYPE_MEM);
+	Pcic_write(ph, PCIC_INTR, intr);
+
+	DPRINTF(("%s: pccbb_pcmcia_socket_enable %02x cardtype %s %02x\n",
+	    ph->ph_parent->dv_xname, ph->sock,
+	    ((cardtype == PCMCIA_IFTYPE_IO) ? "io" : "mem"), intr));
+
 	/* reinstall all the memory and io mappings */
-	for (win = 0; win < PCIC_MEM_WINS; ++win)
-		if (ph->memalloc & (1 << win))
+
+	for (win = 0; win < PCIC_MEM_WINS; ++win) {
+		if (ph->memalloc & (1 << win)) {
 			pccbb_pcmcia_do_mem_map(ph, win);
-	for (win = 0; win < PCIC_IO_WINS; ++win)
-		if (ph->ioalloc & (1 << win))
+		}
+	}
+
+	for (win = 0; win < PCIC_IO_WINS; ++win) {
+		if (ph->ioalloc & (1 << win)) {
 			pccbb_pcmcia_do_io_map(ph, win);
+		}
+	}
 }
 
 /*
@@ -2488,51 +2540,30 @@ pccbb_pcmcia_socket_disable(pch)
 {
 	struct pcic_handle *ph = (struct pcic_handle *)pch;
 	struct pccbb_softc *sc = (struct pccbb_softc *)ph->ph_parent;
-	u_int8_t intr;
+	u_int8_t power, intr;
 
 	DPRINTF(("pccbb_pcmcia_socket_disable\n"));
 
-	/* disable interrupts; assert RESET */
+	/* reset signal asserting... */
+
 	intr = Pcic_read(ph, PCIC_INTR);
-	intr &= PCIC_INTR_ENABLE;
+	intr &= ~(PCIC_INTR_CARDTYPE_MASK);
 	Pcic_write(ph, PCIC_INTR, intr);
+	delay(2 * 1000);
 
-	/* zero out the address windows */
-	Pcic_write(ph, PCIC_ADDRWIN_ENABLE, 0);
-
-	/* power down the socket to reset it, clear the card reset pin */
+	/* power down the socket */
+	power = Pcic_read(ph, PCIC_PWRCTL);
+	power &= ~PCIC_PWRCTL_OE;
+	Pcic_write(ph, PCIC_PWRCTL, power);
 	pccbb_power(sc, CARDBUS_VCC_0V | CARDBUS_VPP_0V);
-
-	/* disable socket: negate output enable bit and power off */
-	Pcic_write(ph, PCIC_PWRCTL, 0);
-
-	/*
-	 * Vcc Falling Time (Tpf) = 300ms
+	/* 
+	 * wait 300ms until power fails (Tpf).
 	 */
-	pccbb_pcmcia_delay(ph, 300, "pccwr1");
-}
-
-STATIC void
-pccbb_pcmcia_socket_settype(pch, type)
-	pcmcia_chipset_handle_t pch;
-	int type;
-{
-	struct pcic_handle *ph = (struct pcic_handle *)pch;
-	u_int8_t intr;
-
-	/* set the card type */
-
-	intr = Pcic_read(ph, PCIC_INTR);
-	intr &= ~(PCIC_INTR_IRQ_MASK | PCIC_INTR_CARDTYPE_MASK);
-	if (type == PCMCIA_IFTYPE_IO)
-		intr |= PCIC_INTR_CARDTYPE_IO;
-	else
-		intr |= PCIC_INTR_CARDTYPE_MEM;
-	Pcic_write(ph, PCIC_INTR, intr);
-
-	DPRINTF(("%s: pccbb_pcmcia_socket_settype %02x type %s %02x\n",
-	    ph->ph_parent->dv_xname, ph->sock,
-	    ((type == PCMCIA_IFTYPE_IO) ? "io" : "mem"), intr));
+#if 0	/* XXX called on interrupt context */
+	DELAY_MS(300, sc);
+#else
+	delay(300 * 1000);
+#endif
 }
 
 /*

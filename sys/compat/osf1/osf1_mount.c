@@ -1,4 +1,4 @@
-/*	$NetBSD: osf1_mount.c,v 1.27 2004/04/27 21:37:49 fair Exp $	*/
+/*	$NetBSD: osf1_mount.c,v 1.24 2003/06/29 22:29:41 fvdl Exp $	*/
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_mount.c,v 1.27 2004/04/27 21:37:49 fair Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_mount.c,v 1.24 2003/06/29 22:29:41 fvdl Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "fs_nfs.h"
@@ -121,7 +121,7 @@ osf1_sys_fstatfs(l, v, retval)
 	struct proc *p = l->l_proc;
 	struct file *fp;
 	struct mount *mp;
-	struct statvfs *sp;
+	struct statfs *sp;
 	struct osf1_statfs osfs;
 	int error;
 
@@ -130,9 +130,9 @@ osf1_sys_fstatfs(l, v, retval)
 		return (error);
 	mp = ((struct vnode *)fp->f_data)->v_mount;
 	sp = &mp->mnt_stat;
-	if ((error = VFS_STATVFS(mp, sp, p)))
+	if ((error = VFS_STATFS(mp, sp, p)))
 		goto out;
-	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
+	sp->f_flags = mp->mnt_flag & MNT_VISFLAGMASK;
 	osf1_cvt_statfs_from_native(sp, &osfs);
 	error = copyout(&osfs, SCARG(uap, buf), min(sizeof osfs,
 	    SCARG(uap, len)));
@@ -150,7 +150,7 @@ osf1_sys_getfsstat(l, v, retval)
 	struct osf1_sys_getfsstat_args *uap = v;
 	struct proc *p = l->l_proc;
 	struct mount *mp, *nmp;
-	struct statvfs *sp;
+	struct statfs *sp;
 	struct osf1_statfs osfs;
 	caddr_t osf_sfsp;
 	long count, maxcount, error;
@@ -172,9 +172,9 @@ osf1_sys_getfsstat(l, v, retval)
 			 */
 			if (((SCARG(uap, flags) & OSF1_MNT_NOWAIT) == 0 ||
 			    (SCARG(uap, flags) & OSF1_MNT_WAIT)) &&
-			    (error = VFS_STATVFS(mp, sp, p)))
+			    (error = VFS_STATFS(mp, sp, p)))
 				continue;
-			sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
+			sp->f_flags = mp->mnt_flag & MNT_VISFLAGMASK;
 			osf1_cvt_statfs_from_native(sp, &osfs);
 			if ((error = copyout(&osfs, osf_sfsp,
 			    sizeof (struct osf1_statfs))))
@@ -233,7 +233,7 @@ osf1_sys_statfs(l, v, retval)
 	struct osf1_sys_statfs_args *uap = v;
 	struct proc *p = l->l_proc;
 	struct mount *mp;
-	struct statvfs *sp;
+	struct statfs *sp;
 	struct osf1_statfs osfs;
 	int error;
 	struct nameidata nd;
@@ -244,9 +244,9 @@ osf1_sys_statfs(l, v, retval)
 	mp = nd.ni_vp->v_mount;
 	sp = &mp->mnt_stat;
 	vrele(nd.ni_vp);
-	if ((error = VFS_STATVFS(mp, sp, p)))
+	if ((error = VFS_STATFS(mp, sp, p)))
 		return (error);
-	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
+	sp->f_flags = mp->mnt_flag & MNT_VISFLAGMASK;
 	osf1_cvt_statfs_from_native(sp, &osfs);
 	return copyout(&osfs, SCARG(uap, buf), min(sizeof osfs,
 	    SCARG(uap, len)));

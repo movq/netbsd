@@ -1,6 +1,6 @@
 /* 8 and 16 bit COFF relocation functions, for BFD.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 2000, 2001,
-   2002, 2003 Free Software Foundation, Inc.
+   2002 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
 This file is part of BFD, the Binary File Descriptor library.
@@ -193,7 +193,7 @@ bfd_coff_reloc16_relax_section (abfd, input_section, link_info, again)
       bfd_size_type amt;
 
       /* Allocate and initialize the shrinks array for this section.
-	 The last element is used as an accumulator of shrinks.  */
+	 The last element is used as an accumlator of shrinks.  */
       amt = reloc_count + 1;
       amt *= sizeof (unsigned);
       shrinks = (unsigned *) bfd_zmalloc (amt);
@@ -240,13 +240,13 @@ bfd_coff_reloc16_get_relocated_section_contents (in_abfd,
 						 link_info,
 						 link_order,
 						 data,
-						 relocatable,
+						 relocateable,
 						 symbols)
      bfd *in_abfd;
      struct bfd_link_info *link_info;
      struct bfd_link_order *link_order;
      bfd_byte *data;
-     bfd_boolean relocatable;
+     bfd_boolean relocateable;
      asymbol **symbols;
 {
   /* Get enough memory to hold the stuff.  */
@@ -259,11 +259,11 @@ bfd_coff_reloc16_get_relocated_section_contents (in_abfd,
   if (reloc_size < 0)
     return NULL;
 
-  /* If producing relocatable output, don't bother to relax.  */
-  if (relocatable)
+  /* If producing relocateable output, don't bother to relax.  */
+  if (relocateable)
     return bfd_generic_get_relocated_section_contents (in_abfd, link_info,
 						       link_order,
-						       data, relocatable,
+						       data, relocateable,
 						       symbols);
 
   /* Read in the section.  */

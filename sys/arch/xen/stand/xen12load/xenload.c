@@ -1,4 +1,4 @@
-/* $NetBSD: xenload.c,v 1.1 2004/04/17 23:20:37 cl Exp $ */
+/* $NetBSD: xenload.c,v 1.1.2.2 2004/05/22 15:59:21 he Exp $ */
 
 /*
  *
@@ -33,7 +33,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xenload.c,v 1.1 2004/04/17 23:20:37 cl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xenload.c,v 1.1.2.2 2004/05/22 15:59:21 he Exp $");
 
 #include <sys/lock.h>
 

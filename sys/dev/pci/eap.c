@@ -1,4 +1,4 @@
-/*	$NetBSD: eap.c,v 1.74 2004/11/09 16:28:14 kent Exp $	*/
+/*	$NetBSD: eap.c,v 1.67.2.1 2004/09/22 20:58:27 jmc Exp $	*/
 /*      $OpenBSD: eap.c,v 1.6 1999/10/05 19:24:42 csapuntz Exp $ */
 
 /*
@@ -57,10 +57,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eap.c,v 1.74 2004/11/09 16:28:14 kent Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eap.c,v 1.67.2.1 2004/09/22 20:58:27 jmc Exp $");
 
 #include "midi.h"
-#include "joy_eap.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,7 +84,6 @@ __KERNEL_RCSID(0, "$NetBSD: eap.c,v 1.74 2004/11/09 16:28:14 kent Exp $");
 #include <machine/bus.h>
 
 #include <dev/pci/eapreg.h>
-#include <dev/pci/eapvar.h>
 
 #define	PCI_CBIO		0x10
 
@@ -157,9 +155,6 @@ struct eap_softc {
 	void	(*sc_ointr)(void *);	/* midi output ready handler */
 	void	*sc_arg;
 	struct device *sc_mididev;
-#endif
-#if NJOY_EAP > 0
-	struct device *sc_gameport;
 #endif
 
 	u_short	sc_port[AK_NPORTS];	/* mirror of the hardware setting */
@@ -234,7 +229,7 @@ int	eap_midi_open(void *, int, void (*)(void *, int),
 int	eap_midi_output(void *, int);
 #endif
 
-const struct audio_hw_if eap1370_hw_if = {
+struct audio_hw_if eap1370_hw_if = {
 	eap_open,
 	eap_close,
 	NULL,
@@ -264,7 +259,7 @@ const struct audio_hw_if eap1370_hw_if = {
 	NULL,
 };
 
-const struct audio_hw_if eap1371_hw_if = {
+struct audio_hw_if eap1371_hw_if = {
 	eap_open,
 	eap_close,
 	NULL,
@@ -295,7 +290,7 @@ const struct audio_hw_if eap1371_hw_if = {
 };
 
 #if NMIDI > 0
-const struct midi_hw_if eap_midi_hw_if = {
+struct midi_hw_if eap_midi_hw_if = {
 	eap_midi_open,
 	eap_midi_close,
 	eap_midi_output,
@@ -581,7 +576,7 @@ eap_attach(struct device *parent, struct device *self, void *aux)
 	struct eap_softc *sc = (struct eap_softc *)self;
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
-	const struct audio_hw_if *eap_hw_if;
+	struct audio_hw_if *eap_hw_if;
 	char const *intrstr;
 	pci_intr_handle_t ih;
 	pcireg_t csr;
@@ -590,9 +585,6 @@ eap_attach(struct device *parent, struct device *self, void *aux)
 	int i;
 	int revision, ct5880;
 	const char *revstr = "";
-#if NJOY_EAP > 0
-	struct eap_gameport_args gpargs;
-#endif
 
 	aprint_naive(": Audio controller\n");
 
@@ -607,7 +599,7 @@ eap_attach(struct device *parent, struct device *self, void *aux)
 	 * The vendor and product ID's are quite "interesting". Just
 	 * trust the following and be happy.
 	 */
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	revision = PCI_REVISION(pa->pa_class);
 	ct5880 = 0;
 	if (sc->sc_1371) {
@@ -767,6 +759,26 @@ eap_attach(struct device *parent, struct device *self, void *aux)
 			return;
 
 		eap_hw_if = &eap1371_hw_if;
+
+		/* Just enable the DAC and master volumes by default */
+		ctl.type = AUDIO_MIXER_ENUM;
+		ctl.un.ord = 0;  /* off */
+		ctl.dev = eap1371_get_portnum_by_name(sc, AudioCoutputs,
+		       AudioNmaster, AudioNmute);
+		eap1371_mixer_set_port(&sc->sc_ei[EAP_I1], &ctl);
+		ctl.dev = eap1371_get_portnum_by_name(sc, AudioCinputs,
+		       AudioNdac, AudioNmute);
+		eap1371_mixer_set_port(&sc->sc_ei[EAP_I1], &ctl);
+		ctl.dev = eap1371_get_portnum_by_name(sc, AudioCrecord,
+		       AudioNvolume, AudioNmute);
+		eap1371_mixer_set_port(&sc->sc_ei[EAP_I1], &ctl);
+		
+		ctl.dev = eap1371_get_portnum_by_name(sc, AudioCrecord,
+		       AudioNsource, NULL);
+		ctl.type = AUDIO_MIXER_ENUM;
+		ctl.un.ord = 0;
+		eap1371_mixer_set_port(&sc->sc_ei[EAP_I1], &ctl);
+
 	}
 
 	sc->sc_ei[EAP_I1].ei_audiodev =
@@ -781,51 +793,23 @@ eap_attach(struct device *parent, struct device *self, void *aux)
 #if NMIDI > 0
 	sc->sc_mididev = midi_attach_mi(&eap_midi_hw_if, sc, &sc->sc_dev);
 #endif
-
-#if NJOY_EAP > 0
-	if (sc->sc_1371) {
-		gpargs.gpa_iot = sc->iot;
-		gpargs.gpa_ioh = sc->ioh;
-		sc->sc_gameport = eap_joy_attach(&sc->sc_dev, &gpargs);
-	}
-#endif
 }
 
 int
 eap_detach(struct device *self, int flags)
 {
 	struct eap_softc *sc = (struct eap_softc *) self;
-	int res;
-#if NJOY_EAP > 0
-	struct eap_gameport_args gpargs;
 
-	if (sc->sc_gameport) {
-		gpargs.gpa_iot = sc->iot;
-		gpargs.gpa_ioh = sc->ioh;
-		res = eap_joy_detach(sc->sc_gameport, &gpargs);
-		if (res)
-			return (res);
-	}
-#endif
 #if NMIDI > 0
-	if (sc->sc_mididev != NULL) {
-		res = config_detach(sc->sc_mididev, 0);
-		if (res)
-			return (res);
-	}
+	if (sc->sc_mididev != NULL)
+		config_detach(sc->sc_mididev, 0);
 #endif
 #ifdef EAP_USE_BOTH_DACS
-	if (sc->sc_ei[EAP_I2].ei_audiodev != NULL) {
-		res = config_detach(sc->sc_ei[EAP_I2].ei_audiodev, 0);
-		if (res)
-			return (res);
-	}
+	if (sc->sc_ei[EAP_I2].ei_audiodev != NULL)
+		config_detach(sc->sc_ei[EAP_I2].ei_audiodev, 0);
 #endif
-	if (sc->sc_ei[EAP_I1].ei_audiodev != NULL) {
-		res = config_detach(sc->sc_ei[EAP_I1].ei_audiodev, 0);
-		if (res)
-			return (res);
-	}
+	if (sc->sc_ei[EAP_I1].ei_audiodev != NULL)
+		config_detach(sc->sc_ei[EAP_I1].ei_audiodev, 0);
 
 	bus_space_unmap(sc->iot, sc->ioh, sc->iosz);
 	pci_intr_disestablish(sc->sc_pc, sc->sc_ih);
@@ -984,7 +968,7 @@ eap_open(void *addr, int flags)
 	struct eap_instance *ei = addr;
 
 	/* there is only one ADC */
-	if (ei->index == EAP_I2 && flags & FREAD)
+	if (ei->index == EAP_I2 && flags & AUOPEN_READ)
 		return (EOPNOTSUPP);
 
 	return (0);
@@ -996,6 +980,16 @@ eap_open(void *addr, int flags)
 void
 eap_close(void *addr)
 {
+	struct eap_instance *ei = addr;
+	struct eap_softc *sc = (struct eap_softc *)ei->parent;
+    
+	eap_halt_output(ei);
+	if (ei->index == EAP_I1) {
+		eap_halt_input(ei);
+		sc->sc_rintr = 0;
+	}
+
+	ei->ei_pintr = 0;
 }
 
 int
@@ -1373,7 +1367,6 @@ eap_halt_output(void *addr)
 	DPRINTF(("eap: eap_halt_output\n"));
 	icsc = EREAD4(sc, EAP_ICSC);
 	EWRITE4(sc, EAP_ICSC, icsc & ~(EAP_DAC_EN(ei->index)));
-	ei->ei_pintr = 0;
 #ifdef DIAGNOSTIC
 	ei->ei_prun = 0;
 #endif
@@ -1392,11 +1385,9 @@ eap_halt_input(void *addr)
 	DPRINTF(("eap: eap_halt_input\n"));
 	icsc = EREAD4(sc, EAP_ICSC);
 	EWRITE4(sc, EAP_ICSC, icsc & ~EAP_ADC_EN);
-	sc->sc_rintr = 0;
 #ifdef DIAGNOSTIC
 	sc->sc_rrun = 0;
 #endif
-
 	return (0);
 }
 

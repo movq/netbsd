@@ -1,4 +1,4 @@
-/*	$NetBSD: miscbltin.c,v 1.34 2004/04/19 01:36:32 lukem Exp $	*/
+/*	$NetBSD: miscbltin.c,v 1.32 2003/08/07 09:05:35 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)miscbltin.c	8.4 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: miscbltin.c,v 1.34 2004/04/19 01:36:32 lukem Exp $");
+__RCSID("$NetBSD: miscbltin.c,v 1.32 2003/08/07 09:05:35 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -290,9 +290,6 @@ static const struct limits limits[] = {
 #ifdef RLIMIT_SWAP
 	{ "swap(kbytes)",		RLIMIT_SWAP,	1024, 'w' },
 #endif
-#ifdef RLIMIT_SBSIZE
-	{ "sbsize(bytes)",		RLIMIT_SBSIZE,	   1, 'b' },
-#endif
 	{ (char *) 0,			0,		   0,  '\0' }
 };
 
@@ -309,7 +306,7 @@ ulimitcmd(int argc, char **argv)
 	struct rlimit	limit;
 
 	what = 'f';
-	while ((optc = nextopt("HSabtfdsmcnpl")) != '\0')
+	while ((optc = nextopt("HSatfdsmcnpl")) != '\0')
 		switch (optc) {
 		case 'H':
 			how = HARD;

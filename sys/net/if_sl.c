@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sl.c,v 1.90 2004/12/06 02:59:23 christos Exp $	*/
+/*	$NetBSD: if_sl.c,v 1.84 2003/08/07 16:32:53 agc Exp $	*/
 
 /*
  * Copyright (c) 1987, 1989, 1992, 1993
@@ -60,7 +60,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sl.c,v 1.90 2004/12/06 02:59:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sl.c,v 1.84 2003/08/07 16:32:53 agc Exp $");
+
+#include "sl.h"
+#if NSL > 0
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -94,6 +97,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_sl.c,v 1.90 2004/12/06 02:59:23 christos Exp $");
 #include <netinet/in_systm.h>
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
+#else
+#error Slip without inet?
 #endif
 
 #include <net/slcompress.h>
@@ -171,13 +176,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_sl.c,v 1.90 2004/12/06 02:59:23 christos Exp $");
 #define	ABT_COUNT	3	/* count of escapes for abort */
 #define	ABT_WINDOW	(ABT_COUNT*2+2)	/* in seconds - time to count */
 
-static int		sl_clone_create(struct if_clone *, int);
-static int		sl_clone_destroy(struct ifnet *);
-
-static LIST_HEAD(, sl_softc) sl_softc_list;
-
-struct if_clone sl_cloner =
-    IF_CLONE_INITIALIZER("sl", sl_clone_create, sl_clone_destroy);
+struct sl_softc sl_softc[NSL];
 
 #define FRAME_END	 	0xc0		/* Frame End */
 #define FRAME_ESCAPE		0xdb		/* Frame Esc */
@@ -192,57 +191,34 @@ void	slintr(void *);
 static int slinit __P((struct sl_softc *));
 static struct mbuf *sl_btom __P((struct sl_softc *, int));
 
+/*
+ * Called from boot code to establish sl interfaces.
+ */
 void
-slattach(void)
-{
-	LIST_INIT(&sl_softc_list);
-	if_clone_attach(&sl_cloner);
-}
-
-static int
-sl_clone_create(struct if_clone *ifc, int unit)
+slattach()
 {
 	struct sl_softc *sc;
+	int i = 0;
 
-	MALLOC(sc, struct sl_softc *, sizeof(*sc), M_DEVBUF, M_WAIT|M_ZERO);
-	sc->sc_unit = unit;
-	(void)snprintf(sc->sc_if.if_xname, sizeof(sc->sc_if.if_xname),
-	    "%s%d", ifc->ifc_name, unit);
-	sc->sc_if.if_softc = sc;
-	sc->sc_if.if_mtu = SLMTU;
-	sc->sc_if.if_flags = IFF_POINTOPOINT | SC_AUTOCOMP | IFF_MULTICAST;
-	sc->sc_if.if_type = IFT_SLIP;
-	sc->sc_if.if_ioctl = slioctl;
-	sc->sc_if.if_output = sloutput;
-	sc->sc_if.if_dlt = DLT_SLIP;
-	sc->sc_fastq.ifq_maxlen = 32;
-	IFQ_SET_READY(&sc->sc_if.if_snd);
-	if_attach(&sc->sc_if);
-	if_alloc_sadl(&sc->sc_if);
+	for (sc = sl_softc; i < NSL; sc++) {
+		sc->sc_unit = i;		/* XXX */
+		sprintf(sc->sc_if.if_xname, "sl%d", i++);
+		sc->sc_if.if_softc = sc;
+		sc->sc_if.if_mtu = SLMTU;
+		sc->sc_if.if_flags =
+		    IFF_POINTOPOINT | SC_AUTOCOMP | IFF_MULTICAST;
+		sc->sc_if.if_type = IFT_SLIP;
+		sc->sc_if.if_ioctl = slioctl;
+		sc->sc_if.if_output = sloutput;
+		sc->sc_if.if_dlt = DLT_SLIP;
+		sc->sc_fastq.ifq_maxlen = 32;
+		IFQ_SET_READY(&sc->sc_if.if_snd);
+		if_attach(&sc->sc_if);
+		if_alloc_sadl(&sc->sc_if);
 #if NBPFILTER > 0
-	bpfattach(&sc->sc_if, DLT_SLIP, SLIP_HDRLEN);
+		bpfattach(&sc->sc_if, DLT_SLIP, SLIP_HDRLEN);
 #endif
-	LIST_INSERT_HEAD(&sl_softc_list, sc, sc_iflist);
-	return 0;
-}
-
-static int
-sl_clone_destroy(struct ifnet *ifp)
-{
-	struct sl_softc *sc = (struct sl_softc *)ifp->if_softc;
-
-	if (sc->sc_ttyp != NULL)
-		return EBUSY;	/* Not removing it */
-
-	LIST_REMOVE(sc, sc_iflist);
-
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
-	if_detach(ifp);
-
-	FREE(sc, M_DEVBUF);
-	return 0;
+	}
 }
 
 static int
@@ -259,9 +235,7 @@ slinit(sc)
 	sc->sc_mp = sc->sc_pktstart = (u_char *) sc->sc_mbuf->m_ext.ext_buf +
 	    BUFOFFSET;
 
-#ifdef INET
 	sl_compress_init(&sc->sc_comp);
-#endif
 
 	return (1);
 }
@@ -278,6 +252,7 @@ slopen(dev, tp)
 {
 	struct proc *p = curproc;		/* XXX */
 	struct sl_softc *sc;
+	int nsl;
 	int error;
 	int s;
 
@@ -287,7 +262,7 @@ slopen(dev, tp)
 	if (tp->t_linesw->l_no == SLIPDISC)
 		return (0);
 
-	LIST_FOREACH(sc, &sl_softc_list, sc_iflist)
+	for (nsl = NSL, sc = sl_softc; --nsl >= 0; sc++)
 		if (sc->sc_ttyp == NULL) {
 #ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 			sc->sc_si = softintr_establish(IPL_SOFTNET,
@@ -461,12 +436,10 @@ sloutput(ifp, m, dst, rtp)
 		return (EHOSTUNREACH);
 	}
 	ip = mtod(m, struct ip *);
-#ifdef INET
 	if (sc->sc_if.if_flags & SC_NOICMP && ip->ip_p == IPPROTO_ICMP) {
 		m_freem(m);
 		return (ENETRESET);		/* XXX ? */
 	}
-#endif
 
 	s = spltty();
 	if (sc->sc_oqlen && sc->sc_ttyp->t_outq.c_cc == sc->sc_oqlen) {
@@ -482,7 +455,6 @@ sloutput(ifp, m, dst, rtp)
 	splx(s);
 
 	s = splnet();
-#ifdef INET
 	if ((ip->ip_tos & IPTOS_LOWDELAY) != 0
 #ifdef ALTQ
 	    && ALTQ_IS_ENABLED(&ifp->if_snd) == 0
@@ -497,7 +469,6 @@ sloutput(ifp, m, dst, rtp)
 			error = 0;
 		}
 	} else
-#endif
 		IFQ_ENQUEUE(&ifp->if_snd, m, &pktattr, error);
 	if (error) {
 		splx(s);
@@ -703,8 +674,10 @@ void
 slnetisr(void)
 {
 	struct sl_softc *sc;
+	int i;
 
-	LIST_FOREACH(sc, &sl_softc_list, sc_iflist) {
+	for (i = 0; i < NSL; i++) {
+		sc = &sl_softc[i];
 		if (sc->sc_ttyp == NULL)
 			continue;
 		slintr(sc);
@@ -719,10 +692,7 @@ slintr(void *arg)
 	struct tty *tp = sc->sc_ttyp;
 	struct mbuf *m;
 	int s, len;
-	u_char *pktstart;
-#ifdef INET
-	u_char c;
-#endif
+	u_char *pktstart, c;
 #if NBPFILTER > 0
 	u_char chdr[CHDR_LEN];
 #endif
@@ -733,9 +703,7 @@ slintr(void *arg)
 	 * Output processing loop.
 	 */
 	for (;;) {
-#ifdef INET
 		struct ip *ip;
-#endif
 		struct mbuf *m2;
 #if NBPFILTER > 0
 		struct mbuf *bpf_m;
@@ -790,18 +758,38 @@ slintr(void *arg)
 		} else
 			bpf_m = NULL;
 #endif
-#ifdef INET
 		if ((ip = mtod(m, struct ip *))->ip_p == IPPROTO_TCP) {
 			if (sc->sc_if.if_flags & SC_COMPRESS)
 				*mtod(m, u_char *) |=
 				    sl_compress_tcp(m, ip,
 				    &sc->sc_comp, 1);
 		}
-#endif
 #if NBPFILTER > 0
-		if (sc->sc_if.if_bpf && bpf_m != NULL)
-			bpf_mtap_sl_out(sc->sc_if.if_bpf, mtod(m, u_char *),
-			    bpf_m);
+		if (sc->sc_if.if_bpf && bpf_m != NULL) {
+			/*
+			 * Put the SLIP pseudo-"link header" in
+			 * place.  The compressed header is now
+			 * at the beginning of the mbuf.
+			 */
+			struct mbuf n;
+			u_char *hp;
+
+			n.m_flags = 0;
+			n.m_next = bpf_m;
+			n.m_data = n.m_dat;
+			n.m_len = SLIP_HDRLEN;
+
+			hp = mtod(&n, u_char *);
+
+			hp[SLX_DIR] = SLIPDIR_OUT;
+			memcpy(&hp[SLX_CHDR], mtod(m, caddr_t),
+			    CHDR_LEN);
+
+			s = splnet();
+			bpf_mtap(sc->sc_if.if_bpf, &n);
+			splx(s);
+			m_freem(bpf_m);
+		}
 #endif
 		sc->sc_lastpacket = time;
 
@@ -923,7 +911,6 @@ slintr(void *arg)
 			memcpy(chdr, pktstart, CHDR_LEN);
 		}
 #endif /* NBPFILTER > 0 */
-#ifdef INET
 		if ((c = (*pktstart & 0xf0)) != (IPVERSION << 4)) {
 			if (c & 0x80)
 				c = TYPE_COMPRESSED_TCP;
@@ -959,14 +946,31 @@ slintr(void *arg)
 				continue;
 			}
 		}
-#endif
 		m->m_data = (caddr_t) pktstart;
 		m->m_pkthdr.len = m->m_len = len;
 #if NBPFILTER > 0
 		if (sc->sc_if.if_bpf) {
-			bpf_mtap_sl_in(sc->sc_if.if_bpf, chdr, &m);
+			/*
+			 * Put the SLIP pseudo-"link header" in place.
+			 * Note this M_PREPEND() should bever fail,
+			 * since we know we always have enough space
+			 * in the input buffer.
+			 */
+			u_char *hp;
+
+			M_PREPEND(m, SLIP_HDRLEN, M_DONTWAIT);
 			if (m == NULL)
 				continue;
+
+			hp = mtod(m, u_char *);
+			hp[SLX_DIR] = SLIPDIR_IN;
+			memcpy(&hp[SLX_CHDR], chdr, CHDR_LEN);
+
+			s = splnet();
+			bpf_mtap(sc->sc_if.if_bpf, m);
+			splx(s);
+
+			m_adj(m, SLIP_HDRLEN);
 		}
 #endif /* NBPFILTER > 0 */
 		/*
@@ -989,7 +993,6 @@ slintr(void *arg)
 		sc->sc_if.if_ipackets++;
 		sc->sc_lastpacket = time;
 
-#ifdef INET
 		s = splnet();
 		if (IF_QFULL(&ipintrq)) {
 			IF_DROP(&ipintrq);
@@ -1001,7 +1004,6 @@ slintr(void *arg)
 			schednetisr(NETISR_IP);
 		}
 		splx(s);
-#endif
 	}
 }
 
@@ -1070,3 +1072,4 @@ slioctl(ifp, cmd, data)
 	splx(s);
 	return (error);
 }
+#endif

@@ -1,4 +1,4 @@
-/* $NetBSD: lkminit_exec.c,v 1.5 2004/11/13 06:09:47 christos Exp $ */
+/* $NetBSD: lkminit_exec.c,v 1.4 2001/12/08 00:37:10 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lkminit_exec.c,v 1.5 2004/11/13 06:09:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lkminit_exec.c,v 1.4 2001/12/08 00:37:10 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,8 +63,7 @@ static struct execsw exec_hpux_aout =
 	  0,
 	  copyargs,
 	  NULL,
-	  coredump_netbsd,
-	  exec_setup_stack };
+	  coredump_netbsd };
 
 /*
  * declare the exec

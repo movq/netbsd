@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.18 2004/08/14 16:06:40 dsl Exp $ */
+/*	$NetBSD: md.c,v 1.16 2003/11/30 14:36:44 dsl Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -51,7 +51,6 @@
 
 
 /* prototypes */
-const char *fdtype = "msdos";
 
 /*
  * any additional partition validation
@@ -158,4 +157,11 @@ md_pre_update(void)
 void
 md_init(void)
 {
+}
+
+void
+md_set_sizemultname(void)
+{
+
+	set_sizemultname_meg();
 }

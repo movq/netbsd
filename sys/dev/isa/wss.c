@@ -1,4 +1,4 @@
-/*	$NetBSD: wss.c,v 1.61 2004/10/29 12:57:17 yamt Exp $	*/
+/*	$NetBSD: wss.c,v 1.60 2002/09/27 15:37:23 provos Exp $	*/
 
 /*
  * Copyright (c) 1994 John Brezak
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wss.c,v 1.61 2004/10/29 12:57:17 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wss.c,v 1.60 2002/09/27 15:37:23 provos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -84,7 +84,7 @@ int	wss_query_devinfo __P((void *, mixer_devinfo_t *));
  * Define our interface to the higher level audio driver.
  */
 
-const struct audio_hw_if wss_hw_if = {
+struct audio_hw_if wss_hw_if = {
 	ad1848_isa_open,
 	ad1848_isa_close,
 	NULL,

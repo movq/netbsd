@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_swap.c,v 1.89 2004/10/28 07:07:47 yamt Exp $	*/
+/*	$NetBSD: uvm_swap.c,v 1.85.2.1 2004/05/15 13:48:49 tron Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997 Matthew R. Green
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_swap.c,v 1.89 2004/10/28 07:07:47 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_swap.c,v 1.85.2.1 2004/05/15 13:48:49 tron Exp $");
 
 #include "fs_nfs.h"
 #include "opt_uvmhist.h"
@@ -42,7 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_swap.c,v 1.89 2004/10/28 07:07:47 yamt Exp $");
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/conf.h>
 #include <sys/proc.h>
 #include <sys/namei.h>
@@ -181,8 +180,8 @@ struct vndbuf {
 /*
  * We keep a of pool vndbuf's and vndxfer structures.
  */
-POOL_INIT(vndxfer_pool, sizeof(struct vndxfer), 0, 0, 0, "swp vnx", NULL);
-POOL_INIT(vndbuf_pool, sizeof(struct vndbuf), 0, 0, 0, "swp vnd", NULL);
+static struct pool vndxfer_pool;
+static struct pool vndbuf_pool;
 
 #define	getvndxfer(vnx)	do {						\
 	int s = splbio();						\
@@ -286,6 +285,16 @@ uvm_swap_init()
 				M_VMSWAP, 0, 0, EX_NOWAIT);
 	if (swapmap == 0)
 		panic("uvm_swap_init: extent_create failed");
+
+	/*
+	 * allocate pools for structures used for swapping to files.
+	 */
+
+	pool_init(&vndxfer_pool, sizeof(struct vndxfer), 0, 0, 0,
+	    "swp vnx", NULL);
+
+	pool_init(&vndbuf_pool, sizeof(struct vndbuf), 0, 0, 0,
+	    "swp vnd", NULL);
 
 	/*
 	 * done!
@@ -828,7 +837,7 @@ swap_on(p, sdp)
 			goto bad;
 		nblocks = (int)btodb(va.va_size);
 		if ((error =
-		     VFS_STATVFS(vp->v_mount, &vp->v_mount->mnt_stat, p)) != 0)
+		     VFS_STATFS(vp->v_mount, &vp->v_mount->mnt_stat, p)) != 0)
 			goto bad;
 
 		sdp->swd_bsize = vp->v_mount->mnt_stat.f_iosize;
@@ -909,12 +918,12 @@ swap_on(p, sdp)
 	 */
 	if (vp == rootvp) {
 		struct mount *mp;
-		struct statvfs *sp;
+		struct statfs *sp;
 		int rootblocks, rootpages;
 
 		mp = rootvnode->v_mount;
 		sp = &mp->mnt_stat;
-		rootblocks = sp->f_blocks * btodb(sp->f_frsize);
+		rootblocks = sp->f_blocks * btodb(sp->f_bsize);
 		/*
 		 * XXX: sp->f_blocks isn't the total number of
 		 * blocks in the filesystem, it's the number of

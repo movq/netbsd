@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.300 2004/12/14 16:28:00 christos Exp $	*/
+/*	$NetBSD: machdep.c,v 1.297.2.1 2004/08/02 07:26:02 tron Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -107,7 +107,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.300 2004/12/14 16:28:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.297.2.1 2004/08/02 07:26:02 tron Exp $");
 
 #include "opt_adb.h"
 #include "opt_ddb.h"
@@ -278,12 +278,6 @@ void	nmihand __P((struct frame));
  * Machine-dependent crash dump header info.
  */
 cpu_kcore_hdr_t cpu_kcore_hdr;
-
-/*
- * XXX: For zs serial driver. We always initialize the base address
- * to avoid a bunch of #ifdefs.
- */
-volatile unsigned char *sccA = 0;
 
 /*
  * Early initialization, before main() is called.
@@ -503,7 +497,33 @@ cpu_startup(void)
 void
 initcpu()
 {
-	/* Invalidate supervisor mode data cache. */
+#if defined(M68040) || defined(M68060)
+	extern void (*vectab[256]) __P((void));
+	void addrerr4060 __P((void));
+#endif
+#ifdef M68060
+	void buserr60 __P((void));
+#endif
+#ifdef M68040
+	void buserr40 __P((void));
+#endif
+
+	switch (cputype) {
+#ifdef M68060
+	case CPU_68060:
+		vectab[2] = buserr60;
+		vectab[3] = addrerr4060;
+		break;
+#endif
+#ifdef M68040
+	case CPU_68040:
+		vectab[2] = buserr40;
+		vectab[3] = addrerr4060;
+		break;
+#endif
+	default:
+		break;
+	}
 	DCIS();
 }
 
@@ -2273,6 +2293,9 @@ void
 mac68k_set_io_offsets(base)
 	vaddr_t base;
 {
+#if NZSC > 0
+	extern volatile u_char *sccA;
+#endif
 
 	switch (current_mac_model->class) {
 	case MACH_CLASSQ:

@@ -1,4 +1,4 @@
-/*	$NetBSD: iommu.c,v 1.75 2004/07/01 06:40:36 petrov Exp $	*/
+/*	$NetBSD: iommu.c,v 1.73.2.1 2004/07/02 18:00:16 he Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Eduardo Horvath
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iommu.c,v 1.75 2004/07/01 06:40:36 petrov Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iommu.c,v 1.73.2.1 2004/07/02 18:00:16 he Exp $");
 
 #include "opt_ddb.h"
 
@@ -545,9 +545,6 @@ iommu_dvmamap_load(t, sb, map, buf, buflen, p, flags)
 		 * Get the physical address for this page.
 		 */
 		if (pmap_extract(pmap, (vaddr_t)vaddr, &curaddr) == FALSE) {
-#ifdef DIAGNOSTIC
-			printf("iommu_dvmamap_load: pmap_extract failed %lx\n", vaddr);
-#endif
 			bus_dmamap_unload(t, map);
 			return (-1);
 		}

@@ -1,5 +1,3 @@
-/*	$NetBSD: master.h,v 1.7 2004/05/31 00:46:47 heas Exp $	*/
-
 /*++
 /* NAME
 /*	master 3h
@@ -108,6 +106,10 @@ extern void master_refresh(void);
  /*
   * master_vars.c
   */
+extern char *var_program_dir;
+extern int var_proc_limit;
+extern int var_use_limit;
+extern int var_idle_limit;
 extern void master_vars_init(void);
 
  /*

@@ -35,7 +35,7 @@
 #include <config.h>
 #ifdef __RCSID
 __RCSID("$Heimdal: print_version.c,v 1.6.2.1 2004/02/12 18:31:33 joda Exp $"
-        "$NetBSD: print_version.c,v 1.7 2004/04/02 14:59:48 lha Exp $");
+        "$NetBSD: print_version.c,v 1.6.2.1 2004/04/21 04:55:42 jmc Exp $");
 #endif /* __RCSID */
 #endif
 #include "roken.h"

@@ -1,4 +1,4 @@
-# $NetBSD: ALPHA,v 1.197 2004/11/24 20:49:19 bouyer Exp $
+# $NetBSD: ALPHA,v 1.191.2.2 2004/07/15 20:22:03 he Exp $
 #
 # Alpha kernel with all the options you'd want, and more.
 
@@ -6,7 +6,7 @@ include 	"arch/alpha/conf/std.alpha"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-ident		"ALPHA-$Revision: 1.197 $"
+ident		"ALPHA-$Revision: 1.191.2.2 $"
 
 maxusers 32
 
@@ -118,7 +118,6 @@ options 	COMPAT_OSF1
 
 # Linux binary compatibility
 options 	COMPAT_LINUX
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # System V-like message queues
 options 	SYSVMSG
@@ -302,7 +301,7 @@ ne*	at	pci? dev ? function ?		# NE2000-compatible Ethernet
 ohci*	at	pci? dev ? function ?		# USB Open Host Controller
 pceb*	at	pci? dev ? function ?		# Intel PCI-EISA Bridges
 pciide* at pci? dev ? function ? flags 0x0000	# GENERIC pciide driver
-acardide* at pci? dev ? function ?		# Acard IDE controllers
+acardide*at pci? dev ? function ?		# Acard IDE controllers
 aceride* at pci? dev ? function ?		# Acer Lab IDE controllers
 artsata* at pci? dev ? function ?		# Intel i31244 SATA controller
 cmdide* at pci? dev ? function ?		# CMD tech IDE controllers
@@ -311,7 +310,6 @@ hptide* at pci? dev ? function ?		# Triones/HighPoint IDE controllers
 optiide* at pci? dev ? function ?		# Opti IDE controllers
 piixide* at pci? dev ? function ?		# Intel IDE controllers
 pdcide* at pci? dev ? function ?		# Promise IDE controllers
-pdcsata* at pci? dev ? function ?		# Promise SATA150 controllers
 satalink* at pci? dev ? function ?		# SiI SATALink controllers
 siside* at pci? dev ? function ?		# SiS IDE controllers
 slide*  at pci? dev ? function ?		# Symphony Labs IDE controllers
@@ -527,9 +525,9 @@ audio*	at uaudio?
 
 # USB Ethernet adapters
 aue*	at uhub? port ?		# ADMtek AN986 Pegasus based adapters
-axe*	at uhub? port ?		# ASIX AX88172 based adapters
 cue*	at uhub? port ?		# CATC USB-EL1201A based adapters
 kue*	at uhub? port ?		# Kawasaki LSI KL5KUSB101B based adapters
+uax*	at uhub? port ?		# ASIX AX88172 based adapters
 url*	at uhub? port ?		# Realtek RTL8150L based adapters
 
 # Serial adapters

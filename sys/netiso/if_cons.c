@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cons.c,v 1.17 2004/04/21 23:19:49 matt Exp $	*/
+/*	$NetBSD: if_cons.c,v 1.15 2003/08/07 16:33:35 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -64,9 +64,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: if_cons.c,v 1.17 2004/04/21 23:19:49 matt Exp $");
-
-#include "opt_iso.h"
+__KERNEL_RCSID(1, "$NetBSD: if_cons.c,v 1.15 2003/08/07 16:33:35 agc Exp $");
 
 #ifdef TPCONS
 #ifdef _KERNEL
@@ -159,17 +157,17 @@ unsigned        LAST_CALL_PCB;
 
 #define CONS_IFQMAXLEN 5
 
-Static int make_partial_x25_packet (struct isopcb *, struct pklcd *);
-Static int NSAPtoDTE (struct sockaddr_iso *, struct sockaddr_x25 *);
-Static int FACILtoNSAP (struct sockaddr_iso *, const u_char *);
-Static void init_siso (struct sockaddr_iso *);
-Static int DTEtoNSAP (struct sockaddr_iso *, struct sockaddr_x25 *);
-Static int parse_facil (struct pklcd *, struct isopcb *, caddr_t, u_char);
+Static int make_partial_x25_packet __P((struct isopcb *, struct pklcd *));
+Static int NSAPtoDTE __P((struct sockaddr_iso *, struct sockaddr_x25 *));
+Static int FACILtoNSAP __P((struct sockaddr_iso *, u_char *));
+Static void init_siso __P((struct sockaddr_iso *));
+Static int DTEtoNSAP __P((struct sockaddr_iso *, struct sockaddr_x25 *));
+Static int parse_facil __P((struct pklcd *, struct isopcb *, caddr_t, u_char));
 
 /* protosw pointers for getting to higher layer */
-Static const struct protosw *CLNP_proto;
-Static const struct protosw *TP_proto;
-Static const struct protosw *X25_proto;
+Static struct protosw *CLNP_proto;
+Static struct protosw *TP_proto;
+Static struct protosw *X25_proto;
 
 extern struct isopcb tp_isopcb;	/* chain of all TP pcbs */
 
@@ -188,16 +186,20 @@ extern struct isopcb tp_isopcb;	/* chain of all TP pcbs */
  * RETURNS: VOID
  */
 void
-nibble_copy(char *src_octet, unsigned int src_nibble, char *dst_octet,
-	unsigned int dst_nibble, int len)
+nibble_copy(src_octet, src_nibble, dst_octet, dst_nibble, len)
+	char  *src_octet;
+	char  *dst_octet;
+	unsigned src_nibble;
+	unsigned dst_nibble;
+	int             len;
 {
 
 	int i;
-	unsigned int dshift, sshift;
+	unsigned dshift, sshift;
 
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_CADDR]) {
-		printf("nibble_copy ( %p, %#x, %p, %#x %#x)\n",
+		printf("nibble_copy ( 0x%x, 0x%x, 0x%x, 0x%x 0x%x)\n",
 		    src_octet, src_nibble, dst_octet, dst_nibble, len);
 	}
 #endif
@@ -234,17 +236,21 @@ nibble_copy(char *src_octet, unsigned int src_nibble, char *dst_octet,
  * RETURNS: 0 if they differ, 1 if they are the same.
  */
 int
-nibble_match(char *src_octet, unsigned int src_nibble, char *dst_octet,
-	unsigned int dst_nibble, int len)
+nibble_match(src_octet, src_nibble, dst_octet, dst_nibble, len)
+	char  *src_octet;
+	char  *dst_octet;
+	unsigned src_nibble;
+	unsigned dst_nibble;
+	int             len;
 {
 
 	int i;
-	u_int dshift, sshift;
-	u_char nibble_a, nibble_b;
+	unsigned dshift, sshift;
+	u_char          nibble_a, nibble_b;
 
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_CADDR]) {
-		printf("nibble_match ( %p, %#x, %p, %#x %#x)\n",
+		printf("nibble_match ( 0x%x, 0x%x, 0x%x, 0x%x 0x%x)\n",
 		       src_octet, src_nibble, dst_octet, dst_nibble, len);
 	}
 #endif
@@ -285,15 +291,15 @@ nibble_match(char *src_octet, unsigned int src_nibble, char *dst_octet,
  *	initialize the protocol
  */
 void
-cons_init(void)
+cons_init()
 {
 	CLNP_proto = pffindproto(AF_ISO, ISOPROTO_CLNP, SOCK_DGRAM);
 	X25_proto = pffindproto(AF_ISO, ISOPROTO_X25, SOCK_STREAM);
 	TP_proto = pffindproto(AF_ISO, ISOPROTO_TP0, SOCK_SEQPACKET);
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_CCONS]) {
-		printf("cons_init end : cnlp_proto %p cons proto %p"
-		    " tp proto %p\n", CLNP_proto, X25_proto, TP_proto);
+		printf("cons_init end : cnlp_proto 0x%x cons proto 0x%x tp proto 0x%x\n",
+		       CLNP_proto, X25_proto, TP_proto);
 	}
 #endif
 #ifdef notdef
@@ -305,7 +311,9 @@ cons_init(void)
 }
 
 int
-tp_incoming(struct mbuf *m, void *v)
+tp_incoming(m, v)
+	struct mbuf *m;
+	void *v;
 {
 	struct pklcd   *lcp = v;
 	struct isopcb *isop;
@@ -329,7 +337,9 @@ tp_incoming(struct mbuf *m, void *v)
 }
 
 int
-cons_tpinput(struct mbuf *m0, void *v)
+cons_tpinput(m0, v)
+	struct mbuf    *m0;
+	void *v;
 {
 	struct pklcd   *lcp = v;
 	struct isopcb *isop = (struct isopcb *) lcp->lcd_upnext;
@@ -388,14 +398,15 @@ cons_tpinput(struct mbuf *m0, void *v)
  *  returns E*
  */
 int
-cons_connect(struct isopcb *isop)
+cons_connect(isop)
+	struct isopcb *isop;
 {
 	struct pklcd *lcp = (struct pklcd *) isop->isop_chan;
 	int             error;
 
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_CCONN]) {
-		printf("cons_connect(%p): ", isop);
+		printf("cons_connect(0x%x): ", isop);
 		dump_isoaddr(isop->isop_faddr);
 		printf("myaddr: ");
 		dump_isoaddr(isop->isop_laddr);
@@ -408,7 +419,7 @@ cons_connect(struct isopcb *isop)
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_CCONN]) {
 		printf(
-		    "calling make_partial_x25_packet( %p, %p, %#x)\n",
+		    "calling make_partial_x25_packet( 0x%x, 0x%x, 0x%x)\n",
 		    &lcp->lcd_faddr, &lcp->lcd_laddr,
 		    isop->isop_socket->so_proto->pr_protocol);
 	}
@@ -433,14 +444,18 @@ cons_connect(struct isopcb *isop)
  * instead of an address.
  */
 void *
-cons_ctlinput(int cmd, struct sockaddr *sa, void *v)
+cons_ctlinput(cmd, sa, v)
+	int             cmd;
+	struct sockaddr *sa;
+	void *v;
 {
 	return NULL;
 }
 
 
 int
-find_error_reason(struct x25_packet *xp)
+find_error_reason(xp)
+	struct x25_packet *xp;
 {
 	int             error, cause = 0;
 
@@ -542,7 +557,9 @@ int             cons_use_facils = 0;
 int  cons_use_udata = 1;	/* KLUDGE FOR DEBUGGING */
 
 Static int
-make_partial_x25_packet(struct isopcb *isop, struct pklcd *lcp)
+make_partial_x25_packet(isop, lcp)
+	struct isopcb  *isop;
+	struct pklcd   *lcp;
 {
 	u_int           proto = 0;
 	int             flag = 0;
@@ -556,7 +573,7 @@ make_partial_x25_packet(struct isopcb *isop, struct pklcd *lcp)
 
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_CCONN]) {
-		printf("make_partial_x25_packet(%p, %p, %#x, %p, %#x)\n",
+		printf("make_partial_x25_packet(0x%x, 0x%x, 0x%x, 0x%x, 0x%x)\n",
 		    isop->isop_laddr, isop->isop_faddr, proto, m, flag);
 	}
 #endif
@@ -585,7 +602,7 @@ make_partial_x25_packet(struct isopcb *isop, struct pklcd *lcp)
 
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_CADDR]) {
-		printf("make_partial  calling: ptr %p, len %#x\n", ptr,
+		printf("make_partial  calling: ptr 0x%x, len 0x%x\n", ptr,
 		    isop->isop_laddr->siso_addr.isoa_len);
 	}
 #endif
@@ -608,7 +625,7 @@ make_partial_x25_packet(struct isopcb *isop, struct pklcd *lcp)
 
 #ifdef ARGO_DEBUG
 		if (argo_debug[D_CADDR]) {
-			printf("make_partial  called: ptr %p, len %#x\n", ptr,
+			printf("make_partial  called: ptr 0x%x, len 0x%x\n", ptr,
 			    isop->isop_faddr->siso_addr.isoa_len);
 		}
 #endif
@@ -638,10 +655,10 @@ make_partial_x25_packet(struct isopcb *isop, struct pklcd *lcp)
 	if (argo_debug[D_CDUMP_REQ]) {
 		int    i;
 
-		printf("ECN_CONNECT DATA buf %p len %d (%#x)\n",
+		printf("ECN_CONNECT DATA buf 0x%x len %d (0x%x)\n",
 		    buf, buflen, buflen);
 		for (i = 0; i < buflen;) {
-			printf("+%d: %02x %02x %02x %02x    %02x %02x %02x %02x\n",
+			printf("+%d: %x %x %x %x    %x %x %x %x\n",
 			    i,
 			    *(buf + i), *(buf + i + 1), *(buf + i + 2), *(buf + i + 3),
 			    *(buf + i + 4), *(buf + i + 5), *(buf + i + 6), *(buf + i + 7));
@@ -651,7 +668,7 @@ make_partial_x25_packet(struct isopcb *isop, struct pklcd *lcp)
 #endif
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_CADDR]) {
-		printf("make_partial returns buf %p size %#x bytes\n",
+		printf("make_partial returns buf 0x%x size 0x%x bytes\n",
 		       mtod(m, caddr_t), buflen);
 	}
 #endif
@@ -690,7 +707,9 @@ make_partial_x25_packet(struct isopcb *isop, struct pklcd *lcp)
  */
 
 Static int
-NSAPtoDTE(struct sockaddr_iso *siso, struct sockaddr_x25 *sx25)
+NSAPtoDTE(siso, sx25)
+	struct sockaddr_iso *siso;
+	struct sockaddr_x25 *sx25;
 {
 	int             dtelen = -1;
 
@@ -758,14 +777,17 @@ NSAPtoDTE(struct sockaddr_iso *siso, struct sockaddr_x25 *sx25)
  */
 
 Static int
-FACILtoNSAP(struct sockaddr_iso *addr, const u_char *buf)
+FACILtoNSAP(addr, buf)
+	u_char *buf;
+	struct sockaddr_iso *addr;
 {
 	int             len_in_nibbles = *++buf & 0x3f;
 	u_char          buf_len = (len_in_nibbles + 1) >> 1;;	/* in bytes */
 
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_CADDR]) {
-		printf("FACILtoNSAP( %p, %#x, %p )\n", buf, buf_len, addr);
+		printf("FACILtoNSAP( 0x%x, 0x%x, 0x%x )\n",
+		    buf, buf_len, addr);
 	}
 #endif
 
@@ -798,7 +820,8 @@ FACILtoNSAP(struct sockaddr_iso *addr, const u_char *buf)
 }
 
 Static void
-init_siso(struct sockaddr_iso *siso)
+init_siso(siso)
+	struct sockaddr_iso *siso;
 {
 	siso->siso_len = sizeof(*siso);
 	siso->siso_family = AF_ISO;
@@ -819,12 +842,14 @@ init_siso(struct sockaddr_iso *siso)
  */
 
 Static int
-DTEtoNSAP(struct sockaddr_iso *addr, struct sockaddr_x25 *sx)
+DTEtoNSAP(addr, sx)
+	struct sockaddr_iso *addr;
+	struct sockaddr_x25 *sx;
 {
 	char  *in, *out;
 	int    first;
-	int    pad_tail = 0;
-	int    src_len;
+	int             pad_tail = 0;
+	int             src_len;
 
 
 	init_siso(addr);
@@ -859,7 +884,11 @@ DTEtoNSAP(struct sockaddr_iso *addr, struct sockaddr_x25 *sx)
  */
 
 Static int
-parse_facil(struct pklcd *lcp, struct isopcb *isop, caddr_t buf, u_char buf_len)
+parse_facil(lcp, isop, buf, buf_len)
+	caddr_t         buf;
+	u_char          buf_len;/* in bytes */
+	struct isopcb  *isop;
+	struct pklcd   *lcp;
 {
 	int    i;
 	u_char *ptr = (u_char *) buf;
@@ -868,7 +897,7 @@ parse_facil(struct pklcd *lcp, struct isopcb *isop, caddr_t buf, u_char buf_len)
 
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_CADDR]) {
-		printf("parse_facil(%p, %p, %p, %#x)\n",
+		printf("parse_facil(0x%x, 0x%x, 0x%x, 0x%x)\n",
 		    lcp, isop, buf, buf_len);
 		dump_buf(buf, buf_len);
 	}
@@ -943,8 +972,8 @@ parse_facil(struct pklcd *lcp, struct isopcb *isop, caddr_t buf, u_char buf_len)
 			break;
 
 		default:
-			printf("BOGUS FACILITY CODE facil_lim %p"
-			    " facil_len %d, ptr %p *ptr %#x\n",
+			printf(
+			    "BOGUS FACILITY CODE facil_lim 0x%x facil_len %d, ptr 0x%x *ptr 0x%x\n",
 			    facil_lim, facil_len, ptr - 1, ptr[-1]);
 			/*
 			 * facil that we don't handle return E_CO_HLI_REJI;

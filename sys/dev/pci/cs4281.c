@@ -1,4 +1,4 @@
-/*	$NetBSD: cs4281.c,v 1.21 2004/11/02 00:40:08 yamt Exp $	*/
+/*	$NetBSD: cs4281.c,v 1.16.4.1 2004/09/22 20:58:21 jmc Exp $	*/
 
 /*
  * Copyright (c) 2000 Tatoku Ogaito.  All rights reserved.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs4281.c,v 1.21 2004/11/02 00:40:08 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs4281.c,v 1.16.4.1 2004/09/22 20:58:21 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -104,7 +104,7 @@ int      cs4281_init(struct cs428x_softc *, int);
 /* Power Management */
 void cs4281_power(int, void *);
 
-const struct audio_hw_if cs4281_hw_if = {
+struct audio_hw_if cs4281_hw_if = {
 	cs428x_open,
 	cs428x_close,
 	NULL,
@@ -142,7 +142,7 @@ int	cs4281_midi_open(void *, int, void (*)(void *, int),
 			      void (*)(void *), void *);
 int	cs4281_midi_output(void *, int);
 
-const struct midi_hw_if cs4281_midi_hw_if = {
+struct midi_hw_if cs4281_midi_hw_if = {
 	cs4281_midi_open,
 	cs4281_midi_close,
 	cs4281_midi_output,
@@ -193,7 +193,7 @@ cs4281_attach(parent, self, aux)
 
 	aprint_naive(": Audio controller\n");
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
 	    PCI_REVISION(pa->pa_class));
 
@@ -338,7 +338,7 @@ cs4281_intr(p)
 		handled = 1;
 		DPRINTF((" PB DMA 0x%x(%d)", (int)BA0READ4(sc, CS4281_DCA0),
 			 (int)BA0READ4(sc, CS4281_DCC0)));
-		if (sc->sc_prun) {
+		if (sc->sc_pintr) {
 			if ((sc->sc_pi%sc->sc_pcount) == 0)
 				sc->sc_pintr(sc->sc_parg);
 		} else {
@@ -364,10 +364,9 @@ cs4281_intr(p)
 		if ((sc->sc_ri & 1) == 0)
 			empty_dma += sc->hw_blocksize;
 		memcpy(sc->sc_rn, empty_dma, sc->hw_blocksize);
-		sc->sc_rn += sc->hw_blocksize;
 		if (sc->sc_rn >= sc->sc_re)
 			sc->sc_rn = sc->sc_rs;
-		if (sc->sc_rrun) {
+		if (sc->sc_rintr) {
 			if ((sc->sc_ri % sc->sc_rcount) == 0)
 				sc->sc_rintr(sc->sc_rarg);
 		} else {
@@ -688,7 +687,7 @@ cs4281_trigger_input(addr, start, end, blksize, intr, arg, param)
 	sc->sc_rn = sc->sc_rs;
 
 	dma_count = sc->dma_size;
-	if (param->precision * param->factor != 8)
+	if (param->precision * param->factor == 8)
 		dma_count /= 2;
 	if (param->channels > 1)
 		dma_count /= 2;

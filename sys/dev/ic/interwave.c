@@ -1,4 +1,4 @@
-/*	$NetBSD: interwave.c,v 1.23 2004/07/09 02:46:44 mycroft Exp $	*/
+/*	$NetBSD: interwave.c,v 1.19 2003/10/30 01:58:17 simonb Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: interwave.c,v 1.23 2004/07/09 02:46:44 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: interwave.c,v 1.19 2003/10/30 01:58:17 simonb Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -144,6 +144,7 @@ iwintr(arg)
 #ifdef DIAGNOSTIC
 		iw_inints++;
 #endif
+		sc->sc_reclocked = 0;
 		if (sc->sc_recintr != 0)
 			sc->sc_recintr(sc->sc_recarg);
 		val = 1;
@@ -152,6 +153,7 @@ iwintr(arg)
 #ifdef DIAGNOSTIC
 		iw_ints++;
 #endif
+		sc->sc_playlocked = 0;
 		if (sc->sc_playintr != 0)
 			sc->sc_playintr(sc->sc_playarg);
 		val = 1;
@@ -188,6 +190,9 @@ iwattach(sc)
 
 	sc->sc_fullduplex = 1;
 
+	sc->sc_reclocked = 0;
+	sc->sc_playlocked = 0;
+
 	sc->sc_dma_flags = 0;
 
 	/*
@@ -219,8 +224,18 @@ iwopen(sc, flags)
 	struct	iw_softc *sc;
 	int	flags;
 {
+	int	s;
 
-	DPRINTF(("iwopen: sc %p\n", sc));
+	s = splaudio();
+	if (sc->sc_open) {
+		splx(s);
+		DPRINTF(("iwopen: open %x sc %p\n", sc->sc_open, sc));
+		return EBUSY;
+	} else
+		sc->sc_open = 1;
+	splx(s);
+
+	DPRINTF(("iwopen: open %x sc %p\n", sc->sc_open, sc));
 
 #ifdef DIAGNOSTIC
 	outputs = 0;
@@ -231,6 +246,22 @@ iwopen(sc, flags)
 
 	iwreset(sc, 1);
 
+	/* READ/WRITE or both */
+
+	if (flags == FREAD) {
+		sc->sc_mode |= IW_READ;
+		sc->sc_reclocked = 0;
+	}
+	if (flags == FWRITE) {
+		sc->sc_mode |= IW_WRITE;
+		sc->sc_playlocked = 0;
+	}
+	sc->sc_playdma_cnt = 0;
+	sc->sc_recdma_cnt = 0;
+	sc->playfirst = 1;
+	sc->sc_playintr = 0;
+	sc->sc_recintr = 0;
+
 	return 0;
 }
 
@@ -240,12 +271,27 @@ void
 iwclose(addr)
 	void	*addr;
 {
-	DPRINTF(("iwclose sc %p\n", addr));
+	struct	iw_softc *sc = addr;
+
+	DPRINTF(("iwclose sc %p\n", sc));
 
 #ifdef DIAGNOSTIC
 	DPRINTF(("iwclose: outputs %d ints %d inputs %d in_ints %d\n",
 		outputs, iw_ints, inputs, iw_inints));
 #endif
+
+	/* close hardware */
+	sc->sc_open = 0;
+	sc->sc_flags = 0;
+	sc->sc_mode = 0;
+	sc->sc_playlocked = 0;
+	sc->sc_reclocked = 0;
+
+	iw_stop_dma(sc, IW_DMA_PLAYBACK, 1);
+	iw_stop_dma(sc, IW_DMA_RECORD, 1);
+
+	sc->sc_playdma_cnt = 0;
+	sc->sc_recdma_cnt = 0;
 }
 
 #define RAM_STEP          64*1024
@@ -440,8 +486,7 @@ iwreset(sc, warm)
 
 	sc->vers = reg >> 4;
 	if (!warm)
-		snprintf(iw_device.version, sizeof(iw_device.version), "%d.%d",
-		    sc->vers, sc->revision);
+		sprintf(iw_device.version, "%d.%d", sc->vers, sc->revision);
 
 	IW_WRITE_GENERAL_1(IDECI, 0x7f);	/* irqs and codec decode
 						 * enable */
@@ -1003,6 +1048,14 @@ iw_start_output(addr, p, cc, intr, arg)
 {
 	struct	iw_softc *sc = addr;
 
+#ifdef AUDIO_DEBUG
+	if (sc->sc_playlocked) {
+		DPRINTF(("iw_start_output: playback DMA already going on\n"));
+		/* return 0; */
+	}
+#endif
+
+	sc->sc_playlocked = 1;
 #ifdef DIAGNOSTIC
 	if (!intr) {
 		printf("iw_start_output: no callback!\n");
@@ -1029,6 +1082,7 @@ iw_start_output(addr, p, cc, intr, arg)
 
 	cc -= iw_cc;
 
+
 	/* iw_dma_access(sc,1); */
 	if (cc != sc->sc_playdma_cnt) {
 		iw_dma_count(sc, (u_short) cc, IW_DMA_PLAYBACK);
@@ -1042,7 +1096,6 @@ iw_start_output(addr, p, cc, intr, arg)
 		printf("iw_start_output: out %d, int %d\n", outputs, iw_ints);
 	outputs++;
 #endif
-
 	return 0;
 }
 
@@ -1057,12 +1110,21 @@ iw_start_input(addr, p, cc, intr, arg)
 {
 	struct	iw_softc *sc = addr;
 
+#if AUDIO_DEBUG
+	if (sc->sc_reclocked) {
+		DPRINTF(("iw_start_input: record DMA already going on\n"));
+		/* return 0; */
+	}
+#endif
+
+	sc->sc_reclocked = 1;
 #ifdef DIAGNOSTIC
 	if (!intr) {
 		printf("iw_start_input: no callback!\n");
 		return 1;
 	}
 #endif
+
 
 	sc->sc_recintr = intr;
 	sc->sc_recarg = arg;
@@ -1106,8 +1168,8 @@ iw_halt_output(addr)
 	void	*addr;
 {
 	struct	iw_softc *sc = addr;
-
 	iw_stop_dma(sc, IW_DMA_PLAYBACK, 0);
+	/* sc->sc_playlocked = 0; */
 	return 0;
 }
 
@@ -1117,8 +1179,8 @@ iw_halt_input(addr)
 	void	*addr;
 {
 	struct	iw_softc *sc = addr;
-
 	iw_stop_dma(sc, IW_DMA_RECORD, 0);
+	/* sc->sc_reclocked = 0; */
 	return 0;
 }
 

@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.README,v 1.156 2004/09/19 08:56:22 tron Exp $
+#	$NetBSD: bsd.README,v 1.149.2.1 2004/09/19 15:40:32 he Exp $
 #	@(#)bsd.README	8.2 (Berkeley) 4/2/94
 
 This is the README file for the new make "include" files for the BSD
@@ -362,7 +362,6 @@ MANOWN		Manual owner.  [root]
 MANMODE		Manual mode.  [${NONBINMODE}]
 
 MANINSTALL	Manual installation type: maninstall, catinstall, or both
-		[maninstall catinstall]
 
 LDSTATIC	Control program linking; if set blank, link everything
 		dynamically.  If set to "-static", link everything statically.
@@ -429,21 +428,6 @@ COPY		The flag passed to the install program to cause the binary
 		building our own install script so that the entire system
 		can either be installed with copies, or with moves using
 		a single knob.  [-c]
-
-MAKEDIRTARGET dir target [params]
-		Runs "cd $${dir} && ${MAKE} [params] $${target}",
-		displaying a "pretty" message whilst doing so.
-
-RELEASEMACHINEDIR
-		Subdirectory used below RELEASEDIR when building
-		a release.  [${MACHINE}]
-
-RELEASEMACHINE	Subdirectory or path component used for the following
-		paths:
-			distrib/${RELEASEMACHINE}
-			distrib/notes/${RELEASEMACHINE}
-			etc/etc.${RELEASEMACHINE}
-		Used when building a release.  [${MACHINE}]
 
 Additionally, the following variables may be set by <bsd.own.mk> or in a
 make configuration file to modify the behaviour of the system build
@@ -536,11 +520,6 @@ from <bsd.lib.mk> and <bsd.prog.mk>, and uses the following variables:
 
 FILES		The list of files to install.
 
-CONFIGFILES	Similar semantics to FILES, except that the files
-		are installed by the `configinstall' target,
-		not the `install' target.
-		The FILES* variables documented below also apply.
-
 FILESOWN	File owner.  [${BINOWN}]
 
 FILESGRP	File group.  [${BINGRP}]
@@ -551,16 +530,9 @@ FILESDIR	The location to install the files.
 
 FILESNAME	Optional name to install each file as.
 
-FILESOWN_<fn>	File owner of the specific file <fn>.
+FILESDIR.<fn>	The location to install the specific file <fn>.
 
-FILESGRP_<fn>	File group of the specific file <fn>.
-
-FILESMODE_<fn>	File mode of the specific file <fn>.
-
-FILESDIR_<fn>	The location to install the specific file <fn>>
-
-FILESNAME_<fn>	Optional name to install <fn> as.
-
+FILESNAME.<fn>	Optional name to install <fn> as.
 
 BUILDSYMLINKS	List of two word items:
 			lnsrc lntgt
@@ -700,11 +672,6 @@ USE_SHLIBDIR	If not "no", use ${SHLIBINSTALLDIR} instead of ${LIBDIR}
 		USE_SHLIBDIR must be defined before <bsd.own.mk> is included.
 		Default: no
 
-MKPRIVATELIB	If not "no", act as "MKPROFILE=no MKPIC=no MKLINT=no",
-		and don't install the (.a) library.
-		This is useful for "build only" helper libraries.
-		Default: no
-
 LINTLIBDIR	Target directory for lint libraries.
 
 LIBGRP		Library group.
@@ -749,20 +716,12 @@ LINKS		The list of hard links, consisting of pairs of paths:
 		For example, to link /bin/test and /bin/[, use:
 			LINKS=/bin/test /bin/[
 
-CONFIGLINKS	Similar semantics to LINKS, except that the links
-		are installed by the `configinstall' target,
-		not the `install' target.
-
 SYMLINKS	The list of symbolic links, consisting of pairs of paths:
 			source-file target-file
 		${DESTDIR} is only prepended to target-file before linking.
 		For example, to symlink /usr/bin/tar to /bin/tar resulting
 		in ${DESTDIR}/usr/bin/tar -> /bin/tar:
 			SYMLINKS=/bin/tar /usr/bin/tar
-
-CONFIGSYMLINKS	Similar semantics to SYMLINKS, except that the symbolic links
-		are installed by the `configinstall' target,
-		not the `install' target.
 
 
 =-=-=-=-=   bsd.man.mk   =-=-=-=-=
@@ -1140,10 +1099,6 @@ AR		Create, modify, and extract from archives.  [ar]
 
 ARFLAGS		Options to ${AR}.  [rl]
 
-AS		Assembler.  [as]
-
-AFLAGS		Options to ${AS}.  []
-
 CC		C compiler.  [cc]
 
 CFLAGS		Options to ${CC}.  [Usually -O or -O2]
@@ -1152,7 +1107,7 @@ CPP		C Pre-Processor.  [cpp]
 
 CPPFLAGS	Options to ${CPP}.  []
 
-CPUFLAGS	Optimization flags for ${CC}.  []
+CPUFLAGS	Optimization flags for ${CC}
 
 CXX		C++ compiler.  [c++]
 

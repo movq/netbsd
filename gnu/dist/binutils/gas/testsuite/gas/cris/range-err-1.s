@@ -9,7 +9,6 @@
  .set three2767, 32767
 
  .text
- .syntax no_register_prefix
 start:
  moveq 32,r0 ; { dg-error "Immediate value not in 6 bit range: 32" }
  moveq 63,r0 ; { dg-error "Immediate value not in 6 bit range: 63" }

@@ -1,5 +1,3 @@
-/*	$NetBSD: rewrite.c,v 1.1.1.6 2004/05/31 00:24:54 heas Exp $	*/
-
 /*++
 /* NAME
 /*	rewrite 3
@@ -184,11 +182,13 @@ void    rewrite_tree(char *unused_ruleset, TOK822 *tree)
      * merely makes diagnostics more accurate by leaving bogus addresses
      * alone.
      */
+#if 0
     if (tree->tail->type == '.'
 	&& tree->tail->prev
 	&& tree->tail->prev->type != '.'
 	&& tree->tail->prev->type != '@')
 	tok822_free_tree(tok822_sub_keep_before(tree, tree->tail));
+#endif
 }
 
 /* rewrite_addr - rewrite address according to rule set */

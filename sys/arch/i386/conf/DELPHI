@@ -1,4 +1,4 @@
-#	$NetBSD: DELPHI,v 1.46 2004/12/01 22:27:46 grant Exp $
+#	$NetBSD: DELPHI,v 1.34.2.1 2004/07/15 20:24:26 he Exp $
 #
 #	DELPHI -- one of thorpej@zembu.com's devel machines
 #
@@ -7,7 +7,7 @@ include "arch/i386/conf/std.i386"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-ident 		"DELPHI-$Revision: 1.46 $"
+ident 		"DELPHI-$Revision: 1.34.2.1 $"
 
 maxusers	64		# estimated number of users
 
@@ -24,6 +24,10 @@ options 	USER_LDT	# user-settable LDT; used by WINE
 
 # delay between "rebooting ..." message and hardware reset, in milliseconds
 #options 	CPURESET_DELAY=2000
+
+# Misc. i386-specific options
+options 	XSERVER		# X server support in console drivers
+#options 	XSERVER_DDB	# PF12 gets you into DDB when X is running
 
 # This option allows you to force a serial console at the specified
 # I/O address.   see console(4) for details.
@@ -89,7 +93,8 @@ makeoptions	DEBUG="-g"	# compile full symbol table
 #options 	COMPAT_IBCS2	# binary compatibility with SCO and ISC
 options 	COMPAT_LINUX	# binary compatibility with Linux
 #options 	COMPAT_FREEBSD	# binary compatibility with FreeBSD
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
+
+#options 	COMPAT_AOUT	# binary compat for NetBSD a.out binaries
 
 # File systems
 file-system 	FFS		# UFS
@@ -126,7 +131,6 @@ options 	IPSEC		# IP security
 options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_DEBUG	# debug for IP security
 options 	MROUTING	# IP multicast routing
-options 	PIM		# Protocol Independent Multicast
 #options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 #options 	ISO,TPIP	# OSI
@@ -160,19 +164,9 @@ options 	SCSIVERBOSE	# human readable SCSI error messages
 # builtin terminal emulations
 #options 	WSEMUL_SUN		# sun terminal emulation
 options 	WSEMUL_VT100		# VT100 / VT220 emulation
-# customization of console and kernel output - see dev/wscons/wsdisplayvar.h
-#options 	WSDISPLAY_CUSTOM_OUTPUT	# color customization from wsconsctl(8)
-#options 	WS_DEFAULT_FG=WSCOL_WHITE
-#options 	WS_DEFAULT_BG=WSCOL_BLACK
-#options 	WS_DEFAULT_COLATTR="(0)"
-#options 	WS_DEFAULT_MONOATTR="(0)"
+# different kernel output - see dev/wscons/wsdisplayvar.h
 options 	WS_KERNEL_FG=WSCOL_GREEN
 #options 	WS_KERNEL_BG=WSCOL_BLACK
-#options 	WS_KERNEL_COLATTR=""
-#options 	WS_KERNEL_MONOATTR=""
-# customization of console border color
-#options 	WSDISPLAY_CUSTOM_BORDER	# border customization from wsconsctl(8)
-#options 	WSDISPLAY_BORDER_COLOR=WSCOL_BLUE	# default color
 # compatibility to other console drivers
 options 	WSDISPLAY_COMPAT_PCVT		# emulate some ioctls
 options 	WSDISPLAY_COMPAT_SYSCONS	# emulate some ioctls
@@ -414,11 +408,9 @@ artsata*	at pci? dev ? function ?	# Intel i31244 SATA controller
 cmdide* 	at pci? dev ? function ?	# CMD tech IDE controllers
 cypide* 	at pci? dev ? function ?	# Cypress IDE controllers
 hptide* 	at pci? dev ? function ?	# Triones/HighPoint IDE controllers
-iteide* 	at pci? dev ? function ?	# IT Express IDE controllers
 optiide* 	at pci? dev ? function ?	# Opti IDE controllers
 piixide* 	at pci? dev ? function ?	# Intel IDE controllers
 pdcide* 	at pci? dev ? function ?	# Promise IDE controllers
-pdcsata*	at pci? dev ? function ?	# Promise SATA150 controllers
 satalink*	at pci? dev ? function ?	# SiI SATALink controllers
 siside* 	at pci? dev ? function ?	# SiS IDE controllers
 slide* 		at pci? dev ? function ?	# Symphony Labs IDE controllers
@@ -621,9 +613,9 @@ nsphy*	at mii? phy ?			# NS83840 PHYs
 
 # USB Ethernet adapters
 #aue*	at uhub? port ?		# ADMtek AN986 Pegasus based adapters
-#axe*	at uhub? port ?		# ASIX AX88172 based adapters
 #cue*	at uhub? port ?		# CATC USB-EL1201A based adapters
 #kue*	at uhub? port ?		# Kawasaki LSI KL5KUSB101B based adapters
+#uax*	at uhub? port ?		# ASIX AX88172 based adapters
 #url*	at uhub? port ?		# Realtek RTL8150L based adapters
 
 # USB Generic driver

@@ -1,4 +1,4 @@
-/*	$NetBSD: pecoff_exec.h,v 1.7 2004/07/18 04:36:42 kent Exp $	*/
+/*	$NetBSD: pecoff_exec.h,v 1.6.4.1 2004/07/19 09:01:54 tron Exp $	*/
 
 /*
  * Copyright (c) 2000 Masaru OKI

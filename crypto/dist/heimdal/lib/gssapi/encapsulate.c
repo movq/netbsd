@@ -34,7 +34,7 @@
 #include "gssapi_locl.h"
 
 __RCSID("$Heimdal: encapsulate.c,v 1.6.6.1 2003/09/18 21:47:44 lha Exp $"
-        "$NetBSD: encapsulate.c,v 1.1.1.6 2004/04/02 14:47:45 lha Exp $");
+        "$NetBSD: encapsulate.c,v 1.1.1.5.2.1 2004/04/21 04:55:40 jmc Exp $");
 
 void
 gssapi_krb5_encap_length (size_t data_len,

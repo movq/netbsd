@@ -1,4 +1,4 @@
-/*	$NetBSD: if_de.c,v 1.112 2004/10/30 18:09:22 thorpej Exp $	*/
+/*	$NetBSD: if_de.c,v 1.110 2003/05/03 18:11:35 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1994-1997 Matt Thomas (matt@3am-software.com)
@@ -37,7 +37,7 @@
  *   board which support 21040, 21041, or 21140 (mostly).
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.112 2004/10/30 18:09:22 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.110 2003/05/03 18:11:35 wiz Exp $");
 
 #define	TULIP_HDR_DATA
 
@@ -2161,7 +2161,7 @@ static void
 tulip_identify_dec_nic(
     tulip_softc_t * const sc)
 {
-    strlcpy(sc->tulip_boardid, "DEC ", sizeof(sc->tulip_boardid));
+    strcpy(sc->tulip_boardid, "DEC ");
 #define D0	4
     if (sc->tulip_chipid <= TULIP_DE425)
 	return;
@@ -2178,7 +2178,7 @@ tulip_identify_znyx_nic(
     tulip_softc_t * const sc)
 {
     unsigned id = 0;
-    strlcpy(sc->tulip_boardid, "ZNYX ZX3XX ", sizeof(sc->tulip_boardid));
+    strcpy(sc->tulip_boardid, "ZNYX ZX3XX ");
     if (sc->tulip_chipid == TULIP_21140 || sc->tulip_chipid == TULIP_21140A) {
 	unsigned znyx_ptr;
 	sc->tulip_boardid[8] = '4';
@@ -2274,17 +2274,17 @@ tulip_identify_smc_nic(
     int auibnc = 0, utp = 0;
     char *cp;
 
-    strlcpy(sc->tulip_boardid, "SMC ", sizeof(sc->tulip_boardid));
+    strcpy(sc->tulip_boardid, "SMC ");
     if (sc->tulip_chipid == TULIP_21041)
 	return;
     if (sc->tulip_chipid != TULIP_21040) {
 	if (sc->tulip_boardsw != &tulip_2114x_isv_boardsw) {
-	    strlcat(sc->tulip_boardid, "9332DST ", sizeof(sc->tulip_boardid));
+	    strcpy(&sc->tulip_boardid[4], "9332DST ");
 	    sc->tulip_boardsw = &tulip_21140_smc9332_boardsw;
 	} else if (sc->tulip_features & (TULIP_HAVE_BASEROM|TULIP_HAVE_SLAVEDROM)) {
-	    strlcat(sc->tulip_boardid, "9334BDT ", sizeof(sc->tulip_boardid));
+	    strcpy(&sc->tulip_boardid[4], "9334BDT ");
 	} else {
-	    strlcat(sc->tulip_boardid, "9332BDT ", sizeof(sc->tulip_boardid));
+	    strcpy(&sc->tulip_boardid[4], "9332BDT ");
 	}
 	return;
     }
@@ -2292,7 +2292,7 @@ tulip_identify_smc_nic(
     id2 = sc->tulip_rombuf[0x62] | (sc->tulip_rombuf[0x63] << 8);
     ei  = sc->tulip_rombuf[0x66] | (sc->tulip_rombuf[0x67] << 8);
 
-    strlcat(sc->tulip_boardid, "8432", sizeof(sc->tulip_boardid));
+    strcpy(&sc->tulip_boardid[4], "8432");
     cp = &sc->tulip_boardid[8];
     if ((id1 & 1) == 0)
 	*cp++ = 'B', auibnc = 1;
@@ -2319,18 +2319,18 @@ static void
 tulip_identify_cogent_nic(
     tulip_softc_t * const sc)
 {
-    strlcpy(sc->tulip_boardid, "Cogent ", sizeof(sc->tulip_boardid));
+    strcpy(sc->tulip_boardid, "Cogent ");
     if (sc->tulip_chipid == TULIP_21140 || sc->tulip_chipid == TULIP_21140A) {
 	if (sc->tulip_rombuf[32] == TULIP_COGENT_EM100TX_ID) {
-	    strlcat(sc->tulip_boardid, "EM100TX ", sizeof(sc->tulip_boardid));
+	    strcat(sc->tulip_boardid, "EM100TX ");
 	    sc->tulip_boardsw = &tulip_21140_cogent_em100_boardsw;
 #if defined(TULIP_COGENT_EM110TX_ID)
 	} else if (sc->tulip_rombuf[32] == TULIP_COGENT_EM110TX_ID) {
-	    strlcat(sc->tulip_boardid, "EM110TX ", sizeof(sc->tulip_boardid));
+	    strcat(sc->tulip_boardid, "EM110TX ");
 	    sc->tulip_boardsw = &tulip_21140_cogent_em100_boardsw;
 #endif
 	} else if (sc->tulip_rombuf[32] == TULIP_COGENT_EM100FX_ID) {
-	    strlcat(sc->tulip_boardid, "EM100FX ", sizeof(sc->tulip_boardid));
+	    strcat(sc->tulip_boardid, "EM100FX ");
 	    sc->tulip_boardsw = &tulip_21140_cogent_em100_boardsw;
 	}
 	/*
@@ -2343,7 +2343,7 @@ tulip_identify_cogent_nic(
 	     * Cogent (Adaptec) is still mapping all INTs to INTA of
 	     * first 21140.  Dumb!  Dumb!
 	     */
-	    strlcat(sc->tulip_boardid, "EM440TX ", sizeof(sc->tulip_boardid));
+	    strcat(sc->tulip_boardid, "EM440TX ");
 	    sc->tulip_features |= TULIP_HAVE_SHAREDINTR;
 	}
     } else if (sc->tulip_chipid == TULIP_21040) {
@@ -2355,24 +2355,24 @@ static void
 tulip_identify_accton_nic(
     tulip_softc_t * const sc)
 {
-    strlcpy(sc->tulip_boardid, "ACCTON ", sizeof(sc->tulip_boardid));
+    strcpy(sc->tulip_boardid, "ACCTON ");
     switch (sc->tulip_chipid) {
 	case TULIP_21140A:
-	    strlcat(sc->tulip_boardid, "EN1207 ", sizeof(sc->tulip_boardid));
+	    strcat(sc->tulip_boardid, "EN1207 ");
 	    if (sc->tulip_boardsw != &tulip_2114x_isv_boardsw)
 		sc->tulip_boardsw = &tulip_21140_accton_boardsw;
 	    break;
 	case TULIP_21140:
-	    strlcat(sc->tulip_boardid, "EN1207TX ", sizeof(sc->tulip_boardid));
+	    strcat(sc->tulip_boardid, "EN1207TX ");
 	    if (sc->tulip_boardsw != &tulip_2114x_isv_boardsw)
 		sc->tulip_boardsw = &tulip_21140_eb_boardsw;
             break;
         case TULIP_21040:
-	    strlcat(sc->tulip_boardid, "EN1203 ", sizeof(sc->tulip_boardid));
+	    strcat(sc->tulip_boardid, "EN1203 ");
             sc->tulip_boardsw = &tulip_21040_boardsw;
             break;
         case TULIP_21041:
-	    strlcat(sc->tulip_boardid, "EN1203 ", sizeof(sc->tulip_boardid));
+	    strcat(sc->tulip_boardid, "EN1203 ");
             sc->tulip_boardsw = &tulip_21041_boardsw;
             break;
 	default:
@@ -2385,7 +2385,7 @@ static void
 tulip_identify_asante_nic(
     tulip_softc_t * const sc)
 {
-    strlcpy(sc->tulip_boardid, "Asante ", sizeof(sc->tulip_boardid));
+    strcpy(sc->tulip_boardid, "Asante ");
     if ((sc->tulip_chipid == TULIP_21140 || sc->tulip_chipid == TULIP_21140A)
 	    && sc->tulip_boardsw != &tulip_2114x_isv_boardsw) {
 	tulip_media_info_t *mi = sc->tulip_mediainfo;
@@ -2441,12 +2441,12 @@ static void
 tulip_identify_compex_nic(
     tulip_softc_t * const sc)
 {
-    strlcpy(sc->tulip_boardid, "COMPEX ", sizeof(sc->tulip_boardid));
+    strcpy(sc->tulip_boardid, "COMPEX ");
     if (sc->tulip_chipid == TULIP_21140A) {
 	int root_unit;
 	tulip_softc_t *root_sc = NULL;
 
-	strlcat(sc->tulip_boardid, "400TX/PCI ", sizeof(sc->tulip_boardid));
+	strcat(sc->tulip_boardid, "400TX/PCI ");
 	/*
 	 * All 4 chips on these boards share an interrupt.  This code
 	 * copied from tulip_read_macaddr.
@@ -2470,7 +2470,7 @@ tulip_identify_compex_nic(
 		   sc->tulip_unit);
 	}
     } else {
-	strlcat(sc->tulip_boardid, "unknown ", sizeof(sc->tulip_boardid));
+	strcat(sc->tulip_boardid, "unknown ");
     }
     /*      sc->tulip_boardsw = &tulip_21140_eb_boardsw; */
     return;
@@ -3002,8 +3002,7 @@ tulip_read_macaddr(
 		    && root_sc->tulip_pci_busno == sc->tulip_pci_busno) {
 		sc->tulip_features |= TULIP_HAVE_SLAVEDROM;
 		sc->tulip_boardsw = root_sc->tulip_boardsw;
-		strlcpy(sc->tulip_boardid, root_sc->tulip_boardid,
-		    sizeof(sc->tulip_boardid));
+		strcpy(sc->tulip_boardid, root_sc->tulip_boardid);
 		if (sc->tulip_boardsw->bd_type == TULIP_21140_ISV) {
 		    memcpy(sc->tulip_rombuf, root_sc->tulip_rombuf,
 			  sizeof(sc->tulip_rombuf));
@@ -4853,10 +4852,8 @@ tulip_ifioctl(
 		error = ether_delmulti(ifr, TULIP_ETHERCOM(sc));
 
 	    if (error == ENETRESET) {
-		if (ifp->if_flags & IFF_RUNNING) {
-		    tulip_addr_filter(sc);	/* reset multicast filtering */
-		    tulip_init(sc);
-		}
+		tulip_addr_filter(sc);		/* reset multicast filtering */
+		tulip_init(sc);
 		error = 0;
 	    }
 	    break;
@@ -5762,8 +5759,7 @@ tulip_pci_attach(
 #endif
 
 #if defined(__NetBSD__)
-    strlcpy(sc->tulip_if.if_xname, self->dv_xname,
-        sizeof(sc->tulip_if.if_xname));
+    strcpy(sc->tulip_if.if_xname, self->dv_xname);
     sc->tulip_if.if_softc = sc;
     sc->tulip_pc = pa->pa_pc;
 #if defined(TULIP_BUS_DMA)

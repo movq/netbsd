@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_ip6.c,v 1.68 2004/09/06 10:05:14 yamt Exp $	*/
+/*	$NetBSD: raw_ip6.c,v 1.63.2.2 2004/09/11 12:09:08 he Exp $	*/
 /*	$KAME: raw_ip6.c,v 1.82 2001/07/23 18:57:56 jinmei Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: raw_ip6.c,v 1.68 2004/09/06 10:05:14 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: raw_ip6.c,v 1.63.2.2 2004/09/11 12:09:08 he Exp $");
 
 #include "opt_ipsec.h"
 
@@ -182,7 +182,7 @@ rip6_input(mp, offp, proto)
 			continue;
 		if (in6p->in6p_cksum != -1) {
 			rip6stat.rip6s_isum++;
-			if (in6_cksum(m, proto, *offp,
+			if (in6_cksum(m, ip6->ip6_nxt, *offp,
 			    m->m_pkthdr.len - *offp)) {
 				rip6stat.rip6s_badsum++;
 				continue;

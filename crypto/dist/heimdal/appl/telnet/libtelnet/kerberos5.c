@@ -50,7 +50,7 @@
 #include <config.h>
 
 __RCSID("$Heimdal: kerberos5.c,v 1.53.2.1 2004/06/21 08:21:07 lha Exp $"
-        "$NetBSD: kerberos5.c,v 1.3 2004/09/14 08:08:20 lha Exp $");
+        "$NetBSD: kerberos5.c,v 1.2.2.1 2004/09/17 04:35:23 jmc Exp $");
 
 #ifdef	KRB5
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: internals.h,v 1.10 2004/11/24 11:57:09 blymn Exp $	*/
+/*	$NetBSD: internals.h,v 1.9 2002/07/29 05:17:38 blymn Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn
@@ -89,24 +89,20 @@ typedef struct _formi_tab_stops _formi_tab_t;
  */
 struct _formi_field_lines
 {
-	_FORMI_FIELD_LINES *prev;
-	_FORMI_FIELD_LINES *next;
-	unsigned allocated;
 	unsigned length;
-	unsigned expanded;
-	char *string;
-	unsigned char hard_ret; /* line contains hard return */
+	unsigned start;
+	unsigned end;
 	_formi_tab_t *tabs;
 };
 
 
 /* function prototypes */
 unsigned
-_formi_skip_blanks(char *string, unsigned int start);
+_formi_skip_blanks(char *, unsigned int);
 int
 _formi_add_char(FIELD *cur, unsigned pos, char c);
 void
-_formi_calculate_tabs(_FORMI_FIELD_LINES *row);
+_formi_calculate_tabs(FIELD *field, unsigned row);
 int
 _formi_draw_page(FORM *form);
 int
@@ -136,9 +132,7 @@ _formi_validate_char(FIELD *field, char c);
 int
 _formi_validate_field(FORM *form);
 int
-_formi_wrap_field(FIELD *field, _FORMI_FIELD_LINES *pos);
-int
-_formi_sync_buffer(FIELD *field);
+_formi_wrap_field(FIELD *field, unsigned int pos);
 
 #ifdef DEBUG
 int

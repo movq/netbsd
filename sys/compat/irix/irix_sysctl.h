@@ -1,4 +1,4 @@
-/*	$NetBSD: irix_sysctl.h,v 1.2 2004/05/20 06:34:24 atatat Exp $ */
+/*	$NetBSD: irix_sysctl.h,v 1.1.10.1 2004/05/23 10:45:04 tron Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_systrace.c,v 1.42 2004/11/30 04:25:43 christos Exp $	*/
+/*	$NetBSD: kern_systrace.c,v 1.37.2.1 2004/04/16 22:29:57 jmc Exp $	*/
 
 /*
  * Copyright 2002, 2003 Niels Provos <provos@citi.umich.edu>
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_systrace.c,v 1.42 2004/11/30 04:25:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_systrace.c,v 1.37.2.1 2004/04/16 22:29:57 jmc Exp $");
 
 #include "opt_systrace.h"
 
@@ -84,13 +84,16 @@ int	systracef_read(struct file *, off_t *, struct uio *, struct ucred *,
 		int);
 int	systracef_write(struct file *, off_t *, struct uio *, struct ucred *,
 		int);
+int	systracef_fcntl(struct file *, u_int, void *, struct proc *);
 int	systracef_poll(struct file *, int, struct proc *);
 #else
 int	systracef_read(struct file *, off_t *, struct uio *, struct ucred *);
 int	systracef_write(struct file *, off_t *, struct uio *, struct ucred *);
 int	systracef_select(struct file *, int, struct proc *);
 #endif
+int	systracef_kqfilter(struct file *, struct knote *);
 int	systracef_ioctl(struct file *, u_long, void *, struct proc *);
+int	systracef_stat(struct file *, struct stat *, struct proc *);
 int	systracef_close(struct file *, struct proc *);
 
 struct str_policy {
@@ -179,29 +182,27 @@ int	systrace_msg_emul(struct fsystrace *, struct str_process *);
 int	systrace_msg_ugid(struct fsystrace *, struct str_process *);
 int	systrace_make_msg(struct str_process *, int, struct str_message *);
 
-static const struct fileops systracefops = {
+static struct fileops systracefops = {
 	systracef_read,
 	systracef_write,
 	systracef_ioctl,
-	fnullop_fcntl,
+#ifdef __NetBSD__
+	systracef_fcntl,
 	systracef_poll,
-	fbadop_stat,
-	systracef_close,
-	fnullop_kqfilter
+#else
+	systracef_select,
+	systracef_kqfilter,
+#endif
+	systracef_stat,
+	systracef_close
+#ifdef __NetBSD__
+	, systracef_kqfilter
+#endif
 };
 
-#ifdef __NetBSD__
-POOL_INIT(systr_proc_pl, sizeof(struct str_process), 0, 0, 0, "strprocpl",
-    NULL);
-POOL_INIT(systr_policy_pl, sizeof(struct str_policy), 0, 0, 0, "strpolpl",
-    NULL);
-POOL_INIT(systr_msgcontainer_pl, sizeof(struct str_msgcontainer), 0, 0, 0,
-    "strmsgpl", NULL);
-#else
 struct pool systr_proc_pl;
 struct pool systr_policy_pl;
 struct pool systr_msgcontainer_pl;
-#endif
 
 int systrace_debug = 0;
 struct lock systrace_lck;
@@ -423,6 +424,19 @@ systracef_ioctl(struct file *fp, u_long cmd, void *data, struct proc *p)
 }
 
 #ifdef __NetBSD__
+/* ARGSUSED */
+int
+systracef_fcntl(struct file *fp, u_int cmd, void *data, struct proc *p)
+{
+
+	if (cmd == FNONBLOCK || cmd == FASYNC)
+		return 0;
+
+	return (EOPNOTSUPP);
+}
+#endif
+
+#ifdef __NetBSD__
 int
 systracef_poll(struct file *fp, int events, struct proc *p)
 {
@@ -464,6 +478,21 @@ systracef_select(struct file *fp, int which, struct proc *p)
 	return (ready);
 }
 #endif /* __NetBSD__ */
+
+/* ARGSUSED */
+int
+systracef_kqfilter(struct file *fp, struct knote *kn)
+{
+	return (1);
+}
+
+
+/* ARGSUSED */
+int
+systracef_stat(struct file *fp, struct stat *sb, struct proc *p)
+{
+	return (EOPNOTSUPP);
+}
 
 /* ARGSUSED */
 int
@@ -535,15 +564,12 @@ systrace_unlock(void)
 void
 systrace_init(void)
 {
-
-#ifndef __NetBSD__
 	pool_init(&systr_proc_pl, sizeof(struct str_process), 0, 0, 0,
 	    "strprocpl", NULL);
 	pool_init(&systr_policy_pl, sizeof(struct str_policy), 0, 0, 0,
 	    "strpolpl", NULL);
 	pool_init(&systr_msgcontainer_pl, sizeof(struct str_msgcontainer),
 	    0, 0, 0, "strmsgpl", NULL);
-#endif
 	lockinit(&systrace_lck, PLOCK, "systrace", 0, 0);
 }
 
@@ -572,7 +598,16 @@ systraceopen(dev_t dev, int flag, int mode, struct proc *p)
 	fst->p_ruid = p->p_cred->p_ruid;
 	fst->p_rgid = p->p_cred->p_rgid;
 
-	return fdclone(p, fp, fd, &systracefops, fst);
+	fp->f_flag = FREAD | FWRITE;
+	fp->f_type = DTYPE_MISC;
+	fp->f_ops = &systracefops;
+	fp->f_data = (caddr_t) fst;
+
+	curlwp->l_dupfd = fd;	/* XXX */
+	FILE_SET_MATURE(fp);
+	FILE_UNUSE(fp, p);
+
+	return (ENXIO);
 }
 
 void
@@ -1144,7 +1179,7 @@ systrace_io(struct str_process *strp, struct systrace_io *io)
 	iov.iov_len = io->strio_len;
 	uio.uio_iov = &iov;
 	uio.uio_iovcnt = 1;
-	uio.uio_offset = (off_t)(unsigned long)io->strio_offs;
+	uio.uio_offset = (off_t)(long)io->strio_offs;
 	uio.uio_resid = io->strio_len;
 	uio.uio_segflg = UIO_USERSPACE;
 	uio.uio_procp = p;

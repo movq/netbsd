@@ -1,4 +1,4 @@
-/*	$NetBSD: vector.S,v 1.6 2004/10/23 21:24:05 yamt Exp $	*/
+/*	$NetBSD: vector.S,v 1.3 2003/08/20 21:48:51 fvdl Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -136,7 +136,7 @@ IDTVEC(trap07)
 	call	_C_LABEL(fpudna)
 	INTRFASTEXIT
 IDTVEC(trap08)
-	TRAP(T_DOUBLEFLT)
+	ZTRAP(T_DOUBLEFLT)
 IDTVEC(trap09)
 	ZTRAP(T_FPOPFLT)
 IDTVEC(trap0a)
@@ -298,6 +298,8 @@ IDTVEC(recurse_lapic_ipi)
 	pushq	$0		
 	pushq	$T_ASTFLT
 	INTRENTRY		
+IDTVEC(resume_lapic_ipi)
+	cli
 	jmp	1f
 IDTVEC(intr_lapic_ipi)
 	pushq	$0		
@@ -307,7 +309,6 @@ IDTVEC(intr_lapic_ipi)
 	movl	CPUVAR(ILEVEL),%ebx
 	cmpl	$IPL_IPI,%ebx
 	jae	2f
-IDTVEC(resume_lapic_ipi)
 1:
 	incl	CPUVAR(IDEPTH)
 	movl	$IPL_IPI,CPUVAR(ILEVEL)
@@ -345,6 +346,8 @@ IDTVEC(recurse_lapic_ltimer)
 	pushq	$0		
 	pushq	$T_ASTFLT
 	INTRENTRY		
+IDTVEC(resume_lapic_ltimer)
+	cli
 	jmp	1f
 IDTVEC(intr_lapic_ltimer)
 	pushq	$0		
@@ -354,7 +357,6 @@ IDTVEC(intr_lapic_ltimer)
 	movl	CPUVAR(ILEVEL),%ebx
 	cmpl	$IPL_CLOCK,%ebx
 	jae	2f
-IDTVEC(resume_lapic_ltimer)
 1:
 	incl	CPUVAR(IDEPTH)
 	movl	$IPL_CLOCK,CPUVAR(ILEVEL)
@@ -369,6 +371,13 @@ IDTVEC(resume_lapic_ltimer)
 	INTRFASTEXIT
 #endif /* NLAPIC > 0 */
 
+#ifdef MULTIPROCESSOR
+#define LOCK_KERNEL	movq %rsp,%rdi ; call _C_LABEL(x86_intlock)
+#define UNLOCK_KERNEL	movq %rsp,%rdi ; call _C_LABEL(x86_intunlock)
+#else
+#define LOCK_KERNEL
+#define UNLOCK_KERNEL
+#endif
 
 #define voidop(num)
 
@@ -411,6 +420,7 @@ IDTVEC(intr_/**/name/**/num)						;\
 	sti								;\
 	incl	CPUVAR(IDEPTH)						;\
 	movq	IS_HANDLERS(%r14),%rbx					;\
+	LOCK_KERNEL							;\
 6:									\
 	movl	IH_LEVEL(%rbx),%r12d					;\
 	cmpl	%r13d,%r12d						;\
@@ -422,12 +432,14 @@ IDTVEC(intr_/**/name/**/num)						;\
 	testq	%rbx,%rbx						;\
 	jnz	6b							;\
 5:									\
+	UNLOCK_KERNEL							;\
 	cli								;\
 	unmask(num)			/* unmask it in hardware */	;\
 	late_ack(num)							;\
 	sti								;\
 	jmp	_C_LABEL(Xdoreti)	/* lower spl and do ASTs */	;\
 7:									\
+	UNLOCK_KERNEL							;\
 	cli								;\
 	orl     $(1 << num),CPUVAR(IPENDING)				;\
 	level_mask(num)							;\
@@ -745,7 +757,6 @@ _C_LABEL(eintrcnt):
 
 IDTVEC(softserial)
 	movl	$IPL_SOFTSERIAL, CPUVAR(ILEVEL)
-	sti
 	incl	CPUVAR(IDEPTH)
 #ifdef MULTIPROCESSOR
 	call	_C_LABEL(x86_softintlock)
@@ -762,7 +773,6 @@ IDTVEC(softserial)
 
 IDTVEC(softnet)
 	movl	$IPL_SOFTNET, CPUVAR(ILEVEL)
-	sti
 	incl	CPUVAR(IDEPTH)
 #ifdef MULTIPROCESSOR	
 	call	_C_LABEL(x86_softintlock)
@@ -792,7 +802,6 @@ IDTVEC(softnet)
 
 IDTVEC(softclock)
 	movl	$IPL_SOFTCLOCK, CPUVAR(ILEVEL)
-	sti
 	incl	CPUVAR(IDEPTH)
 #ifdef MULTIPROCESSOR	
 	call	_C_LABEL(x86_softintlock)

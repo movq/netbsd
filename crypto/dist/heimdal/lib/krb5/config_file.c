@@ -33,7 +33,7 @@
 
 #include "krb5_locl.h"
 __RCSID("$Heimdal: config_file.c,v 1.46.4.2 2003/10/13 13:46:10 lha Exp $"
-        "$NetBSD: config_file.c,v 1.1.1.6 2004/04/02 14:47:48 lha Exp $");
+        "$NetBSD: config_file.c,v 1.1.1.5.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 #ifndef HAVE_NETINFO
 

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.30 2004/08/05 01:24:02 lukem Exp $
+# $NetBSD: Makefile,v 1.27 2003/07/24 14:16:54 itojun Exp $
 
 NOLINT=		# defined
 
@@ -8,8 +8,7 @@ DIST=		${NETBSDSRCDIR}/crypto/dist
 .PATH:		${DIST}/krb4/lib/krb ${DIST}/krb4/doc \
 		${DIST}/krb4/man
 
-MAN=		kerberos.3 krb_realmofhost.3 krb_sendauth.3 \
-		krb_set_tkt_string.3 \
+MAN=		kerberos.3 krb_realmofhost.3 krb_sendauth.3 krb_set_tkt_string.3 \
 		krb.conf.5 krb.equiv.5 krb.extra.5 krb.realms.5
 MLINKS=		kerberos.3 krb_mk_req.3 kerberos.3 krb_rd_req.3 \
 		kerberos.3 krb_kntoln.3 kerberos.3 krb_set_key.3 \
@@ -24,8 +23,6 @@ MLINKS=		kerberos.3 krb_mk_req.3 kerberos.3 krb_rd_req.3 \
 WARNS?=		1
 
 LIB=		krb
-
-LIBDPLIBS=	des ${.CURDIR}/../libdes
 
 .if ${USETOOLS} != "yes"
 COMPILEETOBJ!=		cd ${NETBSDSRCDIR}/lib/libcom_err/compile_et && ${PRINTOBJDIR}
@@ -148,6 +145,9 @@ INFOFLAGS=	-I${DIST}/krb4/doc
 		false; \
 	fi
 .endif
+
+LDADD+=	-ldes
+DPADD+=	${LIBDES}
 
 .include <bsd.lib.mk>
 .include <bsd.info.mk>

@@ -1,6 +1,4 @@
-#	$NetBSD: Makefile,v 1.13 2004/05/12 16:56:41 cl Exp $
-
-.include <bsd.own.mk>
+#	$NetBSD: Makefile,v 1.11 2002/07/25 00:35:33 matt Exp $
 
 SUBDIR=	notes .WAIT
 
@@ -8,12 +6,8 @@ SUBDIR=	notes .WAIT
 SUBDIR+= miniroot .WAIT
 .endif
 
-.if exists(${RELEASEMACHINE}/Makefile)
-SUBDIR+= ${RELEASEMACHINE}
-.endif
-
-.if make(obj)
-SUBDIR+= utils
+.if exists(${MACHINE}/Makefile)
+SUBDIR+= ${MACHINE}
 .endif
 
 TARGETS+=release

@@ -1,4 +1,4 @@
-/*	$NetBSD: mcavar.h,v 1.7 2004/08/30 18:27:21 drochner Exp $	*/
+/*	$NetBSD: mcavar.h,v 1.3 2001/04/27 17:11:45 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -52,7 +52,7 @@
 #include <machine/mca_machdep.h>
 
 struct mcabus_attach_args {
-	const char *_mba_busname;	/* XXX placeholder */
+	const char *mba_busname;
 	bus_space_tag_t mba_iot;	/* MCA I/O space tag */
 	bus_space_tag_t mba_memt;	/* MCA mem space tag */
 	bus_dma_tag_t mba_dmat;		/* MCA DMA tag */
@@ -73,9 +73,10 @@ struct mca_attach_args {
 	int ma_id;			/* MCA device ID (POS1 + POS2<<8) */
 };
 
-int	mcabusprint(void *, const char *);
+#define mcacf_slot		cf_loc[0]
+#define MCA_UNKNOWN_SLOT	-1		/* wildcarded 'slot' */
 
-void	mca_devinfo __P((int, char *, size_t));
+void	mca_devinfo __P((int, char *));
 int	mca_match_disabled __P((int));
 
 #endif /* _DEV_MCA_MCAVAR_H_ */

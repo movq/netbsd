@@ -34,7 +34,7 @@
 #include "ktutil_locl.h"
 
 __RCSID("$Heimdal: get.c,v 1.22.2.1 2004/06/21 10:55:46 lha Exp $"
-        "$NetBSD: get.c,v 1.1.1.8 2004/09/14 07:46:16 lha Exp $");
+        "$NetBSD: get.c,v 1.1.1.7.2.1 2004/09/17 04:34:43 jmc Exp $");
 
 static void*
 open_kadmin_connection(char *principal,

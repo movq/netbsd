@@ -1,4 +1,4 @@
-/*	$NetBSD: uhid.c,v 1.62 2004/06/23 02:30:52 mycroft Exp $	*/
+/*	$NetBSD: uhid.c,v 1.60.2.2 2004/07/02 17:17:06 he Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhid.c,v 1.62 2004/06/23 02:30:52 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhid.c,v 1.60.2.2 2004/07/02 17:17:06 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

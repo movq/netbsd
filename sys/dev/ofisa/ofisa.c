@@ -1,4 +1,4 @@
-/*	$NetBSD: ofisa.c,v 1.14 2004/04/22 00:17:12 itojun Exp $	*/
+/*	$NetBSD: ofisa.c,v 1.13 2003/01/01 00:10:22 thorpej Exp $	*/
 
 /*
  * Copyright 1997, 1998
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofisa.c,v 1.14 2004/04/22 00:17:12 itojun Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofisa.c,v 1.13 2003/01/01 00:10:22 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -398,8 +398,7 @@ ofisa_dma_print(descp, ndescs)
 			modestr = "C";
 			break;
 		default:
-			snprintf(unkmode, sizeof(unkmode), "??? (%d)",
-			    descp[i].mode);
+			sprintf(unkmode, "??? (%d)", descp[i].mode);
 			modestr = unkmode;
 			break;
 		}

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.559 2004/10/20 04:20:05 thorpej Exp $	*/
+/*	$NetBSD: machdep.c,v 1.552.2.3 2004/08/16 17:46:05 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.559 2004/10/20 04:20:05 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.552.2.3 2004/08/16 17:46:05 jmc Exp $");
 
 #include "opt_beep.h"
 #include "opt_compat_ibcs2.h"
@@ -205,8 +205,8 @@ char machine_arch[] = "i386";		/* machine == machine_arch */
 
 char bootinfo[BOOTINFO_MAXSIZE];
 
-extern struct bi_devmatch *x86_alldisks;
-extern int x86_ndisks;
+struct bi_devmatch *i386_alldisks = NULL;
+int i386_ndisks = 0;
 
 #ifdef CPURESET_DELAY
 int	cpureset_delay = CPURESET_DELAY;
@@ -226,7 +226,6 @@ int	physmem;
 int	dumpmem_low;
 int	dumpmem_high;
 unsigned int cpu_feature;
-unsigned int cpu_feature2;
 int	cpu_class;
 int	i386_fpu_present;
 int	i386_fpu_exception;
@@ -470,11 +469,11 @@ sysctl_machdep_diskinfo(SYSCTLFN_ARGS)
 	struct sysctlnode node;
 
 	node = *rnode;
-	if (x86_alldisks == NULL)
+	if (!i386_alldisks)
 		return(EOPNOTSUPP);
-	node.sysctl_data = x86_alldisks;
+	node.sysctl_data = i386_alldisks;
 	node.sysctl_size = sizeof(struct disklist) +
-	    (x86_ndisks - 1) * sizeof(struct nativedisk_info);
+	    (i386_ndisks - 1) * sizeof(struct nativedisk_info);
 	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 }
 
@@ -540,11 +539,6 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 		       CTLTYPE_INT, "sse2", NULL,
 		       NULL, 0, &i386_has_sse2, 0,
 		       CTL_MACHDEP, CPU_SSE2, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL, 
-	    	       CTLFLAG_PERMANENT,
-		       CTLTYPE_STRING, "cpu_brand", NULL,
-		       NULL, 0, &cpu_brand_string, 0,
-		       CTL_MACHDEP, CTL_CREATE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "tm_longrun_mode", NULL,
@@ -888,7 +882,7 @@ cpu_dump()
 	/*
 	 * Add the machine-dependent header info.
 	 */
-	cpuhdrp->pdppaddr = PDPpaddr;
+	cpuhdrp->ptdpaddr = PTDpaddr;
 	cpuhdrp->nmemsegs = mem_cluster_cnt;
 
 	/*
@@ -1363,7 +1357,6 @@ init386(paddr_t first_avail)
 
 	cpu_probe_features(&cpu_info_primary);
 	cpu_feature = cpu_info_primary.ci_feature_flags;
-	cpu_feature2 = cpu_info_primary.ci_feature2_flags;
 
 	lwp0.l_addr = proc0paddr;
 	cpu_info_primary.ci_curpcb = &lwp0.l_addr->u_pcb;

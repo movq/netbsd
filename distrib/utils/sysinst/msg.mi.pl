@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.pl,v 1.43 2004/11/11 21:24:41 dsl Exp $	*/
+/*	$NetBSD: msg.mi.pl,v 1.35.2.5 2004/08/25 03:15:49 jmc Exp $	*/
 /*	Based on english version: */
 /*	NetBSD: msg.mi.pl,v 1.36 2004/04/17 18:55:35 atatat Exp       */
 
@@ -171,16 +171,17 @@ Standard wymaga przynajmniej %d Megabajtow.
 Standard z Xami wymaga przynajmniej %d Megabajtow.
 }
 
-message Choose_your_size_specifier
-{Wybranie Megabajtow nada partycji rozmiar bliski twojemu wyborowi,
-ale dopasowany do granic cylindrow.  Wybranie sektorow pozwoli ci na
-bardziej dokladne okreslenie rozmiarow.  Na nowych dyskach ZBR rozmiar
-cylindra zmienia sie w zaleznosci od miejsca na dysku, jest wiec
-niewielka korzysc z dopasowania cylindrow.  Na starszych dyskach
-bardziej wydajne jest podawanie rozmiaru dysku, ktore sa
-wielokrotnoscia aktualnego rozmiaru cylindra.
-
-Wybierz specyfikator rozmiaru}
+message sizechoice
+{Zdecydowales sie podac rozmiary partycji (albo dla BSD disklabel,
+lub na niektorych portach, dla plastrow MBR). Musisz najpierw wybrac
+jednostke rozmiaru. Wybranie Megabajtow nada partycji rozmiar bliski
+twojemu wyborowi, ale dopasowany do granic cylindrow. Wybranie sektorow
+pozwoli ci na bardziej dokladne okreslenie rozmiarow. Na nowych dyskach ZBR
+rozmiar cylindra zmienia sie w zaleznosci od miejsca na dysku, jest wiec
+niewielka korzysc z dopasowania cylindrow. Na starszych dyskach bardziej
+wydajne jest podawanie rozmiaru dysku, ktore sa wielokrotnoscia aktualnego
+rozmiaru cylindra.
+}
 
 message defaultunit
 {Jezeli nie wybrales 'M' (megabajty), 'G' (gigabajty), 'c' (cylindry)
@@ -354,12 +355,18 @@ message disksetupdone
 {Okej, pierwsza czesc procedury zostala zakonczona. Sysinst zapisal
 disklabel na dysk doceloway, oraz utworzyl system plikow i sprawdzil
 nowe partycje, ktore podales jako docelowe.
+
+Kolejny krok to sciagniecie i rozpakowanie pakietow dystrybucji. 
+Nacisnij <enter> aby kontynuowac.
 }
 
 message disksetupdoneupdate
 {Okej, pierwsza czesc procedury zostala zakonczona. Sysinst zapisal
 disklabel na dysk docelowy, oraz sprawdzil nowe partycje, ktore
 podales jako docelowe.
+
+Kolejny krok to sciagniecie i rozpakowanie pakietow dystrybucji. 
+Nacisnij <enter> aby kontynuowac.
 }
 
 message openfail
@@ -460,7 +467,7 @@ wszystkie (Pelna instalacja) lub wybrac z opcjonalnych pakietow.
 }
 
 message ftpsource
-{Ponizej masz site %s, katalog, uzytkownika, oraz haslo gotowe do uzycia.
+{Ponizej masz site ftp, katalog, uzytkownika, oraz haslo gotowe do uzycia.
 Jesli "uzytkownik" to "ftp", wtedy haslo nie jest wymagane.
 
 host:		%s 
@@ -632,10 +639,7 @@ message delete_dist_files
 (Mozesz je zachowac aby zainstalowac/zaktualizowac kolejny system.)}
 
 message verboseextract
-{
-Kolejny krok to sciagniecie i rozpakowanie pakietow dystrybucji. 
-
-Czy w trakcie rozpakowywania plikow, chcesz widziec nazwe aktualnie
+{Czy w trakcie rozpakowywania plikow, chcesz widziec nazwe aktualnie
 wypakowywanego pliku ?
 }
 
@@ -870,7 +874,7 @@ jest starego typu NetBSD/386BSD/FreeBSD. Czy chcesz zmienic typ tej partycji
 na nowa partycje tylko dla NetBSD?}
 
 message choose_timezone
-{Wybierz strefe czasowa, ktora najlepiej ci odpowiada z ponizszej listy. 
+{Wybierz strefe czasowa, ktora najlepiej ci odpowiada z ponizszej listy.
 Nacisnij ENTER aby wybrac. 
 Nacisnij 'x' a potem ENTER aby wyjsc.
 
@@ -961,12 +965,12 @@ message Hit_enter_to_continue {Nacisnij enter aby kontynuowac}
 message Choose_your_installation {Wybierz swoja instalacje}
 message Set_Sizes {Ustaw rozmiary partycji NetBSD}
 message Use_Existing {Uzyj istniejacych romiarow partycji}
+message Choose_your_size_specifier {Wybierz specyfikator rozmiaru}
 message Megabytes {Megabajty}
 message Cylinders {Cylindry}
 message Sectors {Sektory}
 message Select_medium {Wybierz medium}
 message ftp {FTP}
-message http {HTTP}
 message nfs {NFS}
 message cdrom {CD-ROM / DVD}
 message floppy {Dyskietka}

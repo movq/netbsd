@@ -1,4 +1,4 @@
-/*	$NetBSD: expand.c,v 1.67 2004/07/13 15:05:59 seb Exp $	*/
+/*	$NetBSD: expand.c,v 1.60 2003/12/21 08:32:39 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)expand.c	8.5 (Berkeley) 5/15/95";
 #else
-__RCSID("$NetBSD: expand.c,v 1.67 2004/07/13 15:05:59 seb Exp $");
+__RCSID("$NetBSD: expand.c,v 1.60 2003/12/21 08:32:39 jdolecek Exp $");
 #endif
 #endif /* not lint */
 
@@ -82,7 +82,7 @@ struct ifsregion {
 	struct ifsregion *next;	/* next region in list */
 	int begoff;		/* offset of start of region */
 	int endoff;		/* offset of end of region */
-	int inquotes;		/* search for nul bytes only */
+	int nulonly;		/* search for nul bytes only */
 };
 
 
@@ -175,9 +175,9 @@ expandarg(union node *arg, struct arglist *arglist, int flag)
 
 
 /*
- * Perform variable and command substitution.
- * If EXP_FULL is set, output CTLESC characters to allow for further processing.
- * Otherwise treat $@ like $* since no splitting will be performed.
+ * Perform variable and command substitution.  If EXP_FULL is set, output CTLESC
+ * characters to allow for further processing.  Otherwise treat
+ * $@ like $* since no splitting will be performed.
  */
 
 STATIC void
@@ -186,29 +186,20 @@ argstr(char *p, int flag)
 	char c;
 	int quotes = flag & (EXP_FULL | EXP_CASE);	/* do CTLESC */
 	int firsteq = 1;
-	const char *ifs;
-	int ifs_split = EXP_IFS_SPLIT;
-
-	if (flag & EXP_IFS_SPLIT)
-		ifs = ifsset() ? ifsval() : " \t\n";
 
 	if (*p == '~' && (flag & (EXP_TILDE | EXP_VARTILDE)))
 		p = exptilde(p, flag);
 	for (;;) {
 		switch (c = *p++) {
 		case '\0':
-		case CTLENDVAR: /* end of expanding yyy in ${xxx-yyy} */
-			return;
+		case CTLENDVAR: /* ??? */
+			goto breakloop;
 		case CTLQUOTEMARK:
 			/* "$@" syntax adherence hack */
 			if (p[0] == CTLVAR && p[2] == '@' && p[3] == '=')
 				break;
 			if ((flag & EXP_FULL) != 0)
 				STPUTC(c, expdest);
-			ifs_split = 0;
-			break;
-		case CTLQUOTEEND:
-			ifs_split = EXP_IFS_SPLIT;
 			break;
 		case CTLESC:
 			if (quotes)
@@ -217,7 +208,7 @@ argstr(char *p, int flag)
 			STPUTC(c, expdest);
 			break;
 		case CTLVAR:
-			p = evalvar(p, (flag & ~EXP_IFS_SPLIT) | (flag & ifs_split));
+			p = evalvar(p, flag);
 			break;
 		case CTLBACKQ:
 		case CTLBACKQ|CTLQUOTE:
@@ -246,14 +237,10 @@ argstr(char *p, int flag)
 			break;
 		default:
 			STPUTC(c, expdest);
-			if (flag & EXP_IFS_SPLIT & ifs_split && strchr(ifs, c) != NULL) {
-				/* We need to get the output split here... */
-				recordregion(expdest - stackblock() - 1,
-						expdest - stackblock(), 0);
-			}
-			break;
 		}
 	}
+breakloop:;
+	return;
 }
 
 STATIC char *
@@ -618,7 +605,7 @@ evalvar(char *p, int flag)
 	int special;
 	int startloc;
 	int varlen;
-	int apply_ifs;
+	int easy;
 	int quotes = flag & (EXP_FULL | EXP_CASE);
 
 	varflags = (unsigned char)*p++;
@@ -626,7 +613,6 @@ evalvar(char *p, int flag)
 	var = p;
 	special = !is_name(*p);
 	p = strchr(p, '=') + 1;
-
 again: /* jump here after setting a variable with ${var=text} */
 	if (special) {
 		set = varisset(var, varflags & VSNUL);
@@ -639,11 +625,9 @@ again: /* jump here after setting a variable with ${var=text} */
 		} else
 			set = 1;
 	}
-
 	varlen = 0;
 	startloc = expdest - stackblock();
-
-	if (!set && uflag) {
+	if (!set && uflag)
 		switch (subtype) {
 		case VSNORMAL:
 		case VSTRIMLEFT:
@@ -654,8 +638,6 @@ again: /* jump here after setting a variable with ${var=text} */
 			error("%.*s: parameter not set", p - var - 1, var);
 			/* NOTREACHED */
 		}
-	}
-
 	if (set && subtype != VSPLUS) {
 		/* insert the value of the variable */
 		if (special) {
@@ -671,7 +653,8 @@ again: /* jump here after setting a variable with ${var=text} */
 			if (subtype == VSLENGTH) {
 				for (;*val; val++)
 					varlen++;
-			} else {
+			}
+			else {
 				while (*val) {
 					if (quotes && syntax[(int)*val] == CCTL)
 						STPUTC(CTLESC, expdest);
@@ -682,32 +665,34 @@ again: /* jump here after setting a variable with ${var=text} */
 		}
 	}
 
+	if (subtype == VSPLUS)
+		set = ! set;
 
-	apply_ifs = ((varflags & VSQUOTE) == 0 ||
+	easy = ((varflags & VSQUOTE) == 0 ||
 		(*var == '@' && shellparam.nparam != 1));
+
 
 	switch (subtype) {
 	case VSLENGTH:
 		expdest = cvtnum(varlen, expdest);
-		break;
+		goto record;
 
 	case VSNORMAL:
+		if (!easy)
+			break;
+record:
+		recordregion(startloc, expdest - stackblock(),
+			     varflags & VSQUOTE);
 		break;
 
 	case VSPLUS:
-		set = !set;
-		/* FALLTHROUGH */
 	case VSMINUS:
 		if (!set) {
-		        argstr(p, flag | (apply_ifs ? EXP_IFS_SPLIT : 0));
-			/*
-			 * ${x-a b c} doesn't get split, but removing the
-			 * 'apply_ifs = 0' apparantly breaks ${1+"$@"}..
-			 * ${x-'a b' c} should generate 2 args.
-			 */
-			/* We should have marked stuff already */
-			apply_ifs = 0;
+		        argstr(p, flag);
+			break;
 		}
+		if (easy)
+			goto record;
 		break;
 
 	case VSTRIMLEFT:
@@ -729,32 +714,30 @@ again: /* jump here after setting a variable with ${var=text} */
 		}
 		/* Remove any recorded regions beyond start of variable */
 		removerecordregions(startloc);
-		apply_ifs = 1;
-		break;
+		goto record;
 
 	case VSASSIGN:
 	case VSQUESTION:
-		if (set)
+		if (!set) {
+			if (subevalvar(p, var, 0, subtype, startloc,
+				       varflags)) {
+				varflags &= ~VSNUL;
+				/* 
+				 * Remove any recorded regions beyond 
+				 * start of variable 
+				 */
+				removerecordregions(startloc);
+				goto again;
+			}
 			break;
-		if (subevalvar(p, var, 0, subtype, startloc, varflags)) {
-			varflags &= ~VSNUL;
-			/* 
-			 * Remove any recorded regions beyond 
-			 * start of variable 
-			 */
-			removerecordregions(startloc);
-			goto again;
 		}
-		apply_ifs = 0;
+		if (easy)
+			goto record;
 		break;
 
 	default:
 		abort();
 	}
-
-	if (apply_ifs)
-		recordregion(startloc, expdest - stackblock(),
-			     varflags & VSQUOTE);
 
 	if (subtype != VSNORMAL) {	/* skip to end of alternative */
 		int nesting = 1;
@@ -914,18 +897,13 @@ numvar:
  */
 
 STATIC void
-recordregion(int start, int end, int inquotes)
+recordregion(int start, int end, int nulonly)
 {
 	struct ifsregion *ifsp;
 
 	if (ifslastp == NULL) {
 		ifsp = &ifsfirst;
 	} else {
-		if (ifslastp->endoff == start) {
-			/* extend previous area */
-			ifslastp->endoff = end;
-			return;
-		}
 		ifsp = (struct ifsregion *)ckmalloc(sizeof (struct ifsregion));
 		ifslastp->next = ifsp;
 	}
@@ -933,7 +911,7 @@ recordregion(int start, int end, int inquotes)
 	ifslastp->next = NULL;
 	ifslastp->begoff = start;
 	ifslastp->endoff = end;
-	ifslastp->inquotes = inquotes;
+	ifslastp->nulonly = nulonly;
 }
 
 
@@ -952,86 +930,76 @@ ifsbreakup(char *string, struct arglist *arglist)
 	char *p;
 	char *q;
 	const char *ifs;
-	const char *ifsspc;
-	int inquotes;
+	int ifsspc;
+	int nulonly;
+
 
 	start = string;
-	ifsspc = NULL;
-	inquotes = 0;
-
-	if (ifslastp == NULL) {
-		/* Return entire argument, IFS doesn't apply to any of it */
-		sp = (struct strlist *)stalloc(sizeof *sp);
-		sp->text = start;
-		*arglist->lastp = sp;
-		arglist->lastp = &sp->next;
-		return;
-	}
-
-	ifs = ifsset() ? ifsval() : " \t\n";
-
-	for (ifsp = &ifsfirst; ifsp != NULL; ifsp = ifsp->next) {
-		p = string + ifsp->begoff;
-		inquotes = ifsp->inquotes;
-		ifsspc = NULL;
-		while (p < string + ifsp->endoff) {
-			q = p;
-			if (*p == CTLESC)
-				p++;
-			if (inquotes) {
-				/* Only NULs (probably from "$@") end args */
-				if (*p != 0) {
+	ifsspc = 0;
+	nulonly = 0;
+	if (ifslastp != NULL) {
+		ifsp = &ifsfirst;
+		do {
+			p = string + ifsp->begoff;
+			nulonly = ifsp->nulonly;
+			ifs = nulonly ? nullstr : 
+				( ifsset() ? ifsval() : " \t\n" );
+			ifsspc = 0;
+			while (p < string + ifsp->endoff) {
+				q = p;
+				if (*p == CTLESC)
 					p++;
-					continue;
-				}
-			} else {
-				if (!strchr(ifs, *p)) {
+				if (strchr(ifs, *p)) {
+					if (!nulonly)
+						ifsspc = (strchr(" \t\n", *p) != NULL);
+					/* Ignore IFS whitespace at start */
+					if (q == start && ifsspc) {
+						p++;
+						start = p;
+						continue;
+					}
+					*q = '\0';
+					sp = (struct strlist *)stalloc(sizeof *sp);
+					sp->text = start;
+					*arglist->lastp = sp;
+					arglist->lastp = &sp->next;
 					p++;
-					continue;
-				}
-				ifsspc = strchr(" \t\n", *p);
-
-				/* Ignore IFS whitespace at start */
-				if (q == start && ifsspc != NULL) {
-					p++;
+					if (!nulonly) {
+						for (;;) {
+							if (p >= string + ifsp->endoff) {
+								break;
+							}
+							q = p;
+							if (*p == CTLESC)
+								p++;
+							if (strchr(ifs, *p) == NULL ) {
+								p = q;
+								break;
+							} else if (strchr(" \t\n",*p) == NULL) {
+								if (ifsspc) {
+									p++;
+									ifsspc = 0;
+								} else {
+									p = q;
+									break;
+								}
+							} else
+								p++;
+						}
+					}
 					start = p;
-					continue;
-				}
+				} else
+					p++;
 			}
-
-			/* Save this argument... */
-			*q = '\0';
+		} while ((ifsp = ifsp->next) != NULL);
+		if (*start || (!ifsspc && start > string && 
+			(nulonly || 1))) {
 			sp = (struct strlist *)stalloc(sizeof *sp);
 			sp->text = start;
 			*arglist->lastp = sp;
 			arglist->lastp = &sp->next;
-			p++;
-
-			if (!inquotes) {
-				/* Ignore trailing IFS writespace */
-				for (; p < string + ifsp->endoff; p++) {
-					q = p;
-					if (*p == CTLESC)
-						p++;
-					if (strchr(ifs, *p) == NULL) {
-						p = q;
-						break;
-					}
-					if (strchr(" \t\n", *p) == NULL) {
-						if (ifsspc == NULL) {
-							p = q;
-							break;
-						}
-						ifsspc = NULL;
-					}
-				}
-			}
-			start = p;
 		}
-	}
-
-	/* Save anything left as an argument */
-	if (*start || (!ifsspc && start > string)) {
+	} else {
 		sp = (struct strlist *)stalloc(sizeof *sp);
 		sp->text = start;
 		*arglist->lastp = sp;
@@ -1533,27 +1501,4 @@ cvtnum(int num, char *buf)
 	while (*p)
 		STPUTC(*p++, buf);
 	return buf;
-}
-
-/*
- * Do most of the work for wordexp(3).
- */
-
-int
-wordexpcmd(int argc, char **argv)
-{
-	size_t len;
-	int i;
-
-	out1fmt("%d", argc - 1);
-	out1c('\0');
-	for (i = 1, len = 0; i < argc; i++)
-		len += strlen(argv[i]);
-	out1fmt("%zd", len);
-	out1c('\0');
-	for (i = 1; i < argc; i++) {
-		out1str(argv[i]);
-		out1c('\0');
-	}
-	return (0);
 }

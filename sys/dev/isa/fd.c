@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.55 2004/10/28 07:07:40 yamt Exp $	*/
+/*	$NetBSD: fd.c,v 1.51.2.1 2004/06/04 03:41:05 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003 The NetBSD Foundation, Inc.
@@ -88,7 +88,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.55 2004/10/28 07:07:40 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.51.2.1 2004/06/04 03:41:05 jmc Exp $");
 
 #include "rnd.h"
 #include "opt_ddb.h"
@@ -113,7 +113,6 @@ __KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.55 2004/10/28 07:07:40 yamt Exp $");
 #include <sys/disklabel.h>
 #include <sys/disk.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/malloc.h>
 #include <sys/uio.h>
 #include <sys/syslog.h>
@@ -131,8 +130,6 @@ __KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.55 2004/10/28 07:07:40 yamt Exp $");
 
 #include <machine/cpu.h>
 #include <machine/bus.h>
-
-#include "locators.h"
 
 #if defined(atari)
 /*
@@ -1550,7 +1547,7 @@ fdformat(dev, finfo, p)
 	bp->b_data = (caddr_t)finfo;
 
 #ifdef DEBUG
-	printf("fdformat: blkno %" PRIx64 " count %x\n",
+	printf("fdformat: blkno %" PRIx64 " count %lx\n",
 	    bp->b_blkno, bp->b_bcount);
 #endif
 

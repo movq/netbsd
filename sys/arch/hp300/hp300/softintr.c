@@ -1,4 +1,4 @@
-/*	$NetBSD: softintr.c,v 1.5 2004/08/28 19:11:19 thorpej Exp $	*/
+/*	$NetBSD: softintr.c,v 1.4 2003/11/17 14:37:59 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: softintr.c,v 1.5 2004/08/28 19:11:19 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: softintr.c,v 1.4 2003/11/17 14:37:59 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,7 +69,7 @@ static struct hp300_soft_intr hp300_soft_intrs[IPL_NSOFT];
  *	Initialise hp300 software interrupt subsystem.
  */
 void
-softintr_init(void)
+softintr_init()
 {
 	static const char *softintr_names[] = IPL_SOFTNAMES;
 	struct hp300_soft_intr *hsi;
@@ -96,7 +96,7 @@ softintr_init(void)
  *	Internal function for running queued soft interrupts.
  */
 void
-softintr_dispatch(void)
+softintr_dispatch()
 {
 	struct hp300_soft_intr *hsi;
 	struct hp300_soft_intrhand *sih;

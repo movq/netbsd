@@ -1,7 +1,7 @@
-/*	$NetBSD: boot.cpp,v 1.5 2004/08/13 15:48:21 uch Exp $	*/
+/*	$NetBSD: boot.cpp,v 1.3 2001/11/25 14:39:20 takemura Exp $	*/
 
 /*-
- * Copyright (c) 2001, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -64,7 +64,6 @@ Boot *Boot::_instance = 0;
 Boot &
 Boot::Instance()
 {
-
 	if (_instance)
 		return  *_instance;
 
@@ -84,7 +83,7 @@ Boot::Instance()
 #ifdef SHx
 	_instance = new SHBoot();
 #endif
-
+  
 	memset(&_instance->args, 0, sizeof(struct BootSetupArgs));
 	_instance->args.consoleEnable = TRUE;
 
@@ -94,7 +93,6 @@ Boot::Instance()
 void
 Boot::Destroy()
 {
-
 	if (_instance)
 		delete _instance;
 }
@@ -125,7 +123,7 @@ Boot::setup()
 	args.architectureDebug	= FALSE;
 	args.memorymanagerDebug	= FALSE;
 	args.fileDebug		= FALSE;
-
+  
 	return TRUE;
 }
 
@@ -141,7 +139,6 @@ Boot::Boot()
 
 Boot::~Boot()
 {
-
 	if (_file)
 		delete _file;
 	if (_loader)
@@ -151,10 +148,6 @@ Boot::~Boot()
 BOOL
 Boot::create()
 {
-
-	// Set this console (setuped by machine dependent part) as default.
-	Console::changeConsole(*_cons);
-
 	// File manager.
 	_file = new FileManager(_cons, args.file);
 	_file->setDebug() = args.fileDebug;
@@ -165,7 +158,6 @@ Boot::create()
 BOOL
 Boot::attachLoader()
 {
-
 	switch (Loader::objectFormat(*_file)) {
 	case LOADER_ELF:
 		_loader = new ElfLoader(_cons, _mem);

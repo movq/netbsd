@@ -1,4 +1,4 @@
-/*	$NetBSD: if.h,v 1.98 2004/12/04 18:31:43 peter Exp $	*/
+/*	$NetBSD: if.h,v 1.95 2003/12/10 11:46:33 itojun Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -143,7 +143,7 @@ struct if_clone {
 	size_t ifc_namelen;		/* length of name */
 
 	int	(*ifc_create)(struct if_clone *, int);
-	int	(*ifc_destroy)(struct ifnet *);
+	void	(*ifc_destroy)(struct ifnet *);
 };
 
 #define	IF_CLONE_INITIALIZER(name, create, destroy)			\
@@ -733,7 +733,9 @@ MALLOC_DECLARE(M_IFMADDR);
 
 extern struct ifnet_head ifnet;
 extern struct ifnet **ifindex2ifnet;
-extern struct ifnet *lo0ifp;
+#if 0
+struct ifnet loif[];
+#endif
 extern size_t if_indexlim;
 
 char	*ether_sprintf __P((const u_char *));
@@ -754,14 +756,14 @@ int	ifioctl __P((struct socket *, u_long, caddr_t, struct proc *));
 int	ifpromisc __P((struct ifnet *, int));
 struct	ifnet *ifunit __P((const char *));
 
-struct	ifaddr *ifa_ifwithaddr __P((const struct sockaddr *));
+struct	ifaddr *ifa_ifwithaddr __P((struct sockaddr *));
 struct	ifaddr *ifa_ifwithaf __P((int));
-struct	ifaddr *ifa_ifwithdstaddr __P((const struct sockaddr *));
-struct	ifaddr *ifa_ifwithnet __P((const struct sockaddr *));
-struct	ifaddr *ifa_ifwithladdr __P((const struct sockaddr *));
-struct	ifaddr *ifa_ifwithroute __P((int, const struct sockaddr *,
-					const struct sockaddr *));
-struct	ifaddr *ifaof_ifpforaddr __P((const struct sockaddr *, struct ifnet *));
+struct	ifaddr *ifa_ifwithdstaddr __P((struct sockaddr *));
+struct	ifaddr *ifa_ifwithnet __P((struct sockaddr *));
+struct	ifaddr *ifa_ifwithladdr __P((struct sockaddr *));
+struct	ifaddr *ifa_ifwithroute __P((int, struct sockaddr *,
+					struct sockaddr *));
+struct	ifaddr *ifaof_ifpforaddr __P((struct sockaddr *, struct ifnet *));
 void	ifafree __P((struct ifaddr *));
 void	link_rtrequest __P((int, struct rtentry *, struct rt_addrinfo *));
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: pas.c,v 1.60 2004/10/29 12:57:17 yamt Exp $	*/
+/*	$NetBSD: pas.c,v 1.57 2003/05/03 18:11:27 wiz Exp $	*/
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -57,7 +57,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pas.c,v 1.60 2004/10/29 12:57:17 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pas.c,v 1.57 2003/05/03 18:11:27 wiz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -122,7 +122,7 @@ void	pasconf __P((int, int, int, int));
  * Define our interface to the higher level audio driver.
  */
 
-const struct audio_hw_if pas_hw_if = {
+struct audio_hw_if pas_hw_if = {
 	sbdsp_open,
 	sbdsp_close,
 	0,
@@ -382,7 +382,7 @@ pasfind(parent, sc, ia, probing)
 	}
 
         if (sc->model >= 0) {
-                if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ) {
+                if (ia->ia_irq[0].ir_irq == ISACF_IRQ_DEFAULT) {
                         printf("pas: sb emulation requires known irq\n");
 			goto unmap1;
                 } 
@@ -486,10 +486,8 @@ pasattach(parent, self, aux)
 	
 	sbdsp_attach(&sc->sc_sbdsp);
 
-	snprintf(pas_device.name, sizeof(pas_device.name), "pas,%s",
-	    pasnames[sc->model]);
-	snprintf(pas_device.version, sizeof(pas_device.version), "%d",
-	    sc->rev);
+	sprintf(pas_device.name, "pas,%s", pasnames[sc->model]);
+	sprintf(pas_device.version, "%d", sc->rev);
 
 	audio_attach_mi(&pas_hw_if, &sc->sc_sbdsp, &sc->sc_sbdsp.sc_dev);
 }

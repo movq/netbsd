@@ -1,11 +1,11 @@
 #!/bin/sh
 #
-# $NetBSD: ccd,v 1.5 2004/08/13 18:08:03 mycroft Exp $
+# $NetBSD: ccd,v 1.4 2003/03/19 08:54:00 wiz Exp $
 #
 
 # PROVIDE: disks
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="ccd"
 rcvar=$name

@@ -1,4 +1,4 @@
-.\" $NetBSD: crunchide.1,v 1.14 2004/08/24 12:11:44 wiz Exp $
+.\" $NetBSD: crunchide.1,v 1.13 2003/07/26 20:34:12 salo Exp $
 .\"
 .\" Copyright (c) 1994 University of Maryland
 .\" All Rights Reserved.
@@ -38,8 +38,9 @@
 .Bk -words
 .Op Fl k Ar keep-symbol
 .Ek
-.Ar object-file
+.Bk -words
 .Op Ar object-file ...
+.Ek
 .Sh DESCRIPTION
 .Nm
 hides the global symbols of
@@ -50,16 +51,15 @@ Some symbols may be left visible via the
 .Fl k Ar keep-symbol
 and
 .Fl f Ar keep-list-file
-options.
-The
+options.  The
 .Ar keep-list-file
 must contain a list of symbols to keep visible, one symbol per line.
 The names given by
 .Ar keep-symbol
 or in
 .Ar keep-list-file
-should be C names.
-For example, to keep the C function
+should be C names.  For example,
+to keep the C function
 .Dq foo
 visible, the option
 .Dq -k foo
@@ -75,18 +75,13 @@ multiple component programs.
 .Xr ld 1
 .Sh AUTHORS
 .Nm
-was written by
-.An James da Silva Aq jds@cs.umd.edu .
+was written by James da Silva \*[Lt]jds@cs.umd.edu\*[Gt].
+.sp 0
+Copyright (c) 1994 University of Maryland.  All Rights Reserved.
 .Pp
-Copyright (c) 1994 University of Maryland.
-All Rights Reserved.
-.Pp
-Chris Demetriou
-.Aq cgd@NetBSD.org
-reorganized
+Chris Demetriou \*[Lt]cgd@NetBSD.org\*[Gt] reorganized
 .Nm
 so that it supported multiple object formats, and added
 ELF object support and ECOFF object recognition.
-.Pp
-Copyright (c) 1997 Christopher G. Demetriou.
-All Rights Reserved.
+.sp 0
+Copyright (c) 1997 Christopher G. Demetriou.  All Rights Reserved.

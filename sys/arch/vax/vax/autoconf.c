@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.83 2004/12/14 02:32:03 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.80 2004/01/06 17:01:48 matt Exp $	*/
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.83 2004/12/14 02:32:03 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.80 2004/01/06 17:01:48 matt Exp $");
 
 #include "opt_compat_netbsd.h"
 
@@ -42,7 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.83 2004/12/14 02:32:03 chs Exp $");
 #include <sys/reboot.h>
 #include <sys/disk.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/conf.h>
 
 #include <uvm/uvm_extern.h>
@@ -70,6 +69,8 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.83 2004/12/14 02:32:03 chs Exp $");
 void	gencnslask __P((void));
 
 struct cpu_dep *dep_call;
+struct device *booted_device;
+int booted_partition;	/* defaults to 0 (aka 'a' partition */
 
 struct evcnt softnet_intrcnt =
 	EVCNT_INITIALIZER(EVCNT_TYPE_INTR, NULL, "soft", "net");
@@ -362,7 +363,7 @@ booted_sd(struct device *dev, void *aux)
 	if ((jmfr("si",  ppdev, BDEV_SD) == 0 ||	/* new name */
 	     jmfr("asc", ppdev, BDEV_SD) == 0 ||
 	     jmfr("asc", ppdev, BDEV_SDN) == 0) &&
-	    (ppdev->dv_cfdata->cf_loc[VSBUSCF_CSR] == rpb.csrphy))
+	    (ppdev->dv_cfdata->cf_loc[0] == rpb.csrphy))
 			return 1;
 
 	return 0; /* Where did we come from??? */

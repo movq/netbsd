@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: localconf.c,v 1.4 2004/11/10 20:23:28 thorpej Exp $");
+__RCSID("$NetBSD: localconf.c,v 1.2 2003/07/12 09:37:11 itojun Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -116,7 +116,6 @@ setdefault()
 	lcconf->wait_ph2complete = LC_DEFAULT_WAIT_PH2COMPLETE;
 	lcconf->strict_address = FALSE;
 	lcconf->complex_bundle = TRUE; /*XXX FALSE;*/
-	lcconf->gss_id_enc = LC_GSSENC_UTF16LE;	/* Windows compatibility */
 }
 
 /*
@@ -193,13 +192,13 @@ getpsk(str, len)
 			continue;
 
 		/* search the end of 1st string. */
-		for (p = buf; *p != '\0' && !isspace((unsigned char)*p); p++)
+		for (p = buf; *p != '\0' && !isspace(*p); p++)
 			;
 		if (*p == '\0')
 			continue;	/* no 2nd parameter */
 		*p = '\0';
 		/* search the 1st of 2nd string. */
-		while (isspace((unsigned char)*++p))
+		while (isspace(*++p))
 			;
 		if (*p == '\0')
 			continue;	/* no 2nd parameter */

@@ -1,4 +1,4 @@
-/*	$NetBSD: esmvar.h,v 1.10 2004/09/22 12:20:25 kent Exp $	*/
+/*	$NetBSD: esmvar.h,v 1.9.2.1 2004/09/22 20:58:39 jmc Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 Matt Fredette

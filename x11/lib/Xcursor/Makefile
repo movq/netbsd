@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2004/08/05 01:28:48 lukem Exp $
+#	$NetBSD: Makefile,v 1.7 2004/03/12 03:59:42 rtr Exp $
 
 .include <bsd.own.mk>
 
@@ -15,10 +15,8 @@ MAN=	Xcursor.3
 CPPFLAGS+=	${X11FLAGS.THREADLIB}
 CPPFLAGS+=	-DICONDIR=\"${X11LIBDIR}/icons\"
 
-LIBDPLIBS=\
-	Xrender	${.CURDIR}/../Xrender \
-	Xext	${.CURDIR}/../Xext \
-	X11	${.CURDIR}/../X11/dynamic
+LDADD+=	-lXrender -lXext -lX11
+DPADD+=	${LIBXRENDER} ${LIBXEXT} ${LIBX11}
 
 # XXX it would be really swell if SCRIPTS was available from bsd.lib.mk
 FILES=			xcursor.pc xcursor-config

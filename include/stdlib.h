@@ -1,4 +1,4 @@
-/*	$NetBSD: stdlib.h,v 1.68 2004/12/16 03:54:56 atatat Exp $	*/
+/*	$NetBSD: stdlib.h,v 1.64 2003/08/07 09:44:11 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -191,10 +191,6 @@ char	*realpath __P((const char *, char *));
 int	 ttyslot __P((void));
 
 void	*valloc __P((size_t));		/* obsoleted by malloc() */
-
-int	 grantpt __P((int));
-int	 unlockpt __P((int));
-char	*ptsname __P((int));
 #endif
 
 /*
@@ -228,8 +224,6 @@ int	 __unsetenv13 __P((const char *));
 #else
 int	 unsetenv __P((const char *))		__RENAME(__unsetenv13);
 #endif
-
-int	 posix_openpt __P((int));
 #endif
 
 /*
@@ -248,10 +242,10 @@ void	 arc4random_addrandom __P((u_char *, int));
 char	*getbsize __P((int *, long *));
 char	*cgetcap __P((char *, const char *, int));
 int	 cgetclose __P((void));
-int	 cgetent __P((char **, const char * const *, const char *));
-int	 cgetfirst __P((char **, const char * const *));
+int	 cgetent __P((char **, char **, const char *));
+int	 cgetfirst __P((char **, char **));
 int	 cgetmatch __P((const char *, const char *));
-int	 cgetnext __P((char **, const char * const *));
+int	 cgetnext __P((char **, char **));
 int	 cgetnum __P((char *, const char *, long *));
 int	 cgetset __P((const char *));
 int	 cgetstr __P((char *, const char *, char **));
@@ -259,7 +253,6 @@ int	 cgetustr __P((char *, const char *, char **));
 
 int	 daemon __P((int, int));
 __aconst char *devname __P((dev_t, mode_t));
-dev_t	 getdevmajor __P((const char *, mode_t));
 int	 getloadavg __P((double [], int));
 
 void	 cfree __P((void *));

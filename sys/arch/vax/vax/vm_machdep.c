@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.85 2004/09/17 14:11:23 skrll Exp $	     */
+/*	$NetBSD: vm_machdep.c,v 1.83 2003/07/15 02:15:06 lukem Exp $	     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.85 2004/09/17 14:11:23 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.83 2003/07/15 02:15:06 lukem Exp $");
 
 #include "opt_compat_ultrix.h"
 #include "opt_multiprocessor.h"
@@ -64,6 +64,25 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.85 2004/09/17 14:11:23 skrll Exp $"
 #include <sys/syscallargs.h>
 
 #include "opt_cputype.h"
+
+/*
+ * pagemove - moves pages at virtual address from to virtual address to,
+ * block moved of size size. Using fast insn bcopy for pte move.
+ */
+void
+pagemove(caddr_t from, caddr_t to, size_t size)
+{
+	pt_entry_t *fpte, *tpte;
+	int	stor;
+
+	fpte = kvtopte(from);
+	tpte = kvtopte(to);
+
+	stor = (size >> VAX_PGSHIFT) * sizeof(struct pte);
+	bcopy(fpte, tpte, stor);
+	bzero(fpte, stor);
+	mtpr(0, PR_TBIA);
+}
 
 #ifdef MULTIPROCESSOR
 static void
@@ -238,6 +257,7 @@ cpu_coredump(l, vp, cred, chdr)
 	struct ucred *cred;
 	struct core *chdr;
 {
+	struct proc *p = l->l_proc;
 	struct trapframe *tf;
 	struct md_coredump state;
 	struct coreseg cseg;
@@ -257,13 +277,13 @@ cpu_coredump(l, vp, cred, chdr)
 
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
 	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 	if (error)
 		return error;
 
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&state, sizeof(state),
 	    (off_t)(chdr->c_hdrsize + chdr->c_seghdrsize), UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 
 	if (!error)
 		chdr->c_nseg++;

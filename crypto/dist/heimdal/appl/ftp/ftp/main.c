@@ -35,7 +35,7 @@
 #include <getarg.h>
 
 __RCSID("$Heimdal: main.c,v 1.33.2.1 2003/08/20 16:43:14 lha Exp $"
-        "$NetBSD: main.c,v 1.3 2004/04/02 14:59:46 lha Exp $");
+        "$NetBSD: main.c,v 1.2.2.1 2004/04/21 04:55:36 jmc Exp $");
 
 static int help_flag;
 static int version_flag;

@@ -1,4 +1,4 @@
-/*	$NetBSD: rpcinfo.c,v 1.21 2004/11/01 21:42:41 dsl Exp $	*/
+/*	$NetBSD: rpcinfo.c,v 1.19 2004/01/05 23:23:36 jmmv Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -43,7 +43,7 @@ static char sccsid[] = "@(#)rpcinfo.c 1.16 89/04/05 Copyr 1986 Sun Micro";
 
 /*
  * rpcinfo: ping a particular rpc program
- * 	or dump the registered programs on the remote machine.
+ * 	or dump the the registered programs on the remote machine.
  */
 
 /*
@@ -1559,8 +1559,8 @@ getprognum  (arg)
 	register u_long prognum;
 	char *tptr = arg;
 
-	while (*tptr && isdigit((unsigned char)*tptr++));
-	if (*tptr || isalpha((unsigned char)*(tptr - 1))) {
+	while (*tptr && isdigit(*tptr++));
+	if (*tptr || isalpha(*(tptr - 1))) {
 		rpc = getrpcbyname(arg);
 		if (rpc == NULL) {
 			fprintf(stderr, "rpcinfo: %s is unknown service\n",

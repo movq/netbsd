@@ -1,4 +1,4 @@
-.\"	$NetBSD: getgrent.3,v 1.22 2004/10/05 03:03:24 lukem Exp $
+.\"	$NetBSD: getgrent.3,v 1.19 2003/08/07 16:42:49 agc Exp $
 .\"
 .\" Copyright (c) 1989, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,15 +29,13 @@
 .\"
 .\"     @(#)getgrent.3	8.2 (Berkeley) 4/19/94
 .\"
-.Dd October 5, 2004
+.Dd April 25, 1999
 .Dt GETGRENT 3
 .Os
 .Sh NAME
 .Nm getgrent ,
-.Nm getgrgid ,
-.Nm getgrgid_r ,
 .Nm getgrnam ,
-.Nm getgrnam_r ,
+.Nm getgrgid ,
 .Nm setgroupent ,
 .\" .Nm setgrfile ,
 .Nm setgrent ,
@@ -50,25 +48,9 @@
 .Ft struct group *
 .Fn getgrent void
 .Ft struct group *
-.Fn getgrgid "gid_t gid"
-.Ft int
-.Fo getgrgid_r
-.Fa "gid_t gid"
-.Fa "struct group *grp"
-.Fa "char *buffer"
-.Fa "size_t buflen"
-.Fa "struct group **result"
-.Fc
-.Ft struct group *
 .Fn getgrnam "const char *name"
-.Ft int
-.Fo getgrnam_r
-.Fa "const char *name"
-.Fa "struct group *grp"
-.Fa "char *buffer"
-.Fa "size_t buflen"
-.Fa "struct group **result"
-.Fc
+.Ft struct group *
+.Fn getgrgid "gid_t gid"
 .Ft int
 .Fn setgroupent "int stayopen"
 .\" .Ft void
@@ -78,7 +60,7 @@
 .Ft void
 .Fn endgrent void
 .Sh DESCRIPTION
-These functions operate on the group database which is described in
+These functions operate on the group database file which is described in
 .Xr group 5 .
 Each line of the database is defined by the structure
 .Ar group
@@ -103,33 +85,7 @@ search the group database for the given group name pointed to by
 or the group id pointed to by
 .Ar gid ,
 respectively, returning the first one encountered.
-Identical group names or group ids may result in undefined behavior.
-.Pp
-The functions
-.Fn getgrnam_r
-and
-.Fn getgrgid_r
-search the group database for the given group name pointed to by
-.Ar name
-or the group id pointed to by
-.Ar gid ,
-respectively, updating the contents of
-.Ar grp
-and storing a pointer to that in
-.Ar result ,
-and returning 0.
-Storage used by
-.Ar grp
-is allocated from
-.Ar buffer ,
-which is
-.Ar buflen
-bytes in size.
-If an error occurs,
-an error number will be returned and
-.Ar result
-will point to null.
-Identical group names or group ids may result in undefined behavior.
+Identical group names or group gids may result in undefined behavior.
 .Pp
 The
 .Fn getgrent
@@ -163,30 +119,15 @@ function closes any open files.
 .Sh RETURN VALUES
 The functions
 .Fn getgrent ,
-.Fn getgrgid ,
-and
 .Fn getgrnam ,
+and
+.Fn getgrgid ,
 return a pointer to the group entry if successful; if end-of-file
 is reached or an error occurs a null pointer is returned.
-.Pp
-The functions
-.Fn getgrgid_r
-and
-.Fn getgrnam_r
-return 0 if sucessful and update
-.Ar result
-to point to
-.Ar grp .
-If an error occurs
-an error code is returned and
-.Ar result
-will contain a null pointer.
-.Pp
 The
 .Fn setgroupent
 function returns the value 1 if successful, otherwise the value
 0 is returned.
-.Pp
 The
 .Fn endgrent
 and
@@ -203,22 +144,17 @@ group database file
 .Xr nsswitch.conf 5
 .Sh STANDARDS
 The
-.Fn endgrent ,
-.Fn getgrent ,
-.Fn getgrgid ,
-.Fn getgrgid_r ,
-.Fn getgrnam ,
-.Fn getgrnam_r ,
+.Fn getgrnam
 and
-.Fn setgrent
+.Fn getgrgid
 functions conform to
 .St -p1003.1-90 .
 .Sh HISTORY
 The functions
 .Fn endgrent ,
 .Fn getgrent ,
-.Fn getgrgid ,
 .Fn getgrnam ,
+.Fn getgrgid ,
 and
 .Fn setgrent
 appeared in
@@ -229,22 +165,16 @@ and
 .Fn setgroupent
 appeared in
 .Bx 4.3 Reno .
-The functions
-.Fn getgrgid_r
-and
-.Fn getgrnam_r
-appeared in
-.Nx 3.0 .
 .Sh COMPATIBILITY
 The historic function
 .Fn setgrfile ,
-which allowed the specification of alternative group databases, has
+which allowed the specification of alternative password databases, has
 been deprecated and is no longer available.
 .Sh BUGS
 The functions
 .Fn getgrent ,
-.Fn getgrgid ,
 .Fn getgrnam ,
+.Fn getgrgid ,
 .Fn setgroupent
 and
 .Fn setgrent

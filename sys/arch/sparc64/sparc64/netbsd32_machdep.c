@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.c,v 1.44 2004/11/08 17:05:37 kleink Exp $	*/
+/*	$NetBSD: netbsd32_machdep.c,v 1.42 2004/01/15 14:37:31 mrg Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.44 2004/11/08 17:05:37 kleink Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.42 2004/01/15 14:37:31 mrg Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -617,6 +617,7 @@ cpu_coredump32(l, vp, cred, chdr)
 	int i, error;
 	struct md_coredump32 md_core;
 	struct coreseg32 cseg;
+	struct proc *p = l->l_proc;
 
 	CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
 	chdr->c_hdrsize = ALIGN(sizeof(*chdr));
@@ -657,13 +658,13 @@ cpu_coredump32(l, vp, cred, chdr)
 	cseg.c_size = chdr->c_cpusize;
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
 	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 	if (error)
 		return error;
 
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&md_core, sizeof(md_core),
 	    (off_t)(chdr->c_hdrsize + chdr->c_seghdrsize), UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 	if (!error)
 		chdr->c_nseg++;
 
@@ -689,7 +690,7 @@ netbsd32_cpu_getmcontext(l, mcp, flags)
 		sigexit(l, SIGILL);
 
 	/* For now: Erase any random indicators for optional state. */
-	(void)memset(mcp, 0, sizeof (*mcp));
+	(void)memset(mcp, '0', sizeof (*mcp));
 
 	/* Save general register context. */
 	gr[_REG_PSR] = TSTATECCR_TO_PSR(tf->tf_tstate);

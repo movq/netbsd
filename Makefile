@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.237 2004/09/02 02:02:38 tacha Exp $
+#	$NetBSD: Makefile,v 1.231 2004/02/15 19:52:27 skrll Exp $
 
 #
 # This is the top-level makefile for building NetBSD. For an outline of
@@ -68,11 +68,10 @@
 #   includes:        installs include files.
 #   do-tools-compat: builds the "libnbcompat" library; needed for some
 #                    random host tool programs in the source tree.
-#   do-gnu-lib-crtstuff3: builds and installs prerequisites from
-#			  gnu/lib/crtstuff3
 #   do-gnu-lib-libgcc3: builds and installs prerequisites from gnu/lib/libgcc3
 #   do-lib-csu:      builds and installs prerequisites from lib/csu.
 #   do-lib-libc:     builds and installs prerequisites from lib/libc.
+#   do-lib-libdes:   builds and installs prerequisites from lib/libdes.
 #   do-lib:          builds and installs prerequisites from lib.
 #   do-gnu-lib:      builds and installs prerequisites from gnu/lib.
 #   do-ld.so:        builds and installs prerequisites from libexec/ld.*_so.
@@ -126,7 +125,7 @@ SUBDIR+=	${dir}
 .if exists(regress)
 regression-tests: .PHONY
 	@echo Running regression tests...
-	${MAKEDIRTARGET} regress regress
+	@(cd ${.CURDIR}/regress && ${MAKE} regress)
 .endif
 
 .if ${MKUNPRIVED} != "no"
@@ -135,13 +134,13 @@ NOPOSTINSTALL=	# defined
 
 afterinstall: .PHONY
 .if ${MKMAN} != "no"
-	${MAKEDIRTARGET} share/man makedb
+	(cd ${.CURDIR}/share/man && ${MAKE} makedb)
 .endif
 .if (${MKUNPRIVED} != "no" && ${MKINFO} != "no")
-	${MAKEDIRTARGET} gnu/usr.bin/texinfo/install-info infodir-meta
+	(cd ${.CURDIR}/gnu/usr.bin/texinfo/install-info && ${MAKE} infodir-meta)
 .endif
 .if !defined(NOPOSTINSTALL)
-	${MAKEDIRTARGET} . postinstall-check
+	(cd ${.CURDIR} && ${MAKE} postinstall-check)
 .endif
 
 postinstall-check: .PHONY
@@ -188,12 +187,12 @@ BUILDTARGETS+=	includes
 BUILDTARGETS+=	do-tools-compat
 BUILDTARGETS+=	do-lib-csu
 .if ${MKGCC} != "no"
-.if ${HAVE_GCC3} != "no"
-BUILDTARGETS+=	do-gnu-lib-crtstuff${LIBGCC_EXT}
-.endif
 BUILDTARGETS+=	do-gnu-lib-libgcc${LIBGCC_EXT}
 .endif
 BUILDTARGETS+=	do-lib-libc
+.if ${MKCRYPTO} != "no"
+BUILDTARGETS+=	do-lib-libdes
+.endif
 BUILDTARGETS+=	do-lib do-gnu-lib
 BUILDTARGETS+=	do-ld.so
 BUILDTARGETS+=	do-build
@@ -222,9 +221,9 @@ build: .PHONY
 .else
 	@echo "Build started at: ${START_TIME}"
 .for tgt in ${BUILDTARGETS}
-	${MAKEDIRTARGET} . ${tgt}
+	@(cd ${.CURDIR} && ${MAKE} ${tgt})
 .endfor
-	${MAKEDIRTARGET} etc install-etc-release
+	(cd ${.CURDIR}/etc && ${MAKE} install-etc-release)
 	@echo   "Build started at:  ${START_TIME}"
 	@printf "Build finished at: " && date
 .endif
@@ -240,11 +239,11 @@ distribution buildworld: .PHONY
 	@echo "Won't make ${.TARGET} with DESTDIR=/"
 	@false
 .endif
-	${MAKEDIRTARGET} . build NOPOSTINSTALL=1
-	${MAKEDIRTARGET} etc distribution INSTALL_DONE=1
+	(cd ${.CURDIR} && ${MAKE} NOPOSTINSTALL=1 build)
+	(cd ${.CURDIR}/etc && ${MAKE} INSTALL_DONE=1 distribution)
 .if defined(DESTDIR) && ${DESTDIR} != "" && ${DESTDIR} != "/"
-	${MAKEDIRTARGET} . postinstall-fix-obsolete
-	${MAKEDIRTARGET} distrib/sets checkflist
+	(cd ${.CURDIR} && ${MAKE} postinstall-fix-obsolete)
+	(cd ${.CURDIR}/distrib/sets && ${MAKE} checkflist)
 .endif
 	@echo   "make ${.TARGET} started at:  ${START_TIME}"
 	@printf "make ${.TARGET} finished at: " && date
@@ -274,9 +273,10 @@ installworld: .PHONY
 	@false
 .endif
 .endif
-	${MAKEDIRTARGET} distrib/sets installsets \
-	    INSTALLDIR=${INSTALLWORLDDIR:U/} INSTALLSETS=
-	${MAKEDIRTARGET} . postinstall-check DESTDIR=${INSTALLWORLDDIR}
+	(cd ${.CURDIR}/distrib/sets && \
+	    ${MAKE} INSTALLDIR=${INSTALLWORLDDIR:U/} INSTALLSETS= installsets)
+	(cd ${.CURDIR} && \
+	    ${MAKE} DESTDIR=${INSTALLWORLDDIR} postinstall-check)
 	@echo   "make ${.TARGET} started at:  ${START_TIME}"
 	@printf "make ${.TARGET} finished at: " && date
 
@@ -286,7 +286,7 @@ installworld: .PHONY
 
 .for tgt in sets sourcesets
 ${tgt}: .PHONY
-	${MAKEDIRTARGET} distrib/sets ${tgt}
+	(cd ${.CURDIR}/distrib/sets && ${MAKE} $@)
 .endfor
 
 #
@@ -296,8 +296,8 @@ ${tgt}: .PHONY
 #
 
 release snapshot: .PHONY
-	${MAKEDIRTARGET} . build NOPOSTINSTALL=1
-	${MAKEDIRTARGET} etc release INSTALL_DONE=1
+	(cd ${.CURDIR} && ${MAKE} NOPOSTINSTALL=1 build)
+	(cd ${.CURDIR}/etc && ${MAKE} INSTALL_DONE=1 release)
 	@echo   "make ${.TARGET} started at:  ${START_TIME}"
 	@printf "make ${.TARGET} finished at: " && date
 
@@ -318,9 +318,9 @@ check-tools: .PHONY
 
 do-distrib-dirs: .PHONY
 .if !defined(DESTDIR) || ${DESTDIR} == ""
-	${MAKEDIRTARGET} etc distrib-dirs DESTDIR=/
+	(cd ${.CURDIR}/etc && ${MAKE} DESTDIR=/ distrib-dirs)
 .else
-	${MAKEDIRTARGET} etc distrib-dirs DESTDIR=${DESTDIR}
+	(cd ${.CURDIR}/etc && ${MAKE} DESTDIR=${DESTDIR} distrib-dirs)
 .endif
 
 .for targ in cleandir obj includes
@@ -328,33 +328,33 @@ do-${targ}: .PHONY ${targ}
 	@true
 .endfor
 
-.for dir in tools tools/compat lib/csu gnu/lib/crtstuff${LIBGCC_EXT} gnu/lib/libgcc${LIBGCC_EXT} lib/libc lib/libdes lib gnu/lib
+.for dir in tools tools/compat lib/csu gnu/lib/libgcc${LIBGCC_EXT} lib/libc lib/libdes lib gnu/lib
 do-${dir:S/\//-/g}: .PHONY
 .for targ in dependall install
-	${MAKEDIRTARGET} ${dir} ${targ}
+	(cd ${.CURDIR}/${dir} && ${MAKE} ${targ})
 .endfor
 .endfor
 
 do-ld.so: .PHONY
 .for targ in dependall install
 .if (${OBJECT_FMT} == "a.out")
-	${MAKEDIRTARGET} libexec/ld.aout_so ${targ}
+	(cd ${.CURDIR}/libexec/ld.aout_so && ${MAKE} ${targ})
 .endif
 .if (${OBJECT_FMT} == "ELF")
-	${MAKEDIRTARGET} libexec/ld.elf_so ${targ}
+	(cd ${.CURDIR}/libexec/ld.elf_so && ${MAKE} ${targ})
 .endif
 .endfor
 
 do-build: .PHONY
 .for targ in dependall install
-	${MAKEDIRTARGET} . ${targ} BUILD_tools=no BUILD_lib=no
+	(cd ${.CURDIR} && ${MAKE} ${targ} BUILD_tools=no BUILD_lib=no)
 .endfor
 
 do-x11: .PHONY
-	${MAKEDIRTARGET} x11 build
+	(cd ${.CURDIR}/x11 && ${MAKE} build)
 
 do-obsolete: .PHONY
-	${MAKEDIRTARGET} etc install-obsolete-lists
+	(cd ${.CURDIR}/etc && ${MAKE} install-obsolete-lists)
 
 #
 # Speedup stubs for some subtrees that don't need to run these rules.
@@ -392,4 +392,4 @@ ${.CURDIR}/BUILDING: doc/BUILDING.mdoc
 # Display current make(1) parameters
 #
 params: .PHONY
-	${MAKEDIRTARGET} etc params
+	(cd ${.CURDIR}/etc && ${MAKE} params)

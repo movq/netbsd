@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_vnops.c,v 1.120 2004/10/04 08:40:18 yamt Exp $	*/
+/*	$NetBSD: procfs_vnops.c,v 1.111 2004/02/15 22:18:17 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1993, 1995
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_vnops.c,v 1.120 2004/10/04 08:40:18 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_vnops.c,v 1.111 2004/02/15 22:18:17 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -107,7 +107,6 @@ __KERNEL_RCSID(0, "$NetBSD: procfs_vnops.c,v 1.120 2004/10/04 08:40:18 yamt Exp 
  */
 
 static int procfs_validfile_linux __P((struct proc *, struct mount *));
-static int procfs_root_readdir_callback(struct proc *, void *);
 
 /*
  * This is a list of the valid names in the
@@ -156,7 +155,6 @@ static const struct proc_target proc_root_targets[] = {
 	{ DT_REG, N("meminfo"),     PFSmeminfo,        procfs_validfile_linux },
 	{ DT_REG, N("cpuinfo"),     PFScpuinfo,        procfs_validfile_linux },
 	{ DT_REG, N("uptime"),      PFSuptime,         procfs_validfile_linux },
-	{ DT_REG, N("mounts"),	    PFSmounts,	       procfs_validfile_linux },
 #undef N
 };
 static const int nproc_root_targets =
@@ -580,7 +578,6 @@ procfs_getattr(v)
 	case PFSmeminfo:
 	case PFScpuinfo:
 	case PFSuptime:
-	case PFSmounts:
 		vap->va_nlink = 1;
 		vap->va_uid = vap->va_gid = 0;
 		break;
@@ -616,7 +613,7 @@ procfs_getattr(v)
 		vap->va_uid = 0;
 		vap->va_gid = 0;
 		vap->va_bytes = vap->va_size =
-		    snprintf(buf, sizeof(buf), "%ld", (long)curproc->p_pid);
+		    sprintf(buf, "%ld", (long)curproc->p_pid);
 		break;
 	}
 
@@ -624,7 +621,7 @@ procfs_getattr(v)
 		vap->va_nlink = 1;
 		vap->va_uid = 0;
 		vap->va_gid = 0;
-		vap->va_bytes = vap->va_size = sizeof("curproc") - 1;
+		vap->va_bytes = vap->va_size = sizeof("curproc");
 		break;
 
 	case PFSfd:
@@ -690,7 +687,6 @@ procfs_getattr(v)
 	case PFSmeminfo:
 	case PFScpuinfo:
 	case PFSuptime:
-	case PFSmounts:
 		vap->va_bytes = vap->va_size = 0;
 		break;
 	case PFSmap:
@@ -1001,55 +997,6 @@ procfs_validfile_linux(p, mp)
 	    (p == NULL || procfs_validfile(p, mp)));
 }
 
-struct procfs_root_readdir_ctx {
-	struct uio *uiop;
-	off_t *cookies;
-	int ncookies;
-	off_t off;
-	off_t startoff;
-	int error;
-};
-
-static int
-procfs_root_readdir_callback(struct proc *p, void *arg)
-{
-	struct procfs_root_readdir_ctx *ctxp = arg;
-	struct dirent d;
-	struct uio *uiop;
-	int error;
-
-	uiop = ctxp->uiop;
-	if (uiop->uio_resid < UIO_MX)
-		return -1; /* no space */
-
-	if (ctxp->off < ctxp->startoff) {
-		ctxp->off++;
-		return 0;
-	}
-
-	memset(&d, 0, UIO_MX);
-	d.d_reclen = UIO_MX;
-	d.d_fileno = PROCFS_FILENO(p->p_pid, PFSproc, -1);
-	d.d_namlen = snprintf(d.d_name,
-	    UIO_MX - offsetof(struct dirent, d_name), "%ld", (long)p->p_pid);
-	d.d_type = DT_DIR;
-
-	proclist_unlock_read();
-	error = uiomove(&d, UIO_MX, uiop);
-	proclist_lock_read();
-	if (error) {
-		ctxp->error = error;
-		return -1;
-	}
-
-	ctxp->ncookies++;
-	if (ctxp->cookies)
-		*(ctxp->cookies)++ = ctxp->off + 1;
-	ctxp->off++;
-
-	return 0;
-}
-
 /*
  * readdir returns directory entries from pfsnode (vp).
  *
@@ -1080,10 +1027,9 @@ procfs_readdir(v)
 	off_t i;
 	int error;
 	off_t *cookies = NULL;
-	int ncookies;
+	int ncookies, left, skip, j;
 	struct vnode *vp;
 	const struct proc_target *pt;
-	struct procfs_root_readdir_ctx ctx;
 
 	vp = ap->a_vp;
 	pfs = VTOPFS(vp);
@@ -1095,7 +1041,7 @@ procfs_readdir(v)
 
 	error = 0;
 	i = uio->uio_offset;
-	memset(&d, 0, UIO_MX);
+	memset((caddr_t)&d, 0, UIO_MX);
 	d.d_reclen = UIO_MX;
 	ncookies = uio->uio_resid / UIO_MX;
 
@@ -1134,7 +1080,7 @@ procfs_readdir(v)
 			memcpy(d.d_name, pt->pt_name, pt->pt_namlen + 1);
 			d.d_type = pt->pt_type;
 
-			if ((error = uiomove(&d, UIO_MX, uio)) != 0)
+			if ((error = uiomove((caddr_t)&d, UIO_MX, uio)) != 0)
 				break;
 			if (cookies)
 				*cookies++ = i + 1;
@@ -1172,7 +1118,7 @@ procfs_readdir(v)
 			    pt->pt_pfstype, -1);
 			(void)memcpy(d.d_name, pt->pt_name, pt->pt_namlen + 1);
 			d.d_type = pt->pt_type;
-			if ((error = uiomove(&d, UIO_MX, uio)) != 0)
+			if ((error = uiomove((caddr_t)&d, UIO_MX, uio)) != 0)
 				break;
 			if (cookies)
 				*cookies++ = i + 1;
@@ -1192,7 +1138,7 @@ procfs_readdir(v)
 			d.d_namlen = snprintf(d.d_name, sizeof(d.d_name),
 			    "%lld", (long long)(i - 2));
 			d.d_type = VREG;
-			if ((error = uiomove(&d, UIO_MX, uio)) != 0)
+			if ((error = uiomove((caddr_t)&d, UIO_MX, uio)) != 0)
 				break;
 			if (cookies)
 				*cookies++ = i + 1;
@@ -1206,12 +1152,19 @@ procfs_readdir(v)
 	 * this is for the root of the procfs filesystem
 	 * what is needed are special entries for "curproc"
 	 * and "self" followed by an entry for each process
-	 * on allproc.
+	 * on allproc
+#ifdef PROCFS_ZOMBIE
+	 * and deadproc and zombproc.
+#endif
 	 */
 
 	case PFSroot: {
-		int nc = 0;
+		int pcnt = i, nc = 0;
+		const struct proclist_desc *pd;
+		volatile struct proc *p;
 
+		if (pcnt > 3)
+			pcnt = 3;
 		if (ap->a_ncookies) {
 			/*
 			 * XXX Potentially allocating too much space here,
@@ -1221,9 +1174,17 @@ procfs_readdir(v)
 			    M_TEMP, M_WAITOK);
 			*ap->a_cookies = cookies;
 		}
-		error = 0;
-		/* 0 ... 3 are static entries. */
-		for (; i <= 3 && uio->uio_resid >= UIO_MX; i++) {
+		/*
+		 * XXX: THIS LOOP ASSUMES THAT allproc IS THE FIRST
+		 * PROCLIST IN THE proclists!
+		 */
+		proclist_lock_read();
+		pd = proclists;
+#ifdef PROCFS_ZOMBIE
+	again:
+#endif
+		for (p = LIST_FIRST(pd->pd_list);
+		     p != NULL && uio->uio_resid >= UIO_MX; i++, pcnt++) {
 			switch (i) {
 			case 0:		/* `.' */
 			case 1:		/* `..' */
@@ -1247,38 +1208,44 @@ procfs_readdir(v)
 				memcpy(d.d_name, "self", sizeof("self"));
 				d.d_type = DT_LNK;
 				break;
+
+			default:
+				while (pcnt < i) {
+					pcnt++;
+					p = LIST_NEXT(p, p_list);
+					if (!p)
+						goto done;
+				}
+				d.d_fileno = PROCFS_FILENO(p->p_pid, PFSproc, -1);
+				d.d_namlen = sprintf(d.d_name, "%ld",
+				    (long)p->p_pid);
+				d.d_type = DT_DIR;
+				p = p->p_list.le_next;
+				break;
 			}
 
-			if ((error = uiomove(&d, UIO_MX, uio)) != 0)
+			if ((error = uiomove((caddr_t)&d, UIO_MX, uio)) != 0)
 				break;
 			nc++;
 			if (cookies)
 				*cookies++ = i + 1;
 		}
-		/* 4 ... are process entries. */
-		ctx.uiop = uio;
-		ctx.error = 0;
-		ctx.off = 4;
-		ctx.startoff = i;
-		ctx.cookies = cookies;
-		ctx.ncookies = nc;
-		proclist_foreach_call(&allproc,
-		    procfs_root_readdir_callback, &ctx);
-		cookies = ctx.cookies;
-		nc = ctx.ncookies;
-		error = ctx.error;
-		if (error)
-			break;
+	done:
 
-		/* misc entries. */
-		if (i < ctx.off)
-			i = ctx.off;
-		if (i >= ctx.off + nproc_root_targets)
+#ifdef PROCFS_ZOMBIE
+		pd++;
+		if (p == NULL && pd->pd_list != NULL)
+			goto again;
+#endif
+		proclist_unlock_read();
+
+		skip = i - pcnt;
+		if (skip >= nproc_root_targets)
 			break;
-		for (pt = &proc_root_targets[i - ctx.off];
-		    uio->uio_resid >= UIO_MX &&
-		    pt < &proc_root_targets[nproc_root_targets];
-		    pt++, i++) {
+		left = nproc_root_targets - skip;
+		for (j = 0, pt = &proc_root_targets[0];
+		     uio->uio_resid >= UIO_MX && j < left;
+		     pt++, j++, i++) {
 			if (pt->pt_valid &&
 			    (*pt->pt_valid)(NULL, vp->v_mount) == 0)
 				continue;
@@ -1287,7 +1254,7 @@ procfs_readdir(v)
 			memcpy(d.d_name, pt->pt_name, pt->pt_namlen + 1);
 			d.d_type = pt->pt_type;
 
-			if ((error = uiomove(&d, UIO_MX, uio)) != 0)
+			if ((error = uiomove((caddr_t)&d, UIO_MX, uio)) != 0)
 				break;
 			nc++;
 			if (cookies)
@@ -1332,9 +1299,9 @@ procfs_readlink(v)
 	struct pfsnode *pfs = VTOPFS(ap->a_vp);
 
 	if (pfs->pfs_fileno == PROCFS_FILENO(0, PFScurproc, -1))
-		len = snprintf(buf, sizeof(buf), "%ld", (long)curproc->p_pid);
+		len = sprintf(buf, "%ld", (long)curproc->p_pid);
 	else if (pfs->pfs_fileno == PROCFS_FILENO(0, PFSself, -1))
-		len = snprintf(buf, sizeof(buf), "%s", "curproc");
+		len = sprintf(buf, "%s", "curproc");
 	else {
 		struct file *fp;
 		struct proc *pown;
@@ -1371,11 +1338,11 @@ procfs_readlink(v)
 			break;
 
 		case DTYPE_MISC:
-			len = snprintf(buf, sizeof(buf), "%s", "[misc]");
+			len = sprintf(buf, "%s", "[misc]");
 			break;
 
 		case DTYPE_KQUEUE:
-			len = snprintf(buf, sizeof(buf), "%s", "[kqueue]");
+			len = sprintf(buf, "%s", "[kqueue]");
 			break;
 
 		default:
@@ -1383,7 +1350,7 @@ procfs_readlink(v)
 		}
 	}
 
-	error = uiomove(bp, len, ap->a_uio);
+	error = uiomove((caddr_t)bp, len, ap->a_uio);
 	if (path)
 		free(path, M_TEMP);
 	return error;

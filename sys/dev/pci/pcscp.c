@@ -1,4 +1,4 @@
-/*	$NetBSD: pcscp.c,v 1.30 2004/09/25 11:58:19 tsutsui Exp $	*/
+/*	$NetBSD: pcscp.c,v 1.28 2003/11/23 04:34:26 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcscp.c,v 1.30 2004/09/25 11:58:19 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcscp.c,v 1.28 2003/11/23 04:34:26 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -139,10 +139,12 @@ struct ncr53c9x_glue pcscp_glue = {
 };
 
 int
-pcscp_match(struct device *parent, struct cfdata *match, void *aux)
+pcscp_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct pci_attach_args *pa = aux;
-
 	if (PCI_VENDOR(pa->pa_id) != PCI_VENDOR_AMD)
 		return 0;
 
@@ -157,7 +159,9 @@ pcscp_match(struct device *parent, struct cfdata *match, void *aux)
  * Attach this instance, and then all the sub-devices
  */
 void
-pcscp_attach(struct device *parent, struct device *self, void *aux)
+pcscp_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct pci_attach_args *pa = aux;
 	struct pcscp_softc *esc = (void *)self;
@@ -171,7 +175,7 @@ pcscp_attach(struct device *parent, struct device *self, void *aux)
 	int error, rseg;
 	char devinfo[256];
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	printf(": %s\n", devinfo);
 	printf("%s", sc->sc_dev.dv_xname);
 
@@ -317,7 +321,9 @@ pcscp_attach(struct device *parent, struct device *self, void *aux)
  */
 
 u_char
-pcscp_read_reg(struct ncr53c9x_softc *sc, int reg)
+pcscp_read_reg(sc, reg)
+	struct ncr53c9x_softc *sc;
+	int reg;
 {
 	struct pcscp_softc *esc = (struct pcscp_softc *)sc;
 
@@ -325,7 +331,10 @@ pcscp_read_reg(struct ncr53c9x_softc *sc, int reg)
 }
 
 void
-pcscp_write_reg(struct ncr53c9x_softc *sc, int reg, u_char v)
+pcscp_write_reg(sc, reg, v)
+	struct ncr53c9x_softc *sc;
+	int reg;
+	u_char v;
 {
 	struct pcscp_softc *esc = (struct pcscp_softc *)sc;
 
@@ -333,7 +342,8 @@ pcscp_write_reg(struct ncr53c9x_softc *sc, int reg, u_char v)
 }
 
 int
-pcscp_dma_isintr(struct ncr53c9x_softc *sc)
+pcscp_dma_isintr(sc)
+	struct ncr53c9x_softc *sc;
 {
 	struct pcscp_softc *esc = (struct pcscp_softc *)sc;
 
@@ -341,7 +351,8 @@ pcscp_dma_isintr(struct ncr53c9x_softc *sc)
 }
 
 void
-pcscp_dma_reset(struct ncr53c9x_softc *sc)
+pcscp_dma_reset(sc)
+	struct ncr53c9x_softc *sc;
 {
 	struct pcscp_softc *esc = (struct pcscp_softc *)sc;
 
@@ -351,7 +362,8 @@ pcscp_dma_reset(struct ncr53c9x_softc *sc)
 }
 
 int
-pcscp_dma_intr(struct ncr53c9x_softc *sc)
+pcscp_dma_intr(sc)
+	struct ncr53c9x_softc *sc;
 {
 	struct pcscp_softc *esc = (struct pcscp_softc *)sc;
 	int trans, resid, i;
@@ -497,8 +509,12 @@ pcscp_dma_intr(struct ncr53c9x_softc *sc)
 }
 
 int
-pcscp_dma_setup(struct ncr53c9x_softc *sc, caddr_t *addr, size_t *len,
-    int datain, size_t *dmasize)
+pcscp_dma_setup(sc, addr, len, datain, dmasize)
+	struct ncr53c9x_softc *sc;
+	caddr_t *addr;
+	size_t *len;
+	int datain;
+	size_t *dmasize;
 {
 	struct pcscp_softc *esc = (struct pcscp_softc *)sc;
 	bus_dmamap_t dmap = esc->sc_xfermap;
@@ -561,7 +577,8 @@ pcscp_dma_setup(struct ncr53c9x_softc *sc, caddr_t *addr, size_t *len,
 }
 
 void
-pcscp_dma_go(struct ncr53c9x_softc *sc)
+pcscp_dma_go(sc)
+	struct ncr53c9x_softc *sc;
 {
 	struct pcscp_softc *esc = (struct pcscp_softc *)sc;
 	bus_dmamap_t dmap = esc->sc_xfermap, mdldmap = esc->sc_mdldmap;
@@ -597,7 +614,8 @@ pcscp_dma_go(struct ncr53c9x_softc *sc)
 }
 
 void
-pcscp_dma_stop(struct ncr53c9x_softc *sc)
+pcscp_dma_stop(sc)
+	struct ncr53c9x_softc *sc;
 {
 	struct pcscp_softc *esc = (struct pcscp_softc *)sc;
 
@@ -610,7 +628,8 @@ pcscp_dma_stop(struct ncr53c9x_softc *sc)
 }
 
 int
-pcscp_dma_isactive(struct ncr53c9x_softc *sc)
+pcscp_dma_isactive(sc)
+	struct ncr53c9x_softc *sc;
 {
 	struct pcscp_softc *esc = (struct pcscp_softc *)sc;
 

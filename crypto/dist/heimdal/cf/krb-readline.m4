@@ -1,5 +1,5 @@
 dnl $Heimdal: krb-readline.m4,v 1.5.6.1 2004/04/01 07:27:34 joda Exp $
-dnl $NetBSD: krb-readline.m4,v 1.4 2004/04/02 14:59:47 lha Exp $
+dnl $NetBSD: krb-readline.m4,v 1.3.2.1 2004/04/21 04:55:38 jmc Exp $
 dnl
 dnl Tests for readline functions
 dnl

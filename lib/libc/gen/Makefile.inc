@@ -1,19 +1,17 @@
-#	$NetBSD: Makefile.inc,v 1.137 2004/12/16 03:54:56 atatat Exp $
+#	$NetBSD: Makefile.inc,v 1.128 2004/03/25 19:36:26 atatat Exp $
 #	from: @(#)Makefile.inc	8.6 (Berkeley) 5/4/95
 
 # gen sources
 .PATH: ${ARCHDIR}/gen ${.CURDIR}/gen
 
 SRCS+= 	_errno.c alarm.c arc4random.c assert.c basename.c clock.c closedir.c \
-	closefrom.c confstr.c ctermid.c ctype_.c daemon.c devname.c dirname.c \
+	confstr.c ctermid.c ctype_.c daemon.c devname.c dirname.c \
 	disklabel.c err.c errx.c __errlist14.c errlist.c errno.c execl.c \
 	execle.c execlp.c execv.c execvp.c fmtcheck.c fmtmsg.c fnmatch.c \
 	fstab.c ftok.c __fts13.c fts.c getbsize.c getcap.c getcwd.c \
-	getdevmajor.c \
 	getdomainname.c getgrent.c getgrouplist.c gethostname.c \
-	getloadavg.c getlogin.c getmntinfo.c __getmntinfo13.c \
-	getnetgrent.c getpagesize.c \
-	getpass.c getprogname.c getpwent.c getttyent.c \
+	getloadavg.c getlogin.c getmntinfo.c getnetgrent.c getpagesize.c \
+	getpass.c getprogname.c getpwent.c getsubopt.c getttyent.c \
 	getusershell.c __glob13.c glob.c humanize_number.c initgroups.c \
 	isascii.c isatty.c isctype.c lockf.c nice.c nlist.c nlist_aout.c \
 	nlist_coff.c nlist_ecoff.c nlist_elf32.c nlist_elf64.c opendir.c \
@@ -29,8 +27,8 @@ SRCS+= 	_errno.c alarm.c arc4random.c assert.c basename.c clock.c closedir.c \
 	times.c timezone.c toascii.c tolower_.c ttyname.c ttyslot.c \
 	toupper_.c ualarm.c ulimit.c uname.c unvis.c usleep.c utime.c utmp.c \
 	utmpx.c valloc.c vis.c wait.c wait3.c waitpid.c warn.c warnx.c \
-	vwarn.c vwarnx.c verr.c verrx.c wordexp.c
-
+	vwarn.c vwarnx.c verr.c verrx.c
+ 
 # indirect reference stubs, to be removed soon.
 SRCS+=	_err.c _errx.c _sys_errlist.c _sys_nerr.c _sys_siglist.c \
 	_sysconf.c _verr.c _verrx.c _vwarn.c _vwarnx.c _warn.c _warnx.c
@@ -42,13 +40,13 @@ SRCS+=	_err.c _errx.c _sys_errlist.c _sys_nerr.c _sys_siglist.c \
 
 .include "${ARCHDIR}/gen/Makefile.inc"
 
-MAN+=	alarm.3 arc4random.3 basename.3 bswap.3 clock.3 closefrom.3 confstr.3 \
+MAN+=	alarm.3 arc4random.3 basename.3 bswap.3 clock.3 confstr.3 \
 	ctermid.3 ctype.3 daemon.3 devname.3 directory.3 dirname.3 \
 	endutxent.3 err.3 exec.3 \
 	fmtcheck.3 fmtmsg.3 fnmatch.3 fpclassify.3 fpgetmask.3 frexp.3 \
 	ftok.3 fts.3 \
-	getbsize.3 getcap.3 getcwd.3 getdevmajor.3 \
-	getdomainname.3 getdiskbyname.3 getfsent.3 \
+	getbsize.3 \
+	getcap.3 getcwd.3 getdomainname.3 getdiskbyname.3 getfsent.3 \
 	getgrent.3 getgrouplist.3 gethostname.3 getlastlogx.3 getloadavg.3 \
 	getmntinfo.3 getnetgrent.3 getpagesize.3 getpass.3 \
 	getprogname.3 getpwent.3 getttyent.3 getusershell.3 glob.3 \
@@ -64,8 +62,7 @@ MAN+=	alarm.3 arc4random.3 basename.3 bswap.3 clock.3 closefrom.3 confstr.3 \
 	signal.3 signbit.3 sigrelse.3 sigset.3 sigsetops.3 sleep.3 \
 	stringlist.3 sysconf.3 sysctl.3 syslog.3 time.3 times.3 \
 	timezone.3 toascii.3 tolower.3 toupper.3 ttyname.3 \
-	ualarm.3 ulimit.3 uname.3 unvis.3 usleep.3 utime.3 valloc.3 vis.3 \
-	wordexp.3
+	ualarm.3 ulimit.3 uname.3 unvis.3 usleep.3 utime.3 valloc.3 vis.3
 
 MLINKS+=bswap.3 bswap16.3 bswap.3 bswap32.3 bswap.3 bswap64.3
 MLINKS+=directory.3 closedir.3 directory.3 dirfd.3 directory.3 opendir.3 \
@@ -82,7 +79,7 @@ MLINKS+=fpgetmask.3 fpgetround.3 fpgetmask.3 fpgetsticky.3 \
 	fpgetmask.3 fpsetmask.3  fpgetmask.3 fpsetround.3 \
 	fpgetmask.3 fpsetsticky.3
 MLINKS+=fts.3 fts_open.3 fts.3 fts_read.3 fts.3 fts_children.3 \
-	fts.3 fts_set.3 fts.3 fts_close.3
+	fts.3 fts_set.3 fts.3 fts_close.3 
 MLINKS+=getcap.3 cgetcap.3 getcap.3 cgetclose.3 getcap.3 cgetent.3 \
 	getcap.3 cgetfirst.3 getcap.3 cgetmatch.3 getcap.3 cgetnext.3 \
 	getcap.3 cgetnum.3 getcap.3 cgetset.3 getcap.3 cgetstr.3 \
@@ -94,7 +91,6 @@ MLINKS+=getfsent.3 endfsent.3 getfsent.3 getfsfile.3 getfsent.3 getfsspec.3 \
 	getfsent.3 getfstype.3 getfsent.3 setfsent.3
 MLINKS+=getgrent.3 endgrent.3 getgrent.3 setgroupent.3 getgrent.3 getgrgid.3 \
 	getgrent.3 getgrnam.3 getgrent.3 setgrent.3
-MLINKS+=getgrent.3 getgrgid_r.3 getgrent.3 getgrnam_r.3
 MLINKS+=gethostname.3 sethostname.3
 MLINKS+=getlastlogx.3 getutmp.3 getlastlogx.3 getutmpx.3
 MLINKS+=getlastlogx.3 updlastlogx.3 getlastlogx.3 updwtmpx.3
@@ -104,7 +100,6 @@ MLINKS+=getnetgrent.3 endnetgrent.3 getnetgrent.3 innetgr.3 \
 MLINKS+=getprogname.3 setprogname.3
 MLINKS+=getpwent.3 endpwent.3 getpwent.3 setpassent.3 getpwent.3 getpwnam.3 \
 	getpwent.3 getpwuid.3 getpwent.3 setpwent.3
-MLINKS+=getpwent.3 getpwnam_r.3 getpwent.3 getpwuid_r.3
 # getpwent.3 setpwfile.3 - deprecated
 MLINKS+=getttyent.3 endttyent.3 getttyent.3 getttynam.3 getttyent.3 setttyent.3
 MLINKS+=getusershell.3 endusershell.3 getusershell.3 setusershell.3

@@ -1,4 +1,4 @@
-/*	$NetBSD: umodem.c,v 1.49 2004/10/23 13:28:26 augustss Exp $	*/
+/*	$NetBSD: umodem.c,v 1.46 2003/11/07 17:03:25 wiz Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umodem.c,v 1.49 2004/10/23 13:28:26 augustss Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umodem.c,v 1.46 2003/11/07 17:03:25 wiz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -124,6 +124,7 @@ struct umodem_softc {
 	u_char			sc_msr;		/* Modem status register */
 };
 
+Static void	*umodem_get_desc(usbd_device_handle dev, int type, int subtype);
 Static usbd_status umodem_set_comm_feature(struct umodem_softc *sc,
 					   int feature, int state);
 Static usbd_status umodem_set_line_coding(struct umodem_softc *sc,
@@ -187,14 +188,14 @@ USB_ATTACH(umodem)
 	usbd_device_handle dev = uaa->device;
 	usb_interface_descriptor_t *id;
 	usb_endpoint_descriptor_t *ed;
-	const usb_cdc_cm_descriptor_t *cmd;
+	usb_cdc_cm_descriptor_t *cmd;
 	char devinfo[1024];
 	usbd_status err;
 	int data_ifcno;
 	int i;
 	struct ucom_attach_args uca;
 
-	usbd_devinfo(uaa->device, 0, devinfo, sizeof(devinfo));
+	usbd_devinfo(uaa->device, 0, devinfo);
 	USB_ATTACH_SETUP;
 
 	sc->sc_udev = dev;
@@ -208,8 +209,7 @@ USB_ATTACH(umodem)
 	umodem_get_caps(dev, &sc->sc_cm_cap, &sc->sc_acm_cap);
 
 	/* Get the data interface no. */
-	cmd = (usb_cdc_cm_descriptor_t *)usb_find_desc(dev, UDESC_CS_INTERFACE,
-						       UDESCSUB_CDC_CM);
+	cmd = umodem_get_desc(dev, UDESC_CS_INTERFACE, UDESCSUB_CDC_CM);
 	if (cmd == NULL) {
 		printf("%s: no CM descriptor\n", USBDEVNAME(sc->sc_dev));
 		goto bad;
@@ -330,8 +330,7 @@ USB_ATTACH(umodem)
 			   USBDEV(sc->sc_dev));
 
 	DPRINTF(("umodem_attach: sc=%p\n", sc));
-	sc->sc_subdev = config_found_sm_loc(self, "ucombus", NULL, &uca,
-					    ucomprint, ucomsubmatch);
+	sc->sc_subdev = config_found_sm(self, &uca, ucomprint, ucomsubmatch);
 
 	USB_ATTACH_SUCCESS_RETURN;
 
@@ -448,21 +447,19 @@ umodem_intr(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 void
 umodem_get_caps(usbd_device_handle dev, int *cm, int *acm)
 {
-	const usb_cdc_cm_descriptor_t *cmd;
-	const usb_cdc_acm_descriptor_t *cad;
+	usb_cdc_cm_descriptor_t *cmd;
+	usb_cdc_acm_descriptor_t *cad;
 
 	*cm = *acm = 0;
 
-	cmd = (usb_cdc_cm_descriptor_t *)usb_find_desc(dev, UDESC_CS_INTERFACE,
-						       UDESCSUB_CDC_CM);
+	cmd = umodem_get_desc(dev, UDESC_CS_INTERFACE, UDESCSUB_CDC_CM);
 	if (cmd == NULL) {
 		DPRINTF(("umodem_get_desc: no CM desc\n"));
 		return;
 	}
 	*cm = cmd->bmCapabilities;
 
-	cad = (usb_cdc_acm_descriptor_t *)usb_find_desc(dev, UDESC_CS_INTERFACE,
-							UDESCSUB_CDC_ACM);
+	cad = umodem_get_desc(dev, UDESC_CS_INTERFACE, UDESCSUB_CDC_ACM);
 	if (cad == NULL) {
 		DPRINTF(("umodem_get_desc: no ACM desc\n"));
 		return;
@@ -671,6 +668,25 @@ umodem_set_line_coding(struct umodem_softc *sc, usb_cdc_line_state_t *state)
 	sc->sc_line_state = *state;
 
 	return (USBD_NORMAL_COMPLETION);
+}
+
+void *
+umodem_get_desc(usbd_device_handle dev, int type, int subtype)
+{
+	usb_descriptor_t *desc;
+	usb_config_descriptor_t *cd = usbd_get_config_descriptor(dev);
+        uByte *p = (uByte *)cd;
+        uByte *end = p + UGETW(cd->wTotalLength);
+
+	while (p < end) {
+		desc = (usb_descriptor_t *)p;
+		if (desc->bDescriptorType == type &&
+		    desc->bDescriptorSubtype == subtype)
+			return (desc);
+		p += desc->bLength;
+	}
+
+	return (0);
 }
 
 usbd_status

@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.18 2004/04/16 23:58:08 matt Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.17 2003/09/27 04:44:42 matt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.18 2004/04/16 23:58:08 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.17 2003/09/27 04:44:42 matt Exp $");
 
 #include "opt_altivec.h"
 
@@ -83,34 +83,34 @@ process_write_regs(struct lwp *l, struct reg *regs)
 }
 
 int
-process_read_fpregs(struct lwp *l, struct fpreg *fpregs)
+process_read_fpregs(struct lwp *l, struct fpreg *regs)
 {
 	struct pcb * const pcb = &l->l_addr->u_pcb;
 
 	/* Is the process using the fpu? */
 	if ((pcb->pcb_flags & PCB_FPU) == 0) {
-		memset(fpregs, 0, sizeof (*fpregs));
+		memset(regs, 0, sizeof (struct fpreg));
 		return 0;
 	}
 
 #ifdef PPC_HAVE_FPU
-	save_fpu_lwp(l, FPU_SAVE);
+	save_fpu_lwp(l);
 #endif
-	*fpregs = pcb->pcb_fpu;
+	memcpy(regs, &pcb->pcb_fpu, sizeof (struct fpreg));
 
 	return 0;
 }
 
 int
-process_write_fpregs(struct lwp *l, struct fpreg *fpregs)
+process_write_fpregs(struct lwp *l, struct fpreg *regs)
 {
 	struct pcb * const pcb = &l->l_addr->u_pcb;
 
 #ifdef PPC_HAVE_FPU
-	save_fpu_lwp(l, FPU_DISCARD);
+	save_fpu_lwp(l);
 #endif
 
-	pcb->pcb_fpu = *fpregs;
+	memcpy(&pcb->pcb_fpu, regs, sizeof(struct fpreg));
 
 	/* pcb_fpu is initialized now. */
 	pcb->pcb_flags |= PCB_FPU;
@@ -152,12 +152,7 @@ process_machdep_read_vecregs(struct lwp *l, struct vreg *vregs)
 	if (cpu_altivec == 0)
 		return (EINVAL);
 
-	/* Is the process using AltiVEC? */
-	if ((pcb->pcb_flags & PCB_ALTIVEC) == 0) {
-		memset(vregs, 0, sizeof (*vregs));
-		return 0;
-	}
-	save_vec_lwp(l, ALTIVEC_SAVE);
+	save_vec_lwp(l);
 	*vregs = pcb->pcb_vr;
 
 	return (0);
@@ -171,7 +166,7 @@ process_machdep_write_vecregs(struct lwp *l, struct vreg *vregs)
 	if (cpu_altivec == 0)
 		return (EINVAL);
 
-	save_vec_lwp(l, ALTIVEC_DISCARD);
+	save_vec_lwp(l);
 
 	pcb->pcb_vr = *vregs;
 	pcb->pcb_flags |= PCB_ALTIVEC;	/* pcb_vr is initialized now. */

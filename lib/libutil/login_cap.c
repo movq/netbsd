@@ -1,4 +1,4 @@
-/*	$NetBSD: login_cap.c,v 1.19 2004/12/11 06:40:42 christos Exp $	*/
+/*	$NetBSD: login_cap.c,v 1.15 2003/10/25 07:31:27 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995,1997 Berkeley Software Design, Inc. All rights reserved.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: login_cap.c,v 1.19 2004/12/11 06:40:42 christos Exp $");
+__RCSID("$NetBSD: login_cap.c,v 1.15 2003/10/25 07:31:27 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
  
 #include <sys/types.h>
@@ -60,18 +60,18 @@ __RCSID("$NetBSD: login_cap.c,v 1.19 2004/12/11 06:40:42 christos Exp $");
 #include <unistd.h>
 #include <util.h>
 
-static void	setuserpath(login_cap_t *, const char *);
+static void	setuserpath(login_cap_t *, char *);
 static u_quad_t	multiply(u_quad_t, u_quad_t);
-static u_quad_t	strtolimit(const char *, char **, int);
-static u_quad_t	strtosize(const char *, char **, int);
-static int	gsetrl(login_cap_t *, int, const char *, int type);
+static u_quad_t	strtolimit(char *, char **, int);
+static u_quad_t	strtosize(char *, char **, int);
+static int	gsetrl(login_cap_t *, int, char *, int type);
 static int	setuserenv(login_cap_t *);
 static int	isinfinite(const char *);
 
 login_cap_t *
-login_getclass(const char *class)
+login_getclass(char *class)
 {
-	const char *classfiles[2];
+	char *classfiles[2];
 	login_cap_t *lc;
 	int res;
 
@@ -154,7 +154,7 @@ login_getpwclass(const struct passwd *pwd)
 }
 
 char *
-login_getcapstr(login_cap_t *lc, const char *cap, char *def, char *e)
+login_getcapstr(login_cap_t *lc, char *cap, char *def, char *e)
 {
 	char *res = NULL;
 	int status;
@@ -189,7 +189,7 @@ login_getcapstr(login_cap_t *lc, const char *cap, char *def, char *e)
 }
 
 quad_t
-login_getcaptime(login_cap_t *lc, const char *cap, quad_t def, quad_t e)
+login_getcaptime(login_cap_t *lc, char *cap, quad_t def, quad_t e)
 {
 	char *ep;
 	char *res = NULL, *sres;
@@ -275,7 +275,7 @@ invalid:
 }
 
 quad_t
-login_getcapnum(login_cap_t *lc, const char *cap, quad_t def, quad_t e)
+login_getcapnum(login_cap_t *lc, char *cap, quad_t def, quad_t e)
 {
 	char *ep;
 	char *res = NULL;
@@ -329,7 +329,7 @@ login_getcapnum(login_cap_t *lc, const char *cap, quad_t def, quad_t e)
 }
 
 quad_t
-login_getcapsize(login_cap_t *lc, const char *cap, quad_t def, quad_t e)
+login_getcapsize(login_cap_t *lc, char *cap, quad_t def, quad_t e)
 {
 	char *ep;
 	char *res = NULL;
@@ -381,7 +381,7 @@ login_getcapsize(login_cap_t *lc, const char *cap, quad_t def, quad_t e)
 }
 
 int
-login_getcapbool(login_cap_t *lc, const char *cap, u_int def)
+login_getcapbool(login_cap_t *lc, char *cap, u_int def)
 {
 
 	_DIAGASSERT(cap != NULL);
@@ -414,7 +414,7 @@ login_close(login_cap_t *lc)
 static struct {
 	int	what;
 	int	type;
-	const char *name;
+	char *	name;
 } r_list[] = {
 	{ RLIMIT_CPU,		R_CTIME, "cputime", },
 	{ RLIMIT_FSIZE,		R_CSIZE, "filesize", },
@@ -425,12 +425,11 @@ static struct {
 	{ RLIMIT_NPROC,		R_CNUMB, "maxproc", },
 	{ RLIMIT_NOFILE,	R_CNUMB, "openfiles", },
 	{ RLIMIT_CORE,		R_CSIZE, "coredumpsize", },
-	{ RLIMIT_SBSIZE,	R_CSIZE, "sbsize", },
 	{ -1, 0, 0 }
 };
 
 static int
-gsetrl(login_cap_t *lc, int what, const char *name, int type)
+gsetrl(login_cap_t *lc, int what, char *name, int type)
 {
 	struct rlimit rl;
 	struct rlimit r;
@@ -486,7 +485,7 @@ gsetrl(login_cap_t *lc, int what, const char *name, int type)
 static int
 setuserenv(login_cap_t *lc)
 {
-	const char *stop = ", \t";
+	char *stop = ", \t";
 	int i, count;
 	char *ptr;
 	char **res;
@@ -527,8 +526,8 @@ setuserenv(login_cap_t *lc)
 			if ((ptr = strchr(res[i], '=')) != NULL)
 				*ptr++ = '\0';
 			else 
-				ptr = NULL;
-			setenv(res[i], ptr ? ptr : "", 1);
+				ptr = "";
+			setenv(res[i], ptr, 1);
 		}
 	}
 	
@@ -537,7 +536,7 @@ setuserenv(login_cap_t *lc)
 }
 
 int
-setclasscontext(const char *class, u_int flags)
+setclasscontext(char *class, u_int flags)
 {
 	int ret;
 	login_cap_t *lc;
@@ -630,19 +629,18 @@ setusercontext(login_cap_t *lc, struct passwd *pwd, uid_t uid, u_int flags)
 }
 
 static void
-setuserpath(login_cap_t *lc, const char *home)
+setuserpath(login_cap_t *lc, char *home)
 {
 	size_t hlen, plen;
 	int cnt = 0;
 	char *path;
-	const char *cpath;
 	char *p, *q;
 
 	_DIAGASSERT(home != NULL);
 
 	hlen = strlen(home);
 
-	cpath = p = path = login_getcapstr(lc, "path", NULL, NULL);
+	p = path = login_getcapstr(lc, "path", NULL, NULL);
 	if (p) {
 		while (*p)
 			if (*p++ == '~')
@@ -674,10 +672,10 @@ setuserpath(login_cap_t *lc, const char *home)
 			}
 			*q = '\0';
 		} else
-			cpath = _PATH_DEFPATH;
+			path = _PATH_DEFPATH;
 	} else
-		cpath = _PATH_DEFPATH;
-	if (setenv("PATH", cpath, 1))
+		path = _PATH_DEFPATH;
+	if (setenv("PATH", path, 1))
 		warn("could not set PATH");
 }
 
@@ -694,7 +692,7 @@ setuserpath(login_cap_t *lc, const char *home)
  *	   the product of the indicated values.
  */
 static u_quad_t
-strtosize(const char *str, char **endptr, int radix)
+strtosize(char *str, char **endptr, int radix)
 {
 	u_quad_t num, num2;
 	char *expr, *expr2;
@@ -768,7 +766,7 @@ erange:
 }
 
 static u_quad_t
-strtolimit(const char *str, char **endptr, int radix)
+strtolimit(char *str, char **endptr, int radix)
 {
 
 	_DIAGASSERT(str != NULL);
@@ -776,7 +774,7 @@ strtolimit(const char *str, char **endptr, int radix)
 
 	if (isinfinite(str)) {
 		if (endptr)
-			*endptr = (char *)__UNCONST(str) + strlen(str);
+			*endptr = str + strlen(str);
 		return ((u_quad_t)RLIM_INFINITY);
 	}
 	return (strtosize(str, endptr, radix));

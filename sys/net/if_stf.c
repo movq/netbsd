@@ -1,4 +1,4 @@
-/*	$NetBSD: if_stf.c,v 1.41 2004/12/04 18:31:43 peter Exp $	*/
+/*	$NetBSD: if_stf.c,v 1.36 2003/11/12 13:40:16 cl Exp $	*/
 /*	$KAME: if_stf.c,v 1.62 2001/06/07 22:32:16 itojun Exp $	*/
 
 /*
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_stf.c,v 1.41 2004/12/04 18:31:43 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_stf.c,v 1.36 2003/11/12 13:40:16 cl Exp $");
 
 #include "opt_inet.h"
 
@@ -144,7 +144,7 @@ struct stf_softc {
 LIST_HEAD(, stf_softc) stf_softc_list;
 
 int	stf_clone_create __P((struct if_clone *, int));
-int	stf_clone_destroy __P((struct ifnet *));
+void	stf_clone_destroy __P((struct ifnet *));
 
 struct if_clone stf_cloner =
     IF_CLONE_INITIALIZER("stf", stf_clone_create, stf_clone_destroy);
@@ -156,7 +156,7 @@ static int ip_gif_ttl = 40;	/*XXX*/
 #endif
 
 extern struct domain inetdomain;
-const struct protosw in_stf_protosw =
+struct protosw in_stf_protosw =
 { SOCK_RAW,	&inetdomain,	IPPROTO_IPV6,	PR_ATOMIC|PR_ADDR,
   in_stf_input, rip_output,	0,		rip_ctloutput,
   rip_usrreq,
@@ -201,8 +201,7 @@ stf_clone_create(ifc, unit)
 	sc = malloc(sizeof(struct stf_softc), M_DEVBUF, M_WAIT);
 	memset(sc, 0, sizeof(struct stf_softc));
 
-	snprintf(sc->sc_if.if_xname, sizeof(sc->sc_if.if_xname), "%s%d",
-	    ifc->ifc_name, unit);
+	sprintf(sc->sc_if.if_xname, "%s%d", ifc->ifc_name, unit);
 
 	sc->encap_cookie = encap_attach_func(AF_INET, IPPROTO_IPV6,
 	    stf_encapcheck, &in_stf_protosw, sc);
@@ -227,7 +226,7 @@ stf_clone_create(ifc, unit)
 	return (0);
 }
 
-int
+void
 stf_clone_destroy(ifp)
 	struct ifnet *ifp;
 {
@@ -240,8 +239,6 @@ stf_clone_destroy(ifp)
 #endif
 	if_detach(ifp);
 	free(sc, M_DEVBUF);
-
-	return (0);
 }
 
 static int
@@ -399,8 +396,28 @@ stf_output(ifp, m, dst, rt)
 	}
 
 #if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, AF_INET6, m);
+	if (ifp->if_bpf) {
+		/*
+		 * We need to prepend the address family as
+		 * a four byte field.  Cons up a dummy header
+		 * to pacify bpf.  This is safe because bpf
+		 * will only read from the mbuf (i.e., it won't
+		 * try to free it or keep a pointer a to it).
+		 */
+		struct mbuf m0;
+		u_int32_t af = AF_INET6;
+		
+		m0.m_flags = 0;
+		m0.m_next = m;
+		m0.m_len = 4;
+		m0.m_data = (char *)&af;
+		
+#ifdef HAVE_OLD_BPF
+		bpf_mtap(ifp, &m0);
+#else
+		bpf_mtap(ifp->if_bpf, &m0);
+#endif
+	}
 #endif /*NBPFILTER > 0*/
 
 	M_PREPEND(m, sizeof(struct ip), M_DONTWAIT);
@@ -581,7 +598,12 @@ stf_checkaddr6(sc, in6, inifp)
 }
 
 void
+#if __STDC__
 in_stf_input(struct mbuf *m, ...)
+#else
+in_stf_input(m, va_alist)
+	struct mbuf *m;
+#endif
 {
 	int off, proto;
 	struct stf_softc *sc;
@@ -655,8 +677,28 @@ in_stf_input(struct mbuf *m, ...)
 	m->m_pkthdr.rcvif = ifp;
 	
 #if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, AF_INET6, m);
+	if (ifp->if_bpf) {
+		/*
+		 * We need to prepend the address family as
+		 * a four byte field.  Cons up a dummy header
+		 * to pacify bpf.  This is safe because bpf
+		 * will only read from the mbuf (i.e., it won't
+		 * try to free it or keep a pointer a to it).
+		 */
+		struct mbuf m0;
+		u_int32_t af = AF_INET6;
+		
+		m0.m_flags = 0;
+		m0.m_next = m;
+		m0.m_len = 4;
+		m0.m_data = (char *)&af;
+		
+#ifdef HAVE_OLD_BPF
+		bpf_mtap(ifp, &m0);
+#else
+		bpf_mtap(ifp->if_bpf, &m0);
+#endif
+	}
 #endif /*NBPFILTER > 0*/
 
 	/*

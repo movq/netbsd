@@ -34,7 +34,7 @@
 #include "kdc_locl.h"
 
 __RCSID("$Heimdal: connect.c,v 1.90.2.2.2 2004/04/02 20:50:53 lha Exp $"
-        "$NetBSD: connect.c,v 1.14 2004/10/30 08:34:24 dsl Exp $");
+        "$NetBSD: connect.c,v 1.11.2.1 2004/04/21 04:55:39 jmc Exp $");
 
 /*
  * a tuple describing on what to listen
@@ -491,7 +491,7 @@ de_http(char *buf)
 {
     char *p, *q;
     for(p = q = buf; *p; p++, q++) {
-	if(*p == '%' && isxdigit((unsigned char)p[1]) && isxdigit((unsigned char)p[2])) {
+	if(*p == '%' && isxdigit(p[1]) && isxdigit(p[2])) {
 	    unsigned int x;
 	    if(sscanf(p + 1, "%2x", &x) != 1)
 		return -1;

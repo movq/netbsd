@@ -1,5 +1,3 @@
-/*	$NetBSD: multi_server.c,v 1.1.1.6 2004/05/31 00:24:39 heas Exp $	*/
-
 /*++
 /* NAME
 /*	multi_server 3
@@ -95,11 +93,6 @@
 /*	process termination.
 /* .IP "MAIL_SERVER_PRE_ACCEPT (void *(char *service_name, char **argv))"
 /*	Function to be executed prior to accepting a new connection.
-/* .sp
-/*	Only the last instance of this parameter type is remembered.
-/* .IP "MAIL_SERVER_PRE_DISCONN (VSTREAM *, void *(char *service_name, char **argv))"
-/*	A pointer to a function that is called
-/*	by the multi_server_disconnect() function (see below).
 /* .sp
 /*	Only the last instance of this parameter type is remembered.
 /* .IP "MAIL_SERVER_IN_FLOW_DELAY (none)"
@@ -207,7 +200,6 @@ static void (*multi_server_onexit) (char *, char **);
 static void (*multi_server_pre_accept) (char *, char **);
 static VSTREAM *multi_server_lock;
 static int multi_server_in_flow_delay;
-static void (*multi_server_pre_disconn) (VSTREAM *, char *, char **);
 
 /* multi_server_exit - normal termination */
 
@@ -242,8 +234,6 @@ void    multi_server_disconnect(VSTREAM *stream)
 {
     if (msg_verbose)
 	msg_info("connection closed fd %d", vstream_fileno(stream));
-    if (multi_server_pre_disconn)
-	multi_server_pre_disconn(stream, multi_server_name, multi_server_argv);
     event_disable_readwrite(vstream_fileno(stream));
     (void) vstream_fclose(stream);
     client_count--;
@@ -400,10 +390,8 @@ NORETURN multi_server_main(int argc, char **argv, MULTI_SERVER_FN service,...)
     MAIL_SERVER_LOOP_FN loop = 0;
     int     key;
     char   *transport = 0;
-#if 0
     char   *lock_path;
     VSTRING *why;
-#endif
     int     alone = 0;
     int     zerolimit = 0;
     WATCHDOG *watchdog;
@@ -549,9 +537,6 @@ NORETURN multi_server_main(int argc, char **argv, MULTI_SERVER_FN service,...)
 	    break;
 	case MAIL_SERVER_PRE_ACCEPT:
 	    multi_server_pre_accept = va_arg(ap, MAIL_SERVER_ACCEPT_FN);
-	    break;
-	case MAIL_SERVER_PRE_DISCONN:
-	    multi_server_pre_disconn = va_arg(ap, MAIL_SERVER_DISCONN_FN);
 	    break;
 	case MAIL_SERVER_IN_FLOW_DELAY:
 	    multi_server_in_flow_delay = 1;

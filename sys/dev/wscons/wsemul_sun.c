@@ -1,4 +1,4 @@
-/* $NetBSD: wsemul_sun.c,v 1.19 2004/08/03 11:16:30 he Exp $ */
+/* $NetBSD: wsemul_sun.c,v 1.17 2002/09/27 15:37:40 provos Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -33,7 +33,7 @@
 /* XXX DESCRIPTION/SOURCE OF INFORMATION */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsemul_sun.c,v 1.19 2004/08/03 11:16:30 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsemul_sun.c,v 1.17 2002/09/27 15:37:40 provos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,6 +46,8 @@ __KERNEL_RCSID(0, "$NetBSD: wsemul_sun.c,v 1.19 2004/08/03 11:16:30 he Exp $");
 #include <dev/wscons/wsemulvar.h>
 #include <dev/wscons/wsksymdef.h>
 #include <dev/wscons/ascii.h>
+
+#include "opt_wskernattr.h"
 
 void	*wsemul_sun_cnattach(const struct wsscreen_descr *, void *,
 				  int, int, long);

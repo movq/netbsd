@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: getdate.y,v 1.6 2004/11/06 18:18:33 christos Exp $	*/
+/*	$NetBSD: getdate.y,v 1.5 2000/11/19 11:15:01 mrg Exp $	*/
 
 /*
 **
@@ -18,7 +18,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: getdate.y,v 1.6 2004/11/06 18:18:33 christos Exp $");
+__RCSID("$NetBSD: getdate.y,v 1.5 2000/11/19 11:15:01 mrg Exp $");
 #endif
 
 #include <sys/types.h>
@@ -647,8 +647,8 @@ LookupWord(buff)
 
     /* Make it lowercase. */
     for (p = buff; *p; p++)
-	if (isupper((unsigned char)*p))
-	    *p = tolower((unsigned char)*p);
+	if (isupper(*p))
+	    *p = tolower(*p);
 
     if (strcmp(buff, "am") == 0 || strcmp(buff, "a.m.") == 0) {
 	yylval.Meridian = MERam;
@@ -716,7 +716,7 @@ LookupWord(buff)
 	}
 
     /* Military timezones. */
-    if (buff[1] == '\0' && isalpha((unsigned char)*buff)) {
+    if (buff[1] == '\0' && isalpha(*buff)) {
 	for (tp = MilitaryTable; tp->name; tp++)
 	    if (strcmp(buff, tp->name) == 0) {
 		yylval.Number = tp->value;
@@ -752,27 +752,27 @@ yylex()
     int		sign;
 
     for ( ; ; ) {
-	while (isspace((unsigned char)*yyInput))
+	while (isspace(*yyInput))
 	    yyInput++;
 
-	if (isdigit((unsigned char)(c = *yyInput)) || c == '-' || c == '+') {
+	if (isdigit(c = *yyInput) || c == '-' || c == '+') {
 	    if (c == '-' || c == '+') {
 		sign = c == '-' ? -1 : 1;
-		if (!isdigit((unsigned char)*++yyInput))
+		if (!isdigit(*++yyInput))
 		    /* skip the '-' sign */
 		    continue;
 	    }
 	    else
 		sign = 0;
-	    for (yylval.Number = 0; isdigit((unsigned char)(c = *yyInput++)); )
+	    for (yylval.Number = 0; isdigit(c = *yyInput++); )
 		yylval.Number = 10 * yylval.Number + c - '0';
 	    yyInput--;
 	    if (sign < 0)
 		yylval.Number = -yylval.Number;
 	    return sign ? tSNUMBER : tUNUMBER;
 	}
-	if (isalpha((unsigned char)c)) {
-	    for (p = buff; isalpha((unsigned char)(c = *yyInput++)) || c == '.'; )
+	if (isalpha(c)) {
+	    for (p = buff; isalpha(c = *yyInput++) || c == '.'; )
 		if (p < &buff[sizeof buff - 1])
 		    *p++ = c;
 	    *p = '\0';

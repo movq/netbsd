@@ -1,4 +1,4 @@
-# $NetBSD: md.atari,v 1.5 2004/04/18 16:44:10 jdc Exp $
+# $NetBSD: md.atari,v 1.5.2.2 2004/04/19 03:47:15 jmc Exp $
 ./usr/X11R6/man/cat3/XF86VidMode.0		-unknown-		.cat
 ./usr/X11R6/man/cat3/XF86VidModeDeleteModeLine.0	-unknown-		.cat
 ./usr/X11R6/man/cat3/XF86VidModeGetAllModeLines.0	-unknown-		.cat

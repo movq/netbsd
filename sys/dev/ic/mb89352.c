@@ -1,8 +1,8 @@
-/*	$NetBSD: mb89352.c,v 1.37 2004/09/25 12:17:30 tsutsui Exp $	*/
+/*	$NetBSD: mb89352.c,v 1.26.2.1 2004/08/12 04:19:08 jmc Exp $	*/
 /*	NecBSD: mb89352.c,v 1.4 1998/03/14 07:31:20 kmatsuda Exp	*/
 
 /*-
- * Copyright (c) 1996,97,98,99,2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996,97,98,99 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mb89352.c,v 1.37 2004/09/25 12:17:30 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mb89352.c,v 1.26.2.1 2004/08/12 04:19:08 jmc Exp $");
 
 #ifdef DDB
 #define	integrate
@@ -163,31 +163,31 @@ __KERNEL_RCSID(0, "$NetBSD: mb89352.c,v 1.37 2004/09/25 12:17:30 tsutsui Exp $")
 int spc_debug = 0x00; /* SPC_SHOWSTART|SPC_SHOWMISC|SPC_SHOWTRACE; */
 #endif
 
-void	spc_done(struct spc_softc *, struct spc_acb *);
-void	spc_dequeue(struct spc_softc *, struct spc_acb *);
-void	spc_scsipi_request(struct scsipi_channel *, scsipi_adapter_req_t,
-    void *);
-int	spc_poll(struct spc_softc *, struct scsipi_xfer *, int);
-integrate void	spc_sched_msgout(struct spc_softc *, u_char);
-integrate void	spc_setsync(struct spc_softc *, struct spc_tinfo *);
-void	spc_select(struct spc_softc *, struct spc_acb *);
-void	spc_timeout(void *);
-void	spc_scsi_reset(struct spc_softc *);
-void	spc_reset(struct spc_softc *);
-void	spc_free_acb(struct spc_softc *, struct spc_acb *, int);
-struct spc_acb* spc_get_acb(struct spc_softc *);
-int	spc_reselect(struct spc_softc *, int);
-void	spc_msgin(struct spc_softc *);
-void	spc_abort(struct spc_softc *, struct spc_acb *);
-void	spc_msgout(struct spc_softc *);
-int	spc_dataout_pio(struct spc_softc *, u_char *, int);
-int	spc_datain_pio(struct spc_softc *, u_char *, int);
+void	spc_done	__P((struct spc_softc *, struct spc_acb *));
+void	spc_dequeue	__P((struct spc_softc *, struct spc_acb *));
+void	spc_scsipi_request __P((struct scsipi_channel *,
+				scsipi_adapter_req_t, void *));
+int	spc_poll	__P((struct spc_softc *, struct scsipi_xfer *, int));
+integrate void	spc_sched_msgout __P((struct spc_softc *, u_char));
+integrate void	spc_setsync	__P((struct spc_softc *, struct spc_tinfo *));
+void	spc_select	__P((struct spc_softc *, struct spc_acb *));
+void	spc_timeout	__P((void *));
+void	spc_scsi_reset	__P((struct spc_softc *));
+void	spc_reset	__P((struct spc_softc *));
+void	spc_free_acb	__P((struct spc_softc *, struct spc_acb *, int));
+struct spc_acb* spc_get_acb __P((struct spc_softc *));
+int	spc_reselect	__P((struct spc_softc *, int));
+void	spc_msgin	__P((struct spc_softc *));
+void	spc_abort	__P((struct spc_softc *, struct spc_acb *));
+void	spc_msgout	__P((struct spc_softc *));
+int	spc_dataout_pio	__P((struct spc_softc *, u_char *, int));
+int	spc_datain_pio	__P((struct spc_softc *, u_char *, int));
 #if SPC_DEBUG
-void	spc_print_acb(struct spc_acb *);
-void	spc_dump_driver(struct spc_softc *);
-void	spc_dump89352(struct spc_softc *);
-void	spc_show_scsi_cmd(struct spc_acb *);
-void	spc_print_active_acb(void);
+void	spc_print_acb	__P((struct spc_acb *));
+void	spc_dump_driver __P((struct spc_softc *));
+void	spc_dump89352	__P((struct spc_softc *));
+void	spc_show_scsi_cmd __P((struct spc_acb *));
+void	spc_print_active_acb __P((void));
 #endif
 
 extern struct cfdriver spc_cd;
@@ -201,7 +201,10 @@ extern struct cfdriver spc_cd;
  * Prerequisite: sc->sc_iobase should be set to the proper value
  */
 int
-spc_find(bus_space_tag_t iot, bus_space_handle_t ioh, int bdid)
+spc_find(iot, ioh, bdid)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+	int bdid;
 {
 	long timeout = SPC_ABORT_TIMEOUT;
 
@@ -241,10 +244,9 @@ spc_find(bus_space_tag_t iot, bus_space_handle_t ioh, int bdid)
 }
 
 void
-spc_attach(struct spc_softc *sc)
+spc_attach(sc)
+	struct spc_softc *sc;
 {
-	struct scsipi_adapter *adapt = &sc->sc_adapter;
-	struct scsipi_channel *chan = &sc->sc_channel;
 
 	SPC_TRACE(("spc_attach  "));
 	sc->sc_state = SPC_INIT;
@@ -265,74 +267,29 @@ spc_attach(struct spc_softc *sc)
 	sc->sc_maxsync = (9 * 250) / sc->sc_freq;
 #endif
 
+	spc_init(sc);	/* Init chip and driver */
+
 	/*
 	 * Fill in the adapter.
 	 */
-	adapt->adapt_dev = &sc->sc_dev;
-	adapt->adapt_nchannels = 1;
-	adapt->adapt_openings = 7;
-	adapt->adapt_max_periph = 1;
-	adapt->adapt_request = spc_scsipi_request;
-	adapt->adapt_minphys = minphys;
+	sc->sc_adapter.adapt_dev = &sc->sc_dev;
+	sc->sc_adapter.adapt_nchannels = 1;
+	sc->sc_adapter.adapt_openings = 7;
+	sc->sc_adapter.adapt_max_periph = 1;
+	sc->sc_adapter.adapt_minphys = minphys;
+	sc->sc_adapter.adapt_request = spc_scsipi_request;
 
-	chan->chan_adapter = &sc->sc_adapter;
-	chan->chan_bustype = &scsi_bustype;
-	chan->chan_channel = 0;
-	chan->chan_ntargets = 8;
-	chan->chan_nluns = 8;
-	chan->chan_id = sc->sc_initiator;
-
-	/*
-	 * Add reference to adapter so that we drop the reference after
-	 * config_found() to make sure the adatper is disabled.
-	 */
-	if (scsipi_adapter_addref(adapt) != 0) {
-		printf("%s: unable to enable controller\n",
-		    sc->sc_dev.dv_xname);
-		return;
-	}
-
-	spc_init(sc, 1);	/* Init chip and driver */
+	sc->sc_channel.chan_adapter = &sc->sc_adapter;
+	sc->sc_channel.chan_bustype = &scsi_bustype;
+	sc->sc_channel.chan_channel = 0;
+	sc->sc_channel.chan_ntargets = 8;
+	sc->sc_channel.chan_nluns = 8;
+	sc->sc_channel.chan_id = sc->sc_initiator;
 
 	/*
 	 * ask the adapter what subunits are present
 	 */
-	sc->sc_child = config_found(&sc->sc_dev, chan, scsiprint);
-	scsipi_adapter_delref(adapt);
-}
-
-int
-spc_activate(struct device *self, enum devact act)
-{
-	struct spc_softc *sc = (void *)self;
-	int s, rv = 0;
-
-	s = splhigh();
-	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		if (sc->sc_child != NULL)
-			rv = config_deactivate(sc->sc_child);
-		break;
-	}
-	splx(s);
-
-	return (rv);
-}
-
-int
-spc_detach(struct device *self, int flags)
-{
-	struct spc_softc *sc = (void *)self;
-	int rv = 0;
-
-	if (sc->sc_child != NULL)
-		rv = config_detach(sc->sc_child, flags);
-
-	return (rv);
+	config_found(&sc->sc_dev, &sc->sc_channel, scsiprint);
 }
 
 /*
@@ -342,7 +299,8 @@ spc_detach(struct device *self, int flags)
  * must be valid.
  */
 void
-spc_reset(struct spc_softc *sc)
+spc_reset(sc)
+	struct spc_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -373,7 +331,8 @@ spc_reset(struct spc_softc *sc)
  * Pull the SCSI RST line for 500us.
  */
 void
-spc_scsi_reset(struct spc_softc *sc)
+spc_scsi_reset(sc)
+	struct spc_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -391,16 +350,15 @@ spc_scsi_reset(struct spc_softc *sc)
  * Initialize spc SCSI driver.
  */
 void
-spc_init(struct spc_softc *sc, int bus_reset)
+spc_init(sc)
+	struct spc_softc *sc;
 {
 	struct spc_acb *acb;
 	int r;
 
 	SPC_TRACE(("spc_init  "));
-	if (bus_reset) {
-		spc_reset(sc);
-		spc_scsi_reset(sc);
-	}
+	spc_reset(sc);
+	spc_scsi_reset(sc);
 	spc_reset(sc);
 
 	if (sc->sc_state == SPC_INIT) {
@@ -457,7 +415,10 @@ spc_init(struct spc_softc *sc, int bus_reset)
 }
 
 void
-spc_free_acb(struct spc_softc *sc, struct spc_acb *acb, int flags)
+spc_free_acb(sc, acb, flags)
+	struct spc_softc *sc;
+	struct spc_acb *acb;
+	int flags;
 {
 	int s;
 
@@ -470,7 +431,8 @@ spc_free_acb(struct spc_softc *sc, struct spc_acb *acb, int flags)
 }
 
 struct spc_acb *
-spc_get_acb(struct spc_softc *sc)
+spc_get_acb(sc)
+	struct spc_softc *sc;
 {
 	struct spc_acb *acb;
 	int s;
@@ -511,8 +473,10 @@ spc_get_acb(struct spc_softc *sc)
  * SCSI-commands.
  */
 void
-spc_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
-    void *arg)
+spc_scsipi_request(chan, req, arg)
+	struct scsipi_channel *chan;
+	scsipi_adapter_req_t req;
+	void *arg;
 {
 	struct scsipi_xfer *xs;
 	struct scsipi_periph *periph;
@@ -609,7 +573,10 @@ spc_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
  * Used when interrupt driven I/O isn't allowed, e.g. during boot.
  */
 int
-spc_poll(struct spc_softc *sc, struct scsipi_xfer *xs, int count)
+spc_poll(sc, xs, count)
+	struct spc_softc *sc;
+	struct scsipi_xfer *xs;
+	int count;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -635,7 +602,9 @@ spc_poll(struct spc_softc *sc, struct scsipi_xfer *xs, int count)
  */
 
 integrate void
-spc_sched_msgout(struct spc_softc *sc, u_char m)
+spc_sched_msgout(sc, m)
+	struct spc_softc *sc;
+	u_char m;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -650,7 +619,9 @@ spc_sched_msgout(struct spc_softc *sc, u_char m)
  * Set synchronous transfer offset and period.
  */
 integrate void
-spc_setsync(struct spc_softc *sc, struct spc_tinfo *ti)
+spc_setsync(sc, ti)
+	struct spc_softc *sc;
+	struct spc_tinfo *ti;
 {
 #if SPC_USE_SYNCHRONOUS
 	bus_space_tag_t iot = sc->sc_iot;
@@ -669,7 +640,9 @@ spc_setsync(struct spc_softc *sc, struct spc_tinfo *ti)
  * Start a selection.  This is used by spc_sched() to select an idle target.
  */
 void
-spc_select(struct spc_softc *sc, struct spc_acb *acb)
+spc_select(sc, acb)
+	struct spc_softc *sc;
+	struct spc_acb *acb;
 {
 	struct scsipi_periph *periph = acb->xs->xs_periph;
 	int target = periph->periph_target;
@@ -709,7 +682,9 @@ spc_select(struct spc_softc *sc, struct spc_acb *acb)
 }
 
 int
-spc_reselect(struct spc_softc *sc, int message)
+spc_reselect(sc, message)
+	struct spc_softc *sc;
+	int message;
 {
 	u_char selid, target, lun;
 	struct spc_acb *acb;
@@ -788,7 +763,8 @@ abort:
  * called when state == SPC_IDLE and at bio pl.
  */
 void
-spc_sched(struct spc_softc *sc)
+spc_sched(sc)
+	struct spc_softc *sc;
 {
 	struct spc_acb *acb;
 	struct scsipi_periph *periph;
@@ -824,7 +800,9 @@ spc_sched(struct spc_softc *sc)
  * POST PROCESSING OF SCSI_CMD (usually current)
  */
 void
-spc_done(struct spc_softc *sc, struct spc_acb *acb)
+spc_done(sc, acb)
+	struct spc_softc *sc;
+	struct spc_acb *acb;
 {
 	struct scsipi_xfer *xs = acb->xs;
 	struct scsipi_periph *periph = xs->xs_periph;
@@ -886,7 +864,9 @@ spc_done(struct spc_softc *sc, struct spc_acb *acb)
 }
 
 void
-spc_dequeue(struct spc_softc *sc, struct spc_acb *acb)
+spc_dequeue(sc, acb)
+	struct spc_softc *sc;
+	struct spc_acb *acb;
 {
 
 	SPC_TRACE(("spc_dequeue  "));
@@ -906,7 +886,8 @@ spc_dequeue(struct spc_softc *sc, struct spc_acb *acb)
  * on the bus, along with an asserted REQ signal.
  */
 void
-spc_msgin(struct spc_softc *sc)
+spc_msgin(sc)
+	struct spc_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -975,21 +956,20 @@ nextbyte:
 #else
 		if ((bus_space_read_1(iot, ioh, PSNS) & PSNS_ATN) != 0)
 			bus_space_write_1(iot, ioh, SCMD, SCMD_RST_ATN);
-		bus_space_write_1(iot, ioh, PCTL, PCTL_BFINT_ENAB | PH_MSGIN);
 
 		while ((bus_space_read_1(iot, ioh, PSNS) & PSNS_REQ) == 0) {
+			/* XXX needs timeout */
 			if ((bus_space_read_1(iot, ioh, PSNS) & PH_MASK)
-			    != PH_MSGIN ||
-			    bus_space_read_1(iot, ioh, INTS) != 0)
+			     != PH_MSGIN)
 				/*
 				 * Target left MESSAGE IN, probably because it
 				 * a) noticed our ATN signal, or
 				 * b) ran out of messages.
 				 */
 				goto out;
-			DELAY(1);	/* XXX needs timeout */
 		}
 
+		bus_space_write_1(iot, ioh, PCTL, PH_MSGIN);
 		msg = bus_space_read_1(iot, ioh, TEMP);
 #endif
 
@@ -1026,7 +1006,7 @@ nextbyte:
 		/* Ack the last byte read. */
 		bus_space_write_1(iot, ioh, SCMD, SCMD_SET_ACK);
 		while ((bus_space_read_1(iot, ioh, PSNS) & PSNS_REQ) != 0)
-			DELAY(1);	/* XXX needs timeout */
+			continue;	/* XXX needs timeout */
 		bus_space_write_1(iot, ioh, SCMD, SCMD_RST_ACK);
 #endif
 	}
@@ -1048,8 +1028,8 @@ nextbyte:
 		case MSG_CMDCOMPLETE:
 			if (sc->sc_dleft < 0) {
 				periph = acb->xs->xs_periph;
-				printf("%s: %ld extra bytes from %d:%d\n",
-				    sc->sc_dev.dv_xname, (long)-sc->sc_dleft,
+				printf("%s: %d extra bytes from %d:%d\n",
+				    sc->sc_dev.dv_xname, -sc->sc_dleft,
 				    periph->periph_target, periph->periph_lun);
 				sc->sc_dleft = 0;
 			}
@@ -1203,7 +1183,7 @@ nextbyte:
 	/* Ack the last message byte. */
 	bus_space_write_1(iot, ioh, SCMD, SCMD_SET_ACK);
 	while ((bus_space_read_1(iot, ioh, PSNS) & PSNS_REQ) != 0)
-		DELAY(1);	/* XXX needs timeout */
+		continue;	/* XXX needs timeout */
 	bus_space_write_1(iot, ioh, SCMD, SCMD_RST_ACK);
 #endif
 
@@ -1222,7 +1202,8 @@ out:
  * Send the highest priority, scheduled message.
  */
 void
-spc_msgout(struct spc_softc *sc)
+spc_msgout(sc)
+	struct spc_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1394,7 +1375,7 @@ nextbyte:
 #endif
 
 		while ((bus_space_read_1(iot, ioh, SSTS) & SSTS_DREG_FULL) != 0)
-			DELAY(1);
+			;
 		/* Send message byte. */
 		bus_space_write_1(iot, ioh, DREG, *--sc->sc_omp);
 		--n;
@@ -1438,7 +1419,10 @@ out:
  * and the rarer cases (as a result) somewhat more comlex
  */
 int
-spc_dataout_pio(struct spc_softc *sc, u_char *p, int n)
+spc_dataout_pio(sc, p, n)
+	struct spc_softc *sc;
+	u_char *p;
+	int n;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1482,7 +1466,6 @@ spc_dataout_pio(struct spc_softc *sc, u_char *p, int n)
 			/* Break on interrupt. */
 			if (intstat != 0)
 				goto phasechange;
-			DELAY(1);
 		}
 
 		xfer = min(DOUTAMOUNT, n);
@@ -1500,7 +1483,6 @@ spc_dataout_pio(struct spc_softc *sc, u_char *p, int n)
 		for (;;) {
 			if (bus_space_read_1(iot, ioh, INTS) != 0)
 				break;
-			DELAY(1);
 		}
 		SPC_MISC(("extra data  "));
 	} else {
@@ -1514,7 +1496,6 @@ spc_dataout_pio(struct spc_softc *sc, u_char *p, int n)
 			/* Break on interrupt. */
 			if (intstat != 0)
 				goto phasechange;
-			DELAY(1);
 		}
 	}
 
@@ -1547,7 +1528,10 @@ phasechange:
  * targets which don't disconnect or for huge transfers.
  */
 int
-spc_datain_pio(struct spc_softc *sc, u_char *p, int n)
+spc_datain_pio(sc, p, n)
+	struct spc_softc *sc;
+	u_char *p;
+	int n;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1567,29 +1551,52 @@ spc_datain_pio(struct spc_softc *sc, u_char *p, int n)
 	bus_space_write_1(iot, ioh, SCMD,
 	    SCMD_XFR | SCMD_PROG_XFR);	/* XXX */
 #endif
+	for (;;) {
+		if ((bus_space_read_1(iot, ioh, SSTS) & SSTS_BUSY) != 0)
+			break;
+		if (bus_space_read_1(iot, ioh, INTS) != 0)
+			goto phasechange;
+	}
 
 	/*
 	 * We leave this loop if one or more of the following is true:
 	 * a) phase != PH_DATAIN && FIFOs are empty
 	 * b) reset has occurred or busfree is detected.
 	 */
-	intstat = 0;
 	while (n > 0) {
-		sstat = bus_space_read_1(iot, ioh, SSTS);
-		if ((sstat & SSTS_DREG_FULL) != 0) {
-			n -= DINAMOUNT;
-			in += DINAMOUNT;
-			bus_space_read_multi_1(iot, ioh, DREG, p, DINAMOUNT);
-			p += DINAMOUNT;
-		} else if ((sstat & SSTS_DREG_EMPTY) == 0) {
+		int xfer;
+
+		/* Wait for fifo half full or phase mismatch */
+		for (;;) {
+			/* XXX needs timeout */
+			intstat = bus_space_read_1(iot, ioh, INTS);
+			sstat = bus_space_read_1(iot, ioh, SSTS);
+			if (intstat != 0 ||
+			    (sstat & SSTS_DREG_EMPTY) == 0)
+				break;
+		}
+
+#ifdef NEED_DREQ_ON_HARDWARE_XFER
+		if (intstat != 0)
+			goto phasechange;
+#endif
+
+		if (sstat & SSTS_DREG_FULL) {
+			xfer = DINAMOUNT;
+			n -= xfer;
+			in += xfer;
+			bus_space_read_multi_1(iot, ioh, DREG, p, xfer);
+			p += xfer;
+		}
+		while (n > 0 &&
+		    (bus_space_read_1(iot, ioh, SSTS) & SSTS_DREG_EMPTY) == 0) {
 			n--;
 			in++;
 			*p++ = bus_space_read_1(iot, ioh, DREG);
-		} else {
-			if (intstat != 0)
-				goto phasechange;
-			intstat = bus_space_read_1(iot, ioh, INTS);
 		}
+
+		if (intstat != 0)
+			goto phasechange;
 	}
 
 	/*
@@ -1601,15 +1608,9 @@ spc_datain_pio(struct spc_softc *sc, u_char *p, int n)
 	 */
 	if (in == 0) {
 		for (;;) {
-			sstat = bus_space_read_1(iot, ioh, SSTS);
-			if ((sstat & SSTS_DREG_EMPTY) == 0) {
-				(void) bus_space_read_1(iot, ioh, DREG);
-			} else {
-				if (intstat != 0)
-					goto phasechange;
-				intstat = bus_space_read_1(iot, ioh, INTS);
-			}
-			DELAY(1);
+			/* XXX needs timeout */
+			if (bus_space_read_1(iot, ioh, INTS) != 0)
+				break;
 		}
 		SPC_MISC(("extra data  "));
 	}
@@ -1629,7 +1630,8 @@ phasechange:
  * 1) always uses programmed I/O
  */
 int
-spc_intr(void *arg)
+spc_intr(arg)
+	void *arg;
 {
 	struct spc_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -1640,17 +1642,17 @@ spc_intr(void *arg)
 	struct spc_tinfo *ti;
 	int n;
 
-	SPC_TRACE(("spc_intr  "));
-
-	ints = bus_space_read_1(iot, ioh, INTS);
-	if (ints == 0)
-		return 0;
-
 	/*
 	 * Disable interrupt.
 	 */
 	bus_space_write_1(iot, ioh, SCTL,
 	    bus_space_read_1(iot, ioh, SCTL) & ~SCTL_INTR_ENAB);
+
+	SPC_TRACE(("spc_intr  "));
+
+	ints = bus_space_read_1(iot, ioh, INTS);
+	if (ints == 0)
+		goto out;
 
 	if (sc->sc_dma_done != NULL &&
 	    sc->sc_state == SPC_CONNECTED &&
@@ -1993,16 +1995,20 @@ dophase:
 		SPC_ASSERT(sc->sc_nexus != NULL);
 		acb = sc->sc_nexus;
 
+#ifdef NO_MANUAL_XFER
+		spc_datain_pio(sc, &acb->target_stat, 1);
+#else
 		if ((bus_space_read_1(iot, ioh, PSNS) & PSNS_ATN) != 0)
 			bus_space_write_1(iot, ioh, SCMD, SCMD_RST_ATN);
-		bus_space_write_1(iot, ioh, PCTL, PCTL_BFINT_ENAB | PH_STAT);
 		while ((bus_space_read_1(iot, ioh, PSNS) & PSNS_REQ) == 0)
-			DELAY(1);	/* XXX needs timeout */
+			continue;	/* XXX needs timeout */
+		bus_space_write_1(iot, ioh, PCTL, PH_STAT);
 		acb->target_stat = bus_space_read_1(iot, ioh, TEMP);
 		bus_space_write_1(iot, ioh, SCMD, SCMD_SET_ACK);
 		while ((bus_space_read_1(iot, ioh, PSNS) & PSNS_REQ) != 0)
-			DELAY(1);	/* XXX needs timeout */
+			continue;	/* XXX needs timeout */
 		bus_space_write_1(iot, ioh, SCMD, SCMD_RST_ACK);
+#endif
 
 		SPC_MISC(("target_stat=0x%02x  ", acb->target_stat));
 		sc->sc_prevphase = PH_STAT;
@@ -2012,7 +2018,7 @@ dophase:
 	printf("%s: unexpected bus phase; resetting\n", sc->sc_dev.dv_xname);
 	SPC_BREAK();
 reset:
-	spc_init(sc, 1);
+	spc_init(sc);
 	return 1;
 
 finish:
@@ -2036,7 +2042,9 @@ out:
 }
 
 void
-spc_abort(struct spc_softc *sc, struct spc_acb *acb)
+spc_abort(sc, acb)
+	struct spc_softc *sc;
+	struct spc_acb *acb;
 {
 
 	/* 2 secs for the abort */
@@ -2059,7 +2067,8 @@ spc_abort(struct spc_softc *sc, struct spc_acb *acb)
 }
 
 void
-spc_timeout(void *arg)
+spc_timeout(arg)
+	void *arg;
 {
 	struct spc_acb *acb = arg;
 	struct scsipi_xfer *xs = acb->xs;
@@ -2094,7 +2103,8 @@ spc_timeout(void *arg)
  */
 
 void
-spc_show_scsi_cmd(struct spc_acb *acb)
+spc_show_scsi_cmd(acb)
+	struct spc_acb *acb;
 {
 	u_char  *b = (u_char *)&acb->scsipi_cmd;
 	int i;
@@ -2112,7 +2122,8 @@ spc_show_scsi_cmd(struct spc_acb *acb)
 }
 
 void
-spc_print_acb(struct spc_acb *acb)
+spc_print_acb(acb)
+	struct spc_acb *acb;
 {
 
 	printf("acb@%p xs=%p flags=%x", acb, acb->xs, acb->flags);
@@ -2122,7 +2133,7 @@ spc_print_acb(struct spc_acb *acb)
 }
 
 void
-spc_print_active_acb(void)
+spc_print_active_acb()
 {
 	struct spc_acb *acb;
 	struct spc_softc *sc = spc_cd.cd_devs[0]; /* XXX */
@@ -2139,7 +2150,8 @@ spc_print_active_acb(void)
 }
 
 void
-spc_dump89352(struct spc_softc *sc)
+spc_dump89352(sc)
+	struct spc_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -2171,7 +2183,8 @@ spc_dump89352(struct spc_softc *sc)
 }
 
 void
-spc_dump_driver(struct spc_softc *sc)
+spc_dump_driver(sc)
+	struct spc_softc *sc;
 {
 	struct spc_tinfo *ti;
 	int i;

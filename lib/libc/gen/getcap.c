@@ -1,4 +1,4 @@
-/*	$NetBSD: getcap.c,v 1.41 2004/04/25 06:45:29 christos Exp $	*/
+/*	$NetBSD: getcap.c,v 1.39 2003/10/27 00:12:42 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -41,21 +41,17 @@
 #if 0
 static char sccsid[] = "@(#)getcap.c	8.3 (Berkeley) 3/25/94";
 #else
-__RCSID("$NetBSD: getcap.c,v 1.41 2004/04/25 06:45:29 christos Exp $");
+__RCSID("$NetBSD: getcap.c,v 1.39 2003/10/27 00:12:42 lukem Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
-#ifndef SMALL
 #include "namespace.h"
-#endif
 #include <sys/types.h>
 #include <sys/param.h>
 
 #include <assert.h>
 #include <ctype.h>
-#ifndef SMALL
 #include <db.h>
-#endif
 #include <errno.h>	
 #include <fcntl.h>
 #include <limits.h>
@@ -91,12 +87,9 @@ static size_t	 topreclen;	/* toprec length */
 static char	*toprec;	/* Additional record specified by cgetset() */
 static int	 gottoprec;	/* Flag indicating retrieval of toprecord */
 
-#ifndef SMALL
-static int	cdbget(DB *, char **, const char *);
-#endif
-static int 	getent(char **, size_t *, const char * const *, int,
-    const char *, int, char *);
-static int	nfcmp(char *, char *);
+static int	cdbget __P((DB *, char **, const char *));
+static int 	getent __P((char **, size_t *, char **, int, const char *, int, char *));
+static int	nfcmp __P((char *, char *));
 
 /*
  * Cgetset() allows the addition of a user specified buffer to be added
@@ -104,7 +97,8 @@ static int	nfcmp(char *, char *);
  * virtual database. 0 is returned on success, -1 on failure.
  */
 int
-cgetset(const char *ent)
+cgetset(ent)
+	const char *ent;
 {
 	const char *source, *check;
 	char *dest;
@@ -214,7 +208,9 @@ cgetcap(buf, cap, type)
  * reference loop is detected.
  */
 int
-cgetent(char **buf, const char * const *db_array, const char *name)
+cgetent(buf, db_array, name)
+	char **buf, **db_array;
+	const char *name;
 {
 	size_t dummy;
 
@@ -244,21 +240,19 @@ cgetent(char **buf, const char * const *db_array, const char *name)
  *	  MAX_RECURSION.
  */
 static int
-getent(char **cap, size_t *len, const char * const *db_array, int fd,
-    const char *name, int depth, char *nfield)
+getent(cap, len, db_array, fd, name, depth, nfield)
+	char **cap, **db_array, *nfield;
+	const char *name;
+	size_t *len;
+	int fd, depth;
 {
-#ifndef SMALL
 	DB *capdbp;
-	char pbuf[MAXPATHLEN];
-	char *cbuf;
-	int retval;
+	char *r_end, *rp = NULL, **db_p;	/* pacify gcc */
+	int myfd = 0, eof, foundit, retval;
 	size_t clen;
-#endif
-	char *record, *newrecord;
-	char *r_end, *rp = NULL;	/* pacify gcc */
-	const char * const *db_p;
-	int myfd = 0, eof, foundit;
+	char *record, *cbuf, *newrecord;
 	int tc_not_resolved;
+	char pbuf[MAXPATHLEN];
 	
 	_DIAGASSERT(cap != NULL);
 	_DIAGASSERT(len != NULL);
@@ -311,7 +305,6 @@ getent(char **cap, size_t *len, const char * const *db_array, int fd,
 		if (fd >= 0) {
 			(void)lseek(fd, (off_t)0, SEEK_SET);
 		} else {
-#ifndef SMALL
 			(void)snprintf(pbuf, sizeof(pbuf), "%s.db", *db_p);
 			if ((capdbp = dbopen(pbuf, O_RDONLY, 0, DB_HASH, 0))
 			     != NULL) {
@@ -336,9 +329,7 @@ getent(char **cap, size_t *len, const char * const *db_array, int fd,
 				*len = clen;
 				*cap = cbuf;
 				return (retval);
-			} else
-#endif
-			{
+			} else {
 				fd = open(*db_p, O_RDONLY, 0);
 				if (fd < 0) {
 					/* No error on unfound file. */
@@ -645,9 +636,11 @@ tc_exp:	{
 	return (0);
 }	
 
-#ifndef SMALL
 static int
-cdbget(DB *capdbp, char **bp, const char *name)
+cdbget(capdbp, bp, name)
+	DB *capdbp;
+	char **bp;
+	const char *name;
 {
 	DBT key;
 	DBT data;
@@ -680,14 +673,14 @@ cdbget(DB *capdbp, char **bp, const char *name)
 	*bp = (char *)data.data + 1;
 	return (((char *)(data.data))[0] == TCERR ? 1 : 0);
 }
-#endif
 
 /*
  * Cgetmatch will return 0 if name is one of the names of the capability
  * record buf, -1 if not.
  */
 int
-cgetmatch(const char *buf, const char *name)
+cgetmatch(buf, name)
+	const char *buf, *name;
 {
 	const char *np, *bp;
 
@@ -730,7 +723,8 @@ cgetmatch(const char *buf, const char *name)
 }
 
 int
-cgetfirst(char **buf, const char * const *db_array)
+cgetfirst(buf, db_array)
+	char **buf, **db_array;
 {
 
 	_DIAGASSERT(buf != NULL);
@@ -742,10 +736,10 @@ cgetfirst(char **buf, const char * const *db_array)
 
 static FILE *pfp;
 static int slash;
-static const char * const *dbp;
+static char **dbp;
 
 int
-cgetclose(void)
+cgetclose()
 {
 	if (pfp != NULL) {
 		(void)fclose(pfp);
@@ -763,7 +757,9 @@ cgetclose(void)
  * upon returning an entry with more remaining, and -1 if an error occurs.
  */
 int
-cgetnext(char **bp, const char * const *db_array)
+cgetnext(bp, db_array)
+        char **bp;
+	char **db_array;
 {
 	size_t len;
 	int status, done;
@@ -897,7 +893,10 @@ cgetnext(char **bp, const char * const *db_array)
  * allocation failure).
  */
 int
-cgetstr(char *buf, const char *cap, char **str)
+cgetstr(buf, cap, str)
+	char *buf;
+	const char *cap;
+	char **str;
 {
 	u_int m_room;
 	const char *bp;
@@ -1032,7 +1031,10 @@ cgetstr(char *buf, const char *cap, char **str)
  * error was encountered (storage allocation failure).
  */
 int
-cgetustr(char *buf, const char *cap, char **str)
+cgetustr(buf, cap, str)
+	char *buf;
+	const char *cap;
+	char **str;
 {
 	u_int m_room;
 	const char *bp;
@@ -1112,7 +1114,10 @@ cgetustr(char *buf, const char *cap, char **str)
  * numeric capability couldn't be found.
  */
 int
-cgetnum(char *buf, const char *cap, long *num)
+cgetnum(buf, cap, num)
+	char *buf;
+	const char *cap;
+	long *num;
 {
 	long n;
 	int base, digit;
@@ -1178,7 +1183,8 @@ cgetnum(char *buf, const char *cap, long *num)
  * Compare name field of record.
  */
 static int
-nfcmp(char *nf, char *rec)
+nfcmp(nf, rec)
+	char *nf, *rec;
 {
 	char *cp, tmp;
 	int ret;

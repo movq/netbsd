@@ -1,4 +1,4 @@
-/*	$NetBSD: i82365var.h,v 1.21 2004/09/13 12:34:00 drochner Exp $	*/
+/*	$NetBSD: i82365var.h,v 1.18 2003/09/05 01:02:51 mycroft Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -58,8 +58,7 @@ struct pcic_handle {
 
 	int	vendor;		/* vendor of chip */
 	int	chip;		/* chip index 0 or 1 */
-	int	socket;		/* socket index 0 or 1 */
-	int	sock;		/* register offset */
+	int	sock;
 	int	flags;
 	int	laststate;
 	int	memalloc;
@@ -87,7 +86,8 @@ struct pcic_handle {
 #define	PCIC_FLAG_CARDP		0x0002
 #define	PCIC_FLAG_ENABLED	0x0004
 
-#define PCIC_LASTSTATE_PRESENT	0x0001
+#define PCIC_LASTSTATE_PRESENT	0x0002
+#define PCIC_LASTSTATE_HALF	0x0001
 #define PCIC_LASTSTATE_EMPTY	0x0000
 
 #define	C0SA	0
@@ -191,7 +191,6 @@ void	pcic_chip_io_unmap __P((pcmcia_chipset_handle_t, int));
 
 void	pcic_chip_socket_enable __P((pcmcia_chipset_handle_t));
 void	pcic_chip_socket_disable __P((pcmcia_chipset_handle_t));
-void	pcic_chip_socket_settype __P((pcmcia_chipset_handle_t, int));
 
 #if 0
 

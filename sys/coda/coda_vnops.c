@@ -6,7 +6,7 @@ mkdir
 rmdir
 symlink
 */
-/*	$NetBSD: coda_vnops.c,v 1.39 2004/06/25 02:52:46 petrov Exp $	*/
+/*	$NetBSD: coda_vnops.c,v 1.38.2.1 2004/06/27 08:23:28 jdc Exp $	*/
 
 /*
  * 
@@ -54,7 +54,7 @@ symlink
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coda_vnops.c,v 1.39 2004/06/25 02:52:46 petrov Exp $");
+__KERNEL_RCSID(0, "$NetBSD: coda_vnops.c,v 1.38.2.1 2004/06/27 08:23:28 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

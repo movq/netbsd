@@ -1,4 +1,4 @@
-/*	$NetBSD: ataio.h,v 1.5 2004/08/02 19:47:11 bouyer Exp $	*/
+/*	$NetBSD: ataio.h,v 1.3 2002/09/29 23:24:00 wiz Exp $	*/
 
 #ifndef _SYS_ATAIO_H_
 #define _SYS_ATAIO_H_
@@ -34,22 +34,5 @@ typedef struct	atareq {
 #define ATACMD_DF	0x03
 
 #define ATAIOCCOMMAND	_IOWR('Q', 8, atareq_t)
-
-/*
- * ATA bus IOCTL
- */
-/* Scan bus for new devices. */       
-struct atabusioscan_args {
-	int	at_dev;		/* device to scan, -1 for wildcard */
-};
-#define ATABUSIOSCAN	_IOW('A', 50, struct atabusioscan_args)
-
-#define ATABUSIORESET	_IO('A', 51) /* reset ATA bus */
-
-struct atabusiodetach_args {
-	int	at_dev;		/* device to detach; -1 for wildcard */
-};
-#define ATABUSIODETACH	_IOW('A', 52, struct atabusiodetach_args)
-
 
 #endif /* _SYS_ATAIO_H_ */

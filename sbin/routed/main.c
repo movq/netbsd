@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.39 2004/07/06 16:43:18 wiz Exp $	*/
+/*	$NetBSD: main.c,v 1.36 2004/03/27 20:50:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -46,7 +46,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\n"
 	    "The Regents of the University of California."
 	    "  All rights reserved.\n");
 #ifdef __NetBSD__
-__RCSID("$NetBSD: main.c,v 1.39 2004/07/06 16:43:18 wiz Exp $");
+__RCSID("$NetBSD: main.c,v 1.36 2004/03/27 20:50:43 christos Exp $");
 #elif defined(__FreeBSD__)
 __RCSID("$FreeBSD$");
 #else
@@ -140,7 +140,7 @@ main(int argc,
 	(void)gethostname(myname, sizeof(myname) - 1);
 	(void)gethost(myname, &myaddr);
 
-	while ((n = getopt(argc, argv, "sqdghmAtvT:F:P:")) != -1) {
+	while ((n = getopt(argc, argv, "sqdghmpAtvT:F:P:")) != -1) {
 		switch (n) {
 		case 's':
 			supplier = 1;
@@ -244,8 +244,8 @@ main(int argc,
 		goto usage;
 	if (argc != 0) {
 usage:
-		logbad(0, "usage: routed [-sqdghmAtv] [-T tracefile]"
-		       " [-F net[/mask[,metric]]] [-P parms]");
+		logbad(0, "usage: routed [-sqdghmpAtv] [-T tracefile]"
+		       " [-F net[,metric]] [-P parms]");
 	}
 	if (geteuid() != 0) {
 		if (verbose)

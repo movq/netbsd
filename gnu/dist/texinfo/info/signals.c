@@ -1,9 +1,9 @@
-/*	$NetBSD: signals.c,v 1.1.1.5 2004/07/12 23:26:53 wiz Exp $	*/
+/*	$NetBSD: signals.c,v 1.1.1.4 2003/02/13 08:50:53 wiz Exp $	*/
 
-/* signals.c -- install and maintain signal handlers.
-   Id: signals.c,v 1.4 2004/03/27 16:19:09 karl Exp
+/* signals.c -- install and maintain Info signal handlers.
+   Id: signals.c,v 1.4 2003/01/29 19:23:22 karl Exp
 
-   Copyright (C) 1993, 1994, 1995, 1998, 2002, 2003, 2004 Free Software
+   Copyright (C) 1993, 1994, 1995, 1998, 2002, 2003 Free Software
    Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
@@ -20,12 +20,10 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
-   Originally written by Brian Fox (bfox@ai.mit.edu). */
+   Written by Brian Fox (bfox@ai.mit.edu). */
 
 #include "info.h"
 #include "signals.h"
-
-void initialize_info_signal_handler (void);
 
 /* **************************************************************** */
 /*                                                                  */
@@ -36,7 +34,8 @@ void initialize_info_signal_handler (void);
 #if !defined (HAVE_SIGPROCMASK) && defined (HAVE_SIGSETMASK)
 /* Perform OPERATION on NEWSET, perhaps leaving information in OLDSET. */
 static void
-sigprocmask (int operation, int *newset, int *oldset)
+sigprocmask (operation, newset, oldset)
+     int operation, *newset, *oldset;
 {
   switch (operation)
     {
@@ -67,7 +66,8 @@ sigprocmask (int operation, int *newset, int *oldset)
 #if defined (HAVE_SIGACTION) || defined (HAVE_SIGPROCMASK) ||\
   defined (HAVE_SIGSETMASK)
 static void
-mask_termsig (sigset_t *set)
+mask_termsig (set)
+  sigset_t *set;
 {
 # if defined (SIGTSTP)
   sigaddset (set, SIGTSTP);
@@ -77,9 +77,6 @@ mask_termsig (sigset_t *set)
 # if defined (SIGWINCH)
   sigaddset (set, SIGWINCH);
 # endif
-#if defined (SIGQUIT)
-  sigaddset (set, SIGQUIT);
-#endif
 #if defined (SIGINT)
   sigaddset (set, SIGINT);
 #endif
@@ -89,19 +86,23 @@ mask_termsig (sigset_t *set)
 }
 #endif /* HAVE_SIGACTION || HAVE_SIGPROCMASK || HAVE_SIGSETMASK */
 
-static RETSIGTYPE info_signal_proc (int sig);
+static RETSIGTYPE info_signal_proc ();
 #if defined (HAVE_SIGACTION)
 typedef struct sigaction signal_info;
 signal_info info_signal_handler;
 
 static void
-set_termsig (int sig, signal_info *old)
+set_termsig (sig, old)
+  int sig;
+  signal_info *old;
 {
   sigaction (sig, &info_signal_handler, old);
 }
 
 static void
-restore_termsig (int sig, const signal_info *saved)
+restore_termsig (sig, saved)
+  int sig;
+  const signal_info *saved;
 {
   sigaction (sig, saved, NULL);
 }
@@ -115,20 +116,15 @@ static int term_conf_busy = 0;
 
 static signal_info old_TSTP, old_TTOU, old_TTIN;
 static signal_info old_WINCH, old_INT, old_USR1;
-static signal_info old_QUIT;
 
 void
-initialize_info_signal_handler (void)
+initialize_info_signal_handler ()
 {
-#ifdef SA_NOCLDSTOP
-  /* (Based on info from Paul Eggert found in coreutils.)  Don't use
-     HAVE_SIGACTION to decide whether to use the sa_handler, sa_flags,
-     sa_mask members, as some systems (Solaris 7+) don't define them.  Use
-     SA_NOCLDSTOP instead; it's been part of POSIX.1 since day 1 (in 1988).  */
+#if defined (HAVE_SIGACTION)
   info_signal_handler.sa_handler = info_signal_proc;
   info_signal_handler.sa_flags = 0;
   mask_termsig (&info_signal_handler.sa_mask);
-#endif /* SA_NOCLDSTOP */
+#endif /* HAVE_SIGACTION */
 
 #if defined (SIGTSTP)
   set_termsig (SIGTSTP, &old_TSTP);
@@ -138,10 +134,6 @@ initialize_info_signal_handler (void)
 
 #if defined (SIGWINCH)
   set_termsig (SIGWINCH, &old_WINCH);
-#endif
-
-#if defined (SIGQUIT)
-  set_termsig (SIGQUIT, &old_QUIT);
 #endif
 
 #if defined (SIGINT)
@@ -155,7 +147,7 @@ initialize_info_signal_handler (void)
 }
 
 static void
-redisplay_after_signal (void)
+redisplay_after_signal ()
 {
   terminal_clear_screen ();
   display_clear_display (the_display);
@@ -166,7 +158,7 @@ redisplay_after_signal (void)
 }
 
 static void
-reset_info_window_sizes (void)
+reset_info_window_sizes ()
 {
   terminal_goto_xy (0, 0);
   fflush (stdout);
@@ -174,14 +166,15 @@ reset_info_window_sizes (void)
   terminal_get_screen_size ();
   terminal_prep_terminal ();
   display_initialize_display (screenwidth, screenheight);
-  window_new_screen_size (screenwidth, screenheight);
+  window_new_screen_size (screenwidth, screenheight, NULL);
   redisplay_after_signal ();
 }
 
 static RETSIGTYPE
-info_signal_proc (int sig)
+info_signal_proc (sig)
+     int sig;
 {
-  signal_info *old_signal_handler = NULL;
+  signal_info *old_signal_handler;
 
 #if !defined (HAVE_SIGACTION)
   /* best effort: first increment this counter and later block signals */
@@ -204,9 +197,6 @@ info_signal_proc (int sig)
     case SIGTTOU:
     case SIGTTIN:
 #endif
-#if defined (SIGQUIT)
-    case SIGQUIT:
-#endif
 #if defined (SIGINT)
     case SIGINT:
 #endif
@@ -219,10 +209,6 @@ info_signal_proc (int sig)
         if (sig == SIGTTIN)
           old_signal_handler = &old_TTIN;
 #endif /* SIGTSTP */
-#if defined (SIGQUIT)
-        if (sig == SIGQUIT)
-          old_signal_handler = &old_QUIT;
-#endif /* SIGQUIT */
 #if defined (SIGINT)
         if (sig == SIGINT)
           old_signal_handler = &old_INT;

@@ -1,10 +1,6 @@
-#	$NetBSD: Makefile,v 1.3 2004/11/19 21:43:40 christos Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1997/02/11 18:36:51 phil Exp $
 
 PROG= lastlogin
 MAN= lastlogin.8
-CPPFLAGS+=-DSUPPORT_UTMP -DSUPPORT_UTMPX
-
-LDADD+=-lutil
-DPADD+=${LIBUTIL}
 
 .include <bsd.prog.mk>

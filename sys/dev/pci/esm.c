@@ -1,4 +1,4 @@
-/*      $NetBSD: esm.c,v 1.28 2004/10/29 12:57:18 yamt Exp $      */
+/*      $NetBSD: esm.c,v 1.23.2.1 2004/09/22 20:58:37 jmc Exp $      */
 
 /*-
  * Copyright (c) 2002, 2003 Matt Fredette
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: esm.c,v 1.28 2004/10/29 12:57:18 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: esm.c,v 1.23.2.1 2004/09/22 20:58:37 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -152,7 +152,7 @@ void esm_powerhook(int, void *);
 CFATTACH_DECL(esm, sizeof(struct esm_softc),
     esm_match, esm_attach, NULL, NULL);
 
-const struct audio_hw_if esm_hw_if = {
+struct audio_hw_if esm_hw_if = {
 	esm_open,
 	esm_close,
 	NULL,				/* drain */
@@ -762,8 +762,8 @@ esm_trigger_output(void *sc, void *start, void *end, int blksize,
 	wpwa = APU_USE_SYSMEM | ((offset >> 8) & APU_64KPAGE_MASK);
 
 	DPRINTF(ESM_DEBUG_DMA,
-	    ("choffs=0x%x, wpwa=0x%x, size=0x%lx words\n",
-	    choffset, wpwa, (unsigned long int)size));
+	    ("choffs=0x%x, wpwa=0x%x, size=0x%x words\n",
+	    choffset, wpwa, size));
 
 	switch (ch->aputype) {
 	case APUTYPE_16BITSTEREO:
@@ -932,8 +932,8 @@ esm_trigger_input(void *sc, void *start, void *end, int blksize,
 		wp_wrapu(ess, apuch + i, APUREG_ROUTE, apuch + 2 + i);
 
 		DPRINTF(ESM_DEBUG_DMA,
-		    ("choffs=0x%x, wpwa=0x%x, offset=0x%x words, size=0x%lx words\n",
-		    choffset, wpwa, offset, (unsigned long int)size));
+		    ("choffs=0x%x, wpwa=0x%x, offset=0x%x words, size=0x%x words\n",
+		    choffset, wpwa, offset, size));
 
 		/* Clear all mixer WP channel registers first. */
 		for (reg = 0; reg < 15; reg++)
@@ -964,8 +964,8 @@ esm_trigger_input(void *sc, void *start, void *end, int blksize,
 		    ROUTE_PARALLEL + i);
 
 		DPRINTF(ESM_DEBUG_DMA,
-		    ("mixoffs=0x%x, wpwa=0x%x, offset=0x%x words, size=0x%lx words\n",
-		    mixoffset, wpwa, offset, (unsigned long int)mixsize));
+		    ("mixoffs=0x%x, wpwa=0x%x, offset=0x%x words, size=0x%x words\n",
+		    mixoffset, wpwa, offset, mixsize));
 
 		/* Assume we're going to loop to do the right channel. */
 		choffset += MAESTRO_RECBUF_L_SZ;
@@ -1087,13 +1087,8 @@ esmch_set_format(struct esm_chinfo *ch, struct audio_params *p)
 	}
 	if (p->precision * p->factor == 8) {
 		aputype += 2;
-		switch (p->encoding) {
-		case AUDIO_ENCODING_ULINEAR:
-		case AUDIO_ENCODING_ULINEAR_BE:
-		case AUDIO_ENCODING_ULINEAR_LE:
+		if (p->encoding == AUDIO_ENCODING_ULINEAR)
 			wcreg_tpl |= WAVCACHE_CHCTL_U8;
-			break;
-		}
 	}
 	ch->wcreg_tpl = wcreg_tpl;
 	ch->aputype = aputype;
@@ -1337,8 +1332,8 @@ esm_malloc(void *sc, int direction, size_t size, struct malloc_type *pool,
 	int off;
 
 	DPRINTF(ESM_DEBUG_DMA,
-	    ("esm_malloc(%p, %d, 0x%lx, %p, 0x%x)",
-	    sc, direction, (unsigned long int)size, pool, flags));
+	    ("esm_malloc(%p, %d, 0x%x, %p, 0x%x)",
+	    sc, direction, size, pool, flags));
 
 	/*
 	 * Each buffer can only be allocated once.
@@ -1595,7 +1590,7 @@ esm_attach(struct device *parent, struct device *self, void *aux)
 
 	aprint_naive(": Audio controller\n");
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	revision = PCI_REVISION(pa->pa_class);
 	aprint_normal(": %s (rev. 0x%02x)\n", devinfo, revision);
 

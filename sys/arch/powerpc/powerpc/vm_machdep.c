@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.62 2004/09/17 14:11:21 skrll Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.58 2004/01/04 11:33:31 jdolecek Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.62 2004/09/17 14:11:21 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.58 2004/01/04 11:33:31 jdolecek Exp $");
 
 #include "opt_altivec.h"
 #include "opt_multiprocessor.h"
@@ -98,11 +98,11 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 
 #ifdef PPC_HAVE_FPU
 	if (l1->l_addr->u_pcb.pcb_fpcpu)
-		save_fpu_lwp(l1, FPU_SAVE);
+		save_fpu_lwp(l1);
 #endif
 #ifdef ALTIVEC
 	if (l1->l_addr->u_pcb.pcb_veccpu)
-		save_vec_lwp(l1, ALTIVEC_SAVE);
+		save_vec_lwp(l1);
 #endif
 	*pcb = l1->l_addr->u_pcb;
 
@@ -188,14 +188,30 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 	pcb->pcb_sp = (register_t)sf;
 	pcb->pcb_kmapsr = 0;
 	pcb->pcb_umapsr = 0;
-#ifdef PPC_HAVE_FPU
-	pcb->pcb_flags = PSL_FE_DFLT;
-#endif
 }
 
 void
 cpu_swapin(struct lwp *l)
 {
+}
+
+/*
+ * Move pages from one kernel virtual address to another.
+ */
+void
+pagemove(caddr_t from, caddr_t to, size_t size)
+{
+	paddr_t pa;
+	vaddr_t va;
+
+	for (va = (vaddr_t)from; size > 0; size -= PAGE_SIZE) {
+		(void) pmap_extract(pmap_kernel(), va, &pa);
+		pmap_kremove(va, PAGE_SIZE);
+		pmap_kenter_pa((vaddr_t)to, pa, VM_PROT_READ|VM_PROT_WRITE);
+		va += PAGE_SIZE;
+		to += PAGE_SIZE;
+	}
+	pmap_update(pmap_kernel());
 }
 
 void
@@ -207,11 +223,11 @@ cpu_lwp_free(struct lwp *l, int proc)
 
 #ifdef PPC_HAVE_FPU
 	if (pcb->pcb_fpcpu)			/* release the FPU */
-		save_fpu_lwp(l, FPU_DISCARD);
+		save_fpu_lwp(l);
 #endif
 #ifdef ALTIVEC
 	if (pcb->pcb_veccpu)			/* release the AltiVEC */
-		save_vec_lwp(l, ALTIVEC_DISCARD);
+		save_vec_lwp(l);
 #endif
 
 }
@@ -243,6 +259,7 @@ cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
 {
 	struct coreseg cseg;
 	struct md_coredump md_core;
+	struct proc *p = l->l_proc;
 	struct pcb *pcb = &l->l_addr->u_pcb;
 	int error;
 
@@ -254,19 +271,19 @@ cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
 	md_core.frame = *trapframe(l);
 	if (pcb->pcb_flags & PCB_FPU) {
 #ifdef PPC_HAVE_FPU
-		if (pcb->pcb_fpcpu)
-			save_fpu_lwp(l, FPU_SAVE);
+		if (l->l_addr->u_pcb.pcb_fpcpu)
+			save_fpu_lwp(l);
 #endif
 		md_core.fpstate = pcb->pcb_fpu;
 	} else
 		memset(&md_core.fpstate, 0, sizeof(md_core.fpstate));
 
 #ifdef ALTIVEC
-	if (pcb->pcb_flags & PCB_ALTIVEC) {
-		if (pcb->pcb_veccpu)
-			save_vec_lwp(l, ALTIVEC_SAVE);
+	if (pcb->pcb_veccpu)
+		save_vec_lwp(l);
+	if (pcb->pcb_flags & PCB_ALTIVEC)
 		md_core.vstate = pcb->pcb_vr;
-	} else
+	else
 #endif
 		memset(&md_core.vstate, 0, sizeof(md_core.vstate));
 
@@ -276,11 +293,11 @@ cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
 
 	if ((error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
 			    (off_t)chdr->c_hdrsize, UIO_SYSSPACE,
-			    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL)) != 0)
+			    IO_NODELOCKED|IO_UNIT, cred, NULL, p)) != 0)
 		return error;
 	if ((error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&md_core, sizeof md_core,
 			    (off_t)(chdr->c_hdrsize + chdr->c_seghdrsize), UIO_SYSSPACE,
-			    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL)) != 0)
+			    IO_NODELOCKED|IO_UNIT, cred, NULL, p)) != 0)
 		return error;
 
 	chdr->c_nseg++;

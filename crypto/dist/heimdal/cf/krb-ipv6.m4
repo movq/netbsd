@@ -1,5 +1,5 @@
 dnl $Heimdal: krb-ipv6.m4,v 1.13.8.1 2004/04/01 07:27:34 joda Exp $
-dnl $NetBSD: krb-ipv6.m4,v 1.1.1.7 2004/04/02 14:48:06 lha Exp $
+dnl $NetBSD: krb-ipv6.m4,v 1.1.1.6.2.1 2004/04/21 04:55:38 jmc Exp $
 dnl
 dnl test for IPv6
 dnl

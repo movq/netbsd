@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_vfsops.c,v 1.58 2004/09/13 19:19:45 jdolecek Exp $	*/
+/*	$NetBSD: procfs_vfsops.c,v 1.52.2.1 2004/05/29 09:04:41 tron Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_vfsops.c,v 1.58 2004/09/13 19:19:45 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_vfsops.c,v 1.52.2.1 2004/05/29 09:04:41 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -91,7 +91,6 @@ __KERNEL_RCSID(0, "$NetBSD: procfs_vfsops.c,v 1.58 2004/09/13 19:19:45 jdolecek 
 #include <sys/buf.h>
 #include <sys/syslog.h>
 #include <sys/mount.h>
-#include <sys/dirent.h>
 #include <sys/signalvar.h>
 #include <sys/vnode.h>
 #include <sys/malloc.h>
@@ -107,9 +106,9 @@ int	procfs_mount __P((struct mount *, const char *, void *,
 			  struct nameidata *, struct proc *));
 int	procfs_start __P((struct mount *, int, struct proc *));
 int	procfs_unmount __P((struct mount *, int, struct proc *));
-int	procfs_quotactl __P((struct mount *, int, uid_t, void *,
+int	procfs_quotactl __P((struct mount *, int, uid_t, caddr_t,
 			     struct proc *));
-int	procfs_statvfs __P((struct mount *, struct statvfs *, struct proc *));
+int	procfs_statfs __P((struct mount *, struct statfs *, struct proc *));
 int	procfs_sync __P((struct mount *, int, struct ucred *, struct proc *));
 int	procfs_vget __P((struct mount *, ino_t, struct vnode **));
 int	procfs_fhtovp __P((struct mount *, struct fid *, struct vnode **));
@@ -162,15 +161,14 @@ procfs_mount(mp, path, data, ndp, p)
 	} else
 		args.flags = 0;
 
+	mp->mnt_flag |= MNT_LOCAL;
 	pmnt = (struct procfsmount *) malloc(sizeof(struct procfsmount),
 	    M_UFSMNT, M_WAITOK);   /* XXX need new malloc type */
 
-	mp->mnt_stat.f_namemax = MAXNAMLEN;
-	mp->mnt_flag |= MNT_LOCAL;
 	mp->mnt_data = pmnt;
 	vfs_getnewfsid(mp);
 
-	error = set_statvfs_info(path, UIO_USERSPACE, "procfs", UIO_SYSSPACE,
+	error = set_statfs_info(path, UIO_USERSPACE, "procfs", UIO_SYSSPACE,
 	    mp, p);
 	pmnt->pmnt_exechook = exechook_establish(procfs_revoke_vnodes, mp);
 	pmnt->pmnt_flags = args.flags;
@@ -228,24 +226,25 @@ procfs_start(mp, flags, p)
  * Get file system statistics.
  */
 int
-procfs_statvfs(mp, sbp, p)
+procfs_statfs(mp, sbp, p)
 	struct mount *mp;
-	struct statvfs *sbp;
+	struct statfs *sbp;
 	struct proc *p;
 {
 
 	sbp->f_bsize = PAGE_SIZE;
-	sbp->f_frsize = PAGE_SIZE;
 	sbp->f_iosize = PAGE_SIZE;
 	sbp->f_blocks = 1;	/* avoid divide by zero in some df's */
 	sbp->f_bfree = 0;
 	sbp->f_bavail = 0;
-	sbp->f_bresvd = 0;
 	sbp->f_files = maxproc;			/* approx */
 	sbp->f_ffree = maxproc - nprocs;	/* approx */
-	sbp->f_favail = maxproc - nprocs;	/* approx */
-	sbp->f_fresvd = 0;
-	copy_statvfs_info(sbp, mp);
+#ifdef COMPAT_09
+	sbp->f_type = 10;
+#else
+	sbp->f_type = 0;
+#endif
+	copy_statfs_info(sbp, mp);
 	return (0);
 }
 
@@ -255,7 +254,7 @@ procfs_quotactl(mp, cmds, uid, arg, p)
 	struct mount *mp;
 	int cmds;
 	uid_t uid;
-	void *arg;
+	caddr_t arg;
 	struct proc *p;
 {
 
@@ -370,7 +369,7 @@ struct vfsops procfs_vfsops = {
 	procfs_unmount,
 	procfs_root,
 	procfs_quotactl,
-	procfs_statvfs,
+	procfs_statfs,
 	procfs_sync,
 	procfs_vget,
 	procfs_fhtovp,
@@ -381,6 +380,5 @@ struct vfsops procfs_vfsops = {
 	NULL,
 	NULL,				/* vfs_mountroot */
 	procfs_checkexp,
-	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	procfs_vnodeopv_descs,
 };

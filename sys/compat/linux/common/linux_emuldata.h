@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_emuldata.h,v 1.6 2004/08/08 09:40:50 jdolecek Exp $	*/
+/*	$NetBSD: linux_emuldata.h,v 1.5.4.1 2004/08/15 13:58:59 tron Exp $	*/
 
 /*-
  * Copyright (c) 1998,2002 The NetBSD Foundation, Inc.

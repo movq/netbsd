@@ -1,4 +1,4 @@
-/*	$NetBSD: an.c,v 1.32 2004/08/24 00:53:29 thorpej Exp $	*/
+/*	$NetBSD: an.c,v 1.29 2004/01/28 15:07:52 onoe Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999
  *	Bill Paul <wpaul@ctr.columbia.edu>.  All rights reserved.
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: an.c,v 1.32 2004/08/24 00:53:29 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: an.c,v 1.29 2004/01/28 15:07:52 onoe Exp $");
 
 #include "bpfilter.h"
 
@@ -83,38 +83,37 @@ __KERNEL_RCSID(0, "$NetBSD: an.c,v 1.32 2004/08/24 00:53:29 thorpej Exp $");
 #include <dev/ic/anreg.h>
 #include <dev/ic/anvar.h>
 
-static int	an_reset(struct an_softc *);
-static void	an_wait(struct an_softc *);
-static int	an_init(struct ifnet *);
-static void	an_stop(struct ifnet *, int);
-static void	an_start(struct ifnet *);
-static void	an_watchdog(struct ifnet *);
-static int	an_ioctl(struct ifnet *, u_long, caddr_t);
-static int	an_media_change(struct ifnet *);
-static void	an_media_status(struct ifnet *, struct ifmediareq *);
+static int an_reset(struct an_softc *);
+static void an_wait(struct an_softc *);
+static int an_init(struct ifnet *);
+static void an_stop(struct ifnet *, int);
+static void an_start(struct ifnet *);
+static void an_watchdog(struct ifnet *);
+static int an_ioctl(struct ifnet *, u_long, caddr_t);
+static int an_media_change(struct ifnet *);
+static void an_media_status(struct ifnet *, struct ifmediareq *);
 
-static int	an_set_nwkey(struct an_softc *, struct ieee80211_nwkey *);
-static int	an_set_nwkey_wep(struct an_softc *, struct ieee80211_nwkey *);
-static int	an_set_nwkey_eap(struct an_softc *, struct ieee80211_nwkey *);
-static int	an_get_nwkey(struct an_softc *, struct ieee80211_nwkey *);
-static int	an_write_wepkey(struct an_softc *, int, struct an_wepkey *,
-				int);
+static int an_set_nwkey(struct an_softc *, struct ieee80211_nwkey *);
+static int an_set_nwkey_wep(struct an_softc *, struct ieee80211_nwkey *);
+static int an_set_nwkey_eap(struct an_softc *, struct ieee80211_nwkey *);
+static int an_get_nwkey(struct an_softc *, struct ieee80211_nwkey *);
+static int an_write_wepkey(struct an_softc *, int, struct an_wepkey *, int);
 
-static void	an_rx_intr(struct an_softc *);
-static void	an_tx_intr(struct an_softc *, int);
-static void	an_linkstat_intr(struct an_softc *);
+static void an_rx_intr(struct an_softc *);
+static void an_tx_intr(struct an_softc *, int);
+static void an_linkstat_intr(struct an_softc *);
 
-static int	an_cmd(struct an_softc *, int, int);
-static int	an_seek_bap(struct an_softc *, int, int);
-static int	an_read_bap(struct an_softc *, int, int, void *, int);
-static int	an_write_bap(struct an_softc *, int, int, void *, int);
-static int	an_mwrite_bap(struct an_softc *, int, int, struct mbuf *, int);
-static int	an_read_rid(struct an_softc *, int, void *, int *);
-static int	an_write_rid(struct an_softc *, int, void *, int);
+static int an_cmd(struct an_softc *, int, int);
+static int an_seek_bap(struct an_softc *, int, int);
+static int an_read_bap(struct an_softc *, int, int, void *, int);
+static int an_write_bap(struct an_softc *, int, int, void *, int);
+static int an_mwrite_bap(struct an_softc *, int, int, struct mbuf *, int);
+static int an_read_rid(struct an_softc *, int, void *, int *);
+static int an_write_rid(struct an_softc *, int, void *, int);
 
-static int	an_alloc_fid(struct an_softc *, int, int *);
+static int an_alloc_fid(struct an_softc *, int, int *);
 
-static int	an_newstate(struct ieee80211com *, enum ieee80211_state, int);
+static int an_newstate(struct ieee80211com *, enum ieee80211_state, int);
 
 #ifdef AN_DEBUG
 int an_debug = 0;
@@ -457,7 +456,7 @@ an_init(struct ifnet *ifp)
 	IEEE80211_ADDR_COPY(sc->sc_config.an_macaddr, ic->ic_myaddr);
 	sc->sc_config.an_scanmode = htole16(AN_SCANMODE_ACTIVE);
 	sc->sc_config.an_authtype = htole16(AN_AUTHTYPE_OPEN);	/*XXX*/
-	if (ic->ic_flags & IEEE80211_F_PRIVACY) {
+	if (ic->ic_flags & IEEE80211_F_WEPON) {
 		sc->sc_config.an_authtype |=
 		    htole16(AN_AUTHTYPE_PRIVACY_IN_USE);
 		if (sc->sc_use_leap)
@@ -489,7 +488,7 @@ an_init(struct ifnet *ifp)
 		sc->sc_config.an_rxmode =
 		    htole16(AN_RXMODE_80211_MONITOR_ANYBSS);
 		sc->sc_config.an_authtype = htole16(AN_AUTHTYPE_NONE);
-		if (ic->ic_flags & IEEE80211_F_PRIVACY)
+		if (ic->ic_flags & IEEE80211_F_WEPON)
 			sc->sc_config.an_authtype |=
 			    htole16(AN_AUTHTYPE_PRIVACY_IN_USE |
 		            AN_AUTHTYPE_ALLOW_UNENCRYPTED);
@@ -530,7 +529,7 @@ an_init(struct ifnet *ifp)
 	    sizeof(sc->sc_buf.sc_encap));
 
 	/* Set the WEP Keys */
-	if (ic->ic_flags & IEEE80211_F_PRIVACY)
+	if (ic->ic_flags & IEEE80211_F_WEPON)
 		an_write_wepkey(sc, AN_RID_WEP_VOLATILE, sc->sc_wepkeys,
 		    sc->sc_tx_key);
 
@@ -570,7 +569,7 @@ an_init(struct ifnet *ifp)
 	return 0;
 }
 
-static void
+void
 an_stop(struct ifnet *ifp, int disable)
 {
 	struct an_softc *sc = ifp->if_softc;
@@ -650,15 +649,13 @@ an_start(struct ifnet *ifp)
 			ifp->if_oerrors++;
 			continue;
 		}
-		if (ni != NULL)
-			ieee80211_release_node(ic, ni);
 #if NBPFILTER > 0
 		if (ic->ic_rawbpf)
 			bpf_mtap(ic->ic_rawbpf, m);
 #endif
 
 		wh = mtod(m, struct ieee80211_frame *);
-		if (ic->ic_flags & IEEE80211_F_PRIVACY)
+		if (ic->ic_flags & IEEE80211_F_WEPON)
 			wh->i_fc[1] |= IEEE80211_FC1_WEP;
 		m_copydata(m, 0, sizeof(struct ieee80211_frame),
 		    (caddr_t)&frmhdr.an_whdr);
@@ -945,7 +942,7 @@ an_set_nwkey(struct an_softc *sc, struct ieee80211_nwkey *nwkey)
 	switch (nwkey->i_wepon) {
 	case IEEE80211_NWKEY_OPEN:
 		sc->sc_config.an_authtype = AN_AUTHTYPE_OPEN;
-		ic->ic_flags &= ~IEEE80211_F_PRIVACY;
+		ic->ic_flags &= ~IEEE80211_F_WEPON;
 		break;
 
 	case IEEE80211_NWKEY_WEP:
@@ -954,7 +951,7 @@ an_set_nwkey(struct an_softc *sc, struct ieee80211_nwkey *nwkey)
 		if (error == 0 || error == ENETRESET) {
 			sc->sc_config.an_authtype =
 			    AN_AUTHTYPE_OPEN | AN_AUTHTYPE_PRIVACY_IN_USE;
-			ic->ic_flags |= IEEE80211_F_PRIVACY;
+			ic->ic_flags |= IEEE80211_F_WEPON;
 		}
 		break;
 
@@ -963,7 +960,7 @@ an_set_nwkey(struct an_softc *sc, struct ieee80211_nwkey *nwkey)
 		if (error == 0 || error == ENETRESET) {
 			sc->sc_config.an_authtype = AN_AUTHTYPE_OPEN |
 			    AN_AUTHTYPE_PRIVACY_IN_USE | AN_AUTHTYPE_LEAP;
-			ic->ic_flags |= IEEE80211_F_PRIVACY;
+			ic->ic_flags |= IEEE80211_F_WEPON;
 		}
 		break;
 	default:
@@ -1335,7 +1332,6 @@ an_rx_intr(struct an_softc *sc)
 	ni = ieee80211_find_rxnode(ic, wh);
 	ieee80211_input(ifp, m, ni, frmhdr.an_rx_signal_strength,
 	    le32toh(frmhdr.an_rx_time));
-	ieee80211_release_node(ic, ni);
 }
 
 static void

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_shm.h,v 1.6 2004/09/28 19:05:19 jdolecek Exp $	*/
+/*	$NetBSD: linux_shm.h,v 1.5.4.1 2004/10/04 05:19:21 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.

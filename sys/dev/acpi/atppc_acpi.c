@@ -1,4 +1,4 @@
-/* $NetBSD: atppc_acpi.c,v 1.5 2004/05/01 12:03:48 kochi Exp $ */
+/* $NetBSD: atppc_acpi.c,v 1.1 2004/01/25 11:46:49 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atppc_acpi.c,v 1.5 2004/05/01 12:03:48 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atppc_acpi.c,v 1.1 2004/01/25 11:46:49 jdolecek Exp $");
 
 #include "opt_atppc.h"
 
@@ -84,13 +84,13 @@ static const char * const atppc_acpi_ids[] = {
 	NULL
 };
 
-static int atppc_acpi_dma_start(struct atppc_softc *, void *, u_int,
+static int atppc_acpi_dma_start(struct atppc_softc *, void *, u_int, 
 	u_int8_t);
 static int atppc_acpi_dma_finish(struct atppc_softc *);
 static int atppc_acpi_dma_abort(struct atppc_softc *);
-static int atppc_acpi_dma_malloc(struct device *, caddr_t *, bus_addr_t *,
+static int atppc_acpi_dma_malloc(struct device *, caddr_t *, bus_addr_t *, 
 	bus_size_t);
-static void atppc_acpi_dma_free(struct device *, caddr_t *, bus_addr_t *,
+static void atppc_acpi_dma_free(struct device *, caddr_t *, bus_addr_t *, 
 	bus_size_t);
 /*
  * atppc_acpi_match: autoconf(9) match routine
@@ -124,8 +124,8 @@ atppc_acpi_attach(struct device *parent, struct device *self, void *aux)
 	printf(": AT Parallel Port\n");
 
 	/* parse resources */
-	rv = acpi_resource_parse(&sc->sc_dev, aa->aa_node->ad_handle, "_CRS",
-				 &res, &acpi_resource_parse_ops_default);
+	rv = acpi_resource_parse(&sc->sc_dev, aa->aa_node, &res,
+	    &acpi_resource_parse_ops_default);
 	if (ACPI_FAILURE(rv))
 		return;
 
@@ -134,7 +134,7 @@ atppc_acpi_attach(struct device *parent, struct device *self, void *aux)
 	if (io == NULL) {
 		printf("%s: unable to find i/o register resource\n",
 		    sc->sc_dev.dv_xname);
-		goto out;
+		return;
 	}
 
 	/* find our IRQ */
@@ -142,7 +142,7 @@ atppc_acpi_attach(struct device *parent, struct device *self, void *aux)
 	if (irq == NULL) {
 		printf("%s: unable to find irq resource\n",
 		    sc->sc_dev.dv_xname);
-		goto out;
+		return;
 	}
 	nirq = irq->ar_irq;
 
@@ -151,7 +151,7 @@ atppc_acpi_attach(struct device *parent, struct device *self, void *aux)
 	if (drq == NULL) {
 		printf("%s: unable to find drq resource\n",
 		    sc->sc_dev.dv_xname);
-		goto out;
+		return;
 	}
 	asc->sc_drq = drq->ar_drq;
 
@@ -166,7 +166,7 @@ atppc_acpi_attach(struct device *parent, struct device *self, void *aux)
 		&sc->sc_ioh) != 0) {
 		printf("%s: attempt to map bus space failed, device not "
 			"properly attached.\n", self->dv_xname);
-		goto out;
+		return;
 	}
 
 	sc->sc_ieh = isa_intr_establish(aa->aa_ic, nirq,
@@ -187,40 +187,38 @@ atppc_acpi_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Run soft configuration attach */
 	atppc_sc_attach(sc);
- out:
-	acpi_resource_cleanup(&res);
 }
 
 /* Start DMA operation over ISA bus */
-static int
+static int 
 atppc_acpi_dma_start(struct atppc_softc *lsc, void *buf, u_int nbytes,
 	u_int8_t mode)
 {
 	struct atppc_acpi_softc * sc = (struct atppc_acpi_softc *) lsc;
-
+	
 	return atppc_isadma_start(sc->sc_ic, sc->sc_drq, buf, nbytes, mode);
 }
 
 /* Stop DMA operation over ISA bus */
-static int
+static int 
 atppc_acpi_dma_finish(struct atppc_softc * lsc)
 {
 	struct atppc_acpi_softc * sc = (struct atppc_acpi_softc *) lsc;
-
+	
 	return atppc_isadma_finish(sc->sc_ic, sc->sc_drq);
 }
 
 /* Abort DMA operation over ISA bus */
-int
+int 
 atppc_acpi_dma_abort(struct atppc_softc * lsc)
 {
 	struct atppc_acpi_softc * sc = (struct atppc_acpi_softc *) lsc;
-
+	
 	return atppc_isadma_abort(sc->sc_ic, sc->sc_drq);
 }
 
-/* Allocate memory for DMA over ISA bus */
-static int
+/* Allocate memory for DMA over ISA bus */ 
+int
 atppc_acpi_dma_malloc(struct device * dev, caddr_t * buf, bus_addr_t * bus_addr,
 	bus_size_t size)
 {
@@ -229,9 +227,9 @@ atppc_acpi_dma_malloc(struct device * dev, caddr_t * buf, bus_addr_t * bus_addr,
 	return atppc_isadma_malloc(sc->sc_ic, sc->sc_drq, buf, bus_addr, size);
 }
 
-/* Free memory allocated by atppc_isa_dma_malloc() */
-static void
-atppc_acpi_dma_free(struct device * dev, caddr_t * buf, bus_addr_t * bus_addr,
+/* Free memory allocated by atppc_isa_dma_malloc() */ 
+void 
+atppc_acpi_dma_free(struct device * dev, caddr_t * buf, bus_addr_t * bus_addr, 
 	bus_size_t size)
 {
 	struct atppc_acpi_softc * sc = (struct atppc_acpi_softc *) dev;

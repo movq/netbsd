@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.43 2004/08/14 16:06:43 dsl Exp $	*/
+/*	$NetBSD: md.c,v 1.41 2003/11/30 14:36:45 dsl Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -57,8 +57,6 @@
 #include "md.h"
 #include "msg_defs.h"
 #include "menu_defs.h"
-
-const char *fdtype = "ffs";
 
 int
 md_get_info(void)
@@ -207,4 +205,11 @@ md_pre_update()
 void
 md_init()
 {
+}
+
+void
+md_set_sizemultname()
+{
+
+	set_sizemultname_cyl();
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: mail_addr_find.c,v 1.1.1.4 2004/05/31 00:24:31 heas Exp $	*/
-
 /*++
 /* NAME
 /*	mail_addr_find 3
@@ -27,7 +25,7 @@
 /* .IP user
 /*	Look up \fIuser\fR when \fIdomain\fR is equal to $myorigin,
 /*	when \fIdomain\fR matches $mydestination, or when it matches
-/*	$inet_interfaces or $proxy_interfaces.
+/*	$inet_interfaces.
 /* .IP @domain
 /*	Look for an entry that matches the domain specified in \fIaddress\fR.
 /* .PP
@@ -130,7 +128,7 @@ const char *mail_addr_find(MAPS *path, const char *address, char **extp)
 
     /*
      * Try user+foo@$myorigin, user+foo@$mydestination or
-     * user+foo@[${proxy,inet}_interfaces]. Then try with +foo stripped off.
+     * user+foo@[$inet_interfaces]. Then try with +foo stripped off.
      */
     if (result == 0 && dict_errno == 0
 	&& (ratsign = strrchr(full_key, '@')) != 0

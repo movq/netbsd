@@ -1,4 +1,4 @@
-/*	$NetBSD: mkdevsw.c,v 1.5 2004/06/20 22:20:17 jmc Exp $	*/
+/*	$NetBSD: mkdevsw.c,v 1.4.2.1 2004/06/22 07:17:40 tron Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.

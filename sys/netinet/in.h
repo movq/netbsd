@@ -1,4 +1,4 @@
-/*	$NetBSD: in.h,v 1.69 2004/12/15 04:25:19 thorpej Exp $	*/
+/*	$NetBSD: in.h,v 1.64.2.1 2004/05/10 15:00:59 tron Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -356,58 +356,6 @@ struct ip_mreq {
 	{ 0, 0 }, \
 	{ 0, 0 }, \
 	{ "ipsec", CTLTYPE_NODE }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ 0, 0 }, \
-	{ "pim", CTLTYPE_NODE }, \
 }
 
 /*
@@ -437,8 +385,7 @@ struct ip_mreq {
 #define	IPCTL_CHECKINTERFACE   20	/* drop pkts in from 'wrong' iface */
 #define	IPCTL_IFQ	       21	/* ipintrq node */
 #define	IPCTL_RANDOMID	       22	/* use random IP ids (if configured) */
-#define	IPCTL_LOOPBACKCKSUM    23	/* do IP checksum on loopback */
-#define	IPCTL_MAXID	       24
+#define	IPCTL_MAXID	       23
 
 #define	IPCTL_NAMES { \
 	{ 0, 0 }, \
@@ -464,7 +411,6 @@ struct ip_mreq {
 	{ "checkinterface", CTLTYPE_INT }, \
 	{ "ifq", CTLTYPE_NODE }, \
 	{ "random_id", CTLTYPE_INT }, \
-	{ "do_loopback_cksum", CTLTYPE_INT }, \
 }
 #endif /* _NETBSD_SOURCE */
 
@@ -524,13 +470,13 @@ in_cksum_addword(u_int16_t a, u_int16_t b)
 extern	struct in_addr zeroin_addr;
 extern	u_char	ip_protox[];
 
-int	in_broadcast(struct in_addr, struct ifnet *);
-int	in_canforward(struct in_addr);
-int	in_cksum(struct mbuf *, int);
-int	in4_cksum(struct mbuf *, u_int8_t, int, int);
-void	in_delayed_cksum(struct mbuf *);
-int	in_localaddr(struct in_addr);
-void	in_socktrim(struct sockaddr_in *);
+int	in_broadcast __P((struct in_addr, struct ifnet *));
+int	in_canforward __P((struct in_addr));
+int	in_cksum __P((struct mbuf *, int));
+int	in4_cksum __P((struct mbuf *, u_int8_t, int, int));
+void	in_delayed_cksum __P((struct mbuf *));
+int	in_localaddr __P((struct in_addr));
+void	in_socktrim __P((struct sockaddr_in *));
 
 #define	in_hosteq(s,t)	((s).s_addr == (t).s_addr)
 #define	in_nullhost(x)	((x).s_addr == INADDR_ANY)

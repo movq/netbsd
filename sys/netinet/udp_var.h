@@ -1,4 +1,4 @@
-/*	$NetBSD: udp_var.h,v 1.25 2004/12/15 04:25:21 thorpej Exp $	*/
+/*	$NetBSD: udp_var.h,v 1.22 2003/08/07 16:33:21 agc Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -71,21 +71,18 @@ struct	udpstat {
 #define	UDPCTL_CHECKSUM		1	/* checksum UDP packets */
 #define	UDPCTL_SENDSPACE	2	/* default send buffer */
 #define	UDPCTL_RECVSPACE	3	/* default recv buffer */
-#define	UDPCTL_LOOPBACKCKSUM	4	/* do UDP checksum on loopback */
-#define	UDPCTL_MAXID		5
+#define	UDPCTL_MAXID		4
 
 #define UDPCTL_NAMES { \
 	{ 0, 0 }, \
 	{ "checksum", CTLTYPE_INT }, \
 	{ "sendspace", CTLTYPE_INT }, \
 	{ "recvspace", CTLTYPE_INT }, \
-	{ "do_loopback_cksum", CTLTYPE_INT }, \
 }
 
 #ifdef _KERNEL
 extern	struct	inpcbtable udbtable;
 extern	struct	udpstat udpstat;
-extern	int	udp_do_loopback_cksum;
 
 #ifdef __NO_STRICT_ALIGNMENT
 #define	UDP_HDR_ALIGNED_P(uh)	1
@@ -93,13 +90,13 @@ extern	int	udp_do_loopback_cksum;
 #define	UDP_HDR_ALIGNED_P(uh)	((((vaddr_t) (uh)) & 3) == 0)
 #endif
 
-void	 *udp_ctlinput(int, struct sockaddr *, void *);
-void	 udp_init(void);
-void	 udp_input(struct mbuf *, ...);
-int	 udp_output(struct mbuf *, ...);
-int	 udp_sysctl(int *, u_int, void *, size_t *, void *, size_t);
-int	 udp_usrreq(struct socket *,
-	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *);
+void	 *udp_ctlinput __P((int, struct sockaddr *, void *));
+void	 udp_init __P((void));
+void	 udp_input __P((struct mbuf *, ...));
+int	 udp_output __P((struct mbuf *, ...));
+int	 udp_sysctl __P((int *, u_int, void *, size_t *, void *, size_t));
+int	 udp_usrreq __P((struct socket *,
+	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *));
 #endif
 
 #endif /* _NETINET_UDP_VAR_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: frodoreg.h,v 1.2 2004/04/07 13:41:10 tsutsui Exp $	*/
+/*	$NetBSD: frodoreg.h,v 1.1.58.1 2004/04/11 02:57:49 jmc Exp $	*/
 
 /*
  * Copyright (c) 1997 Michael Smith.  All rights reserved.

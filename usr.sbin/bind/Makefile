@@ -1,8 +1,13 @@
-#	$NetBSD: Makefile,v 1.13 2004/05/23 03:16:40 lukem Exp $
+#	$NetBSD: Makefile,v 1.10 2001/02/11 06:45:59 itojun Exp $
 
-SUBDIR= libbind9 libdns libisc libisccc libisccfg liblwres .WAIT \
-	dig host named nslookup nsupdate rndc rndc-confgen
+.include <bsd.own.mk>
 
-.include "Makefile.inc"
+# named-xfer and ndc depend on named/pathname.h
+
+SUBDIR=	named-bootconf reload restart lib .WAIT dig dnskeygen dnsquery host \
+	nslookup nsupdate named .WAIT named-xfer ndc
+.if ${MKDOC} != no
+SUBDIR+=doc
+.endif
 
 .include <bsd.subdir.mk>

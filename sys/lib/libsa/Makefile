@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.55 2004/05/19 23:37:41 abs Exp $
+#	$NetBSD: Makefile,v 1.54.4.1 2004/05/22 17:13:31 he Exp $
 
 LIB=	sa
 NOPIC=	# defined

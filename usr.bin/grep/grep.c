@@ -1,4 +1,4 @@
-/*	$NetBSD: grep.c,v 1.2 2004/05/05 14:34:55 cjep Exp $	*/
+/*	$NetBSD: grep.c,v 1.1.1.2 2004/01/02 15:00:29 cjep Exp $	*/
 
 /*-
  * Copyright (c) 1999 James Howard and Dag-Erling Coïdan Smørgrav
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: grep.c,v 1.2 2004/05/05 14:34:55 cjep Exp $");
+__RCSID("$NetBSD: grep.c,v 1.1.1.2 2004/01/02 15:00:29 cjep Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -89,7 +89,6 @@ int sflag;		/* -s: silent mode (ignore errors) */
 int vflag;		/* -v: only show non-matching lines */
 int wflag;		/* -w: pattern must start and end on word boundaries */
 int xflag;		/* -x: pattern must match entire line */
-int lbflag;		/* --line-buffered */
 
 int colours = 0;	/* Attempt to use terminal colours */
 const char *grep_colour = "01;32"; /* Default colour string, green */
@@ -119,8 +118,7 @@ enum {
 	LABEL_OPT,
 	MMAP_OPT,
 	LINK_OPT,
-	COLOUR_OPT,
-	LINEBUF_OPT
+	COLOUR_OPT
 };
 
 /* Housekeeping */
@@ -145,7 +143,6 @@ struct option long_options[] =
 	{"help",		no_argument, 	   NULL, HELP_OPT},
 	{"label",		required_argument, NULL, LABEL_OPT},
 	{"mmap",		no_argument, 	   NULL, MMAP_OPT},
-	{"line-buffered",	no_argument, 	   NULL, LINEBUF_OPT},
 /*	{"links",		required_argument, NULL, LINK_OPT},*/
 	{"after-context",       required_argument, NULL, 'A'},
 	{"before-context",      required_argument, NULL, 'B'},
@@ -509,9 +506,6 @@ main(int argc, char *argv[])
  * 			}
  *                         break;
  */
-		case LINEBUF_OPT:
-			lbflag = 1;
-			break;
 
 		case HELP_OPT:
 		default:
@@ -552,9 +546,6 @@ main(int argc, char *argv[])
 	
 	if (argc == 0)
 		exit(!procfile(NULL));
-
-	if (lbflag)
-		setlinebuf(stdout);
 
 	if (dirbehave == GREP_RECURSE)
 		c = grep_tree(argv);

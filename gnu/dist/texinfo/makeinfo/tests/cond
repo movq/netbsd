@@ -1,7 +1,6 @@
 #!/bin/sh
 # Test conditional text.
 
-unset TEXINFO_OUTPUT
 : ${srcdir=.}
 
 # Default Info output.

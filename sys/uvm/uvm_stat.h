@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_stat.h,v 1.35 2004/11/23 05:08:33 yamt Exp $	*/
+/*	$NetBSD: uvm_stat.h,v 1.29.2.1 2004/05/09 08:55:42 jdc Exp $	*/
 
 /*
  *
@@ -54,16 +54,16 @@
 struct uvm_history_ent {
 	struct timeval tv; 		/* time stamp */
 	int cpunum;
-	const char *fmt;		/* printf format */
+	char *fmt; 			/* printf format */
 	size_t fmtlen;			/* length of printf format */
-	const char *fn;			/* function name */
+	char *fn;			/* function name */
 	size_t fnlen;			/* length of function name */
 	u_long call;			/* function call number */
 	u_long v[4];			/* values */
 };
 
 struct uvm_history {
-	const char *name;		/* name of this history */
+	const char *name;		/* name of this this history */
 	size_t namelen;			/* length of name, not including null */
 	LIST_ENTRY(uvm_history) list;	/* link on list of all histories */
 	int n;				/* number of entries */
@@ -88,7 +88,6 @@ LIST_HEAD(uvm_history_head, uvm_history);
 #define	UVMHIST_MAPHIST		0x00000001	/* maphist */
 #define	UVMHIST_PDHIST		0x00000002	/* pdhist */
 #define	UVMHIST_UBCHIST		0x00000004	/* ubchist */
-#define	UVMHIST_LOANHIST	0x00000008	/* loanhist */
 
 #ifdef _KERNEL
 
@@ -114,7 +113,7 @@ extern	struct uvm_history_head uvm_histories;
 #define UVMHIST_INIT(NAME,N) \
 do { \
 	(NAME).name = __STRING(NAME); \
-	(NAME).namelen = strlen(__STRING(NAME)); \
+	(NAME).namelen = strlen((NAME).name); \
 	(NAME).n = (N); \
 	(NAME).f = 0; \
 	simple_lock_init(&(NAME).l); \
@@ -128,7 +127,7 @@ do { \
 #define UVMHIST_INIT_STATIC(NAME,BUF) \
 do { \
 	(NAME).name = __STRING(NAME); \
-	(NAME).namelen = strlen(__STRING(NAME)); \
+	(NAME).namelen = strlen((NAME).name); \
 	(NAME).n = sizeof(BUF) / sizeof(struct uvm_history_ent); \
 	(NAME).f = 0; \
 	simple_lock_init(&(NAME).l); \
@@ -155,16 +154,16 @@ do { \
 	int _i_, _s_ = splhigh(); \
 	simple_lock(&(NAME).l); \
 	_i_ = (NAME).f; \
-	(NAME).f = (_i_ + 1 < (NAME).n) ? _i_ + 1 : 0; \
+	(NAME).f = (_i_ + 1) % (NAME).n; \
 	simple_unlock(&(NAME).l); \
 	splx(_s_); \
 	if (!cold) \
 		microtime(&(NAME).e[_i_].tv); \
 	(NAME).e[_i_].cpunum = cpu_number(); \
 	(NAME).e[_i_].fmt = (FMT); \
-	(NAME).e[_i_].fmtlen = strlen(FMT); \
+	(NAME).e[_i_].fmtlen = strlen((NAME).e[_i_].fmt); \
 	(NAME).e[_i_].fn = _uvmhist_name; \
-	(NAME).e[_i_].fnlen = strlen(_uvmhist_name); \
+	(NAME).e[_i_].fnlen = strlen((NAME).e[_i_].fn); \
 	(NAME).e[_i_].call = _uvmhist_call; \
 	(NAME).e[_i_].v[0] = (u_long)(A); \
 	(NAME).e[_i_].v[1] = (u_long)(B); \
@@ -187,7 +186,7 @@ do { \
 
 #define UVMHIST_FUNC(FNAME) \
 	static int _uvmhist_cnt = 0; \
-	static const char *const _uvmhist_name = FNAME; \
+	static char *_uvmhist_name = FNAME; \
 	int _uvmhist_call;
 
 static __inline void uvmhist_print(struct uvm_history_ent *);

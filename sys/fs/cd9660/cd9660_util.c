@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_util.c,v 1.3 2004/11/21 21:49:08 jdolecek Exp $	*/
+/*	$NetBSD: cd9660_util.c,v 1.2 2003/08/07 16:31:35 agc Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_util.c,v 1.3 2004/11/21 21:49:08 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_util.c,v 1.2 2003/08/07 16:31:35 agc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,13 +56,6 @@ __KERNEL_RCSID(0, "$NetBSD: cd9660_util.c,v 1.3 2004/11/21 21:49:08 jdolecek Exp
 #include <fs/cd9660/iso.h>
 #include <fs/cd9660/cd9660_extern.h>
 
-#include <fs/unicode.h>
-
-static u_int16_t wget(const u_char **, int);
-static int wput(u_char *, size_t, u_int16_t, int);
-
-int cd9660_utf8_joliet = 1;
-
 /*
  * Get one character out of an iso filename
  * Return number of bytes consumed
@@ -72,24 +65,22 @@ isochar(isofn, isoend, joliet_level, c)
 	const u_char *isofn;
 	const u_char *isoend;
 	int joliet_level;
-	u_int16_t *c;
+	u_char *c;
 {
-	*c = isofn[0];
-	if (joliet_level == 0 || isofn + 1 == isoend) {
+	*c = *isofn++;
+	if (joliet_level == 0 || isofn == isoend)
 		/* (00) and (01) are one byte in Joliet, too */
 		return 1;
-	}
 
-	if (cd9660_utf8_joliet) {
-		*c = (*c << 8) + isofn[1];
-	} else {
-		/* characters outside ISO-8859-1 subset replaced with '?' */
-		if (*c != 0)
-			*c = '?';
-		else
-			*c = isofn[1];
+	/* No Unicode support yet :-( */
+	switch (*c) {
+	default:
+		*c = '?';
+		break;
+	case '\0':
+		*c = *isofn;
+		break;
 	}
-
 	return 2;
 }
 
@@ -103,57 +94,54 @@ isofncmp(fn, fnlen, isofn, isolen, joliet_level)
 	int fnlen, isolen, joliet_level;
 {
 	int i, j;
-	u_int16_t fc, ic;
+	char c;
 	const u_char *isoend = isofn + isolen;
 
-	/* fn should always contain standard C string, and wget() needs it */
-	KASSERT(fn[fnlen] == 0);
-
-	while ((fc = wget(&fn, joliet_level)) && fc) {
+	while (--fnlen >= 0) {
 		if (isofn == isoend)
-			return fc;
-		isofn += isochar(isofn, isoend, joliet_level, &ic);
-		if (ic == ';') {
-			switch (fc) {
+			return *fn;
+		isofn += isochar(isofn, isoend, joliet_level, &c);
+		if (c == ';') {
+			switch (*fn++) {
 			default:
-				return fc;
+				return *--fn;
 			case 0:
 				return 0;
 			case ';':
 				break;
 			}
-			fn++;
 			for (i = 0; --fnlen >= 0; i = i * 10 + *fn++ - '0') {
 				if (*fn < '0' || *fn > '9') {
 					return -1;
 				}
 			}
-			for (j = 0; isofn != isoend; j = j * 10 + ic - '0')
+			for (j = 0; isofn != isoend; j = j * 10 + c - '0')
 				isofn += isochar(isofn, isoend,
-						 joliet_level, &ic);
+						 joliet_level, &c);
 			return i - j;
 		}
-		if (ic != fc) {
-			if (ic >= 'A' && ic <= 'Z') {
-				if (ic + ('a' - 'A') != fc) {
-					if (fc >= 'a' && fc <= 'z')
-						fc -= 'a' - 'A';
-
-					return (int) fc - (int) ic;
+		if (((u_char) c) != *fn) {
+			if (c >= 'A' && c <= 'Z') {
+				if (c + ('a' - 'A') != *fn) {
+					if (*fn >= 'a' && *fn <= 'z')
+						return *fn - ('a' - 'A') - c;
+					else
+						return *fn - c;
 				}
 			} else
-				return (int) fc - (int) ic;
+				return *fn - c;
 		}
+		fn++;
 	}
 	if (isofn != isoend) {
-		isofn += isochar(isofn, isoend, joliet_level, &ic);
-		switch (ic) {
+		isofn += isochar(isofn, isoend, joliet_level, &c);
+		switch (c) {
 		default:
 			return -1;
 		case '.':
 			if (isofn != isoend) {
-				isochar(isofn, isoend, joliet_level, &ic);
-				if (ic == ';')
+				isochar(isofn, isoend, joliet_level, &c);
+				if (c == ';')
 					return 0;
 			}
 			return -1;
@@ -179,71 +167,24 @@ isofntrans(infn, infnlen, outfn, outfnlen, original, casetrans, assoc, joliet_le
 {
 	int fnidx = 0;
 	u_char *infnend = infn + infnlen;
-	u_int16_t c;
-	int sz;
-
+	
 	if (assoc) {
 		*outfn++ = ASSOCCHAR;
 		fnidx++;
 	}
+	for (; infn != infnend; fnidx++) {
+		char c;
 
-	for(; infn != infnend; fnidx += sz) {
 		infn += isochar(infn, infnend, joliet_level, &c);
 
 		if (casetrans && joliet_level == 0 && c >= 'A' && c <= 'Z')
-			c = c + ('a' - 'A');
+			*outfn++ = c + ('a' - 'A');
 		else if (!original && c == ';') {
 			if (fnidx > 0 && outfn[-1] == '.')
 				fnidx--;
 			break;
-		}
-
-		sz = wput(outfn, MAXNAMLEN - fnidx, c, joliet_level);
-		if (sz == 0) {
-			/* not enough space to write the character */
-			if (fnidx < MAXNAMLEN) {
-				*outfn = '?';
-				fnidx++;
-			}
-			break;
-		}
-		outfn += sz;
+		} else
+			*outfn++ = c;
 	}
 	*outfnlen = fnidx;
-}
-
-static u_int16_t
-wget(const u_char **str, int joliet_level)
-{
-	if (joliet_level > 0 && cd9660_utf8_joliet) {
-		/* decode UTF-8 sequence */
-		return wget_utf8((const char **) str);
-	} else {
-		/*
-		 * Raw 8-bit characters without any conversion. For Joliet,
-		 * this effectively assumes provided file name is using
-		 * ISO-8859-1 subset.
-		 */
-		u_int16_t c = *str[0];
-		(*str)++;
-
-		return c;
-	}
-}
-
-static int
-wput(u_char *s, size_t n, u_int16_t c, int joliet_level)
-{
-	if (joliet_level > 0 && cd9660_utf8_joliet) {
-		/* Store Joliet file name encoded into UTF-8 */
-		return wput_utf8((char *)s, n, c);
-	} else {
-		/*
-		 * Store raw 8-bit characters without any conversion.
-		 * For Joliet case, this filters the Unicode characters
-		 * to ISO-8859-1 subset.
-		 */
-		*s = (u_char)c;
-		return 1;
-	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.21 2004/06/12 14:44:42 he Exp $	*/
+/*	$NetBSD: md.h,v 1.19 2003/07/25 08:26:28 dsl Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -65,7 +65,22 @@ typedef struct {
  *    This should match the definitions in include/machine/disklabel.h
  *    and must conform to the matching rules in arch/mac68k/mac68k/disksubr.c
  */
-extern MAP_TYPE map_types[];
+EXTERN MAP_TYPE map_types[]
+#ifdef MAIN
+= {
+	{MAP_RESERVED, APPLE_PART_TYPE_DRIVER},
+	{MAP_RESERVED, APPLE_PART_TYPE_DRIVER43},
+	{MAP_RESERVED, APPLE_PART_TYPE_DRIVERATA},
+	{MAP_RESERVED, APPLE_PART_TYPE_FWB_COMPONENT},
+	{MAP_MACOS,    APPLE_PART_TYPE_MAC},
+	{MAP_NETBSD,   APPLE_PART_TYPE_NETBSD},
+	{MAP_RESERVED, APPLE_PART_TYPE_PARTMAP},
+	{MAP_OTHER,    APPLE_PART_TYPE_SCRATCH},
+	{MAP_NETBSD,   APPLE_PART_TYPE_UNIX},
+	{MAP_EOL,      NULL}
+}
+#endif
+;
 
 /*
  * Define NetBSD partition types
@@ -76,7 +91,7 @@ extern MAP_TYPE map_types[];
 #define HFS_PART 4
 #define SCRATCH_PART 5
 
-int usefull;			/* on install, clobber entire disk */
+EXTERN int usefull;			/* on install, clobber entire disk */
 
 typedef struct {
         int size;               /* number of blocks in map for I/O */
@@ -98,7 +113,11 @@ typedef struct {
  */
 #define NEW_MAP_SIZE 15
 
-MAP map;
+EXTERN MAP map
+#ifdef MAIN
+= {0, 0, 0, 0, 0, 0, 0, 0, {0}}
+#endif
+;
 
 int	edit_diskmap (void);		
 void	disp_selected_part (int sel);
@@ -177,7 +196,24 @@ typedef struct {
  *  Has minimal entry for an old Apple SCSI driver, a newer 43 SCSI
  *  driver and an IDE driver (for those Macs with IDE). 
  */
-extern struct apple_part_map_entry new_map[];
+EXTERN struct apple_part_map_entry new_map[]
+#ifdef MAIN
+= {
+	{ APPLE_PART_MAP_ENTRY_MAGIC, 0xa5a5, 6, 1, NEW_MAP_SIZE & 0x7e,
+	  "Apple", "Apple_Partition_Map", 0, NEW_MAP_SIZE, 0x37 },
+	{ APPLE_PART_MAP_ENTRY_MAGIC, 0, 6, 64, 32,
+	  "Macintosh", "Apple_Driver", 0, 0, 0x37 },
+	{ APPLE_PART_MAP_ENTRY_MAGIC, 0, 6, 96, 64,
+	  "Macintosh", "Apple_Driver43", 0, 0, 0x37 },
+	{ APPLE_PART_MAP_ENTRY_MAGIC, 0, 6, 160, 64,
+	  "Macintosh", "Apple_Driver_ATA", 0, 0, 0x37 },
+	{ APPLE_PART_MAP_ENTRY_MAGIC, 0, 6, 224, 4096,
+	  "untitled", "Apple_HFS", 0, 0, 0x37 },
+	{ APPLE_PART_MAP_ENTRY_MAGIC, 0, 6,4320, 0,
+	  "untitled", "Apple_Free", 0, 0, 0x37 }
+}
+#endif
+;
 
 /* Megs required for a full X installation. */
 #define XNEEDMB 50
@@ -210,7 +246,7 @@ extern struct apple_part_map_entry new_map[];
 /*
  * Default fileystem type for floppy disks.
  */
-const char *fdtype;
+EXTERN const char *fdtype INIT("msdos");
 
 /*
  *  prototypes for MD code.

@@ -1,5 +1,3 @@
-/*	$NetBSD: argv.h,v 1.1.1.3 2004/05/31 00:24:55 heas Exp $	*/
-
 #ifndef _ARGV_H_INCLUDED_
 #define _ARGV_H_INCLUDED_
 
@@ -24,7 +22,6 @@ typedef struct ARGV {
 
 extern ARGV *argv_alloc(int);
 extern void argv_add(ARGV *,...);
-extern void argv_addn(ARGV *,...);
 extern void argv_terminate(ARGV *);
 extern ARGV *argv_free(ARGV *);
 

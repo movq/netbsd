@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6_input.c,v 1.77 2004/12/04 16:10:25 peter Exp $	*/
+/*	$NetBSD: ip6_input.c,v 1.73.2.1 2004/05/28 07:23:48 tron Exp $	*/
 /*	$KAME: ip6_input.c,v 1.188 2001/03/29 05:34:31 itojun Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip6_input.c,v 1.77 2004/12/04 16:10:25 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip6_input.c,v 1.73.2.1 2004/05/28 07:23:48 tron Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -112,8 +112,11 @@ __KERNEL_RCSID(0, "$NetBSD: ip6_input.c,v 1.77 2004/12/04 16:10:25 peter Exp $")
 
 #include <netinet6/ip6protosw.h>
 
+/* we need it for NLOOP. */
+#include "loop.h"
 #include "faith.h"
 #include "gif.h"
+#include "bpfilter.h"
 
 #if NGIF > 0
 #include <netinet6/in6_gif.h>
@@ -128,6 +131,7 @@ static int ip6qmaxlen = IFQ_MAXLEN;
 struct in6_ifaddr *in6_ifaddr;
 struct ifqueue ip6intrq;
 
+extern struct ifnet loif[NLOOP];
 int ip6_forward_srcrt;			/* XXX */
 int ip6_sourcecheck;			/* XXX */
 int ip6_sourcecheck_interval;		/* XXX */
@@ -244,7 +248,7 @@ ip6_input(m)
 #define M2MMAX	(sizeof(ip6stat.ip6s_m2m)/sizeof(ip6stat.ip6s_m2m[0]))
 		if (m->m_next) {
 			if (m->m_flags & M_LOOP) {
-				ip6stat.ip6s_m2m[lo0ifp->if_index]++; /* XXX */
+				ip6stat.ip6s_m2m[loif[0].if_index]++; /* XXX */
 			} else if (m->m_pkthdr.rcvif->if_index < M2MMAX)
 				ip6stat.ip6s_m2m[m->m_pkthdr.rcvif->if_index]++;
 			else
@@ -993,6 +997,12 @@ ip6_savecontrol(in6p, mp, ip6, m)
 	struct ip6_hdr *ip6;
 	struct mbuf *m;
 {
+	struct proc *p = curproc;	/* XXX */
+	int privileged;
+
+	privileged = 0;
+	if (p && !suser(p->p_ucred, &p->p_acflag))
+		privileged++;
 
 #ifdef SO_TIMESTAMP
 	if (in6p->in6p_socket->so_options & SO_TIMESTAMP) {
@@ -1045,13 +1055,12 @@ ip6_savecontrol(in6p, mp, ip6, m)
 	/* IN6P_NEXTHOP - for outgoing packet only */
 
 	/*
-	 * IPV6_HOPOPTS socket option.  Recall that we required super-user
-	 * privilege for the option (see ip6_ctloutput), but it might be too
-	 * strict, since there might be some hop-by-hop options which can be
-	 * returned to normal user.
-	 * See also RFC 2292 section 6.
+	 * IPV6_HOPOPTS socket option. We require super-user privilege
+	 * for the option, but it might be too strict, since there might
+	 * be some hop-by-hop options which can be returned to normal user.
+	 * See RFC 2292 section 6.
 	 */
-	if ((in6p->in6p_flags & IN6P_HOPOPTS) != 0) {
+	if ((in6p->in6p_flags & IN6P_HOPOPTS) != 0 && privileged) {
 		/*
 		 * Check if a hop-by-hop options header is contatined in the
 		 * received packet, and if so, store the options as ancillary
@@ -1144,6 +1153,14 @@ ip6_savecontrol(in6p, mp, ip6, m)
 			switch (nxt) {
 			case IPPROTO_DSTOPTS:
 				if (!in6p->in6p_flags & IN6P_DSTOPTS)
+					break;
+
+				/*
+				 * We also require super-user privilege for
+				 * the option.
+				 * See the comments on IN6_HOPOPTS.
+				 */
+				if (!privileged)
 					break;
 
 				*mp = sbcreatecontrol((caddr_t)ip6e, elen,

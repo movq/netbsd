@@ -1,4 +1,4 @@
-/*	$NetBSD: ioat66.c,v 1.9 2004/09/14 20:20:48 drochner Exp $	*/
+/*	$NetBSD: ioat66.c,v 1.7 2003/01/06 13:05:14 wiz Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ioat66.c,v 1.9 2004/09/14 20:20:48 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ioat66.c,v 1.7 2003/01/06 13:05:14 wiz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,6 +71,7 @@ int ioatbases[NSLAVES]={0x220,0x228,0x240,0x248,0x260,0x268};
 int ioat66probe __P((struct device *, struct cfdata *, void *));
 void ioat66attach __P((struct device *, struct device *, void *));
 int ioat66intr __P((void *));
+int ioat66print __P((void *, const char *));
 
 CFATTACH_DECL(ioat, sizeof(struct ioat_softc),
     ioat66probe, ioat66attach, NULL, NULL);
@@ -95,7 +96,7 @@ ioat66probe(parent, self, aux)
 	 */
 
 	/* Disallow wildcarded i/o address. */
-	if (ia->ia_iobase == ISA_UNKNOWN_PORT)
+	if (ia->ia_iobase == ISACF_PORT_DEFAULT)
 		return (0);
 
 	/* if the first port is in use as console, then it. */
@@ -129,6 +130,19 @@ out:
 	if (rv)
 		ia->ia_iosize = NSLAVES * COM_NPORTS;
 	return (rv);
+}
+
+int
+ioat66print(aux, pnp)
+	void *aux;
+	const char *pnp;
+{
+	struct commulti_attach_args *ca = aux;
+
+	if (pnp)
+		aprint_normal("com at %s", pnp);
+	aprint_normal(" slave %d", ca->ca_slave);
+	return (UNCONF);
 }
 
 void
@@ -172,7 +186,7 @@ ioat66attach(parent, self, aux)
 		ca.ca_iobase = ioatbases[i];
 		ca.ca_noien = 0;
 
-		sc->sc_slaves[i] = config_found(self, &ca, commultiprint);
+		sc->sc_slaves[i] = config_found(self, &ca, ioat66print);
 		if (sc->sc_slaves[i] != NULL)
 			sc->sc_alive |= 1 << i;
 	}

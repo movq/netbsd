@@ -1,6 +1,35 @@
-/*	$NetBSD: netdb.h,v 1.47 2004/11/16 06:00:51 itojun Exp $	*/
+/*	$NetBSD: netdb.h,v 1.34.2.1 2004/09/11 11:52:52 he Exp $	*/
 
 /*
+ * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the project nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE PROJECT OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
+/*-
  * Copyright (c) 1980, 1983, 1988, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -27,16 +56,19 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ *      @(#)netdb.h	8.1 (Berkeley) 6/2/93
+ *	Id: netdb.h,v 4.9.1.2 1993/05/17 09:59:01 vixie Exp
  * -
  * Portions Copyright (c) 1993 by Digital Equipment Corporation.
- *
+ * 
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies, and that
  * the name of Digital Equipment Corporation not be used in advertising or
  * publicity pertaining to distribution of the document or software without
  * specific, written prior permission.
- *
+ * 
  * THE SOFTWARE IS PROVIDED "AS IS" AND DIGITAL EQUIPMENT CORP. DISCLAIMS ALL
  * WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS.   IN NO EVENT SHALL DIGITAL EQUIPMENT
@@ -46,60 +78,24 @@
  * ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
  * SOFTWARE.
  * -
- * Portions Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *    This product includes software developed by WIDE Project and
- *    its contributors.
- * 4. Neither the name of the project nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE PROJECT OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- * -
  * --Copyright--
  */
 
-/*
- *      @(#)netdb.h	8.1 (Berkeley) 6/2/93
- *	Id: netdb.h,v 1.12.2.1.4.4 2004/03/16 02:19:19 marka Exp
- */
-
 #ifndef _NETDB_H_
-#define	_NETDB_H_
+#define _NETDB_H_
 
 #include <machine/ansi.h>
-#include <machine/endian_machdep.h>
 #include <sys/ansi.h>
 #include <sys/cdefs.h>
 #include <sys/featuretest.h>
 #include <inttypes.h>
+
 /*
  * Data types
  */
 #ifndef socklen_t
 typedef __socklen_t	socklen_t;
-#define	socklen_t	__socklen_t
+#define socklen_t	__socklen_t
 #endif
 
 #ifdef  _BSD_SIZE_T_
@@ -108,26 +104,14 @@ typedef _BSD_SIZE_T_	size_t;
 #endif
 
 #if defined(_NETBSD_SOURCE)
-#ifndef _PATH_HEQUIV
 #define	_PATH_HEQUIV	"/etc/hosts.equiv"
-#endif
-#ifndef _PATH_HOSTS
 #define	_PATH_HOSTS	"/etc/hosts"
-#endif
-#ifndef _PATH_NETWORKS
 #define	_PATH_NETWORKS	"/etc/networks"
-#endif
-#ifndef _PATH_PROTOCOLS
 #define	_PATH_PROTOCOLS	"/etc/protocols"
-#endif
-#ifndef _PATH_SERVICES
 #define	_PATH_SERVICES	"/etc/services"
 #endif
-#endif
 
-__BEGIN_DECLS
 extern int h_errno;
-__END_DECLS
 
 /*
  * Structures returned by network data base library.  All addresses are
@@ -140,7 +124,7 @@ struct	hostent {
 	int	h_addrtype;	/* host address type */
 	int	h_length;	/* length of address */
 	char	**h_addr_list;	/* list of addresses from name server */
-#define	h_addr	h_addr_list[0]	/* address, for backward compatiblity */
+#define	h_addr	h_addr_list[0]	/* address, for backward compatibility */
 };
 
 /*
@@ -151,15 +135,7 @@ struct	netent {
 	char		*n_name;	/* official name of net */
 	char		**n_aliases;	/* alias list */
 	int		n_addrtype;	/* net address type */
-#if (defined(__sparc__) && defined(_LP64)) || \
-    (defined(__sh__) && defined(_LP64) && (_BYTE_ORDER == _BIG_ENDIAN))
-	int		__n_pad0;	/* ABI compatibility */
-#endif
-	uint32_t	n_net;		/* network # */
-#if defined(__alpha__) || (defined(__i386__) && defined(_LP64)) || \
-    (defined(__sh__) && defined(_LP64) && (_BYTE_ORDER == _LITTLE_ENDIAN))
-	int		__n_pad0;	/* ABI compatibility */
-#endif
+	unsigned long	n_net;		/* network # XXX */
 };
 
 struct	servent {
@@ -189,16 +165,16 @@ struct	protoent {
 #if (_POSIX_C_SOURCE - 0) >= 200112L || (_XOPEN_SOURCE - 0) >= 520 || \
     defined(_NETBSD_SOURCE)
 struct addrinfo {
-	int	ai_flags;	/* AI_xxx */
+	int	ai_flags;	/* AI_PASSIVE, AI_CANONNAME, AI_NUMERICHOST */
 	int	ai_family;	/* PF_xxx */
 	int	ai_socktype;	/* SOCK_xxx */
 	int	ai_protocol;	/* 0 or IPPROTO_xxx for IPv4 and IPv6 */
-#if defined(__sparc__) && defined(_LP64)
-	int	__ai_pad0;	/* ABI compatibility */
+#if defined(__sparc64__)
+	int	__ai_pad0;
 #endif
 	socklen_t ai_addrlen;	/* length of ai_addr */
 #if defined(__alpha__) || (defined(__i386__) && defined(_LP64))
-	int	__ai_pad0;	/* ABI compatbility */
+	int	__ai_pad0;
 #endif
 	char	*ai_canonname;	/* canonical name for hostname */
 	struct sockaddr *ai_addr;	/* binary address */
@@ -216,7 +192,7 @@ struct addrinfo {
 #define	NETDB_SUCCESS	0	/* no problem */
 #endif
 #define	HOST_NOT_FOUND	1 /* Authoritative Answer Host not found */
-#define	TRY_AGAIN	2 /* Non-Authoritive Host not found, or SERVERFAIL */
+#define	TRY_AGAIN	2 /* Non-Authoritative Host not found, or SERVERFAIL */
 #define	NO_RECOVERY	3 /* Non recoverable errors, FORMERR, REFUSED, NOTIMP */
 #define	NO_DATA		4 /* Valid name, no data record of requested type */
 #if defined(_NETBSD_SOURCE)
@@ -251,21 +227,9 @@ struct addrinfo {
     defined(_NETBSD_SOURCE)
 #define	AI_PASSIVE	0x00000001 /* get address to use bind() */
 #define	AI_CANONNAME	0x00000002 /* fill ai_canonname */
-#define	AI_NUMERICHOST	0x00000004 /* prevent host name resolution */
-#define	AI_NUMERICSERV	0x00000008 /* prevent service name resolution */
-/* valid flags for addrinfo (not a standard def, apps should not use it) */
-#define	AI_MASK	\
-    (AI_PASSIVE | AI_CANONNAME | AI_NUMERICHOST | AI_NUMERICSERV)
-
-#if 0
-/*
- * Flag values for getipnodebyname()
- */
-#define	AI_V4MAPPED	0x00000008
-#define	AI_ALL		0x00000010
-#define	AI_ADDRCONFIG	0x00000020
-#define	AI_DEFAULT	(AI_V4MAPPED|AI_ADDRCONFIG)
-#endif
+#define	AI_NUMERICHOST	0x00000004 /* prevent name resolution */
+/* valid flags for addrinfo */
+#define	AI_MASK		(AI_PASSIVE | AI_CANONNAME | AI_NUMERICHOST)
 #endif
 
 #if (_POSIX_C_SOURCE - 0) >= 200112L || (_XOPEN_SOURCE - 0) >= 520 || \
@@ -286,13 +250,15 @@ struct addrinfo {
 #define	NI_NAMEREQD	0x00000004
 #define	NI_NUMERICSERV	0x00000008
 #define	NI_DGRAM	0x00000010
-#define	NI_NUMERICSCOPE	0x00000040
+#if defined(_NETBSD_SOURCE)
+#define	NI_WITHSCOPEID	0x00000020	/*KAME extension*/
+#endif
 
 /*
  * Scope delimit character
  */
 #if defined(_NETBSD_SOURCE)
-#define	SCOPE_DELIMITER	'%'
+#define	SCOPE_DELIMITER '%'		/*KAME extension*/
 #endif
 #endif /* (_POSIX_C_SOURCE - 0) >= 200112L || ... */
 
@@ -320,7 +286,7 @@ struct hostent	*getipnodebyaddr __P((const void *, size_t, int, int *));
 struct hostent	*getipnodebyname __P((const char *, int, int, int *));
 #endif
 #endif
-struct netent	*getnetbyaddr __P((uint32_t, int));
+struct netent	*getnetbyaddr __P((unsigned long, int));
 struct netent	*getnetbyname __P((const char *));
 struct netent	*getnetent __P((void));
 struct protoent	*getprotobyname __P((const char *));
@@ -341,13 +307,12 @@ void		setnetent __P((int));
 void		setprotoent __P((int));
 #if (_POSIX_C_SOURCE - 0) >= 200112L || (_XOPEN_SOURCE - 0) >= 520 || \
     defined(_NETBSD_SOURCE)
-void		setservent __P((int));
 int		getaddrinfo __P((const char *, const char *,
 				 const struct addrinfo *, struct addrinfo **));
 int		getnameinfo __P((const struct sockaddr *, socklen_t, char *,
 				 socklen_t, char *, socklen_t, int));
 void		freeaddrinfo __P((struct addrinfo *));
-const char	*gai_strerror __P((int));
+char		*gai_strerror __P((int));
 #endif
 void		setservent __P((int));
 
@@ -368,6 +333,7 @@ struct protoent	*getprotobyname_r __P((const char *,
     struct protoent *, struct protoent_data *));
 struct protoent	*getprotobynumber_r __P((int,
     struct protoent *, struct protoent_data *));
+struct protoent	*getprotoent_r __P((struct protoent *, struct protoent_data *));
 void setprotoent_r __P((int, struct protoent_data *));
 void endprotoent_r __P((struct protoent_data *));
 

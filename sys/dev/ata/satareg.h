@@ -1,4 +1,4 @@
-/*	$NetBSD: satareg.h,v 1.3 2004/05/23 23:07:59 wiz Exp $	*/
+/*	$NetBSD: satareg.h,v 1.2 2003/12/17 16:16:36 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
  * Reference:
  *
  *	Serial ATA: High Speed Serialized AT Attachment
- *	Revision 1.0 29-August-2001
+ *	Revsion 1.0 29-August-2001
  *	Serial ATA Working Group
  */
 

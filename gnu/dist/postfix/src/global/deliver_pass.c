@@ -1,5 +1,3 @@
-/*	$NetBSD: deliver_pass.c,v 1.1.1.5 2004/05/31 00:24:29 heas Exp $	*/
-
 /*++
 /* NAME
 /*	deliver_pass 3
@@ -109,10 +107,6 @@ static int deliver_pass_send_request(VSTREAM *stream, DELIVER_REQUEST *request,
 	       ATTR_TYPE_STR, MAIL_ATTR_ERRTO, request->errors_to,
 	       ATTR_TYPE_STR, MAIL_ATTR_RRCPT, request->return_receipt,
 	       ATTR_TYPE_LONG, MAIL_ATTR_TIME, request->arrival_time,
-	       ATTR_TYPE_STR, MAIL_ATTR_CLIENT_NAME, request->client_name,
-	       ATTR_TYPE_STR, MAIL_ATTR_CLIENT_ADDR, request->client_addr,
-	       ATTR_TYPE_STR, MAIL_ATTR_PROTO_NAME, request->client_proto,
-	       ATTR_TYPE_STR, MAIL_ATTR_HELO_NAME, request->client_helo,
 	       ATTR_TYPE_LONG, MAIL_ATTR_OFFSET, offs,
 	       ATTR_TYPE_STR, MAIL_ATTR_ORCPT, orcpt,
 	       ATTR_TYPE_STR, MAIL_ATTR_RECIP, addr,

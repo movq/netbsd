@@ -1,6 +1,5 @@
 /* addr2line.c -- convert addresses to line number and function name
-   Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003
-   Free Software Foundation, Inc.
+   Copyright 1997, 1998, 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
    Contributed by Ulrich Lauther <Ulrich.Lauther@mchp.siemens.de>
 
    This file is part of GNU Binutils.
@@ -59,16 +58,18 @@ static struct option long_options[] =
   {0, no_argument, 0, 0}
 };
 
-static void usage (FILE *, int);
-static void slurp_symtab (bfd *);
-static void find_address_in_section (bfd *, asection *, void *);
-static void translate_addresses (bfd *);
-static void process_file (const char *, const char *);
+static void usage PARAMS ((FILE *, int));
+static void slurp_symtab PARAMS ((bfd *));
+static void find_address_in_section PARAMS ((bfd *, asection *, PTR));
+static void translate_addresses PARAMS ((bfd *));
+static void process_file PARAMS ((const char *, const char *));
 
 /* Print a usage message to STREAM and exit with STATUS.  */
 
 static void
-usage (FILE *stream, int status)
+usage (stream, status)
+     FILE *stream;
+     int status;
 {
   fprintf (stream, _("Usage: %s [option(s)] [addr(s)]\n"), program_name);
   fprintf (stream, _(" Convert addresses into line number/file name pairs.\n"));
@@ -92,7 +93,8 @@ usage (FILE *stream, int status)
 /* Read in the symbol table.  */
 
 static void
-slurp_symtab (bfd *abfd)
+slurp_symtab (abfd)
+     bfd *abfd;
 {
   long symcount;
   unsigned int size;
@@ -100,9 +102,9 @@ slurp_symtab (bfd *abfd)
   if ((bfd_get_file_flags (abfd) & HAS_SYMS) == 0)
     return;
 
-  symcount = bfd_read_minisymbols (abfd, FALSE, (void *) &syms, &size);
+  symcount = bfd_read_minisymbols (abfd, FALSE, (PTR) &syms, &size);
   if (symcount == 0)
-    symcount = bfd_read_minisymbols (abfd, TRUE /* dynamic */, (void *) &syms, &size);
+    symcount = bfd_read_minisymbols (abfd, TRUE /* dynamic */, (PTR) &syms, &size);
 
   if (symcount < 0)
     bfd_fatal (bfd_get_filename (abfd));
@@ -121,8 +123,10 @@ static bfd_boolean found;
    bfd_map_over_sections.  */
 
 static void
-find_address_in_section (bfd *abfd, asection *section,
-			 void *data ATTRIBUTE_UNUSED)
+find_address_in_section (abfd, section, data)
+     bfd *abfd;
+     asection *section;
+     PTR data ATTRIBUTE_UNUSED;
 {
   bfd_vma vma;
   bfd_size_type size;
@@ -149,7 +153,8 @@ find_address_in_section (bfd *abfd, asection *section,
    file_name:line_number and optionally function name.  */
 
 static void
-translate_addresses (bfd *abfd)
+translate_addresses (abfd)
+     bfd *abfd;
 {
   int read_stdin = (naddr == 0);
 
@@ -172,7 +177,7 @@ translate_addresses (bfd *abfd)
 	}
 
       found = FALSE;
-      bfd_map_over_sections (abfd, find_address_in_section, NULL);
+      bfd_map_over_sections (abfd, find_address_in_section, (PTR) NULL);
 
       if (! found)
 	{
@@ -225,13 +230,12 @@ translate_addresses (bfd *abfd)
 /* Process a file.  */
 
 static void
-process_file (const char *file_name, const char *target)
+process_file (file_name, target)
+     const char *file_name;
+     const char *target;
 {
   bfd *abfd;
   char **matching;
-
-  if (get_file_size (file_name) < 1)
-    return;
 
   abfd = bfd_openr (file_name, target);
   if (abfd == NULL)
@@ -264,10 +268,12 @@ process_file (const char *file_name, const char *target)
   bfd_close (abfd);
 }
 
-int main (int, char **);
+int main PARAMS ((int, char **));
 
 int
-main (int argc, char **argv)
+main (argc, argv)
+     int argc;
+     char **argv;
 {
   const char *file_name;
   char *target;

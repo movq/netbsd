@@ -1,4 +1,4 @@
-#	$NetBSD: NetBSD.dist,v 1.268 2004/09/24 13:47:46 wiz Exp $
+#	$NetBSD: NetBSD.dist,v 1.259.2.2 2004/05/10 15:00:20 tron Exp $
 #	@(#)4.4BSD.dist	8.1 (Berkeley) 6/13/93
 
 /set type=dir uname=root gname=wheel mode=0755
@@ -11,18 +11,6 @@
 ./dev/fd
 ./etc
 ./etc/X11
-./etc/X11/fs
-./etc/X11/lbxproxy
-./etc/X11/proxymngr
-./etc/X11/rstart
-./etc/X11/rstart/commands
-./etc/X11/rstart/commands/x11r6
-./etc/X11/rstart/contexts
-./etc/X11/twm
-./etc/X11/xdm
-./etc/X11/xinit
-./etc/X11/xserver
-./etc/X11/xsm
 ./etc/cgd			mode=0700
 ./etc/defaults
 ./etc/fonts
@@ -98,6 +86,8 @@
 ./usr/X11R6/lib/X11/fonts/local
 ./usr/X11R6/lib/X11/fonts/misc
 ./usr/X11R6/lib/X11/fonts/util
+./usr/X11R6/lib/X11/fs
+./usr/X11R6/lib/X11/lbxproxy
 ./usr/X11R6/lib/X11/locale
 ./usr/X11R6/lib/X11/locale/C
 ./usr/X11R6/lib/X11/locale/armscii-8
@@ -153,10 +143,19 @@
 ./usr/X11R6/lib/X11/locale/zh_TW
 ./usr/X11R6/lib/X11/locale/zh_TW.UTF-8
 ./usr/X11R6/lib/X11/locale/zh_TW.big5
+./usr/X11R6/lib/X11/proxymngr
+./usr/X11R6/lib/X11/rstart
+./usr/X11R6/lib/X11/rstart/commands
+./usr/X11R6/lib/X11/rstart/commands/x11r6
+./usr/X11R6/lib/X11/rstart/contexts
+./usr/X11R6/lib/X11/twm
 ./usr/X11R6/lib/X11/x11perfcomp
+./usr/X11R6/lib/X11/xdm
+./usr/X11R6/lib/X11/xdm/pixmaps
 ./usr/X11R6/lib/X11/xedit
 ./usr/X11R6/lib/X11/xedit/lisp
 ./usr/X11R6/lib/X11/xedit/lisp/progmodes
+./usr/X11R6/lib/X11/xinit
 ./usr/X11R6/lib/X11/xkb
 ./usr/X11R6/lib/X11/xkb/compat
 ./usr/X11R6/lib/X11/xkb/compiled
@@ -186,6 +185,8 @@
 ./usr/X11R6/lib/X11/xkb/symbols/sun
 ./usr/X11R6/lib/X11/xkb/symbols/xfree68
 ./usr/X11R6/lib/X11/xkb/types
+./usr/X11R6/lib/X11/xserver
+./usr/X11R6/lib/X11/xsm
 ./usr/X11R6/lib/modules
 ./usr/X11R6/lib/modules/codeconv
 ./usr/X11R6/lib/modules/extensions
@@ -355,6 +356,7 @@
 ./usr/share/doc/smm/07.lpd
 ./usr/share/doc/smm/08.sendmailop
 ./usr/share/doc/smm/09.sendmail
+./usr/share/doc/smm/10.named
 ./usr/share/doc/smm/11.timedop
 ./usr/share/doc/smm/12.timed
 ./usr/share/doc/smm/13.amd
@@ -412,6 +414,7 @@
 ./usr/share/examples/isdn
 ./usr/share/examples/kerberos
 ./usr/share/examples/mount_portal
+./usr/share/examples/named
 ./usr/share/examples/openssl
 ./usr/share/examples/postfix
 ./usr/share/examples/racoon
@@ -559,8 +562,6 @@
 ./usr/share/locale/ko_KR.UTF-8
 ./usr/share/locale/lt_LT.ISO8859-4
 ./usr/share/locale/lt_LT.ISO8859-13
-./usr/share/locale/nb
-./usr/share/locale/nb/LC_MESSAGES
 ./usr/share/locale/nl
 ./usr/share/locale/nl/LC_MESSAGES
 ./usr/share/locale/nl_BE.ISO8859-1
@@ -606,6 +607,7 @@
 ./usr/share/locale/zh_CN.eucCN
 ./usr/share/locale/zh_CN/LC_MESSAGES
 ./usr/share/locale/zh_TW
+./usr/share/locale/zh_TW.BIG5
 ./usr/share/locale/zh_TW.Big5
 ./usr/share/locale/zh_TW.eucTW
 ./usr/share/locale/zh_TW/LC_MESSAGES
@@ -627,7 +629,6 @@
 ./usr/share/man/cat4/dreamcast
 ./usr/share/man/cat4/evbarm
 ./usr/share/man/cat4/hp300
-./usr/share/man/cat4/hp700
 ./usr/share/man/cat4/hpcsh
 ./usr/share/man/cat4/i386
 ./usr/share/man/cat4/mac68k
@@ -730,7 +731,6 @@
 ./usr/share/man/man4/dreamcast
 ./usr/share/man/man4/evbarm
 ./usr/share/man/man4/hp300
-./usr/share/man/man4/hp700
 ./usr/share/man/man4/hpcsh
 ./usr/share/man/man4/i386
 ./usr/share/man/man4/mac68k
@@ -833,7 +833,6 @@
 ./usr/share/man/html4/dreamcast
 ./usr/share/man/html4/evbarm
 ./usr/share/man/html4/hp300
-./usr/share/man/html4/hp700
 ./usr/share/man/html4/hpcsh
 ./usr/share/man/html4/i386
 ./usr/share/man/html4/mac68k
@@ -1074,7 +1073,6 @@
 ./var/chroot/ntpd/var
 ./var/chroot/ntpd/var/db	mode=0775 gname=ntpd
 ./var/chroot/ntpd/var/run	mode=0775 gname=ntpd
-./var/chroot/spamd		mode=0755
 ./var/chroot/sshd		mode=0755
 ./var/crash			mode=0770
 ./var/cron
@@ -1082,7 +1080,6 @@
 ./var/db
 ./var/db/ns
 ./var/db/obsolete
-./var/db/xdm
 ./var/games			uname=games gname=games mode=0775
 ./var/games/hackdir		uname=games gname=games mode=0775
 ./var/games/hackdir/save	uname=games gname=games mode=0770

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-ah.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: print-ah.c,v 1.3 2002/02/18 09:37:05 itojun Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994
@@ -24,10 +24,10 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-ah.c,v 1.19.2.3 2003/11/19 00:35:43 guy Exp (LBL)";
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-ah.c,v 1.15 2001/09/17 21:57:54 fenner Exp (LBL)";
 #else
-__RCSID("$NetBSD: print-ah.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
+__RCSID("$NetBSD: print-ah.c,v 1.3 2002/02/18 09:37:05 itojun Exp $");
 #endif
 #endif
 
@@ -35,7 +35,12 @@ __RCSID("$NetBSD: print-ah.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
+#include <netinet/in.h>
 
 #include <stdio.h>
 
@@ -43,10 +48,9 @@ __RCSID("$NetBSD: print-ah.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
 
 #include "interface.h"
 #include "addrtoname.h"
-#include "extract.h"
 
 int
-ah_print(register const u_char *bp)
+ah_print(register const u_char *bp, register const u_char *bp2)
 {
 	register const struct ah *ah;
 	register const u_char *ep;
@@ -59,18 +63,18 @@ ah_print(register const u_char *bp)
 	TCHECK(*ah);
 
 	sumlen = ah->ah_len << 2;
-	spi = EXTRACT_32BITS(&ah->ah_spi);
+	spi = (u_int32_t)ntohl(ah->ah_spi);
 
 	printf("AH(spi=0x%08x", spi);
 	if (vflag)
 		printf(",sumlen=%d", sumlen);
-	printf(",seq=0x%x", EXTRACT_32BITS(ah + 1));
+	printf(",seq=0x%x", (u_int32_t)ntohl(*(const u_int32_t *)(ah + 1)));
 	if (bp + sizeof(struct ah) + sumlen > ep)
 		fputs("[truncated]", stdout);
 	fputs("): ", stdout);
-
+	
 	return sizeof(struct ah) + sumlen;
  trunc:
 	fputs("[|AH]", stdout);
-	return -1;
+	return 65535;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: lock.h,v 1.57 2004/10/23 21:27:33 yamt Exp $	*/
+/*	$NetBSD: lock.h,v 1.52.2.1 2004/07/02 18:18:27 he Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -140,9 +140,6 @@ struct lock {
 
 			/* maximum sleep time (for tsleep) */
 			int lk_sleep_timo;
-
-			/* lock taking over this lock */
-			struct lock *lk_newlock;
 		} lk_un_sleep;
 		struct {
 			/* CPU ID of exclusive lock holder */
@@ -157,7 +154,6 @@ struct lock {
 #define	lk_locklwp	lk_un.lk_un_sleep.lk_sleep_locklwp
 #define	lk_prio		lk_un.lk_un_sleep.lk_sleep_prio
 #define	lk_timo		lk_un.lk_un_sleep.lk_sleep_timo
-#define	lk_newlock	lk_un.lk_un_sleep.lk_newlock
 
 #define	lk_cpu		lk_un.lk_un_spin.lk_spin_cpu
 #if defined(LOCKDEBUG)
@@ -224,7 +220,6 @@ struct lock {
 #define	LK_DOWNGRADE	0x00000005	/* exclusive-to-shared downgrade */
 #define	LK_RELEASE	0x00000006	/* release any type of lock */
 #define	LK_DRAIN	0x00000007	/* wait for all lock activity to end */
-#define	LK_EXCLOTHER	0x00000008	/* other process holds lock */
 /*
  * External lock flags.
  *
@@ -272,7 +267,7 @@ struct lock {
  * unless one of the following is true:
  *	LK_FORCEUPGRADE is requested and some other process has already
  *	    requested a lock upgrade (returns EBUSY).
- *	LK_NOWAIT is set and a sleep would be required (returns EBUSY).
+ *	LK_WAIT is set and a sleep would be required (returns EBUSY).
  *	LK_SLEEPFAIL is set and a sleep was done (returns ENOLCK).
  *	PCATCH is set in lock priority and a signal arrives (returns
  *	    either EINTR or ERESTART if system calls is to be restarted).
@@ -301,7 +296,6 @@ int	_lockmgr(__volatile struct lock *, u_int, struct simplelock *,
 #else
 int	lockmgr(__volatile struct lock *, u_int flags, struct simplelock *);
 #endif /* LOCKDEBUG */
-void	transferlockers(struct lock *, struct lock *);
 int	lockstatus(struct lock *);
 void	lockmgr_printinfo(__volatile struct lock *);
 
@@ -370,6 +364,10 @@ void	simple_lock_switchcheck(void);
 #define	simple_lock_only_held(x,y)		/* nothing */
 #endif /* __lint__ */
 #define	LOCK_ASSERT(x)		/* nothing */
+#endif
+
+#if defined(MULTIPROCESSOR)
+extern struct lock kernel_lock;
 #endif
 
 #endif /* _KERNEL */

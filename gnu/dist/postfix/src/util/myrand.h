@@ -1,5 +1,3 @@
-/*	$NetBSD: myrand.h,v 1.1.1.3 2004/05/31 00:25:00 heas Exp $	*/
-
 #ifndef _MYRAND_H_INCLUDED_
 #define _MYRAND_H_INCLUDED_
 
@@ -16,10 +14,6 @@
  /*
   * External interface.
   */
-#ifndef RAND_MAX
-#define RAND_MAX 0x7fffffff
-#endif
-
 extern void mysrand(int);
 extern int myrand(void);
 

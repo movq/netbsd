@@ -1,7 +1,7 @@
-/*	$NetBSD: uipc_usrreq.c,v 1.79 2004/09/03 18:14:09 darrenr Exp $	*/
+/*	$NetBSD: uipc_usrreq.c,v 1.74 2004/03/23 13:22:05 junyoung Exp $	*/
 
 /*-
- * Copyright (c) 1998, 2000, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -103,7 +103,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_usrreq.c,v 1.79 2004/09/03 18:14:09 darrenr Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_usrreq.c,v 1.74 2004/03/23 13:22:05 junyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -129,17 +129,19 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_usrreq.c,v 1.79 2004/09/03 18:14:09 darrenr Exp
  *	rethink name space problems
  *	need a proper out-of-band
  */
-const struct	sockaddr_un sun_noname = { sizeof(sun_noname), AF_LOCAL };
+struct	sockaddr_un sun_noname = { sizeof(sun_noname), AF_LOCAL };
 ino_t	unp_ino;			/* prototype for fake inode numbers */
 
 struct mbuf *unp_addsockcred(struct proc *, struct mbuf *);
 
 int
-unp_output(struct mbuf *m, struct mbuf *control, struct unpcb *unp,
-	struct proc *p)
+unp_output(m, control, unp, p)
+	struct mbuf *m, *control;
+	struct unpcb *unp;
+	struct proc *p;
 {
 	struct socket *so2;
-	const struct sockaddr_un *sun;
+	struct sockaddr_un *sun;
 
 	so2 = unp->unp_conn->unp_socket;
 	if (unp->unp_addr)
@@ -152,7 +154,6 @@ unp_output(struct mbuf *m, struct mbuf *control, struct unpcb *unp,
 	    control) == 0) {
 		m_freem(control);
 		m_freem(m);
-		so2->so_rcv.sb_overflowed++;
 		return (ENOBUFS);
 	} else {
 		sorwakeup(so2);
@@ -161,9 +162,11 @@ unp_output(struct mbuf *m, struct mbuf *control, struct unpcb *unp,
 }
 
 void
-unp_setsockaddr(struct unpcb *unp, struct mbuf *nam)
+unp_setsockaddr(unp, nam)
+	struct unpcb *unp;
+	struct mbuf *nam;
 {
-	const struct sockaddr_un *sun;
+	struct sockaddr_un *sun;
 
 	if (unp->unp_addr)
 		sun = unp->unp_addr;
@@ -176,9 +179,11 @@ unp_setsockaddr(struct unpcb *unp, struct mbuf *nam)
 }
 
 void
-unp_setpeeraddr(struct unpcb *unp, struct mbuf *nam)
+unp_setpeeraddr(unp, nam)
+	struct unpcb *unp;
+	struct mbuf *nam;
 {
-	const struct sockaddr_un *sun;
+	struct sockaddr_un *sun;
 
 	if (unp->unp_conn && unp->unp_conn->unp_addr)
 		sun = unp->unp_conn->unp_addr;
@@ -192,12 +197,14 @@ unp_setpeeraddr(struct unpcb *unp, struct mbuf *nam)
 
 /*ARGSUSED*/
 int
-uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
-	struct mbuf *control, struct proc *p)
+uipc_usrreq(so, req, m, nam, control, p)
+	struct socket *so;
+	int req;
+	struct mbuf *m, *nam, *control;
+	struct proc *p;
 {
 	struct unpcb *unp = sotounpcb(so);
 	struct socket *so2;
-	u_int newhiwat;
 	int error = 0;
 
 	if (req == PRU_CONTROL)
@@ -283,9 +290,7 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			 */
 			snd->sb_mbmax += unp->unp_mbcnt - rcv->sb_mbcnt;
 			unp->unp_mbcnt = rcv->sb_mbcnt;
-			newhiwat = snd->sb_hiwat + unp->unp_cc - rcv->sb_cc;
-			(void)chgsbsize(so2->so_uid,
-			    &snd->sb_hiwat, newhiwat, RLIM_INFINITY);
+			snd->sb_hiwat += unp->unp_cc - rcv->sb_cc;
 			unp->unp_cc = rcv->sb_cc;
 			sowwakeup(so2);
 #undef snd
@@ -360,10 +365,7 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			snd->sb_mbmax -=
 			    rcv->sb_mbcnt - unp->unp_conn->unp_mbcnt;
 			unp->unp_conn->unp_mbcnt = rcv->sb_mbcnt;
-			newhiwat = snd->sb_hiwat -
-			    (rcv->sb_cc - unp->unp_conn->unp_cc);
-			(void)chgsbsize(so->so_uid,
-			    &snd->sb_hiwat, newhiwat, RLIM_INFINITY);
+			snd->sb_hiwat -= rcv->sb_cc - unp->unp_conn->unp_cc;
 			unp->unp_conn->unp_cc = rcv->sb_cc;
 			sorwakeup(so2);
 #undef snd
@@ -430,8 +432,11 @@ release:
  * Unix domain socket option processing.
  */
 int
-uipc_ctloutput(int op, struct socket *so, int level, int optname,
-	struct mbuf **mp)
+uipc_ctloutput(op, so, level, optname, mp)
+	int op;
+	struct socket *so;
+	int level, optname;
+	struct mbuf **mp;
 {
 	struct unpcb *unp = sotounpcb(so);
 	struct mbuf *m = *mp;
@@ -520,7 +525,8 @@ u_long	unpdg_recvspace = 4*1024;
 int	unp_rights;			/* file descriptors in flight */
 
 int
-unp_attach(struct socket *so)
+unp_attach(so)
+	struct socket *so;
 {
 	struct unpcb *unp;
 	struct timeval tv;
@@ -555,7 +561,8 @@ unp_attach(struct socket *so)
 }
 
 void
-unp_detach(struct unpcb *unp)
+unp_detach(unp)
+	struct unpcb *unp;
 {
 	
 	if (unp->unp_vnode) {
@@ -587,7 +594,10 @@ unp_detach(struct unpcb *unp)
 }
 
 int
-unp_bind(struct unpcb *unp, struct mbuf *nam, struct proc *p)
+unp_bind(unp, nam, p)
+	struct unpcb *unp;
+	struct mbuf *nam;
+	struct proc *p;
 {
 	struct sockaddr_un *sun;
 	struct vnode *vp;
@@ -657,7 +667,10 @@ restart:
 }
 
 int
-unp_connect(struct socket *so, struct mbuf *nam, struct proc *p)
+unp_connect(so, nam, p)
+	struct socket *so;
+	struct mbuf *nam;
+	struct proc *p;
 {
 	struct sockaddr_un *sun;
 	struct vnode *vp;
@@ -725,7 +738,10 @@ unp_connect(struct socket *so, struct mbuf *nam, struct proc *p)
 }
 
 int
-unp_connect2(struct socket *so, struct socket *so2, int req)
+unp_connect2(so, so2, req)
+	struct socket *so;
+	struct socket *so2;
+	int req;
 {
 	struct unpcb *unp = sotounpcb(so);
 	struct unpcb *unp2;
@@ -759,7 +775,8 @@ unp_connect2(struct socket *so, struct socket *so2, int req)
 }
 
 void
-unp_disconnect(struct unpcb *unp)
+unp_disconnect(unp)
+	struct unpcb *unp;
 {
 	struct unpcb *unp2 = unp->unp_conn;
 
@@ -795,14 +812,17 @@ unp_disconnect(struct unpcb *unp)
 }
 
 #ifdef notdef
-unp_abort(struct unpcb *unp)
+unp_abort(unp)
+	struct unpcb *unp;
 {
+
 	unp_detach(unp);
 }
 #endif
 
 void
-unp_shutdown(struct unpcb *unp)
+unp_shutdown(unp)
+	struct unpcb *unp;
 {
 	struct socket *so;
 
@@ -812,7 +832,9 @@ unp_shutdown(struct unpcb *unp)
 }
 
 void
-unp_drop(struct unpcb *unp, int errno)
+unp_drop(unp, errno)
+	struct unpcb *unp;
+	int errno;
 {
 	struct socket *so = unp->unp_socket;
 
@@ -828,15 +850,17 @@ unp_drop(struct unpcb *unp, int errno)
 }
 
 #ifdef notdef
-unp_drain(void)
+unp_drain()
 {
 
 }
 #endif
 
 int
-unp_externalize(struct mbuf *rights, struct proc *p)
+unp_externalize(rights)
+	struct mbuf *rights;
 {
+	struct proc *p = curproc;		/* XXX */
 	struct cmsghdr *cm = mtod(rights, struct cmsghdr *);
 	int i, *fdp;
 	struct file **rp;
@@ -945,7 +969,9 @@ unp_externalize(struct mbuf *rights, struct proc *p)
 }
 
 int
-unp_internalize(struct mbuf *control, struct proc *p)
+unp_internalize(control, p)
+	struct mbuf *control;
+	struct proc *p;
 {
 	struct filedesc *fdescp = p->p_fd;
 	struct cmsghdr *newcm, *cm = mtod(control, struct cmsghdr *);
@@ -1027,7 +1053,9 @@ unp_internalize(struct mbuf *control, struct proc *p)
 }
 
 struct mbuf *
-unp_addsockcred(struct proc *p, struct mbuf *control)
+unp_addsockcred(p, control)
+	struct proc *p;
+	struct mbuf *control;
 {
 	struct cmsghdr *cmp;
 	struct sockcred *sc;
@@ -1107,7 +1135,7 @@ extern	struct domain unixdomain;
  * into a separate thread.
  */
 void
-unp_gc(void)
+unp_gc()
 {
 	struct file *fp, *nextfp;
 	struct socket *so, *so1;
@@ -1258,7 +1286,8 @@ unp_gc(void)
 }
 
 void
-unp_dispose(struct mbuf *m)
+unp_dispose(m)
+	struct mbuf *m;
 {
 
 	if (m)
@@ -1266,7 +1295,10 @@ unp_dispose(struct mbuf *m)
 }
 
 void
-unp_scan(struct mbuf *m0, void (*op)(struct file *), int discard)
+unp_scan(m0, op, discard)
+	struct mbuf *m0;
+	void (*op)(struct file *);
+	int discard;
 {
 	struct mbuf *m;
 	struct file **rp;
@@ -1300,7 +1332,8 @@ unp_scan(struct mbuf *m0, void (*op)(struct file *), int discard)
 }
 
 void
-unp_mark(struct file *fp)
+unp_mark(fp)
+	struct file *fp;
 {
 	if (fp == NULL)
 		return;
@@ -1330,7 +1363,8 @@ unp_mark(struct file *fp)
 }
 
 void
-unp_discard(struct file *fp)
+unp_discard(fp)
+	struct file *fp;
 {
 	if (fp == NULL)
 		return;

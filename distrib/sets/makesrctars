@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: makesrctars,v 1.18 2004/05/09 13:46:00 lukem Exp $
+#	$NetBSD: makesrctars,v 1.15.2.3 2004/05/11 13:11:18 tron Exp $
 #
 # makesrctars srcdir setdir
 #	Create source tarballs in setdir from the source under srcdir.

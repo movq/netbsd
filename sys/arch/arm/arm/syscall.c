@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.26 2004/10/24 06:58:14 skrll Exp $	*/
+/*	$NetBSD: syscall.c,v 1.24 2003/11/14 19:03:17 scw Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2003 The NetBSD Foundation, Inc.
@@ -82,7 +82,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.26 2004/10/24 06:58:14 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.24 2003/11/14 19:03:17 scw Exp $");
 
 #include <sys/device.h>
 #include <sys/errno.h>
@@ -134,7 +134,6 @@ swi_handler(trapframe_t *frame)
 	frame->tf_pc += INSN_SIZE;
 #endif
 
-#ifndef THUMB_CODE
 	/*
 	 * Make sure the program counter is correctly aligned so we
 	 * don't take an alignment fault trying to read the opcode.
@@ -146,35 +145,24 @@ swi_handler(trapframe_t *frame)
 		ksi.ksi_signo = SIGILL;
 		ksi.ksi_code = ILL_ILLOPC;
 		ksi.ksi_addr = (u_int32_t *)(intptr_t) (frame->tf_pc-INSN_SIZE);
-		KERNEL_PROC_LOCK(l);
+		KERNEL_PROC_LOCK(l->l_proc);
 #if 0
 		/* maybe one day we'll do emulations */
 		(*l->l_proc->p_emul->e_trapsignal)(l, &ksi);
 #else
 		trapsignal(l, &ksi);
 #endif
-		KERNEL_PROC_UNLOCK(l);
+		KERNEL_PROC_UNLOCK(l->l_proc);
 		userret(l);
 		return;
 	}
-#endif
 
-#ifdef THUMB_CODE
-	if (frame->tf_spsr & PSR_T_bit) {
-		/* Map a Thumb SWI onto the bottom 256 ARM SWIs.  */
-		insn = fusword((void *)(frame->tf_pc - THUMB_INSN_SIZE));
-		insn = (insn & 0x00ff) | 0xef000000;
-	}
-	else
-#endif
-	{
 	/* XXX fuword? */
 #ifdef __PROG32
-		insn = *(u_int32_t *)(frame->tf_pc - INSN_SIZE);
+	insn = *(u_int32_t *)(frame->tf_pc - INSN_SIZE);
 #else
-		insn = *(u_int32_t *)((frame->tf_r15 & R15_PC) - INSN_SIZE);
+	insn = *(u_int32_t *)((frame->tf_r15 & R15_PC) - INSN_SIZE);
 #endif
-	}
 
 	l->l_addr->u_pcb.pcb_tf = frame;
 
@@ -243,7 +231,7 @@ syscall_plain(struct trapframe *frame, struct lwp *l, u_int32_t insn)
 	register_t *ap, *args, copyargs[MAXARGS], rval[2];
 	ksiginfo_t ksi;
 
-	KERNEL_PROC_LOCK(l);
+	KERNEL_PROC_LOCK(p);
 
 	switch (insn & SWI_OS_MASK) { /* Which OS is the SWI from? */
 	case SWI_OS_ARM: /* ARM-defined SWIs */
@@ -262,14 +250,7 @@ syscall_plain(struct trapframe *frame, struct lwp *l, u_int32_t insn)
 			ksi.ksi_signo = SIGILL;
 			/* XXX get an ILL_ILLSYSCALL assigned */
 			ksi.ksi_code = 0;
-#ifdef THUMB_CODE
-			if (frame->tf_spsr & PSR_T_bit) 
-				ksi.ksi_addr = (u_int32_t *)(frame->tf_pc -
-				    THUMB_INSN_SIZE);
-			else
-#endif
-				ksi.ksi_addr = (u_int32_t *)(frame->tf_pc -
-				    INSN_SIZE);
+			ksi.ksi_addr = (u_int32_t *)(frame->tf_pc - INSN_SIZE);
 			ksi.ksi_trap = insn;
 			trapsignal(l, &ksi);
 			break;
@@ -287,13 +268,7 @@ syscall_plain(struct trapframe *frame, struct lwp *l, u_int32_t insn)
 		ksi.ksi_signo = SIGILL;
 		/* XXX get an ILL_ILLSYSCALL assigned */
 		ksi.ksi_code = 0;
-#ifdef THUMB_CODE
-		if (frame->tf_spsr & PSR_T_bit) 
-			ksi.ksi_addr = (u_int32_t *)(frame->tf_pc -
-			    THUMB_INSN_SIZE);
-		else
-#endif
-			ksi.ksi_addr = (u_int32_t *)(frame->tf_pc - INSN_SIZE);
+		ksi.ksi_addr = (u_int32_t *)(frame->tf_pc - INSN_SIZE);
 		ksi.ksi_trap = insn;
 		trapsignal(l, &ksi);
 		userret(l);
@@ -352,12 +327,7 @@ syscall_plain(struct trapframe *frame, struct lwp *l, u_int32_t insn)
 		/*
 		 * Reconstruct the pc to point at the swi.
 		 */
-#ifdef THUMB_CODE
-		if (frame->tf_spsr & PSR_T_bit)
-			frame->tf_pc -= THUMB_INSN_SIZE;
-		else
-#endif
-			frame->tf_pc -= INSN_SIZE;
+		frame->tf_pc -= INSN_SIZE;
 		break;
 
 	case EJUSTRETURN:
@@ -389,7 +359,7 @@ syscall_fancy(struct trapframe *frame, struct lwp *l, u_int32_t insn)
 	register_t *ap, *args, copyargs[MAXARGS], rval[2];
 	ksiginfo_t ksi;
 
-	KERNEL_PROC_LOCK(l);
+	KERNEL_PROC_LOCK(p);
 
 	switch (insn & SWI_OS_MASK) { /* Which OS is the SWI from? */
 	case SWI_OS_ARM: /* ARM-defined SWIs */
@@ -408,14 +378,7 @@ syscall_fancy(struct trapframe *frame, struct lwp *l, u_int32_t insn)
 			ksi.ksi_signo = SIGILL;
 			/* XXX get an ILL_ILLSYSCALL assigned */
 			ksi.ksi_code = 0;
-#ifdef THUMB_CODE
-			if (frame->tf_spsr & PSR_T_bit) 
-				ksi.ksi_addr = (u_int32_t *)(frame->tf_pc -
-				    THUMB_INSN_SIZE);
-			else
-#endif
-				ksi.ksi_addr = (u_int32_t *)(frame->tf_pc -
-				    INSN_SIZE);
+			ksi.ksi_addr = (u_int32_t *)(frame->tf_pc - INSN_SIZE);
 			ksi.ksi_trap = insn;
 			trapsignal(l, &ksi);
 			break;
@@ -433,13 +396,7 @@ syscall_fancy(struct trapframe *frame, struct lwp *l, u_int32_t insn)
 		ksi.ksi_signo = SIGILL;
 		/* XXX get an ILL_ILLSYSCALL assigned */
 		ksi.ksi_code = 0;
-#ifdef THUMB_CODE
-		if (frame->tf_spsr & PSR_T_bit) 
-			ksi.ksi_addr = (u_int32_t *)(frame->tf_pc -
-			    THUMB_INSN_SIZE);
-		else
-#endif
-			ksi.ksi_addr = (u_int32_t *)(frame->tf_pc - INSN_SIZE);
+		ksi.ksi_addr = (u_int32_t *)(frame->tf_pc - INSN_SIZE);
 		ksi.ksi_trap = insn;
 		trapsignal(l, &ksi);
 		userret(l);
@@ -501,12 +458,7 @@ syscall_fancy(struct trapframe *frame, struct lwp *l, u_int32_t insn)
 		/*
 		 * Reconstruct the pc to point at the swi.
 		 */
-#ifdef THUMB_CODE
-		if (frame->tf_spsr & PSR_T_bit)
-			frame->tf_pc -= THUMB_INSN_SIZE;
-		else
-#endif
-			frame->tf_pc -= INSN_SIZE;
+		frame->tf_pc -= INSN_SIZE;
 		break;
 
 	case EJUSTRETURN:
@@ -550,9 +502,9 @@ child_return(arg)
 	userret(l);
 #ifdef KTRACE
 	if (KTRPOINT(p, KTR_SYSRET)) {
-		KERNEL_PROC_LOCK(l);
+		KERNEL_PROC_LOCK(p);
 		ktrsysret(p, SYS_fork, 0, 0);
-		KERNEL_PROC_UNLOCK(l);
+		KERNEL_PROC_UNLOCK(p);
 	}
 #endif
 }

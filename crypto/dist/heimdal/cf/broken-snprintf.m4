@@ -1,5 +1,5 @@
 dnl $Heimdal: broken-snprintf.m4,v 1.4.10.1 2004/04/01 07:27:32 joda Exp $
-dnl $NetBSD: broken-snprintf.m4,v 1.1.1.5 2004/04/02 14:48:06 lha Exp $
+dnl $NetBSD: broken-snprintf.m4,v 1.1.1.4.2.1 2004/04/21 04:55:38 jmc Exp $
 dnl
 AC_DEFUN([AC_BROKEN_SNPRINTF], [
 AC_CACHE_CHECK(for working snprintf,ac_cv_func_snprintf_working,

@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_segment.c,v 1.155 2004/09/18 16:40:11 yamt Exp $	*/
+/*	$NetBSD: lfs_segment.c,v 1.152 2004/03/09 07:43:49 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_segment.c,v 1.155 2004/09/18 16:40:11 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_segment.c,v 1.152 2004/03/09 07:43:49 yamt Exp $");
 
 #define ivndebug(vp,str) printf("ino %d: %s\n",VTOI(vp)->i_number,(str))
 
@@ -917,7 +917,7 @@ lfs_writeinode(struct lfs *fs, struct segment *sp, struct inode *ip)
 	else {
 		/* XXX IN_ALLMOD */
 		LFS_CLR_UINO(ip, IN_ACCESSED | IN_ACCESS | IN_CHANGE |
-			     IN_UPDATE | IN_MODIFY);
+			     IN_UPDATE);
 		if (ip->i_lfs_effnblks == ip->i_ffs1_blocks)
 			LFS_CLR_UINO(ip, IN_MODIFIED);
 #ifdef DEBUG_LFS
@@ -1119,7 +1119,7 @@ loop:
 #ifdef DEBUG_LFS
 			if (vp == fs->lfs_ivnode &&
 			    (bp->b_flags & (B_BUSY|B_GATHERED)) == B_BUSY)
-				printf("(%" PRId64 ":%x)",
+				printf("(%" PRId64 ":%lx)",
 				    bp->b_lblkno, bp->b_flags);
 #endif
 			continue;
@@ -1947,7 +1947,7 @@ lfs_writeseg(struct lfs *fs, struct segment *sp)
 			if (dtosn(fs, dbtofsb(fs, bp->b_blkno +
 					      btodb(bp->b_bcount - 1))) !=
 			    sp->seg_number) {
-				printf("blk size %d daddr %" PRIx64
+				printf("blk size %ld daddr %" PRIx64
 				    " not in seg %d\n",
 				    bp->b_bcount, bp->b_blkno,
 				    sp->seg_number);
@@ -2164,7 +2164,6 @@ lfs_cluster_aiodone(struct buf *bp)
 	/* Put the pages back, and release the buffer */
 	while (cl->bufcount--) {
 		tbp = cl->bpp[cl->bufcount];
-		KASSERT(tbp->b_flags & B_BUSY);
 		if (error) {
 			tbp->b_flags |= B_ERROR;
 			tbp->b_error = error;
@@ -2202,57 +2201,59 @@ lfs_cluster_aiodone(struct buf *bp)
 				cl->bufcount, (long)tbp->b_flags);
 		}
 #endif
-
-		if ((tbp->b_flags & B_CALL) && !LFS_IS_MALLOC_BUF(tbp)) {
-			/* printf("flags 0x%lx\n", tbp->b_flags); */
-			/*
-			 * A buffer from the page daemon.
-			 * We use the same iodone as it does,
-			 * so we must manually disassociate its
-			 * buffers from the vp.
-			 */
-			if (tbp->b_vp) {
-				/* This is just silly */
-				s = splbio();
-				brelvp(tbp);
-				tbp->b_vp = vp;
-				splx(s);
+		if (tbp->b_flags & (B_BUSY | B_CALL)) {
+			if ((tbp->b_flags & B_CALL) &&
+			    !LFS_IS_MALLOC_BUF(tbp)) {
+				/* printf("flags 0x%lx\n", tbp->b_flags); */
+				/*
+				 * A buffer from the page daemon.
+				 * We use the same iodone as it does,
+				 * so we must manually disassociate its
+				 * buffers from the vp.
+				 */
+				if (tbp->b_vp) {
+					/* This is just silly */
+					s = splbio();
+					brelvp(tbp);
+					tbp->b_vp = vp;
+					splx(s);
+				}
+				/* Put it back the way it was */
+				tbp->b_flags |= B_ASYNC;
+				/* Master buffers have B_AGE */
+				if (tbp->b_private == tbp)
+					tbp->b_flags |= B_AGE;
 			}
-			/* Put it back the way it was */
-			tbp->b_flags |= B_ASYNC;
-			/* Master buffers have B_AGE */
-			if (tbp->b_private == tbp)
-				tbp->b_flags |= B_AGE;
-		}
-		s = splbio();
-		biodone(tbp);
+			s = splbio();
+			biodone(tbp);
 
-		/*
-		 * If this is the last block for this vnode, but
-		 * there are other blocks on its dirty list,
-		 * set IN_MODIFIED/IN_CLEANING depending on what
-		 * sort of block.  Only do this for our mount point,
-		 * not for, e.g., inode blocks that are attached to
-		 * the devvp.
-		 * XXX KS - Shouldn't we set *both* if both types
-		 * of blocks are present (traverse the dirty list?)
-		 */
-		simple_lock(&global_v_numoutput_slock);
-		if (vp != devvp && vp->v_numoutput == 0 &&
-		    (fbp = LIST_FIRST(&vp->v_dirtyblkhd)) != NULL) {
-			ip = VTOI(vp);
+			/*
+			 * If this is the last block for this vnode, but
+			 * there are other blocks on its dirty list,
+			 * set IN_MODIFIED/IN_CLEANING depending on what
+			 * sort of block.  Only do this for our mount point,
+			 * not for, e.g., inode blocks that are attached to
+			 * the devvp.
+			 * XXX KS - Shouldn't we set *both* if both types
+			 * of blocks are present (traverse the dirty list?)
+			 */
+			simple_lock(&global_v_numoutput_slock);
+			if (vp != devvp && vp->v_numoutput == 0 &&
+			    (fbp = LIST_FIRST(&vp->v_dirtyblkhd)) != NULL) {
+				ip = VTOI(vp);
 #ifdef DEBUG_LFS
-			printf("lfs_cluster_aiodone: marking ino %d\n",
-			       ip->i_number);
+				printf("lfs_cluster_aiodone: marking ino %d\n",
+				       ip->i_number);
 #endif
-			if (LFS_IS_MALLOC_BUF(fbp))
-				LFS_SET_UINO(ip, IN_CLEANING);
-			else
-				LFS_SET_UINO(ip, IN_MODIFIED);
+				if (LFS_IS_MALLOC_BUF(fbp))
+					LFS_SET_UINO(ip, IN_CLEANING);
+				else
+					LFS_SET_UINO(ip, IN_MODIFIED);
+			}
+			simple_unlock(&global_v_numoutput_slock);
+			splx(s);
+			wakeup(vp);
 		}
-		simple_unlock(&global_v_numoutput_slock);
-		splx(s);
-		wakeup(vp);
 	}
 
 	/* Fix up the cluster buffer, and release it */

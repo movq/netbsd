@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.21 2004/04/29 03:23:44 lukem Exp $
+# $NetBSD: mi,v 1.19.2.2 2004/04/29 06:05:55 jmc Exp $
 ./etc/mtree/set.xfont						xfont-sys-root
 ./usr/X11R6/lib/X11/fonts					xfont	share
 ./usr/X11R6/lib/X11/fonts/100dpi				xfont	share

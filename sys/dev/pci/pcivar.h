@@ -1,4 +1,4 @@
-/*	$NetBSD: pcivar.h,v 1.67 2004/09/13 12:22:53 drochner Exp $	*/
+/*	$NetBSD: pcivar.h,v 1.59 2003/08/15 07:17:21 itojun Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -62,7 +62,7 @@ struct pci_softc;
  * PCI bus attach arguments.
  */
 struct pcibus_attach_args {
-	char		*_pba_busname;	/* XXX placeholder */
+	char		*pba_busname;	/* XXX should be common */
 	bus_space_tag_t pba_iot;	/* pci i/o space tag */
 	bus_space_tag_t pba_memt;	/* pci mem space tag */
 	bus_dma_tag_t pba_dmat;		/* DMA tag */
@@ -166,14 +166,24 @@ struct pci_softc {
 	u_int sc_intrswiz;
 	pcitag_t sc_intrtag;
 	int sc_flags;
-	/* accounting of child devices */
-	struct device *sc_devices[32*8];
-#define PCI_SC_DEVICESC(d, f) sc_devices[(d) * 8 + (f)]
 };
 
 extern struct cfdriver pci_cd;
 
-int pcibusprint(void *, const char *);
+/*
+ * Locators devices that attach to 'pcibus', as specified to config.
+ */
+#define	pcibuscf_bus		cf_loc[PCIBUSCF_BUS]
+#define	PCIBUS_UNK_BUS		PCIBUSCF_BUS_DEFAULT	/* wildcarded 'bus' */
+
+/*
+ * Locators for PCI devices, as specified to config.
+ */
+#define	pcicf_dev		cf_loc[PCICF_DEV]
+#define	PCI_UNK_DEV		PCICF_DEV_DEFAULT	/* wildcarded 'dev' */
+
+#define	pcicf_function		cf_loc[PCICF_FUNCTION]
+#define	PCI_UNK_FUNCTION	PCICF_FUNCTION_DEFAULT /* wildcarded 'function' */
 
 /*
  * Configuration space access and utility functions.  (Note that most,
@@ -193,9 +203,11 @@ int pci_get_capability __P((pci_chipset_tag_t, pcitag_t, int,
 /*
  * Helper functions for autoconfiguration.
  */
+int	pci_enumerate_bus_generic(struct pci_softc *,
+	    int (*)(struct pci_attach_args *), struct pci_attach_args *);
 int	pci_probe_device(struct pci_softc *, pcitag_t tag,
 	    int (*)(struct pci_attach_args *), struct pci_attach_args *);
-void	pci_devinfo __P((pcireg_t, pcireg_t, int, char *, size_t));
+void	pci_devinfo __P((pcireg_t, pcireg_t, int, char *));
 void	pci_conf_print __P((pci_chipset_tag_t, pcitag_t,
 	    void (*)(pci_chipset_tag_t, pcitag_t, const pcireg_t *)));
 const struct pci_quirkdata *
@@ -216,7 +228,8 @@ int	pci_devioctl __P((pci_chipset_tag_t, pcitag_t, u_long, caddr_t,
 #define PCI_PWR_D1	1
 #define PCI_PWR_D2	2
 #define PCI_PWR_D3	3
-int	pci_powerstate __P((pci_chipset_tag_t, pcitag_t, const int *, int *));
+int	pci_set_powerstate __P((pci_chipset_tag_t, pcitag_t, int));
+int	pci_get_powerstate __P((pci_chipset_tag_t, pcitag_t));
 
 /*
  * Vital Product Data (PCI 2.2)
@@ -227,8 +240,7 @@ int	pci_vpd_write __P((pci_chipset_tag_t, pcitag_t, int, int, pcireg_t *));
 /*
  * Misc.
  */
-const char *pci_findvendor __P((pcireg_t));
-const char *pci_findproduct __P((pcireg_t));
+char   *pci_findvendor __P((pcireg_t));
 int	pci_find_device(struct pci_attach_args *pa,
 			int (*match)(struct pci_attach_args *));
 int	pci_dma64_available(struct pci_attach_args *);

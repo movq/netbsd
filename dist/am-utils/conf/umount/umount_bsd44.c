@@ -1,7 +1,7 @@
-/*	$NetBSD: umount_bsd44.c,v 1.1.1.7 2004/11/27 01:00:55 christos Exp $	*/
+/*	$NetBSD: umount_bsd44.c,v 1.1.1.6 2003/03/09 01:13:33 christos Exp $	*/
 
 /*
- * Copyright (c) 1997-2004 Erez Zadok
+ * Copyright (c) 1997-2003 Erez Zadok
  * Copyright (c) 1990 Jan-Simon Pendry
  * Copyright (c) 1990 Imperial College of Science, Technology & Medicine
  * Copyright (c) 1990 The Regents of the University of California.
@@ -39,7 +39,7 @@
  * SUCH DAMAGE.
  *
  *
- * Id: umount_bsd44.c,v 1.11 2004/01/06 03:56:20 ezk Exp
+ * Id: umount_bsd44.c,v 1.8 2002/12/27 22:44:03 ezk Exp
  *
  */
 
@@ -55,12 +55,18 @@
 
 
 int
-umount_fs(char *mntdir, const char *mnttabname, int on_autofs)
+umount_fs(char *mntdir, const char *mnttabname)
+{
+  return umount_fs2(mntdir, mntdir, mnttabname);
+}
+
+int
+umount_fs2(char *fs_name, char *unused, const char *mnttabname)
 {
   int error;
 
 eintr:
-  error = unmount(mntdir, 0);
+  error = unmount(fs_name, 0);
   if (error < 0)
     error = errno;
 
@@ -68,17 +74,17 @@ eintr:
   case EINVAL:
   case ENOTBLK:
   case ENOENT:
-    plog(XLOG_WARNING, "unmount: %s is not mounted", mntdir);
+    plog(XLOG_WARNING, "unmount: %s is not mounted", fs_name);
     error = 0;			/* Not really an error */
     break;
 
   case EINTR:
     /* not sure why this happens, but it does.  ask kirk one day... */
-    dlog("%s: unmount: %m", mntdir);
+    dlog("%s: unmount: %m", fs_name);
     goto eintr;
 
   default:
-    dlog("%s: unmount: %m", mntdir);
+    dlog("%s: unmount: %m", fs_name);
     break;
   }
 

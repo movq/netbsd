@@ -1,7 +1,7 @@
-/*	$NetBSD: scsi_base.c,v 1.84 2004/09/18 00:08:16 mycroft Exp $	*/
+/*	$NetBSD: scsi_base.c,v 1.77.18.1 2004/09/11 12:52:07 he Exp $	*/
 
 /*-
- * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsi_base.c,v 1.84 2004/09/18 00:08:16 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsi_base.c,v 1.77.18.1 2004/09/11 12:52:07 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,16 +59,19 @@ __KERNEL_RCSID(0, "$NetBSD: scsi_base.c,v 1.84 2004/09/18 00:08:16 mycroft Exp $
  * Do a scsi operation, asking a device to run as SCSI-II if it can.
  */
 int
-scsi_change_def(struct scsipi_periph *periph, int flags)
+scsi_change_def(periph, flags)
+	struct scsipi_periph *periph;
+	int flags;
 {
-	struct scsi_changedef cmd;
+	struct scsi_changedef scsipi_cmd;
 
-	memset(&cmd, 0, sizeof(cmd));
-	cmd.opcode = SCSI_CHANGE_DEFINITION;
-	cmd.how = SC_SCSI_2;
+	memset(&scsipi_cmd, 0, sizeof(scsipi_cmd));
+	scsipi_cmd.opcode = SCSI_CHANGE_DEFINITION;
+	scsipi_cmd.how = SC_SCSI_2;
 
-	return (scsipi_command(periph, (void *)&cmd, sizeof(cmd), 0, 0,
-	    SCSIPIRETRIES, 100000, NULL, flags));
+	return (scsipi_command(periph, NULL,
+	    (struct scsipi_generic *) &scsipi_cmd, sizeof(scsipi_cmd),
+	    0, 0, SCSIPIRETRIES, 100000, NULL, flags));
 }
 
 /*
@@ -77,12 +80,36 @@ scsi_change_def(struct scsipi_periph *periph, int flags)
  * long the data is supposed to be. If we have  a buf
  * to associate with the transfer, we need that too.
  */
-void
-scsi_scsipi_cmd(struct scsipi_xfer *xs)
+int
+scsi_scsipi_cmd(periph, xs, scsipi_cmd, cmdlen, data, datalen,
+	retries, timeout, bp, flags)
+	struct scsipi_periph *periph;
+	struct scsipi_xfer *xs;
+	struct scsipi_generic *scsipi_cmd;
+	int cmdlen;
+	void *data;
+	size_t datalen;
+	int retries;
+	int timeout;
+	struct buf *bp;
+	int flags;
 {
-	struct scsipi_periph *periph = xs->xs_periph;
+	int error;
 
 	SC_DEBUG(periph, SCSIPI_DB2, ("scsi_scsipi_cmd\n"));
+
+#ifdef DIAGNOSTIC
+	if (bp != NULL && (flags & XS_CTL_ASYNC) == 0)
+		panic("scsi_scsipi_cmd: buffer without async");
+#endif
+
+	if (xs == NULL) {
+		if ((xs = scsipi_make_xs(periph, scsipi_cmd, cmdlen, data,
+		    datalen, retries, timeout, bp, flags)) == NULL) {
+			/* let the caller deal with this */
+			return (ENOMEM);
+		}
+	}
 
 	/*
 	 * Set the LUN in the CDB if we have an older device.  We also
@@ -92,6 +119,10 @@ scsi_scsipi_cmd(struct scsipi_xfer *xs)
 		xs->cmd->bytes[0] |=
 		    ((periph->periph_lun << SCSI_CMD_LUN_SHIFT) &
 			SCSI_CMD_LUN_MASK);
+
+	if ((error = scsipi_execute_xs(xs)) == EJUSTRETURN)
+		return (0);
+	return (error);
 }
 
 /*
@@ -102,7 +133,8 @@ scsi_scsipi_cmd(struct scsipi_xfer *xs)
  * Print out the periph's address info.
  */
 void
-scsi_print_addr(struct scsipi_periph *periph)
+scsi_print_addr(periph)
+	struct scsipi_periph *periph;
 {
 	struct scsipi_channel *chan = periph->periph_channel;
 	struct scsipi_adapter *adapt = chan->chan_adapter;
@@ -120,6 +152,13 @@ scsi_print_addr(struct scsipi_periph *periph)
  * Must be called at splbio().
  */
 void
-scsi_kill_pending(struct scsipi_periph *periph)
+scsi_kill_pending(periph)
+	struct scsipi_periph *periph;
 {
+	struct scsipi_xfer *xs;
+
+	while ((xs = TAILQ_FIRST(&periph->periph_xferq)) != NULL) {
+		xs->error = XS_DRIVER_STUFFUP;
+		scsipi_done(xs);
+	}
 }

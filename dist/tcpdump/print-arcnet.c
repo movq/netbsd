@@ -1,4 +1,4 @@
-/*	$NetBSD: print-arcnet.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: print-arcnet.c,v 1.3 2002/02/18 09:37:05 itojun Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997
@@ -19,16 +19,16 @@
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
- *
+ * 
  * From: NetBSD: print-arcnet.c,v 1.2 2000/04/24 13:02:28 itojun Exp
  */
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-arcnet.c,v 1.15.2.2 2003/11/16 08:51:09 guy Exp (LBL)";
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-arcnet.c,v 1.6 2001/09/17 21:57:54 fenner Exp (LBL)";
 #else
-__RCSID("$NetBSD: print-arcnet.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
+__RCSID("$NetBSD: print-arcnet.c,v 1.3 2002/02/18 09:37:05 itojun Exp $");
 #endif
 #endif
 
@@ -36,7 +36,14 @@ __RCSID("$NetBSD: print-arcnet.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/socket.h>
+
+struct mbuf;
+struct rtentry;
+
+#include <netinet/in.h>
 
 #include <stdio.h>
 #include <pcap.h>
@@ -44,7 +51,7 @@ __RCSID("$NetBSD: print-arcnet.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
 #include "interface.h"
 #include "arcnet.h"
 
-static int arcnet_encap_print(u_char arctype, const u_char *p,
+int arcnet_encap_print(u_char arctype, const u_char *p,
     u_int length, u_int caplen);
 
 struct tok arctypemap[] = {
@@ -108,13 +115,13 @@ arcnet_print(const u_char *bp, u_int length, int phds, int flag, u_int seqid)
 }
 
 /*
- * This is the top level routine of the printer.  'p' points
- * to the ARCNET header of the packet, 'h->ts' is the timestamp,
- * 'h->length' is the length of the packet off the wire, and 'h->caplen'
+ * This is the top level routine of the printer.  'p' is the points
+ * to the ether header of the packet, 'tvp' is the timestamp,
+ * 'length' is the length of the packet off the wire, and 'caplen'
  * is the number of bytes actually captured.
  */
-u_int
-arcnet_if_print(const struct pcap_pkthdr *h, const u_char *p)
+void
+arcnet_if_print(u_char *user, const struct pcap_pkthdr *h, const u_char *p)
 {
 	u_int caplen = h->caplen;
 	u_int length = h->len;
@@ -124,9 +131,12 @@ arcnet_if_print(const struct pcap_pkthdr *h, const u_char *p)
 	u_int seqid = 0;
 	u_char arc_type;
 
+	++infodelay;
+	ts_print(&h->ts);
+
 	if (caplen < ARC_HDRLEN) {
 		printf("[|arcnet]");
-		return (caplen);
+		goto out;
 	}
 
 	ap = (const struct arc_header *)p;
@@ -148,21 +158,21 @@ arcnet_if_print(const struct pcap_pkthdr *h, const u_char *p)
 		if (caplen < ARC_HDRNEWLEN) {
 			arcnet_print(p, length, 0, 0, 0);
 			printf("[|phds]");
-			return (caplen);
+			goto out;
 		}
 
 		if (ap->arc_flag == 0xff) {
 			if (caplen < ARC_HDRNEWLEN_EXC) {
 				arcnet_print(p, length, 0, 0, 0);
 				printf("[|phds extended]");
-				return (caplen);
+				goto out;
 			}
 			flag = ap->arc_flag2;
-			seqid = ntohs(ap->arc_seqid2);
+			seqid = ap->arc_seqid2;
 			archdrlen = ARC_HDRNEWLEN_EXC;
 		} else {
 			flag = ap->arc_flag;
-			seqid = ntohs(ap->arc_seqid);
+			seqid = ap->arc_seqid;
 			archdrlen = ARC_HDRNEWLEN;
 		}
 	}
@@ -172,82 +182,34 @@ arcnet_if_print(const struct pcap_pkthdr *h, const u_char *p)
 		arcnet_print(p, length, phds, flag, seqid);
 
 	/*
-	 * Go past the ARCNET header.
+	 * Some printers want to get back at the ethernet addresses,
+	 * and/or check that they're not walking off the end of the packet.
+	 * Rather than pass them all the way down, we set these globals.
 	 */
+	packetp = p;
+	snapend = p + caplen;
+
 	length -= archdrlen;
 	caplen -= archdrlen;
 	p += archdrlen;
 
-	if (phds && flag && (flag & 1) == 0) {
-		/*
-		 * This is a middle fragment.
-		 */
-		return (archdrlen);
+	if (phds && flag && (flag & 1) == 0)
+		goto out2;
+
+	if (!arcnet_encap_print(arc_type, p, length, caplen)) {
+		default_print(p, caplen);
+		goto out;
 	}
 
-	if (!arcnet_encap_print(arc_type, p, length, caplen))
+ out2:
+	if (xflag)
 		default_print(p, caplen);
 
-	return (archdrlen);
-}
-
-/*
- * This is the top level routine of the printer.  'p' points
- * to the ARCNET header of the packet, 'h->ts' is the timestamp,
- * 'h->length' is the length of the packet off the wire, and 'h->caplen'
- * is the number of bytes actually captured.  It is quite similar
- * to the non-Linux style printer except that Linux doesn't ever
- * supply packets that look like exception frames, it always supplies
- * reassembled packets rather than raw frames, and headers have an
- * extra "offset" field between the src/dest and packet type.
- */
-u_int
-arcnet_linux_if_print(const struct pcap_pkthdr *h, const u_char *p)
-{
-	u_int caplen = h->caplen;
-	u_int length = h->len;
-	const struct arc_linux_header *ap;
-
-	int archdrlen = 0;
-	u_char arc_type;
-
-	if (caplen < ARC_LINUX_HDRLEN) {
-		printf("[|arcnet]");
-		return (caplen);
-	}
-
-	ap = (const struct arc_linux_header *)p;
-	arc_type = ap->arc_type;
-
-	switch (arc_type) {
-	default:
-		archdrlen = ARC_LINUX_HDRNEWLEN;
-		if (caplen < ARC_LINUX_HDRNEWLEN) {
-			printf("[|arcnet]");
-			return (caplen);
-		}
-		break;
-	case ARCTYPE_IP_OLD:
-	case ARCTYPE_ARP_OLD:
-	case ARCTYPE_DIAGNOSE:
-		archdrlen = ARC_LINUX_HDRLEN;
-		break;
-	}
-
-	if (eflag)
-		arcnet_print(p, length, 0, 0, 0);
-
-	/*
-	 * Go past the ARCNET header.
-	 */
-	length -= archdrlen;
-	caplen -= archdrlen;
-	p += archdrlen;
-
-	if (!arcnet_encap_print(arc_type, p, length, caplen))
-		default_print(p, caplen);
-
-	return (archdrlen);
+ out:
+	putchar('\n');
+	--infodelay;
+	if (infoprint)
+		info(0);
 }
 
 /*
@@ -258,7 +220,7 @@ arcnet_linux_if_print(const struct pcap_pkthdr *h, const u_char *p)
  */
 
 
-static int
+int
 arcnet_encap_print(u_char arctype, const u_char *p,
     u_int length, u_int caplen)
 {
@@ -285,10 +247,6 @@ arcnet_encap_print(u_char arctype, const u_char *p,
 		if (vflag)
 			fputs("et1 ", stdout);
 		atalk_print(p, length);
-		return (1);
-
-	case ARCTYPE_IPX:
-		ipx_print(p, length);
 		return (1);
 
 	default:

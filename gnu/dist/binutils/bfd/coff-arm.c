@@ -1,24 +1,24 @@
 /* BFD back-end for ARM COFF files.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003
+   2000, 2001, 2002
    Free Software Foundation, Inc.
    Written by Cygnus Support.
 
-   This file is part of BFD, the Binary File Descriptor library.
+This file is part of BFD, the Binary File Descriptor library.
 
-   This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
-   (at your option) any later version.
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
 
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -252,11 +252,11 @@ coff_arm_reloc (abfd, reloc_entry, symbol, data, input_section, output_bfd,
 #undef  ARM_THUMB12
 #undef  ARM_26D
 
-#define ARM_26D      0
 #define ARM_32       1
 #define ARM_RVA32    2
 #define ARM_26	     3
 #define ARM_THUMB12  4
+#define ARM_26D      5
 #define ARM_SECTION  14
 #define ARM_SECREL   15
 #endif
@@ -264,19 +264,7 @@ coff_arm_reloc (abfd, reloc_entry, symbol, data, input_section, output_bfd,
 static reloc_howto_type aoutarm_std_reloc_howto[] =
   {
 #ifdef ARM_WINCE
-    HOWTO (ARM_26D,
-	   2,
-	   2,
-	   24,
-	   TRUE,
-	   0,
-	   complain_overflow_dont,
-	   aoutarm_fix_pcrel_26_done,
-	   "ARM_26D",
-	   FALSE,
-	   0x00ffffff,
-	   0x0,
-	   PCRELOFFSET),
+    EMPTY_HOWTO (-1),
     HOWTO (ARM_32,
 	   0,
 	   2,
@@ -286,7 +274,7 @@ static reloc_howto_type aoutarm_std_reloc_howto[] =
 	   complain_overflow_bitfield,
 	   coff_arm_reloc,
 	   "ARM_32",
-	   FALSE,
+	   TRUE,
 	   0xffffffff,
 	   0xffffffff,
 	   PCRELOFFSET),
@@ -299,7 +287,7 @@ static reloc_howto_type aoutarm_std_reloc_howto[] =
 	   complain_overflow_bitfield,
 	   coff_arm_reloc,
 	   "ARM_RVA32",
-	   FALSE,
+	   TRUE,
 	   0xffffffff,
 	   0xffffffff,
 	   PCRELOFFSET),
@@ -329,7 +317,19 @@ static reloc_howto_type aoutarm_std_reloc_howto[] =
 	   0x000007ff,
 	   0x000007ff,
 	   PCRELOFFSET),
-    EMPTY_HOWTO (-1),
+    HOWTO (ARM_26D,
+	   2,
+	   2,
+	   24,
+	   FALSE,
+	   0,
+	   complain_overflow_dont,
+	   aoutarm_fix_pcrel_26_done,
+	   "ARM_26D",
+	   TRUE,
+	   0x00ffffff,
+	   0x0,
+	   FALSE),
     EMPTY_HOWTO (-1),
     EMPTY_HOWTO (-1),
     EMPTY_HOWTO (-1),
@@ -346,8 +346,8 @@ static reloc_howto_type aoutarm_std_reloc_howto[] =
 	   0,
 	   complain_overflow_bitfield,
 	   coff_arm_reloc,
-	   "ARM_SECTION",
-	   FALSE,
+	   "ARM_16",
+	   TRUE,
 	   0x0000ffff,
 	   0x0000ffff,
 	   PCRELOFFSET),
@@ -359,8 +359,8 @@ static reloc_howto_type aoutarm_std_reloc_howto[] =
 	   0,
 	   complain_overflow_bitfield,
 	   coff_arm_reloc,
-	   "ARM_SECREL",
-	   FALSE,
+	   "ARM_32",
+	   TRUE,
 	   0xffffffff,
 	   0xffffffff,
 	   PCRELOFFSET),
@@ -921,13 +921,13 @@ struct coff_arm_link_hash_table
     /* The original coff_link_hash_table structure.  MUST be first field.  */
     struct coff_link_hash_table	root;
 
-    /* The size in bytes of the section containing the Thumb-to-ARM glue.  */
+    /* The size in bytes of the section containg the Thumb-to-ARM glue.  */
     bfd_size_type		thumb_glue_size;
 
-    /* The size in bytes of the section containing the ARM-to-Thumb glue.  */
+    /* The size in bytes of the section containg the ARM-to-Thumb glue.  */
     bfd_size_type		arm_glue_size;
 
-    /* An arbitrary input BFD chosen to hold the glue sections.  */
+    /* An arbitary input BFD chosen to hold the glue sections.  */
     bfd *			bfd_of_glue_owner;
 
     /* Support interworking with old, non-interworking aware ARM code.  */
@@ -991,7 +991,7 @@ arm_emit_base_file_entry (info, output_bfd, input_section, reloc_offset)
    instruction.
 
    It takes two thumb instructions to encode the target address. Each has
-   11 bits to invest. The upper 11 bits are stored in one (identified by
+   11 bits to invest. The upper 11 bits are stored in one (identifed by
    H-0.. see below), the lower 11 bits are stored in the other (identified
    by H-1).
 
@@ -1247,14 +1247,13 @@ coff_arm_relocate_section (output_bfd, info, input_bfd, input_section,
 	return FALSE;
 
       /* The relocation_section function will skip pcrel_offset relocs
-         when doing a relocatable link.  However, we want to convert
-         ARM_26 to ARM_26D relocs if possible.  We return a fake howto in
+         when doing a relocateable link.  However, we want to convert
+         ARM26 to ARM26D relocs if possible.  We return a fake howto in
          this case without pcrel_offset set, and adjust the addend to
-         compensate.  'partial_inplace' is also set, since we want 'done'
-         relocations to be reflected in section's data.  */
+         compensate.  */
       if (rel->r_type == ARM_26
           && h != NULL
-          && info->relocatable
+          && info->relocateable
           && (h->root.type == bfd_link_hash_defined
 	      || h->root.type == bfd_link_hash_defweak)
           && (h->root.u.def.section->output_section
@@ -1270,17 +1269,12 @@ coff_arm_relocate_section (output_bfd, info, input_bfd, input_section,
     	       complain_overflow_signed,
     	       aoutarm_fix_pcrel_26 ,
     	       "ARM_26",
-    	       TRUE,
+    	       FALSE,
     	       0x00ffffff,
     	       0x00ffffff,
     	       FALSE);
 
           addend -= rel->r_vaddr - input_section->vma;
-#ifdef ARM_WINCE
-          /* FIXME: I don't know why, but the hack is necessary for correct
-                    generation of bl's instruction offset. */
-          addend -= 8;
-#endif
           howto = &fake_arm26_reloc;
         }
 
@@ -1289,23 +1283,23 @@ coff_arm_relocate_section (output_bfd, info, input_bfd, input_section,
 	 the next opcode's pc, so is off by one.  */
 #if 0 /* This appears to have been true for WINCE 2.0, but it is not
 	 true for WINCE 3.0.  */
-      if (howto->pc_relative && !info->relocatable)
+      if (howto->pc_relative && !info->relocateable)
 	addend -= 8;
 #endif
 #endif
 
-      /* If we are doing a relocatable link, then we can just ignore
+      /* If we are doing a relocateable link, then we can just ignore
          a PC relative reloc that is pcrel_offset.  It will already
-         have the correct value.  If this is not a relocatable link,
+         have the correct value.  If this is not a relocateable link,
          then we should ignore the symbol value.  */
       if (howto->pc_relative && howto->pcrel_offset)
         {
-          if (info->relocatable)
+          if (info->relocateable)
             continue;
 	  /* FIXME - it is not clear which targets need this next test
 	     and which do not.  It is known that it is needed for the
 	     VxWorks and EPOC-PE targets, but it is also known that it
-	     was suppressed for other ARM targets.  This ought to be
+	     was supressed for other ARM targets.  This ought to be
 	     sorted out one day.  */
 #ifdef ARM_COFF_BUGFIX
 	  /* We must not ignore the symbol value.  If the symbol is
@@ -1347,7 +1341,7 @@ coff_arm_relocate_section (output_bfd, info, input_bfd, input_section,
              stub generation to the final linker pass. If we fail to
 	     verify that the name is defined, we'll try to build stubs
 	     for an undefined name...  */
-          if (! info->relocatable
+          if (! info->relocateable
 	      && (   h->root.type == bfd_link_hash_defined
 		  || h->root.type == bfd_link_hash_defweak))
             {
@@ -1601,7 +1595,7 @@ coff_arm_relocate_section (output_bfd, info, input_bfd, input_section,
 		     + sec->output_offset);
 	      }
 
-	  else if (! info->relocatable)
+	  else if (! info->relocateable)
 	    {
 	      if (! ((*info->callbacks->undefined_symbol)
 		     (info, h->root.root.string, input_bfd, input_section,
@@ -1623,7 +1617,7 @@ coff_arm_relocate_section (output_bfd, info, input_bfd, input_section,
 	rstat = bfd_reloc_ok;
 #ifndef ARM_WINCE
       /* Only perform this fix during the final link, not a relocatable link.  nickc@cygnus.com  */
-      else if (! info->relocatable
+      else if (! info->relocateable
 	       && howto->type == ARM_THUMB23)
         {
           /* This is pretty much a copy of what the default
@@ -1740,19 +1734,16 @@ coff_arm_relocate_section (output_bfd, info, input_bfd, input_section,
 #endif
       else
 #endif /* THUMBEXTENSION */
-        if (info->relocatable && ! howto->partial_inplace)
-            rstat = bfd_reloc_ok;
-        else
-	  rstat = _bfd_final_link_relocate (howto, input_bfd, input_section,
-					    contents,
-					    rel->r_vaddr - input_section->vma,
-					    val, addend);
+        rstat = _bfd_final_link_relocate (howto, input_bfd, input_section,
+                                          contents,
+                                          rel->r_vaddr - input_section->vma,
+                                          val, addend);
 #if 1 /* THUMBEXTENSION */
       /* FIXME:
 	 Is this the best way to fix up thumb addresses? krk@cygnus.com
 	 Probably not, but it works, and if it works it don't need fixing!  nickc@cygnus.com */
       /* Only perform this fix during the final link, not a relocatable link.  nickc@cygnus.com  */
-      if (! info->relocatable
+      if (! info->relocateable
 	  && (rel->r_type == ARM_32 || rel->r_type == ARM_RVA32))
 	{
 	  /* Determine if we need to set the bottom bit of a relocated address
@@ -2032,7 +2023,7 @@ bfd_arm_get_bfd_for_interworking (abfd, info)
 
   /* If we are only performing a partial link do not bother
      getting a bfd to hold the glue.  */
-  if (info->relocatable)
+  if (info->relocateable)
     return TRUE;
 
   globals = coff_arm_hash_table (info);
@@ -2087,7 +2078,7 @@ bfd_arm_process_before_allocation (abfd, info, support_old_code)
 
   /* If we are only performing a partial link do not bother
      to construct any glue.  */
-  if (info->relocatable)
+  if (info->relocateable)
     return TRUE;
 
   /* Here we have a bfd that is to be included on the link.  We have a hook
@@ -2207,8 +2198,8 @@ bfd_arm_process_before_allocation (abfd, info, support_old_code)
 #define coff_bfd_copy_private_bfd_data          coff_arm_copy_private_bfd_data
 #define coff_bfd_link_hash_table_create		coff_arm_link_hash_table_create
 
-/* When doing a relocatable link, we want to convert ARM_26 relocs
-   into ARM_26D relocs.  */
+/* When doing a relocateable link, we want to convert ARM26 relocs
+   into ARM26D relocs.  */
 
 static bfd_boolean
 coff_arm_adjust_symndx (obfd, info, ibfd, sec, irel, adjustedp)
@@ -2219,7 +2210,7 @@ coff_arm_adjust_symndx (obfd, info, ibfd, sec, irel, adjustedp)
      struct internal_reloc *irel;
      bfd_boolean *adjustedp;
 {
-  if (irel->r_type == ARM_26)
+  if (irel->r_type == 3)
     {
       struct coff_link_hash_entry *h;
 
@@ -2228,7 +2219,7 @@ coff_arm_adjust_symndx (obfd, info, ibfd, sec, irel, adjustedp)
 	  && (h->root.type == bfd_link_hash_defined
 	      || h->root.type == bfd_link_hash_defweak)
 	  && h->root.u.def.section->output_section == sec->output_section)
-	irel->r_type = ARM_26D;
+	irel->r_type = 7;
     }
   *adjustedp = FALSE;
   return TRUE;
@@ -2237,7 +2228,7 @@ coff_arm_adjust_symndx (obfd, info, ibfd, sec, irel, adjustedp)
 /* Called when merging the private data areas of two BFDs.
    This is important as it allows us to detect if we are
    attempting to merge binaries compiled for different ARM
-   targets, eg different CPUs or different APCS's.     */
+   targets, eg different CPUs or differents APCS's.     */
 
 static bfd_boolean
 coff_arm_merge_private_bfd_data (ibfd, obfd)
@@ -2370,7 +2361,7 @@ coff_arm_print_private_bfd_data (abfd, ptr)
 
   if (APCS_SET (abfd))
     {
-      /* xgettext: APCS is ARM Procedure Call Standard, it should not be translated.  */
+      /* xgettext: APCS is ARM Prodecure Call Standard, it should not be translated.  */
       fprintf (file, " [APCS-%d]", APCS_26_FLAG (abfd) ? 26 : 32);
 
       if (APCS_FLOAT_FLAG (abfd))
@@ -2622,9 +2613,9 @@ coff_arm_final_link_postscript (abfd, pfinfo)
 
 #ifndef EXTRA_S_FLAGS
 #ifdef COFF_WITH_PE
-#define EXTRA_S_FLAGS (SEC_CODE | SEC_LINK_ONCE | SEC_LINK_DUPLICATES)
+#define EXTRA_S_FLAGS (SEC_LINK_ONCE | SEC_LINK_DUPLICATES)
 #else
-#define EXTRA_S_FLAGS SEC_CODE
+#define EXTRA_S_FLAGS 0
 #endif
 #endif
 
@@ -2632,5 +2623,5 @@ coff_arm_final_link_postscript (abfd, pfinfo)
 extern const bfd_target TARGET_BIG_SYM ;
 
 /* Target vectors.  */
-CREATE_LITTLE_COFF_TARGET_VEC (TARGET_LITTLE_SYM, TARGET_LITTLE_NAME, D_PAGED, EXTRA_S_FLAGS, TARGET_UNDERSCORE, & TARGET_BIG_SYM, COFF_SWAP_TABLE)
-CREATE_BIG_COFF_TARGET_VEC (TARGET_BIG_SYM, TARGET_BIG_NAME, D_PAGED, EXTRA_S_FLAGS, TARGET_UNDERSCORE, & TARGET_LITTLE_SYM, COFF_SWAP_TABLE)
+CREATE_LITTLE_COFF_TARGET_VEC (TARGET_LITTLE_SYM, TARGET_LITTLE_NAME, D_PAGED, EXTRA_S_FLAGS, TARGET_UNDERSCORE, & TARGET_BIG_SYM)
+CREATE_BIG_COFF_TARGET_VEC (TARGET_BIG_SYM, TARGET_BIG_NAME, D_PAGED, EXTRA_S_FLAGS, TARGET_UNDERSCORE, & TARGET_LITTLE_SYM)

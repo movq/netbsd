@@ -1,4 +1,4 @@
-/*	$NetBSD: aic6360var.h,v 1.11 2004/12/07 22:23:45 thorpej Exp $	*/
+/*	$NetBSD: aic6360var.h,v 1.9 2001/04/30 03:45:35 lukem Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Charles M. Hannum.  All rights reserved.
@@ -44,9 +44,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _DEV_IC_AIC6360VAR_H_
-#define	_DEV_IC_AIC6360VAR_H_
-
 /*
  * Acknowledgements: Many of the algorithms used in this driver are
  * inspired by the work of Julian Elischer (julian@tfs.com) and
@@ -72,7 +69,7 @@ struct aic_dma_seg {
  * occasionally xs->retries.
  */
 struct aic_acb {
-	struct scsipi_generic scsipi_cmd;
+	struct scsi_generic scsipi_cmd;
 	int scsipi_cmd_length;
 	u_char *data_addr;		/* Saved data pointer */
 	int data_length;		/* Residue */
@@ -217,12 +214,10 @@ extern int aic_debug; /* AIC_SHOWSTART|AIC_SHOWMISC|AIC_SHOWTRACE; */
 
 #define AIC_ISA_IOSIZE	0x20	/* XXX */
 
-void	aicattach(struct aic_softc *);
-int	aic_activate(struct device *, enum devact);
-int	aic_detach(struct device *, int);
-int	aicintr(void *);
-int	aic_find(bus_space_tag_t, bus_space_handle_t);
-void	aic_isa_attach(struct device *, struct device *, void *);
-void	aic_init(struct aic_softc *, int);
-
-#endif /* _DEV_IC_AIC6360VAR_H_ */
+void	aicattach	__P((struct aic_softc *));
+int	aic_activate	__P((struct device *, enum devact));
+int	aic_detach	__P((struct device *, int));
+int	aicintr		__P((void *));
+int	aic_find	__P((bus_space_tag_t, bus_space_handle_t));
+void	aic_isa_attach	__P((struct device *, struct device *, void *));
+void	aic_init	__P((struct aic_softc *, int));

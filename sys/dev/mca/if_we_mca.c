@@ -1,4 +1,4 @@
-/*	$NetBSD: if_we_mca.c,v 1.11 2004/09/08 19:09:43 jdolecek Exp $	*/
+/*	$NetBSD: if_we_mca.c,v 1.9.2.2 2004/09/10 03:08:55 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2001 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_we_mca.c,v 1.11 2004/09/08 19:09:43 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_we_mca.c,v 1.9.2.2 2004/09/10 03:08:55 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

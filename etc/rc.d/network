@@ -1,13 +1,13 @@
 #!/bin/sh
 #
-# $NetBSD: network,v 1.47 2004/10/12 14:51:03 lukem Exp $
+# $NetBSD: network,v 1.44 2003/10/12 09:50:05 jdc Exp $
 #
 
 # PROVIDE: network
 # REQUIRE: ipfilter ipsec mountcritlocal root tty sysctl
 # BEFORE:  NETWORKING
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="network"
 start_cmd="network_start"
@@ -23,7 +23,7 @@ network_start()
 	# otherwise use /etc/myname
 	#
 	if [ -z "$hostname" ] && [ -f /etc/myname ]; then
-		hostname=$(cat /etc/myname)
+		hostname=`cat /etc/myname`
 	fi
 	if [ -n "$hostname" ]; then
 		echo "Hostname: $hostname"
@@ -33,7 +33,7 @@ network_start()
 		# DHCP later, as we will probably get the
 		# hostname at that time.
 		#
-		if ! checkyesno dhclient && [ -z "$(hostname)" ]; then
+		if ! checkyesno dhclient && [ -z "`hostname`" ]; then
 			warn "\$hostname not set."
 		fi
 	fi
@@ -42,7 +42,7 @@ network_start()
 	# for NIS/YP domain name
 	#
 	if [ -z "$domainname" ] && [ -f /etc/defaultdomain ]; then
-		domainname=$(cat /etc/defaultdomain)
+		domainname=`cat /etc/defaultdomain`
 	fi
 	if [ -n "$domainname" ]; then
 		echo "NIS domainname: $domainname"
@@ -172,8 +172,8 @@ network_start()
 	#
 	if [ "$net_interfaces" != NO ]; then
 		if checkyesno auto_ifconfig; then
-			tmp=$(ifconfig -l)
-			for cloner in $(ifconfig -C 2>/dev/null); do
+			tmp=`ifconfig -l`
+			for cloner in `ifconfig -C 2>/dev/null`; do
 				for int in /etc/ifconfig.${cloner}[0-9]*; do
 					[ ! -f $int ] && break
 					tmp="$tmp ${int##*.}"
@@ -229,7 +229,7 @@ network_start()
 	# /etc/hosts.
 	#
 	if [ -z "$defaultroute" ] && [ -f /etc/mygate ]; then
-		defaultroute=$(cat /etc/mygate)
+		defaultroute=`cat /etc/mygate`
 	fi
 	if [ -n "$defaultroute" ]; then
 		route add default $defaultroute
@@ -241,7 +241,7 @@ network_start()
 	# address if it is not using an stf* interface.
 	#
 	if [ -z "$defaultroute6" ] && [ -f /etc/mygate6 ]; then
-		defaultroute6=$(cat /etc/mygate6)
+		defaultroute6=`cat /etc/mygate6`
 	fi
 	if [ -n "$defaultroute6" ]; then
 		if [ "$ip6mode" = "autohost" ]; then
@@ -311,7 +311,7 @@ network_start()
 		# wait till DAD is completed. always invoke it in case
 		# if are configured manually by ifconfig
 		#
-		dadcount=$(sysctl -n net.inet6.ip6.dad_count 2>/dev/null)
+		dadcount=`sysctl -n net.inet6.ip6.dad_count 2>/dev/null`
 		sleep $dadcount
 		sleep 1
 
@@ -355,7 +355,7 @@ network_stop()
 		done < /etc/ifaliases
 	fi
 
-	for int in $(ifconfig -lu); do
+	for int in `ifconfig -lu`; do
 		eval args=\$ifaliases_$int
 		if [ -n "$args" ]; then
 			set -- $args
@@ -371,7 +371,7 @@ network_stop()
 	echo -n 'Downing network interfaces:'
 	if [ "$net_interfaces" != NO ]; then
 		if checkyesno auto_ifconfig; then
-			tmp=$(ifconfig -l)
+			tmp=`ifconfig -l`
 		else
 			tmp="$net_interfaces"
 		fi
@@ -396,7 +396,5 @@ network_stop()
 
 }
 
-load_rc_config $name
-load_rc_config_var dhclient dhclient
-load_rc_config_var ipfilter ipfilter
+load_rc_config $name ipfilter
 run_rc_command "$1"

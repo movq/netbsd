@@ -1,4 +1,4 @@
-;	$NetBSD: esiop.ss,v 1.18 2004/05/17 18:37:02 bouyer Exp $
+;	$NetBSD: esiop.ss,v 1.16 2003/10/05 17:48:49 bouyer Exp $
 
 ;
 ; Copyright (c) 2002 Manuel Bouyer.
@@ -208,7 +208,6 @@ waitphase:
 
 handle_cmpl:
 	CALL REL(disconnect);
-	STORE NOFLUSH SCRATCHA0, 4, from tlq_offset; save current offset
 	MOVE SCRATCHE1 to SFBR;
 	INT int_done, IF NOT 0x00; if status is not "done", let host handle it
 	MOVE SCRATCHF0 to SFBR; load pointer in done ring
@@ -342,8 +341,10 @@ handle_msgin:
 	JUMP REL(handle_extin), IF 0x01	; extended message
 	INT int_msgin, IF NOT 0x04;
 	CALL REL(disconnect)		; disconnect message
-; if we didn't get sdp, no need to interrupt
+; if we didn't get sdp, or if offset is 0, no need to interrupt
 	MOVE SCRATCHC0 & f_c_sdp TO SFBR;
+	JUMP REL(script_sched), if 0x00;
+	MOVE SCRATCHA1 TO SFBR;
 	JUMP REL(script_sched), if 0x00;
 ; Ok, we need to save data pointers
 	INT int_disc;

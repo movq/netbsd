@@ -1,4 +1,4 @@
-/*	$NetBSD: oea_machdep.c,v 1.19 2004/06/26 21:48:30 kleink Exp $	*/
+/*	$NetBSD: oea_machdep.c,v 1.15.2.1 2004/04/01 23:31:58 jmc Exp $	*/
 
 /*
  * Copyright (C) 2002 Matt Thomas
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: oea_machdep.c,v 1.19 2004/06/26 21:48:30 kleink Exp $");
+__KERNEL_RCSID(0, "$NetBSD: oea_machdep.c,v 1.15.2.1 2004/04/01 23:31:58 jmc Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
@@ -256,12 +256,7 @@ oea_init(void (*handler)(void))
 #define	MxSPR_MASK	0x7c1fffff
 #define	MFSPR_MQ	0x7c0002a6
 #define	MTSPR_MQ	0x7c0003a6
-#define	MTSPR_IBAT0L	0x7c1183a6
-#define	MTSPR_IBAT1L	0x7c1383a6
 #define	NOP		0x60000000
-#define	B		0x48000000
-#define	TLBSYNC		0x7c00046c
-#define	SYNC		0x7c0004ac
 
 #ifdef ALTIVEC
 #define	MFSPR_VRSAVE	0x7c0042a6
@@ -278,8 +273,8 @@ oea_init(void (*handler)(void))
 	    :	"J"(PSL_VEC));
 
 	/*
-	 * If we aren't on an AltiVec capable processor, we need to zap any of
-	 * the sequences we save/restore the VRSAVE SPR into NOPs.
+	 * If we aren't on an AltiVec capable processor, we to need zap any of
+	 * sequences we save/restore the VRSAVE SPR into NOPs.
 	 */
 	if (scratch & PSL_VEC) {
 		cpu_altivec = 1;
@@ -299,9 +294,8 @@ oea_init(void (*handler)(void))
 #endif
 
 	/*
-	 * If we aren't on a MPC601 processor, we need to zap any of the
-	 * sequences we save/restore the MQ SPR into NOPs, and skip over the
-	 * sequences where we zap/restore BAT registers on kernel exit/entry.
+	 * If we aren't on a MPC601 processor, we to need zap any of
+	 * sequences we save/restore the MQ SPR into NOPs.
 	 */
 	if (cpuvers != MPC601) {
 		int *ip = trapstart;
@@ -313,52 +307,17 @@ oea_init(void (*handler)(void))
 			} else if ((ip[0] & MxSPR_MASK) == MTSPR_MQ) {
 				ip[-1] = NOP;	/* lwz */
 				ip[0] = NOP;	/* mtspr */
-			} else if ((ip[0] & MxSPR_MASK) == MTSPR_IBAT0L) {
-				if ((ip[1] & MxSPR_MASK) == MTSPR_IBAT1L)
-					ip[-1] = B | 0x14;	/* li */
-				else
-					ip[-4] = B | 0x24;	/* lis */
 			}
 		}
 	}
 
-	/*
-	 * Sync the changed instructions.
-	 */
-	__syncicache((void *) trapstart,
-	    (uintptr_t) trapend - (uintptr_t) trapstart);
-
-	/*
-	 * If we are on a MPC601 processor, we need to zap any tlbsync
-	 * instructions into sync.  This differs from the above in
-	 * examing all kernel text, as opposed to just the exception handling.
-	 * We sync the icache on every instruction found since there are
-	 * only very few of them.
-	 */
-	if (cpuvers == MPC601) {
-		extern int kernel_text[], etext[];
-		int *ip;
-
-		for (ip = kernel_text; ip < etext; ip++)
-			if (*ip == TLBSYNC) {
-				*ip = SYNC;
-				__syncicache(ip, sizeof(*ip));
-		}
+	if (!cpu_altivec || cpuvers != MPC601) {
+		/*
+		 * Sync the changed instructions.
+		 */
+		__syncicache((void *) trapstart,
+		    (uintptr_t) trapend - (uintptr_t) trapstart);
 	}
-
-        /*
-	 * Configure a PSL user mask matching this processor.
- 	 */
-	cpu_psluserset = PSL_EE | PSL_PR | PSL_ME | PSL_IR | PSL_DR | PSL_RI;
-	cpu_pslusermod = PSL_FP | PSL_FE0 | PSL_FE1 | PSL_LE | PSL_SE | PSL_BE;
-	if (cpuvers == MPC601) {
-		cpu_psluserset &= PSL_601_MASK;
-		cpu_pslusermod &= PSL_601_MASK;
-	}
-#ifdef ALTIVEC
-	if (cpu_altivec)
-		cpu_pslusermod |= PSL_VEC;
-#endif
 
 	/*
 	 * external interrupt handler install

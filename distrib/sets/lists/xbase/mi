@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.44 2004/11/16 14:40:32 jschauma Exp $
+# $NetBSD: mi,v 1.40.2.1 2004/04/29 05:45:24 jmc Exp $
 ./etc/mtree/set.xbase				xbase-sys-root
 ./usr/X11R6/bin/Xmark
 ./usr/X11R6/bin/appres
@@ -207,11 +207,6 @@
 ./usr/X11R6/include/X11/bitmaps/xlogo32
 ./usr/X11R6/include/X11/bitmaps/xlogo64
 ./usr/X11R6/include/X11/bitmaps/xsnow
-./usr/X11R6/include/X11/pixmaps/NetBSD.xpm
-./usr/X11R6/include/X11/pixmaps/NetBSDbw.xpm
-./usr/X11R6/include/X11/pixmaps/NetBSDinv.xpm
-./usr/X11R6/include/X11/pixmaps/XFree86.xpm
-./usr/X11R6/include/X11/pixmaps/XFree86bw.xpm
 ./usr/X11R6/include/X11/pixmaps/deny-always.xpm
 ./usr/X11R6/include/X11/pixmaps/deny.xpm
 ./usr/X11R6/include/X11/pixmaps/logo.xpm
@@ -407,7 +402,6 @@
 ./usr/X11R6/lib/X11/locale/zh_TW/Compose	-unknown-		share
 ./usr/X11R6/lib/X11/locale/zh_TW/XI18N_OBJS	-unknown-		share
 ./usr/X11R6/lib/X11/locale/zh_TW/XLC_LOCALE	-unknown-		share
-./usr/X11R6/lib/X11/rgb.txt
 ./usr/X11R6/lib/X11/x11perfcomp/fillblnk
 ./usr/X11R6/lib/X11/x11perfcomp/perfboth
 ./usr/X11R6/lib/X11/x11perfcomp/perfratio

@@ -1,11 +1,12 @@
 
-$NetBSD: TODO,v 1.3 2004/05/05 14:52:34 cjep Exp $
+$NetBSD: TODO,v 1.1.1.1 2004/01/02 15:00:27 cjep Exp $
 
 Hopefully this program can become a full drop-in replacement for 
-GNU grep. If you want to help out, please let me (cjep@) know so that 
-we can organise our efforts efficiently.
+GNU grep.
 
 1. Add functionality and maybe change flags to match GNU grep. 
+  * --line-buffered
+
   * --include,--exclude
 	possibly use code from pax for this.
 
@@ -27,6 +28,3 @@ to search for a byte worth 0 or 128 (depending on -z).
    ii) we probably stat wastefully.
 
 7. Fix the manual page.
-
-8. Possible look at regex libc speedups from FreeBSD.
-

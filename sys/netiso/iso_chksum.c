@@ -1,4 +1,4 @@
-/*	$NetBSD: iso_chksum.c,v 1.19 2004/04/19 05:16:45 matt Exp $	*/
+/*	$NetBSD: iso_chksum.c,v 1.18 2003/08/07 16:33:36 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -75,7 +75,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: iso_chksum.c,v 1.19 2004/04/19 05:16:45 matt Exp $");
+__KERNEL_RCSID(1, "$NetBSD: iso_chksum.c,v 1.18 2003/08/07 16:33:36 agc Exp $");
 
 #include "opt_iso.h"
 
@@ -111,7 +111,9 @@ __KERNEL_RCSID(1, "$NetBSD: iso_chksum.c,v 1.19 2004/04/19 05:16:45 matt Exp $")
  *		 isn't worth it.
  */
 int
-iso_check_csum(struct mbuf *m, int len)
+iso_check_csum(m, len)
+	struct mbuf    *m;
+	int             len;
 {
 	u_char *p = mtod(m, u_char *);
 	u_long c0 = 0, c1 = 0;
@@ -185,10 +187,10 @@ iso_check_csum(struct mbuf *m, int len)
  */
 
 void
-iso_gen_csum(
-	struct mbuf    *m,
-	int             n,	/* offset of 2 checksum bytes */
-	int             l)
+iso_gen_csum(m, n, l)
+	struct mbuf    *m;
+	int             n;	/* offset of 2 checksum bytes */
+	int             l;
 {
 	u_char *p = mtod(m, u_char *);
 	int    c0 = 0, c1 = 0;
@@ -293,7 +295,8 @@ iso_gen_csum(
  */
 
 int
-m_datalen(struct mbuf *m)
+m_datalen(m)
+	struct mbuf *m;
 {
 	int    datalen;
 
@@ -303,7 +306,8 @@ m_datalen(struct mbuf *m)
 }
 
 int
-m_compress(struct mbuf *in, struct mbuf **out)
+m_compress(in, out)
+	struct mbuf *in, **out;
 {
 	int    datalen = 0;
 	int             s = splnet();

@@ -1,4 +1,5 @@
-/*	$NetBSD: usbdi_util.h,v 1.31 2004/12/03 08:53:40 augustss Exp $	*/
+/*	$NetBSD: usbdi_util.h,v 1.28.8.1 2004/07/02 17:24:20 he Exp $	*/
+/*	$FreeBSD: src/sys/dev/usb/usbdi_util.h,v 1.9 1999/11/17 22:33:50 n_hibma Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -81,14 +82,7 @@ usbd_status usbd_bulk_transfer(usbd_xfer_handle xfer, usbd_pipe_handle pipe,
 			       u_int16_t flags, u_int32_t timeout, void *buf,
 			       u_int32_t *size, char *lbl);
 
-usbd_status usbd_intr_transfer(usbd_xfer_handle xfer, usbd_pipe_handle pipe,
- 			       u_int16_t flags, u_int32_t timeout, void *buf,
- 			       u_int32_t *size, char *lbl);
-
 void usb_detach_wait(device_ptr_t);
 void usb_detach_wakeup(device_ptr_t);
 
-const usb_descriptor_t *usb_find_desc(usbd_device_handle dev, int type,
-				      int subtype);
-#define USBD_SUBTYPE_ANY (~0)
-
+usb_descriptor_t *usb_find_desc(usbd_device_handle dev, int type);

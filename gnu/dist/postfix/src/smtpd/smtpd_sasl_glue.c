@@ -1,5 +1,3 @@
-/*	$NetBSD: smtpd_sasl_glue.c,v 1.1.1.6 2004/05/31 00:24:50 heas Exp $	*/
-
 /*++
 /* NAME
 /*	smtpd_sasl_glue 3
@@ -10,7 +8,7 @@
 /*
 /*	void	smtpd_sasl_initialize()
 /*
-/*	void	smtpd_sasl_connect(state, sasl_opts_name, sasl_opts_val)
+/*	void	smtpd_sasl_connect(state)
 /*	SMTPD_STATE *state;
 /*
 /*	char	*smtpd_sasl_authenticate(state, sasl_method, init_response)
@@ -34,9 +32,7 @@
 /*
 /*	smtpd_sasl_connect() performs per-connection initialization.
 /*	This routine should be called once at the start of every
-/*	connection. The sasl_opts_name and sasl_opts_val parameters
-/*	are the postfix configuration parameters setting the security
-/*	policy of the SASL authentication.
+/*	connection.
 /*
 /*	smtpd_sasl_authenticate() implements the authentication dialog.
 /*	The result is a null pointer in case of success, an SMTP reply
@@ -205,6 +201,8 @@ static NAME_MASK smtpd_sasl_mask[] = {
     0,
 };
 
+static int smtpd_sasl_opts;
+
 /* smtpd_sasl_initialize - per-process initialization */
 
 void    smtpd_sasl_initialize(void)
@@ -213,18 +211,19 @@ void    smtpd_sasl_initialize(void)
     /*
      * Initialize the library: load SASL plug-in routines, etc.
      */
-    if (msg_verbose)
-	msg_info("smtpd_sasl_initialize: SASL config file is %s.conf",
-		 var_smtpd_sasl_appname);
-    if (sasl_server_init(callbacks, var_smtpd_sasl_appname) != SASL_OK)
+    if (sasl_server_init(callbacks, "smtpd") != SASL_OK)
 	msg_fatal("SASL per-process initialization failed");
 
+    /*
+     * Configuration parameters.
+     */
+    smtpd_sasl_opts = name_mask(VAR_SMTPD_SASL_OPTS, smtpd_sasl_mask,
+				var_smtpd_sasl_opts);
 }
 
 /* smtpd_sasl_connect - per-connection initialization */
 
-void    smtpd_sasl_connect(SMTPD_STATE *state, const char *sasl_opts_name,
-			           const char *sasl_opts_val)
+void    smtpd_sasl_connect(SMTPD_STATE *state)
 {
 #if SASL_VERSION_MAJOR < 2
     unsigned sasl_mechanism_count;
@@ -292,8 +291,7 @@ void    smtpd_sasl_connect(SMTPD_STATE *state, const char *sasl_opts_name,
     sec_props.min_ssf = 0;
     sec_props.max_ssf = 1;			/* don't allow real SASL
 						 * security layer */
-    sec_props.security_flags = name_mask(sasl_opts_name, smtpd_sasl_mask,
-					 sasl_opts_val);
+    sec_props.security_flags = smtpd_sasl_opts;
     sec_props.maxbufsize = 0;
     sec_props.property_names = 0;
     sec_props.property_values = 0;
@@ -483,9 +481,7 @@ char   *smtpd_sasl_authenticate(SMTPD_STATE *state,
     if (result != SASL_OK || serverout == 0)
 	msg_panic("%s: sasl_getprop SASL_USERNAME botch", myname);
     state->sasl_username = mystrdup(serverout);
-    printable(state->sasl_username, '?');
     state->sasl_method = mystrdup(sasl_method);
-    printable(state->sasl_method, '?');
 
     return (0);
 }

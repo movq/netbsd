@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_ip.c,v 1.81 2004/09/04 23:30:07 manu Exp $	*/
+/*	$NetBSD: raw_ip.c,v 1.78.2.1 2004/05/10 15:00:12 tron Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: raw_ip.c,v 1.81 2004/09/04 23:30:07 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: raw_ip.c,v 1.78.2.1 2004/05/10 15:00:12 tron Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -134,7 +134,13 @@ rip_init()
  * mbuf chain.
  */
 void
+#if __STDC__
 rip_input(struct mbuf *m, ...)
+#else
+rip_input(m, va_alist)
+	struct mbuf *m;
+	va_dcl
+#endif
 {
 	int proto;
 	struct ip *ip = mtod(m, struct ip *);
@@ -303,7 +309,13 @@ rip_ctlinput(cmd, sa, v)
  * Tack on options user may have setup with control call.
  */
 int
+#if __STDC__
 rip_output(struct mbuf *m, ...)
+#else
+rip_output(m, va_alist)
+	struct mbuf *m;
+	va_dcl
+#endif
 {
 	struct inpcb *inp;
 	struct ip *ip;
@@ -421,9 +433,6 @@ rip_ctloutput(op, so, level, optname, m)
 		case MRT_ADD_MFC:
 		case MRT_DEL_MFC:
 		case MRT_ASSERT:
-		case MRT_API_CONFIG:
-		case MRT_ADD_BW_UPCALL:
-		case MRT_DEL_BW_UPCALL:
 			error = ip_mrouter_set(so, optname, m);
 			break;
 #endif
@@ -446,8 +455,6 @@ rip_ctloutput(op, so, level, optname, m)
 #ifdef MROUTING
 		case MRT_VERSION:
 		case MRT_ASSERT:
-		case MRT_API_SUPPORT:
-		case MRT_API_CONFIG:
 			error = ip_mrouter_get(so, optname, m);
 			break;
 #endif

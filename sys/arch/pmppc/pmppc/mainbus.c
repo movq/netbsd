@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.8 2004/07/29 18:39:00 drochner Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.7 2003/07/15 02:54:42 lukem Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.8 2004/07/29 18:39:00 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.7 2003/07/15 02:54:42 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -56,11 +56,11 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.8 2004/07/29 18:39:00 drochner Exp $")
 #error	A cpu device is now required
 #endif
 
-int	mainbus_match(struct device *, struct cfdata *, void *);
+int	mainbus_match(struct device *, void *, void *);
 void	mainbus_attach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(mainbus, sizeof(struct device),
-    mainbus_match, mainbus_attach, NULL, NULL);
+    (cfmatch_t)mainbus_match, mainbus_attach, NULL, NULL);
 
 static int mainbus_print(void *, const char *);
 
@@ -68,7 +68,7 @@ static int mainbus_print(void *, const char *);
  * Probe for the mainbus; always succeeds.
  */
 int
-mainbus_match(struct device *parent, struct cfdata *match, void *aux)
+mainbus_match(struct device *parent, void *match, void *aux)
 {
 
 	return 1;

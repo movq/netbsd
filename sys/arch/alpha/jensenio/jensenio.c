@@ -1,4 +1,4 @@
-/* $NetBSD: jensenio.c,v 1.10 2004/09/14 19:57:37 drochner Exp $ */
+/* $NetBSD: jensenio.c,v 1.8 2003/01/01 00:39:19 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -50,7 +50,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: jensenio.c,v 1.10 2004/09/14 19:57:37 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: jensenio.c,v 1.8 2003/01/01 00:39:19 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,8 +65,6 @@ __KERNEL_RCSID(0, "$NetBSD: jensenio.c,v 1.10 2004/09/14 19:57:37 drochner Exp $
 
 #include <alpha/jensenio/jensenioreg.h>
 #include <alpha/jensenio/jenseniovar.h>
-
-#include "locators.h"
 
 #include "eisa.h"
 
@@ -93,8 +91,7 @@ CFATTACH_DECL(jensenio, sizeof(struct device),
     jensenio_match, jensenio_attach, NULL, NULL);
 
 int	jensenio_print(void *, const char *);
-int	jensenio_submatch(struct device *, struct cfdata *,
-			  const locdesc_t *, void *);
+int	jensenio_submatch(struct device *, struct cfdata *, void *);
 
 int	jensenio_attached;
 
@@ -158,8 +155,6 @@ jensenio_attach(struct device *parent, struct device *self, void *aux)
 	struct jensenio_attach_args ja;
 	struct jensenio_config *jcp = &jensenio_configuration;
 	int i;
-	int help[2];
-	locdesc_t *ldesc = (void *)help; /* XXX */
 
 	printf("\n");
 
@@ -193,10 +188,8 @@ jensenio_attach(struct device *parent, struct device *self, void *aux)
 		ja.ja_iot = &jcp->jc_internal_iot;
 		ja.ja_ec = &jcp->jc_ec;
 
-		ldesc->len = 1;
-		ldesc->locs[JENSENIOCF_PORT] = jensenio_devs[i].jd_ioaddr;
-		(void) config_found_sm_loc(self, "jensenio", ldesc, &ja,
-		    jensenio_print, jensenio_submatch);
+		(void) config_found_sm(self, &ja, jensenio_print,
+		    jensenio_submatch);
 	}
 
 	/*
@@ -205,31 +198,41 @@ jensenio_attach(struct device *parent, struct device *self, void *aux)
 	jcp->jc_ec.ec_attach_hook = jensenio_eisa_attach_hook;
 	jcp->jc_ec.ec_maxslots = jensenio_eisa_maxslots;
 
+	ja.ja_eisa.eba_busname = "eisa";
 	ja.ja_eisa.eba_iot = &jcp->jc_eisa_iot;
 	ja.ja_eisa.eba_memt = &jcp->jc_eisa_memt;
 	ja.ja_eisa.eba_dmat = &jcp->jc_dmat_eisa;
 	ja.ja_eisa.eba_ec = &jcp->jc_ec;
-	(void) config_found_ia(self, "eisabus", &ja.ja_eisa, eisabusprint);
+	(void) config_found(self, &ja.ja_eisa, jensenio_print);
 
 	/*
 	 * Attach the ISA bus.
 	 */
 	jcp->jc_ic.ic_attach_hook = jensenio_isa_attach_hook;
 
+	ja.ja_isa.iba_busname = "isa";
 	ja.ja_isa.iba_iot = &jcp->jc_eisa_iot;
 	ja.ja_isa.iba_memt = &jcp->jc_eisa_memt;
 	ja.ja_isa.iba_dmat = &jcp->jc_dmat_isa;
 	ja.ja_isa.iba_ic = &jcp->jc_ic;
-	(void) config_found_ia(self, "isabus", &ja.ja_isa, isabusprint);
+	(void) config_found(self, &ja.ja_isa, jensenio_print);
 }
 
 int
-jensenio_submatch(struct device *parent, struct cfdata *cf,
-		  const locdesc_t *ldesc, void *aux)
+jensenio_submatch(struct device *parent, struct cfdata *cf, void *aux)
 {
+	struct jensenio_attach_args *ja = aux;
+
+	/*
+	 * Skip the locator song-and-dance if we're attaching the
+	 * EISA or ISA layer.
+	 */
+	if (strcmp(ja->ja_name, "eisa") == 0 ||
+	    strcmp(ja->ja_name, "isa") == 0)
+		return (config_match(parent, cf, aux));
 
 	if (cf->cf_loc[JENSENIOCF_PORT] != JENSENIOCF_PORT_DEFAULT &&
-	    cf->cf_loc[JENSENIOCF_PORT] != ldesc->locs[JENSENIOCF_PORT])
+	    cf->cf_loc[JENSENIOCF_PORT] != ja->ja_ioaddr)
 		return (0);
 
 	return (config_match(parent, cf, aux));
@@ -243,7 +246,13 @@ jensenio_print(void *aux, const char *pnp)
 	if (pnp != NULL)
 		aprint_normal("%s at %s", ja->ja_name, pnp);
 
-	aprint_normal(" port 0x%lx", ja->ja_ioaddr);
+	/*
+	 * Skip the locator song-and-dance if we're attaching the
+	 * EISA or ISA layer.
+	 */
+	if (strcmp(ja->ja_name, "eisa") != 0 &&
+	    strcmp(ja->ja_name, "isa") != 0)
+		aprint_normal(" port 0x%lx", ja->ja_ioaddr);
 
 	return (UNCONF);
 }

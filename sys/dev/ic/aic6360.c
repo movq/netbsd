@@ -1,4 +1,4 @@
-/*	$NetBSD: aic6360.c,v 1.82 2004/08/24 00:53:29 thorpej Exp $	*/
+/*	$NetBSD: aic6360.c,v 1.80 2003/11/02 11:07:44 wiz Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Charles M. Hannum.  All rights reserved.
@@ -58,9 +58,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic6360.c,v 1.82 2004/08/24 00:53:29 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic6360.c,v 1.80 2003/11/02 11:07:44 wiz Exp $");
 
 #include "opt_ddb.h"
+#ifdef DDB
+#define	integrate
+#else
+#define	integrate	static inline
+#endif
 
 /*
  * A few customizable items:
@@ -149,32 +154,34 @@ __KERNEL_RCSID(0, "$NetBSD: aic6360.c,v 1.82 2004/08/24 00:53:29 thorpej Exp $")
 int aic_debug = 0x00; /* AIC_SHOWSTART|AIC_SHOWMISC|AIC_SHOWTRACE; */
 #endif
 
-static void	aic_minphys(struct buf *);
-static void	aic_done(struct aic_softc *, struct aic_acb *);
-static void	aic_dequeue(struct aic_softc *, struct aic_acb *);
-static void	aic_scsipi_request(struct scsipi_channel *,
-				   scsipi_adapter_req_t, void *);
-static int	aic_poll(struct aic_softc *, struct scsipi_xfer *, int);
-static void	aic_select(struct aic_softc *, struct aic_acb *);
-static void	aic_timeout(void *);
-static void	aic_sched(struct aic_softc *);
-static void	aic_scsi_reset(struct aic_softc *);
-static void	aic_reset(struct aic_softc *);
-static void	aic_free_acb(struct aic_softc *, struct aic_acb *);
-static struct aic_acb* aic_get_acb(struct aic_softc *);
-static int	aic_reselect(struct aic_softc *, int);
-static void	aic_sense(struct aic_softc *, struct aic_acb *);
-static void	aic_msgin(struct aic_softc *);
-static void	aic_abort(struct aic_softc *, struct aic_acb *);
-static void	aic_msgout(struct aic_softc *);
-static int	aic_dataout_pio(struct aic_softc *, u_char *, int);
-static int	aic_datain_pio(struct aic_softc *, u_char *, int);
-static void	aic_update_xfer_mode(struct aic_softc *, int);
+void	aic_minphys(struct buf *);
+void	aic_done(struct aic_softc *, struct aic_acb *);
+void	aic_dequeue(struct aic_softc *, struct aic_acb *);
+void	aic_scsipi_request(struct scsipi_channel *, scsipi_adapter_req_t,
+			    void *);
+int	aic_poll(struct aic_softc *, struct scsipi_xfer *, int);
+integrate void	aic_sched_msgout(struct aic_softc *, u_char);
+integrate void	aic_setsync(struct aic_softc *, struct aic_tinfo *);
+void	aic_select(struct aic_softc *, struct aic_acb *);
+void	aic_timeout(void *);
+void	aic_sched(struct aic_softc *);
+void	aic_scsi_reset(struct aic_softc *);
+void	aic_reset(struct aic_softc *);
+void	aic_free_acb(struct aic_softc *, struct aic_acb *);
+struct aic_acb* aic_get_acb(struct aic_softc *);
+int	aic_reselect(struct aic_softc *, int);
+void	aic_sense(struct aic_softc *, struct aic_acb *);
+void	aic_msgin(struct aic_softc *);
+void	aic_abort(struct aic_softc *, struct aic_acb *);
+void	aic_msgout(struct aic_softc *);
+int	aic_dataout_pio(struct aic_softc *, u_char *, int);
+int	aic_datain_pio(struct aic_softc *, u_char *, int);
+void	aic_update_xfer_mode(struct aic_softc *, int);
 #if AIC_DEBUG
-static void	aic_print_acb(struct aic_acb *);
+void	aic_print_acb(struct aic_acb *);
 void	aic_dump_driver(struct aic_softc *);
 void	aic_dump6360(struct aic_softc *);
-static void	aic_show_scsi_cmd(struct aic_acb *);
+void	aic_show_scsi_cmd(struct aic_acb *);
 void	aic_print_active_acb(void);
 #endif
 
@@ -335,7 +342,7 @@ aic_detach(struct device *self, int flags)
  * aic_isa_probe should have succeeded, i.e. the iobase address in aic_softc
  * must be valid.
  */
-static void
+void
 aic_reset(struct aic_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
@@ -381,7 +388,7 @@ aic_reset(struct aic_softc *sc)
 }
 
 /* Pull the SCSI RST line for 500 us */
-static void
+void
 aic_scsi_reset(struct aic_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
@@ -449,7 +456,7 @@ aic_init(struct aic_softc *sc, int bus_reset)
 	bus_space_write_1(sc->sc_iot, sc->sc_ioh, DMACNTRL0, INTEN);
 }
 
-static void
+void
 aic_free_acb(struct aic_softc *sc, struct aic_acb *acb)
 {
 	int s;
@@ -460,7 +467,7 @@ aic_free_acb(struct aic_softc *sc, struct aic_acb *acb)
 	splx(s);
 }
 
-static struct aic_acb *
+struct aic_acb *
 aic_get_acb(struct aic_softc *sc)
 {
 	struct aic_acb *acb;
@@ -500,7 +507,7 @@ aic_get_acb(struct aic_softc *sc)
 /*
  * Perform a request from the SCSIPI midlayer.
  */
-static void
+void
 aic_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
     void *arg)
 {
@@ -613,7 +620,7 @@ aic_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 	}
 }
 
-static void
+void
 aic_update_xfer_mode(struct aic_softc *sc, int target)
 {
 	struct scsipi_xfer_mode xm;
@@ -644,7 +651,7 @@ aic_update_xfer_mode(struct aic_softc *sc, int target)
 /*
  * Adjust transfer size in buffer structure
  */
-static void
+void
 aic_minphys(struct buf *bp)
 {
 
@@ -657,7 +664,7 @@ aic_minphys(struct buf *bp)
 /*
  * Used when interrupt driven I/O isn't allowed, e.g. during boot.
  */
-static int
+int
 aic_poll(struct aic_softc *sc, struct scsipi_xfer *xs, int count)
 {
 	bus_space_tag_t iot = sc->sc_iot;
@@ -683,7 +690,7 @@ aic_poll(struct aic_softc *sc, struct scsipi_xfer *xs, int count)
  * LOW LEVEL SCSI UTILITIES
  */
 
-static __inline void
+integrate void
 aic_sched_msgout(struct aic_softc *sc, u_char m)
 {
 	bus_space_tag_t iot = sc->sc_iot;
@@ -700,7 +707,7 @@ aic_sched_msgout(struct aic_softc *sc, u_char m)
 #if !AIC_USE_SYNCHRONOUS
 /* ARGSUSED */
 #endif
-static __inline void
+integrate void
 aic_setsync(struct aic_softc *sc, struct aic_tinfo *ti)
 {
 #if AIC_USE_SYNCHRONOUS
@@ -719,7 +726,7 @@ aic_setsync(struct aic_softc *sc, struct aic_tinfo *ti)
  * Start a selection.  This is used by aic_sched() to select an idle target,
  * and by aic_done() to immediately reselect a target to get sense information.
  */
-static void
+void
 aic_select(struct aic_softc *sc, struct aic_acb *acb)
 {
 	struct scsipi_periph *periph = acb->xs->xs_periph;
@@ -741,7 +748,7 @@ aic_select(struct aic_softc *sc, struct aic_acb *acb)
 	sc->sc_state = AIC_SELECTING;
 }
 
-static int
+int
 aic_reselect(struct aic_softc *sc, int message)
 {
 	u_char selid, target, lun;
@@ -819,7 +826,7 @@ abort:
  * may save us an unnecessary interrupt just to get things going.  Should only
  * be called when state == AIC_IDLE and at bio pl.
  */
-static void
+void
 aic_sched(struct aic_softc *sc)
 {
 	struct aic_acb *acb;
@@ -859,7 +866,7 @@ aic_sched(struct aic_softc *sc)
 	bus_space_write_1(iot, ioh, SCSISEQ, ENRESELI);
 }
 
-static void
+void
 aic_sense(struct aic_softc *sc, struct aic_acb *acb)
 {
 	struct scsipi_xfer *xs = acb->xs;
@@ -893,7 +900,7 @@ aic_sense(struct aic_softc *sc, struct aic_acb *acb)
 /*
  * POST PROCESSING OF SCSI_CMD (usually current)
  */
-static void
+void
 aic_done(struct aic_softc *sc, struct aic_acb *acb)
 {
 	struct scsipi_xfer *xs = acb->xs;
@@ -954,7 +961,7 @@ aic_done(struct aic_softc *sc, struct aic_acb *acb)
 	scsipi_done(xs);
 }
 
-static void
+void
 aic_dequeue(struct aic_softc *sc, struct aic_acb *acb)
 {
 
@@ -974,7 +981,7 @@ aic_dequeue(struct aic_softc *sc, struct aic_acb *acb)
  * The SCSI bus is already in the MSGI phase and there is a message byte
  * on the bus, along with an asserted REQ signal.
  */
-static void
+void
 aic_msgin(struct aic_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
@@ -1084,8 +1091,9 @@ nextbyte:
 				periph = acb->xs->xs_periph;
 				printf("%s: %ld extra bytes from %d:%d\n",
 				    sc->sc_dev.dv_xname, (long)-sc->sc_dleft,
-				    periph->periph_target, periph->periph_lun);
-				sc->sc_dleft = 0;
+				    periph->periph_target,
+				    periph->periph_lun);
+				acb->data_length = 0;
 			}
 			acb->xs->resid = acb->data_length = sc->sc_dleft;
 			sc->sc_state = AIC_CMDCOMPLETE;
@@ -1251,7 +1259,7 @@ out:
 /*
  * Send the highest priority, scheduled message.
  */
-static void
+void
 aic_msgout(struct aic_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
@@ -1444,7 +1452,7 @@ out:
  * This new revision has been optimized (I tried) to make the common case fast,
  * and the rarer cases (as a result) somewhat more comlex
  */
-static int
+int
 aic_dataout_pio(struct aic_softc *sc, u_char *p, int n)
 {
 	bus_space_tag_t iot = sc->sc_iot;
@@ -1587,7 +1595,7 @@ phasechange:
  * transferred.  This, is OK for fast targets, but not so smart for slow
  * targets which don't disconnect or for huge transfers.
  */
-static int
+int
 aic_datain_pio(struct aic_softc *sc, u_char *p, int n)
 {
 	bus_space_tag_t iot = sc->sc_iot;
@@ -2077,7 +2085,7 @@ out:
 	return 1;
 }
 
-static void
+void
 aic_abort(struct aic_softc *sc, struct aic_acb *acb)
 {
 
@@ -2100,7 +2108,7 @@ aic_abort(struct aic_softc *sc, struct aic_acb *acb)
 	}
 }
 
-static void
+void
 aic_timeout(void *arg)
 {
 	struct aic_acb *acb = arg;
@@ -2135,7 +2143,7 @@ aic_timeout(void *arg)
  * directly called from the driver or from the kernel debugger.
  */
 
-static void
+void
 aic_show_scsi_cmd(struct aic_acb *acb)
 {
 	u_char  *b = (u_char *)&acb->scsipi_cmd;
@@ -2154,7 +2162,7 @@ aic_show_scsi_cmd(struct aic_acb *acb)
 		printf("RESET\n");
 }
 
-static void
+void
 aic_print_acb(struct aic_acb *acb)
 {
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ftpd.c,v 1.163 2004/12/11 18:37:26 christos Exp $	*/
+/*	$NetBSD: ftpd.c,v 1.157.2.1 2004/08/12 20:44:30 jmc Exp $	*/
 
 /*
  * Copyright (c) 1997-2004 The NetBSD Foundation, Inc.
@@ -105,7 +105,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)ftpd.c	8.5 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: ftpd.c,v 1.163 2004/12/11 18:37:26 christos Exp $");
+__RCSID("$NetBSD: ftpd.c,v 1.157.2.1 2004/08/12 20:44:30 jmc Exp $");
 #endif
 #endif /* not lint */
 
@@ -236,8 +236,7 @@ static int	 checkpassword(const struct passwd *, const char *);
 static void	 end_login(void);
 static FILE	*getdatasock(const char *);
 static char	*gunique(const char *);
-static void	 login_utmp(const char *, const char *, const char *,
-		     struct sockinet *);
+static void	 login_utmp(const char *, const char *, const char *);
 static void	 logremotehost(struct sockinet *);
 static void	 lostconn(int);
 static void	 toolong(int);
@@ -588,7 +587,7 @@ main(int argc, char *argv[])
 		reply(530, "System not available.");
 		exit(0);
 	}
-	(void)display_file(conffilename(_NAME_FTPWELCOME), 220);
+	(void)display_file(conffilename(_PATH_FTPWELCOME), 220);
 		/* reply(220,) must follow */
 	if (EMPTYSTR(version))
 		reply(220, "%s FTP server ready.", hostname);
@@ -688,11 +687,11 @@ static int	permitted;	/* USER permitted */
  * Sets global passwd pointer pw if named account exists and is acceptable;
  * sets askpasswd if a PASS command is expected.  If logged in previously,
  * need to reset state.  If name is "ftp" or "anonymous", the name is not in
- * _NAME_FTPUSERS, and ftp account exists, set guest and pw, then just return.
+ * _PATH_FTPUSERS, and ftp account exists, set guest and pw, then just return.
  * If account doesn't exist, ask for passwd anyway.  Otherwise, check user
  * requesting login privileges.  Disallow anyone who does not have a standard
  * shell as returned by getusershell().  Disallow anyone mentioned in the file
- * _NAME_FTPUSERS to allow people such as root and uucp to be avoided.
+ * _PATH_FTPUSERS to allow people such as root and uucp to be avoided.
  */
 void
 user(const char *name)
@@ -758,14 +757,14 @@ user(const char *name)
 	strlcpy(curname, name, curname_len);
 
 			/* check user in /etc/ftpusers, and setup class */
-	permitted = checkuser(_NAME_FTPUSERS, curname, 1, 0, &class);
+	permitted = checkuser(_PATH_FTPUSERS, curname, 1, 0, &class);
 
 			/* check user in /etc/ftpchroot */
-	if (checkuser(_NAME_FTPCHROOT, curname, 0, 0, NULL)) {
+	if (checkuser(_PATH_FTPCHROOT, curname, 0, 0, NULL)) {
 		if (curclass.type == CLASS_GUEST) {
 			syslog(LOG_NOTICE,
 	    "Can't change guest user to chroot class; remove entry in %s",
-			    _NAME_FTPCHROOT);
+			    _PATH_FTPCHROOT);
 			exit(1);
 		}
 		curclass.type = CLASS_CHROOT;
@@ -917,7 +916,7 @@ checkuser(const char *fname, const char *name, int def, int nofile,
 
 			*p++ = '\0';
 					/* check against network or CIDR */
-			if (isdigit((unsigned char)*p) &&
+			if (isdigit(*p) &&
 			    (bits = inet_net_pton(AF_INET, p,
 			    &net, sizeof(net))) != -1) {
 				net = ntohl(net);
@@ -998,12 +997,11 @@ static int
 checkaccess(const char *name)
 {
 
-	return (checkuser(_NAME_FTPUSERS, name, 1, 0, NULL));
+	return (checkuser(_PATH_FTPUSERS, name, 1, 0, NULL));
 }
 
 static void
-login_utmp(const char *line, const char *name, const char *host,
-    struct sockinet *haddr)
+login_utmp(const char *line, const char *name, const char *host)
 {
 #if defined(SUPPORT_UTMPX) || defined(SUPPORT_UTMP)
 	struct timeval tv;
@@ -1022,11 +1020,10 @@ login_utmp(const char *line, const char *name, const char *host,
 		(void)strncpy(utmpx.ut_name, name, sizeof(utmpx.ut_name));
 		(void)strncpy(utmpx.ut_line, line, sizeof(utmpx.ut_line));
 		(void)strncpy(utmpx.ut_host, host, sizeof(utmpx.ut_host));
-		(void)memcpy(&utmpx.ut_ss, &haddr->si_su, haddr->su_len);
 		ftpd_loginx(&utmpx);
 	}
 	if (dowtmp)
-		ftpd_logwtmpx(line, name, host, haddr, 0, USER_PROCESS);
+		ftpd_logwtmpx(line, name, host, 0, USER_PROCESS);
 #endif
 #ifdef SUPPORT_UTMP
 	if (doutmp) {
@@ -1057,8 +1054,7 @@ logout_utmp(void)
 		}
 		if (okwtmp) {
 #ifdef SUPPORT_UTMPX
-			ftpd_logwtmpx(ttyline, "", "", NULL, 0,
-			    DEAD_PROCESS);
+			ftpd_logwtmpx(ttyline, "", "", 0, DEAD_PROCESS);
 #endif
 #ifdef SUPPORT_UTMP
 			ftpd_logwtmp(ttyline, "", "");
@@ -1187,7 +1183,7 @@ pass(const char *passwd)
 	gidcount = getgroups(gidcount, gidlist);
 
 	/* open utmp/wtmp before chroot */
-	login_utmp(ttyline, pw->pw_name, remotehost, &his_addr);
+	login_utmp(ttyline, pw->pw_name, remotehost);
 
 	logged_in = 1;
 
@@ -1347,7 +1343,7 @@ pass(const char *passwd)
 			/* store guest password reply into pw_passwd */
 		REASSIGN(pw->pw_passwd, xstrdup(passwd));
 		for (p = pw->pw_passwd; *p; p++)
-			if (!isgraph((unsigned char)*p))
+			if (!isgraph(*p))
 				*p = '_';
 	} else {
 		reply(230, "User %s logged in.", pw->pw_name);
@@ -3325,16 +3321,14 @@ int
 checkpassword(const struct passwd *pwent, const char *password)
 {
 	char	*orig, *new;
-	time_t	 change, expire, now;
+	time_t	 expire;
 
-	change = expire = 0;
+	expire = 0;
 	if (pwent == NULL)
 		return 1;
 
-	time(&now);
 	orig = pwent->pw_passwd;	/* save existing password */
 	expire = pwent->pw_expire;
-	change = (pwent->pw_change == _PASSWORD_CHGNOW)? now : pwent->pw_change;
 
 	if (orig[0] == '\0')		/* don't allow empty passwords */
 		return 1;
@@ -3343,7 +3337,7 @@ checkpassword(const struct passwd *pwent, const char *password)
 	if (strcmp(new, orig) != 0)	/* compare */
 		return 1;
 
-	if ((expire && now >= expire) || (change && now >= change))
+	if (expire && time(NULL) >= expire)
 		return 2;		/* check if expired */
 
 	return 0;			/* OK! */

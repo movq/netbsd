@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.serverlib,v 1.8 2004/07/14 13:34:13 sekiya Exp $
+#	$NetBSD: Makefile.serverlib,v 1.5.2.1 2004/08/12 04:08:28 jmc Exp $
 
 NOLINT=         1
 NOPROFILE=      1

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gif.c,v 1.47 2004/12/04 18:31:43 peter Exp $	*/
+/*	$NetBSD: if_gif.c,v 1.44 2003/10/28 20:13:23 mycroft Exp $	*/
 /*	$KAME: if_gif.c,v 1.76 2001/08/20 02:01:02 kjc Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gif.c,v 1.47 2004/12/04 18:31:43 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gif.c,v 1.44 2003/10/28 20:13:23 mycroft Exp $");
 
 #include "opt_inet.h"
 #include "opt_iso.h"
@@ -104,7 +104,7 @@ static struct mbuf *gif_eon_decap __P((struct ifnet *, struct mbuf *));
 LIST_HEAD(, gif_softc) gif_softc_list;
 
 int	gif_clone_create __P((struct if_clone *, int));
-int	gif_clone_destroy __P((struct ifnet *));
+void	gif_clone_destroy __P((struct ifnet *));
 
 struct if_clone gif_cloner =
     IF_CLONE_INITIALIZER("gif", gif_clone_create, gif_clone_destroy);
@@ -142,8 +142,7 @@ gif_clone_create(ifc, unit)
 	sc = malloc(sizeof(struct gif_softc), M_DEVBUF, M_WAIT);
 	memset(sc, 0, sizeof(struct gif_softc));
 
-	snprintf(sc->gif_if.if_xname, sizeof(sc->gif_if.if_xname), "%s%d",
-	    ifc->ifc_name, unit);
+	sprintf(sc->gif_if.if_xname, "%s%d", ifc->ifc_name, unit);
 
 	gifattach0(sc);
 
@@ -173,7 +172,7 @@ gifattach0(sc)
 #endif
 }
 
-int
+void
 gif_clone_destroy(ifp)
 	struct ifnet *ifp;
 {
@@ -194,8 +193,6 @@ gif_clone_destroy(ifp)
 	if_detach(ifp);
 
 	free(sc, M_DEVBUF);
-
-	return (0);
 }
 
 #ifdef GIF_ENCAPCHECK
@@ -401,8 +398,13 @@ gifintr(arg)
 		}
 		family = *mtod(m, int *);
 #if NBPFILTER > 0
-		if (ifp->if_bpf)
+		if (ifp->if_bpf) {
+#ifdef HAVE_OLD_BPF
+			bpf_mtap(ifp, m);
+#else
 			bpf_mtap(ifp->if_bpf, m);
+#endif
+		}
 #endif
 		m_adj(m, sizeof(int));
 
@@ -453,8 +455,27 @@ gif_input(m, af, ifp)
 	m->m_pkthdr.rcvif = ifp;
 	
 #if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, af, m);
+	if (ifp->if_bpf) {
+		/*
+		 * We need to prepend the address family as
+		 * a four byte field.  Cons up a dummy header
+		 * to pacify bpf.  This is safe because bpf
+		 * will only read from the mbuf (i.e., it won't
+		 * try to free it or keep a pointer a to it).
+		 */
+		struct mbuf m0;
+		u_int32_t af1 = af;
+		
+		m0.m_next = m;
+		m0.m_len = 4;
+		m0.m_data = (char *)&af1;
+		
+#ifdef HAVE_OLD_BPF
+		bpf_mtap(ifp, &m0);
+#else
+		bpf_mtap(ifp->if_bpf, &m0);
+#endif
+	}
 #endif /*NBPFILTER > 0*/
 
 	/*

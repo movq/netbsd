@@ -1,4 +1,4 @@
-/*	$NetBSD: fsck.c,v 1.36 2004/09/25 03:32:52 thorpej Exp $	*/
+/*	$NetBSD: fsck.c,v 1.33 2004/03/20 20:28:44 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Christos Zoulas. All rights reserved.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsck.c,v 1.36 2004/09/25 03:32:52 thorpej Exp $");
+__RCSID("$NetBSD: fsck.c,v 1.33 2004/03/20 20:28:44 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -45,7 +45,6 @@ __RCSID("$NetBSD: fsck.c,v 1.36 2004/09/25 03:32:52 thorpej Exp $");
 #include <sys/wait.h>
 #define FSTYPENAMES
 #define FSCKNAMES
-#include <sys/disk.h>
 #include <sys/disklabel.h>
 #include <sys/ioctl.h>
 
@@ -226,8 +225,8 @@ checkfs(const char *vfstype, const char *spec, const char *mntpt, void *auxarg,
 {
 	/* List of directories containing fsck_xxx subcommands. */
 	static const char *edirs[] = {
-#ifdef RESCUEDIR
-		RESCUEDIR,
+#ifdef _PATH_RESCUE
+		_PATH_RESCUE,
 #endif
 		_PATH_SBIN,
 		_PATH_USRSBIN,
@@ -282,16 +281,16 @@ checkfs(const char *vfstype, const char *spec, const char *mntpt, void *auxarg,
 
 	case 0:					/* Child. */
 		if ((flags & CHECK_FORCE) == 0) {
-			struct statvfs	sfs;
+			struct statfs	sfs;
 
 				/*
 				 * if mntpt is a mountpoint of a mounted file
 				 * system and it's mounted read-write, skip it
 				 * unless -f is given.
 				 */
-			if ((statvfs(mntpt, &sfs) == 0) &&
+			if ((statfs(mntpt, &sfs) == 0) &&
 			    (strcmp(mntpt, sfs.f_mntonname) == 0) &&
-			    ((sfs.f_flag & MNT_RDONLY) == 0)) {
+			    ((sfs.f_flags & MNT_RDONLY) == 0)) {
 				printf(
 		"%s: file system is mounted read-write on %s; not checking\n",
 				    spec, mntpt);
@@ -491,10 +490,10 @@ mangle(char *opts, int *argcp, const char ***argvp, int *maxargcp)
 	*maxargcp = maxargc;
 }
 
+
 const static char *
 getfslab(const char *str)
 {
-	static struct dkwedge_info dkw;
 	struct disklabel dl;
 	int fd;
 	char p;
@@ -504,13 +503,6 @@ getfslab(const char *str)
 	/* deduce the file system type from the disk label */
 	if ((fd = open(str, O_RDONLY)) == -1)
 		err(1, "cannot open `%s'", str);
-
-	/* First check to see if it's a wedge. */
-	if (ioctl(fd, DIOCGWEDGEINFO, &dkw) == 0) {
-		/* Yup, this is easy. */
-		(void) close(fd);
-		return (dkw.dkw_ptype);
-	}
 
 	if (ioctl(fd, DIOCGDINFO, &dl) == -1)
 		err(1, "cannot get disklabel for `%s'", str);

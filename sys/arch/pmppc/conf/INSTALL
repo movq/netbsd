@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.13 2004/11/10 17:54:06 christos Exp $
+#	$NetBSD: INSTALL,v 1.10.2.1 2004/07/15 20:19:34 he Exp $
 #
 #	INSTALL
 #
@@ -58,7 +58,6 @@ no makeoptions	NEED_SYMTAB
 #options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # File systems
 file-system 	FFS		# UFS
@@ -97,7 +96,6 @@ options 	INET		# IP + ICMP + TCP + UDP
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
-#options 	PIM		# Protocol Independent Multicast
 #options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 #options 	ISO,TPIP	# OSI

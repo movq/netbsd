@@ -34,7 +34,7 @@
 #include "kadm5_locl.h"
 
 __RCSID("$Heimdal: chpass_s.c,v 1.13.8.1 2003/12/30 15:59:58 lha Exp $"
-        "$NetBSD: chpass_s.c,v 1.1.1.5 2004/04/02 14:47:46 lha Exp $");
+        "$NetBSD: chpass_s.c,v 1.1.1.4.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 static kadm5_ret_t
 change(void *server_handle, 

@@ -1,4 +1,4 @@
-/*	$NetBSD: file.c,v 1.11 2004/12/13 10:35:03 pooka Exp $	*/
+/*	$NetBSD: file.c,v 1.6 2004/03/25 15:00:24 salo Exp $	*/
 
 /*
  * Copyright (c) Ian F. Darwin 1986-1995.
@@ -14,6 +14,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *    This product includes software developed by Ian F. Darwin and others.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *  
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -59,6 +64,10 @@
 #ifdef HAVE_LOCALE_H
 #include <locale.h>
 #endif
+/* XXX: FreeBSD prior to 5.0 doesn't have real wchar support */
+#if defined(__FreeBSD_version) && __FreeBSD_version < 500000
+#undef HAVE_WCHAR_H
+#endif
 #ifdef HAVE_WCHAR_H
 #include <wchar.h>
 #endif
@@ -75,9 +84,9 @@
 
 #ifndef	lint
 #if 0
-FILE_RCSID("@(#)Id: file.c,v 1.95 2004/09/27 15:28:37 christos Exp")
+FILE_RCSID("@(#)Id: file.c,v 1.92 2004/03/22 21:34:39 christos Exp")
 #else
-__RCSID("$NetBSD: file.c,v 1.11 2004/12/13 10:35:03 pooka Exp $");
+__RCSID("$NetBSD: file.c,v 1.6 2004/03/25 15:00:24 salo Exp $");
 #endif
 #endif	/* lint */
 
@@ -316,7 +325,6 @@ main(int argc, char *argv[])
 			process(argv[optind], wid);
 	}
 
-	magic_close(magic);
 	return 0;
 }
 
@@ -455,7 +463,7 @@ byteconv2(int from, int same, int big_endian)
 size_t
 file_mbswidth(const char *s)
 {
-#if defined(HAVE_WCHAR_H) && defined(HAVE_MBRTOWC) && defined(HAVE_WCWIDTH)
+#ifdef HAVE_WCHAR_H
 	size_t bytesconsumed, old_n, n, width = 0;
 	mbstate_t state;
 	wchar_t nextchar;

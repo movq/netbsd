@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_init.c,v 1.20 2004/04/25 16:42:45 simonb Exp $	*/
+/*	$NetBSD: uvm_init.c,v 1.19 2003/10/26 08:05:00 jdolecek Exp $	*/
 
 /*
  *
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_init.c,v 1.20 2004/04/25 16:42:45 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_init.c,v 1.19 2003/10/26 08:05:00 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -136,9 +136,10 @@ uvm_init()
 	uvm_pager_init();
 
 	/*
-	 * step 8: init anonymous memory systems
+	 * step 8: init anonymous memory systems (both amap and anons)
 	 */
 
+	amap_init();		/* init amap module */
 	uvm_anon_init();	/* allocate initial anons */
 
 	/*

@@ -1,4 +1,4 @@
-/*	$NetBSD: c_ksh.c,v 1.12 2004/10/28 20:15:36 dsl Exp $	*/
+/*	$NetBSD: c_ksh.c,v 1.10 2004/01/05 23:23:32 jmmv Exp $	*/
 
 /*
  * built-in Korn commands: c_*
@@ -6,7 +6,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: c_ksh.c,v 1.12 2004/10/28 20:15:36 dsl Exp $");
+__RCSID("$NetBSD: c_ksh.c,v 1.10 2004/01/05 23:23:32 jmmv Exp $");
 #endif
 
 #include "sh.h"
@@ -80,7 +80,7 @@ c_cd(wp)
 			bi_errorf("don't know current directory");
 			return 1;
 		}
-		/* substitute arg1 for arg2 in current path.
+		/* substitue arg1 for arg2 in current path.
 		 * if the first substitution fails because the cd fails
 		 * we could try to find another substitution. For now
 		 * we don't
@@ -340,7 +340,7 @@ c_print(wp)
 		while ((c = *s++) != '\0') {
 			Xcheck(xs, xp);
 #ifdef OS2
-			if ((flags & PO_FSLASH) && c == '\\')
+			if ((flags & PO_FSLASH) && c == '\\') 
 				if (*s == '\\')
 					*s++;
 				else
@@ -366,7 +366,7 @@ c_print(wp)
 				case '0':
 					/* Look for an octal number: can have
 					 * three digits (not counting the
-					 * leading 0).  Truly burnt.
+					 * leading 0).  Truely burnt.
 					 */
 					c = 0;
 					for (i = 0; i < 3; i++) {
@@ -397,8 +397,8 @@ c_print(wp)
 		Xfree(xs, xp);
 	} else {
 		int n, len = Xlength(xs, xp);
-		int UNINITIALIZED(opipe);
 #ifdef KSH
+		int UNINITIALIZED(opipe);
 
 		/* Ensure we aren't killed by a SIGPIPE while writing to
 		 * a coprocess.  at&t ksh doesn't seem to do this (seems
@@ -613,7 +613,7 @@ c_typeset(wp)
  		local = 1;
  		break;
  	}
-
+ 
 	fieldstr = basestr = (char *) 0;
 	builtin_opt.flags |= GF_PLUSOPT;
 	/* at&t ksh seems to have 0-9 as options, which are multiplied
@@ -657,7 +657,7 @@ c_typeset(wp)
 			flag = LCASEV;
 			break;
 		  case 'p': /* posix export/readonly -p flag.
-			     * typeset -p is the same as typeset (in pdksh);
+			     * typset -p is the same as typeset (in pdksh);
 			     * here for compatibility with ksh93.
 			     */
 			pflag = 1;
@@ -709,7 +709,7 @@ c_typeset(wp)
 		return 1;
 	}
 	if (wp[builtin_opt.optind]) {
-		/* Take care of exclusions.
+		/* Take care of exclusions.  
 		 * At this point, flags in fset are cleared in fclr and vise
 		 * versa.  This property should be preserved.
 		 */
@@ -829,19 +829,19 @@ c_typeset(wp)
 				shprintf("-x ");
 			    if ((vp->flag&RDONLY))
 				shprintf("-r ");
-			    if ((vp->flag&TRACE))
+			    if ((vp->flag&TRACE)) 
 				shprintf("-t ");
-			    if ((vp->flag&LJUST))
+			    if ((vp->flag&LJUST)) 
 				shprintf("-L%d ", vp->u2.field);
-			    if ((vp->flag&RJUST))
+			    if ((vp->flag&RJUST)) 
 				shprintf("-R%d ", vp->u2.field);
-			    if ((vp->flag&ZEROFIL))
+			    if ((vp->flag&ZEROFIL)) 
 				shprintf("-Z ");
-			    if ((vp->flag&LCASEV))
+			    if ((vp->flag&LCASEV)) 
 				shprintf("-l ");
-			    if ((vp->flag&UCASEV_AL))
+			    if ((vp->flag&UCASEV_AL)) 
 				shprintf("-u ");
-			    if ((vp->flag&INT_U))
+			    if ((vp->flag&INT_U)) 
 				shprintf("-U ");
 			    shprintf("%s\n", vp->name);
 			    if (vp->flag&ARRAY)
@@ -1121,9 +1121,10 @@ c_jobs(wp)
 		if (j_jobs((char *) 0, flag, nflag))
 			rv = 1;
 	} else {
-		for (; *wp; wp++)
+		for (; *wp; wp++) {
 			if (j_jobs(*wp, flag, nflag))
 				rv = 1;
+		}
 	}
 	return rv;
 }
@@ -1196,8 +1197,7 @@ c_kill(wp)
 	int i, n, rv, sig;
 
 	/* assume old style options if -digits or -UPPERCASE */
-	if ((p = wp[1]) && *p == '-'
-	    && (digit(p[1]) || isupper((unsigned char)p[1]))) {
+	if ((p = wp[1]) && *p == '-' && (digit(p[1]) || isupper(p[1]))) {
 		if (!(t = gettrap(p + 1, TRUE))) {
 			bi_errorf("bad signal `%s'", p + 1);
 			return 1;
@@ -1281,7 +1281,7 @@ c_kill(wp)
 			if (j_kill(p, sig))
 				rv = 1;
 		} else if (!getn(p, &n)) {
-			bi_errorf("%s: arguments must be jobs or process IDs",
+			bi_errorf("%s: arguments must be jobs or process ids",
 				p);
 			rv = 1;
 		} else {

@@ -1,4 +1,4 @@
-.\"	$NetBSD: hardware,v 1.116 2004/11/24 20:49:17 bouyer Exp $
+.\"	$NetBSD: hardware,v 1.113.2.2 2004/11/29 05:51:41 jmc Exp $
 .
 .Nx \*V
 runs on ISA (AT-Bus), EISA, MCA, PCI, and VL-bus systems
@@ -46,9 +46,6 @@ Intel 82801 (ICH/ICH0/ICH2/ICH4/ICH5) IDE Controllers
 Promise PDC20246 (Ultra/33), PDC20262 (Ultra/66), PDC20265/PDC20267 (Ultra/100),
 PDC20268 (Ultra/100TX2 and Ultra/100TX2v2), Ultra/133, Ultra/133TX2,
 and Ultra/133TX2v2.
-.It
-Promise SATA150 serial-ATA controllers: PDC20318, PDC20319, PDC20371,
-PDC20375, PDC20376, PDC20377, PDC20378 and PDC20379.
 .It
 Silicon Integrated System 5597/5598 IDE controller
 .It
@@ -595,37 +592,6 @@ SmartCache IV
 SmartRAID III
 .It
 SmartRAID IV
-.bullet)
-.It
-MegaRAID controllers
-.(bullet -compact
-320-1
-.It
-320-2
-.It
-Series 418
-.It
-Enterprise 1200 (Series 428)
-.It
-Enterprise 1300 (Series 434)
-.It
-Enterprise 1400 (Series 438)
-.It
-Enterprise 1500 (Series 467)
-.It
-Enterprise 1600 (Series 471)
-.It
-Elite 1500 (Series 467)
-.It
-Elite 1600 (Series 493)
-.It
-Express 100 (Series 466WS)
-.It
-Express 200 (Series 466)
-.It
-Express 300 (Series 490)
-.It
-Express 500 (Series 475)
 .bullet)
 .bullet)
 .bullet)

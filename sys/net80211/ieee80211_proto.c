@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211_proto.c,v 1.17 2004/09/07 01:07:40 enami Exp $	*/
+/*	$NetBSD: ieee80211_proto.c,v 1.7 2004/01/13 23:37:30 dyoung Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting
@@ -33,9 +33,9 @@
 
 #include <sys/cdefs.h>
 #ifdef __FreeBSD__
-__FBSDID("$FreeBSD: src/sys/net80211/ieee80211_proto.c,v 1.8 2004/04/02 20:22:25 sam Exp $");
+__FBSDID("$FreeBSD: src/sys/net80211/ieee80211_proto.c,v 1.6 2003/10/31 18:32:09 brooks Exp $");
 #else
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_proto.c,v 1.17 2004/09/07 01:07:40 enami Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_proto.c,v 1.7 2004/01/13 23:37:30 dyoung Exp $");
 #endif
 
 /*
@@ -88,8 +88,6 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211_proto.c,v 1.17 2004/09/07 01:07:40 enami E
 #endif
 #endif
 
-#include <net/route.h>
-
 #define	IEEE80211_RATE2MBS(r)	(((r) & IEEE80211_RATE_VAL) / 2)
 
 const char *ieee80211_mgt_subtype_name[] = {
@@ -122,7 +120,6 @@ ieee80211_proto_attach(struct ifnet *ifp)
 #endif
 	ic->ic_fragthreshold = 2346;		/* XXX not used yet */
 	ic->ic_fixed_rate = -1;			/* no fixed rate */
-	ic->ic_protmode = IEEE80211_PROT_CTSONLY;
 
 #ifdef __FreeBSD__
 	mtx_init(&ic->ic_mgtq.ifq_mtx, ifp->if_xname, "mgmt send q", MTX_DEF);
@@ -283,17 +280,8 @@ ieee80211_fix_rate(struct ieee80211com *ic, struct ieee80211_node *ni, int flags
 			 * Check against supported rates.
 			 */
 			for (j = 0; j < srs->rs_nrates; j++) {
-				if (r == RV(srs->rs_rates[j])) {
-					/*
-					 * Overwrite with the supported rate
-					 * value so any basic rate bit is set.
-					 * This insures that response we send
-					 * to stations have the necessary basic
-					 * rate bit set.
-					 */
-					nrs->rs_rates[i] = srs->rs_rates[j];
+				if (r == RV(srs->rs_rates[j]))
 					break;
-				}
 			}
 			if (j == srs->rs_nrates) {
 				/*
@@ -322,10 +310,8 @@ ieee80211_fix_rate(struct ieee80211com *ic, struct ieee80211_node *ni, int flags
 				continue;
 			}
 		}
-		if (!ignore) {
+		if (!ignore)
 			okrate = nrs->rs_rates[i];
-			ni->ni_txrate = i;
-		}
 		i++;
 	}
 	if (okrate == 0 || error != 0)
@@ -342,10 +328,9 @@ ieee80211_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int mgt
 	struct ieee80211_node *ni;
 	enum ieee80211_state ostate;
 	ieee80211_node_critsec_decl(s);
-	int linkstate = LINK_STATE_DOWN;
 
 	ostate = ic->ic_state;
-	IEEE80211_DPRINTF(ic, IEEE80211_MSG_STATE, ("%s: %s -> %s\n", __func__,
+	IEEE80211_DPRINTF(("%s: %s -> %s\n", __func__,
 		ieee80211_state_name[ostate], ieee80211_state_name[nstate]));
 	ic->ic_state = nstate;			/* state transition */
 	ni = ic->ic_bss;			/* NB: no reference held */
@@ -432,7 +417,7 @@ ieee80211_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int mgt
 				 */
 				ieee80211_create_ibss(ic, ic->ic_des_chan);
 			} else {
-				ieee80211_begin_scan(ic);
+				ieee80211_begin_scan(ifp);
 			}
 			break;
 		case IEEE80211_S_SCAN:
@@ -444,10 +429,12 @@ ieee80211_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int mgt
 			break;
 		case IEEE80211_S_RUN:
 			/* beacon miss */
-			IEEE80211_DPRINTF(ic, IEEE80211_MSG_STATE,
-				("no recent beacons from %s; rescanning\n",
-				ether_sprintf(ic->ic_bss->ni_bssid)));
-			/* XXX this clears the scan set */
+			if (ifp->if_flags & IFF_DEBUG) {
+				/* XXX bssid clobbered above */
+				if_printf(ifp, "no recent beacons from %s;"
+				    " rescanning\n",
+				    ether_sprintf(ic->ic_bss->ni_bssid));
+			}
 			ieee80211_free_allnodes(ic);
 			/* FALLTHRU */
 		case IEEE80211_S_AUTH:
@@ -456,16 +443,17 @@ ieee80211_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int mgt
 			ni = ieee80211_find_node(ic, ic->ic_bss->ni_macaddr);
 			if (ni != NULL) {
 				ni->ni_fails++;
+				ieee80211_unref_node(&ni);
 			}
-			ieee80211_begin_scan(ic);
+			ieee80211_begin_scan(ifp);
 			break;
 		}
 		break;
 	case IEEE80211_S_AUTH:
 		switch (ostate) {
 		case IEEE80211_S_INIT:
-			IEEE80211_DPRINTF(ic, IEEE80211_MSG_ANY,
-				("%s: invalid transition\n", __func__));
+			IEEE80211_DPRINTF(("%s: invalid transition\n",
+				__func__));
 			break;
 		case IEEE80211_S_SCAN:
 			IEEE80211_SEND_MGMT(ic, ni,
@@ -505,8 +493,8 @@ ieee80211_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int mgt
 		case IEEE80211_S_INIT:
 		case IEEE80211_S_SCAN:
 		case IEEE80211_S_ASSOC:
-			IEEE80211_DPRINTF(ic, IEEE80211_MSG_ANY,
-				("%s: invalid transition\n", __func__));
+			IEEE80211_DPRINTF(("%s: invalid transition\n",
+				__func__));
 			break;
 		case IEEE80211_S_AUTH:
 			IEEE80211_SEND_MGMT(ic, ni,
@@ -514,26 +502,24 @@ ieee80211_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int mgt
 			break;
 		case IEEE80211_S_RUN:
 			IEEE80211_SEND_MGMT(ic, ni,
-			    IEEE80211_FC0_SUBTYPE_REASSOC_REQ, 0);
+			    IEEE80211_FC0_SUBTYPE_ASSOC_REQ, 1);
 			break;
 		}
 		break;
 	case IEEE80211_S_RUN:
-		linkstate = LINK_STATE_UP;
 		switch (ostate) {
 		case IEEE80211_S_INIT:
 		case IEEE80211_S_AUTH:
 		case IEEE80211_S_RUN:
-			IEEE80211_DPRINTF(ic, IEEE80211_MSG_ANY,
-				("%s: invalid transition\n", __func__));
+			IEEE80211_DPRINTF(("%s: invalid transition\n",
+				__func__));
 			break;
 		case IEEE80211_S_SCAN:		/* adhoc/hostap mode */
 		case IEEE80211_S_ASSOC:		/* infra mode */
 			IASSERT(ni->ni_txrate < ni->ni_rates.rs_nrates,
-				("%s: bogus xmit rate %u setup", __func__,
+				("%s: bogus xmit rate %u setup\n", __func__,
 					ni->ni_txrate));
-#ifdef IEEE80211_DEBUG
-			if (ieee80211_msg_debug(ic)) {
+			if (ifp->if_flags & IFF_DEBUG) {
 				if_printf(ifp, " ");
 				if (ic->ic_opmode == IEEE80211_M_STA)
 					printf("associated ");
@@ -547,18 +533,11 @@ ieee80211_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int mgt
 					ieee80211_chan2ieee(ic, ni->ni_chan),
 					IEEE80211_RATE2MBS(ni->ni_rates.rs_rates[ni->ni_txrate]));
 			}
-#endif
 			ic->ic_mgt_timer = 0;
 			(*ifp->if_start)(ifp);
 			break;
 		}
 		break;
-	}
-	if (ifp->if_link_state != linkstate) {
-		ifp->if_link_state = linkstate;
-		s = splnet();
-		rt_ifmsg(ifp);
-		splx(s);
 	}
 	return 0;
 }

@@ -32,7 +32,7 @@
 /* Base Exchange (Base Mode) */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: isakmp_base.c,v 1.3 2004/04/12 03:34:07 itojun Exp $");
+__RCSID("$NetBSD: isakmp_base.c,v 1.2.2.1 2004/06/17 12:38:10 tron Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

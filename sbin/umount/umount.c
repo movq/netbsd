@@ -1,4 +1,4 @@
-/*	$NetBSD: umount.c,v 1.35 2004/09/01 01:47:09 chs Exp $	*/
+/*	$NetBSD: umount.c,v 1.32 2004/03/12 21:48:32 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1989, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1989, 1993\n\
 #if 0
 static char sccsid[] = "@(#)umount.c	8.8 (Berkeley) 5/8/95";
 #else
-__RCSID("$NetBSD: umount.c,v 1.35 2004/09/01 01:47:09 chs Exp $");
+__RCSID("$NetBSD: umount.c,v 1.32 2004/03/12 21:48:32 dsl Exp $");
 #endif
 #endif /* not lint */
 
@@ -47,7 +47,6 @@ __RCSID("$NetBSD: umount.c,v 1.35 2004/09/01 01:47:09 chs Exp $");
 #include <sys/stat.h>
 #include <sys/mount.h>
 #include <sys/time.h>
-#ifndef SMALL
 #include <sys/socket.h>
 
 #include <netdb.h>
@@ -55,7 +54,6 @@ __RCSID("$NetBSD: umount.c,v 1.35 2004/09/01 01:47:09 chs Exp $");
 #include <rpc/pmap_clnt.h>
 #include <rpc/pmap_prot.h>
 #include <nfs/rpcv2.h>
-#endif /* !SMALL */
 
 #include <err.h>
 #include <fstab.h>
@@ -66,53 +64,35 @@ __RCSID("$NetBSD: umount.c,v 1.35 2004/09/01 01:47:09 chs Exp $");
 
 typedef enum { MNTANY, MNTON, MNTFROM } mntwhat;
 
-#ifndef SMALL
-#include "vfslist.h"
+int	fake, fflag, verbose, raw;
+char	*nfshost;
+struct addrinfo *nfshost_ai = NULL;
 
-static int	 fake, verbose;
-static char	*nfshost;
-static struct addrinfo *nfshost_ai = NULL;
-
-static int	 namematch(const struct addrinfo *);
-static int	 sacmp(const struct sockaddr *, const struct sockaddr *);
-static int	 xdr_dir(XDR *, char *);
-#endif /* !SMALL */
-
-static int	 fflag;
-static char	*getmntname(const char *, mntwhat, char **);
-static int	 umountfs(const char *, const char **, int);
-static void	 usage(void) __attribute__((__noreturn__));
-
+int	 checkvfsname(char *, char **);
+char	*getmntname(const char *, mntwhat, char **);
+char	**makevfslist(char *);
 int	 main(int, char *[]);
+int	 namematch(const struct addrinfo *);
+int	 sacmp(const struct sockaddr *, const struct sockaddr *);
+int	 selected(int);
+int	 umountfs(const char *, char **);
+void	 usage(void);
+int	 xdr_dir(XDR *, char *);
 
 int
 main(int argc, char *argv[])
 {
-	int ch, errs, all = 0, raw = 0;
-#ifndef SMALL
-	int mnts;
-	struct statvfs *mntbuf;
+	int all, ch, errs, mnts;
+	char **typelist = NULL;
+	struct statfs *mntbuf;
 	struct addrinfo hints;
-#endif /* SMALL */
-	const char **typelist = NULL;
 
 	/* Start disks transferring immediately. */
 	sync();
 
-#ifdef SMALL
-#define OPTS "fr"
-#else
-#define OPTS "AaFfh:Rt:v"
-#endif
-	while ((ch = getopt(argc, argv, OPTS)) != -1)
+	all = 0;
+	while ((ch = getopt(argc, argv, "AaFfRh:t:v")) != -1)
 		switch (ch) {
-		case 'f':
-			fflag = MNT_FORCE;
-			break;
-		case 'R':
-			raw = 1;
-			break;
-#ifndef SMALL
 		case 'A':
 		case 'a':
 			all = 1;
@@ -120,9 +100,15 @@ main(int argc, char *argv[])
 		case 'F':
 			fake = 1;
 			break;
+		case 'f':
+			fflag = MNT_FORCE;
+			break;
 		case 'h':	/* -h implies -A. */
 			all = 1;
 			nfshost = optarg;
+			break;
+		case 'R':
+			raw = 1;
 			break;
 		case 't':
 			if (typelist != NULL)
@@ -132,7 +118,6 @@ main(int argc, char *argv[])
 		case 'v':
 			verbose = 1;
 			break;
-#endif /* !SMALL */
 		default:
 			usage();
 			/* NOTREACHED */
@@ -143,7 +128,6 @@ main(int argc, char *argv[])
 	if ((argc == 0 && !all) || (argc != 0 && all) || (all && raw))
 		usage();
 
-#ifndef SMALL
 	/* -h implies "-t nfs" if no -t flag. */
 	if ((nfshost != NULL) && (typelist == NULL))
 		typelist = makevfslist("nfs");
@@ -155,39 +139,38 @@ main(int argc, char *argv[])
 		
 	errs = 0;
 	if (all) {
-		if ((mnts = getmntinfo(&mntbuf, ST_NOWAIT)) == 0) {
+		if ((mnts = getmntinfo(&mntbuf, MNT_NOWAIT)) == 0) {
 			warn("getmntinfo");
 			errs = 1;
 		}
 		for (errs = 0, mnts--; mnts > 0; mnts--) {
 			if (checkvfsname(mntbuf[mnts].f_fstypename, typelist))
 				continue;
-			if (umountfs(mntbuf[mnts].f_mntonname, typelist,
-				     raw) != 0)
+			if (umountfs(mntbuf[mnts].f_mntonname, typelist) != 0)
 				errs = 1;
 		}
-	} else 
-#endif /* !SMALL */
+	} else {
 		for (errs = 0; *argv != NULL; ++argv)
-			if (umountfs(*argv, typelist, raw) != 0)
+			if (umountfs(*argv, typelist) != 0)
 				errs = 1;
-	return errs;
+	}
+	exit(errs);
 }
 
-static int
-umountfs(const char *name, const char **typelist, int raw)
+int
+umountfs(const char *name, char **typelist)
 {
-#ifndef SMALL
 	enum clnt_stat clnt_stat;
+	struct stat sb;
 	struct timeval try;
 	CLIENT *clp;
-	char *hostp = NULL;
-	struct addrinfo *ai = NULL, hints;
-#endif /* !SMALL */
-	const char *mntpt;
-	char *type, rname[MAXPATHLEN];
+	char *type, *hostp, rname[MAXPATHLEN];
 	mntwhat what;
-	struct stat sb;
+	struct addrinfo *ai, hints;
+	const char *mntpt;
+
+	hostp = NULL;
+	ai = NULL;
 
 	if (raw) {
 		mntpt = name;
@@ -204,12 +187,6 @@ umountfs(const char *name, const char **typelist, int raw)
 					what = MNTFROM;
 			}
 		}
-#ifdef SMALL
-		else {
- 			warn("%s", rname);
- 			return 1;
-		}
-#endif /* SMALL */
 		mntpt = name;
 
 		switch (what) {
@@ -230,16 +207,15 @@ umountfs(const char *name, const char **typelist, int raw)
 				name = mntpt;
 				if ((mntpt = getmntname(name, MNTON, &type)) == NULL) {
 					warnx("%s: not currently mounted", name);
-					return 1;
+					return (1);
 				}
 			}
 		}
 
-#ifndef SMALL
 		if (checkvfsname(type, typelist))
-			return 1;
+			return (1);
 
-		(void)memset(&hints, 0, sizeof hints);
+		memset(&hints, 0, sizeof hints);
 		if (!strncmp(type, MOUNT_NFS, MFSNAMELEN)) {
 			char *delimp;
 			/* look for host:mountpoint */
@@ -256,28 +232,24 @@ umountfs(const char *name, const char **typelist, int raw)
 		}
 
 		if (!namematch(ai))
-			return 1;
-#endif /* ! SMALL */
+			return (1);
 	}
 
-#ifndef SMALL
 	if (verbose)
 		(void)printf("%s: unmount from %s\n", name, mntpt);
 	if (fake)
-		return 0;
-#endif /* ! SMALL */
+		return (0);
 
 	if (unmount(mntpt, fflag) < 0) {
 		warn("%s", mntpt);
-		return 1;
+		return (1);
 	}
 
-#ifndef SMALL
 	if (ai != NULL && !(fflag & MNT_FORCE)) {
 		clp = clnt_create(hostp, RPCPROG_MNT, RPCMNT_VER1, "udp");
 		if (clp  == NULL) {
 			clnt_pcreateerror("Cannot MNT PRC");
-			return 1;
+			return (1);
 		}
 		clp->cl_auth = authsys_create_default();
 		try.tv_sec = 20;
@@ -286,19 +258,18 @@ umountfs(const char *name, const char **typelist, int raw)
 		    RPCMNT_UMOUNT, xdr_dir, name, xdr_void, (caddr_t)0, try);
 		if (clnt_stat != RPC_SUCCESS) {
 			clnt_perror(clp, "Bad MNT RPC");
-			return 1;
+			return (1);
 		}
 		auth_destroy(clp->cl_auth);
 		clnt_destroy(clp);
 	}
-#endif /* ! SMALL */
-	return 0;
+	return (0);
 }
 
-static char *
+char *
 getmntname(const char *name, mntwhat what, char **type)
 {
-	static struct statvfs *mntbuf;
+	static struct statfs *mntbuf;
 	static int mntsize;
 	int i;
 
@@ -322,8 +293,7 @@ getmntname(const char *name, mntwhat what, char **type)
 	return (NULL);
 }
 
-#ifndef SMALL
-static int
+int
 sacmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
 {
 	void *p1, *p2;
@@ -353,7 +323,7 @@ sacmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
 	return memcmp(p1, p2, len);
 }
 
-static int
+int
 namematch(const struct addrinfo *ai)
 {
 	struct addrinfo *aip;
@@ -377,24 +347,18 @@ namematch(const struct addrinfo *ai)
 /*
  * xdr routines for mount rpc's
  */
-static int
+int
 xdr_dir(XDR *xdrsp, char *dirp)
 {
-	return xdr_string(xdrsp, &dirp, RPCMNT_PATHLEN);
+	return (xdr_string(xdrsp, &dirp, RPCMNT_PATHLEN));
 }
-#endif /* !SMALL */
 
-static void
+void
 usage(void)
 {
-#ifdef SMALL
 	(void)fprintf(stderr,
-	    "Usage: %s [-fR]  special | node\n", getprogname());
-#else
-	(void)fprintf(stderr,
-	    "Usage: %s [-fvFR] [-t fstypelist] special | node\n"
-	    "\t %s -a[fvF] [-h host] [-t fstypelist]\n", getprogname(),
-	    getprogname());
-#endif /* SMALL */
+	    "usage: %s\n       %s\n",
+	    "umount [-fvFR] [-t fstypelist] special | node",
+	    "umount -a[fvF] [-h host] [-t fstypelist]");
 	exit(1);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: pk_llcsubr.c,v 1.16 2004/04/18 19:11:39 matt Exp $	*/
+/*	$NetBSD: pk_llcsubr.c,v 1.15 2003/08/07 16:33:04 agc Exp $	*/
 
 /* 
  * Copyright (c) 1992, 1993
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pk_llcsubr.c,v 1.16 2004/04/18 19:11:39 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pk_llcsubr.c,v 1.15 2003/08/07 16:33:04 agc Exp $");
 
 #include "opt_llc.h"
 
@@ -368,8 +368,9 @@ npaidb_enter(key, value, rt, link)
 		for (i = saploc; i < npdl_datasize; i++)
 			npdl_netmask.sdl_data[i] = -1;
 
-		nprt->rt_llinfo = malloc(size, M_PCB, M_WAITOK|M_ZERO);
+		nprt->rt_llinfo = malloc(size, M_PCB, M_WAITOK);
 		if (nprt->rt_llinfo) {
+			bzero(nprt->rt_llinfo, size);
 			((struct npaidbentry *) (nprt->rt_llinfo))->np_rt = rt;
 		}
 	} else

@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_raid.h,v 1.33 2004/04/09 23:10:16 oster Exp $	*/
+/*	$NetBSD: rf_raid.h,v 1.32.2.1 2004/04/11 11:19:50 tron Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.

@@ -1,5 +1,3 @@
-/*	$NetBSD: own_inet_addr.c,v 1.6 2004/05/31 00:46:47 heas Exp $	*/
-
 /*++
 /* NAME
 /*	own_inet_addr 3

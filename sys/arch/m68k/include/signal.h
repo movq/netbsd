@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.h,v 1.20 2004/07/29 12:54:46 is Exp $	*/
+/*	$NetBSD: signal.h,v 1.17 2004/03/26 21:39:57 drochner Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991 Regents of the University of California.
@@ -40,12 +40,10 @@ typedef int sig_atomic_t;
 
 #if defined(_NETBSD_SOURCE)
 
-#ifdef _KERNEL
 #ifdef COMPAT_16
 #define SIGTRAMP_VALID(vers)	((unsigned)(vers) <= 2)
 #else
 #define SIGTRAMP_VALID(vers)	((vers) == 2)
-#endif
 #endif
 
 /*

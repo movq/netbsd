@@ -1,4 +1,4 @@
-/*	$NetBSD: sigsuspend.S,v 1.4 2004/07/01 06:50:04 skrll Exp $	*/
+/*	$NetBSD: sigsuspend.S,v 1.3 2003/10/06 05:30:21 matt Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
 #include <sys/errno.h>
 #include "SYS.h"
 
-	.import __cerror, code
+	.import errno, data
 
 WARN_REFERENCES(sigsuspend, \
     "warning: reference to compatibility sigsuspend(); include <signal.h> for correct reference")
@@ -50,5 +50,7 @@ ENTRY(sigsuspend, 0)
 	 * we shouldn't have to supply the compatability sigsuspend.
 	 */
 	ldi	EINVAL, %t1
-	b,n	__cerror
+	__SYSCALL_ERRNO
+	bv	%r0(%rp)
+	ldi	-1, %ret0
 EXIT(sigsuspend)

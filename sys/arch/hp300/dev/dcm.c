@@ -1,4 +1,4 @@
-/*	$NetBSD: dcm.c,v 1.65 2004/08/28 17:37:00 thorpej Exp $	*/
+/*	$NetBSD: dcm.c,v 1.63 2003/11/17 14:37:59 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -123,7 +123,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dcm.c,v 1.65 2004/08/28 17:37:00 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dcm.c,v 1.63 2003/11/17 14:37:59 tsutsui Exp $");
 
 #include "opt_kgdb.h"
 
@@ -152,7 +152,7 @@ __KERNEL_RCSID(0, "$NetBSD: dcm.c,v 1.65 2004/08/28 17:37:00 thorpej Exp $");
 #define DEFAULT_BAUD_RATE 9600
 #endif
 
-static const struct speedtab dcmspeedtab[] = {
+struct speedtab dcmspeedtab[] = {
 	{	0,	BR_0		},
 	{	50,	BR_50		},
 	{	75,	BR_75		},
@@ -182,8 +182,8 @@ static const struct speedtab dcmspeedtab[] = {
 #define DIS_PERCHAR	1
 #define DIS_RESET	2
 
-static int	dcmistype = -1; /* -1 == dynamic, 0 == timer, 1 == perchar */
-static int     dcminterval = 5;	/* interval (secs) between checks */
+int	dcmistype = -1;		/* -1 == dynamic, 0 == timer, 1 == perchar */
+int     dcminterval = 5;	/* interval (secs) between checks */
 struct	dcmischeme {
 	int	dis_perchar;	/* non-zero if interrupting per char */
 	long	dis_time;	/* last time examined */
@@ -264,7 +264,7 @@ struct	dcmstats {
  *		"SR"	23	 4	RTS	(often not needed)
  */
 #define hp2dce_in(ibits)	(iconv[(ibits) & 0xf])
-static const char iconv[16] = {
+static char iconv[16] = {
 	0,		MI_DM,		MI_CTS,		MI_CTS|MI_DM,
 	MI_CD,		MI_CD|MI_DM,	MI_CD|MI_CTS,	MI_CD|MI_CTS|MI_DM,
 	MI_RI,		MI_RI|MI_DM,	MI_RI|MI_CTS,	MI_RI|MI_CTS|MI_DM,
@@ -311,28 +311,27 @@ struct	dcm_softc {
 #endif
 };
 
-static int	dcmintr(void *);
-static void	dcmpint(struct dcm_softc *, int, int);
-static void	dcmrint(struct dcm_softc *);
-static void	dcmreadbuf(struct dcm_softc *, int);
-static void	dcmxint(struct dcm_softc *, int);
-static void	dcmmint(struct dcm_softc *, int, int);
+int	dcmintr __P((void *));
+void	dcmpint __P((struct dcm_softc *, int, int));
+void	dcmrint __P((struct dcm_softc *));
+void	dcmreadbuf __P((struct dcm_softc *, int));
+void	dcmxint __P((struct dcm_softc *, int));
+void	dcmmint __P((struct dcm_softc *, int, int));
 
-static int	dcmparam(struct tty *, struct termios *);
-static void	dcmstart(struct tty *);
-static int	dcmmctl(dev_t, int, int);
-static void	dcmsetischeme(int, int);
-static void	dcminit(struct dcmdevice *, int, int);
+int	dcmparam __P((struct tty *, struct termios *));
+void	dcmstart __P((struct tty *));
+int	dcmmctl __P((dev_t, int, int));
+void	dcmsetischeme __P((int, int));
+void	dcminit __P((struct dcmdevice *, int, int));
 
-static int	dcmselftest(struct dcm_softc *);
+int	dcmselftest __P((struct dcm_softc *));
 
-static int	dcmcngetc(dev_t);
-static void	dcmcnputc(dev_t, int);
+int	dcmcnattach __P((bus_space_tag_t, bus_addr_t, int));
+int	dcmcngetc __P((dev_t));
+void	dcmcnputc __P((dev_t, int));
 
-int	dcmcnattach(bus_space_tag_t, bus_addr_t, int);
-
-static int	dcmmatch(struct device *, struct cfdata *, void *);
-static void	dcmattach(struct device *, struct device *, void *);
+int	dcmmatch __P((struct device *, struct cfdata *, void *));
+void	dcmattach __P((struct device *, struct device *, void *));
 
 CFATTACH_DECL(dcm, sizeof(struct dcm_softc),
     dcmmatch, dcmattach, NULL, NULL);
@@ -363,22 +362,25 @@ int	dcmconbrdbusy = 0;
 
 extern struct cfdriver dcm_cd;
 
-static dev_type_open(dcmopen);
-static dev_type_close(dcmclose);
-static dev_type_read(dcmread);
-static dev_type_write(dcmwrite);
-static dev_type_ioctl(dcmioctl);
-static dev_type_stop(dcmstop);
-static dev_type_tty(dcmtty);
-static dev_type_poll(dcmpoll);
+dev_type_open(dcmopen);
+dev_type_close(dcmclose);
+dev_type_read(dcmread);
+dev_type_write(dcmwrite);
+dev_type_ioctl(dcmioctl);
+dev_type_stop(dcmstop);
+dev_type_tty(dcmtty);
+dev_type_poll(dcmpoll);
 
 const struct cdevsw dcm_cdevsw = {
 	dcmopen, dcmclose, dcmread, dcmwrite, dcmioctl,
 	dcmstop, dcmtty, dcmpoll, nommap, ttykqfilter, D_TTY
 };
 
-static int
-dcmmatch(struct device *parent, struct cfdata *match, void *aux)
+int
+dcmmatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct dio_attach_args *da = aux;
 
@@ -391,8 +393,10 @@ dcmmatch(struct device *parent, struct cfdata *match, void *aux)
 	return (0);
 }
 
-static void
-dcmattach(struct device *parent, struct device *self, void *aux)
+void
+dcmattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct dcm_softc *sc = (struct dcm_softc *)self;
 	struct dio_attach_args *da = aux;
@@ -520,8 +524,11 @@ dcmattach(struct device *parent, struct device *self, void *aux)
 }
 
 /* ARGSUSED */
-static int
-dcmopen(dev_t dev, int flag, int mode, struct proc *p)
+int
+dcmopen(dev, flag, mode, p)
+	dev_t dev;
+	int flag, mode;
+	struct proc *p;
 {
 	struct dcm_softc *sc;
 	struct tty *tp;
@@ -612,8 +619,11 @@ dcmopen(dev_t dev, int flag, int mode, struct proc *p)
 }
 
 /*ARGSUSED*/
-static int
-dcmclose(dev_t dev, int flag, int mode, struct proc *p)
+int
+dcmclose(dev, flag, mode, p)
+	dev_t dev;
+	int flag, mode;
+	struct proc *p;
 {
 	int s, unit, board, port;
 	struct dcm_softc *sc;
@@ -648,8 +658,11 @@ dcmclose(dev_t dev, int flag, int mode, struct proc *p)
 	return (0);
 }
 
-static int
-dcmread(dev_t dev, struct uio *uio, int flag)
+int
+dcmread(dev, uio, flag)
+	dev_t dev;
+	struct uio *uio;
+	int flag;
 {
 	int unit, board, port;
 	struct dcm_softc *sc;
@@ -665,8 +678,11 @@ dcmread(dev_t dev, struct uio *uio, int flag)
 	return ((*tp->t_linesw->l_read)(tp, uio, flag));
 }
 
-static int
-dcmwrite(dev_t dev, struct uio *uio, int flag)
+int
+dcmwrite(dev, uio, flag)
+	dev_t dev;
+	struct uio *uio;
+	int flag;
 {
 	int unit, board, port;
 	struct dcm_softc *sc;
@@ -682,8 +698,11 @@ dcmwrite(dev_t dev, struct uio *uio, int flag)
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
 }
 
-static int
-dcmpoll(dev_t dev, int events, struct proc *p)
+int
+dcmpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
 {
 	int unit, board, port;
 	struct dcm_softc *sc;
@@ -699,8 +718,9 @@ dcmpoll(dev_t dev, int events, struct proc *p)
 	return ((*tp->t_linesw->l_poll)(tp, events, p));
 }
 
-static struct tty *
-dcmtty(dev_t dev)
+struct tty *
+dcmtty(dev)
+	dev_t dev;
 {
 	int unit, board, port;
 	struct dcm_softc *sc;
@@ -714,8 +734,9 @@ dcmtty(dev_t dev)
 	return (sc->sc_tty[port]);
 }
 
-static int
-dcmintr(void *arg)
+int
+dcmintr(arg)
+	void *arg;
 {
 	struct dcm_softc *sc = arg;
 	struct dcmdevice *dcm = sc->sc_dcm;
@@ -822,8 +843,10 @@ dcmintr(void *arg)
  *	First, it might be a special character (exception interrupt);
  *	Second, it may be a buffer empty (transmit interrupt);
  */
-static void
-dcmpint(struct dcm_softc *sc, int port, int code)
+void
+dcmpint(sc, port, code)
+	struct dcm_softc *sc;
+	int port, code;
 {
 
 	if (code & IT_SPEC)
@@ -832,8 +855,9 @@ dcmpint(struct dcm_softc *sc, int port, int code)
 		dcmxint(sc, port);
 }
 
-static void
-dcmrint(struct dcm_softc *sc)
+void
+dcmrint(sc)
+	struct dcm_softc *sc;
 {
 	int port;
 
@@ -841,8 +865,10 @@ dcmrint(struct dcm_softc *sc)
 		dcmreadbuf(sc, port);
 }
 
-static void
-dcmreadbuf(struct dcm_softc *sc, int port)
+void
+dcmreadbuf(sc, port)
+	struct dcm_softc *sc;
+	int port;
 {
 	struct dcmdevice *dcm = sc->sc_dcm;
 	struct dcmpreg *pp = dcm_preg(dcm, port);
@@ -938,8 +964,10 @@ dcmreadbuf(struct dcm_softc *sc, int port)
 #endif
 }
 
-static void
-dcmxint(struct dcm_softc *sc, int port)
+void
+dcmxint(sc, port)
+	struct dcm_softc *sc;
+	int port;
 {
 	struct tty *tp;
 
@@ -953,8 +981,10 @@ dcmxint(struct dcm_softc *sc, int port)
 	(*tp->t_linesw->l_start)(tp);
 }
 
-static void
-dcmmint(struct dcm_softc *sc, int port, int mcnd)
+void
+dcmmint(sc, port, mcnd)
+	struct dcm_softc *sc;
+	int port, mcnd;
 {
 	int delta;
 	struct tty *tp;
@@ -994,8 +1024,13 @@ dcmmint(struct dcm_softc *sc, int port, int mcnd)
 	}
 }
 
-static int
-dcmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
+int
+dcmioctl(dev, cmd, data, flag, p)
+	dev_t dev;
+	u_long cmd;
+	caddr_t data;
+	int flag;
+	struct proc *p;
 {
 	struct dcm_softc *sc;
 	struct tty *tp;
@@ -1109,8 +1144,10 @@ dcmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 	return (0);
 }
 
-static int
-dcmparam(struct tty *tp, struct termios *t)
+int
+dcmparam(tp, t)
+	struct tty *tp;
+	struct termios *t;
 {
 	struct dcm_softc *sc;
 	struct dcmdevice *dcm;
@@ -1186,8 +1223,9 @@ dcmparam(struct tty *tp, struct termios *t)
 	return (0);
 }
 
-static void
-dcmstart(struct tty *tp)
+void
+dcmstart(tp)
+	struct tty *tp;
 {
 	struct dcm_softc *sc;
 	struct dcmdevice *dcm;
@@ -1315,8 +1353,10 @@ out:
 /*
  * Stop output on a line.
  */
-static void
-dcmstop(struct tty *tp, int flag)
+void
+dcmstop(tp, flag)
+	struct tty *tp;
+	int flag;
 {
 	int s;
 
@@ -1333,7 +1373,9 @@ dcmstop(struct tty *tp, int flag)
  * Modem control
  */
 int
-dcmmctl(dev_t dev, int bits, int how)
+dcmmctl(dev, bits, how)
+	dev_t dev;
+	int bits, how;
 {
 	struct dcm_softc *sc;
 	struct dcmdevice *dcm;
@@ -1390,8 +1432,9 @@ dcmmctl(dev_t dev, int bits, int how)
 /*
  * Set board to either interrupt per-character or at a fixed interval.
  */
-static void
-dcmsetischeme(int brd, int flags)
+void
+dcmsetischeme(brd, flags)
+	int brd, flags;
 {
 	struct dcm_softc *sc = dcm_cd.cd_devs[brd];
 	struct dcmdevice *dcm = sc->sc_dcm;
@@ -1454,8 +1497,10 @@ dcmsetischeme(int brd, int flags)
 	SEM_UNLOCK(dcm);
 }
 
-static void
-dcminit(struct dcmdevice *dcm, int port, int rate)
+void
+dcminit(dcm, port, rate)
+	struct dcmdevice *dcm;
+	int port, rate;
 {
 	int s, mode;
 
@@ -1490,8 +1535,9 @@ dcminit(struct dcmdevice *dcm, int port, int rate)
 /*
  * Empirically derived self-test magic
  */
-static int
-dcmselftest(struct dcm_softc *sc)
+int
+dcmselftest(sc)
+	struct dcm_softc *sc;
 {
 	struct dcmdevice *dcm = sc->sc_dcm;
 	int timo = 0;
@@ -1604,8 +1650,9 @@ error:
 }
 
 /* ARGSUSED */
-static int
-dcmcngetc(dev_t dev)
+int
+dcmcngetc(dev)
+	dev_t dev;
 {
 	struct dcmrfifo *fifo;
 	struct dcmpreg *pp;
@@ -1639,8 +1686,10 @@ dcmcngetc(dev_t dev)
  * Console kernel output character routine.
  */
 /* ARGSUSED */
-static void
-dcmcnputc(dev_t dev, int c)
+void
+dcmcnputc(dev, c)
+	dev_t dev;
+	int c;
 {
 	struct dcmpreg *pp;
 	unsigned tail;

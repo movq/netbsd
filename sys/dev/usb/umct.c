@@ -1,4 +1,4 @@
-/*	$NetBSD: umct.c,v 1.15 2004/09/13 12:55:49 drochner Exp $	*/
+/*	$NetBSD: umct.c,v 1.12.2.1 2004/07/10 13:02:11 tron Exp $	*/
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umct.c,v 1.15 2004/09/13 12:55:49 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umct.c,v 1.12.2.1 2004/07/10 13:02:11 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -183,7 +183,7 @@ USB_ATTACH(umct)
 	int i;
 	struct ucom_attach_args uca;
 
-        usbd_devinfo(dev, 0, devinfo, sizeof(devinfo));
+        usbd_devinfo(dev, 0, devinfo);
         USB_ATTACH_SETUP;
         printf("%s: %s\n", devname, devinfo);
 
@@ -303,8 +303,7 @@ USB_ATTACH(umct)
 
 	DPRINTF(("umct: in=0x%x out=0x%x intr=0x%x\n",
 			uca.bulkin, uca.bulkout, sc->sc_intr_number ));
-	sc->sc_subdev = config_found_sm_loc(self, "ucombus", NULL, &uca,
-					    ucomprint, ucomsubmatch);
+	sc->sc_subdev = config_found_sm(self, &uca, ucomprint, ucomsubmatch);
 
 	USB_ATTACH_SUCCESS_RETURN;
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: cgd.c,v 1.21 2004/10/28 07:07:39 yamt Exp $ */
+/* $NetBSD: cgd.c,v 1.16 2004/03/27 23:23:06 elric Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgd.c,v 1.21 2004/10/28 07:07:39 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgd.c,v 1.16 2004/03/27 23:23:06 elric Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -45,7 +45,6 @@ __KERNEL_RCSID(0, "$NetBSD: cgd.c,v 1.21 2004/10/28 07:07:39 yamt Exp $");
 #include <sys/proc.h>
 #include <sys/errno.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/malloc.h>
 #include <sys/pool.h>
 #include <sys/ioctl.h>
@@ -64,14 +63,14 @@ __KERNEL_RCSID(0, "$NetBSD: cgd.c,v 1.21 2004/10/28 07:07:39 yamt Exp $");
 
 void	cgdattach(int);
 
-static dev_type_open(cgdopen);
-static dev_type_close(cgdclose);
-static dev_type_read(cgdread);
-static dev_type_write(cgdwrite);
-static dev_type_ioctl(cgdioctl);
-static dev_type_strategy(cgdstrategy);
-static dev_type_dump(cgddump);
-static dev_type_size(cgdsize);
+dev_type_open(cgdopen);
+dev_type_close(cgdclose);
+dev_type_read(cgdread);
+dev_type_write(cgdwrite);
+dev_type_ioctl(cgdioctl);
+dev_type_strategy(cgdstrategy);
+dev_type_dump(cgddump);
+dev_type_size(cgdsize);
 
 const struct bdevsw cgd_bdevsw = {
 	cgdopen, cgdclose, cgdstrategy, cgdioctl,
@@ -140,6 +139,19 @@ static void	hexprint(char *, void *, int);
 #define DIAGCONDPANIC(x,y)
 #endif
 
+/* Component Buffer Pool structures and macros */
+
+struct cgdbuf {
+	struct buf		 cb_buf;	/* new I/O buf */
+	struct buf		*cb_obp;	/* ptr. to original I/O buf */
+	struct cgd_softc	*cb_sc;		/* pointer to cgd softc */
+};
+
+struct pool cgd_cbufpool;
+
+#define	CGD_GETBUF()		pool_get(&cgd_cbufpool, PR_NOWAIT)
+#define	CGD_PUTBUF(cbp)		pool_put(&cgd_cbufpool, cbp)
+
 /* Global variables */
 
 struct	cgd_softc *cgd_softc;
@@ -195,9 +207,13 @@ cgdattach(int num)
 	numcgd = num;
 	for (i=0; i<num; i++)
 		cgdsoftc_init(&cgd_softc[i], i);
+
+	/* Init component buffer pool. XXX, can we put this in dksubr.c? */
+	pool_init(&cgd_cbufpool, sizeof(struct cgdbuf), 0, 0, 0,
+	    "cgdpl", NULL);
 }
 
-static int
+int
 cgdopen(dev_t dev, int flags, int fmt, struct proc *p)
 {
 	struct	cgd_softc *cs;
@@ -207,7 +223,7 @@ cgdopen(dev_t dev, int flags, int fmt, struct proc *p)
 	return dk_open(di, &cs->sc_dksc, dev, flags, fmt, p);
 }
 
-static int
+int
 cgdclose(dev_t dev, int flags, int fmt, struct proc *p)
 {
 	struct	cgd_softc *cs;
@@ -217,7 +233,7 @@ cgdclose(dev_t dev, int flags, int fmt, struct proc *p)
 	return dk_close(di, &cs->sc_dksc, dev, flags, fmt, p);
 }
 
-static void
+void
 cgdstrategy(struct buf *bp)
 {
 	struct	cgd_softc *cs = getcgd_softc(bp->b_dev);
@@ -229,7 +245,7 @@ cgdstrategy(struct buf *bp)
 	return;
 }
 
-static int
+int
 cgdsize(dev_t dev)
 {
 	struct cgd_softc *cs = getcgd_softc(dev);
@@ -285,12 +301,11 @@ static int
 cgdstart(struct dk_softc *dksc, struct buf *bp)
 {
 	struct	cgd_softc *cs = dksc->sc_osc;
-	struct	buf *nbp;
+	struct	cgdbuf *cbp;
 	struct	partition *pp;
 	caddr_t	addr;
 	caddr_t	newaddr;
 	daddr_t	bn;
-	int s;
 
 	DPRINTF_FOLLOW(("cgdstart(%p, %p)\n", dksc, bp));
 	disk_busy(&dksc->sc_dkdev); /* XXX: put in dksubr.c */
@@ -311,11 +326,9 @@ cgdstart(struct dk_softc *dksc, struct buf *bp)
 	 * We attempt to allocate all of our resources up front, so that
 	 * we can fail quickly if they are unavailable.
 	 */
-	
-	s = splbio();
-	nbp = pool_get(&bufpool, PR_NOWAIT);
-	splx(s);
-	if (nbp == NULL) {
+
+	cbp = CGD_GETBUF();
+	if (cbp == NULL) {
 		disk_unbusy(&dksc->sc_dkdev, 0, (bp->b_flags & B_READ));
 		return -1;
 	}
@@ -329,9 +342,7 @@ cgdstart(struct dk_softc *dksc, struct buf *bp)
 	if ((bp->b_flags & B_READ) == 0) {
 		newaddr = cgd_getdata(dksc, bp->b_bcount);
 		if (!newaddr) {
-			s = splbio();
-			pool_put(&bufpool, nbp);
-			splx(s);
+			CGD_PUTBUF(cbp);
 			disk_unbusy(&dksc->sc_dkdev, 0, (bp->b_flags & B_READ));
 			return -1;
 		}
@@ -339,41 +350,44 @@ cgdstart(struct dk_softc *dksc, struct buf *bp)
 		    DEV_BSIZE, CGD_CIPHER_ENCRYPT);
 	}
 
-	BUF_INIT(nbp);
-	nbp->b_data = newaddr;
-	nbp->b_flags = bp->b_flags | B_CALL;
-	nbp->b_iodone = cgdiodone;
-	nbp->b_proc = bp->b_proc;
-	nbp->b_blkno = bn;
-	nbp->b_vp = cs->sc_tvn;
-	nbp->b_bcount = bp->b_bcount;
-	nbp->b_private = bp;
+	BUF_INIT(&cbp->cb_buf);
+	cbp->cb_buf.b_data = newaddr;
+	cbp->cb_buf.b_flags = bp->b_flags | B_CALL;
+	cbp->cb_buf.b_iodone = cgdiodone;
+	cbp->cb_buf.b_proc = bp->b_proc;
+	cbp->cb_buf.b_blkno = bn;
+	cbp->cb_buf.b_vp = cs->sc_tvn;
+	cbp->cb_buf.b_bcount = bp->b_bcount;
 
-	BIO_COPYPRIO(nbp, bp);
+	/* context for cgdiodone */
+	cbp->cb_obp = bp;
+	cbp->cb_sc = cs;
 
-	if ((nbp->b_flags & B_READ) == 0) {
-		V_INCR_NUMOUTPUT(nbp->b_vp);
-	}
-	VOP_STRATEGY(cs->sc_tvn, nbp);
+	BIO_COPYPRIO(&cbp->cb_buf, bp);
+
+	if ((cbp->cb_buf.b_flags & B_READ) == 0)
+		cbp->cb_buf.b_vp->v_numoutput++;
+	VOP_STRATEGY(cs->sc_tvn, &cbp->cb_buf);
 	return 0;
 }
 
-/* expected to be called at splbio() */
-static void
-cgdiodone(struct buf *nbp)
+void
+cgdiodone(struct buf *vbp)
 {
-	struct	buf *obp = nbp->b_private;
-	struct	cgd_softc *cs = getcgd_softc(obp->b_dev);
+	struct	cgdbuf *cbp = (struct cgdbuf *)vbp;
+	struct	buf *obp = cbp->cb_obp;
+	struct	buf *nbp = &cbp->cb_buf;
+	struct	cgd_softc *cs = cbp->cb_sc;
 	struct	dk_softc *dksc = &cs->sc_dksc;
-	
-	KDASSERT(cs);
+	int	s;
 
-	DPRINTF_FOLLOW(("cgdiodone(%p)\n", nbp));
-	DPRINTF(CGDB_IO, ("cgdiodone: bp %p bcount %d resid %d\n",
+	DPRINTF_FOLLOW(("cgdiodone(%p)\n", vbp));
+	DPRINTF(CGDB_IO, ("cgdiodone: bp %p bcount %ld resid %ld\n",
 	    obp, obp->b_bcount, obp->b_resid));
-	DPRINTF(CGDB_IO, (" dev 0x%x, nbp %p bn %" PRId64 " addr %p bcnt %d\n",
-	    nbp->b_dev, nbp, nbp->b_blkno, nbp->b_data,
-	    nbp->b_bcount));
+	DPRINTF(CGDB_IO, (" dev 0x%x, cbp %p bn %" PRId64 " addr %p bcnt %ld\n",
+	    cbp->cb_buf.b_dev, cbp, cbp->cb_buf.b_blkno, cbp->cb_buf.b_data,
+	    cbp->cb_buf.b_bcount));
+	s = splbio();
 	if (nbp->b_flags & B_ERROR) {
 		obp->b_flags |= B_ERROR;
 		obp->b_error  = nbp->b_error ? nbp->b_error : EIO;
@@ -395,7 +409,7 @@ cgdiodone(struct buf *nbp)
 	if (nbp->b_data != obp->b_data)
 		cgd_putdata(dksc, nbp->b_data);
 
-	pool_put(&bufpool, nbp);
+	CGD_PUTBUF(cbp);
 
 	/* Request is complete for whatever reason */
 	obp->b_resid = 0;
@@ -405,10 +419,11 @@ cgdiodone(struct buf *nbp)
 	    (obp->b_flags & B_READ));
 	biodone(obp);
 	dk_iodone(di, dksc);
+	splx(s);
 }
 
 /* XXX: we should probably put these into dksubr.c, mostly */
-static int
+int
 cgdread(dev_t dev, struct uio *uio, int flags)
 {
 	struct	cgd_softc *cs;
@@ -419,11 +434,12 @@ cgdread(dev_t dev, struct uio *uio, int flags)
 	dksc = &cs->sc_dksc;
 	if ((dksc->sc_flags & DKF_INITED) == 0)
 		return ENXIO;
+	/* XXX see the comments about minphys in ccd.c */
 	return physio(cgdstrategy, NULL, dev, B_READ, minphys, uio);
 }
 
 /* XXX: we should probably put these into dksubr.c, mostly */
-static int
+int
 cgdwrite(dev_t dev, struct uio *uio, int flags)
 {
 	struct	cgd_softc *cs;
@@ -434,10 +450,11 @@ cgdwrite(dev_t dev, struct uio *uio, int flags)
 	dksc = &cs->sc_dksc;
 	if ((dksc->sc_flags & DKF_INITED) == 0)
 		return ENXIO;
+	/* XXX see the comments about minphys in ccd.c */
 	return physio(cgdstrategy, NULL, dev, B_WRITE, minphys, uio);
 }
 
-static int
+int
 cgdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 {
 	struct	cgd_softc *cs;
@@ -487,7 +504,7 @@ cgdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 	return ret;
 }
 
-static int
+int
 cgddump(dev_t dev, daddr_t blkno, caddr_t va, size_t size)
 {
 	struct	cgd_softc *cs;

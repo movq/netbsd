@@ -1,4 +1,4 @@
-/*	$NetBSD: in_gif.c,v 1.36 2004/04/26 01:31:56 matt Exp $	*/
+/*	$NetBSD: in_gif.c,v 1.34 2003/11/11 20:25:26 jonathan Exp $	*/
 /*	$KAME: in_gif.c,v 1.66 2001/07/29 04:46:09 itojun Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_gif.c,v 1.36 2004/04/26 01:31:56 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_gif.c,v 1.34 2003/11/11 20:25:26 jonathan Exp $");
 
 #include "opt_inet.h"
 #include "opt_iso.h"
@@ -79,7 +79,8 @@ int ip_gif_ttl = GIF_TTL;
 int ip_gif_ttl = 0;
 #endif
 
-const struct protosw in_gif_protosw =
+extern struct domain inetdomain;
+struct protosw in_gif_protosw =
 { SOCK_RAW,	&inetdomain,	0/* IPPROTO_IPV[46] */,	PR_ATOMIC|PR_ADDR,
   in_gif_input, rip_output,	0,		rip_ctloutput,
   rip_usrreq,
@@ -212,7 +213,13 @@ in_gif_output(ifp, family, m)
 }
 
 void
+#if __STDC__
 in_gif_input(struct mbuf *m, ...)
+#else
+in_gif_input(m, va_alist)
+	struct mbuf *m;
+	va_dcl
+#endif
 {
 	int off, proto;
 	struct ifnet *gifp = NULL;

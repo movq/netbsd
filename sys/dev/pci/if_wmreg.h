@@ -1,4 +1,4 @@
-/*	$NetBSD: if_wmreg.h,v 1.13 2004/10/05 21:29:56 thorpej Exp $	*/
+/*	$NetBSD: if_wmreg.h,v 1.10 2004/02/19 05:19:52 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -131,9 +131,6 @@ typedef struct wiseman_txdesc {
 /* wtx_fields option bits for IP/TCP/UDP checksum offload */
 #define	WTX_IXSM	(1U << 0)	/* IP checksum offload */
 #define	WTX_TXSM	(1U << 1)	/* TCP/UDP checksum offload */
-
-/* Maximum payload per Tx descriptor */
-#define	WTX_MAX_LEN	4096
 
 /*
  * The Livengood TCP/IP context descriptor.
@@ -444,10 +441,9 @@ struct livengood_tcpip_ctxdesc {
 #define	WMREG_OLD_FCRTL 0x0168	/* Flow Control Rx Threshold Lo (OLD) */
 #define	WMREG_FCRTH	0x2168	/* Flow Control Rx Threhsold Hi */
 #define	FCRTL_DFLT	0x00004000
-#define	FCRTL_XONE	0x80000000	/* Enable XON frame transmission */
 
 #define	WMREG_FCTTV	0x0170	/* Flow Control Transmit Timer Value */
-#define	FCTTV_DFLT	0x00000600
+#define	FCTTV_DFLT	0x00000100
 
 #define	WMREG_TXCW	0x0178	/* Transmit Configuration Word (TBI mode) */
 	/* See MII ANAR_X bits. */
@@ -494,24 +490,6 @@ struct livengood_tcpip_ctxdesc {
 
 #define	WMREG_TQC	0x0418
 
-#define	WMREG_RDFH	0x2410	/* Receive Data FIFO Head */
-
-#define	WMREG_RDFT	0x2418	/* Receive Data FIFO Tail */
-
-#define	WMREG_RDFHS	0x2420	/* Receive Data FIFO Head Saved */
-
-#define	WMREG_RDFTS	0x2428	/* Receive Data FIFO Tail Saved */
-
-#define	WMREG_TDFH	0x3410	/* Transmit Data FIFO Head */
-
-#define	WMREG_TDFT	0x3418	/* Transmit Data FIFO Tail */
-
-#define	WMREG_TDFHS	0x3420	/* Transmit Data FIFO Head Saved */
-
-#define	WMREG_TDFTS	0x3428	/* Transmit Data FIFO Tail Saved */
-
-#define	WMREG_TDFPC	0x3430	/* Transmit Data FIFO Packet Count */
-
 #define	WMREG_OLD_TBDAL	0x0420	/* Transmit Descriptor Base Lo */
 #define	WMREG_TBDAL	0x3800
 
@@ -543,14 +521,6 @@ struct livengood_tcpip_ctxdesc {
 #define	WM_VLAN_TABSIZE	128
 
 #define	WMREG_PBA	0x1000	/* Packet Buffer Allocation */
-#define	PBA_BYTE_SHIFT	10		/* KB -> bytes */
-#define	PBA_ADDR_SHIFT	7		/* KB -> quadwords */
-#define	PBA_16K		0x0010		/* 16K, default Tx allocation */
-#define	PBA_22K		0x0016
-#define	PBA_24K		0x0018
-#define	PBA_30K		0x001e
-#define	PBA_40K		0x0028
-#define	PBA_48K		0x0030		/* 48K, default Rx allocation */
 
 #define	WMREG_TXDMAC	0x3000	/* Transfer DMA Control */
 #define	TXDMAC_DPP	(1U << 0)	/* disable packet prefetch */
@@ -564,9 +534,3 @@ struct livengood_tcpip_ctxdesc {
 #define	RXCSUM_PCSS	0x000000ff	/* Packet Checksum Start */
 #define	RXCSUM_IPOFL	(1U << 8)	/* IP checksum offload */
 #define	RXCSUM_TUOFL	(1U << 9)	/* TCP/UDP checksum offload */
-
-#define	WMREG_XONRXC	0x4048	/* XON Rx Count - R/clr */
-#define	WMREG_XONTXC	0x404c	/* XON Tx Count - R/clr */
-#define	WMREG_XOFFRXC	0x4050	/* XOFF Rx Count - R/clr */
-#define	WMREG_XOFFTXC	0x4054	/* XOFF Tx Count - R/clr */
-#define	WMREG_FCRUC	0x4058	/* Flow Control Rx Unsupported Count - R/clr */

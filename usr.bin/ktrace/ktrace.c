@@ -1,4 +1,4 @@
-/*	$NetBSD: ktrace.c,v 1.37 2004/07/16 23:52:01 enami Exp $	*/
+/*	$NetBSD: ktrace.c,v 1.34 2004/02/28 02:42:45 enami Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
 #if 0
 static char sccsid[] = "@(#)ktrace.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: ktrace.c,v 1.37 2004/07/16 23:52:01 enami Exp $");
+__RCSID("$NetBSD: ktrace.c,v 1.34 2004/02/28 02:42:45 enami Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,7 +53,6 @@ __RCSID("$NetBSD: ktrace.c,v 1.37 2004/07/16 23:52:01 enami Exp $");
 #include <sys/socket.h>
 
 #include <err.h>
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,23 +65,23 @@ __RCSID("$NetBSD: ktrace.c,v 1.37 2004/07/16 23:52:01 enami Exp $");
 #include "setemul.h"
 #endif
 
-int	main(int, char *[]);
-static int rpid(char *);
-static void usage(void);
-static int do_ktrace(const char *, int, int, int, int);
-static void no_ktrace(int);
-static void fset(int fd, int flag);
-static void fclear(int fd, int flag);
+int	main __P((int, char **));
+int	rpid __P((char *));
+void	usage __P((void));
+int	do_ktrace __P((const char *, int, int,int));
+void	no_ktrace __P((int));
 
 #ifdef KTRUSS
 extern int timestamp, decimal, fancy, tail, maxdata;
 #endif
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char **argv;
 {
 	enum { NOTSET, CLEAR, CLEARALL } clear;
-	int block, append, ch, fd, trset, ops, pid, pidset, synclog, trpoints;
+	int append, ch, fd, trset, ops, pid, pidset, synclog, trpoints;
 	const char *outfile;
 #ifdef KTRUSS
 	const char *infile;
@@ -92,11 +91,10 @@ main(int argc, char *argv[])
 	clear = NOTSET;
 	append = ops = pidset = trset = synclog = 0;
 	trpoints = 0;
-	block = 1;
 	pid = 0;	/* Appease GCC */
 
 #ifdef KTRUSS
-# define OPTIONS "aCce:df:g:ilm:no:p:RTt:"
+# define OPTIONS "aCce:df:g:ilm:o:p:RTt:"
 	outfile = infile = NULL;
 #else
 # define OPTIONS "aCcdf:g:ip:st:"
@@ -149,9 +147,6 @@ main(int argc, char *argv[])
 			outfile = optarg;
 			break;
 #endif
-		case 'n':
-			block = 0;
-			break;
 		case 'p':
 			pid = rpid(optarg);
 			pidset = 1;
@@ -221,7 +216,7 @@ main(int argc, char *argv[])
 		} else
 			ops |= pid ? KTROP_CLEAR : KTROP_CLEARFILE;
 
-		(void)do_ktrace(outfile, ops, trpoints, pid, block);
+		(void)do_ktrace(outfile, ops, trpoints, pid);
 		exit(0);
 	}
 
@@ -235,22 +230,23 @@ main(int argc, char *argv[])
 
 	if (*argv) {
 #ifdef KTRUSS
-		if (do_ktrace(outfile, ops, trpoints, getpid(), block) == 1) {
+		if (do_ktrace(outfile, ops, trpoints, getpid()) == 1) {
 			execvp(argv[0], &argv[0]);
 			err(EXIT_FAILURE, "exec of '%s' failed", argv[0]);
 		}
 #else
-		(void)do_ktrace(outfile, ops, trpoints, getpid(), block);
+		(void)do_ktrace(outfile, ops, trpoints, getpid());
 		execvp(argv[0], &argv[0]);
 		err(EXIT_FAILURE, "exec of '%s' failed", argv[0]);
 #endif
 	} else
-		(void)do_ktrace(outfile, ops, trpoints, pid, block);
-	return 0;
+		(void)do_ktrace(outfile, ops, trpoints, pid);
+	exit(0);
 }
 
-static int
-rpid(char *p)
+int
+rpid(p)
+	char *p;
 {
 	static int first;
 
@@ -265,30 +261,8 @@ rpid(char *p)
 	return (atoi(p));
 }
 
-static void
-fset(int fd, int flag)
-{
-	int oflag = fcntl(fd, F_GETFL, 0);
-
-	if (oflag == -1)
-		err(EXIT_FAILURE, "Cannot get file flags");
-	if (fcntl(fd, F_SETFL, oflag | flag) == -1)
-		err(EXIT_FAILURE, "Cannot set file flags");
-}
-
-static void
-fclear(int fd, int flag)
-{
-	int oflag = fcntl(fd, F_GETFL, 0);
-
-	if (oflag == -1)
-		err(EXIT_FAILURE, "Cannot get file flags");
-	if (fcntl(fd, F_SETFL, oflag & ~flag) == -1)
-		err(EXIT_FAILURE, "Cannot set file flags");
-}
-
-static void
-usage(void)
+void
+usage()
 {
 
 #define	TRPOINTS "[Aaceilmnsuvw+-]"
@@ -313,9 +287,9 @@ usage(void)
 }
 
 static const char *ktracefile = NULL;
-static void
-/*ARGSUSED*/
-no_ktrace(int sig)
+void
+no_ktrace(sig)
+	int sig;
 {
 
 	if (ktracefile)
@@ -325,81 +299,81 @@ no_ktrace(int sig)
 	    " kernel; re-compile kernel with `options KTRACE'");
 }
 
-static int
-do_ktrace(const char *tracefile, int ops, int trpoints, int pid, int block)
+int
+do_ktrace(tracefile, ops, trpoints, pid)
+	const char *tracefile;
+	int ops;
+	int trpoints;
+	int pid;
 {
 	int ret;
 
 	if (KTROP(ops) == KTROP_SET &&
 	    (!tracefile || strcmp(tracefile, "-") == 0)) {
-		int pi[2], dofork;
+		int pi[2], dofork, fpid;
 
 		if (pipe(pi) < 0)
 			err(EXIT_FAILURE, "pipe(2)");
+		fcntl(pi[0], F_SETFD, FD_CLOEXEC | fcntl(pi[0], F_GETFD, 0));
+		fcntl(pi[1], F_SETFD, FD_CLOEXEC | fcntl(pi[1], F_GETFD, 0));
 
-		fset(pi[0], FD_CLOEXEC);
-		fset(pi[1], FD_CLOEXEC);
 		dofork = (pid == getpid());
 
-		if (dofork) {
 #ifdef KTRUSS
-			/*
-			 * Create a child process and trace it.
-			 */
-			pid = fork();
-			if (pid == -1)
-				err(EXIT_FAILURE, "fork");
-			else if (pid == 0) {
-				pid = getpid();
-				goto trace_and_exec;
-			}
-#else
-			int fpid;
-
-			/*
-			 * Create a dumper process and we will be
-			 * traced.
-			 */
-			fpid = fork();
-			if (fpid == -1)
-				err(EXIT_FAILURE, "fork");
-			else if (fpid != 0)
-				goto trace_and_exec;
-#endif
-			(void)close(pi[1]);
-		} else {
-			ret = fktrace(pi[1], ops, trpoints, pid);
-			if (ret == -1)
-				err(EXIT_FAILURE, "fd %d, pid %d",
-				    pi[1], pid);
-			if (block)
-				fclear(pi[1], O_NONBLOCK);
-		}
-#ifdef KTRUSS
-		dumpfile(NULL, pi[0], trpoints);
-		waitpid(pid, NULL, 0);
-#else
-		{
-			char	buf[BUFSIZ];
-			int	n;
-
-			while ((n =
-			    read(pi[0], buf, sizeof(buf))) > 0)
-				if (write(STDOUT_FILENO, buf, (size_t)n) == -1)
-					warn("write failed");
-		}
 		if (dofork)
-			_exit(0);
+			fpid = fork();
+		else
+			fpid = pid;	/* XXX: Gcc */
+#else
+		if (dofork)
+			fpid = fork();
+		else
+			fpid = 0;	/* XXX: Gcc */
 #endif
-		return 0;
+#ifdef KTRUSS
+		if (fpid)
+#else
+		if (!dofork || !fpid)
+#endif
+		{
+			if (!dofork)
+#ifdef KTRUSS
+				ret = fktrace(pi[1], ops, trpoints, fpid);
+#else
+				ret = fktrace(pi[1], ops, trpoints, pid);
+#endif
+			else
+				close(pi[1]);
+#ifdef KTRUSS
+			dumpfile(NULL, pi[0], trpoints);
+			waitpid(fpid, NULL, 0);
+#else
+			{
+				char	buf[512];
+				int	n, cnt = 0;
 
-trace_and_exec:
-		(void)close(pi[0]);
+				while ((n =
+				    read(pi[0], buf, sizeof(buf))) > 0) {
+					write(1, buf, n);
+					cnt += n;
+				}
+			}
+			if (dofork)
+				_exit(0);
+#endif
+			return 0;
+		}
+		close(pi[0]);
+#ifdef KTRUSS
+		if (dofork && !fpid) {
+			ret = fktrace(pi[1], ops, trpoints, getpid());
+			return 1;
+		}
+#else
 		ret = fktrace(pi[1], ops, trpoints, pid);
+#endif
 		if (ret == -1)
 			err(EXIT_FAILURE, "fd %d, pid %d", pi[1], pid);
-		if (block)
-			fclear(pi[1], O_NONBLOCK);
 	} else {
 		ret = ktrace(ktracefile = tracefile, ops, trpoints, pid);
 		if (ret == -1)

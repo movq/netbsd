@@ -1,4 +1,4 @@
-/*	$NetBSD: type_ipv6.c,v 1.10 2004/11/24 11:57:09 blymn Exp $	*/
+/*	$NetBSD: type_ipv6.c,v 1.8 2003/07/26 19:24:57 salo Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: type_ipv6.c,v 1.10 2004/11/24 11:57:09 blymn Exp $");
+__RCSID("$NetBSD: type_ipv6.c,v 1.8 2003/07/26 19:24:57 salo Exp $");
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -55,7 +55,11 @@ ipv6_check_field(FIELD *field, char *args)
 {
 	char cleaned[NI_MAXHOST];
 	struct addrinfo hints, *res;
+#ifdef NI_WITHSCOPEID	/* KAME extension */
+	const int niflags = NI_NUMERICHOST | NI_WITHSCOPEID;
+#else
 	const int niflags = NI_NUMERICHOST;
+#endif
 
 	if (args == NULL)
 		return FALSE;
@@ -79,7 +83,7 @@ ipv6_check_field(FIELD *field, char *args)
 	}
 
 	if (getnameinfo(res->ai_addr, res->ai_addrlen, cleaned,
-			(socklen_t) sizeof(cleaned), NULL, 0, niflags) != 0) {
+			sizeof(cleaned), NULL, 0, niflags) != 0) {
 		freeaddrinfo(res);
 		return FALSE;
 	}

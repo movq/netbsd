@@ -1,4 +1,4 @@
-/*	$NetBSD: excludes.c,v 1.13 2004/06/20 22:20:18 jmc Exp $	*/
+/*	$NetBSD: excludes.c,v 1.12.2.1 2004/06/22 07:18:03 tron Exp $	*/
 
 /*
  * Copyright 2000 Massachusetts Institute of Technology
@@ -36,7 +36,7 @@
 #include <sys/cdefs.h>
 
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: excludes.c,v 1.13 2004/06/20 22:20:18 jmc Exp $");
+__RCSID("$NetBSD: excludes.c,v 1.12.2.1 2004/06/22 07:18:03 tron Exp $");
 #endif
 
 #include <sys/types.h>

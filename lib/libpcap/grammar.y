@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: grammar.y,v 1.11 2004/09/27 23:02:53 dyoung Exp $	*/
+/*	$NetBSD: grammar.y,v 1.9 2002/12/19 16:33:48 hannken Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996
@@ -26,51 +26,38 @@
 #ifndef lint
 #if 0
 static const char rcsid[] =
-    "@(#) Header: /tcpdump/master/libpcap/grammar.y,v 1.79.2.3 2004/03/28 21:45:32 fenner Exp  (LBL)";
+    "@(#) Header: grammar.y,v 1.56 96/11/02 21:54:55 leres Exp  (LBL)";
 #else
-__RCSID("$NetBSD: grammar.y,v 1.11 2004/09/27 23:02:53 dyoung Exp $");
+__RCSID("$NetBSD: grammar.y,v 1.9 2002/12/19 16:33:48 hannken Exp $");
 #endif
 #endif
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
-#ifdef WIN32
-#include <pcap-stdinc.h>
-#else /* WIN32 */
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/socket.h>
-#endif /* WIN32 */
 
-#include <stdlib.h>
-
-#ifndef WIN32
 #if __STDC__
 struct mbuf;
 struct rtentry;
 #endif
 
+#include <net/if.h>
+
 #include <netinet/in.h>
 #ifdef __NetBSD__
-#include <net/if.h>
 #include <net/if_ether.h>
 #else
 #include <netinet/if_ether.h>
 #endif
 
-#include <net/pfvar.h>
-#endif /* WIN32 */
-
 #include <stdio.h>
-#include <strings.h>
 
 #include "pcap-int.h"
 
 #include "gencode.h"
 #include <pcap-namedb.h>
 
+#include "gnuc.h"
 #ifdef HAVE_OS_PROTO_H
 #include "os-proto.h"
 #endif
@@ -112,7 +99,6 @@ pcap_parse()
 	struct arth *a;
 	struct {
 		struct qual q;
-		int atmfieldtype;
 		struct block *b;
 	} blk;
 	struct block *rblk;
@@ -124,18 +110,14 @@ pcap_parse()
 %type	<a>	arth narth
 %type	<i>	byteop pname pnum relop irelop
 %type	<blk>	and or paren not null prog
-%type	<rblk>	other pfvar
-%type	<i>	atmtype atmmultitype
-%type	<blk>	atmfield
-%type	<blk>	atmfieldvalue atmvalue atmlistvalue
+%type	<rblk>	other
 
 %token  DST SRC HOST GATEWAY
-%token  NET NETMASK PORT LESS GREATER PROTO PROTOCHAIN CBYTE
-%token  ARP RARP IP SCTP TCP UDP ICMP IGMP IGRP PIM VRRP
-%token  ATALK AARP DECNET LAT SCA MOPRC MOPDL
+%token  NET MASK PORT LESS GREATER PROTO PROTOCHAIN BYTE
+%token  ARP RARP IP TCP UDP ICMP IGMP IGRP PIM VRRP
+%token  ATALK DECNET LAT SCA MOPRC MOPDL
 %token  TK_BROADCAST TK_MULTICAST
 %token  NUM INBOUND OUTBOUND
-%token  PF_IFNAME PF_RSET PF_RNR PF_SRNR PF_REASON PF_ACTION
 %token  LINK
 %token	GEQ LEQ NEQ
 %token	ID EID HID HID6 AID
@@ -143,19 +125,12 @@ pcap_parse()
 %token  LEN
 %token  IPV6 ICMPV6 AH ESP
 %token	VLAN
-%token  ISO ESIS CLNP ISIS L1 L2 IIH LSP SNP CSNP PSNP 
-%token  STP
-%token  IPX
-%token  NETBEUI
-%token	LANE LLC METAC BCC SC ILMIC OAMF4EC OAMF4SC
-%token	OAM OAMF4 CONNECTMSG METACONNECT
-%token	VPI VCI
 
 %type	<s> ID
 %type	<e> EID
 %type	<e> AID
 %type	<s> HID HID6
-%type	<i> NUM action reason
+%type	<i> NUM
 
 %left OR AND
 %nonassoc  '!'
@@ -192,17 +167,23 @@ id:	  nid
 nid:	  ID			{ $$.b = gen_scode($1, $$.q = $<blk>0.q); }
 	| HID '/' NUM		{ $$.b = gen_mcode($1, NULL, $3,
 				    $$.q = $<blk>0.q); }
-	| HID NETMASK HID	{ $$.b = gen_mcode($1, $3, 0,
+	| HID MASK HID		{ $$.b = gen_mcode($1, $3, 0,
 				    $$.q = $<blk>0.q); }
 	| HID			{
 				  /* Decide how to parse HID based on proto */
 				  $$.q = $<blk>0.q;
-				  $$.b = gen_ncode($1, 0, $$.q);
+				  switch ($$.q.proto) {
+				  case Q_DECNET:
+					$$.b = gen_ncode($1, 0, $$.q);
+					break;
+				  default:
+					$$.b = gen_ncode($1, 0, $$.q);
+					break;
+				  }
 				}
 	| HID6 '/' NUM		{
 #ifdef INET6
-				  $$.b = gen_mcode6($1, NULL,
-				    (u_int)$3, /* XXX */
+				  $$.b = gen_mcode6($1, NULL, $3,
 				    $$.q = $<blk>0.q);
 #else
 				  bpf_error("'ip6addr/prefixlen' not supported "
@@ -218,24 +199,8 @@ nid:	  ID			{ $$.b = gen_scode($1, $$.q = $<blk>0.q); }
 					"in this configuration");
 #endif /*INET6*/
 				}
-	| EID			{ 
-				  $$.b = gen_ecode($1, $$.q = $<blk>0.q);
-				  /*
-				   * $1 was allocated by "pcap_ether_aton()",
-				   * so we must free it now that we're done
-				   * with it.
-				   */
-				  free($1);
-				}
-	| AID			{
-				  $$.b = gen_acode($1, $$.q = $<blk>0.q);
-				  /*
-				   * $1 was allocated by "pcap_ether_aton()",
-				   * so we must free it now that we're done
-				   * with it.
-				   */
-				  free($1);
-				}
+	| EID			{ $$.b = gen_ecode($1, $$.q = $<blk>0.q); }
+	| AID			{ $$.b = gen_acode($1, $$.q = $<blk>0.q); }
 	| not id		{ gen_not($2.b); $$ = $2; }
 	;
 not:	  '!'			{ $$ = $<blk>0; }
@@ -268,9 +233,6 @@ rterm:	  head id		{ $$ = $2; }
 	| arth irelop arth	{ $$.b = gen_relation($2, $1, $3, 1);
 				  $$.q = qerr; }
 	| other			{ $$.b = $1; $$.q = qerr; }
-	| atmtype		{ $$.b = gen_atmtype_abbrev($1); $$.q = qerr; }
-	| atmmultitype		{ $$.b = gen_atmmulti_abbrev($1); $$.q = qerr; }
-	| atmfield atmvalue	{ $$.b = $2.b; $$.q = qerr; }
 	;
 /* protocol level qualifiers */
 pqual:	  pname
@@ -296,7 +258,6 @@ pname:	  LINK			{ $$ = Q_LINK; }
 	| IP			{ $$ = Q_IP; }
 	| ARP			{ $$ = Q_ARP; }
 	| RARP			{ $$ = Q_RARP; }
-	| SCTP			{ $$ = Q_SCTP; }
 	| TCP			{ $$ = Q_TCP; }
 	| UDP			{ $$ = Q_UDP; }
 	| ICMP			{ $$ = Q_ICMP; }
@@ -305,7 +266,6 @@ pname:	  LINK			{ $$ = Q_LINK; }
 	| PIM			{ $$ = Q_PIM; }
 	| VRRP			{ $$ = Q_VRRP; }
 	| ATALK			{ $$ = Q_ATALK; }
-	| AARP			{ $$ = Q_AARP; }
 	| DECNET		{ $$ = Q_DECNET; }
 	| LAT			{ $$ = Q_LAT; }
 	| SCA			{ $$ = Q_SCA; }
@@ -315,66 +275,17 @@ pname:	  LINK			{ $$ = Q_LINK; }
 	| ICMPV6		{ $$ = Q_ICMPV6; }
 	| AH			{ $$ = Q_AH; }
 	| ESP			{ $$ = Q_ESP; }
-	| ISO			{ $$ = Q_ISO; }
-	| ESIS			{ $$ = Q_ESIS; }
-	| ISIS			{ $$ = Q_ISIS; }
-	| L1			{ $$ = Q_ISIS_L1; }
-	| L2			{ $$ = Q_ISIS_L2; }
-	| IIH			{ $$ = Q_ISIS_IIH; }
-	| LSP			{ $$ = Q_ISIS_LSP; }
-	| SNP			{ $$ = Q_ISIS_SNP; }
-	| PSNP			{ $$ = Q_ISIS_PSNP; }
-	| CSNP			{ $$ = Q_ISIS_CSNP; }
-	| CLNP			{ $$ = Q_CLNP; }
-	| STP			{ $$ = Q_STP; }
-	| IPX			{ $$ = Q_IPX; }
-	| NETBEUI		{ $$ = Q_NETBEUI; }
 	;
 other:	  pqual TK_BROADCAST	{ $$ = gen_broadcast($1); }
 	| pqual TK_MULTICAST	{ $$ = gen_multicast($1); }
 	| LESS NUM		{ $$ = gen_less($2); }
 	| GREATER NUM		{ $$ = gen_greater($2); }
-	| CBYTE NUM byteop NUM	{ $$ = gen_byteop($3, $2, $4); }
+	| BYTE NUM byteop NUM	{ $$ = gen_byteop($3, $2, $4); }
 	| INBOUND		{ $$ = gen_inbound(0); }
 	| OUTBOUND		{ $$ = gen_inbound(1); }
 	| VLAN pnum		{ $$ = gen_vlan($2); }
 	| VLAN			{ $$ = gen_vlan(-1); }
-	| pfvar			{ $$ = $1; }
 	;
-
-pfvar:	  PF_IFNAME ID		{ $$ = gen_pf_ifname($2); }
-	| PF_RSET ID		{ $$ = gen_pf_ruleset($2); }
-	| PF_RNR NUM		{ $$ = gen_pf_rnr($2); }
-	| PF_SRNR NUM		{ $$ = gen_pf_srnr($2); }
-	| PF_REASON reason	{ $$ = gen_pf_reason($2); }
-	| PF_ACTION action	{ $$ = gen_pf_action($2); }
-	;
-
-reason:	  NUM			{ $$ = $1; }
-	| ID			{ const char *reasons[] = PFRES_NAMES;
-				  int i;
-				  for (i = 0; reasons[i]; i++) {
-					  if (pcap_strcasecmp($1, reasons[i]) == 0) {
-						  $$ = i;
-						  break;
-					  }
-				  }
-				  if (reasons[i] == NULL)
-					  bpf_error("unknown PF reason");
-				}
-	;
-
-action:	  ID			{ if (pcap_strcasecmp($1, "pass") == 0 ||
-				      pcap_strcasecmp($1, "accept") == 0)
-					$$ = PF_PASS;
-				  else if (pcap_strcasecmp($1, "drop") == 0 ||
-				      pcap_strcasecmp($1, "block") == 0)
-					$$ = PF_DROP;
-				  else
-					  bpf_error("unknown PF action");
-				}
-	;
-
 relop:	  '>'			{ $$ = BPF_JGT; }
 	| GEQ			{ $$ = BPF_JGE; }
 	| '='			{ $$ = BPF_JEQ; }
@@ -408,38 +319,5 @@ byteop:	  '&'			{ $$ = '&'; }
 	;
 pnum:	  NUM
 	| paren pnum ')'	{ $$ = $2; }
-	;
-atmtype: LANE			{ $$ = A_LANE; }
-	| LLC			{ $$ = A_LLC; }
-	| METAC			{ $$ = A_METAC;	}
-	| BCC			{ $$ = A_BCC; }
-	| OAMF4EC		{ $$ = A_OAMF4EC; }
-	| OAMF4SC		{ $$ = A_OAMF4SC; }
-	| SC			{ $$ = A_SC; }
-	| ILMIC			{ $$ = A_ILMIC; }
-	;
-atmmultitype: OAM		{ $$ = A_OAM; }
-	| OAMF4			{ $$ = A_OAMF4; }
-	| CONNECTMSG		{ $$ = A_CONNECTMSG; }
-	| METACONNECT		{ $$ = A_METACONNECT; }
-	;
-	/* ATM field types quantifier */
-atmfield: VPI			{ $$.atmfieldtype = A_VPI; }
-	| VCI			{ $$.atmfieldtype = A_VCI; }
-	;
-atmvalue: atmfieldvalue
-	| relop NUM		{ $$.b = gen_atmfield_code($<blk>0.atmfieldtype, (u_int)$2, (u_int)$1, 0); }
-	| irelop NUM		{ $$.b = gen_atmfield_code($<blk>0.atmfieldtype, (u_int)$2, (u_int)$1, 1); }
-	| paren atmlistvalue ')' { $$.b = $2.b; $$.q = qerr; }
-	;
-atmfieldvalue: NUM {
-	$$.atmfieldtype = $<blk>0.atmfieldtype;
-	if ($$.atmfieldtype == A_VPI ||
-	    $$.atmfieldtype == A_VCI)
-		$$.b = gen_atmfield_code($$.atmfieldtype, (u_int) $1, BPF_JEQ, 0);
-	}
-	;
-atmlistvalue: atmfieldvalue
-	| atmlistvalue or atmfieldvalue { gen_or($1.b, $3.b); $$ = $3; }
 	;
 %%

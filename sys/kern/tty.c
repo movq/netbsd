@@ -1,4 +1,4 @@
-/*	$NetBSD: tty.c,v 1.170 2004/11/06 02:03:20 wrstuden Exp $	*/
+/*	$NetBSD: tty.c,v 1.165.2.1 2004/05/26 20:13:56 he Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty.c,v 1.170 2004/11/06 02:03:20 wrstuden Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty.c,v 1.165.2.1 2004/05/26 20:13:56 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -168,11 +168,10 @@ unsigned char const char_type[] = {
 #define	ISSET(t, f)	((t) & (f))
 
 struct simplelock ttylist_slock = SIMPLELOCK_INITIALIZER;
-struct ttylist_head ttylist = TAILQ_HEAD_INITIALIZER(ttylist);
+struct ttylist_head ttylist;	/* TAILQ_HEAD */
 int tty_count;
 
-POOL_INIT(tty_pool, sizeof(struct tty), 0, 0, 0, "ttypl",
-    &pool_allocator_nointr);
+struct pool tty_pool;
 
 u_int64_t tk_cancc;
 u_int64_t tk_nin;
@@ -877,20 +876,6 @@ ttioctl(struct tty *tp, u_long cmd, caddr_t data, int flag, struct proc *p)
 		s = spltty();
 		TTY_LOCK(tp);
 		*(int *)data = ttnread(tp);
-		TTY_UNLOCK(tp);
-		splx(s);
-		break;
-	case FIONWRITE:			/* get # bytes to written & unsent */
-		s = spltty();
-		TTY_LOCK(tp);
-		*(int *)data = tp->t_outq.c_cc;
-		TTY_UNLOCK(tp);
-		splx(s);
-		break;
-	case FIONSPACE:			/* get # bytes to written & unsent */
-		s = spltty();
-		TTY_LOCK(tp);
-		*(int *)data = tp->t_outq.c_cn - tp->t_outq.c_cc;
 		TTY_UNLOCK(tp);
 		splx(s);
 		break;
@@ -2283,7 +2268,7 @@ ttwakeup(struct tty *tp)
  * used by drivers to map software speed values to hardware parameters.
  */
 int
-ttspeedtab(int speed, const struct speedtab *table)
+ttspeedtab(int speed, struct speedtab *table)
 {
 
 	for (; table->sp_speed != -1; table++)
@@ -2517,6 +2502,12 @@ tty_init(void)
 {
 
 	ttyldisc_init();
+
+	TAILQ_INIT(&ttylist);
+	tty_count = 0;
+
+	pool_init(&tty_pool, sizeof(struct tty), 0, 0, 0, "ttypl",
+	    &pool_allocator_nointr);
 }
 
 /*

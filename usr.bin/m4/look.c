@@ -1,4 +1,4 @@
-/*	$NetBSD: look.c,v 1.10 2004/06/20 22:20:15 jmc Exp $	*/
+/*	$NetBSD: look.c,v 1.9.2.1 2004/06/22 07:15:27 tron Exp $	*/
 /*	$OpenBSD: look.c,v 1.8 2001/09/17 08:11:13 espie Exp $	*/
 
 /*
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)look.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: look.c,v 1.10 2004/06/20 22:20:15 jmc Exp $");
+__RCSID("$NetBSD: look.c,v 1.9.2.1 2004/06/22 07:15:27 tron Exp $");
 #endif
 #endif /* not lint */
 

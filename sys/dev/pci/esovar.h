@@ -1,4 +1,4 @@
-/*	$NetBSD: esovar.h,v 1.5 2004/05/25 21:38:11 kleink Exp $	*/
+/*	$NetBSD: esovar.h,v 1.4.30.1 2004/05/29 14:23:55 tron Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2004 Klaus J. Klein

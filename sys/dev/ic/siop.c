@@ -1,4 +1,4 @@
-/*	$NetBSD: siop.c,v 1.76 2004/10/03 14:52:53 bouyer Exp $	*/
+/*	$NetBSD: siop.c,v 1.72 2004/03/16 19:10:43 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2000 Manuel Bouyer.
@@ -33,7 +33,7 @@
 /* SYM53c7/8xx PCI-SCSI I/O Processors driver */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: siop.c,v 1.76 2004/10/03 14:52:53 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: siop.c,v 1.72 2004/03/16 19:10:43 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -490,31 +490,31 @@ siop_intr(v)
 				/*
 				 * previous phase may be aborted for any reason
 				 * ( for example, the target has less data to
-				 * transfer than requested). Compute resid and
-				 * just go to status, the command should
-				 * terminate.
+				 * transfer than requested). Just go to status
+				 * and the command should terminate.
 				 */
 					INCSTAT(siop_stat_intr_shortxfer);
-					if (scratcha0 & A_flag_data)
-						siop_ma(&siop_cmd->cmd_c);
-					else if ((dstat & DSTAT_DFE) == 0)
+					if ((dstat & DSTAT_DFE) == 0)
 						siop_clearfifo(&sc->sc_c);
+					/* no table to flush here */
 					CALL_SCRIPT(Ent_status);
 					return 1;
 				case SSTAT1_PHASE_MSGIN:
-				/*
-				 * target may be ready to disconnect
-				 * Compute resid which would be used later
-				 * if a save data pointer is needed.
-				 */
+					/*
+					 * target may be ready to disconnect
+					 * Save data pointers just in case.
+					 */
 					INCSTAT(siop_stat_intr_xferdisc);
 					if (scratcha0 & A_flag_data)
-						siop_ma(&siop_cmd->cmd_c);
+						siop_sdp(&siop_cmd->cmd_c);
 					else if ((dstat & DSTAT_DFE) == 0)
 						siop_clearfifo(&sc->sc_c);
 					bus_space_write_1(sc->sc_c.sc_rt,
 					    sc->sc_c.sc_rh, SIOP_SCRATCHA,
 					    scratcha0 & ~A_flag_data);
+					siop_table_sync(siop_cmd,
+					    BUS_DMASYNC_PREREAD |
+					    BUS_DMASYNC_PREWRITE);
 					CALL_SCRIPT(Ent_msgin);
 					return 1;
 				}
@@ -779,15 +779,6 @@ scintr:
 				CALL_SCRIPT(Ent_msgin_ack);
 				return 1;
 			}
-			if (msgin == MSG_IGN_WIDE_RESIDUE) {
-			/* use the extmsgdata table to get the second byte */
-				siop_cmd->cmd_tables->t_extmsgdata.count =
-				    htole32(1);
-				siop_table_sync(siop_cmd,
-				    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
-				CALL_SCRIPT(Ent_get_extmsgdata);
-				return 1;
-			}
 			if (xs)
 				scsipi_printaddr(xs->xs_periph);
 			else
@@ -831,29 +822,6 @@ scintr:
 			printf("\n");
 			}
 #endif
-			if (siop_cmd->cmd_tables->msg_in[0] ==
-			    MSG_IGN_WIDE_RESIDUE) {
-			/* we got the second byte of MSG_IGN_WIDE_RESIDUE */
-				if (siop_cmd->cmd_tables->msg_in[3] != 1)
-					printf("MSG_IGN_WIDE_RESIDUE: "
-					    "bad len %d\n",
-					    siop_cmd->cmd_tables->msg_in[3]);
-				switch (siop_iwr(&siop_cmd->cmd_c)) {
-				case SIOP_NEG_MSGOUT:
-					siop_table_sync(siop_cmd,
-					    BUS_DMASYNC_PREREAD |
-					    BUS_DMASYNC_PREWRITE);
-					CALL_SCRIPT(Ent_send_msgout);
-					return(1);
-				case SIOP_NEG_ACK:
-					CALL_SCRIPT(Ent_msgin_ack);
-					return(1);
-				default:
-					panic("invalid retval from "
-					    "siop_iwr()");
-				}
-				return(1);
-			}
 			if (siop_cmd->cmd_tables->msg_in[2] == MSG_EXT_WDTR) {
 				switch (siop_wdtr_neg(&siop_cmd->cmd_c)) {
 				case SIOP_NEG_MSGOUT:
@@ -910,9 +878,23 @@ scintr:
 #ifdef SIOP_DEBUG_DR
 			printf("disconnect offset %d\n", offset);
 #endif
-			siop_sdp(&siop_cmd->cmd_c, offset);
-			siop_table_sync(siop_cmd,
-			    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
+			if (offset > SIOP_NSG) {
+				printf("%s: bad offset for disconnect (%d)\n",
+				    sc->sc_c.sc_dev.dv_xname, offset);
+				goto reset;
+			}
+			/* 
+			 * offset == SIOP_NSG may be a valid condition if
+			 * we get a sdp when the xfer is done.
+			 * Don't call memmove in this case.
+			 */
+			if (offset < SIOP_NSG) {
+				memmove(&siop_cmd->cmd_tables->data[0],
+				    &siop_cmd->cmd_tables->data[offset],
+				    (SIOP_NSG - offset) * sizeof(scr_table_t));
+				siop_table_sync(siop_cmd,
+				    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
+			}
 			CALL_SCRIPT(Ent_script_sched);
 			return 1;
 		case A_int_resfail:
@@ -936,10 +918,6 @@ scintr:
 			    le32toh(siop_cmd->cmd_tables->status));
 #endif
 			INCSTAT(siop_stat_intr_done);
-			/* update resid.  */
-			offset = bus_space_read_1(sc->sc_c.sc_rt,
-			    sc->sc_c.sc_rh, SIOP_SCRATCHA + 1);
-			siop_update_resid(&siop_cmd->cmd_c, offset);
 			siop_cmd->cmd_c.status = CMDST_DONE;
 			goto end;
 		default:
@@ -1039,10 +1017,7 @@ siop_scsicmd_end(siop_cmd)
 	callout_stop(&siop_cmd->cmd_c.xs->xs_callout);
 	siop_cmd->cmd_c.status = CMDST_FREE;
 	TAILQ_INSERT_TAIL(&sc->free_list, siop_cmd, next);
-#if 0
-	if (xs->resid != 0)
-		printf("resid %d datalen %d\n", xs->resid, xs->datalen);
-#endif
+	xs->resid = 0;
 	scsipi_done (xs);
 }
 

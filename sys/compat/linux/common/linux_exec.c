@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec.c,v 1.72 2004/08/08 19:52:37 jdolecek Exp $	*/
+/*	$NetBSD: linux_exec.c,v 1.70.2.2 2004/08/15 14:07:39 tron Exp $	*/
 
 /*-
  * Copyright (c) 1994, 1995, 1998, 2000 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_exec.c,v 1.72 2004/08/08 19:52:37 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_exec.c,v 1.70.2.2 2004/08/15 14:07:39 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

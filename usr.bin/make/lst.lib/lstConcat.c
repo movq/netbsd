@@ -1,4 +1,4 @@
-/*	$NetBSD: lstConcat.c,v 1.12 2004/05/07 00:04:41 ross Exp $	*/
+/*	$NetBSD: lstConcat.c,v 1.11.2.1 2004/05/10 15:43:13 tron Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -33,14 +33,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: lstConcat.c,v 1.12 2004/05/07 00:04:41 ross Exp $";
+static char rcsid[] = "$NetBSD: lstConcat.c,v 1.11.2.1 2004/05/10 15:43:13 tron Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)lstConcat.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: lstConcat.c,v 1.12 2004/05/07 00:04:41 ross Exp $");
+__RCSID("$NetBSD: lstConcat.c,v 1.11.2.1 2004/05/10 15:43:13 tron Exp $");
 #endif
 #endif /* not lint */
 #endif

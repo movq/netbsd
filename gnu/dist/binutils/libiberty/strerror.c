@@ -462,8 +462,6 @@ static int num_error_names = 0;
 
 #ifndef HAVE_SYS_ERRLIST
 
-#define sys_nerr sys_nerr__
-#define sys_errlist sys_errlist__
 static int sys_nerr;
 static const char **sys_errlist;
 
@@ -473,6 +471,7 @@ extern int sys_nerr;
 extern char *sys_errlist[];
 
 #endif
+
 
 /*
 

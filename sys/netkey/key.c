@@ -1,4 +1,4 @@
-/*	$NetBSD: key.c,v 1.126 2004/12/06 08:07:28 itojun Exp $	*/
+/*	$NetBSD: key.c,v 1.113.2.1 2004/05/11 14:54:52 tron Exp $	*/
 /*	$KAME: key.c,v 1.310 2003/09/08 02:23:44 itojun Exp $	*/
 
 /*
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: key.c,v 1.126 2004/12/06 08:07:28 itojun Exp $");
+__KERNEL_RCSID(0, "$NetBSD: key.c,v 1.113.2.1 2004/05/11 14:54:52 tron Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -129,11 +129,13 @@ u_int32_t key_debug_level = 0;
 static u_int key_spi_trycnt = 1000;
 static u_int32_t key_spi_minval = 0x100;
 static u_int32_t key_spi_maxval = 0x0fffffff;	/* XXX */
+static u_int key_int_random = 60;	/*interval to initialize randseed,1(m)*/
 static u_int key_larval_lifetime = 30;	/* interval to expire acquiring, 30(s)*/
 static int key_blockacq_count = 10;	/* counter for blocking SADB_ACQUIRE.*/
 static int key_blockacq_lifetime = 20;	/* lifetime for blocking SADB_ACQUIRE.*/
 
 static u_int32_t acq_seq = 0;
+static int key_tick_init_random = 0;
 
 struct _satailq satailq;		/* list of all SAD entry */
 struct _sptailq sptailq;		/* SPD table + pcb */
@@ -325,7 +327,7 @@ static struct secpolicy *key_getsp __P((struct secpolicyindex *, int));
 #ifdef SADB_X_EXT_TAG
 static struct secpolicy *key_getspbytag __P((u_int16_t, int));
 #endif
-static u_int16_t key_newreqid __P((void));
+static u_int32_t key_newreqid __P((void));
 static struct mbuf *key_gather_mbuf __P((struct mbuf *,
 	const struct sadb_msghdr *, int, int, ...));
 static int key_spdadd __P((struct socket *, struct mbuf *,
@@ -365,7 +367,7 @@ static struct mbuf *key_setsadbaddr __P((u_int16_t,
 static struct mbuf *key_setsadbident __P((u_int16_t, u_int16_t, caddr_t,
 	int, u_int64_t));
 #endif
-static struct mbuf *key_setsadbxsa2 __P((u_int8_t, u_int32_t, u_int16_t));
+static struct mbuf *key_setsadbxsa2 __P((u_int8_t, u_int32_t, u_int32_t));
 #ifdef SADB_X_EXT_TAG
 static struct mbuf *key_setsadbxtag __P((u_int16_t));
 #endif
@@ -386,6 +388,7 @@ static int key_cmpsaidx_withoutmode
 	__P((struct secasindex *, struct secasindex *));
 static int key_sockaddrcmp __P((struct sockaddr *, struct sockaddr *, int));
 static int key_bbcmp __P((caddr_t, caddr_t, u_int));
+static void key_srandom __P((void));
 static u_long key_random __P((void));
 static u_int16_t key_satype2proto __P((u_int8_t));
 static u_int8_t key_proto2satype __P((u_int16_t));
@@ -1223,8 +1226,6 @@ key_msg2sp(xpl0, len, error)
 			case IPPROTO_ESP:
 			case IPPROTO_AH:
 			case IPPROTO_IPCOMP:
-			case IPPROTO_IPV4:
-			case IPPROTO_IPV6:
 				break;
 			default:
 				ipseclog((LOG_DEBUG,
@@ -1273,7 +1274,7 @@ key_msg2sp(xpl0, len, error)
 
 				/* allocate new reqid id if reqid is zero. */
 				if (xisr->sadb_x_ipsecrequest_reqid == 0) {
-					u_int16_t reqid;
+					u_int32_t reqid;
 					if ((reqid = key_newreqid()) == 0) {
 						key_freesp(newsp);
 						*error = ENOBUFS;
@@ -1362,13 +1363,13 @@ key_msg2sp(xpl0, len, error)
 	return newsp;
 }
 
-static u_int16_t
+static u_int32_t
 key_newreqid()
 {
-	static u_int16_t auto_reqid = IPSEC_MANUAL_REQID_MAX + 1;
+	static u_int32_t auto_reqid = IPSEC_MANUAL_REQID_MAX + 1;
 
-	auto_reqid = (auto_reqid == 0xffff
-	    ? IPSEC_MANUAL_REQID_MAX + 1 : auto_reqid + 1);
+	auto_reqid = (auto_reqid == ~0
+			? IPSEC_MANUAL_REQID_MAX + 1 : auto_reqid + 1);
 
 	/* XXX should be unique check */
 
@@ -1444,8 +1445,17 @@ key_sp2msg(sp)
 
 /* m will not be freed nor modified */
 static struct mbuf *
+#ifdef __STDC__
 key_gather_mbuf(struct mbuf *m, const struct sadb_msghdr *mhp,
 	int ndeep, int nitem, ...)
+#else
+key_gather_mbuf(m, mhp, ndeep, nitem, va_alist)
+	struct mbuf *m;
+	const struct sadb_msghdr *mhp;
+	int ndeep;
+	int nitem;
+	va_dcl
+#endif
 {
 	va_list ap;
 	int idx;
@@ -2306,8 +2316,6 @@ key_spddump(so, m, mhp)
 	int cnt;
 	u_int dir;
 	struct mbuf *n;
-	struct keycb *kp;
-	int error = 0, needwait = 0;
 
 	/* sanity check */
 	if (so == NULL || m == NULL || mhp == NULL || mhp->msg == NULL)
@@ -2330,18 +2338,10 @@ key_spddump(so, m, mhp)
 			n = key_setdumpsp(sp, SADB_X_SPDDUMP, cnt,
 			    mhp->msg->sadb_msg_pid);
 
-			if (n) {
-				error = key_sendup_mbuf(so, n,
-				    KEY_SENDUP_ONE | KEY_SENDUP_CANWAIT);
-				if (error == EAGAIN)
-					needwait = 1;
-			}
+			if (n)
+				key_sendup_mbuf(so, n, KEY_SENDUP_ONE);
 		}
 	}
-
-	kp = (struct keycb *)sotorawcb(so);
-	while (needwait && kp->kp_queue)
-		sbwait(&so->so_rcv);
 
 	m_freem(m);
 	return 0;
@@ -3003,7 +3003,6 @@ key_setsaval(sav, m, mhp)
 		switch (mhp->msg->sadb_msg_satype) {
 		case SADB_SATYPE_AH:
 		case SADB_SATYPE_ESP:
-		case SADB_X_SATYPE_TCPSIGNATURE:
 			if (len == PFKEY_ALIGN8(sizeof(struct sadb_key)) &&
 			    sav->alg_auth != SADB_X_AALG_NULL)
 				error = EINVAL;
@@ -3059,7 +3058,6 @@ key_setsaval(sav, m, mhp)
 			sav->key_enc = NULL;	/*just in case*/
 			break;
 		case SADB_SATYPE_AH:
-		case SADB_X_SATYPE_TCPSIGNATURE:
 		default:
 			error = EINVAL;
 			break;
@@ -3095,14 +3093,6 @@ key_setsaval(sav, m, mhp)
 	case SADB_SATYPE_AH:
 		break;
 	case SADB_X_SATYPE_IPCOMP:
-		break;
-	case SADB_X_SATYPE_TCPSIGNATURE:
-		if (sav->alg_enc != SADB_EALG_NONE) {
-			ipseclog((LOG_DEBUG, "key_setsaval: protocol and "
-			    "algorithm mismatched.\n"));
-			error = EINVAL;
-			goto fail;
-		}
 		break;
 	default:
 		ipseclog((LOG_DEBUG, "key_setsaval: invalid SA type.\n"));
@@ -3246,16 +3236,6 @@ key_mature(sav)
 			return EINVAL;
 		}
 		break;
-	case IPPROTO_TCP:
-		if (ntohl(sav->spi) != 0x1000) {	/*TCP_SIG_SPI*/
-			ipseclog((LOG_DEBUG,
-			    "key_mature: SPI must be 0x1000 for TCPMD5.\n"));
-			return (EINVAL);
-		}
-		break;
-	case IPPROTO_IPV4:
-	case IPPROTO_IPV6:
-		break;
 	}
 
 	/* check satype */
@@ -3305,22 +3285,6 @@ key_mature(sav)
 		}
 		checkmask = 4;
 		mustmask = 4;
-		break;
-	case IPPROTO_TCP:
-		if (sav->alg_enc != SADB_EALG_NONE) {
-			ipseclog((LOG_DEBUG, "key_mature: "
-			    "encryption algorithm must be null for TCPMD5.\n"));
-			return (EINVAL);
-		}
-		if (sav->alg_auth != SADB_X_AALG_TCP_MD5) {
-			ipseclog((LOG_DEBUG, "key_mature: "
-			    "auth algorithm must be tcp-md5 for TCPMD5.\n"));
-			return (EINVAL);
-		}
-		checkmask = 0;
-		break;
-	case IPPROTO_IPV4:
-	case IPPROTO_IPV6:
 		break;
 	default:
 		ipseclog((LOG_DEBUG, "key_mature: Invalid satype.\n"));
@@ -3751,8 +3715,7 @@ key_setsadbident(exttype, idtype, string, stringlen, id)
 static struct mbuf *
 key_setsadbxsa2(mode, seq, reqid)
 	u_int8_t mode;
-	u_int32_t seq;
-	u_int16_t reqid;
+	u_int32_t seq, reqid;
 {
 	struct mbuf *m;
 	struct sadb_x_sa2 *p;
@@ -4379,8 +4342,6 @@ key_timehandler(arg)
     {
 	struct secashead *sah, *nextsah;
 	struct secasvar *sav, *nextsav;
-	int havesav;
-	u_int stateidx, state;
 
 	for (sah = LIST_FIRST(&sahtree);
 	     sah != NULL;
@@ -4541,23 +4502,6 @@ key_timehandler(arg)
 			 * (such as from SPD).
 			 */
 		}
-
-		/* move SA header to DEAD if there's no SA */
-		havesav = 0;
-		for (stateidx = 0;
-		     stateidx < _ARRAYLEN(saorder_state_alive);
-		     stateidx++) {
-			state = saorder_state_alive[stateidx];
-			if (LIST_FIRST(&sah->savtree[state])) {
-				havesav++;
-				break;
-			}
-		}
-		if (havesav == 0) {
-			ipseclog((LOG_DEBUG, "key_timehandler: "
-			       "move sah %p to DEAD (no more SAs)\n", sah));
-			sah->state = SADB_SASTATE_DEAD;
-		}
 	}
     }
 
@@ -4599,6 +4543,12 @@ key_timehandler(arg)
 	}
     }
 
+	/* initialize random seed */
+	if (key_tick_init_random++ > key_int_random) {
+		key_tick_init_random = 0;
+		key_srandom();
+	}
+
 	callout_reset(&key_timehandler_ch, hz, key_timehandler, (void *)0);
 
 	splx(s);
@@ -4608,6 +4558,13 @@ key_timehandler(arg)
 /*
  * to initialize a seed for random()
  */
+static void
+key_srandom()
+{
+
+	return;
+}
+
 static u_long
 key_random()
 {
@@ -4657,8 +4614,7 @@ key_satype2proto(satype)
 		return IPPROTO_ESP;
 	case SADB_X_SATYPE_IPCOMP:
 		return IPPROTO_IPCOMP;
-	case SADB_X_SATYPE_TCPSIGNATURE:
-		return IPPROTO_TCP;
+		break;
 	default:
 		return 0;
 	}
@@ -4681,8 +4637,7 @@ key_proto2satype(proto)
 		return SADB_SATYPE_ESP;
 	case IPPROTO_IPCOMP:
 		return SADB_X_SATYPE_IPCOMP;
-	case IPPROTO_TCP:
-		return SADB_X_SATYPE_TCPSIGNATURE;
+		break;
 	default:
 		return 0;
 	}
@@ -4715,7 +4670,7 @@ key_getspi(so, m, mhp)
 	u_int8_t proto;
 	u_int32_t spi;
 	u_int8_t mode;
-	u_int16_t reqid;
+	u_int32_t reqid;
 	int error;
 
 	/* sanity check */
@@ -4990,7 +4945,7 @@ key_update(so, m, mhp)
 	struct secasvar *sav;
 	u_int16_t proto;
 	u_int8_t mode;
-	u_int16_t reqid;
+	u_int32_t reqid;
 	int error;
 
 	/* sanity check */
@@ -5100,9 +5055,9 @@ key_update(so, m, mhp)
 	}
 
 	/* check SA values to be mature. */
-	if ((error = key_mature(sav)) != 0) {
+	if ((mhp->msg->sadb_msg_errno = key_mature(sav)) != 0) {
 		key_freesav(sav);
-		return key_senderror(so, m, error);
+		return key_senderror(so, m, 0);
 	}
 
     {
@@ -5143,7 +5098,14 @@ key_getsavbyseq(sah, seq)
 
 		KEY_CHKSASTATE(state, sav->state, "key_getsabyseq");
 
-		if (sav->seq == seq)
+		if (sav->seq == seq) {
+			sav->refcnt++;
+			KEYDEBUG(KEYDEBUG_IPSEC_STAMP,
+				printf("DP key_getsavbyseq cause "
+					"refcnt++:%d SA:%p\n",
+					sav->refcnt, sav));
+			return sav;
+		}
 	}
 
 	return NULL;
@@ -5178,7 +5140,7 @@ key_add(so, m, mhp)
 	struct secasvar *newsav;
 	u_int16_t proto;
 	u_int8_t mode;
-	u_int16_t reqid;
+	u_int32_t reqid;
 	int error;
 
 	/* sanity check */
@@ -6780,8 +6742,7 @@ key_dump(so, m, mhp)
 	u_int stateidx;
 	u_int8_t satype;
 	u_int8_t state;
-	int cnt, error = 0, needwait = 0;
-	struct keycb *kp;
+	int cnt;
 	struct mbuf *n;
 
 	/* sanity check */
@@ -6836,17 +6797,10 @@ key_dump(so, m, mhp)
 				if (!n)
 					return key_senderror(so, m, ENOBUFS);
 
-				error = key_sendup_mbuf(so, n,
-				    KEY_SENDUP_ONE | KEY_SENDUP_CANWAIT);
-				if (error == EAGAIN)
-					needwait = 1;
+				key_sendup_mbuf(so, n, KEY_SENDUP_ONE);
 			}
 		}
 	}
-
-	kp = (struct keycb *)sotorawcb(so);
-	while (needwait && kp->kp_queue)
-		sbwait(&so->so_rcv);
 
 	m_freem(m);
 	return 0;
@@ -7167,6 +7121,11 @@ key_parse(m, so)
 	if (error)
 		return error;
 
+	if (m->m_next) {	/*XXX*/
+		m_freem(m);
+		return ENOBUFS;
+	}
+
 	msg = mh.msg;
 
 	/* check SA type */
@@ -7190,7 +7149,6 @@ key_parse(m, so)
 	case SADB_SATYPE_AH:
 	case SADB_SATYPE_ESP:
 	case SADB_X_SATYPE_IPCOMP:
-	case SADB_X_SATYPE_TCPSIGNATURE:
 		switch (msg->sadb_msg_type) {
 		case SADB_X_SPDADD:
 		case SADB_X_SPDDELETE:
@@ -7944,6 +7902,11 @@ SYSCTL_SETUP(sysctl_net_key_setup, "sysctl net.key subtree setup")
 		       CTLTYPE_INT, "spi_max_value", NULL,
 		       NULL, 0, &key_spi_maxval, 0,
 		       CTL_NET, PF_KEY, KEYCTL_SPI_MAX_VALUE, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "random_int", NULL,
+		       NULL, 0, &key_int_random, 0,
+		       CTL_NET, PF_KEY, KEYCTL_RANDOM_INT, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "larval_lifetime", NULL,

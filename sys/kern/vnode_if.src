@@ -1,4 +1,4 @@
-#	$NetBSD: vnode_if.src,v 1.41 2004/09/21 03:10:35 thorpej Exp $
+#	$NetBSD: vnode_if.src,v 1.38 2004/01/25 18:02:04 hannken Exp $
 #
 # Copyright (c) 1992, 1993
 #	The Regents of the University of California.  All rights reserved.
@@ -105,7 +105,7 @@ vop_lookup {
 #! create cnp	CREATE, LOCKPARENT
 #
 vop_create {
-	IN LOCKED=YES WILLPUT struct vnode *dvp;
+	IN WILLPUT struct vnode *dvp;
 	OUT struct vnode **vpp;
 	IN struct componentname *cnp;
 	IN struct vattr *vap;
@@ -118,7 +118,7 @@ vop_create {
 #! mknod cnp	CREATE, LOCKPARENT
 #
 vop_mknod {
-	IN LOCKED=YES WILLPUT struct vnode *dvp;
+	IN WILLPUT struct vnode *dvp;
 	OUT struct vnode **vpp;
 	IN struct componentname *cnp;
 	IN struct vattr *vap;
@@ -128,7 +128,7 @@ vop_mknod {
 #% open               vp      L L L
 #
 vop_open {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	IN int mode;
 	IN struct ucred *cred;
 	IN struct proc *p;
@@ -138,7 +138,7 @@ vop_open {
 #% close      vp      L L L
 #
 vop_close {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	IN int fflag;
 	IN struct ucred *cred;
 	IN struct proc *p;
@@ -148,7 +148,7 @@ vop_close {
 #% access     vp      L L L
 #
 vop_access {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	IN int mode;
 	IN struct ucred *cred;
 	IN struct proc *p;
@@ -168,7 +168,7 @@ vop_getattr {
 #% setattr    vp      L L L
 #
 vop_setattr {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	IN struct vattr *vap;
 	IN struct ucred *cred;
 	IN struct proc *p;
@@ -178,7 +178,7 @@ vop_setattr {
 #% read               vp      L L L
 #
 vop_read {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	INOUT struct uio *uio;
 	IN int ioflag;
 	IN struct ucred *cred;
@@ -188,7 +188,7 @@ vop_read {
 #% write      vp      L L L
 #
 vop_write {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	INOUT struct uio *uio;
 	IN int ioflag;
 	IN struct ucred *cred;
@@ -198,7 +198,7 @@ vop_write {
 #% ioctl      vp      U U U
 #
 vop_ioctl {
-	IN LOCKED=NO struct vnode *vp;
+	IN struct vnode *vp;
 	IN u_long command;
 	IN void *data;
 	IN int fflag;
@@ -210,7 +210,7 @@ vop_ioctl {
 #% fcntl      vp      L L L
 #
 vop_fcntl {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	IN u_int command;
 	IN void *data;
 	IN int fflag;
@@ -222,7 +222,7 @@ vop_fcntl {
 #% poll     vp      U U U
 #
 vop_poll {
-	IN LOCKED=NO struct vnode *vp;
+	IN struct vnode *vp;
 	IN int events;
 	IN struct proc *p;
 };
@@ -231,7 +231,7 @@ vop_poll {
 #% kqfilter     vp      U U U
 #
 vop_kqfilter {
-	IN LOCKED=NO struct vnode *vp;
+	IN struct vnode *vp;
 	IN struct knote *kn;
 };
 
@@ -239,7 +239,7 @@ vop_kqfilter {
 #% revoke     vp      U U U
 #
 vop_revoke {
-	IN LOCKED=NO struct vnode *vp;
+	IN struct vnode *vp;
 	IN int flags;
 };
 
@@ -257,7 +257,7 @@ vop_mmap {
 #% fsync      vp      L L L
 #
 vop_fsync {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	IN struct ucred *cred;
 	IN int flags;
 	IN off_t offlo;
@@ -267,7 +267,6 @@ vop_fsync {
 
 #
 # Needs work: Is newoff right?  What's it mean?
-# XXX Locking prototocl?
 #
 vop_seek {
 	IN struct vnode *vp;
@@ -283,20 +282,20 @@ vop_seek {
 #! remove cnp	DELETE, LOCKPARENT | LOCKLEAF
 #
 vop_remove {
-	IN LOCKED=YES WILLPUT struct vnode *dvp;
-	IN LOCKED=YES WILLPUT struct vnode *vp;
+	IN WILLPUT struct vnode *dvp;
+	IN WILLPUT struct vnode *vp;
 	IN struct componentname *cnp;
 };
 
 #
 #% link               vp      U U U
-#% link               dvp     L U U
+#% link               tdvp    L U U
 #
 #! link	 cnp	CREATE, LOCKPARENT
 #
 vop_link {
-	IN LOCKED=YES WILLPUT struct vnode *dvp;
-	IN LOCKED=NO struct vnode *vp;
+	IN WILLPUT struct vnode *dvp;
+	IN struct vnode *vp;
 	IN struct componentname *cnp;
 };
 
@@ -312,10 +311,10 @@ vop_link {
 # XXX the vop_rename routines should REALLY NOT be depending on SAVESTART!
 #
 vop_rename {
-	IN LOCKED=NO WILLRELE struct vnode *fdvp;
-	IN LOCKED=NO WILLRELE struct vnode *fvp;
+	IN WILLRELE struct vnode *fdvp;
+	IN WILLRELE struct vnode *fvp;
 	IN struct componentname *fcnp;
-	IN LOCKED=YES WILLPUT struct vnode *tdvp;
+	IN WILLPUT struct vnode *tdvp;
 	IN WILLPUT struct vnode *tvp;
 	IN struct componentname *tcnp;
 };
@@ -327,7 +326,7 @@ vop_rename {
 #! mkdir cnp	CREATE, LOCKPARENT
 #
 vop_mkdir {
-	IN LOCKED=YES WILLPUT struct vnode *dvp;
+	IN WILLPUT struct vnode *dvp;
 	OUT struct vnode **vpp;
 	IN struct componentname *cnp;
 	IN struct vattr *vap;
@@ -340,8 +339,8 @@ vop_mkdir {
 #! rmdir cnp	DELETE, LOCKPARENT | LOCKLEAF
 #
 vop_rmdir {
-	IN LOCKED=YES WILLPUT struct vnode *dvp;
-	IN LOCKED=YES WILLPUT struct vnode *vp;
+	IN WILLPUT struct vnode *dvp;
+	IN WILLPUT struct vnode *vp;
 	IN struct componentname *cnp;
 };
 
@@ -352,7 +351,7 @@ vop_rmdir {
 #! symlink cnp	CREATE, LOCKPARENT
 #
 vop_symlink {
-	IN LOCKED=YES WILLPUT struct vnode *dvp;
+	IN WILLPUT struct vnode *dvp;
 	OUT struct vnode **vpp;
 	IN struct componentname *cnp;
 	IN struct vattr *vap;
@@ -363,7 +362,7 @@ vop_symlink {
 #% readdir    vp      L L L   
 #
 vop_readdir {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	INOUT struct uio *uio;
 	IN struct ucred *cred;
 	OUT int *eofflag;
@@ -375,7 +374,7 @@ vop_readdir {
 #% readlink   vp      L L L
 #
 vop_readlink {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	INOUT struct uio *uio;
 	IN struct ucred *cred;
 };
@@ -394,7 +393,7 @@ vop_abortop {
 #% inactive   vp      L U U  
 #
 vop_inactive {
-	IN LOCKED=YES WILLUNLOCK struct vnode *vp;
+	IN WILLUNLOCK struct vnode *vp;
 	IN struct proc *p;
 };
 
@@ -402,7 +401,7 @@ vop_inactive {
 #% reclaim    vp      U U U
 #
 vop_reclaim {
-	IN LOCKED=NO struct vnode *vp;
+	IN struct vnode *vp;
 	IN struct proc *p;
 };
 
@@ -410,7 +409,7 @@ vop_reclaim {
 #% lock               vp      U L U
 #
 vop_lock {
-	IN LOCKED=NO struct vnode *vp;
+	IN struct vnode *vp;
 	IN int flags;
 };
 
@@ -418,16 +417,16 @@ vop_lock {
 #% unlock     vp      L U L
 #
 vop_unlock {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	IN int flags;
 };
 
 #
-#% bmap               vp      = = =
+#% bmap               vp      L L L
 #% bmap               vpp     - U -
 #
 vop_bmap {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	IN daddr_t bn;
 	OUT struct vnode **vpp;
 	IN daddr_t *bnp;
@@ -460,7 +459,7 @@ vop_islocked {
 #% pathconf   vp      L L L
 #
 vop_pathconf {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	IN int name;
 	OUT register_t *retval;
 };
@@ -469,7 +468,7 @@ vop_pathconf {
 #% advlock    vp      U U U
 #
 vop_advlock {
-	IN LOCKED=NO struct vnode *vp;
+	IN struct vnode *vp;
 	IN void *id;
 	IN int op;
 	IN struct flock *fl;
@@ -480,7 +479,7 @@ vop_advlock {
 #% blkatoff   vp      L L L
 #
 vop_blkatoff {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	IN off_t offset;
 	OUT char **res;
 	OUT struct buf **bpp;
@@ -490,7 +489,7 @@ vop_blkatoff {
 #% valloc     pvp     L L L
 #
 vop_valloc {
-	IN LOCKED=YES struct vnode *pvp;
+	IN struct vnode *pvp;
 	IN int mode;
 	IN struct ucred *cred;
 	OUT struct vnode **vpp;
@@ -500,7 +499,7 @@ vop_valloc {
 #% balloc     vp      L L L
 #
 vop_balloc {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	IN off_t startoffset;
 	IN int size;
 	IN struct ucred *cred;	
@@ -512,7 +511,7 @@ vop_balloc {
 #% reallocblks        vp      L L L
 #
 vop_reallocblks {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	IN struct cluster_save *buflist;
 };
 
@@ -520,7 +519,7 @@ vop_reallocblks {
 #% vfree      pvp     L L L
 #
 vop_vfree {
-	IN LOCKED=YES struct vnode *pvp;
+	IN struct vnode *pvp;
 	IN ino_t ino;
 	IN int mode;
 };
@@ -529,7 +528,7 @@ vop_vfree {
 #% truncate   vp      L L L
 #
 vop_truncate {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	IN off_t length;
 	IN int flags;
 	IN struct ucred *cred;
@@ -540,7 +539,7 @@ vop_truncate {
 #% update     vp      L L L
 #
 vop_update {
-	IN LOCKED=YES struct vnode *vp;
+	IN struct vnode *vp;
 	IN struct timespec *access;
 	IN struct timespec *modify;
 	IN int flags;
@@ -564,7 +563,7 @@ vop_lease {
 #! whiteout cnp	CREATE, LOCKPARENT
 # 
 vop_whiteout {
-	IN LOCKED=YES struct vnode *dvp;
+	IN struct vnode *dvp;
 	IN struct componentname *cnp;
 	IN int flags;
 };
@@ -577,7 +576,7 @@ vop_whiteout {
 #};
 
 #
-#% getpages	vp = = =
+#% getpages	vp L L L
 #
 vop_getpages {
 	IN struct vnode *vp;

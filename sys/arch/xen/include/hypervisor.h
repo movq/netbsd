@@ -1,4 +1,4 @@
-/*	$NetBSD: hypervisor.h,v 1.9 2004/12/10 18:51:15 christos Exp $	*/
+/*	$NetBSD: hypervisor.h,v 1.1.2.2 2004/06/17 09:23:19 tron Exp $	*/
 
 /*
  * 
@@ -47,6 +47,8 @@ struct xen_npx_attach_args {
 #define	u32 uint32_t
 #define	u64 uint64_t
 
+/* include the hypervisor interface */
+#include <sys/systm.h>
 #include <machine/hypervisor-ifs/block.h>
 #include <machine/hypervisor-ifs/hypervisor-if.h>
 #include <machine/hypervisor-ifs/dom0_ops.h>
@@ -71,7 +73,6 @@ extern union start_info_union start_info_union;
 
 
 /* hypervisor.c */
-struct trapframe;
 void do_hypervisor_callback(struct trapframe *regs);
 void hypervisor_enable_event(unsigned int ev);
 void hypervisor_disable_event(unsigned int ev);
@@ -100,10 +101,8 @@ static inline int HYPERVISOR_mmu_update(mmu_update_t *req, int count)
         : "=a" (ret) : "0" (__HYPERVISOR_mmu_update), 
         "b" (req), "c" (count) : "memory" );
 
-#ifdef notdef
     if (__predict_false(ret < 0))
         panic("Failed mmu update: %p, %d", req, count);
-#endif
 
     return ret;
 }
@@ -344,11 +343,9 @@ static inline int HYPERVISOR_update_va_mapping(
         : "=a" (ret) : "0" (__HYPERVISOR_update_va_mapping), 
         "b" (page_nr), "c" (new_val), "d" (flags) : "memory" );
 
-#ifdef notdef
     if (__predict_false(ret < 0))
         panic("Failed update VA mapping: %08lx, %08lx, %08lx",
               page_nr, new_val, flags);
-#endif
 
     return ret;
 }

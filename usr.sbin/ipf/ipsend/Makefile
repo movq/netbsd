@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.23 2004/03/31 00:34:32 lukem Exp $
+#	$NetBSD: Makefile,v 1.19.2.5 2004/04/01 16:09:06 tron Exp $
 
 NOGCCERROR=	# defined
 

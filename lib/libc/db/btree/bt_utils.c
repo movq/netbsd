@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_utils.c,v 1.10 2004/06/20 22:20:14 jmc Exp $	*/
+/*	$NetBSD: bt_utils.c,v 1.9.2.1 2004/06/22 07:15:27 tron Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -41,7 +41,7 @@
 #if 0
 static char sccsid[] = "@(#)bt_utils.c	8.8 (Berkeley) 7/20/94";
 #else
-__RCSID("$NetBSD: bt_utils.c,v 1.10 2004/06/20 22:20:14 jmc Exp $");
+__RCSID("$NetBSD: bt_utils.c,v 1.9.2.1 2004/06/22 07:15:27 tron Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.29 2004/12/14 01:47:13 yamt Exp $
+#	$NetBSD: Makefile,v 1.25 2004/01/02 01:37:53 lukem Exp $
 #
 
 WARNS=	2
@@ -26,7 +26,6 @@ ARCHDIR=	${.CURDIR}/arch/${ARCHSUBDIR}
 .PATH:	${ARCHDIR}
 
 CPPFLAGS+=	-I${ARCHDIR} -I${.CURDIR} -I${.OBJDIR} -D_LIBC
-CPPFLAGS+=	-D__LIBPTHREAD_SOURCE__
 
 DPSRCS+=	assym.h
 CLEANFILES+=	assym.h
@@ -62,7 +61,6 @@ SRCS+=	pthread_specific.c
 SRCS+=  pthread_stack.c
 SRCS+=	pthread_tsd.c
 SRCS+=  pthread_debug.c
-SRCS+=	res_state.c
 SRCS+=	sched.c
 SRCS+=	sem.c
 # Architecture-dependent files
@@ -99,8 +97,7 @@ MAN+=	pthread.3 \
 	pthread_schedparam.3 pthread_self.3 \
 	pthread_setspecific.3 pthread_sigmask.3 pthread_spin_destroy.3 \
 	pthread_spin_init.3 pthread_spin_lock.3 pthread_spin_unlock.3 \
-	pthread_suspend_np.3 pthread_testcancel.3 \
-	sched_yield.3
+	pthread_suspend_np.3 pthread_testcancel.3
 
 MLINKS+=	pthread_attr.3 pthread_attr_init.3
 MLINKS+=	pthread_attr.3 pthread_attr_destroy.3
@@ -126,7 +123,6 @@ MLINKS+=	pthread_rwlockattr.3 pthread_rwlockattr_init.3
 MLINKS+=	pthread_rwlockattr.3 pthread_rwlockattr_destroy.3
 MLINKS+=	pthread_schedparam.3 pthread_setschedparam.3
 MLINKS+=	pthread_schedparam.3 pthread_getschedparam.3
-MLINKS+=	pthread_spin_lock.3 pthread_spin_trylock.3
 MLINKS+=	pthread_suspend_np.3 pthread_resume_np.3
 MLINKS+=	pthread_testcancel.3 pthread_setcancelstate.3
 MLINKS+=	pthread_testcancel.3 pthread_setcanceltype.3

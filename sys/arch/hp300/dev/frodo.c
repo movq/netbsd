@@ -1,4 +1,4 @@
-/*	$NetBSD: frodo.c,v 1.18 2004/08/28 17:37:00 thorpej Exp $	*/
+/*	$NetBSD: frodo.c,v 1.16.2.1 2004/04/11 02:57:55 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: frodo.c,v 1.18 2004/08/28 17:37:00 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: frodo.c,v 1.16.2.1 2004/04/11 02:57:55 jmc Exp $");
 
 #define	_HP300_INTR_H_PRIVATE
 
@@ -91,7 +91,7 @@ __KERNEL_RCSID(0, "$NetBSD: frodo.c,v 1.18 2004/08/28 17:37:00 thorpej Exp $");
  * Description of a Frodo interrupt handler.
  */
 struct frodo_interhand {
-	int	(*ih_fn)(void *);
+	int	(*ih_fn) __P((void *));
 	void	*ih_arg;
 	int	ih_priority;
 };
@@ -106,20 +106,20 @@ struct frodo_softc {
 	struct bus_space_tag sc_tag;	/* bus space tag */
 };
 
-static int	frodomatch(struct device *, struct cfdata *, void *);
-static void	frodoattach(struct device *, struct device *, void *);
+int	frodomatch __P((struct device *, struct cfdata *, void *));
+void	frodoattach __P((struct device *, struct device *, void *));
 
-static int	frodoprint(void *, const char *);
-static int	frodosubmatch(struct device *, struct cfdata *, void *);
+int	frodoprint __P((void *, const char *));
+int	frodosubmatch __P((struct device *, struct cfdata *, void *));
 
-static int	frodointr(void *);
+int	frodointr __P((void *));
 
-static void	frodo_imask(struct frodo_softc *, u_int16_t, u_int16_t);
+void	frodo_imask __P((struct frodo_softc *, u_int16_t, u_int16_t));
 
 CFATTACH_DECL(frodo, sizeof(struct frodo_softc),
     frodomatch, frodoattach, NULL, NULL);
 
-static const struct frodo_device frodo_subdevs[] = {
+struct frodo_device frodo_subdevs[] = {
 	{ "dnkbd",	FRODO_APCI_OFFSET(0),	FRODO_INTR_APCI0 },
 	{ "com",	FRODO_APCI_OFFSET(1),	FRODO_INTR_APCI1 },
 	{ "com",	FRODO_APCI_OFFSET(2),	FRODO_INTR_APCI2 },
@@ -127,8 +127,11 @@ static const struct frodo_device frodo_subdevs[] = {
 	{ NULL,		0,			0 },
 };
 
-static int
-frodomatch(struct device *parent, struct cfdata *match, void *aux)
+int
+frodomatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct intio_attach_args *ia = aux;
 	static int frodo_matched = 0;
@@ -147,13 +150,15 @@ frodomatch(struct device *parent, struct cfdata *match, void *aux)
 	return (1);
 }
 
-static void
-frodoattach(struct device *parent, struct device *self, void *aux)
+void
+frodoattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct frodo_softc *sc = (struct frodo_softc *)self;
 	struct intio_attach_args *ia = aux;
 	bus_space_tag_t bst = &sc->sc_tag;
-	const struct frodo_device *fd;
+	struct frodo_device *fd;
 	struct frodo_attach_args fa;
 
 	sc->sc_regs = (volatile u_int8_t *)ia->ia_addr;
@@ -211,8 +216,11 @@ frodoattach(struct device *parent, struct device *self, void *aux)
 	}
 }
 
-static int
-frodosubmatch(struct device *parent, struct cfdata *cf, void *aux)
+int
+frodosubmatch(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct frodo_attach_args *fa = aux;
 
@@ -223,8 +231,10 @@ frodosubmatch(struct device *parent, struct cfdata *cf, void *aux)
 	return (config_match(parent, cf, aux));
 }
 
-static int
-frodoprint(void *aux, const char *pnp)
+int
+frodoprint(aux, pnp)
+	void *aux;
+	const char *pnp;
 {
 	struct frodo_attach_args *fa = aux;
 
@@ -235,8 +245,12 @@ frodoprint(void *aux, const char *pnp)
 }
 
 void
-frodo_intr_establish(struct device *frdev, int (*func)(void *), void *arg,
-    int line, int priority)
+frodo_intr_establish(frdev, func, arg, line, priority)
+	struct device *frdev;
+	int (*func) __P((void *));
+	void *arg;
+	int line;
+	int priority;
 {
 	struct frodo_softc *sc = (struct frodo_softc *)frdev;
 	struct hp300_intrhand *ih = sc->sc_ih;
@@ -278,7 +292,9 @@ frodo_intr_establish(struct device *frdev, int (*func)(void *), void *arg,
 }
 
 void
-frodo_intr_disestablish(struct device *frdev, int line)
+frodo_intr_disestablish(frdev, line)
+	struct device *frdev;
+	int line;
 {
 	struct frodo_softc *sc = (struct frodo_softc *)frdev;
 	struct hp300_intrhand *ih = sc->sc_ih;
@@ -311,8 +327,9 @@ frodo_intr_disestablish(struct device *frdev, int line)
 	}
 }
 
-static int
-frodointr(void *arg)
+int
+frodointr(arg)
+	void *arg;
 {
 	struct frodo_softc *sc = arg;
 	struct frodo_interhand *fih;
@@ -339,8 +356,10 @@ frodointr(void *arg)
 	return (1);
 }
 
-static void
-frodo_imask(struct frodo_softc *sc, u_int16_t set, u_int16_t clear)
+void
+frodo_imask(sc, set, clear)
+	struct frodo_softc *sc;
+	u_int16_t set, clear;
 {
 	u_int16_t imask;
 
@@ -355,26 +374,26 @@ frodo_imask(struct frodo_softc *sc, u_int16_t set, u_int16_t clear)
 /*
  * frodo chip specific bus_space(9) support functions.
  */
-static u_int8_t frodo_bus_space_read_sparse_1(bus_space_tag_t,
-    bus_space_handle_t, bus_size_t);
-static void frodo_bus_space_write_sparse_1(bus_space_tag_t,
-    bus_space_handle_t, bus_size_t, u_int8_t);
+static u_int8_t frodo_bus_space_read_sparse_1 __P((bus_space_tag_t,
+    bus_space_handle_t, bus_size_t));
+static void frodo_bus_space_write_sparse_1 __P((bus_space_tag_t,
+    bus_space_handle_t, bus_size_t, u_int8_t));
 
-static void frodo_bus_space_read_multi_sparse_1(bus_space_tag_t,
-    bus_space_handle_t, bus_size_t, u_int8_t *, bus_size_t);
-static void frodo_bus_space_write_multi_sparse_1(bus_space_tag_t,
-    bus_space_handle_t, bus_size_t, const u_int8_t *, bus_size_t);
+static void frodo_bus_space_read_multi_sparse_1 __P((bus_space_tag_t,
+    bus_space_handle_t, bus_size_t, u_int8_t *, bus_size_t));
+static void frodo_bus_space_write_multi_sparse_1 __P((bus_space_tag_t,
+    bus_space_handle_t, bus_size_t, const u_int8_t *, bus_size_t));
 
-static void frodo_bus_space_read_region_sparse_1(bus_space_tag_t,
-    bus_space_handle_t, bus_size_t, u_int8_t *, bus_size_t);
-static void frodo_bus_space_write_region_sparse_1(bus_space_tag_t,
-    bus_space_handle_t, bus_size_t, const u_int8_t *, bus_size_t);
+static void frodo_bus_space_read_region_sparse_1 __P((bus_space_tag_t,
+    bus_space_handle_t, bus_size_t, u_int8_t *, bus_size_t));
+static void frodo_bus_space_write_region_sparse_1 __P((bus_space_tag_t,
+    bus_space_handle_t, bus_size_t, const u_int8_t *, bus_size_t));
 
-static void frodo_bus_space_set_multi_sparse_1(bus_space_tag_t,
-    bus_space_handle_t, bus_size_t, u_int8_t, bus_size_t);
+static void frodo_bus_space_set_multi_sparse_1 __P((bus_space_tag_t,
+    bus_space_handle_t, bus_size_t, u_int8_t, bus_size_t));
 
-static void frodo_bus_space_set_region_sparse_1(bus_space_tag_t,
-    bus_space_handle_t, bus_size_t, u_int8_t, bus_size_t);
+static void frodo_bus_space_set_region_sparse_1 __P((bus_space_tag_t,
+    bus_space_handle_t, bus_size_t, u_int8_t, bus_size_t));
 
 /*
  * frodo_init_bus_space():
@@ -382,7 +401,8 @@ static void frodo_bus_space_set_region_sparse_1(bus_space_tag_t,
  *	for frodo devices which have sparse address space.
  */
 void
-frodo_init_bus_space(bus_space_tag_t bst)
+frodo_init_bus_space(bst)
+	bus_space_tag_t bst;
 {
 
 	memset(bst, 0, sizeof(struct bus_space_tag));
@@ -403,24 +423,32 @@ frodo_init_bus_space(bus_space_tag_t bst)
 }
 
 static u_int8_t
-frodo_bus_space_read_sparse_1(bus_space_tag_t bst, bus_space_handle_t bsh,
-    bus_size_t offset)
+frodo_bus_space_read_sparse_1(bst, bsh, offset)
+	bus_space_tag_t bst;
+	bus_space_handle_t bsh;
+	bus_size_t offset;
 {
 
 	return *(volatile u_int8_t *)(bsh + (offset << 2));
 }
 
-static void
-frodo_bus_space_write_sparse_1(bus_space_tag_t bst, bus_space_handle_t bsh,
-    bus_size_t offset, u_int8_t val)
+static void frodo_bus_space_write_sparse_1(bst, bsh, offset, val)
+	bus_space_tag_t bst;
+	bus_space_handle_t bsh;
+	bus_size_t offset;
+	u_int8_t val;
 {
 
 	*(volatile u_int8_t *)(bsh + (offset << 2)) = val;
 }
 
 static void
-frodo_bus_space_read_multi_sparse_1(bus_space_tag_t bst, bus_space_handle_t bsh,
-    bus_size_t offset, u_int8_t *addr, bus_size_t len)
+frodo_bus_space_read_multi_sparse_1(bst, bsh, offset, addr, len)
+	bus_space_tag_t bst;
+	bus_space_handle_t bsh;
+	bus_size_t offset;
+	u_int8_t *addr;
+	bus_size_t len;
 {
 
 	__asm __volatile (
@@ -436,9 +464,12 @@ frodo_bus_space_read_multi_sparse_1(bus_space_tag_t bst, bus_space_handle_t bsh,
 }
 
 static void
-frodo_bus_space_write_multi_sparse_1(bus_space_tag_t bst,
-    bus_space_handle_t bsh, bus_size_t offset, const u_int8_t *addr,
-    bus_size_t len)
+frodo_bus_space_write_multi_sparse_1(bst, bsh, offset, addr, len)
+	bus_space_tag_t bst;
+	bus_space_handle_t bsh;
+	bus_size_t offset;
+	const u_int8_t *addr;
+	bus_size_t len;
 {
 
 	__asm __volatile (
@@ -454,8 +485,12 @@ frodo_bus_space_write_multi_sparse_1(bus_space_tag_t bst,
 }
 
 static void
-frodo_bus_space_read_region_sparse_1(bus_space_tag_t bst,
-    bus_space_handle_t bsh, bus_size_t offset, u_int8_t *addr, bus_size_t len)
+frodo_bus_space_read_region_sparse_1(bst, bsh, offset, addr, len)
+	bus_space_tag_t bst;
+	bus_space_handle_t bsh;
+	bus_size_t offset;
+	u_int8_t *addr;
+	bus_size_t len;
 {
 	__asm __volatile (
 	"	movl	%0,%%a0		;\n"
@@ -471,9 +506,12 @@ frodo_bus_space_read_region_sparse_1(bus_space_tag_t bst,
 }
 
 static void
-frodo_bus_space_write_region_sparse_1(bus_space_tag_t bst,
-    bus_space_handle_t bsh, bus_size_t offset, const u_int8_t *addr,
-    bus_size_t len)
+frodo_bus_space_write_region_sparse_1(bst, bsh, offset, addr, len)
+	bus_space_tag_t	bst;
+	bus_space_handle_t bsh;
+	bus_size_t offset;
+	const u_int8_t *addr;
+	bus_size_t len;
 {
 
 	__asm __volatile (
@@ -490,8 +528,12 @@ frodo_bus_space_write_region_sparse_1(bus_space_tag_t bst,
 }
 
 static void
-frodo_bus_space_set_multi_sparse_1(bus_space_tag_t bst, bus_space_handle_t bsh,
-    bus_size_t offset, u_int8_t val, bus_size_t count)
+frodo_bus_space_set_multi_sparse_1(bst, bsh, offset, val, count)
+	bus_space_tag_t bst;
+	bus_space_handle_t bsh;
+	bus_size_t offset;
+	u_int8_t val;
+	bus_size_t count;
 {
 	__asm __volatile (
 	"	movl	%0,%%a0		;\n"
@@ -506,8 +548,12 @@ frodo_bus_space_set_multi_sparse_1(bus_space_tag_t bst, bus_space_handle_t bsh,
 }
 
 static void
-frodo_bus_space_set_region_sparse_1(bus_space_tag_t bst, bus_space_handle_t bsh,
-    bus_size_t offset, u_int8_t val, bus_size_t count)
+frodo_bus_space_set_region_sparse_1(bst, bsh, offset, val, count)
+	bus_space_tag_t bst;
+	bus_space_handle_t bsh;
+	bus_size_t offset;
+	u_int8_t val;
+	bus_size_t count;
 {
 
 	__asm __volatile (

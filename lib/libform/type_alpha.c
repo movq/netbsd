@@ -1,4 +1,4 @@
-/*	$NetBSD: type_alpha.c,v 1.11 2004/11/24 11:57:09 blymn Exp $	*/
+/*	$NetBSD: type_alpha.c,v 1.7 2003/03/09 00:57:19 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: type_alpha.c,v 1.11 2004/11/24 11:57:09 blymn Exp $");
+__RCSID("$NetBSD: type_alpha.c,v 1.7 2003/03/09 00:57:19 lukem Exp $");
 
 #include <stdlib.h>
 #include <string.h>
@@ -65,7 +65,7 @@ create_alpha_args(va_list *args)
 }
 
 /*
- * Copy the alpha argument structure.
+ * Copy the the alpha argument structure.
  */
 static char *
 copy_alpha_args(char *args)
@@ -117,7 +117,7 @@ alpha_check_field(FIELD *field, char *args)
 
 	  /* find the end of the non-whitespace stuff */
 	cur = start;
-	while(isalpha((unsigned char)buf[cur]))
+	while((buf[cur] != '\0') && isalpha(buf[cur]))
 		cur++;
 
 	  /* no good if it exceeds the width */
@@ -140,7 +140,7 @@ alpha_check_field(FIELD *field, char *args)
 		return FALSE;
 
 	if ((end - start) >= 1) {
-		strncpy(new, &buf[start], (size_t) (end - start - 1));
+		strncpy(new, &buf[start], (unsigned) end - start - 1);
 		new[end] = '\0';
 	} else
 		new[0] = '\0';

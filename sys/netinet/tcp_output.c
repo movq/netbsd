@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_output.c,v 1.115 2004/12/15 04:25:19 thorpej Exp $	*/
+/*	$NetBSD: tcp_output.c,v 1.108.2.1 2004/05/11 13:00:20 tron Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -138,7 +138,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_output.c,v 1.115 2004/12/15 04:25:19 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_output.c,v 1.108.2.1 2004/05/11 13:00:20 tron Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -154,9 +154,6 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_output.c,v 1.115 2004/12/15 04:25:19 thorpej Exp
 #include <sys/errno.h>
 #include <sys/domain.h>
 #include <sys/kernel.h>
-#ifdef TCP_SIGNATURE
-#include <sys/md5.h>
-#endif
 
 #include <net/if.h>
 #include <net/route.h>
@@ -180,7 +177,6 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_output.c,v 1.115 2004/12/15 04:25:19 thorpej Exp
 
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
-#include <netipsec/key.h>
 #endif	/* FAST_IPSEC*/
 #ifdef IPSEC
 #include <netinet6/ipsec.h>
@@ -194,10 +190,6 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_output.c,v 1.115 2004/12/15 04:25:19 thorpej Exp
 #include <netinet/tcp_var.h>
 #include <netinet/tcpip.h>
 #include <netinet/tcp_debug.h>
-
-#ifdef IPSEC
-#include <netkey/key.h>
-#endif
 
 #ifdef notyet
 extern struct mbuf *m_copypack();
@@ -555,9 +547,6 @@ tcp_output(tp)
 	int maxburst = TCP_MAXBURST;
 	int af;		/* address family on the wire */
 	int iphdrlen;
-#ifdef TCP_SIGNATURE
-	int sigoff = 0;
-#endif
 
 #ifdef DIAGNOSTIC
 	if (tp->t_inpcb && tp->t_in6pcb)
@@ -909,31 +898,6 @@ send:
 		optlen += TCPOLEN_TSTAMP_APPA;
 	}
 
-#ifdef TCP_SIGNATURE
-#if defined(INET6) && defined(FAST_IPSEC)
-	if (tp->t_family == AF_INET) 
-#endif
-	if (tp->t_flags & TF_SIGNATURE) {
-		u_char *bp;
-		/*
-		 * Initialize TCP-MD5 option (RFC2385)
-		 */
-		bp = (u_char *)opt + optlen;
-		*bp++ = TCPOPT_SIGNATURE;
-		*bp++ = TCPOLEN_SIGNATURE;
-		sigoff = optlen + 2;
-		bzero(bp, TCP_SIGLEN);
-		bp += TCP_SIGLEN;
-		optlen += TCPOLEN_SIGNATURE;
-		/*
-		 * Terminate options list and maintain 32-bit alignment.
- 		 */
-		*bp++ = TCPOPT_NOP;
-		*bp++ = TCPOPT_EOL;
- 		optlen += 2;
- 	}
-#endif /* TCP_SIGNATURE */
-
 	hdrlen += optlen;
 
 #ifdef DIAGNOSTIC
@@ -1068,49 +1032,14 @@ send:
 		 */
 		tp->snd_up = tp->snd_una;		/* drag it along */
 
-#ifdef TCP_SIGNATURE
-#if defined(INET6) && defined(FAST_IPSEC)
-	if (tp->t_family == AF_INET) /* XXX */
-#endif
-	if (sigoff && (tp->t_flags & TF_SIGNATURE)) {
-		struct secasvar *sav;
-		u_int8_t *sigp;
-
-		sav = tcp_signature_getsav(m, th);
-		
-		if (sav == NULL) {
-			if (m)
-				m_freem(m);
-			return (EPERM);
-		}
-
-		m->m_pkthdr.len = hdrlen + len;
-		sigp = (caddr_t)th + sizeof(*th) + sigoff;
-		tcp_signature(m, th, (caddr_t)th - mtod(m, caddr_t), sav, sigp);
-
-		key_sa_recordxfer(sav, m);
-#ifdef FAST_IPSEC
-		KEY_FREESAV(&sav);
-#else
-		key_freesav(sav);
-#endif
-	}
-#endif
-
 	/*
 	 * Set ourselves up to be checksummed just before the packet
-	 * hits the wire.  Maybe skip checksums on loopback interfaces.
+	 * hits the wire.
 	 */
 	switch (af) {
 #ifdef INET
 	case AF_INET:
-		if (__predict_true(ro->ro_rt == NULL ||
-				   !(ro->ro_rt->rt_ifp->if_flags &
-				     IFF_LOOPBACK) ||
-				   tcp_do_loopback_cksum))
-			m->m_pkthdr.csum_flags = M_CSUM_TCPv4;
-		else
-			m->m_pkthdr.csum_flags = 0;
+		m->m_pkthdr.csum_flags = M_CSUM_TCPv4;
 		m->m_pkthdr.csum_data = offsetof(struct tcphdr, th_sum);
 		if (len + optlen) {
 			/* Fixup the pseudo-header checksum. */
@@ -1132,13 +1061,7 @@ send:
 		m->m_pkthdr.len = sizeof(struct ip6_hdr)
 			+ sizeof(struct tcphdr) + optlen + len;
 #ifdef notyet
-		if (__predict_true(ro->ro_rt == NULL ||
-				   !(ro->ro_rt->rt_ifp->if_flags &
-				     IFF_LOOPBACK) ||
-				   tcp_do_loopback_cksum))
-			m->m_pkthdr.csum_flags = M_CSUM_TCPv6;
-		else
-			m->m_pkthdr.csum_flags = 0;
+		m->m_pkthdr.csum_flags = M_CSUM_TCPv6;
 		m->m_pkthdr.csum_data = offsetof(struct tcphdr, th_sum);
 #endif
 		if (len + optlen) {
@@ -1148,12 +1071,8 @@ send:
 			    htons((u_int16_t) (len + optlen)));
 		}
 #ifndef notyet
-		if (__predict_true(ro->ro_rt == NULL ||
-				   !(ro->ro_rt->rt_ifp->if_flags &
-				     IFF_LOOPBACK) ||
-				   tcp_do_loopback_cksum))
-			th->th_sum = in6_cksum(m, 0, sizeof(struct ip6_hdr),
-			    sizeof(struct tcphdr) + optlen + len);
+		th->th_sum = in6_cksum(m, 0, sizeof(struct ip6_hdr),
+		    sizeof(struct tcphdr) + optlen + len);
 #endif
 		break;
 #endif
@@ -1197,11 +1116,11 @@ send:
 		 */
 		if (TCP_TIMER_ISARMED(tp, TCPT_REXMT) == 0 &&
 		    tp->snd_nxt != tp->snd_una) {
+			TCP_TIMER_ARM(tp, TCPT_REXMT, tp->t_rxtcur);
 			if (TCP_TIMER_ISARMED(tp, TCPT_PERSIST)) {
 				TCP_TIMER_DISARM(tp, TCPT_PERSIST);
 				tp->t_rxtshift = 0;
 			}
-			TCP_TIMER_ARM(tp, TCPT_REXMT, tp->t_rxtcur);
 		}
 	} else
 		if (SEQ_GT(tp->snd_nxt + len, tp->snd_max))

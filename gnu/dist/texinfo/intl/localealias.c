@@ -1,4 +1,4 @@
-/*	$NetBSD: localealias.c,v 1.1.1.5 2004/07/12 23:27:16 wiz Exp $	*/
+/*	$NetBSD: localealias.c,v 1.1.1.4 2003/07/03 14:59:13 wiz Exp $	*/
 
 /* Handle aliases for locale names.
    Copyright (C) 1995-1999, 2000-2001, 2003 Free Software Foundation, Inc.
@@ -112,11 +112,11 @@ __libc_lock_define_initialized (static, lock);
 # define freea(p) free (p)
 #endif
 
-#if defined _LIBC_REENTRANT || HAVE_DECL_FGETS_UNLOCKED
+#if defined _LIBC_REENTRANT || defined HAVE_FGETS_UNLOCKED
 # undef fgets
 # define fgets(buf, len, s) fgets_unlocked (buf, len, s)
 #endif
-#if defined _LIBC_REENTRANT || HAVE_DECL_FEOF_UNLOCKED
+#if defined _LIBC_REENTRANT || defined HAVE_FEOF_UNLOCKED
 # undef feof
 # define feof(s) feof_unlocked (s)
 #endif
@@ -142,15 +142,16 @@ static size_t maxmap;
 
 
 /* Prototypes for local functions.  */
-static size_t read_alias_file (const char *fname, int fname_len)
+static size_t read_alias_file PARAMS ((const char *fname, int fname_len))
      internal_function;
-static int extend_alias_table (void);
-static int alias_compare (const struct alias_map *map1,
-			  const struct alias_map *map2);
+static int extend_alias_table PARAMS ((void));
+static int alias_compare PARAMS ((const struct alias_map *map1,
+				  const struct alias_map *map2));
 
 
 const char *
-_nl_expand_alias (const char *name)
+_nl_expand_alias (name)
+    const char *name;
 {
   static const char *locale_alias_path;
   struct alias_map *retval;
@@ -173,8 +174,8 @@ _nl_expand_alias (const char *name)
       if (nmap > 0)
 	retval = (struct alias_map *) bsearch (&item, map, nmap,
 					       sizeof (struct alias_map),
-					       (int (*) (const void *,
-							 const void *)
+					       (int (*) PARAMS ((const void *,
+								 const void *))
 						) alias_compare);
       else
 	retval = NULL;
@@ -216,7 +217,9 @@ _nl_expand_alias (const char *name)
 
 static size_t
 internal_function
-read_alias_file (const char *fname, int fname_len)
+read_alias_file (fname, fname_len)
+     const char *fname;
+     int fname_len;
 {
   FILE *fp;
   char *full_fname;
@@ -360,7 +363,7 @@ read_alias_file (const char *fname, int fname_len)
 
   if (added > 0)
     qsort (map, nmap, sizeof (struct alias_map),
-	   (int (*) (const void *, const void *)) alias_compare);
+	   (int (*) PARAMS ((const void *, const void *))) alias_compare);
 
   return added;
 }
@@ -386,7 +389,9 @@ extend_alias_table ()
 
 
 static int
-alias_compare (const struct alias_map *map1, const struct alias_map *map2)
+alias_compare (map1, map2)
+     const struct alias_map *map1;
+     const struct alias_map *map2;
 {
 #if defined _LIBC || defined HAVE_STRCASECMP
   return strcasecmp (map1->alias, map2->alias);

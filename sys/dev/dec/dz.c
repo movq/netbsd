@@ -1,4 +1,4 @@
-/*	$NetBSD: dz.c,v 1.15 2004/04/25 06:23:41 matt Exp $	*/
+/*	$NetBSD: dz.c,v 1.14 2003/12/14 01:18:36 ad Exp $	*/
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dz.c,v 1.15 2004/04/25 06:23:41 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dz.c,v 1.14 2003/12/14 01:18:36 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -112,7 +112,7 @@ __KERNEL_RCSID(0, "$NetBSD: dz.c,v 1.15 2004/04/25 06:23:41 matt Exp $");
 #define DML_RI		TIOCM_RI
 #define DML_BRK		0100000		/* no equivalent, we will mask */
 
-static const struct speedtab dzspeedtab[] =
+static struct speedtab dzspeedtab[] =
 {
   {       0,	0		},
   {      50,	DZ_LPR_B50	},

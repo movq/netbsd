@@ -1,4 +1,4 @@
-/*	$NetBSD: vga_pci.c,v 1.25 2004/05/11 22:45:30 wiz Exp $	*/
+/*	$NetBSD: vga_pci.c,v 1.23 2003/06/29 22:30:29 fvdl Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga_pci.c,v 1.25 2004/05/11 22:45:30 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vga_pci.c,v 1.23 2003/06/29 22:30:29 fvdl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -130,7 +130,7 @@ vga_pci_match(struct device *parent, struct cfdata *match, void *aux)
 
 	/*
 	 * If it's prehistoric/vga or display/vga, we might match.
-	 * For the console device, this is just a sanity check.
+	 * For the console device, this is jut a sanity check.
 	 */
 	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_PREHISTORIC &&
 	    PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_PREHISTORIC_VGA)
@@ -173,7 +173,7 @@ vga_pci_attach(struct device *parent, struct device *self, void *aux)
 	psc->sc_pc = pa->pa_pc;
 	psc->sc_pcitag = pa->pa_tag;
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	printf(": %s (rev. 0x%02x)\n", devinfo,
 	    PCI_REVISION(pa->pa_class));
 

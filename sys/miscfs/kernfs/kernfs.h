@@ -1,4 +1,4 @@
-/*	$NetBSD: kernfs.h,v 1.23 2004/05/20 06:34:30 atatat Exp $	*/
+/*	$NetBSD: kernfs.h,v 1.20.2.3 2004/05/23 10:46:05 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

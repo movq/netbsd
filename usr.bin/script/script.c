@@ -1,4 +1,4 @@
-/*	$NetBSD: script.c,v 1.10 2004/07/13 12:07:51 wiz Exp $	*/
+/*	$NetBSD: script.c,v 1.9 2003/08/07 11:15:48 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1992, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1992, 1993\n\
 #if 0
 static char sccsid[] = "@(#)script.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: script.c,v 1.10 2004/07/13 12:07:51 wiz Exp $");
+__RCSID("$NetBSD: script.c,v 1.9 2003/08/07 11:15:48 agc Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -120,8 +120,7 @@ main(argc, argv)
 			break;
 		case '?':
 		default:
-			(void)fprintf(stderr, "usage: %s [-adpr] [file]\n",
-			    getprogname());
+			(void)fprintf(stderr, "usage: script [-apr] [file]\n");
 			exit(1);
 		}
 	argc -= optind;

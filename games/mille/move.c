@@ -1,4 +1,4 @@
-/*	$NetBSD: move.c,v 1.15 2004/11/05 21:30:32 dsl Exp $	*/
+/*	$NetBSD: move.c,v 1.13.2.1 2004/04/08 22:02:36 jmc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)move.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: move.c,v 1.15 2004/11/05 21:30:32 dsl Exp $");
+__RCSID("$NetBSD: move.c,v 1.13.2.1 2004/04/08 22:02:36 jmc Exp $");
 #endif
 #endif /* not lint */
 
@@ -367,9 +367,9 @@ getmove()
 		refresh();
 		while ((c = readch()) == killchar() || c == erasechar())
 			continue;
-		if (islower((unsigned char)c))
-			c = toupper((unsigned char)c);
-		if (isprint((unsigned char)c) && !isspace((unsigned char)c)) {
+		if (islower(c))
+			c = toupper(c);
+		if (isprint(c) && !isspace(c)) {
 			addch(c);
 			refresh();
 		}

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ate.c,v 1.41 2004/12/12 21:03:07 abs Exp $	*/
+/*	$NetBSD: if_ate.c,v 1.39 2002/11/30 14:15:11 tsutsui Exp $	*/
 
 /*
  * All Rights Reserved, Copyright (C) Fujitsu Limited 1995
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ate.c,v 1.41 2004/12/12 21:03:07 abs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ate.c,v 1.39 2002/11/30 14:15:11 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -112,7 +112,7 @@ ate_match(parent, match, aux)
 		return (0);
 
 	/* Disallow wildcarded values. */
-	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+	if (ia->ia_io[0].ir_addr == ISACF_PORT_DEFAULT)
 		return (0);
 
 	/*
@@ -159,7 +159,7 @@ ate_match(parent, match, aux)
 		goto out;
 	}
 
-	if (ia->ia_irq[0].ir_irq != ISA_UNKNOWN_IRQ) {
+	if (ia->ia_irq[0].ir_irq != ISACF_IRQ_DEFAULT) {
 		if (ia->ia_irq[0].ir_irq != irq) {
 			printf("ate_match: irq mismatch; "
 			    "kernel configured %d != board configured %d\n",
@@ -279,7 +279,7 @@ ate_find(iot, ioh, iobase, irq)
 	if (eeprom[FE_EEPROM_CONF] != bus_space_read_1(iot, ioh, FE_BMPR19)) {
 #ifdef DIAGNOSTIC
 		printf("ate_find: "
-		    "incorrect configuration in eeprom and chip\n");
+		    "incorrect configration in eeprom and chip\n");
 #endif
 		return (0);
 	}

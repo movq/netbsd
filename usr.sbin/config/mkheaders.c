@@ -1,4 +1,4 @@
-/*	$NetBSD: mkheaders.c,v 1.37 2004/10/29 20:40:33 dsl Exp $	*/
+/*	$NetBSD: mkheaders.c,v 1.35.2.1 2004/06/22 07:23:47 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -231,8 +231,8 @@ locators_print(const char *name, void *value, void *arg)
 			return 0;
 		locdup = estrdup(name);
 		for (cp = locdup; *cp; cp++)
-			if (islower((unsigned char)*cp))
-				*cp = toupper((unsigned char)*cp);
+			if (islower(*cp))
+				*cp = toupper(*cp);
 		if (fprintf(fp, "extern const char *%scf_locnames[];\n",
 		    name) < 0)
 			return 1;
@@ -246,8 +246,8 @@ locators_print(const char *name, void *value, void *arg)
 				continue;
 			namedup = estrdup(nv->nv_name);
 			for (cp = namedup; *cp; cp++)
-				if (islower((unsigned char)*cp))
-					*cp = toupper((unsigned char)*cp);
+				if (islower(*cp))
+					*cp = toupper(*cp);
 				else if (*cp == ARRCHR)
 					*cp = '_';
 			if (fprintf(fp, "#define %sCF_%s %d\n",
@@ -431,8 +431,7 @@ herr(const char *what, const char *fname, FILE *fp)
 static char *
 cntname(const char *src)
 {
-	char *dst;
-	unsigned char c;
+	char *dst, c;
 	static char buf[100];
 
 	dst = buf;

@@ -1,4 +1,4 @@
-/*	$NetBSD: sysconf.c,v 1.21 2004/11/10 04:46:01 lukem Exp $	*/
+/*	$NetBSD: sysconf.c,v 1.19 2003/08/07 16:42:57 agc Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)sysconf.c	8.2 (Berkeley) 3/20/94";
 #else
-__RCSID("$NetBSD: sysconf.c,v 1.21 2004/11/10 04:46:01 lukem Exp $");
+__RCSID("$NetBSD: sysconf.c,v 1.19 2003/08/07 16:42:57 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -48,7 +48,6 @@ __RCSID("$NetBSD: sysconf.c,v 1.21 2004/11/10 04:46:01 lukem Exp $");
 #include <sys/resource.h>
 
 #include <errno.h>
-#include <limits.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -81,7 +80,6 @@ sysconf(name)
 	len = sizeof(value);
 
 	switch (name) {
-
 /* 1003.1 */
 	case _SC_ARG_MAX:
 		mib[0] = CTL_KERN;
@@ -290,12 +288,6 @@ sysconf(name)
 		mib[0] = CTL_USER;
 		mib[1] = USER_ATEXIT_MAX;
 		break;
-
-/* 1003.1-2001, TSF */
-	case _SC_GETGR_R_SIZE_MAX:
-		return _GETGR_R_SIZE_MAX;
-	case _SC_GETPW_R_SIZE_MAX:
-		return _GETPW_R_SIZE_MAX;
 
 yesno:		if (sysctl(mib, 2, &value, &len, NULL, 0) == -1)
 			return (-1);

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.39 2004/08/31 00:00:31 lukem Exp $
+#	$NetBSD: Makefile,v 1.37.2.1 2004/06/22 07:56:26 tron Exp $
 
 .include <bsd.own.mk>
 
@@ -98,9 +98,9 @@ afterinstall: ${DATA} ${REDO}
 		cmp -s $$tzfile $$destfile > /dev/null 2>&1 && continue; \
 		${_MKSHMSG_INSTALL} $$destfile; \
 		${_MKSHECHO} ${INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} \
-		    -m ${NONBINMODE} $$tzfile $$destfile ; \
+		    -m ${BINMODE} $$tzfile $$destfile ; \
 		${INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} \
-		    -m ${NONBINMODE} $$tzfile $$destfile ; \
+		    -m ${BINMODE} $$tzfile $$destfile ; \
 	done
 .else	# ${MKSHARE} == "no"
 afterinstall:

@@ -1,5 +1,3 @@
-/*	$NetBSD: qmgr_bounce.c,v 1.1.1.4 2004/05/31 00:24:44 heas Exp $	*/
-
 /*++
 /* NAME
 /*	qmgr_bounce
@@ -37,11 +35,6 @@
 /*	IBM T.J. Watson Research
 /*	P.O. Box 704
 /*	Yorktown Heights, NY 10598, USA
-/*
-/*	Scheduler enhancements:
-/*	Patrik Rak
-/*	Modra 6
-/*	155 00, Prague, Czech Republic
 /*--*/
 
 /* System library. */
@@ -69,10 +62,9 @@ void    qmgr_bounce_recipient(QMGR_MESSAGE *message, QMGR_RCPT *recipient,
     int     status;
 
     va_start(ap, format);
-    status = vbounce_append(message->tflags, message->queue_id,
-			    recipient->orig_rcpt, recipient->address,
-			    recipient->offset, "none", message->arrival_time,
-			    format, ap);
+    status = vbounce_append(BOUNCE_FLAG_KEEP, message->queue_id,
+			    recipient->orig_rcpt, recipient->address, "none",
+			    message->arrival_time, format, ap);
     va_end(ap);
 
     if (status == 0)

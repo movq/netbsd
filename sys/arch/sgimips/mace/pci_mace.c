@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_mace.c,v 1.5 2004/09/29 04:06:52 sekiya Exp $	*/
+/*	$NetBSD: pci_mace.c,v 1.2 2004/01/19 10:28:28 sekiya Exp $	*/
 
 /*
  * Copyright (c) 2001,2003 Christopher Sekiya
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_mace.c,v 1.5 2004/09/29 04:06:52 sekiya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_mace.c,v 1.2 2004/01/19 10:28:28 sekiya Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -80,6 +80,7 @@ struct macepci_softc {
 
 static int	macepci_match(struct device *, struct cfdata *, void *);
 static void	macepci_attach(struct device *, struct device *, void *);
+static int	macepci_print(void *, const char *);
 pcireg_t	macepci_conf_read(pci_chipset_tag_t, pcitag_t, int);
 void		macepci_conf_write(pci_chipset_tag_t, pcitag_t, int, pcireg_t);
 int		macepci_intr(void *);
@@ -97,14 +98,20 @@ CFATTACH_DECL(macepci, sizeof(struct macepci_softc),
     macepci_match, macepci_attach, NULL, NULL);
 
 static int
-macepci_match(struct device *parent, struct cfdata *match, void *aux)
+macepci_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 
 	return (1);
 }
 
 static void
-macepci_attach(struct device *parent, struct device *self, void *aux)
+macepci_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct macepci_softc *sc = (struct macepci_softc *)self;
 	pci_chipset_tag_t pc = &sc->sc_pc;
@@ -125,8 +132,6 @@ macepci_attach(struct device *parent, struct device *self, void *aux)
 
 	pc->pc_conf_read = macepci_conf_read;
 	pc->pc_conf_write = macepci_conf_write;
-	pc->intr_establish = mace_intr_establish;
-	pc->intr_disestablish = mace_intr_disestablish;
 
 	bus_space_write_4(pc->iot, pc->ioh, MACE_PCI_ERROR_ADDR, 0);
 	bus_space_write_4(pc->iot, pc->ioh, MACE_PCI_ERROR_FLAGS, 0);
@@ -196,6 +201,7 @@ macepci_attach(struct device *parent, struct device *self, void *aux)
 
 #if NPCI > 0
 	memset(&pba, 0, sizeof pba);
+	pba.pba_busname = "pci";
 /*XXX*/	pba.pba_iot = SGIMIPS_BUS_SPACE_IO;
 /*XXX*/	pba.pba_memt = SGIMIPS_BUS_SPACE_MEM;
 	pba.pba_dmat = &pci_bus_dma_tag;
@@ -213,12 +219,31 @@ macepci_attach(struct device *parent, struct device *self, void *aux)
 
 	cpu_intr_establish(maa->maa_intr, IPL_NONE, macepci_intr, sc);
 
-	config_found_ia(self, "pcibus", &pba, pcibusprint);
+	config_found(self, &pba, macepci_print);
 #endif
 }
 
+
+static int
+macepci_print(aux, pnp)
+	void *aux;
+	const char *pnp;
+{
+	struct pcibus_attach_args *pba = aux;
+
+	if (pnp != 0)
+		aprint_normal("%s at %s", pba->pba_busname, pnp);
+	else
+		aprint_normal(" bus %d", pba->pba_bus);
+
+	return UNCONF;
+}
+
 pcireg_t
-macepci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
+macepci_conf_read(pc, tag, reg)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	int reg;
 {
 	pcireg_t data;
 
@@ -230,7 +255,11 @@ macepci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 }
 
 void
-macepci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
+macepci_conf_write(pc, tag, reg, data)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	int reg;
+	pcireg_t data;
 {
 	/* XXX O2 soren */
 	if (tag == 0)
@@ -246,7 +275,8 @@ macepci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
  * Handle PCI error interrupts.
  */
 int
-macepci_intr(void *arg)
+macepci_intr(arg)
+	void *arg;
 {
 	struct macepci_softc *sc = (struct macepci_softc *)arg;
 	pci_chipset_tag_t pc = &sc->sc_pc;
@@ -336,8 +366,11 @@ macepci_intr(void *arg)
 /* PCI Address fixup routines */
 
 void
-pciaddr_resource_manage(pci_chipset_tag_t pc, pcitag_t tag,
-		pciaddr_resource_manage_func_t func, void *ctx)
+pciaddr_resource_manage(pc, tag, func, ctx)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	pciaddr_resource_manage_func_t func;
+	void *ctx;
 {
 	pcireg_t val, mask;
 	bus_addr_t addr;
@@ -465,7 +498,8 @@ pciaddr_resource_manage(pci_chipset_tag_t pc, pcitag_t tag,
 }
 
 bus_addr_t
-pciaddr_ioaddr(u_int32_t val)
+pciaddr_ioaddr(val)
+	u_int32_t val;
 {
 
 	return ((PCI_MAPREG_TYPE(val) == PCI_MAPREG_TYPE_MEM) ?
@@ -473,8 +507,13 @@ pciaddr_ioaddr(u_int32_t val)
 }
 
 int
-pciaddr_do_resource_allocate(pci_chipset_tag_t pc, pcitag_t tag, int mapreg,
-		void *ctx, int type, bus_addr_t *addr, bus_size_t size)
+pciaddr_do_resource_allocate(pc, tag, mapreg, ctx, type, addr, size)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	void *ctx;
+	int mapreg, type;
+	bus_addr_t *addr;
+	bus_size_t size;
 {
 
 	switch (type) {
@@ -521,7 +560,9 @@ pciaddr_do_resource_allocate(pci_chipset_tag_t pc, pcitag_t tag, int mapreg,
 }
 
 void
-pciaddr_print_devid(pci_chipset_tag_t pc, pcitag_t tag)
+pciaddr_print_devid(pc, tag)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
 {
 	int bus, device, function;
 	pcireg_t id;
@@ -531,3 +572,4 @@ pciaddr_print_devid(pci_chipset_tag_t pc, pcitag_t tag)
 	printf("%03d:%02d:%d 0x%04x 0x%04x ", bus, device, function,
 	    PCI_VENDOR(id), PCI_PRODUCT(id));
 }
+

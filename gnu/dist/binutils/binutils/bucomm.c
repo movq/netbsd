@@ -38,17 +38,18 @@ typedef long time_t;
 #endif
 #endif
 
-static const char * endian_string (enum bfd_endian);
-static int display_target_list (void);
-static int display_info_table (int, int);
-static int display_target_tables (void);
+static const char * endian_string PARAMS ((enum bfd_endian));
+static int display_target_list PARAMS ((void));
+static int display_info_table PARAMS ((int, int));
+static int display_target_tables PARAMS ((void));
 
 /* Error reporting.  */
 
 char *program_name;
 
 void
-bfd_nonfatal (const char *string)
+bfd_nonfatal (string)
+     const char *string;
 {
   const char *errmsg = bfd_errmsg (bfd_get_error ());
 
@@ -59,14 +60,17 @@ bfd_nonfatal (const char *string)
 }
 
 void
-bfd_fatal (const char *string)
+bfd_fatal (string)
+     const char *string;
 {
   bfd_nonfatal (string);
   xexit (1);
 }
 
 void
-report (const char * format, va_list args)
+report (format, args)
+     const char * format;
+     va_list args;
 {
   fprintf (stderr, "%s: ", program_name);
   vfprintf (stderr, format, args);
@@ -100,7 +104,7 @@ non_fatal VPARAMS ((const char *format, ...))
    different target.  */
 
 void
-set_default_bfd_target (void)
+set_default_bfd_target ()
 {
   /* The macro TARGET is defined by Makefile.  */
   const char *target = TARGET;
@@ -115,7 +119,8 @@ set_default_bfd_target (void)
    the possible matching targets.  */
 
 void
-list_matching_formats (char **p)
+list_matching_formats (p)
+     char **p;
 {
   fprintf (stderr, _("%s: Matching formats:"), program_name);
   while (*p)
@@ -126,7 +131,9 @@ list_matching_formats (char **p)
 /* List the supported targets.  */
 
 void
-list_supported_targets (const char *name, FILE *f)
+list_supported_targets (name, f)
+     const char *name;
+     FILE *f;
 {
   int t;
   const char **targ_names = bfd_target_list ();
@@ -145,7 +152,9 @@ list_supported_targets (const char *name, FILE *f)
 /* List the supported architectures.  */
 
 void
-list_supported_architectures (const char *name, FILE *f)
+list_supported_architectures (name, f)
+     const char *name;
+     FILE *f;
 {
   const char **arch;
 
@@ -163,7 +172,8 @@ list_supported_architectures (const char *name, FILE *f)
 #define LONGEST_ARCH sizeof ("powerpc:common")
 
 static const char *
-endian_string (enum bfd_endian endian)
+endian_string (endian)
+     enum bfd_endian endian;
 {
   switch (endian)
     {
@@ -177,7 +187,7 @@ endian_string (enum bfd_endian endian)
    by its endianness and the architectures it supports.  */
 
 static int
-display_target_list (void)
+display_target_list ()
 {
   char *dummy_name;
   int t;
@@ -229,7 +239,9 @@ display_target_list (void)
    architectures down).  */
 
 static int
-display_info_table (int first, int last)
+display_info_table (first, last)
+     int first;
+     int last;
 {
   int t;
   int a;
@@ -304,7 +316,7 @@ display_info_table (int first, int last)
    BFD has been configured to support.  */
 
 static int
-display_target_tables (void)
+display_target_tables ()
 {
   int t;
   int columns;
@@ -343,7 +355,7 @@ display_target_tables (void)
 }
 
 int
-display_info (void)
+display_info ()
 {
   printf (_("BFD header file version %s\n"), BFD_VERSION_STRING);
   if (! display_target_list () || ! display_target_tables ())
@@ -357,7 +369,10 @@ display_info (void)
    Mode       User\tGroup\tSize\tDate               Name */
 
 void
-print_arelt_descr (FILE *file, bfd *abfd, bfd_boolean verbose)
+print_arelt_descr (file, abfd, verbose)
+     FILE *file;
+     bfd *abfd;
+     bfd_boolean verbose;
 {
   struct stat buf;
 
@@ -388,7 +403,8 @@ print_arelt_descr (FILE *file, bfd *abfd, bfd_boolean verbose)
 /* Return the name of a temporary file in the same directory as FILENAME.  */
 
 char *
-make_tempname (char *filename)
+make_tempname (filename)
+     char *filename;
 {
   static char template[] = "stXXXXXX";
   char *tmpname;
@@ -438,7 +454,9 @@ make_tempname (char *filename)
    parsed.  */
 
 bfd_vma
-parse_vma (const char *s, const char *arg)
+parse_vma (s, arg)
+     const char *s;
+     const char *arg;
 {
   bfd_vma ret;
   const char *end;
@@ -449,29 +467,4 @@ parse_vma (const char *s, const char *arg)
     fatal (_("%s: bad number: %s"), arg, s);
 
   return ret;
-}
-
-/* Returns the size of the named file.  If the file does not
-   exist, or if it is not a real file, then a suitable non-fatal
-   error message is printed and zero is returned.  */
-
-off_t
-get_file_size (const char * file_name)
-{
-  struct stat statbuf;
-  
-  if (stat (file_name, &statbuf) < 0)
-    {
-      if (errno == ENOENT)
-	non_fatal (_("'%s': No such file"), file_name);
-      else
-	non_fatal (_("Warning: could not locate '%s'.  reason: %s"),
-		   file_name, strerror (errno));
-    }  
-  else if (! S_ISREG (statbuf.st_mode))
-    non_fatal (_("Warning: '%s' is not an ordinary file"), file_name);
-  else
-    return statbuf.st_size;
-
-  return 0;
 }

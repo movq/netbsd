@@ -34,7 +34,7 @@
 #include "der_locl.h"
 
 __RCSID("$Heimdal: der_free.c,v 1.8.6.1 2003/08/20 16:24:20 joda Exp $"
-        "$NetBSD: der_free.c,v 1.1.1.4 2004/04/02 14:47:42 lha Exp $");
+        "$NetBSD: der_free.c,v 1.1.1.3.2.1 2004/04/21 04:55:40 jmc Exp $");
 
 void
 free_general_string (general_string *str)

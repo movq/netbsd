@@ -32,7 +32,7 @@
  */
 
 /* $Heimdal: security.h,v 1.9.12.1 2003/08/20 16:41:53 lha Exp $
-   $NetBSD: security.h,v 1.1.1.5 2004/04/02 14:47:35 lha Exp $ */
+   $NetBSD: security.h,v 1.1.1.4.2.1 2004/04/21 04:55:36 jmc Exp $ */
 
 #ifndef __security_h__
 #define __security_h__

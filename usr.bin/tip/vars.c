@@ -1,4 +1,4 @@
-/*	$NetBSD: vars.c,v 1.7 2004/04/23 22:11:44 christos Exp $	*/
+/*	$NetBSD: vars.c,v 1.6 2003/08/07 11:16:20 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,14 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)vars.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: vars.c,v 1.7 2004/04/23 22:11:44 christos Exp $");
+__RCSID("$NetBSD: vars.c,v 1.6 2003/08/07 11:16:20 agc Exp $");
 #endif /* not lint */
 
 #include "tip.h"
 #include "pathnames.h"
 
-static char path_aculog[] = _PATH_ACULOG;
-static char path_bshell[] = _PATH_BSHELL;
 /*
  * Definition of variables
  */
@@ -69,7 +67,7 @@ value_t vtable[] = {
 	{ "host",	STRING|IREMOTE|INIT,	READ<<PUBLIC,
 	  "ho",		(char *)&HO },
 	{ "log",	STRING|INIT,		(READ|WRITE)<<ROOT,
-	  NULL,		path_aculog },
+	  NULL,		_PATH_ACULOG },
 	{ "phones",	STRING|INIT|IREMOTE,	READ<<PUBLIC,
 	  NULL,		(char *)&PH },
 	{ "prompt",	CHAR,			(READ|WRITE)<<PUBLIC,
@@ -89,7 +87,7 @@ value_t vtable[] = {
 	{ "verbose",	BOOL,			(READ|WRITE)<<PUBLIC,
 	  "verb",	(char *)TRUE },
 	{ "SHELL",	STRING|ENVIRON|INIT,	(READ|WRITE)<<PUBLIC,
-	  NULL,		path_bshell },
+	  NULL,		_PATH_BSHELL },
 	{ "HOME",	STRING|ENVIRON,		(READ|WRITE)<<PUBLIC,
 	  NULL,		NULL },
 	{ "echocheck",	BOOL,			(READ|WRITE)<<PUBLIC,

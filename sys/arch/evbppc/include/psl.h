@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.2 2004/05/12 14:38:17 hannken Exp $	*/
+/*	$NetBSD: psl.h,v 1.1 2002/12/09 12:16:13 scw Exp $	*/
 
 #ifdef _KERNEL_OPT
 #include "opt_ppcarch.h"
@@ -7,14 +7,9 @@
 #include <powerpc/psl.h>
 
 #ifdef PPC_IBM4XX
-/* 4xx don't have PSL_RI */
-#undef PSL_USERSET
-#ifdef PPC_IBM403
-#define	PSL_USERSET	(PSL_EE | PSL_PR | PSL_ME | PSL_IR | PSL_DR)
-#else
 /* Apparently we get unexplained machine checks, so disable them. */
-#define	PSL_USERSET	(PSL_EE | PSL_PR | PSL_IR | PSL_DR)
-#endif
+#undef PSL_USERSET
+#define	PSL_USERSET	(PSL_EE | PSL_PR | PSL_IR | PSL_DR | PSL_RI)
 
 /* 
  * We also need to override the PSL_SE bit.  4xx have completely

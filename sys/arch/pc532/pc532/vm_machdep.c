@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.62 2004/09/17 14:11:21 skrll Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.60 2004/01/23 04:12:39 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.62 2004/09/17 14:11:21 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.60 2004/01/23 04:12:39 simonb Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -267,6 +267,7 @@ cpu_coredump(l, vp, cred, chdr)
 	struct ucred *cred;
 	struct core *chdr;
 {
+	struct proc *p = l->l_proc;
 	struct md_core md_core;
 	struct coreseg cseg;
 	int error;
@@ -292,13 +293,13 @@ cpu_coredump(l, vp, cred, chdr)
 
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
 	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT, cred,
-	    NULL, NULL);
+	    NULL, p);
 	if (error)
 		return error;
 
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&md_core, sizeof(md_core),
 	    (off_t)(chdr->c_hdrsize + chdr->c_seghdrsize), UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 	if (error)
 		return error;
 
@@ -324,6 +325,49 @@ setredzone(pte, vaddr)
    and take the dump while still in mapped mode */
 }
 #endif
+
+/*
+ * Move pages from one kernel virtual address to another.
+ * Both addresses are assumed to reside in the Sysmap,
+ * and size must be a multiple of PAGE_SIZE.
+ */
+void
+pagemove(from, to, size)
+	register caddr_t from, to;
+	size_t size;
+{
+	register pt_entry_t *fpte, *tpte, ofpte, otpte;
+
+	if (size % PAGE_SIZE)
+		panic("pagemove");
+	fpte = kvtopte((vaddr_t)from);
+	tpte = kvtopte((vaddr_t)to);
+
+	if (size <= PAGE_SIZE * 16) {
+		while (size > 0) {
+			otpte = *tpte;
+			ofpte = *fpte;
+			*tpte++ = *fpte;
+			*fpte++ = 0;
+			if (otpte & PG_V)
+				tlbflush_entry((vaddr_t) to);
+			if (ofpte & PG_V)
+				tlbflush_entry((vaddr_t) from);
+			from += PAGE_SIZE;
+			to += PAGE_SIZE;
+			size -= PAGE_SIZE;
+		}
+	} else {
+		while (size > 0) {
+			*tpte++ = *fpte;
+			*fpte++ = 0;
+			from += PAGE_SIZE;
+			to += PAGE_SIZE;
+			size -= PAGE_SIZE;
+		}
+		tlbflush();
+	}
+}
 
 /*
  * Convert kernel VA to physical address

@@ -1,7 +1,7 @@
-/*	$NetBSD: scsipiconf.c,v 1.27 2004/09/18 00:21:03 mycroft Exp $	*/
+/*	$NetBSD: scsipiconf.c,v 1.20.4.1 2004/09/11 12:54:14 he Exp $	*/
 
 /*-
- * Copyright (c) 1998, 1999, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsipiconf.c,v 1.27 2004/09/18 00:21:03 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsipiconf.c,v 1.20.4.1 2004/09/11 12:54:14 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,32 +63,50 @@ __KERNEL_RCSID(0, "$NetBSD: scsipiconf.c,v 1.27 2004/09/18 00:21:03 mycroft Exp 
 #include <sys/device.h>
 #include <sys/proc.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsipiconf.h>
-#include <dev/scsipi/scsipi_base.h>
 
 #define	STRVIS_ISWHITE(x) ((x) == ' ' || (x) == '\0' || (x) == (u_char)'\377')
 
 int
-scsipi_command(struct scsipi_periph *periph, struct scsipi_generic *cmd,
-    int cmdlen, u_char *data_addr, int datalen, int retries, int timeout,
-    struct buf *bp, int flags)
-{
+scsipi_command(periph, xs, cmd, cmdlen, data_addr, datalen,
+     retries, timeout, bp, flags)
+	struct scsipi_periph *periph;
 	struct scsipi_xfer *xs;
+	struct scsipi_generic *cmd;
+	int cmdlen;
+	u_char *data_addr;
+	int datalen;
+	int retries;
+	int timeout;
+	struct buf *bp;
+	int flags;
+{
+	int error;
  
-	xs = scsipi_make_xs(periph, cmd, cmdlen, data_addr, datalen, retries,
-	    timeout, bp, flags);
-	if (!xs)
-		return (ENOMEM);
-
-	return (scsipi_execute_xs(xs));
+	if ((flags & XS_CTL_DATA_ONSTACK) != 0) {
+		/*
+		 * If the I/O buffer is allocated on stack, the
+		 * process must NOT be swapped out, as the device will
+		 * be accessing the stack.
+		 */
+		PHOLD(curlwp);
+	}
+	error = (*periph->periph_channel->chan_bustype->bustype_cmd)(periph,
+	    xs, cmd, cmdlen, data_addr, datalen, retries, timeout, bp, flags);
+	if ((flags & XS_CTL_DATA_ONSTACK) != 0)
+		PRELE(curlwp);
+	return (error);
 }
 
 /*
  * allocate and init a scsipi_periph structure for a new device.
  */
 struct scsipi_periph *
-scsipi_alloc_periph(int malloc_flag)
+scsipi_alloc_periph(malloc_flag)
+	int malloc_flag;
 {
 	struct scsipi_periph *periph;
 	u_int i;
@@ -120,8 +138,11 @@ scsipi_alloc_periph(int malloc_flag)
  * the patterns for the particular driver.
  */
 caddr_t
-scsipi_inqmatch(struct scsipi_inquiry_pattern *inqbuf, caddr_t base,
-    int nmatches, int matchsize, int *bestpriority)
+scsipi_inqmatch(inqbuf, base, nmatches, matchsize, bestpriority)
+	struct scsipi_inquiry_pattern *inqbuf;
+	caddr_t base;
+	int nmatches, matchsize;
+	int *bestpriority;
 {
 	u_int8_t type;
 	caddr_t bestmatch;
@@ -165,10 +186,11 @@ scsipi_inqmatch(struct scsipi_inquiry_pattern *inqbuf, caddr_t base,
 	return (bestmatch);
 }
 
-const char *
-scsipi_dtype(int type)
+char *
+scsipi_dtype(type)
+	int type;
 {
-	const char *dtype;
+	char *dtype;
 
 	switch (type) {
 	case T_DIRECT:
@@ -230,7 +252,9 @@ scsipi_dtype(int type)
 }
 
 void
-scsipi_strvis(u_char *dst, int dlen, u_char *src, int slen)
+scsipi_strvis(dst, dlen, src, slen)
+	u_char *dst, *src;
+	int dlen, slen;
 {
 
 	/* Trim leading and trailing blanks and NULs. */

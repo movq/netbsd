@@ -34,7 +34,7 @@
 #include "krb5_locl.h"
 
 __RCSID("$Heimdal: get_in_tkt.c,v 1.107.2.1 2003/09/18 21:00:09 lha Exp $"
-        "$NetBSD: get_in_tkt.c,v 1.7 2004/07/01 21:27:42 drochner Exp $");
+        "$NetBSD: get_in_tkt.c,v 1.5.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 krb5_error_code
 krb5_init_etype (krb5_context context,
@@ -592,7 +592,7 @@ fail:
 static int
 set_ptypes(krb5_context context,
 	   KRB_ERROR *error, 
-	   const krb5_preauthtype **ptypes,
+	   krb5_preauthtype **ptypes,
 	   krb5_preauthdata **preauth)
 {
     static krb5_preauthdata preauth2;

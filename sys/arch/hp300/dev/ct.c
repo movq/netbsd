@@ -1,4 +1,4 @@
-/*	$NetBSD: ct.c,v 1.39 2004/10/28 07:07:36 yamt Exp $	*/
+/*	$NetBSD: ct.c,v 1.37 2003/11/17 14:37:59 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -82,12 +82,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ct.c,v 1.39 2004/10/28 07:07:36 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ct.c,v 1.37 2003/11/17 14:37:59 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
@@ -144,20 +143,20 @@ struct	ct_softc {
 #define CTF_CANSTREAM	0x200
 #define	CTF_WRTTN	0x400
 
-static int	ctmatch(struct device *, struct cfdata *, void *);
-static void	ctattach(struct device *, struct device *, void *);
+int	ctmatch __P((struct device *, struct cfdata *, void *));
+void	ctattach __P((struct device *, struct device *, void *));
 
 CFATTACH_DECL(ct, sizeof(struct ct_softc),
     ctmatch, ctattach, NULL, NULL);
 
 extern struct cfdriver ct_cd;
 
-static dev_type_open(ctopen);
-static dev_type_close(ctclose);
-static dev_type_read(ctread);
-static dev_type_write(ctwrite);
-static dev_type_ioctl(ctioctl);
-static dev_type_strategy(ctstrategy);
+dev_type_open(ctopen);
+dev_type_close(ctclose);
+dev_type_read(ctread);
+dev_type_write(ctwrite);
+dev_type_ioctl(ctioctl);
+dev_type_strategy(ctstrategy);
 
 const struct bdevsw ct_bdevsw = {
 	ctopen, ctclose, ctstrategy, ctioctl, nodump, nosize, D_TAPE
@@ -168,22 +167,22 @@ const struct cdevsw ct_cdevsw = {
 	nostop, notty, nopoll, nommap, nokqfilter, D_TAPE
 };
 
-static int	ctident(struct device *, struct ct_softc *,
-		    struct hpibbus_attach_args *);
+int	ctident __P((struct device *, struct ct_softc *,
+	    struct hpibbus_attach_args *));
 
-static void	ctreset(struct ct_softc *);
-static void	ctaddeof(struct ct_softc *);
-static void	ctustart(struct ct_softc *);
-static void	cteof(struct ct_softc *, struct buf *);
-static void	ctdone(struct ct_softc *, struct buf *);
+void	ctreset __P((struct ct_softc *));
+void	ctaddeof __P((struct ct_softc *));
+void	ctustart __P((struct ct_softc *));
+void	cteof __P((struct ct_softc *, struct buf *));
+void	ctdone __P((struct ct_softc *, struct buf *));
 
-static void	ctstart(void *);
-static void	ctgo(void *);
-static void	ctintr(void *);
+void	ctstart __P((void *));
+void	ctgo __P((void *));
+void	ctintr __P((void *));
 
-static void	ctcommand(dev_t, int, int);
+void	ctcommand __P((dev_t, int, int));
 
-static const struct ctinfo {
+struct	ctinfo {
 	short	hwid;
 	short	punit;
 	char	*desc;
@@ -195,7 +194,7 @@ static const struct ctinfo {
 	{ CT9145ID,	0,	"9145"	},
 	{ CT35401ID,	0,	"35401A"},
 };
-static const int nctinfo = sizeof(ctinfo) / sizeof(ctinfo[0]);
+int	nctinfo = sizeof(ctinfo) / sizeof(ctinfo[0]);
 
 #define	CT_NOREW	4
 #define	CT_STREAM	8
@@ -208,16 +207,21 @@ int ctdebug = 0;
 #define CT_BSF		0x02
 #endif
 
-static int
-ctmatch(struct device *parent, struct cfdata *match, void *aux)
+int
+ctmatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct hpibbus_attach_args *ha = aux;
 
 	return (ctident(parent, NULL, ha));
 }
 
-static void
-ctattach(struct device *parent, struct device *self, void *aux)
+void
+ctattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct ct_softc *sc = (struct ct_softc *)self;
 	struct hpibbus_attach_args *ha = aux;
@@ -244,9 +248,11 @@ ctattach(struct device *parent, struct device *self, void *aux)
 	sc->sc_flags |= CTF_ALIVE;
 }
 
-static int
-ctident(struct device *parent, struct ct_softc *sc,
-    struct hpibbus_attach_args *ha)
+int
+ctident(parent, sc, ha)
+	struct device *parent;
+	struct ct_softc *sc;
+	struct hpibbus_attach_args *ha;
 {
 	struct ct_describe desc;
 	u_char stat, cmd[3];
@@ -316,8 +322,9 @@ ctident(struct device *parent, struct ct_softc *sc,
 	return (1);
 }
 
-static void
-ctreset(struct ct_softc *sc)
+void
+ctreset(sc)
+	struct ct_softc *sc;
 {
 	int ctlr, slave;
 	u_char stat;
@@ -359,8 +366,11 @@ ctreset(struct ct_softc *sc)
 }
 
 /*ARGSUSED*/
-static int
-ctopen(dev_t dev, int flag, int type, struct proc *p)
+int
+ctopen(dev, flag, type, p)
+	dev_t dev;
+	int flag, type;
+	struct proc *p;
 {
 	struct ct_softc *sc;
 	u_char stat;
@@ -405,8 +415,11 @@ ctopen(dev_t dev, int flag, int type, struct proc *p)
 }
 
 /*ARGSUSED*/
-static int
-ctclose(dev_t dev, int flag, int fmt, struct proc *p)
+int
+ctclose(dev, flag, fmt, p)
+	dev_t dev;
+	int flag, fmt;
+	struct proc *p;
 {
 	struct ct_softc *sc = ct_cd.cd_devs[UNIT(dev)];
 
@@ -436,8 +449,11 @@ ctclose(dev_t dev, int flag, int fmt, struct proc *p)
 	return(0);	/* XXX */
 }
 
-static void
-ctcommand(dev_t dev, int cmd, int cnt)
+void
+ctcommand(dev, cmd, cnt)
+	dev_t dev;
+	int cmd;
+	int cnt;
 {
 	struct ct_softc *sc = ct_cd.cd_devs[UNIT(dev)];
 	struct buf *bp = &sc->sc_bufstore;
@@ -487,8 +503,9 @@ ctcommand(dev_t dev, int cmd, int cnt)
 		brelse(nbp);
 }
 
-static void
-ctstrategy(struct buf *bp)
+void
+ctstrategy(bp)
+	struct buf *bp;
 {
 	int s, unit;
 	struct ct_softc *sc;
@@ -505,8 +522,9 @@ ctstrategy(struct buf *bp)
 	splx(s);
 }
 
-static void
-ctustart(struct ct_softc *sc)
+void
+ctustart(sc)
+	struct ct_softc *sc;
 {
 	struct buf *bp;
 
@@ -517,8 +535,9 @@ ctustart(struct ct_softc *sc)
 		ctstart(sc);
 }
 
-static void
-ctstart(void *arg)
+void
+ctstart(arg)
+	void *arg;
 {
 	struct ct_softc *sc = arg;
 	struct buf *bp;
@@ -630,8 +649,9 @@ mustio:
 	hpibawait(ctlr);
 }
 
-static void
-ctgo(void *arg)
+void
+ctgo(arg)
+	void *arg;
 {
 	struct ct_softc *sc = arg;
 	struct buf *bp;
@@ -646,8 +666,10 @@ ctgo(void *arg)
 /*
  * Hideous grue to handle EOF/EOT (mostly for reads)
  */
-static void
-cteof(struct ct_softc *sc, struct buf *bp)
+void
+cteof(sc, bp)
+	struct ct_softc *sc;
+	struct buf *bp;
 {
 	long blks;
 
@@ -718,8 +740,9 @@ cteof(struct ct_softc *sc, struct buf *bp)
 }
 
 /* ARGSUSED */
-static void
-ctintr(void *arg)
+void
+ctintr(arg)
+	void *arg;
 {
 	struct ct_softc *sc = arg;
 	struct buf *bp;
@@ -861,8 +884,10 @@ done:
 	ctdone(sc, bp);
 }
 
-static void
-ctdone(struct ct_softc *sc, struct buf *bp)
+void
+ctdone(sc, bp)
+	struct ct_softc *sc;
+	struct buf *bp;
 {
 
 	(void)BUFQ_GET(&sc->sc_tab);
@@ -875,22 +900,33 @@ ctdone(struct ct_softc *sc, struct buf *bp)
 	ctustart(sc);
 }
 
-static int
-ctread(dev_t dev, struct uio *uio, int flags)
+int
+ctread(dev, uio, flags)
+	dev_t dev;
+	struct uio *uio;
+	int flags;
 {
 	return (physio(ctstrategy, NULL, dev, B_READ, minphys, uio));
 }
 
-static int
-ctwrite(dev_t dev, struct uio *uio, int flags)
+int
+ctwrite(dev, uio, flags)
+	dev_t dev;
+	struct uio *uio;
+	int flags;
 {
 	/* XXX: check for hardware write-protect? */
 	return (physio(ctstrategy, NULL, dev, B_WRITE, minphys, uio));
 }
 
 /*ARGSUSED*/
-static int
-ctioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
+int
+ctioctl(dev, cmd, data, flag, p)
+	dev_t dev;
+	u_long cmd;
+	int flag;
+	caddr_t data;
+	struct proc *p;
 {
 	struct mtop *op;
 	int cnt;
@@ -929,8 +965,9 @@ ctioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 	return(0);
 }
 
-static void
-ctaddeof(struct ct_softc *sc)
+void
+ctaddeof(sc)
+	struct ct_softc *sc;
 {
 
 	if (sc->sc_eofp == EOFS - 1)

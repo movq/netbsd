@@ -1,4 +1,4 @@
-/*	$NetBSD: usbhid.c,v 1.27 2004/11/05 22:44:57 dsl Exp $	*/
+/*      $NetBSD: usbhid.c,v 1.24 2004/01/05 23:23:37 jmmv Exp $ */
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: usbhid.c,v 1.27 2004/11/05 22:44:57 dsl Exp $");
+__RCSID("$NetBSD: usbhid.c,v 1.24 2004/01/05 23:23:37 jmmv Exp $");
 #endif
 
 #include <sys/types.h>
@@ -285,7 +285,7 @@ hidtestrule(struct Susbvar *var, struct usagedata *cache)
 
 /*
  * hidmatch() determines whether the item specified in 'item', and
- * nested within a hierarchy of collections specified in 'collist'
+ * nested within a heirarchy of collections specified in 'collist'
  * matches any of the rules in the list 'varlist'.  Returns the
  * matching rule on success, or NULL on no match.
  */
@@ -438,9 +438,8 @@ getreport(struct Sreport *report, int hidfd, report_desc_t rd, int repindex)
 
 		report->buffer->ucr_report = reptoparam[repindex].uhid_report;
 		if (ioctl(hidfd, USB_GET_REPORT, report->buffer) < 0)
-			err(1, "USB_GET_REPORT(%s) [probably not supported by "
-			    "device]",
-			    reptoparam[repindex].name);
+			err(1, "USB_GET_REPORT (probably not supported by "
+			    "device)");
 	}
 }
 
@@ -941,7 +940,7 @@ main(int argc, char **argv)
 
 	if (dev[0] != '/') {
 		snprintf(devnamebuf, sizeof(devnamebuf), "/dev/%s%s",
-			 isdigit((unsigned char)dev[0]) ? "uhid" : "", dev);
+			 isdigit(dev[0]) ? "uhid" : "", dev);
 		dev = devnamebuf;
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: npx_hv.c,v 1.2 2004/04/24 17:35:27 cl Exp $	*/
+/*	$NetBSD: npx_hv.c,v 1.1.2.1 2004/05/22 15:59:31 he Exp $	*/
 
 /*
  *
@@ -33,7 +33,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npx_hv.c,v 1.2 2004/04/24 17:35:27 cl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npx_hv.c,v 1.1.2.1 2004/05/22 15:59:31 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

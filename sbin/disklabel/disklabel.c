@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.c,v 1.135 2004/11/12 01:00:40 hubertf Exp $	*/
+/*	$NetBSD: disklabel.c,v 1.130.2.1 2004/09/11 10:47:44 he Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -43,7 +43,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
 static char sccsid[] = "@(#)disklabel.c	8.4 (Berkeley) 5/4/95";
 /* from static char sccsid[] = "@(#)disklabel.c	1.2 (Symmetric) 11/28/85"; */
 #else
-__RCSID("$NetBSD: disklabel.c,v 1.135 2004/11/12 01:00:40 hubertf Exp $");
+__RCSID("$NetBSD: disklabel.c,v 1.130.2.1 2004/09/11 10:47:44 he Exp $");
 #endif
 #endif	/* not lint */
 
@@ -343,8 +343,6 @@ main(int argc, char *argv[])
 			showpartitions(stdout, lp, Cflag);
 		}
 		error = checklabel(lp);
-		if (error)
-			error += 100;
 		break;
 
 	case RESTORE:
@@ -359,8 +357,6 @@ main(int argc, char *argv[])
 			err(4, "%s", argv[1]);
 		if (getasciilabel(t, lp))
 			error = writelabel(f, bootarea, lp);
-		else
-			error = 1;
 		break;
 
 	case SETWRITABLE:
@@ -1717,8 +1713,8 @@ gottype:
 int
 checklabel(struct disklabel *lp)
 {
-	struct partition *pp, *qp;
-	int	i, j, errors;
+	struct partition *pp;
+	int	i, errors;
 	char	part;
 
 	errors = 0;
@@ -1789,7 +1785,7 @@ checklabel(struct disklabel *lp)
 #ifdef STRICT_CYLINDER_ALIGNMENT
 		if (pp->p_offset % lp->d_secpercyl) {
 			warnx("warning, partition %c:"
-			    " not starting on cylinder boundary",
+			    " offset %% cylinder-size != 0",
 			    part);
 			errors++;
 		}
@@ -1804,16 +1800,6 @@ checklabel(struct disklabel *lp)
 			    part);
 			errors++;
 		}
-		if (pp->p_fstype != FS_UNUSED)
-			for (j = i + 1; j < lp->d_npartitions; j++) {
-				qp = &lp->d_partitions[j];
-				if (qp->p_fstype == FS_UNUSED)
-					continue;
-				if (pp->p_offset < qp->p_offset + qp->p_size &&
-				    qp->p_offset < pp->p_offset + pp->p_size)
-					warnx("partitions %c and %c overlap",
-					    part, 'a' + j);
-			}
 	}
 	return (errors);
 }

@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.x11.mk,v 1.42 2004/12/02 16:33:47 fredb Exp $
+#	$NetBSD: bsd.x11.mk,v 1.38.2.3 2004/08/12 04:08:26 jmc Exp $
 
 .include <bsd.init.mk>
 
@@ -164,8 +164,7 @@ cleanx11man: .PHONY
 .man.1 .man.3 .man.4 .man.5 .man.7:
 	${_MKTARGET_CREATE}
 	rm -f ${.TARGET}
-	sed -e 's/\\$$/\\ /' ${.IMPSRC} \
-	| ${CPP} -undef -traditional \
+	${CPP} -undef -traditional \
 	    -D__apploaddir__=${X11ROOTDIR}/lib/X11/app-defaults \
 	    -D__libmansuffix__=3 \
 	    -D__filemansuffix__=5 \
@@ -176,4 +175,4 @@ cleanx11man: .PHONY
 	    -D__xorgversion__='"Release 6.6" "X Version 11"' \
 	    -D__vendorversion__="XFree86 4.4.0" \
 	    ${X11EXTRAMANDEFS} \
-	| ${X11TOOL_UNXCOMM} > ${.TARGET}
+	< ${.IMPSRC} | ${X11TOOL_UNXCOMM} > ${.TARGET}

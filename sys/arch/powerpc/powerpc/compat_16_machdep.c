@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_16_machdep.c,v 1.4 2004/04/15 21:07:07 matt Exp $	*/
+/*	$NetBSD: compat_16_machdep.c,v 1.2 2003/09/25 22:22:36 matt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,10 +32,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.4 2004/04/15 21:07:07 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.2 2003/09/25 22:22:36 matt Exp $");
 
 #include "opt_compat_netbsd.h"
-#include "opt_altivec.h"
 #include "opt_ppcarch.h"
 
 #include <sys/param.h>
@@ -87,13 +86,7 @@ sendsig_sigcontext(int sig, const sigset_t *mask, u_long code)
 	utf->xer  = tf->xer;
 	utf->ctr  = tf->ctr;
 	utf->srr0 = tf->srr0;
-	utf->srr1 = tf->srr1 & PSL_USERSRR1;
-#ifdef PPC_HAVE_FPU
-	utf->srr1 |= l->l_addr->u_pcb.pcb_flags & (PCB_FE0|PCB_FE1);
-#endif
-#ifdef ALTIVEC
-	utf->srr1 |= l->l_addr->u_pcb.pcb_flags & PCB_ALTIVEC ? PSL_VEC : 0;
-#endif
+	utf->srr1 = tf->srr1;
 #ifdef PPC_OEA
 	utf->vrsave = tf->tf_xtra[TF_VRSAVE];
 	utf->mq = tf->tf_xtra[TF_MQ];
@@ -184,11 +177,7 @@ compat_16_sys___sigreturn14(struct lwp *l, void *v, register_t *retval)
 
 	/* Restore the register context. */
 	tf = trapframe(l);
-
-	/*
-	 * Make sure SRR1 hasn't been maliciously tampered with.
-	 */
-	if (!PSL_USEROK_P(sc.sc_frame.srr1))
+	if ((sc.sc_frame.srr1 & PSL_USERSTATIC) != (tf->srr1 & PSL_USERSTATIC))
 		return (EINVAL);
 
 	/* Restore register context. */
@@ -199,10 +188,6 @@ compat_16_sys___sigreturn14(struct lwp *l, void *v, register_t *retval)
 	tf->ctr  = utf->ctr;
 	tf->srr0 = utf->srr0;
 	tf->srr1 = utf->srr1;
-#ifdef PPC_HAVE_FPU
-	l->l_addr->u_pcb.pcb_flags &= ~(PCB_FE0|PCB_FE1);
-	l->l_addr->u_pcb.pcb_flags |= utf->srr1 & (PCB_FE0|PCB_FE1);
-#endif
 #ifdef PPC_OEA
 	tf->tf_xtra[TF_VRSAVE] = utf->vrsave;
 	tf->tf_xtra[TF_MQ] = utf->mq;

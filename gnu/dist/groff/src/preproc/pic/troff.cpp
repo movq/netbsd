@@ -1,4 +1,4 @@
-/*	$NetBSD: troff.cpp,v 1.1.1.2 2004/07/30 14:44:59 wiz Exp $	*/
+/*	$NetBSD: troff.cpp,v 1.1.1.1 2003/06/30 17:52:11 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1989, 1990, 1991, 1992, 2000, 2001, 2002, 2003
@@ -199,11 +199,7 @@ void simple_output::ellipse(const position &cent, const distance &dim,
   case line_type::invisible:
     break;
   case line_type::dotted:
-    dotted_ellipse(cent, dim, lt);
-    break;
   case line_type::dashed:
-    dashed_ellipse(cent, dim, lt);
-    break;
   case line_type::solid:
     simple_ellipse(0, cent, dim);
     break;
@@ -326,7 +322,7 @@ void troff_output::simple_circle(int filled, const position &cent, double rad)
   position c = transform(cent);
   printf("\\h'%.3fi'"
 	 "\\v'%.3fi'"
-	 "\\D'%c %.3fi'"
+	 "\\D'%c%.3fi'"
 	 "\n.sp -1\n",
 	 c.x - rad/scale,
 	 c.y,
@@ -340,7 +336,7 @@ void troff_output::simple_ellipse(int filled, const position &cent,
   position c = transform(cent);
   printf("\\h'%.3fi'"
 	 "\\v'%.3fi'"
-	 "\\D'%c %.3fi %.3fi'"
+	 "\\D'%c%.3fi %.3fi'"
 	 "\n.sp -1\n",
 	 c.x - dim.x/(2.0*scale),
 	 c.y,
@@ -357,7 +353,7 @@ void troff_output::simple_arc(const position &start, const distance &cent,
   distance ev = transform(end) - c;
   printf("\\h'%.3fi'"
 	 "\\v'%.3fi'"
-	 "\\D'a %.3fi %.3fi %.3fi %.3fi'"
+	 "\\D'a%.3fi %.3fi %.3fi %.3fi'"
 	 "\n.sp -1\n",
 	 s.x, s.y, cv.x, cv.y, ev.x, ev.y);
 }
@@ -368,7 +364,7 @@ void troff_output::simple_line(const position &start, const position &end)
   distance ev = transform(end) - s;
   printf("\\h'%.3fi'"
 	 "\\v'%.3fi'"
-	 "\\D'l %.3fi %.3fi'"
+	 "\\D'l%.3fi %.3fi'"
 	 "\n.sp -1\n",
 	 s.x, s.y, ev.x, ev.y);
 }
@@ -380,7 +376,7 @@ void troff_output::simple_spline(const position &start,
   printf("\\h'%.3fi'"
 	 "\\v'%.3fi'",
 	 pos.x, pos.y);
-  fputs("\\D'~ ", stdout);
+  fputs("\\D'~", stdout);
   for (int i = 0; i < n; i++) {
     position temp = transform(v[i]);
     distance d = temp - pos;
@@ -400,7 +396,7 @@ void troff_output::simple_polygon(int filled, const position *v, int n)
   printf("\\h'%.3fi'"
 	 "\\v'%.3fi'",
 	 pos.x, pos.y);
-  printf("\\D'%c ", (filled ? 'P' : 'p'));
+  printf("\\D'%c", (filled ? 'P' : 'p'));
   for (int i = 1; i < n; i++) {
     position temp = transform(v[i]);
     distance d = temp - pos;
@@ -482,15 +478,13 @@ void troff_output::line_thickness(double p)
 void troff_output::set_fill(double f)
 {
   if (driver_extension_flag && f != last_fill) {
-    // \D'Fg ...' emits a node only in compatibility mode,
-    // thus we add a dummy node
-    printf("\\&\\D'Fg %.3f'\n.sp -1\n", 1.0 - f);
+    printf("\\D'Fg %.3f'\n.sp -1\n", 1.0 - f);
     last_fill = f;
   }
   if (last_filled) {
     free(last_filled);
     last_filled = 0;
-    printf("\\M[]\n");
+    printf("\\M[]\n.sp -1\n");
   }
 }
 
@@ -500,14 +494,12 @@ void troff_output::set_color(char *color_fill, char *color_outlined)
     if (last_filled || last_outlined) {
       reset_color();
     }
-    // \m and \M emit a node in compatibility mode only,
-    // but that won't work anyway
     if (color_fill) {
-      printf("\\M[%s]\n", color_fill);
+      printf("\\M[%s]\n.sp -1\n", color_fill);
       last_filled = strsave(color_fill);
     }
     if (color_outlined) {
-      printf("\\m[%s]\n", color_outlined);
+      printf("\\m[%s]\n.sp -1\n", color_outlined);
       last_outlined = strsave(color_outlined);
     }
   }
@@ -517,12 +509,12 @@ void troff_output::reset_color()
 {
   if (driver_extension_flag) {
     if (last_filled) {
-      printf("\\M[]\n");
+      printf("\\M[]\n.sp -1\n");
       a_delete last_filled;
       last_filled = 0;
     }
     if (last_outlined) {
-      printf("\\m[]\n");
+      printf("\\m[]\n.sp -1\n");
       a_delete last_outlined;
       last_outlined = 0;
     }

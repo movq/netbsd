@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_vfsops.c,v 1.16 2004/09/13 19:25:48 jdolecek Exp $	*/
+/*	$NetBSD: filecore_vfsops.c,v 1.9.2.1 2004/05/29 09:05:15 tron Exp $	*/
 
 /*-
  * Copyright (c) 1994 The Regents of the University of California.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_vfsops.c,v 1.16 2004/09/13 19:25:48 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_vfsops.c,v 1.9.2.1 2004/05/29 09:05:15 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -109,7 +109,7 @@ struct vfsops filecore_vfsops = {
 	filecore_unmount,
 	filecore_root,
 	filecore_quotactl,
-	filecore_statvfs,
+	filecore_statfs,
 	filecore_sync,
 	filecore_vget,
 	filecore_fhtovp,
@@ -120,7 +120,6 @@ struct vfsops filecore_vfsops = {
 	NULL,
 	NULL,				/* filecore_mountroot */
 	filecore_checkexp,
-	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	filecore_vnodeopv_descs,
 };
 
@@ -169,7 +168,7 @@ filecore_mountroot()
 	simple_lock(&mountlist_slock);
 	CIRCLEQ_INSERT_TAIL(&mountlist, mp, mnt_list);
 	simple_unlock(&mountlist_slock);
-	(void)filecore_statvfs(mp, &mp->mnt_stat, p);
+	(void)filecore_statfs(mp, &mp->mnt_stat, p);
 	vfs_unbusy(mp);
 	return (0);
 }
@@ -204,7 +203,7 @@ filecore_mount(mp, path, data, ndp, p)
 		vfs_showexport(mp, &args.export, &fcmp->fc_export);
 		return copyout(&args, data, sizeof(args));
 	}
-	error = copyin(data, &args, sizeof (struct filecore_args));
+	error = copyin(data, (caddr_t)&args, sizeof (struct filecore_args));
 	if (error)
 		return (error);
 	
@@ -263,7 +262,7 @@ filecore_mount(mp, path, data, ndp, p)
 		return error;
 	}
 	fcmp = VFSTOFILECORE(mp);
-	return set_statvfs_info(path, UIO_USERSPACE, args.fspec, UIO_USERSPACE,
+	return set_statfs_info(path, UIO_USERSPACE, args.fspec, UIO_USERSPACE,
 	    mp, p);
 }
 
@@ -343,12 +342,12 @@ filecore_mountfs(devvp, mp, p, argp)
 		goto out;
        	fcdr = (struct filecore_disc_record *)(bp->b_data + 4);
 	fcmp = malloc(sizeof *fcmp, M_FILECOREMNT, M_WAITOK);
-	memset(fcmp, 0, sizeof *fcmp);
+	memset((caddr_t)fcmp, 0, sizeof *fcmp);
 	if (fcdr->log2bpmb > fcdr->log2secsize)
 		fcmp->log2bsize = fcdr->log2bpmb;
 	else	fcmp->log2bsize = fcdr->log2secsize;
 	fcmp->blksize = 1 << fcmp->log2bsize;
-	memcpy(&fcmp->drec, fcdr, sizeof(*fcdr));
+	memcpy((caddr_t)&fcmp->drec, (caddr_t)fcdr, sizeof(*fcdr));
 	fcmp->map = map;
 	fcmp->idspz = ((8 << fcdr->log2secsize) - fcdr->zone_spare)
 	    / (fcdr->idlen + 1);
@@ -368,10 +367,9 @@ filecore_mountfs(devvp, mp, p, argp)
 	bp = NULL;
 
 	mp->mnt_data = fcmp;
-	mp->mnt_stat.f_fsidx.__fsid_val[0] = (long)dev;
-	mp->mnt_stat.f_fsidx.__fsid_val[1] = makefstype(MOUNT_FILECORE);
-	mp->mnt_stat.f_fsid = mp->mnt_stat.f_fsidx.__fsid_val[0];
-	mp->mnt_stat.f_namemax = 10;
+	mp->mnt_stat.f_fsid.val[0] = (long)dev;
+	mp->mnt_stat.f_fsid.val[1] = makefstype(MOUNT_FILECORE);
+	mp->mnt_maxsymlinklen = 0;
 	mp->mnt_flag |= MNT_LOCAL;
 	mp->mnt_dev_bshift = fcdr->log2secsize;
 	mp->mnt_fs_bshift = fcmp->log2bsize;
@@ -400,7 +398,7 @@ out:
 	(void)VOP_CLOSE(devvp, ronly ? FREAD : FREAD|FWRITE, NOCRED, p);
 	VOP_UNLOCK(devvp, 0);
 	if (fcmp) {
-		free(fcmp, M_FILECOREMNT);
+		free((caddr_t)fcmp, M_FILECOREMNT);
 		mp->mnt_data = NULL;
 	}
 	return error;
@@ -449,7 +447,7 @@ filecore_unmount(mp, mntflags, p)
 	vn_lock(fcmp->fc_devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_CLOSE(fcmp->fc_devvp, FREAD, NOCRED, p);
 	vput(fcmp->fc_devvp);
-	free(fcmp, M_FILECOREMNT);
+	free((caddr_t)fcmp, M_FILECOREMNT);
 	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
 	return (error);
@@ -481,7 +479,7 @@ filecore_quotactl(mp, cmd, uid, arg, p)
 	struct mount *mp;
 	int cmd;
 	uid_t uid;
-	void *arg;
+	caddr_t arg;
 	struct proc *p;
 {
 
@@ -492,25 +490,26 @@ filecore_quotactl(mp, cmd, uid, arg, p)
  * Get file system statistics.
  */
 int
-filecore_statvfs(mp, sbp, p)
+filecore_statfs(mp, sbp, p)
 	struct mount *mp;
-	struct statvfs *sbp;
+	struct statfs *sbp;
 	struct proc *p;
 {
 	struct filecore_mnt *fcmp = VFSTOFILECORE(mp);
 
+#ifdef COMPAT_09
+	sbp->f_type = 255;
+#else
+	sbp->f_type = 0;
+#endif
 	sbp->f_bsize = fcmp->blksize;
-	sbp->f_frsize = sbp->f_bsize; /* XXX */
 	sbp->f_iosize = sbp->f_bsize;	/* XXX */
 	sbp->f_blocks = fcmp->nblks;
 	sbp->f_bfree = 0; /* total free blocks */
 	sbp->f_bavail = 0; /* blocks free for non superuser */
-	sbp->f_bresvd = 0; /* reserved blocks */
 	sbp->f_files =  0; /* total files */
-	sbp->f_ffree = 0; /* free file nodes for non superuser */
-	sbp->f_favail = 0; /* free file nodes */
-	sbp->f_fresvd = 0; /* reserved file nodes */
-	copy_statvfs_info(sbp, mp);
+	sbp->f_ffree = 0; /* free file nodes */
+	copy_statfs_info(sbp, mp);
 	return 0;
 }
 
@@ -641,7 +640,7 @@ filecore_vget(mp, ino, vpp)
 
 	if (ino == FILECORE_ROOTINO) {
 		/* Here we need to construct a root directory inode */
-		memcpy(ip->i_dirent.name, "root", 4);
+		memcpy((caddr_t)ip->i_dirent.name, (caddr_t)"root", 4);
 		ip->i_dirent.load = 0;
 		ip->i_dirent.exec = 0;
 		ip->i_dirent.len = FILECORE_DIR_SIZE;
@@ -661,8 +660,8 @@ filecore_vget(mp, ino, vpp)
 			return (error);
 		}
 		
-		memcpy(&ip->i_dirent,
-		    fcdirentry(bp->b_data, ino >> FILECORE_INO_INDEX),
+		memcpy((caddr_t)&ip->i_dirent,
+		    (caddr_t)fcdirentry(bp->b_data, ino >> FILECORE_INO_INDEX),
 		    sizeof(struct filecore_direntry));
 #ifdef FILECORE_DEBUG_BR
 		printf("brelse(%p) vf5\n", bp);

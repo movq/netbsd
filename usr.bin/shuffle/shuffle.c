@@ -1,4 +1,4 @@
-/*	$NetBSD: shuffle.c,v 1.18 2004/12/01 00:03:45 perry Exp $	*/
+/*	$NetBSD: shuffle.c,v 1.15.2.1 2004/05/20 09:45:50 tron Exp $	*/
 
 /*
  * Copyright (c) 1998
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: shuffle.c,v 1.18 2004/12/01 00:03:45 perry Exp $");
+__RCSID("$NetBSD: shuffle.c,v 1.15.2.1 2004/05/20 09:45:50 tron Exp $");
 #endif /* not lint */
 
 #include <sys/time.h>
@@ -110,11 +110,11 @@ get_shuffle(size_t t)
 	
 	/*
 	 * This algorithm taken from Knuth, Seminumerical Algorithms,
-	 * 2nd Ed., page 139.
+	 * page 139.
 	 */
 
 	for (j = t - 1; j > 0; j--) {
-		k = arc4random() % (j + 1);
+		k = random() % (j + 1);
 		temp = shuffle[j];
 		shuffle[j] = shuffle[k];
 		shuffle[k] = temp;
@@ -202,6 +202,7 @@ main(int argc, char *argv[])
 	int i, nflag = 0, pflag = 0, ch;
 	char *fname = NULL;
 	size_t *shuffle = NULL;
+	struct timeval tv;
 	char **lines = NULL;
 	size_t nlines = 0, pick = 0;
 	char sep = '\n';
@@ -240,6 +241,8 @@ main(int argc, char *argv[])
 		nlines = argc;
 	}
 
+	gettimeofday(&tv, NULL);
+	srandom(getpid() ^ ~getuid() ^ tv.tv_sec ^ tv.tv_usec);
 	if (nlines > 0)
 		shuffle = get_shuffle(nlines);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcmciachip.h,v 1.9 2004/09/13 12:55:48 drochner Exp $	*/
+/*	$NetBSD: pcmciachip.h,v 1.6 2001/12/15 13:23:23 soren Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -88,7 +88,6 @@ struct pcmcia_chip_functions {
 	/* card enable/disable */
 	void	(*socket_enable) __P((pcmcia_chipset_handle_t));
 	void	(*socket_disable) __P((pcmcia_chipset_handle_t));
-	void	(*socket_settype) __P((pcmcia_chipset_handle_t, int));
 
 	/* card detection */
 	int (*card_detect) __P((pcmcia_chipset_handle_t));  
@@ -136,8 +135,6 @@ struct pcmcia_chip_functions {
 	((*(tag)->socket_enable)((handle)))
 #define	pcmcia_chip_socket_disable(tag, handle)				\
 	((*(tag)->socket_disable)((handle)))
-#define	pcmcia_chip_socket_settype(tag, handle, type)			\
-	((*(tag)->socket_settype)((handle), (type)))
 
 struct pcmciabus_attach_args {
 	char *paa_busname;	/* Bus name */
@@ -152,5 +149,6 @@ struct pcmciabus_attach_args {
 int	pcmcia_card_attach __P((struct device *));
 void	pcmcia_card_detach __P((struct device *, int));
 void	pcmcia_card_deactivate __P((struct device *));
+int	pcmcia_card_gettype __P((struct device *));
 
 #endif /* _PCMCIA_PCMCIACHIP_H_ */

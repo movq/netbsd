@@ -1,4 +1,4 @@
-/*	$NetBSD: _setjmp.S,v 1.6 2004/08/21 11:20:10 rearnsha Exp $	*/
+/*	$NetBSD: _setjmp.S,v 1.5 2003/04/05 23:08:51 bjh21 Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe
@@ -64,7 +64,7 @@ ENTRY(_setjmp)
         stmia	r0, {r4-r14}
 
         mov	r0, #0x00000000
-        RET
+        mov	r15, r14
 
 .L_setjmp_magic:
 	.word	_JB_MAGIC__SETJMP
@@ -96,7 +96,7 @@ ENTRY(_longjmp)
 	mov	r0, r1
 	teq	r0, #0x00000000
 	moveq	r0, #0x00000001
-	RET
+	mov	r15, r14
 
 	/* validation failed, die die die. */
 botch:

@@ -1,4 +1,4 @@
-/*	$NetBSD: irix_prctl.c,v 1.24 2004/10/27 19:29:57 david Exp $ */
+/*	$NetBSD: irix_prctl.c,v 1.23.2.1 2004/11/12 06:56:16 jmc Exp $ */
 
 /*-
  * Copyright (c) 2001-2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: irix_prctl.c,v 1.24 2004/10/27 19:29:57 david Exp $");
+__KERNEL_RCSID(0, "$NetBSD: irix_prctl.c,v 1.23.2.1 2004/11/12 06:56:16 jmc Exp $");
 
 #include <sys/errno.h>
 #include <sys/types.h>

@@ -30,7 +30,7 @@
 #include "telnetd.h"
 
 __RCSID("$Heimdal: telnetd.c,v 1.69.6.1 2004/03/22 18:17:25 lha Exp $"
-        "$NetBSD: telnetd.c,v 1.3 2004/04/02 14:59:47 lha Exp $");
+        "$NetBSD: telnetd.c,v 1.2.2.1 2004/04/21 04:55:38 jmc Exp $");
 
 #ifdef _SC_CRAY_SECURE_SYS
 #include <sys/sysv.h>

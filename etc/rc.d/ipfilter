@@ -1,12 +1,12 @@
 #!/bin/sh
 #
-# $NetBSD: ipfilter,v 1.13 2004/11/08 02:09:01 lukem Exp $
+# $NetBSD: ipfilter,v 1.10.4.2 2004/11/12 06:44:17 jmc Exp $
 #
 
 # PROVIDE: ipfilter
 # REQUIRE: root beforenetlkm mountcritlocal tty
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="ipfilter"
 rcvar=$name

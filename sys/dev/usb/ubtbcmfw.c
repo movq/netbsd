@@ -1,4 +1,4 @@
-/*	$NetBSD: ubtbcmfw.c,v 1.9 2004/09/17 14:11:24 skrll Exp $	*/
+/*	$NetBSD: ubtbcmfw.c,v 1.7 2003/12/01 01:09:24 atatat Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ubtbcmfw.c,v 1.9 2004/09/17 14:11:24 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ubtbcmfw.c,v 1.7 2003/12/01 01:09:24 atatat Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -114,7 +114,7 @@ USB_ATTACH(ubtbcmfw)
 	usbd_pipe_handle bulk_out_pipe;
 	uint n;
 
-	usbd_devinfo(dev, 0, devinfo, sizeof(devinfo));
+	usbd_devinfo(dev, 0, devinfo);
 	USB_ATTACH_SETUP;
 	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfo);
 
@@ -246,7 +246,7 @@ ubtbcmfw_load_file(usbd_device_handle dev, usbd_pipe_handle out,
 	for (offs = 0; ; offs += size) {
 		size = sizeof buf;
 		error = vn_rdwr(UIO_READ, vp, buf, size, offs, UIO_SYSSPACE,
-		    IO_NODELOCKED | IO_SYNC, p->p_ucred, &resid, NULL);
+		    IO_NODELOCKED | IO_SYNC, p->p_ucred, &resid, p);
 		size -= resid;
 		if (error || size == 0)
 			break;

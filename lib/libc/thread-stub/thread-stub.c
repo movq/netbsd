@@ -1,4 +1,4 @@
-/*	$NetBSD: thread-stub.c,v 1.12 2004/12/14 00:21:40 nathanw Exp $	*/
+/*	$NetBSD: thread-stub.c,v 1.9 2003/07/18 21:44:38 nathanw Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -329,7 +329,7 @@ __libc_thr_keydelete_stub(thread_key_t k)
 int	__libc_thr_once_stub(once_t *, void (*)(void));
 int	__libc_thr_sigsetmask_stub(int, const sigset_t *, sigset_t *);
 thr_t	__libc_thr_self_stub(void);
-int	__libc_thr_yield_stub(void);
+void	__libc_thr_yield_stub(void);
 int	__libc_thr_create_stub(thr_t *, const thrattr_t *,
 	    void *(*)(void *), void *);
 void	__libc_thr_exit_stub(void *);
@@ -363,10 +363,18 @@ __libc_thr_once_stub(once_t *o, void (*r)(void))
 int
 __libc_thr_sigsetmask_stub(int h, const sigset_t *s, sigset_t *o)
 {
+	/* LINTED deliberate lack of effect */
+	(void)h;
+	/* LINTED deliberate lack of effect */
+	(void)s;
+	/* LINTED deliberate lack of effect */
+	(void)o;
 
 	CHECK_NOT_THREADED();
 
-	return sigprocmask(h, s, o);
+	/* XXX just use sigmask(2)?  abort? */
+
+	return (0);
 }
 
 thr_t
@@ -376,12 +384,11 @@ __libc_thr_self_stub(void)
 	return ((thr_t) -1);
 }
 
-int
+void
 __libc_thr_yield_stub(void)
 {
 
 	/* Nothing to do. */
-	return (0);
 }
 
 int
@@ -407,6 +414,7 @@ __libc_thr_exit_stub(void *v)
 {
 	/* LINTED deliberate lack of effect */
 	(void)v;
+
 	exit(0);
 }
 

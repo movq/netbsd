@@ -4,9 +4,10 @@ CLEANADD=nroff
 
 all: nroff
 
-nroff: nroff.sh $(SH_DEPS_SED_SCRIPT)
+nroff: nroff.sh
 	rm -f $@
-	sed -f $(SH_DEPS_SED_SCRIPT) \
+	sed -e "s|@BINDIR@|$(bindir)|g" \
+	-e "s|@SEP@|$(SEP)|g" \
 	-e $(SH_SCRIPT_SED_CMD) \
 	-e "s|@VERSION@|$(version)$(revision)|" $(srcdir)/nroff.sh >$@
 	chmod +x $@

@@ -1,4 +1,4 @@
-/*	$NetBSD: msgmain.c,v 1.7 2004/06/20 22:20:16 jmc Exp $	*/
+/*	$NetBSD: msgmain.c,v 1.6.2.1 2004/06/22 07:19:12 tron Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -45,7 +45,7 @@
 #include <sys/cdefs.h>
 
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: msgmain.c,v 1.7 2004/06/20 22:20:16 jmc Exp $");
+__RCSID("$NetBSD: msgmain.c,v 1.6.2.1 2004/06/22 07:19:12 tron Exp $");
 #endif
 
 

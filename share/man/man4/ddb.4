@@ -1,4 +1,4 @@
-.\"	$NetBSD: ddb.4,v 1.80 2004/09/30 09:20:52 wiz Exp $
+.\"	$NetBSD: ddb.4,v 1.78 2004/03/02 20:57:45 jdc Exp $
 .\"
 .\" Copyright (c) 1997 - 2003 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -63,7 +63,7 @@
 .\" any improvements or extensions that they make and grant Carnegie Mellon
 .\" the rights to redistribute these changes.
 .\"
-.Dd September 30, 2004
+.Dd March 2, 2004
 .Dt DDB 4
 .Os
 .Sh NAME
@@ -80,12 +80,6 @@ To disable entering
 .Ic ddb
 upon kernel panic:
 .Cd options DDB_ONPANIC=0
-.Pp
-To enable teeing all
-.\" XXX: hack; .Nm automatically introduces newline in SYNOPSIS
-.Ic ddb
-output to the kernel msgbuf:
-.Cd options DDB_TEE_MSGBUF=1
 .Sh DESCRIPTION
 .Nm
 is the in-kernel debugger.
@@ -1122,24 +1116,6 @@ will be initialized to off.
 Input and output radix.
 .It Va tabstops
 Tab stop width.
-.It Va tee_msgbuf
-If explictly set to non zero (zero is the default) all
-.Nm
-output will not only be displayed on screen but
-also be fed to the msgbuf.
-The default of the variable can be set using the kernel configuration option
-.D1 Cd options DDB_TEE_MSGBUF=1
-wich will initialise
-.Va tee_msgbuf
-to be 1.
-This option is especially handy for poor souls
-who don't have a serial console but want to recall
-.Nm
-output from a crash investigation.
-This option is more generic than the /l command modifier possible for
-selected commands as discussed above to log the output.
-Mixing both /l
-and this setting can give double loggings.
 .\" .It Va work Ns Sy xx
 .\" Temporary work variable.
 .\" .Sq Sy xx

@@ -1,4 +1,4 @@
-/*	$NetBSD: mulaw.c,v 1.22 2004/11/05 16:31:14 kent Exp $	*/
+/*	$NetBSD: mulaw.c,v 1.21 2003/04/06 18:20:12 wiz Exp $	*/
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mulaw.c,v 1.22 2004/11/05 16:31:14 kent Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mulaw.c,v 1.21 2003/04/06 18:20:12 wiz Exp $");
 
 #include <sys/types.h>
 #include <sys/audioio.h>
@@ -342,39 +342,6 @@ slinear16_to_mulaw_le(void *v, u_char* p, int cc)
 }
 
 void
-slinear16_to_mulaw_be(void *v, u_char* p, int cc)
-{
-	u_char *q = p;		/* q points higher byte. */
-
-	while (--cc >= 0) {
-		*p++ = lintomulaw[*q ^ 0x80];
-		q +=2 ;
-	}
-}
-
-void
-ulinear16_to_mulaw_le(void *v, u_char* p, int cc)
-{
-	u_char *q = p + 1;	/* q points higher byte. */
-
-	while (--cc >= 0) {
-		*p++ = lintomulaw[*q];
-		q +=2 ;
-	}
-}
-
-void
-ulinear16_to_mulaw_be(void *v, u_char* p, int cc)
-{
-	u_char *q = p;		/* q points higher byte. */
-
-	while (--cc >= 0) {
-		*p++ = lintomulaw[*q];
-		q +=2 ;
-	}
-}
-
-void
 ulinear8_to_mulaw(void *v, u_char *p, int cc)
 {
 	while (--cc >= 0) {
@@ -502,6 +469,7 @@ slinear16_to_alaw_le(void *v, u_char *p, int cc)
 	}
 }
 
+
 void
 slinear16_to_alaw_be(void *v, u_char *p, int cc)
 {
@@ -509,30 +477,6 @@ slinear16_to_alaw_be(void *v, u_char *p, int cc)
 
 	while (--cc >= 0) {
 		*p = lintoalaw[q[0] ^ 0x80];
-		++p;
-		q += 2;
-	}
-}
-
-void
-ulinear16_to_alaw_le(void *v, u_char *p, int cc)
-{
-	u_char *q = p;
-
-	while (--cc >= 0) {
-		*p = lintoalaw[q[1]];
-		++p;
-		q += 2;
-	}
-}
-
-void
-ulinear16_to_alaw_be(void *v, u_char *p, int cc)
-{
-	u_char *q = p;
-
-	while (--cc >= 0) {
-		*p = lintoalaw[q[0]];
 		++p;
 		q += 2;
 	}

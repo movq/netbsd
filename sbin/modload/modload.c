@@ -1,4 +1,4 @@
-/*	$NetBSD: modload.c,v 1.49 2004/10/27 19:36:31 peter Exp $	*/
+/*	$NetBSD: modload.c,v 1.45 2004/03/19 12:04:37 wiz Exp $	*/
 
 /*
  * Copyright (c) 1993 Terrence R. Lambert.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: modload.c,v 1.49 2004/10/27 19:36:31 peter Exp $");
+__RCSID("$NetBSD: modload.c,v 1.45 2004/03/19 12:04:37 wiz Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -94,7 +94,7 @@ prelink(const char *kernel,
 	switch (system(cmd)) {
 	case 0:				/* SUCCESS! */
 		break;
-	case 1:				/* uninformative error */
+	case 1:				/* uninformitive error */
 		/*
 		 * Someone needs to fix the return values from the NetBSD
 		 * ld program -- it's totally uninformative.
@@ -122,9 +122,9 @@ usage(void)
 
 	fprintf(stderr, "usage:\n");
 	fprintf(stderr, "modload [-dfnsSv] "
-	    "[-A <kernel>] [-e <entry>] [-p <postinstall>]\n");
+	    "[-A <kernel>] [-e <entry>]\n");
 	fprintf(stderr,
-	    "        [-o <output file>] [-T <linker_script>] <input file>\n");
+	    "        [-p <postinstall>] [-o <output file>] <input file>\n");
 	exit(1);
 }
 
@@ -240,6 +240,7 @@ loadsym(void *buf, size_t len)
 	}
 }
 
+/* Transfer some empty space. */
 int
 main(int argc, char **argv)
 {
@@ -321,8 +322,8 @@ main(int argc, char **argv)
 		err(3, _PATH_LKM);
 	fileopen |= DEV_OPEN;
 
-	if (strlcpy(modout, modobj, sizeof(modout)) >= sizeof(modout))
-		errx(1, "program name is too big for buffer");
+	strncpy(modout, modobj, sizeof(modout) - 1);
+	modout[sizeof(modout) - 1] = '\0';
 
 	p = strrchr(modout, '.');
 	if (!p || strcmp(p, ".o"))

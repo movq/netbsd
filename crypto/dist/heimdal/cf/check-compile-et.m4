@@ -1,5 +1,5 @@
 dnl $Heimdal: check-compile-et.m4,v 1.7.2.1 2003/08/15 14:40:42 lha Exp $
-dnl $NetBSD: check-compile-et.m4,v 1.1.1.4 2004/04/02 14:48:06 lha Exp $
+dnl $NetBSD: check-compile-et.m4,v 1.1.1.3.2.1 2004/04/21 04:55:38 jmc Exp $
 dnl
 dnl CHECK_COMPILE_ET
 AC_DEFUN([CHECK_COMPILE_ET], [

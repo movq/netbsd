@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_cout.c,v 1.27 2004/11/01 21:39:32 dsl Exp $	*/
+/*	$NetBSD: rpc_cout.c,v 1.25.2.1 2004/06/22 07:27:28 tron Exp $	*/
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
  * unrestricted use provided that this legend is included on all tape
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)rpc_cout.c 1.13 89/02/22 (C) 1987 SMI";
 #else
-__RCSID("$NetBSD: rpc_cout.c,v 1.27 2004/11/01 21:39:32 dsl Exp $");
+__RCSID("$NetBSD: rpc_cout.c,v 1.25.2.1 2004/06/22 07:27:28 tron Exp $");
 #endif
 #endif
 
@@ -757,7 +757,7 @@ upcase(str)
 
 	hptr = ptr;
 	while (*str != '\0')
-		*ptr++ = toupper((unsigned char)*str++);
+		*ptr++ = toupper(*str++);
 
 	*ptr = '\0';
 	return (hptr);

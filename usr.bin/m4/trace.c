@@ -1,4 +1,4 @@
-/*	$NetBSD: trace.c,v 1.5 2004/06/20 22:20:16 jmc Exp $	*/
+/*	$NetBSD: trace.c,v 1.4.4.1 2004/06/22 07:17:40 tron Exp $	*/
 /* $OpenBSD: trace.c,v 1.3 2001/09/29 15:47:18 espie Exp $ */
 
 /*

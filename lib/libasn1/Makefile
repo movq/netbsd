@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.24 2004/07/12 20:44:56 jonathan Exp $
+# $NetBSD: Makefile,v 1.23.2.1 2004/07/14 09:17:20 tron Exp $
 
 NOLINT=		# defined
 

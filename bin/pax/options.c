@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.82 2004/10/26 16:11:49 tron Exp $	*/
+/*	$NetBSD: options.c,v 1.73.2.1 2004/06/22 07:28:58 tron Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)options.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: options.c,v 1.82 2004/10/26 16:11:49 tron Exp $");
+__RCSID("$NetBSD: options.c,v 1.73.2.1 2004/06/22 07:28:58 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -78,7 +78,7 @@ __RCSID("$NetBSD: options.c,v 1.82 2004/10/26 16:11:49 tron Exp $");
  */
 
 static int nopids;		/* tar mode: suppress "pids" for -p option */
-static char flgch[] = FLGCH;	/* list of all possible flags (pax) */
+static char *flgch = FLGCH;	/* list of all possible flags (pax) */
 static OPLIST *ophead = NULL;	/* head for format specific options -x */
 static OPLIST *optail = NULL;	/* option tail */
 
@@ -122,10 +122,6 @@ static int getline_error;
 #define	OPT_FORCE_LOCAL			13
 #define	OPT_INSECURE			14
 #define	OPT_STRICT			15
-#define	OPT_SPARSE			16
-#if !HAVE_NBTOOL_CONFIG_H
-#define	OPT_CHROOT			17
-#endif
 
 /*
  *	Format specific routine table - MUST BE IN SORTED ORDER BY NAME
@@ -133,7 +129,7 @@ static int getline_error;
  *
  *	name, blksz, hdsz, udev, hlk, blkagn, inhead, id, st_read,
  *	read, end_read, st_write, write, end_write, trail,
- *	subtrail, rd_data, wr_data, options
+ *	rd_data, wr_data, options
  */
 
 FSUB fsub[] = {
@@ -181,11 +177,6 @@ FSUB fsub[] = {
  * some formats may be subsets of others....
  */
 int ford[] = {F_USTAR, F_TAR, F_SV4CRC, F_SV4CPIO, F_CPIO, F_BCPIO, -1};
-
-/*
- * filename record separator
- */
-int sep = '\n';
 
 /*
  * options()
@@ -242,12 +233,9 @@ pax_options(int argc, char **argv)
 	 * process option flags
 	 */
 	while ((c = getopt_long(argc, argv,
-	    "0ab:cdf:ijklno:p:rs:tuvwx:zAB:DE:G:HLMN:OPT:U:XYZ",
+	    "ab:cdf:ijklno:p:rs:tuvwx:zAB:DE:G:HLMN:OPT:U:XYZ",
 	    pax_longopts, NULL)) != -1) {
 		switch (c) {
-		case '0':
-			sep = '\0';
-			break;
 		case 'a':
 			/*
 			 * append
@@ -487,10 +475,10 @@ pax_options(int argc, char **argv)
 			/*
 			 * non-standard limit on read faults
 			 * 0 indicates stop after first error, values
-			 * indicate a limit, "none" try forever
+			 * indicate a limit, "NONE" try forever
 			 */
 			flg |= CEF;
-			if (strcmp(none, optarg) == 0)
+			if (strcmp(NONE, optarg) == 0)
 				maxflt = -1;
 			else if ((maxflt = atoi(optarg)) < 0) {
 				tty_warn(1,
@@ -727,7 +715,6 @@ struct option tar_longopts[] = {
 	{ "directory",		required_argument,	0,	'C' },
 	{ "to-stdout",		no_argument,		0,	'O' },
 	{ "absolute-paths",	no_argument,		0,	'P' },
-	{ "sparse",		no_argument,		0,	'S' },
 	{ "files-from",		required_argument,	0,	'T' },
 	{ "exclude-from",	required_argument,	0,	'X' },
 	{ "compress",		no_argument,		0,	'Z' },
@@ -746,10 +733,6 @@ struct option tar_longopts[] = {
 						OPT_INSECURE },
 	{ "exclude",		required_argument,	0,
 						OPT_EXCLUDE },
-#if !HAVE_NBTOOL_CONFIG_H
-	{ "chroot",		no_argument,		0,
-						OPT_CHROOT },
-#endif
 #if 0 /* Not implemented */
 	{ "catenate",		no_argument,		0,	'A' },	/* F */
 	{ "concatenate",	no_argument,		0,	'A' },	/* F */
@@ -776,6 +759,7 @@ struct option tar_longopts[] = {
 						OPT_REMOVE_FILES },
 	{ "same-order",		no_argument,		0,	's' },
 	{ "preserve-order",	no_argument,		0,	's' },
+	{ "sparse",		no_argument,		0,	'S' },
 	{ "null",		no_argument,		0,
 						OPT_NULL },
 	{ "totals",		no_argument,		0,
@@ -817,7 +801,7 @@ tar_options(int argc, char **argv)
 	 * process option flags
 	 */
 	while ((c = getoldopt(argc, argv,
-	    "+b:cef:hjklmopqrs:tuvwxzBC:HI:OPST:X:Z014578",
+	    "+b:cef:hjklmopqrs:tuvwxzBC:HI:OPT:X:Z014578",
 	    tar_longopts, NULL))
 	    != -1)  {
 		switch(c) {
@@ -1012,9 +996,6 @@ tar_options(int argc, char **argv)
 			rmleadslash = 0;
 			Aflag = 1;
 			break;
-		case 'S':
-			/* do nothing; we already generate sparse files */
-			break;
 		case 'X':
 			/*
 			 * GNU tar compat: exclude the files listed in optarg
@@ -1071,11 +1052,6 @@ tar_options(int argc, char **argv)
 			if (tar_gnutar_minus_minus_exclude(optarg) != 0)
 				tar_usage();
 			break;
-#if !HAVE_NBTOOL_CONFIG_H
-		case OPT_CHROOT:
-			do_chroot = 1;
-			break;
-#endif
 		default:
 			tar_usage();
 			break;
@@ -1165,10 +1141,6 @@ tar_options(int argc, char **argv)
 							dirisnext = 1;
 							continue;
 						}
-						if (strncmp(str, "-C ", 3) == 0) {
-							dir = str + 3;
-							continue;
-						}
 						if (pat_add(str, dir) < 0)
 							tar_usage();
 						sawpat = 1;
@@ -1254,11 +1226,6 @@ tar_options(int argc, char **argv)
 					}
 					if (strcmp(str, "-C") == 0) {
 						dirisnext = 1;
-						continue;
-					}
-					if (strncmp(str, "-C ", 3) == 0) {
-						if (ftree_add(str + 3, 1) < 0)
-							tar_usage();
 						continue;
 					}
 					if (ftree_add(str, 0) < 0)
@@ -1353,8 +1320,6 @@ struct option cpio_longopts[] = {
 	{ "swap-halfwords",	no_argument,		0,	'S' },
 	{ "insecure",		no_argument,		0,
 						OPT_INSECURE },
-	{ "sparse",		no_argument,		0,
-						OPT_SPARSE },
 
 #ifdef notyet
 /* Not implemented */
@@ -1375,6 +1340,8 @@ struct option cpio_longopts[] = {
 						OPT_ONLY_VERIFY_CRC },
 	{ "rsh-command",	required_argument,	0,
 						OPT_RSH_COMMAND },
+	{ "sparce",		no_argument,		0,
+						OPT_SPARSE },
 	{ "version",		no_argument,		0,
 						OPT_VERSION },
 #endif
@@ -1437,6 +1404,7 @@ cpio_options(int argc, char **argv)
 			 * pax does this by default ..
 			 */
 			nodirs = 0;
+			flg |= RF;
 			break;
 		case 'f':
 			/*
@@ -1505,7 +1473,6 @@ cpio_options(int argc, char **argv)
 			 */
 			act = LIST;
 			listf = stdout;
-			flg &= ~RF;
 			break;
 		case 'u':
 			/*
@@ -1642,10 +1609,6 @@ cpio_options(int argc, char **argv)
 		case OPT_INSECURE:
 			secure = 0;
 			break;
-
-		case OPT_SPARSE:
-			/* do nothing; we already generate sparse files */
-			break;
 		default:
 			cpio_usage();
 			break;
@@ -1756,7 +1719,7 @@ printflg(unsigned int flg)
 static int
 c_frmt(const void *a, const void *b)
 {
-	return(strcmp(((const FSUB *)a)->name, ((const FSUB *)b)->name));
+	return(strcmp(((FSUB *)a)->name, ((FSUB *)b)->name));
 }
 
 /*
@@ -2015,7 +1978,7 @@ pax_usage(void)
 void
 tar_usage(void)
 {
-	(void)fputs("usage: tar [-]{crtux}[-befhjlmopqvwzHOPSXZ014578] [archive] "
+	(void)fputs("usage: tar [-]{crtux}[-befhjlmopqvwzHLOPXZ014578] [archive] "
 		    "[blocksize]\n"
 		    "           [-C directory] [-T file] [-s replstr] "
 		    "[file ...]\n", stderr);

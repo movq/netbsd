@@ -1,4 +1,4 @@
-/*	$NetBSD: mesh.c,v 1.21 2004/12/09 04:37:30 briggs Exp $	*/
+/*	$NetBSD: mesh.c,v 1.19 2003/07/15 02:43:29 lukem Exp $	*/
 
 /*-
  * Copyright (c) 2000	Tsubai Masanari.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mesh.c,v 1.21 2004/12/09 04:37:30 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mesh.c,v 1.19 2003/07/15 02:43:29 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -84,7 +84,7 @@ struct mesh_scb {
 	TAILQ_ENTRY(mesh_scb) chain;
 	int flags;
 	struct scsipi_xfer *xs;
-	struct scsipi_generic cmd;
+	struct scsi_generic cmd;
 	int cmdlen;
 	int target;			/* target SCSI ID */
 	int resid;
@@ -303,7 +303,6 @@ mesh_shutdownhook(arg)
 
 	/* Set to async mode. */
 	mesh_set_reg(sc, MESH_SYNC_PARAM, 2);
-	mesh_bus_reset(sc);
 }
 
 #ifdef MESH_DEBUG
@@ -359,41 +358,27 @@ mesh_intr(arg)
 		return 1;
 	}
 
-	if (intr & MESH_INTR_CMDDONE) {
-		if (sc->sc_flags & MESH_DMA_ACTIVE) {
-			dbdma_stop(sc->sc_dmareg);
+	if (sc->sc_flags & MESH_DMA_ACTIVE) {
+		dbdma_stop(sc->sc_dmareg);
 
-			sc->sc_flags &= ~MESH_DMA_ACTIVE;
-			scb->resid = MESH_GET_XFER(sc);
+		sc->sc_flags &= ~MESH_DMA_ACTIVE;
+		scb->resid = MESH_GET_XFER(sc);
 
-			fifocnt = mesh_read_reg(sc, MESH_FIFO_COUNT);
-			if (fifocnt != 0) {
-				if (scb->flags & MESH_READ) {
-					char *cp;
+		fifocnt = mesh_read_reg(sc, MESH_FIFO_COUNT);
+		if (fifocnt != 0 && (scb->flags & MESH_READ)) {
+			char *cp = (char *)scb->daddr + scb->dlen - fifocnt;
 
-					cp = (char *)scb->daddr + scb->dlen
-						- fifocnt;
-					DPRINTF("fifocnt = %d, resid = %d\n",
-						fifocnt, scb->resid);
-					while (fifocnt > 0) {
-						*cp++ = mesh_read_reg(sc,
-								MESH_FIFO);
-						fifocnt--;
-					}
-				} else {
-					mesh_set_reg(sc, MESH_SEQUENCE,
-							MESH_CMD_FLUSH_FIFO);
-				}
-			} else {
-				/* Clear all interrupts */
-				mesh_set_reg(sc, MESH_INTERRUPT, 7);
+			DPRINTF("fifocnt = %d, resid = %d\n", fifocnt,
+				scb->resid);
+			while (fifocnt > 0) {
+				*cp++ = mesh_read_reg(sc, MESH_FIFO);
+				fifocnt--;
 			}
-		}
+		} else
+			mesh_set_reg(sc, MESH_SEQUENCE, MESH_CMD_FLUSH_FIFO);
 	}
 
 	if (intr & MESH_INTR_ERROR) {
-		printf("%s: error %02x %02x\n",
-			sc->sc_dev.dv_xname, error, exception);
 		mesh_error(sc, scb, error, 0);
 		return 1;
 	}
@@ -1157,20 +1142,15 @@ mesh_timeout(arg)
 	    (void *)scb->xs->xs_periph->periph_channel->chan_adapter->adapt_dev;
 	int s;
 	int status0, status1;
-	int intr, error, exception, imsk;
+	int intr, error, exception;
 
 	printf("%s: timeout state %d\n", sc->sc_dev.dv_xname, sc->sc_nextstate);
 
 	intr = mesh_read_reg(sc, MESH_INTERRUPT);
-	imsk = mesh_read_reg(sc, MESH_INTR_MASK);
 	exception = mesh_read_reg(sc, MESH_EXCEPTION);
 	error = mesh_read_reg(sc, MESH_ERROR);
 	status0 = mesh_read_reg(sc, MESH_BUS_STATUS0);
 	status1 = mesh_read_reg(sc, MESH_BUS_STATUS1);
-
-	printf("%s: intr/msk %02x/%02x, exc %02x, err %02x, st0/1 %02x/%02x\n",
-		sc->sc_dev.dv_xname,
-		intr, imsk, exception, error, status0, status1);
 
 	s = splbio();
 	if (sc->sc_flags & MESH_DMA_ACTIVE) {

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2004/08/05 01:28:48 lukem Exp $
+#	$NetBSD: Makefile,v 1.4 2003/09/30 06:41:31 lukem Exp $
 
 .include <bsd.own.mk>
 
@@ -12,8 +12,8 @@ INCSDIR=${X11INCDIR}/X11
 
 CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/X11
 
-LIBDPLIBS=\
-	X11	${.CURDIR}/../X11/dynamic
+LDADD+=	-lX11
+DPADD+=	${LIBX11}
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>

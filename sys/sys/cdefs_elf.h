@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs_elf.h,v 1.21 2004/06/07 18:41:38 drochner Exp $	*/
+/*	$NetBSD: cdefs_elf.h,v 1.17 2003/10/29 21:56:02 mycroft Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -104,8 +104,7 @@
 #define	__COPYRIGHT(_s)			__SECTIONSTRING(.copyright,_s)
 #else
 #define	__COPYRIGHT(_s)							\
-	static const char copyright[]					\
-	    __attribute__((__unused__,__section__(".copyright"))) = _s
+	static const char copyright[] __attribute__((__unused__)) = _s
 #endif
 
 #define	__KERNEL_RCSID(_n, _s)		__RCSID(_s)
@@ -119,32 +118,23 @@
 #ifndef __lint__
 #define	__link_set_make_entry(set, sym)					\
 	static void const * const __link_set_##set##_sym_##sym		\
-	    __section("link_set_" #set) __used = &sym
-#define	__link_set_make_entry2(set, sym, n)				\
-	static void const * const __link_set_##set##_sym_##sym##_##n	\
-	    __section("link_set_" #set) __used = &sym[n]
+	    __section("link_set_" #set) __unused = &sym
 #else
 #define	__link_set_make_entry(set, sym)					\
 	extern void const * const __link_set_##set##_sym_##sym
-#define	__link_set_make_entry2(set, sym, n)				\
-	extern void const * const __link_set_##set##_sym_##sym##_##n
 #endif /* __lint__ */
 
 #define	__link_set_add_text(set, sym)	__link_set_make_entry(set, sym)
 #define	__link_set_add_rodata(set, sym)	__link_set_make_entry(set, sym)
 #define	__link_set_add_data(set, sym)	__link_set_make_entry(set, sym)
 #define	__link_set_add_bss(set, sym)	__link_set_make_entry(set, sym)
-#define	__link_set_add_text2(set, sym, n)   __link_set_make_entry2(set, sym, n)
-#define	__link_set_add_rodata2(set, sym, n) __link_set_make_entry2(set, sym, n)
-#define	__link_set_add_data2(set, sym, n)   __link_set_make_entry2(set, sym, n)
-#define	__link_set_add_bss2(set, sym, n)    __link_set_make_entry2(set, sym, n)
 
 #define	__link_set_decl(set, ptype)					\
-	extern ptype * const __start_link_set_##set[];			\
-	extern ptype * const __stop_link_set_##set[]			\
+	extern ptype *__start_link_set_##set;				\
+	extern ptype *__stop_link_set_##set
 
-#define	__link_set_start(set)	(__start_link_set_##set)
-#define	__link_set_end(set)	(__stop_link_set_##set)
+#define	__link_set_start(set)	(&__start_link_set_##set)
+#define	__link_set_end(set)	(&__stop_link_set_##set)
 
 #define	__link_set_count(set)						\
 	(__link_set_end(set) - __link_set_start(set))

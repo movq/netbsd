@@ -1,4 +1,4 @@
-/*	$NetBSD: crtbegin.c,v 1.26 2004/08/28 00:19:22 thorpej Exp $	*/
+/*	$NetBSD: crtbegin.c,v 1.24 2003/12/03 18:41:35 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001, 2002 The NetBSD Foundation, Inc.
@@ -47,18 +47,10 @@
  * null-terminated.
  */
 
-#include <sys/param.h>
+#include <sys/param.h>		/* sysident.h requires `NetBSD' constant */
 #include <sys/exec.h>
 #include <sys/exec_elf.h>
 #include <stdlib.h>
-
-/*
- * WE SHOULD BE USING GCC-SUPPLIED crtbegin.o FOR GCC 3.3 AND
- * LATER!!!
- */
-#if __GNUC_PREREQ__(3, 3)
-#error "Use GCC-supplied crtbegin.o"
-#endif
 
 #if __GNUC_PREREQ__(3, 0)
 #define	USED_NOINLINE __attribute__((__used__,__noinline__))

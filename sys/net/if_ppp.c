@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ppp.c,v 1.95 2004/12/05 15:03:13 christos Exp $	*/
+/*	$NetBSD: if_ppp.c,v 1.88 2003/10/28 20:16:28 mycroft Exp $	*/
 /*	Id: if_ppp.c,v 1.6 1997/03/04 03:33:00 paulus Exp 	*/
 
 /*
@@ -102,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ppp.c,v 1.95 2004/12/05 15:03:13 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ppp.c,v 1.88 2003/10/28 20:16:28 mycroft Exp $");
 
 #include "ppp.h"
 
@@ -202,17 +202,7 @@ void		pppintr(void *);
 #define	M_HIGHPRI	M_LINK0	/* output packet for sc_fastq */
 #define	M_ERRMARK	M_LINK1	/* rx packet following lost/corrupted pkt */
 
-static int		ppp_clone_create(struct if_clone *, int);
-static int		ppp_clone_destroy(struct ifnet *);
-
-static struct ppp_softc *ppp_create(const char *, int);
-
-static LIST_HEAD(, ppp_softc) ppp_softc_list;
-
-struct if_clone ppp_cloner =
-    IF_CLONE_INITIALIZER("ppp", ppp_clone_create, ppp_clone_destroy);
-
-static struct simplelock ppp_list_mutex = SIMPLELOCK_INITIALIZER;
+struct	ppp_softc ppp_softc[NPPP];
 
 #ifdef PPP_COMPRESS
 /*
@@ -240,109 +230,37 @@ struct compressor *ppp_compressors[PPP_COMPRESSORS_MAX] = {
  * Called from boot code to establish ppp interfaces.
  */
 void
-pppattach(void)
+pppattach()
 {
-    LIST_INIT(&ppp_softc_list);
-    if_clone_attach(&ppp_cloner);
-}
+    struct ppp_softc *sc;
+    int i = 0;
 
-static struct ppp_softc *
-ppp_create(const char *name, int unit)
-{
-    struct ppp_softc *sc, *sci, *scl = NULL;
-
-    MALLOC(sc, struct ppp_softc *, sizeof(*sc), M_DEVBUF, M_WAIT|M_ZERO);
-
-    simple_lock(&ppp_list_mutex);
-    if (unit == -1) {
-	int i = 0;
-	LIST_FOREACH(sci, &ppp_softc_list, sc_iflist) {
-	    scl = sci;
-	    if (i < sci->sc_unit) {
-		unit = i;
-		break;
-	    } else {
-#ifdef DIAGNOSTIC
-		KASSERT(i == sci->sc_unit);
-#endif
-		i++;
-	    }
-	}
-	if (unit == -1)
-	    unit = i;
-    } else {
-	LIST_FOREACH(sci, &ppp_softc_list, sc_iflist) {
-	    scl = sci;
-	    if (unit < sci->sc_unit)
-		break;
-	    else if (unit == sci->sc_unit) {
-		FREE(sc, M_DEVBUF);
-		return NULL;
-	    }
-	}
-    }
-
-    if (sci != NULL)
-	LIST_INSERT_BEFORE(sci, sc, sc_iflist);
-    else if (scl != NULL)
-	LIST_INSERT_AFTER(scl, sc, sc_iflist);
-    else
-	LIST_INSERT_HEAD(&ppp_softc_list, sc, sc_iflist);
-
-    simple_unlock(&ppp_list_mutex);
-
-    (void)snprintf(sc->sc_if.if_xname, sizeof(sc->sc_if.if_xname), "%s%d",
-	name, sc->sc_unit = unit);
-    callout_init(&sc->sc_timo_ch);
-    sc->sc_if.if_softc = sc;
-    sc->sc_if.if_mtu = PPP_MTU;
-    sc->sc_if.if_flags = IFF_POINTOPOINT | IFF_MULTICAST;
-    sc->sc_if.if_type = IFT_PPP;
-    sc->sc_if.if_hdrlen = PPP_HDRLEN;
-    sc->sc_if.if_dlt = DLT_NULL;
-    sc->sc_if.if_ioctl = pppsioctl;
-    sc->sc_if.if_output = pppoutput;
+    for (sc = ppp_softc; i < NPPP; sc++) {
+	sc->sc_unit = i;	/* XXX */
+	sprintf(sc->sc_if.if_xname, "ppp%d", i++);
+	callout_init(&sc->sc_timo_ch);
+	sc->sc_if.if_softc = sc;
+	sc->sc_if.if_mtu = PPP_MTU;
+	sc->sc_if.if_flags = IFF_POINTOPOINT | IFF_MULTICAST;
+	sc->sc_if.if_type = IFT_PPP;
+	sc->sc_if.if_hdrlen = PPP_HDRLEN;
+	sc->sc_if.if_dlt = DLT_NULL;
+	sc->sc_if.if_ioctl = pppsioctl;
+	sc->sc_if.if_output = pppoutput;
 #ifdef ALTQ
-    sc->sc_if.if_start = ppp_ifstart;
+	sc->sc_if.if_start = ppp_ifstart;
 #endif
-    IFQ_SET_MAXLEN(&sc->sc_if.if_snd, IFQ_MAXLEN);
-    sc->sc_inq.ifq_maxlen = IFQ_MAXLEN;
-    sc->sc_fastq.ifq_maxlen = IFQ_MAXLEN;
-    sc->sc_rawq.ifq_maxlen = IFQ_MAXLEN;
-    IFQ_SET_READY(&sc->sc_if.if_snd);
-    if_attach(&sc->sc_if);
-    if_alloc_sadl(&sc->sc_if);
+	IFQ_SET_MAXLEN(&sc->sc_if.if_snd, IFQ_MAXLEN);
+	sc->sc_inq.ifq_maxlen = IFQ_MAXLEN;
+	sc->sc_fastq.ifq_maxlen = IFQ_MAXLEN;
+	sc->sc_rawq.ifq_maxlen = IFQ_MAXLEN;
+	IFQ_SET_READY(&sc->sc_if.if_snd);
+	if_attach(&sc->sc_if);
+	if_alloc_sadl(&sc->sc_if);
 #if NBPFILTER > 0
-    bpfattach(&sc->sc_if, DLT_NULL, 0);
+	bpfattach(&sc->sc_if, DLT_NULL, 0);
 #endif
-    return sc;
-}
-
-static int
-ppp_clone_create(struct if_clone *ifc, int unit)
-{
-    return ppp_create(ifc->ifc_name, unit) == NULL ? EEXIST : 0;
-}
-
-static int
-ppp_clone_destroy(struct ifnet *ifp)
-{
-    struct ppp_softc *sc = (struct ppp_softc *)ifp->if_softc;
-
-    if (sc->sc_devp != NULL)
-	return EBUSY; /* Not removing it */
-
-    simple_lock(&ppp_list_mutex);
-    LIST_REMOVE(sc, sc_iflist);
-    simple_unlock(&ppp_list_mutex);
-
-#if NBPFILTER > 0
-    bpfdetach(ifp);
-#endif
-    if_detach(ifp);
-
-    FREE(sc, M_DEVBUF);
-    return 0;
+    }
 }
 
 /*
@@ -352,36 +270,32 @@ struct ppp_softc *
 pppalloc(pid)
     pid_t pid;
 {
-    struct ppp_softc *sc = NULL, *scf;
-    int i;
+    int nppp, i;
+    struct ppp_softc *sc;
 
-    simple_lock(&ppp_list_mutex);
-    for (scf = LIST_FIRST(&ppp_softc_list); scf != NULL; 
-	scf = LIST_NEXT(scf, sc_iflist)) {
-	if (scf->sc_xfer == pid) {
-	    scf->sc_xfer = 0;
-	    simple_unlock(&ppp_list_mutex);
-	    return scf;
+    for (nppp = 0, sc = ppp_softc; nppp < NPPP; nppp++, sc++)
+	if (sc->sc_xfer == pid) {
+	    sc->sc_xfer = 0;
+	    return sc;
 	}
-	if (scf->sc_devp == NULL && sc == NULL)
-	    sc = scf;
-    }
-    simple_unlock(&ppp_list_mutex);
-
-    if (sc == NULL)
-	sc = ppp_create(ppp_cloner.ifc_name, -1);
+    for (nppp = 0, sc = ppp_softc; nppp < NPPP; nppp++, sc++)
+	if (sc->sc_devp == NULL)
+	    break;
+    if (nppp >= NPPP)
+	return NULL;
 
 #ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
     sc->sc_si = softintr_establish(IPL_SOFTNET, pppintr, sc);
     if (sc->sc_si == NULL) {
-	printf("%s: unable to establish softintr\n", sc->sc_if.if_xname);
+	printf("ppp%d: unable to establish softintr\n", sc->sc_unit);
 	return (NULL);
     }
 #endif
+
     sc->sc_flags = 0;
     sc->sc_mru = PPP_MRU;
     sc->sc_relinq = NULL;
-    (void)memset(&sc->sc_stats, 0, sizeof(sc->sc_stats));
+    memset((char *)&sc->sc_stats, 0, sizeof(sc->sc_stats));
 #ifdef VJC
     MALLOC(sc->sc_comp, struct slcompress *, sizeof(struct slcompress),
 	   M_DEVBUF, M_NOWAIT);
@@ -476,7 +390,6 @@ pppdealloc(sc)
 	sc->sc_comp = 0;
     }
 #endif
-    (void)ppp_clone_destroy(&sc->sc_if);
 }
 
 /*
@@ -497,6 +410,7 @@ pppioctl(sc, cmd, data, flag, p)
     struct npioctl *npi;
     time_t t;
 #ifdef PPP_FILTER
+/*###413 [cc] warning: `bp' might be used uninitialized in this function%%%*/
     struct bpf_program *bp, *nbp;
     struct bpf_insn *newcode, *oldcode;
     int newcodelen;
@@ -511,7 +425,7 @@ pppioctl(sc, cmd, data, flag, p)
 	break;
 
     case PPPIOCGUNIT:
-	*(int *)data = sc->sc_unit;
+	*(int *)data = sc->sc_unit;	/* XXX */
 	break;
 
     case PPPIOCGFLAGS:
@@ -883,6 +797,7 @@ pppoutput(ifp, m0, dst, rtp)
     struct ifqueue *ifq;
     enum NPmode mode;
     int len;
+    struct mbuf *m;
     ALTQ_DECL(struct altq_pktattr pktattr;)
 
     if (sc->sc_devp == NULL || (ifp->if_flags & IFF_RUNNING) == 0
@@ -957,21 +872,29 @@ pppoutput(ifp, m0, dst, rtp)
     }
 
     /*
-     * Add PPP header.
+     * Add PPP header.  If no space in first mbuf, allocate another.
+     * (This assumes M_LEADINGSPACE is always 0 for a cluster mbuf.)
      */
-    M_PREPEND(m0, PPP_HDRLEN, M_DONTWAIT);
-    if (m0 == NULL) {
-	error = ENOBUFS;
-	goto bad;
-    }
+    if (M_LEADINGSPACE(m0) < PPP_HDRLEN) {
+	m0 = m_prepend(m0, PPP_HDRLEN, M_DONTWAIT);
+	if (m0 == 0) {
+	    error = ENOBUFS;
+	    goto bad;
+	}
+	m0->m_len = 0;
+    } else
+	m0->m_data -= PPP_HDRLEN;
 
     cp = mtod(m0, u_char *);
     *cp++ = address;
     *cp++ = control;
     *cp++ = protocol >> 8;
     *cp++ = protocol & 0xff;
+    m0->m_len += PPP_HDRLEN;
 
-    len = m_length(m0);
+    len = 0;
+    for (m = m0; m != 0; m = m->m_next)
+	len += m->m_len;
 
     if (sc->sc_flags & SC_LOG_OUTPKT) {
 	printf("%s output: ", ifp->if_xname);
@@ -1288,10 +1211,12 @@ void
 pppnetisr(void)
 {
 	struct ppp_softc *sc;
+	int i;
 
-	for (sc = LIST_FIRST(&ppp_softc_list); sc != NULL; 
-	    sc = LIST_NEXT(sc, sc_iflist))
+	for (i = 0; i < NPPP; i++) {
+		sc = &ppp_softc[i];
 		pppintr(sc);
+	}
 }
 #endif
 

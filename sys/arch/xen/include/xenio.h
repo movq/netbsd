@@ -1,4 +1,4 @@
-/*	$NetBSD: xenio.h,v 1.1 2004/05/07 15:51:04 cl Exp $	*/
+/*	$NetBSD: xenio.h,v 1.1.2.2 2004/05/22 15:59:21 he Exp $	*/
 
 /*
  *

@@ -1,4 +1,4 @@
-/*	$NetBSD: db_command.c,v 1.76 2004/04/27 04:03:28 atatat Exp $	*/
+/*	$NetBSD: db_command.c,v 1.75.2.1 2004/04/29 04:08:15 jmc Exp $	*/
 
 /*
  * Mach Operating System
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_command.c,v 1.76 2004/04/27 04:03:28 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_command.c,v 1.75.2.1 2004/04/29 04:08:15 jmc Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"

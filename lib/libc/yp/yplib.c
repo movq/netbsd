@@ -1,4 +1,4 @@
-/*	$NetBSD: yplib.c,v 1.42 2004/10/29 06:32:09 lukem Exp $	 */
+/*	$NetBSD: yplib.c,v 1.40 2003/12/10 12:06:25 agc Exp $	 */
 
 /*
  * Copyright (c) 1992, 1993 Theo de Raadt <deraadt@fsa.ca>
@@ -28,12 +28,10 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: yplib.c,v 1.42 2004/10/29 06:32:09 lukem Exp $");
+__RCSID("$NetBSD: yplib.c,v 1.40 2003/12/10 12:06:25 agc Exp $");
 #endif
 
 #include "namespace.h"
-#include "reentrant.h"
-
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/file.h>
@@ -72,15 +70,6 @@ int _yplib_nerrs = 5;
 __weak_alias(yp_bind, _yp_bind)
 __weak_alias(yp_unbind, _yp_unbind)
 __weak_alias(yp_get_default_domain, _yp_get_default_domain)
-#endif
-
-#ifdef _REENTRANT
-static 	mutex_t			_ypmutex = MUTEX_INITIALIZER;
-#define YPLOCK()		mutex_lock(&_ypmutex)
-#define YPUNLOCK()		mutex_unlock(&_ypmutex)
-#else
-#define YPLOCK()
-#define YPUNLOCK()
 #endif
 
 int
@@ -329,22 +318,17 @@ _yp_check(dom)
 	char          **dom;
 {
 	char           *unused;
-	int 		good;
-
-	YPLOCK();
 
 	if (_yp_domain[0] == '\0')
-		if (yp_get_default_domain(&unused)) {
-			good = 0;
-			goto done;
-		}
+		if (yp_get_default_domain(&unused))
+			return 0;
+
 	if (dom)
 		*dom = _yp_domain;
 
-	good = yp_bind(_yp_domain) == 0;
-done:
-	YPUNLOCK();
-	return good;
+	if (yp_bind(_yp_domain) == 0)
+		return 1;
+	return 0;
 }
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: gethostid.c,v 1.6 2004/04/19 13:16:42 atatat Exp $	*/
+/*	$NetBSD: gethostid.c,v 1.5.2.1 2004/04/21 03:15:05 jmc Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)gethostid.c	8.1 (Berkeley) 6/2/93";
 #else
-__RCSID("$NetBSD: gethostid.c,v 1.6 2004/04/19 13:16:42 atatat Exp $");
+__RCSID("$NetBSD: gethostid.c,v 1.5.2.1 2004/04/21 03:15:05 jmc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

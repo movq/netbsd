@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_isa.c,v 1.20 2004/09/14 20:20:48 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_isa.c,v 1.19 2003/12/04 13:57:30 keihan Exp $");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -146,7 +146,7 @@ isic_isa_probe(parent, cf, aux)
 		return (0);
 
 	/* check irq */
-	if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ) {
+	if (ia->ia_irq[0].ir_irq == ISACF_IRQ_DEFAULT) {
 		printf("isic%d: config error: no IRQ specified\n", cf->cf_unit);
 		return 0;
 	}
@@ -232,7 +232,7 @@ isic_isa_probe(parent, cf, aux)
 
 		default:
 			/* No card type given, try to figure ... */
-			if (iobase == ISA_UNKNOWN_PORT) {
+			if (iobase == ISACF_PORT_DEFAULT) {
 				ret = 0;
 #ifdef ISICISA_TEL_S0_8
 				/* only Teles S0/8 will work without IO */
@@ -244,7 +244,7 @@ isic_isa_probe(parent, cf, aux)
 					ret = isic_probe_s08(&args);
 				}
 #endif /* ISICISA_TEL_S0_8 */				
-			} else if (maddr == ISA_UNKNOWN_IOMEM) {
+			} else if (maddr == ISACF_IOMEM_DEFAULT) {
 				ret = 0;
 #ifdef ISICISA_TEL_S0_16_3
 				/* no shared memory, only a 16.3 based card,
@@ -819,14 +819,14 @@ isic_isa_attach(parent, self, aux)
 		iobase = ia->ia_io[0].ir_addr;
 		iosize = ia->ia_io[0].ir_size;
 	} else {
-		iobase = ISA_UNKNOWN_PORT;
+		iobase = ISACF_PORT_DEFAULT;
 		iosize = 0;
 	}
 	if (ia->ia_niomem > 0) {
 		maddr = ia->ia_iomem[0].ir_addr;
 		msize = ia->ia_iomem[0].ir_size;
 	} else {
-		maddr = ISA_UNKNOWN_IOMEM;
+		maddr = ISACF_IOMEM_DEFAULT;
 		msize = 0;
 	}
 
@@ -857,7 +857,7 @@ isic_isa_attach(parent, self, aux)
 			args.ia_flags = flags;
 
 			/* Probe cards */
-			if (iobase == ISA_UNKNOWN_PORT) {
+			if (iobase == ISACF_PORT_DEFAULT) {
 				ret = 0;
 #ifdef ISICISA_TEL_S0_8
 				/* only Teles S0/8 will work without IO */
@@ -869,7 +869,7 @@ isic_isa_attach(parent, self, aux)
 					goto found;
 				args_unmap(&args.ia_num_mappings, &args.ia_maps[0]);
 #endif /* ISICISA_TEL_S0_8 */
-			} else if (maddr == ISA_UNKNOWN_IOMEM) {
+			} else if (maddr == ISACF_IOMEM_DEFAULT) {
 				/* no shared memory, only a 16.3 based card,
 				   AVM A1, the usr sportster or an ITK would work */
 				ret = 0;
@@ -1025,7 +1025,7 @@ setup_io_map(flags, iot, memt, iobase, maddr, num_mappings, maps, iosize, msize)
 	switch(flags)
 	{
 		case FLAG_TELES_S0_8:
-			if (maddr == ISA_UNKNOWN_IOMEM) {
+			if (maddr == ISACF_IOMEM_DEFAULT) {
 				printf("isic: config error: no shared memory specified for Teles S0/8!\n");
 				return 1;
 			}
@@ -1049,11 +1049,11 @@ setup_io_map(flags, iot, memt, iobase, maddr, num_mappings, maps, iosize, msize)
 			break;
 
 		case FLAG_TELES_S0_16:
-			if (iobase == ISA_UNKNOWN_PORT) {
+			if (iobase == ISACF_PORT_DEFAULT) {
 				printf("isic: config error: no i/o address specified for Teles S0/16!\n");
 				return 1;
 			}
-			if (maddr == ISA_UNKNOWN_IOMEM) {
+			if (maddr == ISACF_IOMEM_DEFAULT) {
 				printf("isic: config error: no shared memory specified for Teles S0/16!\n");
 				return 1;
 			}
@@ -1085,7 +1085,7 @@ setup_io_map(flags, iot, memt, iobase, maddr, num_mappings, maps, iosize, msize)
 			break;
 
 		case FLAG_TELES_S0_163:
-			if (iobase == ISA_UNKNOWN_PORT) {
+			if (iobase == ISACF_PORT_DEFAULT) {
 				printf("isic: config error: no i/o address specified for Teles S0/16!\n");
 				return 1;
 			}
@@ -1139,7 +1139,7 @@ setup_io_map(flags, iot, memt, iobase, maddr, num_mappings, maps, iosize, msize)
 			break;
 
 		case FLAG_AVM_A1:
-			if (iobase == ISA_UNKNOWN_PORT) {
+			if (iobase == ISACF_PORT_DEFAULT) {
 				printf("isic: config error: no i/o address specified for AVM A1/Fritz! card!\n");
 				return 1;
 			}
@@ -1212,7 +1212,7 @@ setup_io_map(flags, iot, memt, iobase, maddr, num_mappings, maps, iosize, msize)
 			break;
 
 		case FLAG_USR_ISDN_TA_INT:
-			if (iobase == ISA_UNKNOWN_PORT) {
+			if (iobase == ISACF_PORT_DEFAULT) {
 				printf("isic: config error: no I/O base specified for USR Sportster TA intern!\n");
 				return 1;
 			}
@@ -1284,7 +1284,7 @@ setup_io_map(flags, iot, memt, iobase, maddr, num_mappings, maps, iosize, msize)
 			break;
 
 		case FLAG_ITK_IX1:
-			if (iobase == ISA_UNKNOWN_PORT) {
+			if (iobase == ISACF_PORT_DEFAULT) {
 				printf("isic: config error: no I/O base specified for ITK ix1 micro!\n");
 				return 1;
 			}

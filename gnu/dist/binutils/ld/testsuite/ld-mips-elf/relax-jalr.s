@@ -10,6 +10,3 @@ __start:
 	.space 64
 	jal .Lstart
 .end __start
-
-# make objdump print ...
-	.space 8

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.32 2004/09/26 21:44:27 yamt Exp $	*/
+/*	$NetBSD: cpu.h,v 1.30 2004/01/04 11:33:31 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990, 1993
@@ -79,8 +79,6 @@
 #ifndef _X68K_CPU_H_
 #define	_X68K_CPU_H_
 
-#if defined(_KERNEL)
-
 /*
  * Exported definitions unique to x68k/68k cpu support.
  */
@@ -101,11 +99,16 @@
  */
 #include <machine/intr.h>
 
-#include <sys/cpu_data.h>
+#include <sys/sched.h>
 struct cpu_info {
-	struct cpu_data ci_data;	/* MI per-cpu data */
+	struct schedstate_percpu ci_schedstate; /* scheduler state */
+#if defined(DIAGNOSTIC) || defined(LOCKDEBUG)
+	u_long ci_spin_locks;           /* # of spin locks held */
+	u_long ci_simple_locks;         /* # of simple locks held */
+#endif
 };
 
+#ifdef _KERNEL
 extern struct cpu_info cpu_info_store;
 
 #define	curcpu()			(&cpu_info_store)

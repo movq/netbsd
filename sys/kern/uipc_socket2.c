@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_socket2.c,v 1.65 2004/06/24 04:15:50 jonathan Exp $	*/
+/*	$NetBSD: uipc_socket2.c,v 1.58.2.3 2004/07/14 11:07:12 tron Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988, 1990, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_socket2.c,v 1.65 2004/06/24 04:15:50 jonathan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_socket2.c,v 1.58.2.3 2004/07/14 11:07:12 tron Exp $");
 
 #include "opt_mbuftrace.h"
 #include "opt_sb_max.h"
@@ -377,9 +377,9 @@ int
 soreserve(struct socket *so, u_long sndcc, u_long rcvcc)
 {
 
-	if (sbreserve(&so->so_snd, sndcc, so) == 0)
+	if (sbreserve(&so->so_snd, sndcc) == 0)
 		goto bad;
-	if (sbreserve(&so->so_rcv, rcvcc, so) == 0)
+	if (sbreserve(&so->so_rcv, rcvcc) == 0)
 		goto bad2;
 	if (so->so_rcv.sb_lowat == 0)
 		so->so_rcv.sb_lowat = 1;
@@ -389,7 +389,7 @@ soreserve(struct socket *so, u_long sndcc, u_long rcvcc)
 		so->so_snd.sb_lowat = so->so_snd.sb_hiwat;
 	return (0);
  bad2:
-	sbrelease(&so->so_snd, so);
+	sbrelease(&so->so_snd);
  bad:
 	return (ENOBUFS);
 }
@@ -400,27 +400,13 @@ soreserve(struct socket *so, u_long sndcc, u_long rcvcc)
  * if buffering efficiency is near the normal case.
  */
 int
-sbreserve(struct sockbuf *sb, u_long cc, struct socket *so)
+sbreserve(struct sockbuf *sb, u_long cc)
 {
-	struct proc *p = curproc; /* XXX */
-	rlim_t maxcc;
-	uid_t uid;
 
 	KDASSERT(sb_max_adj != 0);
 	if (cc == 0 || cc > sb_max_adj)
 		return (0);
-	if (so) {
-		if (p && p->p_ucred->cr_uid == so->so_uid)
-			maxcc = p->p_rlimit[RLIMIT_SBSIZE].rlim_cur;
-		else
-			maxcc = RLIM_INFINITY;
-		uid = so->so_uid;
-	} else {
-		uid = 0;	/* XXX: nothing better */
-		maxcc = RLIM_INFINITY;
-	}
-	if (!chgsbsize(uid, &sb->sb_hiwat, cc, maxcc))
-		return 0;
+	sb->sb_hiwat = cc;
 	sb->sb_mbmax = min(cc * 2, sb_max);
 	if (sb->sb_lowat > sb->sb_hiwat)
 		sb->sb_lowat = sb->sb_hiwat;
@@ -431,13 +417,11 @@ sbreserve(struct sockbuf *sb, u_long cc, struct socket *so)
  * Free mbufs held by a socket, and reserved mbuf space.
  */
 void
-sbrelease(struct sockbuf *sb, struct socket *so)
+sbrelease(struct sockbuf *sb)
 {
 
 	sbflush(sb);
-	(void)chgsbsize(so->so_uid, &sb->sb_hiwat, 0,
-	    RLIM_INFINITY);
-	sb->sb_mbmax = 0;
+	sb->sb_hiwat = sb->sb_mbmax = 0;
 }
 
 /*
@@ -707,7 +691,7 @@ sbinsertoob(struct sockbuf *sb, struct mbuf *m0)
  * Returns 0 if no space in sockbuf or insufficient mbufs.
  */
 int
-sbappendaddr(struct sockbuf *sb, const struct sockaddr *asa, struct mbuf *m0,
+sbappendaddr(struct sockbuf *sb, struct sockaddr *asa, struct mbuf *m0,
 	struct mbuf *control)
 {
 	struct mbuf	*m, *n, *nlast;

@@ -33,7 +33,7 @@
 
 #include "push_locl.h"
 __RCSID("$Heimdal: push.c,v 1.47.2.1 2004/06/21 10:54:46 lha Exp $"
-        "$NetBSD: push.c,v 1.1.1.7 2004/09/14 07:46:24 lha Exp $");
+        "$NetBSD: push.c,v 1.1.1.6.2.1 2004/09/17 04:35:17 jmc Exp $");
 
 #ifdef KRB4
 static int use_v4 = -1;

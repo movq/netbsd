@@ -1,4 +1,4 @@
-.\"	$NetBSD: form_fieldtype.3,v 1.10 2004/11/24 12:42:51 wiz Exp $
+.\"	$NetBSD: form_fieldtype.3,v 1.7 2003/04/16 13:35:05 wiz Exp $
 .\"
 .\" Copyright (c) 2001
 .\"	Brett Lymn - blymn@baea.com.au, brett_lymn@yahoo.com.au
@@ -76,25 +76,20 @@ A new field type can be created by calling
 .Fn new_fieldtype
 which requires pointers to two functions which perform validation, the
 .Fa field_check
-function must validate the field contents and return
-.Dv TRUE
-if they are acceptable and
-.Dv FALSE
-if they are not.
+function must validate the field contents and return TRUE if they are
+acceptable and FALSE if they are not.
 The
 .Fa char_check
 validates the character input into the field, this function will be
 called for each character entered, if the character can be entered
 into the field then
 .Fa char_check
-must return
-.Dv TRUE .
+must return TRUE.
 Neither
 .Fa field_check
 nor
 .Fa char_check
-may be
-.Dv NULL .
+may be NULL.
 The functions for handling the field type arguments can
 be defined by using the
 .Fn set_fieldtype_arg
@@ -106,8 +101,7 @@ is used to copy the fieldtype arguments to a new arguments structure
 and
 .Fa free_args
 is used to destroy the fieldtype arguments and release any associated
-storage, none of these function pointers may be
-.Dv NULL .
+storage, none of these function pointers may be NULL.
 The field type choice functions can be set by calling
 .Fn set_fieldtype_choice ,
 the
@@ -118,15 +112,10 @@ specify the next and previous choice functions for the field type.
 These functions must perform the necessary actions to select the next
 or previous choice for the field, updating the field buffer if
 necessary.
-The choice functions must return
-.Dv TRUE
-if the function succeeded and
-.Dv FALSE
-otherwise.
+The choice functions must return TRUE if the function
+succeeded and FALSE otherwise.
 .Sh RETURN VALUES
-Functions returning pointers will return
-.Dv NULL
-if an error is detected.
+Functions returning pointers will return NULL if an error is detected.
 The functions that return an int will return one of the following error
 values:
 .Pp
@@ -143,8 +132,8 @@ The field is connected to a form.
 .Xr forms 3
 .Sh NOTES
 The header
-.Aq Pa form.h
+.Pa \*[Lt]form.h\*[Gt]
 automatically includes both
-.Aq Pa curses.h
+.Pa \*[Lt]curses.h\*[Gt]
 and
-.Aq Pa eti.h .
+.Pa \*[Lt]eti.h\*[Gt] .

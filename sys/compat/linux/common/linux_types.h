@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_types.h,v 1.20 2004/09/20 18:51:55 jdolecek Exp $	*/
+/*	$NetBSD: linux_types.h,v 1.15 2002/10/10 07:25:21 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -47,6 +47,9 @@
 #include <compat/linux/arch/powerpc/linux_types.h>
 #elif defined(__arm__)
 #include <compat/linux/arch/arm/linux_types.h>
+/*
+ * The rest are not written yet:
+ */
 #elif defined(__m68k__)
 #include <compat/linux/arch/m68k/linux_types.h>
 #elif defined(__mips__)
@@ -55,13 +58,6 @@
 typedef unsigned long linux_clock_t;
 typedef unsigned long linux_time_t;
 #endif
-
-/*
- * From Linux include/asm-.../posix_types.h
- */
-typedef struct {
-	int val[2];
-} linux_fsid_t;
 
 /*
  * Structure for uname(2)
@@ -102,40 +98,5 @@ struct linux___sysctl {
 };
 
 #include <compat/linux/common/linux_siginfo.h>
-
-/*
- * From Linux include/asm-generic/statfs.h
- * This is _almost_ generic - Linux/sparc64 uses different (fully 64bit)
- * struct statfs. However, we don't support Linux/sparc64 ATM.
- */
-#ifndef __sparc64__
-struct linux_statfs {
-	u_int32_t	l_ftype;
-	u_int32_t	l_fbsize;
-	u_int32_t	l_fblocks;
-	u_int32_t	l_fbfree;
-	u_int32_t	l_fbavail;
-	u_int32_t	l_ffiles;
-	u_int32_t	l_fffree;
-	linux_fsid_t	l_ffsid;
-	u_int32_t	l_fnamelen;
-	u_int32_t	l_ffrsize;
-	u_int32_t	l_fspare[5];
-};
-
-struct linux_statfs64 {
-	u_int32_t	l_ftype;
-	u_int32_t	l_fbsize;
-	u_int64_t	l_fblocks;
-	u_int64_t	l_fbfree;
-	u_int64_t	l_fbavail;
-	u_int64_t	l_ffiles;
-	u_int64_t	l_fffree;
-	linux_fsid_t	l_ffsid;
-	u_int32_t	l_fnamelen;
-	u_int32_t	l_ffrsize;
-	u_int32_t	l_fspare[5];
-};
-#endif /* !__sparc64__ */
 
 #endif /* !_LINUX_TYPES_H */

@@ -1,4 +1,4 @@
-/*	$NetBSD: hpux_file.c,v 1.26 2004/10/27 19:29:57 david Exp $	*/
+/*	$NetBSD: hpux_file.c,v 1.25.2.1 2004/11/12 06:56:05 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -119,7 +119,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpux_file.c,v 1.26 2004/10/27 19:29:57 david Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpux_file.c,v 1.25.2.1 2004/11/12 06:56:05 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

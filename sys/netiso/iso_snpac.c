@@ -1,4 +1,4 @@
-/*	$NetBSD: iso_snpac.c,v 1.31 2004/04/19 05:16:46 matt Exp $	*/
+/*	$NetBSD: iso_snpac.c,v 1.30 2003/10/30 01:43:10 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,7 +59,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iso_snpac.c,v 1.31 2004/04/19 05:16:46 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iso_snpac.c,v 1.30 2003/10/30 01:43:10 simonb Exp $");
 
 #include "opt_iso.h"
 #ifdef ISO
@@ -120,7 +120,7 @@ static struct sockaddr_dl gte_dl;
 #define zap_linkaddr(a, b, c, i) \
 	(*a = blank_dl, bcopy(b, a->sdl_data, a->sdl_alen = c), a->sdl_index = i)
 
-static void snpac_fixdstandmask (int);
+static void snpac_fixdstandmask __P((int));
 
 /*
  *	We only keep track of a single IS at a time.
@@ -144,10 +144,10 @@ struct rtentry *known_is;
  *	lan_output() That means that if these multicast addresses change
  *	the token ring driver must be altered.
  */
-const char all_es_snpa[] = {0x09, 0x00, 0x2b, 0x00, 0x00, 0x04};
-const char all_is_snpa[] = {0x09, 0x00, 0x2b, 0x00, 0x00, 0x05};
-const char all_l1is_snpa[] = {0x01, 0x80, 0xc2, 0x00, 0x00, 0x14};
-const char all_l2is_snpa[] = {0x01, 0x80, 0xc2, 0x00, 0x00, 0x15};
+char            all_es_snpa[] = {0x09, 0x00, 0x2b, 0x00, 0x00, 0x04};
+char            all_is_snpa[] = {0x09, 0x00, 0x2b, 0x00, 0x00, 0x05};
+char            all_l1is_snpa[] = {0x01, 0x80, 0xc2, 0x00, 0x00, 0x14};
+char            all_l2is_snpa[] = {0x01, 0x80, 0xc2, 0x00, 0x00, 0x15};
 
 union sockunion {
 	struct sockaddr_iso siso;
@@ -163,7 +163,10 @@ union sockunion {
  * NOTES:		This does a lot of obscure magic;
  */
 void
-llc_rtrequest(int req, struct rtentry *rt, struct rt_addrinfo *info)
+llc_rtrequest(req, rt, info)
+	int             req;
+	struct rtentry *rt;
+	struct rt_addrinfo *info;
 {
 	union sockunion *gate = (union sockunion *) rt->rt_gateway;
 	struct llinfo_llc *lc = (struct llinfo_llc *) rt->rt_llinfo;
@@ -245,14 +248,16 @@ llc_rtrequest(int req, struct rtentry *rt, struct rt_addrinfo *info)
  * NOTES:		This also does a lot of obscure magic;
  */
 void
-iso_setmcasts(struct ifnet *ifp, int req)
+iso_setmcasts(ifp, req)
+	struct ifnet   *ifp;
+	int             req;
 {
-	static const char * const addrlist[] =
+	static char    *addrlist[] =
 	{all_es_snpa, all_is_snpa, all_l1is_snpa, all_l2is_snpa, 0};
-	struct ifreq ifr;
+	struct ifreq    ifr;
 	caddr_t *cpp;
 
-	bzero((caddr_t) &ifr, sizeof(ifr));
+	bzero((caddr_t) & ifr, sizeof(ifr));
 	for (cpp = (caddr_t *) addrlist; *cpp; cpp++) {
 		bcopy(*cpp, (caddr_t) ifr.ifr_addr.sa_data, 6);
 		if (req == RTM_ADD && (ifp->if_ioctl == 0 ||
@@ -289,11 +294,11 @@ iso_setmcasts(struct ifnet *ifp, int req)
  *			being invoked if the system is an IS.
  */
 int
-iso_snparesolve(
-	struct ifnet   *ifp,		/* outgoing interface */
-	struct sockaddr_iso *dest,	/* destination */
-	caddr_t         snpa,		/* RESULT: snpa to be used */
-	int            *snpa_len)	/* RESULT: length of snpa */
+iso_snparesolve(ifp, dest, snpa, snpa_len)
+	struct ifnet   *ifp;	/* outgoing interface */
+	struct sockaddr_iso *dest;	/* destination */
+	caddr_t         snpa;	/* RESULT: snpa to be used */
+	int            *snpa_len;	/* RESULT: length of snpa */
 {
 	struct llinfo_llc *sc;	/* ptr to snpa table entry */
 	caddr_t         found_snpa;
@@ -358,8 +363,8 @@ iso_snparesolve(
  *			entry, then delete that as well
  */
 void
-snpac_free(
-	struct llinfo_llc *lc)	/* entry to free */
+snpac_free(lc)
+	struct llinfo_llc *lc;	/* entry to free */
 {
 	struct rtentry *rt = lc->lc_rt;
 
@@ -386,13 +391,13 @@ snpac_free(
  * NOTES:		If entry already exists, then update holding time.
  */
 int
-snpac_add(
-	struct ifnet   *ifp,		/* interface info is related to */
-	struct iso_addr *nsap,		/* nsap to add */
-	caddr_t         snpa,		/* translation */
-	int             type,		/* SNPA_IS or SNPA_ES */
-	u_short         ht,		/* holding time (in seconds) */
-	int             nsellength)	/* nsaps may differ only in trailing
+snpac_add(ifp, nsap, snpa, type, ht, nsellength)
+	struct ifnet   *ifp;	/* interface info is related to */
+	struct iso_addr *nsap;	/* nsap to add */
+	caddr_t         snpa;	/* translation */
+	char            type;	/* SNPA_IS or SNPA_ES */
+	u_short         ht;	/* holding time (in seconds) */
+	int             nsellength;	/* nsaps may differ only in trailing
 					 * bytes */
 {
 	struct llinfo_llc *lc;
@@ -479,7 +484,8 @@ add:
 }
 
 static void
-snpac_fixdstandmask(int nsellength)
+snpac_fixdstandmask(nsellength)
+	int nsellength;
 {
 	char  *cp = msk.siso_data, *cplim;
 
@@ -506,11 +512,11 @@ snpac_fixdstandmask(int nsellength)
  * NOTES:
  */
 int
-snpac_ioctl(
-	struct socket *so,
-	u_long cmd,		/* ioctl to process */
-	caddr_t data,		/* data for the cmd */
-	struct proc *p)
+snpac_ioctl(so, cmd, data, p)
+	struct socket  *so;
+	u_long cmd;	/* ioctl to process */
+	caddr_t data;	/* data for the cmd */
+	struct proc *p;
 {
 	struct systype_req *rq = (struct systype_req *) data;
 
@@ -566,7 +572,8 @@ snpac_ioctl(
  * NOTES:
  */
 void
-snpac_logdefis(struct rtentry *sc)
+snpac_logdefis(sc)
+	struct rtentry *sc;
 {
 	struct rtentry *rt;
 
@@ -611,7 +618,8 @@ snpac_logdefis(struct rtentry *sc)
  */
 /*ARGSUSED*/
 void
-snpac_age(void *v)
+snpac_age(v)
+	void *v;
 {
 	struct llinfo_llc *lc, *nlc;
 	struct rtentry *rt;
@@ -643,7 +651,9 @@ snpac_age(void *v)
  *			real multicast addresses can be configured
  */
 int
-snpac_ownmulti(caddr_t snpa, u_int len)
+snpac_ownmulti(snpa, len)
+	caddr_t         snpa;
+	u_int           len;
 {
 	return (((iso_systype & SNPA_ES) &&
 		 (!bcmp(snpa, (caddr_t) all_es_snpa, len))) ||
@@ -663,7 +673,8 @@ snpac_ownmulti(caddr_t snpa, u_int len)
  * NOTES:
  */
 void
-snpac_flushifp(struct ifnet *ifp)
+snpac_flushifp(ifp)
+	struct ifnet   *ifp;
 {
 	struct llinfo_llc *lc;
 
@@ -686,8 +697,13 @@ snpac_flushifp(struct ifnet *ifp)
  *			level routing daemon.
  */
 void
-snpac_rtrequest(int req, struct iso_addr *host, struct iso_addr *gateway,
-	struct iso_addr *netmask, int flags, struct rtentry **ret_nrt)
+snpac_rtrequest(req, host, gateway, netmask, flags, ret_nrt)
+	int             req;
+	struct iso_addr *host;
+	struct iso_addr *gateway;
+	struct iso_addr *netmask;
+	short           flags;
+	struct rtentry **ret_nrt;
 {
 	struct iso_addr *r;
 
@@ -737,8 +753,9 @@ snpac_rtrequest(int req, struct iso_addr *host, struct iso_addr *gateway,
  *			the existing route before adding a new one.
  */
 void
-snpac_addrt(struct ifnet *ifp, struct iso_addr *host, struct iso_addr *gateway,
-	struct iso_addr *netmask)
+snpac_addrt(ifp, host, gateway, netmask)
+	struct ifnet   *ifp;
+	struct iso_addr *host, *gateway, *netmask;
 {
 	struct iso_addr *r;
 

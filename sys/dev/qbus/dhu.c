@@ -1,6 +1,5 @@
-/*	$NetBSD: dhu.c,v 1.36 2004/05/12 00:45:04 wiz Exp $	*/
+/*	$NetBSD: dhu.c,v 1.34 2003/08/07 16:31:13 agc Exp $	*/
 /*
- * Copyright (c) 2003, Hugh Graham.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -33,6 +32,7 @@
  */
 
 /*
+ * Copyright (c) 2003, Hugh Graham.
  * Copyright (c) 1996  Ken C. Wellsch.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dhu.c,v 1.36 2004/05/12 00:45:04 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dhu.c,v 1.34 2003/08/07 16:31:13 agc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -149,7 +149,7 @@ struct	dhu_softc {
 /* a baud rate from the same group.  So limiting to B is likely */
 /* best, although clone boards like the ABLE QHV allow all settings. */
 
-static const struct speedtab dhuspeedtab[] = {
+static struct speedtab dhuspeedtab[] = {
   {       0,	0		},	/* Groups  */
   {      50,	DHU_LPR_B50	},	/* A	   */
   {      75,	DHU_LPR_B75	},	/* 	 B */

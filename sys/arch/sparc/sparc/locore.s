@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.214 2004/07/04 09:54:20 pk Exp $	*/
+/*	$NetBSD: locore.s,v 1.198.2.1 2004/04/24 18:30:47 jdc Exp $	*/
 
 /*
  * Copyright (c) 1996 Paul Kranenburg
@@ -919,7 +919,7 @@ trapbase_sun4m:
 /* trap 0 is special since we cannot receive it */
 	b dostart; nop; nop; nop	! 00 = reset (fake)
 	VTRAP(T_TEXTFAULT, memfault_sun4m)	! 01 = instr. fetch fault
-	VTRAP(T_ILLINST, illinst4m)	! 02 = illegal instruction
+	TRAP(T_ILLINST)			! 02 = illegal instruction
 	TRAP(T_PRIVINST)		! 03 = privileged instruction
 	TRAP(T_FPDISABLED)		! 04 = fp instr, but EF bit off in psr
 	WINDOW_OF			! 05 = window overflow
@@ -1234,7 +1234,7 @@ Lpanic_red:
 	st	%g0, [t1 + %lo(_redzone)]; \
 	set	_redstack + REDSTACK - 96, %sp; \
 	/* prevent panic() from lowering ipl */ \
-	sethi	%hi(_C_LABEL(panicstr)), t1; \
+	sethi	%hi(_C_LABEL(panicstr)), t2; \
 	set	Lpanic_red, t2; \
 	st	t2, [t1 + %lo(_C_LABEL(panicstr))]; \
 	rd	%psr, t1;		/* t1 = splhigh() */ \
@@ -2069,59 +2069,6 @@ normal_mem_fault:
 	b	return_from_trap	! go return
 	 wr	%l0, 0, %psr		! (but first disable traps again)
 
-illinst4m:
-	/*
-	 * Cypress CPUs like to generate an Illegal Instruction trap
-	 * for FLUSH instructions. Since we turn FLUSHes into no-ops
-	 * (see also trap.c/emul.c), we check for this case here in
-	 * the trap window, saving the overhead of a slow trap.
-	 *
-	 * We have to be careful not to incur a trap while probing
-	 * for the instruction in user space. Use the Inhibit Fault
-	 * bit in the PCR register to prevent that.
-	 */
-
-	btst	PSR_PS, %l0		! slowtrap() if from kernel
-	bnz	slowtrap
-	 EMPTY
-
-	! clear fault status
-	set	SRMMU_SFSR, %l7
-	lda	[%l7]ASI_SRMMU, %g0
-
-	! turn on the fault inhibit in PCR
-	!set	SRMMU_PCR, reg			- SRMMU_PCR == 0, so use %g0
-	lda	[%g0]ASI_SRMMU, %l4
-	or	%l4, SRMMU_PCR_NF, %l5
-	sta	%l5, [%g0]ASI_SRMMU
-
-	! load the insn word as if user insn fetch
-	lda	[%l1]ASI_USERI, %l5
-
-	sta	%l4, [%g0]ASI_SRMMU		! restore PCR
-
-	! check fault status; if we have a fault, take a regular trap
-	set	SRMMU_SFAR, %l6
-	lda	[%l6]ASI_SRMMU, %g0		! fault VA; must be read first
-	lda	[%l7]ASI_SRMMU, %l6		! fault status
-	andcc	%l6, SFSR_FAV, %l6		! get fault status bits
-	bnz	slowtrap
-	 EMPTY
-
-	! we got the insn; check whether it was a FLUSH
-	! instruction format: op=2, op3=0x3b (see also instr.h)
-	set	((3 << 30) | (0x3f << 19)), %l7	! extract op & op3 fields
-	and	%l5, %l7, %l6
-	set	((2 << 30) | (0x3b << 19)), %l7	! any FLUSH opcode
-	cmp	%l6, %l7
-	bne	slowtrap
-	 nop
-
-	mov	%l2, %l1			! ADVANCE <pc,npc>
-	mov	%l0, %psr			! and return from trap
-	 add	%l2, 4, %l2
-	RETT
-	
 
 /*
  * fp_exception has to check to see if we are trying to save
@@ -4799,20 +4746,23 @@ ENTRY(write_user_windows)
 /*
  * Switch statistics (for later tweaking):
  *	nswitchdiff = p1 => p2 (i.e., chose different process)
+ *	nswitchexit = number of calls to switchexit()
  *	cnt.v_swtch = total calls to swtch+swtchexit
  */
 	.comm	_C_LABEL(nswitchdiff), 4
+	.comm	_C_LABEL(nswitchexit), 4
 
 /*
- * cpu_exit is called as the last action during exit.
+ * switchexit is called only from cpu_exit() before the current process
+ * has freed its vmspace and kernel stack; we must schedule them to be
+ * freed.  (curlwp is already NULL.)
  *
  * We lay the process to rest by changing to the `idle' kernel stack,
  * and note that the `last loaded process' is nonexistent.
- *
- * lwp_exit2(0 will free the thread's stack.
  */
-ENTRY(cpu_exit)
-	mov	%o0, %g2		! save lwp for lwp_exit2() call
+ENTRY(switchexit)
+	mov	%o0, %g2		! save proc for exit2() call
+	mov	%o1, %g1		! exit2() or lwp_exit2()
 
 	/*
 	 * Change pcb to idle u. area, i.e., set %sp to top of stack
@@ -4846,7 +4796,7 @@ ENTRY(cpu_exit)
 #endif
 	wr	%g0, PSR_S|PSR_ET, %psr	! and then enable traps
 	 nop
-	call	lwp_exit2		! lwp_exit2(l)
+	call	%g1			! {lwp}exit2(p)
 	 mov	%g2, %o0
 
 	/*
@@ -4863,6 +4813,9 @@ ENTRY(cpu_exit)
 	 *	%o0 = tmp 1
 	 *	%o1 = tmp 2
 	 */
+
+	INCR(_C_LABEL(nswitchexit))	! nswitchexit++;
+	INCR(_C_LABEL(uvmexp)+V_SWTCH)	! cnt.v_switch++;
 
 	mov	PSR_S|PSR_ET, %l1	! oldpsr = PSR_S | PSR_ET;
 	sethi	%hi(_C_LABEL(sched_whichqs)), %l2
@@ -6606,30 +6559,19 @@ _ENTRY(_C_LABEL(__cpu_simple_lock))
 0:
 	ldstub	[%o0], %o1
 	tst	%o1
-	bnz,a	2f
-	 ldub	[%o0], %o1
-1:
+	bnz	1f
+	 set	0x1000000, %o2	! set spinout counter
 	retl
 	 EMPTY
-2:
-	set	0x1000000, %o2	! set spinout counter
-3:
+1:
+	ldub	[%o0], %o1
 	tst	%o1
 	bz	0b		! lock has been released; try again
 	deccc	%o2
-	bcc,a	3b		! repeat until counter < 0
-	 ldub	[%o0], %o1
+	bcc	1b		! repeat until counter < 0
+	 nop
 
-	! spun out; check if already panicking
-	sethi	%hi(_C_LABEL(panicstr)), %o2
-	ld	[%o2 + %lo(_C_LABEL(panicstr))], %o1
-	tst	%o1
-	! if so, just take the lock and return on the assumption that
-	! in panic mode we're running on a single CPU anyway.
-	bnz,a	1b
-	 ldstub	[%o0], %g0
-
-	! set up stack frame and call panic
+	! spun out; set up stack frame and call panic
 	save	%sp, -CCFSZ, %sp
 	sethi	%hi(CPUINFO_VA + CPUINFO_CPUNO), %o0
 	ld	[%o0 + %lo(CPUINFO_VA + CPUINFO_CPUNO)], %o1

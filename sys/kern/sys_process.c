@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_process.c,v 1.92 2004/09/17 14:11:25 skrll Exp $	*/
+/*	$NetBSD: sys_process.c,v 1.86 2004/03/13 18:43:18 matt Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -89,7 +89,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_process.c,v 1.92 2004/09/17 14:11:25 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_process.c,v 1.86 2004/03/13 18:43:18 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -310,11 +310,11 @@ sys_ptrace(l, v, retval)
 		iov.iov_len = sizeof(tmp);
 		uio.uio_iov = &iov;
 		uio.uio_iovcnt = 1;
-		uio.uio_offset = (off_t)(unsigned long)SCARG(uap, addr);
+		uio.uio_offset = (off_t)(long)SCARG(uap, addr);
 		uio.uio_resid = sizeof(tmp);
 		uio.uio_segflg = UIO_SYSSPACE;
 		uio.uio_rw = write ? UIO_WRITE : UIO_READ;
-		uio.uio_procp = NULL;
+		uio.uio_procp = p;
 		error = process_domem(p, t, &uio);
 		if (!write)
 			*retval = tmp;
@@ -328,7 +328,7 @@ sys_ptrace(l, v, retval)
 		iov.iov_len = piod.piod_len;
 		uio.uio_iov = &iov;
 		uio.uio_iovcnt = 1;
-		uio.uio_offset = (off_t)(unsigned long)piod.piod_offs;
+		uio.uio_offset = (off_t)(long)piod.piod_offs;
 		uio.uio_resid = piod.piod_len;
 		uio.uio_segflg = UIO_USERSPACE;
 		uio.uio_procp = p;
@@ -399,7 +399,6 @@ sys_ptrace(l, v, retval)
 
 		if (SCARG(uap, req) == PT_DETACH) {
 			/* give process back to original parent or init */
-			s = proclist_lock_write();
 			if (t->p_opptr != t->p_pptr) {
 				struct proc *pp = t->p_opptr;
 				proc_reparent(t, pp ? pp : initproc);
@@ -407,7 +406,6 @@ sys_ptrace(l, v, retval)
 
 			/* not being traced any more */
 			t->p_opptr = NULL;
-			proclist_unlock_write(s);
 			CLR(t->p_flag, P_TRACED|P_WAITED);
 		}
 
@@ -451,13 +449,11 @@ sys_ptrace(l, v, retval)
 		 * Stop the target.
 		 */
 		SET(t->p_flag, P_TRACED);
-		s = proclist_lock_write();
 		t->p_opptr = t->p_pptr;
 		if (t->p_pptr != p) {
 			t->p_pptr->p_flag |= P_CHTRACED;
 			proc_reparent(t, p);
 		}
-		proclist_unlock_write(s);
 		SCARG(uap, data) = SIGSTOP;
 		goto sendsig;
 
@@ -583,18 +579,17 @@ process_doregs(curp, l, uio)
 	char *kv;
 	int kl;
 
-	if (uio->uio_offset < 0 || uio->uio_offset > (off_t)sizeof(r))
-		return EINVAL;
-
 	if ((error = process_checkioperm(curp, l->l_proc)) != 0)
 		return error;
 
 	kl = sizeof(r);
-	kv = (char *)&r;
+	kv = (char *) &r;
 
 	kv += uio->uio_offset;
 	kl -= uio->uio_offset;
-	if ((size_t)kl > uio->uio_resid)
+	if (kl < 0)
+		return (EINVAL);
+	if ((size_t) kl > uio->uio_resid)
 		kl = uio->uio_resid;
 
 	PHOLD(l);
@@ -642,18 +637,17 @@ process_dofpregs(curp, l, uio)
 	char *kv;
 	int kl;
 
-	if (uio->uio_offset < 0 || uio->uio_offset > (off_t)sizeof(r))
-		return EINVAL;
-
 	if ((error = process_checkioperm(curp, l->l_proc)) != 0)
 		return (error);
 
 	kl = sizeof(r);
-	kv = (char *)&r;
+	kv = (char *) &r;
 
 	kv += uio->uio_offset;
 	kl -= uio->uio_offset;
-	if ((size_t)kl > uio->uio_resid)
+	if (kl < 0)
+		return (EINVAL);
+	if ((size_t) kl > uio->uio_resid)
 		kl = uio->uio_resid;
 
 	PHOLD(l);
@@ -695,7 +689,6 @@ process_domem(curp, p, uio)
 	struct proc *p;			/* traced */
 	struct uio *uio;
 {
-	struct vmspace *vm;
 	int error;
 
 	size_t len;
@@ -715,18 +708,12 @@ process_domem(curp, p, uio)
 	if ((error = process_checkioperm(curp, p)) != 0)
 		return (error);
 
-	vm = p->p_vmspace;
-
-	simple_lock(&vm->vm_map.ref_lock);
-	if ((p->p_flag & P_WEXIT) || vm->vm_refcnt < 1) 
-		error = EFAULT;
-	if (error == 0)
-		p->p_vmspace->vm_refcnt++;  /* XXX */
-	simple_unlock(&vm->vm_map.ref_lock);
-	if (error != 0)
-		return (error);
-	error = uvm_io(&vm->vm_map, uio);
-	uvmspace_free(vm);
+	/* XXXCDC: how should locking work here? */
+	if ((p->p_flag & P_WEXIT) || (p->p_vmspace->vm_refcnt < 1)) 
+		return(EFAULT);
+	p->p_vmspace->vm_refcnt++;  /* XXX */
+	error = uvm_io(&p->p_vmspace->vm_map, uio);
+	uvmspace_free(p->p_vmspace);
 
 #ifdef PMAP_NEED_PROCWR
 	if (error == 0 && uio->uio_rw == UIO_WRITE)

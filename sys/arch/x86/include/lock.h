@@ -1,4 +1,4 @@
-/*	$NetBSD: lock.h,v 1.8 2004/11/25 04:50:48 yamt Exp $	*/
+/*	$NetBSD: lock.h,v 1.5 2003/10/27 13:43:48 junyoung Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -49,6 +49,16 @@
 
 #include <machine/cpufunc.h>
 
+/*
+ * compiler barrier: prevent reordering of instructions.
+ * XXX something similar will move to <sys/cdefs.h>
+ * or thereabouts.
+ * This prevents the compiler from reordering code around
+ * this "instruction", acting as a sequence point for code generation.
+ */
+
+#define __lockbarrier() __asm __volatile("": : :"memory")
+
 #ifdef LOCKDEBUG
 
 extern void __cpu_simple_lock_init(__cpu_simple_lock_t *);
@@ -74,7 +84,7 @@ __cpu_simple_lock_init(__cpu_simple_lock_t *lockp)
 {
 
 	*lockp = __SIMPLELOCK_UNLOCKED;
-	__insn_barrier();
+	__lockbarrier();
 }
 
 static __inline void
@@ -82,12 +92,9 @@ __cpu_simple_lock(__cpu_simple_lock_t *lockp)
 {
 
 	while (x86_atomic_testset_i(lockp, __SIMPLELOCK_LOCKED)
-	    != __SIMPLELOCK_UNLOCKED) {
-		do {
-			x86_pause();
-		} while (*lockp == __SIMPLELOCK_LOCKED);
-	}
-	__insn_barrier();
+	    != __SIMPLELOCK_UNLOCKED)
+		x86_pause();
+	__lockbarrier();
 }
 
 static __inline int
@@ -96,7 +103,7 @@ __cpu_simple_lock_try(__cpu_simple_lock_t *lockp)
 	int r = (x86_atomic_testset_i(lockp, __SIMPLELOCK_LOCKED)
 	    == __SIMPLELOCK_UNLOCKED);
 
-	__insn_barrier();
+	__lockbarrier();
 
 	return (r);
 }
@@ -105,7 +112,7 @@ static __inline void
 __cpu_simple_unlock(__cpu_simple_lock_t *lockp)
 {
 
-	__insn_barrier();
+	__lockbarrier();
 	*lockp = __SIMPLELOCK_UNLOCKED;
 }
 

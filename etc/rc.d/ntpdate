@@ -1,12 +1,12 @@
 #!/bin/sh
 #
-# $NetBSD: ntpdate,v 1.17 2004/10/11 15:00:51 christos Exp $
+# $NetBSD: ntpdate,v 1.15 2003/12/04 18:28:54 drochner Exp $
 #
 
 # PROVIDE: ntpdate
 # REQUIRE: NETWORKING syslogd
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="ntpdate"
 rcvar=$name
@@ -17,14 +17,14 @@ stop_cmd=":"
 ntpdate_start()
 {
 	if [ -z "$ntpdate_hosts" ]; then
-		ntpdate_hosts=$(awk '
+		ntpdate_hosts=`awk '
 			/^#/				{ next }
 			/^(server|peer)[ \t]*127.127/	{ next }
 			/^(server|peer)/		{ if ($2 ~ /^-[46]/)
 							    print $3
 							  else
 							    print $2 }
-		' </etc/ntp.conf)
+		' </etc/ntp.conf`
 	fi
 	if [ -n "$ntpdate_hosts"  ]; then
 		echo "Setting date via ntp."

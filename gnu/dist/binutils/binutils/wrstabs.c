@@ -173,80 +173,115 @@ struct stab_write_handle
 };
 
 static struct bfd_hash_entry *string_hash_newfunc
-  (struct bfd_hash_entry *, struct bfd_hash_table *, const char *);
+  PARAMS ((struct bfd_hash_entry *, struct bfd_hash_table *, const char *));
 static bfd_boolean stab_write_symbol
-  (struct stab_write_handle *, int, int, bfd_vma, const char *);
+  PARAMS ((struct stab_write_handle *, int, int, bfd_vma, const char *));
 static bfd_boolean stab_push_string
-  (struct stab_write_handle *, const char *, long, bfd_boolean, unsigned int);
+  PARAMS ((struct stab_write_handle *, const char *, long, bfd_boolean,
+	   unsigned int));
 static bfd_boolean stab_push_defined_type
-  (struct stab_write_handle *, long, unsigned int);
-static char *stab_pop_type (struct stab_write_handle *);
+  PARAMS ((struct stab_write_handle *, long, unsigned int));
+static char *stab_pop_type
+  PARAMS ((struct stab_write_handle *));
 static bfd_boolean stab_modify_type
-  (struct stab_write_handle *, int, unsigned int, long **, size_t *);
+  PARAMS ((struct stab_write_handle *, int, unsigned int, long **, size_t *));
 static long stab_get_struct_index
-  (struct stab_write_handle *, const char *, unsigned int,
-   enum debug_type_kind, unsigned int *);
+  PARAMS ((struct stab_write_handle *, const char *, unsigned int,
+	   enum debug_type_kind, unsigned int *));
 static bfd_boolean stab_class_method_var
-  (struct stab_write_handle *, const char *, enum debug_visibility,
-   bfd_boolean, bfd_boolean, bfd_boolean, bfd_vma, bfd_boolean);
-static bfd_boolean stab_start_compilation_unit (void *, const char *);
-static bfd_boolean stab_start_source (void *, const char *);
-static bfd_boolean stab_empty_type (void *);
-static bfd_boolean stab_void_type (void *);
-static bfd_boolean stab_int_type (void *, unsigned int, bfd_boolean);
-static bfd_boolean stab_float_type (void *, unsigned int);
-static bfd_boolean stab_complex_type (void *, unsigned int);
-static bfd_boolean stab_bool_type (void *, unsigned int);
+  PARAMS ((struct stab_write_handle *, const char *, enum debug_visibility,
+	   bfd_boolean, bfd_boolean, bfd_boolean, bfd_vma, bfd_boolean));
+static bfd_boolean stab_start_compilation_unit
+  PARAMS ((PTR, const char *));
+static bfd_boolean stab_start_source
+  PARAMS ((PTR, const char *));
+static bfd_boolean stab_empty_type
+  PARAMS ((PTR));
+static bfd_boolean stab_void_type
+  PARAMS ((PTR));
+static bfd_boolean stab_int_type
+  PARAMS ((PTR, unsigned int, bfd_boolean));
+static bfd_boolean stab_float_type
+  PARAMS ((PTR, unsigned int));
+static bfd_boolean stab_complex_type
+  PARAMS ((PTR, unsigned int));
+static bfd_boolean stab_bool_type
+  PARAMS ((PTR, unsigned int));
 static bfd_boolean stab_enum_type
-  (void *, const char *, const char **, bfd_signed_vma *);
-static bfd_boolean stab_pointer_type (void *);
-static bfd_boolean stab_function_type (void *, int, bfd_boolean);
-static bfd_boolean stab_reference_type (void *);
-static bfd_boolean stab_range_type (void *, bfd_signed_vma, bfd_signed_vma);
+  PARAMS ((PTR, const char *, const char **, bfd_signed_vma *));
+static bfd_boolean stab_pointer_type
+  PARAMS ((PTR));
+static bfd_boolean stab_function_type
+  PARAMS ((PTR, int, bfd_boolean));
+static bfd_boolean stab_reference_type
+  PARAMS ((PTR));
+static bfd_boolean stab_range_type
+  PARAMS ((PTR, bfd_signed_vma, bfd_signed_vma));
 static bfd_boolean stab_array_type
-  (void *, bfd_signed_vma, bfd_signed_vma, bfd_boolean);
-static bfd_boolean stab_set_type (void *, bfd_boolean);
-static bfd_boolean stab_offset_type (void *);
-static bfd_boolean stab_method_type (void *, bfd_boolean, int, bfd_boolean);
-static bfd_boolean stab_const_type (void *);
-static bfd_boolean stab_volatile_type (void *);
+  PARAMS ((PTR, bfd_signed_vma, bfd_signed_vma, bfd_boolean));
+static bfd_boolean stab_set_type
+  PARAMS ((PTR, bfd_boolean));
+static bfd_boolean stab_offset_type
+  PARAMS ((PTR));
+static bfd_boolean stab_method_type
+  PARAMS ((PTR, bfd_boolean, int, bfd_boolean));
+static bfd_boolean stab_const_type
+  PARAMS ((PTR));
+static bfd_boolean stab_volatile_type
+  PARAMS ((PTR));
 static bfd_boolean stab_start_struct_type
-  (void *, const char *, unsigned int, bfd_boolean, unsigned int);
+  PARAMS ((PTR, const char *, unsigned int, bfd_boolean, unsigned int));
 static bfd_boolean stab_struct_field
-  (void *, const char *, bfd_vma, bfd_vma, enum debug_visibility);
-static bfd_boolean stab_end_struct_type (void *);
+  PARAMS ((PTR, const char *, bfd_vma, bfd_vma, enum debug_visibility));
+static bfd_boolean stab_end_struct_type
+  PARAMS ((PTR));
 static bfd_boolean stab_start_class_type
-  (void *, const char *, unsigned int, bfd_boolean, unsigned int,
-   bfd_boolean, bfd_boolean);
+  PARAMS ((PTR, const char *, unsigned int, bfd_boolean, unsigned int,
+	   bfd_boolean, bfd_boolean));
 static bfd_boolean stab_class_static_member
-  (void *, const char *, const char *, enum debug_visibility);
+  PARAMS ((PTR, const char *, const char *, enum debug_visibility));
 static bfd_boolean stab_class_baseclass
-  (void *, bfd_vma, bfd_boolean, enum debug_visibility);
-static bfd_boolean stab_class_start_method (void *, const char *);
+  PARAMS ((PTR, bfd_vma, bfd_boolean, enum debug_visibility));
+static bfd_boolean stab_class_start_method
+  PARAMS ((PTR, const char *));
 static bfd_boolean stab_class_method_variant
-  (void *, const char *, enum debug_visibility, bfd_boolean, bfd_boolean,
-   bfd_vma, bfd_boolean);
+  PARAMS ((PTR, const char *, enum debug_visibility, bfd_boolean, bfd_boolean,
+	   bfd_vma, bfd_boolean));
 static bfd_boolean stab_class_static_method_variant
-  (void *, const char *, enum debug_visibility, bfd_boolean, bfd_boolean);
-static bfd_boolean stab_class_end_method (void *);
-static bfd_boolean stab_end_class_type (void *);
-static bfd_boolean stab_typedef_type (void *, const char *);
+  PARAMS ((PTR, const char *, enum debug_visibility, bfd_boolean,
+	   bfd_boolean));
+static bfd_boolean stab_class_end_method
+  PARAMS ((PTR));
+static bfd_boolean stab_end_class_type
+  PARAMS ((PTR));
+static bfd_boolean stab_typedef_type
+  PARAMS ((PTR, const char *));
 static bfd_boolean stab_tag_type
-  (void *, const char *, unsigned int, enum debug_type_kind);
-static bfd_boolean stab_typdef (void *, const char *);
-static bfd_boolean stab_tag (void *, const char *);
-static bfd_boolean stab_int_constant (void *, const char *, bfd_vma);
-static bfd_boolean stab_float_constant (void *, const char *, double);
-static bfd_boolean stab_typed_constant (void *, const char *, bfd_vma);
+  PARAMS ((PTR, const char *, unsigned int, enum debug_type_kind));
+static bfd_boolean stab_typdef
+  PARAMS ((PTR, const char *));
+static bfd_boolean stab_tag
+  PARAMS ((PTR, const char *));
+static bfd_boolean stab_int_constant
+  PARAMS ((PTR, const char *, bfd_vma));
+static bfd_boolean stab_float_constant
+  PARAMS ((PTR, const char *, double));
+static bfd_boolean stab_typed_constant
+  PARAMS ((PTR, const char *, bfd_vma));
 static bfd_boolean stab_variable
-  (void *, const char *, enum debug_var_kind, bfd_vma);
-static bfd_boolean stab_start_function (void *, const char *, bfd_boolean);
+  PARAMS ((PTR, const char *, enum debug_var_kind, bfd_vma));
+static bfd_boolean stab_start_function
+  PARAMS ((PTR, const char *, bfd_boolean));
 static bfd_boolean stab_function_parameter
-  (void *, const char *, enum debug_parm_kind, bfd_vma);
-static bfd_boolean stab_start_block (void *, bfd_vma);
-static bfd_boolean stab_end_block (void *, bfd_vma);
-static bfd_boolean stab_end_function (void *);
-static bfd_boolean stab_lineno (void *, const char *, unsigned long, bfd_vma);
+  PARAMS ((PTR, const char *, enum debug_parm_kind, bfd_vma));
+static bfd_boolean stab_start_block
+  PARAMS ((PTR, bfd_vma));
+static bfd_boolean stab_end_block
+  PARAMS ((PTR, bfd_vma));
+static bfd_boolean stab_end_function
+  PARAMS ((PTR));
+static bfd_boolean stab_lineno
+  PARAMS ((PTR, const char *, unsigned long, bfd_vma));
 
 static const struct debug_write_fns stab_fns =
 {
@@ -299,8 +334,10 @@ static const struct debug_write_fns stab_fns =
 /* Routine to create an entry in a string hash table.  */
 
 static struct bfd_hash_entry *
-string_hash_newfunc (struct bfd_hash_entry *entry,
-		     struct bfd_hash_table *table, const char *string)
+string_hash_newfunc (entry, table, string)
+     struct bfd_hash_entry *entry;
+     struct bfd_hash_table *table;
+     const char *string;
 {
   struct string_hash_entry *ret = (struct string_hash_entry *) entry;
 
@@ -336,8 +373,12 @@ string_hash_newfunc (struct bfd_hash_entry *entry,
 /* Add a symbol to the stabs debugging information we are building.  */
 
 static bfd_boolean
-stab_write_symbol (struct stab_write_handle *info, int type, int desc,
-		   bfd_vma value, const char *string)
+stab_write_symbol (info, type, desc, value, string)
+     struct stab_write_handle *info;
+     int type;
+     int desc;
+     bfd_vma value;
+     const char *string;
 {
   bfd_size_type strx;
   bfd_byte sym[STAB_SYMBOL_SIZE];
@@ -394,8 +435,12 @@ stab_write_symbol (struct stab_write_handle *info, int type, int desc,
 /* Push a string on to the type stack.  */
 
 static bfd_boolean
-stab_push_string (struct stab_write_handle *info, const char *string,
-		  long index, bfd_boolean definition, unsigned int size)
+stab_push_string (info, string, index, definition, size)
+     struct stab_write_handle *info;
+     const char *string;
+     long index;
+     bfd_boolean definition;
+     unsigned int size;
 {
   struct stab_type_stack *s;
 
@@ -419,8 +464,10 @@ stab_push_string (struct stab_write_handle *info, const char *string,
 /* Push a type index which has already been defined.  */
 
 static bfd_boolean
-stab_push_defined_type (struct stab_write_handle *info, long index,
-			unsigned int size)
+stab_push_defined_type (info, index, size)
+     struct stab_write_handle *info;
+     long index;
+     unsigned int size;
 {
   char buf[20];
 
@@ -432,7 +479,8 @@ stab_push_defined_type (struct stab_write_handle *info, long index,
    freeing the string.  */
 
 static char *
-stab_pop_type (struct stab_write_handle *info)
+stab_pop_type (info)
+     struct stab_write_handle *info;
 {
   struct stab_type_stack *s;
   char *ret;
@@ -459,11 +507,14 @@ stab_pop_type (struct stab_write_handle *info)
    strings, and *PSTRINGSIZE to the size of the strings.  */
 
 bfd_boolean
-write_stabs_in_sections_debugging_info (bfd *abfd, void *dhandle,
-					bfd_byte **psyms,
-					bfd_size_type *psymsize,
-					bfd_byte **pstrings,
-					bfd_size_type *pstringsize)
+write_stabs_in_sections_debugging_info (abfd, dhandle, psyms, psymsize,
+					pstrings, pstringsize)
+     bfd *abfd;
+     PTR dhandle;
+     bfd_byte **psyms;
+     bfd_size_type *psymsize;
+     bfd_byte **pstrings;
+     bfd_size_type *pstringsize;
 {
   struct stab_write_handle info;
   struct string_hash_entry *h;
@@ -507,7 +558,7 @@ write_stabs_in_sections_debugging_info (bfd *abfd, void *dhandle,
   if (! stab_write_symbol (&info, N_SO, 0, 0, bfd_get_filename (abfd)))
     return FALSE;
 
-  if (! debug_write (dhandle, &stab_fns, (void *) &info))
+  if (! debug_write (dhandle, &stab_fns, (PTR) &info))
     return FALSE;
 
   assert (info.pending_lbrac == (bfd_vma) -1);
@@ -540,7 +591,9 @@ write_stabs_in_sections_debugging_info (bfd *abfd, void *dhandle,
 /* Start writing out information for a compilation unit.  */
 
 static bfd_boolean
-stab_start_compilation_unit (void *p, const char *filename)
+stab_start_compilation_unit (p, filename)
+     PTR p;
+     const char *filename;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
 
@@ -557,7 +610,9 @@ stab_start_compilation_unit (void *p, const char *filename)
 /* Start writing out information for a particular source file.  */
 
 static bfd_boolean
-stab_start_source (void *p, const char *filename)
+stab_start_source (p, filename)
+     PTR p;
+     const char *filename;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
 
@@ -574,7 +629,8 @@ stab_start_source (void *p, const char *filename)
    void type.  */
 
 static bfd_boolean
-stab_empty_type (void *p)
+stab_empty_type (p)
+     PTR p;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
 
@@ -600,7 +656,8 @@ stab_empty_type (void *p)
 /* Push a void type.  */
 
 static bfd_boolean
-stab_void_type (void *p)
+stab_void_type (p)
+     PTR p;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
 
@@ -625,7 +682,10 @@ stab_void_type (void *p)
 /* Push an integer type.  */
 
 static bfd_boolean
-stab_int_type (void *p, unsigned int size, bfd_boolean unsignedp)
+stab_int_type (p, size, unsignedp)
+     PTR p;
+     unsigned int size;
+     bfd_boolean unsignedp;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   long *cache;
@@ -685,7 +745,9 @@ stab_int_type (void *p, unsigned int size, bfd_boolean unsignedp)
 /* Push a floating point type.  */
 
 static bfd_boolean
-stab_float_type (void *p, unsigned int size)
+stab_float_type (p, size)
+     PTR p;
+     unsigned int size;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
 
@@ -726,7 +788,9 @@ stab_float_type (void *p, unsigned int size)
 /* Push a complex type.  */
 
 static bfd_boolean
-stab_complex_type (void *p, unsigned int size)
+stab_complex_type (p, size)
+     PTR p;
+     unsigned int size;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   char buf[50];
@@ -744,7 +808,9 @@ stab_complex_type (void *p, unsigned int size)
    always recognizes them.  */
 
 static bfd_boolean
-stab_bool_type (void *p, unsigned int size)
+stab_bool_type (p, size)
+     PTR p;
+     unsigned int size;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   long index;
@@ -775,8 +841,11 @@ stab_bool_type (void *p, unsigned int size)
 /* Push an enum type.  */
 
 static bfd_boolean
-stab_enum_type (void *p, const char *tag, const char **names,
-		bfd_signed_vma *vals)
+stab_enum_type (p, tag, names, vals)
+     PTR p;
+     const char *tag;
+     const char **names;
+     bfd_signed_vma *vals;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   size_t len;
@@ -842,8 +911,12 @@ stab_enum_type (void *p, const char *tag, const char **names,
    results in CACHE and CACHE_ALLOC.  */
 
 static bfd_boolean
-stab_modify_type (struct stab_write_handle *info, int mod,
-		  unsigned int size, long **cache, size_t *cache_alloc)
+stab_modify_type (info, mod, size, cache, cache_alloc)
+     struct stab_write_handle *info;
+     int mod;
+     unsigned int size;
+     long **cache;
+     size_t *cache_alloc;
 {
   long targindex;
   long index;
@@ -924,7 +997,8 @@ stab_modify_type (struct stab_write_handle *info, int mod,
 /* Push a pointer type.  */
 
 static bfd_boolean
-stab_pointer_type (void *p)
+stab_pointer_type (p)
+     PTR p;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
 
@@ -936,8 +1010,10 @@ stab_pointer_type (void *p)
 /* Push a function type.  */
 
 static bfd_boolean
-stab_function_type (void *p, int argcount,
-		    bfd_boolean varargs ATTRIBUTE_UNUSED)
+stab_function_type (p, argcount, varargs)
+     PTR p;
+     int argcount;
+     bfd_boolean varargs ATTRIBUTE_UNUSED;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   int i;
@@ -973,7 +1049,8 @@ stab_function_type (void *p, int argcount,
 /* Push a reference type.  */
 
 static bfd_boolean
-stab_reference_type (void *p)
+stab_reference_type (p)
+     PTR p;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
 
@@ -985,7 +1062,10 @@ stab_reference_type (void *p)
 /* Push a range type.  */
 
 static bfd_boolean
-stab_range_type (void *p, bfd_signed_vma low, bfd_signed_vma high)
+stab_range_type (p, low, high)
+     PTR p;
+     bfd_signed_vma low;
+     bfd_signed_vma high;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   bfd_boolean definition;
@@ -1011,8 +1091,11 @@ stab_range_type (void *p, bfd_signed_vma low, bfd_signed_vma high)
 /* Push an array type.  */
 
 static bfd_boolean
-stab_array_type (void *p, bfd_signed_vma low, bfd_signed_vma high,
-		 bfd_boolean stringp)
+stab_array_type (p, low, high, stringp)
+     PTR p;
+     bfd_signed_vma low;
+     bfd_signed_vma high;
+     bfd_boolean stringp;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   bfd_boolean definition;
@@ -1065,7 +1148,9 @@ stab_array_type (void *p, bfd_signed_vma low, bfd_signed_vma high,
 /* Push a set type.  */
 
 static bfd_boolean
-stab_set_type (void *p, bfd_boolean bitstringp)
+stab_set_type (p, bitstringp)
+     PTR p;
+     bfd_boolean bitstringp;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   bfd_boolean definition;
@@ -1106,7 +1191,8 @@ stab_set_type (void *p, bfd_boolean bitstringp)
 /* Push an offset type.  */
 
 static bfd_boolean
-stab_offset_type (void *p)
+stab_offset_type (p)
+     PTR p;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   bfd_boolean definition;
@@ -1134,8 +1220,11 @@ stab_offset_type (void *p)
 /* Push a method type.  */
 
 static bfd_boolean
-stab_method_type (void *p, bfd_boolean domainp, int argcount,
-		  bfd_boolean varargs)
+stab_method_type (p, domainp, argcount, varargs)
+     PTR p;
+     bfd_boolean domainp;
+     int argcount;
+     bfd_boolean varargs;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   bfd_boolean definition;
@@ -1233,7 +1322,8 @@ stab_method_type (void *p, bfd_boolean domainp, int argcount,
 /* Push a const version of a type.  */
 
 static bfd_boolean
-stab_const_type (void *p)
+stab_const_type (p)
+     PTR p;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
 
@@ -1244,7 +1334,8 @@ stab_const_type (void *p)
 /* Push a volatile version of a type.  */
 
 static bfd_boolean
-stab_volatile_type (void *p)
+stab_volatile_type (p)
+     PTR p;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
 
@@ -1256,9 +1347,12 @@ stab_volatile_type (void *p)
    return -1 if it fails.  */
 
 static long
-stab_get_struct_index (struct stab_write_handle *info, const char *tag,
-		       unsigned int id, enum debug_type_kind kind,
-		       unsigned int *psize)
+stab_get_struct_index (info, tag, id, kind, psize)
+     struct stab_write_handle *info;
+     const char *tag;
+     unsigned int id;
+     enum debug_type_kind kind;
+     unsigned int *psize;
 {
   if (id >= info->type_cache.struct_types_alloc)
     {
@@ -1304,8 +1398,12 @@ stab_get_struct_index (struct stab_write_handle *info, const char *tag,
    stab_tag.  */
 
 static bfd_boolean
-stab_start_struct_type (void *p, const char *tag, unsigned int id,
-			bfd_boolean structp, unsigned int size)
+stab_start_struct_type (p, tag, id, structp, size)
+     PTR p;
+     const char *tag;
+     unsigned int id;
+     bfd_boolean structp;
+     unsigned int size;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   long index;
@@ -1346,8 +1444,12 @@ stab_start_struct_type (void *p, const char *tag, unsigned int id,
 /* Add a field to a struct.  */
 
 static bfd_boolean
-stab_struct_field (void *p, const char *name, bfd_vma bitpos,
-		   bfd_vma bitsize, enum debug_visibility visibility)
+stab_struct_field (p, name, bitpos, bitsize, visibility)
+     PTR p;
+     const char *name;
+     bfd_vma bitpos;
+     bfd_vma bitsize;
+     enum debug_visibility visibility;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   bfd_boolean definition;
@@ -1409,7 +1511,8 @@ stab_struct_field (void *p, const char *name, bfd_vma bitpos,
 /* Finish up a struct.  */
 
 static bfd_boolean
-stab_end_struct_type (void *p)
+stab_end_struct_type (p)
+     PTR p;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   bfd_boolean definition;
@@ -1441,7 +1544,14 @@ stab_end_struct_type (void *p)
 /* Start outputting a class.  */
 
 static bfd_boolean
-stab_start_class_type (void *p, const char *tag, unsigned int id, bfd_boolean structp, unsigned int size, bfd_boolean vptr, bfd_boolean ownvptr)
+stab_start_class_type (p, tag, id, structp, size, vptr, ownvptr)
+     PTR p;
+     const char *tag;
+     unsigned int id;
+     bfd_boolean structp;
+     unsigned int size;
+     bfd_boolean vptr;
+     bfd_boolean ownvptr;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   bfd_boolean definition;
@@ -1490,8 +1600,11 @@ stab_start_class_type (void *p, const char *tag, unsigned int id, bfd_boolean st
 /* Add a static member to the class on the type stack.  */
 
 static bfd_boolean
-stab_class_static_member (void *p, const char *name, const char *physname,
-			  enum debug_visibility visibility)
+stab_class_static_member (p, name, physname, visibility)
+     PTR p;
+     const char *name;
+     const char *physname;
+     enum debug_visibility visibility;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   bfd_boolean definition;
@@ -1544,8 +1657,11 @@ stab_class_static_member (void *p, const char *name, const char *physname,
 /* Add a base class to the class on the type stack.  */
 
 static bfd_boolean
-stab_class_baseclass (void *p, bfd_vma bitpos, bfd_boolean virtual,
-		      enum debug_visibility visibility)
+stab_class_baseclass (p, bitpos, virtual, visibility)
+     PTR p;
+     bfd_vma bitpos;
+     bfd_boolean virtual;
+     enum debug_visibility visibility;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   bfd_boolean definition;
@@ -1611,7 +1727,9 @@ stab_class_baseclass (void *p, bfd_vma bitpos, bfd_boolean virtual,
 /* Start adding a method to the class on the type stack.  */
 
 static bfd_boolean
-stab_class_start_method (void *p, const char *name)
+stab_class_start_method (p, name)
+     PTR p;
+     const char *name;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   char *m;
@@ -1641,11 +1759,16 @@ stab_class_start_method (void *p, const char *name)
 /* Add a variant, either static or not, to the current method.  */
 
 static bfd_boolean
-stab_class_method_var (struct stab_write_handle *info, const char *physname,
-		       enum debug_visibility visibility,
-		       bfd_boolean staticp, bfd_boolean constp,
-		       bfd_boolean volatilep, bfd_vma voffset,
-		       bfd_boolean contextp)
+stab_class_method_var (info, physname, visibility, staticp, constp, volatilep,
+		       voffset, contextp)
+     struct stab_write_handle *info;
+     const char *physname;
+     enum debug_visibility visibility;
+     bfd_boolean staticp;
+     bfd_boolean constp;
+     bfd_boolean volatilep;
+     bfd_vma voffset;
+     bfd_boolean contextp;
 {
   bfd_boolean definition;
   char *type;
@@ -1731,10 +1854,15 @@ stab_class_method_var (struct stab_write_handle *info, const char *physname,
 /* Add a variant to the current method.  */
 
 static bfd_boolean
-stab_class_method_variant (void *p, const char *physname,
-			   enum debug_visibility visibility,
-			   bfd_boolean constp, bfd_boolean volatilep,
-			   bfd_vma voffset, bfd_boolean contextp)
+stab_class_method_variant (p, physname, visibility, constp, volatilep,
+			   voffset, contextp)
+     PTR p;
+     const char *physname;
+     enum debug_visibility visibility;
+     bfd_boolean constp;
+     bfd_boolean volatilep;
+     bfd_vma voffset;
+     bfd_boolean contextp;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
 
@@ -1745,9 +1873,12 @@ stab_class_method_variant (void *p, const char *physname,
 /* Add a static variant to the current method.  */
 
 static bfd_boolean
-stab_class_static_method_variant (void *p, const char *physname,
-				  enum debug_visibility visibility,
-				  bfd_boolean constp, bfd_boolean volatilep)
+stab_class_static_method_variant (p, physname, visibility, constp, volatilep)
+     PTR p;
+     const char *physname;
+     enum debug_visibility visibility;
+     bfd_boolean constp;
+     bfd_boolean volatilep;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
 
@@ -1758,7 +1889,8 @@ stab_class_static_method_variant (void *p, const char *physname,
 /* Finish up a method.  */
 
 static bfd_boolean
-stab_class_end_method (void *p)
+stab_class_end_method (p)
+     PTR p;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
 
@@ -1774,7 +1906,8 @@ stab_class_end_method (void *p)
 /* Finish up a class.  */
 
 static bfd_boolean
-stab_end_class_type (void *p)
+stab_end_class_type (p)
+     PTR p;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   size_t len;
@@ -1848,7 +1981,9 @@ stab_end_class_type (void *p)
 /* Push a typedef which was previously defined.  */
 
 static bfd_boolean
-stab_typedef_type (void *p, const char *name)
+stab_typedef_type (p, name)
+     PTR p;
+     const char *name;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   struct string_hash_entry *h;
@@ -1862,8 +1997,11 @@ stab_typedef_type (void *p, const char *name)
 /* Push a struct, union or class tag.  */
 
 static bfd_boolean
-stab_tag_type (void *p, const char *name, unsigned int id,
-	       enum debug_type_kind kind)
+stab_tag_type (p, name, id, kind)
+     PTR p;
+     const char *name;
+     unsigned int id;
+     enum debug_type_kind kind;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   long index;
@@ -1879,7 +2017,9 @@ stab_tag_type (void *p, const char *name, unsigned int id,
 /* Define a typedef.  */
 
 static bfd_boolean
-stab_typdef (void *p, const char *name)
+stab_typdef (p, name)
+     PTR p;
+     const char *name;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   long index;
@@ -1928,7 +2068,9 @@ stab_typdef (void *p, const char *name)
 /* Define a tag.  */
 
 static bfd_boolean
-stab_tag (void *p, const char *tag)
+stab_tag (p, tag)
+     PTR p;
+     const char *tag;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   char *s, *buf;
@@ -1951,7 +2093,10 @@ stab_tag (void *p, const char *tag)
 /* Define an integer constant.  */
 
 static bfd_boolean
-stab_int_constant (void *p, const char *name, bfd_vma val)
+stab_int_constant (p, name, val)
+     PTR p;
+     const char *name;
+     bfd_vma val;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   char *buf;
@@ -1970,7 +2115,10 @@ stab_int_constant (void *p, const char *name, bfd_vma val)
 /* Define a floating point constant.  */
 
 static bfd_boolean
-stab_float_constant (void *p, const char *name, double val)
+stab_float_constant (p, name, val)
+     PTR p;
+     const char *name;
+     double val;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   char *buf;
@@ -1989,7 +2137,10 @@ stab_float_constant (void *p, const char *name, double val)
 /* Define a typed constant.  */
 
 static bfd_boolean
-stab_typed_constant (void *p, const char *name, bfd_vma val)
+stab_typed_constant (p, name, val)
+     PTR p;
+     const char *name;
+     bfd_vma val;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   char *s, *buf;
@@ -2011,8 +2162,11 @@ stab_typed_constant (void *p, const char *name, bfd_vma val)
 /* Record a variable.  */
 
 static bfd_boolean
-stab_variable (void *p, const char *name, enum debug_var_kind kind,
-	       bfd_vma val)
+stab_variable (p, name, kind, val)
+     PTR p;
+     const char *name;
+     enum debug_var_kind kind;
+     bfd_vma val;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   char *s, *buf;
@@ -2081,7 +2235,10 @@ stab_variable (void *p, const char *name, enum debug_var_kind kind,
 /* Start outputting a function.  */
 
 static bfd_boolean
-stab_start_function (void *p, const char *name, bfd_boolean globalp)
+stab_start_function (p, name, globalp)
+     PTR p;
+     const char *name;
+     bfd_boolean globalp;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   char *rettype, *buf;
@@ -2109,7 +2266,11 @@ stab_start_function (void *p, const char *name, bfd_boolean globalp)
 /* Output a function parameter.  */
 
 static bfd_boolean
-stab_function_parameter (void *p, const char *name, enum debug_parm_kind kind, bfd_vma val)
+stab_function_parameter (p, name, kind, val)
+     PTR p;
+     const char *name;
+     enum debug_parm_kind kind;
+     bfd_vma val;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
   char *s, *buf;
@@ -2159,7 +2320,9 @@ stab_function_parameter (void *p, const char *name, enum debug_parm_kind kind, b
 /* Start a block.  */
 
 static bfd_boolean
-stab_start_block (void *p, bfd_vma addr)
+stab_start_block (p, addr)
+     PTR p;
+     bfd_vma addr;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
 
@@ -2212,7 +2375,9 @@ stab_start_block (void *p, bfd_vma addr)
 /* End a block.  */
 
 static bfd_boolean
-stab_end_block (void *p, bfd_vma addr)
+stab_end_block (p, addr)
+     PTR p;
+     bfd_vma addr;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
 
@@ -2243,7 +2408,8 @@ stab_end_block (void *p, bfd_vma addr)
 /* End a function.  */
 
 static bfd_boolean
-stab_end_function (void *p ATTRIBUTE_UNUSED)
+stab_end_function (p)
+     PTR p ATTRIBUTE_UNUSED;
 {
   return TRUE;
 }
@@ -2251,7 +2417,11 @@ stab_end_function (void *p ATTRIBUTE_UNUSED)
 /* Output a line number.  */
 
 static bfd_boolean
-stab_lineno (void *p, const char *file, unsigned long lineno, bfd_vma addr)
+stab_lineno (p, file, lineno, addr)
+     PTR p;
+     const char *file;
+     unsigned long lineno;
+     bfd_vma addr;
 {
   struct stab_write_handle *info = (struct stab_write_handle *) p;
 

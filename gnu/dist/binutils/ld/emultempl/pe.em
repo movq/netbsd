@@ -9,7 +9,7 @@ rm -f e${EMULATION_NAME}.c
 (echo;echo;echo;echo;echo)>e${EMULATION_NAME}.c # there, now line numbers match ;-)
 cat >>e${EMULATION_NAME}.c <<EOF
 /* This file is part of GLD, the Gnu Linker.
-   Copyright 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003
    Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
@@ -68,7 +68,8 @@ cat >>e${EMULATION_NAME}.c <<EOF
 
 #include "deffile.h"
 #include "pe-dll.h"
-#include "safe-ctype.h"
+
+#include <ctype.h>
 
 /* Permit the emulation parameters to override the default section
    alignment by setting OVERRIDE_SECTION_ALIGNMENT.  FIXME: This makes
@@ -103,6 +104,44 @@ cat >>e${EMULATION_NAME}.c <<EOF
 #define PE_DEF_FILE_ALIGNMENT		0x00000200
 #endif
 
+static void gld_${EMULATION_NAME}_set_symbols PARAMS ((void));
+static void gld_${EMULATION_NAME}_after_open PARAMS ((void));
+static void gld_${EMULATION_NAME}_before_parse PARAMS ((void));
+static void gld_${EMULATION_NAME}_after_parse PARAMS ((void));
+static void gld_${EMULATION_NAME}_before_allocation PARAMS ((void));
+static asection *output_prev_sec_find
+  PARAMS ((lang_output_section_statement_type *));
+static bfd_boolean gld_${EMULATION_NAME}_place_orphan
+  PARAMS ((lang_input_statement_type *, asection *));
+static char *gld_${EMULATION_NAME}_get_script PARAMS ((int *));
+static void gld_${EMULATION_NAME}_finish PARAMS ((void));
+static bfd_boolean gld_${EMULATION_NAME}_open_dynamic_archive
+  PARAMS ((const char *, search_dirs_type *, lang_input_statement_type *));
+static void gld${EMULATION_NAME}_add_options
+  PARAMS ((int, char **, int, struct option **, int, struct option **));
+static bfd_boolean gld${EMULATION_NAME}_handle_option PARAMS ((int));
+static void gld_${EMULATION_NAME}_list_options PARAMS ((FILE *));
+static void set_pe_name PARAMS ((char *, long));
+static void set_pe_subsystem PARAMS ((void));
+static void set_pe_value PARAMS ((char *));
+static void set_pe_stack_heap PARAMS ((char *, char *));
+
+#ifdef DLL_SUPPORT
+static bfd_boolean pe_undef_cdecl_match
+  PARAMS ((struct bfd_link_hash_entry *, PTR));
+static void pe_fixup_stdcalls PARAMS ((void));
+static int make_import_fixup PARAMS ((arelent *, asection *));
+static void pe_find_data_imports PARAMS ((void));
+#endif
+
+static bfd_boolean pr_sym PARAMS ((struct bfd_hash_entry *, PTR));
+static bfd_boolean gld_${EMULATION_NAME}_unrecognized_file
+  PARAMS ((lang_input_statement_type *));
+static bfd_boolean gld_${EMULATION_NAME}_recognized_file
+  PARAMS ((lang_input_statement_type *));
+static int gld_${EMULATION_NAME}_find_potential_libraries
+  PARAMS ((char *, lang_input_statement_type *));
+
 
 static struct internal_extra_pe_aouthdr pe;
 static int dll;
@@ -121,9 +160,17 @@ static char *pe_dll_search_prefix = NULL;
 extern const char *output_filename;
 
 static void
-gld_${EMULATION_NAME}_before_parse (void)
+gld_${EMULATION_NAME}_before_parse()
 {
-  ldfile_set_output_arch ("${OUTPUT_ARCH}", bfd_arch_`echo ${ARCH} | sed -e 's/:.*//'`);
+  const bfd_arch_info_type *arch = bfd_scan_arch ("${OUTPUT_ARCH}");
+  if (arch)
+    {
+      ldfile_output_architecture = arch->arch;
+      ldfile_output_machine = arch->mach;
+      ldfile_output_machine_name = arch->printable_name;
+    }
+  else
+    ldfile_output_architecture = bfd_arch_${ARCH};
   output_filename = "${EXECUTABLE_NAME:-a.exe}";
 #ifdef DLL_SUPPORT
   config.dynamic_link = TRUE;
@@ -133,9 +180,9 @@ gld_${EMULATION_NAME}_before_parse (void)
 
 #if (PE_DEF_SUBSYSTEM == 9) || (PE_DEF_SUBSYSTEM == 2)
 #if defined TARGET_IS_mipspe || defined TARGET_IS_armpe
-  lang_add_entry ("WinMainCRTStartup", FALSE);
+  lang_add_entry ("WinMainCRTStartup", 1);
 #else
-  lang_add_entry ("_WinMainCRTStartup", FALSE);
+  lang_add_entry ("_WinMainCRTStartup", 1);
 #endif
 #endif
 #endif
@@ -155,8 +202,8 @@ gld_${EMULATION_NAME}_before_parse (void)
 #define OPTION_MINOR_OS_VERSION		(OPTION_MINOR_IMAGE_VERSION + 1)
 #define OPTION_MINOR_SUBSYSTEM_VERSION	(OPTION_MINOR_OS_VERSION + 1)
 #define OPTION_SECTION_ALIGNMENT	(OPTION_MINOR_SUBSYSTEM_VERSION + 1)
-#define OPTION_STACK			(OPTION_SECTION_ALIGNMENT + 1)
-#define OPTION_SUBSYSTEM		(OPTION_STACK + 1)
+#define OPTION_STACK                    (OPTION_SECTION_ALIGNMENT + 1)
+#define OPTION_SUBSYSTEM                (OPTION_STACK + 1)
 #define OPTION_HEAP			(OPTION_SUBSYSTEM + 1)
 #define OPTION_SUPPORT_OLD_CODE		(OPTION_HEAP + 1)
 #define OPTION_OUT_DEF			(OPTION_SUPPORT_OLD_CODE + 1)
@@ -184,10 +231,13 @@ gld_${EMULATION_NAME}_before_parse (void)
 					(OPTION_DLL_ENABLE_RUNTIME_PSEUDO_RELOC + 1)
 
 static void
-gld${EMULATION_NAME}_add_options
-  (int ns ATTRIBUTE_UNUSED, char **shortopts ATTRIBUTE_UNUSED, int nl,
-    struct option **longopts, int nrl ATTRIBUTE_UNUSED,
-    struct option **really_longopts ATTRIBUTE_UNUSED)
+gld${EMULATION_NAME}_add_options (ns, shortopts, nl, longopts, nrl, really_longopts)
+     int ns ATTRIBUTE_UNUSED;
+     char **shortopts ATTRIBUTE_UNUSED;
+     int nl;
+     struct option **longopts;
+     int nrl ATTRIBUTE_UNUSED;
+     struct option **really_longopts ATTRIBUTE_UNUSED;
 {
   static const struct option xtra_long[] = {
     /* PE options */
@@ -287,7 +337,8 @@ static definfo init[] =
 
 
 static void
-gld_${EMULATION_NAME}_list_options (FILE *file)
+gld_${EMULATION_NAME}_list_options (file)
+     FILE * file;
 {
   fprintf (file, _("  --base_file <basefile>             Generate a base file for relocatable DLLs\n"));
   fprintf (file, _("  --dll                              Set image base to the default for DLLs\n"));
@@ -339,7 +390,9 @@ gld_${EMULATION_NAME}_list_options (FILE *file)
 
 
 static void
-set_pe_name (char *name, long val)
+set_pe_name (name, val)
+     char *name;
+     long val;
 {
   int i;
 
@@ -358,7 +411,7 @@ set_pe_name (char *name, long val)
 
 
 static void
-set_pe_subsystem (void)
+set_pe_subsystem ()
 {
   const char *sver;
   int len;
@@ -431,7 +484,7 @@ set_pe_subsystem (void)
 	      entry = alc_entry;
 	    }
 
-	  lang_add_entry (entry, TRUE);
+	  lang_add_entry (entry, 0);
 
 	  return;
 	}
@@ -442,7 +495,9 @@ set_pe_subsystem (void)
 
 
 static void
-set_pe_value (char *name)
+set_pe_value (name)
+     char *name;
+
 {
   char *end;
 
@@ -456,7 +511,9 @@ set_pe_value (char *name)
 
 
 static void
-set_pe_stack_heap (char *resname, char *comname)
+set_pe_stack_heap (resname, comname)
+     char *resname;
+     char *comname;
 {
   set_pe_value (resname);
 
@@ -471,7 +528,8 @@ set_pe_stack_heap (char *resname, char *comname)
 
 
 static bfd_boolean
-gld${EMULATION_NAME}_handle_option (int optc)
+gld${EMULATION_NAME}_handle_option (optc)
+     int optc;
 {
   switch (optc)
     {
@@ -479,7 +537,7 @@ gld${EMULATION_NAME}_handle_option (int optc)
       return FALSE;
 
     case OPTION_BASE_FILE:
-      link_info.base_file = fopen (optarg, FOPEN_WB);
+      link_info.base_file = (PTR) fopen (optarg, FOPEN_WB);
       if (link_info.base_file == NULL)
 	{
 	  /* xgettext:c-format */
@@ -640,7 +698,7 @@ compute_dll_image_base (const char *ofile)
    read.  */
 
 static void
-gld_${EMULATION_NAME}_set_symbols (void)
+gld_${EMULATION_NAME}_set_symbols ()
 {
   /* Run through and invent symbols for all the
      names and insert the defaults.  */
@@ -649,7 +707,7 @@ gld_${EMULATION_NAME}_set_symbols (void)
 
   if (!init[IMAGEBASEOFF].inited)
     {
-      if (link_info.relocatable)
+      if (link_info.relocateable)
 	init[IMAGEBASEOFF].value = 0;
       else if (init[DLLOFF].value || link_info.shared)
 #ifdef DLL_SUPPORT
@@ -662,8 +720,8 @@ gld_${EMULATION_NAME}_set_symbols (void)
 	init[IMAGEBASEOFF].value = NT_EXE_IMAGE_BASE;
     }
 
-  /* Don't do any symbol assignments if this is a relocatable link.  */
-  if (link_info.relocatable)
+  /* Don't do any symbol assignments if this is a relocateable link.  */
+  if (link_info.relocateable)
     return;
 
   /* Glue the assignments into the abs section.  */
@@ -704,7 +762,7 @@ gld_${EMULATION_NAME}_set_symbols (void)
    have been read.  */
 
 static void
-gld_${EMULATION_NAME}_after_parse (void)
+gld_${EMULATION_NAME}_after_parse ()
 {
   /* The Windows libraries are designed for the linker to treat the
      entry point as an undefined symbol.  Otherwise, the .obj that
@@ -719,7 +777,7 @@ gld_${EMULATION_NAME}_after_parse (void)
      opened, so registering the symbol as undefined will make a
      difference.  */
 
-  if (! link_info.relocatable && entry_symbol.name != NULL)
+  if (! link_info.relocateable && entry_symbol.name != NULL)
     ldlang_add_undef (entry_symbol.name);
 }
 
@@ -734,12 +792,13 @@ char * pe_data_import_dll;
 static struct bfd_link_hash_entry *pe_undef_found_sym;
 
 static bfd_boolean
-pe_undef_cdecl_match (struct bfd_link_hash_entry *h, void *inf)
+pe_undef_cdecl_match (h, string)
+  struct bfd_link_hash_entry *h;
+  PTR string;
 {
   int sl;
-  char *string = inf;
 
-  sl = strlen (string);
+  sl = strlen (string); /* Silence compiler warning.  */
   if (h->type == bfd_link_hash_defined
       && strncmp (h->root.string, string, sl) == 0
       && h->root.string[sl] == '@')
@@ -751,7 +810,7 @@ pe_undef_cdecl_match (struct bfd_link_hash_entry *h, void *inf)
 }
 
 static void
-pe_fixup_stdcalls (void)
+pe_fixup_stdcalls ()
 {
   static int gave_warning_message = 0;
   struct bfd_link_hash_entry *undef, *sym;
@@ -759,7 +818,7 @@ pe_fixup_stdcalls (void)
   if (pe_dll_extra_pe_debug)
     printf ("%s\n", __FUNCTION__);
 
-  for (undef = link_info.hash->undefs; undef; undef=undef->und_next)
+  for (undef = link_info.hash->undefs; undef; undef=undef->next)
     if (undef->type == bfd_link_hash_undefined)
       {
 	char* at = strchr (undef->root.string, '@');
@@ -800,7 +859,7 @@ pe_fixup_stdcalls (void)
 	       symbols - which means scanning the whole symbol table.  */
 	    pe_undef_found_sym = 0;
 	    bfd_link_hash_traverse (link_info.hash, pe_undef_cdecl_match,
-				    (char *) undef->root.string);
+				    (PTR) undef->root.string);
 	    sym = pe_undef_found_sym;
 	    if (sym)
 	      {
@@ -825,9 +884,11 @@ pe_fixup_stdcalls (void)
 }
 
 static int
-make_import_fixup (arelent *rel, asection *s)
+make_import_fixup (rel, s)
+  arelent *rel;
+  asection *s;
 {
-  struct bfd_symbol *sym = *rel->sym_ptr_ptr;
+  struct symbol_cache_entry *sym = *rel->sym_ptr_ptr;
   int addend = 0;
 
   if (pe_dll_extra_pe_debug)
@@ -844,14 +905,14 @@ make_import_fixup (arelent *rel, asection *s)
 }
 
 static void
-pe_find_data_imports (void)
+pe_find_data_imports ()
 {
   struct bfd_link_hash_entry *undef, *sym;
 
   if (link_info.pei386_auto_import == 0)
     return;
 
-  for (undef = link_info.hash->undefs; undef; undef=undef->und_next)
+  for (undef = link_info.hash->undefs; undef; undef=undef->next)
     {
       if (undef->type == bfd_link_hash_undefined)
         {
@@ -908,22 +969,23 @@ pe_find_data_imports (void)
         }
     }
 }
+#endif /* DLL_SUPPORT */
 
 static bfd_boolean
-pr_sym (struct bfd_hash_entry *h, void *inf ATTRIBUTE_UNUSED)
+pr_sym (h, string)
+  struct bfd_hash_entry *h;
+  PTR string ATTRIBUTE_UNUSED;
 {
   if (pe_dll_extra_pe_debug)
-    printf ("+%s\n", h->string);
+    printf ("+%s\n",h->string);
 
   return TRUE;
 }
-#endif /* DLL_SUPPORT */
 
 
 static void
-gld_${EMULATION_NAME}_after_open (void)
+gld_${EMULATION_NAME}_after_open ()
 {
-#ifdef DLL_SUPPORT
   if (pe_dll_extra_pe_debug)
     {
       bfd *a;
@@ -931,14 +993,13 @@ gld_${EMULATION_NAME}_after_open (void)
 
       printf ("%s()\n", __FUNCTION__);
 
-      for (sym = link_info.hash->undefs; sym; sym=sym->und_next)
+      for (sym = link_info.hash->undefs; sym; sym=sym->next)
         printf ("-%s\n", sym->root.string);
-      bfd_hash_traverse (&link_info.hash->table, pr_sym, NULL);
+      bfd_hash_traverse (&link_info.hash->table, pr_sym,NULL);
 
       for (a = link_info.input_bfds; a; a = a->link_next)
 	printf ("*%s\n",a->filename);
     }
-#endif
 
   /* Pass the wacky PE command line options into the output bfd.
      FIXME: This should be done via a function, rather than by
@@ -961,7 +1022,7 @@ gld_${EMULATION_NAME}_after_open (void)
 #if ! (defined (TARGET_IS_i386pe) || defined (TARGET_IS_armpe))
   if (link_info.shared)
 #else
-  if (!link_info.relocatable)
+  if (!link_info.relocateable)
 #endif
     pe_dll_build_sections (output_bfd, &link_info);
 
@@ -1061,7 +1122,7 @@ gld_${EMULATION_NAME}_after_open (void)
 
 		    for (i = 0; i < nrelocs; i++)
 		      {
-			struct bfd_symbol *s;
+			struct symbol_cache_entry *s;
 			struct bfd_link_hash_entry * blhe;
 			bfd *other_bfd;
 			char *n;
@@ -1107,7 +1168,6 @@ gld_${EMULATION_NAME}_after_open (void)
     int is_ms_arch = 0;
     bfd *cur_arch = 0;
     lang_input_statement_type *is2;
-    lang_input_statement_type *is3;
 
     /* Careful - this is a shell script.  Watch those dollar signs! */
     /* Microsoft import libraries have every member named the same,
@@ -1122,59 +1182,21 @@ gld_${EMULATION_NAME}_after_open (void)
       {
 	if (is->the_bfd->my_archive)
 	  {
-	    char *pnt;
 	    bfd *arch = is->the_bfd->my_archive;
-
 	    if (cur_arch != arch)
 	      {
 		cur_arch = arch;
 		is_ms_arch = 1;
-
-		for (is3 = is;
-		     is3 && is3->the_bfd->my_archive == arch;
-		     is3 = (lang_input_statement_type *) is3->next)
+		for (is2 = is;
+		     is2 && is2->the_bfd->my_archive == arch;
+		     is2 = (lang_input_statement_type *)is2->next)
 		  {
-                    /* A MS dynamic import library can also contain static
-		       members, so look for the first element with a .dll
-		       extension, and use that for the remainder of the
-		       comparisons.  */
-		    pnt = strrchr (is3->the_bfd->filename, '.');
-		    if (pnt != NULL && strcmp (pnt, ".dll") == 0)
-		      break;
-		  }
-
-		if (is3 == NULL)
-		  is_ms_arch = 0;
-		else
-		  {
-		    /* OK, found one.  Now look to see if the remaining
-		       (dynamic import) members use the same name.  */
-		    for (is2 = is;
-			 is2 && is2->the_bfd->my_archive == arch;
-			 is2 = (lang_input_statement_type *) is2->next)
-		      {
-			/* Skip static members, ie anything with a .obj
-			   extension.  */
-			pnt = strrchr (is2->the_bfd->filename, '.');
-			if (pnt != NULL && strcmp (pnt, ".obj") == 0)
-			  continue;
-
-			if (strcmp (is3->the_bfd->filename,
-				    is2->the_bfd->filename))
-			  {
-			    is_ms_arch = 0;
-			    break;
-			  }
-		      }
+		    if (strcmp (is->the_bfd->filename, is2->the_bfd->filename))
+		      is_ms_arch = 0;
 		  }
 	      }
 
-	    /* This fragment might have come from an .obj file in a Microsoft
-	       import, and not an actual import record. If this is the case,
-	       then leave the filename alone.  */
-	    pnt = strrchr (is->the_bfd->filename, '.');
-
-	    if (is_ms_arch && (strcmp (pnt, ".dll") == 0))
+	    if (is_ms_arch)
 	      {
 		int idata2 = 0, reloc_count=0;
 		asection *sec;
@@ -1208,7 +1230,7 @@ gld_${EMULATION_NAME}_after_open (void)
 }
 
 static void
-gld_${EMULATION_NAME}_before_allocation (void)
+gld_${EMULATION_NAME}_before_allocation ()
 {
 #ifdef TARGET_IS_ppcpe
   /* Here we rummage through the found bfds to collect toc information.  */
@@ -1257,7 +1279,7 @@ gld_${EMULATION_NAME}_before_allocation (void)
    check here for .DEF files and pull them in automatically.  */
 
 static int
-saw_option (char *option)
+saw_option (char * option)
 {
   int i;
 
@@ -1269,7 +1291,8 @@ saw_option (char *option)
 #endif /* DLL_SUPPORT */
 
 static bfd_boolean
-gld_${EMULATION_NAME}_unrecognized_file (lang_input_statement_type *entry ATTRIBUTE_UNUSED)
+gld_${EMULATION_NAME}_unrecognized_file (entry)
+     lang_input_statement_type *entry ATTRIBUTE_UNUSED;
 {
 #ifdef DLL_SUPPORT
   const char *ext = entry->filename + strlen (entry->filename) - 4;
@@ -1358,7 +1381,8 @@ gld_${EMULATION_NAME}_unrecognized_file (lang_input_statement_type *entry ATTRIB
 }
 
 static bfd_boolean
-gld_${EMULATION_NAME}_recognized_file (lang_input_statement_type *entry ATTRIBUTE_UNUSED)
+gld_${EMULATION_NAME}_recognized_file (entry)
+  lang_input_statement_type *entry ATTRIBUTE_UNUSED;
 {
 #ifdef DLL_SUPPORT
 #ifdef TARGET_IS_i386pe
@@ -1391,7 +1415,7 @@ gld_${EMULATION_NAME}_recognized_file (lang_input_statement_type *entry ATTRIBUT
 }
 
 static void
-gld_${EMULATION_NAME}_finish (void)
+gld_${EMULATION_NAME}_finish ()
 {
 #if defined(TARGET_IS_armpe) || defined(TARGET_IS_arm_epoc_pe)
   struct bfd_link_hash_entry * h;
@@ -1438,7 +1462,7 @@ gld_${EMULATION_NAME}_finish (void)
 #ifdef DLL_SUPPORT
   if (link_info.shared
 #if !defined(TARGET_IS_shpe) && !defined(TARGET_IS_mipspe)
-    || (!link_info.relocatable && pe_def_file->num_exports != 0)
+    || (!link_info.relocateable && pe_def_file->num_exports != 0)
 #endif
     )
     {
@@ -1475,7 +1499,8 @@ gld_${EMULATION_NAME}_finish (void)
    Used by place_orphan.  */
 
 static asection *
-output_prev_sec_find (lang_output_section_statement_type *os)
+output_prev_sec_find (os)
+     lang_output_section_statement_type *os;
 {
   asection *s = (asection *) NULL;
   lang_statement_union_type *u;
@@ -1517,7 +1542,9 @@ struct orphan_save
 };
 
 static bfd_boolean
-gld_${EMULATION_NAME}_place_orphan (lang_input_statement_type *file, asection *s)
+gld_${EMULATION_NAME}_place_orphan (file, s)
+     lang_input_statement_type *file;
+     asection *s;
 {
   const char *secname;
   char *hold_section_name;
@@ -1530,7 +1557,7 @@ gld_${EMULATION_NAME}_place_orphan (lang_input_statement_type *file, asection *s
 
   /* Look through the script to see where to place this section.  */
   hold_section_name = xstrdup (secname);
-  if (!link_info.relocatable)
+  if (!link_info.relocateable)
     {
       dollar = strchr (hold_section_name, '$');
       if (dollar != NULL)
@@ -1621,7 +1648,7 @@ gld_${EMULATION_NAME}_place_orphan (lang_input_statement_type *file, asection *s
 	  /* If the name of the section is representable in C, then create
 	     symbols to mark the start and the end of the section.  */
 	  for (ps = outsecname; *ps != '\0'; ps++)
-	    if (! ISALNUM ((unsigned char) *ps) && *ps != '_')
+	    if (! isalnum ((unsigned char) *ps) && *ps != '_')
 	      break;
 	  if (*ps == '\0')
 	    {
@@ -1636,7 +1663,7 @@ gld_${EMULATION_NAME}_place_orphan (lang_input_statement_type *file, asection *s
 	    }
 	}
 
-      if (link_info.relocatable || (s->flags & (SEC_LOAD | SEC_ALLOC)) == 0)
+      if (link_info.relocateable || (s->flags & (SEC_LOAD | SEC_ALLOC)) == 0)
 	address = exp_intop ((bfd_vma) 0);
       else
 	{
@@ -1647,6 +1674,7 @@ gld_${EMULATION_NAME}_place_orphan (lang_input_statement_type *file, asection *s
 	}
 
       os = lang_enter_output_section_statement (outsecname, address, 0,
+						(bfd_vma) 0,
 						(etree_type *) NULL,
 						(etree_type *) NULL,
 						(etree_type *) NULL);
@@ -1797,9 +1825,10 @@ gld_${EMULATION_NAME}_place_orphan (lang_input_statement_type *file, asection *s
 }
 
 static bfd_boolean
-gld_${EMULATION_NAME}_open_dynamic_archive
-  (const char *arch ATTRIBUTE_UNUSED, search_dirs_type *search,
-   lang_input_statement_type *entry)
+gld_${EMULATION_NAME}_open_dynamic_archive (arch, search, entry)
+     const char * arch ATTRIBUTE_UNUSED;
+     search_dirs_type * search;
+     lang_input_statement_type * entry;
 {
   const char * filename;
   char * string;
@@ -1887,14 +1916,16 @@ gld_${EMULATION_NAME}_open_dynamic_archive
 }
 
 static int
-gld_${EMULATION_NAME}_find_potential_libraries
-  (char *name, lang_input_statement_type *entry)
+gld_${EMULATION_NAME}_find_potential_libraries (name, entry)
+     char * name;
+     lang_input_statement_type * entry;
 {
   return ldfile_open_file_search (name, entry, "", ".lib");
 }
 
 static char *
-gld_${EMULATION_NAME}_get_script (int *isfile)
+gld_${EMULATION_NAME}_get_script (isfile)
+     int *isfile;
 EOF
 # Scripts compiled in.
 # sed commands to quote an ld script as a C string.
@@ -1904,11 +1935,11 @@ cat >>e${EMULATION_NAME}.c <<EOF
 {
   *isfile = 0;
 
-  if (link_info.relocatable && config.build_constructors)
+  if (link_info.relocateable && config.build_constructors)
     return
 EOF
 sed $sc ldscripts/${EMULATION_NAME}.xu                 >> e${EMULATION_NAME}.c
-echo '  ; else if (link_info.relocatable) return'     >> e${EMULATION_NAME}.c
+echo '  ; else if (link_info.relocateable) return'     >> e${EMULATION_NAME}.c
 sed $sc ldscripts/${EMULATION_NAME}.xr                 >> e${EMULATION_NAME}.c
 echo '  ; else if (!config.text_read_only) return'     >> e${EMULATION_NAME}.c
 sed $sc ldscripts/${EMULATION_NAME}.xbn                >> e${EMULATION_NAME}.c

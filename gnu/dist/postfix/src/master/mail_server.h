@@ -1,5 +1,3 @@
-/*	$NetBSD: mail_server.h,v 1.1.1.5 2004/05/31 00:24:38 heas Exp $	*/
-
 /*++
 /* NAME
 /*	mail_server 3h
@@ -31,7 +29,6 @@
 #define MAIL_SERVER_PRE_ACCEPT	14
 #define MAIL_SERVER_SOLITARY	15
 #define MAIL_SERVER_UNLIMITED	16
-#define MAIL_SERVER_PRE_DISCONN	17
 
 #define MAIL_SERVER_IN_FLOW_DELAY	20
 
@@ -39,7 +36,6 @@ typedef void (*MAIL_SERVER_INIT_FN) (char *, char **);
 typedef int (*MAIL_SERVER_LOOP_FN) (char *, char **);
 typedef void (*MAIL_SERVER_EXIT_FN) (char *, char **);
 typedef void (*MAIL_SERVER_ACCEPT_FN) (char *, char **);
-typedef void (*MAIL_SERVER_DISCONN_FN) (VSTREAM *, char *, char **);
 
  /*
   * single_server.c

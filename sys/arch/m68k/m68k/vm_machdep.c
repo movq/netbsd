@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.10 2004/09/17 14:11:21 skrll Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.7 2004/01/04 11:33:30 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.10 2004/09/17 14:11:21 skrll Exp $");                                                  
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.7 2004/01/04 11:33:30 jdolecek Exp $");                                                  
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -97,7 +97,8 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.10 2004/09/17 14:11:21 skrll Exp $"
 #include <uvm/uvm_extern.h>
 
 void
-cpu_proc_fork(struct proc *p1, struct proc *p2)
+cpu_proc_fork(p1, p2)
+	struct proc *p1, *p2;
 {
 
 	p2->p_md.mdp_flags = p1->p_md.mdp_flags;
@@ -122,8 +123,12 @@ cpu_proc_fork(struct proc *p1, struct proc *p2)
  * accordingly.
  */
 void
-cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
-    void (*func)(void *), void *arg)
+cpu_lwp_fork(l1, l2, stack, stacksize, func, arg)
+	struct lwp *l1, *l2;
+	void *stack;
+	size_t stacksize;
+	void (*func) __P((void *));
+	void *arg;
 {
 	struct pcb *pcb = &l2->l_addr->u_pcb;
 	struct trapframe *tf;
@@ -164,7 +169,10 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 }
 
 void
-cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
+cpu_setfunc(l, func, arg)
+	struct lwp *l;
+	void (*func) __P((void *));
+	void *arg;
 {
 	struct pcb *pcb = &l->l_addr->u_pcb;
 	struct trapframe *tf = (struct trapframe *)l->l_md.md_regs;
@@ -191,7 +199,8 @@ cpu_lwp_free(struct lwp *l, int proc)
  * switch to another process thus we never return.
  */
 void
-cpu_exit(struct lwp *l)
+cpu_exit(l)
+	struct lwp *l;
 {
 
 	(void) splhigh();
@@ -206,11 +215,14 @@ struct md_core {
 	struct reg intreg;
 	struct fpreg freg;
 };
-
 int
-cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
-    struct core *chdr)
+cpu_coredump(l, vp, cred, chdr)
+	struct lwp *l;
+	struct vnode *vp;
+	struct ucred *cred;
+	struct core *chdr;
 {
+	struct proc *p = l->l_proc;
 	struct md_core md_core;
 	struct coreseg cseg;
 	int error;
@@ -241,13 +253,13 @@ cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
 
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
 	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT, cred,
-	    NULL, NULL);
+	    NULL, p);
 	if (error)
 		return error;
 
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&md_core, sizeof(md_core),
 	    (off_t)(chdr->c_hdrsize + chdr->c_seghdrsize), UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 	if (error)
 		return error;
 
@@ -256,12 +268,48 @@ cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
 }
 
 /*
+ * Move pages from one kernel virtual address to another.
+ * Both addresses are assumed to reside in the Sysmap,
+ * and size must be a multiple of PAGE_SIZE.
+ */
+void
+pagemove(from, to, size)
+	caddr_t from, to;
+	size_t size;
+{
+	paddr_t pa;
+	boolean_t rv;
+
+#ifdef DEBUG
+	if (size & PGOFSET)
+		panic("pagemove");
+#endif
+	while (size > 0) {
+		rv = pmap_extract(pmap_kernel(), (vaddr_t)from, &pa);
+#ifdef DEBUG
+		if (rv == FALSE)
+			panic("pagemove 2");
+		if (pmap_extract(pmap_kernel(), (vaddr_t)to, NULL) == TRUE)
+			panic("pagemove 3");
+#endif
+		pmap_kremove((vaddr_t)from, PAGE_SIZE);
+		pmap_kenter_pa((vaddr_t)to, pa, VM_PROT_READ | VM_PROT_WRITE);
+		from += PAGE_SIZE;
+		to += PAGE_SIZE;
+		size -= PAGE_SIZE;
+	}
+	pmap_update(pmap_kernel());
+}
+
+/*
  * Map a user I/O request into kernel virtual address space.
  * Note: the pages are already locked by uvm_vslock(), so we
  * do not need to pass an access_type to pmap_enter().   
  */
 void
-vmapbuf(struct buf *bp, vsize_t len)
+vmapbuf(bp, len)
+	struct buf *bp;
+	vsize_t len;
 {
 	struct pmap *upmap, *kpmap;
 	vaddr_t uva;		/* User VA (map from) */
@@ -300,7 +348,9 @@ vmapbuf(struct buf *bp, vsize_t len)
  * Unmap a previously-mapped user I/O request.
  */
 void
-vunmapbuf(struct buf *bp, vsize_t len)
+vunmapbuf(bp, len)
+	struct buf *bp;
+	vsize_t len;
 {
 	vaddr_t kva;
 	vsize_t off;
@@ -334,7 +384,9 @@ vunmapbuf(struct buf *bp, vsize_t len)
  * are specified by `prot'.
  */ 
 void
-physaccess(caddr_t vaddr, caddr_t paddr, int size, int prot)
+physaccess(vaddr, paddr, size, prot)
+	caddr_t vaddr, paddr;
+	int size, prot;
 {
 	pt_entry_t *pte;
 	u_int page;
@@ -349,7 +401,9 @@ physaccess(caddr_t vaddr, caddr_t paddr, int size, int prot)
 }
 
 void
-physunaccess(caddr_t vaddr, int size)
+physunaccess(vaddr, size)
+	caddr_t vaddr;
+	int size;
 {
 	pt_entry_t *pte;
 
@@ -363,7 +417,8 @@ physunaccess(caddr_t vaddr, int size)
  * Convert kernel VA to physical address
  */
 int
-kvtop(caddr_t addr)
+kvtop(addr)
+	caddr_t addr;
 {
 	paddr_t pa;
 

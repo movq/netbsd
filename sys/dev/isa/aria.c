@@ -1,4 +1,4 @@
-/*	$NetBSD: aria.c,v 1.21 2004/10/29 12:57:17 yamt Exp $	*/
+/*	$NetBSD: aria.c,v 1.18 2003/05/03 18:11:26 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996, 1998 Roland C. Dowdeswell.  All rights reserved.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aria.c,v 1.21 2004/10/29 12:57:17 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aria.c,v 1.18 2003/05/03 18:11:26 wiz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,7 +60,6 @@ __KERNEL_RCSID(0, "$NetBSD: aria.c,v 1.21 2004/10/29 12:57:17 yamt Exp $");
 #include <sys/device.h>
 #include <sys/proc.h>
 #include <sys/buf.h>
-#include <sys/fcntl.h>
 
 #include <machine/cpu.h>
 #include <machine/bus.h>
@@ -73,6 +72,9 @@ __KERNEL_RCSID(0, "$NetBSD: aria.c,v 1.21 2004/10/29 12:57:17 yamt Exp $");
 #include <dev/isa/isavar.h>
 
 #include <dev/isa/ariareg.h>
+
+#define FREAD 1
+#define FWRITE 2
 
 #ifdef AUDIO_DEBUG
 #define DPRINTF(x)	printf x
@@ -202,7 +204,7 @@ struct audio_device aria_device = {
  * Define our interface to the higher level audio driver.
  */
 
-const struct audio_hw_if aria_hw_if = {
+struct audio_hw_if aria_hw_if = {
 	ariaopen,
 	ariaclose,
 	NULL,
@@ -473,7 +475,7 @@ ariaattach(parent, self, aux)
 		printf(", SC18075 mixer");
 	printf("\n");
 
-	snprintf(aria_device.version, sizeof(aria_device.version), "%s", 
+	sprintf(aria_device.version, "%s", 
 		ARIA_MODEL & sc->sc_hardware ? "SC18026" : "SC18025");
 
 	audio_attach_mi(&aria_hw_if, (void *)sc, &sc->sc_dev);
@@ -494,11 +496,21 @@ ariaopen(addr, flags)
     
 	if (!sc)
 		return ENXIO;
+	if ((flags&FREAD) && (sc->sc_open & ARIAR_OPEN_RECORD))
+		return ENXIO;
+	if ((flags&FWRITE) && (sc->sc_open & ARIAR_OPEN_PLAY))
+		return ENXIO;
     
 	if (flags&FREAD)
 		sc->sc_open |= ARIAR_OPEN_RECORD;
 	if (flags&FWRITE)
 		sc->sc_open |= ARIAR_OPEN_PLAY;
+	sc->sc_play  = 0;
+	sc->sc_record= 0;
+	sc->sc_rintr = 0;
+	sc->sc_rarg  = 0;
+	sc->sc_pintr = 0;
+	sc->sc_parg  = 0;
 
 	return 0;
 }
@@ -820,6 +832,23 @@ ariaclose(addr)
 
 	DPRINTF(("aria_close sc=0x%x\n", (unsigned) sc));
 
+        sc->sc_rintr = 0;
+        sc->sc_pintr = 0;
+	sc->sc_rdiobuffer = 0;
+	sc->sc_pdiobuffer = 0;
+
+	if (sc->sc_play&(1<<ARIAR_PLAY_CHAN) &&
+	    sc->sc_open & ARIAR_OPEN_PLAY) {
+		aria_sendcmd(sc, ARIADSPC_STOP_PLAY, ARIAR_PLAY_CHAN, -1, -1);
+		sc->sc_play &= ~(1<<ARIAR_PLAY_CHAN);
+	}
+
+	if (sc->sc_record&(1<<ARIAR_RECORD_CHAN) &&
+	    sc->sc_open & ARIAR_OPEN_RECORD) {
+		aria_sendcmd(sc, ARIADSPC_STOP_REC, ARIAR_RECORD_CHAN, -1, -1);
+		sc->sc_record &= ~(1<<ARIAR_RECORD_CHAN);
+	}
+
 	sc->sc_open = 0;
 
 	if (aria_reset(sc) != 0) {
@@ -960,7 +989,6 @@ aria_halt_input(addr)
 	if (sc->sc_record & (1<<0)) {
 		aria_sendcmd(sc, ARIADSPC_STOP_REC, 0, -1, -1);
 		sc->sc_record &= ~(1<<0);
-		sc->sc_rdiobuffer = 0;
 	}
 
 	return(0);
@@ -977,7 +1005,6 @@ aria_halt_output(addr)
 	if (sc->sc_play & (1<<1)) {
 		aria_sendcmd(sc, ARIADSPC_STOP_PLAY, 1, -1, -1);
 		sc->sc_play &= ~(1<<1);
-		sc->sc_pdiobuffer = 0;
 	}
 
 	return(0);

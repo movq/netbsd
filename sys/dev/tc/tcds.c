@@ -1,4 +1,4 @@
-/* $NetBSD: tcds.c,v 1.12 2004/09/13 14:08:39 drochner Exp $ */
+/* $NetBSD: tcds.c,v 1.10 2003/01/01 00:10:25 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcds.c,v 1.12 2004/09/13 14:08:39 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcds.c,v 1.10 2003/01/01 00:10:25 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -109,8 +109,7 @@ struct tcds_softc {
 int	tcdsmatch __P((struct device *, struct cfdata *, void *));
 void	tcdsattach __P((struct device *, struct device *, void *));
 int     tcdsprint __P((void *, const char *));
-int	tcdssubmatch __P((struct device *, struct cfdata *,
-			  const locdesc_t *, void *));
+int	tcdssubmatch __P((struct device *, struct cfdata *, void *));
 
 CFATTACH_DECL(tcds, sizeof(struct tcds_softc),
     tcdsmatch, tcdsattach, NULL, NULL);
@@ -171,8 +170,6 @@ tcdsattach(parent, self, aux)
 	bus_space_handle_t sbsh[2];
 	int i, gpi2;
 	const struct evcnt *pevcnt;
-	int help[2];
-	locdesc_t *ldesc = (void *)help; /* XXX */
 
 	td = tcds_lookup(ta->ta_modname);
 	if (td == NULL)
@@ -308,11 +305,7 @@ tcdsattach(parent, self, aux)
 
 		tcds_scsi_reset(tcdsdev.tcdsda_sc);
 
-		ldesc->len = 1;
-		ldesc->locs[TCDSCF_CHIP] = i;
-
-		config_found_sm_loc(self, "tcds", ldesc, &tcdsdev,
-				    tcdsprint, tcdssubmatch);
+		config_found_sm(self, &tcdsdev, tcdsprint, tcdssubmatch);
 #ifdef __alpha__
 		/*
 		 * The second SCSI chip isn't present on the baseboard TCDS
@@ -326,15 +319,15 @@ tcdsattach(parent, self, aux)
 }
 
 int
-tcdssubmatch(parent, cf, ldesc, aux)
+tcdssubmatch(parent, cf, aux)
 	struct device *parent;
 	struct cfdata *cf;
-	const locdesc_t *ldesc;
 	void *aux;
 {
+	struct tcdsdev_attach_args *tcdsdev = aux;
 
 	if (cf->cf_loc[TCDSCF_CHIP] != TCDSCF_CHIP_DEFAULT &&
-	    cf->cf_loc[TCDSCF_CHIP] != ldesc->locs[TCDSCF_CHIP])
+	    cf->cf_loc[TCDSCF_CHIP] != tcdsdev->tcdsda_chip)
 		return (0);
 
 	return (config_match(parent, cf, aux));

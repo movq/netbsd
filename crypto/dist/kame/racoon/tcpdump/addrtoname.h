@@ -18,7 +18,7 @@
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  *
- * @(#) $Header: /home/mike/src/cvs/netbsd/src/crypto/dist/kame/racoon/tcpdump/Attic/addrtoname.h,v 1.1.1.1 2004/06/17 03:38:51 itojun Exp $ (LBL)
+ * @(#) $Header: /home/mike/src/cvs/netbsd/src/crypto/dist/kame/racoon/tcpdump/Attic/addrtoname.h,v 1.1.1.1.2.2 2004/06/17 12:38:10 tron Exp $ (LBL)
  */
 
 /* Name to address translation routines. */

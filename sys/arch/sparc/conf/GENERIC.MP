@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC.MP,v 1.3 2004/04/20 15:55:30 pk Exp $
+# $NetBSD: GENERIC.MP,v 1.1.48.1 2004/04/24 18:32:55 jdc Exp $
 #
 # Generic Sparc kernel configuration with multiprocessor support.
 
@@ -12,4 +12,3 @@ options 	MULTIPROCESSOR		# include multiprocessor support
 options 	__CPU_SIMPLE_LOCK_NOINLINE
 
 cpu* 		at mainbus0		# declare additional CPUs
-cpu*		at cpuunit?

@@ -1,4 +1,4 @@
-/*	$NetBSD: makefs.c,v 1.20 2004/06/20 22:20:18 jmc Exp $	*/
+/*	$NetBSD: makefs.c,v 1.19.2.1 2004/06/22 07:25:39 tron Exp $	*/
 
 /*
  * Copyright (c) 2001-2003 Wasabi Systems, Inc.
@@ -41,7 +41,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: makefs.c,v 1.20 2004/06/20 22:20:18 jmc Exp $");
+__RCSID("$NetBSD: makefs.c,v 1.19.2.1 2004/06/22 07:25:39 tron Exp $");
 #endif	/* !__lint */
 
 #include <assert.h>

@@ -1,4 +1,4 @@
-#	$NetBSD: DISKLESS,v 1.100 2004/11/10 17:25:21 christos Exp $
+#	$NetBSD: DISKLESS,v 1.95.2.1 2004/07/15 20:25:03 he Exp $
 #
 # DISKLESS -- Generic machine setup for diskless boot.
 # This kernel can be loaded from a bootable floppy (i.e. kernel-copy)
@@ -25,6 +25,7 @@ options 	USER_LDT	# user-settable LDT; used by WINE
 #options 	REALBASEMEM=...	# size of base memory
 #options 	REALEXTMEM=...	# size of extended memory
 
+options 	XSERVER
 options 	INSECURE	# insecure; allow /dev/mem writing for X
 
 maxusers	32		# estimated number of users
@@ -65,7 +66,6 @@ options 	COMPAT_SVR4	# binary compatibility with SVR4
 #options 	COMPAT_IBCS2	# binary compatibility with SCO and ISC
 #options 	COMPAT_LINUX	# binary compatibility with Linux
 #options 	COMPAT_FREEBSD	# binary compatibility with FreeBSD
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 options 	LKM		# loadable kernel modules
 
@@ -92,7 +92,6 @@ file-system 	UNION		# union file system
 #options 	GATEWAY		# packet forwarding
 options 	INET		# IP + ICMP + TCP + UDP
 #options 	MROUTING	# IP multicast routing
-#options 	PIM		# Protocol Independent Multicast
 options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 options 	ISO,TPIP	# OSI

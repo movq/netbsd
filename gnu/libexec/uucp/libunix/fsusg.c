@@ -54,6 +54,7 @@
 
 #if HAVE_SYS_STATVFS_H		/* SVR4.  */
 #include <sys/statvfs.h>
+int statvfs ();
 #endif
 
 #if HAVE_USTAT_H		/* SVR2 and others.  */

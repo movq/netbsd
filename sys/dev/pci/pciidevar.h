@@ -1,4 +1,4 @@
-/*	$NetBSD: pciidevar.h,v 1.26 2004/11/24 19:52:50 bouyer Exp $	*/
+/*	$NetBSD: pciidevar.h,v 1.20 2004/01/03 01:50:53 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1998 Christopher G. Demetriou.  All rights reserved.
@@ -30,9 +30,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _DEV_PCI_PCIIDEVAR_H_
-#define	_DEV_PCI_PCIIDEVAR_H_
-
 /*
  * PCI IDE driver exported software structures.
  *
@@ -48,20 +45,20 @@
 #define	PCIIDE_OPTIONS_DMA	0x01
 #define	PCIIDE_OPTIONS_NODMA	0x02
 
-#ifndef ATADEBUG
-#define ATADEBUG
+#ifndef WDCDEBUG
+#define WDCDEBUG
 #endif
 
 #define DEBUG_DMA   0x01
 #define DEBUG_XFERS  0x02
 #define DEBUG_FUNCS  0x08
 #define DEBUG_PROBE  0x10
-#ifdef ATADEBUG
-extern int atadebug_pciide_mask;
-#define ATADEBUG_PRINT(args, level) \
-	if (atadebug_pciide_mask & (level)) printf args
+#ifdef WDCDEBUG
+extern int wdcdebug_pciide_mask;
+#define WDCDEBUG_PRINT(args, level) \
+	if (wdcdebug_pciide_mask & (level)) printf args
 #else
-#define ATADEBUG_PRINT(args, level)
+#define WDCDEBUG_PRINT(args, level)
 #endif
 
 struct device;
@@ -108,7 +105,7 @@ struct pciide_softc {
 	/* for SiS */
 	u_int8_t sis_type;
 
-	/* For Silicon Image SATALink, and Promise SATA */
+	/* For Silicon Image SATALink */
 	bus_space_tag_t sc_ba5_st;
 	bus_space_handle_t sc_ba5_sh;
 	int sc_ba5_en;
@@ -118,10 +115,10 @@ struct pciide_softc {
 	/* Chip description */
 	const struct pciide_product_desc *sc_pp;
 	/* common definitions */
-	struct ata_channel *wdc_chanarray[PCIIDE_MAX_CHANNELS];
+	struct wdc_channel *wdc_chanarray[PCIIDE_MAX_CHANNELS];
 	/* internal bookkeeping */
 	struct pciide_channel {			/* per-channel data */
-		struct ata_channel ata_channel; /* generic part */
+		struct wdc_channel wdc_channel; /* generic part */
 		const char	*name;
 		int		compat;	/* is it compat? */
 		void		*ih;	/* compat or pci handle */
@@ -143,12 +140,6 @@ struct pciide_softc {
 		uint8_t		idedma_cmd;
 	} pciide_channels[PCIIDE_MAX_CHANNELS];
 };
-
-/* Given an ata_channel, get the pciide_softc. */
-#define	CHAN_TO_PCIIDE(chp)	((struct pciide_softc *) (chp)->ch_atac)
-
-/* Given an ata_channel, get the pciide_channel. */
-#define	CHAN_TO_PCHAN(chp)	((struct pciide_channel *) (chp))
 
 struct pciide_product_desc {
 	u_int32_t ide_product;
@@ -195,16 +186,14 @@ pciide_pci_write(pc, pa, reg, val)
 }
 
 void default_chip_map __P((struct pciide_softc*, struct pci_attach_args*));
-void sata_setup_channel __P((struct ata_channel*));
+void sata_setup_channel __P((struct wdc_channel*));
 
 void pciide_channel_dma_setup __P((struct pciide_channel *));
 int  pciide_dma_table_setup __P((struct pciide_softc*, int, int));
-int  pciide_dma_dmamap_setup __P((struct pciide_softc *, int, int,
-				void *, size_t, int));
 int  pciide_dma_init __P((void*, int, int, void *, size_t, int));
 void pciide_dma_start __P((void*, int, int));
 int  pciide_dma_finish __P((void*, int, int, int));
-void pciide_irqack __P((struct ata_channel *));
+void pciide_irqack __P((struct wdc_channel *));
 
 /*
  * Functions defined by machine-dependent code.
@@ -238,5 +227,3 @@ void	pciide_map_compat_intr __P(( struct pci_attach_args *,
 	    struct pciide_channel *, int));
 int	pciide_compat_intr __P((void *));
 int	pciide_pci_intr __P((void *));
-
-#endif /* _DEV_PCI_PCIIDEVAR_H_ */

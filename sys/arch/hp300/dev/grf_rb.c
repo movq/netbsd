@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_rb.c,v 1.28 2004/08/28 17:37:01 thorpej Exp $	*/
+/*	$NetBSD: grf_rb.c,v 1.26.2.1 2004/04/11 03:03:00 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -117,7 +117,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_rb.c,v 1.28 2004/08/28 17:37:01 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_rb.c,v 1.26.2.1 2004/04/11 03:03:00 jmc Exp $");
 
 #include "opt_compat_hpux.h"
 
@@ -151,16 +151,16 @@ __KERNEL_RCSID(0, "$NetBSD: grf_rb.c,v 1.28 2004/08/28 17:37:01 thorpej Exp $");
 
 #include "ite.h"
 
-static int	rb_init(struct grf_data *gp, int, caddr_t);
-static int	rb_mode(struct grf_data *gp, int, caddr_t);
+int	rb_init __P((struct grf_data *gp, int, caddr_t));
+int	rb_mode __P((struct grf_data *gp, int, caddr_t));
 
-static int	rbox_intio_match(struct device *, struct cfdata *, void *);
-static void	rbox_intio_attach(struct device *, struct device *, void *);
+int	rbox_intio_match __P((struct device *, struct cfdata *, void *));
+void	rbox_intio_attach __P((struct device *, struct device *, void *));
 
-static int	rbox_dio_match(struct device *, struct cfdata *, void *);
-static void	rbox_dio_attach(struct device *, struct device *, void *);
+int	rbox_dio_match __P((struct device *, struct cfdata *, void *));
+void	rbox_dio_attach __P((struct device *, struct device *, void *));
 
-int	rboxcnattach(bus_space_tag_t, bus_addr_t, int);
+int	rboxcnattach __P((bus_space_tag_t, bus_addr_t, int));
 
 CFATTACH_DECL(rbox_intio, sizeof(struct grfdev_softc),
     rbox_intio_match, rbox_intio_attach, NULL, NULL);
@@ -169,7 +169,7 @@ CFATTACH_DECL(rbox_dio, sizeof(struct grfdev_softc),
     rbox_dio_match, rbox_dio_attach, NULL, NULL);
 
 /* Renaissance grf switch */
-static struct grfsw rbox_grfsw = {
+struct grfsw rbox_grfsw = {
 	GID_RENAISSANCE, GRFRBOX, "renaissance", rb_init, rb_mode
 };
 
@@ -177,24 +177,27 @@ static int rbconscode;
 static caddr_t rbconaddr;
 
 #if NITE > 0
-static void	rbox_init(struct ite_data *);
-static void	rbox_deinit(struct ite_data *);
-static void	rbox_putc(struct ite_data *, int, int, int, int);
-static void	rbox_cursor(struct ite_data *, int);
-static void	rbox_clear(struct ite_data *, int, int, int, int);
-static void	rbox_scroll(struct ite_data *, int, int, int, int);
-static void	rbox_windowmove(struct ite_data *, int, int, int, int,
-			int, int, int);
+void	rbox_init __P((struct ite_data *));
+void	rbox_deinit __P((struct ite_data *));
+void	rbox_putc __P((struct ite_data *, int, int, int, int));
+void	rbox_cursor __P((struct ite_data *, int));
+void	rbox_clear __P((struct ite_data *, int, int, int, int));
+void	rbox_scroll __P((struct ite_data *, int, int, int, int));
+void	rbox_windowmove __P((struct ite_data *, int, int, int, int,
+		int, int, int));
 
 /* Renaissance ite switch */
-static struct itesw rbox_itesw = {
+struct itesw rbox_itesw = {
 	rbox_init, rbox_deinit, rbox_clear, rbox_putc,
 	rbox_cursor, rbox_scroll, ite_readbyte, ite_writeglyph
 };
 #endif /* NITE > 0 */
 
-static int
-rbox_intio_match(struct device *parent, struct cfdata *match, void *aux)
+int
+rbox_intio_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct intio_attach_args *ia = aux;
 	struct grfreg *grf;
@@ -215,8 +218,10 @@ rbox_intio_match(struct device *parent, struct cfdata *match, void *aux)
 	return (0);
 }
 
-static void
-rbox_intio_attach(struct device *parent, struct device *self, void *aux)
+void
+rbox_intio_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct grfdev_softc *sc = (struct grfdev_softc *)self;
 	struct intio_attach_args *ia = aux;
@@ -229,8 +234,11 @@ rbox_intio_attach(struct device *parent, struct device *self, void *aux)
 	grfdev_attach(sc, rb_init, grf, &rbox_grfsw);
 }
 
-static int
-rbox_dio_match(struct device *parent, struct cfdata *match, void *aux)
+int
+rbox_dio_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct dio_attach_args *da = aux;
 
@@ -241,8 +249,10 @@ rbox_dio_match(struct device *parent, struct cfdata *match, void *aux)
 	return (0);
 }
 
-static void
-rbox_dio_attach(struct device *parent, struct device *self, void *aux)
+void
+rbox_dio_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct grfdev_softc *sc = (struct grfdev_softc *)self;
 	struct dio_attach_args *da = aux;
@@ -269,8 +279,11 @@ rbox_dio_attach(struct device *parent, struct device *self, void *aux)
  * Must point g_display at a grfinfo structure describing the hardware.
  * Returns 0 if hardware not present, non-zero ow.
  */
-static int
-rb_init(struct grf_data *gp, int scode, caddr_t addr)
+int
+rb_init(gp, scode, addr)
+	struct grf_data *gp;
+	int scode;
+	caddr_t addr;
 {
 	struct rboxfb *rbp;
 	struct grfinfo *gi = &gp->g_display;
@@ -324,8 +337,11 @@ rb_init(struct grf_data *gp, int scode, caddr_t addr)
  * Right now all we can do is grfon/grfoff.
  * Return a UNIX error number or 0 for success.
  */
-static int
-rb_mode(struct grf_data *gp, int cmd, caddr_t data)
+int
+rb_mode(gp, cmd, data)
+	struct grf_data *gp;
+	int cmd;
+	caddr_t data;
 {
 	struct rboxfb *rbp;
 	int error = 0;
@@ -416,8 +432,9 @@ rb_mode(struct grf_data *gp, int cmd, caddr_t data)
 #define REGBASE		((struct rboxfb *)(ip->regbase))
 #define WINDOWMOVER	rbox_windowmove
 
-static void
-rbox_init(struct ite_data *ip)
+void
+rbox_init(ip)
+	struct ite_data *ip;
 {
 	int i;
 
@@ -511,8 +528,9 @@ rbox_init(struct ite_data *ip)
 			    ip->ftwidth, RR_COPYINVERTED);
 }
 
-static void
-rbox_deinit(struct ite_data *ip)
+void
+rbox_deinit(ip)
+	struct ite_data *ip;
 {
 	rbox_windowmove(ip, 0, 0, 0, 0, ip->fbheight, ip->fbwidth, RR_CLEAR);
 	rb_waitbusy(ip->regbase);
@@ -520,8 +538,10 @@ rbox_deinit(struct ite_data *ip)
 	ip->flags &= ~ITE_INITED;
 }
 
-static void
-rbox_putc(struct ite_data *ip, int c, int dy, int dx, int mode)
+void
+rbox_putc(ip, c, dy, dx, mode)
+	struct ite_data *ip;
+	int dy, dx, c, mode;
 {
 	int wrr = ((mode == ATTR_INV) ? RR_COPYINVERTED : RR_COPY);
 
@@ -530,8 +550,10 @@ rbox_putc(struct ite_data *ip, int c, int dy, int dx, int mode)
 			ip->ftheight, ip->ftwidth, wrr);
 }
 
-static void
-rbox_cursor(struct ite_data *ip, int flag)
+void
+rbox_cursor(ip, flag)
+	struct ite_data *ip;
+	int flag;
 {
 	if (flag == DRAW_CURSOR)
 		draw_cursor(ip)
@@ -543,8 +565,10 @@ rbox_cursor(struct ite_data *ip, int flag)
 		erase_cursor(ip)
 }
 
-static void
-rbox_clear(struct ite_data *ip, int sy, int sx, int h, int w)
+void
+rbox_clear(ip, sy, sx, h, w)
+	struct ite_data *ip;
+	int sy, sx, h, w;
 {
 	rbox_windowmove(ip, sy * ip->ftheight, sx * ip->ftwidth,
 			sy * ip->ftheight, sx * ip->ftwidth,
@@ -552,8 +576,10 @@ rbox_clear(struct ite_data *ip, int sy, int sx, int h, int w)
 			RR_CLEAR);
 }
 
-static void
-rbox_scroll(struct ite_data *ip, int sy, int sx, int count, int dir)
+void
+rbox_scroll(ip, sy, sx, count, dir)
+	struct ite_data *ip;
+	int sy, count, dir, sx;
 {
 	int dy;
 	int dx = sx;
@@ -585,9 +611,10 @@ rbox_scroll(struct ite_data *ip, int sy, int sx, int count, int dir)
 			width  * ip->ftwidth, RR_COPY);
 }
 
-static void
-rbox_windowmove(struct ite_data *ip, int sy, int sx, int dy, int dx, int h,
-    int w, int func)
+void
+rbox_windowmove(ip, sy, sx, dy, dx, h, w, func)
+	struct ite_data *ip;
+	int sy, sx, dy, dx, h, w, func;
 {
 	struct rboxfb *rp = REGBASE;
 	if (h == 0 || w == 0)

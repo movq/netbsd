@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_et.c,v 1.7 2004/09/06 18:12:54 is Exp $ */
+/*	$NetBSD: ite_et.c,v 1.6.18.1 2004/09/10 03:02:34 jmc Exp $ */
 
 /*
  * Copyright (c) 1995 Ezra Story
@@ -36,7 +36,7 @@
 #include "opt_amigacons.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite_et.c,v 1.7 2004/09/06 18:12:54 is Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite_et.c,v 1.6.18.1 2004/09/10 03:02:34 jmc Exp $");
 
 #include "grfet.h"
 #if NGRFET > 0

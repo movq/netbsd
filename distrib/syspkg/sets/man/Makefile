@@ -1,5 +1,3 @@
-#	$NetBSD: Makefile,v 1.3 2004/06/30 03:37:48 jmc Exp $
-
 SUBDIR+=man-adosfs-catman
 SUBDIR+=man-adosfs-man
 SUBDIR+=man-amd-catman

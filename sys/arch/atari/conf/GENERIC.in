@@ -1,5 +1,5 @@
 #
-#	$NetBSD: GENERIC.in,v 1.41 2004/11/10 17:54:03 christos Exp $
+#	$NetBSD: GENERIC.in,v 1.33.2.3 2004/07/15 20:18:24 he Exp $
 #
 # Generic atari
 #
@@ -59,7 +59,6 @@ options 	INET6		# IPV6
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	GATEWAY		# packet forwarding
 #options 	MROUTING	# IP multicast routing
-#options 	PIM		# Protocol Independent Multicast
 options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 options 	ISO,TPIP	# OSI
@@ -155,7 +154,6 @@ options 	COMPAT_16	# Compatibility to NetBSD1.6
 #endif
 options 	COMPAT_AOUT_M68K # Compatibility to a.out executables
 options 	EXEC_AOUT	# a.out format executables
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 #ifndef INSTALL_KERNEL
 #
@@ -265,8 +263,6 @@ options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 pseudo-device	ipfilter		# IP filtering device
 pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
-#pseudo-device	pf			# PF packet filter
-#pseudo-device	pflog			# PF log if
 #endif
 
 #if defined(HADES_KERNEL) || defined(MILAN_KERNEL)

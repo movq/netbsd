@@ -1,4 +1,4 @@
-/*	$NetBSD: hash_log2.c,v 1.9 2004/06/20 22:20:14 jmc Exp $	*/
+/*	$NetBSD: hash_log2.c,v 1.8.2.1 2004/06/22 07:20:43 tron Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -41,7 +41,7 @@
 #if 0
 static char sccsid[] = "@(#)hash_log2.c	8.2 (Berkeley) 5/31/94";
 #else
-__RCSID("$NetBSD: hash_log2.c,v 1.9 2004/06/20 22:20:14 jmc Exp $");
+__RCSID("$NetBSD: hash_log2.c,v 1.8.2.1 2004/06/22 07:20:43 tron Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

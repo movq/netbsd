@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.64 2004/08/24 01:41:51 ginsbach Exp $
+#	$NetBSD: Makefile.inc,v 1.62.2.1 2004/09/11 11:57:24 he Exp $
 #	@(#)Makefile.inc	8.2 (Berkeley) 9/5/93
 
 # net sources
@@ -6,18 +6,24 @@
 
 SRCS+=	__cmsg_alignbytes.c base64.c ethers.c gethnamaddr.c getifaddrs.c \
 	getnetnamadr.c getnetent.c \
-	getprotobyname.c getprotobynumber.c getprotoent.c \
-	getprotobyname_r.c getprotobynumber_r.c getprotoent_r.c \
+	getprotobynumber.c getprotoent.c getprotobyname.c \
+	getprotobynumber_r.c getprotoent_r.c getprotobyname_r.c \
 	getservbyname.c getservbyport.c getservent.c \
 	getservbyname_r.c getservbyport_r.c getservent_r.c \
-	iso_addr.c linkaddr.c \
+	herror.c inet_lnaof.c inet_makeaddr.c \
+	inet_net_ntop.c inet_net_pton.c inet_neta.c inet_ntop.c inet_pton.c \
+	inet_netof.c inet_network.c inet_ntoa.c iso_addr.c linkaddr.c \
 	nsdispatch.c nslexer.l nsparser.y ns_addr.c ns_ntoa.c nsap_addr.c \
-	rcmd.c recv.c send.c sethostent.c \
+	rcmd.c recv.c res_comp.c res_data.c res_debug.c res_init.c \
+	res_mkquery.c res_query.c res_send.c send.c sethostent.c \
 	sockatmark.c
 
 .if (${MKHESIOD} != "no")
 SRCS+=	hesiod.c
 .endif
+
+SRCS+=	__dn_comp.c __res_close.c __res_send.c _inet_aton.c _inet_pton.c
+CPPFLAGS+=-DRESOLVSORT -I.
 
 # IPv6
 SRCS+=	getaddrinfo.c getnameinfo.c

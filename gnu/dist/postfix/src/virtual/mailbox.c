@@ -1,5 +1,3 @@
-/*	$NetBSD: mailbox.c,v 1.1.1.4 2004/05/31 00:25:03 heas Exp $	*/
-
 /*++
 /* NAME
 /*	mailbox 3
@@ -62,7 +60,7 @@
 #include <defer.h>
 #include <sent.h>
 #include <mail_params.h>
-#include <mail_addr_find.h>
+#include <virtual8_maps.h>
 
 #ifndef EDQUOT
 #define EDQUOT EFBIG
@@ -94,13 +92,6 @@ static int deliver_mailbox_file(LOCAL_STATE state, USER_ATTR usr_attr)
     state.level++;
     if (msg_verbose)
 	MSG_LOG_STATE(myname, state);
-
-    /*
-     * Don't deliver trace-only requests.
-     */
-    if (DEL_REQ_TRACE_ONLY(state.request->flags))
-	return (sent(BOUNCE_FLAGS(state.request), SENT_ATTR(state.msg_attr),
-		     "delivers to mailbox"));
 
     /*
      * Initialize. Assume the operation will fail. Set the delivered
@@ -145,12 +136,10 @@ static int deliver_mailbox_file(LOCAL_STATE state, USER_ATTR usr_attr)
     } else if (mail_copy_status != 0) {
 	deliver_status = (errno == EDQUOT || errno == EFBIG ?
 			  bounce_append : defer_append)
-	    (BOUNCE_FLAGS(state.request), BOUNCE_ATTR(state.msg_attr),
+	    (BOUNCE_FLAG_KEEP, BOUNCE_ATTR(state.msg_attr),
 	     "mailbox %s: %s", usr_attr.mailbox, vstring_str(why));
     } else {
-	deliver_status = sent(BOUNCE_FLAGS(state.request),
-			      SENT_ATTR(state.msg_attr),
-			      "delivered to mailbox");
+	deliver_status = sent(SENT_ATTR(state.msg_attr), "mailbox");
     }
     vstring_free(why);
     return (deliver_status);
@@ -184,16 +173,12 @@ int     deliver_mailbox(LOCAL_STATE state, USER_ATTR usr_attr, int *statusp)
      * Look up the mailbox location. Bounce if not found, defer in case of
      * trouble.
      */
-#define IGNORE_EXTENSION ((char **) 0)
-
-    mailbox_res = mail_addr_find(virtual_mailbox_maps, state.msg_attr.user,
-				 IGNORE_EXTENSION);
+    mailbox_res = virtual8_maps_find(virtual_mailbox_maps, state.msg_attr.user);
     if (mailbox_res == 0) {
 	if (dict_errno == 0)
 	    return (NO);
 
-	*statusp = defer_append(BOUNCE_FLAGS(state.request),
-				BOUNCE_ATTR(state.msg_attr),
+	*statusp = defer_append(BOUNCE_FLAG_KEEP, BOUNCE_ATTR(state.msg_attr),
 				"%s: lookup %s: %m",
 			  virtual_mailbox_maps->title, state.msg_attr.user);
 	return (YES);
@@ -206,18 +191,15 @@ int     deliver_mailbox(LOCAL_STATE state, USER_ATTR usr_attr, int *statusp)
     /*
      * Look up the mailbox owner rights. Defer in case of trouble.
      */
-    uid_res = mail_addr_find(virtual_uid_maps, state.msg_attr.user,
-			     IGNORE_EXTENSION);
+    uid_res = virtual8_maps_find(virtual_uid_maps, state.msg_attr.user);
     if (uid_res == 0) {
-	*statusp = defer_append(BOUNCE_FLAGS(state.request),
-				BOUNCE_ATTR(state.msg_attr),
+	*statusp = defer_append(BOUNCE_FLAG_KEEP, BOUNCE_ATTR(state.msg_attr),
 				"recipient %s: uid not found in %s",
 			      state.msg_attr.user, virtual_uid_maps->title);
 	RETURN(YES);
     }
     if ((n = atol(uid_res)) < var_virt_minimum_uid) {
-	*statusp = defer_append(BOUNCE_FLAGS(state.request),
-				BOUNCE_ATTR(state.msg_attr),
+	*statusp = defer_append(BOUNCE_FLAG_KEEP, BOUNCE_ATTR(state.msg_attr),
 				"recipient %s: bad uid %s in %s",
 		     state.msg_attr.user, uid_res, virtual_uid_maps->title);
 	RETURN(YES);
@@ -227,18 +209,15 @@ int     deliver_mailbox(LOCAL_STATE state, USER_ATTR usr_attr, int *statusp)
     /*
      * Look up the mailbox group rights. Defer in case of trouble.
      */
-    gid_res = mail_addr_find(virtual_gid_maps, state.msg_attr.user,
-			     IGNORE_EXTENSION);
+    gid_res = virtual8_maps_find(virtual_gid_maps, state.msg_attr.user);
     if (gid_res == 0) {
-	*statusp = defer_append(BOUNCE_FLAGS(state.request),
-				BOUNCE_ATTR(state.msg_attr),
+	*statusp = defer_append(BOUNCE_FLAG_KEEP, BOUNCE_ATTR(state.msg_attr),
 				"recipient %s: gid not found in %s",
 			      state.msg_attr.user, virtual_gid_maps->title);
 	RETURN(YES);
     }
     if ((n = atol(gid_res)) <= 0) {
-	*statusp = defer_append(BOUNCE_FLAGS(state.request),
-				BOUNCE_ATTR(state.msg_attr),
+	*statusp = defer_append(BOUNCE_FLAG_KEEP, BOUNCE_ATTR(state.msg_attr),
 				"recipient %s: bad gid %s in %s",
 		     state.msg_attr.user, gid_res, virtual_gid_maps->title);
 	RETURN(YES);

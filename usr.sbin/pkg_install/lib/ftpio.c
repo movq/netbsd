@@ -1,8 +1,8 @@
-/*	$NetBSD: ftpio.c,v 1.64 2004/10/31 02:45:37 grant Exp $	*/
+/*	$NetBSD: ftpio.c,v 1.62 2003/12/20 03:31:56 grant Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ftpio.c,v 1.64 2004/10/31 02:45:37 grant Exp $");
+__RCSID("$NetBSD: ftpio.c,v 1.62 2003/12/20 03:31:56 grant Exp $");
 #endif
 
 /*-
@@ -238,7 +238,7 @@ expect(int fd, const char *str, int *ftprc)
 				fflush(stdout);
 #endif /* EXPECT_DEBUG */
 
-				if (ftprc && isdigit((unsigned char)buf[match.rm_so+1])) 
+				if (ftprc && isdigit(buf[match.rm_so+1])) 
 					*ftprc = atoi(buf+match.rm_so+1);
 
 				done=1;
@@ -894,14 +894,14 @@ http_extract_fn(char *input, char *outbuf, size_t outbuflen)
 				state = ST_NONE;
 			else if (p == 'a' || p == 'A')
 				state = ST_LTA;
-			else if (!isspace((unsigned char)p))
+			else if (!isspace(p))
 				state = ST_TAG;
 			break;
 		case ST_LTA:
 			/* in tag -- "<a" already found */
 			if (p == '>')
 				state = ST_NONE;
-			else if (isspace((unsigned char)p))
+			else if (isspace(p))
 				state = ST_TAGA;
 			else
 				state = ST_TAG;
@@ -917,14 +917,14 @@ http_extract_fn(char *input, char *outbuf, size_t outbuflen)
 				state = ST_NONE;
 			else if (p == 'h' || p == 'H')
 				state = ST_H;
-			else if (!isspace((unsigned char)p))
+			else if (!isspace(p))
 				state = ST_TAGAX;
 			break;
 		case ST_TAGAX:
 			/* in unknown keyword in a-tag */
 			if (p == '>')
 				state = ST_NONE;
-			else if (isspace((unsigned char)p))
+			else if (isspace(p))
 				state = ST_TAGA;
 			break;
 		case ST_H:
@@ -933,7 +933,7 @@ http_extract_fn(char *input, char *outbuf, size_t outbuflen)
 				state = ST_NONE;
 			else if (p == 'r' || p == 'R')
 				state = ST_R;
-			else if (isspace((unsigned char)p))
+			else if (isspace(p))
 				state = ST_TAGA;
 			else
 				state = ST_TAGAX;
@@ -944,7 +944,7 @@ http_extract_fn(char *input, char *outbuf, size_t outbuflen)
 				state = ST_NONE;
 			else if (p == 'e' || p == 'E')
 				state = ST_E;
-			else if (isspace((unsigned char)p))
+			else if (isspace(p))
 				state = ST_TAGA;
 			else
 				state = ST_TAGAX;
@@ -955,7 +955,7 @@ http_extract_fn(char *input, char *outbuf, size_t outbuflen)
 				state = ST_NONE;
 			else if (p == 'f' || p == 'F')
 				state = ST_F;
-			else if (isspace((unsigned char)p))
+			else if (isspace(p))
 				state = ST_TAGA;
 			else
 				state = ST_TAGAX;
@@ -966,7 +966,7 @@ http_extract_fn(char *input, char *outbuf, size_t outbuflen)
 				state = ST_NONE;
 			else if (p == '=')
 				state = ST_HREF;
-			else if (!isspace((unsigned char)p))
+			else if (!isspace(p))
 				state = ST_TAGAX;
 			break;
 		case ST_HREF:
@@ -975,7 +975,7 @@ http_extract_fn(char *input, char *outbuf, size_t outbuflen)
 			if (p == '>')
 				state = ST_NONE;
 			/* skip spaces before URL */
-			else if (!isspace((unsigned char)p))
+			else if (!isspace(p))
 				state = ST_TAGA;
 			break;
 			/* no default case by purpose */
@@ -1178,29 +1178,12 @@ unpackURL(const char *url, const char *dir)
 
 	{
 		char cmd[1024];
-		const char *decompress_cmd = NULL;
-		const char *suf;
 
 		if (Verbose)
 			printf("unpackURL '%s' to '%s'\n", url, dir);
 
-		suf = suffix_of(pkg);
-		if (!strcmp(suf, "tbz") || !strcmp(suf, "bz2"))
-			decompress_cmd = BZIP2_CMD;
-		else if (!strcmp(suf, "tgz") || !strcmp(suf, "gz"))
-			decompress_cmd = GZIP_CMD;
-		else if (!strcmp(suf, "tar"))
-			; /* do nothing */
-		else
-			errx(EXIT_FAILURE, "don't know how to decompress %s, sorry", pkg);
-
 		/* yes, this is gross, but needed for borken ftp(1) */
-		(void) snprintf(cmd, sizeof(cmd), "get %s \"| ( cd %s; " TAR_CMD " %s %s -%sx -f - | tee /dev/stderr )\"\n",
-		    pkg, dir,
-		    decompress_cmd != NULL ? "--use-compress-program" : "",
-		    decompress_cmd != NULL ? decompress_cmd : "",
-		    Verbose? "vv" : "");
-
+		(void) snprintf(cmd, sizeof(cmd), "get %s \"| ( cd %s ; gunzip 2>/dev/null | " TAR_CMD " -%sx -f - | tee /dev/stderr )\"\n", pkg, dir, Verbose?"vv":"");
 		rc = ftp_cmd(cmd, "\n(226|550).*\n");
 		if (rc != 226) {
 			warnx("Cannot fetch file (%d!=226)!", rc);

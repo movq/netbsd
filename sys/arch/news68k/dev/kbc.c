@@ -1,4 +1,4 @@
-/*	$NetBSD: kbc.c,v 1.9 2004/09/04 13:43:11 tsutsui Exp $	*/
+/*	$NetBSD: kbc.c,v 1.7 2003/07/15 02:59:26 lukem Exp $	*/
 
 /*-
  * Copyright (C) 2001 Izumi Tsutsui.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kbc.c,v 1.9 2004/09/04 13:43:11 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kbc.c,v 1.7 2003/07/15 02:59:26 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,8 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: kbc.c,v 1.9 2004/09/04 13:43:11 tsutsui Exp $");
 #include <news68k/dev/hbvar.h>
 #include <news68k/dev/kbcvar.h>
 
-#include "ioconf.h"
-
 #define KBC_SIZE 0x10 /* XXX */
 
 /* Definition of the driver for autoconfig. */
@@ -55,7 +53,12 @@ static int  kbc_print(void *, const char *name);
 CFATTACH_DECL(kbc, sizeof(struct device),
     kbc_match, kbc_attach, NULL, NULL);
 
-static int kbc_match(struct device *parent, struct cfdata *cf, void *aux)
+extern struct cfdriver kbc_cd;
+
+static int kbc_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct hb_attach_args *ha = aux;
 	u_int addr;
@@ -76,7 +79,10 @@ static int kbc_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-kbc_attach(struct device *parent, struct device *self, void *aux)
+kbc_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct hb_attach_args *ha = aux;
 	struct kbc_attach_args ka;
@@ -105,7 +111,9 @@ kbc_attach(struct device *parent, struct device *self, void *aux)
 }
 
 static int
-kbc_print(void *aux, const char *name)
+kbc_print(aux, name)
+	void *aux;
+	const char *name;
 {
 
 	if (name != NULL)

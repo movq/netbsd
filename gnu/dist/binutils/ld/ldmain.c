@@ -1,6 +1,6 @@
 /* Main program of GNU linker.
    Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004
+   2002, 2003
    Free Software Foundation, Inc.
    Written by Steve Chamberlain steve@cygnus.com
 
@@ -51,13 +51,15 @@
 
 #ifdef HAVE_SBRK
 #ifdef NEED_DECLARATION_SBRK
-extern void *sbrk ();
+extern PTR sbrk ();
 #endif
 #endif
 
 #ifndef TARGET_SYSTEM_ROOT
 #define TARGET_SYSTEM_ROOT ""
 #endif
+
+int main PARAMS ((int, char **));
 
 /* EXPORTS */
 
@@ -93,10 +95,6 @@ bfd_boolean version_printed;
 /* Nonzero means link in every member of an archive.  */
 bfd_boolean whole_archive;
 
-/* Nonzero means create DT_NEEDED entries only if a dynamic library
-   actually satisfies some reference in a regular object.  */
-bfd_boolean as_needed;
-
 /* TRUE if we should demangle symbol names.  */
 bfd_boolean demangling;
 
@@ -105,40 +103,45 @@ args_type command_line;
 ld_config_type config;
 
 static char *get_emulation
-  (int, char **);
+  PARAMS ((int, char **));
 static void set_scripts_dir
-  (void);
+  PARAMS ((void));
+static void remove_output
+  PARAMS ((void));
+static bfd_boolean check_for_scripts_dir
+  PARAMS ((char *));
 static bfd_boolean add_archive_element
-  (struct bfd_link_info *, bfd *, const char *);
+  PARAMS ((struct bfd_link_info *, bfd *, const char *));
 static bfd_boolean multiple_definition
-  (struct bfd_link_info *, const char *, bfd *, asection *, bfd_vma,
-   bfd *, asection *, bfd_vma);
+  PARAMS ((struct bfd_link_info *, const char *, bfd *, asection *, bfd_vma,
+	   bfd *, asection *, bfd_vma));
 static bfd_boolean multiple_common
-  (struct bfd_link_info *, const char *, bfd *, enum bfd_link_hash_type,
-   bfd_vma, bfd *, enum bfd_link_hash_type, bfd_vma);
+  PARAMS ((struct bfd_link_info *, const char *, bfd *,
+	   enum bfd_link_hash_type, bfd_vma, bfd *, enum bfd_link_hash_type,
+	   bfd_vma));
 static bfd_boolean add_to_set
-  (struct bfd_link_info *, struct bfd_link_hash_entry *,
-   bfd_reloc_code_real_type, bfd *, asection *, bfd_vma);
+  PARAMS ((struct bfd_link_info *, struct bfd_link_hash_entry *,
+	   bfd_reloc_code_real_type, bfd *, asection *, bfd_vma));
 static bfd_boolean constructor_callback
-  (struct bfd_link_info *, bfd_boolean, const char *, bfd *,
-   asection *, bfd_vma);
+  PARAMS ((struct bfd_link_info *, bfd_boolean, const char *, bfd *,
+	   asection *, bfd_vma));
 static bfd_boolean warning_callback
-  (struct bfd_link_info *, const char *, const char *, bfd *,
-   asection *, bfd_vma);
+  PARAMS ((struct bfd_link_info *, const char *, const char *, bfd *,
+	   asection *, bfd_vma));
 static void warning_find_reloc
-  (bfd *, asection *, void *);
+  PARAMS ((bfd *, asection *, PTR));
 static bfd_boolean undefined_symbol
-  (struct bfd_link_info *, const char *, bfd *, asection *, bfd_vma,
-   bfd_boolean);
+  PARAMS ((struct bfd_link_info *, const char *, bfd *, asection *, bfd_vma,
+	   bfd_boolean));
 static bfd_boolean reloc_overflow
-  (struct bfd_link_info *, const char *, const char *, bfd_vma,
-   bfd *, asection *, bfd_vma);
+  PARAMS ((struct bfd_link_info *, const char *, const char *, bfd_vma,
+	   bfd *, asection *, bfd_vma));
 static bfd_boolean reloc_dangerous
-  (struct bfd_link_info *, const char *, bfd *, asection *, bfd_vma);
+  PARAMS ((struct bfd_link_info *, const char *, bfd *, asection *, bfd_vma));
 static bfd_boolean unattached_reloc
-  (struct bfd_link_info *, const char *, bfd *, asection *, bfd_vma);
+  PARAMS ((struct bfd_link_info *, const char *, bfd *, asection *, bfd_vma));
 static bfd_boolean notice
-  (struct bfd_link_info *, const char *, bfd *, asection *, bfd_vma);
+  PARAMS ((struct bfd_link_info *, const char *, bfd *, asection *, bfd_vma));
 
 static struct bfd_link_callbacks link_callbacks =
 {
@@ -159,19 +162,21 @@ static struct bfd_link_callbacks link_callbacks =
 struct bfd_link_info link_info;
 
 static void
-remove_output (void)
+remove_output ()
 {
   if (output_filename)
     {
-      if (output_bfd)
-	bfd_cache_close (output_bfd);
+      if (output_bfd && output_bfd->iostream)
+	fclose ((FILE *) (output_bfd->iostream));
       if (delete_output_file_on_failure)
 	unlink (output_filename);
     }
 }
 
 int
-main (int argc, char **argv)
+main (argc, argv)
+     int argc;
+     char **argv;
 {
   char *emulation;
   long start_time = get_run_time ();
@@ -282,19 +287,17 @@ main (int argc, char **argv)
      interface by default.  */
   demangling = getenv ("COLLECT_NO_DEMANGLE") == NULL;
 
-  link_info.relocatable = FALSE;
+  link_info.relocateable = FALSE;
   link_info.emitrelocations = FALSE;
   link_info.task_link = FALSE;
   link_info.shared = FALSE;
-  link_info.pie = FALSE;
-  link_info.executable = FALSE;
   link_info.symbolic = FALSE;
   link_info.export_dynamic = FALSE;
   link_info.static_link = FALSE;
   link_info.traditional_format = FALSE;
   link_info.optimize = FALSE;
-  link_info.unresolved_syms_in_objects = RM_NOT_YET_SET;
-  link_info.unresolved_syms_in_shared_libs = RM_NOT_YET_SET;
+  link_info.no_undefined = FALSE;
+  link_info.allow_shlib_undefined = TRUE;
   link_info.allow_multiple_definition = FALSE;
   link_info.allow_undefined_version = TRUE;
   link_info.keep_memory = TRUE;
@@ -320,12 +323,13 @@ main (int argc, char **argv)
      and _fini symbols.  We are compatible.  */
   link_info.init_function = "_init";
   link_info.fini_function = "_fini";
+  link_info.mpc860c0 = 0;
   link_info.pei386_auto_import = -1;
   link_info.pei386_runtime_pseudo_reloc = FALSE;
   link_info.spare_dynamic_tags = 5;
-  link_info.flags = 0;
-  link_info.flags_1 = 0;
-  link_info.need_relax_finalize = FALSE;
+  link_info.flags = (bfd_vma) 0;
+  link_info.flags_1 = (bfd_vma) 0;
+  link_info.relax_finalizing = FALSE;
 
   ldfile_add_arch ("");
 
@@ -344,10 +348,12 @@ main (int argc, char **argv)
 
   ldemul_set_symbols ();
 
-  if (link_info.relocatable)
+  if (link_info.relocateable)
     {
       if (command_line.gc_sections)
 	einfo ("%P%F: --gc-sections and -r may not be used together\n");
+      if (link_info.mpc860c0)
+	einfo (_("%P%F: -r and --mpc860c0 may not be used together\n"));
       else if (command_line.relax)
 	einfo (_("%P%F: --relax and -r may not be used together\n"));
       if (link_info.shared)
@@ -362,13 +368,10 @@ main (int argc, char **argv)
 	einfo (_("%P%F: -f may not be used without -shared\n"));
     }
 
-  if (! link_info.shared || link_info.pie)
-    link_info.executable = TRUE;
-
   /* Treat ld -r -s as ld -r -S -x (i.e., strip all local symbols).  I
      don't see how else this can be handled, since in this case we
      must preserve all externally visible symbols.  */
-  if (link_info.relocatable && link_info.strip == strip_all)
+  if (link_info.relocateable && link_info.strip == strip_all)
     {
       link_info.strip = strip_debugger;
       if (link_info.discard == discard_sec_merge)
@@ -467,7 +470,7 @@ main (int argc, char **argv)
 
   /* Print error messages for any missing symbols, for any warning
      symbols, and possibly multiple definitions.  */
-  if (link_info.relocatable)
+  if (link_info.relocateable)
     output_bfd->flags &= ~EXEC_P;
   else
     output_bfd->flags |= EXEC_P;
@@ -481,9 +484,9 @@ main (int argc, char **argv)
   if (nocrossref_list != NULL)
     check_nocrossrefs ();
 
-  /* Even if we're producing relocatable output, some non-fatal errors should
+  /* Even if we're producing relocateable output, some non-fatal errors should
      be reported in the exit status.  (What non-fatal errors, if any, do we
-     want to ignore for relocatable output?)  */
+     want to ignore for relocateable output?)  */
   if (!config.make_executable && !force_make_executable)
     {
       if (trace_files)
@@ -501,7 +504,7 @@ main (int argc, char **argv)
       /* If the --force-exe-suffix is enabled, and we're making an
 	 executable file and it doesn't end in .exe, copy it to one
 	 which does.  */
-      if (! link_info.relocatable && command_line.force_exe_suffix)
+      if (! link_info.relocateable && command_line.force_exe_suffix)
 	{
 	  int len = strlen (output_filename);
 
@@ -522,11 +525,9 @@ main (int argc, char **argv)
 	      dst = fopen (dst_name, FOPEN_WB);
 
 	      if (!src)
-		einfo (_("%X%P: unable to open for source of copy `%s'\n"),
-		       output_filename);
+		einfo (_("%X%P: unable to open for source of copy `%s'\n"), output_filename);
 	      if (!dst)
-		einfo (_("%X%P: unable to open for destination of copy `%s'\n"),
-		       dst_name);
+		einfo (_("%X%P: unable to open for destination of copy `%s'\n"), dst_name);
 	      while ((l = fread (buf, 1, bsize, src)) > 0)
 		{
 		  int done = fwrite (buf, 1, l, dst);
@@ -549,7 +550,7 @@ main (int argc, char **argv)
   if (config.stats)
     {
 #ifdef HAVE_SBRK
-      char *lim = sbrk (0);
+      char *lim = (char *) sbrk (0);
 #endif
       long run_time = get_run_time () - start_time;
 
@@ -572,7 +573,9 @@ main (int argc, char **argv)
    state that's needed by the lex&yacc argument parser (parse_args).  */
 
 static char *
-get_emulation (int argc, char **argv)
+get_emulation (argc, argv)
+     int argc;
+     char **argv;
 {
   char *emulation;
   int i;
@@ -603,8 +606,7 @@ get_emulation (int argc, char **argv)
 		   || strcmp (argv[i], "-mips5") == 0
 		   || strcmp (argv[i], "-mips32") == 0
 		   || strcmp (argv[i], "-mips32r2") == 0
-		   || strcmp (argv[i], "-mips64") == 0
-		   || strcmp (argv[i], "-mips64r2") == 0)
+		   || strcmp (argv[i], "-mips64") == 0)
 	    {
 	      /* FIXME: The arguments -mips1, -mips2, -mips3, etc. are
 		 passed to the linker by some MIPS compilers.  They
@@ -636,7 +638,8 @@ get_emulation (int argc, char **argv)
    else return FALSE.  */
 
 static bfd_boolean
-check_for_scripts_dir (char *dir)
+check_for_scripts_dir (dir)
+     char *dir;
 {
   size_t dirlen;
   char *buf;
@@ -645,7 +648,7 @@ check_for_scripts_dir (char *dir)
 
   dirlen = strlen (dir);
   /* sizeof counts the terminating NUL.  */
-  buf = xmalloc (dirlen + sizeof ("/ldscripts"));
+  buf = (char *) xmalloc (dirlen + sizeof ("/ldscripts"));
   sprintf (buf, "%s/ldscripts", dir);
 
   res = stat (buf, &s) == 0 && S_ISDIR (s.st_mode);
@@ -667,7 +670,7 @@ check_for_scripts_dir (char *dir)
 	     (for installing the tool suite elsewhere).  */
 
 static void
-set_scripts_dir (void)
+set_scripts_dir ()
 {
   char *end, *dir;
   size_t dirlen;
@@ -715,7 +718,7 @@ set_scripts_dir (void)
   dirlen = end - program_name;
   /* Make a copy of program_name in dir.
      Leave room for later "/../lib".  */
-  dir = xmalloc (dirlen + 8);
+  dir = (char *) xmalloc (dirlen + 8);
   strncpy (dir, program_name, dirlen);
   dir[dirlen] = '\0';
 
@@ -732,29 +735,34 @@ set_scripts_dir (void)
 }
 
 void
-add_ysym (const char *name)
+add_ysym (name)
+     const char *name;
 {
-  if (link_info.notice_hash == NULL)
+  if (link_info.notice_hash == (struct bfd_hash_table *) NULL)
     {
-      link_info.notice_hash = xmalloc (sizeof (struct bfd_hash_table));
+      link_info.notice_hash = ((struct bfd_hash_table *)
+			       xmalloc (sizeof (struct bfd_hash_table)));
       if (! bfd_hash_table_init_n (link_info.notice_hash,
 				   bfd_hash_newfunc,
 				   61))
 	einfo (_("%P%F: bfd_hash_table_init failed: %E\n"));
     }
 
-  if (bfd_hash_lookup (link_info.notice_hash, name, TRUE, TRUE) == NULL)
+  if (bfd_hash_lookup (link_info.notice_hash, name, TRUE, TRUE)
+      == (struct bfd_hash_entry *) NULL)
     einfo (_("%P%F: bfd_hash_lookup failed: %E\n"));
 }
 
 /* Record a symbol to be wrapped, from the --wrap option.  */
 
 void
-add_wrap (const char *name)
+add_wrap (name)
+     const char *name;
 {
   if (link_info.wrap_hash == NULL)
     {
-      link_info.wrap_hash = xmalloc (sizeof (struct bfd_hash_table));
+      link_info.wrap_hash = ((struct bfd_hash_table *)
+			     xmalloc (sizeof (struct bfd_hash_table)));
       if (! bfd_hash_table_init_n (link_info.wrap_hash,
 				   bfd_hash_newfunc,
 				   61))
@@ -768,7 +776,8 @@ add_wrap (const char *name)
 /* Handle the -retain-symbols-file option.  */
 
 void
-add_keepsyms_file (const char *filename)
+add_keepsyms_file (filename)
+     const char *filename;
 {
   FILE *file;
   char *buf;
@@ -779,19 +788,20 @@ add_keepsyms_file (const char *filename)
     einfo (_("%X%P: error: duplicate retain-symbols-file\n"));
 
   file = fopen (filename, "r");
-  if (file == NULL)
+  if (file == (FILE *) NULL)
     {
       bfd_set_error (bfd_error_system_call);
       einfo ("%X%P: %s: %E\n", filename);
       return;
     }
 
-  link_info.keep_hash = xmalloc (sizeof (struct bfd_hash_table));
+  link_info.keep_hash = ((struct bfd_hash_table *)
+			 xmalloc (sizeof (struct bfd_hash_table)));
   if (! bfd_hash_table_init (link_info.keep_hash, bfd_hash_newfunc))
     einfo (_("%P%F: bfd_hash_table_init failed: %E\n"));
 
   bufsize = 100;
-  buf = xmalloc (bufsize);
+  buf = (char *) xmalloc (bufsize);
 
   c = getc (file);
   while (c != EOF)
@@ -817,7 +827,8 @@ add_keepsyms_file (const char *filename)
 
 	  buf[len] = '\0';
 
-	  if (bfd_hash_lookup (link_info.keep_hash, buf, TRUE, TRUE) == NULL)
+	  if (bfd_hash_lookup (link_info.keep_hash, buf, TRUE, TRUE)
+	      == (struct bfd_hash_entry *) NULL)
 	    einfo (_("%P%F: bfd_hash_lookup for insertion failed: %E\n"));
 	}
     }
@@ -835,13 +846,15 @@ add_keepsyms_file (const char *filename)
    a link.  */
 
 static bfd_boolean
-add_archive_element (struct bfd_link_info *info ATTRIBUTE_UNUSED,
-		     bfd *abfd,
-		     const char *name)
+add_archive_element (info, abfd, name)
+     struct bfd_link_info *info ATTRIBUTE_UNUSED;
+     bfd *abfd;
+     const char *name;
 {
   lang_input_statement_type *input;
 
-  input = xmalloc (sizeof (lang_input_statement_type));
+  input = ((lang_input_statement_type *)
+	   xmalloc (sizeof (lang_input_statement_type)));
   input->filename = abfd->filename;
   input->local_sym_name = abfd->filename;
   input->the_bfd = abfd;
@@ -859,7 +872,7 @@ add_archive_element (struct bfd_link_info *info ATTRIBUTE_UNUSED,
 
   ldlang_add_file (input);
 
-  if (config.map_file != NULL)
+  if (config.map_file != (FILE *) NULL)
     {
       static bfd_boolean header_printed;
       struct bfd_link_hash_entry *h;
@@ -946,14 +959,15 @@ add_archive_element (struct bfd_link_info *info ATTRIBUTE_UNUSED,
    multiple times.  */
 
 static bfd_boolean
-multiple_definition (struct bfd_link_info *info ATTRIBUTE_UNUSED,
-		     const char *name,
-		     bfd *obfd,
-		     asection *osec,
-		     bfd_vma oval,
-		     bfd *nbfd,
-		     asection *nsec,
-		     bfd_vma nval)
+multiple_definition (info, name, obfd, osec, oval, nbfd, nsec, nval)
+     struct bfd_link_info *info ATTRIBUTE_UNUSED;
+     const char *name;
+     bfd *obfd;
+     asection *osec;
+     bfd_vma oval;
+     bfd *nbfd;
+     asection *nsec;
+     bfd_vma nval;
 {
   /* If either section has the output_section field set to
      bfd_abs_section_ptr, it means that the section is being
@@ -970,7 +984,7 @@ multiple_definition (struct bfd_link_info *info ATTRIBUTE_UNUSED,
 
   einfo (_("%X%C: multiple definition of `%T'\n"),
 	 nbfd, nsec, nval, name);
-  if (obfd != NULL)
+  if (obfd != (bfd *) NULL)
     einfo (_("%D: first defined here\n"), obfd, osec, oval);
 
   if (command_line.relax)
@@ -988,14 +1002,15 @@ multiple_definition (struct bfd_link_info *info ATTRIBUTE_UNUSED,
    -warn-common was used.  */
 
 static bfd_boolean
-multiple_common (struct bfd_link_info *info ATTRIBUTE_UNUSED,
-		 const char *name,
-		 bfd *obfd,
-		 enum bfd_link_hash_type otype,
-		 bfd_vma osize,
-		 bfd *nbfd,
-		 enum bfd_link_hash_type ntype,
-		 bfd_vma nsize)
+multiple_common (info, name, obfd, otype, osize, nbfd, ntype, nsize)
+     struct bfd_link_info *info ATTRIBUTE_UNUSED;
+     const char *name;
+     bfd *obfd;
+     enum bfd_link_hash_type otype;
+     bfd_vma osize;
+     bfd *nbfd;
+     enum bfd_link_hash_type ntype;
+     bfd_vma nsize;
 {
   if (! config.warn_common)
     return TRUE;
@@ -1053,12 +1068,13 @@ multiple_common (struct bfd_link_info *info ATTRIBUTE_UNUSED,
    represent a value which should be added to the set.  */
 
 static bfd_boolean
-add_to_set (struct bfd_link_info *info ATTRIBUTE_UNUSED,
-	    struct bfd_link_hash_entry *h,
-	    bfd_reloc_code_real_type reloc,
-	    bfd *abfd,
-	    asection *section,
-	    bfd_vma value)
+add_to_set (info, h, reloc, abfd, section, value)
+     struct bfd_link_info *info ATTRIBUTE_UNUSED;
+     struct bfd_link_hash_entry *h;
+     bfd_reloc_code_real_type reloc;
+     bfd *abfd;
+     asection *section;
+     bfd_vma value;
 {
   if (config.warn_constructors)
     einfo (_("%P: warning: global constructor %s used\n"),
@@ -1067,7 +1083,7 @@ add_to_set (struct bfd_link_info *info ATTRIBUTE_UNUSED,
   if (! config.build_constructors)
     return TRUE;
 
-  ldctor_add_set_entry (h, reloc, NULL, section, value);
+  ldctor_add_set_entry (h, reloc, (const char *) NULL, section, value);
 
   if (h->type == bfd_link_hash_new)
     {
@@ -1087,12 +1103,13 @@ add_to_set (struct bfd_link_info *info ATTRIBUTE_UNUSED,
    adding an element to a set, but less general.  */
 
 static bfd_boolean
-constructor_callback (struct bfd_link_info *info,
-		      bfd_boolean constructor,
-		      const char *name,
-		      bfd *abfd,
-		      asection *section,
-		      bfd_vma value)
+constructor_callback (info, constructor, name, abfd, section, value)
+     struct bfd_link_info *info;
+     bfd_boolean constructor;
+     const char *name;
+     bfd *abfd;
+     asection *section;
+     bfd_vma value;
 {
   char *s;
   struct bfd_link_hash_entry *h;
@@ -1107,7 +1124,7 @@ constructor_callback (struct bfd_link_info *info,
   /* Ensure that BFD_RELOC_CTOR exists now, so that we can give a
      useful error message.  */
   if (bfd_reloc_type_lookup (output_bfd, BFD_RELOC_CTOR) == NULL
-      && (link_info.relocatable
+      && (link_info.relocateable
 	  || bfd_reloc_type_lookup (abfd, BFD_RELOC_CTOR) == NULL))
     einfo (_("%P%F: BFD backend error: BFD_RELOC_CTOR unsupported\n"));
 
@@ -1149,12 +1166,13 @@ struct warning_callback_info
 /* This is called when there is a reference to a warning symbol.  */
 
 static bfd_boolean
-warning_callback (struct bfd_link_info *info ATTRIBUTE_UNUSED,
-		  const char *warning,
-		  const char *symbol,
-		  bfd *abfd,
-		  asection *section,
-		  bfd_vma address)
+warning_callback (info, warning, symbol, abfd, section, address)
+     struct bfd_link_info *info ATTRIBUTE_UNUSED;
+     const char *warning;
+     const char *symbol;
+     bfd *abfd;
+     asection *section;
+     bfd_vma address;
 {
   /* This is a hack to support warn_multiple_gp.  FIXME: This should
      have a cleaner interface, but what?  */
@@ -1187,7 +1205,7 @@ warning_callback (struct bfd_link_info *info ATTRIBUTE_UNUSED,
 	  symsize = bfd_get_symtab_upper_bound (abfd);
 	  if (symsize < 0)
 	    einfo (_("%B%F: could not read symbols: %E\n"), abfd);
-	  asymbols = xmalloc (symsize);
+	  asymbols = (asymbol **) xmalloc (symsize);
 	  symbol_count = bfd_canonicalize_symtab (abfd, asymbols);
 	  if (symbol_count < 0)
 	    einfo (_("%B%F: could not read symbols: %E\n"), abfd);
@@ -1202,7 +1220,7 @@ warning_callback (struct bfd_link_info *info ATTRIBUTE_UNUSED,
       info.warning = warning;
       info.symbol = symbol;
       info.asymbols = asymbols;
-      bfd_map_over_sections (abfd, warning_find_reloc, &info);
+      bfd_map_over_sections (abfd, warning_find_reloc, (PTR) &info);
 
       if (! info.found)
 	einfo ("%B: %s\n", abfd, warning);
@@ -1220,9 +1238,12 @@ warning_callback (struct bfd_link_info *info ATTRIBUTE_UNUSED,
    to give an error message with a file and line number.  */
 
 static void
-warning_find_reloc (bfd *abfd, asection *sec, void *iarg)
+warning_find_reloc (abfd, sec, iarg)
+     bfd *abfd;
+     asection *sec;
+     PTR iarg;
 {
-  struct warning_callback_info *info = iarg;
+  struct warning_callback_info *info = (struct warning_callback_info *) iarg;
   long relsize;
   arelent **relpp;
   long relcount;
@@ -1237,7 +1258,7 @@ warning_find_reloc (bfd *abfd, asection *sec, void *iarg)
   if (relsize == 0)
     return;
 
-  relpp = xmalloc (relsize);
+  relpp = (arelent **) xmalloc (relsize);
   relcount = bfd_canonicalize_reloc (abfd, sec, relpp, info->asymbols);
   if (relcount < 0)
     einfo (_("%B%F: could not read relocs: %E\n"), abfd);
@@ -1265,12 +1286,13 @@ warning_find_reloc (bfd *abfd, asection *sec, void *iarg)
 /* This is called when an undefined symbol is found.  */
 
 static bfd_boolean
-undefined_symbol (struct bfd_link_info *info ATTRIBUTE_UNUSED,
-		  const char *name,
-		  bfd *abfd,
-		  asection *section,
-		  bfd_vma address,
-		  bfd_boolean error)
+undefined_symbol (info, name, abfd, section, address, fatal)
+     struct bfd_link_info *info ATTRIBUTE_UNUSED;
+     const char *name;
+     bfd *abfd;
+     asection *section;
+     bfd_vma address;
+     bfd_boolean fatal ATTRIBUTE_UNUSED;
 {
   static char *error_name;
   static unsigned int error_count;
@@ -1284,7 +1306,8 @@ undefined_symbol (struct bfd_link_info *info ATTRIBUTE_UNUSED,
       /* Only warn once about a particular undefined symbol.  */
       if (hash == NULL)
 	{
-	  hash = xmalloc (sizeof (struct bfd_hash_table));
+	  hash = ((struct bfd_hash_table *)
+		  xmalloc (sizeof (struct bfd_hash_table)));
 	  if (! bfd_hash_table_init (hash, bfd_hash_newfunc))
 	    einfo (_("%F%P: bfd_hash_table_init failed: %E\n"));
 	}
@@ -1298,13 +1321,13 @@ undefined_symbol (struct bfd_link_info *info ATTRIBUTE_UNUSED,
 
   /* We never print more than a reasonable number of errors in a row
      for a single symbol.  */
-  if (error_name != NULL
+  if (error_name != (char *) NULL
       && strcmp (name, error_name) == 0)
     ++error_count;
   else
     {
       error_count = 0;
-      if (error_name != NULL)
+      if (error_name != (char *) NULL)
 	free (error_name);
       error_name = xstrdup (name);
     }
@@ -1313,87 +1336,48 @@ undefined_symbol (struct bfd_link_info *info ATTRIBUTE_UNUSED,
     {
       if (error_count < MAX_ERRORS_IN_A_ROW)
 	{
-	  if (error)
-	    einfo (_("%X%C: undefined reference to `%T'\n"),
-		   abfd, section, address, name);
-	  else
-	    einfo (_("%C: warning: undefined reference to `%T'\n"),
-		   abfd, section, address, name);
+	  einfo (_("%C: undefined reference to `%T'\n"),
+		 abfd, section, address, name);
+	  if (fatal)
+	    einfo ("%X");
 	}
       else if (error_count == MAX_ERRORS_IN_A_ROW)
-	{
-	  if (error)
-	    einfo (_("%X%D: more undefined references to `%T' follow\n"),
-		   abfd, section, address, name);
-	  else
-	    einfo (_("%D: warning: more undefined references to `%T' follow\n"),
-		   abfd, section, address, name);
-	}
-      else if (error)
-	einfo ("%X");
+	einfo (_("%D: more undefined references to `%T' follow\n"),
+	       abfd, section, address, name);
     }
   else
     {
       if (error_count < MAX_ERRORS_IN_A_ROW)
 	{
-	  if (error)
-	    einfo (_("%X%B: undefined reference to `%T'\n"),
-		   abfd, name);
-	  else
-	    einfo (_("%B: warning: undefined reference to `%T'\n"),
-		   abfd, name);
+	  einfo (_("%B: undefined reference to `%T'\n"),
+		 abfd, name);
+	  if (fatal)
+	    einfo ("%X");
 	}
       else if (error_count == MAX_ERRORS_IN_A_ROW)
-	{
-	  if (error)
-	    einfo (_("%X%B: more undefined references to `%T' follow\n"),
-		   abfd, name);
-	  else
-	    einfo (_("%B: warning: more undefined references to `%T' follow\n"),
-		   abfd, name);
-	}
-      else if (error)
-	einfo ("%X");
+	einfo (_("%B: more undefined references to `%T' follow\n"),
+	       abfd, name);
     }
 
   return TRUE;
 }
 
-/* Counter to limit the number of relocation overflow error messages
-   to print.  Errors are printed as it is decremented.  When it's
-   called and the counter is zero, a final message is printed
-   indicating more relocations were omitted.  When it gets to -1, no
-   such errors are printed.  If it's initially set to a value less
-   than -1, all such errors will be printed (--verbose does this).  */
-
-int overflow_cutoff_limit = 10;
-
 /* This is called when a reloc overflows.  */
 
 static bfd_boolean
-reloc_overflow (struct bfd_link_info *info ATTRIBUTE_UNUSED,
-		const char *name,
-		const char *reloc_name,
-		bfd_vma addend,
-		bfd *abfd,
-		asection *section,
-		bfd_vma address)
+reloc_overflow (info, name, reloc_name, addend, abfd, section, address)
+     struct bfd_link_info *info ATTRIBUTE_UNUSED;
+     const char *name;
+     const char *reloc_name;
+     bfd_vma addend;
+     bfd *abfd;
+     asection *section;
+     bfd_vma address;
 {
-  if (overflow_cutoff_limit == -1)
-    return TRUE;
-
-  if (abfd == NULL)
+  if (abfd == (bfd *) NULL)
     einfo (_("%P%X: generated"));
   else
     einfo ("%X%C:", abfd, section, address);
-
-  if (overflow_cutoff_limit >= 0
-      && overflow_cutoff_limit-- == 0)
-    {
-      einfo (_(" additional relocation overflows omitted from the output\n"));
-      return TRUE;
-    }
-
   einfo (_(" relocation truncated to fit: %s %T"), reloc_name, name);
   if (addend != 0)
     einfo ("+%v", addend);
@@ -1404,13 +1388,14 @@ reloc_overflow (struct bfd_link_info *info ATTRIBUTE_UNUSED,
 /* This is called when a dangerous relocation is made.  */
 
 static bfd_boolean
-reloc_dangerous (struct bfd_link_info *info ATTRIBUTE_UNUSED,
-		 const char *message,
-		 bfd *abfd,
-		 asection *section,
-		 bfd_vma address)
+reloc_dangerous (info, message, abfd, section, address)
+     struct bfd_link_info *info ATTRIBUTE_UNUSED;
+     const char *message;
+     bfd *abfd;
+     asection *section;
+     bfd_vma address;
 {
-  if (abfd == NULL)
+  if (abfd == (bfd *) NULL)
     einfo (_("%P%X: generated"));
   else
     einfo ("%X%C:", abfd, section, address);
@@ -1422,13 +1407,14 @@ reloc_dangerous (struct bfd_link_info *info ATTRIBUTE_UNUSED,
    that is not being output.  */
 
 static bfd_boolean
-unattached_reloc (struct bfd_link_info *info ATTRIBUTE_UNUSED,
-		  const char *name,
-		  bfd *abfd,
-		  asection *section,
-		  bfd_vma address)
+unattached_reloc (info, name, abfd, section, address)
+     struct bfd_link_info *info ATTRIBUTE_UNUSED;
+     const char *name;
+     bfd *abfd;
+     asection *section;
+     bfd_vma address;
 {
-  if (abfd == NULL)
+  if (abfd == (bfd *) NULL)
     einfo (_("%P%X: generated"));
   else
     einfo ("%X%C:", abfd, section, address);
@@ -1441,11 +1427,12 @@ unattached_reloc (struct bfd_link_info *info ATTRIBUTE_UNUSED,
    using the -y option.  */
 
 static bfd_boolean
-notice (struct bfd_link_info *info,
-	const char *name,
-	bfd *abfd,
-	asection *section,
-	bfd_vma value)
+notice (info, name, abfd, section, value)
+     struct bfd_link_info *info;
+     const char *name;
+     bfd *abfd;
+     asection *section;
+     bfd_vma value;
 {
   if (! info->notice_all
       || (info->notice_hash != NULL

@@ -1,5 +1,3 @@
-/*	$NetBSD: smtpd_peer.c,v 1.12 2004/05/31 00:46:48 heas Exp $	*/
-
 /*++
 /* NAME
 /*	smtpd_peer 3
@@ -42,7 +40,7 @@
 /*	name->address mapping, client address not listed for hostname).
 /* .RE
 /* .PP
-/*	smtpd_peer_reset() releases memory allocated by smtpd_peer_init().
+/*	smtpd_peer_reset() releases memory allocate by smtpd_peer_init().
 /* LICENSE
 /* .ad
 /* .fi
@@ -95,7 +93,6 @@ static int h_errno = TRY_AGAIN;
 
 /* Global library. */
 
-#include <mail_proto.h>
 
 /* Application-specific. */
 
@@ -127,9 +124,9 @@ void    smtpd_peer_init(SMTPD_STATE *state)
      * If peer went away, give up.
      */
     if (errno == ECONNRESET || errno == ECONNABORTED) {
-	state->name = mystrdup(CLIENT_NAME_UNKNOWN);
-	state->addr = mystrdup(CLIENT_ADDR_UNKNOWN);
-	state->peer_code = SMTPD_PEER_CODE_PERM;
+	state->name = mystrdup("unknown");
+	state->addr = mystrdup("unknown");
+	state->peer_code = 5;
     }
 
     /*
@@ -140,27 +137,26 @@ void    smtpd_peer_init(SMTPD_STATE *state)
 	hp = gethostbyaddr((char *) &(sin.sin_addr),
 			   sizeof(sin.sin_addr), AF_INET);
 	if (hp == 0) {
-	    state->name = mystrdup(CLIENT_NAME_UNKNOWN);
-	    state->peer_code = (h_errno == TRY_AGAIN ?
-				SMTPD_PEER_CODE_TEMP : SMTPD_PEER_CODE_PERM);
+	    state->name = mystrdup("unknown");
+	    state->peer_code = (h_errno == TRY_AGAIN ? 4 : 5);
 	} else if (valid_hostaddr(hp->h_name, DONT_GRIPE)) {
 	    msg_warn("numeric result %s in address->name lookup for %s",
 		     hp->h_name, state->addr);
-	    state->name = mystrdup(CLIENT_NAME_UNKNOWN);
-	    state->peer_code = SMTPD_PEER_CODE_PERM;
+	    state->name = mystrdup("unknown");
+	    state->peer_code = 5;
 	} else if (!valid_hostname(hp->h_name, DONT_GRIPE)) {
-	    state->name = mystrdup(CLIENT_NAME_UNKNOWN);
-	    state->peer_code = SMTPD_PEER_CODE_PERM;
+	    state->name = mystrdup("unknown");
+	    state->peer_code = 5;
 	} else {
 	    state->name = mystrdup(hp->h_name);	/* hp->name is clobbered!! */
-	    state->peer_code = SMTPD_PEER_CODE_OK;
+	    state->peer_code = 2;
 
 	    /*
 	     * Reject the hostname if it does not list the peer address.
 	     */
 #define REJECT_PEER_NAME(state, code) { \
 	myfree(state->name); \
-	state->name = mystrdup(CLIENT_NAME_UNKNOWN); \
+	state->name = mystrdup("unknown"); \
 	state->peer_code = code; \
     }
 
@@ -168,18 +164,17 @@ void    smtpd_peer_init(SMTPD_STATE *state)
 	    if (hp == 0) {
 		msg_warn("%s: hostname %s verification failed: %s",
 			 state->addr, state->name, HSTRERROR(h_errno));
-		REJECT_PEER_NAME(state, (h_errno == TRY_AGAIN ?
-			      SMTPD_PEER_CODE_TEMP : SMTPD_PEER_CODE_PERM));
+		REJECT_PEER_NAME(state, (h_errno == TRY_AGAIN ? 4 : 5));
 	    } else if (hp->h_length != sizeof(sin.sin_addr)) {
 		msg_warn("%s: hostname %s verification failed: bad address size %d",
 			 state->addr, state->name, hp->h_length);
-		REJECT_PEER_NAME(state, SMTPD_PEER_CODE_PERM);
+		REJECT_PEER_NAME(state, 5);
 	    } else {
 		for (i = 0; /* void */ ; i++) {
 		    if (hp->h_addr_list[i] == 0) {
 			msg_warn("%s: address not listed for hostname %s",
 				 state->addr, state->name);
-			REJECT_PEER_NAME(state, SMTPD_PEER_CODE_PERM);
+			REJECT_PEER_NAME(state, 5);
 			break;
 		    }
 		    if (memcmp(hp->h_addr_list[i],
@@ -198,7 +193,7 @@ void    smtpd_peer_init(SMTPD_STATE *state)
     else {
 	state->name = mystrdup("localhost");
 	state->addr = mystrdup("127.0.0.1");	/* XXX bogus. */
-	state->peer_code = SMTPD_PEER_CODE_OK;
+	state->peer_code = 2;
     }
 
     /*

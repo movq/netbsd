@@ -1,5 +1,3 @@
-/*	$NetBSD: smtpd_chat.c,v 1.1.1.6 2004/05/31 00:24:48 heas Exp $	*/
-
 /*++
 /* NAME
 /*	smtpd_chat 3
@@ -154,10 +152,15 @@ void    smtpd_chat_reply(SMTPD_STATE *state, char *format,...)
 	msg_info("> %s[%s]: %s", state->name, state->addr, STR(state->buffer));
 
     /*
-     * Slow down clients that make errors. Sleep-on-anything slows down
-     * clients that make an excessive number of errors within a session.
+     * Slow down clients that make errors. Sleep-on-error slows down clients
+     * that abort the connection and go into a connect-error-disconnect loop;
+     * sleep-on-anything slows down clients that make an excessive number of
+     * errors within a session.
      */
     if (state->error_count >= var_smtpd_soft_erlim)
+	sleep(delay = (state->error_count > var_smtpd_err_sleep ?
+		       state->error_count : var_smtpd_err_sleep));
+    else if (STR(state->buffer)[0] == '4' || STR(state->buffer)[0] == '5')
 	sleep(delay = var_smtpd_err_sleep);
 
     smtp_fputs(STR(state->buffer), LEN(state->buffer), state->client);
@@ -211,14 +214,13 @@ void    smtpd_chat_notify(SMTPD_STATE *state)
      * mail bounce wars. Always prepend one space to message content that we
      * generate from untrusted data.
      */
-#define NULL_TRACE_FLAGS	0
+#define NULL_CLEANUP_FLAGS	0
 #define LENGTH	78
 #define INDENT	4
 
     notice = post_mail_fopen_nowait(mail_addr_double_bounce(),
 				    var_error_rcpt,
-				    CLEANUP_FLAG_MASK_INTERNAL,
-				    NULL_TRACE_FLAGS);
+				    NULL_CLEANUP_FLAGS);
     if (notice == 0) {
 	msg_warn("postmaster notify: %m");
 	return;

@@ -1,4 +1,4 @@
-/*	$NetBSD: makewhatis.c,v 1.31 2004/11/05 21:59:12 dsl Exp $	*/
+/*	$NetBSD: makewhatis.c,v 1.30 2003/10/27 00:12:42 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
 #if !defined(lint)
 __COPYRIGHT("@(#) Copyright (c) 1999 The NetBSD Foundation, Inc.\n\
 	All rights reserved.\n");
-__RCSID("$NetBSD: makewhatis.c,v 1.31 2004/11/05 21:59:12 dsl Exp $");
+__RCSID("$NetBSD: makewhatis.c,v 1.30 2003/10/27 00:12:42 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -531,7 +531,7 @@ parsecatpage(gzFile *in)
 			return ptr;
 		}
 		if ((length > 1) && (ptr[length - 1] == '-') &&
-		    isalpha((unsigned char)ptr[length - 2]))
+		    isalpha(ptr[length - 2]))
 			last = &ptr[--length];
 		else {
 			last = &ptr[length++];
@@ -573,7 +573,7 @@ manpreprocess(char *line)
 				from++;
 				if ((*from=='+') || (*from=='-'))
 					from++;
-				while (isdigit((unsigned char)*from))
+				while (isdigit(*from))
 					from++;
 				break;
 			default:

@@ -1,4 +1,4 @@
-/*	$NetBSD: npx.c,v 1.3 2004/05/07 13:48:32 cl Exp $	*/
+/*	$NetBSD: npx.c,v 1.1.2.1 2004/05/22 15:59:58 he Exp $	*/
 /*	NetBSD: npx.c,v 1.103 2004/03/21 10:56:24 simonb Exp 	*/
 
 /*-
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npx.c,v 1.3 2004/05/07 13:48:32 cl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npx.c,v 1.1.2.1 2004/05/22 15:59:58 he Exp $");
 
 #if 0
 #define IPRINTF(x)	printf x

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.29 2004/07/31 13:28:53 simonb Exp $	*/
+/*	$NetBSD: pmap.c,v 1.28 2003/12/18 14:15:55 pk Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.29 2004/07/31 13:28:53 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.28 2003/12/18 14:15:55 pk Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -382,6 +382,7 @@ pmap_bootstrap(u_int kernelstart, u_int kernelend)
 		memmove(mp, mp + 1, (cnt - (mp - avail)) * sizeof *mp);
 #endif
 
+	printf("Loading pages\n");
 	for (mp = avail; mp->size; mp++)
 		uvm_page_physload(atop(mp->start), atop(mp->start + mp->size),
 			atop(mp->start), atop(mp->start + mp->size),
@@ -395,10 +396,11 @@ pmap_bootstrap(u_int kernelstart, u_int kernelend)
 	nextavail = avail->start;
 
 
-	evcnt_attach_static(&tlbmiss_ev);
 	evcnt_attach_static(&tlbhit_ev);
+	evcnt_attach_static(&tlbmiss_ev);
 	evcnt_attach_static(&tlbflush_ev);
 	evcnt_attach_static(&tlbenter_ev);
+	printf("Done\n");
 }
 
 /*

@@ -87,14 +87,15 @@ static const char symbol_chars[] =
 #define IS_LINE_COMMENT(c)		(lex[c] == LEX_IS_LINE_COMMENT_START)
 #define	IS_NEWLINE(c)			(lex[c] == LEX_IS_NEWLINE)
 
-static int process_escape (int);
+static int process_escape PARAMS ((int));
 
 /* FIXME-soon: The entire lexer/parser thingy should be
    built statically at compile time rather than dynamically
    each and every time the assembler is run.  xoxorich.  */
 
 void
-do_scrub_begin (int m68k_mri ATTRIBUTE_UNUSED)
+do_scrub_begin (m68k_mri)
+     int m68k_mri ATTRIBUTE_UNUSED;
 {
   const char *p;
   int c;
@@ -230,7 +231,7 @@ struct app_save
 };
 
 char *
-app_push (void)
+app_push ()
 {
   register struct app_save *saved;
 
@@ -266,7 +267,8 @@ app_push (void)
 }
 
 void
-app_pop (char *arg)
+app_pop (arg)
+     char *arg;
 {
   register struct app_save *saved = (struct app_save *) arg;
 
@@ -302,7 +304,8 @@ app_pop (char *arg)
    necessarily true.  */
 
 static int
-process_escape (int ch)
+process_escape (ch)
+     int ch;
 {
   switch (ch)
     {
@@ -337,7 +340,10 @@ process_escape (int ch)
    This is the way the old code used to work.  */
 
 int
-do_scrub_chars (int (*get) (char *, int), char *tostart, int tolen)
+do_scrub_chars (get, tostart, tolen)
+     int (*get) PARAMS ((char *, int));
+     char *tostart;
+     int tolen;
 {
   char *to = tostart;
   char *toend = tostart + tolen;
@@ -367,12 +373,6 @@ do_scrub_chars (int (*get) (char *, int), char *tostart, int tolen)
 #ifdef DOUBLEBAR_PARALLEL
 	 13: After seeing a vertical bar, looking for a second
 	     vertical bar as a parallel expression separator.
-#endif
-#ifdef TC_IA64
-	 14: After seeing a `(' at state 0, looking for a `)' as
-	     predicate.
-	 15: After seeing a `(' at state 1, looking for a `)' as
-	     predicate.
 #endif
 	  */
 
@@ -673,29 +673,6 @@ do_scrub_chars (int (*get) (char *, int), char *tostart, int tolen)
 
       /* flushchar: */
       ch = GET ();
-
-#ifdef TC_IA64
-      if (ch == '(' && (state == 0 || state == 1))
-	{
-	  state += 14;
-	  PUT (ch);
-	  continue;
-	}
-      else if (state == 14 || state == 15)
-	{
-	  if (ch == ')')
-	    {
-	      state -= 14;
-	      PUT (ch);
-	      ch = GET ();
-	    }
-	  else
-	    {
-	      PUT (ch);
-	      continue;
-	    }
-	}
-#endif
 
     recycle:
 
@@ -1320,7 +1297,7 @@ do_scrub_chars (int (*get) (char *, int), char *tostart, int tolen)
 	    }
 	  else if (state == 9)
 	    {
-	      if (!IS_SYMBOL_COMPONENT (ch))
+	      if (lex[ch] != LEX_IS_SYMBOL_COMPONENT)
 		state = 3;
 	    }
 	  else if (state == 10)

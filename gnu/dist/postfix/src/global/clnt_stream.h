@@ -1,5 +1,3 @@
-/*	$NetBSD: clnt_stream.h,v 1.1.1.3 2004/05/31 00:24:29 heas Exp $	*/
-
 #ifndef _CLNT_STREAM_H_INCLUDED_
 #define _CLNT_STREAM_H_INCLUDED_
 
@@ -23,7 +21,7 @@
   */
 typedef struct CLNT_STREAM CLNT_STREAM;
 
-extern CLNT_STREAM *clnt_stream_create(const char *, const char *, int, int);
+extern CLNT_STREAM *clnt_stream_create(const char *, const char *, int);
 extern VSTREAM *clnt_stream_access(CLNT_STREAM *);
 extern void clnt_stream_recover(CLNT_STREAM *);
 extern void clnt_stream_free(CLNT_STREAM *);

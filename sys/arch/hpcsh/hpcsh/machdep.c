@@ -1,7 +1,7 @@
-/*	$NetBSD: machdep.c,v 1.49 2004/11/14 15:45:02 uwe Exp $	*/
+/*	$NetBSD: machdep.c,v 1.46 2004/03/24 15:34:49 atatat Exp $	*/
 
 /*-
- * Copyright (c) 2001, 2002, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.49 2004/11/14 15:45:02 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.46 2004/03/24 15:34:49 atatat Exp $");
 
 #include "opt_md.h"
 #include "opt_ddb.h"
@@ -102,8 +102,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.49 2004/11/14 15:45:02 uwe Exp $");
 #include <nfs/nfsmount.h>
 #endif
 
-#include <dev/hpc/apm/apmvar.h>
-
 #include <hpcsh/dev/hd6446x/hd6446xintcvar.h>
 #include <hpcsh/dev/hd6446x/hd6446xintcreg.h>
 #include <hpcsh/dev/hd64465/hd64465var.h>
@@ -163,8 +161,6 @@ phys_ram_seg_t	mem_clusters[VM_PHYSSEG_MAX];
 void main(void) __attribute__((__noreturn__));
 void machine_startup(int, char *[], struct bootinfo *)
 	__attribute__((__noreturn__));
-void (*__sleep_func)(void *);	/* model dependent sleep function holder */
-void *__sleep_ctx;
 
 void
 machine_startup(int argc, char *argv[], struct bootinfo *bi)
@@ -315,13 +311,21 @@ machine_startup(int argc, char *argv[], struct bootinfo *bi)
 void
 cpu_startup()
 {
+	platid_t cpu;
 	int cpuclock, pclock;
 
 	cpuclock = sh_clock_get_cpuclock();
 	pclock = sh_clock_get_pclock();
-	sprintf(cpu_model, "%s\n", platid_name(&platid));
 
 	sh_startup();
+
+	memcpy(&cpu, &platid, sizeof(platid_t));
+	cpu.dw.dw1 = 0;	/* clear platform */
+	sprintf(cpu_model, "[%s] %s", platid_name(&platid), platid_name(&cpu));
+
+#define	MHZ(x) ((x) / 1000000), (((x) % 1000000) / 1000)
+	printf("%s %d.%02d MHz PCLOCK %d.%02d MHz\n", cpu_model,
+	    MHZ(cpuclock), MHZ(pclock));
 }
 
 SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
@@ -338,20 +342,6 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 		       CTLTYPE_STRUCT, "console_device", NULL,
 		       sysctl_consdev, 0, NULL, sizeof(dev_t),
 		       CTL_MACHDEP, CPU_CONSDEV, CTL_EOL);
-}
-
-void
-machine_sleep()
-{
-
-	if (__sleep_func != NULL)
-		__sleep_func(__sleep_ctx);
-}
-
-void
-machine_standby()
-{
-	// notyet
 }
 
 void
@@ -432,14 +422,14 @@ mem_cluster_init(paddr_t addr)
 	phys_ram_seg_t *seg;
 	int npages, i;
 
-	/* cluster 0 is always the kernel itself. */
+	/* cluster 0 is always kernel myself. */
 	mem_clusters[0].start = SH_CS3_START;
 	mem_clusters[0].size = addr - SH_CS3_START;
 	mem_cluster_cnt = 1;
 
 	/* search CS3 */
 #ifdef SH3
-	/* SH7709A's CS3 is split to 2 banks. */
+	/* SH7709A's CS3 is splited to 2 banks. */
 	if (CPU_IS_SH3) {
 		__find_dram_shadow(addr, SH7709_CS3_BANK0_END);
 		__find_dram_shadow(SH7709_CS3_BANK1_START,
@@ -447,7 +437,7 @@ mem_cluster_init(paddr_t addr)
 	}
 #endif
 #ifdef SH4
-	/* contiguous CS3 */
+	/* contig CS3 */
 	if (CPU_IS_SH4) {
 		__find_dram_shadow(addr, SH_CS3_END);
 	}

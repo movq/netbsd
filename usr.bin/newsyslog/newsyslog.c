@@ -1,4 +1,4 @@
-/*	$NetBSD: newsyslog.c,v 1.48 2004/10/30 21:03:36 dsl Exp $	*/
+/*	$NetBSD: newsyslog.c,v 1.47 2003/10/13 07:28:52 lukem Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Andrew Doran <ad@NetBSD.org>
@@ -55,7 +55,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: newsyslog.c,v 1.48 2004/10/30 21:03:36 dsl Exp $");
+__RCSID("$NetBSD: newsyslog.c,v 1.47 2003/10/13 07:28:52 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -297,14 +297,17 @@ parse_cfgline(struct conf_entry *log, FILE *fd, size_t *_lineno)
 	}
 
 	/* size */
-	if (**ap == '*')
-		log->maxsize = (size_t)-1;
-	else {
+	if (isdigit(**ap)) {
 		log->maxsize = (int)strtol(*ap, &q, 0);
 		if (*q != '\0') {
 			warnx("config line %d: bad log size", lineno);
 			goto bad;
 		}
+	} else if (**ap == '*')
+		log->maxsize = (size_t)-1;
+	else {
+		warnx("config line %d: bad log size", lineno);
+		goto bad;
 	}
 	ap++;
 
@@ -314,7 +317,7 @@ parse_cfgline(struct conf_entry *log, FILE *fd, size_t *_lineno)
 	q = *ap++;
 	
 	if (strcmp(q, "*") != 0) {
-		if (isdigit((unsigned char)*q))
+		if (isdigit(*q))
 			log->maxage = (int)strtol(q, &q, 10);
 	
 		/* 
@@ -342,7 +345,7 @@ parse_cfgline(struct conf_entry *log, FILE *fd, size_t *_lineno)
 	log->flags = (nosignal ? CE_NOSIGNAL : 0);
 
 	for (q = *ap++; q != NULL && *q != '\0'; q++) {
-		switch (tolower((unsigned char)*q)) {
+		switch (tolower(*q)) {
 		case 'b':
 			log->flags |= CE_BINARY;
 			break;
@@ -710,7 +713,7 @@ int
 isnumber(const char *string)
 {
 
-	while (isdigit((unsigned char)*string))
+	while (isdigit(*string))
 		string++;
 
 	return (*string == '\0');
@@ -906,7 +909,7 @@ parse_dwm(char *s)
 				return (-1);
 			wmseen++;
 			s++;
-			if (tolower((unsigned char)*s) == 'l') {
+			if (tolower(*s) == 'l') {
 				tm.tm_mday = nd;
 				s++;
 				t = s;
@@ -926,7 +929,7 @@ parse_dwm(char *s)
 			break;
 		}
 
-		if (*t == '\0' || isspace((unsigned char)*t))
+		if (*t == '\0' || isspace(*t))
 			break;
 		else
 			s = t;
@@ -997,7 +1000,7 @@ parse_iso8601(char *s)
 	if (*t != '\0') {
 		s = ++t;
 		ul = strtoul(s, &t, 10);
-		if (*t != '\0' && !isspace((unsigned char)*t))
+		if (*t != '\0' && !isspace(*t))
 			return ((time_t)-1);
 
 		switch (t - s) {

@@ -1,4 +1,4 @@
-/* $NetBSD: xenload.h,v 1.2 2004/11/10 02:52:11 jmc Exp $ */
+/* $NetBSD: xenload.h,v 1.1.2.2 2004/05/22 15:59:21 he Exp $ */
 
 /*
  *
@@ -34,16 +34,7 @@
 
 #include <sys/systm.h>
 #include <machine/xen.h>
-
-#define u16 uint16_t
-#define u32 uint32_t
-#define u64 uint64_t  
-
 #include <machine/hypervisor-ifs/hypervisor-if.h>
-
-#undef u16
-#undef u32
-#undef u64
 
 /* start.S */
 void do_reloc(vaddr_t, vaddr_t);

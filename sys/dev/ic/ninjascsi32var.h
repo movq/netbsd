@@ -1,4 +1,4 @@
-/*	$NetBSD: ninjascsi32var.h,v 1.2 2004/08/26 18:38:19 thorpej Exp $	*/
+/*	$NetBSD: ninjascsi32var.h,v 1.2.2.3 2004/08/30 09:54:17 tron Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.

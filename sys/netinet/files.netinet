@@ -1,13 +1,11 @@
-#	$NetBSD: files.netinet,v 1.8 2004/09/04 23:30:07 manu Exp $
+#	$NetBSD: files.netinet,v 1.5 2003/11/26 21:26:56 itojun Exp $
 
 defflag opt_tcp_debug.h		TCP_DEBUG
 defparam opt_tcp_debug.h	TCP_NDEBUG
-defflag opt_inet.h		INET INET6 INET6_MD_CKSUM TCP_SIGNATURE
-				TCP_OUTPUT_COUNTERS TCP_REASS_COUNTERS
+defflag opt_inet.h		INET INET6 INET6_MD_CKSUM
 defparam opt_inet_conf.h	SUBNETSARELOCAL HOSTZEROBROADCAST
 
 defflag				MROUTING
-defflag				PIM
 defflag				TCP_COMPAT_42
 
 defparam opt_tcp_space.h	TCP_RECVSPACE TCP_SENDSPACE

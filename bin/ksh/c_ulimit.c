@@ -1,10 +1,10 @@
-/*	$NetBSD: c_ulimit.c,v 1.7 2004/07/07 19:20:09 mycroft Exp $	*/
+/*	$NetBSD: c_ulimit.c,v 1.5 2003/06/23 11:38:54 agc Exp $	*/
 
 /*
 	ulimit -- handle "ulimit" builtin
 
 	Reworked to use getrusage() and ulimit() at once (as needed on
-	some schizophrenic systems, eg, HP-UX 9.01), made argument parsing
+	some schizophenic systems, eg, HP-UX 9.01), made argument parsing
 	conform to at&t ksh, added autoconf support.  Michael Rendell, May, '94
 
 	Eric Gisin, September 1988
@@ -20,7 +20,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: c_ulimit.c,v 1.7 2004/07/07 19:20:09 mycroft Exp $");
+__RCSID("$NetBSD: c_ulimit.c,v 1.5 2003/06/23 11:38:54 agc Exp $");
 #endif
 
 
@@ -117,10 +117,7 @@ c_ulimit(wp)
 # endif /* UL_GMEMLIM */
 #endif /* RLIMIT_VMEM */
 #ifdef RLIMIT_SWAP
-		{ "swap(kbytes)", RLIMIT, RLIMIT_SWAP, RLIMIT_SWAP, 1024, 'w' },
-#endif
-#ifdef RLIMIT_SBSIZE
-		{ "sbsize(bytes)", RLIMIT, RLIMIT_SBSIZE, RLIMIT_SBSIZE, 1, 'b' },
+		{ "swap(kbytes)", RLIMIT_SWAP, RLIMIT_SWAP, 1024, 'w' },
 #endif
 		{ (char *) 0 }
 	    };
@@ -133,6 +130,11 @@ c_ulimit(wp)
 #ifdef HAVE_SETRLIMIT
 	struct rlimit	limit;
 #endif /* HAVE_SETRLIMIT */
+
+#ifdef __GNUC__
+	/* This outrageous construct just to shut up a GCC warning. */
+	(void) &val;
+#endif
 
 	if (!options[0]) {
 		/* build options string on first call - yuck */
@@ -205,7 +207,7 @@ c_ulimit(wp)
 					val = limit.rlim_cur;
 				else if (how & HARD)
 					val = limit.rlim_max;
-			} else
+			} else 
 #endif /* HAVE_SETRLIMIT */
 #ifdef HAVE_ULIMIT
 			{

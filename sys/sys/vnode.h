@@ -1,4 +1,4 @@
-/*	$NetBSD: vnode.h,v 1.127 2004/11/10 17:30:56 christos Exp $	*/
+/*	$NetBSD: vnode.h,v 1.121 2004/02/14 00:00:57 hannken Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -66,7 +66,7 @@ enum vtagtype	{
 	VT_NON, VT_UFS, VT_NFS, VT_MFS, VT_MSDOSFS, VT_LFS, VT_LOFS, VT_FDESC,
 	VT_PORTAL, VT_NULL, VT_UMAP, VT_KERNFS, VT_PROCFS, VT_AFS, VT_ISOFS,
 	VT_UNION, VT_ADOSFS, VT_EXT2FS, VT_CODA, VT_FILECORE, VT_NTFS, VT_VFS,
-	VT_OVERLAY, VT_SMBFS, VT_PTYFS
+	VT_OVERLAY, VT_SMBFS
 };
 
 LIST_HEAD(buflists, buf);
@@ -144,7 +144,6 @@ struct vnode {
 	/* VISTTY used when reading dead vnodes */
 #define	VISTTY		0x0008	/* vnode represents a tty */
 #define	VEXECMAP	0x0010	/* vnode has PROT_EXEC mappings */
-#define	VLOCKSWORK	0x0080	/* FS supports locking discipline */
 #define	VXLOCK		0x0100	/* vnode is locked to change underlying type */
 #define	VXWANT		0x0200	/* process is waiting for vnode */
 #define	VBWAIT		0x0400	/* waiting for output to complete */
@@ -275,7 +274,6 @@ extern const int	vttoif_tab[];
 
 #define	UPDATE_WAIT	0x0001		/* update: wait for completion */
 #define	UPDATE_DIROP	0x0002		/* update: hint to fs to wait or not */
-#define	UPDATE_CLOSE	0x0004		/* update: clean up on close */
 
 #define	HOLDRELE(vp)	holdrele(vp)
 #define	VHOLD(vp)	vhold(vp)
@@ -573,7 +571,6 @@ vn_start_write(struct vnode *vp, struct mount **mpp, int flags)
 	}
 	if ((mp = *mpp) == NULL)
 		return (0);
-	mp = mp->mnt_leaf;
 	/*
 	 * Check on status of suspension.
 	 */
@@ -595,12 +592,10 @@ vn_start_write(struct vnode *vp, struct mount **mpp, int flags)
 	}
 	if (flags & V_SLEEPONLY)
 		return (0);
-	simple_lock(&mp->mnt_slock);
 	if ((flags & V_LOWER) == 0)
 		mp->mnt_writeopcountupper++;
 	else
 		mp->mnt_writeopcountlower++;
-	simple_unlock(&mp->mnt_slock);
 	return (0);
 }
 
@@ -614,8 +609,6 @@ vn_finished_write(struct mount *mp, int flags)
 {
 	if (mp == NULL)
 		return;
-	mp = mp->mnt_leaf;
-	simple_lock(&mp->mnt_slock);
 	if ((flags & V_LOWER) == 0) {
 		mp->mnt_writeopcountupper--;
 		if (mp->mnt_writeopcountupper < 0)
@@ -633,7 +626,6 @@ vn_finished_write(struct mount *mp, int flags)
 		    mp->mnt_writeopcountupper <= 0)
 			wakeup(&mp->mnt_writeopcountlower);
 	}
-	simple_unlock(&mp->mnt_slock);
 }
 
 /*
@@ -698,9 +690,9 @@ u_int	vn_setrecurse(struct vnode *);
 int	vn_stat(struct vnode *, struct stat *, struct proc *);
 int	vn_kqfilter(struct file *, struct knote *);
 int	vn_writechk(struct vnode *);
-int	vn_cow_establish(struct vnode *, int (*)(void *, struct buf *),
+int	vn_cow_establish(struct vnode *, void (*)(void *, struct buf *),
             void *);
-int	vn_cow_disestablish(struct vnode *, int (*)(void *, struct buf *),
+int	vn_cow_disestablish(struct vnode *, void (*)(void *, struct buf *),
             void *);
 
 /* initialise global vnode management */

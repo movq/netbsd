@@ -1,4 +1,4 @@
-/*	$NetBSD: ixm1200_machdep.c,v 1.30 2004/12/12 20:42:53 abs Exp $ */
+/*	$NetBSD: ixm1200_machdep.c,v 1.28 2004/02/13 11:36:12 wiz Exp $ */
 
 /*
  * Copyright (c) 2002, 2003
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixm1200_machdep.c,v 1.30 2004/12/12 20:42:53 abs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixm1200_machdep.c,v 1.28 2004/02/13 11:36:12 wiz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_pmap_debug.h"
@@ -226,6 +226,8 @@ void consinit		__P((void));
 u_int cpu_get_control	__P((void));
 
 void ixdp_ixp12x0_cc_setup(void);
+
+extern int db_trapper(u_int, u_int, trapframe_t *, int);
 
 /*
  * void cpu_reboot(int howto, char *bootstr)
@@ -684,7 +686,7 @@ initarm(void *arg)
 	 * handler. Until then we will use a handler that just panics but
 	 * tells us why.
 	 * Initialisation of the vetcors will just panic on a data abort.
-	 * This just fills in a slightly better one.
+	 * This just fills in a slighly better one.
 	 */
 #ifdef VERBOSE_INIT_ARM
 	printf("vectors ");
@@ -760,7 +762,13 @@ initarm(void *arg)
 #endif
 
 #ifdef DDB
-	db_machine_init();
+	{
+		static struct undefined_handler uh;
+
+		uh.uh_handler = db_trapper;
+		install_coproc_handler_static(0, &uh);
+	}
+
 	if (boothowto & RB_KDB)
 		Debugger();
 #endif

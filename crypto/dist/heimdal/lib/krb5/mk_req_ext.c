@@ -34,7 +34,7 @@
 #include <krb5_locl.h>
 
 __RCSID("$Heimdal: mk_req_ext.c,v 1.26.4.1 2003/09/18 20:34:30 lha Exp $"
-        "$NetBSD: mk_req_ext.c,v 1.1.1.6 2004/04/02 14:47:52 lha Exp $");
+        "$NetBSD: mk_req_ext.c,v 1.1.1.5.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 krb5_error_code
 krb5_mk_req_internal(krb5_context context,

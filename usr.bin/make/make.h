@@ -1,4 +1,4 @@
-/*	$NetBSD: make.h,v 1.52 2004/07/15 09:01:29 yamt Exp $	*/
+/*	$NetBSD: make.h,v 1.50 2003/12/07 20:30:28 dsl Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -99,23 +99,6 @@
 # endif
 #endif
 
-#if !defined(__GNUC_PREREQ__)
-#if defined(__GNUC__)
-#define	__GNUC_PREREQ__(x, y)						\
-	((__GNUC__ == (x) && __GNUC_MINOR__ >= (y)) ||			\
-	 (__GNUC__ > (x)))
-#else /* defined(__GNUC__) */
-#define	__GNUC_PREREQ__(x, y)	0
-#endif /* defined(__GNUC__) */
-#endif /* !defined(__GNUC_PREREQ__) */
-
-#if !defined(__unused)
-#if __GNUC_PREREQ__(2, 7)
-#define __unused        __attribute__((__unused__))
-#else
-#define __unused        /* delete */
-#endif
-#endif
 
 #include "sprite.h"
 #include "lst.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: apm.c,v 1.84 2004/08/30 15:05:17 drochner Exp $ */
+/*	$NetBSD: apm.c,v 1.82 2003/10/28 14:49:53 yamt Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.84 2004/08/30 15:05:17 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.82 2003/10/28 14:49:53 yamt Exp $");
 
 #include "apm.h"
 #if NAPM > 1
@@ -534,11 +534,8 @@ apm_suspend(sc)
 
 	dopowerhooks(PWR_SUSPEND);
 
-	if (apm_set_powstate(APM_DEV_ALLDEVS, APM_SYS_SUSPEND)) {
-		struct bioscallregs b;
-		b.BX = 0;
-		apm_resume(sc, &b);
-	}
+	/* XXX cgd */
+	(void)apm_set_powstate(APM_DEV_ALLDEVS, APM_SYS_SUSPEND);
 }
 
 static void
@@ -561,11 +558,8 @@ apm_standby(sc)
 
 	dopowerhooks(PWR_STANDBY);
 
-	if (apm_set_powstate(APM_DEV_ALLDEVS, APM_SYS_STANDBY)) {
-		struct bioscallregs b;
-		b.BX = 0;
-		apm_resume(sc, &b);
-	}
+	/* XXX cgd */
+	(void)apm_set_powstate(APM_DEV_ALLDEVS, APM_SYS_STANDBY);
 }
 
 static void
@@ -1090,6 +1084,12 @@ apmmatch(parent, match, aux)
 	struct cfdata *match;
 	void *aux;
 {
+	struct apm_attach_args *aaa = aux;
+
+	/* These are not the droids you're looking for. */
+	if (strcmp(aaa->aaa_busname, "apm") != 0)
+		return (0);
+
 	/* There can be only one! */
 	if (apm_inited)
 		return 0;

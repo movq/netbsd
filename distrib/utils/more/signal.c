@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.c,v 1.6 2004/09/01 01:46:56 chs Exp $	*/
+/*	$NetBSD: signal.c,v 1.5.2.1 2004/09/01 03:34:15 jmc Exp $	*/
 
 /*
  * Copyright (c) 1988 Mark Nudelman
@@ -35,7 +35,7 @@
 #if 0
 static char sccsid[] = "@(#)signal.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: signal.c,v 1.6 2004/09/01 01:46:56 chs Exp $");
+__RCSID("$NetBSD: signal.c,v 1.5.2.1 2004/09/01 03:34:15 jmc Exp $");
 #endif
 #endif /* not lint */
 

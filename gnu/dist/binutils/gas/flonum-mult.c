@@ -71,8 +71,10 @@
 	(C style also gives deeper insight [to me] ... oh well ...)  */
 
 void
-flonum_multip (const FLONUM_TYPE *a, const FLONUM_TYPE *b,
-	       FLONUM_TYPE *product)
+flonum_multip (a, b, product)
+     const FLONUM_TYPE *a;
+     const FLONUM_TYPE *b;
+     FLONUM_TYPE *product;
 {
   int size_of_a;		/* 0 origin  */
   int size_of_b;		/* 0 origin  */

@@ -1,4 +1,4 @@
-/*	$NetBSD: tx39var.h,v 1.12 2004/12/12 21:03:06 abs Exp $ */
+/*	$NetBSD: tx39var.h,v 1.11 2003/06/23 11:01:16 martin Exp $ */
 
 /*-
  * Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
@@ -144,7 +144,7 @@ extern u_int32_t tx39intrvec;
 void tx39power_suspend_cpu(void);
 
 /*
- *	Debug print configuration.
+ *	Debug print configration.
  */
 #define USE_HPC_DPRINTF
 #define __DPRINTF_EXT

@@ -1,5 +1,3 @@
-/*	$NetBSD: recipient_list.h,v 1.1.1.4 2004/05/31 00:24:35 heas Exp $	*/
-
 #ifndef _RECIPIENT_LIST_H_INCLUDED_
 #define _RECIPIENT_LIST_H_INCLUDED_
 
@@ -23,7 +21,6 @@ typedef struct RECIPIENT {
     long    offset;			/* REC_TYPE_RCPT byte */
     char   *orig_addr;			/* null or original recipient */
     char   *address;			/* complete address */
-    int     status;			/* Application specific. */
 } RECIPIENT;
 
 typedef struct RECIPIENT_LIST {

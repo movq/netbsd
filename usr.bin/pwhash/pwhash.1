@@ -1,4 +1,4 @@
-.\"	$NetBSD: pwhash.1,v 1.5 2004/11/17 14:57:48 wiz Exp $
+.\"	$NetBSD: pwhash.1,v 1.2 2002/10/02 07:35:29 wiz Exp $
 .\"	$OpenBSD: encrypt.1,v 1.16 2000/11/09 17:52:07 aaron Exp $
 .\"
 .\" Copyright (c) 1996, Jason Downs.  All rights reserved.
@@ -24,7 +24,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd October 12, 2004
+.Dd October 2, 2002
 .Dt PWHASH 1
 .Os
 .Sh NAME
@@ -32,11 +32,11 @@
 .Nd hashes passwords from the command line or standard input
 .Sh SYNOPSIS
 .Nm pwhash
-.Op Fl km
 .Op Fl b Ar rounds
-.Op Fl S Ar rounds
-.Op Fl s Ar salt
+.Op Fl k
+.Op Fl m
 .Op Fl p | Ar string
+.Op Fl s Ar salt
 .Sh DESCRIPTION
 .Nm
 prints the encrypted form of
@@ -59,10 +59,6 @@ terminating newline.
 Encrypt the string using MD5.
 .It Fl p
 Prompt for a single string with echo turned off.
-.It Fl S Ar rounds
-Encrypt the salt with HMAC-SHA1 using the password as key and the specified
-.Ar rounds
-as a hint for the number of iterations.
 .It Fl s Ar salt
 Encrypt the string using DES, with the specified
 .Ar salt .
@@ -74,7 +70,7 @@ is specified,
 .Nm
 reads one string per line from standard input, encrypting each one
 with the chosen algorithm from above.
-In the event that no specific algorithm is given as a command line option,
+In case that no specific algorithm was given as a command line option,
 the algorithm specified in the default class in
 .Pa /etc/passwd.conf
 will be used.

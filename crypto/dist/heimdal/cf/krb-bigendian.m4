@@ -1,6 +1,6 @@
 dnl
 dnl $Heimdal: krb-bigendian.m4,v 1.8.6.1 2004/04/01 07:27:33 joda Exp $
-dnl $NetBSD: krb-bigendian.m4,v 1.1.1.5 2004/04/02 14:48:06 lha Exp $
+dnl $NetBSD: krb-bigendian.m4,v 1.1.1.4.2.1 2004/04/21 04:55:38 jmc Exp $
 dnl
 
 dnl check if this computer is little or big-endian

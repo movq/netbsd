@@ -1,4 +1,4 @@
-/*	$NetBSD: iconv.h,v 1.6 2004/04/21 18:16:14 itojun Exp $	*/
+/*	$NetBSD: iconv.h,v 1.5 2004/02/24 15:22:01 wiz Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -133,21 +133,22 @@ MALLOC_DECLARE(M_ICONV);
 /*
  * Basic conversion functions
  */
-int iconv_open(const char *, const char *, void **);
-int iconv_close(void *);
-int iconv_conv(void *, const char **, size_t *, char **, size_t *);
-char *iconv_convstr(void *, char *, const char *, size_t);
-void *iconv_convmem(void *, void *, const void *, int);
+int iconv_open(const char *to, const char *from, void **handle);
+int iconv_close(void *handle);
+int iconv_conv(void *handle, const char **inbuf,
+	size_t *inbytesleft, char **outbuf, size_t *outbytesleft);
+char* iconv_convstr(void *handle, char *dst, const char *src);
+void* iconv_convmem(void *handle, void *dst, const void *src, int size);
 
 /*
  * Internal functions
  */
-int iconv_lookupcp(const char **, const char *);
+int iconv_lookupcp(const char **cpp, const char *s);
 
 #ifndef __NetBSD__
-int iconv_converter_initstub(struct iconv_converter_class *);
-int iconv_converter_donestub(struct iconv_converter_class *);
-int iconv_converter_handler(module_t, int, void *);
+int iconv_converter_initstub(struct iconv_converter_class *dp);
+int iconv_converter_donestub(struct iconv_converter_class *dp);
+int iconv_converter_handler(module_t mod, int type, void *data);
 #endif /* !NetBSD */
 
 #ifdef ICONV_DEBUG

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.20 2004/07/18 16:34:45 tron Exp $
+#	$NetBSD: Makefile,v 1.17 2003/07/03 15:17:47 wiz Exp $
 
 .include <bsd.own.mk>
 
@@ -6,20 +6,12 @@ SUBDIR=		common .WAIT info infokey install-info makeinfo texi2dvi texindex
 
 .if ${MKSHARE} != "no"
 FILESDIR=	/usr/share/misc
-FILES=		epsf.tex texinfo.cat texinfo.dtd texinfo.tex texinfo.xsl
-VERSION!=	sed -n "s/^\#define VERSION \"\(.*\)\"/\1/p" ${NETBSDSRCDIR}/gnu/usr.bin/texinfo/common/config.h
-
-texinfo.cat: texinfo-cat.in
-	sed 's/__VERSION__/${VERSION}/g' ${.ALLSRC} >${.TARGET}
-
-realall:	texinfo.cat
-
-CLEANFILES+=	texinfo.cat
+FILES=		epsf.tex texinfo.dtd texinfo.tex texinfo.xsl
 .endif
 
 .if ${MKNLS} != "no"
 .for F in cs.gmo da.gmo de.gmo de_AT.gmo eo.gmo fr.gmo he.gmo hr.gmo ja.gmo \
-	nb.gmo nl.gmo no.gmo pl.gmo ro.gmo ru.gmo sv.gmo tr.gmo zh_CN.gmo zh_TW.gmo
+	nl.gmo no.gmo ro.gmo ru.gmo sv.gmo tr.gmo zh_CN.gmo zh_TW.gmo
 FILES+=		${F}
 FILESDIR_${F}=  /usr/share/locale/${F:.gmo=}/LC_MESSAGES
 FILESNAME_${F}= texinfo.mo
@@ -37,7 +29,7 @@ DIST=		${NETBSDSRCDIR}/gnu/dist
 IDIST=		${DIST}/texinfo
 INFOFLAGS=	-I${IDIST}/doc
 
-.PATH: ${IDIST} ${IDIST}/doc ${IDIST}/po ${IDIST}/util
+.PATH: ${IDIST} ${IDIST}/doc ${IDIST}/makeinfo ${IDIST}/po
 
 .include <bsd.info.mk>
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: sbus.c,v 1.63 2004/12/13 02:39:07 chs Exp $ */
+/*	$NetBSD: sbus.c,v 1.60 2004/03/17 17:04:59 pk Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -81,7 +81,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.63 2004/12/13 02:39:07 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.60 2004/03/17 17:04:59 pk Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -101,6 +101,7 @@ __KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.63 2004/12/13 02:39:07 chs Exp $");
 
 void sbusreset __P((int));
 
+static bus_space_tag_t sbus_alloc_bustag __P((struct sbus_softc *));
 static int sbus_get_intr __P((struct sbus_softc *, int,
 			      struct openprom_intr **, int *));
 static void *sbus_intr_establish __P((
@@ -133,8 +134,6 @@ CFATTACH_DECL(sbus_xbox, sizeof(struct sbus_softc),
     sbus_match_xbox, sbus_attach_xbox, NULL, NULL);
 
 extern struct cfdriver sbus_cd;
-
-static int sbus_mainbus_attached;
 
 /* The "primary" Sbus */
 struct sbus_softc *sbus_sc;
@@ -215,7 +214,7 @@ sbus_match_mainbus(parent, cf, aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
-	if (CPU_ISSUN4 || sbus_mainbus_attached)
+	if (CPU_ISSUN4)
 		return (0);
 
 	return (strcmp(cf->cf_name, ma->ma_name) == 0);
@@ -262,7 +261,14 @@ sbus_attach_mainbus(parent, self, aux)
 	struct mainbus_attach_args *ma = aux;
 	int node = ma->ma_node;
 
-	sbus_mainbus_attached = 1;
+	/*
+	 * XXX there is only one Sbus, for now -- do not know how to
+	 * address children on others
+	 */
+	if (sc->sc_dev.dv_unit > 0) {
+		printf(" unsupported\n");
+		return;
+	}
 
 	sc->sc_bustag = ma->ma_bustag;
 	sc->sc_dmatag = ma->ma_dmatag;
@@ -376,11 +382,7 @@ sbus_attach_common(sc, busname, busnode, specials)
 	bus_space_tag_t sbt;
 	struct sbus_attach_args sa;
 
-	if ((sbt = bus_space_tag_alloc(sc->sc_bustag, sc)) == NULL) {
-		printf("%s: attach: out of memory\n", sc->sc_dev.dv_xname);
-		return;
-	}
-	sbt->sparc_intr_establish = sbus_intr_establish;
+	sbt = sbus_alloc_bustag(sc);
 
 	/*
 	 * Get the SBus burst transfer size if burst transfers are supported
@@ -688,6 +690,26 @@ sbus_intr_establish(t, pri, level, handler, arg, fastvec)
 	ih->ih_arg = arg;
 	intr_establish(pil, level, ih, fastvec);
 	return (ih);
+}
+
+static bus_space_tag_t
+sbus_alloc_bustag(sc)
+	struct sbus_softc *sc;
+{
+	bus_space_tag_t sbt;
+
+	sbt = (bus_space_tag_t)
+		malloc(sizeof(struct sparc_bus_space_tag), M_DEVBUF, M_NOWAIT);
+	if (sbt == NULL)
+		return (NULL);
+
+	bzero(sbt, sizeof *sbt);
+	sbt->cookie = sc;
+	sbt->parent = sc->sc_bustag;
+	sbt->sparc_bus_map = sc->sc_bustag->sparc_bus_map;
+	sbt->sparc_bus_mmap = sc->sc_bustag->sparc_bus_mmap;
+	sbt->sparc_intr_establish = sbus_intr_establish;
+	return (sbt);
 }
 
 int

@@ -32,7 +32,7 @@
  */
 
 /* $Heimdal: ftpd_locl.h,v 1.13.2.1 2004/08/20 15:17:07 lha Exp $
-   $NetBSD: ftpd_locl.h,v 1.1.1.6 2004/09/14 07:46:27 lha Exp $ */
+   $NetBSD: ftpd_locl.h,v 1.1.1.5.2.1 2004/09/17 04:35:04 jmc Exp $ */
 
 #ifndef __ftpd_locl_h__
 #define __ftpd_locl_h__

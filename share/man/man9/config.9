@@ -1,4 +1,4 @@
-.\"     $NetBSD: config.9,v 1.21 2004/12/15 15:37:01 wiz Exp $
+.\"     $NetBSD: config.9,v 1.18 2003/09/27 14:52:58 kei Exp $
 .\"
 .\" Copyright (c) 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -72,11 +72,11 @@ The pairing is denoted by "child at parent".
 These pairings form the links in a directed graph.
 The root device is the only exception, as it does not have a parent.
 .It Locators
-Locators are used to augment the parent/child pairings that locate
+Locators are used to augment the parent/child pairings the locate
 specific devices.
 Each locator value is simply an integer that represents some sort of
 device address on the parent bus or controller.
-This can be a memory address, an I/O port, a driver number, or any
+This can be a memory address, and I/O port, a driver number, or any
 other value.
 Locators can sometimes be wildcarded on devices that support direct
 connection.
@@ -290,14 +290,14 @@ Include contents of file
 to currently processed configuration.
 If the specified
 .Ar filename
-doesn't exist,
+doesn't exist, 
 .Xr config 8
 exits with error.
 .It package Ar filename
 Changes prefix to directory of
 .Ar filename ,
 processes contents of
-.Ar filename ,
+.Ar filename,
 and switches back to previous prefix.
 This is syntactic sugar for:
 .Bl -tag -compact -offset indent

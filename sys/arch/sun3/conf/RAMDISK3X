@@ -1,4 +1,4 @@
-# $NetBSD: RAMDISK3X,v 1.24 2004/07/15 03:53:52 atatat Exp $
+# $NetBSD: RAMDISK3X,v 1.23.2.1 2004/07/15 20:22:46 he Exp $
 
 # RAMDISK: Root/swap on ramdisk
 # This kernel is used to:

@@ -1,4 +1,4 @@
-/*	$NetBSD: natm.c,v 1.10 2004/04/21 18:40:41 itojun Exp $	*/
+/*	$NetBSD: natm.c,v 1.9 2003/06/29 22:32:07 fvdl Exp $	*/
 
 /*
  *
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: natm.c,v 1.10 2004/04/21 18:40:41 itojun Exp $");
+__KERNEL_RCSID(0, "$NetBSD: natm.c,v 1.9 2003/06/29 22:32:07 fvdl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -276,8 +276,8 @@ struct proc *p;
 #if defined(__NetBSD__) || defined(__OpenBSD__)
       bcopy(npcb->npcb_ifp->if_xname, snatm->snatm_if, sizeof(snatm->snatm_if));
 #elif defined(__FreeBSD__)
-      snprintf(snatm->snatm_if, sizeof(snatm->snatm_if), "%s%d",
-          npcb->npcb_ifp->if_name, npcb->npcb_ifp->if_unit);
+      sprintf(snatm->snatm_if, "%s%d", npcb->npcb_ifp->if_name,
+	npcb->npcb_ifp->if_unit);
 #endif
       snatm->snatm_vci = npcb->npcb_vci;
       snatm->snatm_vpi = npcb->npcb_vpi;

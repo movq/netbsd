@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.175 2004/11/28 17:34:46 thorpej Exp $ */
+/*	$NetBSD: machdep.c,v 1.165 2004/03/24 15:34:51 atatat Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -78,12 +78,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.175 2004/11/28 17:34:46 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.165 2004/03/24 15:34:51 atatat Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
-#include "opt_compat_svr4.h"
-#include "opt_compat_sunos.h"
 
 #include <sys/param.h>
 #include <sys/extent.h>
@@ -139,14 +137,6 @@ int bus_space_debug = 0; /* This may be used by macros elsewhere. */
 #define DPRINTF(l, s)   do { if (bus_space_debug & l) printf s; } while (0)
 #else
 #define DPRINTF(l, s)
-#endif
-
-#if defined(COMPAT_16) || defined(COMPAT_SVR4) || defined(COMPAT_SVR4_32) || defined(COMPAT_SUNOS)
-#ifdef DEBUG
-/* See <sparc64/sparc64/sigdebug.h> */
-int sigdebug = 0x0;
-int sigpid = 0;
-#endif
 #endif
 
 struct vm_map *exec_map = NULL;
@@ -640,10 +630,8 @@ cpu_reboot(howto, user_boot_string)
 	}
 	(void) splhigh();		/* ??? */
 
-#if defined(MULTIPROCESSOR)
 	/* Stop all secondary cpus */
 	sparc64_ipi_halt_cpus();
-#endif
 
 	/* If rebooting and a dump is requested, do it. */
 	if (howto & RB_DUMP)
@@ -757,7 +745,6 @@ dumpsys()
 	daddr_t blkno;
 	register int (*dump)	__P((dev_t, daddr_t, caddr_t, size_t));
 	int error = 0;
-	unsigned long todo;
 	register struct mem_region *mp;
 	extern struct mem_region *mem;
 
@@ -800,11 +787,7 @@ dumpsys()
 
 	error = pmap_dumpmmu(dump, blkno);
 	blkno += pmap_dumpsize();
-
-	/* calculate total size of dump */
-	for (todo = 0, mp = mem; mp->size; mp++)
-		todo += mp->size;
-
+printf("starting dump, blkno %lld\n", (long long)blkno);
 	for (mp = mem; mp->size; mp++) {
 		unsigned i = 0, n;
 		paddr_t maddr = mp->start;
@@ -823,9 +806,9 @@ dumpsys()
 			if (n > BYTES_PER_DUMP)
 				 n = BYTES_PER_DUMP;
 
-			/* print out how many MBs we still have to dump */
-			if ((todo % (1024*1024)) == 0)
-				printf("%ld ", todo / (1024*1024));
+			/* print out how many MBs we have dumped */
+			if (i && (i % (1024*1024)) == 0)
+				printf("%d ", i / (1024*1024));
 			pmap_kenter_pa(dumpspace, maddr, VM_PROT_READ);
 			pmap_update(pmap_kernel());
 			error = (*dump)(dumpdev, blkno,
@@ -835,7 +818,6 @@ dumpsys()
 			if (error)
 				break;
 			maddr += n;
-			todo -= n;
 			blkno += btodb(n);
 		}
 	}
@@ -1113,9 +1095,6 @@ _bus_dmamap_load_mbuf(t, map, m, flags)
 		vaddr_t vaddr = mtod(m, vaddr_t);
 		long buflen = (long)m->m_len;
 
-		if (buflen == 0)
-			continue;
-
 		len += buflen;
 		while (buflen > 0 && i < MAX_DMA_SEGS) {
 			paddr_t pa;
@@ -1124,16 +1103,7 @@ _bus_dmamap_load_mbuf(t, map, m, flags)
 			incr = PAGE_SIZE - (vaddr & PGOFSET);
 			incr = min(buflen, incr);
 
-			if (pmap_extract(pmap_kernel(), vaddr, &pa) == FALSE) {
-#ifdef DIAGNOSTIC
-				printf("_bus_dmamap_load_mbuf: pmap_extract failed %lx\n",
-				       vaddr);
-#endif
-				map->_dm_type = 0;
-				map->_dm_source = NULL;
-				return EINVAL;
-			}
-
+			(void) pmap_extract(pmap_kernel(), vaddr, &pa);
 			buflen -= incr;
 			vaddr += incr;
 
@@ -1613,57 +1583,6 @@ static void	sparc_bus_free __P((bus_space_tag_t, bus_space_handle_t,
 vaddr_t iobase = IODEV_BASE;
 struct extent *io_space = NULL;
 
-/*
- * Allocate a new bus tag and have it inherit the methods of the
- * given parent.
- */
-bus_space_tag_t
-bus_space_tag_alloc(parent, cookie)
-	bus_space_tag_t parent;
-	void *cookie;
-{
-	struct sparc_bus_space_tag *sbt;
-
-	sbt = malloc(sizeof(struct sparc_bus_space_tag),
-		     M_DEVBUF, M_NOWAIT|M_ZERO);
-	if (sbt == NULL)
-		return (NULL);
-
-	if (parent) {
-		memcpy(sbt, parent, sizeof(*sbt));
-		sbt->parent = parent;
-		sbt->ranges = NULL;
-		sbt->nranges = 0;
-	}
-
-	sbt->cookie = cookie;
-	return (sbt);
-}
-
-/*
- * Generic routine to translate an address using OpenPROM `ranges'.
- */
-int
-bus_space_translate_address_generic(struct openprom_range *ranges, int nranges,
-    bus_addr_t *bap)
-{
-	int i, space = BUS_ADDR_IOSPACE(*bap);
-
-	for (i = 0; i < nranges; i++) {
-		struct openprom_range *rp = &ranges[i];
-
-		if (rp->or_child_space != space)
-			continue;
-
-		/* We've found the connection to the parent bus. */
-		*bap = BUS_ADDR(rp->or_parent_space,
-		    rp->or_parent_base + BUS_ADDR_PADDR(*bap));
-		return (0);
-	}
-
-	return (EINVAL);
-}
-
 int
 sparc_bus_map(t, addr, size, flags, unused, hp)
 	bus_space_tag_t t;
@@ -1801,7 +1720,7 @@ sparc_bus_unmap(t, bh, size)
 	if (PHYS_ASI(bh._asi)) return (0);
 
 	error = extent_free(io_space, va, size, EX_NOWAIT);
-	if (error) printf("sparc_bus_unmap: extent_free returned %d\n", error);
+	if (error) printf("sparc_bus_unmap: extent free sez %d\n", error);
 
 	pmap_remove(pmap_kernel(), va, endva);
 	return (0);
@@ -1869,8 +1788,6 @@ sparc_bus_free(t, h, s)
 struct sparc_bus_space_tag mainbus_space_tag = {
 	NULL,				/* cookie */
 	NULL,				/* parent bus tag */
-	NULL,				/* ranges */
-	0,				/* nranges */
 	UPA_BUS_SPACE,			/* type */
 	sparc_bus_alloc,
 	sparc_bus_free,
@@ -1898,7 +1815,7 @@ cpu_getmcontext(l, mcp, flags)
 		sigexit(l, SIGILL);
 
 	/* For now: Erase any random indicators for optional state. */
-	(void)memset(mcp, 0, sizeof (*mcp));
+	(void)memset(mcp, '0', sizeof (*mcp));
 
 	/* Save general register context. */
 #ifdef __arch64__

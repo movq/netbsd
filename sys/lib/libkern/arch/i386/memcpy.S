@@ -1,4 +1,4 @@
-/*	$NetBSD: memcpy.S,v 1.5 2004/04/15 09:20:29 yamt Exp $	*/
+/*	$NetBSD: memcpy.S,v 1.4 2003/08/07 16:32:13 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -35,7 +35,7 @@
 #include <machine/asm.h>
 
 #if defined(LIBC_SCCS)
-	RCSID("$NetBSD: memcpy.S,v 1.5 2004/04/15 09:20:29 yamt Exp $")
+	RCSID("$NetBSD: memcpy.S,v 1.4 2003/08/07 16:32:13 agc Exp $")
 #endif
 
 	/*
@@ -70,15 +70,15 @@ ENTRY(memcpy)
 	subl	%esi,%eax
 	cmpl	%ecx,%eax	/* overlapping? */
 	movl	%ecx,%eax
-	jb	.Lbackwards
+	jb	backwards
 #endif
 	cld			/* nope, copy forwards. */
 	shrl	$2,%ecx		/* copy by words */
 	rep
 	movsl
 	and	$3,%eax		/* any bytes left? */
-	jnz	.Ltrailing
-.Ldone:
+	jnz	trailing
+done:
 #if defined(MEMCPY) || defined(MEMMOVE)
 	movl	8(%esp),%eax
 #endif
@@ -86,26 +86,26 @@ ENTRY(memcpy)
 	pop	%esi
 	ret
 
-.Ltrailing:
+trailing:
 	cmp	$2,%eax
 	jb	1f
 	movw	(%esi),%ax
 	movw	%ax,(%edi)
-	je	.Ldone
+	je	done
 	movb	2(%esi),%al
 	movb	%al,2(%edi)
-	jmp	.Ldone
+	jmp	done
 1:	movb	(%esi),%al
 	movb	%al,(%edi)
-	jmp	.Ldone
+	jmp	done
 
 #if !defined(NO_OVERLAP)
-.Lbackwards:
+backwards:
 	addl	%ecx,%edi	/* copy backwards. */
 	addl	%ecx,%esi
 	and	$3,%eax		/* any fractional bytes? */
-	jnz	.Lback_align
-.Lback_aligned:
+	jnz	back_align
+back_aligned:
 	shrl	$2,%ecx
 	subl	$4,%esi
 	subl	$4,%edi
@@ -113,9 +113,9 @@ ENTRY(memcpy)
 	rep
 	movsl
 	cld
-	jmp	.Ldone
+	jmp	done
 
-.Lback_align:
+back_align:
 	sub	%eax,%esi
 	sub	%eax,%edi
 	cmp	$2,%eax
@@ -125,8 +125,8 @@ ENTRY(memcpy)
 	movb	%al,2(%edi)
 2:	movw	(%esi),%ax
 	movw	%ax,(%edi)
-	jmp	.Lback_aligned
+	jmp	back_aligned
 1:	movb	(%esi),%al
 	movb	%al,(%edi)
-	jmp	.Lback_aligned
+	jmp	back_aligned
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: getaddrinfo.c,v 1.72 2004/05/27 18:40:07 christos Exp $	*/
+/*	$NetBSD: getaddrinfo.c,v 1.66 2003/05/17 01:36:03 itojun Exp $	*/
 /*	$KAME: getaddrinfo.c,v 1.29 2000/08/31 17:26:57 itojun Exp $	*/
 
 /*
@@ -79,7 +79,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getaddrinfo.c,v 1.72 2004/05/27 18:40:07 christos Exp $");
+__RCSID("$NetBSD: getaddrinfo.c,v 1.66 2003/05/17 01:36:03 itojun Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -212,43 +212,45 @@ struct res_target {
 	int n;			/* result length */
 };
 
-static int str2number(const char *);
-static int explore_fqdn(const struct addrinfo *, const char *,
-	const char *, struct addrinfo **);
-static int explore_null(const struct addrinfo *,
-	const char *, struct addrinfo **);
-static int explore_numeric(const struct addrinfo *, const char *,
-	const char *, struct addrinfo **, const char *);
-static int explore_numeric_scope(const struct addrinfo *, const char *,
-	const char *, struct addrinfo **);
-static int get_canonname(const struct addrinfo *,
-	struct addrinfo *, const char *);
-static struct addrinfo *get_ai(const struct addrinfo *,
-	const struct afd *, const char *);
-static int get_portmatch(const struct addrinfo *, const char *);
-static int get_port(struct addrinfo *, const char *, int);
-static const struct afd *find_afd(int);
+static int str_isnumber __P((const char *));
+static int explore_fqdn __P((const struct addrinfo *, const char *,
+	const char *, struct addrinfo **));
+static int explore_null __P((const struct addrinfo *,
+	const char *, struct addrinfo **));
+static int explore_numeric __P((const struct addrinfo *, const char *,
+	const char *, struct addrinfo **, const char *));
+static int explore_numeric_scope __P((const struct addrinfo *, const char *,
+	const char *, struct addrinfo **));
+static int get_canonname __P((const struct addrinfo *,
+	struct addrinfo *, const char *));
+static struct addrinfo *get_ai __P((const struct addrinfo *,
+	const struct afd *, const char *));
+static int get_portmatch __P((const struct addrinfo *, const char *));
+static int get_port __P((struct addrinfo *, const char *, int));
+static const struct afd *find_afd __P((int));
+#if 0
+static int addrconfig __P((const struct addrinfo *));
+#endif
 #ifdef INET6
-static int ip6_str2scopeid(char *, struct sockaddr_in6 *, u_int32_t *);
+static int ip6_str2scopeid __P((char *, struct sockaddr_in6 *, u_int32_t *));
 #endif
 
-static struct addrinfo *getanswer(const querybuf *, int, const char *, int,
-	const struct addrinfo *);
-static int _dns_getaddrinfo(void *, void *, va_list);
-static void _sethtent(FILE **);
-static void _endhtent(FILE **);
-static struct addrinfo *_gethtent(FILE **, const char *,
-    const struct addrinfo *);
-static int _files_getaddrinfo(void *, void *, va_list);
+static struct addrinfo *getanswer __P((const querybuf *, int, const char *, int,
+	const struct addrinfo *));
+static int _dns_getaddrinfo __P((void *, void *, va_list));
+static void _sethtent __P((void));
+static void _endhtent __P((void));
+static struct addrinfo *_gethtent __P((const char *, const struct addrinfo *));
+static int _files_getaddrinfo __P((void *, void *, va_list));
 #ifdef YP
-static struct addrinfo *_yphostent(char *, const struct addrinfo *);
-static int _yp_getaddrinfo(void *, void *, va_list);
+static struct addrinfo *_yphostent __P((char *, const struct addrinfo *));
+static int _yp_getaddrinfo __P((void *, void *, va_list));
 #endif
 
-static int res_queryN(const char *, struct res_target *, res_state);
-static int res_searchN(const char *, struct res_target *);
-static int res_querydomainN(const char *, const char *,
-	struct res_target *, res_state);
+static int res_queryN __P((const char *, struct res_target *));
+static int res_searchN __P((const char *, struct res_target *));
+static int res_querydomainN __P((const char *, const char *,
+	struct res_target *));
 
 static const char * const ai_errlist[] = {
 	"Success",
@@ -309,16 +311,19 @@ do { \
 #define MATCH(x, y, w) \
 	((x) == (y) || (/*CONSTCOND*/(w) && ((x) == ANY || (y) == ANY)))
 
-const char *
-gai_strerror(int ecode)
+char *
+gai_strerror(ecode)
+	int ecode;
 {
 	if (ecode < 0 || ecode > EAI_MAX)
 		ecode = EAI_MAX;
-	return ai_errlist[ecode];
+	/* LINTED const castaway */
+	return (char *) ai_errlist[ecode];
 }
 
 void
-freeaddrinfo(struct addrinfo *ai)
+freeaddrinfo(ai)
+	struct addrinfo *ai;
 {
 	struct addrinfo *next;
 
@@ -335,27 +340,29 @@ freeaddrinfo(struct addrinfo *ai)
 }
 
 static int
-str2number(const char *p)
+str_isnumber(p)
+	const char *p;
 {
 	char *ep;
-	unsigned long v;
 
 	_DIAGASSERT(p != NULL);
 
 	if (*p == '\0')
-		return -1;
+		return NO;
 	ep = NULL;
 	errno = 0;
-	v = strtoul(p, &ep, 10);
-	if (errno == 0 && ep && *ep == '\0' && v <= UINT_MAX)
-		return v;
+	(void)strtoul(p, &ep, 10);
+	if (errno == 0 && ep && *ep == '\0')
+		return YES;
 	else
-		return -1;
+		return NO;
 }
 
 int
-getaddrinfo(const char *hostname, const char *servname,
-    const struct addrinfo *hints, struct addrinfo **res)
+getaddrinfo(hostname, servname, hints, res)
+	const char *hostname, *servname;
+	const struct addrinfo *hints;
+	struct addrinfo **res;
 {
 	struct addrinfo sentinel;
 	struct addrinfo *cur;
@@ -558,8 +565,11 @@ getaddrinfo(const char *hostname, const char *servname,
  * FQDN hostname, DNS lookup
  */
 static int
-explore_fqdn(const struct addrinfo *pai, const char *hostname,
-    const char *servname, struct addrinfo **res)
+explore_fqdn(pai, hostname, servname, res)
+	const struct addrinfo *pai;
+	const char *hostname;
+	const char *servname;
+	struct addrinfo **res;
 {
 	struct addrinfo *result;
 	struct addrinfo *cur;
@@ -577,6 +587,17 @@ explore_fqdn(const struct addrinfo *pai, const char *hostname,
 	_DIAGASSERT(res != NULL);
 
 	result = NULL;
+
+#if 0
+	/*
+	 * If AI_ADDRCONFIG is specified, check if we are expected to
+	 * return the address family or not.
+	 * XXX does not handle PF_UNSPEC - should filter out result from
+	 * nsdispatch()
+	 */
+	if ((pai->ai_flags & AI_ADDRCONFIG) != 0 && !addrconfig(pai))
+		return 0;
+#endif
 
 	/*
 	 * if the servname does not match socktype/protocol, ignore it.
@@ -620,8 +641,10 @@ free:
  * non-passive socket -> localhost (127.0.0.1 or ::1)
  */
 static int
-explore_null(const struct addrinfo *pai, const char *servname,
-    struct addrinfo **res)
+explore_null(pai, servname, res)
+	const struct addrinfo *pai;
+	const char *servname;
+	struct addrinfo **res;
 {
 	int s;
 	const struct afd *afd;
@@ -686,8 +709,12 @@ free:
  * numeric hostname
  */
 static int
-explore_numeric(const struct addrinfo *pai, const char *hostname,
-    const char *servname, struct addrinfo **res, const char *canonname)
+explore_numeric(pai, hostname, servname, res, canonname)
+	const struct addrinfo *pai;
+	const char *hostname;
+	const char *servname;
+	struct addrinfo **res;
+	const char *canonname;
 {
 	const struct afd *afd;
 	struct addrinfo *cur;
@@ -773,8 +800,11 @@ bad:
  * numeric hostname with scope
  */
 static int
-explore_numeric_scope(const struct addrinfo *pai, const char *hostname,
-    const char *servname, struct addrinfo **res)
+explore_numeric_scope(pai, hostname, servname, res)
+	const struct addrinfo *pai;
+	const char *hostname;
+	const char *servname;
+	struct addrinfo **res;
 {
 #if !defined(SCOPE_DELIMITER) || !defined(INET6)
 	return explore_numeric(pai, hostname, servname, res, hostname);
@@ -807,6 +837,18 @@ explore_numeric_scope(const struct addrinfo *pai, const char *hostname,
 	if (cp == NULL)
 		return explore_numeric(pai, hostname, servname, res, hostname);
 
+#if 0
+	/*
+	 * Handle special case of <scope id><delimiter><scoped_address>
+	 */
+	hostname2 = strdup(hostname);
+	if (hostname2 == NULL)
+		return EAI_MEMORY;
+	/* terminate at the delimiter */
+	hostname2[cp - hostname] = '\0';
+	scope = hostname2;
+	addr = cp + 1;
+#else
 	/*
 	 * Handle special case of <scoped_address><delimiter><scope id>
 	 */
@@ -817,6 +859,7 @@ explore_numeric_scope(const struct addrinfo *pai, const char *hostname,
 	hostname2[cp - hostname] = '\0';
 	addr = hostname2;
 	scope = cp + 1;
+#endif
 
 	error = explore_numeric(pai, addr, servname, res, hostname);
 	if (error == 0) {
@@ -841,7 +884,10 @@ explore_numeric_scope(const struct addrinfo *pai, const char *hostname,
 }
 
 static int
-get_canonname(const struct addrinfo *pai, struct addrinfo *ai, const char *str)
+get_canonname(pai, ai, str)
+	const struct addrinfo *pai;
+	struct addrinfo *ai;
+	const char *str;
 {
 
 	_DIAGASSERT(pai != NULL);
@@ -857,7 +903,10 @@ get_canonname(const struct addrinfo *pai, struct addrinfo *ai, const char *str)
 }
 
 static struct addrinfo *
-get_ai(const struct addrinfo *pai, const struct afd *afd, const char *addr)
+get_ai(pai, afd, addr)
+	const struct addrinfo *pai;
+	const struct afd *afd;
+	const char *addr;
 {
 	char *p;
 	struct addrinfo *ai;
@@ -886,19 +935,24 @@ get_ai(const struct addrinfo *pai, const struct afd *afd, const char *addr)
 }
 
 static int
-get_portmatch(const struct addrinfo *ai, const char *servname)
+get_portmatch(ai, servname)
+	const struct addrinfo *ai;
+	const char *servname;
 {
 
 	_DIAGASSERT(ai != NULL);
 	/* servname may be NULL */
 
-	/* get_port does not touch first argument when matchonly == 1. */
+	/* get_port does not touch first argument. when matchonly == 1. */
 	/* LINTED const cast */
 	return get_port((struct addrinfo *)ai, servname, 1);
 }
 
 static int
-get_port(struct addrinfo *ai, const char *servname, int matchonly)
+get_port(ai, servname, matchonly)
+	struct addrinfo *ai;
+	const char *servname;
+	int matchonly;
 {
 	const char *proto;
 	struct servent *sp;
@@ -934,17 +988,14 @@ get_port(struct addrinfo *ai, const char *servname, int matchonly)
 		return EAI_SOCKTYPE;
 	}
 
-	port = str2number(servname);
-	if (port >= 0) {
+	if (str_isnumber(servname)) {
 		if (!allownumeric)
 			return EAI_SERVICE;
+		port = atoi(servname);
 		if (port < 0 || port > 65535)
 			return EAI_SERVICE;
 		port = htons(port);
 	} else {
-		if (ai->ai_flags & AI_NUMERICSERV)
-			return EAI_NONAME;
-
 		switch (ai->ai_socktype) {
 		case SOCK_DGRAM:
 			proto = "udp";
@@ -981,7 +1032,8 @@ get_port(struct addrinfo *ai, const char *servname, int matchonly)
 }
 
 static const struct afd *
-find_afd(int af)
+find_afd(af)
+	int af;
 {
 	const struct afd *afd;
 
@@ -994,10 +1046,37 @@ find_afd(int af)
 	return NULL;
 }
 
+#if 0
+/*
+ * post-2553: AI_ADDRCONFIG check.  if we use getipnodeby* as backend, backend
+ * will take care of it.
+ * the semantics of AI_ADDRCONFIG is not defined well.  we are not sure
+ * if the code is right or not.
+ */
+static int
+addrconfig(pai)
+	const struct addrinfo *pai;
+{
+	int s;
+
+	_DIAGASSERT(pai != NULL);
+
+	/* XXX errno */
+	s = socket(pai->ai_family, SOCK_DGRAM, 0);
+	if (s < 0)
+		return 0;
+	close(s);
+	return 1;
+}
+#endif
+
 #ifdef INET6
 /* convert a string to a scope identifier. XXX: IPv6 specific */
 static int
-ip6_str2scopeid(char *scope, struct sockaddr_in6 *sin6, u_int32_t *scopeid)
+ip6_str2scopeid(scope, sin6, scopeid)
+	char *scope;
+	struct sockaddr_in6 *sin6;
+	u_int32_t *scopeid;
 {
 	u_long lscopeid;
 	struct in6_addr *a6;
@@ -1049,10 +1128,15 @@ ip6_str2scopeid(char *scope, struct sockaddr_in6 *sin6, u_int32_t *scopeid)
 
 static const char AskedForGot[] =
 	"gethostby*.getanswer: asked for \"%s\", got \"%s\"";
+static FILE *hostf = NULL;
 
 static struct addrinfo *
-getanswer(const querybuf *answer, int anslen, const char *qname, int qtype,
-    const struct addrinfo *pai)
+getanswer(answer, anslen, qname, qtype, pai)
+	const querybuf *answer;
+	int anslen;
+	const char *qname;
+	int qtype;
+	const struct addrinfo *pai;
 {
 	struct addrinfo sentinel, *cur;
 	struct addrinfo ai;
@@ -1066,7 +1150,7 @@ getanswer(const querybuf *answer, int anslen, const char *qname, int qtype,
 	int type, class, ancount, qdcount;
 	int haveanswer, had_error;
 	char tbuf[MAXDNAME];
-	int (*name_ok) (const char *);
+	int (*name_ok) __P((const char *));
 	char hostbuf[8*1024];
 
 	_DIAGASSERT(answer != NULL);
@@ -1085,7 +1169,7 @@ getanswer(const querybuf *answer, int anslen, const char *qname, int qtype,
 		name_ok = res_hnok;
 		break;
 	default:
-		return NULL;	/* XXX should be abort(); */
+		return (NULL);	/* XXX should be abort(); */
 	}
 	/*
 	 * find first satisfactory answer
@@ -1243,7 +1327,10 @@ getanswer(const querybuf *answer, int anslen, const char *qname, int qtype,
 
 /*ARGSUSED*/
 static int
-_dns_getaddrinfo(void *rv, void	*cb_data, va_list ap)
+_dns_getaddrinfo(rv, cb_data, ap)
+	void	*rv;
+	void	*cb_data;
+	va_list	 ap;
 {
 	struct addrinfo *ai;
 	querybuf *buf, *buf2;
@@ -1338,27 +1425,29 @@ _dns_getaddrinfo(void *rv, void	*cb_data, va_list ap)
 }
 
 static void
-_sethtent(FILE **hostf)
+_sethtent()
 {
 
-	if (!*hostf)
-		*hostf = fopen(_PATH_HOSTS, "r" );
+	if (!hostf)
+		hostf = fopen(_PATH_HOSTS, "r" );
 	else
-		rewind(*hostf);
+		rewind(hostf);
 }
 
 static void
-_endhtent(FILE **hostf)
+_endhtent()
 {
 
-	if (*hostf) {
-		(void) fclose(*hostf);
-		*hostf = NULL;
+	if (hostf) {
+		(void) fclose(hostf);
+		hostf = NULL;
 	}
 }
 
 static struct addrinfo *
-_gethtent(FILE **hostf, const char *name, const struct addrinfo *pai)
+_gethtent(name, pai)
+	const char *name;
+	const struct addrinfo *pai;
 {
 	char *p;
 	char *cp, *tname, *cname;
@@ -1370,10 +1459,10 @@ _gethtent(FILE **hostf, const char *name, const struct addrinfo *pai)
 	_DIAGASSERT(name != NULL);
 	_DIAGASSERT(pai != NULL);
 
-	if (!*hostf && !(*hostf = fopen(_PATH_HOSTS, "r" )))
+	if (!hostf && !(hostf = fopen(_PATH_HOSTS, "r" )))
 		return (NULL);
  again:
-	if (!(p = fgets(hostbuf, sizeof hostbuf, *hostf)))
+	if (!(p = fgets(hostbuf, sizeof hostbuf, hostf)))
 		return (NULL);
 	if (*p == '#')
 		goto again;
@@ -1423,16 +1512,15 @@ found:
 
 /*ARGSUSED*/
 static int
-_files_getaddrinfo(void *rv, void *cb_data, va_list ap)
+_files_getaddrinfo(rv, cb_data, ap)
+	void	*rv;
+	void	*cb_data;
+	va_list	 ap;
 {
 	const char *name;
 	const struct addrinfo *pai;
 	struct addrinfo sentinel, *cur;
 	struct addrinfo *p;
-#ifndef _REENTRANT
-	static
-#endif
-	FILE *hostf = NULL;
 
 	name = va_arg(ap, char *);
 	pai = va_arg(ap, struct addrinfo *);
@@ -1440,13 +1528,13 @@ _files_getaddrinfo(void *rv, void *cb_data, va_list ap)
 	memset(&sentinel, 0, sizeof(sentinel));
 	cur = &sentinel;
 
-	_sethtent(&hostf);
-	while ((p = _gethtent(&hostf, name, pai)) != NULL) {
+	_sethtent();
+	while ((p = _gethtent(name, pai)) != NULL) {
 		cur->ai_next = p;
 		while (cur && cur->ai_next)
 			cur = cur->ai_next;
 	}
-	_endhtent(&hostf);
+	_endhtent();
 
 	*((struct addrinfo **)rv) = sentinel.ai_next;
 	if (sentinel.ai_next == NULL)
@@ -1455,9 +1543,13 @@ _files_getaddrinfo(void *rv, void *cb_data, va_list ap)
 }
 
 #ifdef YP
+static char *__ypdomain;
+
 /*ARGSUSED*/
 static struct addrinfo *
-_yphostent(char *line, const struct addrinfo *pai)
+_yphostent(line, pai)
+	char *line;
+	const struct addrinfo *pai;
 {
 	struct addrinfo sentinel, *cur;
 	struct addrinfo hints, *res, *res0;
@@ -1537,18 +1629,17 @@ done:
 
 /*ARGSUSED*/
 static int
-_yp_getaddrinfo(void *rv, void *cb_data, va_list ap)
+_yp_getaddrinfo(rv, cb_data, ap)
+	void	*rv;
+	void	*cb_data;
+	va_list	 ap;
 {
 	struct addrinfo sentinel, *cur;
 	struct addrinfo *ai = NULL;
-	char *ypbuf;
-	int ypbuflen, r;
+	static char *__ypcurrent;
+	int __ypcurrentlen, r;
 	const char *name;
 	const struct addrinfo *pai;
-	char *ypdomain;
-
-	if (_yp_check(&ypdomain) == 0)
-		return NS_UNAVAIL;
 
 	name = va_arg(ap, char *);
 	pai = va_arg(ap, const struct addrinfo *);
@@ -1556,33 +1647,42 @@ _yp_getaddrinfo(void *rv, void *cb_data, va_list ap)
 	memset(&sentinel, 0, sizeof(sentinel));
 	cur = &sentinel;
 
+	if (!__ypdomain) {
+		if (_yp_check(&__ypdomain) == 0)
+			return NS_UNAVAIL;
+	}
+	if (__ypcurrent)
+		free(__ypcurrent);
+	__ypcurrent = NULL;
+
 	/* hosts.byname is only for IPv4 (Solaris8) */
 	if (pai->ai_family == PF_UNSPEC || pai->ai_family == PF_INET) {
-		r = yp_match(ypdomain, "hosts.byname", name,
-			(int)strlen(name), &ypbuf, &ypbuflen);
+		r = yp_match(__ypdomain, "hosts.byname", name,
+			(int)strlen(name), &__ypcurrent, &__ypcurrentlen);
 		if (r == 0) {
 			struct addrinfo ai4;
 
 			ai4 = *pai;
 			ai4.ai_family = AF_INET;
-			ai = _yphostent(ypbuf, &ai4);
+			ai = _yphostent(__ypcurrent, &ai4);
 			if (ai) {
 				cur->ai_next = ai;
 				while (cur && cur->ai_next)
 					cur = cur->ai_next;
 			}
 		}
-		free(ypbuf);
 	}
 
 	/* ipnodes.byname can hold both IPv4/v6 */
-	r = yp_match(ypdomain, "ipnodes.byname", name,
-		(int)strlen(name), &ypbuf, &ypbuflen);
+	r = yp_match(__ypdomain, "ipnodes.byname", name,
+		(int)strlen(name), &__ypcurrent, &__ypcurrentlen);
 	if (r == 0) {
-		ai = _yphostent(ypbuf, pai);
-		if (ai)
+		ai = _yphostent(__ypcurrent, pai);
+		if (ai) {
 			cur->ai_next = ai;
-		free(ypbuf);
+			while (cur && cur->ai_next)
+				cur = cur->ai_next;
+		}
 	}
 
 	if (sentinel.ai_next == NULL) {
@@ -1607,8 +1707,9 @@ _yp_getaddrinfo(void *rv, void *cb_data, va_list ap)
  * Caller must parse answer and determine whether it answers the question.
  */
 static int
-res_queryN(const char *name, /* domain name */ struct res_target *target,
-    res_state res)
+res_queryN(name, target)
+	const char *name;	/* domain name */
+	struct res_target *target;
 {
 	u_char buf[MAXPACKET];
 	HEADER *hp;
@@ -1622,6 +1723,11 @@ res_queryN(const char *name, /* domain name */ struct res_target *target,
 
 	rcode = NOERROR;
 	ancount = 0;
+
+	if ((_res.options & RES_INIT) == 0 && res_init() == -1) {
+		h_errno = NETDB_INTERNAL;
+		return (-1);
+	}
 
 	for (t = target; t; t = t->next) {
 		int class, type;
@@ -1637,40 +1743,40 @@ res_queryN(const char *name, /* domain name */ struct res_target *target,
 		answer = t->answer;
 		anslen = t->anslen;
 #ifdef DEBUG
-		if (res->options & RES_DEBUG)
-			printf(";; res_nquery(%s, %d, %d)\n", name, class, type);
+		if (_res.options & RES_DEBUG)
+			printf(";; res_query(%s, %d, %d)\n", name, class, type);
 #endif
 
-		n = res_nmkquery(res, QUERY, name, class, type, NULL, 0, NULL,
+		n = res_mkquery(QUERY, name, class, type, NULL, 0, NULL,
 		    buf, sizeof(buf));
 #ifdef RES_USE_EDNS0
-		if (n > 0 && (res->options & RES_USE_EDNS0) != 0)
-			n = res_nopt(res, n, buf, sizeof(buf), anslen);
+		if (n > 0 && (_res.options & RES_USE_EDNS0) != 0)
+			n = res_opt(n, buf, sizeof(buf), anslen);
 #endif
 		if (n <= 0) {
 #ifdef DEBUG
-			if (res->options & RES_DEBUG)
-				printf(";; res_nquery: mkquery failed\n");
+			if (_res.options & RES_DEBUG)
+				printf(";; res_query: mkquery failed\n");
 #endif
 			h_errno = NO_RECOVERY;
-			return n;
+			return (n);
 		}
-		n = res_nsend(res, buf, n, answer, anslen);
+		n = res_send(buf, n, answer, anslen);
 #if 0
 		if (n < 0) {
 #ifdef DEBUG
-			if (res->options & RES_DEBUG)
+			if (_res.options & RES_DEBUG)
 				printf(";; res_query: send error\n");
 #endif
 			h_errno = TRY_AGAIN;
-			return n;
+			return (n);
 		}
 #endif
 
 		if (n < 0 || hp->rcode != NOERROR || ntohs(hp->ancount) == 0) {
 			rcode = hp->rcode;	/* record most recent error */
 #ifdef DEBUG
-			if (res->options & RES_DEBUG)
+			if (_res.options & RES_DEBUG)
 				printf(";; rcode = %u, ancount=%u\n", hp->rcode,
 				    ntohs(hp->ancount));
 #endif
@@ -1700,9 +1806,9 @@ res_queryN(const char *name, /* domain name */ struct res_target *target,
 			h_errno = NO_RECOVERY;
 			break;
 		}
-		return -1;
+		return (-1);
 	}
-	return ancount;
+	return (ancount);
 }
 
 /*
@@ -1712,22 +1818,25 @@ res_queryN(const char *name, /* domain name */ struct res_target *target,
  * is detected.  Error code, if any, is left in h_errno.
  */
 static int
-res_searchN(const char *name,	/* domain name */ struct res_target *target)
+res_searchN(name, target)
+	const char *name;	/* domain name */
+	struct res_target *target;
 {
 	const char *cp, * const *domain;
 	HEADER *hp;
 	u_int dots;
 	int trailing_dot, ret, saved_herrno;
 	int got_nodata = 0, got_servfail = 0, tried_as_is = 0;
-	res_state res = __res_get_state();
-
-	if (res == NULL)
-		return -1;
 
 	_DIAGASSERT(name != NULL);
 	_DIAGASSERT(target != NULL);
 
 	hp = (HEADER *)(void *)target->answer;	/*XXX*/
+
+	if ((_res.options & RES_INIT) == 0 && res_init() == -1) {
+		h_errno = NETDB_INTERNAL;
+		return (-1);
+	}
 
 	errno = 0;
 	h_errno = HOST_NOT_FOUND;	/* default, if we never query */
@@ -1741,23 +1850,18 @@ res_searchN(const char *name,	/* domain name */ struct res_target *target)
 	/*
 	 * if there aren't any dots, it could be a user-level alias
 	 */
-	if (!dots && (cp = __hostalias(name)) != NULL) {
-		ret = res_queryN(cp, target, res);
-		__res_put_state(res);
-		return ret;
-	}
+	if (!dots && (cp = __hostalias(name)) != NULL)
+		return (res_queryN(cp, target));
 
 	/*
 	 * If there are dots in the name already, let's just give it a try
 	 * 'as is'.  The threshold can be set with the "ndots" option.
 	 */
 	saved_herrno = -1;
-	if (dots >= res->ndots) {
-		ret = res_querydomainN(name, NULL, target, res);
-		if (ret > 0) {
-			__res_put_state(res);
+	if (dots >= _res.ndots) {
+		ret = res_querydomainN(name, NULL, target);
+		if (ret > 0)
 			return (ret);
-		}
 		saved_herrno = h_errno;
 		tried_as_is++;
 	}
@@ -1768,19 +1872,17 @@ res_searchN(const char *name,	/* domain name */ struct res_target *target)
 	 *	- there is at least one dot, there is no trailing dot,
 	 *	  and RES_DNSRCH is set.
 	 */
-	if ((!dots && (res->options & RES_DEFNAMES)) ||
-	    (dots && !trailing_dot && (res->options & RES_DNSRCH))) {
+	if ((!dots && (_res.options & RES_DEFNAMES)) ||
+	    (dots && !trailing_dot && (_res.options & RES_DNSRCH))) {
 		int done = 0;
 
-		for (domain = (const char * const *)res->dnsrch;
+		for (domain = (const char * const *)_res.dnsrch;
 		   *domain && !done;
 		   domain++) {
 
-			ret = res_querydomainN(name, *domain, target, res);
-			if (ret > 0) {
-				__res_put_state(res);
-				return ret;
-			}
+			ret = res_querydomainN(name, *domain, target);
+			if (ret > 0)
+				return (ret);
 
 			/*
 			 * If no server present, give up.
@@ -1797,8 +1899,7 @@ res_searchN(const char *name,	/* domain name */ struct res_target *target)
 			 */
 			if (errno == ECONNREFUSED) {
 				h_errno = TRY_AGAIN;
-				__res_put_state(res);
-				return -1;
+				return (-1);
 			}
 
 			switch (h_errno) {
@@ -1823,7 +1924,7 @@ res_searchN(const char *name,	/* domain name */ struct res_target *target)
 			 * if we got here for some reason other than DNSRCH,
 			 * we only wanted one iteration of the loop, so stop.
 			 */
-			if (!(res->options & RES_DNSRCH))
+			if (!(_res.options & RES_DNSRCH))
 			        done++;
 		}
 	}
@@ -1834,14 +1935,11 @@ res_searchN(const char *name,	/* domain name */ struct res_target *target)
 	 * name or whether it ends with a dot.
 	 */
 	if (!tried_as_is) {
-		ret = res_querydomainN(name, NULL, target, res);
-		if (ret > 0) {
-			__res_put_state(res);
-			return ret;
-		}
+		ret = res_querydomainN(name, NULL, target);
+		if (ret > 0)
+			return (ret);
 	}
 
-	__res_put_state(res);
 	/*
 	 * if we got here, we didn't satisfy the search.
 	 * if we did an initial full query, return that query's h_errno
@@ -1856,7 +1954,7 @@ res_searchN(const char *name,	/* domain name */ struct res_target *target)
 		h_errno = NO_DATA;
 	else if (got_servfail)
 		h_errno = TRY_AGAIN;
-	return -1;
+	return (-1);
 }
 
 /*
@@ -1864,8 +1962,9 @@ res_searchN(const char *name,	/* domain name */ struct res_target *target)
  * removing a trailing dot from name if domain is NULL.
  */
 static int
-res_querydomainN(const char *name, const char *domain, 
-    struct res_target *target, res_state res)
+res_querydomainN(name, domain, target)
+	const char *name, *domain;
+	struct res_target *target;
 {
 	char nbuf[MAXDNAME];
 	const char *longname = nbuf;
@@ -1874,8 +1973,12 @@ res_querydomainN(const char *name, const char *domain,
 	_DIAGASSERT(name != NULL);
 	/* XXX: target may be NULL??? */
 
+	if ((_res.options & RES_INIT) == 0 && res_init() == -1) {
+		h_errno = NETDB_INTERNAL;
+		return (-1);
+	}
 #ifdef DEBUG
-	if (res->options & RES_DEBUG)
+	if (_res.options & RES_DEBUG)
 		printf(";; res_querydomain(%s, %s)\n",
 			name, domain?domain:"<Nil>");
 #endif
@@ -1887,7 +1990,7 @@ res_querydomainN(const char *name, const char *domain,
 		n = strlen(name);
 		if (n + 1 > sizeof(nbuf)) {
 			h_errno = NO_RECOVERY;
-			return -1;
+			return (-1);
 		}
 		if (n > 0 && name[--n] == '.') {
 			strncpy(nbuf, name, n);
@@ -1899,9 +2002,9 @@ res_querydomainN(const char *name, const char *domain,
 		d = strlen(domain);
 		if (n + 1 + d + 1 > sizeof(nbuf)) {
 			h_errno = NO_RECOVERY;
-			return -1;
+			return (-1);
 		}
 		snprintf(nbuf, sizeof(nbuf), "%s.%s", name, domain);
 	}
-	return res_queryN(longname, target, res);
+	return (res_queryN(longname, target));
 }

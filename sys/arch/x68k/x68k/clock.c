@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.18 2004/12/13 02:14:14 chs Exp $	*/
+/*	$NetBSD: clock.c,v 1.17 2003/08/07 16:30:28 agc Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990, 1993
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.18 2004/12/13 02:14:14 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.17 2003/08/07 16:30:28 agc Exp $");
 
 #include "clock.h"
 
@@ -108,8 +108,6 @@ static void clock_attach __P((struct device *, struct device *, void *));
 CFATTACH_DECL(clock, sizeof(struct clock_softc),
     clock_match, clock_attach, NULL, NULL);
 
-static int clock_attached;
-
 static int
 clock_match(parent, cf, aux)
 	struct device *parent;
@@ -118,7 +116,7 @@ clock_match(parent, cf, aux)
 {
 	if (strcmp (aux, "clock") != 0)
 		return (0);
-	if (clock_attached)
+	if (cf->cf_unit != 0)
 		return (0);
 	return 1;
 }
@@ -129,10 +127,8 @@ clock_attach(parent, self, aux)
 	struct device *parent, *self;
 	void *aux;
 {
+	printf (": MFP timer C\n");
 
-	clock_attached = 1;
-
-	printf(": MFP timer C\n");
 	return;
 }
 

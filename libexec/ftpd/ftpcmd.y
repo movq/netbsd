@@ -1,4 +1,4 @@
-/*	$NetBSD: ftpcmd.y,v 1.81 2004/11/05 21:45:36 dsl Exp $	*/
+/*	$NetBSD: ftpcmd.y,v 1.77.2.3 2004/08/12 20:44:26 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1997-2004 The NetBSD Foundation, Inc.
@@ -79,7 +79,7 @@
 #if 0
 static char sccsid[] = "@(#)ftpcmd.y	8.3 (Berkeley) 4/6/94";
 #else
-__RCSID("$NetBSD: ftpcmd.y,v 1.81 2004/11/05 21:45:36 dsl Exp $");
+__RCSID("$NetBSD: ftpcmd.y,v 1.77.2.3 2004/08/12 20:44:26 jmc Exp $");
 #endif
 #endif /* not lint */
 
@@ -1333,7 +1333,7 @@ check_write(const char *file, int isupload)
 		if (file[0] == '.')
 			goto insane_name;
 		for (p = file; *p; p++) {
-			if (isalnum((unsigned char)*p) || *p == '-' || *p == '+' ||
+			if (isalnum(*p) || *p == '-' || *p == '+' ||
 			    *p == ',' || *p == '.' || *p == '_')
 				continue;
  insane_name:
@@ -1583,9 +1583,9 @@ yylex(void)
 			cpos++;
 			return (SP);
 		}
-		if (isdigit((unsigned char)cmdp[cpos])) {
+		if (isdigit(cmdp[cpos])) {
 			cp = &cmdp[cpos];
-			while (isdigit((unsigned char)cmdp[++cpos]))
+			while (isdigit(cmdp[++cpos]))
 				;
 			c = cmdp[cpos];
 			cmdp[cpos] = '\0';
@@ -1598,9 +1598,9 @@ yylex(void)
 		goto dostr1;
 
 	case ARGS:
-		if (isdigit((unsigned char)cmdp[cpos])) {
+		if (isdigit(cmdp[cpos])) {
 			cp = &cmdp[cpos];
-			while (isdigit((unsigned char)cmdp[++cpos]))
+			while (isdigit(cmdp[++cpos]))
 				;
 			c = cmdp[cpos];
 			cmdp[cpos] = '\0';
@@ -1610,7 +1610,7 @@ yylex(void)
 			return (NUMBER);
 		}
 		if (strncasecmp(&cmdp[cpos], "ALL", 3) == 0
-		    && !isalnum((unsigned char)cmdp[cpos + 3])) {
+		    && !isalnum(cmdp[cpos + 3])) {
 			cpos += 3;
 			return (ALL);
 		}

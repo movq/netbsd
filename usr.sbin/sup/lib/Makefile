@@ -1,6 +1,8 @@
-#	$NetBSD: Makefile,v 1.10 2004/05/23 02:24:52 lukem Exp $
+#	$NetBSD: Makefile,v 1.9 2003/10/14 11:49:52 tron Exp $
 
-MKPRIVATELIB=	yes
+NOLINT=	# defined
+NOPIC=	# defined
+NOPROFILE=# defined
 
 LIB=	sup
 
@@ -11,5 +13,8 @@ SRCS+=	atoo.c errmsg.c expand.c ffilecopy.c filecopy.c \
 .PATH: ${.CURDIR}/../source
 
 BUILDSYMLINKS=	${.CURDIR}/../source/netcryptvoid.c netcrypt.c
+
+# only needed during build
+libinstall::
 
 .include <bsd.lib.mk>

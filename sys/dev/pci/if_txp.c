@@ -1,4 +1,4 @@
-/* $NetBSD: if_txp.c,v 1.8 2004/10/30 18:09:22 thorpej Exp $ */
+/* $NetBSD: if_txp.c,v 1.5.2.1 2004/07/10 09:24:34 tron Exp $ */
 
 /*
  * Copyright (c) 2001
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_txp.c,v 1.8 2004/10/30 18:09:22 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_txp.c,v 1.5.2.1 2004/07/10 09:24:34 tron Exp $");
 
 #include "bpfilter.h"
 #include "opt_inet.h"
@@ -224,7 +224,7 @@ txp_attach(parent, self, aux)
 	}
 	sc->sc_flags = flags;
 
-	pci_devinfo(pa->pa_id, 0, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, 0, 0, devinfo);
 #define TXP_EXTRAINFO ((flags & (TXP_USESUBSYSTEM|TXP_SERVERVERSION)) == \
   (TXP_USESUBSYSTEM|TXP_SERVERVERSION) ? " (SVR)" : "")
 	printf(": %s%s\n%s", devinfo, TXP_EXTRAINFO, sc->sc_dev.dv_xname);
@@ -1312,8 +1312,7 @@ txp_ioctl(ifp, command, data)
 			 * Multicast list has changed; set the hardware
 			 * filter accordingly.
 			 */
-			if (ifp->if_flags & IFF_RUNNING)
-				txp_set_filter(sc);
+			txp_set_filter(sc);
 			error = 0;
 		}
 		break;

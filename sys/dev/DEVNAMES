@@ -1,4 +1,4 @@
-#	$NetBSD: DEVNAMES,v 1.168 2004/12/08 15:54:39 cube Exp $
+#	$NetBSD: DEVNAMES,v 1.156.2.1 2004/08/30 09:46:47 tron Exp $
 #
 # This file contains all used device names and defined attributes in 
 # alphabetical order. New devices added to the system somewhere should first 
@@ -16,6 +16,7 @@ a34kbbc			amigappc
 aac			MI
 abtn			macppc
 abus			vax
+ac			hp300
 ac97			MI		Attribute
 acardide		MI
 acc			vax
@@ -65,6 +66,7 @@ ams			mac68k
 ams			macppc
 an			MI
 ap			newsmips
+apci			hp300
 apecs			alpha
 apm			i386
 arc			MI		Attribute
@@ -97,7 +99,6 @@ atm			MI		Attribute
 atppc			MI
 atzsc			amiga
 atzsc			amigappc
-auacer			MI
 aucc			amiga
 aucc			amigappc
 auconv			MI		Attribute
@@ -107,15 +108,12 @@ audioamd		MI
 audiobell		MI		Attribute
 audiocs			MI		
 aue			MI		
-auich			MI
-autri			MI
 auvia			MI		
 auxio			sparc64
 auxiotwo		sparc
 auxreg			sparc
 avmebus			atari
 awi			MI		
-axe			MI		
 az			MI		
 bah			MI		
 bandit			macppc
@@ -163,7 +161,6 @@ cbsc			amiga
 cbsc			amigappc
 cd			MI		
 cd18xx			MI		Attribute
-cdce			MI
 cfb			alpha
 cfb			pmax
 cgeight			sparc
@@ -230,7 +227,6 @@ cpu			evbppc
 cpu			hpcarm
 cpu			hpcmips
 cpu			hpcsh
-cpu			iyonix
 cpu			macppc
 cpu			mipsco
 cpu			netwinder
@@ -258,6 +254,7 @@ cypide			MI
 cz			MI		
 daic			MI
 dc			pmax
+dca			hp300
 dcm			hp300
 de			MI		
 depca			MI		
@@ -459,10 +456,6 @@ grful			amigappc
 gsfb			playstation2
 gt			cobalt
 gt			evbmips
-gt			evbppc
-gfe			evbppc
-gtmpsc			evbppc
-gtidma			evbppc
 gten			prep
 gtsc			amiga
 gtsc			amigappc
@@ -591,7 +584,6 @@ ix			MI
 ixpclk			evbarm
 ixpio			evbarm
 ixpsip			evbarm
-ixpide			MI
 iy			MI		
 j6x0pwr			hpcsh
 j6x0tp			hpcsh
@@ -676,7 +668,6 @@ mainbus			hpcmips
 mainbus			hpcsh
 mainbus			i386
 mainbus			i386		Attribute
-mainbus			iyonix
 mainbus			luna68k
 mainbus			mac68k
 mainbus			macppc
@@ -819,7 +810,6 @@ nubus			mac68k
 nvr			atari
 nvram			macppc
 oak			MI
-obio			iyonix
 obio			mac68k
 obio			macppc
 obio			macppc		Attribute
@@ -828,7 +818,6 @@ obio			prep
 obio			sparc
 obio			sun2
 obio			sun3
-obio			evbppc
 obio_norm		mac68k		Attribute
 obio_scsi5380		mac68k		Attribute
 obmem			sun2
@@ -864,6 +853,7 @@ opm			x68k
 opms			arc
 opms			shark
 optiide			MI
+oscsi			hp300
 osiop			MI
 otgsc			amiga
 otgsc			amigappc
@@ -992,7 +982,6 @@ rb			vax
 rbox			hp300
 rd			hp300
 rd			vax
-re			MI
 repulse			amiga
 repulse			amigappc
 rf			MI
@@ -1057,6 +1046,7 @@ scsi			MI		Attribute
 scsibus			MI		
 scsirom			x68k
 sd			MI		
+sd			hp300
 se			MI		
 sea			MI		
 sebuf			sun3
@@ -1104,10 +1094,9 @@ sn			arc
 sn			mac68k
 sn			newsmips
 sp			MI		
-spif			sparc
-spif			sparc64
 sparcvme		sparc
-spc			MI
+spc			luna68k
+spc			x68k
 spckbd			shark		Attribute
 spd			playstation2
 spic			MI
@@ -1117,7 +1106,7 @@ sppp			MI		Attribute
 sqphy			MI		
 ss			MI		
 st			MI		
-stpcide			MI
+st			hp300
 su			MI		
 supio			amiga		Attribute
 supio			amigappc	Attribute
@@ -1192,6 +1181,7 @@ txsibif			hpcmips
 txsim			hpcmips
 tz			pmax
 uaudio			MI		
+uax			MI		
 uba			MI		
 ucb			hpcmips
 ucbif			hpcmips
@@ -1203,7 +1193,6 @@ ucom			MI
 ucombus			MI		Attribute
 uda			MI		
 udsbr			MI		
-uep			MI		
 uftdi			MI		
 ugen			MI		
 uha			MI		

@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.c,v 1.10 2004/08/28 19:11:19 thorpej Exp $	*/
+/*	$NetBSD: bus_space.c,v 1.9 2003/11/17 14:37:59 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.10 2004/08/28 19:11:19 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.9 2003/11/17 14:37:59 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,8 +57,12 @@ extern int *nofault;
 
 /* ARGSUSED */
 int
-bus_space_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size, int flags,
-    bus_space_handle_t *bshp)
+bus_space_map(t, bpa, size, flags, bshp)
+	bus_space_tag_t t;
+	bus_addr_t bpa;
+	bus_size_t size;
+	int flags;
+	bus_space_handle_t *bshp;
 {
 	vaddr_t kva;
 	vsize_t offset;
@@ -101,9 +105,14 @@ bus_space_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size, int flags,
 
 /* ARGSUSED */
 int
-bus_space_alloc(bus_space_tag_t t, bus_addr_t rstart, bus_addr_t rend,
-    bus_size_t size, bus_size_t alignment, bus_size_t boundary, int flags,
-    bus_addr_t *bpap, bus_space_handle_t *bshp)
+bus_space_alloc(t, rstart, rend, size, alignment, boundary, flags,
+    bpap, bshp)
+	bus_space_tag_t t;
+	bus_addr_t rstart, rend;
+	bus_size_t size, alignment, boundary;
+	int flags;
+	bus_addr_t *bpap;
+	bus_space_handle_t *bshp;
 {
 
 	/*
@@ -114,7 +123,10 @@ bus_space_alloc(bus_space_tag_t t, bus_addr_t rstart, bus_addr_t rend,
 
 /* ARGSUSED */
 void
-bus_space_free(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
+bus_space_free(t, bsh, size)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
 {
 
 	/*
@@ -124,7 +136,10 @@ bus_space_free(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 }
 
 void
-bus_space_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
+bus_space_unmap(t, bsh, size)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
 {
 	vaddr_t kva;
 	vsize_t offset;
@@ -166,8 +181,11 @@ bus_space_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 
 /* ARGSUSED */
 int
-bus_space_subregion(bus_space_tag_t t, bus_space_handle_t bsh,
-    bus_size_t offset, bus_size_t size, bus_space_handle_t *nbshp)
+bus_space_subregion(t, bsh, offset, size, nbshp)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
+	bus_size_t offset, size;
+	bus_space_handle_t *nbshp;
 {
 
 	*nbshp = bsh + offset;
@@ -176,8 +194,11 @@ bus_space_subregion(bus_space_tag_t t, bus_space_handle_t bsh,
 
 /* ARGSUSED */
 int
-hp300_bus_space_probe(bus_space_tag_t t, bus_space_handle_t bsh,
-    bus_size_t offset, int sz)
+hp300_bus_space_probe(t, bsh, offset, sz)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
+	bus_size_t offset;
+	int sz;
 {
 	label_t faultbuf;
 	int i;

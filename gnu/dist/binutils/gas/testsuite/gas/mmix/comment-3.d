@@ -15,5 +15,7 @@ OFFSET           TYPE              VALUE
 0000000000000000 R_MMIX_64         \.text
 
 
+Contents of section \.text:
+Contents of section \.data:
 Contents of section \.MMIX\.reg_contents:
  0000 00000000 00000000                    .*

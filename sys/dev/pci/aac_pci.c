@@ -1,4 +1,4 @@
-/*	$NetBSD: aac_pci.c,v 1.10 2004/05/10 06:21:09 gendalia Exp $	*/
+/*	$NetBSD: aac_pci.c,v 1.8.2.2 2004/10/08 03:07:51 jmc Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aac_pci.c,v 1.10 2004/05/10 06:21:09 gendalia Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aac_pci.c,v 1.8.2.2 2004/10/08 03:07:51 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

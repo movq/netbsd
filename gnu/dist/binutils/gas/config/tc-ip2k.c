@@ -19,7 +19,10 @@
    Boston, MA 02111-1307, USA.  */
 
 #include <stdio.h>
+#include <ctype.h>
+
 #include "as.h"
+#include "dwarf2dbg.h"
 #include "subsegs.h"     
 #include "symcat.h"
 #include "opcodes/ip2k-desc.h"
@@ -63,6 +66,8 @@ static void ip2k_elf_section_rtn (int);
 /* The target specific pseudo-ops which we support.  */
 const pseudo_typeS md_pseudo_table[] =
 {
+    { "file",	(void (*) PARAMS ((int))) dwarf2_directive_file, 0 },
+    { "loc",	dwarf2_directive_loc,	0 },
     { "text",   ip2k_elf_section_text,  0 },
     { "sect",   ip2k_elf_section_rtn,   0 },
     { NULL, 	NULL,			0 }
@@ -326,6 +331,7 @@ md_atof (type, litP, sizeP)
   LITTLENUM_TYPE   words [MAX_LITTLENUMS];
   LITTLENUM_TYPE  *wordP;
   char *           t;
+  char *           atof_ieee PARAMS ((char *, int, LITTLENUM_TYPE *));
 
   switch (type)
     {

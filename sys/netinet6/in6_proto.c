@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_proto.c,v 1.57 2004/04/22 01:01:41 matt Exp $	*/
+/*	$NetBSD: in6_proto.c,v 1.56 2003/12/04 19:38:24 atatat Exp $	*/
 /*	$KAME: in6_proto.c,v 1.66 2000/10/10 15:35:47 itojun Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6_proto.c,v 1.57 2004/04/22 01:01:41 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6_proto.c,v 1.56 2003/12/04 19:38:24 atatat Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -129,7 +129,7 @@ __KERNEL_RCSID(0, "$NetBSD: in6_proto.c,v 1.57 2004/04/22 01:01:41 matt Exp $");
 
 extern	struct domain inet6domain;
 
-const struct ip6protosw inet6sw[] = {
+struct ip6protosw inet6sw[] = {
 { 0,		&inet6domain,	IPPROTO_IPV6,	0,
   0,		0,		0,		0,
   0,

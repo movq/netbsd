@@ -1,4 +1,4 @@
-/*	$NetBSD: ipfs.c,v 1.4 2004/07/23 05:39:04 martti Exp $	*/
+/*	$NetBSD: ipfs.c,v 1.1.1.1.2.3 2004/08/13 03:58:36 jmc Exp $	*/
 
 /*
  * Copyright (C) 1999-2001, 2003 by Darren Reed.

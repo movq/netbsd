@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_extern.h,v 1.11 2004/11/21 21:49:08 jdolecek Exp $	*/
+/*	$NetBSD: cd9660_extern.h,v 1.7.2.1 2004/05/23 10:45:11 tron Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -43,17 +43,6 @@
 #include <sys/mallocvar.h>
 MALLOC_DECLARE(M_ISOFSMNT);
 
-/*
- * Sysctl values for the cd9660 filesystem.
- */
-#define CD9660_UTF8_JOLIET	1	/* UTF-8 encode Joliet file names */
-
-#define CD9660_NAMES { \
-        { 0, 0 }, \
-        { "utf8_joliet", CTLTYPE_INT }, \
-}
-
-
 /* CD-ROM Format type */
 enum ISO_FTYPE  { ISO_FTYPE_DEFAULT, ISO_FTYPE_9660, ISO_FTYPE_RRIP, ISO_FTYPE_ECMA };
 
@@ -93,15 +82,14 @@ struct iso_mnt {
 #define blksize(imp, ip, lbn)	((imp)->logical_block_size)
 
 extern struct pool cd9660_node_pool;
-extern int cd9660_utf8_joliet;
 
 int cd9660_mount __P((struct mount *,
 	    const char *, void *, struct nameidata *, struct proc *));
 int cd9660_start __P((struct mount *, int, struct proc *));
 int cd9660_unmount __P((struct mount *, int, struct proc *));
 int cd9660_root __P((struct mount *, struct vnode **));
-int cd9660_quotactl __P((struct mount *, int, uid_t, void *, struct proc *));
-int cd9660_statvfs __P((struct mount *, struct statvfs *, struct proc *));
+int cd9660_quotactl __P((struct mount *, int, uid_t, caddr_t, struct proc *));
+int cd9660_statfs __P((struct mount *, struct statfs *, struct proc *));
 int cd9660_sync __P((struct mount *, int, struct ucred *, struct proc *));
 int cd9660_vget __P((struct mount *, ino_t, struct vnode **));
 int cd9660_fhtovp __P((struct mount *, struct fid *, struct vnode **));
@@ -122,7 +110,7 @@ extern int (**cd9660_vnodeop_p) __P((void *));
 extern int (**cd9660_specop_p) __P((void *));
 extern int (**cd9660_fifoop_p) __P((void *));
 
-int isochar __P((const u_char *, const u_char *, int, u_int16_t *));
+int isochar __P((const u_char *, const u_char *, int, u_char *));
 int isofncmp __P((const u_char *, int, const u_char *, int, int));
 void isofntrans __P((u_char *, int, u_char *, u_short *, int, int, int, int));
 ino_t isodirino __P((struct iso_directory_record *, struct iso_mnt *));

@@ -1,4 +1,4 @@
-/*	$NetBSD: calendar.c,v 1.36 2004/12/07 16:47:32 jwise Exp $	*/
+/*	$NetBSD: calendar.c,v 1.30 2004/01/05 23:23:34 jmmv Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
 #if 0
 static char sccsid[] = "@(#)calendar.c	8.4 (Berkeley) 1/7/95";
 #endif
-__RCSID("$NetBSD: calendar.c,v 1.36 2004/12/07 16:47:32 jwise Exp $");
+__RCSID("$NetBSD: calendar.c,v 1.30 2004/01/05 23:23:34 jmmv Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -70,12 +70,10 @@ __RCSID("$NetBSD: calendar.c,v 1.36 2004/12/07 16:47:32 jwise Exp $");
 #endif
 
 static unsigned short lookahead = 1, weekend = 2;
-static char *fname = NULL, *datestr = NULL;
-static char *defaultnames[] = {"calendar", ".calendar", _PATH_SYSTEM_CALENDAR, NULL};
+static char *fname = "calendar", *datestr = NULL;
 static struct passwd *pw;
 static int doall;
 static char path[MAXPATHLEN + 1];
-static int cpp_restricted = 0;
 
 /* 1-based month, 0-based days, cumulative */
 static int daytab[][14] = {
@@ -127,7 +125,7 @@ main(argc, argv)
 	int ch;
 	const char *caldir;
 
-	while ((ch = getopt(argc, argv, "-ad:f:l:w:x")) != -1)
+	while ((ch = getopt(argc, argv, "-ad:f:l:w:")) != -1)
 		switch (ch) {
 		case '-':		/* backward contemptible */
 		case 'a':
@@ -149,8 +147,6 @@ main(argc, argv)
 		case 'w':
 			atodays(ch, optarg, &weekend);
 			break;
-		case 'x':
-			cpp_restricted = 1;
 		case '?':
 		default:
 			usage();
@@ -174,8 +170,7 @@ main(argc, argv)
 		if(!chdir(caldir))
 			cal();
 	} else {
-		if (((pw = getpwuid(geteuid())) != NULL) && !chdir(pw->pw_dir))
-			cal();
+		cal();
 	}
 	exit(0);
 }
@@ -245,11 +240,7 @@ isnow(endp)
 
 #define	F_ISMONTH	0x01
 #define	F_ISDAY		0x02
-#define F_WILDMONTH	0x04
-#define F_WILDDAY	0x08
-
 	flags = 0;
-
 	/* didn't recognize anything, skip it */
 	if (!(v1 = getfield(endp, &endp, &flags)))
 		return (0);
@@ -274,16 +265,6 @@ isnow(endp)
 			day = v2 ? v2 : 1;
 		}
 	}
-
-	if (flags & (F_WILDMONTH|F_WILDDAY))
-		return (1);
-
-	if ((flags & (F_WILDMONTH|F_ISDAY)) && (day == tp->tm_mday))
-		return (1);
-
-	if ((flags & (F_ISMONTH|F_WILDDAY)) && (month == tp->tm_mon + 1))
-		return (1);
-
 	if (flags & F_ISDAY)
 		day = tp->tm_mday + (((day - 1) - tp->tm_wday + 7) % 7);
 	day = cumdays[month] + day;
@@ -311,15 +292,9 @@ getfield(p, endp, flags)
 	for (; FLDCHAR(*p); ++p)
 		continue;
 	if (*p == '*') {			/* `*' is current month */
-		if (!(*flags & F_ISMONTH)) {
-			*flags |= F_ISMONTH|F_WILDMONTH;
-			*endp = p+1;
-			return (tp->tm_mon + 1);
-		} else {
-			*flags |= F_ISDAY|F_WILDDAY;
-			*endp = p+1;
-			return (1);
-		}
+		*flags |= F_ISMONTH;
+		*endp = p+1;
+		return (tp->tm_mon + 1);
 	}
 	if (isdigit((unsigned char)*p)) {
 		val = strtol(p, &p, 10);	/* if 0, it's failure */
@@ -350,32 +325,17 @@ static FILE *
 opencal(void)
 {
 	int fd, pdes[2];
-	char **name;
 
 	/* open up calendar file as stdin */
-	if (fname == NULL) {
-		for (name = defaultnames; *name != NULL; name++) {
-			if (!freopen(*name, "rf", stdin))
-				continue;
-			else
-				break;
-		}
-		if (*name == NULL) {
-			if (doall)
-				return (NULL);
-			err(1, "Cannot open calendar file");
-		}
-	} else if (!freopen(fname, "rf", stdin)) {
+	if (!freopen(fname, "rf", stdin)) {
 		if (doall)
 			return (NULL);
 		err(1, "Cannot open `%s'", fname);
 	}
-
 	if (pipe(pdes) < 0) {
 		warn("Cannot open pipe");
 		return (NULL);
 	}
-
 	switch (fork()) {
 	case -1:			/* error */
 		(void)close(pdes[0]);
@@ -388,17 +348,11 @@ opencal(void)
 			(void)close(pdes[1]);
 		}
 		(void)close(pdes[0]);
-		/* tell CPP to only open regular files */
-		if(!cpp_restricted && setenv("CPP_RESTRICTED", "", 1))
-			err(1, "Cannot restrict cpp");
-		cpp_restricted = 1;
-
 		(void)execl(_PATH_CPP, "cpp", "-traditional", "-P", "-I.",
 		    "-I" _PATH_CALENDARS, NULL);
 		err(1, "Cannot exec `%s'", _PATH_CPP);
 		/*NOTREACHED*/
 	}
-
 	/* parent -- set stdin to pipe output */
 	(void)dup2(pdes[0], STDIN_FILENO);
 	(void)close(pdes[0]);
@@ -557,7 +511,7 @@ getmmdd(struct tm *tp, char *ds)
 static void
 usage(void)
 {
-	(void)fprintf(stderr, "usage: %s [-ax] [-d MMDD[[YY]YY]"
+	(void)fprintf(stderr, "usage: %s [-a] [-d MMDD[[YY]YY]"
 	    " [-f fname] [-l days] [-w days]\n", getprogname());
 	exit(1);
 }

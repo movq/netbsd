@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.5 2004/04/23 02:58:29 simonb Exp $ */
+/*	$NetBSD: pmap.h,v 1.4 2004/01/31 18:25:27 atatat Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@
  * only pull in the headers once.  if we attempt to pull them in
  * again, we get namespace collisions on some structures, and we don't
  * want to redefine some of them since it will affect the layout of
- * the struct kbit.
+ * the the struct kbit.
  */
 #ifndef PMAP_HEADERS
 

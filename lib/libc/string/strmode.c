@@ -1,4 +1,4 @@
-/*	$NetBSD: strmode.c,v 1.16 2004/06/20 22:20:15 jmc Exp $	*/
+/*	$NetBSD: strmode.c,v 1.15.2.1 2004/06/22 07:20:18 tron Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)strmode.c	8.3 (Berkeley) 8/15/94";
 #else
-__RCSID("$NetBSD: strmode.c,v 1.16 2004/06/20 22:20:15 jmc Exp $");
+__RCSID("$NetBSD: strmode.c,v 1.15.2.1 2004/06/22 07:20:18 tron Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

@@ -1,9 +1,9 @@
-/*	$NetBSD: sti_sgc.c,v 1.8 2004/09/19 23:00:29 chs Exp $	*/
+/*	$NetBSD: sti_sgc.c,v 1.6 2003/11/23 17:09:29 chs Exp $	*/
 
-/*	$OpenBSD: sti_sgc.c,v 1.21 2003/12/22 23:39:06 mickey Exp $	*/
+/*	$OpenBSD: sti_sgc.c,v 1.6 2001/09/11 20:05:24 miod Exp $	*/
 
 /*
- * Copyright (c) 2000-2003 Michael Shalayeff
+ * Copyright (c) 2000 Michael Shalayeff
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sti_sgc.c,v 1.8 2004/09/19 23:00:29 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sti_sgc.c,v 1.6 2003/11/23 17:09:29 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,162 +58,99 @@ __KERNEL_RCSID(0, "$NetBSD: sti_sgc.c,v 1.8 2004/09/19 23:00:29 chs Exp $");
 #include <dev/ic/stireg.h>
 #include <dev/ic/stivar.h>
 
-#include <hp700/dev/cpudevs.h>
 #include <hp700/hp700/machdep.h>
+#include <hp700/dev/cpudevs.h>
 
-#define	STI_ROMSIZE	(sizeof(struct sti_dd) * 4)
-#define	STI_ID_FDDI	0x280b31af	/* Medusa FDDI ROM id */
+#define	STI_MEMSIZE	0x1000000
+#define	STI_ROMSIZE	0x0004000
 
-/* gecko optional graphics */
-#define	STI_GOPT1_REV	0x17
-#define	STI_GOPT2_REV	0x70
-
-/* internal EG */
-#define	STI_INEG_REV	0x60
-#define	STI_INEG_PROM	0xf0011000
-
-int sti_sgc_probe(struct device *, struct cfdata *, void *);
+int  sti_sgc_probe(struct device *, struct cfdata *, void *);
 void sti_sgc_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL(sti_sgc, sizeof(struct sti_softc), sti_sgc_probe, sti_sgc_attach,
-    NULL, NULL);
-
-CFATTACH_DECL(sti_phantomas, sizeof(struct sti_softc), sti_sgc_probe, 
-    sti_sgc_attach, NULL, NULL);
-
-
-paddr_t sti_sgc_getrom(int, struct confargs *);
-
-
-/*
- * Locate STI ROM.
- * On some machines it may not be part of the HPA space.
- */
-paddr_t
-sti_sgc_getrom(int unit, struct confargs *ca)
-{
-	paddr_t rom;
-	int pagezero_cookie;
-
-	pagezero_cookie = hp700_pagezero_map();
-	rom = PAGE0->pd_resv2[1];
-
-	if (unit) {
-		if (ca->ca_type.iodc_sv_model == HPPA_FIO_GSGC &&
-		    (ca->ca_type.iodc_revision == STI_GOPT1_REV ||
-		     ca->ca_type.iodc_revision == STI_GOPT2_REV))
-			/* these two share the onboard's prom */ ;
-		else
-			rom = 0;
-	}
-
-	if (rom < HPPA_IOBEGIN) {
-		if (unit == 0 &&
-		    ca->ca_type.iodc_sv_model == HPPA_FIO_GSGC &&
-		    ca->ca_type.iodc_revision == STI_INEG_REV)
-			rom = STI_INEG_PROM;
-		else
-			rom = ca->ca_hpa;
-	}
-
-	hp700_pagezero_unmap(pagezero_cookie);
-	return (rom);
-}
+CFATTACH_DECL(sti_sgc, sizeof(struct sti_softc),
+    sti_sgc_probe, sti_sgc_attach, NULL, NULL);
 
 int
-sti_sgc_probe(struct device *parent, struct cfdata *cf, void *aux)
+sti_sgc_probe(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct confargs *ca = aux;
-	bus_space_handle_t romh;
-	paddr_t rom;
-	u_int32_t id, romend;
+	bus_space_handle_t ioh, romh;
+	u_int rom;
 	u_char devtype;
-	int rv = 0, romunmapped = 0;
+	int rv = 0, romh_is_subregion;
+	int pagezero_cookie;
 
-	if (ca->ca_type.iodc_type != HPPA_TYPE_FIO)
-		return (0);
-
-	/* these need futher checking for the graphics id */
-	if (ca->ca_type.iodc_sv_model != HPPA_FIO_GSGC &&
-	    ca->ca_type.iodc_sv_model != HPPA_FIO_SGC)
+	if (ca->ca_type.iodc_type != HPPA_TYPE_FIO ||
+	    (ca->ca_type.iodc_sv_model != HPPA_FIO_GSGC &&
+	     ca->ca_type.iodc_sv_model != HPPA_FIO_SGC))
 		return 0;
 
-	rom = sti_sgc_getrom(cf->cf_unit, ca);
+	if ((rv = bus_space_map(ca->ca_iot, ca->ca_hpa, STI_MEMSIZE, 0, &ioh))) {
 #ifdef STIDEBUG
-	printf ("sti: hpa=%x, rom=%x\n", (uint)ca->ca_hpa, (uint)rom);
+		printf("st: cannot map io space (%d)\n", rv);
+#endif
+		return 0;
+	}
+
+	/*
+	 * Locate STI ROM.
+	 * On some machines it may not be part of the HPA space.
+	 */
+	pagezero_cookie = hp700_pagezero_map();
+	if (PAGE0->pd_resv2[1] < HPPA_IOBEGIN) {
+		rom = ca->ca_hpa;
+	} else
+		rom = PAGE0->pd_resv2[1];
+	hp700_pagezero_unmap(pagezero_cookie);
+
+#ifdef STIDEBUG
+	printf ("sti: hpa=%x, rom=%x\n", ca->ca_hpa, rom);
 #endif
 
-	/* if it does not map, probably part of the lasi space */
-	if ((rv = bus_space_map(ca->ca_iot, rom, STI_ROMSIZE, 0, &romh))) {
+	/*
+	 * Map the ROM.
+	 */
+	if (ca->ca_hpa <= rom &&
+	    (rom + STI_ROMSIZE) <= (ca->ca_hpa + STI_MEMSIZE)) {
+		romh_is_subregion = TRUE;
+		rv = bus_space_subregion(ca->ca_iot, ioh,
+			rom - ca->ca_hpa, STI_ROMSIZE, &romh);
+	} else {
+		romh_is_subregion = FALSE;
+		rv = bus_space_map(ca->ca_iot, rom, STI_ROMSIZE, 0, &romh);
+	}
+	if (rv) {
 #ifdef STIDEBUG
 		printf ("sti: cannot map rom space (%d)\n", rv);
 #endif
-		if ((rom & HPPA_IOBEGIN) == HPPA_IOBEGIN) {
-			romh = rom;
-			romunmapped++;
-		} else {
-			/* in this case nobody has no freaking idea */
-			return 0;
-		}
+		bus_space_unmap(ca->ca_iot, ioh,  STI_MEMSIZE);
+		return 0;
 	}
+
+#ifdef STIDEBUG
+	printf("sti: ioh=%x, romh=%x\n", ioh, romh);
+#endif
 
 	devtype = bus_space_read_1(ca->ca_iot, romh, 3);
 
 #ifdef STIDEBUG
 	printf("sti: devtype=%d\n", devtype);
 #endif
-	rv = 1;
-	switch (devtype) {
-	case STI_DEVTYPE4:
-		id = bus_space_read_4(ca->ca_iot, romh, STI_DEV4_DD_GRID);
-		romend = bus_space_read_4(ca->ca_iot, romh, STI_DEV4_DD_ROMEND);
-		break;
-	case STI_DEVTYPE1:
-		id = (bus_space_read_1(ca->ca_iot, romh, STI_DEV1_DD_GRID
-		    +  3) << 24) |
-		    (bus_space_read_1(ca->ca_iot, romh, STI_DEV1_DD_GRID
-		    +  7) << 16) |
-		    (bus_space_read_1(ca->ca_iot, romh, STI_DEV1_DD_GRID
-		    + 11) <<  8) |
-		    (bus_space_read_1(ca->ca_iot, romh, STI_DEV1_DD_GRID
-		    + 15));
-		romend = (bus_space_read_1(ca->ca_iot, romh, STI_DEV1_DD_ROMEND 
-		    +  3) << 24) |
-		    (bus_space_read_1(ca->ca_iot, romh, STI_DEV1_DD_ROMEND 
-		    +  7) << 16) |
-		    (bus_space_read_1(ca->ca_iot, romh, STI_DEV1_DD_ROMEND 
-		    + 11) <<  8) |
-		    (bus_space_read_1(ca->ca_iot, romh, STI_DEV1_DD_ROMEND 
-		    + 15));
-		break;
-	default:
+#if 0 /* ignore this for now */
+	if ((ca->ca_type.iodc_sv_model == HPPA_FIO_SGC &&
+	     STI_ID_HI(STI_TYPE_BWGRF, rioh) == STI_ID_FDDI) ||
+	    (devtype != STI_TYPE_BWGRF && devtype != STI_TYPE_WWGRF)) {
 #ifdef STIDEBUG
-		printf("sti: unknown type (%x)\n", devtype);
+		printf("sti: not a graphics device (%x)\n", devtype);
 #endif
-		rv = 0;
-		romend = 0;
-	}
-
-	if (rv &&
-	    ca->ca_type.iodc_sv_model == HPPA_FIO_SGC && id == STI_ID_FDDI) {
-#ifdef STIDEBUG
-		printf("sti: not a graphics device\n");
+	} else
 #endif
-		rv = 0;
-	}
+		rv = 1;
 
-	if (ca->ca_naddrs >= sizeof(ca->ca_addrs) / sizeof(ca->ca_addrs[0])) {
-		printf("sti: address list overflow\n");
-		return (0);
-	}
-
-	ca->ca_addrs[ca->ca_naddrs].addr = rom;
-	ca->ca_addrs[ca->ca_naddrs].size = round_page(romend);
-	ca->ca_naddrs++;
-
-	if (!romunmapped)
+	bus_space_unmap(ca->ca_iot, ioh,  STI_MEMSIZE);
+	if (!romh_is_subregion)
 		bus_space_unmap(ca->ca_iot, romh, STI_ROMSIZE);
-	return (rv);
+	return rv;
 }
 
 void
@@ -221,42 +158,50 @@ sti_sgc_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct sti_softc *sc = (void *)self;
 	struct confargs *ca = aux;
-	paddr_t rom;
-	u_int32_t romlen;
+	bus_addr_t addr;
 	int rv;
 	int pagezero_cookie;
 
 	pagezero_cookie = hp700_pagezero_map();
-	sc->memt = sc->iot = ca->ca_iot;
-	sc->base = ca->ca_hpa;
+	if (PAGE0->pd_resv2[1] < HPPA_IOBEGIN)
+		addr = ca->ca_hpa;
+	else
+		addr = PAGE0->pd_resv2[1];
+	hp700_pagezero_unmap(pagezero_cookie);
 
-	/* we stashed rom addr/len into the last slot during probe */
-	rom = ca->ca_addrs[ca->ca_naddrs - 1].addr;
-	romlen = ca->ca_addrs[ca->ca_naddrs - 1].size;
-	if ((rv = bus_space_map(ca->ca_iot, rom, romlen, 0, &sc->romh))) {
-		if ((rom & HPPA_IOBEGIN) == HPPA_IOBEGIN)
-			sc->romh = rom;
-		else {
-			printf (": cannot map rom space (%d)\n", rv);
-			return;
-		}
+	sc->memt = sc->iot = ca->ca_iot;
+
+	if ((rv = bus_space_map(ca->ca_iot, ca->ca_hpa, STI_MEMSIZE, 0,
+	    &sc->ioh))) {
+#ifdef STIDEBUG
+		printf("st: cannot map io space (%d)\n", rv);
+#endif
+		return;
 	}
 
-#ifdef HP7300LC_CPU
 	/*
-	 * PCXL2: enable accel I/O for this space, see PCX-L2 ERS "ACCEL_IO".
-	 * "pcxl2_ers.{ps,pdf}", (section / chapter . rel. page / abs. page)
-	 * 8.7.4 / 8-12 / 92, 11.3.14 / 11-14 / 122 and 14.8 / 14-5 / 203.
+	 * Map the ROM.
 	 */
-	if (strcmp(hppa_cpu_info->hppa_cpu_info_chip_type, "PCX-L2") == 0
-	    && ca->ca_hpa >= PCXL2_ACCEL_IO_START
-	    && ca->ca_hpa <= PCXL2_ACCEL_IO_END)
-		eaio_l2(PCXL2_ACCEL_IO_ADDR2MASK(ca->ca_hpa));
-#endif /* HP7300LC_CPU */
+	if (ca->ca_hpa <= addr &&
+	    (addr + STI_ROMSIZE) <= (ca->ca_hpa + STI_MEMSIZE)) {
+		rv = bus_space_subregion(ca->ca_iot, sc->ioh,
+			addr - ca->ca_hpa, STI_ROMSIZE, &sc->romh);
+	} else {
+		rv = bus_space_map(ca->ca_iot, addr, STI_ROMSIZE, 0, &sc->romh);
+	}
+	if (rv) {
+#ifdef STIDEBUG
+		printf ("sti: cannot map rom space (%d)\n", rv);
+#endif
+		bus_space_unmap(ca->ca_iot, sc->ioh,  STI_MEMSIZE);
+		return;
+	}
 
 	sc->sc_devtype = bus_space_read_1(sc->iot, sc->romh, 3);
-	if (ca->ca_hpa == (hppa_hpa_t)PAGE0->mem_cons.pz_hpa)
-		sc->sc_flags |= STI_CONSOLE;
-	hp700_pagezero_unmap(pagezero_cookie);
+#ifdef STIDEBUG
+	printf("sti: hpa=%x, rom=%x\n", ca->ca_hpa, addr);
+	printf("sti: ioh=%x, romh=%x\n", sc->ioh, sc->romh);
+#endif
 	sti_attach_common(sc);
 }
+

@@ -1,4 +1,4 @@
-/*	$NetBSD: ctags.c,v 1.10 2004/06/20 22:20:15 jmc Exp $	*/
+/*	$NetBSD: ctags.c,v 1.9.2.1 2004/06/22 07:15:27 tron Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994, 1995
@@ -43,7 +43,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994, 1995\n\
 #if 0
 static char sccsid[] = "@(#)ctags.c	8.4 (Berkeley) 2/7/95";
 #endif
-__RCSID("$NetBSD: ctags.c,v 1.10 2004/06/20 22:20:15 jmc Exp $");
+__RCSID("$NetBSD: ctags.c,v 1.9.2.1 2004/06/22 07:15:27 tron Exp $");
 #endif /* not lint */
 
 #include <err.h>

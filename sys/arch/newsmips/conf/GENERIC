@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.70 2004/11/10 17:54:06 christos Exp $
+# $NetBSD: GENERIC,v 1.62.2.3 2004/07/15 20:18:59 he Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/newsmips/conf/std.newsmips"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.70 $"
+#ident 		"GENERIC-$Revision: 1.62.2.3 $"
 
 maxusers	16
 
@@ -72,7 +72,6 @@ options 	COMPAT_16	# NetBSD 1.6 binary compatibility
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 #options 	EXEC_AOUT	# exec a.out binaries
 #options 	EXEC_ECOFF	# exec ecoff binaries
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # Filesystem options
 file-system	FFS		# Berkeley Fast Filesystem
@@ -103,7 +102,6 @@ options 	INET6		# IPV6
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	GATEWAY		# IP packet forwarding
 #options 	MROUTING	# packet forwarding of multicast packets
-#options 	PIM		# Protocol Independent Multicast
 options 	NS		# Xerox NS networking
 #options 	NSIP		# Xerox NS tunneling over IP
 #options 	ISO,TPIP	# OSI networking
@@ -223,5 +221,3 @@ pseudo-device	ccd		4	# concatenated and striped disks
 pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
-#pseudo-device	pf			# PF packet filter
-#pseudo-device	pflog			# PF log if

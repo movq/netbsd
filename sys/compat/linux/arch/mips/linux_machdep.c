@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.c,v 1.21 2004/06/19 18:45:30 manu Exp $ */
+/*	$NetBSD: linux_machdep.c,v 1.20.2.1 2004/06/22 08:47:35 tron Exp $ */
 
 /*-
  * Copyright (c) 1995, 2000, 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.21 2004/06/19 18:45:30 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.20.2.1 2004/06/22 08:47:35 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

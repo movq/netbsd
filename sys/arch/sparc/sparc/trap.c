@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.155 2004/08/28 17:53:02 jdolecek Exp $ */
+/*	$NetBSD: trap.c,v 1.153.2.1 2004/04/24 18:28:24 jdc Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.155 2004/08/28 17:53:02 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.153.2.1 2004/04/24 18:28:24 jdc Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ktrace.h"
@@ -1022,9 +1022,11 @@ mem_access_fault(type, ser, v, pc, psr, tf)
 		 (vaddr_t)p->p_limit->pl_rlimit[RLIMIT_STACK].rlim_cur +
 		 SUNOS_MAXSADDR_SLOP)
 #endif
-	    && rv == 0)
-		uvm_grow(p, va);
-
+	    && rv == 0) {
+		vaddr_t nss = btoc(USRSTACK - va);
+		if (nss > vm->vm_ssize)
+			vm->vm_ssize = nss;
+	}
 	if (rv == 0) {
 		/*
 		 * pmap_enter() does not enter all requests made from
@@ -1320,8 +1322,11 @@ mem_access_fault4m(type, sfsr, sfva, tf)
 	 * the current limit and we need to reflect that as an access
 	 * error.
 	 */
-	if (rv == 0 && (caddr_t)va >= vm->vm_maxsaddr)
-		uvm_grow(p, va);
+	if ((caddr_t)va >= vm->vm_maxsaddr && rv == 0) {
+		vaddr_t nss = btoc(USRSTACK - va);
+		if (nss > vm->vm_ssize)
+			vm->vm_ssize = nss;
+	}
 	if (rv != 0) {
 		/*
 		 * Pagein failed.  If doing copyin/out, return to onfault

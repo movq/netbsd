@@ -1,7 +1,7 @@
-#	$NetBSD: Makefile,v 1.6 2004/11/28 07:00:53 jmc Exp $
+#	$NetBSD: Makefile,v 1.5 2001/12/12 01:49:34 tv Exp $
 #
-PROG=	aout2bb
+HOSTPROG=	aout2bb
 NOMAN=	# defined
 SRCS=	aout2bb.c chksum.c
 
-.include <bsd.prog.mk>
+.include <bsd.hostprog.mk>

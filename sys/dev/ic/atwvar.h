@@ -1,4 +1,4 @@
-/*	$NetBSD: atwvar.h,v 1.14 2004/07/24 23:53:49 dyoung Exp $	*/
+/*	$NetBSD: atwvar.h,v 1.8 2004/01/29 10:25:49 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2003, 2004 The NetBSD Foundation, Inc.  All rights reserved.
@@ -146,7 +146,7 @@ enum atw_rftype { ATW_RFTYPE_INTERSIL = 0, ATW_RFTYPE_RFMD  = 1,
        ATW_RFTYPE_MARVEL = 2 };
 
 enum atw_bbptype { ATW_BBPTYPE_INTERSIL = 0, ATW_BBPTYPE_RFMD  = 1,
-       ATW_BBPTYPE_MARVEL = 2, ATW_C_BBPTYPE_RFMD  = 5 };
+       ATW_BBPTYPE_MARVEL = 2 };
 
 /* Radio capture format for ADMtek. */
 
@@ -175,13 +175,6 @@ struct atw_tx_radiotap_header {
 	u_int16_t				at_chan_freq;
 	u_int16_t				at_chan_flags;
 } __attribute__((__packed__));
-
-enum atw_revision {
-	ATW_REVISION_AB = 0x11,	/* ADM8211A */
-	ATW_REVISION_AF = 0x15,	/* ADM8211A? */
-	ATW_REVISION_BA = 0x20,	/* ADM8211B */
-	ATW_REVISION_CA = 0x30	/* ADM8211C/CR */
-};
 
 struct atw_softc {
 	struct device		sc_dev;
@@ -276,13 +269,11 @@ struct atw_softc {
 			    int, u_int32_t);
 
 	/* ADM8211 state variables. */
-	u_int8_t	sc_sram[ATW_SRAM_MAXSIZE];
-	u_int		sc_sramlen;
+	u_int8_t	sc_sram[ATW_SRAM_SIZE];
 	u_int8_t	sc_bssid[IEEE80211_ADDR_LEN];
-	uint8_t		sc_rev;
-	uint8_t		sc_rf3000_options1;
-	uint8_t		sc_rf3000_options2;
+	u_int8_t	sc_lost_bcn_thresh;
 
+	struct timeval	sc_last_beacon;
 	struct callout	sc_scan_ch;
 	union {
 		struct atw_rx_radiotap_header	tap;
@@ -398,6 +389,9 @@ do {									\
  * Note we rely on MCLBYTES being a power of two.  Because the `length'
  * field is only 11 bits, we must subtract 1 from the length to avoid
  * having it truncated to 0!
+ *
+ * Apparently we have to set ATW_RXSTAT_SQL to make the ADM8211 tell
+ * us RSSI.
  */
 #define	ATW_INIT_RXDESC(sc, x)						\
 do {									\
@@ -405,6 +399,7 @@ do {									\
 	struct atw_rxdesc *__rxd = &sc->sc_rxdescs[(x)];		\
 	struct mbuf *__m = __rxs->rxs_mbuf;				\
 									\
+	__m->m_data = __m->m_ext.ext_buf;				\
 	__rxd->ar_buf1 =						\
 	    htole32(__rxs->rxs_dmamap->dm_segs[0].ds_addr);		\
 	__rxd->ar_buf2 =	/* for descriptor chaining */		\
@@ -414,8 +409,9 @@ do {									\
 	                   ATW_RXCTL_RBS1_MASK) |			\
 		    0 /* ATW_RXCTL_RCH */ |				\
 	    ((x) == (ATW_NRXDESC - 1) ? ATW_RXCTL_RER : 0));		\
-	__rxd->ar_stat = htole32(ATW_RXSTAT_OWN);			\
-	            							\
+	__rxd->ar_stat =						\
+	    htole32(ATW_RXSTAT_OWN|ATW_RXSTAT_SQL|ATW_RXSTAT_FS|	\
+	            ATW_RXSTAT_LS);					\
 	ATW_CDRXSYNC((sc), (x),						\
 	    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);			\
 } while (0)

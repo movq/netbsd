@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: daic.c,v 1.20 2004/08/13 11:25:58 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: daic.c,v 1.18 2004/02/24 15:22:01 wiz Exp $");
 
 /*
  * daic.c: MI driver for Diehl active ISDN cards (S, SX, SXn, SCOM, QUADRO)
@@ -696,15 +696,12 @@ daic_register_port(struct daic_softc *sc, int port)
 
 	/* make sure this hardware driver type is known to layer 4 */
 	if (sc->sc_cardtype == DAIC_TYPE_QUAD)
-		snprintf(devname, sizeof(devname), "%s port %d",
-		    sc->sc_dev.dv_xname, port);
+		sprintf(devname, "%s port %d", sc->sc_dev.dv_xname, port);
 	else
-		strlcpy(devname, sc->sc_dev.dv_xname, sizeof(devname));
-	snprintf(cardname, sizeof(cardname), "EICON.Diehl %s",
-	    cardtypename(sc->sc_cardtype));
+		strcpy(devname, sc->sc_dev.dv_xname);
+	sprintf(cardname, "EICON.Diehl %s", cardtypename(sc->sc_cardtype));
 	l3drv = isdn_attach_isdnif(
-	    devname, cardname, &sc->sc_port[port], &daic_l3_functions,
-	    NBCH_BRI);
+	    devname, cardname, &sc->sc_port[port], &daic_l3_functions, 2);
 	sc->sc_port[port].du_l3 = l3drv;
 
 	/* initialize linktabs for this port */

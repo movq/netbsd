@@ -1,4 +1,4 @@
-/*	$NetBSD: df.c,v 1.66 2004/07/17 00:29:08 enami Exp $	*/
+/*	$NetBSD: df.c,v 1.61 2004/03/26 20:28:39 enami Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993, 1994
@@ -45,7 +45,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)df.c	8.7 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: df.c,v 1.66 2004/07/17 00:29:08 enami Exp $");
+__RCSID("$NetBSD: df.c,v 1.61 2004/03/26 20:28:39 enami Exp $");
 #endif
 #endif /* not lint */
 
@@ -67,15 +67,13 @@ extern char *strpct(u_long, u_long, u_int);
 int	 main(int, char *[]);
 int	 bread(off_t, void *, int);
 char	*getmntpt(char *);
-void	 prtstat(struct statvfs *, int);
+void	 prtstat(struct statfs *, int);
 int	 selected(const char *);
 void	 maketypelist(char *);
-long	 regetmntinfo(struct statvfs **, long);
+long	 regetmntinfo(struct statfs **, long);
 void	 usage(void);
 void	 prthumanval(int64_t, char *);
-void	 prthuman(struct statvfs *, int64_t, int64_t);
-const char *
-	strpct64(uint64_t, uint64_t, u_int);
+void	 prthuman(struct statfs *, int64_t, int64_t);
 
 int	aflag, gflag, hflag, iflag, kflag, lflag, mflag, nflag, Pflag;
 char	**typelist = NULL;
@@ -84,7 +82,7 @@ int
 main(int argc, char *argv[])
 {
 	struct stat stbuf;
-	struct statvfs *mntbuf;
+	struct statfs *mntbuf;
 	long mntsize;
 	int ch, i, maxwidth, width;
 	char *mntpt;
@@ -137,7 +135,7 @@ main(int argc, char *argv[])
 	if (*argv == NULL) {
 		mntsize = regetmntinfo(&mntbuf, mntsize);
 	} else {
-		mntbuf = malloc(argc * sizeof(*mntbuf));
+		mntbuf = malloc(argc * sizeof(struct statfs));
 		mntsize = 0;
 		for (; *argv != NULL; argv++) {
 			if (stat(*argv, &stbuf) < 0) {
@@ -154,9 +152,9 @@ main(int argc, char *argv[])
 			 * Statfs does not take a `wait' flag, so we cannot
 			 * implement nflag here.
 			 */
-			if (!statvfs(mntpt, &mntbuf[mntsize]))
+			if (!statfs(mntpt, &mntbuf[mntsize]))
 				if (lflag &&
-				    (mntbuf[mntsize].f_flag & MNT_LOCAL) == 0)
+				    (mntbuf[mntsize].f_flags & MNT_LOCAL) == 0)
 					warnx("Warning: %s is not a local %s",
 					    *argv, "file system");
 				else if
@@ -188,7 +186,7 @@ char *
 getmntpt(char *name)
 {
 	long mntsize, i;
-	struct statvfs *mntbuf;
+	struct statfs *mntbuf;
 
 	mntsize = getmntinfo(&mntbuf, MNT_NOWAIT);
 	for (i = 0; i < mntsize; i++) {
@@ -255,13 +253,13 @@ maketypelist(char *fslist)
 /*
  * Make a pass over the filesystem info in ``mntbuf'' filtering out
  * filesystem types not in ``fsmask'' and possibly re-stating to get
- * current (not cached) info.  Returns the new count of valid statvfs bufs.
+ * current (not cached) info.  Returns the new count of valid statfs bufs.
  */
 long
-regetmntinfo(struct statvfs **mntbufp, long mntsize)
+regetmntinfo(struct statfs **mntbufp, long mntsize)
 {
 	int i, j;
-	struct statvfs *mntbuf;
+	struct statfs *mntbuf;
 
 	if (!lflag && typelist == NULL && aflag)
 		return (nflag ? mntsize : getmntinfo(mntbufp, MNT_WAIT));
@@ -269,17 +267,17 @@ regetmntinfo(struct statvfs **mntbufp, long mntsize)
 	mntbuf = *mntbufp;
 	j = 0;
 	for (i = 0; i < mntsize; i++) {
-		if (!aflag && (mntbuf[i].f_flag & MNT_IGNORE) != 0)
+		if (!aflag && (mntbuf[i].f_flags & MNT_IGNORE) != 0)
 			continue;
-		if (lflag && (mntbuf[i].f_flag & MNT_LOCAL) == 0)
+		if (lflag && (mntbuf[i].f_flags & MNT_LOCAL) == 0)
 			continue;
 		if (!selected(mntbuf[i].f_fstypename))
 			continue;
 		if (nflag)
 			mntbuf[j] = mntbuf[i];
 		else {
-			struct statvfs layerbuf = mntbuf[i];
-			(void)statvfs(mntbuf[i].f_mntonname, &mntbuf[j]);
+			struct statfs layerbuf = mntbuf[i];
+			(void)statfs(mntbuf[i].f_mntonname, &mntbuf[j]);
 			/*
 			 * If the FS name changed, then new data is for
 			 * a different layer and we don't want it.
@@ -306,35 +304,36 @@ prthumanval(int64_t bytes, char *pad)
 }
 
 void
-prthuman(struct statvfs *sfsp, int64_t used, int64_t bavail)
+prthuman(struct statfs *sfsp, int64_t used, int64_t bavail)
 {
 
-	prthumanval(sfsp->f_blocks * sfsp->f_frsize, "");
-	prthumanval(used * sfsp->f_frsize, "  ");
-	prthumanval(bavail * sfsp->f_frsize, "   ");
+	prthumanval((int64_t)(u_long)sfsp->f_blocks * sfsp->f_bsize, "");
+	prthumanval(used * sfsp->f_bsize, "  ");
+	prthumanval(bavail * sfsp->f_bsize, "   ");
 }
 
+
 /*
- * Convert statvfs returned filesystem size into BLOCKSIZE units.
+ * Convert statfs returned filesystem size into BLOCKSIZE units.
  * Attempts to avoid overflow for large filesystems.
  */
 #define fsbtoblk(num, fsbs, bs)					\
 	(((fsbs) != 0 && (fsbs) < (bs)) ?			\
-	    (int64_t)(num) / (int64_t)((bs) / (fsbs)) :		\
+	    (int64_t)(num) / ((bs) / (fsbs)) :			\
 	    (int64_t)(num) * ((fsbs) / (bs)))
 
 /*
  * Print out status about a filesystem.
  */
 void
-prtstat(struct statvfs *sfsp, int maxwidth)
+prtstat(struct statfs *sfsp, int maxwidth)
 {
 	static long blocksize;
 	static int headerlen, timesthrough;
 	static char *header;
 	static const char full[] = "100%";
 	static const char empty[] = "  0%";
-	int64_t used, availblks, inodes;
+	long used, availblks, inodes;
 	int64_t bavail;
 
 	if (maxwidth < 11)
@@ -366,26 +365,26 @@ prtstat(struct statvfs *sfsp, int maxwidth)
 	}
 	(void)printf("%-*.*s", maxwidth, maxwidth, sfsp->f_mntfromname);
 	used = sfsp->f_blocks - sfsp->f_bfree;
-	bavail = sfsp->f_bfree - sfsp->f_bresvd;
-	availblks = bavail + used;
+	availblks = sfsp->f_bavail + used;
+	if ((u_long)availblks > (u_long)used)
+		bavail = (u_long)sfsp->f_bavail;
+	else
+		bavail = sfsp->f_bavail;
 	if (hflag)
-		prthuman(sfsp, used, bavail);
+		prthuman(sfsp, (u_long)used, bavail);
 	else
 		(void)printf(" %*" PRId64 " %8" PRId64 " %9" PRId64, headerlen,
-		    fsbtoblk(sfsp->f_blocks, sfsp->f_frsize, blocksize),
-		    fsbtoblk(used, sfsp->f_frsize, blocksize),
-		    fsbtoblk(bavail, sfsp->f_frsize, blocksize));
+		    fsbtoblk((u_long)sfsp->f_blocks, sfsp->f_bsize, blocksize),
+		    fsbtoblk((u_long)used, sfsp->f_bsize, blocksize),
+		    fsbtoblk(bavail, sfsp->f_bsize, blocksize));
 	(void)printf("%7s",
-	    availblks == 0 ? full :
-	    /* We know that these values are never negative */
-	    strpct64((uint64_t)used, (uint64_t)availblks, 0));
+	    availblks == 0 ? full : strpct((u_long)used, (u_long)availblks, 0));
 	if (iflag) {
 		inodes = sfsp->f_files;
 		used = inodes - sfsp->f_ffree;
-		(void)printf(" %8ld %8ld %6s ",
-		    (u_long)used, (u_long)sfsp->f_ffree,
+		(void)printf(" %8ld %8ld %6s ", used, sfsp->f_ffree,
 		    inodes == 0 ? (used == 0 ? empty : full) :
-		    strpct64((uint64_t)used, (uint64_t)inodes, 0));
+		    strpct((u_long)used, (u_long)inodes, 0));
 	} else
 		(void)printf("  ");
 	(void)printf("  %s\n", sfsp->f_mntonname);
@@ -400,15 +399,4 @@ usage(void)
 	    getprogname());
 	exit(1);
 	/* NOTREACHED */
-}
-
-const char *
-strpct64(uint64_t numerator, uint64_t denominator, u_int digits)
-{
-
-	while (denominator > ULONG_MAX) {
-		numerator >>= 1;
-		denominator >>= 1;
-	}
-	return (strpct((u_long)numerator, (u_long)denominator, digits));
 }

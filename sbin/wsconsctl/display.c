@@ -1,7 +1,7 @@
-/*	$NetBSD: display.c,v 1.8 2004/07/30 15:22:42 jmmv Exp $ */
+/*	$NetBSD: display.c,v 1.2.4.2 2004/06/07 09:59:09 tron Exp $ */
 
 /*-
- * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -48,30 +48,34 @@
 
 #include "wsconsctl.h"
 
-static int border;
 static int dpytype;
 static struct wsdisplay_usefontdata font;
 static struct wsdisplay_scroll_data scroll_l;
-static int msg_default_attrs, msg_default_bg, msg_default_fg;
-static int msg_kernel_attrs, msg_kernel_bg, msg_kernel_fg;
+static int havescroll = 1;
 
 struct field display_field_tab[] = {
-    { "border",			&border,	FMT_COLOR,	FLG_MODIFY },
     { "type",			&dpytype,	FMT_DPYTYPE,	FLG_RDONLY },
     { "font",			&font.name,	FMT_STRING,	FLG_WRONLY },
     { "scroll.fastlines",	&scroll_l.fastlines, FMT_UINT, FLG_MODIFY },
     { "scroll.slowlines",	&scroll_l.slowlines, FMT_UINT, FLG_MODIFY },
-    { "msg.default.attrs",	&msg_default_attrs, FMT_ATTRS,	FLG_MODIFY },
-    { "msg.default.bg",		&msg_default_bg, FMT_COLOR,	FLG_MODIFY },
-    { "msg.default.fg",		&msg_default_fg, FMT_COLOR,	FLG_MODIFY },
-    { "msg.kernel.attrs",	&msg_kernel_attrs, FMT_ATTRS,	FLG_MODIFY },
-    { "msg.kernel.bg",		&msg_kernel_bg, FMT_COLOR,	FLG_MODIFY },
-    { "msg.kernel.fg",		&msg_kernel_fg, FMT_COLOR,	FLG_MODIFY },
 };
 
 int display_field_tab_len = sizeof(display_field_tab)/
 			     sizeof(display_field_tab[0]);
 
+static int
+init_values(void)
+{
+	scroll_l.which = 0;
+
+	if (field_by_value(&scroll_l.fastlines)->flags & FLG_GET)
+		scroll_l.which |= WSDISPLAY_SCROLL_DOFASTLINES;
+	if (field_by_value(&scroll_l.slowlines)->flags & FLG_GET)
+		scroll_l.which |= WSDISPLAY_SCROLL_DOSLOWLINES;
+
+	return scroll_l.which;
+
+}
 void
 display_get_values(fd)
 	int fd;
@@ -80,48 +84,14 @@ display_get_values(fd)
 		if (ioctl(fd, WSDISPLAYIO_GTYPE, &dpytype) < 0)
 			err(1, "WSDISPLAYIO_GTYPE");
 	
-	if (field_by_value(&border)->flags & FLG_GET)
-		if (ioctl(fd, WSDISPLAYIO_GBORDER, &border) < 0)
-			field_disable_by_value(&border);
-	
-	if (field_by_value(&msg_default_attrs)->flags & FLG_GET ||
-	    field_by_value(&msg_default_bg)->flags & FLG_GET ||
-	    field_by_value(&msg_default_fg)->flags & FLG_GET ||
-	    field_by_value(&msg_kernel_attrs)->flags & FLG_GET ||
-	    field_by_value(&msg_kernel_bg)->flags & FLG_GET ||
-	    field_by_value(&msg_kernel_fg)->flags & FLG_GET) {
-		struct wsdisplay_msgattrs ma;
+	if (init_values() == 0 || havescroll == 0)
+		return;
 
-		if (ioctl(fd, WSDISPLAYIO_GMSGATTRS, &ma) < 0) {
-			field_disable_by_value(&msg_default_attrs);
-			field_disable_by_value(&msg_default_bg);
-			field_disable_by_value(&msg_default_fg);
-			field_disable_by_value(&msg_kernel_attrs);
-			field_disable_by_value(&msg_kernel_bg);
-			field_disable_by_value(&msg_kernel_fg);
-		} else {
-			msg_default_attrs = ma.default_attrs;
-			if (ma.default_attrs & WSATTR_WSCOLORS) {
-				msg_default_bg = ma.default_bg;
-				msg_default_fg = ma.default_fg;
-			} else
-				msg_default_bg = msg_default_fg = -1;
-
-			msg_kernel_attrs = ma.kernel_attrs;
-			if (ma.kernel_attrs & WSATTR_WSCOLORS) {
-				msg_kernel_bg = ma.kernel_bg;
-				msg_kernel_fg = ma.kernel_fg;
-			} else
-				msg_kernel_bg = msg_kernel_fg = -1;
-		}
-	}
-
-	if (field_by_value(&scroll_l.fastlines)->flags & FLG_GET ||
-	    field_by_value(&scroll_l.slowlines)->flags & FLG_GET) {
-		if (ioctl(fd, WSDISPLAYIO_DGSCROLL, &scroll_l) < 0) {
-			field_disable_by_value(&scroll_l.fastlines);
-			field_disable_by_value(&scroll_l.slowlines);
-		}
+	if (ioctl(fd, WSDISPLAYIO_DGSCROLL, &scroll_l) < 0) {
+		if (errno != ENODEV)
+			err(1, "WSDISPLAYIO_GSCROLL");
+		else
+			havescroll = 0;
 	}
 }
 
@@ -134,72 +104,21 @@ display_put_values(fd)
 			err(1, "WSDISPLAYIO_SFONT");
 		pr_field(field_by_value(&font.name), " -> ");
 	}
+	
+	if (init_values() == 0 || havescroll == 0)
+		return;
 
-	if (field_by_value(&border)->flags & FLG_SET) {
-		if (ioctl(fd, WSDISPLAYIO_SBORDER, &border) < 0)
-			err(1, "WSDISPLAYIO_SBORDER");
-		pr_field(field_by_value(&border), " -> ");
-	}
-
-	if (field_by_value(&msg_default_attrs)->flags & FLG_SET ||
-	    field_by_value(&msg_default_bg)->flags & FLG_SET ||
-	    field_by_value(&msg_default_fg)->flags & FLG_SET ||
-	    field_by_value(&msg_kernel_attrs)->flags & FLG_SET ||
-	    field_by_value(&msg_kernel_bg)->flags & FLG_SET ||
-	    field_by_value(&msg_kernel_fg)->flags & FLG_SET) {
-		struct wsdisplay_msgattrs ma;
-
-		if (ioctl(fd, WSDISPLAYIO_GMSGATTRS, &ma) < 0)
-			err(1, "WSDISPLAYIO_GMSGATTRS");
-
-		if (field_by_value(&msg_default_attrs)->flags & FLG_SET) {
-			ma.default_attrs = msg_default_attrs;
-			pr_field(field_by_value(&msg_default_attrs), " -> ");
-		}
-		if (ma.default_attrs & WSATTR_WSCOLORS) {
-			if (field_by_value(&msg_default_bg)->flags & FLG_SET) {
-				ma.default_bg = msg_default_bg;
-				pr_field(field_by_value(&msg_default_bg),
-				         " -> ");
-			}
-			if (field_by_value(&msg_default_fg)->flags & FLG_SET) {
-				ma.default_fg = msg_default_fg;
-				pr_field(field_by_value(&msg_default_fg),
-				         " -> ");
-			}
-		}
-
-		if (field_by_value(&msg_kernel_attrs)->flags & FLG_SET) {
-			ma.kernel_attrs = msg_kernel_attrs;
-			pr_field(field_by_value(&msg_kernel_attrs), " -> ");
-		}
-		if (ma.default_attrs & WSATTR_WSCOLORS) {
-			if (field_by_value(&msg_kernel_bg)->flags & FLG_SET) {
-				ma.kernel_bg = msg_kernel_bg;
-				pr_field(field_by_value(&msg_kernel_bg),
-				         " -> ");
-			}
-			if (field_by_value(&msg_kernel_fg)->flags & FLG_SET) {
-				ma.kernel_fg = msg_kernel_fg;
-				pr_field(field_by_value(&msg_kernel_fg),
-				         " -> ");
-			}
-		}
-
-		if (ioctl(fd, WSDISPLAYIO_SMSGATTRS, &ma) < 0)
-			err(1, "WSDISPLAYIO_SMSGATTRS");
-	}
-
-	scroll_l.which = 0;
-	if (field_by_value(&scroll_l.fastlines)->flags & FLG_SET)
-		scroll_l.which |= WSDISPLAY_SCROLL_DOFASTLINES;
-	if (field_by_value(&scroll_l.slowlines)->flags & FLG_SET)
-		scroll_l.which |= WSDISPLAY_SCROLL_DOSLOWLINES;
-	if (scroll_l.which != 0 &&
-	    ioctl(fd, WSDISPLAYIO_DSSCROLL, &scroll_l) < 0)
-		err (1, "WSDISPLAYIO_DSSCROLL");
 	if (scroll_l.which & WSDISPLAY_SCROLL_DOFASTLINES)
 		pr_field(field_by_value(&scroll_l.fastlines), " -> ");
 	if (scroll_l.which & WSDISPLAY_SCROLL_DOSLOWLINES)
 		pr_field(field_by_value(&scroll_l.slowlines), " -> ");
+
+	if (ioctl(fd, WSDISPLAYIO_DSSCROLL, &scroll_l) < 0) {
+		if (errno != ENODEV)
+			err (1, "WSDISPLAYIO_DSSCROLL");
+		else {
+			warnx("scrolling is not supported by this kernel");
+			havescroll = 0;
+		}
+	}
 }

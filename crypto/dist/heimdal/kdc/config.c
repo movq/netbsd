@@ -36,7 +36,7 @@
 #include <parse_bytes.h>
 
 __RCSID("$Heimdal: config.c,v 1.46.2.2 2003/10/27 11:06:52 joda Exp $"
-        "$NetBSD: config.c,v 1.12 2004/04/02 14:59:47 lha Exp $");
+        "$NetBSD: config.c,v 1.11.2.1 2004/04/21 04:55:39 jmc Exp $");
 
 static const char *config_file;	/* location of kdc config file */
 

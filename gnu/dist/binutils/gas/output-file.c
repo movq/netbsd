@@ -1,5 +1,5 @@
 /* output-file.c -  Deal with the output file
-   Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1996, 1998, 1999, 2001, 2003
+   Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1996, 1998, 1999, 2001
    Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
@@ -41,7 +41,8 @@
 bfd *stdoutput;
 
 void
-output_file_create (char *name)
+output_file_create (name)
+     char *name;
 {
   if (name[0] == '-' && name[1] == '\0')
     as_fatal (_("can't open a bfd on stdout %s"), name);
@@ -61,7 +62,8 @@ output_file_create (char *name)
 }
 
 void
-output_file_close (char *filename)
+output_file_close (filename)
+     char *filename;
 {
 #ifdef BFD_ASSEMBLER
   /* Close the bfd.  */
@@ -84,9 +86,10 @@ output_file_close (char *filename)
 
 #ifndef BFD_ASSEMBLER
 void
-output_file_append (char *where ATTRIBUTE_UNUSED,
-		    long length ATTRIBUTE_UNUSED,
-		    char *filename ATTRIBUTE_UNUSED)
+output_file_append (where, length, filename)
+     char *where ATTRIBUTE_UNUSED;
+     long length ATTRIBUTE_UNUSED;
+     char *filename ATTRIBUTE_UNUSED;
 {
   abort ();
 }
@@ -97,7 +100,8 @@ output_file_append (char *where ATTRIBUTE_UNUSED,
 static FILE *stdoutput;
 
 void
-output_file_create (char *name)
+output_file_create (name)
+     char *name;
 {
   if (name[0] == '-' && name[1] == '\0')
     {
@@ -108,22 +112,17 @@ output_file_create (char *name)
   stdoutput = fopen (name, FOPEN_WB);
   if (stdoutput == NULL)
     {
-#ifdef BFD_ASSEMBLER
-      bfd_set_error (bfd_error_system_call);
-#endif
       as_perror (_("FATAL: can't create %s"), name);
       exit (EXIT_FAILURE);
     }
 }
 
 void
-output_file_close (char *filename)
+output_file_close (filename)
+     char *filename;
 {
   if (EOF == fclose (stdoutput))
     {
-#ifdef BFD_ASSEMBLER
-      bfd_set_error (bfd_error_system_call);
-#endif
       as_perror (_("FATAL: can't close %s"), filename);
       exit (EXIT_FAILURE);
     }
@@ -133,17 +132,18 @@ output_file_close (char *filename)
 }
 
 void
-output_file_append (char * where, long length, char * filename)
+output_file_append (where, length, filename)
+     char * where;
+     long   length;
+     char * filename;
 {
   for (; length; length--, where++)
     {
       (void) putc (*where, stdoutput);
 
       if (ferror (stdoutput))
+	/* if ( EOF == (putc( *where, stdoutput )) ) */
 	{
-#ifdef BFD_ASSEMBLER
-	  bfd_set_error (bfd_error_system_call);
-#endif
 	  as_perror (_("Failed to emit an object byte"), filename);
 	  as_fatal (_("can't continue"));
 	}

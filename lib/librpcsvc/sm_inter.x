@@ -38,7 +38,7 @@
 %#ifndef __lint__
 %/*static char sccsid[] = "from: @(#)sm_inter.x 1.7 87/06/24 Copyr 1987 Sun Micro";*/
 %/*static char sccsid[] = "from: @(#)sm_inter.x	2.2 88/08/01 4.0 RPCSRC";*/
-%__RCSID("$NetBSD: sm_inter.x,v 1.6 2004/07/01 22:52:34 kleink Exp $");
+%__RCSID("$NetBSD: sm_inter.x,v 1.5.12.1 2004/07/02 18:19:47 he Exp $");
 %#endif /* not __lint__ */
 #endif
 

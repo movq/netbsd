@@ -1,4 +1,4 @@
-/* $NetBSD: gzio.c,v 1.21 2004/05/01 07:54:50 mrg Exp $ */
+/* $NetBSD: gzio.c,v 1.20.2.1 2004/05/06 05:41:24 jmc Exp $ */
 
 /* gzio.c -- IO on .gz files
  * Copyright (C) 1995-2002 Jean-loup Gailly.
@@ -7,10 +7,10 @@
  * Compile this file with -DNO_DEFLATE to avoid the compression code.
  */
 
-/* @(#) $Id: gzio.c,v 1.21 2004/05/01 07:54:50 mrg Exp $ */
+/* @(#) $Id: gzio.c,v 1.20.2.1 2004/05/06 05:41:24 jmc Exp $ */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: gzio.c,v 1.21 2004/05/01 07:54:50 mrg Exp $");
+__RCSID("$NetBSD: gzio.c,v 1.20.2.1 2004/05/06 05:41:24 jmc Exp $");
 
 #include <stdio.h>
 

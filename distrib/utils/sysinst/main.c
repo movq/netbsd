@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.48 2004/11/11 20:17:48 dsl Exp $	*/
+/*	$NetBSD: main.c,v 1.42.2.2 2004/06/07 10:20:32 tron Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -48,6 +48,7 @@
 #include <fcntl.h>
 #include <dirent.h>
 
+#define MAIN
 #include "defs.h"
 #include "md.h"
 #include "msg_defs.h"
@@ -55,7 +56,6 @@
 #include "txtwalk.h"
 
 int main(int, char **);
-static void init(void);
 static void select_language(void);
 static void usage(void);
 static void miscsighandler(int);
@@ -73,38 +73,6 @@ FILE *script;			/* script file */
 extern int log_flip(void);
 #endif
 
-static void
-init(void)
-{
-	(void)strlcpy(rel, REL, SSTRSIZE);
-	(void)strlcpy(machine, MACH, SSTRSIZE);
-	sizemult = 1;
-	(void)strlcpy(diskdev, "", SSTRSIZE);
-	disktype = "unknown";
-	tmp_mfs_size = 0;
-	(void)strlcpy(bsddiskname, "mydisk", DISKNAME_SIZE);
-	doessf = "";
-	(void)strlcpy(dist_dir, "/usr/INSTALL", STRSIZE);  
-	clean_dist_dir = 0;
-	(void)strlcpy(ext_dir, "", STRSIZE);
-	(void)strlcpy(set_dir, "/" MACH "/binary/sets", STRSIZE);
-	(void)strlcpy(ftp_host, SYSINST_FTP_HOST, STRSIZE);
-	(void)strlcpy(ftp_dir, SYSINST_FTP_DIR, STRSIZE);
-	(void)strlcpy(ftp_user, "ftp", SSTRSIZE);
-	(void)strlcpy(ftp_pass, "", STRSIZE);
-	(void)strlcpy(ftp_proxy, "", STRSIZE);
-	(void)strlcpy(nfs_host, "", STRSIZE);
-	(void)strlcpy(nfs_dir, "/bsd/release", STRSIZE);
-	(void)strlcpy(cdrom_dev, "cd0a", SSTRSIZE);
-	(void)strlcpy(localfs_dev, "sd0a", SSTRSIZE);
-	(void)strlcpy(localfs_fs, "ffs", SSTRSIZE);
-	(void)strlcpy(localfs_dir, "release", STRSIZE);
-	(void)strlcpy(targetroot_mnt, "/targetroot", SSTRSIZE);
-	(void)strlcpy(distfs_mnt, "/mnt2", SSTRSIZE);
-	mnt2_mounted = 0;
-	(void)strlcpy(dist_postfix, ".tgz", SSTRSIZE);
-}
-
 int
 main(int argc, char **argv)
 {
@@ -112,7 +80,6 @@ main(int argc, char **argv)
 	int ch;
 
 	logging = 0; /* shut them off unless turned on by the user */
-	init();
 #ifdef DEBUG
 	log_flip();
 #endif
@@ -186,7 +153,6 @@ main(int argc, char **argv)
 	mkdir(targetroot_mnt, S_IRWXU| S_IRGRP|S_IXGRP | S_IROTH|S_IXOTH);
 
 	select_language();
-	get_kb_encoding();
 
 	/* Menu processing */
 	process_menu(MENU_netbsd, NULL);
@@ -455,8 +421,27 @@ void
 process_f_flag(char *f_name)
 {
 	char *buffer;
+	struct stat statinfo;
 	int fd;
-	int fsize;
+
+	/* stat the file (error reported) */
+
+	if (stat(f_name, &statinfo) < 0) {
+		perror(f_name);			/* XXX -- better message? */
+		exit(1);
+	}
+
+	if ((statinfo.st_mode & S_IFMT) != S_IFREG) {
+		fprintf(stderr, msg_string(MSG_not_regular_file), f_name);
+		exit(1);
+	}
+
+	/* allocate buffer (error reported) */
+	buffer = malloc((size_t)statinfo.st_size + 1);
+	if (buffer == NULL) {
+		fprintf(stderr, msg_string(MSG_out_of_memory));
+		exit(1); 
+	}
 
 	/* open the file */
 	fd = open(f_name, O_RDONLY, 0);
@@ -465,33 +450,19 @@ process_f_flag(char *f_name)
 		exit(1);
 	}
 
-	/* get file size */
-	fsize = lseek(fd, 0, SEEK_END);
-	lseek(fd, 0, SEEK_SET);
-	if (fsize == -1) {
-		fprintf(stderr, msg_string(MSG_not_regular_file), f_name);
-		exit(1);
-	}
-
-	/* allocate buffer (error reported) */
-	buffer = malloc(fsize + 1);
-	if (buffer == NULL) {
-		fprintf(stderr, msg_string(MSG_out_of_memory));
-		exit(1); 
-	}
-
 	/* read the file */
-	if (read(fd,buffer, fsize) != fsize) {
+	if (read(fd,buffer, (size_t)statinfo.st_size)
+						!= (size_t)statinfo.st_size) {
 		fprintf(stderr, msg_string(MSG_config_read_error), f_name);
 		exit(1);
 	}
-	buffer[fsize] = 0;
+	buffer[(size_t)statinfo.st_size] = 0;
 
 	/* close the file */
 	close(fd);
 
 	/* Walk the buffer */
-	walk(buffer, fsize, fflagopts,
+	walk(buffer, (size_t)statinfo.st_size, fflagopts,
 	    sizeof(fflagopts)/sizeof(struct lookfor));
 
 	/* free the buffer */

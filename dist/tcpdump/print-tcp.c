@@ -1,4 +1,4 @@
-/*	$NetBSD: print-tcp.c,v 1.7 2004/09/27 23:04:25 dyoung Exp $	*/
+/*	$NetBSD: print-tcp.c,v 1.5 2002/09/10 01:47:31 itojun Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997
@@ -24,10 +24,10 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-tcp.c,v 1.107.2.3 2003/11/19 00:17:02 guy Exp (LBL)";
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-tcp.c,v 1.95 2001/12/10 08:21:24 guy Exp (LBL)";
 #else
-__RCSID("$NetBSD: print-tcp.c,v 1.7 2004/09/27 23:04:25 dyoung Exp $");
+__RCSID("$NetBSD: print-tcp.c,v 1.5 2002/09/10 01:47:31 itojun Exp $");
 #endif
 #endif
 
@@ -35,13 +35,18 @@ __RCSID("$NetBSD: print-tcp.c,v 1.7 2004/09/27 23:04:25 dyoung Exp $");
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
 
 #include <rpc/rpc.h>
+
+#include <netinet/in.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
+#include <unistd.h>
 
 #include "interface.h"
 #include "addrtoname.h"
@@ -53,7 +58,6 @@ __RCSID("$NetBSD: print-tcp.c,v 1.7 2004/09/27 23:04:25 dyoung Exp $");
 #ifdef INET6
 #include "ip6.h"
 #endif
-#include "ipproto.h"
 
 #include "nameser.h"
 
@@ -103,11 +107,10 @@ static struct tcp_seq_hash tcp_seq_hash[TSEQ_HASHSIZE];
 #define NFS_PORT	2049
 #endif
 #define MSDP_PORT	639
-#define LDP_PORT        646
 
 static int tcp_cksum(register const struct ip *ip,
 		     register const struct tcphdr *tp,
-		     register u_int len)
+		     register int len)
 {
 	union phu {
 		struct phdr {
@@ -122,14 +125,11 @@ static int tcp_cksum(register const struct ip *ip,
 	const u_int16_t *sp;
 
 	/* pseudo-header.. */
-	phu.ph.len = htons((u_int16_t)len);
+	phu.ph.len = htons(len);	/* XXX */
 	phu.ph.mbz = 0;
 	phu.ph.proto = IPPROTO_TCP;
 	memcpy(&phu.ph.src, &ip->ip_src.s_addr, sizeof(u_int32_t));
-	if (IP_HL(ip) == 5)
-		memcpy(&phu.ph.dst, &ip->ip_dst.s_addr, sizeof(u_int32_t));
-	else
-		phu.ph.dst = ip_finddst(ip);
+	memcpy(&phu.ph.dst, &ip->ip_dst.s_addr, sizeof(u_int32_t));
 
 	sp = &phu.pa[0];
 	return in_cksum((u_short *)tp, len,
@@ -138,9 +138,9 @@ static int tcp_cksum(register const struct ip *ip,
 
 #ifdef INET6
 static int tcp6_cksum(const struct ip6_hdr *ip6, const struct tcphdr *tp,
-	u_int len)
+	int len)
 {
-	size_t i;
+	int i, tlen;
 	register const u_int16_t *sp;
 	u_int32_t sum;
 	union {
@@ -154,11 +154,14 @@ static int tcp6_cksum(const struct ip6_hdr *ip6, const struct tcphdr *tp,
 		u_int16_t pa[20];
 	} phu;
 
+	tlen = ntohs(ip6->ip6_plen) + sizeof(struct ip6_hdr) -
+	    ((const char *)tp - (const char*)ip6);
+
 	/* pseudo-header */
 	memset(&phu, 0, sizeof(phu));
 	phu.ph.ph_src = ip6->ip6_src;
 	phu.ph.ph_dst = ip6->ip6_dst;
-	phu.ph.ph_len = htonl(len);
+	phu.ph.ph_len = htonl(tlen);
 	phu.ph.ph_nxt = IPPROTO_TCP;
 
 	sum = 0;
@@ -167,10 +170,10 @@ static int tcp6_cksum(const struct ip6_hdr *ip6, const struct tcphdr *tp,
 
 	sp = (const u_int16_t *)tp;
 
-	for (i = 0; i < (len & ~1); i += 2)
+	for (i = 0; i < (tlen & ~1); i += 2)
 		sum += *sp++;
 
-	if (len & 1)
+	if (tlen & 1)
 		sum += htons((*(const u_int8_t *)sp) << 8);
 
 	while (sum > 0xffff)
@@ -188,7 +191,7 @@ tcp_print(register const u_char *bp, register u_int length,
 	register const struct tcphdr *tp;
 	register const struct ip *ip;
 	register u_char flags;
-	register u_int hlen;
+	register int hlen;
 	register char ch;
 	u_int16_t sport, dport, win, urp;
 	u_int32_t seq, ack, thseq, thack;
@@ -213,8 +216,8 @@ tcp_print(register const u_char *bp, register u_int length,
 		return;
 	}
 
-	sport = EXTRACT_16BITS(&tp->th_sport);
-	dport = EXTRACT_16BITS(&tp->th_dport);
+	sport = ntohs(tp->th_sport);
+	dport = ntohs(tp->th_dport);
 
 	hlen = TH_OFF(tp) * 4;
 
@@ -266,10 +269,10 @@ tcp_print(register const u_char *bp, register u_int length,
 
 	TCHECK(*tp);
 
-	seq = EXTRACT_32BITS(&tp->th_seq);
-	ack = EXTRACT_32BITS(&tp->th_ack);
-	win = EXTRACT_16BITS(&tp->th_win);
-	urp = EXTRACT_16BITS(&tp->th_urp);
+	seq = (u_int32_t)ntohl(tp->th_seq);
+	ack = (u_int32_t)ntohl(tp->th_ack);
+	win = ntohs(tp->th_win);
+	urp = ntohs(tp->th_urp);
 
 	if (qflag) {
 		(void)printf("tcp %d", length - TH_OFF(tp) * 4);
@@ -294,7 +297,6 @@ tcp_print(register const u_char *bp, register u_int length,
 
 	if (!Sflag && (flags & TH_ACK)) {
 		register struct tcp_seq_hash *th;
-		const void *src, *dst;
 		register int rev;
 		struct tha tha;
 		/*
@@ -307,68 +309,63 @@ tcp_print(register const u_char *bp, register u_int length,
 		memset(&tha, 0, sizeof(tha));
 		rev = 0;
 		if (ip6) {
-			src = &ip6->ip6_src;
-			dst = &ip6->ip6_dst;
 			if (sport > dport)
 				rev = 1;
 			else if (sport == dport) {
-				if (memcmp(src, dst, sizeof ip6->ip6_dst) > 0)
-					rev = 1;
+				int i;
+
+				for (i = 0; i < 4; i++) {
+					if (((u_int32_t *)(&ip6->ip6_src))[i] >
+					    ((u_int32_t *)(&ip6->ip6_dst))[i]) {
+						rev = 1;
+						break;
+					}
+				}
 			}
 			if (rev) {
-				memcpy(&tha.src, dst, sizeof ip6->ip6_dst);
-				memcpy(&tha.dst, src, sizeof ip6->ip6_src);
+				tha.src = ip6->ip6_dst;
+				tha.dst = ip6->ip6_src;
 				tha.port = dport << 16 | sport;
 			} else {
-				memcpy(&tha.dst, dst, sizeof ip6->ip6_dst);
-				memcpy(&tha.src, src, sizeof ip6->ip6_src);
+				tha.dst = ip6->ip6_dst;
+				tha.src = ip6->ip6_src;
 				tha.port = sport << 16 | dport;
 			}
 		} else {
-			src = &ip->ip_src;
-			dst = &ip->ip_dst;
-			if (sport > dport)
+			if (sport > dport ||
+			    (sport == dport &&
+			     ip->ip_src.s_addr > ip->ip_dst.s_addr)) {
 				rev = 1;
-			else if (sport == dport) {
-				if (memcmp(src, dst, sizeof ip->ip_dst) > 0)
-					rev = 1;
 			}
 			if (rev) {
-				memcpy(&tha.src, dst, sizeof ip->ip_dst);
-				memcpy(&tha.dst, src, sizeof ip->ip_src);
+				*(struct in_addr *)&tha.src = ip->ip_dst;
+				*(struct in_addr *)&tha.dst = ip->ip_src;
 				tha.port = dport << 16 | sport;
 			} else {
-				memcpy(&tha.dst, dst, sizeof ip->ip_dst);
-				memcpy(&tha.src, src, sizeof ip->ip_src);
+				*(struct in_addr *)&tha.dst = ip->ip_dst;
+				*(struct in_addr *)&tha.src = ip->ip_src;
 				tha.port = sport << 16 | dport;
 			}
 		}
 #else
-		rev = 0;
-		src = &ip->ip_src;
-		dst = &ip->ip_dst;
-		if (sport > dport)
-			rev = 1;
-		else if (sport == dport) {
-			if (memcmp(src, dst, sizeof ip->ip_dst) > 0)
-				rev = 1;
-		}
-		if (rev) {
-			memcpy(&tha.src, dst, sizeof ip->ip_dst);
-			memcpy(&tha.dst, src, sizeof ip->ip_src);
-			tha.port = dport << 16 | sport;
-		} else {
-			memcpy(&tha.dst, dst, sizeof ip->ip_dst);
-			memcpy(&tha.src, src, sizeof ip->ip_src);
+		if (sport < dport ||
+		    (sport == dport &&
+		     ip->ip_src.s_addr < ip->ip_dst.s_addr)) {
+			tha.src = ip->ip_src, tha.dst = ip->ip_dst;
 			tha.port = sport << 16 | dport;
+			rev = 0;
+		} else {
+			tha.src = ip->ip_dst, tha.dst = ip->ip_src;
+			tha.port = dport << 16 | sport;
+			rev = 1;
 		}
 #endif
 
 		threv = rev;
 		for (th = &tcp_seq_hash[tha.port % TSEQ_HASHSIZE];
 		     th->nxt; th = th->nxt)
-			if (memcmp((char *)&tha, (char *)&th->addr,
-				  sizeof(th->addr)) == 0)
+			if (!memcmp((char *)&tha, (char *)&th->addr,
+				  sizeof(th->addr)))
 				break;
 
 		if (!th->nxt || (flags & TH_SYN)) {
@@ -403,14 +400,12 @@ tcp_print(register const u_char *bp, register u_int length,
 	}
 
 	if (IP_V(ip) == 4 && vflag && !fragmented) {
-		u_int16_t sum, tcp_sum;
+		int sum;
 		if (TTEST2(tp->th_sport, length)) {
 			sum = tcp_cksum(ip, tp, length);
-			if (sum != 0) {
-				tcp_sum = EXTRACT_16BITS(&tp->th_sum);
-				(void)printf(" [bad tcp cksum %x (->%x)!]",
-				    tcp_sum, in_cksum_shouldbe(tcp_sum, sum));
-			} else
+			if (sum != 0)
+				(void)printf(" [bad tcp cksum %x!]", sum);
+			else
 				(void)printf(" [tcp sum ok]");
 		}
 	}
@@ -440,12 +435,10 @@ tcp_print(register const u_char *bp, register u_int length,
 	/*
 	 * Handle any options.
 	 */
-	if (hlen > sizeof(*tp)) {
+	if ((hlen -= sizeof(*tp)) > 0) {
 		register const u_char *cp;
-		register u_int i, opt, datalen;
-		register u_int len;
+		register int i, opt, len, datalen;
 
-		hlen -= sizeof(*tp);
 		cp = (const u_char *)tp + sizeof(*tp);
 		putchar(' ');
 		ch = '<';
@@ -568,17 +561,8 @@ tcp_print(register const u_char *bp, register u_int length,
 				(void)printf(" %u", EXTRACT_32BITS(cp));
 				break;
 
-			case TCPOPT_SIGNATURE:
-				(void)printf("tcpmd5:");
-				datalen = len - 2;
-				for (i = 0; i < datalen; i++) {
-					LENCHECK(i);
-					(void)printf("%02x", cp[i]);
-				}
-				break;
-
 			default:
-				(void)printf("opt-%u:", opt);
+				(void)printf("opt-%d:", opt);
 				datalen = len - 2;
 				for (i = 0; i < datalen; ++i) {
 					LENCHECK(i);
@@ -621,7 +605,7 @@ tcp_print(register const u_char *bp, register u_int length,
 		} else if (sport == BGP_PORT || dport == BGP_PORT)
 			bgp_print(bp, length);
 		else if (sport == PPTP_PORT || dport == PPTP_PORT)
-			pptp_print(bp);
+			pptp_print(bp, length);
 #ifdef TCPDUMP_DO_SMB
 		else if (sport == NETBIOS_SSN_PORT || dport == NETBIOS_SSN_PORT)
 			nbt_tcp_print(bp, length);
@@ -635,12 +619,10 @@ tcp_print(register const u_char *bp, register u_int length,
 			 * TCP DNS query has 2byte length at the head.
 			 * XXX packet could be unaligned, it can go strange
 			 */
-			ns_print(bp + 2, length - 2, 0);
+			ns_print(bp + 2, length - 2);
 		} else if (sport == MSDP_PORT || dport == MSDP_PORT) {
 			msdp_print(bp, length);
 		}
-                else if (sport == LDP_PORT || dport == LDP_PORT)
-                        printf(": LDP, length: %u", length);
 	}
 	return;
 bad:

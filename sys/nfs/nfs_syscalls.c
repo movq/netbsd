@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_syscalls.c,v 1.77 2004/06/10 12:59:57 yamt Exp $	*/
+/*	$NetBSD: nfs_syscalls.c,v 1.74.2.1 2004/06/14 04:08:37 jmc Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_syscalls.c,v 1.77 2004/06/10 12:59:57 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_syscalls.c,v 1.74.2.1 2004/06/14 04:08:37 jmc Exp $");
 
 #include "fs_nfs.h"
 #include "opt_nfs.h"
@@ -130,7 +130,6 @@ int nfs_niothreads = -1; /* == "0, and has never been set" */
 #ifdef NFSSERVER
 static void nfsd_rt __P((int, struct nfsrv_descript *, int));
 static struct nfssvc_sock *nfsrv_sockalloc __P((void));
-static void nfsrv_sockfree __P((struct nfssvc_sock *));
 #endif
 
 /*
@@ -374,16 +373,6 @@ nfsrv_sockalloc()
 	splx(s);
 
 	return slp;
-}
-
-static void
-nfsrv_sockfree(struct nfssvc_sock *slp)
-{
-
-	KASSERT(slp->ns_so == NULL);
-	KASSERT(slp->ns_fp == NULL);
-	KASSERT((slp->ns_flag & SLP_ALLFLAGS) == 0);
-	free(slp, M_NFSSVC);
 }
 
 /*
@@ -761,7 +750,7 @@ nfssvc_nfsd(nsd, argp, l)
 					(void) nfs_sndlock(solockp, NULL);
 				if (slp->ns_flag & SLP_VALID) {
 					error =
-					    nfs_send(so, nd->nd_nam2, m, NULL, p);
+					    nfs_send(so, nd->nd_nam2, m, NULL);
 				} else {
 					error = EPIPE;
 					m_freem(m);
@@ -859,43 +848,39 @@ nfsrv_zapsock(slp)
 	}
 	slp->ns_flag &= ~SLP_ALLFLAGS;
 	simple_unlock(&nfsd_slock);
-
 	fp = slp->ns_fp;
-	slp->ns_fp = NULL;
-	so = slp->ns_so;
-	slp->ns_so = NULL;
-	KASSERT(fp != NULL);
-	KASSERT(so != NULL);
-	KASSERT(fp->f_data == so);
-	simple_lock(&fp->f_slock);
-	FILE_USE(fp);
-	so->so_upcall = NULL;
-	so->so_upcallarg = NULL;
-	so->so_rcv.sb_flags &= ~SB_UPCALL;
-	soshutdown(so, SHUT_RDWR);
-	closef(fp, (struct proc *)0);
-
-	if (slp->ns_nam)
-		m_free(slp->ns_nam);
-	m_freem(slp->ns_raw);
-	m_freem(slp->ns_rec);
-	for (nuidp = TAILQ_FIRST(&slp->ns_uidlruhead); nuidp != 0;
-	    nuidp = nnuidp) {
-		nnuidp = TAILQ_NEXT(nuidp, nu_lru);
-		LIST_REMOVE(nuidp, nu_hash);
-		TAILQ_REMOVE(&slp->ns_uidlruhead, nuidp, nu_lru);
-		if (nuidp->nu_flag & NU_NAM)
-			m_freem(nuidp->nu_nam);
-		free((caddr_t)nuidp, M_NFSUID);
+	if (fp) {
+		simple_lock(&fp->f_slock);
+		FILE_USE(fp);
+		slp->ns_fp = (struct file *)0;
+		so = slp->ns_so;
+		so->so_upcall = NULL;
+		so->so_upcallarg = NULL;
+		so->so_rcv.sb_flags &= ~SB_UPCALL;
+		soshutdown(so, SHUT_RDWR);
+		closef(fp, (struct proc *)0);
+		if (slp->ns_nam)
+			m_free(slp->ns_nam);
+		m_freem(slp->ns_raw);
+		m_freem(slp->ns_rec);
+		for (nuidp = TAILQ_FIRST(&slp->ns_uidlruhead); nuidp != 0;
+		    nuidp = nnuidp) {
+			nnuidp = TAILQ_NEXT(nuidp, nu_lru);
+			LIST_REMOVE(nuidp, nu_hash);
+			TAILQ_REMOVE(&slp->ns_uidlruhead, nuidp, nu_lru);
+			if (nuidp->nu_flag & NU_NAM)
+				m_freem(nuidp->nu_nam);
+			free((caddr_t)nuidp, M_NFSUID);
+		}
+		s = splsoftclock();
+		for (nwp = LIST_FIRST(&slp->ns_tq); nwp; nwp = nnwp) {
+			nnwp = LIST_NEXT(nwp, nd_tq);
+			LIST_REMOVE(nwp, nd_tq);
+			pool_put(&nfs_srvdesc_pool, nwp);
+		}
+		LIST_INIT(&slp->ns_tq);
+		splx(s);
 	}
-	s = splsoftclock();
-	for (nwp = LIST_FIRST(&slp->ns_tq); nwp; nwp = nnwp) {
-		nnwp = LIST_NEXT(nwp, nd_tq);
-		LIST_REMOVE(nwp, nd_tq);
-		pool_put(&nfs_srvdesc_pool, nwp);
-	}
-	LIST_INIT(&slp->ns_tq);
-	splx(s);
 }
 
 /*
@@ -914,7 +899,7 @@ nfsrv_slpderef(slp)
 		TAILQ_REMOVE(&nfssvc_sockhead, slp, ns_chain);
 		simple_unlock(&nfsd_slock);
 		splx(s);
-		nfsrv_sockfree(slp);
+		free(slp, M_NFSSVC);
 	}
 }
 
@@ -942,7 +927,7 @@ nfsrv_init(terminating)
 			simple_unlock(&nfsd_slock);
 			if (slp->ns_flag & SLP_VALID)
 				nfsrv_zapsock(slp);
-			nfsrv_sockfree(slp);
+			free(slp, M_NFSSVC);
 			simple_lock(&nfsd_slock);
 		}
 		simple_unlock(&nfsd_slock);

@@ -1,4 +1,4 @@
-/*	$NetBSD: aic79xx_osm.c,v 1.10 2004/10/04 11:23:39 fvdl Exp $	*/
+/*	$NetBSD: aic79xx_osm.c,v 1.7 2003/10/30 01:58:17 simonb Exp $	*/
 
 /*
  * Bus independent NetBSD shim for the aic7xxx based adaptec SCSI controllers
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic79xx_osm.c,v 1.10 2004/10/04 11:23:39 fvdl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic79xx_osm.c,v 1.7 2003/10/30 01:58:17 simonb Exp $");
 
 #include <dev/ic/aic79xx_osm.h>
 #include <dev/ic/aic7xxx_cam.h>
@@ -74,7 +74,7 @@ ahd_attach(struct ahd_softc *ahd)
 	int 	s;
 	char	ahd_info[256];
 
-	ahd_controller_info(ahd, ahd_info, sizeof(ahd_info));
+	ahd_controller_info(ahd, ahd_info);
         printf("%s: %s\n", ahd->sc_dev.dv_xname, ahd_info);
 
         ahd_lock(ahd, &s);
@@ -233,25 +233,23 @@ ahd_done(struct ahd_softc *ahd, struct scb *scb)
         } else if ((scb->flags & SCB_PKT_SENSE) != 0) {
 		struct scsi_status_iu_header *siu;
 		u_int sense_len;
-#ifdef AHD_DEBUG
 		int i;
-#endif
+
 		/*
 		 * Copy only the sense data into the provided buffer.
 		 */
 		siu = (struct scsi_status_iu_header *)scb->sense_data;
 		sense_len = MIN(scsi_4btoul(siu->sense_length),
-				sizeof(xs->sense.scsi_sense));
+				sizeof(&xs->sense.scsi_sense));
 		memset(&xs->sense.scsi_sense, 0, sizeof(xs->sense.scsi_sense));
 		memcpy(&xs->sense.scsi_sense, 
 		       scb->sense_data + SIU_SENSE_OFFSET(siu), sense_len);
-#ifdef AHD_DEBUG
 		printf("Copied %d bytes of sense data offset %d:", sense_len,
 		       SIU_SENSE_OFFSET(siu));
 		for (i = 0; i < sense_len; i++)
 			printf(" 0x%x", ((uint8_t *)&xs->sense.scsi_sense)[i]);
 		printf("\n");
-#endif
+
                 ahd_set_transaction_status(scb, XS_SENSE);
 	}
 

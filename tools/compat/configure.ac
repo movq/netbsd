@@ -1,4 +1,4 @@
-#	$NetBSD: configure.ac,v 1.48 2004/11/28 06:57:14 jmc Exp $
+#	$NetBSD: configure.ac,v 1.42.2.2 2004/07/25 07:50:06 tron Exp $
 #
 # Autoconf definition file for libnbcompat.
 #
@@ -100,7 +100,6 @@ AC_CHECK_MEMBERS([DIR.dd_fd, struct dirent.d_namlen],,,
 AC_CHECK_MEMBERS([struct stat.st_flags, struct stat.st_gen,
 	struct stat.st_birthtime, struct stat.st_atim,
 	struct stat.st_mtimensec],,, [#include <sys/stat.h>])
-AC_CHECK_MEMBERS(struct statvfs.f_iosize,,, [#include <sys/statvfs.h>])
 
 # Global variable decls.
 AC_CHECK_DECLS([optind, optreset],,, [
@@ -113,9 +112,9 @@ AC_CHECK_DECLS(sys_signame,,, [#include <signal.h>])
 # Library functions (where a .h check isn't enough).
 AC_FUNC_ALLOCA
 AC_CHECK_FUNCS(atoll asprintf asnprintf basename devname dirfd dirname \
-	fgetln flock fparseln futimes getopt getopt_long group_from_gid \
-	heapsort isblank issetugid lchflags lchmod lchown lutimes mkstemp \
-	mkdtemp poll pread putc_unlocked pwcache_userdb pwrite random setenv \
+	fgetln flock fparseln futimes getopt getopt_long \
+	isblank issetugid lchflags lchmod lchown lutimes mkstemp mkdtemp \
+	poll pread putc_unlocked pwcache_userdb pwrite random setenv \
 	setgroupent setprogname setpassent snprintf strlcat strlcpy strsep \
 	strsuftoll strtoll \
 	user_from_uid vasprintf vasnprintf vsnprintf)
@@ -126,10 +125,6 @@ AC_CHECK_FUNCS([htobe16, htobe32, htobe64, htole16, htole32, htole64, be16toh, b
 
 AC_CHECK_FUNCS([bswap16, bswap32, bswap64],,, [
 #include <machine/bswap.h>
-])
-
-AC_CHECK_FUNCS([fstatvfs],,, [
-#include <sys/statvfs.h>
 ])
 
 AC_CHECK_DECLS([setgroupent, setpassent],,, [

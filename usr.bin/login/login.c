@@ -1,4 +1,4 @@
-/*     $NetBSD: login.c,v 1.79 2004/11/14 18:01:21 christos Exp $       */
+/*     $NetBSD: login.c,v 1.77 2004/01/05 03:53:10 lukem Exp $       */
 
 /*-
  * Copyright (c) 1980, 1987, 1988, 1991, 1993, 1994
@@ -40,7 +40,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)login.c	8.4 (Berkeley) 4/2/94";
 #endif
-__RCSID("$NetBSD: login.c,v 1.79 2004/11/14 18:01:21 christos Exp $");
+__RCSID("$NetBSD: login.c,v 1.77 2004/01/05 03:53:10 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -88,7 +88,6 @@ __RCSID("$NetBSD: login.c,v 1.79 2004/11/14 18:01:21 christos Exp $");
 #ifdef LOGIN_CAP
 #include <login_cap.h>
 #endif
-#include <vis.h>
 
 #include "pathnames.h"
 
@@ -131,8 +130,6 @@ int	 k5_write_creds __P((void));
 #if defined(KERBEROS) || defined(KERBEROS5)
 void	 dofork __P((void));
 #endif
-void	 decode_ss __P((const char *));
-void	 usage __P((void));
 
 #define	TTYGRPNAME	"tty"		/* name of group to own ttys */
 
@@ -170,7 +167,7 @@ extern int	krb5_configured;
 #endif
 
 struct	passwd *pwd;
-int	failures, have_ss;
+int	failures;
 char	term[64], *envinit[1], *hostname, *username, *tty, *nested;
 struct timeval now;
 struct sockaddr_storage ss;
@@ -228,8 +225,6 @@ main(argc, argv)
 	 * -f is used to skip a second login authentication
 	 * -h is used by other servers to pass the name of the remote host to
 	 *    login so that it may be placed in utmp/utmpx and wtmp/wtmpx
-	 * -a in addition to -h, a server my supply -a to pass the actual
-	 *    server address.
 	 * -s is used to force use of S/Key or equivalent.
 	 */
 	domain = NULL;
@@ -240,18 +235,12 @@ main(argc, argv)
 	localhost[sizeof(localhost) - 1] = '\0';
 
 	Fflag = fflag = hflag = pflag = sflag = 0;
-	have_ss = 0;
 #ifdef KERBEROS5
 	have_forward = 0;
 #endif
 	uid = getuid();
-	while ((ch = getopt(argc, argv, "a:Ffh:ps")) != -1)
+	while ((ch = getopt(argc, argv, "Ffh:ps")) != -1)
 		switch (ch) {
-		case 'a':
-			if (uid)
-				errx(1, "-a option: %s", strerror(EPERM));
-			decode_ss(optarg);
-			break;
 		case 'F':
 			Fflag = 1;
 			/* FALLTHROUGH */
@@ -262,11 +251,9 @@ main(argc, argv)
 			if (uid)
 				errx(1, "-h option: %s", strerror(EPERM));
 			hflag = 1;
-#ifdef notdef
 			if (domain && (p = strchr(optarg, '.')) != NULL &&
 			    strcasecmp(p, domain) == 0)
-				*p = '\0';
-#endif
+				*p = 0;
 			hostname = optarg;
 			break;
 		case 'p':
@@ -277,8 +264,9 @@ main(argc, argv)
 			break;
 		default:
 		case '?':
-			usage();
-			break;
+			(void)fprintf(stderr,
+			    "usage: login [-fps] [-h hostname] [username]\n");
+			exit(1);
 		}
 	argc -= optind;
 	argv += optind;
@@ -934,7 +922,7 @@ update_db(int quietlog)
 
 		return;
 	}
-	if (hostname != NULL && have_ss == 0) {
+	if (hostname != NULL) {
 		socklen_t len = sizeof(ss);
 		(void)getpeername(STDIN_FILENO, (struct sockaddr *)&ss, &len);
 	}
@@ -1096,33 +1084,4 @@ sleepexit(eval)
 
 	(void)sleep(5);
 	exit(eval);
-}
-
-void
-decode_ss(arg)
-	const char *arg;
-{
-	struct sockaddr_storage *ssp;
-	size_t len = strlen(arg);
-	
-	if (len > sizeof(*ssp) * 4 + 1 || len < sizeof(*ssp))
-		errx(1, "Bad argument");
-
-	if ((ssp = malloc(len)) == NULL)
-		err(1, NULL);
-
-	if (strunvis((char *)ssp, arg) != sizeof(*ssp))
-		errx(1, "Decoding error");
-
-	(void)memcpy(&ss, ssp, sizeof(ss));
-	have_ss = 1;
-}
-
-void
-usage()
-{
-	(void)fprintf(stderr,
-	    "Usage: %s [-Ffps] [-a address] [-h hostname] [username]\n",
-	    getprogname());
-	exit(1);
 }

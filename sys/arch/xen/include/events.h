@@ -1,4 +1,4 @@
-/*	$NetBSD: events.h,v 1.3 2004/04/24 19:32:37 cl Exp $	*/
+/*	$NetBSD: events.h,v 1.1.2.1 2004/05/22 15:59:58 he Exp $	*/
 
 /*
  *

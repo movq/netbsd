@@ -1,9 +1,9 @@
-# $NetBSD: INSTALL,v 1.45 2004/11/10 17:54:03 christos Exp $
+# $NetBSD: INSTALL,v 1.43.2.3 2004/07/15 20:41:35 he Exp $
 #
 # This file was automatically created.
 # Changes will be lost when make is run in this directory.
 #
-# Created from: # NetBSD: GENERIC.in,v 1.22 2004/06/26 07:32:05 abs Exp $
+# Created from: # NetBSD$
 #
 # GENERIC machine description file
 #
@@ -28,7 +28,7 @@ include "arch/amiga/conf/std.amiga"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.45 $"
+#ident 		"GENERIC-$Revision: 1.43.2.3 $"
 
 makeoptions	COPTS="-Os"
 
@@ -120,7 +120,6 @@ options 	VNODE_OP_NOINLINE	# Not inlining vnode op calls saves mem
 
 options 	EXEC_AOUT	# 32-bit aout executables (NetBSD-1.5.x)
 options 	COMPAT_AOUT_M68K # actually make some system calls work.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 
 #
@@ -131,6 +130,7 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SCSIVERBOSE	# human readable SCSI error messages
 options 	USERCONF	# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
+options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 options 	MALLOC_NOINLINE		# Not inlining MALLOC saves memory
 
 # Enable experimental buffer queue strategy for better responsiveness under 
@@ -417,8 +417,6 @@ pseudo-device	gif		4	# IPv[46] over IPv[46] tunnel (RFC1933)
 pseudo-device	vlan			# IEEE 802.1q encapsulation
 pseudo-device	bridge			# simple inter-network bridging
 #options	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
-#pseudo-device	pf			# PF packet filter
-#pseudo-device	pflog			# PF log if
 
 pseudo-device	view		4	# views (needed for grfcc)
 pseudo-device	pty		2	# pseudo-terminals

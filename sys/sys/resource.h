@@ -1,4 +1,4 @@
-/*	$NetBSD: resource.h,v 1.26 2004/04/26 10:33:38 kleink Exp $	*/
+/*	$NetBSD: resource.h,v 1.22 2003/08/07 16:34:12 agc Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -58,9 +58,7 @@ struct	rusage {
 	struct timeval ru_utime;	/* user time used */
 	struct timeval ru_stime;	/* system time used */
 	long	ru_maxrss;		/* max resident set size */
-#ifdef _KERNEL
 #define	ru_first	ru_ixrss
-#endif
 	long	ru_ixrss;		/* integral shared memory size */
 	long	ru_idrss;		/* integral unshared data " */
 	long	ru_isrss;		/* integral unshared stack " */
@@ -74,9 +72,7 @@ struct	rusage {
 	long	ru_nsignals;		/* signals received */
 	long	ru_nvcsw;		/* voluntary context switches */
 	long	ru_nivcsw;		/* involuntary " */
-#ifdef _KERNEL
 #define	ru_last		ru_nivcsw
-#endif
 };
 
 /*
@@ -91,11 +87,8 @@ struct	rusage {
 #define	RLIMIT_MEMLOCK	6		/* locked-in-memory address space */
 #define	RLIMIT_NPROC	7		/* number of processes */
 #define	RLIMIT_NOFILE	8		/* number of open files */
-#define	RLIMIT_SBSIZE	9		/* maximum size of all socket buffers */
 
-#if defined(_NETBSD_SOURCE)
-#define	RLIM_NLIMITS	10		/* number of resource limits */
-#endif
+#define	RLIM_NLIMITS	9		/* number of resource limits */
 
 #define	RLIM_INFINITY	(~((u_quad_t)1 << 63))	/* no limit */
 #define	RLIM_SAVED_MAX	RLIM_INFINITY	/* unrepresentable hard limit */
@@ -125,18 +118,18 @@ struct loadavg {
 #ifdef _KERNEL
 extern struct loadavg averunnable;
 struct pcred;
-int	dosetrlimit(struct proc *, struct pcred *, int, struct rlimit *);
-int	donice(struct proc *, struct proc *, int);
+int	dosetrlimit __P((struct proc *, struct pcred *, int, struct rlimit *));
+int	donice __P((struct proc *, struct proc *, int));
 
 #else
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int	getpriority(int, id_t);
-int	getrlimit(int, struct rlimit *);
-int	getrusage(int, struct rusage *);
-int	setpriority(int, id_t, int);
-int	setrlimit(int, const struct rlimit *);
+int	getpriority __P((int, int));
+int	getrlimit __P((int, struct rlimit *));
+int	getrusage __P((int, struct rusage *));
+int	setpriority __P((int, int, int));
+int	setrlimit __P((int, const struct rlimit *));
 __END_DECLS
 
 #endif	/* _KERNEL */

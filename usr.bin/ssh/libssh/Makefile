@@ -1,6 +1,9 @@
-#	$NetBSD: Makefile,v 1.20 2004/05/23 02:24:51 lukem Exp $
+#	$NetBSD: Makefile,v 1.19 2003/12/11 09:46:27 dyoung Exp $
 
-MKPRIVATELIB=	yes
+NOLINT=		# defined
+NOMAN=		# defined
+NOPIC=		# defined
+NOPROFILE=	# defined
 
 .include <bsd.own.mk>
 
@@ -17,6 +20,9 @@ SRCS=	authfd.c authfile.c bufaux.c buffer.c canohost.c channels.c \
 	kexdhc.c kexgexc.c scard.c msg.c progressmeter.c
 SRCS+=	random.c
 SRCS+=	readpassphrase.c getpeereid.c
+
+# only needed during build - prevent installation of library
+libinstall::
 
 .if (${USE_KERBEROS} != "no")
 CPPFLAGS+= -DKRB5 -I${DESTDIR}/usr/include/krb5

@@ -1,5 +1,3 @@
-/*	$NetBSD: postconf.c,v 1.1.1.6 2004/05/31 00:24:42 heas Exp $	*/
-
 /*++
 /* NAME
 /*	postconf 1
@@ -7,11 +5,11 @@
 /*	Postfix configuration utility
 /* SYNOPSIS
 /* .fi
-/*	\fBpostconf\fR [\fB-dhmlnv\fR] [\fB-c \fIconfig_dir\fR] 
-/*	[\fIparameter ...\fR]
+/*	\fBpostconf\fR [\fB-dhmlnv\fR] [\fB-c \fIconfig_dir\fR]
+/*		[\fIparameter ...\fR]
 /*
 /*	\fBpostconf\fR [\fB-ev\fR] [\fB-c \fIconfig_dir\fR]
-/*	[\fIparameter=value ...\fR]
+/*		[\fIparameter=value ...\fR]
 /* DESCRIPTION
 /*	The \fBpostconf\fR command prints the actual value of
 /*	\fIparameter\fR (all known parameters by default) one
@@ -58,9 +56,6 @@
 /*	A sorted, balanced tree structure.
 /*	This is available only on systems with support for Berkeley DB
 /*	databases.
-/* .IP \fBcidr\fR
-/*	A table that associates values with Classless Inter-Domain Routing
-/*	(CIDR) patterns. This is described in \fBcidr_table\fR(5).
 /* .IP \fBdbm\fR
 /*	An indexed file type based on hashing.
 /*	This is available only on systems with support for DBM databases.
@@ -74,16 +69,13 @@
 /*	databases.
 /* .IP "\fBldap\fR (read-only)"
 /*	Perform lookups using the LDAP protocol. This is described
-/*	in \fBldap_table\fR(5).
+/*	in an LDAP_README file.
 /* .IP "\fBmysql\fR (read-only)"
 /*	Perform lookups using the MYSQL protocol. This is described
-/*	in \fBmysql_table\fR(5).
+/*	in a MYSQL_README file.
 /* .IP "\fBpcre\fR (read-only)"
 /*	A lookup table based on Perl Compatible Regular Expressions. The
 /*	file format is described in \fBpcre_table\fR(5).
-/* .IP "\fBpgsql\fR (read-only)"
-/*	Perform lookups using the PostgreSQL protocol. This is described
-/*	in \fBpgsql_table\fR(5).
 /* .IP "\fBproxy\fR (read-only)"
 /*	A lookup table that is implemented via the Postfix
 /*	\fBproxymap\fR(8) service. The table name syntax is
@@ -95,10 +87,6 @@
 /*	A table that always returns its name as lookup result. For example,
 /*	\fBstatic:foobar\fR always returns the string \fBfoobar\fR as lookup
 /*	result.
-/* .IP "\fBtcp\fR (read-only)"
-/*	Perform lookups using a simple request-reply protocol that is
-/*	described in tcp_table(5).
-/*	This feature is not included with Postfix 2.1.
 /* .IP "\fBunix\fR (read-only)"
 /*	A limited way to query the UNIX authentication database. The
 /*	following tables are implemented:
@@ -114,8 +102,7 @@
 /* .sp
 /*	Other table types may exist depending on how Postfix was built.
 /* .IP \fB-n\fR
-/*	Print parameter settings that are not left at their built-in
-/*	default value, because they are explicitly specified in main.cf.
+/*	Print non-default parameter settings only.
 /* .IP \fB-v\fR
 /*	Enable verbose logging for debugging purposes. Multiple \fB-v\fR
 /*	options make the software increasingly verbose.
@@ -126,29 +113,6 @@
 /* .fi
 /* .IP \fBMAIL_CONFIG\fR
 /*	Directory with Postfix configuration files.
-/* CONFIGURATION PARAMETERS
-/* .ad
-/* .fi
-/*	The following \fBmain.cf\fR parameters are especially relevant to
-/*	this program.
-/*
-/*	The text below provides only a parameter summary. See
-/*	postconf(5) for more details including examples.
-/* .IP "\fBconfig_directory (see 'postconf -d' output)\fR"
-/*	The default location of the Postfix main.cf and master.cf
-/*	configuration files.
-/* FILES
-/*	/etc/postfix/main.cf, Postfix configuration parameters
-/* SEE ALSO
-/*	postconf(5), configuration parameters
-/* README FILES
-/* .ad
-/* .fi
-/*	Use "\fBpostconf readme_directory\fR" or
-/*	"\fBpostconf html_directory\fR" to locate this information.
-/* .na
-/* .nf
-/*	DATABASE_README, Postfix lookup table overview
 /* LICENSE
 /* .ad
 /* .fi
@@ -239,7 +203,7 @@ DICT   *text_table;
  /*
   * Manually extracted.
   */
-#include "auto_vars.h"
+#include "smtp_vars.h"
 #include "install_vars.h"
 
  /*
@@ -262,7 +226,7 @@ static CONFIG_INT_TABLE int_table[] = {
 
 static CONFIG_STR_TABLE str_table[] = {
 #include "str_table.h"
-#include "auto_table.h"			/* XXX */
+#include "smtp_table.h"			/* XXX */
 #include "install_table.h"
     0,
 };

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-egp.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: print-egp.c,v 1.3 2002/02/18 09:37:06 itojun Exp $	*/
 
 /*
  * Copyright (c) 1991, 1992, 1993, 1994, 1995, 1996
@@ -23,10 +23,10 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-egp.c,v 1.34.2.2 2003/11/16 08:51:18 guy Exp (LBL)";
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-egp.c,v 1.28 2001/09/17 21:58:01 fenner Exp (LBL)";
 #else
-__RCSID("$NetBSD: print-egp.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
+__RCSID("$NetBSD: print-egp.c,v 1.3 2002/02/18 09:37:06 itojun Exp $");
 #endif
 #endif
 
@@ -34,26 +34,31 @@ __RCSID("$NetBSD: print-egp.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/uio.h>
+#include <sys/socket.h>
 
+#include <netinet/in.h>
+
+#include <netdb.h>
 #include <stdio.h>
 
 #include "interface.h"
 #include "addrtoname.h"
-#include "extract.h"
 
 #include "ip.h"
 
 struct egp_packet {
-	u_int8_t  egp_version;
+	u_char  egp_version;
 #define	EGP_VERSION	2
-	u_int8_t  egp_type;
+	u_char  egp_type;
 #define  EGPT_ACQUIRE	3
 #define  EGPT_REACH	5
 #define  EGPT_POLL	2
 #define  EGPT_UPDATE	1
 #define  EGPT_ERROR	8
-	u_int8_t  egp_code;
+	u_char  egp_code;
 #define  EGPC_REQUEST	0
 #define  EGPC_CONFIRM	1
 #define  EGPC_REFUSE	2
@@ -61,7 +66,7 @@ struct egp_packet {
 #define  EGPC_CEASEACK	4
 #define  EGPC_HELLO	0
 #define  EGPC_HEARDU	1
-	u_int8_t  egp_status;
+	u_char  egp_status;
 #define  EGPS_UNSPEC	0
 #define  EGPS_ACTIVE	1
 #define  EGPS_PASSIVE	2
@@ -74,13 +79,13 @@ struct egp_packet {
 #define  EGPS_UP	1
 #define  EGPS_DOWN	2
 #define  EGPS_UNSOL	0x80
-	u_int16_t  egp_checksum;
-	u_int16_t  egp_as;
-	u_int16_t  egp_sequence;
+	u_short  egp_checksum;
+	u_short  egp_as;
+	u_short  egp_sequence;
 	union {
-		u_int16_t  egpu_hello;
-		u_int8_t egpu_gws[2];
-		u_int16_t  egpu_reason;
+		u_short  egpu_hello;
+		u_char egpu_gws[2];
+		u_short  egpu_reason;
 #define  EGPR_UNSPEC	0
 #define  EGPR_BADHEAD	1
 #define  EGPR_BADDATA	2
@@ -94,7 +99,7 @@ struct egp_packet {
 #define  egp_extgw  egp_handg.egpu_gws[1]
 #define  egp_reason  egp_handg.egpu_reason
 	union {
-		u_int16_t  egpu_poll;
+		u_short  egpu_poll;
 		u_int32_t egpu_sourcenet;
 	} egp_pands;
 #define  egp_poll  egp_pands.egpu_poll
@@ -142,15 +147,15 @@ const char *egp_reasons[] = {
 };
 
 static void
-egpnrprint(register const struct egp_packet *egp)
+egpnrprint(register const struct egp_packet *egp, register u_int length)
 {
-	register const u_int8_t *cp;
+	register const u_char *cp;
 	u_int32_t addr;
 	register u_int32_t net;
 	register u_int netlen;
 	int gateways, distances, networks;
 	int t_gateways;
-	const char *comma;
+	char *comma;
 
 	addr = egp->egp_sourcenet;
 	if (IN_CLASSA(addr)) {
@@ -166,7 +171,7 @@ egpnrprint(register const struct egp_packet *egp)
 		net = 0;
 		netlen = 0;
 	}
-	cp = (u_int8_t *)(egp + 1);
+	cp = (u_char *)(egp + 1);
 
 	t_gateways = egp->egp_intgw + egp->egp_extgw;
 	for (gateways = 0; gateways < t_gateways; ++gateways) {
@@ -221,25 +226,24 @@ trunc:
 }
 
 void
-egp_print(register const u_int8_t *bp)
+egp_print(register const u_char *bp, register u_int length,
+	  register const u_char *bp2)
 {
 	register const struct egp_packet *egp;
+	register const struct ip *ip;
 	register int status;
 	register int code;
 	register int type;
 
 	egp = (struct egp_packet *)bp;
-	if (!TTEST(*egp)) {
-		printf("[|egp]");
-		return;
-	}
+	ip = (struct ip *)bp2;
 	(void)printf("egp: ");
 
 	if (egp->egp_version != EGP_VERSION) {
 		printf("[version %d]", egp->egp_version);
 		return;
 	}
-	printf("as:%d seq:%d", EXTRACT_16BITS(&egp->egp_as), EXTRACT_16BITS(&egp->egp_sequence));
+	printf("as:%d seq:%d", ntohs(egp->egp_as), ntohs(egp->egp_sequence));
 
 	type = egp->egp_type;
 	code = egp->egp_code;
@@ -264,8 +268,8 @@ egp_print(register const u_int8_t *bp)
 				break;
 			}
 			printf(" hello:%d poll:%d",
-			       EXTRACT_16BITS(&egp->egp_hello),
-			       EXTRACT_16BITS(&egp->egp_poll));
+			       ntohs(egp->egp_hello),
+			       ntohs(egp->egp_poll));
 			break;
 
 		case EGPC_REFUSE:
@@ -336,7 +340,7 @@ egp_print(register const u_int8_t *bp)
 		       egp->egp_intgw,
 		       egp->egp_extgw);
 		if (vflag)
-			egpnrprint(egp);
+			egpnrprint(egp, length);
 		break;
 
 	case EGPT_ERROR:
@@ -346,10 +350,10 @@ egp_print(register const u_int8_t *bp)
 		else
 			printf(" [status %d]", status);
 
-		if (EXTRACT_16BITS(&egp->egp_reason) <= EGPR_UVERSION)
-			printf(" %s", egp_reasons[EXTRACT_16BITS(&egp->egp_reason)]);
+		if (ntohs(egp->egp_reason) <= EGPR_UVERSION)
+			printf(" %s", egp_reasons[ntohs(egp->egp_reason)]);
 		else
-			printf(" [reason %d]", EXTRACT_16BITS(&egp->egp_reason));
+			printf(" [reason %d]", ntohs(egp->egp_reason));
 		break;
 
 	default:

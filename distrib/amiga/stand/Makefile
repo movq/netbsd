@@ -1,4 +1,4 @@
-#       $NetBSD: Makefile,v 1.1 2004/06/16 02:31:27 mhitch Exp $
+#       $NetBSD: Makefile,v 1.1.2.2 2004/06/24 13:51:34 he Exp $
 #
 
 MISC_FILES=	runbootblock.README

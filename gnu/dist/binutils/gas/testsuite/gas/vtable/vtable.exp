@@ -41,6 +41,7 @@ if { (   [istarget "*-*-elf*"] || [istarget "*-*-linux*"])
 	|| [istarget "d10v-*"]
 	|| [istarget "dlx-*"]
 	|| [istarget "i*86-*"] 
+	|| [istarget "m32r-*"] 
 	|| ([istarget "mips*-*"]
 	    && ! [istarget "mips64*-*-linux*"]
 	    && ! [istarget "mips*-*-irix6*"])

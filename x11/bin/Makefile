@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2004/05/13 21:10:36 mhitch Exp $
+#	$NetBSD: Makefile,v 1.5.2.2 2004/05/15 13:50:50 tron Exp $
 
 SUBDIR=	appres bdftopcf bdftruncate beforelight bitmap \
 	ccmakedep cleanlinks cxpm dpsexec dpsinfo editres \

@@ -1,5 +1,5 @@
 /* nlmconv.c -- NLM conversion program
-   Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003
+   Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002
    Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
@@ -56,7 +56,7 @@
 /* If strerror is just a macro, we want to use the one from libiberty
    since it will handle undefined values.  */
 #undef strerror
-extern char *strerror (int);
+extern char *strerror PARAMS ((int));
 
 #ifndef localtime
 extern struct tm *localtime ();
@@ -122,37 +122,48 @@ static struct option long_options[] =
 
 /* Local routines.  */
 
-int main (int, char **);
+int main PARAMS ((int, char **));
 
-static void show_usage (FILE *, int);
+static void show_usage
+  PARAMS ((FILE *, int));
 static const char *select_output_format
-  (enum bfd_architecture, unsigned long, bfd_boolean);
-static void setup_sections (bfd *, asection *, void *);
-static void copy_sections (bfd *, asection *, void *);
+  PARAMS ((enum bfd_architecture, unsigned long, bfd_boolean));
+static void setup_sections
+  PARAMS ((bfd *, asection *, PTR));
+static void copy_sections
+  PARAMS ((bfd *, asection *, PTR));
 static void mangle_relocs
-  (bfd *, asection *, arelent ***, long *, char *, bfd_size_type);
+  PARAMS ((bfd *, asection *, arelent ***, long *, char *, bfd_size_type));
 static void default_mangle_relocs
-  (bfd *, asection *, arelent ***, long *, char *, bfd_size_type);
-static char *link_inputs (struct string_list *, char *);
+  PARAMS ((bfd *, asection *, arelent ***, long *, char *, bfd_size_type));
+static char *link_inputs
+  PARAMS ((struct string_list *, char *));
 
 #ifdef NLMCONV_I386
-static void i386_mangle_relocs (bfd *, asection *, arelent ***, long *, char *, bfd_size_type);
+static void i386_mangle_relocs
+  PARAMS ((bfd *, asection *, arelent ***, long *, char *, bfd_size_type));
 #endif
 
 #ifdef NLMCONV_ALPHA
-static void alpha_mangle_relocs (bfd *, asection *, arelent ***, long *, char *, bfd_size_type);
+static void alpha_mangle_relocs
+  PARAMS ((bfd *, asection *, arelent ***, long *, char *, bfd_size_type));
 #endif
 
 #ifdef NLMCONV_POWERPC
-static void powerpc_build_stubs (bfd *, bfd *, asymbol ***, long *);
-static void powerpc_resolve_stubs (bfd *, bfd *);
-static void powerpc_mangle_relocs (bfd *, asection *, arelent ***, long *, char *, bfd_size_type);
+static void powerpc_build_stubs
+  PARAMS ((bfd *, bfd *, asymbol ***, long *));
+static void powerpc_resolve_stubs
+  PARAMS ((bfd *, bfd *));
+static void powerpc_mangle_relocs
+  PARAMS ((bfd *, asection *, arelent ***, long *, char *, bfd_size_type));
 #endif
 
 /* The main routine.  */
 
 int
-main (int argc, char **argv)
+main (argc, argv)
+     int argc;
+     char **argv;
 {
   int opt;
   char *input_file = NULL;
@@ -275,15 +286,15 @@ main (int argc, char **argv)
 
   /* Initialize the header information to default values.  */
   fixed_hdr = &fixed_hdr_struct;
-  memset ((void *) &fixed_hdr_struct, 0, sizeof fixed_hdr_struct);
+  memset ((PTR) &fixed_hdr_struct, 0, sizeof fixed_hdr_struct);
   var_hdr = &var_hdr_struct;
-  memset ((void *) &var_hdr_struct, 0, sizeof var_hdr_struct);
+  memset ((PTR) &var_hdr_struct, 0, sizeof var_hdr_struct);
   version_hdr = &version_hdr_struct;
-  memset ((void *) &version_hdr_struct, 0, sizeof version_hdr_struct);
+  memset ((PTR) &version_hdr_struct, 0, sizeof version_hdr_struct);
   copyright_hdr = &copyright_hdr_struct;
-  memset ((void *) &copyright_hdr_struct, 0, sizeof copyright_hdr_struct);
+  memset ((PTR) &copyright_hdr_struct, 0, sizeof copyright_hdr_struct);
   extended_hdr = &extended_hdr_struct;
-  memset ((void *) &extended_hdr_struct, 0, sizeof extended_hdr_struct);
+  memset ((PTR) &extended_hdr_struct, 0, sizeof extended_hdr_struct);
   check_procedure = NULL;
   custom_file = NULL;
   debug_info = FALSE;
@@ -421,7 +432,7 @@ main (int argc, char **argv)
 #endif
 
   /* Set up the sections.  */
-  bfd_map_over_sections (inbfd, setup_sections, (void *) outbfd);
+  bfd_map_over_sections (inbfd, setup_sections, (PTR) outbfd);
 
   text_sec = bfd_get_section_by_name (outbfd, NLM_CODE_NAME);
 
@@ -578,7 +589,7 @@ main (int argc, char **argv)
 			{
 			  newsymalloc += 10;
 			  newsyms = ((asymbol **)
-				     xrealloc ((void *) newsyms,
+				     xrealloc ((PTR) newsyms,
 					       (newsymalloc
 						* sizeof (asymbol *))));
 			}
@@ -892,12 +903,12 @@ main (int argc, char **argv)
 #endif
 
   /* Copy over the sections.  */
-  bfd_map_over_sections (inbfd, copy_sections, (void *) outbfd);
+  bfd_map_over_sections (inbfd, copy_sections, (PTR) outbfd);
 
   /* Finish up the header information.  */
   if (custom_file != NULL)
     {
-      void *data;
+      PTR data;
 
       data = xmalloc (custom_size);
       if (fread (data, 1, custom_size, custom_data) != custom_size)
@@ -926,7 +937,7 @@ main (int argc, char **argv)
     non_fatal (_("warning: MAP and FULLMAP are not supported; try ld -M"));
   if (help_file != NULL)
     {
-      void *data;
+      PTR data;
 
       data = xmalloc (help_size);
       if (fread (data, 1, help_size, help_data) != help_size)
@@ -944,7 +955,7 @@ main (int argc, char **argv)
     }
   if (message_file != NULL)
     {
-      void *data;
+      PTR data;
 
       data = xmalloc (message_size);
       if (fread (data, 1, message_size, message_data) != message_size)
@@ -969,7 +980,7 @@ main (int argc, char **argv)
     }
   if (modules != NULL)
     {
-      void *data;
+      PTR data;
       unsigned char *set;
       struct string_list *l;
       bfd_size_type c;
@@ -993,7 +1004,7 @@ main (int argc, char **argv)
     }
   if (rpc_file != NULL)
     {
-      void *data;
+      PTR data;
 
       data = xmalloc (rpc_size);
       if (fread (data, 1, rpc_size, rpc_data) != rpc_size)
@@ -1011,7 +1022,7 @@ main (int argc, char **argv)
     }
   if (sharelib_file != NULL)
     {
-      void *data;
+      PTR data;
 
       data = xmalloc (shared_size);
       if (fseek (shared_data, shared_offset, SEEK_SET) != 0
@@ -1091,7 +1102,9 @@ main (int argc, char **argv)
 /* Show a usage message and exit.  */
 
 static void
-show_usage (FILE *file, int status)
+show_usage (file, status)
+     FILE *file;
+     int status;
 {
   fprintf (file, _("Usage: %s [option(s)] [in-file [out-file]]\n"), program_name);
   fprintf (file, _(" Convert an object file into a NetWare Loadable Module\n"));
@@ -1113,8 +1126,10 @@ show_usage (FILE *file, int status)
    and endianness.  This chooses the appropriate NLM target.  */
 
 static const char *
-select_output_format (enum bfd_architecture arch, unsigned long mach,
-		      bfd_boolean bigendian ATTRIBUTE_UNUSED)
+select_output_format (arch, mach, bigendian)
+     enum bfd_architecture arch;
+     unsigned long mach;
+     bfd_boolean bigendian ATTRIBUTE_UNUSED;
 {
   switch (arch)
     {
@@ -1146,7 +1161,10 @@ select_output_format (enum bfd_architecture arch, unsigned long mach,
    name, size, etc.  */
 
 static void
-setup_sections (bfd *inbfd ATTRIBUTE_UNUSED, asection *insec, void *data_ptr)
+setup_sections (inbfd, insec, data_ptr)
+     bfd *inbfd ATTRIBUTE_UNUSED;
+     asection *insec;
+     PTR data_ptr;
 {
   bfd *outbfd = (bfd *) data_ptr;
   flagword f;
@@ -1213,14 +1231,17 @@ setup_sections (bfd *inbfd ATTRIBUTE_UNUSED, asection *insec, void *data_ptr)
 /* Copy the section contents.  */
 
 static void
-copy_sections (bfd *inbfd, asection *insec, void *data_ptr)
+copy_sections (inbfd, insec, data_ptr)
+     bfd *inbfd;
+     asection *insec;
+     PTR data_ptr;
 {
   static bfd_size_type secsecoff = 0;
   bfd *outbfd = (bfd *) data_ptr;
   const char *inname;
   asection *outsec;
   bfd_size_type size;
-  void *contents;
+  PTR contents;
   long reloc_size;
   bfd_byte buf[4];
   bfd_size_type add;
@@ -1290,7 +1311,7 @@ copy_sections (bfd *inbfd, asection *insec, void *data_ptr)
     }
 
   /* Add this section to .nlmsections.  */
-  if (! bfd_set_section_contents (outbfd, secsec, (void *) inname, secsecoff,
+  if (! bfd_set_section_contents (outbfd, secsec, (PTR) inname, secsecoff,
 				  strlen (inname) + 1))
     bfd_fatal (_("set .nlmsection contents"));
   secsecoff += strlen (inname) + 1;
@@ -1322,9 +1343,14 @@ copy_sections (bfd *inbfd, asection *insec, void *data_ptr)
    by the input formats.  */
 
 static void
-mangle_relocs (bfd *outbfd, asection *insec, arelent ***relocs_ptr,
-	       long *reloc_count_ptr, char *contents,
-	       bfd_size_type contents_size)
+mangle_relocs (outbfd, insec, relocs_ptr, reloc_count_ptr, contents,
+	       contents_size)
+     bfd *outbfd;
+     asection *insec;
+     arelent ***relocs_ptr;
+     long *reloc_count_ptr;
+     char *contents;
+     bfd_size_type contents_size;
 {
   switch (bfd_get_arch (outbfd))
     {
@@ -1357,10 +1383,14 @@ mangle_relocs (bfd *outbfd, asection *insec, arelent ***relocs_ptr,
    the output_offset.  */
 
 static void
-default_mangle_relocs (bfd *outbfd ATTRIBUTE_UNUSED, asection *insec,
-		       arelent ***relocs_ptr, long *reloc_count_ptr,
-		       char *contents ATTRIBUTE_UNUSED,
-		       bfd_size_type contents_size ATTRIBUTE_UNUSED)
+default_mangle_relocs (outbfd, insec, relocs_ptr, reloc_count_ptr, contents,
+		       contents_size)
+     bfd *outbfd ATTRIBUTE_UNUSED;
+     asection *insec;
+     arelent ***relocs_ptr;
+     long *reloc_count_ptr;
+     char *contents ATTRIBUTE_UNUSED;
+     bfd_size_type contents_size ATTRIBUTE_UNUSED;
 {
   if (insec->output_offset != 0)
     {
@@ -1399,9 +1429,14 @@ static reloc_howto_type nlm_i386_pcrel_howto =
 	 TRUE);			/* pcrel_offset */
 
 static void
-i386_mangle_relocs (bfd *outbfd, asection *insec, arelent ***relocs_ptr,
-		    long *reloc_count_ptr, char *contents,
-		    bfd_size_type contents_size)
+i386_mangle_relocs (outbfd, insec, relocs_ptr, reloc_count_ptr, contents,
+		    contents_size)
+     bfd *outbfd;
+     asection *insec;
+     arelent ***relocs_ptr;
+     long *reloc_count_ptr;
+     char *contents;
+     bfd_size_type contents_size;
 {
   long reloc_count, i;
   arelent **relocs;
@@ -1552,10 +1587,14 @@ static reloc_howto_type nlm32_alpha_nw_howto =
 	 FALSE);		/* pcrel_offset */
 
 static void
-alpha_mangle_relocs (bfd *outbfd, asection *insec,
-		     register arelent ***relocs_ptr, long *reloc_count_ptr,
-		     char *contents ATTRIBUTE_UNUSED,
-		     bfd_size_type contents_size ATTRIBUTE_UNUSED)
+alpha_mangle_relocs (outbfd, insec, relocs_ptr, reloc_count_ptr, contents,
+		     contents_size)
+     bfd *outbfd;
+     asection *insec;
+     register arelent ***relocs_ptr;
+     long *reloc_count_ptr;
+     char *contents ATTRIBUTE_UNUSED;
+     bfd_size_type contents_size ATTRIBUTE_UNUSED;
 {
   long old_reloc_count;
   arelent **old_relocs;
@@ -1608,7 +1647,8 @@ alpha_mangle_relocs (bfd *outbfd, asection *insec,
   ++relocs;
   ++(*reloc_count_ptr);
 
-  memcpy (relocs, old_relocs, (size_t) old_reloc_count * sizeof (arelent *));
+  memcpy ((PTR) relocs, (PTR) old_relocs,
+	  (size_t) old_reloc_count * sizeof (arelent *));
   relocs[old_reloc_count] = (arelent *) NULL;
 
   free (old_relocs);
@@ -1684,8 +1724,11 @@ static bfd_size_type powerpc_initial_got_size;
    build a stub for each one.  */
 
 static void
-powerpc_build_stubs (bfd *inbfd, bfd *outbfd ATTRIBUTE_UNUSED,
-		     asymbol ***symbols_ptr, long *symcount_ptr)
+powerpc_build_stubs (inbfd, outbfd, symbols_ptr, symcount_ptr)
+     bfd *inbfd;
+     bfd *outbfd ATTRIBUTE_UNUSED;
+     asymbol ***symbols_ptr;
+     long *symcount_ptr;
 {
   asection *stub_sec;
   asection *got_sec;
@@ -1801,7 +1844,9 @@ powerpc_build_stubs (bfd *inbfd, bfd *outbfd ATTRIBUTE_UNUSED,
    of the output section, and create new relocs in the TOC.  */
 
 static void
-powerpc_resolve_stubs (bfd *inbfd, bfd *outbfd)
+powerpc_resolve_stubs (inbfd, outbfd)
+     bfd *inbfd;
+     bfd *outbfd;
 {
   bfd_byte buf[POWERPC_STUB_SIZE];
   unsigned int i;
@@ -1862,10 +1907,14 @@ powerpc_resolve_stubs (bfd *inbfd, bfd *outbfd)
    any further reloc.  */
 
 static void
-powerpc_mangle_relocs (bfd *outbfd, asection *insec,
-		       register arelent ***relocs_ptr,
-		       long *reloc_count_ptr, char *contents,
-		       bfd_size_type contents_size ATTRIBUTE_UNUSED)
+powerpc_mangle_relocs (outbfd, insec, relocs_ptr, reloc_count_ptr, contents,
+		       contents_size)
+     bfd *outbfd;
+     asection *insec;
+     register arelent ***relocs_ptr;
+     long *reloc_count_ptr;
+     char *contents;
+     bfd_size_type contents_size ATTRIBUTE_UNUSED;
 {
   reloc_howto_type *toc_howto;
   long reloc_count;
@@ -2041,7 +2090,9 @@ powerpc_mangle_relocs (bfd *outbfd, asection *insec,
    file.  */
 
 static char *
-link_inputs (struct string_list *inputs, char *ld)
+link_inputs (inputs, ld)
+     struct string_list *inputs;
+     char *ld;
 {
   size_t c;
   struct string_list *q;

@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_exec.c,v 1.54 2004/08/08 08:42:03 jdolecek Exp $	 */
+/*	$NetBSD: mach_exec.c,v 1.53.2.1 2004/08/15 13:54:26 tron Exp $	 */
 
 /*-
  * Copyright (c) 2001-2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_exec.c,v 1.54 2004/08/08 08:42:03 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mach_exec.c,v 1.53.2.1 2004/08/15 13:54:26 tron Exp $");
 
 #include "opt_syscall_debug.h"
 

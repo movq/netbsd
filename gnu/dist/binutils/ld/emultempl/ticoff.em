@@ -3,7 +3,7 @@
 (echo;echo;echo;echo)>e${EMULATION_NAME}.c # there, now line numbers match ;-)
 cat >>e${EMULATION_NAME}.c <<EOF
 /* This file is part of GLD, the Gnu Linker.
-   Copyright 1999, 2000, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2002, 2003 Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,8 +20,8 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 /* For TI COFF */
-/* Need to determine load and run pages for output sections */
-
+/* Need to determine load and run pages for output sections */ 
+  
 #define TARGET_IS_${EMULATION_NAME}
 
 #include "bfd.h"
@@ -39,14 +39,24 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 static int coff_version;
 
+static void gld_${EMULATION_NAME}_before_parse PARAMS ((void));
+static char *gld_${EMULATION_NAME}_get_script PARAMS ((int *));
+static void gld${EMULATION_NAME}_add_options
+  PARAMS ((int, char **, int, struct option **, int, struct option **));
+static bfd_boolean gld${EMULATION_NAME}_handle_option PARAMS ((int));
+static void gld_${EMULATION_NAME}_list_options PARAMS ((FILE *));
+
 /* TI COFF extra command line options */
 #define OPTION_COFF_FORMAT		(300 + 1)
 
 static void
-gld${EMULATION_NAME}_add_options
-  (int ns ATTRIBUTE_UNUSED, char **shortopts ATTRIBUTE_UNUSED, int nl,
-   struct option **longopts, int nrl ATTRIBUTE_UNUSED,
-   struct option **really_longopts ATTRIBUTE_UNUSED)
+gld${EMULATION_NAME}_add_options (ns, shortopts, nl, longopts, nrl, really_longopts)
+     int ns ATTRIBUTE_UNUSED;
+     char **shortopts ATTRIBUTE_UNUSED;
+     int nl;
+     struct option **longopts;
+     int nrl ATTRIBUTE_UNUSED;
+     struct option **really_longopts ATTRIBUTE_UNUSED;
 {
   static const struct option xtra_long[] = {
     /* TI COFF options */
@@ -60,13 +70,15 @@ gld${EMULATION_NAME}_add_options
 }
 
 static void
-gld_${EMULATION_NAME}_list_options (FILE * file)
+gld_${EMULATION_NAME}_list_options (file)
+    FILE * file;
 {
-  fprintf (file, _("  --format 0|1|2         Specify which COFF version to use\n"));
-}
+  fprintf (file, _("  --format 0|1|2         Specify which COFF version to use"));
+}				  
 
 static bfd_boolean
-gld${EMULATION_NAME}_handle_option (int optc)
+gld${EMULATION_NAME}_handle_option (optc)
+     int optc;
 {
   switch (optc)
     {
@@ -77,10 +89,12 @@ gld${EMULATION_NAME}_handle_option (int optc)
       if ((*optarg == '0' || *optarg == '1' || *optarg == '2')
           && optarg[1] == '\0')
       {
+        extern void lang_add_output_format
+          PARAMS ((const char *, const char *, const char *, int));
         static char buf[] = "coffX-${OUTPUT_FORMAT_TEMPLATE}";
         coff_version = *optarg - '0';
         buf[4] = *optarg;
-	lang_add_output_format (buf, NULL, NULL, 0);
+	lang_add_output_format (buf, NULL, NULL, 0);	
       }
       else
         {
@@ -92,15 +106,16 @@ gld${EMULATION_NAME}_handle_option (int optc)
 }
 
 static void
-gld_${EMULATION_NAME}_before_parse(void)
+gld_${EMULATION_NAME}_before_parse()
 {
 #ifndef TARGET_			/* I.e., if not generic.  */
-  ldfile_set_output_arch ("`echo ${ARCH}`", bfd_arch_unknown);
+  ldfile_set_output_arch ("`echo ${ARCH}`");
 #endif /* not TARGET_ */
 }
 
 static char *
-gld_${EMULATION_NAME}_get_script (int *isfile)
+gld_${EMULATION_NAME}_get_script (isfile)
+     int *isfile;
 EOF
 if test -n "$COMPILE_IN"
 then
@@ -113,11 +128,11 @@ s/$/\\n\\/
 $s/$/n"/
 '
 cat >>e${EMULATION_NAME}.c <<EOF
-{
+{			     
   *isfile = 0;
-  if (link_info.relocatable && config.build_constructors)
+  if (link_info.relocateable && config.build_constructors)
     return `sed "$sc" ldscripts/${EMULATION_NAME}.xu`;
-  else if (link_info.relocatable)
+  else if (link_info.relocateable)
     return `sed "$sc" ldscripts/${EMULATION_NAME}.xr`;
   else if (!config.text_read_only)
     return `sed "$sc" ldscripts/${EMULATION_NAME}.xbn`;
@@ -132,12 +147,12 @@ else
 # Scripts read from the filesystem.
 
 cat >>e${EMULATION_NAME}.c <<EOF
-{
+{			     
   *isfile = 1;
 
-  if (link_info.relocatable && config.build_constructors)
+  if (link_info.relocateable && config.build_constructors)
     return "ldscripts/${EMULATION_NAME}.xu";
-  else if (link_info.relocatable)
+  else if (link_info.relocateable)
     return "ldscripts/${EMULATION_NAME}.xr";
   else if (!config.text_read_only)
     return "ldscripts/${EMULATION_NAME}.xbn";
@@ -151,7 +166,7 @@ EOF
 fi
 
 cat >>e${EMULATION_NAME}.c <<EOF
-struct ld_emulation_xfer_struct ld_${EMULATION_NAME}_emulation =
+struct ld_emulation_xfer_struct ld_${EMULATION_NAME}_emulation = 
 {
   gld_${EMULATION_NAME}_before_parse,
   syslib_default,

@@ -1,4 +1,4 @@
-/*	$NetBSD: scc.c,v 1.85 2004/08/26 18:08:04 drochner Exp $	*/
+/*	$NetBSD: scc.c,v 1.83 2003/09/28 17:25:07 chs Exp $	*/
 
 /*
  * Copyright (c) 1991,1990,1989,1994,1995,1996 Carnegie Mellon University
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: scc.c,v 1.85 2004/08/26 18:08:04 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scc.c,v 1.83 2003/09/28 17:25:07 chs Exp $");
 
 /*
  * Intel 82530 dual usart chip driver. Supports the serial port(s) on the
@@ -161,7 +161,7 @@ struct scc_softc {
  *
  * Speed selections with Pclk=7.3728Mhz, clock x16
  */
-const struct speedtab sccspeedtab[] = {
+struct speedtab sccspeedtab[] = {
 	{ 0,		0,	},
 	{ 50,		4606,	},
 	{ 75,		3070,	},
@@ -339,6 +339,14 @@ sccmatch(parent, cf, aux)
 	if ((strncmp(d->iada_modname, "z8530   ", TC_ROM_LLEN) != 0) &&
 	    (strncmp(d->iada_modname, "scc", TC_ROM_LLEN)!= 0))
 	    return (0);
+
+	/*
+	 * Check user-specified offset against the ioasic offset.
+	 * Allow it to be wildcarded.
+	 */
+	if (cf->cf_loc[IOASICCF_OFFSET] != IOASICCF_OFFSET_DEFAULT &&
+	    cf->cf_loc[IOASICCF_OFFSET] != d->iada_offset)
+		return (0);
 
 	/* Get the address, and check it for validity. */
 	sccaddr = (void *)d->iada_addr;

@@ -1,5 +1,5 @@
 /* BFD back-end for ALPHA Extended-Coff files.
-   Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003
+   Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002
    Free Software Foundation, Inc.
    Modified from coff-mips.c by Steve Chamberlain <sac@cygnus.com> and
    Ian Lance Taylor <ian@cygnus.com>.
@@ -53,7 +53,7 @@ static reloc_howto_type *alpha_bfd_reloc_type_lookup
   PARAMS ((bfd *, bfd_reloc_code_real_type));
 static bfd_byte *alpha_ecoff_get_relocated_section_contents
   PARAMS ((bfd *abfd, struct bfd_link_info *, struct bfd_link_order *,
-	   bfd_byte *data, bfd_boolean relocatable, asymbol **symbols));
+	   bfd_byte *data, bfd_boolean relocateable, asymbol **symbols));
 static bfd_vma alpha_convert_external_reloc
   PARAMS ((bfd *, struct bfd_link_info *, bfd *, struct external_reloc *,
 	   struct ecoff_link_hash_entry *));
@@ -755,12 +755,12 @@ alpha_adjust_reloc_out (abfd, rel, intern)
 
 static bfd_byte *
 alpha_ecoff_get_relocated_section_contents (abfd, link_info, link_order,
-					    data, relocatable, symbols)
+					    data, relocateable, symbols)
      bfd *abfd;
      struct bfd_link_info *link_info;
      struct bfd_link_order *link_order;
      bfd_byte *data;
-     bfd_boolean relocatable;
+     bfd_boolean relocateable;
      asymbol **symbols;
 {
   bfd *input_bfd = link_order->u.indirect.section->owner;
@@ -768,7 +768,7 @@ alpha_ecoff_get_relocated_section_contents (abfd, link_info, link_order,
   long reloc_size = bfd_get_reloc_upper_bound (input_bfd, input_section);
   arelent **reloc_vector = NULL;
   long reloc_count;
-  bfd *output_bfd = relocatable ? abfd : (bfd *) NULL;
+  bfd *output_bfd = relocateable ? abfd : (bfd *) NULL;
   bfd_vma gp;
   bfd_boolean gp_undefined;
   bfd_vma stack[RELOC_STACKSIZE];
@@ -800,7 +800,7 @@ alpha_ecoff_get_relocated_section_contents (abfd, link_info, link_order,
   gp = _bfd_get_gp_value (abfd);
   if (gp == 0)
     {
-      if (relocatable)
+      if (relocateable)
 	{
 	  asection *sec;
 	  bfd_vma lo;
@@ -860,7 +860,7 @@ alpha_ecoff_get_relocated_section_contents (abfd, link_info, link_order,
 	case ALPHA_R_SREL16:
 	case ALPHA_R_SREL32:
 	case ALPHA_R_SREL64:
-	  if (relocatable
+	  if (relocateable
 	      && ((*rel->sym_ptr_ptr)->flags & BSF_SECTION_SYM) == 0)
 	    {
 	      rel->address += input_section->output_offset;
@@ -993,7 +993,7 @@ alpha_ecoff_get_relocated_section_contents (abfd, link_info, link_order,
 	    asymbol *symbol;
 	    bfd_vma relocation;
 
-	    if (relocatable)
+	    if (relocateable)
 	      {
 		rel->address += input_section->output_offset;
 		break;
@@ -1026,7 +1026,7 @@ alpha_ecoff_get_relocated_section_contents (abfd, link_info, link_order,
 	    bfd_vma val;
 	    int offset, size;
 
-	    if (relocatable)
+	    if (relocateable)
 	      {
 		rel->address += input_section->output_offset;
 		break;
@@ -1053,7 +1053,7 @@ alpha_ecoff_get_relocated_section_contents (abfd, link_info, link_order,
 	    asymbol *symbol;
 	    bfd_vma relocation;
 
-	    if (relocatable)
+	    if (relocateable)
 	      {
 		rel->address += input_section->output_offset;
 		break;
@@ -1086,7 +1086,7 @@ alpha_ecoff_get_relocated_section_contents (abfd, link_info, link_order,
 	    asymbol *symbol;
 	    bfd_vma relocation;
 
-	    if (relocatable)
+	    if (relocateable)
 	      {
 		rel->address += input_section->output_offset;
 		break;
@@ -1123,7 +1123,7 @@ alpha_ecoff_get_relocated_section_contents (abfd, link_info, link_order,
 	  abort ();
 	}
 
-      if (relocatable)
+      if (relocateable)
 	{
 	  asection *os = input_section->output_section;
 
@@ -1250,7 +1250,7 @@ alpha_bfd_reloc_type_lookup (abfd, code)
 }
 
 /* A helper routine for alpha_relocate_section which converts an
-   external reloc when generating relocatable output.  Returns the
+   external reloc when generating relocateable output.  Returns the
    relocation amount.  */
 
 static bfd_vma
@@ -1264,7 +1264,7 @@ alpha_convert_external_reloc (output_bfd, info, input_bfd, ext_rel, h)
   unsigned long r_symndx;
   bfd_vma relocation;
 
-  BFD_ASSERT (info->relocatable);
+  BFD_ASSERT (info->relocateable);
 
   if (h->root.type == bfd_link_hash_defined
       || h->root.type == bfd_link_hash_defweak)
@@ -1445,7 +1445,7 @@ alpha_relocate_section (output_bfd, info, input_bfd, input_section,
 
   lita_sec = symndx_to_section[RELOC_SECTION_LITA];
   gp = _bfd_get_gp_value (output_bfd);
-  if (! info->relocatable && lita_sec != NULL)
+  if (! info->relocateable && lita_sec != NULL)
     {
       struct ecoff_section_tdata *lita_sec_data;
 
@@ -1554,7 +1554,7 @@ alpha_relocate_section (output_bfd, info, input_bfd, input_section,
 	     not otherwise used for anything.  For some reason, the
 	     address of the relocation does not appear to include the
 	     section VMA, unlike the other relocation types.  */
-	  if (info->relocatable)
+	  if (info->relocateable)
 	    H_PUT_64 (input_bfd, input_section->output_offset + r_vaddr,
 		      ext_rel->r_vaddr);
 	  adjust_addrp = FALSE;
@@ -1707,7 +1707,7 @@ alpha_relocate_section (output_bfd, info, input_bfd, input_section,
 	      if (h == (struct ecoff_link_hash_entry *) NULL)
 		abort ();
 
-	      if (! info->relocatable)
+	      if (! info->relocateable)
 		{
 		  if (h->root.type == bfd_link_hash_defined
 		      || h->root.type == bfd_link_hash_defweak)
@@ -1750,7 +1750,7 @@ alpha_relocate_section (output_bfd, info, input_bfd, input_section,
 
 	  addend += r_vaddr;
 
-	  if (info->relocatable)
+	  if (info->relocateable)
 	    {
 	      /* Adjust r_vaddr by the addend.  */
 	      H_PUT_64 (input_bfd, addend, ext_rel->r_vaddr);
@@ -1784,9 +1784,9 @@ alpha_relocate_section (output_bfd, info, input_bfd, input_section,
 
 	case ALPHA_R_OP_STORE:
 	  /* Store a value from the reloc stack into a bitfield.  If
-	     we are generating relocatable output, all we do is
+	     we are generating relocateable output, all we do is
 	     adjust the address of the reloc.  */
-	  if (! info->relocatable)
+	  if (! info->relocateable)
 	    {
 	      bfd_vma mask;
 	      bfd_vma val;
@@ -1852,9 +1852,9 @@ alpha_relocate_section (output_bfd, info, input_bfd, input_section,
 		abort ();
 	    }
 
-	  if (info->relocatable)
+	  if (info->relocateable)
 	    {
-	      /* We are generating relocatable output, and must
+	      /* We are generating relocateable output, and must
 		 convert the existing reloc.  */
 	      if (r_extern)
 		{
@@ -1977,7 +1977,7 @@ alpha_relocate_section (output_bfd, info, input_bfd, input_section,
 	    }
 	}
 
-      if (info->relocatable && adjust_addrp)
+      if (info->relocateable && adjust_addrp)
 	{
 	  /* Change the address of the relocation.  */
 	  H_PUT_64 (input_bfd,

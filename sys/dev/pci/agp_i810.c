@@ -1,4 +1,4 @@
-/*	$NetBSD: agp_i810.c,v 1.23 2004/11/06 07:43:30 xtraeme Exp $	*/
+/*	$NetBSD: agp_i810.c,v 1.22.2.1 2004/11/12 06:04:32 jmc Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agp_i810.c,v 1.23 2004/11/06 07:43:30 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agp_i810.c,v 1.22.2.1 2004/11/12 06:04:32 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

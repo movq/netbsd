@@ -1,4 +1,4 @@
-/*	$NetBSD: newfs_msdos.c,v 1.18 2004/10/29 19:07:46 dsl Exp $	*/
+/*	$NetBSD: newfs_msdos.c,v 1.14.2.2 2004/09/23 02:44:44 jmc Exp $	*/
 
 /*
  * Copyright (c) 1998 Robert Nordier
@@ -33,7 +33,7 @@
 static const char rcsid[] =
   "$FreeBSD: src/sbin/newfs_msdos/newfs_msdos.c,v 1.15 2000/10/10 01:49:37 wollman Exp $";
 #else
-__RCSID("$NetBSD: newfs_msdos.c,v 1.18 2004/10/29 19:07:46 dsl Exp $");
+__RCSID("$NetBSD: newfs_msdos.c,v 1.14.2.2 2004/09/23 02:44:44 jmc Exp $");
 #endif
 #endif /* not lint */
 
@@ -713,7 +713,7 @@ main(int argc, char *argv[])
 static void
 check_mounted(const char *fname, mode_t mode)
 {
-    struct statvfs *mp;
+    struct statfs *mp;
     const char *s1, *s2;
     size_t len;
     int n, r;
@@ -770,11 +770,11 @@ getdiskinfo(int fd, const char *fname, const char *dtype, int oflag,
     s1 = fname;
     if ((s2 = strrchr(s1, '/')))
 	s1 = s2 + 1;
-    for (s2 = s1; *s2 && !isdigit((unsigned char)*s2); s2++);
+    for (s2 = s1; *s2 && !isdigit(*s2); s2++);
     if (!*s2 || s2 == s1)
 	s2 = NULL;
     else
-	while (isdigit((unsigned char)*++s2));
+	while (isdigit(*++s2));
     s1 = s2;
 #ifdef __FreeBSD__
     if (s2 && *s2 == 's') {
@@ -944,7 +944,7 @@ mklabel(u_int8_t *dest, const char *src)
     int c, i;
 
     for (i = 0; i < 11; i++) {
-	c = *src ? toupper((unsigned char)*src++) : ' ';
+	c = *src ? toupper(*src++) : ' ';
 	*dest++ = !i && c == '\xe5' ? 5 : c;
     }
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: l4check.c,v 1.2 2004/11/13 19:16:10 he Exp $	*/
+/*	$NetBSD: l4check.c,v 1.1.1.3 2004/03/28 08:56:17 martti Exp $	*/
 
 /*
  * (C)Copyright March, 2000 - Darren Reed.
@@ -418,10 +418,10 @@ u_short *portp;
 		*port++ = '\0';
 
 #ifdef	HAVE_INET_ATON
-	if (ISDIGIT(*host) && inet_aton(host, &ip))
+	if (isdigit(*host) && inet_aton(host, &ip))
 		*ipp = ip.s_addr;
 #else
-	if (ISDIGIT(*host))
+	if (isdigit(*host))
 		*ipp = inet_addr(host);
 #endif
 	else {
@@ -434,7 +434,7 @@ u_short *portp;
 	}
 
 	if (port) {
-		if (ISDIGIT(*port))
+		if (isdigit(*port))
 			*portp = htons(atoi(port));
 		else {
 			sp = getservbyname(port, "tcp");
@@ -527,7 +527,7 @@ char *filename;
 		/*
 		 * Skip leading whitespace
 		 */
-		for (line = buf; (c = *line) && ISSPACE(c); line++)
+		for (line = buf; (c = *line) && isspace(c); line++)
 			;
 		if (!*line)
 			continue;

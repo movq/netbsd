@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.22 2004/10/23 17:12:22 thorpej Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.20 2004/01/19 03:26:14 sekiya Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.22 2004/10/23 17:12:22 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.20 2004/01/19 03:26:14 sekiya Exp $");
 
 #include "opt_ddb.h"
 
@@ -52,8 +52,9 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.22 2004/10/23 17:12:22 thorpej Exp $"
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 
+struct device	*booted_device = NULL;
 static struct device *booted_controller = NULL;
-static int	booted_slot, booted_unit;
+static int	booted_slot, booted_unit, booted_partition;
 static char	*booted_protocol = NULL;
 
 extern struct platform platform;
@@ -88,7 +89,8 @@ cpu_configure()
  * 'dksc(0,1,0)netbsd'
  */
 void
-makebootdev(char *cp)
+makebootdev(cp)
+	char *cp;
 {
 	if (booted_protocol != NULL)
 		return;
@@ -168,7 +170,9 @@ cpu_rootconf()
  * Try to determine the boot device.
  */
 void
-device_register(struct device *dev, void *aux)
+device_register(dev, aux)
+	struct device *dev;
+	void *aux;
 {
 	static int found, initted, scsiboot, netboot;
 	struct device *parent = dev->dv_parent;

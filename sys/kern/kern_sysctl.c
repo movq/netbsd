@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sysctl.c,v 1.176 2004/05/12 12:21:39 cube Exp $	*/
+/*	$NetBSD: kern_sysctl.c,v 1.169.2.6 2004/05/14 06:18:39 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.176 2004/05/12 12:21:39 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.169.2.6 2004/05/14 06:18:39 jdc Exp $");
 
 #include "opt_defcorename.h"
 #include "opt_insecure.h"
@@ -221,7 +221,7 @@ sysctl_copyinstr(const struct lwp *l, const void *uaddr, void *kaddr,
 void
 sysctl_init(void)
 {
-	sysctl_setup_func * const *sysctl_setup, f;
+	sysctl_setup_func **sysctl_setup, f;
 
 	lockinit(&sysctl_treelock, PRIBIO|PCATCH, "sysctl", 0, 0);
 

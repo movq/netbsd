@@ -1,4 +1,4 @@
-/* $NetBSD: atppcvar.h,v 1.4 2004/04/21 17:38:48 drochner Exp $ */
+/* $NetBSD: atppcvar.h,v 1.3 2004/01/25 00:28:01 bjh21 Exp $ */
 
 /*-
  * Copyright (c) 2001 Alcove - Nicolas Souchu
@@ -82,11 +82,9 @@ extern int atppc_verbose;
 #if defined(MULTIPROCESSOR) || defined (LOCKDEBUG)
 #include <sys/lock.h>
 #define ATPPC_SC_LOCK(sc) (&((sc)->sc_lock))
-#define ATPPC_LOCK_INIT(sc) simple_lock_init(ATPPC_SC_LOCK((sc)))
 #define ATPPC_LOCK(sc) simple_lock(ATPPC_SC_LOCK((sc)))
 #define ATPPC_UNLOCK(sc) simple_unlock(ATPPC_SC_LOCK((sc)))
 #else /* !(MULTIPROCESSOR) && !(LOCKDEBUG) */
-#define ATPPC_LOCK_INIT(sc)
 #define ATPPC_LOCK(sc)
 #define ATPPC_UNLOCK(sc)
 #define ATPPC_SC_LOCK(sc) NULL 

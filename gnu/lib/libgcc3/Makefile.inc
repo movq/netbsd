@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.7 2004/03/29 09:32:49 tron Exp $
+#	$NetBSD: Makefile.inc,v 1.6.2.1 2004/03/29 19:26:42 jdc Exp $
 
 .if exists(${.CURDIR}/arch/${MACHINE_ARCH}.mk) && ${MKGCC} != "no"
 .include "${.CURDIR}/arch/${MACHINE_ARCH}.mk"

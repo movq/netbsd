@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2004/08/05 01:28:48 lukem Exp $
+#	$NetBSD: Makefile,v 1.4 2003/11/08 13:57:29 lukem Exp $
 
 .include <bsd.own.mk>
 
@@ -32,11 +32,8 @@ PSOPSHEADERFILES= \
 
 PSOPSCFILES= ${PSOPSHEADERFILES:.h=.c}
 
-DPSRCS+=	${DPSOPSHEADERFILES} ${DPSOPSCFILES}
 CLEANFILES+=	${DPSOPSHEADERFILES} ${DPSOPSCFILES}
-DPSRCS+=	${PSOPSHEADERFILES} ${PSOPSCFILES}
 CLEANFILES+=	${PSOPSHEADERFILES} ${PSOPSCFILES}
-CPPFLAGS+=	-I.
 
 psops.h: ${PSOPSHEADERFILES} psname.txt header.txt psifdef.txt psendif.txt
 	${_MKTARGET_CREATE}
@@ -70,12 +67,8 @@ CLEANFILES+=	dpsops.h dpsops.h.tmp
 
 .include "${NETBSDSRCDIR}/x11/tools/pswrap/Makefile.pswrap"
 
-LIBDPLIBS=\
-	Xt	${.CURDIR}/../Xt \
-	SM	${.CURDIR}/../SM \
-	ICE	${.CURDIR}/../ICE \
-	Xext	${.CURDIR}/../Xext \
-	X11	${.CURDIR}/../X11/dynamic
+LDADD+=	-lXt -lSM -lICE -lXext -lX11
+DPADD+=	${LIBXT} ${LIBSM} ${LIBICE} ${LIBXEXT} ${LIBX11}
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>

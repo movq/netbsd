@@ -1,6 +1,5 @@
-#	$NetBSD: Makefile,v 1.2 2004/05/16 09:53:09 lukem Exp $
+#	$NetBSD: Makefile,v 1.1 2003/04/18 05:40:06 thorpej Exp $
 
 SUBDIR+= scripts
-TARGETS+=configinstall
 
 .include <bsd.subdir.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_lookup.h,v 1.2 2004/07/21 14:16:34 tshiozak Exp $	*/
+/*	$NetBSD: citrus_lookup.h,v 1.1 2003/06/25 09:51:35 tshiozak Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,
@@ -29,13 +29,10 @@
 #ifndef _CITRUS_LOOKUP_H_
 #define _CITRUS_LOOKUP_H_
 
-#define _CITRUS_LOOKUP_CASE_SENSITIVE	0
-#define _CITRUS_LOOKUP_CASE_IGNORE	1
-
 struct _citrus_lookup;
 __BEGIN_DECLS
-char *_citrus_lookup_simple(const char *, const char *, char *, size_t, int);
-int _citrus_lookup_seq_open(struct _citrus_lookup **, const char *, int);
+char *_citrus_lookup_simple(const char *, const char *, char *, size_t);
+int _citrus_lookup_seq_open(struct _citrus_lookup **, const char *);
 void _citrus_lookup_seq_rewind(struct _citrus_lookup *);
 int _citrus_lookup_seq_next(struct _citrus_lookup *,
 			    struct _region *, struct _region *);
@@ -46,12 +43,11 @@ void _citrus_lookup_seq_close(struct _citrus_lookup *);
 __END_DECLS
 
 static __inline const char *
-_citrus_lookup_alias(const char *path, const char *key, char *buf, size_t n,
-		     int ignore_case)
+_citrus_lookup_alias(const char *path, const char *key, char *buf, size_t n)
 {
 	const char *ret;
 
-	ret = _citrus_lookup_simple(path, key, buf, n, ignore_case);
+	ret = _citrus_lookup_simple(path, key, buf, n);
 	if (ret == NULL)
 		ret = key;
 

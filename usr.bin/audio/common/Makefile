@@ -1,8 +1,12 @@
-#	$NetBSD: Makefile,v 1.7 2004/05/23 02:24:51 lukem Exp $
+#	$NetBSD: Makefile,v 1.6 2002/10/13 00:59:45 mrg Exp $
 
-MKPRIVATELIB=	yes
+NOPROFILE=      # defined
+NOPIC=          # defined
 
 LIB=	audio
 SRCS=	audio.c wav.c sun.c
+
+# only needed during build
+libinstall::
 
 .include <bsd.lib.mk>

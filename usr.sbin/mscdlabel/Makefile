@@ -1,9 +1,9 @@
-# $NetBSD: Makefile,v 1.4 2004/07/04 14:11:44 drochner Exp $
+# $NetBSD: Makefile,v 1.3 2002/11/30 06:00:42 lukem Exp $
 
 .include <bsd.own.mk>
 
 PROG=	mscdlabel
-SRCS=	main.c dkcksum.c iso9660.c
+SRCS=	main.c dkcksum.c
 DPADD+=	${LIBUTIL}
 LDADD+=	-lutil
 MAN=	mscdlabel.8

@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.12 2004/06/26 21:48:30 kleink Exp $	*/
+/*	$NetBSD: psl.h,v 1.8 2003/07/31 01:25:38 matt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -61,7 +61,7 @@
 #define	PSL_RI		0x00000002	/* recoverable interrupt */
 #define	PSL_LE		0x00000001	/* endian mode (1 == le) */
 
-#define	PSL_601_MASK	~(PSL_VEC|PSL_POW|PSL_ILE|PSL_BE|PSL_RI|PSL_LE)
+#define	PSL_601_MASK	~(PSL_POW|PSL_ILE|PSL_BE|PSL_RI|PSL_LE)
 
 /*
  * Floating-point exception modes:
@@ -78,29 +78,8 @@
 #define	PSL_MBO		0
 #define	PSL_MBZ		0
 
-/*
- * A user is not allowed to change any MSR bits except the following:
- * We restrict the test to the low 16 bits of the MSR since those are the
- * only ones preserved in the trap.  Note that this means PSL_VEC needs to
- * be restored to SRR1 in userret.
- */
-#if defined(_KERNEL) && !defined(_LOCORE)
-#ifdef _KERNEL_OPT
-#include "opt_ppcarch.h"
-#endif /* _KERNEL_OPT */
+#define	PSL_USERSET	(PSL_EE | PSL_PR | PSL_ME | PSL_IR | PSL_DR | PSL_RI)
 
-#if defined(PPC_OEA)
-extern int cpu_psluserset, cpu_pslusermod;
-
-#define	PSL_USERSET		cpu_psluserset
-#define	PSL_USERMOD		cpu_pslusermod
-#else /* PPC_IBM4XX */
-#define	PSL_USERSET		(PSL_EE | PSL_PR | PSL_ME | PSL_IR | PSL_DR)
-#define	PSL_USERMOD		(0)
-#endif /* PPC_OEA */
-
-#define	PSL_USERSRR1		((PSL_USERSET|PSL_USERMOD) & 0xFFFF)
-#define	PSL_USEROK_P(psl)	(((psl) & ~PSL_USERMOD) == PSL_USERSET)
-#endif /* !_LOCORE */
+#define	PSL_USERSTATIC	(PSL_USERSET | PSL_IP | 0x87c0008c)
 
 #endif	/* _POWERPC_PSL_H_ */

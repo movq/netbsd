@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_extern.h,v 1.93 2004/08/28 22:12:40 thorpej Exp $	*/
+/*	$NetBSD: uvm_extern.h,v 1.91 2004/03/24 07:55:01 junyoung Exp $	*/
 
 /*
  *
@@ -460,8 +460,7 @@ extern struct uvmexp uvmexp;
  */
 struct vmspace {
 	struct	vm_map vm_map;	/* VM address map */
-	int	vm_refcnt;	/* number of references *
-				 * note: protected by vm_map.ref_lock */
+	int	vm_refcnt;	/* number of references */
 	caddr_t	vm_shm;		/* SYS5 shared memory private data XXX */
 /* we copy from vm_startcopy to the end of the structure on fork */
 #define vm_startcopy vm_rssize
@@ -531,6 +530,7 @@ MALLOC_DECLARE(M_VMPMAP);
 /* vm_machdep.c */
 void		vmapbuf(struct buf *, vsize_t);
 void		vunmapbuf(struct buf *, vsize_t);
+void		pagemove(caddr_t, caddr_t, size_t);
 #ifndef	cpu_swapin
 void		cpu_swapin(struct lwp *);
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: timer_msiiep.c,v 1.14 2004/07/01 10:23:41 pk Exp $	*/
+/*	$NetBSD: timer_msiiep.c,v 1.12 2004/02/13 11:36:18 wiz Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: timer_msiiep.c,v 1.14 2004/07/01 10:23:41 pk Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timer_msiiep.c,v 1.12 2004/02/13 11:36:18 wiz Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -72,6 +72,8 @@ __KERNEL_RCSID(0, "$NetBSD: timer_msiiep.c,v 1.14 2004/07/01 10:23:41 pk Exp $")
 
 #include <sparc/sparc/msiiepreg.h> 
 #include <sparc/sparc/msiiepvar.h>
+
+static int timerok;
 
 static struct intrhand level10;
 static struct intrhand level14;
@@ -109,9 +111,10 @@ timer_init_msiiep(void)
 static int
 clockintr_msiiep(void *cap)
 {
+	volatile int discard;
 
 	/* read the limit register to clear the interrupt */
-	*((volatile int *)&msiiep->pcic_sclr);
+	discard = msiiep->pcic_sclr;
 	hardclock((struct clockframe *)cap);
 	return (1);
 }
@@ -123,10 +126,24 @@ static int
 statintr_msiiep(void *cap)
 {
 	struct clockframe *frame = cap;
+	volatile int discard;
 	u_long newint;
 
 	/* read the limit register to clear the interrupt */
-	*((volatile int *)&msiiep->pcic_pclr);
+	discard = msiiep->pcic_pclr;
+	if (timerok == 0) {
+		/* Stop the clock */
+#ifdef DIAGNOSTIC
+		printf("note: counter running!\n");
+#endif
+		/*
+		 * Turn interrupting processor counter
+		 * into non-interrupting user timer.
+		 */
+		msiiep->pcic_pc_cfg = 1; /* make it a user timer */
+		msiiep->pcic_pc_ctl = 0; /* stop user timer */
+		return (1);
+	}
 
 	statclock(frame);
 
@@ -191,10 +208,10 @@ timerattach_msiiep(struct device *parent, struct device *self, void *aux)
 	 * Note: ms-IIep clocks ticks every 4 processor cycles.
 	 */
 	for (timerblurb = 1; ; ++timerblurb) {
-		volatile int t;
+		volatile int discard;
+		int t;
 
-		/* clear the limit bit */
-		*((volatile int *)&msiiep->pcic_pclr);
+		discard = msiiep->pcic_pclr; /* clear the limit bit */
 		msiiep->pcic_pclr = 0; /* reset counter to 1, free run */
 		delay(100);
 		t = msiiep->pcic_pccr;
@@ -228,6 +245,8 @@ timerattach_msiiep(struct device *parent, struct device *self, void *aux)
 	sched_cookie = softintr_establish(IPL_SCHED, schedintr, NULL);
 	if (sched_cookie == NULL)
 		panic("timerattach: cannot establish schedintr");
+
+	timerok = 1;
 }
 
 CFATTACH_DECL(timer_msiiep, sizeof(struct device), 

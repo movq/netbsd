@@ -1,4 +1,4 @@
-/*	$NetBSD: platid_name.c,v 1.16 2004/08/13 15:49:13 uch Exp $	*/
+/*	$NetBSD: platid_name.c,v 1.14 2004/03/17 04:18:38 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001
@@ -84,8 +84,6 @@ struct platid_name platid_name_table[] = {
 	 TEXT("SH 3 7709") },
 	{ &platid_mask_CPU_SH_3_7709A,
 	 TEXT("SH 3 7709A") },
-	{ &platid_mask_CPU_SH_3_7707,
-	 TEXT("SH 3 7707") },
 	{ &platid_mask_CPU_SH_4,
 	 TEXT("SH 4") },
 	{ &platid_mask_CPU_SH_4_7750,
@@ -232,16 +230,10 @@ struct platid_name platid_name_table[] = {
 	 TEXT("Sharp Tripad PV6000") },
 	{ &platid_mask_MACH_SHARP_TELIOS,
 	 TEXT("Sharp Telios") },
-	{ &platid_mask_MACH_SHARP_TELIOS_HCAJ,
-	 TEXT("Sharp Telios HCAJ") },
-	{ &platid_mask_MACH_SHARP_TELIOS_HCAJ1_JP,
-	 TEXT("Sharp HC-AJ1 (Japanese)") },
-	{ &platid_mask_MACH_SHARP_TELIOS_HCAJ2_JP,
-	 TEXT("Sharp HC-AJ2 (Japanese)") },
-	{ &platid_mask_MACH_SHARP_TELIOS_HCAJ3_JP,
-	 TEXT("Sharp HC-AJ3 (Japanese)") },
-	{ &platid_mask_MACH_SHARP_TELIOS_HCVJ,
-	 TEXT("Sharp Telios HCVJ") },
+	{ &platid_mask_MACH_SHARP_TELIOS_HC,
+	 TEXT("Sharp Telios HC") },
+	{ &platid_mask_MACH_SHARP_TELIOS_HCAJ1,
+	 TEXT("Sharp HC-AJ1/AJ2") },
 	{ &platid_mask_MACH_SHARP_TELIOS_HCVJ1C_JP,
 	 TEXT("Sharp HC-VJ1C (Japanese)") },
 	{ &platid_mask_MACH_SHARP_MOBILON,
@@ -386,8 +378,6 @@ struct platid_name platid_name_table[] = {
 	 TEXT("HP 620LX") },
 	{ &platid_mask_MACH_HP_LX_620JP,
 	 TEXT("HP 620LX (Japanese)") },
-	{ &platid_mask_MACH_HP_LX_360,
-	 TEXT("HP 360LX (Ericsson MC-16)") },
 #endif /* hpcsh */
 	{ &platid_mask_MACH_HP_JORNADA,
 	 TEXT("HP Jornada") },
@@ -442,8 +432,6 @@ struct platid_name platid_name_table[] = {
 	 TEXT("HITACHI PERSONA HPW230JC") },
 	{ &platid_mask_MACH_HITACHI_PERSONA_HPW50PAD,
 	 TEXT("HITACHI PERSONA HPW50PAD") },
-	{ &platid_mask_MACH_HITACHI_PERSONA_HPW200EC,
-	 TEXT("HITACHI PERSONA HPW200EC") },
 	{ &platid_mask_MACH_HITACHI_PERSONA_HPW650PA,
 	 TEXT("HITACHI PERSONA HPW650PA") },
 #endif /* hpcsh */

@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl81x9var.h,v 1.13 2004/05/30 03:43:26 toshii Exp $	*/
+/*	$NetBSD: rtl81x9var.h,v 1.11.2.2 2004/06/21 17:12:38 tron Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998

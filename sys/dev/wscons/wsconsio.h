@@ -1,4 +1,4 @@
-/* $NetBSD: wsconsio.h,v 1.70 2004/08/26 16:48:06 jkunz Exp $ */
+/* $NetBSD: wsconsio.h,v 1.61.2.4 2004/06/13 08:22:01 jdc Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -96,7 +96,6 @@ struct wscons_event {
 #define	WSKBD_TYPE_ATARI	15	/* Atari keyboard */
 #define	WSKBD_TYPE_SUN		16	/* Sun Type3/4 */
 #define	WSKBD_TYPE_SUN5		17	/* Sun Type5 */
-#define WSKBD_TYPE_SGI		18	/* SGI keyboard */
 
 /* Manipulate the keyboard bell. */
 struct wskbd_bell_data {
@@ -194,7 +193,6 @@ struct wskbd_scroll_data {
 #define	WSMOUSE_TYPE_AMIGA	10	/* Amiga mouse */      
 #define	WSMOUSE_TYPE_MAXINE	11	/* DEC maxine mouse */
 #define	WSMOUSE_TYPE_MAPLE	12	/* Dreamcast Maple mouse */
-#define WSMOUSE_TYPE_SGI	13	/* SGI mouse */
 
 /* Set resolution.  Not applicable to all mouse types. */
 #define	WSMOUSEIO_SRES		_IOW('W', 33, u_int)
@@ -283,7 +281,6 @@ struct wsmouse_id {
 #define	WSDISPLAY_TYPE_SUNCG14	37	/* Sun cgfourteen */
 #define	WSDISPLAY_TYPE_SUNTCX	38	/* Sun TCX */
 #define	WSDISPLAY_TYPE_SUNFFB	39	/* Sun creator FFB */
-#define	WSDISPLAY_TYPE_STI	40	/* HP STI frambuffers */
 
 /* Basic display information.  Not applicable to all display types. */
 struct wsdisplay_fbinfo {
@@ -349,7 +346,6 @@ struct wsdisplay_cursor {
 #define	WSDISPLAYIO_SMODE	_IOW('W', 76, u_int)
 #define	WSDISPLAYIO_MODE_EMUL	0	/* emulation (text) mode */
 #define	WSDISPLAYIO_MODE_MAPPED	1	/* mapped (graphics) mode */
-#define	WSDISPLAYIO_MODE_DUMBFB	2	/* mapped (graphics) fb mode */
 
 
 /*
@@ -444,22 +440,9 @@ struct wsdisplay_scroll_data {
 #define	WSDISPLAYIO_DGSCROLL	_IOR('W', 87, struct wsdisplay_scroll_data)
 #define	WSDISPLAYIO_DSSCROLL	_IOW('W', 88, struct wsdisplay_scroll_data)
 
-struct wsdisplay_msgattrs {
-	int default_attrs, default_bg, default_fg;
-	int kernel_attrs, kernel_bg, kernel_fg;
-};
-
-#define	WSDISPLAYIO_GMSGATTRS	_IOR('W', 89, struct wsdisplay_msgattrs)
-#define	WSDISPLAYIO_SMSGATTRS	_IOW('W', 90, struct wsdisplay_msgattrs)
-
-#define	WSDISPLAYIO_GBORDER	_IOR('W', 91, int)
-#define	WSDISPLAYIO_SBORDER	_IOW('W', 92, int)
-
 /* XXX NOT YET DEFINED */
 /* Mapping information retrieval. */
 
-/* Display information: number of bytes per row, may be same as pixels */
-#define	WSDISPLAYIO_LINEBYTES	_IOR('W', 95, u_int)
 
 /*
  * Mux ioctls (96 - 127)

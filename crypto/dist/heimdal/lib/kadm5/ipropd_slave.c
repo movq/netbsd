@@ -34,7 +34,7 @@
 #include "iprop.h"
 
 __RCSID("$Heimdal: ipropd_slave.c,v 1.27.2.1 2003/08/15 16:45:15 lha Exp $"
-        "$NetBSD: ipropd_slave.c,v 1.1.1.7 2004/04/02 14:47:47 lha Exp $");
+        "$NetBSD: ipropd_slave.c,v 1.1.1.6.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 static krb5_log_facility *log_facility;
 

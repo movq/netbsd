@@ -1,8 +1,7 @@
-/*	$NetBSD: groff.cpp,v 1.1.1.2 2004/07/30 14:44:53 wiz Exp $	*/
+/*	$NetBSD: groff.cpp,v 1.1.1.1 2003/06/30 17:52:07 wiz Exp $	*/
 
 // -*- C++ -*-
-/* Copyright (C) 1989-2000, 2001, 2002, 2003, 2004
-   Free Software Foundation, Inc.
+/* Copyright (C) 1989-2000, 2001, 2002 Free Software Foundation, Inc.
      Written by James Clark (jjc@jclark.com)
 
 This file is part of groff.
@@ -96,7 +95,7 @@ char *predriver = 0;
 possible_command commands[NCOMMANDS];
 
 int run_commands(int no_pipe);
-void print_commands(FILE *);
+void print_commands();
 void append_arg_to_string(const char *arg, string &str);
 void handle_unknown_desc_command(const char *command, const char *arg,
 				 const char *filename, int lineno);
@@ -117,7 +116,6 @@ int main(int argc, char **argv)
   int zflag = 0;
   int iflag = 0;
   int Xflag = 0;
-  int oflag = 0;
   int safer_flag = 1;
   int opt;
   const char *command_prefix = getenv("GROFF_COMMAND_PREFIX");
@@ -144,12 +142,6 @@ int main(int argc, char **argv)
     case 'I':
       commands[SOELIM_INDEX].set_name(command_prefix, "soelim");
       commands[SOELIM_INDEX].append_arg(buf, optarg);
-      // .psbb may need to search for files
-      commands[TROFF_INDEX].append_arg(buf, optarg);
-      // \X'ps:import' may need to search for files
-      Pargs += buf;
-      Pargs += optarg;
-      Pargs += '\0';
       break;
     case 't':
       commands[TBL_INDEX].set_name(command_prefix, "tbl");
@@ -189,7 +181,7 @@ int main(int argc, char **argv)
       vflag = 1;
       {
 	printf("GNU groff version %s\n", Version_string);
-	printf("Copyright (C) 2004 Free Software Foundation, Inc.\n"
+	printf("Copyright (C) 2002 Free Software Foundation, Inc.\n"
 	       "GNU groff comes with ABSOLUTELY NO WARRANTY.\n"
 	       "You may redistribute copies of groff and its subprograms\n"
 	       "under the terms of the GNU General Public License.\n"
@@ -244,15 +236,14 @@ int main(int argc, char **argv)
     case 'F':
       font::command_line_font_dir(optarg);
       if (Fargs.length() > 0) {
-	Fargs += PATH_SEP_CHAR;
+	Fargs += PATH_SEP[0];
 	Fargs += optarg;
       }
       else
 	Fargs = optarg;
       break;
-    case 'o':
-      oflag = 1;
     case 'f':
+    case 'o':
     case 'm':
     case 'r':
     case 'd':
@@ -306,7 +297,7 @@ int main(int argc, char **argv)
   const char *real_driver = 0;
   if (Xflag) {
     real_driver = postdriver;
-    postdriver = (char *)GXDITVIEW;
+    postdriver = GXDITVIEW;
     commands[TROFF_INDEX].append_arg("-r" XREG "=", "1");
   }
   if (postdriver)
@@ -345,7 +336,7 @@ int main(int argc, char **argv)
   }
   if (gxditview_flag)
     commands[POST_INDEX].append_arg("-");
-  if (lflag && !vflag && !Xflag && spooler) {
+  if (lflag && !Xflag && spooler) {
     commands[SPOOL_INDEX].set_name(BSHELL);
     commands[SPOOL_INDEX].append_arg(BSHELL_DASH_C);
     Largs += '\0';
@@ -358,11 +349,8 @@ int main(int argc, char **argv)
   }
   commands[TROFF_INDEX].append_arg("-T", device);
   // html renders equations as images via ps
-  if (strcmp(device, "html") == 0) {
-    if (oflag)
-      fatal("`-o' option is invalid with device `html'");
+  if (strcmp(device, "html") == 0)
     commands[EQN_INDEX].append_arg("-Tps:html");
-  }
   else
     commands[EQN_INDEX].append_arg("-T", device);
 
@@ -386,7 +374,7 @@ int main(int argc, char **argv)
     e += Fargs;
     char *fontpath = getenv("GROFF_FONT_PATH");
     if (fontpath && *fontpath) {
-      e += PATH_SEP_CHAR;
+      e += PATH_SEP[0];
       e += fontpath;
     }
     e += '\0';
@@ -412,17 +400,17 @@ int main(int argc, char **argv)
     else
       f += BINPATH;
     if (path && *path) {
-      f += PATH_SEP_CHAR;
+      f += PATH_SEP[0];
       f += path;
     }
     f += '\0';
     if (putenv(strsave(f.contents())))
       fatal("putenv failed");
   }
-  if (Vflag)
-    print_commands(Vflag == 1 ? stdout : stderr);
-  if (Vflag == 1)
+  if (Vflag) {
+    print_commands();
     exit(0);
+  }
   return run_commands(vflag);
 }
 
@@ -488,7 +476,7 @@ void handle_unknown_desc_command(const char *command, const char *arg,
   }
 }
 
-void print_commands(FILE *fp)
+void print_commands()
 {
   int last;
   for (last = SPOOL_INDEX; last >= 0; last--)
@@ -496,7 +484,7 @@ void print_commands(FILE *fp)
       break;
   for (int i = 0; i <= last; i++)
     if (commands[i].get_name() != 0)
-      commands[i].print(i == last, fp);
+      commands[i].print(i == last, stdout);
 }
 
 // Run the commands. Return the code with which to exit.
@@ -738,7 +726,7 @@ void help()
 "-N\tdon't allow newlines within eqn delimiters\n"
 "-S\tenable safer mode (the default)\n"
 "-U\tenable unsafe mode\n"
-"-Idir\tsearch dir for soelim, troff, and grops.  Implies -s\n"
+"-Idir\tsearch dir for soelim.  Implies -s\n"
 "\n",
 	stdout);
   exit(0);

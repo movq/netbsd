@@ -1,5 +1,5 @@
 #	from: @(#)Makefile.inc	8.1 (Berkeley) 6/4/93
-#	$NetBSD: Makefile.inc,v 1.54 2004/07/03 08:27:25 junyoung Exp $
+#	$NetBSD: Makefile.inc,v 1.53.2.1 2004/07/12 20:54:25 he Exp $
 
 # string sources
 .PATH: ${ARCHDIR}/string ${.CURDIR}/string

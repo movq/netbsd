@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_var.h,v 1.69 2004/12/15 04:25:19 thorpej Exp $	*/
+/*	$NetBSD: ip_var.h,v 1.65 2003/12/12 21:17:59 scw Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -192,9 +192,6 @@ struct ipflow {
 #define	IP_HDR_ALIGNED_P(ip)	((((vaddr_t) (ip)) & 3) == 0)
 #endif
 
-extern const struct protosw inetsw[];
-extern struct domain inetdomain;
-
 extern struct ipstat ipstat;		/* ip statistics */
 extern LIST_HEAD(ipqhead, ipq) ipq[];	/* ip reass. queue */
 extern int   ip_defttl;			/* default IP ttl */
@@ -205,7 +202,6 @@ extern int   anonportmin;		/* minimum ephemeral port */
 extern int   anonportmax;		/* maximum ephemeral port */
 extern int   lowportmin;		/* minimum reserved port */
 extern int   lowportmax;		/* maximum reserved port */
-extern int   ip_do_loopback_cksum;	/* do IP checksum on loopback? */
 extern struct rttimer_queue *ip_mtudisc_timeout_q;
 #ifdef MBUFTRACE
 extern struct mowner ip_rx_mowner;
@@ -218,49 +214,49 @@ extern struct pool inmulti_pool;
 extern struct pool ipqent_pool;
 struct	 inpcb;
 
-int	 ip_ctloutput(int, struct socket *, int, int, struct mbuf **);
-int	 ip_dooptions(struct mbuf *);
-void	 ip_drain(void);
-void	 ip_forward(struct mbuf *, int);
-void	 ip_freef(struct ipq *);
-void	 ip_freemoptions(struct ip_moptions *);
-int	 ip_getmoptions(int, struct ip_moptions *, struct mbuf **);
-void	 ip_init(void);
-int	 ip_optcopy(struct ip *, struct ip *);
-u_int	 ip_optlen(struct inpcb *);
-int	 ip_output(struct mbuf *, ...);
+int	 ip_ctloutput __P((int, struct socket *, int, int, struct mbuf **));
+int	 ip_dooptions __P((struct mbuf *));
+void	 ip_drain __P((void));
+void	 ip_forward __P((struct mbuf *, int));
+void	 ip_freef __P((struct ipq *));
+void	 ip_freemoptions __P((struct ip_moptions *));
+int	 ip_getmoptions __P((int, struct ip_moptions *, struct mbuf **));
+void	 ip_init __P((void));
+int	 ip_optcopy __P((struct ip *, struct ip *));
+u_int	 ip_optlen __P((struct inpcb *));
+int	 ip_output __P((struct mbuf *, ...));
 int	 ip_fragment(struct mbuf *, struct ifnet *, u_long);
-int	 ip_pcbopts(struct mbuf **, struct mbuf *);
+int	 ip_pcbopts __P((struct mbuf **, struct mbuf *));
 struct mbuf *
-	 ip_reass(struct ipqent *, struct ipq *, struct ipqhead *);
+	 ip_reass __P((struct ipqent *, struct ipq *, struct ipqhead *));
 struct in_ifaddr *
-	 ip_rtaddr(struct in_addr);
-void	 ip_savecontrol(struct inpcb *, struct mbuf **, struct ip *,
-	   struct mbuf *);
-int	 ip_setmoptions(int, struct ip_moptions **, struct mbuf *);
-void	 ip_slowtimo(void);
+	 ip_rtaddr __P((struct in_addr));
+void	 ip_savecontrol __P((struct inpcb *, struct mbuf **, struct ip *,
+	   struct mbuf *));
+int	 ip_setmoptions __P((int, struct ip_moptions **, struct mbuf *));
+void	 ip_slowtimo __P((void));
 struct mbuf *
-	 ip_srcroute(void);
-void	 ip_stripoptions(struct mbuf *, struct mbuf *);
-int	 ip_sysctl(int *, u_int, void *, size_t *, void *, size_t);
-void	 ipintr(void);
-void *	 rip_ctlinput(int, struct sockaddr *, void *);
-int	 rip_ctloutput(int, struct socket *, int, int, struct mbuf **);
-void	 rip_init(void);
-void	 rip_input(struct mbuf *, ...);
-int	 rip_output(struct mbuf *, ...);
-int	 rip_usrreq(struct socket *,
-	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *);
-void	ipflow_init(void);
-struct	ipflow *ipflow_reap(int);
-void	ipflow_create(const struct route *, struct mbuf *);
-void	ipflow_slowtimo(void);
-void	ipflow_invalidate_all(void);
+	 ip_srcroute __P((void));
+void	 ip_stripoptions __P((struct mbuf *, struct mbuf *));
+int	 ip_sysctl __P((int *, u_int, void *, size_t *, void *, size_t));
+void	 ipintr __P((void));
+void *	 rip_ctlinput __P((int, struct sockaddr *, void *));
+int	 rip_ctloutput __P((int, struct socket *, int, int, struct mbuf **));
+void	 rip_init __P((void));
+void	 rip_input __P((struct mbuf *, ...));
+int	 rip_output __P((struct mbuf *, ...));
+int	 rip_usrreq __P((struct socket *,
+	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *));
+void	ipflow_init __P((void));
+struct	ipflow *ipflow_reap __P((int));
+void	ipflow_create __P((const struct route *, struct mbuf *));
+void	ipflow_slowtimo __P((void));
+void	ipflow_invalidate_all __P((void));
 
 extern uint16_t	ip_id;
-static __inline uint16_t ip_newid(void);
+static __inline uint16_t ip_newid __P((void));
 
-u_int16_t ip_randomid(void);
+u_int16_t ip_randomid __P((void));
 extern int ip_do_randomid;
 
 static __inline uint16_t

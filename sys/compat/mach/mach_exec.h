@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_exec.h,v 1.27 2004/08/08 08:42:03 jdolecek Exp $	 */
+/*	$NetBSD: mach_exec.h,v 1.26.2.1 2004/08/15 13:54:31 tron Exp $	 */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.

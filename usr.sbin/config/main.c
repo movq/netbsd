@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.97 2004/11/05 18:07:27 mason Exp $	*/
+/*	$NetBSD: main.c,v 1.88.2.1 2004/06/22 07:17:18 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -88,7 +88,6 @@ extern int yydebug;
 static struct hashtab *mkopttab;
 static struct nvlist **nextopt;
 static struct nvlist **nextmkopt;
-static struct nvlist **nextappmkopt;
 static struct nvlist **nextfsopt;
 
 static	void	usage(void);
@@ -255,7 +254,6 @@ main(int argc, char **argv)
 	needcnttab = ht_new();
 	opttab = ht_new();
 	mkopttab = ht_new();
-	condmkopttab = ht_new();
 	fsopttab = ht_new();
 	deffstab = ht_new();
 	defopttab = ht_new();
@@ -268,7 +266,6 @@ main(int argc, char **argv)
 	maxcdevm = 0;
 	nextopt = &options;
 	nextmkopt = &mkoptions;
-	nextappmkopt = &appmkoptions;
 	nextfsopt = &fsoptions;
 
 	/*
@@ -631,8 +628,9 @@ defopt(struct hashtab *ht, const char *fname, struct nvlist *opts,
 {
 	struct nvlist *nv, *nextnv, *oldnv, *dep;
 	struct attr *a;
-	const char *name;
-	char buf[500];
+	const char *name, *n;
+	char *p, c;
+	char low[500];
 
 	if (fname != NULL && badfilename(fname)) {
 		return;
@@ -664,9 +662,14 @@ defopt(struct hashtab *ht, const char *fname, struct nvlist *opts,
 			 * lower case name will be used as the option
 			 * file name.
 			 */
-			(void) snprintf(buf, sizeof(buf), "opt_%s.h",
-			    strtolower(nv->nv_name));
-			name = intern(buf);
+			(void) strlcpy(low, "opt_", sizeof(low));
+			p = low + strlen(low);
+			for (n = nv->nv_name; (c = *n) != '\0'; n++)
+				*p++ = isupper(c) ? tolower(c) : c;
+			*p = '\0';
+			strlcat(low, ".h", sizeof(low));
+
+			name = intern(low);
 		} else {
 			name = fname;
 		}
@@ -676,7 +679,7 @@ defopt(struct hashtab *ht, const char *fname, struct nvlist *opts,
 		for (dep = deps; dep != NULL; dep = dep->nv_next) {
 			/*
 			 * If the dependency is an attribute, it must not
-			 * be an interface attribute.  Otherwise, it must
+			 * be an interface attribute.  Otherwise, is must
 			 * be a previously declared option.
 			 */
 			if ((a = ht_lookup(attrtab, dep->nv_name)) != NULL) {
@@ -756,6 +759,8 @@ void
 addoption(const char *name, const char *value)
 {
 	const char *n;
+	char *p, c;
+	char low[500];
 	int is_fs, is_param, is_flag, is_opt, is_undecl;
 
 	/* 
@@ -793,7 +798,10 @@ addoption(const char *name, const char *value)
 		return;
 
 	/* make lowercase, then add to select table */
-	n = strtolower(name);
+	for (n = name, p = low; (c = *n) != '\0'; n++)
+		*p++ = isupper(c) ? tolower(c) : c;
+	*p = 0;
+	n = intern(low);
 	(void)ht_insert(selecttab, n, (void *)n);
 }
 
@@ -816,6 +824,8 @@ void
 addfsoption(const char *name)
 {
 	const char *n; 
+	char *p, c;
+	char low[500];
 
 	/* Make sure this is a defined file system. */
 	if (!OPT_FSOPT(name)) {
@@ -828,7 +838,10 @@ addfsoption(const char *name)
 	 * table, to verify root file systems, and when the initial
 	 * VFS list is created.
 	 */
-	n = strtolower(name);
+	for (n = name, p = low; (c = *n) != '\0'; n++)
+		*p++ = isupper(c) ? tolower(c) : c;
+	*p = 0;
+	n = intern(low);
 
 	if (do_option(fsopttab, &nextfsopt, name, n, "file-system"))
 		return;
@@ -877,40 +890,6 @@ delmkoption(const char *name)
 }
 
 /*
- * Add an appending "make" option.
- */
-void
-appendmkoption(const char *name, const char *value)
-{
-	struct nvlist *nv;
-
-	nv = newnv(name, value, NULL, 0, NULL);
-	*nextappmkopt = nv;
-	nextappmkopt = &nv->nv_next;
-}
-
-/*
- * Add a conditional appending "make" option.
- */
-void
-appendcondmkoption(const char *selname, const char *name, const char *value)
-{
-	struct nvlist *nv, *lnv;
-	const char *n;
-
-	n = strtolower(selname);
-	nv = newnv(name, value, NULL, 0, NULL);
-	if (ht_insert(condmkopttab, n, nv) == 0)
-		return;
-
-	if ((lnv = ht_lookup(condmkopttab, n)) == NULL)
-		panic("appendcondmkoption");
-	for (; lnv->nv_next != NULL; lnv = lnv->nv_next)
-		/* search for the last list element */;
-	lnv->nv_next = nv;
-}
-
-/*
  * Add a name=value pair to an option list.  The value may be NULL.
  */
 static int
@@ -921,9 +900,9 @@ do_option(struct hashtab *ht, struct nvlist ***nppp, const char *name,
 
 	/*
 	 * If a defopt'ed or defflag'ed option was enabled but without
-	 * an explicit value (always the case for defflag), supply a
-	 * default value of 1, as for non-defopt options (where cc
-	 * treats -DBAR as -DBAR=1.) 
+	  * an explicit value (always the case for defflag), supply a
+	  * default value of 1, as for non-defopt options (where cc
+	  * treats -DBAR as -DBAR=1.) 
 	 */
 	if ((OPT_DEFOPT(name) || OPT_DEFFLAG(name)) && value == NULL)
 		value = "1";
@@ -1405,7 +1384,7 @@ logconfig_end(void)
 	fp = fopen("config_file.h", "w");
 	if(!fp) {
 		(void)fprintf(stderr,
-		    "config: cannot write to \"config_file.h\"\n");
+		    "config: cannot write to \"config_file.h\"");
 		exit(1);
 	}
 
@@ -1419,8 +1398,7 @@ static const char *
 strtolower(const char *name)
 {
 	const char *n;
-	char *p, low[500];
-	unsigned char c;
+	char *p, c, low[500];
 
 	for (n = name, p = low; (c = *n) != '\0'; n++)
 		*p++ = isupper(c) ? tolower(c) : c;

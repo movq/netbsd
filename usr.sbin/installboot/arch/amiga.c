@@ -1,4 +1,4 @@
-/*	$NetBSD: amiga.c,v 1.3 2004/06/20 22:20:17 jmc Exp $	*/
+/*	$NetBSD: amiga.c,v 1.2.2.1 2004/06/22 07:15:04 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: amiga.c,v 1.3 2004/06/20 22:20:17 jmc Exp $");
+__RCSID("$NetBSD: amiga.c,v 1.2.2.1 2004/06/22 07:15:04 tron Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>

@@ -1,4 +1,4 @@
-/*      $NetBSD: scanform.c,v 1.40 2004/10/30 15:51:20 dsl Exp $       */
+/*      $NetBSD: scanform.c,v 1.38 2004/03/24 22:03:17 garbled Exp $       */
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -818,7 +818,7 @@ process_preform(FORM *form, char *path)
 				args[i] = strdup(field_buffer(f[lcnt], 0));
 			if (args[i] != NULL) {
 				p = &args[i][strlen(args[i]) - 1];
-				while(isspace((unsigned char)*p))
+				while(isspace(*p))
 					*p-- = '\0';
 			}
 			i++;
@@ -940,7 +940,7 @@ process_form(FORM *form, char *path)
 				args[i] = strdup(field_buffer(f[lcnt], 0));
 			if (args[i] != NULL) {
 				p = &args[i][strlen(args[i]) - 1];
-				while(isspace((unsigned char)*p))
+				while(isspace(*p))
 					*p-- = '\0';
 			}
 			i++;
@@ -1623,27 +1623,6 @@ tab_help(FORM *form)
 	curs_set(1);
 }
 
-static void
-invalid_field_help(void)
-{
-	CDKLABEL *label;
-	char *msg[2];
-
-	msg[0] = catgets(catalog, 3, 18, "The data entered in this field is "
-	    "invalid.");
-	msg[1] = catgets(catalog, 3, 19, "Please enter the correct "
-	    "information before continuing.");
-
-	curs_set(0);
-	label = newCDKLabel(cdkscreen, CENTER, CENTER, msg, 2, TRUE, FALSE);
-	activateCDKLabel(label, NULL);
-	waitCDKLabel(label, 0);
-	destroyCDKLabel(label);
-	touchwin(stdscr);
-	wrefresh(stdscr);
-	curs_set(1);
-}
-
 int
 handle_form(char *basedir, char *path, char **args)
 {
@@ -1712,9 +1691,6 @@ handle_form(char *basedir, char *path, char **args)
 			break;
 		case E_REQUEST_DENIED:
 			tab_help(menuform);
-			break;
-		case E_INVALID_FIELD:
-			invalid_field_help();
 			break;
 		default:
 			break;
@@ -1819,9 +1795,6 @@ handle_preform(char *basedir, char *path)
 			break;
 		case E_REQUEST_DENIED:
 			tab_help(menuform);
-			break;
-		case E_INVALID_FIELD:
-			invalid_field_help();
 			break;
 		default:
 			break;

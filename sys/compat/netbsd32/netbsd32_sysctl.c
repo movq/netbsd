@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_sysctl.c,v 1.15 2004/04/27 03:49:03 atatat Exp $	*/
+/*	$NetBSD: netbsd32_sysctl.c,v 1.14.2.1 2004/04/29 04:07:16 jmc Exp $	*/
 
 /*
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_sysctl.c,v 1.15 2004/04/27 03:49:03 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_sysctl.c,v 1.14.2.1 2004/04/29 04:07:16 jmc Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ddb.h"

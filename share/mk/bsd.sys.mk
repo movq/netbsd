@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.sys.mk,v 1.114 2004/10/19 01:05:40 simonb Exp $
+#	$NetBSD: bsd.sys.mk,v 1.111.2.1 2004/06/17 08:09:38 tron Exp $
 #
 # Build definitions used for NetBSD source tree builds.
 
@@ -55,7 +55,6 @@ CFLAGS+=	-Wa,-Av8plus
 .endif
 
 CFLAGS+=	${CPUFLAGS}
-AFLAGS+=	${CPUFLAGS}
 
 # Helpers for cross-compiling
 HOST_CC?=	cc
@@ -146,7 +145,6 @@ TOOL_ZIC?=		zic
 .c.o:
 	${_MKTARGET_COMPILE}
 	${COMPILE.c} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC}
-
 .c.ln:
 	${_MKTARGET_COMPILE}
 	${LINT} ${LINTFLAGS} \

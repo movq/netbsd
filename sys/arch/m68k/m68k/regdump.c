@@ -1,4 +1,4 @@
-/*	$NetBSD: regdump.c,v 1.8 2004/08/28 22:06:28 thorpej Exp $	*/
+/*	$NetBSD: regdump.c,v 1.7 2003/09/27 19:34:17 mhitch Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: regdump.c,v 1.8 2004/08/28 22:06:28 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: regdump.c,v 1.7 2003/09/27 19:34:17 mhitch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -89,14 +89,16 @@ __KERNEL_RCSID(0, "$NetBSD: regdump.c,v 1.8 2004/08/28 22:06:28 thorpej Exp $");
 
 #include <machine/psl.h>
 
-static void	dumpmem(int *, int, int);
-static char	*hexstr(int, int);
+static void dumpmem __P((int *, int, int));
+static char *hexstr __P((int, int));
 
 /*
  * Print a register and stack dump.
  */
 void
-regdump(struct trapframe *tf, int sbytes)
+regdump(tf, sbytes)
+	struct trapframe *tf; /* must not be register */
+	int sbytes;
 {
 	static int doingdump = 0;
 	register int i;
@@ -136,7 +138,9 @@ regdump(struct trapframe *tf, int sbytes)
 }
 
 static void
-dumpmem(int *ptr, int sz, int ustack)
+dumpmem(ptr, sz, ustack)
+	register int *ptr;
+	int sz, ustack;
 {
 	register int i, val;
 	register int limit;
@@ -163,7 +167,9 @@ dumpmem(int *ptr, int sz, int ustack)
 }
 
 static char *
-hexstr(int val, int len)
+hexstr(val, len)
+	register int val;
+	int len;
 {
 	static char nbuf[9];
 	register int x, i;

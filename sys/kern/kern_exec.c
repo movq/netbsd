@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_exec.c,v 1.191 2004/10/01 16:30:52 yamt Exp $	*/
+/*	$NetBSD: kern_exec.c,v 1.185.2.2 2004/06/27 13:33:52 he Exp $	*/
 
 /*-
  * Copyright (C) 1993, 1994, 1996 Christopher G. Demetriou
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_exec.c,v 1.191 2004/10/01 16:30:52 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_exec.c,v 1.185.2.2 2004/06/27 13:33:52 he Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_syscall_debug.h"
@@ -272,7 +272,7 @@ check_exec(struct proc *p, struct exec_package *epp)
 	/* now we have the file, get the exec header */
 	uvn_attach(vp, VM_PROT_READ);
 	error = vn_rdwr(UIO_READ, vp, epp->ep_hdr, epp->ep_hdrlen, 0,
-			UIO_SYSSPACE, 0, p->p_ucred, &resid, NULL);
+			UIO_SYSSPACE, 0, p->p_ucred, &resid, p);
 	if (error)
 		goto bad2;
 	epp->ep_hdrvalid = epp->ep_hdrlen - resid;
@@ -347,12 +347,6 @@ bad1:
 	PNBUF_PUT(ndp->ni_cnd.cn_pnbuf);
 	return error;
 }
-
-#ifdef __MACHINE_STACK_GROWS_UP
-#define STACK_PTHREADSPACE NBPG
-#else
-#define STACK_PTHREADSPACE 0
-#endif
 
 /*
  * exec system call
@@ -530,13 +524,11 @@ sys_execve(struct lwp *l, void *v, register_t *retval)
 	if (pack.ep_flags & EXEC_32)
 		len = ((argc + envc + 2 + pack.ep_es->es_arglen) *
 		    sizeof(int) + sizeof(int) + dp + STACKGAPLEN +
-		    szsigcode + sizeof(struct ps_strings) + STACK_PTHREADSPACE)
-		    - argp;
+		    szsigcode + sizeof(struct ps_strings)) - argp;
 	else
 		len = ((argc + envc + 2 + pack.ep_es->es_arglen) *
 		    sizeof(char *) + sizeof(int) + dp + STACKGAPLEN +
-		    szsigcode + sizeof(struct ps_strings) + STACK_PTHREADSPACE)
-		    - argp;
+		    szsigcode + sizeof(struct ps_strings)) - argp;
 
 	len = ALIGN(len);	/* make the stack "safely" aligned */
 
@@ -641,7 +633,7 @@ sys_execve(struct lwp *l, void *v, register_t *retval)
 	arginfo.ps_nenvstr = envc;
 
 	stack = (char *)STACK_ALLOC(STACK_GROW(vm->vm_minsaddr,
-		STACK_PTHREADSPACE + sizeof(struct ps_strings) + szsigcode),
+		sizeof(struct ps_strings) + szsigcode),
 		len - (sizeof(struct ps_strings) + szsigcode));
 #ifdef __MACHINE_STACK_GROWS_UP
 	/*
@@ -680,8 +672,7 @@ sys_execve(struct lwp *l, void *v, register_t *retval)
 	stack = (char *)STACK_GROW(vm->vm_minsaddr, len);
 
 	/* fill process ps_strings info */
-	p->p_psstr = (struct ps_strings *)
-	    STACK_ALLOC(STACK_GROW(vm->vm_minsaddr, STACK_PTHREADSPACE),
+	p->p_psstr = (struct ps_strings *)STACK_ALLOC(vm->vm_minsaddr,
 	    sizeof(struct ps_strings));
 	p->p_psargv = offsetof(struct ps_strings, ps_argvstr);
 	p->p_psnargv = offsetof(struct ps_strings, ps_nargvstr);
@@ -1025,7 +1016,7 @@ emul_unregister(const char *name)
 	 */
 	proclist_lock_read();
 	for (pd = proclists; pd->pd_list != NULL && !error; pd++) {
-		PROCLIST_FOREACH(ptmp, pd->pd_list) {
+		LIST_FOREACH(ptmp, pd->pd_list, p_list) {
 			if (ptmp->p_emul == it->el_emul) {
 				error = EBUSY;
 				break;
@@ -1304,8 +1295,8 @@ exec_sigcode_map(struct proc *p, const struct emul *e)
 	 * in all processes that need this sigcode. The creation is simple,
 	 * we create an object, add a permanent reference to it, map it in
 	 * kernel space, copy out the sigcode to it and unmap it.
-	 * We map it with PROT_READ|PROT_EXEC into the process just
-	 * the way sys_mmap() would map it.
+	 * The we map it with PROT_READ|PROT_EXEC into the process just
+	 * the way sys_mmap would map it.
 	 */
 
 	uobj = *e->e_sigobject;

@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_debug.c,v 1.14 2004/04/21 18:40:41 itojun Exp $	*/
+/*	$NetBSD: clnp_debug.c,v 1.12 2003/08/07 16:33:32 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,7 +59,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clnp_debug.c,v 1.14 2004/04/21 18:40:41 itojun Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clnp_debug.c,v 1.12 2003/08/07 16:33:32 agc Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -99,7 +99,7 @@ struct addr_rfc986 u_bad = {
 	{0x00, 0x01},
 	{0x01, 0xc0, 0x0c, 0x0c, 0xab, 0x11}
 };
-int main        (void);
+int main        __P((void));
 
 #include <stdio.h>
 int
@@ -136,18 +136,21 @@ main()
 #endif				/* TESTDEBUG */
 
 unsigned int    clnp_debug;
-static const char letters[] = "0123456789abcdef";
+static char     letters[] = "0123456789abcdef";
 
-char           *clnp_hexp (const char *, int, char *);
-char           *clnp_iso_addrp (struct iso_addr *);
-char           *clnp_saddr_isop (struct sockaddr_iso *);
+char           *clnp_hexp __P((char *, int, char *));
+char           *clnp_iso_addrp __P((struct iso_addr *));
+char           *clnp_saddr_isop __P((struct sockaddr_iso *));
 
 /*
  *	Print buffer in hex, return addr of where we left off.
  *	Do not null terminate.
  */
 char *
-clnp_hexp(const char *src, int len, char *where)
+clnp_hexp(src, len, where)
+	char           *src;	/* src of data to print */
+	int             len;	/* lengthof src */
+	char           *where;	/* where to put data */
 {
 	int             i;
 
@@ -166,7 +169,8 @@ static char     iso_addr_b[50];
 #define	DELIM	'.';
 
 char *
-clnp_iso_addrp(struct iso_addr *isoa)
+clnp_iso_addrp(isoa)
+	struct iso_addr *isoa;
 {
 	char           *cp;
 #ifdef notdef
@@ -174,7 +178,7 @@ clnp_iso_addrp(struct iso_addr *isoa)
 #endif
 
 	/* print length */
-	snprintf(iso_addr_b, sizeof(iso_addr_b), "[%d] ", isoa->isoa_len);
+	sprintf(iso_addr_b, "[%d] ", isoa->isoa_len);
 
 	/* set cp to end of what we have */
 	cp = iso_addr_b;
@@ -252,7 +256,8 @@ clnp_iso_addrp(struct iso_addr *isoa)
 }
 
 char *
-clnp_saddr_isop(struct sockaddr_iso *s)
+clnp_saddr_isop(s)
+	struct sockaddr_iso *s;
 {
 	char  *cp = clnp_iso_addrp(&s->siso_addr);
 

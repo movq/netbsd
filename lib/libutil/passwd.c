@@ -1,4 +1,4 @@
-/*	$NetBSD: passwd.c,v 1.37 2004/12/11 06:41:15 christos Exp $	*/
+/*	$NetBSD: passwd.c,v 1.35 2003/08/07 16:44:59 agc Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994, 1995
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: passwd.c,v 1.37 2004/12/11 06:41:15 christos Exp $");
+__RCSID("$NetBSD: passwd.c,v 1.35 2003/08/07 16:44:59 agc Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -161,7 +161,7 @@ pw_mkdb(username, secureonly)
 
 		args[i++] = pw_filename(_PATH_MASTERPASSWD_LOCK);
 		args[i] = NULL;
-		execv(_PATH_PWD_MKDB, (char * const *)__UNCONST(args));
+		execv(_PATH_PWD_MKDB, (char * const *)args);
 		_exit(1);
 	}
 	pid = waitpid(pid, &pstat, 0);
@@ -224,9 +224,8 @@ void
 pw_edit(int notsetuid, const char *filename)
 {
 	int pstat;
-	char *p;
-	const char *editor;
-	const char *argp[] = { "sh", "-c", NULL, NULL };
+	char *p, *editor;
+	char *argp[] = { "sh", "-c", NULL, NULL };
 
 #ifdef __GNUC__
 	(void) &editor;
@@ -258,7 +257,7 @@ pw_edit(int notsetuid, const char *filename)
 			setgid(getgid());
 			setuid(getuid());
 		}
-		execvp(_PATH_BSHELL, (char *const *)__UNCONST(argp));
+		execvp(_PATH_BSHELL, argp);
 		_exit(1);
 	}
 
@@ -321,118 +320,77 @@ pw_equal(char *buf, struct passwd *pw)
 void
 pw_copy(int ffd, int tfd, struct passwd *pw, struct passwd *old_pw)
 {
-	char errbuf[200];
-	int rv;
-
-	rv = pw_copyx(ffd, tfd, pw, old_pw, errbuf, sizeof(errbuf));
-	if (rv == 0) {
-		warnx("%s", errbuf);
-		pw_error(NULL, 0, 1);
-	}
-}
-
-int
-pw_copyx(int ffd, int tfd, struct passwd *pw, struct passwd *old_pw,
-    char *errbuf, size_t errbufsz)
-{
 	const char *filename;
 	char mpwd[MAXPATHLEN], mpwdl[MAXPATHLEN], *p, buf[8192];
 	FILE *from, *to;
 	int done;
 
 	_DIAGASSERT(pw != NULL);
-	_DIAGASSERT(errbuf != NULL);
 	/* old_pw may be NULL */
 
-	if ((filename = pw_filename(_PATH_MASTERPASSWD)) == NULL) {
-		snprintf(errbuf, errbufsz, "%s: %s", pw_prefix,
-		    strerror(errno));
-		return (0);
-	}
+	if ((filename = pw_filename(_PATH_MASTERPASSWD)) == NULL)
+		pw_error(pw_prefix, 1,1);
 	(void)strcpy(mpwd, filename);
-	if ((filename = pw_filename(_PATH_MASTERPASSWD_LOCK)) == NULL) {
-		snprintf(errbuf, errbufsz, "%s: %s", pw_prefix,
-		    strerror(errno));
-		return (0);
-	}
+	if ((filename = pw_filename(_PATH_MASTERPASSWD_LOCK)) == NULL)
+		pw_error(pw_prefix, 1,1);
 	(void)strcpy(mpwdl, filename);
 
-	if (!(from = fdopen(ffd, "r"))) {
-		snprintf(errbuf, errbufsz, "%s: %s", mpwd, strerror(errno));
-		return (0);
-	}
-	if (!(to = fdopen(tfd, "w"))) {
-		snprintf(errbuf, errbufsz, "%s: %s", mpwdl, strerror(errno));
-		return (0);
-	}
+	if (!(from = fdopen(ffd, "r")))
+		pw_error(mpwd, 1, 1);
+	if (!(to = fdopen(tfd, "w")))
+		pw_error(mpwdl, 1, 1);
 
 	for (done = 0; fgets(buf, sizeof(buf), from);) {
 		if (!strchr(buf, '\n')) {
-			snprintf(errbuf, errbufsz, "%s: line too long", mpwd);
-			return (0);
+			warnx("%s: line too long", mpwd);
+			pw_error(NULL, 0, 1);
 		}
 		if (done) {
 			(void)fprintf(to, "%s", buf);
-			if (ferror(to)) {
-				snprintf(errbuf, errbufsz, "%s",
-				    strerror(errno));
-				return (0);
-			}
+			if (ferror(to))
+				goto err;
 			continue;
 		}
 		if (!(p = strchr(buf, ':'))) {
-			snprintf(errbuf, errbufsz, "%s: corrupted entry", mpwd);
-			return (0);
+			warnx("%s: corrupted entry", mpwd);
+			pw_error(NULL, 0, 1);
 		}
 		*p = '\0';
 		if (strcmp(buf, pw->pw_name)) {
 			*p = ':';
 			(void)fprintf(to, "%s", buf);
-			if (ferror(to)) {
-				snprintf(errbuf, errbufsz, "%s",
-				    strerror(errno));
-				return (0);
-			}
+			if (ferror(to))
+				goto err;
 			continue;
 		}
 		*p = ':';
 		if (old_pw && !pw_equal(buf, old_pw)) {
-			snprintf(errbuf, errbufsz, "%s: entry inconsistent",
-			    mpwd);
-			return (0);
+			warnx("%s: entry inconsistent", mpwd);
+			pw_error(NULL, 0, 1);
 		}
 		(void)fprintf(to, "%s:%s:%d:%d:%s:%ld:%ld:%s:%s:%s\n",
 		    pw->pw_name, pw->pw_passwd, pw->pw_uid, pw->pw_gid,
 		    pw->pw_class, (long)pw->pw_change, (long)pw->pw_expire,
 		    pw->pw_gecos, pw->pw_dir, pw->pw_shell);
 		done = 1;
-		if (ferror(to)) {
-			snprintf(errbuf, errbufsz, "%s", strerror(errno));
-			return (0);
-		}
+		if (ferror(to))
+			goto err;
 	}
 	/* Only append a new entry if real uid is root! */
 	if (!done) {
-		if (getuid() == 0) {
+		if (getuid() == 0)
 			(void)fprintf(to, "%s:%s:%d:%d:%s:%ld:%ld:%s:%s:%s\n",
 			    pw->pw_name, pw->pw_passwd, pw->pw_uid, pw->pw_gid,
 			    pw->pw_class, (long)pw->pw_change,
 			    (long)pw->pw_expire, pw->pw_gecos, pw->pw_dir,
 			    pw->pw_shell);
-			done = 1;
-		} else {
-			snprintf(errbuf, errbufsz,
-			    "%s: changes not made, no such entry", mpwd);
-		}
+		else
+			warnx("%s: changes not made, no such entry", mpwd);
 	}
 
-	if (ferror(to)) {
-		snprintf(errbuf, errbufsz, "%s", strerror(errno));
-		return (0);
-	}
+	if (ferror(to))
+err:		pw_error(NULL, 1, 1);
 	(void)fclose(to);
-
-	return (done);
 }
 
 void

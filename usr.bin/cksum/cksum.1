@@ -1,4 +1,4 @@
-.\"	$NetBSD: cksum.1,v 1.25 2004/07/09 11:47:59 wiz Exp $
+.\"	$NetBSD: cksum.1,v 1.23 2003/08/07 11:13:20 agc Exp $
 .\"
 .\" Copyright (c) 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"	@(#)cksum.1	8.2 (Berkeley) 4/28/95
 .\"
-.Dd July 9, 2004
+.Dd October 18, 2002
 .Dt CKSUM 1
 .Os
 .Sh NAME
@@ -61,48 +61,38 @@
 .Op Ar
 .Nm md2
 .Op Fl n
-.Oo
-.Fl p |
-.Fl t |
-.Fl x |
-.Fl s Ar string
-.Oc
+.Op Fl p
+.Op Fl t
+.Op Fl x
+.Op Fl s Ar string
 .Op Ar
 .Nm md4
 .Op Fl n
-.Oo
-.Fl p |
-.Fl t |
-.Fl x |
-.Fl s Ar string
-.Oc
+.Op Fl p
+.Op Fl t
+.Op Fl x
+.Op Fl s Ar string
 .Op Ar
 .Nm md5
 .Op Fl n
-.Oo
-.Fl p |
-.Fl t |
-.Fl x |
-.Fl s Ar string
-.Oc
+.Op Fl p
+.Op Fl t
+.Op Fl x
+.Op Fl s Ar string
 .Op Ar
 .Nm sha1
 .Op Fl n
-.Oo
-.Fl p |
-.Fl t |
-.Fl x |
-.Fl s Ar string
-.Oc
+.Op Fl p
+.Op Fl t
+.Op Fl x
+.Op Fl s Ar string
 .Op Ar
 .Nm rmd160
 .Op Fl n
-.Oo
-.Fl p |
-.Fl t |
-.Fl x |
-.Fl s Ar string
-.Oc
+.Op Fl p
+.Op Fl t
+.Op Fl x
+.Op Fl s Ar string
 .Op Ar
 .Sh DESCRIPTION
 The
@@ -225,7 +215,7 @@ Run a built-in message digest time trial.
 Run a built-in message digest test script.
 The tests that are run
 are supposed to encompass all the various tests in the suites that
-accompany the algorithms' descriptions with the exception of the
+accompany the algorithms' descriptions with the exception of the the
 last test for the SHA-1 algorithm and the RIPEMD-160 algorithm.
 The
 last test for these is one million copies of the lower letter a.

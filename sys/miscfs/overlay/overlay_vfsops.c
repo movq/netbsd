@@ -1,4 +1,4 @@
-/*	$NetBSD: overlay_vfsops.c,v 1.27 2004/07/01 10:03:32 hannken Exp $	*/
+/*	$NetBSD: overlay_vfsops.c,v 1.21.2.1 2004/05/29 09:05:32 tron Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 National Aeronautics & Space Administration
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: overlay_vfsops.c,v 1.27 2004/07/01 10:03:32 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: overlay_vfsops.c,v 1.21.2.1 2004/05/29 09:05:32 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -126,7 +126,7 @@ ov_mount(mp, path, data, ndp, p)
 	/*
 	 * Get argument
 	 */
-	error = copyin(data, &args, sizeof(struct overlay_args));
+	error = copyin(data, (caddr_t)&args, sizeof(struct overlay_args));
 	if (error)
 		return (error);
 
@@ -154,10 +154,9 @@ ov_mount(mp, path, data, ndp, p)
 	 */
 	nmp = (struct overlay_mount *) malloc(sizeof(struct overlay_mount),
 				M_UFSMNT, M_WAITOK);	/* XXX */
-	memset(nmp, 0, sizeof(struct overlay_mount));
+	memset((caddr_t)nmp, 0, sizeof(struct overlay_mount));
 
 	mp->mnt_data = nmp;
-	mp->mnt_leaf = lowerrootvp->v_mount->mnt_leaf;
 	nmp->ovm_vfs = lowerrootvp->v_mount;
 	if (nmp->ovm_vfs->mnt_flag & MNT_LOCAL)
 		mp->mnt_flag |= MNT_LOCAL;
@@ -201,7 +200,7 @@ ov_mount(mp, path, data, ndp, p)
 	vp->v_flag |= VROOT;
 	nmp->ovm_rootvp = vp;
 
-	error = set_statvfs_info(path, UIO_USERSPACE, args.la.target,
+	error = set_statfs_info(path, UIO_USERSPACE, args.la.target,
 	    UIO_USERSPACE, mp, p);
 #ifdef OVERLAYFS_DIAGNOSTIC
 	printf("ov_mount: lower %s, alias at %s\n",
@@ -292,7 +291,7 @@ struct vfsops overlay_vfsops = {
 	ov_unmount,
 	layerfs_root,
 	layerfs_quotactl,
-	layerfs_statvfs,
+	layerfs_statfs,
 	layerfs_sync,
 	layerfs_vget,
 	layerfs_fhtovp,
@@ -303,6 +302,5 @@ struct vfsops overlay_vfsops = {
 	NULL,
 	NULL,				/* vfs_mountroot */
 	layerfs_checkexp,
-	layerfs_snapshot,
 	ov_vnodeopv_descs,
 };

@@ -1,6 +1,6 @@
-.\"	$NetBSD: fdisk.8,v 1.50 2004/07/13 19:24:03 uwe Exp $
+.\"	$NetBSD: fdisk.8,v 1.47 2004/03/22 05:07:56 lukem Exp $
 .\"
-.Dd July 13, 2004
+.Dd March 22, 2004
 .Dt FDISK 8
 .Os
 .Sh NAME
@@ -435,14 +435,6 @@ by a previous run of
 .Nm .
 .El
 .Sh NOTES
-This program is only available (and useful) on systems with PC-platform-style
-MBR partitioning.
-On
-.Nx
-this includes the following ports: amd64, arc, bebox, cobalt, hpcarm,
-hpcmips, hpcsh, i386, macppc, mvmeppc, netwinder, ofppc, playstation2,
-and prep.
-.Pp
 Traditionally the partition boundaries should be on cylinder boundaries
 using the BIOS geometry, all of the first track should be reserved
 for use by the BIOS.

@@ -1,4 +1,4 @@
-/*	$NetBSD: wds.c,v 1.59 2004/12/07 14:50:56 thorpej Exp $	*/
+/*	$NetBSD: wds.c,v 1.56 2003/08/04 00:26:09 christos Exp $	*/
 
 /*
  * XXX
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wds.c,v 1.59 2004/12/07 14:50:56 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wds.c,v 1.56 2003/08/04 00:26:09 christos Exp $");
 
 #include "opt_ddb.h"
 
@@ -277,7 +277,7 @@ wdsprobe(parent, match, aux)
 		return (0);
 
 	/* Disallow wildcarded i/o address. */
-	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+	if (ia->ia_io[0].ir_addr == ISACF_PORT_DEFAULT)
 		return (0);
 
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, WDS_ISA_IOSIZE, 0, &ioh))
@@ -289,10 +289,10 @@ wdsprobe(parent, match, aux)
 
 	if (rv) {
 #ifdef notyet
-		if (ia->ia_irq[0].ir_irq != ISA_UNKNOWN_IRQ &&
+		if (ia->ia_irq[0].ir_irq != ISACF_IRQ_DEFAULT &&
 		    ia->ia_irq[0].ir_irq != wpd.sc_irq)
 			return (0);
-		if (ia->ia_drq[0].ir_drq != ISA_UNKNOWN_DRQ &&
+		if (ia->ia_drq[0].ir_drq != ISACF_DRQ_DEFAULT &&
 		    ia->ia_drq[0].ir_drq != wpd.sc_drq)
 			return (0);
 
@@ -302,9 +302,9 @@ wdsprobe(parent, match, aux)
 		ia->ia_ndrq = 1;
 		ia->ia_drq[0].ir_drq = wpd.sc_drq;
 #else
-		if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ)
+		if (ia->ia_irq[0].ir_irq == ISACF_IRQ_DEFAULT)
 			return (0);
-		if (ia->ia_drq[0].ir_drq == ISA_UNKNOWN_DRQ)
+		if (ia->ia_drq[0].ir_drq == ISACF_DRQ_DEFAULT)
 			return (0);
 
 		ia->ia_nirq = 1;
@@ -654,8 +654,7 @@ wds_create_scbs(sc, mem, size)
 			return (error);
 		}
 		TAILQ_INSERT_TAIL(&sc->sc_free_scb, scb, chain);
-		scb = (struct wds_scb *)((caddr_t)scb +
-			ALIGN(sizeof(struct wds_scb)));
+		(caddr_t)scb += ALIGN(sizeof(struct wds_scb));
 		size -= ALIGN(sizeof(struct wds_scb));
 		sc->sc_numscbs++;
 	}
@@ -1080,8 +1079,8 @@ wds_inquire_setup_information(sc)
 
 	/* Print the version number. */
 	printf("%s: version %x.%02x ", sc->sc_dev.dv_xname,
-	    scb->cmd.targ, scb->cmd.scb[0]);
-	sc->sc_revision = (scb->cmd.targ << 8) | scb->cmd.scb[0];
+	    scb->cmd.targ, scb->cmd.scb.opcode);
+	sc->sc_revision = (scb->cmd.targ << 8) | scb->cmd.scb.opcode;
 	/* Print out the version string. */
 	j = 2 + &(scb->cmd.targ);
 	while ((*j >= 32) && (*j < 128)) {
@@ -1176,14 +1175,9 @@ wds_scsipi_request(chan, req, arg)
 		scb->timeout = xs->timeout;
 
 		/* Zero out the command structure. */
-		if (xs->cmdlen > sizeof(scb->cmd.scb)) {
-			printf("%s: cmdlen %d too large for SCB\n",
-			    sc->sc_dev.dv_xname, xs->cmdlen);
-			xs->error = XS_DRIVER_STUFFUP;
-			goto out_bad;
-		}
 		memset(&scb->cmd, 0, sizeof scb->cmd);
-		memcpy(&scb->cmd.scb, xs->cmd, xs->cmdlen);
+		memcpy(&scb->cmd.scb, xs->cmd,
+		    xs->cmdlen < 12 ? xs->cmdlen : 12);
 
 		/* Set up some of the command fields. */
 		scb->cmd.targ = (periph->periph_target << 5) |

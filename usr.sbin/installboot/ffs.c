@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs.c,v 1.15 2004/06/20 22:20:17 jmc Exp $	*/
+/*	$NetBSD: ffs.c,v 1.14.2.1 2004/06/22 07:19:55 tron Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: ffs.c,v 1.15 2004/06/20 22:20:17 jmc Exp $");
+__RCSID("$NetBSD: ffs.c,v 1.14.2.1 2004/06/22 07:19:55 tron Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: ppp,v 1.8 2004/10/11 15:00:51 christos Exp $
+# $NetBSD: ppp,v 1.6 2002/03/22 04:33:59 thorpej Exp $
 #
 
 # PROVIDE: ppp
@@ -11,7 +11,7 @@
 #	any PPP addresses.  This is considered a feature.
 #
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="ppp"
 start_cmd="ppp_start"
@@ -45,7 +45,7 @@ ppp_start()
 
 ppp_hup()
 {
-	pids="$(check_process pppd)"
+	pids="`check_process pppd`"
 	if [ -n "$pids" ]; then
 		for pid in $pids; do
 			kill $sig_hup $pid
@@ -55,7 +55,7 @@ ppp_hup()
 
 ppp_stop()
 {
-	pids="$(check_process pppd)"
+	pids="`check_process pppd`"
 	if [ -n "$pids" ]; then
 		for pid in $pids; do
 			kill $sig_stop $pid

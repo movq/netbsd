@@ -1,4 +1,4 @@
-/*	$NetBSD: eso.c,v 1.37 2004/10/29 12:57:18 yamt Exp $	*/
+/*	$NetBSD: eso.c,v 1.33.2.2 2004/07/10 13:51:43 tron Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2004 Klaus J. Klein
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eso.c,v 1.37 2004/10/29 12:57:18 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eso.c,v 1.33.2.2 2004/07/10 13:51:43 tron Exp $");
 
 #include "mpu.h"
 
@@ -127,7 +127,7 @@ static int	eso_trigger_output __P((void *, void *, void *, int,
 static int	eso_trigger_input __P((void *, void *, void *, int,
 		    void (*)(void *), void *, struct audio_params *));
 
-static const struct audio_hw_if eso_hw_if = {
+static struct audio_hw_if eso_hw_if = {
 	eso_open,
 	eso_close,
 	NULL,			/* drain */
@@ -658,6 +658,13 @@ eso_open(hdl, flags)
 	void *hdl;
 	int flags;
 {
+	struct eso_softc *sc = hdl;
+	
+	DPRINTF(("%s: open\n", sc->sc_dev.dv_xname));
+
+	sc->sc_pintr = NULL;
+	sc->sc_rintr = NULL;
+	
 	return (0);
 }
 
@@ -665,6 +672,8 @@ static void
 eso_close(hdl)
 	void *hdl;
 {
+
+	DPRINTF(("%s: close\n", ((struct eso_softc *)hdl)->sc_dev.dv_xname));
 }
 
 static int

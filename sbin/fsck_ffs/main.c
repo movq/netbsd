@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.52 2004/10/11 15:24:09 dbj Exp $	*/
+/*	$NetBSD: main.c,v 1.49 2004/01/17 22:17:07 dbj Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1986, 1993\n\
 #if 0
 static char sccsid[] = "@(#)main.c	8.6 (Berkeley) 5/14/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.52 2004/10/11 15:24:09 dbj Exp $");
+__RCSID("$NetBSD: main.c,v 1.49 2004/01/17 22:17:07 dbj Exp $");
 #endif
 #endif /* not lint */
 
@@ -346,12 +346,12 @@ checkfilesys(filesys, mntpt, auxdata, child)
 	if (!hotroot()) {
 		ckfini();
 	} else {
-		struct statvfs stfs_buf;
+		struct statfs stfs_buf;
 		/*
 		 * Check to see if root is mounted read-write.
 		 */
-		if (statvfs("/", &stfs_buf) == 0)
-			flags = stfs_buf.f_flag;
+		if (statfs("/", &stfs_buf) == 0)
+			flags = stfs_buf.f_flags;
 		else
 			flags = 0;
 		if (markclean)
@@ -367,10 +367,6 @@ checkfilesys(filesys, mntpt, auxdata, child)
 	free(inostathead);
 	inostathead = NULL;
 
-	if (!resolved || rerun) {
-		pwarn("\n***** UNRESOLVED INCONSISTENCIES REMAIN *****\n");
-		returntosingle = 1;
-	}
 	if (!fsmodified)
 		return (0);
 	if (!preen)
@@ -378,13 +374,13 @@ checkfilesys(filesys, mntpt, auxdata, child)
 	if (rerun)
 		pwarn("\n***** PLEASE RERUN FSCK *****\n");
 	if (hotroot()) {
-		struct statvfs stfs_buf;
+		struct statfs stfs_buf;
 		/*
 		 * We modified the root.  Do a mount update on
 		 * it, unless it is read-write, so we can continue.
 		 */
-		if (statvfs("/", &stfs_buf) == 0) {
-			long flags = stfs_buf.f_flag;
+		if (statfs("/", &stfs_buf) == 0) {
+			long flags = stfs_buf.f_flags;
 			struct ufs_args args;
 			int ret;
 
@@ -411,7 +407,7 @@ usage()
 {
 
 	(void) fprintf(stderr,
-	    "usage: %s [-adFfnpqy] [-B be|le] [-b block] [-c level] [-m mode]"
+	    "usage: %s [-dFfnpqy] [-B be|le] [-b block] [-c level] [-m mode]"
 	    " filesystem ...\n",
 	    getprogname());
 	exit(1);

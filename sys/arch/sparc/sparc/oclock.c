@@ -1,4 +1,4 @@
-/*	$NetBSD: oclock.c,v 1.10 2004/07/01 10:23:41 pk Exp $ */
+/*	$NetBSD: oclock.c,v 1.8.2.1 2004/07/10 16:38:27 tron Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: oclock.c,v 1.10 2004/07/01 10:23:41 pk Exp $");
+__KERNEL_RCSID(0, "$NetBSD: oclock.c,v 1.8.2.1 2004/07/10 16:38:27 tron Exp $");
 
 #include "opt_sparc_arch.h"
 
@@ -213,6 +213,7 @@ oclockattach(parent, self, aux)
 void
 oclock_init()
 {
+	int dummy;
 
 	profhz = hz = 100;
 	tick = 1000000 / hz;
@@ -223,7 +224,7 @@ oclock_init()
 
 	ienab_bic(IE_L14 | IE_L10);	/* disable all clock intrs */
 	intersil_disable();		/* disable clock */
-	(void)intersil_clear();		/* clear interrupts */
+	dummy = intersil_clear();	/* clear interrupts */
 	ienab_bis(IE_L10);		/* enable l10 interrupt */
 	intersil_enable();		/* enable clock */
 }
@@ -237,6 +238,7 @@ int
 oclockintr(cap)
 	void *cap;
 {
+	volatile int discard;
 	int s;
 
 	/*
@@ -247,7 +249,7 @@ oclockintr(cap)
 	 */
 	s = splhigh();
 
-	(void)intersil_clear();
+	discard = intersil_clear();
 	ienab_bic(IE_L10);  /* clear interrupt */
 	ienab_bis(IE_L10);  /* enable interrupt */
 	splx(s);

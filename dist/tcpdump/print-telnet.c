@@ -1,4 +1,4 @@
-/*	$NetBSD: print-telnet.c,v 1.4 2004/09/27 23:04:25 dyoung Exp $	*/
+/*	$NetBSD: print-telnet.c,v 1.3 2002/02/18 09:37:10 itojun Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -37,11 +37,11 @@
  */
 /*
  *      @(#)Copyright (c) 1994, Simon J. Gerraty.
- *
+ *      
  *      This is free software.  It comes with NO WARRANTY.
- *      Permission to use, modify and distribute this source code
+ *      Permission to use, modify and distribute this source code 
  *      is granted subject to the following conditions.
- *      1/ that the above copyright notice and this notice
+ *      1/ that the above copyright notice and this notice 
  *      are preserved in all copies.
  */
 
@@ -52,17 +52,23 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
-static const char rcsid[] _U_ =
-     "@(#) Header: /tcpdump/master/tcpdump/print-telnet.c,v 1.21.2.3 2003/12/29 22:42:23 hannes Exp";
+static const char rcsid[] =
+     "@(#) Header: /tcpdump/master/tcpdump/print-telnet.c,v 1.18 2001/09/10 06:40:08 fenner Exp";
 #else
-__RCSID("$NetBSD: print-telnet.c,v 1.4 2004/09/27 23:04:25 dyoung Exp $");
+__RCSID("$NetBSD: print-telnet.c,v 1.3 2002/02/18 09:37:10 itojun Exp $");
 #endif
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <ctype.h>
+
+#include <netinet/in.h>
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 
 #include "interface.h"
@@ -114,8 +120,7 @@ numstr(int x)
 static int
 telnet_parse(const u_char *sp, u_int length, int print)
 {
-	int i, x;
-	u_int c;
+	int i, c, x;
 	const u_char *osp, *p;
 #define FETCH(c, sp, length) \
 	do { \
@@ -161,7 +166,7 @@ telnet_parse(const u_char *sp, u_int length, int print)
 			break;
 		/* IAC SB .... IAC SE */
 		p = sp;
-		while (length > (u_int)(p + 1 - sp)) {
+		while (length > p + 1 - sp) {
 			if (p[0] == IAC && p[1] == SE)
 				break;
 			p++;
@@ -237,7 +242,7 @@ telnet_print(const u_char *sp, u_int length)
 	int l;
 
 	osp = sp;
-
+	
 	while (length > 0 && *sp == IAC) {
 		l = telnet_parse(sp, length, 0);
 		if (l < 0)
@@ -249,7 +254,7 @@ telnet_print(const u_char *sp, u_int length)
 		if (Xflag && 2 < vflag) {
 			if (first)
 				printf("\nTelnet:");
-			hex_print_with_offset("\n", sp, l, sp - osp);
+			hex_print_with_offset(sp, l, sp - osp);
 			if (l > 8)
 				printf("\n\t\t\t\t");
 			else

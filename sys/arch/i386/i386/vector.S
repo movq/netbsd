@@ -1,4 +1,4 @@
-/*	$NetBSD: vector.S,v 1.17 2004/10/23 21:24:05 yamt Exp $	*/
+/*	$NetBSD: vector.S,v 1.13 2004/03/11 11:39:26 yamt Exp $	*/
 
 /*
  * Copyright 2002 (c) Wasabi Systems, Inc.
@@ -156,6 +156,8 @@ IDTVEC(recurse_lapic_ipi)
 	pushl	$0		
 	pushl	$T_ASTFLT
 	INTRENTRY		
+IDTVEC(resume_lapic_ipi)
+	cli
 	jmp	1f
 IDTVEC(intr_lapic_ipi)
 	pushl	$0		
@@ -165,7 +167,6 @@ IDTVEC(intr_lapic_ipi)
 	movl	CPUVAR(ILEVEL),%ebx
 	cmpl	$IPL_IPI,%ebx
 	jae	2f
-IDTVEC(resume_lapic_ipi)
 1:
 	incl	CPUVAR(IDEPTH)
 	movl	$IPL_IPI,CPUVAR(ILEVEL)
@@ -207,6 +208,8 @@ IDTVEC(recurse_lapic_ltimer)
 	pushl	$0		
 	pushl	$T_ASTFLT
 	INTRENTRY		
+IDTVEC(resume_lapic_ltimer)
+	cli
 	jmp	1f
 IDTVEC(intr_lapic_ltimer)
 	pushl	$0		
@@ -216,7 +219,6 @@ IDTVEC(intr_lapic_ltimer)
 	movl	CPUVAR(ILEVEL),%ebx
 	cmpl	$IPL_CLOCK,%ebx
 	jae	2f
-IDTVEC(resume_lapic_ltimer)
 1:
 	incl	CPUVAR(IDEPTH)
 	movl	$IPL_CLOCK,CPUVAR(ILEVEL)
@@ -232,6 +234,13 @@ IDTVEC(resume_lapic_ltimer)
 	INTRFASTEXIT
 #endif /* NLAPIC > 0 */
 
+#ifdef MULTIPROCESSOR
+#define LOCK_KERNEL	pushl %esp ; call _C_LABEL(x86_intlock) ; addl $4,%esp
+#define UNLOCK_KERNEL	pushl %esp ; call _C_LABEL(x86_intunlock) ; addl $4,%esp
+#else
+#define LOCK_KERNEL
+#define UNLOCK_KERNEL
+#endif
 
 #define voidop(num)
 
@@ -277,25 +286,27 @@ IDTVEC(intr_/**/name/**/num)						;\
 	sti								;\
 	incl	CPUVAR(IDEPTH)						;\
 	movl	IS_HANDLERS(%ebp),%ebx					;\
+	LOCK_KERNEL							;\
 6:									\
 	movl	IH_LEVEL(%ebx),%edi					;\
 	cmpl	%esi,%edi						;\
 	jle	7f							;\
 	pushl	IH_ARG(%ebx)						;\
-	movl	IH_FUN(%ebx),%eax					;\
 	movl	%edi,CPUVAR(ILEVEL)					;\
-	movl	IH_NEXT(%ebx),%ebx	/* next handler in chain */	;\
-	call	*%eax			/* call it */			;\
+	call	*IH_FUN(%ebx)		/* call it */			;\
 	addl	$4,%esp			/* toss the arg */		;\
+	movl	IH_NEXT(%ebx),%ebx	/* next handler in chain */	;\
 	testl	%ebx,%ebx						;\
 	jnz	6b							;\
 5:									\
+	UNLOCK_KERNEL							;\
 	cli								;\
 	unmask(num)			/* unmask it in hardware */	;\
 	late_ack(num)							;\
 	sti								;\
 	jmp	_C_LABEL(Xdoreti)	/* lower spl and do ASTs */	;\
 7:									\
+	UNLOCK_KERNEL							;\
 	cli								;\
 	orl     $(1 << num),CPUVAR(IPENDING)				;\
 	level_mask(num)							;\
@@ -613,7 +624,6 @@ _C_LABEL(eintrcnt):
 
 IDTVEC(softserial)
 	movl	$IPL_SOFTSERIAL, CPUVAR(ILEVEL)
-	sti
 	incl	CPUVAR(IDEPTH)
 #ifdef MULTIPROCESSOR
 	call	_C_LABEL(x86_softintlock)
@@ -632,7 +642,6 @@ IDTVEC(softserial)
 
 IDTVEC(softnet)
 	movl	$IPL_SOFTNET, CPUVAR(ILEVEL)
-	sti
 	incl	CPUVAR(IDEPTH)
 #ifdef MULTIPROCESSOR	
 	call	_C_LABEL(x86_softintlock)
@@ -664,7 +673,6 @@ IDTVEC(softnet)
 
 IDTVEC(softclock)
 	movl	$IPL_SOFTCLOCK, CPUVAR(ILEVEL)
-	sti
 	incl	CPUVAR(IDEPTH)
 #ifdef MULTIPROCESSOR	
 	call	_C_LABEL(x86_softintlock)
@@ -853,14 +861,14 @@ calltrap:
 	call	_C_LABEL(trap)
 	addl	$4,%esp
 	testb	$SEL_RPL,TF_CS(%esp)
-	jnz	.Lalltraps_checkast
+	jnz	alltraps_checkast
 #ifdef VM86
 	testl	$PSL_VM,TF_EFLAGS(%esp)
 	jz	6f
 #else
 	jmp	6f
 #endif
-.Lalltraps_checkast:
+alltraps_checkast:
 	/* Check for ASTs on exit to user mode. */
 	cli
 	CHECK_ASTPENDING(%eax)
@@ -871,7 +879,7 @@ calltrap:
 	pushl	%esp
 	call	_C_LABEL(trap)
 	addl	$4,%esp
-	jmp	.Lalltraps_checkast	/* re-check ASTs */
+	jmp	alltraps_checkast	/* re-check ASTs */
 3:	CHECK_DEFERRED_SWITCH(%eax)
 	jnz	9f
 #ifndef DIAGNOSTIC
@@ -888,12 +896,12 @@ calltrap:
 	int	$3
 #endif /* DDB */
 	movl	%ebx,CPUVAR(ILEVEL)
-	jmp	.Lalltraps_checkast	/* re-check ASTs */
+	jmp	alltraps_checkast	/* re-check ASTs */
 4:	.asciz	"WARNING: SPL NOT LOWERED ON TRAP EXIT\n"
 #endif /* DIAGNOSTIC */
 9:	sti
 	call	_C_LABEL(pmap_load)
-	jmp	.Lalltraps_checkast	/* re-check ASTs */
+	jmp	alltraps_checkast	/* re-check ASTs */
 
 #ifdef IPKDB
 /* LINTSTUB: Ignore */

@@ -1,7 +1,7 @@
-/*	$NetBSD: tp_driver.c,v 1.18 2004/04/20 02:13:26 matt Exp $	*/
+/*	$NetBSD: tp_driver.c,v 1.16 2003/09/06 23:56:27 christos Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tp_driver.c,v 1.18 2004/04/20 02:13:26 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tp_driver.c,v 1.16 2003/09/06 23:56:27 christos Exp $");
 
 #include "tp_states.h"
 
@@ -26,7 +26,6 @@ static const struct act_ent {
 #include <sys/errno.h>
 
 #include <netiso/tp_param.h>
-#include <netiso/tp_var.h>
 #include <netiso/tp_stat.h>
 #include <netiso/tp_pcb.h>
 #include <netiso/tp_tpdu.h>
@@ -34,6 +33,7 @@ static const struct act_ent {
 #include <netiso/tp_trace.h>
 #include <netiso/iso_errno.h>
 #include <netiso/tp_seq.h>
+#include <netiso/tp_var.h>
 #include <netiso/cons.h>
 
 #define DRIVERTRACE TPPTdriver
@@ -43,11 +43,14 @@ static const struct act_ent {
 static int trick_hc = 1;
 
 #include "tp_events.h"
-static int _Xebec_action (int, struct tp_event *, struct tp_pcb *);
-static int _Xebec_index (struct tp_event *, struct tp_pcb *);
+static int _Xebec_action __P((int, struct tp_event *, struct tp_pcb *));
+static int _Xebec_index __P((struct tp_event *, struct tp_pcb *));
 
 static int
-_Xebec_action(int a, struct tp_event *e, struct tp_pcb *p)
+_Xebec_action(a, e, p)
+	int             a;
+	struct tp_event *e;
+	struct tp_pcb  *p;
 {
 	int             error;
 	struct mbuf    *data = NULL;
@@ -950,7 +953,7 @@ _Xebec_index(e, p)
 		return 0;
 	}			/* end switch */
 }				/* _Xebec_index() */
-static const int inx[26][9] =
+static const int      inx[26][9] =
 {
     {0, 0, 0, 0, 0, 0, 0, 0, 0,},
     {0x0, 0x0, 0x0, 0x0, 0x31, 0x0, 0x0, 0x0, 0x0,},
@@ -980,11 +983,13 @@ static const int inx[26][9] =
     {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, -1,},
 };
 int
-tp_driver(struct tp_pcb *p, struct tp_event *e)
+tp_driver(p, e)
+	struct tp_pcb *p;
+	struct tp_event *e;
 {
 	int    index, error = 0;
 	const struct act_ent *a;
-	static const struct act_ent erroraction = {0, -1};
+	static struct act_ent erroraction = {0, -1};
 
 	index = inx[1 + e->ev_number][p->tp_state];
 	if (index < 0)

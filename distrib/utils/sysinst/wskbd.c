@@ -1,4 +1,4 @@
-/*	$NetBSD: wskbd.c,v 1.2 2004/10/16 13:20:11 dsl Exp $	*/
+/*	$NetBSD: wskbd.c,v 1.5 2005/03/09 20:59:09 dsl Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: wskbd.c,v 1.2 2004/10/16 13:20:11 dsl Exp $");
+__RCSID("$NetBSD: wskbd.c,v 1.5 2005/03/09 20:59:09 dsl Exp $");
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -51,24 +51,31 @@ void save_kb_encoding(void);
 
 /* wscons setup for sysinst */
 
+static const char *kbd_name = 0;
+static int kb_default = 0;
+
 struct kb_types {
 	kbd_t		kb_encoding;
+	const char	*kb_enc_txt;
 	const char	*kb_name;
 };
 
-static struct kb_types kb_types[] = { KB_ENCTAB };
-static const char *kbd_name = 0;
-static int kb_default = 0;
+/* Types and names of keyboards, maybe the names should be translated... */
+static const struct kb_types kb_types[] = {
+#define KB_sysinst(tag, tagf, value, cc, ccf, country) \
+	{tag | tagf, cc ccf, country},
+KB_ENC_FUN(KB_sysinst)
+};
 
 static int
 set_kb_encoding(menudesc *m, void *arg)
 {
 	int fd = *(int *)arg;
-	struct kb_types *kbt = kb_types + m->cursel;
+	const struct kb_types *kbt = kb_types + m->cursel;
 
 	if (kbt->kb_encoding != KB_USER) {
 		ioctl(fd, WSKBDIO_SETENCODING, &kbt->kb_encoding);
-		kbd_name = kbt->kb_name;
+		kbd_name = kbt->kb_enc_txt;
 	}
 	return 1;
 }
@@ -130,7 +137,7 @@ save_kb_encoding(void)
 	 * 1) replace an exiting line
 	 * 2) replace a commented out line
 	 * or
-	 * 3) add a line to the end of teh file
+	 * 3) add a line to the end of the file
 	 */
 	run_program(0, "sed -an -e 'H;$!d;g'"
 	    " -e 's/\\nencoding [a-zA-Z0-9.]*\\n/\\\nencoding %s\\\n/; t done'"

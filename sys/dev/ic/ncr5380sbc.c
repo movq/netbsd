@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr5380sbc.c,v 1.53 2004/09/12 18:05:46 he Exp $	*/
+/*	$NetBSD: ncr5380sbc.c,v 1.51 2003/11/05 23:39:21 simonb Exp $	*/
 
 /*
  * Copyright (c) 1995 David Jones, Gordon W. Ross
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ncr5380sbc.c,v 1.53 2004/09/12 18:05:46 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ncr5380sbc.c,v 1.51 2003/11/05 23:39:21 simonb Exp $");
 
 #include "opt_ddb.h"
 
@@ -96,7 +96,6 @@ __KERNEL_RCSID(0, "$NetBSD: ncr5380sbc.c,v 1.53 2004/09/12 18:05:46 he Exp $");
 
 #include <dev/ic/ncr5380reg.h>
 #include <dev/ic/ncr5380var.h>
-#include <dev/ic/ncr53c400reg.h>
 
 static void	ncr5380_reset_scsibus __P((struct ncr5380_softc *));
 static void	ncr5380_sched __P((struct ncr5380_softc *));
@@ -373,12 +372,6 @@ ncr5380_init(sc)
 
 	sc->sc_prevphase = PHASE_INVALID;
 	sc->sc_state = NCR_IDLE;
-
-#ifdef NCR5380_USE_BUS_SPACE
-	if (sc->sc_rev == NCR_VARIANT_NCR53C400)
-		bus_space_write_1(sc->sc_regt, sc->sc_regh, C400_CSR,
-		    C400_CSR_5380_ENABLE);
-#endif
 
 	NCR5380_WRITE(sc, sci_tcmd, PHASE_INVALID);
 	NCR5380_WRITE(sc, sci_icmd, 0);

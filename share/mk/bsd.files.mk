@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.files.mk,v 1.37 2004/05/17 12:58:17 lukem Exp $
+#	$NetBSD: bsd.files.mk,v 1.33.2.2 2004/03/31 08:02:29 tron Exp $
 
 .if !defined(_BSD_FILES_MK_)
 _BSD_FILES_MK_=1
@@ -19,8 +19,6 @@ FILESMODE?=	${NONBINMODE}
 filesinstall::	# ensure existence
 .PHONY:		filesinstall
 
-configfilesinstall:: .PHONY
-
 __fileinstall: .USE
 	${_MKTARGET_INSTALL}
 	${INSTALL_FILE} \
@@ -30,7 +28,6 @@ __fileinstall: .USE
 	    ${SYSPKGTAG} ${.ALLSRC} ${.TARGET}
 
 .endif # !target(__fileinstall)
-
 
 .for F in ${FILES:O:u}
 _FDIR:=		${FILESDIR_${F}:U${FILESDIR}}		# dir override
@@ -50,33 +47,6 @@ ${_F}:		.MADE					# no build at install
 .endif
 
 filesinstall::	${_F}
-.PRECIOUS: 	${_F}					# keep if install fails
-.endfor
-
-
-# 
-# CONFIGFILES
-#
-configinstall:	configfilesinstall
-
-.for F in ${CONFIGFILES:O:u}
-_FDIR:=		${FILESDIR_${F}:U${FILESDIR}}		# dir override
-_FNAME:=	${FILESNAME_${F}:U${FILESNAME:U${F:T}}}	# name override
-_F:=		${DESTDIR}${_FDIR}/${_FNAME}		# installed path
-
-.if ${MKUPDATE} == "no"
-${_F}!		${F} __fileinstall	# install rule
-.if !defined(BUILD) && !make(all) && !make(${F})
-${_F}!		.MADE					# no build at install
-.endif
-.else
-${_F}:		${F} __fileinstall	# install rule
-.if !defined(BUILD) && !make(all) && !make(${F})
-${_F}:		.MADE					# no build at install
-.endif
-.endif
-
-configfilesinstall::	${_F}
 .PRECIOUS: 	${_F}					# keep if install fails
 .endfor
 
@@ -121,13 +91,13 @@ cleanbuildsymlinks: .PHONY
 
 .uue:
 	${_MKTARGET_CREATE}
-	rm -f ${.TARGET} ${.TARGET}.tmp
-	${TOOL_UUDECODE} -p ${.IMPSRC} > ${.TARGET}.tmp \
-	    && mv ${.TARGET}.tmp ${UUDECODE_FILES_RENAME_${.TARGET}:U${.TARGET}}
+	rm -f ${.TARGET}
+	${TOOL_UUDECODE} ${UUDECODE_FILES_RENAME_${.TARGET}:?-p:} ${.IMPSRC} ${UUDECODE_FILES_RENAME_${.TARGET}:?>:} ${UUDECODE_FILES_RENAME_${.TARGET}:U}
+	${UUDECODE_FILES_RENAME_${.TARGET}:?touch ${.TARGET}:@true}
 
 realall: ${UUDECODE_FILES}
 
-CLEANUUDECODE_FILES=${UUDECODE_FILES} ${UUDECODE_FILES:=.tmp}
+CLEANUUDECODE_FILES=${UUDECODE_FILES}
 .for i in ${UUDECODE_FILES}
 CLEANUUDECODE_FILES+=${UUDECODE_FILES_RENAME_${i}}
 .endfor

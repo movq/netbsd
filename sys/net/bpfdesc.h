@@ -1,4 +1,4 @@
-/*	$NetBSD: bpfdesc.h,v 1.21 2004/11/30 04:28:43 christos Exp $	*/
+/*	$NetBSD: bpfdesc.h,v 1.16.2.1 2004/04/21 03:56:20 jmc Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993
@@ -89,7 +89,6 @@ struct bpf_d {
 	struct selinfo	bd_sel;		/* bsd select info */
 #endif
 	struct callout	bd_callout;	/* for BPF timeouts with select */
-	LIST_ENTRY(bpf_d) bd_list;	/* list of all BPF's */
 };
 
 

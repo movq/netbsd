@@ -1,4 +1,4 @@
-/*	$NetBSD: apmvar.h,v 1.3 2004/05/11 10:13:35 he Exp $	*/
+/*	$NetBSD: apmvar.h,v 1.2 2002/09/19 16:52:00 manu Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -35,9 +35,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-#ifndef _MACHINE_APMVAR_H_
-#define _MACHINE_APMVAR_H_
 
 struct apm_attach_args {
 	int aaa_magic;
@@ -97,4 +94,3 @@ struct apm_event_info {
 
 #define APM_IOC_NEXTEVENT _IOR('A', 4, struct apm_event_info)
 
-#endif /* _MACHINE_APMVAR_H_ */

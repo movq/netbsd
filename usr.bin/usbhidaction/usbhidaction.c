@@ -1,4 +1,4 @@
-/*      $NetBSD: usbhidaction.c,v 1.17 2004/11/05 22:43:47 dsl Exp $ */
+/*      $NetBSD: usbhidaction.c,v 1.11 2004/01/05 23:23:37 jmmv Exp $ */
 
 /*
  * Copyright (c) 2000, 2002 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: usbhidaction.c,v 1.17 2004/11/05 22:43:47 dsl Exp $");
+__RCSID("$NetBSD: usbhidaction.c,v 1.11 2004/01/05 23:23:37 jmmv Exp $");
 #endif
 
 #include <stdio.h>
@@ -60,7 +60,7 @@ __RCSID("$NetBSD: usbhidaction.c,v 1.17 2004/11/05 22:43:47 dsl Exp $");
 
 int verbose = 0;
 int isdemon = 0;
-int reparse = 0;
+int reparse = 1;
 
 struct command {
 	struct command *next;
@@ -99,13 +99,10 @@ main(int argc, char **argv)
 	char devnamebuf[PATH_MAX];
 	struct command *cmd;
 	int reportid;
-	const char *table = NULL;
-
-	setlinebuf(stdout);
 
 	demon = 1;
 	ignore = 0;
-	while ((ch = getopt(argc, argv, "c:df:it:v")) != -1) {
+	while ((ch = getopt(argc, argv, "c:df:iv")) != -1) {
 		switch(ch) {
 		case 'c':
 			conf = optarg;
@@ -118,9 +115,6 @@ main(int argc, char **argv)
 			break;
 		case 'f':
 			dev = optarg;
-			break;
-		case 't':
-			table = optarg;
 			break;
 		case 'v':
 			demon = 0;
@@ -137,11 +131,11 @@ main(int argc, char **argv)
 	if (conf == NULL || dev == NULL)
 		usage();
 
-	hid_init(table);
+	hid_init(NULL);
 
 	if (dev[0] != '/') {
 		snprintf(devnamebuf, sizeof(devnamebuf), "/dev/%s%s",
-			 isdigit((unsigned char)dev[0]) ? "uhid" : "", dev);
+			 isdigit(dev[0]) ? "uhid" : "", dev);
 		dev = devnamebuf;
 	}
 
@@ -215,7 +209,7 @@ usage(void)
 {
 
 	fprintf(stderr, "usage: %s -c config_file [-d] -f hid_dev "
-		"[-i] [-t table] [-v]\n", getprogname());
+		"[-i] [-v]\n", getprogname());
 	exit(1);
 }
 
@@ -306,12 +300,11 @@ parse_conf(const char *conf, report_desc_t repd, int reportid, int ignore)
 		for (d = hid_start_parse(repd, 1 << hid_input, reportid);
 		     hid_get_item(d, &h); ) {
 			if (verbose > 2)
-				printf("kind=%d usage=%x flags=%x\n",
-				       h.kind, h.usage, h.flags);
+				printf("kind=%d usage=%x\n", h.kind, h.usage);
+			if (h.flags & HIO_CONST)
+				continue;
 			switch (h.kind) {
 			case hid_input:
-				if (h.flags & HIO_CONST)
-					continue;
 				if (h.usage_minimum != 0 ||
 				    h.usage_maximum != 0) {
 					lo = h.usage_minimum;
@@ -348,8 +341,6 @@ parse_conf(const char *conf, report_desc_t repd, int reportid, int ignore)
 				    sizeof coll - strlen(coll),  ".%s:%s",
 				    hid_usage_page(HID_PAGE(h.usage)), 
 				    hid_usage_in_page(h.usage));
-				if (verbose > 2)
-					printf("coll '%s'\n", coll);
 				break;
 			case hid_endcollection:
 				if (coll[0])
@@ -366,12 +357,12 @@ parse_conf(const char *conf, report_desc_t repd, int reportid, int ignore)
 		}
 		if (isdemon) {
 			syslog(LOG_WARNING, "config file `%s', line %d, HID "
-			       "item not found: `%s'", conf, line, name);
+			       "item not found: `%s'\n", conf, line, name);
 			freecommands(cmds);
 			return (NULL);
 		} else {
 			errx(1, "config file `%s', line %d, HID item "
-			     "not found: `%s'", conf, line, name);
+			     "not found: `%s'\n", conf, line, name);
 		}
 
 	foundhid:
@@ -405,7 +396,7 @@ docmd(struct command *cmd, int value, const char *hid, int argc, char **argv)
 		if (*p == '$') {
 			p++;
 			len = &cmdbuf[SIZE-1] - q;
-			if (isdigit((unsigned char)*p)) {
+			if (isdigit(*p)) {
 				n = strtol(p, &p, 10) - 1;
 				if (n >= 0 && n < argc) {
 					strncpy(q, argv[n], len);

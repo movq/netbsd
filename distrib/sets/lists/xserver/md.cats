@@ -1,4 +1,4 @@
-# $NetBSD: md.cats,v 1.8 2004/11/14 19:53:59 nathanw Exp $
+# $NetBSD: md.cats,v 1.4 2004/03/28 06:51:12 jmc Exp $
 ./usr/X11R6/bin/X
 ./usr/X11R6/bin/XFree86
 ./usr/X11R6/bin/gtf
@@ -127,8 +127,6 @@
 ./usr/X11R6/lib/modules/drivers/tseng_drv.o
 ./usr/X11R6/lib/modules/drivers/vesa_drv.o
 ./usr/X11R6/lib/modules/drivers/vga_drv.o
-./usr/X11R6/lib/modules/drivers/wsfb.o	xserver-obsolete	obsolete
-./usr/X11R6/lib/modules/drivers/wsfb_drv.o
 ./usr/X11R6/lib/modules/extensions/libGLcore.a
 ./usr/X11R6/lib/modules/extensions/libdbe.a
 ./usr/X11R6/lib/modules/extensions/libextmod.a
@@ -169,13 +167,11 @@
 ./usr/X11R6/lib/modules/libfb.a
 ./usr/X11R6/lib/modules/libi2c.a
 ./usr/X11R6/lib/modules/libint10.a
-./usr/X11R6/lib/modules/liblayer.a 
 ./usr/X11R6/lib/modules/libmfb.a
 ./usr/X11R6/lib/modules/libpcidata.a
 ./usr/X11R6/lib/modules/librac.a
 ./usr/X11R6/lib/modules/libramdac.a
 ./usr/X11R6/lib/modules/libscanpci.a
-./usr/X11R6/lib/modules/libshadow.a
 ./usr/X11R6/lib/modules/libshadowfb.a
 ./usr/X11R6/lib/modules/libvbe.a
 ./usr/X11R6/lib/modules/libvgahw.a
@@ -234,7 +230,6 @@
 ./usr/X11R6/man/cat4/vga.0			-unknown-		.cat
 ./usr/X11R6/man/cat4/void.0			-unknown-		.cat
 ./usr/X11R6/man/cat4/wacom.0			-unknown-		.cat
-./usr/X11R6/man/cat4/wsfb.0			-unknown-		.cat
 ./usr/X11R6/man/cat5/XF86Config.0		-unknown-		.cat
 ./usr/X11R6/man/man1/XFree86.1			-unknown-		.man
 ./usr/X11R6/man/man1/gtf.1			-unknown-		.man
@@ -283,5 +278,4 @@
 ./usr/X11R6/man/man4/vga.4			-unknown-		.man
 ./usr/X11R6/man/man4/void.4			-unknown-		.man
 ./usr/X11R6/man/man4/wacom.4			-unknown-		.man
-./usr/X11R6/man/man4/wsfb.4			-unknown-		.man
 ./usr/X11R6/man/man5/XF86Config.5		-unknown-		.man

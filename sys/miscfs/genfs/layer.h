@@ -1,4 +1,4 @@
-/*	$NetBSD: layer.h,v 1.6 2004/05/28 18:55:20 wrstuden Exp $	*/
+/*	$NetBSD: layer.h,v 1.5.2.1 2004/05/30 15:09:46 tron Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration

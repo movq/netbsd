@@ -1,4 +1,4 @@
-/* $NetBSD: bus_dma.c,v 1.26 2004/11/28 17:34:46 thorpej Exp $	*/
+/* $NetBSD: bus_dma.c,v 1.23 2003/06/29 22:28:41 fvdl Exp $	*/
 
 /*
  * This file was taken from from next68k/dev/bus_dma.c, which was originally
@@ -46,7 +46,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.26 2004/11/28 17:34:46 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.23 2003/06/29 22:28:41 fvdl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -90,12 +90,12 @@ _bus_dmamap_create(t, size, nsegments, maxsegsz, boundary, flags, dmamp)
 	size_t mapsize;
 
 	/*
-	 * Allocate and initialize the DMA map.  The end of the map
+	 * Allcoate and initialize the DMA map.  The end of the map
 	 * is a variable-sized array of segments, so we allocate enough
 	 * room for them in one shot.
 	 *
 	 * Note we don't preserve the WAITOK or NOWAIT flags.  Preservation
-	 * of ALLOCNOW notifies others that we've reserved these resources,
+	 * of ALLOCNOW notifes others that we've reserved these resources,
 	 * and they are not to be freed.
 	 *
 	 * The bus_dmamap_t includes one bus_dma_segment_t, hence
@@ -319,8 +319,6 @@ _bus_dmamap_load_mbuf_direct(t, map, m0, flags)
 	seg = 0;
 	error = 0;
 	for (m = m0; m != NULL && error == 0; m = m->m_next) {
-		if (m->m_len == 0)
-			continue;
 		error = _bus_dmamap_load_buffer_direct_common(t, map,
 		    m->m_data, m->m_len, NULL, flags, &lastaddr, &seg, first);
 		first = 0;
@@ -403,7 +401,7 @@ _bus_dmamap_load_raw_direct(t, map, segs, nsegs, size, flags)
 	int flags;
 {
 	/* @@@ This routine doesn't enforce map boundary requirement
-	 * @@@ perhaps it should return an error instead of panicking
+	 * @@@ perhaps it should return an error instead of panicing
 	 */
 
 #ifdef DIAGNOSTIC

@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.104 2004/09/17 14:11:21 skrll Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.102 2004/02/28 16:02:03 simonb Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -79,7 +79,7 @@
 #include "opt_ddb.h"
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.104 2004/09/17 14:11:21 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.102 2004/02/28 16:02:03 simonb Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -275,6 +275,7 @@ cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
 		struct frame frame;
 		struct fpreg fpregs;
 	} cpustate;
+	struct proc *p = l->l_proc;
 
 	CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
 	chdr->c_hdrsize = ALIGN(sizeof(struct core));
@@ -291,7 +292,7 @@ cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
 	cseg.c_size = chdr->c_cpusize;
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
 	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 	if (error)
 		return error;
 
@@ -299,12 +300,45 @@ cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
 			(off_t)chdr->c_cpusize,
 			(off_t)(chdr->c_hdrsize + chdr->c_seghdrsize),
 			UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT,
-			cred, NULL, NULL);
+			cred, NULL, p);
 
 	if (!error)
 		chdr->c_nseg++;
 
 	return error;
+}
+
+/*
+ * Move pages from one kernel virtual address to another.
+ * Both addresses are assumed to reside in the Sysmap,
+ * and size must be a multiple of PAGE_SIZE.
+ */
+void
+pagemove(caddr_t from, caddr_t to, size_t size)
+{
+	pt_entry_t *fpte, *tpte;
+	paddr_t invalid;
+
+	if (size % PAGE_SIZE)
+		panic("pagemove");
+	fpte = kvtopte(from);
+	tpte = kvtopte(to);
+#ifdef MIPS3_PLUS
+	if (CPUISMIPS3 &&
+	    (mips_cache_indexof(from) != mips_cache_indexof(to)))
+		mips_dcache_wbinv_range((vaddr_t) from, size);
+#endif
+	invalid = (MIPS_HAS_R4K_MMU) ? MIPS3_PG_NV | MIPS3_PG_G : MIPS1_PG_NV;
+	while (size > 0) {
+		tpte->pt_entry = fpte->pt_entry;
+		fpte->pt_entry = invalid;
+		MIPS_TBIS((vaddr_t)from);
+		MIPS_TBIS((vaddr_t)to);
+		fpte++; tpte++;
+		size -= PAGE_SIZE;
+		from += PAGE_SIZE;
+		to += PAGE_SIZE;
+	}
 }
 
 /*

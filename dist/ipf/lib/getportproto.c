@@ -1,4 +1,4 @@
-/*	$NetBSD: getportproto.c,v 1.4 2004/11/13 19:16:10 he Exp $	*/
+/*	$NetBSD: getportproto.c,v 1.1.1.1.2.1 2004/08/13 03:56:59 jmc Exp $	*/
 
 #include <ctype.h>
 #include "ipf.h"
@@ -10,7 +10,7 @@ int proto;
 	struct servent *s;
 	struct protoent *p;
 
-	if (ISDIGIT(*name) && atoi(name) > 0)
+	if (isdigit(*name) && atoi(name) > 0)
 		return htons(atoi(name) & 65535);
 
 	p = getprotobynumber(proto);

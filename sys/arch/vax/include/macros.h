@@ -1,4 +1,4 @@
-/*	$NetBSD: macros.h,v 1.31 2004/07/01 22:58:13 kleink Exp $	*/
+/*	$NetBSD: macros.h,v 1.30.2.1 2004/07/02 18:25:40 he Exp $	*/
 
 /*
  * Copyright (c) 1994, 1998, 2000 Ludd, University of Lule}, Sweden.

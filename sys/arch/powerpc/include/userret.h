@@ -1,4 +1,4 @@
-/*	$NetBSD: userret.h,v 1.10 2004/04/16 08:52:41 hannken Exp $	*/
+/*	$NetBSD: userret.h,v 1.6 2004/02/13 11:36:17 wiz Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -44,38 +44,28 @@
 static __inline void
 userret(struct lwp *l, struct trapframe *frame)
 {
-	struct cpu_info * const ci = curcpu();
-#ifdef PPC_HAVE_FPU
-	struct pcb * const pcb = &l->l_addr->u_pcb;
-#endif
+	struct cpu_info *ci = curcpu();
+	struct pcb *pcb;
 
 	/* Invoke MI userret code */
 	mi_userret(l);
 
-	frame->srr1 &= PSL_USERSRR1;	/* clear SRR1 status bits */
+	pcb = &l->l_addr->u_pcb;
 
 	/*
 	 * If someone stole the fp or vector unit while we were away,
-	 * disable it.  Note that if the PSL FP/VEC bits aren't set, then
-	 * we don't own it.
+	 * disable it
 	 */
 #ifdef PPC_HAVE_FPU
-	if ((frame->srr1 & PSL_FP) &&
+	if ((pcb->pcb_flags & PCB_FPU) &&
 	    (l != ci->ci_fpulwp || pcb->pcb_fpcpu != ci)) {
-		frame->srr1 &= ~(PSL_FP|PSL_FE0|PSL_FE1);
+		frame->srr1 &= ~PSL_FP;
 	}
 #endif
 #ifdef ALTIVEC
-	/*
-	 * We need to manually restore PSL_VEC each time we return
-	 * to user mode since PSL_VEC is not preserved in SRR1.
-	 */
-	if (frame->srr1 & PSL_VEC) {
-		if (l != ci->ci_veclwp)
-			frame->srr1 &= ~PSL_VEC;
-	} else {
-		if (l == ci->ci_veclwp)
-			frame->srr1 |= PSL_VEC;
+	if ((pcb->pcb_flags & PCB_ALTIVEC) &&
+	    (l != ci->ci_veclwp || pcb->pcb_veccpu != ci)) {
+		frame->srr1 &= ~PSL_VEC;
 	}
 
 	/*

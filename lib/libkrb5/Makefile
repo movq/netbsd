@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.33 2004/08/05 01:24:02 lukem Exp $
+# $NetBSD: Makefile,v 1.28.2.1 2004/07/14 11:13:43 tron Exp $
 
 NOLINT=		# defined
 
@@ -10,11 +10,6 @@ DIST=		${NETBSDSRCDIR}/crypto/dist
 WARNS?=		1
 
 LIB=		krb5
-
-LIBDPLIBS=	crypto	${.CURDIR}/../libcrypto \
-		asn1	${.CURDIR}/../libasn1 \
-		com_err	${.CURDIR}/../libcom_err \
-		roken	${.CURDIR}/../libroken
 
 .if ${USETOOLS} != "yes"
 COMPILEETOBJ!=		cd ${NETBSDSRCDIR}/lib/libcom_err/compile_et && ${PRINTOBJDIR}

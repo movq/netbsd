@@ -1,4 +1,4 @@
-/*	$NetBSD: pss.c,v 1.66 2004/10/29 12:57:17 yamt Exp $	*/
+/*	$NetBSD: pss.c,v 1.64 2003/05/03 18:11:28 wiz Exp $	*/
 
 /* XXX THIS DRIVER IS BROKEN.  IT WILL NOT EVEN COMPILE. */
 
@@ -53,7 +53,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pss.c,v 1.66 2004/10/29 12:57:17 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pss.c,v 1.64 2003/05/03 18:11:28 wiz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -217,7 +217,7 @@ void	wss_dump_regs __P((struct ad1848_isa_softc *));
  * Define our interface to the higher level audio driver.
  */
 
-const struct audio_hw_if pss_audio_if = {
+struct audio_hw_if pss_audio_if = {
 	ad1848_isa_open,
 	ad1848_isa_close,
 	NULL,
@@ -732,8 +732,8 @@ pssfind(parent, sc, ia)
 	return 0;
     }
 
-    /* Need to probe for iobase when ISA_UNKNOWN_PORT {0x220 0x240} */
-    if (iobase == ISA_UNKNOWN_PORT) {
+    /* Need to probe for iobase when ISACF_PORT_DEFAULT {0x220 0x240} */
+    if (iobase == ISACF_PORT_DEFAULT) {
 
 	iobase = 0x220;
 	if ((inw(iobase+PSS_ID_VERS) & 0xff00) == 0x4500)
@@ -765,7 +765,7 @@ pss_found:
     outw(sc->sc_iobase+MIDI_CONFIG, 0);
     outw(sc->sc_iobase+CD_CONFIG, 0);
 
-    if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ) {
+    if (ia->ia_irq[0].ir_irq == ISACF_IRQ_DEFAULT) {
 	int i;
 	for (i = 0; i < 16; i++) {
 	    if (pss_testirq(sc, i) != 0)
@@ -788,7 +788,7 @@ pss_found:
 	}
     }
 
-    /* XXX Need to deal with ISA_UNKNOWN_DRQ */
+    /* XXX Need to deal with ISACF_DRQ_DEFAULT */
     if (pss_testdma(sc, ia->ia_drq[0].ir_drq) == 0) {
 	printf("pss: configured DMA channel unavailable (%d)\n",
 	    ia->ia_drq[0].ir_drq);
@@ -856,7 +856,7 @@ spfind(parent, sc, ia)
     }
 	
     /* Setup WSS interrupt and DMA if auto */
-    if (cf->cf_irq == ISA_UNKNOWN_IRQ) {
+    if (cf->cf_irq == ISACF_IRQ_DEFAULT) {
 
 	/* Find unused IRQ for WSS */
 	for (i = 0; i < 12; i++) {
@@ -883,7 +883,7 @@ spfind(parent, sc, ia)
 	}
     }
 
-    if (cf->cf_drq == ISA_UNKNOWN_DRQ) {
+    if (cf->cf_drq == ISACF_DRQ_DEFAULT) {
 	/* Find unused DMA channel for WSS */
 	for (i = 0; i < 4; i++) {
 	    if (wss_dma_bits[i]) {

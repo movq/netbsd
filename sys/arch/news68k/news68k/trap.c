@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.38 2004/09/04 13:43:11 tsutsui Exp $	*/
+/*	$NetBSD: trap.c,v 1.36 2004/03/14 01:08:48 cl Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.38 2004/09/04 13:43:11 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.36 2004/03/14 01:08:48 cl Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
@@ -209,15 +209,19 @@ int mmupid = -1;
  * to user mode.
  */
 static inline void
-userret(struct lwp *l, struct frame *fp, u_quad_t oticks, u_int faultaddr,
-    int fromtrap)
+userret(l, fp, oticks, faultaddr, fromtrap)
+	struct lwp *l;
+	struct frame *fp;
+	u_quad_t oticks;
+	u_int faultaddr;
+	int fromtrap;
 {
 	struct proc *p = l->l_proc;
 #ifdef M68040
 	int sig;
 	int beenhere = 0;
 
- again:
+again:
 #endif
 	/* Invoke MI userret code */
 	mi_userret(l);
@@ -272,7 +276,10 @@ userret(struct lwp *l, struct frame *fp, u_quad_t oticks, u_int faultaddr,
 void machine_userret(struct lwp *, struct frame *, u_quad_t);
 
 void
-machine_userret(struct lwp *l, struct frame *f, u_quad_t t)
+machine_userret(l, f, t)
+	struct lwp *l;
+	struct frame *f;
+	u_quad_t t;
 {
 
 	userret(l, f, t, 0, 0);
@@ -285,7 +292,11 @@ machine_userret(struct lwp *l, struct frame *f, u_quad_t t)
  */
 /*ARGSUSED*/
 void
-trap(int type, unsigned code, unsigned v, struct frame frame)
+trap(type, code, v, frame)
+	int type;
+	unsigned code;
+	unsigned v;
+	struct frame frame;
 {
 	extern char fubail[], subail[];
 	struct lwp *l;
@@ -635,10 +646,17 @@ trap(int type, unsigned code, unsigned v, struct frame frame)
 		 * the current limit and we need to reflect that as an access
 		 * error.
 		 */
-		if (rv == 0) {
-			if (map != kernel_map && (caddr_t)va >= vm->vm_maxsaddr)
-				uvm_grow(p, va);
+		if ((vm != NULL && (caddr_t)va >= vm->vm_maxsaddr)
+		    && map != kernel_map) {
+			if (rv == 0) {
+				int nss;
 
+				nss = btoc(USRSTACK-(u_int)va);
+				if (nss > vm->vm_ssize)
+					vm->vm_ssize = nss;
+			}
+		}
+		if (rv == 0) {
 			if (type == T_MMUFLT) {
 #ifdef M68040
 				if (cputype == CPU_68040)
@@ -680,7 +698,7 @@ trap(int type, unsigned code, unsigned v, struct frame frame)
 	trapsignal(l, &ksi);
 	if ((type & T_USER) == 0)
 		return;
- out:
+out:
 	userret(l, &frame, sticks, v, 1);
 }
 
@@ -703,7 +721,9 @@ char wberrstr[] =
 #endif
 
 int
-writeback(struct frame *fp, int docachepush)
+writeback(fp, docachepush)
+	struct frame *fp;
+	int docachepush;
 {
 	struct fmt7 *f = &fp->f_fmt7;
 	struct lwp *l = curlwp;
@@ -936,14 +956,14 @@ writeback(struct frame *fp, int docachepush)
 	l->l_addr->u_pcb.pcb_onfault = oonfault;
 	if (err)
 		err = SIGSEGV;
-	return err;
+	return (err);
 }
 
 #ifdef DEBUG
 void
-dumpssw(u_short ssw)
+dumpssw(ssw)
+	u_short ssw;
 {
-
 	printf(" SSW: %x: ", ssw);
 	if (ssw & SSW4_CP)
 		printf("CP,");
@@ -968,7 +988,10 @@ dumpssw(u_short ssw)
 }
 
 void
-dumpwb(int num, u_short s, u_int a, u_int d)
+dumpwb(num, s, a, d)
+	int num;
+	u_short s;
+	u_int a, d;
 {
 	struct proc *p = curproc;
 	paddr_t pa;

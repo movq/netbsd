@@ -1,4 +1,4 @@
-/* $NetBSD: vrecu.c,v 1.5 2004/09/20 17:00:39 drochner Exp $ */
+/* $NetBSD: vrecu.c,v 1.3 2003/09/02 22:48:30 mycroft Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vrecu.c,v 1.5 2004/09/20 17:00:39 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vrecu.c,v 1.3 2003/09/02 22:48:30 mycroft Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -99,7 +99,6 @@ static struct pcmcia_chip_functions pcic_vrip_functions = {
 
 	.socket_enable		= pcic_chip_socket_enable,
 	.socket_disable		= pcic_chip_socket_disable,
-	.socket_settype		= pcic_chip_socket_settype,
 };
 
 
@@ -173,7 +172,7 @@ pcic_vrip_attach(struct device *parent, struct device *self, void *aux)
 
 	printf("\n");
 
-	sc->irq = -1;
+	sc->irq = ISACF_IRQ_DEFAULT;
 
 	pcic_attach(sc);
 	pcic_attach_sockets(sc);

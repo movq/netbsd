@@ -1,4 +1,4 @@
-/*	$NetBSD: pccbbvar.h,v 1.21 2004/07/22 16:39:51 mycroft Exp $	*/
+/*	$NetBSD: pccbbvar.h,v 1.20.2.1 2004/07/23 22:29:12 he Exp $	*/
 /*
  * Copyright (c) 1999 HAYAKAWA Koichi.  All rights reserved.
  *

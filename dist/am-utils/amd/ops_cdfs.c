@@ -1,7 +1,7 @@
-/*	$NetBSD: ops_cdfs.c,v 1.1.1.7 2004/11/27 01:00:40 christos Exp $	*/
+/*	$NetBSD: ops_cdfs.c,v 1.1.1.6 2003/03/09 01:13:15 christos Exp $	*/
 
 /*
- * Copyright (c) 1997-2004 Erez Zadok
+ * Copyright (c) 1997-2003 Erez Zadok
  * Copyright (c) 1990 Jan-Simon Pendry
  * Copyright (c) 1990 Imperial College of Science, Technology & Medicine
  * Copyright (c) 1990 The Regents of the University of California.
@@ -39,7 +39,7 @@
  * SUCH DAMAGE.
  *
  *
- * Id: ops_cdfs.c,v 1.23 2004/01/06 03:56:20 ezk Exp
+ * Id: ops_cdfs.c,v 1.19 2002/12/27 22:43:51 ezk Exp
  *
  */
 
@@ -74,8 +74,7 @@ am_ops cdfs_ops =
   0,				/* cdfs_readlink */
   0,				/* cdfs_mounted */
   0,				/* cdfs_umounted */
-  amfs_generic_find_srvr,
-  0,				/* cdfs_get_wchan */
+  find_amfs_auto_srvr,
   FS_MKMNT | FS_UBACKGROUND | FS_AMQINFO,	/* nfs_fs_flags */
 #ifdef HAVE_FS_AUTOFS
   AUTOFS_CDFS_FS_FLAGS,
@@ -104,7 +103,7 @@ cdfs_match(am_opts *fo)
 
 
 static int
-mount_cdfs(char *mntdir, char *fs_name, char *opts, int on_autofs)
+mount_cdfs(char *mntdir, char *real_mntdir, char *fs_name, char *opts, int on_autofs, char **lpname)
 {
   cdfs_args_t cdfs_args;
   mntent_t mnt;
@@ -199,7 +198,7 @@ mount_cdfs(char *mntdir, char *fs_name, char *opts, int on_autofs)
   /*
    * Call generic mount routine
    */
-  retval = mount_fs(&mnt, genflags, (caddr_t) &cdfs_args, 0, type, 0, NULL, mnttab_file_name, on_autofs);
+  retval = mount_fs2(&mnt, real_mntdir, genflags, (caddr_t) &cdfs_args, 0, type, 0, NULL, mnttab_file_name);
 
   return retval;
 }
@@ -208,10 +207,10 @@ mount_cdfs(char *mntdir, char *fs_name, char *opts, int on_autofs)
 static int
 cdfs_mount(am_node *am, mntfs *mf)
 {
-  int on_autofs = mf->mf_flags & MFF_ON_AUTOFS;
   int error;
 
-  error = mount_cdfs(mf->mf_mount, mf->mf_info, mf->mf_mopts, on_autofs);
+  error = mount_cdfs(mf->mf_mount, mf->mf_real_mount, mf->mf_info, mf->mf_mopts,
+		     am->am_flags & AMF_AUTOFS, &mf->mf_loopdev);
   if (error) {
     errno = error;
     plog(XLOG_ERROR, "mount_cdfs: %m");
@@ -224,6 +223,5 @@ cdfs_mount(am_node *am, mntfs *mf)
 static int
 cdfs_umount(am_node *am, mntfs *mf)
 {
-  int on_autofs = mf->mf_flags & MFF_ON_AUTOFS;
-  return UMOUNT_FS(mf->mf_mount, mnttab_file_name, on_autofs);
+  return UMOUNT_FS(mf->mf_mount, mf->mf_real_mount, mnttab_file_name);
 }

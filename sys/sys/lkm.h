@@ -1,4 +1,4 @@
-/*	$NetBSD: lkm.h,v 1.36 2004/11/13 10:17:24 christos Exp $	*/
+/*	$NetBSD: lkm.h,v 1.32 2004/02/06 22:40:37 cube Exp $	*/
 
 /*
  * Header file used by loadable kernel modules and loadable kernel module
@@ -40,8 +40,6 @@
 #ifndef _SYS_LKM_H_
 #define _SYS_LKM_H_
 
-#include <sys/queue.h>
-
 /*
  * Supported module types
  */
@@ -53,7 +51,6 @@ typedef enum loadmod {
 	LM_EXEC,
 	LM_COMPAT,
 	LM_MISC,
-	LM_DRV,
 } MODTYPE;
 
 /*
@@ -148,16 +145,6 @@ struct lkm_misc {
 };
 
 /*
- * Driver module
- */
-struct lkm_drv {
-	struct lkm_any mod;
-	struct cfdriver **lkm_cd;
-	const struct cfattachlkminit *lkm_cai;
-	struct cfdata *lkm_cf;
-};
-
-/*
  * Generic reference ala XEvent to allow single entry point in the xxxinit()
  * routine.
  */
@@ -172,14 +159,13 @@ union lkm_generic {
 	struct lkm_exec		*lkm_exec;
 	struct lkm_compat	*lkm_compat;
 	struct lkm_misc		*lkm_misc;
-	struct lkm_drv		*lkm_drv;
 };
 
 /*
  * Per module information structure
  */
 struct lkm_table {
-	char	refcnt;		/* Reference count */
+	char	used;
 	char	forced;		/* Forced load, skipping compatibility check */
 
 	int	(*entry) __P((struct lkm_table *, int, int));/* entry function */
@@ -194,9 +180,6 @@ struct lkm_table {
 	u_long	sym_size;	/* size of symbol table (syms+strings) */
 	u_long	sym_offset;	/* offset of next symbol chunk */
 	u_long	sym_symsize;	/* size of symbol part only */
-
-	int	id;		/* Identifier */
-	TAILQ_ENTRY(lkm_table) link;
 };
 
 
@@ -214,14 +197,14 @@ struct lkm_table {
 
 #define	MOD_VFS(name,vfsslot,vfsopsp)		\
 	static struct lkm_vfs _module = {	\
-		{ LM_VFS, name, (u_long)vfsslot,	\
+		{ LM_VFS, name, vfsslot,	\
 		  LKM_VERSION, __NetBSD_Version__, _LKM_ENV_VERSION },	\
 		vfsopsp				\
 	};
 
 #define	MOD_DEV(name,devname,bdevp,bdevm,cdevp,cdevm)	\
 	static struct lkm_dev _module = {	\
-		{ LM_DEV, name, (u_long)-1,		\
+		{ LM_DEV, name, -1,		\
 		  LKM_VERSION, __NetBSD_Version__, _LKM_ENV_VERSION },	\
 		devname,			\
 		bdevp,				\
@@ -230,16 +213,16 @@ struct lkm_table {
 		cdevm,				\
 	};
 
-#define	MOD_COMPAT(name,compatslot,emulp)	\
+#define	MOD_COMPAT(name, compatslot,emulp)	\
 	static struct lkm_compat _module = {	\
-		{ LM_COMPAT, name, (u_long)compatslot,	\
+		{ LM_COMPAT, name, compatslot,	\
 		  LKM_VERSION, __NetBSD_Version__, _LKM_ENV_VERSION },	\
 		emulp				\
 	};
 
 #define	MOD_EXEC(name,execslot,execsw,emul)	\
 	static struct lkm_exec _module = {	\
-		{ LM_EXEC, name, (u_long)execslot,	\
+		{ LM_EXEC, name, execslot,	\
 		  LKM_VERSION, __NetBSD_Version__, _LKM_ENV_VERSION },	\
 		execsw,				\
 		emul				\
@@ -247,15 +230,8 @@ struct lkm_table {
 
 #define	MOD_MISC(name)				\
 	static struct lkm_misc _module = {	\
-		{ LM_MISC, name, (u_long)-1,		\
+		{ LM_MISC, name, -1,		\
 		  LKM_VERSION, __NetBSD_Version__, _LKM_ENV_VERSION },	\
-	};
-
-#define	MOD_DRV(name,drvs,atts,cfdata)	\
-	static struct lkm_drv _module = {	\
-		{ LM_DRV, name, (u_long)-1,		\
-		  LKM_VERSION, __NetBSD_Version__, _LKM_ENV_VERSION },	\
-		drvs, atts, cfdata		\
 	};
 
 /*

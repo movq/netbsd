@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_vnops.c,v 1.84 2004/12/12 04:46:46 yamt Exp $	*/
+/*	$NetBSD: vfs_vnops.c,v 1.77 2004/02/14 00:00:56 hannken Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_vnops.c,v 1.84 2004/12/12 04:46:46 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_vnops.c,v 1.77 2004/02/14 00:00:56 hannken Exp $");
 
 #include "fs_union.h"
 
@@ -85,7 +85,7 @@ static int vn_fcntl(struct file *fp, u_int com, void *data, struct proc *p);
 static int vn_statfile(struct file *fp, struct stat *sb, struct proc *p);
 static int vn_ioctl(struct file *fp, u_long com, void *data, struct proc *p);
 
-const struct fileops vnops = {
+struct 	fileops vnops = {
 	vn_read, vn_write, vn_ioctl, vn_fcntl, vn_poll,
 	vn_statfile, vn_closefile, vn_kqfilter
 };
@@ -692,15 +692,6 @@ vn_ioctl(fp, com, data, p)
 			*(int *)data = vattr.va_size - fp->f_offset;
 			return (0);
 		}
-		if ((com == FIONWRITE) || (com == FIONSPACE)) {
-			/*
-			 * Files don't have send queues, so there never
-			 * are any bytes in them, nor is there any
-			 * open space in them.
-			 */
-			*(int *)data = 0;
-			return (0);
-		}
 		if (com == FIOGETBMAP) {
 			daddr_t *block;
 
@@ -775,11 +766,6 @@ vn_lock(vp, flags)
 {
 	int error;
 
-#if 0
-	KASSERT(vp->v_usecount > 0 || (flags & LK_INTERLOCK) != 0
-	    || (vp->v_flag & VONWORKLST) != 0);
-#endif
-
 	do {
 		if ((flags & LK_INTERLOCK) == 0)
 			simple_lock(&vp->v_interlock);
@@ -793,8 +779,7 @@ vn_lock(vp, flags)
 			    "vn_lock", 0, &vp->v_interlock);
 			error = ENOENT;
 		} else {
-			error = VOP_LOCK(vp,
-			    (flags & ~LK_RETRY) | LK_INTERLOCK);
+			error = VOP_LOCK(vp, flags | LK_INTERLOCK);
 			if (error == 0 || error == EDEADLK || error == EBUSY)
 				return (error);
 		}
@@ -846,7 +831,7 @@ vn_restorerecurse(vp, flags)
 
 int
 vn_cow_establish(struct vnode *vp,
-    int (*func)(void *, struct buf *), void *cookie)
+    void (*func)(void *, struct buf *), void *cookie)
 {
 	int s;
 	struct spec_cow_entry *e;
@@ -874,7 +859,7 @@ vn_cow_establish(struct vnode *vp,
 
 int
 vn_cow_disestablish(struct vnode *vp,
-    int (*func)(void *, struct buf *), void *cookie)
+    void (*func)(void *, struct buf *), void *cookie)
 {
 	int s;
 	struct spec_cow_entry *e;

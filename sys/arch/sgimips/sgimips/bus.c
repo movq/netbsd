@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.c,v 1.36 2004/12/13 08:31:54 sekiya Exp $	*/
+/*	$NetBSD: bus.c,v 1.28 2004/03/25 15:06:37 pooka Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.36 2004/12/13 08:31:54 sekiya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.28 2004/03/25 15:06:37 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -86,20 +86,23 @@ void
 sgimips_bus_dma_init(void)
 {
 	switch (mach_type) {
+#ifdef MIPS1
 	/* R2000/R3000 */
 	case MACH_SGI_IP12:
 		sgimips_default_bus_dma_tag._dmamap_sync =
 		    _bus_dmamap_sync_mips1;
 		break;
+#endif
 
+#ifdef MIPS3
 	/* >=R4000*/
 	case MACH_SGI_IP20:
 	case MACH_SGI_IP22:
-	case MACH_SGI_IP30:
 	case MACH_SGI_IP32:
 		sgimips_default_bus_dma_tag._dmamap_sync =
 		    _bus_dmamap_sync_mips3;
 		break;
+#endif
 
 	default:
 		panic("sgimips_bus_dma_init: unsupported mach type IP%d\n",
@@ -108,7 +111,10 @@ sgimips_bus_dma_init(void)
 }
 
 u_int8_t
-bus_space_read_1(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o)
+bus_space_read_1(t, h, o)
+	bus_space_tag_t t;
+	bus_space_handle_t h;
+	bus_size_t o;
 {
 	wbflush(); /* XXX ? */
 
@@ -128,7 +134,11 @@ bus_space_read_1(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o)
 }
 
 void
-bus_space_write_1(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o, u_int8_t v)
+bus_space_write_1(t, h, o, v)
+	bus_space_tag_t t;
+	bus_space_handle_t h;
+	bus_size_t o;
+	u_int8_t v;
 {
 	switch (t) {
 	case SGIMIPS_BUS_SPACE_NORMAL:
@@ -152,7 +162,10 @@ bus_space_write_1(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o, u_int8_
 }
 
 u_int16_t
-bus_space_read_2(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o)
+bus_space_read_2(t, h, o)
+	bus_space_tag_t t;
+	bus_space_handle_t h;
+	bus_size_t o;
 {
 	wbflush(); /* XXX ? */
 
@@ -170,7 +183,11 @@ bus_space_read_2(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o)
 }
 
 void
-bus_space_write_2(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o, u_int16_t v)
+bus_space_write_2(t, h, o, v)
+	bus_space_tag_t t;
+	bus_space_handle_t h;
+	bus_size_t o;
+	u_int16_t v;
 {
 	switch (t) {
 	case SGIMIPS_BUS_SPACE_NORMAL:
@@ -232,7 +249,7 @@ bus_space_write_4(bus_space_tag_t tag, bus_space_handle_t bsh, bus_size_t o, u_i
 	}
 }
 
-#if defined(MIPS3) || defined(MIPS64)
+#ifdef MIPS3
 u_int64_t
 bus_space_read_8(bus_space_tag_t tag, bus_space_handle_t bsh, bus_size_t o)
 {
@@ -272,11 +289,15 @@ bus_space_write_8(bus_space_tag_t tag, bus_space_handle_t bsh, bus_size_t o, u_i
 			break;
 	}
 }
-#endif /* MIPS3 || MIPS64 */
+#endif /* MIPS3 */
 
 int
-bus_space_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size,
-	      int flags, bus_space_handle_t *bshp)
+bus_space_map(t, bpa, size, flags, bshp)
+	bus_space_tag_t t;
+	bus_addr_t bpa;
+	bus_size_t size;
+	int flags;
+	bus_space_handle_t *bshp;
 {
 	int cacheable = flags & BUS_SPACE_MAP_CACHEABLE;
 
@@ -299,29 +320,41 @@ bus_space_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size,
 }
 
 int
-bus_space_alloc(bus_space_tag_t t, bus_addr_t rstart, bus_addr_t rend,
-		bus_size_t size, bus_size_t alignment, bus_size_t boundary,
-		int flags, bus_addr_t *bpap, bus_space_handle_t *bshp)
+bus_space_alloc(t, rstart, rend, size, alignment, boundary, flags, bpap, bshp)
+	bus_space_tag_t t;
+	bus_addr_t rstart, rend;
+	bus_size_t size, alignment, boundary;
+	int flags;
+	bus_addr_t *bpap;
+	bus_space_handle_t *bshp;
 {
 	panic("bus_space_alloc: not implemented");
 }
 
 void
-bus_space_free(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
+bus_space_free(t, bsh, size)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
 {
 	panic("bus_space_free: not implemented");
 }
 
 void
-bus_space_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
+bus_space_unmap(t, bsh, size)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
 {
 	return;
 }
 
 int
-bus_space_subregion(bus_space_tag_t t, bus_space_handle_t bsh,
-		    bus_size_t offset, bus_size_t size,
-		    bus_space_handle_t *nbshp)
+bus_space_subregion(t, bsh, offset, size, nbshp)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
+	bus_size_t offset, size;
+	bus_space_handle_t *nbshp;
 {
 
 	*nbshp = bsh + offset;
@@ -329,7 +362,9 @@ bus_space_subregion(bus_space_tag_t t, bus_space_handle_t bsh,
 }
 
 void *
-bus_space_vaddr(bus_space_tag_t t, bus_space_handle_t bsh)
+bus_space_vaddr(t, bsh)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
 {
 	switch(t) {
 	case SGIMIPS_BUS_SPACE_NORMAL:
@@ -354,21 +389,26 @@ bus_space_vaddr(bus_space_tag_t t, bus_space_handle_t bsh)
  * DMA map creation functions.
  */
 int
-_bus_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
-		   bus_size_t maxsegsz, bus_size_t boundary, int flags,
-		   bus_dmamap_t *dmamp)
+_bus_dmamap_create(t, size, nsegments, maxsegsz, boundary, flags, dmamp)
+	bus_dma_tag_t t;
+	bus_size_t size;
+	int nsegments;
+	bus_size_t maxsegsz;
+	bus_size_t boundary;
+	int flags;
+	bus_dmamap_t *dmamp;
 {
 	struct sgimips_bus_dmamap *map;
 	void *mapstore;
 	size_t mapsize;
 
 	/*
-	 * Allocate and initialize the DMA map.  The end of the map
+	 * Allcoate and initialize the DMA map.  The end of the map
 	 * is a variable-sized array of segments, so we allocate enough
 	 * room for them in one shot.
 	 *
 	 * Note we don't preserve the WAITOK or NOWAIT flags.  Preservation
-	 * of ALLOCNOW notifies others that we've reserved these resources,
+	 * of ALLOCNOW notifes others that we've reserved these resources,
 	 * and they are not to be freed.
 	 *
 	 * The bus_dmamap_t includes one bus_dma_segment_t, hence
@@ -400,7 +440,9 @@ _bus_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
  * DMA map destruction functions.
  */
 void
-_bus_dmamap_destroy(bus_dma_tag_t t, bus_dmamap_t map)
+_bus_dmamap_destroy(t, map)
+	bus_dma_tag_t t;
+	bus_dmamap_t map;
 {
 
 	free(map, M_DMAMAP);
@@ -414,9 +456,15 @@ extern	paddr_t kvtophys(vaddr_t);		/* XXX */
  * first indicates if this is the first invocation of this function.
  */
 int
-_bus_dmamap_load_buffer(bus_dmamap_t map, void *buf, bus_size_t buflen,
-			struct proc *p, int flags, vaddr_t *lastaddrp,
-			int *segp, int first)
+_bus_dmamap_load_buffer(map, buf, buflen, p, flags, lastaddrp, segp, first)
+	bus_dmamap_t map;
+	void *buf;
+	bus_size_t buflen;
+	struct proc *p;
+	int flags;
+	vaddr_t *lastaddrp;
+	int *segp;
+	int first;
 {
 	bus_size_t sgsize;
 	bus_addr_t curaddr, lastaddr, baddr, bmask;
@@ -500,8 +548,13 @@ _bus_dmamap_load_buffer(bus_dmamap_t map, void *buf, bus_size_t buflen,
  * buffer.
  */
 int
-_bus_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
-		 bus_size_t buflen, struct proc *p, int flags)
+_bus_dmamap_load(t, map, buf, buflen, p, flags)
+	bus_dma_tag_t t;
+	bus_dmamap_t map;
+	void *buf;
+	bus_size_t buflen;
+	struct proc *p;
+	int flags;
 {
 	vaddr_t lastaddr;
 	int seg, error;
@@ -540,8 +593,11 @@ _bus_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
  * Like _bus_dmamap_load(), but for mbufs.
  */
 int
-_bus_dmamap_load_mbuf(bus_dma_tag_t t, bus_dmamap_t map, struct mbuf *m0,
-		      int flags)
+_bus_dmamap_load_mbuf(t, map, m0, flags)
+	bus_dma_tag_t t;
+	bus_dmamap_t map;
+	struct mbuf *m0;
+	int flags;
 {
 	vaddr_t lastaddr;
 	int seg, error, first;
@@ -565,8 +621,6 @@ _bus_dmamap_load_mbuf(bus_dma_tag_t t, bus_dmamap_t map, struct mbuf *m0,
 	seg = 0;
 	error = 0;
 	for (m = m0; m != NULL && error == 0; m = m->m_next) {
-		if (m->m_len == 0)
-			continue;
 		error = _bus_dmamap_load_buffer(map,
 		    m->m_data, m->m_len, NULL, flags, &lastaddr, &seg, first);
 		first = 0;
@@ -583,8 +637,11 @@ _bus_dmamap_load_mbuf(bus_dma_tag_t t, bus_dmamap_t map, struct mbuf *m0,
  * Like _bus_dmamap_load(), but for uios.
  */
 int
-_bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio,
-		     int flags)
+_bus_dmamap_load_uio(t, map, uio, flags)
+	bus_dma_tag_t t;
+	bus_dmamap_t map;
+	struct uio *uio;
+	int flags;
 {
 	vaddr_t lastaddr;
 	int seg, i, error, first;
@@ -639,8 +696,13 @@ _bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio,
  * Like _bus_dmamap_load(), but for raw memory.
  */
 int
-_bus_dmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map, bus_dma_segment_t *segs,
-		     int nsegs, bus_size_t size, int flags)
+_bus_dmamap_load_raw(t, map, segs, nsegs, size, flags)
+	bus_dma_tag_t t;
+	bus_dmamap_t map;
+	bus_dma_segment_t *segs;
+	int nsegs;
+	bus_size_t size;
+	int flags;
 {
 
 	panic("_bus_dmamap_load_raw: not implemented");
@@ -651,7 +713,9 @@ _bus_dmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map, bus_dma_segment_t *segs,
  * chipset-specific DMA map unload functions.
  */
 void
-_bus_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t map)
+_bus_dmamap_unload(t, map)
+	bus_dma_tag_t t;
+	bus_dmamap_t map;
 {
 
 	/*
@@ -663,14 +727,19 @@ _bus_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t map)
 	map->_dm_flags &= ~SGIMIPS_DMAMAP_COHERENT;
 }
 
+#ifdef MIPS1
 /* Common function from DMA map synchronization. May be called
  * by chipset-specific DMA map synchronization functions.
  *
  * This is the R3000 version.
  */
 void
-_bus_dmamap_sync_mips1(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
-		       bus_size_t len, int ops)
+_bus_dmamap_sync_mips1(t, map, offset, len, ops)
+	bus_dma_tag_t t;
+	bus_dmamap_t map;
+	bus_addr_t offset;
+	bus_size_t len;
+	int ops;
 {
 	bus_size_t minlen;
 	bus_addr_t addr;
@@ -763,7 +832,9 @@ _bus_dmamap_sync_mips1(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 		len -= minlen;
 	}
 }	
+#endif /* MIPS1 */
 
+#ifdef MIPS3
 /*
  * Common function for DMA map synchronization.  May be called
  * by chipset-specific DMA map synchronization functions.
@@ -771,8 +842,12 @@ _bus_dmamap_sync_mips1(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
  * This is the R4x00/R5k version.
  */
 void
-_bus_dmamap_sync_mips3(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
-		       bus_size_t len, int ops)
+_bus_dmamap_sync_mips3(t, map, offset, len, ops)
+	bus_dma_tag_t t;
+	bus_dmamap_t map;
+	bus_addr_t offset;
+	bus_size_t len;
+	int ops;
 {
 	bus_size_t minlen;
 	bus_addr_t addr, start, end, preboundary, firstboundary, lastboundary;
@@ -839,8 +914,7 @@ _bus_dmamap_sync_mips3(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 	 *
 	 * This should be true the vast majority of the time.
 	 */
-	if (__predict_true(map->_dm_proc == NULL ||
-		map->_dm_proc == curlwp->l_proc))
+	if (__predict_true(map->_dm_proc == NULL || map->_dm_proc == curproc))
 		useindex = 0;
 	else
 		useindex = 1;
@@ -882,8 +956,6 @@ _bus_dmamap_sync_mips3(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 			continue;
  		}
 
-		/* The code that follows is more correct than that in
-		   mips/bus_dma.c. */
 		start = addr + offset;
 		switch (ops) {
 		case BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE:
@@ -918,15 +990,20 @@ _bus_dmamap_sync_mips3(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 		len -= minlen;
 	}
 }
+#endif /* MIPS3 */
 
 /*
  * Common function for DMA-safe memory allocation.  May be called
  * by bus-specific DMA memory allocation functions.
  */
 int
-_bus_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
-		  bus_size_t boundary, bus_dma_segment_t *segs,
-		  int nsegs, int *rsegs, int flags)
+_bus_dmamem_alloc(t, size, alignment, boundary, segs, nsegs, rsegs, flags)
+	bus_dma_tag_t t;
+	bus_size_t size, alignment, boundary;
+	bus_dma_segment_t *segs;
+	int nsegs;
+	int *rsegs;
+	int flags;
 {
 	extern paddr_t avail_start, avail_end;
 	vaddr_t curaddr, lastaddr;
@@ -987,7 +1064,10 @@ _bus_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
  * bus-specific DMA memory free functions.
  */
 void
-_bus_dmamem_free(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs)
+_bus_dmamem_free(t, segs, nsegs)
+	bus_dma_tag_t t;
+	bus_dma_segment_t *segs;
+	int nsegs;
 {
 	struct vm_page *m;
 	bus_addr_t addr;
@@ -1015,8 +1095,13 @@ _bus_dmamem_free(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs)
  * bus-specific DMA memory map functions.
  */
 int
-_bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
-		size_t size, caddr_t *kvap, int flags)
+_bus_dmamem_map(t, segs, nsegs, size, kvap, flags)
+	bus_dma_tag_t t;
+	bus_dma_segment_t *segs;
+	int nsegs;
+	size_t size;
+	caddr_t *kvap;
+	int flags;
 {
 	vaddr_t va;
 	bus_addr_t addr;
@@ -1066,7 +1151,10 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
  * bus-specific DMA memory unmapping functions.
  */
 void
-_bus_dmamem_unmap(bus_dma_tag_t t, caddr_t kva, size_t size)
+_bus_dmamem_unmap(t, kva, size)
+	bus_dma_tag_t t;
+	caddr_t kva;
+	size_t size;
 {
 
 #ifdef DIAGNOSTIC
@@ -1091,8 +1179,12 @@ _bus_dmamem_unmap(bus_dma_tag_t t, caddr_t kva, size_t size)
  * bus-specific DMA mmap(2)'ing functions.
  */
 paddr_t
-_bus_dmamem_mmap(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
-		 off_t off, int prot, int flags)
+_bus_dmamem_mmap(t, segs, nsegs, off, prot, flags)
+	bus_dma_tag_t t;
+	bus_dma_segment_t *segs;
+	int nsegs;
+	off_t off;
+	int prot, flags;
 {
 	int i;
 

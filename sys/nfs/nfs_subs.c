@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_subs.c,v 1.138 2004/10/26 04:34:46 yamt Exp $	*/
+/*	$NetBSD: nfs_subs.c,v 1.132.2.3 2004/10/04 06:05:30 jmc Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_subs.c,v 1.138 2004/10/26 04:34:46 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_subs.c,v 1.132.2.3 2004/10/04 06:05:30 jmc Exp $");
 
 #include "fs_nfs.h"
 #include "opt_nfs.h"
@@ -1232,6 +1232,7 @@ nfs_initdircache(vp)
 	NFSDC_LOCK(np);
 	if (np->n_dircache == NULL) {
 		np->n_dircachesize = 0;
+		np->n_dblkno = 1;
 		np->n_dircache = dircache;
 		dircache = NULL;
 		TAILQ_INIT(&np->n_dirchain);
@@ -1373,6 +1374,7 @@ nfs_searchdircache(vp, off, do32, hashent)
 				 */
 				if (ndp->dc_flags & NFSDC_INVALID) {
 					ndp->dc_blkcookie = ndp->dc_cookie;
+					ndp->dc_blkno = np->n_dblkno++;
 					ndp->dc_entry = 0;
 					ndp->dc_flags &= ~NFSDC_INVALID;
 				}
@@ -1469,6 +1471,15 @@ retry:
 	} else
 		overwrite = 1;
 
+	/*
+	 * If the entry number is 0, we are at the start of a new block, so
+	 * allocate a new blocknumber.
+	 */
+	if (en == 0)
+		ndp->dc_blkno = np->n_dblkno++;
+	else
+		ndp->dc_blkno = blkno;
+
 	ndp->dc_cookie = off;
 	ndp->dc_blkcookie = blkoff;
 	ndp->dc_entry = en;
@@ -1534,6 +1545,7 @@ nfs_invaldircache(vp, forcefree)
 			ndp->dc_flags |= NFSDC_INVALID;
 	}
 
+	np->n_dblkno = 1;
 	NFSDC_UNLOCK(np);
 }
 
@@ -1763,7 +1775,7 @@ nfs_loadattrcache(vpp, fp, vaper, flags)
 	vap->va_mode = vmode;
 	vap->va_rdev = (dev_t)rdev;
 	vap->va_mtime = mtime;
-	vap->va_fsid = vp->v_mount->mnt_stat.f_fsidx.__fsid_val[0];
+	vap->va_fsid = vp->v_mount->mnt_stat.f_fsid.val[0];
 	switch (vtyp) {
 	case VDIR:
 		vap->va_blocksize = NFS_DIRFRAGSIZ;
@@ -1927,7 +1939,7 @@ nfs_cookieheuristic(vp, flagp, p, cred)
 	auio.uio_iovcnt = 1;
 	auio.uio_rw = UIO_READ;
 	auio.uio_segflg = UIO_SYSSPACE;
-	auio.uio_procp = NULL;
+	auio.uio_procp = p;
 	auio.uio_resid = NFS_DIRFRAGSIZ;
 	auio.uio_offset = 0;
 
@@ -2170,7 +2182,7 @@ nfs_namei(ndp, fhp, len, slp, nam, mdp, dposp, retdirp, p, kerbflag, pubflag)
 		auio.uio_offset = 0;
 		auio.uio_rw = UIO_READ;
 		auio.uio_segflg = UIO_SYSSPACE;
-		auio.uio_procp = NULL;
+		auio.uio_procp = (struct proc *)0;
 		auio.uio_resid = MAXPATHLEN;
 		error = VOP_READLINK(ndp->ni_vp, &auio, cnp->cn_cred);
 		if (error) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.11 2004/08/07 21:42:10 chs Exp $	*/
+/*	$NetBSD: types.h,v 1.8 2003/11/01 18:23:38 matt Exp $	*/
 
 /*	$OpenBSD: types.h,v 1.6 2001/08/11 01:58:34 art Exp $	*/
 
@@ -63,24 +63,15 @@ typedef unsigned long vm_size_t;
 /*
  * Semaphores must be aligned on 16-byte boundaries on the PA-RISC.
  */
-typedef __volatile unsigned long __cpu_simple_lock_t;
+typedef __volatile unsigned long __cpu_simple_lock_t __attribute__ ((aligned (16)));
 
-#define __SIMPLELOCK_LOCKED	0
-#define __SIMPLELOCK_UNLOCKED	1
+#define __SIMPLELOCK_LOCKED	1
+#define __SIMPLELOCK_UNLOCKED	0
 
 typedef int			register_t;
 
 #define	__MACHINE_STACK_GROWS_UP	/* stack grows to higher addresses */
 #define	__HAVE_FUNCTION_DESCRIPTORS	/* function ptrs may be descriptors */
 #define	__HAVE_MD_RUNQUEUE
-#define	__HAVE_RAS
-
-/*
- * On hppa, declaring RAS labels as functions doesn't work, since the toolchain
- * will construct PLABELs for them.  Make them "const char []" instead.
- */
-
-#define	RAS_DECL(name)							\
-extern const char __CONCAT(name,_ras_start[]), __CONCAT(name,_ras_end[])
 
 #endif	/* _HPPA_TYPES_H_ */

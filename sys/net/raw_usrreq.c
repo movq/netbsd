@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_usrreq.c,v 1.22 2004/04/26 01:41:15 matt Exp $	*/
+/*	$NetBSD: raw_usrreq.c,v 1.21 2003/09/30 00:01:18 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: raw_usrreq.c,v 1.22 2004/04/26 01:41:15 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: raw_usrreq.c,v 1.21 2003/09/30 00:01:18 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -70,7 +70,13 @@ raw_init()
  * Raw protocol interface.
  */
 void
+#if __STDC__
 raw_input(struct mbuf *m0, ...)
+#else
+raw_input(m0, va_alist)
+	struct mbuf *m0;
+	va_dcl
+#endif
 {
 	struct rawcb *rp;
 	struct mbuf *m = m0;

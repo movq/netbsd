@@ -1,4 +1,4 @@
-/*	$NetBSD: umap_vfsops.c,v 1.49 2004/07/01 10:03:32 hannken Exp $	*/
+/*	$NetBSD: umap_vfsops.c,v 1.43.2.1 2004/05/29 09:04:20 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umap_vfsops.c,v 1.49 2004/07/01 10:03:32 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umap_vfsops.c,v 1.43.2.1 2004/05/29 09:04:20 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -99,7 +99,7 @@ umapfs_mount(mp, path, data, ndp, p)
 	/*
 	 * Get argument
 	 */
-	error = copyin(data, &args, sizeof(struct umap_args));
+	error = copyin(data, (caddr_t)&args, sizeof(struct umap_args));
 	if (error)
 		return (error);
 
@@ -142,10 +142,9 @@ umapfs_mount(mp, path, data, ndp, p)
 
 	amp = (struct umap_mount *) malloc(sizeof(struct umap_mount),
 				M_UFSMNT, M_WAITOK);	/* XXX */
-	memset(amp, 0, sizeof(struct umap_mount));
+	memset((caddr_t)amp, 0, sizeof(struct umap_mount));
 
 	mp->mnt_data = amp;
-	mp->mnt_leaf = lowerrootvp->v_mount->mnt_leaf;
 	amp->umapm_vfs = lowerrootvp->v_mount;
 	if (amp->umapm_vfs->mnt_flag & MNT_LOCAL)
 		mp->mnt_flag |= MNT_LOCAL;
@@ -160,7 +159,7 @@ umapfs_mount(mp, path, data, ndp, p)
 
 	amp->info_nentries = args.nentries;
 	amp->info_gnentries = args.gnentries;
-	error = copyin(args.mapdata, amp->info_mapdata, 
+	error = copyin(args.mapdata, (caddr_t)amp->info_mapdata, 
 	    2*sizeof(u_long)*args.nentries);
 	if (error) {
 		vput(lowerrootvp);
@@ -174,7 +173,7 @@ umapfs_mount(mp, path, data, ndp, p)
 	 	    amp->info_mapdata[i][1]);
 #endif
 
-	error = copyin(args.gmapdata, amp->info_gmapdata, 
+	error = copyin(args.gmapdata, (caddr_t)amp->info_gmapdata, 
 	    2*sizeof(u_long)*args.gnentries);
 	if (error) {
 		vput(lowerrootvp);
@@ -228,7 +227,7 @@ umapfs_mount(mp, path, data, ndp, p)
 	vp->v_flag |= VROOT;
 	amp->umapm_rootvp = vp;
 
-	error = set_statvfs_info(path, UIO_USERSPACE, args.umap_target,
+	error = set_statfs_info(path, UIO_USERSPACE, args.umap_target,
 	    UIO_USERSPACE, mp, p);
 #ifdef UMAPFS_DIAGNOSTIC
 	printf("umapfs_mount: lower %s, alias at %s\n",
@@ -326,7 +325,7 @@ struct vfsops umapfs_vfsops = {
 	umapfs_unmount,
 	layerfs_root,
 	layerfs_quotactl,
-	layerfs_statvfs,
+	layerfs_statfs,
 	layerfs_sync,
 	layerfs_vget,
 	layerfs_fhtovp,
@@ -337,6 +336,5 @@ struct vfsops umapfs_vfsops = {
 	NULL,
 	NULL,				/* vfs_mountroot */
 	layerfs_checkexp,
-	layerfs_snapshot,
 	umapfs_vnodeopv_descs,
 };

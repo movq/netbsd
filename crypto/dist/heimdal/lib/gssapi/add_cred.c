@@ -34,7 +34,7 @@
 #include "gssapi_locl.h"
 
 __RCSID("$Heimdal: add_cred.c,v 1.2.2.1 2003/10/21 21:00:47 lha Exp $"
-        "$NetBSD: add_cred.c,v 1.1.1.2 2004/04/02 14:47:44 lha Exp $");
+        "$NetBSD: add_cred.c,v 1.1.1.1.2.1 2004/04/21 04:55:40 jmc Exp $");
 
 OM_uint32 gss_add_cred (
      OM_uint32           *minor_status,

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2004/04/29 05:18:26 lukem Exp $
+#	$NetBSD: Makefile,v 1.5.2.1 2004/04/29 06:08:33 jmc Exp $
 
 NOCHECKVER=	yes	# we want to install an older version ...
 MKLINKLIB=	no

@@ -1,9 +1,9 @@
-/*	$NetBSD: var.c,v 1.10 2004/10/28 20:15:37 dsl Exp $	*/
+/*	$NetBSD: var.c,v 1.8 2003/06/23 11:39:07 agc Exp $	*/
 
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: var.c,v 1.10 2004/10/28 20:15:37 dsl Exp $");
+__RCSID("$NetBSD: var.c,v 1.8 2003/06/23 11:39:07 agc Exp $");
 #endif
 
 
@@ -32,6 +32,7 @@ static void	getspec		ARGS((struct tbl *vp));
 static void	setspec		ARGS((struct tbl *vp));
 static void	unsetspec	ARGS((struct tbl *vp));
 static struct tbl *arraysearch  ARGS((struct tbl *, int));
+static const char *array_index_calc ARGS((const char *, bool_t *, int *));
 
 /*
  * create a new block for function calls and simple commands
@@ -133,9 +134,7 @@ initvar()
  * non-zero if this is an array, sets *valp to the array index, returns
  * the basename of the array.
  */
-const char *array_index_calc(const char *n, bool_t *arrayp, int *valp);
-
-const char *
+static const char *
 array_index_calc(n, arrayp, valp)
 	const char *n;
 	bool_t *arrayp;
@@ -175,7 +174,7 @@ global(n)
 	register struct block *l = e->loc;
 	register struct tbl *vp;
 	register int c;
-	unsigned h;
+	unsigned h; 
 	bool_t	 array;
 	int	 val;
 
@@ -393,7 +392,8 @@ setstr(vq, s, error_ok)
 			export(vq, s);
 		else {
 			vq->val.s = str_save(s, vq->areap);
-			vq->flag |= ALLOC;
+			if (vq->val.s)		/* <sjg> don't lie */
+				vq->flag |= ALLOC;
 		}
 	} else			/* integer dest */
 		if (!v_evaluate(vq, s, error_ok))
@@ -435,7 +435,7 @@ getint(vp, nump)
 	int base, neg;
 	int have_base = 0;
 	long num;
-
+	
 	if (vp->flag&SPECIAL)
 		getspec(vp);
 	/* XXX is it possible for ISSET to be set and val.s to be 0? */
@@ -446,7 +446,7 @@ getint(vp, nump)
 		return vp->type;
 	}
 	s = vp->val.s + vp->type;
-	if (s == NULL)	/* redundant given initial test */
+	if (s == NULL)	/* redundent given initial test */
 		s = null;
 	base = 10;
 	num = 0;
@@ -490,7 +490,7 @@ setint_v(vq, vp)
 {
 	int base;
 	long num;
-
+	
 	if ((base = getint(vp, &num)) == -1)
 		return NULL;
 	if (!(vq->flag & INTEGER) && (vq->flag & ALLOC)) {
@@ -557,11 +557,11 @@ formatstr(vp, s)
 	if (vp->flag & UCASEV_AL) {
 		for (q = p; *q; q++)
 			if (islower((unsigned char)*q))
-				*q = toupper((unsigned char)*q);
+				*q = toupper(*q);
 	} else if (vp->flag & LCASEV) {
 		for (q = p; *q; q++)
 			if (isupper((unsigned char)*q))
-				*q = tolower((unsigned char)*q);
+				*q = tolower(*q);
 	}
 
 	return p;
@@ -613,7 +613,7 @@ typeset(var, set, clr, field, base)
 		return NULL;
 	if (*val == '[') {
 		int len;
-
+		
 		len = array_ref_len(val);
 		if (len == 0)
 			return NULL;
@@ -634,7 +634,7 @@ typeset(var, set, clr, field, base)
 	if (*val == '=')
 		tvar = str_nsave(var, val++ - var, ATEMP);
 	else {
-		/* Importing from original environment: must have an = */
+		/* Importing from original envirnment: must have an = */
 		if (set & IMPORT)
 			return NULL;
 		tvar = (char *) var;
@@ -705,7 +705,7 @@ typeset(var, set, clr, field, base)
 			if (fake_assign) {
 				if (!setstr(t, s, KSH_RETURN_ERROR)) {
 					/* Somewhat arbitrary action here:
-					 * zap contents of variable, but keep
+					 * zap contents of varibale, but keep
 					 * the flag settings.
 					 */
 					ok = 0;
@@ -1141,7 +1141,6 @@ arraysearch(vp, val)
 	int val;
 {
 	struct tbl *prev, *curr, *new;
-	size_t namelen = strlen(vp->name) + 1;
 
 	vp->flag |= ARRAY|DEFINED;
 
@@ -1162,9 +1161,8 @@ arraysearch(vp, val)
 		else
 			new = curr;
 	} else
-		new = (struct tbl *)alloc(sizeof(struct tbl) + namelen,
-		    vp->areap);
-	strlcpy(new->name, vp->name, namelen);
+		new = (struct tbl *)alloc(sizeof(struct tbl)+strlen(vp->name)+1, vp->areap);
+	strcpy(new->name, vp->name);
 	new->flag = vp->flag & ~(ALLOC|DEFINED|ISSET|SPECIAL);
 	new->type = vp->type;
 	new->areap = vp->areap;

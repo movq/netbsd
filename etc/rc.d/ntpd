@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: ntpd,v 1.13 2004/08/13 18:08:03 mycroft Exp $
+# $NetBSD: ntpd,v 1.10 2002/07/02 14:47:22 itohy Exp $
 #
 
 # PROVIDE: ntpd
@@ -8,7 +8,7 @@
 # BEFORE:  LOGIN
 # KEYWORD: chrootdir
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="ntpd"
 rcvar=$name

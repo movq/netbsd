@@ -42,7 +42,7 @@
 #include <kadm_err.h>
 
 __RCSID("$Heimdal: version4.c,v 1.29.2.1 2004/04/29 12:29:23 lha Exp $"
-	"$NetBSD: version4.c,v 1.5 2004/05/08 13:27:58 lha Exp $");
+	"$NetBSD: version4.c,v 1.4.2.1 2004/05/25 02:28:30 jmc Exp $");
 
 #define KADM_NO_OPCODE -1
 #define KADM_NO_ENCRYPT -2

@@ -1,4 +1,4 @@
-/*	$NetBSD: hme.c,v 1.43 2004/10/30 18:08:37 thorpej Exp $	*/
+/*	$NetBSD: hme.c,v 1.40 2004/01/21 00:47:37 abs Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.43 2004/10/30 18:08:37 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.40 2004/01/21 00:47:37 abs Exp $");
 
 /* #define HMEDEBUG */
 
@@ -53,7 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.43 2004/10/30 18:08:37 thorpej Exp $");
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/mbuf.h>
+#include <sys/mbuf.h> 
 #include <sys/syslog.h>
 #include <sys/socket.h>
 #include <sys/device.h>
@@ -254,7 +254,6 @@ hme_config(sc)
 	ifp->if_watchdog = hme_watchdog;
 	ifp->if_flags =
 	    IFF_BROADCAST | IFF_SIMPLEX | IFF_NOTRAILERS | IFF_MULTICAST;
-	sc->sc_if_flags = ifp->if_flags;
 	IFQ_SET_READY(&ifp->if_snd);
 
 	/* Initialize ifmedia structures and MII info */
@@ -518,7 +517,7 @@ hme_init(sc)
 	/*
 	 * Init seed for backoff
 	 * (source suggested by manual: low 10 bits of MAC address)
-	 */
+	 */ 
 	v = ((ea[4] << 8) | ea[5]) & 0x3fff;
 	bus_space_write_4(t, mac, HME_MACI_RANDSEED, v);
 
@@ -634,7 +633,6 @@ hme_init(sc)
 
 	ifp->if_flags |= IFF_RUNNING;
 	ifp->if_flags &= ~IFF_OACTIVE;
-	sc->sc_if_flags = ifp->if_flags;
 	ifp->if_timer = 0;
 	hme_start(ifp);
 }
@@ -646,8 +644,8 @@ hme_init(sc)
 static __inline__ int
 ether_cmp(a, b)
 	u_char *a, *b;
-{
-
+{       
+        
 	if (a[5] != b[5] || a[4] != b[4] || a[3] != b[3] ||
 	    a[2] != b[2] || a[1] != b[1] || a[0] != b[0])
 		return (0);
@@ -1079,7 +1077,7 @@ hme_mii_readreg(self, phy, reg)
 		v |= HME_MIF_CFG_PHY;
 	bus_space_write_4(t, mif, HME_MIFI_CFG, v);
 
-	/* Enable MII drivers on external transceiver */
+	/* Enable MII drivers on external transceiver */ 
 	v = xif_cfg = bus_space_read_4(t, mac, HME_MACI_XIF);
 	if (phy == HME_PHYAD_EXTERNAL)
 		v |= HME_MAC_XIF_MIIENABLE;
@@ -1152,7 +1150,7 @@ hme_mii_writereg(self, phy, reg, val)
 		v |= HME_MIF_CFG_PHY;
 	bus_space_write_4(t, mif, HME_MIFI_CFG, v);
 
-	/* Enable MII drivers on external transceiver */
+	/* Enable MII drivers on external transceiver */ 
 	v = xif_cfg = bus_space_read_4(t, mac, HME_MACI_XIF);
 	if (phy == HME_PHYAD_EXTERNAL)
 		v |= HME_MAC_XIF_MIIENABLE;
@@ -1223,7 +1221,6 @@ hme_mii_statchg(dev)
 		v &= ~HME_MAC_TXCFG_FULLDPLX;
 		sc->sc_ethercom.ec_if.if_flags &= ~IFF_SIMPLEX;
 	}
-	sc->sc_if_flags = sc->sc_ethercom.ec_if.if_flags;
 	bus_space_write_4(t, mac, HME_MACI_TXCFG, v);
 }
 
@@ -1297,15 +1294,12 @@ hme_ioctl(ifp, cmd, data)
 	switch (cmd) {
 
 	case SIOCSIFADDR:
+		ifp->if_flags |= IFF_UP;
+
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
-			if (ifp->if_flags & IFF_UP)
-				hme_setladrf(sc);
-			else {
-				ifp->if_flags |= IFF_UP;
-				hme_init(sc);
-			}
+			hme_init(sc);
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
@@ -1320,19 +1314,13 @@ hme_ioctl(ifp, cmd, data)
 			else {
 				memcpy(LLADDR(ifp->if_sadl),
 				    ina->x_host.c_host, sizeof(sc->sc_enaddr));
-			}
+			}	
 			/* Set new address. */
-			if (ifp->if_flags & IFF_UP)
-				hme_setladrf(sc);
-			else {
-				ifp->if_flags |= IFF_UP;
-				hme_init(sc);
-			}
+			hme_init(sc);
 			break;
 		    }
 #endif
 		default:
-			ifp->if_flags |= IFF_UP;
 			hme_init(sc);
 			break;
 		}
@@ -1356,19 +1344,11 @@ hme_ioctl(ifp, cmd, data)
 			hme_init(sc);
 		} else if ((ifp->if_flags & IFF_UP) != 0) {
 			/*
-			 * If setting debug or promiscuous mode, do not reset
-			 * the chip; for everything else, call hme_init()
-			 * which will trigger a reset.
+			 * Reset the interface to pick up changes in any other
+			 * flags that affect hardware registers.
 			 */
-#define RESETIGN (IFF_CANTCHANGE | IFF_DEBUG)
-			if (ifp->if_flags == sc->sc_if_flags)
-				break;
-			if ((ifp->if_flags & (~RESETIGN))
-			    == (sc->sc_if_flags & (~RESETIGN)))
-				hme_setladrf(sc);
-			else
-				hme_init(sc);
-#undef RESETIGN
+			/*hme_stop(sc);*/
+			hme_init(sc);
 		}
 #ifdef HMEDEBUG
 		sc->sc_debug = (ifp->if_flags & IFF_DEBUG) != 0 ? 1 : 0;
@@ -1386,8 +1366,7 @@ hme_ioctl(ifp, cmd, data)
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			if (ifp->if_flags & IFF_RUNNING)
-				hme_setladrf(sc);
+			hme_setladrf(sc);
 			error = 0;
 		}
 		break;
@@ -1402,7 +1381,6 @@ hme_ioctl(ifp, cmd, data)
 		break;
 	}
 
-	sc->sc_if_flags = ifp->if_flags;
 	splx(s);
 	return (error);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socketcall.c,v 1.27 2004/09/05 09:09:02 jdolecek Exp $	*/
+/*	$NetBSD: linux_socketcall.c,v 1.25 2003/01/18 21:21:36 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_socketcall.c,v 1.27 2004/09/05 09:09:02 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_socketcall.c,v 1.25 2003/01/18 21:21:36 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -140,32 +140,6 @@ linux_sys_socketcall(l, v, retval)
 		linux_socketcall[SCARG(uap, what)].name, error));
 		return error;
 	}
-
-#ifdef DEBUG_LINUX
-	/* dump the passed argument data */
-	{
-        	DPRINTF(("linux_socketcall('%s'): ",
-		    linux_socketcall[SCARG(uap, what)].name));
-
-		if (SCARG(uap, what) == LINUX_SYS_socket) {
-			DPRINTF(("[dom %d type %d proto %d]\n",
-				lda.dummy_ints[0],
-				lda.dummy_ints[1],
-				lda.dummy_ints[2]));
-		} else {
-			int i, sz;
-			u_int8_t *data = (u_int8_t *)&lda.dummy_ints[1];
-
-			sz = linux_socketcall[SCARG(uap, what)].argsize
-			    - sizeof(lda.dummy_ints[0]);
-
-			DPRINTF(("socket %d [", lda.dummy_ints[0]));
-			for(i=0; i < sz; i++)
-				DPRINTF(("%02x ", data[i]));
-			DPRINTF(("]\n"));
-		}
-	}
-#endif
 
 	switch (SCARG(uap, what)) {
 	case LINUX_SYS_socket:

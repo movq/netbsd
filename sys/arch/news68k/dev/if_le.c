@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le.c,v 1.11 2004/12/11 03:32:27 tsutsui Exp $	*/
+/*	$NetBSD: if_le.c,v 1.8 2003/07/15 02:59:26 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.11 2004/12/11 03:32:27 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.8 2003/07/15 02:59:26 lukem Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -70,15 +70,13 @@ __KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.11 2004/12/11 03:32:27 tsutsui Exp $");
 #include <dev/ic/am7990reg.h>
 #include <dev/ic/am7990var.h>
 
-#include "ioconf.h"
-
 /*
  * LANCE registers.
  * The real stuff is in dev/ic/am7990reg.h
  */
 struct lereg1 {
-	volatile uint16_t	ler1_rdp;	/* data port */
-	volatile uint16_t	ler1_rap;	/* register select port */
+	volatile u_int16_t	ler1_rdp;	/* data port */
+	volatile u_int16_t	ler1_rap;	/* register select port */
 };
 
 /*
@@ -111,12 +109,14 @@ extern volatile u_char *lance_mem, *idrom_addr;
 #define hide		static
 #endif
 
-hide void lewrcsr(struct lance_softc *, uint16_t, uint16_t);
-hide uint16_t lerdcsr(struct lance_softc *, uint16_t);
+hide void lewrcsr(struct lance_softc *, u_int16_t, u_int16_t);
+hide u_int16_t lerdcsr(struct lance_softc *, u_int16_t);
 int leintr(int);
 
 hide void
-lewrcsr(struct lance_softc *sc, uint16_t port, uint16_t val)
+lewrcsr(sc, port, val)
+	struct lance_softc *sc;
+	u_int16_t port, val;
 {
 	struct lereg1 *ler1 = ((struct le_softc *)sc)->sc_r1;
 
@@ -124,19 +124,24 @@ lewrcsr(struct lance_softc *sc, uint16_t port, uint16_t val)
 	ler1->ler1_rdp = val;
 }
 
-hide uint16_t
-lerdcsr(struct lance_softc *sc, uint16_t port)
+hide u_int16_t
+lerdcsr(sc, port)
+	struct lance_softc *sc;
+	u_int16_t port;
 {
 	struct lereg1 *ler1 = ((struct le_softc *)sc)->sc_r1;
-	uint16_t val;
+	u_int16_t val;
 
 	ler1->ler1_rap = port;
 	val = ler1->ler1_rdp;
-	return val;
+	return (val);
 }
 
 int
-le_match(struct device *parent, struct cfdata *cf, void *aux)
+le_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct hb_attach_args *ha = aux;
 	int addr;
@@ -153,7 +158,9 @@ le_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-le_attach(struct device *parent, struct device *self, void *aux)
+le_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct le_softc *lesc = (struct le_softc *)self;
 	struct lance_softc *sc = &lesc->sc_am7990.lsc;
@@ -201,9 +208,11 @@ le_attach(struct device *parent, struct device *self, void *aux)
 }
 
 int
-leintr(int unit)
+leintr(unit)
+	int unit;
 {
 	struct am7990_softc *sc;
+	extern struct cfdriver le_cd;
 
 	if (unit >= le_cd.cd_ndevs)
 		return 0;

@@ -1,7 +1,7 @@
-/*	$NetBSD: st_scsi.c,v 1.16 2004/10/28 07:07:46 yamt Exp $ */
+/*	$NetBSD: st_scsi.c,v 1.10.8.1 2004/09/11 12:59:02 he Exp $ */
 
 /*-
- * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: st_scsi.c,v 1.16 2004/10/28 07:07:46 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: st_scsi.c,v 1.10.8.1 2004/09/11 12:59:02 he Exp $");
 
 #include "opt_scsi.h"
 #include "rnd.h"
@@ -65,33 +65,35 @@ __KERNEL_RCSID(0, "$NetBSD: st_scsi.c,v 1.16 2004/10/28 07:07:46 yamt Exp $");
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/conf.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
 
-#include <dev/scsipi/scsi_all.h>
-#include <dev/scsipi/scsi_tape.h>
 #include <dev/scsipi/stvar.h>
+#include <dev/scsipi/scsi_tape.h>
+#include <dev/scsipi/scsi_all.h>
 
-static int	st_scsibus_match(struct device *, struct cfdata *, void *);
-static void	st_scsibus_attach(struct device *, struct device *, void *);
-static int	st_scsibus_ops(struct st_softc *, int, int);
-static int	st_scsibus_read_block_limits(struct st_softc *, int);
-static int	st_scsibus_mode_sense(struct st_softc *, int);
-static int	st_scsibus_mode_select(struct st_softc *, int);
-static int	st_scsibus_cmprss(struct st_softc *, int, int);
+int	st_scsibus_match __P((struct device *, struct cfdata *, void *));
+void	st_scsibus_attach __P((struct device *, struct device *, void *));
+int	st_scsibus_ops __P((struct st_softc *, int, int));
+int	st_scsibus_read_block_limits __P((struct st_softc *, int));
+int	st_scsibus_mode_sense __P((struct st_softc *, int));
+int	st_scsibus_mode_select __P((struct st_softc *, int));
+int	st_scsibus_cmprss __P((struct st_softc *, int, int));
 
 CFATTACH_DECL(st_scsibus, sizeof(struct st_softc),
     st_scsibus_match, st_scsibus_attach, stdetach, stactivate);
 
-static const struct scsipi_inquiry_pattern st_scsibus_patterns[] = {
+const struct scsipi_inquiry_pattern st_scsibus_patterns[] = {
 	{T_SEQUENTIAL, T_REMOV,
 	 "",         "",                 ""},
 };
 
-static int
-st_scsibus_match(struct device *parent, struct cfdata *match, void *aux)
+int
+st_scsibus_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct scsipibus_attach_args *sa = aux;
 	int priority;
@@ -106,8 +108,10 @@ st_scsibus_match(struct device *parent, struct cfdata *match, void *aux)
 	return (priority);
 }
 
-static void
-st_scsibus_attach(struct device *parent, struct device *self, void *aux)
+void
+st_scsibus_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct st_softc *st = (void *)self;
 
@@ -115,8 +119,11 @@ st_scsibus_attach(struct device *parent, struct device *self, void *aux)
 	stattach(parent, st, aux);
 }
 
-static int
-st_scsibus_ops(struct st_softc *st, int op, int flags)
+int
+st_scsibus_ops(st, op, flags)
+	struct st_softc *st;
+	int op;
+	int flags;
 {
 	switch(op) {
 	case ST_OPS_RBL:
@@ -139,8 +146,10 @@ st_scsibus_ops(struct st_softc *st, int op, int flags)
 /*
  * Ask the drive what it's min and max blk sizes are.
  */
-static int
-st_scsibus_read_block_limits(struct st_softc *st, int flags)
+int
+st_scsibus_read_block_limits(st, flags)
+	struct st_softc *st;
+	int flags;
 {
 	struct scsi_block_limits cmd;
 	struct scsi_block_limits_data block_limits;
@@ -156,8 +165,8 @@ st_scsibus_read_block_limits(struct st_softc *st, int flags)
 	/*
 	 * do the command, update the global values
 	 */
-	error = scsipi_command(periph, (void *)&cmd, sizeof(cmd),
-	    (void *)&block_limits, sizeof(block_limits),
+	error = scsipi_command(periph, NULL, (struct scsipi_generic *)&cmd,
+	    sizeof(cmd), (u_char *)&block_limits, sizeof(block_limits),
 	    ST_RETRIES, ST_CTL_TIME, NULL,
 	    flags | XS_CTL_DATA_IN | XS_CTL_DATA_ONSTACK);
 	if (error)
@@ -181,8 +190,10 @@ st_scsibus_read_block_limits(struct st_softc *st, int flags)
  * open
  * ioctl (to reset original blksize)
  */
-static int
-st_scsibus_mode_sense(struct st_softc *st, int flags)
+int
+st_scsibus_mode_sense(st, flags)
+	struct st_softc *st;
+	int flags;
 {
 	u_int scsipi_sense_len;
 	int error;
@@ -232,8 +243,10 @@ st_scsibus_mode_sense(struct st_softc *st, int flags)
  * Send a filled out parameter structure to the drive to
  * set it into the desire modes etc.
  */
-static int
-st_scsibus_mode_select(struct st_softc *st, int flags)
+int
+st_scsibus_mode_select(st, flags)
+	struct st_softc *st;
+	int flags;
 {
 	u_int scsi_select_len;
 	struct scsi_select {
@@ -281,8 +294,11 @@ st_scsibus_mode_select(struct st_softc *st, int flags)
 	    ST_RETRIES, ST_CTL_TIME);
 }
 
-static int
-st_scsibus_cmprss(struct st_softc *st, int flags, int onoff)
+int
+st_scsibus_cmprss(st, flags, onoff)
+	struct st_softc *st;
+	int flags;
+	int onoff;
 {
 	u_int scsi_dlen;
 	int byte2, page;

@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.82 2004/12/09 02:54:18 briggs Exp $
+#	$NetBSD: INSTALL,v 1.75.2.3 2004/07/15 20:19:04 he Exp $
 #
 # config file for INSTALL FLOPPY
 #
@@ -12,6 +12,9 @@ makeoptions	COPTS="-Os -mmultiple -pipe" # -Os -mmultiple to reduce size.
 maxusers	12
 
 options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
+
+# Change base address to 0x800000 to use large memory disk.
+makeoptions	TEXTADDR=0x800000
 
 # Enable the hooks used for initializing the ram-disk.
 options 	MEMORY_DISK_HOOKS
@@ -29,7 +32,6 @@ options 	MALLOC_NOINLINE		# Not inlining MALLOC saves memory
 options 	COMPAT_14	# NetBSD 1.4,
 options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_43	# and 4.3BSD
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # File systems
 file-system 	FFS		# UFS
@@ -82,8 +84,6 @@ ne*	at pci? dev ? function ?	# NE2000-compatible Ethernet
 re*	at pci? dev ? function ?	# Realtek 8139C+/8169/8169S/8110S
 rtk*	at pci? dev ? function ?	# Realtek 8129/8139
 sip*	at pci? dev ? function ?	# SiS 900/7016 Ethernet
-vr*	at pci? dev ? function ?	# VIA Rhine Fast Ethernet
-wi*	at pci? dev ? function ?	# Intersil Prism Mini-PCI (802.11b)
 adv*	at pci? dev ? function ?	# AdvanSys 1200[A,B], 9xx[U,UA] SCSI
 adw*	at pci? dev ? function ?	# AdvanSys 9x0UW[D], 3940U[2,3]W SCSI
 ahc*	at pci? dev ? function ?	# Adaptec [23]94x, aic78x0 SCSI
@@ -103,7 +103,6 @@ hptide* at pci? dev ? function ?	# Triones/HighPoint IDE controllers
 optiide* at pci? dev ? function ?	# Opti IDE controllers
 piixide* at pci? dev ? function ?	# Intel IDE controllers
 pdcide* at pci? dev ? function ?	# Promise IDE controllers
-pdcsata* at pci? dev ? function ?	# Promise SATA150 controllers
 satalink* at pci? dev ? function ?	# SiI SATALink controllers
 siside* at pci? dev ? function ?	# SiS IDE controllers
 slide*  at pci? dev ? function ?	# Symphony Labs IDE controllers
@@ -134,13 +133,11 @@ wdc*	at pcmcia? function ?		# PCMCIA IDE controllers
 ep*	at pcmcia? function ?		# 3Com 3c589 and 3c562 Ethernet
 mbe*	at pcmcia? function ?		# MB8696x based Ethernet
 ne*	at pcmcia? function ?		# NE2000-compatible Ethernet
-wi*	at pcmcia? function ?		# Lucent WaveLan IEEE (802.11)
 ex*	at cardbus? dev ? function ?	# 3Com 3C575TX
 tlp*	at cardbus? dev ? function ?	# DECchip 21143
 
 bm*	at obio?			# bmac ethernet
 mc*	at obio?			# MACE ethernet
-wi*	at obio?			# AirMac
 esp*	at obio? flags 0x00ff		# 53c9x SCSI
 mesh*	at obio? flags 0xffff		# MESH SCSI
 nvram*	at obio?			# nvram

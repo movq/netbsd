@@ -1,4 +1,4 @@
-/*	$NetBSD: if_es.c,v 1.35 2004/10/30 18:08:34 thorpej Exp $ */
+/*	$NetBSD: if_es.c,v 1.34 2003/01/28 22:35:04 wiz Exp $ */
 
 /*
  * Copyright (c) 1995 Michael L. Hitch
@@ -38,7 +38,7 @@
 #include "opt_ns.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_es.c,v 1.35 2004/10/30 18:08:34 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_es.c,v 1.34 2003/01/28 22:35:04 wiz Exp $");
 
 #include "bpfilter.h"
 
@@ -1050,9 +1050,7 @@ esioctl(register struct ifnet *ifp, u_long command, caddr_t data)
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			if (ifp->if_flags & IFF_RUNNING) {
-				/* XXX */
-			}
+			/* XXX */
 			error = 0;
 		}
 		break;

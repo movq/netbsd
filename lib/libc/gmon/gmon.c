@@ -1,4 +1,4 @@
-/*	$NetBSD: gmon.c,v 1.22 2004/05/10 22:16:42 thorpej Exp $	*/
+/*	$NetBSD: gmon.c,v 1.21.2.1 2004/05/11 14:51:50 tron Exp $	*/
 
 /*
  * Copyright (c) 2003, 2004 Wasabi Systems, Inc.
@@ -69,7 +69,7 @@
 #if 0
 static char sccsid[] = "@(#)gmon.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: gmon.c,v 1.22 2004/05/10 22:16:42 thorpej Exp $");
+__RCSID("$NetBSD: gmon.c,v 1.21.2.1 2004/05/11 14:51:50 tron Exp $");
 #endif
 #endif
 

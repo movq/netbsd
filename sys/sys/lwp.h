@@ -1,4 +1,4 @@
-/* 	$NetBSD: lwp.h,v 1.24 2004/07/18 21:26:52 chs Exp $	*/
+/* 	$NetBSD: lwp.h,v 1.21 2004/03/14 01:08:47 cl Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -46,6 +46,7 @@
 #include <machine/proc.h>		/* Machine-dependent proc substruct. */
 #include <sys/queue.h>
 #include <sys/callout.h>
+#include <sys/ucontext.h>
 
 struct	lwp {
 	struct	lwp *l_forw;		/* Doubly-linked run/sleep queue. */
@@ -108,6 +109,7 @@ extern struct lwp lwp0;			/* LWP for proc0 */
 #define	L_SINTR		0x00080	/* Sleep is interruptible. */
 #define	L_TIMEOUT	0x00400	/* Timing out during sleep. */
 #define	L_PROCEXIT	0x00800 /* In process exit, l_proc no longer valid */
+#define	L_BIGLOCK	0x80000	/* LWP needs kernel "big lock" to run */
 #define	L_SA		0x100000 /* Scheduler activations LWP */
 #define	L_SA_UPCALL	0x200000 /* SA upcall is pending */
 #define	L_SA_BLOCKING	0x400000 /* Blocking in tsleep() */
@@ -116,7 +118,6 @@ extern struct lwp lwp0;			/* LWP for proc0 */
 #define	L_SA_PAGEFAULT	0x4000000 /* SA LWP in pagefault handler */
 #define	L_SA_YIELD	0x10000000 /* LWP on VP is yielding */
 #define	L_SA_IDLE	0x20000000 /* VP is idle */
-#define	L_COWINPROGRESS	0x40000000 /* UFS: doing copy on write */
 
 /*
  * Status values.

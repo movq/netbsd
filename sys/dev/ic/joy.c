@@ -1,4 +1,4 @@
-/*	$NetBSD: joy.c,v 1.8 2004/08/03 18:35:21 drochner Exp $	*/
+/*	$NetBSD: joy.c,v 1.6 2003/06/29 22:30:12 fvdl Exp $	*/
 
 /*-
  * Copyright (c) 1995 Jean-Marc Zucconi
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: joy.c,v 1.8 2004/08/03 18:35:21 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: joy.c,v 1.6 2003/06/29 22:30:12 fvdl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,10 +41,16 @@ __KERNEL_RCSID(0, "$NetBSD: joy.c,v 1.8 2004/08/03 18:35:21 drochner Exp $");
 #include <sys/errno.h>
 #include <sys/conf.h>
 #include <sys/event.h>
-#include <sys/vnode.h>
+
 #include <machine/bus.h>
 
-#include <sys/joystick.h>
+#include <machine/cpu.h>
+#include <machine/pio.h>
+#include <machine/joystick.h>
+
+#include <dev/isa/isavar.h>
+#include <dev/isa/isareg.h>
+
 #include <dev/ic/joyvar.h>
 
 /*
@@ -57,9 +63,16 @@ __KERNEL_RCSID(0, "$NetBSD: joy.c,v 1.8 2004/08/03 18:35:21 drochner Exp $");
  * at port and wait until the corresponding bit returns to 0.
  */
 
+/*
+ * The formulae below only work if u is ``not too large''.  See also
+ * the discussion in microtime.s
+ */
+#define USEC2TICKS(u) 	(((u) * 19549) >> 14)
+#define TICKS2USEC(u) 	(((u) * 3433) >> 12)
+
 
 #define JOYPART(d) (minor(d) & 1)
-#define JOYUNIT(d) (minor(d) >> 1)
+#define JOYUNIT(d) minor(d) >> 1 & 3
 
 #ifndef JOY_TIMEOUT
 #define JOY_TIMEOUT   2000	/* 2 milliseconds */
@@ -88,21 +101,8 @@ joyattach(sc)
 	printf("%s: joystick %sconnected\n", sc->sc_dev.dv_xname,
 	    (bus_space_read_1(sc->sc_iot, sc->sc_ioh, 0) & 0x0f) == 0x0f ?
 	    "not " : "");
-}
 
-int
-joydetach(sc, flags)
-	struct joy_softc *sc;
-	int flags;
-{
-	int maj, mn;
-
-	maj = cdevsw_lookup_major(&joy_cdevsw);
-	mn = sc->sc_dev.dv_unit << 1;
-	vdevgone(maj, mn, mn, VCHR);
-	vdevgone(maj, mn + 1, mn + 1, VCHR);
-
-	return (0);
+	sc->sc_timer_freq = joy_timer_freq();
 }
 
 int
@@ -154,34 +154,32 @@ joyread(dev, uio, flag)
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	struct joystick c;
-	int i, s;
-	struct timeval start, now, diff;
+	int i, t0, t1, s;
 	int state = 0, x = 0, y = 0;
 
 	s = splhigh();	/* XXX */
 	bus_space_write_1(iot, ioh, 0, 0xff);
-	microtime(&start);
-	now = start; /* structure assignment */
-	i = sc->timeout[JOYPART(dev)];
-	for (;;) {
-		timersub(&now, &start, &diff);
-		if (diff.tv_sec > 0 || diff.tv_usec > i)
-			break;
+	t0 = joy_get_tick();
+	t1 = t0;
+	i = USEC2TICKS(sc->timeout[JOYPART(dev)]);
+	while (t0 - t1 < i) {
 		state = bus_space_read_1(iot, ioh, 0);
 		if (JOYPART(dev) == 1)
 			state >>= 2;
+		t1 = joy_get_tick();
+		if (t1 > t0)
+			t1 -= sc->sc_timer_freq / hz;
 		if (!x && !(state & 0x01))
-			x = diff.tv_usec;
+			x = t1;
 		if (!y && !(state & 0x02))
-			y = diff.tv_usec;
+			y = t1;
 		if (x && y)
 			break;
-		microtime(&now);
 	}
 	splx(s);	/* XXX */
 
-	c.x = x ? sc->x_off[JOYPART(dev)] + x : 0x80000000;
-	c.y = y ? sc->y_off[JOYPART(dev)] + y : 0x80000000;
+	c.x = x ? sc->x_off[JOYPART(dev)] + TICKS2USEC(t0 - x) : 0x80000000;
+	c.y = y ? sc->y_off[JOYPART(dev)] + TICKS2USEC(t0 - y) : 0x80000000;
 	state >>= 4;
 	c.b1 = ~state & 1;
 	c.b2 = ~(state >> 1) & 1;

@@ -1,4 +1,5 @@
-/*	$NetBSD: usbdi_util.c,v 1.42 2004/12/03 08:53:40 augustss Exp $	*/
+/*	$NetBSD: usbdi_util.c,v 1.40 2002/07/11 21:14:36 augustss Exp $	*/
+/*	$FreeBSD: src/sys/dev/usb/usbdi_util.c,v 1.14 1999/11/17 22:33:50 n_hibma Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -38,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usbdi_util.c,v 1.42 2004/12/03 08:53:40 augustss Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usbdi_util.c,v 1.40 2002/07/11 21:14:36 augustss Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -364,8 +365,8 @@ usbd_get_hid_descriptor(usbd_interface_handle ifc)
 	char *p, *end;
 
 	if (idesc == NULL)
-		return (NULL);
-	usbd_interface2device_handle(ifc, &dev);
+		return (0);
+	 usbd_interface2device_handle(ifc, &dev);
 	cdesc = usbd_get_config_descriptor(dev);
 
 	p = (char *)idesc + idesc->bLength;
@@ -378,7 +379,7 @@ usbd_get_hid_descriptor(usbd_interface_handle ifc)
 		if (hd->bDescriptorType == UDESC_INTERFACE)
 			break;
 	}
-	return (NULL);
+	return (0);
 }
 
 usbd_status
@@ -466,48 +467,6 @@ usbd_bulk_transfer(usbd_xfer_handle xfer, usbd_pipe_handle pipe,
 	return (err);
 }
 
-Static void usbd_intr_transfer_cb(usbd_xfer_handle xfer,
-				  usbd_private_handle priv, usbd_status status);
-Static void
-usbd_intr_transfer_cb(usbd_xfer_handle xfer, usbd_private_handle priv,
-		      usbd_status status)
-{
-	wakeup(xfer);
-}
-
-usbd_status
-usbd_intr_transfer(usbd_xfer_handle xfer, usbd_pipe_handle pipe,
-		   u_int16_t flags, u_int32_t timeout, void *buf,
-		   u_int32_t *size, char *lbl)
-{
-	usbd_status err;
-	int s, error;
-
-	usbd_setup_xfer(xfer, pipe, 0, buf, *size,
-			flags, timeout, usbd_intr_transfer_cb);
-	DPRINTFN(1, ("usbd_intr_transfer: start transfer %d bytes\n", *size));
-	s = splusb();		/* don't want callback until tsleep() */
-	err = usbd_transfer(xfer);
-	if (err != USBD_IN_PROGRESS) {
-		splx(s);
-		return (err);
-	}
-	error = tsleep(xfer, PZERO | PCATCH, lbl, 0);
-	splx(s);
-	if (error) {
-		DPRINTF(("usbd_intr_transfer: tsleep=%d\n", error));
-		usbd_abort_pipe(pipe);
-		return (USBD_INTERRUPTED);
-	}
-	usbd_get_xfer_status(xfer, NULL, NULL, size, &err);
-	DPRINTFN(1,("usbd_intr_transfer: transferred %d\n", *size));
-	if (err) {
-		DPRINTF(("usbd_intr_transfer: error=%d\n", err));
-		usbd_clear_endpoint_stall(pipe);
-	}
-	return (err);
-}
-
 void
 usb_detach_wait(device_ptr_t dv)
 {
@@ -525,19 +484,20 @@ usb_detach_wakeup(device_ptr_t dv)
 	wakeup(dv);
 }
 
-const usb_descriptor_t *
-usb_find_desc(usbd_device_handle dev, int type, int subtype)
+usb_descriptor_t *
+usb_find_desc(usbd_device_handle dev, int type)
 {
-	usbd_desc_iter_t iter;
-	const usb_descriptor_t *desc;
+	usb_descriptor_t *desc;
+	usb_config_descriptor_t *cd = usbd_get_config_descriptor(dev);
+        uByte *p = (uByte *)cd;
+        uByte *end = p + UGETW(cd->wTotalLength);
 
-	usb_desc_iter_init(dev, &iter);
-	for (;;) {
-		desc = usb_desc_iter_next(&iter);
-		if (!desc || (desc->bDescriptorType == type &&
-			      (subtype == USBD_SUBTYPE_ANY ||
-			       subtype == desc->bDescriptorSubtype)))
-			break;
+	while (p < end) {
+		desc = (usb_descriptor_t *)p;
+		if (desc->bDescriptorType == type)
+			return (desc);
+		p += desc->bLength;
 	}
-	return desc;
+
+	return (NULL);
 }

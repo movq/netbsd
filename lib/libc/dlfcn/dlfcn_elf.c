@@ -1,4 +1,4 @@
-/*	$NetBSD: dlfcn_elf.c,v 1.5 2004/07/18 17:26:19 thorpej Exp $	*/
+/*	$NetBSD: dlfcn_elf.c,v 1.4.2.1 2004/07/19 09:07:13 tron Exp $	*/
 
 /*
  * Copyright (c) 2000 Takuya SHIOZAKI
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: dlfcn_elf.c,v 1.5 2004/07/18 17:26:19 thorpej Exp $");
+__RCSID("$NetBSD: dlfcn_elf.c,v 1.4.2.1 2004/07/19 09:07:13 tron Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"

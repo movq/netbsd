@@ -1,5 +1,3 @@
-/*	$NetBSD: mail_conf.c,v 1.1.1.4 2004/05/31 00:24:31 heas Exp $	*/
-
 /*++
 /* NAME
 /*	mail_conf 3
@@ -52,11 +50,11 @@
 /*	copied if it is to be used for any appreciable amount of time.
 /* DIAGNOSTICS
 /*	Fatal errors: malformed numerical value.
+/* FILES
+/*	/etc/postfix: default Postfix configuration directory.
 /* ENVIRONMENT
 /*	MAIL_CONFIG, non-default configuration database
 /*	MAIL_VERBOSE, enable verbose mode
-/* FILES
-/*	/etc/postfix: default Postfix configuration directory.
 /* SEE ALSO
 /*	dict(3) generic dictionary manager
 /*	mail_conf_int(3) integer-valued parameters

@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.28 2004/12/13 02:14:13 chs Exp $	*/
+/*	$NetBSD: clock.c,v 1.26 2003/08/07 16:29:01 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.28 2004/12/13 02:14:13 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.26 2003/08/07 16:29:01 agc Exp $");
 
 #include <sys/param.h>
 #include <sys/time.h>
@@ -54,7 +54,6 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.28 2004/12/13 02:14:13 chs Exp $");
 static volatile u_char * const rom = (u_char *)ROM_ORIGIN;
 static int divisor;
 static int clockinitted;
-static int clock_attached;
 static int rtc_attached;
 static u_char rtc_magic[8] = {
 	0xc5, 0x3a, 0xa3, 0x5c, 0xc5, 0x3a, 0xa3, 0x5c
@@ -88,7 +87,7 @@ clock_match(parent, cf, aux)
 	struct confargs *ca = aux;
 
 	/* This driver only supports one unit. */
-	if (clock_attached)
+	if (cf->cf_unit != 0)
 		return(0);
 
 	if ((ca->ca_addr != -1 && ca->ca_addr != ICU_ADR) ||
@@ -117,8 +116,6 @@ clock_attach(parent, self, aux)
 		0xff
 	};
 
-	clock_attached = 1;
-
 	printf("\n");
 	icu_init(icu_table);
 
@@ -143,8 +140,7 @@ void
 setstatclockrate(arg)
 	int arg;
 {
-
-	/* Nothing */
+	printf("setstatclockrate\n");
 }
 
 void
@@ -199,7 +195,7 @@ rtc_match(parent, cf, aux)
 	int rom_val, rom_cnt, i;
 
 	/* This driver only supports one unit. */
-	if (rtc_attached)
+	if (cf->cf_unit != 0)
 		return(0);
 
 	(void) rom[4];	/* Synchronize the comparison reg. */
@@ -237,8 +233,7 @@ rtc_attach(parent, self, aux)
  * Initialize the time of day register, based on the time base
  * which is, e.g. from a filesystem.
  */
-void
-inittodr(fs_time)
+void inittodr(fs_time)
 	time_t fs_time;
 {
 	long diff, clk_time;
@@ -290,8 +285,7 @@ inittodr(fs_time)
 /*
  * Resettodr restores the time of day hardware after a time change.
  */
-void
-resettodr()
+void resettodr()
 {
 	/*
 	 * We might have been called by boot() due to a crash early

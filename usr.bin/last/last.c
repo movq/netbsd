@@ -1,4 +1,4 @@
-/*	$NetBSD: last.c,v 1.25 2004/11/19 21:41:25 christos Exp $	*/
+/*	$NetBSD: last.c,v 1.22 2004/01/05 23:23:35 jmmv Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -40,7 +40,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)last.c	8.2 (Berkeley) 4/2/94";
 #endif
-__RCSID("$NetBSD: last.c,v 1.25 2004/11/19 21:41:25 christos Exp $");
+__RCSID("$NetBSD: last.c,v 1.22 2004/01/05 23:23:35 jmmv Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -56,14 +56,12 @@ __RCSID("$NetBSD: last.c,v 1.25 2004/11/19 21:41:25 christos Exp $");
 #include <time.h>
 #include <tzfile.h>
 #include <unistd.h>
-#include <arpa/inet.h>
 #ifdef SUPPORT_UTMPX
 #include <utmpx.h>
 #endif
 #ifdef SUPPORT_UTMP
 #include <utmp.h>
 #endif
-#include <util.h>
 
 #ifndef UT_NAMESIZE
 #define UT_NAMESIZE 8
@@ -120,10 +118,10 @@ static TTY	*addtty(const char *);
 static void	 hostconv(char *);
 static char	*ttyconv(char *);
 #ifdef SUPPORT_UTMPX
-static void	 wtmpx(const char *, int, int, int, int);
+static void	 wtmpx(const char *, int, int, int);
 #endif
 #ifdef SUPPORT_UTMP
-static void	 wtmp(const char *, int, int, int, int);
+static void	 wtmp(const char *, int, int, int);
 #endif
 static char	*fmttime(time_t, int);
 static void	 usage(void);
@@ -131,7 +129,7 @@ static void	 usage(void);
 static
 void usage(void)
 {
-	(void)fprintf(stderr, "usage: %s [-#%s] [-nT] [-f file]"
+	(void)fprintf(stderr, "usage: %s [-#%s] [-T] [-f file]"
 	    " [-H hostsize] [-h host] [-L linesize]\n"
 	    "\t    [-N namesize] [-t tty] [user ...]\n", getprogname(),
 #ifdef NOTYET_SUPPORT_UTMPX
@@ -152,11 +150,10 @@ main(int argc, char *argv[])
 	int namesize = UT_NAMESIZE;
 	int linesize = UT_LINESIZE;
 	int hostsize = UT_HOSTSIZE;
-	int numeric = 0;
 
 	maxrec = -1;
 
-	while ((ch = getopt(argc, argv, "0123456789f:H:h:L:nN:Tt:")) != -1)
+	while ((ch = getopt(argc, argv, "0123456789f:H:h:L:N:Tt:")) != -1)
 		switch (ch) {
 		case '0': case '1': case '2': case '3': case '4':
 		case '5': case '6': case '7': case '8': case '9':
@@ -189,9 +186,6 @@ main(int argc, char *argv[])
 			break;
 		case 'N':
 			namesize = atoi(optarg);
-			break;
-		case 'n':
-			numeric = 1;
 			break;
 		case 'T':
 			fulltime = 1;
@@ -239,13 +233,13 @@ main(int argc, char *argv[])
 	}
 #if defined(SUPPORT_UTMPX) && defined(SUPPORT_UTMP)
 	if (file[strlen(file) - 1] == 'x')
-		wtmpx(file, namesize, linesize, hostsize, numeric);
+		wtmpx(file, namesize, linesize, hostsize);
 	else
-		wtmp(file, namesize, linesize, hostsize, numeric);
+		wtmp(file, namesize, linesize, hostsize);
 #elif defined(SUPPORT_UTMPX)
-	wtmpx(file, namesize, linesize, hostsize, numeric);
+	wtmpx(file, namesize, linesize, hostsize);
 #elif defined(SUPPORT_UTMP)
-	wtmp(file, namesize, linesize, hostsize, numeric);
+	wtmp(file, namesize, linesize, hostsize);
 #else
 	errx(1, "No utmp or utmpx support compiled in.");
 #endif
@@ -379,7 +373,6 @@ fmttime(time_t t, int flags)
 #define utmp utmpx
 #define want wantx
 #define wtmp wtmpx
-#define gethost gethostx
 #define buf bufx
 #define onintr onintrx
 #define TYPE(a) (a)->ut_type

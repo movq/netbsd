@@ -1,4 +1,4 @@
-/*	$NetBSD: urlphy.c,v 1.10 2004/08/23 06:16:07 thorpej Exp $	*/
+/*	$NetBSD: urlphy.c,v 1.9 2003/09/04 15:17:38 tsutsui Exp $	*/
 /*
  * Copyright (c) 2001, 2002
  *     Shingo WATANABE <nabe@nabechan.org>.  All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: urlphy.c,v 1.10 2004/08/23 06:16:07 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: urlphy.c,v 1.9 2003/09/04 15:17:38 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,20 +59,20 @@ int urlphydebug = URLPHY_DEBUG;
 #define DPRINTFN(n,x)
 #endif
 
-static int	urlphy_match(struct device *, struct cfdata *, void *);
-static void	urlphy_attach(struct device *, struct device *, void *);
+int urlphy_match(struct device *, struct cfdata *, void *);
+void urlphy_attach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(urlphy, sizeof(struct mii_softc),
     urlphy_match, urlphy_attach, mii_phy_detach, mii_phy_activate);
 
-static int	urlphy_service(struct mii_softc *, struct mii_data *, int);
-static void	urlphy_status(struct mii_softc *);
+int urlphy_service(struct mii_softc *, struct mii_data *, int);
+void urlphy_status(struct mii_softc *);
 
-static const struct mii_phy_funcs urlphy_funcs = {
+const struct mii_phy_funcs urlphy_funcs = {
 	urlphy_service, urlphy_status, mii_phy_reset,
 };
 
-static int
+int
 urlphy_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct mii_attach_args *ma = aux;
@@ -93,7 +93,7 @@ urlphy_match(struct device *parent, struct cfdata *match, void *aux)
 	return (10);
 }
 
-static void
+void
 urlphy_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct mii_softc *sc = (struct mii_softc *)self;
@@ -133,7 +133,7 @@ urlphy_attach(struct device *parent, struct device *self, void *aux)
 	aprint_normal("\n");
 }
 
-static int
+int
 urlphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 {
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
@@ -221,7 +221,7 @@ urlphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 	return (0);
 }
 
-static void
+void
 urlphy_status(struct mii_softc *sc)
 {
 	struct mii_data *mii = sc->mii_pdata;

@@ -34,7 +34,7 @@
 #include "kadmin_locl.h"
 
 __RCSID("$Heimdal: kadmind.c,v 1.28.2.1 2004/04/29 12:30:32 lha Exp $"
-         "$NetBSD: kadmind.c,v 1.10 2004/05/08 13:27:58 lha Exp $");
+	"$NetBSD: kadmind.c,v 1.9.2.1 2004/05/25 02:28:25 jmc Exp $");
 
 static char *check_library  = NULL;
 static char *check_function = NULL;
@@ -76,7 +76,7 @@ static struct getargs args[] = {
 	"enable debugging" 
     },
 #ifdef KRB4
-    {	"kerberos4", 0,		arg_flag,   &do_kerberos4,
+    {	"kerberos4", 0, arg_flag, &do_kerberos4,
 	"don't respond to kerberos 4 requests"
     },
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: fhpib.c,v 1.29 2004/08/28 17:37:00 thorpej Exp $	*/
+/*	$NetBSD: fhpib.c,v 1.28 2003/11/17 14:37:59 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fhpib.c,v 1.29 2004/08/28 17:37:00 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fhpib.c,v 1.28 2003/11/17 14:37:59 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -112,24 +112,23 @@ int	doppollint = 1;	/* use ppoll interrupts instead of watchdog */
 int	fhpibppolldelay = 50;
 #endif
 
-static void	fhpibifc(struct fhpibdevice *);
-static void	fhpibdmadone(void *);
-static int	fhpibwait(struct fhpibdevice *, int);
+void	fhpibifc __P((struct fhpibdevice *));
+void	fhpibdmadone __P((void *));
+int	fhpibwait __P((struct fhpibdevice *, int));
 
-static void	fhpibreset(struct hpibbus_softc *);
-static int	fhpibsend(struct hpibbus_softc *, int, int, void *, int);
-static int	fhpibrecv(struct hpibbus_softc *, int, int, void *, int);
-static int	fhpibppoll(struct hpibbus_softc *);
-static void	fhpibppwatch(void *);
-static void	fhpibgo(struct hpibbus_softc *, int, int, void *, int, int,
-		    int);
-static void	fhpibdone(struct hpibbus_softc *);
-static int	fhpibintr(void *);
+void	fhpibreset __P((struct hpibbus_softc *));
+int	fhpibsend __P((struct hpibbus_softc *, int, int, void *, int));
+int	fhpibrecv __P((struct hpibbus_softc *, int, int, void *, int));
+int	fhpibppoll __P((struct hpibbus_softc *));
+void	fhpibppwatch __P((void *));
+void	fhpibgo __P((struct hpibbus_softc *, int, int, void *, int, int, int));
+void	fhpibdone __P((struct hpibbus_softc *));
+int	fhpibintr __P((void *));
 
 /*
  * Our controller ops structure.
  */
-static struct hpib_controller fhpib_controller = {
+struct	hpib_controller fhpib_controller = {
 	fhpibreset,
 	fhpibsend,
 	fhpibrecv,
@@ -149,14 +148,17 @@ struct fhpib_softc {
 	struct callout sc_ppwatch_ch;
 };
 
-static int	fhpibmatch(struct device *, struct cfdata *, void *);
-static void	fhpibattach(struct device *, struct device *, void *);
+int	fhpibmatch __P((struct device *, struct cfdata *, void *));
+void	fhpibattach __P((struct device *, struct device *, void *));
 
 CFATTACH_DECL(fhpib, sizeof(struct fhpib_softc),
     fhpibmatch, fhpibattach, NULL, NULL);
 
-static int
-fhpibmatch(struct device *parent, struct cfdata *match, void *aux)
+int
+fhpibmatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct dio_attach_args *da = aux;
 
@@ -166,8 +168,10 @@ fhpibmatch(struct device *parent, struct cfdata *match, void *aux)
 	return (0);
 }
 
-static void
-fhpibattach(struct device *parent, struct device *self, void *aux)
+void
+fhpibattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct fhpib_softc *sc = (struct fhpib_softc *)self;
 	struct dio_attach_args *da = aux;
@@ -195,8 +199,9 @@ fhpibattach(struct device *parent, struct device *self, void *aux)
 	(void)config_found(self, &ha, hpibdevprint);
 }
 
-static void
-fhpibreset(struct hpibbus_softc *hs)
+void
+fhpibreset(hs)
+	struct hpibbus_softc *hs;
 {
 	struct fhpib_softc *sc = (struct fhpib_softc *)hs->sc_dev.dv_parent;
 	struct fhpibdevice *hd = sc->sc_regs;
@@ -226,8 +231,9 @@ fhpibreset(struct hpibbus_softc *hs)
 	}
 }
 
-static void
-fhpibifc(struct fhpibdevice *hd)
+void
+fhpibifc(hd)
+	struct fhpibdevice *hd;
 {
 	hd->hpib_cmd |= CT_IFC;
 	hd->hpib_cmd |= CT_INITFIFO;
@@ -237,8 +243,11 @@ fhpibifc(struct fhpibdevice *hd)
 	hd->hpib_stat = ST_ATN;
 }
 
-static int
-fhpibsend(struct hpibbus_softc *hs, int slave, int sec, void *ptr, int origcnt)
+int
+fhpibsend(hs, slave, sec, ptr, origcnt)
+	struct hpibbus_softc *hs;
+	int slave, sec, origcnt;
+	void *ptr;
 {
 	struct fhpib_softc *sc = (struct fhpib_softc *)hs->sc_dev.dv_parent;
 	struct fhpibdevice *hd = sc->sc_regs;
@@ -298,8 +307,11 @@ senderr:
 	return (origcnt - cnt - 1);
 }
 
-static int
-fhpibrecv(struct hpibbus_softc *hs, int slave, int sec, void *ptr, int origcnt)
+int
+fhpibrecv(hs, slave, sec, ptr, origcnt)
+	struct hpibbus_softc *hs;
+	int slave, sec, origcnt;
+	void *ptr;
 {
 	struct fhpib_softc *sc = (struct fhpib_softc *)hs->sc_dev.dv_parent;
 	struct fhpibdevice *hd = sc->sc_regs;
@@ -359,9 +371,11 @@ recvbyteserror:
 	return (origcnt - cnt - 1);
 }
 
-static void
-fhpibgo(struct hpibbus_softc *hs, int slave, int sec, void *ptr, int count,
-    int rw, int timo)
+void
+fhpibgo(hs, slave, sec, ptr, count, rw, timo)
+	struct hpibbus_softc *hs;
+	int slave, sec, count, rw, timo;
+	void *ptr;
 {
 	struct fhpib_softc *sc = (struct fhpib_softc *)hs->sc_dev.dv_parent;
 	struct fhpibdevice *hd = sc->sc_regs;
@@ -450,8 +464,9 @@ fhpibgo(struct hpibbus_softc *hs, int slave, int sec, void *ptr, int count,
  * takes care of that.  Somehow, the thing gets hosed.  For now, since
  * this should be a very rare occurence, we RESET it.
  */
-static void
-fhpibdmadone(void *arg)
+void
+fhpibdmadone(arg)
+	void *arg;
 {
 	struct hpibbus_softc *hs = arg;
 	struct fhpib_softc *sc = (struct fhpib_softc *)hs->sc_dev.dv_parent;
@@ -477,8 +492,9 @@ fhpibdmadone(void *arg)
 	splx(s);
 }
 
-static void
-fhpibdone(struct hpibbus_softc *hs)
+void
+fhpibdone(hs)
+	struct hpibbus_softc *hs;
 {
 	struct fhpib_softc *sc = (struct fhpib_softc *)hs->sc_dev.dv_parent;
 	struct fhpibdevice *hd = sc->sc_regs;
@@ -519,8 +535,9 @@ fhpibdone(struct hpibbus_softc *hs)
 	hd->hpib_ie = IDS_IE;
 }
 
-static int
-fhpibintr(void *arg)
+int
+fhpibintr(arg)
+	void *arg;
 {
 	struct fhpib_softc *sc = arg;
 	struct hpibbus_softc *hs = sc->sc_hpibbus;
@@ -597,8 +614,9 @@ fhpibintr(void *arg)
 	return(1);
 }
 
-static int
-fhpibppoll(struct hpibbus_softc *hs)
+int
+fhpibppoll(hs)
+	struct hpibbus_softc *hs;
 {
 	struct fhpib_softc *sc = (struct fhpib_softc *)hs->sc_dev.dv_parent;
 	struct fhpibdevice *hd = sc->sc_regs;
@@ -619,8 +637,10 @@ fhpibppoll(struct hpibbus_softc *hs)
 	return(ppoll);
 }
 
-static int
-fhpibwait(struct fhpibdevice *hd, int x)
+int
+fhpibwait(hd, x)
+	struct fhpibdevice *hd;
+	int x;
 {
 	int timo = hpibtimeout;
 
@@ -640,8 +660,9 @@ fhpibwait(struct fhpibdevice *hd, int x)
  * XXX: this will have to change if we ever allow more than one
  * pending operation per HP-IB.
  */
-static void
-fhpibppwatch(void *arg)
+void
+fhpibppwatch(arg)
+	void *arg;
 {
 	struct hpibbus_softc *hs = arg;
 	struct fhpib_softc *sc = (struct fhpib_softc *)hs->sc_dev.dv_parent;

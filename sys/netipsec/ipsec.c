@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec.c,v 1.14 2004/10/27 23:10:13 jonathan Exp $	*/
+/*	$NetBSD: ipsec.c,v 1.10.2.1 2004/05/10 15:02:18 tron Exp $	*/
 /*	$FreeBSD: /usr/local/www/cvsroot/FreeBSD/src/sys/netipsec/ipsec.c,v 1.2.2.2 2003/07/01 01:38:13 sam Exp $	*/
 /*	$KAME: ipsec.c,v 1.103 2001/05/24 07:14:18 sakane Exp $	*/
 
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipsec.c,v 1.14 2004/10/27 23:10:13 jonathan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipsec.c,v 1.10.2.1 2004/05/10 15:02:18 tron Exp $");
 
 /*
  * IPsec controller part.
@@ -1542,7 +1542,6 @@ ipsec_get_reqlevel(isr)
 				level = ah_net_deflev;
 			else
 				level = ah_trans_deflev;
-			break;
 		case IPPROTO_IPCOMP:
 			/*
 			 * we don't really care, as IPcomp document says that
@@ -2073,8 +2072,8 @@ inet_ntoa4(struct in_addr ina)
 	static int i = 3;
 
 	i = (i + 1) % 4;
-	snprintf(buf[i], sizeof(buf[i]), "%d.%d.%d.%d",
-	    ucp[0] & 0xff, ucp[1] & 0xff, ucp[2] & 0xff, ucp[3] & 0xff);
+	sprintf(buf[i], "%d.%d.%d.%d", ucp[0] & 0xff, ucp[1] & 0xff,
+	    ucp[2] & 0xff, ucp[3] & 0xff);
 	return (buf[i]);
 }
 
@@ -2190,9 +2189,6 @@ ipsec_attach(void)
 	esp_attach();
 	ipcomp_attach();
 	ipe4_attach();
-#ifdef TCP_SIGNATURE
-	tcpsignature_attach();
-#endif
 	printf(" done\n");
 }
 #endif	/* __NetBSD__ */

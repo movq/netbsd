@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: smmsp,v 1.4 2004/10/12 14:51:03 lukem Exp $
+# $NetBSD: smmsp,v 1.2 2003/04/02 18:00:14 atatat Exp $
 #
 
 # REQUIRE: mail
@@ -14,7 +14,7 @@
 #	replacement for hosts that were previously using a "null
 #	client" configuration and a smart relay.
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="smmsp"
 rcvar=$name
@@ -84,5 +84,4 @@ smmsp_precmd()
 }
 
 load_rc_config $name
-load_rc_config_var sendmail sendmail_suidroot
 run_rc_command "$1"

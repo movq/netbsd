@@ -1,4 +1,4 @@
-/*	$NetBSD: pchb.c,v 1.4 2004/08/30 15:05:16 drochner Exp $	*/
+/*	$NetBSD: pchb.c,v 1.2 2003/07/14 23:32:34 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998, 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.4 2004/08/30 15:05:16 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.2 2003/07/14 23:32:34 lukem Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -78,6 +78,8 @@ __KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.4 2004/08/30 15:05:16 drochner Exp $");
 int	pchbmatch __P((struct device *, struct cfdata *, void *));
 void	pchbattach __P((struct device *, struct device *, void *));
 
+int	pchb_print __P((void *, const char *));
+
 CFATTACH_DECL(pchb, sizeof(struct pchb_softc),
     pchbmatch, pchbattach, NULL, NULL);
 
@@ -112,7 +114,7 @@ pchbattach(parent, self, aux)
 	 * have auxiliary PCI buses.
 	 */
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	printf("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
 	    PCI_REVISION(pa->pa_class));
 	switch (PCI_VENDOR(pa->pa_id)) {
@@ -121,4 +123,17 @@ pchbattach(parent, self, aux)
 			break;
 	}
 
+}
+
+int
+pchb_print(aux, pnp)
+	void *aux;
+	const char *pnp;
+{
+	struct pcibus_attach_args *pba = aux;
+
+	if (pnp)
+		aprint_normal("%s at %s", pba->pba_busname, pnp);
+	aprint_normal(" bus %d", pba->pba_bus);
+	return (UNCONF);
 }

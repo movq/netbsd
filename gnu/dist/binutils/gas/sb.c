@@ -52,7 +52,7 @@
 
 #define dsize 5
 
-static void sb_check (sb *, int);
+static void sb_check PARAMS ((sb *, int));
 
 /* Statistics of sb structures.  */
 
@@ -65,7 +65,9 @@ static sb_list_vector free_list;
 /* initializes an sb.  */
 
 void
-sb_build (sb *ptr, int size)
+sb_build (ptr, size)
+     sb *ptr;
+     int size;
 {
   /* see if we can find one to allocate */
   sb_element *e;
@@ -96,7 +98,8 @@ sb_build (sb *ptr, int size)
 }
 
 void
-sb_new (sb *ptr)
+sb_new (ptr)
+     sb *ptr;
 {
   sb_build (ptr, dsize);
 }
@@ -104,7 +107,8 @@ sb_new (sb *ptr)
 /* deallocate the sb at ptr */
 
 void
-sb_kill (sb *ptr)
+sb_kill (ptr)
+     sb *ptr;
 {
   /* return item to free list */
   ptr->item->next = free_list.size[ptr->pot];
@@ -114,7 +118,9 @@ sb_kill (sb *ptr)
 /* add the sb at s to the end of the sb at ptr */
 
 void
-sb_add_sb (sb *ptr, sb *s)
+sb_add_sb (ptr, s)
+     sb *ptr;
+     sb *s;
 {
   sb_check (ptr, s->len);
   memcpy (ptr->ptr + ptr->len, s->ptr, s->len);
@@ -125,7 +131,9 @@ sb_add_sb (sb *ptr, sb *s)
    and grow it if it doesn't.  */
 
 static void
-sb_check (sb *ptr, int len)
+sb_check (ptr, len)
+     sb *ptr;
+     int len;
 {
   if (ptr->len + len >= 1 << ptr->pot)
     {
@@ -143,7 +151,8 @@ sb_check (sb *ptr, int len)
 /* make the sb at ptr point back to the beginning.  */
 
 void
-sb_reset (sb *ptr)
+sb_reset (ptr)
+     sb *ptr;
 {
   ptr->len = 0;
 }
@@ -151,7 +160,9 @@ sb_reset (sb *ptr)
 /* add character c to the end of the sb at ptr.  */
 
 void
-sb_add_char (sb *ptr, int c)
+sb_add_char (ptr, c)
+     sb *ptr;
+     int c;
 {
   sb_check (ptr, 1);
   ptr->ptr[ptr->len++] = c;
@@ -160,7 +171,9 @@ sb_add_char (sb *ptr, int c)
 /* add null terminated string s to the end of sb at ptr.  */
 
 void
-sb_add_string (sb *ptr, const char *s)
+sb_add_string (ptr, s)
+     sb *ptr;
+     const char *s;
 {
   int len = strlen (s);
   sb_check (ptr, len);
@@ -171,7 +184,10 @@ sb_add_string (sb *ptr, const char *s)
 /* add string at s of length len to sb at ptr */
 
 void
-sb_add_buffer (sb *ptr, const char *s, int len)
+sb_add_buffer (ptr, s, len)
+     sb *ptr;
+     const char *s;
+     int len;
 {
   sb_check (ptr, len);
   memcpy (ptr->ptr + ptr->len, s, len);
@@ -181,7 +197,9 @@ sb_add_buffer (sb *ptr, const char *s, int len)
 /* print the sb at ptr to the output file */
 
 void
-sb_print (FILE *outfile, sb *ptr)
+sb_print (outfile, ptr)
+     FILE *outfile;
+     sb *ptr;
 {
   int i;
   int nc = 0;
@@ -198,7 +216,10 @@ sb_print (FILE *outfile, sb *ptr)
 }
 
 void
-sb_print_at (FILE *outfile, int idx, sb *ptr)
+sb_print_at (outfile, idx, ptr)
+     FILE *outfile;
+     int idx;
+     sb *ptr;
 {
   int i;
   for (i = idx; i < ptr->len; i++)
@@ -209,7 +230,8 @@ sb_print_at (FILE *outfile, int idx, sb *ptr)
    string, so that it can be used as an arg to printf %s.  */
 
 char *
-sb_name (sb *in)
+sb_name (in)
+     sb *in;
 {
   /* stick a null on the end of the string */
   sb_add_char (in, 0);
@@ -219,7 +241,8 @@ sb_name (sb *in)
 /* like sb_name, but don't include the null byte in the string.  */
 
 char *
-sb_terminate (sb *in)
+sb_terminate (in)
+     sb *in;
 {
   sb_add_char (in, 0);
   --in->len;
@@ -230,7 +253,9 @@ sb_terminate (sb *in)
    whitespace. return the index of the first non whitespace character */
 
 int
-sb_skip_white (int idx, sb *ptr)
+sb_skip_white (idx, ptr)
+     int idx;
+     sb *ptr;
 {
   while (idx < ptr->len
 	 && (ptr->ptr[idx] == ' '
@@ -240,11 +265,13 @@ sb_skip_white (int idx, sb *ptr)
 }
 
 /* start at the index idx into the sb at ptr. skips whitespace,
-   a comma and any following whitespace. returns the index of the
+   a comma and any following whitespace. returnes the index of the
    next character.  */
 
 int
-sb_skip_comma (int idx, sb *ptr)
+sb_skip_comma (idx, ptr)
+     int idx;
+     sb *ptr;
 {
   while (idx < ptr->len
 	 && (ptr->ptr[idx] == ' '

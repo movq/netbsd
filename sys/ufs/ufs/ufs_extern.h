@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_extern.h,v 1.41 2004/06/20 18:25:49 hannken Exp $	*/
+/*	$NetBSD: ufs_extern.h,v 1.38 2003/08/07 16:34:45 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -53,8 +53,6 @@ struct ufsmount;
 struct uio;
 struct vattr;
 struct vnode;
-
-extern struct pool ufs_direct_pool;	/* memory pool for directs */
 
 __BEGIN_DECLS
 #define	ufs_abortop	genfs_abortop
@@ -157,7 +155,7 @@ void ufs_reinit __P((void));
 void ufs_done __P((void));
 int ufs_start __P((struct mount *, int, struct proc *));
 int ufs_root __P((struct mount *, struct vnode **));
-int ufs_quotactl __P((struct mount *, int, uid_t, void *, struct proc *));
+int ufs_quotactl __P((struct mount *, int, uid_t, caddr_t, struct proc *));
 int ufs_fhtovp __P((struct mount *, struct ufid *, struct vnode **));
 int ufs_check_export __P((struct mount *, struct mbuf *, int *,
 		struct ucred **));
@@ -168,12 +166,6 @@ void ufs_vinit __P((struct mount *, int (**) __P((void *)),
 int ufs_makeinode __P((int, struct vnode *, struct vnode **,
 		       struct componentname *));
 int ufs_gop_alloc __P((struct vnode *, off_t, off_t, int, struct ucred *));
-
-/*
- * Snapshot function prototypes.
- */
-
-void	ffs_snapgone(struct inode *);
 
 /*
  * Soft dependency function prototypes.

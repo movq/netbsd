@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_sleep.c,v 1.5 2004/08/24 02:08:08 nathanw Exp $ */
+/*	$NetBSD: pthread_sleep.c,v 1.2 2003/03/08 08:03:36 lukem Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_sleep.c,v 1.5 2004/08/24 02:08:08 nathanw Exp $");
+__RCSID("$NetBSD: pthread_sleep.c,v 1.2 2003/03/08 08:03:36 lukem Exp $");
 
 #include <errno.h>
 #include <sys/time.h>
@@ -59,7 +59,7 @@ extern int pthread__started;
 
 /* Queue of threads in nanosleep() */
 struct pthread_queue_t pthread__nanosleeping;
-static pthread_spin_t pt_nanosleep_lock = __SIMPLELOCK_UNLOCKED;
+static pthread_spin_t pt_nanosleep_lock;
 /*
  * Nothing actually signals or waits on this lock, but the sleepobj
  * needs to point to something.
@@ -103,43 +103,38 @@ nanosleep(const struct timespec *rqtp, struct timespec *rmtp)
 	TIMEVAL_TO_TIMESPEC(&now, &sleeptime);
 	timespecadd(&sleeptime, rqtp, &sleeptime);
 
-	do {
-		pthread_spinlock(self, &pt_nanosleep_lock);
-		pthread_spinlock(self, &self->pt_statelock);
-		if (self->pt_cancel) {
-			pthread_spinunlock(self, &self->pt_statelock);
-			pthread_spinunlock(self, &pt_nanosleep_lock);
-			pthread_exit(PTHREAD_CANCELED);
-		}
-		pthread__alarm_add(self, &alarm, &sleeptime,
-		    pthread__nanosleep_callback, self);
-		
-		self->pt_state = PT_STATE_BLOCKED_QUEUE;
-		self->pt_sleepobj = &pt_nanosleep_cond;
-		self->pt_sleepq = &pthread__nanosleeping;
-		self->pt_sleeplock = &pt_nanosleep_lock;
-		self->pt_flags &= ~PT_FLAG_SIGNALED;
+	pthread_spinlock(self, &pt_nanosleep_lock);
+	pthread_spinlock(self, &self->pt_statelock);
+	if (self->pt_cancel) {
 		pthread_spinunlock(self, &self->pt_statelock);
-		
-		PTQ_INSERT_TAIL(&pthread__nanosleeping, self, pt_sleep);
-		pthread__block(self, &pt_nanosleep_lock);
-		/* Spinlock is unlocked on return */
-		pthread__alarm_del(self, &alarm);
+		pthread_spinunlock(self, &pt_nanosleep_lock);
+		pthread_exit(PTHREAD_CANCELED);
+	}
+	pthread__alarm_add(self, &alarm, &sleeptime,
+	    pthread__nanosleep_callback, self);
+	    
+	self->pt_state = PT_STATE_BLOCKED_QUEUE;
+	self->pt_sleepobj = &pt_nanosleep_cond;
+	self->pt_sleepq = &pthread__nanosleeping;
+	self->pt_sleeplock = &pt_nanosleep_lock;
+	pthread_spinunlock(self, &self->pt_statelock);
 
-		pthread__testcancel(self);
+	PTQ_INSERT_TAIL(&pthread__nanosleeping, self, pt_sleep);
+	pthread__block(self, &pt_nanosleep_lock);
+	/* Spinlock is unlocked on return */
+	pthread__alarm_del(self, &alarm);
 
-		if (self->pt_flags & PT_FLAG_SIGNALED) {
-			retval = -1;
-			errno = EINTR;
-			if (rmtp) {
-				gettimeofday(&now, NULL);
-				TIMEVAL_TO_TIMESPEC(&now, rmtp);
-				timespecsub(&sleeptime, rmtp, rmtp);
-			}
-		} else if (rmtp)
-			timespecclear(rmtp);
-	} while (!(pthread__alarm_fired(&alarm) ||
-		     (self->pt_flags & PT_FLAG_SIGNALED)));
+	pthread__testcancel(self);
+
+	if (!pthread__alarm_fired(&alarm)) {
+		retval = -1;
+		errno = EINTR;
+		if (rmtp) {
+			gettimeofday(&now, NULL);
+			TIMEVAL_TO_TIMESPEC(&now, rmtp);
+			timespecsub(&sleeptime, rmtp, rmtp);
+		}
+	}
 
 	return retval;
 }

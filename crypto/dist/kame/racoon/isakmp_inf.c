@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: isakmp_inf.c,v 1.7 2004/04/12 03:34:07 itojun Exp $");
+__RCSID("$NetBSD: isakmp_inf.c,v 1.6.2.1 2004/06/17 12:38:10 tron Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

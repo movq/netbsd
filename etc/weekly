@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: weekly,v 1.20 2004/06/27 13:51:55 lukem Exp $
+#	$NetBSD: weekly,v 1.17 2001/06/18 10:54:02 lukem Exp $
 #	from: @(#)weekly	8.2 (Berkeley) 1/2/94
 #
 
@@ -13,7 +13,6 @@ fi
 
 host=`hostname`
 date=`date`
-rcvar_manpage='weekly.conf(5)'
 
 echo "To: ${MAILTO:-root}"
 echo "Subject: $host weekly output for $date"
@@ -25,17 +24,6 @@ else
 	echo "Can't read /etc/rc.subr; aborting."
 	exit 1;
 fi
-
-WEEKLYDIR=`mktemp -d /tmp/_weekly.XXXXXX` || exit 1
-
-trap "/bin/rm -rf $WEEKLYDIR ; exit 0" EXIT INT QUIT PIPE
-
-if ! cd "$WEEKLYDIR"; then
-	echo "Can not cd to $WEEKLYDIR".
-	exit 1
-fi
-
-TMP=weekly.$$
 
 #echo ""
 #echo "Removing old .o files:"
@@ -78,7 +66,7 @@ if checkyesno rebuild_locatedb; then
 		echo "Rebuilding locate database:"
 		chmod 644 /var/db/locate.database
 		chown nobody:nobody /var/db/locate.database
-		(cd / && nice -5 su -m nobody -c /usr/libexec/locate.updatedb 2>/dev/null)
+		nice -5 su -m nobody -c /usr/libexec/locate.updatedb 2>/dev/null
 		chown root:wheel /var/db/locate.database
 	else
 		echo "Not rebuilding locate database; no /var/db/locate.database"
@@ -86,10 +74,7 @@ if checkyesno rebuild_locatedb; then
 fi
 
 if [ -f /etc/weekly.local ]; then
-	. /etc/weekly.local > $TMP 2>&1
-	if [ -s $TMP ] ; then
-		printf "\nRunning /etc/weekly.local:\n"
-		cat $TMP
-	fi
-	rm -f $TMP
+	echo ""
+	echo "Running /etc/weekly.local:"
+	. /etc/weekly.local
 fi

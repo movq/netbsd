@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.kern.inc,v 1.58 2004/12/16 00:35:48 heas Exp $
+#	$NetBSD: Makefile.kern.inc,v 1.51.2.3 2004/09/13 17:32:31 tron Exp $
 #
 # This file contains common `MI' targets and definitions and it is included
 # at the bottom of each `MD' ${MACHINE}/conf/Makefile.${MACHINE}.
@@ -127,12 +127,12 @@ LIBKERNLN?=	${KERNLIBLN}
 ### find out what to use for libcompat
 .include "$S/compat/common/Makefile.inc"
 .ifndef PROF
-SYSLIBCOMPAT?=	${COMPATLIB}
+LIBCOMPAT?=	${COMPATLIB}
 .else
-SYSLIBCOMPAT?=	${COMPATLIB_PROF}
+LIBCOMPAT?=	${COMPATLIB_PROF}
 .endif
 
-SYSLIBCOMPATLN?=	${COMPATLIBLN}
+LIBCOMPATLN?=	${COMPATLIBLN}
 
 ##
 ## (4) local objects, compile rules, and dependencies
@@ -169,7 +169,7 @@ ${_cfile:T:R}.o: ${_cfile}
 #	${SYSTEM_LD_HEAD}
 #	${SYSTEM_LD} swapxxx.o
 #	${SYSTEM_LD_TAIL}
-SYSTEM_OBJ?=	${MD_OBJS} ${MI_OBJS} ${OBJS} ${SYSLIBCOMPAT} ${LIBKERN}
+SYSTEM_OBJ?=	${MD_OBJS} ${MI_OBJS} ${OBJS} ${LIBCOMPAT} ${LIBKERN}
 SYSTEM_DEP?=	Makefile ${SYSTEM_OBJ} .gdbinit
 SYSTEM_LD_HEAD?=@rm -f $@
 SYSTEM_LD?=	@${_MKSHMSG} "   link  ${.CURDIR:T}/${.TARGET}"; \
@@ -301,7 +301,7 @@ MKDEP_CFLAGS?=	${CFLAGS}
 	cat ${GENASSYM} ${GENASSYM_EXTRAS} | \
 	    ${HOST_SH} $S/kern/genassym.sh ${MKDEP} -f assym.dep -- \
 	    ${CFLAGS} ${CPPFLAGS}
-	@sed -e 's/^.*\.o:.*\.c /assym.h: /' < assym.dep >> .depend
+	@sed -e 's/.*\.o:.*\.c/assym.h:/' < assym.dep >> .depend
 	@rm -f assym.dep
 .endif
 
@@ -312,7 +312,7 @@ KERNLINTFLAGS?=	-bcehnxzFS
 NORMAL_LN?=	${LINT} ${KERNLINTFLAGS} ${CPPFLAGS:M-[IDU]*} -i $<
 
 _lsrc=${CFILES} ${LINTSTUBS} ${MI_CFILES} ${MD_CFILES}
-LOBJS?= ${_lsrc:T:S/.c$/.ln/g} ${LIBKERNLN} ${SYSLIBCOMPATLN}
+LOBJS?= ${_lsrc:T:S/.c$/.ln/g} ${LIBKERNLN} ${LIBCOMPATLN}
 
 .for _sfile in ${ALLSFILES}
 LintStub_${_sfile:T:R}.c: ${_sfile} assym.h
@@ -350,21 +350,17 @@ tags:
 	@echo "see $S/kern/Makefile for tags"
 .endif
 
-EXTRA_CLEAN+= cscope.out cscope.tmp
+EXTRA_CLEAN+= cscope.out
 .if !target(cscope.out)
 cscope.out: Makefile depend
 	${_MKTARGET_CREATE}
-	@sed 's/[^:]*://;s/^ *//;s/ *\\ *$$//;' lib/kern/.depend | \
-	tr -s ' ' '\n' | sed 's|^\([^.\\]\)|lib/kern/\1|;s|^../../||;' > \
-	cscope.tmp
-	@sed 's/[^:]*://;s/^ *//;s/ *\\ *$$//;' lib/compat/.depend | \
-	tr -s ' ' '\n' | sed 's|^\([^.\\]\)|lib/compat/\1|;s|^../../||;' >> \
-	cscope.tmp
-	@echo ${SRCS} | cat - cscope.tmp | tr -s ' ' '\n' | sort -u | \
-	${CSCOPE} -k -i - -b `echo ${INCLUDES} | sed s/-nostdinc//`
+	@echo ${SRCS} `sed 's/[^:]*://;s/^ *//;s/ *\\\\ *$$//;' \
+	lib/kern/.depend lib/compat/.depend | tr ' ' '\n' | \
+	sed "s|^../../||" | sort -u` \
+	| ${CSCOPE} -k -i - -b `echo ${INCLUDES} | sed s/-nostdinc//`
 #	cscope doesn't write cscope.out if it's uptodate, so ensure
 #	make doesn't keep calling cscope when not needed.
-	@rm -f cscope.tmp; touch cscope.out
+	@touch cscope.out
 .endif
 
 .if !target(cscope)

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.42 2004/09/22 11:32:03 yamt Exp $	*/
+/*	$NetBSD: cpu.h,v 1.40 2004/02/17 22:03:52 matt Exp $	*/
 
 /*
  * Copyright (C) 1999 Wolfgang Solfrank.
@@ -54,10 +54,10 @@ struct cache_info {
 #include <machine/intr.h>
 #include <sys/device.h>
 
-#include <sys/cpu_data.h>
+#include <sys/sched.h>
 
 struct cpu_info {
-	struct cpu_data ci_data;	/* MI per-cpu data */
+	struct schedstate_percpu ci_schedstate; /* scheduler state */
 	struct device *ci_dev;		/* device of corresponding cpu */
 	struct lwp *ci_curlwp;		/* current owner of the processor */
 
@@ -113,6 +113,10 @@ struct cpu_info {
 	struct evcnt ci_ev_vec;		/* Altivec traps */
 	struct evcnt ci_ev_vecsw;	/* Altivec context switches */
 	struct evcnt ci_ev_umchk;	/* user MCHK events */
+#if defined(DIAGNOSTIC) || defined(LOCKDEBUG)
+	u_long ci_spin_locks;		/* # of spin locks held */
+	u_long ci_simple_locks;		/* # of simple locks held */
+#endif
 };
 
 #ifdef MULTIPROCESSOR
@@ -238,7 +242,7 @@ mfrtc(uint32_t *rtcp)
 "	mfrtcu	%2	\n"
 "	cmplw	%0,%2	\n"
 "	bne-	1b"
-	    : "=r"(*rtcp), "=r"(*(rtcp + 1)), "=r"(tmp) :: "cr0");
+	    : "=r"(*rtcp), "=r"(*(rtcp + 1)), "=r"(tmp));
 }
 
 static __inline uint32_t

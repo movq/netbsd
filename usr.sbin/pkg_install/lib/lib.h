@@ -1,4 +1,4 @@
-/* $NetBSD: lib.h,v 1.72 2004/12/10 21:49:31 erh Exp $ */
+/* $NetBSD: lib.h,v 1.67 2004/01/15 09:33:39 agc Exp $ */
 
 /* from FreeBSD Id: lib.h,v 1.25 1997/10/08 07:48:03 charnier Exp */
 
@@ -54,10 +54,6 @@
 
 #ifndef OPSYS_NAME
 #define OPSYS_NAME "NetBSD"
-#endif
-
-#ifndef DEF_UMASK
-#define DEF_UMASK 022
 #endif
 
 /* Usually "rm", but often "echo" during debugging! */
@@ -172,8 +168,7 @@ typedef enum bi_ent_t {
 	BI_OPSYS,		/*  0 */
 	BI_OS_VERSION,		/*  1 */
 	BI_MACHINE_ARCH,	/*  2 */
-	BI_IGNORE_RECOMMENDED,	/*  3 */
-	BI_ENUM_COUNT		/*  4 */
+	BI_ENUM_COUNT,		/*  3 */
 }	bi_ent_t;
 
 /* Types */
@@ -300,7 +295,7 @@ void    delete_plist(package_t *, Boolean, pl_ent_t, char *);
 void    write_plist(package_t *, FILE *, char *);
 void    read_plist(package_t *, FILE *);
 int     plist_cmd(char *, char **);
-int     delete_package(Boolean, Boolean, package_t *, Boolean);
+int     delete_package(Boolean, Boolean, package_t *);
 
 /* Package Database */
 int     pkgdb_open(int);
@@ -326,5 +321,6 @@ int     pkg_perform(lpkg_head_t *);
 extern Boolean Verbose;
 extern Boolean Fake;
 extern Boolean Force;
+extern Boolean Replace;
 
 #endif				/* _INST_LIB_LIB_H_ */

@@ -1,5 +1,3 @@
-/*	$NetBSD: mbox_open.h,v 1.1.1.2 2004/05/31 00:24:32 heas Exp $	*/
-
 #ifndef _MBOX_OPEN_H_INCLUDED_
 #define _MBOX_OPEN_H_INCLUDED_
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_faith.c,v 1.30 2004/12/04 18:31:43 peter Exp $	*/
+/*	$NetBSD: if_faith.c,v 1.26 2003/08/07 16:32:52 agc Exp $	*/
 /*	$KAME: if_faith.c,v 1.21 2001/02/20 07:59:26 itojun Exp $	*/
 
 /*
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_faith.c,v 1.30 2004/12/04 18:31:43 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_faith.c,v 1.26 2003/08/07 16:32:52 agc Exp $");
 
 #include "opt_inet.h"
 
@@ -98,7 +98,7 @@ void faithattach __P((int));
 LIST_HEAD(, faith_softc) faith_softc_list;
 
 int	faith_clone_create __P((struct if_clone *, int));
-int	faith_clone_destroy __P((struct ifnet *));
+void	faith_clone_destroy __P((struct ifnet *));
 
 struct if_clone faith_cloner =
     IF_CLONE_INITIALIZER("faith", faith_clone_create, faith_clone_destroy);
@@ -125,8 +125,7 @@ faith_clone_create(ifc, unit)
 	sc = malloc(sizeof(struct faith_softc), M_DEVBUF, M_WAITOK);
 	memset(sc, 0, sizeof(struct faith_softc));
 
-	snprintf(sc->sc_if.if_xname, sizeof(sc->sc_if.if_xname), "%s%d",
-	    ifc->ifc_name, unit);
+	sprintf(sc->sc_if.if_xname, "%s%d", ifc->ifc_name, unit);
 
 	sc->sc_if.if_mtu = FAITHMTU;
 	/* Change to BROADCAST experimentaly to announce its prefix. */
@@ -146,7 +145,7 @@ faith_clone_create(ifc, unit)
 	return (0);
 }
 
-int
+void
 faith_clone_destroy(ifp)
 	struct ifnet *ifp;
 {
@@ -158,8 +157,6 @@ faith_clone_destroy(ifp)
 #endif
 	if_detach(ifp);
 	free(sc, M_DEVBUF);
-
-	return (0);
 }
 
 int
@@ -183,8 +180,27 @@ faithoutput(ifp, m, dst, rt)
 		m->m_data += sizeof(int);
 	}
 
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, dst->sa_family, m);
+	if (ifp->if_bpf) {
+		/*
+		 * We need to prepend the address family as
+		 * a four byte field.  Cons up a faith header
+		 * to pacify bpf.  This is safe because bpf
+		 * will only read from the mbuf (i.e., it won't
+		 * try to free it or keep a pointer a to it).
+		 */
+		struct mbuf m0;
+		u_int32_t af = dst->sa_family;
+
+		m0.m_next = m;
+		m0.m_len = 4;
+		m0.m_data = (char *)&af;
+
+#ifdef HAVE_OLD_BPF
+		bpf_mtap(ifp, &m0);
+#else
+		bpf_mtap(ifp->if_bpf, &m0);
+#endif
+	}
 #endif
 
 	if (rt && rt->rt_flags & (RTF_REJECT|RTF_BLACKHOLE)) {

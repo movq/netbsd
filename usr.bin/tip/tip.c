@@ -1,4 +1,4 @@
-/*	$NetBSD: tip.c,v 1.28 2004/11/04 07:29:09 dsl Exp $	*/
+/*	$NetBSD: tip.c,v 1.24 2003/08/07 11:16:19 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
 #if 0
 static char sccsid[] = "@(#)tip.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: tip.c,v 1.28 2004/11/04 07:29:09 dsl Exp $");
+__RCSID("$NetBSD: tip.c,v 1.24 2003/08/07 11:16:19 agc Exp $");
 #endif /* not lint */
 
 /*
@@ -66,17 +66,14 @@ void	tipin __P((void));
 
 char	PNbuf[256];			/* This limits the size of a number */
 
-static char path_phones[] = _PATH_PHONES;
-
 int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	char *System = NULL;
+	char *system = NULL;
 	int i;
 	char *p;
-	const char *q;
 	char sbuf[12];
 	int fcarg;
 
@@ -101,7 +98,7 @@ main(argc, argv)
 
 	for (; argc > 1; argv++, argc--) {
 		if (argv[1][0] != '-')
-			System = argv[1];
+			system = argv[1];
 		else switch (argv[1][1]) {
 
 		case 'v':
@@ -119,26 +116,27 @@ main(argc, argv)
 		}
 	}
 
-	if (System == NULL)
+	if (system == NULL)
 		goto notnumber;
-	if (isalpha((unsigned char)*System))
+	if (isalpha((unsigned char)*system))
 		goto notnumber;
 	/*
 	 * System name is really a phone number...
 	 * Copy the number then stomp on the original (in case the number
 	 *	is private, we don't want 'ps' or 'w' to find it).
 	 */
-	if (strlen(System) > sizeof PNbuf - 1) {
+	if (strlen(system) > sizeof PNbuf - 1) {
 		fprintf(stderr, "tip: phone number too long (max = %d bytes)\n",
 			(int)sizeof(PNbuf) - 1);
 		exit(1);
 	}
-	(void)strlcpy(PNbuf, System, sizeof(PNbuf));
-	for (p = System; *p; p++)
+	strncpy(PNbuf, system, sizeof PNbuf - 1);
+	PNbuf[sizeof PNbuf - 1] = '\0';
+	for (p = system; *p; p++)
 		*p = '\0';
 	PN = PNbuf;
 	(void)snprintf(sbuf, sizeof sbuf, "tip%d", (int)BR);
-	System = sbuf;
+	system = sbuf;
 
 notnumber:
 	(void)signal(SIGINT, cleanup);
@@ -146,7 +144,7 @@ notnumber:
 	(void)signal(SIGHUP, cleanup);
 	(void)signal(SIGTERM, cleanup);
 
-	if ((i = hunt(System)) == 0) {
+	if ((i = hunt(system)) == 0) {
 		printf("all ports busy\n");
 		exit(3);
 	}
@@ -172,7 +170,7 @@ notnumber:
 	 *   in the right order, so force it here
 	 */
 	if ((PH = getenv("PHONES")) == NULL)
-		PH = path_phones;
+		PH = _PATH_PHONES;
 	vinit();				/* init variables */
 	setparity("even");			/* set the parity table */
 	if ((i = speed(number(value(BAUDRATE)))) == 0) {
@@ -189,8 +187,8 @@ notnumber:
 	 */
 	if (HW)
 		ttysetup(i);
-	if ((q = connect()) != NULL) {
-		printf("\07%s\n[EOT]\n", q);
+	if ((p = connect()) != NULL) {
+		printf("\07%s\n[EOT]\n", p);
 		daemon_uid();
 		(void)uu_unlock(uucplock);
 		exit(1);
@@ -335,7 +333,7 @@ static	jmp_buf promptbuf;
  */
 int
 prompt(s, p, l)
-	const char *s;
+	char *s;
 	char *p;
 	size_t l;
 {
@@ -417,7 +415,7 @@ tipin()
 			gch = getchar()&STRIP_PAR;
 		bol = any(gch, value(EOL));
 		if (boolean(value(RAISE)) && islower((unsigned char)gch))
-			gch = toupper((unsigned char)gch);
+			gch = toupper(gch);
 		xpwrite(FD, &gch, 1);
 		if (boolean(value(HALFDUPLEX)))
 			printf("%c", gch);
@@ -464,8 +462,7 @@ speed(n)
 
 int
 any(c, p)
-	char c;
-	const char *p;
+	char c, *p;
 {
 
 	while (p && *p)
@@ -476,11 +473,10 @@ any(c, p)
 
 char *
 interp(s)
-	const char *s;
+	char *s;
 {
 	static char buf[256];
-	char *p = buf, c;
-	const char *q;
+	char *p = buf, c, *q;
 
 	while ((c = *s++) != 0 && buf + sizeof buf - p > 2) {
 		for (q = "\nn\rr\tt\ff\033E\bb"; *q; q++)
@@ -541,14 +537,14 @@ help(c)
  * Set up the "remote" tty's state
  */
 void
-ttysetup(spd)
-	int spd;
+ttysetup(speed)
+	int speed;
 {
 	struct termios	cntrl;
 
 	tcgetattr(FD, &cntrl);
-	cfsetospeed(&cntrl, spd);
-	cfsetispeed(&cntrl, spd);
+	cfsetospeed(&cntrl, speed);
+	cfsetispeed(&cntrl, speed);
 	cntrl.c_cflag &= ~(CSIZE|PARENB);
 	cntrl.c_cflag |= CS8;
 	if (DC)
@@ -598,17 +594,13 @@ xpwrite(fd, buf, n)
  */
 void
 setparity(defparity)
-	const char *defparity;
+	char *defparity;
 {
 	int i, flip, clr, set;
-	const char *parity;
-	static char *curpar;
+	char *parity;
 
-	if (value(PARITY) == NULL || (value(PARITY))[0] == '\0') {
-		if (curpar != NULL)
-			free(curpar);
-		value(PARITY) = curpar = strdup(defparity);
-	}
+	if (value(PARITY) == NULL || (value(PARITY))[0] == '\0')
+		value(PARITY) = defparity;
 	parity = value(PARITY);
 	if (equal(parity, "none")) {
 		bits8 = 1;

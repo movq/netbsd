@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.own.mk,v 1.427 2004/11/28 11:14:41 jmc Exp $
+#	$NetBSD: bsd.own.mk,v 1.413.2.2 2004/06/17 08:09:44 tron Exp $
 
 .if !defined(_BSD_OWN_MK_)
 _BSD_OWN_MK_=1
@@ -10,20 +10,6 @@ MAKECONF?=	/etc/mk.conf
 # CPU model, derived from MACHINE_ARCH
 #
 MACHINE_CPU=	${MACHINE_ARCH:C/mipse[bl]/mips/:C/sh3e[bl]/sh3/:C/sh5e[bl]/sh5/:S/m68000/m68k/:S/armeb/arm/}
-
-#
-# Subdirectory used below ${RELEASEDIR} when building a release
-#
-RELEASEMACHINEDIR?=	${MACHINE}
-
-#
-# Subdirectory or path component used for the following paths:
-#   distrib/${RELEASEMACHINE}
-#   distrib/notes/${RELEASEMACHINE}
-#   etc/etc.${RELEASEMACHINE}
-# Used when building a release.
-#
-RELEASEMACHINE?=	${MACHINE}
 
 #
 # NEED_OWN_INSTALL_TARGET is set to "no" by pkgsrc/mk/bsd.pkg.mk to
@@ -204,12 +190,7 @@ MKDEP=		CC=${CC:Q} ${TOOLDIR}/bin/${_TOOL_PREFIX}mkdep
 TSORT=		${TOOLDIR}/bin/${_TOOL_PREFIX}tsort -q
 YACC=		${TOOLDIR}/bin/${_TOOL_PREFIX}yacc
 
-TOOL_AMIGAAOUT2BB=	${TOOLDIR}/bin/${_TOOL_PREFIX}amiga-aout2bb
-TOOL_AMIGAELF2BB=	${TOOLDIR}/bin/${_TOOL_PREFIX}amiga-elf2bb
-TOOL_AMIGATXLT=		${TOOLDIR}/bin/${_TOOL_PREFIX}amiga-txlt
 TOOL_ASN1_COMPILE=	${TOOLDIR}/bin/${_TOOL_PREFIX}asn1_compile
-TOOL_BEBOXELF2PEF=	${TOOLDIR}/bin/${_TOOL_PREFIX}bebox-elf2pef
-TOOL_BEBOXMKBOOTIMAGE=	${TOOLDIR}/bin/${_TOOL_PREFIX}bebox-mkbootimage
 TOOL_CAP_MKDB=		${TOOLDIR}/bin/${_TOOL_PREFIX}cap_mkdb
 TOOL_CAT=		${TOOLDIR}/bin/${_TOOL_PREFIX}cat
 TOOL_CKSUM=		${TOOLDIR}/bin/${_TOOL_PREFIX}cksum
@@ -223,7 +204,6 @@ TOOL_FGEN=		${TOOLDIR}/bin/${_TOOL_PREFIX}fgen
 TOOL_GENCAT=		${TOOLDIR}/bin/${_TOOL_PREFIX}gencat
 TOOL_GROFF=		PATH=${TOOLDIR}/lib/groff:$${PATH} ${TOOLDIR}/bin/${_TOOL_PREFIX}groff
 TOOL_HEXDUMP=		${TOOLDIR}/bin/${_TOOL_PREFIX}hexdump
-TOOL_HP300MKBOOT=	${TOOLDIR}/bin/${_TOOL_PREFIX}hp300-mkboot
 TOOL_INDXBIB=		${TOOLDIR}/bin/${_TOOL_PREFIX}indxbib
 TOOL_INSTALLBOOT=	${TOOLDIR}/bin/${_TOOL_PREFIX}installboot
 TOOL_INSTALL_INFO=	${TOOLDIR}/bin/${_TOOL_PREFIX}install-info
@@ -234,7 +214,6 @@ TOOL_MAKEINFO=		${TOOLDIR}/bin/${_TOOL_PREFIX}makeinfo
 TOOL_MAKEWHATIS=	${TOOLDIR}/bin/${_TOOL_PREFIX}makewhatis
 TOOL_MDSETIMAGE=	${TOOLDIR}/bin/${MACHINE_GNU_PLATFORM}-mdsetimage
 TOOL_MENUC=		MENUDEF=${TOOLDIR}/share/misc ${TOOLDIR}/bin/${_TOOL_PREFIX}menuc
-TOOL_MIPSELF2ECOFF=	${TOOLDIR}/bin/${_TOOL_PREFIX}mips-elf2ecoff
 TOOL_MKCSMAPPER=	${TOOLDIR}/bin/${_TOOL_PREFIX}mkcsmapper
 TOOL_MKESDB=		${TOOLDIR}/bin/${_TOOL_PREFIX}mkesdb
 TOOL_MKLOCALE=		${TOOLDIR}/bin/${_TOOL_PREFIX}mklocale
@@ -421,7 +400,8 @@ NOPIC=		# defined
 # The hppa port is incomplete.
 #
 .if ${MACHINE_ARCH} == "hppa"
-MKGDB=		no
+NOLINT=		# defined
+NOPROFILE=	# defined
 .endif
 
 #
@@ -529,8 +509,7 @@ dependall:	.NOTMAIN realdepend .MAKE
 # Supported NO* options (if defined, MK* will be forced to "no",
 # regardless of user's mk.conf setting).
 #
-.for var in \
-	CRYPTO DOC HTML LINKLIB LINT MAN NLS OBJ PIC PICINSTALL PROFILE \
+.for var in CRYPTO DOC HTML LINKLIB LINT MAN NLS OBJ PIC PICINSTALL PROFILE \
 	SHARE STATICLIB
 .if defined(NO${var})
 MK${var}:=	no
@@ -549,8 +528,7 @@ MK${var}:=	yes
 #
 # MK* options which default to "yes".
 #
-.for var in \
-	BFD BINUTILS \
+.for var in BFD BINUTILS \
 	CATPAGES CRYPTO CVS \
 	DOC \
 	GCC GCCCMDS GDB \
@@ -571,9 +549,8 @@ MK${var}?=	yes
 #
 # MK* options which default to "no".
 #
-.for var in \
-	CRYPTO_IDEA CRYPTO_MDC2 CRYPTO_RC5 \
-	MANZ OBJDIRS PRIVATELIB SOFTFLOAT UNPRIVED UPDATE X11
+.for var in CRYPTO_IDEA CRYPTO_MDC2 CRYPTO_RC5 \
+	MANZ OBJDIRS SOFTFLOAT UNPRIVED UPDATE X11
 MK${var}?=	no
 .endfor
 
@@ -676,8 +653,8 @@ USE_${var}?= yes
 .endfor
 
 #
-# Use XFree86 4.x as default version on:
-#	i386, amd64, macppc, cats, sgimips, sparc, sparc64.
+# Use XFree86 4.x as default version on i386, amd64, macppc, cats, sgimips,
+# and sparc*.
 #
 .if ${MACHINE_ARCH} == "i386" || ${MACHINE} == "amd64" || \
     ${MACHINE} == "macppc" || ${MACHINE} == "cats" || \
@@ -687,46 +664,20 @@ USE_XF86_4?=	yes
 .endif
 
 #
-# Where X11R6 sources are and where it is installed to.
+# Where X11R6 sources are and where it is installed to
 #
 X11SRCDIR?=		/usr/xsrc
 X11SRCDIR.xc?=		${X11SRCDIR}/xfree/xc
 X11SRCDIR.local?=	${X11SRCDIR}/local
 X11ROOTDIR?=		/usr/X11R6
 X11BINDIR?=		${X11ROOTDIR}/bin
-X11ETCDIR?=		/etc/X11
 X11FONTDIR?=		${X11ROOTDIR}/lib/X11/fonts
 X11INCDIR?=		${X11ROOTDIR}/include
 X11LIBDIR?=		${X11ROOTDIR}/lib/X11
 X11MANDIR?=		${X11ROOTDIR}/man
 X11USRLIBDIR?=		${X11ROOTDIR}/lib
-
 X11DRI?=		no
-X11LOADABLE?=		yes
 
-
-#
-# MAKEDIRTARGET dir target [extra make(1) params]
-#	run "cd $${dir} && ${MAKE} [params] $${target}", with a pretty message
-#
-MAKEDIRTARGET=\
-	@_makedirtarget() { \
-		dir="$$1"; shift; \
-		target="$$1"; shift; \
-		case "$${dir}" in \
-		/*)	this="$${dir}/"; \
-			real="$${dir}" ;; \
-		.)	this="${_THISDIR_}"; \
-			real="${.CURDIR}" ;; \
-		*)	this="${_THISDIR_}$${dir}/"; \
-			real="${.CURDIR}/$${dir}" ;; \
-		esac; \
-		show=$${this:-.}; \
-		echo "$${target} ===> $${show%/}$${1:+	(with: $$@)}"; \
-		cd "$${real}" \
-		&& ${MAKE} _THISDIR_="$${this}" "$$@" $${target}; \
-	}; \
-	_makedirtarget
 
 #
 # MAKEVERBOSE support.  Levels are:

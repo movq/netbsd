@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.118 2004/09/17 14:11:21 skrll Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.116 2004/02/06 10:28:03 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.118 2004/09/17 14:11:21 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.116 2004/02/06 10:28:03 drochner Exp $");
 
 #include "opt_user_ldt.h"
 #include "opt_largepages.h"
@@ -277,6 +277,7 @@ int
 cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
     struct core *chdr)
 {
+	struct proc *p = l->l_proc;
 	struct md_core md_core;
 	struct coreseg cseg;
 	int error;
@@ -302,13 +303,13 @@ cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
 
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
 	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT, cred,
-	    NULL, NULL);
+	    NULL, p);
 	if (error)
 		return error;
 
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&md_core, sizeof(md_core),
 	    (off_t)(chdr->c_hdrsize + chdr->c_seghdrsize), UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 	if (error)
 		return error;
 
@@ -328,6 +329,45 @@ setredzone(struct lwp *l)
 	pmap_update(pmap_kernel());
 }
 #endif
+
+/*
+ * Move pages from one kernel virtual address to another.
+ * Both addresses are assumed to reside in the Sysmap.
+ */
+void
+pagemove(register caddr_t from, register caddr_t to, size_t size)
+{
+	register pt_entry_t *fpte, *tpte, ofpte, otpte;
+	int32_t cpumask = 0;
+
+	if (size & PAGE_MASK)
+		panic("pagemove");
+	fpte = kvtopte((vaddr_t)from);
+	tpte = kvtopte((vaddr_t)to);
+#ifdef LARGEPAGES
+	/* XXX For now... */
+	if (*fpte & PG_PS)
+		panic("pagemove: fpte PG_PS");
+	if (*tpte & PG_PS)
+		panic("pagemove: tpte PG_PS");
+#endif
+	while (size > 0) {
+		otpte = *tpte;
+		ofpte = *fpte;
+		*tpte++ = *fpte;
+		*fpte++ = 0;
+		if (otpte & PG_V)
+			pmap_tlb_shootdown(pmap_kernel(),
+			    (vaddr_t)to, otpte, &cpumask);
+		if (ofpte & PG_V)
+			pmap_tlb_shootdown(pmap_kernel(),
+			    (vaddr_t)from, ofpte, &cpumask);
+		from += PAGE_SIZE;
+		to += PAGE_SIZE;
+		size -= PAGE_SIZE;
+	}
+	pmap_tlb_shootnow(cpumask);
+}
 
 /*
  * Convert kernel VA to physical address

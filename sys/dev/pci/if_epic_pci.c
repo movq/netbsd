@@ -1,4 +1,4 @@
-/*	$NetBSD: if_epic_pci.c,v 1.27 2004/08/21 23:48:33 thorpej Exp $	*/
+/*	$NetBSD: if_epic_pci.c,v 1.26 2003/01/31 00:07:42 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_epic_pci.c,v 1.27 2004/08/21 23:48:33 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_epic_pci.c,v 1.26 2003/01/31 00:07:42 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h> 
@@ -85,13 +85,13 @@ struct epic_pci_softc {
 	void	*sc_ih;			/* interrupt handle */
 };
 
-static int	epic_pci_match(struct device *, struct cfdata *, void *);
-static void	epic_pci_attach(struct device *, struct device *, void *);
+int	epic_pci_match(struct device *, struct cfdata *, void *);
+void	epic_pci_attach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(epic_pci, sizeof(struct epic_pci_softc),
     epic_pci_match, epic_pci_attach, NULL, NULL);
 
-static const struct epic_pci_product {
+const struct epic_pci_product {
 	u_int32_t	epp_prodid;	/* PCI product ID */
 	const char	*epp_name;	/* device name */
 } epic_pci_products[] = {
@@ -100,8 +100,11 @@ static const struct epic_pci_product {
 	{ 0,				NULL },
 };
 
-static const struct epic_pci_product *
-epic_pci_lookup(const struct pci_attach_args *pa)
+const struct epic_pci_product *epic_pci_lookup(const struct pci_attach_args *);
+
+const struct epic_pci_product *
+epic_pci_lookup(pa)
+	const struct pci_attach_args *pa;
 {
 	const struct epic_pci_product *epp;
 
@@ -115,7 +118,7 @@ epic_pci_lookup(const struct pci_attach_args *pa)
 	return (NULL);
 }
 
-static const struct epic_pci_subsys_info {
+const struct epic_pci_subsys_info {
 	pcireg_t subsysid;
 	int flags;
 } epic_pci_subsys_info[] = {
@@ -129,8 +132,12 @@ static const struct epic_pci_subsys_info {
 	  0 }
 };
 
-static const struct epic_pci_subsys_info *
-epic_pci_subsys_lookup(const struct pci_attach_args *pa)
+const struct epic_pci_subsys_info *
+  epic_pci_subsys_lookup(const struct pci_attach_args *);
+
+const struct epic_pci_subsys_info *
+epic_pci_subsys_lookup(pa)
+	const struct pci_attach_args *pa;
 {
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pcireg_t reg;
@@ -145,8 +152,11 @@ epic_pci_subsys_lookup(const struct pci_attach_args *pa)
 	return (NULL);
 }
 
-static int
-epic_pci_match(struct device *parent, struct cfdata *match, void *aux)
+int
+epic_pci_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct pci_attach_args *pa = aux;
 
@@ -156,8 +166,10 @@ epic_pci_match(struct device *parent, struct cfdata *match, void *aux)
 	return (0);
 }
 
-static void
-epic_pci_attach(struct device *parent, struct device *self, void *aux)
+void
+epic_pci_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct epic_pci_softc *psc = (struct epic_pci_softc *)self;
 	struct epic_softc *sc = &psc->sc_epic;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ohci_pci.c,v 1.26 2004/08/02 18:43:38 mycroft Exp $	*/
+/*	$NetBSD: ohci_pci.c,v 1.23 2002/10/02 16:51:47 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ohci_pci.c,v 1.26 2004/08/02 18:43:38 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ohci_pci.c,v 1.23 2002/10/02 16:51:47 thorpej Exp $");
 
 #include "ehci.h"
 
@@ -103,10 +103,10 @@ ohci_pci_attach(struct device *parent, struct device *self, void *aux)
 	pcireg_t csr;
 	char devinfo[256];
 	usbd_status r;
-	const char *vendor;
-	const char *devname = sc->sc.sc_bus.bdev.dv_xname;
+	char *vendor;
+	char *devname = sc->sc.sc_bus.bdev.dv_xname;
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	printf(": %s (rev. 0x%02x)\n", devinfo, PCI_REVISION(pa->pa_class));
 
 	/* Map I/O registers */
@@ -148,10 +148,11 @@ ohci_pci_attach(struct device *parent, struct device *self, void *aux)
 	vendor = pci_findvendor(pa->pa_id);
 	sc->sc.sc_id_vendor = PCI_VENDOR(pa->pa_id);
 	if (vendor)
-		strlcpy(sc->sc.sc_vendor, vendor, sizeof(sc->sc.sc_vendor));
+		strncpy(sc->sc.sc_vendor, vendor, 
+			sizeof(sc->sc.sc_vendor) - 1);
 	else
-		snprintf(sc->sc.sc_vendor, sizeof(sc->sc.sc_vendor),
-		    "vendor 0x%04x", PCI_VENDOR(pa->pa_id));
+		sprintf(sc->sc.sc_vendor, "vendor 0x%04x", 
+			PCI_VENDOR(pa->pa_id));
 	
 	r = ohci_init(&sc->sc);
 	if (r != USBD_NORMAL_COMPLETION) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: superio.c,v 1.15 2004/08/30 15:05:17 drochner Exp $	*/
+/*	$NetBSD: superio.c,v 1.14 2003/07/15 01:37:39 lukem Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: superio.c,v 1.15 2004/08/30 15:05:17 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: superio.c,v 1.14 2003/07/15 01:37:39 lukem Exp $");
 
 #include "locators.h"
 #include "com.h"
@@ -77,6 +77,7 @@ struct superio_softc {
 
 static int superiomatch(struct device *, struct cfdata *, void *);
 static void superioattach(struct device *, struct device *, void *);
+static int superioprint(void *, const char *);
 
 CFATTACH_DECL(superio, sizeof(struct superio_softc),
     superiomatch, superioattach, NULL, NULL);
@@ -270,11 +271,23 @@ superioattach(struct device *parent, struct device *self, void *args)
 	/*
 	 * Attach the isa bus
 	 */
+	iba.iba_busname = "isa";
 	iba.iba_iot = &superio_bus_space_tag;
 	iba.iba_memt = NULL;
 	iba.iba_dmat = NULL;/* XXX Should be able to do DMA thru dmac */
 	iba.iba_ic = (void *)sc;
-	config_found_ia(self, "isabus", &iba, isabusprint);
+	config_found(self, &iba, superioprint);
+}
+
+static int
+superioprint(void *arg, const char *cp)
+{
+	struct superio_attach_args *saa = arg;
+
+	if (cp)
+		aprint_normal("%s at %s", saa->saa_name, cp);
+
+	return (UNCONF);
 }
 
 static void

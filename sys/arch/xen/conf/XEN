@@ -1,4 +1,4 @@
-# $NetBSD: XEN,v 1.14 2004/11/10 17:54:08 christos Exp $
+# $NetBSD: XEN,v 1.1.2.3 2004/09/23 02:40:58 jmc Exp $
 
 include 	"arch/xen/conf/std.xen"
 
@@ -69,7 +69,6 @@ options 	COMPAT_16	# NetBSD 1.6
 #options	COMPAT_DARWIN	# binary compatibility with Darwin binaries
 #options 	EXEC_MACHO	# exec MACH-O binaries
 #options 	COMPAT_PECOFF	# kernel support to run Win32 apps
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 file-system 	FFS		# UFS
 file-system 	EXT2FS		# second extended file system (linux)
@@ -99,7 +98,6 @@ options 	INET6		# IPV6
 options 	IPSEC		# IP security
 options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 options 	MROUTING	# IP multicast routing
-options 	PIM		# Protocol Independent Multicast
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 

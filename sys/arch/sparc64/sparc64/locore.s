@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.201 2004/12/03 02:04:00 chs Exp $	*/
+/*	$NetBSD: locore.s,v 1.196.2.1 2004/07/25 07:45:01 tron Exp $	*/
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath
@@ -67,8 +67,12 @@
 #undef	TRAPSTATS		/* Count traps */
 #undef	TRAPS_USE_IG		/* Use Interrupt Globals for all traps */
 #define	HWREF			/* Track ref/mod bits in trap handlers */
+#undef	PMAP_FPSTATE		/* Allow nesting of VIS pmap copy/zero */
+#define	NEW_FPSTATE
+#define	PMAP_PHYS_PAGE		/* Use phys ASIs for pmap copy/zero */
 #undef	DCACHE_BUG		/* Flush D$ around ASI_PHYS accesses */
 #undef	NO_TSB			/* Don't use TSB */
+#define	TICK_IS_TIME		/* Keep %tick synchronized with time */
 #undef	SCHED_DEBUG
 
 #include "opt_ddb.h"
@@ -425,6 +429,13 @@ panicstack:
 #endif
 
 /*
+ * _cpcb points to the current pcb (and hence u. area).
+ * Initially this is the special one.
+ */
+	.globl	_C_LABEL(cpcb)
+_C_LABEL(cpcb):	POINTER	_C_LABEL(u0)
+
+/*
  * romp is the prom entry pointer
  * romtba is the prom trap table base address
  */
@@ -433,6 +444,44 @@ romp:	POINTER	0
 	.globl	romtba
 romtba:	POINTER	0
 
+
+/* NB:	 Do we really need the following around? */
+/*
+ * _cputyp is the current CPU type, used to distinguish between
+ * the many variations of different sun4* machines. It contains
+ * the value CPU_SUN4, CPU_SUN4C, or CPU_SUN4M.
+ */
+	.globl	_C_LABEL(cputyp)
+_C_LABEL(cputyp):
+	.word	1
+/*
+ * _cpumod is the current CPU model, used to distinguish between variants
+ * in the Sun4 and Sun4M families. See /sys/arch/sparc64/include/param.h
+ * for possible values.
+ */
+	.globl	_C_LABEL(cpumod)
+_C_LABEL(cpumod):
+	.word	1
+/*
+ * _mmumod is the current mmu model, used to distinguish between the
+ * various implementations of the SRMMU in the sun4m family of machines.
+ * See /sys/arch/sparc64/include/param.h for possible values.
+ */
+	.globl	_C_LABEL(mmumod)
+_C_LABEL(mmumod):
+	.word	0
+
+/*
+ * There variables are pointed to by the cpp symbols PGSHIFT, NBPG,
+ * and PGOFSET.
+ */
+	.globl	_C_LABEL(pgshift), _C_LABEL(nbpg), _C_LABEL(pgofset)
+_C_LABEL(pgshift):
+	.word	0
+_C_LABEL(nbpg):
+	.word	0
+_C_LABEL(pgofset):
+	.word	0
 
 	_ALIGN
 
@@ -858,33 +907,33 @@ _C_LABEL(trapbase):
 	UTRAP(T_ECCERR)			! We'll implement this one later
 ufast_IMMU_miss:			! 064 = fast instr access MMU miss
 	TRACEFLT			! DEBUG
-	ldxa	[%g0] ASI_IMMU_8KPTR, %g2 ! Load IMMU 8K TSB pointer
+	ldxa	[%g0] ASI_IMMU_8KPTR, %g2	! Load IMMU 8K TSB pointer
 #ifdef NO_TSB
-	ba,a	%icc, instr_miss
+	ba,a	%icc, instr_miss;
 #endif
-	ldxa	[%g0] ASI_IMMU, %g1	! Load IMMU tag target register
-	ldda	[%g2] ASI_NUCLEUS_QUAD_LDD, %g4	! Load TSB tag:data into %g4:%g5
-	brgez,pn %g5, instr_miss	! Entry invalid?  Punt
-	 cmp	%g1, %g4		! Compare TLB tags
-	bne,pn %xcc, instr_miss		! Got right tag?
+	ldxa	[%g0] ASI_IMMU, %g1	!	Load IMMU tag target register
+	ldda	[%g2] ASI_NUCLEUS_QUAD_LDD, %g4	!Load TSB tag:data into %g4:%g5
+	brgez,pn %g5, instr_miss	!	Entry invalid?  Punt
+	 cmp	%g1, %g4		!	Compare TLB tags
+	bne,pn %xcc, instr_miss		!	Got right tag?
 	 nop
 	CLRTT
-	stxa	%g5, [%g0] ASI_IMMU_DATA_IN ! Enter new mapping
-	retry				! Try new mapping
+	stxa	%g5, [%g0] ASI_IMMU_DATA_IN!	Enter new mapping
+	retry				!	Try new mapping
 1:
 	sir
 	TA32
 ufast_DMMU_miss:			! 068 = fast data access MMU miss
 	TRACEFLT			! DEBUG
-	ldxa	[%g0] ASI_DMMU_8KPTR, %g2! Load DMMU 8K TSB pointer
+	ldxa	[%g0] ASI_DMMU_8KPTR, %g2!					Load DMMU 8K TSB pointer
 #ifdef NO_TSB
-	ba,a	%icc, data_miss
+	ba,a	%icc, data_miss;
 #endif
-	ldxa	[%g0] ASI_DMMU, %g1	! Load DMMU tag target register
-	ldda	[%g2] ASI_NUCLEUS_QUAD_LDD, %g4	! Load TSB tag and data into %g4 and %g5
-	brgez,pn %g5, data_miss		! Entry invalid?  Punt
-	 cmp	%g1, %g4		! Compare TLB tags
-	bnz,pn	%xcc, data_miss		! Got right tag?
+	ldxa	[%g0] ASI_DMMU, %g1	! Hard coded for unified 8K TSB		Load DMMU tag target register
+	ldda	[%g2] ASI_NUCLEUS_QUAD_LDD, %g4	!				Load TSB tag and data into %g4 and %g5
+	brgez,pn %g5, data_miss		!					Entry invalid?  Punt
+	 cmp	%g1, %g4		!					Compare TLB tags
+	bnz,pn	%xcc, data_miss		!					Got right tag?
 	 nop
 	CLRTT
 #ifdef TRAPSTATS
@@ -893,8 +942,8 @@ ufast_DMMU_miss:			! 068 = fast data access MMU miss
 	inc	%g2
 	stw	%g2, [%g1+%lo(_C_LABEL(udhit))]
 #endif
-	stxa	%g5, [%g0] ASI_DMMU_DATA_IN ! Enter new mapping
-	retry				! Try new mapping
+	stxa	%g5, [%g0] ASI_DMMU_DATA_IN!					Enter new mapping
+	retry				!					Try new mapping
 1:
 	sir
 	TA32
@@ -1101,33 +1150,33 @@ kdatafault:
 	UTRAP(T_ECCERR)			! We'll implement this one later
 kfast_IMMU_miss:			! 064 = fast instr access MMU miss
 	TRACEFLT			! DEBUG
-	ldxa	[%g0] ASI_IMMU_8KPTR, %g2 ! Load IMMU 8K TSB pointer
+	ldxa	[%g0] ASI_IMMU_8KPTR, %g2	! Load IMMU 8K TSB pointer
 #ifdef NO_TSB
-	ba,a	%icc, instr_miss
+	ba,a	%icc, instr_miss;
 #endif
-	ldxa	[%g0] ASI_IMMU, %g1	! Load IMMU tag target register
-	ldda	[%g2] ASI_NUCLEUS_QUAD_LDD, %g4	! Load TSB tag:data into %g4:%g5
-	brgez,pn %g5, instr_miss	! Entry invalid?  Punt
-	 cmp	%g1, %g4		! Compare TLB tags
-	bne,pn %xcc, instr_miss		! Got right tag?
+	ldxa	[%g0] ASI_IMMU, %g1	!	Load IMMU tag target register
+	ldda	[%g2] ASI_NUCLEUS_QUAD_LDD, %g4	!Load TSB tag:data into %g4:%g5
+	brgez,pn %g5, instr_miss	!	Entry invalid?  Punt
+	 cmp	%g1, %g4		!	Compare TLB tags
+	bne,pn %xcc, instr_miss		!	Got right tag?
 	 nop
 	CLRTT
-	stxa	%g5, [%g0] ASI_IMMU_DATA_IN ! Enter new mapping
-	retry				! Try new mapping
+	stxa	%g5, [%g0] ASI_IMMU_DATA_IN!	Enter new mapping
+	retry				!	Try new mapping
 1:
 	sir
 	TA32
 kfast_DMMU_miss:			! 068 = fast data access MMU miss
 	TRACEFLT			! DEBUG
-	ldxa	[%g0] ASI_DMMU_8KPTR, %g2! Load DMMU 8K TSB pointer
+	ldxa	[%g0] ASI_DMMU_8KPTR, %g2!					Load DMMU 8K TSB pointer
 #ifdef NO_TSB
-	ba,a	%icc, data_miss
+	ba,a	%icc, data_miss;
 #endif
-	ldxa	[%g0] ASI_DMMU, %g1	! Load DMMU tag target register
-	ldda	[%g2] ASI_NUCLEUS_QUAD_LDD, %g4	! Load TSB tag and data into %g4 and %g5
-	brgez,pn %g5, data_miss		! Entry invalid?  Punt
-	 cmp	%g1, %g4		! Compare TLB tags
-	bnz,pn	%xcc, data_miss		! Got right tag?
+	ldxa	[%g0] ASI_DMMU, %g1	! Hard coded for unified 8K TSB		Load DMMU tag target register
+	ldda	[%g2] ASI_NUCLEUS_QUAD_LDD, %g4	!				Load TSB tag and data into %g4 and %g5
+	brgez,pn %g5, data_miss		!					Entry invalid?  Punt
+	 cmp	%g1, %g4		!					Compare TLB tags
+	bnz,pn	%xcc, data_miss		!					Got right tag?
 	 nop
 	CLRTT
 #ifdef TRAPSTATS
@@ -1136,8 +1185,8 @@ kfast_DMMU_miss:			! 068 = fast data access MMU miss
 	inc	%g2
 	stw	%g2, [%g1+%lo(_C_LABEL(kdhit))]
 #endif
-	stxa	%g5, [%g0] ASI_DMMU_DATA_IN ! Enter new mapping
-	retry				! Try new mapping
+	stxa	%g5, [%g0] ASI_DMMU_DATA_IN!					Enter new mapping
+	retry				!					Try new mapping
 1:
 	sir
 	TA32
@@ -2095,8 +2144,8 @@ dmmu_write_fault:
 	and	%g6, PTMASK, %g6
 	add	%g5, %g4, %g5
 	brz,pn	%g4, winfix				! NULL entry? check somewhere else
-	 nop	
 
+	 nop	
 	ldxa	[%g5] ASI_PHYS_CACHED, %g4
 	sll	%g6, 3, %g6
 	brz,pn	%g4, winfix				! NULL entry? check somewhere else
@@ -2126,8 +2175,9 @@ dmmu_write_fault:
 	ldxa	[%g0] ASI_DMMU_8KPTR, %g2		! Load DMMU 8K TSB pointer
 	andcc	%g5, 0x3, %g5				! 8K?
 	bnz,pn	%icc, winfix				! We punt to the pmap code since we can't handle policy
-	 ldxa	[%g0] ASI_DMMU, %g1			! Load DMMU tag target register
+	 ldxa	[%g0] ASI_DMMU, %g1			! Hard coded for unified 8K TSB		Load DMMU tag target register
 	casxa	[%g6] ASI_PHYS_CACHED, %g4, %g7		!  and write it out
+	
 	membar	#StoreLoad
 	cmp	%g4, %g7
 	bne,pn	%xcc, 1b
@@ -2136,7 +2186,6 @@ dmmu_write_fault:
 	mov	SFSR, %g7
 	stx	%g4, [%g2+8]				! Update TSB entry data
 	nop
-
 #ifdef DEBUG
 	set	DATA_START, %g6	! debug
 	stx	%g1, [%g6+0x40]	! debug
@@ -4192,7 +4241,6 @@ ret_from_intr_vector:
 	ba,a	ret_from_intr_vector
 	 nop				! XXX spitfire bug?
 
-#if defined(MULTIPROCESSOR)
 /*
  * IPI handler to flush single pte.
  * void sparc64_ipi_flush_pte(void *);
@@ -4273,7 +4321,6 @@ ENTRY(sparc64_ipi_flush_all)
 
 	ba,a	ret_from_intr_vector
 	 nop
-#endif				/* MULTIPROCESSOR */
 
 /*
  * Ultra1 and Ultra2 CPUs use soft interrupts for everything.  What we do
@@ -6695,10 +6742,6 @@ ENTRY(blast_dcache)
 /*
  * We turn off interrupts for the duration to prevent RED exceptions.
  */
-#ifdef PROF
-	save	%sp, -CC64FSZ, %sp
-#endif
-
 	rdpr	%pstate, %o3
 	set	(2 * NBPG) - 8, %o1
 	andn	%o3, PSTATE_IE, %o4			! Turn off PSTATE_IE bit
@@ -6709,14 +6752,8 @@ ENTRY(blast_dcache)
 	 dec	8, %o1
 	sethi	%hi(KERNBASE), %o2
 	flush	%o2
-#ifdef PROF
-	wrpr	%o3, %pstate
-	ret
-	 restore
-#else
 	retl
 	 wrpr	%o3, %pstate
-#endif
 
 /*
  * blast_icache()
@@ -6743,8 +6780,10 @@ ENTRY(blast_icache)
 	retl
 	 wrpr	%o3, %pstate
 
+
+
 /*
- * dcache_flush_page(paddr_t pa)
+ * dcache_flush_page(vaddr_t pa)
  *
  * Clear one page from D$.
  *
@@ -6754,27 +6793,30 @@ ENTRY(dcache_flush_page)
 #ifndef _LP64
 	COMBINE(%o0, %o1, %o0)
 #endif
+
+	!! Try using cache_flush_phys for a change.
+
 	mov	-1, %o1		! Generate mask for tag: bits [29..2]
-	srlx	%o0, 13-2, %o2	! Tag is PA bits <40:13> in bits <29:2>
+	srlx	%o0, 13-2, %o2	! Tag is VA bits <40:13> in bits <29:2>
 	clr	%o4
 	srl	%o1, 2, %o1	! Now we have bits <29:0> set
 	set	(2*NBPG), %o5
 	ba,pt	%icc, 1f
 	 andn	%o1, 3, %o1	! Now we have bits <29:2> set
-
+	
 	.align 8
 1:
 	ldxa	[%o4] ASI_DCACHE_TAG, %o3
 	mov	%o4, %o0
-	deccc	32, %o5
+	deccc	16, %o5
 	bl,pn	%icc, 2f
-	 inc	32, %o4
-
+	
+	 inc	16, %o4
 	xor	%o3, %o2, %o3
 	andcc	%o3, %o1, %g0
 	bne,pt	%xcc, 1b
 	 membar	#LoadStore
-
+	
 	stxa	%g0, [%o0] ASI_DCACHE_TAG
 	ba,pt	%icc, 1b
 	 membar	#StoreLoad
@@ -6787,7 +6829,7 @@ ENTRY(dcache_flush_page)
 	 membar	#Sync
 
 /*
- * icache_flush_page(paddr_t pa)
+ * icache_flush_page(vaddr_t pa)
  *
  * Clear one page from I$.
  *
@@ -6829,6 +6871,59 @@ ENTRY(icache_flush_page)
 	membar	#Sync
 	retl
 	 nop
+
+/*
+ * cache_flush_virt(vaddr_t va, vsize_t len)
+ *
+ * Clear everything in that va range from D$ and I$.
+ *
+ */
+	.align 8
+ENTRY(cache_flush_virt)
+	brz,pn	%o1, 2f		! What? nothing to clear?
+	 add	%o0, %o1, %o2
+	mov	0x1ff, %o3
+	sllx	%o3, 5, %o3	! Generate mask for VA bits
+	and	%o0, %o3, %o0
+	and	%o2, %o3, %o2
+	sub	%o2, %o1, %o4	! End < start? need to split flushes.
+	sethi	%hi((1<<13)), %o5
+	brlz,pn	%o4, 1f
+	 movrz	%o4, %o3, %o4	! If start == end we need to wrap
+
+	!! Clear from start to end
+1:
+	stxa	%g0, [%o0] ASI_DCACHE_TAG
+	dec	16, %o4
+	xor	%o5, %o0, %o3	! Second way
+#ifdef SPITFIRE
+	stxa	%g0, [%o0] ASI_ICACHE_TAG! Don't do this on cheetah
+	stxa	%g0, [%o3] ASI_ICACHE_TAG! Don't do this on cheetah
+#endif
+	brgz,pt	%o4, 1b
+	 inc	16, %o0
+2:
+	sethi	%hi(KERNBASE), %o5
+	flush	%o5
+	membar	#Sync
+	retl
+	 nop
+
+	!! We got a hole.  Clear from start to hole
+	clr	%o4
+3:
+	stxa	%g0, [%o4] ASI_DCACHE_TAG
+	dec	16, %o1
+	xor	%o5, %o4, %g1	! Second way
+	stxa	%g0, [%o4] ASI_ICACHE_TAG
+	stxa	%g0, [%g1] ASI_ICACHE_TAG
+	brgz,pt	%o1, 3b
+	 inc	16, %o4
+
+	!! Now clear to the end.
+	sub	%o3, %o2, %o4	! Size to clear (NBPG - end)
+	ba,pt	%icc, 1b
+	 mov	%o2, %o0	! Start of clear
 
 /*
  *	cache_flush_phys __P((paddr_t, psize_t, int));
@@ -8838,8 +8933,14 @@ paginuse:
 	.word	0
 	.text
 ENTRY(pmap_zero_page)
+	!!
+	!! If we have 64-bit physical addresses (and we do now)
+	!! we need to move the pointer from %o0:%o1 to %o0
+	!!
 #ifndef _LP64
+#if PADDRT == 8
 	COMBINE(%o0, %o1, %o0)
+#endif
 #endif
 #ifdef DEBUG
 	set	pmapdebug, %o4
@@ -8895,8 +8996,15 @@ ENTRY(pmap_zero_page)
  */
 ENTRY(pmap_copy_page)
 #ifndef _LP64
+	!!
+	!! If we have 64-bit physical addresses (and we do now)
+	!! we need to move the pointer from %o0:%o1 to %o0 and
+	!! %o2:%o3 to %o1
+	!!
+#if PADDRT == 8
 	COMBINE(%o0, %o1, %o0)
 	COMBINE(%o2, %o3, %o1)
+#endif
 #endif
 #ifdef DEBUG
 	set	pmapdebug, %o4
@@ -9009,9 +9117,7 @@ ENTRY(pseg_get)
 	 nop
 #endif
 1:
-#ifndef _LP64
 	clr	%o1
-#endif
 	retl
 	 clr	%o0
 

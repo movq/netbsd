@@ -1,4 +1,4 @@
-/*	$NetBSD: mips_reloc.c,v 1.46 2004/12/15 10:26:29 skrll Exp $	*/
+/*	$NetBSD: mips_reloc.c,v 1.45 2003/11/19 19:41:57 simonb Exp $	*/
 
 /*
  * Copyright 1997 Michael L. Hitch <mhitch@montana.edu>
@@ -137,11 +137,13 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Addr relocbase)
 		case R_TYPE(REL32):
 			assert(ELF_R_SYM(rel->r_info) < gotsym);
 			sym = symtab + ELF_R_SYM(rel->r_info);
-			assert(ELF_ST_BIND(sym->st_info) == STB_LOCAL);
+			assert(sym->st_info ==
+			    ELF_ST_INFO(STB_LOCAL, STT_SECTION));
 			if (__predict_true(RELOC_ALIGNED_P(where)))
-				*where += relocbase;
+				*where += (Elf_Addr)(sym->st_value + relocbase);
 			else
-				store_ptr(where, load_ptr(where) + relocbase);
+				store_ptr(where, load_ptr(where) +
+				    (Elf_Addr)(sym->st_value + relocbase));
 			break;
 
 		default:

@@ -1,4 +1,4 @@
-/*	$NetBSD: ras.h,v 1.5 2004/07/19 03:12:31 chs Exp $	*/
+/*	$NetBSD: ras.h,v 1.3 2004/03/03 21:05:30 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2004 The NetBSD Foundation, Inc.
@@ -67,12 +67,8 @@ extern struct pool ras_pool;
 
 #else
 
-#ifndef	RAS_DECL
-
 #define	RAS_DECL(name)							\
 extern void __CONCAT(name,_ras_start(void)), __CONCAT(name,_ras_end(void))
-
-#endif	/* RAS_DECL */
 
 /*
  * RAS_START and RAS_END contain implicit instruction reordering

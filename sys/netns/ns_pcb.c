@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_pcb.c,v 1.22 2004/04/19 00:10:48 matt Exp $	*/
+/*	$NetBSD: ns_pcb.c,v 1.20 2004/02/24 15:22:01 wiz Exp $	*/
 
 /*
  * Copyright (c) 1984, 1985, 1986, 1987, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ns_pcb.c,v 1.22 2004/04/19 00:10:48 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ns_pcb.c,v 1.20 2004/02/24 15:22:01 wiz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,13 +54,16 @@ __KERNEL_RCSID(0, "$NetBSD: ns_pcb.c,v 1.22 2004/04/19 00:10:48 matt Exp $");
 static const struct	ns_addr zerons_addr;
 
 int
-ns_pcballoc(struct socket *so, struct nspcb *head)
+ns_pcballoc(so, head)
+	struct socket *so;
+	struct nspcb *head;
 {
 	struct nspcb *nsp;
 
-	nsp = malloc(sizeof(*nsp), M_PCB, M_NOWAIT|M_ZERO);
+	nsp = malloc(sizeof(*nsp), M_PCB, M_NOWAIT);
 	if (nsp == 0)
 		return (ENOBUFS);
+	bzero((caddr_t)nsp, sizeof(*nsp));
 	nsp->nsp_socket = so;
 	insque(nsp, head);
 	so->so_pcb = nsp;
@@ -68,7 +71,10 @@ ns_pcballoc(struct socket *so, struct nspcb *head)
 }
 	
 int
-ns_pcbbind(struct nspcb *nsp, struct mbuf *nam, struct proc *p)
+ns_pcbbind(nsp, nam, p)
+	struct nspcb *nsp;
+	struct mbuf *nam;
+	struct proc *p;
 {
 	struct sockaddr_ns *sns;
 	u_int16_t lport = 0;
@@ -116,7 +122,9 @@ noname:
  * then pick one.
  */
 int
-ns_pcbconnect(struct nspcb *nsp, struct mbuf *nam)
+ns_pcbconnect(nsp, nam)
+	struct nspcb *nsp;
+	struct mbuf *nam;
 {
 	struct ns_ifaddr *ia;
 	struct sockaddr_ns *sns = mtod(nam, struct sockaddr_ns *);
@@ -218,7 +226,8 @@ ns_pcbconnect(struct nspcb *nsp, struct mbuf *nam)
 }
 
 void
-ns_pcbdisconnect(struct nspcb *nsp)
+ns_pcbdisconnect(nsp)
+	struct nspcb *nsp;
 {
 
 	nsp->nsp_faddr = zerons_addr;
@@ -227,7 +236,8 @@ ns_pcbdisconnect(struct nspcb *nsp)
 }
 
 void
-ns_pcbdetach(struct nspcb *nsp)
+ns_pcbdetach(nsp)
+	struct nspcb *nsp;
 {
 	struct socket *so = nsp->nsp_socket;
 
@@ -240,7 +250,9 @@ ns_pcbdetach(struct nspcb *nsp)
 }
 
 void
-ns_setsockaddr(struct nspcb *nsp, struct mbuf *nam)
+ns_setsockaddr(nsp, nam)
+	struct nspcb *nsp;
+	struct mbuf *nam;
 {
 	struct sockaddr_ns *sns = mtod(nam, struct sockaddr_ns *);
 	
@@ -253,7 +265,9 @@ ns_setsockaddr(struct nspcb *nsp, struct mbuf *nam)
 }
 
 void
-ns_setpeeraddr(struct nspcb *nsp, struct mbuf *nam)
+ns_setpeeraddr(nsp, nam)
+	struct nspcb *nsp;
+	struct mbuf *nam;
 {
 	struct sockaddr_ns *sns = mtod(nam, struct sockaddr_ns *);
 	
@@ -273,8 +287,11 @@ ns_setpeeraddr(struct nspcb *nsp, struct mbuf *nam)
  * be a parameter list!)
  */
 void
-ns_pcbnotify(struct ns_addr *dst, int errno,
-	void (*notify)(struct nspcb *), long param)
+ns_pcbnotify(dst, errno, notify, param)
+	struct ns_addr *dst;
+	long param;
+	int errno;
+	void (*notify) __P((struct nspcb *));
 {
 	struct nspcb *nsp, *oinp;
 	int s = splnet();
@@ -302,7 +319,8 @@ ns_pcbnotify(struct ns_addr *dst, int errno,
  * and allocate a (hopefully) better one.
  */
 void
-ns_rtchange(struct nspcb *nsp)
+ns_rtchange(nsp)
+	struct nspcb *nsp;
 {
 	if (nsp->nsp_route.ro_rt) {
 		rtfree(nsp->nsp_route.ro_rt);
@@ -316,7 +334,10 @@ ns_rtchange(struct nspcb *nsp)
 }
 
 struct nspcb *
-ns_pcblookup(const struct ns_addr *faddr, u_int16_t lport, int wildp)
+ns_pcblookup(faddr, lport, wildp)
+	const struct ns_addr *faddr;
+	u_int16_t lport;
+	int wildp;
 {
 	struct nspcb *nsp, *match = 0;
 	int matchwild = 3, wildcard;

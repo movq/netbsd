@@ -1,4 +1,4 @@
-/*	$NetBSD: command.c,v 1.11 2004/09/01 01:46:56 chs Exp $	*/
+/*	$NetBSD: command.c,v 1.10.2.1 2004/09/01 03:34:08 jmc Exp $	*/
 
 /*
  * Copyright (c) 1988 Mark Nudelman
@@ -35,7 +35,7 @@
 #if 0
 static char sccsid[] = "@(#)command.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: command.c,v 1.11 2004/09/01 01:46:56 chs Exp $");
+__RCSID("$NetBSD: command.c,v 1.10.2.1 2004/09/01 03:34:08 jmc Exp $");
 #endif
 #endif /* not lint */
 

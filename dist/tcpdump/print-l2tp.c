@@ -1,4 +1,4 @@
-/*	$NetBSD: print-l2tp.c,v 1.5 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: print-l2tp.c,v 1.4 2002/05/31 09:45:45 itojun Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993, 1994, 1995, 1996, 1997
@@ -26,10 +26,10 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-l2tp.c,v 1.14.2.3 2003/12/26 23:21:42 guy Exp";
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-l2tp.c,v 1.11 2002/05/25 09:41:07 guy Exp";
 #else
-__RCSID("$NetBSD: print-l2tp.c,v 1.5 2004/09/27 23:04:24 dyoung Exp $");
+__RCSID("$NetBSD: print-l2tp.c,v 1.4 2002/05/31 09:45:45 itojun Exp $");
 #endif
 #endif
 
@@ -37,9 +37,11 @@ __RCSID("$NetBSD: print-l2tp.c,v 1.5 2004/09/27 23:04:24 dyoung Exp $");
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
-
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/param.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include "l2tp.h"
 #include "interface.h"
@@ -151,27 +153,27 @@ static struct tok l2tp_avp2str[] = {
 	{ L2TP_AVP_MAXIMUM_BPS,		"MAXIMUM_BPS" },
 	{ L2TP_AVP_BEARER_TYPE,		"BEARER_TYPE" },
 	{ L2TP_AVP_FRAMING_TYPE,	"FRAMING_TYPE" },
-	{ L2TP_AVP_PACKET_PROC_DELAY,	"PACKET_PROC_DELAY" },
+	{ L2TP_AVP_PACKET_PROC_DELAY,	"PACKET_PROC_DELAY" },	
 	{ L2TP_AVP_CALLED_NUMBER,	"CALLED_NUMBER" },
 	{ L2TP_AVP_CALLING_NUMBER,	"CALLING_NUMBER" },
 	{ L2TP_AVP_SUB_ADDRESS,		"SUB_ADDRESS" },
 	{ L2TP_AVP_TX_CONN_SPEED,	"TX_CONN_SPEED" },
 	{ L2TP_AVP_PHY_CHANNEL_ID,	"PHY_CHANNEL_ID" },
 	{ L2TP_AVP_INI_RECV_LCP,	"INI_RECV_LCP" },
-	{ L2TP_AVP_LAST_SENT_LCP,	"LAST_SENT_LCP" },
-	{ L2TP_AVP_LAST_RECV_LCP,	"LAST_RECV_LCP" },
-	{ L2TP_AVP_PROXY_AUTH_TYPE,	"PROXY_AUTH_TYPE" },
+	{ L2TP_AVP_LAST_SENT_LCP,	"LAST_SENT_LCP" },	
+	{ L2TP_AVP_LAST_RECV_LCP,	"LAST_RECV_LCP" },	
+	{ L2TP_AVP_PROXY_AUTH_TYPE,	"PROXY_AUTH_TYPE" }, 	
 	{ L2TP_AVP_PROXY_AUTH_NAME,	"PROXY_AUTH_NAME" },
-	{ L2TP_AVP_PROXY_AUTH_CHAL,	"PROXY_AUTH_CHAL" },
+	{ L2TP_AVP_PROXY_AUTH_CHAL,	"PROXY_AUTH_CHAL" },	
 	{ L2TP_AVP_PROXY_AUTH_ID,	"PROXY_AUTH_ID" },
 	{ L2TP_AVP_PROXY_AUTH_RESP,	"PROXY_AUTH_RESP" },
 	{ L2TP_AVP_CALL_ERRORS,		"CALL_ERRORS" },
-	{ L2TP_AVP_ACCM,		"ACCM" },
-	{ L2TP_AVP_RANDOM_VECTOR,	"RANDOM_VECTOR" },
+	{ L2TP_AVP_ACCM,		"ACCM" },		
+	{ L2TP_AVP_RANDOM_VECTOR,	"RANDOM_VECTOR" },	
 	{ L2TP_AVP_PRIVATE_GRP_ID,	"PRIVATE_GRP_ID" },
-	{ L2TP_AVP_RX_CONN_SPEED,	"RX_CONN_SPEED" },
-	{ L2TP_AVP_SEQ_REQUIRED,	"SEQ_REQUIRED" },
-	{ L2TP_AVP_PPP_DISCON_CC,	"PPP_DISCON_CC" },
+	{ L2TP_AVP_RX_CONN_SPEED,	"RX_CONN_SPEED" }, 	
+	{ L2TP_AVP_SEQ_REQUIRED,	"SEQ_REQUIRED" }, 	
+	{ L2TP_AVP_PPP_DISCON_CC,	"PPP_DISCON_CC" },	
 	{ 0,				NULL }
 };
 
@@ -248,19 +250,19 @@ static char *l2tp_error_code_general[] = {
 /******************************/
 /* generic print out routines */
 /******************************/
-static void
+static void 
 print_string(const u_char *dat, u_int length)
 {
-	u_int i;
+	int i;
 	for (i=0; i<length; i++) {
 		printf("%c", *dat++);
 	}
 }
 
-static void
+static void 
 print_octets(const u_char *dat, u_int length)
 {
-	u_int i;
+	int i;
 	for (i=0; i<length; i++) {
 		printf("%02x", *dat++);
 	}
@@ -294,7 +296,7 @@ static void
 l2tp_result_code_print(const u_char *dat, u_int length)
 {
 	u_int16_t *ptr = (u_int16_t *)dat;
-
+	
 	printf("%u", EXTRACT_16BITS(ptr)); ptr++;	/* Result Code */
 	if (length > 2) {				/* Error Code (opt) */
 	        printf("/%u", EXTRACT_16BITS(ptr)); ptr++;
@@ -346,7 +348,7 @@ l2tp_q931_cc_print(const u_char *dat, u_int length)
 	if (length > 3) {
 		printf(" ");
 		print_string(dat+3, length-3);
-	}
+	} 
 }
 
 static void
@@ -386,7 +388,7 @@ l2tp_proxy_auth_type_print(const u_char *dat)
 {
 	u_int16_t *ptr = (u_int16_t *)dat;
 
-	printf("%s", tok2str(l2tp_authentype2str,
+	printf("%s", tok2str(l2tp_authentype2str, 
 			     "AuthType-#%u", EXTRACT_16BITS(ptr)));
 }
 
@@ -403,7 +405,7 @@ l2tp_call_errors_print(const u_char *dat)
 {
 	u_int16_t *ptr = (u_int16_t *)dat;
 	u_int16_t val_h, val_l;
-
+	
 	ptr++;		/* skip "Reserved" */
 
 	val_h = EXTRACT_16BITS(ptr); ptr++;
@@ -442,7 +444,7 @@ l2tp_accm_print(const u_char *dat)
 	val_h = EXTRACT_16BITS(ptr); ptr++;
 	val_l = EXTRACT_16BITS(ptr); ptr++;
 	printf("send=%08x ", (val_h<<16) + val_l);
-
+	
 	val_h = EXTRACT_16BITS(ptr); ptr++;
 	val_l = EXTRACT_16BITS(ptr); ptr++;
 	printf("recv=%08x ", (val_h<<16) + val_l);
@@ -452,10 +454,10 @@ static void
 l2tp_ppp_discon_cc_print(const u_char *dat, u_int length)
 {
 	u_int16_t *ptr = (u_int16_t *)dat;
-
+	
 	printf("%04x, ", EXTRACT_16BITS(ptr)); ptr++;	/* Disconnect Code */
 	printf("%04x ",  EXTRACT_16BITS(ptr)); ptr++;	/* Control Protocol Number */
-	printf("%s", tok2str(l2tp_cc_direction2str,
+	printf("%s", tok2str(l2tp_cc_direction2str, 
 			     "Direction-#%u", *((u_char *)ptr++)));
 
 	if (length > 5) {
@@ -481,17 +483,8 @@ l2tp_avp_print(const u_char *dat, int length)
 	TCHECK(*ptr);	/* Flags & Length */
 	len = EXTRACT_16BITS(ptr) & L2TP_AVP_HDR_LEN_MASK;
 
-	/* If it is not long enough to contain the header, we'll give up. */
-	if (len < 6)
-		goto trunc;
-
-	/* If it goes past the end of the remaining length of the packet,
-	   we'll give up. */
-	if (len > (u_int)length)
-		goto trunc;
-
-	/* If it goes past the end of the remaining length of the captured
-	   data, we'll give up. */
+	/* If it is not long enough to decode the entire AVP, we'll 
+	   abandon. */
 	TCHECK2(*ptr, len);
 	/* After this point, no need to worry about truncation */
 
@@ -512,7 +505,7 @@ l2tp_avp_print(const u_char *dat, int length)
 		print_octets((u_char *)ptr, len-6);
 		printf(")");
 	} else {
-		/* IETF-defined Attributes */
+		/* IETF-defined Attributes */ 
 		ptr++;
 		attr_type = EXTRACT_16BITS(ptr); ptr++;
 		printf("%s", tok2str(l2tp_avp2str, "AVP-#%u", attr_type));
@@ -551,7 +544,7 @@ l2tp_avp_print(const u_char *dat, int length)
 			case L2TP_AVP_CALLED_NUMBER:
 			case L2TP_AVP_SUB_ADDRESS:
 			case L2TP_AVP_PROXY_AUTH_NAME:
-			case L2TP_AVP_PRIVATE_GRP_ID:
+			case L2TP_AVP_PRIVATE_GRP_ID:	
 				print_string((u_char *)ptr, len-6);
 				break;
 			case L2TP_AVP_CHALLENGE:
@@ -665,7 +658,7 @@ l2tp_print(const u_char *dat, u_int length)
 
 	ptr++;
 	cnt += 2;
-
+	
 	if (flag_l) {
 		TCHECK(*ptr);	/* Length */
 		l2tp_len = EXTRACT_16BITS(ptr); ptr++;
@@ -713,4 +706,4 @@ l2tp_print(const u_char *dat, u_int length)
 
  trunc:
 	printf("%s", tstr);
-}
+}	

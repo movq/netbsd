@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_inet.c,v 1.27 2004/04/19 05:16:46 matt Exp $	*/
+/*	$NetBSD: tp_inet.c,v 1.26 2003/08/22 21:53:11 itojun Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -73,7 +73,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tp_inet.c,v 1.27 2004/04/19 05:16:46 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tp_inet.c,v 1.26 2003/08/22 21:53:11 itojun Exp $");
 
 #include "opt_inet.h"
 #include "opt_iso.h"
@@ -125,7 +125,11 @@ __KERNEL_RCSID(0, "$NetBSD: tp_inet.c,v 1.27 2004/04/19 05:16:46 matt Exp $");
  * NOTES:
  */
 void
-in_getsufx(void	*v, u_short *lenp, caddr_t data_out, int which)
+in_getsufx(v, lenp, data_out, which)
+	void	       *v;
+	u_short        *lenp;
+	caddr_t         data_out;
+	int             which;
 {
 	struct inpcb   *inp = v;
 	*lenp = sizeof(u_short);
@@ -158,7 +162,11 @@ in_getsufx(void	*v, u_short *lenp, caddr_t data_out, int which)
  */
 /* ARGSUSED */
 void
-in_putsufx(void *v, caddr_t sufxloc, int sufxlen, int which)
+in_putsufx(v, sufxloc, sufxlen, which)
+	void	       *v;
+	caddr_t         sufxloc;
+	int		sufxlen;
+	int             which;
 {
 	struct inpcb   *inp = v;
 	if (which == TP_FOREIGN) {
@@ -185,7 +193,8 @@ in_putsufx(void *v, caddr_t sufxloc, int sufxlen, int which)
  * 	timer goes off.
  */
 void
-in_recycle_tsuffix(void *v)
+in_recycle_tsuffix(v)
+	void *v;
 {
 	struct inpcb   *inp = v;
 	inp->inp_fport = inp->inp_lport = 0;
@@ -210,7 +219,10 @@ in_recycle_tsuffix(void *v)
  * NOTES:
  */
 void
-in_putnetaddr(void *v, struct sockaddr *nm, int which)
+in_putnetaddr(v, nm, which)
+	void *v;
+	struct sockaddr *nm;
+	int             which;
 {
 	struct inpcb *inp = v;
 	struct sockaddr_in *name = (struct sockaddr_in *) nm;
@@ -248,7 +260,10 @@ in_putnetaddr(void *v, struct sockaddr *nm, int which)
  * NOTES:
  */
 int
-in_cmpnetaddr(void *v, struct sockaddr *nm, int which)
+in_cmpnetaddr(v, nm, which)
+	void *v;
+	struct sockaddr *nm;
+	int             which;
 {
 	struct inpcb *inp = v;
 	struct sockaddr_in *name = (struct sockaddr_in *) nm;
@@ -280,7 +295,10 @@ in_cmpnetaddr(void *v, struct sockaddr *nm, int which)
  */
 
 void
-in_getnetaddr(void *v, struct mbuf *name, int which)
+in_getnetaddr(v, name, which)
+	void *v;
+	struct mbuf *name;
+	int             which;
 {
 	struct inpcb   *inp = v;
 	struct sockaddr_in *sin = mtod(name, struct sockaddr_in *);
@@ -320,7 +338,8 @@ in_getnetaddr(void *v, struct mbuf *name, int which)
  * NOTES:
  */
 int
-tpip_mtu(void *v)
+tpip_mtu(v)
+	void *v;
 {
 	struct tp_pcb *tpcb = v;
 	struct inpcb   *inp = (struct inpcb *) tpcb->tp_npcb;
@@ -356,7 +375,13 @@ tpip_mtu(void *v)
  */
 
 int
+#if __STDC__
 tpip_output(struct mbuf *m0, ...)
+#else
+tpip_output(m0, va_alist)
+	struct mbuf    *m0;
+	va_dcl
+#endif
 {
 	int             datalen;
 	struct inpcb   *inp;
@@ -393,7 +418,13 @@ tpip_output(struct mbuf *m0, ...)
 
 /* ARGSUSED */
 int
+#if __STDC__
 tpip_output_dg(struct mbuf *m0, ...)
+#else
+tpip_output_dg(m0, va_alist)
+	struct mbuf    *m0;
+	va_dcl
+#endif
 {
 	int             datalen;
 	struct in_addr *laddr, *faddr;
@@ -487,7 +518,13 @@ bad:
  * NOTES:
  */
 void
+#if __STDC__
 tpip_input(struct mbuf *m, ...)
+#else
+tpip_input(m, va_alist)
+	struct mbuf    *m;
+	va_dcl
+#endif
 {
 	int             iplen;
 	struct sockaddr_in src, dst;
@@ -599,7 +636,9 @@ discard:
  */
 
 void
-tpin_quench(struct inpcb *inp, int dummy)
+tpin_quench(inp, dummy)
+	struct inpcb   *inp;
+	int dummy;
 {
 	tp_quench((struct inpcb *) inp->inp_socket->so_pcb, PRC_QUENCH);
 }
@@ -625,9 +664,12 @@ tpin_quench(struct inpcb *inp, int dummy)
  * NOTES:
  */
 void *
-tpip_ctlinput(int cmd, struct sockaddr *sa, void *dummy)
+tpip_ctlinput(cmd, sa, dummy)
+	int             cmd;
+	struct sockaddr *sa;
+	void *dummy;
 {
-	void            (*notify)(struct inpcb *, int);
+	void            (*notify) __P((struct inpcb *, int));
 	int             errno;
 
 	if ((unsigned)cmd >= PRC_NCMDS)
@@ -690,7 +732,9 @@ tpip_ctlinput(int cmd, struct sockaddr *sa, void *dummy)
  */
 
 void
-tpin_abort(struct inpcb *inp, int n)
+tpin_abort(inp, n)
+	struct inpcb   *inp;
+	int             n;
 {
 	struct tp_event e;
 
@@ -701,7 +745,8 @@ tpin_abort(struct inpcb *inp, int n)
 
 #ifdef ARGO_DEBUG
 void
-dump_inaddr(struct sockaddr_in *addr)
+dump_inaddr(addr)
+	struct sockaddr_in *addr;
 {
 	printf("INET: port 0x%x; addr 0x%x\n", addr->sin_port, addr->sin_addr.s_addr);
 }

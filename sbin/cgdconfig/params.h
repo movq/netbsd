@@ -1,4 +1,4 @@
-/* $NetBSD: params.h,v 1.7 2004/08/13 15:03:57 tv Exp $ */
+/* $NetBSD: params.h,v 1.6.2.1 2004/08/13 15:02:17 tv Exp $ */
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -66,7 +66,6 @@ struct params {
 #define KEYGEN_RANDOMKEY		0x1
 #define KEYGEN_PKCS5_PBKDF2_OLD		0x2
 #define KEYGEN_STOREDKEY		0x3
-#define KEYGEN_URANDOMKEY		0x4
 #define KEYGEN_PKCS5_PBKDF2_SHA1	0x5
 
 /* verification methods */

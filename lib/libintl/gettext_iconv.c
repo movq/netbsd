@@ -1,4 +1,4 @@
-/*	$NetBSD: gettext_iconv.c,v 1.7 2004/08/02 13:38:21 tshiozak Exp $	*/
+/*	$NetBSD: gettext_iconv.c,v 1.5 2004/03/13 04:58:04 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 2004 Citrus Project,

@@ -35,84 +35,89 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 ld_emulation_xfer_type *ld_emulation;
 
 void
-ldemul_hll (char *name)
+ldemul_hll (name)
+     char *name;
 {
   ld_emulation->hll (name);
 }
 
 void
-ldemul_syslib (char *name)
+ldemul_syslib (name)
+     char *name;
 {
   ld_emulation->syslib (name);
 }
 
 void
-ldemul_after_parse (void)
+ldemul_after_parse ()
 {
   ld_emulation->after_parse ();
 }
 
 void
-ldemul_before_parse (void)
+ldemul_before_parse ()
 {
   ld_emulation->before_parse ();
 }
 
 void
-ldemul_after_open (void)
+ldemul_after_open ()
 {
   ld_emulation->after_open ();
 }
 
 void
-ldemul_after_allocation (void)
+ldemul_after_allocation ()
 {
   ld_emulation->after_allocation ();
 }
 
 void
-ldemul_before_allocation (void)
+ldemul_before_allocation ()
 {
   if (ld_emulation->before_allocation)
     ld_emulation->before_allocation ();
 }
 
 void
-ldemul_set_output_arch (void)
+ldemul_set_output_arch ()
 {
   ld_emulation->set_output_arch ();
 }
 
 void
-ldemul_finish (void)
+ldemul_finish ()
 {
   if (ld_emulation->finish)
     ld_emulation->finish ();
 }
 
 void
-ldemul_set_symbols (void)
+ldemul_set_symbols ()
 {
   if (ld_emulation->set_symbols)
     ld_emulation->set_symbols ();
 }
 
 void
-ldemul_create_output_section_statements (void)
+ldemul_create_output_section_statements ()
 {
   if (ld_emulation->create_output_section_statements)
     ld_emulation->create_output_section_statements ();
 }
 
 char *
-ldemul_get_script (int *isfile)
+ldemul_get_script (isfile)
+     int *isfile;
 {
   return ld_emulation->get_script (isfile);
 }
 
 bfd_boolean
-ldemul_open_dynamic_archive (const char *arch, search_dirs_type *search,
-			     lang_input_statement_type *entry)
+ldemul_open_dynamic_archive (arch, search, entry)
+     const char *arch;
+     search_dirs_type *search;
+     lang_input_statement_type *entry;
 {
   if (ld_emulation->open_dynamic_archive)
     return (*ld_emulation->open_dynamic_archive) (arch, search, entry);
@@ -120,7 +125,9 @@ ldemul_open_dynamic_archive (const char *arch, search_dirs_type *search,
 }
 
 bfd_boolean
-ldemul_place_orphan (lang_input_statement_type *file, asection *s)
+ldemul_place_orphan (file, s)
+     lang_input_statement_type *file;
+     asection *s;
 {
   if (ld_emulation->place_orphan)
     return (*ld_emulation->place_orphan) (file, s);
@@ -128,9 +135,13 @@ ldemul_place_orphan (lang_input_statement_type *file, asection *s)
 }
 
 void
-ldemul_add_options (int ns, char **shortopts, int nl,
-		    struct option **longopts, int nrl,
-		    struct option **really_longopts)
+ldemul_add_options (ns, shortopts, nl, longopts, nrl, really_longopts)
+     int ns;
+     char **shortopts;
+     int nl;
+     struct option **longopts;
+     int nrl;
+     struct option **really_longopts;
 {
   if (ld_emulation->add_options)
     (*ld_emulation->add_options) (ns, shortopts, nl, longopts,
@@ -138,7 +149,8 @@ ldemul_add_options (int ns, char **shortopts, int nl,
 }
 
 bfd_boolean
-ldemul_handle_option (int optc)
+ldemul_handle_option (optc)
+     int optc;
 {
   if (ld_emulation->handle_option)
     return (*ld_emulation->handle_option) (optc);
@@ -146,7 +158,9 @@ ldemul_handle_option (int optc)
 }
 
 bfd_boolean
-ldemul_parse_args (int argc, char **argv)
+ldemul_parse_args (argc, argv)
+     int argc;
+     char **argv;
 {
   /* Try and use the emulation parser if there is one.  */
   if (ld_emulation->parse_args)
@@ -157,7 +171,8 @@ ldemul_parse_args (int argc, char **argv)
 /* Let the emulation code handle an unrecognized file.  */
 
 bfd_boolean
-ldemul_unrecognized_file (lang_input_statement_type *entry)
+ldemul_unrecognized_file (entry)
+     lang_input_statement_type *entry;
 {
   if (ld_emulation->unrecognized_file)
     return (*ld_emulation->unrecognized_file) (entry);
@@ -167,7 +182,8 @@ ldemul_unrecognized_file (lang_input_statement_type *entry)
 /* Let the emulation code handle a recognized file.  */
 
 bfd_boolean
-ldemul_recognized_file (lang_input_statement_type *entry)
+ldemul_recognized_file (entry)
+     lang_input_statement_type *entry;
 {
   if (ld_emulation->recognized_file)
     return (*ld_emulation->recognized_file) (entry);
@@ -175,7 +191,9 @@ ldemul_recognized_file (lang_input_statement_type *entry)
 }
 
 char *
-ldemul_choose_target (int argc, char **argv)
+ldemul_choose_target (argc, argv)
+     int argc;
+     char **argv;
 {
   return ld_emulation->choose_target (argc, argv);
 }
@@ -184,7 +202,9 @@ ldemul_choose_target (int argc, char **argv)
 /* The default choose_target function.  */
 
 char *
-ldemul_default_target (int argc ATTRIBUTE_UNUSED, char **argv ATTRIBUTE_UNUSED)
+ldemul_default_target (argc, argv)
+     int argc ATTRIBUTE_UNUSED;
+     char **argv ATTRIBUTE_UNUSED;
 {
   char *from_outside = getenv (TARGET_ENVIRON);
   if (from_outside != (char *) NULL)
@@ -193,27 +213,27 @@ ldemul_default_target (int argc ATTRIBUTE_UNUSED, char **argv ATTRIBUTE_UNUSED)
 }
 
 void
-after_parse_default (void)
+after_parse_default ()
 {
 }
 
 void
-after_open_default (void)
+after_open_default ()
 {
 }
 
 void
-after_allocation_default (void)
+after_allocation_default ()
 {
 }
 
 void
-before_allocation_default (void)
+before_allocation_default ()
 {
 }
 
 void
-set_output_arch_default (void)
+set_output_arch_default ()
 {
   /* Set the output architecture and machine if possible.  */
   bfd_set_arch_mach (output_bfd,
@@ -221,13 +241,15 @@ set_output_arch_default (void)
 }
 
 void
-syslib_default (char *ignore ATTRIBUTE_UNUSED)
+syslib_default (ignore)
+     char *ignore ATTRIBUTE_UNUSED;
 {
   info_msg (_("%S SYSLIB ignored\n"));
 }
 
 void
-hll_default (char *ignore ATTRIBUTE_UNUSED)
+hll_default (ignore)
+     char *ignore ATTRIBUTE_UNUSED;
 {
   info_msg (_("%S HLL ignored\n"));
 }
@@ -235,7 +257,8 @@ hll_default (char *ignore ATTRIBUTE_UNUSED)
 ld_emulation_xfer_type *ld_emulations[] = { EMULATION_LIST };
 
 void
-ldemul_choose_mode (char *target)
+ldemul_choose_mode (target)
+     char *target;
 {
   ld_emulation_xfer_type **eptr = ld_emulations;
   /* Ignore "gld" prefix.  */
@@ -256,7 +279,8 @@ ldemul_choose_mode (char *target)
 }
 
 void
-ldemul_list_emulations (FILE *f)
+ldemul_list_emulations (f)
+     FILE *f;
 {
   ld_emulation_xfer_type **eptr = ld_emulations;
   bfd_boolean first = TRUE;
@@ -272,7 +296,8 @@ ldemul_list_emulations (FILE *f)
 }
 
 void
-ldemul_list_emulation_options (FILE *f)
+ldemul_list_emulation_options (f)
+     FILE *f;
 {
   ld_emulation_xfer_type **eptr;
   int options_found = 0;
@@ -296,7 +321,9 @@ ldemul_list_emulation_options (FILE *f)
 }
 
 int
-ldemul_find_potential_libraries (char *name, lang_input_statement_type *entry)
+ldemul_find_potential_libraries (name, entry)
+     char *name;
+     lang_input_statement_type *entry;
 {
   if (ld_emulation->find_potential_libraries)
     return ld_emulation->find_potential_libraries (name, entry);
@@ -305,7 +332,8 @@ ldemul_find_potential_libraries (char *name, lang_input_statement_type *entry)
 }
 
 struct bfd_elf_version_expr *
-ldemul_new_vers_pattern (struct bfd_elf_version_expr *entry)
+ldemul_new_vers_pattern (entry)
+     struct bfd_elf_version_expr *entry;
 {
   if (ld_emulation->new_vers_pattern)
     entry = (*ld_emulation->new_vers_pattern) (entry);

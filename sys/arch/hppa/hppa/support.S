@@ -1,4 +1,4 @@
-/*	$NetBSD: support.S,v 1.4 2004/08/26 16:48:06 jkunz Exp $	*/
+/*	$NetBSD: support.S,v 1.2 2003/10/10 15:07:43 chs Exp $	*/
 
 /*	$OpenBSD: locore.S,v 1.46 2001/09/20 18:33:03 mickey Exp $	*/
 
@@ -82,7 +82,7 @@ LEAF_ENTRY(fdcache)
 	ldil	L%dcache_stride,%t1
 	ldw	R%dcache_stride(%t1), %arg3
 
-	comb,=,n %arg2, %r0, fdc_none	/* no bytes, no flush */
+	comb,=	%arg2, %r0, fdc_none	/* no bytes, no flush */
 
 	mtsp	%arg0, %sr1		/* move the space register to sr1 */
 	add	%arg1, %arg2, %arg0	/* get the last byte to flush in arg0 */
@@ -123,7 +123,7 @@ fdc_short:				/* flush one line at a time */
 fdc_none:
 	sync
 	syncdma
-	bv	%r0(%rp)
+	bv	%r0(%r2)
 	sync
 EXIT(fdcache)
 
@@ -176,7 +176,7 @@ pdc_short:				/* flush one line at a time */
 pdc_none:
 	sync
 	syncdma
-	bv	%r0(%rp)
+	bv	%r0(%r2)
 	sync
 EXIT(pdcache)
 
@@ -229,26 +229,10 @@ fic_short:				/* flush one line at a time */
 fic_none:
 	sync
 	syncdma
-	bv	%r0(%rp)
+	bv	%r0(%r2)
 	sync
 EXIT(ficache)
 
-#ifdef HP7300LC_CPU
-	.section .bss
-eaio_l2_mask:
-	.block 4
-	.text
-LEAF_ENTRY(eaio_l2)
-	ldil	L%eaio_l2_mask, %t2
-	ldw	R%eaio_l2_mask(%t2), %t1
-	or	%t1, %arg0, %t1
-	MTCPU_C(22, DR0_PCXL2_ACCEL_IO)
-	nop
-	nop
-	bv	0(%rp)
-	stw	%t1, R%eaio_l2_mask(%t2)
-EXIT(eaio_l2)
-#endif /* HP7300LC_CPU */
 
 LEAF_ENTRY(setjmp)
 /*
@@ -277,7 +261,7 @@ LEAF_ENTRY(setjmp)
 	stwm	%rp,4(%arg0)	/* Save the return pointer */
 	stwm	%sp,4(%arg0)	/* Save the original stack pointer */
 
-	bv	%r0(%rp)
+	bv	0(%rp)
 	copy	%r0, %ret0
 EXIT(setjmp)
 
@@ -305,7 +289,7 @@ LEAF_ENTRY(longjmp)
 	ldwm	4(%arg0),%rp	/* Restore return address pointer, */
 	ldwm	4(%arg0),%sp	/* stack pointer, */
 
-	bv	%r0(%rp)
+	bv	0(%rp)
 	copy	%arg1,%ret0	/* Move return value to where it belongs. */
 EXIT(longjmp)
 

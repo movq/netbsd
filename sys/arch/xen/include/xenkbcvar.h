@@ -1,4 +1,4 @@
-/* $NetBSD: xenkbcvar.h,v 1.1 2004/04/24 21:33:32 cl Exp $ */
+/* $NetBSD: xenkbcvar.h,v 1.1.2.2 2004/05/22 15:59:21 he Exp $ */
 
 /*
  *

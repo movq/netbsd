@@ -7,14 +7,15 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: w_dremf.c,v 1.4 2004/06/25 15:57:38 drochner Exp $");
+__RCSID("$NetBSD: w_dremf.c,v 1.3 1999/07/02 15:37:44 simonb Exp $");
 #endif
 
 #include "math.h"
 #include "math_private.h"
 
 float
-dremf(float x, float y)
+dremf(x, y)
+	float x, y;
 {
 	return remainderf(x, y);
 }

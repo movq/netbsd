@@ -1,8 +1,7 @@
-/*	$NetBSD: index.cpp,v 1.1.1.2 2004/07/30 14:44:53 wiz Exp $	*/
+/*	$NetBSD: index.cpp,v 1.1.1.1 2003/06/30 17:52:06 wiz Exp $	*/
 
 // -*- C++ -*-
-/* Copyright (C) 1989, 1990, 1991, 1992, 2001, 2004
-   Free Software Foundation, Inc.
+/* Copyright (C) 1989, 1990, 1991, 1992, 2001 Free Software Foundation, Inc.
      Written by James Clark (jjc@jclark.com)
 
 This file is part of groff.
@@ -352,7 +351,7 @@ int index_search_item_iterator::next(const linear_searcher &,
 }
 
 int index_search_item_iterator::get_tag(int tagno,
-					const linear_searcher &searchr,
+					const linear_searcher &searcher,
 					const char **pp, int *lenp,
 					reference_id *ridp)
 {
@@ -392,6 +391,7 @@ int index_search_item_iterator::get_tag(int tagno,
     int length = tp->length;
     int err = 0;
     if (length == 0) {
+      struct stat sb;
       if (fstat(fileno(fp), &sb) < 0) {
 	error("can't stat `%1': %2", filename, strerror(errno));
 	err = 1;
@@ -428,7 +428,7 @@ int index_search_item_iterator::get_tag(int tagno,
 	      buf[didx] = buf[sidx];
 	  }
 	buf[length + 1] = '\n';
-	res = searchr.search(buf + 1, buf + 2 + length, pp, lenp);
+	res = searcher.search(buf + 1, buf + 2 + length, pp, lenp);
 	if (res && ridp)
 	  *ridp = reference_id(indx->filename_id + tp->filename_index,
 			       tp->start);

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_spppsubr.c,v 1.79 2004/12/06 02:59:23 christos Exp $	 */
+/*	$NetBSD: if_spppsubr.c,v 1.75.2.1 2004/04/08 21:16:03 jdc Exp $	 */
 
 /*
  * Synchronous PPP/Cisco link level subroutines.
@@ -41,13 +41,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_spppsubr.c,v 1.79 2004/12/06 02:59:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_spppsubr.c,v 1.75.2.1 2004/04/08 21:16:03 jdc Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipx.h"
 #include "opt_iso.h"
 #include "opt_ns.h"
-#include "opt_pfil_hooks.h"
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -372,16 +371,14 @@ static const char *sppp_phase_name(int phase);
 static const char *sppp_proto_name(u_short proto);
 static const char *sppp_state_name(int state);
 static int sppp_params(struct sppp *sp, int cmd, void *data);
-#ifdef INET
 static void sppp_get_ip_addrs(struct sppp *sp, u_int32_t *src, u_int32_t *dst,
 			      u_int32_t *srcmask);
-static void sppp_set_ip_addrs(struct sppp *sp, u_int32_t myaddr, u_int32_t hisaddr);
-static void sppp_clear_ip_addrs(struct sppp *sp);
-#endif
 static void sppp_keepalive(void *dummy);
 static void sppp_phase_network(struct sppp *sp);
 static void sppp_print_bytes(const u_char *p, u_short len);
 static void sppp_print_string(const char *p, u_short len);
+static void sppp_set_ip_addrs(struct sppp *sp, u_int32_t myaddr, u_int32_t hisaddr);
+static void sppp_clear_ip_addrs(struct sppp *sp);
 #ifdef INET6
 static void sppp_get_ip6_addrs(struct sppp *sp, struct in6_addr *src,
 				struct in6_addr *dst, struct in6_addr *srcmask);
@@ -1191,9 +1188,7 @@ sppp_cisco_input(struct sppp *sp, struct mbuf *m)
 {
 	STDDCL;
 	struct cisco_packet *h;
-#ifdef INET
 	u_int32_t me, mymask;
-#endif
 
 	if (m->m_pkthdr.len < CISCO_PACKET_LEN) {
 		if (debug)
@@ -1247,11 +1242,9 @@ sppp_cisco_input(struct sppp *sp, struct mbuf *m)
 		}
 		break;
 	case CISCO_ADDR_REQ:
-#ifdef INET
 		sppp_get_ip_addrs(sp, &me, 0, &mymask);
 		if (me != 0L)
 			sppp_cisco_send(sp, CISCO_ADDR_REPLY, me, mymask);
-#endif
 		break;
 	}
 }
@@ -2746,18 +2739,14 @@ sppp_ipcp_open(struct sppp *sp)
 	sp->ipcp.req_hisaddr = 0;
 	memset(&sp->dns_addrs, 0, sizeof sp->dns_addrs);
 
-#ifdef INET
 	sppp_get_ip_addrs(sp, &myaddr, &hisaddr, 0);
-#else
-	myaddr = hisaddr = 0;
-#endif
 	/*
 	 * If we don't have his address, this probably means our
 	 * interface doesn't want to talk IP at all.  (This could
 	 * be the case if somebody wants to speak only IPX, for
 	 * example.)  Don't open IPCP in this case.
 	 */
-	if (hisaddr == 0) {
+	if (hisaddr == 0L) {
 		/* XXX this message should go away */
 		if (debug)
 			log(LOG_DEBUG, "%s: ipcp_open(): no IP interface\n",
@@ -2789,13 +2778,11 @@ sppp_ipcp_close(struct sppp *sp)
 	STDDCL;
 
 	sppp_close_event(&ipcp, sp);
-#ifdef INET
 	if (sp->ipcp.flags & (IPCP_MYADDR_DYN|IPCP_HISADDR_DYN))
 		/*
 		 * Some address was dynamic, clear it again.
 		 */
 		sppp_clear_ip_addrs(sp);
-#endif
 
 	if (sp->pp_saved_mtu > 0) {
 		ifp->if_mtu = sp->pp_saved_mtu;
@@ -2887,11 +2874,7 @@ sppp_ipcp_RCR(struct sppp *sp, struct lcp_header *h, int len)
 	if (sp->ipcp.flags & IPCP_HISADDR_SEEN)
 		hisaddr = sp->ipcp.req_hisaddr;	/* we already aggreed on that */
 	else
-#ifdef INET
 		sppp_get_ip_addrs(sp, 0, &hisaddr, 0);	/* user configuration */
-#else
-		hisaddr = 0;
-#endif
 	if (debug)
 		log(LOG_DEBUG, "%s: ipcp parse opt values: ",
 		       ifp->if_xname);
@@ -3114,7 +3097,6 @@ sppp_ipcp_RCN_nak(struct sppp *sp, struct lcp_header *h, int len)
 static void
 sppp_ipcp_tlu(struct sppp *sp)
 {
-#ifdef INET
 	/* we are up. Set addresses and notify anyone interested */
 	STDDCL;
 	u_int32_t myaddr, hisaddr;
@@ -3137,7 +3119,6 @@ sppp_ipcp_tlu(struct sppp *sp)
 
 	if (sp->pp_con)
 		sp->pp_con(sp);
-#endif
 }
 
 static void
@@ -3163,9 +3144,7 @@ static void
 sppp_ipcp_scr(struct sppp *sp)
 {
 	char opt[6 /* compression */ + 6 /* address */ + 12 /* dns addresses */];
-#ifdef INET
 	u_int32_t ouraddr;
-#endif
 	int i = 0;
 
 #ifdef notyet
@@ -3179,7 +3158,6 @@ sppp_ipcp_scr(struct sppp *sp)
 	}
 #endif
 
-#ifdef INET
 	if (sp->ipcp.opts & (1 << IPCP_OPT_ADDRESS)) {
 		if (sp->ipcp.flags & IPCP_MYADDR_SEEN)
 			ouraddr = sp->ipcp.req_myaddr;	/* not sure if this can ever happen */
@@ -3192,7 +3170,6 @@ sppp_ipcp_scr(struct sppp *sp)
 		opt[i++] = ouraddr >> 8;
 		opt[i++] = ouraddr;
 	}
-#endif
 
 	if (sp->query_dns & 1) {
 		opt[i++] = IPCP_OPT_PRIMDNS;
@@ -4730,7 +4707,6 @@ sppp_keepalive(void *dummy)
 	callout_reset(&keepalive_ch, hz * LCP_KEEPALIVE_INTERVAL, sppp_keepalive, NULL);
 }
 
-#ifdef INET
 /*
  * Get both IP addresses.
  */
@@ -4826,11 +4802,6 @@ found:
 			log(LOG_DEBUG, "%s: sppp_set_ip_addrs: in_ifinit "
 			" failed, error=%d\n", ifp->if_xname, error);
 		}
-#ifdef PFIL_HOOKS
-		if (!error)
-			(void)pfil_run_hooks(&if_pfil,
-			    (struct mbuf **)SIOCAIFADDR, ifp, PFIL_IFADDR);
-#endif
 	}
 }			
 
@@ -4875,13 +4846,8 @@ found:
 			/* replace peer addr in place */
 			dest->sin_addr.s_addr = sp->ipcp.saved_hisaddr;
 		in_ifinit(ifp, ifatoia(ifa), &new_sin, 0);
-#ifdef PFIL_HOOKS
-		(void)pfil_run_hooks(&if_pfil,
-		    (struct mbuf **)SIOCDIFADDR, ifp, PFIL_IFADDR);
-#endif
 	}
 }			
-#endif
 
 #ifdef INET6
 /*
@@ -4979,11 +4945,6 @@ sppp_set_ip6_addr(struct sppp *sp, const struct in6_addr *src)
 			log(LOG_DEBUG, "%s: sppp_set_ip6_addr: in6_ifinit "
 			" failed, error=%d\n", ifp->if_xname, error);
 		}
-#ifdef PFIL_HOOKS
-		if (!error)
-			(void)pfil_run_hooks(&if_pfil,
-			    (struct mbuf **)SIOCAIFADDR_IN6, ifp, PFIL_IFADDR);
-#endif
 	}
 }
 #endif
@@ -5292,7 +5253,7 @@ sppp_cp_type_name(u_char type)
 	case ECHO_REPLY: return "echo-reply";
 	case DISC_REQ:   return "discard-req";
 	}
-	snprintf(buf, sizeof(buf), "0x%x", type);
+	sprintf (buf, "0x%x", type);
 	return buf;
 }
 
@@ -5315,7 +5276,7 @@ sppp_auth_type_name(u_short proto, u_char type)
 		case PAP_NAK:		return "nak";
 		}
 	}
-	snprintf(buf, sizeof(buf), "0x%x", type);
+	sprintf (buf, "0x%x", type);
 	return buf;
 }
 
@@ -5332,7 +5293,7 @@ sppp_lcp_opt_name(u_char opt)
 	case LCP_OPT_PROTO_COMP:	return "proto-comp";
 	case LCP_OPT_ADDR_COMP:		return "addr-comp";
 	}
-	snprintf(buf, sizeof(buf), "0x%x", opt);
+	sprintf (buf, "0x%x", opt);
 	return buf;
 }
 
@@ -5345,7 +5306,7 @@ sppp_ipcp_opt_name(u_char opt)
 	case IPCP_OPT_COMPRESSION:	return "compression";
 	case IPCP_OPT_ADDRESS:		return "address";
 	}
-	snprintf(buf, sizeof(buf), "0x%x", opt);
+	sprintf (buf, "0x%x", opt);
 	return buf;
 }
 
@@ -5358,7 +5319,7 @@ sppp_ipv6cp_opt_name(u_char opt)
 	case IPV6CP_OPT_IFID:		return "ifid";
 	case IPV6CP_OPT_COMPRESSION:	return "compression";
 	}
-	snprintf(buf, sizeof(buf), "0x%x", opt);
+	sprintf (buf, "0x%x", opt);
 	return buf;
 }
 #endif
@@ -5405,7 +5366,7 @@ sppp_proto_name(u_short proto)
 	case PPP_CHAP:	return "chap";
 	case PPP_IPV6CP: return "ipv6cp";
 	}
-	snprintf(buf, sizeof(buf), "0x%x", (unsigned)proto);
+	sprintf(buf, "0x%x", (unsigned)proto);
 	return buf;
 }
 
@@ -5438,7 +5399,7 @@ static const char *
 sppp_dotted_quad(u_int32_t addr)
 {
 	static char s[16];
-	snprintf(s, sizeof(s), "%d.%d.%d.%d",
+	sprintf(s, "%d.%d.%d.%d",
 		(int)((addr >> 24) & 0xff),
 		(int)((addr >> 16) & 0xff),
 		(int)((addr >> 8) & 0xff),

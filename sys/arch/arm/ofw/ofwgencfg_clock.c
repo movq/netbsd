@@ -1,4 +1,4 @@
-/*	$NetBSD: ofwgencfg_clock.c,v 1.5 2004/08/29 17:37:03 thorpej Exp $	*/
+/*	$NetBSD: ofwgencfg_clock.c,v 1.4 2003/07/15 00:24:48 lukem Exp $	*/
 
 /*
  * Copyright 1997
@@ -36,7 +36,7 @@
 /* Include header files */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofwgencfg_clock.c,v 1.5 2004/08/29 17:37:03 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofwgencfg_clock.c,v 1.4 2003/07/15 00:24:48 lukem Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -59,16 +59,17 @@ static void *clockirq;
  * hardclock(). Eventually the irqhandler can call hardclock() directly
  * but for now we use this function so that we can debug IRQ's
  */
-
-static int
-clockhandler(struct clockframe *frame)
+ 
+int
+clockhandler(frame)
+	struct clockframe *frame;
 {
 
 	hardclock(frame);
 	return(0);	/* Pass the interrupt on down the chain */
 }
 
-#if 0
+
 /*
  * int statclockhandler(struct clockframe *frame)
  *
@@ -76,7 +77,7 @@ clockhandler(struct clockframe *frame)
  * statclock(). Eventually the irqhandler can call statclock() directly
  * but for now we use this function so that we can debug IRQ's
  */
-
+ 
 int
 statclockhandler(frame)
 	struct clockframe *frame;
@@ -85,7 +86,7 @@ statclockhandler(frame)
 	statclock(frame);
 	return(0);	/* Pass the interrupt on down the chain */
 }
-#endif
+
 
 /*
  * void setstatclockrate(int hz)
@@ -124,7 +125,7 @@ cpu_initclocks()
 	printf("clock: hz=%d stathz = %d profhz = %d\n", hz, stathz, profhz);
 
         clockirq = intr_claim(IRQ_TIMER0, IPL_CLOCK, "tmr0 hard clk",
-            (int (*)(void *))clockhandler, 0);
+            clockhandler, 0);
         if (clockirq == NULL)
                 panic("Cannot installer timer 0 IRQ handler");
 

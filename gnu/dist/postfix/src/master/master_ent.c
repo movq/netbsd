@@ -1,5 +1,3 @@
-/*	$NetBSD: master_ent.c,v 1.12 2004/05/31 00:46:47 heas Exp $	*/
-
 /*++
 /* NAME
 /*	master_ent 3

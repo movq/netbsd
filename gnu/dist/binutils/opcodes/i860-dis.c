@@ -1,5 +1,5 @@
 /* Disassembler for the i860.
-   Copyright 2000, 2003 Free Software Foundation, Inc.
+   Copyright 2000 Free Software Foundation, Inc.
 
    Contributed by Jason Eckhardt <jle@cygnus.com>.
 
@@ -37,12 +37,14 @@ static const char *const frnames[] =
   "f16", "f17", "f18", "f19", "f20", "f21", "f22", "f23",
   "f24", "f25", "f26", "f27", "f28", "f29", "f30", "f31"};
 
-/* Control/status register names (encoded as 0..11 in the instruction).
-   Registers bear, ccr, p0, p1, p2 and p3 are XP only.  */
+/* Control/status register names (encoded as 0..5 in the instruction).  */
 static const char *const crnames[] = 
- {"fir", "psr", "dirbase", "db", "fsr", "epsr", "bear", "ccr",
-  "p0", "p1", "p2", "p3", "--", "--", "--", "--" };
+ {"fir", "psr", "dirbase", "db", "fsr", "epsr", "", ""};
 
+
+/* Prototypes.  */
+static int sign_ext		PARAMS((unsigned int, int)); 
+static void print_br_address	PARAMS((disassemble_info *, bfd_vma, long));
 
 
 /* True if opcode is xor, xorh, and, andh, or, orh, andnot, andnoth.  */
@@ -56,7 +58,9 @@ static const char *const crnames[] =
 
 /* Sign extend N-bit number.  */
 static int
-sign_ext (unsigned int x, int n)
+sign_ext (x, n)
+     unsigned int x;
+     int n;
 {
   int t;
   t = x >> (n - 1);
@@ -68,7 +72,10 @@ sign_ext (unsigned int x, int n)
 /* Print a PC-relative branch offset.  VAL is the sign extended value
    from the branch instruction.  */
 static void
-print_br_address (disassemble_info *info, bfd_vma memaddr, long val)
+print_br_address (info, memaddr, val)
+     disassemble_info *info;
+     bfd_vma memaddr;
+     long val;
 {
 
   long adj = (long)memaddr + 4 + (val << 2);
@@ -87,7 +94,9 @@ print_br_address (disassemble_info *info, bfd_vma memaddr, long val)
 
 /* Print one instruction.  */
 int
-print_insn_i860 (bfd_vma memaddr, disassemble_info *info)
+print_insn_i860 (memaddr, info)
+     bfd_vma memaddr;
+     disassemble_info *info;
 {
   bfd_byte buff[4];
   unsigned int insn, i;
@@ -129,11 +138,8 @@ print_insn_i860 (bfd_vma memaddr, disassemble_info *info)
       const char *s;
       int val;
 
-      /* If this a flop (or a shrd) and its dual bit is set,
-         prefix with 'd.'.  */ 	
-      if (((insn & 0xfc000000) == 0x48000000
-           || (insn & 0xfc000000) == 0xb0000000)
-          && (insn & 0x200))
+      /* If this a flop and its dual bit is set, prefix with 'd.'.  */ 	
+      if ((insn & 0xfc000000) == 0x48000000 && (insn & 0x200))
 	(*info->fprintf_func) (info->stream, "d.%s\t", opcode->name);
       else
 	(*info->fprintf_func) (info->stream, "%s\t", opcode->name);
@@ -181,7 +187,7 @@ print_insn_i860 (bfd_vma memaddr, disassemble_info *info)
 	    /* Control register.  */
 	    case 'c':
 	      (*info->fprintf_func) (info->stream, "%s%s", I860_REG_PREFIX,
-				     crnames[(insn >> 21) & 0xf]);
+				     crnames[(insn >> 21) & 0x7]);
 	      break;
 
 	    /* 16-bit immediate (sign extend, except for bitwise ops).  */

@@ -1,5 +1,5 @@
 # $Heimdal: Makefile.am,v 1.69.2.3 2004/06/21 08:26:44 lha Exp $
-# $NetBSD: Makefile.am,v 1.1.1.9 2004/09/14 07:46:33 lha Exp $
+# $NetBSD: Makefile.am,v 1.1.1.7.2.2 2004/09/17 04:36:00 jmc Exp $
 
 include $(top_srcdir)/Makefile.am.common
 

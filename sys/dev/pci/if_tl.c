@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tl.c,v 1.66 2004/10/30 18:09:22 thorpej Exp $	*/
+/*	$NetBSD: if_tl.c,v 1.64.2.1 2004/06/22 15:24:54 tron Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.  All rights reserved.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.66 2004/10/30 18:09:22 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.64.2.1 2004/06/22 15:24:54 tron Exp $");
 
 #undef TLDEBUG
 #define TL_PRIV_STATS
@@ -1250,8 +1250,7 @@ tl_ifioctl(ifp, cmd, data)
 	default:
 		error = ether_ioctl(ifp, cmd, data);
 		if (error == ENETRESET) {
-			if (ifp->if_flags & IFF_RUNNING)
-				tl_addr_filter(sc);
+			tl_addr_filter(sc);
 			error = 0;
 		}
 	}

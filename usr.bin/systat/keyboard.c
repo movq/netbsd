@@ -1,4 +1,4 @@
-/*	$NetBSD: keyboard.c,v 1.20 2004/11/04 07:18:47 dsl Exp $	*/
+/*	$NetBSD: keyboard.c,v 1.16 2004/03/27 00:53:59 martin Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1992, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)keyboard.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: keyboard.c,v 1.20 2004/11/04 07:18:47 dsl Exp $");
+__RCSID("$NetBSD: keyboard.c,v 1.16 2004/03/27 00:53:59 martin Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -50,9 +50,12 @@ __RCSID("$NetBSD: keyboard.c,v 1.20 2004/11/04 07:18:47 dsl Exp $");
 void
 keyboard(void)
 {
-	int ch, rch;
-	char *line;
+	char ch, rch, *line;
 	int i, linesz;
+	sigset_t set;
+
+	sigemptyset(&set);
+	sigaddset(&set, SIGALRM);
 
 	linesz = COLS - 2;		/* XXX does not get updated on SIGWINCH */
 	if ((line = malloc(linesz)) == NULL) {
@@ -66,16 +69,11 @@ keyboard(void)
 
 		while (col == 0 || (ch != '\r' && ch != '\n')) {
 			refresh();
-			ch = getch();
-			if (ch == ERR) {
-				display(SIGALRM);
+			ch = getch() & 0177;
+			if (ch == 0177 && ferror(stdin)) {
+				clearerr(stdin);
 				continue;
 			}
-			if (ch == KEY_RESIZE) {
-				redraw(0);
-				continue;
-			}
-			ch &= 0177;
 			rch = ch;
 			if (col == 0) {
 				switch(ch) {
@@ -85,10 +83,14 @@ keyboard(void)
 					display(0);
 					break;
 				    case CTRL('l'):
+					sigprocmask(SIG_BLOCK, &set, NULL);
 					wrefresh(curscr);
+					sigprocmask(SIG_UNBLOCK, &set, NULL);
 					break;
 				    case CTRL('g'):
+					sigprocmask(SIG_BLOCK, &set, NULL);
 					status();
+					sigprocmask(SIG_UNBLOCK, &set, NULL);
 					break;
 				    case '?':
 				    case 'H':
@@ -116,12 +118,9 @@ keyboard(void)
 				goto doerase;
 			}
 			if (ch == CTRL('w') && col > 0) {
-				while (--col >= 0 &&
-				    isspace((unsigned char)line[col]))
-					continue;
+				while (--col >= 0 && isspace(line[col]));
 				col++;
-				while (--col >= 0 &&
-				    !isspace((unsigned char)line[col]))
+				while (--col >= 0 && !isspace(line[col]))
 					if (col == 0)
 						break;
 				col++;
@@ -145,7 +144,7 @@ keyboard(void)
 		line[col] = '\0';
 		/* pass commands as lowercase */
 		for (i = 1; i < col ; i++)
-			line[i] = tolower((unsigned char)line[i]);
+			line[i] = tolower(line[i]);
 		command(line + 1);
 	}
 	/* NOTREACHED */

@@ -1,4 +1,4 @@
-/* $NetBSD: lkminit_vfs.c,v 1.7 2004/05/25 01:36:37 mhitch Exp $ */
+/* $NetBSD: lkminit_vfs.c,v 1.5.4.2 2004/05/29 09:06:17 tron Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lkminit_vfs.c,v 1.7 2004/05/25 01:36:37 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lkminit_vfs.c,v 1.5.4.2 2004/05/29 09:06:17 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/sysctl.h>

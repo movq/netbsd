@@ -1,4 +1,4 @@
-.\" $NetBSD: cnmagic.9,v 1.13 2004/10/06 05:57:33 dbj Exp $
+.\" $NetBSD: cnmagic.9,v 1.11 2003/04/16 13:35:26 wiz Exp $
 .\"
 .\" Copyright (c) 2000 Eduardo Horvath
 .\" All rights reserved.
@@ -166,14 +166,14 @@ Serial
 .Li BREAK
 sequence.
 .It 0x02
-.Li Nul
+.LI Nul
 character.
 .El
 Returns
 .Li 0
 on success or a non-zero error value.
 .It Fn "int cn_get_magic" "char *magic" "int len"
-Extract the current magic sequence from the state machine and return
+Extract the current magic sequence from the sate machine and return
 up to
 .Fa len
 bytes of it in the buffer pointed to by

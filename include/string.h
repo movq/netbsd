@@ -1,4 +1,4 @@
-/*	$NetBSD: string.h,v 1.27 2004/07/12 23:35:14 kleink Exp $	*/
+/*	$NetBSD: string.h,v 1.25.2.2 2004/07/14 09:02:02 tron Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993

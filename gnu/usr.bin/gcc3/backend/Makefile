@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.16 2004/06/12 14:57:57 jmc Exp $
+#	$NetBSD: Makefile,v 1.14.2.2 2004/06/14 18:19:40 tron Exp $
 
 NOLINKLIB=	# defined
 NOLINT=		# defined

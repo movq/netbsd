@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.cats.inc,v 1.16 2004/09/13 09:39:40 chs Exp $
+#	$NetBSD: Makefile.cats.inc,v 1.15.2.1 2004/09/13 17:32:25 tron Exp $
 
 MACHINE_ARCH=	arm
 CPPFLAGS+=	-D${MACHINE}

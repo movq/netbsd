@@ -1,5 +1,5 @@
 dnl $Heimdal: roken-frag.m4,v 1.45.2.1 2004/04/01 07:27:35 joda Exp $
-dnl $NetBSD: roken-frag.m4,v 1.7 2004/04/02 14:59:47 lha Exp $
+dnl $NetBSD: roken-frag.m4,v 1.6.2.1 2004/04/21 04:55:38 jmc Exp $
 dnl
 dnl some code to get roken working
 dnl

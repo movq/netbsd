@@ -1,5 +1,5 @@
 /* arsup.c - Archive support for MRI compatibility
-   Copyright 1992, 1994, 1995, 1996, 1997, 2000, 2002, 2003, 2004
+   Copyright 1992, 1994, 1995, 1996, 1997, 2000, 2002
    Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
@@ -32,14 +32,17 @@
 #include "filenames.h"
 
 static void map_over_list
-  (bfd *, void (*function) (bfd *, bfd *), struct list *);
-static void ar_directory_doer (bfd *, bfd *);
-static void ar_addlib_doer (bfd *, bfd *);
+  PARAMS ((bfd *, void (*function) (bfd *, bfd *), struct list *));
+static void ar_directory_doer PARAMS ((bfd *, bfd *));
+static void ar_addlib_doer PARAMS ((bfd *, bfd *));
 
 extern int verbose;
 
 static void
-map_over_list (bfd *arch, void (*function) (bfd *, bfd *), struct list *list)
+map_over_list (arch, function, list)
+     bfd *arch;
+     void (*function) PARAMS ((bfd *, bfd *));
+     struct list *list;
 {
   bfd *head;
 
@@ -89,13 +92,18 @@ map_over_list (bfd *arch, void (*function) (bfd *, bfd *), struct list *list)
 FILE *outfile;
 
 static void
-ar_directory_doer (bfd *abfd, bfd *ignore ATTRIBUTE_UNUSED)
+ar_directory_doer (abfd, ignore)
+     bfd *abfd;
+     bfd *ignore ATTRIBUTE_UNUSED;
 {
   print_arelt_descr(outfile, abfd, verbose);
 }
 
 void
-ar_directory (char *ar_name, struct list *list, char *output)
+ar_directory (ar_name, list, output)
+     char *ar_name;
+     struct list *list;
+     char *output;
 {
   bfd *arch;
 
@@ -122,7 +130,7 @@ ar_directory (char *ar_name, struct list *list, char *output)
 }
 
 void
-prompt (void)
+DEFUN_VOID(prompt)
 {
   extern int interactive;
 
@@ -134,7 +142,7 @@ prompt (void)
 }
 
 void
-maybequit (void)
+maybequit ()
 {
   if (! interactive)
     xexit (9);
@@ -145,7 +153,9 @@ bfd *obfd;
 char *real_name;
 
 void
-ar_open (char *name, int t)
+ar_open (name, t)
+  char *name;
+  int t;
 {
   char *tname = (char *) xmalloc (strlen (name) + 10);
   const char *bname = lbasename (name);
@@ -209,7 +219,9 @@ ar_open (char *name, int t)
 }
 
 static void
-ar_addlib_doer (bfd *abfd, bfd *prev)
+ar_addlib_doer (abfd, prev)
+     bfd *abfd;
+     bfd *prev;
 {
   /* Add this module to the output bfd.  */
   if (prev != NULL)
@@ -220,7 +232,9 @@ ar_addlib_doer (bfd *abfd, bfd *prev)
 }
 
 void
-ar_addlib (char *name, struct list *list)
+ar_addlib (name, list)
+     char *name;
+     struct list *list;
 {
   if (obfd == NULL)
     {
@@ -235,12 +249,13 @@ ar_addlib (char *name, struct list *list)
       if (arch != NULL)
 	map_over_list (arch, ar_addlib_doer, list);
 
-      /* Don't close the bfd, since it will make the elements disappear.  */
+      /* Don't close the bfd, since it will make the elements disasppear.  */
     }
 }
 
 void
-ar_addmod (struct list *list)
+ar_addmod (list)
+     struct list *list;
 {
   if (!obfd)
     {
@@ -271,14 +286,15 @@ ar_addmod (struct list *list)
 
 
 void
-ar_clear (void)
+ar_clear ()
 {
   if (obfd)
     obfd->archive_head = 0;
 }
 
 void
-ar_delete (struct list *list)
+ar_delete (list)
+     struct list *list;
 {
   if (!obfd)
     {
@@ -320,7 +336,7 @@ ar_delete (struct list *list)
 }
 
 void
-ar_save (void)
+ar_save ()
 {
   if (!obfd)
     {
@@ -333,14 +349,15 @@ ar_save (void)
 
       bfd_close (obfd);
 
-      smart_rename (ofilename, real_name, 0);
+      rename (ofilename, real_name);
       obfd = 0;
       free (ofilename);
     }
 }
 
 void
-ar_replace (struct list *list)
+ar_replace (list)
+     struct list *list;
 {
   if (!obfd)
     {
@@ -406,7 +423,7 @@ ar_replace (struct list *list)
 
 /* And I added this one.  */
 void
-ar_list (void)
+ar_list ()
 {
   if (!obfd)
     {
@@ -429,17 +446,18 @@ ar_list (void)
 }
 
 void
-ar_end (void)
+ar_end ()
 {
   if (obfd)
     {
-      bfd_cache_close (obfd);
+      fclose ((FILE *)(obfd->iostream));
       unlink (bfd_get_filename (obfd));
     }
 }
 
 void
-ar_extract (struct list *list)
+ar_extract (list)
+     struct list *list;
 {
   if (!obfd)
     {

@@ -1,4 +1,4 @@
-/*	$NetBSD: ms_hb.c,v 1.7 2004/09/04 13:43:11 tsutsui Exp $	*/
+/*	$NetBSD: ms_hb.c,v 1.6 2003/07/15 02:59:26 lukem Exp $	*/
 
 /*-
  * Copyright (c) 2001 Izumi Tsutsui.  All rights reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ms_hb.c,v 1.7 2004/09/04 13:43:11 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ms_hb.c,v 1.6 2003/07/15 02:59:26 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -49,14 +49,14 @@ __KERNEL_RCSID(0, "$NetBSD: ms_hb.c,v 1.7 2004/09/04 13:43:11 tsutsui Exp $");
 #define MS_SIZE 0x10 /* XXX */
 #define MS_IPL 5
 
-static int ms_hb_match(struct device *, struct cfdata *, void *);
-static void ms_hb_attach(struct device *, struct device *, void *);
-static void ms_hb_init(struct ms_softc *);
+int ms_hb_match(struct device *, struct cfdata *, void *);
+void ms_hb_attach(struct device *, struct device *, void *);
+void ms_hb_init(struct ms_softc *);
 int ms_hb_intr(void *);
 
-static int ms_hb_enable(void *);
-static int ms_hb_ioctl(void *, u_long, caddr_t, int, struct proc *);
-static void ms_hb_disable(void *);
+int ms_hb_enable(void *);
+int ms_hb_ioctl(void *, u_long, caddr_t, int, struct proc *);
+void ms_hb_disable(void *);
 
 CFATTACH_DECL(ms_hb, sizeof(struct ms_softc),
     ms_hb_match, ms_hb_attach, NULL, NULL);
@@ -67,8 +67,11 @@ struct wsmouse_accessops ms_hb_accessops = {
 	ms_hb_disable
 };
 
-static int
-ms_hb_match(struct device *parent, struct cfdata *cf, void *aux)
+int
+ms_hb_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct hb_attach_args *ha = aux;
 	u_int addr;
@@ -88,8 +91,11 @@ ms_hb_match(struct device *parent, struct cfdata *cf, void *aux)
 	return 1;
 }
 
-static void
-ms_hb_attach(struct device *parent, struct device *self, void *aux)
+void
+ms_hb_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct ms_softc *sc = (void *)self;
 	struct hb_attach_args *ha = aux;
@@ -121,8 +127,9 @@ ms_hb_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_wsmousedev = config_found(self, &wsa, wsmousedevprint);
 }
 
-static void
-ms_hb_init(struct ms_softc *sc)
+void
+ms_hb_init(sc)
+	struct ms_softc *sc;
 {
 	bus_space_tag_t bt = sc->sc_bt;
 	bus_space_handle_t bh = sc->sc_bh;
@@ -132,7 +139,8 @@ ms_hb_init(struct ms_softc *sc)
 }
 
 int
-ms_hb_intr(void *v)
+ms_hb_intr(v)
+	void *v;
 {
 	struct ms_softc *sc = v;
 	bus_space_tag_t bt = sc->sc_bt;
@@ -149,8 +157,9 @@ ms_hb_intr(void *v)
 	return handled;
 }
 
-static int
-ms_hb_enable(void *v)
+int
+ms_hb_enable(v)
+	void *v;
 {
 	struct ms_softc *sc = v;
 	bus_space_tag_t bt = sc->sc_bt;
@@ -161,8 +170,9 @@ ms_hb_enable(void *v)
 	return 0;
 }
 
-static void
-ms_hb_disable(void *v)
+void
+ms_hb_disable(v)
+	void *v;
 {
 	struct ms_softc *sc = v;
 	bus_space_tag_t bt = sc->sc_bt;
@@ -171,9 +181,13 @@ ms_hb_disable(void *v)
 	bus_space_write_1(bt, bh, MS_REG_INTE, 0);
 }
 
-static int
-ms_hb_ioctl(void *v, u_long cmd, caddr_t data, int flag, struct proc *p)
+int
+ms_hb_ioctl(v, cmd, data, flag, p)
+	void *v;
+	u_long cmd;
+	caddr_t data;
+	int flag;
+	struct proc *p;
 {
-
 	return EPASSTHROUGH;
 }

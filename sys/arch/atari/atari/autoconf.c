@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.48 2004/12/13 02:14:13 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.46 2003/07/15 01:19:42 lukem Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.48 2004/12/13 02:14:13 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.46 2003/07/15 01:19:42 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,6 +49,9 @@ static void findroot __P((void));
 void mbattach __P((struct device *, struct device *, void *));
 int mbprint __P((void *, const char *));
 int mbmatch __P((struct device *, struct cfdata *, void *));
+
+struct device *booted_device;
+int booted_partition;
 
 int atari_realconfig;
 #include <sys/kernel.h>
@@ -259,15 +262,13 @@ findroot(void)
 CFATTACH_DECL(mainbus, sizeof(struct device),
     mbmatch, mbattach, NULL, NULL);
 
-static int mb_attached;
-
 int
 mbmatch(pdp, cfp, auxp)
 	struct device	*pdp;
 	struct cfdata	*cfp;
 	void		*auxp;
 {
-	if (mb_attached)
+	if (cfp->cf_unit > 0)
 		return(0);
 	/*
 	 * We are always here
@@ -283,9 +284,6 @@ mbattach(pdp, dp, auxp)
 	struct device *pdp, *dp;
 	void *auxp;
 {
-
-	mb_attached = 1;
-
 	printf ("\n");
 	config_found(dp, "clock"   , simple_devprint);
 	config_found(dp, "grfbus"  , simple_devprint);

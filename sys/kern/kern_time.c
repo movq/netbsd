@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_time.c,v 1.85 2004/11/14 03:30:09 atatat Exp $	*/
+/*	$NetBSD: kern_time.c,v 1.82 2004/03/14 01:08:47 cl Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_time.c,v 1.85 2004/11/14 03:30:09 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_time.c,v 1.82 2004/03/14 01:08:47 cl Exp $");
 
 #include "fs_nfs.h"
 #include "opt_nfs.h"
@@ -280,7 +280,7 @@ sys_nanosleep(struct lwp *l, void *v, register_t *retval)
 	if (error)
 		return (error);
 
-	TIMESPEC_TO_TIMEVAL(&atv,&rqt);
+	TIMESPEC_TO_TIMEVAL(&atv,&rqt)
 	if (itimerfix(&atv))
 		return (EINVAL);
 
@@ -327,7 +327,7 @@ sys_gettimeofday(struct lwp *l, void *v, register_t *retval)
 {
 	struct sys_gettimeofday_args /* {
 		syscallarg(struct timeval *) tp;
-		syscallarg(void *) tzp;		really "struct timezone *"
+		syscallarg(struct timezone *) tzp;
 	} */ *uap = v;
 	struct timeval atv;
 	int error = 0;
@@ -357,7 +357,7 @@ sys_settimeofday(struct lwp *l, void *v, register_t *retval)
 {
 	struct sys_settimeofday_args /* {
 		syscallarg(const struct timeval *) tv;
-		syscallarg(const void *) tzp;	really "const struct timezone *"
+		syscallarg(const struct timezone *) tzp;
 	} */ *uap = v;
 	struct proc *p = l->l_proc;
 	int error;

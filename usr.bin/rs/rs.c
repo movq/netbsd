@@ -1,4 +1,4 @@
-/*	$NetBSD: rs.c,v 1.11 2004/11/01 21:43:35 dsl Exp $	*/
+/*	$NetBSD: rs.c,v 1.10 2004/01/05 23:23:36 jmmv Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1993\n\
 #if 0
 static char sccsid[] = "@(#)rs.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: rs.c,v 1.11 2004/11/01 21:43:35 dsl Exp $");
+__RCSID("$NetBSD: rs.c,v 1.10 2004/01/05 23:23:36 jmmv Exp $");
 #endif
 #endif /* not lint */
 
@@ -513,10 +513,10 @@ getlist(list, p)
 	char *t;
 
 	for (t = p + 1; *t; t++) {
-		if (!isdigit((unsigned char)*t))
+		if (!isdigit(*t))
 			usage("Option %.1s requires a list of unsigned numbers separated by commas", t);
 		count++;
-		while (*t && isdigit((unsigned char)*t))
+		while (*t && isdigit(*t))
 			t++;
 		if (*t != ',')
 			break;
@@ -528,7 +528,7 @@ getlist(list, p)
 		(*list)[count++] = atoi(t);
 		printf("++ %d ", (*list)[count-1]);
 		fflush(stdout);
-		while (*t && isdigit((unsigned char)*t))
+		while (*t && isdigit(*t))
 			t++;
 		if (*t != ',')
 			break;
@@ -544,7 +544,7 @@ getnum(num, p, strict)	/* num = number p points to; if (strict) complain */
 {
 	char *t = p;
 
-	if (!isdigit((unsigned char)*++t)) {
+	if (!isdigit(*++t)) {
 		if (strict || *t == '-' || *t == '+')
 			usage("Option %.1s requires an unsigned integer", p);
 		*num = 0;
@@ -552,7 +552,7 @@ getnum(num, p, strict)	/* num = number p points to; if (strict) complain */
 	}
 	*num = atoi(t);
 	while (*++t)
-		if (!isdigit((unsigned char)*t))
+		if (!isdigit(*t))
 			break;
 	return(--t);
 }

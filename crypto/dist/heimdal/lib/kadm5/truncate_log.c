@@ -34,7 +34,7 @@
 #include "iprop.h"
 
 __RCSID("$Heimdal: truncate_log.c,v 1.1.8.1 2003/10/14 15:58:46 joda Exp $"
-        "$NetBSD: truncate_log.c,v 1.3 2004/04/02 14:59:48 lha Exp $");
+        "$NetBSD: truncate_log.c,v 1.2.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 static char *realm;
 static int version_flag;

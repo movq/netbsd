@@ -1,5 +1,3 @@
-/*	$NetBSD: indirect.c,v 1.1.1.3 2004/05/31 00:24:37 heas Exp $	*/
-
 /*++
 /* NAME
 /*	indirect 3
@@ -51,7 +49,6 @@
 #include <bounce.h>
 #include <defer.h>
 #include <been_here.h>
-#include <sent.h>
 
 /* Application-specific. */
 
@@ -71,23 +68,14 @@ int     deliver_indirect(LOCAL_STATE state)
     if (msg_verbose)
 	msg_info("deliver_indirect: %s", state.msg_attr.recipient);
     if (been_here(state.dup_filter, "indirect %s", state.msg_attr.recipient))
-	return (0);
-
-    /*
-     * Don't forward a trace-only request.
-     */
-    if (DEL_REQ_TRACE_ONLY(state.request->flags))
-	return (sent(BOUNCE_FLAGS(state.request),
-		     SENT_ATTR(state.msg_attr),
-		     "forwards to %s", state.msg_attr.recipient));
+	    return (0);
 
     /*
      * Send the address to the forwarding service. Inherit the delivered
      * attribute from the alias or from the .forward file owner.
      */
     if (forward_append(state.msg_attr))
-	return (defer_append(BOUNCE_FLAGS(state.request),
-			     BOUNCE_ATTR(state.msg_attr),
+	return (defer_append(BOUNCE_FLAG_KEEP, BOUNCE_ATTR(state.msg_attr),
 			     "unable to forward message"));
     return (0);
 }

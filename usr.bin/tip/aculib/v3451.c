@@ -1,4 +1,4 @@
-/*	$NetBSD: v3451.c,v 1.10 2004/04/23 22:11:44 christos Exp $	*/
+/*	$NetBSD: v3451.c,v 1.9 2003/08/07 11:16:22 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)v3451.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: v3451.c,v 1.10 2004/04/23 22:11:44 christos Exp $");
+__RCSID("$NetBSD: v3451.c,v 1.9 2003/08/07 11:16:22 agc Exp $");
 #endif /* not lint */
 
 /*
@@ -45,10 +45,10 @@ __RCSID("$NetBSD: v3451.c,v 1.10 2004/04/23 22:11:44 christos Exp $");
 static	jmp_buf Sjbuf;
 
 static	void	alarmtr __P((int));
-static	int	expect __P((const char *));
-static	int	notin __P((const char *, char *));
-static	int	prefix __P((const char *, char *));
-static	void	vawrite __P((const char *, int));
+static	int	expect __P((char *));
+static	int	notin __P((char *, char *));
+static	int	prefix __P((char *, char *));
+static	void	vawrite __P((char *, int));
 
 int
 v3451_dialer(num, acu)
@@ -142,7 +142,7 @@ v3451_abort()
 
 static void
 vawrite(cp, delay)
-	const char *cp;
+	char *cp;
 	int delay;
 {
 
@@ -152,7 +152,7 @@ vawrite(cp, delay)
 
 static int
 expect(cp)
-	const char *cp;
+	char *cp;
 {
 	char buf[300];
 	char *rp = buf;
@@ -205,8 +205,7 @@ alarmtr(dummy)
 
 static int
 notin(sh, lg)
-	const char *sh;
-	char *lg;
+	char *sh, *lg;
 {
 
 	for (; *lg; lg++)
@@ -217,8 +216,7 @@ notin(sh, lg)
 
 static int
 prefix(s1, s2)
-	const char *s1;
-	char *s2;
+	char *s1, *s2;
 {
 	char c;
 

@@ -1,4 +1,4 @@
-#	$NetBSD: files.bebox,v 1.45 2004/08/30 15:05:16 drochner Exp $
+#	$NetBSD: files.bebox,v 1.43 2004/03/25 12:40:19 wiz Exp $
 #
 # First try for bebox specific configuration info
 #
@@ -46,7 +46,7 @@ include "dev/i2o/files.i2o"
 # System bus types
 #
 define mainbus { }
-device	mainbus: pcibus, mainbus
+device	mainbus: isabus, pcibus, mainbus
 attach	mainbus at root
 
 device	cpu
@@ -120,6 +120,9 @@ file	dev/isa/fdc_isa.c		fdc_isa
 
 device	fd: disk
 attach	fd at fdc
+
+# Game adapter (joystick)
+file	arch/bebox/isa/joy_timer.c	joy
 
 # ISA Plug 'n Play support
 file	arch/bebox/isa/isapnp_machdep.c		isapnp

@@ -34,7 +34,7 @@
 #include "kx.h"
 
 __RCSID("$Heimdal: kxd.c,v 1.71.2.2 2003/05/15 15:11:35 lha Exp $"
-        "$NetBSD: kxd.c,v 1.1.1.7 2004/04/02 14:47:33 lha Exp $");
+        "$NetBSD: kxd.c,v 1.1.1.6.2.1 2004/04/21 04:55:37 jmc Exp $");
 
 static pid_t wait_on_pid = -1;
 static int   done        = 0;

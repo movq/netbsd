@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.31 2004/08/14 16:06:42 dsl Exp $	*/
+/*	$NetBSD: md.c,v 1.29 2003/07/11 14:48:43 dsl Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -52,8 +52,6 @@
 #include "menu_defs.h"
 /* Maximum */
 #define MAX(i,j) ((i)>(j)?(i):(j))
-
-const char *fdtype = "";
    
 
 int
@@ -130,4 +128,11 @@ md_pre_update()
 void
 md_init()
 {
+}
+
+void
+md_set_sizemultname()
+{
+
+	set_sizemultname_meg();
 }

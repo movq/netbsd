@@ -1,4 +1,4 @@
-/*	$NetBSD: fdesc_vnops.c,v 1.82 2004/11/30 04:25:44 christos Exp $	*/
+/*	$NetBSD: fdesc_vnops.c,v 1.79 2003/09/13 08:32:16 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdesc_vnops.c,v 1.82 2004/11/30 04:25:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdesc_vnops.c,v 1.79 2003/09/13 08:32:16 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -263,7 +263,7 @@ out:;
 
 	if (fdcache_lock & FDL_WANT) {
 		fdcache_lock &= ~FDL_WANT;
-		wakeup(&fdcache_lock);
+		wakeup((caddr_t) &fdcache_lock);
 	}
 
 	return (error);
@@ -450,7 +450,7 @@ fdesc_open(v)
 		 * VOP_OPEN will simply report the error.
 		 */
 		curlwp->l_dupfd = VTOFDESC(vp)->fd_fd;	/* XXX */
-		return EDUPFD;
+		return (ENODEV);
 
 	case Fctty:
 		return ((*ctty_cdevsw.d_open)(devctty, ap->a_mode, 0, ap->a_p));
@@ -587,7 +587,7 @@ fdesc_getattr(v)
 		}
 		vap->va_uid = 0;
 		vap->va_gid = 0;
-		vap->va_fsid = vp->v_mount->mnt_stat.f_fsidx.__fsid_val[0];
+		vap->va_fsid = vp->v_mount->mnt_stat.f_fsid.val[0];
 		vap->va_blocksize = DEV_BSIZE;
 		vap->va_atime.tv_sec = boottime.tv_sec;
 		vap->va_atime.tv_nsec = 0;
@@ -714,7 +714,7 @@ fdesc_readdir(v)
 
 	error = 0;
 	i = uio->uio_offset;
-	memset(&d, 0, UIO_MX);
+	memset((caddr_t)&d, 0, UIO_MX);
 	d.d_reclen = UIO_MX;
 	if (ap->a_ncookies)
 		ncookies = (uio->uio_resid / UIO_MX);
@@ -757,7 +757,7 @@ fdesc_readdir(v)
 			memcpy(d.d_name, ft->ft_name, ft->ft_namlen + 1);
 			d.d_type = ft->ft_type;
 
-			if ((error = uiomove(&d, UIO_MX, uio)) != 0)
+			if ((error = uiomove((caddr_t)&d, UIO_MX, uio)) != 0)
 				break;
 			if (cookies)
 				*cookies++ = i + 1;
@@ -792,7 +792,7 @@ fdesc_readdir(v)
 				break;
 			}
 
-			if ((error = uiomove(&d, UIO_MX, uio)) != 0)
+			if ((error = uiomove((caddr_t)&d, UIO_MX, uio)) != 0)
 				break;
 			if (cookies)
 				*cookies++ = i + 1;
@@ -898,7 +898,7 @@ fdesc_ioctl(v)
 	struct vop_ioctl_args /* {
 		struct vnode *a_vp;
 		u_long a_command;
-		void *a_data;
+		caddr_t  a_data;
 		int  a_fflag;
 		struct ucred *a_cred;
 		struct proc *a_p;

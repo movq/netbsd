@@ -34,7 +34,7 @@
 #include "gssapi_locl.h"
 
 __RCSID("$Heimdal: unwrap.c,v 1.22.2.1 2003/09/18 22:05:22 lha Exp $"
-        "$NetBSD: unwrap.c,v 1.10 2004/04/02 14:59:48 lha Exp $");
+        "$NetBSD: unwrap.c,v 1.9.2.1 2004/04/21 04:55:40 jmc Exp $");
 
 OM_uint32
 gss_krb5_get_remotekey(const gss_ctx_id_t context_handle,

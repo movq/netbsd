@@ -1,4 +1,4 @@
-/*	$NetBSD: restore.h,v 1.16 2004/10/22 22:38:38 bouyer Exp $	*/
+/*	$NetBSD: restore.h,v 1.14 2003/08/07 10:04:38 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -41,7 +41,6 @@
  */
 extern int	cvtflag;	/* convert from old to new tape format */
 extern int	bflag;		/* set input block size */
-extern int	Dflag;		/* output digest of files */
 extern int	dflag;		/* print out debugging info */
 extern int	hflag;		/* restore hierarchies */
 extern int	mflag;		/* restore by name instead of inode number */
@@ -66,18 +65,6 @@ extern FILE	*terminal;	/* file descriptor for the terminal input */
 extern char	*tmpdir;	/* where to store temporary files */
 extern int	oldinofmt;	/* reading tape with old format inodes */
 extern int	Bcvt;		/* need byte swapping on inodes and dirs */
-extern FILE	*Mtreefile;	/* file descriptor for the mtree file */
-
-struct digest_desc {
-	const char *dd_name;
-	void (*dd_init)(void *);
-	void (*dd_update)(void *, const u_char *, u_int);
-	char *(*dd_end)(void *, void *);
-};
-extern const struct digest_desc *ddesc;
-extern const struct digest_desc md5_desc;
-extern const struct digest_desc rmd160_desc;
-extern const struct digest_desc sha1_desc;
 
 /*
  * Each file in the file system is described by one of these entries

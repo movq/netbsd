@@ -1,4 +1,4 @@
-/*	$NetBSD: null_vnops.c,v 1.31 2004/06/30 17:42:55 hannken Exp $	*/
+/*	$NetBSD: null_vnops.c,v 1.28.2.3 2004/07/02 17:54:57 he Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -203,7 +203,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: null_vnops.c,v 1.31 2004/06/30 17:42:55 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: null_vnops.c,v 1.28.2.3 2004/07/02 17:54:57 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

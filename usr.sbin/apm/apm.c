@@ -1,4 +1,4 @@
-/*	$NetBSD: apm.c,v 1.15 2004/03/31 12:00:57 tron Exp $ */
+/*	$NetBSD: apm.c,v 1.14.2.1 2004/04/01 02:32:14 jmc Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_bio.c,v 1.123 2004/12/14 09:13:13 yamt Exp $	*/
+/*	$NetBSD: nfs_bio.c,v 1.116.2.2 2004/09/18 19:21:23 he Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_bio.c,v 1.123 2004/12/14 09:13:13 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_bio.c,v 1.116.2.2 2004/09/18 19:21:23 he Exp $");
 
 #include "opt_nfs.h"
 #include "opt_ddb.h"
@@ -85,6 +85,7 @@ nfs_bioread(vp, uio, ioflag, cred, cflag)
 {
 	struct nfsnode *np = VTONFS(vp);
 	struct buf *bp = NULL, *rabp;
+	struct vattr vattr;
 	struct proc *p;
 	struct nfsmount *nmp = VFSTONFS(vp->v_mount);
 	struct nfsdircache *ndp = NULL, *nndp = NULL;
@@ -131,10 +132,36 @@ nfs_bioread(vp, uio, ioflag, cred, cflag)
 	 */
 
 	if ((nmp->nm_flag & NFSMNT_NQNFS) == 0 && vp->v_type != VLNK) {
-		error = nfs_flushstalebuf(vp, cred, p,
-		    NFS_FLUSHSTALEBUF_MYWRITE);
-		if (error)
-			return error;
+		if (np->n_flag & NMODIFIED) {
+			if (vp->v_type != VREG) {
+				if (vp->v_type != VDIR)
+					panic("nfs: bioread, not dir");
+				nfs_invaldircache(vp, 0);
+				np->n_direofoffset = 0;
+				error = nfs_vinvalbuf(vp, V_SAVE, cred, p, 1);
+				if (error)
+					return (error);
+			}
+			NFS_INVALIDATE_ATTRCACHE(np);
+			error = VOP_GETATTR(vp, &vattr, cred, p);
+			if (error)
+				return (error);
+			np->n_mtime = vattr.va_mtime;
+		} else {
+			error = VOP_GETATTR(vp, &vattr, cred, p);
+			if (error)
+				return (error);
+			if (timespeccmp(&np->n_mtime, &vattr.va_mtime, !=)) {
+				if (vp->v_type == VDIR) {
+					nfs_invaldircache(vp, 0);
+					np->n_direofoffset = 0;
+				}
+				error = nfs_vinvalbuf(vp, V_SAVE, cred, p, 1);
+				if (error)
+					return (error);
+				np->n_mtime = vattr.va_mtime;
+			}
+		}
 	}
 
 	do {
@@ -260,7 +287,7 @@ diragain:
 			return (0);
 		}
 
-		bp = nfs_getcacheblk(vp, NFSDC_BLKNO(ndp), NFS_DIRBLKSIZ, p);
+		bp = nfs_getcacheblk(vp, ndp->dc_blkno, NFS_DIRBLKSIZ, p);
 		if (!bp)
 		    return (EINTR);
 		if ((bp->b_flags & B_DONE) == 0) {
@@ -418,7 +445,7 @@ diragain:
 		 */
 		if (nfs_numasync > 0 && nmp->nm_readahead > 0 &&
 		    np->n_direofoffset == 0 && !(np->n_flag & NQNFSNONCACHE)) {
-			rabp = nfs_getcacheblk(vp, NFSDC_BLKNO(nndp),
+			rabp = nfs_getcacheblk(vp, nndp->dc_blkno,
 						NFS_DIRBLKSIZ, p);
 			if (rabp) {
 			    if ((rabp->b_flags & (B_DONE | B_DELWRI)) == 0) {
@@ -735,59 +762,6 @@ nfs_vinvalbuf(vp, flags, cred, p, intrflg)
 }
 
 /*
- * nfs_flushstalebuf: flush cache if it's stale. 
- *
- * => caller shouldn't own any pages or buffers which belong to the vnode.
- */
-
-int
-nfs_flushstalebuf(struct vnode *vp, struct ucred *cred, struct proc *p,
-    int flags)
-{
-	struct nfsnode *np = VTONFS(vp);
-	struct vattr vattr;
-	int error;
-
-	if (np->n_flag & NMODIFIED) {
-		if ((flags & NFS_FLUSHSTALEBUF_MYWRITE) == 0
-		    || vp->v_type != VREG) {
-			error = nfs_vinvalbuf(vp, V_SAVE, cred, p, 1);
-			if (error)
-				return error;
-			if (vp->v_type == VDIR) {
-				nfs_invaldircache(vp, 0);
-				np->n_direofoffset = 0;
-			}
-		} else {
-			/*
-			 * XXX assuming writes are ours.
-			 */
-		}
-		NFS_INVALIDATE_ATTRCACHE(np);
-		error = VOP_GETATTR(vp, &vattr, cred, p);
-		if (error)
-			return error;
-		np->n_mtime = vattr.va_mtime;
-	} else {
-		error = VOP_GETATTR(vp, &vattr, cred, p);
-		if (error)
-			return error;
-		if (timespeccmp(&np->n_mtime, &vattr.va_mtime, !=)) {
-			if (vp->v_type == VDIR) {
-				nfs_invaldircache(vp, 0);
-				np->n_direofoffset = 0;
-			}
-			error = nfs_vinvalbuf(vp, V_SAVE, cred, p, 1);
-			if (error)
-				return error;
-			np->n_mtime = vattr.va_mtime;
-		}
-	}
-
-	return error;
-}
-
-/*
  * Initiate asynchronous I/O. Return an error if no nfsiods are available.
  * This is mainly to avoid queueing async I/O requests when the nfsiods
  * are all hung on a dead server.
@@ -928,18 +902,19 @@ nfs_doio_read(bp, uiop)
 			int diff, len;
 
 			/*
-			 * If uio_resid > 0, there is a hole in the file and
+			 * If len > 0, there is a hole in the file and
 			 * no writes after the hole have been pushed to
-			 * the server yet or the file has been truncated
-			 * on the server.
+			 * the server yet.
 			 * Just zero fill the rest of the valid area.
 			 */
 
-			KASSERT(vp->v_size >=
-			    uiop->uio_offset + uiop->uio_resid);
 			diff = bp->b_bcount - uiop->uio_resid;
-			len = uiop->uio_resid;
-			memset((char *)bp->b_data + diff, 0, len);
+			len = np->n_size - ((((off_t)bp->b_blkno) << DEV_BSHIFT)
+				+ diff);
+			if (len > 0) {
+				len = MIN(len, uiop->uio_resid);
+				memset((char *)bp->b_data + diff, 0, len);
+			}
 		}
 		if (uiop->uio_procp && (vp->v_flag & VTEXT) &&
 		    (((nmp->nm_flag & NFSMNT_NQNFS) &&
@@ -963,15 +938,11 @@ nfs_doio_read(bp, uiop)
 	case VDIR:
 		nfsstats.readdir_bios++;
 		uiop->uio_offset = bp->b_dcookie;
-#ifndef NFS_V2_ONLY
 		if (nmp->nm_flag & NFSMNT_RDIRPLUS) {
 			error = nfs_readdirplusrpc(vp, uiop, np->n_rcred);
 			if (error == NFSERR_NOTSUPP)
 				nmp->nm_flag &= ~NFSMNT_RDIRPLUS;
 		}
-#else
-		nmp->nm_flag &= ~NFSMNT_RDIRPLUS;
-#endif
 		if ((nmp->nm_flag & NFSMNT_RDIRPLUS) == 0)
 			error = nfs_readdirrpc(vp, uiop, np->n_rcred);
 		if (!error) {
@@ -1004,11 +975,7 @@ nfs_doio_write(bp, uiop)
 	boolean_t stalewriteverf = FALSE;
 	int i, npages = (bp->b_bcount + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	struct vm_page *pgs[npages];
-#ifndef NFS_V2_ONLY
 	boolean_t needcommit = TRUE; /* need only COMMIT RPC */
-#else
-	boolean_t needcommit = FALSE; /* need only COMMIT RPC */
-#endif
 	boolean_t pageprotected;
 	struct uvm_object *uobj = &vp->v_uobj;
 	int error;
@@ -1020,9 +987,7 @@ nfs_doio_write(bp, uiop)
 		iomode = NFSV3WRITE_FILESYNC;
 	}
 
-#ifndef NFS_V2_ONLY
 again:
-#endif
 	lockmgr(&nmp->nm_writeverflock, LK_SHARED, NULL);
 
 	for (i = 0; i < npages; i++) {
@@ -1071,7 +1036,7 @@ again:
 	 * Send the data to the server if necessary,
 	 * otherwise just send a commit rpc.
 	 */
-#ifndef NFS_V2_ONLY
+
 	if (needcommit) {
 
 		/*
@@ -1131,13 +1096,11 @@ again:
 		}
 		return error;
 	}
-#endif
 	off = uiop->uio_offset;
 	cnt = bp->b_bcount;
 	uiop->uio_rw = UIO_WRITE;
 	nfsstats.write_bios++;
 	error = nfs_writerpc(vp, uiop, &iomode, pageprotected, &stalewriteverf);
-#ifndef NFS_V2_ONLY
 	if (!error && iomode == NFSV3WRITE_UNSTABLE) {
 		/*
 		 * we need to commit pages later.
@@ -1171,9 +1134,7 @@ again:
 			simple_unlock(&uobj->vmobjlock);
 		}
 		lockmgr(&np->n_commitlock, LK_RELEASE, NULL);
-	} else
-#endif
-	if (!error) {
+	} else if (!error) {
 		/*
 		 * pages are now on stable storage.
 		 */
@@ -1257,7 +1218,7 @@ nfs_doio(bp, p)
 	uiop->uio_iov = &io;
 	uiop->uio_iovcnt = 1;
 	uiop->uio_segflg = UIO_SYSSPACE;
-	uiop->uio_procp = NULL;
+	uiop->uio_procp = p;
 	uiop->uio_offset = (((off_t)bp->b_blkno) << DEV_BSHIFT);
 	io.iov_base = bp->b_data;
 	io.iov_len = uiop->uio_resid = bp->b_bcount;

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-lwres.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: print-lwres.c,v 1.3 2002/02/18 09:37:08 itojun Exp $	*/
 
 /*
  * Copyright (C) 2001 WIDE Project.
@@ -32,10 +32,10 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-lwres.c,v 1.10.2.3 2004/03/24 01:54:58 guy Exp (LBL)";
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-lwres.c,v 1.5 2001/06/26 06:19:05 guy Exp (LBL)";
 #else
-__RCSID("$NetBSD: print-lwres.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
+__RCSID("$NetBSD: print-lwres.c,v 1.3 2002/02/18 09:37:08 itojun Exp $");
 #endif
 #endif
 
@@ -43,7 +43,10 @@ __RCSID("$NetBSD: print-lwres.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+
+#include <netinet/in.h>
 
 #include "nameser.h"
 
@@ -203,7 +206,7 @@ static int
 lwres_printname(size_t l, const char *p0)
 {
 	const char *p;
-	size_t i;
+	int i;
 
 	p = p0;
 	/* + 1 for terminating \0 */
@@ -269,28 +272,25 @@ lwres_printaddr(lwres_addr_t *ap)
 	int i;
 
 	TCHECK(ap->length);
-	l = EXTRACT_16BITS(&ap->length);
+	l = ntohs(ap->length);
 	/* XXX ap points to packed struct */
 	p = (const char *)&ap->length + sizeof(ap->length);
-	TCHECK2(*p, l);
+	if (p + l > (const char *)snapend)
+		goto trunc;
 
-	switch (EXTRACT_32BITS(&ap->family)) {
+	switch (ntohl(ap->family)) {
 	case 1:	/* IPv4 */
-		if (l < 4)
-			return -1;
 		printf(" %s", ipaddr_string(p));
 		p += sizeof(struct in_addr);
 		break;
 #ifdef INET6
 	case 2:	/* IPv6 */
-		if (l < 16)
-			return -1;
 		printf(" %s", ip6addr_string(p));
 		p += sizeof(struct in6_addr);
 		break;
 #endif
 	default:
-		printf(" %u/", EXTRACT_32BITS(&ap->family));
+		printf(" %lu/", (unsigned long)ntohl(ap->family));
 		for (i = 0; i < l; i++)
 			printf("%02x", *p++);
 	}
@@ -315,35 +315,35 @@ lwres_print(register const u_char *bp, u_int length)
 	TCHECK(np->authlength);
 
 	printf(" lwres");
-	v = EXTRACT_16BITS(&np->version);
+	v = ntohs(np->version);
 	if (vflag || v != LWRES_LWPACKETVERSION_0)
 		printf(" v%u", v);
 	if (v != LWRES_LWPACKETVERSION_0) {
-		s = (const char *)np + EXTRACT_32BITS(&np->length);
+		s = (const char *)np + ntohl(np->length);
 		goto tail;
 	}
 
-	response = EXTRACT_16BITS(&np->pktflags) & LWRES_LWPACKETFLAG_RESPONSE;
+	response = ntohs(np->pktflags) & LWRES_LWPACKETFLAG_RESPONSE;
 
 	/* opcode and pktflags */
-	v = EXTRACT_32BITS(&np->opcode);
+	v = (u_int32_t)ntohl(np->opcode);
 	s = tok2str(opcode, "#0x%x", v);
 	printf(" %s%s", s, response ? "" : "?");
 
 	/* pktflags */
-	v = EXTRACT_16BITS(&np->pktflags);
+	v = ntohs(np->pktflags);
 	if (v & ~LWRES_LWPACKETFLAG_RESPONSE)
 		printf("[0x%x]", v);
 
 	if (vflag > 1) {
 		printf(" (");	/*)*/
-		printf("serial:0x%x", EXTRACT_32BITS(&np->serial));
-		printf(" result:0x%x", EXTRACT_32BITS(&np->result));
-		printf(" recvlen:%u", EXTRACT_32BITS(&np->recvlength));
+		printf("serial:0x%lx", (unsigned long)ntohl(np->serial));
+		printf(" result:0x%lx", (unsigned long)ntohl(np->result));
+		printf(" recvlen:%lu", (unsigned long)ntohl(np->recvlength));
 		/* BIND910: not used */
 		if (vflag > 2) {
-			printf(" authtype:0x%x", EXTRACT_16BITS(&np->authtype));
-			printf(" authlen:%u", EXTRACT_16BITS(&np->authlength));
+			printf(" authtype:0x%x", ntohs(np->authtype));
+			printf(" authlen:%u", ntohs(np->authlength));
 		}
 		/*(*/
 		printf(")");
@@ -363,7 +363,7 @@ lwres_print(register const u_char *bp, u_int length)
 		gnba = NULL;
 		grbn = NULL;
 
-		switch (EXTRACT_32BITS(&np->opcode)) {
+		switch (ntohl(np->opcode)) {
 		case LWRES_OPCODE_NOOP:
 			break;
 		case LWRES_OPCODE_GETADDRSBYNAME:
@@ -372,15 +372,15 @@ lwres_print(register const u_char *bp, u_int length)
 			/* XXX gabn points to packed struct */
 			s = (const char *)&gabn->namelen +
 			    sizeof(gabn->namelen);
-			l = EXTRACT_16BITS(&gabn->namelen);
+			l = ntohs(gabn->namelen);
 
 			/* BIND910: not used */
 			if (vflag > 2) {
-				printf(" flags:0x%x",
-				    EXTRACT_32BITS(&gabn->flags));
+				printf(" flags:0x%lx",
+				    (unsigned long)ntohl(gabn->flags));
 			}
 
-			v = EXTRACT_32BITS(&gabn->addrtypes);
+			v = (u_int32_t)ntohl(gabn->addrtypes);
 			switch (v & (LWRES_ADDRTYPE_V4 | LWRES_ADDRTYPE_V6)) {
 			case LWRES_ADDRTYPE_V4:
 				printf(" IPv4");
@@ -406,8 +406,8 @@ lwres_print(register const u_char *bp, u_int length)
 
 			/* BIND910: not used */
 			if (vflag > 2) {
-				printf(" flags:0x%x",
-				    EXTRACT_32BITS(&gnba->flags));
+				printf(" flags:0x%lx",
+				    (unsigned long)ntohl(gnba->flags));
 			}
 
 			s = (const char *)&gnba->addr;
@@ -424,21 +424,20 @@ lwres_print(register const u_char *bp, u_int length)
 
 			/* BIND910: not used */
 			if (vflag > 2) {
-				printf(" flags:0x%x",
-				    EXTRACT_32BITS(&grbn->flags));
+				printf(" flags:0x%lx",
+				    (unsigned long)ntohl(grbn->flags));
 			}
 
 			printf(" %s", tok2str(ns_type2str, "Type%d",
-			    EXTRACT_16BITS(&grbn->rdtype)));
-			if (EXTRACT_16BITS(&grbn->rdclass) != C_IN) {
+			    ntohs(grbn->rdtype)));
+			if (ntohs(grbn->rdclass) != C_IN);
 				printf(" %s", tok2str(ns_class2str, "Class%d",
-				    EXTRACT_16BITS(&grbn->rdclass)));
-			}
+				    ntohs(grbn->rdclass)));
 
 			/* XXX grbn points to packed struct */
 			s = (const char *)&grbn->namelen +
 			    sizeof(grbn->namelen);
-			l = EXTRACT_16BITS(&grbn->namelen);
+			l = ntohs(gabn->namelen);
 
 			advance = lwres_printname(l, s);
 			if (advance < 0)
@@ -457,13 +456,13 @@ lwres_print(register const u_char *bp, u_int length)
 		lwres_gnbaresponse_t *gnba;
 		lwres_grbnresponse_t *grbn;
 		u_int32_t l, na;
-		u_int32_t i;
+		int i;
 
 		gabn = NULL;
 		gnba = NULL;
 		grbn = NULL;
 
-		switch (EXTRACT_32BITS(&np->opcode)) {
+		switch (ntohl(np->opcode)) {
 		case LWRES_OPCODE_NOOP:
 			break;
 		case LWRES_OPCODE_GETADDRSBYNAME:
@@ -472,16 +471,16 @@ lwres_print(register const u_char *bp, u_int length)
 			/* XXX gabn points to packed struct */
 			s = (const char *)&gabn->realnamelen +
 			    sizeof(gabn->realnamelen);
-			l = EXTRACT_16BITS(&gabn->realnamelen);
+			l = ntohs(gabn->realnamelen);
 
 			/* BIND910: not used */
 			if (vflag > 2) {
-				printf(" flags:0x%x",
-				    EXTRACT_32BITS(&gabn->flags));
+				printf(" flags:0x%lx",
+				    (unsigned long)ntohl(gabn->flags));
 			}
 
-			printf(" %u/%u", EXTRACT_16BITS(&gabn->naliases),
-			    EXTRACT_16BITS(&gabn->naddrs));
+			printf(" %u/%u", ntohs(gabn->naliases),
+			    ntohs(gabn->naddrs));
 
 			advance = lwres_printname(l, s);
 			if (advance < 0)
@@ -489,7 +488,7 @@ lwres_print(register const u_char *bp, u_int length)
 			s += advance;
 
 			/* aliases */
-			na = EXTRACT_16BITS(&gabn->naliases);
+			na = ntohs(gabn->naliases);
 			for (i = 0; i < na; i++) {
 				advance = lwres_printnamelen(s);
 				if (advance < 0)
@@ -498,7 +497,7 @@ lwres_print(register const u_char *bp, u_int length)
 			}
 
 			/* addrs */
-			na = EXTRACT_16BITS(&gabn->naddrs);
+			na = ntohs(gabn->naddrs);
 			for (i = 0; i < na; i++) {
 				advance = lwres_printaddr((lwres_addr_t *)s);
 				if (advance < 0)
@@ -512,15 +511,15 @@ lwres_print(register const u_char *bp, u_int length)
 			/* XXX gnba points to packed struct */
 			s = (const char *)&gnba->realnamelen +
 			    sizeof(gnba->realnamelen);
-			l = EXTRACT_16BITS(&gnba->realnamelen);
+			l = ntohs(gnba->realnamelen);
 
 			/* BIND910: not used */
 			if (vflag > 2) {
-				printf(" flags:0x%x",
-				    EXTRACT_32BITS(&gnba->flags));
+				printf(" flags:0x%lx",
+				    (unsigned long)ntohl(gnba->flags));
 			}
 
-			printf(" %u", EXTRACT_16BITS(&gnba->naliases));
+			printf(" %u", ntohs(gnba->naliases));
 
 			advance = lwres_printname(l, s);
 			if (advance < 0)
@@ -528,7 +527,7 @@ lwres_print(register const u_char *bp, u_int length)
 			s += advance;
 
 			/* aliases */
-			na = EXTRACT_16BITS(&gnba->naliases);
+			na = ntohs(gnba->naliases);
 			for (i = 0; i < na; i++) {
 				advance = lwres_printnamelen(s);
 				if (advance < 0)
@@ -543,20 +542,19 @@ lwres_print(register const u_char *bp, u_int length)
 
 			/* BIND910: not used */
 			if (vflag > 2) {
-				printf(" flags:0x%x",
-				    EXTRACT_32BITS(&grbn->flags));
+				printf(" flags:0x%lx",
+				    (unsigned long)ntohl(grbn->flags));
 			}
 
 			printf(" %s", tok2str(ns_type2str, "Type%d",
-			    EXTRACT_16BITS(&grbn->rdtype)));
-			if (EXTRACT_16BITS(&grbn->rdclass) != C_IN) {
+			    ntohs(grbn->rdtype)));
+			if (ntohs(grbn->rdclass) != C_IN);
 				printf(" %s", tok2str(ns_class2str, "Class%d",
-				    EXTRACT_16BITS(&grbn->rdclass)));
-			}
+				    ntohs(grbn->rdclass)));
 			printf(" TTL ");
-			relts_print(EXTRACT_32BITS(&grbn->ttl));
-			printf(" %u/%u", EXTRACT_16BITS(&grbn->nrdatas),
-			    EXTRACT_16BITS(&grbn->nsigs));
+			relts_print(ntohl(grbn->ttl));
+			printf(" %u/%u", ntohs(grbn->nrdatas),
+			    ntohs(grbn->nsigs));
 
 			/* XXX grbn points to packed struct */
 			s = (const char *)&grbn->nsigs+ sizeof(grbn->nsigs);
@@ -567,7 +565,7 @@ lwres_print(register const u_char *bp, u_int length)
 			s += advance;
 
 			/* rdatas */
-			na = EXTRACT_16BITS(&grbn->nrdatas);
+			na = ntohs(grbn->nrdatas);
 			for (i = 0; i < na; i++) {
 				/* XXX should decode resource data */
 				advance = lwres_printbinlen(s);
@@ -577,7 +575,7 @@ lwres_print(register const u_char *bp, u_int length)
 			}
 
 			/* sigs */
-			na = EXTRACT_16BITS(&grbn->nsigs);
+			na = ntohs(grbn->nsigs);
 			for (i = 0; i < na; i++) {
 				/* XXX how should we print it? */
 				advance = lwres_printbinlen(s);
@@ -594,11 +592,11 @@ lwres_print(register const u_char *bp, u_int length)
 
   tail:
 	/* length mismatch */
-	if (EXTRACT_32BITS(&np->length) != length) {
-		printf(" [len: %u != %u]", EXTRACT_32BITS(&np->length),
+	if (ntohl(np->length) != length) {
+		printf(" [len: %lu != %u]", (unsigned long)ntohl(np->length),
 		    length);
 	}
-	if (!unsupported && s < (const char *)np + EXTRACT_32BITS(&np->length))
+	if (!unsupported && s < (const char *)np + ntohl(np->length))
 		printf("[extra]");
 	return;
 

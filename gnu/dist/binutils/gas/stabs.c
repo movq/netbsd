@@ -34,8 +34,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 int outputting_stabs_line_debug = 0;
 
-static void s_stab_generic (int, char *, char *);
-static void generate_asm_file (int, char *);
+static void s_stab_generic PARAMS ((int, char *, char *));
+static void generate_asm_file PARAMS ((int, char *));
 
 /* Allow backends to override the names used for the stab sections.  */
 #ifndef STAB_SECTION_NAME
@@ -80,7 +80,9 @@ static const char *current_function_label;
 #endif
 
 unsigned int
-get_stab_string_offset (const char *string, const char *stabstr_secname)
+get_stab_string_offset (string, stabstr_secname)
+     const char *string;
+     const char *stabstr_secname;
 {
   unsigned int length;
   unsigned int retval;
@@ -177,7 +179,10 @@ aout_process_stab (what, string, type, other, desc)
    kinds of stab sections.  */
 
 static void
-s_stab_generic (int what, char *stab_secname, char *stabstr_secname)
+s_stab_generic (what, stab_secname, stabstr_secname)
+     int what;
+     char *stab_secname;
+     char *stabstr_secname;
 {
   long longint;
   char *string, *saved_string_obstack_end;
@@ -366,11 +371,13 @@ s_stab_generic (int what, char *stab_secname, char *stabstr_secname)
 	}
       else
 	{
+	  const char *fake;
 	  symbolS *symbol;
 	  expressionS exp;
 
 	  /* Arrange for a value representing the current location.  */
-	  symbol = symbol_temp_new (saved_seg, dot, saved_frag);
+	  fake = FAKE_LABEL_NAME;
+	  symbol = symbol_new (fake, saved_seg, dot, saved_frag);
 
 	  exp.X_op = O_symbol;
 	  exp.X_add_symbol = symbol;
@@ -400,7 +407,8 @@ s_stab_generic (int what, char *stab_secname, char *stabstr_secname)
 /* Regular stab directive.  */
 
 void
-s_stab (int what)
+s_stab (what)
+     int what;
 {
   s_stab_generic (what, STAB_SECTION_NAME, STAB_STRING_SECTION_NAME);
 }
@@ -408,7 +416,8 @@ s_stab (int what)
 /* "Extended stabs", used in Solaris only now.  */
 
 void
-s_xstab (int what)
+s_xstab (what)
+     int what;
 {
   int length;
   char *stab_secname, *stabstr_secname;
@@ -489,21 +498,12 @@ s_desc (ignore)
 /* Generate stabs debugging information to denote the main source file.  */
 
 void
-stabs_generate_asm_file (void)
+stabs_generate_asm_file ()
 {
   char *file;
   unsigned int lineno;
 
   as_where (&file, &lineno);
-  if (use_gnu_debug_info_extensions)
-    {
-      char *dir, *dir2;
-
-      dir = getpwd ();
-      dir2 = alloca (strlen (dir) + 2);
-      sprintf (dir2, "%s%s", dir, "/");
-      generate_asm_file (N_SO, dir2);
-    }
   generate_asm_file (N_SO, file);
 }
 
@@ -511,7 +511,9 @@ stabs_generate_asm_file (void)
    TYPE is one of N_SO, N_SOL.  */
 
 static void
-generate_asm_file (int type, char *file)
+generate_asm_file (type, file)
+     int type;
+     char *file;
 {
   static char *last_file;
   static int label_count;
@@ -520,7 +522,7 @@ generate_asm_file (int type, char *file)
   char *buf;
   char *tmp = file;
   char *endp = file + strlen (file);
-  char *bufp;
+  char *bufp = buf;
 
   if (last_file != NULL
       && strcmp (last_file, file) == 0)
@@ -578,7 +580,7 @@ generate_asm_file (int type, char *file)
    used to produce debugging information for an assembler file.  */
 
 void
-stabs_generate_asm_lineno (void)
+stabs_generate_asm_lineno ()
 {
   static int label_count;
   char *hold;
@@ -655,7 +657,9 @@ stabs_generate_asm_lineno (void)
    All assembler functions are assumed to have return type `void'.  */
 
 void
-stabs_generate_asm_func (const char *funcname, const char *startlabname)
+stabs_generate_asm_func (funcname, startlabname)
+     const char *funcname;
+     const char *startlabname;
 {
   static int void_emitted_p;
   char *hold = input_line_pointer;
@@ -685,8 +689,9 @@ stabs_generate_asm_func (const char *funcname, const char *startlabname)
 /* Emit a stab to record the end of a function.  */
 
 void
-stabs_generate_asm_endfunc (const char *funcname ATTRIBUTE_UNUSED,
-			    const char *startlabname)
+stabs_generate_asm_endfunc (funcname, startlabname)
+     const char *funcname ATTRIBUTE_UNUSED;
+     const char *startlabname;
 {
   static int label_count;
   char *hold = input_line_pointer;

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_acct.c,v 1.60 2004/12/13 08:46:43 yamt Exp $	*/
+/*	$NetBSD: kern_acct.c,v 1.56 2004/03/23 13:22:03 junyoung Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_acct.c,v 1.60 2004/12/13 08:46:43 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_acct.c,v 1.56 2004/03/23 13:22:03 junyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -185,24 +185,21 @@ int
 acct_chkfree()
 {
 	int error;
-	struct statvfs sb;
-	int64_t bavail;
+	struct statfs sb;
 
-	error = VFS_STATVFS(acct_vp->v_mount, &sb, NULL);
+	error = VFS_STATFS(acct_vp->v_mount, &sb, NULL);
 	if (error != 0)
 		return (error);
 
-	bavail = sb.f_bfree - sb.f_bresvd;
-
 	switch (acct_state) {
 	case ACCT_SUSPENDED:
-		if (bavail > acctresume * sb.f_blocks / 100) {
+		if (sb.f_bavail > acctresume * sb.f_blocks / 100) {
 			acct_state = ACCT_ACTIVE;
 			log(LOG_NOTICE, "Accounting resumed\n");
 		}
 		break;
 	case ACCT_ACTIVE:
-		if (bavail <= acctsuspend * sb.f_blocks / 100) {
+		if (sb.f_bavail <= acctsuspend * sb.f_blocks / 100) {
 			acct_state = ACCT_SUSPENDED;
 			log(LOG_NOTICE, "Accounting suspended\n");
 		}
@@ -239,38 +236,15 @@ sys_acct(l, v, retval)
 	 * writing and make sure it's a 'normal'.
 	 */
 	if (SCARG(uap, path) != NULL) {
-		struct vattr va;
-		size_t pad;
 		NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_USERSPACE, SCARG(uap, path),
 		    p);
 		if ((error = vn_open(&nd, FWRITE|O_APPEND, 0)) != 0)
 			return (error);
-		if (nd.ni_vp->v_type != VREG) {
-			VOP_UNLOCK(nd.ni_vp, 0);
-			error = EACCES;
-			goto bad;
-		}
-		if ((error = VOP_GETATTR(nd.ni_vp, &va, p->p_ucred, p)) != 0) {
-			VOP_UNLOCK(nd.ni_vp, 0);
-			goto bad;
-		}
-
-		if ((pad = (va.va_size % sizeof(struct acct))) != 0) {
-			u_quad_t size = va.va_size - pad;
-#ifdef DIAGNOSTIC
-			printf("Size of accounting file not a multiple of "
-			    "%lu - incomplete record truncated\n",
-			    (unsigned long)sizeof(struct acct));
-#endif
-			VATTR_NULL(&va);
-			va.va_size = size;
-			error = VOP_SETATTR(nd.ni_vp, &va, p->p_ucred, p);
-			if (error != 0) {
-				VOP_UNLOCK(nd.ni_vp, 0);
-				goto bad;
-			}
-		}
 		VOP_UNLOCK(nd.ni_vp, 0);
+		if (nd.ni_vp->v_type != VREG) {
+			vn_close(nd.ni_vp, FWRITE, p->p_ucred, p);
+			return (EACCES);
+		}
 	}
 
 	ACCT_LOCK();
@@ -309,9 +283,6 @@ sys_acct(l, v, retval)
  out:
 	ACCT_UNLOCK();
 	return (error);
- bad:
-	vn_close(nd.ni_vp, FWRITE, p->p_ucred, p);
-	return error;
 }
 
 /*
@@ -398,7 +369,7 @@ acct_process(p)
 	VOP_LEASE(acct_vp, p, p->p_ucred, LEASE_WRITE);
 	error = vn_rdwr(UIO_WRITE, acct_vp, (caddr_t)&acct,
 	    sizeof(acct), (off_t)0, UIO_SYSSPACE, IO_APPEND|IO_UNIT,
-	    acct_ucred, NULL, NULL);
+	    acct_ucred, NULL, p);
 	if (error != 0)
 		log(LOG_ERR, "Accounting: write failed %d\n", error);
 
@@ -475,7 +446,7 @@ acctwatch(arg)
 		error = acct_chkfree();
 #ifdef DIAGNOSTIC
 		if (error != 0)
-			printf("acctwatch: failed to statvfs, error = %d\n",
+			printf("acctwatch: failed to statfs, error = %d\n",
 			    error);
 #endif
 

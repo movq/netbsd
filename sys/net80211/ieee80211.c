@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211.c,v 1.32 2004/08/10 00:57:21 dyoung Exp $	*/
+/*	$NetBSD: ieee80211.c,v 1.9.2.2 2004/07/23 23:28:59 he Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting
@@ -33,9 +33,9 @@
 
 #include <sys/cdefs.h>
 #ifdef __FreeBSD__
-__FBSDID("$FreeBSD: src/sys/net80211/ieee80211.c,v 1.11 2004/04/02 20:19:20 sam Exp $");
+__FBSDID("$FreeBSD: src/sys/net80211/ieee80211.c,v 1.8 2003/09/14 22:32:18 sam Exp $");
 #else
-__KERNEL_RCSID(0, "$NetBSD: ieee80211.c,v 1.32 2004/08/10 00:57:21 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211.c,v 1.9.2.2 2004/07/23 23:28:59 he Exp $");
 #endif
 
 /*
@@ -77,7 +77,6 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211.c,v 1.32 2004/08/10 00:57:21 dyoung Exp $"
 
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_compat.h>
-#include <net80211/ieee80211_sysctl.h>
 
 #include <net/bpf.h>
 
@@ -92,45 +91,35 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211.c,v 1.32 2004/08/10 00:57:21 dyoung Exp $"
 
 #ifdef IEEE80211_DEBUG
 int	ieee80211_debug = 0;
-#ifdef __NetBSD__
-static int ieee80211_debug_nodenum;
-#endif /* __NetBSD__ */
-
 #ifdef __FreeBSD__
 SYSCTL_INT(_debug, OID_AUTO, ieee80211, CTLFLAG_RW, &ieee80211_debug,
 	    0, "IEEE 802.11 media debugging printfs");
 #endif
 #endif
 
-int	ieee80211_cache_size = IEEE80211_CACHE_SIZE;
-static int ieee80211_cache_size_nodenum;
-
-struct ieee80211com_head ieee80211com_head =
-    LIST_HEAD_INITIALIZER(ieee80211com_head);
-
 static void ieee80211_setbasicrates(struct ieee80211com *);
 
-#ifdef __NetBSD__
-static void sysctl_ieee80211_fill_node(struct ieee80211_node *,
-    struct ieee80211_node_sysctl *, int, struct ieee80211_channel *, int);
-static struct ieee80211_node *ieee80211_node_walknext(
-    struct ieee80211_node_walk *);
-static struct ieee80211_node *ieee80211_node_walkfirst(
-    struct ieee80211_node_walk *, u_short);
-static int sysctl_ieee80211_verify(SYSCTLFN_ARGS);
-static int sysctl_ieee80211_node(SYSCTLFN_ARGS);
-#endif /* __NetBSD__ */
-
-#define	LOGICALLY_EQUAL(x, y)	(!(x) == !(y))
-
-static const char *ieee80211_phymode_name[] = {
-	"auto",		/* IEEE80211_MODE_AUTO */
-	"11a",		/* IEEE80211_MODE_11A */
-	"11b",		/* IEEE80211_MODE_11B */
-	"11g",		/* IEEE80211_MODE_11G */
-	"FH",		/* IEEE80211_MODE_FH */
-	"turbo",	/* IEEE80211_MODE_TURBO */
-};
+static const char *
+ieee80211_phymode_name(enum ieee80211_phymode mode)
+{
+	int i;
+	struct {
+		enum ieee80211_phymode mode;
+		const char *name;
+	} modenames[] = {
+		{ IEEE80211_MODE_AUTO,	"auto" },
+		{ IEEE80211_MODE_11A,	"11a" },
+		{ IEEE80211_MODE_11B,	"11b" },
+		{ IEEE80211_MODE_11G,	"11g" },
+		{ IEEE80211_MODE_FH,	"FH" },
+		{ IEEE80211_MODE_TURBO,  "turbo" }
+	};
+	for (i = 0; i < sizeof(modenames) / sizeof(modenames[0]); i++) {
+		if (mode == modenames[i].mode)
+			return modenames[i].name;
+	}
+	return "<unknown>";
+}
 
 void
 ieee80211_ifattach(struct ifnet *ifp)
@@ -185,17 +174,16 @@ ieee80211_ifattach(struct ifnet *ifp)
 	/* validate ic->ic_curmode */
 	if ((ic->ic_modecaps & (1<<ic->ic_curmode)) == 0)
 		ic->ic_curmode = IEEE80211_MODE_AUTO;
-	ic->ic_des_chan = IEEE80211_CHAN_ANYC;	/* any channel is ok */
 
 	ieee80211_setbasicrates(ic);
 	(void) ieee80211_setmode(ic, ic->ic_curmode);
 
+	ic->ic_des_chan = IEEE80211_CHAN_ANYC;	/* any channel is ok */
 	if (ic->ic_lintval == 0)
 		ic->ic_lintval = 100;		/* default sleep */
 	ic->ic_bmisstimeout = 7*ic->ic_lintval;	/* default 7 beacons */
 
-	LIST_INSERT_HEAD(&ieee80211com_head, ic, ic_list);
-	ieee80211_node_attach(ic);
+	ieee80211_node_attach(ifp);
 	ieee80211_proto_attach(ifp);
 }
 
@@ -206,8 +194,7 @@ ieee80211_ifdetach(struct ifnet *ifp)
 
 	ieee80211_proto_detach(ifp);
 	ieee80211_crypto_detach(ifp);
-	ieee80211_node_detach(ic);
-	LIST_REMOVE(ic, ic_list);
+	ieee80211_node_detach(ifp);
 #ifdef __FreeBSD__
 	ifmedia_removeall(&ic->ic_media);
 #else
@@ -313,7 +300,7 @@ ieee80211_media_init(struct ifnet *ifp,
 	 * Do late attach work that must wait for any subclass
 	 * (i.e. driver) work such as overriding methods.
 	 */
-	ieee80211_node_lateattach(ic);
+	ieee80211_node_lateattach(ifp);
 
 	/*
 	 * Fill in media characteristics.
@@ -344,7 +331,7 @@ ieee80211_media_init(struct ifnet *ifp,
 			ADD(ic, IFM_AUTO, mopt | IFM_IEEE80211_MONITOR);
 		if (mode == IEEE80211_MODE_AUTO)
 			continue;
-		if_printf(ifp, "%s rates: ", ieee80211_phymode_name[mode]);
+		if_printf(ifp, "%s rates: ", ieee80211_phymode_name(mode));
 		rs = &ic->ic_sup_rates[mode];
 		for (i = 0; i < rs->rs_nrates; i++) {
 			rate = rs->rs_rates[i];
@@ -399,10 +386,13 @@ ieee80211_media_init(struct ifnet *ifp,
 	}
 	ieee80211_media_status(ifp, &imr);
 	ifmedia_set(&ic->ic_media, imr.ifm_active);
-#ifndef __linux__
+
 	if (maxrate)
 		ifp->if_baudrate = IF_Mbps(maxrate);
-#endif
+
+	if (ic->ic_max_aid == 0)
+		ic->ic_max_aid = IEEE80211_MAX_AID;
+
 #undef ADD
 }
 
@@ -637,8 +627,10 @@ ieee80211_watchdog(struct ifnet *ifp)
 
 	if (ic->ic_mgt_timer && --ic->ic_mgt_timer == 0)
 		ieee80211_new_state(ic, IEEE80211_S_SCAN, -1);
+	if (ic->ic_inact_timer && --ic->ic_inact_timer == 0)
+		ieee80211_timeout_nodes(ic);
 
-	if (ic->ic_mgt_timer != 0)
+	if (ic->ic_mgt_timer != 0 || ic->ic_inact_timer != 0)
 		ifp->if_timer = 1;
 }
 
@@ -656,7 +648,7 @@ ieee80211_setbasicrates(struct ieee80211com *ic)
 	    { 0 },				/* IEEE80211_MODE_AUTO */
 	    { 3, { 12, 24, 48 } },		/* IEEE80211_MODE_11A */
 	    { 2, { 2, 4 } },			/* IEEE80211_MODE_11B */
-	    { 4, { 2, 4, 11, 22 } },		/* IEEE80211_MODE_11G */
+	    { 7, { 2, 4, 11, 22, 12, 24, 48 } },/* IEEE80211_MODE_11G */
 	    { 2, { 2, 4 } },			/* IEEE80211_MODE_FH */
 	    { 0 },				/* IEEE80211_MODE_TURBO	*/
 	};
@@ -701,8 +693,7 @@ ieee80211_setmode(struct ieee80211com *ic, enum ieee80211_phymode mode)
 
 	/* validate new mode */
 	if ((ic->ic_modecaps & (1<<mode)) == 0) {
-		IEEE80211_DPRINTF(ic, IEEE80211_MSG_ANY,
-			("%s: mode %u not supported (caps 0x%x)\n",
+		IEEE80211_DPRINTF(("%s: mode %u not supported (caps 0x%x)\n",
 			__func__, mode, ic->ic_modecaps));
 		return EINVAL;
 	}
@@ -711,7 +702,7 @@ ieee80211_setmode(struct ieee80211com *ic, enum ieee80211_phymode mode)
 	 * Verify at least one channel is present in the available
 	 * channel list before committing to the new mode.
 	 */
-	IASSERT(mode < N(chanflags), ("Unexpected mode %u", mode));
+	IASSERT(mode < N(chanflags), ("Unexpected mode %u\n", mode));
 	modeflags = chanflags[mode];
 	for (i = 0; i <= IEEE80211_CHAN_MAX; i++) {
 		c = &ic->ic_channels[i];
@@ -725,8 +716,8 @@ ieee80211_setmode(struct ieee80211com *ic, enum ieee80211_phymode mode)
 		}
 	}
 	if (i > IEEE80211_CHAN_MAX) {
-		IEEE80211_DPRINTF(ic, IEEE80211_MSG_ANY,
-			("%s: no channels found for mode %u\n", __func__, mode));
+		IEEE80211_DPRINTF(("%s: no channels found for mode %u\n",
+			__func__, mode));
 		return EINVAL;
 	}
 
@@ -761,7 +752,7 @@ ieee80211_setmode(struct ieee80211com *ic, enum ieee80211_phymode mode)
 		IASSERT(ic->ic_ibss_chan != NULL &&
 		    isset(ic->ic_chan_active,
 			ieee80211_chan2ieee(ic, ic->ic_ibss_chan)),
-		    ("Bad IBSS channel %u",
+		    ("Bad IBSS channel %u\n",
 		     ieee80211_chan2ieee(ic, ic->ic_ibss_chan)));
 	}
 
@@ -770,15 +761,9 @@ ieee80211_setmode(struct ieee80211com *ic, enum ieee80211_phymode mode)
 	 *
 	 * XXX what if we have stations already associated???
 	 * XXX probably not right for autoselect?
-	 *
-	 * Short preamble is not interoperable with legacy .11b
-	 * equipment, so it should not be the default for b or
-	 * mixed b/g networks. -dcy
 	 */
-#if 0
 	if (ic->ic_caps & IEEE80211_C_SHPREAMBLE)
 		ic->ic_flags |= IEEE80211_F_SHPREAMBLE;
-#endif
 	if (mode == IEEE80211_MODE_11G) {
 		if (ic->ic_caps & IEEE80211_C_SHSLOT)
 			ic->ic_flags |= IEEE80211_F_SHSLOT;
@@ -877,17 +862,22 @@ ieee80211_rate2media(struct ieee80211com *ic, int rate, enum ieee80211_phymode m
 	case IEEE80211_MODE_FH:
 		mask |= IFM_IEEE80211_FH;
 		break;
-	case IEEE80211_MODE_AUTO:
-		/* NB: ic may be NULL for some drivers */
-		if (ic && ic->ic_phytype == IEEE80211_T_FH) {
-			mask |= IFM_IEEE80211_FH;
-			break;
-		}
-		/* NB: hack, 11g matches both 11b+11a rates */
-		/* fall thru... */
 	case IEEE80211_MODE_11G:
 		mask |= IFM_IEEE80211_11G;
 		break;
+	case IEEE80211_MODE_AUTO:
+		switch (ic->ic_phytype) {
+		case IEEE80211_T_FH:
+			mask |= IFM_IEEE80211_FH;
+			break;
+		case IEEE80211_T_DS:
+			mask |= IFM_IEEE80211_11B;
+			break;
+		case IEEE80211_T_OFDM:
+		case IEEE80211_T_TURBO:
+			mask |= IFM_IEEE80211_11G;
+			break;
+		}
 	}
 	for (i = 0; i < N(rates); i++)
 		if (rates[i].m == mask)
@@ -900,314 +890,38 @@ int
 ieee80211_media2rate(int mword)
 {
 #define	N(a)	(sizeof(a) / sizeof(a[0]))
-	static const int ieeerates[] = {
-		-1,		/* IFM_AUTO */
-		0,		/* IFM_MANUAL */
-		0,		/* IFM_NONE */
-		2,		/* IFM_IEEE80211_FH1 */
-		4,		/* IFM_IEEE80211_FH2 */
-		4,		/* IFM_IEEE80211_DS2 */
-		11,		/* IFM_IEEE80211_DS5 */
-		22,		/* IFM_IEEE80211_DS11 */
-		2,		/* IFM_IEEE80211_DS1 */
-		44,		/* IFM_IEEE80211_DS22 */
-		12,		/* IFM_IEEE80211_OFDM6 */
-		18,		/* IFM_IEEE80211_OFDM9 */
-		24,		/* IFM_IEEE80211_OFDM12 */
-		36,		/* IFM_IEEE80211_OFDM18 */
-		48,		/* IFM_IEEE80211_OFDM24 */
-		72,		/* IFM_IEEE80211_OFDM36 */
-		96,		/* IFM_IEEE80211_OFDM48 */
-		108,		/* IFM_IEEE80211_OFDM54 */
-		144,		/* IFM_IEEE80211_OFDM72 */
+	int i;
+	static const struct {
+		int subtype;
+		int rate;
+	} ieeerates[] = {
+		{ IFM_AUTO,		-1	},
+		{ IFM_MANUAL,		0	},
+		{ IFM_NONE,		0	},
+		{ IFM_IEEE80211_FH1,	2	},
+		{ IFM_IEEE80211_FH2,	4	},
+		{ IFM_IEEE80211_DS1,	2	},
+		{ IFM_IEEE80211_DS2,	4	},
+		{ IFM_IEEE80211_DS5,	11	},
+		{ IFM_IEEE80211_DS11,	22	},
+		{ IFM_IEEE80211_DS22,	44	},
+		{ IFM_IEEE80211_OFDM6,	12	},
+		{ IFM_IEEE80211_OFDM9,	18	},
+		{ IFM_IEEE80211_OFDM12,	24	},
+		{ IFM_IEEE80211_OFDM18,	36	},
+		{ IFM_IEEE80211_OFDM24,	48	},
+		{ IFM_IEEE80211_OFDM36,	72	},
+		{ IFM_IEEE80211_OFDM48,	96	},
+		{ IFM_IEEE80211_OFDM54,	108	},
+		{ IFM_IEEE80211_OFDM72,	144	},
 	};
-	return IFM_SUBTYPE(mword) < N(ieeerates) ?
-		ieeerates[IFM_SUBTYPE(mword)] : 0;
+	for (i = 0; i < N(ieeerates); i++) {
+		if (ieeerates[i].subtype == IFM_SUBTYPE(mword))
+			return ieeerates[i].rate;
+	}
+	return 0;
 #undef N
 }
-
-#ifdef __NetBSD__
-static void
-ieee80211_clean_all_nodes(int cache_size)
-{
-	struct ieee80211com *ic;
-	LIST_FOREACH(ic, &ieee80211com_head, ic_list) {
-		ic->ic_max_nnodes = cache_size;
-		ieee80211_clean_nodes(ic);
-	}
-}
-
-/* TBD factor with sysctl_ath_verify. */
-static int
-sysctl_ieee80211_verify(SYSCTLFN_ARGS)
-{
-	int error, t;
-	struct sysctlnode node;
-
-	node = *rnode;
-	t = *(int*)rnode->sysctl_data;
-	node.sysctl_data = &t;
-	error = sysctl_lookup(SYSCTLFN_CALL(&node));
-	if (error || newp == NULL)
-		return (error);
-
-	if (node.sysctl_num == ieee80211_cache_size_nodenum) {
-		if (t < 0)
-			return (EINVAL);
-#ifdef IEEE80211_DEBUG
-	} else if (node.sysctl_num != ieee80211_debug_nodenum)
-#else /* IEEE80211_DEBUG */
-	} else
-#endif /* IEEE80211_DEBUG */
-		return (EINVAL);
-
-	*(int*)rnode->sysctl_data = t;
-
-	if (node.sysctl_num == ieee80211_cache_size_nodenum)
-		ieee80211_clean_all_nodes(t);
-	return (0);
-}
-
-/*
- * Pointers for testing:
- *
- *	If there are no interfaces, or else no 802.11 interfaces,
- *	ieee80211_node_walkfirst must return NULL.
- *
- *	If there is any single 802.11 interface, ieee80211_node_walkfirst
- *	must not return NULL.
- */	
-static struct ieee80211_node *
-ieee80211_node_walkfirst(struct ieee80211_node_walk *nw,
-    u_short if_index)
-{
-	struct ieee80211com *ic;
-	(void)memset(nw, 0, sizeof(*nw));
-
-	nw->nw_ifindex = if_index;
-
-	LIST_FOREACH(ic, &ieee80211com_head, ic_list) {
-		if (if_index != 0 && ic->ic_if.if_index != if_index)
-			continue;
-		nw->nw_ic = ic;
-		nw->nw_ni = ic->ic_bss;
-		break;
-	}
-
-	KASSERT(LOGICALLY_EQUAL(nw->nw_ni == NULL, nw->nw_ic == NULL));
-
-	return nw->nw_ni;
-}
-
-static struct ieee80211_node *
-ieee80211_node_walknext(struct ieee80211_node_walk *nw)
-{
-	KASSERT(LOGICALLY_EQUAL(nw->nw_ni == NULL, nw->nw_ic == NULL));
-
-	if (nw->nw_ic == NULL && nw->nw_ni == NULL)
-		return NULL;
-
-	if (nw->nw_ni == nw->nw_ic->ic_bss)
-		nw->nw_ni = TAILQ_FIRST(&nw->nw_ic->ic_node);
-	else
-		nw->nw_ni = TAILQ_NEXT(nw->nw_ni, ni_list);
-
-	if (nw->nw_ni == NULL) {
-		if (nw->nw_ifindex != 0)
-			return NULL;
-
-		nw->nw_ic = LIST_NEXT(nw->nw_ic, ic_list);
-		if (nw->nw_ic == NULL)
-			return NULL;
-
-		nw->nw_ni = nw->nw_ic->ic_bss;
-	}
-
-	KASSERT(LOGICALLY_EQUAL(nw->nw_ni == NULL, nw->nw_ic == NULL));
-
-	return nw->nw_ni;
-}
-
-static void
-sysctl_ieee80211_fill_node(struct ieee80211_node *ni,
-    struct ieee80211_node_sysctl *ns, int ifindex,
-    struct ieee80211_channel *chan0, int is_bss)
-{
-	ns->ns_ifindex = ifindex;
-	ns->ns_capinfo = ni->ni_capinfo;
-	ns->ns_flags = (is_bss) ? IEEE80211_NODE_SYSCTL_F_BSS : 0;
-	(void)memcpy(ns->ns_macaddr, ni->ni_macaddr, sizeof(ns->ns_macaddr));
-	(void)memcpy(ns->ns_bssid, ni->ni_bssid, sizeof(ns->ns_bssid));
-	if (ni->ni_chan != IEEE80211_CHAN_ANYC) {
-		ns->ns_freq = ni->ni_chan->ic_freq;
-		ns->ns_chanflags = ni->ni_chan->ic_flags;
-		ns->ns_chanidx = ni->ni_chan - chan0;
-	} else {
-		ns->ns_freq = ns->ns_chanflags = 0;
-		ns->ns_chanidx = 0;
-	}
-	ns->ns_rssi = ni->ni_rssi;
-	ns->ns_esslen = ni->ni_esslen;
-	(void)memcpy(ns->ns_essid, ni->ni_essid, sizeof(ns->ns_essid));
-	ns->ns_pwrsave = ni->ni_pwrsave;
-	ns->ns_erp = ni->ni_erp;
-	ns->ns_associd = ni->ni_associd;
-	ns->ns_inact = ni->ni_inact * IEEE80211_INACT_WAIT;
-	ns->ns_rstamp = ni->ni_rstamp;
-	ns->ns_rates = ni->ni_rates;
-	ns->ns_txrate = ni->ni_txrate;
-	ns->ns_intval = ni->ni_intval;
-	(void)memcpy(ns->ns_tstamp, ni->ni_tstamp, sizeof(ns->ns_tstamp));
-	ns->ns_txseq = ni->ni_txseq;
-	ns->ns_rxseq = ni->ni_rxseq;
-	ns->ns_fhdwell = ni->ni_fhdwell;
-	ns->ns_fhindex = ni->ni_fhindex;
-	ns->ns_fails = ni->ni_fails;
-}
-
-/* Between two examinations of the sysctl tree, I expect each
- * interface to add no more than 5 nodes.
- */
-#define IEEE80211_SYSCTL_NODE_GROWTH	5
-
-static int
-sysctl_ieee80211_node(SYSCTLFN_ARGS)
-{
-	struct ieee80211_node_walk nw;
-	struct ieee80211_node *ni;
-	struct ieee80211_node_sysctl ns;
-	char *dp;
-	u_int cur_ifindex, ifcount, ifindex, last_ifindex, op, arg, hdr_type;
-	size_t len, needed, eltsize, out_size;
-	int error, s, nelt;
-
-	if (namelen == 1 && name[0] == CTL_QUERY)
-		return (sysctl_query(SYSCTLFN_CALL(rnode)));
-
-	if (namelen != IEEE80211_SYSCTL_NODENAMELEN)
-		return (EINVAL);
-
-	/* ifindex.op.arg.header-type.eltsize.nelt */
-	dp = oldp;
-	len = (oldp != NULL) ? *oldlenp : 0;
-	ifindex = name[IEEE80211_SYSCTL_NODENAME_IF];
-	op = name[IEEE80211_SYSCTL_NODENAME_OP];
-	arg = name[IEEE80211_SYSCTL_NODENAME_ARG];
-	hdr_type = name[IEEE80211_SYSCTL_NODENAME_TYPE];
-	eltsize = name[IEEE80211_SYSCTL_NODENAME_ELTSIZE];
-	nelt = name[IEEE80211_SYSCTL_NODENAME_ELTCOUNT];
-	out_size = MIN(sizeof(ns), eltsize);
-
-	if (op != IEEE80211_SYSCTL_OP_ALL || arg != 0 ||
-	    hdr_type != IEEE80211_SYSCTL_T_NODE || eltsize < 1 || nelt < 0)
-		return (EINVAL);
-
-	error = 0;
-	needed = 0;
-	ifcount = 0;
-	last_ifindex = 0;
-
-	s = splnet();
-
-	for (ni = ieee80211_node_walkfirst(&nw, ifindex); ni != NULL;
-	     ni = ieee80211_node_walknext(&nw)) {
-		struct ieee80211com *ic;
-
-		ic = nw.nw_ic;
-		cur_ifindex = ic->ic_if.if_index;
-
-		if (cur_ifindex != last_ifindex) {
-			ifcount++;
-			last_ifindex = cur_ifindex;
-		}
-
-		if (nelt <= 0)
-			continue;
-
-		if (len >= eltsize) {
-			sysctl_ieee80211_fill_node(ni, &ns, cur_ifindex,
-			    &ic->ic_channels[0], ni == ic->ic_bss);
-			error = copyout(&ns, dp, out_size);
-			if (error)
-				goto cleanup;
-			dp += eltsize;
-			len -= eltsize;
-		}
-		needed += eltsize;
-		if (nelt != INT_MAX)
-			nelt--;
-	}
-cleanup:
-	splx(s);
-
-	*oldlenp = needed;
-	if (oldp == NULL)
-		*oldlenp += ifcount * IEEE80211_SYSCTL_NODE_GROWTH * eltsize;
-
-	return (error);
-}
-
-/*
- * Setup sysctl(3) MIB, net.ieee80211.*
- *
- * TBD condition CTLFLAG_PERMANENT on being an LKM or not
- */
-SYSCTL_SETUP(sysctl_ieee80211, "sysctl ieee80211 subtree setup")
-{
-	int rc;
-	struct sysctlnode *cnode, *rnode;
-
-	if ((rc = sysctl_createv(clog, 0, NULL, &rnode,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "net", NULL,
-	    NULL, 0, NULL, 0, CTL_NET, CTL_EOL)) != 0)
-		goto err;
-
-	if ((rc = sysctl_createv(clog, 0, &rnode, &rnode,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "link",
-	    "link-layer statistics and controls",
-	    NULL, 0, NULL, 0, PF_LINK, CTL_EOL)) != 0)
-		goto err;
-
-	if ((rc = sysctl_createv(clog, 0, &rnode, &rnode,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "ieee80211",
-	    "IEEE 802.11 WLAN statistics and controls",
-	    NULL, 0, NULL, 0, CTL_CREATE, CTL_EOL)) != 0)
-		goto err;
-
-	if ((rc = sysctl_createv(clog, 0, &rnode, NULL,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "nodes", "client/peer stations",
-	    sysctl_ieee80211_node, 0, NULL, 0, CTL_CREATE, CTL_EOL)) != 0)
-		goto err;
-
-#ifdef IEEE80211_DEBUG
-
-	/* control debugging printfs */
-	if ((rc = sysctl_createv(clog, 0, &rnode, &cnode,
-	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
-	    "debug", SYSCTL_DESCR("Enable IEEE 802.11 debugging output"),
-	    sysctl_ieee80211_verify, 0, &ieee80211_debug, 0,
-	    CTL_CREATE, CTL_EOL)) != 0)
-		goto err;
-
-	ieee80211_debug_nodenum = cnode->sysctl_num;
-
-#endif /* IEEE80211_DEBUG */
-
-	/* control LRU cache size */
-	if ((rc = sysctl_createv(clog, 0, &rnode, &cnode,
-	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
-	    "maxnodecache", SYSCTL_DESCR("Maximum station cache size"),
-	    sysctl_ieee80211_verify, 0, &ieee80211_cache_size,
-	    0, CTL_CREATE, CTL_EOL)) != 0)
-		goto err;
-
-	ieee80211_cache_size_nodenum = cnode->sysctl_num;
-
-	return;
-err:
-	printf("%s: sysctl_createv failed (rc = %d)\n", __func__, rc);
-}
-#endif /* __NetBSD__ */
 
 #ifdef __FreeBSD__
 /*
@@ -1238,5 +952,4 @@ static moduledata_t ieee80211_mod = {
 DECLARE_MODULE(wlan, ieee80211_mod, SI_SUB_DRIVERS, SI_ORDER_FIRST);
 MODULE_VERSION(wlan, 1);
 MODULE_DEPEND(wlan, rc4, 1, 1, 1);
-MODULE_DEPEND(wlan, ether, 1, 1, 1);
 #endif

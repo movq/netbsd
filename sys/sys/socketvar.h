@@ -1,4 +1,4 @@
-/*	$NetBSD: socketvar.h,v 1.80 2004/09/03 18:14:09 darrenr Exp $	*/
+/*	$NetBSD: socketvar.h,v 1.69.2.1 2004/05/30 07:02:37 tron Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -39,7 +39,6 @@
 
 #if !defined(_KERNEL) || defined(LKM)
 struct uio;
-struct proc;
 #endif
 
 TAILQ_HEAD(soqhead, socket);
@@ -61,9 +60,8 @@ struct sockbuf {
 	struct mbuf *sb_mbtail;		/* the last mbuf in the chain */
 	struct mbuf *sb_lastrecord;	/* first mbuf of last record in
 					   socket buffer */
-	int	sb_flags;		/* flags, see below */
-	int	sb_timeo;		/* timeout for read/write */
-	u_long	sb_overflowed;		/* # of drops due to full buffer */
+	short	sb_flags;		/* flags, see below */
+	short	sb_timeo;		/* timeout for read/write */
 };
 
 #ifndef SB_MAX
@@ -92,7 +90,7 @@ struct socket {
 	short		so_linger;	/* time to linger while closing */
 	short		so_state;	/* internal state flags SS_*, below */
 	void		*so_pcb;	/* protocol control block */
-	const struct protosw *so_proto;	/* protocol handle */
+	struct protosw	*so_proto;	/* protocol handle */
 /*
  * Variables for connection queueing.
  * Socket where accepts occur is so_head in all subsidiary sockets.
@@ -120,15 +118,15 @@ struct socket {
 	struct sockbuf	so_rcv;		/* receive buffer */
 
 	void		*so_internal;	/* Space for svr4 stream data */
-	void		(*so_upcall) (struct socket *, caddr_t, int);
+	void		(*so_upcall) __P((struct socket *, caddr_t, int));
 	caddr_t		so_upcallarg;	/* Arg for above */
-	int		(*so_send) (struct socket *, struct mbuf *,
+	int		(*so_send) __P((struct socket *, struct mbuf *,
 					struct uio *, struct mbuf *,
-					struct mbuf *, int, struct proc *);
-	int		(*so_receive) (struct socket *,
+					struct mbuf *, int));
+	int		(*so_receive) __P((struct socket *,
 					struct mbuf **,
 					struct uio *, struct mbuf **,
-					struct mbuf **, int *);
+					struct mbuf **, int *));
 	struct mowner	*so_mowner;	/* who owns mbufs for this socket */
 	uid_t		so_uid;		/* who opened the socket */
 };
@@ -279,9 +277,12 @@ int	soo_poll(struct file *, int, struct proc *);
 int	soo_kqfilter(struct file *, struct knote *);
 int 	soo_close(struct file *, struct proc *);
 int	soo_stat(struct file *, struct stat *, struct proc *);
+int	uipc_usrreq(struct socket *, int, struct mbuf *,
+	    struct mbuf *, struct mbuf *, struct proc *);
+int	uipc_ctloutput(int, struct socket *, int, int, struct mbuf **);
 void	sbappend(struct sockbuf *, struct mbuf *);
 void	sbappendstream(struct sockbuf *, struct mbuf *);
-int	sbappendaddr(struct sockbuf *, const struct sockaddr *, struct mbuf *,
+int	sbappendaddr(struct sockbuf *, struct sockaddr *, struct mbuf *,
 	    struct mbuf *);
 int	sbappendaddrchain(struct sockbuf *, const struct sockaddr *,
 	     struct mbuf *, int);
@@ -295,8 +296,8 @@ void	sbdrop(struct sockbuf *, int);
 void	sbdroprecord(struct sockbuf *);
 void	sbflush(struct sockbuf *);
 void	sbinsertoob(struct sockbuf *, struct mbuf *);
-void	sbrelease(struct sockbuf *, struct socket *);
-int	sbreserve(struct sockbuf *, u_long, struct socket *);
+void	sbrelease(struct sockbuf *);
+int	sbreserve(struct sockbuf *, u_long);
 int	sbwait(struct sockbuf *);
 int	sb_lock(struct sockbuf *);
 int	sb_max_set(u_long);
@@ -307,9 +308,9 @@ int	sobind(struct socket *, struct mbuf *, struct proc *);
 void	socantrcvmore(struct socket *);
 void	socantsendmore(struct socket *);
 int	soclose(struct socket *);
-int	soconnect(struct socket *, struct mbuf *, struct proc *);
+int	soconnect(struct socket *, struct mbuf *);
 int	soconnect2(struct socket *, struct socket *);
-int	socreate(int, struct socket **, int, int, struct proc *);
+int	socreate(int, struct socket **, int, int);
 int	sodisconnect(struct socket *);
 void	sofree(struct socket *);
 int	sogetopt(struct socket *, int, int, struct mbuf **);
@@ -328,7 +329,7 @@ int	soreceive(struct socket *, struct mbuf **, struct uio *,
 int	soreserve(struct socket *, u_long, u_long);
 void	sorflush(struct socket *);
 int	sosend(struct socket *, struct mbuf *, struct uio *,
-	    struct mbuf *, struct mbuf *, int, struct proc *);
+	    struct mbuf *, struct mbuf *, int);
 int	sosetopt(struct socket *, int, int, struct mbuf *);
 int	soshutdown(struct socket *, int);
 void	sowakeup(struct socket *, struct sockbuf *, int);
@@ -338,13 +339,6 @@ int	sendit(struct proc *, int, struct msghdr *, int, register_t *);
 int	recvit(struct proc *, int, struct msghdr *, caddr_t, register_t *);
 
 #ifdef SOCKBUF_DEBUG
-/*
- * SBLASTRECORDCHK: check sb->sb_lastrecord is maintained correctly.
- * SBLASTMBUFCHK: check sb->sb_mbtail is maintained correctly.
- *
- * => panic if the socket buffer is inconsistent.
- * => 'where' is used for a panic message.
- */
 void	sblastrecordchk(struct sockbuf *, const char *);
 #define	SBLASTRECORDCHK(sb, where)	sblastrecordchk((sb), (where))
 

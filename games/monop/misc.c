@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.13 2004/11/05 21:30:32 dsl Exp $	*/
+/*	$NetBSD: misc.c,v 1.12 2004/01/26 09:59:36 jsm Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)misc.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: misc.c,v 1.13 2004/11/05 21:30:32 dsl Exp $");
+__RCSID("$NetBSD: misc.c,v 1.12 2004/01/26 09:59:36 jsm Exp $");
 #endif
 #endif /* not lint */
 
@@ -109,9 +109,9 @@ inter:
 		*sp = c;
 		if (sp == buf)
 			continue;
-		for (sp = buf; isspace((unsigned char)*sp); sp++)
+		for (sp = buf; isspace(*sp); sp++)
 			continue;
-		for (; isdigit((unsigned char)*sp); sp++)
+		for (; isdigit(*sp); sp++)
 			num = num * 10 + *sp - '0';
 		if (*sp == '\n')
 			return num;

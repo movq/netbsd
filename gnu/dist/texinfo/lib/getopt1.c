@@ -1,7 +1,7 @@
-/*	$NetBSD: getopt1.c,v 1.1.1.5 2004/07/12 23:26:57 wiz Exp $	*/
+/*	$NetBSD: getopt1.c,v 1.1.1.4 2003/02/13 08:50:51 wiz Exp $	*/
 
 /* getopt_long and getopt_long_only entry points for GNU getopt.
-   Copyright (C) 1987,88,89,90,91,92,93,94,96,97,98,2004
+   Copyright (C) 1987,88,89,90,91,92,93,94,96,97,98
      Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
@@ -28,7 +28,14 @@
 #else
 # include "getopt.h"
 #endif
-#include "getopt_int.h"
+
+#if !defined __STDC__ || !__STDC__
+/* This is a separate conditional since some stdc systems
+   reject `defined (const)'.  */
+#ifndef const
+#define const
+#endif
+#endif
 
 #include <stdio.h>
 
@@ -62,19 +69,14 @@
 #endif
 
 int
-getopt_long (int argc, char *const *argv, const char *options,
-	     const struct option *long_options, int *opt_index)
+getopt_long (argc, argv, options, long_options, opt_index)
+     int argc;
+     char *const *argv;
+     const char *options;
+     const struct option *long_options;
+     int *opt_index;
 {
   return _getopt_internal (argc, argv, options, long_options, opt_index, 0);
-}
-
-int
-_getopt_long_r (int argc, char *const *argv, const char *options,
-		const struct option *long_options, int *opt_index,
-		struct _getopt_data *d)
-{
-  return _getopt_internal_r (argc, argv, options, long_options, opt_index,
-			     0, d);
 }
 
 /* Like getopt_long, but '-' as well as '--' can indicate a long option.
@@ -83,20 +85,20 @@ _getopt_long_r (int argc, char *const *argv, const char *options,
    instead.  */
 
 int
-getopt_long_only (int argc, char *const *argv, const char *options,
-		  const struct option *long_options, int *opt_index)
+getopt_long_only (argc, argv, options, long_options, opt_index)
+     int argc;
+     char *const *argv;
+     const char *options;
+     const struct option *long_options;
+     int *opt_index;
 {
   return _getopt_internal (argc, argv, options, long_options, opt_index, 1);
 }
 
-int
-_getopt_long_only_r (int argc, char *const *argv, const char *options,
-		     const struct option *long_options, int *opt_index,
-		     struct _getopt_data *d)
-{
-  return _getopt_internal_r (argc, argv, options, long_options, opt_index,
-			     1, d);
-}
+# ifdef _LIBC
+libc_hidden_def (getopt_long)
+libc_hidden_def (getopt_long_only)
+# endif
 
 #endif	/* Not ELIDE_CODE.  */
 
@@ -105,7 +107,9 @@ _getopt_long_only_r (int argc, char *const *argv, const char *options,
 #include <stdio.h>
 
 int
-main (int argc, char **argv)
+main (argc, argv)
+     int argc;
+     char **argv;
 {
   int c;
   int digit_optind = 0;

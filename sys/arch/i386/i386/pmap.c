@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.179 2004/10/10 09:55:24 yamt Exp $	*/
+/*	$NetBSD: pmap.c,v 1.171.2.1 2004/04/16 07:58:45 tron Exp $	*/
 
 /*
  *
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.179 2004/10/10 09:55:24 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.171.2.1 2004/04/16 07:58:45 tron Exp $");
 
 #include "opt_cputype.h"
 #include "opt_user_ldt.h"
@@ -132,6 +132,8 @@ __KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.179 2004/10/10 09:55:24 yamt Exp $");
  *  - pv_page/pv_page_info: pv_entry's are allocated out of pv_page's.
  *      if we run out of pv_entry's we allocate a new pv_page and free
  *      its pv_entrys.
+ * - pmap_remove_record: a list of virtual addresses whose mappings
+ *	have been changed.   used for TLB flushing.
  */
 
 /*
@@ -1992,11 +1994,7 @@ pmap_reactivate(struct pmap *pmap)
 	 * for this pmap in the meantime.
 	 */
 
-#if defined(MULTIPROCESSOR)
 	s = splipi(); /* protect from tlb shootdown ipis. */
-#else /* defined(MULTIPROCESSOR) */
-	s = splvm();
-#endif /* defined(MULTIPROCESSOR) */
 	oldcpus = pmap->pm_cpus;
 	x86_atomic_setbits_l(&pmap->pm_cpus, cpumask);
 	if (oldcpus & cpumask) {
@@ -2029,10 +2027,6 @@ pmap_load()
 	int s;
 
 	KASSERT(ci->ci_want_pmapload);
-
-	/* should be able to take ipis. */
-	KASSERT(ci->ci_ilevel < IPL_IPI); 
-	KASSERT((read_psl() & PSL_I) != 0);
 
 	l = ci->ci_curlwp;
 	KASSERT(l != NULL);
@@ -2077,11 +2071,7 @@ pmap_load()
 	 * mark the pmap in use by this processor.
 	 */
 
-#if defined(MULTIPROCESSOR)
 	s = splipi();
-#else /* defined(MULTIPROCESSOR) */
-	s = splvm();
-#endif /* defined(MULTIPROCESSOR) */
 	x86_atomic_setbits_l(&pmap->pm_cpus, cpumask);
 	ci->ci_pmap = pmap;
 	ci->ci_tlbstate = TLBSTATE_VALID;
@@ -2271,7 +2261,7 @@ pmap_zero_page(pa)
 		panic("pmap_zero_page: lock botch");
 #endif
 
-	*zpte = (pa & PG_FRAME) | PG_V | PG_RW | PG_M | PG_U; /* map in */
+	*zpte = (pa & PG_FRAME) | PG_V | PG_RW;		/* map in */
 	pmap_update_pg((vaddr_t)zerova);		/* flush TLB */
 
 	memset(zerova, 0, PAGE_SIZE);			/* zero */
@@ -2296,20 +2286,15 @@ pmap_pageidlezero(pa)
 	pt_entry_t *zpte = PTESLEW(zero_pte, id);
 	caddr_t zerova = VASLEW(zerop, id);
 	boolean_t rv = TRUE;
-	int *ptr;
-	int *ep;
-#if defined(I686_CPU)
-	const u_int32_t cpu_features = curcpu()->ci_feature_flags;
-#endif /* defined(I686_CPU) */
+	int i, *ptr;
 
 #ifdef DIAGNOSTIC
 	if (*zpte)
-		panic("pmap_pageidlezero: lock botch");
+		panic("pmap_zero_page_uncached: lock botch");
 #endif
-	*zpte = (pa & PG_FRAME) | PG_V | PG_RW | PG_M | PG_U; /* map in */
+	*zpte = (pa & PG_FRAME) | PG_V | PG_RW;		/* map in */
 	pmap_update_pg((vaddr_t)zerova);		/* flush TLB */
-	for (ptr = (int *) zerova, ep = ptr + PAGE_SIZE / sizeof(int);
-	    ptr < ep; ptr++) {
+	for (i = 0, ptr = (int *) zerova; i < PAGE_SIZE / sizeof(int); i++) {
 		if (sched_whichqs != 0) {
 
 			/*
@@ -2322,19 +2307,8 @@ pmap_pageidlezero(pa)
 			rv = FALSE;
 			break;
 		}
-#if defined(I686_CPU)
-		if (cpu_features & CPUID_SSE2)
-			__asm __volatile ("movnti %1, %0" :
-			    "=m"(*ptr) : "r" (0));
-		else
-#endif /* defined(I686_CPU) */
-			*ptr = 0;
+		*ptr++ = 0;
 	}
-
-#if defined(I686_CPU)
-	if (cpu_features & CPUID_SSE2)
-		__asm __volatile ("sfence" ::: "memory");
-#endif /* defined(I686_CPU) */
 
 #ifdef DIAGNOSTIC
 	*zpte = 0;					/* zap! */
@@ -2363,8 +2337,8 @@ pmap_copy_page(srcpa, dstpa)
 		panic("pmap_copy_page: lock botch");
 #endif
 
-	*spte = (srcpa & PG_FRAME) | PG_V | PG_RW | PG_U;
-	*dpte = (dstpa & PG_FRAME) | PG_V | PG_RW | PG_M | PG_U;
+	*spte = (srcpa & PG_FRAME) | PG_V | PG_RW;
+	*dpte = (dstpa & PG_FRAME) | PG_V | PG_RW;
 	pmap_update_2pg((vaddr_t)csrcva, (vaddr_t)cdstva);
 	memcpy(cdstva, csrcva, PAGE_SIZE);
 #ifdef DIAGNOSTIC
@@ -3033,7 +3007,6 @@ pmap_clear_attrs(pg, clearbits)
 	*myattrs &= ~clearbits;
 
 	SPLAY_FOREACH(pve, pvtree, &pvh->pvh_root) {
-		pt_entry_t *ptep;
 #ifdef DIAGNOSTIC
 		if (!pmap_valid_entry(pve->pv_pmap->pm_pdir[pdei(pve->pv_va)]))
 			panic("pmap_change_attrs: mapping without PTP "
@@ -3041,8 +3014,7 @@ pmap_clear_attrs(pg, clearbits)
 #endif
 
 		ptes = pmap_map_ptes(pve->pv_pmap);	/* locks pmap */
-		ptep = &ptes[x86_btop(pve->pv_va)];
-		opte = *ptep;
+		opte = ptes[x86_btop(pve->pv_va)];
 		if (opte & clearbits) {
 			/* We need to do something */
 			if (clearbits == PG_RW) {
@@ -3054,8 +3026,9 @@ pmap_clear_attrs(pg, clearbits)
 				 */
 
 				/* First zap the RW bit! */
-				x86_atomic_clearbits_l(ptep, PG_RW); 
-				opte = *ptep;
+				x86_atomic_clearbits_l(
+				    &ptes[x86_btop(pve->pv_va)], PG_RW); 
+				opte = ptes[x86_btop(pve->pv_va)];
 
 				/*
 				 * Then test if it is not cached as RW the TLB
@@ -3070,7 +3043,8 @@ pmap_clear_attrs(pg, clearbits)
 			 */
 
 			/* zap! */
-			opte = x86_atomic_testset_ul(ptep,
+			opte = x86_atomic_testset_ul(
+			    &ptes[x86_btop(pve->pv_va)],
 			    (opte & ~(PG_U | PG_M)));
 
 			result |= (opte & clearbits);
@@ -3274,7 +3248,6 @@ pmap_enter(pmap, va, pa, prot, flags)
 	int flags;
 {
 	pt_entry_t *ptes, opte, npte;
-	pt_entry_t *ptep;
 	struct vm_page *ptp, *pg;
 	struct vm_page_md *mdpg;
 	struct pv_head *old_pvh, *new_pvh;
@@ -3330,8 +3303,7 @@ pmap_enter(pmap, va, pa, prot, flags)
 	 * on SMP the PTE might gain PG_U and PG_M flags
 	 * before we zap it later
 	 */
-	ptep = &ptes[x86_btop(va)];
-	opte = *ptep;		/* old PTE */
+	opte = ptes[x86_btop(va)];		/* old PTE */
 
 	/*
 	 * is there currently a valid mapping at our VA and does it
@@ -3351,7 +3323,7 @@ pmap_enter(pmap, va, pa, prot, flags)
 		npte |= (opte & PG_PVLIST);
 
 		/* zap! */
-		opte = x86_atomic_testset_ul(ptep, npte);
+		opte = x86_atomic_testset_ul(&ptes[x86_btop(va)], npte);
 
 		/*
 		 * Any change in the protection level that the CPU
@@ -3363,7 +3335,8 @@ pmap_enter(pmap, va, pa, prot, flags)
 			 * No need to flush the TLB.
 			 * Just add old PG_M, ... flags in new entry.
 			 */
-			x86_atomic_setbits_l(ptep, opte & (PG_M | PG_U));
+			x86_atomic_setbits_l(&ptes[x86_btop(va)],
+			    opte & (PG_M | PG_U));
 			goto out_ok;
 		}
 
@@ -3443,7 +3416,7 @@ pmap_enter(pmap, va, pa, prot, flags)
 			pmap_lock_pvhs(old_pvh, new_pvh);
 
 			/* zap! */
-			opte = x86_atomic_testset_ul(ptep, npte);
+			opte = x86_atomic_testset_ul(&ptes[x86_btop(va)], npte);
 
 			pve = pmap_remove_pv(old_pvh, pmap, va);
 			KASSERT(pve != 0);
@@ -3472,7 +3445,7 @@ pmap_enter(pmap, va, pa, prot, flags)
 		simple_unlock(&new_pvh->pvh_lock);
 	}
 
-	opte = x86_atomic_testset_ul(ptep, npte);   /* zap! */
+	opte = x86_atomic_testset_ul(&ptes[x86_btop(va)], npte);   /* zap! */
 
 shootdown_test:
 	/* Update page attributes if needed */
@@ -3729,11 +3702,7 @@ pmap_tlb_shootdown(pmap, va, pte, cpumaskp)
 
 	self = curcpu();
 
-#if defined(MULTIPROCESSOR)
 	s = splipi();
-#else /* defined(MULTIPROCESSOR) */
-	s = splvm();
-#endif /* defined(MULTIPROCESSOR) */
 #if 0
 	printf("dshootdown %lx\n", va);
 #endif
@@ -3817,8 +3786,7 @@ pmap_tlb_shootdown(pmap, va, pte, cpumaskp)
 /*
  * pmap_do_tlb_shootdown_checktlbstate: check and update ci_tlbstate.
  *
- * => called at splipi if MULTIPROCESSOR.
- * => called at splvm if !MULTIPROCESSOR.
+ * => called at splipi.
  * => return TRUE if we need to maintain user tlbs.
  */
 static __inline boolean_t
@@ -3864,15 +3832,10 @@ pmap_do_tlb_shootdown(struct cpu_info *self)
 #ifdef MULTIPROCESSOR
 	struct cpu_info *ci;
 	CPU_INFO_ITERATOR cii;
-#endif /* MULTIPROCESSOR */
-
+#endif
 	KASSERT(self == curcpu());
 
-#ifdef MULTIPROCESSOR
 	s = splipi();
-#else /* MULTIPROCESSOR */
-	s = splvm();
-#endif /* MULTIPROCESSOR */
 
 	__cpu_simple_lock(&pq->pq_slock);
 
@@ -3915,7 +3878,7 @@ pmap_do_tlb_shootdown(struct cpu_info *self)
 	for (CPU_INFO_FOREACH(cii, ci))
 		x86_atomic_clearbits_l(&ci->ci_tlb_ipi_mask,
 		    (1U << cpu_id));
-#endif /* MULTIPROCESSOR */
+#endif
 	__cpu_simple_unlock(&pq->pq_slock);
 
 	splx(s);

@@ -1,4 +1,4 @@
-/*	$NetBSD: rnd.c,v 1.44 2004/11/29 13:33:37 yamt Exp $	*/
+/*	$NetBSD: rnd.c,v 1.42 2003/06/29 22:30:01 fvdl Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rnd.c,v 1.44 2004/11/29 13:33:37 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rnd.c,v 1.42 2003/06/29 22:30:01 fvdl Exp $");
 
 #include <sys/param.h>
 #include <sys/ioctl.h>
@@ -109,7 +109,7 @@ typedef struct _rnd_sample_t {
 
 /*
  * The event queue.  Fields are altered at an interrupt level.
- * All accesses must be protected at splvm().
+ * All accesses must be protected at splhigh().
  */
 volatile int			rnd_timeout_pending;
 SIMPLEQ_HEAD(, _rnd_sample_t)	rnd_samples;
@@ -126,15 +126,15 @@ struct selinfo rnd_selq;
 volatile u_int32_t rnd_status;
 
 /*
- * Memory pool; accessed only at splvm().
+ * Memory pool; accessed only at splhigh().
  */
-POOL_INIT(rnd_mempool, sizeof(rnd_sample_t), 0, 0, 0, "rndsample", NULL);
+struct pool rnd_mempool;
 
 /*
  * Our random pool.  This is defined here rather than using the general
  * purpose one defined in rndpool.c.
  *
- * Samples are collected and queued at splvm() into a separate queue
+ * Samples are collected and queued at splhigh() into a separate queue
  * (rnd_samples, see above), and processed in a timeout routine; therefore,
  * all other accesses to the random pool must be at splsoftclock() as well.
  */
@@ -320,6 +320,9 @@ rnd_init(void)
 
 	LIST_INIT(&rnd_sources);
 	SIMPLEQ_INIT(&rnd_samples);
+
+	pool_init(&rnd_mempool, sizeof(rnd_sample_t), 0, 0, 0, "rndsample",
+	    NULL);
 
 	rndpool_init(&rnd_pool);
 
@@ -772,7 +775,7 @@ rnd_sample_allocate(rndsource_t *source)
 	rnd_sample_t *c;
 	int s;
 
-	s = splvm();
+	s = splhigh();
 	c = pool_get(&rnd_mempool, PR_WAITOK);
 	splx(s);
 	if (c == NULL)
@@ -794,7 +797,7 @@ rnd_sample_allocate_isr(rndsource_t *source)
 	rnd_sample_t *c;
 	int s;
 
-	s = splvm();
+	s = splhigh();
 	c = pool_get(&rnd_mempool, 0);
 	splx(s);
 	if (c == NULL)
@@ -813,7 +816,7 @@ rnd_sample_free(rnd_sample_t *c)
 	int s;
 
 	memset(c, 0, sizeof(rnd_sample_t));
-	s = splvm();
+	s = splhigh();
 	pool_put(&rnd_mempool, c);
 	splx(s);
 }
@@ -878,7 +881,7 @@ rnd_detach_source(rndsource_element_t *rs)
 	rndsource_t *source;
 	int s;
 
-	s = splvm();
+	s = splhigh();
 
 	LIST_REMOVE(rs, list);
 
@@ -970,7 +973,7 @@ rnd_add_uint32(rndsource_element_t *rs, u_int32_t val)
 	/*
 	 * State arrays are full.  Queue this chunk on the processing queue.
 	 */
-	s = splvm();
+	s = splhigh();
 	SIMPLEQ_INSERT_HEAD(&rnd_samples, state, next);
 	rst->state = NULL;
 
@@ -1027,9 +1030,9 @@ rnd_timeout(void *arg)
 	int s;
 
 	/*
-	 * Sample queue is protected at splvm(); go there briefly to dequeue.
+	 * Sample queue is protected at splhigh(); go there briefly to dequeue.
 	 */
-	s = splvm();
+	s = splhigh();
 	rnd_timeout_pending = 0;
 
 	sample = SIMPLEQ_FIRST(&rnd_samples);
@@ -1061,8 +1064,8 @@ rnd_timeout(void *arg)
 
 		rnd_sample_free(sample);
 
-		/* Go back to splvm to dequeue the next one.. */
-		s = splvm();
+		/* Go back to splhigh to dequeue the next one.. */
+		s = splhigh();
 		sample = SIMPLEQ_FIRST(&rnd_samples);
 	}
 	splx(s);

@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplay_compat_usl.c,v 1.25 2004/04/23 21:29:16 itojun Exp $ */
+/* $NetBSD: wsdisplay_compat_usl.c,v 1.24 2004/03/24 17:26:53 drochner Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsdisplay_compat_usl.c,v 1.25 2004/04/23 21:29:16 itojun Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsdisplay_compat_usl.c,v 1.24 2004/03/24 17:26:53 drochner Exp $");
 
 #include "opt_compat_freebsd.h"
 #include "opt_compat_netbsd.h"
@@ -324,7 +324,7 @@ wsdisplay_usl_ioctl1(struct wsdisplay_softc *sc, u_long cmd, caddr_t data,
 #ifdef WSDISPLAY_COMPAT_PCVT
 	    case VGAPCVTID:
 #define id ((struct pcvtid *)data)
-		strlcpy(id->name, "pcvt", sizeof(id->name));
+		strcpy(id->name, "pcvt");
 		id->rmajor = 3;
 		id->rminor = 32;
 #undef id

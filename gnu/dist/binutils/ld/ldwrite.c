@@ -1,5 +1,5 @@
 /* ldwrite.c -- write out the linked file
-   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 2000, 2002, 2003
+   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 2000, 2002
    Free Software Foundation, Inc.
    Written by Steve Chamberlain sac@cygnus.com
 
@@ -23,7 +23,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "sysdep.h"
 #include "bfdlink.h"
 #include "libiberty.h"
-#include "safe-ctype.h"
 
 #include "ld.h"
 #include "ldexp.h"
@@ -33,10 +32,15 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include <ldgram.h>
 #include "ldmain.h"
 
+static void build_link_order PARAMS ((lang_statement_union_type *));
+static asection *clone_section PARAMS ((bfd *, asection *, const char *, int *));
+static void split_sections PARAMS ((bfd *, struct bfd_link_info *));
+
 /* Build link_order structures for the BFD linker.  */
 
 static void
-build_link_order (lang_statement_union_type *statement)
+build_link_order (statement)
+     lang_statement_union_type *statement;
 {
   switch (statement->header.type)
     {
@@ -56,7 +60,7 @@ build_link_order (lang_statement_union_type *statement)
 
 	link_order->type = bfd_data_link_order;
 	link_order->offset = statement->data_statement.output_vma;
-	link_order->u.data.contents = xmalloc (QUAD_SIZE);
+	link_order->u.data.contents = (bfd_byte *) xmalloc (QUAD_SIZE);
 
 	value = statement->data_statement.value;
 
@@ -193,7 +197,9 @@ build_link_order (lang_statement_union_type *statement)
 	link_order->offset = rs->output_vma;
 	link_order->size = bfd_get_reloc_size (rs->howto);
 
-	link_order->u.reloc.p = xmalloc (sizeof (struct bfd_link_order_reloc));
+	link_order->u.reloc.p =
+	  ((struct bfd_link_order_reloc *)
+	   xmalloc (sizeof (struct bfd_link_order_reloc)));
 
 	link_order->u.reloc.p->reloc = rs->reloc;
 	link_order->u.reloc.p->addend = rs->addend_value;
@@ -286,24 +292,9 @@ build_link_order (lang_statement_union_type *statement)
     }
 }
 
-/* Return true if NAME is the name of an unsplittable section. These
-   are the stabs strings, dwarf strings.  */
+/* Call BFD to write out the linked file.  */
 
-static bfd_boolean
-unsplittable_name (const char *name)
-{
-  if (strncmp (name, ".stab", 5) == 0)
-    {
-      /* There are several stab like string sections. We pattern match on
-	 ".stab...str"  */
-      unsigned len = strlen (name);
-      if (strcmp (&name[len-3], "str") == 0)
-	return TRUE;
-    }
-  else if (strcmp (name, "$GDB_STRINGS$") == 0)
-    return TRUE;
-  return FALSE;
-}
+/**********************************************************************/
 
 /* Wander around the input sections, make sure that
    we'll never try and create an output section with more relocs
@@ -311,43 +302,22 @@ unsplittable_name (const char *name)
    creating new output sections with all the right bits.  */
 #define TESTIT 1
 static asection *
-clone_section (bfd *abfd, asection *s, const char *name, int *count)
+clone_section (abfd, s, name, count)
+     bfd *abfd;
+     asection *s;
+     const char *name;
+     int *count;
 {
-  char *tname;
+  char templ[6];
   char *sname;
-  unsigned int len;	
   asection *n;
   struct bfd_link_hash_entry *h;
 
-  /* Invent a section name from the section name and a dotted numeric
-     suffix.   */
-  len = strlen (name);
-  tname = xmalloc (len + 1);
-  memcpy (tname, name, len + 1);
-  /* Remove a dotted number suffix, from a previous split link. */
-  while (len && ISDIGIT (tname[len-1]))
-    len--;
-  if (len > 1 && tname[len-1] == '.')
-    /* It was a dotted number. */
-    tname[len-1] = 0;
-
-  /* We want to use the whole of the original section name for the
-     split name, but coff can be restricted to 8 character names.  */
-  if (bfd_family_coff (abfd) && strlen (tname) > 5)
-    {
-      /* Some section names cannot be truncated, as the name is
-	 used to locate some other section.  */
-      if (strncmp (name, ".stab", 5) == 0
-	  || strcmp (name, "$GDB_SYMBOLS$") == 0)
-	{
-	  einfo (_ ("%F%P: cannot create split section name for %s\n"), name);
-	  /* Silence gcc warnings.  einfo exits, so we never reach here.  */
-	  return NULL;
-	}
-      tname[5] = 0;
-    }
-  
-  if ((sname = bfd_get_unique_section_name (abfd, tname, count)) == NULL
+  /* Invent a section name from the first five chars of the base
+     section name and a digit suffix.  */
+  strncpy (templ, name, sizeof (templ) - 1);
+  templ[sizeof (templ) - 1] = '\0';
+  if ((sname = bfd_get_unique_section_name (abfd, templ, count)) == NULL
       || (n = bfd_make_section_anyway (abfd, sname)) == NULL
       || (h = bfd_link_hash_lookup (link_info.hash,
 				    sname, TRUE, TRUE, FALSE)) == NULL)
@@ -356,8 +326,7 @@ clone_section (bfd *abfd, asection *s, const char *name, int *count)
       /* Silence gcc warnings.  einfo exits, so we never reach here.  */
       return NULL;
     }
-  free (tname);
-  
+
   /* Set up section symbol.  */
   h->type = bfd_link_hash_defined;
   h->u.def.value = 0;
@@ -379,7 +348,8 @@ clone_section (bfd *abfd, asection *s, const char *name, int *count)
 
 #if TESTING
 static void
-ds (asection *s)
+ds (s)
+     asection *s;
 {
   struct bfd_link_order *l = s->link_order_head;
   printf ("vma %x size %x\n", s->vma, s->_raw_size);
@@ -398,7 +368,10 @@ ds (asection *s)
   printf ("\n");
 }
 
-dump (char *s, asection *a1, asection *a2)
+dump (s, a1, a2)
+     char *s;
+     asection *a1;
+     asection *a2;
 {
   printf ("%s\n", s);
   ds (a1);
@@ -406,7 +379,8 @@ dump (char *s, asection *a1, asection *a2)
 }
 
 static void
-sanity_check (bfd *abfd)
+sanity_check (abfd)
+     bfd *abfd;
 {
   asection *s;
   for (s = abfd->sections; s; s = s->next)
@@ -429,7 +403,9 @@ sanity_check (bfd *abfd)
 #endif
 
 static void
-split_sections (bfd *abfd, struct bfd_link_info *info)
+split_sections (abfd, info)
+     bfd *abfd;
+     struct bfd_link_info *info;
 {
   asection *original_sec;
   int nsecs = abfd->section_count;
@@ -465,7 +441,7 @@ split_sections (bfd *abfd, struct bfd_link_info *info)
 		  || info->strip == strip_some)
 		thislines = sec->lineno_count;
 
-	      if (info->relocatable)
+	      if (info->relocateable)
 		thisrelocs = sec->reloc_count;
 
 	      if (sec->_cooked_size != 0)
@@ -474,7 +450,7 @@ split_sections (bfd *abfd, struct bfd_link_info *info)
 		thissize = sec->_raw_size;
 
 	    }
-	  else if (info->relocatable
+	  else if (info->relocateable
 		   && (p->type == bfd_section_reloc_link_order
 		       || p->type == bfd_symbol_reloc_link_order))
 	    thisrelocs++;
@@ -482,8 +458,7 @@ split_sections (bfd *abfd, struct bfd_link_info *info)
 	  if (l != NULL
 	      && (thisrelocs + relocs >= config.split_by_reloc
 		  || thislines + lines >= config.split_by_reloc
-		  || (thissize + sec_size >= config.split_by_file))
-	      && !unsplittable_name (cursor->name))
+		  || thissize + sec_size >= config.split_by_file))
 	    {
 	      /* Create a new section and put this link order and the
 		 following link orders into it.  */
@@ -549,10 +524,10 @@ split_sections (bfd *abfd, struct bfd_link_info *info)
   sanity_check (abfd);
 }
 
-/* Call BFD to write out the linked file.  */
+/**********************************************************************/
 
 void
-ldwrite (void)
+ldwrite ()
 {
   /* Reset error indicator, which can typically something like invalid
      format from opening up the .o files.  */

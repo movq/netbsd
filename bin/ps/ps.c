@@ -1,4 +1,4 @@
-/*	$NetBSD: ps.c,v 1.56 2004/11/29 04:44:10 atatat Exp $	*/
+/*	$NetBSD: ps.c,v 1.54 2004/03/27 14:09:10 simonb Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -75,7 +75,7 @@ __COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)ps.c	8.4 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: ps.c,v 1.56 2004/11/29 04:44:10 atatat Exp $");
+__RCSID("$NetBSD: ps.c,v 1.54 2004/03/27 14:09:10 simonb Exp $");
 #endif
 #endif /* not lint */
 
@@ -269,9 +269,6 @@ main(int argc, char *argv[])
 				flag = KERN_PROC_TTY_REVOKE;
 			else if (strcmp(ttname, "co") == 0)
 				ttypath = _PATH_CONSOLE;
-			else if (strncmp(ttname, "pts/", 4) == 0)
-				(void)snprintf(ttypath = pathbuf,
-				    sizeof(pathbuf), "%s%s", _PATH_DEV, ttname);
 			else if (*ttname != '/')
 				(void)snprintf(ttypath = pathbuf,
 				    sizeof(pathbuf), "%s%s", _PATH_TTY, ttname);
@@ -701,7 +698,7 @@ kludge_oldps_options(char *s)
 		 * otherwise check for trailing number, which *may* be a
 		 * pid.
 		 */
-		while (cp >= s && isdigit((unsigned char)*cp))
+		while (cp >= s && isdigit(*cp))
 			--cp;
 	}
 	cp++;
@@ -711,9 +708,9 @@ kludge_oldps_options(char *s)
 	 * if there's a trailing number, and not a preceding 'p' (pid) or
 	 * 't' (tty) flag, then assume it's a pid and insert a 'p' flag.
 	 */
-	if (isdigit((unsigned char)*cp) &&
+	if (isdigit(*cp) &&
 	    (cp == s || (cp[-1] != 'U' && cp[-1] != 't' && cp[-1] != 'p' &&
-	    cp[-1] != '/' && (cp - 1 == s || cp[-2] != 't'))))
+	     (cp - 1 == s || cp[-2] != 't'))))
 		*ns++ = 'p';
 	/* and append the number */
 	(void)strcpy(ns, cp);		/* XXX strcpy is safe here */

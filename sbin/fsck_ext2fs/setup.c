@@ -1,4 +1,4 @@
-/*	$NetBSD: setup.c,v 1.16 2004/10/29 17:37:30 dsl Exp $	*/
+/*	$NetBSD: setup.c,v 1.15 2004/03/22 19:46:53 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -63,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)setup.c	8.5 (Berkeley) 11/23/94";
 #else
-__RCSID("$NetBSD: setup.c,v 1.16 2004/10/29 17:37:30 dsl Exp $");
+__RCSID("$NetBSD: setup.c,v 1.15 2004/03/22 19:46:53 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -464,14 +464,13 @@ calcsb(dev, devfd, fs)
 	struct partition *pp;
 	char *cp;
 
-	cp = strchr(dev, '\0');
-	if (cp-- == dev ||
-	    ((*cp < 'a' || *cp > 'h') && !isdigit((unsigned char)*cp))) {
+	cp = strchr(dev, '\0') - 1;
+	if ((cp == (char *)-1 || (*cp < 'a' || *cp > 'h')) && !isdigit(*cp)) {
 		pfatal("%s: CANNOT FIGURE OUT FILE SYSTEM PARTITION\n", dev);
 		return (0);
 	}
 	lp = getdisklabel(dev, devfd);
-	if (isdigit((unsigned char)*cp))
+	if (isdigit(*cp))
 		pp = &lp->d_partitions[0];
 	else
 		pp = &lp->d_partitions[*cp - 'a'];

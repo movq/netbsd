@@ -1,5 +1,5 @@
 dnl $Heimdal: test-package.m4,v 1.12.4.1 2004/04/01 07:27:35 joda Exp $
-dnl $NetBSD: test-package.m4,v 1.1.1.5 2004/04/02 14:48:06 lha Exp $
+dnl $NetBSD: test-package.m4,v 1.1.1.4.2.1 2004/04/21 04:55:38 jmc Exp $
 dnl
 dnl rk_TEST_PACKAGE(package,headers,libraries,extra libs,
 dnl			default locations, conditional, config-program)

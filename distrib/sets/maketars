@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: maketars,v 1.54 2004/07/23 15:11:26 erh Exp $
+# $NetBSD: maketars,v 1.52 2004/02/19 02:54:51 dyoung Exp $
 #
 # Make release tar files for some or all lists.  Usage:
 # maketars [-b] [-x] [-i installdir] [-a arch] [-m machine] [-s setsdir]
@@ -22,8 +22,7 @@ prog=${0##*/}
 : ${MTREE=mtree}
 : ${PAX=pax}
 
-rundir=${0%/*}
-. ${rundir}/sets.subr
+. $(dirname $0)/sets.subr
 lists=$nlists
 
 tars=$RELEASEDIR
@@ -149,11 +148,11 @@ for setname in $lists; do
 	    -s $setsdir $setname > $SDIR/flist.$setname
 	if [ -n "$metalog" ]; then
 		$setfilesonly && echo "Creating ${setlistdir}/set.${setname}"
-		awk -f $rundir/getdirs.awk $SDIR/flist.$setname \
+		awk -f getdirs.awk ${SDIR}/flist.${setname} \
 		    | sort -u > $SDIR/flist.$setname.full
 		(
 			echo "/set uname=root gname=wheel"
-			awk -f $rundir/join.awk $SDIR/flist.$setname.full $SDIR/metalog
+			awk -f join.awk $SDIR/flist.$setname.full $SDIR/metalog
 			echo "./etc/mtree/set.${setname} type=file mode=0444"
 		) > ${setlistdir}/set.${setname}
 	elif ! cmp -s ${SDIR}/flist.${setname} \
@@ -179,18 +178,16 @@ for setname in $lists; do
 		echo "Copying set $setname"
 		( cd $dest ; \
 		    ${PAX} -O -rwpe -d -N${etcdir} ${metalog:+-M} \
-			${installdir} < ${setlistdir}/set.${setname} )
+		    ${installdir} < ${setlistdir}/set.${setname} )
 	else
 		if [ -n "$metalog" -a $tars/$out -nt "$metalog" ]; then
 			echo "$out is up to date"
 			continue
 		fi
 		echo "Creating $out"
-		rm -f ${tars}/$out
 		( cd $dest ; \
 		    ${PAX} -O -w -d -z -N${etcdir} ${metalog:+-M} \
-			< ${setlistdir}/set.${setname} ) > ${tars}/$out.tmp &&
-		mv ${tars}/$out.tmp ${tars}/$out
+		    < ${setlistdir}/set.${setname} ) > ${tars}/$out
 	fi
 	es=$(($es + $?))
 done

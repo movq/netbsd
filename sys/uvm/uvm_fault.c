@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_fault.c,v 1.88 2004/05/05 11:54:32 yamt Exp $	*/
+/*	$NetBSD: uvm_fault.c,v 1.87.2.1 2004/05/10 14:27:00 tron Exp $	*/
 
 /*
  *
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_fault.c,v 1.88 2004/05/05 11:54:32 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_fault.c,v 1.87.2.1 2004/05/10 14:27:00 tron Exp $");
 
 #include "opt_uvmhist.h"
 

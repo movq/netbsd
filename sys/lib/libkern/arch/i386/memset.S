@@ -1,4 +1,4 @@
-/*	$NetBSD: memset.S,v 1.6 2004/04/15 09:20:29 yamt Exp $	*/
+/*	$NetBSD: memset.S,v 1.5 2003/04/15 22:49:50 dsl Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
 #include <machine/asm.h>
 
 #if defined(LIBC_SCCS)
-	RCSID("$NetBSD: memset.S,v 1.6 2004/04/15 09:20:29 yamt Exp $")
+	RCSID("$NetBSD: memset.S,v 1.5 2003/04/15 22:49:50 dsl Exp $")
 #endif
 
 #ifdef BZERO
@@ -75,7 +75,7 @@ ENTRY(memset)
 	 * The PII, PIII and PIV allseem to have a massive performance
 	 * drop when the initial target address is an odd multiple of 4.
 	 */
-	jbe	.Lby_bytes
+	jbe	by_bytes
 
 #ifndef BZERO
 	movb	%al,%ah			/* copy char to all bytes in word */
@@ -87,27 +87,27 @@ ENTRY(memset)
 	movl	%edi,%edx		/* detect misalignment */
 	neg	%edx
 	andl	$7,%edx
-	jnz	.Lalign
-.Laligned:
+	jnz	align
+aligned:
 	movl	%eax,-4(%edi,%ecx)	/* zap last 4 bytes */
 	shrl	$2,%ecx			/* zero by words */
 	rep
 	stosl
-.Ldone:
+done:
 #ifndef BZERO
 	movl	8(%esp),%eax		/* return address of buffer */
 #endif
 	pop	%edi
 	ret
 
-.Lalign:
+align:
 	movl	%eax,(%edi)		/* zap first 8 bytes */
 	movl	%eax,4(%edi)
 	subl	%edx,%ecx		/* remove from main count */
 	add	%edx,%edi
-	jmp	.Laligned
+	jmp	aligned
 
-.Lby_bytes:
+by_bytes:
 #endif	/* LIBKERN_OPTIMISE_SPACE */
 	rep
 	stosb

@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_usrreq.c,v 1.93 2004/12/15 04:25:20 thorpej Exp $	*/
+/*	$NetBSD: tcp_usrreq.c,v 1.87.2.1 2004/05/28 07:23:55 tron Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_usrreq.c,v 1.93 2004/12/15 04:25:20 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_usrreq.c,v 1.87.2.1 2004/05/28 07:23:55 tron Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -155,6 +155,7 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_usrreq.c,v 1.93 2004/12/15 04:25:20 thorpej Exp 
 /*
  * TCP protocol interface to socket abstraction.
  */
+extern	char *tcpstates[];
 
 /*
  * Process a TCP user request for TCP tb.  If this is a send request
@@ -687,19 +688,6 @@ tcp_ctloutput(op, so, level, optname, mp)
 		m = *mp;
 		switch (optname) {
 
-#ifdef TCP_SIGNATURE
-		case TCP_MD5SIG:
-			if (m == NULL || m->m_len < sizeof (int))
-				error = EINVAL;
-			if (error)
-				break;
-			if (*mtod(m, int *) > 0)
-				tp->t_flags |= TF_SIGNATURE;
-			else
-				tp->t_flags &= ~TF_SIGNATURE;
-			break;
-#endif /* TCP_SIGNATURE */
-
 		case TCP_NODELAY:
 			if (m == NULL || m->m_len < sizeof (int))
 				error = EINVAL;
@@ -731,11 +719,6 @@ tcp_ctloutput(op, so, level, optname, mp)
 		MCLAIM(m, so->so_mowner);
 
 		switch (optname) {
-#ifdef TCP_SIGNATURE
-		case TCP_MD5SIG:
-			*mtod(m, int *) = (tp->t_flags & TF_SIGNATURE) ? 1 : 0;
-			break;
-#endif
 		case TCP_NODELAY:
 			*mtod(m, int *) = tp->t_flags & TF_NODELAY;
 			break;
@@ -1087,8 +1070,10 @@ sysctl_net_inet_tcp_ident(SYSCTLFN_ARGS)
 	struct in6pcb *in6b;
 	struct sockaddr_in6 *si6[2];
 #endif /* INET6 */
+	struct in_addr laddr, raddr;
 	struct sockaddr_storage sa[2];
 	struct socket *sockp;
+	u_int lport, rport;
 	size_t sz;
 	uid_t uid;
 	int error, pf;
@@ -1102,9 +1087,6 @@ sysctl_net_inet_tcp_ident(SYSCTLFN_ARGS)
 	/* old style lookup, ipv4 only */
 	if (namelen == 4) {
 #ifdef INET
-		struct in_addr laddr, raddr;
-		u_int lport, rport;
-
 		if (pf != PF_INET)
 			return (EPROTONOSUPPORT);
 		raddr.s_addr = (uint32_t)name[0];
@@ -1391,13 +1373,6 @@ sysctl_net_inet_tcp_setup2(struct sysctllog **clog, int pf, const char *pfname,
 		       SYSCTL_DESCR("RFC1413 Identification Protocol lookups"),
 		       sysctl_net_inet_tcp_ident, 0, NULL, sizeof(uid_t),
 		       CTL_NET, pf, IPPROTO_TCP, TCPCTL_IDENT, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "do_loopback_cksum",
-		       SYSCTL_DESCR("Perform TCP checksum on loopback"),
-		       NULL, 0, &tcp_do_loopback_cksum, 0,
-		       CTL_NET, pf, IPPROTO_TCP, TCPCTL_LOOPBACKCKSUM,
-		       CTL_EOL);
 }
 
 /*

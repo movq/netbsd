@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_error.c,v 1.16 2004/04/19 00:10:48 matt Exp $	*/
+/*	$NetBSD: ns_error.c,v 1.15 2003/08/07 16:33:45 agc Exp $	*/
 
 /*
  * Copyright (c) 1984, 1988, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ns_error.c,v 1.16 2004/04/19 00:10:48 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ns_error.c,v 1.15 2003/08/07 16:33:45 agc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,7 +73,8 @@ int	ns_errprintfs = 0;
 struct	ns_errstat ns_errstat;
 
 int
-ns_err_x(int c)
+ns_err_x(c)
+	int c;
 {
 	u_int16_t *w, *lim, *base = ns_errstat.ns_es_codes;
 	u_int16_t x = c;
@@ -98,7 +99,10 @@ ns_err_x(int c)
  * in response to bad packet.
  */
 void
-ns_error(struct mbuf *om, int type, int param)
+ns_error(om, type, param)
+	struct mbuf *om;
+	int type;
+	int param;
 {
 	struct ns_epidp *ep;
 	struct mbuf *m;
@@ -175,7 +179,8 @@ freeit:
 }
 
 void
-ns_printhost(struct ns_addr *p)
+ns_printhost(p)
+struct ns_addr *p;
 {
 
 	printf("<net:%x%x,host:%x%x%x,port:%x>",
@@ -192,7 +197,8 @@ ns_printhost(struct ns_addr *p)
  * Process a received NS_ERR message.
  */
 void
-ns_err_input(struct mbuf *m)
+ns_err_input(m)
+	struct mbuf *m;
 {
 	struct ns_errp *ep;
 #ifdef NS_ERRPRINTFS
@@ -298,7 +304,7 @@ freeit:
 
 #ifdef notdef
 u_int32_t
-nstime(void)
+nstime()
 {
 	int s = splclock();
 	u_int32_t t;
@@ -310,7 +316,8 @@ nstime(void)
 #endif
 
 int
-ns_echo(struct mbuf *m)
+ns_echo(m)
+struct mbuf *m;
 {
 	struct idp *idp = mtod(m, struct idp *);
 	struct echo {

@@ -1,4 +1,4 @@
-/*	$NetBSD: hpux_exec.c,v 1.44 2004/09/12 10:38:25 jdolecek Exp $	*/
+/*	$NetBSD: hpux_exec.c,v 1.42.2.1 2004/08/22 14:10:43 tron Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -71,11 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpux_exec.c,v 1.44 2004/09/12 10:38:25 jdolecek Exp $");
-
-#if defined(_KERNEL_OPT)
-#include "opt_syscall_debug.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: hpux_exec.c,v 1.42.2.1 2004/08/22 14:10:43 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -125,11 +121,7 @@ const struct emul emul_hpux = {
 	HPUX_SYS_NSYSENT,
 #endif
 	hpux_sysent,
-#ifdef SYSCALL_DEBUG
 	hpux_syscallnames,
-#else
-	NULL,
-#endif
 	hpux_sendsig,
 	trapsignal,
 	NULL,

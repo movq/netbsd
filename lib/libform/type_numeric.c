@@ -1,4 +1,4 @@
-/*	$NetBSD: type_numeric.c,v 1.8 2004/10/28 21:14:52 dsl Exp $	*/
+/*	$NetBSD: type_numeric.c,v 1.5 2003/03/09 00:57:20 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: type_numeric.c,v 1.8 2004/10/28 21:14:52 dsl Exp $");
+__RCSID("$NetBSD: type_numeric.c,v 1.5 2003/03/09 00:57:20 lukem Exp $");
 
 #include <stdlib.h>
 #include <string.h>
@@ -70,7 +70,7 @@ create_numeric_args(va_list *args)
 }
 
 /*
- * Copy the numeric argument structure.
+ * Copy the the numeric argument structure.
  */
 static char *
 copy_numeric_args(char *args)
@@ -132,14 +132,14 @@ numeric_check_field(FIELD *field, char *args)
 	if ((buf[cur] == '-') || (buf[cur] == '+'))
 		cur++;
 	
-	while(isdigit((unsigned char)buf[cur]))
+	while((buf[cur] != '\0') && isdigit(buf[cur]))
 		cur++;
 
 	  /* if not at end of string then check for decimal... */
 	if ((buf[cur] != '\0') && (buf[cur] == '.')) {
 		cur++;
 		  /* check for more digits now.... */
-		while(isdigit((unsigned char)buf[cur]))
+		while((buf[cur] != '\0') && isdigit(buf[cur]))
 			cur++;
 	}
 	
@@ -158,11 +158,11 @@ numeric_check_field(FIELD *field, char *args)
 			return FALSE;
 			
 		  /* we expect a digit now */
-		if (!isdigit((unsigned char)buf[cur]))
+		if (!isdigit(buf[cur]))
 			return FALSE;
 			
 		  /* skip digits for the final time */
-		while(isdigit((unsigned char)buf[cur]))
+		while((buf[cur] != '\0') && isdigit(buf[cur]))
 			cur++;
 	}
 			

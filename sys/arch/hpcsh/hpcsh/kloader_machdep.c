@@ -1,7 +1,7 @@
-/*	$NetBSD: kloader_machdep.c,v 1.10 2004/07/06 13:28:39 uch Exp $	*/
+/*	$NetBSD: kloader_machdep.c,v 1.9 2003/11/01 03:24:12 uwe Exp $	*/
 
 /*-
- * Copyright (c) 2001, 2002, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kloader_machdep.c,v 1.10 2004/07/06 13:28:39 uch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kloader_machdep.c,v 1.9 2003/11/01 03:24:12 uwe Exp $");
 
 #include "debug_kloader.h"
 
@@ -53,9 +53,9 @@ __KERNEL_RCSID(0, "$NetBSD: kloader_machdep.c,v 1.10 2004/07/06 13:28:39 uch Exp
 /* 
  * 2nd-bootloader. Make sure that PIC and its size is lower than page size.
  */
-#define KLOADER_HPCSH_BOOT(cpu, product)				\
+#define KLOADER_SH_BOOT(cpu, product)					\
 void									\
-kloader_hpcsh ## cpu ## _boot(struct kloader_bootinfo *kbi,		\
+kloader_sh ## cpu ## _boot(struct kloader_bootinfo *kbi,		\
     struct kloader_page_tag *p)						\
 {									\
 	int tmp = 0;	/* XXX: -Wuninitialized */			\
@@ -93,12 +93,13 @@ kloader_hpcsh ## cpu ## _boot(struct kloader_bootinfo *kbi,		\
 	/* NOTREACHED */						\
 }
 
-kloader_jumpfunc_t kloader_hpcsh_jump;
-kloader_bootfunc_t kloader_hpcsh3_boot;
-kloader_bootfunc_t kloader_hpcsh4_boot;
+void kloader_sh_jump(kloader_bootfunc_t *, vaddr_t,
+    struct kloader_bootinfo *, struct kloader_page_tag *);
+kloader_bootfunc_t kloader_sh3_boot;
+kloader_bootfunc_t kloader_sh4_boot;
 
-struct kloader_ops kloader_hpcsh_ops = {
-	.jump = kloader_hpcsh_jump,
+struct kloader_ops kloader_sh_ops = {
+	.jump = kloader_sh_jump,
 	.boot = 0
 };
 
@@ -106,14 +107,13 @@ void
 kloader_reboot_setup(const char *filename)
 {
 
-	kloader_hpcsh_ops.boot =
-	    CPU_IS_SH3 ? kloader_hpcsh3_boot : kloader_hpcsh4_boot;
+	kloader_sh_ops.boot = CPU_IS_SH3 ? kloader_sh3_boot : kloader_sh4_boot;
 
-	__kloader_reboot_setup(&kloader_hpcsh_ops, filename);
+	__kloader_reboot_setup(&kloader_sh_ops, filename);
 }
 
 void
-kloader_hpcsh_jump(kloader_bootfunc_t func, vaddr_t sp,
+kloader_sh_jump(kloader_bootfunc_t func, vaddr_t sp,
     struct kloader_bootinfo *info, struct kloader_page_tag *tag)
 {
 
@@ -129,8 +129,8 @@ kloader_hpcsh_jump(kloader_bootfunc_t func, vaddr_t sp,
 }
 
 #ifdef SH3
-KLOADER_HPCSH_BOOT(3, 7709A)
+KLOADER_SH_BOOT(3, 7709A)
 #endif 
 #ifdef SH4
-KLOADER_HPCSH_BOOT(4, 7750)
+KLOADER_SH_BOOT(4, 7750)
 #endif

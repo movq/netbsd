@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.4 2004/04/30 17:58:04 toshii Exp $	*/
+/*	$NetBSD: clock.c,v 1.3.2.1 2004/05/06 05:33:10 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -121,7 +121,7 @@ WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.4 2004/04/30 17:58:04 toshii Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.3.2.1 2004/05/06 05:33:10 jmc Exp $");
 
 /* #define CLOCKDEBUG */
 /* #define CLOCK_PARANOIA */

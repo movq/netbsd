@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le.c,v 1.7 2004/12/13 02:31:56 chs Exp $	*/
+/*	$NetBSD: if_le.c,v 1.6 2003/07/15 02:43:43 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1996, 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.7 2004/12/13 02:31:56 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.6 2003/07/15 02:43:43 lukem Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -94,8 +94,6 @@ static void	le_attach __P((struct device *, struct device *, void *));
 CFATTACH_DECL(le, sizeof(struct le_softc),
     le_match, le_attach, NULL, NULL);
 
-static int le_attached;
-
 #if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
 #endif
@@ -147,10 +145,15 @@ le_match(parent, cf, aux)
 	if (strcmp(ca->ca_name, "le"))
 		return 0;
 
-	if (le_attached)
-		return 0;
+	switch(cf->cf_unit) {
 
-	addr = LANCE_PORT;
+	case 0:
+		addr = LANCE_PORT;
+		break;
+	default:
+		return 0;
+	}
+
 	if (badaddr((void *)addr, 1))
 		return 0;
 
@@ -172,11 +175,19 @@ le_attach(parent, self, aux)
 	bus_dma_segment_t seg;
 	int rseg;
 
+	/*struct confargs *ca = aux;*/
 	u_char *id;
 	int i;
 	caddr_t kvaddr;
 
-	id = (u_char *)ETHER_ID;
+	switch (sc->sc_dev.dv_unit) {
+	case 0:
+		id = (u_char *)(ETHER_ID);
+		break;
+	default:
+		panic("le_attach");
+	}
+
 	lesc->sc_bustag = ca->ca_bustag;
 	dmat = lesc->sc_dmatag = ca->ca_dmatag;
 

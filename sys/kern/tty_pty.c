@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_pty.c,v 1.82 2004/11/13 19:16:18 christos Exp $	*/
+/*	$NetBSD: tty_pty.c,v 1.76 2004/03/23 13:22:04 junyoung Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -37,29 +37,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_pty.c,v 1.82 2004/11/13 19:16:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_pty.c,v 1.76 2004/03/23 13:22:04 junyoung Exp $");
 
 #include "opt_compat_sunos.h"
-#include "opt_ptm.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/ioctl.h>
 #include <sys/proc.h>
 #include <sys/tty.h>
-#include <sys/stat.h>
 #include <sys/file.h>
 #include <sys/uio.h>
 #include <sys/kernel.h>
 #include <sys/vnode.h>
-#include <sys/namei.h>
 #include <sys/signalvar.h>
 #include <sys/uio.h>
-#include <sys/filedesc.h>
 #include <sys/conf.h>
 #include <sys/poll.h>
 #include <sys/malloc.h>
-#include <sys/pty.h>
 
 #define	DEFAULT_NPTYS		16	/* default number of initial ptys */
 #define DEFAULT_MAXPTYS		992	/* default maximum number of ptys */
@@ -71,6 +66,10 @@ __KERNEL_RCSID(0, "$NetBSD: tty_pty.c,v 1.82 2004/11/13 19:16:18 christos Exp $"
 
 #define BUFSIZ 100		/* Chunk size iomoved to/from user */
 
+/*
+ * pts == /dev/tty[pqrs]?
+ * ptc == /dev/pty[pqrs]?
+ */
 struct	pt_softc {
 	struct	tty *pt_tty;
 	int	pt_flags;
@@ -80,9 +79,9 @@ struct	pt_softc {
 };
 
 static struct pt_softc **pt_softc = NULL;	/* pty array */
+static int npty = 0;			/* for pstat -t */
 static int maxptys = DEFAULT_MAXPTYS;	/* maximum number of ptys (sysctable) */
-struct simplelock pt_softc_mutex = SIMPLELOCK_INITIALIZER;
-int npty = 0;			/* for pstat -t */
+static struct simplelock pt_softc_mutex = SIMPLELOCK_INITIALIZER;
 
 #define	PF_PKT		0x08		/* packet mode */
 #define	PF_STOPPED	0x10		/* user told stopped */
@@ -96,6 +95,7 @@ void	ptsstart(struct tty *);
 int	pty_maxptys(int, int);
 
 static struct pt_softc **ptyarralloc(int);
+static int check_pty(int);
 
 dev_type_open(ptcopen);
 dev_type_close(ptcclose);
@@ -137,22 +137,6 @@ const struct cdevsw pts_ultrix_cdevsw = {
 #endif /* defined(pmax) */
 
 /*
- * Check if a pty is free to use.
- */
-int
-pty_isfree(int minor, int lock)
-{
-	struct pt_softc *pt = pt_softc[minor];
-	if (lock)
-		simple_lock(&pt_softc_mutex);
-	minor = pt == NULL || pt->pt_tty == NULL ||
-	    pt->pt_tty->t_oproc == NULL;
-	if (lock)
-		simple_unlock(&pt_softc_mutex);
-	return minor;
-}
-
-/*
  * Allocate and zero array of nelem elements.
  */
 static struct pt_softc **
@@ -169,8 +153,8 @@ ptyarralloc(nelem)
  * Check if the minor is correct and ensure necessary structures
  * are properly allocated.
  */
-int
-pty_check(int ptn)
+static int
+check_pty(int ptn)
 {
 	struct pt_softc *pti;
 
@@ -274,7 +258,7 @@ pty_maxptys(newmax, set)
 
 	/*
 	 * We have to grab the pt_softc lock, so that we would pick correct
-	 * value of npty (might be modified in pty_check()).
+	 * value of npty (might be modified in check_pty()).
 	 */
 	simple_lock(&pt_softc_mutex);
 
@@ -304,9 +288,6 @@ ptyattach(n)
 		n = DEFAULT_NPTYS;
 	pt_softc = ptyarralloc(n);
 	npty = n;
-#ifndef NO_DEV_PTM
-	ptmattach(1);
-#endif
 }
 
 /*ARGSUSED*/
@@ -322,7 +303,7 @@ ptsopen(dev, flag, devtype, p)
 	int ptn = minor(dev);
 	int s;
 
-	if ((error = pty_check(ptn)) != 0)
+	if ((error = check_pty(ptn)))
 		return (error);
 
 	pti = pt_softc[ptn];
@@ -418,7 +399,6 @@ again:
 			}
 			error = ttysleep(tp, (caddr_t)&tp->t_canq,
 					 TTIPRI | PCATCH | PNORELOCK, ttyin, 0);
-			splx(s);
 			if (error)
 				return (error);
 			goto again;
@@ -569,7 +549,7 @@ ptcopen(dev, flag, devtype, p)
 	int ptn = minor(dev);
 	int s;
 
-	if ((error = pty_check(ptn)) != 0)
+	if ((error = check_pty(ptn)))
 		return (error);
 
 	pti = pt_softc[ptn];
@@ -1027,6 +1007,7 @@ ptyioctl(dev, cmd, data, flag, p)
 	int stop, error, sig;
 	int s;
 
+	cdev = cdevsw_lookup(dev);
 	/*
 	 * IF CONTROLLER STTY THEN MUST FLUSH TO PREVENT A HANG.
 	 * ttywflush(tp) will hang if there are characters in the outq.
@@ -1054,19 +1035,8 @@ ptyioctl(dev, cmd, data, flag, p)
 		return(0);
 	}
 
-#ifndef NO_DEV_PTM
-	/* Allow getting the name from either the master or the slave */
-	if (cmd == TIOCPTSNAME)
-		return pty_fill_ptmget(dev, -1, -1, data);
-#endif
-
-	cdev = cdevsw_lookup(dev);
 	if (cdev != NULL && cdev->d_open == ptcopen)
 		switch (cmd) {
-#ifndef NO_DEV_PTM
-		case TIOCGRANTPT:
-			return pty_grant_slave(p, dev);
-#endif
 
 		case TIOCGPGRP:
 			/*

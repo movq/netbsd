@@ -1,5 +1,3 @@
-/*	$NetBSD: hex_quote.c,v 1.1.1.3 2004/05/31 00:24:59 heas Exp $	*/
-
 /*++
 /* NAME
 /*	hex_quote 3
@@ -17,8 +15,7 @@
 /*	const char *hex;
 /* DESCRIPTION
 /*	hex_quote() takes a null-terminated string and replaces non-printable
-/*	and whitespace characters and the % by %XX, XX being the two-digit
-/*	hexadecimal equivalent.
+/*	characters and % by %XX, XX being the two-digit hexadecimal equivalent.
 /*	The hexadecimal codes are produced as upper-case characters. The result
 /*	value is the hex argument.
 /*
@@ -64,7 +61,7 @@ VSTRING *hex_quote(VSTRING *hex, const char *raw)
 
     VSTRING_RESET(hex);
     for (cp = raw; (ch = *(unsigned const char *) cp) != 0; cp++) {
-	if (ch != '%' && !ISSPACE(ch) && ISPRINT(ch)) {
+	if (ch != '%' && ISPRINT(ch)) {
 	    VSTRING_ADDCH(hex, ch);
 	} else {
 	    vstring_sprintf_append(hex, "%%%02X", ch);

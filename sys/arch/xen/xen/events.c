@@ -1,4 +1,4 @@
-/*	$NetBSD: events.c,v 1.5 2004/05/07 23:05:30 cl Exp $	*/
+/*	$NetBSD: events.c,v 1.1.2.1 2004/05/22 15:57:33 he Exp $	*/
 
 /*
  *
@@ -33,7 +33,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: events.c,v 1.5 2004/05/07 23:05:30 cl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: events.c,v 1.1.2.1 2004/05/22 15:57:33 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

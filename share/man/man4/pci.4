@@ -1,4 +1,4 @@
-.\"	$NetBSD: pci.4,v 1.76 2004/12/11 10:15:02 jdolecek Exp $
+.\"	$NetBSD: pci.4,v 1.72 2003/05/06 18:58:24 wiz Exp $
 .\"
 .\" Copyright (c) 1997 Jason R. Thorpe.  All rights reserved.
 .\" Copyright (c) 1997 Jonathan Stone
@@ -29,7 +29,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 11, 2004
+.Dd September 27, 2002
 .Dt PCI 4
 .Os
 .Sh NAME
@@ -218,10 +218,6 @@ Silicon Integrated Systems SiS 900, SiS 7016, and National Semiconductor
 DP83815 based
 .Tn Ethernet
 interfaces.
-.It sk
-SysKonnect SK-98xx based Gigabit
-.Tn Ethernet
-interfaces.
 .It ste
 Sundance ST-201 10/100 based
 .Tn Ethernet
@@ -258,8 +254,6 @@ Cyclades-Z series multi-port serial interfaces.
 .El
 .Ss Audio devices
 .Bl -tag -width pcdisplay -offset indent
-.It auacer
-Acer Labs M5455 I/O Controller Hub integrated AC'97 audio device.
 .It auich
 Intel I/O Controller Hub integrated AC'97 audio device.
 .It auvia
@@ -400,7 +394,6 @@ VGA graphics boards.
 .Xr sf 4 ,
 .Xr siop 4 ,
 .Xr sip 4 ,
-.Xr sk 4 ,
 .Xr ste 4 ,
 .Xr stge 4 ,
 .Xr sv 4 ,

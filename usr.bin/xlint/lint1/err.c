@@ -1,4 +1,4 @@
-/*	$NetBSD: err.c,v 1.28 2004/08/03 12:11:54 yamt Exp $	*/
+/*	$NetBSD: err.c,v 1.26.2.1 2004/06/22 07:27:50 tron Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: err.c,v 1.28 2004/08/03 12:11:54 yamt Exp $");
+__RCSID("$NetBSD: err.c,v 1.26.2.1 2004/06/22 07:27:50 tron Exp $");
 #endif
 
 #include <sys/types.h>
@@ -380,7 +380,6 @@ const	char *msgs[] = {
 	"variable array dimension is a GCC extension",		      /* 318 */
 	"compound literals are a C9X/GCC extension",		      /* 319 */
 	"({ }) is a GCC extension",				      /* 320 */
-	"array initializer with designators is a C9X feature",	      /* 321 */
 };
 
 /*

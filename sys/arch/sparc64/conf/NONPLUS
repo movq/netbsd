@@ -1,4 +1,4 @@
-# 	$NetBSD: NONPLUS,v 1.43 2004/11/10 17:54:07 christos Exp $
+# 	$NetBSD: NONPLUS,v 1.40.4.1 2004/07/15 20:20:45 he Exp $
 
 include "arch/sparc64/conf/std.sparc64"
 
@@ -132,7 +132,6 @@ options 	EXEC_ELF32	# Exec module for NetBSD/sparc 1.5 binaries.
 options 	EXEC_AOUT	# Exec module for NetBSD/sparc pre-1.5 binaries.
 
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 ## File systems.  You probably need at least one of FFS or NFS.
 file-system	FFS		# Berkeley Fast Filesystem
@@ -165,7 +164,6 @@ options 	INET6		# IPV6
 #options 	TCP_SIGNATURE	# TCP MD5 Signatures, for BGP routing sessions
 options 	GATEWAY		# packet forwarding ("router switch")
 #options 	MROUTING	# packet forwarding of multicast packets
-#options 	PIM		# Protocol Independent Multicast
 #options 	DIRECTED_BROADCAST	# allow broadcasts through routers
 #options 	NS		# Xerox NS networking
 #options 	NSIP		# Xerox NS tunneling over IP

@@ -1,4 +1,4 @@
-/*	$NetBSD: gtvar.h,v 1.7 2004/11/26 05:10:31 jmc Exp $	*/
+/*	$NetBSD: gtvar.h,v 1.5 2004/03/20 01:55:00 matt Exp $	*/
 
 /*
  * Copyright (c) 2002 Allegro Networks, Inc., Wasabi Systems, Inc.
@@ -104,12 +104,16 @@ extern int gtpci_debug;
 /*
  * Locators for GT private devices, as specified to config.
  */
+#define	gtcf_unit		cf_loc[GTCF_UNIT]
 #define	GT_UNK_UNIT		GTCF_UNIT_DEFAULT	/* wcarded 'function' */
 
+#define	obiocf_offset		cf_loc[OBIOCF_OFFSET]
 #define	OBIO_UNK_OFFSET		OBIOCF_OFFSET_DEFAULT	/* wcarded 'offset' */
 
+#define	obiocf_size		cf_loc[OBIOCF_SIZE]
 #define	OBIO_UNK_SIZE		OBIOCF_SIZE_DEFAULT	/* wcarded 'size' */
 
+#define	obiocf_irq		cf_loc[OBIOCF_IRQ]
 #define	OBIO_UNK_IRQ		OBIOCF_IRQ_DEFAULT	/* wcarded 'irq' */
 
 void	gt_attach_common(struct gt_softc *);

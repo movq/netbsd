@@ -1,4 +1,4 @@
-/*	$NetBSD: emul.c,v 1.9 2004/04/13 14:00:24 pk Exp $	*/
+/*	$NetBSD: emul.c,v 1.8.2.1 2004/04/24 18:27:07 jdc Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: emul.c,v 1.9 2004/04/13 14:00:24 pk Exp $");
+__KERNEL_RCSID(0, "$NetBSD: emul.c,v 1.8.2.1 2004/04/24 18:27:07 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.15 2004/10/31 10:39:34 yamt Exp $	*/
+/*	$NetBSD: intr.h,v 1.12 2004/03/04 19:10:10 dbj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -102,8 +102,6 @@ struct intrhand {
 	int	(*ih_fun)(void *);
 	void	*ih_arg;
 	int	ih_level;
-	int	(*ih_realfun)(void *);
-	void	*ih_realarg;
 	struct	intrhand *ih_next;
 	int	ih_pin;
 	int	ih_slot;
@@ -125,6 +123,16 @@ static __inline void softintr(int);
 #define APIC_LEVEL(l)   ((l) << 4)
 
 /*
+ * compiler barrier: prevent reordering of instructions.
+ * XXX something similar will move to <sys/cdefs.h>
+ * or thereabouts.
+ * This prevents the compiler from reordering code around
+ * this "instruction", acting as a sequence point for code generation.
+ */
+
+#define	__splbarrier() __asm __volatile("":::"memory")
+
+/*
  * Add a mask to cpl, and return the old value of cpl.
  */
 static __inline int
@@ -136,7 +144,7 @@ splraise(int nlevel)
 	olevel = ci->ci_ilevel;
 	if (nlevel > olevel)
 		ci->ci_ilevel = nlevel;
-	__insn_barrier();
+	__splbarrier();
 	return (olevel);
 }
 
@@ -148,21 +156,16 @@ static __inline void
 spllower(int nlevel)
 {
 	struct cpu_info *ci = curcpu();
-	u_int32_t imask;
-	u_long psl;
 
-	__insn_barrier();
-
-	imask = IUNMASK(ci, nlevel);
-	psl = read_psl();
-	disable_intr();
-	if (ci->ci_ipending & imask) {
+	__splbarrier();
+	/*
+	 * Since this should only lower the interrupt level,
+	 * the XOR below should only show interrupts that
+	 * are being unmasked.
+	 */
+	ci->ci_ilevel = nlevel;
+	if (ci->ci_ipending & IUNMASK(ci,nlevel))
 		Xspllower(nlevel);
-		/* Xspllower does enable_intr() */
-	} else {
-		ci->ci_ilevel = nlevel;
-		write_psl(psl);
-	}
 }
 
 /*

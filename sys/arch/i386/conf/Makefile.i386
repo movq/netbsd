@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.i386,v 1.136 2004/07/15 03:35:20 atatat Exp $
+#	$NetBSD: Makefile.i386,v 1.133.2.2 2004/07/15 19:26:49 he Exp $
 
 # Makefile for NetBSD
 #
@@ -120,8 +120,3 @@ athhal-elf.o: athhal-elf-o.uue
 ## (9) port independent kernel machinery
 ##
 .include "$S/conf/Makefile.kern.inc"
-
-##
-## (10) Appending make options.
-##
-%MAKEOPTIONSAPPEND

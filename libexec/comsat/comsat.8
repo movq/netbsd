@@ -1,4 +1,4 @@
-.\"	$NetBSD: comsat.8,v 1.13 2004/06/25 17:36:04 wiz Exp $
+.\"	$NetBSD: comsat.8,v 1.11 2003/08/07 09:46:37 agc Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     from: @(#)comsat.8	8.1 (Berkeley) 6/4/93
 .\"
-.Dd June 25, 2004
+.Dd June 4, 1993
 .Dt COMSAT 8
 .Os
 .Sh NAME
@@ -84,13 +84,9 @@ option turns on
 log messages.
 .El
 .Sh FILES
-To find out who's logged on and on what terminals
-.Nm
-consults:
-.Pp
-.Bl -tag -width /var/run/utmpx -compact
+.Bl -tag -width /var/run/utmp -compact
 .It Pa /var/run/utmp
-.It Pa /var/run/utmpx
+to find out who's logged on and on what terminals
 .El
 .Sh SEE ALSO
 .Xr biff 1 ,

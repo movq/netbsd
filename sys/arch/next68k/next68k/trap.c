@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.52 2004/08/28 17:53:01 jdolecek Exp $	*/
+/*	$NetBSD: trap.c,v 1.50 2004/03/14 01:08:48 cl Exp $	*/
 
 /*
  * This file was taken from mvme68k/mvme68k/trap.c
@@ -84,7 +84,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.52 2004/08/28 17:53:01 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.50 2004/03/14 01:08:48 cl Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
@@ -329,7 +329,7 @@ trap(type, code, v, frame)
 	int s;
 	u_quad_t sticks = 0 /* XXX initialiser works around compiler bug */;
 	int bit;
-	static int panicking = 0;
+	static int panicing = 0;
 
 	uvmexp.traps++;
 	l = curlwp;
@@ -361,7 +361,7 @@ trap(type, code, v, frame)
 		 * one can see registers at the point of failure.
 		 */
 		s = splhigh();
-		panicking = 1;
+		panicing = 1;
 		printf("trap type %d, code = 0x%x, v = 0x%x\n", type, code, v);
 		printf("%s program counter = 0x%x\n",
 		    (type & T_USER) ? "user" : "kernel", frame.f_pc);
@@ -674,7 +674,7 @@ trap(type, code, v, frame)
 		}
 
 #ifdef DIAGNOSTIC
-		if (interrupt_depth && !panicking) {
+		if (interrupt_depth && !panicing) {
 			printf("trap: calling uvm_fault() from interrupt!\n");
 			goto dopanic;
 		}
@@ -707,10 +707,17 @@ trap(type, code, v, frame)
 		 * the current limit and we need to reflect that as an access
 		 * error.
 		 */
-		if (rv == 0) {
-			if (map != kernel_map && (caddr_t)va >= vm->vm_maxsaddr)
-				uvm_grow(p, va);
+		if ((vm != NULL && (caddr_t)va >= vm->vm_maxsaddr)
+		    && map != kernel_map) {
+			if (rv == 0) {
+				unsigned nss;
 
+				nss = btoc(USRSTACK-(unsigned)va);
+				if (nss > vm->vm_ssize)
+					vm->vm_ssize = nss;
+			}
+		}
+		if (rv == 0) {
 			if (type == T_MMUFLT) {
 #ifdef M68040
 				if (cputype == CPU_68040)

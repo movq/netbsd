@@ -1,4 +1,4 @@
-/*	$NetBSD: usb_subr.c,v 1.120 2004/10/23 16:17:56 augustss Exp $	*/
+/*	$NetBSD: usb_subr.c,v 1.111.2.1 2004/07/02 17:23:33 he Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usb_subr.c,v 1.18 1999/11/17 22:33:47 n_hibma Exp $	*/
 
 /*
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usb_subr.c,v 1.120 2004/10/23 16:17:56 augustss Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usb_subr.c,v 1.111.2.1 2004/07/02 17:23:33 he Exp $");
 
 #include "opt_usbverbose.h"
 
@@ -81,13 +81,12 @@ extern int usbdebug;
 #endif
 
 Static usbd_status usbd_set_config(usbd_device_handle, int);
-Static void usbd_devinfo_vp(usbd_device_handle, char *, size_t, char *,
-	size_t, int);
+Static void usbd_devinfo_vp(usbd_device_handle, char *, char *, int);
+Static char *usbd_get_string(usbd_device_handle, int, char *);
 Static int usbd_getnewaddr(usbd_bus_handle bus);
 #if defined(__NetBSD__)
-Static int usbd_print(void *, const char *);
-Static int usbd_submatch(device_ptr_t, struct cfdata *,
-			 const locdesc_t *, void *);
+Static int usbd_print(void *aux, const char *pnp);
+Static int usbd_submatch(device_ptr_t, struct cfdata *cf, void *);
 #elif defined(__OpenBSD__)
 Static int usbd_print(void *aux, const char *pnp);
 Static int usbd_submatch(device_ptr_t, void *, void *);
@@ -189,6 +188,51 @@ usbd_get_string_desc(usbd_device_handle dev, int sindex, int langid,
 	return (USBD_NORMAL_COMPLETION);
 }
 
+char *
+usbd_get_string(usbd_device_handle dev, int si, char *buf)
+{
+	int swap = dev->quirks->uq_flags & UQ_SWAP_UNICODE;
+	usb_string_descriptor_t us;
+	char *s;
+	int i, n;
+	u_int16_t c;
+	usbd_status err;
+	int size;
+
+	if (si == 0)
+		return (0);
+	if (dev->quirks->uq_flags & UQ_NO_STRINGS)
+		return (0);
+	if (dev->langid == USBD_NOLANG) {
+		/* Set up default language */
+		err = usbd_get_string_desc(dev, USB_LANGUAGE_TABLE, 0, &us,
+		    &size);
+		if (err || size < 4) {
+			dev->langid = 0; /* Well, just pick something then */
+		} else {
+			/* Pick the first language as the default. */
+			dev->langid = UGETW(us.bString[0]);
+		}
+	}
+	err = usbd_get_string_desc(dev, si, dev->langid, &us, &size);
+	if (err)
+		return (0);
+	s = buf;
+	n = size / 2 - 1;
+	for (i = 0; i < n; i++) {
+		c = UGETW(us.bString[i]);
+		/* Convert from Unicode, handle buggy strings. */
+		if ((c & 0xff00) == 0)
+			*s++ = c;
+		else if ((c & 0x00ff) == 0 && swap)
+			*s++ = c >> 8;
+		else
+			*s++ = '?';
+	}
+	*s++ = 0;
+	return (buf);
+}
+
 static void
 usbd_trim_spaces(char *p)
 {
@@ -206,8 +250,7 @@ usbd_trim_spaces(char *p)
 }
 
 void
-usbd_devinfo_vp(usbd_device_handle dev, char *v, size_t lv, char *p, size_t lp,
-	int usedev)
+usbd_devinfo_vp(usbd_device_handle dev, char *v, char *p, int usedev)
 {
 	usb_device_descriptor_t *udd = &dev->ddesc;
 	char *vendor = NULL, *product = NULL;
@@ -221,15 +264,9 @@ usbd_devinfo_vp(usbd_device_handle dev, char *v, size_t lv, char *p, size_t lp,
 	}
 
 	if (usedev) {
-		if (usbd_get_string(dev, udd->iManufacturer, v))
-			vendor = NULL;
-		else
-			vendor = v;
+		vendor = usbd_get_string(dev, udd->iManufacturer, v);
 		usbd_trim_spaces(vendor);
-		if (usbd_get_string(dev, udd->iProduct, p))
-			product = NULL;
-		else
-			product = p;
+		product = usbd_get_string(dev, udd->iProduct, p);
 		usbd_trim_spaces(product);
 		if (vendor && !*vendor)
 			vendor = NULL;
@@ -259,45 +296,41 @@ usbd_devinfo_vp(usbd_device_handle dev, char *v, size_t lv, char *p, size_t lp,
 	}
 #endif
 	if (vendor != NULL && *vendor)
-		strlcpy(v, vendor, lv);
+		strcpy(v, vendor);
 	else
-		snprintf(v, lv, "vendor 0x%04x", UGETW(udd->idVendor));
+		sprintf(v, "vendor 0x%04x", UGETW(udd->idVendor));
 	if (product != NULL && *product)
-		strlcpy(p, product, lp);
+		strcpy(p, product);
 	else
-		snprintf(p, lp, "product 0x%04x", UGETW(udd->idProduct));
+		sprintf(p, "product 0x%04x", UGETW(udd->idProduct));
 }
 
 int
-usbd_printBCD(char *cp, size_t l, int bcd)
+usbd_printBCD(char *cp, int bcd)
 {
-	return (snprintf(cp, l, "%x.%02x", bcd >> 8, bcd & 0xff));
+	return (sprintf(cp, "%x.%02x", bcd >> 8, bcd & 0xff));
 }
 
 void
-usbd_devinfo(usbd_device_handle dev, int showclass, char *cp, size_t l)
+usbd_devinfo(usbd_device_handle dev, int showclass, char *cp)
 {
 	usb_device_descriptor_t *udd = &dev->ddesc;
 	char vendor[USB_MAX_STRING_LEN];
 	char product[USB_MAX_STRING_LEN];
 	int bcdDevice, bcdUSB;
-	char *ep;
 
-	ep = cp + l;
-
-	usbd_devinfo_vp(dev, vendor, sizeof(vendor), product,
-	    sizeof(product), 1);
-	cp += snprintf(cp, ep - cp, "%s %s", vendor, product);
+	usbd_devinfo_vp(dev, vendor, product, 1);
+	cp += sprintf(cp, "%s %s", vendor, product);
 	if (showclass)
-		cp += snprintf(cp, ep - cp, ", class %d/%d",
-		    udd->bDeviceClass, udd->bDeviceSubClass);
+		cp += sprintf(cp, ", class %d/%d",
+			      udd->bDeviceClass, udd->bDeviceSubClass);
 	bcdUSB = UGETW(udd->bcdUSB);
 	bcdDevice = UGETW(udd->bcdDevice);
-	cp += snprintf(cp, ep - cp, ", rev ");
-	cp += usbd_printBCD(cp, ep - cp, bcdUSB);
+	cp += sprintf(cp, ", rev ");
+	cp += usbd_printBCD(cp, bcdUSB);
 	*cp++ = '/';
-	cp += usbd_printBCD(cp, ep - cp, bcdDevice);
-	cp += snprintf(cp, ep - cp, ", addr %d", dev->address);
+	cp += usbd_printBCD(cp, bcdDevice);
+	cp += sprintf(cp, ", addr %d", dev->address);
 	*cp = 0;
 }
 
@@ -961,14 +994,13 @@ usbd_status
 usbd_new_device(device_ptr_t parent, usbd_bus_handle bus, int depth,
 		int speed, int port, struct usbd_port *up)
 {
-	usbd_device_handle dev, adev;
+	usbd_device_handle dev;
 	struct usbd_device *hub;
 	usb_device_descriptor_t *dd;
 	usb_port_status_t ps;
 	usbd_status err;
 	int addr;
 	int i;
-	int p;
 
 	DPRINTF(("usbd_new_device bus=%p port=%d depth=%d speed=%d\n",
 		 bus, port, depth, speed));
@@ -1002,27 +1034,11 @@ usbd_new_device(device_ptr_t parent, usbd_bus_handle bus, int depth,
 	dev->depth = depth;
 	dev->powersrc = up;
 	dev->myhub = up->parent;
-
-	up->device = dev;
-
-	/* Locate port on upstream high speed hub */
-	for (adev = dev, hub = up->parent;
+	for (hub = up->parent;
 	     hub != NULL && hub->speed != USB_SPEED_HIGH;
-	     adev = hub, hub = hub->myhub)
+	     hub = hub->myhub)
 		;
-	if (hub) {
-		for (p = 0; p < hub->hub->hubdesc.bNbrPorts; p++) {
-			if (hub->hub->ports[p].device == adev) {
-				dev->myhsport = &hub->hub->ports[p];
-				goto found;
-			}
-		}
-		panic("usbd_new_device: cannot find HS port\n");
-	found:
-		DPRINTFN(1,("usbd_new_device: high speed port %d\n", p));
-	} else {
-		dev->myhsport = NULL;
-	}
+	dev->myhighhub = hub;
 	dev->speed = speed;
 	dev->langid = USBD_NOLANG;
 	dev->cookie.cookie = ++usb_cookie_no;
@@ -1034,6 +1050,8 @@ usbd_new_device(device_ptr_t parent, usbd_bus_handle bus, int depth,
 		usbd_remove_device(dev, up);
 		return (err);
 	}
+
+	up->device = dev;
 
 	/* Set the address.  Do this early; some devices need that. */
 	err = usbd_set_address(dev, addr);
@@ -1149,8 +1167,8 @@ usbd_remove_device(usbd_device_handle dev, struct usbd_port *up)
 
 	if (dev->default_pipe != NULL)
 		usbd_kill_pipe(dev->default_pipe);
-	up->device = NULL;
-	dev->bus->devices[dev->address] = NULL;
+	up->device = 0;
+	dev->bus->devices[dev->address] = 0;
 
 	free(dev, M_USB);
 }
@@ -1166,7 +1184,7 @@ usbd_print(void *aux, const char *pnp)
 	if (pnp) {
 		if (!uaa->usegeneric)
 			return (QUIET);
-		usbd_devinfo(uaa->device, 1, devinfo, sizeof(devinfo));
+		usbd_devinfo(uaa->device, 1, devinfo);
 		aprint_normal("%s, %s", devinfo, pnp);
 	}
 	if (uaa->port != 0)
@@ -1193,8 +1211,7 @@ usbd_print(void *aux, const char *pnp)
 
 #if defined(__NetBSD__)
 int
-usbd_submatch(struct device *parent, struct cfdata *cf,
-	      const locdesc_t *ldesc, void *aux)
+usbd_submatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 #elif defined(__OpenBSD__)
 int
@@ -1213,7 +1230,8 @@ usbd_submatch(struct device *parent, void *match, void *aux)
 	    uaa->product, cf->uhubcf_product,
 	    uaa->release, cf->uhubcf_release));
 	if (uaa->port != 0 &&	/* root hub has port 0, it should match */
-	    ((cf->uhubcf_port != UHUB_UNK_PORT &&
+	    ((uaa->port != 0 &&
+	      cf->uhubcf_port != UHUB_UNK_PORT &&
 	      cf->uhubcf_port != uaa->port) ||
 	     (uaa->configno != UHUB_UNK_CONFIGURATION &&
 	      cf->uhubcf_configuration != UHUB_UNK_CONFIGURATION &&
@@ -1260,10 +1278,8 @@ usbd_fill_deviceinfo(usbd_device_handle dev, struct usb_device_info *di,
 	di->udi_bus = USBDEVUNIT(dev->bus->bdev);
 	di->udi_addr = dev->address;
 	di->udi_cookie = dev->cookie;
-	usbd_devinfo_vp(dev, di->udi_vendor, sizeof(di->udi_vendor),
-	    di->udi_product, sizeof(di->udi_product), usedev);
-	usbd_printBCD(di->udi_release, sizeof(di->udi_release),
-	    UGETW(dev->ddesc.bcdDevice));
+	usbd_devinfo_vp(dev, di->udi_vendor, di->udi_product, usedev);
+	usbd_printBCD(di->udi_release, UGETW(dev->ddesc.bcdDevice));
 	di->udi_vendorNo = UGETW(dev->ddesc.idVendor);
 	di->udi_productNo = UGETW(dev->ddesc.idProduct);
 	di->udi_releaseNo = UGETW(dev->ddesc.bcdDevice);

@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.195 2004/10/01 16:30:52 yamt Exp $	*/
+/*	$NetBSD: proc.h,v 1.191.2.1 2004/08/15 13:54:20 tron Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1989, 1991, 1993
@@ -209,7 +209,7 @@ struct proc {
 	u_quad_t 	p_iticks;	/* Statclock hits processing intr */
 
 	int		p_traceflag;	/* Kernel trace points */
-	void		*p_tracep;	/* Trace private data */
+	struct file	*p_tracep;	/* Trace to file */
 	void		*p_systrace;	/* Back pointer to systrace */
 
 	struct vnode 	*p_textvp;	/* Vnode of executable */
@@ -298,7 +298,6 @@ struct proc {
 #define	P_STOPFORK	0x00800000 /* Child will be stopped on fork(2) */
 #define	P_STOPEXEC	0x01000000 /* Will be stopped on exec(2) */
 #define	P_STOPEXIT	0x02000000 /* Will be stopped at process exit */
-#define	P_MARKER	0x80000000 /* Is a dummy marker process */
 
 /*
  * Macro to compute the exit signal to be delivered.
@@ -428,6 +427,7 @@ struct pgrp *pg_find(pid_t, uint);	/* Find process group by id */
 #define pgfind(pgid) pg_find((pgid), PFIND_UNLOCK)
 
 struct simplelock;
+int	chgproccnt(uid_t, int);
 int	enterpgrp(struct proc *, pid_t, int);
 void	fixjobc(struct proc *, struct pgrp *, int);
 int	inferior(struct proc *, struct proc *);
@@ -475,25 +475,6 @@ void	proclist_unlock_read(void);
 int	proclist_lock_write(void);
 void	proclist_unlock_write(int);
 void	p_sugid(struct proc *);
-
-int	proclist_foreach_call(struct proclist *,
-    int (*)(struct proc *, void *arg), void *);
-static __inline struct proc *_proclist_skipmarker(struct proc *);
-
-static __inline struct proc *
-_proclist_skipmarker(struct proc *p0)
-{
-	struct proc *p = p0;
-
-	while (p != NULL && p->p_flag & P_MARKER)
-		p = LIST_NEXT(p, p_list);
-
-	return p;
-}
-#define	PROCLIST_FOREACH(var, head)					\
-	for ((var) = LIST_FIRST(head);					\
-		((var) = _proclist_skipmarker(var)) != NULL;		\
-		(var) = LIST_NEXT(var, p_list))
 
 /* Compatibility with old, non-interlocked tsleep call */
 #define	tsleep(chan, pri, wmesg, timo)					\

@@ -1,4 +1,4 @@
-/*	$NetBSD: type_ipv4.c,v 1.9 2004/11/24 11:57:09 blymn Exp $	*/
+/*	$NetBSD: type_ipv4.c,v 1.8 2003/04/17 03:25:56 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: type_ipv4.c,v 1.9 2004/11/24 11:57:09 blymn Exp $");
+__RCSID("$NetBSD: type_ipv4.c,v 1.8 2003/04/17 03:25:56 lukem Exp $");
 
 #include <string.h>
 #include <stdlib.h>
@@ -77,9 +77,7 @@ ipv4_check_field(FIELD *field, char *args)
 #endif
 	style = FORMI_DOTTED_QUAD;
 	buf = keeper;
-	hex_val = 0;
-	mask = 0;
-	
+
 	if ((slash = index(buf, '/')) != NULL)
 		style = FORMI_CLASSLESS;
 	else {

@@ -34,7 +34,7 @@
 #include "krb5_locl.h"
 
 __RCSID("$Heimdal: init_creds_pw.c,v 1.55.2.1 2004/08/30 23:21:07 lha Exp $"
-        "$NetBSD: init_creds_pw.c,v 1.1.1.7 2004/09/14 07:46:42 lha Exp $");
+        "$NetBSD: init_creds_pw.c,v 1.1.1.6.2.1 2004/09/17 04:36:27 jmc Exp $");
 
 static int
 get_config_time (krb5_context context,

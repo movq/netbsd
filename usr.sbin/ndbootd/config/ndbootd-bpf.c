@@ -1,4 +1,4 @@
-/*	$NetBSD: ndbootd-bpf.c,v 1.8 2004/12/01 23:18:20 christos Exp $	*/
+/*	$NetBSD: ndbootd-bpf.c,v 1.6.2.1 2004/04/21 03:56:00 jmc Exp $	*/
 
 /* ndbootd-bpf.c - the Sun Network Disk (nd) daemon BPF component: */
 
@@ -48,13 +48,12 @@
 #if o
 static const char _ndbootd_bpf_c_rcsid[] = "<<Id: ndbootd-bpf.c,v 1.4 2001/05/23 02:35:49 fredette Exp >>";
 #else
-__RCSID("$NetBSD: ndbootd-bpf.c,v 1.8 2004/12/01 23:18:20 christos Exp $");
+__RCSID("$NetBSD: ndbootd-bpf.c,v 1.6.2.1 2004/04/21 03:56:00 jmc Exp $");
 #endif
 
 /* includes: */
 #include <sys/poll.h>
 #include <net/bpf.h>
-#include <paths.h>
 
 /* structures: */
 struct _ndbootd_interface_bpf {
@@ -105,6 +104,9 @@ int
 ndbootd_raw_open(struct ndbootd_interface * interface)
 {
 	int network_fd;
+#define DEV_BPF_FORMAT "/dev/bpf%d"
+	char dev_bpf_filename[sizeof(DEV_BPF_FORMAT) + (sizeof(int) * 3) + 1];
+	int minor;
 	int saved_errno;
 	u_int bufsize;
 	u_int bpf_opt;
@@ -112,15 +114,28 @@ ndbootd_raw_open(struct ndbootd_interface * interface)
 	u_int packet_buffer_size;
 	struct bpf_program program;
 	struct _ndbootd_interface_bpf *interface_bpf;
-	const char *dev_bpf_filename = _PATH_BPF;
 
-	/* loop trying to open the /dev/bpf device: */
-	if ((network_fd = open(dev_bpf_filename, O_RDWR)) < 0) {
-		/* we have failed: */
+	/* loop trying to open a /dev/bpf device: */
+	for (minor = 0;; minor++) {
+
+		/* form the name of the next device to try, then try opening
+		 * it. if we succeed, we're done: */
+		snprintf(dev_bpf_filename, sizeof(dev_bpf_filename),
+		    DEV_BPF_FORMAT, minor);
+		_NDBOOTD_DEBUG((fp, "bpf: trying %s", dev_bpf_filename));
+		if ((network_fd = open(dev_bpf_filename, O_RDWR)) >= 0) {
+			_NDBOOTD_DEBUG((fp, "bpf: opened %s", dev_bpf_filename));
+			break;
+		}
+		/* we failed to open this device.  if this device was simply
+		 * busy, loop: */
 		_NDBOOTD_DEBUG((fp, "bpf: failed to open %s: %s", dev_bpf_filename, strerror(errno)));
+		if (errno == EBUSY) {
+			continue;
+		}
+		/* otherwise, we have failed: */
 		return (-1);
 	}
-	_NDBOOTD_DEBUG((fp, "bpf: opened %s", dev_bpf_filename));
 
 	/* this macro helps in closing the BPF socket on error: */
 #define _NDBOOTD_RAW_OPEN_ERROR(x) saved_errno = errno; x; errno = saved_errno

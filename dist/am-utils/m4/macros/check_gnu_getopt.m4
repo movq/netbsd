@@ -32,7 +32,7 @@ int main()
 ],[
 ac_cv_sys_gnu_getopt="`cat conftestresult`"
 ],[
-ac_cv_sys_gnu_getopt="fail"
+AC_MSG_ERROR(could not test for getopt())
 ])
 ])
 if test "$ac_cv_sys_gnu_getopt" = "yes"

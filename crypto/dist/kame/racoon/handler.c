@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: handler.c,v 1.4 2004/06/17 03:42:55 itojun Exp $");
+__RCSID("$NetBSD: handler.c,v 1.2.2.1 2004/06/17 12:38:09 tron Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

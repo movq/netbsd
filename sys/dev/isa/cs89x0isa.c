@@ -1,4 +1,4 @@
-/* $NetBSD: cs89x0isa.c,v 1.9 2004/09/14 20:20:46 drochner Exp $ */
+/* $NetBSD: cs89x0isa.c,v 1.7 2003/05/09 23:51:28 fvdl Exp $ */
 
 /*
  * Copyright 1997
@@ -36,7 +36,7 @@
 /* isa DMA routines for cs89x0 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs89x0isa.c,v 1.9 2004/09/14 20:20:46 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs89x0isa.c,v 1.7 2003/05/09 23:51:28 fvdl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,7 +71,7 @@ cs_isa_dma_attach(struct cs_softc *sc)
 {
 	struct cs_softc_isa *isc = (void *)sc;
 
-	if (isc->sc_drq == ISA_UNKNOWN_DRQ)
+	if (isc->sc_drq == ISACF_DRQ_DEFAULT)
 		printf("%s: DMA channel unspecified, not using DMA\n",
 		    sc->sc_dev.dv_xname);
 	else if (isc->sc_drq < 5 || isc->sc_drq > 7)
@@ -206,13 +206,11 @@ void cs_process_rx_dma(struct cs_softc *sc)
 			 * status is guaranteed to be at dma_mem_ptr, ie need
 			 * to check for wraparound before reading the length
 			 */
-			status = *((u_int16_t *) dma_mem_ptr);
-			dma_mem_ptr += 2;
+			status = *((unsigned short *) dma_mem_ptr)++;
 			if (dma_mem_ptr > (isc->sc_dmabase + isc->sc_dmasize)) {
 				dma_mem_ptr = isc->sc_dmabase;
 			}
-			pkt_length = *((u_int16_t *) dma_mem_ptr);
-			dma_mem_ptr += 2;
+			pkt_length = *((unsigned short *) dma_mem_ptr)++;
 
 			/* Do some sanity checks on the length and status. */
 			if ((pkt_length > ETHER_MAX_LEN) ||

@@ -1,4 +1,4 @@
-/* $NetBSD: if_mtd_pci.c,v 1.5 2004/08/21 23:48:33 thorpej Exp $ */
+/* $NetBSD: if_mtd_pci.c,v 1.3 2003/10/15 06:32:35 simonb Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
 /* TODO: Check why in IO space, the MII won't work. Memory mapped works */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mtd_pci.c,v 1.5 2004/08/21 23:48:33 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mtd_pci.c,v 1.3 2003/10/15 06:32:35 simonb Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -74,14 +74,17 @@ static struct mtd_pci_device_id mtd_ids[] = {
 	{ 0, 0 }
 };
 
-static int	mtd_pci_match(struct device *, struct cfdata *, void *);
-static void	mtd_pci_attach(struct device *, struct device *, void *);
+int	mtd_pci_match __P((struct device *, struct cfdata *, void *));
+void	mtd_pci_attach __P((struct device *, struct device *, void *));
 
 CFATTACH_DECL(mtd_pci, sizeof(struct mtd_softc), mtd_pci_match, mtd_pci_attach,
     NULL, NULL);
 
-static int
-mtd_pci_match(struct device *parent, struct cfdata *match, void *aux)
+int
+mtd_pci_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct pci_attach_args *pa = aux;
 	struct mtd_pci_device_id *id;
@@ -94,8 +97,11 @@ mtd_pci_match(struct device *parent, struct cfdata *match, void *aux)
 	return (0);
 }
 
-static void
-mtd_pci_attach(struct device *parent, struct device *self, void *aux)
+void
+mtd_pci_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct pci_attach_args * const pa = aux;
 	struct mtd_softc * const sc = (void *)self;
@@ -106,7 +112,7 @@ mtd_pci_attach(struct device *parent, struct device *self, void *aux)
 	int io_valid, mem_valid;
 	char devinfo[256];
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	printf(": %s (rev. 0x%02x)\n", devinfo, PCI_REVISION(pa->pa_class));
 
 	io_valid = (pci_mapreg_map(pa, PCI_IO_MAP_REG, PCI_MAPREG_TYPE_IO,

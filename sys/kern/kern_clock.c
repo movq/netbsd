@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_clock.c,v 1.92 2004/09/15 04:56:14 tls Exp $	*/
+/*	$NetBSD: kern_clock.c,v 1.90.2.1 2004/09/16 03:23:27 jmc Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_clock.c,v 1.92 2004/09/15 04:56:14 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_clock.c,v 1.90.2.1 2004/09/16 03:23:27 jmc Exp $");
 
 #include "opt_ntp.h"
 #include "opt_multiprocessor.h"
@@ -327,7 +327,6 @@ int	profsrc;
 int	schedhz;
 int	profprocs;
 int	hardclock_ticks;
-static int statscheddiv; /* stat => sched divider (used if schedhz == 0) */
 static int psdiv;			/* prof => stat divider */
 int	psratio;			/* ratio: prof / stat */
 int	tickfix, tickfixinterval;	/* used if tick not really integral */
@@ -377,12 +376,6 @@ initclocks(void)
 		profhz = i;
 	psratio = profhz / i;
 	rrticks = hz / 10;
-	if (schedhz == 0) {
-		/* 16Hz is best */
-		statscheddiv = i / 16;
-		if (statscheddiv <= 0)
-			panic("statscheddiv");
-	}
 
 #ifdef NTP
 	switch (hz) {
@@ -1089,13 +1082,11 @@ statclock(struct clockframe *frame)
 		++p->p_cpticks;
 		/*
 		 * If no separate schedclock is provided, call it here 
-		 * at about 16 Hz.
+		 * at ~~12-25 Hz, ~~16 Hz is best
 		 */
 		if (schedhz == 0)
-			if ((int)(--ci->ci_schedstate.spc_schedticks) <= 0) {
+			if ((++ci->ci_schedstate.spc_schedticks & 3) == 0)
 				schedclock(l);
-				ci->ci_schedstate.spc_schedticks = statscheddiv;
-			}
 	}
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: record.c,v 1.38 2004/07/19 19:27:59 mycroft Exp $	*/
+/*	$NetBSD: record.c,v 1.36.2.2 2004/07/23 18:07:14 tron Exp $	*/
 
 /*
  * Copyright (c) 1999, 2002 Matthew R. Green
@@ -34,7 +34,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: record.c,v 1.38 2004/07/19 19:27:59 mycroft Exp $");
+__RCSID("$NetBSD: record.c,v 1.36.2.2 2004/07/23 18:07:14 tron Exp $");
 #endif
 
 

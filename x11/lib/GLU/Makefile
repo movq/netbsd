@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2004/08/05 01:28:48 lukem Exp $
+#	$NetBSD: Makefile,v 1.4 2003/09/23 10:57:40 lukem Exp $
 
 NOLINT=		1	# XTODO: tess.ln SIGSEGVs lint :(
 
@@ -60,12 +60,8 @@ CPPFLAGS+=	-I${GLUDIR}/include -DNDEBUG
 SRCS=		${SRCS.libutil} ${SRCS.libtess} \
 		${SRCS.interface} ${SRCS.internals} ${SRCS.nurbtess}
 
-LIBDPLIBS=	Xext	${.CURDIR}/../Xext \
-		X11	${.CURDIR}/../X11/dynamic \
-		GL	${.CURDIR}/../GL
-
-LDADD+=		-lstdc++ -lm
-DPADD+=		${LIBSTDCXX} ${LIBM}
+LDADD+=		-lXext -lX11 -lGL -lstdc++ -lm
+DPADD+=		${LIBXEXT} ${LIBX11} ${LIBGL} ${LIBSTDCXX} ${LIBM}
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>

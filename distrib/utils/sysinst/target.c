@@ -1,4 +1,4 @@
-/*	$NetBSD: target.c,v 1.47 2004/06/06 06:06:59 christos Exp $	*/
+/*	$NetBSD: target.c,v 1.46 2003/12/28 05:30:47 christos Exp $	*/
 
 /*
  * Copyright 1997 Jonathan Stone
@@ -71,7 +71,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: target.c,v 1.47 2004/06/06 06:06:59 christos Exp $");
+__RCSID("$NetBSD: target.c,v 1.46 2003/12/28 05:30:47 christos Exp $");
 #endif
 
 /*
@@ -559,10 +559,7 @@ target_realpath(const char *path, char *resolved)
 	struct stat sb;
 	int fd, n, rootd, serrno, nlnk = 0;
 	char *p, *q, wbuf[MAXPATHLEN];
-	char solidus[2], empty[1];
-	solidus[0] = '/';
-	solidus[1] = '\0';
-	empty[0] = '\0';
+	char solidus[] = "/", empty[] = "";
 
 	/* Save the starting point. */
 	if ((fd = open(".", O_RDONLY)) < 0) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld_start.S,v 1.4 2004/09/14 21:34:01 uwe Exp $	*/
+/*	$NetBSD: rtld_start.S,v 1.3.2.1 2004/09/16 03:24:42 jmc Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: twereg.h,v 1.10 2004/10/05 23:49:15 heas Exp $	*/
+/*	$NetBSD: twereg.h,v 1.6 2003/09/22 01:28:25 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -117,8 +117,6 @@
 #define TWE_OP_WRITE			0x03
 #define TWE_OP_READVERIFY		0x04
 #define TWE_OP_VERIFY			0x05
-#define TWE_OP_PROBE			0x06
-#define TWE_OP_PROBEUNIT		0x07
 #define TWE_OP_ZEROUNIT			0x08
 #define TWE_OP_REPLACEUNIT		0x09
 #define TWE_OP_HOTSWAP			0x0a
@@ -240,7 +238,7 @@ struct twe_param {
 #define TWE_PARAM_DRIVEINFO_Serial		4	/* drive serial number [20] */
 #define TWE_PARAM_DRIVEINFO_PhysCylNum		5	/* physical geometry [2] */
 #define TWE_PARAM_DRIVEINFO_PhysHeadNum		6	/* [2] */
-#define TWE_PARAM_DRIVEINFO_PhysSectorNum	7	/* [2] */
+#define TWE_PARAM_DRIVEINFO_PhysSectorNym	7	/* [2] */
 #define TWE_PARAM_DRIVEINFO_LogCylNum		8	/* logical geometry [2] */
 #define TWE_PARAM_DRIVEINFO_LogHeadNum		9	/* [2] */
 #define TWE_PARAM_DRIVEINFO_LogSectorNum	10	/* [2] */
@@ -298,9 +296,6 @@ struct twe_param {
 
 #define TWE_PARAM_FEATURES			0x404
 #define TWE_PARAM_FEATURES_DriverShutdown	2	/* set to 1 if driver supports shutdown notification [1] */
-
-#define TWE_PARAM_PROC				0x406
-#define TWE_PARAM_PROC_PERCENT			2	/* Per-sub-unit % complete of init/verify/rebuild or 0xff [16] */
 
 struct twe_unit_descriptor {
 	u_int8_t	num_subunits;	/* must be zero */

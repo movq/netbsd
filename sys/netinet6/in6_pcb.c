@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_pcb.c,v 1.66 2004/12/04 16:10:25 peter Exp $	*/
+/*	$NetBSD: in6_pcb.c,v 1.61.2.1 2004/04/28 05:56:07 jmc Exp $	*/
 /*	$KAME: in6_pcb.c,v 1.84 2001/02/08 18:02:08 itojun Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6_pcb.c,v 1.66 2004/12/04 16:10:25 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6_pcb.c,v 1.61.2.1 2004/04/28 05:56:07 jmc Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -92,6 +92,8 @@ __KERNEL_RCSID(0, "$NetBSD: in6_pcb.c,v 1.66 2004/12/04 16:10:25 peter Exp $");
 #include <netinet6/in6_pcb.h>
 #include <netinet6/nd6.h>
 
+#include "loop.h"
+extern struct ifnet loif[NLOOP];
 #include "faith.h"
 
 #ifdef IPSEC
@@ -127,13 +129,20 @@ int ip6_anonportmax = IPV6PORT_ANONMAX;
 int ip6_lowportmin  = IPV6PORT_RESERVEDMIN;
 int ip6_lowportmax  = IPV6PORT_RESERVEDMAX;
 
-POOL_INIT(in6pcb_pool, sizeof(struct in6pcb), 0, 0, 0, "in6pcbpl", NULL);
+struct pool in6pcb_pool;
 
 void
 in6_pcbinit(table, bindhashsize, connecthashsize)
 	struct inpcbtable *table;
 	int bindhashsize, connecthashsize;
 {
+	static int in6pcb_pool_initialized;
+
+	if (in6pcb_pool_initialized == 0) {
+		pool_init(&in6pcb_pool, sizeof(struct in6pcb), 0, 0, 0,
+		    "in6pcbpl", NULL);
+		in6pcb_pool_initialized = 1;
+	}
 
 	in_pcbinit(table, bindhashsize, connecthashsize);
 	table->inpt_lastport = (u_int16_t)ip6_anonportmax;
@@ -496,7 +505,7 @@ in6_pcbdetach(in6p)
 #if defined(IPSEC) || defined(FAST_IPSEC)
 	ipsec6_delete_pcbpolicy(in6p);
 #endif /* IPSEC */
-	so->so_pcb = 0;
+	sotoin6pcb(so) = 0;
 	sofree(so);
 	if (in6p->in6p_options)
 		m_freem(in6p->in6p_options);
@@ -1006,7 +1015,7 @@ in6_pcblookup_bind(table, laddr6, lport_arg, faith)
 	struct inpcb_hdr *inph;
 	struct in6pcb *in6p;
 	u_int16_t lport = lport_arg;
-#ifdef INET
+#ifdef INET6
 	struct in6_addr zero_mapped;
 #endif
 

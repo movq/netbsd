@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.gzboot,v 1.10 2004/06/21 18:20:08 jmc Exp $
+#	$NetBSD: Makefile.gzboot,v 1.9.2.1 2004/06/22 07:52:48 tron Exp $
 
 NOMAN=  # defined
 

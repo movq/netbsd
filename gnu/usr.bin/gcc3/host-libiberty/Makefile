@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2004/06/21 18:20:08 jmc Exp $
+#	$NetBSD: Makefile,v 1.4.2.2 2004/06/22 07:53:44 tron Exp $
 
 libiberty/libiberty.a:
 	[ ! -d libiberty ] && mkdir libiberty || exit 0

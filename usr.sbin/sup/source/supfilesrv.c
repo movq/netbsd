@@ -1,4 +1,4 @@
-/*	$NetBSD: supfilesrv.c,v 1.29 2004/04/23 02:58:30 simonb Exp $	*/
+/*	$NetBSD: supfilesrv.c,v 1.27 2003/08/11 16:20:11 itojun Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -96,14 +96,14 @@
  * 	routines probably should have been in another module, but only
  * 	supfilesrv needs to do the check and none of its other modules seemed
  * 	appropriate.  Note, the implementation should be changed once we have
- * 	direct kernel support, for example the fstatvfs(2) system call, for
+ * 	direct kernel support, for example the fstatfs(2) system call, for
  * 	detecting the type of file system a file resides.  Also, I changed
  * 	the routines which read the crosspatch crypt file or collection crypt
  * 	file to save the uid and gid from the stat information obtained via
  * 	the local_file() call (when the file is local) at the same time the
  * 	crypt key is read.  This change disallows non-local files for the
  * 	crypt key to plug a security hole involving the usage of the uid/gid
- * 	of the crypt file to define who the file server should run as.  If
+ * 	of the crypt file to define who the the file server should run as.  If
  * 	the saved uid/gid are both valid, then the server will set its uid/gid
  * 	to these values.
  * 	[90/04/18            dlc]
@@ -1820,7 +1820,7 @@ fmttime(time_t time)
  * Currently, the cases that we try to distinguish are RFS, AFS, NFS and
  * UFS, where the latter is considered a trusted file.  We assume that the
  * caller has disabled link following and will detect an attempt to access
- * a file through an RFS link, except in the case the last component is
+ * a file through an RFS link, except in the case the the last component is
  * an RFS link.  With link following disabled, the last component itself is
  * interpreted as a regular file if it is really an RFS link, so we
  * disallow the RFS link identified by group "symlink" and mode "IEXEC by
@@ -1832,7 +1832,7 @@ fmttime(time_t time)
  * the major device number and seeing if it matches the known values for
  * MACH NSF/Sun OS 3.x or Sun OS 4.x.
  *
- * Having the fstatvfs() system call would make this routine easier and
+ * Having the fstatfs() system call would make this routine easier and
  * more reliable.
  *
  * Note, in order to make the checks simpler, the file referenced by the
@@ -1906,20 +1906,16 @@ local_file(int handle, struct stat * sinfo)
 	 *
 	 * Our current implementation and Sun OS 3.x use major device
 	 * 255 for NFS files; Sun OS 4.x seems to use 130 (I have only
-	 * determined this empirically -- DLC).  Without a fstatvfs()
+	 * determined this empirically -- DLC).  Without a fstatfs()
 	 * system call, this will have to do for now.
 	 */
-#if defined(__SVR4) || __NetBSD_Version__ > 200030000
+#ifdef __SVR4
 	{
 		struct statvfs sf;
 
 		if (fstatvfs(handle, &sf) == -1)
 			return (-1);
-#ifdef __SVR4
 		return strncmp(sf.f_basetype, "nfs", 3) != 0;
-#else
-		return strncmp(sf.f_fstypename, "nfs", 3) != 0;
-#endif
 	}
 #elif defined(__NetBSD__)
 	{

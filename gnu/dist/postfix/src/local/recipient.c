@@ -1,5 +1,3 @@
-/*	$NetBSD: recipient.c,v 1.1.1.4 2004/05/31 00:24:37 heas Exp $	*/
-
 /*++
 /* NAME
 /*	recipient 3
@@ -186,7 +184,7 @@ static int deliver_switch(LOCAL_STATE state, USER_ATTR usr_attr)
     if (var_stat_home_dir
 	&& (mypwd = mypwnam(state.msg_attr.user)) != 0
 	&& stat_as(mypwd->pw_dir, &st, mypwd->pw_uid, mypwd->pw_gid) < 0)
-	return (defer_append(BOUNCE_FLAGS(state.request),
+	return (defer_append(BOUNCE_FLAG_KEEP,
 			     BOUNCE_ATTR(state.msg_attr),
 			     "cannot access home directory %s: %m",
 			     mypwd->pw_dir));
@@ -264,13 +262,13 @@ int     deliver_recipient(LOCAL_STATE state, USER_ATTR usr_attr)
 	    myfree(owner_alias);
 	}
 	if (canon_owner) {
-	    rcpt_stat = bounce_one(BOUNCE_FLAGS(state.request),
+	    rcpt_stat = bounce_one(BOUNCE_FLAG_KEEP,
 				   BOUNCE_ONE_ATTR(state.msg_attr),
 				   "mail forwarding loop for %s",
 				   state.msg_attr.recipient);
 	    vstring_free(canon_owner);
 	} else {
-	    rcpt_stat = bounce_append(BOUNCE_FLAGS(state.request),
+	    rcpt_stat = bounce_append(BOUNCE_FLAG_KEEP,
 				      BOUNCE_ATTR(state.msg_attr),
 				      "mail forwarding loop for %s",
 				      state.msg_attr.recipient);
@@ -310,8 +308,7 @@ int     deliver_recipient(LOCAL_STATE state, USER_ATTR usr_attr)
      * Do not allow null usernames.
      */
     if (state.msg_attr.user[0] == 0)
-	return (bounce_append(BOUNCE_FLAGS(state.request),
-			      BOUNCE_ATTR(state.msg_attr),
+	return (bounce_append(BOUNCE_FLAG_KEEP, BOUNCE_ATTR(state.msg_attr),
 			  "null username in %s", state.msg_attr.recipient));
 
     /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_udav.c,v 1.4 2004/10/30 18:10:06 thorpej Exp $	*/
+/*	$NetBSD: if_udav.c,v 1.2 2003/09/04 15:17:38 tsutsui Exp $	*/
 /*	$nabe: if_udav.c,v 1.3 2003/08/21 16:57:19 nabe Exp $	*/
 /*
  * Copyright (c) 2003
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_udav.c,v 1.4 2004/10/30 18:10:06 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_udav.c,v 1.2 2003/09/04 15:17:38 tsutsui Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
@@ -193,7 +193,7 @@ USB_ATTACH(udav)
 	u_char eaddr[ETHER_ADDR_LEN];
 	int i, s;
 
-	usbd_devinfo(dev, 0, devinfo, sizeof(devinfo));
+	usbd_devinfo(dev, 0, devinfo);
 	USB_ATTACH_SETUP;
 	printf("%s: %s\n", devname, devinfo);
 
@@ -1234,8 +1234,7 @@ udav_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	default:
 		error = ether_ioctl(ifp, cmd, data);
 		if (error == ENETRESET) {
-			if (ifp->if_flags & IFF_RUNNING)
-				udav_setmulti(sc);
+			udav_setmulti(sc);
 			error = 0;
 		}
 		break;

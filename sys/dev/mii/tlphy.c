@@ -1,4 +1,4 @@
-/*	$NetBSD: tlphy.c,v 1.41 2004/08/23 06:16:07 thorpej Exp $	*/
+/*	$NetBSD: tlphy.c,v 1.40 2003/09/30 09:35:15 tron Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tlphy.c,v 1.41 2004/08/23 06:16:07 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tlphy.c,v 1.40 2003/09/30 09:35:15 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -103,22 +103,22 @@ struct tlphy_softc {
 	int sc_need_acomp;
 };
 
-static int	tlphymatch(struct device *, struct cfdata *, void *);
-static void	tlphyattach(struct device *, struct device *, void *);
+int	tlphymatch(struct device *, struct cfdata *, void *);
+void	tlphyattach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(tlphy, sizeof(struct tlphy_softc),
     tlphymatch, tlphyattach, mii_phy_detach, mii_phy_activate);
 
-static int	tlphy_service(struct mii_softc *, struct mii_data *, int);
-static int	tlphy_auto(struct tlphy_softc *, int);
-static void	tlphy_acomp(struct tlphy_softc *);
-static void	tlphy_status(struct mii_softc *);
+int	tlphy_service(struct mii_softc *, struct mii_data *, int);
+int	tlphy_auto(struct tlphy_softc *, int);
+void	tlphy_acomp(struct tlphy_softc *);
+void	tlphy_status(struct mii_softc *);
 
-static const struct mii_phy_funcs tlphy_funcs = {
+const struct mii_phy_funcs tlphy_funcs = {
 	tlphy_service, tlphy_status, mii_phy_reset,
 };
 
-static const struct mii_phydesc tlphys[] = {
+const struct mii_phydesc tlphys[] = {
 	{ MII_OUI_TI,		MII_MODEL_TI_TLAN10T,
 	  MII_STR_TI_TLAN10T },
 
@@ -126,7 +126,7 @@ static const struct mii_phydesc tlphys[] = {
 	  NULL },
 };
 
-static int
+int
 tlphymatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct mii_attach_args *ma = aux;       
@@ -137,7 +137,7 @@ tlphymatch(struct device *parent, struct cfdata *match, void *aux)
 	return (0);
 }
 
-static void
+void
 tlphyattach(struct device *parent, struct device *self, void *aux)
 {
 	struct tlphy_softc *sc = (struct tlphy_softc *)self;
@@ -201,7 +201,7 @@ tlphyattach(struct device *parent, struct device *self, void *aux)
 #undef PRINT
 }
 
-static int
+int
 tlphy_service(struct mii_softc *self, struct mii_data *mii, int cmd)
 {
 	struct tlphy_softc *sc = (struct tlphy_softc *)self;
@@ -302,7 +302,7 @@ tlphy_service(struct mii_softc *self, struct mii_data *mii, int cmd)
 	return (0);
 }
 
-static void
+void
 tlphy_status(struct mii_softc *physc)
 {
 	struct tlphy_softc *sc = (void *) physc;
@@ -351,7 +351,7 @@ tlphy_status(struct mii_softc *physc)
 	mii->mii_media_active |= IFM_10_T;
 }
 
-static int
+int
 tlphy_auto(struct tlphy_softc *sc, int waitfor)
 {
 	int error;
@@ -377,7 +377,7 @@ tlphy_auto(struct tlphy_softc *sc, int waitfor)
 	return (error);
 }
 
-static void
+void
 tlphy_acomp(struct tlphy_softc *sc)
 {
 	int aner, anlpar;

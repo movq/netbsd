@@ -1,4 +1,4 @@
-/*	$NetBSD: getport.c,v 1.1 2004/10/16 02:03:54 christos Exp $	*/
+/*	$NetBSD: getport.c,v 1.1.2.2 2004/11/12 05:51:56 jmc Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: getport.c,v 1.1 2004/10/16 02:03:54 christos Exp $");
+__RCSID("$NetBSD: getport.c,v 1.1.2.2 2004/11/12 05:51:56 jmc Exp $");
 
 #include <stdlib.h>
 #include <err.h>
@@ -59,8 +59,8 @@ getport(const char *service, const char *protocol)
 
 	if ((sp = calloc(1, sizeof(*sp))) == NULL)
 		err(1, "malloc");
-	sp->s_name = __UNCONST(service);
-	sp->s_proto = __UNCONST(protocol);
+	sp->s_name = (char *)service;
+	sp->s_proto = (char *)protocol;
 	port = strtol(service, &ep, 0);
 	if ((service[0] != '\0' && *ep != '\0') ||
 	    (errno == ERANGE &&

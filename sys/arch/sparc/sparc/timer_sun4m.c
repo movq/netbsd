@@ -1,4 +1,4 @@
-/*	$NetBSD: timer_sun4m.c,v 1.11 2004/07/01 10:23:41 pk Exp $	*/
+/*	$NetBSD: timer_sun4m.c,v 1.8.2.1 2004/07/10 16:38:03 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: timer_sun4m.c,v 1.11 2004/07/01 10:23:41 pk Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timer_sun4m.c,v 1.8.2.1 2004/07/10 16:38:03 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -75,6 +75,8 @@ __KERNEL_RCSID(0, "$NetBSD: timer_sun4m.c,v 1.11 2004/07/01 10:23:41 pk Exp $");
 
 struct timer_4m		*timerreg4m;
 #define	counterreg4m	cpuinfo.counterreg_4m
+
+static int timerok;
 
 /*
  * Set up the real-time and statistics clocks.
@@ -103,9 +105,10 @@ timer_init_4m(void)
 int
 clockintr_4m(void *cap)
 {
+	volatile int discard;
 
 	/* read the limit register to clear the interrupt */
-	*((volatile int *)&timerreg4m->t_limit);
+	discard = timerreg4m->t_limit;
 
 	hardclock((struct clockframe *)cap);
 	return (1);
@@ -118,10 +121,22 @@ int
 statintr_4m(void *cap)
 {
 	struct clockframe *frame = cap;
+	volatile int discard;
 	u_long newint;
 
 	/* read the limit register to clear the interrupt */
-	*((volatile int *)&counterreg4m->t_limit);
+	discard = counterreg4m->t_limit;
+	if (timerok == 0) {
+		/* Stop the clock */
+#ifdef DIAGNOSTIC
+		printf("note: counter running!\n");
+#endif
+		discard = counterreg4m->t_limit;
+		counterreg4m->t_limit = 0;
+		counterreg4m->t_ss = 0;
+		timerreg4m->t_cfg = TMR_CFG_USER;
+		return (1);
+	}
 
 	statclock(frame);
 
@@ -220,4 +235,5 @@ timerattach_obio_4m(struct device *parent, struct device *self, void *aux)
 	timerreg4m->t_cfg = 0;
 
 	timerattach(&counterreg4m->t_counter, &counterreg4m->t_limit);
+	timerok = 1;
 }

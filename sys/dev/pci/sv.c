@@ -1,4 +1,4 @@
-/*      $NetBSD: sv.c,v 1.25 2004/10/29 12:57:18 yamt Exp $ */
+/*      $NetBSD: sv.c,v 1.22 2003/05/03 18:11:37 wiz Exp $ */
 /*      $OpenBSD: sv.c,v 1.2 1998/07/13 01:50:15 csapuntz Exp $ */
 
 /*
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sv.c,v 1.25 2004/10/29 12:57:18 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sv.c,v 1.22 2003/05/03 18:11:37 wiz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -172,7 +172,7 @@ int	sv_get_props __P((void *));
 void    sv_dumpregs __P((struct sv_softc *sc));
 #endif
 
-const struct audio_hw_if sv_hw_if = {
+struct audio_hw_if sv_hw_if = {
 	sv_open,
 	sv_close,
 	NULL,
@@ -604,6 +604,8 @@ sv_open(addr, flags)
 	DPRINTF(("sv_open\n"));
 	if (!sc->sc_dmaset)
 		return (ENXIO);
+	sc->sc_pintr = 0;
+	sc->sc_rintr = 0;
 
 	return (0);
 }
@@ -615,6 +617,14 @@ void
 sv_close(addr)
 	void *addr;
 {
+	struct sv_softc *sc = addr;
+    
+	DPRINTF(("sv_close\n"));
+	sv_halt_output(sc);
+	sv_halt_input(sc);
+
+	sc->sc_pintr = 0;
+	sc->sc_rintr = 0;
 }
 
 int
@@ -971,7 +981,6 @@ sv_halt_output(addr)
 	DPRINTF(("sv: sv_halt_output\n"));
 	mode = sv_read_indirect(sc, SV_PLAY_RECORD_ENABLE);
 	sv_write_indirect(sc, SV_PLAY_RECORD_ENABLE, mode & ~SV_PLAY_ENABLE);
-	sc->sc_pintr = 0;
 
 	return (0);
 }
@@ -986,7 +995,6 @@ sv_halt_input(addr)
 	DPRINTF(("sv: sv_halt_input\n"));
 	mode = sv_read_indirect(sc, SV_PLAY_RECORD_ENABLE);
 	sv_write_indirect(sc, SV_PLAY_RECORD_ENABLE, mode & ~SV_RECORD_ENABLE);
-	sc->sc_rintr = 0;
 
 	return (0);
 }

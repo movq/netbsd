@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_amap.c,v 1.55 2004/05/12 20:09:50 yamt Exp $	*/
+/*	$NetBSD: uvm_amap.c,v 1.53 2004/03/24 07:50:48 junyoung Exp $	*/
 
 /*
  *
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_amap.c,v 1.55 2004/05/12 20:09:50 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_amap.c,v 1.53 2004/03/24 07:50:48 junyoung Exp $");
 
 #undef UVM_AMAP_INLINE		/* enable/disable amap inlines */
 
@@ -66,8 +66,8 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_amap.c,v 1.55 2004/05/12 20:09:50 yamt Exp $");
  * memory from an amap (it currently goes through the kernel uobj, so
  * we are ok).
  */
-POOL_INIT(uvm_amap_pool, sizeof(struct vm_amap), 0, 0, 0, "amappl",
-    &pool_allocator_nointr);
+
+struct pool uvm_amap_pool;
 
 MALLOC_DEFINE(M_UVMAMAP, "UVM amap", "UVM amap and related structures");
 
@@ -152,6 +152,22 @@ pp_setreflen(ppref, offset, ref, len)
 	}
 }
 #endif
+
+/*
+ * amap_init: called at boot time to init global amap data structures
+ */
+
+void
+amap_init(void)
+{
+
+	/*
+	 * Initialize the vm_amap pool.
+	 */
+
+	pool_init(&uvm_amap_pool, sizeof(struct vm_amap), 0, 0, 0,
+	    "amappl", &pool_allocator_nointr);
+}
 
 /*
  * amap_alloc1: internal function that allocates an amap, but does not
@@ -301,7 +317,6 @@ amap_extend(entry, addsize, flags)
 	 */
 
 	amap_lock(amap);
-	KASSERT(amap_refs(amap) == 1); /* amap can't be shared */
 	AMAP_B2SLOT(slotmapped, entry->end - entry->start); /* slots mapped */
 	AMAP_B2SLOT(slotadd, addsize);			/* slots to add */
 	if (flags & AMAP_EXTEND_FORWARDS) {

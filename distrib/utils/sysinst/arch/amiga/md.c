@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.17 2004/08/14 16:06:40 dsl Exp $ */
+/*	$NetBSD: md.c,v 1.15 2003/11/30 14:36:44 dsl Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -48,8 +48,6 @@
 #include "msg_defs.h"
 #include "menu_defs.h"
 
-
-const char *fdtype = "ados";
 
 /* prototypes */
 
@@ -130,4 +128,11 @@ md_pre_update()
 void
 md_init()
 {
+}
+
+void
+md_set_sizemultname()
+{
+
+	set_sizemultname_meg();
 }

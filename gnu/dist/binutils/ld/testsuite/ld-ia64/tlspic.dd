@@ -1,11 +1,11 @@
 #source: tlspic1.s
 #source: tlspic2.s
 #as:
-#ld:
+#ld: -shared -melf64_ia64
 #objdump: -drj.text
 #target: ia64-*-*
 
-.*: +file format elf..-ia64-.*
+.*: +file format elf64-ia64-little
 
 Disassembly of section .text:
 

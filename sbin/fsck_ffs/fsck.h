@@ -1,4 +1,4 @@
-/*	$NetBSD: fsck.h,v 1.39 2004/07/20 15:05:33 mycroft Exp $	*/
+/*	$NetBSD: fsck.h,v 1.37 2004/01/09 19:12:31 dbj Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -175,8 +175,7 @@ struct inodesc {
 };
 /* file types */
 #define	DATA	1
-#define	SNAP	2
-#define	ADDR	3
+#define	ADDR	2
 
 /*
  * Linked list of duplicate blocks.
@@ -220,7 +219,7 @@ struct zlncnt *zlnhead;		/* head of zero link count list */
  */
 struct inoinfo {
 	struct	inoinfo *i_nexthash;	/* next entry in hash chain */
-	struct	inoinfo	*i_child, *i_sibling;
+	struct	inoinfo	*i_child, *i_sibling, *i_parentp;
 	ino_t	i_number;		/* inode number of this entry */
 	ino_t	i_parent;		/* inode number of parent */
 	ino_t	i_dotdot;		/* inode number of `..' */

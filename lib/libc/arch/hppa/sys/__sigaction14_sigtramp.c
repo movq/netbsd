@@ -1,4 +1,4 @@
-/*	$NetBSD: __sigaction14_sigtramp.c,v 1.2 2004/07/18 22:38:07 chs Exp $	*/
+/*	$NetBSD: __sigaction14_sigtramp.c,v 1.1 2002/07/09 23:32:36 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -43,13 +43,16 @@
 
 #include "extern.h"
 
-__weak_alias(__sigaction14, __libc_sigaction14)
-
 int
-__libc_sigaction14(int sig, const struct sigaction *act, struct sigaction *oact)
+__sigaction14(int sig, const struct sigaction *act, struct sigaction *oact)
 {
-	extern int __sigtramp_siginfo_2[];
+	extern int __sigtramp_sigcontext_1[];
+
+	/*
+	 * Right here we should select the SA_SIGINFO trampoline
+	 * if SA_SIGINFO is set in the sigaction.
+	 */
 
 	return (__sigaction_sigtramp(sig, act, oact,
-				     __sigtramp_siginfo_2, 2));
+				     __sigtramp_sigcontext_1, 1));
 }

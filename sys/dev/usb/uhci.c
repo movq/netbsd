@@ -1,4 +1,4 @@
-/*	$NetBSD: uhci.c,v 1.182 2004/10/26 20:46:16 augustss Exp $	*/
+/*	$NetBSD: uhci.c,v 1.178.2.1 2004/07/02 17:16:14 he Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/uhci.c,v 1.33 1999/11/17 22:33:41 n_hibma Exp $	*/
 
 /*
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhci.c,v 1.182 2004/10/26 20:46:16 augustss Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhci.c,v 1.178.2.1 2004/07/02 17:16:14 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -112,7 +112,7 @@ int uhcinoloop = 0;
 
 /*
  * The UHCI controller is little endian, so on big endian machines
- * the data stored in memory needs to be swapped.
+ * the data strored in memory needs to be swapped.
  */
 #if defined(__FreeBSD__) || defined(__OpenBSD__)
 #if BYTE_ORDER == BIG_ENDIAN
@@ -1963,6 +1963,8 @@ uhci_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 	/*
 	 * Step 3: Execute callback.
 	 */
+	xfer->hcpriv = ii;
+
 	DPRINTFN(1,("uhci_abort_xfer: callback\n"));
 	s = splusb();
 #ifdef DIAGNOSTIC
@@ -3184,9 +3186,6 @@ uhci_root_ctrl_start(usbd_xfer_handle xfer)
 			*(u_int8_t *)buf = 0;
 			totlen = 1;
 			switch (value & 0xff) {
-			case 0: /* Language table */
-				totlen = uhci_str(buf, len, "\001");
-				break;
 			case 1: /* Vendor */
 				totlen = uhci_str(buf, len, sc->sc_vendor);
 				break;

@@ -1,4 +1,4 @@
-/*	$NetBSD: mace.c,v 1.5 2004/09/06 07:24:06 sekiya Exp $	*/
+/*	$NetBSD: mace.c,v 1.1.2.1 2004/07/15 19:12:41 he Exp $	*/
 
 /*
  * Copyright (c) 2003 Christopher Sekiya
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mace.c,v 1.5 2004/09/06 07:24:06 sekiya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mace.c,v 1.1.2.1 2004/07/15 19:12:41 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,8 +82,6 @@ struct {
 	unsigned int	intrmask;
 	int	(*func)(void *);
 	void	*arg;
-	struct evcnt evcnt;
-	char	evname[32];
 } maceintrtab[MACE_NINTR];
 
 struct mace_softc {
@@ -267,7 +265,7 @@ mace_intr_establish(int intr, int level, int (*func)(void *), void *arg)
 {
 	int i;
 
-	if (intr < 0 || intr >= 16)
+	if (intr < 0 || intr >= 8)
 		panic("invalid interrupt number");
 
 	for (i = 0; i < MACE_NINTR; i++)
@@ -276,12 +274,6 @@ mace_intr_establish(int intr, int level, int (*func)(void *), void *arg)
 		        maceintrtab[i].arg = arg;
 			maceintrtab[i].irq = (1 << intr);
 			maceintrtab[i].intrmask = level;
-			snprintf(maceintrtab[i].evname,
-			    sizeof(maceintrtab[i].evname),
-			    "intr %d level 0x%x", intr, level);
-			evcnt_attach_dynamic(&maceintrtab[i].evcnt,
-			    EVCNT_TYPE_INTR, NULL,
-			    "mace", maceintrtab[i].evname);
 			break;
 		}
 
@@ -289,41 +281,6 @@ mace_intr_establish(int intr, int level, int (*func)(void *), void *arg)
 	aprint_normal("mace: established interrupt %d (level %x)\n",
 	    intr, level);
 	return (void *)&maceintrtab[i];
-}
-
-void
-mace_intr_disestablish(void *cookie)
-{
-	int intr = -1, level = 0, irq = 0, i;
-
-	for (i = 0; i < MACE_NINTR; i++)
-		if (&maceintrtab[i] == cookie) {
-			evcnt_detach(&maceintrtab[i].evcnt);
-			for (intr = 0;
-			    maceintrtab[i].irq == (1 << intr); intr ++);
-			level = maceintrtab[i].intrmask;
-			irq = maceintrtab[i].irq;
-
-			maceintrtab[i].irq = 0;
-			maceintrtab[i].intrmask = 0;
-		        maceintrtab[i].func = NULL;
-		        maceintrtab[i].arg = NULL;
-			bzero(&maceintrtab[i].evcnt, sizeof (struct evcnt));
-			bzero(&maceintrtab[i].evname,
-			    sizeof (maceintrtab[i].evname));
-			break;
-		}
-	if (intr == -1)
-		panic("mace: lost maceintrtab");
-
-	/* do not do a unmask, when irq is being shared. */
-	for (i = 0; i < MACE_NINTR; i++)
-		if (&maceintrtab[i].func != NULL && maceintrtab[i].irq == irq)
-			break;
-	if (i == MACE_NINTR)
-		crime_intr_unmask(intr);
-	aprint_normal("mace: disestablished interrupt %d (level %x)\n",
-	    intr, level);
 }
 
 void
@@ -342,7 +299,6 @@ mace_intr(int irqs)
 			if ((maceintrtab[i].irq == (1 << 4)) &&
 			    (isa_irq & maceintrtab[i].intrmask)) {
 		  		(maceintrtab[i].func)(maceintrtab[i].arg);
-				maceintrtab[i].evcnt.ev_count++;
 	        	}
 		}
 #if 0
@@ -353,10 +309,8 @@ mace_intr(int irqs)
 	}
 
 	for (i = 0; i < MACE_NINTR; i++)
-		if ((irqs & maceintrtab[i].irq)) {
+		if ((irqs & maceintrtab[i].irq))
 		  	(maceintrtab[i].func)(maceintrtab[i].arg);
-			maceintrtab[i].evcnt.ev_count++;
-		}
 }
 
 #if defined(BLINK)

@@ -1,4 +1,4 @@
-.\" $NetBSD: uaudio.4,v 1.21 2004/10/24 16:42:19 wiz Exp $
+.\" $NetBSD: uaudio.4,v 1.15 2002/02/12 19:53:57 jdolecek Exp $
 .\"
 .\" Copyright (c) 1999 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -34,7 +34,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd October 23, 2004
+.Dd July 12, 1998
 .Dt UAUDIO 4
 .Os
 .Sh NAME
@@ -72,22 +72,19 @@ is a number that identifies which mixer it is and
 .Ar S
 which input.
 .It selector
-A selector unit selects one of multiple audio sources such as mic-in
-and line-in.
+Not implemented yet.
+.It feature
+A feature unit changes the sound in some way, like bass, treble, or
+volume.
 The name of the control is
-.Ar selN-S1S2S3... ,
+.Ar feaN-S-F ,
 where
 .Ar N
-is a number that identifies which selector unit it is and the sequence of
-.Ar Sn
-indicates candidate units for the audio source.
-.It feature
-A feature unit changes the sound in some way, like bass, treble,
-mute, or volume.
-The name of the control is determined in a heuristic way.
-If the unit changes the sound to a speaker output terminal,
-the names of the controls may be outputs.speaker.bass, outputs.speaker.treble,
-outputs.speaker.mute, outputs.speaker, or likewise.
+is a number that identifies which feature unit it is,
+.Ar S
+which input, and
+.Ar F
+which feature is affected.
 .It processing
 A processing unit does one of a number of audio processing functions
 (e.g., channel up-down mixing, Dolby ProLogic, or chorus effects).
@@ -128,8 +125,7 @@ driver
 appeared in
 .Nx 1.5 .
 .Sh BUGS
-There is no support for multiple-endpoints audio stream,
-adaptive recording, async playback, and TYPE-II/III formats.
+The mixer interface is really incomplete.
 .Pp
-There is the possibility that a device has multiple mixer items
-which have the same name.
+There should be some heuristics that allows important controls,
+e.g., volume, to be identified and given its traditional name.

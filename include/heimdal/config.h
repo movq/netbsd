@@ -325,7 +325,7 @@ static /**/const char *const rcsid[] = { (const char *)rcsid, "@(#)" msg }
 #define HAVE_GLOB 1
 
 /* Define to 1 if you have the `grantpt' function. */
-#define HAVE_GRANTPT 1
+/* #undef HAVE_GRANTPT */
 
 /* Define to 1 if you have the <grp.h> header file. */
 #define HAVE_GRP_H 1
@@ -547,7 +547,7 @@ static /**/const char *const rcsid[] = { (const char *)rcsid, "@(#)" msg }
 #define HAVE_PTHREAD_H 1
 
 /* Define to 1 if you have the `ptsname' function. */
-#define HAVE_PTSNAME 1
+/* #undef HAVE_PTSNAME */
 
 /* Define to 1 if you have the <pty.h> header file. */
 /* #undef HAVE_PTY_H */
@@ -580,7 +580,7 @@ static /**/const char *const rcsid[] = { (const char *)rcsid, "@(#)" msg }
 #define HAVE_RESOLV_H 1
 
 /* Define to 1 if you have the `res_nsearch' function. */
-#define HAVE_RES_NSEARCH 1
+/* #undef HAVE_RES_NSEARCH */
 
 /* Define to 1 if you have the `res_search' function. */
 #define HAVE_RES_SEARCH 1
@@ -1012,7 +1012,7 @@ static /**/const char *const rcsid[] = { (const char *)rcsid, "@(#)" msg }
 #define HAVE_UNISTD_H 1
 
 /* Define to 1 if you have the `unlockpt' function. */
-#define HAVE_UNLOCKPT 1
+/* #undef HAVE_UNLOCKPT */
 
 /* Define if you have the function `unsetenv'. */
 #define HAVE_UNSETENV 1

@@ -1,4 +1,4 @@
-/*	$NetBSD: picreg.h,v 1.2 2004/04/10 19:02:39 pooka Exp $	*/
+/*	$NetBSD: picreg.h,v 1.1.2.1 2004/07/23 06:54:51 tron Exp $	*/
 
 /*
  * Copyright (c) 2002 Steve Rumble

@@ -1,4 +1,4 @@
-/*	$NetBSD: cardbusvar.h,v 1.30 2004/12/14 02:34:15 chs Exp $	*/
+/*	$NetBSD: cardbusvar.h,v 1.25 2003/07/08 10:06:29 itojun Exp $	*/
 
 /*
  * Copyright (c) 1998, 1999 and 2000
@@ -153,6 +153,12 @@ struct cbslot_attach_args {
 };
 
 
+#define cbslotcf_dev  cf_loc[0]
+#define cbslotcf_func cf_loc[1]
+#define CBSLOT_UNK_DEV -1
+#define CBSLOT_UNK_FUNC -1
+
+
 struct cardbus_devfunc;
 
 /*
@@ -184,7 +190,7 @@ struct cardbus_softc {
 #define PCCARD_XXV  0x04
 #define PCCARD_YYV  0x08
 	int sc_poweron_func;
-  struct cardbus_devfunc *sc_funcs[8];	/* list of cardbus device functions */
+  struct cardbus_devfunc *sc_funcs;	/* list of cardbus device functions */
 };
 
 
@@ -213,6 +219,8 @@ typedef struct cardbus_devfunc {
 	/* u_int32_t ct_cisreg; */	/* CIS reg: is it needed??? */
 
 	struct device *ct_device;	/* pointer to the device */
+
+	struct cardbus_devfunc *ct_next;
 
 	/* some data structure needed for tuple??? */
 } *cardbus_devfunc_t;
@@ -243,6 +251,7 @@ struct cardbus_cis_info {
 };
 
 struct cardbus_attach_args {
+	int ca_unit;
 	cardbus_devfunc_t ca_ct;
 
 	bus_space_tag_t ca_iot;		/* CardBus I/O space tag */
@@ -298,6 +307,17 @@ struct cardbus_attach_args {
 #define CARDBUS_VPPMASK 0x00f0
 
 
+#include "locators.h"
+
+/*
+ * Locators devices that attach to 'cardbus', as specified to config.
+ */
+#define cardbuscf_dev cf_loc[CARDBUSCF_DEV]
+#define CARDBUS_UNK_DEV CARDBUSCF_DEV_DEFAULT
+
+#define cardbuscf_function cf_loc[CARDBUSCF_FUNCTION]
+#define CARDBUS_UNK_FUNCTION CARDBUSCF_FUNCTION_DEFAULT
+
 int cardbus_attach_card __P((struct cardbus_softc *));
 void cardbus_detach_card __P((struct cardbus_softc *));
 void *cardbus_intr_establish __P((cardbus_chipset_tag_t, cardbus_function_tag_t,
@@ -318,8 +338,6 @@ int cardbus_function_disable __P((struct cardbus_softc *, int));
 
 int cardbus_get_capability __P((cardbus_chipset_tag_t, cardbus_function_tag_t,
     cardbustag_t, int, int *, cardbusreg_t *));
-int cardbus_powerstate __P((cardbus_devfunc_t, pcitag_t, const int *, int *));
-int cardbus_setpowerstate __P((const char *, cardbus_devfunc_t, pcitag_t, int));
 
 #define Cardbus_function_enable(ct) cardbus_function_enable((ct)->ct_sc, (ct)->ct_func)
 #define Cardbus_function_disable(ct) cardbus_function_disable((ct)->ct_sc, (ct)->ct_func)

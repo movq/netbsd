@@ -1,4 +1,4 @@
-/*	$NetBSD: intl-compat.c,v 1.1.1.4 2004/07/12 23:27:15 wiz Exp $	*/
+/*	$NetBSD: intl-compat.c,v 1.1.1.3 2003/07/03 14:59:12 wiz Exp $	*/
 
 /* intl-compat.c - Stub functions to call gettext functions from GNU gettext
    Library.
@@ -60,7 +60,8 @@
 
 DLL_EXPORTED
 char *
-gettext (const char *msgid)
+gettext (msgid)
+     const char *msgid;
 {
   return libintl_gettext (msgid);
 }
@@ -68,7 +69,9 @@ gettext (const char *msgid)
 
 DLL_EXPORTED
 char *
-dgettext (const char *domainname, const char *msgid)
+dgettext (domainname, msgid)
+     const char *domainname;
+     const char *msgid;
 {
   return libintl_dgettext (domainname, msgid);
 }
@@ -76,7 +79,10 @@ dgettext (const char *domainname, const char *msgid)
 
 DLL_EXPORTED
 char *
-dcgettext (const char *domainname, const char *msgid, int category)
+dcgettext (domainname, msgid, category)
+     const char *domainname;
+     const char *msgid;
+     int category;
 {
   return libintl_dcgettext (domainname, msgid, category);
 }
@@ -84,7 +90,10 @@ dcgettext (const char *domainname, const char *msgid, int category)
 
 DLL_EXPORTED
 char *
-ngettext (const char *msgid1, const char *msgid2, unsigned long int n)
+ngettext (msgid1, msgid2, n)
+     const char *msgid1;
+     const char *msgid2;
+     unsigned long int n;
 {
   return libintl_ngettext (msgid1, msgid2, n);
 }
@@ -92,8 +101,11 @@ ngettext (const char *msgid1, const char *msgid2, unsigned long int n)
 
 DLL_EXPORTED
 char *
-dngettext (const char *domainname,
-	   const char *msgid1, const char *msgid2, unsigned long int n)
+dngettext (domainname, msgid1, msgid2, n)
+     const char *domainname;
+     const char *msgid1;
+     const char *msgid2;
+     unsigned long int n;
 {
   return libintl_dngettext (domainname, msgid1, msgid2, n);
 }
@@ -101,9 +113,12 @@ dngettext (const char *domainname,
 
 DLL_EXPORTED
 char *
-dcngettext (const char *domainname,
-	    const char *msgid1, const char *msgid2, unsigned long int n,
-	    int category)
+dcngettext (domainname, msgid1, msgid2, n, category)
+     const char *domainname;
+     const char *msgid1;
+     const char *msgid2;
+     unsigned long int n;
+     int category;
 {
   return libintl_dcngettext (domainname, msgid1, msgid2, n, category);
 }
@@ -111,7 +126,8 @@ dcngettext (const char *domainname,
 
 DLL_EXPORTED
 char *
-textdomain (const char *domainname)
+textdomain (domainname)
+     const char *domainname;
 {
   return libintl_textdomain (domainname);
 }
@@ -119,7 +135,9 @@ textdomain (const char *domainname)
 
 DLL_EXPORTED
 char *
-bindtextdomain (const char *domainname, const char *dirname)
+bindtextdomain (domainname, dirname)
+     const char *domainname;
+     const char *dirname;
 {
   return libintl_bindtextdomain (domainname, dirname);
 }
@@ -127,7 +145,9 @@ bindtextdomain (const char *domainname, const char *dirname)
 
 DLL_EXPORTED
 char *
-bind_textdomain_codeset (const char *domainname, const char *codeset)
+bind_textdomain_codeset (domainname, codeset)
+     const char *domainname;
+     const char *codeset;
 {
   return libintl_bind_textdomain_codeset (domainname, codeset);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp.h,v 1.18 2004/12/07 14:24:04 yamt Exp $	*/
+/*	$NetBSD: tcp.h,v 1.15 2003/08/07 16:33:15 agc Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -42,7 +42,6 @@ typedef u_int32_t tcp_seq;
 /*
  * TCP header.
  * Per RFC 793, September, 1981.
- * Updated by RFC 3168, September, 2001.
  */
 struct tcphdr {
 	u_int16_t th_sport;		/* source port */
@@ -66,8 +65,6 @@ struct tcphdr {
 #define	TH_PUSH	  0x08
 #define	TH_ACK	  0x10
 #define	TH_URG	  0x20
-#define	TH_ECE	  0x40			/* (unimplemented) */
-#define	TH_CWR	  0x80			/* (unimplemented) */
 	u_int16_t th_win;			/* window */
 	u_int16_t th_sum;			/* checksum */
 	u_int16_t th_urp;			/* urgent pointer */
@@ -85,12 +82,11 @@ struct tcphdr {
 #define	TCPOPT_TIMESTAMP	8
 #define	   TCPOLEN_TIMESTAMP		10
 #define	   TCPOLEN_TSTAMP_APPA		(TCPOLEN_TIMESTAMP+2) /* appendix A */
+#define	TCPOPT_MD5SIGNATURE	19		/* RFC 2385 */
+#define    TCPOLEN_MD5SIGNATURE		18
 
 #define TCPOPT_TSTAMP_HDR	\
     (TCPOPT_NOP<<24|TCPOPT_NOP<<16|TCPOPT_TIMESTAMP<<8|TCPOLEN_TIMESTAMP)
-
-#define	TCPOPT_SIGNATURE	19		/* Keyed MD5: RFC 2385 */
-#define	   TCPOLEN_SIGNATURE		18
 
 /*
  * Default maximum segment size for TCP.
@@ -113,6 +109,5 @@ struct tcphdr {
  */
 #define	TCP_NODELAY	0x01	/* don't delay send to coalesce packets */
 #define	TCP_MAXSEG	0x02	/* set maximum segment size */
-/* Bits 0x04, 0x08 reserved for FreeBSD compatibility: TCP_NOPUSH, TCP_NOOPT */
-#define TCP_MD5SIG	0x10	/* use MD5 digests (RFC2385) */
+
 #endif /* _NETINET_TCP_H_ */

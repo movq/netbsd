@@ -26,7 +26,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: s_round.c,v 1.1 2004/07/10 13:49:10 junyoung Exp $");
+__RCSID("$NetBSD: s_round.c,v 1.1.2.2 2004/07/15 20:57:36 he Exp $");
 #if 0
 __FBSDID("$FreeBSD: src/lib/msun/src/s_round.c,v 1.1 2004/06/07 08:05:36 das Exp $");
 #endif

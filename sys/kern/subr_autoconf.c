@@ -1,4 +1,4 @@
-/* $NetBSD: subr_autoconf.c,v 1.92 2004/10/15 04:38:37 thorpej Exp $ */
+/* $NetBSD: subr_autoconf.c,v 1.89 2004/02/17 05:03:16 rtr Exp $ */
 
 /*
  * Copyright (c) 1996, 2000 Christopher G. Demetriou
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_autoconf.c,v 1.92 2004/10/15 04:38:37 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_autoconf.c,v 1.89 2004/02/17 05:03:16 rtr Exp $");
 
 #include "opt_ddb.h"
 
@@ -135,9 +135,7 @@ propdb_t dev_propdb;
 
 struct matchinfo {
 	cfmatch_t fn;
-	cfmatch_loc_t fn_loc;
 	struct	device *parent;
-	const locdesc_t *ldesc;
 	void	*aux;
 	struct	cfdata *match;
 	int	pri;
@@ -440,12 +438,9 @@ mapply(struct matchinfo *m, struct cfdata *cf)
 {
 	int pri;
 
-	if (m->fn != NULL) {
-		KASSERT(m->fn_loc == NULL);
+	if (m->fn != NULL)
 		pri = (*m->fn)(m->parent, cf, m->aux);
-	} else if (m->fn_loc != NULL) {
-		pri = (*m->fn_loc)(m->parent, cf, m->ldesc, m->aux);
-	} else {
+	else {
 		struct cfattach *ca;
 
 		ca = config_cfattach_lookup(cf->cf_name, cf->cf_atname);
@@ -466,33 +461,15 @@ mapply(struct matchinfo *m, struct cfdata *cf)
 }
 
 /*
- * Helper function: check whether the driver supports the interface attribute.
- */
-static int
-cfdriver_has_iattr(const struct cfdriver *cd, const char *ia)
-{
-	const char * const *cpp;
-
-	if (cd->cd_attrs == NULL)
-		return (0);
-
-	for (cpp = cd->cd_attrs; *cpp; cpp++) {
-		if (STREQ(*cpp, ia)) {
-			/* Match. */
-			return (1);
-		}
-	}
-	return (0);
-}
-
-/*
  * Determine if `parent' is a potential parent for a device spec based
  * on `cfp'.
  */
 static int
-cfparent_match(const struct device *parent, const struct cfparent *cfp)
+cfparent_match(struct device *parent, const struct cfparent *cfp)
 {
 	struct cfdriver *pcd;
+	const char * const *cpp;
+	const char *cp;
 
 	/* We don't match root nodes here. */
 	if (cfp == NULL)
@@ -505,8 +482,16 @@ cfparent_match(const struct device *parent, const struct cfparent *cfp)
 	 * First, ensure this parent has the correct interface
 	 * attribute.
 	 */
-	if (!cfdriver_has_iattr(pcd, cfp->cfp_iattr))
-		return (0);
+	if (pcd->cd_attrs == NULL)
+		return (0);	/* no interface attributes -> no children */
+	for (cpp = pcd->cd_attrs; (cp = *cpp) != NULL; cpp++) {
+		if (STREQ(cp, cfp->cfp_iattr)) {
+			/* Match. */
+			break;
+		}
+	}
+	if (cp == NULL)
+		return (0);	/* doesn't carry the req'd attribute */
 
 	/*
 	 * If no specific parent device instance was specified (i.e.
@@ -530,107 +515,6 @@ cfparent_match(const struct device *parent, const struct cfparent *cfp)
 
 	/* Unit numbers don't match. */
 	return (0);
-}
-
-/*
- * Helper for config_cfdata_attach(): check all devices whether it could be
- * parent any attachment in the config data table passed, and rescan.
- */
-static void
-rescan_with_cfdata(const struct cfdata *cf)
-{
-	struct device *d;
-	const struct cfdata *cf1;
-
-	/*
-	 * "alldevs" is likely longer than an LKM's cfdata, so make it
-	 * the outer loop.
-	 */
-	TAILQ_FOREACH(d, &alldevs, dv_list) {
-
-		if (!(d->dv_cfattach->ca_rescan))
-			continue;
-
-		for (cf1 = cf; cf1->cf_name; cf1++) {
-
-			if (!cfparent_match(d, cf1->cf_pspec))
-				continue;
-
-			(*d->dv_cfattach->ca_rescan)(d,
-				cf1->cf_pspec->cfp_iattr, cf1->cf_loc);
-		}
-	}
-}
-
-/*
- * Attach a supplemental config data table and rescan potential
- * parent devices if required.
- */
-int
-config_cfdata_attach(struct cfdata *cf, int scannow)
-{
-	struct cftable *ct;
-
-	ct = malloc(sizeof(struct cftable), M_DEVBUF, M_WAITOK);
-	ct->ct_cfdata = cf;
-	TAILQ_INSERT_TAIL(&allcftables, ct, ct_list);
-
-	if (scannow)
-		rescan_with_cfdata(cf);
-
-	return (0);
-}
-
-/*
- * Helper for config_cfdata_detach: check whether a device is
- * found through any attachment in the config data table.
- */
-static int
-dev_in_cfdata(const struct device *d, const struct cfdata *cf)
-{
-	const struct cfdata *cf1;
-
-	for (cf1 = cf; cf1->cf_name; cf1++)
-		if (d->dv_cfdata == cf1)
-			return (1);
-
-	return (0);
-}
-
-/*
- * Detach a supplemental config data table. Detach all devices found
- * through that table (and thus keeping references to it) before.
- */
-int
-config_cfdata_detach(struct cfdata *cf)
-{
-	struct device *d;
-	int error;
-	struct cftable *ct;
-
-again:
-	TAILQ_FOREACH(d, &alldevs, dv_list) {
-		if (dev_in_cfdata(d, cf)) {
-			error = config_detach(d, 0);
-			if (error) {
-				aprint_error("%s: unable to detach instance\n",
-					d->dv_xname);
-				return (error);
-			}
-			goto again;
-		}
-	}
-
-	TAILQ_FOREACH(ct, &allcftables, ct_list) {
-		if (ct->ct_cfdata == cf) {
-			TAILQ_REMOVE(&allcftables, ct, ct_list);
-			free(ct, M_DEVBUF);
-			return (0);
-		}
-	}
-
-	/* not found -- shouldn't happen */
-	return (EINVAL);
 }
 
 /*
@@ -672,7 +556,6 @@ config_search(cfmatch_t fn, struct device *parent, void *aux)
 	KASSERT(config_initialized);
 
 	m.fn = fn;
-	m.fn_loc = NULL;
 	m.parent = parent;
 	m.aux = aux;
 	m.match = NULL;
@@ -690,59 +573,6 @@ config_search(cfmatch_t fn, struct device *parent, void *aux)
 			if (cf->cf_fstate == FSTATE_DNOTFOUND ||
 			    cf->cf_fstate == FSTATE_DSTAR)
 				continue;
-			if (cfparent_match(parent, cf->cf_pspec))
-				mapply(&m, cf);
-		}
-	}
-	return (m.match);
-}
-
-/* same as above, with real locators passed */
-struct cfdata *
-config_search_loc(cfmatch_loc_t fn, struct device *parent,
-		  const char *ifattr, const locdesc_t *ldesc, void *aux)
-{
-	struct cftable *ct;
-	struct cfdata *cf;
-	struct matchinfo m;
-
-	KASSERT(config_initialized);
-	KASSERT(!ifattr || cfdriver_has_iattr(parent->dv_cfdriver, ifattr));
-
-	m.fn = NULL;
-	m.fn_loc = fn;
-	m.parent = parent;
-	m.ldesc = ldesc;
-	m.aux = aux;
-	m.match = NULL;
-	m.pri = 0;
-
-	TAILQ_FOREACH(ct, &allcftables, ct_list) {
-		for (cf = ct->ct_cfdata; cf->cf_name; cf++) {
-
-			/* We don't match root nodes here. */
-			if (!cf->cf_pspec)
-				continue;
-
-			/*
-			 * Skip cf if no longer eligible, otherwise scan
-			 * through parents for one matching `parent', and
-			 * try match function.
-			 */
-			if (cf->cf_fstate == FSTATE_FOUND)
-				continue;
-			if (cf->cf_fstate == FSTATE_DNOTFOUND ||
-			    cf->cf_fstate == FSTATE_DSTAR)
-				continue;
-
-			/*
-			 * If an interface attribute was specified,
-			 * consider only children which attach to
-			 * that attribute.
-			 */
-			if (ifattr && !STREQ(ifattr, cf->cf_pspec->cfp_iattr))
-				continue;
-
 			if (cfparent_match(parent, cf->cf_pspec))
 				mapply(&m, cf);
 		}
@@ -764,7 +594,6 @@ config_rootsearch(cfmatch_t fn, const char *rootname, void *aux)
 	struct matchinfo m;
 
 	m.fn = fn;
-	m.fn_loc = NULL;
 	m.parent = ROOT;
 	m.aux = aux;
 	m.match = NULL;
@@ -800,24 +629,6 @@ config_found_sm(struct device *parent, void *aux, cfprint_t print,
 
 	if ((cf = config_search(submatch, parent, aux)) != NULL)
 		return (config_attach(parent, cf, aux, print));
-	if (print) {
-		if (config_do_twiddle)
-			twiddle();
-		aprint_normal("%s", msgs[(*print)(aux, parent->dv_xname)]);
-	}
-	return (NULL);
-}
-
-/* same as above, with real locators passed */
-struct device *
-config_found_sm_loc(struct device *parent,
-		const char *ifattr, const locdesc_t *ldesc, void *aux,
-		cfprint_t print, cfmatch_loc_t submatch)
-{
-	struct cfdata *cf;
-
-	if ((cf = config_search_loc(submatch, parent, ifattr, ldesc, aux)))
-		return(config_attach_loc(parent, cf, ldesc, aux, print));
 	if (print) {
 		if (config_do_twiddle)
 			twiddle();
@@ -894,8 +705,8 @@ config_makeroom(int n, struct cfdriver *cd)
  * Attach a found device.  Allocates memory for device variables.
  */
 struct device *
-config_attach_loc(struct device *parent, struct cfdata *cf,
-	const locdesc_t *ldesc, void *aux, cfprint_t print)
+config_attach(struct device *parent, struct cfdata *cf, void *aux,
+	cfprint_t print)
 {
 	struct device *dev;
 	struct cftable *ct;
@@ -962,11 +773,6 @@ config_attach_loc(struct device *parent, struct cfdata *cf,
 	memcpy(dev->dv_xname + lname, xunit, lunit);
 	dev->dv_parent = parent;
 	dev->dv_flags = DVF_ACTIVE;	/* always initially active */
-	if (ldesc) {
-		dev->dv_locators = malloc(ldesc->len * sizeof(int),
-					  M_DEVBUF, cold ? M_NOWAIT : M_WAITOK);
-		memcpy(dev->dv_locators, ldesc->locs, ldesc->len * sizeof(int));
-	}
 
 	if (config_do_twiddle)
 		twiddle();
@@ -1031,7 +837,7 @@ config_attach_loc(struct device *parent, struct cfdata *cf,
  * name by the attach routine.
  */
 struct device *
-config_attach_pseudo(struct cfdata *cf)
+config_attach_pseudo(const char *name, int unit)
 {
 	struct device *dev;
 	struct cfdriver *cd;
@@ -1041,26 +847,18 @@ config_attach_pseudo(struct cfdata *cf)
 	int myunit;
 	char num[10];
 
-	cd = config_cfdriver_lookup(cf->cf_name);
+	cd = config_cfdriver_lookup(name);
 	if (cd == NULL)
 		return (NULL);
 
-	ca = config_cfattach_lookup_cd(cd, cf->cf_atname);
+	ca = config_cfattach_lookup_cd(cd, name);
 	if (ca == NULL)
 		return (NULL);
 
 	if (ca->ca_devsize < sizeof(struct device))
 		panic("config_attach_pseudo");
 
-	/*
-	 * We just ignore cf_fstate, instead doing everything with
-	 * cf_unit.
-	 *
-	 * XXX Should we change this and use FSTATE_NOTFOUND and
-	 * XXX FSTATE_STAR?
-	 */
-
-	if (cf->cf_unit == DVUNIT_ANY) {
+	if (unit == DVUNIT_ANY) {
 		for (myunit = 0; myunit < cd->cd_ndevs; myunit++)
 			if (cd->cd_devs[myunit] == NULL)
 				break;
@@ -1068,7 +866,7 @@ config_attach_pseudo(struct cfdata *cf)
 		 * myunit is now the unit of the first NULL device pointer.
 		 */
 	} else {
-		myunit = cf->cf_unit;
+		myunit = unit;
 		if (myunit < cd->cd_ndevs && cd->cd_devs[myunit] != NULL)
 			return (NULL);
 	}
@@ -1089,7 +887,7 @@ config_attach_pseudo(struct cfdata *cf)
 	memset(dev, 0, ca->ca_devsize);
 	TAILQ_INSERT_TAIL(&alldevs, dev, dv_list);	/* link up */
 	dev->dv_class = cd->cd_class;
-	dev->dv_cfdata = cf;
+	dev->dv_cfdata = NULL;
 	dev->dv_cfdriver = cd;
 	dev->dv_cfattach = ca;
 	dev->dv_unit = myunit;
@@ -1196,13 +994,6 @@ config_detach(struct device *dev, int flags)
 	}
 #endif
 
-	/* notify the parent that the child is gone */
-	if (dev->dv_parent) {
-		struct device *p = dev->dv_parent;
-		if (p->dv_cfattach->ca_childdetached)
-			(*p->dv_cfattach->ca_childdetached)(p, dev);
-	}
-
 	/*
 	 * Mark cfdata to show that the unit can be reused, if possible.
 	 */
@@ -1238,8 +1029,6 @@ config_detach(struct device *dev, int flags)
 	cd->cd_devs[dev->dv_unit] = NULL;
 	if (dev->dv_cfdata != NULL && (flags & DETACH_QUIET) == 0)
 		aprint_normal("%s detached\n", dev->dv_xname);
-	if (dev->dv_locators)
-		free(dev->dv_locators, M_DEVBUF);
 	free(dev, M_DEVBUF);
 
 	/*

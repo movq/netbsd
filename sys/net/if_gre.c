@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gre.c,v 1.54 2004/12/06 02:59:23 christos Exp $ */
+/*	$NetBSD: if_gre.c,v 1.49.2.1 2004/05/20 12:24:05 grant Exp $ */
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -46,13 +46,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gre.c,v 1.54 2004/12/06 02:59:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gre.c,v 1.49.2.1 2004/05/20 12:24:05 grant Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
 #include "bpfilter.h"
 
-#ifdef INET
 #include <sys/param.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
@@ -112,12 +111,24 @@ struct gre_softc_head gre_softc_list;
 int ip_gre_ttl = GRE_TTL;
 
 int	gre_clone_create __P((struct if_clone *, int));
-int	gre_clone_destroy __P((struct ifnet *));
+void	gre_clone_destroy __P((struct ifnet *));
 
 struct if_clone gre_cloner =
     IF_CLONE_INITIALIZER("gre", gre_clone_create, gre_clone_destroy);
 
 int gre_compute_route(struct gre_softc *sc);
+
+void	greattach __P((int));
+
+/* ARGSUSED */
+void
+greattach(count)
+	int count;
+{
+
+	LIST_INIT(&gre_softc_list);
+	if_clone_attach(&gre_cloner);
+}
 
 int
 gre_clone_create(ifc, unit)
@@ -129,8 +140,7 @@ gre_clone_create(ifc, unit)
 	sc = malloc(sizeof(struct gre_softc), M_DEVBUF, M_WAITOK);
 	memset(sc, 0, sizeof(struct gre_softc));
 
-	snprintf(sc->sc_if.if_xname, sizeof(sc->sc_if.if_xname), "%s%d",
-	    ifc->ifc_name, unit);
+	sprintf(sc->sc_if.if_xname, "%s%d", ifc->ifc_name, unit);
 	sc->sc_if.if_softc = sc;
 	sc->sc_if.if_type = IFT_TUNNEL;
 	sc->sc_if.if_addrlen = 0;
@@ -152,7 +162,7 @@ gre_clone_create(ifc, unit)
 	return (0);
 }
 
-int
+void
 gre_clone_destroy(ifp)
 	struct ifnet *ifp;
 {
@@ -164,8 +174,6 @@ gre_clone_destroy(ifp)
 #endif
 	if_detach(ifp);
 	free(sc, M_DEVBUF);
-
-	return (0);
 }
 
 /*
@@ -194,8 +202,17 @@ gre_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 	ip = NULL;
 
 #if NBPFILTER >0
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, dst->sa_family, m);
+	if (ifp->if_bpf) {
+		/* see comment of other if_foo.c files */
+		struct mbuf m0;
+		u_int32_t af = dst->sa_family;
+
+		m0.m_next = m;
+		m0.m_len = 4;
+		m0.m_data = (char *)&af;
+
+		bpf_mtap(ifp->if_bpf, &m0);
+	}
 #endif
 
 	m->m_flags &= ~(M_BCAST|M_MCAST);
@@ -595,18 +612,4 @@ gre_in_cksum(u_int16_t *p, u_int len)
 	sum = (sum >> 16) + (sum & 0xffff);
 	sum += (sum >> 16);
 	return (~sum);
-}
-#endif
-
-void	greattach __P((int));
-
-/* ARGSUSED */
-void
-greattach(count)
-	int count;
-{
-#ifdef INET
-	LIST_INIT(&gre_softc_list);
-	if_clone_attach(&gre_cloner);
-#endif
 }

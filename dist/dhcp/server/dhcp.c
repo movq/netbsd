@@ -43,7 +43,7 @@
 
 #ifndef lint
 static char copyright[] =
-"$Id: dhcp.c,v 1.6 2004/06/11 19:54:02 mellon Exp $ Copyright (c) 1995-2002 The Internet Software Consortium.  All rights reserved.\n";
+"$Id: dhcp.c,v 1.5 2003/04/11 17:11:11 drochner Exp $ Copyright (c) 1995-2002 The Internet Software Consortium.  All rights reserved.\n";
 #endif /* not lint */
 
 #include "dhcpd.h"
@@ -269,11 +269,9 @@ void dhcpdiscover (packet, ms_nulltp)
 		    0, &allocatedp, (struct lease *)0, MDL);
 
 	if (lease && lease -> client_hostname &&
-	    db_printable (lease -> client_hostname)) {
+	    db_printable (lease -> client_hostname))
 		s = lease -> client_hostname;
-		if (strlen (s) > 32)
-			s = (char *)0;
-	} else
+	else
 		s = (char *)0;
 
 	/* Say what we're doing... */
@@ -453,11 +451,9 @@ void dhcprequest (packet, ms_nulltp, ip_lease)
 	   XXX that this isn't a compliant DHCPREQUEST. */
 
 	if (lease && lease -> client_hostname &&
-	    db_printable (lease -> client_hostname)) {
+	    db_printable (lease -> client_hostname))
 		s = lease -> client_hostname;
-		if (strlen (s) > 32)
-			s = (char *)0;
-	} else
+	else
 		s = (char *)0;
 
 	oc = lookup_option (&dhcp_universe, packet -> options,
@@ -751,11 +747,9 @@ void dhcprelease (packet, ms_nulltp)
 		lease_dereference (&lease, MDL);
 
 	if (lease && lease -> client_hostname &&
-	    db_printable (lease -> client_hostname)) {
+	    db_printable (lease -> client_hostname))
 		s = lease -> client_hostname;
-		if (strlen(s) > 32)
-			s = (char *)0;
-	} else
+	else
 		s = (char *)0;
 
 	/* Say what we're doing... */
@@ -838,11 +832,9 @@ void dhcpdecline (packet, ms_nulltp)
 	find_lease_by_ip_addr (&lease, cip, MDL);
 
 	if (lease && lease -> client_hostname &&
-	    db_printable (lease -> client_hostname)) {
+	    db_printable (lease -> client_hostname))
 		s = lease -> client_hostname;
-		if (strlen (s) > 32)
-			s = (char *)0;
-	} else
+	else
 		s = (char *)0;
 
 	sprintf (msgbuf, "DHCPDECLINE of %s from %s %s%s%svia %s",

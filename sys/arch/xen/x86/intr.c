@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.3 2004/10/23 21:27:35 yamt Exp $	*/
+/*	$NetBSD: intr.c,v 1.1.2.1 2004/05/22 15:59:31 he Exp $	*/
 /*	NetBSD: intr.c,v 1.15 2004/04/10 14:49:55 kochi Exp 	*/
 
 /*
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.3 2004/10/23 21:27:35 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.1.2.1 2004/05/22 15:59:31 he Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -785,26 +785,26 @@ void
 x86_intlock(struct intrframe *iframe)
 {
 	if (iframe->if_ppl < IPL_SCHED)
-		KERNEL_LOCK(LK_EXCLUSIVE|LK_CANRECURSE);
+		spinlockmgr(&kernel_lock, LK_EXCLUSIVE|LK_CANRECURSE, 0);
 }
 
 void
 x86_intunlock(struct intrframe *iframe)
 {
 	if (iframe->if_ppl < IPL_SCHED)
-		KERNEL_UNLOCK();
+		spinlockmgr(&kernel_lock, LK_RELEASE, 0);
 }
 
 void
 x86_softintlock(void)
 {
-	KERNEL_LOCK(LK_EXCLUSIVE|LK_CANRECURSE);
+	spinlockmgr(&kernel_lock, LK_EXCLUSIVE|LK_CANRECURSE, 0);
 }
 
 void
 x86_softintunlock(void)
 {
-	KERNEL_UNLOCK();
+	spinlockmgr(&kernel_lock, LK_RELEASE, 0);
 }
 #endif
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: telnetd.c,v 1.45 2004/11/30 04:13:43 christos Exp $	*/
+/*	$NetBSD: telnetd.c,v 1.43 2003/08/07 09:46:52 agc Exp $	*/
 
 /*
  * Copyright (C) 1997 and 1998 WIDE Project.
@@ -65,7 +65,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
 #if 0
 static char sccsid[] = "@(#)telnetd.c	8.4 (Berkeley) 5/30/95";
 #else
-__RCSID("$NetBSD: telnetd.c,v 1.45 2004/11/30 04:13:43 christos Exp $");
+__RCSID("$NetBSD: telnetd.c,v 1.43 2003/08/07 09:46:52 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -160,13 +160,13 @@ char valid_opts[] = {
 };
 
 int family = AF_INET;
-struct sockaddr_storage from;
 
 int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
+	struct sockaddr_storage from;
 	int on = 1, fromlen;
 	register int ch;
 #if	defined(IPPROTO_IP) && defined(IP_TOS)
@@ -999,7 +999,7 @@ telnet(f, p)
 		/*
 		 * Something to read from the network...
 		 */
-		if (set[0].revents & POLLIN) {
+		if (set[0].revents && POLLIN) {
 		    ncc = read(f, netibuf, sizeof (netibuf));
 		    if (ncc < 0 && errno == EWOULDBLOCK)
 			ncc = 0;
@@ -1093,11 +1093,11 @@ telnet(f, p)
 			}
 		}
 
-		if ((set[0].revents & POLLOUT) && (nfrontp - nbackp) > 0)
+		if (set[0].revents & POLLOUT && (nfrontp - nbackp) > 0)
 			netflush();
 		if (ncc > 0)
 			telrcv();
-		if ((set[1].revents & POLLOUT) && (pfrontp - pbackp) > 0)
+		if (set[1].revents & POLLOUT && (pfrontp - pbackp) > 0)
 			ptyflush();
 	}
 	cleanup(0);

@@ -1,4 +1,4 @@
-/*	$NetBSD: aac.c,v 1.13 2004/09/13 12:55:47 drochner Exp $	*/
+/*	$NetBSD: aac.c,v 1.11 2004/03/20 21:16:55 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -77,7 +77,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aac.c,v 1.13 2004/09/13 12:55:47 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aac.c,v 1.11 2004/03/20 21:16:55 christos Exp $");
+
+#include "locators.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -94,28 +96,25 @@ __KERNEL_RCSID(0, "$NetBSD: aac.c,v 1.13 2004/09/13 12:55:47 drochner Exp $");
 #include <dev/ic/aacvar.h>
 #include <dev/ic/aac_tables.h>
 
-#include "locators.h"
-
-static int	aac_check_firmware(struct aac_softc *);
-static void	aac_describe_controller(struct aac_softc *);
-static int	aac_dequeue_fib(struct aac_softc *, int, u_int32_t *,
-				struct aac_fib **);
-static int	aac_enqueue_fib(struct aac_softc *, int, struct aac_fib *);
-static void	aac_host_command(struct aac_softc *);
-static void	aac_host_response(struct aac_softc *);
-static int	aac_init(struct aac_softc *);
-static int	aac_print(void *, const char *);
-static void	aac_shutdown(void *);
-static void	aac_startup(struct aac_softc *);
-static int	aac_sync_command(struct aac_softc *, u_int32_t, u_int32_t,
-				 u_int32_t, u_int32_t, u_int32_t, u_int32_t *);
-static int	aac_sync_fib(struct aac_softc *, u_int32_t, u_int32_t, void *,
-			     u_int16_t, void *, u_int16_t *);
-static int	aac_submatch(struct device *, struct cfdata *,
-			     const locdesc_t *, void *);
+int	aac_check_firmware(struct aac_softc *);
+void	aac_describe_controller(struct aac_softc *);
+int	aac_dequeue_fib(struct aac_softc *, int, u_int32_t *,
+			struct aac_fib **);
+int	aac_enqueue_fib(struct aac_softc *, int, struct aac_fib *);
+void	aac_host_command(struct aac_softc *);
+void	aac_host_response(struct aac_softc *);
+int	aac_init(struct aac_softc *);
+int	aac_print(void *, const char *);
+void	aac_shutdown(void *);
+void	aac_startup(struct aac_softc *);
+int	aac_sync_command(struct aac_softc *, u_int32_t, u_int32_t,
+			 u_int32_t, u_int32_t, u_int32_t, u_int32_t *);
+int	aac_sync_fib(struct aac_softc *, u_int32_t, u_int32_t, void *,
+		     u_int16_t, void *, u_int16_t *);
+int	aac_submatch(struct device *, struct cfdata *, void *);
 
 #ifdef AAC_DEBUG
-static void	aac_print_fib(struct aac_softc *, struct aac_fib *, char *);
+void	aac_print_fib(struct aac_softc *, struct aac_fib *, char *);
 #endif
 
 /*
@@ -142,7 +141,7 @@ static struct {
 int	aac_debug = AAC_DEBUG;
 #endif
 
-static void	*aac_sdh;
+void	*aac_sdh;
 
 extern struct	cfdriver aac_cd;
 
@@ -154,8 +153,6 @@ aac_attach(struct aac_softc *sc)
 	struct aac_ccb *ac;
 	struct aac_fib *fib;
 	bus_addr_t fibpa;
-	int help[2];
-	locdesc_t *ldesc = (void *)help; /* XXX */
 
 	SIMPLEQ_INIT(&sc->sc_ccb_free);
 	SIMPLEQ_INIT(&sc->sc_ccb_queue);
@@ -253,12 +250,7 @@ aac_attach(struct aac_softc *sc)
 		if (!sc->sc_hdr[i].hd_present)
 			continue;
 		aaca.aaca_unit = i;
-
-		ldesc->len = 1;
-		ldesc->locs[AACCF_UNIT] = i;
-
-		config_found_sm_loc(&sc->sc_dv, "aac", ldesc, &aaca,
-				    aac_print, aac_submatch);
+		config_found_sm(&sc->sc_dv, &aaca, aac_print, aac_submatch);
 	}
 
 	/*
@@ -293,7 +285,7 @@ aac_attach(struct aac_softc *sc)
 /*
  * Print autoconfiguration message for a sub-device.
  */
-static int
+int
 aac_print(void *aux, const char *pnp)
 {
 	struct aac_attach_args *aaca;
@@ -309,16 +301,15 @@ aac_print(void *aux, const char *pnp)
 /*
  * Match a sub-device.
  */
-static int
-aac_submatch(struct device *parent, struct cfdata *cf,
-	     const locdesc_t *ldesc, void *aux)
+int
+aac_submatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct aac_attach_args *aaca;
 
 	aaca = aux;
 
-	if (cf->cf_loc[AACCF_UNIT] != AACCF_UNIT_DEFAULT &&
-	    cf->cf_loc[AACCF_UNIT] != ldesc->locs[AACCF_UNIT])
+	if (cf->aaccf_unit != AACCF_UNIT_DEFAULT &&
+	    cf->aaccf_unit != aaca->aaca_unit)
 		return (0);
 
 	return (config_match(parent, cf, aux));
@@ -340,7 +331,7 @@ aac_describe_code(const struct aac_code_lookup *table, u_int32_t code)
 	return (table[i + 1].string);
 }
 
-static void
+void
 aac_describe_controller(struct aac_softc *sc)
 {
 	u_int8_t buf[AAC_FIB_DATASIZE];
@@ -382,7 +373,7 @@ aac_describe_controller(struct aac_softc *sc)
  * Retrieve the firmware version numbers.  Dell PERC2/QC cards with firmware
  * version 1.x are not compatible with this driver.
  */
-static int
+int
 aac_check_firmware(struct aac_softc *sc)
 {
 	u_int32_t major, minor;
@@ -409,7 +400,7 @@ aac_check_firmware(struct aac_softc *sc)
 	return (0);
 }
 
-static int
+int
 aac_init(struct aac_softc *sc)
 {
 	int nsegs, i, rv, state, norm, high;
@@ -628,7 +619,7 @@ aac_init(struct aac_softc *sc)
 /*
  * Probe for containers, create disks.
  */
-static void
+void
 aac_startup(struct aac_softc *sc)
 {
 	struct aac_mntinfo mi;
@@ -679,7 +670,7 @@ aac_startup(struct aac_softc *sc)
 	}
 }
 
-static void
+void
 aac_shutdown(void *cookie)
 {
 	struct aac_softc *sc;
@@ -792,7 +783,7 @@ aac_intr(void *cookie)
 /*
  * Handle notification of one or more FIBs coming from the controller.
  */
-static void
+void
 aac_host_command(struct aac_softc *sc)
 {
 	struct aac_fib *fib;
@@ -833,7 +824,7 @@ aac_host_command(struct aac_softc *sc)
 /*
  * Handle notification of one or more FIBs completed by the controller
  */
-static void
+void
 aac_host_response(struct aac_softc *sc)
 {
 	struct aac_ccb *ac;
@@ -884,7 +875,7 @@ aac_host_response(struct aac_softc *sc)
 /*
  * Send a synchronous command to the controller and wait for a result.
  */
-static int
+int
 aac_sync_command(struct aac_softc *sc, u_int32_t command, u_int32_t arg0,
 		 u_int32_t arg1, u_int32_t arg2, u_int32_t arg3, u_int32_t *sp)
 {
@@ -930,7 +921,7 @@ aac_sync_command(struct aac_softc *sc, u_int32_t command, u_int32_t arg0,
 /*
  * Send a synchronous FIB to the controller and wait for a result.
  */
-static int
+int
 aac_sync_fib(struct aac_softc *sc, u_int32_t command, u_int32_t xferstate,
 	     void *data, u_int16_t datasize, void *result,
 	     u_int16_t *resultsize)
@@ -1172,7 +1163,7 @@ aac_ccb_poll(struct aac_softc *sc, struct aac_ccb *ac, int timo)
  * controller in the case where we may be inserting several entries in rapid
  * succession, but implementing this usefully is difficult.
  */
-static int
+int
 aac_enqueue_fib(struct aac_softc *sc, int queue, struct aac_fib *fib)
 {
 	u_int32_t fib_size, fib_addr, pi, ci;
@@ -1220,7 +1211,7 @@ aac_enqueue_fib(struct aac_softc *sc, int queue, struct aac_fib *fib)
  * Atomically remove one entry from the nominated queue, returns 0 on success
  * or ENOENT if the queue is empty.
  */
-static int
+int
 aac_dequeue_fib(struct aac_softc *sc, int queue, u_int32_t *fib_size,
 		struct aac_fib **fib_addr)
 {
@@ -1272,7 +1263,7 @@ aac_dequeue_fib(struct aac_softc *sc, int queue, u_int32_t *fib_size,
 /*
  * Print a FIB
  */
-static void
+void
 aac_print_fib(struct aac_softc *sc, struct aac_fib *fib, char *caller)
 {
 	struct aac_blockread *br;
@@ -1355,4 +1346,4 @@ aac_print_fib(struct aac_softc *sc, struct aac_fib *fib, char *caller)
 		break;
 	}
 }
-#endif /* AAC_DEBUG */
+#endif

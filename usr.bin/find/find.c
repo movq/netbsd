@@ -1,4 +1,4 @@
-/*	$NetBSD: find.c,v 1.19 2004/03/30 22:51:13 heas Exp $	*/
+/*	$NetBSD: find.c,v 1.18.2.1 2004/03/31 18:07:46 tron Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "from: @(#)find.c	8.5 (Berkeley) 8/5/94";
 #else
-__RCSID("$NetBSD: find.c,v 1.19 2004/03/30 22:51:13 heas Exp $");
+__RCSID("$NetBSD: find.c,v 1.18.2.1 2004/03/31 18:07:46 tron Exp $");
 #endif
 #endif /* not lint */
 

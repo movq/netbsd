@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.12 2004/09/16 03:57:11 rumble Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.10 2003/06/29 22:28:53 fvdl Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.12 2004/09/16 03:57:11 rumble Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.10 2003/06/29 22:28:53 fvdl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -117,12 +117,12 @@ _bus_dmamap_create(void *cookie, bus_size_t size, int nsegments,
 	size_t mapsize;
 
 	/*
-	 * Allocate and initialize the DMA map.  The end of the map
+	 * Allcoate and initialize the DMA map.  The end of the map
 	 * is a variable-sized array of segments, so we allocate enough
 	 * room for them in one shot.
 	 *
 	 * Note we don't preserve the WAITOK or NOWAIT flags.  Preservation
-	 * of ALLOCNOW notifies others that we've reserved these resources,
+	 * of ALLOCNOW notifes others that we've reserved these resources,
 	 * and they are not to be freed.
 	 *
 	 * The bus_dmamap_t includes one bus_dma_segment_t, hence
@@ -428,7 +428,7 @@ _bus_dmamap_load_raw_direct(void *cookie, bus_dmamap_t map,
 	int i, j;
 
 	/* @@@ This routine doesn't enforce map boundary requirement
-	 * @@@ perhaps it should return an error instead of panicking
+	 * @@@ perhaps it should return an error instead of panicing
 	 */
 
 #ifdef DIAGNOSTIC

@@ -37,7 +37,7 @@
  * otherwise) arising in any way out of the use of this software, even if
  * advised of the possibility of such damage.
  *
- * $Id: vinumvar.h,v 1.2 2004/09/05 15:10:25 jdolecek Exp $
+ * $Id: vinumvar.h,v 1.1.1.1.2.1 2004/09/05 20:36:04 tron Exp $
  * $FreeBSD$
  */
 

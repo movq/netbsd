@@ -1,4 +1,4 @@
-#	$NetBSD: EXPLORA451,v 1.7 2004/11/10 17:25:21 christos Exp $
+#	$NetBSD: EXPLORA451,v 1.4.2.1 2004/07/15 20:15:56 he Exp $
 #
 #	GENERIC -- everything that's currently supported
 #
@@ -68,7 +68,6 @@ options 	COMPAT_14	# NetBSD 1.4,
 options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_43	# and 4.3BSD
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # File systems
 file-system 	FFS		# UFS
@@ -106,7 +105,6 @@ options 	INET6		# IPV6
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
-#options 	PIM		# Protocol Independent Multicast
 #options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 options 	ISO,TPIP	# OSI

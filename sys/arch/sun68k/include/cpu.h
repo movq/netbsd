@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.8 2004/09/22 11:32:03 yamt Exp $	*/
+/*	$NetBSD: cpu.h,v 1.7 2004/01/04 11:33:31 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -102,9 +102,13 @@
  * code to identify machine-dependent functions, etc.
  */
 
-#include <sys/cpu_data.h>
+#include <sys/sched.h>
 struct cpu_info {
-	struct cpu_data ci_data;	/* MI per-cpu data */
+	struct schedstate_percpu ci_schedstate; /* scheduler state */
+#if defined(DIAGNOSTIC) || defined(LOCKDEBUG)
+	u_long ci_spin_locks;		/* # of spin locks held */
+	u_long ci_simple_locks;		/* # of simple locks held */
+#endif
 };
 
 extern struct cpu_info cpu_info_store;

@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.20 2004/08/28 19:11:19 thorpej Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.19 2003/11/17 14:37:59 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.20 2004/08/28 19:11:19 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.19 2003/11/17 14:37:59 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,8 +56,11 @@ __KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.20 2004/08/28 19:11:19 thorpej Exp $"
  * string on failure.
  */
 const char *
-readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
-    struct cpu_disklabel *osdep)
+readdisklabel(dev, strat, lp, osdep)
+	dev_t dev;
+	void (*strat) __P((struct buf *));
+	struct disklabel *lp;
+	struct cpu_disklabel *osdep;
 {
 	struct buf *bp;
 	struct disklabel *dlp;
@@ -103,8 +106,10 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
  * Check new disk label for sensibility before setting it.
  */
 int
-setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask,
-    struct cpu_disklabel *osdep)
+setdisklabel(olp, nlp, openmask, osdep)
+	struct disklabel *olp, *nlp;
+	u_long openmask;
+	struct cpu_disklabel *osdep;
 {
 	int i;
 	struct partition *opp, *npp;
@@ -142,8 +147,11 @@ setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask,
  * Write disk label back to device after modification.
  */
 int
-writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
-    struct cpu_disklabel *osdep)
+writedisklabel(dev, strat, lp, osdep)
+	dev_t dev;
+	void (*strat) __P((struct buf *));
+	struct disklabel *lp;
+	struct cpu_disklabel *osdep;
 {
 	struct buf *bp;
 	struct disklabel *dlp;
@@ -190,7 +198,10 @@ done:
  * if needed, and signal errors or early completion.
  */
 int
-bounds_check_with_label(struct disk *dk, struct buf *bp, int wlabel)
+bounds_check_with_label(dk, bp, wlabel)
+	struct disk *dk;
+	struct buf *bp;
+	int wlabel;
 {
 	struct disklabel *lp = dk->dk_label;
 	struct partition *p = &lp->d_partitions[DISKPART(bp->b_dev)];

@@ -1,5 +1,3 @@
-/*	$NetBSD: lmtp_sasl_proto.c,v 1.1.1.4 2004/05/31 00:24:36 heas Exp $	*/
-
 /*++
 /* NAME
 /*	lmtp_sasl_proto 3
@@ -116,7 +114,7 @@ int     lmtp_sasl_helo_login(LMTP_STATE *state)
      * required, and assume that an authentication error is recoverable.
      */
     if (lmtp_sasl_passwd_lookup(state) != 0) {
-	lmtp_sasl_start(state, VAR_LMTP_SASL_OPTS, var_lmtp_sasl_opts);
+	lmtp_sasl_start(state);
 	if (lmtp_sasl_authenticate(state, why) <= 0)
 	    ret = lmtp_site_fail(state, 450, "Authentication failed: %s",
 				 vstring_str(why));

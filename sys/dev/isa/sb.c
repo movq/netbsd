@@ -1,4 +1,4 @@
-/*	$NetBSD: sb.c,v 1.78 2004/10/29 12:57:17 yamt Exp $	*/
+/*	$NetBSD: sb.c,v 1.76 2003/12/04 13:57:30 keihan Exp $	*/
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sb.c,v 1.78 2004/10/29 12:57:17 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sb.c,v 1.76 2003/12/04 13:57:30 keihan Exp $");
 
 #include "midi.h"
 
@@ -65,7 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: sb.c,v 1.78 2004/10/29 12:57:17 yamt Exp $");
 #include <dev/isa/sbdspvar.h>
 
 #if NMPU > 0
-const struct midi_hw_if sb_midi_hw_if = {
+struct midi_hw_if sb_midi_hw_if = {
 	sbdsp_midi_open,
 	sbdsp_midi_close,
 	sbdsp_midi_output,
@@ -80,7 +80,7 @@ int	sb_getdev __P((void *, struct audio_device *));
  * Define our interface to the higher level audio driver.
  */
 
-const struct audio_hw_if sb_hw_if = {
+struct audio_hw_if sb_hw_if = {
 	sbdsp_open,
 	sbdsp_close,
 	0,
@@ -268,16 +268,17 @@ sb_getdev(addr, retp)
 	const char *config;
 
 	if (sc->sc_model == SB_JAZZ)
-		strlcpy(retp->name, "MV Jazz16", sizeof(retp->name));
+		strncpy(retp->name, "MV Jazz16", sizeof(retp->name));
 	else
-		strlcpy(retp->name, "SoundBlaster", sizeof(retp->name));
-	snprintf(retp->version, sizeof(retp->version), "%d.%02d",
-	    SBVER_MAJOR(sc->sc_version), SBVER_MINOR(sc->sc_version));
+		strncpy(retp->name, "SoundBlaster", sizeof(retp->name));
+	sprintf(retp->version, "%d.%02d", 
+		SBVER_MAJOR(sc->sc_version),
+		SBVER_MINOR(sc->sc_version));
 	if (0 <= sc->sc_model && sc->sc_model < sizeof names / sizeof names[0])
 		config = names[sc->sc_model];
 	else
 		config = "??";
-	strlcpy(retp->config, config, sizeof(retp->config));
+	strncpy(retp->config, config, sizeof(retp->config));
 		
 	return 0;
 }

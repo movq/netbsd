@@ -1,6 +1,5 @@
 /* rddbg.c -- Read debugging information into a generic form.
-   Copyright 1995, 1996, 1997, 2000, 2002, 2003
-   Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1997, 2000, 2002 Free Software Foundation, Inc.
    Written by Ian Lance Taylor <ian@cygnus.com>.
 
    This file is part of GNU Binutils.
@@ -31,21 +30,28 @@
 #include "budbg.h"
 
 static bfd_boolean read_section_stabs_debugging_info
-  (bfd *, asymbol **, long, void *, bfd_boolean *);
+  PARAMS ((bfd *, asymbol **, long, PTR, bfd_boolean *));
 static bfd_boolean read_symbol_stabs_debugging_info
-  (bfd *, asymbol **, long, void *, bfd_boolean *);
-static bfd_boolean read_ieee_debugging_info (bfd *, void *, bfd_boolean *);
-static void save_stab (int, int, bfd_vma, const char *);
-static void stab_context (void);
-static void free_saved_stabs (void);
+  PARAMS ((bfd *, asymbol **, long, PTR, bfd_boolean *));
+static bfd_boolean read_ieee_debugging_info
+  PARAMS ((bfd *, PTR, bfd_boolean *));
+static void save_stab
+  PARAMS ((int, int, bfd_vma, const char *));
+static void stab_context
+  PARAMS ((void));
+static void free_saved_stabs
+  PARAMS ((void));
 
 /* Read debugging information from a BFD.  Returns a generic debugging
    pointer.  */
 
-void *
-read_debugging_info (bfd *abfd, asymbol **syms, long symcount)
+PTR
+read_debugging_info (abfd, syms, symcount)
+     bfd *abfd;
+     asymbol **syms;
+     long symcount;
 {
-  void *dhandle;
+  PTR dhandle;
   bfd_boolean found;
 
   dhandle = debug_init ();
@@ -93,8 +99,12 @@ read_debugging_info (bfd *abfd, asymbol **syms, long symcount)
 /* Read stabs in sections debugging information from a BFD.  */
 
 static bfd_boolean
-read_section_stabs_debugging_info (bfd *abfd, asymbol **syms, long symcount,
-				   void *dhandle, bfd_boolean *pfound)
+read_section_stabs_debugging_info (abfd, syms, symcount, dhandle, pfound)
+     bfd *abfd;
+     asymbol **syms;
+     long symcount;
+     PTR dhandle;
+     bfd_boolean *pfound;
 {
   static struct
     {
@@ -103,7 +113,7 @@ read_section_stabs_debugging_info (bfd *abfd, asymbol **syms, long symcount,
     } names[] = { { ".stab", ".stabstr" },
 		  { "LC_SYMTAB.stabs", "LC_SYMTAB.stabstr" } };
   unsigned int i;
-  void *shandle;
+  PTR shandle;
 
   *pfound = FALSE;
   shandle = NULL;
@@ -251,10 +261,14 @@ read_section_stabs_debugging_info (bfd *abfd, asymbol **syms, long symcount,
 /* Read stabs in the symbol table.  */
 
 static bfd_boolean
-read_symbol_stabs_debugging_info (bfd *abfd, asymbol **syms, long symcount,
-				  void *dhandle, bfd_boolean *pfound)
+read_symbol_stabs_debugging_info (abfd, syms, symcount, dhandle, pfound)
+     bfd *abfd;
+     asymbol **syms;
+     long symcount;
+     PTR dhandle;
+     bfd_boolean *pfound;
 {
-  void *shandle;
+  PTR shandle;
   asymbol **ps, **symend;
 
   shandle = NULL;
@@ -327,7 +341,10 @@ read_symbol_stabs_debugging_info (bfd *abfd, asymbol **syms, long symcount,
 /* Read IEEE debugging information.  */
 
 static bfd_boolean
-read_ieee_debugging_info (bfd *abfd, void *dhandle, bfd_boolean *pfound)
+read_ieee_debugging_info (abfd, dhandle, pfound)
+     bfd *abfd;
+     PTR dhandle;
+     bfd_boolean *pfound;
 {
   asection *dsec;
   bfd_size_type size;
@@ -373,7 +390,11 @@ static int saved_stabs_index;
 /* Save a stabs string.  */
 
 static void
-save_stab (int type, int desc, bfd_vma value, const char *string)
+save_stab (type, desc, value, string)
+     int type;
+     int desc;
+     bfd_vma value;
+     const char *string;
 {
   if (saved_stabs[saved_stabs_index].string != NULL)
     free (saved_stabs[saved_stabs_index].string);
@@ -387,7 +408,7 @@ save_stab (int type, int desc, bfd_vma value, const char *string)
 /* Provide context for an error.  */
 
 static void
-stab_context (void)
+stab_context ()
 {
   int i;
 
@@ -425,7 +446,7 @@ stab_context (void)
 /* Free the saved stab strings.  */
 
 static void
-free_saved_stabs (void)
+free_saved_stabs ()
 {
   int i;
 

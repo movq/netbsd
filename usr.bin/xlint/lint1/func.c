@@ -1,4 +1,4 @@
-/*	$NetBSD: func.c,v 1.21 2004/06/20 22:20:17 jmc Exp $	*/
+/*	$NetBSD: func.c,v 1.20.2.1 2004/06/22 07:26:01 tron Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: func.c,v 1.21 2004/06/20 22:20:17 jmc Exp $");
+__RCSID("$NetBSD: func.c,v 1.20.2.1 2004/06/22 07:26:01 tron Exp $");
 #endif
 
 #include <stdlib.h>

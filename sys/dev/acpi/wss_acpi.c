@@ -1,4 +1,4 @@
-/* $NetBSD: wss_acpi.c,v 1.13 2004/05/01 12:03:48 kochi Exp $ */
+/* $NetBSD: wss_acpi.c,v 1.9 2003/11/03 18:07:10 mycroft Exp $ */
 
 /*
  * Copyright (c) 2002 Jared D. McNeill <jmcneill@invisible.ca>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wss_acpi.c,v 1.13 2004/05/01 12:03:48 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wss_acpi.c,v 1.9 2003/11/03 18:07:10 mycroft Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,8 +52,8 @@ __KERNEL_RCSID(0, "$NetBSD: wss_acpi.c,v 1.13 2004/05/01 12:03:48 kochi Exp $");
 #include <dev/isa/wssreg.h>
 #include <dev/isa/wssvar.h>
 
-static int	wss_acpi_match(struct device *, struct cfdata *, void *);
-static void	wss_acpi_attach(struct device *, struct device *, void *);
+int	wss_acpi_match(struct device *, struct cfdata *, void *);
+void	wss_acpi_attach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(wss_acpi, sizeof(struct wss_softc), wss_acpi_match,
     wss_acpi_attach, NULL, NULL);
@@ -69,16 +69,16 @@ struct wss_acpi_hint {
 	int offset_ad1848;		/* offset from start of DAC region */
 };
 
-static struct wss_acpi_hint wss_acpi_hints[] = {
+struct wss_acpi_hint wss_acpi_hints[] = {
 	{ "NMX2210", 1, 2, WSS_CODEC },
 	{ "CSC0000", 0, 1, 0 },		/* Dell Latitude CPi */
 	{ "CSC0100", 0, 1, 0 },		/* CS4610 with CS4236 codec */
 	{ { 0 }, 0, 0, 0 }
 };
 
-static int wss_acpi_hints_index (const char *);
+int wss_acpi_hints_index (const char *);
 
-static int
+int
 wss_acpi_hints_index(idstr)
 	const char *idstr;
 {
@@ -96,22 +96,22 @@ wss_acpi_hints_index(idstr)
 /*
  * wss_acpi_match: autoconf(9) match routine
  */
-static int
+int
 wss_acpi_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
 	if (aa->aa_node->ad_type != ACPI_TYPE_DEVICE ||
 	    wss_acpi_hints_index(aa->aa_node->ad_devinfo->HardwareId.Value) == -1)
-		return 0;
+		return (0);
 
-	return 1;
+	return (1);
 }
 
 /*
  * wss_acpi_attach: autoconf(9) attach routine
  */
-static void
+void
 wss_acpi_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct wss_softc *sc = (struct wss_softc *)self;
@@ -131,8 +131,7 @@ wss_acpi_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Parse our resources */
 	rv = acpi_resource_parse(&sc->sc_ad1848.sc_ad1848.sc_dev,
-	    aa->aa_node->ad_handle, "_CRS", &res,
-	    &acpi_resource_parse_ops_default);
+	    aa->aa_node, &res, &acpi_resource_parse_ops_default);
 	if (ACPI_FAILURE(rv))
 		return;
 
@@ -143,19 +142,19 @@ wss_acpi_attach(struct device *parent, struct device *self, void *aux)
 	if (dspio == NULL || oplio == NULL) {
 		printf("%s: unable to find i/o registers resource\n",
 		    sc->sc_ad1848.sc_ad1848.sc_dev.dv_xname);
-		goto out;
+		return;
 	}
 	if (bus_space_map(sc->sc_iot, dspio->ar_base, dspio->ar_length,
 	    0, &sc->sc_ioh) != 0) {
 		printf("%s: unable to map i/o registers\n",
 		    sc->sc_ad1848.sc_ad1848.sc_dev.dv_xname);
-		goto out;
+		return;
 	}
 	if (bus_space_map(sc->sc_iot, oplio->ar_base, oplio->ar_length,
 	    0, &sc->sc_opl_ioh) != 0) {
 		printf("%s: unable to map opl i/o registers\n",
 		    sc->sc_ad1848.sc_ad1848.sc_dev.dv_xname);
-		goto out;
+		return;
 	}
 
 	sc->wss_ic = aa->aa_ic;
@@ -166,7 +165,7 @@ wss_acpi_attach(struct device *parent, struct device *self, void *aux)
 		printf("%s: unable to find irq resource\n",
 		    sc->sc_ad1848.sc_ad1848.sc_dev.dv_xname);
 		/* XXX bus_space_unmap */
-		goto out;
+		return;
 	}
 	sc->wss_irq = irq->ar_irq;
 
@@ -177,7 +176,7 @@ wss_acpi_attach(struct device *parent, struct device *self, void *aux)
 		printf("%s: unable to find drq resources\n",
 		    sc->sc_ad1848.sc_ad1848.sc_dev.dv_xname);
 		/* XXX bus_space_unmap */
-		goto out;
+		return;
 	}
 	sc->wss_playdrq = playdrq->ar_drq;
 	sc->wss_recdrq = recdrq->ar_drq;
@@ -191,7 +190,7 @@ wss_acpi_attach(struct device *parent, struct device *self, void *aux)
 		printf("%s: ad1848 probe failed\n",
 		    sc->sc_ad1848.sc_ad1848.sc_dev.dv_xname);
 		/* XXX cleanup */
-		goto out;
+		return;
 	}
 
 	printf("%s", sc->sc_ad1848.sc_ad1848.sc_dev.dv_xname);
@@ -202,7 +201,4 @@ wss_acpi_attach(struct device *parent, struct device *self, void *aux)
 	arg.hwif = 0;
 	arg.hdl = 0;
 	config_found(self, &arg, audioprint);
-
- out:
-	acpi_resource_cleanup(&res);
 }

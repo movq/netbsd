@@ -1,4 +1,4 @@
-/*	$NetBSD: gus.c,v 1.85 2004/10/29 12:57:17 yamt Exp $	*/
+/*	$NetBSD: gus.c,v 1.82 2003/11/21 03:08:37 gson Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1999 The NetBSD Foundation, Inc.
@@ -95,7 +95,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gus.c,v 1.85 2004/10/29 12:57:17 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gus.c,v 1.82 2003/11/21 03:08:37 gson Exp $");
 
 #include "gus.h"
 #if NGUS > 0
@@ -451,11 +451,13 @@ CFATTACH_DECL(gus, sizeof(struct gus_softc),
  */
 
 static const int gus_irq_map[] = {
-	-1, -1, 1, 3, -1, 2, -1, 4,
-	-1, 1, -1, 5, 6, -1, -1, 7
+	ISACF_IRQ_DEFAULT, ISACF_IRQ_DEFAULT, 1, 3, ISACF_IRQ_DEFAULT, 2,
+	ISACF_IRQ_DEFAULT, 4, ISACF_IRQ_DEFAULT, 1, ISACF_IRQ_DEFAULT, 5,
+	6, ISACF_IRQ_DEFAULT, ISACF_IRQ_DEFAULT, 7
 };
 static const int gus_drq_map[] = {
-	-1, 1, -1, 2, -1, 3, 4, 5
+	ISACF_DRQ_DEFAULT, 1, ISACF_DRQ_DEFAULT, 2, ISACF_DRQ_DEFAULT, 3,
+	4, 5
 };
 
 /*
@@ -582,7 +584,7 @@ static const unsigned short gus_log_volumes[512] = {
  * Interface to higher level audio driver
  */
 
-const struct audio_hw_if gus_hw_if = {
+struct audio_hw_if gus_hw_if = {
 	gusopen,
 	gusclose,
 	NULL,				/* drain */
@@ -619,7 +621,7 @@ const struct audio_hw_if gus_hw_if = {
 	NULL,
 };
 
-static const struct audio_hw_if gusmax_hw_if = {
+static struct audio_hw_if gusmax_hw_if = {
 	gusmaxopen,
 	gusmax_close,
 	NULL,				/* drain */
@@ -693,7 +695,7 @@ gusprobe(parent, match, aux)
 	if (ia->ia_ndrq > 1)
 		recdrq = ia->ia_drq[1].ir_drq;
 	else
-		recdrq = ISA_UNKNOWN_DRQ;
+		recdrq = ISACF_DRQ_DEFAULT;
 
 	/*
 	 * Before we do anything else, make sure requested IRQ and DRQ are
@@ -701,22 +703,22 @@ gusprobe(parent, match, aux)
 	 */
 
 	/* XXX range check before indexing!! */
-	if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ ||
-	    gus_irq_map[ia->ia_irq[0].ir_irq] == -1) {
+	if (ia->ia_irq[0].ir_irq == ISACF_IRQ_DEFAULT ||
+	    gus_irq_map[ia->ia_irq[0].ir_irq] == ISACF_IRQ_DEFAULT) {
 		printf("gus: invalid irq %d, card not probed\n",
 		    ia->ia_irq[0].ir_irq);
 		return 0;
 	}
 
-	if (ia->ia_drq[0].ir_drq == ISA_UNKNOWN_DRQ ||
-	    gus_drq_map[ia->ia_drq[0].ir_drq] == -1) {
+	if (ia->ia_drq[0].ir_drq == ISACF_DRQ_DEFAULT ||
+	    gus_drq_map[ia->ia_drq[0].ir_drq] == ISACF_DRQ_DEFAULT) {
 		printf("gus: invalid drq %d, card not probed\n",
 		    ia->ia_drq[0].ir_drq);
 		return 0;
 	}
 
-	if (recdrq != ISA_UNKNOWN_DRQ) {
-		if (recdrq > 7 || gus_drq_map[recdrq] == -1) {
+	if (recdrq != ISACF_DRQ_DEFAULT) {
+		if (recdrq > 7 || gus_drq_map[recdrq] == ISACF_DRQ_DEFAULT) {
 		   printf("gus: invalid second DMA channel (%d), card not "
 		       "probed\n", recdrq);
 		   return 0;
@@ -724,7 +726,7 @@ gusprobe(parent, match, aux)
 	} else
 		recdrq = ia->ia_drq[0].ir_drq;
 
-	if (iobase == ISA_UNKNOWN_PORT) {
+	if (iobase == ISACF_PORT_DEFAULT) {
 		int i;
 		for(i = 0; i < gus_addrs; i++)
 			if (gus_test_iobase(ia->ia_iot, gus_base_addrs[i])) {
@@ -844,7 +846,6 @@ gusattach(parent, self, aux)
 	bus_space_handle_t ioh1, ioh2, ioh3, ioh4;
  	int		iobase, i;
 	unsigned char	c,d,m;
-	const struct audio_hw_if *hwif;
 
 	callout_init(&sc->sc_dmaout_ch);
 
@@ -994,10 +995,8 @@ gusattach(parent, self, aux)
  		sc->sc_flags |= GUS_MIXER_INSTALLED;
  		gus_init_ics2101(sc);
 	}
-	hwif = &gus_hw_if;
 	if (sc->sc_revision >= 10)
-		if (gus_init_cs4231(sc))
-			hwif = &gusmax_hw_if;
+		gus_init_cs4231(sc);
 
  	SELECT_GUS_REG(iot, ioh2, GUSREG_RESET);
  	/*
@@ -1031,8 +1030,7 @@ gusattach(parent, self, aux)
 	 * of the board version. Simply use the revision register as
 	 * identification.
 	 */
-	snprintf(gus_device.version, sizeof(gus_device.version), "%d",
-	    sc->sc_revision);
+	sprintf(gus_device.version, "%d", sc->sc_revision);
 
 	printf("\n%s: Gravis UltraSound", sc->sc_dev.dv_xname);
 	if (sc->sc_revision >= 10)
@@ -1091,8 +1089,7 @@ gusattach(parent, self, aux)
 	 * Attach to the generic audio layer
 	 */
 
-	audio_attach_mi(hwif,
-	    HAS_CODEC(sc) ? (void *)&sc->sc_codec : (void *)sc, &sc->sc_dev);
+	audio_attach_mi(&gus_hw_if, HAS_CODEC(sc) ? (void *)&sc->sc_codec : (void *)sc, &sc->sc_dev);
 }
 
 int
@@ -2954,6 +2951,7 @@ gus_init_cs4231(sc)
 		sc->sc_codec.sc_play_maxsize = sc->sc_req_maxsize;
 		sc->sc_codec.sc_recdrq = sc->sc_playdrq;
 		sc->sc_codec.sc_rec_maxsize = sc->sc_play_maxsize;
+		gus_hw_if = gusmax_hw_if;
 		/* enable line in and mic in the GUS mixer; the codec chip
 		   will do the real mixing for them. */
 		sc->sc_mixcontrol &= ~GUSMASK_LINE_IN; /* 0 enables. */

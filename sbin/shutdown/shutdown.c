@@ -1,4 +1,4 @@
-/*	$NetBSD: shutdown.c,v 1.42 2004/11/05 22:46:31 dsl Exp $	*/
+/*	$NetBSD: shutdown.c,v 1.40 2003/08/07 10:04:39 agc Exp $	*/
 
 /*
  * Copyright (c) 1988, 1990, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1990, 1993\n\
 #if 0
 static char sccsid[] = "@(#)shutdown.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: shutdown.c,v 1.42 2004/11/05 22:46:31 dsl Exp $");
+__RCSID("$NetBSD: shutdown.c,v 1.40 2003/08/07 10:04:39 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -323,7 +323,7 @@ timewarn(timeleft)
 
 	/*
 	 * play some games, just in case wall doesn't come back
-	 * probably unnecessary, given that wall is careful.
+	 * probably unecessary, given that wall is careful.
 	 */
 	if (!setjmp(alarmbuf)) {
 		(void)signal(SIGALRM, timeout);
@@ -417,7 +417,7 @@ getoffset(timearg)
 	}
 
 	if (*timearg == '+') {				/* +minutes */
-		if (!isdigit((unsigned char)*++timearg))
+		if (!isdigit(*++timearg))
 			badtime();
 		offset = atoi(timearg) * 60;
 		shuttime = now + offset;
@@ -426,7 +426,7 @@ getoffset(timearg)
 
 	/* handle hh:mm by getting rid of the colon */
 	for (p = timearg; *p; ++p)
-		if (!isascii(*p) || !isdigit((unsigned char)*p)) {
+		if (!isascii(*p) || !isdigit(*p)) {
 			if (*p == ':' && strlen(p) == 3) {
 				p[0] = p[1];
 				p[1] = p[2];

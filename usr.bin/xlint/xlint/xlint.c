@@ -1,4 +1,4 @@
-/* $NetBSD: xlint.c,v 1.35 2004/06/20 22:20:17 jmc Exp $ */
+/* $NetBSD: xlint.c,v 1.34.2.1 2004/06/22 07:23:26 tron Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: xlint.c,v 1.35 2004/06/20 22:20:17 jmc Exp $");
+__RCSID("$NetBSD: xlint.c,v 1.34.2.1 2004/06/22 07:23:26 tron Exp $");
 #endif
 
 #include <sys/param.h>

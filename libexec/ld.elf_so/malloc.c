@@ -1,4 +1,4 @@
-/*	$NetBSD: malloc.c,v 1.9 2004/10/22 05:39:56 skrll Exp $	*/
+/*	$NetBSD: malloc.c,v 1.8 2003/08/07 09:46:43 agc Exp $	*/
 
 /*
  * Copyright (c) 1983 Regents of the University of California.
@@ -45,10 +45,6 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: malloc.c,v 1.9 2004/10/22 05:39:56 skrll Exp $");
-#endif /* not lint */
-
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

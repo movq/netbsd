@@ -1,6 +1,8 @@
-#	$NetBSD: Makefile,v 1.4 2004/05/23 02:24:51 lukem Exp $
+#	$NetBSD: Makefile,v 1.3 2003/09/22 12:54:48 atatat Exp $
 
-MKPRIVATELIB=	yes
+NOSHARE=	# defined
+NOPIC=		# defined
+NOPROFILE=	# defined
 
 .include <bsd.own.mk>
 
@@ -23,5 +25,7 @@ SRCS=		assert.c cf.c clock.c clrerr.c config.c debug.c \
 		strto.c syslogio.c test.c ungetc.c vasprintf.c vfprintf.c \
 		vfscanf.c vprintf.c vsnprintf.c vsprintf.c vsscanf.c \
 		wbuf.c wsetup.c xtrap.c
+
+libinstall::
 
 .include <bsd.lib.mk>

@@ -1,4 +1,4 @@
-#	$NetBSD: files.hp300,v 1.73 2004/12/07 04:33:24 chs Exp $
+#	$NetBSD: files.hp300,v 1.69 2003/11/08 11:18:33 tsutsui Exp $
 #
 # hp300-specific configuration info
 
@@ -161,6 +161,7 @@ file	arch/hp300/dev/mt.c		mt needs-flag
 device	rd: disk
 attach	rd at hpibbus
 file	arch/hp300/dev/rd.c		rd needs-flag
+file	arch/hp300/dev/rd_compat.c	rd		# XXX
 
 device	ppi
 attach	ppi at hpibbus
@@ -169,8 +170,10 @@ file	arch/hp300/dev/ppi.c		ppi needs-flag
 # MI SCSI
 include "dev/scsipi/files.scsipi"
 
+device	spc: scsi
 attach	spc at dio
 file	arch/hp300/dev/spc.c		spc needs-flag
+file	dev/ic/mb89352.c		spc
 
 # Memory Disk for ramdisk
 file	dev/md_root.c			memory_disk_hooks
@@ -188,6 +191,7 @@ file	arch/hp300/hp300/intr.c
 file	arch/hp300/hp300/leds.c			useleds
 file	arch/hp300/hp300/mem.c
 file	arch/hp300/hp300/pmap_bootstrap.c	compile-with "${NOPROF_C}"
+file	arch/hp300/hp300/procfs_machdep.c	procfs
 file	arch/hp300/hp300/softintr.c
 file	arch/hp300/hp300/trap.c
 file	arch/hp300/hp300/disksubr.c
@@ -195,7 +199,6 @@ file	arch/m68k/m68k/cacheops.c
 file	arch/m68k/m68k/db_memrw.c		ddb | kgdb
 file	arch/m68k/m68k/kgdb_machdep.c		kgdb
 file	arch/m68k/m68k/pmap_motorola.c
-file	arch/m68k/m68k/procfs_machdep.c		procfs
 file	arch/m68k/m68k/sys_machdep.c
 file	arch/m68k/m68k/vm_machdep.c
 
@@ -221,6 +224,9 @@ file	arch/m68k/m68k/sunos_machdep.c	compat_sunos
 include "compat/linux/files.linux"
 include "compat/linux/arch/m68k/files.linux_m68k"
 file arch/m68k/m68k/linux_trap.c		compat_linux
+
+# a.out binary compatibility (COMPAT_AOUT)
+include "compat/aout/files.aout"
 
 # OSS audio driver compatibility
 include "compat/ossaudio/files.ossaudio"

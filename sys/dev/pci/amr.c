@@ -1,4 +1,4 @@
-/*	$NetBSD: amr.c,v 1.24 2004/10/28 07:22:24 martti Exp $	*/
+/*	$NetBSD: amr.c,v 1.19.2.3 2004/11/12 06:27:33 jmc Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amr.c,v 1.24 2004/10/28 07:22:24 martti Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amr.c,v 1.19.2.3 2004/11/12 06:27:33 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -93,8 +93,6 @@ __KERNEL_RCSID(0, "$NetBSD: amr.c,v 1.24 2004/10/28 07:22:24 martti Exp $");
 #include <dev/pci/amrreg.h>
 #include <dev/pci/amrvar.h>
 
-#include "locators.h"
-
 void	amr_attach(struct device *, struct device *, void *);
 void	amr_ccb_dump(struct amr_softc *, struct amr_ccb *);
 void	*amr_enquire(struct amr_softc *, u_int8_t, u_int8_t, u_int8_t, void *);
@@ -104,8 +102,7 @@ int	amr_intr(void *);
 int	amr_match(struct device *, struct cfdata *, void *);
 int	amr_print(void *, const char *);
 void	amr_shutdown(void *);
-int	amr_submatch(struct device *, struct cfdata *,
-		     const locdesc_t *, void *);
+int	amr_submatch(struct device *, struct cfdata *, void *);
 void	amr_teardown(struct amr_softc *);
 void	amr_thread(void *);
 void	amr_thread_create(void *);
@@ -260,8 +257,6 @@ amr_attach(struct device *parent, struct device *self, void *aux)
 	pcireg_t reg;
 	int rseg, i, j, size, rv, memreg, ioreg;
         struct amr_ccb *ac;
-	int help[2];
-	locdesc_t *ldesc = (void *)help; /* XXX */
 
 	aprint_naive(": RAID controller\n");
 
@@ -466,12 +461,8 @@ amr_attach(struct device *parent, struct device *self, void *aux)
 		if (amr->amr_drive[j].al_size == 0)
 			continue;
 		amra.amra_unit = j;
-
-		ldesc->len = 1;
-		ldesc->locs[AMRCF_UNIT] = j;
-
-		amr->amr_drive[j].al_dv = config_found_sm_loc(&amr->amr_dv,
-			"amr", ldesc, &amra, amr_print, amr_submatch);
+		amr->amr_drive[j].al_dv = config_found_sm(&amr->amr_dv, &amra,
+		    amr_print, amr_submatch);
 	}
 
 	SIMPLEQ_INIT(&amr->amr_ccb_queue);
@@ -541,15 +532,14 @@ amr_print(void *aux, const char *pnp)
  * Match a sub-device.
  */
 int
-amr_submatch(struct device *parent, struct cfdata *cf,
-	     const locdesc_t *ldesc, void *aux)
+amr_submatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct amr_attach_args *amra;
 
 	amra = (struct amr_attach_args *)aux;
 
-	if (cf->cf_loc[AMRCF_UNIT] != AMRCF_UNIT_DEFAULT &&
-	    cf->cf_loc[AMRCF_UNIT] != ldesc->locs[AMRCF_UNIT])
+	if (cf->amracf_unit != AMRCF_UNIT_DEFAULT &&
+	    cf->amracf_unit != amra->amra_unit)
 		return (0);
 
 	return (config_match(parent, cf, aux));
@@ -632,8 +622,7 @@ amr_init(struct amr_softc *amr, const char *intrstr,
 			i++;
 		}
 		if (i == sizeof(amr_typestr) / sizeof(amr_typestr[0])) {
-			snprintf(buf, sizeof(buf),
-			    "unknown ENQUIRY2 sig (0x%08x)", sig);
+			sprintf(buf, "unknown ENQUIRY2 sig (0x%08x)", sig);
 			prodstr = buf;
 		} else
 			prodstr = amr_typestr[i].at_str;
@@ -653,7 +642,7 @@ amr_init(struct amr_softc *amr, const char *intrstr,
 			prodstr = "Series 434";
 			break;
 		default:
-			snprintf(buf, sizeof(buf), "unknown PCI dev (0x%04x)",
+			sprintf(buf, "unknown PCI dev (0x%04x)",
 			    PCI_PRODUCT(pa->pa_id));
 			prodstr = buf;
 			break;

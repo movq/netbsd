@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2004/08/05 01:28:48 lukem Exp $
+#	$NetBSD: Makefile,v 1.3 2003/09/13 20:18:49 lukem Exp $
 
 .include <bsd.own.mk>
 
@@ -28,12 +28,8 @@ CPPFLAGS+=	-DXTSTRINGDEFINES	#XTODO is this correct?
 CPPFLAGS.CvtStdSel.c=	${X11FLAGS.CONNECTION}
 CPPFLAGS.LocBitmap.c=	-DBITMAPDIR=\"${X11INCDIR}/X11/bitmaps\"
 
-LIBDPLIBS=\
-	Xt	${.CURDIR}/../Xt \
-	SM	${.CURDIR}/../SM \
-	ICE	${.CURDIR}/../ICE \
-	Xext	${.CURDIR}/../Xext \
-	X11	${.CURDIR}/../X11/dynamic
+LDADD+=	-lXt -lSM -lICE -lXext -lX11
+DPADD+=	${LIBXT} ${LIBSM} ${LIBICE} ${LIBXEXT} ${LIBX11}
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>

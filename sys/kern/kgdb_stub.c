@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_stub.c,v 1.18 2004/04/21 18:40:38 itojun Exp $	*/
+/*	$NetBSD: kgdb_stub.c,v 1.17 2004/03/23 13:22:03 junyoung Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kgdb_stub.c,v 1.18 2004/04/21 18:40:38 itojun Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kgdb_stub.c,v 1.17 2004/03/23 13:22:03 junyoung Exp $");
 
 #include "opt_kgdb.h"
 
@@ -407,7 +407,7 @@ kgdb_trap(type, regs)
 		kgdb_active = 1;
 	} else {
 		/* Tell remote host that an exception has occurred. */
-		snprintf(buffer, sizeof(buffer), "S%02x", kgdb_signal(type));
+		sprintf(buffer, "S%02x", kgdb_signal(type));
 		kgdb_send(buffer);
 	}
 
@@ -435,8 +435,7 @@ kgdb_trap(type, regs)
 			 * knowing if we're in or out of this loop
 			 * when he issues a "remote-signal".
 			 */
-			snprintf(buffer, sizeof(buffer), "S%02x",
-			    kgdb_signal(type));
+			sprintf(buffer, "S%02x", kgdb_signal(type));
 			kgdb_send(buffer);
 			continue;
 

@@ -57,7 +57,6 @@ options 	INET6		# IPV6
 #options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
-#options 	PIM		# Protocol Independent Multicast
 #options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 #options 	ISO,TPIP	# OSI
@@ -86,7 +85,6 @@ options 	COMPAT_16	# NetBSD 1.6 compatibility.
 #options 	COMPAT_10	# NetBSD 1.0 compatibility.
 #options 	COMPAT_09	# NetBSD 0.9 compatibility.
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # Shared memory options
 
@@ -178,15 +176,12 @@ sacpcic* at sacc?
 pcmcia*	at sacpcic?
 
 sackbc0 at sacc0 addr 0x0a00 intr 21
-sackbc1 at sacc0 addr 0x0c00 intr 18
+#sackbc1 at sacc0 addr 0x0c00 intr 18
 
-# PS/2 controller of SA-1111 doesn't have "slot"; One device is attached
-# to one controller.  However, pckbd driver requires "slot 0" and pms driver 
-# requires "slot 1"
-pckbd*	at sackbc0 slot 0
+pckbd* at sackbc0 slot 0         # slot is bogus but needed.
 wskbd* 		at pckbd? # console ?
-pms*	at sackbc1 slot 1
-wsmouse*	at pms? mux 0
+#pms* at sackbc1 slot 0
+#wsmouse*	at pms? mux 0
 
 # PCMCIA serial interfaces
 com*	at pcmcia? function ?		# Modems and serial cards

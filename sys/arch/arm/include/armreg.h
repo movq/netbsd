@@ -1,4 +1,4 @@
-/*	$NetBSD: armreg.h,v 1.30 2004/08/21 10:53:36 rearnsha Exp $	*/
+/*	$NetBSD: armreg.h,v 1.28 2003/10/31 16:30:15 scw Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Ben Harris
@@ -203,7 +203,6 @@
 #define CPU_ID_PXA210B		0x69052920 /* 3rd version Core */
 #define CPU_ID_PXA250C		0x69052d00 /* 4th version Core */
 #define CPU_ID_PXA210C		0x69052d20 /* 4th version Core */
-#define	CPU_ID_PXA27X		0x69054110
 #define	CPU_ID_80321_400	0x69052420
 #define	CPU_ID_80321_600	0x69052430
 #define	CPU_ID_80321_400_B0	0x69052c20
@@ -349,7 +348,5 @@
 #define INSN_SIZE		4		/* Always 4 bytes */
 #define INSN_COND_MASK		0xf0000000	/* Condition mask */
 #define INSN_COND_AL		0xe0000000	/* Always condition */
-
-#define THUMB_INSN_SIZE		2		/* Some are 4 bytes.  */
 
 #endif

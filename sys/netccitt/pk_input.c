@@ -1,4 +1,4 @@
-/*	$NetBSD: pk_input.c,v 1.24 2004/04/26 01:41:15 matt Exp $	*/
+/*	$NetBSD: pk_input.c,v 1.20 2003/08/07 16:33:04 agc Exp $	*/
 
 /*
  * Copyright (c) 1991, 1992, 1993
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pk_input.c,v 1.24 2004/04/26 01:41:15 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pk_input.c,v 1.20 2003/08/07 16:33:04 agc Exp $");
 
 #include "opt_hdlc.h"
 #include "opt_llc.h"
@@ -146,7 +146,7 @@ pk_newlink(ia, llnext)
 {
 	struct x25config *xcp = &ia->ia_xc;
 	struct pkcb *pkp;
-	const struct protosw *pp;
+	struct protosw *pp;
 	unsigned        size;
 
 	pp = pffindproto(AF_CCITT, (int) xcp->xc_lproto, 0);
@@ -158,9 +158,10 @@ pk_newlink(ia, llnext)
 	 * Allocate a network control block structure
 	 */
 	size = sizeof(struct pkcb);
-	pkp = (struct pkcb *) malloc(size, M_PCB, M_WAITOK|M_ZERO);
+	pkp = (struct pkcb *) malloc(size, M_PCB, M_WAITOK);
 	if (pkp == 0)
 		return ((struct pkcb *) 0);
+	bzero((caddr_t) pkp, size);
 	pkp->pk_lloutput = pp->pr_output;
 	pkp->pk_llctlinput = pp->pr_ctlinput;
 	pkp->pk_xcp = xcp;
@@ -192,7 +193,7 @@ pk_dellink(pkp)
 	struct pkcb *pkp;
 {
 	int    i;
-	const struct protosw *pp;
+	struct protosw *pp;
 
 	/*
 	 * Essentially we have the choice to
@@ -268,8 +269,9 @@ pk_resize(pkp)
 		unsigned        size;
 		pkp->pk_maxlcn = xcp->xc_maxlcn;
 		size = (pkp->pk_maxlcn + 1) * sizeof(struct pklcd *);
-		pkp->pk_chan = malloc(size, M_IFADDR, M_WAITOK|M_ZERO);
+		pkp->pk_chan = malloc(size, M_IFADDR, M_WAITOK);
 		if (pkp->pk_chan) {
+			bzero((caddr_t) pkp->pk_chan, size);
 			/*
 			 * Allocate a logical channel descriptor for lcn 0
 			 */
@@ -393,7 +395,13 @@ struct mbuf_cache pk_input_cache = {0};
 	 ((xp)->packet_cause >= X25_RESTART_DTE_ORIGINATED2))
 
 void
+#if __STDC__
 pk_input(struct mbuf *m, ...)
+#else
+pk_input(m, va_alist)
+	struct mbuf *m;
+	va_dcl
+#endif
 {
 	struct x25_packet *xp;
 	struct pklcd *lcp;
@@ -918,8 +926,7 @@ pk_from_bcd(a, iscalling, sa, xcp)
 	if (xcp->xc_addr.x25_net && (xcp->xc_nodnic || xcp->xc_prepnd0)) {
 		octet           dnicname[sizeof(long) * NBBY / 3 + 2];
 
-		snprintf((char *) dnicname, sizeof(dnicname), "%d",
-		    xcp->xc_addr.x25_net);
+		sprintf((char *) dnicname, "%d", xcp->xc_addr.x25_net);
 		prune_dnic((char *) buf, sa->x25_addr, dnicname, xcp);
 	} else
 		bcopy((caddr_t) buf, (caddr_t) sa->x25_addr, count + 1);

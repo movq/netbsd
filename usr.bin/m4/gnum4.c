@@ -1,4 +1,4 @@
-/*	$NetBSD: gnum4.c,v 1.5 2004/10/30 20:39:35 dsl Exp $	*/
+/*	$NetBSD: gnum4.c,v 1.2.4.1 2004/06/22 07:16:11 tron Exp $	*/
 /* $OpenBSD: gnum4.c,v 1.15 2001/10/13 20:18:48 espie Exp $ */
 
 /*
@@ -54,7 +54,7 @@ int mimic_gnu = 0;
 
 /*
  * Support for include path search
- * First search in the current directory.
+ * First search in the the current directory.
  * If not found, and the path is not absolute, include path kicks in.
  * First, -I options, in the order found on the command line.
  * Then M4PATH env variable
@@ -320,7 +320,7 @@ add_replace(string, re, replace, pm)
 				p++;
 				continue;
 			}
-			if (isdigit((unsigned char)p[1])) {
+			if (isdigit(p[1])) {
 				add_sub(*(++p) - '0', string, re, pm);
 				continue;
 			}

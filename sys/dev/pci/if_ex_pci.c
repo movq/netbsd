@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ex_pci.c,v 1.37 2004/08/21 23:48:33 thorpej Exp $	*/
+/*	$NetBSD: if_ex_pci.c,v 1.35.4.1 2004/08/22 14:22:20 tron Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ex_pci.c,v 1.37 2004/08/21 23:48:33 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ex_pci.c,v 1.35.4.1 2004/08/22 14:22:20 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -98,20 +98,20 @@ struct ex_pci_softc {
 #define PCI_INTR		4
 #define PCI_INTRACK		0x00008000
 
-static int	ex_pci_match(struct device *, struct cfdata *, void *);
-static void	ex_pci_attach(struct device *, struct device *, void *);
-static void	ex_pci_intr_ack(struct ex_softc *);
+int ex_pci_match __P((struct device *, struct cfdata *, void *));
+void ex_pci_attach __P((struct device *, struct device *, void *));
+void ex_pci_intr_ack __P((struct ex_softc *));
 
-static int	ex_pci_enable(struct ex_softc *);
-static void	ex_pci_disable(struct ex_softc *);
+int ex_pci_enable __P((struct ex_softc *));
+void ex_pci_disable __P((struct ex_softc *));
 
-static void	ex_pci_confreg_restore(struct ex_pci_softc *);
-static void	ex_d3tod0( struct ex_softc *, struct pci_attach_args *);
+void ex_pci_confreg_restore __P((struct ex_pci_softc *));
+void ex_d3tod0 __P(( struct ex_softc *, struct pci_attach_args *));
 
 CFATTACH_DECL(ex_pci, sizeof(struct ex_pci_softc),
     ex_pci_match, ex_pci_attach, NULL, NULL);
 
-static const struct ex_pci_product {
+const struct ex_pci_product {
 	u_int32_t	epp_prodid;	/* PCI product ID */
 	int		epp_flags;	/* initial softc flags */
 	const char	*epp_name;	/* device name */
@@ -184,8 +184,12 @@ static const struct ex_pci_product {
 	  NULL },
 };
 
-static const struct ex_pci_product *
-ex_pci_lookup(const struct pci_attach_args *pa)
+const struct ex_pci_product *ex_pci_lookup
+    __P((const struct pci_attach_args *));
+
+const struct ex_pci_product *
+ex_pci_lookup(pa)
+	const struct pci_attach_args *pa;
 {
 	const struct ex_pci_product *epp;
 
@@ -198,8 +202,11 @@ ex_pci_lookup(const struct pci_attach_args *pa)
 	return (NULL);
 }
 
-static int
-ex_pci_match(struct device *parent, struct cfdata *match, void *aux)
+int
+ex_pci_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
@@ -209,8 +216,10 @@ ex_pci_match(struct device *parent, struct cfdata *match, void *aux)
 	return (0);
 }
 
-static void
-ex_pci_attach(struct device *parent, struct device *self, void *aux)
+void
+ex_pci_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct ex_softc *sc = (void *)self;
 	struct ex_pci_softc *psc = (void *)self;
@@ -336,8 +345,9 @@ ex_pci_attach(struct device *parent, struct device *self, void *aux)
 		ex_disable(sc);
 }
 
-static void            
-ex_pci_intr_ack(struct ex_softc *sc)
+void            
+ex_pci_intr_ack(sc)
+	struct ex_softc *sc;
 {
 	struct ex_pci_softc *psc = (struct ex_pci_softc *)sc;
         
@@ -345,8 +355,10 @@ ex_pci_intr_ack(struct ex_softc *sc)
 	    PCI_INTRACK);
 }
 
-static void
-ex_d3tod0(struct ex_softc *sc, struct pci_attach_args *pa)
+void
+ex_d3tod0(sc, pa)
+	struct ex_softc		*sc;
+	struct pci_attach_args	*pa;
 {
 
 #define PCI_CACHE_LAT_BIST	0x0c
@@ -385,8 +397,9 @@ ex_d3tod0(struct ex_softc *sc, struct pci_attach_args *pa)
 	    (PCI_COMMAND_MASTER_ENABLE | PCI_COMMAND_IO_ENABLE));
 }
 
-static void
-ex_pci_confreg_restore(struct ex_pci_softc *psc)
+void
+ex_pci_confreg_restore(psc)
+	struct ex_pci_softc *psc;
 {
 	struct ex_softc *sc = (void *) psc;
 	pcireg_t reg;
@@ -408,8 +421,9 @@ ex_pci_confreg_restore(struct ex_pci_softc *psc)
 	    psc->psc_regs[PCI_INTERRUPT_REG>>2]);
 }
 
-static int
-ex_pci_enable(struct ex_softc *sc)
+int
+ex_pci_enable(sc)
+	struct ex_softc *sc;
 {
 	struct ex_pci_softc *psc = (void *) sc;
 
@@ -427,8 +441,9 @@ ex_pci_enable(struct ex_softc *sc)
 	return (0);
 }
 
-static void
-ex_pci_disable(struct ex_softc *sc)
+void
+ex_pci_disable(sc)
+	struct ex_softc *sc;
 {
 	struct ex_pci_softc *psc = (void *) sc;
 

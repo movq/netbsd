@@ -1,5 +1,3 @@
-/*	$NetBSD: mail_addr_map.c,v 1.1.1.5 2004/05/31 00:24:31 heas Exp $	*/
-
 /*++
 /* NAME
 /*	mail_addr_map 3
@@ -32,8 +30,6 @@
 /* .IP address
 /*	The address to be looked up.
 /* DIAGNOSTICS
-/*	Warnings: map lookup returns a non-address result.
-/*
 /*	The global \fIdict_errno\fR is non-zero when the lookup
 /*	should be tried again.
 /* SEE ALSO
@@ -118,12 +114,6 @@ ARGV   *mail_addr_map(MAPS *path, const char *address, int propagate)
 	if (msg_verbose)
 	    for (i = 0; i < argv->argc; i++)
 		msg_info("%s: %s -> %d: %s", myname, address, i, argv->argv[i]);
-	if (argv->argc == 0) {
-	    msg_warn("%s lookup of %s returns non-address result \"%s\"",
-		     path->title, address, string);
-	    argv = argv_free(argv);
-	    dict_errno = DICT_ERR_RETRY;
-	}
     }
 
     /*

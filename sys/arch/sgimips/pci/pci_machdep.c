@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.15 2004/09/29 04:06:52 sekiya Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.13 2004/01/18 00:50:08 sekiya Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.15 2004/09/29 04:06:52 sekiya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.13 2004/01/18 00:50:08 sekiya Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -74,7 +74,9 @@ struct sgimips_bus_dma_tag pci_bus_dma_tag = {
 };
 
 void
-pci_attach_hook(struct device *parent, struct device *self, struct pcibus_attach_args *pba)
+pci_attach_hook(parent, self, pba)
+	struct device *parent, *self;
+	struct pcibus_attach_args *pba;
 {
 	/* XXX */
 
@@ -82,7 +84,9 @@ pci_attach_hook(struct device *parent, struct device *self, struct pcibus_attach
 }
 
 int
-pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
+pci_bus_maxdevs(pc, busno)
+	pci_chipset_tag_t pc;
+	int busno;
 {
 
 	if (busno == 0)
@@ -92,14 +96,19 @@ pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
 }
 
 pcitag_t
-pci_make_tag(pci_chipset_tag_t pc, int bus, int device, int function)
+pci_make_tag(pc, bus, device, function)
+	pci_chipset_tag_t pc;
+	int bus, device, function;
 {
 
 	return (bus << 16) | (device << 11) | (function << 8);
 }
 
 void
-pci_decompose_tag(pci_chipset_tag_t pc, pcitag_t tag, int *bp, int *dp, int *fp)
+pci_decompose_tag(pc, tag, bp, dp, fp)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	int *bp, *dp, *fp;
 {
 
 	if (bp != NULL)
@@ -111,21 +120,30 @@ pci_decompose_tag(pci_chipset_tag_t pc, pcitag_t tag, int *bp, int *dp, int *fp)
 }
 
 pcireg_t
-pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
+pci_conf_read(pc, tag, reg)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	int reg;
 {
 
 	return (*pc->pc_conf_read)(pc, tag, reg);
 }
 
 void
-pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
+pci_conf_write(pc, tag, reg, data)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	int reg;
+	pcireg_t data;
 {
 
 	(*pc->pc_conf_write)(pc, tag, reg, data);
 }
 
 int
-pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+pci_intr_map(pa, ihp)
+	struct pci_attach_args *pa;
+	pci_intr_handle_t *ihp;
 {
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pcitag_t intrtag = pa->pa_intrtag;
@@ -167,7 +185,9 @@ pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 }
 
 const char *
-pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih)
+pci_intr_string(pc, ih)
+	pci_chipset_tag_t pc;
+	pci_intr_handle_t ih;
 {
 	static char irqstr[32];
 
@@ -176,7 +196,9 @@ pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 }
 
 const struct evcnt *
-pci_intr_evcnt(pci_chipset_tag_t pc, pci_intr_handle_t ih)
+pci_intr_evcnt(pc, ih)
+	pci_chipset_tag_t pc;
+	pci_intr_handle_t ih;
 {
 
 	/* XXX for now, no evcnt parent reported */
@@ -184,16 +206,21 @@ pci_intr_evcnt(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 }
 
 void *
-pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih, int level,
-	int (*func)(void *), void *arg)
+pci_intr_establish(pc, ih, level, func, arg)
+	pci_chipset_tag_t pc;
+	pci_intr_handle_t ih;
+	int level, (*func)(void *);
+	void *arg;
 {
 
-	return (void *)(pc->intr_establish)(ih, 0, func, arg);
+	return (void *)(*platform.intr_establish)(ih, 0, func, arg);
 }
 
 void
-pci_intr_disestablish(pci_chipset_tag_t pc, void *cookie)
+pci_intr_disestablish(pc, cookie)
+	pci_chipset_tag_t pc;
+	void *cookie;
 {
 
-	(pc->intr_disestablish)(cookie);
+	panic("pci_intr_disestablish: not implemented");
 }

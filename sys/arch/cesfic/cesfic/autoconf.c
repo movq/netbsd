@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.11 2004/10/23 17:07:38 thorpej Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.9 2003/07/15 01:29:19 lukem Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.11 2004/10/23 17:07:38 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.9 2003/07/15 01:29:19 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,14 +54,16 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.11 2004/10/23 17:07:38 thorpej Exp $"
 
 #include <cesfic/cesfic/isr.h>
 
+struct	device *booted_device;
+int	booted_partition;
+
 u_int	bootdev;
 
 struct evcnt evcnt_fpsp_unimp, evcnt_fpsp_unsupp;
 
 int	mainbusmatch __P((struct device *, struct cfdata *, void *));
 void	mainbusattach __P((struct device *, struct device *, void *));
-int	mainbussearch __P((struct device *, struct cfdata *,
-			   const locdesc_t *, void *));
+int	mainbussearch __P((struct device *, struct cfdata *, void *));
 
 CFATTACH_DECL(mainbus, sizeof(struct device),
     mainbusmatch, mainbusattach, NULL, NULL);
@@ -96,14 +98,13 @@ mainbusattach(parent, self, aux)
 #endif
 
 	/* Search for and attach children. */
-	config_search_ia(mainbussearch, self, "mainbus", NULL);
+	config_search(mainbussearch, self, NULL);
 }
 
 int
-mainbussearch(parent, cf, ldesc, aux)
+mainbussearch(parent, cf, aux)
 	struct device *parent;
 	struct cfdata *cf;
-	const locdesc_t *ldesc;
 	void *aux;
 {
 

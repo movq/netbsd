@@ -34,7 +34,7 @@
 #include "der_locl.h"
 
 __RCSID("$Heimdal: der_length.c,v 1.12.6.2 2004/02/12 18:45:51 joda Exp $"
-        "$NetBSD: der_length.c,v 1.1.1.4 2004/04/02 14:47:42 lha Exp $");
+        "$NetBSD: der_length.c,v 1.1.1.3.2.1 2004/04/21 04:55:40 jmc Exp $");
 
 size_t
 _heim_len_unsigned (unsigned val)

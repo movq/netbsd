@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.160 2004/11/10 17:54:04 christos Exp $
+# $NetBSD: GENERIC,v 1.145.2.3 2004/07/15 20:19:16 he Exp $
 #
 # GENERIC machine description file
 # 
@@ -24,7 +24,7 @@ include		"arch/hpcmips/conf/std.hpcmips.tx39"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.160 $"
+#ident 		"GENERIC-$Revision: 1.145.2.3 $"
 
 maxusers	16
 
@@ -40,7 +40,6 @@ options 	KLOADER
 # Standard system options
 options 	DDB			# in-kernel debugger
 #options 	DDB_ONPANIC=0		# don't enter debugger on panic
-options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 #options 	KGDB			# remote debugger
 #options 	DIAGNOSTIC		# extra kernel debugging checks
 #options 	DEBUG			# extra kernel debugging support
@@ -55,8 +54,6 @@ options 	MSGBUFSIZE=8192		# dmesg buffer size
 
 #options 	SCSIVERBOSE		# human readable SCSI error messages
 #options 	PCMCIAVERBOSE		# verbose PCMCIA configuration messages
-#options 	PCMCIADEBUG
-#options 	PCMCIACISDEBUG
 
 #options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 #options 	RTC_OFFSET=-540		# JST-9
@@ -102,7 +99,6 @@ options 	INET6		# IPV6
 #options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# Multicast routing support
-#options 	PIM		# Protocol Independent Multicast
 #options 	ISO		# OSI networking
 #options 	TPIP		# TPIP
 #options 	EON		# OSI tunneling over IP
@@ -124,7 +120,6 @@ options 	INET6		# IPV6
 # NetBSD backwards compatibility
 options 	COMPAT_43
 options 	COMPAT_16
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 options 	LKM		# loadable kernel modules
 
@@ -254,7 +249,6 @@ pwctl1 at vrgiu? platform NEC_MCCS id PWCTL_LCDLIGHT port 45
 pwctl2 at vrgiu? platform NEC_MCR_3XX id PWCTL_LCD port 10
 pwctl2 at vrgiu? platform NEC_MCR_500 id PWCTL_LCD port 10
 pwctl2 at vrgiu? platform NEC_MCCS id PWCTL_LCD port 10
-pwctl3 at vrgiu? platform NEC_MCCS id PWCTL_SPEAKER port 12
 pwctl3 at vrgiu? platform NEC_MCR_3XX id PWCTL_SPEAKER port 12
 pwctl3 at vrgiu? platform NEC_MCR_430 id PWCTL_SPEAKER port 44
 pwctl3 at vrgiu? platform NEC_MCR_500 id PWCTL_SPEAKER port 12
@@ -401,18 +395,18 @@ hpcioman9 at vrgiu? platform NEC_MCR_730A
 hpcin*	at hpcioman9 evtype PCIINTR id PCIINTR_00_00_01 port 13 level 0 connect 1
 
 #
-# Sharp Telios HC-AJ1/AJ2/AJ3, HC-VJ1C
+# Sharp Telios HC-AJ1, HC-VJ1C
 #
 txcsbus1	at tx39biu? platform SHARP_TELIOS
 
 # IO module manager (virtual bridge) DO NOT DELETE
 txioman* at txsim?
-# iochip 0 TX39 internal MFIO
-#	 1 TX39 internal IO
+# iochip 0 TX39 internal IO
+#	 1 TX39 internal MFIO
 #	 2 BETTY IO
 #	(3) ITE IO notyet
 #	(4) Plum2 IO (EXTPW[0:2]) notyet
-hpcioman1 at txioman? platform SHARP_TELIOS_HCAJ
+hpcioman1 at txioman? platform SHARP_TELIOS_HCAJ1
 hpcin*	at hpcioman1 iochip 1 evtype BUTTON  id BTN_APP0   port 7  edge 1 # IE button
 hpcin*	at hpcioman1 iochip 1 evtype BUTTON  id BTN_APP1   port 8  edge 1 # Mail button
 hpcin*	at hpcioman1 iochip 1 evtype PMEVENT id PME_AC	   port 6  edge 1 # AC-power
@@ -420,7 +414,7 @@ hpcin*	at hpcioman1 iochip 0 evtype EVENT   id COM0_CTS   port 27 edge 3
 hpcin*	at hpcioman1 iochip 0 evtype EVENT   id COM0_DCD   port 29 edge 3
 hpcout*	at hpcioman1 iochip 1 evtype POWER   id PWCTL_LED  port 4  flags 3 #(blink)
 
-hpcioman2 at txioman? platform SHARP_TELIOS_HCVJ
+hpcioman2 at txioman? platform SHARP_TELIOS_HCVJ1C_JP
 hpcin*	at hpcioman2 iochip 1 evtype BUTTON  id BTN_APP0   port 7  edge 1 # IE button
 hpcin*	at hpcioman2 iochip 1 evtype BUTTON  id BTN_APP1   port 8  edge 1 # Mail button
 hpcin*	at hpcioman2 iochip 1 evtype BUTTON  id BTN_APP2   port 11 edge 1 # Video button
@@ -508,14 +502,9 @@ ne*	at pcmcia? function ?		# NE2000-compatible Ethernet
 ray*	at pcmcia? function ?		# Raytheon Raylink (802.11)
 sm*	at pcmcia? function ?		# Megahertz Ethernet
 wi*	at pcmcia? function ?		# Lucent WaveLan IEEE (802.11)
-xirc*	at pcmcia? function ?		# Xircom CreditCard Ethernet
-com*	at xirc?
-xi*	at xirc?
+xi*	at pcmcia? function ?		# Xircom CreditCard Ethernet
 awi*	at pcmcia? function ?		# WLI-PCM
 an*	at pcmcia? function ?		# Aironet PC4500/PC4800 (802.11)
-mhzc*	at pcmcia? function ?
-com*	at mhzc?
-sm*	at mhzc?
 
 # PCMCIA Serial interfaces
 com*	at pcmcia? function ?		# Modems and serial cards
@@ -523,7 +512,6 @@ com*	at pcmcia? function ?		# Modems and serial cards
 # PCMCIA SCSI interfaces
 aic*	at pcmcia? function ?
 esp*	at pcmcia? function ?		# NCR53c406 SCSI
-spc*	at pcmcia? function ?
 
 # ATAPI bus support
 atapibus* at atapi?
@@ -533,7 +521,6 @@ sd*	at atapibus? drive ? flags 0x0000 # ATAPI disk drives
 # SCSI bus support
 scsibus* at aic?
 scsibus* at esp?
-scsibus* at spc?
 sd*	at scsibus? target ? lun ?	# SCSI disk drives
 cd*	at scsibus? target ? lun ?	# SCSI CD-ROM drives
 
@@ -580,9 +567,9 @@ umidi* at uhub? port ? configuration ?
 
 # USB Ethernet adapters
 aue*	at uhub? port ?		# ADMtek AN986 Pegasus based adapters
-axe*	at uhub? port ?		# ASIX AX88172 based adapters
 cue*	at uhub? port ?		# CATC USB-EL1201A based adapters
 kue*	at uhub? port ?		# Kawasaki LSI KL5KUSB101B based adapters
+uax*	at uhub? port ?		# ASIX AX88172 based adapters
 url*	at uhub? port ?		# Realtek RTL8150L based adapters
 udav*	at uhub? port ?		# Davicom DM9601 based adapters
 
@@ -667,5 +654,3 @@ pseudo-device	vlan
 pseudo-device	bridge
 #options	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
 pseudo-device	ksyms			# /dev/ksyms
-#pseudo-device	pf			# PF packet filter
-#pseudo-device	pflog			# PF log if

@@ -1,4 +1,4 @@
-/*	$NetBSD: consinit.c,v 1.3 2004/04/24 21:45:58 cl Exp $	*/
+/*	$NetBSD: consinit.c,v 1.1.2.1 2004/05/22 15:59:58 he Exp $	*/
 /*	NetBSD: consinit.c,v 1.4 2004/03/13 17:31:34 bjh21 Exp 	*/
 
 /*
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.3 2004/04/24 21:45:58 cl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.1.2.1 2004/05/22 15:59:58 he Exp $");
 
 #include "opt_kgdb.h"
 

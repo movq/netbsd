@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.82 2004/08/26 10:12:33 junyoung Exp $	*/
+/*	$NetBSD: pmap.h,v 1.79 2004/02/20 17:35:01 yamt Exp $	*/
 
 /*
  *
@@ -74,7 +74,7 @@
  * a 4GB address space into a linear chunk of virtual memory.  in other
  * words, the PTE for page 0 is the first int mapped into the 4MB recursive
  * area.  the PTE for page 1 is the second int.  the very last int in the
- * 4MB range is the PTE that maps VA 0xfffff000 (the last page in a 4GB
+ * 4MB range is the PTE that maps VA 0xffffe000 (the last page in a 4GB
  * address).
  *
  * all pmap's PD's must have the same values in slots 768->1023 so that
@@ -121,13 +121,13 @@
  *   |   0| -> maps the contents of PTP#0 at VA 0xbfc00000->0xbfc01000
  *   |    |
  *   |    |
- *   | 767| -> maps contents of PTP#767 (the PDP) at VA 0xbfeff000
+ *   | 767| -> maps contents of PTP#767 (the PDP) at VA 0xbffbf000
  *   | 768| -> maps contents of first kernel PTP
  *   |    |
  *   |1023|
  *   +----+
  *
- * note that mapping of the PDP at PTP#767's VA (0xbfeff000) is
+ * note that mapping of the PDP at PTP#767's VA (0xbffbf000) is
  * defined as "PDP_BASE".... within that mapping there are two
  * defines:
  *   "PDP_PDE" (0xbfeffbfc) is the VA of the PDE in the PDP
@@ -154,7 +154,7 @@
  * the following defines give the virtual addresses of various MMU
  * data structures:
  * PTE_BASE and APTE_BASE: the base VA of the linear PTE mappings
- * PDP_BASE and APDP_BASE: the base VA of the recursive mapping of the PDP
+ * PTD_BASE and APTD_BASE: the base VA of the recursive mapping of the PTD
  * PDP_PDE and APDP_PDE: the VA of the PDE that points back to the PDP/APDP
  */
 
@@ -167,15 +167,15 @@
 
 /*
  * the follow define determines how many PTPs should be set up for the
- * kernel by locore.S at boot time.  this should be large enough to
+ * kernel by locore.s at boot time.  this should be large enough to
  * get the VM system running.  once the VM system is running, the
  * pmap module can add more PTPs to the kernel area on demand.
  */
 
 #ifndef NKPTP
-#define NKPTP		0	/* 16MB to start */
+#define NKPTP		4	/* 16MB to start */
 #endif
-#define NKPTP_MIN	2	/* smallest value we allow */
+#define NKPTP_MIN	4	/* smallest value we allow */
 #define NKPTP_MAX	(1024 - (KERNBASE/NBPD) - 1)
 				/* largest value (-1 for APTP space) */
 
@@ -308,8 +308,8 @@ struct pv_page {
  * global kernel variables
  */
 
-/* PDPpaddr: is the physical address of the kernel's PDP */
-extern u_long PDPpaddr;
+/* PTDpaddr: is the physical address of the kernel's PDP */
+extern u_long PTDpaddr;
 
 extern struct pmap kernel_pmap_store;	/* kernel pmap */
 extern int nkpde;			/* current # of PDEs for kernel */

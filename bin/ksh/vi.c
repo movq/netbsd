@@ -1,4 +1,4 @@
-/*	$NetBSD: vi.c,v 1.9 2004/10/28 20:15:37 dsl Exp $	*/
+/*	$NetBSD: vi.c,v 1.7 2003/06/23 11:39:08 agc Exp $	*/
 
 /*
  *	vi command editing
@@ -9,7 +9,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: vi.c,v 1.9 2004/10/28 20:15:37 dsl Exp $");
+__RCSID("$NetBSD: vi.c,v 1.7 2003/06/23 11:39:08 agc Exp $");
 #endif
 
 #include "config.h"
@@ -244,7 +244,7 @@ x_vi(buf, len)
 
 	x_putc('\r'); x_putc('\n'); x_flush();
 
-	if (c == -1 || len <= es->linelen)
+	if (c == -1)
 		return -1;
 
 	if (es->cbuf != buf)
@@ -428,7 +428,7 @@ vi_hook(ch)
 				}
 			} else {
 				locpat[srchlen] = '\0';
-				(void) strlcpy(srchpat, locpat, sizeof srchpat);
+				(void) strcpy(srchpat, locpat);
 			}
 			state = VCMD;
 		} else if (ch == edchars.erase || ch == Ctrl('h')) {
@@ -468,22 +468,15 @@ vi_hook(ch)
 			else {
 				locpat[srchlen++] = ch;
 				if ((ch & 0x80) && Flag(FVISHOW8)) {
-					if (es->linelen + 2 > es->cbufsize)
-						vi_error();
 					es->cbuf[es->linelen++] = 'M';
 					es->cbuf[es->linelen++] = '-';
 					ch &= 0x7f;
 				}
 				if (ch < ' ' || ch == 0x7f) {
-					if (es->linelen + 2 > es->cbufsize)
-						vi_error();
 					es->cbuf[es->linelen++] = '^';
 					es->cbuf[es->linelen++] = ch ^ '@';
-				} else {
-					if (es->linelen >= es->cbufsize)
-						vi_error();
+				} else
 					es->cbuf[es->linelen++] = ch;
-				}
 				es->cursor = es->linelen;
 				refresh(0);
 			}
@@ -706,7 +699,7 @@ vi_insert(ch)
 	/* End nonstandard vi commands } */
 
 	default:
-		if (es->linelen >= es->cbufsize - 1)
+		if (es->linelen == es->cbufsize - 1)
 			return -1;
 		ibuf[inslen++] = ch;
 		if (insert == INSERT) {
@@ -1123,10 +1116,10 @@ vi_cmd(argcnt, cmd)
 				p = &es->cbuf[es->cursor];
 				if (islower((unsigned char)*p)) {
 					modified = 1; hnum = hlast;
-					*p = toupper((unsigned char)*p);
+					*p = toupper(*p);
 				} else if (isupper((unsigned char)*p)) {
 					modified = 1; hnum = hlast;
-					*p = tolower((unsigned char)*p);
+					*p = tolower(*p);
 				}
 				if (es->cursor < es->linelen - 1)
 					es->cursor++;
@@ -1418,8 +1411,8 @@ save_edstate(old)
 
 	new = (struct edstate *)alloc(sizeof(struct edstate), APERM);
 	new->cbuf = alloc(old->cbufsize, APERM);
-	memcpy(new->cbuf, old->cbuf, old->linelen);
 	new->cbufsize = old->cbufsize;
+	strcpy(new->cbuf, old->cbuf);
 	new->linelen = old->linelen;
 	new->cursor = old->cursor;
 	new->winleft = old->winleft;
@@ -1430,7 +1423,7 @@ static void
 restore_edstate(new, old)
 	struct edstate *old, *new;
 {
-	memcpy(new->cbuf, old->cbuf, old->linelen);
+	strncpy(new->cbuf, old->cbuf, old->linelen);
 	new->linelen = old->linelen;
 	new->cursor = old->cursor;
 	new->winleft = old->winleft;
@@ -1992,7 +1985,7 @@ expand_word(command)
 	del_range(start, end);
 	es->cursor = start;
 	for (i = 0; i < nwords; ) {
-		if (x_escape(words[i], strlen(words[i]), x_vi_putbuf) != 0) {
+		if (putbuf(words[i], (int) strlen(words[i]), 0) != 0) {
 			rval = -1;
 			break;
 		}

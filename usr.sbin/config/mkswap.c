@@ -1,4 +1,4 @@
-/*	$NetBSD: mkswap.c,v 1.17 2004/06/20 22:20:17 jmc Exp $	*/
+/*	$NetBSD: mkswap.c,v 1.16.2.1 2004/06/22 07:21:29 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

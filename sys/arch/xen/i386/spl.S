@@ -1,4 +1,4 @@
-/*	$NetBSD: spl.S,v 1.2 2004/05/07 13:52:37 cl Exp $	*/
+/*	$NetBSD: spl.S,v 1.1.2.1 2004/05/22 15:59:31 he Exp $	*/
 /*	NetBSD: spl.S,v 1.8 2004/02/20 17:35:01 yamt Exp 	*/
 
 /*

@@ -1,5 +1,3 @@
-/*	$NetBSD: vstream.c,v 1.1.1.5 2004/05/31 00:25:02 heas Exp $	*/
-
 /*++
 /* NAME
 /*	vstream 3
@@ -46,12 +44,12 @@
 /*	char	*str;
 /*	VSTREAM	*stream;
 /*
-/*	off_t	vstream_ftell(stream)
+/*	long	vstream_ftell(stream)
 /*	VSTREAM	*stream;
 /*
-/*	off_t	vstream_fseek(stream, offset, whence)
+/*	long	vstream_fseek(stream, offset, whence)
 /*	VSTREAM	*stream;
-/*	off_t	offset;
+/*	long	offset;
 /*	int	whence;
 /*
 /*	int	vstream_fflush(stream)
@@ -797,7 +795,7 @@ static int vstream_buf_space(VBUF *bp, int want)
 
 /* vstream_fseek - change I/O position */
 
-off_t   vstream_fseek(VSTREAM *stream, off_t offset, int whence)
+long    vstream_fseek(VSTREAM *stream, long offset, int whence)
 {
     char   *myname = "vstream_fseek";
     VBUF   *bp = &stream->buf;
@@ -809,21 +807,11 @@ off_t   vstream_fseek(VSTREAM *stream, off_t offset, int whence)
      */
     switch (bp->flags & (VSTREAM_FLAG_READ | VSTREAM_FLAG_WRITE)) {
     case VSTREAM_FLAG_WRITE:
-	if (bp->ptr > bp->data) {
-	    if (whence == SEEK_CUR)
-		offset += (bp->ptr - bp->data);	/* add unwritten data */
-	    else if (whence == SEEK_END)
-		bp->flags &= ~VSTREAM_FLAG_SEEK;
+	if (bp->ptr > bp->data)
 	    if (VSTREAM_FFLUSH_SOME(stream))
 		return (-1);
-	}
-	VSTREAM_BUF_AT_END(bp);
-	break;
+	/* FALLTHROUGH */
     case VSTREAM_FLAG_READ:
-	if (whence == SEEK_CUR)
-	    offset += bp->cnt;			/* subtract unread data */
-	else if (whence == SEEK_END)
-	    bp->flags &= ~VSTREAM_FLAG_SEEK;
     case 0:
 	VSTREAM_BUF_AT_END(bp);
 	break;
@@ -859,7 +847,7 @@ off_t   vstream_fseek(VSTREAM *stream, off_t offset, int whence)
 
 /* vstream_ftell - return file offset */
 
-off_t   vstream_ftell(VSTREAM *stream)
+long    vstream_ftell(VSTREAM *stream)
 {
     VBUF   *bp = &stream->buf;
 
@@ -876,7 +864,7 @@ off_t   vstream_ftell(VSTREAM *stream)
      * the last read, write or seek operation.
      */
     if ((bp->flags & VSTREAM_FLAG_SEEK) == 0) {
-	if ((stream->offset = lseek(stream->fd, (off_t) 0, SEEK_CUR)) < 0) {
+	if ((stream->offset = lseek(stream->fd, 0L, SEEK_CUR)) < 0) {
 	    bp->flags |= VSTREAM_FLAG_NSEEK;
 	    return (-1);
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_bmap.c,v 1.34 2004/12/15 07:11:51 mycroft Exp $	*/
+/*	$NetBSD: ufs_bmap.c,v 1.28.2.2 2004/09/18 19:25:53 he Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_bmap.c,v 1.34 2004/12/15 07:11:51 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_bmap.c,v 1.28.2.2 2004/09/18 19:25:53 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -136,7 +136,7 @@ ufs_bmaparray(vp, bn, bnp, ap, nump, runp, is_sequential)
 
 	ip = VTOI(vp);
 	mp = vp->v_mount;
-	ump = ip->i_ump;
+	ump = VFSTOUFS(mp);
 #ifdef DIAGNOSTIC
 	if ((ap != NULL && nump == NULL) || (ap == NULL && nump != NULL))
 		panic("ufs_bmaparray: invalid arguments");
@@ -156,46 +156,31 @@ ufs_bmaparray(vp, bn, bnp, ap, nump, runp, is_sequential)
 	if (bn >= 0 && bn < NDADDR) {
 		if (nump != NULL)
 			*nump = 0;
-		if (ump->um_fstype == UFS1)
-			daddr = ufs_rw32(ip->i_ffs1_db[bn],
-			    UFS_MPNEEDSWAP(ump));
+		if (ip->i_ump->um_fstype == UFS1)
+			*bnp = blkptrtodb(ump,
+			    (int32_t)ufs_rw32(ip->i_ffs1_db[bn],
+			    UFS_MPNEEDSWAP(vp->v_mount)));
 		else
-			daddr = ufs_rw64(ip->i_ffs2_db[bn],
-			    UFS_MPNEEDSWAP(ump));
-		*bnp = blkptrtodb(ump, daddr);
-		/*
-		 * Since this is FFS independent code, we are out of
-		 * scope for the definitions of BLK_NOCOPY and
-		 * BLK_SNAP, but we do know that they will fall in
-		 * the range 1..um_seqinc, so we use that test and
-		 * return a request for a zeroed out buffer if attempts
-		 * are made to read a BLK_NOCOPY or BLK_SNAP block.
-		 */
-		if ((ip->i_flags & SF_SNAPSHOT) && daddr > 0 &&
-		    daddr < ump->um_seqinc) {
+			*bnp = blkptrtodb(ump, ufs_rw64(ip->i_ffs2_db[bn],
+			    UFS_MPNEEDSWAP(vp->v_mount)));
+		if (*bnp == 0)
 			*bnp = -1;
-		} else if (*bnp == 0) {
-			if (ip->i_flags & SF_SNAPSHOT) {
-				*bnp = blkptrtodb(ump, bn * ump->um_seqinc);
-			} else {
-				*bnp = -1;
-			}
-		} else if (runp) {
-			if (ump->um_fstype == UFS1) {
+		if (runp) {
+			if (ip->i_ump->um_fstype == UFS1) {
 				for (++bn; bn < NDADDR && *runp < maxrun &&
 				    is_sequential(ump,
-				        ufs_rw32(ip->i_ffs1_db[bn - 1],
-				            UFS_MPNEEDSWAP(ump)),
-				        ufs_rw32(ip->i_ffs1_db[bn],
-				            UFS_MPNEEDSWAP(ump)));
+				        (int32_t)ufs_rw32(ip->i_ffs1_db[bn - 1],
+				            UFS_MPNEEDSWAP(vp->v_mount)),
+				        (int32_t)ufs_rw32(ip->i_ffs1_db[bn],
+				            UFS_MPNEEDSWAP(vp->v_mount)));
 				    ++bn, ++*runp);
 			} else {
 				for (++bn; bn < NDADDR && *runp < maxrun &&
 				    is_sequential(ump,
 				        ufs_rw64(ip->i_ffs2_db[bn - 1],
-				            UFS_MPNEEDSWAP(ump)),
+				            UFS_MPNEEDSWAP(vp->v_mount)),
 				        ufs_rw64(ip->i_ffs2_db[bn],
-				            UFS_MPNEEDSWAP(ump)));
+				            UFS_MPNEEDSWAP(vp->v_mount)));
 				    ++bn, ++*runp);
 			}
 		}
@@ -211,12 +196,12 @@ ufs_bmaparray(vp, bn, bnp, ap, nump, runp, is_sequential)
 	num = *nump;
 
 	/* Get disk address out of indirect block array */
-	if (ump->um_fstype == UFS1)
-		daddr = ufs_rw32(ip->i_ffs1_ib[xap->in_off],
-		    UFS_MPNEEDSWAP(ump));
+	if (ip->i_ump->um_fstype == UFS1)
+		daddr = (int32_t)ufs_rw32(ip->i_ffs1_ib[xap->in_off],
+		    UFS_MPNEEDSWAP(vp->v_mount));
 	else
 		daddr = ufs_rw64(ip->i_ffs2_ib[xap->in_off],
-		    UFS_MPNEEDSWAP(ump));
+		    UFS_MPNEEDSWAP(vp->v_mount));
 
 	for (bp = NULL, ++xap; --num; ++xap) {
 		/* 
@@ -266,30 +251,33 @@ ufs_bmaparray(vp, bn, bnp, ap, nump, runp, is_sequential)
 				return (error);
 			}
 		}
-		if (ump->um_fstype == UFS1) {
-			daddr = ufs_rw32(((u_int32_t *)bp->b_data)[xap->in_off],
-			    UFS_MPNEEDSWAP(ump));
-			if (num == 1 && daddr && runp) {
+		if (ip->i_ump->um_fstype == UFS1) {
+			daddr = (int32_t)ufs_rw32(
+			    ((int32_t *)bp->b_data)[xap->in_off],
+			    UFS_MPNEEDSWAP(mp));
+			if (num == 1 && runp) {
 				for (bn = xap->in_off + 1;
 				    bn < MNINDIR(ump) && *runp < maxrun &&
 				    is_sequential(ump,
-				        ufs_rw32(((int32_t *)bp->b_data)[bn-1],
-				            UFS_MPNEEDSWAP(ump)),
-				        ufs_rw32(((int32_t *)bp->b_data)[bn],
-				            UFS_MPNEEDSWAP(ump)));
+				        (int32_t)ufs_rw32(
+					    ((int32_t *)bp->b_data)[bn-1],
+				            UFS_MPNEEDSWAP(mp)),
+				        (int32_t)ufs_rw32(
+					    ((int32_t *)bp->b_data)[bn],
+				            UFS_MPNEEDSWAP(mp)));
 				    ++bn, ++*runp);
 			}
 		} else {
-			daddr = ufs_rw64(((u_int64_t *)bp->b_data)[xap->in_off],
-			    UFS_MPNEEDSWAP(ump));
-			if (num == 1 && daddr && runp) {
+			daddr = ufs_rw64(((int64_t *)bp->b_data)[xap->in_off],
+			    UFS_MPNEEDSWAP(mp));
+			if (num == 1 && runp) {
 				for (bn = xap->in_off + 1;
 				    bn < MNINDIR(ump) && *runp < maxrun &&
 				    is_sequential(ump,
 				        ufs_rw64(((int64_t *)bp->b_data)[bn-1],
-				            UFS_MPNEEDSWAP(ump)),
+				            UFS_MPNEEDSWAP(mp)),
 				        ufs_rw64(((int64_t *)bp->b_data)[bn],
-				            UFS_MPNEEDSWAP(ump)));
+				            UFS_MPNEEDSWAP(mp)));
 				    ++bn, ++*runp);
 			}
 		}
@@ -297,26 +285,8 @@ ufs_bmaparray(vp, bn, bnp, ap, nump, runp, is_sequential)
 	if (bp)
 		brelse(bp);
 
-	/*
-	 * Since this is FFS independent code, we are out of scope for the
-	 * definitions of BLK_NOCOPY and BLK_SNAP, but we do know that they
-	 * will fall in the range 1..um_seqinc, so we use that test and
-	 * return a request for a zeroed out buffer if attempts are made
-	 * to read a BLK_NOCOPY or BLK_SNAP block.
-	 */
-	if ((ip->i_flags & SF_SNAPSHOT) && daddr > 0 &&
-	    daddr < ump->um_seqinc) {
-		*bnp = -1;
-		return (0);
-	}
-	*bnp = blkptrtodb(ump, daddr);
-	if (*bnp == 0) {
-		if (ip->i_flags & SF_SNAPSHOT) {
-			*bnp = blkptrtodb(ump, bn * ump->um_seqinc);
-		} else {
-			*bnp = -1;
-		}
-	}
+	daddr = blkptrtodb(ump, daddr);
+	*bnp = daddr == 0 ? -1 : daddr;
 	return (0);
 }
 

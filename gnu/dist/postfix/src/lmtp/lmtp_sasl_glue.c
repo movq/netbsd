@@ -1,5 +1,3 @@
-/*	$NetBSD: lmtp_sasl_glue.c,v 1.1.1.5 2004/05/31 00:24:36 heas Exp $	*/
-
 /*++
 /* NAME
 /*	lmtp_sasl 3
@@ -13,7 +11,7 @@
 /*	void	lmtp_sasl_connect(state)
 /*	LMTP_STATE *state;
 /*
-/*	void	lmtp_sasl_start(state, sasl_opts_name, sasl_opts_val)
+/*	void	lmtp_sasl_start(state)
 /*	LMTP_STATE *state;
 /*
 /*	int     lmtp_sasl_passwd_lookup(state)
@@ -35,9 +33,7 @@
 /*
 /*	lmtp_sasl_start() performs per-session initialization. This
 /*	routine must be called once per session before doing any SASL
-/*	authentication. The sasl_opts_name and sasl_opts_val parameters are
-/*	the postfix configuration parameters setting the security
-/*	policy of the SASL authentication.
+/*	authentication.
 /*
 /*	lmtp_sasl_passwd_lookup() looks up the username/password
 /*	for the current LMTP server. The result is zero in case
@@ -125,6 +121,8 @@ static NAME_MASK lmtp_sasl_sec_mask[] = {
 #endif
     0,
 };
+
+static int lmtp_sasl_sec_opts;
 
  /*
   * Silly little macros.
@@ -321,6 +319,11 @@ void    lmtp_sasl_initialize(void)
     if (sasl_client_init(callbacks) != SASL_OK)
 	msg_fatal("SASL library initialization");
 
+    /*
+     * Configuration parameters.
+     */
+    lmtp_sasl_sec_opts = name_mask(VAR_LMTP_SASL_OPTS, lmtp_sasl_sec_mask,
+				   var_lmtp_sasl_opts);
 }
 
 /* lmtp_sasl_connect - per-session client initialization */
@@ -338,8 +341,7 @@ void    lmtp_sasl_connect(LMTP_STATE *state)
 
 /* lmtp_sasl_start - per-session SASL initialization */
 
-void    lmtp_sasl_start(LMTP_STATE *state, const char *sasl_opts_name,
-			        const char *sasl_opts_val)
+void    lmtp_sasl_start(LMTP_STATE *state)
 {
     static sasl_callback_t callbacks[] = {
 	{SASL_CB_USER, &lmtp_sasl_get_user, 0},
@@ -381,8 +383,7 @@ void    lmtp_sasl_start(LMTP_STATE *state, const char *sasl_opts_name,
     sec_props.min_ssf = 0;
     sec_props.max_ssf = 1;			/* don't allow real SASL
 						 * security layer */
-    sec_props.security_flags = name_mask(sasl_opts_name, lmtp_sasl_sec_mask,
-					 sasl_opts_val);
+    sec_props.security_flags = lmtp_sasl_sec_opts;
     sec_props.maxbufsize = 0;
     sec_props.property_names = 0;
     sec_props.property_values = 0;

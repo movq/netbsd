@@ -1,7 +1,7 @@
-/*	$NetBSD: ch.c,v 1.64 2004/09/18 00:08:16 mycroft Exp $	*/
+/*	$NetBSD: ch.c,v 1.58.2.2 2004/09/11 12:51:07 he Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997, 1998, 1999, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 1998, 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ch.c,v 1.64 2004/09/18 00:08:16 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ch.c,v 1.58.2.2 2004/09/11 12:51:07 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -106,25 +106,25 @@ struct ch_softc {
 #define CHF_ROTATE		0x01	/* picker can rotate */
 
 /* Autoconfiguration glue */
-static int	chmatch(struct device *, struct cfdata *, void *);
-static void	chattach(struct device *, struct device *, void *);
+int	chmatch __P((struct device *, struct cfdata *, void *));
+void	chattach __P((struct device *, struct device *, void *));
 
 CFATTACH_DECL(ch, sizeof(struct ch_softc),
     chmatch, chattach, NULL, NULL);
 
 extern struct cfdriver ch_cd;
 
-static struct scsipi_inquiry_pattern ch_patterns[] = {
+struct scsipi_inquiry_pattern ch_patterns[] = {
 	{T_CHANGER, T_REMOV,
 	 "",		"",		""},
 };
 
-static dev_type_open(chopen);
-static dev_type_close(chclose);
-static dev_type_read(chread);
-static dev_type_ioctl(chioctl);
-static dev_type_poll(chpoll);
-static dev_type_kqfilter(chkqfilter);
+dev_type_open(chopen);
+dev_type_close(chclose);
+dev_type_read(chread);
+dev_type_ioctl(chioctl);
+dev_type_poll(chpoll);
+dev_type_kqfilter(chkqfilter);
 
 const struct cdevsw ch_cdevsw = {
 	chopen, chclose, chread, nowrite, chioctl,
@@ -132,38 +132,36 @@ const struct cdevsw ch_cdevsw = {
 };
 
 /* SCSI glue */
-static int	ch_interpret_sense(struct scsipi_xfer *);
+int	ch_interpret_sense __P((struct scsipi_xfer *));
 
-static const struct scsipi_periphsw ch_switch = {
+const struct scsipi_periphsw ch_switch = {
 	ch_interpret_sense,	/* check our error handler first */
 	NULL,			/* no queue; our commands are synchronous */
 	NULL,			/* have no async handler */
 	NULL,			/* nothing to be done when xfer is done */
 };
 
-static int	ch_move(struct ch_softc *, struct changer_move_request *);
-static int	ch_exchange(struct ch_softc *,
-		    struct changer_exchange_request *);
-static int	ch_position(struct ch_softc *,
-		    struct changer_position_request *);
-static int	ch_ielem(struct ch_softc *);
-static int	ch_ousergetelemstatus(struct ch_softc *, int, u_int8_t *);
-static int	ch_usergetelemstatus(struct ch_softc *,
-		    struct changer_element_status_request *);
-static int	ch_getelemstatus(struct ch_softc *, int, int, void *,
-		    size_t, int, int);
-static int	ch_setvoltag(struct ch_softc *,
-		    struct changer_set_voltag_request *);
-static int	ch_get_params(struct ch_softc *, int);
-static void	ch_get_quirks(struct ch_softc *,
-		    struct scsipi_inquiry_pattern *);
-static void	ch_event(struct ch_softc *, u_int);
-static int	ch_map_element(struct ch_softc *, u_int16_t, int *, int *);
+int	ch_move __P((struct ch_softc *, struct changer_move_request *));
+int	ch_exchange __P((struct ch_softc *, struct changer_exchange_request *));
+int	ch_position __P((struct ch_softc *, struct changer_position_request *));
+int	ch_ielem __P((struct ch_softc *));
+int	ch_ousergetelemstatus __P((struct ch_softc *, int, u_int8_t *));
+int	ch_usergetelemstatus __P((struct ch_softc *,
+	    struct changer_element_status_request *));
+int	ch_getelemstatus __P((struct ch_softc *, int, int, void *,
+	    size_t, int, int));
+int	ch_setvoltag __P((struct ch_softc *,
+	    struct changer_set_voltag_request *));
+int	ch_get_params __P((struct ch_softc *, int));
+void	ch_get_quirks __P((struct ch_softc *,
+	    struct scsipi_inquiry_pattern *));
+void	ch_event __P((struct ch_softc *, u_int));
+int	ch_map_element __P((struct ch_softc *, u_int16_t, int *, int *));
 
-static void	ch_voltag_convert_in(const struct changer_volume_tag *,
-		    struct changer_voltag *);
-static int	ch_voltag_convert_out(const struct changer_voltag *,
-		    struct changer_volume_tag *);
+void	ch_voltag_convert_in __P((const struct changer_volume_tag *,
+	    struct changer_voltag *));
+int	ch_voltag_convert_out __P((const struct changer_voltag *,
+	    struct changer_volume_tag *));
 
 /*
  * SCSI changer quirks.
@@ -173,14 +171,17 @@ struct chquirk {
 	int	cq_settledelay;	/* settle delay, in seconds */
 };
 
-static const struct chquirk chquirks[] = {
+const struct chquirk chquirks[] = {
 	{{T_CHANGER, T_REMOV,
 	  "SPECTRA",	"9000",		"0200"},
 	 75},
 };
 
-static int
-chmatch(struct device *parent, struct cfdata *match, void *aux)
+int
+chmatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct scsipibus_attach_args *sa = aux;
 	int priority;
@@ -192,8 +193,10 @@ chmatch(struct device *parent, struct cfdata *match, void *aux)
 	return (priority);
 }
 
-static void
-chattach(struct device *parent, struct device *self, void *aux)
+void
+chattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct ch_softc *sc = (struct ch_softc *)self;
 	struct scsipibus_attach_args *sa = aux;
@@ -252,8 +255,11 @@ chattach(struct device *parent, struct device *self, void *aux)
 	sc->sc_picker = sc->sc_firsts[CHET_MT];
 }
 
-static int
-chopen(dev_t dev, int flags, int fmt, struct proc *p)
+int
+chopen(dev, flags, fmt, p)
+	dev_t dev;
+	int flags, fmt;
+	struct proc *p;
 {
 	struct ch_softc *sc;
 	struct scsipi_periph *periph;
@@ -305,8 +311,11 @@ chopen(dev_t dev, int flags, int fmt, struct proc *p)
 	return (error);
 }
 
-static int
-chclose(dev_t dev, int flags, int fmt, struct proc *p)
+int
+chclose(dev, flags, fmt, p)
+	dev_t dev;
+	int flags, fmt;
+	struct proc *p;
 {
 	struct ch_softc *sc = ch_cd.cd_devs[CHUNIT(dev)];
 	struct scsipi_periph *periph = sc->sc_periph;
@@ -322,8 +331,11 @@ chclose(dev_t dev, int flags, int fmt, struct proc *p)
 	return (0);
 }
 
-static int
-chread(dev_t dev, struct uio *uio, int flags)
+int
+chread(dev, uio, flags)
+	dev_t dev;
+	struct uio *uio;
+	int flags;
 {
 	struct ch_softc *sc = ch_cd.cd_devs[CHUNIT(dev)];
 	int error;
@@ -341,8 +353,13 @@ chread(dev_t dev, struct uio *uio, int flags)
 	return (error);
 }
 
-static int
-chioctl(dev_t dev, u_long cmd, caddr_t data, int flags, struct proc *p)
+int
+chioctl(dev, cmd, data, flags, p)
+	dev_t dev;
+	u_long cmd;
+	caddr_t data;
+	int flags;
+	struct proc *p;
 {
 	struct ch_softc *sc = ch_cd.cd_devs[CHUNIT(dev)];
 	int error = 0;
@@ -441,8 +458,11 @@ chioctl(dev_t dev, u_long cmd, caddr_t data, int flags, struct proc *p)
 	return (error);
 }
 
-static int
-chpoll(dev_t dev, int events, struct proc *p)
+int
+chpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
 {
 	struct ch_softc *sc = ch_cd.cd_devs[CHUNIT(dev)];
 	int revents;
@@ -485,7 +505,7 @@ static const struct filterops chread_filtops =
 static const struct filterops chwrite_filtops =
 	{ 1, NULL, filt_chdetach, filt_seltrue };
 
-static int
+int
 chkqfilter(dev_t dev, struct knote *kn)
 {
 	struct ch_softc *sc = ch_cd.cd_devs[CHUNIT(dev)];
@@ -513,8 +533,9 @@ chkqfilter(dev_t dev, struct knote *kn)
 	return (0);
 }
 
-static int
-ch_interpret_sense(struct scsipi_xfer *xs)
+int
+ch_interpret_sense(xs)
+	struct scsipi_xfer *xs;
 {
 	struct scsipi_periph *periph = xs->xs_periph;
 	struct scsipi_sense_data *sense = &xs->sense.scsi_sense;
@@ -566,16 +587,20 @@ ch_interpret_sense(struct scsipi_xfer *xs)
 	return (EJUSTRETURN);
 }
 
-static void
-ch_event(struct ch_softc *sc, u_int event)
+void
+ch_event(sc, event)
+	struct ch_softc *sc;
+	u_int event;
 {
 
 	sc->sc_events |= event;
 	selnotify(&sc->sc_selq, 0);
 }
 
-static int
-ch_move(struct ch_softc *sc, struct changer_move_request *cm)
+int
+ch_move(sc, cm)
+	struct ch_softc *sc;
+	struct changer_move_request *cm;
 {
 	struct scsi_move_medium cmd;
 	u_int16_t fromelem, toelem;
@@ -615,12 +640,15 @@ ch_move(struct ch_softc *sc, struct changer_move_request *cm)
 	/*
 	 * Send command to changer.
 	 */
-	return (scsipi_command(sc->sc_periph, (void *)&cmd, sizeof(cmd), 0, 0,
-	    CHRETRIES, 100000, NULL, 0));
+	return (scsipi_command(sc->sc_periph, NULL,
+	    (struct scsipi_generic *)&cmd, sizeof(cmd), NULL, 0, CHRETRIES,
+	    100000, NULL, 0));
 }
 
-static int
-ch_exchange(struct ch_softc *sc, struct changer_exchange_request *ce)
+int
+ch_exchange(sc, ce)
+	struct ch_softc *sc;
+	struct changer_exchange_request *ce;
 {
 	struct scsi_exchange_medium cmd;
 	u_int16_t src, dst1, dst2;
@@ -669,12 +697,15 @@ ch_exchange(struct ch_softc *sc, struct changer_exchange_request *ce)
 	/*
 	 * Send command to changer.
 	 */
-	return (scsipi_command(sc->sc_periph, (void *)&cmd, sizeof(cmd), 0, 0,
-	    CHRETRIES, 100000, NULL, 0));
+	return (scsipi_command(sc->sc_periph, NULL,
+	    (struct scsipi_generic *)&cmd, sizeof(cmd), NULL, 0, CHRETRIES,
+	    100000, NULL, 0));
 }
 
-static int
-ch_position(struct ch_softc *sc, struct changer_position_request *cp)
+int
+ch_position(sc, cp)
+	struct ch_softc *sc;
+	struct changer_position_request *cp;
 {
 	struct scsi_position_to_element cmd;
 	u_int16_t dst;
@@ -705,8 +736,9 @@ ch_position(struct ch_softc *sc, struct changer_position_request *cp)
 	/*
 	 * Send command to changer.
 	 */
-	return (scsipi_command(sc->sc_periph, (void *)&cmd, sizeof(cmd), 0, 0,
-	    CHRETRIES, 100000, NULL, 0));
+	return (scsipi_command(sc->sc_periph, NULL,
+	    (struct scsipi_generic *)&cmd, sizeof(cmd), NULL, 0, CHRETRIES,
+	    100000, NULL, 0));
 }
 
 /*
@@ -714,8 +746,11 @@ ch_position(struct ch_softc *sc, struct changer_position_request *cp)
  * the user only the data the user is interested in.  This returns the
  * old data format.
  */
-static int
-ch_ousergetelemstatus(struct ch_softc *sc, int chet, u_int8_t *uptr)
+int
+ch_ousergetelemstatus(sc, chet, uptr)
+	struct ch_softc *sc;
+	int chet;
+	u_int8_t *uptr;
 {
 	struct read_element_status_header *st_hdrp, st_hdr;
 	struct read_element_status_page_header *pg_hdrp;
@@ -800,9 +835,10 @@ ch_ousergetelemstatus(struct ch_softc *sc, int chet, u_int8_t *uptr)
  * Perform a READ ELEMENT STATUS on behalf of the user.  This returns
  * the new (more complete) data format.
  */
-static int
-ch_usergetelemstatus(struct ch_softc *sc,
-    struct changer_element_status_request *cesr)
+int
+ch_usergetelemstatus(sc, cesr)
+	struct ch_softc *sc;
+	struct changer_element_status_request *cesr;
 {
 	struct scsipi_channel *chan = sc->sc_periph->periph_channel;
 	struct scsipi_periph *dtperiph;
@@ -937,9 +973,8 @@ ch_usergetelemstatus(struct ch_softc *sc,
 			    (dtperiph = scsipi_lookup_periph(chan,
 			     ces.ces_target, ces.ces_lun)) != NULL &&
 			    dtperiph->periph_dev != NULL) {
-				strlcpy(ces.ces_xname,
-				    dtperiph->periph_dev->dv_xname,
-				    sizeof(ces.ces_xname));
+				strcpy(ces.ces_xname,
+				    dtperiph->periph_dev->dv_xname);
 				ces.ces_flags |= CESTATUS_XNAME_VALID;
 			}
 		}
@@ -1023,9 +1058,14 @@ ch_usergetelemstatus(struct ch_softc *sc,
 	return (error);
 }
 
-static int
-ch_getelemstatus(struct ch_softc *sc, int first, int count, void *data,
-    size_t datalen, int scsiflags, int flags)
+int
+ch_getelemstatus(sc, first, count, data, datalen, scsiflags, flags)
+	struct ch_softc *sc;
+	int first, count;
+	void *data;
+	size_t datalen;
+	int scsiflags;
+	int flags;
 {
 	struct scsi_read_element_status cmd;
 
@@ -1044,13 +1084,16 @@ ch_getelemstatus(struct ch_softc *sc, int first, int count, void *data,
 	/*
 	 * Send command to changer.
 	 */
-	return (scsipi_command(sc->sc_periph, (void *)&cmd, sizeof(cmd),
-	    (void *)data, datalen,
-	    CHRETRIES, 100000, NULL, scsiflags | XS_CTL_DATA_IN));
+	return (scsipi_command(sc->sc_periph, NULL,
+	    (struct scsipi_generic *)&cmd, sizeof(cmd),
+	    (u_char *)data, datalen, CHRETRIES, 100000, NULL,
+	    scsiflags | XS_CTL_DATA_IN));
 }
 
-static int
-ch_setvoltag(struct ch_softc *sc, struct changer_set_voltag_request *csvr)
+int
+ch_setvoltag(sc, csvr)
+	struct ch_softc *sc;
+	struct changer_set_voltag_request *csvr;
 {
 	struct scsi_send_volume_tag cmd;
 	struct changer_volume_tag voltag;
@@ -1109,13 +1152,15 @@ ch_setvoltag(struct ch_softc *sc, struct changer_set_voltag_request *csvr)
 	/*
 	 * Send command to changer.
 	 */
-	return (scsipi_command(sc->sc_periph, (void *)&cmd, sizeof(cmd),
-	    (void *)data, datalen, CHRETRIES, 100000, NULL,
+	return (scsipi_command(sc->sc_periph, NULL,
+	    (struct scsipi_generic *)&cmd, sizeof(cmd),
+	    (u_char *)data, datalen, CHRETRIES, 100000, NULL,
 	    datalen ? XS_CTL_DATA_OUT | XS_CTL_DATA_ONSTACK : 0));
 }
 
-static int
-ch_ielem(struct ch_softc *sc)
+int
+ch_ielem(sc)
+	struct ch_softc *sc;
 {
 	int tmo;
 	struct scsi_initialize_element_status cmd;
@@ -1145,16 +1190,19 @@ ch_ielem(struct ch_softc *sc)
 	tmo *= 5 * 60 * 1000;
 	tmo += (10 * 60 * 1000);
 
-	return (scsipi_command(sc->sc_periph, (void *)&cmd, sizeof(cmd), 0, 0,
-	    CHRETRIES, tmo, NULL, XS_CTL_IGNORE_ILLEGAL_REQUEST));
+	return (scsipi_command(sc->sc_periph, NULL,
+	    (struct scsipi_generic *)&cmd, sizeof(cmd),
+	    NULL, 0, CHRETRIES, tmo, NULL, XS_CTL_IGNORE_ILLEGAL_REQUEST));
 }
 
 /*
  * Ask the device about itself and fill in the parameters in our
  * softc.
  */
-static int
-ch_get_params(struct ch_softc *sc, int scsiflags)
+int
+ch_get_params(sc, scsiflags)
+	struct ch_softc *sc;
+	int scsiflags;
 {
 	struct scsi_mode_sense_data {
 		struct scsipi_mode_header header;
@@ -1233,8 +1281,10 @@ ch_get_params(struct ch_softc *sc, int scsiflags)
 	return (error);
 }
 
-static void
-ch_get_quirks(struct ch_softc *sc, struct scsipi_inquiry_pattern *inqbuf)
+void
+ch_get_quirks(sc, inqbuf)
+	struct ch_softc *sc;
+	struct scsipi_inquiry_pattern *inqbuf;
 {
 	struct chquirk *match;
 	int priority;
@@ -1249,8 +1299,11 @@ ch_get_quirks(struct ch_softc *sc, struct scsipi_inquiry_pattern *inqbuf)
 		sc->sc_settledelay = match->cq_settledelay;
 }
 
-static int
-ch_map_element(struct ch_softc *sc, u_int16_t elem, int *typep, int *unitp)
+int
+ch_map_element(sc, elem, typep, unitp)
+	struct ch_softc *sc;
+	u_int16_t elem;
+	int *typep, *unitp;
 {
 	int chet;
 
@@ -1265,9 +1318,10 @@ ch_map_element(struct ch_softc *sc, u_int16_t elem, int *typep, int *unitp)
 	return (0);
 }
 
-static void
-ch_voltag_convert_in(const struct changer_volume_tag *sv,
-    struct changer_voltag *cv)
+void
+ch_voltag_convert_in(sv, cv)
+	const struct changer_volume_tag *sv;
+	struct changer_voltag *cv;
 {
 	int i;
 
@@ -1287,9 +1341,10 @@ ch_voltag_convert_in(const struct changer_volume_tag *sv,
 	cv->cv_serial = _2btol(sv->volseq);
 }
 
-static int
-ch_voltag_convert_out(const struct changer_voltag *cv,
-    struct changer_volume_tag *sv)
+int
+ch_voltag_convert_out(cv, sv)
+	const struct changer_voltag *cv;
+	struct changer_volume_tag *sv;
 {
 	int i;
 

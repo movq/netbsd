@@ -1,5 +1,5 @@
 #!/bin/sh -e
-#	$NetBSD: mksparkive.sh,v 1.7 2004/11/10 03:55:28 jmc Exp $
+#	$NetBSD: mksparkive.sh,v 1.2.2.7 2004/08/30 08:19:00 tron Exp $
 #
 # Copyright (c) 2004 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -55,12 +55,6 @@ if [ -z "${TOOL_STAT}" ]
 then
 	TOOL_STAT=stat
 fi
-
-if [ -z "${TOOL_MKTEMP}" ]
-then
-        TOOL_MKTEMP=mktemp
-fi
-
 
 # Target byte order is little endian.
 
@@ -148,7 +142,7 @@ makearchive()
 {
 	for file in "$@"
 	do
-		temp=`${TOOL_MKTEMP} -t $progname` || exit 1
+		temp=`mktemp -t $progname` || exit 1
 		trap "rm -f $temp" 0
 		# Archive marker
 		printf \\x1a

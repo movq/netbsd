@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.26 2004/05/08 21:51:49 kleink Exp $
+#	$NetBSD: Makefile,v 1.25 2003/05/15 18:51:18 wiz Exp $
 
 INCSDIR= /usr/include/i386
 
@@ -23,7 +23,6 @@ INCS=	ansi.h aout_machdep.h apmvar.h asm.h atomic.h \
 	segments.h setjmp.h signal.h specialreg.h spkr.h stdarg.h \
 	svr4_machdep.h sysarch.h \
 	trap.h tss.h types.h \
-	varargs.h vm86.h vmparam.h \
-	wchar_limits.h
+	varargs.h vm86.h vmparam.h
 
 .include <bsd.kinc.mk>

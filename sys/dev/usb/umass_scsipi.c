@@ -1,4 +1,4 @@
-/*	$NetBSD: umass_scsipi.c,v 1.21 2004/10/28 07:07:46 yamt Exp $	*/
+/*	$NetBSD: umass_scsipi.c,v 1.19 2003/10/17 00:20:28 mycroft Exp $	*/
 
 /*
  * Copyright (c) 2001, 2003 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umass_scsipi.c,v 1.21 2004/10/28 07:07:46 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umass_scsipi.c,v 1.19 2003/10/17 00:20:28 mycroft Exp $");
 
 #include "atapibus.h"
 #include "scsibus.h"
@@ -48,7 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: umass_scsipi.c,v 1.21 2004/10/28 07:07:46 yamt Exp $
 #include <sys/kernel.h>
 #include <sys/conf.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
 #include <sys/malloc.h>
@@ -356,7 +355,7 @@ umass_scsipi_minphys(struct buf *bp)
 {
 #ifdef DIAGNOSTIC
 	if (bp->b_bcount <= 0) {
-		printf("umass_scsipi_minphys count(%d) <= 0\n",
+		printf("umass_scsipi_minphys count(%ld) <= 0\n",
 		       bp->b_bcount);
 		bp->b_bcount = UMASS_MAX_TRANSFER_SIZE;
 	}

@@ -34,7 +34,7 @@
 #include <krb5_locl.h>
 
 __RCSID("$Heimdal: get_for_creds.c,v 1.34.4.1 2004/01/09 00:51:55 lha Exp $"
-        "$NetBSD: get_for_creds.c,v 1.1.1.7 2004/04/02 14:47:50 lha Exp $");
+        "$NetBSD: get_for_creds.c,v 1.1.1.6.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 static krb5_error_code
 add_addrs(krb5_context context,

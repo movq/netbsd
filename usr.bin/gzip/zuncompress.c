@@ -1,4 +1,4 @@
-/*	$NetBSD: zuncompress.c,v 1.5 2004/08/30 14:36:51 dsl Exp $ */
+/*	$NetBSD: zuncompress.c,v 1.2.2.2 2004/05/30 14:48:27 tron Exp $ */
 
 /*-
  * Copyright (c) 1985, 1986, 1992, 1993
@@ -132,11 +132,7 @@ zuncompress(FILE *in, FILE *out, char *pre, size_t prelen,
 	    off_t *compressed_bytes)
 {
 	off_t bin, bout = 0;
-	char *buf;
-
-	buf = malloc(BUFSIZE);
-	if (buf == NULL)
-		return -1;
+	char buf[BUFSIZE];
 
 	/* XXX */
 	compressed_prelen = prelen;
@@ -146,30 +142,19 @@ zuncompress(FILE *in, FILE *out, char *pre, size_t prelen,
 		compressed_pre = NULL;
 
 	while ((bin = fread(buf, 1, sizeof(buf), in)) != 0) {
-		if (fwrite(buf, 1, bin, out) != bin) {
-			free(buf);
+		if (fwrite(buf, 1, bin, out) != bin)
 			return -1;
-		}
 		bout += bin;
 	}
 
 	if (compressed_bytes)
 		*compressed_bytes = total_compressed_bytes;
 
-	free(buf);
 	return bout;
 }
 
-static int
-zclose(void *zs)
-{
-	free(zs);
-	/* We leave the caller to close the fd passed to zdopen() */
-	return 0;
-}
-
 FILE *
-zdopen(int fd)
+zopen(const char *fname, FILE *preopen)
 {
 	struct s_zstate *zs;
 
@@ -194,12 +179,13 @@ zdopen(int fd)
 	 * Layering compress on top of stdio in order to provide buffering,
 	 * and ensure that reads and write work with the data specified.
 	 */
-	if ((zs->zs_fp = fdopen(fd, "r")) == NULL) {
+	if ((zs->zs_fp = preopen) == NULL &&
+	    (zs->zs_fp = fopen(fname, "r")) == NULL) {
 		free(zs);
 		return NULL;
 	}
 
-	return funopen(zs, zread, NULL, NULL, zclose);
+	return fropen(zs, zread);
 }
 
 /*

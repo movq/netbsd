@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs.h,v 1.56 2004/09/20 17:53:08 jdolecek Exp $	*/
+/*	$NetBSD: procfs.h,v 1.52.2.1 2004/05/23 10:44:45 tron Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -99,7 +99,6 @@ typedef enum {
 	PFSmaps,	/* memory map, Linux style (if -o linux) */
 	PFSfd,		/* a directory containing the processes open fd's */
 	PFSuptime,	/* elapsed time since (if -o linux) */
-	PFSmounts,	/* mounted filesystems (if -o linux) */
 #ifdef __HAVE_PROCFS_MACHDEP
 	PROCFS_MACHDEP_NODE_TYPES
 #endif
@@ -201,8 +200,6 @@ int procfs_docpuinfo __P((struct proc *, struct proc *, struct pfsnode *,
 int procfs_dofd __P((struct proc *, struct proc *, struct pfsnode *,
     struct uio *));
 int procfs_douptime __P((struct proc *, struct proc *, struct pfsnode *,
-    struct uio *));
-int procfs_domounts __P((struct proc *, struct proc *, struct pfsnode *,
     struct uio *));
 
 void procfs_revoke_vnodes __P((struct proc *, void *));

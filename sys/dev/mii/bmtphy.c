@@ -1,4 +1,4 @@
-/*	$NetBSD: bmtphy.c,v 1.16 2004/11/24 10:15:54 martin Exp $	*/
+/*	$NetBSD: bmtphy.c,v 1.14 2003/06/06 23:22:56 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bmtphy.c,v 1.16 2004/11/24 10:15:54 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bmtphy.c,v 1.14 2003/06/06 23:22:56 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,20 +91,20 @@ __KERNEL_RCSID(0, "$NetBSD: bmtphy.c,v 1.16 2004/11/24 10:15:54 martin Exp $");
 
 #include <dev/mii/bmtphyreg.h>
 
-static int	bmtphymatch(struct device *, struct cfdata *, void *);
-static void	bmtphyattach(struct device *, struct device *, void *);
+int	bmtphymatch(struct device *, struct cfdata *, void *);
+void	bmtphyattach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(bmtphy, sizeof(struct mii_softc),
     bmtphymatch, bmtphyattach, mii_phy_detach, mii_phy_activate);
 
-static int	bmtphy_service(struct mii_softc *, struct mii_data *, int);
-static void	bmtphy_status(struct mii_softc *);
+int	bmtphy_service(struct mii_softc *, struct mii_data *, int);
+void	bmtphy_status(struct mii_softc *);
 
-static const struct mii_phy_funcs bmtphy_funcs = {
+const struct mii_phy_funcs bmtphy_funcs = {
 	bmtphy_service, bmtphy_status, mii_phy_reset,
 };
 
-static const struct mii_phydesc bmtphys[] = {
+const struct mii_phydesc bmtphys[] = {
 	{ MII_OUI_xxBROADCOM,		MII_MODEL_xxBROADCOM_3C905B,
 	  MII_STR_xxBROADCOM_3C905B },
 	{ MII_OUI_xxBROADCOM,		MII_MODEL_xxBROADCOM_3C905C,
@@ -115,14 +115,12 @@ static const struct mii_phydesc bmtphys[] = {
 	  MII_STR_xxBROADCOM_BCM5214 },
 	{ MII_OUI_xxBROADCOM,		MII_MODEL_xxBROADCOM_BCM5221,
 	  MII_STR_xxBROADCOM_BCM5221 },
-	{ MII_OUI_xxBROADCOM,		MII_MODEL_xxBROADCOM_BCM4401,
-	  MII_STR_xxBROADCOM_BCM4401 },
 
 	{ 0,				0,
 	  NULL },
 };
 
-static int
+int
 bmtphymatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct mii_attach_args *ma = aux;
@@ -133,7 +131,7 @@ bmtphymatch(struct device *parent, struct cfdata *match, void *aux)
 	return (0);
 }
 
-static void
+void
 bmtphyattach(struct device *parent, struct device *self, void *aux)
 {
 	struct mii_softc *sc = (struct mii_softc *)self;
@@ -168,7 +166,7 @@ bmtphyattach(struct device *parent, struct device *self, void *aux)
 	aprint_normal("\n");
 }
 
-static int
+int
 bmtphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 {
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
@@ -227,7 +225,7 @@ bmtphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 	return (0);
 }
 
-static void
+void
 bmtphy_status(struct mii_softc *sc)
 {
 	struct mii_data *mii = sc->mii_pdata;

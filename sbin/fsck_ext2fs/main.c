@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.18 2004/05/13 00:18:46 wiz Exp $	*/
+/*	$NetBSD: main.c,v 1.16 2004/03/22 19:46:53 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -68,7 +68,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1986, 1993\n\
 #if 0
 static char sccsid[] = "@(#)main.c	8.2 (Berkeley) 1/23/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.18 2004/05/13 00:18:46 wiz Exp $");
+__RCSID("$NetBSD: main.c,v 1.16 2004/03/22 19:46:53 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -108,7 +108,7 @@ main(argc, argv)
 
 	sync();
 	skipclean = 1;
-	while ((ch = getopt(argc, argv, "b:dfm:npqy")) != -1) {
+	while ((ch = getopt(argc, argv, "b:c:dfm:npqy")) != -1) {
 		switch (ch) {
 		case 'b':
 			skipclean = 0;
@@ -320,13 +320,13 @@ checkfilesys(filesys, mntpt, auxdata, child)
 	if (rerun)
 		printf("\n***** PLEASE RERUN FSCK *****\n");
 	if (hotroot()) {
-		struct statvfs stfs_buf;
+		struct statfs stfs_buf;
 		/*
 		 * We modified the root.  Do a mount update on
 		 * it, unless it is read-write, so we can continue.
 		 */
-		if (statvfs("/", &stfs_buf) == 0) {
-			long flags = stfs_buf.f_flag;
+		if (statfs("/", &stfs_buf) == 0) {
+			long flags = stfs_buf.f_flags;
 			struct ufs_args args;
 			int ret;
 

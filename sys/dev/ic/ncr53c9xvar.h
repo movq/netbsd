@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr53c9xvar.h,v 1.45 2004/12/07 22:23:45 thorpej Exp $	*/
+/*	$NetBSD: ncr53c9xvar.h,v 1.43 2003/11/02 11:07:45 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -121,7 +121,7 @@ struct ncr53c9x_ecb {
 
 	struct {
 		u_char	msg[3];			/* Selection Id msg and tags */
-		struct scsipi_generic cmd;	/* SCSI command block */
+		struct scsi_generic cmd;	/* SCSI command block */
 	} cmd;
 	char	*daddr;		/* Saved data pointer */
 	int	 clen;		/* Size of command in cmd.cmd */
@@ -277,7 +277,7 @@ struct ncr53c9x_softc {
 	struct device *sc_child;		/* attached scsibus, if any */
 	struct callout sc_watchdog;		/* periodic timer */
 
-	const struct ncr53c9x_glue *sc_glue;	/* glue to MD code */
+	struct ncr53c9x_glue *sc_glue;		/* glue to MD code */
 
 	int	sc_cfflags;			/* Copy of config flags */
 

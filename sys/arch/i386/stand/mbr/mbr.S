@@ -1,4 +1,4 @@
-/*	$NetBSD: mbr.S,v 1.12 2004/09/12 08:41:47 dsl Exp $	*/
+/*	$NetBSD: mbr.S,v 1.5.2.3 2004/07/04 13:16:41 he Exp $	*/
 
 /*
  * Copyright (c) 1999-2004 The NetBSD Foundation, Inc. 
@@ -47,16 +47,11 @@
  * TERSE_ERROR	- terse error messages
  * NO_CHS	- all reads are LBA
  * NO_LBA_CHECK	- no check if bios supports LBA reads
- * NO_BANNER    - do not output 'banner'
  */
 
 #ifdef BOOT_EXTENDED
 #define NO_CHS	1
 #define BOOTSEL	1
-#endif
-
-#ifdef BOOTSEL
-#define TERSE_ERROR 1
 #endif
 
 #include <machine/asm.h>
@@ -112,10 +107,10 @@ ENTRY(start)
 	movw	$start, %di
 	movw	$(bss_start - start)/2, %cx
 	rep
-	movsw				/* relocate code */
+	movsw
 	mov	$(bss_end - bss_start + 1)/2, %cx
 	rep
-	stosw				/* zero bss */
+	stosw
 	ljmp	$0, $mbr		/* leap into copy of code */
 
 /*
@@ -129,11 +124,6 @@ mbr:
 1:
 	push	%dx			/* save drive number */
 	push	%dx			/* twice - for err_msg loop */
-
-#ifndef NO_BANNER
-	mov	$banner, %si
-	call	message_crlf
-#endif
 
 /*
  * Walk through the selector (name) table printing used entries.
@@ -192,7 +182,9 @@ next_ptn:
 #endif
 #undef CONST
 	mov	%bx, %si
-	call	message_crlf			/* prompt */
+	call	message			/* prompt */
+	movw	$crlf, %si
+	call	message
 #endif
 4:
 	add	$0x10, %bp
@@ -223,13 +215,20 @@ next_ptn:
 #endif
 
 /*
- * The non-bootsel code traverses this code path, it needs the
- * correct keycode to select the active partition.
+ * If we haven't output any menu entries, then the system sits waiting
+ * for a keypress with the user looking at a blank screen wondering
+ * why nothing is happening.
+ * To stop this we generate <ENTER> - to boot the active partition
+ * if we haven't output any menu texts.
+ * The non-bootsel code also traverses this code path.
  */
 
 #ifndef BOOTSEL
-	mov	$(SCAN_ENTER - SCAN_F1) & 0xff, %ax
+	movb	$SCAN_ENTER - SCAN_F1, %al
 #else
+	movb	$SCAN_ENTER, %al	/* default to active partition */
+	cmpb	$'0', prefix		/* did we output a menu ? */
+	je	check_key		/* Nope - process SCAN_ENTER */
 /*
  * Get the initial time value for the timeout comparison. It is returned
  * by int 1a in cx:dx. We do sums modulo 2^16 so it doesn't matter if
@@ -250,15 +249,16 @@ wait_key:
 	xorb	%ah, %ah
 	int	$0x1a			/* current time to cx:dx */
 	sub	%di, %dx
-	cmpw	timeout, %dx		/* always wait for 1 tick... */
+	movw	timeout, %ax
+	cmp	%ax, %dx		/* always wait for 1 tick... */
 	jbe	3b			/* 0xffff means never timeout */
 def_key:
-	mov	defkey - 1, %ax		/* timedout - get default key to %ah */
-	jmp	4f
+	movb	defkey, %al		/* timedout - pick default key */
+	jmp	check_key
 get_key:
 	xorb	%ah, %ah
 	int	$0x16			/* 'read key', code ah, ascii al */
-4:	shr	$8, %ax			/* code in %al, %ah zero */
+	shr	$8, %ax			/* code in %al, %ah zero */
 
 /*
  * We have a keycode, see what it means.
@@ -325,10 +325,13 @@ err_msg:
 	movw	$errtxt, %si
 	call	message
 #else
+	push	%ax
 	movw	$errtxt, %si
 	call	message
-	mov	%ax, %si
-	call	message_crlf
+	pop	%si
+	call	message
+	movw	$crlf, %si
+	call	message
 #endif
 	pop	%dx			/* drive we errored on */
 	xor	%ax,%ax			/* only need %ah = 0 */
@@ -410,12 +413,13 @@ boot_si:
 	pop	%dx
 	push	%dx
 	int	$0x13
-	set_err(ERR_NO_LBA)
-	jc	err_msg			/* no int13 extensions */
+	jc	1f			/* no int13 extensions */
 	cmpw	$0xaa55, %bx
-	jnz	err_msg
+	jnz	1f
 	testb	$1, %cl
-	jz	err_msg
+	jnz	boot_lba
+1:	set_err(ERR_NO_LBA)
+	jmp	err_msg
 #endif	/* NO_LBA_CHECK */
 #endif	/* NO_CHS */
 
@@ -492,14 +496,6 @@ errtxt: .ascii	"Error "		/* runs into crlf if errcod set */
 errcod: .byte	0
 crlf:	.asciz	"\r\n"
 
-#ifndef NO_BANNER
-#ifdef BOOTSEL
-banner:	.asciz	"Fn: diskn"
-#else
-banner:	.asciz	"NetBSD MBR boot"
-#endif
-#endif
-
 #ifdef BOOTSEL
 prefix:	.asciz	"0: "
 #endif
@@ -522,9 +518,6 @@ ERR_KEY:	.asciz	"bad key"
  * Clearly this could be done with a linker script.
  */
 
-message_crlf:
-	call	message
-	movw	$crlf, %si
 #include <message.S>
 #if 0
 #include <dump_eax.S>

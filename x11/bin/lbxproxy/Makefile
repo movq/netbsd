@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2004/05/16 10:25:14 lukem Exp $
+#	$NetBSD: Makefile,v 1.4 2003/11/17 05:18:20 lukem Exp $
 
 .include <bsd.own.mk>
 
@@ -16,10 +16,8 @@ CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/X11 \
 		-I${X11SRCDIR.xc}/programs/${PROG}/include \
 		${X11FLAGS.SERVER}
 
-LBXPROXYDIR=	${X11ETCDIR}/lbxproxy
-
 CPPFLAGS.dispatch.c=	${X11FLAGS.EXTENSION}
-CPPFLAGS.utils.c=	-DDEF_ATOMS_FILE=\"${LBXPROXYDIR}/AtomControl\" \
+CPPFLAGS.utils.c=	-DDEF_ATOMS_FILE=\"${X11LIBDIR}/lbxproxy/AtomControl\" \
 			-DRGB_DB=\"${X11LIBDIR}/rgb\"
 
 
@@ -34,12 +32,12 @@ CPPFLAGS.${_S}=	${X11FLAGS.CONNECTION} \
 
 CPPFLAGS.connection.c+=	-DLBXPROXY_t -DTRANS_SERVER -DBSD44SOCKETS
 CPPFLAGS.io.c+=		-DLBXPROXY_t -DTRANS_SERVER ${X11FLAGS.EXTENSION}
-CPPFLAGS.transport.c+=	-DLBXPROXY_t -DTRANS_SERVER -DBSD44SOCKETS \
-			-I${X11SRCDIR.xc}/lib/xtrans  
+CPPFLAGS.transport.c+=	-DLBXPROXY_t -DTRANS_SERVER -DBSD44SOCKETS
+
 
 .PATH:		${X11SRCDIR.xc}/programs/${PROG}/config
-CONFIGFILES=	AtomControl
-FILESDIR=	${LBXPROXYDIR}
+FILES=		AtomControl
+FILESDIR=	${X11LIBDIR}/lbxproxy
 
 LDADD+=	-llbxutil -lICE -lXext -lX11 -lz
 DPADD+=	${LIBLBXUTIL} ${LIBICE} ${LIBXEXT} ${LIBX11} ${LIBZ}

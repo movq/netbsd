@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_bsd.c,v 1.32 2004/11/10 20:26:43 christos Exp $	*/
+/*	$NetBSD: sys_bsd.c,v 1.31 2004/03/20 23:26:05 heas Exp $	*/
 
 /*
  * Copyright (c) 1988, 1990, 1993
@@ -34,7 +34,7 @@
 #if 0
 from: static char sccsid[] = "@(#)sys_bsd.c	8.4 (Berkeley) 5/30/95";
 #else
-__RCSID("$NetBSD: sys_bsd.c,v 1.32 2004/11/10 20:26:43 christos Exp $");
+__RCSID("$NetBSD: sys_bsd.c,v 1.31 2004/03/20 23:26:05 heas Exp $");
 #endif
 #endif /* not lint */
 
@@ -68,6 +68,7 @@ SIG_FUNC_RET ayt(int);
 SIG_FUNC_RET intr(int);
 SIG_FUNC_RET intr2(int);
 SIG_FUNC_RET sendwin(int);
+SIG_FUNC_RET deadpeer(int);
 
 
 int

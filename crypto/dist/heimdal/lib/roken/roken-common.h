@@ -32,7 +32,7 @@
  */
 
 /* $Heimdal: roken-common.h,v 1.51.6.1 2004/01/15 18:15:05 lha Exp $
-   $NetBSD: roken-common.h,v 1.6 2004/04/02 14:59:48 lha Exp $ */
+   $NetBSD: roken-common.h,v 1.5.2.1 2004/04/21 04:55:42 jmc Exp $ */
 
 #ifndef __ROKEN_COMMON_H__
 #define __ROKEN_COMMON_H__

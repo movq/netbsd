@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_disks.c,v 1.56 2004/10/10 11:15:22 tron Exp $	*/
+/*	$NetBSD: rf_disks.c,v 1.51.2.2 2004/08/30 08:42:48 tron Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -67,7 +67,7 @@
  ***************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.56 2004/10/10 11:15:22 tron Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.51.2.2 2004/08/30 08:42:48 tron Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -284,10 +284,7 @@ rf_ConfigureSpareDisks(RF_ShutdownList_t **listp, RF_Raid_t *raidPtr,
 			goto fail;
 		} else
 			if (disks[i].numBlocks > raidPtr->sectorsPerDisk) {
-				RF_ERRORMSG3("Warning: truncating spare disk %s to %ld blocks (from %ld)\n",
-				    disks[i].devname,
-				    (long int) raidPtr->sectorsPerDisk,
-				    (long int) disks[i].numBlocks);
+				RF_ERRORMSG2("Warning: truncating spare disk %s to %ld blocks\n", disks[i].devname, (long int) raidPtr->sectorsPerDisk);
 
 				disks[i].numBlocks = raidPtr->sectorsPerDisk;
 			}
@@ -468,9 +465,9 @@ rf_AutoConfigureDisks(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr,
 			raidPtr->raid_cinfo[c].ci_dev = ac->dev;
 			
 			memcpy(&raidPtr->raid_cinfo[c].ci_label,
-			    ac->clabel, sizeof(*ac->clabel));
-			snprintf(diskPtr->devname, sizeof(diskPtr->devname),
-			    "/dev/%s", ac->devname);
+			       ac->clabel, sizeof(*ac->clabel));
+			sprintf(diskPtr->devname, "/dev/%s", 
+				ac->devname);
 				
 			/* note the fact that this component was
 			   autoconfigured.  You'll need this info
@@ -520,8 +517,7 @@ rf_AutoConfigureDisks(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr,
 			/* Didn't find it at all!!  Component must
 			   really be dead */
 			disks[c].status = rf_ds_failed;
-			snprintf(disks[c].devname, sizeof(disks[c].devname),
-			    "component%d", c);
+			sprintf(disks[c].devname, "component%d", c);
 			numFailuresThisRow++;
 		}
 	}
@@ -1027,10 +1023,8 @@ rf_add_hot_spare(RF_Raid_t *raidPtr, RF_SingleComponent_t *sparePtr)
 	} else {
 		if (disks[spare_number].numBlocks > 
 		    raidPtr->sectorsPerDisk) {
-			RF_ERRORMSG3("Warning: truncating spare disk %s to %ld blocks (from %ld)\n",
-			    disks[spare_number].devname, 
-			    (long int) raidPtr->sectorsPerDisk,
-			    (long int) disks[spare_number].numBlocks);
+			RF_ERRORMSG2("Warning: truncating spare disk %s to %ld blocks\n", disks[spare_number].devname, 
+				     (long int) raidPtr->sectorsPerDisk);
 			
 			disks[spare_number].numBlocks = raidPtr->sectorsPerDisk;
 		}

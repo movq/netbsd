@@ -1,5 +1,3 @@
-/*	$NetBSD: resolve_clnt.h,v 1.1.1.5 2004/05/31 00:24:35 heas Exp $	*/
-
 #ifndef _RESOLVE_CLNT_H_INCLUDED_
 #define _RESOLVE_CLNT_H_INCLUDED_
 
@@ -21,8 +19,7 @@
  /*
   * External interface.
   */
-#define RESOLVE_REGULAR	"resolve"
-#define RESOLVE_VERIFY	"verify"
+#define RESOLVE_ADDR	"resolve"
 
 #define RESOLVE_FLAG_FINAL	(1<<0)	/* final delivery */
 #define RESOLVE_FLAG_ROUTED	(1<<1)	/* routed destination */
@@ -38,23 +35,16 @@
 #define RESOLVE_CLASS_FINAL \
 	(RESOLVE_CLASS_LOCAL | RESOLVE_CLASS_ALIAS | RESOLVE_CLASS_VIRTUAL)
 
-#define RESOLVE_CLASS_MASK \
-	(RESOLVE_CLASS_LOCAL | RESOLVE_CLASS_ALIAS | RESOLVE_CLASS_VIRTUAL \
-	| RESOLVE_CLASS_RELAY | RESOLVE_CLASS_DEFAULT)
-
 typedef struct RESOLVE_REPLY {
     VSTRING *transport;
     VSTRING *nexthop;
     VSTRING *recipient;
     int     flags;
-}       RESOLVE_REPLY;
+} RESOLVE_REPLY;
 
 extern void resolve_clnt_init(RESOLVE_REPLY *);
-extern void resolve_clnt(const char *, const char *, RESOLVE_REPLY *);
+extern void resolve_clnt_query(const char *, RESOLVE_REPLY *);
 extern void resolve_clnt_free(RESOLVE_REPLY *);
-
-#define resolve_clnt_query(a, r) resolve_clnt(RESOLVE_REGULAR, (a), (r))
-#define resolve_clnt_verify(a, r) resolve_clnt(RESOLVE_VERIFY, (a), (r))
 
 #define RESOLVE_CLNT_ASSIGN(reply, transport, nexthop, recipient) { \
 	(reply).transport = (transport); \

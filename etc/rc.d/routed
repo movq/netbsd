@@ -1,13 +1,13 @@
 #!/bin/sh
 #
-# $NetBSD: routed,v 1.9 2004/10/12 14:51:03 lukem Exp $
+# $NetBSD: routed,v 1.7 2002/03/22 04:34:00 thorpej Exp $
 #
 
 # PROVIDE: routed
 # REQUIRE: DAEMON
 # BEFORE:  LOGIN
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="routed"
 rcvar=$name
@@ -23,5 +23,4 @@ routed_precmd()
 }
 
 load_rc_config $name
-load_rc_config_var gated gated
 run_rc_command "$1"

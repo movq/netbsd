@@ -1,4 +1,4 @@
-.\"     $NetBSD: sa_stacks.2,v 1.6 2004/12/12 05:56:45 snj Exp $
+.\"     $NetBSD: sa_stacks.2,v 1.4 2004/03/14 23:05:09 yamt Exp $
 .\"
 .\" Copyright (c)2004 YAMAMOTO Takashi,
 .\" All rights reserved.
@@ -25,7 +25,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\" ------------------------------------------------------------
-.Dd December 12, 2004
+.Dd March 14, 2004
 .Dt SA_STACKS 2
 .Os
 .Sh NAME
@@ -56,9 +56,8 @@ An upcall handler should be registered by
 beforehand.
 .\" ------------------------------------------------------------
 .Sh RETURN VALUES
-On success,
 .Fn sa_stacks
-returns the number of stacks registered.
+returns zero on success.
 Otherwise, a value of \-1 is returned and
 .Va errno
 is set to indicate the error.

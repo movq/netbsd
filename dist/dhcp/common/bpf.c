@@ -47,7 +47,7 @@
 
 #ifndef lint
 static char copyright[] =
-"$Id: bpf.c,v 1.9 2004/12/01 23:45:12 christos Exp $ Copyright (c) 1995-2002 The Internet Software Consortium.  All rights reserved.\n";
+"$Id: bpf.c,v 1.6.2.1 2004/04/21 03:55:53 jmc Exp $ Copyright (c) 1995-2002 The Internet Software Consortium.  All rights reserved.\n";
 #endif /* not lint */
 
 #include "dhcpd.h"
@@ -66,7 +66,6 @@ static char copyright[] =
 #  endif
 # endif
 
-#include <paths.h>
 #include <netinet/in_systm.h>
 #include "includes/netinet/ip.h"
 #include "includes/netinet/udp.h"
@@ -99,21 +98,11 @@ int if_register_bpf (info)
 	struct interface_info *info;
 {
 	int sock;
+	char filename[50];
+	int b;
 	u_int bufsize;
 
 	/* Open a BPF device */
-#ifdef _PATH_BPF
-	const char *filename = _PATH_BPF;
-	sock = open (filename, O_RDWR, 0);
-	if (sock < 0)
-		log_fatal ("No bpf devices.%s%s%s",
-		       "   Please read the README",
-		       " section for your operating",
-		       " system.");
-
-#else
-	char filename[50];
-	int b;
 	for (b = 0; 1; b++) {
 #ifndef NO_SNPRINTF
 		snprintf(filename, sizeof(filename), BPF_FORMAT, b);
@@ -136,7 +125,6 @@ int if_register_bpf (info)
 			break;
 		}
 	}
-#endif
 
 	/* Set the BPF buffer size to 32k */
 	bufsize = 32768;
@@ -427,7 +415,6 @@ ssize_t receive_packet (interface, buf, len, from, hfrom)
 	int length = 0;
 	int offset = 0;
 	struct bpf_hdr hdr;
-	unsigned paylen;
 
 	/* All this complexity is because BPF doesn't guarantee
 	   that only one packet will be returned at a time.   We're
@@ -520,7 +507,7 @@ ssize_t receive_packet (interface, buf, len, from, hfrom)
 					       interface -> rbuf_offset,
 					       from,
 					       (unsigned char *)0,
-					       hdr.bh_caplen, &paylen);
+					       hdr.bh_caplen);
 
 		/* If the IP or UDP checksum was bad, skip the packet... */
 		if (offset < 0) {
@@ -544,11 +531,11 @@ ssize_t receive_packet (interface, buf, len, from, hfrom)
 
 		/* Copy out the data in the packet... */
 		memcpy (buf, interface -> rbuf + interface -> rbuf_offset,
-			paylen);
+			hdr.bh_caplen);
 		interface -> rbuf_offset =
 			BPF_WORDALIGN (interface -> rbuf_offset +
 				       hdr.bh_caplen);
-		return paylen;
+		return hdr.bh_caplen;
 	} while (!length);
 	return 0;
 }

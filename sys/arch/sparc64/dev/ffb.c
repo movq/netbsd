@@ -1,4 +1,4 @@
-/*	$NetBSD: ffb.c,v 1.8 2004/07/19 01:04:35 heas Exp $	*/
+/*	$NetBSD: ffb.c,v 1.5 2004/03/17 17:04:59 pk Exp $	*/
 /*	$OpenBSD: creator.c,v 1.20 2002/07/30 19:48:15 jason Exp $	*/
 
 /*
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffb.c,v 1.8 2004/07/19 01:04:35 heas Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffb.c,v 1.5 2004/03/17 17:04:59 pk Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -55,7 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: ffb.c,v 1.8 2004/07/19 01:04:35 heas Exp $");
 #include <sparc64/dev/ffbvar.h>
 
 struct wsscreen_descr ffb_stdscreen = {
-	"sunffb",
+	"std",
 	0, 0,	/* will be filled in -- XXX shouldn't, it's global. */
 	0,
 	0, 0,
@@ -75,7 +75,6 @@ struct wsscreen_list ffb_screenlist = {
 int	ffb_ioctl(void *, u_long, caddr_t, int, struct proc *);
 int	ffb_alloc_screen(void *, const struct wsscreen_descr *, void **,
 	    int *, int *, long *);
-static int ffb_blank(struct ffb_softc *, u_long, u_int *);
 void	ffb_free_screen(void *, void *);
 int	ffb_show_screen(void *, void *, int, void (*cb)(void *, int, int),
 	    void *);
@@ -97,10 +96,9 @@ struct wsdisplay_accessops ffb_accessops = {
 	ffb_free_screen,
 	ffb_show_screen,
 	NULL,	/* load font */
-	NULL,	/* pollc */
-	NULL,	/* getwschar */
-	NULL,	/* putwschar */
-	NULL,	/* scroll */
+	NULL,	/* scrollback */
+	NULL,	/* getchar */
+	NULL,	/* burner */
 };
 
 void
@@ -110,7 +108,6 @@ ffb_attach(struct ffb_softc *sc)
 	char *model;
 	int btype;
 	int maxrow, maxcol;
-	u_int blank = WSDISPLAYIO_VIDEO_ON;
 	char buf[6+1];
 
 	printf(":");
@@ -127,6 +124,8 @@ ffb_attach(struct ffb_softc *sc)
 	model = prom_getpropstring(sc->sc_node, "model");
 	if (model == NULL || strlen(model) == 0)
 		model = "unknown";
+
+	printf(", model %s\n", model);
 
 	sc->sc_depth = 24;
 	sc->sc_linebytes = 8192;
@@ -164,16 +163,6 @@ ffb_attach(struct ffb_softc *sc)
 	ffb_stdscreen.nrows = sc->sc_rasops.ri_rows;
 	ffb_stdscreen.ncols = sc->sc_rasops.ri_cols;
 	ffb_stdscreen.textops = &sc->sc_rasops.ri_ops;
-
-	/* collect DAC version, as Elite3D cursor enable bit is reversed */
-	DAC_WRITE(sc, FFB_DAC_TYPE, FFB_DAC_GVERS);
-	sc->sc_dacrev = DAC_READ(sc, FFB_DAC_VALUE) >> 28;
-
-	if (sc->sc_type == FFB_AFB)
-		sc->sc_dacrev = 10;
-	printf(", model %s, dac %u\n", model, sc->sc_dacrev);
-
-	ffb_blank(sc, WSDISPLAYIO_SVIDEO, &blank);
 
 	if (sc->sc_console) {
 		int *ccolp, *crowp;
@@ -220,7 +209,7 @@ ffb_ioctl(v, cmd, data, flags, p)
 
 	switch (cmd) {
 	case WSDISPLAYIO_GTYPE:
-		*(u_int *)data = WSDISPLAY_TYPE_SUNFFB;
+		*(u_int *)data = WSDISPLAY_TYPE_SUN24;
 		break;
 	case WSDISPLAYIO_SMODE:
 		sc->sc_mode = *(u_int *)data;
@@ -245,8 +234,6 @@ ffb_ioctl(v, cmd, data, flags, p)
 
 	case WSDISPLAYIO_SVIDEO:
 	case WSDISPLAYIO_GVIDEO:
-		return(ffb_blank(sc, cmd, (u_int *)data));
-		break;
 	case WSDISPLAYIO_GCURPOS:
 	case WSDISPLAYIO_SCURPOS:
 	case WSDISPLAYIO_GCURMAX:
@@ -280,38 +267,6 @@ ffb_alloc_screen(v, type, cookiep, curxp, curyp, attrp)
 
 	sc->sc_nscreens++;
 	return (0);
-}
-
-/* blank/unblank the screen */
-static int
-ffb_blank(struct ffb_softc *sc, u_long cmd, u_int *data)
-{
-	u_int val;
-
-	DAC_WRITE(sc, FFB_DAC_TYPE, FFB_DAC_GSBLANK);
-	val = DAC_READ(sc, FFB_DAC_VALUE);
-
-	switch (cmd) {
-	case WSDISPLAYIO_GVIDEO:
-		*data = val & 1;
-		return(0);
-		break;
-	case WSDISPLAYIO_SVIDEO:
-		if (*data == WSDISPLAYIO_VIDEO_OFF)
-			val &= ~1;
-		else if (*data == WSDISPLAYIO_VIDEO_ON)
-			val |= 1;
-		else
-			return(EINVAL);
-		break;
-	default:
-		return(EINVAL);
-	}
-
-	DAC_WRITE(sc, FFB_DAC_TYPE, FFB_DAC_GSBLANK);
-	DAC_WRITE(sc, FFB_DAC_VALUE, val);
-
-	return(0);
 }
 
 void

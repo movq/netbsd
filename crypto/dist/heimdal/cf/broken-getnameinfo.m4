@@ -1,5 +1,5 @@
 dnl $Heimdal: broken-getnameinfo.m4,v 1.2.12.1 2004/04/01 07:27:32 joda Exp $
-dnl $NetBSD: broken-getnameinfo.m4,v 1.3 2004/04/02 14:59:47 lha Exp $
+dnl $NetBSD: broken-getnameinfo.m4,v 1.2.2.1 2004/04/21 04:55:38 jmc Exp $
 dnl
 dnl test for broken AIX getnameinfo
 

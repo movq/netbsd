@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_port.h,v 1.36 2004/08/21 18:58:31 hubertf Exp $ */
+/*	$NetBSD: mach_port.h,v 1.34.2.1 2004/08/25 21:27:39 he Exp $ */
 
 /*-
  * Copyright (c) 2002-2003 The NetBSD Foundation, Inc.
@@ -256,40 +256,6 @@ typedef struct {
 	mach_msg_port_descriptor_t rep_previous;
 	mach_msg_trailer_t rep_trailer;
 } mach_port_request_notification_reply_t;
-
-/* port_get_refs */
-
-typedef struct {
-	mach_msg_header_t req_msgh;
-	mach_ndr_record_t req_ndr;
-	mach_port_name_t req_name;
-	mach_port_right_t req_right;
-} mach_port_get_refs_request_t;
-
-typedef struct {
-	mach_msg_header_t rep_msgh;
-	mach_ndr_record_t rep_ndr;
-	mach_kern_return_t rep_retval;
-	mach_port_urefs_t rep_refs;
-	mach_msg_trailer_t rep_trailer;
-} mach_port_get_refs_reply_t;
-
-/* port_mod_refs */
-
-typedef struct {
-	mach_msg_header_t req_msgh;
-	mach_ndr_record_t req_ndr;
-	mach_port_name_t req_name;
-	mach_port_right_t req_right;
-	mach_port_delta_t req_delta;
-} mach_port_mod_refs_request_t;
-
-typedef struct {
-	mach_msg_header_t rep_msgh;
-	mach_ndr_record_t rep_ndr;
-	mach_kern_return_t rep_retval;
-	mach_msg_trailer_t rep_trailer;
-} mach_port_mod_refs_reply_t;
 
 /* Kernel-private structures */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: llc_subr.c,v 1.19 2004/04/22 01:01:40 matt Exp $	*/
+/*	$NetBSD: llc_subr.c,v 1.17 2003/08/07 16:33:02 agc Exp $	*/
 
 /* 
  * Copyright (c) 1992, 1993
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: llc_subr.c,v 1.19 2004/04/22 01:01:40 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: llc_subr.c,v 1.17 2003/08/07 16:33:02 agc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -265,7 +265,7 @@ llc_setsapinfo(ifp, af, sap, llconf)
 	u_char sap;
 	struct dllconfig* llconf;
 {
-	const struct protosw *pp;
+	struct protosw *pp;
 	struct sockaddr_dl *ifdl_addr;
 	struct rtentry *sirt = (struct rtentry *) 0;
 	struct npaidbentry *sapinfo;
@@ -304,9 +304,10 @@ llc_setsapinfo(ifp, af, sap, llconf)
 
 	/* Plug in config information in rt->rt_llinfo */
 
-	sirt->rt_llinfo = malloc(size, M_PCB, M_WAITOK|M_ZERO);
+	sirt->rt_llinfo = malloc(size, M_PCB, M_WAITOK);
 	sapinfo = (struct npaidbentry *) sirt->rt_llinfo;
 	if (sapinfo) {
+		bzero((caddr_t) sapinfo, size);
 		/*
 		 * For the time being we support LLC CLASS II here 	 only
 		 */
@@ -2298,9 +2299,10 @@ llc_newlink(dst, ifp, nlrt, nlnext, llrt)
 
 	/* allocate memory for link control block */
 	MALLOC(nlinkp, struct llc_linkcb *, sizeof(struct llc_linkcb),
-	       M_PCB, M_NOWAIT|M_ZERO);
+	       M_PCB, M_DONTWAIT);
 	if (nlinkp == 0)
 		return (NULL);
+	bzero((caddr_t) nlinkp, sizeof(struct llc_linkcb));
 
 	/* copy link address */
 	sdl_copy(dst, &nlinkp->llcl_addr);
@@ -2332,11 +2334,13 @@ llc_newlink(dst, ifp, nlrt, nlnext, llrt)
 
 	/* allocate memory for window buffer */
 	MALLOC(nlinkp->llcl_output_buffers, struct mbuf **,
-	       llcwindow * sizeof(struct mbuf *), M_PCB, M_NOWAIT|M_ZERO);
+	       llcwindow * sizeof(struct mbuf *), M_PCB, M_DONTWAIT);
 	if (nlinkp->llcl_output_buffers == 0) {
 		FREE(nlinkp, M_PCB);
 		return (NULL);
 	}
+	bzero((caddr_t) nlinkp->llcl_output_buffers,
+	      llcwindow * sizeof(struct mbuf *));
 
 	/* set window size & slotsfree */
 	nlinkp->llcl_slotsfree = nlinkp->llcl_window = llcwindow;

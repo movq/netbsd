@@ -1,4 +1,4 @@
-/*	$NetBSD: coda_vfsops.c,v 1.40 2004/10/15 09:09:09 skrll Exp $	*/
+/*	$NetBSD: coda_vfsops.c,v 1.33.2.1 2004/05/29 09:04:35 tron Exp $	*/
 
 /*
  * 
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coda_vfsops.c,v 1.40 2004/10/15 09:09:09 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: coda_vfsops.c,v 1.33.2.1 2004/05/29 09:04:35 tron Exp $");
 
 #ifdef	_LKM
 #define	NVCODA 4
@@ -59,7 +59,6 @@ __KERNEL_RCSID(0, "$NetBSD: coda_vfsops.c,v 1.40 2004/10/15 09:09:09 skrll Exp $
 #include <sys/malloc.h>
 #include <sys/conf.h>
 #include <sys/namei.h>
-#include <sys/dirent.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/select.h>
@@ -107,7 +106,7 @@ struct vfsops coda_vfsops = {
     coda_unmount,
     coda_root,
     coda_quotactl,
-    coda_nb_statvfs,
+    coda_nb_statfs,
     coda_sync,
     coda_vget,
     (int (*) (struct mount *, struct fid *, struct vnode ** ))
@@ -120,7 +119,6 @@ struct vfsops coda_vfsops = {
     (int (*)(void)) eopnotsupp,
     (int (*)(struct mount *, struct mbuf *, int *, struct ucred **))
 	eopnotsupp,
-    (int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
     coda_vnodeopv_descs,
     0
 };
@@ -227,10 +225,8 @@ coda_mount(vfsp, path, data, ndp, p)
     
     /* No initialization (here) of mi_vcomm! */
     vfsp->mnt_data = mi;
-    vfsp->mnt_stat.f_fsidx.__fsid_val[0] = 0;
-    vfsp->mnt_stat.f_fsidx.__fsid_val[1] = makefstype(MOUNT_CODA);
-    vfsp->mnt_stat.f_fsid = vfsp->mnt_stat.f_fsidx.__fsid_val[0];
-    vfsp->mnt_stat.f_namemax = MAXNAMLEN;
+    vfsp->mnt_stat.f_fsid.val[0] = 0;
+    vfsp->mnt_stat.f_fsid.val[1] = makefstype(MOUNT_CODA);
     mi->mi_vfsp = vfsp;
     
     /*
@@ -257,7 +253,6 @@ coda_mount(vfsp, path, data, ndp, p)
     
     /* set filesystem block size */
     vfsp->mnt_stat.f_bsize = 8192;	    /* XXX -JJK */
-    vfsp->mnt_stat.f_frsize = 8192;	    /* XXX -JJK */
 
     /* error is currently guaranteed to be zero, but in case some
        code changes... */
@@ -268,7 +263,7 @@ coda_mount(vfsp, path, data, ndp, p)
     else
 	MARK_INT_SAT(CODA_MOUNT_STATS);
 
-    return set_statvfs_info("/coda", UIO_SYSSPACE, "CODA", UIO_SYSSPACE, vfsp,
+    return set_statfs_info("/coda", UIO_SYSSPACE, "CODA", UIO_SYSSPACE, vfsp,
 	p);
 }
 
@@ -411,7 +406,7 @@ coda_quotactl(vfsp, cmd, uid, arg, p)
     struct mount *vfsp;
     int cmd;
     uid_t uid;
-    void *arg;
+    caddr_t arg;
     struct proc *p;
 {
     ENTRY;
@@ -422,9 +417,9 @@ coda_quotactl(vfsp, cmd, uid, arg, p)
  * Get file system statistics.
  */
 int
-coda_nb_statvfs(vfsp, sbp, p)
+coda_nb_statfs(vfsp, sbp, p)
     struct mount *vfsp;
-    struct statvfs *sbp;
+    struct statfs *sbp;
     struct proc *p;
 {
     struct coda_statfs fsstat;
@@ -446,18 +441,15 @@ coda_nb_statvfs(vfsp, sbp, p)
     error = venus_statfs(vftomi(vfsp), p->p_cred->pc_ucred, p, &fsstat);
 
     if (!error) {
+	sbp->f_type = 0;
 	sbp->f_bsize = 8192; /* XXX */
-	sbp->f_frsize = 8192; /* XXX */
 	sbp->f_iosize = 8192; /* XXX */
 	sbp->f_blocks = fsstat.f_blocks;
 	sbp->f_bfree  = fsstat.f_bfree;
 	sbp->f_bavail = fsstat.f_bavail;
-	sbp->f_bresvd = 0;
 	sbp->f_files  = fsstat.f_files;
 	sbp->f_ffree  = fsstat.f_ffree;
-	sbp->f_favail = fsstat.f_ffree;
-	sbp->f_fresvd = 0;
-	copy_statvfs_info(sbp, vfsp);
+	copy_statfs_info(sbp, vfsp);
     }
 
     MARK_INT_SAT(CODA_STATFS_STATS);

@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.204 2004/12/04 18:34:09 peter Exp $	*/
+/*	$NetBSD: param.h,v 1.188.2.9 2004/11/29 06:24:21 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -63,7 +63,7 @@
  *	2.99.9		(299000900)
  */
 
-#define	__NetBSD_Version__	299001100	/* NetBSD 2.99.11 */
+#define	__NetBSD_Version__	200000000	/* NetBSD 2.0 */
 
 #define __NetBSD_Prereq__(M,m,p) (((((M) * 100000000) + \
     (m) * 1000000) + (p) * 100) >= __NetBSD_Version__)
@@ -158,7 +158,7 @@
  * the maximum (in the "maxsaddr" sense) stack address of the 
  * allocated memory.
  */
-#if defined(_KERNEL) || defined(__EXPOSE_STACK)
+#ifdef _KERNEL
 #ifdef __MACHINE_STACK_GROWS_UP
 #define	STACK_GROW(sp, _size)		(((caddr_t)(sp)) + (_size))
 #define	STACK_SHRINK(sp, _size)		(((caddr_t)(sp)) - (_size))
@@ -174,7 +174,7 @@
 #define	STACK_ALLOC(sp, _size)		(((caddr_t)(sp)) - (_size))
 #define	STACK_MAX(p, _size)		((caddr_t)(p))
 #endif
-#endif /* defined(_KERNEL) || defined(__EXPOSE_STACK) */
+#endif /* _KERNEL */
 
 /*
  * Priorities.  Note that with 32 run queues, differences less than 4 are

@@ -1,4 +1,4 @@
-/*	$NetBSD: ac97var.h,v 1.12 2004/11/10 04:20:26 kent Exp $	*/
+/*	$NetBSD: ac97var.h,v 1.8.2.1 2004/09/22 20:58:06 jmc Exp $	*/
 /*	$OpenBSD: ac97.h,v 1.4 2000/07/19 09:01:35 csapuntz Exp $	*/
 
 /*
@@ -27,9 +27,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-#ifndef _DEV_IC_AC97VAR_H_
-#define	_DEV_IC_AC97VAR_H_
 
 struct ac97_codec_if;
 
@@ -71,22 +68,10 @@ struct ac97_codec_if_vtbl {
 	u_int16_t (*get_extcaps)(struct ac97_codec_if *);
 	int (*set_rate)(struct ac97_codec_if *, int, u_long *);
 	void (*set_clock)(struct ac97_codec_if *, unsigned int);
-	void (*detach)(struct ac97_codec_if *);
 };
 
 struct ac97_codec_if {
 	struct ac97_codec_if_vtbl *vtbl;
 };
 
-int ac97_attach(struct ac97_host_if *);
-
-#define AC97_IS_FIXED_RATE(codec)	\
-	!((codec)->vtbl->get_extcaps(codec) & AC97_EXT_AUDIO_VRA)
-#define AC97_IS_4CH(codec)		\
-	((codec)->vtbl->get_extcaps(codec) & AC97_EXT_AUDIO_SDAC)
-#define AC97_IS_6CH(codec)		\
-	(((codec)->vtbl->get_extcaps(codec) \
-	& (AC97_EXT_AUDIO_SDAC | AC97_EXT_AUDIO_CDAC | AC97_EXT_AUDIO_LDAC)) \
-	== (AC97_EXT_AUDIO_SDAC | AC97_EXT_AUDIO_CDAC | AC97_EXT_AUDIO_LDAC))
-
-#endif /* _DEV_IC_AC97VAR_H_ */
+int ac97_attach __P((struct ac97_host_if *));

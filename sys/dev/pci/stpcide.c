@@ -1,4 +1,4 @@
-/*	$NetBSD: stpcide.c,v 1.11 2004/08/21 21:46:54 nisimura Exp $	*/
+/*	$NetBSD: stpcide.c,v 1.4.2.2 2004/08/22 13:26:06 tron Exp $	*/
 
 /*
  * Copyright (c) 2003 Tohru Nishimura
@@ -38,7 +38,7 @@
 #include <dev/pci/pciidevar.h>
 
 static void stpc_chip_map(struct pciide_softc *, struct pci_attach_args *);
-static void stpc_setup_channel(struct ata_channel *);
+static void stpc_setup_channel(struct wdc_channel *);
 
 static int  stpcide_match(struct device *, struct cfdata *, void *);
 static void stpcide_attach(struct device *, struct device *, void *);
@@ -90,25 +90,23 @@ stpc_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		return;
 
 	aprint_normal("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	    sc->sc_wdcdev.sc_dev.dv_xname);
 	pciide_mapreg_dma(sc, pa);
 	aprint_normal("\n");
-	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16 | ATAC_CAP_DATA32;
+	sc->sc_wdcdev.cap |= WDC_CAPABILITY_DATA16 | WDC_CAPABILITY_DATA32 |
+	    WDC_CAPABILITY_MODE;
 	if (sc->sc_dma_ok) {
-		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DMA;
+		sc->sc_wdcdev.cap |= WDC_CAPABILITY_DMA | WDC_CAPABILITY_IRQACK;
 		sc->sc_wdcdev.irqack = pciide_irqack;
 	}
-	sc->sc_wdcdev.sc_atac.atac_pio_cap = 4;
-	sc->sc_wdcdev.sc_atac.atac_dma_cap = 2;
-	sc->sc_wdcdev.sc_atac.atac_udma_cap = 0;
-	sc->sc_wdcdev.sc_atac.atac_set_modes = stpc_setup_channel;
-	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
-	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
+	sc->sc_wdcdev.PIO_cap = 4;
+	sc->sc_wdcdev.DMA_cap = 2;
+	sc->sc_wdcdev.UDMA_cap = 0;
+	sc->sc_wdcdev.set_modes = stpc_setup_channel;
+	sc->sc_wdcdev.channels = sc->wdc_chanarray;
+	sc->sc_wdcdev.nchannels = PCIIDE_NUM_CHANNELS;
 
-	wdc_allocate_regs(&sc->sc_wdcdev);
-
-	for (channel = 0; channel < sc->sc_wdcdev.sc_atac.atac_nchannels;
-	     channel++) {
+	for (channel = 0; channel < sc->sc_wdcdev.nchannels; channel++) {
 		cp = &sc->pciide_channels[channel];
 		if (pciide_chansetup(sc, channel, interface) == 0)
 			continue;
@@ -134,15 +132,15 @@ static const u_int16_t dmatbl[] = { 0x7C00, 0x1800, 0x0800 };
 static const u_int16_t piotbl[] = { 0x03C0, 0x0230, 0x01A0, 0x0110, 0x0010 };
 
 static void
-stpc_setup_channel(struct ata_channel *chp)
+stpc_setup_channel(struct wdc_channel *chp)
 {
-	struct atac_softc *atac = chp->ch_atac;
-	struct pciide_channel *cp = CHAN_TO_PCHAN(chp);
-	struct pciide_softc *sc = CHAN_TO_PCIIDE(chp);
+	struct pciide_channel *cp = (struct pciide_channel *)chp;
+	struct pciide_softc *sc = (struct pciide_softc *)cp->wdc_channel.ch_wdc;
+	struct wdc_softc *wdc = &sc->sc_wdcdev;
 	int channel = chp->ch_channel;
 	struct ata_drive_datas *drvp;
 	u_int32_t idedma_ctl, idetim;
-	int drive, bits[2], s;
+	int drive, bits[2];
 
 	/* setup DMA if needed */
 	pciide_channel_dma_setup(cp);
@@ -157,20 +155,16 @@ stpc_setup_channel(struct ata_channel *chp)
 		if ((drvp->drive_flags & DRIVE) == 0)
 			continue;
 		/* add timing values, setup DMA if needed */
-		if ((atac->atac_cap & ATAC_CAP_DMA) &&
+		if ((wdc->cap & WDC_CAPABILITY_DMA) &&
 		    (drvp->drive_flags & DRIVE_DMA)) {
 			/* use Multiword DMA */
-			s = splbio();
 			drvp->drive_flags &= ~DRIVE_UDMA;
-			splx(s);
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
 			bits[drive] = 0xe; /* IOCHRDY,wr/post,rd/prefetch */
 		}
 		else {
 			/* PIO only */
-			s = splbio();
 			drvp->drive_flags &= ~(DRIVE_UDMA | DRIVE_DMA);
-			splx(s);
 			bits[drive] = 0x8; /* IOCHRDY */
 		}
 		bits[drive] |= dmatbl[drvp->DMA_mode] | piotbl[drvp->PIO_mode];

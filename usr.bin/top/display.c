@@ -1,4 +1,4 @@
-/*	$NetBSD: display.c,v 1.12 2004/11/04 07:35:15 dsl Exp $	*/
+/*	$NetBSD: display.c,v 1.11 2003/10/03 15:32:06 christos Exp $	*/
 
 /*
  *  Top users/processes display for Unix
@@ -47,7 +47,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: display.c,v 1.12 2004/11/04 07:35:15 dsl Exp $");
+__RCSID("$NetBSD: display.c,v 1.11 2003/10/03 15:32:06 christos Exp $");
 #endif
 
 #include "os.h"
@@ -932,10 +932,10 @@ int  size;
 int  numeric;
 
 {
-    char *ptr = buffer;
-    int ch;
-    int cnt = 0;
-    int maxcnt = 0;
+    register char *ptr = buffer;
+    register char ch;
+    register char cnt = 0;
+    register char maxcnt = 0;
 
     /* allow room for null terminator */
     size -= 1;
@@ -944,7 +944,7 @@ int  numeric;
     while ((fflush(stdout), read(0, ptr, 1) > 0))
     {
 	/* newline means we are done */
-	if ((ch = (unsigned char)*ptr) == '\n')
+	if ((ch = *ptr) == '\n')
 	{
 	    break;
 	}
@@ -1217,7 +1217,7 @@ char *str;
     ptr = str;
     while ((ch = *ptr) != '\0')
     {
-	if (!isprint((unsigned char)ch))
+	if (!isprint(ch))
 	{
 	    *ptr = '?';
 	}

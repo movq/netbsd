@@ -1,4 +1,4 @@
-/*	$NetBSD: head.c,v 1.18 2004/05/04 10:57:42 mrg Exp $	*/
+/*	$NetBSD: head.c,v 1.17 2004/01/05 23:23:34 jmmv Exp $	*/
 
 /*
  * Copyright (c) 1980, 1987, 1992, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1987, 1992, 1993\n\
 #if 0
 static char sccsid[] = "@(#)head.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: head.c,v 1.18 2004/05/04 10:57:42 mrg Exp $");
+__RCSID("$NetBSD: head.c,v 1.17 2004/01/05 23:23:34 jmmv Exp $");
 #endif
 #endif /* not lint */
 
@@ -61,7 +61,7 @@ __RCSID("$NetBSD: head.c,v 1.18 2004/05/04 10:57:42 mrg Exp $");
  * Bill Joy UCB August 24, 1977
  */
 
-void head __P((FILE *, long, long));
+void head __P((FILE *, long));
 void obsolete __P((char *[]));
 void usage __P((void));
 int main __P((int, char *[]));
@@ -77,27 +77,13 @@ main(argc, argv)
 	FILE *fp;
 	int first;
 	long linecnt;
-	long bytecnt;
 	char *ep;
-	int qflag = 0;
-	int vflag = 0;
 
 	(void)setlocale(LC_ALL, "");
 	obsolete(argv);
 	linecnt = 10;
-	bytecnt = 0;
-	while ((ch = getopt(argc, argv, "c:n:qv")) != -1)
+	while ((ch = getopt(argc, argv, "n:")) != -1)
 		switch(ch) {
-		case 'c':
-			errno = 0;
-			bytecnt = strtol(optarg, &ep, 10);
-			if ((bytecnt == LONG_MIN || bytecnt == LONG_MAX) &&
-			    errno == ERANGE)
-				err(1, "illegal byte count -- %s", optarg);
-			else if (*ep || bytecnt <= 0)
-				errx(1, "illegal byte count -- %s", optarg);
-			break;
-
 		case 'n':
 			errno = 0;
 			linecnt = strtol(optarg, &ep, 10);
@@ -106,16 +92,6 @@ main(argc, argv)
 				err(1, "illegal line count -- %s", optarg);
 			else if (*ep || linecnt <= 0)
 				errx(1, "illegal line count -- %s", optarg);
-			break;
-
-		case 'q':
-			qflag = 1;
-			vflag = 0;
-			break;
-
-		case 'v':
-			qflag = 0;
-			vflag = 1;
 			break;
 
 		case '?':
@@ -132,34 +108,31 @@ main(argc, argv)
 				eval = 1;
 				continue;
 			}
-			if (vflag || (qflag == 0 && argc > 1)) {
+			if (argc > 1) {
 				(void)printf("%s==> %s <==\n",
 				    first ? "" : "\n", *argv);
 				first = 0;
 			}
-			head(fp, linecnt, bytecnt);
+			head(fp, linecnt);
 			(void)fclose(fp);
 		}
 	else
-		head(stdin, linecnt, bytecnt);
+		head(stdin, linecnt);
 	exit(eval);
 }
 
 void
-head(fp, cnt, bytecnt)
+head(fp, cnt)
 	FILE *fp;
 	long cnt;
-	long bytecnt;
 {
 	int ch;
 
-	if (bytecnt)
-		cnt = bytecnt;
 	while (cnt--)
 		while ((ch = getc(fp)) != EOF) {
 			if (putchar(ch) == EOF)
 				err(1, "stdout");
-			if (ch == '\n' || bytecnt)
+			if (ch == '\n')
 				break;
 		}
 }

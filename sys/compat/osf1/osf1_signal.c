@@ -1,4 +1,4 @@
-/*	$NetBSD: osf1_signal.c,v 1.24 2004/10/27 19:29:57 david Exp $	*/
+/*	$NetBSD: osf1_signal.c,v 1.23.2.1 2004/11/12 06:56:24 jmc Exp $	*/
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_signal.c,v 1.24 2004/10/27 19:29:57 david Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_signal.c,v 1.23.2.1 2004/11/12 06:56:24 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

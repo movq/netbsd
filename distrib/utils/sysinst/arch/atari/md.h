@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.16 2004/06/06 06:06:59 christos Exp $	*/
+/*	$NetBSD: md.h,v 1.15 2004/01/29 08:48:24 lukem Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -85,7 +85,7 @@
  * Default fileystem type for floppy disks.
  * On atari, that is msdos.
  */
-const char *fdtype;
+EXTERN	const char *fdtype INIT("msdos");
 
 
 /*

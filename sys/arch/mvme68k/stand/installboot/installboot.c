@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.c,v 1.10 2004/05/21 08:35:00 he Exp $ */
+/*	$NetBSD: installboot.c,v 1.9 2003/04/07 11:45:55 he Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -41,7 +41,6 @@
 #include <sys/mount.h>
 #include <sys/time.h>
 #include <sys/stat.h>
-#include <sys/statvfs.h>
 #include <ufs/ufs/dinode.h>
 #include <ufs/ufs/dir.h>
 #include <ufs/ffs/fs.h>
@@ -259,7 +258,7 @@ int	devfd;
 {
 	int		i, fd;
 	struct	stat	statbuf;
-	struct	statvfs	statvfsbuf;
+	struct	statfs	statfsbuf;
 	struct fs	*fs;
 	char		*buf;
 	daddr_t		blk, *ap;
@@ -277,11 +276,11 @@ int	devfd;
 	if ((fd = open(boot, O_RDONLY)) < 0)
 		err(1, "open: %s", boot);
 
-	if (fstatvfs(fd, &statvfsbuf) != 0)
+	if (fstatfs(fd, &statfsbuf) != 0)
 		err(1, "statfs: %s", boot);
 
-	if (strncmp(statvfsbuf.f_fstypename, "ffs", MFSNAMELEN) &&
-	    strncmp(statvfsbuf.f_fstypename, "ufs", MFSNAMELEN) ) {
+	if (strncmp(statfsbuf.f_fstypename, "ffs", MFSNAMELEN) &&
+	    strncmp(statfsbuf.f_fstypename, "ufs", MFSNAMELEN) ) {
 		errx(1, "%s: must be on an FFS filesystem", boot);
 	}
 

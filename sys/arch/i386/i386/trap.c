@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.202 2004/08/28 17:53:01 jdolecek Exp $	*/
+/*	$NetBSD: trap.c,v 1.200 2004/03/14 01:08:48 cl Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.202 2004/08/28 17:53:01 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.200 2004/03/14 01:08:48 cl Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -266,10 +266,6 @@ trap(frame)
 			}
 		}
 #endif
-#ifdef DDB
-		if (kdb_trap(type, 0, frame))
-			return;
-#endif
 #ifdef KGDB
 		if (kgdb_trap(type, frame))
 			return;
@@ -283,6 +279,10 @@ trap(frame)
 				return;
 			}
 		}
+#endif
+#ifdef DDB
+		if (kdb_trap(type, 0, frame))
+			return;
 #endif
 		if (frame->tf_trapno < trap_types)
 			printf("fatal %s", trap_type[frame->tf_trapno]);
@@ -550,6 +550,7 @@ copyfault:
 		register struct vm_map *map;
 		vm_prot_t ftype;
 		extern struct vm_map *kernel_map;
+		unsigned nss;
 
 		cr2 = rcr2();
 		KERNEL_PROC_LOCK(l);
@@ -587,14 +588,33 @@ copyfault:
 		}
 #endif
 
+		nss = 0;
+		if ((caddr_t)va >= vm->vm_maxsaddr
+		    && (caddr_t)va < (caddr_t)VM_MAXUSER_ADDRESS
+		    && map != kernel_map) {
+			nss = btoc(USRSTACK-(unsigned)va);
+			if (nss > btoc(p->p_rlimit[RLIMIT_STACK].rlim_cur)) {
+				/*
+				 * We used to fail here. However, it may
+				 * just have been an mmap()ed page low
+				 * in the stack, which is legal. If it
+				 * wasn't, uvm_fault() will fail below.
+				 *
+				 * Set nss to 0, since this case is not
+				 * a "stack extension".
+				 */
+				nss = 0;
+			}
+		}
+
 		/* Fault the original page in. */
 		onfault = pcb->pcb_onfault;
 		pcb->pcb_onfault = NULL;
 		error = uvm_fault(map, va, 0, ftype);
 		pcb->pcb_onfault = onfault;
 		if (error == 0) {
-			if (map != kernel_map && (caddr_t)va >= vm->vm_maxsaddr)
-				uvm_grow(p, va);
+			if (nss > vm->vm_ssize)
+				vm->vm_ssize = nss;
 
 			if (type == T_PAGEFLT) {
 				KERNEL_UNLOCK();
@@ -745,6 +765,7 @@ trapwrite(addr)
 	unsigned addr;
 {
 	vaddr_t va;
+	unsigned nss;
 	struct proc *p;
 	struct vmspace *vm;
 
@@ -752,14 +773,20 @@ trapwrite(addr)
 	if (va >= VM_MAXUSER_ADDRESS)
 		return 1;
 
+	nss = 0;
 	p = curproc;
 	vm = p->p_vmspace;
+	if ((caddr_t)va >= vm->vm_maxsaddr) {
+		nss = btoc(USRSTACK-(unsigned)va);
+		if (nss > btoc(p->p_rlimit[RLIMIT_STACK].rlim_cur))
+			nss = 0;
+	}
 
 	if (uvm_fault(&vm->vm_map, va, 0, VM_PROT_WRITE) != 0)
 		return 1;
 
-	if ((caddr_t)va >= vm->vm_maxsaddr)
-		uvm_grow(p, va);
+	if (nss > vm->vm_ssize)
+		vm->vm_ssize = nss;
 
 	return 0;
 }

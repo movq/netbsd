@@ -1,4 +1,4 @@
-# $NetBSD: md.alpha,v 1.51 2004/08/12 16:07:07 lukem Exp $
+# $NetBSD: md.alpha,v 1.48 2004/01/11 14:53:23 lukem Exp $
 ./usr/include/alpha				comp-c-include
 ./usr/include/alpha/_G_config.h			comp-obsolete		obsolete
 ./usr/include/alpha/alpha_cpu.h			comp-c-include
@@ -34,7 +34,6 @@
 ./usr/include/alpha/int_types.h			comp-c-include
 ./usr/include/alpha/intr.h			comp-c-include
 ./usr/include/alpha/intrcnt.h			comp-obsolete		obsolete
-./usr/include/alpha/joystick.h			comp-c-include
 ./usr/include/alpha/kbio.h			comp-c-include
 ./usr/include/alpha/kcore.h			comp-c-include
 ./usr/include/alpha/limits.h			comp-c-include
@@ -63,12 +62,12 @@
 ./usr/include/alpha/varargs.h			comp-c-include
 ./usr/include/alpha/vmparam.h			comp-c-include
 ./usr/include/alpha/vuid_event.h		comp-c-include
-./usr/include/alpha/wchar_limits.h		comp-c-include
 ./usr/include/alpha/wsconsio.h			comp-obsolete		obsolete
 ./usr/include/alpha/z8530var.h			comp-c-include
 ./usr/include/ieeefp.h				comp-c-include
 ./usr/lib/crtfm.o				comp-c-lib
 ./usr/lib/libalpha.a				comp-c-lib
+./usr/lib/libalpha.so				comp-c-lib
 ./usr/lib/libalpha_p.a				comp-c-proflib		profile
 ./usr/lib/libalpha_pic.a			comp-c-piclib
 ./usr/libdata/lint/llib-lalpha.ln		comp-c-lintlib		lint

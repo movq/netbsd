@@ -1,4 +1,4 @@
-/*	$NetBSD: stvar.h,v 1.9 2004/08/27 20:37:29 bouyer Exp $ */
+/*	$NetBSD: stvar.h,v 1.6.8.1 2004/09/11 12:59:29 he Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -99,7 +99,7 @@ struct st_quirk_inquiry_pattern {
 struct st_softc {
 	struct device sc_dev;
 /*--------------------callback to bus-specific code--------------------------*/
-	int (*ops)(struct st_softc *, int, int);
+	int (*ops) __P((struct st_softc *, int, int));
 #define ST_OPS_RBL		0x00	/* read block limit */
 #define ST_OPS_MODESENSE	0x01	/* mode sense */
 #define ST_OPS_MODESELECT	0x02	/* mode select */
@@ -182,8 +182,8 @@ struct st_softc {
 			 ST_FIXEDBLOCKS | ST_READONLY | ST_FM_WRITTEN |	\
 			 ST_2FM_AT_EOD | ST_PER_ACTION | ST_POSUPDATED)
 
-void	stattach(struct device *, struct st_softc *, void *);
-int	stactivate(struct device *, enum devact);
-int	stdetach(struct device *, int);
+void	stattach __P((struct device *, struct st_softc *, void *));
+int stactivate __P((struct device *, enum devact));
+int stdetach __P((struct device *, int));
 
 extern struct cfdriver st_cd;

@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_bio.c,v 1.32 2004/05/05 11:35:40 yamt Exp $	*/
+/*	$NetBSD: uvm_bio.c,v 1.31.2.1 2004/05/10 14:28:57 tron Exp $	*/
 
 /*
  * Copyright (c) 1998 Chuck Silvers.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_bio.c,v 1.32 2004/05/05 11:35:40 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_bio.c,v 1.31.2.1 2004/05/10 14:28:57 tron Exp $");
 
 #include "opt_uvmhist.h"
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_vfsops.c,v 1.156 2004/11/21 19:21:51 jdolecek Exp $	*/
+/*	$NetBSD: ffs_vfsops.c,v 1.140.2.3 2004/05/29 09:03:56 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1994
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_vfsops.c,v 1.156 2004/11/21 19:21:51 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_vfsops.c,v 1.140.2.3 2004/05/29 09:03:56 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -97,7 +97,7 @@ struct vfsops ffs_vfsops = {
 	ffs_unmount,
 	ufs_root,
 	ufs_quotactl,
-	ffs_statvfs,
+	ffs_statfs,
 	ffs_sync,
 	ffs_vget,
 	ffs_fhtovp,
@@ -108,7 +108,6 @@ struct vfsops ffs_vfsops = {
 	NULL,
 	ffs_mountroot,
 	ufs_check_export,
-	ffs_snapshot,
 	ffs_vnodeopv_descs,
 };
 
@@ -118,14 +117,12 @@ struct genfs_ops ffs_genfsops = {
 	genfs_gop_write,
 };
 
-POOL_INIT(ffs_inode_pool, sizeof(struct inode), 0, 0, 0, "ffsinopl",
-    &pool_allocator_nointr);
-POOL_INIT(ffs_dinode1_pool, sizeof(struct ufs1_dinode), 0, 0, 0, "dino1pl",
-    &pool_allocator_nointr);
-POOL_INIT(ffs_dinode2_pool, sizeof(struct ufs2_dinode), 0, 0, 0, "dino2pl",
-    &pool_allocator_nointr);
+struct pool ffs_inode_pool;
+struct pool ffs_dinode1_pool;
+struct pool ffs_dinode2_pool;
 
-static void ffs_oldfscompat_read(struct fs *, struct ufsmount *, daddr_t);
+static void ffs_oldfscompat_read(struct fs *, struct ufsmount *,
+				   daddr_t);
 static void ffs_oldfscompat_write(struct fs *, struct ufsmount *);
 
 /*
@@ -168,9 +165,9 @@ ffs_mountroot()
 	fs = ump->um_fs;
 	memset(fs->fs_fsmnt, 0, sizeof(fs->fs_fsmnt));
 	(void)copystr(mp->mnt_stat.f_mntonname, fs->fs_fsmnt, MNAMELEN - 1, 0);
-	(void)ffs_statvfs(mp, &mp->mnt_stat, p);
+	(void)ffs_statfs(mp, &mp->mnt_stat, p);
 	vfs_unbusy(mp);
-	setrootfstime((time_t)fs->fs_time);
+	inittodr(fs->fs_time);
 	return (0);
 }
 
@@ -396,8 +393,6 @@ ffs_mount(mp, path, data, ndp, p)
 				if (error)
 					return (error);
 			}
-			if (fs->fs_snapinum[0] != 0)
-				ffs_snapshot_mount(mp);
 		}
 		if (args.fspec == 0) {
 			/*
@@ -413,7 +408,7 @@ ffs_mount(mp, path, data, ndp, p)
 		}
 	}
 
-	error = set_statvfs_info(path, UIO_USERSPACE, args.fspec,
+	error = set_statfs_info(path, UIO_USERSPACE, args.fspec,
 	    UIO_USERSPACE, mp, p);
 	if (error == 0)
 		(void)strncpy(fs->fs_fsmnt, mp->mnt_stat.f_mntonname,
@@ -452,8 +447,8 @@ ffs_mount(mp, path, data, ndp, p)
  *	6) re-read inode data for all active vnodes.
  */
 int
-ffs_reload(mp, cred, p)
-	struct mount *mp;
+ffs_reload(mountp, cred, p)
+	struct mount *mountp;
 	struct ucred *cred;
 	struct proc *p;
 {
@@ -468,10 +463,10 @@ ffs_reload(mp, cred, p)
 	struct ufsmount *ump;
 	daddr_t sblockloc;
 
-	if ((mp->mnt_flag & MNT_RDONLY) == 0)
+	if ((mountp->mnt_flag & MNT_RDONLY) == 0)
 		return (EINVAL);
 
-	ump = VFSTOUFS(mp);
+	ump = VFSTOUFS(mountp);
 	/*
 	 * Step 1: invalidate all cached meta-data.
 	 */
@@ -530,13 +525,13 @@ ffs_reload(mp, cred, p)
 	free(newfs, M_UFSMNT);
 
 	/* Recheck for apple UFS filesystem */
-	ump->um_flags &= ~UFS_ISAPPLEUFS;
+	VFSTOUFS(mountp)->um_flags &= ~UFS_ISAPPLEUFS;
 	/* First check to see if this is tagged as an Apple UFS filesystem
 	 * in the disklabel
 	 */
 	if ((VOP_IOCTL(devvp, DIOCGPART, &dpart, FREAD, cred, p) == 0) &&
 		(dpart.part->p_fstype == FS_APPLEUFS)) {
-		ump->um_flags |= UFS_ISAPPLEUFS;
+		VFSTOUFS(mountp)->um_flags |= UFS_ISAPPLEUFS;
 	}
 #ifdef APPLE_UFS
 	else {
@@ -551,37 +546,29 @@ ffs_reload(mp, cred, p)
 		}
 		error = ffs_appleufs_validate(fs->fs_fsmnt,
 			(struct appleufslabel *)bp->b_data,NULL);
-		if (error == 0)
-			ump->um_flags |= UFS_ISAPPLEUFS;
+		if (error == 0) {
+			VFSTOUFS(mountp)->um_flags |= UFS_ISAPPLEUFS;
+		}
 		brelse(bp);
 		bp = NULL;
 	}
 #else
-	if (ump->um_flags & UFS_ISAPPLEUFS)
+	if (VFSTOUFS(mountp)->um_flags & UFS_ISAPPLEUFS)
 		return (EIO);
 #endif
 
-	if (UFS_MPISAPPLEUFS(ump)) {
+	mountp->mnt_maxsymlinklen = fs->fs_maxsymlinklen;
+	if (UFS_MPISAPPLEUFS(mountp)) {
 		/* see comment about NeXT below */
-		ump->um_maxsymlinklen = APPLEUFS_MAXSYMLINKLEN;
-		ump->um_dirblksiz = APPLEUFS_DIRBLKSIZ;
-		mp->mnt_iflag |= IMNT_DTYPE;
-	} else {
-		ump->um_maxsymlinklen = fs->fs_maxsymlinklen;
-		ump->um_dirblksiz = DIRBLKSIZ;
-		if (ump->um_maxsymlinklen > 0)
-			mp->mnt_iflag |= IMNT_DTYPE;
-		else
-			mp->mnt_iflag &= ~IMNT_DTYPE;
+		mountp->mnt_maxsymlinklen = APPLEUFS_MAXSYMLINKLEN;
 	}
-	ffs_oldfscompat_read(fs, ump, sblockloc);
-	ump->um_maxfilesize = fs->fs_maxfilesize;
+	ffs_oldfscompat_read(fs, VFSTOUFS(mountp), sblockloc);
 	if (fs->fs_pendingblocks != 0 || fs->fs_pendinginodes != 0) {
 		fs->fs_pendingblocks = 0;
 		fs->fs_pendinginodes = 0;
 	}
 
-	ffs_statvfs(mp, &mp->mnt_stat, p);
+	ffs_statfs(mountp, &mountp->mnt_stat, p);
 	/*
 	 * Step 3: re-read summary information from disk.
 	 */
@@ -608,9 +595,7 @@ ffs_reload(mp, cred, p)
 		brelse(bp);
 	}
 	if ((fs->fs_flags & FS_DOSOFTDEP))
-		softdep_mount(devvp, mp, fs, cred);
-	if (fs->fs_snapinum[0] != 0)
-		ffs_snapshot_mount(mp);
+		softdep_mount(devvp, mountp, fs, cred);
 	/*
 	 * We no longer know anything about clusters per cylinder group.
 	 */
@@ -622,8 +607,8 @@ ffs_reload(mp, cred, p)
 
 loop:
 	simple_lock(&mntvnode_slock);
-	for (vp = mp->mnt_vnodelist.lh_first; vp != NULL; vp = nvp) {
-		if (vp->v_mount != mp) {
+	for (vp = mountp->mnt_vnodelist.lh_first; vp != NULL; vp = nvp) {
+		if (vp->v_mount != mountp) {
 			simple_unlock(&mntvnode_slock);
 			goto loop;
 		}
@@ -804,7 +789,6 @@ ffs_mountfs(devvp, mp, p)
 
 	ump = malloc(sizeof *ump, M_UFSMNT, M_WAITOK);
 	memset(ump, 0, sizeof *ump);
-	TAILQ_INIT(&ump->um_snapshots);
 	ump->um_fs = fs;
 
 #ifdef FFS_EI
@@ -816,7 +800,6 @@ ffs_mountfs(devvp, mp, p)
 		fs->fs_flags &= ~FS_SWAPPED;
 
 	ffs_oldfscompat_read(fs, ump, sblockloc);
-	ump->um_maxfilesize = fs->fs_maxfilesize;
 
 	if (fs->fs_pendingblocks != 0 || fs->fs_pendinginodes != 0) {
 		fs->fs_pendingblocks = 0;
@@ -926,28 +909,17 @@ ffs_mountfs(devvp, mp, p)
 		fs->fs_avgfilesize = AVFILESIZ;
 	if (fs->fs_avgfpdir <= 0)
 		fs->fs_avgfpdir = AFPDIR;
-	fs->fs_active = NULL;
 	mp->mnt_data = ump;
-	mp->mnt_stat.f_fsidx.__fsid_val[0] = (long)dev;
-	mp->mnt_stat.f_fsidx.__fsid_val[1] = makefstype(MOUNT_FFS);
-	mp->mnt_stat.f_fsid = mp->mnt_stat.f_fsidx.__fsid_val[0];
-	mp->mnt_stat.f_namemax = MAXNAMLEN;
-	if (UFS_MPISAPPLEUFS(ump)) {
+	mp->mnt_stat.f_fsid.val[0] = (long)dev;
+	mp->mnt_stat.f_fsid.val[1] = makefstype(MOUNT_FFS);
+	mp->mnt_maxsymlinklen = fs->fs_maxsymlinklen;
+	if (UFS_MPISAPPLEUFS(mp)) {
 		/* NeXT used to keep short symlinks in the inode even
 		 * when using FS_42INODEFMT.  In that case fs->fs_maxsymlinklen
 		 * is probably -1, but we still need to be able to identify
 		 * short symlinks.
 		 */
-		ump->um_maxsymlinklen = APPLEUFS_MAXSYMLINKLEN;
-		ump->um_dirblksiz = APPLEUFS_DIRBLKSIZ;
-		mp->mnt_iflag |= IMNT_DTYPE;
-	} else {
-		ump->um_maxsymlinklen = fs->fs_maxsymlinklen;
-		ump->um_dirblksiz = DIRBLKSIZ;
-		if (ump->um_maxsymlinklen > 0)
-			mp->mnt_iflag |= IMNT_DTYPE;
-		else
-			mp->mnt_iflag &= ~IMNT_DTYPE;
+		mp->mnt_maxsymlinklen = APPLEUFS_MAXSYMLINKLEN;
 	}
 	mp->mnt_fs_bshift = fs->fs_bshift;
 	mp->mnt_dev_bshift = DEV_BSHIFT;	/* XXX */
@@ -973,8 +945,6 @@ ffs_mountfs(devvp, mp, p)
 			goto out;
 		}
 	}
-	if (ronly == 0 && fs->fs_snapinum[0] != 0)
-		ffs_snapshot_mount(mp);
 	return (0);
 out:
 	if (fs)
@@ -1051,14 +1021,14 @@ ffs_oldfscompat_read(fs, ump, sblockloc)
 	}
 
 	if (fs->fs_old_inodefmt < FS_44INODEFMT) {
-		ump->um_maxfilesize = (u_quad_t) 1LL << 39;
+		fs->fs_maxfilesize = (u_quad_t) 1LL << 39;
 		fs->fs_qbmask = ~fs->fs_bmask;
 		fs->fs_qfmask = ~fs->fs_fmask;
 	}
 
 	maxfilesize = (u_int64_t)0x80000000 * fs->fs_bsize - 1;
-	if (ump->um_maxfilesize > maxfilesize)
-		ump->um_maxfilesize = maxfilesize;
+	if (fs->fs_maxfilesize > maxfilesize)
+		fs->fs_maxfilesize = maxfilesize;
 
 	/* Compatibility for old filesystems */
 	if (fs->fs_avgfilesize <= 0)
@@ -1211,9 +1181,6 @@ ffs_flushfiles(mp, flags, p)
 		 */
 	}
 #endif
-	if ((error = vflush(mp, 0, SKIPSYSTEM | flags)) != 0)
-		return (error);
-	ffs_snapshot_unmount(mp);
 	/*
 	 * Flush all the files.
 	 */
@@ -1233,9 +1200,9 @@ ffs_flushfiles(mp, flags, p)
  * Get file system statistics.
  */
 int
-ffs_statvfs(mp, sbp, p)
+ffs_statfs(mp, sbp, p)
 	struct mount *mp;
-	struct statvfs *sbp;
+	struct statfs *sbp;
 	struct proc *p;
 {
 	struct ufsmount *ump;
@@ -1243,23 +1210,22 @@ ffs_statvfs(mp, sbp, p)
 
 	ump = VFSTOUFS(mp);
 	fs = ump->um_fs;
-	sbp->f_bsize = fs->fs_bsize;
-	sbp->f_frsize = fs->fs_fsize;
+#ifdef COMPAT_09
+	sbp->f_type = 1;
+#else
+	sbp->f_type = 0;
+#endif
+	sbp->f_bsize = fs->fs_fsize;
 	sbp->f_iosize = fs->fs_bsize;
 	sbp->f_blocks = fs->fs_dsize;
 	sbp->f_bfree = blkstofrags(fs, fs->fs_cstotal.cs_nbfree) +
 		fs->fs_cstotal.cs_nffree + dbtofsb(fs, fs->fs_pendingblocks);
-	sbp->f_bresvd = ((u_int64_t) fs->fs_dsize * (u_int64_t)
-	    fs->fs_minfree) / (u_int64_t) 100;
-	if (sbp->f_bfree > sbp->f_bresvd)
-		sbp->f_bavail = sbp->f_bfree - sbp->f_bresvd;
-	else
-		sbp->f_bavail = 0;
+	sbp->f_bavail = (long) (((u_int64_t) fs->fs_dsize * (u_int64_t)
+	    (100 - fs->fs_minfree) / (u_int64_t) 100) -
+	    (u_int64_t) (fs->fs_dsize - sbp->f_bfree));
 	sbp->f_files =  fs->fs_ncg * fs->fs_ipg - ROOTINO;
 	sbp->f_ffree = fs->fs_cstotal.cs_nifree + fs->fs_pendinginodes;
-	sbp->f_favail = sbp->f_ffree;
-	sbp->f_fresvd = 0;
-	copy_statvfs_info(sbp, mp);
+	copy_statfs_info(sbp, mp);
 	return (0);
 }
 
@@ -1305,7 +1271,7 @@ loop:
 		ip = VTOI(vp);
 		if (vp->v_type == VNON ||
 		    ((ip->i_flag &
-		      (IN_CHANGE | IN_UPDATE | IN_MODIFIED)) == 0 &&
+		      (IN_ACCESS | IN_CHANGE | IN_UPDATE | IN_MODIFIED | IN_ACCESSED)) == 0 &&
 		     LIST_EMPTY(&vp->v_dirtyblkhd) &&
 		     vp->v_uobj.uo_npages == 0))
 		{
@@ -1320,12 +1286,8 @@ loop:
 				goto loop;
 			continue;
 		}
-		if (vp->v_type == VREG && waitfor == MNT_LAZY)
-			error = VOP_UPDATE(vp, NULL, NULL, 0);
-		else
-			error = VOP_FSYNC(vp, cred,
-			    waitfor == MNT_WAIT ? FSYNC_WAIT : 0, 0, 0, p);
-		if (error)
+		if ((error = VOP_FSYNC(vp, cred,
+		    waitfor == MNT_WAIT ? FSYNC_WAIT : 0, 0, 0, p)) != 0)
 			allerror = error;
 		vput(vp);
 		simple_lock(&mntvnode_slock);
@@ -1413,8 +1375,6 @@ ffs_vget(mp, ino, vpp)
 			return (0);
 		}
 	} while (lockmgr(&ufs_hashlock, LK_EXCLUSIVE|LK_SLEEPFAIL, 0));
-
-	vp->v_flag |= VLOCKSWORK;
 
 	/*
 	 * XXX MFS ends up here, too, to allocate an inode.  Should we
@@ -1559,16 +1519,15 @@ ffs_init()
 	if (ffs_initcount++ > 0)
 		return;
 
-#ifdef _LKM
-	pool_init(&ffs_inode_pool, sizeof(struct inode), 0, 0, 0,
-		  "ffsinopl", &pool_allocator_nointr);
-	pool_init(&ffs_dinode1_pool, sizeof(struct ufs1_dinode), 0, 0, 0, 
-		  "dino1pl", &pool_allocator_nointr);
-	pool_init(&ffs_dinode2_pool, sizeof(struct ufs2_dinode), 0, 0, 0,
-		  "dino2pl", &pool_allocator_nointr);
-#endif
 	softdep_initialize();
 	ufs_init();
+
+	pool_init(&ffs_inode_pool, sizeof(struct inode), 0, 0, 0, "ffsinopl",
+	    &pool_allocator_nointr);
+	pool_init(&ffs_dinode1_pool, sizeof(struct ufs1_dinode), 0, 0, 0,
+	    "dino1pl", &pool_allocator_nointr);
+	pool_init(&ffs_dinode2_pool, sizeof(struct ufs2_dinode), 0, 0, 0,
+	    "dino2pl", &pool_allocator_nointr);
 }
 
 void
@@ -1586,11 +1545,7 @@ ffs_done()
 
 	/* XXX softdep cleanup ? */
 	ufs_done();
-#ifdef _LKM
-	pool_destroy(&ffs_dinode2_pool);
-	pool_destroy(&ffs_dinode1_pool);
 	pool_destroy(&ffs_inode_pool);
-#endif
 }
 
 SYSCTL_SETUP(sysctl_vfs_ffs_setup, "sysctl vfs.ffs subtree setup")
@@ -1614,28 +1569,28 @@ SYSCTL_SETUP(sysctl_vfs_ffs_setup, "sysctl vfs.ffs subtree setup")
 	 * @@@ should we even bother with these first three?
 	 */
 	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLFLAG_PERMANENT,
 		       CTLTYPE_INT, "doclusterread", NULL,
 		       sysctl_notavail, 0, NULL, 0,
 		       CTL_VFS, 1, FFS_CLUSTERREAD, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLFLAG_PERMANENT,
 		       CTLTYPE_INT, "doclusterwrite", NULL,
 		       sysctl_notavail, 0, NULL, 0,
 		       CTL_VFS, 1, FFS_CLUSTERWRITE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLFLAG_PERMANENT,
 		       CTLTYPE_INT, "doreallocblks", NULL,
 		       sysctl_notavail, 0, NULL, 0,
 		       CTL_VFS, 1, FFS_REALLOCBLKS, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLFLAG_PERMANENT,
 		       CTLTYPE_INT, "doasyncfree",
 		       SYSCTL_DESCR("Release dirty blocks asynchronously"),
 		       NULL, 0, &doasyncfree, 0,
 		       CTL_VFS, 1, FFS_ASYNCFREE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLFLAG_PERMANENT,
 		       CTLTYPE_INT, "log_changeopt",
 		       SYSCTL_DESCR("Log changes in optimization strategy"),
 		       NULL, 0, &ffs_log_changeopt, 0,

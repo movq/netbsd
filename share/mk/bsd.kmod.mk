@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.kmod.mk,v 1.77 2004/06/10 00:29:59 lukem Exp $
+#	$NetBSD: bsd.kmod.mk,v 1.74 2004/01/29 01:48:45 lukem Exp $
 
 .include <bsd.init.mk>
 
@@ -22,9 +22,9 @@ CFLAGS+=	-ffreestanding ${COPTS}
 CPPFLAGS+=	-nostdinc -I. -I${.CURDIR} -isystem $S -isystem $S/arch
 CPPFLAGS+=	-D_KERNEL -D_LKM
 
-_YKMSRCS=	${SRCS:M*.[ly]:C/\..$/.c/} ${YHEADER:D${SRCS:M*.y:.y=.h}}
-DPSRCS+=	${_YKMSRCS}
-CLEANFILES+=	${_YKMSRCS}
+DPSRCS+=	${SRCS:M*.l:.l=.c} ${SRCS:M*.y:.y=.c}
+CLEANFILES+=	${SRCS:M*.l:.l=.c} ${SRCS:M*.y:.y=.c}
+CLEANFILES+=	${YHEADER:D${SRCS:M*.y:.y=.h}}
 CLEANFILES+=	machine ${MACHINE_CPU} tmp.o
 
 # see below why this is necessary
@@ -40,13 +40,6 @@ CFLAGS+=	-mcmodel=kernel
 .elif ${MACHINE_CPU} == "powerpc" || \
       ${MACHINE_CPU} == "arm"
 CLEANFILES+=	${KMOD}_tramp.o ${KMOD}_tramp.S tmp.S ${KMOD}_tmp.o
-.endif
-.if defined(XEN_BUILD) || ${MACHINE} == "xen"
-CLEANFILES+=	xen xen-ma/machine # xen-ma
-CPPFLAGS+=	-I${.OBJDIR}/xen-ma
-.if ${MACHINE_CPU} == "i386"
-CLEANFILES+=	x86
-.endif
 .endif
 
 OBJS+=		${SRCS:N*.h:N*.sh:R:S/$/.o/g}
@@ -111,12 +104,6 @@ ${PROG}: ${OBJS} ${DPADD}
 .if ${MACHINE_CPU} == "i386"
 	@rm -f x86 && \
 	    ln -s $S/arch/x86/include x86
-.endif
-.if defined(XEN_BUILD) || ${MACHINE} == "xen"
-	@rm -f xen && \
-	    ln -s $S/arch/xen/include xen
-	@rm -rf xen-ma && mkdir xen-ma && \
-	    ln -s ../${XEN_BUILD:U${MACHINE_ARCH}} xen-ma/machine
 .endif
 .endif
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: iwm_fd.c,v 1.30 2004/12/15 04:09:16 jmc Exp $	*/
+/*	$NetBSD: iwm_fd.c,v 1.25 2003/10/27 22:16:04 fredb Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998 Hauke Fath.  All rights reserved.
@@ -34,11 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iwm_fd.c,v 1.30 2004/12/15 04:09:16 jmc Exp $");
-
-#ifndef _LKM
-#include "locators.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: iwm_fd.c,v 1.25 2003/10/27 22:16:04 fredb Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,7 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: iwm_fd.c,v 1.30 2004/12/15 04:09:16 jmc Exp $");
 #include <sys/disk.h>
 #include <sys/dkbad.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/uio.h>
 #include <sys/stat.h>
 #include <sys/syslog.h>
@@ -342,8 +337,8 @@ iwm_attach(parent, self, auxp)
 			iwm->fd[ia.unit] = NULL;
 			ia.driveType = getFDType(ia.unit);
 			if (NULL != ia.driveType)
-				config_found(self, (void *)&ia,
-				    fd_print);
+				config_found_sm(self, (void *)&ia,
+				    fd_print, NULL);
 		}
 		if (TRACE_CONFIG)
 			printf("iwm: Initialization completed.\n");
@@ -432,15 +427,11 @@ fd_match(parent, match, auxp)
 
 	cfp = match;
 	fdParams = (iwmAttachArgs_t *)auxp;
-#ifdef _LKM
 	cfUnit = cfp->cf_loc[0];
-#else
-	cfUnit = cfp->cf_loc[IWMCF_DRIVE];
-#endif
 	matched = (cfUnit == fdParams->unit || cfUnit == -1) ? 1 : 0;
 	if (TRACE_CONFIG) {
 		printf("fdMatch() drive %d ? cfUnit = %d\n",
-		    fdParams->unit, cfUnit);
+		    fdParams->unit, cfp->cf_loc[0]);
 	}
 	return matched;
 }
@@ -1035,13 +1026,13 @@ fdstrategy(bp)
 	if (TRACE_STRAT) {
 		printf("iwm: fdstrategy()...\n");
 		printf("     struct buf is at %p\n", bp);
-		printf("     Allocated buffer size (b_bufsize): 0x0%x\n",
+		printf("     Allocated buffer size (b_bufsize): 0x0%lx\n",
 		    bp->b_bufsize);
 		printf("     Base address of buffer (b_data): %p\n",
 		    bp->b_data);
-		printf("     Bytes to be transferred (b_bcount): 0x0%x\n",
+		printf("     Bytes to be transferred (b_bcount): 0x0%lx\n",
 		    bp->b_bcount);
-		printf("     Remaining I/O (b_resid): 0x0%x\n",
+		printf("     Remaining I/O (b_resid): 0x0%lx\n",
 		    bp->b_resid);
 	}
 	/* Check for valid fd unit, controller and io request */
@@ -1061,7 +1052,7 @@ fdstrategy(bp)
 		    || (bp->b_bcount % sectSize) != 0) {
 			if (TRACE_STRAT)
 				printf(" Illegal transfer size: "
-				    "block %lld, %d bytes\n",
+				    "block %lld, %ld bytes\n",
 				    (long long) bp->b_blkno, bp->b_bcount);
 			err = EINVAL;
 		}
@@ -1114,7 +1105,7 @@ fdstrategy(bp)
 		if (TRACE_STRAT) {
 			printf(" This job starts at b_blkno %lld; ",
 			    (long long) bp->b_blkno);
-			printf("it gets sorted for cylinder # %d.\n",
+			printf("it gets sorted for cylinder # %ld.\n",
 			    bp->b_cylinder);
 		}
 		spl = splbio();
@@ -1139,9 +1130,9 @@ fdstrategy(bp)
 	/* Comment on results */
 	if (TRACE_STRAT) {
 		printf("iwm: fdstrategy() done.\n");
-		printf("     We have b_resid = %d bytes left, " \
+		printf("     We have b_resid = %ld bytes left, " \
 		    "b_error is %d;\n", bp->b_resid, bp->b_error);
-		printf("     b_flags are 0x0%x.\n", bp->b_flags);
+		printf("     b_flags are 0x0%lx.\n", bp->b_flags);
 	}
 }
 

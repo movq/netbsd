@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.18 2004/11/05 21:30:31 dsl Exp $	*/
+/*	$NetBSD: io.c,v 1.17 2004/01/26 09:58:35 jsm Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)io.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: io.c,v 1.18 2004/11/05 21:30:31 dsl Exp $");
+__RCSID("$NetBSD: io.c,v 1.17 2004/01/26 09:58:35 jsm Exp $");
 #endif
 #endif /* not lint */
 
@@ -353,10 +353,10 @@ number(lo, hi, prompt)
 		}
 		sum = 0;
 
-		if (!isdigit((unsigned char)*p))
+		if (!isdigit(*p))
 			sum = lo - 1;
 		else
-			while (isdigit((unsigned char)*p)) {
+			while (isdigit(*p)) {
 				sum = 10 * sum + (*p - '0');
 				++p;
 			}
@@ -424,8 +424,8 @@ endmsg()
 
 	/* All messages should start with uppercase */
 	mvaddch(lastline + Y_MSG_START, SCORE_X, ' ');
-	if (islower((unsigned char)Msgbuf[0]) && Msgbuf[1] != ')')
-		Msgbuf[0] = toupper((unsigned char)Msgbuf[0]);
+	if (islower(Msgbuf[0]) && Msgbuf[1] != ')')
+		Msgbuf[0] = toupper(Msgbuf[0]);
 	mp = Msgbuf;
 	len = strlen(mp);
 	if (len / MSG_X + Lineno >= MSG_Y) {

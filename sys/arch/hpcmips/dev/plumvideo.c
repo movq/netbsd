@@ -1,4 +1,4 @@
-/*	$NetBSD: plumvideo.c,v 1.35 2004/12/12 21:03:06 abs Exp $ */
+/*	$NetBSD: plumvideo.c,v 1.34 2003/11/13 03:09:28 chs Exp $ */
 
 /*-
  * Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: plumvideo.c,v 1.35 2004/12/12 21:03:06 abs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: plumvideo.c,v 1.34 2003/11/13 03:09:28 chs Exp $");
 
 #undef PLUMVIDEODEBUG
 
@@ -506,7 +506,7 @@ out:
 			return (EINVAL);
 		}
 		/*
-		 * nothing to do because we have only one configuration
+		 * nothing to do because we have only one configration
 		 */
 		return (0);
 
@@ -531,7 +531,7 @@ out:
 		}
 		/*
 		 * nothing to do
-		 * because we have only one unit and one configuration
+		 * because we have only one unit and one configration
 		 */
 		return (0);
 

@@ -34,7 +34,7 @@
 #include <krb5_locl.h>
 
 __RCSID("$Heimdal: rd_req.c,v 1.47.8.3 2003/10/21 20:10:33 lha Exp $"
-        "$NetBSD: rd_req.c,v 1.1.1.7 2004/04/02 14:47:52 lha Exp $");
+        "$NetBSD: rd_req.c,v 1.1.1.6.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 static krb5_error_code
 decrypt_tkt_enc_part (krb5_context context,

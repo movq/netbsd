@@ -16,8 +16,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307,
-   USA.  */
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 /* This file holds definitions specific to the Xtensa ELF ABI.  */
 
@@ -69,8 +68,8 @@ END_RELOC_NUMBERS (R_XTENSA_max)
 
 
 /* Definitions for instruction and literal property tables.  The
-   tables for ".gnu.linkonce.*" sections are placed in the following
-   sections:
+   instruction tables for ".gnu.linkonce.t.*" sections are placed in
+   the following sections:
 
    instruction tables:	.gnu.linkonce.x.*
    literal tables:	.gnu.linkonce.p.*

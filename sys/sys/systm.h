@@ -1,4 +1,4 @@
-/*	$NetBSD: systm.h,v 1.174 2004/10/23 21:27:33 yamt Exp $	*/
+/*	$NetBSD: systm.h,v 1.170 2004/01/23 05:01:19 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1988, 1991, 1993
@@ -274,7 +274,6 @@ void	initclocks __P((void));
 void	inittodr __P((time_t));
 void	resettodr __P((void));
 void	cpu_initclocks __P((void));
-void	setrootfstime __P((time_t));
 
 void	startprofclock __P((struct proc *));
 void	stopprofclock __P((struct proc *));
@@ -345,7 +344,6 @@ int	trace_enter __P((struct lwp *, register_t, register_t,
 void	trace_exit __P((struct lwp *, register_t, void *, register_t [], int));
 
 int	uiomove __P((void *, size_t, struct uio *));
-int	uiomove_frombuf __P((void *, size_t, struct uio *));
 
 #ifdef _KERNEL
 int	setjmp	__P((label_t *));
@@ -443,16 +441,12 @@ void	_kernel_lock(int);
 void	_kernel_unlock(void);
 void	_kernel_proc_lock(struct lwp *);
 void	_kernel_proc_unlock(struct lwp *);
-int	_kernel_lock_release_all(void);
-void	_kernel_lock_acquire_count(int);
 
 #define	KERNEL_LOCK_INIT()		_kernel_lock_init()
 #define	KERNEL_LOCK(flag)		_kernel_lock((flag))
 #define	KERNEL_UNLOCK()			_kernel_unlock()
 #define	KERNEL_PROC_LOCK(l)		_kernel_proc_lock((l))
 #define	KERNEL_PROC_UNLOCK(l)		_kernel_proc_unlock((l))
-#define	KERNEL_LOCK_RELEASE_ALL()	_kernel_lock_release_all()
-#define	KERNEL_LOCK_ACQUIRE_COUNT(count) _kernel_lock_acquire_count(count)
 
 #else /* ! MULTIPROCESSOR */
 
@@ -461,16 +455,7 @@ void	_kernel_lock_acquire_count(int);
 #define	KERNEL_UNLOCK()			/* nothing */
 #define	KERNEL_PROC_LOCK(l)		/* nothing */
 #define	KERNEL_PROC_UNLOCK(l)		/* nothing */
-#define	KERNEL_LOCK_RELEASE_ALL()	(0)
-#define	KERNEL_LOCK_ACQUIRE_COUNT(count) /* nothing */
 
 #endif /* MULTIPROCESSOR */
-
-#if defined(MULTIPROCESSOR) && defined(DEBUG)
-#define	KERNEL_LOCK_ASSERT_LOCKED()	_kernel_lock_assert_locked()
-void _kernel_lock_assert_locked(void);
-#else
-#define	KERNEL_LOCK_ASSERT_LOCKED()	/* nothing */
-#endif
 
 #endif	/* !_SYS_SYSTM_H_ */

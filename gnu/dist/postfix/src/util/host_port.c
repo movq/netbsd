@@ -1,5 +1,3 @@
-/*	$NetBSD: host_port.c,v 1.1.1.3 2004/05/31 00:24:59 heas Exp $	*/
-
 /*++
 /* NAME
 /*	host_port 3
@@ -17,12 +15,6 @@
 /*	host_port() splits a string into substrings with the host
 /*	name or address, and the service name or port number.
 /*	The input string is modified.
-/*
-/*	The following input formats are understood:
-/*
-/*	[host]:port, [host]:, [host].
-/*
-/*	host:port, host:, host.
 /* DIAGNOSTICS
 /*	The result is a null pointer in case of success.
 /*	In case of problems the result is a string pointer with

@@ -1,5 +1,3 @@
-/*	$NetBSD: base64_code.c,v 1.1.1.3 2004/05/31 00:24:56 heas Exp $	*/
-
 /*++
 /* NAME
 /*	base64_code 3
@@ -43,11 +41,6 @@
 #include "sys_defs.h"
 #include <ctype.h>
 #include <string.h>
-#include <limits.h>
-
-#ifndef UCHAR_MAX
-#define UCHAR_MAX 0xff
-#endif
 
 /* Utility library. */
 
@@ -109,7 +102,7 @@ VSTRING *base64_decode(VSTRING *result, const char *in, int len)
     int     ch2;
     int     ch3;
 
-#define CHARS_PER_BYTE	(UCHAR_MAX + 1)
+#define CHARS_PER_BYTE	256
 #define INVALID		0xff
 
     /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: ss_scanjet.c,v 1.37 2004/10/28 07:07:45 yamt Exp $	*/
+/*	$NetBSD: ss_scanjet.c,v 1.28.8.1 2004/09/11 12:57:39 he Exp $	*/
 
 /*
  * Copyright (c) 1995 Kenneth Stailey.  All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ss_scanjet.c,v 1.37 2004/10/28 07:07:45 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ss_scanjet.c,v 1.28.8.1 2004/09/11 12:57:39 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,7 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: ss_scanjet.c,v 1.37 2004/10/28 07:07:45 yamt Exp $")
 #include <sys/ioctl.h>
 #include <sys/malloc.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/device.h>
@@ -51,30 +50,30 @@ __KERNEL_RCSID(0, "$NetBSD: ss_scanjet.c,v 1.37 2004/10/28 07:07:45 yamt Exp $")
 #include <sys/scanio.h>
 #include <sys/kernel.h>
 
-#include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsi_all.h>
+#include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsi_scanner.h>
-#include <dev/scsipi/scsipiconf.h>
+#include <dev/scsipi/scsiconf.h>
 #include <dev/scsipi/scsipi_base.h>
 #include <dev/scsipi/ssvar.h>
 
 #define SCANJET_RETRIES 4
 
-static int	scanjet_get_params(struct ss_softc *);
-static int	scanjet_set_params(struct ss_softc *, struct scan_io *);
-static int	scanjet_trigger_scanner(struct ss_softc *);
-static int	scanjet_read(struct ss_softc *, struct buf *);
+int scanjet_get_params __P((struct ss_softc *));
+int scanjet_set_params __P((struct ss_softc *, struct scan_io *));
+int scanjet_trigger_scanner __P((struct ss_softc *));
+int scanjet_read __P((struct ss_softc *, struct buf *));
 
 /* only used internally */
-static int	scanjet_ctl_write(struct ss_softc *, char *, u_int);
-static int	scanjet_ctl_read(struct ss_softc *, char *, u_int);
-static int	scanjet_set_window(struct ss_softc *);
-static int	scanjet_compute_sizes(struct ss_softc *);
+int scanjet_ctl_write __P((struct ss_softc *, char *, u_int));
+int scanjet_ctl_read __P((struct ss_softc *, char *, u_int));
+int scanjet_set_window __P((struct ss_softc *));
+int scanjet_compute_sizes __P((struct ss_softc *));
 
 /*
  * structure for the special handlers
  */
-static struct ss_special scanjet_special = {
+struct ss_special scanjet_special = {
 	scanjet_set_params,
 	scanjet_trigger_scanner,
 	scanjet_get_params,
@@ -89,7 +88,9 @@ static struct ss_special scanjet_special = {
  * scanjet_attach: attach special functions to ss
  */
 void
-scanjet_attach(struct ss_softc *ss, struct scsipibus_attach_args *sa)
+scanjet_attach(ss, sa)
+	struct ss_softc *ss;
+	struct scsipibus_attach_args *sa;
 {
 	int error;
 
@@ -155,8 +156,9 @@ scanjet_attach(struct ss_softc *ss, struct scsipibus_attach_args *sa)
 	printf("\n");
 }
 
-static int
-scanjet_get_params(struct ss_softc *ss)
+int
+scanjet_get_params(ss)
+	struct ss_softc *ss;
 {
 
 	return (0);
@@ -167,8 +169,10 @@ scanjet_get_params(struct ss_softc *ss)
  * but don't send the command to the scanner in case the user wants
  * to change parameters by more than one call
  */
-static int
-scanjet_set_params(struct ss_softc *ss, struct scan_io *sio)
+int
+scanjet_set_params(ss, sio)
+	struct ss_softc *ss;
+	struct scan_io *sio;
 {
 	int error;
 
@@ -230,8 +234,9 @@ scanjet_set_params(struct ss_softc *ss, struct scan_io *sio)
  * this includes sending the mode- and window-data,
  * and starting the scanner
  */
-static int
-scanjet_trigger_scanner(struct ss_softc *ss)
+int
+scanjet_trigger_scanner(ss)
+	struct ss_softc *ss;
 {
 	char escape_codes[20];
 	int error;
@@ -248,7 +253,7 @@ scanjet_trigger_scanner(struct ss_softc *ss)
 	}
 
 	/* send "trigger" operation */
-	strlcpy(escape_codes, "\033*f0S", sizeof(escape_codes));
+	strcpy(escape_codes, "\033*f0S");
 	error = scanjet_ctl_write(ss, escape_codes, strlen(escape_codes));
 	if (error) {
 		uprintf("%s: trigger_scanner failed\n", ss->sc_dev.dv_xname);
@@ -258,8 +263,10 @@ scanjet_trigger_scanner(struct ss_softc *ss)
 	return (0);
 }
 
-static int
-scanjet_read(struct ss_softc *ss, struct buf *bp)
+int
+scanjet_read(ss, bp)
+	struct ss_softc *ss;
+	struct buf *bp;
 {
 	struct scsi_rw_scanner cmd;
 	struct scsipi_xfer *xs;
@@ -301,7 +308,10 @@ scanjet_read(struct ss_softc *ss, struct buf *bp)
 #else
 	BUFQ_GET(&ss->buf_queue);
 #endif
-	error = scsipi_execute_xs(xs);
+	error = scsipi_command(periph, xs,
+	    (struct scsipi_generic *) &cmd, sizeof(cmd),
+	    (u_char *) bp->b_data, bp->b_bcount, SCANJET_RETRIES, 100000, bp,
+	    XS_CTL_NOSLEEP | XS_CTL_ASYNC | XS_CTL_DATA_IN);
 	/* with a scsipi_xfer preallocated, scsipi_command can't fail */
 	KASSERT(error == 0);
 	ss->sio.scan_window_size -= bp->b_bcount;
@@ -314,8 +324,11 @@ scanjet_read(struct ss_softc *ss, struct buf *bp)
 /*
  * Do a synchronous write.  Used to send control messages.
  */
-static int 
-scanjet_ctl_write(struct ss_softc *ss, char *buf, u_int size)
+int 
+scanjet_ctl_write(ss, buf, size)
+	struct ss_softc *ss;
+	char *buf;
+	u_int size;
 {
 	struct scsi_rw_scanner cmd;
 	int flags;
@@ -327,9 +340,9 @@ scanjet_ctl_write(struct ss_softc *ss, char *buf, u_int size)
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.opcode = WRITE;
 	_lto3b(size, cmd.len);
-
-	return (scsipi_command(ss->sc_periph,
-	    (void *)&cmd, sizeof(cmd), (void *)buf, size, 0, 100000, NULL,
+	return (scsipi_command(ss->sc_periph, NULL,
+	    (struct scsipi_generic *) &cmd,
+	    sizeof(cmd), (u_char *) buf, size, 0, 100000, NULL,
 	    flags | XS_CTL_DATA_OUT | XS_CTL_DATA_ONSTACK));
 }
 
@@ -337,8 +350,11 @@ scanjet_ctl_write(struct ss_softc *ss, char *buf, u_int size)
 /*
  * Do a synchronous read.  Used to read responses to control messages.
  */
-static int
-scanjet_ctl_read(struct ss_softc *ss, char *buf, u_int size)
+int
+scanjet_ctl_read(ss, buf, size)
+	struct ss_softc *ss;
+	char *buf;
+	u_int size;
 {
 	struct scsi_rw_scanner cmd;
 	int flags;
@@ -350,16 +366,15 @@ scanjet_ctl_read(struct ss_softc *ss, char *buf, u_int size)
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.opcode = READ;
 	_lto3b(size, cmd.len);
-
-	return (scsipi_command(ss->sc_periph,
-	    (void *)&cmd, sizeof(cmd), (void *)buf, size, 0, 100000, NULL,
+	return (scsipi_command(ss->sc_periph, NULL,
+	    (struct scsipi_generic *) &cmd,
+	    sizeof(cmd), (u_char *) buf, size, 0, 100000, NULL,
 	    flags | XS_CTL_DATA_IN | XS_CTL_DATA_ONSTACK));
 }
 
 
 #ifdef SCANJETDEBUG
-static void
-show_es(char *es)
+static void show_es(char *es)
 {
 	char *p = es;
 	while (*p) {
@@ -376,72 +391,73 @@ show_es(char *es)
 /* 
  * simulate SCSI_SET_WINDOW for ScanJets
  */
-static int
-scanjet_set_window(struct ss_softc *ss)
+int
+scanjet_set_window(ss)
+	struct ss_softc *ss;
 {
-	char escape_codes[128], *p, *ep;
+	char escape_codes[128], *p;
 
 	p = escape_codes;
-	ep = &escape_codes[128];
 
-	p += snprintf(p, ep - p, "\033*f%ldP", ss->sio.scan_width / 4);
-	p += snprintf(p, ep - p, "\033*f%ldQ", ss->sio.scan_height / 4);
-	p += snprintf(p, ep - p, "\033*f%ldX", ss->sio.scan_x_origin / 4);
-	p += snprintf(p, ep - p, "\033*f%ldY", ss->sio.scan_y_origin / 4);
-	p += snprintf(p, ep - p, "\033*a%dR", ss->sio.scan_x_resolution);
-	p += snprintf(p, ep - p, "\033*a%dS", ss->sio.scan_y_resolution);
+	p += sprintf(p, "\033*f%ldP", ss->sio.scan_width / 4);
+	p += sprintf(p, "\033*f%ldQ", ss->sio.scan_height / 4);
+	p += sprintf(p, "\033*f%ldX", ss->sio.scan_x_origin / 4);
+	p += sprintf(p, "\033*f%ldY", ss->sio.scan_y_origin / 4);
+	p += sprintf(p, "\033*a%dR", ss->sio.scan_x_resolution);
+	p += sprintf(p, "\033*a%dS", ss->sio.scan_y_resolution);
      
 	switch (ss->sio.scan_image_mode) {
 	case SIM_BINARY_MONOCHROME:
 		ss->sio.scan_bits_per_pixel = 1;
 		/* use "line art" mode */
-		strlcpy(p, "\033*a0T", ep - p);
+		strcpy(p, "\033*a0T");
 		p += strlen(p);
 		/* make image data be "min-is-white ala PBM */
-		strlcpy(p, "\033*a0I", ep - p);
+		strcpy(p, "\033*a0I");
 		p += strlen(p);
 		break;
 	case SIM_DITHERED_MONOCHROME:
 		ss->sio.scan_bits_per_pixel = 1;
 		/* use dithered mode */
-		strlcpy(p, "\033*a3T", ep - p);
+		strcpy(p, "\033*a3T");
 		p += strlen(p);
 		/* make image data be "min-is-white ala PBM */
-		strlcpy(p, "\033*a0I", ep - p);
+		strcpy(p, "\033*a0I");
 		p += strlen(p);
 		break;
 	case SIM_GRAYSCALE:
 		ss->sio.scan_bits_per_pixel = 8;
 		/* use grayscale mode */
-		strlcpy(p, "\033*a4T", ep - p);
+		strcpy(p, "\033*a4T");
 		p += strlen(p);
 		/* make image data be "min-is-black ala PGM */
-		strlcpy(p, "\033*a1I", ep - p);
+		strcpy(p, "\033*a1I");
 		p += strlen(p);
 		break;
 	case SIM_COLOR:
 		ss->sio.scan_bits_per_pixel = 24;
 		/* use RGB color mode */
-		strlcpy(p, "\033*a5T", ep - p);
+		strcpy(p, "\033*a5T");
 		p += strlen(p);
 		/* make image data be "min-is-black ala PPM */
-		strlcpy(p, "\033*a1I", ep - p);
+		strcpy(p, "\033*a1I");
 		p += strlen(p);
 		/* use pass-through matrix (disable NTSC) */
-		strlcpy(p, "\033*u2T", ep - p);
+		strcpy(p, "\033*u2T");
 		p += strlen(p);
 		break;
 	}
 
-	p += snprintf(p, ep - p, "\033*a%dG", ss->sio.scan_bits_per_pixel);
-	p += snprintf(p, ep - p, "\033*a%dL", (int)(ss->sio.scan_brightness) - 128);
-	p += snprintf(p, ep - p, "\033*a%dK", (int)(ss->sio.scan_contrast) - 128);
+	p += sprintf(p, "\033*a%dG", ss->sio.scan_bits_per_pixel);
+	p += sprintf(p, "\033*a%dL", (int)(ss->sio.scan_brightness) - 128);
+	p += sprintf(p, "\033*a%dK", (int)(ss->sio.scan_contrast) - 128);
 
 	return (scanjet_ctl_write(ss, escape_codes, p - escape_codes));
 }
 
-static int
-scanjet_compute_sizes(struct ss_softc *ss)
+int
+scanjet_compute_sizes(ss)
+	struct ss_softc *ss;
 {
 	int error;
 	static const char *wfail = "%s: interrogate write failed\n";
@@ -462,13 +478,11 @@ scanjet_compute_sizes(struct ss_softc *ss)
 	switch (ss->sio.scan_image_mode) {
 	case SIM_BINARY_MONOCHROME:
 	case SIM_DITHERED_MONOCHROME:
-		/* bytes wide */
-		strlcpy(escape_codes, "\033*s1025E", sizeof(escape_codes));
+		strcpy(escape_codes, "\033*s1025E"); /* bytes wide */
 		break;
 	case SIM_GRAYSCALE:
 	case SIM_COLOR:
-		/* pixels wide */
-		strlcpy(escape_codes, "\033*s1024E", sizeof(escape_codes));
+		strcpy(escape_codes, "\033*s1024E"); /* pixels wide */
 		break;
 	}
 	error = scanjet_ctl_write(ss, escape_codes, strlen(escape_codes));
@@ -490,8 +504,7 @@ scanjet_compute_sizes(struct ss_softc *ss)
 	if (ss->sio.scan_image_mode < SIM_GRAYSCALE)
 		ss->sio.scan_pixels_per_line *= 8;
 
-	/* pixels high */
-	strlcpy(escape_codes, "\033*s1026E", sizeof(escape_codes));
+	strcpy(escape_codes, "\033*s1026E"); /* pixels high */
 	error = scanjet_ctl_write(ss, escape_codes, strlen(escape_codes));
 	if (error) {
 		uprintf(wfail, ss->sc_dev.dv_xname);

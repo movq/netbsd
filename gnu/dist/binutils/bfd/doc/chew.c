@@ -1,6 +1,6 @@
 /* chew
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 2000, 2001,
-   2002, 2003
+   2002
    Free Software Foundation, Inc.
    Contributed by steve chamberlain @cygnus
 
@@ -494,11 +494,8 @@ paramstuff ()
   string_type out;
   init_string (&out);
 
-#define NO_PARAMS 1
-
   /* Make sure that it's not already param'd or proto'd.  */
-  if (NO_PARAMS
-      || find (tos, "PARAMS") || find (tos, "PROTO") || !find (tos, "("))
+  if (find (tos, "PARAMS") || find (tos, "PROTO") || !find (tos, "("))
     {
       catstr (&out, tos);
     }

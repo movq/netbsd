@@ -1,7 +1,7 @@
-/*	$NetBSD: atapi_base.c,v 1.23 2004/09/17 23:30:22 mycroft Exp $	*/
+/*	$NetBSD: atapi_base.c,v 1.19.2.1 2004/09/11 12:47:55 he Exp $	*/
 
 /*-
- * Copyright (c) 1998, 1999, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atapi_base.c,v 1.23 2004/09/17 23:30:22 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atapi_base.c,v 1.19.2.1 2004/09/11 12:47:55 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,7 +62,8 @@ __KERNEL_RCSID(0, "$NetBSD: atapi_base.c,v 1.23 2004/09/17 23:30:22 mycroft Exp 
  * THIS IS THE DEFAULT ERROR HANDLER
  */
 int
-atapi_interpret_sense(struct scsipi_xfer *xs)
+atapi_interpret_sense(xs)
+	struct scsipi_xfer *xs;
 {
 	struct scsipi_periph *periph = xs->xs_periph;
 	int key, error;
@@ -195,7 +196,8 @@ atapi_interpret_sense(struct scsipi_xfer *xs)
  * Print out the scsi_link structure's address info.
  */
 void
-atapi_print_addr(struct scsipi_periph *periph)
+atapi_print_addr(periph)
+	struct scsipi_periph *periph;
 {
 	struct scsipi_channel *chan = periph->periph_channel;
 	struct scsipi_adapter *adapt = chan->chan_adapter;
@@ -212,12 +214,39 @@ atapi_print_addr(struct scsipi_periph *periph)
  * long the data is supposed to be. If we have  a buf
  * to associate with the transfer, we need that too.
  */
-void
-atapi_scsipi_cmd(struct scsipi_xfer *xs)
+int
+atapi_scsipi_cmd(periph, xs, scsipi_cmd, cmdlen, data, datalen,
+    retries, timeout, bp, flags)
+	struct scsipi_periph *periph;
+	struct scsipi_xfer *xs;
+	struct scsipi_generic *scsipi_cmd;
+	int cmdlen;
+	void *data;
+	size_t datalen;
+	int retries;
+	int timeout;
+	struct buf *bp;
+	int flags;
 {
-	struct scsipi_periph *periph = xs->xs_periph;
+	int error;
 
 	SC_DEBUG(periph, SCSIPI_DB2, ("atapi_cmd\n"));
 
+#ifdef DIAGNOSTIC
+	if (bp != NULL && (flags & XS_CTL_ASYNC) == 0)
+		panic("atapi_scsipi_cmd: buffer without async");
+#endif
+	if (xs == NULL) {
+		if ((xs = scsipi_make_xs(periph, scsipi_cmd, cmdlen, data,
+		    datalen, retries, timeout, bp, flags)) == NULL) {
+			/* let the caller deal with this */
+			return (ENOMEM);
+		}
+	}
+
 	xs->cmdlen = (periph->periph_cap & PERIPH_CAP_CMD16) ? 16 : 12;
+
+	if ((error = scsipi_execute_xs(xs)) == EJUSTRETURN)
+		return (0);
+	return (error);
 }

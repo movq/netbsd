@@ -1,4 +1,4 @@
-/*	$NetBSD: eisa.c,v 1.35 2004/09/01 21:09:09 drochner Exp $	*/
+/*	$NetBSD: eisa.c,v 1.31 2003/01/01 00:10:17 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Christopher G. Demetriou
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eisa.c,v 1.35 2004/09/01 21:09:09 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eisa.c,v 1.31 2003/01/01 00:10:17 thorpej Exp $");
 
 #include "opt_eisaverbose.h"
 
@@ -53,53 +53,55 @@ __KERNEL_RCSID(0, "$NetBSD: eisa.c,v 1.35 2004/09/01 21:09:09 drochner Exp $");
 #include <dev/eisa/eisavar.h>
 #include <dev/eisa/eisadevs.h>
 
-#include "locators.h"
-
-static int	eisamatch(struct device *, struct cfdata *, void *);
-static void	eisaattach(struct device *, struct device *, void *);
+int	eisamatch(struct device *, struct cfdata *, void *);
+void	eisaattach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(eisa, sizeof(struct device),
     eisamatch, eisaattach, NULL, NULL);
 
-static int	eisasubmatch(struct device *, struct cfdata *,
-			     const locdesc_t *, void *);
-static int	eisaprint(void *, const char *);
-static void	eisa_devinfo(const char *, char *, size_t);
+int	eisasubmatch(struct device *, struct cfdata *, void *);
+int	eisaprint(void *, const char *);
+void	eisa_devinfo(const char *, char *);
 
-static int
+int
 eisamatch(struct device *parent, struct cfdata *cf, void *aux)
 {
+	struct eisabus_attach_args *eba = aux;
+
+	if (strcmp(eba->eba_busname, cf->cf_name))
+		return (0);
+
 	/* XXX check other indicators */
 
 	return (1);
 }
 
-static int
+int
 eisaprint(void *aux, const char *pnp)
 {
 	struct eisa_attach_args *ea = aux;
 	char devinfo[256]; 
 
 	if (pnp) {
-		eisa_devinfo(ea->ea_idstring, devinfo, sizeof(devinfo));
+		eisa_devinfo(ea->ea_idstring, devinfo);
 		aprint_normal("%s at %s", devinfo, pnp);
 	}
 	aprint_normal(" slot %d", ea->ea_slot);
 	return (UNCONF);
 }
 
-static int
-eisasubmatch(struct device *parent, struct cfdata *cf,
-	     const locdesc_t * ldesc, void *aux)
+int
+eisasubmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
+	struct eisa_attach_args *ea = aux;
 
-	if (cf->cf_loc[EISACF_SLOT] != EISACF_SLOT_DEFAULT &&
-	    cf->cf_loc[EISACF_SLOT] != ldesc->locs[EISACF_SLOT])
+	if (cf->eisacf_slot != EISA_UNKNOWN_SLOT &&
+	    cf->eisacf_slot != ea->ea_slot)
 		return (0);
 	return (config_match(parent, cf, aux));
 }
 
-static void
+void
 eisaattach(struct device *parent, struct device *self, void *aux)
 {
 	struct eisabus_attach_args *eba = aux;
@@ -128,8 +130,6 @@ eisaattach(struct device *parent, struct device *self, void *aux)
 		u_int slotaddr;
 		bus_space_handle_t slotioh;
 		int i;
-		int help[2];
-		locdesc_t *ldesc = (void *)help; /* XXX */
 
 		ea.ea_iot = iot;
 		ea.ea_memt = memt;
@@ -192,12 +192,8 @@ eisaattach(struct device *parent, struct device *self, void *aux)
 		/* We no longer need the I/O handle; free it. */
 		bus_space_unmap(iot, slotioh, EISA_SLOT_SIZE);
 
-		ldesc->len = 1;
-		ldesc->locs[EISACF_SLOT] = slot;
-
 		/* Attach matching device. */
-		config_found_sm_loc(self, "eisa", ldesc, &ea,
-				    eisaprint, eisasubmatch);
+		config_found_sm(self, &ea, eisaprint, eisasubmatch);
 	}
 }
 
@@ -215,7 +211,7 @@ struct eisa_knowndev {
 #endif	/* EISAVEBSOSE */
 
 void
-eisa_devinfo(const char *id, char *cp, size_t l)
+eisa_devinfo(const char *id, char *cp)
 {
 #ifdef EISAVERBOSE
 	const char *name;
@@ -239,13 +235,13 @@ eisa_devinfo(const char *id, char *cp, size_t l)
 	}
 
 	if (name == NULL)
-		snprintf(cp, l, "unknown device %s", id);
+		sprintf(cp, "unknown device %s", id);
 	else if (onlyvendor)
-		snprintf(cp, l, "unknown %s device %s", name, id);
+		sprintf(cp, "unknown %s device %s", name, id);
 	else
-		snprintf(cp, l, "%s", name);
+		sprintf(cp, "%s", name);
 #else	/* EISAVERBOSE */
 
-	snprintf(cp, l, "device %s", id);
+	sprintf(cp, "device %s", id);
 #endif	/* EISAVERBOSE */
 }

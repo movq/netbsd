@@ -1,4 +1,4 @@
-.\" $NetBSD: pkg_delete.1,v 1.35 2004/12/15 17:17:51 wiz Exp $
+.\" $NetBSD: pkg_delete.1,v 1.32 2004/01/29 01:56:17 reed Exp $
 .\"
 .\" FreeBSD install - a package for the installation and maintenance
 .\" of non-core utilities.
@@ -17,7 +17,7 @@
 .\"
 .\"     from FreeBSD: @(#)pkg_delete.1
 .\"
-.Dd November 2, 2004
+.Dd September 2, 2003
 .Dt PKG_DELETE 1
 .Os
 .Sh NAME
@@ -25,7 +25,7 @@
 .Nd a utility for deleting previously installed software package distributions
 .Sh SYNOPSIS
 .Nm
-.Op Fl DdFfNnORrVv
+.Op Fl DdFfnORrVv
 .Bk -words
 .Op Fl K Ar pkg_dbdir
 .Ek
@@ -54,15 +54,8 @@ For extra protection, examine all the package control files in the
 package record directory
 .Pa ( /var/db/pkg/\*[Lt]pkg-name\*[Gt]/ ) .
 Pay particular
-attention to any
-.Pa +INSTALL ,
-.Pa +DEINSTALL ,
-.Pa +REQUIRE ,
-or
-.Pa +MTREE_DIRS
-files, and inspect the
-.Pa +CONTENTS
-file for
+attention to any +INSTALL, +DEINSTALL, +REQUIRE or +MTREE_DIRS files,
+and inspect the +CONTENTS file for
 .Cm @cwd ,
 .Cm @mode
 (check for setuid),
@@ -118,10 +111,6 @@ taken from the value of the environment variable
 .Ev PKG_DBDIR
 if it's set, otherwise it defaults to
 .Pa /var/db/pkg .
-.It Fl N
-Remove the package's registration and its entries from the package database,
-but leave the files installed.
-Don't run any deinstall scripts or @unexec lines either.
 .It Fl n
 Don't actually deinstall a package, just report the steps that
 would be taken if it were.

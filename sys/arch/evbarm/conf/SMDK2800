@@ -1,4 +1,4 @@
-#	$NetBSD: SMDK2800,v 1.18 2004/11/24 20:49:20 bouyer Exp $
+#	$NetBSD: SMDK2800,v 1.13.2.1 2004/07/15 20:22:15 he Exp $
 #
 #	SMDK2800 -- Samsung's S3C2800 evaluation board.
 #
@@ -27,7 +27,7 @@ options 	NTP		# NTP phase/frequency locked loop
 # CPU options
 
 options 	CPU_ARM9	# Support the ARM9TDMI core
-makeoptions	CPUFLAGS="-march=armv4"
+makeoptions	COPTS="-O2 -march=armv4"
 
 options 	S3C2XX0_XTAL_CLK=6000000	# 6MHz external Xtal
 
@@ -66,7 +66,6 @@ options 	INET6		# IPV6
 #options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
-#options 	PIM		# Protocol Independent Multicast
 #options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 #options 	ISO,TPIP	# OSI
@@ -95,7 +94,6 @@ options 	COMPAT_16	# NetBSD 1.6 compatibility.
 #options 	COMPAT_10	# NetBSD 1.0 compatibility.
 #options 	COMPAT_09	# NetBSD 0.9 compatibility.
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # Shared memory options
 
@@ -172,7 +170,6 @@ pci0	at sspci0
 #cmdide* 	at pci? dev ? function ?	# CMD tech IDE controllers
 #hptide* 	at pci? dev ? function ?	# Triones/HighPoint IDE controllers
 #pdcide* 	at pci? dev ? function ?	# Promise IDE controllers
-#pdcsata* 	at pci? dev ? function ?	# Promise SATA150 controllers
 #satalink*	at pci? dev ? function ?	# SiI SATALink controllers
 
 # ATA bus support

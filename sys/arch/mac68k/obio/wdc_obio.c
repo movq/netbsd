@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_obio.c,v 1.17 2004/08/20 06:39:38 thorpej Exp $ */
+/*	$NetBSD: wdc_obio.c,v 1.14 2004/01/09 17:00:02 fredb Exp $ */
 
 /*
  * Copyright (c) 2002 Takeshi Shibagaki  All rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_obio.c,v 1.17 2004/08/20 06:39:38 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_obio.c,v 1.14 2004/01/09 17:00:02 fredb Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -66,10 +66,9 @@ static u_long	IDEBase = 0x50f1a000;
 
 struct wdc_obio_softc {
 	struct  wdc_softc sc_wdcdev;
-	struct  ata_channel *sc_chanlist[1];
-	struct  ata_channel sc_channel;
-	struct	ata_queue sc_chqueue;
-	struct	wdc_regs sc_wdc_regs;
+	struct  wdc_channel *wdc_chanlist[1];
+	struct  wdc_channel wdc_channel;
+	struct	ata_queue wdc_chqueue;
 	void    *sc_ih;
 };
 
@@ -87,16 +86,11 @@ wdc_obio_match(parent, match, aux)
 	void *aux;
 {
 	struct obio_attach_args *oa = (struct obio_attach_args *) aux;
-	struct ata_channel ch;
-	struct wdc_softc wdc;
-	struct wdc_regs wdr;
+	struct wdc_channel ch;
 	static int wdc_matched = 0;
 	int i, result = 0;
 
-	memset(&wdc, 0, sizeof(wdc));
 	memset(&ch, 0, sizeof(ch));
-	ch.ch_atac = &wdc.sc_atac;
-	wdc.regs = &wdr;
 
 	switch (current_mac_model->machineid) {
 	case MACH_MACPB150:
@@ -104,32 +98,31 @@ wdc_obio_match(parent, match, aux)
 	case MACH_MACPB190CS:
 	case MACH_MACP580:
 	case MACH_MACQ630:
-		wdr.cmd_iot = wdr.ctl_iot = oa->oa_tag;
+		ch.cmd_iot = ch.ctl_iot = oa->oa_tag;
 
-		if (bus_space_map(wdr.cmd_iot, IDEBase, WDC_OBIO_REG_NPORTS,
-				0, &wdr.cmd_baseioh))
+		if (bus_space_map(ch.cmd_iot, IDEBase, WDC_OBIO_REG_NPORTS,
+				0, &ch.cmd_baseioh))
 			return 0;
 
-		mac68k_bus_space_handle_swapped(wdr.cmd_iot, &wdr.cmd_baseioh);
+		mac68k_bus_space_handle_swapped(ch.cmd_iot, &ch.cmd_baseioh);
 
 		for (i = 0; i < WDC_NREG; i++) {
-			if (bus_space_subregion(wdr.cmd_iot, wdr.cmd_baseioh,
-					    4 * i, 4, &wdr.cmd_iohs[i]) != 0) {
+			if (bus_space_subregion(ch.cmd_iot, ch.cmd_baseioh,
+					    4 * i, 4, &ch.cmd_iohs[i]) != 0) {
 				return 0;
 			}
 		}
-		wdc_init_shadow_regs(&ch);
 
 
-		if (bus_space_subregion(wdr.cmd_iot, wdr.cmd_baseioh,
+		if (bus_space_subregion(ch.cmd_iot, ch.cmd_baseioh,
 				        WDC_OBIO_AUXREG_OFFSET,
 					WDC_OBIO_AUXREG_NPORTS,
-					&wdr.ctl_ioh))
+					&ch.ctl_ioh))
 			return 0;
 
 		result = wdcprobe(&ch);
 
-		bus_space_unmap(wdr.cmd_iot, wdr.cmd_baseioh, WDC_OBIO_REG_NPORTS);
+		bus_space_unmap(ch.cmd_iot, ch.cmd_baseioh, WDC_OBIO_REG_NPORTS);
 
 		if (result)
 			wdc_matched = 1;
@@ -140,7 +133,7 @@ wdc_obio_match(parent, match, aux)
 
 static bus_space_tag_t		wdc_obio_isr_tag;
 static bus_space_handle_t	wdc_obio_isr_hdl;
-static struct ata_channel	*ch_sc = NULL;
+static struct wdc_channel	*ch_sc = NULL;
 
 void
 wdc_obio_intr(arg)
@@ -164,43 +157,39 @@ wdc_obio_attach(parent, self, aux)
 	void *aux;
 {
 	struct wdc_obio_softc *sc = (void *)self;
-	struct wdc_regs *wdr;
 	struct obio_attach_args *oa = aux;
-	struct ata_channel *chp = &sc->sc_channel;
+	struct wdc_channel *chp = &sc->wdc_channel;
 	int i;
 
-	sc->sc_wdcdev.regs = wdr = &sc->sc_wdc_regs;
-
 	oa->oa_addr = IDEBase;
-	wdr->cmd_iot = wdr->ctl_iot = oa->oa_tag;
+	sc->wdc_channel.cmd_iot = sc->wdc_channel.ctl_iot = oa->oa_tag;
 
-	if (bus_space_map(wdr->cmd_iot, oa->oa_addr,
-		      WDC_OBIO_REG_NPORTS, 0, &wdr->cmd_baseioh)) {
+	if (bus_space_map(sc->wdc_channel.cmd_iot, oa->oa_addr,
+		      WDC_OBIO_REG_NPORTS, 0, &sc->wdc_channel.cmd_baseioh)) {
 		printf("%s: couldn't map registers\n",
-			sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+			sc->sc_wdcdev.sc_dev.dv_xname);
 		return;
 	}
 
-	mac68k_bus_space_handle_swapped(wdr->cmd_iot,
-				  &wdr->cmd_baseioh);
+	mac68k_bus_space_handle_swapped(sc->wdc_channel.cmd_iot,
+				  &sc->wdc_channel.cmd_baseioh);
 
 	for (i = 0; i < WDC_NREG; i++) {
-		if (bus_space_subregion(wdr->cmd_iot,
-				    wdr->cmd_baseioh, 4 * i, 4,
-				    &wdr->cmd_iohs[i]) != 0) {
+		if (bus_space_subregion(sc->wdc_channel.cmd_iot,
+				    sc->wdc_channel.cmd_baseioh, 4 * i, 4,
+				    &sc->wdc_channel.cmd_iohs[i]) != 0) {
 			printf("%s: unable to subregion control register\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+			    sc->sc_wdcdev.sc_dev.dv_xname);
 			return;
 		}
 	}
-	wdc_init_shadow_regs(&sc->sc_channel);
 
-	if (bus_space_subregion(wdr->cmd_iot,
-				wdr->cmd_baseioh,
+	if (bus_space_subregion(sc->wdc_channel.cmd_iot,
+				sc->wdc_channel.cmd_baseioh,
 				WDC_OBIO_AUXREG_OFFSET, WDC_OBIO_AUXREG_NPORTS,
-				&wdr->ctl_ioh)) {
+				&sc->wdc_channel.ctl_ioh)) {
 		printf("%s: unable to subregion aux register\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		    sc->sc_wdcdev.sc_dev.dv_xname);
 		return;
 	}
 
@@ -210,7 +199,7 @@ wdc_obio_attach(parent, self, aux)
 			  oa->oa_addr+WDC_OBIO_ISR_OFFSET,
 			  WDC_OBIO_ISR_NPORTS, 0, &wdc_obio_isr_hdl)) {
 		printf("%s: couldn't map intr status register\n",
-			sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+			sc->sc_wdcdev.sc_dev.dv_xname);
 		return;
 	}
 
@@ -239,16 +228,16 @@ wdc_obio_attach(parent, self, aux)
 	}
 
 	ch_sc = chp;
-	if (sc->sc_wdcdev.sc_atac.atac_dev.dv_cfdata->cf_flags & ATAC_CAP_NOIRQ)
-		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_NOIRQ;
-	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16;
-	sc->sc_wdcdev.sc_atac.atac_pio_cap = 0;
-	sc->sc_chanlist[0] = chp;
-	sc->sc_wdcdev.sc_atac.atac_channels = sc->sc_chanlist;
-	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
+	if (sc->sc_wdcdev.sc_dev.dv_cfdata->cf_flags & WDC_CAPABILITY_NOIRQ)
+		sc->sc_wdcdev.cap |= WDC_CAPABILITY_NOIRQ;
+	sc->sc_wdcdev.cap |= WDC_CAPABILITY_DATA16;
+	sc->sc_wdcdev.PIO_cap = 0;
+	sc->wdc_chanlist[0] = chp;
+	sc->sc_wdcdev.channels = sc->wdc_chanlist;
+	sc->sc_wdcdev.nchannels = 1;
 	chp->ch_channel = 0;
-	chp->ch_atac = &sc->sc_wdcdev.sc_atac;
-	chp->ch_queue = &sc->sc_chqueue;
+	chp->ch_wdc = &sc->sc_wdcdev;
+	chp->ch_queue = &sc->wdc_chqueue;
 
 	printf("\n");
 

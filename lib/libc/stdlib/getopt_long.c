@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt_long.c,v 1.17 2004/06/20 22:20:15 jmc Exp $	*/
+/*	$NetBSD: getopt_long.c,v 1.16.2.1 2004/06/22 07:21:29 tron Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getopt_long.c,v 1.17 2004/06/20 22:20:15 jmc Exp $");
+__RCSID("$NetBSD: getopt_long.c,v 1.16.2.1 2004/06/22 07:21:29 tron Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"

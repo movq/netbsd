@@ -1,6 +1,6 @@
 #!/usr/bin/awk -
 #
-#	$NetBSD: MAKEDEV.awk,v 1.15 2004/04/22 23:02:39 enami Exp $
+#	$NetBSD: MAKEDEV.awk,v 1.14.2.1 2004/04/24 17:48:39 jdc Exp $
 #
 # Copyright (c) 2003 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -211,7 +211,7 @@ BEGIN {
 	print "# Generated from:"
 
 	# MAKEDEV.awk (this script) RCS Id
-	ARCSID = "$NetBSD: MAKEDEV.awk,v 1.15 2004/04/22 23:02:39 enami Exp $"
+	ARCSID = "$NetBSD: MAKEDEV.awk,v 1.14.2.1 2004/04/24 17:48:39 jdc Exp $"
 	gsub(/\$/, "", ARCSID)
 	print "#	" ARCSID
 	

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.31 2004/10/20 04:20:05 thorpej Exp $	*/
+/*	$NetBSD: machdep.c,v 1.25.2.1 2004/06/22 08:45:39 tron Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.31 2004/10/20 04:20:05 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.25.2.1 2004/06/22 08:45:39 tron Exp $");
 
 #include "opt_user_ldt.h"
 #include "opt_ddb.h"
@@ -167,8 +167,8 @@ char bootinfo[BOOTINFO_MAXSIZE];
 struct cpu_info cpu_info_primary;
 struct cpu_info *cpu_info_list;
 
-extern struct bi_devmatch *x86_alldisks;
-extern int x86_ndisks;
+struct bi_devmatch *x86_64_alldisks = NULL;
+int x86_64_ndisks = 0;
 
 #ifdef CPURESET_DELAY
 int	cpureset_delay = CPURESET_DELAY;
@@ -183,6 +183,7 @@ struct mtrr_funcs *mtrr_funcs;
 int	physmem;
 u_int64_t	dumpmem_low;
 u_int64_t	dumpmem_high;
+int	boothowto;
 int	cpu_class;
 
 #define	CPUID2MODEL(cpuid)	(((cpuid) >> 4) & 15)
@@ -222,8 +223,6 @@ struct mtrr_funcs *mtrr_funcs;
  */
 phys_ram_seg_t mem_clusters[VM_PHYSSEG_MAX];
 int	mem_cluster_cnt;
-
-char	x86_64_doubleflt_stack[4096];
 
 int	cpu_dump __P((void));
 int	cpu_dumpsize __P((void));
@@ -319,8 +318,6 @@ x86_64_proc0_tss_ldt_init(void)
 	pcb->pcb_cr0 = rcr0();
 	pcb->pcb_tss.tss_rsp0 = (u_int64_t)lwp0.l_addr + USPACE - 16;
 	pcb->pcb_tss.tss_ist[0] = (u_int64_t)lwp0.l_addr + PAGE_SIZE;
-	pcb->pcb_tss.tss_ist[1] = (uint64_t) x86_64_doubleflt_stack
-	    + PAGE_SIZE - 16;
 	lwp0.l_md.md_regs = (struct trapframe *)pcb->pcb_tss.tss_rsp0 - 1;
 	lwp0.l_md.md_tss_sel = tss_alloc(pcb);
 
@@ -377,13 +374,13 @@ sysctl_machdep_diskinfo(SYSCTLFN_ARGS)
 {
         struct sysctlnode node;
 
-	if (x86_alldisks == NULL)
+	if (x86_64_alldisks == NULL)
 		return (ENOENT);
 
         node = *rnode;
-        node.sysctl_data = x86_alldisks;
+        node.sysctl_data = x86_64_alldisks;
         node.sysctl_size = sizeof(struct disklist) +
-	    (x86_ndisks - 1) * sizeof(struct nativedisk_info);
+	    (x86_64_ndisks - 1) * sizeof(struct nativedisk_info);
         return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 }
 
@@ -941,8 +938,6 @@ setgate(gd, func, ist, type, dpl, sel)
 	void *func;
 	int ist, type, dpl, sel;
 {
-	pmap_changeprot_local(idt_vaddr, VM_PROT_READ|VM_PROT_WRITE);
-
 	gd->gd_looffset = (u_int64_t)func & 0xffff;
 	gd->gd_selector = sel;
 	gd->gd_ist = ist;
@@ -954,19 +949,13 @@ setgate(gd, func, ist, type, dpl, sel)
 	gd->gd_xx1 = 0;
 	gd->gd_xx2 = 0;
 	gd->gd_xx3 = 0;
-
-	pmap_changeprot_local(idt_vaddr, VM_PROT_READ);
 }
 
 void
 unsetgate(gd)
 	struct gate_descriptor *gd;
 {
-	pmap_changeprot_local(idt_vaddr, VM_PROT_READ|VM_PROT_WRITE);
-
 	memset(gd, 0, sizeof (*gd));
-
-	pmap_changeprot_local(idt_vaddr, VM_PROT_READ);
 }
 
 void
@@ -1419,9 +1408,6 @@ init_x86_64(first_avail)
 	pmap_growkernel(VM_MIN_KERNEL_ADDRESS + 32 * 1024 * 1024);
 
 	pmap_kenter_pa(idt_vaddr, idt_paddr, VM_PROT_READ|VM_PROT_WRITE);
-	memset((void *)idt_vaddr, 0, PAGE_SIZE);
-	pmap_changeprot_local(idt_vaddr, VM_PROT_READ);
-
 	pmap_kenter_pa(idt_vaddr + PAGE_SIZE, idt_paddr + PAGE_SIZE,
 	    VM_PROT_READ|VM_PROT_WRITE);
 
@@ -1490,7 +1476,7 @@ init_x86_64(first_avail)
 
 	/* exceptions */
 	for (x = 0; x < 32; x++) {
-		ist = (x == 8) ? 2 : 0;
+		ist = (x == 8) ? 1 : 0;
 		setgate(&idt[x], IDTVEC(exceptions)[x], ist, SDT_SYS386IGT,
 		    (x == 3 || x == 4) ? SEL_UPL : SEL_KPL,
 		    GSEL(GCODE_SEL, SEL_KPL));
@@ -1588,10 +1574,6 @@ cpu_reset()
 	 * Try to cause a triple fault and watchdog reset by making the IDT
 	 * invalid and causing a fault.
 	 */
-	pmap_changeprot_local(idt_vaddr, VM_PROT_READ|VM_PROT_WRITE);           
-	pmap_changeprot_local(idt_vaddr + PAGE_SIZE,
-	    VM_PROT_READ|VM_PROT_WRITE);
-
 	memset((caddr_t)idt, 0, NIDT * sizeof(idt[0]));
 	__asm __volatile("divl %0,%1" : : "q" (0), "a" (0)); 
 

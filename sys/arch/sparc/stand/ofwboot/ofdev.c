@@ -1,4 +1,4 @@
-/*	$NetBSD: ofdev.c,v 1.6 2004/11/13 08:13:58 grant Exp $	*/
+/*	$NetBSD: ofdev.c,v 1.4 2003/01/01 06:33:29 mrg Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -48,11 +48,11 @@
 #include <lib/libkern/libkern.h>
 
 #include <dev/sun/disklabel.h>
-#include <dev/raidframe/raidframevar.h>
-
 #include "ofdev.h"
 
 extern char bootdev[];
+
+#define RF_PROTECTED_SECTORS 64		/* XXX */
 
 /*
  * This is ugly.  A path on a sparc machine is something like this:
@@ -82,7 +82,7 @@ filename(str, ppart)
 		/* ...look whether there is a device with this name */
 		dhandle = OF_finddevice(str);
 #ifdef NOTDEF_DEBUG
-		printf("filename: OF_finddevice(%s) returned %x\n",
+		printf("filename: OF_finddevice(%s) sez %x\n",
 		       str, dhandle);
 #endif
 		*cp = savec;
@@ -105,12 +105,12 @@ filename(str, ppart)
 					     cp[1] == '-'))
 						break;
 				}
-				if (cp >= str && *cp == '-')
-					*cp = 0;	/* found arguments, make firmware ignore them */
-				for (cp = lp; *--cp && *cp != ',' && *cp != ':';);
-				if (*++cp >= 'a' && *cp <= 'a' + MAXPARTITIONS) {
-					*ppart = *cp;
-					*--cp = '\0';
+				if (cp >= str && *cp == '-') {
+					/* found arguments, make firmware ignore them */
+					*cp = 0;
+					for (cp = lp; *--cp && *cp != ',';);
+					if (*++cp >= 'a' && *cp <= 'a' + MAXPARTITIONS)
+						*ppart = *cp;
 				}
 			}
 #ifdef NOTDEF_DEBUG
@@ -428,10 +428,10 @@ devopen(of, name, file)
 		*cp++ = partition;
 		*cp = 0;
 	}
-	*file = opened_name + strlen(opened_name);
 	if (*buf != '/')
 		strcat(opened_name, "/");
 	strcat(opened_name, buf);
+	*file = opened_name + strlen(fname) + 1;
 #ifdef NOTDEF_DEBUG
 	printf("devopen: trying %s\n", fname);
 #endif
@@ -476,11 +476,11 @@ devopen(of, name, file)
 			     LABELSECTOR, DEV_BSIZE, buf, &read) != 0
 		    || read != DEV_BSIZE
 		    || (errmsg = getdisklabel(buf, &label))) {
-			if (errmsg) printf("devopen: getdisklabel returned %s\n", errmsg);
+			if (errmsg) printf("devopen: getdisklabel sez %s\n", errmsg);
 			/* Else try MBR partitions */
 			errmsg = search_label(&ofdev, 0, buf, &label, 0);
 			if (errmsg) { 
-				printf("devopen: search_label returned %s\n", errmsg);
+				printf("devopen: search_label sez %s\n", errmsg);
 				error = ERDLAB;
 			}
 			if (error && error != ERDLAB)
@@ -504,7 +504,7 @@ devopen(of, name, file)
 				ofdev.partoff += RF_PROTECTED_SECTORS;
 #ifdef NOTDEF_DEBUG
 				printf("devopen: found RAID partition, "
-				    "adjusting offset to %x\n", ofdev.partoff);
+				    "adjusting offset to %x", ofdev.partoff);
 #endif
 			}
 		}

@@ -1,4 +1,4 @@
-/*	$NetBSD: overlay.h,v 1.5 2004/05/20 06:34:30 atatat Exp $	*/
+/*	$NetBSD: overlay.h,v 1.4.2.1 2004/05/23 10:45:39 tron Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration

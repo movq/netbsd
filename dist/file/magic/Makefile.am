@@ -19,7 +19,7 @@ magic.mgc: magic
 	$(top_builddir)/src/file -C -m magic
 
 magic.mime.mgc: magic.mime
-	$(top_builddir)/src/file -C -m $(srcdir)/magic.mime
+	$(top_builddir)/src/file -C -m magic.mime
 
 magic_FRAGMENTS = \
 Magdir/acorn \
@@ -53,7 +53,6 @@ Magdir/cisco \
 Magdir/citrus \
 Magdir/claris \
 Magdir/clipper \
-Magdir/spec \
 Magdir/commands \
 Magdir/communications \
 Magdir/compress \
@@ -67,11 +66,11 @@ Magdir/diff \
 Magdir/digital \
 Magdir/dolby \
 Magdir/dump \
+Magdir/dyadic \
 Magdir/editors \
 Magdir/elf \
 Magdir/encore \
 Magdir/epoc \
-Magdir/esri \
 Magdir/fcs \
 Magdir/filesystems \
 Magdir/flash \
@@ -112,7 +111,6 @@ Magdir/magic \
 Magdir/mail.news \
 Magdir/maple \
 Magdir/mathematica \
-Magdir/matroska \
 Magdir/mcrypt \
 Magdir/mime \
 Magdir/mips \
@@ -169,7 +167,6 @@ Magdir/sinclair \
 Magdir/sketch \
 Magdir/smalltalk \
 Magdir/sniffer \
-Magdir/dyadic \
 Magdir/softquad \
 Magdir/spectrum \
 Magdir/sql \
@@ -190,7 +187,6 @@ Magdir/varied.out \
 Magdir/varied.script \
 Magdir/vax \
 Magdir/vicar \
-Magdir/virtutech \
 Magdir/visx \
 Magdir/vms \
 Magdir/vmware \
@@ -199,7 +195,6 @@ Magdir/vxl \
 Magdir/wordprocessors \
 Magdir/xdelta \
 Magdir/xenix \
-Magdir/xo65 \
 Magdir/xwindows \
 Magdir/zilog \
 Magdir/zyxel

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_eon.c,v 1.46 2004/12/04 16:10:25 peter Exp $	*/
+/*	$NetBSD: if_eon.c,v 1.42 2003/09/30 00:01:18 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -67,7 +67,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_eon.c,v 1.46 2004/12/04 16:10:25 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_eon.c,v 1.42 2003/09/30 00:01:18 christos Exp $");
 
 #include "opt_eon.h"
 
@@ -109,6 +109,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_eon.c,v 1.46 2004/12/04 16:10:25 peter Exp $");
 
 #include <machine/stdarg.h>
 
+#include "loop.h"
+
+extern struct ifnet loif[NLOOP];
+
 extern struct timeval time;
 
 #define EOK 0
@@ -116,7 +120,7 @@ extern struct timeval time;
 struct ifnet    eonif[1];
 
 void
-eonprotoinit(void)
+eonprotoinit()
 {
 	(void) eonattach();
 }
@@ -134,7 +138,7 @@ struct eon_llinfo eon_llinfo;
  */
 
 void
-eonattach(void)
+eonattach()
 {
 	struct ifnet *ifp = eonif;
 
@@ -143,7 +147,7 @@ eonattach(void)
 		printf("eonattach()\n");
 	}
 #endif
-	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "eon%d", 0);
+	sprintf(ifp->if_xname, "eon%d", 0);
 	ifp->if_mtu = ETHERMTU;
 	ifp->if_softc = NULL;
 	/* since everything will go out over ether or token ring */
@@ -180,9 +184,12 @@ eonattach(void)
  * RETURNS:			nothing
  */
 int
-eonioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+eonioctl(ifp, cmd, data)
+	struct ifnet *ifp;
+	u_long          cmd;
+	caddr_t data;
 {
-	int    s = splnet();
+	int             s = splnet();
 	int    error = 0;
 
 #ifdef ARGO_DEBUG
@@ -211,8 +218,11 @@ eonioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 
 void
-eoniphdr(struct eon_iphdr *hdr, caddr_t loc, struct route *ro,
-	int class, int zero)
+eoniphdr(hdr, loc, ro, class, zero)
+	struct route   *ro;
+	struct eon_iphdr *hdr;
+	caddr_t         loc;
+	int		class, zero;
 {
 	struct mbuf     mhead;
 	struct sockaddr_in *sin = satosin(&ro->ro_dst);
@@ -267,12 +277,15 @@ eoniphdr(struct eon_iphdr *hdr, caddr_t loc, struct route *ro,
  * RETURNS:			nothing
  */
 void
-eonrtrequest(int cmd, struct rtentry *rt, struct rt_addrinfo *info)
+eonrtrequest(cmd, rt, info)
+	int cmd;
+	struct rtentry *rt;
+	struct rt_addrinfo *info;
 {
 	unsigned long   zerodst = 0;
 	caddr_t         ipaddrloc = (caddr_t) & zerodst;
 	struct eon_llinfo *el = (struct eon_llinfo *) rt->rt_llinfo;
-	const struct sockaddr *gate;
+	struct sockaddr *gate;
 
 	/*
 	 * Common Housekeeping
@@ -290,7 +303,7 @@ eonrtrequest(int cmd, struct rtentry *rt, struct rt_addrinfo *info)
 
 	case RTM_ADD:
 	case RTM_RESOLVE:
-		rt->rt_rmx.rmx_mtu = lo0ifp->if_mtu;	/* unless better below */
+		rt->rt_rmx.rmx_mtu = loif[0].if_mtu;	/* unless better below */
 		R_Malloc(el, struct eon_llinfo *, sizeof(*el));
 		rt->rt_llinfo = (caddr_t) el;
 		if (el == 0)
@@ -337,8 +350,11 @@ eonrtrequest(int cmd, struct rtentry *rt, struct rt_addrinfo *info)
  *
  */
 int
-eonoutput(struct ifnet *ifp, struct mbuf *m, struct sockaddr *sdst,
-	struct rtentry *rt)
+eonoutput(ifp, m, sdst, rt)
+	struct ifnet   *ifp;
+	struct mbuf *m;	/* packet */
+	struct sockaddr *sdst;		/* destination addr */
+	struct rtentry *rt;
 {
 	struct sockaddr_iso *dst = (struct sockaddr_iso *) sdst;
 	struct eon_llinfo *el;
@@ -446,7 +462,13 @@ flush:
 }
 
 void
+#if __STDC__
 eoninput(struct mbuf *m, ...)
+#else
+eoninput(m, va_alist)
+	struct mbuf *m;
+	va_dcl
+#endif
 {
 	int             iphlen;
 	struct eon_hdr *eonhdr;
@@ -572,7 +594,10 @@ eoninput(struct mbuf *m, ...)
 }
 
 void *
-eonctlinput(int cmd, struct sockaddr *sa, void *dummy)
+eonctlinput(cmd, sa, dummy)
+	int             cmd;
+	struct sockaddr *sa;
+	void *dummy;
 {
 	struct sockaddr_in *sin = (struct sockaddr_in *) sa;
 #ifdef ARGO_DEBUG

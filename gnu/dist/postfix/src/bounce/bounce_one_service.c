@@ -1,5 +1,3 @@
-/*	$NetBSD: bounce_one_service.c,v 1.1.1.3 2004/05/31 00:24:26 heas Exp $	*/
-
 /*++
 /* NAME
 /*	bounce_one_service 3
@@ -8,16 +6,13 @@
 /* SYNOPSIS
 /*	#include "bounce_service.h"
 /*
-/*	int     bounce_one_service(flags, queue_name, queue_id, encoding,
-/*					orig_sender, orig_recipient,
-/*					status, why)
-/*	int	flags;
+/*	int     bounce_one_service(queue_name, queue_id, encoding,
+/*					orig_sender, orig_recipient, why)
 /*	char	*queue_name;
 /*	char	*queue_id;
 /*	char	*encoding;
 /*	char	*orig_sender;
 /*	char	*orig_recipient;
-/*	char	*status;
 /*	char	*why;
 /* DESCRIPTION
 /*	This module implements the server side of the bounce_one()
@@ -74,7 +69,6 @@
 #include <post_mail.h>
 #include <mail_addr.h>
 #include <mail_error.h>
-#include <bounce.h>
 
 /* Application-specific. */
 
@@ -84,11 +78,9 @@
 
 /* bounce_one_service - send a bounce for one recipient */
 
-int     bounce_one_service(int flags, char *queue_name, char *queue_id,
-			           char *encoding, char *orig_sender,
-			           char *orig_recipient, char *recipient,
-			           long offset, char *dsn_status,
-			           char *dsn_action, char *why)
+int     bounce_one_service(char *queue_name, char *queue_id, char *encoding,
+			           char *orig_sender, char *orig_recipient,
+			           char *why)
 {
     BOUNCE_INFO *bounce_info;
     int     bounce_status = 1;
@@ -101,12 +93,10 @@ int     bounce_one_service(int flags, char *queue_name, char *queue_id,
      * Initialize. Open queue file, bounce log, etc.
      */
     bounce_info = bounce_mail_one_init(queue_name, queue_id,
-				       encoding, orig_recipient,
-				       recipient, offset, dsn_status,
-				       dsn_action, why);
+				       encoding, orig_recipient, why);
 
 #define NULL_SENDER		MAIL_ADDR_EMPTY	/* special address */
-#define NULL_TRACE_FLAGS	0
+#define NULL_CLEANUP_FLAGS	0
 #define BOUNCE_HEADERS		1
 #define BOUNCE_ALL		0
 
@@ -149,8 +139,7 @@ int     bounce_one_service(int flags, char *queue_name, char *queue_id,
 	} else {
 	    if ((bounce = post_mail_fopen_nowait(mail_addr_double_bounce(),
 						 var_2bounce_rcpt,
-						 CLEANUP_FLAG_MASK_INTERNAL,
-						 NULL_TRACE_FLAGS)) != 0) {
+						 NULL_CLEANUP_FLAGS)) != 0) {
 
 		/*
 		 * Double bounce to Postmaster. This is the last opportunity
@@ -173,8 +162,7 @@ int     bounce_one_service(int flags, char *queue_name, char *queue_id,
      */
     else {
 	if ((bounce = post_mail_fopen_nowait(NULL_SENDER, orig_sender,
-					     CLEANUP_FLAG_MASK_INTERNAL,
-					     NULL_TRACE_FLAGS)) != 0) {
+					     NULL_CLEANUP_FLAGS)) != 0) {
 
 	    /*
 	     * Send the bounce message header, some boilerplate text that
@@ -210,8 +198,7 @@ int     bounce_one_service(int flags, char *queue_name, char *queue_id,
 	     */
 	    if ((bounce = post_mail_fopen_nowait(mail_addr_double_bounce(),
 						 var_bounce_rcpt,
-						 CLEANUP_FLAG_MASK_INTERNAL,
-						 NULL_TRACE_FLAGS)) != 0) {
+						 NULL_CLEANUP_FLAGS)) != 0) {
 		if (bounce_header(bounce, bounce_info, var_bounce_rcpt) == 0
 		    && bounce_recipient_log(bounce, bounce_info) == 0
 		    && bounce_header_dsn(bounce, bounce_info) == 0
@@ -224,12 +211,6 @@ int     bounce_one_service(int flags, char *queue_name, char *queue_id,
 			 orig_sender);
 	}
     }
-
-    /*
-     * Optionally, delete the recipient from the queue file.
-     */
-    if (bounce_status == 0 && (flags & BOUNCE_FLAG_DELRCPT))
-	bounce_delrcpt_one(bounce_info);
 
     /*
      * Cleanup.

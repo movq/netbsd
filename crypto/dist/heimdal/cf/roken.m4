@@ -1,5 +1,5 @@
 dnl $Heimdal: roken.m4,v 1.3.8.1 2004/04/01 07:27:35 joda Exp $
-dnl $NetBSD: roken.m4,v 1.3 2004/04/02 14:59:47 lha Exp $
+dnl $NetBSD: roken.m4,v 1.2.2.1 2004/04/21 04:55:38 jmc Exp $
 dnl
 dnl try to look for an installed roken library with sufficient stuff
 dnl

@@ -1,4 +1,4 @@
-#	$NetBSD: files.x68k,v 1.59 2004/11/17 09:01:38 he Exp $
+#	$NetBSD: files.x68k,v 1.56 2004/01/08 12:32:03 minoura Exp $
 #
 # new style config file for x68k architecture
 #
@@ -32,13 +32,13 @@ file	arch/x68k/x68k/disksubr.c	disk
 file	arch/x68k/x68k/machdep.c
 file	arch/x68k/x68k/mem.c
 file	arch/x68k/x68k/pmap_bootstrap.c	compile-with "${NOPROF_C}"
+file	arch/x68k/x68k/procfs_machdep.c	procfs
 file	arch/x68k/x68k/trap.c
 file	arch/x68k/x68k/fpu.c
 file	arch/x68k/x68k/bus.c
 file	arch/m68k/m68k/cacheops.c
 file	arch/m68k/m68k/db_memrw.c	ddb
 file	arch/m68k/m68k/pmap_motorola.c
-file	arch/m68k/m68k/procfs_machdep.c	procfs
 file	arch/m68k/m68k/sys_machdep.c
 file	arch/m68k/m68k/vm_machdep.c
 
@@ -155,8 +155,10 @@ device scsirom {}
 attach	scsirom at intio
 file	arch/x68k/dev/scsirom.c		scsirom
 
+device	spc: scsi
 attach	spc at scsirom with spc_intio
 file	arch/x68k/dev/spc.c		spc_intio needs-flag
+file	dev/ic/mb89352.c		spc
 
 device	mha: scsi
 attach	mha at scsirom
@@ -209,7 +211,6 @@ file arch/m68k/m68k/linux_trap.c	compat_linux
 include "compat/ossaudio/files.ossaudio"
 
 # USB support
-include "dev/wscons/files.wscons"
 include "dev/usb/files.usb"
 
 include "arch/x68k/conf/majors.x68k"

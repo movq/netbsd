@@ -1,5 +1,3 @@
-/*	$NetBSD: remove.c,v 1.1.1.3 2004/05/31 00:24:35 heas Exp $	*/
-
 /*++
 /* NAME
 /*	REMOVE 3
@@ -12,14 +10,14 @@
 /*	\fBREMOVE()\fR removes a file, or renames it to a unique name,
 /*	depending on the setting of the boolean \fBvar_dont_remove\fR
 /*	flag.
+/* SEE ALSO
+/*	remove(3)
 /* DIAGNOSTICS
 /*	The result is 0 in case of success, -1 in case of trouble.
 /*	The global \fBerrno\fR variable reflects the nature of the
 /*	problem.
 /* FILES
 /*	saved/*, stashed-away files.
-/* SEE ALSO
-/*	remove(3)
 /* LICENSE
 /* .ad
 /* .fi

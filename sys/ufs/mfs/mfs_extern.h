@@ -1,4 +1,4 @@
-/*	$NetBSD: mfs_extern.h,v 1.20 2004/05/20 06:34:33 atatat Exp $	*/
+/*	$NetBSD: mfs_extern.h,v 1.18.2.1 2004/05/23 10:45:22 tron Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -41,7 +41,7 @@ struct buf;
 struct mount;
 struct nameidata;
 struct proc;
-struct statvfs;
+struct statfs;
 struct ucred;
 struct vnode;
 
@@ -54,7 +54,7 @@ int	mfs_initminiroot	__P((caddr_t));
 int	mfs_mount	__P((struct mount *, const char *, void *,
 			     struct nameidata *, struct proc *));
 int	mfs_start	__P((struct mount *, int, struct proc *));
-int	mfs_statvfs	__P((struct mount *, struct statvfs *, struct proc *));
+int	mfs_statfs	__P((struct mount *, struct statfs *, struct proc *));
 
 void	mfs_init	__P((void));
 void	mfs_reinit	__P((void));

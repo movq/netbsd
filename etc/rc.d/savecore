@@ -1,13 +1,13 @@
 #!/bin/sh
 #
-# $NetBSD: savecore,v 1.7 2004/08/13 18:08:03 mycroft Exp $
+# $NetBSD: savecore,v 1.5.4.1 2004/07/15 19:22:52 he Exp $
 #
 
 # PROVIDE: savecore
 # REQUIRE: syslogd
 # BEFORE:  SERVERS
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="savecore"
 rcvar=$name

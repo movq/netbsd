@@ -1,5 +1,3 @@
-/*	$NetBSD: mail_conf_int.c,v 1.1.1.3 2004/05/31 00:24:31 heas Exp $	*/
-
 /*++
 /* NAME
 /*	mail_conf_int 3
@@ -114,9 +112,9 @@ static int convert_mail_conf_int(const char *name, int *intval)
 static void check_mail_conf_int(const char *name, int intval, int min, int max)
 {
     if (min && intval < min)
-	msg_fatal("invalid %s parameter value %d < %d", name, intval, min);
+	msg_fatal("invalid %s: %d (min %d)", name, intval, min);
     if (max && intval > max)
-	msg_fatal("invalid %s parameter value %d > %d", name, intval, max);
+	msg_fatal("invalid %s: %d (max %d)", name, intval, max);
 }
 
 /* get_mail_conf_int - evaluate integer-valued configuration variable */

@@ -1,4 +1,4 @@
-/*	$NetBSD: mkfs.c,v 1.88 2004/04/14 22:06:33 dbj Exp $	*/
+/*	$NetBSD: mkfs.c,v 1.87.2.1 2004/04/27 17:26:24 jdc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1989, 1993
@@ -73,7 +73,7 @@
 #if 0
 static char sccsid[] = "@(#)mkfs.c	8.11 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: mkfs.c,v 1.88 2004/04/14 22:06:33 dbj Exp $");
+__RCSID("$NetBSD: mkfs.c,v 1.87.2.1 2004/04/27 17:26:24 jdc Exp $");
 #endif
 #endif /* not lint */
 

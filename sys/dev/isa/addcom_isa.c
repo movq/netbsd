@@ -1,4 +1,4 @@
-/*	$NetBSD: addcom_isa.c,v 1.11 2004/09/14 20:20:46 drochner Exp $	*/
+/*	$NetBSD: addcom_isa.c,v 1.9 2003/12/04 13:57:30 keihan Exp $	*/
 
 /*
  * Copyright (c) 2000 Michael Graff.  All rights reserved.
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: addcom_isa.c,v 1.11 2004/09/14 20:20:46 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: addcom_isa.c,v 1.9 2003/12/04 13:57:30 keihan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -108,6 +108,7 @@ static int slave_iobases[8] = {
 int addcomprobe __P((struct device *, struct cfdata *, void *));
 void addcomattach __P((struct device *, struct device *, void *));
 int addcomintr __P((void *));
+int addcomprint __P((void *, const char *));
 
 CFATTACH_DECL(addcom_isa, sizeof(struct addcom_softc),
     addcomprobe, addcomattach, NULL, NULL);
@@ -136,9 +137,9 @@ addcomprobe(struct device *parent, struct cfdata *self, void *aux)
 		return (0);
 
 	/* Disallow wildcarded i/o address. */
-	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+	if (ia->ia_io[0].ir_addr == ISACF_PORT_DEFAULT)
 		return (0);
-	if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ)
+	if (ia->ia_irq[0].ir_irq == ISACF_IRQ_DEFAULT)
 		return (0);
 
 	iobase = ia->ia_io[0].ir_addr;
@@ -183,6 +184,17 @@ out:
 	return (rv);
 }
 
+int
+addcomprint(void *aux, const char *pnp)
+{
+	struct commulti_attach_args *ca = aux;
+
+	if (pnp)
+		aprint_normal("com at %s", pnp);
+	aprint_normal(" slave %d", ca->ca_slave);
+	return (UNCONF);
+}
+
 void
 addcomattach(struct device *parent, struct device *self, void *aux)
 {
@@ -225,7 +237,7 @@ addcomattach(struct device *parent, struct device *self, void *aux)
 			- SLAVE_IOBASE_OFFSET;
 		ca.ca_noien = 0;
 
-		sc->sc_slaves[i] = config_found(self, &ca, commultiprint);
+		sc->sc_slaves[i] = config_found(self, &ca, addcomprint);
 		if (sc->sc_slaves[i] != NULL)
 			sc->sc_alive |= 1 << i;
 	}

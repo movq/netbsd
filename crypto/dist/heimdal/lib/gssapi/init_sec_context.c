@@ -34,7 +34,7 @@
 #include "gssapi_locl.h"
 
 __RCSID("$Heimdal: init_sec_context.c,v 1.36.2.1 2003/08/15 14:21:18 lha Exp $"
-        "$NetBSD: init_sec_context.c,v 1.11 2004/04/02 14:59:48 lha Exp $");
+        "$NetBSD: init_sec_context.c,v 1.10.2.1 2004/04/21 04:55:40 jmc Exp $");
 
 /*
  * copy the addresses from `input_chan_bindings' (if any) to

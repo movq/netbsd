@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.25 2004/05/25 16:47:31 aymeric Exp $
+#	$NetBSD: Makefile,v 1.24.2.1 2004/05/29 14:03:52 tron Exp $
 #
 #	@(#)Makefile.in	8.75 (Berkeley) 10/23/96
 

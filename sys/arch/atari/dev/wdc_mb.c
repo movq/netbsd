@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_mb.c,v 1.24 2004/08/20 06:39:38 thorpej Exp $	*/
+/*	$NetBSD: wdc_mb.c,v 1.21 2004/01/06 18:46:07 he Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_mb.c,v 1.24 2004/08/20 06:39:38 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_mb.c,v 1.21 2004/01/06 18:46:07 he Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -63,8 +63,8 @@ __KERNEL_RCSID(0, "$NetBSD: wdc_mb.c,v 1.24 2004/08/20 06:39:38 thorpej Exp $");
 /*
  * XXX This code currently doesn't even try to allow 32-bit data port use.
  */
-static int	claim_hw __P((struct ata_channel *, int));
-static void	free_hw __P((struct ata_channel *));
+static int	claim_hw __P((void *, int));
+static void	free_hw __P((void *));
 static void	read_multi_2_swap __P((bus_space_tag_t, bus_space_handle_t,
 				bus_size_t, u_int16_t *, bus_size_t));
 static void	write_multi_2_swap __P((bus_space_tag_t, bus_space_handle_t,
@@ -72,10 +72,9 @@ static void	write_multi_2_swap __P((bus_space_tag_t, bus_space_handle_t,
 
 struct wdc_mb_softc {
 	struct wdc_softc sc_wdcdev;
-	struct	ata_channel *sc_chanlist[1];
-	struct  ata_channel sc_channel;
-	struct	ata_queue sc_chqueue;
-	struct	wdc_regs sc_wdc_regs;
+	struct	wdc_channel *wdc_chanlist[1];
+	struct  wdc_channel wdc_channel;
+	struct	ata_queue wdc_chqueue;
 	void	*sc_ih;
 };
 
@@ -92,9 +91,7 @@ wdc_mb_probe(parent, cfp, aux)
 	void *aux;
 {
 	static int	wdc_matched = 0;
-	struct ata_channel ch;
-	struct wdc_softc wdc;
-	struct wdc_regs wdr;
+	struct wdc_channel ch;
 	int	result = 0;
 	u_char	sv_ierb;
 
@@ -103,21 +100,18 @@ wdc_mb_probe(parent, cfp, aux)
 	if (!atari_realconfig)
 		return 0;
 
-	memset(&wdc, 0, sizeof(wdc));
 	memset(&ch, 0, sizeof(ch));
-	ch.ch_atac = &wdc.sc_atac;
-	wdc.regs = &wdr;
 
-	wdr.cmd_iot = wdr.ctl_iot = mb_alloc_bus_space_tag();
-	if (wdr.cmd_iot == NULL)
+	ch.cmd_iot = ch.ctl_iot = mb_alloc_bus_space_tag();
+	if (ch.cmd_iot == NULL)
 		return 0;
-	wdr.cmd_iot->stride = 2;
-	wdr.cmd_iot->wo_1   = 1;
+	ch.cmd_iot->stride = 2;
+	ch.cmd_iot->wo_1   = 1;
 
-	if (bus_space_map(wdr.cmd_iot, 0xfff00000, 0x40, 0, &wdr.cmd_baseioh))
+	if (bus_space_map(ch.cmd_iot, 0xfff00000, 0x40, 0, &ch.cmd_baseioh))
 		return 0;
-	if (bus_space_subregion(wdr.cmd_iot, wdr.cmd_baseioh, 0x38, 1,
-	    &wdr.ctl_ioh))
+	if (bus_space_subregion(ch.cmd_iot, ch.cmd_baseioh, 0x38, 1,
+	    &ch.ctl_ioh))
 		return 0;
 
 	/*
@@ -136,8 +130,8 @@ wdc_mb_probe(parent, cfp, aux)
 
 	MFP->mf_ierb = sv_ierb;
 
-	bus_space_unmap(wdr.cmd_iot, wdr.cmd_baseioh, 0x40);
-	mb_free_bus_space_tag(wdr.cmd_iot);
+	bus_space_unmap(ch.cmd_iot, ch.cmd_baseioh, 0x40);
+	mb_free_bus_space_tag(ch.cmd_iot);
 
 	if (result)
 		wdc_matched = 1;
@@ -150,25 +144,23 @@ wdc_mb_attach(parent, self, aux)
 	void *aux;
 {
 	struct wdc_mb_softc *sc = (void *)self;
-	struct wdc_regs *wdr;
 
 	printf("\n");
 
-	sc->sc_wdcdev.regs = wdr = &sc->sc_wdc_regs;
-	wdr->cmd_iot = wdr->ctl_iot =
+	sc->wdc_channel.cmd_iot = sc->wdc_channel.ctl_iot =
 	    mb_alloc_bus_space_tag();
-	wdr->cmd_iot->stride = 2;
-	wdr->cmd_iot->wo_1   = 1;
-	wdr->cmd_iot->abs_rms_2 = read_multi_2_swap;
-	wdr->cmd_iot->abs_wms_2 = write_multi_2_swap;
-	if (bus_space_map(wdr->cmd_iot, 0xfff00000, 0x40, 0,
-			  &wdr->cmd_baseioh)) {
+	sc->wdc_channel.cmd_iot->stride = 2;
+	sc->wdc_channel.cmd_iot->wo_1   = 1;
+	sc->wdc_channel.cmd_iot->abs_rms_2 = read_multi_2_swap;
+	sc->wdc_channel.cmd_iot->abs_wms_2 = write_multi_2_swap;
+	if (bus_space_map(sc->wdc_channel.cmd_iot, 0xfff00000, 0x40, 0,
+			  &sc->wdc_channel.cmd_baseioh)) {
 		printf("%s: couldn't map registers\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		    sc->sc_wdcdev.sc_dev.dv_xname);
 		return;
 	}
-	if (bus_space_subregion(wdr->cmd_iot,
-	    wdr->cmd_baseioh, 0x38, 1, &wdr->ctl_ioh))
+	if (bus_space_subregion(sc->wdc_channel.cmd_iot,
+	    sc->wdc_channel.cmd_baseioh, 0x38, 1, &sc->wdc_channel.ctl_ioh))
 		return;
 
 	/*
@@ -178,17 +170,17 @@ wdc_mb_attach(parent, self, aux)
 	 */
 	MFP->mf_ierb &= ~IB_DINT;
 
-	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16 |
-	    ATAC_CAP_ATA_NOSTREAM;
-	sc->sc_wdcdev.sc_atac.atac_pio_cap = 0;
-	sc->sc_wdcdev.sc_atac.atac_claim_hw = &claim_hw;
-	sc->sc_wdcdev.sc_atac.atac_free_hw  = &free_hw;
-	sc->sc_chanlist[0] = &sc->sc_channel;
-	sc->sc_wdcdev.sc_atac.atac_channels = sc->sc_chanlist;
-	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
-	sc->sc_channel.ch_channel = 0;
-	sc->sc_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
-	sc->sc_channel.ch_queue = &sc->sc_chqueue;
+	sc->sc_wdcdev.cap |= WDC_CAPABILITY_DATA16 | WDC_CAPABILITY_HWLOCK |
+	    WDC_CAPABILITY_ATA_NOSTREAM;
+	sc->sc_wdcdev.PIO_cap = 0;
+	sc->sc_wdcdev.claim_hw = &claim_hw;
+	sc->sc_wdcdev.free_hw  = &free_hw;
+	sc->wdc_chanlist[0] = &sc->wdc_channel;
+	sc->sc_wdcdev.channels = sc->wdc_chanlist;
+	sc->sc_wdcdev.nchannels = 1;
+	sc->wdc_channel.ch_channel = 0;
+	sc->wdc_channel.ch_wdc = &sc->sc_wdcdev;
+	sc->wdc_channel.ch_queue = &sc->wdc_chqueue;
 
 	/*
 	 * Setup & enable disk related interrupts.
@@ -197,7 +189,7 @@ wdc_mb_attach(parent, self, aux)
 	MFP->mf_iprb  = (u_int8_t)~IB_DINT;
 	MFP->mf_imrb |= IB_DINT;
 
-	wdcattach(&sc->sc_channel);
+	wdcattach(&sc->wdc_channel);
 }
 
 /*
@@ -206,8 +198,8 @@ wdc_mb_attach(parent, self, aux)
 static int	wd_lock;
 
 static int
-claim_hw(chp, maysleep)
-struct ata_channel *chp;
+claim_hw(softc, maysleep)
+void *softc;
 int  maysleep;
 {
 	if (wd_lock != DMA_LOCK_GRANT) {
@@ -218,7 +210,7 @@ int  maysleep;
 			return 0;
 		}
 		if (!st_dmagrab((dma_farg)wdcintr,
-		    (dma_farg)(maysleep ? NULL : wdcrestart), chp,
+		    (dma_farg)(maysleep ? NULL : wdcrestart), softc,
 		    &wd_lock, 1))
 			return 0;
 	}
@@ -226,8 +218,8 @@ int  maysleep;
 }
 
 static void
-free_hw(chp)
-struct ata_channel *chp;
+free_hw(softc)
+void *softc;
 {
 	/*
 	 * Flush pending interrupts before giving-up lock
@@ -238,7 +230,7 @@ struct ata_channel *chp;
 	 * Only free the lock on a Falcon. On the Hades, keep it.
 	 */
 /*	if (machineid & ATARI_FALCON) */
-		st_dmafree(chp, &wd_lock);
+		st_dmafree(softc, &wd_lock);
 }
 
 /*

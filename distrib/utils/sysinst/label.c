@@ -1,4 +1,4 @@
-/*	$NetBSD: label.c,v 1.45 2004/10/16 13:20:11 dsl Exp $	*/
+/*	$NetBSD: label.c,v 1.43 2004/03/26 19:55:13 dsl Exp $	*/
 
 /*
  * Copyright 1997 Jonathan Stone
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: label.c,v 1.45 2004/10/16 13:20:11 dsl Exp $");
+__RCSID("$NetBSD: label.c,v 1.43 2004/03/26 19:55:13 dsl Exp $");
 #endif
 
 #include <sys/types.h>
@@ -272,6 +272,7 @@ static int
 edit_fs_mountpt(menudesc *m, void *arg)
 {
 	partinfo *p = arg;
+	char buff[4];
 
 	msg_prompt_win(MSG_mountpoint, -1, 18, 0, 0,
 		p->pi_mount, p->pi_mount, sizeof p->pi_mount);
@@ -375,7 +376,7 @@ edit_ptn(menudesc *menu, void *arg)
 		}
 		all_fstype_menu = new_menu(MSG_Select_the_type,
 			all_fstypes, nelem(all_fstypes),
-			30, 6, 10, 0, MC_SUBMENU | MC_SCROLL,
+			30, 6, 10, 0, MC_SCROLL,
 			get_fstype, NULL, NULL, NULL, MSG_unchanged);
 	}
 

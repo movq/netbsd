@@ -1,4 +1,4 @@
-#  $NetBSD: Makefile,v 1.65 2004/11/13 20:29:47 jmmv Exp $
+#  $NetBSD: Makefile,v 1.59.2.1 2004/07/15 20:58:27 he Exp $
 #
 #  @(#)Makefile 5.1beta 93/09/24
 #
@@ -51,7 +51,7 @@ USE_SHLIBDIR=	yes
 
 .if (${MACHINE_ARCH} == "alpha")
 .PATH: ${.CURDIR}/arch/alpha
-ARCH_SRCS = s_copysign.S s_copysignf.S lrint.S
+ARCH_SRCS = s_copysign.S s_copysignf.S
 .elif ((${MACHINE_ARCH} == "i386") || (${MACHINE_ARCH} == "x86_64"))
 .if (defined(I387_LIBM) || (${MACHINE_ARCH} == "x86_64"))
 .PATH:	${.CURDIR}/arch/i387
@@ -62,7 +62,7 @@ ARCH_SRCS = e_acos.S e_asin.S e_atan2.S e_exp.S e_expf.S e_fmod.S e_log.S \
 	    s_finite.S s_finitef.S s_floor.S s_floorf.S s_ilogb.S s_ilogbf.S \
 	    s_log1p.S s_log1pf.S s_logb.S s_logbf.S s_rint.S s_rintf.S \
 	    s_scalbn.S s_scalbnf.S s_significand.S s_significandf.S s_sin.S \
-	    s_sinf.S s_tan.S s_tanf.S lrint.S
+	    s_sinf.S s_tan.S s_tanf.S
 .else
 SUBDIR=arch/i387
 .endif
@@ -78,13 +78,11 @@ ARCH_SRCS += s_ceil.S s_copysign.S s_finite.S s_floor.S s_rint.S
 COPTS+=-m68040
 ARCH_SRCS = s_copysign.S s_finite.S
 .else
-.if (${MKSOFTFLOAT} != "yes")
 .PATH:	${.CURDIR}/arch/mc68881 ${.CURDIR}/arch/m68k
 ARCH_SRCS = e_acos.S e_asin.S e_atanh.S e_cosh.S e_exp.S e_fmod.S e_log.S \
 	    e_log10.S e_remainder.S e_scalb.S e_sinh.S e_sqrt.S s_atan.S \
 	    s_ceil.S s_copysign.S s_cos.S s_expm1.S s_finite.S s_floor.S \
 	    s_log1p.S s_logb.S s_rint.S s_scalbn.S s_sin.S s_tan.S s_tanh.S
-.endif
 .endif
 # end of m68k
 .elif (${MACHINE_ARCH} == "vax")
@@ -133,9 +131,7 @@ COMMON_SRCS = e_acos.c e_acosf.c e_acosh.c e_acoshf.c e_asin.c e_asinf.c \
 	w_j0f.c w_j1.c w_j1f.c w_jn.c w_jnf.c w_lgamma.c w_lgamma_r.c \
 	w_lgammaf.c w_lgammaf_r.c w_log.c w_log10.c w_log10f.c w_logf.c \
 	w_pow.c w_powf.c w_remainder.c w_remainderf.c w_scalb.c w_scalbf.c \
-	w_sinh.c w_sinhf.c w_sqrt.c w_sqrtf.c \
-	lrint.c lrintf.c llrint.c llrintf.c lround.c lroundf.c llround.c \
-	llroundf.c
+	w_sinh.c w_sinhf.c w_sqrt.c w_sqrtf.c
 
 # math routines for non-IEEE architectures.
 NOIEEE_SRCS = n_asincos.c n_acosh.c n_asinh.c n_atan.c n_atanh.c n_cosh.c \
@@ -161,7 +157,7 @@ SRCS+= ${ARCH_ADDS}
 
 # Substitute common sources with any arch specific sources
 .for i in ${ARCH_SRCS} ${NOIEEE_ARCH}
-    SRCS:=${SRCS:S/^${i:S/.S/.c/}/$i/}
+    SRCS:=${SRCS:S/${i:S/.S/.c/}/$i/}
 .endfor
 
 .if (${MACHINE_ARCH} == "vax") # XXX until POLYD is written.

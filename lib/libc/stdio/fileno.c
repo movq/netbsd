@@ -1,4 +1,4 @@
-/*	$NetBSD: fileno.c,v 1.12 2004/05/09 17:27:53 kleink Exp $	*/
+/*	$NetBSD: fileno.c,v 1.11.2.1 2004/05/11 15:48:18 tron Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)fileno.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: fileno.c,v 1.12 2004/05/09 17:27:53 kleink Exp $");
+__RCSID("$NetBSD: fileno.c,v 1.11.2.1 2004/05/11 15:48:18 tron Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

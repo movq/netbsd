@@ -1,5 +1,3 @@
-/*	$NetBSD: stringops.h,v 1.1.1.4 2004/05/31 00:25:01 heas Exp $	*/
-
 #ifndef _STRINGOPS_H_INCLUDED_
 #define _STRINGOPS_H_INCLUDED_
 
@@ -22,9 +20,7 @@
   * External interface.
   */
 extern char *printable(char *, int);
-extern char *neuter(char *, const char *, int);
 extern char *lowercase(char *);
-extern char *uppercase(char *);
 extern char *skipblanks(const char *);
 extern char *trimblanks(char *, int);
 extern char *concatenate(const char *,...);

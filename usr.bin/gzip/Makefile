@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2004/05/21 12:16:10 agc Exp $
+#	$NetBSD: Makefile,v 1.8.2.1 2004/05/30 14:55:45 tron Exp $
 
 PROG=		gzip
 MAN=		gzip.1 gzexe.1 zdiff.1 zforce.1 zgrep.1 zmore.1 znew.1

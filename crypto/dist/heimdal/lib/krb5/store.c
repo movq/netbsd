@@ -35,7 +35,7 @@
 #include "store-int.h"
 
 __RCSID("$Heimdal: store.c,v 1.38.4.1 2004/03/09 19:32:14 lha Exp $"
-        "$NetBSD: store.c,v 1.1.1.5 2004/04/02 14:47:53 lha Exp $");
+        "$NetBSD: store.c,v 1.1.1.4.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 #define BYTEORDER_IS(SP, V) (((SP)->flags & KRB5_STORAGE_BYTEORDER_MASK) == (V))
 #define BYTEORDER_IS_LE(SP) BYTEORDER_IS((SP), KRB5_STORAGE_BYTEORDER_LE)

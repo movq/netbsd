@@ -1,4 +1,4 @@
-/*	$NetBSD: keysock.c,v 1.39 2004/07/24 09:15:56 yamt Exp $	*/
+/*	$NetBSD: keysock.c,v 1.26 2003/12/04 19:38:25 atatat Exp $	*/
 /*	$KAME: keysock.c,v 1.32 2003/08/22 05:45:08 itojun Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.39 2004/07/24 09:15:56 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.26 2003/12/04 19:38:25 atatat Exp $");
 
 #include "opt_inet.h"
 
@@ -64,44 +64,9 @@ __KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.39 2004/07/24 09:15:56 yamt Exp $");
 struct sockaddr key_dst = { 2, PF_KEY, };
 struct sockaddr key_src = { 2, PF_KEY, };
 
+static int key_sendup0 __P((struct rawcb *, struct mbuf *, int));
+
 struct pfkeystat pfkeystat;
-
-static int key_receive __P((struct socket *, struct mbuf **, struct uio *,
-	struct mbuf **, struct mbuf **, int *));
-
-static int key_sendup0 __P((struct rawcb *, struct mbuf *, int, int));
-
-static int
-key_receive(struct socket *so, struct mbuf **paddr, struct uio *uio,
-	struct mbuf **mp0, struct mbuf **controlp, int *flagsp)
-{
-	struct rawcb *rp = sotorawcb(so);
-	struct keycb *kp = (struct keycb *)rp;
-	int error;
-	int s;
-
-	error = (*kp->kp_receive)(so, paddr, uio, mp0, controlp, flagsp);
-
-	/*
-	 * now we might have enough receive buffer space.
-	 * pull packets from kp_queue as many as possible.
-	 */
-	s = splsoftnet();
-	while (/*CONSTCOND*/ 1) {
-		struct mbuf *m;
-
-		m = kp->kp_queue;
-		if (m == NULL || sbspace(&so->so_rcv) < m->m_pkthdr.len)
-			break;
-		kp->kp_queue = m->m_nextpkt;
-		m->m_nextpkt = NULL; /* safety */
-		if (key_sendup0(rp, m, 0, 1))
-			break;
-	}
-	splx(s);
-
-	return error;
-}
 
 /*
  * key_usrreq()
@@ -120,28 +85,18 @@ key_usrreq(so, req, m, nam, control, p)
 
 	s = splsoftnet();
 	if (req == PRU_ATTACH) {
-		kp = (struct keycb *)malloc(sizeof(*kp), M_PCB,
-		    M_WAITOK|M_ZERO);
+		kp = (struct keycb *)malloc(sizeof(*kp), M_PCB, M_WAITOK);
 		so->so_pcb = (caddr_t)kp;
-		kp->kp_receive = so->so_receive;
-		so->so_receive = key_receive;
+		if (so->so_pcb)
+			bzero(so->so_pcb, sizeof(*kp));
 	}
 	if (req == PRU_DETACH && kp) {
 		int af = kp->kp_raw.rcb_proto.sp_protocol;
-		struct mbuf *n;
-
-		if (af == PF_KEY)
+		if (af == PF_KEY) /* XXX: AF_KEY */
 			key_cb.key_count--;
 		key_cb.any_count--;
 
 		key_freereg(so);
-
-		while (kp->kp_queue) {
-			n = kp->kp_queue->m_nextpkt;
-			kp->kp_queue->m_nextpkt = NULL;
-			m_freem(kp->kp_queue);
-			kp->kp_queue = n;
-		}
 	}
 
 	error = raw_usrreq(so, req, m, nam, control, p);
@@ -159,7 +114,7 @@ key_usrreq(so, req, m, nam, control, p)
 
 		kp->kp_promisc = kp->kp_registered = 0;
 
-		if (af == PF_KEY)
+		if (af == PF_KEY) /* XXX: AF_KEY */
 			key_cb.key_count++;
 		key_cb.any_count++;
 		kp->kp_raw.rcb_laddr = &key_src;
@@ -175,7 +130,13 @@ key_usrreq(so, req, m, nam, control, p)
  * key_output()
  */
 int
+#if __STDC__
 key_output(struct mbuf *m, ...)
+#else
+key_output(m, va_alist)
+	struct mbuf *m;
+	va_dcl
+#endif
 {
 	struct sadb_msg *msg;
 	int len, error = 0;
@@ -236,15 +197,12 @@ end:
  * send message to the socket.
  */
 static int
-key_sendup0(rp, m, promisc, canwait)
+key_sendup0(rp, m, promisc)
 	struct rawcb *rp;
 	struct mbuf *m;
 	int promisc;
-	int canwait;
 {
-	struct keycb *kp = (struct keycb *)rp;
-	struct mbuf *n;
-	int error = 0;
+	int error;
 
 	if (promisc) {
 		struct sadb_msg *pmsg;
@@ -268,68 +226,15 @@ key_sendup0(rp, m, promisc, canwait)
 		pfkeystat.in_msgtype[pmsg->sadb_msg_type]++;
 	}
 
-	if (canwait) {
-		if (kp->kp_queue) {
-			for (n = kp->kp_queue; n && n->m_nextpkt;
-			    n = n->m_nextpkt)
-				;
-			n->m_nextpkt = m;
-			m = kp->kp_queue;
-			kp->kp_queue = NULL;
-		} else
-			m->m_nextpkt = NULL;	/* just for safety */
+	if (!sbappendaddr(&rp->rcb_socket->so_rcv, (struct sockaddr *)&key_src,
+	    m, NULL)) {
+		pfkeystat.in_nomem++;
+		m_freem(m);
+		error = ENOBUFS;
 	} else
-		m->m_nextpkt = NULL;
-
-	for (; m && error == 0; m = n) {
-		n = m->m_nextpkt;
-
-		if (canwait &&
-		    sbspace(&rp->rcb_socket->so_rcv) < m->m_pkthdr.len) {
-			error = EAGAIN;
-			goto recovery;
-		}
-
-		m->m_nextpkt = NULL;
-
-		if (!sbappendaddr(&rp->rcb_socket->so_rcv,
-		    (struct sockaddr *)&key_src, m, NULL)) {
-			pfkeystat.in_nomem++;
-			error = ENOBUFS;
-			goto recovery;
-		} else {
-			sorwakeup(rp->rcb_socket);
-			error = 0;
-		}
-	}
-	return (error);
-
-recovery:
-	if (kp->kp_queue) {
-		/*
-		 * kp_queue != NULL implies !canwait.
-		 */
-		KASSERT(!canwait);
-		KASSERT(m->m_nextpkt == NULL);
-		/*
-		 * insert m to the head of queue, as normally mbuf on the queue
-		 * is less important than others.
-		 */
-		if (m) {
-			m->m_nextpkt = kp->kp_queue;
-			kp->kp_queue = m;
-		}
-	} else {
-		/* recover the queue */
-		if (!m) {
-			/* first ENOBUFS case */
-			kp->kp_queue = n;
-		} else {
-			kp->kp_queue = m;
-			m->m_nextpkt = n;
-		}
-	}
-	return (error);
+		error = 0;
+	sorwakeup(rp->rcb_socket);
+	return error;
 }
 
 /* so can be NULL if target != KEY_SENDUP_ONE */
@@ -344,15 +249,11 @@ key_sendup_mbuf(so, m, target)
 	int sendup;
 	struct rawcb *rp;
 	int error = 0;
-	int canwait;
 
 	if (m == NULL)
 		panic("key_sendup_mbuf: NULL pointer was passed.");
 	if (so == NULL && target == KEY_SENDUP_ONE)
 		panic("key_sendup_mbuf: NULL pointer was passed.");
-
-	canwait = target & KEY_SENDUP_CANWAIT;
-	target &= ~KEY_SENDUP_CANWAIT;
 
 	pfkeystat.in_total++;
 	pfkeystat.in_bytes += m->m_pkthdr.len;
@@ -387,7 +288,7 @@ key_sendup_mbuf(so, m, target)
 		 */
 		if (((struct keycb *)rp)->kp_promisc) {
 			if ((n = m_copy(m, 0, (int)M_COPYALL)) != NULL) {
-				(void)key_sendup0(rp, n, 1, canwait);
+				(void)key_sendup0(rp, n, 1);
 				n = NULL;
 			}
 		}
@@ -427,13 +328,13 @@ key_sendup_mbuf(so, m, target)
 		 * guarantee the delivery of the message.
 		 * this is important when target == KEY_SENDUP_ALL.
 		 */
-		key_sendup0(rp, n, 0, canwait);
+		key_sendup0(rp, n, 0);
 
 		n = NULL;
 	}
 
 	if (so) {
-		error = key_sendup0(sotorawcb(so), m, 0, canwait);
+		error = key_sendup0(sotorawcb(so), m, 0);
 		m = NULL;
 	} else {
 		error = 0;
@@ -449,7 +350,7 @@ key_sendup_mbuf(so, m, target)
 
 extern struct domain keydomain;
 
-const struct protosw keysw[] = {
+struct protosw keysw[] = {
 { SOCK_RAW,	&keydomain,	PF_KEY_V2,	PR_ATOMIC|PR_ADDR,
   0,		key_output,	raw_ctlinput,	0,
   key_usrreq,

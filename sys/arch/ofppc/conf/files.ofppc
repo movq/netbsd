@@ -1,4 +1,4 @@
-#	$NetBSD: files.ofppc,v 1.23 2004/11/28 10:01:25 jmc Exp $
+#	$NetBSD: files.ofppc,v 1.22 2003/03/05 05:43:44 matt Exp $
 #
 # NetBSD/ofppc configuration info
 #
@@ -64,7 +64,7 @@ include "dev/wscons/files.wscons"
 #
 # PCI bus support
 #
-file	dev/pci/pcibusprint.c
+include "dev/pci/files.pci"
 
 #
 # ISA bus support

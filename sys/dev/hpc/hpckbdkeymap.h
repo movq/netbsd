@@ -1,4 +1,4 @@
-/*	$NetBSD: hpckbdkeymap.h,v 1.29 2004/07/03 12:47:53 uch Exp $	*/
+/*	$NetBSD: hpckbdkeymap.h,v 1.26.2.1 2004/04/07 04:38:42 jmc Exp $ */
 
 /*-
  * Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
@@ -736,7 +736,7 @@ static const keysym_t jornada6x0_scnv_keydesc[] = {
 
 
 const int jornada6x0_special_keymap[] = {
-	[KEY_SPECIAL_OFF]	= -1,
+	[KEY_SPECIAL_OFF]	= 88,
 	[KEY_SPECIAL_LIGHT]	= -1
 };
 
@@ -794,35 +794,6 @@ const u_int8_t persona_hpw50pad_jp_keytrans[] = {
 };
 
 const int persona_hpw50pad_special_keymap[] = {
-	[KEY_SPECIAL_OFF]	=  0,
-	[KEY_SPECIAL_LIGHT]	= -1
-};
-
-/*
- * HITACHI PERSONA HPW200EC
-*/
-/* US */
-const u_int8_t persona_hpw200ec_keytrans[] = {
-/*      0    1    2    3    4    5    6    7 */       
-/* 0 */	SPL, UNK,   2,  3,  UNK,   5,   6, UNK,
-/* 1 */	UNK, UNK, UNK,  11, UNK, UNK, UNK, UNK,
-/* 2 */	UNK, UNK, UNK,  19, UNK,  21, UNK, UNK,
-/* 3 */	UNK, UNK,  26,  27, UNK,  29,  30, UNK,
-/* 4 */	 32, UNK,  34,  35, UNK, UNK,  26, UNK,
-/* 5 */	 40, UNK,  42,  43, UNK, UNK,  46, UNK,
-/* 6 */	 48, UNK,  50,  51, UNK,  53,  54, UNK,
-/* 7 */	 56, UNK,  58,  59, UNK,  61,  62, UNK,
-/* 8 */	UNK, UNK,  66,  67,  68,  69,  70,  71,
-/* 9 */	UNK, UNK,  74,  75,  76,  77,  78,  79,
-/*10 */	UNK, UNK,  82,  83,  84,  85, UNK, UNK,
-/*11 */	UNK, UNK,  90,  91,  92,  93,  94,  95,
-/*12 */	UNK, UNK,  98,  99, 100, 101, 102, 103,
-/*13 */	104, UNK, 106, 107, 108, 109, 110, 111,
-/*14 */	UNK, UNK, 114, 115, 124, 117, 118, 119,
-/*15 */	UNK, UNK, 122, 123, UNK, UNK, 126, UNK,
-};
-
-const int persona_hpw200ec_special_keymap[] = {
 	[KEY_SPECIAL_OFF]	=  0,
 	[KEY_SPECIAL_LIGHT]	= -1
 };
@@ -1031,17 +1002,6 @@ const struct hpckbd_keymap_table {
 		persona_hpw50pad_special_keymap,
 		NULLCMDMAP,
 		KB_JP },
-
-	/*
-	 * PERSONA HPW200EC
-	 */
-	/* US */
-	{ 	&platid_mask_MACH_HITACHI_PERSONA_HPW200EC,
-		persona_hpw200ec_keytrans,
-		persona_hpw200ec_special_keymap,
-		NULLCMDMAP,
-		KB_US },
-
 #endif /* hpcsh */
 	{ NULL } /* end mark */
 };

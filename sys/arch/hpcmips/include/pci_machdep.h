@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.h,v 1.5 2004/09/17 23:32:09 enami Exp $	*/
+/*	$NetBSD: pci_machdep.h,v 1.3 2002/05/15 19:23:54 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2001 Enami Tsugutomo.
@@ -31,7 +31,7 @@
  */
 
 /*
- * We want to control both device probe order.
+ * We want to contro both device probe order.
  */
 #define	__PCI_BUS_DEVORDER
 
@@ -101,3 +101,6 @@ struct hpcmips_pci_chipset {
     (*(c)->pc_intr_establish)((c), (ih), (l), (h), (a))
 #define	pci_intr_disestablish(c, iv)					\
     (*(c)->pc_intr_disestablish)((c), (iv))
+
+#define	pci_enumerate_bus(sc, m, p)					\
+	pci_enumerate_bus_generic((sc), (m), (p))

@@ -1,4 +1,4 @@
-/*	$NetBSD: igphy.c,v 1.5 2004/10/05 20:20:00 thorpej Exp $	*/
+/*	$NetBSD: igphy.c,v 1.1 2003/10/28 00:15:40 fvdl Exp $	*/
 
 /*
  * The Intel copyright applies to the analog register setup, and the
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: igphy.c,v 1.5 2004/10/05 20:20:00 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: igphy.c,v 1.1 2003/10/28 00:15:40 fvdl Exp $");
 
 #include "opt_mii.h"
 
@@ -97,29 +97,26 @@ __KERNEL_RCSID(0, "$NetBSD: igphy.c,v 1.5 2004/10/05 20:20:00 thorpej Exp $");
 
 #include <dev/mii/igphyreg.h>
 
-struct igphy_softc {
-	struct mii_softc sc_mii;
-	int sc_smartspeed;
-};
-
 static void igphy_reset(struct mii_softc *);
 static void igphy_load_dspcode(struct mii_softc *);
+#if 0
 static void igphy_smartspeed_workaround(struct mii_softc *sc);
+#endif
 
-static int	igphymatch(struct device *, struct cfdata *, void *);
-static void	igphyattach(struct device *, struct device *, void *);
+int	igphymatch(struct device *, struct cfdata *, void *);
+void	igphyattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL(igphy, sizeof(struct igphy_softc),
+CFATTACH_DECL(igphy, sizeof(struct mii_softc),
     igphymatch, igphyattach, mii_phy_detach, mii_phy_activate);
 
-static int	igphy_service(struct mii_softc *, struct mii_data *, int);
-static void	igphy_status(struct mii_softc *);
+int	igphy_service(struct mii_softc *, struct mii_data *, int);
+void	igphy_status(struct mii_softc *);
 
-static const struct mii_phy_funcs igphy_funcs = {
+const struct mii_phy_funcs igphy_funcs = {
 	igphy_service, igphy_status, igphy_reset,
 };
 
-static const struct mii_phydesc igphys[] = {
+const struct mii_phydesc igphys[] = {
 	{ MII_OUI_yyINTEL,		MII_MODEL_yyINTEL_IGP01E1000,
 	  MII_STR_yyINTEL_IGP01E1000 },
 
@@ -127,7 +124,7 @@ static const struct mii_phydesc igphys[] = {
 	 NULL },
 };
 
-static int
+int
 igphymatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct mii_attach_args *ma = aux;
@@ -138,7 +135,7 @@ igphymatch(struct device *parent, struct cfdata *match, void *aux)
 	return 0;
 }
 
-static void
+void
 igphyattach(struct device *parent, struct device *self, void *aux)
 {
 	struct mii_softc *sc = (struct mii_softc *)self;
@@ -239,7 +236,7 @@ igphy_reset(struct mii_softc *sc)
 }
 
 
-static int
+int
 igphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 {
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
@@ -281,7 +278,9 @@ igphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 		if (IFM_INST(ife->ifm_media) != sc->mii_inst)
 			return (0);
 
+#if 0
 		igphy_smartspeed_workaround(sc);
+#endif
 
 		if (mii_phy_tick(sc) == EJUSTRETURN)
 			return (0);
@@ -301,7 +300,7 @@ igphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 }
 
 
-static void
+void
 igphy_status(struct mii_softc *sc)
 {
 	struct mii_data *mii = sc->mii_pdata;
@@ -360,26 +359,20 @@ igphy_status(struct mii_softc *sc)
 		}
 
 		if (pssr & PSSR_FULL_DUPLEX)
-			mii->mii_media_active |=
-			    IFM_FDX | mii_phy_flowstatus(sc);
+			mii->mii_media_active |= IFM_FDX;
 	} else
 		mii->mii_media_active = ife->ifm_media;
 }
 
+#if 0
 static void
 igphy_smartspeed_workaround(struct mii_softc *sc)
 {
-	struct igphy_softc *igsc = (struct igphy_softc *) sc;
-	uint16_t reg, gtsr, gtcr;
-
-	if ((PHY_READ(sc, MII_BMCR) & BMCR_AUTOEN) == 0)
-		return;
-
-	/* XXX Assume 1000TX-FDX is advertized if doing autonegotiation. */
+	uint16_t reg, gtsr, gctr;
 
 	reg = PHY_READ(sc, MII_BMSR) | PHY_READ(sc, MII_BMSR);
-	if ((reg & BMSR_LINK) == 0) {
-		switch (igsc->sc_smartspeed) {
+	if (!(reg & BMSR_LINK)) {
+		switch (sc->mii_ticks) {
 		case 0:
 			gtsr = PHY_READ(sc, MII_100T2SR);
 			if (!(gtsr & GTSR_MAN_MS_FLT))
@@ -393,6 +386,7 @@ igphy_smartspeed_workaround(struct mii_softc *sc)
 					    gtcr);
 				}
 				mii_phy_auto(sc, 0);
+				sc->mii_ticks++;
 			}
 			break;
 		case IGPHY_TICK_DOWNSHIFT:
@@ -404,8 +398,6 @@ igphy_smartspeed_workaround(struct mii_softc *sc)
 		default:
 			break;
 		}
-		if (igsc->sc_smartspeed++ == IGPHY_TICK_MAX)
-			igsc->sc_smartspeed = 0;
-	} else
-		igsc->sc_smartspeed = 0;
+	}
 }
+#endif

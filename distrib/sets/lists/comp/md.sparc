@@ -1,4 +1,4 @@
-# $NetBSD: md.sparc,v 1.63 2004/07/08 10:04:45 hannken Exp $
+# $NetBSD: md.sparc,v 1.61 2004/01/11 10:13:42 lukem Exp $
 ./usr/include/ieeefp.h				comp-c-include
 ./usr/include/sparc				comp-c-include
 ./usr/include/sparc/_G_config.h			comp-obsolete		obsolete
@@ -60,7 +60,6 @@
 ./usr/include/sparc/varargs.h			comp-c-include
 ./usr/include/sparc/vmparam.h			comp-c-include
 ./usr/include/sparc/vuid_event.h		comp-c-include
-./usr/include/sparc/wchar_limits.h		comp-c-include
 ./usr/include/sparc64				comp-c-include
 ./usr/include/sparc64/_G_config.h		comp-obsolete		obsolete
 ./usr/include/sparc64/ansi.h			comp-c-include
@@ -95,7 +94,6 @@
 ./usr/include/sparc64/int_limits.h		comp-c-include
 ./usr/include/sparc64/int_mwgwtypes.h		comp-c-include
 ./usr/include/sparc64/int_types.h		comp-c-include
-./usr/include/sparc64/joystick.h		comp-c-include
 ./usr/include/sparc64/kbd.h			comp-c-include
 ./usr/include/sparc64/kbio.h			comp-c-include
 ./usr/include/sparc64/kcore.h			comp-c-include
@@ -126,5 +124,4 @@
 ./usr/include/sparc64/varargs.h			comp-c-include
 ./usr/include/sparc64/vmparam.h			comp-c-include
 ./usr/include/sparc64/vuid_event.h		comp-c-include
-./usr/include/sparc64/wchar_limits.h		comp-c-include
 ./usr/include/sparc64/z8530var.h		comp-c-include

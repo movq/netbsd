@@ -1,5 +1,3 @@
-/*	$NetBSD: dict_open.c,v 1.1.1.6 2004/05/31 00:24:57 heas Exp $	*/
-
 /*++
 /* NAME
 /*	dict_open 3
@@ -174,10 +172,11 @@
 #include <dict_nis.h>
 #include <dict_nisplus.h>
 #include <dict_ni.h>
+#include <dict_ldap.h>
+#include <dict_mysql.h>
 #include <dict_pcre.h>
 #include <dict_regexp.h>
 #include <dict_static.h>
-#include <dict_cidr.h>
 #include <stringops.h>
 #include <split_at.h>
 #include <htable.h>
@@ -193,7 +192,7 @@ typedef struct {
 static DICT_OPEN_INFO dict_open_info[] = {
     DICT_TYPE_ENVIRON, dict_env_open,
     DICT_TYPE_UNIX, dict_unix_open,
-#ifdef SNAPSHOT
+#if 0
     DICT_TYPE_TCP, dict_tcp_open,
 #endif
 #ifdef HAS_DBM
@@ -212,6 +211,12 @@ static DICT_OPEN_INFO dict_open_info[] = {
 #ifdef HAS_NETINFO
     DICT_TYPE_NETINFO, dict_ni_open,
 #endif
+#ifdef HAS_LDAP
+    DICT_TYPE_LDAP, dict_ldap_open,
+#endif
+#ifdef HAS_MYSQL
+    DICT_TYPE_MYSQL, dict_mysql_open,
+#endif
 #ifdef HAS_PCRE
     DICT_TYPE_PCRE, dict_pcre_open,
 #endif
@@ -219,7 +224,6 @@ static DICT_OPEN_INFO dict_open_info[] = {
     DICT_TYPE_REGEXP, dict_regexp_open,
 #endif
     DICT_TYPE_STATIC, dict_static_open,
-    DICT_TYPE_CIDR, dict_cidr_open,
     0,
 };
 
@@ -391,7 +395,7 @@ int     main(int argc, char **argv)
 	    vstream_fflush(VSTREAM_OUT);
 	    continue;
 	}
-	if (dict_changed_name())
+	if (dict_changed())
 	    msg_warn("dictionary has changed");
 	key = vstring_str(unescape(keybuf, mystrtok(&bufp, " =")));
 	value = mystrtok(&bufp, " =");

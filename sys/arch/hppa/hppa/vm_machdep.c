@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.14 2004/09/17 14:11:21 skrll Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.9 2004/01/04 11:33:30 jdolecek Exp $	*/
 
 /*	$OpenBSD: vm_machdep.c,v 1.25 2001/09/19 20:50:56 mickey Exp $	*/
 
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.14 2004/09/17 14:11:21 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.9 2004/01/04 11:33:30 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,6 +63,7 @@ int
 cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
     struct core *core)
 {
+	struct proc *p = l->l_proc;
 	struct md_coredump md_core;
 	struct coreseg cseg;
 	off_t off;
@@ -80,7 +81,7 @@ cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
 	cseg.c_size = core->c_cpusize;
 
 #define	write(vp, addr, n) vn_rdwr(UIO_WRITE, (vp), (caddr_t)(addr), (n), off, \
-			     UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT, cred, NULL, NULL)
+			     UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT, cred, NULL, p)
 	
 	off = core->c_hdrsize;
 	if ((error = write(vp, &cseg, core->c_seghdrsize)))
@@ -93,6 +94,32 @@ cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
 	core->c_nseg++;
 
 	return error;
+}
+
+/*
+ * Move pages from one kernel virtual address to another.
+ * Both addresses are assumed to reside in the Sysmap.
+ */
+void
+pagemove(caddr_t from, caddr_t to, size_t size)
+{
+	paddr_t pa;
+	boolean_t rv;
+
+	KASSERT(((vaddr_t)from & PGOFSET) == 0);
+	KASSERT(((vaddr_t)to & PGOFSET) == 0);
+	KASSERT((size & PGOFSET) == 0);
+	while (size > 0) {
+		rv = pmap_extract(pmap_kernel(), (vaddr_t)from, &pa);
+		KASSERT(rv);
+		KASSERT(!pmap_extract(pmap_kernel(), (vaddr_t)to, NULL));
+		pmap_kremove((vaddr_t)from, PAGE_SIZE);
+		pmap_kenter_pa((vaddr_t)to, pa,
+			       VM_PROT_READ|VM_PROT_WRITE);
+		from += PAGE_SIZE;
+		to += PAGE_SIZE;
+		size -= PAGE_SIZE;
+	}
 }
 
 void
@@ -141,13 +168,6 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	/* Now copy the parent PCB into the child. */
 	pcbp = &l2->l_addr->u_pcb;
 	bcopy(&l1->l_addr->u_pcb, pcbp, sizeof(*pcbp));
-	fdcache(HPPA_SID_KERNEL, (vaddr_t)&l1->l_addr->u_pcb,
-		sizeof(pcbp->pcb_fpregs));
-	/* reset any of the pending FPU exceptions from parent */
-	pcbp->pcb_fpregs[0] = HPPA_FPU_FORK(pcbp->pcb_fpregs[0]);
-	pcbp->pcb_fpregs[1] = 0;
-	pcbp->pcb_fpregs[2] = 0;
-	pcbp->pcb_fpregs[3] = 0;
 
 	sp = (register_t)l2->l_addr + PAGE_SIZE;
 	l2->l_md.md_regs = tf = (struct trapframe *)sp;
@@ -190,51 +210,28 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	 */
 	osp = sp;
 	sp += HPPA_FRAME_SIZE + 16*4; /* std frame + calee-save registers */
+	*HPPA_FRAME_CARG(0, sp) = tf->tf_sp;
 	*HPPA_FRAME_CARG(1, sp) = KERNMODE(func);
 	*HPPA_FRAME_CARG(2, sp) = (register_t)arg;
 	*(register_t*)(sp + HPPA_FRAME_PSP) = osp;
-	*(register_t*)(sp + HPPA_FRAME_CRP) = (register_t)switch_trampoline;
-	pcbp->pcb_ksp = sp;
+	*(register_t*)(sp + HPPA_FRAME_CRP) =
+		(register_t)switch_trampoline;
+	tf->tf_sp = sp;
 	fdcache(HPPA_SID_KERNEL, (vaddr_t)l2->l_addr, sp - (vaddr_t)l2->l_addr);
 }
 
 void
 cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 {
-	struct pcb *pcbp;
-	struct trapframe *tf;
-	register_t sp, osp;
-
-	pcbp = &l->l_addr->u_pcb;
-	sp = (register_t)pcbp + PAGE_SIZE;
-	l->l_md.md_regs = tf = (struct trapframe *)sp;
-	sp += sizeof(struct trapframe);
-
-	cpu_swapin(l);
-
-	osp = sp;
-	sp += HPPA_FRAME_SIZE + 16*4; /* std frame + calee-save registers */
-	*HPPA_FRAME_CARG(1, sp) = KERNMODE(func);
-	*HPPA_FRAME_CARG(2, sp) = (register_t)arg;
-	*(register_t*)(sp + HPPA_FRAME_PSP) = osp;
-	*(register_t*)(sp + HPPA_FRAME_CRP) = (register_t)switch_trampoline;
-	pcbp->pcb_ksp = sp;
-	fdcache(HPPA_SID_KERNEL, (vaddr_t)l->l_addr, sp - (vaddr_t)l->l_addr);
+	printf("cpu_setfunc not implemented\n");
 }
 
 void
 cpu_lwp_free(struct lwp *l, int proc)
 {
 
-	/*
-	 * If this thread was using the FPU, disable the FPU and record
-	 * that it's unused.
-	 */
-
-	if (fpu_cur_uspace == l->l_md.md_regs->tf_cr30) {
-		fpu_cur_uspace = 0;
-		mtctl(0, CR_CCR);
-	}
+	/* Flush the LWP out of the FPU. */
+	hppa_fpu_flush(l);
 }
 
 void

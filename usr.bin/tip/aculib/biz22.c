@@ -1,4 +1,4 @@
-/*	$NetBSD: biz22.c,v 1.9 2004/04/23 22:11:44 christos Exp $	*/
+/*	$NetBSD: biz22.c,v 1.8 2003/08/07 11:16:21 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)biz22.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: biz22.c,v 1.9 2004/04/23 22:11:44 christos Exp $");
+__RCSID("$NetBSD: biz22.c,v 1.8 2003/08/07 11:16:21 agc Exp $");
 #endif /* not lint */
 
 #include "tip.h"
@@ -44,9 +44,9 @@ __RCSID("$NetBSD: biz22.c,v 1.9 2004/04/23 22:11:44 christos Exp $");
 static	int btimeout = 0;
 static	jmp_buf timeoutbuf;
 
-static	int	biz_dialer __P((char *, const char *));
-static	int	cmd __P((const char *));
-static	int	detect __P((const char *));
+static	int	biz_dialer __P((char *, char *));
+static	int	cmd __P((char *));
+static	int	detect __P((char *));
 static	void	sigALRM __P((int));
 
 /*
@@ -56,8 +56,7 @@ static	void	sigALRM __P((int));
  */
 static int
 biz_dialer(num, mod)
-	char *num;
-	const char *mod;
+	char *num, *mod;
 {
 	int connected = 0;
 	char cbuf[40];
@@ -149,7 +148,7 @@ sigALRM(dummy)
 
 static int
 cmd(s)
-	const char *s;
+	char *s;
 {
 	sig_t f;
 	char c;
@@ -171,7 +170,7 @@ cmd(s)
 
 static int
 detect(s)
-	const char *s;
+	char *s;
 {
 	sig_t f;
 	char c;

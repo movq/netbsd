@@ -1,4 +1,4 @@
-/*	$NetBSD: alloc.c,v 1.2 2004/06/30 15:43:57 christos Exp $	*/
+/*	$NetBSD: alloc.c,v 1.1 2002/02/10 01:58:16 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -89,7 +89,6 @@
 #include <lib/libsa/stand.h>
 
 #include "openfirm.h"
-#include "extern.h"
 
 /*
  * Each block actually has ALIGN(struct ml) + ALIGN(size) bytes allocated
@@ -234,7 +233,7 @@ free(ptr, size)
 }
 
 void
-freeall(void)
+freeall()
 {
 	struct ml *m;
 

@@ -34,7 +34,7 @@
 #include <krb5_locl.h>
 
 __RCSID("$Heimdal: mk_safe.c,v 1.28.4.1 2004/03/07 12:46:43 lha Exp $"
-        "$NetBSD: mk_safe.c,v 1.1.1.7 2004/04/02 14:47:52 lha Exp $");
+        "$NetBSD: mk_safe.c,v 1.1.1.6.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 krb5_error_code
 krb5_mk_safe(krb5_context context,

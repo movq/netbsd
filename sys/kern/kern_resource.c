@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_resource.c,v 1.86 2004/10/01 16:30:54 yamt Exp $	*/
+/*	$NetBSD: kern_resource.c,v 1.76.2.1 2004/04/21 04:27:38 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_resource.c,v 1.86 2004/10/01 16:30:54 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_resource.c,v 1.76.2.1 2004/04/21 04:27:38 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,16 +58,11 @@ __KERNEL_RCSID(0, "$NetBSD: kern_resource.c,v 1.86 2004/10/01 16:30:54 yamt Exp 
 /*
  * Maximum process data and stack limits.
  * They are variables so they are patchable.
+ *
+ * XXXX Do we really need them to be patchable?
  */
 rlim_t maxdmap = MAXDSIZ;
 rlim_t maxsmap = MAXSSIZ;
-
-struct uihashhead *uihashtbl;
-u_long uihash;		/* size of hash table - 1 */
-
-static struct uidinfo *getuidinfo(uid_t);
-static void freeuidinfo(struct uidinfo *);
-static struct uidinfo *allocuidinfo(uid_t);
 
 /*
  * Resource controls and accounting.
@@ -81,7 +76,7 @@ sys_getpriority(l, v, retval)
 {
 	struct sys_getpriority_args /* {
 		syscallarg(int) which;
-		syscallarg(id_t) who;
+		syscallarg(int) who;
 	} */ *uap = v;
 	struct proc *curp = l->l_proc, *p;
 	int low = NZERO + PRIO_MAX + 1;
@@ -116,7 +111,7 @@ sys_getpriority(l, v, retval)
 		if (SCARG(uap, who) == 0)
 			SCARG(uap, who) = curp->p_ucred->cr_uid;
 		proclist_lock_read();
-		PROCLIST_FOREACH(p, &allproc) {
+		LIST_FOREACH(p, &allproc, p_list) {
 			if (p->p_ucred->cr_uid == (uid_t) SCARG(uap, who) &&
 			    p->p_nice < low)
 				low = p->p_nice;
@@ -142,7 +137,7 @@ sys_setpriority(l, v, retval)
 {
 	struct sys_setpriority_args /* {
 		syscallarg(int) which;
-		syscallarg(id_t) who;
+		syscallarg(int) who;
 		syscallarg(int) prio;
 	} */ *uap = v;
 	struct proc *curp = l->l_proc, *p;
@@ -179,7 +174,7 @@ sys_setpriority(l, v, retval)
 		if (SCARG(uap, who) == 0)
 			SCARG(uap, who) = curp->p_ucred->cr_uid;
 		proclist_lock_read();
-		PROCLIST_FOREACH(p, &allproc) {
+		LIST_FOREACH(p, &allproc, p_list) {
 			if (p->p_ucred->cr_uid == (uid_t) SCARG(uap, who)) {
 				error = donice(curp, p, SCARG(uap, prio));
 				found++;
@@ -252,7 +247,7 @@ dosetrlimit(p, cred, which, limp)
 	struct rlimit *limp;
 {
 	struct rlimit *alimp;
-	struct plimit *oldplim;
+	struct plimit *newplim;
 	int error;
 
 	if ((u_int)which >= RLIM_NLIMITS)
@@ -280,8 +275,9 @@ dosetrlimit(p, cred, which, limp)
 
 	if (p->p_limit->p_refcnt > 1 &&
 	    (p->p_limit->p_lflags & PL_SHAREMOD) == 0) {
-		p->p_limit = limcopy(oldplim = p->p_limit);
-		limfree(oldplim);
+		newplim = limcopy(p->p_limit);
+		limfree(p->p_limit);
+		p->p_limit = newplim;
 		alimp = &p->p_rlimit[which];
 	}
 
@@ -504,29 +500,20 @@ limcopy(lim)
 	struct plimit *lim;
 {
 	struct plimit *newlim;
-	size_t l = 0;
-
-	simple_lock(&lim->p_slock);
-	if (lim->pl_corename != defcorename)
-		l = strlen(lim->pl_corename) + 1;
-	simple_unlock(&lim->p_slock);
+	size_t l;
 
 	newlim = pool_get(&plimit_pool, PR_WAITOK);
-	simple_lock_init(&newlim->p_slock);
-	newlim->p_lflags = 0;
-	newlim->p_refcnt = 1;
-	newlim->pl_corename = (l != 0)
-		? malloc(l, M_TEMP, M_WAITOK)
-		: defcorename;
-
-	simple_lock(&lim->p_slock);
 	memcpy(newlim->pl_rlimit, lim->pl_rlimit,
 	    sizeof(struct rlimit) * RLIM_NLIMITS);
-
-	if (l != 0)
+	if (lim->pl_corename == defcorename) {
+		newlim->pl_corename = defcorename;
+	} else {
+		l = strlen(lim->pl_corename) + 1;
+		newlim->pl_corename = malloc(l, M_TEMP, M_WAITOK);
 		strlcpy(newlim->pl_corename, lim->pl_corename, l);
-	simple_unlock(&lim->p_slock);
-
+	}
+	newlim->p_lflags = 0;
+	newlim->p_refcnt = 1;
 	return (newlim);
 }
 
@@ -534,15 +521,11 @@ void
 limfree(lim)
 	struct plimit *lim;
 {
-	int n;
 
-	simple_lock(&lim->p_slock);
-	n = --lim->p_refcnt;
-	simple_unlock(&lim->p_slock);
-	if (n > 0)
+	if (--lim->p_refcnt > 0)
 		return;
 #ifdef DIAGNOSTIC
-	if (n < 0)
+	if (lim->p_refcnt < 0)
 		panic("limfree");
 #endif
 	if (lim->pl_corename != defcorename)
@@ -638,7 +621,7 @@ static int
 sysctl_proc_corename(SYSCTLFN_ARGS)
 {
 	struct proc *ptmp, *p;
-	struct plimit *lim;
+	struct plimit *newplim;
 	int error = 0, len;
 	char cname[MAXPATHLEN], *tmp;
 	struct sysctlnode node;
@@ -696,15 +679,15 @@ sysctl_proc_corename(SYSCTLFN_ARGS)
 		return (ENOMEM);
 	strlcpy(tmp, cname, len + 1);
 
-	lim = ptmp->p_limit;
-	if (lim->p_refcnt > 1 && (lim->p_lflags & PL_SHAREMOD) == 0) {
-		ptmp->p_limit = limcopy(lim);
-		limfree(lim);
-		lim = ptmp->p_limit;
+	if (ptmp->p_limit->p_refcnt > 1 &&
+	    (ptmp->p_limit->p_lflags & PL_SHAREMOD) == 0) {
+		newplim = limcopy(ptmp->p_limit);
+		limfree(ptmp->p_limit);
+		ptmp->p_limit = newplim;
 	}
-	if (lim->pl_corename != defcorename)
-		free(lim->pl_corename, M_TEMP);
-	lim->pl_corename = tmp;
+	if (ptmp->p_limit->pl_corename != defcorename)
+		FREE(ptmp->p_limit->pl_corename, M_SYSCTLDATA);
+	ptmp->p_limit->pl_corename = tmp;
 
 	return (error);
 }
@@ -867,7 +850,6 @@ SYSCTL_SETUP(sysctl_proc_setup, "sysctl proc subtree setup")
 	create_proc_plimit("memorylocked",	PROC_PID_LIMIT_MEMLOCK);
 	create_proc_plimit("maxproc",		PROC_PID_LIMIT_NPROC);
 	create_proc_plimit("descriptors",	PROC_PID_LIMIT_NOFILE);
-	create_proc_plimit("sbsize",		PROC_PID_LIMIT_SBSIZE);
 
 #undef create_proc_plimit
 
@@ -889,97 +871,4 @@ SYSCTL_SETUP(sysctl_proc_setup, "sysctl proc subtree setup")
 		       SYSCTL_DESCR("Stop process before completing exit"),
 		       sysctl_proc_stop, 0, NULL, 0,
 		       CTL_PROC, PROC_CURPROC, PROC_PID_STOPEXIT, CTL_EOL);
-}
-
-static struct uidinfo *
-getuidinfo(uid_t uid)
-{
-	struct uidinfo *uip;
-	struct uihashhead *uipp;
-
-	uipp = UIHASH(uid);
-
-	LIST_FOREACH(uip, uipp, ui_hash)
-		if (uip->ui_uid == uid)
-			return uip;
-	return NULL;
-}
-
-static void
-freeuidinfo(struct uidinfo *uip)
-{
-	LIST_REMOVE(uip, ui_hash);
-	FREE(uip, M_PROC);
-}
-
-static struct uidinfo *
-allocuidinfo(uid_t uid)
-{
-	struct uidinfo *uip;
-	struct uihashhead *uipp;
-
-	uipp = UIHASH(uid);
-	MALLOC(uip, struct uidinfo *, sizeof(*uip), M_PROC, M_WAITOK);
-	LIST_INSERT_HEAD(uipp, uip, ui_hash);
-	uip->ui_uid = uid;
-	uip->ui_proccnt = 0;
-	uip->ui_sbsize = 0;
-	return uip;
-}
-
-/*
- * Change the count associated with number of processes
- * a given user is using.
- */
-int
-chgproccnt(uid_t uid, int diff)
-{
-	struct uidinfo *uip;
-
-	if (diff == 0)
-		return 0;
-
-	if ((uip = getuidinfo(uid)) != NULL) {
-		uip->ui_proccnt += diff;
-		KASSERT(uip->ui_proccnt >= 0);
-		if (uip->ui_proccnt > 0)
-			return uip->ui_proccnt;
-		else {
-			if (uip->ui_sbsize == 0)
-				freeuidinfo(uip);
-			return 0;
-		}
-	} else {
-		if (diff < 0)
-			panic("chgproccnt: lost user %lu", (unsigned long)uid);
-		uip = allocuidinfo(uid);
-		uip->ui_proccnt = diff;
-		return uip->ui_proccnt;
-	}
-}
-
-int
-chgsbsize(uid_t uid, u_long *hiwat, u_long to, rlim_t max)
-{
-	*hiwat = to;
-	return 1;
-#ifdef notyet
-	struct uidinfo *uip;
-	rlim_t nsb;
-	int rv = 0;
-
-	if ((uip = getuidinfo(uid)) == NULL)
-		uip = allocuidinfo(uid);
-	nsb = uip->ui_sbsize + to - *hiwat;
-	if (to > *hiwat && nsb > max)
-		goto done;
-	*hiwat = to;
-	uip->ui_sbsize = nsb;
-	rv = 1;
-	KASSERT(uip->ui_sbsize >= 0);
-done:
-	if (uip->ui_sbsize == 0 && uip->ui_proccnt == 0)
-		freeuidinfo(uip);
-	return rv;
-#endif
 }

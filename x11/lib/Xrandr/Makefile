@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2004/08/05 01:28:48 lukem Exp $
+#	$NetBSD: Makefile,v 1.4 2003/09/30 06:41:31 lukem Exp $
 
 .include <bsd.own.mk>
 
@@ -15,10 +15,8 @@ CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/X11/extensions
 
 MAN=	Xrandr.3
 
-LIBDPLIBS=\
-	Xrender	${.CURDIR}/../Xrender \
-	Xext	${.CURDIR}/../Xext \
-	X11	${.CURDIR}/../X11/dynamic
+LDADD+=	-lXrender -lXext -lX11
+DPADD+=	${LIBXRENDER} ${LIBXEXT} ${LIBX11}
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>

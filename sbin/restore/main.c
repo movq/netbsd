@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.28 2004/10/24 17:01:07 wiz Exp $	*/
+/*	$NetBSD: main.c,v 1.23 2003/08/07 10:04:37 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
 #if 0
 static char sccsid[] = "@(#)main.c	8.6 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.28 2004/10/24 17:01:07 wiz Exp $");
+__RCSID("$NetBSD: main.c,v 1.23 2003/08/07 10:04:37 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -63,7 +63,7 @@ __RCSID("$NetBSD: main.c,v 1.28 2004/10/24 17:01:07 wiz Exp $");
 #include "extern.h"
 
 int	bflag = 0, cvtflag = 0, dflag = 0, vflag = 0, yflag = 0;
-int	hflag = 1, mflag = 1, Dflag = 0, Nflag = 0;
+int	hflag = 1, mflag = 1, Nflag = 0;
 char	command = '\0';
 int32_t	dumpnum = 1;
 int32_t	volno = 0;
@@ -74,10 +74,8 @@ ino_t	maxino;
 time_t	dumptime;
 time_t	dumpdate;
 size_t	pagesize;
-FILE	*terminal;
+FILE 	*terminal;
 char	*tmpdir;
-
-FILE *Mtreefile = NULL;
 
 int	main __P((int, char *[]));
 static	void obsolete __P((int *, char **[]));
@@ -102,8 +100,8 @@ main(argc, argv)
 	if ((tmpdir = getenv("TMPDIR")) == NULL)
 		tmpdir = _PATH_TMP;
 	obsolete(&argc, &argv);
-	while ((ch = getopt(argc, argv, "b:cD:df:himM:NRrs:tuvxy")) != -1)
-		switch (ch) {
+	while ((ch = getopt(argc, argv, "b:cdf:himNRrs:tuvxy")) != -1)
+		switch(ch) {
 		case 'b':
 			/* Change default tape blocksize. */
 			bflag = 1;
@@ -115,12 +113,6 @@ main(argc, argv)
 			break;
 		case 'c':
 			cvtflag = 1;
-			break;
-		case 'D':
-			ddesc = digest_lookup(optarg);
-			if (ddesc == NULL)
-				err(1, "unknown digest algorithm: %s", optarg);
-			Dflag = 1;
 			break;
 		case 'd':
 			dflag = 1;
@@ -147,11 +139,6 @@ main(argc, argv)
 			break;
 		case 'N':
 			Nflag = 1;
-			break;
-		case 'M':
-			Mtreefile = fopen(optarg, "a");
-			if (Mtreefile == NULL)
-				err(1, "can't open %s", optarg);
 			break;
 		case 's':
 			/* Dumpnum (skip to) for multifile dump tapes. */
@@ -306,20 +293,20 @@ usage()
 	const char *progname = getprogname();
 
 	(void)fprintf(stderr,
-	    "usage: %s -i [-cdhmvyN] [-b bsize] [-D algorithm] "
-	    "[-f file] [-M mtreefile] [-s fileno]\n", progname);
+	    "usage: %s -i [-cdhmvyN] [-b blocksize] [-f file] [-s fileno]\n",
+	    progname);
 	(void)fprintf(stderr,
-	    "       %s -R [-cdvyN] [-b bsize] [-D algorithm] [-f file] "
-	    "[-M mtreefile] [-s fileno]\n", progname);
+	    "\t%s -R [-cdvyN] [-b blocksize] [-f file] [-s fileno]\n",
+	    progname);
 	(void)fprintf(stderr,
-	    "       %s -r [-cdvyN] [-b bsize] [-D algorithm] [-f file] "
-	    "[-M mtreefile] [-s fileno]\n", progname);
+	    "\t%s -r [-cdvyN] [-b blocksize] [-f file] [-s fileno]\n",
+	    progname);
 	(void)fprintf(stderr,
-	    "       %s -t [-cdhvy] [-b bsize] [-D algorithm] [-f file]\n"
-	    "           [-s fileno] [file ...]\n", progname);
+	    "\t%s -t [-cdhvy] [-b blocksize] [-f file] [-s fileno] [file ...]\n",
+	    progname);
 	(void)fprintf(stderr,
-	    "       %s -x [-cdhmvyN] [-b bsize] [-D algorithm] [-f file]\n"
-	    "           [-M mtreefile] [-s fileno] [file ...]\n", progname);
+	    "\t%s -x [-cdhmvyN] [-b blocksize] [-f file] [-s fileno] [file ...]\n",
+	    progname);
 	exit(1);
 }
 

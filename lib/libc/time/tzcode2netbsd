@@ -1,7 +1,7 @@
 #! /bin/sh
 
 #
-# $NetBSD: tzcode2netbsd,v 1.5 2004/05/27 20:33:31 kleink Exp $
+# $NetBSD: tzcode2netbsd,v 1.4.2.1 2004/05/30 07:07:10 tron Exp $
 #
 # Convert an extracted tzcode distribution into the format suitable
 # for importing it into the NetBSD source tree.

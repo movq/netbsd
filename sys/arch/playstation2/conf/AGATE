@@ -1,7 +1,7 @@
 #
 # -- SCPH-18000 used by uch@NetBSD.org
 #
-# 	$NetBSD: AGATE,v 1.8 2004/07/15 03:53:51 atatat Exp $
+# 	$NetBSD: AGATE,v 1.6.2.1 2004/07/15 20:18:00 he Exp $
 #
 
 include 	"arch/playstation2/conf/std.playstation2"
@@ -16,7 +16,6 @@ config		nfsnetbsd root on smap0 type nfs
 #makeoptions	DEFGP="-G 40"
 
 options 	KLOADER_KERNEL_PATH="\"/netbsd\""
-options 	KLOADER
 
 options 	DDB			# in-kernel debugger
 

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.20 2004/12/12 12:43:06 mrg Exp $
+#	$NetBSD: Makefile,v 1.17.2.1 2004/06/22 07:55:44 tron Exp $
 
 .include <bsd.own.mk>
 
@@ -6,6 +6,7 @@ TOP=		${NETBSDSRCDIR}/gnu
 
 .include "${.CURDIR}/../common/Makefile.inc"
 .include "${.CURDIR}/arch/${MACHINE_ARCH}/defs.mk"
+GNUHOSTDIST=	${DIST}
 
 PROG=		ld
 SRCS=		${G_OFILES:.o=.c}
@@ -40,7 +41,6 @@ INFOFLAGS=	-I${DIST}/ld -I${DIST}/bfd/doc
 	${DIST}/ld/emultempl ${DIST}/ld/scripttempl ldscripts
 
 BUILDSYMLINKS+=	${G_STRINGIFY} stringify.sed
-BUILDSYMLINKS+=	gen-doc.texi configdoc.texi
 
 .for f in ${G_EMULATION_OFILES:S/^e//:R}
 .if exists(.depend.${f})

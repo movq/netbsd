@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_cache.c,v 1.61 2004/06/27 08:50:44 yamt Exp $	*/
+/*	$NetBSD: vfs_cache.c,v 1.54.2.2 2004/07/23 23:48:21 he Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.61 2004/06/27 08:50:44 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.54.2.2 2004/07/23 23:48:21 he Exp $");
 
 #include "opt_ddb.h"
 #include "opt_revcache.h"
@@ -85,8 +85,7 @@ u_long	ncvhash;			/* size of hash table - 1 */
 TAILQ_HEAD(, namecache) nclruhead;		/* LRU chain */
 struct	nchstats nchstats;		/* cache effectiveness statistics */
 
-POOL_INIT(namecache_pool, sizeof(struct namecache), 0, 0, 0, "ncachepl",
-    &pool_allocator_nointr);
+struct pool namecache_pool;
 
 MALLOC_DEFINE(M_CACHE, "namecache", "Dynamically allocated cache entries");
 
@@ -234,9 +233,10 @@ cache_lookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 		TAILQ_INSERT_TAIL(&nclruhead, ncp, nc_lru);
 	}
 
-	error = vget(vp, LK_NOWAIT);
+	if (vp != dvp)
+		simple_lock(&vp->v_interlock);
 
-	/* Release the name cache mutex while we get reference to the vnode */
+	/* Release the name cache mutex while we acquire vnode locks */
 	simple_unlock(&namecache_slock);
 
 #ifdef DEBUG
@@ -247,23 +247,24 @@ cache_lookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 	ncp = NULL;
 #endif /* DEBUG */
 
-	if (error) {
-		KASSERT(error == EBUSY);
+	if (vp != dvp && __predict_false(vp->v_flag & VXLOCK)) {
 		/*
 		 * this vnode is being cleaned out.
 		 */
+		simple_unlock(&vp->v_interlock);
 		nchstats.ncs_falsehits++; /* XXX badhits? */
 		goto fail;
 	}
 
 	if (vp == dvp) {	/* lookup on "." */
+		VREF(dvp);
 		error = 0;
 	} else if (cnp->cn_flags & ISDOTDOT) {
 		VOP_UNLOCK(dvp, 0);
 		cnp->cn_flags |= PDIRUNLOCK;
-		error = vn_lock(vp, LK_EXCLUSIVE);
+		error = vget(vp, LK_EXCLUSIVE | LK_INTERLOCK);
 		/*
-		 * If the above vn_lock() succeeded and both LOCKPARENT and
+		 * If the above vget() succeeded and both LOCKPARENT and
 		 * ISLASTCN is set, lock the directory vnode as well.
 		 */
 		if (!error && (~cnp->cn_flags & (LOCKPARENT|ISLASTCN)) == 0) {
@@ -274,9 +275,9 @@ cache_lookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 			cnp->cn_flags &= ~PDIRUNLOCK;
 		}
 	} else {
-		error = vn_lock(vp, LK_EXCLUSIVE);
+		error = vget(vp, LK_EXCLUSIVE | LK_INTERLOCK);
 		/*
-		 * If the above vn_lock() failed or either of LOCKPARENT or
+		 * If the above vget() failed or either of LOCKPARENT or
 		 * ISLASTCN is set, unlock the directory vnode.
 		 */
 		if (error || (~cnp->cn_flags & (LOCKPARENT|ISLASTCN)) != 0) {
@@ -326,77 +327,6 @@ fail_wlock:
 fail:
 	*vpp = NULL;
 	return (-1);
-}
-
-int
-cache_lookup_raw(struct vnode *dvp, struct vnode **vpp,
-    struct componentname *cnp)
-{
-	struct namecache *ncp;
-	struct vnode *vp;
-	int error;
-
-	if (!doingcache) {
-		cnp->cn_flags &= ~MAKEENTRY;
-		*vpp = NULL;
-		return (-1);
-	}
-
-	if (cnp->cn_namelen > NCHNAMLEN) {
-		/* XXXSMP - updating stats without lock; do we care? */
-		nchstats.ncs_long++;
-		cnp->cn_flags &= ~MAKEENTRY;
-		goto fail;
-	}
-	simple_lock(&namecache_slock);
-	ncp = cache_lookup_entry(dvp, cnp);
-	if (ncp == NULL) {
-		nchstats.ncs_miss++;
-		goto fail_wlock;
-	}
-	/*
-	 * Move this slot to end of LRU chain,
-	 * if not already there.
-	 */
-	if (TAILQ_NEXT(ncp, nc_lru) != 0) {
-		TAILQ_REMOVE(&nclruhead, ncp, nc_lru);
-		TAILQ_INSERT_TAIL(&nclruhead, ncp, nc_lru);
-	}
-
-	vp = ncp->nc_vp;
-	if (vp == NULL) {
-		/*
-		 * Restore the ISWHITEOUT flag saved earlier.
-		 */
-		cnp->cn_flags |= ncp->nc_flags;
-		nchstats.ncs_neghits++;
-		simple_unlock(&namecache_slock);
-		return (ENOENT);
-	}
-
-	error = vget(vp, LK_NOWAIT);
-
-	/* Release the name cache mutex while we get reference to the vnode */
-	simple_unlock(&namecache_slock);
-
-	if (error) {
-		KASSERT(error == EBUSY);
-		/*
-		 * this vnode is being cleaned out.
-		 */
-		nchstats.ncs_falsehits++; /* XXX badhits? */
-		goto fail;
-	}
-
-	*vpp = vp;
-
-	return 0;
-
-fail_wlock:
-	simple_unlock(&namecache_slock);
-fail:
-	*vpp = NULL;
-	return -1;
 }
 
 /*
@@ -474,7 +404,6 @@ void
 cache_enter(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 {
 	struct namecache *ncp;
-	struct namecache *oncp;
 	struct nchashhead *ncpp;
 	struct ncvhashhead *nvcpp;
 
@@ -488,7 +417,6 @@ cache_enter(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 	 * Free the cache slot at head of lru chain.
 	 */
 	simple_lock(&namecache_slock);
-
 	if (numcache < numvnodes) {
 		numcache++;
 		simple_unlock(&namecache_slock);
@@ -504,14 +432,13 @@ cache_enter(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 
 	/*
 	 * Concurrent lookups in the same directory may race for a
-	 * cache entry.  if there's a duplicated entry, free it.
+	 * cache entry. If we loose, free our tentative entry and return.
 	 */
-	oncp = cache_lookup_entry(dvp, cnp);
-	if (oncp) {
-		cache_remove(oncp);
-		cache_free(oncp);
+	if (cache_lookup_entry(dvp, cnp) != NULL) {
+		cache_free(ncp);
+		simple_unlock(&namecache_slock);
+		return;
 	}
-	KASSERT(cache_lookup_entry(dvp, cnp) == NULL);
 
 	/* Grab the vnode we just found. */
 	ncp->nc_vp = vp;
@@ -569,6 +496,8 @@ nchinit(void)
 #else
 	    hashinit(desiredvnodes/8, HASH_LIST, M_CACHE, M_WAITOK, &ncvhash);
 #endif
+	pool_init(&namecache_pool, sizeof(struct namecache), 0, 0, 0,
+	    "ncachepl", &pool_allocator_nointr);
 }
 
 /*

@@ -1,4 +1,4 @@
-/* $NetBSD: wskbd.c,v 1.76 2004/06/03 19:04:58 christos Exp $ */
+/* $NetBSD: wskbd.c,v 1.73.2.3 2004/06/07 09:57:29 tron Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wskbd.c,v 1.76 2004/06/03 19:04:58 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wskbd.c,v 1.73.2.3 2004/06/07 09:57:29 tron Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"

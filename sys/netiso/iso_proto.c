@@ -1,4 +1,4 @@
-/*	$NetBSD: iso_proto.c,v 1.16 2004/04/22 01:01:41 matt Exp $	*/
+/*	$NetBSD: iso_proto.c,v 1.14 2003/08/07 16:33:37 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -65,7 +65,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iso_proto.c,v 1.16 2004/04/22 01:01:41 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iso_proto.c,v 1.14 2003/08/07 16:33:37 agc Exp $");
 
 #include "opt_iso.h"
 
@@ -88,16 +88,7 @@ __KERNEL_RCSID(0, "$NetBSD: iso_proto.c,v 1.16 2004/04/22 01:01:41 matt Exp $");
 #include <netiso/iso_pcb.h>
 #include <netiso/cltp_var.h>
 
-const int isoctlerrmap[PRC_NCMDS] = {
-	0,		0,		0,		0,
-	0,		EMSGSIZE,	EHOSTDOWN,	EHOSTUNREACH,
-	EHOSTUNREACH,	EHOSTUNREACH,	ECONNREFUSED,	ECONNREFUSED,
-	EMSGSIZE,	EHOSTUNREACH,	0,		0,
-	0,		0,		0,		0,
-	ENOPROTOOPT
-};
-
-const struct protosw  isosw[] = {
+struct protosw  isosw[] = {
 	/*
 	 *  We need a datagram entry through which net mgmt programs can get
 	 *	to the iso_control procedure (iso ioctls). Thus, a minimal

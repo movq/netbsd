@@ -1,5 +1,5 @@
 /* BFD back-end for Zilog Z800n COFF binaries.
-   Copyright 1992, 1993, 1994, 1995, 1997, 1999, 2000, 2001, 2002, 2003
+   Copyright 1992, 1993, 1994, 1995, 1997, 1999, 2000, 2001, 2002
    Free Software Foundation, Inc.
    Contributed by Cygnus Support.
    Written by Steve Chamberlain, <sac@cygnus.com>.
@@ -27,6 +27,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "coff/z8k.h"
 #include "coff/internal.h"
 #include "libcoff.h"
+
+static void extra_case PARAMS ((bfd *, struct bfd_link_info *, struct bfd_link_order *, arelent *, bfd_byte *, unsigned int *, unsigned int *));
+static void reloc_processing PARAMS ((arelent *, struct internal_reloc *, asymbol **, bfd *, asection *));
+static void rtype2howto PARAMS ((arelent *, struct internal_reloc *));
+static int coff_z8k_select_reloc PARAMS ((reloc_howto_type *));
 
 #define COFF_DEFAULT_SECTION_ALIGNMENT_POWER (1)
 
@@ -69,7 +74,8 @@ HOWTO (R_CALLR, 0, 1, 12, TRUE, 0, complain_overflow_signed, 0,
 /* Turn a howto into a reloc number */
 
 static int
-coff_z8k_select_reloc (reloc_howto_type *howto)
+coff_z8k_select_reloc (howto)
+     reloc_howto_type *howto;
 {
   return howto->type;
 }
@@ -90,7 +96,9 @@ coff_z8k_select_reloc (reloc_howto_type *howto)
 /* Code to turn a r_type into a howto ptr, uses the above howto table.  */
 
 static void
-rtype2howto (arelent *internal, struct internal_reloc *dst)
+rtype2howto (internal, dst)
+     arelent * internal;
+     struct internal_reloc *dst;
 {
   switch (dst->r_type)
     {
@@ -135,11 +143,12 @@ rtype2howto (arelent *internal, struct internal_reloc *dst)
  reloc_processing(relent, reloc, symbols, abfd, section)
 
 static void
-reloc_processing (arelent *relent,
-                  struct internal_reloc *reloc,
-                  asymbol **symbols,
-                  bfd *abfd,
-                  asection *section)
+reloc_processing (relent, reloc, symbols, abfd, section)
+     arelent * relent;
+     struct internal_reloc * reloc;
+     asymbol ** symbols;
+     bfd * abfd;
+     asection * section;
 {
   relent->address = reloc->r_vaddr;
   rtype2howto (relent, reloc);
@@ -154,13 +163,14 @@ reloc_processing (arelent *relent,
 }
 
 static void
-extra_case (bfd *in_abfd,
-            struct bfd_link_info *link_info,
-            struct bfd_link_order *link_order,
-            arelent *reloc,
-            bfd_byte *data,
-            unsigned int *src_ptr,
-            unsigned int *dst_ptr)
+extra_case (in_abfd, link_info, link_order, reloc, data, src_ptr, dst_ptr)
+     bfd * in_abfd;
+     struct bfd_link_info * link_info;
+     struct bfd_link_order * link_order;
+     arelent * reloc;
+     bfd_byte * data;
+     unsigned int * src_ptr;
+     unsigned int * dst_ptr;
 {
   asection * input_section = link_order->u.indirect.section;
 
@@ -187,7 +197,7 @@ extra_case (bfd *in_abfd,
 	{
 	  bfd_vma dst = bfd_coff_reloc16_get_value (reloc, link_info,
 						    input_section);
-	  /* Addresses are 23 bit, and the layout of those in a 32-bit
+	  /* Adresses are 23 bit, and the layout of those in a 32-bit
 	     value is as follows:
 	       1AAAAAAA xxxxxxxx AAAAAAAA AAAAAAAA
 	     (A - address bits,  x - ignore).  */
@@ -258,7 +268,7 @@ extra_case (bfd *in_abfd,
 	  abort ();
 	gap /= 2;
 
-	if (gap > 0 || gap < -127)
+	if (gap > 0 || gap < -128)
 	  {
 	    if (! ((*link_info->callbacks->reloc_overflow)
 		   (link_info, bfd_asymbol_name (*reloc->sym_ptr_ptr),
@@ -285,7 +295,8 @@ extra_case (bfd *in_abfd,
 
 	if (gap & 1)
 	  abort ();
-	if (gap > 4096 || gap < -4095)
+	gap /= 2;
+	if (gap > 8191 || gap < -8192)
 	  {
 	    if (! ((*link_info->callbacks->reloc_overflow)
 		   (link_info, bfd_asymbol_name (*reloc->sym_ptr_ptr),
@@ -293,7 +304,6 @@ extra_case (bfd *in_abfd,
 		    input_section, reloc->address)))
 	      abort ();
 	  }
-	gap /= 2;
 	bfd_put_16 (in_abfd,
                     (bfd_get_16 ( in_abfd, data + *dst_ptr) & 0xf000) | (-gap & 0x0fff),
                     data + *dst_ptr);
@@ -340,4 +350,4 @@ extra_case (bfd *in_abfd,
   bfd_coff_reloc16_get_relocated_section_contents
 #define coff_bfd_relax_section bfd_coff_reloc16_relax_section
 
-CREATE_BIG_COFF_TARGET_VEC (z8kcoff_vec, "coff-z8k", 0, 0, '_', NULL, COFF_SWAP_TABLE)
+CREATE_BIG_COFF_TARGET_VEC (z8kcoff_vec, "coff-z8k", 0, 0, '_', NULL)

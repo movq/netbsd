@@ -1,4 +1,4 @@
-/*	$NetBSD: util.h,v 1.33 2004/11/19 21:39:03 christos Exp $	*/
+/*	$NetBSD: util.h,v 1.31 2003/08/07 09:44:11 agc Exp $	*/
 
 /*-
  * Copyright (c) 1995
@@ -59,7 +59,6 @@ struct passwd;
 struct termios;
 struct utmp;
 struct winsize;
-struct sockaddr;
 
 pid_t		forkpty(int *, char *, struct termios *, struct winsize *);
 const char     *getbootfile(void);
@@ -83,8 +82,6 @@ int		pidfile(const char *);
 int		pidlock(const char *, int, pid_t *, const char *);
 int		pw_abort(void);
 void		pw_copy(int, int, struct passwd *, struct passwd *);
-int		pw_copyx(int, int, struct passwd *, struct passwd *,
-			 char *, size_t);
 void		pw_edit(int, const char *);
 void		pw_error(const char *, int, int);
 void		pw_getconf(char *, size_t, const char *, const char *);
@@ -96,8 +93,6 @@ void		pw_prompt(void);
 int		pw_setprefix(const char *);
 int		secure_path(const char *);
 int		snprintb(char *, size_t, const char *, uint64_t);
-int		sockaddr_snprintf(char *, size_t, const char *,
-    const struct sockaddr *);
 int		ttyaction(const char *, const char *, const char *);
 int		ttylock(const char *, int, pid_t *);
 char	       *ttymsg(struct iovec *, int, const char *, int);

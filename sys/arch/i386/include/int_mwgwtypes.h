@@ -1,4 +1,4 @@
-/*	$NetBSD: int_mwgwtypes.h,v 1.4 2004/05/22 14:16:59 kleink Exp $	*/
+/*	$NetBSD: int_mwgwtypes.h,v 1.2.28.2 2004/05/22 18:05:16 he Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.

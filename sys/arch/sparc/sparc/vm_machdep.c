@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.81 2004/09/17 14:11:22 skrll Exp $ */
+/*	$NetBSD: vm_machdep.c,v 1.78 2004/01/04 11:33:31 jdolecek Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.81 2004/09/17 14:11:22 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.78 2004/01/04 11:33:31 jdolecek Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -70,6 +70,31 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.81 2004/09/17 14:11:22 skrll Exp $"
 #include <machine/trap.h>
 
 #include <sparc/sparc/cpuvar.h>
+
+/*
+ * Move pages from one kernel virtual address to another.
+ */
+void
+pagemove(from, to, size)
+	caddr_t from, to;
+	size_t size;
+{
+	paddr_t pa;
+
+	if (size & PGOFSET || (int)from & PGOFSET || (int)to & PGOFSET)
+		panic("pagemove 1");
+	while (size > 0) {
+		if (pmap_extract(pmap_kernel(), (vaddr_t)from, &pa) == FALSE)
+			panic("pagemove 2");
+		pmap_kremove((vaddr_t)from, PAGE_SIZE);
+		pmap_kenter_pa((vaddr_t)to, pa, VM_PROT_READ | VM_PROT_WRITE);
+		from += PAGE_SIZE;
+		to += PAGE_SIZE;
+		size -= PAGE_SIZE;
+	}
+	pmap_update(pmap_kernel());
+}
+
 
 /*
  * Map a user I/O request into kernel virtual address space.
@@ -314,6 +339,25 @@ cpu_lwp_free(struct lwp *l, int proc)
 	}
 }
 
+/*
+ * cpu_exit is called as the last action during exit.
+ *
+ * We just call switchexit() with the old lwp
+ * as an argument.  switchexit() switches to the idle context, schedules
+ * the old vmspace and stack to be freed, then selects a new process to
+ * run.
+ *
+ * If proc==0, we're an exiting lwp and arrange to call lwp_exit2() instead
+ * of exit2().
+ */
+void
+cpu_exit(l)
+	struct lwp *l;
+{
+	switchexit(l, lwp_exit2);
+	/* NOTREACHED */
+}
+
 void
 cpu_setfunc(l, func, arg)
 	struct lwp *l;
@@ -371,13 +415,13 @@ cpu_coredump(l, vp, cred, chdr)
 	cseg.c_size = chdr->c_cpusize;
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
 	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 	if (error)
 		return error;
 
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&md_core, sizeof(md_core),
 	    (off_t)(chdr->c_hdrsize + chdr->c_seghdrsize), UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 	if (!error)
 		chdr->c_nseg++;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_var.h,v 1.47 2004/12/14 09:13:13 yamt Exp $	*/
+/*	$NetBSD: nfs_var.h,v 1.42.2.2 2004/09/18 19:22:19 he Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -87,8 +87,6 @@ int nfs_bioread __P((struct vnode *, struct uio *, int, struct ucred *, int));
 struct buf *nfs_getcacheblk __P((struct vnode *, daddr_t, int, struct proc *));
 int nfs_vinvalbuf __P((struct vnode *, int, struct ucred *, struct proc *,
 		       int));
-int nfs_flushstalebuf __P((struct vnode *, struct ucred *, struct proc *, int));
-#define	NFS_FLUSHSTALEBUF_MYWRITE	1	/* assume writes are ours */
 int nfs_asyncio __P((struct buf *));
 int nfs_doio __P((struct buf *, struct proc *));
 
@@ -146,7 +144,7 @@ void nqsrv_instimeq __P((struct nqlease *, u_int32_t));
 int nqsrv_cmpnam __P((struct nfssvc_sock *, struct mbuf *, struct nqhost *));
 void nqsrv_send_eviction __P((struct vnode *, struct nqlease *,
 			      struct nfssvc_sock *, struct mbuf *,
-			      struct ucred *, struct proc *));
+			      struct ucred *));
 void nqsrv_waitfor_expiry __P((struct nqlease *));
 void nqnfs_serverd __P((void));
 int nqnfsrv_getlease __P((struct nfsrv_descript *, struct nfssvc_sock *,
@@ -154,7 +152,7 @@ int nqnfsrv_getlease __P((struct nfsrv_descript *, struct nfssvc_sock *,
 int nqnfsrv_vacated __P((struct nfsrv_descript *, struct nfssvc_sock *,
 			 struct proc *, struct mbuf **));
 int nqnfs_getlease __P((struct vnode *, int, struct ucred *, struct proc *));
-int nqnfs_vacated __P((struct vnode *, struct ucred *, struct proc *));
+int nqnfs_vacated __P((struct vnode *, struct ucred *));
 int nqnfs_callback __P((struct nfsmount *, struct mbuf *, struct mbuf *,
 			caddr_t));
 
@@ -212,18 +210,17 @@ int nfsrv_access __P((struct vnode *, int, struct ucred *, int, struct proc *,
 		      int));
 
 /* nfs_socket.c */
-int nfs_connect __P((struct nfsmount *, struct nfsreq *, struct proc *));
-int nfs_reconnect __P((struct nfsreq *, struct proc *));
+int nfs_connect __P((struct nfsmount *, struct nfsreq *));
+int nfs_reconnect __P((struct nfsreq *));
 void nfs_disconnect __P((struct nfsmount *));
 void nfs_safedisconnect __P((struct nfsmount *));
 int nfs_send __P((struct socket *, struct mbuf *, struct mbuf *,
-		  struct nfsreq *, struct proc *));
-int nfs_receive __P((struct nfsreq *, struct mbuf **, struct mbuf **,
-		     struct proc *));
-int nfs_reply __P((struct nfsreq *, struct proc *));
+		  struct nfsreq *));
+int nfs_receive __P((struct nfsreq *, struct mbuf **, struct mbuf **));
+int nfs_reply __P((struct nfsreq *));
 int nfs_request __P((struct nfsnode *, struct mbuf *, int, struct proc *,
 		     struct ucred *, struct mbuf **, struct mbuf **,
-		     caddr_t *, int *));
+		     caddr_t *));
 int nfs_rephead __P((int, struct nfsrv_descript *, struct nfssvc_sock *,
 		     int, int, u_quad_t *, struct mbuf **, struct mbuf **,			     caddr_t *));
 void nfs_timer __P((void *));

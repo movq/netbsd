@@ -40,7 +40,7 @@
 #endif
 
 __RCSID("$Heimdal: login.c,v 1.59.2.1 2004/09/08 09:15:39 joda Exp $"
-        "$NetBSD: login.c,v 1.1.1.8 2004/09/14 07:46:17 lha Exp $");
+        "$NetBSD: login.c,v 1.1.1.7.2.1 2004/09/17 04:35:11 jmc Exp $");
 
 static int login_timeout = 60;
 

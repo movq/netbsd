@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_vnops.c,v 1.10 2004/09/17 14:11:24 skrll Exp $	*/
+/*	$NetBSD: cd9660_vnops.c,v 1.8 2004/01/26 10:39:30 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_vnops.c,v 1.10 2004/09/17 14:11:24 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_vnops.c,v 1.8 2004/01/26 10:39:30 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -219,7 +219,7 @@ cd9660_getattr(v)
 		auio.uio_offset = 0;
 		auio.uio_rw = UIO_READ;
 		auio.uio_segflg = UIO_SYSSPACE;
-		auio.uio_procp = NULL;
+		auio.uio_procp = ap->a_p;
 		auio.uio_resid = MAXPATHLEN;
 		rdlnk.a_uio = &auio;
 		rdlnk.a_vp = ap->a_vp;
@@ -345,7 +345,7 @@ iso_uiodir(idp, dp, off)
 		--idp->ncookies;
 	}
 
-	if ((error = uiomove(dp, dp->d_reclen, idp->uio)) != 0)
+	if ((error = uiomove((caddr_t)dp, dp->d_reclen, idp->uio)) != 0)
 		return (error);
 	idp->uio_off = off;
 	return (0);

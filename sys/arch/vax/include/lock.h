@@ -1,4 +1,4 @@
-/*	$NetBSD: lock.h,v 1.16 2004/05/19 23:15:43 he Exp $	*/
+/*	$NetBSD: lock.h,v 1.14 2003/09/26 22:46:01 nathanw Exp $	*/
 
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden.
@@ -36,7 +36,6 @@
 #ifdef _KERNEL
 #ifdef _KERNEL_OPT
 #include "opt_multiprocessor.h"
-#include <machine/intr.h>
 #endif
 #include <machine/cpu.h>
 #endif

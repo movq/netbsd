@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl81x9.c,v 1.47 2004/10/30 18:08:37 thorpej Exp $	*/
+/*	$NetBSD: rtl81x9.c,v 1.45.4.1 2004/06/21 16:39:00 tron Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtl81x9.c,v 1.47 2004/10/30 18:08:37 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtl81x9.c,v 1.45.4.1 2004/06/21 16:39:00 tron Exp $");
 
 #include "bpfilter.h"
 #include "rnd.h"
@@ -1531,7 +1531,7 @@ STATIC int rtk_ioctl(ifp, command, data)
 	default:
 		error = ether_ioctl(ifp, command, data);
 		if (error == ENETRESET) {
-			if (ifp->if_flags & IFF_RUNNING) {
+			if (RTK_IS_ENABLED(sc)) {
 				/*
 				 * Multicast list has changed.  Set the
 				 * hardware filter accordingly.

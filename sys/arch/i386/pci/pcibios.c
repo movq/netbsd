@@ -1,4 +1,4 @@
-/*	$NetBSD: pcibios.c,v 1.21 2004/11/21 22:00:00 augustss Exp $	*/
+/*	$NetBSD: pcibios.c,v 1.14.2.1 2004/04/28 05:19:13 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcibios.c,v 1.21 2004/11/21 22:00:00 augustss Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcibios.c,v 1.14.2.1 2004/04/28 05:19:13 jmc Exp $");
 
 #include "opt_pcibios.h"
 
@@ -109,36 +109,18 @@ int pcibios_max_bus;
 
 struct bios32_entry pcibios_entry;
 
-void	pcibios_pir_init(void);
+void	pcibios_pir_init __P((void));
 
-int	pcibios_get_status(u_int32_t *, u_int32_t *, u_int32_t *,
-	    u_int32_t *, u_int32_t *, u_int32_t *, u_int32_t *);
-int	pcibios_get_intr_routing(struct pcibios_intr_routing *,
-	    int *, u_int16_t *);
+int	pcibios_get_status __P((u_int32_t *, u_int32_t *, u_int32_t *,
+	    u_int32_t *, u_int32_t *, u_int32_t *, u_int32_t *));
+int	pcibios_get_intr_routing __P((struct pcibios_intr_routing *,
+	    int *, u_int16_t *));
 
-int	pcibios_return_code(u_int16_t, const char *);
+int	pcibios_return_code __P((u_int16_t, const char *));
 
-void	pcibios_print_exclirq(void);
-
-#ifdef PCIBIOS_LIBRETTO_FIXUP
-/* for Libretto L2/L3 hack */
-static void	pcibios_fixup_pir_table(void);
-static void	pcibios_fixup_pir_table_mask(struct pcibios_linkmap *);
-
-struct pcibios_linkmap pir_mask[] = {
-	{ 2,	0x0040 },
-	{ 7,	0x0080 },
-	{ 8,	0x0020 },
-	{ 0,	0x0000 }
-};
-#endif
-
-#ifdef PCIBIOS_SHARP_MM20_FIXUP
-static void pcibios_mm20_fixup(void);
-#endif
-
+void	pcibios_print_exclirq __P((void));
 #ifdef PCIINTR_DEBUG
-void	pcibios_print_pir_table(void);
+void	pcibios_print_pir_table __P((void));
 #endif
 
 #define	PCI_IRQ_TABLE_START	0xf0000
@@ -248,7 +230,7 @@ pcibios_init()
 void
 pcibios_pir_init()
 {
-	char *devinfo;
+	char devinfo[256];
 	paddr_t pa;
 	caddr_t p;
 	unsigned char cksum;
@@ -313,24 +295,12 @@ pcibios_pir_init()
 		    PIR_DEVFUNC_DEVICE(pcibios_pir_header.router_devfunc),
 		    PIR_DEVFUNC_FUNCTION(pcibios_pir_header.router_devfunc));
 		if (pcibios_pir_header.compat_router != 0) {
-			devinfo = malloc(256, M_DEVBUF, M_NOWAIT);
-			if (devinfo) {
-				pci_devinfo(pcibios_pir_header.compat_router,
-				    0, 0, devinfo, 256);
-				printf(" (%s compatible)", devinfo);
-				free(devinfo, M_DEVBUF);
-			}
+			pci_devinfo(pcibios_pir_header.compat_router, 0, 0,
+			    devinfo);
+			printf(" (%s compatible)", devinfo);
 		}
 		printf("\n");
 		pcibios_print_exclirq();
-
-#ifdef PCIBIOS_LIBRETTO_FIXUP
-		/* for Libretto L2/L3 hack */
-		pcibios_fixup_pir_table();
-#endif
-#ifdef PCIBIOS_SHARP_MM20_FIXUP
-		pcibios_mm20_fixup();
-#endif
 #ifdef PCIINTR_DEBUG
 		pcibios_print_pir_table();
 #endif
@@ -363,23 +333,15 @@ pcibios_pir_init()
 	printf("PCI BIOS has %d Interrupt Routing table entries\n",
 	    pcibios_pir_table_nentries);
 	pcibios_print_exclirq();
-
-#ifdef PCIBIOS_LIBRETTO_FIXUP
-	/* for Libretto L2/L3 hack */
-	pcibios_fixup_pir_table();
-#endif
-#ifdef PCIBIOS_SHARP_MM20_FIXUP
-	pcibios_mm20_fixup();
-#endif
 #ifdef PCIINTR_DEBUG
 	pcibios_print_pir_table();
 #endif
 }
 
 int
-pcibios_get_status(u_int32_t *rev_maj, u_int32_t *rev_min,
-    u_int32_t *mech1, u_int32_t *mech2, u_int32_t *scmech1, u_int32_t *scmech2,
-    u_int32_t *maxbus)
+pcibios_get_status(rev_maj, rev_min, mech1, mech2, scmech1, scmech2, maxbus)
+	u_int32_t *rev_maj, *rev_min, *mech1, *mech2, *scmech1, *scmech2,
+	    *maxbus;
 {
 	u_int16_t ax, bx, cx;
 	u_int32_t edx;
@@ -414,8 +376,10 @@ pcibios_get_status(u_int32_t *rev_maj, u_int32_t *rev_min,
 }
 
 int
-pcibios_get_intr_routing(struct pcibios_intr_routing *table,
-    int *nentries, u_int16_t *exclirq)
+pcibios_get_intr_routing(table, nentries, exclirq)
+	struct pcibios_intr_routing *table;
+	int *nentries;
+	u_int16_t *exclirq;
 {
 	u_int16_t ax, bx;
 	int rv;
@@ -451,7 +415,9 @@ pcibios_get_intr_routing(struct pcibios_intr_routing *table,
 }
 
 int
-pcibios_return_code(u_int16_t ax, const char *func)
+pcibios_return_code(ax, func)
+	u_int16_t ax;
+	const char *func;
 {
 	const char *errstr;
 	int rv = ax >> 8;
@@ -512,34 +478,6 @@ pcibios_print_exclirq()
 	}
 }
 
-#ifdef PCIBIOS_LIBRETTO_FIXUP
-/* for Libretto L2/L3 hack */
-static void 
-pcibios_fixup_pir_table()
-{
-	struct pcibios_linkmap *m;
-
-	for (m = pir_mask; m->link != 0; m++)
-		pcibios_fixup_pir_table_mask(m);
-}
-
-void 
-pcibios_fixup_pir_table_mask(mask)
-	struct pcibios_linkmap *mask;
-{
-	int i, j;
-
-	for (i = 0; i < pcibios_pir_table_nentries; i++) {
-		for (j = 0; j < 4; j++) {
-			if (pcibios_pir_table[i].linkmap[j].link == mask->link) {
-				pcibios_pir_table[i].linkmap[j].bitmap
-				    &= mask->bitmap; 
-			}
-		}
-	}
-}
-#endif
-
 #ifdef PCIINTR_DEBUG
 void
 pcibios_print_pir_table()
@@ -562,15 +500,22 @@ pcibios_print_pir_table()
 #endif
 
 void 
-pci_device_foreach(pci_chipset_tag_t pc, int maxbus,
-    void (*func)(pci_chipset_tag_t, pcitag_t, void *), void *context)
+pci_device_foreach(pc, maxbus, func, context)
+	pci_chipset_tag_t pc;
+	int maxbus;
+	void (*func) __P((pci_chipset_tag_t, pcitag_t, void *));
+	void *context;
 {
-	pci_device_foreach_min(pc, 0, maxbus, func, context);
+  pci_device_foreach_min(pc, 0, maxbus, func, context);
 }
 
 void
-pci_device_foreach_min(pci_chipset_tag_t pc, int minbus, int maxbus,
-    void (*func)(pci_chipset_tag_t, pcitag_t, void *), void *context)
+pci_device_foreach_min(pc, minbus, maxbus, func, context)
+	pci_chipset_tag_t pc;
+	int minbus;
+	int maxbus;
+	void (*func) __P((pci_chipset_tag_t, pcitag_t, void *));
+	void *context;
 {
 	const struct pci_quirkdata *qd;
 	int bus, device, function, maxdevs, nfuncs;
@@ -646,141 +591,3 @@ pci_bridge_hook(pci_chipset_tag_t pc, pcitag_t tag, void *ctx)
 		(*bridge_hook->func)(pc, tag, bridge_hook->arg);
 	}
 }
-
-#ifdef PCIBIOS_SHARP_MM20_FIXUP
-/*
- * This is a gross hack to get the interrupt from the EHCI controller
- * working on a Sharp MM20.  The BIOS is just incredibly buggy.
- *
- * The story thus far:
- * The modern way to route the interrupt is to use ACPI.  But using
- * ACPI fails with an error message about an uninitialized local
- * variable in the AML code.  (It works in Windows, but fails in NetBSD
- * and Linux.)
- *
- * The second attempt is to use PCI Interrupt Routing table.  But this
- * fails because the table does not contain any information about the
- * interrupt from the EHCI controller.  This is probably due to the fact
- * that the table is compatible with ALi M1543, but the MM20 has an ALi M1563.
- * The M1563 has additional interrupt lines.  The ali1543.c code also
- * cannot handle the M1653's extended interrupts.  And fixing this is
- * difficult since getting a data sheet from ALi requires signing an NDA.
- *
- * The third attempt is to use a BIOS call to route the interrupt
- * (as FreeBSD does) with manually generated information.  But the BIOS call
- * fails because the BIOS code is not quite position independent.  It makes
- * some assumption about where the code segment register points.
- * 
- * So the solution is to use the third attempt, but with a patched version
- * of the BIOS.
- *    -- lennart@augustsson.net
- */
-
-#define	BIOS32_START	0xe0000
-#define	BIOS32_SIZE	0x20000
-
-static char pcibios_shadow[BIOS32_SIZE];
-static struct bios32_entry pcibios_entry_shadow;
-
-/* 
- * Copy BIOS and zap offending instruction.
- * The bad instruction is
- *    mov    %cs:0x63c(%ebx),%ah
- * NetBSD does not have the code segment set up for this to work.
- * Using the value 0xff for the table entry seems to work.
- * The replacement is
- *    mov $0xff,%ah; nop; nop; nop; nop; nop
- */
-static void
-pcibios_copy_bios(void)
-{
-	u_int8_t *bad_instr;
-
-	memcpy(pcibios_shadow, ISA_HOLE_VADDR(BIOS32_START), BIOS32_SIZE);
-	pcibios_entry_shadow = pcibios_entry;
-	pcibios_entry_shadow.offset =
-	    (void*)((u_long)pcibios_shadow +
-		    (u_long)pcibios_entry.offset -
-		    (u_long)ISA_HOLE_VADDR(BIOS32_START));
-	
-	bad_instr = (u_int8_t *)pcibios_entry_shadow.offset + 0x499;
-	if (*bad_instr != 0x2e)
-		panic("bad bios");
-	bad_instr[0] = 0xb4; bad_instr[1] = 0xff; /* mov $0xff,%ah */
-	bad_instr[2] = 0x90;		/* nop */
-	bad_instr[3] = 0x90;		/* nop */
-	bad_instr[4] = 0x90;		/* nop */
-	bad_instr[5] = 0x90;		/* nop */
-	bad_instr[6] = 0x90;		/* nop */
-}
-
-/*
- * Call BIOS to route an interrupt.
- * The PCI device is identified by bus,device,func.
- * The interrupt is on pin PIN (A-D) and interrupt IRQ.
- * BIOS knows the magic for the interrupt controller.
- */
-static int
-pcibios_biosroute(int bus, int device, int func, int pin, int irq)
-{
-	u_int16_t ax, bx, cx;
-	int rv;
-
-	printf("pcibios_biosroute: b,d,f=%d,%d,%d pin=%x irq=%d\n",
-	       bus, device, func, pin+0xa, irq);
-
-	bx = (bus << 8) | (device << 3) | func;
-	cx = (irq << 8) | (0xa + pin);
-
-	__asm __volatile("lcall *(%%esi)				; \
-			jc 1f						; \
-			xor %%ah, %%ah					; \
-		1:	movw %w1, %%ds					; \
-			movw %w1, %%es"
-			 : "=a" (ax)
-			 : "r" GSEL(GDATA_SEL, SEL_KPL), "0" (0xb10f),
-			   "b" (bx), "c" (cx),
-		           "S" (&pcibios_entry_shadow));
-
-	rv = pcibios_return_code(ax, "pcibios_biosroute");
-
-	return rv;
-}
-
-#define MM20_PCI_BUS 0
-#define MM20_PCI_EHCI_DEV 15
-#define MM20_PCI_EHCI_FUNC 3
-#define MM20_PCI_EHCI_PIN 3
-#define MM20_PCI_EHCI_INTR 11
-#define MM20_PCI_ISA_DEV 3
-#define MM20_PCI_ISA_FUNC 0
-
-static void
-pcibios_mm20_fixup(void)
-{
-	pci_chipset_tag_t pc;
-	pcitag_t tag;
-
-	/* Copy BIOS */
-	pcibios_copy_bios();
-	/* Route the interrupt for the EHCI controller. */
-	(void)pcibios_biosroute(MM20_PCI_BUS,
-				MM20_PCI_EHCI_DEV,
-				MM20_PCI_EHCI_FUNC,
-				MM20_PCI_EHCI_PIN,
-				MM20_PCI_EHCI_INTR);
-
-	/* Fake some tags. */
-	pc = NULL;
-	tag = pci_make_tag(pc, MM20_PCI_BUS, MM20_PCI_EHCI_DEV,
-			   MM20_PCI_EHCI_FUNC);
-	/* Set interrupt register in EHCI controller */
-	pci_conf_write(pc, tag, 0x3c, 0x50000400 + MM20_PCI_EHCI_INTR);
-	tag = pci_make_tag(pc, MM20_PCI_BUS, MM20_PCI_ISA_DEV,
-			   MM20_PCI_ISA_FUNC);
-	/* Set some unknown registers in the ISA bridge. */
-	pci_conf_write(pc, tag, 0x58, 0xd87f5300);
-	pci_conf_write(pc, tag, 0x74, 0x00000009);
-}
-
-#endif /* PCIBIOS_SHARP_MM20_FIXUP */

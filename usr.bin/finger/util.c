@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.23 2004/11/12 21:48:58 christos Exp $	*/
+/*	$NetBSD: util.c,v 1.21 2003/08/07 11:13:46 agc Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -72,7 +72,7 @@
 #if 0
 static char sccsid[] = "@(#)util.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: util.c,v 1.23 2004/11/12 21:48:58 christos Exp $");
+__RCSID("$NetBSD: util.c,v 1.21 2003/08/07 11:13:46 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -153,7 +153,7 @@ expandusername(gecos, login, buf, buflen)
 		if (*p == '&') {
 			/* interpolate full name */
 			snprintf(bp, buflen - (bp - buf), "%s", login);
-			*bp = toupper((unsigned char)*bp);
+			*bp = toupper(*bp);
 			bp += strlen(bp);
 		}
 		else
@@ -268,6 +268,7 @@ PERSON *
 find_person(name)
 	char *name;
 {
+	int cnt;
 	DBT data, key;
 	PERSON *p;
 
@@ -275,7 +276,7 @@ find_person(name)
 		return(NULL);
 
 	key.data = name;
-	key.size = strlen(name);
+	key.size = cnt;
 
 	if ((*db->get)(db, &key, &data, 0))
 		return (NULL);

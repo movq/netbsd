@@ -1,4 +1,4 @@
-/*	$NetBSD: telnet.c,v 1.29 2004/11/04 07:22:47 dsl Exp $	*/
+/*	$NetBSD: telnet.c,v 1.28 2004/03/20 23:26:05 heas Exp $	*/
 
 /*
  * Copyright (c) 1988, 1990, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)telnet.c	8.4 (Berkeley) 5/30/95";
 #else
-__RCSID("$NetBSD: telnet.c,v 1.29 2004/11/04 07:22:47 dsl Exp $");
+__RCSID("$NetBSD: telnet.c,v 1.28 2004/03/20 23:26:05 heas Exp $");
 #endif
 #endif /* not lint */
 
@@ -693,7 +693,7 @@ mklist(char *buf, char *name)
 		if ((c == ' ') || !isascii(c))
 			n = 1;
 		else if (islower((unsigned char)c))
-			*cp = toupper((unsigned char)c);
+			*cp = toupper(c);
 	}
 
 	/*

@@ -1,4 +1,4 @@
-/*	$NetBSD: magic.c,v 1.12 2004/12/13 10:35:04 pooka Exp $	*/
+/*	$NetBSD: magic.c,v 1.8.2.1 2004/05/22 17:31:56 he Exp $	*/
 
 /*
  * Copyright (c) Christos Zoulas 2003.
@@ -13,6 +13,8 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *  
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -66,9 +68,9 @@
 
 #ifndef	lint
 #if 0
-FILE_RCSID("@(#)Id: magic.c,v 1.24 2004/09/27 15:28:37 christos Exp")
+FILE_RCSID("@(#)Id: magic.c,v 1.19 2004/03/22 20:37:13 christos Exp")
 #else
-__RCSID("$NetBSD: magic.c,v 1.12 2004/12/13 10:35:04 pooka Exp $");
+__RCSID("$NetBSD: magic.c,v 1.8.2.1 2004/05/22 17:31:56 he Exp $");
 #endif
 #endif	/* lint */
 
@@ -91,34 +93,34 @@ magic_open(int flags)
 		return NULL;
 
 	if (magic_setflags(ms, flags) == -1) {
+		free(ms);
 		errno = EINVAL;
-		goto free1;
+		return NULL;
 	}
 
 	ms->o.ptr = ms->o.buf = malloc(ms->o.size = 1024);
-	if (ms->o.buf == NULL)
-		goto free1;
-
-	ms->o.pbuf = malloc(ms->o.psize = 1024);
-	if (ms->o.pbuf == NULL)
-		goto free2;
-
-	ms->c.off = malloc((ms->c.len = 10) * sizeof(*ms->c.off));
-	if (ms->c.off == NULL)
-		goto free3;
-	
 	ms->o.len = 0;
+	if (ms->o.buf == NULL) {
+		free(ms);
+		return NULL;
+	}
+	ms->o.pbuf = malloc(ms->o.psize = 1024);
+	if (ms->o.pbuf == NULL) {
+		free(ms->o.buf);
+		free(ms);
+		return NULL;
+	}
+	ms->c.off = malloc((ms->c.len = 10) * sizeof(*ms->c.off));
+	if (ms->c.off == NULL) {
+		free(ms->o.pbuf);
+		free(ms->o.buf);
+		free(ms);
+		return NULL;
+	}
 	ms->haderr = 0;
 	ms->error = -1;
 	ms->mlist = NULL;
 	return ms;
-free3:
-	free(ms->o.pbuf);
-free2:
-	free(ms->o.buf);
-free1:
-	free(ms);
-	return NULL;
 }
 
 private void
@@ -144,7 +146,6 @@ magic_close(ms)
     struct magic_set *ms;
 {
 	free_mlist(ms->mlist);
-	free(ms->o.pbuf);
 	free(ms->o.buf);
 	free(ms->c.off);
 	free(ms);
@@ -209,7 +210,6 @@ close_and_restore(const struct magic_set *ms, const char *name, int fd,
 	}
 }
 
-#ifndef COMPILE_ONLY
 /*
  * find type of named file
  */
@@ -322,7 +322,6 @@ magic_buffer(struct magic_set *ms, const void *buf, size_t nb)
 	}
 	return file_getbuffer(ms);
 }
-#endif
 
 public const char *
 magic_error(struct magic_set *ms)

@@ -13,7 +13,7 @@
 %#ifndef __lint__
 %/*static char sccsid[] = "from: @(#)nlm_prot.x 1.8 87/09/21 Copyr 1987 Sun Micro";*/
 %/*static char sccsid[] = "from: * @(#)nlm_prot.x	2.1 88/08/01 4.0 RPCSRC";*/
-%__RCSID("$NetBSD: nlm_prot.x,v 1.7 2004/07/01 22:52:34 kleink Exp $");
+%__RCSID("$NetBSD: nlm_prot.x,v 1.6.6.1 2004/07/02 18:19:53 he Exp $");
 %#endif /* not __lint__ */
 #endif
 

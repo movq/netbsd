@@ -1,4 +1,4 @@
-/*	$NetBSD: math.h,v 1.39 2004/07/12 23:44:52 kleink Exp $	*/
+/*	$NetBSD: math.h,v 1.34.2.2 2004/07/16 20:32:10 he Exp $	*/
 
 /*
  * ====================================================
@@ -6,7 +6,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice
+ * software is freely granted, provided that this notice 
  * is preserved.
  * ====================================================
  */
@@ -129,15 +129,15 @@ extern int signgam;
 enum fdversion {fdlibm_ieee = -1, fdlibm_svid, fdlibm_xopen, fdlibm_posix};
 
 #define _LIB_VERSION_TYPE enum fdversion
-#define _LIB_VERSION _fdlib_version
+#define _LIB_VERSION _fdlib_version  
 
-/* if global variable _LIB_VERSION is not desirable, one may
- * change the following to be a constant by:
+/* if global variable _LIB_VERSION is not desirable, one may 
+ * change the following to be a constant by: 
  *	#define _LIB_VERSION_TYPE const enum version
  * In that case, after one initializes the value _LIB_VERSION (see
  * s_lib_version.c) during compile time, it cannot be modified
  * in the middle of a program
- */
+ */ 
 extern  _LIB_VERSION_TYPE  _LIB_VERSION;
 
 #define _IEEE_  fdlibm_ieee
@@ -157,12 +157,12 @@ struct exception {
 
 #define	HUGE		MAXFLOAT
 
-/*
+/* 
  * set X_TLOSS = pi*2**52, which is possibly defined in <values.h>
  * (one may replace the following line by "#include <values.h>")
  */
 
-#define X_TLOSS		1.41484755040568800000e+16
+#define X_TLOSS		1.41484755040568800000e+16 
 
 #define	DOMAIN		1
 #define	SING		2
@@ -255,83 +255,8 @@ double	scalb __P((double, double));
 /* 7.12.3.6 int signbit(real-floating x) */
 #define	signbit(__x)	__fpmacro_unary_floating(signbit, __x)
 
-/* 7.12.4 trigonometric */
-
-float	acosf __P((float));
-float	asinf __P((float));
-float	atanf __P((float));
-float	atan2f __P((float, float));
-float	cosf __P((float));
-float	sinf __P((float));
-float	tanf __P((float));
-
-/* 7.12.5 hyperbolic */
-
-float	acoshf __P((float));
-float	asinhf __P((float));
-float	atanhf __P((float));
-float	coshf __P((float));
-float	sinhf __P((float));
-float	tanhf __P((float));
-
-/* 7.12.6 exp / log */
-
-float	expf __P((float));
-float	expm1f __P((float));
-float	frexpf __P((float, int *));
-int	ilogbf __P((float));
-float	ldexpf __P((float, int));
-float	logf __P((float));
-float	log10f __P((float));
-float	log1pf __P((float));
-float	logbf __P((float));
-float	modff __P((float, float *));
-float	scalbnf __P((float, int));
-
-/* 7.12.7 power / absolute */
-
-float	cbrtf __P((float));
-float	fabsf __P((float));
-float	hypotf __P((float, float));
-float	powf __P((float, float));
-float	sqrtf __P((float));
-
-/* 7.12.8 error / gamma */
-
-float	erff __P((float));
-float	erfcf __P((float));
-float	lgammaf __P((float));
-
-/* 7.12.9 nearest integer */
-
-float	ceilf __P((float));
-float	floorf __P((float));
-float	rintf __P((float));
 double	round __P((double));
 float	roundf __P((float));
-long int	lrint __P((double));
-long int	lrintf __P((float));
-/* LONGLONG */
-long long int	llrint __P((double));
-/* LONGLONG */
-long long int	llrintf __P((float));
-long int	lround __P((double));
-long int	lroundf __P((float));
-/* LONGLONG */
-long long int	llround __P((double));
-/* LONGLONG */
-long long int	llroundf __P((float));
-
-/* 7.12.10 remainder */
-
-float	fmodf __P((float, float));
-float	remainderf __P((float, float));
-
-/* 7.2.11 manipulation */
-
-float	copysignf __P((float, float));
-float	nextafterf __P((float, float));
-
 
 #endif /* !_ANSI_SOURCE && ... */
 
@@ -394,18 +319,55 @@ double	lgamma_r __P((double, int *));
 #if defined(_NETBSD_SOURCE)
 
 /* float versions of ANSI/POSIX functions */
+float	acosf __P((float));
+float	asinf __P((float));
+float	atanf __P((float));
+float	atan2f __P((float, float));
+float	cosf __P((float));
+float	sinf __P((float));
+float	tanf __P((float));
 
+float	coshf __P((float));
+float	sinhf __P((float));
+float	tanhf __P((float));
+
+float	expf __P((float));
+float	frexpf __P((float, int *));
+float	ldexpf __P((float, int));
+float	logf __P((float));
+float	log10f __P((float));
+float	modff __P((float, float *));
+
+float	powf __P((float, float));
+float	sqrtf __P((float));
+
+float	ceilf __P((float));
+float	fabsf __P((float));
+float	floorf __P((float));
+float	fmodf __P((float, float));
+
+float	erff __P((float));
+float	erfcf __P((float));
 float	gammaf __P((float));
+float	hypotf __P((float, float));
 int	isinff __P((float));
 int	isnanf __P((float));
 int	finitef __P((float));
 float	j0f __P((float));
 float	j1f __P((float));
 float	jnf __P((int, float));
+float	lgammaf __P((float));
 float	y0f __P((float));
 float	y1f __P((float));
 float	ynf __P((int, float));
 
+float	acoshf __P((float));
+float	asinhf __P((float));
+float	atanhf __P((float));
+float	cbrtf __P((float));
+float	logbf __P((float));
+float	nextafterf __P((float, float));
+float	remainderf __P((float, float));
 float	scalbf __P((float, float));
 
 /*
@@ -414,12 +376,23 @@ float	scalbf __P((float, float));
 float	significandf __P((float));
 
 /*
+ * Float versions of functions callable from C, intended to support
+ * IEEE arithmetic.
+ */
+float	copysignf __P((float, float));
+int	ilogbf __P((float));
+float	rintf __P((float));
+float	scalbnf __P((float, int));
+
+/*
  * float versions of BSD math library entry points
  */
 #ifndef __MATH_PRIVATE__
 float	cabsf __P((/* struct complex { float r; float i; } */));
 #endif
 float	dremf __P((float, float));
+float	expm1f __P((float));
+float	log1pf __P((float));
 #endif /* _NETBSD_SOURCE */
 
 #if defined(_NETBSD_SOURCE) || defined(_REENTRANT)

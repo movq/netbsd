@@ -1,4 +1,4 @@
-/*	$NetBSD: kernfs_vfsops.c,v 1.65 2004/09/13 19:19:45 jdolecek Exp $	*/
+/*	$NetBSD: kernfs_vfsops.c,v 1.58.2.1 2004/05/29 09:03:41 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kernfs_vfsops.c,v 1.65 2004/09/13 19:19:45 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kernfs_vfsops.c,v 1.58.2.1 2004/05/29 09:03:41 tron Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -53,7 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: kernfs_vfsops.c,v 1.65 2004/09/13 19:19:45 jdolecek 
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
-#include <sys/dirent.h>
 #include <sys/malloc.h>
 #include <sys/syslog.h>
 
@@ -72,8 +71,8 @@ int	kernfs_mount __P((struct mount *, const char *, void *,
 	    struct nameidata *, struct proc *));
 int	kernfs_start __P((struct mount *, int, struct proc *));
 int	kernfs_unmount __P((struct mount *, int, struct proc *));
-int	kernfs_statvfs __P((struct mount *, struct statvfs *, struct proc *));
-int	kernfs_quotactl __P((struct mount *, int, uid_t, void *,
+int	kernfs_statfs __P((struct mount *, struct statfs *, struct proc *));
+int	kernfs_quotactl __P((struct mount *, int, uid_t, caddr_t,
 			     struct proc *));
 int	kernfs_sync __P((struct mount *, int, struct ucred *, struct proc *));
 int	kernfs_vget __P((struct mount *, ino_t, struct vnode **));
@@ -158,19 +157,15 @@ kernfs_mount(mp, path, data, ndp, p)
 	memset(fmp, 0, sizeof(*fmp));
 	TAILQ_INIT(&fmp->nodelist);
 
-	mp->mnt_stat.f_namemax = MAXNAMLEN;
-	mp->mnt_flag |= MNT_LOCAL;
 	mp->mnt_data = fmp;
+	mp->mnt_flag |= MNT_LOCAL;
 	vfs_getnewfsid(mp);
 
-	if ((error = set_statvfs_info(path, UIO_USERSPACE, "kernfs",
-	    UIO_SYSSPACE, mp, p)) != 0) {
-		free(fmp, M_KERNFSMNT);
-		return error;
-	}
+	error = set_statfs_info(path, UIO_USERSPACE, "kernfs", UIO_SYSSPACE,
+	    mp, p);
 
 	kernfs_get_rrootdev();
-	return 0;
+	return error;
 }
 
 int
@@ -202,7 +197,7 @@ kernfs_unmount(mp, mntflags, p)
 	 * Finally, throw away the kernfs_mount structure
 	 */
 	free(mp->mnt_data, M_KERNFSMNT);
-	mp->mnt_data = NULL;
+	mp->mnt_data = 0;
 	return (0);
 }
 
@@ -221,7 +216,7 @@ kernfs_quotactl(mp, cmd, uid, arg, p)
 	struct mount *mp;
 	int cmd;
 	uid_t uid;
-	void *arg;
+	caddr_t arg;
 	struct proc *p;
 {
 
@@ -229,24 +224,25 @@ kernfs_quotactl(mp, cmd, uid, arg, p)
 }
 
 int
-kernfs_statvfs(mp, sbp, p)
+kernfs_statfs(mp, sbp, p)
 	struct mount *mp;
-	struct statvfs *sbp;
+	struct statfs *sbp;
 	struct proc *p;
 {
 
 	sbp->f_bsize = DEV_BSIZE;
-	sbp->f_frsize = DEV_BSIZE;
 	sbp->f_iosize = DEV_BSIZE;
 	sbp->f_blocks = 2;		/* 1K to keep df happy */
 	sbp->f_bfree = 0;
 	sbp->f_bavail = 0;
-	sbp->f_bresvd = 0;
 	sbp->f_files = 1024;	/* XXX lie */
 	sbp->f_ffree = 128;	/* XXX lie */
-	sbp->f_favail = 128;	/* XXX lie */
-	sbp->f_fresvd = 0;
-	copy_statvfs_info(sbp, mp);
+#ifdef COMPAT_09
+	sbp->f_type = 7;
+#else
+	sbp->f_type = 0;
+#endif
+	copy_statfs_info(sbp, mp);
 	return (0);
 }
 
@@ -344,7 +340,7 @@ struct vfsops kernfs_vfsops = {
 	kernfs_unmount,
 	kernfs_root,
 	kernfs_quotactl,
-	kernfs_statvfs,
+	kernfs_statfs,
 	kernfs_sync,
 	kernfs_vget,
 	kernfs_fhtovp,
@@ -355,6 +351,5 @@ struct vfsops kernfs_vfsops = {
 	NULL,
 	NULL,				/* vfs_mountroot */
 	kernfs_checkexp,
-	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	kernfs_vnodeopv_descs,
 };

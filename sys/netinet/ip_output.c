@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_output.c,v 1.138 2004/12/15 04:25:19 thorpej Exp $	*/
+/*	$NetBSD: ip_output.c,v 1.130 2004/03/02 02:28:28 thorpej Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_output.c,v 1.138 2004/12/15 04:25:19 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_output.c,v 1.130 2004/03/02 02:28:28 thorpej Exp $");
 
 #include "opt_pfil_hooks.h"
 #include "opt_inet.h"
@@ -163,7 +163,13 @@ extern struct pfil_head inet_pfil_hook;			/* XXX */
  * The mbuf opt, if present, will not be freed.
  */
 int
+#if __STDC__
 ip_output(struct mbuf *m0, ...)
+#else
+ip_output(m0, va_alist)
+	struct mbuf *m0;
+	va_dcl
+#endif
 {
 	struct ip *ip;
 	struct ifnet *ifp;
@@ -585,11 +591,8 @@ sendit:
 		}
 	} else {
 		/* nobody uses ia beyond here */
-		if (state.encap) {
+		if (state.encap)
 			ifp = ro->ro_rt->rt_ifp;
-			if ((mtu = ro->ro_rt->rt_rmx.rmx_mtu) == 0)
-				mtu = ifp->if_mtu;
-		}
 	}
     }
 skip_ipsec:
@@ -737,24 +740,18 @@ spd_done:
 	hlen = ip->ip_hl << 2;
 #endif /* PFIL_HOOKS */
 
-#if IFA_STATS
-	/*
-	 * search for the source address structure to
-	 * maintain output statistics.
-	 */
-	INADDR_TO_IA(ip->ip_src, ia);
-#endif
-
-	/* Maybe skip checksums on loopback interfaces. */
-	if (__predict_true(!(ifp->if_flags & IFF_LOOPBACK) ||
-			   ip_do_loopback_cksum))
-		m->m_pkthdr.csum_flags |= M_CSUM_IPv4;
+	m->m_pkthdr.csum_flags |= M_CSUM_IPv4;
 	sw_csum = m->m_pkthdr.csum_flags & ~ifp->if_csum_flags_tx;
 	/*
 	 * If small enough for mtu of path, can just send directly.
 	 */
 	if (ip_len <= mtu) {
 #if IFA_STATS
+		/*
+		 * search for the source address structure to
+		 * maintain output statistics.
+		 */
+		INADDR_TO_IA(ip->ip_src, ia);
 		if (ia)
 			ia->ia_ifa.ifa_data.ifad_outbytes += ip_len;
 #endif
@@ -822,9 +819,15 @@ spd_done:
 		m->m_nextpkt = 0;
 		if (error == 0) {
 #if IFA_STATS
-			if (ia)
+			/*
+			 * search for the source address structure to
+			 * maintain output statistics.
+			 */
+			INADDR_TO_IA(ip->ip_src, ia);
+			if (ia) {
 				ia->ia_ifa.ifa_data.ifad_outbytes +=
 				    ntohs(ip->ip_len);
+			}
 #endif
 #ifdef IPSEC
 			/* clean ipsec history once it goes out of the node */
@@ -872,15 +875,14 @@ ip_fragment(struct mbuf *m, struct ifnet *ifp, u_long mtu)
 	int len, hlen, off;
 	int mhlen, firstlen;
 	struct mbuf **mnext;
-	int sw_csum = m->m_pkthdr.csum_flags;
+	int sw_csum;
 	int fragments = 0;
 	int s;
 	int error = 0;
 
 	ip = mtod(m, struct ip *);
 	hlen = ip->ip_hl << 2;
-	if (ifp != NULL)
-		sw_csum &= ~ifp->if_csum_flags_tx;
+	sw_csum = m->m_pkthdr.csum_flags & ~ifp->if_csum_flags_tx;
 
 	len = (mtu - hlen) &~ 7;
 	if (len < 8) {
@@ -966,16 +968,14 @@ sendorfree:
 	 * If there is no room for all the fragments, don't queue
 	 * any of them.
 	 */
-	if (ifp != NULL) {
-		s = splnet();
-		if (ifp->if_snd.ifq_maxlen - ifp->if_snd.ifq_len < fragments &&
-		    error == 0) {
-			error = ENOBUFS;
-			ipstat.ips_odropped++;
-			IFQ_INC_DROPS(&ifp->if_snd);
-		}
-		splx(s);
+	s = splnet();
+	if (ifp->if_snd.ifq_maxlen - ifp->if_snd.ifq_len < fragments &&
+	    error == 0) {
+		error = ENOBUFS;
+		ipstat.ips_odropped++;
+		IFQ_INC_DROPS(&ifp->if_snd);
 	}
+	splx(s);
 	if (error) {
 		for (m = m0; m; m = m0) {
 			m0 = m->m_nextpkt;
@@ -1328,8 +1328,7 @@ ip_ctloutput(op, so, level, optname, mp)
 			*mtod(m, int *) = optval;
 			break;
 
-#if 0	/* defined(IPSEC) || defined(FAST_IPSEC) */
-		/* XXX: code broken */
+#if defined(IPSEC) || defined(FAST_IPSEC)
 		case IP_IPSEC_POLICY:
 		{
 			caddr_t req = NULL;
@@ -1468,9 +1467,9 @@ ip_pcbopts(pcbopt, m)
 			 * Then copy rest of options back
 			 * to close up the deleted entry.
 			 */
-			(void)memmove(&cp[IPOPT_OFFSET+1],
-			    &cp[IPOPT_OFFSET+1] + sizeof(struct in_addr),
-			    (unsigned)cnt - (IPOPT_MINOFF - 1));
+			memmove(&cp[IPOPT_OFFSET+1],
+			    (caddr_t)(&cp[IPOPT_OFFSET+1] + sizeof(struct in_addr)),
+			    (unsigned)cnt + sizeof(struct in_addr));
 			break;
 		}
 	}
@@ -1835,7 +1834,7 @@ ip_freemoptions(imo)
  * Routine called from ip_output() to loop back a copy of an IP multicast
  * packet to the input queue of a specified interface.  Note that this
  * calls the output routine of the loopback "driver", but with an interface
- * pointer that might NOT be lo0ifp -- easier than replicating that code here.
+ * pointer that might NOT be &loif -- easier than replicating that code here.
  */
 static void
 ip_mloopback(ifp, m, dst)

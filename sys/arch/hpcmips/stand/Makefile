@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.9 2004/06/21 18:20:08 jmc Exp $
+# $NetBSD: Makefile,v 1.8.2.1 2004/06/22 07:55:23 tron Exp $
 #
 # Makefile to generate windows VC++ project and workspace files from
 # config files and templates

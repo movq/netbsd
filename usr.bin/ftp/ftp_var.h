@@ -1,7 +1,7 @@
-/*	$NetBSD: ftp_var.h,v 1.68 2004/07/21 00:09:14 lukem Exp $	*/
+/*	$NetBSD: ftp_var.h,v 1.65 2003/08/07 11:13:56 agc Exp $	*/
 
 /*-
- * Copyright (c) 1996-2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996-2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -126,15 +126,15 @@
  * Format of command table.
  */
 struct cmd {
-	char		*c_name;	/* name of command */
-	const char	*c_help;	/* help string */
-	char	 	c_bell;		/* give bell when command completes */
-	char	 	c_conn;		/* must be connected to use command */
-	char	 	c_proxy;	/* proxy server may execute */
+	char	*c_name;	/* name of command */
+	char	*c_help;	/* help string */
+	char	 c_bell;	/* give bell when command completes */
+	char	 c_conn;	/* must be connected to use command */
+	char	 c_proxy;	/* proxy server may execute */
 #ifndef NO_EDITCOMPLETE
-	const char	*c_complete;	/* context sensitive completion list */
+	char	*c_complete;	/* context sensitive completion list */
 #endif /* !NO_EDITCOMPLETE */
-	void		(*c_handler)(int, char **); /* function to call */
+	void	(*c_handler)(int, char **); /* function to call */
 };
 
 /*
@@ -310,7 +310,6 @@ GLOBAL	void	(*reply_callback)(const char *);
 					 * first (`xxx-') and last (`xxx ')
 					 */
 
-GLOBAL	volatile sig_atomic_t	sigint_raised;
 
 GLOBAL	FILE	*cin;
 GLOBAL	FILE	*cout;

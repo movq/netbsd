@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.59 2004/09/26 21:44:26 yamt Exp $	*/
+/*	$NetBSD: cpu.h,v 1.57 2004/01/04 11:33:29 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -78,8 +78,6 @@
 #ifndef _MACHINE_CPU_H_
 #define _MACHINE_CPU_H_
 
-#if defined(_KERNEL)
-
 /*
  * Exported definitions unique to amiga/68k cpu support.
  */
@@ -94,11 +92,16 @@
 #include <m68k/cpu.h>
 #define	M68K_MMU_MOTOROLA
 
-#include <sys/cpu_data.h>
+#include <sys/sched.h>
 struct cpu_info {
-	struct cpu_data ci_data;	/* MI per-cpu data */
+	struct schedstate_percpu ci_schedstate; /* scheduler state */
+#if defined(DIAGNOSTIC) || defined(LOCKDEBUG)
+	u_long ci_spin_locks;		/* # of spin locks held */
+	u_long ci_simple_locks;		/* # of simple locks held */
+#endif
 };
 
+#ifdef _KERNEL
 extern struct cpu_info cpu_info_store;
 
 #define	curcpu()	(&cpu_info_store)
@@ -157,6 +160,8 @@ extern int want_resched;	/* resched() was called */
 extern int astpending;		/* need trap before returning to user mode */
 #define setsoftast()	(astpending = 1)
 
+#endif /* _KERNEL */
+
 /* include support for software interrupts */
 #include <machine/mtpr.h>
 
@@ -174,9 +179,9 @@ extern int astpending;		/* need trap before returning to user mode */
 #define	AMIGA_FPU40	(1L<<6)
 #define AMIGA_68060	(1L<<7)
 
+#ifdef _KERNEL
 extern int machineid;
-
-#endif /* _KERNEL */
+#endif
 
 /*
  * CTL_MACHDEP definitions.

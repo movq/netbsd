@@ -1,4 +1,4 @@
-/* $NetBSD: crt0.c,v 1.17 2004/08/26 21:13:01 thorpej Exp $ */
+/* $NetBSD: crt0.c,v 1.16 2000/06/14 06:49:00 cgd Exp $ */
 
 /*
  * Copyright (c) 1995 Christopher G. Demetriou
@@ -52,16 +52,17 @@
  *	as well as the usual registers (pc, sp, and t9 == pc for ABI).
  */
 
-void __start(u_long, void (*)(void), const Obj_Entry *,
-		struct ps_strings *);
+void __start __P((u_long, void (*) __P((void)), const Obj_Entry *,
+		struct ps_strings *));
 
 asm(".text; .align 4;  .globl _start; _start:");
 
 void
-__start(u_long sp,
-    void (*cleanup)(void),		/* from shared loader */
-    const Obj_Entry *obj,		/* from shared loader */
-    struct ps_strings *ps_strings)
+__start(sp, cleanup, obj, ps_strings)
+	u_long sp;
+	void (*cleanup) __P((void));	/* from shared loader */
+	const Obj_Entry *obj;		/* from shared loader */
+	struct ps_strings *ps_strings;
 {
 	char **ksp;
 	char **argv, *namep;
@@ -157,7 +158,7 @@ __start(u_long sp,
  *  is the entrypoint. (Only needed for old toolchains).
  */
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: crt0.c,v 1.17 2004/08/26 21:13:01 thorpej Exp $");
+__RCSID("$NetBSD: crt0.c,v 1.16 2000/06/14 06:49:00 cgd Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "common.c"

@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplayvar.h,v 1.29 2004/07/29 22:29:37 jmmv Exp $ */
+/* $NetBSD: wsdisplayvar.h,v 1.25.4.2 2004/06/07 09:47:19 tron Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -73,7 +73,6 @@ struct wsdisplay_emulops {
 #define WSATTR_UNDERLINE 8
 #define WSATTR_WSCOLORS 16
 	/* XXX need a free_attr() ??? */
-	void	(*replaceattr)(void *c, long oldattr, long newattr);
 };
 
 struct wsscreen_descr {
@@ -113,8 +112,6 @@ struct wsdisplay_accessops {
 	int	(*getwschar)(void *, struct wsdisplay_char *);
 	int	(*putwschar)(void *, struct wsdisplay_char *);
 	void	(*scroll) __P((void *, void *, int));
-	u_int	(*getborder)(void *);
-	int	(*setborder)(void *, u_int);
 };
 
 /*
@@ -218,43 +215,3 @@ int wsdisplay_stat_inject(struct device *dev, u_int type, int value);
 void wsdisplay_switchtoconsole(void);
 const struct wsscreen_descr *
     wsdisplay_screentype_pick(const struct wsscreen_list *, const char *);
-
-#if defined(_KERNEL)
-#  if defined(_KERNEL_OPT)
-#    include "opt_wsmsgattrs.h"
-#    include "opt_wsdisplay_border.h"
-#  endif
-#  if !defined(WS_DEFAULT_FG)
-#    define WS_DEFAULT_FG WSCOL_WHITE
-#  endif
-#  if !defined(WS_DEFAULT_BG)
-#    define WS_DEFAULT_BG WSCOL_BLACK
-#  endif
-#  if !defined(WS_DEFAULT_COLATTR)
-#    define WS_DEFAULT_COLATTR 0
-#  endif
-#  if !defined(WS_DEFAULT_MONOATTR)
-#    define WS_DEFAULT_MONOATTR 0
-#  endif
-#  if defined(WS_KERNEL_FG) || defined(WS_KERNEL_BG) || \
-      defined(WS_KERNEL_COLATTR) || defined(WS_KERNEL_MONOATTR)
-#    define WS_KERNEL_CUSTOMIZED
-#  else
-#    undef WS_KERNEL_CUSTOMIZED
-#  endif
-#  if !defined(WS_KERNEL_FG)
-#    define WS_KERNEL_FG WS_DEFAULT_FG
-#  endif
-#  if !defined(WS_KERNEL_BG)
-#    define WS_KERNEL_BG WS_DEFAULT_BG
-#  endif
-#  if !defined(WS_KERNEL_COLATTR)
-#    define WS_KERNEL_COLATTR WS_DEFAULT_COLATTR
-#  endif
-#  if !defined(WS_KERNEL_MONOATTR)
-#    define WS_KERNEL_MONOATTR WS_DEFAULT_MONOATTR
-#  endif
-#  if !defined(WSDISPLAY_BORDER_COLOR)
-#    define WSDISPLAY_BORDER_COLOR WSCOL_BLACK
-#  endif
-#endif /* _KERNEL */

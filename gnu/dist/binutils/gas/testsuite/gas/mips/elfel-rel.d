@@ -1,7 +1,6 @@
 #objdump: -sr -j .text
 #name: MIPS ELF reloc
 #source: elf-rel.s
-#as: -32
 
 # Test the HI16/LO16 generation.
 

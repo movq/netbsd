@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: algorithm.c,v 1.7 2004/04/12 03:34:05 itojun Exp $");
+__RCSID("$NetBSD: algorithm.c,v 1.6.2.1 2004/06/17 12:38:09 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

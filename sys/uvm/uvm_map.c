@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_map.c,v 1.173 2004/09/25 04:19:38 yamt Exp $	*/
+/*	$NetBSD: uvm_map.c,v 1.164.2.3 2004/05/09 09:01:32 jdc Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_map.c,v 1.173 2004/09/25 04:19:38 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_map.c,v 1.164.2.3 2004/05/09 09:01:32 jdc Exp $");
 
 #include "opt_ddb.h"
 #include "opt_uvmhist.h"
@@ -153,17 +153,14 @@ const char vmmapbsy[] = "vmmapbsy";
  * pool for vmspace structures.
  */
 
-POOL_INIT(uvm_vmspace_pool, sizeof(struct vmspace), 0, 0, 0, "vmsppl",
-    &pool_allocator_nointr);
+struct pool uvm_vmspace_pool;
 
 /*
  * pool for dynamically-allocated map entries.
  */
 
-POOL_INIT(uvm_map_entry_pool, sizeof(struct vm_map_entry), 0, 0, 0, "vmmpepl",
-    &pool_allocator_nointr);
-POOL_INIT(uvm_map_entry_kmem_pool, sizeof(struct vm_map_entry), 0, 0, 0,
-    "vmmpekpl", NULL);
+struct pool uvm_map_entry_pool;
+struct pool uvm_map_entry_kmem_pool;
 
 MALLOC_DEFINE(M_VMMAP, "VM map", "VM map structures");
 MALLOC_DEFINE(M_VMPMAP, "VM pmap", "VM pmap");
@@ -574,6 +571,16 @@ uvm_map_init(void)
 		kernel_map_entry[lcv].next = uvm.kentry_free;
 		uvm.kentry_free = &kernel_map_entry[lcv];
 	}
+
+	/*
+	 * initialize the map-related pools.
+	 */
+	pool_init(&uvm_vmspace_pool, sizeof(struct vmspace),
+	    0, 0, 0, "vmsppl", &pool_allocator_nointr);
+	pool_init(&uvm_map_entry_pool, sizeof(struct vm_map_entry),
+	    0, 0, 0, "vmmpepl", &pool_allocator_nointr);
+	pool_init(&uvm_map_entry_kmem_pool, sizeof(struct vm_map_entry),
+	    0, 0, 0, "vmmpekpl", NULL);
 }
 
 /*
@@ -1331,11 +1338,11 @@ uvm_map_space_avail(vaddr_t *start, vsize_t length, voff_t uoffset,
 /*
  * uvm_map_findspace: find "length" sized space in "map".
  *
- * => "hint" is a hint about where we want it, unless UVM_FLAG_FIXED is
- *	set in "flags" (in which case we insist on using "hint").
+ * => "hint" is a hint about where we want it, unless FINDSPACE_FIXED is
+ *	set (in which case we insist on using "hint").
  * => "result" is VA returned
  * => uobj/uoffset are to be used to handle VAC alignment, if required
- * => if "align" is non-zero, we attempt to align to that value.
+ * => if `align' is non-zero, we attempt to align to that value.
  * => caller must at least have read-locked map
  * => returns NULL on failure, or pointer to prev. map entry if success
  * => note this is a cross between the old vm_map_findspace and vm_map_find
@@ -1446,7 +1453,7 @@ uvm_map_findspace(struct vm_map *map, vaddr_t hint, vsize_t length,
 				 * if hint > entry->end.
 				 */
 			} else {
-				/* Start from higher gap. */
+				/* Start from higer gap. */
 				entry = entry->next;
 				if (entry == &map->header)
 					goto notfound;
@@ -3442,20 +3449,18 @@ uvmspace_init(struct vmspace *vm, struct pmap *pmap, vaddr_t min, vaddr_t max)
 }
 
 /*
- * uvmspace_share: share a vmspace between two processes
+ * uvmspace_share: share a vmspace between two proceses
  *
+ * - XXX: no locking on vmspace
  * - used for vfork, threads(?)
  */
 
 void
 uvmspace_share(struct proc *p1, struct proc *p2)
 {
-	struct simplelock *slock = &p1->p_vmspace->vm_map.ref_lock;
 
 	p2->p_vmspace = p1->p_vmspace;
-	simple_lock(slock);
 	p1->p_vmspace->vm_refcnt++;
-	simple_unlock(slock);
 }
 
 /*
@@ -3486,6 +3491,8 @@ uvmspace_unshare(struct lwp *l)
 
 /*
  * uvmspace_exec: the process wants to exec a new program
+ *
+ * - XXX: no locking on vmspace
  */
 
 void
@@ -3566,29 +3573,28 @@ uvmspace_exec(struct lwp *l, vaddr_t start, vaddr_t end)
 
 /*
  * uvmspace_free: free a vmspace data structure
+ *
+ * - XXX: no locking on vmspace
  */
 
 void
 uvmspace_free(struct vmspace *vm)
 {
 	struct vm_map_entry *dead_entries;
-	struct vm_map *map = &vm->vm_map;
-	int n;
-
+	struct vm_map *map;
 	UVMHIST_FUNC("uvmspace_free"); UVMHIST_CALLED(maphist);
 
 	UVMHIST_LOG(maphist,"(vm=0x%x) ref=%d", vm, vm->vm_refcnt,0,0);
-	simple_lock(&map->ref_lock);
-	n = --vm->vm_refcnt;
-	simple_unlock(&map->ref_lock);
-	if (n > 0)
+	if (--vm->vm_refcnt > 0) {
 		return;
+	}
 
 	/*
 	 * at this point, there should be no other references to the map.
 	 * delete all of the mappings, then destroy the pmap.
 	 */
 
+	map = &vm->vm_map;
 	map->flags |= VM_MAP_DYING;
 	pmap_remove_all(map->pmap);
 #ifdef SYSVSHM
@@ -3867,13 +3873,8 @@ uvm_map_printit(struct vm_map *map, boolean_t full,
 	(*pr)("\t#ent=%d, sz=%d, ref=%d, version=%d, flags=0x%x\n",
 	    map->nentries, map->size, map->ref_count, map->timestamp,
 	    map->flags);
-#ifdef pmap_wired_count
-	(*pr)("\tpmap=%p(resident=%ld, wired=%ld)\n", map->pmap,
-	    pmap_resident_count(map->pmap), pmap_wired_count(map->pmap));
-#else
-	(*pr)("\tpmap=%p(resident=%ld)\n", map->pmap,
+	(*pr)("\tpmap=%p(resident=%d)\n", map->pmap,
 	    pmap_resident_count(map->pmap));
-#endif
 	if (!full)
 		return;
 	for (entry = map->header.next; entry != &map->header;

@@ -1,4 +1,4 @@
-#       $NetBSD: Makefile,v 1.168 2004/12/06 17:34:07 yamt Exp $
+#       $NetBSD: Makefile,v 1.160.2.1 2004/09/11 11:15:00 he Exp $
 
 #	Makefile for section 9 (kernel function and variable) manual pages.
 
@@ -13,7 +13,7 @@ MAN=	altq.9 arc4random.9 arp.9 audio.9 autoconf.9 \
 	cred.9 ctxsw.9 curproc.9 \
 	delay.9 disk.9 disklabel.9 dofileread.9 \
 	dopowerhooks.9 do_setresuid.9 doshutdownhooks.9 driver.9 \
-	errno.9 ethersubr.9 evcnt.9 extent.9 \
+	ethersubr.9 evcnt.9 extent.9 \
 	fetch.9 file.9 filedesc.9 fork1.9 fsetown.9 \
 	hash.9 hardclock.9 humanize_number.9 hz.9 \
 	in4_cksum.9 inittodr.9 intro.9 ioasic.9 ioctl.9 ipkdb.9 isa.9 \
@@ -21,14 +21,13 @@ MAN=	altq.9 arc4random.9 arp.9 audio.9 autoconf.9 \
 	kfilter_register.9 knote.9 \
 	kprintf.9 kthread.9 linedisc.9 lock.9 log.9 ltsleep.9 \
 	malloc.9 mbuf.9 mca.9 memcmp.9 memcpy.9 memmove.9 memset.9 \
-	microtime.9 mstohz.9 m_tag.9 namecache.9 namei.9 need_resched.9 \
+	microtime.9 mstohz.9 namecache.9 namei.9 need_resched.9 \
 	opencrypto.9 \
 	panic.9 pci.9 pci_configure_bus.9 pci_intr.9 pckbport.9 \
 	pcmcia.9 pfil.9 physio.9 pmap.9 pmatch.9 pmc.9 \
 	pool.9 pool_cache.9 powerhook_establish.9 ppsratecheck.9 \
 	properties.9 preempt.9 \
-	radio.9 ras.9 rasops.9 ratecheck.9 resettodr.9 rnd.9 rssadapt.9 \
-	rt_timer.9 \
+	radio.9 ras.9 rasops.9 ratecheck.9 resettodr.9 rnd.9 rt_timer.9 \
 	SCHED_LOCK.9 scheduler.9 \
 	scsipi.9 setjmp.9 setrunqueue.9 shutdownhook_establish.9 \
 	signal.9 softintr.9 spl.9 store.9 suser.9 suspendsched.9 \
@@ -257,7 +256,7 @@ MLINKS+=lock.9 simple_lock_init.9 lock.9 simple_lock.9 \
 	lock.9 simple_lock_try.9 lock.9 simple_unlock.9 \
 	lock.9 simple_lock_freecheck.9 lock.9 simple_lock_dump.9  \
 	lock.9 lockinit.9 lock.9 lockmgr.9 \
-	lock.9 lockstatus.9 lock.9 lockmgr_printinfo.9 lock.9 transferlockers.9 \
+	lock.9 lockstatus.9 lock.9 lockmgr_printinfo.9 \
 	lock.9 spinlockinit.9 lock.9 spinlockmgr.9
 MLINKS+=ltsleep.9 wakeup.9 ltsleep.9 tsleep.9
 MLINKS+=malloc.9 MALLOC.9 malloc.9 realloc.9 malloc.9 free.9 malloc.9 FREE.9
@@ -283,19 +282,6 @@ MLINKS+=mca.9 mca_intr_establish.9 \
 	mca.9 mca_intr_evcnt.9 \
 	mca.9 mca_conf_read.9 \
 	mca.9 mca_conf_write.9
-MLINKS+=m_tag.9 m_tag_copy.9 \
-	m_tag.9 m_tag_copy_chain.9 \
-	m_tag.9 m_tag_delete.9 \
-	m_tag.9 m_tag_delete_chain.9 \
-	m_tag.9 m_tag_delete_nonpersistent.9 \
-	m_tag.9 m_tag_find.9 \
-	m_tag.9 m_tag_first.9 \
-	m_tag.9 m_tag_free.9 \
-	m_tag.9 m_tag_get.9 \
-	m_tag.9 m_tag_init.9 \
-	m_tag.9 m_tag_next.9 \
-	m_tag.9 m_tag_prepend.9 \
-	m_tag.9 m_tag_unlink.9
 MLINKS+=namecache.9 cache_lookup.9 \
 	namecache.9 cache_revlookup.9 \
 	namecache.9 cache_enter.9 \
@@ -424,11 +410,6 @@ MLINKS+=rasops.9 rasops_init.9 \
 	rasops.9 rasops_reconfig.9
 MLINKS+=rnd.9 rnd_attach_source.9 rnd.9 rnd_detach_source.9 \
 	rnd.9 rnd_add_data.9 rnd.9 rnd_add_uint32.9
-MLINKS+=rssadapt.9 ieee80211_rssadapt_choose.9 \
-	rssadapt.9 ieee80211_rssadapt_input.9 \
-	rssadapt.9 ieee80211_rssadapt_lower_rate.9 \
-	rssadapt.9 ieee80211_rssadapt_raise_rate.9 \
-	rssadapt.9 ieee80211_rssadapt_updatestats.9
 MLINKS+=rt_timer.9 rt_timer_queue_create.9 rt_timer.9 rt_timer_queue_change.9 \
 	rt_timer.9 rt_timer_queue_destroy.9 rt_timer.9 rt_timer_add.9 \
 	rt_timer.9 rt_timer_remove_all.9
@@ -505,8 +486,7 @@ MLINKS+=todr.9 todr_gettime.9 todr.9 todr_settime.9 \
 	todr.9 todr_getcal.9 todr.9 todr_setcal.9 \
 	todr.9 clock_ymdhms_to_secs.9 todr.9 clock_secs_to_ymdhms.9
 MLINKS+=uvm.9 uvm_init.9 uvm.9 uvm_init_limits.9 uvm.9 uvm_setpagesize.9 \
-	uvm.9 uvm_swap_init.9 uvm.9 uvm_map.9 uvm.9 uvm_unmap.9 \
-	uvm.9 uvm_map_pageable.9 \
+	uvm.9 uvm_swap_init.9 uvm.9 uvm_map.9 uvm.9 uvm_map_pageable.9 \
 	uvm.9 uvm_map_checkprot.9 uvm.9 uvm_map_protect.9 \
 	uvm.9 uvm_deallocate.9 uvm.9 uvmspace_alloc.9 uvm.9 uvmspace_exec.9 \
 	uvm.9 uvmspace_fork.9 uvm.9 uvmspace_free.9 uvm.9 uvmspace_share.9 \
@@ -520,7 +500,7 @@ MLINKS+=uvm.9 uvm_init.9 uvm.9 uvm_init_limits.9 uvm.9 uvm_setpagesize.9 \
 	uvm.9 uvm_pglistfree.9 uvm.9 uvm_page_physload.9 uvm.9 uvm_pageout.9 \
 	uvm.9 uvm_scheduler.9 uvm.9 uvm_swapin.9 uvm.9 uao_create.9 \
 	uvm.9 uao_detach.9 uvm.9 uao_reference.9 uvm.9 uvm_chgkprot.9 \
-	uvm.9 uvm_kernacc.9 uvm.9 uvm_vslock.9 \
+	uvm.9 uvm_kernacc.9 uvm.9 uvm_useracc.9 uvm.9 uvm_vslock.9 \
 	uvm.9 uvm_vsunlock.9 uvm.9 uvm_meter.9 \
 	uvm.9 uvm_fork.9 uvm.9 uvm_grow.9 uvm.9 uvm_coredump.9 \
 	uvm.9 ubc_alloc.9 \
@@ -553,8 +533,7 @@ MLINKS+=vfsops.9 VFS_MOUNT.9 \
 	vfsops.9 VFS_VGET.9 \
 	vfsops.9 VFS_FHTOVP.9 \
 	vfsops.9 VFS_VPTOFH.9 \
-	vfsops.9 VFS_CHECKEXP.9 \
-	vfsops.9 VFS_SNAPSHOT.9
+	vfsops.9 VFS_CHECKEXP.9
 MLINKS+=vfssubr.9 vfs_getnewfsid.9 \
 	vfssubr.9 vfs_getvfs.9 \
 	vfssubr.9 vfs_export.9 \

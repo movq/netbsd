@@ -29,8 +29,10 @@ cat >>e${EMULATION_NAME}.c <<EOF
 /* Whether to run tls optimization.  */
 static int notlsopt = 0;
 
+static void ppc_before_allocation PARAMS ((void));
+
 static void
-ppc_before_allocation (void)
+ppc_before_allocation ()
 {
   extern const bfd_target bfd_elf32_powerpc_vec;
   extern const bfd_target bfd_elf32_powerpcle_vec;

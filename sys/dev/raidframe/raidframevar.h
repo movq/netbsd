@@ -1,4 +1,4 @@
-/*	$NetBSD: raidframevar.h,v 1.7 2004/06/02 22:58:28 drochner Exp $ */
+/*	$NetBSD: raidframevar.h,v 1.6.2.1 2004/06/28 08:33:24 tron Exp $ */
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
  * All rights reserved.

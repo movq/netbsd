@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socket.c,v 1.53 2004/09/12 15:32:55 jdolecek Exp $	*/
+/*	$NetBSD: linux_socket.c,v 1.50.2.1 2004/09/20 05:59:47 tron Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.53 2004/09/12 15:32:55 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.50.2.1 2004/09/20 05:59:47 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_inet.h"
@@ -1516,6 +1516,7 @@ linux_sa_get(p, s, sgp, sap, osa, osalen)
 		     !IN6_IS_ADDR_MULTICAST(&sin6->sin6_addr))) {
 			sin6->sin6_scope_id = 0;
 		} else {
+			struct proc *p = curproc;	/* XXX */
 			int uid = p->p_cred && p->p_ucred ? 
 					p->p_ucred->cr_uid : -1;
 
@@ -1561,7 +1562,7 @@ linux_sa_get(p, s, sgp, sap, osa, osalen)
 #ifdef DEBUG_LINUX
 	DPRINTF(("family %d, len = %d [ ", sa->sa_family, sa->sa_len));
 	for (bdom = 0; bdom < sizeof(sa->sa_data); bdom++)
-	    DPRINTF(("%02x ", (unsigned char) sa->sa_data[bdom]));
+	    DPRINTF(("%02x ", sa->sa_data[bdom]));
 	DPRINTF(("\n"));
 #endif
 

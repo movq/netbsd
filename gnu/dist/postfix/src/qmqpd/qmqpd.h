@@ -1,5 +1,3 @@
-/*	$NetBSD: qmqpd.h,v 1.1.1.3 2004/05/31 00:24:45 heas Exp $	*/
-
 /*++
 /* NAME
 /*	qmqpd 3h
@@ -49,24 +47,6 @@ typedef struct {
     char   *where;			/* protocol state */
     VSTRING *why_rejected;		/* REJECT reason */
 } QMQPD_STATE;
-
- /*
-  * Representation of unknown upstream client or message information within
-  * qmqpd processes. This is not the representation that Postfix uses in
-  * queue files, in queue manager delivery requests, or in XCLIENT/XFORWARD
-  * commands!
-  */
-#define CLIENT_ATTR_UNKNOWN	"unknown"
-
-#define CLIENT_NAME_UNKNOWN	CLIENT_ATTR_UNKNOWN
-#define CLIENT_ADDR_UNKNOWN	CLIENT_ATTR_UNKNOWN
-#define CLIENT_NAMADDR_UNKNOWN	CLIENT_ATTR_UNKNOWN
-
-#define IS_AVAIL_CLIENT_ATTR(v)	((v) && strcmp((v), CLIENT_ATTR_UNKNOWN))
-
-#define IS_AVAIL_CLIENT_NAME(v)	IS_AVAIL_CLIENT_ATTR(v)
-#define IS_AVAIL_CLIENT_ADDR(v)	IS_AVAIL_CLIENT_ATTR(v)
-#define IS_AVAIL_CLIENT_NAMADDR(v) IS_AVAIL_CLIENT_ATTR(v)
 
  /*
   * QMQP protocol status codes.

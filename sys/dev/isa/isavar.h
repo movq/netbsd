@@ -1,4 +1,4 @@
-/*	$NetBSD: isavar.h,v 1.44 2004/09/14 20:20:48 drochner Exp $	*/
+/*	$NetBSD: isavar.h,v 1.41 2003/07/08 10:06:32 itojun Exp $	*/
 
 /*-
  * Copyright (c) 1997, 2001 The NetBSD Foundation, Inc.
@@ -93,7 +93,7 @@ struct isabus_attach_args;
  * ISA bus attach arguments
  */
 struct isabus_attach_args {
-	char	*_iba_busname;		/* XXX placeholder */
+	char	*iba_busname;		/* XXX should be common */
 	bus_space_tag_t iba_iot;	/* isa i/o space tag */
 	bus_space_tag_t iba_memt;	/* isa mem space tag */
 	bus_dma_tag_t iba_dmat;		/* isa DMA tag */
@@ -211,6 +211,8 @@ struct isa_attach_args {
 #define	ISA_DIRECT_CONFIG(ia)						\
 	((ia)->ia_pnpname != NULL || (ia)->ia_pnpcompatnames != NULL)
 
+#include "locators.h"
+
 /*
  * ISA master bus
  */
@@ -227,19 +229,13 @@ struct isa_softc {
 	int sc_dynamicdevs;
 };
 
-/*
- * These must be in sync with the ISACF_XXX_DEFAULT definitions
- * in "locators.h" (generated from files.isa).
- * (not including "locators.h" here to avoid dependency)
- */
-#define ISA_UNKNOWN_PORT	(-1)
-#define ISA_UNKNOWN_IOMEM	(-1)
-#define ISA_UNKNOWN_IOSIZ	(0)
-#define ISA_UNKNOWN_IRQ		(-1)
-#define ISA_UNKNOWN_DRQ		(-1)
-#define ISA_UNKNOWN_DRQ2	(-1)
-
-int	isabusprint(void *, const char *);
+#define		cf_iobase		cf_loc[ISACF_PORT]
+#define		cf_iosize		cf_loc[ISACF_SIZE]
+#define		cf_maddr		cf_loc[ISACF_IOMEM]
+#define		cf_msize		cf_loc[ISACF_IOSIZ]
+#define		cf_irq			cf_loc[ISACF_IRQ]
+#define		cf_drq			cf_loc[ISACF_DRQ]
+#define		cf_drq2			cf_loc[ISACF_DRQ2]
 
 /*
  * ISA interrupt handler manipulation.

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_types.h,v 1.3 2004/09/20 18:51:55 jdolecek Exp $	*/
+/*	$NetBSD: linux_types.h,v 1.1 1998/09/30 21:36:30 erh Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -39,6 +39,10 @@
 #ifndef _ALPHA_LINUX_TYPES_H
 #define _ALPAH_LINUX_TYPES_H
 
+typedef struct {
+	int	val[2];
+} linux_fsid_t;
+
 typedef unsigned int linux_uid_t;
 typedef unsigned int linux_gid_t;
 typedef unsigned int linux_dev_t;
@@ -54,6 +58,19 @@ typedef int linux_pid_t;
 typedef unsigned char linux_cc_t;
 typedef	unsigned int  linux_speed_t;
 typedef unsigned int  linux_tcflag_t;
+
+struct linux_statfs {
+	int		l_ftype;
+	int		l_fbsize;
+	int		l_fblocks;
+	int		l_fbfree;
+	int		l_fbavail;
+	int		l_ffiles;
+	int		l_fffree;
+	linux_fsid_t	l_ffsid;
+	int		l_fnamelen;
+	int		l_fspare[6];
+};
 
 struct linux_stat {
 	linux_dev_t		lst_dev;

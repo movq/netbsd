@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.10 2004/08/01 18:52:03 uch Exp $
+#	$NetBSD: Makefile,v 1.8.2.1 2004/04/24 17:52:59 jdc Exp $
 
 .include "../Makefile.serverlib"
 
@@ -27,7 +27,6 @@ CPPFLAGS+=	-I${X11SRCDIR.xc}/programs/Xserver/include \
     ${MACHINE} == "pmax" || \
     ${MACHINE} == "sun3" || \
     ${MACHINE} == "dreamcast" || \
-    ${MACHINE} == "newsmips" || \
     ${MACHINE} == "vax"
 CPPFLAGS+=	-DXINPUT
 .endif

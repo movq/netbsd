@@ -1,4 +1,4 @@
-/*	$NetBSD: mcount.c,v 1.14 2004/05/10 22:16:42 thorpej Exp $	*/
+/*	$NetBSD: mcount.c,v 1.13.2.1 2004/05/11 14:51:55 tron Exp $	*/
 
 /*
  * Copyright (c) 2003, 2004 Wasabi Systems, Inc.
@@ -72,7 +72,7 @@
 #if 0
 static char sccsid[] = "@(#)mcount.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: mcount.c,v 1.14 2004/05/10 22:16:42 thorpej Exp $");
+__RCSID("$NetBSD: mcount.c,v 1.13.2.1 2004/05/11 14:51:55 tron Exp $");
 #endif
 #endif
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: dp8390.c,v 1.54 2004/10/30 18:08:36 thorpej Exp $	*/
+/*	$NetBSD: dp8390.c,v 1.52 2003/01/15 22:20:05 bouyer Exp $	*/
 
 /*
  * Device driver for National Semiconductor DS8390/WD83C690 based ethernet
@@ -14,7 +14,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dp8390.c,v 1.54 2004/10/30 18:08:36 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dp8390.c,v 1.52 2003/01/15 22:20:05 bouyer Exp $");
 
 #include "opt_ipkdb.h"
 #include "opt_inet.h"
@@ -617,6 +617,7 @@ loop:
 			dp8390_read(sc,
 			    packet_ptr + sizeof(struct dp8390_ring),
 			    len - sizeof(struct dp8390_ring));
+			++sc->sc_ec.ec_if.if_ipackets;
 		} else {
 			/* Really BAD.  The ring pointers are corrupted. */
 			log(LOG_ERR, "%s: NIC memory corrupt - "
@@ -959,10 +960,8 @@ dp8390_ioctl(ifp, cmd, data)
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			if (ifp->if_flags & IFF_RUNNING) {
-				dp8390_stop(sc); /* XXX for ds_setmcaf? */
-				dp8390_init(sc);
-			}
+			dp8390_stop(sc);	/* XXX for ds_setmcaf? */
+			dp8390_init(sc);
 			error = 0;
 		}
 		break;

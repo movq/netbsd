@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.29 2004/10/01 15:26:35 christos Exp $
+#	$NetBSD: Makefile,v 1.24.2.5 2004/08/13 18:53:17 jmc Exp $
 
 NOGCCERROR=	# defined
 
@@ -16,7 +16,7 @@ CPPFLAGS+=	-DIPFILTER_LOG -DIPFILTER_LOOKUP \
 		-DIPFILTER_SCAN -DIPFILTER_SYNC -DIPFILTER_CKSUM -D_RADIX_H_ \
 		-I.
 
-.PATH:		${NETBSDSRCDIR}/sys/dist/ipf/netinet
+.PATH:		${NETBSDSRCDIR}/sys/netinet
 
 DPSRCS+=	ipnat_l.h ipnat_y.h ippool_l.h ippool_y.h ipf_l.h ipf_y.h
 

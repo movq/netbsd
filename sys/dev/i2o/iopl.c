@@ -1,4 +1,4 @@
-/*	$NetBSD: iopl.c,v 1.14 2004/10/30 18:08:35 thorpej Exp $	*/
+/*	$NetBSD: iopl.c,v 1.11 2002/10/02 16:33:51 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iopl.c,v 1.14 2004/10/30 18:08:35 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iopl.c,v 1.11 2002/10/02 16:33:51 thorpej Exp $");
 
 #include "opt_i2o.h"
 #include "opt_inet.h"
@@ -277,7 +277,7 @@ iopl_attach(struct device *parent, struct device *self, void *aux)
 	case I2O_LAN_TYPE_FIBRECHANNEL:
 		typestr = "fibre channel";
 		addrstr = wwn;
-		snprintf(wwn, sizeof(wwn), "%08x%08x",
+		sprintf(wwn, "%08x%08x",
 		    ((u_int32_t *)param.p.ldi.hwaddr)[0],
 		    ((u_int32_t *)param.p.ldi.hwaddr)[1]);
 		iff = IFF_BROADCAST | IFF_MULTICAST;
@@ -334,7 +334,7 @@ iopl_attach(struct device *parent, struct device *self, void *aux)
 	iop_initiator_register(iop, &sc->sc_ii_tx);
 
 	/*
-	 * Determine some of the capabilities of the interface - in
+	 * Determine some of the the capabilities of the interface - in
 	 * particular, the maximum number of segments per S/G list, and how
 	 * much buffer context we'll need to transmit frames (some adapters
 	 * may need the destination address in the buffer context).
@@ -1896,10 +1896,7 @@ iopl_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			 * Flags and/or multicast list has changed; need to
 			 * set the hardware filter accordingly.
 			 */
-			if (ifp->if_flags & IFF_RUNNING)
-				rv = iopl_filter_ether(sc);
-			else
-				rv = 0;
+			rv = iopl_filter_ether(sc);
 		}
 		break;
 
@@ -1957,12 +1954,9 @@ iopl_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 				rv = ether_addmulti(ifr, &sc->sc_if.sci_ec);
 			else
 				rv = ether_delmulti(ifr, &sc->sc_if.sci_ec);
-			if (rv == ENETRESET) {
-				if (ifp->if_flags & IFF_RUNNING)
-					rv = iopl_filter_ether(sc);
-				else
-					rv = 0;
-			}
+			if (rv == ENETRESET &&
+			    (ifp->if_flags & IFF_RUNNING) != 0)
+				rv = iopl_filter_ether(sc);
 			break;
 
 		case SIOCSIFMTU:

@@ -1,4 +1,4 @@
-/* $NetBSD: emit1.c,v 1.15 2004/09/12 08:58:52 yamt Exp $ */
+/* $NetBSD: emit1.c,v 1.13.2.1 2004/06/22 07:18:49 tron Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: emit1.c,v 1.15 2004/09/12 08:58:52 yamt Exp $");
+__RCSID("$NetBSD: emit1.c,v 1.13.2.1 2004/06/22 07:18:49 tron Exp $");
 #endif
 
 #include <ctype.h>
@@ -53,7 +53,6 @@ static	void	outfstrg(strg_t *);
  * The type is written as a sequence of substrings, each of which describes a
  * node of type type_t
  * a node is coded as follows:
- *	_Bool			B
  *	char			C
  *	signed char		s C
  *	unsigned char		u C
@@ -99,7 +98,6 @@ outtype(type_t *tp)
 		if ((ts = tp->t_tspec) == INT && tp->t_isenum)
 			ts = ENUM;
 		switch (ts) {
-		case BOOL:	t = 'B';	s = '\0';	break;
 		case CHAR:	t = 'C';	s = '\0';	break;
 		case SCHAR:	t = 'C';	s = 's';	break;
 		case UCHAR:	t = 'C';	s = 'u';	break;

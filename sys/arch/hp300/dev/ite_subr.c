@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_subr.c,v 1.12 2004/08/28 17:37:01 thorpej Exp $	*/
+/*	$NetBSD: ite_subr.c,v 1.11 2003/11/17 14:37:59 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite_subr.c,v 1.12 2004/08/28 17:37:01 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite_subr.c,v 1.11 2003/11/17 14:37:59 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -93,7 +93,8 @@ __KERNEL_RCSID(0, "$NetBSD: ite_subr.c,v 1.12 2004/08/28 17:37:01 thorpej Exp $"
 #include <machine/cpu.h>
 
 void
-ite_fontinfo(struct ite_data *ip)
+ite_fontinfo(ip)
+	struct ite_data *ip;
 {
 	u_long fontaddr = getword(ip, getword(ip, FONTROM) + FONTADDR);
 
@@ -125,7 +126,8 @@ ite_fontinfo(struct ite_data *ip)
 }
 
 void
-ite_fontinit(struct ite_data *ip)
+ite_fontinit(ip)
+	struct ite_data *ip;
 {
 	int bytewidth = (((ip->ftwidth - 1) / 8) + 1);
 	int glyphsize = bytewidth * ip->ftheight;
@@ -152,13 +154,17 @@ ite_fontinit(struct ite_data *ip)
  * Display independent versions of the readbyte and writeglyph routines.
  */
 u_char
-ite_readbyte(struct ite_data *ip, int disp)
+ite_readbyte(ip, disp)
+	struct ite_data *ip;
+	int disp;
 {
 	return((u_char) *(((u_char *)ip->regbase) + disp));
 }
 
 void
-ite_writeglyph(struct ite_data *ip, u_char *fbmem, u_char *glyphp)
+ite_writeglyph(ip, fbmem, glyphp)
+	struct ite_data *ip;
+	u_char *fbmem, *glyphp;
 {
 	int bn;
 	int l, b;

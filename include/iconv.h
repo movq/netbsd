@@ -1,4 +1,4 @@
-/*	$NetBSD: iconv.h,v 1.5 2004/08/02 13:38:21 tshiozak Exp $	*/
+/*	$NetBSD: iconv.h,v 1.3 2003/08/22 14:05:03 kleink Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,

@@ -1,5 +1,5 @@
 /* BFD support for the HP Precision Architecture architecture.
-   Copyright 1992, 1995, 1998, 1999, 2000, 2002, 2003
+   Copyright 1992, 1995, 1998, 1999, 2000, 2002
    Free Software Foundation, Inc.
 
 This file is part of BFD, the Binary File Descriptor library.
@@ -28,7 +28,7 @@ static const bfd_arch_info_type bfd_hppa10_arch =
   32,				/* 32 bits in an address */
   8,				/* 8 bits in a byte */
   bfd_arch_hppa,
-  bfd_mach_hppa10,		/* By convention PA1.0 = 10 */
+  10,				/* By convention PA1.0 = 10 */
   "hppa",
   "hppa1.0",
   3,
@@ -45,7 +45,7 @@ static const bfd_arch_info_type bfd_hppa20_arch =
   32,				/* 32 bits in an address */
   8,				/* 8 bits in a byte */
   bfd_arch_hppa,
-  bfd_mach_hppa20,		/* By convention PA2.0 = 20 */
+  20,				/* By convention PA1.0 = 10 */
   "hppa",
   "hppa2.0",
   3,
@@ -58,11 +58,11 @@ static const bfd_arch_info_type bfd_hppa20_arch =
 /* PA2.0 in wide mode */
 static const bfd_arch_info_type bfd_hppa20w_arch =
 {
-  64,				/* 64 bits in a word */
-  64,				/* 64 bits in an address */
+  64,				/* 32 bits in a word */
+  64,				/* 32 bits in an address */
   8,				/* 8 bits in a byte */
   bfd_arch_hppa,
-  bfd_mach_hppa20w,		/* ??? How best to describe wide mode here?  */
+  25,				/* ??? How best to describe wide mode here?  */
   "hppa",
   "hppa2.0w",
   3,
@@ -78,7 +78,7 @@ const bfd_arch_info_type bfd_hppa_arch =
   32,				/* 32 bits in an address */
   8,				/* 8 bits in a byte */
   bfd_arch_hppa,
-  bfd_mach_hppa11,		/* By convention PA1.1 = 11 */
+  11,				/* By convention PA1.1 = 11 */
   "hppa",
   "hppa1.1",
   3,

@@ -1,5 +1,3 @@
-/*	$NetBSD: defer.h,v 1.1.1.4 2004/05/31 00:24:29 heas Exp $	*/
-
 #ifndef _DEFER_H_INCLUDED_
 #define _DEFER_H_INCLUDED_
 
@@ -23,16 +21,14 @@
   * Global library.
   */
 #include <bounce.h>
-#include <deliver_request.h>
 
  /*
   * External interface.
   */
-extern int PRINTFLIKE(8, 9) defer_append(int, const char *,
-					         const char *, const char *,
-					         long, const char *, time_t,
+extern int PRINTFLIKE(7, 8) defer_append(int, const char *, const char *,
+				         const char *, const char *, time_t,
 					         const char *,...);
-extern int vdefer_append(int, const char *, const char *, const char *, long,
+extern int vdefer_append(int, const char *, const char *, const char *,
 		               const char *, time_t, const char *, va_list);
 extern int defer_flush(int, const char *, const char *, const char *, const char *);
 

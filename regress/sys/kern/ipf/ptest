@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: ptest,v 1.2 2004/07/23 05:39:04 martti Exp $
+# $NetBSD: ptest,v 1.1.1.1.2.1 2004/08/15 14:51:42 tron Exp $
 #
 TESTDIR=$1
 shift

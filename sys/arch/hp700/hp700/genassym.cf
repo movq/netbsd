@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.9 2004/08/26 16:52:27 jkunz Exp $
+#	$NetBSD: genassym.cf,v 1.6 2004/03/26 14:11:01 drochner Exp $
 
 #	$OpenBSD: genassym.cf,v 1.18 2001/09/20 18:31:14 mickey Exp $
 
@@ -77,7 +77,7 @@ export	HPPA_BREAK_SET_PSW
 struct	hp700_int_reg
 member	INT_REG_REQ	int_reg_req
 member	INT_REG_BITS_MAP int_reg_bits_map
-export	INT_REG_BIT_REG
+export	INT_REG_BIT_REG_POS
 
 # pte things
 export	TLB_REF_POS
@@ -177,13 +177,11 @@ member	TF_CR30		tf_cr30
 
 # proc fields and values
 struct	proc
-member	P_RASLIST	p_raslist
 member	P_MD		p_md
 
 struct	lwp
 member	L_FORW		l_forw
 member	L_BACK		l_back
-member	L_PROC		l_proc
 member	L_ADDR		l_addr
 member	L_PRIORITY	l_priority
 member	L_STAT		l_stat
@@ -199,7 +197,6 @@ member	PCB_FPREGS	pcb_fpregs
 member	PCB_ONFAULT	pcb_onfault
 member	PCB_SPACE	pcb_space
 member	PCB_UVA		pcb_uva
-member	PCB_KSP		pcb_ksp
 
 struct	user
 member	U_PCB		u_pcb

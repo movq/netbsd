@@ -1,4 +1,4 @@
-/*	$NetBSD: if_an_pci.c,v 1.16 2004/08/21 23:48:33 thorpej Exp $	*/
+/*	$NetBSD: if_an_pci.c,v 1.13 2004/01/29 16:57:29 martin Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_an_pci.c,v 1.16 2004/08/21 23:48:33 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_an_pci.c,v 1.13 2004/01/29 16:57:29 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h> 
@@ -86,24 +86,24 @@ struct an_pci_softc {
 	void	*sc_ih;			/* interrupt handle */
 };
 
-static int	an_pci_match(struct device *, struct cfdata *, void *);
-static void	an_pci_attach(struct device *, struct device *, void *);
+int	an_pci_match __P((struct device *, struct cfdata *, void *));
+void	an_pci_attach __P((struct device *, struct device *, void *));
 
 CFATTACH_DECL(an_pci, sizeof(struct an_pci_softc),
     an_pci_match, an_pci_attach, NULL, NULL);
 
-static const struct an_pci_product {
+const struct an_pci_product {
 	u_int32_t	app_vendor;	/* PCI vendor ID */
 	u_int32_t	app_product;	/* PCI product ID */
 } an_pci_products[] = {
 	{ PCI_VENDOR_AIRONET,		PCI_PRODUCT_AIRONET_PC4xxx },
 	{ PCI_VENDOR_AIRONET,		PCI_PRODUCT_AIRONET_PC4500 },
 	{ PCI_VENDOR_AIRONET,		PCI_PRODUCT_AIRONET_PC4800 },
-	{ PCI_VENDOR_AIRONET,		PCI_PRODUCT_AIRONET_PCI350 },
+	{ PCI_VENDOR_AIRONET,		PCI_PRODUCT_AIRONET_350 },
 	{ 0,				0			   }
 };
 
-static int
+int
 an_pci_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
@@ -117,7 +117,7 @@ an_pci_match(struct device *parent, struct cfdata *match, void *aux)
 	return 0;
 }
 
-static void
+void
 an_pci_attach(struct device *parent, struct device *self, void *aux)
 {
         struct pci_attach_args *pa = (struct pci_attach_args *)aux;
@@ -130,7 +130,7 @@ an_pci_attach(struct device *parent, struct device *self, void *aux)
 
 	aprint_naive(": 802.11 controller\n");
 
-        pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+        pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
         aprint_normal(": %s\n", devinfo);
 
         /* Map I/O registers */

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.26 2004/05/16 09:53:10 lukem Exp $
+#	$NetBSD: Makefile,v 1.25 2003/07/04 04:52:59 atatat Exp $
 #	install these sources in /usr/share/sendmail/cf
 
 .include <bsd.own.mk>
@@ -36,15 +36,12 @@ clean cleandir distclean:
 
 realdepend:
 
-BUILDSYMLINKS+=		netbsd-proto.cf sendmail.cf \
-			netbsd-msp.cf etcsubmit.cf
-
-CONFIGFILES=		sendmail.cf
-FILESDIR_sendmail.cf=	/etc/mail
+distribution: netbsd-proto.cf netbsd-msp.cf
+	${INSTALL_FILE} -o root -g wheel -m 444 \
+	    netbsd-proto.cf ${DESTDIR}/etc/mail/sendmail.cf
 .if !defined(SENDMAIL_SUIDROOT) || ${SENDMAIL_SUIDROOT} != "yes"
-CONFIGFILES+=		etcsubmit.cf
-FILESDIR_etcsubmit.cf=	/etc/mail
-FILESNAME_etcsubmit.cf=	submit.cf
+	${INSTALL_FILE} -o root -g wheel -m 444 \
+	    netbsd-msp.cf ${DESTDIR}/etc/mail/submit.cf
 .endif
 
 # this is overkill, but....

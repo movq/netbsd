@@ -1,4 +1,4 @@
-/*	$NetBSD: shm.h,v 1.37 2004/09/28 19:05:19 jdolecek Exp $	*/
+/*	$NetBSD: shm.h,v 1.35.2.1 2004/10/04 05:19:13 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.24 2004/04/28 14:17:56 lukem Exp $
+# $NetBSD: mi,v 1.23.2.1 2004/04/29 05:45:35 jmc Exp $
 ./etc/mtree/set.xcomp			xcomp-sys-root
 ./usr/X11R6/bin/bdftruncate.pl		xcomp-obsolete	obsolete
 ./usr/X11R6/bin/ccmakedep

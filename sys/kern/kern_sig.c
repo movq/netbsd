@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sig.c,v 1.199 2004/10/01 16:30:55 yamt Exp $	*/
+/*	$NetBSD: kern_sig.c,v 1.189.2.6 2004/10/01 03:46:37 jmc Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sig.c,v 1.199 2004/10/01 16:30:55 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sig.c,v 1.189.2.6 2004/10/01 03:46:37 jmc Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_compat_sunos.h"
@@ -115,9 +115,8 @@ static struct pool_allocator sigactspool_allocator = {
         sigacts_poolpage_alloc, sigacts_poolpage_free,
 };
 
-POOL_INIT(siginfo_pool, sizeof(siginfo_t), 0, 0, 0, "siginfo",
-    &pool_allocator_nointr);
-POOL_INIT(ksiginfo_pool, sizeof(ksiginfo_t), 0, 0, 0, "ksiginfo", NULL);
+struct pool	siginfo_pool;	/* memory pool for siginfo structures */
+struct pool	ksiginfo_pool;	/* memory pool for ksiginfo structures */
 
 /*
  * Can process p, with pcred pc, send the signal signum to process q?
@@ -235,7 +234,10 @@ signal_init(void)
 	pool_init(&sigacts_pool, sizeof(struct sigacts), 0, 0, 0, "sigapl",
 	    sizeof(struct sigacts) > PAGE_SIZE ?
 	    &sigactspool_allocator : &pool_allocator_nointr);
-
+	pool_init(&siginfo_pool, sizeof(siginfo_t), 0, 0, 0, "siginfo",
+	    &pool_allocator_nointr);
+	pool_init(&ksiginfo_pool, sizeof(ksiginfo_t), 0, 0, 0, "ksiginfo",
+	    NULL);
 	exithook_establish(ksiginfo_exithook, NULL);
 	exechook_establish(ksiginfo_exithook, NULL);
 }
@@ -287,9 +289,11 @@ sigactsunshare(struct proc *p)
  * Release a sigctx structure.
  */
 void
-sigactsfree(struct sigacts *ps)
+sigactsfree(struct proc *p)
 {
+	struct sigacts *ps;
 
+	ps = p->p_sigacts;
 	if (--ps->sa_refcnt > 0)
 		return;
 
@@ -812,7 +816,7 @@ killpg1(struct proc *cp, ksiginfo_t *ksi, int pgid, int all)
 		 * broadcast 
 		 */
 		proclist_lock_read();
-		PROCLIST_FOREACH(p, &allproc) {
+		LIST_FOREACH(p, &allproc, p_list) {
 			if (p->p_pid <= 1 || p->p_flag & P_SYSTEM || 
 			    p == cp || !CANSIGNAL(cp, pc, p, signum))
 				continue;

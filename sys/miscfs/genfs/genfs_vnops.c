@@ -1,4 +1,4 @@
-/*	$NetBSD: genfs_vnops.c,v 1.91 2004/10/04 00:28:30 enami Exp $	*/
+/*	$NetBSD: genfs_vnops.c,v 1.85 2004/01/25 18:06:49 hannken Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: genfs_vnops.c,v 1.91 2004/10/04 00:28:30 enami Exp $");
+__KERNEL_RCSID(0, "$NetBSD: genfs_vnops.c,v 1.85 2004/01/25 18:06:49 hannken Exp $");
 
 #include "opt_nfsserver.h"
 
@@ -321,7 +321,7 @@ genfs_lock(void *v)
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 
-	return (lockmgr(vp->v_vnlock, ap->a_flags, &vp->v_interlock));
+	return (lockmgr(&vp->v_lock, ap->a_flags, &vp->v_interlock));
 }
 
 /*
@@ -336,7 +336,7 @@ genfs_unlock(void *v)
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 
-	return (lockmgr(vp->v_vnlock, ap->a_flags | LK_RELEASE,
+	return (lockmgr(&vp->v_lock, ap->a_flags | LK_RELEASE,
 	    &vp->v_interlock));
 }
 
@@ -351,7 +351,7 @@ genfs_islocked(void *v)
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 
-	return (lockstatus(vp->v_vnlock));
+	return (lockstatus(&vp->v_lock));
 }
 
 /*
@@ -531,7 +531,7 @@ genfs_getpages(void *v)
 		return (ap->a_m[ap->a_centeridx] == NULL ? EBUSY : 0);
 	}
 
-	/* uobj is locked */
+	/* vnode is VOP_LOCKed, uobj is locked */
 
 	if (write && (vp->v_flag & VONWORKLST) == 0) {
 		vn_syncer_add_to_worklist(vp, filedelay);
@@ -1301,8 +1301,6 @@ genfs_putpages(void *v)
 
 					nextpg = TAILQ_NEXT(tpg, listq);
 					uvm_pagefree(tpg);
-					if (pagedaemon)
-						uvmexp.pdfreed++;
 				}
 			}
 		}
@@ -1626,8 +1624,7 @@ genfs_compat_getpages(void *v)
 		uio.uio_segflg = UIO_SYSSPACE;
 		uio.uio_rw = UIO_READ;
 		uio.uio_resid = PAGE_SIZE;
-		uio.uio_procp = NULL;
-		/* XXX vn_lock */
+		uio.uio_procp = curproc;
 		error = VOP_READ(vp, &uio, 0, cred);
 		if (error) {
 			break;
@@ -1680,8 +1677,7 @@ genfs_compat_gop_write(struct vnode *vp, struct vm_page **pgs, int npages,
 	uio.uio_segflg = UIO_SYSSPACE;
 	uio.uio_rw = UIO_WRITE;
 	uio.uio_resid = npages << PAGE_SHIFT;
-	uio.uio_procp = NULL;
-	/* XXX vn_lock */
+	uio.uio_procp = curproc;
 	error = VOP_WRITE(vp, &uio, 0, cred);
 
 	s = splbio();
