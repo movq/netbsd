@@ -1,4 +1,4 @@
-/*	$NetBSD: cons.c,v 1.6 1994/10/26 07:27:09 cgd Exp $	*/
+/*	$NetBSD: cons.c,v 1.7 1995/08/04 07:55:38 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -44,17 +44,9 @@
 
 #include <sys/param.h>
 #include <dev/cons.h>
-#include "samachdep.h"
 
-#ifdef ITECONSOLE
-int	iteprobe(), iteinit(), itegetchar(), iteputchar();
-#endif
-#ifdef DCACONSOLE
-int	dcaprobe(), dcainit(), dcagetchar(), dcaputchar();
-#endif
-#ifdef DCMCONSOLE
-int	dcmprobe(), dcminit(), dcmgetchar(), dcmputchar();
-#endif
+#include <hp300/stand/consdefs.h>
+#include <hp300/stand/samachdep.h>
 
 struct consdev constab[] = {
 #ifdef ITECONSOLE
@@ -92,14 +84,18 @@ cninit()
 
 cngetc()
 {
+
+	/* Note: the dev_t arguments are not used! */
 	if (cn_tab)
-		return((*cn_tab->cn_getc)());
+		return((*cn_tab->cn_getc)(0));
 	return(0);
 }
 
 cnputc(c)
 	int c;
 {
+
+	/* Note: the dev_t arguments are not used! */
 #ifdef ROMPRF
 	extern int userom;
 
@@ -108,5 +104,5 @@ cnputc(c)
 	else
 #endif
 	if (cn_tab)
-		(*cn_tab->cn_putc)(c);
+		(*cn_tab->cn_putc)(0, c);
 }
