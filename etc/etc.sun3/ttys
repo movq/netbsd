@@ -1,6 +1,6 @@
 #
 #	@(#)ttys	5.1 (Berkeley) 4/17/89
-#	$Id: ttys,v 1.1 1994/07/12 21:11:18 gwr Exp $
+#	$Id: ttys,v 1.1.1.1 1994/07/12 21:11:19 gwr Exp $
 #
 # name	getty				type	status		comments
 #
