@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: keywords.sh,v 1.1 1996/09/13 18:21:26 gwr Exp $
+# $NetBSD: keywords.sh,v 1.1.1.1 1996/09/13 18:21:26 gwr Exp $
 # @(#)keywords	8.2 (Berkeley) 3/19/94
 #
 # WARNING!  If you change this file, re-run it!
