@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_rcmd_pxy.c,v 1.1 1999/12/12 10:57:57 veego Exp $	*/
+/*	$NetBSD: ip_rcmd_pxy.c,v 1.1.1.1 1999/12/12 10:57:57 veego Exp $	*/
 
 /*
  * Simple RCMD transparent proxy for in-kernel use.  For use with the NAT

@@ -1,4 +1,4 @@
-/*	$NetBSD: ipl.h,v 1.1 1999/12/12 10:57:57 veego Exp $	*/
+/*	$NetBSD: ipl.h,v 1.1.1.1 1999/12/12 10:57:57 veego Exp $	*/
 
 /*
  * Copyright (C) 1993-1999 by Darren Reed.
