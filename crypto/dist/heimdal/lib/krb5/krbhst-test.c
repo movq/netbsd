@@ -33,7 +33,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: krbhst-test.c,v 1.1 2001/09/17 12:25:04 assar Exp $");
+RCSID("$Id: krbhst-test.c,v 1.1.1.1 2001/09/17 12:25:04 assar Exp $");
 
 int
 main(int argc, char **argv)

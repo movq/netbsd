@@ -33,7 +33,7 @@
 
 #include "ktutil_locl.h"
 
-RCSID("$Id: rename.c,v 1.1 2001/09/17 12:24:35 assar Exp $");
+RCSID("$Id: rename.c,v 1.1.1.1 2001/09/17 12:24:35 assar Exp $");
 
 int
 kt_rename(int argc, char **argv)

@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: edit_compat.h,v 1.1 2001/09/17 12:25:11 assar Exp $ */
+/* $Id: edit_compat.h,v 1.1.1.1 2001/09/17 12:25:11 assar Exp $ */
 
 #ifndef _EDIT_COMPAT_H
 #define _EDIT_COMPAT_H
