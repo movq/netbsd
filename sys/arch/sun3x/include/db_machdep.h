@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.h,v 1.1 1997/01/14 20:57:04 gwr Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.1.1.1 1997/01/14 20:57:04 gwr Exp $	*/
 
 /*
  * Mach Operating System

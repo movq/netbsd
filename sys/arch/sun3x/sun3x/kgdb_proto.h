@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_proto.h,v 1.1 1997/01/14 20:57:09 gwr Exp $ */
+/*	$NetBSD: kgdb_proto.h,v 1.1.1.1 1997/01/14 20:57:09 gwr Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993

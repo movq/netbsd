@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.1 1997/01/14 20:57:06 gwr Exp $	*/
+/*	$NetBSD: proc.h,v 1.1.1.1 1997/01/14 20:57:06 gwr Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.1 1997/01/14 20:57:09 gwr Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.1.1.1 1997/01/14 20:57:09 gwr Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Gordon W. Ross
