@@ -1,4 +1,4 @@
-/*	$NetBSD: des_ecb.c,v 1.1 2000/06/14 19:45:35 thorpej Exp $	*/
+/*	$NetBSD: des_ecb.c,v 1.1.1.1 2000/06/14 19:45:35 thorpej Exp $	*/
 /*	$KAME: des_ecb.c,v 1.3 2000/03/27 04:36:33 sumikawa Exp $	*/
 
 /* crypto/des/ecb_enc.c */

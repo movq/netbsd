@@ -1,4 +1,4 @@
-/*	$NetBSD: cast128.c,v 1.1 2000/06/14 19:45:34 thorpej Exp $	*/
+/*	$NetBSD: cast128.c,v 1.1.1.1 2000/06/14 19:45:34 thorpej Exp $	*/
 /*	$KAME: cast128.c,v 1.3 2000/03/27 04:36:29 sumikawa Exp $	*/
 
 /*

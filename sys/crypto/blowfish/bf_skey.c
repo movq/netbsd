@@ -1,4 +1,4 @@
-/*	$NetBSD: bf_skey.c,v 1.1 2000/06/14 19:45:34 thorpej Exp $	*/
+/*	$NetBSD: bf_skey.c,v 1.1.1.1 2000/06/14 19:45:34 thorpej Exp $	*/
 /*	$KAME: bf_skey.c,v 1.3 2000/03/27 04:36:27 sumikawa Exp $	*/
 
 /* crypto/bf/bf_skey.c */

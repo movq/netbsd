@@ -1,4 +1,4 @@
-/*	$NetBSD: bf_pi.h,v 1.1 2000/06/14 19:45:33 thorpej Exp $	*/
+/*	$NetBSD: bf_pi.h,v 1.1.1.1 2000/06/14 19:45:33 thorpej Exp $	*/
 /*	$KAME: bf_pi.h,v 1.3 2000/03/27 04:36:26 sumikawa Exp $	*/
 
 /* crypto/bf/bf_pi.h */
