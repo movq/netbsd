@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2003/06/12 22:54:25 provos Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2003/06/12 22:54:25 provos Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/4/93
 
 NOLINT=		# Until someone explains to me how to avoid lint stupidity
