@@ -1,4 +1,4 @@
-#	$Id: copy_kernel.sh,v 1.1 1994/08/29 15:30:16 cgd Exp $
+#	$Id: copy_kernel.sh,v 1.1.1.1 1994/08/29 15:30:17 cgd Exp $
 #
 #	Kernel copy script
 

@@ -27,7 +27,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-#	$Id: dot.upgrutils,v 1.1 1994/08/29 15:30:19 cgd Exp $
+#	$Id: dot.upgrutils,v 1.1.1.1 1994/08/29 15:30:20 cgd Exp $
 
 # Upgrade cleanup utilites (functions), to make sure a recently-upgraded
 # system is safely runnable.  These are meant to be invoked from the shell
