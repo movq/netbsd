@@ -1,4 +1,4 @@
-/*	$NetBSD: loadkmap.c,v 1.1 1995/07/03 20:49:40 leo Exp $	*/
+/*	$NetBSD: loadkmap.c,v 1.1.1.1 1995/07/03 20:49:40 leo Exp $	*/
 
 #include <sys/types.h>
 #include <sys/stat.h>
