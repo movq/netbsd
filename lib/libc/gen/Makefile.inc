@@ -1,49 +1,50 @@
 #	from: @(#)Makefile.inc	5.21 (Berkeley) 5/24/91
-#	$Id: Makefile.inc,v 1.49 1994/06/28 04:34:24 jtc Exp $
+#	$Id: Makefile.inc,v 1.51 1994/08/29 04:47:31 mycroft Exp $
 
 # gen sources
 .PATH: ${.CURDIR}/arch/${MACHINE_ARCH}/gen ${.CURDIR}/gen
 
-SRCS+=	alarm.c assert.c clock.c confstr.c ctermid.c ctime.c ctype_.c \
-	daemon.c devname.c difftime.c \
-	directory.c disklabel.c err.c errlst.c errno.c exec.c fnmatch.c \
-	frexp.c fstab.c ftok.c fts.c \
+SRCS+=	alarm.c assert.c clock.c closedir.c confstr.c ctermid.c ctime.c \
+	ctype_.c daemon.c devname.c difftime.c \
+	disklabel.c err.c errlst.c errno.c exec.c fnmatch.c \
+	fstab.c ftok.c fts.c \
 	getbsize.c getcap.c getcwd.c getdomainname.c getgrent.c getgrouplist.c \
 	gethostname.c getloadavg.c getlogin.c getmntinfo.c getnetgrent.c \
 	getpagesize.c getpass.c getpwent.c getsubopt.c getttyent.c \
 	getusershell.c glob.c infinity.c initgroups.c isatty.c isctype.c \
 	isinf.c \
 	msgctl.c msgget.c msgsnd.c msgrcv.c \
-	mktemp.c nice.c nlist.c pause.c popen.c psignal.c pwcache.c raise.c \
-	scandir.c semconfig.c semctl.c semget.c semop.c \
+	mktemp.c nice.c nlist.c opendir.c pause.c popen.c psignal.c pwcache.c \
+	raise.c readdir.c rewinddir.c scandir.c seekdir.c semconfig.c semctl.c \
+	semget.c semop.c \
 	setdomainname.c sethostname.c setjmperr.c setmode.c \
 	setproctitle.c shmat.c shmctl.c shmdt.c shmget.c siginterrupt.c \
 	siglist.c signal.c signame.c sigsetops.c sleep.c sysconf.c sysctl.c \
-	syslog.c \
+	syslog.c telldir.c \
 	termios.c time.c times.c timezone.c tolower_.c ttyname.c ttyslot.c \
 	toupper_.c ualarm.c uname.c unvis.c usleep.c \
 	utime.c valloc.c vis.c wait.c wait3.c \
 	waitpid.c
 
 .if   (${MACHINE_ARCH} == "m68k")
-SRCS+=	_setjmp.S alloca.S fabs.S ldexp.S modf.S setjmp.S
+SRCS+=	_setjmp.S alloca.S fabs.S frexp.c ldexp.S modf.S setjmp.S
 SRCS+=	adddf3.S addsf3.S ashlsi3.S ashrsi3.S cmpdf2.S cmpsf2.S divdf3.S \
 	divsf3.S divsi3.S extendsfdf2.S fixdfsi.S fixunsdfsi.S \
 	floatsidf.S lshlsi3.S lshrsi3.S modsi3.S muldf3.S mulsf3.S mulsi3.S \
 	negdf2.S negsf2.S saveregs.c subdf3.S subsf3.S truncdfsf2.S udivsi3.S \
 	umodsi3.S umulsi3.S
 .elif (${MACHINE_ARCH} == "i386")
-SRCS+=	_setjmp.S alloca.S fabs.S ldexp.c modf.S setjmp.S sigsetjmp.S
+SRCS+=	_setjmp.S alloca.S fabs.S frexp.c ldexp.c modf.S setjmp.S sigsetjmp.S
 SRCS+=	divsi3.S fixdfsi.S fixunsdfsi.S udivsi3.S
 .elif (${MACHINE_ARCH} == "ns32k")
 SRCS+=	__main.c _setjmp.S alloca.S fabs.S frexp.S infinity.c isinf.c
 SRCS+=  ldexp.S modf.S setjmp.S
 .elif (${MACHINE_ARCH} == "tahoe")
 CFLAGS+=-I/sys
-SRCS+=	_setjmp.S alloca.S fabs.S ldexp.S modf.S setjmp.S
+SRCS+=	_setjmp.S alloca.S fabs.S frexp.c ldexp.S modf.S setjmp.S
 SRCS+=	udiv.S urem.S
 .elif (${MACHINE_ARCH} == "vax")
-SRCS+=	_setjmp.S alloca.S fabs.S ldexp.S modf.S setjmp.S
+SRCS+=	_setjmp.S alloca.S fabs.S frexp.c ldexp.S modf.S setjmp.S
 SRCS+=	udiv.S urem.S
 .elif (${MACHINE_ARCH} == "sparc")
 SRCS+=	_setjmp.S fabs.S frexp.c infinity.c isnan.c ldexp.c modf.S

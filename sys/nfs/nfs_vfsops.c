@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_vfsops.c,v 1.27 1994/07/03 09:24:01 mycroft Exp $	*/
+/*	$NetBSD: nfs_vfsops.c,v 1.32 1994/08/23 09:31:00 pk Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -216,7 +216,7 @@ nfs_mountroot()
 	if (error) panic("nfs_mountroot: getattr for root");
 	n = attr.va_mtime.ts_sec;
 #ifdef	DEBUG
-	printf(" root time: 0x%x\n", n);
+	printf("root time: 0x%x\n", n);
 #endif
 	inittodr(n);
 
@@ -265,7 +265,7 @@ nfs_mountroot()
 		panic("nfs_mountroot: getattr for swap");
 	n = (long) (attr.va_size >> DEV_BSHIFT);
 #ifdef	DEBUG
-	printf(" swap size: 0x%x (blocks)\n", n);
+	printf("swap size: 0x%x (blocks)\n", n);
 #endif
 	swdevt[0].sw_nblks = n;
 
@@ -303,9 +303,21 @@ nfs_mount_diskless(ndmntp, mntname, mntflag, vpp)
 	args.sotype   = SOCK_DGRAM;
 	args.fh       = (nfsv2fh_t *)ndmntp->ndm_fh;
 	args.hostname = ndmntp->ndm_host;
+	args.flags    = NFSMNT_RESVPORT;
+
+#ifdef	NFS_BOOT_RWSIZE
+	/*
+	 * Reduce rsize,wsize for interfaces that consistently
+	 * drop fragments of long UDP messages.  (i.e. wd8003).
+	 * You can always change these later via remount.
+	 */
+	args.flags   |= NFSMNT_WSIZE | NFSMNT_RSIZE;
+	args.wsize    = NFS_BOOT_RWSIZE;
+	args.rsize    = NFS_BOOT_RWSIZE;
+#endif
 
 	/* Get mbuf for server sockaddr. */
-	MGET(m, MT_SONAME, M_DONTWAIT);
+	m = m_get(M_WAIT, MT_SONAME);
 	if (m == NULL)
 		panic("nfs_mountroot: mget soname for %s", mntname);
 	bcopy((caddr_t)args.addr, mtod(m, caddr_t),
@@ -323,8 +335,14 @@ nfs_decode_args(nmp, argp)
 	struct nfs_args *argp;
 {
 	int s;
+	int adjsock;
 
 	s = splnet();
+
+	/* Re-bind if rsrvd port requested and wasn't on one */
+	adjsock = !(nmp->nm_flag & NFSMNT_RESVPORT)
+		  && (argp->flags & NFSMNT_RESVPORT);
+
 	/* Update flags atomically.  Don't change the lock bits. */
 	nmp->nm_flag =
 	    (argp->flags & ~NFSMNT_INTERNAL) | (nmp->nm_flag & NFSMNT_INTERNAL);
@@ -345,6 +363,7 @@ nfs_decode_args(nmp, argp)
 	}
 
 	if ((argp->flags & NFSMNT_WSIZE) && argp->wsize > 0) {
+		int osize = nmp->nm_wsize;
 		nmp->nm_wsize = argp->wsize;
 		/* Round down to multiple of blocksize */
 		nmp->nm_wsize &= ~0x1ff;
@@ -352,11 +371,13 @@ nfs_decode_args(nmp, argp)
 			nmp->nm_wsize = 512;
 		else if (nmp->nm_wsize > NFS_MAXDATA)
 			nmp->nm_wsize = NFS_MAXDATA;
+		adjsock |= (nmp->nm_wsize != osize);
 	}
 	if (nmp->nm_wsize > MAXBSIZE)
 		nmp->nm_wsize = MAXBSIZE;
 
 	if ((argp->flags & NFSMNT_RSIZE) && argp->rsize > 0) {
+		int osize = nmp->nm_rsize;
 		nmp->nm_rsize = argp->rsize;
 		/* Round down to multiple of blocksize */
 		nmp->nm_rsize &= ~0x1ff;
@@ -364,6 +385,7 @@ nfs_decode_args(nmp, argp)
 			nmp->nm_rsize = 512;
 		else if (nmp->nm_rsize > NFS_MAXDATA)
 			nmp->nm_rsize = NFS_MAXDATA;
+		adjsock |= (nmp->nm_rsize != osize);
 	}
 	if (nmp->nm_rsize > MAXBSIZE)
 		nmp->nm_rsize = MAXBSIZE;
@@ -380,6 +402,16 @@ nfs_decode_args(nmp, argp)
 	if ((argp->flags & NFSMNT_DEADTHRESH) && argp->deadthresh >= 1 &&
 		argp->deadthresh <= NQ_NEVERDEAD)
 		nmp->nm_deadthresh = argp->deadthresh;
+
+	if (nmp->nm_so && adjsock) {
+		nfs_disconnect(nmp);
+		if (nmp->nm_sotype == SOCK_DGRAM)
+			while (nfs_connect(nmp, (struct nfsreq *)0)) {
+				printf("nfs_args: retrying connect\n");
+				(void) tsleep((caddr_t)&lbolt,
+					      PSOCK, "nfscon", 0);
+			}
+	}
 }
 
 /*
@@ -484,8 +516,7 @@ mountnfs(argp, mp, nam, pth, hst, vpp)
 	nmp->nm_readahead = NFS_DEFRAHEAD;
 	nmp->nm_leaseterm = NQ_DEFLEASE;
 	nmp->nm_deadthresh = NQ_DEADTHRESH;
-	nmp->nm_tnext = (struct nfsnode *)nmp;
-	nmp->nm_tprev = (struct nfsnode *)nmp;
+	CIRCLEQ_INIT(&nmp->nm_timerhead);
 	nmp->nm_inprog = NULLVP;
 	bcopy((caddr_t)argp->fh, (caddr_t)&nmp->nm_fh, sizeof(nfsv2fh_t));
 #ifdef COMPAT_09

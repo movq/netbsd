@@ -38,7 +38,7 @@
  * from: Utah $Hdr: machparam.h 1.16 92/12/20$
  *
  *	from: @(#)param.h	8.1 (Berkeley) 6/10/93
- *	$Id: param.h,v 1.2 1994/06/18 12:10:30 paulus Exp $
+ *	$Id: param.h,v 1.4 1994/08/25 06:14:29 paulus Exp $
  */
 
 /*
@@ -81,6 +81,7 @@
 #define	SINCR		1		/* increment of stack/NBPG */
 
 #define	UPAGES		3		/* pages of u-area */
+#define USPACE		(UPAGES * NBPG)	/* bytes of u-area */
 
 /*
  * Constants related to network buffer management.
@@ -120,10 +121,10 @@
 #define	btoc(x)	(((unsigned)(x)+(NBPG-1))>>PGSHIFT)
 
 #ifndef LABELSECTOR
-#define LABELSECTOR	(1024/DEV_BSIZE)
+#define LABELSECTOR	0
 #endif
 #ifndef LABELOFFSET
-#define LABELOFFSET	0
+#define LABELOFFSET	64
 #endif
 
 #define	btodb(bytes)	 		/* calculates (bytes / DEV_BSIZE) */ \

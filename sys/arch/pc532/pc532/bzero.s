@@ -29,7 +29,7 @@
  * 	File: ns532/bzero.s
  *	Author: Tero Kivinen, Helsinki University of Technology 1992.
  *
- *	$Id: bzero.s,v 1.1 1993/09/09 23:53:46 phil Exp $
+ *	$Id: bzero.s,v 1.1.1.1 1993/09/09 23:53:47 phil Exp $
  */
 
 #include <machine/asm.h>

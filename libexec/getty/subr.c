@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1983 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1983, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,8 +32,8 @@
  */
 
 #ifndef lint
-/*static char sccsid[] = "from: @(#)subr.c	5.10 (Berkeley) 2/26/91";*/
-static char rcsid[] = "$Id: subr.c,v 1.7 1994/04/28 22:12:31 pk Exp $";
+/*static char sccsid[] = "from: @(#)subr.c	8.1 (Berkeley) 6/4/93";*/
+static char rcsid[] = "$Id: subr.c,v 1.11 1994/08/24 07:54:51 mycroft Exp $";
 #endif /* not lint */
 
 /*
@@ -48,13 +48,16 @@ static char rcsid[] = "$Id: subr.c,v 1.7 1994/04/28 22:12:31 pk Exp $";
 
 #include "gettytab.h"
 #include "pathnames.h"
+#include "extern.h"
 
-extern	struct termios tmode;
+extern	struct termios tmode, omode;
 
 static void	compatflags __P((long));
+
 /*
  * Get a table entry.
  */
+void
 gettable(name, buf)
 	char *name, *buf;
 {
@@ -94,12 +97,13 @@ gettable(name, buf)
 	for (np = gettynums; np->field; np++)
 		printf("cgetnum: %s=%d\n", np->field, np->value);
 	for (fp = gettyflags; fp->field; fp++)
-		printf("cgetflags: %s='%c' set='%c'\n", fp->field,
-		    fp->value + '0', fp->set + '0');
+		printf("cgetflags: %s='%c' set='%c'\n", fp->field, 
+		       fp->value + '0', fp->set + '0');
 	exit(1);
 #endif /* DEBUG */
 }
 
+void
 gendefaults()
 {
 	register struct gettystrs *sp;
@@ -119,6 +123,7 @@ gendefaults()
 			fp->defalt = fp->invrt;
 }
 
+void
 setdefaults()
 {
 	register struct gettystrs *sp;
@@ -151,6 +156,7 @@ charvars[] = {
 	&tmode.c_cc[VWERASE], &tmode.c_cc[VLNEXT], 0
 };
 
+void
 setchars()
 {
 	register int i;
@@ -167,6 +173,7 @@ setchars()
 
 void
 setflags(n)
+	int n;
 {
 	register tcflag_t iflag, oflag, cflag, lflag;
 
@@ -223,24 +230,32 @@ setflags(n)
 		break;
 	}
 
-	iflag = (BRKINT|ICRNL|IMAXBEL|IXON|IXANY);
-	oflag = (OPOST|ONLCR|OXTABS);
-	cflag = (CREAD);
-	lflag = (ICANON|ISIG|IEXTEN);
+#define BIC(v,c)	(v) &= ~(c)
+#define BIS(v,s)	(v) |= (s)
+#define BICS(v,c,s)	BIC(v,c),BIS(v,s)
+
+	iflag = omode.c_iflag;
+	oflag = omode.c_oflag;
+	cflag = omode.c_cflag;
+	lflag = omode.c_lflag;
 
 	if (NP) {
-		iflag |= IGNPAR;
-		cflag |= CS8;
-	} else if (AP) {
-		iflag |= IGNPAR|ISTRIP;
-		cflag |= CS7;
-	} else if (OP) {
-		iflag |= INPCK|ISTRIP;
-		cflag |= PARENB|PARODD|CS7;
-	} else if (EP) {
-		iflag |= INPCK|ISTRIP;
-		cflag |= PARENB|CS7;
-	}
+		BIC(iflag, ISTRIP|INPCK|IGNPAR);
+		BICS(cflag, CSIZE|PARENB|PARODD, CS8);
+	} else if (OP && !EP) {
+		BIS(iflag, ISTRIP|INPCK|IGNPAR);
+		BICS(cflag, CSIZE, PARENB|PARODD|CS7);
+		if (AP)
+			BIC(iflag, INPCK);
+	} else if (EP && !OP) {
+		BIS(iflag, ISTRIP|INPCK|IGNPAR);
+		BICS(cflag, CSIZE|PARODD, PARENB|CS7);
+		if (AP)
+			BIC(iflag, INPCK);
+	} else if (AP || EP && OP) {
+		BICS(iflag, INPCK|IGNPAR, ISTRIP);
+		BICS(cflag, CSIZE|PARODD, PARENB|CS7);
+	} /* else, leave as is */
 
 #if 0
 	if (UC)
@@ -249,6 +264,8 @@ setflags(n)
 
 	if (HC)
 		cflag |= HUPCL;
+	else
+		cflag &= ~HUPCL;
 
 	if (NL) {
 		iflag |= ICRNL;
@@ -271,7 +288,9 @@ setflags(n)
 		goto out;
 	}
 
-	if (!HT)
+	if (HT)
+		oflag &= ~OXTABS;
+	else
 		oflag |= OXTABS;
 
 	if (n == 0)
@@ -302,6 +321,8 @@ setflags(n)
 
 	if (MB)
 		cflag |= MDMBUF;
+	else
+		cflag &= ~MDMBUF;
 
 out:
 	tmode.c_iflag = iflag;
@@ -325,103 +346,116 @@ register long flags;
 	cflag = (CREAD);
 	lflag = (ICANON|ISIG|IEXTEN);
 
+	if (flags & TANDEM)
+		iflag |= IXOFF;
+	else
+		iflag &= ~IXOFF;
+	if (flags & ECHO)
+		lflag |= ECHO;
+	else
+		lflag &= ~ECHO;
+	if (flags & CRMOD) {
+		iflag |= ICRNL;
+		oflag |= ONLCR;
+	} else {
+		iflag &= ~ICRNL;
+		oflag &= ~ONLCR;
+	}
+	if (flags & XTABS)
+		oflag |= OXTABS;
+	else
+		oflag &= ~OXTABS;
+
 	if (flags & RAW) {
-		iflag &= IXOFF|IXANY;
-		oflag &= ~OPOST;
-		lflag &= ~(ECHOCTL|ISIG|ICANON|IEXTEN);
+		iflag &= IXOFF;
+		lflag &= ~(ISIG|ICANON|IEXTEN);
 	} else {
 		iflag |= BRKINT|IXON|IMAXBEL;
-		oflag |= OPOST;
-		lflag |= ISIG|IEXTEN|ECHOCTL;	/* XXX was echoctl on ? */
-		if (flags & XTABS)
-			oflag |= OXTABS;
-		else
-			oflag &= ~OXTABS;
+		lflag |= ISIG|IEXTEN;
 		if (flags & CBREAK)
 			lflag &= ~ICANON;
 		else
 			lflag |= ICANON;
-		if (flags&CRMOD) {
-			iflag |= ICRNL;
-			oflag |= ONLCR;
-		} else {
-			iflag &= ~ICRNL;
-			oflag &= ~ONLCR;
-		}
 	}
-	if (flags&ECHO)
-		lflag |= ECHO;
-	else
-		lflag &= ~ECHO;
 		
-	if (flags&(RAW|LITOUT|PASS8)) {
+	switch (flags & ANYP) {
+	case EVENP:
+		iflag |= INPCK;
+		cflag &= ~PARODD;
+		break;
+	case ODDP:
+		iflag |= INPCK;
+		cflag |= PARODD;
+		break;
+	default:
+		iflag &= ~INPCK;
+		break;
+	}
+
+	if (flags & (RAW|LITOUT|PASS8)) {
 		cflag &= ~(CSIZE|PARENB);
 		cflag |= CS8;
-		if ((flags&(RAW|PASS8)) == 0)
+		if ((flags & (RAW|PASS8)) == 0)
 			iflag |= ISTRIP;
 		else
 			iflag &= ~ISTRIP;
+		if ((flags & (RAW|LITOUT)) == 0)
+			oflag |= OPOST;
+		else
+			oflag &= ~OPOST;
 	} else {
 		cflag &= ~CSIZE;
 		cflag |= CS7|PARENB;
 		iflag |= ISTRIP;
+		oflag |= OPOST;
 	}
-	if ((flags&(EVENP|ODDP)) == EVENP) {
-		iflag |= INPCK;
-		cflag &= ~PARODD;
-	} else if ((flags&(EVENP|ODDP)) == ODDP) {
-		iflag |= INPCK;
-		cflag |= PARODD;
-	} else 
-		iflag &= ~INPCK;
-	if (flags&LITOUT)
-		oflag &= ~OPOST;	/* move earlier ? */
-	if (flags&TANDEM)
-		iflag |= IXOFF;
-	else
-		iflag &= ~IXOFF;
 
-	if (flags&CRTERA)
-		lflag |= ECHOE;
-	else
-		lflag &= ~ECHOE;
-	if (flags&CRTKIL)
-		lflag |= ECHOKE;
-	else
-		lflag &= ~ECHOKE;
-	if (flags&PRTERA)
+	if (flags & PRTERA)
 		lflag |= ECHOPRT;
 	else
 		lflag &= ~ECHOPRT;
-	if (flags&CTLECH)
-		lflag |= ECHOCTL;
+	if (flags & CRTERA)
+		lflag |= ECHOE;
 	else
-		lflag &= ~ECHOCTL;
-	if ((flags&DECCTQ) == 0)
-		lflag |= IXANY;
-	else
-		lflag &= ~IXANY;
+		lflag &= ~ECHOE;
 	if (flags & MDMBUF)
 		cflag |= MDMBUF;
 	else
 		cflag &= ~MDMBUF;
-	if (flags&NOHANG)
+	if (flags & NOHANG)
 		cflag &= ~HUPCL;
 	else
 		cflag |= HUPCL;
+	if (flags & CRTKIL)
+		lflag |= ECHOKE;
+	else
+		lflag &= ~ECHOKE;
+	if (flags & CTLECH)
+		lflag |= ECHOCTL;
+	else
+		lflag &= ~ECHOCTL;
+	if ((flags & DECCTQ) == 0)
+		lflag |= IXANY;
+	else
+		lflag &= ~IXANY;
 	lflag &= ~(TOSTOP|FLUSHO|PENDIN|NOFLSH);
-	lflag |= flags&(TOSTOP|FLUSHO|PENDIN|NOFLSH);
-	if (flags&(LITOUT|PASS8)) {
-		iflag &= ~ISTRIP;
+	lflag |= flags & (TOSTOP|FLUSHO|PENDIN|NOFLSH);
+
+	if (flags & (RAW|LITOUT|PASS8)) {
 		cflag &= ~(CSIZE|PARENB);
 		cflag |= CS8;
-		if (flags&LITOUT)
+		if ((flags & (RAW|PASS8)) == 0)
+			iflag |= ISTRIP;
+		else
+			iflag &= ~ISTRIP;
+		if ((flags & (RAW|LITOUT)) == 0)
+			oflag |= OPOST;
+		else
 			oflag &= ~OPOST;
-		if ((flags&(PASS8|RAW)) == 0)
-  			iflag |= ISTRIP;
-	} else if ((flags&RAW) == 0) {
+	} else {
 		cflag &= ~CSIZE;
 		cflag |= CS7|PARENB;
+		iflag |= ISTRIP;
 		oflag |= OPOST;
 	}
 
@@ -443,44 +477,45 @@ struct delayval {
  */
 
 struct delayval	crdelay[] = {
-	1,		CR1,
-	2,		CR2,
-	3,		CR3,
-	83,		CR1,
-	166,		CR2,
-	0,		CR3,
+	{ 1,		CR1 },
+	{ 2,		CR2 },
+	{ 3,		CR3 },
+	{ 83,		CR1 },
+	{ 166,		CR2 },
+	{ 0,		CR3 },
 };
 
 struct delayval nldelay[] = {
-	1,		NL1,		/* special, calculated */
-	2,		NL2,
-	3,		NL3,
-	100,		NL2,
-	0,		NL3,
+	{ 1,		NL1 },		/* special, calculated */
+	{ 2,		NL2 },
+	{ 3,		NL3 },
+	{ 100,		NL2 },
+	{ 0,		NL3 },
 };
 
 struct delayval	bsdelay[] = {
-	1,		BS1,
-	0,		0,
+	{ 1,		BS1 },
+	{ 0,		0 },
 };
 
 struct delayval	ffdelay[] = {
-	1,		FF1,
-	1750,		FF1,
-	0,		FF1,
+	{ 1,		FF1 },
+	{ 1750,		FF1 },
+	{ 0,		FF1 },
 };
 
 struct delayval	tbdelay[] = {
-	1,		TAB1,
-	2,		TAB2,
-	3,		XTABS,		/* this is expand tabs */
-	100,		TAB1,
-	0,		TAB2,
+	{ 1,		 TAB1 },
+	{ 2,		 TAB2 },
+	{ 3,		XTABS },	/* this is expand tabs */
+	{ 100,		 TAB1 },
+	{ 0,		 TAB2 },
 };
 
+int
 delaybits()
 {
-	register f;
+	register int f;
 
 	f  = adelay(CD, crdelay);
 	f |= adelay(ND, nldelay);
@@ -490,6 +525,7 @@ delaybits()
 	return (f);
 }
 
+int
 adelay(ms, dp)
 	register ms;
 	register struct delayval *dp;
@@ -504,6 +540,7 @@ adelay(ms, dp)
 
 char	editedhost[32];
 
+void
 edithost(pat)
 	register char *pat;
 {
@@ -543,54 +580,13 @@ edithost(pat)
 	editedhost[sizeof editedhost - 1] = '\0';
 }
 
-struct speedtab {
-	int	speed;
-	int	uxname;
-} speedtab[] = {
-	50,	B50,
-	75,	B75,
-	110,	B110,
-	134,	B134,
-	150,	B150,
-	200,	B200,
-	300,	B300,
-	600,	B600,
-	1200,	B1200,
-	1800,	B1800,
-	2400,	B2400,
-	4800,	B4800,
-	9600,	B9600,
-	19200,	EXTA,
-	19,	EXTA,		/* for people who say 19.2K */
-	38400,	EXTB,
-	38,	EXTB,
-	7200,	EXTB,		/* alternative */
-	57600,	B57600,
-	115200,	B115200,
-	0
-};
-
-speed(val)
-{
-	register struct speedtab *sp;
-
-	if (val <= 15)
-		return (val);
-
-	for (sp = speedtab; sp->speed; sp++)
-		if (sp->speed == val)
-			return (sp->uxname);
-	
-	return (B300);		/* default in impossible cases */
-}
-
+void
 makeenv(env)
 	char *env[];
 {
 	static char termbuf[128] = "TERM=";
 	register char *p, *q;
 	register char **ep;
-	char *index();
 
 	ep = env;
 	if (TT && *TT) {
@@ -599,7 +595,7 @@ makeenv(env)
 	}
 	if (p = EV) {
 		q = p;
-		while (q = index(q, ',')) {
+		while (q = strchr(q, ',')) {
 			*q++ = '\0';
 			*ep++ = p;
 			p = q;

@@ -31,9 +31,12 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)gets.c	8.1 (Berkeley) 6/11/93
- *	     $Id: gets.c,v 1.1 1994/01/26 02:03:47 brezak Exp $
+ *	     $Id: gets.c,v 1.4 1994/08/22 21:56:07 brezak Exp $
  */
 
+#include "stand.h"
+
+void
 gets(buf)
 	char *buf;
 {
@@ -45,6 +48,7 @@ gets(buf)
 		case '\n':
 		case '\r':
 			*lp = '\0';
+			putchar('\n');
 			return;
 		case '\b':
 		case '\177':
@@ -75,6 +79,7 @@ gets(buf)
 			break;
 		default:
 			*lp++ = c;
+			putchar(c);
 		}
 	/*NOTREACHED*/
 }

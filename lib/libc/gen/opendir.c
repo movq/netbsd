@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1983 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1983, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,16 +32,18 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-static char sccsid[] = "@(#)opendir.c	5.11 (Berkeley) 2/23/91";
+/*static char sccsid[] = "from: @(#)opendir.c	8.2 (Berkeley) 2/12/94";*/
+static char rcsid[] = "$Id: opendir.c,v 1.3 1994/07/27 14:39:46 jtc Exp $";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
-
-long _rewinddir;
+#include <errno.h>
 
 /*
  * open a directory.
@@ -50,25 +52,31 @@ DIR *
 opendir(name)
 	const char *name;
 {
+        struct stat statb;
 	register DIR *dirp;
 	register int fd;
 
 	if ((fd = open(name, 0)) == -1)
 		return NULL;
-	if (fcntl(fd, F_SETFD, 1) == -1 ||
+	if (fstat(fd, &statb) || !S_ISDIR(statb.st_mode)) {
+		errno = ENOTDIR;
+		close (fd);
+		return NULL;
+	}
+	if (fcntl(fd, F_SETFD, FD_CLOEXEC) == -1 ||
 	    (dirp = (DIR *)malloc(sizeof(DIR))) == NULL) {
 		close (fd);
 		return NULL;
 	}
 	/*
-	 * If CLSIZE is an exact multiple of DIRBLKSIZ, use a CLSIZE
+	 * If CLBYTES is an exact multiple of DIRBLKSIZ, use a CLBYTES
 	 * buffer that it cluster boundary aligned.
 	 * Hopefully this can be a big win someday by allowing page trades
 	 * to user space to be done by getdirentries()
 	 */
-	if ((CLSIZE % DIRBLKSIZ) == 0) {
-		dirp->dd_buf = malloc(CLSIZE);
-		dirp->dd_len = CLSIZE;
+	if ((CLBYTES % DIRBLKSIZ) == 0) {
+		dirp->dd_buf = malloc(CLBYTES);
+		dirp->dd_len = CLBYTES;
 	} else {
 		dirp->dd_buf = malloc(DIRBLKSIZ);
 		dirp->dd_len = DIRBLKSIZ;
@@ -83,6 +91,6 @@ opendir(name)
 	/*
 	 * Set up seek point for rewinddir.
 	 */
-	_rewinddir = telldir(dirp);
+	dirp->dd_rewind = telldir(dirp);
 	return dirp;
 }

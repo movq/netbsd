@@ -1,5 +1,5 @@
 #	from: @(#)Makefile	5.45.1.1 (Berkeley) 5/6/91
-#	$Id: Makefile,v 1.43 1994/06/22 15:09:35 mycroft Exp $
+#	$Id: Makefile,v 1.46 1994/08/29 04:59:48 mycroft Exp $
 
 # Doing a make install builds /usr/include
 #
@@ -22,8 +22,6 @@ LFILES=	errno.h fcntl.h syslog.h termios.h
 
 DIRS=	arpa protocols rpc rpcsvc
 LDIRS=	dev net netinet netccitt netiso netns nfs sys ufs vm 
-# the following only used when making copies
-LSUBDIRS= ufs/ffs ufs/lfs ufs/mfs ufs/ufs
 
 NOOBJ=	noobj
 
@@ -57,7 +55,9 @@ realinstall:
 	done
 	chown -R ${BINOWN}:${BINGRP} ${DESTDIR}/usr/include
 	find ${DESTDIR}/usr/include -type f | \
-		xargs chmod a-w
+		xargs chmod a=r
+	find ${DESTDIR}/usr/include -type d | \
+		xargs chmod u=rwx,go=rx
 
 beforeinstall:
 	install -d -o bin -g bin -m 755 ${DESTDIR}/usr/include
@@ -68,25 +68,25 @@ copies:
 		rm -rf ${DESTDIR}/usr/include/$$i; \
 		install -d -o bin -g bin -m 755 ${DESTDIR}/usr/include/$$i ; \
 	done
-# This would be simpler if we didn't care whether netiso/xebec gets installed.
 	cd ../sys; \
-	pax -rw -pa -L `find ${LDIRS} '(' -type d -path '*/*' -prune ')' -o \
-	    '(' -type f -name '*.h' -print ')'; \
-	    find ${LSUBDIRS} -type f -name '*.h' -print` ${DESTDIR}/usr/include
+	pax -rw -pa -L \
+	    `find ${LDIRS} -type f -name '*.h' '!' -path 'netiso/xebec/*' \
+	    -print` ${DESTDIR}/usr/include
 	rm -rf ${DESTDIR}/usr/include/machine
 	install -d -o bin -g bin -m 755 ${DESTDIR}/usr/include/machine
-	cd ../sys/arch/${MACHINE}/include; \
-	    tar cf - *.h | (cd ${DESTDIR}/usr/include/machine; tar xpfB -);
+	pax -rw -pa -s "|../sys/arch/${MACHINE}/include||" \
+	    ../sys/arch/${MACHINE}/include/*.h \
+	    ${DESTDIR}/usr/include/machine   
 	rm -rf ${DESTDIR}/usr/include/${MACHINE_ARCH}
 	if test ${MACHINE} != ${MACHINE_ARCH} -a \
-	    -d ../sys/arch/${MACHINE_ARCH}/include ; then \
+	    -d ../sys/arch/${MACHINE_ARCH}/include; then \
 		install -d -o bin -g bin -m 755 \
-		    ${DESTDIR}/usr/include/${MACHINE_ARCH} ; \
-		cd ../sys/arch/${MACHINE_ARCH}/include ; \
-		tar cf - *.h | \
-		    (cd ${DESTDIR}/usr/include/${MACHINE_ARCH} ; tar xpfB -); \
+    	    	    ${DESTDIR}/usr/include/${MACHINE_ARCH}; \
+		pax -rw -pa -s "|../sys/arch/${MACHINE_ARCH}/include||" \
+		    ../sys/arch/${MACHINE_ARCH}/include/*.h \
+		    ${DESTDIR}/usr/include/${MACHINE_ARCH}; \
 	else \
-		ln -s machine ${DESTDIR}/usr/include/${MACHINE_ARCH} ; \
+		ln -s machine ${DESTDIR}/usr/include/${MACHINE_ARCH}; \
 	fi
 
 symlinks:

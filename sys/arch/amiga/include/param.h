@@ -38,7 +38,7 @@
  * from: Utah $Hdr: machparam.h 1.11 89/08/14$
  *
  *	@(#)param.h	7.8 (Berkeley) 6/28/91
- *	$Id: param.h,v 1.12 1994/06/04 11:59:26 chopps Exp $
+ *	$Id: param.h,v 1.14 1994/09/16 02:39:36 jtc Exp $
  */
 #ifndef _MACHINE_PARAM_H_
 #define _MACHINE_PARAM_H_
@@ -83,6 +83,7 @@
 #define	SINCR		1		/* increment of stack/NBPG */
 
 #define	UPAGES		2		/* pages of u-area */
+#define USPACE		(UPAGES * NBPG)
 
 /*
  * Constants related to network buffer management.
@@ -157,7 +158,7 @@
 ({ \
         register int _spl_r; \
 \
-        asm __volatile ("clrl %0; movew sr,%0; movew %1,sr" : \
+        __asm __volatile ("clrl %0; movew sr,%0; movew %1,sr" : \
                 "&=d" (_spl_r) : "di" (s)); \
 	if ((_spl_r&PSL_IPL) > (s&PSL_IPL)) \
 		printf ("%s:%d:spl(%d) ==> spl(%d)!!\n",__FILE__,__LINE__, \
@@ -169,7 +170,7 @@
 ({ \
         register int _spl_r; \
 \
-        asm __volatile ("clrl %0; movew sr,%0; movew %1,sr" : \
+        __asm __volatile ("clrl %0; movew sr,%0; movew %1,sr" : \
                 "&=d" (_spl_r) : "di" (s)); \
         _spl_r; \
 })

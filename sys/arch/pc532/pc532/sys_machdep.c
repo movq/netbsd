@@ -35,7 +35,7 @@
  *
  *	@(#)sys_machdep.c	5.5 (Berkeley) 1/19/91
  *
- *	$Id: sys_machdep.c,v 1.1 1993/09/09 23:53:49 phil Exp $
+ *	$Id: sys_machdep.c,v 1.1.1.1 1993/09/09 23:53:50 phil Exp $
  */
 
 #include "param.h"
