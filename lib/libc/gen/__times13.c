@@ -1,5 +1,7 @@
-/*
- * Copyright (c) 1983, 1993
+/*	$NetBSD: __times13.c,v 1.1.2.2 2002/08/01 03:28:09 nathanw Exp $	*/
+
+/*-
+ * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,35 +33,68 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-	/* .asciz "@(#)modf.s	8.1 (Berkeley) 6/4/93" */
-	.asciz "$NetBSD: modf.S,v 1.1.22.3 2002/08/01 03:28:07 nathanw Exp $"
+#if 0
+static char sccsid[] = "@(#)times.c	8.1 (Berkeley) 6/4/93";
+#else
+__RCSID("$NetBSD: __times13.c,v 1.1.2.2 2002/08/01 03:28:09 nathanw Exp $");
+#endif
 #endif /* LIBC_SCCS and not lint */
 
+#include "namespace.h"
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/times.h>
+#include <sys/resource.h>
+
+#include <assert.h>
+#include <errno.h>
+#include <time.h>
+
+#ifdef __weak_alias
+#ifdef __LIBC12_SOURCE__
+__weak_alias(times,_times)
+#endif
+#endif
+
+#ifdef __LIBC12_SOURCE__
+__warn_references(times,
+    "warning: reference to compatibility times(); include <sys/times.h> for correct reference")
+#endif
+
 /*
- * double modf (value, iptr)
- * double value, *iptr;
- *
- * Modf returns the fractional part of "value",
- * and stores the integer part indirectly through "iptr".
+ * Convert usec to clock ticks; could do (usec * CLK_TCK) / 1000000,
+ * but this would overflow if we switch to nanosec.
  */
+#define	CONVTCK(r)	(r.tv_sec * clk_tck + r.tv_usec / (1000000 / clk_tck))
 
-#include "DEFS.h"
+clock_t
+times(tp)
+	struct tms *tp;
+{
+	struct rusage ru;
+	struct timeval t;
+	static long clk_tck;
+	
+	_DIAGASSERT(tp != NULL);
 
-ENTRY(modf, 0)
-	emodd	4(%ap),$0,$0f1.0,%r2,%r0
-	jvs	1f			# integer overflow
-	cvtld	%r2,*12(%ap)
-	ret
-1:
-	subd3	%r0,4(%ap),*12(%ap)
-	ret
+	/*
+	 * we use a local copy of CLK_TCK because it expands to a
+	 * moderately expensive function call.
+	 */
+	if (clk_tck == 0)
+		clk_tck = CLK_TCK;
 
-ENTRY(modff, 0)
-	emodf	4(%ap),$0,$0f1.0,%r2,%r0
-	jvs	1f			# integer overflow
-	cvtlf	%r2,*8(%ap)
-	ret
-1:
-	subf3	%r0,4(%ap),*8(%ap)
-	ret
+	if (getrusage(RUSAGE_SELF, &ru) < 0)
+		return ((clock_t)-1);
+	tp->tms_utime = CONVTCK(ru.ru_utime);
+	tp->tms_stime = CONVTCK(ru.ru_stime);
+	if (getrusage(RUSAGE_CHILDREN, &ru) < 0)
+		return ((clock_t)-1);
+	tp->tms_cutime = CONVTCK(ru.ru_utime);
+	tp->tms_cstime = CONVTCK(ru.ru_stime);
+	if (gettimeofday(&t, (struct timezone *)0))
+		return ((clock_t)-1);
+	return ((clock_t)(CONVTCK(t)));
+}
