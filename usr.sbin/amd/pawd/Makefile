@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1998/08/08 22:05:39 christos Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1998/08/08 22:05:39 christos Exp $
 
 PROG= pawd
 SRCS=	pawd.c 
