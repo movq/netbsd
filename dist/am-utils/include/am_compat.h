@@ -1,4 +1,4 @@
-/*	$NetBSD: am_compat.h,v 1.1 2000/06/07 00:52:21 dogcow Exp $ */
+/*	$NetBSD: am_compat.h,v 1.1.1.1 2000/06/07 00:52:21 dogcow Exp $ */
 /*
  * am_compat.h:
  *

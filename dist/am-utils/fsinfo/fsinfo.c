@@ -1,4 +1,4 @@
-/*	$NetBSD: fsinfo.c,v 1.1 2000/06/07 00:52:23 dogcow Exp $ */
+/*	$NetBSD: fsinfo.c,v 1.1.1.1 2000/06/07 00:52:23 dogcow Exp $ */
 /*
  * Copyright (c) 1997-2000 Erez Zadok
  * Copyright (c) 1989 Jan-Simon Pendry
