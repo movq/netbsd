@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1998/03/29 11:40:13 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1998/03/29 11:40:13 mrg Exp $
 
 INCS=	cassert cerrno cfloat ciso646 climits clocale cmath complex csetjmp \
 	csignal cstdarg cstddef cstdio cstdlib cstring ctime cwchar cwctype \
