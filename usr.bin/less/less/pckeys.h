@@ -1,4 +1,4 @@
-/*	$NetBSD: pckeys.h,v 1.1 2001/07/26 12:00:35 mrg Exp $	*/
+/*	$NetBSD: pckeys.h,v 1.1.1.1 2001/07/26 12:00:35 mrg Exp $	*/
 
 /*
  * Copyright (C) 1984-2000  Mark Nudelman
