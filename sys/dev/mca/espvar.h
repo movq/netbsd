@@ -1,4 +1,4 @@
-/*	$NetBSD: espvar.h,v 1.1 2001/12/01 10:42:38 jdolecek Exp $	*/
+/*	$NetBSD: espvar.h,v 1.2 2001/12/04 20:47:58 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1997, 2001 The NetBSD Foundation, Inc.
@@ -40,16 +40,21 @@
 struct esp_softc {
 	struct ncr53c9x_softc sc_ncr53c9x;	/* glue to MI code */
 	bus_space_tag_t	sc_iot;
+
 	bus_space_handle_t sc_ioh;	/* the device registers */
+	bus_space_handle_t sc_esp_ioh;	/* the 'esp' registers */
 
 	bus_dma_tag_t sc_dmat;
 
 	void *sc_ih;
 
 	bus_dmamap_t	sc_xfer;
-	bus_size_t	sc_xfer_len;
 
-	int sc_flags;
+	caddr_t		*sc_xfer_addr;
+	size_t		*sc_xfer_len;
+
+	volatile int sc_flags;
 #define	ESP_XFER_LOADED		0x01
 #define ESP_XFER_ACTIVE		0x02
+#define	ESP_XFER_READ		0x04
 };
