@@ -33,7 +33,7 @@
 
 #include "headers.h"
 
-RCSID("$Id: kstash.c,v 1.1 2000/06/16 18:31:38 thorpej Exp $");
+RCSID("$Id: kstash.c,v 1.1.1.1 2000/06/16 18:31:38 thorpej Exp $");
 
 krb5_context context;
 

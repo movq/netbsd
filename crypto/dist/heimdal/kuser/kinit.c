@@ -32,7 +32,7 @@
  */
 
 #include "kuser_locl.h"
-RCSID("$Id: kinit.c,v 1.1 2000/06/16 18:31:40 thorpej Exp $");
+RCSID("$Id: kinit.c,v 1.1.1.1 2000/06/16 18:31:40 thorpej Exp $");
 
 int forwardable_flag	= 0;
 int proxiable_flag	= 0;

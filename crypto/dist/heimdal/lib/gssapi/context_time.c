@@ -33,7 +33,7 @@
 
 #include "gssapi_locl.h"
 
-RCSID("$Id: context_time.c,v 1.1 2000/06/16 18:32:45 thorpej Exp $");
+RCSID("$Id: context_time.c,v 1.1.1.1 2000/06/16 18:32:45 thorpej Exp $");
 
 OM_uint32 gss_context_time
            (OM_uint32 * minor_status,

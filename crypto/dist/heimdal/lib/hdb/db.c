@@ -33,7 +33,7 @@
 
 #include "hdb_locl.h"
 
-RCSID("$Id: db.c,v 1.1 2000/06/16 18:32:48 thorpej Exp $");
+RCSID("$Id: db.c,v 1.1.1.1 2000/06/16 18:32:48 thorpej Exp $");
 
 #ifdef HAVE_DB_H
 

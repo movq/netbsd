@@ -33,7 +33,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: get_in_tkt.c,v 1.1 2000/06/16 18:32:57 thorpej Exp $");
+RCSID("$Id: get_in_tkt.c,v 1.1.1.1 2000/06/16 18:32:57 thorpej Exp $");
 
 krb5_error_code
 krb5_init_etype (krb5_context context,

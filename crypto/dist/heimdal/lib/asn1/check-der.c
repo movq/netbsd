@@ -41,7 +41,7 @@
 
 #include <libasn1.h>
 
-RCSID("$Id: check-der.c,v 1.1 2000/06/16 18:32:38 thorpej Exp $");
+RCSID("$Id: check-der.c,v 1.1.1.1 2000/06/16 18:32:38 thorpej Exp $");
 
 static void
 print_bytes (unsigned const char *buf, size_t len)

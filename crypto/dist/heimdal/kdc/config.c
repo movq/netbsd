@@ -35,7 +35,7 @@
 #include <getarg.h>
 #include <parse_bytes.h>
 
-RCSID("$Id: config.c,v 1.1 2000/06/16 18:31:37 thorpej Exp $");
+RCSID("$Id: config.c,v 1.1.1.1 2000/06/16 18:31:37 thorpej Exp $");
 
 static char *config_file;	/* location of kdc config file */
 

@@ -38,7 +38,7 @@
 
 #ifndef HAVE_GETGID
 
-RCSID("$Id: getgid.c,v 1.1 2000/06/16 18:32:34 thorpej Exp $");
+RCSID("$Id: getgid.c,v 1.1.1.1 2000/06/16 18:32:34 thorpej Exp $");
 
 int getgid(void)
 {

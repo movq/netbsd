@@ -34,7 +34,7 @@
 #include "kadmin_locl.h"
 #include <krb5-private.h>
 
-RCSID("$Id: server.c,v 1.1 2000/06/16 18:32:07 thorpej Exp $");
+RCSID("$Id: server.c,v 1.1.1.1 2000/06/16 18:32:07 thorpej Exp $");
 
 static kadm5_ret_t
 kadmind_dispatch(void *kadm_handle, krb5_boolean initial,

@@ -33,7 +33,7 @@
 
 #include "iprop.h"
 
-RCSID("$Id: ipropd_slave.c,v 1.1 2000/06/16 18:32:53 thorpej Exp $");
+RCSID("$Id: ipropd_slave.c,v 1.1.1.1 2000/06/16 18:32:53 thorpej Exp $");
 
 static int
 connect_to_master (krb5_context context, const char *master)

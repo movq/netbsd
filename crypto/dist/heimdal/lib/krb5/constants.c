@@ -33,7 +33,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: constants.c,v 1.1 2000/06/16 18:32:56 thorpej Exp $");
+RCSID("$Id: constants.c,v 1.1.1.1 2000/06/16 18:32:56 thorpej Exp $");
 
 const char krb5_config_file[] = "/etc/krb5.conf";
 const char krb5_defkeyname[] = "/etc/v5srvtab";

@@ -33,7 +33,7 @@
 
 #include "kadm5_locl.h"
 
-RCSID("$Id: modify_s.c,v 1.1 2000/06/16 18:32:53 thorpej Exp $");
+RCSID("$Id: modify_s.c,v 1.1.1.1 2000/06/16 18:32:53 thorpej Exp $");
 
 static kadm5_ret_t
 modify_principal(void *server_handle,

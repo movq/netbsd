@@ -33,7 +33,7 @@
 
 #include "gssapi_locl.h"
 
-RCSID("$Id: init_sec_context.c,v 1.1 2000/06/16 18:32:46 thorpej Exp $");
+RCSID("$Id: init_sec_context.c,v 1.1.1.1 2000/06/16 18:32:46 thorpej Exp $");
 
 static OM_uint32
 init_auth

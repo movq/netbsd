@@ -33,7 +33,7 @@
 
 #include "gssapi_locl.h"
 
-RCSID("$Id: import_sec_context.c,v 1.1 2000/06/16 18:32:48 thorpej Exp $");
+RCSID("$Id: import_sec_context.c,v 1.1.1.1 2000/06/16 18:32:48 thorpej Exp $");
 
 OM_uint32
 gss_import_sec_context (

@@ -33,7 +33,7 @@
 
 #include <krb5_locl.h>
 
-RCSID("$Id: get_for_creds.c,v 1.1 2000/06/16 18:32:57 thorpej Exp $");
+RCSID("$Id: get_for_creds.c,v 1.1.1.1 2000/06/16 18:32:57 thorpej Exp $");
 
 static krb5_error_code
 add_addrs(krb5_context context,

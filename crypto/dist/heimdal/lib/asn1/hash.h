@@ -35,7 +35,7 @@
  * hash.h. Header file for hash table functions
  */
 
-/* $Id: hash.h,v 1.1 2000/06/16 18:32:39 thorpej Exp $ */
+/* $Id: hash.h,v 1.1.1.1 2000/06/16 18:32:39 thorpej Exp $ */
 
 struct hashentry {		/* Entry in bucket */
      struct hashentry **prev;

@@ -33,7 +33,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: init_creds_pw.c,v 1.1 2000/06/16 18:32:57 thorpej Exp $");
+RCSID("$Id: init_creds_pw.c,v 1.1.1.1 2000/06/16 18:32:57 thorpej Exp $");
 
 static int
 get_config_time (krb5_context context,

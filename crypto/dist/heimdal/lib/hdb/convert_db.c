@@ -40,7 +40,7 @@
 #include "hdb_locl.h"
 #include "getarg.h"
 
-RCSID("$Id: convert_db.c,v 1.1 2000/06/16 18:32:48 thorpej Exp $");
+RCSID("$Id: convert_db.c,v 1.1.1.1 2000/06/16 18:32:48 thorpej Exp $");
 
 static krb5_error_code
 update_keytypes(krb5_context context, HDB *db, hdb_entry *entry, void *data)

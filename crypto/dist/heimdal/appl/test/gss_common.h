@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: gss_common.h,v 1.1 2000/06/16 18:31:46 thorpej Exp $ */
+/* $Id: gss_common.h,v 1.1.1.1 2000/06/16 18:31:46 thorpej Exp $ */
 
 void write_token (int sock, gss_buffer_t buf);
 void read_token (int sock, gss_buffer_t buf);

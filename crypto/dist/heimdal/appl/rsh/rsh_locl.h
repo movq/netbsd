@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: rsh_locl.h,v 1.1 2000/06/16 18:32:05 thorpej Exp $ */
+/* $Id: rsh_locl.h,v 1.1.1.1 2000/06/16 18:32:05 thorpej Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>

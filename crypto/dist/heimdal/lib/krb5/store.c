@@ -33,7 +33,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: store.c,v 1.1 2000/06/16 18:33:01 thorpej Exp $");
+RCSID("$Id: store.c,v 1.1.1.1 2000/06/16 18:33:01 thorpej Exp $");
 
 void
 krb5_storage_set_flags(krb5_storage *sp, krb5_flags flags)

@@ -33,7 +33,7 @@
 
 #include "krb5_locl.h"
 #include <getarg.h>
-RCSID("$Id: verify_krb5_conf.c,v 1.1 2000/06/16 18:33:02 thorpej Exp $");
+RCSID("$Id: verify_krb5_conf.c,v 1.1.1.1 2000/06/16 18:33:02 thorpej Exp $");
 
 /* verify krb5.conf */
 

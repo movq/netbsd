@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: iprop.h,v 1.1 2000/06/16 18:32:52 thorpej Exp $ */
+/* $Id: iprop.h,v 1.1.1.1 2000/06/16 18:32:52 thorpej Exp $ */
 
 #ifndef __IPROP_H__
 #define __IPROP_H__

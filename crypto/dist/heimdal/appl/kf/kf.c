@@ -32,7 +32,7 @@
  */
 
 #include "kf_locl.h"
-RCSID("$Id: kf.c,v 1.1 2000/06/16 18:31:51 thorpej Exp $");
+RCSID("$Id: kf.c,v 1.1.1.1 2000/06/16 18:31:51 thorpej Exp $");
 
 krb5_context context;
 static int help_flag;

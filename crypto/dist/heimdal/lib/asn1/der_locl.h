@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: der_locl.h,v 1.1 2000/06/16 18:32:38 thorpej Exp $ */
+/* $Id: der_locl.h,v 1.1.1.1 2000/06/16 18:32:38 thorpej Exp $ */
 
 #ifndef __DER_LOCL_H__
 #define __DER_LOCL_H__

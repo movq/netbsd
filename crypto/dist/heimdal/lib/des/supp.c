@@ -87,7 +87,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: supp.c,v 1.1 2000/06/16 18:32:30 thorpej Exp $
+ * $Id: supp.c,v 1.1.1.1 2000/06/16 18:32:30 thorpej Exp $
  */
 
 #include <stdio.h>

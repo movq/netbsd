@@ -33,7 +33,7 @@
 
 #include "hprop.h"
 
-RCSID("$Id: hprop-common.c,v 1.1 2000/06/16 18:31:37 thorpej Exp $");
+RCSID("$Id: hprop-common.c,v 1.1.1.1 2000/06/16 18:31:37 thorpej Exp $");
 
 krb5_error_code 
 send_priv(krb5_context context, krb5_auth_context ac,

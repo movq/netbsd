@@ -32,7 +32,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: dump_config.c,v 1.1 2000/06/16 18:32:57 thorpej Exp $");
+RCSID("$Id: dump_config.c,v 1.1.1.1 2000/06/16 18:32:57 thorpej Exp $");
 
 /* print contents of krb5.conf */
 

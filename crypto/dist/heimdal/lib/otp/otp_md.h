@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: otp_md.h,v 1.1 2000/06/16 18:32:43 thorpej Exp $ */
+/* $Id: otp_md.h,v 1.1.1.1 2000/06/16 18:32:43 thorpej Exp $ */
 
 int otp_md4_init (OtpKey key, char *pwd, char *seed);
 int otp_md4_hash (char *, size_t, unsigned char *res);

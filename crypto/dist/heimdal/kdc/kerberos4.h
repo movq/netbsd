@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: kerberos4.h,v 1.1 2000/06/16 18:31:38 thorpej Exp $ */
+/* $Id: kerberos4.h,v 1.1.1.1 2000/06/16 18:31:38 thorpej Exp $ */
 
 #ifndef __KERBEROS4_H__
 #define __KERBEROS4_H__

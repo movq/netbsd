@@ -33,7 +33,7 @@
 
 #include <krb5_locl.h>
 
-RCSID("$Id: rd_safe.c,v 1.1 2000/06/16 18:33:01 thorpej Exp $");
+RCSID("$Id: rd_safe.c,v 1.1.1.1 2000/06/16 18:33:01 thorpej Exp $");
 
 static krb5_error_code
 verify_checksum(krb5_context context,

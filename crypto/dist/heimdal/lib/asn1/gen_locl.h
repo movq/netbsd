@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: gen_locl.h,v 1.1 2000/06/16 18:32:39 thorpej Exp $ */
+/* $Id: gen_locl.h,v 1.1.1.1 2000/06/16 18:32:39 thorpej Exp $ */
 
 #ifndef __GEN_LOCL_H__
 #define __GEN_LOCL_H__

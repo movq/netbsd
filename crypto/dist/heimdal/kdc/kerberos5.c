@@ -33,7 +33,7 @@
 
 #include "kdc_locl.h"
 
-RCSID("$Id: kerberos5.c,v 1.1 2000/06/16 18:31:38 thorpej Exp $");
+RCSID("$Id: kerberos5.c,v 1.1.1.1 2000/06/16 18:31:38 thorpej Exp $");
 
 #define MAX_TIME ((time_t)((1U << 31) - 1))
 

@@ -32,7 +32,7 @@
  */
 
 #include "kpasswd_locl.h"
-RCSID("$Id: kpasswdd.c,v 1.1 2000/06/16 18:31:41 thorpej Exp $");
+RCSID("$Id: kpasswdd.c,v 1.1.1.1 2000/06/16 18:31:41 thorpej Exp $");
 
 #include <kadm5/admin.h>
 #ifdef HAVE_DLFCN_H

@@ -32,7 +32,7 @@
  */
 
 /* 
- * $Id: ktutil_locl.h,v 1.1 2000/06/16 18:31:39 thorpej Exp $
+ * $Id: ktutil_locl.h,v 1.1.1.1 2000/06/16 18:31:39 thorpej Exp $
  */
 
 #ifndef __KTUTIL_LOCL_H__

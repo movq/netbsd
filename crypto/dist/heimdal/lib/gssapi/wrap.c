@@ -33,7 +33,7 @@
 
 #include "gssapi_locl.h"
 
-RCSID("$Id: wrap.c,v 1.1 2000/06/16 18:32:47 thorpej Exp $");
+RCSID("$Id: wrap.c,v 1.1.1.1 2000/06/16 18:32:47 thorpej Exp $");
 
 OM_uint32 gss_wrap_size_limit (
             OM_uint32 * minor_status,

@@ -33,7 +33,7 @@
  */
 
 #include "make_cmds.h"
-RCSID("$Id: parse.y,v 1.1 2000/06/16 18:32:33 thorpej Exp $");
+RCSID("$Id: parse.y,v 1.1.1.1 2000/06/16 18:32:33 thorpej Exp $");
 
 void yyerror (char *s);
 void error_message(char *, ...);

@@ -1,4 +1,4 @@
-dnl $Id: have-type.m4,v 1.1 2000/06/16 18:32:17 thorpej Exp $
+dnl $Id: have-type.m4,v 1.1.1.1 2000/06/16 18:32:17 thorpej Exp $
 dnl
 dnl check for existance of a type
 

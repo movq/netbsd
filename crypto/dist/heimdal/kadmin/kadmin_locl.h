@@ -32,7 +32,7 @@
  */
 
 /* 
- * $Id: kadmin_locl.h,v 1.1 2000/06/16 18:32:07 thorpej Exp $
+ * $Id: kadmin_locl.h,v 1.1.1.1 2000/06/16 18:32:07 thorpej Exp $
  */
 
 #ifndef __ADMIN_LOCL_H__

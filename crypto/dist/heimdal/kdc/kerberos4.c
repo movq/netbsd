@@ -33,7 +33,7 @@
 
 #include "kdc_locl.h"
 
-RCSID("$Id: kerberos4.c,v 1.1 2000/06/16 18:31:38 thorpej Exp $");
+RCSID("$Id: kerberos4.c,v 1.1.1.1 2000/06/16 18:31:38 thorpej Exp $");
 
 #ifdef KRB4
 

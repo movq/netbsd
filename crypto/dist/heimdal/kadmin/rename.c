@@ -33,7 +33,7 @@
 
 #include "kadmin_locl.h"
 
-RCSID("$Id: rename.c,v 1.1 2000/06/16 18:32:07 thorpej Exp $");
+RCSID("$Id: rename.c,v 1.1.1.1 2000/06/16 18:32:07 thorpej Exp $");
 
 int
 rename_entry(int argc, char **argv)

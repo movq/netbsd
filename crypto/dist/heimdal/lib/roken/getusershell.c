@@ -35,7 +35,7 @@
 #include <config.h>
 #endif
 
-RCSID("$Id: getusershell.c,v 1.1 2000/06/16 18:32:35 thorpej Exp $");
+RCSID("$Id: getusershell.c,v 1.1.1.1 2000/06/16 18:32:35 thorpej Exp $");
 
 #ifndef HAVE_GETUSERSHELL
 

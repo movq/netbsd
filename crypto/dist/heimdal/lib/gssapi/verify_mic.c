@@ -33,7 +33,7 @@
 
 #include "gssapi_locl.h"
 
-RCSID("$Id: verify_mic.c,v 1.1 2000/06/16 18:32:47 thorpej Exp $");
+RCSID("$Id: verify_mic.c,v 1.1.1.1 2000/06/16 18:32:47 thorpej Exp $");
 
 OM_uint32 gss_verify_mic
            (OM_uint32 * minor_status,

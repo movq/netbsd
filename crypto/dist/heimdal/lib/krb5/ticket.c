@@ -33,7 +33,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: ticket.c,v 1.1 2000/06/16 18:33:02 thorpej Exp $");
+RCSID("$Id: ticket.c,v 1.1.1.1 2000/06/16 18:33:02 thorpej Exp $");
 
 krb5_error_code
 krb5_free_ticket(krb5_context context,

@@ -33,7 +33,7 @@
 
 #include "kuser_locl.h"
 
-RCSID("$Id: kgetcred.c,v 1.1 2000/06/16 18:31:40 thorpej Exp $");
+RCSID("$Id: kgetcred.c,v 1.1.1.1 2000/06/16 18:31:40 thorpej Exp $");
 
 static char *etype_str;
 static int version_flag;

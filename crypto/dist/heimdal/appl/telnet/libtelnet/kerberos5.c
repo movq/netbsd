@@ -53,7 +53,7 @@
 
 #include <config.h>
 
-RCSID("$Id: kerberos5.c,v 1.1 2000/06/16 18:31:54 thorpej Exp $");
+RCSID("$Id: kerberos5.c,v 1.1.1.1 2000/06/16 18:31:54 thorpej Exp $");
 
 #ifdef	KRB5
 

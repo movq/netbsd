@@ -33,7 +33,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: cache.c,v 1.1 2000/06/16 18:32:56 thorpej Exp $");
+RCSID("$Id: cache.c,v 1.1.1.1 2000/06/16 18:32:56 thorpej Exp $");
 
 /*
  * Add a new ccache type with operations `ops', overwriting any

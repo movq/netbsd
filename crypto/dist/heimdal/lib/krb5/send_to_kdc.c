@@ -33,7 +33,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: send_to_kdc.c,v 1.1 2000/06/16 18:33:01 thorpej Exp $");
+RCSID("$Id: send_to_kdc.c,v 1.1.1.1 2000/06/16 18:33:01 thorpej Exp $");
 
 /*
  * send the data in `req' on the socket `fd' (which is datagram iff udp)

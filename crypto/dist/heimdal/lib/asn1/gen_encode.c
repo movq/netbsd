@@ -33,7 +33,7 @@
 
 #include "gen_locl.h"
 
-RCSID("$Id: gen_encode.c,v 1.1 2000/06/16 18:32:38 thorpej Exp $");
+RCSID("$Id: gen_encode.c,v 1.1.1.1 2000/06/16 18:32:38 thorpej Exp $");
 
 static void
 encode_primitive (const char *typename, const char *name)

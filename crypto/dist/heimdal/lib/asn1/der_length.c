@@ -33,7 +33,7 @@
 
 #include "der_locl.h"
 
-RCSID("$Id: der_length.c,v 1.1 2000/06/16 18:32:38 thorpej Exp $");
+RCSID("$Id: der_length.c,v 1.1.1.1 2000/06/16 18:32:38 thorpej Exp $");
 
 static size_t
 len_unsigned (unsigned val)
