@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_sigcode.s,v 1.1.4.8 2001/12/29 23:31:04 sommerfeld Exp $	*/
+/*	$NetBSD: svr4_sigcode.s,v 1.1.4.9 2002/02/24 01:55:11 sommerfeld Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -130,7 +130,7 @@
 	pushl	%fs		; \
 	pushl	%gs		; \
 	movw	%ax,%gs		; \
-	movw	$GSEL(GCPU_SEL, SEL_KPL),%eax	; \
+	movw	$GSEL(GCPU_SEL, SEL_KPL),%ax	; \
 	movw	%ax,%fs		
 	
 #define	INTRFASTEXIT \
