@@ -1,4 +1,4 @@
-/*	$NetBSD: startprog.S,v 1.1 1997/03/14 02:40:33 perry Exp $	*/
+/*	$NetBSD: startprog.S,v 1.1.1.1 1997/03/14 02:40:33 perry Exp $	*/
 	
 /* starts program in protected mode / flat space
  with given stackframe

@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd_opts.c,v 1.1 1997/03/14 02:40:33 perry Exp $	*/
+/*	$NetBSD: netbsd_opts.c,v 1.1.1.1 1997/03/14 02:40:33 perry Exp $	*/
 
 /*
  * Copyright (c) 1996

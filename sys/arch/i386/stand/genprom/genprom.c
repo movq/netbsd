@@ -1,4 +1,4 @@
-/*	$NetBSD: genprom.c,v 1.1 1997/03/14 02:40:30 perry Exp $	*/
+/*	$NetBSD: genprom.c,v 1.1.1.1 1997/03/14 02:40:30 perry Exp $	*/
 /*
  * mainly from netbsd:sys/arch/i386/netboot/genprom.c
  */

@@ -1,4 +1,4 @@
-/*	$NetBSD: lance.h,v 1.1 1997/03/14 02:40:33 perry Exp $	*/
+/*	$NetBSD: lance.h,v 1.1.1.1 1997/03/14 02:40:33 perry Exp $	*/
 
 /*
  * source in this file came from

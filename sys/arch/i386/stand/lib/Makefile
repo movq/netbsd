@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1997/03/14 02:40:33 perry Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1997/03/14 02:40:33 perry Exp $
 
 S?= ../../../../
 

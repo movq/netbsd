@@ -1,4 +1,4 @@
-/*	$NetBSD: netif_small.c,v 1.1 1997/03/14 02:40:33 perry Exp $	*/
+/*	$NetBSD: netif_small.c,v 1.1.1.1 1997/03/14 02:40:33 perry Exp $	*/
 
 /* minimal netif - for boot ROMs we don't have to select between
   several interfaces, and we have to save space

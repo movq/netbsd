@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.booters,v 1.1 1997/03/14 02:40:29 perry Exp $
+#	$NetBSD: Makefile.booters,v 1.1.1.1 1997/03/14 02:40:29 perry Exp $
 
 BINDIR= /usr/mdec
 STRIP=

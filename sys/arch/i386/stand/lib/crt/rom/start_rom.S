@@ -1,4 +1,4 @@
-/*	$NetBSD: start_rom.S,v 1.1 1997/03/14 02:40:34 perry Exp $	*/
+/*	$NetBSD: start_rom.S,v 1.1.1.1 1997/03/14 02:40:34 perry Exp $	*/
 	
 /* ROM startup
  mostly from freebsd:sys/arch/i396/boot/netboot/start2.S

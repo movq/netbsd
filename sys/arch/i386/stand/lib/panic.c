@@ -1,4 +1,4 @@
-/*	$NetBSD: panic.c,v 1.1 1997/03/14 02:40:33 perry Exp $	*/
+/*	$NetBSD: panic.c,v 1.1.1.1 1997/03/14 02:40:33 perry Exp $	*/
 
 /*
  * Copyright (c) 1996

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.1 1997/03/14 02:40:35 perry Exp $	*/
+/*	$NetBSD: main.c,v 1.1.1.1 1997/03/14 02:40:35 perry Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997

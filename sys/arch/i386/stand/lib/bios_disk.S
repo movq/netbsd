@@ -1,4 +1,4 @@
-/*	$NetBSD: bios_disk.S,v 1.1 1997/03/14 02:40:32 perry Exp $	*/
+/*	$NetBSD: bios_disk.S,v 1.1.1.1 1997/03/14 02:40:32 perry Exp $	*/
 
 /*
  * Ported to boot 386BSD by Julian Elischer (julian@tfs.com) Sept 1992

@@ -1,4 +1,4 @@
-/*	$NetBSD: dos_file.S,v 1.1 1997/03/14 02:40:32 perry Exp $	*/
+/*	$NetBSD: dos_file.S,v 1.1.1.1 1997/03/14 02:40:32 perry Exp $	*/
 	
 /* extracted from Tor Egge's patches for NetBSD boot */
 

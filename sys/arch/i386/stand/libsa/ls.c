@@ -1,4 +1,4 @@
-/*	$NetBSD: ls.c,v 1.1 1997/03/14 02:40:31 perry Exp $	*/
+/*	$NetBSD: ls.c,v 1.1.1.1 1997/03/14 02:40:31 perry Exp $	*/
 
 /*
  * Copyright (c) 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: conio.S,v 1.1 1997/03/14 02:40:32 perry Exp $	*/
+/*	$NetBSD: conio.S,v 1.1.1.1 1997/03/14 02:40:32 perry Exp $	*/
 
 /* PC console handling
   originally from: FreeBSD:sys/i386/boot/netboot/start2.S

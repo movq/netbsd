@@ -1,4 +1,4 @@
-##	$NetBSD: Makefile.inc,v 1.1 1997/03/14 02:40:33 perry Exp $
+##	$NetBSD: Makefile.inc,v 1.1.1.1 1997/03/14 02:40:33 perry Exp $
 
 SRCS += netif_small.c
 .if (${USE_NETIF} == "3c509")

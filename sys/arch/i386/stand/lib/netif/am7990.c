@@ -1,4 +1,4 @@
-/*	$NetBSD: am7990.c,v 1.1 1997/03/14 02:40:33 perry Exp $	*/
+/*	$NetBSD: am7990.c,v 1.1.1.1 1997/03/14 02:40:33 perry Exp $	*/
 
 /* mostly from netbsd:sys/arch/i386/netboot/ne2100.c
  memory allocation now 1 chunk, added deallocation

@@ -1,4 +1,4 @@
-/*	$NetBSD: start_bootsect.S,v 1.1 1997/03/14 02:40:34 perry Exp $	*/
+/*	$NetBSD: start_bootsect.S,v 1.1.1.1 1997/03/14 02:40:34 perry Exp $	*/
 	
 /* BIOS bootsector startup
  parts from netbsd:sys/arch/i386/boot/start.S

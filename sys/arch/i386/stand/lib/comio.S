@@ -1,4 +1,4 @@
-/*	$NetBSD: comio.S,v 1.1 1997/03/14 02:40:32 perry Exp $	*/
+/*	$NetBSD: comio.S,v 1.1.1.1 1997/03/14 02:40:32 perry Exp $	*/
 
 /* serial console handling
   modelled after code in FreeBSD:sys/i386/boot/netboot/start2.S

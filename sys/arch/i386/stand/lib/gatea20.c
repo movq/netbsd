@@ -1,4 +1,4 @@
-/*	$NetBSD: gatea20.c,v 1.1 1997/03/14 02:40:32 perry Exp $	*/
+/*	$NetBSD: gatea20.c,v 1.1.1.1 1997/03/14 02:40:32 perry Exp $	*/
 
 /* extracted from freebsd:sys/i386/boot/biosboot/io.c */
 
