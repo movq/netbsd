@@ -1,6 +1,8 @@
+/*	$NetBSD: readelf.h,v 1.1.1.1 1998/09/19 18:07:38 christos Exp $	*/
+
 /*
  * readelf.h 
- * @(#)$Id: readelf.h,v 1.1 1996/10/05 20:20:31 christos Exp $
+ * @(#)Id: readelf.h,v 1.6 1998/09/12 13:21:01 christos Exp 
  *
  * Provide elf data structures for non-elf machines, allowing file
  * non-elf hosts to determine if an elf binary is stripped.
@@ -10,15 +12,20 @@
 #define __fake_elf_h__
 
 typedef unsigned int	Elf32_Addr;
-typedef unsigned short	Elf32_Half;
 typedef unsigned int	Elf32_Off;
+typedef unsigned short	Elf32_Half;
 typedef unsigned int	Elf32_Word;
 typedef unsigned char	Elf32_Char;
 
+#ifdef __GNUC__
+typedef	unsigned long long Elf64_Addr;
+typedef	unsigned long long Elf64_Off;
+#else
 /* XXX: We need 64 bit numbers here */
 typedef unsigned int	Elf64_Addr[2];
-typedef unsigned short	Elf64_Half;
 typedef unsigned int	Elf64_Off[2];
+#endif
+typedef unsigned short	Elf64_Half;
 typedef unsigned int	Elf64_Word;
 typedef unsigned char	Elf64_Char;
 
@@ -59,6 +66,7 @@ typedef struct {
 } Elf64_Ehdr;
 
 /* e_type */
+#define ET_EXEC		2
 #define ET_CORE		4
 
 /* sh_type */
@@ -90,6 +98,9 @@ typedef struct {
 #define	ELFMAG2		'L'
 #define	ELFMAG3		'F'
 #define	ELFMAG		"\177ELF"
+
+#define	OLFMAG1		'O'
+#define	OLFMAG		"\177OLF"
 
 typedef struct {
     Elf32_Word	p_type;
@@ -136,5 +147,31 @@ typedef struct {
     Elf64_Off	sh_addralign;
     Elf64_Off	sh_entsize;
 } Elf64_Shdr;
+
+/* Notes used in ET_CORE */
+#define NT_PRSTATUS	1
+#define NT_PRFPREG	2
+#define NT_PRPSINFO	3
+#define NT_TASKSTRUCT	4
+
+/* Note header in a PT_NOTE section */
+typedef struct elf_note {
+  Elf32_Word	n_namesz;	/* Name size */
+  Elf32_Word	n_descsz;	/* Content size */
+  Elf32_Word	n_type;		/* Content type */
+} Elf32_Nhdr;
+
+typedef struct {
+    Elf64_Word	n_namesz;
+    Elf64_Word	n_descsz;
+    Elf64_Word	n_type;
+} Elf64_Nhdr;
+
+#define	NT_PRSTATUS	1
+#define	NT_PRFPREG	2
+#define	NT_PRPSINFO	3
+#define	NT_PRXREG	4
+#define	NT_PLATFORM	5
+#define	NT_AUXV		6
 
 #endif

@@ -1,6 +1,6 @@
 #!/usr/local/bin/perl
 #
-#	$NetBSD: file2netbsd,v 1.1 1998/09/19 18:07:41 christos Exp $
+#	$NetBSD: file2netbsd,v 1.1.1.1 1998/09/19 18:07:41 christos Exp $
 #
 #  Perl script to convert a standard distribution directory for file into
 #	a NetBSD source tree.
