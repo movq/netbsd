@@ -1,4 +1,4 @@
-/*	$NetBSD: port_before.h,v 1.1 1998/10/05 18:01:58 tron Exp $	*/
+/*	$NetBSD: port_before.h,v 1.1.1.1 1998/10/05 18:01:58 tron Exp $	*/
 
 /*
 #define WANT_IRS_NIS

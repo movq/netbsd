@@ -1,4 +1,4 @@
-/*	$NetBSD: type.h,v 1.1 1998/10/05 18:01:59 tron Exp $	*/
+/*	$NetBSD: type.h,v 1.1.1.1 1998/10/05 18:01:59 tron Exp $	*/
 
 /*
 ** Various new resource record type and class values.

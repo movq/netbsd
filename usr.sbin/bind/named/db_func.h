@@ -1,4 +1,4 @@
-/*	$NetBSD: db_func.h,v 1.1 1998/10/05 18:02:00 tron Exp $	*/
+/*	$NetBSD: db_func.h,v 1.1.1.1 1998/10/05 18:02:00 tron Exp $	*/
 
 /* Copyright (c) 1985, 1990
  *    The Regents of the University of California.  All rights reserved.

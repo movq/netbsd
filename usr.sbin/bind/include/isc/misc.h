@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.h,v 1.1 1998/10/05 18:01:59 tron Exp $	*/
+/*	$NetBSD: misc.h,v 1.1.1.1 1998/10/05 18:01:59 tron Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 by Internet Software Consortium
@@ -18,7 +18,7 @@
  */
 
 /*
- * $Id: misc.h,v 1.1 1998/10/05 18:01:59 tron Exp $
+ * $Id: misc.h,v 1.1.1.1 1998/10/05 18:01:59 tron Exp $
  */
 
 #ifndef _ISC_MISC_H

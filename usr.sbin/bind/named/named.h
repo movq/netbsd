@@ -1,4 +1,4 @@
-/*	$NetBSD: named.h,v 1.1 1998/10/05 18:02:00 tron Exp $	*/
+/*	$NetBSD: named.h,v 1.1.1.1 1998/10/05 18:02:00 tron Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997 by Internet Software Consortium.

@@ -1,4 +1,4 @@
-/*	$NetBSD: debug.c,v 1.1 1998/10/05 18:01:59 tron Exp $	*/
+/*	$NetBSD: debug.c,v 1.1.1.1 1998/10/05 18:01:59 tron Exp $	*/
 
 /*
  * Copyright (c) 1985, 1989

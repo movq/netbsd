@@ -1,4 +1,4 @@
-/*	$NetBSD: assertions.h,v 1.1 1998/10/05 18:01:59 tron Exp $	*/
+/*	$NetBSD: assertions.h,v 1.1.1.1 1998/10/05 18:01:59 tron Exp $	*/
 
 /*
  * Copyright (c) 1997 by Internet Software Consortium.

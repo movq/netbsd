@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1998/10/05 18:02:00 tron Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1998/10/05 18:02:00 tron Exp $
 # from: $Id: Makefile,v 8.1 1994/12/15 06:23:46 vixie Exp 
 
 .PATH:	${.CURDIR}/../man

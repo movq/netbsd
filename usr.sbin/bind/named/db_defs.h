@@ -1,4 +1,4 @@
-/*	$NetBSD: db_defs.h,v 1.1 1998/10/05 18:02:00 tron Exp $	*/
+/*	$NetBSD: db_defs.h,v 1.1.1.1 1998/10/05 18:02:00 tron Exp $	*/
 
 /*
  *	from db.h	4.16 (Berkeley) 6/1/90

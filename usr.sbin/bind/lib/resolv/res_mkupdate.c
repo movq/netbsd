@@ -1,4 +1,4 @@
-/*	$NetBSD: res_mkupdate.c,v 1.1 1998/10/05 18:01:58 tron Exp $	*/
+/*	$NetBSD: res_mkupdate.c,v 1.1.1.1 1998/10/05 18:01:58 tron Exp $	*/
 
 /*
  * Copyright (c) 1996 by Internet Software Consortium.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_main.c,v 1.1 1998/10/05 18:02:00 tron Exp $	*/
+/*	$NetBSD: ns_main.c,v 1.1.1.1 1998/10/05 18:02:00 tron Exp $	*/
 
 #if !defined(lint) && !defined(SABER)
 static char sccsid[] = "@(#)ns_main.c	4.55 (Berkeley) 7/1/91";

@@ -1,4 +1,4 @@
-$NetBSD: nslookup.help,v 1.1 1998/10/05 18:01:59 tron Exp $
+$NetBSD: nslookup.help,v 1.1.1.1 1998/10/05 18:01:59 tron Exp $
 Id: nslookup.help,v 8.4 1996/10/25 18:09:41 vixie Exp
 
 Commands: 	(identifiers are shown in uppercase, [] means optional)

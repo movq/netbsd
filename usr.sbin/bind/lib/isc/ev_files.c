@@ -1,4 +1,4 @@
-/*	$NetBSD: ev_files.c,v 1.1 1998/10/05 18:01:58 tron Exp $	*/
+/*	$NetBSD: ev_files.c,v 1.1.1.1 1998/10/05 18:01:58 tron Exp $	*/
 
 /* Copyright (c) 1995, 1996, 1997, 1998 by Internet Software Consortium
  *

@@ -1,4 +1,4 @@
-/*	$NetBSD: eventlib_p.h,v 1.1 1998/10/05 18:01:58 tron Exp $	*/
+/*	$NetBSD: eventlib_p.h,v 1.1.1.1 1998/10/05 18:01:58 tron Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997, 1998 by Internet Software Consortium

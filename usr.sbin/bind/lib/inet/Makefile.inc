@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.1 1998/10/05 18:01:58 tron Exp $
+# $NetBSD: Makefile.inc,v 1.1.1.1 1998/10/05 18:01:58 tron Exp $
 
 .PATH: ${.CURDIR}/inet
 

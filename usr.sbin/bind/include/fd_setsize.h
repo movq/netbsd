@@ -1,4 +1,4 @@
-/*	$NetBSD: fd_setsize.h,v 1.1 1998/10/05 18:01:58 tron Exp $	*/
+/*	$NetBSD: fd_setsize.h,v 1.1.1.1 1998/10/05 18:01:58 tron Exp $	*/
 
 #ifndef _FD_SETSIZE_H
 #define _FD_SETSIZE_H

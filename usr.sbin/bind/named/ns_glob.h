@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_glob.h,v 1.1 1998/10/05 18:02:00 tron Exp $	*/
+/*	$NetBSD: ns_glob.h,v 1.1.1.1 1998/10/05 18:02:00 tron Exp $	*/
 
 /*
  *	from ns.h	4.33 (Berkeley) 8/23/90

@@ -110,7 +110,7 @@ char copyright[] =
 
 #if !defined(lint) && !defined(SABER)
 static char sccsid[] = "@(#)named-xfer.c	4.18 (Berkeley) 3/7/91";
-static char rcsid[] = "$Id: named-xfer.c,v 1.1 1998/10/05 18:02:00 tron Exp $";
+static char rcsid[] = "$Id: named-xfer.c,v 1.1.1.1 1998/10/05 18:02:00 tron Exp $";
 #endif /* not lint */
 
 #include "port_before.h"
