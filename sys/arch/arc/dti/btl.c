@@ -1,4 +1,4 @@
-/*	$NetBSD: btl.c,v 1.1 2000/01/23 20:24:28 soda Exp $	*/
+/*	$NetBSD: btl.c,v 1.1.1.1 2000/01/23 20:24:28 soda Exp $	*/
 
 #undef BTDIAG
 #define integrate

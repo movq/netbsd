@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.1 2000/01/23 20:24:28 soda Exp $	*/
+/*	$NetBSD: intr.h,v 1.1.1.1 2000/01/23 20:24:28 soda Exp $	*/
 
 /*
  * Copyright (c) 1996 Charles M. Hannum.  All rights reserved.

@@ -35,7 +35,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)fp.s	8.1 (Berkeley) 6/10/93
- *      $Id: fp.S,v 1.1 2000/01/23 20:24:24 soda Exp $
+ *      $Id: fp.S,v 1.1.1.1 2000/01/23 20:24:24 soda Exp $
  */
 
 /*
