@@ -1,4 +1,4 @@
-/*	$NetBSD: check_y2k.c,v 1.1 2000/03/29 12:38:52 simonb Exp $	*/
+/*	$NetBSD: check_y2k.c,v 1.1.1.1 2000/03/29 12:38:52 simonb Exp $	*/
 
 /* check_y2k.c -- test ntp code constructs for Y2K correctness 	Y2KFixes [*/
 

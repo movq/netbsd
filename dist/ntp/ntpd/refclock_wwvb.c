@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_wwvb.c,v 1.1 2000/03/29 12:38:54 simonb Exp $	*/
+/*	$NetBSD: refclock_wwvb.c,v 1.1.1.1 2000/03/29 12:38:54 simonb Exp $	*/
 
 /*
  * refclock_wwvb - clock driver for Spectracom WWVB receivers

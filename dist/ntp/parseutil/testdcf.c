@@ -1,4 +1,4 @@
-/*	$NetBSD: testdcf.c,v 1.1 2000/03/29 12:38:56 simonb Exp $	*/
+/*	$NetBSD: testdcf.c,v 1.1.1.1 2000/03/29 12:38:56 simonb Exp $	*/
 
 /*
  * /src/NTP/REPOSITORY/v4/parseutil/testdcf.c,v 3.18 1996/12/01 16:05:04 kardel Exp

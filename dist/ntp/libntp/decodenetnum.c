@@ -1,4 +1,4 @@
-/*	$NetBSD: decodenetnum.c,v 1.1 2000/03/29 12:38:49 simonb Exp $	*/
+/*	$NetBSD: decodenetnum.c,v 1.1.1.1 2000/03/29 12:38:49 simonb Exp $	*/
 
 /*
  * decodenetnum - return a net number (this is crude, but careful)

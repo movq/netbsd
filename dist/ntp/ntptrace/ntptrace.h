@@ -1,4 +1,4 @@
-/*	$NetBSD: ntptrace.h,v 1.1 2000/03/29 12:38:55 simonb Exp $	*/
+/*	$NetBSD: ntptrace.h,v 1.1.1.1 2000/03/29 12:38:55 simonb Exp $	*/
 
 /*
  * ntptrace.h - declarations for the ntptrace program

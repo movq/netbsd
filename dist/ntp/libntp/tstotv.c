@@ -1,4 +1,4 @@
-/*	$NetBSD: tstotv.c,v 1.1 2000/03/29 12:38:50 simonb Exp $	*/
+/*	$NetBSD: tstotv.c,v 1.1.1.1 2000/03/29 12:38:50 simonb Exp $	*/
 
 /*
  * tstotv - tables for converting from NTP time stamps to struct timeval

@@ -1,4 +1,4 @@
-/*	$NetBSD: msutotsf.c,v 1.1 2000/03/29 12:38:50 simonb Exp $	*/
+/*	$NetBSD: msutotsf.c,v 1.1.1.1 2000/03/29 12:38:50 simonb Exp $	*/
 
 /*
  * msutotsf - tables for converting from a subsecond millisecond value

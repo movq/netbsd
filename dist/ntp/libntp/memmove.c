@@ -1,4 +1,4 @@
-/*	$NetBSD: memmove.c,v 1.1 2000/03/29 12:38:50 simonb Exp $	*/
+/*	$NetBSD: memmove.c,v 1.1.1.1 2000/03/29 12:38:50 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_arc.c,v 1.1 2000/03/29 12:38:53 simonb Exp $	*/
+/*	$NetBSD: refclock_arc.c,v 1.1.1.1 2000/03/29 12:38:53 simonb Exp $	*/
 
 /*
  * refclock_arc - clock driver for ARCRON MSF receivers

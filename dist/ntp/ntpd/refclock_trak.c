@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_trak.c,v 1.1 2000/03/29 12:38:54 simonb Exp $	*/
+/*	$NetBSD: refclock_trak.c,v 1.1.1.1 2000/03/29 12:38:54 simonb Exp $	*/
 
 /*
  * refclock_trak - clock driver for the TRAK 8810 GPS Station Clock

@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_atom.c,v 1.1 2000/03/29 12:38:53 simonb Exp $	*/
+/*	$NetBSD: refclock_atom.c,v 1.1.1.1 2000/03/29 12:38:53 simonb Exp $	*/
 
 /*
  * refclock_atom - clock driver for 1-pps signals

@@ -1,4 +1,4 @@
-/*	$NetBSD: clk_rawdcf.c,v 1.1 2000/03/29 12:38:51 simonb Exp $	*/
+/*	$NetBSD: clk_rawdcf.c,v 1.1.1.1 2000/03/29 12:38:51 simonb Exp $	*/
 
 /*
  * /src/NTP/ntp-4/libparse/clk_rawdcf.c,v 4.9 1999/12/06 13:42:23 kardel Exp

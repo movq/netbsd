@@ -1,4 +1,4 @@
-/*	$NetBSD: tsftomsu.c,v 1.1 2000/03/29 12:38:50 simonb Exp $	*/
+/*	$NetBSD: tsftomsu.c,v 1.1.1.1 2000/03/29 12:38:50 simonb Exp $	*/
 
 /*
  * tsftomsu - convert from a time stamp fraction to milliseconds

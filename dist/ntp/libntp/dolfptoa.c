@@ -1,4 +1,4 @@
-/*	$NetBSD: dolfptoa.c,v 1.1 2000/03/29 12:38:49 simonb Exp $	*/
+/*	$NetBSD: dolfptoa.c,v 1.1.1.1 2000/03/29 12:38:49 simonb Exp $	*/
 
 /*
  * dolfptoa - do the grunge work of converting an l_fp number to decimal

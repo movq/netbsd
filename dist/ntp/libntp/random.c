@@ -1,4 +1,4 @@
-/*	$NetBSD: random.c,v 1.1 2000/03/29 12:38:51 simonb Exp $	*/
+/*	$NetBSD: random.c,v 1.1.1.1 2000/03/29 12:38:51 simonb Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993

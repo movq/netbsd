@@ -1,4 +1,4 @@
-/*	$NetBSD: clk_wharton.c,v 1.1 2000/03/29 12:38:51 simonb Exp $	*/
+/*	$NetBSD: clk_wharton.c,v 1.1.1.1 2000/03/29 12:38:51 simonb Exp $	*/
 
 /*
  * /src/NTP/ntp-4/libparse/clk_wharton.c,v 4.1 1999/02/28 15:27:24 kardel RELEASE_19990228_A

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntptimeset.c,v 1.1 2000/03/29 12:38:54 simonb Exp $	*/
+/*	$NetBSD: ntptimeset.c,v 1.1.1.1 2000/03/29 12:38:54 simonb Exp $	*/
 
 /*
  * ntptimeset - get/set the time via ntp

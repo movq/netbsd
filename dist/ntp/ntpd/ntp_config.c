@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_config.c,v 1.1 2000/03/29 12:38:52 simonb Exp $	*/
+/*	$NetBSD: ntp_config.c,v 1.1.1.1 2000/03/29 12:38:52 simonb Exp $	*/
 
 /*
  * ntp_config.c - read and apply configuration information

@@ -1,4 +1,4 @@
-/*	$NetBSD: netof.c,v 1.1 2000/03/29 12:38:50 simonb Exp $	*/
+/*	$NetBSD: netof.c,v 1.1.1.1 2000/03/29 12:38:50 simonb Exp $	*/
 
 /* 
  * netof - return the net address part of an ip address

@@ -1,4 +1,4 @@
-/*	$NetBSD: strerror.c,v 1.1 2000/03/29 12:38:49 simonb Exp $	*/
+/*	$NetBSD: strerror.c,v 1.1.1.1 2000/03/29 12:38:49 simonb Exp $	*/
 
 /*
  * Copyright (c) 1988 Regents of the University of California.

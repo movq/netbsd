@@ -1,4 +1,4 @@
-/*	$NetBSD: acconfig.h,v 1.1 2000/03/29 12:38:44 simonb Exp $	*/
+/*	$NetBSD: acconfig.h,v 1.1.1.1 2000/03/29 12:38:44 simonb Exp $	*/
 
 /* Package */
 #undef PACKAGE
