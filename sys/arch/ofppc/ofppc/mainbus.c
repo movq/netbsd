@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.2 1998/08/15 10:11:02 mycroft Exp $	 */
+/*	$NetBSD: mainbus.c,v 1.3 2001/08/26 02:47:41 matt Exp $	 */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -60,7 +60,6 @@ mainbus_match(parent, cf, aux)
 	struct cfdata *cf;
 	void *aux;
 {
-
 	return (1);
 }
 
