@@ -1,4 +1,4 @@
-/*	$NetBSD: auth2-pubkey.c,v 1.1 2002/06/24 05:26:12 itojun Exp $	*/
+/*	$NetBSD: auth2-pubkey.c,v 1.1.1.1 2002/06/24 05:26:12 itojun Exp $	*/
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
  *
