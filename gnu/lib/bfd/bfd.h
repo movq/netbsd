@@ -1,4 +1,4 @@
-/*	$NetBSD: bfd.h,v 1.1 1997/09/26 02:38:49 gwr Exp $	*/
+/*	$NetBSD: bfd.h,v 1.1.1.1 1997/09/26 02:38:49 gwr Exp $	*/
 
 /* Main header file for the bfd library -- portable access to object files.
    Copyright 1990, 91, 92, 93, 94, 95, 96, 1997 Free Software Foundation, Inc.

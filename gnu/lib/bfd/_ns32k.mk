@@ -1,4 +1,4 @@
-# $NetBSD: _ns32k.mk,v 1.1 1997/09/26 02:38:49 gwr Exp $
+# $NetBSD: _ns32k.mk,v 1.1.1.1 1997/09/26 02:38:49 gwr Exp $
 
 BFD_BACKENDS =	ns32knetbsd.c aout-ns32k.c
 BFD_MACHINES =	cpu-ns32k.c

@@ -1,4 +1,4 @@
-# $NetBSD: _i386.mk,v 1.1 1997/09/26 02:38:49 gwr Exp $
+# $NetBSD: _i386.mk,v 1.1.1.1 1997/09/26 02:38:49 gwr Exp $
 
 BFD_BACKENDS =	i386netbsd.c aout32.c
 BFD_MACHINES =	cpu-i386.c

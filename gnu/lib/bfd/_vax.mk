@@ -1,4 +1,4 @@
-# $NetBSD: _vax.mk,v 1.1 1997/09/26 02:38:49 gwr Exp $
+# $NetBSD: _vax.mk,v 1.1.1.1 1997/09/26 02:38:49 gwr Exp $
 
 BFD_BACKENDS =	vaxnetbsd.c aout32.c
 BFD_MACHINES =	cpu-vax.c

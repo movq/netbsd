@@ -1,4 +1,4 @@
-/*	$NetBSD: targmatch.h,v 1.1 1997/09/26 02:38:49 gwr Exp $	*/
+/*	$NetBSD: targmatch.h,v 1.1.1.1 1997/09/26 02:38:49 gwr Exp $	*/
 
 /*
  * This file was copied by hand from the result of configure with a

@@ -1,4 +1,4 @@
-/*	$NetBSD: alloca-conf.h,v 1.1 1997/09/26 02:38:49 gwr Exp $	*/
+/*	$NetBSD: alloca-conf.h,v 1.1.1.1 1997/09/26 02:38:49 gwr Exp $	*/
 
 /* NetBSD configuration for alloca.  */
 

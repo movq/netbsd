@@ -1,4 +1,4 @@
-/*	$NetBSD: libiberty.h,v 1.1 1997/09/26 02:38:49 gwr Exp $	*/
+/*	$NetBSD: libiberty.h,v 1.1.1.1 1997/09/26 02:38:49 gwr Exp $	*/
 
 /* Function declarations for libiberty.
    Written by Cygnus Support, 1994.
