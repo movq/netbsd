@@ -64,7 +64,7 @@
  * interrupts and network activity; thus, splimp must be >= spltty.
  */
 
-/* $Header: /cvsroot/src/sys/net/if_sl.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ */
+/* $Header: /cvsroot/src/sys/net/if_sl.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $ */
 /* from if_sl.c,v 1.11 84/10/04 12:54:47 rick Exp */
 
 #include "sl.h"

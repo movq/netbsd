@@ -43,7 +43,7 @@ static char sccsid[] = "@(#)rsh.c	5.24 (Berkeley) 7/1/91";
 
 /*
  * $Source: /cvsroot/src/usr.bin/rsh/rsh.c,v $
- * $Header: /cvsroot/src/usr.bin/rsh/rsh.c,v 1.1 1993/03/21 09:45:37 cgd Exp $
+ * $Header: /cvsroot/src/usr.bin/rsh/rsh.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
  */
 
 #include <sys/types.h>
