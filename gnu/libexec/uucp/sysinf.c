@@ -23,8 +23,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: sysinf.c,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
    Revision 1.24  1992/04/02  22:51:09  ian
    Add gcc 2.0 format checking to ulog, and fixed discovered problems
@@ -103,7 +103,7 @@
 #include "uucp.h"
 
 #if USE_RCS_ID
-char sysinf_rcsid[] = "$Id: sysinf.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+char sysinf_rcsid[] = "$Id: sysinf.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 #include <ctype.h>

@@ -23,8 +23,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: port.h,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
    Revision 1.13  1992/03/12  19:56:10  ian
    Debugging based on types rather than number

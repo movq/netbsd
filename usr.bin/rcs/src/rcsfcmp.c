@@ -2,7 +2,7 @@
  *                     RCS file comparison
  */
 #ifndef lint
-static char rcsid[]= "$Id: rcsfcmp.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
+static char rcsid[]= "$Id: rcsfcmp.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
 #endif
 /*****************************************************************************
  *                       rcsfcmp()
@@ -40,9 +40,9 @@ static char rcsid[]= "$Id: rcsfcmp.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ Purdue 
 
 
 /* $Log: rcsfcmp.c,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 4.5  89/05/01  15:12:42  narten
  * changed copyright header to reflect current distribution rules
  * 

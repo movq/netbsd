@@ -11,9 +11,9 @@ the GNU General Public License, version 2, 1991.
 ********************************************/
 
 /* $Log: print.c,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 5.2  92/02/24  10:52:16  brennan
  * printf and sprintf() can now have more args than % conversions
  * removed HAVE_PRINTF_HD -- it was too obscure

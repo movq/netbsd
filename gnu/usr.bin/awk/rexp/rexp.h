@@ -11,9 +11,9 @@ the GNU General Public License, version 2, 1991.
 ********************************************/
 
 /*$Log: rexp.h,v $
-/*Revision 1.1  1993/03/21 09:45:37  cgd
-/*Initial revision
-/*
+ *Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ *initial import of 386bsd-0.1 sources
+ *
  * Revision 3.6  92/01/21  17:31:45  brennan
  * moved ison() macro out of rexp[23].c
  * 

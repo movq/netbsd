@@ -23,8 +23,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: parse.c,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
    Revision 1.3  1992/02/08  03:54:18  ian
    Include <string.h> only in <uucp.h>, added 1992 copyright
@@ -40,7 +40,7 @@
 #include "uucp.h"
 
 #if USE_RCS_ID
-char parse_rcsid[] = "$Id: parse.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+char parse_rcsid[] = "$Id: parse.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 /* Parse a UUCP command string into an scmd structure.  This is called

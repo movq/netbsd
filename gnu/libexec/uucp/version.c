@@ -23,8 +23,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: version.c,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
    Revision 1.6  1992/04/07  05:30:43  ian
    Changed version to 1.03
@@ -49,7 +49,7 @@
 #include "uucp.h"
 
 #if USE_RCS_ID
-char version_rcsid[] = "$Id: version.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+char version_rcsid[] = "$Id: version.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 char abVersion[] = "1.03";

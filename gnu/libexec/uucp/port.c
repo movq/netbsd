@@ -23,8 +23,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: port.c,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
    Revision 1.17  1992/04/01  22:31:05  ian
    Initialize stdin port
@@ -82,7 +82,7 @@
 #include "uucp.h"
 
 #if USE_RCS_ID
-char port_rcsid[] = "$Id: port.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+char port_rcsid[] = "$Id: port.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 #include <ctype.h>

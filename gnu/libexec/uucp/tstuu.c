@@ -23,8 +23,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: tstuu.c,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
  * Revision 1.2  1992/05/13  05:42:07  rich
  * ported to 386bsd
@@ -193,7 +193,7 @@
 #include "uucp.h"
 
 #if USE_RCS_ID
-char tstuu_rcsid[] = "$Id: tstuu.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+char tstuu_rcsid[] = "$Id: tstuu.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 #include <stdio.h>

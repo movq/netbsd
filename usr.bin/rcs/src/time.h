@@ -5,12 +5,12 @@
  *	libcx: partime, maketime (may not be installed yet)
  */
 
-#define TIMEID "$Id: time.h,v 1.1 1993/03/21 09:45:37 cgd Exp $"
+#define TIMEID "$Id: time.h,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $"
 
 /* $Log: time.h,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 1.1  84/01/23  14:50:50  kcs
  * Initial revision
  * 

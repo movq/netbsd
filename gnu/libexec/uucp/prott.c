@@ -23,8 +23,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: prott.c,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
    Revision 1.16  1992/03/30  04:49:10  ian
    Niels Baggesen: added debugging types abnormal and uucp-proto
@@ -79,7 +79,7 @@
 #include "uucp.h"
 
 #if USE_RCS_ID
-char prott_rcsid[] = "$Id: prott.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+char prott_rcsid[] = "$Id: prott.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 

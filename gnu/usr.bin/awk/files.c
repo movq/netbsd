@@ -11,9 +11,9 @@ the GNU General Public License, version 2, 1991.
 ********************************************/
 
 /*$Log: files.c,v $
-/*Revision 1.1  1993/03/21 09:45:37  cgd
-/*Initial revision
-/*
+ *Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ *initial import of 386bsd-0.1 sources
+ *
  * Revision 5.1  91/12/05  07:56:00  brennan
  * 1.1 pre-release
  * 

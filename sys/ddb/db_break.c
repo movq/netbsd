@@ -26,8 +26,8 @@
 /*
  * HISTORY
  * $Log: db_break.c,v $
- * Revision 1.1  1993/03/21 09:45:37  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
  *
  * Revision 1.1  1992/03/25  21:44:57  pace
  * Initial revision

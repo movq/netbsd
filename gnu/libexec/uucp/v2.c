@@ -24,8 +24,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: v2.c,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
    Revision 1.15  1992/03/12  19:54:43  ian
    Debugging based on types rather than number
@@ -79,7 +79,7 @@
 #if HAVE_V2_CONFIG
 
 #if USE_RCS_ID
-char v2_rcsid[] = "$Id: v2.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+char v2_rcsid[] = "$Id: v2.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 #include <errno.h>

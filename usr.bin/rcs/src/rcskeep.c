@@ -2,7 +2,7 @@
  *                     RCS keyword extraction
  */
 #ifndef lint
-static char rcsid[]= "$Id: rcskeep.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
+static char rcsid[]= "$Id: rcskeep.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
 #endif
 /*****************************************************************************
  *                       main routine: getoldkeys()
@@ -38,9 +38,9 @@ static char rcsid[]= "$Id: rcskeep.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ Purdue 
 
 
 /* $Log: rcskeep.c,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 4.6  89/05/01  15:12:56  narten
  * changed copyright header to reflect current distribution rules
  * 

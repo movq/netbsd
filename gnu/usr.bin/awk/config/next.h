@@ -14,9 +14,9 @@ the GNU General Public License, version 2, 1991.
 */
 
 /* $Log: next.h,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 1.1  92/02/25  08:13:12  brennan
  * Initial revision
  * 

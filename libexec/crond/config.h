@@ -1,6 +1,6 @@
 /* config.h - configurables for Vixie Cron
  *
- * $Header: /cvsroot/src/libexec/crond/Attic/config.h,v 1.1 1993/03/21 09:45:37 cgd Exp $
+ * $Header: /cvsroot/src/libexec/crond/Attic/config.h,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
  */
 
 /* Copyright 1988,1990 by Paul Vixie

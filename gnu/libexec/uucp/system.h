@@ -24,8 +24,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: system.h,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
    Revision 1.32  1992/03/17  03:15:40  ian
    Pass command to fsysdep_execute as first element of argument array

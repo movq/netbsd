@@ -23,8 +23,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: config.c,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
    Revision 1.29  1992/03/28  22:06:38  ian
    Michael I Bushnell: renamed enum tstatus to avoid header file conflict
@@ -118,7 +118,7 @@
 #include "uucp.h"
 
 #if USE_RCS_ID
-char config_rcsid[] = "$Id: config.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+char config_rcsid[] = "$Id: config.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 #include <ctype.h>

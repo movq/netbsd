@@ -46,7 +46,7 @@
  * SUCH DAMAGE.
  *
  */
-static char rcsid[] = "$Header: /cvsroot/src/sys/kern/Attic/vfs_bio.old.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[] = "$Header: /cvsroot/src/sys/kern/Attic/vfs_bio.old.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 
 #include "param.h"
 #include "proc.h"

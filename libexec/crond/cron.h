@@ -1,11 +1,11 @@
 /* cron.h - header for vixie's cron
  *
- * $Header: /cvsroot/src/libexec/crond/Attic/cron.h,v 1.1 1993/03/21 09:45:37 cgd Exp $
+ * $Header: /cvsroot/src/libexec/crond/Attic/cron.h,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
  * $Source: /cvsroot/src/libexec/crond/Attic/cron.h,v $
- * $Revision: 1.1 $
+ * $Revision: 1.1.1.1 $
  * $Log: cron.h,v $
- * Revision 1.1  1993/03/21 09:45:37  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
  *
  * Revision 2.1  90/07/18  00:23:47  vixie
  * Baseline for 4.4BSD release

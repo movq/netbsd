@@ -11,9 +11,9 @@ the GNU General Public License, version 2, 1991.
 ********************************************/
 
 /*$Log: rexp3.c,v $
-/*Revision 1.1  1993/03/21 09:45:37  cgd
-/*Initial revision
-/*
+ *Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ *initial import of 386bsd-0.1 sources
+ *
  * Revision 3.5  92/01/21  17:33:20  brennan
  * added some casts so that character classes work with signed chars
  * 

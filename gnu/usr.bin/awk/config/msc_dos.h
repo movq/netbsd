@@ -13,9 +13,9 @@ the GNU General Public License, version 2, 1991.
 /* Microsoft C 6.0A under MSDOS */
 
 /*$Log: msc_dos.h,v $
-/*Revision 1.1  1993/03/21 09:45:37  cgd
-/*Initial revision
-/*
+ *Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ *initial import of 386bsd-0.1 sources
+ *
  * Revision 4.3  92/01/09  08:54:09  brennan
  * changed SAMESEG macro
  * 

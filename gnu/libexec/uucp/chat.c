@@ -23,8 +23,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: chat.c,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
    Revision 1.26  1992/04/03  05:37:11  ian
    Minor cleanups for gcc 2.1
@@ -109,7 +109,7 @@
 #include "uucp.h"
 
 #if USE_RCS_ID
-char chat_rcsid[] = "$Id: chat.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+char chat_rcsid[] = "$Id: chat.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 #include <ctype.h>

@@ -38,9 +38,9 @@ static char rcsid[]=
 
 
 /* $Log: rcsclean.c,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 4.4  89/05/01  15:12:21  narten
  * changed copyright header to reflect current distribution rules
  * 

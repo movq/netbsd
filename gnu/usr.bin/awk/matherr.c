@@ -11,9 +11,9 @@ the GNU General Public License, version 2, 1991.
 ********************************************/
 
 /*$Log: matherr.c,v $
-/*Revision 1.1  1993/03/21 09:45:37  cgd
-/*Initial revision
-/*
+ *Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ *initial import of 386bsd-0.1 sources
+ *
  * Revision 1.2  1992/06/02  05:07:35  rich
  * Ported to 386bsd.  Changes from vax BSD4.3 include usage of
  * fmod in libm.a, usage of void pointers, and usage of vfprintf
