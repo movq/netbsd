@@ -1,8 +1,6 @@
-/*	$NetBSD: wwiomux.c,v 1.5 1996/02/08 20:45:09 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,11 +35,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)wwiomux.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: wwiomux.c,v 1.5 1996/02/08 20:45:09 mycroft Exp $";
-#endif
+static char sccsid[] = "@(#)wwiomux.c	3.26 (Berkeley) 8/12/90";
 #endif /* not lint */
 
 #include "ww.h"
@@ -57,8 +51,11 @@ static char rcsid[] = "$NetBSD: wwiomux.c,v 1.5 1996/02/08 20:45:09 mycroft Exp 
  * The idea is to copy window outputs to the terminal, via the
  * display package.  We try to give wwcurwin highest priority.
  * The only return conditions are when there is keyboard input
- * and when a child process dies.
+ * and when a child process dies, which are serviced by signal
+ * catchers (wwrint() and wwchild()).
  * When there's nothing to do, we sleep in a select().
+ * This can be done better with interrupt driven io.  But that's
+ * not supported on ptys, yet.
  * The history of this routine is interesting.
  */
 wwiomux()
@@ -78,23 +75,13 @@ wwiomux()
 		}
 
 		FD_ZERO(&imask);
-		n = -1;
 		for (w = wwhead.ww_forw; w != &wwhead; w = w->ww_forw) {
 			if (w->ww_pty < 0)
 				continue;
-			if (w->ww_obq < w->ww_obe) {
-				if (w->ww_pty > n)
-					n = w->ww_pty + 1;
+			if (w->ww_obq < w->ww_obe)
 				FD_SET(w->ww_pty, &imask);
-			}
-			if (w->ww_obq > w->ww_obp &&
-			    !ISSET(w->ww_pflags, WWP_STOPPED))
+			if (w->ww_obq > w->ww_obp && !w->ww_stopped)
 				noblock = 1;
-		}
-		if (wwibq < wwibe) {
-			if (0 > n)
-				n = 0 + 1;
-			FD_SET(0, &imask);
 		}
 
 		if (!noblock) {
@@ -109,7 +96,16 @@ wwiomux()
 				wwclrintr();
 				return;
 			}
-			/* XXXX */
+			/*
+			 * Defensive code.  If somebody else (for example,
+			 * wall) clears the ASYNC flag on us, we will block
+			 * forever.  So we need a finite timeout and set
+			 * the flag again.  Anything more clever will probably
+			 * need even more system calls.  (This is a bug
+			 * in the kernel.)
+			 * I don't like this one bit.
+			 */
+			(void) fcntl(0, F_SETFL, wwnewtty.ww_fflags);
 			tv.tv_sec = 30;
 			tv.tv_usec = 0;
 		} else {
@@ -117,7 +113,7 @@ wwiomux()
 			tv.tv_usec = 10000;
 		}
 		wwnselect++;
-		n = select(n + 1, &imask, (fd_set *)0, (fd_set *)0, &tv);
+		n = select(wwdtablesize, &imask, (fd_set *)0, (fd_set *)0, &tv);
 		wwsetjmp = 0;
 		noblock = 0;
 
@@ -125,16 +121,14 @@ wwiomux()
 			wwnselecte++;
 		else if (n == 0)
 			wwnselectz++;
-		else {
-			if (FD_ISSET(0, &imask))
-				wwrint();
+		else
 			for (w = wwhead.ww_forw; w != &wwhead; w = w->ww_forw) {
 				if (w->ww_pty < 0 ||
 				    !FD_ISSET(w->ww_pty, &imask))
 					continue;
 				wwnwread++;
 				p = w->ww_obq;
-				if (w->ww_type == WWT_PTY) {
+				if (w->ww_ispty) {
 					if (p == w->ww_ob) {
 						w->ww_obp++;
 						w->ww_obq++;
@@ -151,7 +145,7 @@ wwiomux()
 					wwnwreadz++;
 					(void) close(w->ww_pty);
 					w->ww_pty = -1;
-				} else if (w->ww_type != WWT_PTY) {
+				} else if (!w->ww_ispty) {
 					wwnwreadd++;
 					wwnwreadc += n;
 					w->ww_obq += n;
@@ -163,17 +157,18 @@ wwiomux()
 				} else {
 					wwnwreadp++;
 					if (*p & TIOCPKT_STOP)
-						SET(w->ww_pflags, WWP_STOPPED);
+						w->ww_stopped = 1;
 					if (*p & TIOCPKT_START)
-						CLR(w->ww_pflags, WWP_STOPPED);
+						w->ww_stopped = 0;
 					if (*p & TIOCPKT_FLUSHWRITE) {
-						CLR(w->ww_pflags, WWP_STOPPED);
+						w->ww_stopped = 0;
 						w->ww_obq = w->ww_obp =
 							w->ww_ob;
 					}
 				}
+				if (w->ww_ispty)
+					*p = c;
 			}
-		}
 		/*
 		 * Try the current window first, if there is output
 		 * then process it and go back to the top to try again.
@@ -183,8 +178,7 @@ wwiomux()
 		 * dies down.
 		 */
 		if ((w = wwcurwin) != 0 && w->ww_pty >= 0 &&
-		    w->ww_obq > w->ww_obp &&
-		    !ISSET(w->ww_pflags, WWP_STOPPED)) {
+		    w->ww_obq > w->ww_obp && !w->ww_stopped) {
 			n = wwwrite(w, w->ww_obp, w->ww_obq - w->ww_obp);
 			if ((w->ww_obp += n) == w->ww_obq)
 				w->ww_obq = w->ww_obp = w->ww_ob;
@@ -193,7 +187,7 @@ wwiomux()
 		}
 		for (w = wwhead.ww_forw; w != &wwhead; w = w->ww_forw)
 			if (w->ww_pty >= 0 && w->ww_obq > w->ww_obp &&
-			    !ISSET(w->ww_pflags, WWP_STOPPED)) {
+			    !w->ww_stopped) {
 				n = wwwrite(w, w->ww_obp,
 					w->ww_obq - w->ww_obp);
 				if ((w->ww_obp += n) == w->ww_obq)

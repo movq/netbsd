@@ -1,17 +1,24 @@
-#	$NetBSD: Makefile,v 1.18 1997/10/10 19:52:22 christos Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/5/93
+#	@(#)Makefile	5.6 (Berkeley) 6/27/91
 
 PROG=	route
-MAN=	route.8
-SRCS=	route.c show.c keywords.c ccitt_addr.c
+MAN8=	route.0
+SRCS=	route.c
+#SRCS=	route.c ccitt_addr.c
+CFLAGS+=-I.
+#CLEANFILES+=keywords.h
+BINOWN=	root
+BINMODE=4555
 
-# The Makefile over in ../../distrib/utils/x_route
-# would like keywords.[ch] to always exist here, so
-# they are now checked in as sources.
-#
-# CPPFLAGS+=-I.
-# CLEANFILES+= keywords.c keywords.h
-# keywords.c keywords.h : keywords.sh
-# 	sh keywords.sh
+all route depend lint tags: keywords.h
+
+# keywords.h: keywords
+# 	sed -e '/^#/d' -e '/^$$/d' ${.CURDIR}/keywords > _keywords.tmp
+# 	tr a-z A-Z < _keywords.tmp | paste _keywords.tmp - | \
+# 	    awk '{ \
+# 		if (NF > 1) \
+# 			printf "#define\tK_%s\t%d\n\t{\"%s\", K_%s},\n", \
+# 			    $$2, NR, $$1, $$2 }' \
+# 	    > ${.TARGET}
+# 	rm -f _keywords.tmp
 
 .include <bsd.prog.mk>

@@ -1,8 +1,6 @@
-/*	$NetBSD: local_passwd.c,v 1.14 1997/10/19 12:29:51 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
- * 	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,64 +31,73 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "from: @(#)local_passwd.c    8.3 (Berkeley) 4/2/94";
-#else
-__RCSID("$NetBSD: local_passwd.c,v 1.14 1997/10/19 12:29:51 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)local_passwd.c	5.5 (Berkeley) 5/6/91";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/stat.h>
-#include <ctype.h>
-#include <err.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <pwd.h>
+#include <errno.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <util.h>
 
-#include "extern.h"
+uid_t uid;
 
-static	char   *getnewpasswd __P((struct passwd *));
-
-static uid_t uid;
-
+char *progname = "passwd";
 char *tempname;
 
-static unsigned char itoa64[] =		/* 0 ... 63 => ascii - 64 */
-	"./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-
-void
-to64(s, v, n)
-	char *s;
-	long v;
-	int n;
+local_passwd(uname)
+	char *uname;
 {
-	while (--n >= 0) {
-		*s++ = itoa64[v&0x3f];
-		v >>= 6;
+	struct passwd *pw;
+	int pfd, tfd;
+	char *getnewpasswd();
+
+	if (!(pw = getpwnam(uname))) {
+		(void)fprintf(stderr, "passwd: unknown user %s.\n", uname);
+		exit(1);
 	}
+
+	uid = getuid();
+	if (uid && uid != pw->pw_uid) {
+		(void)fprintf(stderr, "passwd: %s\n", strerror(EACCES));
+		exit(1);
+	}
+
+	pw_init();
+	pfd = pw_lock();
+	tfd = pw_tmp();
+
+	/*
+	 * Get the new password.  Reset passwd change time to zero; when
+	 * classes are implemented, go and get the "offset" value for this
+	 * class and reset the timer.
+	 */
+	pw->pw_passwd = getnewpasswd(pw);
+	pw->pw_change = 0;
+	pw_copy(pfd, tfd, pw);
+
+	if (!pw_mkdb())
+		pw_error((char *)NULL, 0, 1);
+	exit(0);
 }
 
-static char *
+char *
 getnewpasswd(pw)
-	struct passwd *pw;
+	register struct passwd *pw;
 {
+	register char *p, *t;
 	int tries;
-	char *p, *t;
-	char buf[_PASSWORD_LEN+1], salt[9];
+	char buf[_PASSWORD_LEN+1], salt[9], *crypt(), *getpass();
 
 	(void)printf("Changing local password for %s.\n", pw->pw_name);
 
-	if (uid && pw->pw_passwd[0] &&
+	if (uid && pw->pw_passwd &&
+#ifdef DES
 	    strcmp(crypt(getpass("Old password:"), pw->pw_passwd),
 	    pw->pw_passwd)) {
+#else
+	    strcmp(getpass("Old password:"), pw->pw_passwd)) {
+#endif
 		errno = EACCES;
 		pw_error(NULL, 1, 1);
 	}
@@ -101,19 +108,16 @@ getnewpasswd(pw)
 			(void)printf("Password unchanged.\n");
 			pw_error(NULL, 0, 0);
 		}
-		if (strlen(p) <= 5 && ++tries < 2) {
+		if (strlen(p) <= 5 && (uid != 0 || ++tries < 2)) {
 			(void)printf("Please enter a longer password.\n");
 			continue;
 		}
 		for (t = p; *t && islower(*t); ++t);
-		if (!*t && ++tries < 2) {
-			(void)printf("Please don't use an all-lower case "
-				     "password.\nUnusual capitalization, "
-				     "control characters or digits are "
-				     "suggested.\n");
+		if (!*t && (uid != 0 || ++tries < 2)) {
+			(void)printf("Please don't use an all-lower case password.\nUnusual capitalization, control characters or digits are suggested.\n");
 			continue;
 		}
-		(void)strncpy(buf, p, sizeof(buf) - 1);
+		(void)strcpy(buf, p);
 		if (!strcmp(buf, getpass("Retype new password:")))
 			break;
 		(void)printf("Mismatch; try again, EOF to quit.\n");
@@ -127,60 +131,23 @@ getnewpasswd(pw)
 #else
 	to64(&salt[0], random(), 2);
 #endif
+#ifdef DES
 	return(crypt(buf, salt));
+#else
+	return(buf);
+#endif
 }
 
-int
-local_passwd(uname)
-	char *uname;
+static unsigned char itoa64[] =		/* 0 ... 63 => ascii - 64 */
+	"./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+to64(s, v, n)
+	register char *s;
+	register long v;
+	register int n;
 {
-	struct passwd *pw;
-	struct passwd old_pw;
-	int pfd, tfd;
-
-	if (!(pw = getpwnam(uname))) {
-		warnx("unknown user %s", uname);
-		return (1);
+	while (--n >= 0) {
+		*s++ = itoa64[v&0x3f];
+		v >>= 6;
 	}
-
-	uid = getuid();
-	if (uid && uid != pw->pw_uid) {
-		warnx("%s", strerror(EACCES));
-		return (1);
-	}
-
-	/* Save the old pw information for comparing on pw_copy(). */
-	old_pw = *pw;
-
-	/*
-	 * Get the new password.  Reset passwd change time to zero; when
-	 * classes are implemented, go and get the "offset" value for this
-	 * class and reset the timer.
-	 */
-	pw->pw_passwd = getnewpasswd(pw);
-	pw->pw_change = 0;
-
-	/* Now that the user has given us a new password, let us
-	 * change the database.
-	 */
-
-	pw_init();
-	tfd = pw_lock(0);
-	if (tfd < 0) {
-		warnx ("The passwd file is busy, waiting...");
-		tfd = pw_lock(10);
-		if (tfd < 0)
-			errx(1, "The passwd file is still busy, "
-			     "try again later.");
-	}
-
-	pfd = open(_PATH_MASTERPASSWD, O_RDONLY, 0);
-	if (pfd < 0)
-		pw_error(_PATH_MASTERPASSWD, 1, 1);
-
-	pw_copy(pfd, tfd, pw, &old_pw);
-
-	if (pw_mkdb() < 0)
-		pw_error((char *)NULL, 0, 1);
-	return (0);
 }

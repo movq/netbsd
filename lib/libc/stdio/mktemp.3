@@ -1,7 +1,5 @@
-.\"	$NetBSD: mktemp.3,v 1.7 1997/03/24 11:39:10 lukem Exp $
-.\"
-.\" Copyright (c) 1989, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1989, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)mktemp.3	8.1 (Berkeley) 6/4/93
+.\"     @(#)mktemp.3	6.10 (Berkeley) 4/19/91
 .\"
-.Dd March 24, 1997
+.Dd April 19, 1991
 .Dt MKTEMP 3
 .Os
 .Sh NAME
@@ -102,7 +100,7 @@ functions
 may set
 .Va errno
 to one of the following values:
-.Bl -tag -width Er
+.Bl -tag -width [ENOTDIR]
 .It Bq Er ENOTDIR
 The pathname portion of the template is not an existing directory.
 .El
@@ -133,16 +131,6 @@ function.
 .Xr stat 2
 .Sh HISTORY
 A
-.Fn mktemp
+.Nm mktemp
 function appeared in
 .At v7 .
-.Sh BUGS
-The use of
-.Fn mktemp
-should generally be avoided, as a hostile process can exploit a race
-condition in the time between the generation of a temporary filename by
-.Fn mktemp
-and the invoker's use of the temporary name.
-A link-time warning will be issued to advise the use of
-.Fn mkstemp
-instead.

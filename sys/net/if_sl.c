@@ -1,8 +1,6 @@
-/*	$NetBSD: if_sl.c,v 1.46 1997/05/17 21:12:05 christos Exp $	*/
-
 /*
- * Copyright (c) 1987, 1989, 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1987, 1989 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)if_sl.c	8.6 (Berkeley) 2/1/94
+ *	@(#)if_sl.c	7.22 (Berkeley) 4/20/91
  */
 
 /*
@@ -66,51 +64,41 @@
  * interrupts and network activity; thus, splimp must be >= spltty.
  */
 
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/net/if_sl.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ */
+/* from if_sl.c,v 1.11 84/10/04 12:54:47 rick Exp */
+
 #include "sl.h"
 #if NSL > 0
 
-#include "bpfilter.h"
+#include "param.h"
+#include "proc.h"
+#include "mbuf.h"
+#include "buf.h"
+#include "dkstat.h"
+#include "socket.h"
+#include "ioctl.h"
+#include "file.h"
+#include "tty.h"
+#include "kernel.h"
+#include "conf.h"
 
-#include <sys/param.h>
-#include <sys/proc.h>
-#include <sys/malloc.h>
-#include <sys/mbuf.h>
-#include <sys/buf.h>
-#include <sys/dkstat.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <sys/file.h>
-#include <sys/tty.h>
-#include <sys/kernel.h>
-#include <sys/conf.h>
-#if __NetBSD__
-#include <sys/systm.h>
-#endif
-
-#include <machine/cpu.h>
-
-#include <net/if.h>
-#include <net/if_types.h>
-#include <net/netisr.h>
-#include <net/route.h>
-
+#include "if.h"
+#include "if_types.h"
+#include "netisr.h"
+#include "route.h"
 #if INET
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/in_var.h>
-#include <netinet/ip.h>
+#include "netinet/in.h"
+#include "netinet/in_systm.h"
+#include "netinet/in_var.h"
+#include "netinet/ip.h"
 #else
 Huh? Slip without inet?
 #endif
 
-#include <net/slcompress.h>
-#include <net/if_slvar.h>
-#include <net/slip.h>
+#include "machine/mtpr.h"
 
-#if NBPFILTER > 0
-#include <sys/time.h>
-#include <net/bpf.h>
-#endif
+#include "slcompress.h"
+#include "if_slvar.h"
 
 /*
  * SLMAX is a hard limit on input packet size.  To simplify the code
@@ -152,35 +140,37 @@ Huh? Slip without inet?
  * time.  So, setting SLIP_HIWAT to ~100 guarantees that we'll lose
  * at most 1% while maintaining good interactive response.
  */
-#if NBPFILTER > 0
-#define	BUFOFFSET	(128+sizeof(struct ifnet **)+SLIP_HDRLEN)
-#else
-#define	BUFOFFSET	(128+sizeof(struct ifnet **))
-#endif
+#define BUFOFFSET	128
 #define	SLMAX		(MCLBYTES - BUFOFFSET)
 #define	SLBUFSIZE	(SLMAX + BUFOFFSET)
-#ifndef SLMTU
 #define	SLMTU		296
-#endif
-#if (SLMTU < 3)
-Huh?  SLMTU way too small.
-#endif
 #define	SLIP_HIWAT	roundup(50,CBSIZE)
-#ifndef NetBSD						/* XXX - cgd */
 #define	CLISTRESERVE	1024	/* Can't let clists get too low */
-#endif	/* !NetBSD */
 
 /*
  * SLIP ABORT ESCAPE MECHANISM:
  *	(inspired by HAYES modem escape arrangement)
  *	1sec escape 1sec escape 1sec escape { 1sec escape 1sec escape }
- *	within window time signals a "soft" exit from slip mode by remote end
- *	if the IFF_DEBUG flag is on.
+ *	signals a "soft" exit from slip mode by usermode process
  */
+
 #define	ABT_ESC		'\033'	/* can't be t_intr - distant host must know it*/
-#define	ABT_IDLE	1	/* in seconds - idle before an escape */
-#define	ABT_COUNT	3	/* count of escapes for abort */
-#define	ABT_WINDOW	(ABT_COUNT*2+2)	/* in seconds - time to count */
+#define ABT_WAIT	1	/* in seconds - idle before an escape & after */
+#define ABT_RECYCLE	(5*2+2)	/* in seconds - time window processing abort */
+
+#define ABT_SOFT	3	/* count of escapes */
+
+/*
+ * The following disgusting hack gets around the problem that IP TOS
+ * can't be set yet.  We want to put "interactive" traffic on a high
+ * priority queue.  To decide if traffic is interactive, we check that
+ * a) it is TCP and b) one of its ports is telnet, rlogin or ftp control.
+ */
+static u_short interactive_ports[8] = {
+	0,	513,	0,	0,
+	0,	21,	0,	23,
+};
+#define INTERACTIVE(p) (interactive_ports[(p) & 7] == (p))
 
 struct sl_softc sl_softc[NSL];
 
@@ -189,34 +179,30 @@ struct sl_softc sl_softc[NSL];
 #define TRANS_FRAME_END	 	0xdc		/* transposed frame end */
 #define TRANS_FRAME_ESCAPE 	0xdd		/* transposed frame esc */
 
-static int slinit __P((struct sl_softc *));
-static struct mbuf *sl_btom __P((struct sl_softc *, int));
+#define t_sc T_LINEP
+
+int sloutput(), slioctl(), ttrstrt();
+extern struct timeval time;
 
 /*
  * Called from boot code to establish sl interfaces.
  */
-void
 slattach()
 {
 	register struct sl_softc *sc;
 	register int i = 0;
 
 	for (sc = sl_softc; i < NSL; sc++) {
-		sc->sc_unit = i;		/* XXX */
-		sprintf(sc->sc_if.if_xname, "sl%d", i++);
-		sc->sc_if.if_softc = sc;
+		sc->sc_if.if_name = "sl";
+		sc->sc_if.if_unit = i++;
 		sc->sc_if.if_mtu = SLMTU;
-		sc->sc_if.if_flags =
-		    IFF_POINTOPOINT | SC_AUTOCOMP | IFF_MULTICAST;
+		sc->sc_if.if_flags = IFF_POINTOPOINT;
 		sc->sc_if.if_type = IFT_SLIP;
 		sc->sc_if.if_ioctl = slioctl;
 		sc->sc_if.if_output = sloutput;
 		sc->sc_if.if_snd.ifq_maxlen = 50;
 		sc->sc_fastq.ifq_maxlen = 32;
 		if_attach(&sc->sc_if);
-#if NBPFILTER > 0
-		bpfattach(&sc->sc_bpf, &sc->sc_if, DLT_SLIP, SLIP_HDRLEN);
-#endif
 	}
 }
 
@@ -224,16 +210,14 @@ static int
 slinit(sc)
 	register struct sl_softc *sc;
 {
+	register caddr_t p;
 
-	if (sc->sc_ep == NULL) {
-		/*
-		 * XXX the trick this is used for is evil...
-		 */
-		sc->sc_xxx = (u_char *)malloc(MCLBYTES, M_MBUF, M_WAITOK);
-		if (sc->sc_xxx)
-			sc->sc_ep = sc->sc_xxx + SLBUFSIZE;
+	if (sc->sc_ep == (u_char *) 0) {
+		MCLALLOC(p, M_WAIT);
+		if (p)
+			sc->sc_ep = (u_char *)p + SLBUFSIZE;
 		else {
-			printf("sl%d: can't allocate buffer\n", sc->sc_unit);
+			printf("sl%d: can't allocate buffer\n", sc - sl_softc);
 			sc->sc_if.if_flags &= ~IFF_UP;
 			return (0);
 		}
@@ -249,7 +233,6 @@ slinit(sc)
  * Attach the given tty to the first available sl unit.
  */
 /* ARGSUSED */
-int
 slopen(dev, tp)
 	dev_t dev;
 	register struct tty *tp;
@@ -258,11 +241,8 @@ slopen(dev, tp)
 	register struct sl_softc *sc;
 	register int nsl;
 	int error;
-#ifdef NetBSD
-	int s;
-#endif
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if (error = suser(p->p_ucred, &p->p_acflag))
 		return (error);
 
 	if (tp->t_line == SLIPDISC)
@@ -276,30 +256,6 @@ slopen(dev, tp)
 			sc->sc_ttyp = tp;
 			sc->sc_if.if_baudrate = tp->t_ospeed;
 			ttyflush(tp, FREAD | FWRITE);
-#ifdef NetBSD
-			/*
-			 * make sure tty output queue is large enough
-			 * to hold a full-sized packet (including frame
-			 * end, and a possible extra frame end).  full-sized
-			 * packet occupies a max of 2*SLMTU bytes (because
-			 * of possible escapes), and add two on for frame
-			 * ends.
-			 */
-			s = spltty();
-			if (tp->t_outq.c_cn < 2*SLMTU+2) {
-				sc->sc_oldbufsize = tp->t_outq.c_cn;
-				sc->sc_oldbufquot = tp->t_outq.c_cq != 0;
-
-				clfree(&tp->t_outq);
-				error = clalloc(&tp->t_outq, 3*SLMTU, 0);
-				if (error) {
-					splx(s);
-					return(error);
-				}
-			} else
-				sc->sc_oldbufsize = sc->sc_oldbufquot = 0;
-			splx(s);
-#endif /* NetBSD */
 			return (0);
 		}
 	return (ENXIO);
@@ -308,8 +264,8 @@ slopen(dev, tp)
 /*
  * Line specific close routine.
  * Detach the tty from the sl unit.
+ * Mimics part of ttyclose().
  */
-void
 slclose(tp)
 	struct tty *tp;
 {
@@ -317,25 +273,18 @@ slclose(tp)
 	int s;
 
 	ttywflush(tp);
-	s = splimp();		/* actually, max(spltty, splsoftnet) */
+	s = splimp();		/* actually, max(spltty, splnet) */
 	tp->t_line = 0;
 	sc = (struct sl_softc *)tp->t_sc;
 	if (sc != NULL) {
 		if_down(&sc->sc_if);
 		sc->sc_ttyp = NULL;
 		tp->t_sc = NULL;
-		free((caddr_t)(sc->sc_ep - SLBUFSIZE), M_MBUF);
+		MCLFREE((caddr_t)(sc->sc_ep - SLBUFSIZE));
 		sc->sc_ep = 0;
 		sc->sc_mp = 0;
 		sc->sc_buf = 0;
 	}
-#ifdef NetBSD
-	/* if necessary, install a new outq buffer of the appropriate size */
-	if (sc->sc_oldbufsize != 0) {
-		clfree(&tp->t_outq);
-		clalloc(&tp->t_outq, sc->sc_oldbufsize, sc->sc_oldbufquot);
-	}
-#endif
 	splx(s);
 }
 
@@ -344,18 +293,28 @@ slclose(tp)
  * Provide a way to get the sl unit number.
  */
 /* ARGSUSED */
-int
 sltioctl(tp, cmd, data, flag)
 	struct tty *tp;
-	u_long cmd;
 	caddr_t data;
-	int flag;
 {
 	struct sl_softc *sc = (struct sl_softc *)tp->t_sc;
+	int s;
 
 	switch (cmd) {
 	case SLIOCGUNIT:
-		*(int *)data = sc->sc_unit;	/* XXX */
+		*(int *)data = sc->sc_if.if_unit;
+		break;
+
+	case SLIOCGFLAGS:
+		*(int *)data = sc->sc_flags;
+		break;
+
+	case SLIOCSFLAGS:
+#define	SC_MASK	0xffff
+		s = splimp();
+		sc->sc_flags =
+		    (sc->sc_flags &~ SC_MASK) | ((*(int *)data) & SC_MASK);
+		splx(s);
 		break;
 
 	default:
@@ -366,18 +325,13 @@ sltioctl(tp, cmd, data, flag)
 
 /*
  * Queue a packet.  Start transmission if not active.
- * Compression happens in slstart; if we do it here, IP TOS
- * will cause us to not compress "background" packets, because
- * ordering gets trashed.  It can be done for all packets in slstart.
  */
-int
-sloutput(ifp, m, dst, rtp)
+sloutput(ifp, m, dst)
 	struct ifnet *ifp;
 	register struct mbuf *m;
 	struct sockaddr *dst;
-	struct rtentry *rtp;
 {
-	register struct sl_softc *sc = ifp->if_softc;
+	register struct sl_softc *sc = &sl_softc[ifp->if_unit];
 	register struct ip *ip;
 	register struct ifqueue *ifq;
 	int s;
@@ -387,10 +341,9 @@ sloutput(ifp, m, dst, rtp)
 	 * the line protocol to support other address families.
 	 */
 	if (dst->sa_family != AF_INET) {
-		printf("%s: af%d not supported\n", sc->sc_if.if_xname,
-		    dst->sa_family);
+		printf("sl%d: af%d not supported\n", sc->sc_if.if_unit,
+			dst->sa_family);
 		m_freem(m);
-		sc->sc_if.if_noproto++;
 		return (EAFNOSUPPORT);
 	}
 
@@ -398,30 +351,36 @@ sloutput(ifp, m, dst, rtp)
 		m_freem(m);
 		return (ENETDOWN);	/* sort of */
 	}
-	if ((sc->sc_ttyp->t_state & TS_CARR_ON) == 0 &&
-	    (sc->sc_ttyp->t_cflag & CLOCAL) == 0) {
+	if ((sc->sc_ttyp->t_state & TS_CARR_ON) == 0) {
 		m_freem(m);
 		return (EHOSTUNREACH);
 	}
 	ifq = &sc->sc_if.if_snd;
-	ip = mtod(m, struct ip *);
-	if (sc->sc_if.if_flags & SC_NOICMP && ip->ip_p == IPPROTO_ICMP) {
-		m_freem(m);
-		return (ENETRESET);		/* XXX ? */
-	}
-	if (ip->ip_tos & IPTOS_LOWDELAY)
-		ifq = &sc->sc_fastq;
-	s = splimp();
-	if (sc->sc_oqlen && sc->sc_ttyp->t_outq.c_cc == sc->sc_oqlen) {
-		struct timeval tv;
+	if ((ip = mtod(m, struct ip *))->ip_p == IPPROTO_TCP) {
+		register int p = ((int *)ip)[ip->ip_hl];
 
-		/* if output's been stalled for too long, and restart */
-		timersub(&time, &sc->sc_if.if_lastchange, &tv);
-		if (tv.tv_sec > 0) {
-			sc->sc_otimeout++;
-			slstart(sc->sc_ttyp);
+		if (INTERACTIVE(p & 0xffff) || INTERACTIVE(p >> 16)) {
+			ifq = &sc->sc_fastq;
+			p = 1;
+		} else
+			p = 0;
+
+		if (sc->sc_flags & SC_COMPRESS) {
+			/*
+			 * The last parameter turns off connection id
+			 * compression for background traffic:  Since
+			 * fastq traffic can jump ahead of the background
+			 * traffic, we don't know what order packets will
+			 * go on the line.
+			 */
+			p = sl_compress_tcp(m, ip, &sc->sc_comp, p);
+			*mtod(m, u_char *) |= p;
 		}
+	} else if (sc->sc_flags & SC_NOICMP && ip->ip_p == IPPROTO_ICMP) {
+		m_freem(m);
+		return (0);
 	}
+	s = splimp();
 	if (IF_QFULL(ifq)) {
 		IF_DROP(ifq);
 		m_freem(m);
@@ -431,7 +390,7 @@ sloutput(ifp, m, dst, rtp)
 	}
 	IF_ENQUEUE(ifq, m);
 	sc->sc_if.if_lastchange = time;
-	if ((sc->sc_oqlen = sc->sc_ttyp->t_outq.c_cc) == 0)
+	if (RB_LEN(&sc->sc_ttyp->t_out) == 0)
 		slstart(sc->sc_ttyp);
 	splx(s);
 	return (0);
@@ -442,23 +401,14 @@ sloutput(ifp, m, dst, rtp)
  * to send from the interface queue and map it to
  * the interface before starting output.
  */
-void
 slstart(tp)
 	register struct tty *tp;
 {
 	register struct sl_softc *sc = (struct sl_softc *)tp->t_sc;
 	register struct mbuf *m;
 	register u_char *cp;
-	register struct ip *ip;
 	int s;
 	struct mbuf *m2;
-#if NBPFILTER > 0
-	u_char bpfbuf[SLMTU + SLIP_HDRLEN];
-	register int len = 0;
-#endif
-#ifndef NetBSD						/* XXX - cgd */
-	extern int cfreecount;
-#endif
 
 	for (;;) {
 		/*
@@ -466,9 +416,9 @@ slstart(tp)
 		 * We are being called in lieu of ttstart and must do what
 		 * it would.
 		 */
-		if (tp->t_outq.c_cc != 0) {
+		if (RB_LEN(&tp->t_out) != 0) {
 			(*tp->t_oproc)(tp);
-			if (tp->t_outq.c_cc > SLIP_HIWAT)
+			if (RB_LEN(&tp->t_out) > SLIP_HIWAT)
 				return;
 		}
 		/*
@@ -477,98 +427,36 @@ slstart(tp)
 		if (sc == NULL)
 			return;
 
-#ifdef NetBSD						/* XXX - cgd */
-		/*
-		 * Do not remove the packet from the IP queue if it
-		 * doesn't look like the packet will fit into the
-		 * current serial output queue, with a packet full of
-		 * escapes this could be as bad as SLMTU*2+2.
-		 */
-		if (tp->t_outq.c_cn - tp->t_outq.c_cc < 2*SLMTU+2)
-			return;
-#endif /* NetBSD */
-
 		/*
 		 * Get a packet and send it to the interface.
 		 */
 		s = splimp();
 		IF_DEQUEUE(&sc->sc_fastq, m);
-		if (m)
-			sc->sc_if.if_omcasts++;		/* XXX */
-		else
+		if (m == NULL)
 			IF_DEQUEUE(&sc->sc_if.if_snd, m);
 		splx(s);
 		if (m == NULL)
 			return;
-
-		/*
-		 * We do the header compression here rather than in sloutput
-		 * because the packets will be out of order if we are using TOS
-		 * queueing, and the connection id compression will get
-		 * munged when this happens.
-		 */
-#if NBPFILTER > 0
-		if (sc->sc_bpf) {
-			/*
-			 * We need to save the TCP/IP header before it's
-			 * compressed.  To avoid complicated code, we just
-			 * copy the entire packet into a stack buffer (since
-			 * this is a serial line, packets should be short
-			 * and/or the copy should be negligible cost compared
-			 * to the packet transmission time).
-			 */
-			register struct mbuf *m1 = m;
-			register u_char *cp = bpfbuf + SLIP_HDRLEN;
-
-			len = 0;
-			do {
-				register int mlen = m1->m_len;
-
-				bcopy(mtod(m1, caddr_t), cp, mlen);
-				cp += mlen;
-				len += mlen;
-			} while ((m1 = m1->m_next) != NULL);
-		}
-#endif
-		if ((ip = mtod(m, struct ip *))->ip_p == IPPROTO_TCP) {
-			if (sc->sc_if.if_flags & SC_COMPRESS)
-				*mtod(m, u_char *) |= sl_compress_tcp(m, ip,
-				    &sc->sc_comp, 1);
-		}
-#if NBPFILTER > 0
-		if (sc->sc_bpf) {
-			/*
-			 * Put the SLIP pseudo-"link header" in place.  The
-			 * compressed header is now at the beginning of the
-			 * mbuf.
-			 */
-			bpfbuf[SLX_DIR] = SLIPDIR_OUT;
-			bcopy(mtod(m, caddr_t), &bpfbuf[SLX_CHDR], CHDR_LEN);
-			bpf_tap(sc->sc_bpf, bpfbuf, len + SLIP_HDRLEN);
-		}
-#endif
 		sc->sc_if.if_lastchange = time;
-
-#ifndef __NetBSD__					/* XXX - cgd */
 		/*
 		 * If system is getting low on clists, just flush our
 		 * output queue (if the stuff was important, it'll get
 		 * retransmitted).
 		 */
-		if (cfreecount < CLISTRESERVE + SLMTU) {
+		if (RBSZ - RB_LEN(&tp->t_out) < SLMTU) {
 			m_freem(m);
 			sc->sc_if.if_collisions++;
 			continue;
 		}
-#endif /* !__NetBSD__ */
+
 		/*
 		 * The extra FRAME_END will start up a new packet, and thus
 		 * will flush any accumulated garbage.  We do this whenever
 		 * the line may have been idle for some time.
 		 */
-		if (tp->t_outq.c_cc == 0) {
-			++sc->sc_if.if_obytes;
-			(void) putc(FRAME_END, &tp->t_outq);
+		if (RB_LEN(&tp->t_out) == 0) {
+			++sc->sc_bytessent;
+			(void) putc(FRAME_END, &tp->t_out);
 		}
 
 		while (m) {
@@ -592,18 +480,49 @@ slstart(tp)
 				}
 				out:
 				if (cp > bp) {
+					int cc;
 					/*
 					 * Put n characters at once
 					 * into the tty output queue.
 					 */
-#ifdef __NetBSD__					/* XXX - cgd */
-					if (b_to_q((u_char *)bp, cp - bp,
-#else
-					if (b_to_q((char *)bp, cp - bp,
-#endif
-					    &tp->t_outq))
+#ifdef was
+					if (b_to_q((char *)bp, cp - bp, &tp->t_outq))
 						break;
-					sc->sc_if.if_obytes += cp - bp;
+					sc->sc_bytessent += cp - bp;
+#else
+#ifdef works
+					if (cc = RB_CONTIGPUT(&tp->t_out)) {
+						cc = min (cc, cp - bp);
+						bcopy((char *)bp,
+							tp->t_out.rb_tl, cc);
+						tp->t_out.rb_tl =
+				  RB_ROLLOVER(&tp->t_out, tp->t_out.rb_tl + cc);
+						sc->sc_bytessent += cc;
+						bp += cc;
+					} else
+						break;
+					if (cp > bp && cc = RB_CONTIGPUT(&tp->t_out)) {
+						cc = min (cc, cp - bp);
+						bcopy((char *)bp,
+							tp->t_out.rb_tl, cc);
+						tp->t_out.rb_tl =
+				  RB_ROLLOVER(&tp->t_out, tp->t_out.rb_tl + cc);
+						sc->sc_bytessent += cc;
+						bp += cc;
+					} else
+						break;
+#else
+					while (cp > bp && (cc = RB_CONTIGPUT(&tp->t_out))) {
+						cc = min (cc, cp - bp);
+						bcopy((char *)bp,
+							tp->t_out.rb_tl, cc);
+						tp->t_out.rb_tl =
+				  RB_ROLLOVER(&tp->t_out, tp->t_out.rb_tl + cc);
+						sc->sc_bytessent += cc;
+						bp += cc;
+					}
+#endif
+#endif
 				}
 				/*
 				 * If there are characters left in the mbuf,
@@ -611,22 +530,22 @@ slstart(tp)
 				 * Put it out in a different form.
 				 */
 				if (cp < ep) {
-					if (putc(FRAME_ESCAPE, &tp->t_outq))
+					if (putc(FRAME_ESCAPE, &tp->t_out))
 						break;
 					if (putc(*cp++ == FRAME_ESCAPE ?
 					   TRANS_FRAME_ESCAPE : TRANS_FRAME_END,
-					   &tp->t_outq)) {
-						(void) unputc(&tp->t_outq);
+					   &tp->t_out)) {
+						(void) unputc(&tp->t_out);
 						break;
 					}
-					sc->sc_if.if_obytes += 2;
+					sc->sc_bytessent += 2;
 				}
 			}
 			MFREE(m, m2);
 			m = m2;
 		}
 
-		if (putc(FRAME_END, &tp->t_outq)) {
+		if (putc(FRAME_END, &tp->t_out)) {
 			/*
 			 * Not enough room.  Remove a char to make room
 			 * and end the packet normally.
@@ -634,13 +553,14 @@ slstart(tp)
 			 * a day) you probably do not have enough clists
 			 * and you should increase "nclist" in param.c.
 			 */
-			(void) unputc(&tp->t_outq);
-			(void) putc(FRAME_END, &tp->t_outq);
+			(void) unputc(&tp->t_out);
+			(void) putc(FRAME_END, &tp->t_out);
 			sc->sc_if.if_collisions++;
 		} else {
-			++sc->sc_if.if_obytes;
+			++sc->sc_bytessent;
 			sc->sc_if.if_opackets++;
 		}
+		sc->sc_if.if_obytes = sc->sc_bytessent;
 	}
 }
 
@@ -653,7 +573,6 @@ sl_btom(sc, len)
 	register int len;
 {
 	register struct mbuf *m;
-	register u_char *p;
 
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == NULL)
@@ -667,23 +586,18 @@ sl_btom(sc, len)
 	 * guarantees that packet will fit in a cluster.
 	 */
 	if (len >= MHLEN) {
-		/*
-		 * XXX this is that evil trick I mentioned...
-		 */
-		p = sc->sc_xxx;
-		sc->sc_xxx = (u_char *)malloc(MCLBYTES, M_MBUF, M_NOWAIT);
-		if (sc->sc_xxx == NULL) {
+		MCLGET(m, M_DONTWAIT);
+		if ((m->m_flags & M_EXT) == 0) {
 			/*
-			 * We couldn't allocate a new buffer - if
-			 * memory's this low, it's time to start
-			 * dropping packets.
+			 * we couldn't get a cluster - if memory's this
+			 * low, it's time to start dropping packets.
 			 */
 			(void) m_free(m);
 			return (NULL);
 		}
-		sc->sc_ep = sc->sc_xxx + SLBUFSIZE;
-		MEXTADD(m, p, MCLBYTES, M_MBUF, NULL, NULL);
+		sc->sc_ep = mtod(m, u_char *) + SLBUFSIZE;
 		m->m_data = (caddr_t)sc->sc_buf;
+		m->m_ext.ext_buf = (caddr_t)((int)sc->sc_buf &~ MCLOFSET);
 	} else
 		bcopy((caddr_t)sc->sc_buf, mtod(m, caddr_t), len);
 
@@ -696,7 +610,6 @@ sl_btom(sc, len)
 /*
  * tty interface receiver interrupt.
  */
-void
 slinput(c, tp)
 	register int c;
 	register struct tty *tp;
@@ -705,48 +618,44 @@ slinput(c, tp)
 	register struct mbuf *m;
 	register int len;
 	int s;
-#if NBPFILTER > 0
-	u_char chdr[CHDR_LEN];
-#endif
 
 	tk_nin++;
 	sc = (struct sl_softc *)tp->t_sc;
 	if (sc == NULL)
 		return;
-	if (c & TTY_ERRORMASK || ((tp->t_state & TS_CARR_ON) == 0 &&
-	    (tp->t_cflag & CLOCAL) == 0)) {
-		sc->sc_flags |= SC_ERROR;
+	if (!(tp->t_state&TS_CARR_ON))	/* XXX */
 		return;
-	}
-	c &= TTY_CHARMASK;
 
+	++sc->sc_bytesrcvd;
 	++sc->sc_if.if_ibytes;
+	c &= 0xff;			/* XXX */
 
-	if (sc->sc_if.if_flags & IFF_DEBUG) {
-		if (c == ABT_ESC) {
-			/*
-			 * If we have a previous abort, see whether
-			 * this one is within the time limit.
-			 */
-			if (sc->sc_abortcount &&
-			    time.tv_sec >= sc->sc_starttime + ABT_WINDOW)
+#ifdef ABT_ESC
+	if (sc->sc_flags & SC_ABORT) {
+		/* if we see an abort after "idle" time, count it */
+		if (c == ABT_ESC && time.tv_sec >= sc->sc_lasttime + ABT_WAIT) {
+			sc->sc_abortcount++;
+			/* record when the first abort escape arrived */
+			if (sc->sc_abortcount == 1)
+				sc->sc_starttime = time.tv_sec;
+		}
+		/*
+		 * if we have an abort, see that we have not run out of time,
+		 * or that we have an "idle" time after the complete escape
+		 * sequence
+		 */
+		if (sc->sc_abortcount) {
+			if (time.tv_sec >= sc->sc_starttime + ABT_RECYCLE)
 				sc->sc_abortcount = 0;
-			/*
-			 * If we see an abort after "idle" time, count it;
-			 * record when the first abort escape arrived.
-			 */
-			if (time.tv_sec >= sc->sc_lasttime + ABT_IDLE) {
-				if (++sc->sc_abortcount == 1)
-					sc->sc_starttime = time.tv_sec;
-				if (sc->sc_abortcount >= ABT_COUNT) {
-					slclose(tp);
-					return;
-				}
+			if (sc->sc_abortcount >= ABT_SOFT &&
+			    time.tv_sec >= sc->sc_lasttime + ABT_WAIT) {
+				slclose(tp);
+				return;
 			}
-		} else
-			sc->sc_abortcount = 0;
+		}
 		sc->sc_lasttime = time.tv_sec;
 	}
+#endif
 
 	switch (c) {
 
@@ -765,28 +674,10 @@ slinput(c, tp)
 		return;
 
 	case FRAME_END:
-		if(sc->sc_flags & SC_ERROR) {
-			sc->sc_flags &= ~SC_ERROR;
-			goto newpack;
-		}
 		len = sc->sc_mp - sc->sc_buf;
 		if (len < 3)
 			/* less than min length packet - ignore */
 			goto newpack;
-
-#if NBPFILTER > 0
-		if (sc->sc_bpf) {
-			/*
-			 * Save the compressed header, so we
-			 * can tack it on later.  Note that we
-			 * will end up copying garbage in some
-			 * cases but this is okay.  We remember
-			 * where the buffer started so we can
-			 * compute the new header length.
-			 */
-			bcopy(sc->sc_buf, chdr, CHDR_LEN);
-		}
-#endif
 
 		if ((c = (*sc->sc_buf & 0xf0)) != (IPVERSION << 4)) {
 			if (c & 0x80)
@@ -800,36 +691,21 @@ slinput(c, tp)
 			 * it's a reasonable packet, decompress it and then
 			 * enable compression.  Otherwise, drop it.
 			 */
-			if (sc->sc_if.if_flags & SC_COMPRESS) {
+			if (sc->sc_flags & SC_COMPRESS) {
 				len = sl_uncompress_tcp(&sc->sc_buf, len,
 							(u_int)c, &sc->sc_comp);
 				if (len <= 0)
 					goto error;
-			} else if ((sc->sc_if.if_flags & SC_AUTOCOMP) &&
+			} else if ((sc->sc_flags & SC_AUTOCOMP) &&
 			    c == TYPE_UNCOMPRESSED_TCP && len >= 40) {
 				len = sl_uncompress_tcp(&sc->sc_buf, len,
 							(u_int)c, &sc->sc_comp);
 				if (len <= 0)
 					goto error;
-				sc->sc_if.if_flags |= SC_COMPRESS;
+				sc->sc_flags |= SC_COMPRESS;
 			} else
 				goto error;
 		}
-#if NBPFILTER > 0
-		if (sc->sc_bpf) {
-			/*
-			 * Put the SLIP pseudo-"link header" in place.
-			 * We couldn't do this any earlier since
-			 * decompression probably moved the buffer
-			 * pointer.  Then, invoke BPF.
-			 */
-			register u_char *hp = sc->sc_buf - SLIP_HDRLEN;
-
-			hp[SLX_DIR] = SLIPDIR_IN;
-			bcopy(chdr, &hp[SLX_CHDR], CHDR_LEN);
-			bpf_tap(sc->sc_bpf, hp, len + SLIP_HDRLEN);
-		}
-#endif
 		m = sl_btom(sc, len);
 		if (m == NULL)
 			goto error;
@@ -854,10 +730,6 @@ slinput(c, tp)
 		sc->sc_escape = 0;
 		return;
 	}
-
-	/* can't put lower; would miss an extra frame */
-	sc->sc_flags |= SC_ERROR;
-
 error:
 	sc->sc_if.if_ierrors++;
 newpack:
@@ -868,15 +740,13 @@ newpack:
 /*
  * Process an ioctl request.
  */
-int
 slioctl(ifp, cmd, data)
 	register struct ifnet *ifp;
-	u_long cmd;
+	int cmd;
 	caddr_t data;
 {
 	register struct ifaddr *ifa = (struct ifaddr *)data;
-	register struct ifreq *ifr;
-	register int s = splimp(), error = 0;
+	int s = splimp(), error = 0;
 
 	switch (cmd) {
 
@@ -890,26 +760,6 @@ slioctl(ifp, cmd, data)
 	case SIOCSIFDSTADDR:
 		if (ifa->ifa_addr->sa_family != AF_INET)
 			error = EAFNOSUPPORT;
-		break;
-
-	case SIOCADDMULTI:
-	case SIOCDELMULTI:
-		ifr = (struct ifreq *)data;
-		if (ifr == 0) {
-			error = EAFNOSUPPORT;		/* XXX */
-			break;
-		}
-		switch (ifr->ifr_addr.sa_family) {
-
-#ifdef INET
-		case AF_INET:
-			break;
-#endif
-
-		default:
-			error = EAFNOSUPPORT;
-			break;
-		}
 		break;
 
 	default:

@@ -29,8 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)mail5.nr	8.2 (Berkeley) 5/16/94
+.\"	@(#)mail5.nr	8.1 (Berkeley) 6/8/93
 .\"
+.bp
 .sh 1 "Additional features"
 .pp
 This section describes some additional commands useful for
@@ -938,7 +939,7 @@ to truncate your system mailbox instead of deleting it when it
 is empty.  This is useful if you elect to protect your mailbox, which
 you would do with the shell command:
 .(l
-chmod 600 /var/mail/yourname
+chmod 600 /usr/spool/mail/yourname
 .)l
 where
 .i yourname

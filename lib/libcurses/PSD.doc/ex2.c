@@ -68,7 +68,7 @@ main()
 	move(0,0);
 	refresh();
 	for (i = 0; i < YSIZE + 2; i++) {
-		(void)snprintf(id, sizeof id, "%d: ", i);
+		sprintf(id, "%d: ", i);
 		addstr(id);
 		for (j = 0; j < XSIZE - strlen(id); j++)
 			addch('0' + (i % 10));
@@ -179,7 +179,7 @@ main()
 			base--;
 			move(0, 0);
 			insertln();
-			(void)snprintf(id, sizeof id, "%d: ", base);
+			sprintf(id, "%d: ", base);
 			addstr(id);
 			for (j = 0; j < XSIZE - strlen(id) - 2; j++) 
 				addch('0' + (base % 10));
@@ -188,7 +188,7 @@ main()
 			move(0, 0);
 			deleteln();
 			move(YSIZE - 1, 0);
-			(void)snprintf(id, sizeof id, "%d: ", base + YSIZE);
+			sprintf(id, "%d: ", base + YSIZE);
 			addstr(id);
 			for (j = 0; j < XSIZE - strlen(id) - 2; j++)
 				addch('0' + ((base + YSIZE) % 10));

@@ -1,8 +1,6 @@
-/*	$NetBSD: resource.h,v 1.15 1997/10/15 17:04:30 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,11 +30,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)resource.h	8.2 (Berkeley) 1/4/94
+ *	@(#)resource.h	7.5 (Berkeley) 3/17/91
  */
 
-#ifndef _SYS_RESOURCE_H_
-#define	_SYS_RESOURCE_H_
+#ifndef _RESOURCE_H_
+#define	_RESOURCE_H_
 
 /*
  * Process priority specifications to get/setpriority.
@@ -87,34 +85,18 @@ struct	rusage {
 #define	RLIMIT_RSS	5		/* resident set size */
 #define	RLIMIT_MEMLOCK	6		/* locked-in-memory address space */
 #define	RLIMIT_NPROC	7		/* number of processes */
-#define	RLIMIT_NOFILE	8		/* number of open files */
+#define	RLIMIT_OFILE	8		/* number of open files */
 
 #define	RLIM_NLIMITS	9		/* number of resource limits */
 
-#define	RLIM_INFINITY	(((u_quad_t)1 << 63) - 1)
-
-struct orlimit {
-	int32_t	rlim_cur;		/* current (soft) limit */
-	int32_t	rlim_max;		/* maximum value for rlim_cur */
-};
+#define	RLIM_INFINITY	0x7fffffff
 
 struct rlimit {
-	rlim_t	rlim_cur;		/* current (soft) limit */
-	rlim_t	rlim_max;		/* maximum value for rlim_cur */
+	long	rlim_cur;		/* current (soft) limit */
+	long	rlim_max;		/* maximum value for rlim_cur */
 };
 
-/* Load average structure. */
-struct loadavg {
-	fixpt_t	ldavg[3];
-	long	fscale;
-};
-
-#ifdef _KERNEL
-extern struct loadavg averunnable;
-int	dosetrlimit __P((struct proc *, int, struct rlimit *));
-int	donice __P((struct proc *, struct proc *, int));
-
-#else
+#ifndef KERNEL
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
@@ -125,5 +107,5 @@ int	setpriority __P((int, int, int));
 int	setrlimit __P((int, const struct rlimit *));
 __END_DECLS
 
-#endif	/* _KERNEL */
-#endif	/* !_SYS_RESOURCE_H_ */
+#endif	/* !KERNEL */
+#endif	/* !_RESOURCE_H_ */

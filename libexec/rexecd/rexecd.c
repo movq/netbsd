@@ -1,8 +1,6 @@
-/*	$NetBSD: rexecd.c,v 1.4 1997/10/07 10:11:31 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,38 +31,33 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#if 0
-static char sccsid[] = "from: @(#)rexecd.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: rexecd.c,v 1.4 1997/10/07 10:11:31 mrg Exp $");
-#endif
+char copyright[] =
+"@(#) Copyright (c) 1983 The Regents of the University of California.\n\
+ All rights reserved.\n";
+#endif /* not lint */
+
+#ifndef lint
+static char sccsid[] = "@(#)rexecd.c	5.12 (Berkeley) 2/25/91";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/time.h>
-
 #include <netinet/in.h>
-
-#include <errno.h>
-#include <netdb.h>
-#include <paths.h>
-#include <pwd.h>
 #include <signal.h>
+#include <netdb.h>
+#include <pwd.h>
+#include <errno.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
+#include <paths.h>
 
-void error __P((const char *, ...));
-int main __P((int, char **));
-void doit __P((int, struct sockaddr_in *));
-void getstr __P((char *, int, char *));
+/*VARARGS1*/
+int error();
 
 /*
  * remote execute server:
@@ -73,7 +66,7 @@ void getstr __P((char *, int, char *));
  *	command\0
  *	data
  */
-int
+/*ARGSUSED*/
 main(argc, argv)
 	int argc;
 	char **argv;
@@ -88,7 +81,6 @@ main(argc, argv)
 		exit(1);
 	}
 	doit(0, &from);
-	exit(0);
 }
 
 char	username[20] = "USER=";
@@ -101,7 +93,6 @@ char	**environ;
 
 struct	sockaddr_in asin = { AF_INET };
 
-void
 doit(f, fromp)
 	int f;
 	struct sockaddr_in *fromp;
@@ -109,7 +100,7 @@ doit(f, fromp)
 	char cmdbuf[NCARGS+1], *cp, *namep;
 	char user[16], pass[16];
 	struct passwd *pwd;
-	int s = -1; /* XXX gcc */
+	int s;
 	u_short port;
 	int pv[2], pid, ready, readfrom, cc;
 	char buf[BUFSIZ], sig;
@@ -217,7 +208,6 @@ doit(f, fromp)
 		pwd->pw_shell = _PATH_BSHELL;
 	if (f > 2)
 		(void) close(f);
-	setlogin(pwd->pw_name);
 	(void) setgid((gid_t)pwd->pw_gid);
 	initgroups(pwd->pw_name, pwd->pw_gid);
 	(void) setuid((uid_t)pwd->pw_uid);
@@ -226,7 +216,7 @@ doit(f, fromp)
 	strncat(homedir, pwd->pw_dir, sizeof(homedir)-6);
 	strncat(shell, pwd->pw_shell, sizeof(shell)-7);
 	strncat(username, pwd->pw_name, sizeof(username)-6);
-	cp = strrchr(pwd->pw_shell, '/');
+	cp = rindex(pwd->pw_shell, '/');
 	if (cp)
 		cp++;
 	else
@@ -236,36 +226,18 @@ doit(f, fromp)
 	exit(1);
 }
 
-#ifdef __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
-
-void
-#ifdef __STDC__
-error(const char *fmt, ...)
-#else
-error(fmt, va_alist)
+/*VARARGS1*/
+error(fmt, a1, a2, a3)
 	char *fmt;
-	va_dcl
-#endif
+	int a1, a2, a3;
 {
 	char buf[BUFSIZ];
-	va_list ap;
-
-#ifdef __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 
 	buf[0] = 1;
-	(void)vsprintf(buf+1, fmt, ap);
-	(void)write(2, buf, strlen(buf));
+	(void) sprintf(buf+1, fmt, a1, a2, a3);
+	(void) write(2, buf, strlen(buf));
 }
 
-void
 getstr(buf, cnt, err)
 	char *buf;
 	int cnt;

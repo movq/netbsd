@@ -1,5 +1,3 @@
-/*	$NetBSD: t3000.c,v 1.5 1997/02/11 09:24:18 mrg Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)t3000.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: t3000.c,v 1.5 1997/02/11 09:24:18 mrg Exp $";
 #endif /* not lint */
 
 /*
@@ -45,8 +40,6 @@ static char rcsid[] = "$NetBSD: t3000.c,v 1.5 1997/02/11 09:24:18 mrg Exp $";
  * Derived from Courier driver.
  */
 #include "tip.h"
-
-#include <sys/ioctl.h>
 #include <stdio.h>
 
 #define	MAXRETRY	5
@@ -55,25 +48,22 @@ static	void sigALRM();
 static	int timeout = 0;
 static	int connected = 0;
 static	jmp_buf timeoutbuf, intbuf;
-static	int t3000_sync(), t3000_connect(), t3000_swallow();
-static	void t3000_napx();
+static	int t3000_sync();
 
 t3000_dialer(num, acu)
 	register char *num;
 	char *acu;
 {
 	register char *cp;
-	struct termios cntrl;
 #ifdef ACULOG
 	char line[80];
 #endif
+	static int t3000_connect(), t3000_swallow();
 
 	if (boolean(value(VERBOSE)))
 		printf("Using \"%s\"\n", acu);
 
-	tcgetattr(FD, &cntrl);
-	cntrl.c_cflag |= HUPCL;
-	tcsetattr(FD, TCSANOW, &cntrl);
+	ioctl(FD, TIOCHPCL, 0);
 	/*
 	 * Get in synch.
 	 */
@@ -91,7 +81,7 @@ badsynch:
 	if (boolean(value(VERBOSE)))
 		t3000_verbose_read();
 #endif
-	tcflush(FD, TCIOFLUSH);
+	ioctl(FD, TIOCFLUSH, 0);	/* flush any clutter */
 	t3000_write(FD, "AT E0 H0 Q0 X4 V1\r", 18);
 	if (!t3000_swallow("\r\nOK\r\n"))
 		goto badsynch;
@@ -105,7 +95,7 @@ badsynch:
 	connected = t3000_connect();
 #ifdef ACULOG
 	if (timeout) {
-		(void)snprintf(line, sizeof line, "%d second dial timeout",
+		sprintf(line, "%d second dial timeout",
 			number(value(DIALTIMEOUT)));
 		logent(value(HOST), num, "t3000", line);
 	}
@@ -205,6 +195,7 @@ t3000_connect()
 {
 	char c;
 	int nc, nl, n;
+	struct sgttyb sb;
 	char dialer_buf[64];
 	struct tbaud_msg *bm;
 	sig_t f;
@@ -243,12 +234,25 @@ again:
 			for (bm = tbaud_msg ; bm->msg ; bm++)
 				if (strcmp(bm->msg,
 				    dialer_buf+sizeof("CONNECT")-1) == 0) {
-					struct termios	cntrl;
-
-					tcgetattr(FD, &cntrl);
-					cfsetospeed(&cntrl, bm->baud);
-					cfsetispeed(&cntrl, bm->baud);
-					tcsetattr(FD, TCSAFLUSH, &cntrl);
+					if (ioctl(FD, TIOCGETP, &sb) < 0) {
+						perror("TIOCGETP");
+						goto error;
+					}
+					sb.sg_ispeed = sb.sg_ospeed = bm->baud;
+					if (ioctl(FD, TIOCSETP, &sb) < 0) {
+						if (bm->baud2) {
+							sb.sg_ispeed =
+							sb.sg_ospeed =
+								bm->baud2;
+							if (ioctl(FD,
+								  TIOCSETP,
+								  &sb) >= 0)
+								goto isok;
+						}
+						perror("TIOCSETP");
+						goto error;
+					}
+isok:
 					signal(SIGALRM, f);
 #ifdef DEBUG
 					if (boolean(value(VERBOSE)))
@@ -283,7 +287,7 @@ t3000_sync()
 	char buf[40];
 
 	while (already++ < MAXRETRY) {
-		tcflush(FD, TCIOFLUSH);
+		ioctl(FD, TIOCFLUSH, 0);	/* flush any clutter */
 		t3000_write(FD, "\rAT Z\r", 6);	/* reset modem */
 		bzero(buf, sizeof(buf));
 		sleep(2);
@@ -325,15 +329,19 @@ int fd;
 char *cp;
 int n;
 {
+	struct sgttyb sb;
+
 #ifdef notdef
 	if (boolean(value(VERBOSE)))
 		write(1, cp, n);
 #endif
-	tcdrain(fd);
+	ioctl(fd, TIOCGETP, &sb);
+	ioctl(fd, TIOCSETP, &sb);
 	t3000_nap();
 	for ( ; n-- ; cp++) {
 		write(fd, cp, 1);
-		tcdrain(fd);
+		ioctl(fd, TIOCGETP, &sb);
+		ioctl(fd, TIOCSETP, &sb);
 		t3000_nap();
 	}
 }
@@ -368,6 +376,7 @@ static int ringring;
 t3000_nap()
 {
 
+        static void t3000_napx();
 	int omask;
         struct itimerval itv, oitv;
         register struct itimerval *itp = &itv;

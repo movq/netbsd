@@ -1,8 +1,6 @@
-/*	$NetBSD: perror.c,v 1.10 1997/07/13 20:15:17 christos Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)perror.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: perror.c,v 1.10 1997/07/13 20:15:17 christos Exp $");
-#endif
+static char sccsid[] = "@(#)perror.c	5.11 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -48,14 +41,6 @@ __RCSID("$NetBSD: perror.c,v 1.10 1997/07/13 20:15:17 christos Exp $");
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include <limits.h>
-#include "extern.h"
-
-/*
- * Since perror() is not allowed to change the contents of strerror()'s
- * static buffer, both functions supply their own buffers to the
- * internal function __strerror().
- */
 
 void
 perror(s)
@@ -63,7 +48,6 @@ perror(s)
 {
 	register struct iovec *v;
 	struct iovec iov[4];
-	static char buf[NL_TEXTMAX];
 
 	v = iov;
 	if (s && *s) {
@@ -74,7 +58,7 @@ perror(s)
 		v->iov_len = 2;
 		v++;
 	}
-	v->iov_base = __strerror(errno, buf, NL_TEXTMAX);
+	v->iov_base = strerror(errno);
 	v->iov_len = strlen(v->iov_base);
 	v++;
 	v->iov_base = "\n";

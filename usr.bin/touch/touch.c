@@ -1,8 +1,6 @@
-/*	$NetBSD: touch.c,v 1.15 1997/10/20 00:49:54 lukem Exp $	*/
-
 /*
- * Copyright (c) 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,337 +31,131 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1988 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)touch.c	8.2 (Berkeley) 4/28/95";
-#endif
-__RCSID("$NetBSD: touch.c,v 1.15 1997/10/20 00:49:54 lukem Exp $");
+static char sccsid[] = "@(#)touch.c	4.8 (Berkeley) 6/1/90";
 #endif /* not lint */
 
+/*
+ * Attempt to set the modify date of a file to the current date.  If the
+ * file exists, read and write its first character.  If the file doesn't
+ * exist, create it, unless -c option prevents it.  If the file is read-only,
+ * -f forces chmod'ing and touch'ing.
+ */
 #include <sys/types.h>
+#include <sys/file.h>
 #include <sys/stat.h>
-#include <sys/time.h>
-
-#include <err.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <locale.h>
-#include <time.h>
-#include <unistd.h>
 
-int	main __P((int, char **));
-int	rw __P((char *, struct stat *, int));
-void	stime_arg1 __P((char *, struct timeval *));
-void	stime_arg2 __P((char *, int, struct timeval *));
-void	stime_file __P((char *, struct timeval *));
-void	usage __P((void));
+static int	dontcreate;	/* set if -c option */
+static int	force;		/* set if -f option */
 
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	struct stat sb;
-	struct timeval tv[2];
-	int aflag, cflag, fflag, hflag, mflag, ch, fd, len, rval, timeset;
-	char *p;
-	int (*change_file_times) __P((const char *, const struct timeval *));
-	int (*get_file_status) __P((const char *, struct stat *));
+	extern int optind;
+	int ch, retval;
 
-	setlocale(LC_ALL, "");
-
-	aflag = cflag = fflag = hflag = mflag = timeset = 0;
-	if (gettimeofday(&tv[0], NULL))
-		err(1, "gettimeofday");
-
-	while ((ch = getopt(argc, argv, "acfhmr:t:")) != -1)
-		switch(ch) {
-		case 'a':
-			aflag = 1;
-			break;
+	dontcreate = force = retval = 0;
+	while ((ch = getopt(argc, argv, "cf")) != EOF)
+		switch((char)ch) {
 		case 'c':
-			cflag = 1;
+			dontcreate = 1;
 			break;
 		case 'f':
-			fflag = 1;
-			break;
-		case 'h':
-			hflag = 1;
-			break;
-		case 'm':
-			mflag = 1;
-			break;
-		case 'r':
-			timeset = 1;
-			stime_file(optarg, tv);
-			break;
-		case 't':
-			timeset = 1;
-			stime_arg1(optarg, tv);
+			force = 1;
 			break;
 		case '?':
 		default:
 			usage();
 		}
-	argc -= optind;
-	argv += optind;
-
-	/* Default is both -a and -m. */
-	if (aflag == 0 && mflag == 0)
-		aflag = mflag = 1;
-
-	if (hflag) {
-		cflag = 1;		/* Don't create new file */
-		change_file_times = lutimes;
-		get_file_status = lstat;
-	} else {
-		change_file_times = utimes;
-		get_file_status = stat;
-	}
-
-	/*
-	 * If no -r or -t flag, at least two operands, the first of which
-	 * is an 8 or 10 digit number, use the obsolete time specification.
-	 */
-	if (!timeset && argc > 1) {
-		(void)strtol(argv[0], &p, 10);
-		len = p - argv[0];
-		if (*p == '\0' && (len == 8 || len == 10)) {
-			timeset = 1;
-			stime_arg2(*argv++, len == 10, tv);
-		}
-	}
-
-	/* Otherwise use the current time of day. */
-	if (!timeset)
-		tv[1] = tv[0];
-
-	if (*argv == NULL)
+	if (!*(argv += optind))
 		usage();
+	do {
+		retval |= touch(*argv);
+	} while (*++argv);
+	exit(retval);
+}
 
-	for (rval = 0; *argv; ++argv) {
-		/* See if the file exists. */
-		if ((*get_file_status)(*argv, &sb))
-			if (!cflag) {
-				/* Create the file. */
-				fd = open(*argv,
-				    O_WRONLY | O_CREAT, DEFFILEMODE);
-				if (fd == -1 || fstat(fd, &sb) || close(fd)) {
-					rval = 1;
-					warn("%s", *argv);
-					continue;
-				}
+touch(filename)
+	char *filename;
+{
+	struct stat statbuffer;
 
-				/* If using the current time, we're done. */
-				if (!timeset)
-					continue;
-			} else
-				continue;
+	if (stat(filename, &statbuffer) == -1) {
+		if (!dontcreate)
+			return(readwrite(filename, 0L));
+		fprintf(stderr, "touch: %s: does not exist\n", filename);
+		return(1);
+	}
+	if ((statbuffer.st_mode & S_IFMT) != S_IFREG) {
+		fprintf(stderr, "touch: %s: can only touch regular files\n",
+		    filename);
+		return(1);
+	}
+	if (!access(filename, R_OK | W_OK))
+		return(readwrite(filename,statbuffer.st_size));
+	if (force) {
+		int retval;
 
-		if (!aflag)
-			TIMESPEC_TO_TIMEVAL(&tv[0], &sb.st_atimespec);
-		if (!mflag)
-			TIMESPEC_TO_TIMEVAL(&tv[1], &sb.st_mtimespec);
-
-		/* Try utimes(2). */
-		if (!(*change_file_times)(*argv, tv))
-			continue;
-
-		/* If the user specified a time, nothing else we can do. */
-		if (timeset) {
-			rval = 1;
-			warn("%s", *argv);
+		if (chmod(filename, 0666)) {
+			fprintf(stderr, "touch: %s: couldn't chmod: ",
+			    filename);
+			perror((char *)NULL);
+			return(1);
 		}
-
-		/*
-		 * System V and POSIX 1003.1 require that a NULL argument
-		 * set the access/modification times to the current time.
-		 * The permission checks are different, too, in that the
-		 * ability to write the file is sufficient.  Take a shot.
-		 */
-		 if (!(*change_file_times)(*argv, NULL))
-			continue;
-
-		/* Try reading/writing. */
-		if (!S_ISLNK(sb.st_mode) && rw(*argv, &sb, fflag))
-			rval = 1;
-	}
-	exit(rval);
-}
-
-#define	ATOI2(ar)	((ar)[0] - '0') * 10 + ((ar)[1] - '0'); (ar) += 2;
-
-void
-stime_arg1(arg, tvp)
-	char *arg;
-	struct timeval *tvp;
-{
-	struct tm *t;
-	time_t tmptime;
-	int yearset;
-	char *p;
-					/* Start with the current time. */
-	tmptime = tvp[0].tv_sec;
-	if ((t = localtime(&tmptime)) == NULL)
-		err(1, "localtime");
-					/* [[CC]YY]MMDDhhmm[.SS] */
-	if ((p = strchr(arg, '.')) == NULL)
-		t->tm_sec = 0;		/* Seconds defaults to 0. */
-	else {
-		if (strlen(p + 1) != 2)
-			goto terr;
-		*p++ = '\0';
-		t->tm_sec = ATOI2(p);
-	}
-		
-	yearset = 0;
-	switch(strlen(arg)) {
-	case 12:			/* CCYYMMDDhhmm */
-		t->tm_year = ATOI2(arg);
-		t->tm_year *= 100;
-		yearset = 1;
-		/* FALLTHOUGH */
-	case 10:			/* YYMMDDhhmm */
-		if (yearset) {
-			yearset = ATOI2(arg);
-			t->tm_year += yearset;
-		} else {
-			yearset = ATOI2(arg);
-			if (yearset < 69)
-				t->tm_year = yearset + 2000;
-			else
-				t->tm_year = yearset + 1900;
+		retval = readwrite(filename, statbuffer.st_size);
+		if (chmod(filename, statbuffer.st_mode)) {
+			fprintf(stderr, "touch: %s: couldn't chmod back: ",
+			    filename);
+			perror((char *)NULL);
+			return(1);
 		}
-		t->tm_year -= 1900;	/* Convert to UNIX time. */
-		/* FALLTHROUGH */
-	case 8:				/* MMDDhhmm */
-		t->tm_mon = ATOI2(arg);
-		--t->tm_mon;		/* Convert from 01-12 to 00-11 */
-		t->tm_mday = ATOI2(arg);
-		t->tm_hour = ATOI2(arg);
-		t->tm_min = ATOI2(arg);
-		break;
-	default:
-		goto terr;
+		return(retval);
 	}
-
-	t->tm_isdst = -1;		/* Figure out DST. */
-	tvp[0].tv_sec = tvp[1].tv_sec = mktime(t);
-	if (tvp[0].tv_sec == -1)
-terr:		errx(1,
-	"out of range or illegal time specification: [[CC]YY]MMDDhhmm[.SS]");
-
-	tvp[0].tv_usec = tvp[1].tv_usec = 0;
+	fprintf(stderr, "touch: %s: cannot touch\n", filename);
+	return(1);
 }
 
-void
-stime_arg2(arg, year, tvp)
-	char *arg;
-	int year;
-	struct timeval *tvp;
+readwrite(filename, size)
+	char *filename;
+	off_t size;
 {
-	struct tm *t;
-	time_t tmptime;
-					/* Start with the current time. */
-	tmptime = tvp[0].tv_sec;
-	if ((t = localtime(&tmptime)) == NULL)
-		err(1, "localtime");
+	int filedescriptor;
+	char first;
+	off_t lseek();
 
-	t->tm_mon = ATOI2(arg);		/* MMDDhhmm[yy] */
-	--t->tm_mon;			/* Convert from 01-12 to 00-11 */
-	t->tm_mday = ATOI2(arg);
-	t->tm_hour = ATOI2(arg);
-	t->tm_min = ATOI2(arg);
-	if (year)
-		t->tm_year = ATOI2(arg);
-
-	t->tm_isdst = -1;		/* Figure out DST. */
-	tvp[0].tv_sec = tvp[1].tv_sec = mktime(t);
-	if (tvp[0].tv_sec == -1)
-		errx(1,
-	"out of range or illegal time specification: MMDDhhmm[yy]");
-
-	tvp[0].tv_usec = tvp[1].tv_usec = 0;
-}
-
-void
-stime_file(fname, tvp)
-	char *fname;
-	struct timeval *tvp;
-{
-	struct stat sb;
-
-	if (stat(fname, &sb))
-		err(1, "%s", fname);
-	TIMESPEC_TO_TIMEVAL(&tvp[0], &sb.st_atimespec);
-	TIMESPEC_TO_TIMEVAL(&tvp[1], &sb.st_mtimespec);
-}
-
-int
-rw(fname, sbp, force)
-	char *fname;
-	struct stat *sbp;
-	int force;
-{
-	int fd, needed_chmod, rval;
-	u_char byte;
-
-	/* Try regular files and directories. */
-	if (!S_ISREG(sbp->st_mode) && !S_ISDIR(sbp->st_mode)) {
-		warnx("%s: %s", fname, strerror(EFTYPE));
-		return (1);
-	}
-
-	needed_chmod = rval = 0;
-	if ((fd = open(fname, O_RDWR, 0)) == -1) {
-		if (!force || chmod(fname, DEFFILEMODE))
-			goto err;
-		if ((fd = open(fname, O_RDWR, 0)) == -1)
-			goto err;
-		needed_chmod = 1;
-	}
-
-	if (sbp->st_size != 0) {
-		if (read(fd, &byte, sizeof(byte)) != sizeof(byte))
-			goto err;
-		if (lseek(fd, (off_t)0, SEEK_SET) == -1)
-			goto err;
-		if (write(fd, &byte, sizeof(byte)) != sizeof(byte))
-			goto err;
+	if (size) {
+		filedescriptor = open(filename, O_RDWR, 0);
+		if (filedescriptor == -1) {
+error:			fprintf(stderr, "touch: %s: ", filename);
+			perror((char *)NULL);
+			return(1);
+		}
+		if (read(filedescriptor, &first, 1) != 1)
+			goto error;
+		if (lseek(filedescriptor, 0L, 0) == -1)
+			goto error;
+		if (write(filedescriptor, &first, 1) != 1)
+			goto error;
 	} else {
-		if (write(fd, &byte, sizeof(byte)) != sizeof(byte)) {
-err:			rval = 1;
-			warn("%s", fname);
-		} else if (ftruncate(fd, (off_t)0)) {
-			rval = 1;
-			warn("%s: file modified", fname);
-		}
+		filedescriptor = creat(filename, 0666);
+		if (filedescriptor == -1)
+			goto error;
 	}
-
-	if (close(fd) && rval != 1) {
-		rval = 1;
-		warn("%s", fname);
-	}
-	if (needed_chmod && chmod(fname, sbp->st_mode) && rval != 1) {
-		rval = 1;
-		warn("%s: permissions modified", fname);
-	}
-	return (rval);
+	if (close(filedescriptor) == -1)
+		goto error;
+	return(0);
 }
 
-__dead void
 usage()
 {
-	(void)fprintf(stderr,
-	    "usage: touch [-acfhm] [-r file] [-t time] file ...\n");
+	fprintf(stderr, "usage: touch [-cf] file ...\n");
 	exit(1);
 }

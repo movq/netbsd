@@ -1,5 +1,3 @@
-/* $NetBSD: pathnames.h,v 1.7 1997/10/18 20:03:41 christos Exp $	 */
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -32,11 +30,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)pathnames.h	5.2 (Berkeley) 4/27/95
+ *	@(#)pathnames.h	5.1 (Berkeley) 5/2/90
  */
 
 #define	_PATH_LOG		"/var/games/larn/llog12.0"
 #define	_PATH_SCORE		"/var/games/larn/lscore12.0"
 #define	_PATH_HELP		"/usr/share/games/larn/larn.help"
 #define	_PATH_LEVELS		"/usr/share/games/larn/larnmaze"
-#define	_PATH_PLAYERIDS		"/var/games/larn/playerids"
+#define	_PATH_FORTS		"/usr/share/games/larn/lfortune"
+#define	_PATH_PLAYERIDS		"/usr/share/games/larn/playerids"

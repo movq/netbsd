@@ -1,8 +1,6 @@
-/*	$NetBSD: out.c,v 1.5 1997/10/13 22:20:35 cjs Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,32 +31,24 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)out.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: out.c,v 1.5 1997/10/13 22:20:35 cjs Exp $");
-#endif
+static char sccsid[] = "@(#)out.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <string.h>
-#include "trek.h"
+# include	"trek.h"
 
 /*
 **  Announce Device Out
 */
 
-void
 out(dev)
 int	dev;
 {
-	struct device	*d;
+	register struct device	*d;
 
 	d = &Device[dev];
 	printf("%s reports %s ", d->person, d->name);
-	if (d->name[strlen(d->name) - 1] == 's')
+	if (d->name[length(d->name) - 1] == 's')
 		printf("are");
 	else
 		printf("is");

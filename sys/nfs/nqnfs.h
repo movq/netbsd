@@ -1,5 +1,3 @@
-/*	$NetBSD: nqnfs.h,v 1.6 1996/02/18 11:54:10 fvdl Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -35,12 +33,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)nqnfs.h	8.3 (Berkeley) 3/30/95
+ *	from: @(#)nqnfs.h	8.1 (Berkeley) 6/10/93
+ *	$Id: nqnfs.h,v 1.1 1994/06/08 11:37:18 mycroft Exp $
  */
-
-
-#ifndef _NFS_NQNFS_H_
-#define _NFS_NQNFS_H_
 
 /*
  * Definitions for NQNFS (Not Quite NFS) cache consistency protocol.
@@ -60,7 +55,7 @@
 #define	NQLCHSZ		256	/* Server hash table size */
 
 #define	NQNFS_PROG	300105	/* As assigned by Sun */
-#define	NQNFS_VER3	3
+#define	NQNFS_VER1	1
 #define	NQNFS_EVICTSIZ	156	/* Size of eviction request in bytes */
 
 /*
@@ -68,9 +63,6 @@
  * RAM on the server. The default definitions below assume that NOVRAM is not
  * available.
  */
-#ifdef HASNVRAM
-#  undef HASNVRAM
-#endif
 #define	NQSTORENOVRAM(t)
 #define	NQLOADNOVRAM(t)
 
@@ -89,18 +81,18 @@
 struct nqhost {
 	union {
 		struct {
-			u_int16_t udp_flag;
-			u_int16_t	udp_port;
+			u_short udp_flag;
+			u_short	udp_port;
 			union nethostaddr udp_haddr;
 		} un_udp;
 		struct {
-			u_int16_t connless_flag;
-			u_int16_t connless_spare;
+			u_short connless_flag;
+			u_short connless_spare;
 			union nethostaddr connless_haddr;
 		} un_connless;
 		struct {
-			u_int16_t conn_flag;
-			u_int16_t conn_spare;
+			u_short conn_flag;
+			u_short conn_spare;
 			struct nfssvc_sock *conn_slp;
 		} un_conn;
 	} lph_un;
@@ -114,8 +106,9 @@ struct nqhost {
 #define	lph_slp		lph_un.un_conn.conn_slp
 
 struct nqlease {
-	LIST_ENTRY(nqlease) lc_hash;	/* Fhandle hash list */
-	CIRCLEQ_ENTRY(nqlease) lc_timer; /* Timer queue list */
+	struct nqlease *lc_chain1[2];	/* Timer queue list (must be first) */
+	struct nqlease *lc_fhnext;	/* Fhandle hash list */
+	struct nqlease **lc_fhprev;
 	time_t		lc_expiry;	/* Expiry time (sec) */
 	struct nqhost	lc_host;	/* Host that got lease */
 	struct nqm	*lc_morehosts;	/* Other hosts that share read lease */
@@ -145,6 +138,14 @@ struct nqm {
 };
 
 /*
+ * Flag bits for flags argument to nqsrv_getlease.
+ */
+#define	NQL_READ	LEASE_READ	/* Read Request */
+#define	NQL_WRITE	LEASE_WRITE	/* Write Request */
+#define	NQL_CHECK	0x4		/* Check for lease */
+#define	NQL_NOVAL	0xffffffff	/* Invalid */
+
+/*
  * Special value for slp for local server calls.
  */
 #define	NQLOCALSLP	((struct nfssvc_sock *) -1)
@@ -154,9 +155,9 @@ struct nqm {
  */
 #define	nqsrv_getl(v, l) \
 		(void) nqsrv_getlease((v), &nfsd->nd_duration, \
-		 ((nfsd->nd_flag & ND_LEASE) ? (nfsd->nd_flag & ND_LEASE) : \
-		 ((l) | ND_CHECK)), \
-		 slp, procp, nfsd->nd_nam, &cache, &frev, cred)
+		 ((nfsd->nd_nqlflag != 0 && nfsd->nd_nqlflag != NQL_NOVAL) ? nfsd->nd_nqlflag : \
+		 ((l) | NQL_CHECK)), \
+		 nfsd, nam, &cache, &frev, cred)
 
 /*
  * Client side macros that check for a valid lease.
@@ -164,13 +165,13 @@ struct nqm {
 #define	NQNFS_CKINVALID(v, n, f) \
  ((time.tv_sec > (n)->n_expiry && \
  VFSTONFS((v)->v_mount)->nm_timeouts < VFSTONFS((v)->v_mount)->nm_deadthresh) \
-  || ((f) == ND_WRITE && ((n)->n_flag & NQNFSWRITE) == 0))
+  || ((f) == NQL_WRITE && ((n)->n_flag & NQNFSWRITE) == 0))
 
 #define	NQNFS_CKCACHABLE(v, f) \
  ((time.tv_sec <= VTONFS(v)->n_expiry || \
   VFSTONFS((v)->v_mount)->nm_timeouts >= VFSTONFS((v)->v_mount)->nm_deadthresh) \
    && (VTONFS(v)->n_flag & NQNFSNONCACHE) == 0 && \
-   ((f) == ND_READ || (VTONFS(v)->n_flag & NQNFSWRITE)))
+   ((f) == NQL_READ || (VTONFS(v)->n_flag & NQNFSWRITE)))
 
 #define	NQNFS_NEEDLEASE(v, p) \
 		(time.tv_sec > VTONFS(v)->n_expiry ? \
@@ -178,38 +179,21 @@ struct nqm {
 		 (((time.tv_sec + NQ_RENEWAL) > VTONFS(v)->n_expiry && \
 		   nqnfs_piggy[p]) ? \
 		   ((VTONFS(v)->n_flag & NQNFSWRITE) ? \
-		    ND_WRITE : nqnfs_piggy[p]) : 0))
+		    NQL_WRITE : nqnfs_piggy[p]) : 0))
 
 /*
  * List head for timer queue.
  */
-CIRCLEQ_HEAD(, nqlease) nqtimerhead;
-
-/*
- * List head for the file handle hash table.
- */
-#define	NQFHHASH(f) \
-	(&nqfhhashtbl[(*((u_int32_t *)(f))) & nqfhhash])
-LIST_HEAD(nqfhhashhead, nqlease) *nqfhhashtbl;
-u_long nqfhhash;
+extern union nqsrvthead {
+	union	nqsrvthead *th_head[2];
+	struct	nqlease *th_chain[2];
+} nqthead;
+extern struct nqlease **nqfhead;
+extern u_long nqfheadhash;
 
 /*
  * Nqnfs return status numbers.
  */
 #define	NQNFS_EXPIRED	500
 #define	NQNFS_TRYLATER	501
-
-#ifdef _KERNEL
-void	nqnfs_lease_updatetime __P((int));
-int	nqsrv_cmpnam __P((struct nfssvc_sock *,struct mbuf *,struct nqhost *));
-int	nqsrv_getlease __P((struct vnode *, u_int32_t *, int,
-		struct nfssvc_sock *, struct proc *, struct mbuf *, int *,
-		u_quad_t *, struct ucred *));
-int	nqnfs_getlease __P((struct vnode *, int, struct ucred *,struct proc *));
-int	nqnfs_callback __P((struct nfsmount *, struct mbuf *, struct mbuf *,
-		caddr_t));
-int	nqnfs_clientd __P((struct nfsmount *, struct ucred *,
-		struct nfsd_cargs *, int, caddr_t, struct proc *));
-#endif
-
-#endif
+#define NQNFS_AUTHERR	502

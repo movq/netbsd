@@ -1,13 +1,10 @@
-/*	$NetBSD: bpf.h,v 1.18 1997/10/10 14:15:32 christos Exp $	*/
-
-/*
- * Copyright (c) 1990, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+/*-
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from the Stanford/CMU enet packet filter,
  * (net/enet.c) distributed as part of 4.3BSD, and code contributed
- * to Berkeley by Steven McCanne and Van Jacobson both of Lawrence
- * Berkeley Laboratory.
+ * to Berkeley by Steven McCanne of Lawrence Berkeley Laboratory.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,18 +34,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)bpf.h	8.1 (Berkeley) 6/10/93
- * @(#) Header: bpf.h,v 1.36 97/06/12 14:29:53 leres Exp  (LBL)
+ *	@(#)bpf.h	7.1 (Berkeley) 5/7/91
+ *
+ * @(#) $Header: /home/mike/src/cvs/netbsd/src/sys/net/bpf.h,v 1.1 1993/03/21 09:45:37 cgd Exp $ (LBL)
  */
-
-#ifndef _NET_BPF_H_
-#define _NET_BPF_H_
-
-/* BSD style release date */
-#define BPF_RELEASE 199606
-
-typedef	int bpf_int32;
-typedef	u_int bpf_u_int32;
 
 /*
  * Alignment macros.  BPF_WORDALIGN rounds up to the next 
@@ -59,7 +48,6 @@ typedef	u_int bpf_u_int32;
 
 #define BPF_MAXINSNS 512
 #define BPF_MAXBUFSIZE 0x8000
-#define BPF_MINBUFSIZE 32
 
 /*
  *  Structure for BIOCSETF.
@@ -78,34 +66,15 @@ struct bpf_stat {
 };
 
 /*
- * Struct return by BIOCVERSION.  This represents the version number of 
- * the filter language described by the instruction encodings below.
- * bpf understands a program iff kernel_major == filter_major &&
- * kernel_minor >= filter_minor, that is, if the value returned by the
- * running kernel has the same major number and a minor number equal
- * equal to or less than the filter being downloaded.  Otherwise, the
- * results are undefined, meaning an error may be returned or packets
- * may be accepted haphazardly.
- * It has nothing to do with the source code version.
- */
-struct bpf_version {
-	u_short bv_major;
-	u_short bv_minor;
-};
-/* Current version number of filter architecture. */
-#define BPF_MAJOR_VERSION 1
-#define BPF_MINOR_VERSION 1
-
-/*
  * BPF ioctls
  *
  * The first set is for compatibility with Sun's pcc style
  * header files.  If your using gcc, we assume that you
  * have run fixincludes so the latter set should work.
  */
-#if (defined(sun) || defined(ibm032)) && !defined(__GNUC__)
+#if defined(sun) && !defined(__GNUC__)
+#define	BIOCGFLEN	_IOR(B,101, u_int)
 #define	BIOCGBLEN	_IOR(B,102, u_int)
-#define	BIOCSBLEN	_IOWR(B,102, u_int)
 #define	BIOCSETF	_IOW(B,103, struct bpf_program)
 #define	BIOCFLUSH	_IO(B,104)
 #define BIOCPROMISC	_IO(B,105)
@@ -116,12 +85,9 @@ struct bpf_version {
 #define BIOCGRTIMEOUT	_IOR(B,110, struct timeval)
 #define BIOCGSTATS	_IOR(B,111, struct bpf_stat)
 #define BIOCIMMEDIATE	_IOW(B,112, u_int)
-#define BIOCVERSION	_IOR(B,113, struct bpf_version)
-#define BIOCSTCPF	_IOW(B,114, struct bpf_program)
-#define BIOCSUDPF	_IOW(B,115, struct bpf_program)
 #else
+#define	BIOCGFLEN	_IOR('B',101, u_int)
 #define	BIOCGBLEN	_IOR('B',102, u_int)
-#define	BIOCSBLEN	_IOWR('B',102, u_int)
 #define	BIOCSETF	_IOW('B',103, struct bpf_program)
 #define	BIOCFLUSH	_IO('B',104)
 #define BIOCPROMISC	_IO('B',105)
@@ -132,9 +98,6 @@ struct bpf_version {
 #define BIOCGRTIMEOUT	_IOR('B',110, struct timeval)
 #define BIOCGSTATS	_IOR('B',111, struct bpf_stat)
 #define BIOCIMMEDIATE	_IOW('B',112, u_int)
-#define BIOCVERSION	_IOR('B',113, struct bpf_version)
-#define BIOCSTCPF	_IOW('B',114, struct bpf_program)
-#define BIOCSUDPF	_IOW('B',115, struct bpf_program)
 #endif
 
 /*
@@ -142,33 +105,24 @@ struct bpf_version {
  */
 struct bpf_hdr {
 	struct timeval	bh_tstamp;	/* time stamp */
-	u_int32_t	bh_caplen;	/* length of captured portion */
-	u_int32_t	bh_datalen;	/* original length of packet */
-	u_int16_t	bh_hdrlen;	/* length of bpf header (this struct
+	u_long		bh_caplen;	/* length of captured portion */
+	u_long		bh_datalen;	/* original length of packet */
+	u_short		bh_hdrlen;	/* length of bpf header (this struct
 					   plus alignment padding) */
 };
 /*
  * Because the structure above is not a multiple of 4 bytes, some compilers
  * will insist on inserting padding; hence, sizeof(struct bpf_hdr) won't work.
  * Only the kernel needs to know about it; applications use bh_hdrlen.
- * XXX To save a few bytes on 32-bit machines, we avoid end-of-struct
- * XXX padding by using the size of the header data elements.  This is
- * XXX fail-safe: on new machines, we just use the 'safe' sizeof.
  */
-#ifdef _KERNEL
-#if defined(__arm32__) || defined(__i386__) || defined(__m68k__) || \
-    defined(__mips__) || defined(__ns32k__) || defined(__sparc__) || \
-    defined(__vax__)
+#ifdef KERNEL
 #define SIZEOF_BPF_HDR 18
-#else
-#define SIZEOF_BPF_HDR sizeof(struct bpf_hdr)
-#endif
 #endif
 
 /*
  * Data-link level type codes.
+ * Currently, only DLT_EN10MB and DLT_SLIP are supported.
  */
-#define DLT_NULL	0	/* no link-layer encapsulation */
 #define DLT_EN10MB	1	/* Ethernet (10Mb) */
 #define DLT_EN3MB	2	/* Experimental Ethernet (3Mb) */
 #define DLT_AX25	3	/* Amateur Radio AX.25 */
@@ -179,15 +133,11 @@ struct bpf_hdr {
 #define DLT_SLIP	8	/* Serial Line IP */
 #define DLT_PPP		9	/* Point-to-point Protocol */
 #define DLT_FDDI	10	/* FDDI */
-#define DLT_ATM_RFC1483	11	/* LLC/SNAP encapsulated atm */
-#define DLT_RAW		12	/* raw IP */
-#define DLT_SLIP_BSDOS	13	/* BSD/OS Serial Line IP */
-#define DLT_PPP_BSDOS	14	/* BSD/OS Point-to-point Protocol */
 
 /*
  * The instruction encondings.
  */
-/* instruction classes */
+/* classes <2:0> */
 #define BPF_CLASS(code) ((code) & 0x07)
 #define		BPF_LD		0x00
 #define		BPF_LDX		0x01
@@ -244,31 +194,26 @@ struct bpf_hdr {
  * The instruction data structure.
  */
 struct bpf_insn {
-	u_int16_t code;
-	u_char 	  jt;
-	u_char 	  jf;
-	int32_t	  k;
+	u_short	code;
+	u_char 	jt;
+	u_char 	jf;
+	long	k;
 };
 
 /*
  * Macros for insn array initializers.
  */
-#define BPF_STMT(code, k) { (u_int16_t)(code), 0, 0, k }
-#define BPF_JUMP(code, k, jt, jf) { (u_int16_t)(code), jt, jf, k }
+#define BPF_STMT(code, k) { (u_short)(code), 0, 0, k }
+#define BPF_JUMP(code, k, jt, jf) { (u_short)(code), jt, jf, k }
 
-#ifdef _KERNEL
-int	 bpf_validate __P((struct bpf_insn *, int));
-void	 bpf_tap __P((caddr_t, u_char *, u_int));
-void	 bpf_mtap __P((caddr_t, struct mbuf *));
-void	 bpfattach __P((caddr_t *, struct ifnet *, u_int, u_int));
-void	 bpfilterattach __P((int));
+#ifdef KERNEL
+extern u_int bpf_filter();
+extern void bpfattach();
+extern void bpf_tap();
+extern void bpf_mtap();
 #endif
-
-u_int	 bpf_filter __P((struct bpf_insn *, u_char *, u_int, u_int));
 
 /*
  * Number of scratch memory words (for BPF_LD|BPF_MEM and BPF_ST).
  */
 #define BPF_MEMWORDS 16
-
-#endif /* _NET_BPF_H_ */

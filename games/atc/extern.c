@@ -1,8 +1,6 @@
-/*	$NetBSD: extern.c,v 1.5 1997/10/10 02:07:04 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Ed James.
@@ -45,13 +43,8 @@
  * For more info on this and all of my stuff, mail edjames@berkeley.edu.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)extern.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: extern.c,v 1.5 1997/10/10 02:07:04 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)extern.c	5.4 (Berkeley) 10/30/90";
 #endif /* not lint */
 
 #include "include.h"
@@ -68,7 +61,7 @@ C_SCREEN		screen, *sp = &screen;
 
 LIST		air, ground;
 
-struct termios	tty_start, tty_new;
+struct sgttyb	tty_start, tty_new;
 
 DISPLACEMENT	displacement[MAXDIR] = {
 		{  0, -1 },

@@ -1,4 +1,5 @@
-/*	$NetBSD: llparse.h,v 1.4 1994/06/29 06:41:04 cgd Exp $	*/
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/llparse.h,v 1.1 1993/04/09 12:02:07 cgd Exp $ */
+/* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/llparse.h,v $ */
 
 	/************************************************************
 		attributes stack garbage

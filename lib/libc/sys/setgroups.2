@@ -1,7 +1,5 @@
-.\"	$NetBSD: setgroups.2,v 1.7 1995/02/27 12:36:49 cgd Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993, 1994
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,19 +29,19 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)setgroups.2	8.2 (Berkeley) 4/16/94
+.\"     @(#)setgroups.2	6.7 (Berkeley) 3/10/91
 .\"
-.Dd April 16, 1994
+.Dd March 10, 1991
 .Dt SETGROUPS 2
 .Os BSD 4.2
 .Sh NAME
 .Nm setgroups
 .Nd set group access list
 .Sh SYNOPSIS
-.Fd #include <sys/param.h>
 .Fd #include <unistd.h>
+.Fd #include <sys/param.h>
 .Ft int
-.Fn setgroups "int ngroups" "const gid_t *gidset"
+.Fn setgroups "int ngroups" "const int *gidset"
 .Sh DESCRIPTION
 .Fn Setgroups
 sets the group access list of the current user process
@@ -53,7 +51,9 @@ The parameter
 .Fa ngroups
 indicates the number of entries in the array and must be no
 more than
-.Dv {NGROUPS_MAX} .
+.Dv NGROUPS ,
+as defined in
+.Ao Pa sys/param.h Ac .
 .Pp
 Only the super-user may set new groups.
 .Sh RETURN VALUES
@@ -65,11 +65,6 @@ The
 .Fn setgroups
 call will fail if:
 .Bl -tag -width Er
-.It Bq Er EINVAL
-The value of 
-.Fa ngroups
-is greater than
-.Dv {NGROUPS_MAX} .
 .It Bq Er EPERM
 The caller is not the super-user.
 .It Bq Er EFAULT
@@ -81,8 +76,14 @@ address space.
 .Sh SEE ALSO
 .Xr getgroups 2 ,
 .Xr initgroups 3
+.Sh BUGS
+The
+.Fa gidset
+array should be of type
+.Em gid_t ,
+but remains integer for compatibility with earlier systems.
 .Sh HISTORY
 The
-.Fn setgroups
+.Nm
 function call appeared in
 .Bx 4.2 .

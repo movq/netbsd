@@ -1,8 +1,6 @@
-/*	$NetBSD: clnp_debug.c,v 1.8 1996/10/13 02:04:13 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)clnp_debug.c	8.1 (Berkeley) 6/10/93
+ *	@(#)clnp_debug.c	7.8 (Berkeley) 5/27/91
  */
 
 /***********************************************************
@@ -40,13 +38,13 @@
 
                       All Rights Reserved
 
-Permission to use, copy, modify, and distribute this software and its
-documentation for any purpose and without fee is hereby granted,
+Permission to use, copy, modify, and distribute this software and its 
+documentation for any purpose and without fee is hereby granted, 
 provided that the above copyright notice appear in all copies and that
-both that copyright notice and this permission notice appear in
+both that copyright notice and this permission notice appear in 
 supporting documentation, and that the name of IBM not be
 used in advertising or publicity pertaining to distribution of the
-software without specific, written prior permission.
+software without specific, written prior permission.  
 
 IBM DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
 ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
@@ -61,37 +59,39 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_debug.c,v 1.1 1993/04/09 12:00:48 cgd Exp $ */
+/* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_debug.c,v $ */
 
-#include <sys/param.h>
-#include <sys/mbuf.h>
-#include <sys/domain.h>
-#include <sys/protosw.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
-#include <sys/errno.h>
-#include <sys/systm.h>
+#include "types.h"
+#include "param.h"
+#include "mbuf.h"
+#include "domain.h"
+#include "protosw.h"
+#include "socket.h"
+#include "socketvar.h"
+#include "errno.h"
 
-#include <net/if.h>
-#include <net/route.h>
+#include "../net/if.h"
+#include "../net/route.h"
 
-#include <netiso/iso.h>
-#include <netiso/clnp.h>
-#include <netiso/clnp_stat.h>
-#include <netiso/argo_debug.h>
+#include "iso.h"
+#include "clnp.h"
+#include "clnp_stat.h"
+#include "argo_debug.h"
 
 #ifdef	ARGO_DEBUG
 
 #ifdef	TESTDEBUG
 #ifdef notdef
-struct addr_37  u_37 = {
-	{0x00, 0x02, 0x00, 0x10, 0x20, 0x30, 0x35},
+struct addr_37 u_37 = {
+	{0x00, 0x02, 0x00, 0x10, 0x20, 0x30, 0x35}, 
 	{0x01, 0x02, 0x03, 0x04, 0x50, 0x60, 0x70, 0x80, 0x90}
 };
 struct addr_osinet u_osinet = {
 	{0x00, 0x04},
 	{0x00, 0x02, 0x00, 0x01, 0x23, 0x42, 0x78, 0x20, 0x01, 0x05, 0x00}
 };
-#endif				/* notdef */
+#endif notdef
 struct addr_rfc986 u_rfc986 = {
 	{0x00, 0x06},
 	{0x01, 0xc0, 0x0c, 0x0c, 0xab, 0x11}
@@ -100,13 +100,10 @@ struct addr_rfc986 u_bad = {
 	{0x00, 0x01},
 	{0x01, 0xc0, 0x0c, 0x0c, 0xab, 0x11}
 };
-int main        __P((void));
-
 #include <stdio.h>
-int
 main()
 {
-	struct iso_addr a;
+	struct iso_addr	a;
 
 	a.isoa_afi = AFI_37;
 	a.isoa_u.addr_37 = u_37;
@@ -132,16 +129,11 @@ main()
 	a.isoa_u.addr_rfc986 = u_bad;
 	a.isoa_len = 9;
 	printf("type bad idi: %s\n", clnp_iso_addrp(&a));
-	return 0;
 }
-#endif				/* TESTDEBUG */
+#endif	TESTDEBUG
 
-unsigned int    clnp_debug;
-static char     letters[] = "0123456789abcdef";
-
-char           *clnp_hexp __P((char *, int, char *));
-char           *clnp_iso_addrp __P((struct iso_addr *));
-char           *clnp_saddr_isop __P((struct sockaddr_iso *));
+unsigned int	clnp_debug;
+static char letters[] = "0123456789abcdef";
 
 /*
  *	Print buffer in hex, return addr of where we left off.
@@ -149,34 +141,30 @@ char           *clnp_saddr_isop __P((struct sockaddr_iso *));
  */
 char *
 clnp_hexp(src, len, where)
-	char           *src;	/* src of data to print */
-	int             len;	/* lengthof src */
-	char           *where;	/* where to put data */
+char	*src;		/* src of data to print */
+int		len;		/* lengthof src */
+char	*where;		/* where to put data */
 {
-	int             i;
+	int i;
 
-	for (i = 0; i < len; i++) {
-		register int    j = ((u_char *) src)[i];
-		*where++ = letters[j >> 4];
-		*where++ = letters[j & 0x0f];
+	for (i=0; i<len; i++) {
+		*where++ = letters[src[i] >> 4];
+		*where++ = letters[src[i] & 0x0f];
 	}
 	return where;
 }
 
 /*
- *	Return a ptr to a human readable form of an iso addr
+ *	Return a ptr to a human readable form of an iso addr 
  */
-static char     iso_addr_b[50];
+static char iso_addr_b[50];
 #define	DELIM	'.';
 
 char *
 clnp_iso_addrp(isoa)
-	struct iso_addr *isoa;
+struct iso_addr *isoa;
 {
-	char           *cp;
-#ifdef notdef
-	u_short         idi;
-#endif
+	char	*cp;
 
 	/* print length */
 	sprintf(iso_addr_b, "[%d] ", isoa->isoa_len);
@@ -187,88 +175,86 @@ clnp_iso_addrp(isoa)
 		cp++;
 
 	/* print afi */
-	cp = clnp_hexp(isoa->isoa_genaddr, (int) isoa->isoa_len, cp);
+	cp = clnp_hexp(isoa->isoa_genaddr, (int)isoa->isoa_len, cp);
 #ifdef notdef
 	*cp++ = DELIM;
 
 	/* print type specific part */
-	switch (isoa->isoa_afi) {
-	case AFI_37:
-		cp = clnp_hexp(isoa->t37_idi, ADDR37_IDI_LEN, cp);
-		*cp++ = DELIM;
-		cp = clnp_hexp(isoa->t37_dsp, ADDR37_DSP_LEN, cp);
-		break;
+	switch(isoa->isoa_afi) {
+		case AFI_37:
+			cp = clnp_hexp(isoa->t37_idi, ADDR37_IDI_LEN, cp);
+			*cp++ = DELIM;
+			cp = clnp_hexp(isoa->t37_dsp, ADDR37_DSP_LEN, cp);
+			break;
+		
+/* 		case AFI_OSINET:*/
+		case AFI_RFC986: {
+			u_short	idi;
 
-		/* case AFI_OSINET: */
-	case AFI_RFC986:
+			/* osinet and rfc986 have idi in the same place */
+			/* print idi */
+			cp = clnp_hexp(isoa->rfc986_idi, ADDROSINET_IDI_LEN, cp);
+			*cp++ = DELIM;
+			CTOH(isoa->rfc986_idi[0], isoa->rfc986_idi[1], idi);
 
-		/* osinet and rfc986 have idi in the same place */
-		/* print idi */
-		cp = clnp_hexp(isoa->rfc986_idi,
-			       ADDROSINET_IDI_LEN, cp);
-		*cp++ = DELIM;
-		CTOH(isoa->rfc986_idi[0], isoa->rfc986_idi[1], idi);
-
-		if (idi == IDI_OSINET) {
-			struct ovl_osinet *oosi = (struct ovl_osinet *) isoa;
-			cp = clnp_hexp(oosi->oosi_orgid,
-				       OVLOSINET_ORGID_LEN, cp);
-			*cp++ = DELIM;
-			cp = clnp_hexp(oosi->oosi_snetid,
-				       OVLOSINET_SNETID_LEN, cp);
-			*cp++ = DELIM;
-			cp = clnp_hexp(oosi->oosi_snpa, OVLOSINET_SNPA_LEN, cp);
-			*cp++ = DELIM;
-			cp = clnp_hexp(oosi->oosi_nsap, OVLOSINET_NSAP_LEN, cp);
-		} else if (idi == IDI_RFC986) {
-			struct ovl_rfc986 *o986 = (struct ovl_rfc986 *) isoa;
-			cp = clnp_hexp(&o986->o986_vers, 1, cp);
-			*cp++ = DELIM;
+			if (idi == IDI_OSINET) {
+				struct ovl_osinet *oosi = (struct ovl_osinet *)isoa;
+				cp = clnp_hexp(oosi->oosi_orgid, OVLOSINET_ORGID_LEN, cp);
+				*cp++ = DELIM;
+				cp = clnp_hexp(oosi->oosi_snetid, OVLOSINET_SNETID_LEN, cp);
+				*cp++ = DELIM;
+				cp = clnp_hexp(oosi->oosi_snpa, OVLOSINET_SNPA_LEN, cp);
+				*cp++ = DELIM;
+				cp = clnp_hexp(oosi->oosi_nsap, OVLOSINET_NSAP_LEN, cp);
+			} else if (idi == IDI_RFC986) {
+				struct ovl_rfc986 *o986 = (struct ovl_rfc986 *)isoa;
+				cp = clnp_hexp(&o986->o986_vers, 1, cp);
+				*cp++ = DELIM;
 #ifdef  vax
-			sprintf(cp, "%d.%d.%d.%d.%d",
-			    o986->o986_inetaddr[0] & 0xff,
-			    o986->o986_inetaddr[1] & 0xff,
-			    o986->o986_inetaddr[2] & 0xff,
-			    o986->o986_inetaddr[3] & 0xff,
-			    o986->o986_upid & 0xff);
-			return (iso_addr_b);
+				sprintf(cp, "%d.%d.%d.%d.%d", 
+				o986->o986_inetaddr[0] & 0xff,
+				o986->o986_inetaddr[1] & 0xff,
+				o986->o986_inetaddr[2] & 0xff,
+				o986->o986_inetaddr[3] & 0xff,
+				o986->o986_upid & 0xff);
+				return(iso_addr_b);
 #else
-			cp = clnp_hexp(&o986->o986_inetaddr[0], 1, cp);
-			*cp++ = DELIM;
-			cp = clnp_hexp(&o986->o986_inetaddr[1], 1, cp);
-			*cp++ = DELIM;
-			cp = clnp_hexp(&o986->o986_inetaddr[2], 1, cp);
-			*cp++ = DELIM;
-			cp = clnp_hexp(&o986->o986_inetaddr[3], 1, cp);
-			*cp++ = DELIM;
-			cp = clnp_hexp(&o986->o986_upid, 1, cp);
-#endif				/* vax */
-		}
-		break;
+				cp = clnp_hexp(&o986->o986_inetaddr[0], 1, cp);
+				*cp++ = DELIM;
+				cp = clnp_hexp(&o986->o986_inetaddr[1], 1, cp);
+				*cp++ = DELIM;
+				cp = clnp_hexp(&o986->o986_inetaddr[2], 1, cp);
+				*cp++ = DELIM;
+				cp = clnp_hexp(&o986->o986_inetaddr[3], 1, cp);
+				*cp++ = DELIM;
+				cp = clnp_hexp(&o986->o986_upid, 1, cp);
+#endif vax
+			}
+			
+		} break;
 
-	default:
-		*cp++ = '?';
-		break;
+		default:
+			*cp++ = '?';
+			break;
 	}
-#endif /* notdef */
-	*cp = (char) 0;
-
-	return (iso_addr_b);
+#endif notdef
+	*cp = (char)0;
+	
+	return(iso_addr_b);
 }
 
 char *
 clnp_saddr_isop(s)
-	register struct sockaddr_iso *s;
+register struct sockaddr_iso *s;
 {
-	register char  *cp = clnp_iso_addrp(&s->siso_addr);
+	register char	*cp = clnp_iso_addrp(&s->siso_addr);
 
-	while (*cp)
-		cp++;
+	while (*cp) cp++;
 	*cp++ = '(';
-	cp = clnp_hexp(TSEL(s), (int) s->siso_tlen, cp);
+	cp = clnp_hexp(TSEL(s), (int)s->siso_tlen, cp);
 	*cp++ = ')';
 	*cp++ = 0;
 	return (iso_addr_b);
 }
 
-#endif /* ARGO_DEBUG */
+#endif	ARGO_DEBUG

@@ -1,7 +1,5 @@
-.\"	$NetBSD: tftpd.8,v 1.5 1997/10/20 02:57:18 enami Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,24 +29,21 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	from: @(#)tftpd.8	8.1 (Berkeley) 6/4/93
+.\"	@(#)tftpd.8	6.7 (Berkeley) 5/13/91
 .\"
-.Dd June 4, 1993
+.Dd May 13, 1991
 .Dt TFTPD 8
 .Os BSD 4.2
 .Sh NAME
 .Nm tftpd
 .Nd
 .Tn DARPA
-Internet Trivial File Transfer Protocol server
+Trivial File Transfer Protocol server
 .Sh SYNOPSIS
-.Nm
-.Op Fl s Ar directory
-.Op Fl l
-.Op Fl n
+.Nm tftpd
 .Op Ar directory ...
 .Sh DESCRIPTION
-.Nm
+.Nm Tftpd
 is a server which supports the
 .Tn DARPA
 Trivial File Transfer
@@ -67,11 +62,10 @@ The server is normally started by
 The use of
 .Xr tftp 1
 does not require an account or password on the remote system.
-Due to the lack of authentication information,
-.Nm
+Due to the lack of authentication information, 
+.Nm tftpd
 will allow only publicly readable files to be
 accessed.
-Files containing the string ``/\|\fB.\|.\fP\|/'' are not allowed.
 Files may be written only if they already exist and are publicly writable.
 Note that this extends the concept of
 .Dq public
@@ -82,32 +76,12 @@ should be considered before enabling tftp service.
 The server should have the user ID with the lowest possible privilege.
 .Pp
 Access to files may be restricted by invoking
-.Nm
-with a list of directories by including up to 20 pathnames
+.Nm tftpd
+with a list of directories by including pathnames
 as server program arguments in
 .Pa /etc/inetd.conf .
 In this case access is restricted to files whose
 names are prefixed by the one of the given directories.
-The given directories are also treated as a search path for
-relative filename requests.
-.Pp
-The options are:
-.Bl -tag -width Ds
-.It Fl l
-Logs all requests using
-.Xr syslog 3 .
-.It Fl n
-Suppresses negative acknowledgement of requests for nonexistent
-relative filenames.
-.It Fl s
-.Nm
-will
-.Xr chroot 2
-on startup; therefore the remote host is not expected to pass the directory
-as part of the file name to transfer.  This option is intended primarily for
-compatibility with SunOS boot ROMs which do not include a directory name.
-.El
-.Pp
 .Sh SEE ALSO
 .Xr tftp 1 ,
 .Xr inetd 8
@@ -116,7 +90,3 @@ The
 .Nm
 command appeared in
 .Bx 4.2 .
-.Pp
-The
-.Fl s
-flag appeared in NetBSD 0.9a.

@@ -2,6 +2,6 @@
 
 DIR=	usd/18.msdiffs
 SRCS=	ms.diffs
-MACROS=	-ms
+MACROS=	-msU
 
 .include <bsd.doc.mk>

@@ -1,5 +1,3 @@
-.\"	$NetBSD: btree.3,v 1.6 1996/05/03 21:26:48 cgd Exp $
-.\"
 .\" Copyright (c) 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
 .\"
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)btree.3	8.4 (Berkeley) 8/18/94
+.\"	@(#)btree.3	8.1 (Berkeley) 6/4/93
 .\"
-.TH BTREE 3 "August 18, 1994"
+.TH BTREE 3
 .\".UC 7
 .SH NAME
 btree \- btree database access method
@@ -66,17 +64,17 @@ u_long flags;
 .br
 u_int cachesize;
 .br
-int maxkeypage;
+index_t psize;
+.br
+int lorder;
+.\" .br
+.\" int maxkeypage;
 .br
 int minkeypage;
 .br
-u_int psize;
-.br
 int (*compare)(const DBT *key1, const DBT *key2);
 .br
-size_t (*prefix)(const DBT *key1, const DBT *key2);
-.br
-int lorder;
+int (*prefix)(const DBT *key1, const DBT *key2);
 .RE
 } BTREEINFO;
 .PP
@@ -123,9 +121,23 @@ If
 .I cachesize
 is 0 (no size is specified) a default cache is used.
 .TP
-maxkeypage
-The maximum number of keys which will be stored on any single page.
-Not currently implemented.
+psize
+Page size is the size (in bytes) of the pages used for nodes in the tree.
+The minimum page size is 512 bytes and the maximum page size is 64K.
+If
+.I psize
+is 0 (no page size is specified) a page size is chosen based on the
+underlying file system I/O block size.
+.TP
+lorder
+The byte order for integers in the stored database metadata.
+The number should represent the order as an integer; for example, 
+big endian order would be the number 4,321.
+If
+.I lorder
+is 0 (no order is specified) the current host order is used.
+.\" .TP
+.\" maxkeypage
 .\" The maximum number of keys which will be stored on any single page.
 .\" Because of the way the btree data structure works,
 .\" .I maxkeypage
@@ -144,14 +156,6 @@ of in the page itself.
 If
 .I minkeypage
 is 0 (no minimum number of keys is specified) a value of 2 is used.
-.TP
-psize
-Page size is the size (in bytes) of the pages used for nodes in the tree.
-The minimum page size is 512 bytes and the maximum page size is 64K.
-If
-.I psize
-is 0 (no page size is specified) a page size is chosen based on the
-underlying file system I/O block size.
 .TP
 compare
 Compare is the key comparison function.
@@ -183,14 +187,6 @@ If
 .I prefix
 is NULL and a comparison routine is specified, no prefix comparison is
 done.
-.TP
-lorder
-The byte order for integers in the stored database metadata.
-The number should represent the order as an integer; for example, 
-big endian order would be the number 4,321.
-If
-.I lorder
-is 0 (no order is specified) the current host order is used.
 .PP
 If the file already exists (and the O_TRUNC flag is not specified), the
 values specified for the parameters flags, lorder and psize are ignored
@@ -209,13 +205,6 @@ O lg base N where base is the average fill factor.
 Often, inserting ordered data into btrees results in a low fill factor.
 This implementation has been modified to make ordered insertion the best
 case, resulting in a much better than normal page fill factor.
-.SH ERRORS
-The
-.I btree
-access method routines may fail and set
-.I errno
-for any of the errors specified for the library routine
-.IR dbopen (3).
 .SH "SEE ALSO"
 .IR dbopen (3),
 .IR hash (3),

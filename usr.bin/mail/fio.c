@@ -1,8 +1,6 @@
-/*	$NetBSD: fio.c,v 1.10 1997/10/19 05:03:22 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,16 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)fio.c	8.2 (Berkeley) 4/20/95";
-#else
-__RCSID("$NetBSD: fio.c,v 1.10 1997/10/19 05:03:22 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)fio.c	5.24 (Berkeley) 2/3/91";
 #endif /* not lint */
 
 #include "rcv.h"
-#include "extern.h"
+#include <sys/stat.h>
+#include <sys/file.h>
+#include <sys/wait.h>
+#include <paths.h>
+#include <errno.h>
 
 /*
  * Mail -- a mail program
@@ -54,22 +51,19 @@ __RCSID("$NetBSD: fio.c,v 1.10 1997/10/19 05:03:22 lukem Exp $");
 /*
  * Set up the input pointers while copying the mail file into /tmp.
  */
-void
-setptr(ibuf, offset)
-	FILE *ibuf;
-	off_t offset;
+setptr(ibuf)
+	register FILE *ibuf;
 {
-	extern char *tmpdir;
-	int c, count;
-	char *cp, *cp2;
+	register int c, count;
+	register char *cp, *cp2;
 	struct message this;
 	FILE *mestmp;
+	off_t offset;
 	int maybe, inhead;
 	char linebuf[LINESIZE];
-	int omsgCount;
 
 	/* Get temporary file. */
-	(void)snprintf(linebuf, LINESIZE, "%s/mail.XXXXXX", tmpdir);
+	(void)sprintf(linebuf, "%s/mail.XXXXXX", _PATH_TMP);
 	if ((c = mkstemp(linebuf)) == -1 ||
 	    (mestmp = Fdopen(c, "r+")) == NULL) {
 		(void)fprintf(stderr, "mail: can't open %s\n", linebuf);
@@ -77,23 +71,10 @@ setptr(ibuf, offset)
 	}
 	(void)unlink(linebuf);
 
-	if (offset == 0) {
-		 msgCount = 0;
-	} else {
-		/* Seek into the file to get to the new messages */
-		(void) fseek(ibuf, offset, 0);
-		/*
-		 * We need to make "offset" a pointer to the end of
-		 * the temp file that has the copy of the mail file.
-		 * If any messages have been edited, this will be
-		 * different from the offset into the mail file.
-		 */
-		(void) fseek(otf, 0L, 2);
-		offset = ftell(otf);
-	}
-	omsgCount = msgCount;
+	msgCount = 0;
 	maybe = 1;
 	inhead = 0;
+	offset = 0;
 	this.m_flag = MUSED|MNEW;
 	this.m_size = 0;
 	this.m_lines = 0;
@@ -105,19 +86,10 @@ setptr(ibuf, offset)
 				perror("temporary file");
 				exit(1);
 			}
-			makemessage(mestmp, omsgCount);
+			makemessage(mestmp);
 			return;
 		}
 		count = strlen(linebuf);
-		/*
-		 * Transforms lines ending in <CR><LF> to just <LF>.
-		 * This allows mail to be able to read Eudora mailboxes
-		 * that reside on a DOS partition.
-		 */
-		if (count >= 2 && linebuf[count-1] == '\n' && linebuf[count-2] == '\r') {
-			linebuf[count-2] = '\n';
-			count--;
-		}
 		(void) fwrite(linebuf, sizeof *linebuf, count, otf);
 		if (ferror(otf)) {
 			perror("/tmp");
@@ -145,7 +117,7 @@ setptr(ibuf, offset)
 						;
 					if (cp[-1] != ':')
 						break;
-					while ((c = *cp++) != '\0')
+					while (c = *cp++)
 						if (c == 'R')
 							this.m_flag |= MREAD;
 						else if (c == 'O')
@@ -167,25 +139,20 @@ setptr(ibuf, offset)
 /*
  * Drop the passed line onto the passed output buffer.
  * If a write error occurs, return -1, else the count of
- * characters written, including the newline if requested.
+ * characters written, including the newline.
  */
-int
-putline(obuf, linebuf, outlf)
+putline(obuf, linebuf)
 	FILE *obuf;
 	char *linebuf;
-	int   outlf;
 {
-	int c;
+	register int c;
 
 	c = strlen(linebuf);
 	(void) fwrite(linebuf, sizeof *linebuf, c, obuf);
-	if (outlf) {
-		(void) putc('\n', obuf);
-		c++;
-	}
+	(void) putc('\n', obuf);
 	if (ferror(obuf))
 		return (-1);
-	return (c);
+	return (c + 1);
 }
 
 /*
@@ -193,13 +160,11 @@ putline(obuf, linebuf, outlf)
  * buffer.  Return the number of characters read.  Do not
  * include the newline at the end.
  */
-int
 readline(ibuf, linebuf, linesize)
 	FILE *ibuf;
 	char *linebuf;
-	int linesize;
 {
-	int n;
+	register int n;
 
 	clearerr(ibuf);
 	if (fgets(linebuf, linesize, ibuf) == NULL)
@@ -216,12 +181,14 @@ readline(ibuf, linebuf, linesize)
  */
 FILE *
 setinput(mp)
-	struct message *mp;
+	register struct message *mp;
 {
 
 	fflush(otf);
-	if (fseek(itf, (long)positionof(mp->m_block, mp->m_offset), 0) < 0)
-		err(1, "fseek");
+	if (fseek(itf, positionof(mp->m_block, mp->m_offset), 0) < 0) {
+		perror("fseek");
+		panic("temporary file seek");
+	}
 	return (itf);
 }
 
@@ -229,31 +196,22 @@ setinput(mp)
  * Take the data out of the passed ghost file and toss it into
  * a dynamically allocated message structure.
  */
-void
-makemessage(f, omsgCount)
+makemessage(f)
 	FILE *f;
-	int omsgCount;
 {
-	int size = (msgCount + 1) * sizeof (struct message);
+	register size = (msgCount + 1) * sizeof (struct message);
+	off_t lseek();
 
-	if (omsgCount) {
-		message = (struct message *)realloc(message, (unsigned) size);
-		if (message == 0)
-			errx(1, "Insufficient memory for %d messages\n",
-			      msgCount);
-	} else {        
-		if (message != 0)
-			free((char *) message);
-		if ((message = (struct message *) malloc((unsigned) size)) == 0)
-			errx(1, "Insufficient memory for %d messages",
-			    msgCount);
-		dot = message;
-	}
-	size -= (omsgCount + 1) * sizeof (struct message);
+	if (message != 0)
+		free((char *) message);
+	if ((message = (struct message *) malloc((unsigned) size)) == 0)
+		panic("Insufficient memory for %d messages", msgCount);
+	dot = message;
+	size -= sizeof (struct message);
 	fflush(f);
-	(void) lseek(fileno(f), (off_t)sizeof *message, 0);
-	if (read(fileno(f), (char *) &message[omsgCount], size) != size)
-		errx(1, "Message temporary file corrupted");
+	(void) lseek(fileno(f), (long) sizeof *message, 0);
+	if (read(fileno(f), (char *) message, size) != size)
+		panic("Message temporary file corrupted");
 	message[msgCount].m_size = 0;
 	message[msgCount].m_lines = 0;
 	Fclose(f);
@@ -263,7 +221,6 @@ makemessage(f, omsgCount)
  * Append the passed message descriptor onto the temp file.
  * If the write fails, return 1, else 0
  */
-int
 append(mp, f)
 	struct message *mp;
 	FILE *f;
@@ -274,7 +231,6 @@ append(mp, f)
 /*
  * Delete a file, but only if the file is a plain file.
  */
-int
 rm(name)
 	char *name;
 {
@@ -290,32 +246,25 @@ rm(name)
 }
 
 static int sigdepth;		/* depth of holdsigs() */
-static sigset_t nset, oset;
+static int omask;
 /*
  * Hold signals SIGHUP, SIGINT, and SIGQUIT.
  */
-void
 holdsigs()
 {
 
-	if (sigdepth++ == 0) {
-		sigemptyset(&nset);
-		sigaddset(&nset, SIGHUP);
-		sigaddset(&nset, SIGINT);
-		sigaddset(&nset, SIGQUIT);
-		sigprocmask(SIG_BLOCK, &nset, &oset);
-	}
+	if (sigdepth++ == 0)
+		omask = sigblock(sigmask(SIGHUP)|sigmask(SIGINT)|sigmask(SIGQUIT));
 }
 
 /*
  * Release signals SIGHUP, SIGINT, and SIGQUIT.
  */
-void
 relsesigs()
 {
 
 	if (--sigdepth == 0)
-		sigprocmask(SIG_SETMASK, &oset, NULL);
+		sigsetmask(omask);
 }
 
 /*
@@ -346,12 +295,12 @@ fsize(iob)
  */
 char *
 expand(name)
-	char *name;
+	register char *name;
 {
 	char xname[PATHSIZE];
 	char cmdbuf[PATHSIZE];		/* also used for file names */
-	int pid, l;
-	char *cp, *shell;
+	register int pid, l;
+	register char *cp, *shell;
 	int pivec[2];
 	struct stat sbuf;
 	extern union wait wait_status;
@@ -380,12 +329,12 @@ expand(name)
 		/* fall through */
 	}
 	if (name[0] == '+' && getfold(cmdbuf) >= 0) {
-		snprintf(xname, PATHSIZE, "%s/%s", cmdbuf, name + 1);
+		sprintf(xname, "%s/%s", cmdbuf, name + 1);
 		name = savestr(xname);
 	}
 	/* catch the most common shell meta character */
 	if (name[0] == '~' && (name[1] == '/' || name[1] == '\0')) {
-		snprintf(xname, PATHSIZE, "%s%s", homedir, name + 1);
+		sprintf(xname, "%s%s", homedir, name + 1);
 		name = savestr(xname);
 	}
 	if (!anyof(name, "~{[*?$`'\"\\"))
@@ -394,7 +343,7 @@ expand(name)
 		perror("pipe");
 		return name;
 	}
-	snprintf(cmdbuf, PATHSIZE, "echo %s", name);
+	sprintf(cmdbuf, "echo %s", name);
 	if ((shell = value("SHELL")) == NOSTR)
 		shell = _PATH_CSHELL;
 	pid = start_command(shell, 0, -1, pivec[1], "-c", cmdbuf, NOSTR);
@@ -404,7 +353,7 @@ expand(name)
 		return NOSTR;
 	}
 	close(pivec[1]);
-	l = read(pivec[0], xname, PATHSIZE);
+	l = read(pivec[0], xname, BUFSIZ);
 	close(pivec[0]);
 	if (wait_child(pid) < 0 && wait_status.w_termsig != SIGPIPE) {
 		fprintf(stderr, "\"%s\": Expansion failed.\n", name);
@@ -418,11 +367,11 @@ expand(name)
 		fprintf(stderr, "\"%s\": No match.\n", name);
 		return NOSTR;
 	}
-	if (l == PATHSIZE) {
+	if (l == BUFSIZ) {
 		fprintf(stderr, "\"%s\": Expansion buffer overflow.\n", name);
 		return NOSTR;
 	}
-	xname[l] = '\0';
+	xname[l] = 0;
 	for (cp = &xname[l-1]; *cp == '\n' && cp > xname; cp--)
 		;
 	cp[1] = '\0';
@@ -436,7 +385,6 @@ expand(name)
 /*
  * Determine the current folder directory name.
  */
-int
 getfold(name)
 	char *name;
 {
@@ -444,12 +392,10 @@ getfold(name)
 
 	if ((folder = value("folder")) == NOSTR)
 		return (-1);
-	if (*folder == '/') {
-		strncpy(name, folder, PATHSIZE - 1);
-		name[PATHSIZE - 1] = '\0' ;
-	}
+	if (*folder == '/')
+		strcpy(name, folder);
 	else
-		snprintf(name, PATHSIZE, "%s/%s", homedir, folder);
+		sprintf(name, "%s/%s", homedir, folder);
 	return (0);
 }
 
@@ -459,14 +405,14 @@ getfold(name)
 char *
 getdeadletter()
 {
-	char *cp;
+	register char *cp;
 
 	if ((cp = value("DEAD")) == NOSTR || (cp = expand(cp)) == NOSTR)
 		cp = expand("~/dead.letter");
 	else if (*cp != '/') {
 		char buf[PATHSIZE];
 
-		(void) snprintf(buf, PATHSIZE, "~/%s", cp);
+		(void) sprintf(buf, "~/%s", cp);
 		cp = expand(buf);
 	}
 	return cp;

@@ -1,8 +1,6 @@
-/*	$NetBSD: vmstat.c,v 1.38 1997/10/20 03:11:57 mrg Exp $	*/
-
 /*
- * Copyright (c) 1980, 1986, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1986, 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1986, 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980, 1986, 1991 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)vmstat.c	8.2 (Berkeley) 3/1/95";
-#else
-__RCSID("$NetBSD: vmstat.c,v 1.38 1997/10/20 03:11:57 mrg Exp $");
-#endif
+static char sccsid[] = "@(#)vmstat.c	5.31 (Berkeley) 7/2/91";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -55,94 +49,123 @@ __RCSID("$NetBSD: vmstat.c,v 1.38 1997/10/20 03:11:57 mrg Exp $");
 #include <sys/buf.h>
 #include <sys/namei.h>
 #include <sys/malloc.h>
+#include <sys/signal.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
-#include <sys/sysctl.h>
-#include <sys/device.h>
+#include <sys/vmmeter.h>
 #include <vm/vm.h>
+#include <vm/vm_statistics.h>
 #include <time.h>
 #include <nlist.h>
 #include <kvm.h>
 #include <errno.h>
 #include <unistd.h>
-#include <signal.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 #include <paths.h>
-#include <limits.h>
-#include "dkstats.h"
 
 #define NEWVM			/* XXX till old has been updated or purged */
-struct nlist namelist[] = {
+struct nlist nl[] = {
 #define	X_CPTIME	0
 	{ "_cp_time" },
-#define X_SUM		1
-	{ "_cnt" },
-#define	X_BOOTTIME	2
+#define X_TOTAL		1
+	{ "_total" },
+#define X_SUM		2
+	{ "_cnt" },		/* XXX for now that's where it is */
+#define	X_BOOTTIME	3
 	{ "_boottime" },
-#define X_HZ		3
+#define	X_DKXFER	4
+	{ "_dk_xfer" },
+#define X_HZ		5
 	{ "_hz" },
-#define X_STATHZ	4
-	{ "_stathz" },
-#define X_NCHSTATS	5
+#define X_PHZ		6
+	{ "_phz" },
+#define X_NCHSTATS	7
 	{ "_nchstats" },
-#define	X_INTRNAMES	6
+#define	X_INTRNAMES	8
 	{ "_intrnames" },
-#define	X_EINTRNAMES	7
+#define	X_EINTRNAMES	9
 	{ "_eintrnames" },
-#define	X_INTRCNT	8
+#define	X_INTRCNT	10
 	{ "_intrcnt" },
-#define	X_EINTRCNT	9
+#define	X_EINTRCNT	11
 	{ "_eintrcnt" },
-#define	X_KMEMSTAT	10
+#define	X_DK_NDRIVE	12
+	{ "_dk_ndrive" },
+#define	X_KMEMSTAT	13
 	{ "_kmemstats" },
-#define	X_KMEMBUCKETS	11
+#define	X_KMEMBUCKETS	14
 	{ "_bucket" },
-#define X_ALLEVENTS	12
-	{ "_allevents" },
+#define	X_VMSTAT	15
+	{ "_vm_stat" },
 #ifdef notdef
-#define	X_DEFICIT	13
+#define	X_DEFICIT	15
 	{ "_deficit" },
-#define	X_FORKSTAT	14
+#define	X_FORKSTAT	16
 	{ "_forkstat" },
-#define X_REC		15
+#define X_REC		17
 	{ "_rectime" },
-#define X_PGIN		16
+#define X_PGIN		18
 	{ "_pgintime" },
-#define	X_XSTATS	17
+#define	X_XSTATS	19
 	{ "_xstats" },
-#define X_END		18
+#define X_END		19
 #else
-#define X_END		13
+#define X_END		15
+#endif
+#ifdef hp300
+#define	X_HPDINIT	(X_END+1)
+	{ "_hp_dinit" },
 #endif
 #ifdef tahoe
-#define	X_VBDINIT	(X_END)
+#define	X_VBDINIT	(X_END+1)
 	{ "_vbdinit" },
-#define	X_CKEYSTATS	(X_END+1)
+#define	X_CKEYSTATS	(X_END+2)
 	{ "_ckeystats" },
-#define	X_DKEYSTATS	(X_END+2)
+#define	X_DKEYSTATS	(X_END+3)
 	{ "_dkeystats" },
 #endif
-#if defined(pc532)
-#define	X_IVT		(X_END)
-	{ "_ivt" },
+#ifdef vax
+#define X_MBDINIT	(X_END+1)
+	{ "_mbdinit" },
+#define X_UBDINIT	(X_END+2)
+	{ "_ubdinit" },
 #endif
+#ifdef __386BSD__
+#define	X_FREE		(X_END+1)
+	{ "_vm_page_free_count" },
+#define	X_ACTIVE	(X_END+2)
+	{ "_vm_page_active_count" },
+#define	X_INACTIVE	(X_END+3)
+	{ "_vm_page_inactive_count" },
+#define	X_WIRED		(X_END+4)
+	{ "_vm_page_wire_count" },
+#define	X_PAGESIZE	(X_END+5)
+	{ "_page_size" },
+#define	X_ISA_BIO	(X_END+6)
+	{ "_isa_devtab_bio" },
+#endif /* __386BSD__ */
 	{ "" },
 };
 
-/* Objects defined in dkstats.c */
-extern struct _disk	cur;
-extern char	**dr_name;
-extern int	*dk_select, dk_ndrive;
+struct _disk {
+	long time[CPUSTATES];
+	long *xfer;
+} cur, last;
 
+struct	vm_statistics vm_stat, ostat;
 struct	vmmeter sum, osum;
-int		ndrives;
+char	*vmunix = _PATH_UNIX;
+char	**dr_name;
+int	*dr_select, dk_ndrive, ndrives;
+#ifdef __386BSD__
+      /* to make up for statistics that don't get updated */
+int	size, free_count, active_count, inactive, wired; 
+#endif
 
 int	winlines = 20;
-
-kvm_t *kd;
 
 #define	FORKSTAT	0x01
 #define	INTRSTAT	0x02
@@ -151,46 +174,26 @@ kvm_t *kd;
 #define	TIMESTAT	0x10
 #define	VMSTAT		0x20
 
-void	cpustats __P((void));
-void	dkstats __P((void));
-void	dointr __P((void));
-void	domem __P((void));
-void	dosum __P((void));
-void	dovmstat __P((u_int, int));
-void	kread __P((int, void *, size_t));
-void	needhdr __P((int));
-long	getuptime __P((void));
-void	printhdr __P((void));
-long	pct __P((long, long));
-void	usage __P((void));
+#include "names.c"			/* disk names -- machine dependent */
+
+void	cpustats(), dkstats(), dointr(), domem(), dosum();
+void	dovmstat(), kread(), usage();
 #ifdef notdef
-void	dotimes __P((void));
-void	doforkst __P((void));
+void	dotimes(), doforkst();
 #endif
 
-int	main __P((int, char **));
-char	**choosedrives __P((char **));
-
-extern int dkinit __P((int));
-extern void dkreadstats __P((void));
-extern void dkswap __P((void));
-
-/* Namelist and memory file names. */
-char	*nlistf, *memf;
-
-int
 main(argc, argv)
-	int argc;
-	char **argv;
+	register int argc;
+	register char **argv;
 {
 	extern int optind;
 	extern char *optarg;
-	int c, todo;
+	register int c, todo;
 	u_int interval;
 	int reps;
-        char errbuf[_POSIX2_LINE_MAX];
+	char *kmem;
 
-	memf = nlistf = NULL;
+	kmem = NULL;
 	interval = reps = todo = 0;
 	while ((c = getopt(argc, argv, "c:fiM:mN:stw:")) != EOF) {
 		switch (c) {
@@ -206,13 +209,13 @@ main(argc, argv)
 			todo |= INTRSTAT;
 			break;
 		case 'M':
-			memf = optarg;
+			kmem = optarg;
 			break;
 		case 'm':
 			todo |= MEMSTAT;
 			break;
 		case 'N':
-			nlistf = optarg;
+			vmunix = optarg;
 			break;
 		case 's':
 			todo |= SUMSTAT;
@@ -236,41 +239,31 @@ main(argc, argv)
 	if (todo == 0)
 		todo = VMSTAT;
 
-	/*
-	 * Discard setgid privileges if not the running kernel so that bad
-	 * guys can't print interesting stuff from kernel memory.
-	 */
-	if (nlistf != NULL || memf != NULL)
-		setgid(getgid());
-
-        kd = kvm_openfiles(nlistf, memf, NULL, O_RDONLY, errbuf);
-	if (kd == 0) {
+	if (kvm_openfiles(vmunix, kmem, NULL) < 0) {
 		(void)fprintf(stderr,
-		    "vmstat: kvm_openfiles: %s\n", errbuf);
+		    "vmstat: kvm_openfiles: %s\n", kvm_geterr());
 		exit(1);
 	}
 
-	if ((c = kvm_nlist(kd, namelist)) != 0) {
+	if ((c = kvm_nlist(nl)) != 0) {
 		if (c > 0) {
 			(void)fprintf(stderr,
-			    "vmstat: undefined symbols:");
-			for (c = 0;
-			    c < sizeof(namelist)/sizeof(namelist[0]); c++)
-				if (namelist[c].n_type == 0)
-					fprintf(stderr, " %s",
-					    namelist[c].n_name);
+			    "vmstat: undefined symbols in %s:", vmunix);
+			for (c = 0; c < sizeof(nl)/sizeof(nl[0]); c++)
+				if (nl[c].n_type == 0)
+					fprintf(stderr, " %s", nl[c].n_name);
 			(void)fputc('\n', stderr);
 		} else
 			(void)fprintf(stderr, "vmstat: kvm_nlist: %s\n",
-			    kvm_geterr(kd));
+			    kvm_geterr());
 		exit(1);
 	}
 
 	if (todo & VMSTAT) {
+		char **getdrivedata();
 		struct winsize winsize;
 
-		dkinit(0);	/* Initialize disk stats, no disks selected. */
-		argv = choosedrives(argv);	/* Select disks. */
+		argv = getdrivedata(argv);
 		winsize.ws_row = 0;
 		(void) ioctl(STDOUT_FILENO, TIOCGWINSZ, (char *)&winsize);
 		if (winsize.ws_row > 0)
@@ -313,10 +306,30 @@ main(argc, argv)
 }
 
 char **
-choosedrives(argv)
+getdrivedata(argv)
 	char **argv;
 {
-	int i;
+	register int i;
+	register char **cp;
+	char buf[30];
+
+	kread(X_DK_NDRIVE, &dk_ndrive, sizeof(dk_ndrive));
+	if (dk_ndrive <= 0) {
+		(void)fprintf(stderr, "vmstat: dk_ndrive %d\n", dk_ndrive);
+		exit(1);
+	}
+	dr_select = calloc((size_t)dk_ndrive, sizeof(int));
+	dr_name = calloc((size_t)dk_ndrive, sizeof(char *));
+	for (i = 0; i < dk_ndrive; i++)
+		dr_name[i] = NULL;
+	cur.xfer = calloc((size_t)dk_ndrive, sizeof(long));
+	last.xfer = calloc((size_t)dk_ndrive, sizeof(long));
+	read_names();
+	for (i = 0; i < dk_ndrive; i++)
+		if (dr_name[i] == NULL) {
+			(void)sprintf(buf, "??%d", i);
+			dr_name[i] = strdup(buf);
+		}
 
 	/*
 	 * Choose drives to be displayed.  Priority goes to (in order) drives
@@ -333,31 +346,59 @@ choosedrives(argv)
 		for (i = 0; i < dk_ndrive; i++) {
 			if (strcmp(dr_name[i], *argv))
 				continue;
-			dk_select[i] = 1;
+			dr_select[i] = 1;
 			++ndrives;
 			break;
 		}
 	}
 	for (i = 0; i < dk_ndrive && ndrives < 4; i++) {
-		if (dk_select[i])
+		if (dr_select[i])
 			continue;
-		dk_select[i] = 1;
+		for (cp = defdrives; *cp; cp++)
+			if (strcmp(dr_name[i], *cp) == 0) {
+				dr_select[i] = 1;
+				++ndrives;
+				break;
+			}
+	}
+	for (i = 0; i < dk_ndrive && ndrives < 4; i++) {
+		if (dr_select[i])
+			continue;
+		dr_select[i] = 1;
 		++ndrives;
 	}
 	return(argv);
 }
 
+#ifdef __386BSD__
+/* 
+ * Make up for the fact that under 0.1, VM doesn't update all of the
+ * fields in the statistics structures.
+ */
+
+void
+fill_in_vm_stat(vm_stat)
+        struct vm_statistics *vm_stat;
+{
+	kread(X_FREE, &vm_stat->free_count, sizeof(vm_stat->free_count));
+	kread(X_ACTIVE, &vm_stat->active_count, sizeof(vm_stat->active_count));
+	kread(X_INACTIVE, &vm_stat->inactive_count, 
+	      sizeof(vm_stat->inactive_count));
+	kread(X_WIRED, &vm_stat->wire_count, sizeof(vm_stat->wire_count));
+	kread(X_PAGESIZE, &vm_stat->pagesize, sizeof(vm_stat->pagesize));
+}
+#endif
+
 long
 getuptime()
 {
-	static time_t now;
-	static struct timeval boottime;
+	static time_t now, boottime;
 	time_t uptime;
 
-	if (boottime.tv_sec == 0)
+	if (boottime == 0)
 		kread(X_BOOTTIME, &boottime, sizeof(boottime));
 	(void)time(&now);
-	uptime = now - boottime.tv_sec;
+	uptime = now - boottime;
 	if (uptime <= 0 || uptime > 60*60*24*365*10) {
 		(void)fprintf(stderr,
 		    "vmstat: time makes no sense; namelist must be wrong.\n");
@@ -375,44 +416,51 @@ dovmstat(interval, reps)
 {
 	struct vmtotal total;
 	time_t uptime, halfuptime;
-	int mib[2];
-	size_t size;
+	void needhdr();
+#ifndef notdef
+	int deficit;
+#endif
 
 	uptime = getuptime();
 	halfuptime = uptime / 2;
 	(void)signal(SIGCONT, needhdr);
 
-	if (namelist[X_STATHZ].n_type != 0 && namelist[X_STATHZ].n_value != 0)
-		kread(X_STATHZ, &hz, sizeof(hz));
+	if (nl[X_PHZ].n_type != 0 && nl[X_PHZ].n_value != 0)
+		kread(X_PHZ, &hz, sizeof(hz));
 	if (!hz)
 		kread(X_HZ, &hz, sizeof(hz));
 
 	for (hdrcnt = 1;;) {
 		if (!--hdrcnt)
 			printhdr();
-		/* Read new disk statistics */
-		dkreadstats();
+		kread(X_CPTIME, cur.time, sizeof(cur.time));
+		kread(X_DKXFER, cur.xfer, sizeof(*cur.xfer * dk_ndrive));
 		kread(X_SUM, &sum, sizeof(sum));
-		size = sizeof(total);
-		mib[0] = CTL_VM;
-		mib[1] = VM_METER;
-		if (sysctl(mib, 2, &total, &size, NULL, 0) < 0) {
-			printf("Can't get kerninfo: %s\n", strerror(errno));
-			bzero(&total, sizeof(total));
-		}
-		(void)printf("%2d%2d%2d",
-		    total.t_rq - 1, total.t_dw + total.t_pw, total.t_sw);
-#define pgtok(a) (long)((a) * (sum.v_page_size >> 10))
-#define	rate(x)	(u_long)(((x) + halfuptime) / uptime)	/* round */
-		(void)printf("%6ld%6ld ",
+		kread(X_TOTAL, &total, sizeof(total));
+		kread(X_VMSTAT, &vm_stat, sizeof(vm_stat));
+#ifdef __386BSD__
+		fill_in_vm_stat (&vm_stat);
+#endif
+#ifdef notdef
+		kread(X_DEFICIT, &deficit, sizeof(deficit));
+#endif
+		(void)printf("%2d %1d %1d ",
+		    total.t_rq, total.t_dw + total.t_pw, total.t_sw);
+#define pgtok(a) ((a)*NBPG >> 10)
+#define	rate(x)	(((x) + halfuptime) / uptime)	/* round */
+		(void)printf("%5ld %5ld ",
+#ifdef __386BSD__
+		    pgtok(vm_stat.active_count), pgtok(vm_stat.free_count));
+#else
 		    pgtok(total.t_avm), pgtok(total.t_free));
+#endif
 #ifdef NEWVM
-		(void)printf("%4lu ", rate(sum.v_faults - osum.v_faults));
+		(void)printf("%4lu ", rate(vm_stat.faults - ostat.faults));
 		(void)printf("%3lu ",
-		    rate(sum.v_reactivated - osum.v_reactivated));
-		(void)printf("%3lu ", rate(sum.v_pageins - osum.v_pageins));
+		    rate(vm_stat.reactivations - ostat.reactivations));
+		(void)printf("%3lu ", rate(vm_stat.pageins - ostat.pageins));
 		(void)printf("%3lu %3lu ",
-		    rate(sum.v_pageouts - osum.v_pageouts), (u_long)0);
+		    rate(vm_stat.pageouts - ostat.pageouts), 0);
 #else
 		(void)printf("%3lu %2lu ",
 		    rate(sum.v_pgrec - (sum.v_xsfrec+sum.v_xifrec) -
@@ -438,45 +486,34 @@ dovmstat(interval, reps)
 		if (reps >= 0 && --reps <= 0)
 			break;
 		osum = sum;
+		ostat = vm_stat;
 		uptime = interval;
 		/*
 		 * We round upward to avoid losing low-frequency events
 		 * (i.e., >= 1 per interval but < 1 per second).
 		 */
-		halfuptime = uptime == 1 ? 0 : (uptime + 1) / 2;
+		halfuptime = (uptime + 1) / 2;
 		(void)sleep(interval);
 	}
 }
 
-void
 printhdr()
 {
-	int i;
+	register int i;
 
 	(void)printf(" procs   memory     page%*s", 20, "");
-	if (ndrives > 0)
-#ifdef NEWVM
-		(void)printf("%s %*sfaults   cpu\n",
-		   ((ndrives > 1) ? "disks" : "disk"),
-#else
-		(void)printf("disks %*sfaults      cpu\n",
-#endif
-		   ((ndrives > 1) ? ndrives * 3 - 4 : 0), "");
+	if (ndrives > 1)
+		(void)printf("disks %*s  faults      cpu\n",
+		   ndrives * 3 - 6, "");
 	else
-#ifdef NEWVM
-		(void)printf("%*s  faults   cpu\n",
-#else
-		(void)printf("%*s  faults      cpu\n",
-#endif
-		   ndrives * 3, "");
-
-#ifdef NEWVM
-	(void)printf(" r b w   avm   fre  flt  re  pi  po  fr  sr ");
-#else
+		(void)printf("%*s  faults      cpu\n", ndrives * 3, "");
+#ifndef NEWVM
 	(void)printf(" r b w   avm   fre  re at  pi  po  fr  de  sr ");
+#else
+	(void)printf(" r b w   avm   fre  flt  re  pi  po  fr  sr ");
 #endif
 	for (i = 0; i < dk_ndrive; i++)
-		if (dk_select[i])
+		if (dr_select[i])
 			(void)printf("%c%c ", dr_name[i][0],
 			    dr_name[i][strlen(dr_name[i]) - 1]);
 	(void)printf("  in   sy  cs us sy id\n");
@@ -487,8 +524,7 @@ printhdr()
  * Force a header to be prepended to the next output.
  */
 void
-needhdr(dummy)
-	int dummy;
+needhdr()
 {
 
 	hdrcnt = 1;
@@ -514,19 +550,15 @@ dotimes()
 }
 #endif
 
-long
 pct(top, bot)
 	long top, bot;
 {
-	long ans;
-
 	if (bot == 0)
 		return(0);
-	ans = (quad_t)top * 100 / bot;
-	return (ans);
+	return((top * 100) / bot);
 }
 
-#define	PCT(top, bot) (int)pct((long)(top), (long)(bot))
+#define	PCT(top, bot) pct((long)(top), (long)(bot))
 
 #if defined(tahoe)
 #include <machine/cpu.h>
@@ -545,46 +577,28 @@ dosum()
 #endif
 
 	kread(X_SUM, &sum, sizeof(sum));
-	(void)printf("%9u cpu context switches\n", sum.v_swtch);
-	(void)printf("%9u device interrupts\n", sum.v_intr);
-	(void)printf("%9u software interrupts\n", sum.v_soft);
-	(void)printf("%9u traps\n", sum.v_trap);
-	(void)printf("%9u system calls\n", sum.v_syscall);
-	(void)printf("%9u total faults taken\n", sum.v_faults);
+#ifdef NEWVM
+	kread(X_VMSTAT, &vm_stat, sizeof(vm_stat));
+#ifdef __386BSD__
+	fill_in_vm_stat(&vm_stat);
+#endif
+#else
 	(void)printf("%9u swap ins\n", sum.v_swpin);
 	(void)printf("%9u swap outs\n", sum.v_swpout);
 	(void)printf("%9u pages swapped in\n", sum.v_pswpin / CLSIZE);
 	(void)printf("%9u pages swapped out\n", sum.v_pswpout / CLSIZE);
-	(void)printf("%9u page ins\n", sum.v_pageins);
-	(void)printf("%9u page outs\n", sum.v_pageouts);
+	(void)printf("%9u total address trans. faults taken\n", sum.v_faults);
+	(void)printf("%9u page ins\n", sum.v_pgin);
+	(void)printf("%9u page outs\n", sum.v_pgout);
 	(void)printf("%9u pages paged in\n", sum.v_pgpgin);
 	(void)printf("%9u pages paged out\n", sum.v_pgpgout);
-	(void)printf("%9u pages reactivated\n", sum.v_reactivated);
-	(void)printf("%9u intransit blocking page faults\n", sum.v_intrans);
-	(void)printf("%9u zero fill pages created\n", sum.v_nzfod / CLSIZE);
-	(void)printf("%9u zero fill page faults\n", sum.v_zfod / CLSIZE);
-	(void)printf("%9u pages examined by the clock daemon\n", sum.v_scan);
-	(void)printf("%9u revolutions of the clock hand\n", sum.v_rev);
-#ifdef NEWVM
-	(void)printf("%9u VM object cache lookups\n", sum.v_lookups);
-	(void)printf("%9u VM object hits\n", sum.v_hits);
-	(void)printf("%9u total VM faults taken\n", sum.v_vm_faults);
-	(void)printf("%9u copy-on-write faults\n", sum.v_cow_faults);
-	(void)printf("%9u pages freed by daemon\n", sum.v_dfree);
-	(void)printf("%9u pages freed by exiting processes\n", sum.v_pfree);
-	(void)printf("%9u pages free\n", sum.v_free_count);
-	(void)printf("%9u pages wired down\n", sum.v_wire_count);
-	(void)printf("%9u pages active\n", sum.v_active_count);
-	(void)printf("%9u pages inactive\n", sum.v_inactive_count);
-	(void)printf("%9u bytes per page\n", sum.v_page_size);
-	(void)printf("%9u target inactive pages\n", sum.v_inactive_target);
-	(void)printf("%9u target free pages\n", sum.v_free_target);
-	(void)printf("%9u minimum free pages\n", sum.v_free_min);
-#else
 	(void)printf("%9u sequential process pages freed\n", sum.v_seqfree);
 	(void)printf("%9u total reclaims (%d%% fast)\n", sum.v_pgrec,
 	    PCT(sum.v_fastpgrec, sum.v_pgrec));
 	(void)printf("%9u reclaims from free list\n", sum.v_pgfrec);
+	(void)printf("%9u intransit blocking page faults\n", sum.v_intrans);
+	(void)printf("%9u zero fill pages created\n", sum.v_nzfod / CLSIZE);
+	(void)printf("%9u zero fill page faults\n", sum.v_zfod / CLSIZE);
 	(void)printf("%9u executable fill pages created\n",
 	    sum.v_nexfod / CLSIZE);
 	(void)printf("%9u executable fill page faults\n",
@@ -595,9 +609,35 @@ dosum()
 	    sum.v_xifrec);
 	(void)printf("%9u file fill pages created\n", sum.v_nvrfod / CLSIZE);
 	(void)printf("%9u file fill page faults\n", sum.v_vrfod / CLSIZE);
+	(void)printf("%9u pages examined by the clock daemon\n", sum.v_scan);
+	(void)printf("%9u revolutions of the clock hand\n", sum.v_rev);
 	(void)printf("%9u pages freed by the clock daemon\n",
 	    sum.v_dfree / CLSIZE);
 #endif
+	(void)printf("%9u cpu context switches\n", sum.v_swtch);
+	(void)printf("%9u device interrupts\n", sum.v_intr);
+	(void)printf("%9u software interrupts\n", sum.v_soft);
+#ifdef vax
+	(void)printf("%9u pseudo-dma dz interrupts\n", sum.v_pdma);
+#endif
+	(void)printf("%9u traps\n", sum.v_trap);
+	(void)printf("%9u system calls\n", sum.v_syscall);
+#ifdef NEWVM
+	(void)printf("%9u bytes per page\n", vm_stat.pagesize);
+	(void)printf("%9u pages free\n", vm_stat.free_count);
+	(void)printf("%9u pages active\n", vm_stat.active_count);
+	(void)printf("%9u pages inactive\n", vm_stat.inactive_count);
+	(void)printf("%9u pages wired down\n", vm_stat.wire_count);
+	(void)printf("%9u zero-fill pages\n", vm_stat.zero_fill_count);
+	(void)printf("%9u pages reactivated\n", vm_stat.reactivations);
+	(void)printf("%9u pageins\n", vm_stat.pageins);
+	(void)printf("%9u pageouts\n", vm_stat.pageouts);
+	(void)printf("%9u VM faults\n", vm_stat.faults);
+	(void)printf("%9u copy-on-write faults\n", vm_stat.cow_faults);
+	(void)printf("%9u VM object cache lookups\n", vm_stat.lookups);
+	(void)printf("%9u VM object hits\n", vm_stat.hits);
+#endif
+
 	kread(X_NCHSTATS, &nchstats, sizeof(nchstats));
 	nchtotal = nchstats.ncs_goodhits + nchstats.ncs_neghits +
 	    nchstats.ncs_badhits + nchstats.ncs_falsehits +
@@ -657,94 +697,61 @@ doforkst()
 void
 dkstats()
 {
-	int dn, state;
+	register int dn, state;
 	double etime;
+	long tmp;
 
-	/* Calculate disk stat deltas. */
-	dkswap();
+	for (dn = 0; dn < dk_ndrive; ++dn) {
+		tmp = cur.xfer[dn];
+		cur.xfer[dn] -= last.xfer[dn];
+		last.xfer[dn] = tmp;
+	}
 	etime = 0;
 	for (state = 0; state < CPUSTATES; ++state) {
-		etime += cur.cp_time[state];
+		tmp = cur.time[state];
+		cur.time[state] -= last.time[state];
+		last.time[state] = tmp;
+		etime += cur.time[state];
 	}
 	if (etime == 0)
 		etime = 1;
 	etime /= hz;
 	for (dn = 0; dn < dk_ndrive; ++dn) {
-		if (!dk_select[dn])
+		if (!dr_select[dn])
 			continue;
-		(void)printf("%2.0f ", cur.dk_xfer[dn] / etime);
+		(void)printf("%2.0f ", cur.xfer[dn] / etime);
 	}
 }
 
 void
 cpustats()
 {
-	int state;
+	register int state;
 	double pct, total;
 
 	total = 0;
 	for (state = 0; state < CPUSTATES; ++state)
-		total += cur.cp_time[state];
+		total += cur.time[state];
 	if (total)
 		pct = 100 / total;
 	else
 		pct = 0;
-	(void)printf("%2.0f ", (cur.cp_time[CP_USER] + cur.cp_time[CP_NICE]) * pct);
-	(void)printf("%2.0f ", (cur.cp_time[CP_SYS] + cur.cp_time[CP_INTR]) * pct);
-	(void)printf("%2.0f", cur.cp_time[CP_IDLE] * pct);
+	(void)printf("%2.0f ",				/* user + nice */
+	    (cur.time[0] + cur.time[1]) * pct);
+	(void)printf("%2.0f ", cur.time[2] * pct);	/* system */
+	(void)printf("%2.0f", cur.time[3] * pct);	/* idle */
 }
 
-#if defined(pc532)
-/* To get struct iv ...*/
-#define _KERNEL
-#include <machine/psl.h>
-#undef _KERNEL
 void
 dointr()
 {
-	long i, j, inttotal, uptime;
-	static char iname[64];
-	struct iv ivt[32], *ivp = ivt;
-
-	iname[63] = '\0';
-	uptime = getuptime();
-	kread(X_IVT, ivp, sizeof(ivt));
-
-	for (i = 0; i < 2; i++) {
-		(void)printf("%sware interrupts:\n", i ? "\nsoft" : "hard");
-		(void)printf("interrupt       total     rate\n");
-		inttotal = 0;
-		for (j = 0; j < 16; j++, ivp++) {
-			if (ivp->iv_vec && ivp->iv_use && ivp->iv_cnt) {
-				if (kvm_read(kd, (u_long)ivp->iv_use, iname, 63) != 63) {
-					(void)fprintf(stderr, "vmstat: iv_use: %s\n",
-					    kvm_geterr(kd));
-					exit(1);
-				}
-				(void)printf("%-12s %8ld %8ld\n", iname,
-				    ivp->iv_cnt, ivp->iv_cnt / uptime);
-				inttotal += ivp->iv_cnt;
-			}
-		}
-		(void)printf("Total        %8ld %8ld\n",
-		    inttotal, inttotal / uptime);
-	}
-}
-#else
-void
-dointr()
-{
-	long *intrcnt, inttotal, uptime;
-	int nintr, inamlen;
-	char *intrname;
-	struct evcntlist allevents;
-	struct evcnt evcnt, *evptr;
-	struct device dev;
+	register long *intrcnt, inttotal, uptime;
+	register int nintr, inamlen;
+	register char *intrname;
 
 	uptime = getuptime();
-	nintr = namelist[X_EINTRCNT].n_value - namelist[X_INTRCNT].n_value;
-	inamlen =
-	    namelist[X_EINTRNAMES].n_value - namelist[X_INTRNAMES].n_value;
+	nintr = nl[X_EINTRCNT].n_value - nl[X_INTRCNT].n_value;
+	inamlen = nl[X_EINTRNAMES].n_value - nl[X_INTRNAMES].n_value;
 	intrcnt = malloc((size_t)nintr);
 	intrname = malloc((size_t)inamlen);
 	if (intrcnt == NULL || intrname == NULL) {
@@ -753,41 +760,18 @@ dointr()
 	}
 	kread(X_INTRCNT, intrcnt, (size_t)nintr);
 	kread(X_INTRNAMES, intrname, (size_t)inamlen);
-	(void)printf("interrupt         total     rate\n");
+	(void)printf("interrupt      total      rate\n");
 	inttotal = 0;
 	nintr /= sizeof(long);
 	while (--nintr >= 0) {
 		if (*intrcnt)
-			(void)printf("%-14s %8ld %8ld\n", intrname,
+			(void)printf("%-12s %8ld %8ld\n", intrname,
 			    *intrcnt, *intrcnt / uptime);
 		intrname += strlen(intrname) + 1;
 		inttotal += *intrcnt++;
 	}
-	kread(X_ALLEVENTS, &allevents, sizeof allevents);
-	evptr = allevents.tqh_first;
-	while (evptr) {
-		if (kvm_read(kd, (long)evptr, (void *)&evcnt,
-		    sizeof evcnt) != sizeof evcnt) {
-			(void)fprintf(stderr, "vmstat: event chain trashed: %s\n",
-			    kvm_geterr(kd));
-			exit(1);
-		}
-		if (kvm_read(kd, (long)evcnt.ev_dev, (void *)&dev,
-		    sizeof dev) != sizeof dev) {
-			(void)fprintf(stderr, "vmstat: event chain trashed: %s\n",
-			    kvm_geterr(kd));
-			exit(1);
-		}
-		if (evcnt.ev_count)
-			(void)printf("%-14s %8ld %8ld\n", dev.dv_xname,
-			    (long)evcnt.ev_count, evcnt.ev_count / uptime);
-		inttotal += evcnt.ev_count++;
-
-		evptr = evcnt.ev_list.tqe_next;
-	}
-	(void)printf("Total          %8ld %8ld\n", inttotal, inttotal / uptime);
+	(void)printf("Total        %8ld %8ld\n", inttotal, inttotal / uptime);
 }
-#endif
 
 /*
  * These names are defined in <sys/malloc.h>.
@@ -797,26 +781,21 @@ char *kmemnames[] = INITKMEMNAMES;
 void
 domem()
 {
-	struct kmembuckets *kp;
-	struct kmemstats *ks;
-	int i, j;
-	int len, size, first;
+	register struct kmembuckets *kp;
+	register struct kmemstats *ks;
+	register int i;
+	int size;
 	long totuse = 0, totfree = 0, totreq = 0;
-	char *name;
 	struct kmemstats kmemstats[M_LAST];
 	struct kmembuckets buckets[MINBUCKET + 16];
 
 	kread(X_KMEMBUCKETS, buckets, sizeof(buckets));
-	for (first = 1, i = MINBUCKET, kp = &buckets[i]; i < MINBUCKET + 16;
-	    i++, kp++) {
+	(void)printf("Memory statistics by bucket size\n");
+	(void)printf(
+	    "    Size   In Use   Free   Requests  HighWater  Couldfree\n");
+	for (i = MINBUCKET, kp = &buckets[i]; i < MINBUCKET + 16; i++, kp++) {
 		if (kp->kb_calls == 0)
 			continue;
-		if (first) {
-			(void)printf("Memory statistics by bucket size\n");
-			(void)printf(
-		 "    Size   In Use   Free   Requests  HighWater  Couldfree\n");
-			first = 0;
-		}
 		size = 1 << i;
 		(void)printf("%8d %8ld %6ld %10ld %7ld %10ld\n", size, 
 			kp->kb_total - kp->kb_totalfree,
@@ -825,77 +804,19 @@ domem()
 		totfree += size * kp->kb_totalfree;
 	}
 
-	/*
-	 * If kmem statistics are not being gathered by the kernel,
-	 * first will still be 1.
-	 */
-	if (first) {
-		printf(
-		    "Kmem statistics are not being gathered by the kernel.\n");
-		return;
-	}
-
 	kread(X_KMEMSTAT, kmemstats, sizeof(kmemstats));
-	(void)printf("\nMemory usage type by bucket size\n");
-	(void)printf("    Size  Type(s)\n");
-	kp = &buckets[MINBUCKET];
-	for (j =  1 << MINBUCKET; j < 1 << (MINBUCKET + 16); j <<= 1, kp++) {
-		if (kp->kb_calls == 0)
-			continue;
-		first = 1;
-		len = 8;
-		for (i = 0, ks = &kmemstats[0]; i < M_LAST; i++, ks++) {
-			if (ks->ks_calls == 0)
-				continue;
-			if ((ks->ks_size & j) == 0)
-				continue;
-			if (kmemnames[i] == 0) {
-				kmemnames[i] = malloc(10);
-						/* strlen("undef/")+3+1);*/
-				snprintf(kmemnames[i], 10, "undef/%d", i);
-						/* same 10 as above!!! */
-			}
-			name = kmemnames[i];
-			len += 2 + strlen(name);
-			if (first)
-				printf("%8d  %s", j, name);
-			else
-				printf(",");
-			if (len >= 80) {
-				printf("\n\t ");
-				len = 10 + strlen(name);
-			}
-			if (!first)
-				printf(" %s", name);
-			first = 0;
-		}
-		printf("\n");
-	}
-
+	(void)printf("\nMemory statistics by type\n");
 	(void)printf(
-	    "\nMemory statistics by type                        Type  Kern\n");
-	(void)printf(
-"         Type  InUse MemUse HighUse  Limit Requests Limit Limit Size(s)\n");
+"      Type  In Use  MemUse   HighUse  Limit Requests  TypeLimit KernLimit\n");
 	for (i = 0, ks = &kmemstats[0]; i < M_LAST; i++, ks++) {
 		if (ks->ks_calls == 0)
 			continue;
-		(void)printf("%14s%6ld%6ldK%7ldK%6ldK%9ld%5u%6u",
+		(void)printf("%10s %6ld %7ldK %8ldK %5ldK %8ld %6u %9u\n",
 		    kmemnames[i] ? kmemnames[i] : "undefined",
 		    ks->ks_inuse, (ks->ks_memuse + 1023) / 1024,
 		    (ks->ks_maxused + 1023) / 1024,
 		    (ks->ks_limit + 1023) / 1024, ks->ks_calls,
 		    ks->ks_limblocks, ks->ks_mapblocks);
-		first = 1;
-		for (j =  1 << MINBUCKET; j < 1 << (MINBUCKET + 16); j <<= 1) {
-			if ((ks->ks_size & j) == 0)
-				continue;
-			if (first)
-				printf("  %d", j);
-			else
-				printf(",%d", j);
-			first = 0;
-		}
-		printf("\n");
 		totuse += ks->ks_memuse;
 		totreq += ks->ks_calls;
 	}
@@ -915,19 +836,19 @@ kread(nlx, addr, size)
 {
 	char *sym;
 
-	if (namelist[nlx].n_type == 0 || namelist[nlx].n_value == 0) {
-		sym = namelist[nlx].n_name;
+	if (nl[nlx].n_type == 0 || nl[nlx].n_value == 0) {
+		sym = nl[nlx].n_name;
 		if (*sym == '_')
 			++sym;
 		(void)fprintf(stderr,
-		    "vmstat: symbol %s not defined\n", sym);
+		    "vmstat: %s: symbol %s not defined\n", vmunix, sym);
 		exit(1);
 	}
-	if (kvm_read(kd, namelist[nlx].n_value, addr, size) != size) {
-		sym = namelist[nlx].n_name;
+	if (kvm_read((void *)nl[nlx].n_value, addr, size) != size) {
+		sym = nl[nlx].n_name;
 		if (*sym == '_')
 			++sym;
-		(void)fprintf(stderr, "vmstat: %s: %s\n", sym, kvm_geterr(kd));
+		(void)fprintf(stderr, "vmstat: %s: %s\n", sym, kvm_geterr());
 		exit(1);
 	}
 }
@@ -945,4 +866,3 @@ usage()
 #endif
 	exit(1);
 }
-

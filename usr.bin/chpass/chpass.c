@@ -1,8 +1,6 @@
-/*	$NetBSD: chpass.c,v 1.14 1997/10/18 12:48:47 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1988, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,76 +31,48 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1988 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)chpass.c	8.4 (Berkeley) 4/2/94";
-#else 
-__RCSID("$NetBSD: chpass.c,v 1.14 1997/10/18 12:48:47 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)chpass.c	5.17 (Berkeley) 3/3/91";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
+#include <sys/signal.h>
 #include <sys/time.h>
 #include <sys/resource.h>
-
-#include <ctype.h>
-#include <err.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <pwd.h>
+#include <errno.h>
 #include <stdio.h>
-#include <stdlib.h>
+#include <ctype.h>
 #include <string.h>
-#include <unistd.h>
-#include <util.h>
-
 #include "chpass.h"
 #include "pathnames.h"
 
-extern	char *__progname;		/* from crt0.o */
-
+char *progname = "chpass";
 char *tempname;
 uid_t uid;
-int use_yp;
-int yflag;
 
-void	(*Pw_error) __P((const char *, int, int));
-
-#ifdef	YP
-extern	int _yp_check __P((char **));	/* buried deep inside libc */
-#endif
-
-void	baduser __P((void));
-int	main __P((int, char **));
-void	usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	enum { NEWSH, LOADENTRY, EDITENTRY } op;
-	struct passwd *pw, lpw, old_pw;
-	int ch, pfd, tfd, dfd;
-	char *arg, *username = NULL, tempname[] = "/etc/pw.XXXXXX";
-
-#ifdef __GNUC__
-	pw = NULL;		/* XXX gcc -Wuninitialized */
-	arg = NULL;
-#endif
-#ifdef	YP
-	use_yp = _yp_check(NULL);
-#endif
+	extern int optind;
+	extern char *optarg;
+	register enum { NEWSH, LOADENTRY, EDITENTRY } op;
+	register struct passwd *pw;
+	struct passwd lpw;
+	int ch, pfd, tfd;
+	char *arg;
 
 	op = EDITENTRY;
-	while ((ch = getopt(argc, argv, "a:s:ly")) != -1)
+	while ((ch = getopt(argc, argv, "a:s:")) != EOF)
 		switch(ch) {
 		case 'a':
 			op = LOADENTRY;
@@ -112,18 +82,7 @@ main(argc, argv)
 			op = NEWSH;
 			arg = optarg;
 			break;
-		case 'l':
-			use_yp = 0;
-			break;
-		case 'y':
-#ifdef	YP
-			if (!use_yp)
-				errx(1, "YP not in use.");
-			yflag = 1;
-#else
-			errx(1, "YP support not compiled in.");
-#endif
-			break;
+		case '?':
 		default:
 			usage();
 		}
@@ -131,169 +90,96 @@ main(argc, argv)
 	argv += optind;
 
 	uid = getuid();
-	switch (argc) {
-	case 0:
-		/* nothing */
-		break;
 
-	case 1:
-		username = argv[0];
-		break;
-
-	default:
-		usage();
-	}
-
-#ifdef YP
-	/*
-	 * We need to determine if we _really_ want to use YP.
-	 * If we defaulted to YP (i.e. were not given the -y flag),
-	 * and the master is not running rpc.yppasswdd, we check
-	 * to see if the user exists in the local passwd database.
-	 * If so, we use it, otherwise we error out.
-	 */
-	if (use_yp && yflag == 0) {
-		if (check_yppasswdd()) {
-			/*
-			 * We weren't able to contact rpc.yppasswdd.
-			 * Check to see if we're in the local
-			 * password database.  If we are, use it.
-			 */
-			if (username != NULL)
-				pw = getpwnam(username);
-			else
-				pw = getpwuid(uid);
-			if (pw != NULL)
-				use_yp = 0;
-			else {
-				errx(1, "master YP server not running yppasswd daemon.\n\t%s\n",
-				    "Can't change password.");
+	if (op == EDITENTRY || op == NEWSH)
+		switch(argc) {
+		case 0:
+			if (!(pw = getpwuid(uid))) {
+				(void)fprintf(stderr,
+				    "chpass: unknown user: uid %u\n", uid);
+				exit(1);
 			}
-		}
-	}
-#endif
-
-#ifdef YP
-	if (use_yp)
-		Pw_error = yppw_error;
-	else
-#endif
-		Pw_error = pw_error;
-
-#ifdef	YP
-	if (op == LOADENTRY && use_yp)
-		errx(1, "cannot load entry using YP.\n\tUse the -l flag to load local.");
-#endif
-
-	if (op == EDITENTRY || op == NEWSH) {
-		if (username != NULL) {
-#ifdef YP
-			if (use_yp)
-				pw = ypgetpwnam(username);
-			else
-#endif /* YP */
-				pw = getpwnam(username);
-			if (pw == NULL)
-				errx(1, "unknown user: %s", username);
+			break;
+		case 1:
+			if (!(pw = getpwnam(*argv))) {
+				(void)fprintf(stderr,
+				    "chpass: unknown user %s.\n", *argv);
+				exit(1);
+			}
 			if (uid && uid != pw->pw_uid)
 				baduser();
-		} else {
-#ifdef YP
-			if (use_yp)
-				pw = ypgetpwuid(uid);
-			else
-#endif /* YP */
-				pw = getpwuid(uid);
-			if (pw == NULL)
-				errx(1, "unknown user: uid %u\n", uid);
+			break;
+		default:
+			usage();
 		}
-	}
 
 	if (op == NEWSH) {
 		/* protect p_shell -- it thinks NULL is /bin/sh */
 		if (!arg[0])
 			usage();
 		if (p_shell(arg, pw, (ENTRY *)NULL))
-				(*Pw_error)((char *)NULL, 0, 1);
+			pw_error((char *)NULL, 0, 1);
 	}
 
 	if (op == LOADENTRY) {
 		if (uid)
 			baduser();
 		pw = &lpw;
-		if (!pw_scan(arg, pw, (int *)NULL))
+		if (!pw_scan(arg, pw))
 			exit(1);
 	}
 
-	/* Make a copy for later verification */
-	old_pw = *pw;
-	old_pw.pw_gecos = strdup(old_pw.pw_gecos);
-
-	/* Edit the user passwd information if requested. */
-	if (op == EDITENTRY) {
-		dfd = mkstemp(tempname);
-		if (dfd < 0) {
-				(*Pw_error)(tempname, 1, 1);
-		}
-		display(tempname, dfd, pw);
-		edit(tempname, pw);
-		(void)unlink(tempname);
-	}
-
-#ifdef	YP
-	if (use_yp) {
-		if (pw_yp(pw, uid))
-			yppw_error((char *)NULL, 0, 1);
-		else
-			exit(0);
-		/* Will not exit from this if. */
-	}
-#endif	/* YP */
-
-
 	/*
-	 * Get the passwd lock file and open the passwd file for
-	 * reading.
+	 * The temporary file/file descriptor usage is a little tricky here.
+	 * 1:	We start off with two fd's, one for the master password
+	 *	file (used to lock everything), and one for a temporary file.
+	 * 2:	Display() gets an fp for the temporary file, and copies the
+	 *	user's information into it.  It then gives the temporary file
+	 *	to the user and closes the fp, closing the underlying fd.
+	 * 3:	The user edits the temporary file some number of times.
+	 * 4:	Verify() gets an fp for the temporary file, and verifies the
+	 *	contents.  It can't use an fp derived from the step #2 fd,
+	 *	because the user's editor may have created a new instance of
+	 *	the file.  Once the file is verified, its contents are stored
+	 *	in a password structure.  The verify routine closes the fp,
+	 *	closing the underlying fd.
+	 * 5:	Delete the temporary file.
+	 * 6:	Get a new temporary file/fd.  Pw_copy() gets an fp for it
+	 *	file and copies the master password file into it, replacing
+	 *	the user record with a new one.  We can't use the first
+	 *	temporary file for this because it was owned by the user.
+	 *	Pw_copy() closes its fp, flushing the data and closing the
+	 *	underlying file descriptor.  We can't close the master
+	 *	password fp, or we'd lose the lock.
+	 * 7:	Call pw_mkdb() (which renames the temporary file) and exit.
+	 *	The exit closes the master passwd fp/fd.
 	 */
 	pw_init();
-	tfd = pw_lock(0);
-	if (tfd < 0) {
-		warnx ("The passwd file is busy, waiting...");
-		tfd = pw_lock(10);
-		if (tfd < 0)
-			errx(1, "The passwd file is still busy, "
-			     "try again later.");
+	pfd = pw_lock();
+	tfd = pw_tmp();
+
+	if (op == EDITENTRY) {
+		display(tfd, pw);
+		edit(pw);
+		(void)unlink(tempname);
+		tfd = pw_tmp();
 	}
+		
+	pw_copy(pfd, tfd, pw);
 
-	pfd = open(_PATH_MASTERPASSWD, O_RDONLY, 0);
-	if (pfd < 0)
-		pw_error(_PATH_MASTERPASSWD, 1, 1);
-
-	/* Copy the passwd file to the lock file, updating pw. */
-	pw_copy(pfd, tfd, pw, &old_pw);
-
-	/* Now finish the passwd file update. */
-	if (pw_mkdb() < 0)
+	if (!pw_mkdb())
 		pw_error((char *)NULL, 0, 1);
-
 	exit(0);
 }
 
-void
 baduser()
 {
-
-	errx(1, "%s", strerror(EACCES));
+	(void)fprintf(stderr, "chpass: %s\n", strerror(EACCES));
+	exit(1);
 }
 
-void
 usage()
 {
-
-#ifdef	YP
-	(void)fprintf(stderr, "usage: chpass [-a list] [-s shell] [-l]%s [user]\n", use_yp?" [-y]":"");
-#else
 	(void)fprintf(stderr, "usage: chpass [-a list] [-s shell] [user]\n");
-#endif
 	exit(1);
 }

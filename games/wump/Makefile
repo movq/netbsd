@@ -1,10 +1,11 @@
-#	$NetBSD: Makefile,v 1.6 1997/03/24 22:15:51 christos Exp $
-#	@(#)Makefile	8.1 (Berkeley) 5/31/93
+#	@(#)Makefile	5.4 (Berkeley) 5/11/90
 
 PROG=	wump
-MAN=	wump.6
+MAN6=	wump.0
 HIDEGAME=hidegame
-FILES=wump.info
-FILESDIR=/usr/share/games
+
+beforeinstall:
+	install -c -o ${BINOWN} -g ${BINGRP} -m 444 ${.CURDIR}/wump.info \
+	    ${DESTDIR}/usr/share/games
 
 .include <bsd.prog.mk>

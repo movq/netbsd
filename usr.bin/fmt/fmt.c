@@ -1,8 +1,6 @@
-/*	$NetBSD: fmt.c,v 1.7 1997/10/18 15:01:05 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)fmt.c	8.1 (Berkeley) 7/20/93";
-#endif
-__RCSID("$NetBSD: fmt.c,v 1.7 1997/10/18 15:01:05 lukem Exp $");
+static char sccsid[] = "@(#)fmt.c	5.10 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <ctype.h>
-#include <locale.h>
 
 /*
  * fmt -- format the concatenation of input files or standard input
@@ -75,20 +67,8 @@ int	pfx;			/* Current leading blank count */
 int	lineno;			/* Current input line */
 int	mark;			/* Last place we saw a head line */
 
+char	*malloc();		/* for lint . . . */
 char	*headnames[] = {"To", "Subject", "Cc", 0};
-
-void	fmt __P((FILE *));
-int	ispref __P((char *, char *));
-int	ishead __P((char *));
-void	leadin __P((void));
-int	main __P((int, char **));
-void	oflush __P((void));
-void	pack __P((char *, int));
-void	prefix __P((char *));
-char   *savestr __P((char *));
-void	setout __P((void));
-void	split __P((char *));
-void	tabulate __P((char *));
 
 /*
  * Drive the whole formatter by managing input files.  Also,
@@ -96,13 +76,12 @@ void	tabulate __P((char *));
  * at the end.
  */
 
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	FILE *fi;
-	int errs = 0;
+	register FILE *fi;
+	register int errs = 0;
 	int number;		/* LIZ@UOM 6/18/85 */
 
 	goal_length = GOAL_LENGTH;
@@ -110,9 +89,6 @@ main(argc, argv)
 	setout();
 	lineno = 1;
 	mark = -10;
-
-	setlocale(LC_ALL, "");
-
 	/*
 	 * LIZ@UOM 6/18/85 -- Check for goal and max length arguments 
 	 */
@@ -154,13 +130,12 @@ main(argc, argv)
  * doing ^H processing, expanding tabs, stripping trailing blanks,
  * and sending each line down for analysis.
  */
-void
 fmt(fi)
 	FILE *fi;
 {
 	char linebuf[BUFSIZ], canonb[BUFSIZ];
-	char *cp, *cp2;
-	int c, col;
+	register char *cp, *cp2;
+	register int c, col;
 
 	c = getc(fi);
 	while (c != EOF) {
@@ -176,7 +151,7 @@ fmt(fi)
 				c = getc(fi);
 				continue;
 			}
-			if(!(isprint(c) || c == '\t')) {
+			if ((c < ' ' || c >= 0177) && c != '\t') {
 				c = getc(fi);
 				continue;
 			}
@@ -197,7 +172,7 @@ fmt(fi)
 		col = 0;
 		cp = linebuf;
 		cp2 = canonb;
-		while ((c = *cp++) != 0) {
+		while (c = *cp++) {
 			if (c != '\t') {
 				col++;
 				if (cp2-canonb < BUFSIZ-1)
@@ -230,12 +205,11 @@ fmt(fi)
  * Finally, if the line minus the prefix is a mail header, try to keep
  * it on a line by itself.
  */
-void
 prefix(line)
 	char line[];
 {
-	char *cp, **hp;
-	int np, h;
+	register char *cp, **hp;
+	register int np, h;
 
 	if (strlen(line) == 0) {
 		oflush();
@@ -252,7 +226,7 @@ prefix(line)
 	 */
 	if (np != pfx && (np > pfx || abs(pfx-np) > 8))
 		oflush();
-	if ((h = ishead(cp)) != 0)
+	if (h = ishead(cp))
 		oflush(), mark = lineno;
 	if (lineno - mark < 3 && lineno - mark > 0)
 		for (hp = &headnames[0]; *hp != (char *) 0; hp++)
@@ -265,7 +239,7 @@ prefix(line)
 		oflush();
 	pfx = np;
 	if (h)
-		pack(cp, strlen(cp));
+		pack(cp);
 	else	split(cp);
 	if (h)
 		oflush();
@@ -278,11 +252,10 @@ prefix(line)
  * attached at the end.  Pass these words along to the output
  * line packer.
  */
-void
 split(line)
 	char line[];
 {
-	char *cp, *cp2;
+	register char *cp, *cp2;
 	char word[BUFSIZ];
 	int wordl;		/* LIZ@UOM 6/18/85 */
 
@@ -308,7 +281,7 @@ split(line)
 		 */
 		if (*cp == '\0') {
 			*cp2++ = ' ';
-			if (strchr(".:!", cp[-1]))
+			if (index(".:!", cp[-1]))
 				*cp2++ = ' ';
 		}
 		while (*cp == ' ')
@@ -336,7 +309,6 @@ char	*outp;				/* Pointer in above */
 /*
  * Initialize the output section.
  */
-void
 setout()
 {
 	outp = NOSTR;
@@ -362,13 +334,12 @@ setout()
  * pack(word)
  *	char word[];
  */
-void
 pack(word,wl)
 	char word[];
 	int wl;
 {
-	char *cp;
-	int s, t;
+	register char *cp;
+	register int s, t;
 
 	if (outp == NOSTR)
 		leadin();
@@ -401,7 +372,6 @@ pack(word,wl)
  * its way.  Set outp to NOSTR to indicate the absence of the current
  * line prefix.
  */
-void
 oflush()
 {
 	if (outp == NOSTR)
@@ -415,12 +385,11 @@ oflush()
  * Take the passed line buffer, insert leading tabs where possible, and
  * output on standard output (finally).
  */
-void
 tabulate(line)
 	char line[];
 {
-	char *cp;
-	int b, t;
+	register char *cp;
+	register int b, t;
 
 	/*
 	 * Toss trailing blanks in the output line.
@@ -455,11 +424,10 @@ tabulate(line)
  * Initialize the output line with the appropriate number of
  * leading blanks.
  */
-void
 leadin()
 {
-	int b;
-	char *cp;
+	register int b;
+	register char *cp;
 
 	for (b = 0, cp = outbuf; b < pfx; b++)
 		*cp++ = ' ';
@@ -475,7 +443,7 @@ char *
 savestr(str)
 	char str[];
 {
-	char *top;
+	register char *top;
 
 	top = malloc(strlen(str) + 1);
 	if (top == NOSTR) {
@@ -489,9 +457,8 @@ savestr(str)
 /*
  * Is s1 a prefix of s2??
  */
-int
 ispref(s1, s2)
-	char *s1, *s2;
+	register char *s1, *s2;
 {
 
 	while (*s1++ == *s2)

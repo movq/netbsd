@@ -1,8 +1,6 @@
-/*	$NetBSD: if_dl.h,v 1.8 1995/03/26 20:30:13 jtc Exp $	*/
-
 /*
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)if_dl.h	8.1 (Berkeley) 6/10/93
+ *	@(#)if_dl.h	7.2 (Berkeley) 2/22/91
  */
 
 /* 
@@ -57,20 +55,20 @@
  * Structure of a Link-Level sockaddr:
  */
 struct sockaddr_dl {
-	u_char	  sdl_len;	/* Total length of sockaddr */
-	u_char	  sdl_family;	/* AF_DLI */
-	u_int16_t sdl_index;	/* if != 0, system given index for interface */
-	u_char	  sdl_type;	/* interface type */
-	u_char	  sdl_nlen;	/* interface name length, no trailing 0 reqd. */
-	u_char	  sdl_alen;	/* link level address length */
-	u_char	  sdl_slen;	/* link layer selector length */
-	char	  sdl_data[12];	/* minimum work area, can be larger;
+	u_char	sdl_len;	/* Total length of sockaddr */
+	u_char	sdl_family;	/* AF_DLI */
+	u_short	sdl_index;	/* if != 0, system given index for interface */
+	u_char	sdl_type;	/* interface type */
+	u_char	sdl_nlen;	/* interface name length, no trailing 0 reqd. */
+	u_char	sdl_alen;	/* link level address length */
+	u_char	sdl_slen;	/* link layer selector length */
+	char	sdl_data[12];	/* minimum work area, can be larger;
 				   contains both if name and ll address */
 };
 
 #define LLADDR(s) ((caddr_t)((s)->sdl_data + (s)->sdl_nlen))
 
-#ifndef _KERNEL
+#ifndef KERNEL
 
 #include <sys/cdefs.h>
 
@@ -79,4 +77,4 @@ void	link_addr __P((const char *, struct sockaddr_dl *));
 char	*link_ntoa __P((const struct sockaddr_dl *));
 __END_DECLS
 
-#endif /* !_KERNEL */
+#endif /* !KERNEL */

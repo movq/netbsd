@@ -1,8 +1,6 @@
-/*	$NetBSD: options.h,v 1.11 1996/11/06 01:17:12 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -35,64 +33,38 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)options.h	8.2 (Berkeley) 5/4/95
+ *	@(#)options.h	5.1 (Berkeley) 3/7/91
  */
 
 struct shparam {
-	int nparam;		/* # of positional parameters (without $0) */
-	unsigned char malloc;	/* if parameter list dynamically allocated */
-	unsigned char reset;	/* if getopts has been reset */
+	int nparam;	/* number of positional parameters (without $0) */
+	char malloc;	/* true if parameter list dynamicly allocated */
 	char **p;		/* parameter list */
-	char **optnext;		/* next parameter to be processed by getopts */
-	char *optptr;		/* used by getopts */
+	char **optnext;	/* next parameter to be processed by getopts */
+	char *optptr;	/* used by getopts */
 };
 
 
 
-#define eflag optlist[0].val
-#define fflag optlist[1].val
-#define Iflag optlist[2].val
-#define iflag optlist[3].val
-#define mflag optlist[4].val
-#define nflag optlist[5].val
-#define sflag optlist[6].val
-#define xflag optlist[7].val
-#define vflag optlist[8].val
-#define Vflag optlist[9].val
-#define	Eflag optlist[10].val
-#define	Cflag optlist[11].val
-#define	aflag optlist[12].val
-#define	bflag optlist[13].val
-#define	uflag optlist[14].val
+#define eflag optval[0]
+#define fflag optval[1]
+#define Iflag optval[2]
+#define iflag optval[3]
+#define jflag optval[4]
+#define nflag optval[5]
+#define sflag optval[6]
+#define xflag optval[7]
+#define zflag optval[8]
+#define vflag optval[9]
 
-#define NOPTS	15
-
-struct optent {
-	const char *name;
-	const char letter;
-	char val;
-};
+#define NOPTS	10
 
 #ifdef DEFINE_OPTIONS
-struct optent optlist[NOPTS] = {
-	{ "errexit",	'e',	0 },
-	{ "noglob",	'f',	0 },
-	{ "ignoreeof",	'I',	0 },
-	{ "interactive",'i',	0 },
-	{ "monitor",	'm',	0 },
-	{ "noexec",	'n',	0 },
-	{ "stdin",	's',	0 },
-	{ "xtrace",	'x',	0 },
-	{ "verbose",	'v',	0 },
-	{ "vi",		'V',	0 },
-	{ "emacs",	'E',	0 },
-	{ "noclobber",	'C',	0 },
-	{ "allexport",	'a',	0 },
-	{ "notify",	'b',	0 },
-	{ "nounset",	'u',	0 },
-};
+const char optchar[NOPTS+1] = "efIijnsxzv";       /* shell flags */
+char optval[NOPTS+1];           /* values of option flags */
 #else
-extern struct optent optlist[NOPTS];
+extern const char optchar[NOPTS+1];
+extern char optval[NOPTS+1];
 #endif
 
 
@@ -103,12 +75,15 @@ extern char **argptr;		/* argument list for builtin commands */
 extern char *optarg;		/* set by nextopt */
 extern char *optptr;		/* used by nextopt */
 
-void procargs __P((int, char **));
-void optschanged __P((void));
-void setparam __P((char **));
-void freeparam __P((struct shparam *));
-int shiftcmd __P((int, char **));
-int setcmd __P((int, char **));
-int getoptscmd __P((int, char **));
-int nextopt __P((char *));
-void getoptsreset __P((const char *));
+
+#ifdef __STDC__
+void procargs(int, char **);
+void setparam(char **);
+void freeparam(struct shparam *);
+int nextopt(char *);
+#else
+void procargs();
+void setparam();
+void freeparam();
+int nextopt();
+#endif

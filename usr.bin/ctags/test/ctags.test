@@ -1,8 +1,5 @@
-/*	$NetBSD: ctags.test,v 1.2 1995/03/26 20:14:14 glass Exp $	*/
-
 int	bar = (1 + 5);
 
-FOO("here is a #define test: ) {");
 char sysent[20];
 int	nsysent = sizeof (sysent) / sizeof (sysent[0]);
 /*
@@ -64,6 +61,3 @@ typedef unsigned char	u_char;
  routine3
 (one,
 two) { puts("world\n"); }
-routine4(int one, char (*two)(void)) /* test ANSI arguments */
-{
-}

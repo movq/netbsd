@@ -1,8 +1,6 @@
-/*	$NetBSD: startdaemon.c,v 1.9 1997/10/05 15:12:04 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,77 +31,68 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)startdaemon.c	8.2 (Berkeley) 4/17/94";
-#else
-__RCSID("$NetBSD: startdaemon.c,v 1.9 1997/10/05 15:12:04 mrg Exp $");
-#endif
+static char sccsid[] = "@(#)startdaemon.c	5.7 (Berkeley) 3/2/91";
 #endif /* not lint */
-
-
-#include <sys/param.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-
-#include <dirent.h>
-#include <errno.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <string.h>
-#include <err.h>
-#include "lp.h"
-#include "pathnames.h"
-
-extern uid_t	uid, euid;
 
 /*
  * Tell the printer daemon that there are new files in the spool directory.
  */
 
-int
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <stdio.h>
+#include "lp.local.h"
+#include "pathnames.h"
+
 startdaemon(printer)
 	char *printer;
 {
-	struct sockaddr_un un;
-	int s, n;
+	struct sockaddr_un sun;
+	register int s, n;
 	char buf[BUFSIZ];
+	static void perr();
 
 	s = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (s < 0) {
-		warn("socket");
+		perr("socket");
 		return(0);
 	}
-	memset(&un, 0, sizeof(un));
-	un.sun_family = AF_UNIX;
-	strncpy(un.sun_path, _PATH_SOCKETNAME, sizeof(un.sun_path) - 1);
-#ifndef SUN_LEN
-#define SUN_LEN(unp) (strlen((unp)->sun_path) + 2)
-#endif
-	seteuid(euid);
-	if (connect(s, (struct sockaddr *)&un, SUN_LEN(&un)) < 0) {
-		seteuid(uid);
-		warn("connect");
-		(void)close(s);
+	sun.sun_family = AF_UNIX;
+	strcpy(sun.sun_path, _PATH_SOCKETNAME);
+	if (connect(s, (struct sockaddr *)&sun, strlen(sun.sun_path) + 2) < 0) {
+		perr("connect");
+		(void) close(s);
 		return(0);
 	}
-	seteuid(uid);
-	n = snprintf(buf, sizeof(buf), "\1%s\n", printer);
+	(void) sprintf(buf, "\1%s\n", printer);
+	n = strlen(buf);
 	if (write(s, buf, n) != n) {
-		warn("write");
-		(void)close(s);
+		perr("write");
+		(void) close(s);
 		return(0);
 	}
 	if (read(s, buf, 1) == 1) {
 		if (buf[0] == '\0') {		/* everything is OK */
-			(void)close(s);
+			(void) close(s);
 			return(1);
 		}
 		putchar(buf[0]);
 	}
 	while ((n = read(s, buf, sizeof(buf))) > 0)
 		fwrite(buf, 1, n, stdout);
-	(void)close(s);
+	(void) close(s);
 	return(0);
+}
+
+static void
+perr(msg)
+	char *msg;
+{
+	extern int errno;
+	extern char *name;
+	char *strerror();
+
+	(void)printf("%s: %s: %s\n", name, msg, strerror(errno));
 }

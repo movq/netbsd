@@ -1,8 +1,6 @@
-/*	$NetBSD: termstat.c,v 1.6 1997/10/08 08:45:14 mrg Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)termstat.c	8.2 (Berkeley) 5/30/95";
-#else
-__RCSID("$NetBSD: termstat.c,v 1.6 1997/10/08 08:45:14 mrg Exp $");
-#endif
+static char sccsid[] = "@(#)termstat.c	5.10 (Berkeley) 3/22/91";
 #endif /* not lint */
 
 #include "telnetd.h"
@@ -82,7 +75,6 @@ int	newmap = 1;	/* nonzero if \n maps to ^M^J */
  *	handle real linemode, or if use of kludgeomatic linemode
  *	is preferred.  It will be set to one of the following:
  *		REAL_LINEMODE : use linemode option
- *		NO_KLUDGE : don't initiate kludge linemode.
  *		KLUDGE_LINEMODE : use kludge linemode
  *		NO_LINEMODE : client is ignorant of linemode
  *
@@ -113,7 +105,6 @@ int	newmap = 1;	/* nonzero if \n maps to ^M^J */
  *	   then lmodetype is set to REAL_LINEMODE and all linemode
  *	   processing occurs in the context of the linemode option.
  *	2) If the attempt to negotiate the linemode option failed,
- *	   and the "-k" (don't initiate kludge linemode) isn't set,
  *	   then we try to use kludge linemode.  We test for this
  *	   capability by sending "do Timing Mark".  If a positive
  *	   response comes back, then we assume that the client
@@ -139,6 +130,7 @@ int	newmap = 1;	/* nonzero if \n maps to ^M^J */
 	void
 localstat()
 {
+	void netflush();
 	int need_will_echo = 0;
 
 #if	defined(CRAY2) && defined(UNICOS5)
@@ -171,7 +163,14 @@ localstat()
 	/*
 	 * Check for changes to flow control if client supports it.
 	 */
-	flowstat();
+	if (his_state_is_will(TELOPT_LFLOW)) {
+		if (tty_flowmode() != flowmode) {
+			flowmode = tty_flowmode();
+			(void) sprintf(nfrontp, "%c%c%c%c%c%c", IAC, SB,
+				TELOPT_LFLOW, flowmode, IAC, SE);
+			nfrontp += 6;
+		}
+	}
 
 	/*
 	 * Check linemode on/off state
@@ -187,6 +186,25 @@ localstat()
 		tty_setlinemode(uselinemode);
 	}
 
+#if	defined(ENCRYPT)
+	/*
+	 * If the terminal is not echoing, but editing is enabled,
+	 * something like password input is going to happen, so
+	 * if we the other side is not currently sending encrypted
+	 * data, ask the other side to start encrypting.
+	 */
+	if (his_state_is_will(TELOPT_ENCRYPT)) {
+		static int enc_passwd = 0;
+		if (uselinemode && !tty_isecho() && tty_isediting()
+		    && (enc_passwd == 0) && !decrypt_input) {
+			encrypt_send_request_start();
+			enc_passwd = 1;
+		} else if (enc_passwd) {
+			encrypt_send_request_end();
+			enc_passwd = 0;
+		}
+	}
+#endif
 
 	/*
 	 * Do echo mode handling as soon as we know what the
@@ -211,10 +229,6 @@ localstat()
 			send_wont(TELOPT_ECHO, 1);
 		else
 			need_will_echo = 1;
-#ifdef	KLUDGELINEMODE
-		if (lmodetype == KLUDGE_OK)
-			lmodetype = KLUDGE_LINEMODE;
-#endif
 	}
 
 	/*
@@ -307,7 +321,7 @@ localstat()
 			nfrontp += 7;
 			editmode = useeditmode;
 		}
-
+							
 
 		/*
 		 * Check for changes to special characters in use.
@@ -337,34 +351,6 @@ done:
 }  /* end of localstat */
 #endif	/* LINEMODE */
 
-/*
- * flowstat
- *
- * Check for changes to flow control
- */
-	void
-flowstat()
-{
-	if (his_state_is_will(TELOPT_LFLOW)) {
-		if (tty_flowmode() != flowmode) {
-			flowmode = tty_flowmode();
-			(void) sprintf(nfrontp, "%c%c%c%c%c%c",
-					IAC, SB, TELOPT_LFLOW,
-					flowmode ? LFLOW_ON : LFLOW_OFF,
-					IAC, SE);
-			nfrontp += 6;
-		}
-		if (tty_restartany() != restartany) {
-			restartany = tty_restartany();
-			(void) sprintf(nfrontp, "%c%c%c%c%c%c",
-					IAC, SB, TELOPT_LFLOW,
-					restartany ? LFLOW_RESTART_ANY
-						   : LFLOW_RESTART_XON,
-					IAC, SE);
-			nfrontp += 6;
-		}
-	}
-}
 
 /*
  * clientstat
@@ -378,6 +364,7 @@ flowstat()
 clientstat(code, parm1, parm2)
 	register int code, parm1, parm2;
 {
+	void netflush();
 
 	/*
 	 * Get a copy of terminal characteristics.
@@ -408,7 +395,7 @@ clientstat(code, parm1, parm2)
 					uselinemode = 1;
 				}
 			}
-
+		
 			/*
 			 * Quit now if we can't do it.
 			 */
@@ -445,11 +432,9 @@ clientstat(code, parm1, parm2)
 
 			linemode = uselinemode;
 
-			if (!linemode)
-				send_will(TELOPT_ECHO, 1);
 		}
 		break;
-
+	
 	case LM_MODE:
 	    {
 		register int ack, changed;
@@ -465,7 +450,7 @@ clientstat(code, parm1, parm2)
 		 ack = (useeditmode & MODE_ACK);
 		 useeditmode &= ~MODE_ACK;
 
-		 if ((changed = (useeditmode ^ editmode))) {
+		 if (changed = (useeditmode ^ editmode)) {
 			/*
 			 * This check is for a timing problem.  If the
 			 * state of the tty has changed (due to the user
@@ -498,7 +483,7 @@ clientstat(code, parm1, parm2)
  					IAC, SE);
  				nfrontp += 7;
  			}
-
+ 		
 			editmode = useeditmode;
 		}
 
@@ -532,9 +517,9 @@ clientstat(code, parm1, parm2)
 		(void) ioctl(pty, TIOCSWINSZ, (char *)&ws);
 	    }
 #endif	/* TIOCSWINSZ */
-
+		
 		break;
-
+	
 	case TELOPT_TSPEED:
 	    {
 		def_tspeed = parm1;
@@ -599,7 +584,7 @@ _termstat()
  *
  * Some things should not be done until after the login process has started
  * and all the pty modes are set to what they are supposed to be.  This
- * function is called when the pty state has been processed for the first time.
+ * function is called when the pty state has been processed for the first time. 
  * It calls other functions that do things that were deferred in each module.
  */
 	void
@@ -618,7 +603,7 @@ defer_terminit()
 	if (def_col || def_row) {
 		struct winsize ws;
 
-		memset((char *)&ws, 0, sizeof(ws));
+		bzero((char *)&ws, sizeof(ws));
 		ws.ws_col = def_col;
 		ws.ws_row = def_row;
 		(void) ioctl(pty, TIOCSWINSZ, (char *)&ws);
@@ -640,7 +625,7 @@ defer_terminit()
 	int
 terminit()
 {
-	return(_terminit);
+	return _terminit;
 
 }  /* end of terminit */
 #endif	/* LINEMODE */

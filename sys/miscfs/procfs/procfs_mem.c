@@ -1,13 +1,10 @@
-/*	$NetBSD: procfs_mem.c,v 1.16 1997/09/13 04:25:35 enami Exp $	*/
-
 /*
+ * Copyright (c) 1993 The Regents of the University of California.
  * Copyright (c) 1993 Jan-Simon Pendry
- * Copyright (c) 1993 Sean Eric Fagan
- * Copyright (c) 1993
- *	The Regents of the University of California.  All rights reserved.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
- * Jan-Simon Pendry and Sean Eric Fagan.
+ * Jan-Simon Pendry.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,7 +34,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)procfs_mem.c	8.5 (Berkeley) 6/15/94
+ * From:
+ *	Id: procfs_mem.c,v 4.1 1993/12/17 10:47:45 jsp Rel
+ *
+ *	$Id: procfs_mem.c,v 1.1 1994/01/05 07:51:18 cgd Exp $
  */
 
 /*
@@ -56,12 +56,8 @@
 #include <vm/vm_kern.h>
 #include <vm/vm_page.h>
 
-#define	ISSET(t, f)	((t) & (f))
-
-static int procfs_rwmem __P((struct proc *, struct uio *));
-
 static int
-procfs_rwmem(p, uio)
+pfs_rwmem(p, uio)
 	struct proc *p;
 	struct uio *uio;
 {
@@ -156,17 +152,15 @@ procfs_rwmem(p, uio)
 		 */
 		if (!error && writing && object->shadow) {
 			m = vm_page_lookup(object, off);
-			if (m == 0 || (m->flags & PG_COPYONWRITE))
+			if (m == 0 || m->copy_on_write)
 				error = vm_fault(map, pageno,
 							VM_PROT_WRITE, FALSE);
 		}
 
 		/* Find space in kernel_map for the page we're interested in */
-		if (!error) {
-			kva = VM_MIN_KERNEL_ADDRESS;
+		if (!error)
 			error = vm_map_find(kernel_map, object, off, &kva,
 					PAGE_SIZE, 1);
-		}
 
 		if (!error) {
 			/*
@@ -186,8 +180,7 @@ procfs_rwmem(p, uio)
 			 * Now do the i/o move.
 			 */
 			if (!error)
-				error = uiomove((caddr_t) (kva + page_offset),
-						len, uio);
+				error = uiomove(kva + page_offset, len, uio);
 
 			vm_map_remove(kernel_map, kva, kva + PAGE_SIZE);
 		}
@@ -205,10 +198,9 @@ procfs_rwmem(p, uio)
  * the kernel and then doing a uiomove direct
  * from the kernel address space.
  */
-int
-procfs_domem(curp, p, pfs, uio)
-	struct proc *curp;		/* tracer */
-	struct proc *p;			/* traced */
+pfs_domem(curp, p, pfs, uio)
+	struct proc *curp;
+	struct proc *p;
 	struct pfsnode *pfs;
 	struct uio *uio;
 {
@@ -217,12 +209,8 @@ procfs_domem(curp, p, pfs, uio)
 	if (uio->uio_resid == 0)
 		return (0);
 
-	if ((error = procfs_checkioperm(curp, p)) != 0)
-		return (error);
+	error = pfs_rwmem(p, uio);
 
-	PHOLD(p);
-	error = procfs_rwmem(p, uio);
-	PRELE(p);
 	return (error);
 }
 
@@ -241,43 +229,9 @@ struct vnode *
 procfs_findtextvp(p)
 	struct proc *p;
 {
-
 	return (p->p_textvp);
 }
 
-/*
- * Ensure that a process has permission to perform I/O on another.
- * Arguments:
- *	p	The process wishing to do the I/O (the tracer).
- *	t	The process who's memory/registers will be read/written.
- */
-int
-procfs_checkioperm(p, t)
-	struct proc *p, *t;
-{
-	int error;
-
-	/*
-	 * You cannot attach to a processes mem/regs if:
-	 *
-	 *	(1) it's not owned by you, or is set-id on exec
-	 *	    (unless you're root), or...
-	 */
-	if ((t->p_cred->p_ruid != p->p_cred->p_ruid ||
-		ISSET(t->p_flag, P_SUGID)) &&
-	    (error = suser(p->p_ucred, &p->p_acflag)) != 0)
-		return (error);
-
-	/*
-	 *	(2) ...it's init, which controls the security level
-	 *	    of the entire system, and the system was not
-	 *	    compiled with permanetly insecure mode turned on.
-	 */
-	if (t == initproc && securelevel > -1)
-		return (EPERM);
-
-	return (0);
-}
 
 #ifdef probably_never
 /*
@@ -315,9 +269,9 @@ procfs_findtextvp(p)
 		if (!error) {
 			vm_pager_t pager;
 
-			printf("procfs: found vm object\n");
+			printf("procfs: found object\n");
 			vm_map_lookup_done(map, out_entry);
-			printf("procfs: vm object = %p\n", object);
+			printf("procfs: object = %x\n", object);
 
 			/*
 			 * At this point, assuming no errors, object
@@ -327,21 +281,20 @@ procfs_findtextvp(p)
 			 */
 
 			pager = object->pager;
-			printf("procfs: pager = %p\n", pager);
+			printf("procfs: pager = %x\n", pager);
 			if (pager)
-				printf("procfs: found pager, type = %d\n",
-				    pager->pg_type);
+				printf("procfs: found pager, type = %d\n", pager->pg_type);
 			if (pager && pager->pg_type == PG_VNODE) {
 				struct vnode *vp;
 
 				vp = (struct vnode *) pager->pg_handle;
-				printf("procfs: vp = %p\n", vp);
+				printf("procfs: vp = 0x%x\n", vp);
 				return (vp);
 			}
 		}
 	}
 
-	printf("procfs: text object not found\n");
+	printf("procfs: not found\n");
 	return (0);
 }
-#endif /* probably_never */
+#endif /* notyet */

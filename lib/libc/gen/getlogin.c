@@ -1,8 +1,6 @@
-/*	$NetBSD: getlogin.c,v 1.9 1997/07/21 14:07:08 jtc Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,39 +31,46 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)getlogin.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: getlogin.c,v 1.9 1997/07/21 14:07:08 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)getlogin.c	5.9 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/param.h>
 #include <pwd.h>
 #include <utmp.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include "extern.h"
 
-#ifdef __weak_alias
-__weak_alias(getlogin,_getlogin);
-#endif
-
-int	__logname_valid;		/* known to setlogin() */
+int	_logname_valid;		/* known to setlogin() */
 
 char *
 getlogin()
 {
 	static char logname[MAXLOGNAME + 1];
 
-	if (__logname_valid == 0) {
-		if (__getlogin(logname, sizeof(logname) - 1) < 0)
+	if (_logname_valid == 0) {
+		if (_getlogin(logname, sizeof(logname) - 1) < 0)
 			return ((char *)NULL);
-		__logname_valid = 1;
+		_logname_valid = 1;
 	}
 	return (*logname ? logname : (char *)NULL);
+}
+
+char *
+cuserid(s)
+	char *s;
+{
+	register struct passwd *pwd;
+
+	if ((pwd = getpwuid(geteuid())) == NULL) {
+		if (s)
+			*s = '\0';
+		return (s);
+	}
+	if (s) {
+		(void)strncpy(s, pwd->pw_name, L_cuserid);
+		return (s);
+	}
+	return (pwd->pw_name);
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: netstat.h,v 1.8 1997/04/03 04:46:51 christos Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	Regents of the University of California.  All rights reserved.
@@ -33,6 +31,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)netstat.h	8.2 (Berkeley) 1/4/94
+ *	$Id: netstat.h,v 1.1 1994/05/13 08:06:36 mycroft Exp $
  */
 
 #include <sys/cdefs.h>
@@ -52,10 +51,11 @@ int	tflag;		/* show i/f watchdog timers */
 int	interval;	/* repeat interval for i/f stats */
 
 char	*interface;	/* desired i/f for stats, or NULL for all i/fs */
+int	unit;		/* unit number for above */
 
 int	af;		/* address family */
 
-extern	char *__progname; /* program name, from crt0.o */
+char	*prog;		/* program name */
 
 
 int	kread __P((u_long addr, char *buf, int size));
@@ -70,24 +70,21 @@ void	icmp_stats __P((u_long, char *));
 void	igmp_stats __P((u_long, char *));
 void	protopr __P((u_long, char *));
 
-void	mbpr(u_long, u_long, u_long);
+void	mbpr(u_long);
 
 void	hostpr __P((u_long, u_long));
 void	impstats __P((u_long, u_long));
 
 void	intpr __P((int, u_long));
 
-void	pr_rthdr __P((void));
+void	pr_rthdr __P(());
 void	pr_family __P((int));
 void	rt_stats __P((u_long));
 char	*ns_phost __P((struct sockaddr *));
 void	upHex __P((char *));
 
-char	*routename __P((u_int32_t));
-char	*netname __P((u_int32_t, u_int32_t));
-char	*atalk_print __P((const struct sockaddr *, int));
-char	*atalk_print2 __P((const struct sockaddr *, const struct sockaddr *,
-    int));
+char	*routename __P((u_long));
+char	*netname __P((u_long, u_long));
 char	*ns_print __P((struct sockaddr *));
 void	routepr __P((u_long));
 
@@ -95,9 +92,6 @@ void	nsprotopr __P((u_long, char *));
 void	spp_stats __P((u_long, char *));
 void	idp_stats __P((u_long, char *));
 void	nserr_stats __P((u_long, char *));
-
-void	atalkprotopr __P((u_long, char *));
-void	ddp_stats __P((u_long, char *));
 
 void	intpr __P((int, u_long));
 
@@ -110,7 +104,7 @@ void	iso_protopr __P((u_long, char *));
 void	iso_protopr1 __P((u_long, int));
 void	tp_protopr __P((u_long, char *));
 void	tp_inproto __P((u_long));
-void	tp_stats __P((u_long, caddr_t));
+void	tp_stats __P((caddr_t, caddr_t));
 
-void	mroutepr __P((u_long, u_long, u_long, u_long));
+void	mroutepr __P((u_long, u_long, u_long));
 void	mrt_stats __P((u_long, u_long));

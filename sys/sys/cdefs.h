@@ -1,11 +1,6 @@
-/*	$NetBSD: cdefs.h,v 1.18 1997/06/18 19:09:50 christos Exp $	*/
-
 /*
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
- * This code is derived from software contributed to Berkeley by
- * Berkeley Software Design, Inc.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,13 +30,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)cdefs.h	8.7 (Berkeley) 1/21/94
+ *	@(#)cdefs.h	7.6 (Berkeley) 5/4/91
  */
 
-#ifndef	_SYS_CDEFS_H_
-#define	_SYS_CDEFS_H_
-
-#include <machine/cdefs.h>
+#ifndef	_CDEFS_H_
+#define	_CDEFS_H_
 
 #if defined(__cplusplus)
 #define	__BEGIN_DECLS	extern "C" {
@@ -63,81 +56,23 @@
 #define	__CONCAT(x,y)	x ## y
 #define	__STRING(x)	#x
 
-#define	__const		const		/* define reserved names to standard */
-#define	__signed	signed
-#define	__volatile	volatile
-#if defined(__cplusplus)
-#define	__inline	inline		/* convert to C++ keyword */
-#else
-#ifndef __GNUC__
-#define	__inline			/* delete GCC keyword */
-#endif /* !__GNUC__ */
-#endif /* !__cplusplus */
-
 #else	/* !(__STDC__ || __cplusplus) */
 #define	__P(protos)	()		/* traditional C preprocessor */
 #define	__CONCAT(x,y)	x/**/y
 #define	__STRING(x)	"x"
 
-#ifndef __GNUC__
-#define	__const				/* delete pseudo-ANSI C keywords */
-#define	__inline
-#define	__signed
-#define	__volatile
-#endif	/* !__GNUC__ */
-
-/*
- * In non-ANSI C environments, new programs will want ANSI-only C keywords
- * deleted from the program and old programs will want them left alone.
- * Programs using the ANSI C keywords const, inline etc. as normal
- * identifiers should define -DNO_ANSI_KEYWORDS.
- */
-#ifndef	NO_ANSI_KEYWORDS
-#define	const		__const		/* convert ANSI C keywords */
+#ifdef __GNUC__
+#define	const		__const		/* GCC: ANSI C with -traditional */
 #define	inline		__inline
 #define	signed		__signed
 #define	volatile	__volatile
-#endif /* !NO_ANSI_KEYWORDS */
+
+#else	/* !__GNUC__ */
+#define	const				/* delete ANSI C keywords */
+#define	inline
+#define	signed
+#define	volatile
+#endif	/* !__GNUC__ */
 #endif	/* !(__STDC__ || __cplusplus) */
 
-/*
- * GCC1 and some versions of GCC2 declare dead (non-returning) and
- * pure (no side effects) functions using "volatile" and "const";
- * unfortunately, these then cause warnings under "-ansi -pedantic".
- * GCC2 uses a new, peculiar __attribute__((attrs)) style.  All of
- * these work for GNU C++ (modulo a slight glitch in the C++ grammar
- * in the distribution version of 2.5.5).
- */
-#if !defined(__GNUC__) || __GNUC__ < 2 || \
-	(__GNUC__ == 2 && __GNUC_MINOR__ < 5)
-#define	__attribute__(x)	/* delete __attribute__ if non-gcc or gcc1 */
-#if defined(__GNUC__) && !defined(__STRICT_ANSI__)
-#define	__dead		__volatile
-#define	__pure		__const
-#endif
-#endif
-
-#ifdef __KPRINTF_ATTRIBUTE__
-#define __kprintf_attribute__(a) __attribute__(a)
-#else
-#define __kprintf_attribute__(a)
-#endif
-
-/* Delete pseudo-keywords wherever they are not available or needed. */
-#ifndef __dead
-#define	__dead
-#define	__pure
-#endif
-
-#define __IDSTRING(name,string) \
-	static const char name[] __attribute__((__unused__)) = string
-
-#ifndef __RCSID
-#define __RCSID(s) __IDSTRING(rcsid,s)
-#endif
-
-#ifndef __COPYRIGHT
-#define __COPYRIGHT(s) __IDSTRING(copyright,s)
-#endif
-
-#endif /* !_SYS_CDEFS_H_ */
+#endif /* !_CDEFS_H_ */

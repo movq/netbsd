@@ -1,8 +1,6 @@
-/*	$NetBSD: save.c,v 1.4 1997/10/12 11:45:58 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Timothy C. Stoehr.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)save.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: save.c,v 1.4 1997/10/12 11:45:58 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)save.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -63,7 +56,29 @@ __RCSID("$NetBSD: save.c,v 1.4 1997/10/12 11:45:58 lukem Exp $");
 short write_failed = 0;
 char *save_file = (char *) 0;
 
-void
+extern boolean detect_monster;
+extern short cur_level, max_level;
+extern char hunger_str[];
+extern char login_name[];
+extern short party_room;
+extern short foods;
+extern boolean is_wood[];
+extern short cur_room;
+extern boolean being_held;
+extern short bear_trap;
+extern short halluc;
+extern short blind;
+extern short confused;
+extern short levitate;
+extern short haste_self;
+extern boolean see_invisible;
+extern boolean detect_monster;
+extern boolean wizard;
+extern boolean score_only;
+extern short m_moves;
+
+extern boolean msg_cleared;
+
 save_game()
 {
 	char fname[64];
@@ -77,9 +92,8 @@ save_game()
 	save_into_file(fname);
 }
 
-void
 save_into_file(sfile)
-	char *sfile;
+char *sfile;
 {
 	FILE *fp;
 	int file_id;
@@ -88,7 +102,7 @@ save_into_file(sfile)
 	struct rogue_time rt_buf;
 
 	if (sfile[0] == '~') {
-		if ((hptr = md_getenv("HOME")) != NULL) {
+		if (hptr = md_getenv("HOME")) {
 			(void) strcpy(name_buffer, hptr);
 			(void) strcat(name_buffer, sfile+1);
 			sfile = name_buffer;
@@ -147,9 +161,8 @@ save_into_file(sfile)
 	}
 }
 
-void
 restore(fname)
-	char *fname;
+char *fname;
 {
 	FILE *fp;
 	struct rogue_time saved_time, mod_time;
@@ -157,7 +170,6 @@ restore(fname)
 	char tbuf[40];
 	int new_file_id, saved_file_id;
 
-	fp = NULL;
 	if (	((new_file_id = md_get_file_id(fname)) == -1) ||
 			((fp = fopen(fname, "r")) == NULL)) {
 		clean_up("cannot open file");
@@ -229,25 +241,23 @@ restore(fname)
 	fclose(fp);
 }
 
-void
 write_pack(pack, fp)
-	object *pack;
-	FILE *fp;
+object *pack;
+FILE *fp;
 {
 	object t;
 
-	while ((pack = pack->next_object) != NULL) {
+	while (pack = pack->next_object) {
 		r_write(fp, (char *) pack, sizeof(object));
 	}
 	t.ichar = t.what_is = 0;
 	r_write(fp, (char *) &t, sizeof(object));
 }
 
-void
 read_pack(pack, fp, is_rogue)
-	object *pack;
-	FILE *fp;
-	boolean is_rogue;
+object *pack;
+FILE *fp;
+boolean is_rogue;
 {
 	object read_obj, *new_obj;
 
@@ -274,10 +284,9 @@ read_pack(pack, fp, is_rogue)
 	}
 }
 
-void
 rw_dungeon(fp, rw)
-	FILE *fp;
-	boolean rw;
+FILE *fp;
+boolean rw;
 {
 	short i, j;
 	char buf[DCOLS];
@@ -299,12 +308,11 @@ rw_dungeon(fp, rw)
 	}
 }
 
-void
 rw_id(id_table, fp, n, wr)
-	struct id id_table[];
-	FILE *fp;
-	int n;
-	boolean wr;
+struct id id_table[];
+FILE *fp;
+int n;
+boolean wr;
 {
 	short i;
 
@@ -323,10 +331,9 @@ rw_id(id_table, fp, n, wr)
 	}
 }
 
-void
 write_string(s, fp)
-	char *s;
-	FILE *fp;
+char *s;
+FILE *fp;
 {
 	short n;
 
@@ -336,10 +343,9 @@ write_string(s, fp)
 	r_write(fp, s, n);
 }
 
-void
 read_string(s, fp)
-	char *s;
-	FILE *fp;
+char *s;
+FILE *fp;
 {
 	short n;
 
@@ -348,10 +354,9 @@ read_string(s, fp)
 	xxxx(s, n);
 }
 
-void
 rw_rooms(fp, rw)
-	FILE *fp;
-	boolean rw;
+FILE *fp;
+boolean rw;
 {
 	short i;
 
@@ -361,22 +366,20 @@ rw_rooms(fp, rw)
 	}
 }
 
-void
 r_read(fp, buf, n)
-	FILE *fp;
-	char *buf;
-	int n;
+FILE *fp;
+char *buf;
+int n;
 {
 	if (fread(buf, sizeof(char), n, fp) != n) {
 		clean_up("read() failed, don't know why");
 	}
 }
 
-void
 r_write(fp, buf, n)
-	FILE *fp;
-	char *buf;
-	int n;
+FILE *fp;
+char *buf;
+int n;
 {
 	if (!write_failed) {
 		if (fwrite(buf, sizeof(char), n, fp) != n) {
@@ -389,7 +392,7 @@ r_write(fp, buf, n)
 
 boolean
 has_been_touched(saved_time, mod_time)
-	struct rogue_time *saved_time, *mod_time;
+struct rogue_time *saved_time, *mod_time;
 {
 	if (saved_time->year < mod_time->year) {
 		return(1);

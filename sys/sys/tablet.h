@@ -1,8 +1,6 @@
-/*	$NetBSD: tablet.h,v 1.10 1996/02/09 18:25:43 christos Exp $	*/
-
 /*-
- * Copyright (c) 1985, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1985, 1986 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,16 +30,20 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tablet.h	8.3 (Berkeley) 1/4/94
+ *	@(#)tablet.h	7.5 (Berkeley) 2/15/91
  */
 
-#ifndef _SYS_TABLET_H_
-#define	_SYS_TABLET_H_
+#ifndef _TABLET_H_
+#define	_TABLET_H_
 
 /*
  * Tablet line discipline.
  */
+#ifdef KERNEL
+#include "../h/ioctl.h"
+#else
 #include <sys/ioctl.h>
+#endif
 
 /*
  * Reads on the tablet return one of the following structures, depending on
@@ -50,26 +52,26 @@
  * in-proximity bit is simulated where the tablet does not directly provide
  * the information.
  */
-struct	hitpos {
-	int32_t	xpos, ypos;	/* raw x-y coordinates */
-	int16_t	status;		/* buttons/pen down */
+struct	tbpos {
+	int	xpos, ypos;	/* raw x-y coordinates */
+	short	status;		/* buttons/pen down */
 #define	TBINPROX	0100000		/* pen in proximity of tablet */
-	int16_t	scount;		/* sample count */
+	short	scount;		/* sample count */
 };
 
 struct	gtcopos {
-	int32_t	xpos, ypos;	/* raw x-y coordinates */
-	int16_t	status;		/* as above */
-	int16_t	scount;		/* sample count */
-	int16_t	xtilt, ytilt;	/* raw tilt */
-	int16_t	pressure;
-	int16_t	pad;		/* pad to 32-bit boundary */
+	int	xpos, ypos;	/* raw x-y coordinates */
+	short	status;		/* as above */
+	short	scount;		/* sample count */
+	short	xtilt, ytilt;	/* raw tilt */
+	short	pressure;
+	short	pad;		/* pad to longword boundary */
 };
 
 struct	polpos {
-	int16_t	p_x, p_y, p_z;	/* raw 3-space coordinates */
-	int16_t	p_azi, p_pit, p_rol;	/* azimuth, pitch, and roll */
-	int16_t	p_stat;		/* status, as above */
+	short	p_x, p_y, p_z;	/* raw 3-space coordinates */
+	short	p_azi, p_pit, p_rol;	/* azimuth, pitch, and roll */
+	short	p_stat;		/* status, as above */
 	char	p_key;		/* calculator input keyboard */
 };
 
@@ -92,5 +94,6 @@ struct	polpos {
 #define		TBDIGIHIRES	0x8		/* gtco digi-pad, high res */
 #define BIOSTYPE	_IOW('b', 3, int)	/* set tablet type */
 #define BIOGTYPE	_IOR('b', 4, int)	/* get tablet type*/
+#endif
 
-#endif /* !_SYS_TABLET_H_ */
+#endif /* !_TABLET_H_ */

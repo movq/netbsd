@@ -1,8 +1,6 @@
-/*	$NetBSD: soelim.c,v 1.4 1997/10/19 23:25:51 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)soelim.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: soelim.c,v 1.4 1997/10/19 23:25:51 lukem Exp $");
+static char sccsid[] = "@(#)soelim.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include <stdio.h>
@@ -65,10 +60,6 @@ __RCSID("$NetBSD: soelim.c,v 1.4 1997/10/19 23:25:51 lukem Exp $");
  */
 #define	STDIN_NAME	"-"
 
-int	main __P((int, char **));
-int	process __P((char *));
-
-int
 main(argc, argv)
 	int argc;
 	char *argv[];
@@ -88,12 +79,11 @@ main(argc, argv)
 	exit(0);
 }
 
-int
-process(file)
+int process(file)
 	char *file;
 {
-	char *cp;
-	int c;
+	register char *cp;
+	register int c;
 	char fname[BUFSIZ];
 	FILE *soee;
 	int isfile;

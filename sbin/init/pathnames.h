@@ -1,11 +1,9 @@
-/*	$NetBSD: pathnames.h,v 1.5 1995/03/18 14:56:35 cgd Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
- * Donn Seeley at Berkeley Software Design, Inc.
+ * Donn Seeley at UUNET Technologies, Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,7 +33,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)pathnames.h	8.1 (Berkeley) 6/5/93
+ *	from: @(#)pathnames.h	6.1 (Berkeley) 7/2/91
+ *	$Id: pathnames.h,v 1.1 1993/06/18 20:51:50 cgd Exp $
  */
 
 #include <paths.h>

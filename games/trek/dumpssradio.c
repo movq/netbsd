@@ -1,8 +1,6 @@
-/*	$NetBSD: dumpssradio.c,v 1.4 1997/10/12 21:24:45 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,28 +31,21 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)dumpssradio.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: dumpssradio.c,v 1.4 1997/10/12 21:24:45 christos Exp $");
-#endif
+static char sccsid[] = "@(#)dumpssradio.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include "trek.h"
+# include	"trek.h"
 
 /**
  **	output hidden distress calls
  **/
 
-int
 dumpssradio()
 {
-	struct event	*e;
-	int		j;
-	int		chkrest;
+	register struct event	*e;
+	register int		j;
+	register int		chkrest;
 
 	chkrest = 0;
 	for (j = 0; j < MAXEVENTS; j++)
@@ -67,7 +58,7 @@ dumpssradio()
 		{
 			unschedule(e);
 			printf("Starsystem %s in quadrant %d,%d is no longer distressed\n",
-				systemname(&Quad[e->x][e->y]), e->x, e->y);
+				systemname(e), e->x, e->y);
 			continue;
 		}
 
@@ -83,7 +74,7 @@ dumpssradio()
 		  case E_ENSLV:
 		  case E_REPRO:
 			printf("Starsystem %s in quadrant %d,%d is distressed\n",
-				systemname(&Quad[e->x][e->y]), e->x, e->y);
+				systemname(e), e->x, e->y);
 			chkrest++;
 			break;
 

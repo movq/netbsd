@@ -1,8 +1,6 @@
-/*	$NetBSD: main.c,v 1.6 1997/10/11 02:01:05 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Ed James.
@@ -45,27 +43,20 @@
  * For more info on this and all of my stuff, mail edjames@berkeley.edu.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1990 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: main.c,v 1.6 1997/10/11 02:01:05 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)main.c	5.4 (Berkeley) 3/5/91";
 #endif /* not lint */
 
 #include "include.h"
 #include "pathnames.h"
 
-
-int
 main(ac, av)
-	int	 ac;
 	char	*av[];
 {
 	int			seed;
@@ -73,10 +64,11 @@ main(ac, av)
 	int			f_printpath = 0;
 	char			*file = NULL;
 	char			*name, *ptr;
-	struct sigaction	sa;
 #ifdef BSD
 	struct itimerval	itv;
 #endif
+	extern char		*default_game(), *okay_game();
+	extern void		log_score(), quit(), update();
 
 	start_time = seed = time(0);
 
@@ -84,7 +76,7 @@ main(ac, av)
 	while (*av) {
 #ifndef SAVEDASH
 		if (**av == '-') 
-			++*av;
+			*++*av;
 		else
 			break;
 #endif
@@ -115,7 +107,8 @@ main(ac, av)
 				av++;
 				break;
 			default: 
-				warnx("unknown option '%c'\n", *ptr);
+				fprintf(stderr, "Unknown option '%c'\n", *ptr,
+					name);
 				f_usage++;
 				break;
 			}
@@ -162,22 +155,28 @@ main(ac, av)
 	signal(SIGTSTP, SIG_IGN);
 	signal(SIGSTOP, SIG_IGN);
 #endif
-	signal(SIGHUP, log_score_quit);
-	signal(SIGTERM, log_score_quit);
+	signal(SIGHUP, log_score);
+	signal(SIGTERM, log_score);
 
-	tcgetattr(fileno(stdin), &tty_start);
-	tty_new = tty_start;
-	tty_new.c_lflag &= ~(ICANON|ECHO);
+#ifdef BSD
+	ioctl(fileno(stdin), TIOCGETP, &tty_start);
+	bcopy(&tty_start, &tty_new, sizeof(tty_new));
+	tty_new.sg_flags |= CBREAK;
+	tty_new.sg_flags &= ~ECHO;
+	ioctl(fileno(stdin), TIOCSETP, &tty_new);
+#endif
+
+#ifdef SYSV
+	ioctl(fileno(stdin), TCGETA, &tty_start);
+	bcopy(&tty_start, &tty_new, sizeof(tty_new));
+	tty_new.c_lflag &= ~ICANON;
+	tty_new.c_lflag &= ~ECHO;
 	tty_new.c_cc[VMIN] = 1;
 	tty_new.c_cc[VTIME] = 0;
-	tcsetattr(fileno(stdin), TCSADRAIN, &tty_new);
+	ioctl(fileno(stdin), TCSETAW, &tty_new);
+#endif
 
-	sa.sa_handler = update;
-	sigemptyset(&sa.sa_mask);
-	sigaddset(&sa.sa_mask, SIGALRM);
-	sigaddset(&sa.sa_mask, SIGINT);
-	sa.sa_flags = 0;
-	sigaction(SIGALRM, &sa, (struct sigaction *)0);
+	signal(SIGALRM, update);
 
 #ifdef BSD
 	itv.it_value.tv_sec = 0;
@@ -203,7 +202,7 @@ main(ac, av)
 			alarm(0);
 #endif
 
-			update(0);
+			update();
 
 #ifdef BSD
 			itv.it_value.tv_sec = sp->update_secs;
@@ -219,7 +218,6 @@ main(ac, av)
 	}
 }
 
-int
 read_file(s)
 	char	*s;
 {
@@ -229,7 +227,7 @@ read_file(s)
 	file = s;
 	yyin = fopen(s, "r");
 	if (yyin == NULL) {
-		warn("fopen %s", s);
+		perror(s);
 		return (-1);
 	}
 	retval = yyparse();
@@ -252,7 +250,7 @@ default_game()
 	strcat(games, GAMES);
 
 	if ((fp = fopen(games, "r")) == NULL) {
-		warn("fopen %s", games);
+		perror(games);
 		return (NULL);
 	}
 	if (fgets(line, sizeof(line), fp) == NULL) {
@@ -278,7 +276,7 @@ okay_game(s)
 	strcat(games, GAMES);
 
 	if ((fp = fopen(games, "r")) == NULL) {
-		warn("fopen %s", games);
+		perror(games);
 		return (NULL);
 	}
 	while (fgets(line, sizeof(line), fp) != NULL) {
@@ -301,7 +299,6 @@ okay_game(s)
 	return (ret);
 }
 
-int
 list_games()
 {
 	FILE		*fp;
@@ -312,7 +309,7 @@ list_games()
 	strcat(games, GAMES);
 
 	if ((fp = fopen(games, "r")) == NULL) {
-		warn("fopen %s", games);
+		perror(games);
 		return (-1);
 	}
 	puts("available games:");

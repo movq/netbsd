@@ -1,25 +1,38 @@
-#	$NetBSD: Makefile,v 1.18 1997/10/10 19:48:01 christos Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/5/93
+#	@(#)Makefile	5.12 (Berkeley) 3/7/91
 
 #	dump.h			header file
-#	itime.c			reads /etc/dumpdates
-#	main.c			driver
-#	optr.c			operator interface
-#	dumprmt.c		handles remote tape via rmt(8)
-#	tape.c			handles the mag tape and opening/closing
-#	traverse.c		traverses the file system
+#	dumpitime.c		reads /etc/dumpdates
+#	dumpmain.c		driver
+#	dumpoptr.c		operator interface
+#	dumptape.c		handles the mag tape and opening/closing
+#	dumptraverse.c		traverses the file system
 #	unctime.c		undo ctime
 #
 #	DEBUG			use local directory to find ddate and dumpdates
 #	TDEBUG			trace out the process forking
 
 PROG=	dump
-LINKS=	${BINDIR}/dump ${BINDIR}/rdump
-CPPFLAGS+=-DRDUMP
-SRCS=	itime.c main.c optr.c dumprmt.c tape.c traverse.c unctime.c
+SRCS=	dumpitime.c dumpmain.c dumpoptr.c dumptape.c dumptraverse.c \
+	unctime.c
+ROBJS=	dumpitime.o dumprmain.o dumpoptr.o dumprmt.o dumprtape.o \
+	dumptraverse.o unctime.o
 BINGRP=	tty
-BINMODE=2555
-MAN=	dump.8
-MLINKS+=dump.8 rdump.8
+MAN8=	dump.0 rdump.0
+CLEANFILES=dumprmain.o dumprtape.o dumprmt.o rdump
+
+all: rdump
+
+rdump: ${ROBJS} ${LIBC}
+	${CC} -o ${.TARGET} ${CFLAGS} ${ROBJS}
+
+dumprmain.o: dumpmain.o
+	${CC} -c -DRDUMP ${CFLAGS} ${.CURDIR}/dumpmain.c -o ${.TARGET}
+
+dumprtape.o: dumptape.o
+	${CC} -c -DRDUMP ${CFLAGS} ${.CURDIR}/dumptape.c -o ${.TARGET}
+
+afterinstall:
+	install ${STRIP} -o root -g ${BINGRP} -m 6555 rdump \
+	    ${DESTDIR}${BINDIR}
 
 .include <bsd.prog.mk>

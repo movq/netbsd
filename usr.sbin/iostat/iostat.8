@@ -1,7 +1,5 @@
-.\"	$NetBSD: iostat.8,v 1.12 1997/10/17 09:03:53 lukem Exp $
-.\"
-.\" Copyright (c) 1985, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1985, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,163 +29,106 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	from: @(#)iostat.8	8.1 (Berkeley) 6/6/93
+.\"	@(#)iostat.8	6.8 (Berkeley) 4/24/91
 .\"
-.Dd Jan 18, 1996
-.Dt IOSTAT 8
-.Os NetBSD 1.1
-.Sh NAME
-.Nm iostat
-.Nd report
-.Tn I/O
-statistics
-.Sh SYNOPSIS
-.Nm
-.Op Fl CdDIT
-.Op Fl c Ar count
-.Op Fl M Ar core
-.Op Fl N Ar system
-.Op Fl w Ar wait
-.Op Ar drives
-.Sh DESCRIPTION
-.Nm
-displays kernel
-.Tn I/O
-statistics on terminal, disk and cpu operations.  By default,
-.Nm
-displays one line of statistics averaged over the machine's run time.
-The use of 
-.Fl c
-presents successive lines averaged over the
-.Ar wait
-period.
-The
-.Fl I
-option causes
-.Nm
-to print raw, unaveraged values.
-.Pp
+.TH IOSTAT 8 "April 24, 1991"
+.UC 4
+.SH NAME
+iostat \- report I/O statistics
+.SH SYNOPSIS
+.nf
+.ft B
+iostat [ \-c count ] [ \-M core ] [ \-N system ]
+.ti +5
+[ \-w wait ] [ drives ]
+.ft R
+.fi
+.SH DESCRIPTION
+.I Iostat
+reports certain kernel statistics kept about terminal, disk and cpu
+activity.
+.PP
 The options are as follows:
-.Bl -tag -width flag
-.It Fl c
+.TP
+\-c
 Repeat the display
-.Ar count
+.I count
 times.
-Unless the
-.Fl I
-flag is in effect, the first display is for the time since a reboot and
-each subsequent report is for the time period since the last display.
+The first display is for the time since a reboot and each subsequent
+report is for the time period since the last display.
 If no
-.Ar wait
+.I wait
 interval is specified, the default is 1 second.
-.It Fl C
-Show cpu statistics.  This is enabled by default unless the
-.Fl d, 
-.Fl D,
-or 
-.Fl T
-flags are used.
-.It Fl d
-Show disk statistics.  This is the default.  Displays kilobytes per
-transfer, number of transfers, and megabytes transfered.  Use of this
-flag disables display of cpu and tty statistics.
-.It Fl D
-Show alternative disk statistics.  Displays kilobytes transfered, number of 
-transfers, and time spent in transfers.  Use of this flag disables the
-default display.
-.It Fl I
-Show the running total values, rather than an average.
-.It Fl M
+.TP
+\-M
 Extract values associated with the name list from the specified core
-instead of the default
-.Dq Pa /dev/mem .
-.It Fl N
+instead of the default ``/dev/kmem''.
+.TP
+\-N
 Extract the name list from the specified system instead of the default
-.Dq Pa /netbsd .
-.It Fl T
-Show tty statistics.  This is enabled by default unless the
-.Fl C, 
-.Fl d,
-or 
-.Fl D
-flags are used.
-.It Fl w
+``/vmunix''.
+.TP
+\-w
 Pause
-.Ar wait
+.I wait
 seconds between each display.
 If no repeat
-.Ar count
+.I count
 is specified, the default is infinity.
-.El
-.Pp
-.Nm
+.PP
+.I Iostat
 displays its information in the following format:
-.Bl -tag -width flag
-.It tty
-.Bl -tag -width indent -compact
-.It tin
-characters read from terminals
-.It tout
-characters written to terminals
-.El
-.It disks
-Disk operations. 
+.TP
+tty
+.nf
+.RS
+tin	characters read from terminals
+tout	characters written to terminals
+.RE
+.fi
+.TP
+disks
+Disk operations (this field is system dependent). 
 The header of the field is the disk name and unit number.
 If more than four disk drives are configured in the system,
-.Nm
+.I iostat
 displays only the first four drives.
 To force
-.Nm
+.I iostat
 to display specific drives, their names may be supplied on the command
 line.
-.Pp
-.Bl -tag -width indent -compact
-.It KB/t
-Kilobytes transferred per disk transfer
-.It t/s
-transfers per second
-.It MB/s
-Megabytes transferred per second
-.Pp
-.El
-The alternative display format, (selected with
-.Fl D
-), presents the following values.
-.Bl -tag -width indent -compact
-.It KB
-Kilobytes transferred
-.It xfr
-Disk transfers
-.It time
-Seconds spent in disk activity
-.El
-.It cpu
-.Bl -tag -width indent -compact
-.It \&us
-% of cpu time in user mode
-.It \&ni
-% of cpu time in user mode running niced processes
-.It \&sy
-% of cpu time in system mode
-.It \&id
-% of cpu time in idle mode
-.El
-.El
-.Sh FILES
-.Bl -tag -width /dev/mem -compact
-.It Pa /netbsd
-Default kernel namelist.
-.It Pa /dev/mem
-Default memory file.
-.El
-.Sh SEE ALSO
-.Xr fstat 1 ,
-.Xr netstat 1 ,
-.Xr nfsstat 1 ,
-.Xr \&ps 1 ,
-.Xr systat 1 ,
-.Xr pstat 8 ,
-.Xr vmstat 8
-.Pp
+.sp
+.nf
+.RS
+sps	sectors transferred per second
+tps	transfers per second
+msps	milliseconds per average seek (including implied
+	seeks and rotational latency)
+.RE
+.fi
+.TP
+cpu
+.nf
+.RS
+us	% of cpu time in user mode
+ni	% of cpu time in user mode running niced processes
+sy	% of cpu time in system mode
+id	% of cpu time in idle mode
+.RE
+.fi
+.SH FILES
+.ta \w'/dev/kmem  'u
+/vmunix	default kernel namelist
+.br
+/dev/kmem	default memory file
+.SH SEE ALSO
+.IR fstat (1),
+.IR netstat (1),
+.IR nfsstat (1),
+.IR ps (1),
+.IR systat (1),
+.IR vmstat (1),
+.IR pstat (8)
+.sp
 The sections starting with ``Interpreting system activity'' in
-.%T "Installing and Operating 4.3BSD" .
+.IR "Installing and Operating 4.3BSD" .

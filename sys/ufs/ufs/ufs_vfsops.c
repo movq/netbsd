@@ -1,5 +1,3 @@
-/*	$NetBSD: ufs_vfsops.c,v 1.5 1997/06/11 10:10:17 bouyer Exp $	*/
-
 /*
  * Copyright (c) 1991, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -37,7 +35,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ufs_vfsops.c	8.4 (Berkeley) 4/16/94
+ *	from: @(#)ufs_vfsops.c	8.4 (Berkeley) 4/16/94
+ *	$Id: ufs_vfsops.c,v 1.1 1994/06/08 11:43:23 mycroft Exp $
  */
 
 #include <sys/param.h>
@@ -81,7 +80,7 @@ ufs_root(mp, vpp)
 	struct vnode *nvp;
 	int error;
 
-	if ((error = VFS_VGET(mp, (ino_t)ROOTINO, &nvp)) != 0)
+	if (error = VFS_VGET(mp, (ino_t)ROOTINO, &nvp))
 		return (error);
 	*vpp = nvp;
 	return (0);
@@ -98,29 +97,27 @@ ufs_quotactl(mp, cmds, uid, arg, p)
 	caddr_t arg;
 	struct proc *p;
 {
+	int cmd, type, error;
 
 #ifndef QUOTA
 	return (EOPNOTSUPP);
 #else
-	int cmd, type, error;
-
 	if (uid == -1)
 		uid = p->p_cred->p_ruid;
 	cmd = cmds >> SUBCMDSHIFT;
 
 	switch (cmd) {
-	case Q_SYNC:
-		break;
 	case Q_GETQUOTA:
+	case Q_SYNC:
 		if (uid == p->p_cred->p_ruid)
 			break;
 		/* fall through */
 	default:
-		if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+		if (error = suser(p->p_ucred, &p->p_acflag))
 			return (error);
 	}
 
-	type = cmds & SUBCMDMASK;
+	type = cmd & SUBCMDMASK;
 	if ((u_int)type >= MAXQUOTAS)
 		return (EINVAL);
 
@@ -188,12 +185,12 @@ ufs_check_export(mp, ufhp, nam, vpp, exflagsp, credanonp)
 	if (np == NULL)
 		return (EACCES);
 
-	if ((error = VFS_VGET(mp, ufhp->ufid_ino, &nvp)) != 0) {
+	if (error = VFS_VGET(mp, ufhp->ufid_ino, &nvp)) {
 		*vpp = NULLVP;
 		return (error);
 	}
 	ip = VTOI(nvp);
-	if (ip->i_ffs_mode == 0 || ip->i_ffs_gen != ufhp->ufid_gen) {
+	if (ip->i_mode == 0 || ip->i_gen != ufhp->ufid_gen) {
 		vput(nvp);
 		*vpp = NULLVP;
 		return (ESTALE);

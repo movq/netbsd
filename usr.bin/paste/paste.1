@@ -1,7 +1,5 @@
-.\"	$NetBSD: paste.1,v 1.4 1997/10/19 12:36:23 lukem Exp $
-.\"
-.\" Copyright (c) 1989, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1989, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" Adam S. Moskowitz and the Institute of Electrical and Electronics
@@ -35,23 +33,22 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	from: @(#)paste.1	8.1 (Berkeley) 6/6/93
-.\"	$NetBSD: paste.1,v 1.4 1997/10/19 12:36:23 lukem Exp $
+.\"	@(#)paste.1	5.6 (Berkeley) 7/27/91
 .\"
-.Dd June 6, 1993
+.Dd July 27, 1991
 .Dt PASTE 1
 .Os
 .Sh NAME
 .Nm paste
 .Nd merge corresponding or subsequent lines of files
 .Sh SYNOPSIS
-.Nm
+.Nm paste
 .Op Fl s
 .Op Fl d Ar list
 .Ar file ...
 .Sh DESCRIPTION
 The
-.Nm
+.Nm paste
 utility concatenates the corresponding lines of the given input files,
 replacing all but the last file's newline characters with a single tab
 character, and writes the resulting lines to standard output.
@@ -74,7 +71,7 @@ is reused.
 This continues until a line from the last input file (in default operation)
 or the last line in each file (using the -s option) is displayed, at which
 time
-.Nm
+.Nm paste
 begins selecting characters from the beginning of
 .Ar list
 again.
@@ -110,13 +107,13 @@ for each instance of
 .Ql Fl .
 .Pp
 The
-.Nm
+.Nm paste
 utility exits 0 on success, and >0 if an error occurs.
 .Sh SEE ALSO
 .Xr cut 1
 .Sh STANDARDS
 The
-.Nm
+.Nm paste
 utility is expected to be
 .St -p1003.2
 compatible.

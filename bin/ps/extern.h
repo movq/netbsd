@@ -1,8 +1,6 @@
-/*	$NetBSD: extern.h,v 1.11 1996/10/02 18:07:20 ws Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,58 +30,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)extern.h	8.3 (Berkeley) 4/2/94
+ *	@(#)extern.h	5.2 (Berkeley) 6/3/91
  */
 
-struct kinfo;
-struct nlist;
-struct var;
-struct varent;
+#include <sys/cdefs.h>
 
-extern fixpt_t ccpu;
-extern int eval, fscale, mempages, nlistread, rawcpu;
-extern int sumrusage, termwidth, totwidth;
 extern VAR var[];
-extern VARENT *vhead;
+extern struct varent *vhead;
 
 __BEGIN_DECLS
-void	 command __P((KINFO *, VARENT *));
-void	 cputime __P((KINFO *, VARENT *));
-int	 donlist __P((void));
-void	 evar __P((KINFO *, VARENT *));
-void	 fmt_puts __P((char *, int *));
-void	 fmt_putc __P((int, int *));
-double	 getpcpu __P((KINFO *));
-double	 getpmem __P((KINFO *));
-void	 logname __P((KINFO *, VARENT *));
-void	 longtname __P((KINFO *, VARENT *));
-void	 lstarted __P((KINFO *, VARENT *));
-void	 maxrss __P((KINFO *, VARENT *));
-void	 nlisterr __P((struct nlist *));
-void	 p_rssize __P((KINFO *, VARENT *));
-void	 pagein __P((KINFO *, VARENT *));
-void	 parsefmt __P((char *));
-void	 pcpu __P((KINFO *, VARENT *));
-void	 pmem __P((KINFO *, VARENT *));
-void	 pnice __P((KINFO *, VARENT *));
-void	 pri __P((KINFO *, VARENT *));
-void	 printheader __P((void));
-void	 pvar __P((KINFO *, VARENT *));
-void	 rssize __P((KINFO *, VARENT *));
-void	 runame __P((KINFO *, VARENT *));
-void	 rvar __P((KINFO *, VARENT *));
-void	 showkey __P((void));
-void	 started __P((KINFO *, VARENT *));
-void	 state __P((KINFO *, VARENT *));
-void	 tdev __P((KINFO *, VARENT *));
-void	 tname __P((KINFO *, VARENT *));
-#ifndef NEWVM
-void	 trss __P((KINFO *, VARENT *));
-#endif
-void	 tsize __P((KINFO *, VARENT *));
-void	 ucomm __P((KINFO *, VARENT *));
-void	 uname __P((KINFO *, VARENT *));
-void	 uvar __P((KINFO *, VARENT *));
-void	 vsize __P((KINFO *, VARENT *));
-void	 wchan __P((KINFO *, VARENT *));
+void	 err __P((const char *, ...));
 __END_DECLS

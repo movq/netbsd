@@ -1,5 +1,3 @@
-/*	$NetBSD: creat.c,v 1.5 1997/07/13 18:50:06 christos Exp $	*/
-
 /*
  * Copyright (c) 1989 The Regents of the University of California.
  * All rights reserved.
@@ -33,18 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "@(#)creat.c	5.3 (Berkeley) 2/24/91";
-#else
-__RCSID("$NetBSD: creat.c,v 1.5 1997/07/13 18:50:06 christos Exp $");
-#endif
+static char sccsid[] = "@(#)creat.c	5.3 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <fcntl.h>
 
-int
 #if __STDC__
 creat(const char *path, mode_t mode)
 #else

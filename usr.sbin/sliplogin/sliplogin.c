@@ -1,8 +1,6 @@
-/*	$NetBSD: sliplogin.c,v 1.14 1997/10/17 13:36:53 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1990 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)sliplogin.c	8.2 (Berkeley) 2/1/94";
-#else
-__RCSID("$NetBSD: sliplogin.c,v 1.14 1997/10/17 13:36:53 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)sliplogin.c	5.6 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 /*
@@ -73,47 +67,50 @@ __RCSID("$NetBSD: sliplogin.c,v 1.14 1997/10/17 13:36:53 lukem Exp $");
  * /etc/slip.hosts file and if found fd0 is configured as in case 1.
  */
 
-#include <sys/types.h>
-#include <sys/file.h>
 #include <sys/param.h>
 #include <sys/socket.h>
-#include <sys/stat.h>
+#include <sys/signal.h>
+#include <sys/file.h>
 #include <sys/syslog.h>
 #include <netdb.h>
-#include <signal.h>
-#include <stdlib.h>
 
 #if BSD >= 199006
 #define POSIX
 #endif
 #ifdef POSIX
-#include <termios.h>
+#include <sys/termios.h>
 #include <sys/ioctl.h>
 #include <ttyent.h>
 #else
 #include <sgtty.h>
 #endif
-#include <net/slip.h>
+#include <netinet/in.h>
+#include <net/if.h>
+#include <net/if_slvar.h>
 
-#include <ctype.h>
-#include <err.h>
-#include <errno.h>
 #include <stdio.h>
+#include <errno.h>
+#include <ctype.h>
 #include <string.h>
-#include <unistd.h>
 #include "pathnames.h"
 
 int	unit;
+int	slip_mode;
 int	speed;
 int	uid;
 char	loginargs[BUFSIZ];
 char	loginfile[MAXPATHLEN];
 char	loginname[BUFSIZ];
 
-void	 findid __P((char *));
-void	hup_handler __P((int));
-int	main __P((int, char **));
-const char *sigstr __P((int));
+struct slip_modes {
+	char	*sm_name;
+	int	sm_value;
+}	 modes[] = {
+	"normal",	0,              
+	"compress",	SC_COMPRESS,   
+	"noicmp",	SC_NOICMP,
+	"autocomp",	SC_AUTOCOMP
+};
 
 void
 findid(name)
@@ -125,12 +122,14 @@ findid(name)
 	static char raddr[16];
 	static char mask[16];
 	char user[16];
-	int n;
+	int i, j, n;
 
-	(void)strncpy(loginname, name, sizeof(loginname) - 1);
+	(void)strcpy(loginname, name);
 	if ((fp = fopen(_PATH_ACCESS, "r")) == NULL) {
+		(void)fprintf(stderr, "sliplogin: %s: %s\n",
+		    _PATH_ACCESS, strerror(errno));
 		syslog(LOG_ERR, "%s: %m\n", _PATH_ACCESS);
-		err(1, "%s", _PATH_ACCESS);
+		exit(1);
 	}
 	while (fgets(loginargs, sizeof(loginargs) - 1, fp)) {
 		if (ferror(fp))
@@ -143,16 +142,26 @@ findid(name)
 		if (strcmp(user, name) != 0)
 			continue;
 
+		slip_mode = 0;
+		for (i = 0; i < n - 4; i++) {
+			for (j = 0; j < sizeof(modes)/sizeof(struct slip_modes);
+				j++) {
+				if (strcmp(modes[j].sm_name, slopt[i]) == 0) {
+					slip_mode |= modes[j].sm_value;
+					break;
+				}
+			}
+		}
+
 		/*
 		 * we've found the guy we're looking for -- see if
 		 * there's a login file we can use.  First check for
 		 * one specific to this host.  If none found, try for
 		 * a generic one.
 		 */
-		(void)snprintf(loginfile, sizeof loginfile, "%s.%s",
-		    _PATH_LOGIN, name);
+		(void)sprintf(loginfile, "%s.%s", _PATH_LOGIN, name);
 		if (access(loginfile, R_OK|X_OK) != 0) {
-			(void)strncpy(loginfile, _PATH_LOGIN, sizeof(loginfile) - 1);
+			(void)strcpy(loginfile, _PATH_LOGIN);
 			if (access(loginfile, R_OK|X_OK)) {
 				fputs("access denied - no login file\n",
 				      stderr);
@@ -166,23 +175,55 @@ findid(name)
 		(void) fclose(fp);
 		return;
 	}
+	(void)fprintf(stderr, "SLIP access denied for %s\n", name);
 	syslog(LOG_ERR, "SLIP access denied for %s\n", name);
-	errx(1, "SLIP access denied for %s", name);
+	exit(4);
 	/* NOTREACHED */
 }
 
-const char *
+char *
 sigstr(s)
 	int s;
 {
-	if (s > 0 && s < NSIG)
-		return(sys_signame[s]);
-	else {
-		static char buf[32];
+	static char buf[32];
 
-		(void)snprintf(buf, sizeof buf, "sig %d", s);
-		return(buf);
+	switch (s) {
+	case SIGHUP:	return("HUP");
+	case SIGINT:	return("INT");
+	case SIGQUIT:	return("QUIT");
+	case SIGILL:	return("ILL");
+	case SIGTRAP:	return("TRAP");
+	case SIGIOT:	return("IOT");
+	case SIGEMT:	return("EMT");
+	case SIGFPE:	return("FPE");
+	case SIGKILL:	return("KILL");
+	case SIGBUS:	return("BUS");
+	case SIGSEGV:	return("SEGV");
+	case SIGSYS:	return("SYS");
+	case SIGPIPE:	return("PIPE");
+	case SIGALRM:	return("ALRM");
+	case SIGTERM:	return("TERM");
+	case SIGURG:	return("URG");
+	case SIGSTOP:	return("STOP");
+	case SIGTSTP:	return("TSTP");
+	case SIGCONT:	return("CONT");
+	case SIGCHLD:	return("CHLD");
+	case SIGTTIN:	return("TTIN");
+	case SIGTTOU:	return("TTOU");
+	case SIGIO:	return("IO");
+	case SIGXCPU:	return("XCPU");
+	case SIGXFSZ:	return("XFSZ");
+	case SIGVTALRM:	return("VTALRM");
+	case SIGPROF:	return("PROF");
+	case SIGWINCH:	return("WINCH");
+#ifdef SIGLOST
+	case SIGLOST:	return("LOST");
+#endif
+	case SIGUSR1:	return("USR1");
+	case SIGUSR2:	return("USR2");
 	}
+	(void)sprintf(buf, "sig %d", s);
+	return(buf);
 }
 
 void
@@ -191,15 +232,14 @@ hup_handler(s)
 {
 	char logoutfile[MAXPATHLEN];
 
-	(void)snprintf(logoutfile, sizeof logoutfile, "%s.%s", _PATH_LOGOUT,
-	    loginname);
+	(void)sprintf(logoutfile, "%s.%s", _PATH_LOGOUT, loginname);
 	if (access(logoutfile, R_OK|X_OK) != 0)
-		(void)strncpy(logoutfile, _PATH_LOGOUT, sizeof(logoutfile) - 1);
+		(void)strcpy(logoutfile, _PATH_LOGOUT);
 	if (access(logoutfile, R_OK|X_OK) == 0) {
 		char logincmd[2*MAXPATHLEN+32];
 
-		(void)snprintf(logincmd, sizeof logincmd, "%s %d %d %s",
-		    logoutfile, unit, speed, loginargs);
+		(void) sprintf(logincmd, "%s %d %d %s", logoutfile, unit, speed,
+			      loginargs);
 		(void) system(logincmd);
 	}
 	(void) close(0);
@@ -209,7 +249,6 @@ hup_handler(s)
 	/* NOTREACHED */
 }
 
-int
 main(argc, argv)
 	int argc;
 	char *argv[];
@@ -222,6 +261,7 @@ main(argc, argv)
 	struct sgttyb tty, otty;
 #endif
 	char logincmd[2*BUFSIZ+32];
+	extern uid_t getuid();
 
 	if ((name = strrchr(argv[0], '/')) == NULL)
 		name = argv[0];
@@ -240,7 +280,7 @@ main(argc, argv)
 #ifdef POSIX
 		if (fork() > 0)
 			exit(0);
-		if (setsid() < 0)
+		if (setsid() != 0)
 			perror("setsid");
 #else
 		if ((fd = open("/dev/tty", O_RDONLY, 0)) >= 0) {
@@ -265,63 +305,61 @@ main(argc, argv)
 				close(fd);
 		}
 #ifdef TIOCSCTTY
-		if (ioctl(STDIN_FILENO, TIOCSCTTY, (caddr_t)0) != 0)
+		if (ioctl(0, TIOCSCTTY, (caddr_t)0) != 0)
 			perror("ioctl (TIOCSCTTY)");
 #endif
 	} else {
+		extern char *getlogin();
+
 		if ((name = getlogin()) == NULL) {
-			syslog(LOG_ERR,
-			    "access denied - getlogin returned 0\n");
-			errx(1, "access denied - no username");
+			(void) fprintf(stderr, "access denied - no username\n");
+			syslog(LOG_ERR, "access denied - getlogin returned 0\n");
+			exit(1);
 		}
 		findid(name);
 	}
-	if (!isatty(STDIN_FILENO)) {
-		syslog(LOG_ERR, "stdin not a tty");
-		errx(1, "stdin not a tty");
-	}
-	(void) fchmod(STDIN_FILENO, 0600);
-	warnx("starting slip login for %s", loginname);
+	(void) fchmod(0, 0600);
+	(void) fprintf(stderr, "starting slip login for %s\n", loginname);
 #ifdef POSIX
 	/* set up the line parameters */
-	if (tcgetattr(STDIN_FILENO, &tios) < 0) {
+	if (tcgetattr(0, &tios) < 0) {
 		syslog(LOG_ERR, "tcgetattr: %m");
 		exit(1);
 	}
 	otios = tios;
 	cfmakeraw(&tios);
 	tios.c_iflag &= ~IMAXBEL;
-	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &tios) < 0) {
+	if (tcsetattr(0, TCSAFLUSH, &tios) < 0) {
 		syslog(LOG_ERR, "tcsetattr: %m");
 		exit(1);
 	}
 	speed = cfgetispeed(&tios);
 #else
 	/* set up the line parameters */
-	if (ioctl(STDIN_FILENO, TIOCGETP, (caddr_t)&tty) < 0) {
+	if (ioctl(0, TIOCGETP, (caddr_t)&tty) < 0) {
 		syslog(LOG_ERR, "ioctl (TIOCGETP): %m");
 		exit(1);
 	}
 	otty = tty;
 	speed = tty.sg_ispeed;
 	tty.sg_flags = RAW | ANYP;
-	if (ioctl(STDIN_FILENO, TIOCSETP, (caddr_t)&tty) < 0) {
+	if (ioctl(0, TIOCSETP, (caddr_t)&tty) < 0) {
 		syslog(LOG_ERR, "ioctl (TIOCSETP): %m");
 		exit(1);
 	}
 #endif
 	/* find out what ldisc we started with */
-	if (ioctl(STDIN_FILENO, TIOCGETD, (caddr_t)&odisc) < 0) {
+	if (ioctl(0, TIOCGETD, (caddr_t)&odisc) < 0) {
 		syslog(LOG_ERR, "ioctl(TIOCGETD) (1): %m");
 		exit(1);
 	}
 	ldisc = SLIPDISC;
-	if (ioctl(STDIN_FILENO, TIOCSETD, (caddr_t)&ldisc) < 0) {
+	if (ioctl(0, TIOCSETD, (caddr_t)&ldisc) < 0) {
 		syslog(LOG_ERR, "ioctl(TIOCSETD): %m");
 		exit(1);
 	}
 	/* find out what unit number we were assigned */
-	if (ioctl(STDIN_FILENO, SLIOCGUNIT, (caddr_t)&unit) < 0) {
+	if (ioctl(0, SLIOCGUNIT, (caddr_t)&unit) < 0) {
 		syslog(LOG_ERR, "ioctl (SLIOCGUNIT): %m");
 		exit(1);
 	}
@@ -329,8 +367,8 @@ main(argc, argv)
 	(void) signal(SIGTERM, hup_handler);
 
 	syslog(LOG_INFO, "attaching slip unit %d for %s\n", unit, loginname);
-	(void)snprintf(logincmd, sizeof logincmd, "%s %d %d %s", loginfile,
-	    unit, speed, loginargs);
+	(void)sprintf(logincmd, "%s %d %d %s", loginfile, unit, speed,
+		      loginargs);
 	/*
 	 * aim stdout and errout at /dev/null so logincmd output won't
 	 * babble into the slip tty line.
@@ -352,16 +390,15 @@ main(argc, argv)
 	 * to see whether changes are allowed (or just "route get").
 	 */
 	(void) setuid(0);
-	if ((s = system(logincmd)) != NULL) {
+	if (s = system(logincmd)) {
 		syslog(LOG_ERR, "%s login failed: exit status %d from %s",
 		       loginname, s, loginfile);
-		(void) ioctl(STDIN_FILENO, TIOCSETD, (caddr_t)&odisc);
-#ifdef POSIX
-		(void) tcsetattr(STDIN_FILENO, TCSAFLUSH, &otios);
-#else
-		(void) ioctl(STDIN_FILENO, TIOCSETP, (caddr_t)&otty);
-#endif
+		(void) ioctl(0, TIOCSETD, (caddr_t)&odisc);
 		exit(6);
+	}
+	if (ioctl(0, SLIOCSFLAGS, (caddr_t)&slip_mode) < 0) {
+		syslog(LOG_ERR, "ioctl (SLIOCSFLAGS): %m");
+		exit(1);
 	}
 
 	/* twiddle thumbs until we get a signal */

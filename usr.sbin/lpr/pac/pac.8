@@ -1,7 +1,5 @@
-.\"	$NetBSD: pac.8,v 1.5 1997/10/05 15:12:25 mrg Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,16 +29,16 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)pac.8	8.1 (Berkeley) 6/6/93
+.\"     @(#)pac.8	6.5 (Berkeley) 3/16/91
 .\"
-.Dd June 6, 1993
+.Dd March 16, 1991
 .Dt PAC 8
 .Os BSD 4.2
 .Sh NAME
 .Nm pac
 .Nd printer/plotter accounting information
 .Sh SYNOPSIS
-.Nm
+.Nm pac
 .Op Fl P Ns Ar printer
 .Op Fl c
 .Op Fl m
@@ -49,7 +47,7 @@
 .Op Fl r
 .Op Ar name ...
 .Sh DESCRIPTION
-.Nm
+.Nm Pac
 reads the printer/plotter accounting files, accumulating the number
 of pages (the usual case) or feet (for raster devices)
 of paper consumed by each user, and printing out

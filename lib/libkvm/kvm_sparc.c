@@ -1,5 +1,3 @@
-/*	$NetBSD: kvm_sparc.c,v 1.15 1997/10/10 13:11:50 mrg Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -37,13 +35,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
 static char sccsid[] = "@(#)kvm_sparc.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: kvm_sparc.c,v 1.15 1997/10/10 13:11:50 mrg Exp $");
-#endif
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -52,76 +45,160 @@ __RCSID("$NetBSD: kvm_sparc.c,v 1.15 1997/10/10 13:11:50 mrg Exp $");
  */
 
 #include <sys/param.h>
-#include <sys/exec.h>
 #include <sys/user.h>
 #include <sys/proc.h>
 #include <sys/stat.h>
-#include <sys/core.h>
-#include <sys/kcore.h>
 #include <unistd.h>
 #include <nlist.h>
 #include <kvm.h>
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
-#include <machine/autoconf.h>
-#include <machine/kcore.h>
 
 #include <limits.h>
 #include <db.h>
 
 #include "kvm_private.h"
 
+#define NPMEG 128
 
-static int cputyp = -1;
-static int pgshift;
-static int nptesg;	/* [sun4/sun4c] only */
+/* XXX from sparc/pmap.c */
+#define MAXMEM  (128 * 1024 * 1024)     /* no more than 128 MB phys mem */
+#define NPGBANK 16                      /* 2^4 pages per bank (64K / bank) */
+#define BSHIFT  4                       /* log2(NPGBANK) */
+#define BOFFSET (NPGBANK - 1)
+#define BTSIZE  (MAXMEM / NBPG / NPGBANK)
+#define HWTOSW(pmap_stod, pg) (pmap_stod[(pg) >> BSHIFT] | ((pg) & BOFFSET))
 
-#define VA_VPG(va)	((cputyp == CPU_SUN4C || cputyp == CPU_SUN4M) \
-				? VA_SUN4C_VPG(va) \
-				: VA_SUN4_VPG(va))
-
-#define VA_OFF(va) (va & (kd->nbpg - 1))
-
-int _kvm_kvatop44c __P((kvm_t *, u_long, u_long *));
-int _kvm_kvatop4m __P((kvm_t *, u_long, u_long *));
+struct vmstate {
+	pmeg_t segmap[NKSEG];
+	int pmeg[NPMEG][NPTESG];
+	int pmap_stod[BTSIZE];              /* dense to sparse */
+};
 
 void
 _kvm_freevtop(kd)
 	kvm_t *kd;
 {
-	if (kd->vmst != 0) {
-		_kvm_err(kd, kd->program, "_kvm_freevtop: internal error");
-		kd->vmst = 0;
-	}
+	if (kd->vmst != 0)
+		free(kd->vmst);
 }
 
-/*
- * Prepare for translation of kernel virtual addresses into offsets
- * into crash dump files. We use the MMU specific goop written at the
- * front of the crash dump by pmap_dumpmmu().
- */
 int
 _kvm_initvtop(kd)
 	kvm_t *kd;
 {
-	cpu_kcore_hdr_t *cpup = kd->cpu_data;
+	register int i;
+	register int off;
+	register struct vmstate *vm;
+	struct stat st;
+	struct nlist nlist[2];
 
-	switch (cputyp = cpup->cputype) {
-	case CPU_SUN4:
-		kd->nbpg = 8196;
-		pgshift = 13;
-		break;
-	case CPU_SUN4C:
-	case CPU_SUN4M:
-		kd->nbpg = 4096;
-		pgshift = 12;
-		break;
-	default:
-		_kvm_err(kd, kd->program, "Unsupported CPU type");
+	vm = (struct vmstate *)_kvm_malloc(kd, sizeof(*vm));
+	if (vm == 0)
+		return (-1);
+
+	kd->vmst = vm;
+
+	if (fstat(kd->pmfd, &st) < 0)
+		return (-1);
+	/*
+	 * Read segment table.
+	 */
+	off = st.st_size - ctob(btoc(sizeof(vm->segmap)));
+	errno = 0;
+	if (lseek(kd->pmfd, (off_t)off, 0) == -1 && errno != 0 || 
+	    read(kd->pmfd, (char *)vm->segmap, sizeof(vm->segmap)) < 0) {
+		_kvm_err(kd, kd->program, "cannot read segment map");
 		return (-1);
 	}
-	nptesg = NBPSG / kd->nbpg;
+	/*
+	 * Read PMEGs.
+	 */
+	off = st.st_size - ctob(btoc(sizeof(vm->pmeg)) +
+	    btoc(sizeof(vm->segmap)));
+	errno = 0;
+	if (lseek(kd->pmfd, (off_t)off, 0) == -1 && errno != 0 || 
+	    read(kd->pmfd, (char *)vm->pmeg, sizeof(vm->pmeg)) < 0) {
+		_kvm_err(kd, kd->program, "cannot read PMEG table");
+		return (-1);
+	}
+	/*
+	 * Make pmap_stod be an identity map so we can bootstrap it in.
+	 * We assume it's in the first contiguous chunk of physical memory.
+	 */
+	for (i = 0; i < BTSIZE; ++i) 
+		vm->pmap_stod[i] = i << 4;
+
+	/*
+	 * It's okay to do this nlist separately from the one kvm_getprocs()
+	 * does, since the only time we could gain anything by combining
+	 * them is if we do a kvm_getprocs() on a dead kernel, which is
+	 * not too common.
+	 */
+	nlist[0].n_name = "_pmap_stod";
+	nlist[1].n_name = 0;
+	if (kvm_nlist(kd, nlist) != 0) {
+		_kvm_err(kd, kd->program, "pmap_stod: no such symbol");
+		return (-1);
+	}
+	if (kvm_read(kd, (u_long)nlist[0].n_value, 
+		     (char *)vm->pmap_stod, sizeof(vm->pmap_stod))
+	    != sizeof(vm->pmap_stod)) {
+		_kvm_err(kd, kd->program, "cannot read pmap_stod");
+		return (-1);
+	}
+	return (0);
+}
+
+#define VA_OFF(va) (va & (NBPG - 1))
+
+/*
+ * Translate a user virtual address to a physical address.
+ */
+int
+_kvm_uvatop(kd, p, va, pa)
+	kvm_t *kd;
+	const struct proc *p;
+	u_long va;
+	u_long *pa;
+{
+	int kva, pte;
+	register int off, frame;
+	register struct vmspace *vms = p->p_vmspace;
+
+	if ((u_long)vms < KERNBASE) {
+		_kvm_err(kd, kd->program, "_kvm_uvatop: corrupt proc");
+		return (0);
+	}
+	if (va >= KERNBASE)
+		return (0);
+	/*
+	 * Get the PTE.  This takes two steps.  We read the
+	 * base address of the table, then we index it.
+	 * Note that the index pte table is indexed by
+	 * virtual segment rather than physical segment.
+	 */
+	kva = (u_long)&vms->vm_pmap.pm_rpte[VA_VSEG(va)];
+	if (kvm_read(kd, kva, (char *)&kva, 4) != 4 || kva == 0)
+		goto invalid;
+	kva += sizeof(vms->vm_pmap.pm_rpte[0]) * VA_VPG(va);
+	if (kvm_read(kd, kva, (char *)&pte, 4) == 4 && (pte & PG_V)) {
+		off = VA_OFF(va);
+		/*
+		 * /dev/mem adheres to the hardware model of physical memory
+		 * (with holes in the address space), while crashdumps
+		 * adhere to the contiguous software model.
+		 */
+		if (ISALIVE(kd))
+			frame = pte & PG_PFNUM;
+		else
+			frame = HWTOSW(kd->vmst->pmap_stod, pte & PG_PFNUM);
+		*pa = (frame << PGSHIFT) | off;		
+		return (NBPG - off);
+	}
+invalid:
+	_kvm_err(kd, 0, "invalid address (%x)", va);
 	return (0);
 }
 
@@ -137,178 +214,23 @@ _kvm_kvatop(kd, va, pa)
 	u_long va;
 	u_long *pa;
 {
-	if (cputyp == -1)
-		if (_kvm_initvtop(kd) != 0)
-			return (-1);
+	register struct vmstate *vm;
+	register int s;
+	register int pte;
+	register int off;
 
-	return ((cputyp == CPU_SUN4M)
-		? _kvm_kvatop4m(kd, va, pa)
-		: _kvm_kvatop44c(kd, va, pa));
-}
+	if (va >= KERNBASE) {
+		vm = kd->vmst;
+		s = vm->segmap[VA_VSEG(va) - NUSEG];
+		pte = vm->pmeg[s][VA_VPG(va)];
+		if ((pte & PG_V) != 0) {
+			off = VA_OFF(va);
+			*pa = (HWTOSW(vm->pmap_stod, pte & PG_PFNUM)
+			       << PGSHIFT) | off;
 
-/*
- * (note: sun4 3-level MMU not yet supported)
- */
-int
-_kvm_kvatop44c(kd, va, pa)
-	kvm_t *kd;
-	u_long va;
-	u_long *pa;
-{
-	register int vr, vs, pte;
-	cpu_kcore_hdr_t *cpup = kd->cpu_data;
-	struct segmap *sp, *segmaps;
-	int *ptes;
-	int nkreg, nureg;
-	u_long kernbase = cpup->kernbase;
-
-	if (va < kernbase)
-		goto err;
-
-	/*
-	 * Layout of CPU segment:
-	 *	cpu_kcore_hdr_t;
-	 *	[alignment]
-	 *	phys_ram_seg_t[cpup->nmemseg];
-	 *	segmap[cpup->nsegmap];
-	 *	ptes[cpup->npmegs];
-	 */
-	segmaps = (struct segmap *)((long)kd->cpu_data + cpup->segmapoffset);
-	ptes = (int *)((int)kd->cpu_data + cpup->pmegoffset);
-	nkreg = ((int)((-(unsigned)kernbase) / NBPRG));
-	nureg = 256 - nkreg;
-
-	vr = VA_VREG(va);
-	vs = VA_VSEG(va);
-
-	sp = &segmaps[(vr-nureg)*NSEGRG + vs];
-	if (sp->sg_npte == 0)
-		goto err;
-	if (sp->sg_pmeg == cpup->npmeg - 1) /* =seginval */
-		goto err;
-	pte = ptes[sp->sg_pmeg * nptesg + VA_VPG(va)];
-	if ((pte & PG_V) != 0) {
-		register long p, off = VA_OFF(va);
-
-		p = (pte & PG_PFNUM) << pgshift;
-		*pa = p + off;
-		return (kd->nbpg - off);
+			return (NBPG - off);
+		}
 	}
-err:
 	_kvm_err(kd, 0, "invalid address (%x)", va);
-	return (0);
-}
-
-int
-_kvm_kvatop4m(kd, va, pa)
-	kvm_t *kd;
-	u_long va;
-	u_long *pa;
-{
-	cpu_kcore_hdr_t *cpup = kd->cpu_data;
-	register int vr, vs;
-	int pte;
-	off_t foff;
-	struct segmap *sp, *segmaps;
-	int nkreg, nureg;
-	u_long kernbase = cpup->kernbase;
-
-	if (va < kernbase)
-		goto err;
-
-	/*
-	 * Layout of CPU segment:
-	 *	cpu_kcore_hdr_t;
-	 *	[alignment]
-	 *	phys_ram_seg_t[cpup->nmemseg];
-	 *	segmap[cpup->nsegmap];
-	 */
-	segmaps = (struct segmap *)((long)kd->cpu_data + cpup->segmapoffset);
-	nkreg = ((int)((-(unsigned)kernbase) / NBPRG));
-	nureg = 256 - nkreg;
-
-	vr = VA_VREG(va);
-	vs = VA_VSEG(va);
-
-	sp = &segmaps[(vr-nureg)*NSEGRG + vs];
-	if (sp->sg_npte == 0)
-		goto err;
-
-	/* XXX - assume page tables in initial kernel DATA or BSS. */
-	foff = _kvm_pa2off(kd, (u_long)&sp->sg_pte[VA_VPG(va)] - kernbase);
-	if (foff == (off_t)-1)
-		return (0);
-
-	if (lseek(kd->pmfd, foff, 0) == -1 || 
-	    read(kd->pmfd, (void *)&pte, sizeof(pte)) < 0) {
-		_kvm_err(kd, kd->program, "cannot read pte for %x", va);
-		return (0);
-	}
-
-	if ((pte & SRMMU_TETYPE) == SRMMU_TEPTE) {
-		register long p, off = VA_OFF(va);
-
-		p = (pte & SRMMU_PPNMASK) << SRMMU_PPNPASHIFT;
-		*pa = p + off;
-		return (kd->nbpg - off);
-	}
-err:
-	_kvm_err(kd, 0, "invalid address (%x)", va);
-	return (0);
-}
-
-/*       
- * Translate a physical address to a file-offset in the crash-dump.
- */     
-off_t
-_kvm_pa2off(kd, pa)
-	kvm_t   *kd;
-	u_long  pa;
-{
-	cpu_kcore_hdr_t *cpup = kd->cpu_data;
-	phys_ram_seg_t *mp;
-	off_t off;
-	int nmem;
-
-	/*
-	 * Layout of CPU segment:
-	 *	cpu_kcore_hdr_t;
-	 *	[alignment]
-	 *	phys_ram_seg_t[cpup->nmemseg];
-	 */
-	mp = (phys_ram_seg_t *)((int)kd->cpu_data + cpup->memsegoffset);
-	off = 0;
-
-	/* Translate (sparse) pfnum to (packed) dump offset */
-	for (nmem = cpup->nmemseg; --nmem >= 0; mp++) {
-		if (mp->start <= pa && pa < mp->start + mp->size)
-			break;
-		off += mp->size;
-	}
-	if (nmem < 0) {
-		_kvm_err(kd, 0, "invalid address (%x)", pa);
-		return (-1);
-	}
-
-	return (kd->dump_off + off + pa - mp->start);
-}
-
-/*
- * Machine-dependent initialization for ALL open kvm descriptors,
- * not just those for a kernel crash dump.  Some architectures
- * have to deal with these NOT being constants!  (i.e. m68k)
- */
-int
-_kvm_mdopen(kd)
-	kvm_t	*kd;
-{
-	u_long max_uva;
-	extern struct ps_strings *__ps_strings;
-
-	max_uva = (u_long) (__ps_strings + 1);
-	kd->usrstack = max_uva;
-	kd->max_uva  = max_uva;
-	kd->min_uva  = 0;
-
 	return (0);
 }

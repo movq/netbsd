@@ -1,5 +1,3 @@
-/*	$NetBSD: memccpy.c,v 1.7 1997/07/13 20:24:16 christos Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -33,15 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "@(#)memccpy.c	5.8 (Berkeley) 5/30/91";
-#else
-__RCSID("$NetBSD: memccpy.c,v 1.7 1997/07/13 20:24:16 christos Exp $");
-#endif
+static char sccsid[] = "@(#)memccpy.c	5.8 (Berkeley) 5/30/91";
 #endif /* LIBC_SCCS and not lint */
 
+#include <sys/cdefs.h>
 #include <string.h>
 
 void *
@@ -58,7 +52,7 @@ memccpy(t, f, c, n)
 		register unsigned char uc = c;
 		do {
 			if ((*tp++ = *fp++) == uc)
-				return (tp);
+				return (t);
 		} while (--n != 0);
 	}
 	return (0);

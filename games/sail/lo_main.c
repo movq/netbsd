@@ -1,8 +1,6 @@
-/*	$NetBSD: lo_main.c,v 1.5 1997/10/13 19:44:24 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lo_main.c	8.2 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: lo_main.c,v 1.5 1997/10/13 19:44:24 christos Exp $");
-#endif
+static char sccsid[] = "@(#)lo_main.c	5.7 (Berkeley) 2/28/91";
 #endif /* not lint */
 
 /*
@@ -49,7 +42,7 @@ __RCSID("$NetBSD: lo_main.c,v 1.5 1997/10/13 19:44:24 christos Exp $");
  */
 #include <sys/types.h>
 #include <pwd.h>
-#include "extern.h"
+#include "externs.h"
 #include "pathnames.h"
 
 char *title[] = {
@@ -58,7 +51,6 @@ char *title[] = {
 	"Commander", "Lieutenant"
 };
 
-int
 lo_main()
 {
 	FILE *fp;

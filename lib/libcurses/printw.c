@@ -1,8 +1,6 @@
-/*	$NetBSD: printw.c,v 1.9 1997/07/22 07:36:56 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,22 +31,9 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)printw.c	8.3 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: printw.c,v 1.9 1997/07/22 07:36:56 mikel Exp $");
-#endif
-#endif	/* not lint */
-
-#ifdef __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
-
-#include "curses.h"
+static char sccsid[] = "@(#)printw.c	5.8 (Berkeley) 4/15/91";
+#endif /* not lint */
 
 /*
  * printw and friends.
@@ -57,14 +42,17 @@ __RCSID("$NetBSD: printw.c,v 1.9 1997/07/22 07:36:56 mikel Exp $");
  * is not in effect.
  */
 
-static int __winwrite __P((void *, const char *, int));
+#if __STDC__
+#include <stdarg.h>
+#else
+#include <varargs.h>
+#endif
+#include "curses.ext"
 
 /*
- * printw --
- *	Printf on the standard screen.
+ *	This routine implements a printf on the standard screen.
  */
-int
-#ifdef __STDC__
+#if __STDC__
 printw(const char *fmt, ...)
 #else
 printw(fmt, va_alist)
@@ -72,26 +60,24 @@ printw(fmt, va_alist)
 	va_dcl
 #endif
 {
-	va_list ap;
-	int ret;
+	va_list	ap;
+	int	ret;
 
-#ifdef __STDC__
+#if __STDC__
 	va_start(ap, fmt);
 #else
 	va_start(ap);
 #endif
-	ret = vwprintw(stdscr, fmt, ap);
+	ret = _sprintw(stdscr, fmt, ap);
 	va_end(ap);
 	return (ret);
 }
 
 /*
- * wprintw --
- *	Printf on the given window.
+ *	This routine implements a printf on the given window.
  */
-int
-#ifdef __STDC__
-wprintw(WINDOW * win, const char *fmt, ...)
+#if __STDC__
+wprintw(WINDOW *win, const char *fmt, ...)
 #else
 wprintw(win, fmt, va_alist)
 	WINDOW *win;
@@ -99,109 +85,56 @@ wprintw(win, fmt, va_alist)
 	va_dcl
 #endif
 {
-	va_list ap;
-	int ret;
+	va_list	ap;
+	int	ret;
 
 #ifdef __STDC__
 	va_start(ap, fmt);
 #else
 	va_start(ap);
 #endif
-	ret = vwprintw(win, fmt, ap);
+	ret = _sprintw(win, fmt, ap);
 	va_end(ap);
 	return (ret);
 }
 
 /*
- * mvprintw, mvwprintw --
- *	Implement the mvprintw commands.  Due to the variable number of
- *	arguments, they cannot be macros.  Sigh....
- */
-int
-#ifdef __STDC__
-mvprintw(register int y, register int x, const char *fmt, ...)
-#else
-mvprintw(y, x, fmt, va_alist)
-	register int y, x;
-	char *fmt;
-	va_dcl
-#endif
-{
-	va_list ap;
-	int ret;
-
-#ifdef __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
-	if (move(y, x) != OK)
-		return (ERR);
-	ret = vwprintw(stdscr, fmt, ap);
-	va_end(ap);
-	return (ret);
-}
-
-int
-#ifdef __STDC__
-mvwprintw(register WINDOW * win, register int y, register int x,
-    const char *fmt, ...)
-#else
-mvwprintw(win, y, x, fmt, va_alist)
-	register WINDOW *win;
-	register int y, x;
-	char *fmt;
-	va_dcl
-#endif
-{
-	va_list ap;
-	int ret;
-
-#ifdef __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
-	if (wmove(win, y, x) != OK)
-		return (ERR);
-
-	ret = vwprintw(win, fmt, ap);
-	va_end(ap);
-	return (ret);
-}
-
-/*
- * Internal write-buffer-to-window function.
+ *	Internal write-buffer-to-window function.
  */
 static int
-__winwrite(cookie, buf, n)
+_winwrite(cookie, buf, n)
 	void *cookie;
-	register const char *buf;
+	register char *buf;
 	int n;
 {
-	register WINDOW *win;
-	register int c;
+	register WINDOW *win = (WINDOW *)cookie;
+	register int c = n;
 
-	for (c = n, win = cookie; --c >= 0;)
+	while (--c >= 0) {
 		if (waddch(win, *buf++) == ERR)
 			return (-1);
-	return (n);
+	}
+	return n;
 }
 
 /*
- * vwprintw --
  *	This routine actually executes the printf and adds it to the window.
+ *	It must not be declared static as it is used in mvprintw.c.
+ *	THIS SHOULD BE RENAMED vwprintw AND EXPORTED
  */
-int
-vwprintw(win, fmt, ap)
+_sprintw(win, fmt, ap)
 	WINDOW *win;
+#if __STDC__
 	const char *fmt;
-	va_list ap;
+#else
+	char *fmt;
+#endif
+	va_list	ap;
 {
 	FILE *f;
 
-	if ((f = funopen(win, NULL, __winwrite, NULL, NULL)) == NULL)
-		return (ERR);
-	(void)vfprintf(f, fmt, ap);
-	return (fclose(f) ? ERR : OK);
+	if ((f = fwopen((void *)win, _winwrite)) == NULL)
+		return ERR;
+	(void) vfprintf(f, fmt, ap);
+	return fclose(f) ? ERR : OK;
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: slattach.c,v 1.19 1997/10/20 08:08:20 scottr Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Rick Adams.
@@ -36,141 +34,139 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1988 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)slattach.c	8.2 (Berkeley) 1/7/94";
-#else
-__RCSID("$NetBSD: slattach.c,v 1.19 1997/10/20 08:08:20 scottr Exp $");
-#endif
+static char sccsid[] = "@(#)slattach.c	4.6 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include <sys/param.h>
+#include <sgtty.h>
 #include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/ioctl.h>
-
-#include <net/if.h>
 #include <netinet/in.h>
-
-#include <err.h>
-#include <fcntl.h>
+#include <net/if.h>
 #include <netdb.h>
-#include <paths.h>
-#include <signal.h>
+#include <fcntl.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <termios.h>
-#include <unistd.h>
+#include <paths.h>
 
-int	speed = 9600;
+#define DEFAULT_BAUD	9600
 int	slipdisc = SLIPDISC;
 
-char	devicename[32];
+char	devname[32];
+char	hostname[MAXHOSTNAMELEN];
 
-int	main __P((int, char *[]));
-int	ttydisc __P((char *));
-void	usage __P((void));
-
-
-int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	int fd;
-	char *dev = argv[1];
-	struct termios tty;
-	tcflag_t cflag = HUPCL;
-	int ch;
-	sigset_t sigset;
+	register int fd;
+	register char *dev = argv[1];
+	struct sgttyb sgtty;
+	int	speed;
 
-	while ((ch = getopt(argc, argv, "hHms:t:")) != -1) {
-		switch (ch) {
-		case 'h':
-			cflag |= CRTSCTS;
-			break;
-		case 'H':
-			cflag |= CDTRCTS;
-			break;
-		case 'm':
-			cflag &= ~HUPCL;
-			break;
-		case 's':
-			speed = atoi(optarg);
-			break;
-		case 'r': case 't':
-			slipdisc = ttydisc(optarg);
-			break;
-		case '?':
-		default:
-			usage();
-		}
+	if (argc < 2 || argc > 3) {
+		fprintf(stderr, "usage: %s ttyname [baudrate]\n", argv[0]);
+		exit(1);
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc != 1)
-		usage();
-
-	dev = *argv;
+	speed = argc == 3 ? findspeed(atoi(argv[2])) : findspeed(DEFAULT_BAUD);
+	if (speed == 0) {
+		fprintf(stderr, "unknown speed %s", argv[2]);
+		exit(1);
+	}
 	if (strncmp(_PATH_DEV, dev, sizeof(_PATH_DEV) - 1)) {
-		(void)snprintf(devicename, sizeof(devicename),
-		    "%s%s", _PATH_DEV, dev);
-		dev = devicename;
+		(void)sprintf(devname, "%s/%s", _PATH_DEV, dev);
+		dev = devname;
 	}
 	if ((fd = open(dev, O_RDWR | O_NDELAY)) < 0) {
 		perror(dev);
 		exit(1);
 	}
-	tty.c_cflag = CREAD | CS8 | cflag;
-	tty.c_iflag = 0;
-	tty.c_lflag = 0;
-	tty.c_oflag = 0;
-	tty.c_cc[VMIN] = 1;
-	tty.c_cc[VTIME] = 0;
-	cfsetspeed(&tty, speed);
-	if (tcsetattr(fd, TCSADRAIN, &tty) < 0)
-		err(1, "tcsetattr");
-	if (ioctl(fd, TIOCSDTR, 0) < 0)
-		err(1, "TIOCSDTR");
-	if (ioctl(fd, TIOCSETD, &slipdisc) < 0)
-		err(1, "TIOCSETD");
+	sgtty.sg_flags = RAW | ANYP;
+	sgtty.sg_ispeed = sgtty.sg_ospeed = speed;
+	if (ioctl(fd, TIOCSETP, &sgtty) < 0) {
+		perror("ioctl(TIOCSETP)");
+		exit(1);
+	}
+	if (ioctl(fd, TIOCSETD, &slipdisc) < 0) {
+		perror("ioctl(TIOCSETD)");
+		exit(1);
+	}
 
 	if (fork() > 0)
 		exit(0);
-	sigemptyset(&sigset);
 	for (;;)
-		sigsuspend(&sigset);
+		sigpause(0L);
 }
 
-int
-ttydisc(name)
-     char *name;
-{
-	if (strcmp(name, "slip") == 0)
-		return(SLIPDISC);
-#ifdef STRIPDISC
-	else if (strcmp(name, "strip") == 0)
-  		return(STRIPDISC);
+struct sg_spds {
+	int sp_val, sp_name;
+}       spds[] = {
+#ifdef B50
+	{ 50, B50 },
 #endif
-	else
-		usage();
-	/* NOTREACHED */
-	return -1;
-}
+#ifdef B75
+	{ 75, B75 },
+#endif
+#ifdef B110
+	{ 110, B110 },
+#endif
+#ifdef B150
+	{ 150, B150 },
+#endif
+#ifdef B200
+	{ 200, B200 },
+#endif
+#ifdef B300
+	{ 300, B300 },
+#endif
+#ifdef B600
+	{ 600, B600 },
+#endif
+#ifdef B1200
+	{ 1200, B1200 },
+#endif
+#ifdef B1800
+	{ 1800, B1800 },
+#endif
+#ifdef B2000
+	{ 2000, B2000 },
+#endif
+#ifdef B2400
+	{ 2400, B2400 },
+#endif
+#ifdef B3600
+	{ 3600, B3600 },
+#endif
+#ifdef B4800
+	{ 4800, B4800 },
+#endif
+#ifdef B7200
+	{ 7200, B7200 },
+#endif
+#ifdef B9600
+	{ 9600, B9600 },
+#endif
+#ifdef EXTA
+	{ 19200, EXTA },
+#endif
+#ifdef EXTB
+	{ 38400, EXTB },
+#endif
+	{ 0, 0 }
+};
 
-void
-usage()
+findspeed(speed)
+	register int speed;
 {
+	register struct sg_spds *sp;
 
-	(void)fprintf(stderr,
-		      "usage: slattach [-t ldisc] [-hm] [-s baudrate] ttyname\n");
-	exit(1);
+	sp = spds;
+	while (sp->sp_val && sp->sp_val != speed)
+		sp++;
+	return (sp->sp_name);
 }

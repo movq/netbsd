@@ -1,8 +1,6 @@
-/*	$NetBSD: main.c,v 1.7 1997/10/12 14:16:26 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,34 +31,30 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: main.c,v 1.7 1997/10/12 14:16:26 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)main.c	5.5 (Berkeley) 2/28/91";
 #endif /* not lint */
 
 # include	"robots.h"
+# include	<signal.h>
+# include	<ctype.h>
 
-int main __P((int, char **));
-
-int
 main(ac, av)
-	int	ac;
-	char	**av;
+int	ac;
+char	**av;
 {
-	char	*sp;
-	bool	bad_arg;
-	bool	show_only;
+	register char	*sp;
+	register bool	bad_arg;
+	register bool	show_only;
 	extern char	*Scorefile;
 	extern int	Max_per_uid;
+	void quit();
 
 	show_only = FALSE;
 	if (ac > 1) {
@@ -74,7 +68,7 @@ main(ac, av)
 					setgid(getgid());
 					Scorefile = av[0];
 # ifdef	FANCY
-					sp = strrchr(Scorefile, '/');
+					sp = rindex(Scorefile, '/');
 					if (sp == NULL)
 						sp = Scorefile;
 					if (strcmp(sp, "pattern_roll") == 0)
@@ -150,16 +144,7 @@ main(ac, av)
 		refresh();
 		score();
 	} while (another());
-	quit(0);
-	/* NOTREACHED */
-	return(0);
-}
-
-void
-__cputchar(ch)
-	int ch;
-{
-	(void)putchar(ch);
+	quit();
 }
 
 /*
@@ -167,10 +152,19 @@ __cputchar(ch)
  *	Leave the program elegantly.
  */
 void
-quit(dummy)
-	int dummy;
+quit()
 {
-	endwin();
+	extern int	_putchar();
+
+	mvcur(0, COLS - 1, LINES - 1, 0);
+	if (CE) {
+		tputs(CE, 1, _putchar);
+		endwin();
+	}
+	else {
+		endwin();
+		putchar('\n');
+	}
 	exit(0);
 	/* NOTREACHED */
 }
@@ -179,10 +173,9 @@ quit(dummy)
  * another:
  *	See if another game is desired
  */
-bool
 another()
 {
-	int	y;
+	register int	y;
 
 #ifdef	FANCY
 	if ((Stand_still || Pattern_roll) && !Newscore)

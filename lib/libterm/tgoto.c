@@ -1,8 +1,6 @@
-/*	$NetBSD: tgoto.c,v 1.9 1997/10/13 16:11:52 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,9 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)tgoto.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: tgoto.c,v 1.9 1997/10/13 16:11:52 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)tgoto.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
-
-#include <string.h>
-#include <termcap.h>
 
 #define	CTRL(c)	((c) & 037)
 
@@ -84,10 +74,10 @@ tgoto(CM, destcol, destline)
 	static char result[MAXRETURNSIZE];
 	static char added[10];
 	char *cp = CM;
-	char *dp = result;
-	int c;
+	register char *dp = result;
+	register int c;
 	int oncol = 0;
-	int which = destline;
+	register int which = destline;
 
 	if (cp == 0) {
 toohard:
@@ -96,13 +86,10 @@ toohard:
 		 */
 		return ("OOPS");
 	}
-	added[0] = '\0';
-	while ((c = *cp++) != '\0') {
+	added[0] = 0;
+	while (c = *cp++) {
 		if (c != '%') {
-copy:
 			*dp++ = c;
-			if (dp >= &result[MAXRETURNSIZE])
-				goto toohard;
 			continue;
 		}
 		switch (c = *cp++) {
@@ -122,23 +109,15 @@ copy:
 			/* fall into... */
 
 		case '3':
-			if (which >= 1000)
-				goto toohard;
 			*dp++ = (which / 100) | '0';
-			if (dp >= &result[MAXRETURNSIZE])
-				goto toohard;
 			which %= 100;
 			/* fall into... */
 
 		case '2':
 two:	
 			*dp++ = which / 10 | '0';
-			if (dp >= &result[MAXRETURNSIZE])
-				goto toohard;
 one:
 			*dp++ = which % 10 | '0';
-			if (dp >= &result[MAXRETURNSIZE])
-				goto toohard;
 swap:
 			oncol = 1 - oncol;
 setwhich:
@@ -159,6 +138,7 @@ setwhich:
 			/* fall into... */
 
 		case '.':
+casedot:
 			/*
 			 * This code is worth scratching your head at for a
 			 * while.  The idea is that various weird things can
@@ -179,24 +159,17 @@ setwhich:
 			 * like nondestructive space.
 			 */
 			if (which == 0 || which == CTRL('d') || /* which == '\t' || */ which == '\n') {
-				if (oncol || UP) { /* Assumption: backspace works */
-					char *add = oncol ? (BC ? BC : "\b") : UP;
-
+				if (oncol || UP) /* Assumption: backspace works */
 					/*
 					 * Loop needed because newline happens
 					 * to be the successor of tab.
 					 */
 					do {
-						if (strlen(added) + strlen(add) >= sizeof(added))
-							goto toohard;
-						(void)strcat(added, add);
+						strcat(added, oncol ? (BC ? BC : "\b") : UP);
 						which++;
 					} while (which == '\n');
-				}
 			}
 			*dp++ = which;
-			if (dp >= &result[MAXRETURNSIZE])
-				goto toohard;
 			goto swap;
 
 		case 'r':
@@ -210,7 +183,8 @@ setwhich:
 			continue;
 
 		case '%':
-			goto copy;
+			*dp++ = c;
+			continue;
 
 #ifdef CM_B
 		case 'B':
@@ -228,8 +202,6 @@ setwhich:
 			goto toohard;
 		}
 	}
-	if (dp + strlen(added) >= &result[MAXRETURNSIZE])
-		goto toohard;
-	(void)strcpy(dp, added);
+	strcpy(dp, added);
 	return (result);
 }

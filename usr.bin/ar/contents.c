@@ -1,8 +1,6 @@
-/*	$NetBSD: contents.c,v 1.6 1997/10/18 11:52:59 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Hugh Smith at The University of Guelph.
@@ -36,40 +34,35 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)contents.c	8.3 (Berkeley) 4/2/94";
-#else
-__RCSID("$NetBSD: contents.c,v 1.6 1997/10/18 11:52:59 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)contents.c	5.6 (Berkeley) 3/12/91";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-
-#include <ar.h>
-#include <dirent.h>
 #include <fcntl.h>
+#include <unistd.h>
+#include <tzfile.h>
+#include <dirent.h>
+#include <ar.h>
 #include <stdio.h>
 #include <string.h>
-#include <tzfile.h>
-#include <unistd.h>
-
 #include "archive.h"
 #include "extern.h"
+
+extern CHDR chdr;			/* converted header */
+extern char *archive;			/* archive name */
 
 /*
  * contents --
  *	Handles t[v] option - opens the archive and then reads headers,
  *	skipping member contents.
  */
-int
 contents(argv)
-	char **argv;
+	register char **argv;
 {
-	int afd, all;
+	register int afd, all;
 	struct tm *tp;
 	char *file, buf[25];
 	
@@ -82,7 +75,7 @@ contents(argv)
 			goto next;
 		if (options & AR_V) {
 			(void)strmode(chdr.mode, buf);
-			(void)printf("%s %6d/%-6d %8qd ",
+			(void)printf("%s %6d/%-6d %8ld ",
 			    buf + 1, chdr.uid, chdr.gid, chdr.size);
 			tp = localtime(&chdr.date);
 			(void)strftime(buf, sizeof(buf), "%b %e %H:%M %Y", tp);
@@ -97,7 +90,7 @@ next:		skip_arobj(afd);
 
 	if (*argv) {
 		orphans(argv);
-		return (1);
+		return(1);
 	}
-	return (0);
+	return(0);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: ip_var.h,v 1.22 1997/10/18 21:18:32 kml Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,45 +30,20 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ip_var.h	8.1 (Berkeley) 6/10/93
+ *	@(#)ip_var.h	7.7 (Berkeley) 6/28/90
  */
-
-#include <sys/queue.h>
 
 /*
  * Overlay for ip header used by other protocols (tcp, udp).
  */
 struct ipovly {
-	u_int8_t  ih_x1[9];		/* (unused) */
-	u_int8_t  ih_pr;		/* protocol */
-	u_int16_t ih_len;		/* protocol length */
-	struct	  in_addr ih_src;	/* source internet address */
-	struct	  in_addr ih_dst;	/* destination internet address */
+	caddr_t	ih_next, ih_prev;	/* for protocol sequence q's */
+	u_char	ih_x1;			/* (unused) */
+	u_char	ih_pr;			/* protocol */
+	short	ih_len;			/* protocol length */
+	struct	in_addr ih_src;		/* source internet address */
+	struct	in_addr ih_dst;		/* destination internet address */
 };
-
-/*
- * Ip (reassembly or sequence) queue structures.
- *
- * XXX -- The following explains why the ipqe_m field is here, for TCP's use:
- * We want to avoid doing m_pullup on incoming packets but that
- * means avoiding dtom on the tcp reassembly code.  That in turn means
- * keeping an mbuf pointer in the reassembly queue (since we might
- * have a cluster).  As a quick hack, the source & destination
- * port numbers (which are no longer needed once we've located the
- * tcpcb) are overlayed with an mbuf pointer.
- */
-LIST_HEAD(ipqehead, ipqent);
-struct ipqent {
-	LIST_ENTRY(ipqent) ipqe_q;
-	union {
-		struct ip	*_ip;
-		struct tcpiphdr *_tcp;
-	} _ipqe_u1;
-	struct mbuf	*ipqe_m;	/* mbuf contains packet */
-	u_int8_t	ipqe_mff;	/* for IP fragmentation */
-};
-#define	ipqe_ip		_ipqe_u1._ip
-#define	ipqe_tcp	_ipqe_u1._tcp
 
 /*
  * Ip reassembly queue structure.  Each fragment
@@ -79,12 +52,38 @@ struct ipqent {
  * be reclaimed if memory becomes tight.
  */
 struct ipq {
-	LIST_ENTRY(ipq) ipq_q;		/* to other reass headers */
-	u_int8_t  ipq_ttl;		/* time for reass q to live */
-	u_int8_t  ipq_p;		/* protocol of this fragment */
-	u_int16_t ipq_id;		/* sequence id for reassembly */
-	struct	  ipqehead ipq_fragq;	/* to ip fragment queue */
-	struct	  in_addr ipq_src, ipq_dst;
+	struct	ipq *next,*prev;	/* to other reass headers */
+	u_char	ipq_ttl;		/* time for reass q to live */
+	u_char	ipq_p;			/* protocol of this fragment */
+	u_short	ipq_id;			/* sequence id for reassembly */
+	struct	ipasfrag *ipq_next,*ipq_prev;
+					/* to ip headers of fragments */
+	struct	in_addr ipq_src,ipq_dst;
+};
+
+/*
+ * Ip header, when holding a fragment.
+ *
+ * Note: ipf_next must be at same offset as ipq_next above
+ */
+struct	ipasfrag {
+#if BYTE_ORDER == LITTLE_ENDIAN 
+	u_char	ip_hl:4,
+		ip_v:4;
+#endif
+#if BYTE_ORDER == BIG_ENDIAN 
+	u_char	ip_v:4,
+		ip_hl:4;
+#endif
+	u_char	ipf_mff;		/* copied from (ip_off&IP_MF) */
+	short	ip_len;
+	u_short	ip_id;
+	short	ip_off;
+	u_char	ip_ttl;
+	u_char	ip_p;
+	u_short	ip_sum;
+	struct	ipasfrag *ipf_next;	/* next fragment */
+	struct	ipasfrag *ipf_prev;	/* previous fragment */
 };
 
 /*
@@ -93,100 +92,45 @@ struct ipq {
  * The actual length of the options (including ipopt_dst)
  * is in m_len.
  */
-#define	MAX_IPOPTLEN	40
+#define MAX_IPOPTLEN	40
 
 struct ipoption {
 	struct	in_addr ipopt_dst;	/* first-hop dst if source routed */
-	int8_t	ipopt_list[MAX_IPOPTLEN];	/* options proper */
-};
-
-/*
- * Structure attached to inpcb.ip_moptions and
- * passed to ip_output when IP multicast options are in use.
- */
-struct ip_moptions {
-	struct	  ifnet *imo_multicast_ifp; /* ifp for outgoing multicasts */
-	u_int8_t  imo_multicast_ttl;	/* TTL for outgoing multicasts */
-	u_int8_t  imo_multicast_loop;	/* 1 => hear sends if a member */
-	u_int16_t imo_num_memberships;	/* no. memberships this socket */
-	struct	  in_multi *imo_membership[IP_MAX_MEMBERSHIPS];
+	char	ipopt_list[MAX_IPOPTLEN];	/* options proper */
 };
 
 struct	ipstat {
-	u_long	ips_total;		/* total packets received */
-	u_long	ips_badsum;		/* checksum bad */
-	u_long	ips_tooshort;		/* packet too short */
-	u_long	ips_toosmall;		/* not enough data */
-	u_long	ips_badhlen;		/* ip header length < data size */
-	u_long	ips_badlen;		/* ip length < ip header length */
-	u_long	ips_fragments;		/* fragments received */
-	u_long	ips_fragdropped;	/* frags dropped (dups, out of space) */
-	u_long	ips_fragtimeout;	/* fragments timed out */
-	u_long	ips_forward;		/* packets forwarded */
-	u_long	ips_cantforward;	/* packets rcvd for unreachable dest */
-	u_long	ips_redirectsent;	/* packets forwarded on same net */
-	u_long	ips_noproto;		/* unknown or unsupported protocol */
-	u_long	ips_delivered;		/* datagrams delivered to upper level*/
-	u_long	ips_localout;		/* total ip packets generated here */
-	u_long	ips_odropped;		/* lost packets due to nobufs, etc. */
-	u_long	ips_reassembled;	/* total packets reassembled ok */
-	u_long	ips_fragmented;		/* datagrams sucessfully fragmented */
-	u_long	ips_ofragments;		/* output fragments created */
-	u_long	ips_cantfrag;		/* don't fragment flag was set, etc. */
-	u_long	ips_badoptions;		/* error in option processing */
-	u_long	ips_noroute;		/* packets discarded due to no route */
-	u_long	ips_badvers;		/* ip version != 4 */
-	u_long	ips_rawout;		/* total raw ip packets generated */
-	u_long	ips_badfrags;		/* malformed fragments (bad length) */
-	u_long	ips_rcvmemdrop;		/* frags dropped for lack of memory */
-	u_long	ips_toolong;		/* ip length > max ip packet size */
+	long	ips_total;		/* total packets received */
+	long	ips_badsum;		/* checksum bad */
+	long	ips_tooshort;		/* packet too short */
+	long	ips_toosmall;		/* not enough data */
+	long	ips_badhlen;		/* ip header length < data size */
+	long	ips_badlen;		/* ip length < ip header length */
+	long	ips_fragments;		/* fragments received */
+	long	ips_fragdropped;	/* frags dropped (dups, out of space) */
+	long	ips_fragtimeout;	/* fragments timed out */
+	long	ips_forward;		/* packets forwarded */
+	long	ips_cantforward;	/* packets rcvd for unreachable dest */
+	long	ips_redirectsent;	/* packets forwarded on same net */
+	long	ips_noproto;		/* unknown or unsupported protocol */
+	long	ips_delivered;		/* packets consumed here */
+	long	ips_localout;		/* total ip packets generated here */
+	long	ips_odropped;		/* lost packets due to nobufs, etc. */
+	long	ips_reassembled;	/* total packets reassembled ok */
+	long	ips_fragmented;		/* output packets fragmented ok */
+	long	ips_ofragments;		/* output fragments created */
+	long	ips_cantfrag;		/* don't fragment flag was set, etc. */
 };
 
-#ifdef _KERNEL
+#ifdef KERNEL
 /* flags passed to ip_output as last parameter */
 #define	IP_FORWARDING		0x1		/* most of ip header exists */
-#define	IP_RAWOUTPUT		0x2		/* raw ip header exists */
-#define	IP_RETURNMTU		0x4		/* pass back mtu on EMSGSIZE */
 #define	IP_ROUTETOIF		SO_DONTROUTE	/* bypass routing tables */
 #define	IP_ALLOWBROADCAST	SO_BROADCAST	/* can send broadcast packets */
 
-struct	  ipstat ipstat;
-LIST_HEAD(ipqhead, ipq)	ipq;		/* ip reass. queue */
-u_int16_t  ip_id;			/* ip packet ctr, for ids */
-int        ip_defttl;			/* default IP ttl */
-extern int ip_mtudisc;			/* mtu discovery */
+struct	ipstat	ipstat;
+struct	ipq	ipq;			/* ip reass. queue */
+u_short	ip_id;				/* ip packet ctr, for ids */
 
-struct	 inpcb;
-
-int	 ip_ctloutput __P((int, struct socket *, int, int, struct mbuf **));
-int	 ip_dooptions __P((struct mbuf *));
-void	 ip_drain __P((void));
-void	 ip_forward __P((struct mbuf *, int));
-void	 ip_freef __P((struct ipq *));
-void	 ip_freemoptions __P((struct ip_moptions *));
-int	 ip_getmoptions __P((int, struct ip_moptions *, struct mbuf **));
-void	 ip_init __P((void));
-int	 ip_mforward __P((struct mbuf *, struct ifnet *));
-int	 ip_optcopy __P((struct ip *, struct ip *));
-int	 ip_output __P((struct mbuf *, ...));
-int	 ip_pcbopts __P((struct mbuf **, struct mbuf *));
-struct mbuf *
-	 ip_reass __P((struct ipqent *, struct ipq *));
-struct in_ifaddr *
-	 ip_rtaddr __P((struct in_addr));
-void	 ip_savecontrol __P((struct inpcb *, struct mbuf **, struct ip *,
-	   struct mbuf *));
-int	 ip_setmoptions __P((int, struct ip_moptions **, struct mbuf *));
-void	 ip_slowtimo __P((void));
-struct mbuf *
-	 ip_srcroute __P((void));
-void	 ip_stripoptions __P((struct mbuf *, struct mbuf *));
-int	 ip_sysctl __P((int *, u_int, void *, size_t *, void *, size_t));
-void	 ipintr __P((void));
-int	 rip_ctloutput __P((int, struct socket *, int, int, struct mbuf **));
-void	 rip_init __P((void));
-void	 rip_input __P((struct mbuf *, ...));
-int	 rip_output __P((struct mbuf *, ...));
-int	 rip_usrreq __P((struct socket *,
-	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *));
+struct	mbuf *ip_srcroute();
 #endif

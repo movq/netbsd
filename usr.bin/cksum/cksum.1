@@ -1,7 +1,5 @@
-.\"	$NetBSD: cksum.1,v 1.11 1997/10/17 11:36:56 lukem Exp $
-.\"
-.\" Copyright (c) 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1991, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" the Institute of Electrical and Electronics Engineers, Inc.
@@ -34,69 +32,30 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)cksum.1	8.2 (Berkeley) 4/28/95
+.\"	@(#)cksum.1	5.5 (Berkeley) 6/27/91
 .\"
-.Dd April 28, 1995
+.Dd June 27, 1991
 .Dt CKSUM 1
-.Os BSD 4.4
+.Os
 .Sh NAME
 .Nm cksum
 .Nd display file checksums and block counts
 .Sh SYNOPSIS
-.Nm
-.Oo Fl m \&|
-.Oo Fl o Ar \&1 No \&| Ar \&2
-.Oc
-.Oc
-.Op Ar file ...
-.Nm sum
-.Op Ar file ...
-.Nm md5
-.Op Fl p
-.Op Fl t
-.Op Fl x
-.Op Fl s Ar string
+.Nm cksum
+.Op Fl o Op \&1 \&| \&2
 .Op Ar file ...
 .Sh DESCRIPTION
 The
-.Nm
-utility writes to the standard output three whitespace separated
-fields for each input file.
+.Nm cksum
+utility writes to standard output three whitespace separated fields for each
+input file (or the standard input by default).
 These fields are a checksum
 .Tn CRC ,
-the total number of octets in the file and the file name.
-If no file name is specified, the standard input is used and no file name
-is written.
-.Pp
-The
-.Nm sum
-utility is identical to the
-.Nm
-utility, except that it defaults to using historic algorithm 1, as
-described below.
-It is provided for compatibility only.
-.Pp
-The
-.Nm md5
-utility takes as input a message of arbitrary length and produces
-as output a 128-bit
-.Dq fingerprint
-or
-.Dq message digest
-of the input.  It is conjectured that it is computationally infeasible
-to product two messages having the same message digest, or to produce
-any message having a given prespecified target message digest.  The
-MD5 algorithm is intended for digital signature applications, where
-a large file must be
-.Dq compressed
-in a secure manner before being encrypted with a private (secret)
-key under a public-key encryption system such as
-.Pa RSA .
+the total number of bytes in the file and
+the file name.
 .Pp
 The options are as follows:
 .Bl -tag -width indent
-.It Fl m
-Use the MD5 algorithm rather than the default one.
 .It Fl o
 Use historic algorithms instead of the (superior) default one.
 .Pp
@@ -127,25 +86,12 @@ r = s % 2^16 + (s % 2^32) / 2^16;
 cksum = (r % 2^16) + r / 2^16;
 .Ed
 .Pp
-Both algorithm 1 and 2 write to the standard output the same fields as
+Both algorithm 1 and 2 write to standard output the same fields as
 the default algorithm except that the size of the file in bytes is
 replaced with the size of the file in blocks.
 For historic reasons, the block size is 1024 for algorithm 1 and 512
 for algorithm 2.
 Partial blocks are rounded up.
-.El
-.Pp
-The following options apply only when using the MD5 algorithm:
-.Bl -tag -width indent
-.It Fl s Ar string
-Print the MD5 checksum of the given string
-.Ar string .
-.It Fl p
-Echo input from standard input to standard output, and append an MD5 checksum.
-.It Fl t
-Run a built-in MD5 time trial.
-.It Fl x
-Run a built-in MD5 test script.
 .El
 .Pp
 The default
@@ -171,37 +117,30 @@ the following procedure:
 .Bd -filled -offset indent
 The
 .Ar n
-bits to be evaluated are considered to be the coefficients of a mod 2
+bits of the file are considered to be the coefficients of a mod 2
 polynomial M(x) of degree
 .Ar n Ns \-1 .
-These
-.Ar n
-bits are the bits from the file, with the most significant bit being the most
-significant bit of the first octet of the file and the last bit being the least
-significant bit of the last octet, padded with zero bits (if necessary) to
-achieve an integral number of octets, followed by one or more octets
-representing the length of the file as a binary value, least significant octet
-first.
-The smallest number of octets capable of representing this integer are used.
 .Pp
 M(x) is multiplied by x^32 (i.e., shifted left 32 bits) and divided by
 G(x) using mod 2 division, producing a remainder R(x) of degree <= 31.
+During the division, each time the intermediate remainder is zero, it
+is changed to the next value from a predefined sequence of
+32-bit integers before completing the division.
+This sequence is long and complex -- see the source code for more
+information.
 .Pp
 The coefficients of R(x) are considered to be a 32-bit sequence.
-.Pp
-The bit sequence is complemented and the result is the CRC.
 .Ed
 .Pp
-The
-.Nm
-and
-.Nm sum
-utilities exit 0 on success, and >0 if an error occurs.
-.Sh SEE ALSO
-The default calculation is identical to that given in pseudo-code
-in the following
+The calculation used is identical to that given in pseudo-code in
+the
 .Tn ACM
-article.
+article referenced below.
+.Pp
+The
+.Nm cksum
+utility exits 0 on success, and >0 if an error occurs.
+.Sh SEE ALSO
 .Rs
 .%T "Computation of Cyclic Redundancy Checks Via Table Lookup"
 .%A Dilip V. Sarwate
@@ -209,19 +148,11 @@ article.
 .%D "August 1988"
 .Re
 .Sh STANDARDS
-The
-.Nm
-utility is expected to conform to 
-.St -p1003.2-92 .
+.Nm Cksum
+is expected to conform to
+.St -p1003.2 .
 .Sh HISTORY
 The
-.Nm
-utility appeared in
-.Bx 4.4 .
-.\" .Pp
-.\" The
-.\" .Nm sum
-.\" utility appeared in
-.\" .Bx ?.?
-.\" and
-.\" .At V .
+.Nm cksum
+utility is
+.Ud .

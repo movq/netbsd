@@ -1,8 +1,6 @@
-/*	$NetBSD: cons.h,v 1.8 1996/02/13 22:09:10 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)cons.h	8.1 (Berkeley) 6/10/93
+ *	@(#)cons.h	7.3 (Berkeley) 5/6/91
  */
 
 /***********************************************************
@@ -40,13 +38,13 @@
 
                       All Rights Reserved
 
-Permission to use, copy, modify, and distribute this software and its
-documentation for any purpose and without fee is hereby granted,
+Permission to use, copy, modify, and distribute this software and its 
+documentation for any purpose and without fee is hereby granted, 
 provided that the above copyright notice appear in all copies and that
-both that copyright notice and this permission notice appear in
+both that copyright notice and this permission notice appear in 
 supporting documentation, and that the name of IBM not be
 used in advertising or publicity pertaining to distribution of the
-software without specific, written prior permission.
+software without specific, written prior permission.  
 
 IBM DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
 ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
@@ -62,17 +60,20 @@ SOFTWARE.
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
 /*
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/cons.h,v 1.1 1993/04/09 12:01:03 cgd Exp $
+ * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/cons.h,v $
+ *
  * interface between TP and CONS
  */
 
-#define	CONSOPT_X25CRUD	0x01	/* set x.25 call request user data */
+#define	CONSOPT_X25CRUD	0x01		/* set x.25 call request user data */
 
 struct dte_addr {
-	u_char          dtea_addr[7];
-	u_char          dtea_niblen;
+	u_char 	dtea_addr[7];
+	u_char	dtea_niblen;
 };
 
-#ifdef	_KERNEL
+#ifdef	KERNEL
 
 #define CONN_OPEN		0x33
 #define CONN_CONFIRM	0x30
@@ -83,9 +84,9 @@ struct dte_addr {
 #define	CONS_NOT_DGM	0x0
 
 #ifndef	PRC_NCMDS
-#include <sys/protosw.h>
-#endif				/* PRC_NCMDS */
+#include "protosw.h"
+#endif	PRC_NCMDS
 
-#define PRC_CONS_SEND_DONE 2	/* something unused in protosw.h */
+#define PRC_CONS_SEND_DONE 2 /* something unused in protosw.h */
 
-#endif				/* _KERNEL */
+#endif	KERNEL

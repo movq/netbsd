@@ -1,5 +1,3 @@
-/*	$NetBSD: ns_cksum.c,v 1.5 1997/07/18 19:30:36 thorpej Exp $	*/
-
 /*
  * Copyright (c) 1982, 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,12 +30,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ns_cksum.c	8.1 (Berkeley) 6/10/93
+ *	from: @(#)ns_cksum.c	8.1 (Berkeley) 6/10/93
+ *	$Id: ns_cksum.c,v 1.1 1994/05/13 06:11:12 mycroft Exp $
  */
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
-#include <netns/ns_var.h>
 
 /*
  * Checksum routine for Network Systems Protocol Packets (Big-Endian).
@@ -49,19 +47,19 @@
 #define ADDCARRY(x)  { if ((x) > 65535) (x) -= 65535; }
 #define FOLD(x) {l_util.l = (x); (x) = l_util.s[0] + l_util.s[1]; ADDCARRY(x);}
 
-u_int16_t
+u_short
 ns_cksum(m, len)
 	register struct mbuf *m;
 	register int len;
 {
-	register u_int16_t *w;
+	register u_short *w;
 	register int sum = 0;
 	register int mlen = 0;
 	register int sum2;
 
 	union {
-		u_int16_t s[2];
-		int32_t l;
+		u_short s[2];
+		long	l;
 	} l_util;
 
 	for (;m && len; m = m->m_next) {
@@ -71,19 +69,19 @@ ns_cksum(m, len)
 		 * Each trip around loop adds in
 		 * word from one mbuf segment.
 		 */
-		w = mtod(m, u_int16_t *);
+		w = mtod(m, u_short *);
 		if (mlen == -1) {
 			/*
 			 * There is a byte left from the last segment;
 			 * ones-complement add it into the checksum.
 			 */
 #if BYTE_ORDER == BIG_ENDIAN
-			sum  += *(u_int8_t *)w;
+			sum  += *(u_char *)w;
 #else
-			sum  += *(u_int8_t *)w << 8;
+			sum  += *(u_char *)w << 8;
 #endif
 			sum += sum;
-			w = (u_int16_t *)(1 + (char *)w);
+			w = (u_short *)(1 + (char *)w);
 			mlen = m->m_len - 1;
 			len--;
 			FOLD(sum);
@@ -99,7 +97,7 @@ ns_cksum(m, len)
 		 * into the high (by normal carry-chaining)
 		 * so long as we fold back before 16 carries have occured.
 		 */
-		if (1 & (long) w)
+		if (1 & (int) w)
 			goto uuuuglyy;
 #ifndef TINY
 /* -DTINY reduces the size from 1250 to 550, but slows it down by 22% */
@@ -131,12 +129,12 @@ ns_cksum(m, len)
 		goto commoncase;
 uuuuglyy:
 #if BYTE_ORDER == BIG_ENDIAN
-#define ww(n) (((u_int8_t *)w)[n + n + 1])
-#define vv(n) (((u_int8_t *)w)[n + n])
+#define ww(n) (((u_char *)w)[n + n + 1])
+#define vv(n) (((u_char *)w)[n + n])
 #else
 #if BYTE_ORDER == LITTLE_ENDIAN
-#define vv(n) (((u_int8_t *)w)[n + n + 1])
-#define ww(n) (((u_int8_t *)w)[n + n])
+#define vv(n) (((u_char *)w)[n + n + 1])
+#define ww(n) (((u_char *)w)[n + n])
 #endif
 #endif
 		sum2 = 0;
@@ -185,9 +183,9 @@ uuuuglyy:
 commoncase:
 		if (mlen == -1) {
 #if BYTE_ORDER == BIG_ENDIAN
-			sum += *(u_int8_t *)w << 8;
+			sum += *(u_char *)w << 8;
 #else
-			sum += *(u_int8_t *)w;
+			sum += *(u_char *)w;
 #endif
 		}
 		FOLD(sum);

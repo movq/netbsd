@@ -1,8 +1,6 @@
-/*	$NetBSD: cmdtab.c,v 1.5 1997/10/17 14:20:02 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,16 +31,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cmdtab.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: cmdtab.c,v 1.5 1997/10/17 14:20:02 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)cmdtab.c	2.6 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "timedc.h"
+
+int	clockdiff(), help(), msite(), quit(), testing(), tracing();
 
 char	clockdiffhelp[] =	"measures clock differences between machines";
 char	helphelp[] =		"gets help on commands";

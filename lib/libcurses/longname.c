@@ -1,8 +1,6 @@
-/*	$NetBSD: longname.c,v 1.7 1997/07/22 07:36:50 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,33 +31,30 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)longname.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: longname.c,v 1.7 1997/07/22 07:36:50 mikel Exp $");
-#endif
-#endif	/* not lint */
+static char sccsid[] = "@(#)longname.c	5.4 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include "curses.h"
+# define	reg	register
 
 /*
- * longname --
- *	Fill in "def" with the long name of the terminal.
+ *	This routine fills in "def" with the long name of the terminal.
+ *
  */
 char *
 longname(bp, def)
-	register char *bp, *def;
-{
-	register char *cp;
+reg char	*bp, *def; {
+
+	reg char	*cp;
 
 	while (*bp && *bp != ':' && *bp != '|')
 		bp++;
 	if (*bp == '|') {
-		for (cp = def, ++bp; *bp && *bp != ':' && *bp != '|';)
+		bp++;
+		cp = def;
+		while (*bp && *bp != ':' && *bp != '|')
 			*cp++ = *bp++;
-		*cp = '\0';
+		*cp = 0;
 	}
-	return (def);
+	return def;
 }

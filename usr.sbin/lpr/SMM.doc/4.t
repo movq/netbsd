@@ -1,4 +1,3 @@
-.\" $NetBSD: 4.t,v 1.3 1997/07/09 02:34:44 jtc Exp $
 .\" Copyright (c) 1983, 1993
 .\"	The Regents of the University of California.  All rights reserved.
 .\"
@@ -110,7 +109,7 @@ named ``lp'' on the machine ``ucbvax''.
 .DS
 .DT
 lp|default line printer:\e
-	:lp=:rm=ucbvax:rp=lp:sd=/var/spool/output/vaxlpd:
+	:lp=:rm=ucbvax:rp=lp:sd=/usr/spool/vaxlpd:
 .DE
 The
 .B rm
@@ -123,9 +122,9 @@ the name of the printer on the remote machine is ``lp'';
 here it could be left out since this is the default value.
 The
 .B sd
-entry specifies ``/var/spool/output/vaxlpd''
+entry specifies ``/usr/spool/vaxlpd''
 as the spooling directory instead of the
-default value of ``/var/spool/output/lpd''.
+default value of ``/usr/spool/lpd''.
 .NH 2
 Output filters
 .PP
@@ -151,7 +150,7 @@ is the Benson-Varian.
 .DS
 .DT
 va|varian|Benson-Varian:\e
-	:lp=/dev/va0:sd=/var/spool/output/vad:of=/usr/lib/vpf:\e
+	:lp=/dev/va0:sd=/usr/spool/vad:of=/usr/lib/vpf:\e
 	:tf=/usr/lib/rvcat:mx#2000:pl#58:px=2112:py=1700:tr=\ef:
 .DE
 The
@@ -172,7 +171,7 @@ filter as shown below.
 .DS
 .DT
 va|varian|Benson-Varian:\e
-	:lp=/dev/va0:sd=/var/spool/output/vad:of=/usr/lib/vpf:\e
+	:lp=/dev/va0:sd=/usr/spool/vad:of=/usr/lib/vpf:\e
 	:if=/usr/lib/vpf:tf=/usr/lib/rvcat:af=/usr/adm/vaacct:\e
 	:mx#2000:pl#58:px=2112:py=1700:tr=\ef:
 .DE

@@ -1,9 +1,7 @@
-/*	$NetBSD: hdlc.h,v 1.6 1996/02/13 22:04:37 christos Exp $	*/
-
 /*-
  * Copyright (c) University of British Columbia, 1984
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by the
  * Laboratory for Computation Vision and the Computer Science Department
@@ -37,17 +35,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)hdlc.h	8.1 (Berkeley) 6/10/93
+ *	@(#)hdlc.h	7.4 (Berkeley) 5/6/91
  */
 
 #ifndef ORDER4
-#ifndef CCITT_TYPES_DEFINED
-#define CCITT_TYPES_DEFINED
 #define FALSE   0
 #define TRUE    1
 typedef u_char octet;
 typedef char    bool;
-#endif
 
 /*
  *  HDLC Packet format definitions
@@ -155,3 +150,7 @@ struct	Hdlc_frame {
 
 #define TX 0
 #define RX 1
+
+bool	range_check ();
+bool	valid_nr ();
+struct	mbuf *hd_remove ();

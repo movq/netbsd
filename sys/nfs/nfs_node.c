@@ -1,8 +1,6 @@
-/*	$NetBSD: nfs_node.c,v 1.24 1997/10/19 01:46:24 fvdl Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Rick Macklem at The University of Guelph.
@@ -35,31 +33,37 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)nfs_node.c	8.6 (Berkeley) 5/22/95
+ *	@(#)nfs_node.c	7.34 (Berkeley) 5/15/91
  */
 
+#include "param.h"
+#include "systm.h"
+#include "proc.h"
+#include "mount.h"
+#include "namei.h"
+#include "vnode.h"
+#include "kernel.h"
+#include "malloc.h"
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/proc.h>
-#include <sys/mount.h>
-#include <sys/namei.h>
-#include <sys/vnode.h>
-#include <sys/kernel.h>
-#include <sys/malloc.h>
-#include <sys/lock.h>
+#include "nfsv2.h"
+#include "nfs.h"
+#include "nfsnode.h"
+#include "nfsmount.h"
 
-#include <nfs/rpcv2.h>
-#include <nfs/nfsproto.h>
-#include <nfs/nfs.h>
-#include <nfs/nfsnode.h>
-#include <nfs/nfsmount.h>
-#include <nfs/nqnfs.h>
-#include <nfs/nfs_var.h>
+/* The request list head */
+extern struct nfsreq nfsreqh;
 
-LIST_HEAD(nfsnodehashhead, nfsnode) *nfsnodehashtbl;
-u_long nfsnodehash;
-struct lock nfs_hashlock;
+#define	NFSNOHSZ	512
+#if	((NFSNOHSZ&(NFSNOHSZ-1)) == 0)
+#define	NFSNOHASH(fhsum)	((fhsum)&(NFSNOHSZ-1))
+#else
+#define	NFSNOHASH(fhsum)	(((unsigned)(fhsum))%NFSNOHSZ)
+#endif
+
+union nhead {
+	union  nhead *nh_head[2];
+	struct nfsnode *nh_chain[2];
+} nhead[NFSNOHSZ];
 
 #define TRUE	1
 #define	FALSE	0
@@ -68,31 +72,37 @@ struct lock nfs_hashlock;
  * Initialize hash links for nfsnodes
  * and build nfsnode free list.
  */
-void
 nfs_nhinit()
 {
+	register int i;
+	register union  nhead *nh = nhead;
 
-	nfsnodehashtbl = hashinit(desiredvnodes, M_NFSNODE, &nfsnodehash);
-	lockinit(&nfs_hashlock, PINOD, "nfs_hashlock", 0, 0);
+#ifndef lint
+	if (VN_MAXPRIVATE < sizeof(struct nfsnode))
+		panic("nfs_nhinit: too small");
+#endif /* not lint */
+	for (i = NFSNOHSZ; --i >= 0; nh++) {
+		nh->nh_head[0] = nh;
+		nh->nh_head[1] = nh;
+	}
 }
 
 /*
  * Compute an entry in the NFS hash table structure
  */
-u_long
-nfs_hash(fhp, fhsize)
-	register nfsfh_t *fhp;
-	int fhsize;
+union nhead *
+nfs_hash(fhp)
+	register nfsv2fh_t *fhp;
 {
 	register u_char *fhpp;
 	register u_long fhsum;
-	register int i;
+	int i;
 
 	fhpp = &fhp->fh_bytes[0];
 	fhsum = 0;
-	for (i = 0; i < fhsize; i++)
+	for (i = 0; i < NFSX_FH; i++)
 		fhsum += *fhpp++;
-	return (fhsum);
+	return (&nhead[NFSNOHASH(fhsum)]);
 }
 
 /*
@@ -101,233 +111,215 @@ nfs_hash(fhp, fhsize)
  * In all cases, a pointer to a
  * nfsnode structure is returned.
  */
-int
-nfs_nget(mntp, fhp, fhsize, npp)
+nfs_nget(mntp, fhp, npp)
 	struct mount *mntp;
-	register nfsfh_t *fhp;
-	int fhsize;
+	register nfsv2fh_t *fhp;
 	struct nfsnode **npp;
 {
-	struct proc *p = curproc;	/* XXX */
 	register struct nfsnode *np;
-	struct nfsnodehashhead *nhpp;
 	register struct vnode *vp;
-	extern int (**nfsv2_vnodeop_p)__P((void *));
+	extern struct vnodeops nfsv2_vnodeops;
 	struct vnode *nvp;
+	union nhead *nh;
 	int error;
 
-	nhpp = NFSNOHASH(nfs_hash(fhp, fhsize));
+	nh = nfs_hash(fhp);
 loop:
-	for (np = nhpp->lh_first; np != 0; np = np->n_hash.le_next) {
-		if (mntp != NFSTOV(np)->v_mount || np->n_fhsize != fhsize ||
-		    bcmp((caddr_t)fhp, (caddr_t)np->n_fhp, fhsize))
+	for (np = nh->nh_chain[0]; np != (struct nfsnode *)nh; np = np->n_forw) {
+		if (mntp != NFSTOV(np)->v_mount ||
+		    bcmp((caddr_t)fhp, (caddr_t)&np->n_fh, NFSX_FH))
 			continue;
+		if ((np->n_flag & NLOCKED) != 0) {
+			np->n_flag |= NWANT;
+			(void) tsleep((caddr_t)np, PINOD, "nfsnode", 0);
+			goto loop;
+		}
 		vp = NFSTOV(np);
-#ifdef Lite2_integrated
-		if (vget(vp, LK_EXCLUSIVE, p))
-#else
-		if (vget(vp, 1))
-#endif
+		if (vget(vp))
 			goto loop;
 		*npp = np;
 		return(0);
 	}
-	if (lockmgr(&nfs_hashlock, LK_EXCLUSIVE|LK_SLEEPFAIL, 0, p))
-		goto loop;
-	error = getnewvnode(VT_NFS, mntp, nfsv2_vnodeop_p, &nvp);
-	if (error) {
+	if (error = getnewvnode(VT_NFS, mntp, &nfsv2_vnodeops, &nvp)) {
 		*npp = 0;
-		lockmgr(&nfs_hashlock, LK_RELEASE, 0, p);
 		return (error);
 	}
 	vp = nvp;
-	MALLOC(np, struct nfsnode *, sizeof *np, M_NFSNODE, M_WAITOK);
-	bzero((caddr_t)np, sizeof *np);
-	vp->v_data = np;
+	np = VTONFS(vp);
 	np->n_vnode = vp;
 	/*
 	 * Insert the nfsnode in the hash queue for its new file handle
 	 */
-	LIST_INSERT_HEAD(nhpp, np, n_hash);
-	if (fhsize > NFS_SMALLFH) {
-		MALLOC(np->n_fhp, nfsfh_t *, fhsize, M_NFSBIGFH, M_WAITOK);
-	} else
-		np->n_fhp = &np->n_fh;
-	bcopy((caddr_t)fhp, (caddr_t)np->n_fhp, fhsize);
-	np->n_fhsize = fhsize;
-	MALLOC(np->n_vattr, struct vattr *, sizeof (struct vattr),
-	    M_NFSNODE, M_WAITOK);
-	bzero(np->n_vattr, sizeof (struct vattr));
-	lockmgr(&nfs_hashlock, LK_RELEASE, 0, p);
+	np->n_flag = 0;
+	insque(np, nh);
+	nfs_lock(vp);
+	bcopy((caddr_t)fhp, (caddr_t)&np->n_fh, NFSX_FH);
+	np->n_attrstamp = 0;
+	np->n_direofoffset = 0;
+	np->n_sillyrename = (struct sillyrename *)0;
+	np->n_size = 0;
+	np->n_mtime = 0;
 	*npp = np;
 	return (0);
 }
 
-int
-nfs_inactive(v)
-	void *v;
+nfs_inactive(vp, p)
+	struct vnode *vp;
+	struct proc *p;
 {
-	struct vop_inactive_args /* {
-		struct vnode *a_vp;
-#ifdef Lite2_integrated
-		struct proc *a_p;
-#endif
-	} */ *ap = v;
 	register struct nfsnode *np;
 	register struct sillyrename *sp;
-	struct proc *p = curproc;	/* XXX */
+	struct nfsnode *dnp;
 	extern int prtactive;
 
-	np = VTONFS(ap->a_vp);
-	if (prtactive && ap->a_vp->v_usecount != 0)
-		vprint("nfs_inactive: pushing active", ap->a_vp);
-	if (ap->a_vp->v_type != VDIR) {
-		sp = np->n_sillyrename;
-		np->n_sillyrename = (struct sillyrename *)0;
-	} else
-		sp = (struct sillyrename *)0;
-#ifdef Lite2_integrated
-	VOP_UNLOCK(ap->a_vp, 0, ap->a_p);
-#else
-	VOP_UNLOCK(ap->a_vp);
-#endif
+	np = VTONFS(vp);
+	if (prtactive && vp->v_usecount != 0)
+		vprint("nfs_inactive: pushing active", vp);
+	nfs_lock(vp);
+	sp = np->n_sillyrename;
+	np->n_sillyrename = (struct sillyrename *)0;
 	if (sp) {
-		/*
-		 * If the usecount is greater than zero, then we are
-		 * being inactivated by a forcible unmount and do not
-		 * have to get our own reference. In the normal case,
-		 * we need a reference to keep the vnode from being
-		 * recycled by getnewvnode while we do the I/O
-		 * associated with discarding the buffers.
-		 */
-		if (ap->a_vp->v_usecount > 0)
-			(void) nfs_vinvalbuf(ap->a_vp, 0, sp->s_cred, p, 1);
-#ifdef Lite2_integrated
-		else if (vget(ap->a_vp, 0, p))
-#else
-		else if (vget(ap->a_vp, 0))
-#endif
-                        panic("nfs_inactive: lost vnode");
-		else {
-			(void) nfs_vinvalbuf(ap->a_vp, 0, sp->s_cred, p, 1);
-			vrele(ap->a_vp);
-		}
-
-
 		/*
 		 * Remove the silly file that was rename'd earlier
 		 */
-		nfs_removeit(sp);
+		if (!nfs_nget(vp->v_mount, &sp->s_fh, &dnp)) {
+			sp->s_dvp = NFSTOV(dnp);
+			nfs_removeit(sp, p);
+			nfs_nput(sp->s_dvp);
+		}
 		crfree(sp->s_cred);
 		vrele(sp->s_dvp);
-		FREE((caddr_t)sp, M_NFSREQ);
+		free((caddr_t)sp, M_NFSREQ);
 	}
-	np->n_flag &= (NMODIFIED | NFLUSHINPROG | NFLUSHWANT | NQNFSEVICTED |
-		NQNFSNONCACHE | NQNFSWRITE);
+	nfs_unlock(vp);
+	np->n_flag &= NMODIFIED;
+#ifdef notdef
+	/*
+	 * Scan the request list for any requests left hanging about
+	 */
+	s = splnet();
+	rep = nfsreqh.r_next;
+	while (rep && rep != &nfsreqh) {
+		if (rep->r_vp == vp) {
+			rep->r_prev->r_next = rep2 = rep->r_next;
+			rep->r_next->r_prev = rep->r_prev;
+			m_freem(rep->r_mreq);
+			if (rep->r_mrep != NULL)
+				m_freem(rep->r_mrep);
+			free((caddr_t)rep, M_NFSREQ);
+			rep = rep2;
+		} else
+			rep = rep->r_next;
+	}
+	splx(s);
+#endif
 	return (0);
 }
 
 /*
  * Reclaim an nfsnode so that it can be used for other purposes.
  */
-int
-nfs_reclaim(v)
-	void *v;
+nfs_reclaim(vp)
+	register struct vnode *vp;
 {
-	struct vop_reclaim_args /* {
-		struct vnode *a_vp;
-	} */ *ap = v;
-	register struct vnode *vp = ap->a_vp;
 	register struct nfsnode *np = VTONFS(vp);
-	register struct nfsmount *nmp = VFSTONFS(vp->v_mount);
 	extern int prtactive;
 
 	if (prtactive && vp->v_usecount != 0)
 		vprint("nfs_reclaim: pushing active", vp);
-
-	LIST_REMOVE(np, n_hash);
-
 	/*
-	 * For nqnfs, take it off the timer queue as required.
+	 * Remove the nfsnode from its hash chain.
 	 */
-	if ((nmp->nm_flag & NFSMNT_NQNFS) && np->n_timer.cqe_next != 0) {
-		CIRCLEQ_REMOVE(&nmp->nm_timerhead, np, n_timer);
-	}
-
-	/*
-	 * Free up any directory cookie structures and
-	 * large file handle structures that might be associated with
-	 * this nfs node.
-	 */
-	if (vp->v_type == VDIR && np->n_dircache) {
-		nfs_invaldircache(vp, 1);
-		FREE(np->n_dircache, M_NFSDIROFF);
-	}
-	if (np->n_fhsize > NFS_SMALLFH) {
-		FREE((caddr_t)np->n_fhp, M_NFSBIGFH);
-	}
-
-	FREE(np->n_vattr, M_NFSNODE);
+	remque(np);
+	np->n_forw = np;
+	np->n_back = np;
 	cache_purge(vp);
-	FREE(vp->v_data, M_NFSNODE);
-	vp->v_data = (void *)0;
+	np->n_flag = 0;
+	np->n_direofoffset = 0;
 	return (0);
 }
 
-#ifndef Lite2_integrated
+/*
+ * In theory, NFS does not need locking, but we make provision
+ * for doing it just in case it is needed.
+ */
+int donfslocking = 0;
 /*
  * Lock an nfsnode
  */
-int
-nfs_lock(v)
-	void *v;
-{
-	struct vop_lock_args /* {
-		struct vnode *a_vp;
-	} */ *ap = v;
-	register struct vnode *vp = ap->a_vp;
 
-	/*
-	 * Ugh, another place where interruptible mounts will get hung.
-	 * If you make this sleep interruptible, then you have to fix all
-	 * the VOP_LOCK() calls to expect interruptibility.
-	 */
-	while (vp->v_flag & VXLOCK) {
-		vp->v_flag |= VXWANT;
-		(void) tsleep((caddr_t)vp, PINOD, "nfslck", 0);
+nfs_lock(vp)
+	struct vnode *vp;
+{
+	register struct nfsnode *np = VTONFS(vp);
+
+	if (!donfslocking)
+		return;
+	while (np->n_flag & NLOCKED) {
+		np->n_flag |= NWANT;
+		if (np->n_lockholder == curproc->p_pid)
+			panic("locking against myself");
+		np->n_lockwaiter = curproc->p_pid;
+		(void) tsleep((caddr_t)np, PINOD, "nfslock", 0);
 	}
-	if (vp->v_tag == VT_NON)
-		return (ENOENT);
-	return (0);
+	np->n_lockwaiter = 0;
+	np->n_lockholder = curproc->p_pid;
+	np->n_flag |= NLOCKED;
 }
 
 /*
  * Unlock an nfsnode
  */
-int
-nfs_unlock(v)
-	void *v;
+nfs_unlock(vp)
+	struct vnode *vp;
 {
-#if 0
-	struct vop_unlock_args /* {
-		struct vnode *a_vp;
-	} */ *ap = v;
-#endif
-	return (0);
+	register struct nfsnode *np = VTONFS(vp);
+
+	np->n_lockholder = 0;
+	np->n_flag &= ~NLOCKED;
+	if (np->n_flag & NWANT) {
+		np->n_flag &= ~NWANT;
+		wakeup((caddr_t)np);
+	}
 }
 
 /*
  * Check for a locked nfsnode
  */
-int
-nfs_islocked(v)
-	void *v;
+nfs_islocked(vp)
+	struct vnode *vp;
 {
-#if 0
-	struct vop_islocked_args /* {
-		struct vnode *a_vp;
-	} */ *ap = v;
-#endif
+
+	if (VTONFS(vp)->n_flag & NLOCKED)
+		return (1);
 	return (0);
 }
-#endif /* Lite2_integrated */
+
+/*
+ * Unlock and vrele()
+ * since I can't decide if dirs. should be locked, I will check for
+ * the lock and be flexible
+ */
+nfs_nput(vp)
+	struct vnode *vp;
+{
+	register struct nfsnode *np = VTONFS(vp);
+
+	if (np->n_flag & NLOCKED)
+		nfs_unlock(vp);
+	vrele(vp);
+}
+
+/*
+ * Nfs abort op, called after namei() when a CREATE/DELETE isn't actually
+ * done. Currently nothing to do.
+ */
+/* ARGSUSED */
+nfs_abortop(ndp)
+	struct nameidata *ndp;
+{
+
+	if ((ndp->ni_nameiop & (HASBUF | SAVESTART)) == HASBUF)
+		FREE(ndp->ni_pnbuf, M_NAMEI);
+	return (0);
+}

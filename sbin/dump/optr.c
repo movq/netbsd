@@ -1,8 +1,6 @@
-/*	$NetBSD: optr.c,v 1.12 1997/09/15 07:58:06 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,45 +31,43 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)optr.c	8.2 (Berkeley) 1/6/94";
-#else
-__RCSID("$NetBSD: optr.c,v 1.12 1997/09/15 07:58:06 lukem Exp $");
-#endif
+/* from: static char sccsid[] = "@(#)optr.c	5.14 (Berkeley) 7/16/92"; */
+static char *rcsid = "$Id: optr.c,v 1.1 1993/12/22 10:24:50 cgd Exp $";
 #endif /* not lint */
 
+#ifdef sunos
+#include <stdio.h>
+#include <ctype.h>
 #include <sys/param.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <sys/time.h>
-
-#include <errno.h>
+#else
+#include <sys/param.h>
+#include <sys/wait.h>
+#include <stdio.h>
+#endif
+#include <signal.h>
+#include <time.h>
 #include <fstab.h>
 #include <grp.h>
-#include <signal.h>
-#include <stdio.h>
+#include <utmp.h>
+#include <tzfile.h>
+#include <errno.h>
 #ifdef __STDC__
+#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#endif
-#include <tzfile.h>
-#ifdef __STDC__
-#include <unistd.h>
-#endif
-#include <utmp.h>
-#ifndef __STDC__
+#else
 #include <varargs.h>
 #endif
-
 #include "dump.h"
 #include "pathnames.h"
 
-void	alarmcatch __P((int));
-struct fstab *allocfsent __P((struct fstab *fs));
-int	datesort __P((const void *, const void *));
-static	void sendmes __P((char *, char *));
+static void alarmcatch();
+static void sendmes();
 
 /*
  *	Query the operator; This previously-fascist piece of code
@@ -84,8 +80,8 @@ static	void sendmes __P((char *, char *));
  *	Every 2 minutes we reprint the message, alerting others
  *	that dump needs attention.
  */
-static	int timeout;
-static	char *attnmessage;		/* attention message */
+int	timeout;
+char	*attnmessage;		/* attention message */
 
 int
 query(question)
@@ -94,15 +90,12 @@ query(question)
 	char	replybuffer[64];
 	int	back, errcount;
 	FILE	*mytty;
-	time_t	firstprompt, when_answered;
-
-	firstprompt = time((time_t *)0);
 
 	if ((mytty = fopen(_PATH_TTY, "r")) == NULL)
 		quit("fopen on %s fails: %s\n", _PATH_TTY, strerror(errno));
 	attnmessage = question;
 	timeout = 0;
-	alarmcatch(0);
+	alarmcatch();
 	back = -1;
 	errcount = 0;
 	do {
@@ -129,13 +122,6 @@ query(question)
 	if (signal(SIGALRM, sig) == SIG_IGN)
 		signal(SIGALRM, SIG_IGN);
 	(void) fclose(mytty);
-	when_answered = time((time_t *)0);
-	/*
-	 * Adjust the base for time estimates to ignore time we spent waiting
-	 * for operator input.
-	 */
-	if (tstart_writing != 0)
-	    tstart_writing += (when_answered - firstprompt);
 	return(back);
 }
 
@@ -145,9 +131,8 @@ char lastmsg[100];
  *	Alert the console operator, and enable the alarm clock to
  *	sleep for 2 minutes in case nobody comes to satisfy dump
  */
-void
-alarmcatch(dummy)
-	int dummy;
+static void
+alarmcatch()
 {
 	if (notify == 0) {
 		if (timeout == 0)
@@ -205,6 +190,7 @@ set_operators()
 	}
 }
 
+struct tm *localtime();
 struct tm *localclock;
 
 /*
@@ -272,13 +258,12 @@ sendmes(tty, message)
 	char *tty, *message;
 {
 	char t[50], buf[BUFSIZ];
-	char *cp;
+	register char *cp;
 	int lmsg = 1;
 	FILE *f_tty;
 
-	(void)strncpy(t, _PATH_DEV, sizeof(t) - 1);
-	(void)strncat(t, tty, sizeof(t) - sizeof(_PATH_DEV) - 1);
-	t[sizeof(t) - 1] = '\0';
+	(void) strcpy(t, _PATH_DEV);
+	(void) strcat(t, tty);
 
 	if ((f_tty = fopen(t, "w")) != NULL) {
 		setbuf(f_tty, buf);
@@ -353,7 +338,7 @@ msg(fmt, va_alist)
 	(void) vfprintf(stderr, fmt, ap);
 	(void) fflush(stdout);
 	(void) fflush(stderr);
-	(void) vsnprintf(lastmsg, sizeof lastmsg, fmt, ap);
+	(void) vsprintf(lastmsg, fmt, ap);
 	va_end(ap);
 }
 
@@ -410,9 +395,9 @@ quit(fmt, va_alist)
 
 struct fstab *
 allocfsent(fs)
-	struct fstab *fs;
+	register struct fstab *fs;
 {
-	struct fstab *new;
+	register struct fstab *new;
 
 	new = (struct fstab *)malloc(sizeof (*fs));
 	if (new == NULL ||
@@ -435,21 +420,18 @@ static	struct pfstab *table;
 void
 getfstab()
 {
-	struct fstab *fs;
-	struct pfstab *pf;
+	register struct fstab *fs;
+	register struct pfstab *pf;
 
 	if (setfsent() == 0) {
 		msg("Can't open %s for dump table information: %s\n",
 		    _PATH_FSTAB, strerror(errno));
 		return;
 	}
-	while ((fs = getfsent()) != NULL) {
+	while (fs = getfsent()) {
 		if (strcmp(fs->fs_type, FSTAB_RW) &&
 		    strcmp(fs->fs_type, FSTAB_RO) &&
 		    strcmp(fs->fs_type, FSTAB_RQ))
-			continue;
-		if (strcmp(fs->fs_vfstype, "ufs") &&
-		    strcmp(fs->fs_vfstype, "ffs"))
 			continue;
 		fs = allocfsent(fs);
 		if ((pf = (struct pfstab *)malloc(sizeof (*pf))) == NULL)
@@ -476,9 +458,9 @@ struct fstab *
 fstabsearch(key)
 	char *key;
 {
-	struct pfstab *pf;
-	struct fstab *fs;
-	char *rn;
+	register struct pfstab *pf;
+	register struct fstab *fs;
+	char *rn, *rawname();
 
 	for (pf = table; pf != NULL; pf = pf->pf_next) {
 		fs = pf->pf_fstab;
@@ -507,11 +489,11 @@ void
 lastdump(arg)
 	char	arg;	/* w ==> just what to do; W ==> most recent dumps */
 {
-	int i;
-	struct fstab *dt;
-	struct dumpdates *dtwalk;
+	register int i;
+	register struct fstab *dt;
+	register struct dumpdates *dtwalk;
 	char *lastname, *date;
-	int dumpme;
+	int dumpme, datesort();
 	time_t tnow;
 
 	(void) time(&tnow);
@@ -529,8 +511,7 @@ lastdump(arg)
 		    sizeof(dtwalk->dd_name)) == 0)
 			continue;
 		date = (char *)ctime(&dtwalk->dd_ddate);
-		date[24] = '\0';
-		strcpy(date + 16, date + 19);	/* blast away seconds */
+		date[16] = '\0';	/* blast away seconds and year */
 		lastname = dtwalk->dd_name;
 		dt = fstabsearch(dtwalk->dd_name);
 		dumpme = (dt != NULL &&
@@ -549,7 +530,7 @@ lastdump(arg)
 
 int
 datesort(a1, a2)
-	const void *a1, *a2;
+	void *a1, *a2;
 {
 	struct dumpdates *d1 = *(struct dumpdates **)a1;
 	struct dumpdates *d2 = *(struct dumpdates **)a2;
@@ -560,3 +541,4 @@ datesort(a1, a2)
 		return (d2->dd_ddate - d1->dd_ddate);
 	return (diff);
 }
+

@@ -1,8 +1,6 @@
-/*	$NetBSD: lstInsert.c,v 1.7 1997/09/28 03:31:28 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1989, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Adam de Boor.
@@ -36,18 +34,9 @@
  * SUCH DAMAGE.
  */
 
-#ifdef MAKE_BOOTSTRAP
-static char rcsid[] = "$NetBSD: lstInsert.c,v 1.7 1997/09/28 03:31:28 lukem Exp $";
-#else
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lstInsert.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: lstInsert.c,v 1.7 1997/09/28 03:31:28 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)lstInsert.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
-#endif
 
 /*-
  * LstInsert.c --
@@ -87,17 +76,17 @@ Lst_Insert (l, ln, d)
      */
     if (LstValid (l) && (LstIsEmpty (l) && ln == NILLNODE))
 	goto ok;
-
+    
     if (!LstValid (l) || LstIsEmpty (l) || !LstNodeValid (ln, l)) {
 	return (FAILURE);
     }
-
+    
     ok:
     PAlloc (nLNode, ListNode);
-
+    
     nLNode->datum = d;
     nLNode->useCount = nLNode->flags = 0;
-
+    
     if (ln == NILLNODE) {
 	if (list->isCirc) {
 	    nLNode->prevPtr = nLNode->nextPtr = nLNode;
@@ -108,17 +97,17 @@ Lst_Insert (l, ln, d)
     } else {
 	nLNode->prevPtr = lNode->prevPtr;
 	nLNode->nextPtr = lNode;
-
+	
 	if (nLNode->prevPtr != NilListNode) {
 	    nLNode->prevPtr->nextPtr = nLNode;
 	}
 	lNode->prevPtr = nLNode;
-
+	
 	if (lNode == list->firstPtr) {
 	    list->firstPtr = nLNode;
 	}
     }
-
+    
     return (SUCCESS);
 }
-
+	

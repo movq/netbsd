@@ -1,5 +1,3 @@
-/*	$NetBSD: kvm_getloadavg.c,v 1.4 1997/08/15 02:21:58 mikel Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
 static char sccsid[] = "@(#)kvm_getloadavg.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: kvm_getloadavg.c,v 1.4 1997/08/15 02:21:58 mikel Exp $");
-#endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>
@@ -54,7 +47,6 @@ __RCSID("$NetBSD: kvm_getloadavg.c,v 1.4 1997/08/15 02:21:58 mikel Exp $");
 #include <limits.h>
 #include <nlist.h>
 #include <kvm.h>
-#include <stdlib.h>
 
 #include "kvm_private.h"
 

@@ -1,5 +1,3 @@
-/*	$NetBSD: setpgrp.c,v 1.5 1997/07/13 18:50:11 christos Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -33,19 +31,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "@(#)setpgrp.c	5.2 (Berkeley) 2/24/91";
-#else
-__RCSID("$NetBSD: setpgrp.c,v 1.5 1997/07/13 18:50:11 christos Exp $");
-#endif
+static char sccsid[] = "@(#)setpgrp.c	5.2 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
 #include <unistd.h>
 
-int
 #if __STDC__
 setpgrp(pid_t pid, pid_t pgid)
 #else

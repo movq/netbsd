@@ -1,8 +1,6 @@
-/*	$NetBSD: replace.c,v 1.8 1997/10/18 11:53:32 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Hugh Smith at The University of Guelph.
@@ -36,28 +34,25 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)replace.c	8.4 (Berkeley) 4/27/95";
-#else
-__RCSID("$NetBSD: replace.c,v 1.8 1997/10/18 11:53:32 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)replace.c	5.8 (Berkeley) 3/15/91";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
-
-#include <ar.h>
-#include <dirent.h>
-#include <err.h>
 #include <fcntl.h>
+#include <dirent.h>
+#include <errno.h>
+#include <unistd.h>
+#include <ar.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
-
 #include "archive.h"
 #include "extern.h"
+
+extern CHDR chdr;			/* converted header */
+extern char *archive;			/* archive name */
+extern char *tname;                     /* temporary file "name" */
 
 /*
  * replace --
@@ -66,17 +61,19 @@ __RCSID("$NetBSD: replace.c,v 1.8 1997/10/18 11:53:32 lukem Exp $");
  *	the key entry, based on the a, b and i options.  If the u option
  *	is specified, modification dates select for replacement.
  */
-int
 replace(argv)
 	char **argv;
 {
-	char *file;
-	int afd, curfd, errflg, exists, mods, sfd, tfd1, tfd2;
+	extern char *posarg, *posname;	/* positioning file name */
+	register char *file;
+	register int afd, curfd, mods, sfd;
 	struct stat sb;
 	CF cf;
 	off_t size, tsize;
+	int err, exists, tfd1, tfd2;
+	char *rname();
 
-	errflg = 0;
+	err = 0;
 	/*
 	 * If doesn't exist, simply append to the archive.  There's
 	 * a race here, but it's pretty short, and not worth fixing.
@@ -104,15 +101,14 @@ replace(argv)
 	for (curfd = tfd1; get_arobj(afd);) {
 		if (*argv && (file = files(argv))) {
 			if ((sfd = open(file, O_RDONLY)) < 0) {
-				errflg = 1;
-				warn("%s", file);
+				err = 1;
+				(void)fprintf(stderr, "ar: %s: %s.\n",
+				    file, strerror(errno));
 				goto useold;
 			}
 			(void)fstat(sfd, &sb);
-			if (options & AR_U && sb.st_mtime <= chdr.date) {
-				(void)close(sfd);
+			if (options & AR_U && sb.st_mtime <= chdr.date)
 				goto useold;
-			}
 
 			if (options & AR_V)
 			     (void)printf("r - %s\n", file);
@@ -142,19 +138,20 @@ useold:			SETCF(afd, archive, curfd, tname, RPAD|WPAD);
 	}
 
 	if (mods) {
-		warnx("%s: archive member not found", posarg);
+		(void)fprintf(stderr, "ar: %s: archive member not found.\n",
+		    posarg);
                 close_archive(afd);
-                return (1);
+                return(1);
         }
 
 	/* Append any left-over arguments to the end of the after file. */
-append:
-	while ((file = *argv++) != NULL) {
+append:	while (file = *argv++) {
 		if (options & AR_V)
 			(void)printf("a - %s\n", file);
 		if ((sfd = open(file, O_RDONLY)) < 0) {
-			errflg = 1;
-			warn("%s", file);
+			err = 1;
+			(void)fprintf(stderr, "ar: %s: %s.\n",
+			    file, strerror(errno));
 			continue;
 		}
 		(void)fstat(sfd, &sb);
@@ -182,5 +179,5 @@ append:
 
 	(void)ftruncate(afd, tsize + SARMAG);
 	close_archive(afd);
-	return (errflg);
+	return(err);
 }	

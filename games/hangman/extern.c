@@ -1,8 +1,6 @@
-/*	$NetBSD: extern.c,v 1.4 1997/10/11 01:16:27 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,46 +31,44 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)extern.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: extern.c,v 1.4 1997/10/11 01:16:27 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)extern.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include	"hangman.h"
+# include	"hangman.h"
 
-bool    Guessed[26];
+bool	Guessed[26];
 
-char    Word[BUFSIZ], Known[BUFSIZ], *Noose_pict[] = {
-	"     ______",
-	"     |    |",
-	"     |",
-	"     |",
-	"     |",
-	"     |",
-	"   __|_____",
-	"   |      |___",
-	"   |_________|",
-	NULL
+char	Word[BUFSIZ],
+	Known[BUFSIZ],
+	*Noose_pict[] = {
+		"     ______",
+		"     |    |",
+		"     |",
+		"     |",
+		"     |",
+		"     |",
+		"   __|_____",
+		"   |      |___",
+		"   |_________|",
+		NULL
+	};
+
+int	Errors,
+	Wordnum = 0;
+
+double	Average = 0.0;
+
+ERR_POS	Err_pos[MAXERRS] = {
+	{  2, 10, 'O' },
+	{  3, 10, '|' },
+	{  4, 10, '|' },
+	{  5,  9, '/' },
+	{  3,  9, '/' },
+	{  3, 11, '\\' },
+	{  5, 11, '\\' }
 };
 
-int     Errors, Wordnum = 0;
+FILE	*Dict = NULL;
 
-double  Average = 0.0;
-
-ERR_POS Err_pos[MAXERRS] = {
-	{2, 10, 'O'},
-	{3, 10, '|'},
-	{4, 10, '|'},
-	{5, 9, '/'},
-	{3, 9, '/'},
-	{3, 11, '\\'},
-	{5, 11, '\\'}
-};
-
-FILE   *Dict = NULL;
-
-off_t   Dict_size;
+off_t	Dict_size;

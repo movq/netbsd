@@ -1,8 +1,6 @@
-/*	$NetBSD: dkcksum.c,v 1.8 1997/09/14 08:50:18 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,25 +31,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)dkcksum.c	8.1 (Berkeley) 6/5/93";
-#else
-__RCSID("$NetBSD: dkcksum.c,v 1.8 1997/09/14 08:50:18 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)dkcksum.c	5.1 (Berkeley) 2/21/91";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/disklabel.h>
-#include "dkcksum.h"
 
 u_short
 dkcksum(lp)
-	struct disklabel *lp;
+	register struct disklabel *lp;
 {
-	u_short *start, *end;
-	u_short sum = 0;
+	register u_short *start, *end;
+	register u_short sum = 0;
 
 	start = (u_short *)lp;
 	end = (u_short *)&lp->d_partitions[lp->d_npartitions];

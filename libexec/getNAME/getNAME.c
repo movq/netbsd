@@ -1,8 +1,6 @@
-/*	$NetBSD: getNAME.c,v 1.7 1997/10/20 02:00:36 enami Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,15 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#if 0
-static char sccsid[] = "@(#)getNAME.c	8.1 (Berkeley) 6/30/93";
-#else
-__RCSID("$NetBSD: getNAME.c,v 1.7 1997/10/20 02:00:36 enami Exp $");
-#endif
+char copyright[] =
+"@(#) Copyright (c) 1980 The Regents of the University of California.\n\
+ All rights reserved.\n";
+#endif /* not lint */
+
+#ifndef lint
+static char sccsid[] = "@(#)getNAME.c	5.4 (Berkeley) 1/20/91";
 #endif /* not lint */
 
 /*
@@ -51,38 +48,25 @@ __RCSID("$NetBSD: getNAME.c,v 1.7 1997/10/20 02:00:36 enami Exp $");
  *	other	apropos database
  */
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 int tocrc;
 int intro;
-int typeflag;
 
-void doname __P((char *));
-void dorefname __P((char *));
-void getfrom __P((char *));
-void split __P((char *, char *));
-void trimln __P((char *));
-void usage __P((void));
-int main __P((int, char *[]));
-
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
+	extern int optind;
 	int ch;
 
-	while ((ch = getopt(argc, argv, "itw")) != -1)
-		switch (ch) {
+	while ((ch = getopt(argc, argv, "it")) != EOF)
+		switch(ch) {
 		case 'i':
 			intro = 1;
 			break;
 		case 't':
 			tocrc = 1;
-			break;
-		case 'w':
-			typeflag = 1;
 			break;
 		case '?':
 		default:
@@ -99,45 +83,26 @@ main(argc, argv)
 	exit(0);
 }
 
-void
-getfrom(pathname)
-	char *pathname;
+getfrom(name)
+	char *name;
 {
 	int i = 0;
-	char *name, *loc;
 	char headbuf[BUFSIZ];
 	char linbuf[BUFSIZ];
 
-	if (freopen(pathname, "r", stdin) == 0) {
-		perror(pathname);
+	if (freopen(name, "r", stdin) == 0) {
+		perror(name);
 		return;
 	}
-	if ((name = strrchr(pathname, '/')))
-		name++;
-	else
-		name = pathname;
 	for (;;) {
-		if (fgets(headbuf, sizeof headbuf, stdin) == NULL) {
-			if (typeflag)
-				printf("%-60s	UNKNOWN\n", pathname);
+		if (fgets(headbuf, sizeof headbuf, stdin) == NULL)
 			return;
-		}
 		if (headbuf[0] != '.')
 			continue;
-		if ((headbuf[1] == 'T' && headbuf[2] == 'H') ||
-		    (headbuf[1] == 't' && headbuf[2] == 'h'))
+		if (headbuf[1] == 'T' && headbuf[2] == 'H')
 			break;
-		if (headbuf[1] == 'D' && headbuf[2] == 't') {
-			if (typeflag) {
-				printf("%-60s	NEW\n", pathname);
-				return;
-			}
-			goto newman;
-		}
-	}
-	if (typeflag) {
-		printf("%-60s	OLD\n", pathname);
-		return;
+		if (headbuf[1] == 't' && headbuf[2] == 'h')
+			break;
 	}
 	for (;;) {
 		if (fgets(linbuf, sizeof linbuf, stdin) == NULL)
@@ -152,99 +117,30 @@ getfrom(pathname)
 	trimln(headbuf);
 	if (tocrc)
 		doname(name);
-	if (!tocrc && !intro)
+	if (!intro)
 		printf("%s\t", headbuf);
-	linbuf[0] = '\0';
-	for (;;) {
-		if (fgets(headbuf, sizeof headbuf, stdin) == NULL)
-			break;
-		if (headbuf[0] == '.') {
-			if (headbuf[1] == 'S' && headbuf[2] == 'H')
-				break;
-			if (headbuf[1] == 's' && headbuf[2] == 'h')
-				break;
-		}
-		if (i != 0)
-			strcat(linbuf, " ");
-		i++;
-		trimln(headbuf);
-		strcat(linbuf, headbuf);
-	}
-	if (intro)
-		split(linbuf, name);
-	else
-		printf("%s\n", linbuf);
-	return;
-
-newman:
 	for (;;) {
 		if (fgets(linbuf, sizeof linbuf, stdin) == NULL)
-			return;
-		if (linbuf[0] != '.')
-			continue;
-		if (linbuf[1] == 'S' && linbuf[2] == 'h')
 			break;
-	}
-	trimln(headbuf);
-	if (tocrc)
-		doname(name);
-	if (!tocrc && !intro)
-		printf(".TH%s\t", &headbuf[3]);
-	linbuf[0] = '\0';
-	for (;;) {
-		if (fgets(headbuf, sizeof headbuf, stdin) == NULL)
-			break;
-		if (headbuf[0] == '.') {
-			if (headbuf[1] == 'S' && headbuf[2] == 'h')
+		if (linbuf[0] == '.') {
+			if (linbuf[1] == 'S' && linbuf[2] == 'H')
+				break;
+			if (linbuf[1] == 's' && linbuf[2] == 'h')
 				break;
 		}
-		if (i != 0)
-			strcat(linbuf, " ");
-		i++;
-		trimln(headbuf);
-		for (loc = strchr(headbuf, ' '); loc; loc = strchr(loc, ' '))
-			if (loc[1] == ',')
-				strcpy(loc, &loc[1]);
-			else
-				loc++;
-		if (headbuf[0] != '.') {
-			strcat(linbuf, headbuf);
-		} else {
-			/*
-			 * Get rid of quotes in macros.
-			 */
-			for (loc = strchr(&headbuf[4], '"'); loc; ) {
-				strcpy(loc, &loc[1]);
-				loc = strchr(loc, '"');
-			}
-			/*
-			 * Handle cross references
-			 */
-			if (headbuf[1] == 'X' && headbuf[2] == 'r') {
-				for (loc = &headbuf[4]; *loc != ' '; loc++)
-					continue;
-				loc[0] = '(';
-				loc[2] = ')';
-				loc[3] = '\0';
-			}
-			/*
-			 * Put dash between names and description.
-			 */
-			if (headbuf[1] == 'N' && headbuf[2] == 'd')
-				strcat(linbuf, "\\- ");
-			/*
-			 * Skip over macro names.
-			 */
-			strcat(linbuf, &headbuf[4]);
+		trimln(linbuf);
+		if (intro) {
+			split(linbuf, name);
+			continue;
 		}
+		if (i != 0)
+			printf(" ");
+		i++;
+		printf("%s", linbuf);
 	}
-	if (intro)
-		split(linbuf, name);
-	else
-		printf("%s\n", linbuf);
+	printf("\n");
 }
 
-void
 trimln(cp)
 	register char *cp;
 {
@@ -255,7 +151,6 @@ trimln(cp)
 		*cp = 0;
 }
 
-void
 doname(name)
 	char *name;
 {
@@ -279,14 +174,13 @@ again:
 	putchar(' ');
 }
 
-void
 split(line, name)
 	char *line, *name;
 {
 	register char *cp, *dp;
 	char *sp, *sep;
 
-	cp = strchr(line, '-');
+	cp = index(line, '-');
 	if (cp == 0)
 		return;
 	sp = cp + 1;
@@ -296,7 +190,7 @@ split(line, name)
 	while (*sp && (*sp == ' ' || *sp == '\t'))
 		sp++;
 	for (sep = "", dp = line; dp && *dp; dp = cp, sep = "\n") {
-		cp = strchr(dp, ',');
+		cp = index(dp, ',');
 		if (cp) {
 			register char *tp;
 
@@ -312,7 +206,6 @@ split(line, name)
 	}
 }
 
-void
 dorefname(name)
 	char *name;
 {
@@ -334,7 +227,6 @@ again:
 		putchar (*dp++);
 }
 
-void
 usage()
 {
 	(void)fprintf(stderr, "usage: getNAME [-it] file ...\n");

@@ -1,8 +1,6 @@
-/*	$NetBSD: signal.c,v 1.9 1997/07/21 14:07:33 jtc Exp $	*/
-
 /*
- * Copyright (c) 1985, 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1985, 1989 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,22 +31,16 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)signal.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: signal.c,v 1.9 1997/07/21 14:07:33 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)signal.c	5.5 (Berkeley) 6/1/90";
 #endif /* LIBC_SCCS and not lint */
 
 /*
  * Almost backwards compatible signal.
  */
-#include "namespace.h"
 #include <signal.h>
 
-sigset_t __sigintr;		/* shared with siginterrupt */
+sigset_t _sigintr;		/* shared with siginterrupt */
 
 sig_t
 signal(s, a)
@@ -60,9 +52,9 @@ signal(s, a)
 	sa.sa_handler = a;
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = 0;
-	if (!sigismember(&__sigintr, s))
+	if (!sigismember(&_sigintr, s))
 		sa.sa_flags |= SA_RESTART;
 	if (sigaction(s, &sa, &osa) < 0)
-		return (SIG_ERR);
+		return (BADSIG);
 	return (osa.sa_handler);
 }

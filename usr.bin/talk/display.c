@@ -1,8 +1,6 @@
-/*	$NetBSD: display.c,v 1.5 1997/10/20 00:23:17 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,12 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)display.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: display.c,v 1.5 1997/10/20 00:23:17 lukem Exp $");
+static char sccsid[] = "@(#)display.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -46,7 +40,6 @@ __RCSID("$NetBSD: display.c,v 1.5 1997/10/20 00:23:17 lukem Exp $");
  * displaying of text
  */
 #include "talk.h"
-#include <ctype.h>
 
 xwin_t	my_win;
 xwin_t	his_win;
@@ -58,7 +51,6 @@ int	curses_initialized = 0;
  * max HAS to be a function, it is called with
  * a argument of the form --foo at least once.
  */
-int
 max(a,b)
 	int a, b;
 {
@@ -70,13 +62,12 @@ max(a,b)
  * Display some text on somebody's window, processing some control
  * characters while we are at it.
  */
-void
 display(win, text, size)
-	xwin_t *win;
-	char *text;
+	register xwin_t *win;
+	register char *text;
 	int size;
 {
-	int i;
+	register int i;
 	char cch;
 
 	for (i = 0; i < size; i++) {
@@ -122,7 +113,6 @@ display(win, text, size)
 				waddch(win->x_win, ' ');
 			wmove(win->x_win, win->x_line, xcol + 1);
 			getyx(win->x_win, win->x_line, win->x_col);
-			text++;
 			continue;
 		}
 		/* line kill */
@@ -143,7 +133,7 @@ display(win, text, size)
 			/* check for wraparound */
 			xscroll(win, 0);
 		}
-		if ( !isprint((u_char)*text) && *text != '\t') {
+		if (*text < ' ' && *text != '\t') {
 			waddch(win->x_win, '^');
 			getyx(win->x_win, win->x_line, win->x_col);
 			if (win->x_col == COLS-1) /* check for wraparound */
@@ -161,13 +151,11 @@ display(win, text, size)
 /*
  * Read the character at the indicated position in win
  */
-int
 readwin(win, line, col)
 	WINDOW *win;
-	int line, col;
 {
 	int oldline, oldcol;
-	int c;
+	register int c;
 
 	getyx(win, oldline, oldcol);
 	wmove(win, line, col);
@@ -180,9 +168,8 @@ readwin(win, line, col)
  * Scroll a window, blanking out the line following the current line
  * so that the current position is obvious
  */
-void
 xscroll(win, flag)
-	xwin_t *win;
+	register xwin_t *win;
 	int flag;
 {
 

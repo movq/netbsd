@@ -1,5 +1,3 @@
-/*	$NetBSD: stddef.h,v 1.4 1994/10/26 00:56:26 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -40,16 +38,16 @@
 
 #include <machine/ansi.h>
 
-typedef	_BSD_PTRDIFF_T_	ptrdiff_t;
+typedef	_PTRDIFF_T_	ptrdiff_t;
 
-#ifdef	_BSD_SIZE_T_
-typedef	_BSD_SIZE_T_	size_t;
-#undef	_BSD_SIZE_T_
+#ifdef	_SIZE_T_
+typedef	_SIZE_T_	size_t;
+#undef	_SIZE_T_
 #endif
 
-#ifdef	_BSD_WCHAR_T_
-typedef	_BSD_WCHAR_T_	wchar_t;
-#undef	_BSD_WCHAR_T_
+#ifdef	_WCHAR_T_
+typedef	_WCHAR_T_	wchar_t;
+#undef	_WCHAR_T_
 #endif
 
 #ifndef	NULL

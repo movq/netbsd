@@ -1,8 +1,6 @@
-/*	$NetBSD: clri.c,v 1.11 1997/09/16 02:33:48 lukem Exp $	*/
-
 /*
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Rich $alz of BBN Inc.
@@ -36,50 +34,42 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1990 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)clri.c	8.3 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: clri.c,v 1.11 1997/09/16 02:33:48 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)clri.c	5.3 (Berkeley) 6/29/91";
 #endif /* not lint */
+
+/*
+ * clri(8)
+ */
 
 #include <sys/param.h>
-#include <sys/time.h>
-
-#include <ufs/ufs/dinode.h>
-#include <ufs/ffs/fs.h>
-
-#include <err.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
+#include <ufs/quota.h>
+#include <ufs/inode.h>
+#include <ufs/fs.h>
 #include <unistd.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <errno.h>
 
-int	main __P((int, char *[]));
+char *fs;
 
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	struct fs *sbp;
-	struct dinode *ip;
-	int fd;
+	register struct fs *sbp;
+	register struct dinode *ip;
+	register int fd;
 	struct dinode ibuf[MAXBSIZE / sizeof (struct dinode)];
-	int32_t generation;
-	off_t offset;
-	size_t bsize;
+	long generation, offset, bsize;
 	int inonum;
-	char *fs, sblock[SBSIZE];
+	char sblock[SBSIZE];
 
 	if (argc < 3) {
 		(void)fprintf(stderr, "usage: clri filesystem inode ...\n");
@@ -90,51 +80,66 @@ main(argc, argv)
 
 	/* get the superblock. */
 	if ((fd = open(fs, O_RDWR, 0)) < 0)
-		err(1, "%s", fs);
-	if (lseek(fd, (off_t)(SBLOCK * DEV_BSIZE), SEEK_SET) < 0)
-		err(1, "%s", fs);
-	if (read(fd, sblock, sizeof(sblock)) != sizeof(sblock))
-		errx(1, "%s: can't read superblock", fs);
+		error();
+	if (lseek(fd, SBLOCK * DEV_BSIZE, SEEK_SET) < 0)
+		error();
+	if (read(fd, sblock, sizeof(sblock)) != sizeof(sblock)) {
+		(void)fprintf(stderr,
+		    "clri: %s: can't read the superblock.\n", fs);
+		exit(1);
+	}
 
 	sbp = (struct fs *)sblock;
-	if (sbp->fs_magic != FS_MAGIC)
-		errx(1, "%s: superblock magic number 0x%x, not 0x%x",
+	if (sbp->fs_magic != FS_MAGIC) {
+		(void)fprintf(stderr,
+		    "clri: %s: superblock magic number 0x%x, not 0x%x.\n",
 		    fs, sbp->fs_magic, FS_MAGIC);
+		exit(1);
+	}
 	bsize = sbp->fs_bsize;
 
 	/* remaining arguments are inode numbers. */
 	while (*++argv) {
 		/* get the inode number. */
-		if ((inonum = atoi(*argv)) <= 0)
-			errx(1, "%s is not a valid inode number", *argv);
+		if ((inonum = atoi(*argv)) <= 0) {
+			(void)fprintf(stderr,
+			    "clri: %s is not a valid inode number.\n", *argv);
+			exit(1);
+		}
 		(void)printf("clearing %d\n", inonum);
 
 		/* read in the appropriate block. */
-		offset = ino_to_fsba(sbp, inonum);	/* inode to fs blk */
-		offset = fsbtodb(sbp, offset);		/* fs blk disk blk */
-		offset *= DEV_BSIZE;			/* disk blk to bytes */
+		offset = itod(sbp, inonum);	/* inode to fs block */
+		offset = fsbtodb(sbp, offset);	/* fs block to disk block */
+		offset *= DEV_BSIZE;		/* disk block to disk bytes */
 
 		/* seek and read the block */
 		if (lseek(fd, offset, SEEK_SET) < 0)
-			err(1, "%s", fs);
-		if (read(fd, ibuf, bsize) != bsize)
-			err(1, "%s", fs);
+			error();
+		if (read(fd, (char *)ibuf, bsize) != bsize)
+			error();
 
 		/* get the inode within the block. */
-		ip = &ibuf[ino_to_fsbo(sbp, inonum)];
+		ip = &ibuf[itoo(sbp, inonum)];
 
 		/* clear the inode, and bump the generation count. */
 		generation = ip->di_gen + 1;
-		memset(ip, 0, sizeof(*ip));
+		bzero((char *)ip, sizeof *ip);
 		ip->di_gen = generation;
 
 		/* backup and write the block */
-		if (lseek(fd, offset, SEEK_SET) < 0)
-			err(1, "%s", fs);
-		if (write(fd, ibuf, bsize) != bsize)
-			err(1, "%s", fs);
+		if (lseek(fd, -bsize, SEEK_CUR) < 0)
+			error();
+		if (write(fd, (char *)ibuf, bsize) != bsize)
+			error();
 		(void)fsync(fd);
 	}
 	(void)close(fd);
 	exit(0);
+}
+
+error()
+{
+	(void)fprintf(stderr, "clri: %s: %s\n", fs, strerror(errno));
+	exit(1);
 }

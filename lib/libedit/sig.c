@@ -1,5 +1,3 @@
-/*	$NetBSD: sig.c,v 1.4 1997/07/06 18:25:35 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if !defined(lint) && !defined(SCCSID)
-#if 0
 static char sccsid[] = "@(#)sig.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: sig.c,v 1.4 1997/07/06 18:25:35 christos Exp $");
-#endif
 #endif /* not lint && not SCCSID */
 
 /*
@@ -128,7 +121,7 @@ sig_init(el)
 
     el->el_signal = (sig_t *) el_malloc(SIGSIZE);
     for (i = 0; sighdl[i] != -1; i++) 
-	el->el_signal[i] = SIG_ERR;
+	el->el_signal[i] = BADSIG;
 
     (void) sigprocmask(SIG_SETMASK, &oset, NULL);
 
@@ -192,7 +185,7 @@ sig_clr(el)
     (void) sigprocmask(SIG_BLOCK, &nset, &oset);
 
     for (i = 0; sighdl[i] != -1; i++) 
-	if (el->el_signal[i] != SIG_ERR)
+	if (el->el_signal[i] != BADSIG)
 	    (void) signal(sighdl[i], el->el_signal[i]);
 
     sel = NULL;	/* we are going to die if the handler is called */

@@ -1,5 +1,5 @@
-/*	$NetBSD: tp_states.h,v 1.4 1994/06/29 06:40:31 cgd Exp $	*/
-
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_states.h,v 1.1 1993/04/09 12:01:48 cgd Exp $ */
+/* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_states.h,v $ */
 #define ST_ERROR 0x0
 #define TP_CLOSED 0x1
 #define TP_CRSENT 0x2

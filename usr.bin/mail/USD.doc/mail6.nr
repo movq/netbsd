@@ -29,8 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)mail6.nr	8.2 (Berkeley) 5/16/94
+.\"	@(#)mail6.nr	8.1 (Berkeley) 6/8/93
 .\"
+.bp
 .sh 1 "Command line options"
 .pp
 This section describes command line options for
@@ -73,7 +74,7 @@ mail instead of your own.  Unwitting others often neglect to protect
 their mailboxes, but discretion is advised. Essentially,
 .b "\-u user"
 is a shorthand way of doing
-.b "\-f /var/mail/user".
+.b "\-f /usr/spool/mail/user".
 .ip "\-v"
 Use the
 .b \-v

@@ -1,5 +1,3 @@
-/*	$NetBSD: lfs_segment.c,v 1.9 1997/06/13 08:59:51 pk Exp $	*/
-
 /*
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)lfs_segment.c	8.5 (Berkeley) 1/4/94
+ *	from: @(#)lfs_segment.c	8.5 (Berkeley) 1/4/94
+ *	$Id: lfs_segment.c,v 1.1 1994/06/08 11:42:38 mycroft Exp $
  */
 
 #include <sys/param.h>
@@ -232,9 +231,8 @@ lfs_segwrite(mp, flags)
 		if (clean <= 2) {
 			printf ("segs clean: %d\n", clean);
 			wakeup(&lfs_allclean_wakeup);
-			error = tsleep(&fs->lfs_avail, PRIBIO + 1,
-				       "lfs writer", 0);
-			if (error)
+			if (error = tsleep(&fs->lfs_avail, PRIBIO + 1,
+			    "lfs writer", 0))
 				return (error);
 		}
 	} while (clean <= 2 );
@@ -381,7 +379,6 @@ lfs_writeinode(fs, sp, ip)
 	ino_t ino;
 	int error, i, ndx;
 	int redo_ifile = 0;
-	struct timespec ts;
 
 	if (!(ip->i_flag & (IN_ACCESS | IN_CHANGE | IN_MODIFIED | IN_UPDATE)))
 		return(0);
@@ -415,11 +412,10 @@ lfs_writeinode(fs, sp, ip)
 	/* Update the inode times and copy the inode onto the inode page. */
 	if (ip->i_flag & IN_MODIFIED)
 		--fs->lfs_uinodes;
-	TIMEVAL_TO_TIMESPEC(&time, &ts);
-	FFS_ITIMES(ip, &ts, &ts, &ts);
+	ITIMES(ip, &time, &time);
 	ip->i_flag &= ~(IN_ACCESS | IN_CHANGE | IN_MODIFIED | IN_UPDATE);
 	bp = sp->ibp;
-	((struct dinode *)bp->b_data)[sp->ninodes % INOPB(fs)] = ip->i_din.ffs_din;
+	((struct dinode *)bp->b_data)[sp->ninodes % INOPB(fs)] = ip->i_din;
 	/* Increment inode count in segment summary block. */
 	++((SEGSUM *)(sp->segsum))->ss_ninos;
 
@@ -582,16 +578,15 @@ lfs_updatemeta(sp)
 		(*sp->start_bpp)->b_blkno = off = fs->lfs_offset;
 		fs->lfs_offset += db_per_fsb;
 
-		error = ufs_bmaparray(vp, lbn, &daddr, a, &num, NULL);
-		if (error)
+		if (error = ufs_bmaparray(vp, lbn, &daddr, a, &num, NULL))
 			panic("lfs_updatemeta: ufs_bmaparray %d", error);
 		ip = VTOI(vp);
 		switch (num) {
 		case 0:
-			ip->i_ffs_db[lbn] = off;
+			ip->i_db[lbn] = off;
 			break;
 		case 1:
-			ip->i_ffs_ib[a[0].in_off] = off;
+			ip->i_ib[a[0].in_off] = off;
 			break;
 		default:
 			ap = &a[num - 1];
@@ -604,7 +599,7 @@ lfs_updatemeta(sp)
 			 */
 			if (bp->b_blkno == -1 && !(bp->b_flags & B_CACHE)) {
 printf ("Updatemeta allocating indirect block: shouldn't happen\n");
-				ip->i_ffs_blocks += btodb(fs->lfs_bsize);
+				ip->i_blocks += btodb(fs->lfs_bsize);
 				fs->lfs_bfree -= btodb(fs->lfs_bsize);
 			}
 			((daddr_t *)bp->b_data)[ap->in_off] = off;
@@ -692,7 +687,7 @@ lfs_initseg(fs)
 	ssp->ss_nfinfo = ssp->ss_ninos = 0;
 
 	/* Set pointer to first FINFO, initialize it. */
-	sp->fip = (struct finfo *)((caddr_t)sp->segsum + sizeof(SEGSUM));
+	sp->fip = (struct finfo *)(sp->segsum + sizeof(SEGSUM));
 	sp->fip->fi_nblocks = 0;
 	sp->start_lbp = &sp->fip->fi_blocks[0];
 
@@ -759,7 +754,7 @@ lfs_writeseg(fs, sp)
 	size_t size;
 	u_long *datap, *dp;
 	int ch_per_blk, do_again, i, nblocks, num, s;
-	int (*strategy)__P((void *));
+	int (*strategy)__P((struct vop_strategy_args *));
 	struct vop_strategy_args vop_strategy_a;
 	u_short ninos;
 	char *p;
@@ -777,7 +772,7 @@ lfs_writeseg(fs, sp)
 	/* Update the segment usage information. */
 	LFS_SEGENTRY(sup, fs, sp->seg_number, bp);
 	ninos = (ssp->ss_ninos + INOPB(fs) - 1) / INOPB(fs);
-	sup->su_nbytes += (nblocks - 1 - ninos) << fs->lfs_bshift;
+	sup->su_nbytes += nblocks - 1 - ninos << fs->lfs_bshift;
 	sup->su_nbytes += ssp->ss_ninos * sizeof(struct dinode);
 	sup->su_nbytes += LFS_SUMMARY_SIZE;
 	sup->su_lastmod = time.tv_sec;
@@ -921,7 +916,7 @@ lfs_writesuper(fs)
 {
 	struct buf *bp;
 	dev_t i_dev;
-	int (*strategy) __P((void *));
+	int (*strategy) __P((struct vop_strategy_args *));
 	int s;
 	struct vop_strategy_args vop_strategy_a;
 
@@ -1073,7 +1068,7 @@ lfs_shellsort(bp_array, lb_array, nmemb)
 	struct buf *bp_temp;
 	u_long lb_temp;
 
-	for (incrp = __rsshell_increments; (incr = *incrp++) != 0;)
+	for (incrp = __rsshell_increments; incr = *incrp++;)
 		for (t1 = incr; t1 < nmemb; ++t1)
 			for (t2 = t1 - incr; t2 >= 0;)
 				if (lb_array[t2] > lb_array[t2 + incr]) {
@@ -1091,7 +1086,6 @@ lfs_shellsort(bp_array, lb_array, nmemb)
 /*
  * Check VXLOCK.  Return 1 if the vnode is locked.  Otherwise, vget it.
  */
-int
 lfs_vref(vp)
 	register struct vnode *vp;
 {

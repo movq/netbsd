@@ -1,9 +1,10 @@
-#	$NetBSD: Makefile,v 1.7 1997/10/08 09:07:26 mrg Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 6/4/93
+#	@(#)Makefile	5.9 (Berkeley) 9/27/90
 
 PROG=	rlogind
-MAN=	rlogind.8
+SRCS=	rlogind.c
+MAN8=	rlogind.0
 DPADD=	${LIBUTIL}
 LDADD=	-lutil
+.PATH: ${.CURDIR}/../../usr.bin/rlogin
 
 .include <bsd.prog.mk>

@@ -1,8 +1,6 @@
-/*	$NetBSD: clnp_stat.h,v 1.6 1996/02/13 22:08:46 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)clnp_stat.h	8.1 (Berkeley) 6/10/93
+ *	@(#)clnp_stat.h	7.4 (Berkeley) 5/6/91
  */
 
 /***********************************************************
@@ -40,13 +38,13 @@
 
                       All Rights Reserved
 
-Permission to use, copy, modify, and distribute this software and its
-documentation for any purpose and without fee is hereby granted,
+Permission to use, copy, modify, and distribute this software and its 
+documentation for any purpose and without fee is hereby granted, 
 provided that the above copyright notice appear in all copies and that
-both that copyright notice and this permission notice appear in
+both that copyright notice and this permission notice appear in 
 supporting documentation, and that the name of IBM not be
 used in advertising or publicity pertaining to distribution of the
-software without specific, written prior permission.
+software without specific, written prior permission.  
 
 IBM DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
 ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
@@ -61,45 +59,45 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_stat.h,v 1.1 1993/04/09 12:00:57 cgd Exp $ */
+/* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_stat.h,v $ */
 
-#ifndef _NETISO_CLNP_STAT_H_
-#define _NETISO_CLNP_STAT_H_
+
+#ifndef __CLNP_STAT__
+#define __CLNP_STAT__
 
 struct clnp_stat {
-	int             cns_total;	/* total pkts received */
-	int             cns_toosmall;	/* fixed part of header too small */
-	int             cns_badhlen;	/* header length is not reasonable */
-	int             cns_badcsum;	/* checksum on packet failed */
-	int             cns_badaddr;	/* address fields were not reasonable */
-	int             cns_badvers;	/* incorrect version */
-	int             cns_noseg;	/* segment information forgotten */
-	int             cns_noproto;	/* incorrect protocol id */
-	int             cns_delivered;	/* packets consumed by protocol */
-	int             cns_ttlexpired;	/* ttl has expired */
-	int             cns_forward;	/* forwarded packets */
-	int             cns_sent;	/* total packets sent */
-	int             cns_odropped;	/* o.k. packets discarded, e.g.
-					 * ENOBUFS */
-	int             cns_cantforward;	/* non-forwarded packets */
-	int             cns_fragmented;	/* packets fragmented */
-	int             cns_fragments;	/* fragments received */
-	int             cns_fragdropped;	/* fragments discarded */
-	int             cns_fragtimeout;	/* fragments timed out */
-	int             cns_ofragments;	/* fragments generated */
-	int             cns_cantfrag;	/* fragmentation prohibited */
-	int             cns_reassembled;	/* packets reconstructed */
-	int             cns_cachemiss;	/* cache misses */
-	int             cns_congest_set;	/* congestion experienced bit
-						 * set */
-	int             cns_congest_rcvd;	/* congestion experienced bit
-						 * received */
-	int             cns_er_inhist[CLNP_ERRORS + 1];
-	int             cns_er_outhist[CLNP_ERRORS + 1];
-}               clnp_stat;
+	int cns_total;			/* total pkts received */
+	int	cns_toosmall;		/* fixed part of header too small */
+	int	cns_badhlen;		/* header length is not reasonable */
+	int	cns_badcsum;		/* checksum on packet failed */
+	int cns_badaddr;		/* address fields were not reasonable */
+	int	cns_badvers;		/* incorrect version */
+	int cns_noseg;			/* segment information forgotten */
+	int cns_noproto;		/* incorrect protocol id */
+	int	cns_delivered;		/* packets consumed by protocol */
+	int	cns_ttlexpired;		/* ttl has expired */
+	int cns_forward;		/* forwarded packets */
+	int cns_sent;			/* total packets sent */
+	int cns_odropped;		/* o.k. packets discarded, e.g. ENOBUFS */
+	int cns_cantforward;	/* non-forwarded packets */
+	int cns_fragmented;		/* packets fragmented */
+	int cns_fragments;		/* fragments received */
+	int cns_fragdropped;	/* fragments discarded */
+	int cns_fragtimeout;	/* fragments timed out */
+	int cns_ofragments;		/* fragments generated */
+	int cns_cantfrag;		/* fragmentation prohibited */
+	int cns_reassembled;	/* packets reconstructed */
+	int	cns_cachemiss;		/* cache misses */
+	int cns_congest_set;	/* congestion experienced bit set */
+	int cns_congest_rcvd;	/* congestion experienced bit received */
+	int cns_er_inhist[CLNP_ERRORS + 1];
+	int cns_er_outhist[CLNP_ERRORS + 1];
+} clnp_stat ;
 
 #ifdef INCSTAT
 #undef INCSTAT
-#endif				/* INCSTAT */
+#endif INCSTAT
 #define INCSTAT(x) clnp_stat./**/x/**/++
 
-#endif				/* _NETISO_CLNP_STAT_H_ */
+#endif __CLNP_STAT__

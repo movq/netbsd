@@ -1,8 +1,6 @@
-/*	$NetBSD: mt.c,v 1.24 1997/10/05 13:07:24 veego Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,185 +31,114 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)mt.c	8.2 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: mt.c,v 1.24 1997/10/05 13:07:24 veego Exp $");
-#endif
+static char sccsid[] = "@(#)mt.c	5.6 (Berkeley) 6/6/91";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/bin/mt/mt.c,v 1.1 1993/03/25 08:01:35 cgd Exp $";
 #endif /* not lint */
 
 /*
  * mt --
  *   magnetic tape manipulation program
  */
-#include <rmt.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/mtio.h>
-#include <sys/stat.h>
-
-#include <ctype.h>
-#include <err.h>
 #include <fcntl.h>
-#include <paths.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <ctype.h>
 
-/* pseudo ioctl constants */
-#define MTASF	100
+#define	equal(s1,s2)	(strcmp(s1, s2) == 0)
 
 struct commands {
-	const char *c_name;		/* command */
-	int c_spcl;			/* ioctl request */
-	int c_code;			/* ioctl code for MTIOCTOP command */
-	int c_ronly;			/* open tape read-only */
-	int c_mincount;			/* min allowed count value */
+	char *c_name;
+	int c_code;
+	int c_ronly;
+} com[] = {
+	{ "weof",	MTWEOF,	0 },
+	{ "eof",	MTWEOF,	0 },
+	{ "fsf",	MTFSF,	1 },
+	{ "bsf",	MTBSF,	1 },
+	{ "fsr",	MTFSR,	1 },
+	{ "bsr",	MTBSR,	1 },
+	{ "rewind",	MTREW,	1 },
+	{ "offline",	MTOFFL,	1 },
+	{ "rewoffl",	MTOFFL,	1 },
+	{ "status",	MTNOP,	1 },
+	{ 0 }
 };
 
-const struct commands com[] = {
-	{ "asf",	MTIOCTOP,     MTASF,      1,  1 },
-	{ "blocksize",	MTIOCTOP,     MTSETBSIZ,  1,  0 },
-	{ "bsf",	MTIOCTOP,     MTBSF,      1,  1 },
-	{ "bsr",	MTIOCTOP,     MTBSR,      1,  1 },
-	{ "compress",	MTIOCTOP,     MTCMPRESS,  1,  0 },
-	{ "density",	MTIOCTOP,     MTSETDNSTY, 1,  0 },
-	{ "eof",	MTIOCTOP,     MTWEOF,     0,  1 },
-	{ "eom",	MTIOCTOP,     MTEOM,      1,  0 },
-	{ "erase",	MTIOCTOP,     MTERASE,    0,  0 },
-	{ "fsf",	MTIOCTOP,     MTFSF,      1,  1 },
-	{ "fsr",	MTIOCTOP,     MTFSR,      1,  1 },
-	{ "offline",	MTIOCTOP,     MTOFFL,     1,  0 },
-	{ "rdhpos",     MTIOCRDHPOS,  0,          1,  0 },
-	{ "rdspos",     MTIOCRDSPOS,  0,          1,  0 },
-	{ "retension",	MTIOCTOP,     MTRETEN,    1,  0 },
-	{ "rewind",	MTIOCTOP,     MTREW,      1,  0 },
-	{ "rewoffl",	MTIOCTOP,     MTOFFL,     1,  0 },
-	{ "sethpos",    MTIOCHLOCATE, 0,          1,  0 },
-	{ "setspos",    MTIOCSLOCATE, 0,          1,  0 },
-	{ "status",	MTIOCGET,     MTNOP,      1,  0 },
-	{ "weof",	MTIOCTOP,     MTWEOF,     0,  1 },
-	{ NULL }
-};
+int mtfd;
+struct mtop mt_com;
+struct mtget mt_status;
+char *tape;
 
-void printreg __P((char *, u_int, char *));
-void status __P((struct mtget *));
-void usage __P((void));
-int  main __P((int, char *[]));
-
-int
 main(argc, argv)
-	int argc;
-	char *argv[];
+	char **argv;
 {
-	const struct commands *comp = (const struct commands *) NULL;
-	struct mtget mt_status;
-	struct mtop mt_com;
-	int ch, len, mtfd, flags;
-	char *p, *tape;
-	int count;
+	char line[80], *getenv();
+	register char *cp;
+	register struct commands *comp;
 
-	if ((tape = getenv("TAPE")) == NULL)
-		tape = _PATH_DEFTAPE;
-
-	while ((ch = getopt(argc, argv, "f:t:")) != -1)
-		switch (ch) {
-		case 'f':
-		case 't':
-			tape = optarg;
-			break;
-		case '?':
-		default:
-			usage();
-		}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1 || argc > 2)
-		usage();
-
-	len = strlen(p = *argv++);
-	for (comp = com;; comp++) {
-		if (comp->c_name == NULL)
-			errx(1, "%s: unknown command", p);
-		if (strncmp(p, comp->c_name, len) == 0)
-			break;
-	}
-
-	if (*argv) {
-		count = strtol(*argv, &p, 10);
-		if (count < comp->c_mincount || *p)
-			errx(2, "%s: illegal count", *argv);
+	if (argc > 2 && (equal(argv[1], "-t") || equal(argv[1], "-f"))) {
+		argc -= 2;
+		tape = argv[2];
+		argv += 2;
 	} else
-		count = 1;
-
-	flags = comp->c_ronly ? O_RDONLY : O_WRONLY;
-
-	if ((mtfd = open(tape, flags)) < 0)
-		err(2, "%s", tape);
-
-	switch (comp->c_spcl) {
-	case MTIOCTOP:
-		if (comp->c_code == MTASF) {
-			/* If mtget.mt_fileno was implemented, We could
-			   compute the minimal seek needed to position
-			   the tape.  Until then, rewind and seek from
-			   begining-of-tape */
-
-			mt_com.mt_op = MTREW;
-			mt_com.mt_count = 1;
-			if (ioctl(mtfd, MTIOCTOP, &mt_com) < 0)
-				err(2, "%s", tape);
-		
-			mt_com.mt_op = MTFSF;
-			mt_com.mt_count = count;
-			if (ioctl(mtfd, MTIOCTOP, &mt_com) < 0)
-				err(2, "%s", tape);
-
-		} else {
-			mt_com.mt_op = comp->c_code;
-			mt_com.mt_count = count;
-
-			if (ioctl(mtfd, MTIOCTOP, &mt_com) < 0)
-				err(2, "%s: %s", tape, comp->c_name);
-
-		}
-		break;
-
-	case MTIOCGET:
-		if (ioctl(mtfd, MTIOCGET, &mt_status) < 0)
-			err(2, "%s: %s", tape, comp->c_name);
-		status(&mt_status);
-		break;
-
-	case MTIOCRDSPOS:
-	case MTIOCRDHPOS:
-		if (ioctl(mtfd, comp->c_spcl, (caddr_t) &count) < 0)
-			err(2, "%s", tape);
-		printf("%s: block location %u\n", tape, (unsigned int) count);
-		break;
-
-	case MTIOCSLOCATE:
-	case MTIOCHLOCATE:
-		if (ioctl(mtfd, comp->c_spcl, (caddr_t) &count) < 0)
-			err(2, "%s", tape);
-		break;
-
-	default:
-		errx(1, "internal error: unknown request %d", comp->c_spcl);
+		if ((tape = getenv("TAPE")) == NULL)
+			tape = DEFTAPE;
+	if (argc < 2) {
+		fprintf(stderr, "usage: mt [ -f device ] command [ count ]\n");
+		exit(1);
 	}
-
-	exit(0);
-	/* NOTREACHED */
+	cp = argv[1];
+	for (comp = com; comp->c_name != NULL; comp++)
+		if (strncmp(cp, comp->c_name, strlen(cp)) == 0)
+			break;
+	if (comp->c_name == NULL) {
+		fprintf(stderr, "mt: don't grok \"%s\"\n", cp);
+		exit(1);
+	}
+	if ((mtfd = open(tape, comp->c_ronly ? O_RDONLY : O_RDWR)) < 0) {
+		perror(tape);
+		exit(1);
+	}
+	if (comp->c_code != MTNOP) {
+		mt_com.mt_op = comp->c_code;
+		mt_com.mt_count = (argc > 2 ? atoi(argv[2]) : 1);
+		if (mt_com.mt_count < 0) {
+			fprintf(stderr, "mt: negative repeat count\n");
+			exit(1);
+		}
+		if (ioctl(mtfd, MTIOCTOP, &mt_com) < 0) {
+			fprintf(stderr, "%s %s %d ", tape, comp->c_name,
+				mt_com.mt_count);
+			perror("failed");
+			exit(2);
+		}
+	} else {
+		if (ioctl(mtfd, MTIOCGET, (char *)&mt_status) < 0) {
+			perror("mt");
+			exit(2);
+		}
+		status(&mt_status);
+	}
 }
+
+#ifdef vax
+#include <vaxmba/mtreg.h>
+#include <vaxmba/htreg.h>
+
+#include <vaxuba/utreg.h>
+#include <vaxuba/tmreg.h>
+#undef b_repcnt		/* argh */
+#include <vaxuba/tsreg.h>
+#endif
 
 #ifdef sun
 #include <sundev/tmreg.h>
@@ -228,6 +155,13 @@ struct tape_desc {
 	char	*t_dsbits;	/* "drive status" register */
 	char	*t_erbits;	/* "error" register */
 } tapes[] = {
+#ifdef vax
+	{ MT_ISTS,	"ts11",		0,		TSXS0_BITS },
+	{ MT_ISHT,	"tm03",		HTDS_BITS,	HTER_BITS },
+	{ MT_ISTM,	"tm11",		0,		TMER_BITS },
+	{ MT_ISMT,	"tu78",		MTDS_BITS,	0 },
+	{ MT_ISUT,	"tu45",		UTDS_BITS,	UTER_BITS },
+#endif
 #ifdef sun
 	{ MT_ISCPC,	"TapeMaster",	TMS_BITS,	0 },
 	{ MT_ISAR,	"Archive",	ARCH_CTRL_BITS,	ARCH_BITS },
@@ -235,51 +169,40 @@ struct tape_desc {
 #ifdef tahoe
 	{ MT_ISCY,	"cipher",	CYS_BITS,	CYCW_BITS },
 #endif
-	{ 0x7,		"SCSI",		"76543210",	"76543210" },
 	{ 0 }
 };
 
 /*
  * Interpret the status buffer returned
  */
-void
 status(bp)
-	struct mtget *bp;
+	register struct mtget *bp;
 {
-	struct tape_desc *mt;
+	register struct tape_desc *mt;
 
-	for (mt = tapes;; mt++) {
-		if (mt->t_type == 0) {
-			(void)printf("%d: unknown tape drive type\n",
-			    bp->mt_type);
-			return;
-		}
+	for (mt = tapes; mt->t_type; mt++)
 		if (mt->t_type == bp->mt_type)
 			break;
+	if (mt->t_type == 0) {
+		printf("unknown tape drive type (%d)\n", bp->mt_type);
+		return;
 	}
-	(void)printf("%s tape drive, residual=%d\n", mt->t_name, bp->mt_resid);
+	printf("%s tape drive, residual=%d\n", mt->t_name, bp->mt_resid);
 	printreg("ds", bp->mt_dsreg, mt->t_dsbits);
 	printreg("\ner", bp->mt_erreg, mt->t_erbits);
-	(void)putchar('\n');
-	(void)printf("blocksize: %d (%d, %d, %d, %d)\n",
-		bp->mt_blksiz, bp->mt_mblksiz[0], bp->mt_mblksiz[1],
-		bp->mt_mblksiz[2], bp->mt_mblksiz[3]);
-	(void)printf("density: %d (%d, %d, %d, %d)\n",
-		bp->mt_density, bp->mt_mdensity[0], bp->mt_mdensity[1],
-		bp->mt_mdensity[2], bp->mt_mdensity[3]);
+	putchar('\n');
 }
 
 /*
- * Print a register a la the %b format of the kernel's printf.
+ * Print a register a la the %b format of the kernel's printf
  */
-void
 printreg(s, v, bits)
 	char *s;
-	u_int v;
-	char *bits;
+	register char *bits;
+	register unsigned short v;
 {
-	int i, any = 0;
-	char c;
+	register int i, any = 0;
+	register char c;
 
 	if (bits && *bits == 8)
 		printf("%s=%o", s, v);
@@ -288,7 +211,7 @@ printreg(s, v, bits)
 	bits++;
 	if (v && bits) {
 		putchar('<');
-		while ((i = *bits++)) {
+		while (i = *bits++) {
 			if (v & (1 << (i-1))) {
 				if (any)
 					putchar(',');
@@ -301,11 +224,4 @@ printreg(s, v, bits)
 		}
 		putchar('>');
 	}
-}
-
-void
-usage()
-{
-	(void)fprintf(stderr, "usage: mt [-f device] command [ count ]\n");
-	exit(1);
 }

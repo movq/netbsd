@@ -1,11 +1,7 @@
-#	$NetBSD: Makefile,v 1.5 1997/01/09 20:20:51 tls Exp $	
-#	from: @(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.3 (Berkeley) 5/11/90
 
 PROG=	quota
 BINOWN=	root
 BINMODE=4555
-
-DPADD=	${LIBRPCSVC}
-LDADD=	-lrpcsvc
 
 .include <bsd.prog.mk>

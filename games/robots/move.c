@@ -1,8 +1,6 @@
-/*	$NetBSD: move.c,v 1.6 1997/10/12 14:09:59 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,16 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)move.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: move.c,v 1.6 1997/10/12 14:09:59 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)move.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include "robots.h"
+# include	"robots.h"
+# include	<ctype.h>
 
 # define	ESC	'\033'
 
@@ -50,10 +44,11 @@ __RCSID("$NetBSD: move.c,v 1.6 1997/10/12 14:09:59 lukem Exp $");
  * get_move:
  *	Get and execute a move from the player
  */
-void
 get_move()
 {
-	int		c;
+	register int	c;
+	register int	y, x, lastmove;
+	static COORD	newpos;
 
 	if (Waiting)
 		return;
@@ -154,13 +149,14 @@ over:
 		  case 'q':
 		  case 'Q':
 			if (query("Really quit?"))
-				quit(0);
+				quit();
 			refresh();
 			break;
 		  case 'w':
 		  case 'W':
 			Waiting = TRUE;
 			leaveok(stdscr, TRUE);
+			flushok(stdscr, FALSE);
 			goto ret;
 		  case 't':
 		  case 'T':
@@ -173,13 +169,13 @@ teleport:
 			refresh();
 			flush_in();
 			goto ret;
-		  case CTRL('L'):
+		  case CTRL(L):
 			wrefresh(curscr);
 			break;
 		  case EOF:
 			break;
 		  default:
-			putchar(CTRL('G'));
+			putchar(CTRL(G));
 			reset_count();
 			fflush(stdout);
 			break;
@@ -196,10 +192,9 @@ ret:
  *	Must I teleport; i.e., is there anywhere I can move without
  * being eaten?
  */
-bool
 must_telep()
 {
-	int		x, y;
+	register int	x, y;
 	static COORD	newpos;
 
 #ifdef	FANCY
@@ -228,9 +223,8 @@ must_telep()
  * do_move:
  *	Execute a move
  */
-bool
 do_move(dy, dx)
-	int	dy, dx;
+int	dy, dx;
 {
 	static COORD	newpos;
 
@@ -246,7 +240,7 @@ do_move(dy, dx)
 			refresh();
 		}
 		else {
-			putchar(CTRL('G'));
+			putchar(CTRL(G));
 			reset_count();
 		}
 		return FALSE;
@@ -265,11 +259,10 @@ do_move(dy, dx)
  * eaten:
  *	Player would get eaten at this place
  */
-bool
 eaten(pos)
-	COORD	*pos;
+register COORD	*pos;
 {
-	int	x, y;
+	register int	x, y;
 
 	for (y = pos->y - 1; y <= pos->y + 1; y++) {
 		if (y <= 0 || y >= Y_FIELDSIZE)
@@ -288,7 +281,6 @@ eaten(pos)
  * reset_count:
  *	Reset the count variables
  */
-void
 reset_count()
 {
 	Count = 0;
@@ -301,7 +293,6 @@ reset_count()
  * jumping:
  *	See if we are jumping, i.e., we should not refresh.
  */
-bool
 jumping()
 {
 	return (Jump && (Count || Running || Waiting));

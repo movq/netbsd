@@ -1,9 +1,6 @@
-/*	$NetBSD: remote.c,v 1.6 1997/05/14 00:20:03 mellon Exp $	*/
-
 /*
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,23 +32,10 @@
  */
 
 #ifndef lint
-static char copyright[] =
-"@(#) Copyright (c) 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n";
+static char sccsid[] = "@(#)remote.c	5.5 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#ifndef lint
-#if 0
-static char sccsid[] = "@(#)remote.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: remote.c,v 1.6 1997/05/14 00:20:03 mellon Exp $";
-#endif /* not lint */
-
-#include <stdio.h>
-#include <stdlib.h>
-
-#include "pathnames.h"
-#include "tip.h"
+# include "tip.h"
 
 /*
  * Attributes to be gleened from remote host description
@@ -67,30 +51,19 @@ static char *capstrings[] = {
 	"di", "es", "ex", "fo", "rc", "re", "pa", 0
 };
 
-static char	*db_array[3] = { _PATH_REMOTE, 0, 0 };
-
-#define cgetflag(f)	(cgetcap(bp, f, ':') != NULL)
+char *rgetstr();
 
 static
 getremcap(host)
 	register char *host;
 {
+	int stat;
+	char tbuf[BUFSIZ];
+	static char buf[BUFSIZ/2];
+	char *bp = buf;
 	register char **p, ***q;
-	char *bp;
-	char *rempath;
-	int   stat;
 
-	rempath = getenv("REMOTE");
-	if (rempath != NULL)
-		if (*rempath != '/')
-			/* we have an entry */
-			cgetset(rempath);
-		else {	/* we have a path */
-			db_array[1] = rempath;
-			db_array[2] = _PATH_REMOTE;
-		}
-
-	if ((stat = cgetent(&bp, db_array, host)) < 0) {
+	if ((stat = rgetent(tbuf, host)) <= 0) {
 		if (DV ||
 		    host[0] == '/' && access(DV = host, R_OK | W_OK) == 0) {
 			CU = DV;
@@ -102,33 +75,23 @@ getremcap(host)
 			FS = DEFFS;
 			return;
 		}
-		switch(stat) {
-		case -1:
-			fprintf(stderr, "tip: unknown host %s\n", host);
-			break;
-		case -2:
-			fprintf(stderr, 
-			    "tip: can't open host description file\n");
-			break;
-		case -3:
-			fprintf(stderr, 
-			    "tip: possible reference loop in host description file\n");
-			break;
-		}
+		fprintf(stderr, stat == 0 ?
+			"tip: unknown host %s\n" :
+			"tip: can't open host description file\n", host);
 		exit(3);
 	}
 
 	for (p = capstrings, q = caps; *p != NULL; p++, q++)
 		if (**q == NULL)
-			cgetstr(bp, *p, *q);
-	if (!BR && (cgetnum(bp, "br", &BR) == -1))
+			**q = rgetstr(*p, &bp);
+	if (!BR && (BR = rgetnum("br")) < 0)
 		BR = DEFBR;
-	if (cgetnum(bp, "fs", &FS) == -1)
+	if ((FS = rgetnum("fs")) < 0)
 		FS = DEFFS;
 	if (DU < 0)
 		DU = 0;
 	else
-		DU = cgetflag("du");
+		DU = rgetflag("du");
 	if (DV == NOSTR) {
 		fprintf(stderr, "%s: missing device spec\n", host);
 		exit(3);
@@ -140,7 +103,7 @@ getremcap(host)
 		exit(3);
 	}
 
-	HD = cgetflag("hd");
+	HD = rgetflag("hd");
 
 	/*
 	 * This effectively eliminates the "hw" attribute
@@ -152,32 +115,30 @@ getremcap(host)
 	/*
 	 * see if uppercase mode should be turned on initially
 	 */
-	if (cgetflag("ra"))
-		setboolean(value(RAISE), 1);
-	if (cgetflag("ec"))
-		setboolean(value(ECHOCHECK), 1);
-	if (cgetflag("be"))
-		setboolean(value(BEAUTIFY), 1);
-	if (cgetflag("nb"))
-		setboolean(value(BEAUTIFY), 0);
-	if (cgetflag("sc"))
-		setboolean(value(SCRIPT), 1);
-	if (cgetflag("tb"))
-		setboolean(value(TABEXPAND), 1);
-	if (cgetflag("vb"))
-		setboolean(value(VERBOSE), 1);
-	if (cgetflag("nv"))
-		setboolean(value(VERBOSE), 0);
-	if (cgetflag("ta"))
-		setboolean(value(TAND), 1);
-	if (cgetflag("nt"))
-		setboolean(value(TAND), 0);
-	if (cgetflag("rw"))
-		setboolean(value(RAWFTP), 1);
-	if (cgetflag("hd"))
-		setboolean(value(HALFDUPLEX), 1);
-	if (cgetflag("dc"))
-		DC = 1;
+	if (rgetflag("ra"))
+		boolean(value(RAISE)) = 1;
+	if (rgetflag("ec"))
+		boolean(value(ECHOCHECK)) = 1;
+	if (rgetflag("be"))
+		boolean(value(BEAUTIFY)) = 1;
+	if (rgetflag("nb"))
+		boolean(value(BEAUTIFY)) = 0;
+	if (rgetflag("sc"))
+		boolean(value(SCRIPT)) = 1;
+	if (rgetflag("tb"))
+		boolean(value(TABEXPAND)) = 1;
+	if (rgetflag("vb"))
+		boolean(value(VERBOSE)) = 1;
+	if (rgetflag("nv"))
+		boolean(value(VERBOSE)) = 0;
+	if (rgetflag("ta"))
+		boolean(value(TAND)) = 1;
+	if (rgetflag("nt"))
+		boolean(value(TAND)) = 0;
+	if (rgetflag("rw"))
+		boolean(value(RAWFTP)) = 1;
+	if (rgetflag("hd"))
+		boolean(value(HALFDUPLEX)) = 1;
 	if (RE == NOSTR)
 		RE = (char *)"tip.record";
 	if (EX == NOSTR)
@@ -190,11 +151,11 @@ getremcap(host)
 		vstring("pr", PR);
 	if (RC != NOSTR)
 		vstring("rc", RC);
-	if (cgetnum(bp, "dl", &DL) == -1)
+	if ((DL = rgetnum("dl")) < 0)
 		DL = 0;
-	if (cgetnum(bp, "cl", &CL) == -1)
+	if ((CL = rgetnum("cl")) < 0)
 		CL = 0;
-	if (cgetnum(bp, "et", &ET) == -1)
+	if ((ET = rgetnum("et")) < 0)
 		ET = 10;
 }
 

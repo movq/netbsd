@@ -1,8 +1,6 @@
-/*	$NetBSD: file.h,v 1.12 1996/09/07 12:41:32 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1989 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,24 +30,20 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)file.h	8.2 (Berkeley) 8/20/94
+ *	@(#)file.h	7.10 (Berkeley) 6/4/91
  */
 
 #include <sys/fcntl.h>
 #include <sys/unistd.h>
 
-#ifdef _KERNEL
-#include <sys/queue.h>
-
-struct proc;
-struct uio;
-
+#ifdef KERNEL
 /*
  * Kernel descriptor table.
  * One entry for each open kernel vnode and socket.
  */
 struct file {
-	LIST_ENTRY(file) f_list;/* list of active files */
+	struct	file *f_filef;	/* list of active files */
+	struct	file **f_fileb;	/* list of active files */
 	short	f_flag;		/* see fcntl.h */
 #define	DTYPE_VNODE	1	/* file */
 #define	DTYPE_SOCKET	2	/* communications endpoint */
@@ -62,9 +56,9 @@ struct file {
 					    struct ucred *cred));
 		int	(*fo_write)	__P((struct file *fp, struct uio *uio,
 					    struct ucred *cred));
-		int	(*fo_ioctl)	__P((struct file *fp, u_long com,
+		int	(*fo_ioctl)	__P((struct file *fp, int com,
 					    caddr_t data, struct proc *p));
-		int	(*fo_poll)	__P((struct file *fp, int events,
+		int	(*fo_select)	__P((struct file *fp, int which,
 					    struct proc *p));
 		int	(*fo_close)	__P((struct file *fp, struct proc *p));
 	} *f_ops;
@@ -72,9 +66,8 @@ struct file {
 	caddr_t	f_data;		/* vnode or socket */
 };
 
-LIST_HEAD(filelist, file);
-extern struct filelist filehead;	/* head of list of open files */
-extern int maxfiles;			/* kernel limit on number of open files */
-extern int nfiles;			/* actual number of open files */
+extern struct file *filehead;	/* head of list of open files */
+extern int maxfiles;		/* kernel limit on number of open files */
+extern int nfiles;		/* actual number of open files */
 
-#endif /* _KERNEL */
+#endif /* KERNEL */

@@ -1,5 +1,3 @@
-/*	$NetBSD: mips.h,v 1.3 1995/04/19 07:16:12 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.

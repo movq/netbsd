@@ -1,9 +1,0 @@
-#	Makefile for test
-
-PROG= zcat
-SRCS= main.c unzip.c inflate.c
-NOMAN= noman
-CFLAGS= -Wall -O -fomit-frame-pointer -DBOOT -DTEST
-LDFLAGS= -static -N
-
-.include <bsd.prog.mk>

@@ -1,5 +1,3 @@
-/*	$NetBSD: strtoul.c,v 1.10 1997/07/13 20:17:02 christos Exp $	*/
-
 /*
  * Copyright (c) 1990 Regents of the University of California.
  * All rights reserved.
@@ -33,18 +31,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "from: @(#)strtoul.c	5.3 (Berkeley) 2/23/91";
-#else
-__RCSID("$NetBSD: strtoul.c,v 1.10 1997/07/13 20:17:02 christos Exp $");
-#endif
+static char sccsid[] = "@(#)strtoul.c	5.3 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
+#include <limits.h>
 #include <ctype.h>
 #include <errno.h>
-#include <limits.h>
 #include <stdlib.h>
 
 /*
@@ -59,26 +52,23 @@ strtoul(nptr, endptr, base)
 	char **endptr;
 	register int base;
 {
-	register const char *s;
-	register unsigned long acc, cutoff;
+	register const char *s = nptr;
+	register unsigned long acc;
 	register int c;
-	register int neg, any, cutlim;
+	register unsigned long cutoff;
+	register int neg = 0, any, cutlim;
 
 	/*
 	 * See strtol for comments as to the logic used.
 	 */
-	s = nptr;
 	do {
-		c = (unsigned char) *s++;
+		c = *s++;
 	} while (isspace(c));
 	if (c == '-') {
 		neg = 1;
 		c = *s++;
-	} else {
-		neg = 0;
-		if (c == '+')
-			c = *s++;
-	}
+	} else if (c == '+')
+		c = *s++;
 	if ((base == 0 || base == 16) &&
 	    c == '0' && (*s == 'x' || *s == 'X')) {
 		c = s[1];
@@ -87,10 +77,9 @@ strtoul(nptr, endptr, base)
 	}
 	if (base == 0)
 		base = c == '0' ? 8 : 10;
-
-	cutoff = ULONG_MAX / (unsigned long)base;
-	cutlim = ULONG_MAX % (unsigned long)base;
-	for (acc = 0, any = 0;; c = (unsigned char) *s++) {
+	cutoff = (unsigned long)ULONG_MAX / (unsigned long)base;
+	cutlim = (unsigned long)ULONG_MAX % (unsigned long)base;
+	for (acc = 0, any = 0;; c = *s++) {
 		if (isdigit(c))
 			c -= '0';
 		else if (isalpha(c))
@@ -99,21 +88,20 @@ strtoul(nptr, endptr, base)
 			break;
 		if (c >= base)
 			break;
-		if (any < 0)
-			continue;
-		if (acc > cutoff || (acc == cutoff && c > cutlim)) {
+		if (any < 0 || acc > cutoff || acc == cutoff && c > cutlim)
 			any = -1;
-			acc = ULONG_MAX;
-			errno = ERANGE;
-		} else {
+		else {
 			any = 1;
-			acc *= (unsigned long)base;
+			acc *= base;
 			acc += c;
 		}
 	}
-	if (neg && any > 0)
+	if (any < 0) {
+		acc = ULONG_MAX;
+		errno = ERANGE;
+	} else if (neg)
 		acc = -acc;
 	if (endptr != 0)
-		*endptr = (char *) (any ? s - 1 : nptr);
+		*endptr = any ? s - 1 : (char *)nptr;
 	return (acc);
 }

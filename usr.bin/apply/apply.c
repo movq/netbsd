@@ -1,5 +1,3 @@
-/*	$NetBSD: apply.c,v 1.5 1997/10/18 12:23:21 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)apply.c	8.4 (Berkeley) 4/4/94";
-#else
-__RCSID("$NetBSD: apply.c,v 1.5 1997/10/18 12:23:21 lukem Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/wait.h>
@@ -56,7 +49,6 @@ __RCSID("$NetBSD: apply.c,v 1.5 1997/10/18 12:23:21 lukem Exp $");
 #include <string.h>
 #include <unistd.h>
 
-int	main __P((int, char **));
 void	usage __P((void));
 int	system __P((const char *));
 
@@ -71,7 +63,7 @@ main(argc, argv)
 	debug = 0;
 	magic = '%';		/* Default magic char is `%'. */
 	nargs = -1;
-	while ((ch = getopt(argc, argv, "a:d0123456789")) != -1)
+	while ((ch = getopt(argc, argv, "a:d0123456789")) != EOF)
 		switch (ch) {
 		case 'a':
 			if (optarg[1] != '\0')
@@ -118,7 +110,7 @@ main(argc, argv)
 	 */
 	if ((cmd = malloc(sizeof("exec ") - 1 +
 	    strlen(argv[0]) + 9 * (sizeof(" %1") - 1) + 1)) == NULL)
-		err(1, "malloc");
+		err(1, NULL);
 		
 	if (n == 0) {
 		/* If nargs not set, default to a single argument. */
@@ -147,7 +139,7 @@ main(argc, argv)
 	 * for the normal case.
 	 */
 	if ((c = malloc(clen = 1024)) == NULL)
-		err(1, "malloc");
+		err(1, NULL);
 
 	/*
 	 * (argc) and (argv) are still offset by one to make it simpler to
@@ -162,7 +154,7 @@ main(argc, argv)
 		for (l = strlen(cmd), i = 0; i < nargs; i++)
 			l += strlen(argv[i]);
 		if (l > clen && (c = realloc(c, clen = l)) == NULL)
-			err(1, "malloc");
+			err(1, NULL);
 
 		/* Expand command argv references. */
 		for (p = cmd, q = c; *p != '\0'; ++p)

@@ -1,8 +1,6 @@
-/*	$NetBSD: cat.c,v 1.15 1997/07/20 04:34:33 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kevin Fall.
@@ -36,55 +34,41 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cat.c	8.2 (Berkeley) 4/27/95";
-#else
-__RCSID("$NetBSD: cat.c,v 1.15 1997/07/20 04:34:33 thorpej Exp $");
-#endif
+static char sccsid[] = "@(#)cat.c	5.15 (Berkeley) 5/23/91";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
-
-#include <locale.h>
-#include <ctype.h>
-#include <err.h>
-#include <errno.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
+#include <ctype.h>
 
 int bflag, eflag, nflag, sflag, tflag, vflag;
 int rval;
 char *filename;
 
-int main __P((int, char *[]));
-void cook_args __P((char *argv[]));
-void cook_buf __P((FILE *));
-void raw_args __P((char *argv[]));
-void raw_cat __P((int));
+void cook_args(), cook_buf(), raw_args(), raw_cat();
+void err __P((int, const char *, ...));
 
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
 	extern int optind;
 	int ch;
 
-	setlocale(LC_ALL, "");
-
-	while ((ch = getopt(argc, argv, "benstuv")) != -1)
+	while ((ch = getopt(argc, argv, "benstuv")) != EOF)
 		switch (ch) {
 		case 'b':
 			bflag = nflag = 1;	/* -b implies -n */
@@ -107,7 +91,6 @@ main(argc, argv)
 		case 'v':
 			vflag = 1;
 			break;
-		default:
 		case '?':
 			(void)fprintf(stderr,
 			    "usage: cat [-benstuv] [-] [file ...]\n");
@@ -120,7 +103,7 @@ main(argc, argv)
 	else
 		raw_args(argv);
 	if (fclose(stdout))
-		err(1, "stdout");
+		err(1, "stdout: %s", strerror(errno));
 	exit(rval);
 }
 
@@ -128,7 +111,7 @@ void
 cook_args(argv)
 	char **argv;
 {
-	FILE *fp;
+	register FILE *fp;
 
 	fp = stdin;
 	filename = "stdin";
@@ -136,9 +119,8 @@ cook_args(argv)
 		if (*argv) {
 			if (!strcmp(*argv, "-"))
 				fp = stdin;
-			else if ((fp = fopen(*argv, "r")) == NULL) {
-				warn("%s", *argv);
-				rval = 1;
+			else if (!(fp = fopen(*argv, "r"))) {
+				err(0, "%s: %s", *argv, strerror(errno));
 				++argv;
 				continue;
 			}
@@ -152,9 +134,9 @@ cook_args(argv)
 
 void
 cook_buf(fp)
-	FILE *fp;
+	register FILE *fp;
 {
-	int ch, gobble, line, prev;
+	register int ch, gobble, line, prev;
 
 	line = gobble = 0;
 	for (prev = '\n'; (ch = getc(fp)) != EOF; prev = ch) {
@@ -206,19 +188,18 @@ cook_buf(fp)
 			break;
 	}
 	if (ferror(fp)) {
-		warn("%s", filename);
-		rval = 1;
+		err(0, "%s: %s", strerror(errno));
 		clearerr(fp);
 	}
 	if (ferror(stdout))
-		err(1, "stdout");
+		err(1, "stdout: %s", strerror(errno));
 }
 
 void
 raw_args(argv)
 	char **argv;
 {
-	int fd;
+	register int fd;
 
 	fd = fileno(stdin);
 	filename = "stdin";
@@ -227,8 +208,7 @@ raw_args(argv)
 			if (!strcmp(*argv, "-"))
 				fd = fileno(stdin);
 			else if ((fd = open(*argv, O_RDONLY, 0)) < 0) {
-				warn("%s", *argv);
-				rval = 1;
+				err(0, "%s: %s", *argv, strerror(errno));
 				++argv;
 				continue;
 			}
@@ -242,27 +222,56 @@ raw_args(argv)
 
 void
 raw_cat(rfd)
-	int rfd;
+	register int rfd;
 {
-	int nr, nw, off, wfd;
+	register int nr, nw, off, wfd;
 	static int bsize;
 	static char *buf;
 	struct stat sbuf;
 
 	wfd = fileno(stdout);
-	if (buf == NULL) {
+	if (!buf) {
 		if (fstat(wfd, &sbuf))
-			err(1, "%s", filename);
+			err(1, "%s: %s", filename, strerror(errno));
 		bsize = MAX(sbuf.st_blksize, 1024);
-		if ((buf = malloc((u_int)bsize)) == NULL)
-			err(1, "cannot allocate buffer");
+		if (!(buf = malloc((u_int)bsize)))
+			err(1, "%s", strerror(errno));
 	}
 	while ((nr = read(rfd, buf, bsize)) > 0)
-		for (off = 0; nr; nr -= nw, off += nw)
+		for (off = 0; off < nr; nr -= nw, off += nw)
 			if ((nw = write(wfd, buf + off, nr)) < 0)
 				err(1, "stdout");
-	if (nr < 0) {
-		warn("%s", filename);
-		rval = 1;
-	}
+	if (nr < 0)
+		err(0, "%s: %s", filename, strerror(errno));
+}
+
+#if __STDC__
+#include <stdarg.h>
+#else
+#include <varargs.h>
+#endif
+
+void
+#if __STDC__
+err(int ex, const char *fmt, ...)
+#else
+err(ex, fmt, va_alist)
+	int ex;
+	char *fmt;
+        va_dcl
+#endif
+{
+	va_list ap;
+#if __STDC__
+	va_start(ap, fmt);
+#else
+	va_start(ap);
+#endif
+	(void)fprintf(stderr, "cat: ");
+	(void)vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	(void)fprintf(stderr, "\n");
+	if (ex)
+		exit(1);
+	rval = 1;
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: locale.h,v 1.6 1994/10/26 00:56:02 cgd Exp $	*/
-
 /*
  * Copyright (c) 1991 The Regents of the University of California.
  * All rights reserved.
@@ -69,9 +67,8 @@ struct lconv {
 #define	LC_MONETARY	3
 #define	LC_NUMERIC	4
 #define	LC_TIME		5
-#define LC_MESSAGES	6
 
-#define	_LC_LAST	7		/* marks end */
+#define	_LC_LAST	6		/* marks end */
 
 #include <sys/cdefs.h>
 

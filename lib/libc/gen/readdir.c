@@ -1,8 +1,6 @@
-/*	$NetBSD: readdir.c,v 1.9 1997/10/10 14:31:55 fvdl Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,23 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)readdir.c	8.3 (Berkeley) 9/29/94";
-#else
-__RCSID("$NetBSD: readdir.c,v 1.9 1997/10/10 14:31:55 fvdl Exp $");
-#endif
+static char sccsid[] = "@(#)readdir.c	5.7 (Berkeley) 6/1/90";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/param.h>
-#include <unistd.h>
 #include <dirent.h>
-
-#ifdef __weak_alias
-__weak_alias(readdir,_readdir);
-#endif
 
 /*
  * get next entry in a directory.
@@ -61,28 +48,24 @@ readdir(dirp)
 	register struct dirent *dp;
 
 	for (;;) {
-		if (dirp->dd_loc >= dirp->dd_size) {
-			if (dirp->dd_flags & __DTF_READALL)
-				return (NULL);
-			dirp->dd_loc = 0;
-		}
-		if (dirp->dd_loc == 0 && !(dirp->dd_flags & __DTF_READALL)) {
-			dirp->dd_seek = lseek(dirp->dd_fd, 0, SEEK_CUR);
-			dirp->dd_size = getdents(dirp->dd_fd,
-			    dirp->dd_buf, dirp->dd_len);
+		if (dirp->dd_loc == 0) {
+			dirp->dd_size = getdirentries(dirp->dd_fd,
+			    dirp->dd_buf, dirp->dd_len, &dirp->dd_seek);
 			if (dirp->dd_size <= 0)
-				return (NULL);
+				return NULL;
+		}
+		if (dirp->dd_loc >= dirp->dd_size) {
+			dirp->dd_loc = 0;
+			continue;
 		}
 		dp = (struct dirent *)(dirp->dd_buf + dirp->dd_loc);
-		if ((long)dp & 03)	/* bogus pointer check */
-			return (NULL);
+		if ((int)dp & 03)	/* bogus pointer check */
+			return NULL;
 		if (dp->d_reclen <= 0 ||
 		    dp->d_reclen > dirp->dd_len + 1 - dirp->dd_loc)
-			return (NULL);
+			return NULL;
 		dirp->dd_loc += dp->d_reclen;
 		if (dp->d_ino == 0)
-			continue;
-		if (dp->d_type == DT_WHT && (dirp->dd_flags & DTF_HIDEW))
 			continue;
 		return (dp);
 	}

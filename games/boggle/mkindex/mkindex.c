@@ -1,5 +1,3 @@
-/*	$NetBSD: mkindex.c,v 1.3 1997/10/11 02:12:23 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -43,11 +41,7 @@ static char copyright[] =
 #endif /* not lint */
 
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)mkindex.c	8.1 (Berkeley) 6/11/93";
-#else
-static char rcsid[] = "$NetBSD: mkindex.c,v 1.3 1997/10/11 02:12:23 lukem Exp $";
-#endif
 #endif /* not lint */
 
 #include <stdio.h>
@@ -92,8 +86,8 @@ nextword(fp, buffer, clen, rlen)
 	char *buffer;
 	int *clen, *rlen;
 {
-	int ch, pcount;
-	char *p, *q;
+	register int ch, pcount;
+	register char *p, *q;
 	static char buf[MAXWORDLEN + 1];
 	static int first = 1;
 	static int lastch = 0;

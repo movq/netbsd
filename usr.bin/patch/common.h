@@ -1,4 +1,19 @@
-/*	$NetBSD: common.h,v 1.6 1997/03/22 03:38:03 lukem Exp $	*/
+/* $Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/common.h,v 1.1 1993/04/09 11:33:58 cgd Exp $
+ *
+ * $Log: common.h,v $
+ * Revision 1.1  1993/04/09 11:33:58  cgd
+ * patch 2.0.12u8, from prep.ai.mit.edu.  this is not under the GPL.
+ *
+ * Revision 2.0.1.2  88/06/22  20:44:53  lwall
+ * patch12: sprintf was declared wrong
+ * 
+ * Revision 2.0.1.1  88/06/03  15:01:56  lwall
+ * patch10: support for shorter extensions.
+ * 
+ * Revision 2.0  86/09/17  15:36:39  lwall
+ * Baseline for netwide release.
+ * 
+ */
 
 #define DEBUGGING
 
@@ -17,6 +32,7 @@
 #define Fclose (void)fclose
 #define Fflush (void)fflush
 #define Sprintf (void)sprintf
+#define Mktemp (void)mktemp
 #define Strcpy (void)strcpy
 #define Strcat (void)strcat
 
@@ -25,7 +41,6 @@
 #define malloc system_malloc
 #define realloc system_realloc
 #include <stdio.h>
-#include <string.h>
 #include <assert.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -166,6 +181,8 @@ char *getenv();
 char *strcpy();
 char *strcat();
 char *rindex();
+long lseek();
+char *mktemp();
 #if 0				/* This can cause a prototype conflict.  */
 #ifdef CHARSPRINTF
 char *sprintf();

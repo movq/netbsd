@@ -1,8 +1,7 @@
-#	from: @(#)Makefile	8.1 (Berkeley) 6/6/93
-#	$NetBSD: Makefile,v 1.5 1997/10/18 04:37:55 lukem Exp $
+#	@(#)Makefile	5.3 (Berkeley) 5/11/90
 
 PROG=	quotaon
-MAN=	quotaon.8
+MAN8=	quotaon.0
 MLINKS=	quotaon.8 quotaoff.8
 LINKS=	${BINDIR}/quotaon ${BINDIR}/quotaoff
 

@@ -1,7 +1,5 @@
-.\"	$NetBSD: flock.2,v 1.6 1997/07/17 18:20:48 phil Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)flock.2	8.2 (Berkeley) 12/11/93
+.\"     @(#)flock.2	6.7 (Berkeley) 3/10/91
 .\"
-.Dd December 11, 1993
+.Dd March 10, 1991
 .Dt FLOCK 2
 .Os BSD 4.2
 .Sh NAME
@@ -55,11 +53,11 @@ lock on the file associated with the file descriptor
 .Fa fd .
 A lock is applied by specifying an
 .Fa operation
-parameter that is one of
+parameter that is the inclusive or of
 .Dv LOCK_SH
 or
 .Dv LOCK_EX
-with the optional addition of
+and, possibly,
 .Dv LOCK_NB .
 To unlock
 an existing lock
@@ -120,7 +118,7 @@ the global location
 The
 .Fn flock
 call fails if:
-.Bl -tag -width Er
+.Bl -tag -width EWOULDBLOCKAA
 .It Bq Er EWOULDBLOCK
 The file is locked and the
 .Dv LOCK_NB
@@ -129,18 +127,10 @@ option was specified.
 The argument
 .Fa fd
 is an invalid descriptor.
-.It Bq Er EOPNOTSUPP
+.It Bq Er EINVAL
 The argument
 .Fa fd
 refers to an object other than a file.
-.It Bq Er EINVAL
-The argument
-.Fa operation
-does not include one of
-.Dv LOCK_EX ,
-.Dv LOCK_SH 
-or
-.Dv LOCK_UN .
 .El
 .Sh SEE ALSO
 .Xr open 2 ,
@@ -150,6 +140,6 @@ or
 .Xr fork 2
 .Sh HISTORY
 The
-.Fn flock
+.Nm
 function call appeared in
 .Bx 4.2 .

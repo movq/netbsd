@@ -1,8 +1,6 @@
-/*	$NetBSD: cons_pcb.h,v 1.7 1996/02/13 22:09:14 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)cons_pcb.h	8.1 (Berkeley) 6/10/93
+ *	@(#)cons_pcb.h	7.4 (Berkeley) 5/6/91
  */
 
 /***********************************************************
@@ -40,13 +38,13 @@
 
                       All Rights Reserved
 
-Permission to use, copy, modify, and distribute this software and its
-documentation for any purpose and without fee is hereby granted,
+Permission to use, copy, modify, and distribute this software and its 
+documentation for any purpose and without fee is hereby granted, 
 provided that the above copyright notice appear in all copies and that
-both that copyright notice and this permission notice appear in
+both that copyright notice and this permission notice appear in 
 supporting documentation, and that the name of IBM not be
 used in advertising or publicity pertaining to distribution of the
-software without specific, written prior permission.
+software without specific, written prior permission.  
 
 IBM DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
 ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
@@ -61,6 +59,8 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/cons_pcb.h,v 1.1 1993/04/09 12:01:05 cgd Exp $ */
+/* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/cons_pcb.h,v $ */
 
 /*
  * protocol control block for the connection oriented network service
@@ -77,15 +77,15 @@ SOFTWARE.
 #define X25_PARTIAL_PKT_LEN_MAX (MLEN - sizeof(struct cons_pcb))
 
 #ifndef ARGO_DEBUG
-#define X25_TTL 600		/* 5 min */
-#else				/* ARGO_DEBUG */
-#define X25_TTL 120		/* 1 min */
-#endif				/* ARGO_DEBUG */
+#define X25_TTL 600 /* 5 min */
+#else ARGO_DEBUG
+#define X25_TTL 120 /* 1 min */
+#endif ARGO_DEBUG
 
 struct cons_pcb {
-	struct isopcb   _co_isopcb;
+	struct isopcb 	_co_isopcb;
 #define co_next	_co_isopcb.isop_next
-	/* prev used for netstat only */
+/* prev used for netstat only */
 #define co_prev	_co_isopcb.isop_prev
 #define co_head	_co_isopcb.isop_head
 #define co_laddr _co_isopcb.isop_laddr
@@ -98,27 +98,27 @@ struct cons_pcb {
 #define	co_negchanmask _co_isopcb.isop_negchanmask
 #define	co_x25crud _co_isopcb.isop_x25crud
 #define	co_x25crud_len _co_isopcb.isop_x25crud_len
-	u_short         co_state;
-	u_char          co_flags;
-	u_short         co_ttl;	/* time to live timer */
-	u_short         co_init_ttl;	/* initial value of ttl  */
-	int             co_channel;	/* logical channel */
-	struct ifnet   *co_ifp;	/* interface */
-	struct protosw *co_proto;
+	u_short 		co_state; 
+	u_char 			co_flags; 
+	u_short			co_ttl; /* time to live timer */
+	u_short			co_init_ttl; /* initial value of ttl  */
+	int 			co_channel; /* logical channel */
+	struct ifnet *	co_ifp; /* interface */
+	struct protosw *co_proto; 
 
-	struct ifqueue  co_pending;	/* queue data to send when connection
-					 * completes */
-#define MAX_DTE_LEN 0x7		/* 17 bcd digits */
-	struct dte_addr co_peer_dte;
-	struct cons_pcb *co_myself;	/* DEBUGGING AID */
+	struct ifqueue 	co_pending; /* queue data to send when connection
+						completes*/
+#define MAX_DTE_LEN 0x7 /* 17 bcd digits */
+	struct dte_addr	co_peer_dte;
+	struct	cons_pcb *co_myself; /* DEBUGGING AID */
 };
 
 /*
- * X.25 Packet types
+ * X.25 Packet types 
  */
 #define XPKT_DATA		1
 #define XPKT_INTERRUPT	2
-#define XPKT_FLOWCONTROL 3	/* not delivered? */
+#define XPKT_FLOWCONTROL 3 /* not delivered? */
 
 /*
  * pcb xtates
@@ -137,65 +137,57 @@ struct cons_pcb {
 
 
 /* type */
-#define CONSF_OCRE	0x40	/* created on OUTPUT */
-#define CONSF_ICRE	0x20	/* created on INPUT */
-#define CONSF_unused	0x10	/* not used */
-#define CONSF_unused2	0x08	/* not used */
-#define CONSF_DGM		0x04	/* for dgm use only */
-#define CONSF_XTS		0x02	/* for cons-as-transport-service */
-#define CONSF_LOOPBACK	0x01	/* loopback was on when connection commenced */
+#define CONSF_OCRE	0x40 /* created on OUTPUT */
+#define CONSF_ICRE	0x20 /* created on INPUT */
+#define CONSF_unused	0x10 /* not used */
+#define CONSF_unused2	0x08 /* not used */
+#define CONSF_DGM		0x04 /* for dgm use only */
+#define CONSF_XTS		0x02 /* for cons-as-transport-service */
+#define CONSF_LOOPBACK	0x01 /* loopback was on when connection commenced */
 
 #define X_NOCHANNEL 0x80
 
 
 struct cons_stat {
-	u_int           co_intr;/* input from eicon board */
-	u_int           co_restart;	/* ecn_restart() request issued to
-					 * board */
-	u_int           co_slowtimo;	/* times slowtimo called */
-	u_int           co_timedout;	/* connections closed by slowtimo */
-	u_int           co_ack;	/* ECN_ACK indication came from eicon board */
-	u_int           co_receive;	/* ECN_RECEIVE indication came from
-					 * eicon board */
-	u_int           co_send;/* ECN_SEND request issued to board */
-	u_int           co_reset_in;	/* ECN_RESET indication came from
-					 * eicon board */
-	u_int           co_reset_out;	/* ECN_RESET issued to the eicon
-					 * board */
-	u_int           co_clear_in;	/* ECN_CLEAR indication came from
-					 * eicon board */
-	u_int           co_clear_out;	/* ECN_CLEAR request issued to board */
-	u_int           co_refuse;	/* ECN_REFUSE indication came from
-					 * eicon board */
-	u_int           co_accept;	/* ECN_ACCEPT indication came from
-					 * eicon board */
-	u_int           co_connect;	/* ECN_CONNECT indication came from
-					 * eicon board */
-	u_int           co_call;/* ECN_CALL request issued to board */
-	u_int           co_Rdrops;	/* bad pkt came from ll */
-	u_int           co_Xdrops;	/* can't keep up */
+	u_int co_intr;	/* input from eicon board */
+	u_int co_restart; /* ecn_restart() request issued to board */
+	u_int co_slowtimo; /* times slowtimo called */
+	u_int co_timedout; /* connections closed by slowtimo */
+	u_int co_ack; /* ECN_ACK indication came from eicon board */
+	u_int co_receive; /* ECN_RECEIVE indication came from eicon board */
+	u_int co_send; /* ECN_SEND request issued to board */
+	u_int co_reset_in; /* ECN_RESET indication came from eicon board */
+	u_int co_reset_out; /* ECN_RESET issued to the eicon board */
+	u_int co_clear_in; /* ECN_CLEAR indication came from eicon board */
+	u_int co_clear_out; /* ECN_CLEAR request issued to board */
+	u_int co_refuse; /* ECN_REFUSE indication came from eicon board */
+	u_int co_accept; /* ECN_ACCEPT indication came from eicon board */
+	u_int co_connect; /* ECN_CONNECT indication came from eicon board */
+	u_int co_call; /* ECN_CALL request issued to board */
+	u_int co_Rdrops; /* bad pkt came from ll */
+	u_int co_Xdrops; /* can't keep up */
 
-	u_int           co_intrpt_pkts_in;	/* interrupt packets in */
-	u_int           co_avg_qlen;
-	u_int           co_avg_qdrop;
-	u_int           co_active;
+	u_int	co_intrpt_pkts_in; /* interrupt packets in */
+	u_int co_avg_qlen;
+	u_int co_avg_qdrop;
+	u_int co_active;
 
-	u_int           co_noresources;
-	u_int           co_parse_facil_err;
-	u_int           co_addr_proto_consist_err;
-	u_int           co_no_copcb;
-}               cons_stat;
+	u_int co_noresources;
+	u_int co_parse_facil_err;
+	u_int co_addr_proto_consist_err;
+	u_int co_no_copcb;
+} cons_stat;
 
-u_char          x25_error_stats[CONL_ERROR_MAX + 1];
+u_char x25_error_stats[CONL_ERROR_MAX + 1];
 
-struct ifqueue  consintrq;
+struct ifqueue consintrq; 
 
 /* reasons for clear are in a data mbuf chained to a clear ecn_request */
-struct e_clear_data {
-	u_char          ecd_cause;
-	u_char          ecd_diagnostic;
+struct e_clear_data 				{
+	u_char ecd_cause;
+	u_char ecd_diagnostic;
 };
 
-#ifdef _KERNEL
+#ifdef KERNEL
 #define IncStat(XYZ) cons_stat.XYZ++
-#endif				/* _KERNEL */
+#endif KERNEL

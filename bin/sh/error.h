@@ -1,8 +1,6 @@
-/*	$NetBSD: error.h,v 1.11 1997/07/15 17:44:32 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)error.h	8.2 (Berkeley) 5/4/95
+ *	@(#)error.h	5.1 (Berkeley) 3/7/91
  */
 
 /*
@@ -70,7 +68,6 @@ extern int exception;
 #define EXINT 0		/* SIGINT received */
 #define EXERROR 1	/* a generic error */
 #define EXSHELLPROC 2	/* execute a shell procedure */
-#define EXEXEC 3	/* command execution failed */
 
 
 /*
@@ -85,16 +82,24 @@ extern volatile int intpending;
 extern char *commandname;	/* name of command--printed on error */
 
 #define INTOFF suppressint++
-#define INTON { if (--suppressint == 0 && intpending) onint(); }
+#define INTON if (--suppressint == 0 && intpending) onint(); else
 #define FORCEINTON {suppressint = 0; if (intpending) onint();}
 #define CLEAR_PENDING_INT intpending = 0
 #define int_pending() intpending
 
-void exraise __P((int)) __attribute__((__noreturn__));
-void onint __P((void));
-void error __P((char *, ...)) __attribute__((__noreturn__));
-void exerror __P((int, char *, ...));
-char *errmsg __P((int, int));
+#ifdef __STDC__
+void exraise(int);
+void onint(void);
+void error2(char *, char *);
+void error(char *, ...);
+char *errmsg(int, int);
+#else
+void exraise();
+void onint();
+void error2();
+void error();
+char *errmsg();
+#endif
 
 
 /*
@@ -102,7 +107,7 @@ char *errmsg __P((int, int));
  * so we use _setjmp instead.
  */
 
-#if defined(BSD) && !defined(__SVR4)
+#ifdef BSD
 #define setjmp(jmploc)	_setjmp(jmploc)
 #define longjmp(jmploc, val)	_longjmp(jmploc, val)
 #endif

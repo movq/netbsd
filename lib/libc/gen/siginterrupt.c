@@ -1,8 +1,6 @@
-/*	$NetBSD: siginterrupt.c,v 1.9 1997/07/21 14:07:32 jtc Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,41 +31,30 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)siginterrupt.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: siginterrupt.c,v 1.9 1997/07/21 14:07:32 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)siginterrupt.c	5.5 (Berkeley) 6/1/90";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <signal.h>
-
-#ifdef __weak_alias
-__weak_alias(siginterrupt,_siginterrupt);
-#endif
 
 /*
  * Set signal state to prevent restart of system calls
  * after an instance of the indicated signal.
  */
-int
 siginterrupt(sig, flag)
 	int sig, flag;
 {
-	extern sigset_t __sigintr;
+	extern sigset_t _sigintr;
 	struct sigaction sa;
 	int ret;
 
 	if ((ret = sigaction(sig, (struct sigaction *)0, &sa)) < 0)
 		return (ret);
 	if (flag) {
-		sigaddset(&__sigintr, sig);
+		sigaddset(&_sigintr, sig);
 		sa.sa_flags &= ~SA_RESTART;
 	} else {
-		sigdelset(&__sigintr, sig);
+		sigdelset(&_sigintr, sig);
 		sa.sa_flags |= SA_RESTART;
 	}
 	return (sigaction(sig, &sa, (struct sigaction *)0));

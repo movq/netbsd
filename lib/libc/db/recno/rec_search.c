@@ -1,5 +1,3 @@
-/*	$NetBSD: rec_search.c,v 1.9 1997/07/21 14:06:46 jtc Exp $	*/
-
 /*-
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,16 +31,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)rec_search.c	8.4 (Berkeley) 7/14/94";
-#else
-__RCSID("$NetBSD: rec_search.c,v 1.9 1997/07/21 14:06:46 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)rec_search.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
 
 #include <errno.h>
@@ -63,10 +55,9 @@ __RCSID("$NetBSD: rec_search.c,v 1.9 1997/07/21 14:06:46 jtc Exp $");
  *	EPG for matching record, if any, or the EPG for the location of the
  *	key, if it were inserted into the tree.
  *
- * Returns:
- *	The EPG for matching record, if any, or the EPG for the location
- *	of the key, if it were inserted into the tree, is entered into
- *	the bt_cur field of the tree.  A pointer to the field is returned.
+ * Warnings:
+ *	The EPG returned is in static memory, and will be overwritten by the
+ *	next search of any kind in any tree.
  */
 EPG *
 __rec_search(t, recno, op)
@@ -74,6 +65,7 @@ __rec_search(t, recno, op)
 	recno_t recno;
 	enum SRCHOP op;
 {
+	static EPG e;
 	register indx_t index;
 	register PAGE *h;
 	EPGNO *parent;
@@ -81,16 +73,16 @@ __rec_search(t, recno, op)
 	pgno_t pg;
 	indx_t top;
 	recno_t total;
-	int sverrno;
+	int serrno;
 
 	BT_CLR(t);
 	for (pg = P_ROOT, total = 0;;) {
 		if ((h = mpool_get(t->bt_mp, pg, 0)) == NULL)
 			goto err;
 		if (h->flags & P_RLEAF) {
-			t->bt_cur.page = h;
-			t->bt_cur.index = recno - total;
-			return (&t->bt_cur);
+			e.page = h;
+			e.index = recno - total;
+			return (&e);
 		}
 		for (index = 0, top = NEXTINDEX(h);;) {
 			r = GETRINTERNAL(h, index);
@@ -99,7 +91,8 @@ __rec_search(t, recno, op)
 			total += r->nrecs;
 		}
 
-		BT_PUSH(t, pg, index - 1);
+		if (__bt_push(t, pg, index - 1) == RET_ERROR)
+			return (NULL);
 		
 		pg = r->pgno;
 		switch (op) {
@@ -118,7 +111,7 @@ __rec_search(t, recno, op)
 
 	}
 	/* Try and recover the tree. */
-err:	sverrno = errno;
+err:	serrno = errno;
 	if (op != SEARCH)
 		while  ((parent = BT_POP(t)) != NULL) {
 			if ((h = mpool_get(t->bt_mp, parent->pgno, 0)) == NULL)
@@ -129,6 +122,6 @@ err:	sverrno = errno;
 				++GETRINTERNAL(h, parent->index)->nrecs;
                         mpool_put(t->bt_mp, h, MPOOL_DIRTY);
                 }
-	errno = sverrno;
+	errno = serrno;
 	return (NULL);
 }

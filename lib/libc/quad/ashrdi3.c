@@ -1,5 +1,3 @@
-/*	$NetBSD: ashrdi3.c,v 1.4 1997/07/13 20:01:42 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -37,13 +35,9 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)ashrdi3.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: ashrdi3.c,v 1.4 1997/07/13 20:01:42 christos Exp $");
-#endif
+/*static char *sccsid = "from: @(#)ashrdi3.c	8.1 (Berkeley) 6/4/93";*/
+static char *rcsid = "$Id: ashrdi3.c,v 1.1 1993/09/16 06:05:50 mycroft Exp $";
 #endif /* LIBC_SCCS and not lint */
 
 #include "quad.h"
@@ -70,9 +64,10 @@ __ashrdi3(a, shift)
 		 * then 1 more, to get our answer.
 		 */
 		s = (aa.sl[H] >> (LONG_BITS - 1)) >> 1;
-		aa.ul[L] = aa.sl[H] >> (shift - LONG_BITS);
+		aa.ul[L] = shift >= QUAD_BITS ? s :
+		    aa.sl[H] >> (shift - LONG_BITS);
 		aa.ul[H] = s;
-	} else {
+	} else if (shift > 0) {
 		aa.ul[L] = (aa.ul[L] >> shift) |
 		    (aa.ul[H] << (LONG_BITS - shift));
 		aa.sl[H] >>= shift;

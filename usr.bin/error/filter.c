@@ -1,8 +1,6 @@
-/*	$NetBSD: filter.c,v 1.4 1997/10/18 14:44:28 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,12 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)filter.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: filter.c,v 1.4 1997/10/18 14:44:28 lukem Exp $");
+static char sccsid[] = "@(#)filter.c	5.7 (Berkeley) 2/26/91";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -59,24 +53,21 @@ char	*lint_libs[] = {
 	0
 };
 extern	char*	processname;
-int	lexsort __P((const void *, const void *));
-int	search_ignore __P((char *));
-
+int	lexsort();
 /*
  *	Read the file ERRORNAME of the names of functions in lint
  *	to ignore complaints about.
  */
-void
 getignored(auxname)
 	char	*auxname;
 {
-	int	i;
-	FILE	*fyle;
-	char	inbuffer[256];
-	int	uid;
-	char	filename[128];
-	char	*username;
-	struct	passwd *passwdentry;
+	reg	int	i;
+		FILE	*fyle;
+		char	inbuffer[256];
+		int	uid;
+		char	filename[128];
+		char	*username;
+		struct	passwd *passwdentry;
 
 	nignored = 0;
 	if (auxname == 0){	/* use the default */
@@ -133,24 +124,18 @@ getignored(auxname)
 #endif
 }
 
-int
-lexsort(c1, c2)
-	const void *c1, *c2;
-{
+int lexsort(cpp1, cpp2)
 	char	**cpp1, **cpp2;
-
-	cpp1 = (char **)c1;
-	cpp2 = (char **)c2;
+{
 	return(strcmp(*cpp1, *cpp2));
 }
 
-int
-search_ignore(key)
+int search_ignore(key)
 	char	*key;
 {
-	int	ub, lb;
-	int	halfway;
-	int	order;
+	reg	int	ub, lb;
+	reg	int	halfway;
+		int	order;
 
 	if (nignored == 0)
 		return(-1);
@@ -173,12 +158,11 @@ search_ignore(key)
  *	and the linenumber the second.
  *	Return the new categorization of the error class.
  */
-Errorclass
-discardit(errorp)
-	Eptr		errorp;
+Errorclass discardit(errorp)
+	reg	Eptr	errorp;
 {
-	int		language;
-	int		i;
+		int	language;
+	reg	int	i;
 	Errorclass	errorclass = errorp->error_e_class;
 
 	switch(errorclass){

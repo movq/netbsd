@@ -1,8 +1,6 @@
-/*	$NetBSD: clnp_timer.c,v 1.8 1997/06/24 02:26:08 thorpej Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)clnp_timer.c	8.1 (Berkeley) 6/10/93
+ *	@(#)clnp_timer.c	7.5 (Berkeley) 5/6/91
  */
 
 /***********************************************************
@@ -40,13 +38,13 @@
 
                       All Rights Reserved
 
-Permission to use, copy, modify, and distribute this software and its
-documentation for any purpose and without fee is hereby granted,
+Permission to use, copy, modify, and distribute this software and its 
+documentation for any purpose and without fee is hereby granted, 
 provided that the above copyright notice appear in all copies and that
-both that copyright notice and this permission notice appear in
+both that copyright notice and this permission notice appear in 
 supporting documentation, and that the name of IBM not be
 used in advertising or publicity pertaining to distribution of the
-software without specific, written prior permission.
+software without specific, written prior permission.  
 
 IBM DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
 ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
@@ -61,22 +59,24 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_timer.c,v 1.1 1993/04/09 12:01:00 cgd Exp $ */
+/* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_timer.c,v $ */
 
-#include <sys/param.h>
-#include <sys/mbuf.h>
-#include <sys/domain.h>
-#include <sys/protosw.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
-#include <sys/errno.h>
+#include "param.h"
+#include "mbuf.h"
+#include "domain.h"
+#include "protosw.h"
+#include "socket.h"
+#include "socketvar.h"
+#include "errno.h"
 
-#include <net/if.h>
-#include <net/route.h>
+#include "../net/if.h"
+#include "../net/route.h"
 
-#include <netiso/iso.h>
-#include <netiso/clnp.h>
-#include <netiso/clnp_stat.h>
-#include <netiso/argo_debug.h>
+#include "iso.h"
+#include "clnp.h"
+#include "clnp_stat.h"
+#include "argo_debug.h"
 
 extern struct clnp_fragl *clnp_frags;
 
@@ -87,22 +87,22 @@ extern struct clnp_fragl *clnp_frags;
  *
  * RETURNS:			pointer to next fragment in list of fragments
  *
- * SIDE EFFECTS:
+ * SIDE EFFECTS:	
  *
- * NOTES:
+ * NOTES:			
  *			TODO: send ER back to source
  */
 struct clnp_fragl *
 clnp_freefrags(cfh)
-	register struct clnp_fragl *cfh;	/* fragment header to delete */
+register struct clnp_fragl	*cfh;	/* fragment header to delete */
 {
-	struct clnp_fragl *next = cfh->cfl_next;
-	struct clnp_frag *cf;
+	struct clnp_fragl	*next = cfh->cfl_next;
+	struct clnp_frag	*cf;
 
 	/* free any frags hanging around */
 	cf = cfh->cfl_frags;
 	while (cf != NULL) {
-		struct clnp_frag *cf_next = cf->cfr_next;
+		struct clnp_frag	*cf_next = cf->cfr_next;
 		INCSTAT(cns_fragdropped);
 		m_freem(cf->cfr_data);
 		cf = cf_next;
@@ -115,7 +115,7 @@ clnp_freefrags(cfh)
 	if (clnp_frags == cfh) {
 		clnp_frags = cfh->cfl_next;
 	} else {
-		struct clnp_fragl *scan;
+		struct clnp_fragl	*scan;
 
 		for (scan = clnp_frags; scan != NULL; scan = scan->cfl_next) {
 			if (scan->cfl_next == cfh) {
@@ -126,28 +126,27 @@ clnp_freefrags(cfh)
 	}
 
 	/* free the fragment header */
-	FREE(cfh, M_FTABLE);
+	m_freem(dtom(cfh));
 
-	return (next);
+	return(next);
 }
 
 /*
  * FUNCTION:		clnp_slowtimo
  *
- * PURPOSE:			clnp timer processing; if the ttl expires on a
+ * PURPOSE:			clnp timer processing; if the ttl expires on a 
  *					packet on the reassembly queue, discard it.
  *
  * RETURNS:			none
  *
- * SIDE EFFECTS:
+ * SIDE EFFECTS:	
  *
- * NOTES:
+ * NOTES:			
  */
-void
 clnp_slowtimo()
 {
-	register struct clnp_fragl *cfh = clnp_frags;
-	int             s = splsoftnet();
+	register struct clnp_fragl	*cfh = clnp_frags;
+	int s = splnet();
 
 	while (cfh != NULL) {
 		if (--cfh->cfl_ttl == 0) {
@@ -167,15 +166,14 @@ clnp_slowtimo()
  *
  * RETURNS:			none
  *
- * SIDE EFFECTS:
+ * SIDE EFFECTS:	
  *
- * NOTES:
+ * NOTES:			
  *	TODO: should send back ER
  */
-void
 clnp_drain()
 {
-	register struct clnp_fragl *cfh = clnp_frags;
+	register struct clnp_fragl	*cfh = clnp_frags;
 
 	while (cfh != NULL)
 		cfh = clnp_freefrags(cfh);

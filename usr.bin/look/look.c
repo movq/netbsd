@@ -1,8 +1,6 @@
-/*	$NetBSD: look.c,v 1.8 1997/10/19 04:21:27 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * David Hitz of Auspex Systems, Inc.
@@ -36,17 +34,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1991 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)look.c	8.2 (Berkeley) 5/4/95";
-#endif
-__RCSID("$NetBSD: look.c,v 1.8 1997/10/19 04:21:27 lukem Exp $");
+static char sccsid[] = "@(#)look.c	5.1 (Berkeley) 7/21/91";
 #endif /* not lint */
 
 /*
@@ -60,17 +55,12 @@ __RCSID("$NetBSD: look.c,v 1.8 1997/10/19 04:21:27 lukem Exp $");
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-
-#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <err.h>
-
+#include <ctype.h>
 #include "pathnames.h"
 
 /*
@@ -92,34 +82,28 @@ int dflag, fflag;
 
 char	*binary_search __P((char *, char *, char *));
 int	 compare __P((char *, char *, char *));
+void	 err __P((const char *fmt, ...));
 char	*linear_search __P((char *, char *, char *));
 int	 look __P((char *, char *, char *));
-int	 main __P((int, char **));
 void	 print_from __P((char *, char *, char *));
 void	 usage __P((void));
 
-int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
 	struct stat sb;
-	int ch, fd, termchar;
-	char *back, *file, *front, *string, *p;
+	int ch, fd;
+	char *back, *file, *front, *string;
 
-	string = NULL;
 	file = _PATH_WORDS;
-	termchar = '\0';
-	while ((ch = getopt(argc, argv, "dft:")) != -1)
+	while ((ch = getopt(argc, argv, "df")) != EOF)
 		switch(ch) {
 		case 'd':
 			dflag = 1;
 			break;
 		case 'f':
 			fflag = 1;
-			break;
-		case 't':
-			termchar = *optarg;
 			break;
 		case '?':
 		default:
@@ -141,29 +125,22 @@ main(argc, argv)
 		usage();
 	}
 
-	if (termchar != '\0' && (p = strchr(string, termchar)) != NULL)
-		*++p = '\0';
-
-	if ((fd = open(file, O_RDONLY, 0)) < 0 || fstat(fd, &sb))
-		err(2, "%s", file);
-	if (sb.st_size > SIZE_T_MAX)
-		err(2, "%s: %s", file, strerror(EFBIG));
-	if ((front = mmap(NULL,
-	    (size_t)sb.st_size, PROT_READ, 0, fd, (off_t)0)) == NULL)
-		err(2, "%s", file);
+	if ((fd = open(file, O_RDONLY, 0)) < 0 || fstat(fd, &sb) ||
+	    (front = mmap(NULL, sb.st_size, PROT_READ, MAP_FILE, fd,
+	    (off_t)0)) == NULL)
+		err("%s: %s", file, strerror(errno));
 	back = front + sb.st_size;
 	exit(look(string, front, back));
 }
 
-int
 look(string, front, back)
 	char *string, *front, *back;
 {
-	int ch;
-	char *readp, *writep;
+	register int ch;
+	register char *readp, *writep;
 
 	/* Reformat string string to avoid doing it multiple times later. */
-	for (readp = writep = string; (ch = *readp++) != 0; ) {
+	for (readp = writep = string; ch = *readp++;) {
 		if (fflag)
 			ch = FOLD(ch);
 		if (dflag)
@@ -225,18 +202,14 @@ look(string, front, back)
 
 char *
 binary_search(string, front, back)
-	char *string, *front, *back;
+	register char *string, *front, *back;
 {
-	char *p;
+	register char *p;
 
 	p = front + (back - front) / 2;
 	SKIP_PAST_NEWLINE(p, back);
 
-	/*
-	 * If the file changes underneath us, make sure we don't
-	 * infinitely loop.
-	 */
-	while (p < back && back > front) {
+	while (p != back) {
 		if (compare(string, p, back) == GREATER)
 			front = p;
 		else
@@ -283,14 +256,14 @@ linear_search(string, front, back)
  */
 void 
 print_from(string, front, back)
-	char *string, *front, *back;
+	register char *string, *front, *back;
 {
 	for (; front < back && compare(string, front, back) == EQUAL; ++front) {
 		for (; front < back && *front != '\n'; ++front)
 			if (putchar(*front) == EOF)
-				err(2, "stdout");
+				err("stdout: %s", strerror(errno));
 		if (putchar('\n') == EOF)
-			err(2, "stdout");
+			err("stdout: %s", strerror(errno));
 	}
 }
 
@@ -309,9 +282,9 @@ print_from(string, front, back)
  */
 int
 compare(s1, s2, back)
-	char *s1, *s2, *back;
+	register char *s1, *s2, *back;
 {
-	int ch;
+	register int ch;
 
 	for (; *s1 && s2 < back && *s2 != '\n'; ++s1, ++s2) {
 		ch = *s2;
@@ -330,9 +303,38 @@ compare(s1, s2, back)
 	return (*s1 ? GREATER : EQUAL);
 }
 
-void
+static void
 usage()
 {
-	(void)fprintf(stderr, "usage: look [-df] [-t char] string [file]\n");
+	(void)fprintf(stderr, "usage: look [-df] string [file]\n");
 	exit(2);
+}
+
+#if __STDC__
+#include <stdarg.h>
+#else
+#include <varargs.h>
+#endif
+
+void
+#if __STDC__
+err(const char *fmt, ...)
+#else
+err(fmt, va_alist)
+	char *fmt;
+	va_dcl
+#endif
+{
+	va_list ap;
+#if __STDC__
+	va_start(ap, fmt);
+#else
+	va_start(ap);
+#endif
+	(void)fprintf(stderr, "look: ");
+	(void)vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	(void)fprintf(stderr, "\n");
+	exit(2);
+	/* NOTREACHED */
 }

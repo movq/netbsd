@@ -1,8 +1,5 @@
-#	$NetBSD: Makefile,v 1.6 1995/09/28 06:05:11 tls Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.1 (Berkeley) 5/27/90
 
-PROG=	man
-SRCS=	config.c man.c
-MAN=	man.1 man.conf.5
+SUBDIR=	apropos man whatis
 
-.include <bsd.prog.mk>
+.include <bsd.subdir.mk>

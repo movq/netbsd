@@ -1,8 +1,6 @@
-/*	$NetBSD: mkdir.c,v 1.17 1997/07/20 18:55:32 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,143 +31,88 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1983 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)mkdir.c	8.2 (Berkeley) 1/25/94";
-#else
-__RCSID("$NetBSD: mkdir.c,v 1.17 1997/07/20 18:55:32 christos Exp $");
-#endif
+static char sccsid[] = "@(#)mkdir.c	5.7 (Berkeley) 5/31/90";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/stat.h>
-
-#include <err.h>
 #include <errno.h>
-#include <locale.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
-int	mkpath __P((char *, mode_t, mode_t));
-void	usage __P((void));
-int	main __P((int, char *[]));
+extern int errno;
 
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
+	extern int optind;
 	int ch, exitval, pflag;
-	mode_t *set;
-	mode_t mode, dir_mode;
-
-	setlocale(LC_ALL, "");
-
-	/*
-	 * The default file mode is a=rwx (0777) with selected permissions
-	 * removed in accordance with the file mode creation mask.  For
-	 * intermediate path name components, the mode is the default modified
-	 * by u+wx so that the subdirectories can always be created.
-	 */
-	mode = 0777 & ~umask(0);
-	dir_mode = mode | S_IWUSR | S_IXUSR;
 
 	pflag = 0;
-	while ((ch = getopt(argc, argv, "m:p")) != -1)
+	while ((ch = getopt(argc, argv, "p")) != EOF)
 		switch(ch) {
 		case 'p':
 			pflag = 1;
-			break;
-		case 'm':
-			if ((set = setmode(optarg)) == NULL)
-				errx(1, "invalid file mode: %s", optarg);
-			mode = getmode(set, S_IRWXU | S_IRWXG | S_IRWXO);
 			break;
 		case '?':
 		default:
 			usage();
 		}
-	argc -= optind;
-	argv += optind;
 
-	if (*argv == NULL)
+	if (!*(argv += optind))
 		usage();
-	
-	for (exitval = 0; *argv != NULL; ++argv) {
-		char *slash;
 
-		/* Remove trailing slashes, per POSIX. */
-		slash = strrchr(*argv, '\0');
-		while (--slash > *argv && *slash == '/')
-			*slash = '\0';
-
-		if (pflag) {
-			if (mkpath(*argv, mode, dir_mode) < 0)
-				exitval = 1;
-		} else {
-			if (mkdir(*argv, mode) < 0) {
-				warn("%s", *argv);
-				exitval = 1;
-			}
+	for (exitval = 0; *argv; ++argv)
+		if (pflag)
+			exitval |= build(*argv);
+		else if (mkdir(*argv, 0777) < 0) {
+			(void)fprintf(stderr, "mkdir: %s: %s\n",
+			    *argv, strerror(errno));
+			exitval = 1;
 		}
-	}
 	exit(exitval);
 }
 
-/*
- * mkpath -- create directories.  
- *	path     - path
- *	mode     - file mode of terminal directory
- *	dir_mode - file mode of intermediate directories
- */
-int
-mkpath(path, mode, dir_mode)
+build(path)
 	char *path;
-	mode_t mode;
-	mode_t dir_mode;
 {
+	register char *p;
 	struct stat sb;
-	char *slash;
-	int done = 0;
+	int create, ch;
 
-	slash = path;
-
-	while (!done) {
-		slash += strspn(slash, "/");
-		slash += strcspn(slash, "/");
-
-		done = (*slash == '\0');
-		*slash = '\0';
-
-		if (stat(path, &sb)) {
-			if (errno != ENOENT
-			    || mkdir(path, done ? mode : dir_mode)) {
-				warn("%s", path);
-				return (-1);
+	for (create = 0, p = path;; ++p)
+		if (!*p || *p  == '/') {
+			ch = *p;
+			*p = '\0';
+			if (stat(path, &sb)) {
+				if (errno != ENOENT || mkdir(path, 0777) < 0) {
+					(void)fprintf(stderr, "mkdir: %s: %s\n",
+					    path, strerror(errno));
+					return(1);
+				}
+				create = 1;
 			}
-		} else if (!S_ISDIR(sb.st_mode)) {
-		        warnx("%s: %s", path, strerror(ENOTDIR));
-			return (-1);
+			if (!(*p = ch))
+				break;
 		}
-		    
-		*slash = '/';
+	if (!create) {
+		(void)fprintf(stderr, "mkdir: %s: %s\n", path,
+		    strerror(EEXIST));
+		return(1);
 	}
-
-	return (0);
+	return(0);
 }
 
-void
 usage()
 {
-
-	(void)fprintf(stderr, "usage: mkdir [-p] [-m mode] dirname ...\n");
+	(void)fprintf(stderr, "usage: mkdir [-p] dirname ...\n");
 	exit(1);
 }

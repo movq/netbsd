@@ -1,8 +1,6 @@
-/*	$NetBSD: pl_3.c,v 1.5 1997/10/13 21:04:09 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,19 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)pl_3.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: pl_3.c,v 1.5 1997/10/13 21:04:09 christos Exp $");
-#endif
+static char sccsid[] = "@(#)pl_3.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "player.h"
-#include <stdlib.h>
 
-void
 acceptcombat()
 {
 	int men = 0;
@@ -87,7 +78,7 @@ acceptcombat()
 			guns = mc->gunL;
 			car = mc->carL;
 		}
-		if ((!guns && !car) || load == L_EMPTY || (ready & R_LOADED) == 0)
+		if (!guns && !car || load == L_EMPTY || (ready & R_LOADED) == 0)
 			goto cant;
 		if (mf->struck || !crew[2])
 			goto cant;
@@ -97,9 +88,9 @@ acceptcombat()
 		if (closest->file->struck)
 			goto cant;
 		target = range(ms, closest);
-		if (target > rangeofshot[load] || (!guns && target >= 3))
+		if (target > rangeofshot[load] || !guns && target >= 3)
 			goto cant;
-		Signal("$$ within range of %s broadside.",
+		Signal("%s (%c%c) within range of %s broadside.",
 			closest, r ? "right" : "left");
 		if (load > L_CHAIN && target < 6) {
 			switch (sgetch("Aim for hull or rigging? ",
@@ -112,12 +103,14 @@ acceptcombat()
 				break;
 			default:
 				shootat = -1;
-				Msg("'Avast there! Hold your fire.'");
+				Signal("'Avast there! Hold your fire.'",
+					(struct ship *)0);
 			}
 		} else {
 			if (sgetch("Fire? ", (struct ship *)0, 1) == 'n') {
 				shootat = -1;
-				Msg("Belay that! Hold your fire.");
+				Signal("Belay that! Hold your fire.",
+					(struct ship *)0);
 			} else
 				shootat = RIGGING;
 		}
@@ -133,10 +126,9 @@ acceptcombat()
 		sternrake = temp > 4 && temp < 6;
 		if (rakehim)
 			if (!sternrake)
-				Msg("Raking the %s!", closest->shipname);
+				Signal("Raking the %s!", closest);
 			else
-				Msg("Stern Rake! %s splintering!",
-				    closest->shipname);
+				Signal("Stern Rake! %s splintering!", closest);
 		index = guns;
 		if (target < 3)
 			index += car;
@@ -195,9 +187,10 @@ acceptcombat()
 			}
 			table(shootat, load, hit, closest, ms, roll);
 		}
-		Msg("Damage inflicted on the %s:", closest->shipname);
-		Msg("\t%d HULL, %d GUNS, %d CREW, %d RIGGING",
-		    hhits, ghits, chits, rhits);
+		Signal("Damage inflicted on the %s:",
+			(struct ship *)0, closest->shipname);
+		Signal("\t%d HULL, %d GUNS, %d CREW, %d RIGGING",
+			(struct ship *)0, hhits, ghits, chits, rhits);
 		if (!r) {
 			mf->loadL = L_EMPTY;
 			mf->readyL = R_EMPTY;
@@ -207,35 +200,35 @@ acceptcombat()
 		}
 		continue;
 	cant:
-		Msg("Unable to fire %s broadside", r ? "right" : "left");
+		Signal("Unable to fire %s broadside",
+			(struct ship *)0, r ? "right" : "left");
 	}
 	blockalarm();
 	draw_stat();
 	unblockalarm();
 }
 
-void
 grapungrap()
 {
-	struct ship *sp;
-	int i;
+	register struct ship *sp;
+	register int i;
 
 	foreachship(sp) {
 		if (sp == ms || sp->file->dir == 0)
 			continue;
 		if (range(ms, sp) > 1 && !grappled2(ms, sp))
 			continue;
-		switch (sgetch("Attempt to grapple or ungrapple $$: ",
+		switch (sgetch("Attempt to grapple or ungrapple %s (%c%c): ",
 			sp, 1)) {
 		case 'g':
 			if (die() < 3
 			    || ms->nationality == capship(sp)->nationality) {
 				Write(W_GRAP, ms, 0, sp->file->index, 0, 0, 0);
 				Write(W_GRAP, sp, 0, player, 0, 0, 0);
-				Msg("Attempt succeeds!");
-				makesignal(ms, "grappled with $$", sp);
+				Signal("Attempt succeeds!", (struct ship *)0);
+				makesignal(ms, "grappled with %s (%c%c)", sp);
 			} else
-				Msg("Attempt fails.");
+				Signal("Attempt fails.", (struct ship *)0);
 			break;
 		case 'u':
 			for (i = grappled2(ms, sp); --i >= 0;) {
@@ -243,35 +236,37 @@ grapungrap()
 					== capship(sp)->nationality
 				    || die() < 3) {
 					cleangrapple(ms, sp, 0);
-					Msg("Attempt succeeds!");
-					makesignal(ms, "ungrappling with $$",
+					Signal("Attempt succeeds!",
+						(struct ship *)0);
+					makesignal(ms,
+						"ungrappling with %s (%c%c)",
 						sp);
 				} else
-					Msg("Attempt fails.");
+					Signal("Attempt fails.",
+						(struct ship *)0);
 			}
 			break;
 		}
 	}
 }
 
-void
 unfoulplayer()
 {
-	struct ship *to;
-	int i;
+	register struct ship *to;
+	register i;
 
 	foreachship(to) {
 		if (fouled2(ms, to) == 0)
 			continue;
-		if (sgetch("Attempt to unfoul with the $$? ", to, 1) != 'y')
+		if (sgetch("Attempt to unfoul with the %s (%c%c)? ", to, 1) != 'y')
 			continue;
 		for (i = fouled2(ms, to); --i >= 0;) {
 			if (die() <= 2) {
 				cleanfoul(ms, to, 0);
-				Msg("Attempt succeeds!");
-				makesignal(ms, "Unfouling $$", to);
+				Signal("Attempt succeeds!", (struct ship *)0);
+				makesignal(ms, "Unfouling %s (%c%c)", to);
 			} else
-				Msg("Attempt fails.");
+				Signal("Attempt fails.", (struct ship *)0);
 		}
 	}
 }

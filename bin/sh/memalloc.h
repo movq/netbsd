@@ -1,8 +1,6 @@
-/*	$NetBSD: memalloc.h,v 1.10 1995/05/11 21:29:31 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)memalloc.h	8.2 (Berkeley) 5/4/95
+ *	@(#)memalloc.h	5.1 (Berkeley) 3/7/91
  */
 
 struct stackmark {
@@ -50,18 +48,35 @@ extern int stacknleft;
 extern int sstrnleft;
 extern int herefd;
 
-pointer ckmalloc __P((int));
-pointer ckrealloc __P((pointer, int));
-char *savestr __P((char *));
-pointer stalloc __P((int));
-void stunalloc __P((pointer));
-void setstackmark __P((struct stackmark *));
-void popstackmark __P((struct stackmark *));
-void growstackblock __P((void));
-void grabstackblock __P((int));
-char *growstackstr __P((void));
-char *makestrspace __P((void));
-void ungrabstackstr __P((char *, char *));
+#ifdef __STDC__
+pointer ckmalloc(int);
+pointer ckrealloc(pointer, int);
+void free(pointer);		/* defined in C library */
+char *savestr(char *);
+pointer stalloc(int);
+void stunalloc(pointer);
+void setstackmark(struct stackmark *);
+void popstackmark(struct stackmark *);
+void growstackblock(void);
+void grabstackblock(int);
+char *growstackstr(void);
+char *makestrspace(void);
+void ungrabstackstr(char *, char *);
+#else
+pointer ckmalloc();
+pointer ckrealloc();
+void free();		/* defined in C library */
+char *savestr();
+pointer stalloc();
+void stunalloc();
+void setstackmark();
+void popstackmark();
+void growstackblock();
+void grabstackblock();
+char *growstackstr();
+char *makestrspace();
+void ungrabstackstr();
+#endif
 
 
 
@@ -69,7 +84,7 @@ void ungrabstackstr __P((char *, char *));
 #define stackblocksize() stacknleft
 #define STARTSTACKSTR(p)	p = stackblock(), sstrnleft = stackblocksize()
 #define STPUTC(c, p)	(--sstrnleft >= 0? (*p++ = (c)) : (p = growstackstr(), *p++ = (c)))
-#define CHECKSTRSPACE(n, p)	{ if (sstrnleft < n) p = makestrspace(); }
+#define CHECKSTRSPACE(n, p)	if (sstrnleft < n) p = makestrspace(); else
 #define USTPUTC(c, p)	(--sstrnleft, *p++ = (c))
 #define STACKSTRNUL(p)	(sstrnleft == 0? (p = growstackstr(), *p = '\0') : (*p = '\0'))
 #define STUNPUTC(p)	(++sstrnleft, --p)

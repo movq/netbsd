@@ -1,7 +1,5 @@
-.\"	$NetBSD: pwcache.3,v 1.5 1996/05/06 13:45:44 christos Exp $
-.\"
-.\" Copyright (c) 1989, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1989, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)pwcache.3	8.1 (Berkeley) 6/9/93
+.\"     @(#)pwcache.3	5.4 (Berkeley) 4/19/91
 .\"
-.Dd June 9, 1993
+.Dd April 19, 1991
 .Dt PWCACHE 3
 .Os
 .Sh NAME
@@ -43,6 +41,12 @@
 .Fn user_from_uid "uid_t uid" "int nouser"
 .Fn group_from_gid "gid_t gid" "int nogroup"
 .Sh DESCRIPTION
+.Bf -symbolic
+This interface is not part of the C library.
+It has been placed in the Berkeley utility library, libutil, as it is
+used by several standard utilities.
+.Ef
+.Pp
 The
 .Fn user_from_uid
 function returns the user name associated with the argument
@@ -54,7 +58,9 @@ do not require additional calls to
 If there is no user associated with the
 .Fa uid ,
 a pointer is returned
-to a string representation of the
+to an
+.Tn ASCII
+representation of the
 .Fa uid ,
 unless the argument
 .Fa nouser
@@ -73,7 +79,9 @@ do not require additional calls to
 If there is no group associated with the
 .Fa gid ,
 a pointer is returned
-to a string representation of the
+to an
+.Tn ASCII
+representation of the
 .Fa gid ,
 unless the argument
 .Fa nogroup
@@ -85,7 +93,8 @@ pointer is returned.
 .Xr getpwuid 3
 .Sh HISTORY
 The
-.Fn user_from_uid
+.Fn user_from_id
 and
-.Fn group_from_gid
-functions first appeared in 4.4BSD.
+.Fn group_from_id
+functions are
+.Ud .

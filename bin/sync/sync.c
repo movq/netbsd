@@ -1,8 +1,6 @@
-/*	$NetBSD: sync.c,v 1.8 1997/07/20 21:32:54 christos Exp $	*/
-
 /*
- * Copyright (c) 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,28 +31,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1987 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)sync.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: sync.c,v 1.8 1997/07/20 21:32:54 christos Exp $");
-#endif
+static char sccsid[] = "@(#)sync.c	4.4 (Berkeley) 5/31/90";
 #endif /* not lint */
 
-#include <unistd.h>
-
-int main __P((int, char *[]));
-
-int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main()
 {
 	sync();
 	exit(0);

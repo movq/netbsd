@@ -1,8 +1,6 @@
-/*	$NetBSD: save.c,v 1.6 1997/10/12 00:54:32 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,23 +31,21 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)save.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: save.c,v 1.6 1997/10/12 00:54:32 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)save.c	5.6 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include "mille.h"
-
+#include	"mille.h"
+#include	<sys/types.h>
+#include	<sys/stat.h>
+#include	<string.h>
 #ifndef	unctrl
-#include "unctrl.h"
+#include	"unctrl.h"
 #endif
 
 # ifdef	attron
 #	include	<term.h>
+#	define	_tty	cur_term->Nttyb
 # endif	attron
 
 /*
@@ -58,22 +54,24 @@ __RCSID("$NetBSD: save.c,v 1.6 1997/10/12 00:54:32 lukem Exp $");
 
 typedef	struct stat	STAT;
 
+char	*ctime();
+
+int	read(), write();
+
 /*
  *	This routine saves the current game for use at a later date
- *	Returns FALSE if it couldn't be done.
  */
-bool
-save()
-{
-	char	*sp;
-	int	outf;
-	time_t	*tp;
-	char	buf[80];
-	time_t	tme;
-	STAT	junk;
-	bool	rv;
 
-	sp = NULL;
+save() {
+
+	extern int	errno;
+	reg char	*sp;
+	reg int		outf;
+	reg time_t	*tp;
+	char		buf[80];
+	time_t		tme;
+	STAT		junk;
+
 	tp = &tme;
 	if (Fromfile && getyn(SAMEFILEPROMPT))
 		strcpy(buf, Fromfile);
@@ -125,20 +123,16 @@ over:
 	mvwaddstr(Score, ERR_Y, ERR_X, buf);
 	wrefresh(Score);
 	time(tp);			/* get current time		*/
-	rv = varpush(outf, writev);
+	strcpy(buf, ctime(tp));
+	for (sp = buf; *sp != '\n'; sp++)
+		continue;
+	*sp = '\0';
+	varpush(outf, write);
 	close(outf);
-	if (rv == FALSE) {
-		unlink(buf);
-	} else {
-		strcpy(buf, ctime(tp));
-		for (sp = buf; *sp != '\n'; sp++)
-			continue;
-		*sp = '\0';
-		wprintw(Score, " [%s]", buf);
-	}
+	wprintw(Score, " [%s]", buf);
 	wclrtoeol(Score);
 	wrefresh(Score);
-	return rv;
+	return TRUE;
 }
 
 /*
@@ -146,25 +140,23 @@ over:
  * backup was made on exiting, in which case certain things must
  * be cleaned up before the game starts.
  */
-bool
 rest_f(file)
-	char	*file;
-{
+reg char	*file; {
 
-	char	*sp;
-	int	inf;
-	char	buf[80];
-	STAT	sbuf;
+	reg char	*sp;
+	reg int		inf;
+	char		buf[80];
+	STAT		sbuf;
 
 	if ((inf = open(file, 0)) < 0) {
-		warn("%s", file);
+		perror(file);
 		exit(1);
 	}
 	if (fstat(inf, &sbuf) < 0) {		/* get file stats	*/
-		warn("%s", file);
+		perror(file);
 		exit(1);
 	}
-	varpush(inf, readv);
+	varpush(inf, read);
 	close(inf);
 	strcpy(buf, ctime(&sbuf.st_mtime));
 	for (sp = buf; *sp != '\n'; sp++)
@@ -177,3 +169,4 @@ rest_f(file)
 	Fromfile = file;
 	return !On_exit;
 }
+

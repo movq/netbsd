@@ -1,5 +1,3 @@
-/*	$NetBSD: atexit.c,v 1.7 1997/07/13 20:16:35 christos Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -36,26 +34,20 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "from: @(#)atexit.c	5.2 (Berkeley) 11/14/90";
-#else
-__RCSID("$NetBSD: atexit.c,v 1.7 1997/07/13 20:16:35 christos Exp $");
-#endif
+static char sccsid[] = "@(#)atexit.c	5.2 (Berkeley) 11/14/90";
 #endif /* LIBC_SCCS and not lint */
 
+#include <stddef.h>
 #include <stdlib.h>
 #include "atexit.h"
-
-struct atexit *__atexit;
 
 /*
  * Register a function to be performed at exit.
  */
 int
 atexit(fn)
-	void (*fn) __P((void));
+	void (*fn)();
 {
 	static struct atexit __atexit0;	/* one guaranteed table */
 	register struct atexit *p;

@@ -29,8 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)mail8.nr	8.2 (Berkeley) 5/16/94
+.\"	@(#)mail8.nr	8.1 (Berkeley) 6/8/93
 .\"
+.bp
 .sh 1 "Glossary"
 .pp
 This section contains the definitions of a few phrases
@@ -57,7 +58,7 @@ A collection of messages.  Often used in the phrase,
 .q "Have you read your mail?"
 .ip "\fImailbox\fP"
 The place where your mail is stored, typically in the directory
-/var/mail.
+/usr/spool/mail.
 .ip "\fImessage\fP"
 A single letter from someone, initially stored in your
 .i mailbox .

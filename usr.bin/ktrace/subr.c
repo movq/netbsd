@@ -1,5 +1,3 @@
-/*	$NetBSD: subr.c,v 1.7 1997/07/23 05:40:20 mikel Exp $	*/
-
 /*-
  * Copyright (c) 1988, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)subr.c	8.2 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: subr.c,v 1.7 1997/07/23 05:40:20 mikel Exp $");
-#endif
+static char sccsid[] = "@(#)subr.c	8.1 (Berkeley) 6/6/93";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -48,12 +41,9 @@ __RCSID("$NetBSD: subr.c,v 1.7 1997/07/23 05:40:20 mikel Exp $");
 #include <sys/proc.h>
 #include <sys/time.h>
 #include <sys/ktrace.h>
-
 #include <stdio.h>
-
 #include "ktrace.h"
 
-int
 getpoints(s)
 	char *s;
 {
@@ -63,9 +53,6 @@ getpoints(s)
 		switch(*s) {
 		case 'c':
 			facs |= KTRFAC_SYSCALL | KTRFAC_SYSRET;
-			break;
-		case 'e':
-			facs |= KTRFAC_EMUL;
 			break;
 		case 'n':
 			facs |= KTRFAC_NAMEI;
@@ -88,4 +75,33 @@ getpoints(s)
 		s++;
 	}
 	return (facs);
+}
+
+timevaladd(t1, t2)
+	struct timeval *t1, *t2;
+{
+	t1->tv_sec += t2->tv_sec;
+	t1->tv_usec += t2->tv_usec;
+	timevalfix(t1);
+}
+
+timevalsub(t1, t2)
+	struct timeval *t1, *t2;
+{
+	t1->tv_sec -= t2->tv_sec;
+	t1->tv_usec -= t2->tv_usec;
+	timevalfix(t1);
+}
+
+timevalfix(t1)
+	struct timeval *t1;
+{
+	if (t1->tv_usec < 0) {
+		t1->tv_sec--;
+		t1->tv_usec += 1000000;
+	}
+	if (t1->tv_usec >= 1000000) {
+		t1->tv_sec++;
+		t1->tv_usec -= 1000000;
+	}
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: vm_init.c,v 1.9 1994/06/29 06:48:00 cgd Exp $	*/
-
 /* 
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * The Mach Operating System project at Carnegie-Mellon University.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)vm_init.c	8.1 (Berkeley) 6/11/93
+ *	@(#)vm_init.c	7.3 (Berkeley) 4/21/91
  *
  *
  * Copyright (c) 1987, 1990 Carnegie-Mellon University.
@@ -68,11 +66,11 @@
  *	Initialize the Virtual Memory subsystem.
  */
 
-#include <sys/param.h>
+#include "param.h"
 
-#include <vm/vm.h>
-#include <vm/vm_page.h>
-#include <vm/vm_kern.h>
+#include "vm.h"
+#include "vm_page.h"
+#include "vm_kern.h"
 
 /*
  *	vm_init initializes the virtual memory system.
@@ -83,40 +81,22 @@
 
 void vm_mem_init()
 {
-#ifndef MACHINE_NONCONTIG
 	extern vm_offset_t	avail_start, avail_end;
 	extern vm_offset_t	virtual_avail, virtual_end;
-#else
-	vm_offset_t	start, end;
-#endif
 
 	/*
 	 *	Initializes resident memory structures.
 	 *	From here on, all physical memory is accounted for,
 	 *	and we use only virtual addresses.
 	 */
-	vm_set_page_size();
-#ifndef MACHINE_NONCONTIG
-	vm_page_startup(&avail_start, &avail_end);
-#else
-	vm_page_bootstrap(&start, &end);
-#endif
 
+	virtual_avail = vm_page_startup(avail_start, avail_end, virtual_avail);
 	/*
 	 * Initialize other VM packages
 	 */
-#ifndef MACHINE_NONCONTIG
-	vm_object_init(virtual_end - VM_MIN_KERNEL_ADDRESS);
-#else
-	vm_object_init(end - VM_MIN_KERNEL_ADDRESS);
-#endif
+	vm_object_init();
 	vm_map_startup();
-#ifndef MACHINE_NONCONTIG
 	kmem_init(virtual_avail, virtual_end);
 	pmap_init(avail_start, avail_end);
-#else
-	kmem_init(start, end);
-	pmap_init();
-#endif
 	vm_pager_init();
 }

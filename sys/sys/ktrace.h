@@ -1,8 +1,6 @@
-/*	$NetBSD: ktrace.h,v 1.12 1996/02/04 02:12:29 christos Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ktrace.h	8.1 (Berkeley) 6/2/93
+ *	@(#)ktrace.h	7.4 (Berkeley) 5/7/91
  */
 
 /*
@@ -62,8 +60,7 @@ struct ktr_header {
 /*
  * Test for kernel trace point
  */
-#define KTRPOINT(p, type)	\
-	(((p)->p_traceflag & ((1<<(type))|KTRFAC_ACTIVE)) == (1<<(type)))
+#define KTRPOINT(p, type)	((p)->p_traceflag & (1<<(type)))
 
 /*
  * ktrace record types
@@ -74,10 +71,10 @@ struct ktr_header {
  */
 #define KTR_SYSCALL	1
 struct ktr_syscall {
-	int	ktr_code;		/* syscall number */
-	int	ktr_argsize;		/* size of arguments */
+	short	ktr_code;		/* syscall number */
+	short	ktr_narg;		/* number of arguments */
 	/*
-	 * followed by ktr_argsize/sizeof(register_t) "register_t"s
+	 * followed by ktr_narg ints
 	 */
 };
 
@@ -122,21 +119,6 @@ struct ktr_psig {
 };
 
 /*
- * KTR_CSW - trace context switches
- */
-#define KTR_CSW		6
-struct ktr_csw {
-	int	out;	/* 1 if switch out, 0 if switch in */
-	int	user;	/* 1 if usermode (ivcsw), 0 if kernel (vcsw) */
-};
-
-/*
- * KTR_EMUL - emulation change
- */
-#define KTR_EMUL	7
-	/* record contains emulation name */
-
-/*
  * kernel trace points (in p_traceflag)
  */
 #define KTRFAC_MASK	0x00ffffff
@@ -145,16 +127,13 @@ struct ktr_csw {
 #define KTRFAC_NAMEI	(1<<KTR_NAMEI)
 #define KTRFAC_GENIO	(1<<KTR_GENIO)
 #define	KTRFAC_PSIG	(1<<KTR_PSIG)
-#define KTRFAC_CSW	(1<<KTR_CSW)
-#define KTRFAC_EMUL	(1<<KTR_EMUL)
 /*
  * trace flags (also in p_traceflags)
  */
 #define KTRFAC_ROOT	0x80000000	/* root set this trace */
 #define KTRFAC_INHERIT	0x40000000	/* pass trace flags to children */
-#define KTRFAC_ACTIVE	0x20000000	/* ktrace logging in progress, ignore */
 
-#ifndef	_KERNEL
+#ifndef	KERNEL
 
 #include <sys/cdefs.h>
 
@@ -162,14 +141,4 @@ __BEGIN_DECLS
 int	ktrace __P((const char *, int, int, pid_t));
 __END_DECLS
 
-#else
-
-void ktrcsw __P((struct vnode *, int, int));
-void ktremul __P((struct vnode *, char *));
-void ktrgenio __P((struct vnode *, int, enum uio_rw, struct iovec *, int, int));
-void ktrnamei __P((struct vnode *, char *));
-void ktrpsig __P((struct vnode *, int, sig_t, int, int));
-void ktrsyscall __P((struct vnode *, register_t, size_t, register_t []));
-void ktrsysret __P((struct vnode *, register_t, int, register_t));
-
-#endif	/* !_KERNEL */
+#endif	/* !KERNEL */

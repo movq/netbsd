@@ -1,8 +1,6 @@
-/*	$NetBSD: tcp_timer.c,v 1.21 1997/10/13 00:48:16 explorer Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1988, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1988, 1990 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,53 +30,48 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tcp_timer.c	8.1 (Berkeley) 6/10/93
+ *	@(#)tcp_timer.c	7.18 (Berkeley) 6/28/90
  */
 
-#ifndef TUBA_INCLUDE
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/malloc.h>
-#include <sys/mbuf.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
-#include <sys/protosw.h>
-#include <sys/errno.h>
+#include "param.h"
+#include "systm.h"
+#include "malloc.h"
+#include "mbuf.h"
+#include "socket.h"
+#include "socketvar.h"
+#include "protosw.h"
+#include "errno.h"
 
-#include <net/if.h>
-#include <net/route.h>
+#include "../net/if.h"
+#include "../net/route.h"
 
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/ip.h>
-#include <netinet/in_pcb.h>
-#include <netinet/ip_var.h>
-#include <netinet/tcp.h>
-#include <netinet/tcp_fsm.h>
-#include <netinet/tcp_seq.h>
-#include <netinet/tcp_timer.h>
-#include <netinet/tcp_var.h>
-#include <netinet/tcpip.h>
+#include "in.h"
+#include "in_systm.h"
+#include "ip.h"
+#include "in_pcb.h"
+#include "ip_var.h"
+#include "tcp.h"
+#include "tcp_fsm.h"
+#include "tcp_seq.h"
+#include "tcp_timer.h"
+#include "tcp_var.h"
+#include "tcpip.h"
 
 int	tcp_keepidle = TCPTV_KEEP_IDLE;
 int	tcp_keepintvl = TCPTV_KEEPINTVL;
 int	tcp_maxidle;
-#endif /* TUBA_INCLUDE */
 /*
  * Fast timeout routine for processing delayed acks
  */
-void
 tcp_fasttimo()
 {
 	register struct inpcb *inp;
 	register struct tcpcb *tp;
-	int s;
+	int s = splnet();
 
-	s = splsoftnet();
-	inp = tcbtable.inpt_queue.cqh_first;
-	if (inp)						/* XXX */
-	for (; inp != (struct inpcb *)&tcbtable.inpt_queue;
-	    inp = inp->inp_queue.cqe_next) {
+	inp = tcb.inp_next;
+	if (inp)
+	for (; inp != &tcb; inp = inp->inp_next)
 		if ((tp = (struct tcpcb *)inp->inp_ppcb) &&
 		    (tp->t_flags & TF_DELACK)) {
 			tp->t_flags &= ~TF_DELACK;
@@ -86,7 +79,6 @@ tcp_fasttimo()
 			tcpstat.tcps_delack++;
 			(void) tcp_output(tp);
 		}
-	}
 	splx(s);
 }
 
@@ -95,40 +87,33 @@ tcp_fasttimo()
  * Updates the timers in all active tcb's and
  * causes finite state machine actions if timers expire.
  */
-void
 tcp_slowtimo()
 {
-	register struct inpcb *inp, *ninp;
+	register struct inpcb *ip, *ipnxt;
 	register struct tcpcb *tp;
-	int s;
-	register long i;
-	static int syn_cache_last = 0;
+	int s = splnet();
+	register int i;
 
-	s = splsoftnet();
 	tcp_maxidle = TCPTV_KEEPCNT * tcp_keepintvl;
 	/*
 	 * Search through tcb's and update active timers.
 	 */
-	inp = tcbtable.inpt_queue.cqh_first;
-	if (inp == (struct inpcb *)0) {				/* XXX */
+	ip = tcb.inp_next;
+	if (ip == 0) {
 		splx(s);
 		return;
 	}
-	for (; inp != (struct inpcb *)&tcbtable.inpt_queue; inp = ninp) {
-		ninp = inp->inp_queue.cqe_next;
-		tp = intotcpcb(inp);
+	for (; ip != &tcb; ip = ipnxt) {
+		ipnxt = ip->inp_next;
+		tp = intotcpcb(ip);
 		if (tp == 0)
 			continue;
 		for (i = 0; i < TCPT_NTIMERS; i++) {
 			if (tp->t_timer[i] && --tp->t_timer[i] == 0) {
 				(void) tcp_usrreq(tp->t_inpcb->inp_socket,
 				    PRU_SLOWTIMO, (struct mbuf *)0,
-				    (struct mbuf *)i, (struct mbuf *)0,
-				    (struct proc *)0);
-				/* XXX NOT MP SAFE */
-				if ((ninp == (void *)&tcbtable.inpt_queue &&
-				    tcbtable.inpt_queue.cqh_last != inp) ||
-				    ninp->inp_queue.cqe_prev != inp)
+				    (struct mbuf *)i, (struct mbuf *)0);
+				if (ipnxt->inp_prev != ip)
 					goto tpgone;
 			}
 		}
@@ -138,26 +123,17 @@ tcp_slowtimo()
 tpgone:
 		;
 	}
-#if NRND == 0 /* Do we need to do this when using random() ? */
-	tcp_iss_seq += TCP_ISSINCR;			/* increment iss */
+	tcp_iss += TCP_ISSINCR/PR_SLOWHZ;		/* increment iss */
 #ifdef TCP_COMPAT_42
-	if ((int)tcp_iss_seq < 0)
-		tcp_iss_seq = 0;			/* XXX */
+	if ((int)tcp_iss < 0)
+		tcp_iss = 0;				/* XXX */
 #endif
-#endif
-	tcp_now++;					/* for timestamps */
-	if (++syn_cache_last >= tcp_syn_cache_interval) {
-		syn_cache_timer(syn_cache_last);
-		syn_cache_last = 0;
-	}
 	splx(s);
 }
-#ifndef TUBA_INCLUDE
 
 /*
  * Cancel all timers for TCP tp.
  */
-void
 tcp_canceltimers(tp)
 	struct tcpcb *tp;
 {
@@ -178,6 +154,7 @@ tcp_timers(tp, timer)
 	register struct tcpcb *tp;
 	int timer;
 {
+	register int rexmt;
 
 	switch (timer) {
 
@@ -209,8 +186,8 @@ tcp_timers(tp, timer)
 			break;
 		}
 		tcpstat.tcps_rexmttimeo++;
-		TCPT_RANGESET(tp->t_rxtcur,
-		    TCP_REXMTVAL(tp) * tcp_backoff[tp->t_rxtshift],
+		rexmt = TCP_REXMTVAL(tp) * tcp_backoff[tp->t_rxtshift];
+		TCPT_RANGESET(tp->t_rxtcur, rexmt,
 		    tp->t_rttmin, TCPTV_REXMTMAX);
 		tp->t_timer[TCPT_REXMT] = tp->t_rxtcur;
 		/*
@@ -284,7 +261,7 @@ tcp_timers(tp, timer)
 	 */
 	case TCPT_KEEP:
 		tcpstat.tcps_keeptimeo++;
-		if (TCPS_HAVEESTABLISHED(tp->t_state) == 0)
+		if (tp->t_state < TCPS_ESTABLISHED)
 			goto dropit;
 		if (tp->t_inpcb->inp_socket->so_options & SO_KEEPALIVE &&
 		    tp->t_state <= TCPS_CLOSE_WAIT) {
@@ -308,13 +285,11 @@ tcp_timers(tp, timer)
 			 * The keepalive packet must have nonzero length
 			 * to get a 4.2 host to respond.
 			 */
-			(void)tcp_respond(tp, tp->t_template,
-			    (struct mbuf *)NULL, tp->rcv_nxt - 1,
-			    tp->snd_una - 1, 0);
+			tcp_respond(tp, tp->t_template, (struct mbuf *)NULL,
+			    tp->rcv_nxt - 1, tp->snd_una - 1, 0);
 #else
-			(void)tcp_respond(tp, tp->t_template,
-			    (struct mbuf *)NULL, tp->rcv_nxt,
-			    tp->snd_una - 1, 0);
+			tcp_respond(tp, tp->t_template, (struct mbuf *)NULL,
+			    tp->rcv_nxt, tp->snd_una - 1, 0);
 #endif
 			tp->t_timer[TCPT_KEEP] = tcp_keepintvl;
 		} else
@@ -327,4 +302,3 @@ tcp_timers(tp, timer)
 	}
 	return (tp);
 }
-#endif /* TUBA_INCLUDE */

@@ -1,7 +1,5 @@
-.\"	$NetBSD: socket.2,v 1.5 1995/02/27 12:37:53 cgd Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)socket.2	8.1 (Berkeley) 6/4/93
+.\"     @(#)socket.2	6.8 (Berkeley) 3/10/91
 .\"
-.Dd June 4, 1993
+.Dd March 10, 1991
 .Dt SOCKET 2
 .Os BSD 4.2
 .Sh NAME
@@ -213,7 +211,7 @@ value is a descriptor referencing the socket.
 The
 .Fn socket
 call fails if:
-.Bl -tag -width Er
+.Bl -tag -width EPROTONOPSUPPORTA
 .It Bq Er EPROTONOSUPPORT
 The protocol type or the specified protocol is not supported
 within this domain.
@@ -254,6 +252,6 @@ The socket cannot be created until sufficient resources are freed.
 .Re
 .Sh HISTORY
 The
-.Fn socket
+.Nm
 function call appeared in
 .Bx 4.2 .

@@ -1,5 +1,3 @@
-/*	$NetBSD: chflags.c,v 1.5 1997/10/18 12:39:54 lukem Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -33,18 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+static char copyright[] =
+"@(#) Copyright (c) 1992, 1993, 1994\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "from: @(#)chflags.c	8.5 (Berkeley) 4/1/94";
-#else
-__RCSID("$NetBSD: chflags.c,v 1.5 1997/10/18 12:39:54 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)chflags.c	8.5 (Berkeley) 4/1/94";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -58,7 +52,6 @@ __RCSID("$NetBSD: chflags.c,v 1.5 1997/10/18 12:39:54 lukem Exp $");
 #include <string.h>
 #include <unistd.h>
 
-int	main __P((int, char **));
 u_long	string_to_flags __P((char **, u_long *, u_long *));
 void	usage __P((void));
 
@@ -75,7 +68,7 @@ main(argc, argv)
 	char *flags, *ep;
 
 	Hflag = Lflag = Pflag = Rflag = 0;
-	while ((ch = getopt(argc, argv, "HLPR")) != -1)
+	while ((ch = getopt(argc, argv, "HLPR")) != EOF)
 		switch (ch) {
 		case 'H':
 			Hflag = 1;
@@ -132,7 +125,7 @@ main(argc, argv)
 	}
 
 	if ((ftsp = fts_open(++argv, fts_options , 0)) == NULL)
-		err(1, "fts_open `%s'", argv[0]); 
+		err(1, NULL); 
 
 	for (rval = 0; (p = fts_read(ftsp)) != NULL;) {
 		switch (p->fts_info) {

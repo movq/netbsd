@@ -1,8 +1,7 @@
-#	$NetBSD: Makefile,v 1.8 1997/10/19 04:23:06 lukem Exp $
-#	@(#)Makefile	8.2 (Berkeley) 4/28/95
+#	@(#)Makefile	5.8 (Berkeley) 5/11/90
 
 PROG=	msgs
-DPADD=	${LIBTERM}
-LDADD=	-ltermlib
+DPADD=	${LIBTERM} ${LIBCOMPAT}
+LDADD=	-ltermlib -lcompat
 
 .include <bsd.prog.mk>

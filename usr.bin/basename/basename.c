@@ -1,8 +1,6 @@
-/*	$NetBSD: basename.c,v 1.10 1997/10/18 12:18:20 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,39 +31,29 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1991 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)basename.c	8.4 (Berkeley) 5/4/95";
-#endif
-__RCSID("$NetBSD: basename.c,v 1.10 1997/10/18 12:18:20 lukem Exp $");
+static char sccsid[] = "@(#)basename.c	5.1 (Berkeley) 3/9/91";
 #endif /* not lint */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <locale.h>
-#include <unistd.h>
 
-int main __P((int, char **));
-void usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	char *p;
+	extern int optind;
+	register char *p;
 	int ch;
 
-	setlocale(LC_ALL, "");
-
-	while ((ch = getopt(argc, argv, "")) != -1)
+	while ((ch = getopt(argc, argv, "")) != EOF)
 		switch(ch) {
 		case '?':
 		default:
@@ -101,10 +89,8 @@ main(argc, argv)
 	 * (3) If there are any trailing slash characters in string, they
 	 *     shall be removed.
 	 */
-	for (; *p; ++p)
-		continue;
-	while (*--p == '/')
-		continue;
+	for (; *p; ++p);
+	while (*--p == '/');
 	*++p = '\0';
 
 	/*
@@ -139,10 +125,8 @@ main(argc, argv)
 	exit(0);
 }
 
-void
 usage()
 {
-
 	(void)fprintf(stderr, "usage: basename string [suffix]\n");
 	exit(1);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: extern.h,v 1.6 1997/01/30 01:10:35 thorpej Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,22 +30,16 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)extern.h	8.1 (Berkeley) 6/6/93
+ *	@(#)extern.h	5.1 (Berkeley) 4/4/91
  */
 
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int	crc __P((int, u_int32_t *, u_int32_t *));
-void	pcrc __P((char *, u_int32_t, u_int32_t));
-void	psum1 __P((char *, u_int32_t, u_int32_t));
-void	psum2 __P((char *, u_int32_t, u_int32_t));
-int	csum1 __P((int, u_int32_t *, u_int32_t *));
-int	csum2 __P((int, u_int32_t *, u_int32_t *));
-int	md5 __P((int, u_int32_t *, u_int32_t *));
-
-void	MDString __P((const char *));
-void	MDTimeTrial __P((void));
-void	MDTestSuite __P((void));
-void	MDFilter __P((int));
+int	crc __P((int, unsigned long *, unsigned long *));
+void	pcrc __P((char *, unsigned long, unsigned long));
+void	psum1 __P((char *, unsigned long, unsigned long));
+void	psum2 __P((char *, unsigned long, unsigned long));
+int	csum1 __P((int, unsigned long *, unsigned long *));
+int	csum2 __P((int, unsigned long *, unsigned long *));
 __END_DECLS

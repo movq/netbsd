@@ -1,8 +1,6 @@
-/*	$NetBSD: kill.c,v 1.4 1997/10/12 21:24:56 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)kill.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: kill.c,v 1.4 1997/10/12 21:24:56 christos Exp $");
-#endif
+static char sccsid[] = "@(#)kill.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include "trek.h"
+# include	"trek.h"
 
 /*
 **  KILL KILL KILL !!!
@@ -61,11 +53,10 @@ __RCSID("$NetBSD: kill.c,v 1.4 1997/10/12 21:24:56 christos Exp $");
 **	and the game is won if that was the last klingon.
 */
 
-void
 killk(ix, iy)
 int	ix, iy;
 {
-	int		i;
+	register int		i, j;
 
 	printf("   *** Klingon at %d,%d destroyed ***\n", ix, iy);
 
@@ -84,7 +75,7 @@ int	ix, iy;
 			/* purge him from the list */
 			Etc.nkling -= 1;
 			for (; i < Etc.nkling; i++)
-				Etc.klingon[i] = Etc.klingon[i+1];
+				bmove(&Etc.klingon[i+1], &Etc.klingon[i], sizeof Etc.klingon[i]);
 			break;
 		}
 
@@ -102,12 +93,11 @@ int	ix, iy;
 **  handle a starbase's death
 */
 
-void
 killb(qx, qy)
 int	qx, qy;
 {
-	struct quad	*q;
-	struct xy	*b;
+	register struct quad	*q;
+	register struct xy	*b;
 
 	q = &Quad[qx][qy];
 
@@ -125,12 +115,12 @@ int	qx, qy;
 	for (b = Now.base; ; b++)
 		if (qx == b->x && qy == b->y)
 			break;
-	*b = Now.base[Now.bases];
+	bmove(&Now.base[Now.bases], b, sizeof *b);
 	if (qx == Ship.quadx && qy == Ship.quady)
 	{
 		Sect[Etc.starbase.x][Etc.starbase.y] = EMPTY;
 		if (Ship.cond == DOCKED)
-			undock(0);
+			undock();
 		printf("Starbase at %d,%d destroyed\n", Etc.starbase.x, Etc.starbase.y);
 	}
 	else
@@ -150,14 +140,14 @@ int	qx, qy;
  **	kill an inhabited starsystem
  **/
 
-void
 kills(x, y, f)
 int	x, y;	/* quad coords if f == 0, else sector coords */
 int	f;	/* f != 0 -- this quad;  f < 0 -- Enterprise's fault */
 {
-	struct quad	*q;
-	struct event	*e;
-	char		*name;
+	register struct quad	*q;
+	register struct event	*e;
+	register char		*name;
+	char			*systemname();
 
 	if (f)
 	{
@@ -194,14 +184,13 @@ int	f;	/* f != 0 -- this quad;  f < 0 -- Enterprise's fault */
  **	"kill" a distress call
  **/
 
-void
 killd(x, y, f)
 int	x, y;		/* quadrant coordinates */
 int	f;		/* set if user is to be informed */
 {
-	struct event	*e;
-	int		i;
-	struct quad	*q;
+	register struct event	*e;
+	register int		i;
+	register struct quad	*q;
 
 	q = &Quad[x][y];
 	for (i = 0; i < MAXEVENTS; i++)

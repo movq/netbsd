@@ -1,5 +1,5 @@
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -29,19 +29,18 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)rwhod.8	8.2 (Berkeley) 12/11/93
-.\"	$NetBSD: rwhod.8,v 1.8 1997/10/17 13:13:40 lukem Exp $
+.\"     @(#)rwhod.8	6.5 (Berkeley) 3/16/91
 .\"
-.Dd December 11, 1993
+.Dd March 16, 1991
 .Dt RWHOD 8
 .Os BSD 4.2
 .Sh NAME
 .Nm rwhod
 .Nd system status server
 .Sh SYNOPSIS
-.Nm
+.Nm rwhod
 .Sh DESCRIPTION
-.Nm
+.Nm Rwhod
 is the server which maintains the database used by the
 .Xr rwho 1
 and
@@ -50,13 +49,13 @@ programs.  Its operation is predicated on the ability to
 .Em broadcast
 messages on a network.
 .Pp
-.Nm
+.Nm Rwhod
 operates as both a producer and consumer of status information.
 As a producer of information it periodically
 queries the state of the system and constructs
 status messages which are broadcast on a network.
 As a consumer of information, it listens for other
-.Nm
+.Nm rwhod
 servers' status messages, validating them, then recording
 them in a collection of files located in the directory
 .Pa /var/rwho .
@@ -69,21 +68,21 @@ The messages sent and received, are of the form:
 struct	outmp {
 	char	out_line[8];		/* tty name */
 	char	out_name[8];		/* user id */
-	int32_t	out_time;		/* time on */
+	long	out_time;		/* time on */
 };
 
 struct	whod {
 	char	wd_vers;
 	char	wd_type;
 	char	wd_fill[2];
-	int32_t	wd_sendtime;
-	int32_t	wd_recvtime;
+	int	wd_sendtime;
+	int	wd_recvtime;
 	char	wd_hostname[32];
-	int32_t	wd_loadav[3];
-	int32_t	wd_boottime;
+	int	wd_loadav[3];
+	int	wd_boottime;
 	struct	whoent {
 		struct	outmp we_utmp;
-		int32_t	we_idle;
+		int	we_idle;
 	} wd_we[1024 / sizeof (struct whoent)];
 };
 .Ed
@@ -95,8 +94,8 @@ program, and represent load averages over the 5, 10, and 15 minute
 intervals prior to a server's transmission; they are multiplied by 100
 for representation in an integer.  The host name
 included is that returned by the
-.Xr gethostname 3
-function call, with any trailing domain name omitted.
+.Xr gethostname 2
+system call, with any trailing domain name omitted.
 The array at the end of the message contains information about
 the users logged in to the sending machine.  This information 
 includes the contents of the 
@@ -105,15 +104,15 @@ entry for each non-idle terminal line and a value indicating the
 time in seconds since a character was last received on the terminal line.
 .Pp
 Messages received by the
-.Xr rwho 1
+.Xr rwho
 server are discarded unless they originated at an
-rwho
+.Xr rwho
 server's port.  In addition, if the host's name, as specified
 in the message, contains any unprintable
 .Tn ASCII
 characters, the
 message is discarded.  Valid messages received by
-.Nm
+.Nm rwhod
 are placed in files named
 .Pa whod.hostname
 in the directory
@@ -123,6 +122,14 @@ format described above.
 .Pp
 Status messages are generated approximately once every
 3 minutes.
+.Nm Rwhod
+performs an
+.Xr nlist 3
+on
+.Pa /vmunix
+every 30 minutes to guard against
+the possibility that this file is not the system
+image currently operating.
 .Sh SEE ALSO
 .Xr rwho 1 ,
 .Xr ruptime 1
@@ -130,7 +137,7 @@ Status messages are generated approximately once every
 There should be a way to relay status information between networks. 
 Status information should be sent only upon request rather than continuously.
 People often interpret the server dying
-or network communication failures
+or network communtication failures
 as a machine going down.
 .Sh HISTORY
 The

@@ -1,8 +1,6 @@
-/*	$NetBSD: printenv.c,v 1.6 1997/10/19 12:44:26 lukem Exp $	*/
-
 /*
- * Copyright (c) 1987, 1993
- *    Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,26 +31,15 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
-      The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1987 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-/*static char sccsid[] = "from: @(#)printenv.c	8.2 (Berkeley) 5/4/95";*/
-__RCSID("$NetBSD: printenv.c,v 1.6 1997/10/19 12:44:26 lukem Exp $");
+static char sccsid[] = "@(#)printenv.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
-
-#include <sys/types.h>
-
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-
-int	main __P((int, char **));
-void	usage __P((void));
 
 /*
  * printenv
@@ -60,45 +47,27 @@ void	usage __P((void));
  * Bill Joy, UCB
  * February, 1979
  */
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
 	extern char **environ;
-	char *cp, **ep;
-	size_t len;
-	int ch;
+	register char *cp, **ep;
+	register int len;
 
-	while ((ch = getopt(argc, argv, "")) != -1)
-		switch(ch) {
-		case '?':
-		default:
-			usage();
-		}
-	argc -= optind;
-	argv += optind;
-
-	if (argc == 0) {
+	if (argc < 2) {
 		for (ep = environ; *ep; ep++)
-			(void)printf("%s\n", *ep);
+			puts(*ep);
 		exit(0);
 	}
-	len = strlen(*argv);
+	len = strlen(*++argv);
 	for (ep = environ; *ep; ep++)
-		if (!memcmp(*ep, *argv, len)) {
+		if (!strncmp(*ep, *argv, len)) {
 			cp = *ep + len;
 			if (!*cp || *cp == '=') {
-				(void)printf("%s\n", *cp ? cp + 1 : cp);
+				puts(*cp ? cp + 1 : cp);
 				exit(0);
 			}
 		}
-	exit(1);
-}
-
-void
-usage()
-{
-	(void)fprintf(stderr, "usage: printenv [name]\n");
 	exit(1);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: grammar.y,v 1.4 1997/10/10 02:07:08 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Ed James.
@@ -63,13 +61,8 @@
 %{
 #include "include.h"
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)grammar.y	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: grammar.y,v 1.4 1997/10/10 02:07:08 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)grammar.y	5.2 (Berkeley) 4/30/90";
 #endif /* not lint */
 
 int	errors = 0;
@@ -289,18 +282,14 @@ Lline:
 	;
 %%
 
-void
 check_edge(x, y)
-	int x, y;
 {
 	if (!(x == 0) && !(x == sp->width - 1) && 
 	    !(y == 0) && !(y == sp->height - 1))
 		yyerror("edge value not on edge.");
 }
 
-void
 check_point(x, y)
-	int x, y;
 {
 	if (x < 1 || x >= sp->width - 1)
 		yyerror("X value out of range.");
@@ -308,9 +297,7 @@ check_point(x, y)
 		yyerror("Y value out of range.");
 }
 
-void
 check_linepoint(x, y)
-	int x, y;
 {
 	if (x < 0 || x >= sp->width)
 		yyerror("X value out of range.");
@@ -318,9 +305,7 @@ check_linepoint(x, y)
 		yyerror("Y value out of range.");
 }
 
-void
 check_line(x1, y1, x2, y2)
-	int x1, y1, x2, y2;
 {
 	int	d1, d2;
 
@@ -334,9 +319,7 @@ check_line(x1, y1, x2, y2)
 		yyerror("Bad line endpoints.");
 }
 
-int
 yyerror(s)
-	const char *s;
 {
 	fprintf(stderr, "\"%s\": line %d: %s\n", file, line, s);
 	errors++;
@@ -344,9 +327,7 @@ yyerror(s)
 	return (errors);
 }
 
-void
 check_edir(x, y, dir)
-	int x, y, dir;
 {
 	int	bad = 0;
 
@@ -377,13 +358,10 @@ check_edir(x, y, dir)
 		yyerror("Bad direction for entrance at exit.");
 }
 
-void
 check_adir(x, y, dir)
-	int x, y, dir;
 {
 }
 
-int
 checkdefs()
 {
 	int	err = 0;

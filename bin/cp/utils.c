@@ -1,5 +1,3 @@
-/*	$NetBSD: utils.c,v 1.10 1997/10/19 12:50:47 mycroft Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)utils.c	8.3 (Berkeley) 4/1/94";
-#else
-__RCSID("$NetBSD: utils.c,v 1.10 1997/10/19 12:50:47 mycroft Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -91,7 +84,7 @@ copy_file(entp, dne)
 			checkch = ch = getchar();
 			while (ch != '\n' && ch != EOF)
 				ch = getchar();
-			if (checkch != 'y' && checkch != 'Y') {
+			if (checkch != 'y') {
 				(void)close(from_fd);
 				return (0);
 			}
@@ -148,7 +141,9 @@ copy_file(entp, dne)
 		}
 	}
 
+	/* If the copy went bad, lose the file. */
 	if (rval == 1) {
+		(void)unlink(to.p_path);
 		(void)close(from_fd);
 		(void)close(to_fd);
 		return (1);
@@ -200,7 +195,7 @@ copy_link(p, exists)
 		warn("symlink: %s", link);
 		return (1);
 	}
-	return (pflag ? setfile(p->fts_statp, 0) : 0);
+	return (0);
 }
 
 int
@@ -238,19 +233,18 @@ copy_special(from_stat, exists)
 
 int
 setfile(fs, fd)
-	struct stat *fs;
+	register struct stat *fs;
 	int fd;
 {
 	static struct timeval tv[2];
-	int rval, islink;
+	int rval;
 
 	rval = 0;
-	islink = S_ISLNK(fs->st_mode);
 	fs->st_mode &= S_ISUID | S_ISGID | S_IRWXU | S_IRWXG | S_IRWXO;
 
 	TIMESPEC_TO_TIMEVAL(&tv[0], &fs->st_atimespec);
 	TIMESPEC_TO_TIMEVAL(&tv[1], &fs->st_mtimespec);
-	if (fd ? futimes(fd, tv) : lutimes(to.p_path, tv)) {
+	if (utimes(to.p_path, tv)) {
 		warn("utimes: %s", to.p_path);
 		rval = 1;
 	}
@@ -261,34 +255,22 @@ setfile(fs, fd)
 	 * chown.  If chown fails, lose setuid/setgid bits.
 	 */
 	if (fd ? fchown(fd, fs->st_uid, fs->st_gid) :
-	    lchown(to.p_path, fs->st_uid, fs->st_gid)) {
+	    chown(to.p_path, fs->st_uid, fs->st_gid)) {
 		if (errno != EPERM) {
 			warn("chown: %s", to.p_path);
 			rval = 1;
 		}
 		fs->st_mode &= ~(S_ISUID | S_ISGID);
 	}
-	if (fd ? fchmod(fd, fs->st_mode) : lchmod(to.p_path, fs->st_mode)) {
-		warn("chmod: %s", to.p_path);
+	if (fd ? fchmod(fd, fs->st_mode) : chmod(to.p_path, fs->st_mode)) {
+		warn("chown: %s", to.p_path);
 		rval = 1;
 	}
 
-	if (!islink) {
-		/*
-		 * XXX
-		 * NFS doesn't support chflags; ignore errors unless
-		 * there's reason to believe we're losing bits.
-		 * (Note, this still won't be right if the server
-		 * supports flags and we were trying to *remove* flags
-		 * on a file that we copied, i.e., that we didn't create.)
-		 */
-		errno = 0;
-		if (fd ? fchflags(fd, fs->st_flags) :
-		    chflags(to.p_path, fs->st_flags))
-			if (errno != EOPNOTSUPP || fs->st_flags != 0) {
-				warn("chflags: %s", to.p_path);
-				rval = 1;
-			}
+	if (fd ?
+	    fchflags(fd, fs->st_flags) : chflags(to.p_path, fs->st_flags)) {
+		warn("chflags: %s", to.p_path);
+		rval = 1;
 	}
 	return (rval);
 }
@@ -297,7 +279,7 @@ void
 usage()
 {
 	(void)fprintf(stderr, "%s\n%s\n",
-	    "usage: cp [-R [-H | -L | -P]] [-fip] src target",
-	    "       cp [-R [-H | -L | -P]] [-fip] src1 ... srcN directory");
+"usage: cp [-R [-H | -L | -P] [-fip] src target",
+"       cp [-R [-H | -L | -P] [-fip] src1 ... srcN directory");
 	exit(1);
 }

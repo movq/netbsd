@@ -1,8 +1,6 @@
-/*	$NetBSD: dr_1.c,v 1.6 1997/10/13 21:03:09 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,25 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)dr_1.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: dr_1.c,v 1.6 1997/10/13 21:03:09 christos Exp $");
-#endif
+static char sccsid[] = "@(#)dr_1.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "driver.h"
-#include <stdlib.h>
 
-void
 unfoul()
 {
-	struct ship *sp;
+	register struct ship *sp;
 	struct ship *to;
-	int nat;
-	int i;
+	register int nat;
+	register i;
 
 	foreachship(sp) {
 		if (sp->file->captain[0])
@@ -68,11 +59,10 @@ unfoul()
 	}
 }
 
-void
 boardcomp()
 {
 	int crew[3];
-	struct ship *sp, *sq;
+	register struct ship *sp, *sq;
 
 	foreachship(sp) {
 		if (*sp->file->captain)
@@ -133,7 +123,6 @@ boardcomp()
 	}
 }
 
-int
 fightitout(from, to, key)
 struct ship *from, *to;
 int key;
@@ -167,7 +156,7 @@ int key;
 	fromstrength = menfrom * fromcap->specs->qual;
 	strengthto = mento * tocap->specs->qual;
 	for (count = 0;
-	     ((fromstrength < strengthto * 3 && strengthto < fromstrength * 3)
+	     (fromstrength < strengthto * 3 && strengthto < fromstrength * 3
 	      || fromstrength == -1) && count < 4;
 	     count++) {
 		index = fromstrength/10;
@@ -189,10 +178,10 @@ int key;
 		unboard(to, from, 0);
 		subtract(from, totalfrom, crewfrom, fromcap, pcfrom);
 		subtract(to, totalto, crewto, tocap, pcto);
-		makemsg(from, "boarders from %s repelled", to->shipname);
+		makesignal(from, "boarders from %s repelled", to);
 		(void) sprintf(message, "killed in melee: %d.  %s: %d",
 			totalto, from->shipname, totalfrom);
-		Write(W_SIGNAL, to, 1, (long) message, 0, 0, 0);
+		Write(W_SIGNAL, to, 1, (int) message, 0, 0, 0);
 		if (key)
 			return 1;
 	} else if (strengthto >= fromstrength * 3) {
@@ -224,10 +213,10 @@ int key;
 			}
 			(void) sprintf(message, "captured by the %s!",
 				to->shipname);
-			Write(W_SIGNAL, from, 1, (long) message, 0, 0, 0);
+			Write(W_SIGNAL, from, 1, (int) message, 0, 0, 0);
 			(void) sprintf(message, "killed in melee: %d.  %s: %d",
 				totalto, from->shipname, totalfrom);
-			Write(W_SIGNAL, to, 1, (long) message, 0, 0, 0);
+			Write(W_SIGNAL, to, 1, (int) message, 0, 0, 0);
 			mento = 0;
 			return 0;
 		}
@@ -235,11 +224,10 @@ int key;
 	return 0;
 }
 
-void
 resolve()
 {
 	int thwart;
-	struct ship *sp, *sq;
+	register struct ship *sp, *sq;
 
 	foreachship(sp) {
 		if (sp->file->dir == 0)
@@ -266,11 +254,10 @@ resolve()
 	}
 }
 
-void
 compcombat()
 {
-	int n;
-	struct ship *sp;
+	register n;
+	register struct ship *sp;
 	struct ship *closest;
 	int crew[3], men = 0, target, temp;
 	int r, guns, ready, load, car;
@@ -396,7 +383,6 @@ compcombat()
 	}
 }
 
-int
 next()
 {
 	if (++turn % 55 == 0)
@@ -405,8 +391,8 @@ next()
 		else
 			people = 0;
 	if (people <= 0 || windspeed == 7) {
-		struct ship *s;
-		struct ship *bestship = NULL;
+		register struct ship *s;
+		struct ship *bestship;
 		float net, best = 0.0;
 		foreachship(s) {
 			if (*s->file->captain)
@@ -427,7 +413,7 @@ next()
 				sizeof bestship->file->captain);
 			bestship->file->captain
 				[sizeof bestship->file->captain - 1] = 0;
-			logger(bestship);
+			log(bestship);
 		}
 		return -1;
 	}

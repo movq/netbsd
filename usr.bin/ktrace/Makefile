@@ -1,8 +1,5 @@
-#	$NetBSD: Makefile,v 1.8 1997/10/19 03:39:50 lukem Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.1 (Berkeley) 5/11/90
 
-PROG=	ktrace
-SRCS=	ktrace.c subr.c
-LDSTATIC=-static
+SUBDIR=	ktrace kdump
 
-.include <bsd.prog.mk>
+.include <bsd.subdir.mk>

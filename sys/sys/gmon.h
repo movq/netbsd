@@ -1,5 +1,3 @@
-/*	$NetBSD: gmon.h,v 1.6 1996/11/25 20:08:44 jonathan Exp $	*/
-
 /*-
  * Copyright (c) 1982, 1986, 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -61,9 +59,7 @@ struct gmonhdr {
 /*
  * fraction of text space to allocate for histogram counters here, 1/2
  */
-#ifndef HISTFRACTION
 #define	HISTFRACTION	2
-#endif	/* HISTFRACTION */
 
 /*
  * Fraction of text space to allocate for from hash buckets.
@@ -79,7 +75,7 @@ struct gmonhdr {
  *	calls	$0,(r0)
  *	calls	$0,(r0)
  *
- * which is separated by only three bytes, thus HASHFRACTION is
+ * which is separated by only three bytes, thus HASHFRACTION is 
  * calculated as:
  *
  *	HASHFRACTION = 3 / (2 * 2 - 1) = 1
@@ -87,9 +83,9 @@ struct gmonhdr {
  * Note that the division above rounds down, thus if MIN_SUBR_FRACTION
  * is less than three, this algorithm will not work!
  *
- * In practice, however, call instructions are rarely at a minimal
+ * In practice, however, call instructions are rarely at a minimal 
  * distance.  Hence, we will define HASHFRACTION to be 2 across all
- * architectures.  This saves a reasonable amount of space for
+ * architectures.  This saves a reasonable amount of space for 
  * profiling data structures without (in practice) sacrificing
  * any granularity.
  */
@@ -110,7 +106,7 @@ struct tostruct {
 };
 
 /*
- * a raw arc, with pointers to the calling site and
+ * a raw arc, with pointers to the calling site and 
  * the called site and a count.
  */
 struct rawarc {

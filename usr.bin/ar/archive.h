@@ -1,8 +1,6 @@
-/*	$NetBSD: archive.h,v 1.6 1995/03/25 06:39:43 glass Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Hugh Smith at The University of Guelph.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)archive.h	8.3 (Berkeley) 4/2/94
+ *	@(#)archive.h	5.8 (Berkeley) 4/12/91
  */
 
 /* Ar(1) options. */
@@ -79,29 +77,31 @@ typedef struct {
 /* Header structure internal format. */
 typedef struct {
 	off_t size;			/* size of the object in bytes */
-	time_t date;			/* date */
+	long date;			/* date */
 	int lname;			/* size of the long name in bytes */
-	gid_t gid;			/* group */
-	uid_t uid;			/* owner */
+	int gid;			/* group */
+	int uid;			/* owner */
 	u_short mode;			/* permissions */
 	char name[MAXNAMLEN + 1];	/* name */
 } CHDR;
 
 /* Header format strings. */
-#define	HDR1	"%s%-13d%-12ld%-6u%-6u%-8o%-10qd%2s"
-#define	HDR2	"%-16.16s%-12ld%-6u%-6u%-8o%-10qd%2s"
+#define	HDR1	"%s%-13d%-12ld%-6u%-6u%-8o%-10ld%2s"
+#define	HDR2	"%-16.16s%-12ld%-6u%-6u%-8o%-10ld%2s"
 
 #define	OLDARMAXNAME	15
-#define	HDR3	"%-16.15s%-12ld%-6u%-6u%-8o%-10qd%2s"
+#define	HDR3	"%-16.15s%-12ld%-6u%-6u%-8o%-10ld%2s"
 
 
 #include <sys/cdefs.h>
 
-struct stat;
-
+__BEGIN_DECLS
 void	close_archive __P((int));
-void	copy_ar __P((CF *, off_t));
+void	skip_arobj __P((int));
+int	copy_ar __P((CF *, off_t));
 int	get_arobj __P((int));
 int	open_archive __P((int));
-void	put_arobj __P((CF *, struct stat *));
-void	skip_arobj __P((int));
+struct stat;
+int	put_arobj __P((CF *, struct stat *));
+__END_DECLS
+

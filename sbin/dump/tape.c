@@ -1,8 +1,6 @@
-/*	$NetBSD: tape.c,v 1.15 1997/09/16 08:37:01 mrg Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,45 +31,35 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)tape.c	8.4 (Berkeley) 5/1/95";
-#else
-__RCSID("$NetBSD: tape.c,v 1.15 1997/09/16 08:37:01 mrg Exp $");
-#endif
+/* from: static char sccsid[] = "@(#)tape.c	5.25 (Berkeley) 7/16/92"; */
+static char *rcsid = "$Id: tape.c,v 1.1 1993/12/22 10:24:56 cgd Exp $";
 #endif /* not lint */
 
-#include <sys/param.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <sys/wait.h>
 #ifdef sunos
-#include <sys/vnode.h>
-
-#include <ufs/fs.h>
-#include <ufs/inode.h>
-#else
-#include <ufs/ufs/dinode.h>
-#include <ufs/ffs/fs.h>
-#endif
-
-#include <protocols/dumprestore.h>
-
-#include <errno.h>
-#include <fcntl.h>
-#include <setjmp.h>
-#include <signal.h>
+#include <sys/param.h>
 #include <stdio.h>
+#include <ctype.h>
+#include <sys/stat.h>
+#include <ufs/fs.h>
+#else
+#include <sys/param.h>
+#include <sys/wait.h>
+#include <ufs/fs.h>
+#endif
+#include <sys/time.h>
+#include <ufs/dinode.h>
+#include <signal.h>
+#include <fcntl.h>
+#include <protocols/dumprestore.h>
+#include <errno.h>
+#include <setjmp.h>
 #ifdef __STDC__
+#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-#include <unistd.h>
-#else
-int	write(), read();
 #endif
-
+#include <sys/socket.h>
 #include "dump.h"
 #include "pathnames.h"
 
@@ -84,17 +72,13 @@ extern	int ntrec;		/* blocking factor on tape */
 extern	int cartridge;
 extern	char *host;
 char	*nexttape;
-
-static	ssize_t atomic_read __P((int, char *, int));
-static	ssize_t atomic_write __P((int, char *, int));
-static	void doslave __P((int, int));
-static	void enslave __P((void));
-static	void flushtape __P((void));
-static	void killall __P((void));
-static	void proceed __P((int));
-static	void rollforward __P((void));
-static	void sigpipe __P((int));
-static	void tperror __P((int));
+#ifdef RDUMP
+int	rmtopen(), rmtwrite();
+void	rmtclose();
+#endif RDUMP
+void	rollforward();
+int	atomic();
+void	doslave(), enslave(), flushtape(), killall();
 
 /*
  * Concurrent dump mods (Caltech) - disk block reading and tape writing
@@ -126,9 +110,6 @@ struct slave {
 struct slave *slp;
 
 char	(*nextblock)[TP_BSIZE];
-
-static time_t tstart_volume;	/* time of volume start */
-static int tapea_volume;	/* value of spcl.c_tapea at volume start */
 
 int master;		/* pid of master, for sending error signals */
 int tenths;		/* length of tape used per block written */
@@ -218,7 +199,7 @@ dumpblock(blkno, size)
 
 int	nogripe = 0;
 
-static void
+void
 tperror(signo)
 	int signo;
 {
@@ -240,7 +221,7 @@ tperror(signo)
 	Exit(X_REWRITE);
 }
 
-static void
+void
 sigpipe(signo)
 	int signo;
 {
@@ -248,66 +229,20 @@ sigpipe(signo)
 	quit("Broken pipe\n");
 }
 
-/*
- * do_stats --
- *	Update xferrate stats
- */
-time_t
-do_stats()
-{
-	time_t tnow, ttaken;
-	int blocks;
-
-	(void)time(&tnow);
-	ttaken = tnow - tstart_volume;
-	blocks = spcl.c_tapea - tapea_volume;
-	msg("Volume %d completed at: %s", tapeno, ctime(&tnow));
-	if (ttaken > 0) {
-		msg("Volume %d took %d:%02d:%02d\n", tapeno,
-		    ttaken / 3600, (ttaken % 3600) / 60, ttaken % 60); 
-		msg("Volume %d transfer rate: %ld KB/s\n", tapeno,
-		    blocks / ttaken);
-		xferrate += blocks / ttaken;
-	}
-	return(tnow);
-}
-
-/*
- * statussig --
- *	information message upon receipt of SIGINFO
- *	(derived from optr.c::timeest())
- */
 void
-statussig(notused)
-	int notused;
-{
-	time_t	tnow, deltat;
-	char	msgbuf[128];
-
-	if (blockswritten < 500)
-		return;	
-	(void) time((time_t *) &tnow);
-	deltat = tstart_writing - tnow + (1.0 * (tnow - tstart_writing))
-		/ blockswritten * tapesize;
-	(void)snprintf(msgbuf, sizeof(msgbuf),
-	    "%3.2f%% done at %ld KB/s, finished in %d:%02d\n",
-	    (blockswritten * 100.0) / tapesize,
-	    (long)((spcl.c_tapea - tapea_volume) / (tnow - tstart_volume)),
-	    (int)(deltat / 3600), (int)((deltat % 3600) / 60));
-	write(STDERR_FILENO, msgbuf, strlen(msgbuf));
-}
-
-static void
 flushtape()
 {
 	int i, blks, got;
 	long lastfirstrec;
+#ifndef __STDC__
+	int write(), read();
+#endif
 
 	int siz = (char *)nextblock - (char *)slp->req;
 
 	slp->req[trecno].count = 0;			/* Sentinel */
 
-	if (atomic_write(slp->fd, (char *)slp->req, siz) != siz)
+	if (atomic(write, slp->fd, (char *)slp->req, siz) != siz)
 		quit("error writing command pipe: %s\n", strerror(errno));
 	slp->sent = 1; /* we sent a request, read the response later */
 
@@ -318,7 +253,7 @@ flushtape()
 
 	/* Read results back from next slave */
 	if (slp->sent) {
-		if (atomic_read(slp->fd, (char *)&got, sizeof got)
+		if (atomic(read, slp->fd, (char *)&got, sizeof got)
 		    != sizeof got) {
 			perror("  DUMP: error reading command pipe in master");
 			dumpabort(0);
@@ -335,7 +270,7 @@ flushtape()
 			 */
 			for (i = 0; i < SLAVES; i++) {
 				if (slaves[i].sent) {
-					if (atomic_read(slaves[i].fd,
+					if (atomic(read, slaves[i].fd,
 					    (char *)&got, sizeof got)
 					    != sizeof got) {
 						perror("  DUMP: error reading command pipe in master");
@@ -390,7 +325,7 @@ trewind()
 		 * fixme: punt for now.  
 		 */
 		if (slaves[f].sent) {
-			if (atomic_read(slaves[f].fd, (char *)&got, sizeof got)
+			if (atomic(read, slaves[f].fd, (char *)&got, sizeof got)
 			    != sizeof got) {
 				perror("  DUMP: error reading command pipe in master");
 				dumpabort(0);
@@ -431,7 +366,6 @@ void
 close_rewind()
 {
 	trewind();
-	(void)do_stats();
 	if (nexttape)
 		return;
 	if (!nogripe) {
@@ -448,8 +382,8 @@ close_rewind()
 void
 rollforward()
 {
-	struct req *p, *q, *prev;
-	struct slave *tslp;
+	register struct req *p, *q, *prev;
+	register struct slave *tslp;
 	int i, size, savedtapea, got;
 	union u_spcl *ntb, *otb;
 	tslp = &slaves[SLAVES];
@@ -469,7 +403,6 @@ rollforward()
 		 * For each request in the current slave, copy it to tslp. 
 		 */
 
-		prev = NULL;
 		for (p = slp->req; p->count > 0; p += p->count) {
 			*q = *p;
 			if (p->dblk == 0)
@@ -477,8 +410,6 @@ rollforward()
 			prev = q;
 			q += q->count;
 		}
-		if (prev == NULL)
-			quit("rollforward: protocol botch");
 		if (prev->dblk != 0)
 			prev->count -= 1;
 		else
@@ -498,7 +429,7 @@ rollforward()
 			lastspclrec = savedtapea - 1;
 		}
 		size = (char *)ntb - (char *)q;
-		if (atomic_write(slp->fd, (char *)q, size) != size) {
+		if (atomic(write, slp->fd, (char *)q, size) != size) {
 			perror("  DUMP: error writing command pipe");
 			dumpabort(0);
 		}
@@ -538,7 +469,7 @@ rollforward()
 	 * worked ok, otherwise the tape is much too short!
 	 */
 	if (slp->sent) {
-		if (atomic_read(slp->fd, (char *)&got, sizeof got)
+		if (atomic(read, slp->fd, (char *)&got, sizeof got)
 		    != sizeof got) {
 			perror("  DUMP: error reading command pipe in master");
 			dumpabort(0);
@@ -571,16 +502,15 @@ startnewtape(top)
 	char	*p;
 #ifdef sunos
 	void	(*interrupt_save)();
+	char	*index();
 #else
 	sig_t	interrupt_save;
 #endif
 
 	interrupt_save = signal(SIGINT, SIG_IGN);
 	parentpid = getpid();
-	tapea_volume = spcl.c_tapea;
-	(void)time(&tstart_volume);
 
-restore_check_point:
+    restore_check_point:
 	(void)signal(SIGINT, interrupt_save);
 	/*
 	 *	All signals are inherited...
@@ -601,7 +531,7 @@ restore_check_point:
 #ifdef TDEBUG
 		msg("Tape: %d; parent process: %d child process %d\n",
 			tapeno+1, parentpid, childpid);
-#endif /* TDEBUG */
+#endif TDEBUG
 		while ((waitpid = wait(&status)) != childpid)
 			msg("Parent %d waiting for child %d has another child %d return\n",
 				parentpid, childpid, waitpid);
@@ -626,7 +556,7 @@ restore_check_point:
 					childpid, status);
 				break;
 		}
-#endif /* TDEBUG */
+#endif TDEBUG
 		switch(status) {
 			case X_FINOK:
 				Exit(X_FINOK);
@@ -644,17 +574,17 @@ restore_check_point:
 		sleep(4);	/* allow time for parent's message to get out */
 		msg("Child on Tape %d has parent %d, my pid = %d\n",
 			tapeno+1, parentpid, getpid());
-#endif /* TDEBUG */
+#endif TDEBUG
 		/*
-		 * If we have a name like "/dev/rst0,/dev/rst1",
+		 * If we have a name like "/dev/rmt0,/dev/rmt1",
 		 * use the name before the comma first, and save
 		 * the remaining names for subsequent volumes.
 		 */
 		tapeno++;               /* current tape sequence */
-		if (nexttape || strchr(tape, ',')) {
+		if (nexttape || index(tape, ',')) {
 			if (nexttape && *nexttape)
 				tape = nexttape;
-			if ((p = strchr(tape, ',')) != NULL) {
+			if (p = index(tape, ',')) {
 				*p = '\0';
 				nexttape = p + 1;
 			} else
@@ -691,7 +621,6 @@ restore_check_point:
 		spcl.c_flags |= DR_NEWHEADER;
 		writeheader((ino_t)slp->inode);
 		spcl.c_flags &=~ DR_NEWHEADER;
-		msg("Volume %d started at: %s", tapeno, ctime(&tstart_volume));
 		if (tapeno > 1)
 			msg("Volume %d begins with blocks from inode %d\n",
 				tapeno, slp->inode);
@@ -710,9 +639,6 @@ dumpabort(signo)
 		killall();
 		msg("The ENTIRE dump is aborted.\n");
 	}
-#ifdef RDUMP
-	rmtclose();
-#endif
 	Exit(X_ABORT);
 }
 
@@ -723,14 +649,14 @@ Exit(status)
 
 #ifdef TDEBUG
 	msg("pid = %d exits with status %d\n", getpid(), status);
-#endif /* TDEBUG */
-	exit(status);
+#endif TDEBUG
+	(void) exit(status);
 }
 
 /*
  * proceed - handler for SIGUSR2, used to synchronize IO between the slaves.
  */
-static void
+void
 proceed(signo)
 	int signo;
 {
@@ -744,7 +670,7 @@ void
 enslave()
 {
 	int cmd[2];
-	int i, j;
+	register int i, j;
 
 	master = getpid();
 
@@ -771,14 +697,13 @@ enslave()
 			for (j = 0; j <= i; j++)
 			        (void) close(slaves[j].fd);
 			signal(SIGINT, SIG_IGN);    /* Master handles this */
-			signal(SIGINFO, SIG_IGN);
 			doslave(cmd[0], i);
 			Exit(X_FINOK);
 		}
 	}
 	
 	for (i = 0; i < SLAVES; i++)
-		(void) atomic_write(slaves[i].fd, 
+		(void) atomic(write, slaves[i].fd, 
 			      (char *) &slaves[(i + 1) % SLAVES].pid, 
 		              sizeof slaves[0].pid);
 		
@@ -788,7 +713,7 @@ enslave()
 void
 killall()
 {
-	int i;
+	register int i;
 
 	for (i = 0; i < SLAVES; i++)
 		if (slaves[i].pid > 0)
@@ -802,14 +727,16 @@ killall()
  * file, allowing the following process to lock it and proceed. We
  * get the lock back for the next cycle by swapping descriptors.
  */
-static void
+void
 doslave(cmd, slave_number)
-	int cmd;
+	register int cmd;
         int slave_number;
 {
-	int nread;
+	register int nread;
 	int nextslave, size, wrote, eot_count;
-	sigset_t sigset;
+#ifndef __STDC__
+	int read();
+#endif
 
 	/*
 	 * Need our own seek pointer.
@@ -821,7 +748,7 @@ doslave(cmd, slave_number)
 	/*
 	 * Need the pid of the next slave in the loop...
 	 */
-	if ((nread = atomic_read(cmd, (char *)&nextslave, sizeof nextslave))
+	if ((nread = atomic(read, cmd, (char *)&nextslave, sizeof nextslave))
 	    != sizeof nextslave) {
 		quit("master/slave protocol botched - didn't get pid of next slave.\n");
 	}
@@ -829,8 +756,8 @@ doslave(cmd, slave_number)
 	/*
 	 * Get list of blocks to dump, read the blocks into tape buffer
 	 */
-	while ((nread = atomic_read(cmd, (char *)slp->req, reqsiz)) == reqsiz) {
-		struct req *p = slp->req;
+	while ((nread = atomic(read, cmd, (char *)slp->req, reqsiz)) == reqsiz) {
+		register struct req *p = slp->req;
 
 		for (trecno = 0; trecno < ntrec;
 		     trecno += p->count, p += p->count) {
@@ -838,7 +765,7 @@ doslave(cmd, slave_number)
 				bread(p->dblk, slp->tblock[trecno],
 					p->count * TP_BSIZE);
 			} else {
-				if (p->count != 1 || atomic_read(cmd,
+				if (p->count != 1 || atomic(read, cmd,
 				    (char *)slp->tblock[trecno], 
 				    TP_BSIZE) != TP_BSIZE)
 				       quit("master/slave protocol botched.\n");
@@ -890,15 +817,14 @@ doslave(cmd, slave_number)
 		 */
 		if (size < 0) {
 			(void) kill(master, SIGUSR1);
-			sigemptyset(&sigset);
 			for (;;)
-				sigsuspend(&sigset);
+				(void) sigpause(0);
 		} else {
 			/*
 			 * pass size of write back to master
 			 * (for EOT handling)
 			 */
-			(void) atomic_write(cmd, (char *)&size, sizeof size);
+			(void) atomic(write, cmd, (char *)&size, sizeof size);
 		} 
 
 		/*
@@ -913,34 +839,17 @@ doslave(cmd, slave_number)
 
 /*
  * Since a read from a pipe may not return all we asked for,
+ * or a write may not write all we ask if we get a signal,
  * loop until the count is satisfied (or error).
  */
-static ssize_t
-atomic_read(fd, buf, count)
-	int fd;
+int
+atomic(func, fd, buf, count)
+	int (*func)(), fd, count;
 	char *buf;
-	int count;
 {
-	ssize_t got, need = count;
+	int got, need = count;
 
-	while ((got = read(fd, buf, need)) > 0 && (need -= got) > 0)
-		buf += got;
-	return (got < 0 ? got : count - need);
-}
-
-/*
- * Since a write may not write all we ask if we get a signal,
- * loop until the count is satisfied (or error).
- */
-static ssize_t
-atomic_write(fd, buf, count)
-	int fd;
-	char *buf;
-	int count;
-{
-	ssize_t got, need = count;
-
-	while ((got = write(fd, buf, need)) > 0 && (need -= got) > 0)
+	while ((got = (*func)(fd, buf, need)) > 0 && (need -= got) > 0)
 		buf += got;
 	return (got < 0 ? got : count - need);
 }

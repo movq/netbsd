@@ -1,5 +1,5 @@
-.\" Copyright (c) 1990, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -29,10 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)syslog.conf.5	8.1 (Berkeley) 6/9/93
-.\"	$NetBSD: syslog.conf.5,v 1.5 1997/10/17 13:46:09 lukem Exp $
+.\"     @(#)syslog.conf.5	5.3 (Berkeley) 5/10/91
 .\"
-.Dd June 9, 1993
+.Dd May 10, 1991
 .Dt SYSLOG.CONF 5
 .Os
 .Sh NAME
@@ -42,7 +41,7 @@
 configuration file
 .Sh DESCRIPTION
 The
-.Nm
+.Nm syslog.conf
 file is the configuration file for the
 .Xr syslogd 8
 program.
@@ -92,7 +91,7 @@ The
 .Em level
 describes the severity of the message, and is a keyword from the
 following ordered list (higher to lower): emerg, alert, crit, err,
-warning, notice, info and debug.
+warning, notice and debug.
 These keywords correspond to the
 similar
 .Pq Dv LOG_
@@ -225,8 +224,6 @@ the level of ``err'' or higher, not at the level of ``crit'' or higher.
 .Xr syslogd 8
 .Sh HISTORY
 The
-.Nm
-file appeared in
-.Bx 4.3 ,
-along with
-.Xr syslogd 8 .
+.Nm syslog.conf
+file format is
+.Ud .

@@ -1,8 +1,6 @@
-/*	$NetBSD: trap.c,v 1.4 1997/10/12 11:46:09 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Timothy C. Stoehr.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)trap.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: trap.c,v 1.4 1997/10/12 11:46:09 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)trap.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -78,9 +71,15 @@ char *trap_strings[TRAPS * 2] = {
 			"a gush of water hits you on the head"
 };
 
-short
+extern short cur_level, party_room;
+extern char *new_level_message;
+extern boolean interrupted;
+extern short ring_exp;
+extern boolean sustain_strength;
+extern short blind;
+
 trap_at(row, col)
-	int row, col;
+register row, col;
 {
 	short i;
 
@@ -92,9 +91,8 @@ trap_at(row, col)
 	return(NO_TRAP);
 }
 
-void
 trap_player(row, col)
-	short row, col;
+short row, col;
 {
 	short t;
 
@@ -145,7 +143,6 @@ trap_player(row, col)
 	}
 }
 
-void
 add_traps()
 {
 	short i, n, tries = 0;
@@ -190,7 +187,6 @@ add_traps()
 	}
 }
 
-void
 id_trap()
 {
 	short dir, row, col, d, t;
@@ -218,7 +214,6 @@ id_trap()
 	}
 }
 
-void
 show_traps()
 {
 	short i, j;
@@ -232,10 +227,9 @@ show_traps()
 	}
 }
 
-void
 search(n, is_auto)
-	short n;
-	boolean is_auto;
+short n;
+boolean is_auto;
 {
 	short s, i, j, row, col, t;
 	short shown = 0, found = 0;

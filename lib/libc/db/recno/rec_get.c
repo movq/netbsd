@@ -1,7 +1,5 @@
-/*	$NetBSD: rec_get.c,v 1.10 1997/07/21 14:06:44 jtc Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
+ * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,16 +31,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)rec_get.c	8.9 (Berkeley) 8/18/94";
-#else
-__RCSID("$NetBSD: rec_get.c,v 1.10 1997/07/21 14:06:44 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)rec_get.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
 
 #include <errno.h>
@@ -79,15 +71,6 @@ __rec_get(dbp, key, data, flags)
 	recno_t nrec;
 	int status;
 
-	t = dbp->internal;
-
-	/* Toss any page pinned across calls. */
-	if (t->bt_pinned != NULL) {
-		mpool_put(t->bt_mp, t->bt_pinned, 0);
-		t->bt_pinned = NULL;
-	}
-
-	/* Get currently doesn't take any flags, and keys of 0 are illegal. */
 	if (flags || (nrec = *(recno_t *)key->data) == 0) {
 		errno = EINVAL;
 		return (RET_ERROR);
@@ -97,8 +80,9 @@ __rec_get(dbp, key, data, flags)
 	 * If we haven't seen this record yet, try to find it in the
 	 * original file.
 	 */
+	t = dbp->internal;
 	if (nrec > t->bt_nrecs) {
-		if (F_ISSET(t, R_EOF | R_INMEM))
+		if (ISSET(t, R_EOF | R_INMEM))
 			return (RET_SPECIAL);
 		if ((status = t->bt_irec(t, nrec)) != RET_SUCCESS)
 			return (status);
@@ -109,10 +93,7 @@ __rec_get(dbp, key, data, flags)
 		return (RET_ERROR);
 
 	status = __rec_ret(t, e, 0, NULL, data);
-	if (F_ISSET(t, B_DB_LOCK))
-		mpool_put(t->bt_mp, e->page, 0);
-	else
-		t->bt_pinned = e->page;
+	mpool_put(t->bt_mp, e->page, 0);
 	return (status);
 }
 
@@ -135,38 +116,30 @@ __rec_fpipe(t, top)
 	recno_t nrec;
 	size_t len;
 	int ch;
-	u_char *p;
+	char *p;
 
-	if (t->bt_rdata.size < t->bt_reclen) {
-		t->bt_rdata.data = t->bt_rdata.data == NULL ?
-		    malloc(t->bt_reclen) :
-		    realloc(t->bt_rdata.data, t->bt_reclen);
-		if (t->bt_rdata.data == NULL)
-			return (RET_ERROR);
-		t->bt_rdata.size = t->bt_reclen;
-	}
-	data.data = t->bt_rdata.data;
+	data.data = t->bt_dbuf;
 	data.size = t->bt_reclen;
 
-	for (nrec = t->bt_nrecs; nrec < top;) {
+	if (t->bt_dbufsz < t->bt_reclen) {
+		if ((t->bt_dbuf = realloc(t->bt_dbuf, t->bt_reclen)) == NULL)
+			return (RET_ERROR);
+		t->bt_dbufsz = t->bt_reclen;
+	}
+	for (nrec = t->bt_nrecs; nrec < top; ++nrec) {
 		len = t->bt_reclen;
-		for (p = t->bt_rdata.data;; *p++ = ch)
-			if ((ch = getc(t->bt_rfp)) == EOF || !--len) {
-				if (ch != EOF)
-					*p = ch;
-				if (len != 0)
-					memset(p, t->bt_bval, len);
-				if (__rec_iput(t,
-				    nrec, &data, 0) != RET_SUCCESS)
+		for (p = t->bt_dbuf;; *p++ = ch)
+			if ((ch = getc(t->bt_rfp)) == EOF || !len--) {
+				if (__rec_iput(t, nrec, &data, 0)
+				    != RET_SUCCESS)
 					return (RET_ERROR);
-				++nrec;
 				break;
 			}
 		if (ch == EOF)
 			break;
 	}
 	if (nrec < top) {
-		F_SET(t, R_EOF);
+		SET(t, R_EOF);
 		return (RET_SPECIAL);
 	}
 	return (RET_SUCCESS);
@@ -192,15 +165,14 @@ __rec_vpipe(t, top)
 	indx_t len;
 	size_t sz;
 	int bval, ch;
-	u_char *p;
+	char *p;
 
 	bval = t->bt_bval;
 	for (nrec = t->bt_nrecs; nrec < top; ++nrec) {
-		for (p = t->bt_rdata.data,
-		    sz = t->bt_rdata.size;; *p++ = ch, --sz) {
+		for (p = t->bt_dbuf, sz = t->bt_dbufsz;; *p++ = ch, --sz) {
 			if ((ch = getc(t->bt_rfp)) == EOF || ch == bval) {
-				data.data = t->bt_rdata.data;
-				data.size = p - (u_char *)t->bt_rdata.data;
+				data.data = t->bt_dbuf;
+				data.size = p - t->bt_dbuf;
 				if (ch == EOF && data.size == 0)
 					break;
 				if (__rec_iput(t, nrec, &data, 0)
@@ -209,21 +181,19 @@ __rec_vpipe(t, top)
 				break;
 			}
 			if (sz == 0) {
-				len = p - (u_char *)t->bt_rdata.data;
-				t->bt_rdata.size += (sz = 256);
-				t->bt_rdata.data = t->bt_rdata.data == NULL ?
-				    malloc(t->bt_rdata.size) :
-				    realloc(t->bt_rdata.data, t->bt_rdata.size);
-				if (t->bt_rdata.data == NULL)
+				len = p - t->bt_dbuf;
+				t->bt_dbufsz += (sz = 256);
+				if ((t->bt_dbuf =
+				    realloc(t->bt_dbuf, t->bt_dbufsz)) == NULL)
 					return (RET_ERROR);
-				p = (u_char *)t->bt_rdata.data + len;
+				p = t->bt_dbuf + len;
 			}
 		}
 		if (ch == EOF)
 			break;
 	}
 	if (nrec < top) {
-		F_SET(t, R_EOF);
+		SET(t, R_EOF);
 		return (RET_SPECIAL);
 	}
 	return (RET_SUCCESS);
@@ -246,36 +216,32 @@ __rec_fmap(t, top)
 {
 	DBT data;
 	recno_t nrec;
-	u_char *sp, *ep, *p;
+	caddr_t sp, ep;
 	size_t len;
+	char *p;
 
-	if (t->bt_rdata.size < t->bt_reclen) {
-		t->bt_rdata.data = t->bt_rdata.data == NULL ?
-		    malloc(t->bt_reclen) :
-		    realloc(t->bt_rdata.data, t->bt_reclen);
-		if (t->bt_rdata.data == NULL)
-			return (RET_ERROR);
-		t->bt_rdata.size = t->bt_reclen;
-	}
-	data.data = t->bt_rdata.data;
+	sp = t->bt_cmap;
+	ep = t->bt_emap;
+	data.data = t->bt_dbuf;
 	data.size = t->bt_reclen;
 
-	sp = (u_char *)t->bt_cmap;
-	ep = (u_char *)t->bt_emap;
+	if (t->bt_dbufsz < t->bt_reclen) {
+		if ((t->bt_dbuf = realloc(t->bt_dbuf, t->bt_reclen)) == NULL)
+			return (RET_ERROR);
+		t->bt_dbufsz = t->bt_reclen;
+	}
 	for (nrec = t->bt_nrecs; nrec < top; ++nrec) {
 		if (sp >= ep) {
-			F_SET(t, R_EOF);
+			SET(t, R_EOF);
 			return (RET_SPECIAL);
 		}
 		len = t->bt_reclen;
-		for (p = t->bt_rdata.data;
-		    sp < ep && len > 0; *p++ = *sp++, --len);
-		if (len != 0)
-			memset(p, t->bt_bval, len);
+		for (p = t->bt_dbuf; sp < ep && len--; *p++ = *sp++);
+		memset(p, t->bt_bval, len);
 		if (__rec_iput(t, nrec, &data, 0) != RET_SUCCESS)
 			return (RET_ERROR);
 	}
-	t->bt_cmap = (caddr_t)sp;
+	t->bt_cmap = sp;
 	return (RET_SUCCESS);
 }
 
@@ -295,25 +261,25 @@ __rec_vmap(t, top)
 	recno_t top;
 {
 	DBT data;
-	u_char *sp, *ep;
+	caddr_t sp, ep;
 	recno_t nrec;
 	int bval;
 
-	sp = (u_char *)t->bt_cmap;
-	ep = (u_char *)t->bt_emap;
+	sp = t->bt_cmap;
+	ep = t->bt_emap;
 	bval = t->bt_bval;
 
 	for (nrec = t->bt_nrecs; nrec < top; ++nrec) {
 		if (sp >= ep) {
-			F_SET(t, R_EOF);
+			SET(t, R_EOF);
 			return (RET_SPECIAL);
 		}
 		for (data.data = sp; sp < ep && *sp != bval; ++sp);
-		data.size = sp - (u_char *)data.data;
+		data.size = sp - (caddr_t)data.data;
 		if (__rec_iput(t, nrec, &data, 0) != RET_SUCCESS)
 			return (RET_ERROR);
 		++sp;
 	}
-	t->bt_cmap = (caddr_t)sp;
+	t->bt_cmap = sp;
 	return (RET_SUCCESS);
 }

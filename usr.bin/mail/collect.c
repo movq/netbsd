@@ -1,8 +1,6 @@
-/*	$NetBSD: collect.c,v 1.12 1997/10/19 19:29:06 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)collect.c	8.2 (Berkeley) 4/19/94";
-#else
-__RCSID("$NetBSD: collect.c,v 1.12 1997/10/19 19:29:06 mycroft Exp $");
-#endif
+static char sccsid[] = "@(#)collect.c	5.24 (Berkeley) 4/1/91";
 #endif /* not lint */
 
 /*
@@ -50,7 +43,7 @@ __RCSID("$NetBSD: collect.c,v 1.12 1997/10/19 19:29:06 mycroft Exp $");
  */
 
 #include "rcv.h"
-#include "extern.h"
+#include <sys/stat.h>
 
 /*
  * Read a message from standard output and return a read file to it
@@ -78,34 +71,22 @@ static	jmp_buf	collabort;		/* To end collection with error */
 FILE *
 collect(hp, printheaders)
 	struct header *hp;
-	int printheaders;
 {
 	FILE *fbuf;
 	int lc, cc, escape, eofcount;
-	int c, t;
+	register int c, t;
 	char linebuf[LINESIZE], *cp;
-	extern char *tempMail;
+	extern char tempMail[];
 	char getsub;
-	sigset_t oset, nset;
-	int longline, lastlong, rc;	/* So we don't make 2 or more lines
-					   out of a long input line. */
-#if __GNUC__
-	/* Avoid longjmp clobbering */
-	(void) &escape;
-	(void) &eofcount;
-	(void) &getsub;
-	(void) &longline;
-#endif
+	int omask;
+	void collint(), collhup(), collstop();
 
 	collf = NULL;
 	/*
 	 * Start catching signals from here, but we're still die on interrupts
 	 * until we're in the main loop.
 	 */
-	sigemptyset(&nset);
-	sigaddset(&nset, SIGINT);
-	sigaddset(&nset, SIGHUP);
-	sigprocmask(SIG_BLOCK, &nset, &oset);
+	omask = sigblock(sigmask(SIGINT) | sigmask(SIGHUP));
 	if ((saveint = signal(SIGINT, SIG_IGN)) != SIG_IGN)
 		signal(SIGINT, collint);
 	if ((savehup = signal(SIGHUP, SIG_IGN)) != SIG_IGN)
@@ -117,9 +98,7 @@ collect(hp, printheaders)
 		rm(tempMail);
 		goto err;
 	}
-	sigdelset(&oset, SIGINT);
-	sigdelset(&oset, SIGHUP);
-	sigprocmask(SIG_SETMASK, &oset, NULL);
+	sigsetmask(omask & ~(sigmask(SIGINT) | sigmask(SIGHUP)));
 
 	noreset++;
 	if ((collf = Fopen(tempMail, "w+")) == NULL) {
@@ -148,8 +127,6 @@ collect(hp, printheaders)
 		escape = ESCAPE;
 	eofcount = 0;
 	hadintr = 0;
-	lastlong = 0;
-	longline = 0;
 
 	if (!setjmp(colljmp)) {
 		if (getsub)
@@ -182,17 +159,14 @@ cont:
 			}
 			break;
 		}
-		lastlong = longline;
-		longline = c == LINESIZE-1;
 		eofcount = 0;
 		hadintr = 0;
 		if (linebuf[0] == '.' && linebuf[1] == '\0' &&
-		    value("interactive") != NOSTR && !lastlong &&
+		    value("interactive") != NOSTR &&
 		    (value("dot") != NOSTR || value("ignoreeof") != NOSTR))
 			break;
-		if (linebuf[0] != escape || value("interactive") == NOSTR ||
-		    lastlong) {
-			if (putline(collf, linebuf, !longline) < 0)
+		if (linebuf[0] != escape || value("interactive") == NOSTR) {
+			if (putline(collf, linebuf) < 0)
 				goto err;
 			continue;
 		}
@@ -204,7 +178,7 @@ cont:
 			 * Otherwise, it's an error.
 			 */
 			if (c == escape) {
-				if (putline(collf, &linebuf[1], !longline) < 0)
+				if (putline(collf, &linebuf[1]) < 0)
 					goto err;
 				else
 					break;
@@ -215,7 +189,7 @@ cont:
 			/*
 			 * Dump core.
 			 */
-			core(NULL);
+			core();
 			break;
 		case '!':
 			/*
@@ -225,7 +199,6 @@ cont:
 			shell(&linebuf[2]);
 			break;
 		case ':':
-		case '_':
 			/*
 			 * Escape to command mode, but be nice!
 			 */
@@ -281,7 +254,6 @@ cont:
 			strcpy(linebuf + 2, getdeadletter());
 			/* fall into . . . */
 		case 'r':
-		case '<':
 			/*
 			 * Invoke a file:
 			 * Search for the file name,
@@ -309,10 +281,9 @@ cont:
 			fflush(stdout);
 			lc = 0;
 			cc = 0;
-			while ((rc = readline(fbuf, linebuf, LINESIZE)) >= 0) {
-				if (rc != LINESIZE-1) lc++;
-				if ((t = putline(collf, linebuf,
-						 rc != LINESIZE-1)) < 0) {
+			while (readline(fbuf, linebuf, LINESIZE) >= 0) {
+				lc++;
+				if ((t = putline(collf, linebuf)) < 0) {
 					Fclose(fbuf);
 					goto err;
 				}
@@ -400,30 +371,26 @@ out:
 	if (collf != NULL)
 		rewind(collf);
 	noreset--;
-	sigemptyset(&nset);
-	sigaddset(&nset, SIGINT);
-	sigaddset(&nset, SIGHUP);
-	sigprocmask(SIG_BLOCK, &nset, &oset);
+	sigblock(sigmask(SIGINT) | sigmask(SIGHUP));
 	signal(SIGINT, saveint);
 	signal(SIGHUP, savehup);
 	signal(SIGTSTP, savetstp);
 	signal(SIGTTOU, savettou);
 	signal(SIGTTIN, savettin);
-	sigprocmask(SIG_SETMASK, &oset, NULL);
+	sigsetmask(omask);
 	return collf;
 }
 
 /*
  * Write a file, ex-like if f set.
  */
-int
+
 exwrite(name, fp, f)
 	char name[];
 	FILE *fp;
-	int f;
 {
-	FILE *of;
-	int c;
+	register FILE *of;
+	register int c;
 	long cc;
 	int lc;
 	struct stat junk;
@@ -432,7 +399,7 @@ exwrite(name, fp, f)
 		printf("\"%s\" ", name);
 		fflush(stdout);
 	}
-	if (stat(name, &junk) >= 0 && S_ISREG(junk.st_mode)) {
+	if (stat(name, &junk) >= 0 && (junk.st_mode & S_IFMT) == S_IFREG) {
 		if (!f)
 			fprintf(stderr, "%s: ", name);
 		fprintf(stderr, "File exists\n");
@@ -465,16 +432,14 @@ exwrite(name, fp, f)
  * Edit the message being collected on fp.
  * On return, make the edit file the new temp file.
  */
-void
 mesedit(fp, c)
 	FILE *fp;
-	int c;
 {
 	sig_t sigint = signal(SIGINT, SIG_IGN);
 	FILE *nf = run_editor(fp, (off_t)-1, c, 0);
 
 	if (nf != NULL) {
-		fseek(nf, 0L, 2);
+		fseek(nf, (off_t)0, 2);
 		collf = nf;
 		Fclose(fp);
 	}
@@ -487,15 +452,13 @@ mesedit(fp, c)
  * New message collected from stdout.
  * Sh -c must return 0 to accept the new message.
  */
-void
 mespipe(fp, cmd)
 	FILE *fp;
 	char cmd[];
 {
 	FILE *nf;
 	sig_t sigint = signal(SIGINT, SIG_IGN);
-	extern char *tempEdit;
-	char *shell;
+	extern char tempEdit[];
 
 	if ((nf = Fopen(tempEdit, "w+")) == NULL) {
 		perror(tempEdit);
@@ -506,10 +469,7 @@ mespipe(fp, cmd)
 	 * stdin = current message.
 	 * stdout = new message.
 	 */
-	if ((shell = value("SHELL")) == NOSTR)
-		shell = _PATH_CSHELL;
-	if (run_command(shell,
-	    0, fileno(fp), fileno(nf), "-c", cmd, NOSTR) < 0) {
+	if (run_command(cmd, 0, fileno(fp), fileno(nf), NOSTR) < 0) {
 		(void) Fclose(nf);
 		goto out;
 	}
@@ -536,14 +496,12 @@ out:
  * the message temporary.  The flag argument is 'm' if we
  * should shift over and 'f' if not.
  */
-int
 forward(ms, fp, f)
 	char ms[];
 	FILE *fp;
-	int f;
 {
-	int *msgvec;
-	extern char *tempMail;
+	register int *msgvec;
+	extern char tempMail[];
 	struct ignoretab *ig;
 	char *tabst;
 
@@ -554,11 +512,11 @@ forward(ms, fp, f)
 		return(0);
 	if (*msgvec == 0) {
 		*msgvec = first(0, MMNORM);
-		if (*msgvec == 0) {
+		if (*msgvec == NULL) {
 			printf("No appropriate messages\n");
 			return(0);
 		}
-		msgvec[1] = 0;
+		msgvec[1] = NULL;
 	}
 	if (f == 'f' || f == 'F')
 		tabst = NOSTR;
@@ -586,16 +544,12 @@ forward(ms, fp, f)
 /*ARGSUSED*/
 void
 collstop(s)
-	int s;
 {
 	sig_t old_action = signal(s, SIG_DFL);
-	sigset_t nset;
 
-	sigemptyset(&nset);
-	sigaddset(&nset, s);
-	sigprocmask(SIG_UNBLOCK, &nset, NULL);
+	sigsetmask(sigblock(0) & ~sigmask(s));
 	kill(0, s);
-	sigprocmask(SIG_BLOCK, &nset, NULL);
+	sigblock(sigmask(s));
 	signal(s, old_action);
 	if (colljmp_p) {
 		colljmp_p = 0;
@@ -611,7 +565,6 @@ collstop(s)
 /*ARGSUSED*/
 void
 collint(s)
-	int s;
 {
 	/*
 	 * the control flow is subtle, because we can be called from ~q.
@@ -635,7 +588,6 @@ collint(s)
 /*ARGSUSED*/
 void
 collhup(s)
-	int s;
 {
 	rewind(collf);
 	savedeadletter(collf);
@@ -646,12 +598,11 @@ collhup(s)
 	exit(1);
 }
 
-void
 savedeadletter(fp)
-	FILE *fp;
+	register FILE *fp;
 {
-	FILE *dbuf;
-	int c;
+	register FILE *dbuf;
+	register int c;
 	char *cp;
 
 	if (fsize(fp) == 0)

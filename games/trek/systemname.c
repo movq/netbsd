@@ -1,8 +1,6 @@
-/*	$NetBSD: systemname.c,v 1.4 1997/10/12 21:25:21 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)systemname.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: systemname.c,v 1.4 1997/10/12 21:25:21 christos Exp $");
-#endif
+static char sccsid[] = "@(#)systemname.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include	"trek.h"
@@ -58,8 +51,8 @@ __RCSID("$NetBSD: systemname.c,v 1.4 1997/10/12 21:25:21 christos Exp $");
 char *systemname(q1)
 struct quad	*q1;
 {
-	struct quad	*q;
-	int		i;
+	register struct quad	*q;
+	register int		i;
 
 	q = q1;
 

@@ -1,8 +1,6 @@
-/*	$NetBSD: rnd_pos.c,v 1.4 1997/10/12 14:10:02 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)rnd_pos.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: rnd_pos.c,v 1.4 1997/10/12 14:10:02 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)rnd_pos.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include	"robots.h"
@@ -55,6 +48,7 @@ rnd_pos()
 {
 	static COORD	pos;
 	static int	call = 0;
+	register int	i = 0;
 
 	do {
 		pos.y = rnd(Y_FIELDSIZE - 1) + 1;
@@ -65,10 +59,10 @@ rnd_pos()
 	return &pos;
 }
 
-int
 rnd(range)
-	int	range;
+int	range;
 {
+	unsigned int	rand();
 
 	return rand() % range;
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: move.c,v 1.7 1997/10/12 00:54:21 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,16 +31,9 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)move.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: move.c,v 1.7 1997/10/12 00:54:21 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)move.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
-
-#include <termios.h>
 
 #include	"mille.h"
 #ifndef	unctrl
@@ -51,6 +42,7 @@ __RCSID("$NetBSD: move.c,v 1.7 1997/10/12 00:54:21 lukem Exp $");
 
 # ifdef	attron
 #	include	<term.h>
+#	define	_tty	cur_term->Nttyb
 # endif	attron
 
 /*
@@ -64,12 +56,11 @@ char	*Movenames[] = {
 		"M_DISCARD", "M_DRAW", "M_PLAY", "M_ORDER"
 	};
 
-void
 domove()
 {
-	PLAY	*pp;
-	int	i, j;
-	bool	goodplay;
+	reg PLAY	*pp;
+	reg int		i, j;
+	reg bool	goodplay;
 
 	pp = &Player[Play];
 	if (Play == PLAYER)
@@ -168,12 +159,11 @@ acc:
  *	Check and see if either side can go.  If they cannot,
  * the game is over
  */
-void
-check_go()
-{
-	CARD	card;
-	PLAY	*pp, *op;
-	int	i;
+check_go() {
+
+	reg CARD	card;
+	reg PLAY	*pp, *op;
+	reg int		i;
 
 	for (pp = Player; pp < &Player[2]; pp++) {
 		op = (pp == &Player[COMP] ? &Player[PLAYER] : &Player[COMP]);
@@ -199,12 +189,11 @@ check_go()
 	Finished = TRUE;
 }
 
-int
 playcard(pp)
-	PLAY	*pp;
+reg PLAY	*pp;
 {
-	int	v;
-	CARD	card;
+	reg int		v;
+	reg CARD	card;
 
 	/*
 	 * check and see if player has picked
@@ -345,14 +334,13 @@ protected:
 	if (pp == &Player[PLAYER])
 		account(card);
 	pp->hand[Card_no] = C_INIT;
-	Next = (Next == (bool)-1 ? FALSE : TRUE);
+	Next = (Next == -1 ? FALSE : TRUE);
 	return TRUE;
 }
 
-void
 getmove()
 {
-	char	c;
+	reg char	c, *sp;
 #ifdef EXTRAP
 	static bool	last_ex = FALSE;	/* set if last command was E */
 
@@ -398,7 +386,7 @@ getmove()
 			Movetype = M_ORDER;
 			goto ret;
 		  case 'Q':		/* Quit */
-			rub(0);		/* Same as a rubout */
+			rub();		/* Same as a rubout */
 			break;
 		  case 'W':		/* Window toggle */
 			Window = nextwin(Window);
@@ -463,7 +451,7 @@ getmove()
 				*sp = '\0';
 				leaveok(Board, TRUE);
 				if ((outf = fopen(buf, "w")) == NULL)
-					warn("%s", buf);
+					perror(buf);
 				setbuf(outf, (char *)NULL);
 			}
 			Debug = !Debug;
@@ -477,15 +465,13 @@ getmove()
 ret:
 	leaveok(Board, TRUE);
 }
-
 /*
  * return whether or not the player has picked
  */
-int
 haspicked(pp)
-	PLAY	*pp;
-{
-	int	card;
+reg PLAY	*pp; {
+
+	reg int	card;
 
 	if (Topcard <= Deck)
 		return TRUE;
@@ -501,11 +487,10 @@ haspicked(pp)
 	return (pp->hand[card] != C_INIT);
 }
 
-void
 account(card)
-	CARD	card; 
-{
-	CARD	oppos;
+reg CARD	card; {
+
+	reg CARD	oppos;
 
 	if (card == C_INIT)
 		return;
@@ -527,9 +512,8 @@ account(card)
 		}
 }
 
-void
 prompt(promptno)
-	int	promptno;
+int	promptno;
 {
 	static char	*names[] = {
 				">>:Move:",
@@ -559,12 +543,11 @@ prompt(promptno)
 	clrtoeol();
 }
 
-void
 sort(hand)
-	CARD	*hand;
+reg CARD	*hand;
 {
-	CARD	*cp, *tp;
-	CARD	temp;
+	reg CARD	*cp, *tp;
+	reg CARD	temp;
 
 	cp = hand;
 	hand += HAND_SZ;
@@ -576,3 +559,4 @@ sort(hand)
 				*tp = temp;
 			}
 }
+

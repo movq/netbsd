@@ -1,8 +1,6 @@
-/*	$NetBSD: spec.c,v 1.4 1997/10/12 17:45:26 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)spec.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: spec.c,v 1.4 1997/10/12 17:45:26 christos Exp $");
-#endif
+static char sccsid[] = "@(#)spec.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include	"monop.ext"
@@ -48,11 +41,9 @@ static char	*perc[]	= {
 	"10%", "ten percent", "%", "$200", "200", 0
 	};
 
-void
-inc_tax()
-{			/* collect income tax			*/
+inc_tax() {			/* collect income tax			*/
 
-	int	worth, com_num;
+	reg int	worth, com_num;
 
 	com_num = getinp("Do you wish to lose 10%% of your total worth or $200? ", perc);
 	worth = cur_p->money + prop_worth(cur_p);
@@ -76,32 +67,20 @@ inc_tax()
 	if (worth == 200)
 		lucky("\nIt makes no difference!  ");
 }
-
-void
-goto_jail()
-{			/* move player to jail			*/
+goto_jail() {			/* move player to jail			*/
 
 	cur_p->loc = JAIL;
 }
-
-void
-lux_tax()
-{			/* landing on luxury tax		*/
+lux_tax() {			/* landing on luxury tax		*/
 
 	printf("You lose $75\n");
 	cur_p->money -= 75;
 }
-
-void
-cc()
-{				/* draw community chest card		*/
+cc() {				/* draw community chest card		*/
 
 	get_card(&CC_D);
 }
-
-void
-chance()
-{			/* draw chance card			*/
+chance() {			/* draw chance card			*/
 
 	get_card(&CH_D);
 }

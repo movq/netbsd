@@ -1,5 +1,3 @@
-/*	$NetBSD: ttycom.h,v 1.6 1997/10/20 08:04:28 scottr Exp $	*/
-
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -37,7 +35,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ttycom.h	8.1 (Berkeley) 3/28/94
+ *	from: @(#)ttycom.h	8.1 (Berkeley) 3/28/94
+ *	$Id: ttycom.h,v 1.1 1994/05/21 05:20:03 cgd Exp $
  */
 
 #ifndef	_SYS_TTYCOM_H_
@@ -61,6 +60,8 @@ struct winsize {
 	unsigned short	ws_ypixel;	/* vertical size, pixels */
 };
 
+#define	TIOCMODG	_IOR('t', 3, int)	/* get modem control state */
+#define	TIOCMODS	_IOW('t', 4, int)	/* set modem control state */
 #define		TIOCM_LE	0001		/* line enable */
 #define		TIOCM_DTR	0002		/* data terminal ready */
 #define		TIOCM_RTS	0004		/* request to send */
@@ -127,12 +128,10 @@ struct winsize {
 #define		TIOCFLAG_CLOCAL		0x02	/* set clocal on open */
 #define		TIOCFLAG_CRTSCTS	0x04	/* set crtscts on open */
 #define		TIOCFLAG_MDMBUF		0x08	/* set mdmbuf on open */
-#define		TIOCFLAG_CDTRCTS	0x10	/* set cdtrcts on open */
 
 #define	TTYDISC		0		/* termios tty line discipline */
 #define	TABLDISC	3		/* tablet discipline */
 #define	SLIPDISC	4		/* serial IP discipline */
 #define	PPPDISC		5		/* ppp discipline */
-#define	STRIPDISC	6		/* metricom wireless IP discipline */
 
 #endif /* !_SYS_TTYCOM_H_ */

@@ -1,8 +1,6 @@
-/*	$NetBSD: xinstall.c,v 1.21 1997/10/20 03:32:27 lukem Exp $	*/
-
 /*
- * Copyright (c) 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,96 +31,56 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1987 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)xinstall.c	8.1 (Berkeley) 7/21/93";
-#else
-__RCSID("$NetBSD: xinstall.c,v 1.21 1997/10/20 03:32:27 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)xinstall.c	5.24 (Berkeley) 7/1/90";
 #endif /* not lint */
 
 #include <sys/param.h>
-#include <sys/wait.h>
-#include <sys/mman.h>
 #include <sys/stat.h>
-
-#include <ctype.h>
-#include <errno.h>
-#include <fcntl.h>
+#include <sys/file.h>
 #include <grp.h>
-#include <paths.h>
 #include <pwd.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <err.h>
-
+#include <ctype.h>
+#include <paths.h>
 #include "pathnames.h"
 
-struct passwd *pp;
-struct group *gp;
-int docopy, dodir, dostrip, dolink;
-int mode = S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH;
-char pathbuf[MAXPATHLEN];
-uid_t uid;
-gid_t gid;
+static struct passwd *pp;
+static struct group *gp;
+static int docopy, dostrip, mode = 0755;
+static char *group, *owner, pathbuf[MAXPATHLEN];
 
-#define LN_ABSOLUTE	0x01
-#define LN_RELATIVE	0x02
-#define LN_HARD		0x04
-#define LN_SYMBOLIC	0x08
-#define LN_MIXED	0x10
-
-#define	DIRECTORY	0x01		/* Tell install it's a directory. */
-#define	SETFLAGS	0x02		/* Tell install to set flags. */
-
-void	copy __P((int, char *, int, char *, off_t));
-void	makelink __P((char *, char *));
-void	install __P((char *, char *, u_long, u_int));
-void	install_dir __P((char *));
-u_long	string_to_flags __P((char **, u_long *, u_long *));
-void	strip __P((char *));
-void	usage __P((void));
-int	main __P((int, char *[]));
-
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
+	extern char *optarg;
+	extern int optind;
 	struct stat from_sb, to_sb;
-	mode_t *set;
-	u_long fset;
-	u_int iflags;
+	mode_t *set, *setmode();
 	int ch, no_target;
-	char *p;
-	char *flags = NULL, *to_name, *group = NULL, *owner = NULL;
+	char *to_name;
 
-	iflags = 0;
-	while ((ch = getopt(argc, argv, "cf:g:l:m:o:sd")) != -1)
+	while ((ch = getopt(argc, argv, "cg:m:o:s")) != EOF)
 		switch((char)ch) {
 		case 'c':
 			docopy = 1;
-			break;
-		case 'f':
-			flags = optarg;
-			if (string_to_flags(&flags, &fset, NULL))
-				errx(1, "%s: invalid flag", flags);
-			iflags |= SETFLAGS;
 			break;
 		case 'g':
 			group = optarg;
 			break;
 		case 'm':
-			if (!(set = setmode(optarg)))
-				errx(1, "%s: invalid file mode", optarg);
+			if (!(set = setmode(optarg))) {
+				(void)fprintf(stderr,
+				    "install: invalid file mode.\n");
+				exit(1);
+			}
 			mode = getmode(set, 0);
 			break;
 		case 'o':
@@ -131,75 +89,29 @@ main(argc, argv)
 		case 's':
 			dostrip = 1;
 			break;
-		case 'd':
-			dodir = 1;
-			break;
-		case 'l':
-			for (p = optarg; *p; p++)
-				switch (*p) {
-				case 's':
-					dolink &= ~(LN_HARD|LN_MIXED);
-					dolink |= LN_SYMBOLIC;
-					break;
-				case 'h':
-					dolink &= ~(LN_SYMBOLIC|LN_MIXED);
-					dolink |= LN_HARD;
-					break;
-				case 'm':
-					dolink &= ~(LN_SYMBOLIC|LN_HARD);
-					dolink |= LN_MIXED;
-					break;
-				case 'a':
-					dolink &= ~LN_RELATIVE;
-					dolink |= LN_ABSOLUTE;
-					break;
-				case 'r':
-					dolink &= ~LN_ABSOLUTE;
-					dolink |= LN_RELATIVE;
-					break;
-				default:
-					errx(1, "%c: invalid link type", *p);
-					break;
-				}
-			break;
 		case '?':
 		default:
 			usage();
 		}
 	argc -= optind;
 	argv += optind;
-
-	/* copy and strip options make no sense when creating directories */
-	if ((docopy || dostrip || dolink) && dodir)
-		usage();
-
-	/* strip and flags make no sense with links */
-	if ((dostrip || flags) && dolink)
-		usage();
-
-	/* must have at least two arguments, except when creating directories */
-	if (argc < 2 && !dodir)
+	if (argc < 2)
 		usage();
 
 	/* get group and owner id's */
-	if (group && !(gp = getgrnam(group)) && !isdigit(*group))
-		errx(1, "unknown group %s", group);
-	gid = (group) ? ((gp) ? gp->gr_gid : atoi(group)) : -1;
-	if (owner && !(pp = getpwnam(owner)) && !isdigit(*owner))
-		errx(1, "unknown user %s", owner);
-	uid = (owner) ? ((pp) ? pp->pw_uid : atoi(owner)) : -1;
-
-	if (dodir) {
-		for (; *argv != NULL; ++argv)
-			install_dir(*argv);
-		exit (0);
-		/* NOTREACHED */
+	if (group && !(gp = getgrnam(group))) {
+		fprintf(stderr, "install: unknown group %s.\n", group);
+		exit(1);
+	}
+	if (owner && !(pp = getpwnam(owner))) {
+		fprintf(stderr, "install: unknown user %s.\n", owner);
+		exit(1);
 	}
 
 	no_target = stat(to_name = argv[argc - 1], &to_sb);
-	if (!no_target && S_ISDIR(to_sb.st_mode)) {
+	if (!no_target && (to_sb.st_mode & S_IFMT) == S_IFDIR) {
 		for (; *argv != to_name; ++argv)
-			install(*argv, to_name, fset, iflags | DIRECTORY);
+			install(*argv, to_name, 1);
 		exit(0);
 	}
 
@@ -208,237 +120,111 @@ main(argc, argv)
 		usage();
 
 	if (!no_target) {
-		if (stat(*argv, &from_sb))
-			err(1, "%s", *argv);
-		if (!S_ISREG(to_sb.st_mode))
-			errx(1, "%s: %s", to_name, strerror(EFTYPE));
-		if (!dolink && to_sb.st_dev == from_sb.st_dev &&
-		    to_sb.st_ino == from_sb.st_ino)
-			errx(1, "%s and %s are the same file", *argv, to_name);
-		/*
-		 * Unlink now... avoid ETXTBSY errors later.  Try and turn
-		 * off the append/immutable bits -- if we fail, go ahead,
-		 * it might work.
-		 */
-#define	NOCHANGEBITS	(UF_IMMUTABLE | UF_APPEND | SF_IMMUTABLE | SF_APPEND)
-		if (to_sb.st_flags & NOCHANGEBITS)
-			(void)chflags(to_name,
-			    to_sb.st_flags & ~(NOCHANGEBITS));
+		if (stat(*argv, &from_sb)) {
+			fprintf(stderr, "install: can't find %s.\n", *argv);
+			exit(1);
+		}
+		if ((to_sb.st_mode & S_IFMT) != S_IFREG) {
+			fprintf(stderr, "install: %s isn't a regular file.\n", to_name);
+			exit(1);
+		}
+		if (to_sb.st_dev == from_sb.st_dev && to_sb.st_ino == from_sb.st_ino) {
+			fprintf(stderr, "install: %s and %s are the same file.\n", *argv, to_name);
+			exit(1);
+		}
+		/* unlink now... avoid ETXTBSY errors later */
 		(void)unlink(to_name);
 	}
-	install(*argv, to_name, fset, iflags);
+	install(*argv, to_name, 0);
 	exit(0);
-}
-
-/*
- * makelink --
- *	make a link from source to destination
- */
-void
-makelink(from_name, to_name)
-	char *from_name;
-	char *to_name;
-{
-	char src[MAXPATHLEN], dst[MAXPATHLEN], lnk[MAXPATHLEN];
-
-	/* Try hard links first */
-	if (dolink & (LN_HARD|LN_MIXED)) {
-		if (link(from_name, to_name) == -1) {
-			if ((dolink & LN_HARD) || errno != EXDEV)
-				err(1, "link %s -> %s", from_name, to_name);
-		}
-		else
-			return;
-	}
-
-	/* Symbolic links */
-	if (dolink & LN_ABSOLUTE) {
-		/* Convert source path to absolute */
-		if (realpath(from_name, src) == NULL)
-			err(1, "%s", src);
-		if (symlink(src, to_name) == -1)
-			err(1, "symlink %s -> %s", src, to_name);
-		return;
-	}
-
-	if (dolink & LN_RELATIVE) {
-		char *s, *d;
-
-		/* Resolve pathnames */
-		if (realpath(from_name, src) == NULL)
-			err(1, "%s", src);
-		if (realpath(to_name, dst) == NULL)
-			err(1, "%s", dst);
-
-		/* trim common path components */
-		for (s = src, d = dst; *s == *d; s++, d++)
-			continue;
-		while (*s != '/')
-			s--, d--;
-
-		/* count the number of directories we need to backtrack */
-		for (++d, lnk[0] = '\0'; *d; d++)
-			if (*d == '/')
-				(void) strcat(lnk, "../");
-
-		(void) strcat(lnk, ++s);
-
-		if (symlink(lnk, dst) == -1)
-			err(1, "symlink %s -> %s", lnk, dst);
-		return;
-	}
-
-	/*
-	 * If absolute or relative was not specified, 
-	 * try the names the user provided
-	 */
-	if (symlink(from_name, to_name) == -1)
-		err(1, "symlink %s -> %s", from_name, to_name);
-
 }
 
 /*
  * install --
  *	build a path name and install the file
  */
-void
-install(from_name, to_name, fset, flags)
+install(from_name, to_name, isdir)
 	char *from_name, *to_name;
-	u_long fset;
-	u_int flags;
+	int isdir;
 {
-	struct stat from_sb, to_sb;
-	int devnull, from_fd, to_fd, serrno;
-	char *p;
+	struct stat from_sb;
+	int devnull, from_fd, to_fd;
+	char *C, *rindex();
 
-	/* If try to install NULL file to a directory, fails. */
-	if (flags & DIRECTORY || strcmp(from_name, _PATH_DEVNULL)) {
-		if (stat(from_name, &from_sb))
-			err(1, "%s", from_name);
-		if (!S_ISREG(from_sb.st_mode))
-			errx(1, "%s: %s", from_name, strerror(EFTYPE));
-		/* Build the target path. */
-		if (flags & DIRECTORY) {
-			(void)snprintf(pathbuf, sizeof(pathbuf), "%s/%s",
-			    to_name,
-			    (p = strrchr(from_name, '/')) ? ++p : from_name);
+	/* if try to install NULL file to a directory, fails */
+	if (isdir || strcmp(from_name, _PATH_DEVNULL)) {
+		if (stat(from_name, &from_sb)) {
+			fprintf(stderr, "install: can't find %s.\n", from_name);
+			exit(1);
+		}
+		if ((from_sb.st_mode & S_IFMT) != S_IFREG) {
+			fprintf(stderr, "install: %s isn't a regular file.\n", from_name);
+			exit(1);
+		}
+		/* build the target path */
+		if (isdir) {
+			(void)sprintf(pathbuf, "%s/%s", to_name, (C = rindex(from_name, '/')) ? ++C : from_name);
 			to_name = pathbuf;
 		}
 		devnull = 0;
-	} else {
-		from_sb.st_flags = 0;	/* XXX */
+	} else
 		devnull = 1;
-	}
 
-	/*
-	 * Unlink now... avoid ETXTBSY errors later.  Try and turn
-	 * off the append/immutable bits -- if we fail, go ahead,
-	 * it might work.
-	 */
-	if (stat(to_name, &to_sb) == 0 &&
-	    to_sb.st_flags & (NOCHANGEBITS))
-		(void)chflags(to_name, to_sb.st_flags & ~(NOCHANGEBITS));
+	/* unlink now... avoid ETXTBSY errors later */
 	(void)unlink(to_name);
 
-	if (dolink) {
-		makelink(from_name, to_name);
-		return;
+	/* create target */
+	if ((to_fd = open(to_name, O_CREAT|O_WRONLY|O_TRUNC, 0600)) < 0) {
+		error(to_name);
+		exit(1);
 	}
-
-	/* Create target. */
-	if ((to_fd = open(to_name,
-	    O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR)) < 0)
-		err(1, "%s", to_name);
 	if (!devnull) {
 		if ((from_fd = open(from_name, O_RDONLY, 0)) < 0) {
 			(void)unlink(to_name);
-			err(1, "%s", from_name);
+			error(from_name);
+			exit(1);
 		}
-		copy(from_fd, from_name, to_fd, to_name, from_sb.st_size);
+		copy(from_fd, from_name, to_fd, to_name);
 		(void)close(from_fd);
 	}
-
-	if (dostrip) {
+	if (dostrip)
 		strip(to_name);
-
-		/*
-		 * Re-open our fd on the target, in case we used a strip
-		 *  that does not work in-place -- like gnu binutils strip.
-		 */
-		close(to_fd);
-		if ((to_fd = open(to_name, O_RDONLY, S_IRUSR | S_IWUSR)) < 0)
-		  err(1, "stripping %s", to_name);
-	}
-
 	/*
-	 * Set owner, group, mode for target; do the chown first,
+	 * set owner, group, mode for target; do the chown first,
 	 * chown may lose the setuid bits.
 	 */
-	if ((gid != -1 || uid != -1) && fchown(to_fd, uid, gid)) {
-		serrno = errno;
-		(void)unlink(to_name);
-		errx(1, "%s: chown/chgrp: %s", to_name, strerror(serrno));
+	if ((group || owner) &&
+	    fchown(to_fd, owner ? pp->pw_uid : -1, group ? gp->gr_gid : -1) ||
+	    fchmod(to_fd, mode)) {
+		error(to_name);
+		bad(to_name);
 	}
-	if (fchmod(to_fd, mode)) {
-		serrno = errno;
-		(void)unlink(to_name);
-		errx(1, "%s: chmod: %s", to_name, strerror(serrno));
-	}
-
-	/*
-	 * If provided a set of flags, set them, otherwise, preserve the
-	 * flags, except for the dump flag.
-	 */
-	if (fchflags(to_fd,
-	    flags & SETFLAGS ? fset : from_sb.st_flags & ~UF_NODUMP)) {
-		if (errno != EOPNOTSUPP || (from_sb.st_flags & ~UF_NODUMP) != 0)
-			warn("%s: chflags", to_name);
-	}
-
 	(void)close(to_fd);
-	if (!docopy && !devnull && unlink(from_name))
-		err(1, "%s", from_name);
+	if (!docopy && !devnull && unlink(from_name)) {
+		error(from_name);
+		exit(1);
+	}
 }
 
 /*
  * copy --
  *	copy from one file to another
  */
-void
-copy(from_fd, from_name, to_fd, to_name, size)
-	int from_fd, to_fd;
+copy(from_fd, from_name, to_fd, to_name)
+	register int from_fd, to_fd;
 	char *from_name, *to_name;
-	off_t size;
 {
-	int nr, nw;
-	int serrno;
-	char *p;
+	register int n;
 	char buf[MAXBSIZE];
 
-	/*
-	 * Mmap and write if less than 8M (the limit is so we don't totally
-	 * trash memory on big files.  This is really a minor hack, but it
-	 * wins some CPU back.
-	 */
-	if (size <= 8 * 1048576) {
-		if ((p = mmap(NULL, (size_t)size, PROT_READ,
-		    0, from_fd, (off_t)0)) == (char *)-1)
-			err(1, "%s", from_name);
-		if (write(to_fd, p, size) != size)
-			err(1, "%s", to_name);
-	} else {
-		while ((nr = read(from_fd, buf, sizeof(buf))) > 0)
-			if ((nw = write(to_fd, buf, nr)) != nr) {
-				serrno = errno;
-				(void)unlink(to_name);
-				errx(1, "%s: %s",
-				    to_name, strerror(nw > 0 ? EIO : serrno));
-			}
-		if (nr != 0) {
-			serrno = errno;
-			(void)unlink(to_name);
-			errx(1, "%s: %s", from_name, strerror(serrno));
+	while ((n = read(from_fd, buf, sizeof(buf))) > 0)
+		if (write(to_fd, buf, n) != n) {
+			error(to_name);
+			bad(to_name);
 		}
+	if (n == -1) {
+		error(from_name);
+		bad(to_name);
 	}
 }
 
@@ -446,72 +232,56 @@ copy(from_fd, from_name, to_fd, to_name, size)
  * strip --
  *	use strip(1) to strip the target file
  */
-void
 strip(to_name)
 	char *to_name;
 {
-	int serrno, status;
-	char *stripprog;
+	int status;
 
 	switch (vfork()) {
 	case -1:
-		serrno = errno;
-		(void)unlink(to_name);
-		errx(1, "forks: %s", strerror(errno));
+		error("fork");
+		bad(to_name);
 	case 0:
-		stripprog = getenv("STRIP");
-		if (stripprog == NULL)
-			stripprog = _PATH_STRIP;
-		execl(stripprog, "strip", to_name, NULL);
-		err(1, "%s", stripprog);
+		execl(_PATH_STRIP, "strip", to_name, (char *)NULL);
+		error(_PATH_STRIP);
+		_exit(1);
 	default:
 		if (wait(&status) == -1 || status)
-			(void)unlink(to_name);
+			bad(to_name);
 	}
 }
 
 /*
- * install_dir --
- *	build directory heirarchy
+ * error --
+ *	print out an error message
  */
-void
-install_dir(path)
-        char *path;
+error(s)
+	char *s;
 {
-        char *p;
-        struct stat sb;
-        int ch;
+	extern int errno;
+	char *strerror();
 
-        for (p = path;; ++p)
-                if (!*p || (p != path && *p  == '/')) {
-                        ch = *p;
-                        *p = '\0';
-                        if (stat(path, &sb)) {
-                                if (errno != ENOENT || mkdir(path, 0777) < 0) {
-					err(1, "%s", path);
-					/* NOTREACHED */
-                                }
-                        }
-                        if (!(*p = ch))
-				break;
-                }
+	(void)fprintf(stderr, "install: %s: %s\n", s, strerror(errno));
+}
 
-	if (((gid != -1 || uid != -1) && chown(path, uid, gid)) ||
-            chmod(path, mode)) {
-                warn("%s", path);
-        }
+/*
+ * bad --
+ *	remove created target and die
+ */
+bad(fname)
+	char *fname;
+{
+	(void)unlink(fname);
+	exit(1);
 }
 
 /*
  * usage --
  *	print a usage message and die
  */
-void
 usage()
 {
-	(void)fprintf(stderr, "\
-usage: install [-cs] [-f flags] [-g group] [-m mode] [-o owner] file1 file2\n\
-       install [-cs] [-f flags] [-g group] [-m mode] [-o owner] file1 ... fileN directory\n\
-       install  -d   [-g group] [-m mode] [-o owner] directory ...\n");
+	(void)fprintf(stderr,
+"usage: install [-cs] [-g group] [-m mode] [-o owner] file1 file2;\n\tor file1 ... fileN directory\n");
 	exit(1);
 }

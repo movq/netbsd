@@ -1,10 +1,12 @@
-#	$NetBSD: Makefile,v 1.8 1997/10/10 09:26:38 lukem Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.2 (Berkeley) 5/13/90
 
 PROG=	lpc
-MAN=	lpc.8
-SRCS=	lpc.c cmds.c cmdtab.c
+CFLAGS+=-I${.CURDIR}/../common_source
+MAN8=	lpc.0
+SRCS=	lpc.c cmds.c cmdtab.c startdaemon.c common.c printcap.c
 BINGRP=	daemon
 BINMODE=2555
+.PATH:	${.CURDIR}/../common_source
 
+.include "../../Makefile.inc"
 .include <bsd.prog.mk>

@@ -1,12 +1,15 @@
-#	$NetBSD: Makefile,v 1.9 1997/10/10 19:51:39 christos Exp $
-#	@(#)Makefile	8.4 (Berkeley) 7/13/94
+#	from: @(#)Makefile	8.3 (Berkeley) 3/27/94
+#	$Id: Makefile,v 1.1 1994/06/08 19:29:09 mycroft Exp $
 
 PROG=	mount_union
 SRCS=	mount_union.c getmntopts.c
-MAN=	mount_union.8
+MAN8=	mount_union.0
 
 MOUNT=	${.CURDIR}/../mount
-CPPFLAGS+= -I${.CURDIR}/../../sys -I${MOUNT}
+CFLAGS+= -I/sys -I${MOUNT}
 .PATH:	${MOUNT}
+
+BINOWN= root
+BINMODE=4555
 
 .include <bsd.prog.mk>

@@ -1,5 +1,4 @@
 #!/bin/sh -
-#	$NetBSD: zcat.sh,v 1.4 1995/03/26 19:54:37 glass Exp $
 #
 # Copyright (c) 1992, 1993
 #	The Regents of the University of California.  All rights reserved.

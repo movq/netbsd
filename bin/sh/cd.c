@@ -1,8 +1,6 @@
-/*	$NetBSD: cd.c,v 1.23 1997/07/04 20:59:40 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -36,21 +34,9 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cd.c	8.2 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: cd.c,v 1.23 1997/07/04 20:59:40 christos Exp $");
-#endif
+static char sccsid[] = "@(#)cd.c	5.2 (Berkeley) 3/13/91";
 #endif /* not lint */
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
 
 /*
  * The cd and pwd commands.
@@ -64,94 +50,113 @@ __RCSID("$NetBSD: cd.c,v 1.23 1997/07/04 20:59:40 christos Exp $");
 #include "output.h"
 #include "memalloc.h"
 #include "error.h"
-#include "exec.h"
-#include "redir.h"
 #include "mystring.h"
-#include "show.h"
-#include "cd.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <errno.h>
 
-STATIC int docd __P((char *, int));
-STATIC char *getcomponent __P((void));
-STATIC void updatepwd __P((char *));
 
-char *curdir = NULL;		/* current working directory */
-char *prevdir;			/* previous working directory */
+#ifdef __STDC__
+STATIC int docd(char *, int);
+STATIC void updatepwd(char *);
+STATIC void getpwd(void);
+STATIC char *getcomponent(void);
+#else
+STATIC int docd();
+STATIC void updatepwd();
+STATIC void getpwd();
+STATIC char *getcomponent();
+#endif
+
+
+char *curdir;			/* current working directory */
 STATIC char *cdcomppath;
 
+#if UDIR
+extern int didudir;		/* set if /u/logname expanded */
+#endif
+
+
 int
-cdcmd(argc, argv)
-	int argc;
-	char **argv;
-{
+cdcmd(argc, argv)  char **argv; {
 	char *dest;
 	char *path;
 	char *p;
 	struct stat statb;
-	int print = 0;
+	char *padvance();
 
 	nextopt(nullstr);
 	if ((dest = *argptr) == NULL && (dest = bltinlookup("HOME", 1)) == NULL)
 		error("HOME not set");
-	if (*dest == '\0')
-	        dest = ".";
-	if (dest[0] == '-' && dest[1] == '\0') {
-		dest = prevdir ? prevdir : curdir;
-		print = 1;
-		if (dest)
-		        print = 1;
-		else
-		        dest = ".";
-	}
 	if (*dest == '/' || (path = bltinlookup("CDPATH", 1)) == NULL)
 		path = nullstr;
 	while ((p = padvance(&path, dest)) != NULL) {
-		if (stat(p, &statb) >= 0 && S_ISDIR(statb.st_mode)) {
-			if (!print) {
-				/*
-				 * XXX - rethink
-				 */
-				if (p[0] == '.' && p[1] == '/')
-					p += 2;
-				print = strcmp(p, dest);
-			}
-			if (docd(p, print) >= 0)
-				return 0;
-
-		}
+		if (stat(p, &statb) >= 0
+		 && (statb.st_mode & S_IFMT) == S_IFDIR
+		 && docd(p, strcmp(p, dest)) >= 0)
+			return 0;
 	}
 	error("can't cd to %s", dest);
-	/*NOTREACHED*/
-	return 0;
 }
 
 
 /*
- * Actually do the chdir.  In an interactive shell, print the
- * directory name if "print" is nonzero.
+ * Actually do the chdir.  If the name refers to symbolic links, we
+ * compute the actual directory name before doing the cd.  In an
+ * interactive shell, print the directory name if "print" is nonzero
+ * or if the name refers to a symbolic link.  We also print the name
+ * if "/u/logname" was expanded in it, since this is similar to a
+ * symbolic link.  (The check for this breaks if the user gives the
+ * cd command some additional, unused arguments.)
  */
+
+#if SYMLINKS == 0
+STATIC int
+docd(dest, print)
+	char *dest;
+	{
+#if UDIR
+	if (didudir)
+		print = 1;
+#endif
+	INTOFF;
+	if (chdir(dest) < 0) {
+		INTON;
+		return -1;
+	}
+	updatepwd(dest);
+	INTON;
+#ifdef not
+	if (print && iflag)
+		out1fmt("%s\n", stackblock());
+#endif
+	return 0;
+}
+
+#else
+
+
 
 STATIC int
 docd(dest, print)
 	char *dest;
-	int print;
-{
-	char *p;
-	char *q;
+	{
+	register char *p;
+	register char *q;
+	char *symlink;
 	char *component;
 	struct stat statb;
 	int first;
-	int badstat;
+	int i;
 
 	TRACE(("docd(\"%s\", %d) called\n", dest, print));
+#if UDIR
+	if (didudir)
+		print = 1;
+#endif
 
-	/*
-	 *  Check each component of the path. If we find a symlink or
-	 *  something we can't stat, clear curdir to force a getcwd()
-	 *  next time we get the value of the current directory.
-	 */
-	badstat = 0;
-	cdcomppath = stalloc(strlen(dest) + 1);
-	scopy(dest, cdcomppath);
+top:
+	cdcomppath = dest;
 	STARTSTACKSTR(p);
 	if (*dest == '/') {
 		STPUTC('/', p);
@@ -159,7 +164,7 @@ docd(dest, print)
 	}
 	first = 1;
 	while ((q = getcomponent()) != NULL) {
-		if (q[0] == '\0' || (q[0] == '.' && q[1] == '\0'))
+		if (q[0] == '\0' || q[0] == '.' && q[1] == '\0')
 			continue;
 		if (! first)
 			STPUTC('/', p);
@@ -170,25 +175,61 @@ docd(dest, print)
 		if (equal(component, ".."))
 			continue;
 		STACKSTRNUL(p);
-		if ((lstat(stackblock(), &statb) < 0)
-		    || (S_ISLNK(statb.st_mode)))  {
-			/* print = 1; */
-			badstat = 1;
-			break;
-		}
-	}
+		if (lstat(stackblock(), &statb) < 0)
+			error("lstat %s failed", stackblock());
+		if ((statb.st_mode & S_IFMT) != S_IFLNK)
+			continue;
 
+		/* Hit a symbolic link.  We have to start all over again. */
+		print = 1;
+		STPUTC('\0', p);
+		symlink = grabstackstr(p);
+		i = (int)statb.st_size + 2;		/* 2 for '/' and '\0' */
+		if (cdcomppath != NULL)
+			i += strlen(cdcomppath);
+		p = stalloc(i);
+		if (readlink(symlink, p, (int)statb.st_size) < 0) {
+			error("readlink %s failed", stackblock());
+		}
+		if (cdcomppath != NULL) {
+			p[(int)statb.st_size] = '/';
+			scopy(cdcomppath, p + (int)statb.st_size + 1);
+		} else {
+			p[(int)statb.st_size] = '\0';
+		}
+		if (p[0] != '/') {	/* relative path name */
+			char *r;
+			q = r = symlink;
+			while (*q) {
+				if (*q++ == '/')
+					r = q;
+			}
+			*r = '\0';
+			dest = stalloc(strlen(symlink) + strlen(p) + 1);
+			scopy(symlink, dest);
+			strcat(dest, p);
+		} else {
+			dest = p;
+		}
+		goto top;
+	}
+	STPUTC('\0', p);
+	p = grabstackstr(p);
 	INTOFF;
-	if (chdir(dest) < 0) {
+	if (chdir(p) < 0) {
 		INTON;
 		return -1;
 	}
-	updatepwd(badstat ? NULL : dest);
+	updatepwd(p);
 	INTON;
-	if (print && iflag && curdir)
-		out1fmt("%s\n", curdir);
+#ifdef not
+	if (print && iflag)
+		out1fmt("%s\n", p);
+#endif
 	return 0;
 }
+#endif /* SYMLINKS */
+
 
 
 /*
@@ -198,7 +239,7 @@ docd(dest, print)
 
 STATIC char *
 getcomponent() {
-	char *p;
+	register char *p;
 	char *start;
 
 	if ((p = cdcomppath) == NULL)
@@ -223,6 +264,8 @@ getcomponent() {
  * that the current directory has changed.
  */
 
+void hashcd();
+
 STATIC void
 updatepwd(dir)
 	char *dir;
@@ -231,23 +274,6 @@ updatepwd(dir)
 	char *p;
 
 	hashcd();				/* update command hash table */
-
-	/*
-	 * If our argument is NULL, we don't know the current directory
-	 * any more because we traversed a symbolic link or something
-	 * we couldn't stat().
-	 */
-	if (dir == NULL)  {
-		if (prevdir)
-			ckfree(prevdir);
-		INTOFF;
-		prevdir = curdir;
-		curdir = NULL;
-		getpwd();
-		INTON;
-		return;
-	}
-
 	cdcomppath = stalloc(strlen(dir) + 1);
 	scopy(dir, cdcomppath);
 	STARTSTACKSTR(new);
@@ -272,22 +298,15 @@ updatepwd(dir)
 	if (new == stackblock())
 		STPUTC('/', new);
 	STACKSTRNUL(new);
-	INTOFF;
-	if (prevdir)
-		ckfree(prevdir);
-	prevdir = curdir;
+	if (curdir)
+		ckfree(curdir);
 	curdir = savestr(stackblock());
-	setvar("PWD", curdir, VEXPORT|VTEXTFIXED);
-	INTON;
 }
 
 
 
 int
-pwdcmd(argc, argv)
-	int argc;
-	char **argv;
-{
+pwdcmd(argc, argv)  char **argv; {
 	getpwd();
 	out1str(curdir);
 	out1c('\n');
@@ -296,88 +315,56 @@ pwdcmd(argc, argv)
 
 
 
+/*
+ * Run /bin/pwd to find out what the current directory is.  We suppress
+ * interrupts throughout most of this, but the user can still break out
+ * of it by killing the pwd program.  If we already know the current
+ * directory, this routine returns immediately.
+ */
 
 #define MAXPWD 256
 
-/*
- * Find out what the current directory is. If we already know the current
- * directory, this routine returns immediately.
- */
-void
-getpwd()
-{
+STATIC void
+getpwd() {
 	char buf[MAXPWD];
+	char *p;
+	int i;
+	int status;
+	struct job *jp;
+	int pip[2];
 
 	if (curdir)
 		return;
-	/*
-	 * Things are a bit complicated here; we could have just used
-	 * getcwd, but traditionally getcwd is implemented using popen
-	 * to /bin/pwd. This creates a problem for us, since we cannot
-	 * keep track of the job if it is being ran behind our backs.
-	 * So we re-implement getcwd(), and we suppress interrupts
-	 * throughout the process. This is not completely safe, since
-	 * the user can still break out of it by killing the pwd program.
-	 * We still try to use getcwd for systems that we know have a
-	 * c implementation of getcwd, that does not open a pipe to
-	 * /bin/pwd.
-	 */
-#if defined(__NetBSD__) || defined(__SVR4)
-		
-	if (getcwd(buf, sizeof(buf)) == NULL) {
-		char *pwd = getenv("PWD");
-		struct stat stdot, stpwd;
-
-		if (pwd && *pwd == '/' && stat(".", &stdot) != -1 &&
-		    stat(pwd, &stpwd) != -1 &&
-		    stdot.st_dev == stpwd.st_dev &&
-		    stdot.st_ino == stpwd.st_ino) {
-			curdir = savestr(pwd);
-			return;
+	INTOFF;
+	if (pipe(pip) < 0)
+		error("Pipe call failed");
+	jp = makejob((union node *)NULL, 1);
+	if (forkshell(jp, (union node *)NULL, FORK_NOJOB) == 0) {
+		close(pip[0]);
+		if (pip[1] != 1) {
+			close(1);
+			copyfd(pip[1], 1);
+			close(pip[1]);
 		}
-		error("getcwd() failed: %s", strerror(errno));
+		execl("/bin/pwd", "pwd", (char *)0);
+		error("Cannot exec /bin/pwd");
 	}
-	curdir = savestr(buf);
-#else
-	{
-		char *p;
-		int i;
-		int status;
-		struct job *jp;
-		int pip[2];
-
-		INTOFF;
-		if (pipe(pip) < 0)
-			error("Pipe call failed");
-		jp = makejob((union node *)NULL, 1);
-		if (forkshell(jp, (union node *)NULL, FORK_NOJOB) == 0) {
-			(void) close(pip[0]);
-			if (pip[1] != 1) {
-				close(1);
-				copyfd(pip[1], 1);
-				close(pip[1]);
-			}
-			(void) execl("/bin/pwd", "pwd", (char *)0);
-			error("Cannot exec /bin/pwd");
-		}
-		(void) close(pip[1]);
-		pip[1] = -1;
-		p = buf;
-		while ((i = read(pip[0], p, buf + MAXPWD - p)) > 0
-		     || (i == -1 && errno == EINTR)) {
-			if (i > 0)
-				p += i;
-		}
-		(void) close(pip[0]);
-		pip[0] = -1;
-		status = waitforjob(jp);
-		if (status != 0)
-			error((char *)0);
-		if (i < 0 || p == buf || p[-1] != '\n')
-			error("pwd command failed");
-		p[-1] = '\0';
+	close(pip[1]);
+	pip[1] = -1;
+	p = buf;
+	while ((i = read(pip[0], p, buf + MAXPWD - p)) > 0
+	     || i == -1 && errno == EINTR) {
+		if (i > 0)
+			p += i;
 	}
+	close(pip[0]);
+	pip[0] = -1;
+	status = waitforjob(jp);
+	if (status != 0)
+		error((char *)0);
+	if (i < 0 || p == buf || p[-1] != '\n')
+		error("pwd command failed");
+	p[-1] = '\0';
 	curdir = savestr(buf);
 	INTON;
-#endif
 }

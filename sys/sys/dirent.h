@@ -1,8 +1,6 @@
-/*	$NetBSD: dirent.h,v 1.13 1997/01/22 07:09:10 mikel Exp $	*/
-
-/*-
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+/*
+ * Copyright (c) 1982, 1986, 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,16 +30,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)dirent.h	8.3 (Berkeley) 8/10/94
+ *	from: @(#)dir.h	7.3 (Berkeley) 2/5/91
+ *	$Id: dirent.h,v 1.1 1993/12/15 00:46:06 jtc Exp $
  */
 
 #ifndef _SYS_DIRENT_H_
-#define _SYS_DIRENT_H_
+#define	_SYS_DIRENT_H_
 
 /*
- * The dirent structure defines the format of directory entries returned by
- * the getdirentries(2) system call.
- *
  * A directory entry has a struct dirent at the front of it, containing its
  * inode number, the length of the entry, and the length of the name
  * contained in the entry.  These are followed by the name padded to a 4
@@ -50,10 +46,9 @@
  */
 
 struct dirent {
-	u_int32_t d_fileno;		/* file number of entry */
-	u_int16_t d_reclen;		/* length of this record */
-	u_int8_t  d_type; 		/* file type, see below */
-	u_int8_t  d_namlen;		/* length of string in d_name */
+	unsigned long	d_fileno;	/* file number of entry */
+	unsigned short	d_reclen;	/* length of this record */
+	unsigned short	d_namlen;	/* length of string in d_name */
 #ifdef _POSIX_SOURCE
 	char	d_name[255 + 1];	/* name must be no longer than this */
 #else
@@ -62,35 +57,23 @@ struct dirent {
 #endif
 };
 
-/*
- * File types
- */
-#define	DT_UNKNOWN	 0
-#define	DT_FIFO		 1
-#define	DT_CHR		 2
-#define	DT_DIR		 4
-#define	DT_BLK		 6
-#define	DT_REG		 8
-#define	DT_LNK		10
-#define	DT_SOCK		12
-#define	DT_WHT		14
 
+#ifndef _POSIX_SOURCE
 /*
- * Convert between stat structure types and directory types.
- */
-#define	IFTODT(mode)	(((mode) & 0170000) >> 12)
-#define	DTTOIF(dirtype)	((dirtype) << 12)
-
-#ifdef _KERNEL
-/*
- * The DIRENT_SIZE macro gives the minimum record length which will hold
- * the directory entry.  This requires the amount of space in struct dirent
+ * The DIRSIZ macro gives the minimum record length which will hold
+ * the directory entry.  This requires the amount of space in struct direct
  * without the d_name field, plus enough space for the name with a terminating
  * null byte (dp->d_namlen+1), rounded up to a 4 byte boundary.
  */
-#define	DIRENT_SIZE(dp) \
-    ((sizeof (struct dirent) - (MAXNAMLEN+1)) + (((dp)->d_namlen+1 + 3) &~ 3))
+#undef DIRSIZ
+#define DIRSIZ(dp) \
+    ((sizeof (struct direct) - (MAXNAMLEN+1)) + (((dp)->d_namlen+1 + 3) &~ 3))
 
-#endif	/* !_KERNEL */
+#ifdef KERNEL
+/* Temporary backwards compatibility. */
+#define direct dirent
+#endif /* KERNEL */
 
-#endif	/* !_SYS_DIRENT_H_ */
+#endif /* !_POSIX_SOURCE */
+
+#endif /* !_SYS_DIRENT_H_ */

@@ -1,8 +1,6 @@
-/*	$NetBSD: lstDestroy.c,v 1.8 1997/09/28 03:31:21 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1989, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Adam de Boor.
@@ -36,18 +34,9 @@
  * SUCH DAMAGE.
  */
 
-#ifdef MAKE_BOOTSTRAP
-static char rcsid[] = "$NetBSD: lstDestroy.c,v 1.8 1997/09/28 03:31:21 lukem Exp $";
-#else
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lstDestroy.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: lstDestroy.c,v 1.8 1997/09/28 03:31:21 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)lstDestroy.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
-#endif
 
 /*-
  * LstDestroy.c --
@@ -74,12 +63,12 @@ __RCSID("$NetBSD: lstDestroy.c,v 1.8 1997/09/28 03:31:21 lukem Exp $");
 void
 Lst_Destroy (l, freeProc)
     Lst	    	  	l;
-    register void	(*freeProc) __P((ClientData));
+    register void	(*freeProc)();
 {
     register ListNode	ln;
     register ListNode	tln = NilListNode;
     register List 	list = (List)l;
-
+    
     if (l == NILLST || ! l) {
 	/*
 	 * Note the check for l == (Lst)0 to catch uninitialized static Lst's.
@@ -87,27 +76,23 @@ Lst_Destroy (l, freeProc)
 	 */
 	return;
     }
-
-    /* To ease scanning */
-    if (list->lastPtr != NilListNode)
-	list->lastPtr->nextPtr = NilListNode;
-    else {
-	free ((Address)l);
-	return;
-    }
-
+    
     if (freeProc) {
-	for (ln = list->firstPtr; ln != NilListNode; ln = tln) {
-	     tln = ln->nextPtr;
-	     (*freeProc) (ln->datum);
-	     free ((Address)ln);
+	for (ln = list->firstPtr;
+	     ln != NilListNode && tln != list->firstPtr;
+	     ln = tln) {
+		 tln = ln->nextPtr;
+		 (*freeProc) (ln->datum);
+		 free ((Address)ln);
 	}
     } else {
-	for (ln = list->firstPtr; ln != NilListNode; ln = tln) {
-	     tln = ln->nextPtr;
-	     free ((Address)ln);
+	for (ln = list->firstPtr;
+	     ln != NilListNode && tln != list->firstPtr;
+	     ln = tln) {
+		 tln = ln->nextPtr;
+		 free ((Address)ln);
 	}
     }
-
+    
     free ((Address)l);
 }

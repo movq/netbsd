@@ -1,8 +1,6 @@
-/*	$NetBSD: level.c,v 1.4 1997/10/12 11:45:16 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Timothy C. Stoehr.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)level.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: level.c,v 1.4 1997/10/12 11:45:16 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)level.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -94,14 +87,16 @@ long level_points[MAX_EXP_LEVEL] = {
 
 short random_rooms[MAXROOMS] = {3, 7, 5, 2, 0, 6, 1, 4, 8};
 
-void
+extern boolean being_held, wizard, detect_monster;
+extern boolean see_invisible;
+extern short bear_trap, levitate, extra_hp, less_hp, cur_room;
+
 make_level()
 {
 	short i, j;
 	short must_1, must_2, must_3;
 	boolean big_room;
 
-	must_2 = must_3 = 0;
 	if (cur_level < LAST_DUNGEON) {
 		cur_level++;
 	}
@@ -193,16 +188,14 @@ make_level()
 	}
 }
 
-void
 make_room(rn, r1, r2, r3)
-	short rn, r1, r2, r3;
+short rn, r1, r2, r3;
 {
 	short left_col, right_col, top_row, bottom_row;
 	short width, height;
 	short row_offset, col_offset;
 	short i, j, ch;
 
-	left_col = right_col = top_row = bottom_row = 0;
 	switch(rn) {
 	case 0:
 		left_col = 0;
@@ -304,9 +297,8 @@ END:
 	rooms[rn].right_col = right_col;
 }
 
-int
 connect_rooms(room1, room2)
-	short room1, room2;
+short room1, room2;
 {
 	short row1, col1, row2, col2, dir;
 
@@ -352,7 +344,6 @@ connect_rooms(room1, room2)
 	return(1);
 }
 
-void
 clear_level()
 {
 	short i, j;
@@ -379,11 +370,10 @@ clear_level()
 	clear();
 }
 
-void
 put_door(rm, dir, row, col)
-	room *rm;
-	short dir;
-	short *row, *col;
+room *rm;
+short dir;
+short *row, *col;
 {
 	short wall_width;
 
@@ -417,9 +407,8 @@ put_door(rm, dir, row, col)
 	rm->doors[dir/2].door_col = *col;
 }
 
-void
 draw_simple_passage(row1, col1, row2, col2, dir)
-	short row1, col1, row2, col2, dir;
+short row1, col1, row2, col2, dir;
 {
 	short i, middle, t;
 
@@ -459,21 +448,16 @@ draw_simple_passage(row1, col1, row2, col2, dir)
 	}
 }
 
-int
 same_row(room1, room2)
-	int room1, room2;
 {
 	return((room1 / 3) == (room2 / 3));
 }
 
-int
 same_col(room1, room2)
-	int room1, room2;
 {
 	return((room1 % 3) == (room2 % 3));
 }
 
-void
 add_mazes()
 {
 	short i, j;
@@ -505,7 +489,6 @@ add_mazes()
 	}
 }
 
-void
 fill_out_level()
 {
 	short i, rn;
@@ -526,10 +509,9 @@ fill_out_level()
 	}
 }
 
-void
 fill_it(rn, do_rec_de)
-	int rn;
-	boolean do_rec_de;
+int rn;
+boolean do_rec_de;
 {
 	short i, tunnel_dir, door_dir, drow, dcol;
 	short target_room, rooms_found = 0;
@@ -588,11 +570,10 @@ fill_it(rn, do_rec_de)
 	}
 }
 
-void
 recursive_deadend(rn, offsets, srow, scol)
-	short rn;
-	short *offsets;
-	short srow, scol;
+short rn;
+short *offsets;
+short srow, scol;
 {
 	short i, de;
 	short drow, dcol, tunnel_dir;
@@ -626,9 +607,9 @@ recursive_deadend(rn, offsets, srow, scol)
 
 boolean
 mask_room(rn, row, col, mask)
-	short rn;
-	short *row, *col;
-	unsigned short mask;
+short rn;
+short *row, *col;
+unsigned short mask;
 {
 	short i, j;
 
@@ -644,9 +625,8 @@ mask_room(rn, row, col, mask)
 	return(0);
 }
 
-void
 make_maze(r, c, tr, br, lc, rc)
-	short r, c, tr, br, lc, rc;
+short r, c, tr, br, lc, rc;
 {
 	char dirs[4];
 	short i, t;
@@ -710,9 +690,8 @@ make_maze(r, c, tr, br, lc, rc)
 	}
 }
 
-void
 hide_boxed_passage(row1, col1, row2, col2, n)
-	short row1, col1, row2, col2, n;
+short row1, col1, row2, col2, n;
 {
 	short i, j, t;
 	short row, col, row_cut, col_cut;
@@ -746,9 +725,8 @@ hide_boxed_passage(row1, col1, row2, col2, n)
 	}
 }
 
-void
 put_player(nr)
-	short nr;		/* try not to put in this room */
+short nr;		/* try not to put in this room */
 {
 	short rn = nr, misses;
 	short row, col;
@@ -779,7 +757,6 @@ put_player(nr)
 	mvaddch(rogue.row, rogue.col, rogue.fchar);
 }
 
-int
 drop_check()
 {
 	if (wizard) {
@@ -796,7 +773,6 @@ drop_check()
 	return(0);
 }
 
-int
 check_up()
 {
 	if (!wizard) {
@@ -819,10 +795,9 @@ check_up()
 	return(0);
 }
 
-void
 add_exp(e, promotion)
-	int e;
-	boolean promotion;
+int e;
+boolean promotion;
 {
 	char mbuf[40];
 	short new_exp;
@@ -851,9 +826,8 @@ add_exp(e, promotion)
 	}
 }
 
-int
 get_exp_level(e)
-	long e;
+long e;
 {
 	short i;
 
@@ -865,7 +839,6 @@ get_exp_level(e)
 	return(i+1);
 }
 
-int
 hp_raise()
 {
 	int hp;
@@ -874,7 +847,6 @@ hp_raise()
 	return(hp);
 }
 
-void
 show_average_hp()
 {
 	char mbuf[80];
@@ -894,7 +866,6 @@ show_average_hp()
 	message(mbuf, 0);
 }
 
-void
 mix_random_rooms()
 {
 	short i, t;

@@ -1,8 +1,6 @@
-/*	$NetBSD: torped.c,v 1.4 1997/10/12 21:25:22 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,19 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)torped.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: torped.c,v 1.4 1997/10/12 21:25:22 christos Exp $");
-#endif
+static char sccsid[] = "@(#)torped.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <math.h>
-#include "trek.h"
-#include "getpar.h"
+# include	<stdio.h>
+# include	"trek.h"
 
 /*
 **  PHOTON TORPEDO CONTROL
@@ -66,34 +57,28 @@ __RCSID("$NetBSD: torped.c,v 1.4 1997/10/12 21:25:22 christos Exp $");
 **	the misfire damages your torpedo tubes.
 */
 
-static int randcourse __P((int));
 
-/*ARGSUSED*/
-void
-torped(v)
-	int v;
+torped()
 {
-	int		ix, iy;
-	double		x, y, dx, dy;
-	double		angle;
-	int		course, course2;
-	int		k;
-	double		bigger;
-	double		sectsize;
-	int		burst;
-	int		n;
+	register int		ix, iy;
+	double			x, y, dx, dy;
+	double			angle;
+	int			course, course2;
+	register int		k;
+	double			bigger;
+	double			sectsize;
+	int			burst;
+	int			n;
 
 	if (Ship.cloaked)
 	{
-		printf("Federation regulations do not permit attack while cloaked.\n");
-		return;
+		return (printf("Federation regulations do not permit attack while cloaked.\n"));
 	}
 	if (check_out(TORPED))
 		return;
 	if (Ship.torped <= 0)
 	{
-		printf("All photon torpedos expended\n");
-		return;
+		return (printf("All photon torpedos expended\n"));
 	}
 
 	/* get the course */
@@ -127,10 +112,8 @@ torped(v)
 		burst = getintpar("burst angle");
 		if (burst <= 0)
 			return;
-		if (burst > 15) {
-			printf("Maximum burst angle is 15 degrees\n");
-			return;
-		}
+		if (burst > 15)
+			return (printf("Maximum burst angle is 15 degrees\n"));
 	}
 	sectsize = NSECTS;
 	n = -1;
@@ -232,12 +215,11 @@ torped(v)
 **	to the tubes, etc.
 */
 
-static int
 randcourse(n)
 int	n;
 {
 	double			r;
-	int		d;
+	register int		d;
 
 	d = ((franf() + franf()) - 1.0) * 20;
 	if (abs(d) > 12)

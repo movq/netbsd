@@ -1,7 +1,5 @@
-/*	$NetBSD: networkdelta.c,v 1.8 1997/10/20 18:42:17 drochner Exp $	*/
-
-/*-
- * Copyright (c) 1985, 1993 The Regents of the University of California.
+/*
+ * Copyright (c) 1983 Regents of the University of California.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,238 +31,73 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)networkdelta.c	8.3 (Berkeley) 4/27/95";
-#else
-__RCSID("$NetBSD: networkdelta.c,v 1.8 1997/10/20 18:42:17 drochner Exp $");
-#endif
+static char sccsid[] = "@(#)networkdelta.c	2.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#ifdef sgi
-#ident "$Revision: 1.8 $"
-#endif
-
 #include "globals.h"
+#include <protocols/timed.h>
 
-static long median(float, float*, long*, long*, unsigned int);
+extern int machup;
 
 /*
- * Compute a corrected date.
- *	Compute the median of the reasonable differences.  First compute
- *	the median of all authorized differences, and then compute the
- *	median of all differences that are reasonably close to the first
- *	median.
- *
- * This differs from the original BSD implementation, which looked for
- *	the largest group of machines with essentially the same date.
- *	That assumed that machines with bad clocks would be uniformly
- *	distributed.  Unfortunately, in real life networks, the distribution
- *	of machines is not uniform among models of machines, and the
- *	distribution of errors in clocks tends to be quite consistent
- *	for a given model.  In other words, all model VI Supre Servres
- *	from GoFast Inc. tend to have about the same error.
- *	The original BSD implementation would chose the clock of the
- *	most common model, and discard all others.
- *
- *	Therefore, get best we can do is to try to average over all
- *	of the machines in the network, while discarding "obviously"
- *	bad values.
+ * `networkdelta' selects the largest set of deltas that fall within the
+ * interval RANGE, and uses them to compute the network average delta 
  */
-long
-networkdelta()
+
+long networkdelta()
 {
-	struct hosttbl *htp;
-	long med;
-	long lodelta, hidelta;
-	long logood, higood;
+	int i, j, maxind, minind;
+	int ext;
+	int tempind;
+	long tempdata;
 	long x[NHOSTS];
-	long *xp;
-	int numdelta;
-	float eps;
+	long average;
 
-	/*
-	 * compute the median of the good values
-	 */
-	med = 0;
-	numdelta = 1;
-	xp = &x[0];
-	*xp = 0;			/* account for ourself */
-	for (htp = self.l_fwd; htp != &self; htp = htp->l_fwd) {
-		if (htp->good
-		    && htp->noanswer == 0
-		    && htp->delta != HOSTDOWN) {
-			med += htp->delta;
-			numdelta++;
-			*++xp = htp->delta;
-		}
-	}
-
-	/*
-	 * If we are the only trusted time keeper, then do not change our
-	 * clock.  There may be another time keeping service active.
-	 */
-	if (numdelta == 1)
-		return 0;
-
-	med /= numdelta;
-	eps = med - x[0];
-	if (trace)
-		fprintf(fd, "median of %d values starting at %ld is about ",
-			numdelta, med);
-	med = median(med, &eps, &x[0], xp+1, VALID_RANGE);
-
-	/*
-	 * compute the median of all values near the good median
-	 */
-	hidelta = med + GOOD_RANGE;
-	lodelta = med - GOOD_RANGE;
-	higood = med + VGOOD_RANGE;
-	logood = med - VGOOD_RANGE;
-	xp = &x[0];
-	htp = &self;
-	do {
-		if (htp->noanswer == 0
-		    && htp->delta >= lodelta
-		    && htp->delta <= hidelta
-		    && (htp->good
-			|| (htp->delta >= logood
-			    && htp->delta <= higood))) {
-			*xp++ = htp->delta;
-		}
-	} while (&self != (htp = htp->l_fwd));
-
-	if (xp == &x[0]) {
-		if (trace)
-			fprintf(fd, "nothing close to median %ld\n", med);
-		return med;
-	}
-
-	if (xp == &x[1]) {
-		if (trace)
-			fprintf(fd, "only value near median is %ld\n", x[0]);
-		return x[0];
-	}
-
-	if (trace)
-		fprintf(fd, "median of %ld values starting at %ld is ",
-		        (long)(xp - &x[0]), med);
-	return median(med, &eps, &x[0], xp, 1);
-}
-
-
-/*
- * compute the median of an array of signed integers, using the idea
- *	in <<Numerical Recipes>>.
- */
-static long
-median(float a,				/* initial guess for the median */
-       float *eps_ptr,			/* spacing near the median */
-       long *x, long *xlim,		/* the data */
-       unsigned int gnuf)		/* good enough estimate */
-{
-	long *xptr;
-	float ap = LONG_MAX;		/* bounds on the median */
-	float am = -LONG_MAX;
-	float aa;
-	int npts;			/* # of points above & below guess */
-	float xp;			/* closet point above the guess */
-	float xm;			/* closet point below the guess */
-	float eps;
-	float dum, sum, sumx;
-	int pass;
-#define AMP	1.5			/* smoothing constants */
-#define AFAC	1.5
-
-	eps = *eps_ptr;
-	if (eps < 1.0) {
-		eps = -eps;
-		if (eps < 1.0)
-			eps = 1.0;
-	}
-
-	for (pass = 1; ; pass++) {	/* loop over the data */
-		sum = 0.0;
-		sumx = 0.0;
-		npts = 0;
-		xp = LONG_MAX;
-		xm = -LONG_MAX;
-
-		for (xptr = x; xptr != xlim; xptr++) {
-			float xx = *xptr;
-
-			dum = xx - a;
-			if (dum != 0.0) {	/* avoid dividing by 0 */
-				if (dum > 0.0) {
-					npts++;
-					if (xx < xp)
-						xp = xx;
-				} else {
-					npts--;
-					if (xx > xm)
-						xm = xx;
-					dum = -dum;
-				}
-				dum = 1.0/(eps + dum);
-				sum += dum;
-				sumx += xx * dum;
+	for (i=0; i<slvcount; i++)
+		x[i] = hp[i].delta;
+	for (i=0; i<slvcount-1; i++) {
+		tempdata = x[i];
+		tempind = i;
+		for (j=i+1; j<slvcount; j++) {
+			if (x[j] < tempdata) {
+				tempdata = x[j];
+				tempind = j;
 			}
 		}
-
-		if (ap-am < gnuf || sum == 0) {
-			if (trace)
-				fprintf(fd,
-			           "%ld in %d passes; early out balance=%d\n",
-				        (long)a, pass, npts);
-			return a;	/* guess was good enough */
-		}
-
-		aa = (sumx/sum-a)*AMP;
-		if (npts >= 2) {	/* guess was too low */
-			am = a;
-			aa = xp + max(0.0, aa);;
-			if (aa > ap)
-				aa = (a + ap)/2;
-
-		} else if (npts <= -2) {  /* guess was two high */
-			ap = a;
-			aa = xm + min(0.0, aa);;
-			if (aa < am)
-				aa = (a + am)/2;
-
-		} else {
-			break;		/* got it */
-		}
-
-		if (a == aa) {
-			if (trace)
-				fprintf(fd,
-				  "%ld in %d passes; force out balance=%d\n",
-				        (long)a, pass, npts);
-			return a;
-		}
-		eps = AFAC*abs(aa - a);
-		*eps_ptr = eps;
-		a = aa;
+		x[tempind] = x[i];
+		x[i] = tempdata;
 	}
 
-	if (((x - xlim) % 2) != 0) {    /* even number of points? */
-		if (npts == 0)		/* yes, return an average */
-			a = (xp+xm)/2;
-		else if (npts > 0)
-			a =  (a+xp)/2;
-		else
-			a = (xm+a)/2;
-
-	} else 	if (npts != 0) {	/* odd number of points */
-		if (npts > 0)
-			a = xp;
-		else
-			a = xm;
+	/* this piece of code is critical: DO NOT TOUCH IT! */
+/****/
+	i=0; j=1; minind=0; maxind=1;
+	if (machup == 2)
+		goto compute;
+	do {
+		if (x[j]-x[i] <= RANGE)
+			j++;
+		else {
+			if (j > i+1) 
+ 				j--; 
+			if ((x[j]-x[i] <= RANGE) && (j-i >= maxind-minind)) {
+				minind=i;
+				maxind=j;
+			}	
+			i++;
+			if(i = j)
+				j++;
+		}
+	} while (j < machup);
+	if ((x[machup-1] - x[i] <= RANGE) && (machup-i-1 >= maxind-minind)) {
+		minind=i; maxind=machup-1;
 	}
-
-	if (trace)
-		fprintf(fd, "%ld in %d passes\n", (long)a, pass);
-	return a;
+/****/
+compute:
+	ext = maxind - minind + 1;
+	average = 0;
+	for (i=minind; i<=maxind; i++)
+		average += x[i];
+	average /= ext;
+	return(average);
 }

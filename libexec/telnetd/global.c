@@ -1,8 +1,6 @@
-/*	$NetBSD: global.c,v 1.7 1997/10/08 08:45:10 mrg Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)global.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: global.c,v 1.7 1997/10/08 08:45:10 mrg Exp $");
-#endif
+static char sccsid[] = "@(#)global.c	5.2 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -50,6 +43,6 @@ __RCSID("$NetBSD: global.c,v 1.7 1997/10/08 08:45:10 mrg Exp $");
  * we will actually allocate the space.
  */
 
-#include <defs.h>
+#include "defs.h"
 #define extern
-#include <ext.h>
+#include "ext.h"

@@ -1,5 +1,3 @@
-/*	$NetBSD: cache.c,v 1.6 1997/07/20 20:32:22 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992 Keith Muller.
  * Copyright (c) 1992, 1993
@@ -37,13 +35,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)cache.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: cache.c,v 1.6 1997/07/20 20:32:22 christos Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -98,8 +91,7 @@ uidtb_start()
 		return(-1);
 	if ((uidtb = (UIDC **)calloc(UID_SZ, sizeof(UIDC *))) == NULL) {
 		++fail;
-		tty_warn(1,
-		    "Unable to allocate memory for user id cache table");
+		warn(1, "Unable to allocate memory for user id cache table");
 		return(-1);
 	}
 	return(0);
@@ -128,8 +120,7 @@ gidtb_start()
 		return(-1);
 	if ((gidtb = (GIDC **)calloc(GID_SZ, sizeof(GIDC *))) == NULL) {
 		++fail;
-		tty_warn(1,
-		    "Unable to allocate memory for group id cache table");
+		warn(1, "Unable to allocate memory for group id cache table");
 		return(-1);
 	}
 	return(0);
@@ -158,8 +149,7 @@ usrtb_start()
 		return(-1);
 	if ((usrtb = (UIDC **)calloc(UNM_SZ, sizeof(UIDC *))) == NULL) {
 		++fail;
-		tty_warn(1,
-		    "Unable to allocate memory for user name cache table");
+		warn(1, "Unable to allocate memory for user name cache table");
 		return(-1);
 	}
 	return(0);
@@ -188,8 +178,7 @@ grptb_start()
 		return(-1);
 	if ((grptb = (GIDC **)calloc(GNM_SZ, sizeof(GIDC *))) == NULL) {
 		++fail;
-		tty_warn(1,
-		    "Unable to allocate memory for group name cache table");
+		warn(1,"Unable to allocate memory for group name cache table");
 		return(-1);
 	}
 	return(0);
@@ -213,8 +202,8 @@ name_uid(uid, frc)
 	int frc;
 #endif
 {
-	struct passwd *pw;
-	UIDC *ptr;
+	register struct passwd *pw;
+	register UIDC *ptr;
 
 	if ((uidtb == NULL) && (uidtb_start() < 0))
 		return("");
@@ -254,7 +243,7 @@ name_uid(uid, frc)
 #		ifdef NET2_STAT
 		(void)sprintf(ptr->name, "%u", uid);
 #		else
-		(void)sprintf(ptr->name, "%lu", (long) uid);
+		(void)sprintf(ptr->name, "%lu", uid);
 #		endif
 		if (frc == 0)
 			return("");
@@ -290,8 +279,8 @@ name_gid(gid, frc)
 	int frc;
 #endif
 {
-	struct group *gr;
-	GIDC *ptr;
+	register struct group *gr;
+	register GIDC *ptr;
 
 	if ((gidtb == NULL) && (gidtb_start() < 0))
 		return("");
@@ -331,7 +320,7 @@ name_gid(gid, frc)
 #		ifdef NET2_STAT
 		(void)sprintf(ptr->name, "%u", gid);
 #		else
-		(void)sprintf(ptr->name, "%lu", (long) gid);
+		(void)sprintf(ptr->name, "%lu", gid);
 #		endif
 		if (frc == 0)
 			return("");
@@ -366,9 +355,9 @@ uid_name(name, uid)
 	uid_t *uid;
 #endif
 {
-	struct passwd *pw;
-	UIDC *ptr;
-	int namelen;
+	register struct passwd *pw;
+	register UIDC *ptr;
+	register int namelen;
 
 	/*
 	 * return -1 for mangled names
@@ -436,9 +425,9 @@ gid_name(name, gid)
 	gid_t *gid;
 #endif
 {
-	struct group *gr;
-	GIDC *ptr;
-	int namelen;
+	register struct group *gr;
+	register GIDC *ptr;
+	register int namelen;
 
 	/*
 	 * return -1 for mangled names

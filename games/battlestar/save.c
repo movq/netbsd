@@ -1,8 +1,6 @@
-/*	$NetBSD: save.c,v 1.7 1997/10/12 02:06:15 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,36 +31,31 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)save.c	8.2 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: save.c,v 1.7 1997/10/12 02:06:15 lukem Exp $");
-#endif
-#endif				/* not lint */
+static char sccsid[] = "@(#)save.c	5.3 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include "extern.h"
+#include "externs.h"
 
-void
 restore()
 {
-	char   *home;
-	char    home1[100];
-	int     n;
-	int     tmp;
-	FILE   *fp;
+	char *getenv();
+	char *home;
+	char home1[100];
+	register int n;
+	int tmp;
+	register FILE *fp;
 
 	home = getenv("HOME");
 	strcpy(home1, home);
 	strcat(home1, "/Bstar");
 	if ((fp = fopen(home1, "r")) == 0) {
-		warn("fopen %s", home1);
+		perror(home1);
 		return;
 	}
 	fread(&WEIGHT, sizeof WEIGHT, 1, fp);
 	fread(&CUMBER, sizeof CUMBER, 1, fp);
-	fread(&ourclock, sizeof ourclock, 1, fp);
+	fread(&clock, sizeof clock, 1, fp);
 	fread(&tmp, sizeof tmp, 1, fp);
 	location = tmp ? dayfile : nightfile;
 	for (n = 1; n <= NUMOFROOMS; n++) {
@@ -75,7 +68,7 @@ restore()
 	fread(notes, sizeof notes, 1, fp);
 	fread(&direction, sizeof direction, 1, fp);
 	fread(&position, sizeof position, 1, fp);
-	fread(&ourtime, sizeof ourtime, 1, fp);
+	fread(&time, sizeof time, 1, fp);
 	fread(&fuel, sizeof fuel, 1, fp);
 	fread(&torps, sizeof torps, 1, fp);
 	fread(&carrying, sizeof carrying, 1, fp);
@@ -97,26 +90,26 @@ restore()
 	fread(&ego, sizeof ego, 1, fp);
 }
 
-void
 save()
 {
-	char   *home;
-	char    home1[100];
-	int     n;
-	int     tmp;
-	FILE   *fp;
+	char *getenv();
+	char *home;
+	char home1[100];
+	register int n;
+	int tmp;
+	FILE *fp;
 
 	home = getenv("HOME");
 	strcpy(home1, home);
 	strcat(home1, "/Bstar");
 	if ((fp = fopen(home1, "w")) == 0) {
-		warn("fopen %s", home1);
+		perror(home1);
 		return;
 	}
 	printf("Saved in %s.\n", home1);
 	fwrite(&WEIGHT, sizeof WEIGHT, 1, fp);
 	fwrite(&CUMBER, sizeof CUMBER, 1, fp);
-	fwrite(&ourclock, sizeof ourclock, 1, fp);
+	fwrite(&clock, sizeof clock, 1, fp);
 	tmp = location == dayfile;
 	fwrite(&tmp, sizeof tmp, 1, fp);
 	for (n = 1; n <= NUMOFROOMS; n++) {
@@ -129,7 +122,7 @@ save()
 	fwrite(notes, sizeof notes, 1, fp);
 	fwrite(&direction, sizeof direction, 1, fp);
 	fwrite(&position, sizeof position, 1, fp);
-	fwrite(&ourtime, sizeof ourtime, 1, fp);
+	fwrite(&time, sizeof time, 1, fp);
 	fwrite(&fuel, sizeof fuel, 1, fp);
 	fwrite(&torps, sizeof torps, 1, fp);
 	fwrite(&carrying, sizeof carrying, 1, fp);

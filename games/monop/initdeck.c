@@ -1,8 +1,6 @@
-/*	$NetBSD: initdeck.c,v 1.5 1997/10/12 17:45:12 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,23 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)initdeck.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: initdeck.c,v 1.5 1997/10/12 17:45:12 christos Exp $");
-#endif
+static char sccsid[] = "@(#)initdeck.c	5.5 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include "deck.h"
+# include	<stdio.h>
+# include	"deck.h"
 
 /*
  *	This program initializes the card files for monopoly.
@@ -71,17 +64,13 @@ __RCSID("$NetBSD: initdeck.c,v 1.5 1997/10/12 17:45:12 christos Exp $");
 char	*infile		= "cards.inp",		/* input file		*/
 	*outfile	= "cards.pck";		/* "packed" file	*/
 
+extern long	ftell();
+extern char *calloc();
+
 DECK	deck[2];
 
 FILE	*inf, *outf;
 
-/* initdeck.c */
-int main __P((int, char *[]));
-static void getargs __P((int, char *[]));
-static void count __P((void));
-static void putem __P((void));
-
-int
 main(ac, av)
 int	ac;
 char	*av[]; {
@@ -118,11 +107,9 @@ char	*av[]; {
 	exit(0);
 }
 
-static void
 getargs(ac, av)
 int	ac;
-char	*av[];
-{
+char	*av[]; {
 
 	if (ac > 1)
 		infile = av[1];
@@ -133,13 +120,11 @@ char	*av[];
 /*
  * count the cards
  */
-static void
-count() 
-{
+count() {
 
 	reg bool	newline;
 	reg DECK	*in_deck;
-	reg int		c;
+	reg char	c;
 
 	newline = TRUE;
 	in_deck = &CC_D;
@@ -157,13 +142,11 @@ count()
 /*
  *	put strings in the file
  */
-static void
-putem() 
-{
+putem() {
 
 	reg bool	newline;
 	reg DECK	*in_deck;
-	reg int		c;
+	reg char	c;
 	reg int		num;
 
 	in_deck = &CC_D;

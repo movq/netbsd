@@ -1,8 +1,6 @@
-/*	$NetBSD: popen.c,v 1.8 1997/06/18 19:05:52 christos Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software written by Ken Arnold and
  * published in UNIX Review, Vol. 6, No. 8.
@@ -37,31 +35,20 @@
  *
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)popen.c	8.3 (Berkeley) 4/6/94";
-#else
-__RCSID("$NetBSD: popen.c,v 1.8 1997/06/18 19:05:52 christos Exp $");
-#endif
+static char sccsid[] = "@(#)popen.c	5.9 (Berkeley) 2/25/91";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/wait.h>
-
-#include <errno.h>
-#include <glob.h>
 #include <signal.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
-#include "extern.h"
-
-#define INCR	100
 /*
- * Special version of popen which avoids call to shell.  This ensures noone
+ * Special version of popen which avoids call to shell.  This insures noone
  * may create a pipe to a hidden program as a side effect of a list or dir
  * command.
  */
@@ -69,80 +56,48 @@ static int *pids;
 static int fds;
 
 FILE *
-ftpd_popen(program, type, nostderr)
+ftpd_popen(program, type)
 	char *program, *type;
-	int nostderr;
 {
-	char *cp;
-	FILE *iop = NULL;
+	register char *cp;
+	FILE *iop;
 	int argc, gargc, pdes[2], pid;
-	char **pop, **np;
-	char **argv = NULL, **gargv = NULL;
-	size_t nargc = 100, ngargc = 100;
-#ifdef __GNUC__
-	(void) &iop;
-	(void) &gargc;
-	(void) &gargv;
-	(void) &argv;
-#endif
+	char **pop, *argv[100], *gargv[1000], *vv[2];
+	extern char **ftpglob(), **copyblk();
 
-	if ((*type != 'r' && *type != 'w') || type[1])
-		return (NULL);
+	if (*type != 'r' && *type != 'w' || type[1])
+		return(NULL);
 
 	if (!pids) {
 		if ((fds = getdtablesize()) <= 0)
-			return (NULL);
+			return(NULL);
 		if ((pids = (int *)malloc((u_int)(fds * sizeof(int)))) == NULL)
-			return (NULL);
-		memset(pids, 0, fds * sizeof(int));
+			return(NULL);
+		bzero((char *)pids, fds * sizeof(int));
 	}
 	if (pipe(pdes) < 0)
-		return (NULL);
-
-	if ((argv = malloc(nargc * sizeof(char *))) == NULL)
-		return NULL;
-
-#define CHECKMORE(c, v, n) \
-	if (c >= n + 2) { \
-		n += INCR; \
-		if ((np = realloc(v, n * sizeof(char *))) == NULL) \
-			goto pfree; \
-		else \
-			v = np; \
-	}
+		return(NULL);
 
 	/* break up string into pieces */
-	for (argc = 0, cp = program;; cp = NULL) {
-		CHECKMORE(argc, argv, nargc)
+	for (argc = 0, cp = program;; cp = NULL)
 		if (!(argv[argc++] = strtok(cp, " \t\n")))
 			break;
-	}
-
-	if ((gargv = malloc(ngargc * sizeof(char *))) == NULL)
-		goto pfree;
 
 	/* glob each piece */
 	gargv[0] = argv[0];
 	for (gargc = argc = 1; argv[argc]; argc++) {
-		glob_t gl;
-		int flags = GLOB_BRACE|GLOB_NOCHECK|GLOB_QUOTE|GLOB_TILDE;
-
-		memset(&gl, 0, sizeof(gl));
-		if (glob(argv[argc], flags, NULL, &gl)) {
-			CHECKMORE(gargc, gargv, ngargc)
-			if ((gargv[gargc++] = strdup(argv[argc])) == NULL)
-				goto pfree;
+		if (!(pop = ftpglob(argv[argc]))) {	/* globbing failed */
+			vv[0] = argv[argc];
+			vv[1] = NULL;
+			pop = copyblk(vv);
 		}
-		else
-			for (pop = gl.gl_pathv; *pop; pop++) {
-				CHECKMORE(gargc, gargv, ngargc)
-				if ((gargv[gargc++] = strdup(*pop)) == NULL)
-					goto pfree;
-			}
-		globfree(&gl);
+		argv[argc] = (char *)pop;		/* save to free later */
+		while (*pop && gargc < 1000)
+			gargv[gargc++] = *pop++;
 	}
 	gargv[gargc] = NULL;
 
+	iop = NULL;
 	switch(pid = vfork()) {
 	case -1:			/* error */
 		(void)close(pdes[0]);
@@ -151,18 +106,15 @@ ftpd_popen(program, type, nostderr)
 		/* NOTREACHED */
 	case 0:				/* child */
 		if (*type == 'r') {
-			if (pdes[1] != STDOUT_FILENO) {
-				dup2(pdes[1], STDOUT_FILENO);
+			if (pdes[1] != 1) {
+				dup2(pdes[1], 1);
+				dup2(pdes[1], 2);	/* stderr, too! */
 				(void)close(pdes[1]);
 			}
-			if (nostderr)
-				(void)close(STDERR_FILENO);
-			else		/* stderr too! */
-				dup2(STDOUT_FILENO, STDERR_FILENO);
 			(void)close(pdes[0]);
 		} else {
-			if (pdes[0] != STDIN_FILENO) {
-				dup2(pdes[0], STDIN_FILENO);
+			if (pdes[0] != 0) {
+				dup2(pdes[0], 0);
 				(void)close(pdes[0]);
 			}
 			(void)close(pdes[1]);
@@ -180,44 +132,31 @@ ftpd_popen(program, type, nostderr)
 	}
 	pids[fileno(iop)] = pid;
 
-pfree:	if (gargv) {
-		for (argc = 1; argc < gargc; argc++)
-			free(gargv[argc]);
-		free(gargv);
+pfree:	for (argc = 1; argv[argc] != NULL; argc++) {
+		blkfree((char **)argv[argc]);
+		free((char *)argv[argc]);
 	}
-	if (argv)
-		free(argv);
-
-	return (iop);
+	return(iop);
 }
 
-int
 ftpd_pclose(iop)
 	FILE *iop;
 {
-	int fdes, status;
-	pid_t pid;
-	sigset_t sigset, osigset;
+	register int fdes;
+	int omask;
+	union wait stat_loc;
+	int pid;
 
 	/*
 	 * pclose returns -1 if stream is not associated with a
 	 * `popened' command, or, if already `pclosed'.
 	 */
 	if (pids == 0 || pids[fdes = fileno(iop)] == 0)
-		return (-1);
+		return(-1);
 	(void)fclose(iop);
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGINT);
-	sigaddset(&sigset, SIGQUIT);
-	sigaddset(&sigset, SIGHUP);
-	sigprocmask(SIG_BLOCK, &sigset, &osigset);
-	while ((pid = waitpid(pids[fdes], &status, 0)) < 0 && errno == EINTR)
-		continue;
-	sigprocmask(SIG_SETMASK, &osigset, NULL);
+	omask = sigblock(sigmask(SIGINT)|sigmask(SIGQUIT)|sigmask(SIGHUP));
+	while ((pid = wait((int *)&stat_loc)) != pids[fdes] && pid != -1);
+	(void)sigsetmask(omask);
 	pids[fdes] = 0;
-	if (pid < 0)
-		return (pid);
-	if (WIFEXITED(status))
-		return (WEXITSTATUS(status));
-	return (1);
+	return(pid == -1 ? -1 : stat_loc.w_status);
 }

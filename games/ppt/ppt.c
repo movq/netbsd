@@ -1,8 +1,6 @@
-/*	$NetBSD: ppt.c,v 1.5 1997/10/10 16:48:39 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,36 +31,30 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1988 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)ppt.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: ppt.c,v 1.5 1997/10/10 16:48:39 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)ppt.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include <stdio.h>
 
-	int	main __P((int, char *[]));
-static void	putppt __P((int));
+void	putppt();
 
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	int c;
-	char *p;
+	register int c;
+	register char *p;
 
 	(void) puts("___________");
 	if (argc > 1)
-		while ((p = *++argv) != NULL)
+		while (p = *++argv)
 			for (; *p; ++p)
 				putppt((int)*p);
 	else while ((c = getchar()) != EOF)
@@ -73,9 +65,9 @@ main(argc, argv)
 
 static void
 putppt(c)
-	int c;
+	register int c;
 {
-	int i;
+	register int i;
 
 	(void) putchar('|');
 	for (i = 7; i >= 0; i--) {

@@ -1,7 +1,5 @@
-.\"	$NetBSD: dm.8,v 1.4 1997/10/10 12:49:45 lukem Exp $
-.\"
-.\" Copyright (c) 1987, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1987, 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)dm.8	8.1 (Berkeley) 5/31/93
+.\"     @(#)dm.8	5.11 (Berkeley) 7/23/91
 .\"
-.Dd May 31, 1993
+.Dd July 23, 1991
 .Dt DM 8
 .Os
 .Sh NAME
@@ -43,12 +41,12 @@
 .Nm ln
 .Fl s Cm dm Ar game
 .Sh DESCRIPTION
-.Nm
+.Nm Dm
 is a program used to regulate game playing.
-.Nm
+.Nm Dm
 expects to be invoked with the name of a game that a user wishes to play.
 This is done by creating symbolic links to
-.Nm "" ,
+.Nm dm ,
 in the directory
 .Pa /usr/games
 for all of the regulated games.
@@ -57,9 +55,9 @@ The actual binaries for these games should be placed in a
 directory,
 .Pa /usr/games/hide ,
 that may only be accessed by the
-.Nm
+.Nm dm
 program.
-.Nm
+.Nm Dm
 determines if the requested game is available and, if so, runs it.
 The file
 .Pa /etc/dm.conf
@@ -88,7 +86,7 @@ game logging file
 .Xr dm.conf 5
 .Sh BUGS
 Two problems result from
-.Nm
+.Nm dm
 running the games setuid
 .Dq games .
 First, all games that allow users to run
@@ -96,7 +94,7 @@ First, all games that allow users to run
 commands should carefully
 set both the real and effective user id's immediately before executing
 those commands.  Probably more important is that
-.Nm
+.Nm dm
 never be setuid
 anything but
 .Dq games
@@ -106,6 +104,6 @@ had no reason to run setuid and which accessed user files may have to
 be modified.
 .Sh HISTORY
 The
-.Nm
+.Nm dm
 command appeared in
 .Bx 4.3 tahoe .

@@ -1,8 +1,6 @@
-/*	$NetBSD: setterm.c,v 1.8 1997/07/22 07:37:03 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,57 +31,41 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)setterm.c	8.7 (Berkeley) 7/27/94";
-#else
-__RCSID("$NetBSD: setterm.c,v 1.8 1997/07/22 07:37:03 mikel Exp $");
-#endif
+/*static char sccsid[] = "from: @(#)setterm.c	5.9 (Berkeley) 8/23/92";*/
+static char rcsid[] = "$Id: setterm.c,v 1.1 1993/08/07 05:51:11 mycroft Exp $";
 #endif /* not lint */
 
-#include <sys/ioctl.h>		/* TIOCGWINSZ on old systems. */
+#include <sys/ioctl.h>
 
+#include <curses.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
 #include <unistd.h>
-
-#include "curses.h"
 
 static void zap __P((void));
 
 static char	*sflags[] = {
-		/*       am   bs   da   eo   hc   in   mi   ms  */
-			&AM, &BS, &DA, &EO, &HC, &IN, &MI, &MS,
-		/*	 nc   ns   os   ul   xb   xn   xt   xs   xx  */
+			&AM, &BS, &DA, &EO, &HC, &HZ, &IN, &MI, &MS,
 			&NC, &NS, &OS, &UL, &XB, &XN, &XT, &XS, &XX
 		};
 
 static char	*_PC,
 		**sstrs[] = {
-		/*	 AL   bc   bt   cd   ce   cl   cm   cr   cs  */
 			&AL, &BC, &BT, &CD, &CE, &CL, &CM, &CR, &CS,
-		/*	 dc   DL   dm   do   ed   ei   k0   k1   k2  */
 			&DC, &DL, &DM, &DO, &ED, &EI, &K0, &K1, &K2,
-		/*	 k3   k4   k5   k6   k7   k8   k9   ho   ic  */
 			&K3, &K4, &K5, &K6, &K7, &K8, &K9, &HO, &IC,
-		/*	 im   ip   kd   ke   kh   kl   kr   ks   ku  */
 			&IM, &IP, &KD, &KE, &KH, &KL, &KR, &KS, &KU,
-		/*	 ll   ma   nd   nl    pc   rc   sc   se   SF */
 			&LL, &MA, &ND, &NL, &_PC, &RC, &SC, &SE, &SF,
-		/*	 so   SR   ta   te   ti   uc   ue   up   us  */
 			&SO, &SR, &TA, &TE, &TI, &UC, &UE, &UP, &US,
-		/*	 vb   vs   ve   al   dl   sf   sr   AL	     */
-			&VB, &VS, &VE, &al, &dl, &sf, &sr, &AL_PARM, 
-		/*	 DL	   UP	     DO		 LE	     */
-			&DL_PARM, &UP_PARM, &DOWN_PARM, &LEFT_PARM, 
-		/*	 RI					     */
-			&RIGHT_PARM,
+			&VB, &VS, &VE, &AL_PARM, &DL_PARM, &UP_PARM,
+			&DOWN_PARM, &LEFT_PARM, &RIGHT_PARM,
 		};
 
 static char	*aoftspace;		/* Address of _tspace for relocation */
 static char	tspace[2048];		/* Space for capability strings */
+
+static int	destcol, destline;
 
 char *ttytype;
 
@@ -98,7 +80,7 @@ setterm(type)
 	char *p;
 
 #ifdef DEBUG
-	__CTRACE("setterm: (\"%s\")\nLINES = %d, COLS = %d\n",
+	__TRACE("setterm: (\"%s\")\nLINES = %d, COLS = %d\n",
 	    type, LINES, COLS);
 #endif
 	if (type[0] == '\0')
@@ -106,10 +88,10 @@ setterm(type)
 	unknown = 0;
 	if (tgetent(genbuf, type) != 1) {
 		unknown++;
-		(void)strncpy(genbuf, "xx|dumb:", sizeof(genbuf) - 1);
+		strcpy(genbuf, "xx|dumb:");
 	}
 #ifdef DEBUG
-	__CTRACE("setterm: tty = %s\n", type);
+	__TRACE("setterm: tty = %s\n", type);
 #endif
 
 	/* Try TIOCGWINSZ, and, if it fails, the termcap entry. */
@@ -123,35 +105,41 @@ setterm(type)
 	}
 
 	/* POSIX 1003.2 requires that the environment override. */
-	if ((p = getenv("LINES")) != NULL)
+	if ((p = getenv("ROWS")) != NULL)
 		LINES = strtol(p, NULL, 10);
 	if ((p = getenv("COLUMNS")) != NULL)
 		COLS = strtol(p, NULL, 10);
 
 	/*
-	 * Want cols > 4, otherwise things will fail.
+	 * XXX
+	 * Historically, curses fails if rows <= 5, cols <= 4.
 	 */
-	if (COLS <= 4)
+	if (LINES <= 5 || COLS <= 4)
 		return (ERR);
 
 #ifdef DEBUG
-	__CTRACE("setterm: LINES = %d, COLS = %d\n", LINES, COLS);
+	__TRACE("setterm: LINES = %d, COLS = %d\n", LINES, COLS);
 #endif
 	aoftspace = tspace;
 	zap();			/* Get terminal description. */
 
-	/* If we can't tab, we can't backtab, either. */
-	if (!GT)
+	/* Handle funny termcap capabilities. */
+	if (CS && SC && RC)
+		AL = DL = "";
+	if (AL_PARM && AL == NULL)
+		AL = "";
+	if (DL_PARM && DL == NULL)
+		DL = "";
+	if (IC) {
+		if (IM == NULL)
+			IM = "";
+		if (EI == NULL)
+			EI = "";
+	}
+	if (!GT)		/* If we can't tab, we can't backtab either. */
 		BT = NULL;
 
-	/*
-	 * Test for cursor motion capbility.
-	 *
-	 * XXX
-	 * This is truly stupid -- tgoto returns "OOPS" if it can't
-	 * do cursor motions.
-	 */
-	if (tgoto(CM, 0, 0)[0] == 'O') {
+	if (tgoto(CM, destcol, destline)[0] == 'O') {
 		CA = 0;
 		CM = 0;
 	} else
@@ -160,12 +148,6 @@ setterm(type)
 	PC = _PC ? _PC[0] : 0;
 	aoftspace = tspace;
 	ttytype = longname(genbuf, __ttytype);
-
-	/* If no scrolling commands, no quick change. */
-	__noqch =
-	    (CS == NULL || HO == NULL ||
-	    (SF == NULL && sf == NULL) || (SR == NULL && sr == NULL)) &&
-	    ((AL == NULL && al == NULL) || (DL == NULL && dl == NULL));
 
 	return (unknown ? ERR : OK);
 }
@@ -179,36 +161,29 @@ zap()
 {
 	register char *namp, ***sp;
 	register char **fp;
-	char tmp[3];
 #ifdef DEBUG
 	register char	*cp;
 #endif
-	tmp[2] = '\0';
 
-	namp = "ambsdaeohcinmimsncnsosulxbxnxtxsxx";
+	namp = "ambsdadbeohchzinmimsncnsosulxbxnxtxsxx";
 	fp = sflags;
 	do {
-		*tmp = *namp;
-		*(tmp + 1) = *(namp + 1);
-		*(*fp++) = tgetflag(tmp);
+		*(*fp++) = tgetflag(namp);
 #ifdef DEBUG
-		__CTRACE("2.2s = %s\n", namp, *fp[-1] ? "TRUE" : "FALSE");
+		__TRACE("2.2s = %s\n", namp, *fp[-1] ? "TRUE" : "FALSE");
 #endif
 		namp += 2;
-		
 	} while (*namp);
-	namp = "ALbcbtcdceclcmcrcsdcDLdmdoedeik0k1k2k3k4k5k6k7k8k9hoicimipkdkekhklkrkskullmandnlpcrcscseSFsoSRtatetiucueupusvbvsvealdlsfsrALDLUPDOLERI";
+	namp = "albcbtcdceclcmcrcsdcdldmdoedeik0k1k2k3k4k5k6k7k8k9hoicimipkdkekhklkrkskullmandnlpcrcscsesfsosrtatetiucueupusvbvsveALDLUPDOLERI";
 	sp = sstrs;
 	do {
-		*tmp = *namp;
-		*(tmp + 1) = *(namp + 1);
-		*(*sp++) = tgetstr(tmp, &aoftspace);
+		*(*sp++) = tgetstr(namp, &aoftspace);
 #ifdef DEBUG
-		__CTRACE("2.2s = %s", namp, *sp[-1] == NULL ? "NULL\n" : "\"");
+		__TRACE("2.2s = %s", namp, *sp[-1] == NULL ? "NULL\n" : "\"");
 		if (*sp[-1] != NULL) {
 			for (cp = *sp[-1]; *cp; cp++)
-				__CTRACE("%s", unctrl(*cp));
-			__CTRACE("\"\n");
+				__TRACE("%s", unctrl(*cp));
+			__TRACE("\"\n");
 		}
 #endif
 		namp += 2;

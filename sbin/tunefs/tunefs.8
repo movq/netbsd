@@ -1,7 +1,5 @@
-.\"	$NetBSD: tunefs.8,v 1.13 1997/10/20 09:12:07 enami Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,17 +29,16 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)tunefs.8	8.3 (Berkeley) 5/3/95
+.\"     @(#)tunefs.8	6.6 (Berkeley) 3/16/91
 .\"
-.Dd May 3, 1995
+.Dd March 16, 1991
 .Dt TUNEFS 8
 .Os BSD 4.2
 .Sh NAME
 .Nm tunefs
 .Nd tune up an existing file system
 .Sh SYNOPSIS
-.Nm
-.Op Fl AN
+.Nm tunefs
 .Op Fl a Ar maxcontig
 .Op Fl d Ar rotdelay
 .Op Fl e Ar maxbpg
@@ -49,32 +46,11 @@
 .Bk -words
 .Op Fl o Ar optimize_preference
 .Ek
-.Op Fl t Ar trackskew
 .Op Ar special | Ar filesys
 .Sh DESCRIPTION
-.Nm
+.Nm Tunefs
 is designed to change the dynamic parameters of a file system
 which affect the layout policies.
-The
-.Fl N
-flag displays all the settable options
-(after any changes from the tuning options)
-but does not cause any of them to be changed.
-The
-.Fl A
-flag causes the values to be updated in all the alternate
-superblocks instead of just the standard superblock.
-If this option is not used,
-then use of a backup superblock by
-.Xr fsck 8
-will lose anything changed by
-.Nm "" .
-The
-.Fl A
-flag is ignored when the
-.Fl N
-flag is specified.
-.Pp
 The parameters which are to be changed are indicated by the flags
 given below:
 .Bl -tag -width Ds
@@ -120,7 +96,7 @@ users will be unable to allocate files until enough files have
 been deleted to get under the higher threshold.
 .It Fl o Ar optimize_preference
 The file system can either try to minimize the time spent
-allocating blocks, or it can attempt to minimize the space
+allocating blocks, or it can attempt minimize the space
 fragmentation on the disk.
 If the value of minfree (see above) is less than 10%,
 then the file system should optimize for space to avoid
@@ -128,16 +104,11 @@ running out of full sized blocks.
 For values of minfree greater than or equal to 10%,
 fragmentation is unlikely to be problematical, and
 the file system can be optimized for time.
-.It Fl t Ar trackskew
-This specifies the skew in sectors from one track to the next in a cylinder.
-The default value is zero, indicating that each track in a cylinder begins at
-the same rotational position.
 .El
 .Sh SEE ALSO
 .Xr fs 5 ,
-.Xr dumpfs 8 ,
-.Xr fsck_ffs 8 ,
-.Xr newfs 8
+.Xr newfs 8 ,
+.Xr mkfs 8
 .Rs
 .%A M. McKusick
 .%A W. Joy
@@ -148,7 +119,7 @@ the same rotational position.
 .%N 3
 .%P pp 181-197
 .%D August 1984
-.%O "(reprinted in the BSD System Manager's Manual, SMM:5)"
+.%O "(reprinted in the BSD System Manager's Manual, SMM:14)"
 .Re
 .Sh BUGS
 This program should work on mounted and active file systems.

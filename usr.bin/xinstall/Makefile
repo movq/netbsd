@@ -1,11 +1,13 @@
-#	$NetBSD: Makefile,v 1.13 1997/05/08 21:12:02 gwr Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.5 (Berkeley) 6/24/90
 
 PROG=	xinstall
-SRCS=	stat_flags.c xinstall.c
-MAN=	install.1
-.PATH:	${.CURDIR}/../../bin/ls
+MAN1=	install.0
+CLEANFILES=xinstall
 
-PROGNAME=install
+install: maninstall
+	install ${STRIP} -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \
+	    ${PROG} ${DESTDIR}${BINDIR}/install
 
 .include <bsd.prog.mk>
+
+

@@ -1,5 +1,3 @@
-/*	$NetBSD: regular.c,v 1.5 1997/10/19 14:06:05 mrg Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)regular.c	8.3 (Berkeley) 4/2/94";
-#else
-__RCSID("$NetBSD: regular.c,v 1.5 1997/10/19 14:06:05 mrg Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -90,8 +83,7 @@ c_regular(fd1, file1, skip1, len1, fd2, file2, skip2, len2)
 		if ((ch = *p1) != *p2)
 			if (lflag) {
 				dfound = 1;
-				(void)printf("%6qd %3o %3o\n", (long long)byte,
-				    ch, *p2);
+				(void)printf("%6qd %3o %3o\n", byte, ch, *p2);
 			} else
 				diffmsg(file1, file2, byte, line);
 				/* NOTREACHED */

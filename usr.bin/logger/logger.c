@@ -1,8 +1,6 @@
-/*	$NetBSD: logger.c,v 1.5 1997/10/19 04:16:48 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,52 +31,39 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1983 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)logger.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: logger.c,v 1.5 1997/10/19 04:16:48 lukem Exp $");
+static char sccsid[] = "@(#)logger.c	6.15 (Berkeley) 3/1/91";
 #endif /* not lint */
 
-#include <errno.h>
-#include <unistd.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <ctype.h>
-#include <string.h>
-
-#define	SYSLOG_NAMES
 #include <syslog.h>
-
-int	decode __P((char *, CODE *));
-int	pencode __P((char *));
-int	main __P((int, char **));
-void	usage __P((void));
+#include <ctype.h>
 
 /*
- * logger -- read and log utility
- *
- *	Reads from an input and arranges to write the result on the system
- *	log.
- */
-int
+**  LOGGER -- read and log utility
+**
+**	This routine reads from an input and arranges to write the
+**	result on the system log, along with a useful tag.
+*/
+
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	int ch, logflags, pri;
-	char *tag, buf[1024];
+	extern char *optarg;
+	extern int errno, optind;
+	int pri = LOG_NOTICE;
+	int ch, logflags = 0;
+	char *tag, buf[1024], *getlogin(), *strerror();
 
 	tag = NULL;
-	pri = LOG_NOTICE;
-	logflags = 0;
-	while ((ch = getopt(argc, argv, "f:ip:st:")) != -1)
+	while ((ch = getopt(argc, argv, "f:ip:st:")) != EOF)
 		switch((char)ch) {
 		case 'f':		/* file to log */
 			if (freopen(optarg, "r", stdin) == NULL) {
@@ -112,7 +97,7 @@ main(argc, argv)
 
 	/* log input line if appropriate */
 	if (argc > 0) {
-		char *p, *endp;
+		register char *p, *endp;
 		int len;
 
 		for (p = buf, endp = buf + sizeof(buf) - 2; *argv;) {
@@ -126,24 +111,30 @@ main(argc, argv)
 			else {
 				if (p != buf)
 					*p++ = ' ';
-				memmove(p, *argv++, len);
+				bcopy(*argv++, p, len);
 				*(p += len) = '\0';
 			}
 		}
 		if (p != buf)
 			syslog(pri, "%s", buf);
-	} else
-		while (fgets(buf, sizeof(buf), stdin) != NULL)
-			syslog(pri, "%s", buf);
+		exit(0);
+	}
+
+	/* main loop */
+	while (fgets(buf, sizeof(buf), stdin) != NULL)
+		syslog(pri, "%s", buf);
+
 	exit(0);
 }
+
+#define	SYSLOG_NAMES
+#include <syslog.h>
 
 /*
  *  Decode a symbolic name to a numeric value
  */
-int
 pencode(s)
-	char *s;
+	register char *s;
 {
 	char *save;
 	int fac, lev;
@@ -172,12 +163,11 @@ pencode(s)
 	return ((lev & LOG_PRIMASK) | (fac & LOG_FACMASK));
 }
 
-int
 decode(name, codetab)
 	char *name;
 	CODE *codetab;
 {
-	CODE *c;
+	register CODE *c;
 
 	if (isdigit(*name))
 		return (atoi(name));
@@ -189,10 +179,9 @@ decode(name, codetab)
 	return (-1);
 }
 
-void
 usage()
 {
 	(void)fprintf(stderr,
-	    "logger: [-is] [-f file] [-p pri] [-t tag] [ message ... ]\n");
+	    "logger: [-i] [-f file] [-p pri] [-t tag] [ message ... ]\n");
 	exit(1);
 }

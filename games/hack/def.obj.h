@@ -1,10 +1,6 @@
-/*	$NetBSD: def.obj.h,v 1.4 1997/10/19 16:57:09 christos Exp $	*/
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985. */
+/* def.obj.h - version 1.0.3 */
 
-/*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
- */
-#ifndef _DEF_OBJ_H_
-#define _DEF_OBJ_H_
 struct obj {
 	struct obj *nobj;
 	unsigned o_id;
@@ -50,4 +46,3 @@ extern struct obj *fobj;
 #define newobj(xl)	(struct obj *) alloc((unsigned)(xl) + sizeof(struct obj))
 #define	ONAME(otmp)	((char *) otmp->oextra)
 #define	OGOLD(otmp)	(otmp->oextra[0])
-#endif /* _DEF_OBJ_H_ */

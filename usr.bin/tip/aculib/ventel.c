@@ -1,8 +1,6 @@
-/*	$NetBSD: ventel.c,v 1.6 1997/02/11 09:24:21 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)ventel.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: ventel.c,v 1.6 1997/02/11 09:24:21 mrg Exp $";
+static char sccsid[] = "@(#)ventel.c	5.4 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 /*
@@ -45,17 +40,12 @@ static char rcsid[] = "$NetBSD: ventel.c,v 1.6 1997/02/11 09:24:21 mrg Exp $";
  * The Ventel is expected to be strapped for local echo (just like uucp)
  */
 #include "tip.h"
-#include <termios.h>
-#include <sys/ioctl.h>
 
 #define	MAXRETRY	5
 
 static	void sigALRM();
 static	int timeout = 0;
 static	jmp_buf timeoutbuf;
-
-static	int gobble(), vensync();
-static	void echo();
 
 /*
  * some sleep calls have been replaced by this macro
@@ -74,7 +64,8 @@ ven_dialer(num, acu)
 	register char *cp;
 	register int connected = 0;
 	char *msg, *index(), line[80];
-	struct termios	cntrl;
+	static int gobble(), vensync();
+	static void echo();
 
 	/*
 	 * Get in synch with a couple of carriage returns
@@ -89,9 +80,7 @@ ven_dialer(num, acu)
 	if (boolean(value(VERBOSE)))
 		printf("\ndialing...");
 	fflush(stdout);
-	tcgetattr(FD, &cntrl);
-	cntrl.c_cflag |= HUPCL;
-	tcsetattr(FD, TCSANOW, &cntrl);
+	ioctl(FD, TIOCHPCL, 0);
 	echo("#k$\r$\n$D$I$A$L$:$ ");
 	for (cp = num; *cp; cp++) {
 		delay(1, 10);
@@ -102,10 +91,10 @@ ven_dialer(num, acu)
 	gobble('\n', line);
 	if (gobble('\n', line))
 		connected = gobble('!', line);
-	tcflush(FD, TCIOFLUSH);
+	ioctl(FD, TIOCFLUSH);
 #ifdef ACULOG
 	if (timeout) {
-		(void)snprintf(line, sizeof line, "%d second dial timeout",
+		sprintf(line, "%d second dial timeout",
 			number(value(DIALTIMEOUT)));
 		logent(value(HOST), num, "ventel", line);
 	}

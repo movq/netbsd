@@ -1,5 +1,3 @@
-/*	$NetBSD: ranlib.h,v 1.4 1994/10/26 00:56:14 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -43,10 +41,10 @@
 
 struct ranlib {
 	union {
-		long ran_strx;		/* string table index */
+		off_t ran_strx;		/* string table index */
 		char *ran_name;		/* in memory symbol name */
 	} ran_un;
-	long ran_off;			/* archive file offset */
+	off_t ran_off;			/* archive file offset */
 };
 
 #endif /* !_RANLIB_H_ */

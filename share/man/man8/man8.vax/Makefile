@@ -1,8 +1,15 @@
-#	$NetBSD: Makefile,v 1.8 1997/10/19 13:04:24 mrg Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 6/5/93
+#	@(#)Makefile	5.5 (Berkeley) 3/22/91
 
-MAN=	MAKEDEV.8 boot.8 crash.8 drtest.8 format.8 installboot.8
-MLINKS=	MAKEDEV.8 makedev.8
+MAN8=	MAKEDEV.0 crash.0 drtest.0 format.0 installboot.0
 MANSUBDIR=/vax
 
-.include <bsd.man.mk>
+all: ${MAN8}
+
+clean depend lint tags:
+
+cleandir:
+	rm -f ${MAN8}
+
+install: maninstall
+
+.include <bsd.prog.mk>

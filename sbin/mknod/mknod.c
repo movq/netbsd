@@ -1,8 +1,6 @@
-/*	$NetBSD: mknod.c,v 1.9 1997/09/15 03:46:31 lukem Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kevin Fall.
@@ -36,40 +34,32 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)mknod.c	8.1 (Berkeley) 6/5/93";
-#else
-__RCSID("$NetBSD: mknod.c,v 1.9 1997/09/15 03:46:31 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)mknod.c	4.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <err.h>
 
-	int	main __P((int, char *[]));
-static	void	usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	mode_t mode;
+	extern int errno;
+	u_short mode;
+	char *strerror();
 
 	if (argc != 5) {
-		usage();
-		/* NOTREACHED */
+		(void)fprintf(stderr,
+		    "usage: mknod name [b | c] major minor\n");
+		exit(1);
 	}
 
 	mode = 0666;
@@ -78,21 +68,15 @@ main(argc, argv)
 	else if (argv[2][0] == 'b')
 		mode |= S_IFBLK;
 	else {
-		errx(1, "node must be type 'b' or 'c'.");
-		/* NOTREACHED */
+		(void)fprintf(stderr,
+		    "mknod: node must be type 'b' or 'c'.\n");
+		exit(1);
 	}
 
 	if (mknod(argv[1], mode, makedev(atoi(argv[3]), atoi(argv[4]))) < 0) {
-		err(1, "%s", argv[1]);
-		/* NOTREACHED */
+		(void)fprintf(stderr,
+		    "mknod: %s: %s\n", argv[1], strerror(errno));
+		exit(1);
 	}
-
 	exit(0);
-}
-
-void
-usage()
-{
-	fprintf(stderr, "usage: mknod name [b | c] major minor\n");
-	exit(1);
 }

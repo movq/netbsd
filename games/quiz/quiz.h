@@ -1,12 +1,9 @@
-/*	$NetBSD: quiz.h,v 1.4 1995/04/22 10:16:59 cgd Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
- * Jim R. Oldroyd at The Instruction Set and Keith Gabryelski at
- * Commodore Business Machines.
+ * Jim R. Oldroyd at The Instruction Set.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -36,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)quiz.h	8.1 (Berkeley) 5/31/93
+ *	@(#)quiz.h	5.1 (Berkeley) 11/10/91
  */
 
 #define	TRUE		1

@@ -1,8 +1,6 @@
-/*	$NetBSD: flags.c,v 1.7 1997/07/13 20:14:59 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,29 +34,22 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)flags.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: flags.c,v 1.7 1997/07/13 20:14:59 christos Exp $");
-#endif
+static char sccsid[] = "@(#)flags.c	5.1 (Berkeley) 1/20/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
 #include <sys/file.h>
 #include <stdio.h>
 #include <errno.h>
-#include "local.h"
 
 /*
  * Return the (stdio) flags for a given mode.  Store the flags
  * to be passed to an open() syscall through *optr.
  * Return 0 on error.
  */
-int
 __sflags(mode, optr)
-	register const char *mode;
+	register char *mode;
 	int *optr;
 {
 	register int ret, m, o;

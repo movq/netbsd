@@ -1,5 +1,5 @@
-.\" Copyright (c) 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -29,8 +29,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)doc-common	8.1 (Berkeley) 6/8/93
-.\"	$NetBSD: doc-common,v 1.13 1997/07/02 02:55:42 phil Exp $
+.\"     @(#)doc-common	5.7 (Berkeley) 8/5/91
 .\"
 .\"     %beginstrip%
 .nr %A 1
@@ -43,6 +42,7 @@
 .nr Ad 12n
 .nr Ac 3
 .nr Ao 12n
+.nr Ap 2
 .nr An 12n
 .nr Aq 12n
 .nr Ar 12n
@@ -50,14 +50,18 @@
 .nr Bl 1
 .nr Bo 12n
 .nr Bq 12n
+.nr Bx 12n
 .nr Cd 12n
 .nr Cm 10n
+.nr Co 15n
+.nr Cx 20n
 .nr Dc 3
 .nr Do 10n
 .nr Dq 12n
 .nr Ds 6n
 .nr Dq 12n
 .nr Dv 12n
+.nr tI \n(Dsu
 .nr Ec 3
 .nr El 1
 .nr Eo 12n
@@ -65,11 +69,13 @@
 .nr Em 10n
 .nr Er 12n
 .nr Ev 15n
+.nr Ex 10n
 .nr Fa 12n
 .nr Fl 10n
 .nr Fc 3
 .nr Fo 16n
 .nr Fn 16n
+.nr Hl 1
 .nr I1 6n
 .nr I2 12n
 .nr I3 18n
@@ -88,16 +94,26 @@
 .nr Po 12n
 .nr Pq 12n
 .nr Ql 16n
+.nr Qc 3
+.nr Qo 12n
+.nr Qq 12n
 .nr Sc 3
 .nr So 12n
 .nr Sq 12n
 .nr Sy 6n
 .nr Sx 16n
+.nr Ra 1
+.nr Rj 1
+.nr Rn 1
+.nr Ro 1
+.nr Rr 1
+.nr Rt 1
 .nr Rv 1
 .nr Tn 10n
 .nr Ta 1
 .nr Tv 1
 .nr Tx 22n
+.nr Ux 10n
 .nr Va 12n
 .nr Xc 3
 .nr Xo 1
@@ -140,11 +156,10 @@
 .if !"\\$2"" \{\
 .	ds cH \\$2
 .\" .	if "\\$3"" \{\
-.		if \\$2>=1 .if \\$2<=9 \{\
-.			ds vT NetBSD Reference Manual
-.			if \\$2>1 .if \\$2<6 .ds vT NetBSD Programmer's Manual
-.			if "\\$2"8" .ds vT NetBSD System Manager's Manual
-.			if "\\$2"9" .ds vT NetBSD Kernel Manual
+.		if \\$2>=1 .if \\$2<=8 \{\
+.			ds vT UNIX Reference Manual
+.			if \\$2>1 .if \\$2<6 .ds vT UNIX Programmer's Manual
+.			if "\\$2"8" .ds vT UNIX System Manager's Manual
 .			nr sN \\$2
 .		\}
 .		if "\\$2"unass"  .ds vT DRAFT
@@ -153,35 +168,20 @@
 .\" .	\}
 .\}
 .if !"\\$3"" \{\
-.	if "\\$3"USD"   .ds vT NetBSD User's Supplementary Documents
-.	if "\\$3"PS1"   .ds vT NetBSD Programmers's Supplementary Documents
-.	if "\\$3"AMD"   .ds vT NetBSD Ancestral Manual Documents
-.	if "\\$3"SMM"   .ds vT NetBSD System Manager's Manual
-.	if "\\$3"URM"   .ds vT NetBSD Reference Manual
-.	if "\\$3"PRM"   .ds vT NetBSD Programmers's Manual
-.	if "\\$3"KM"    .ds vT NetBSD Kernel Manual
-.	if "\\$3"IND"   .ds vT NetBSD Manual Master Index
-.\" .	if "\\$3"CON"   .ds vT NetBSD Contributed Software Manual
-.\" .	if "\\$3"IMP"	.ds vT NetBSD Implementation Notes
-.\" .	if "\\$3"HOW"	.ds vT NetBSD How Pocket Manual
-.	if "\\$3"LOCAL" .ds vT NetBSD Local Manual
-.	if "\\$3"alpha"   .as vT \ (ALPHA Architecture)
-.	if "\\$3"amiga"   .as vT \ (AMIGA Architecture)
-.	if "\\$3"arm32"   .as vT \ (ARM32 Architecture)
-.	if "\\$3"atari"   .as vT \ (ATARI Architecture)
-.	if "\\$3"da30"    .as vT \ (DA30 Architecture)
-.	if "\\$3"hp300"   .as vT \ (HP300 Architecture)
-.	if "\\$3"i386"    .as vT \ (I386 Architecture)
-.	if "\\$3"mac68k"  .as vT \ (MAC68K Architecture)
-.	if "\\$3"mvme68k" .as vT \ (MVME68K Architecture)
-.	if "\\$3"pc532"   .as vT \ (PC532 Architecture)
-.	if "\\$3"pica"    .as vT \ (PICA Architecture)
-.	if "\\$3"pmax"    .as vT \ (PMAX  Architecture)
-.	if "\\$3"sparc"   .as vT \ (SPARC Architecture)
-.	if "\\$3"sun3"    .as vT \ (SUN3 Architecture)
-.	if "\\$3"tahoe"   .as vT \ (TAHOE Architecture)
-.	if "\\$3"vax"     .as vT \ (VAX Architecture)
-.	if "\\$3"x68k"    .as vT \ (X68K Architecture)
+.	if "\\$3"USD"   .ds vT UNIX User's Supplementary Documents
+.	if "\\$3"PS1"   .ds vT UNIX Programmers's Supplementary Documents
+.	if "\\$3"AMD"   .ds vT UNIX Ancestral Manual Documents
+.	if "\\$3"SMM"   .ds vT UNIX System Manager's Manual
+.	if "\\$3"URM"   .ds vT UNIX Reference Manual
+.	if "\\$3"PRM"   .ds vT UNIX Programmers's Manual
+.	if "\\$3"IND"   .ds vT UNIX Manual Master Index
+.\" .	if "\\$3"CON"   .ds vT UNIX Contributed Software Manual
+.\" .	if "\\$3"IMP"	.ds vT UNIX Implementation Notes
+.\" .	if "\\$3"HOW"	.ds vT UNIX How Pocket Manual
+.	if "\\$3"LOCAL" .ds vT UNIX Local Manual
+.	if "\\$3"tahoe" .as vT \ (Tahoe Architecture)
+.	if "\\$3"vax" .as vT \ (VAX Architecture)
+.	if "\\$3"hp300" .as vT \ (HP300 Architecture)
 .	if "\\*(vT"LOCAL" .ds vT \\$3
 .\}
 ..
@@ -193,7 +193,7 @@
 .de Os
 .ds oS Null
 .if "\\$1"" \{\
-.	ds oS 4.4BSD
+.	ds oS BSD Experimental
 .\}
 .if "\\$2"" \{\
 .	ds aa Non-Null
@@ -220,24 +220,7 @@
 .	if "\\$2"4.3R" .ds oS 4.3-Reno Berkeley Distribution
 .	if "\\$2"4.3t" .ds oS 4.3-Tahoe Berkeley Distribution
 .	if "\\$2"4.3r" .ds oS 4.3-Reno Berkeley Distribution
-.	if "\\$2"4.4"  .ds oS 4.4BSD
-.\}
-.if "\\$1"NetBSD" \{\
-.	ds oS NetBSD
-.	if "\\$2"0.8"  .as oS \00.8
-.	if "\\$2"0.8a" .as oS \00.8A
-.	if "\\$2"0.9"  .as oS \00.9
-.	if "\\$2"0.9a" .as oS \00.9A
-.	if "\\$2"1.0"  .as oS \01.0
-.	if "\\$2"1.0a" .as oS \01.0A
-.	if "\\$2"1.1"  .as oS \01.1
-.	if "\\$2"1.2"  .as oS \01.2
-.	if "\\$2"1.2a" .as oS \01.2A
-.	if "\\$2"1.2b" .as oS \01.2B
-.	if "\\$2"1.2c" .as oS \01.2C
-.	if "\\$2"1.2d" .as oS \01.2D
-.	if "\\$2"1.2e" .as oS \01.2E
-.	if "\\$2"1.3"  .as oS \01.3
+.	if "\\$2"4.4"  .ds oS BSD Experimental
 .\}
 .if "\\*(oS"Null" .ds oS \0\\$1
 .if "\\*(aa"Non-Null" .as oS \0\\$2
@@ -289,6 +272,7 @@
 .	\}
 .	ev
 .\}
+.\" .tm IN 444 fM .k == \\n(.k and nl == \\n(nl
 ..
 .de lM
 .fl

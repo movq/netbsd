@@ -1,70 +1,37 @@
-#	$NetBSD: bsd.doc.mk,v 1.35 1997/10/11 08:43:34 mycroft Exp $
-#	@(#)bsd.doc.mk	8.1 (Berkeley) 8/14/93
+#	@(#)bsd.doc.mk	5.3 (Berkeley) 1/2/91
 
-.if !target(__initialized__)
-__initialized__:
-.if exists(${.CURDIR}/../Makefile.inc)
-.include "${.CURDIR}/../Makefile.inc"
-.endif
-.include <bsd.own.mk>
-.MAIN:		all
-.endif
-
-.PHONY:		cleandoc docinstall print spell
-realinstall:	docinstall
-clean cleandir:	cleandoc
+PRINTER=psc
 
 BIB?=		bib
-EQN?=		eqn
-GREMLIN?=	grn
+EQN?=		deqn -P${PRINTER}
+GREMLIN?=	grn -P${PRINTER}
 GRIND?=		vgrind -f
 INDXBIB?=	indxbib
-PIC?=		pic
+PIC?=		pic -P${PRINTER}
 REFER?=		refer
-ROFF?=		groff -M/usr/share/tmac ${MACROS} ${PAGES}
+ROFF?=		ditroff -t ${MACROS} ${PAGES} -P${PRINTER}
 SOELIM?=	soelim
-TBL?=		tbl
+TBL?=		dtbl -P${PRINTER}
 
-.if !target(all)
-all: paper.ps
-.endif
-
-.if !target(paper.ps)
-paper.ps: ${SRCS}
-	${ROFF} ${SRCS} > ${.TARGET}
-.endif
+.PATH: ${.CURDIR}
 
 .if !target(print)
-print: paper.ps
-	lpr -P${PRINTER} paper.ps
+print: paper.${PRINTER}
+	lpr -P${PRINTER} paper.${PRINTER}
 .endif
 
-cleandoc:
+clean cleandir:
 	rm -f paper.* [eE]rrs mklog ${CLEANFILES}
 
-.if !defined(NODOC)
 FILES?=	${SRCS}
-.for F in ${FILES} ${EXTRA} Makefile
-docinstall:: ${DESTDIR}${DOCDIR}/${DIR}/${F}
-.if !defined(UPDATE)
-.PHONY: ${DESTDIR}${DOCDIR}/${DIR}/${F}
-.endif
-.if !defined(BUILD)
-${DESTDIR}${DOCDIR}/${DIR}/${F}: .MADE
-.endif
-
-.PRECIOUS: ${DESTDIR}${DOCDIR}/${DIR}/${F}
-${DESTDIR}${DOCDIR}/${DIR}/${F}: ${F}
-	${INSTALL} -c -o ${DOCOWN} -g ${DOCGRP} -m ${DOCMODE} ${.ALLSRC} \
-		${.TARGET}
-.endfor
-.endif
-
-.if !target(docinstall)
-docinstall::
-.endif
+install:
+	install -c -o ${BINOWN} -g ${BINGRP} -m 444 \
+	    Makefile ${FILES} ${EXTRA} ${DESTDIR}${BINDIR}/${DIR}
 
 spell: ${SRCS}
 	spell ${SRCS} | sort | comm -23 - spell.ok > paper.spell
 
-depend includes lint obj tags:
+BINDIR?=	/usr/share/doc
+BINGRP?=	bin
+BINOWN?=	bin
+BINMODE?=	444

@@ -1,5 +1,3 @@
-/*	$NetBSD: cmds.c,v 1.8 1997/10/19 23:36:21 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1980, 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,12 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cmds.c	8.2 (Berkeley) 4/29/95";
-#endif
-__RCSID("$NetBSD: cmds.c,v 1.8 1997/10/19 23:36:21 lukem Exp $");
+static char sccsid[] = "@(#)cmds.c	8.1 (Berkeley) 6/6/93";
 #endif /* not lint */
 
 #include <stdlib.h>
@@ -51,36 +45,33 @@ __RCSID("$NetBSD: cmds.c,v 1.8 1997/10/19 23:36:21 lukem Exp $");
 
 void
 command(cmd)
-	char *cmd;
+        char *cmd;
 {
-	struct cmdtab *p;
-	char *cp;
-	int interval;
-	sigset_t set;
+        register struct cmdtab *p;
+        register char *cp;
+	int interval, omask;
 
-	sigemptyset(&set);
-	sigaddset(&set, SIGALRM);
-	sigprocmask(SIG_BLOCK, &set, NULL);
-	for (cp = cmd; *cp && !isspace(*cp); cp++)
-		;
-	if (*cp)
-		*cp++ = '\0';
+	omask = sigblock(sigmask(SIGALRM));
+        for (cp = cmd; *cp && !isspace(*cp); cp++)
+                ;
+        if (*cp)
+                *cp++ = '\0';
 	if (*cmd == '\0')
 		return;
 	for (; *cp && isspace(*cp); cp++)
 		;
-	if (strcmp(cmd, "quit") == 0 || strcmp(cmd, "q") == 0)
-		die(0);
+        if (strcmp(cmd, "quit") == 0 || strcmp(cmd, "q") == 0)
+                die(0);
 	if (strcmp(cmd, "load") == 0) {
 		load();
 		goto done;
 	}
-	if (strcmp(cmd, "stop") == 0) {
-		alarm(0);
-		mvaddstr(CMDLINE, 0, "Refresh disabled.");
-		clrtoeol();
+        if (strcmp(cmd, "stop") == 0) {
+                alarm(0);
+                mvaddstr(CMDLINE, 0, "Refresh disabled.");
+                clrtoeol();
 		goto done;
-	}
+        }
 	if (strcmp(cmd, "help") == 0) {
 		int col, len;
 
@@ -97,30 +88,30 @@ command(cmd)
 		goto done;
 	}
 	interval = atoi(cmd);
-	if (interval <= 0 &&
+        if (interval <= 0 &&
 	    (strcmp(cmd, "start") == 0 || strcmp(cmd, "interval") == 0)) {
 		interval = *cp ? atoi(cp) : naptime;
-		if (interval <= 0) {
+                if (interval <= 0) {
 			error("%d: bad interval.", interval);
 			goto done;
-		}
+                }
 	}
 	if (interval > 0) {
-		alarm(0);
-		naptime = interval;
-		display(0);
-		status();
+                alarm(0);
+                naptime = interval;
+                display(0);
+                status();
 		goto done;
-	}
+        }
 	p = lookup(cmd);
 	if (p == (struct cmdtab *)-1) {
 		error("%s: Ambiguous command.", cmd);
 		goto done;
 	}
-	if (p) {
-		if (curcmd == p)
+        if (p) {
+                if (curcmd == p)
 			goto done;
-		alarm(0);
+                alarm(0);
 		(*curcmd->c_close)(wnd);
 		wnd = (*p->c_open)();
 		if (wnd == 0) {
@@ -138,30 +129,30 @@ command(cmd)
 			else
 				goto done;
 		}
-		curcmd = p;
+                curcmd = p;
 		labels();
-		display(0);
-		status();
+                display(0);
+                status();
 		goto done;
-	}
+        }
 	if (curcmd->c_cmd == 0 || !(*curcmd->c_cmd)(cmd, cp))
 		error("%s: Unknown command.", cmd);
 done:
-	sigprocmask(SIG_UNBLOCK, &set, NULL);
+	sigsetmask(omask);
 }
 
 struct cmdtab *
 lookup(name)
-	char *name;
+	register char *name;
 {
-	char *p, *q;
-	struct cmdtab *c, *found;
-	int nmatches, longest;
+	register char *p, *q;
+	register struct cmdtab *c, *found;
+	register int nmatches, longest;
 
 	longest = 0;
 	nmatches = 0;
 	found = (struct cmdtab *) 0;
-	for (c = cmdtab; (p = c->c_name); c++) {
+	for (c = cmdtab; p = c->c_name; c++) {
 		for (q = name; *q == *p++; q++)
 			if (*q == 0)		/* exact match? */
 				return (c);
@@ -182,18 +173,20 @@ lookup(name)
 void
 status()
 {
-	error("Showing %s, refresh every %d seconds.", curcmd->c_name, naptime);
+
+        error("Showing %s, refresh every %d seconds.",
+          curcmd->c_name, naptime);
 }
 
 int
 prefix(s1, s2)
-	char *s1, *s2;
+        register char *s1, *s2;
 {
 
-	while (*s1 == *s2) {
-		if (*s1 == '\0')
-			return (1);
-		s1++, s2++;
-	}
-	return (*s1 == '\0');
+        while (*s1 == *s2) {
+                if (*s1 == '\0')
+                        return (1);
+                s1++, s2++;
+        }
+        return (*s1 == '\0');
 }

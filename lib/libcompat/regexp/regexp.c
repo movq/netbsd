@@ -32,12 +32,6 @@
  * precedence is structured in regular expressions.  Serious changes in
  * regular-expression syntax might require a total rethink.
  */
-
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: regexp.c,v 1.7 1997/10/09 10:21:18 lukem Exp $");
-#endif /* not lint */
-
 #include <regexp.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -176,18 +170,18 @@ static long regsize;		/* Code size. */
 #ifndef STATIC
 #define	STATIC	static
 #endif
-STATIC char *reg __P((int, int *));
-STATIC char *regbranch __P((int *));
-STATIC char *regpiece __P((int *));
-STATIC char *regatom __P((int *));
-STATIC char *regnode __P((char));
-STATIC char *regnext __P((char *));
-STATIC void regc __P((char));
-STATIC void reginsert __P((char, char *));
-STATIC void regtail __P((char *, char *));
-STATIC void regoptail __P((char *, char *));
+STATIC char *reg();
+STATIC char *regbranch();
+STATIC char *regpiece();
+STATIC char *regatom();
+STATIC char *regnode();
+STATIC char *regnext();
+STATIC void regc();
+STATIC void reginsert();
+STATIC void regtail();
+STATIC void regoptail();
 #ifdef STRCSPN
-STATIC int strcspn __P((char *, char *));
+STATIC int strcspn();
 #endif
 
 /*
@@ -303,7 +297,7 @@ int *flagp;
 	register char *ret;
 	register char *br;
 	register char *ender;
-	register int parno = 0;
+	register int parno;
 	int flags;
 
 	*flagp = HASWIDTH;	/* Tentatively. */
@@ -776,14 +770,14 @@ static char **regendp;		/* Ditto for endp. */
 /*
  * Forwards.
  */
-STATIC int regtry __P((const regexp *, const char *));
-STATIC int regmatch __P((char *));
-STATIC int regrepeat __P((char *));
+STATIC int regtry();
+STATIC int regmatch();
+STATIC int regrepeat();
 
 #ifdef DEBUG
 int regnarrate = 0;
-void regdump __P((regexp *));
-STATIC char *regprop __P((char *));
+void regdump();
+STATIC char *regprop();
 #endif
 
 /*
@@ -795,6 +789,7 @@ register const regexp *prog;
 register const char *string;
 {
 	register char *s;
+	extern char *strchr();
 
 	/* Be paranoid... */
 	if (prog == NULL || string == NULL) {
@@ -852,26 +847,26 @@ register const char *string;
  */
 static int			/* 0 failure, 1 success */
 regtry(prog, string)
-const regexp *prog;
-const char *string;
+regexp *prog;
+char *string;
 {
 	register int i;
 	register char **sp;
 	register char **ep;
 
-	reginput = (char *)string;				/* XXX */
-	regstartp = (char **)prog->startp;			/* XXX */
-	regendp = (char **)prog->endp;				/* XXX */
+	reginput = string;
+	regstartp = prog->startp;
+	regendp = prog->endp;
 
-	sp = (char **)prog->startp;				/* XXX */
-	ep = (char **)prog->endp;				/* XXX */
+	sp = prog->startp;
+	ep = prog->endp;
 	for (i = NSUBEXP; i > 0; i--) {
 		*sp++ = NULL;
 		*ep++ = NULL;
 	}
-	if (regmatch((char *)prog->program + 1)) {		/* XXX */
-		((regexp *)prog)->startp[0] = (char *)string;	/* XXX */
-		((regexp *)prog)->endp[0] = reginput;		/* XXX */
+	if (regmatch(prog->program + 1)) {
+		prog->startp[0] = string;
+		prog->endp[0] = reginput;
 		return(1);
 	} else
 		return(0);
@@ -893,6 +888,7 @@ char *prog;
 {
 	register char *scan;	/* Current node. */
 	char *next;		/* Next node. */
+	extern char *strchr();
 
 	scan = prog;
 #ifdef DEBUG
@@ -1156,6 +1152,8 @@ register char *p;
 
 #ifdef DEBUG
 
+STATIC char *regprop();
+
 /*
  - regdump - dump a regexp onto stdout in vaguely comprehensible form
  */
@@ -1210,7 +1208,7 @@ char *op;
 	register char *p;
 	static char buf[50];
 
-	(void)strncpy(buf, ":", sizeof(buf) - 1);
+	(void) strcpy(buf, ":");
 
 	switch (OP(op)) {
 	case BOL:
@@ -1252,8 +1250,7 @@ char *op;
 	case OPEN+7:
 	case OPEN+8:
 	case OPEN+9:
-		(void)snprintf(buf+strlen(buf), sizeof(buf) - strlen(buf),
-		    "OPEN%d", OP(op)-OPEN);
+		sprintf(buf+strlen(buf), "OPEN%d", OP(op)-OPEN);
 		p = NULL;
 		break;
 	case CLOSE+1:
@@ -1265,8 +1262,7 @@ char *op;
 	case CLOSE+7:
 	case CLOSE+8:
 	case CLOSE+9:
-		(void)snprintf(buf+strlen(buf), sizeof(buf) - strlen(buf),
-		    "CLOSE%d", OP(op)-CLOSE);
+		sprintf(buf+strlen(buf), "CLOSE%d", OP(op)-CLOSE);
 		p = NULL;
 		break;
 	case STAR:
@@ -1286,7 +1282,7 @@ char *op;
 		break;
 	}
 	if (p != NULL)
-		(void)strncat(buf, p, sizeof(buf) - strlen(buf) - 1);
+		(void) strcat(buf, p);
 	return(buf);
 }
 #endif

@@ -1,5 +1,3 @@
-/*	$NetBSD: prtable.c,v 1.4 1997/10/11 02:12:17 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -38,11 +36,6 @@
  *	@(#)prtable.c	8.1 (Berkeley) 6/11/93
  */
 
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: prtable.c,v 1.4 1997/10/11 02:12:17 lukem Exp $");
-#endif /* not lint */
-
 #include <curses.h>
 
 #include "extern.h"
@@ -73,8 +66,8 @@ prtable(base, num, d_cols, width, prentry, length)
 	void (*prentry) __P((char *[], int));
 	int (*length) __P((char *[], int));
 {
-        int c, j;
-        int a, b, cols, loc, maxlen, nrows, z;
+        register int c, j;
+        register int a, b, cols, loc, maxlen, nrows, z;
 	int col, row;
 
         if (num == 0)
@@ -123,7 +116,7 @@ get_maxlen(base, num, length)
 	int num;
 	int (*length) __P((char **, int));
 {
-	int i, len, max;
+	register int i, len, max;
 
 	max = (*length)(base, 0);
 	for (i = 0; i < num; i++) {

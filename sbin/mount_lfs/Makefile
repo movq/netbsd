@@ -1,12 +1,12 @@
-#	$NetBSD: Makefile,v 1.6 1997/10/10 19:50:12 christos Exp $
-#	@(#)Makefile	8.2 (Berkeley) 3/27/94
+#	from: @(#)Makefile	8.2 (Berkeley) 3/27/94
+#	$Id: Makefile,v 1.1 1994/06/08 19:15:55 mycroft Exp $
 
 PROG=	mount_lfs
 SRCS=	mount_lfs.c getmntopts.c
-MAN=	mount_lfs.8
+MAN8=	mount_lfs.0
 
 MOUNT=	${.CURDIR}/../mount
-CPPFLAGS+= -I${MOUNT}
+CFLAGS+= -I${MOUNT}
 .PATH:	${MOUNT}
 
 .include <bsd.prog.mk>

@@ -1,8 +1,6 @@
-/*	$NetBSD: itime.c,v 1.5 1997/09/15 07:58:04 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,38 +31,32 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)itime.c	8.1 (Berkeley) 6/5/93";
-#else
-__RCSID("$NetBSD: itime.c,v 1.5 1997/09/15 07:58:04 lukem Exp $");
-#endif
+/* from: static char sccsid[] = "@(#)itime.c	5.15 (Berkeley) 6/18/92"; */
+static char *rcsid = "$Id: itime.c,v 1.1 1993/12/22 10:24:44 cgd Exp $";
 #endif /* not lint */
 
-#include <sys/param.h>
-#include <sys/time.h>
 #ifdef sunos
-#include <sys/vnode.h>
-
-#include <ufs/fsdir.h>
-#include <ufs/inode.h>
+#include <stdio.h>
+#include <ctype.h>
+#include <sys/param.h>
+#include <sys/stat.h>
 #include <ufs/fs.h>
 #else
-#include <ufs/ufs/dinode.h>
+#include <sys/param.h>
+#include <sys/time.h>
 #endif
-
-#include <protocols/dumprestore.h>
-
-#include <errno.h>
+#include <ufs/dinode.h>
 #include <fcntl.h>
+#include <protocols/dumprestore.h>
+#include <errno.h>
 #include <stdio.h>
 #ifdef __STDC__
+#include <time.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #endif
-
 #include "dump.h"
 
 struct	dumpdates **ddatev = 0;
@@ -72,10 +64,11 @@ int	nddates = 0;
 int	ddates_in = 0;
 struct	dumptime *dthead = 0;
 
-static	void dumprecout __P((FILE *, struct dumpdates *));
-static	int getrecord __P((FILE *, struct dumpdates *));
-static	int makedumpdate __P((struct dumpdates *, char *));
-static	void readdumptimes __P((FILE *));
+void	readdumptimes();
+int	getrecord();
+int	makedumpdate();
+
+static void dumprecout();
 
 void
 initdumptimes()
@@ -109,12 +102,12 @@ initdumptimes()
 	(void) fclose(df);
 }
 
-static void
+void
 readdumptimes(df)
 	FILE *df;
 {
-	int i;
-	struct	dumptime *dtwalk;
+	register int i;
+	register struct	dumptime *dtwalk;
 
 	for (;;) {
 		dtwalk = (struct dumptime *)calloc(1, sizeof (struct dumptime));
@@ -140,8 +133,8 @@ readdumptimes(df)
 void
 getdumptime()
 {
-	struct dumpdates *ddp;
-	int i;
+	register struct dumpdates *ddp;
+	register int i;
 	char *fname;
 
 	fname = disk;
@@ -173,8 +166,8 @@ void
 putdumptime()
 {
 	FILE *df;
-	struct dumpdates *dtwalk;
-	int i;
+	register struct dumpdates *dtwalk;
+	register int i;
 	int fd;
 	char *fname;
 
@@ -240,8 +233,7 @@ dumprecout(file, what)
 }
 
 int	recno;
-
-static int
+int
 getrecord(df, ddatep)
 	FILE *df;
 	struct dumpdates *ddatep;
@@ -263,12 +255,12 @@ getrecord(df, ddatep)
 	return(0);
 }
 
-static int
+int
 makedumpdate(ddp, tbuf)
 	struct dumpdates *ddp;
 	char *tbuf;
 {
-	char un_buf[128];
+	char un_buf[32];
 
 	(void) sscanf(tbuf, DUMPINFMT, ddp->dd_name, &ddp->dd_level, un_buf);
 	ddp->dd_ddate = unctime(un_buf);

@@ -1,7 +1,5 @@
-.\"	$NetBSD: rmdir.2,v 1.9 1997/07/14 23:20:12 kleink Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)rmdir.2	8.1 (Berkeley) 6/4/93
+.\"     @(#)rmdir.2	6.6 (Berkeley) 3/10/91
 .\"
-.Dd June 4, 1993
+.Dd March 10, 1991
 .Dt RMDIR 2
 .Os BSD 4.2
 .Sh NAME
@@ -59,15 +57,14 @@ returned and an error code is stored in the global location
 .Va errno .
 .Sh ERRORS
 The named file is removed unless:
-.Bl -tag -width Er
+.Bl -tag -width [ENAMETOOLONG]
 .It Bq Er ENOTDIR
 A component of the path is not a directory.
+.It Bq Er EINVAL
+The pathname contains a character with the high-order bit set.
 .It Bq Er ENAMETOOLONG
-A component of a pathname exceeded 
-.Dv {NAME_MAX}
-characters, or an entire path name exceeded 
-.Dv {PATH_MAX}
-characters.
+A component of a pathname exceeded 255 characters,
+or an entire path name exceeded 1023 characters.
 .It Bq Er ENOENT
 The named directory does not exist.
 .It Bq Er ELOOP
@@ -102,13 +99,8 @@ points outside the process's allocated address space.
 .Sh SEE ALSO
 .Xr mkdir 2 ,
 .Xr unlink 2
-.Sh STANDARDS
-The
-.Fn rmdir
-function conforms to
-.St -p1003.1-90 .
 .Sh HISTORY
 The
-.Fn rmdir
+.Nm
 function call appeared in
 .Bx 4.2 .

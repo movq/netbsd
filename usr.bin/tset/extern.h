@@ -1,8 +1,6 @@
-/*	$NetBSD: extern.h,v 1.5 1997/10/20 01:07:50 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,12 +30,18 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)extern.h	8.1 (Berkeley) 6/9/93
+ *	@(#)extern.h	5.2 (Berkeley) 12/24/91
  */
 
 /* This should be in <termcap.h> instead. */
 extern char PC;
 extern short ospeed;
+int	 tgetent __P((char *, char *));
+int	 tgetflag __P((char *));
+int	 tgetnum __P((char *));
+char	*tgetstr __P((char *, char **));
+char	*tgoto __P((char *, int, int));
+int	 tputs __P((char *, int, void (*) __P((int))));
 
 extern struct termios mode, oldmode;
 extern int columns, isreset, lines;
@@ -45,6 +49,7 @@ extern int erasechar, intrchar, killchar;
 
 void	 add_mapping __P((char *, char *));
 void	 cat __P((char *));
+void	 err __P((const char *, ...));
 char	*get_termcap_entry __P((char *, char **));
 char	*mapped __P((char *));
 void	 outc __P((int));

@@ -1,141 +1,80 @@
-/*	$NetBSD: mroute.c,v 1.12 1997/10/19 05:50:06 lukem Exp $	*/
-
-/*
- * Copyright (c) 1989 Stephen Deering
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
- * This code is derived from software contributed to Berkeley by
- * Stephen Deering of Stanford University.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	from: @(#)mroute.c	8.1 (Berkeley) 6/6/93
- */
-
-#include <sys/cdefs.h>
-#ifndef lint
-#if 0
-static char sccsid[] = "from: @(#)mroute.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: mroute.c,v 1.12 1997/10/19 05:50:06 lukem Exp $");
-#endif
-#endif /* not lint */
-
 /*
  * Print DVMRP multicast routing structures and statistics.
  *
  * MROUTING 1.0
  */
 
-#include <sys/param.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
-#include <sys/protosw.h>
-
-#include <net/if.h>
-#include <net/route.h>
-#include <netinet/in.h>
-#include <netinet/igmp.h>
-#define _KERNEL
-#include <netinet/ip_mroute.h>
-#undef _KERNEL
+#ifndef lint
+static char rcsid[] = "$Id: mroute.c,v 1.1 1994/01/11 19:42:55 brezak Exp $";
+#endif /* not lint */
 
 #include <stdio.h>
-#include <stdlib.h>
-#include "netstat.h"
+#include <sys/param.h>
+#include <sys/mbuf.h>
+#include <netinet/in.h>
+#include <netinet/igmp.h>
+#define KERNEL 1
+struct socket;	/* shut up warning */
+struct ip;
+#include <netinet/ip_mroute.h>
+#undef KERNEL
 
-static char *pktscale __P((u_long));
+extern int kmem;
+extern int nflag;
+extern char *routename();
+extern char *netname();
+extern char *plural();
 
-static char *
-pktscale(n)
-	u_long n;
+char *plurales(n)
+	int n;
 {
-	static char buf[8];
-	char t;
-
-	if (n < 1024)
-		t = ' ';
-	else if (n < 1024 * 1024) {
-		t = 'k';
-		n /= 1024;
-	} else {
-		t = 'm';
-		n /= 1048576;
-	}
-
-	sprintf(buf, "%lu%c", n, t);
-	return (buf);
+	return (n == 1? "" : "es");
 }
 
-void
-mroutepr(mrpaddr, mfchashtbladdr, mfchashaddr, vifaddr)
-	u_long mrpaddr, mfchashtbladdr, mfchashaddr, vifaddr;
+mroutepr(mrpaddr, mrtaddr, vifaddr)
+	off_t mrpaddr, mrtaddr, vifaddr;
 {
 	u_int mrtproto;
-	LIST_HEAD(, mfc) *mfchashtbl;
-	u_long mfchash;
+#if BSD >= 199006
+	struct mrt *mrttable[MRTHASHSIZ];
+	struct mrt *mp;
+	struct mrt mb;
+	struct mrt *mrt = &mb;
+#else
+	struct mbuf *mrttable[MRTHASHSIZ];
+	struct mbuf *mp;
+	struct mbuf mb;
+	struct mrt *mrt = mtod(&mb, struct mrt *);
+#endif
 	struct vif viftable[MAXVIFS];
-	struct mfc *mfcp, mfc;
-	struct vif *v;
-	vifi_t vifi;
-	int i;
+	register struct vif *v;
+	register vifi_t vifi;
+	struct in_addr *grp;
+	int i, n;
 	int banner_printed;
 	int saved_nflag;
-	int numvifs;
-	int nmfc;		/* No. of cache entries */
 
-	if (mrpaddr == 0) {
+	if(mrpaddr == 0) {
 		printf("ip_mrtproto: symbol not in namelist\n");
 		return;
 	}
 
-	kread(mrpaddr, (char *)&mrtproto, sizeof(mrtproto));
+	kvm_read(mrpaddr, (char *)&mrtproto, sizeof(mrtproto));
 	switch (mrtproto) {
-	case 0:
+	    case 0:
 		printf("no multicast routing compiled into this system\n");
 		return;
 
-	case IGMP_DVMRP:
+	    case IGMP_DVMRP:
 		break;
 
-	default:
+	    default:
 		printf("multicast routing protocol %u, unknown\n", mrtproto);
 		return;
 	}
 
-	if (mfchashtbladdr == 0) {
-		printf("mfchashtbl: symbol not in namelist\n");
-		return;
-	}
-	if (mfchashaddr == 0) {
-		printf("mfchash: symbol not in namelist\n");
+	if (mrtaddr == 0) {
+		printf("mrttable: symbol not in namelist\n");
 		return;
 	}
 	if (vifaddr == 0) {
@@ -146,95 +85,107 @@ mroutepr(mrpaddr, mfchashtbladdr, mfchashaddr, vifaddr)
 	saved_nflag = nflag;
 	nflag = 1;
 
-	kread(vifaddr, (char *)&viftable, sizeof(viftable));
+	kvm_read(vifaddr, (char *)viftable, sizeof(viftable));
 	banner_printed = 0;
-	numvifs = 0;
-
 	for (vifi = 0, v = viftable; vifi < MAXVIFS; ++vifi, ++v) {
-		if (v->v_lcl_addr.s_addr == 0)
-			continue;
-		numvifs = vifi;
+		struct in_addr v_lcl_grps[1024];
+
+		if (v->v_lcl_addr.s_addr == 0) continue;
 
 		if (!banner_printed) {
-			printf("\nVirtual Interface Table\n %s%s",
-			    "Vif  Thresh  Limit  Local-Address    ",
-			    "Remote-Address   Pkt_in  Pkt_out\n");
+			printf("\nVirtual Interface Table\n%s%s",
+			       " Vif   Threshold   Local-Address   ",
+			       "Remote-Address   Groups\n");
 			banner_printed = 1;
 		}
 
-		printf(" %3u     %3u  %5u  %-15.15s",
-		    vifi, v->v_threshold, v->v_rate_limit,
-		    routename(v->v_lcl_addr.s_addr));
-		printf("  %-15.15s  %6lu  %7lu\n", (v->v_flags & VIFF_TUNNEL) ?
-		    routename(v->v_rmt_addr.s_addr) : "",
-		    v->v_pkt_in, v->v_pkt_out);
-	}
-	if (!banner_printed)
-		printf("\nVirtual Interface Table is empty\n");
+		printf(" %2u       %3u      %-15.15s",
+			vifi, v->v_threshold, routename(v->v_lcl_addr));
+		printf(" %-15.15s\n",
+			(v->v_flags & VIFF_TUNNEL) ?
+				routename(v->v_rmt_addr) : "");
 
-	kread(mfchashtbladdr, (char *)&mfchashtbl, sizeof(mfchashtbl));
-	kread(mfchashaddr, (char *)&mfchash, sizeof(mfchash));
+		n = v->v_lcl_grps_n;
+		if (n == 0)
+			continue;
+		if (n < 0 || n > 1024)
+			printf("[v_lcl_grps_n = %d!]\n", n);
+
+		kvm_read(v->v_lcl_grps, (char *)v_lcl_grps, 
+			 n * sizeof(struct in_addr));
+		for (i = 0; i < n; ++i)
+			printf("%51s %-15.15s\n", "",
+			       routename(v_lcl_grps[i]));
+	}
+	if (!banner_printed) printf("\nVirtual Interface Table is empty\n");
+
+	kvm_read(mrtaddr, (char *)mrttable, sizeof(mrttable));
 	banner_printed = 0;
-	nmfc = 0;
+	for (i = 0; i < MRTHASHSIZ; ++i) {
+	    for (mp = mrttable[i]; mp != NULL;
+#if BSD >= 199006
+		 mp = mb.mrt_next
+#else
+		 mp = mb.m_next
+#endif
+		 ) {
 
-	if (mfchashtbl != 0)
-	for (i = 0; i <= mfchash; ++i) {
-		kread((u_long)&mfchashtbl[i], (char *)&mfcp, sizeof(mfcp));
-
-		for (; mfcp != 0; mfcp = mfc.mfc_hash.le_next) {
-			if (!banner_printed) {
-				printf("\nMulticast Forwarding Cache\n %s%s",
-				    "Hash  Origin           Mcastgroup       ",
-				    "Traffic  In-Vif  Out-Vifs/Forw-ttl\n");
-				banner_printed = 1;
-			}
-
-			kread((u_long)mfcp, (char *)&mfc, sizeof(mfc));
-			printf("  %3u  %-15.15s",
-			    i, routename(mfc.mfc_origin.s_addr));
-			printf("  %-15.15s  %7s     %3u ",
-			    routename(mfc.mfc_mcastgrp.s_addr),
-			    pktscale(mfc.mfc_pkt_cnt), mfc.mfc_parent);
-			for (vifi = 0; vifi <= numvifs; ++vifi)
-				if (mfc.mfc_ttls[vifi])
-					printf(" %u/%u", vifi, mfc.mfc_ttls[vifi]);
-
-			printf("\n");
-			nmfc++;
+		if (!banner_printed) {
+			printf("\nMulticast Routing Table\n%s",
+			       " Hash  Origin-Subnet  In-Vif  Out-Vifs\n");
+			banner_printed = 1;
 		}
+		kvm_read(mp, (char *)&mb, sizeof(mb));
+
+
+		printf(" %3u   %-15.15s  %2u   ",
+			i,
+			netname(mrt->mrt_origin.s_addr,
+				ntohl(mrt->mrt_originmask.s_addr)),
+			mrt->mrt_parent);
+		for (vifi = 0; vifi < MAXVIFS; ++vifi) {
+			if (viftable[vifi].v_lcl_addr.s_addr) {
+				if (VIFM_ISSET(vifi, mrt->mrt_children)) {
+					printf(" %u%c",
+						vifi,
+						VIFM_ISSET(vifi,
+						  mrt->mrt_leaves) ?
+						    '*' : ' ');
+				} else
+					printf("   ");
+			}
+		}
+		printf("\n");
+	    }
 	}
-	if (!banner_printed)
-		printf("\nMulticast Forwarding Cache is empty\n");
-	else
-		printf("\nTotal no. of entries in cache: %d\n", nmfc);
+	if (!banner_printed) printf("\nMulticast Routing Table is empty\n");
 
 	printf("\n");
 	nflag = saved_nflag;
 }
 
 
-void
 mrt_stats(mrpaddr, mstaddr)
-	u_long mrpaddr, mstaddr;
+	off_t mrpaddr, mstaddr;
 {
 	u_int mrtproto;
 	struct mrtstat mrtstat;
 
-	if (mrpaddr == 0) {
+	if(mrpaddr == 0) {
 		printf("ip_mrtproto: symbol not in namelist\n");
 		return;
 	}
 
-	kread(mrpaddr, (char *)&mrtproto, sizeof(mrtproto));
+	kvm_read(mrpaddr, (char *)&mrtproto, sizeof(mrtproto));
 	switch (mrtproto) {
-	case 0:
+	    case 0:
 		printf("no multicast routing compiled into this system\n");
 		return;
 
-	case IGMP_DVMRP:
+	    case IGMP_DVMRP:
 		break;
 
-	default:
+	    default:
 		printf("multicast routing protocol %u, unknown\n", mrtproto);
 		return;
 	}
@@ -244,28 +195,22 @@ mrt_stats(mrpaddr, mstaddr)
 		return;
 	}
 
-	kread(mstaddr, (char *)&mrtstat, sizeof(mrtstat));
+	kvm_read(mstaddr, (char *)&mrtstat, sizeof(mrtstat));
 	printf("multicast routing:\n");
-	printf("\t%ld datagram%s with no route for origin\n",
-	    mrtstat.mrts_no_route, plural(mrtstat.mrts_no_route));
-	printf("\t%ld upcall%s made to mrouted\n",
-	    mrtstat.mrts_upcalls, plural(mrtstat.mrts_upcalls));
-	printf("\t%ld datagram%s with malformed tunnel options\n",
-	    mrtstat.mrts_bad_tunnel, plural(mrtstat.mrts_bad_tunnel));
-	printf("\t%ld datagram%s with no room for tunnel options\n",
-	    mrtstat.mrts_cant_tunnel, plural(mrtstat.mrts_cant_tunnel));
-	printf("\t%ld datagram%s arrived on wrong interface\n",
-	    mrtstat.mrts_wrong_if, plural(mrtstat.mrts_wrong_if));
-	printf("\t%ld datagram%s dropped due to upcall Q overflow\n",
-	    mrtstat.mrts_upq_ovflw, plural(mrtstat.mrts_upq_ovflw));
-	printf("\t%ld datagram%s dropped due to upcall socket overflow\n",
-	    mrtstat.mrts_upq_sockfull, plural(mrtstat.mrts_upq_sockfull));
-	printf("\t%ld datagram%s cleaned up by the cache\n",
-	    mrtstat.mrts_cache_cleanups, plural(mrtstat.mrts_cache_cleanups));
-	printf("\t%ld datagram%s dropped selectively by ratelimiter\n",
-	    mrtstat.mrts_drop_sel, plural(mrtstat.mrts_drop_sel));
-	printf("\t%ld datagram%s dropped - bucket Q overflow\n",
-	    mrtstat.mrts_q_overflow, plural(mrtstat.mrts_q_overflow));
-	printf("\t%ld datagram%s dropped - larger than bkt size\n",
-	    mrtstat.mrts_pkt2large, plural(mrtstat.mrts_pkt2large));
+	printf(" %10u multicast route lookup%s\n",
+	  mrtstat.mrts_mrt_lookups, plural(mrtstat.mrts_mrt_lookups));
+	printf(" %10u multicast route cache miss%s\n",
+	  mrtstat.mrts_mrt_misses, plurales(mrtstat.mrts_mrt_misses));
+	printf(" %10u group address lookup%s\n",
+	  mrtstat.mrts_grp_lookups, plural(mrtstat.mrts_grp_lookups));
+	printf(" %10u group address cache miss%s\n",
+	  mrtstat.mrts_grp_misses, plurales(mrtstat.mrts_grp_misses));
+	printf(" %10u datagram%s with no route for origin\n",
+	  mrtstat.mrts_no_route, plural(mrtstat.mrts_no_route));
+	printf(" %10u datagram%s with malformed tunnel options\n",
+	  mrtstat.mrts_bad_tunnel, plural(mrtstat.mrts_bad_tunnel));
+	printf(" %10u datagram%s with no room for tunnel options\n",
+	  mrtstat.mrts_cant_tunnel, plural(mrtstat.mrts_cant_tunnel));
+	printf(" %10u datagram%s arrived on wrong interface\n",
+	  mrtstat.mrts_wrong_if, plural(mrtstat.mrts_wrong_if));
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: funopen.c,v 1.5 1997/07/13 20:15:07 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)funopen.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: funopen.c,v 1.5 1997/07/13 20:15:07 christos Exp $");
-#endif
+static char sccsid[] = "@(#)funopen.c	5.2 (Berkeley) 2/5/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdio.h>
@@ -52,10 +45,13 @@ __RCSID("$NetBSD: funopen.c,v 1.5 1997/07/13 20:15:07 christos Exp $");
 FILE *
 funopen(cookie, readfn, writefn, seekfn, closefn)
 	const void *cookie;
-	int (*readfn) __P((void *, char *, int));
-	int (*writefn) __P((void *, const char *, int));
-	fpos_t (*seekfn) __P((void *, fpos_t, int));
-	int (*closefn) __P((void *));
+	int (*readfn)(), (*writefn)();
+#if __STDC__
+	fpos_t (*seekfn)(void *cookie, fpos_t off, int whence);
+#else
+	fpos_t (*seekfn)();
+#endif
+	int (*closefn)();
 {
 	register FILE *fp;
 	int flags;

@@ -1,7 +1,5 @@
-.\"	$NetBSD: find.1,v 1.12 1997/10/19 11:52:22 lukem Exp $
-.\"
-.\" Copyright (c) 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" the Institute of Electrical and Electronics Engineers, Inc.
@@ -34,23 +32,22 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	from: @(#)find.1	8.1 (Berkeley) 6/6/93
-.\"	$NetBSD: find.1,v 1.12 1997/10/19 11:52:22 lukem Exp $
+.\"	@(#)find.1	6.29 (Berkeley) 7/29/91
 .\"
-.Dd June 6, 1993
+.Dd July 29, 1991
 .Dt FIND 1
 .Os
 .Sh NAME
 .Nm find
 .Nd walk a file hierarchy
 .Sh SYNOPSIS
-.Nm
-.Op Fl HdhXx
+.Nm find
+.Op Fl dsXx
 .Op Fl f Ar file
 .Op Ar file ...
 .Ar expression
 .Sh DESCRIPTION
-.Nm
+.Nm Find
 recursively descends the directory tree for each
 .Ar file
 listed, evaluating an
@@ -58,29 +55,24 @@ listed, evaluating an
 (composed of the ``primaries'' and ``operands'' listed below) in terms
 of each file in the tree.
 .Pp
+If
+.Ar file
+is a symbolic link referencing an existing file, the directory tree
+referenced by the link is descended instead of the link itself.
+.Pp
 The options are as follows:
 .Pp
 .Bl -tag -width Ds
-.It Fl H
-The
-.Fl H
-option causes the file information and file type (see
-.Xr stat  2  ) ,
-returned for each symbolic link encountered on the command line to be 
-those of the file referenced by the link, not the link itself.
-If the referenced file does not exist, the file information and type will
-be for the link itself.  File information of all symbolic links not on 
-the command line is that of the link itself.
 .It Fl d
 The
 .Fl d
 option causes
-.Nm
+.Nm find
 to perform a depth\-first traversal, i.e. directories
 are visited in post\-order and all entries in a directory will be acted
 on before the directory itself.
 By default,
-.Nm
+.Nm find
 visits directories in pre\-order, i.e. before their contents.
 Note, the default is
 .Ar not
@@ -89,13 +81,13 @@ a breadth\-first traversal.
 The
 .Fl f
 option specifies a file hierarchy for
-.Nm
+.Nm find
 to traverse.
 File hierarchies may also be specified as the operands immediately
 following the options.
-.It Fl h
+.It Fl s
 The
-.Fl h
+.Fl s
 option causes the file information and file type (see
 .Xr stat  2  ) ,
 returned for each symbolic link to be those of the file referenced by the
@@ -119,7 +111,7 @@ quotes, backslash (``\e''), space, tab and newline characters.
 The
 .Fl x
 option prevents
-.Nm
+.Nm find
 from descending into directories that have a device number different
 than that of the file from which the descent began.
 .El
@@ -127,14 +119,14 @@ than that of the file from which the descent began.
 .Bl -tag -width Ds
 .It Ic -atime Ar n 
 True if the difference between the file last access time and the time
-.Nm
+.Nm find
 was started, rounded up to the next full 24\-hour period, is
 .Ar n
 24\-hour periods.
 .It Ic -ctime Ar n 
 True if the difference between the time of last change of file status
 information and the time
-.Nm
+.Nm find
 was started, rounded up to the next full 24\-hour period, is
 .Ar n
 24\-hour periods.
@@ -148,19 +140,18 @@ If the string ``{}'' appears anywhere in the utility name or the
 arguments it is replaced by the pathname of the current file.
 .Ar Utility
 will be executed from the directory from which
-.Nm
+.Nm find
 was executed.
-.It Ic -follow
-Follow symbolic links.
 .It Ic -fstype Ar type 
 True if the file is contained in a file system of type
 .Ar type .
-Two special file system types are recognized: ``local'' and ``rdonly''.
-These do not describe actual file system types;
-the former matches any file system physically mounted on the system where
+Currently supported types are ``local'', ``mfs'', ``nfs'', ``msdos'', ``isofs'',
+``rdonly'' and ``ufs''.
+The types ``local'' and ``rdonly'' are not specific file system types.
+The former matches any file system physically mounted on the system where
 the
-.Nm
-is being executed, and the latter matches any file system which is
+.Nm find
+is being executed and the latter matches any file system which is
 mounted read-only.
 .It Ic -group Ar gname 
 True if the file belongs to the group
@@ -189,7 +180,7 @@ displayed preceded by ``\->''.
 The format is identical to that produced by ``ls \-dgils''.
 .It Ic -mtime Ar n 
 True if the difference between the file last modification time and the time
-.Nm
+.Nm find
 was started, rounded up to the next full 24\-hour period, is
 .Ar n
 24\-hour periods.
@@ -199,7 +190,7 @@ The
 primary is identical to the
 .Ic -exec
 primary with the exception that
-.Nm
+.Nm find
 requests user affirmation for the execution of the utility by printing
 a message to the terminal and reading a response.
 If the response is other than ``y'' the command is not executed and the
@@ -261,25 +252,17 @@ the bits in the mode exactly match the file's mode bits.
 Note, the first character of a symbolic mode may not be a dash (``\-'').
 .It Ic -print
 This primary always evaluates to true.
-It prints the pathname of the current file to standard output, followed
-by a newline character.
-If neither
+It prints the pathname of the current file to standard output.
+The expression is appended to the user specified expression if neither
 .Ic -exec ,
-.Ic -ls ,
-.Ic -ok ,
-nor
-.Ic -print0
-is specified, the given expression shall be effectively replaced by
-.Cm \&( Ns Ar given\& expression Ns Cm \&) 
-.Ic -print .
-.It Ic -print0
-This primary always evaluates to true.
-It prints the pathname of the current file to standard output, followed
-by a null character.
+.Ic -ls
+or
+.Ic \&-ok
+is specified.
 .It Ic -prune
 This primary always evaluates to true.
 It causes
-.Nm
+.Nm find
 to not descend into the current file.
 Note, the
 .Ic -prune
@@ -300,8 +283,6 @@ True if the file is of the specified type.
 Possible file types are as follows:
 .Pp
 .Bl -tag -width flag -offset indent -compact
-.It Cm W
-whiteout
 .It Cm b
 block special
 .It Cm c
@@ -370,10 +351,10 @@ The second expression is not evaluated if the first expression is true.
 .El
 .Pp
 All operands and primaries must be separate arguments to
-.Nm ""  .
+.Nm find  .
 Primaries which themselves take arguments expect each argument
 to be a separate argument to
-.Nm ""  .
+.Nm find  .
 .Sh EXAMPLES
 .Pp
 The following examples are shown as given to the shell:
@@ -392,28 +373,28 @@ that are newer than ``ttt''.
 .El
 .Sh SEE ALSO
 .Xr chmod 1 ,
-.Xr locate 1 ,
+.Xr sh 1 ,
+.Xr test 1 ,
 .Xr stat 2 ,
-.Xr fts 3 ,
+.Xr umask 2 ,
 .Xr getpwent 3 ,
 .Xr getgrent 3 ,
-.Xr strmode 3 ,
-.Xr symlink 7
+.Xr strmode 3
 .Sh STANDARDS
 The
-.Nm
+.Nm find
 utility syntax is a superset of the syntax specified by the
 .St -p1003.2
 standard.
 .Pp
-The options and the
-.Ic -follow ,
-.Ic -fstype ,
-.Ic -inum ,
-.Ic -links ,
-.Ic -ls 
+The
+.Fl s
 and
-.Ic -print0
+.Fl X
+options and the
+.Ic -inum
+and
+.Ic -ls
 primaries are extensions to
 .St -p1003.2 .
 .Pp
@@ -436,16 +417,16 @@ The operator ``-or'' was implemented as ``\-o'', and the operator ``-and''
 was implemented as ``\-a''.
 .Pp
 Historic implementations of the
-.Ic -exec
+.Ic exec
 and
-.Ic -ok
+.Ic ok
 primaries did not replace the string ``{}'' in the utility name or the
 utility arguments if it had preceding or following non-whitespace characters.
 This version replaces it no matter where in the utility name or arguments
 it appears.
 .Sh BUGS
 The special characters used by
-.Nm
+.Nm find
 are also special characters to many shell programs.
 In particular, the characters ``*'', ``['', ``]'', ``?'', ``('', ``)'',
 ``!'', ``\e'' and ``;'' may have to be escaped from the shell.

@@ -1,8 +1,12 @@
-#	$NetBSD: Makefile,v 1.11 1997/10/17 09:26:50 mrg Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 6/8/93
+#	@(#)Makefile	5.3 (Berkeley) 6/8/90
 
 FILES=	dot.cshrc dot.login dot.mailrc dot.profile dot.rhosts
-FILESDIR= ${BINDIR}/skel
 NOOBJ=	noobj
+
+all clean cleandir depend lint tags:
+
+install:
+	install -c -o ${BINOWN} -g ${BINGRP} -m 444 ${FILES} \
+	    ${DESTDIR}${BINDIR}/skel
 
 .include <bsd.prog.mk>

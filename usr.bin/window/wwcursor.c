@@ -1,8 +1,6 @@
-/*	$NetBSD: wwcursor.c,v 1.4 1996/02/08 20:45:08 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,11 +35,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)wwcursor.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: wwcursor.c,v 1.4 1996/02/08 20:45:08 mycroft Exp $";
-#endif
+static char sccsid[] = "@(#)wwcursor.c	3.12 (Berkeley) 6/6/90";
 #endif /* not lint */
 
 #include "ww.h"
@@ -52,13 +46,13 @@ register struct ww *w;
 	register char *win;
 
 	if (on) {
-		if (ISSET(w->ww_wflags, WWW_HASCURSOR))
+		if (w->ww_hascursor)
 			return;
-		SET(w->ww_wflags, WWW_HASCURSOR);
+		w->ww_hascursor = 1;
 	} else {
-		if (!ISSET(w->ww_wflags, WWW_HASCURSOR))
+		if (!w->ww_hascursor)
 			return;
-		CLR(w->ww_wflags, WWW_HASCURSOR);
+		w->ww_hascursor = 0;
 	}
 	if (wwcursormodes != 0) {
 		win = &w->ww_win[w->ww_cur.r][w->ww_cur.c];
@@ -88,8 +82,7 @@ register new;
 	if (new == wwcursormodes)
 		return;
 	for (i = 0; i < NWW; i++)
-		if (wwindex[i] != 0 &&
-		    ISSET((w = wwindex[i])->ww_wflags, WWW_HASCURSOR)) {
+		if (wwindex[i] != 0 && (w = wwindex[i])->ww_hascursor) {
 			wwcursor(w, 0);
 			wwcursormodes = new;
 			wwcursor(w, 1);

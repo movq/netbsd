@@ -1,8 +1,6 @@
-/*	$NetBSD: touch.c,v 1.6 1997/10/19 13:40:31 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Hugh Smith at The University of Guelph.
@@ -36,30 +34,24 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)touch.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: touch.c,v 1.6 1997/10/19 13:40:31 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)touch.c	5.3 (Berkeley) 3/12/91";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <ar.h>
-#include <err.h>
-#include <dirent.h>
 #include <fcntl.h>
+#include <dirent.h>
 #include <ranlib.h>
-#include <stdio.h>
-#include <string.h>
+#include <ar.h>
 #include <time.h>
 #include <unistd.h>
+#include <stdio.h>
+#include <string.h>
 #include <archive.h>
 
-#include "extern.h"
+extern CHDR chdr;			/* converted header */
+extern char *archive;			/* archive name */
 
-int
 touch()
 {
 	int afd;
@@ -73,11 +65,9 @@ touch()
 		return(1);
 	}
 	settime(afd);
-	close_archive(afd);
 	return(0);
 }
 
-void
 settime(afd)
 	int afd;
 {
@@ -87,8 +77,8 @@ settime(afd)
 
 	size = SARMAG + sizeof(hdr->ar_name);
 	if (lseek(afd, size, SEEK_SET) == (off_t)-1)
-		err(1, "%s", archive);
+		error(archive);
 	(void)sprintf(buf, "%-12ld", time((time_t *)NULL) + RANLIBSKEW);
 	if (write(afd, buf, sizeof(hdr->ar_date)) != sizeof(hdr->ar_date))
-		err(1, "%s", archive);
+		error(archive);
 }

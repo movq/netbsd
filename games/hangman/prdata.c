@@ -1,8 +1,6 @@
-/*	$NetBSD: prdata.c,v 1.4 1997/10/11 01:16:37 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,25 +31,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)prdata.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: prdata.c,v 1.4 1997/10/11 01:16:37 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)prdata.c	5.3 (Berkeley) 4/8/91";
 #endif /* not lint */
 
-#include	"hangman.h"
+# include	"hangman.h"
 
 /*
  * prdata:
  *	Print out the current guesses
  */
-void
 prdata()
 {
-	bool *bp;
+	register bool	*bp;
 
 	move(GUESSY, GUESSX + sizeof "Guessed: ");
 	bp = Guessed;
@@ -60,7 +52,7 @@ prdata()
 			addch((bp - Guessed) + 'a' - 1);
 	clrtoeol();
 	mvprintw(NUMBERY, NUMBERX + sizeof "Word #:          ", "%d", Wordnum);
-	mvprintw(AVGY, AVGX + sizeof "Current Average: ", "%.3f",
-	    (Average * (Wordnum - 1) + Errors) / Wordnum);
-	mvprintw(AVGY + 1, AVGX + sizeof "Overall Average: ", "%.3f", Average);
+	mvprintw(AVGY, AVGX + sizeof       "Current Average: ", "%.3f",
+				(Average * (Wordnum - 1) + Errors) / Wordnum);
+	mvprintw(AVGY + 1, AVGX + sizeof   "Overall Average: ", "%.3f", Average);
 }

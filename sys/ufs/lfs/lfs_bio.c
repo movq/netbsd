@@ -1,5 +1,3 @@
-/*	$NetBSD: lfs_bio.c,v 1.5 1996/02/09 22:28:49 christos Exp $	*/
-
 /*
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,11 +30,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)lfs_bio.c	8.4 (Berkeley) 12/30/93
+ *	from: @(#)lfs_bio.c	8.4 (Berkeley) 12/30/93
+ *	$Id: lfs_bio.c,v 1.1 1994/06/08 11:42:28 mycroft Exp $
  */
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/vnode.h>
@@ -47,7 +45,6 @@
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufsmount.h>
-#include <ufs/ufs/ufs_extern.h>
 
 #include <ufs/lfs/lfs.h>
 #include <ufs/lfs/lfs_extern.h>
@@ -72,12 +69,11 @@ int	lfs_writing;			/* Set if already kicked off a writer
 #define LFS_BUFWAIT	2
 
 int
-lfs_bwrite(v)
-	void *v;
-{
+lfs_bwrite(ap)
 	struct vop_bwrite_args /* {
 		struct buf *a_bp;
-	} */ *ap = v;
+	} */ *ap;
+{
 	register struct buf *bp = ap->a_bp;
 	struct lfs *fs;
 	struct inode *ip;
@@ -103,9 +99,8 @@ lfs_bwrite(v)
 		    bp->b_lblkno > 0) {
 			/* Out of space, need cleaner to run */
 			wakeup(&lfs_allclean_wakeup);
-			error = tsleep(&fs->lfs_avail, PCATCH | PUSER,
-				       "cleaner", NULL);
-			if (error) {
+			if (error = tsleep(&fs->lfs_avail, PCATCH | PUSER,
+			    "cleaner", NULL)) {
 				brelse(bp);
 				return (error);
 			}
@@ -145,10 +140,9 @@ lfs_flush()
 	if (lfs_writing)
 		return;
 	lfs_writing = 1;
-	for (mp = mountlist.cqh_first; mp != (void *)&mountlist;
-	     mp = mp->mnt_list.cqe_next) {
+	for (mp = mountlist.tqh_first; mp != NULL; mp = mp->mnt_list.tqe_next) {
 		/* The lock check below is to avoid races with unmount. */
-		if (!strncmp(&mp->mnt_stat.f_fstypename[0], MOUNT_LFS, MFSNAMELEN) &&
+		if (!strcmp(&mp->mnt_stat.f_fstypename[0], MOUNT_LFS) &&
 		    (mp->mnt_flag & (MNT_MLOCK|MNT_RDONLY|MNT_UNMOUNT)) == 0 &&
 		    !((((struct ufsmount *)mp->mnt_data))->ufsmount_u.lfs)->lfs_dirops ) {
 			/*
@@ -172,6 +166,7 @@ lfs_check(vp, blkno)
 	struct vnode *vp;
 	daddr_t blkno;
 {
+	extern int lfs_allclean_wakeup;
 	int error;
 
 	error = 0;

@@ -1,5 +1,3 @@
-/*	$NetBSD: extern.h,v 1.7 1997/10/05 15:12:12 mrg Exp $	*/
-
 /*
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,32 +34,6 @@
  */
 
 #include <sys/cdefs.h>
-#include <termios.h>
-#include <sys/ioctl.h>
-#include <stdio.h>
 
-/*
- * from stty.h
- */
-struct info {
-	int fd;                                 /* file descriptor */
-	int ldisc;                              /* line discipline */  
-	int off;                                /* turn off */
-	int set;                                /* need set */
-	int wset;                               /* need window set */
-	char *arg;                              /* argument */
-	struct termios t;                       /* terminal info */  
-	struct winsize win;                     /* window info */
-}; 
-
-int        ksearch __P((char ***, struct info *));
-int        msearch __P((char ***, struct info *));
 void       printjob __P((void));
 void       recvjob __P((void));
-void       sttyclearflags __P((struct termios *tp, int flags));
-void       sttysetflags __P((struct termios *tp, int flags));
-void       sttyclearlflags __P((struct termios *tp, int flags));
-void       sttysetlflags __P((struct termios *tp, int flags));
-
-/* XXX from libc/net/rcmd.c */
-int        __ivaliduser __P((FILE *, u_int32_t, const char *, const char *));

@@ -1,7 +1,5 @@
-.\"	$NetBSD: esis.4,v 1.4 1997/09/20 03:56:40 mikel Exp $
-.\"
-.\" Copyright (c) 1990, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,17 +29,17 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)esis.4	8.2 (Berkeley) 11/30/93
+.\"     @(#)esis.4	6.2 (Berkeley) 3/28/91
 .\"
-.Dd November 30, 1993
+.Dd March 28, 1991
 .Dt ESIS 4
 .Os
 .Sh NAME
 .Nm es-is
 .Nd End System to Intermediate System Routing Protocol
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
-.Fd #include <netiso/esis.h>
+.Sy pseudo-device
+.Nm ether
 .Sh DESCRIPTION
 The
 .Nm ES-IS
@@ -86,7 +84,7 @@ issuing an
 .Dv SIOCSSTYPE
 .Xr ioctl 2 ,
 which is defined in
-.Pa Aq sys/netiso/iso_snpac.h .
+.Pa /sys/netiso/iso_snpac.h.
 .Pp
 The protocol behaves differently depending on whether the System is
 configured as an End System or an Intermediate System.
@@ -116,7 +114,7 @@ received will be processed. This processing
 consists of adding an entry in the routing table. If the
 redirect is towards an Intermediate System, then an entry is made in the
 routing table as well.
-The entry in the routing table will mark the
+The entry in the routing table will may mark the
 .Tn NSAP
 address contained in the redirect
 .Tn PDU
@@ -199,6 +197,11 @@ of the
 .%R ISO
 .%N 9542
 .Re
+.Sh HISTORY
+The
+.Nm
+protocol implementation
+.Ud
 .Sh BUGS
 Redirect
 .Tn PDU Ns s

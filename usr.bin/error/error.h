@@ -1,8 +1,6 @@
-/*	$NetBSD: error.h,v 1.4 1997/10/18 14:44:25 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,10 +30,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)error.h	8.1 (Berkeley) 6/6/93
+ *	@(#)error.h	5.5 (Berkeley) 6/1/90
  */
 
 typedef	int	boolean;
+#define	reg	register
 
 #define	TRUE	1
 #define	FALSE	0
@@ -119,7 +118,7 @@ extern	char	*scriptname;
 
 extern	boolean	query;
 extern	boolean	terse;
-int	inquire __P((char *, ...));	/* inquire for yes/no */
+int	inquire();			/* inquire for yes/no */
 /* 
  *	codes for inquire() to return
  */
@@ -128,7 +127,7 @@ int	inquire __P((char *, ...));	/* inquire for yes/no */
 #define	Q_YES	3			/* 'Y' */
 #define	Q_yes	4			/* 'y' */
 
-int	probethisfile __P((char *));
+int	probethisfile();
 /*
  *	codes for probethisfile to return
  */
@@ -201,55 +200,25 @@ extern	Eptr	*errors;
 extern	int	nfiles;
 extern	Eptr	**files;	/* array of pointers into errors*/
 boolean	*touchedfiles;			/* which files we touched */
-
 /*
  *	The langauge the compilation is in, as intuited from
  *	the flavor of error messages analyzed.
  */
 extern	int	langauge;
 extern	char	*currentfilename;
-
 /*
  *	Functional forwards
  */
-void	arrayify __P((int *, Eptr **, Eptr));
-char   *Calloc __P((int, int));
-void	clob_last __P((char *,  char));
-int	countfiles  __P((Eptr *));
-Errorclass discardit __P((Eptr));
-void	diverterrors __P((char *, int, Eptr **, int, boolean,  int));
-void	eaterrors __P((int *, Eptr **));
-boolean	edit __P((char *));
-void	erroradd __P((int, char **, Errorclass, Errorclass));
-void	errorprint __P((FILE *, Eptr, boolean));
-void	execvarg __P((int, int *, char ***));
-void	filenames __P((int, Eptr **));
-void	findfiles __P((int, Eptr *, int *, Eptr ***));
-char	firstchar __P((char *));
-void	getignored __P((char *));
-void	hackfile __P((char *, Eptr **, int, int));
-void	insert __P((int));
-char	lastchar __P((char *));
-int	mustoverwrite __P((FILE *, FILE *));
-int	mustwrite __P((char *, int, FILE *));
-char	next_lastchar __P((char *));
-int	nopertain __P((Eptr **));
-int	oktotouch __P((char *));
-void	onintr __P((int));
-boolean	persperdexplode __P((char *, char **, char **));
-int	position __P((char *, char));
-boolean	preview __P((char *,  int, Eptr **, int));
-void	printerrors __P((boolean, int, Eptr []));
-char   *plural __P((int));
-boolean	qpersperdexplode __P((char *, char **, char **));
-int	settotouch __P((char *));
-char   *strsave __P((char *));
-char   *substitute __P((char *, char, char));
-void	text __P((Eptr, boolean));
-boolean	touchfiles __P((int, Eptr **, int *, char ***));
-char   *verbform __P((int));
-void	wordvbuild __P((char *, int*, char ***));
-int	wordvcmp __P((char **, int, char **));
-void	wordvprint __P((FILE *, int, char **));
-char  **wordvsplice __P((int, int, char **));
-boolean	writetouched __P((int));
+char	*Calloc();
+char	*strsave();
+char	*clobberfirst();
+char	lastchar();
+char	firstchar();
+char	next_lastchar();
+char	**wordvsplice();
+int	wordvcmp();
+boolean	persperdexplode();
+/*
+ *	Printing hacks
+ */
+char	*plural(), *verbform();

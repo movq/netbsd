@@ -1,5 +1,5 @@
-.\"WISC: Header: program.nr,v 1.1 88/12/05 18:10:57 nhall Exp $
-.\"WISC: Source: /usr/argo/doc/kernel/RCS/program.nr,v $
+.\"$Header: /home/mike/src/cvs/netbsd/src/share/doc/iso/ucb/Attic/program.nr,v 1.1 1994/06/19 00:07:23 cgd Exp $
+.\"$Source: /home/mike/src/cvs/netbsd/src/share/doc/iso/ucb/Attic/program.nr,v $
 .\"
 .\"
 .\" FONT CONVENTIONS

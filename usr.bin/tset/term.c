@@ -1,8 +1,6 @@
-/*	$NetBSD: term.c,v 1.9 1997/10/20 01:07:53 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,23 +31,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)term.c	8.1 (Berkeley) 6/9/93";
-#endif
-__RCSID("$NetBSD: term.c,v 1.9 1997/10/20 01:07:53 lukem Exp $");
+static char sccsid[] = "@(#)term.c	5.1 (Berkeley) 12/22/91";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <err.h>
 #include <errno.h>
+#include <ttyent.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termcap.h>
-#include <ttyent.h>
-#include <unistd.h>
 #include "extern.h"
 
 char    tbuf[1024];      		/* Termcap entry. */
@@ -67,7 +59,7 @@ get_termcap_entry(userarg, tcapbufp)
 {
 	struct ttyent *t;
 	int rval;
-	char *p, *ttype, *ttypath;
+	char *base, *ttype, *ttypath;
 
 	if (userarg) {
 		ttype = userarg;
@@ -75,16 +67,16 @@ get_termcap_entry(userarg, tcapbufp)
 	}
 
 	/* Try the environment. */
-	if ((ttype = getenv("TERM")) != NULL)
+	if (ttype = getenv("TERM"))
 		goto map;
 
 	/* Try ttyname(3); check for dialup or other mapping. */
-	if ((ttypath = ttyname(STDERR_FILENO)) != NULL) {
-		if ((p = strrchr(ttypath, '/')) != NULL)
-			++p;
+	if (ttypath = ttyname(STDERR_FILENO)) {
+		if (base = rindex(ttypath, '/'))
+			++base;
 		else
-			p = ttypath;
-		if ((t = getttynam(p))) {
+			base = ttypath;
+		if ((t = getttynam(base))) {
 			ttype = t->ty_type;
 			goto map;
 		}
@@ -96,33 +88,27 @@ get_termcap_entry(userarg, tcapbufp)
 map:	ttype = mapped(ttype);
 
 	/*
-	 * If not a path, remove TERMCAP from the environment so we get a
-	 * real entry from /etc/termcap.  This prevents us from being fooled
-	 * by out of date stuff in the environment.
+	 * Remove TERMCAP from the environment so we get a real entry from
+	 * /etc/termcap.  This prevents us from being fooled by out of date
+	 * stuff in the environment.
 	 */
-found:	if ((p = getenv("TERMCAP")) != NULL && *p != '/')
-		unsetenv("TERMCAP");
+found:	unsetenv("TERMCAP");
 
 	/*
 	 * ttype now contains a pointer to the type of the terminal.
 	 * If the first character is '?', ask the user.
 	 */
 	if (ttype[0] == '?')
-		if (ttype[1] != '\0')
-			ttype = askuser(ttype + 1);
-		else
-			ttype = askuser(NULL);
+		ttype = askuser(ttype + 1);
 
 	/* Find the termcap entry.  If it doesn't exist, ask the user. */
 	while ((rval = tgetent(tbuf, ttype)) == 0) {
-		warnx("terminal type %s is unknown", ttype);
+		(void)fprintf(stderr,
+		    "tset: terminal type %s is unknown\n", ttype);
 		ttype = askuser(NULL);
 	}
-	if (rval == -1) {
-		if (!errno)
-			errno = ENOENT;
-		err(1, "%s", "");
-	}
+	if (rval == -1)
+		err("termcap: %s", strerror(errno ? errno : ENOENT));
 	*tcapbufp = tbuf;
 	return (ttype);
 }
@@ -135,11 +121,6 @@ askuser(dflt)
 	static char answer[256];
 	char *p;
 
-	/* We can get recalled; if so, don't continue uselessly. */
-	if (feof(stdin) || ferror(stdin)) {
-		(void)fprintf(stderr, "\n");
-		exit(1);
-	}
 	for (;;) {
 		if (dflt)
 			(void)fprintf(stderr, "Terminal type? [%s] ", dflt);
@@ -147,19 +128,11 @@ askuser(dflt)
 			(void)fprintf(stderr, "Terminal type? ");
 		(void)fflush(stderr);
 
-		if (fgets(answer, sizeof(answer), stdin) == NULL) {
-			if (dflt == NULL) {
-				(void)fprintf(stderr, "\n");
-				exit(1);
-			}
-			return (dflt);
-		}
+		if (fgets(answer, sizeof(answer), stdin) == NULL)
+			continue;
 
-		if ((p = strchr(answer, '\n')) != NULL)
+		if (p = index(answer, '\n'))
 			*p = '\0';
-		if (answer[0])
-			return (answer);
-		if (dflt != NULL)
-			return (dflt);
+		return (answer[0] ? answer : dflt);
 	}
 }

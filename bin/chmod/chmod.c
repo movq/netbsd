@@ -1,8 +1,6 @@
-/*	$NetBSD: chmod.c,v 1.17 1997/10/11 03:11:04 enami Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,100 +31,51 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)chmod.c	8.8 (Berkeley) 4/1/94";
-#else
-__RCSID("$NetBSD: chmod.c,v 1.17 1997/10/11 03:11:04 enami Exp $");
-#endif
+static char sccsid[] = "@(#)chmod.c	5.19 (Berkeley) 3/12/91";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/stat.h>
-
-#include <err.h>
-#include <errno.h>
 #include <fts.h>
-#include <locale.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <limits.h>
 
-int main __P((int, char *[]));
-void usage __P((void));
+extern int errno;
+int retval;
 
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	FTS *ftsp;
-	FTSENT *p;
-	mode_t *set;
-	long val;
-	int oct, omode;
-	int Hflag, Lflag, Pflag, Rflag, ch, fflag, fts_options, hflag, rval;
-	char *ep, *mode;
-	int (*change_mode) __P((const char *, mode_t));
+	extern int optind;
+	register FTS *fts;
+	register FTSENT *p;
+	register int oct, omode;
+	register char *mode;
+	mode_t *set, *setmode();
+	struct stat sb;
+	int ch, fflag, rflag;
 
-	set = NULL;	/* XXX gcc -Wuninitialized */
-	omode = 0;	/* XXX gcc -Wuninitialized */
-
-	setlocale(LC_ALL, "");
-
-	Hflag = Lflag = Pflag = Rflag = fflag = hflag = 0;
-	while ((ch = getopt(argc, argv, "HLPRXfghorstuwx")) != -1)
-		switch (ch) {
-		case 'H':
-			Hflag = 1;
-			Lflag = Pflag = 0;
-			break;
-		case 'L':
-			Lflag = 1;
-			Hflag = Pflag = 0;
-			break;
-		case 'P':
-			Pflag = 1;
-			Hflag = Lflag = 0;
-			break;
+	fflag = rflag = 0;
+	while ((ch = getopt(argc, argv, "Rfrwx")) != EOF)
+		switch((char)ch) {
 		case 'R':
-			Rflag = 1;
+			rflag = 1;
 			break;
-		case 'f':		/* XXX: undocumented. */
+		case 'f':		/* no longer documented */
 			fflag = 1;
 			break;
-		case 'h':
-			/*
-			 * In System V (and probably POSIX.2) the -h option
-			 * causes chmod to change the mode of the symbolic
-			 * link.  4.4BSD's symbolic links didn't have modes,
-			 * so it was an undocumented noop.  In NetBSD 1.3,
-			 * lchmod(2) is introduced and this option does real
-			 * work.
-			 */
-			hflag = 1;
-			break;
-		/*
-		 * XXX
-		 * "-[rwx]" are valid mode commands.  If they are the entire
-		 * argument, getopt has moved past them, so decrement optind.
-		 * Regardless, we're done argument processing.
-		 */
-		case 'g': case 'o': case 'r': case 's':
-		case 't': case 'u': case 'w': case 'X': case 'x':
-			if (argv[optind - 1][0] == '-' &&
-			    argv[optind - 1][1] == ch &&
-			    argv[optind - 1][2] == '\0')
-				--optind;
+		case 'r':		/* "-[rwx]" are valid file modes */
+		case 'w':
+		case 'x':
+			--optind;
 			goto done;
 		case '?':
 		default:
@@ -138,89 +87,65 @@ done:	argv += optind;
 	if (argc < 2)
 		usage();
 
-	fts_options = FTS_PHYSICAL;
-	if (Rflag) {
-		if (hflag)
-			errx(1,
-		"the -R and -h options may not be specified together.");
-		if (Hflag)
-			fts_options |= FTS_COMFOLLOW;
-		if (Lflag) {
-			fts_options &= ~FTS_PHYSICAL;
-			fts_options |= FTS_LOGICAL;
-		}
-	}
-	if (hflag)
-		change_mode = lchmod;
-	else
-		change_mode = chmod;
-
 	mode = *argv;
 	if (*mode >= '0' && *mode <= '7') {
-		errno = 0;
-		val = strtol(mode, &ep, 8);
-		if (val > INT_MAX || val < 0)
-			errno = ERANGE;
-		if (errno)
-			err(1, "invalid file mode: %s", mode);
-		if (*ep)
-			errx(1, "invalid file mode: %s", mode);
-		omode = val;
+		omode = (int)strtol(mode, (char **)NULL, 8);
 		oct = 1;
 	} else {
-		if ((set = setmode(mode)) == NULL)
-			errx(1, "invalid file mode: %s", mode);
+		if (!(set = setmode(mode))) {
+			(void)fprintf(stderr, "chmod: invalid file mode.\n");
+			exit(1);
+		}
 		oct = 0;
 	}
 
-	if ((ftsp = fts_open(++argv, fts_options, 0)) == NULL)
-		err(1, argv[0]);
-	for (rval = 0; (p = fts_read(ftsp)) != NULL;) {
-		switch (p->fts_info) {
-		case FTS_D:
-			if (!Rflag)
-				fts_set(ftsp, p, FTS_SKIP);
-			break;
-		case FTS_DNR:			/* Warn, chmod, continue. */
-			warnx("%s: %s", p->fts_path, strerror(p->fts_errno));
-			rval = 1;
-			break;
-		case FTS_DP:			/* Already changed at FTS_D. */
-			continue;
-		case FTS_ERR:			/* Warn, continue. */
-		case FTS_NS:
-			warnx("%s: %s", p->fts_path, strerror(p->fts_errno));
-			rval = 1;
-			continue;
-		case FTS_SL:			/* Ignore. */
-		case FTS_SLNONE:
-			/*
-			 * The only symlinks that end up here are ones that
-			 * don't point to anything and ones that we found
-			 * doing a physical walk.
-			 */
-			if (!hflag)
-				continue;
-			/* else */
-			/* FALLTHROUGH */
-		default:
-			break;
+	retval = 0;
+	if (rflag) {
+		if (!(fts = fts_open(++argv,
+		    oct ? FTS_NOSTAT|FTS_PHYSICAL : FTS_PHYSICAL, 0))) {
+			(void)fprintf(stderr, "chmod: %s.\n", strerror(errno));
+			exit(1);
 		}
-		if ((*change_mode)(p->fts_accpath, oct ? omode :
-		    getmode(set, p->fts_statp->st_mode)) && !fflag) {
-			warn("%s", p->fts_path);
-			rval = 1;
-		}
+		while (p = fts_read(fts))
+			switch(p->fts_info) {
+			case FTS_D:
+				break;
+			case FTS_DNR:
+			case FTS_ERR:
+			case FTS_NS:
+				(void)fprintf(stderr, "chmod: %s: %s.\n",
+				    p->fts_path, strerror(errno));
+				exit(1);
+			default:
+				if (chmod(p->fts_accpath, oct ? omode :
+				    getmode(set, p->fts_statb.st_mode)) &&
+				    !fflag)
+					error(p->fts_path);
+				break;
+			}
+		exit(retval);
 	}
-	if (errno)
-		err(1, "fts_read");
-	exit(rval);
+	if (oct) {
+		while (*++argv)
+			if (chmod(*argv, omode) && !fflag)
+				error(*argv);
+	} else
+		while (*++argv)
+			if ((lstat(*argv, &sb) ||
+			    chmod(*argv, getmode(set, sb.st_mode))) && !fflag)
+				error(*argv);
+	exit(retval);
 }
 
-void
+error(name)
+	char *name;
+{
+	(void)fprintf(stderr, "chmod: %s: %s.\n", name, strerror(errno));
+	retval = 1;
+}
+
 usage()
 {
-	(void)fprintf(stderr,
-	    "usage: chmod [-R [-H | -L | -P]] [-h] mode file ...\n");
+	(void)fprintf(stderr, "chmod: chmod [-R] mode file ...\n");
 	exit(1);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: ttydev.h,v 1.7 1994/06/29 06:45:58 cgd Exp $	*/
-
 /*-
- * Copyright (c) 1982, 1986, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,13 +30,13 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ttydev.h	8.2 (Berkeley) 1/4/94
+ *	@(#)ttydev.h	7.8 (Berkeley) 5/9/91
  */
 
 /* COMPATABILITY HEADER FILE */
 
-#ifndef _SYS_TTYDEV_H_
-#define	_SYS_TTYDEV_H_
+#ifndef _TTYDEV_H_
+#define	_TTYDEV_H_
 
 #ifdef USE_OLD_TTY
 #define B0	0
@@ -57,8 +55,6 @@
 #define B9600	13
 #define EXTA	14
 #define EXTB	15
-#define	B57600	16
-#define	B115200	17
 #endif /* USE_OLD_TTY */
 
-#endif /* !_SYS_TTYDEV_H_ */
+#endif /* !_TTYDEV_H_ */

@@ -1,8 +1,6 @@
-/*	$NetBSD: cmds.c,v 1.7 1997/02/11 09:24:03 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cmds.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: cmds.c,v 1.7 1997/02/11 09:24:03 mrg Exp $";
+static char sccsid[] = "@(#)cmds.c	5.15 (Berkeley) 3/4/91";
 #endif /* not lint */
 
 #include "tip.h"
@@ -112,7 +107,7 @@ cu_take(cc)
 		printf("\r\n%s: cannot create\r\n", argv[1]);
 		return;
 	}
-	(void)snprintf(line, sizeof line, "cat %s;echo \01", argv[0]);
+	sprintf(line, "cat %s;echo \01", argv[0]);
 	transfer(line, fd, "\01");
 }
 
@@ -130,7 +125,6 @@ transfer(buf, fd, eofchars)
 	register int cnt, eof;
 	time_t start;
 	sig_t f;
-	char r;
 
 	pwrite(FD, buf, size(buf));
 	quit = 0;
@@ -140,19 +134,18 @@ transfer(buf, fd, eofchars)
 	/*
 	 * finish command
 	 */
-	r = '\r';
-	pwrite(FD, &r, 1);
+	pwrite(FD, "\r", 1);
 	do
 		read(FD, &c, 1); 
-	while ((c&STRIP_PAR) != '\n');
-	tcsetattr(0, TCSAFLUSH, &defchars);
+	while ((c&0177) != '\n');
+	ioctl(0, TIOCSETC, &defchars);
 	
 	(void) setjmp(intbuf);
 	f = signal(SIGINT, intcopy);
 	start = time(0);
 	for (ct = 0; !quit;) {
 		eof = read(FD, &c, 1) <= 0;
-		c &= STRIP_PAR;
+		c &= 0177;
 		if (quit)
 			continue;
 		if (eof || any(c, eofchars))
@@ -179,7 +172,7 @@ transfer(buf, fd, eofchars)
 
 	if (boolean(value(VERBOSE)))
 		prtime(" lines transferred in ", time(0)-start);
-	tcsetattr(0, TCSAFLUSH, &term);
+	ioctl(0, TIOCSETC, &tchars);
 	write(fildes[1], (char *)&ccc, 1);
 	signal(SIGINT, f);
 	close(fd);
@@ -271,8 +264,12 @@ sendfile(cc)
 		return;
 	}
 	transmit(fd, value(EOFWRITE), NULL);
-	if (!boolean(value(ECHOCHECK)))
-		tcdrain(FD);
+	if (!boolean(value(ECHOCHECK))) {
+		struct sgttyb buf;
+
+		ioctl(FD, TIOCGETP, &buf);	/* this does a */
+		ioctl(FD, TIOCSETP, &buf);	/*   wflushtty */
+	}
 }
 
 /*
@@ -291,7 +288,7 @@ transmit(fd, eofchars, command)
 	kill(pid, SIGIOT);	/* put TIPOUT into a wait state */
 	stop = 0;
 	f = signal(SIGINT, stopsnd);
-	tcsetattr(0, TCSAFLUSH, &defchars);
+	ioctl(0, TIOCSETC, &defchars);
 	read(repdes[0], (char *)&ccc, 1);
 	if (command != NULL) {
 		for (pc = command; *pc; pc++)
@@ -299,7 +296,10 @@ transmit(fd, eofchars, command)
 		if (boolean(value(ECHOCHECK)))
 			read(FD, (char *)&c, 1);	/* trailing \n */
 		else {
-			tcdrain(FD);
+			struct sgttyb buf;
+
+			ioctl(FD, TIOCGETP, &buf);	/* this does a */
+			ioctl(FD, TIOCSETP, &buf);	/*   wflushtty */
 			sleep(5); /* wait for remote stty to take effect */
 		}
 	}
@@ -341,7 +341,7 @@ transmit(fd, eofchars, command)
 			printf("\r%d", ++lcount);
 		if (boolean(value(ECHOCHECK))) {
 			timedout = 0;
-			alarm((long)value(ETIMEOUT));
+			alarm((int)value(ETIMEOUT));
 			do {	/* wait for prompt */
 				read(FD, (char *)&c, 1);
 				if (timedout || stop) {
@@ -350,17 +350,15 @@ transmit(fd, eofchars, command)
 					alarm(0);
 					goto out;
 				}
-			} while ((c&STRIP_PAR) != character(value(PROMPT)));
+			} while ((c&0177) != character(value(PROMPT)));
 			alarm(0);
 		}
 	}
 out:
 	if (lastc != '\n' && !boolean(value(RAWFTP)))
 		send('\r');
-	if (eofchars) {
-		for (pc = eofchars; *pc; pc++)
-			send(*pc);
-	}
+	for (pc = eofchars; *pc; pc++)
+		send(*pc);
 	stop_t = time(0);
 	fclose(fd);
 	signal(SIGINT, f);
@@ -370,7 +368,7 @@ out:
 		else
 			prtime(" lines transferred in ", stop_t-start_t);
 	write(fildes[1], (char *)&ccc, 1);
-	tcsetattr(0, TCSAFLUSH, &term);
+	ioctl(0, TIOCSETC, &tchars);
 }
 
 /*
@@ -399,9 +397,9 @@ cu_put(cc)
 		return;
 	}
 	if (boolean(value(ECHOCHECK)))
-		(void)snprintf(line, sizeof line, "cat>%s\r", argv[1]);
+		sprintf(line, "cat>%s\r", argv[1]);
 	else
-		(void)snprintf(line, sizeof line, "stty -echo;cat>%s;stty echo\r", argv[1]);
+		sprintf(line, "stty -echo;cat>%s;stty echo\r", argv[1]);
 	transmit(fd, "\04", line);
 }
 
@@ -430,7 +428,7 @@ send(c)
 	}
 tryagain:
 	timedout = 0;
-	alarm((long)value(ETIMEOUT));
+	alarm((int)value(ETIMEOUT));
 	read(FD, &cc, 1);
 	alarm(0);
 	if (timedout) {
@@ -465,7 +463,7 @@ pipeout(c)
 	kill(pid, SIGIOT);	/* put TIPOUT into a wait state */
 	signal(SIGINT, SIG_IGN);
 	signal(SIGQUIT, SIG_IGN);
-	tcsetattr(0, TCSAFLUSH, &defchars);
+	ioctl(0, TIOCSETC, &defchars);
 	read(repdes[0], (char *)&ccc, 1);
 	/*
 	 * Set up file descriptors in the child and
@@ -492,7 +490,7 @@ pipeout(c)
 	if (boolean(value(VERBOSE)))
 		prtime("away for ", time(0)-start);
 	write(fildes[1], (char *)&ccc, 1);
-	tcsetattr(0, TCSAFLUSH, &term);
+	ioctl(0, TIOCSETC, &tchars);
 	signal(SIGINT, SIG_DFL);
 	signal(SIGQUIT, SIG_DFL);
 }
@@ -516,7 +514,7 @@ consh(c)
 	kill(pid, SIGIOT);	/* put TIPOUT into a wait state */
 	signal(SIGINT, SIG_IGN);
 	signal(SIGQUIT, SIG_IGN);
-	tcsetattr(0, TCSAFLUSH, &defchars);
+	ioctl(0, TIOCSETC, &defchars);
 	read(repdes[0], (char *)&ccc, 1);
 	/*
 	 * Set up file descriptors in the child and
@@ -531,8 +529,9 @@ consh(c)
 	} else {
 		register int i;
 
+		dup2(1, 2);
 		dup2(FD, 0);
-		dup2(3, 1);
+		dup2(0, 1);
 		for (i = 3; i < 20; i++)
 			close(i);
 		signal(SIGINT, SIG_DFL);
@@ -544,7 +543,7 @@ consh(c)
 	if (boolean(value(VERBOSE)))
 		prtime("away for ", time(0)-start);
 	write(fildes[1], (char *)&ccc, 1);
-	tcsetattr(0, TCSAFLUSH, &term);
+	ioctl(0, TIOCSETC, &tchars);
 	signal(SIGINT, SIG_DFL);
 	signal(SIGQUIT, SIG_DFL);
 }
@@ -764,18 +763,18 @@ variable()
 tandem(option)
 	char *option;
 {
-	struct termios	rmtty;
+	struct sgttyb rmtty;
 
-	tcgetattr(FD, &rmtty);
-	if (strcmp(option, "on") == 0) {
-		rmtty.c_iflag |= IXOFF;
-		term.c_iflag |= IXOFF;
+	ioctl(FD, TIOCGETP, &rmtty);
+	if (strcmp(option,"on") == 0) {
+		rmtty.sg_flags |= TANDEM;
+		arg.sg_flags |= TANDEM;
 	} else {
-		rmtty.c_iflag &= ~IXOFF;
-		term.c_iflag &= ~IXOFF;
+		rmtty.sg_flags &= ~TANDEM;
+		arg.sg_flags &= ~TANDEM;
 	}
-	tcsetattr(FD, TCSADRAIN, &rmtty);
-	tcsetattr(0, TCSADRAIN, &term);
+	ioctl(FD, TIOCSETP, &rmtty);
+	ioctl(0,  TIOCSETP, &arg);
 }
 
 /*
@@ -823,7 +822,7 @@ expand(name)
 		/* signal(SIGINT, sigint) */
 		return(name);
 	}
-	(void)snprintf(cmdbuf, sizeof cmdbuf, "echo %s", name);
+	sprintf(cmdbuf, "echo %s", name);
 	if ((pid = vfork()) == 0) {
 		Shell = value(SHELL);
 		if (Shell == NOSTR)

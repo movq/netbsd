@@ -1,8 +1,6 @@
-/*	$NetBSD: string.c,v 1.5 1995/09/29 00:44:06 cgd Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,16 +35,12 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)string.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: string.c,v 1.5 1995/09/29 00:44:06 cgd Exp $";
-#endif
+static char sccsid[] = "@(#)string.c	3.13 (Berkeley) 6/6/90";
 #endif /* not lint */
 
 #include "string.h"
-#include <stdlib.h>
-#include <string.h>
+
+char *malloc();
 
 char *
 str_cpy(s)

@@ -1,7 +1,5 @@
-.\"	$NetBSD: tmpnam.3,v 1.4 1997/03/24 11:39:11 lukem Exp $
-.\"
-.\" Copyright (c) 1988, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1988, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" the American National Standards Committee X3, on Information
@@ -35,9 +33,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)tmpnam.3	8.2 (Berkeley) 11/17/93
+.\"     @(#)tmpnam.3	5.14 (Berkeley) 6/29/91
 .\"
-.Dd March 24, 1997
+.Dd June 29, 1991
 .Dt TMPFILE 3
 .Os
 .Sh NAME
@@ -108,7 +106,7 @@ contain the temporary file and the file name prefix.
 The environment variable
 .Ev TMPDIR
 (if set), the argument
-.Fa tmpdir
+.Fa dir
 (if
 .Pf non- Dv NULL ) ,
 the directory
@@ -124,7 +122,7 @@ if
 .Pf non- Dv NULL ,
 is used to specify a file name prefix, which will be the
 first part of the created file name.
-.Fn tempnam
+.Fn Tempnam
 allocates memory in which to store the file name; the returned pointer
 may be used as a subsequent argument to
 .Xr free 3 .
@@ -212,25 +210,10 @@ the portable use of these interfaces in such programs.
 Finally, there is no specification of the permissions with which the
 temporary files are created.
 .Pp
-This implementation of
-.Fn tmpfile
-does not have these flaws,
-and that of
-.Fn tmpnam
-and
-.Fn tempnam
-only have the first limitation, but portable software
+This implementation does not have these flaws, but portable software
 cannot depend on that.
 In particular, the
 .Fn tmpfile
 interface should not be used in software expected to be used on other systems
 if there is any possibility that the user does not wish the temporary file to
 be publicly readable and writable.
-.Pp
-A link-time warning will be issued if
-.Fn tmpnam
-or
-.Fn tempnam
-is used, and advises the use of
-.Fn mkstemp
-instead.

@@ -1,7 +1,5 @@
-.\"	$NetBSD: dd.1,v 1.6 1997/10/20 08:51:24 enami Exp $
-.\"
-.\" Copyright (c) 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" Keith Muller of the University of California, San Diego.
@@ -34,16 +32,16 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)dd.1	8.2 (Berkeley) 1/13/94
+.\"     @(#)dd.1	6.7 (Berkeley) 8/7/91
 .\"
-.Dd January 13, 1994
+.Dd August 7, 1991
 .Dt DD 1
 .Os
 .Sh NAME
 .Nm dd
-.Nd convert and copy a file
+.Nd Convert and copy a file.
 .Sh SYNOPSIS
-.Nm
+.Nm dd
 .Op operands ...
 .Sh DESCRIPTION
 The
@@ -53,7 +51,7 @@ Input data is read and written in 512-byte blocks.
 If input reads are short, input from multiple reads are aggregated
 to form the output block.
 When finished,
-.Nm
+.Nm dd
 displays the number of complete and partial input and output blocks
 and truncated input records to the standard error output.
 .Pp
@@ -149,7 +147,7 @@ is one of the symbols from the following list.
 The same as the
 .Cm unblock
 value except that characters are translated from
-.Tn EBCDIC
+.Tn ECBDIC
 to
 .Tn ASCII
 before the
@@ -168,7 +166,9 @@ The value
 .Cm oldascii
 specifies the one used in historic
 .Tn AT&T
-and pre-4.3BSD-reno systems.
+and
+.Pf pre- Bx 4.3 reno
+systems.
 .It Cm block
 Treats the input as a sequence of newline or end-of-file terminated variable
 length records independent of input and output block boundaries.
@@ -180,7 +180,7 @@ operand.
 Input records shorter than the conversion record size are padded with spaces.
 Input records longer than the conversion record size are truncated.
 The number of truncated input records, if any, are reported to the standard
-error output at the completion of the copy.
+error at the completion of the copy.
 .It Cm ebcdic , ibm , oldebcdic , oldibm
 The same as the
 .Cm block
@@ -213,14 +213,16 @@ and
 .Cm oldibm
 are maps used in historic
 .Tn AT&T
-and pre-4.3BSD-reno systems.
+and
+.Pf pre- Bx 4.3 reno
+systems.
 .It Cm lcase
 Transform uppercase characters into lowercase characters.
 .It Cm noerror
 Do not stop processing on an input error.
 When an input error occurs, a diagnostic message followed by the current
-input and output block counts will be written to the standard error output
-in the same format as the standard completion message.
+input and output block counts will be written to standard error in the
+same format as the standard completion message.
 If the
 .Cm sync
 conversion is also specified, any missing input data will be replaced
@@ -238,19 +240,10 @@ will be positioned past the block in which the error occurred using
 Do not truncate the output file.
 This will preserve any blocks in the output file not explicitly written
 by
-.Nm "" .
+.Nm dd .
 The
 .Cm notrunc
 value is not supported for tapes.
-.It Cm osync
-Pad the final output block to the full output block size.
-If the input file is not a multiple of the output block size
-after conversion, this conversion forces the final output block
-to be the same size as preceding blocks for use on devices that require
-regularly sized blocks to be written.
-This option is incompatible with use of the
-.Cm bs= Ns Ar n
-block size specification.
 .It Cm swab
 Swap every pair of input bytes.
 If an input buffer has an odd number of bytes, the last byte will be
@@ -281,7 +274,7 @@ in an integer, respectively.
 Two or more numbers may be separated by an ``x'' to indicate a product.
 .Pp
 When finished,
-.Nm
+.Nm dd
 displays the number of complete and partial input and output blocks,
 truncated input records and odd-length byte-swapping blocks to the
 standard error output.
@@ -304,26 +297,26 @@ This means that the final output block may be shorter than the output
 block size.
 .Pp
 If
-.Nm
+.Nm dd
 receives a
 .Dv SIGINFO
 (see the ``status'' argument for
 .Xr stty 1 )
 signal, the current input and output block counts will
-be written to the standard error output
-in the same format as the standard completion message.
+be written to standard error in the same format as the standard completion
+message.
 If
-.Nm
+.Nm dd
 receives a
 .Dv SIGINT
 signal, the current input and output block counts will
-be written to the standard error output
-in the same format as the standard completion message and
-.Nm
+be written to standard error in the same format as the standard completion
+message and
+.Nm dd
 will exit.
 .Pp
 The
-.Nm
+.Nm dd
 utility exits 0 on success and >0 if an error occurred.
 .Sh SEE ALSO
 .Xr cp 1 ,
@@ -331,7 +324,7 @@ utility exits 0 on success and >0 if an error occurred.
 .Xr tr 1
 .Sh STANDARDS
 The
-.Nm
+.Nm dd
 utility is expected to be a superset of the
 .St -p1003.2
 standard.

@@ -29,8 +29,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)strmode.3	5.4 (Berkeley) 7/31/91
-.\"	$NetBSD: strmode.3,v 1.7 1997/10/09 10:09:17 lukem Exp $
+.\"     @(#)strmode.3	5.4 (Berkeley) 7/31/91
 .\"
 .Dd July 31, 1991
 .Dt STRMODE 3
@@ -72,8 +71,6 @@ symbolic link
 fifo
 .It s
 socket
-.It w
-whiteout
 .It ?
 unknown inode type
 .El
@@ -86,7 +83,7 @@ third for the ``other'', or default, set of users.
 .Pp
 Permission checking is done as specifically as possible.
 If read permission is denied to the owner of a file in the first set
-of permissions, the owner of the file will not be able to read the file.
+of permssions, the owner of the file will not be able to read the file.
 This is true even if the owner is in the file's group and the group
 permissions allow reading or the ``other'' permissions allow reading.
 .Pp
@@ -130,9 +127,14 @@ The file is executable or the directory is searchable.
 None of the above apply.
 .El
 .Pp
-The last character is a plus sign ``+'' if there are any alternative
+The last character is a plus sign ``+'' if any there are any alternate
 or additional access control methods associated with the inode, otherwise
 it will be a space.
+.Sh RETURN VALUES
+The
+.Fn strmode
+function
+always returns 0.
 .Sh SEE ALSO
 .Xr chmod 1 ,
 .Xr find 1 ,
@@ -142,5 +144,5 @@ it will be a space.
 .Sh HISTORY
 The
 .Fn strmode
-function first appeared in
-.Bx 4.4 .
+function
+.Ud .

@@ -1,8 +1,6 @@
-/*	$NetBSD: end.c,v 1.6 1997/10/12 00:53:51 lukem Exp $	*/
-
 /*
- * Copyright (c) 1982, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)end.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: end.c,v 1.6 1997/10/12 00:53:51 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)end.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include	"mille.h"
@@ -52,11 +45,10 @@ __RCSID("$NetBSD: end.c,v 1.6 1997/10/12 00:53:51 lukem Exp $");
  *	print out the score as if it was final, and add the totals for
  * the end-of-games points to the user who deserves it (if any).
  */
-void
 finalscore(pp)
-	PLAY	*pp;
-{
-	int	temp, tot, num;
+reg PLAY	*pp; {
+
+	reg int		temp, tot, num;
 
 	if (pp->was_finished == Finished)
 		return;
@@ -153,3 +145,4 @@ undoex() {
 	}
 }
 # endif
+

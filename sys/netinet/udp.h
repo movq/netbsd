@@ -1,8 +1,6 @@
-/*	$NetBSD: udp.h,v 1.7 1996/10/25 06:22:25 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)udp.h	8.1 (Berkeley) 6/10/93
+ *	@(#)udp.h	7.4 (Berkeley) 6/28/90
  */
 
 /*
@@ -40,8 +38,8 @@
  * Per RFC 768, September, 1981.
  */
 struct udphdr {
-	u_int16_t uh_sport;		/* source port */
-	u_int16_t uh_dport;		/* destination port */
-	u_int16_t uh_ulen;		/* udp length */
-	u_int16_t uh_sum;		/* udp checksum */
+	u_short	uh_sport;		/* source port */
+	u_short	uh_dport;		/* destination port */
+	short	uh_ulen;		/* udp length */
+	u_short	uh_sum;			/* udp checksum */
 };

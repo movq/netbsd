@@ -1,9 +1,11 @@
-/*	$NetBSD: slcompress.h,v 1.11 1997/05/17 21:12:11 christos Exp $	*/
-/*	Id: slcompress.h,v 1.4 1994/09/21 06:50:08 paulus Exp 	*/
-
+/*	slcompress.h	7.4	90/06/28	*/
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Definitions for tcp compression routines.
+ *
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/net/slcompress.h,v 1.1 1993/03/21 09:45:37 cgd Exp $
+ *
+ * Copyright (c) 1989 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +35,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)slcompress.h	8.1 (Berkeley) 6/10/93
- */
-
-/*
- * Definitions for tcp compression routines.
- *
- * Van Jacobson (van@helios.ee.lbl.gov), Dec 31, 1989:
+ *	Van Jacobson (van@helios.ee.lbl.gov), Dec 31, 1989:
  *	- Initial distribution.
  */
-
-#ifndef _SLCOMPRESS_H_
-#define _SLCOMPRESS_H_
 
 #define MAX_STATES 16		/* must be > 2 and < 256 */
 #define MAX_HDR MLEN		/* XXX 4bsd-ism: should really be 128 */
@@ -122,7 +115,7 @@
  */
 struct cstate {
 	struct cstate *cs_next;	/* next most recently used cstate (xmit only) */
-	u_int16_t cs_hlen;	/* size of hdr (receive only) */
+	u_short cs_hlen;	/* size of hdr (receive only) */
 	u_char cs_id;		/* connection # associated with this state */
 	u_char cs_filler;
 	union {
@@ -141,7 +134,7 @@ struct slcompress {
 	struct cstate *last_cs;	/* most recently used tstate */
 	u_char last_recv;	/* last rcvd conn. id */
 	u_char last_xmit;	/* last sent conn. id */
-	u_int16_t flags;
+	u_short flags;
 #ifndef SL_NO_STATS
 	int sls_packets;	/* outbound packets */
 	int sls_compressed;	/* outbound compressed packets */
@@ -158,12 +151,7 @@ struct slcompress {
 /* flag values */
 #define SLF_TOSS 1		/* tossing rcvd frames because of input err */
 
-void	sl_compress_init __P((struct slcompress *));
-void	sl_compress_setup __P((struct slcompress *, int));
-u_int	sl_compress_tcp __P((struct mbuf *,
-  	    struct ip *, struct slcompress *, int));
-int	sl_uncompress_tcp __P((u_char **, int, u_int, struct slcompress *));
-int	sl_uncompress_tcp_core __P((u_char *, int, int, u_int,
-  	    struct slcompress *, u_char **, u_int *));
-
-#endif /* _SLCOMPRESS_H_ */
+extern void sl_compress_init(/* struct slcompress * */);
+extern u_char sl_compress_tcp(/* struct mbuf *, struct ip *,
+				struct slcompress *, int compress_cid_flag */);
+extern int sl_uncompress_tcp(/* u_char **, int,  u_char, struct slcompress * */);

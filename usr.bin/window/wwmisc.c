@@ -1,8 +1,6 @@
-/*	$NetBSD: wwmisc.c,v 1.4 1996/02/08 20:45:10 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,11 +35,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)wwmisc.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: wwmisc.c,v 1.4 1996/02/08 20:45:10 mycroft Exp $";
-#endif
+static char sccsid[] = "@(#)wwmisc.c	3.14 (Berkeley) 6/6/90";
 #endif /* not lint */
 
 #include "ww.h"
@@ -59,7 +53,7 @@ register struct ww *w;
 
 	for (i = w->ww_i.t; i < w->ww_i.b; i++)
 		nvis += w->ww_nvis[i];
-	if (ISSET(w->ww_wflags, WWW_HASCURSOR)
+	if (w->ww_hascursor
 	    && w->ww_cur.r >= w->ww_i.t && w->ww_cur.r < w->ww_i.b
 	    && w->ww_cur.c >= w->ww_i.l && w->ww_cur.c < w->ww_i.r
 	    && wwsmap[w->ww_cur.r][w->ww_cur.c] == w->ww_index)

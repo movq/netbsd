@@ -1,8 +1,6 @@
-/*	$NetBSD: refill.c,v 1.7 1997/07/13 20:15:22 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)refill.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: refill.c,v 1.7 1997/07/13 20:15:22 christos Exp $");
-#endif
+static char sccsid[] = "@(#)refill.c	5.3 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <errno.h>
@@ -50,14 +43,12 @@ __RCSID("$NetBSD: refill.c,v 1.7 1997/07/13 20:15:22 christos Exp $");
 #include <stdlib.h>
 #include "local.h"
 
-static int lflush __P((FILE *));
-
-static int
+static
 lflush(fp)
 	FILE *fp;
 {
 
-	if ((fp->_flags & (__SLBF|__SWR)) == (__SLBF|__SWR))
+	if ((fp->_flags & (__SLBF|__SWR)) == __SLBF|__SWR)
 		return (__sflush(fp));
 	return (0);
 }
@@ -66,7 +57,6 @@ lflush(fp)
  * Refill a stdio buffer.
  * Return EOF on eof or error, 0 otherwise.
  */
-int
 __srefill(fp)
 	register FILE *fp;
 {

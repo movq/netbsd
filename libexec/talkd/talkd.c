@@ -1,8 +1,6 @@
-/*	$NetBSD: talkd.c,v 1.7 1997/06/29 19:19:15 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1983 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)talkd.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: talkd.c,v 1.7 1997/06/29 19:19:15 christos Exp $");
-#endif
+static char sccsid[] = "@(#)talkd.c	5.8 (Berkeley) 2/26/91";
 #endif /* not lint */
 
 /*
@@ -55,8 +49,6 @@ __RCSID("$NetBSD: talkd.c,v 1.7 1997/06/29 19:19:15 christos Exp $");
  */
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/param.h>
-
 #include <protocols/talkd.h>
 #include <signal.h>
 #include <syslog.h>
@@ -67,37 +59,36 @@ __RCSID("$NetBSD: talkd.c,v 1.7 1997/06/29 19:19:15 christos Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <paths.h>
-#include "extern.h"
 
 CTL_MSG		request;
 CTL_RESPONSE	response;
 
-int	sockt = STDIN_FILENO;
+int	sockt;
 int	debug = 0;
+void	timeout();
 long	lastmsgtime;
 
-char	hostname[MAXHOSTNAMELEN + 1];
+char	hostname[32];
 
 #define TIMEOUT 30
 #define MAXIDLE 120
 
-static void timeout __P((int));
-int	main __P((int, char *[]));
-
-int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	CTL_MSG *mp = &request;
+	register CTL_MSG *mp = &request;
 	int cc;
 
+	if (getuid()) {
+		fprintf(stderr, "%s: getuid: not super-user", argv[0]);
+		exit(1);
+	}
 	openlog("talkd", LOG_PID, LOG_DAEMON);
 	if (gethostname(hostname, sizeof (hostname) - 1) < 0) {
 		syslog(LOG_ERR, "gethostname: %m");
 		_exit(1);
 	}
-	hostname[MAXHOSTNAMELEN] = '\0';  /* ensure null termination */
 	if (chdir(_PATH_DEV) < 0) {
 		syslog(LOG_ERR, "chdir: %s: %m", _PATH_DEV);
 		_exit(1);
@@ -127,8 +118,7 @@ main(argc, argv)
 }
 
 void
-timeout(n)
-	int n;
+timeout()
 {
 
 	if (time(0) - lastmsgtime >= MAXIDLE)

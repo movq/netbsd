@@ -1,8 +1,6 @@
-/*	$NetBSD: uuencode.c,v 1.8 1997/10/20 02:51:01 lukem Exp $	*/
-
-/*-
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+/*
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#endif /* not lint */
-
-#ifndef lint
-#if 0
-static char sccsid[] = "@(#)uuencode.c	8.2 (Berkeley) 4/2/94";
-#else
-__RCSID("$NetBSD: uuencode.c,v 1.8 1997/10/20 02:51:01 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)uuencode.c	5.9 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -54,38 +42,30 @@ __RCSID("$NetBSD: uuencode.c,v 1.8 1997/10/20 02:51:01 lukem Exp $");
  */
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <err.h>
-#include <errno.h>
-#include <locale.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 
-int	main __P((int, char **));
-static void encode __P((void));
-static void usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
+	extern int optind;
+	extern int errno;
 	struct stat sb;
 	int mode;
+	char *strerror();
 
-	mode = 0;
-	setlocale(LC_ALL, "");
-
-	while (getopt(argc, argv, "") != -1)
+	while (getopt(argc, argv, "") != EOF)
 		usage();
 	argv += optind;
 	argc -= optind;
 
 	switch(argc) {
 	case 2:			/* optional first argument is input file */
-		if (!freopen(*argv, "r", stdin) || fstat(fileno(stdin), &sb))
-			err(1, "%s", *argv);
+		if (!freopen(*argv, "r", stdin) || fstat(fileno(stdin), &sb)) {
+			(void)fprintf(stderr, "uuencode: %s: %s.\n",
+			    *argv, strerror(errno));
+			exit(1);
+		}
 #define	RWX	(S_IRWXU|S_IRWXG|S_IRWXO)
 		mode = sb.st_mode & RWX;
 		++argv;
@@ -102,8 +82,10 @@ main(argc, argv)
 	(void)printf("begin %o %s\n", mode, *argv);
 	encode();
 	(void)printf("end\n");
-	if (ferror(stdout))
-		err(1, "write error");
+	if (ferror(stdout)) {
+		(void)fprintf(stderr, "uuencode: write error.\n");
+		exit(1);
+	}
 	exit(0);
 }
 
@@ -113,14 +95,13 @@ main(argc, argv)
 /*
  * copy from in to out, encoding as you go along.
  */
-static void
 encode()
 {
-	int ch, n;
-	char *p;
+	register int ch, n;
+	register char *p;
 	char buf[80];
 
-	while ((n = fread(buf, 1, 45, stdin)) > 0) {
+	while (n = fread(buf, 1, 45, stdin)) {
 		ch = ENC(n);
 		if (putchar(ch) == EOF)
 			break;
@@ -129,11 +110,11 @@ encode()
 			ch = ENC(ch);
 			if (putchar(ch) == EOF)
 				break;
-			ch = ((*p << 4) & 060) | ((p[1] >> 4) & 017);
+			ch = (*p << 4) & 060 | (p[1] >> 4) & 017;
 			ch = ENC(ch);
 			if (putchar(ch) == EOF)
 				break;
-			ch = ((p[1] << 2) & 074) | ((p[2] >> 6) & 03);
+			ch = (p[1] << 2) & 074 | (p[2] >> 6) & 03;
 			ch = ENC(ch);
 			if (putchar(ch) == EOF)
 				break;
@@ -145,14 +126,15 @@ encode()
 		if (putchar('\n') == EOF)
 			break;
 	}
-	if (ferror(stdin))
-		err(1, "read error.");
+	if (ferror(stdin)) {
+		(void)fprintf(stderr, "uuencode: read error.\n");
+		exit(1);
+	}
 	ch = ENC('\0');
 	(void)putchar(ch);
 	(void)putchar('\n');
 }
 
-static void
 usage()
 {
 	(void)fprintf(stderr,"usage: uuencode [infile] remotefile\n");

@@ -1,8 +1,6 @@
-/*	$NetBSD: mille.c,v 1.6 1997/10/12 00:54:07 lukem Exp $	*/
-
 /*
- * Copyright (c) 1982, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1982, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1982 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)mille.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: mille.c,v 1.6 1997/10/12 00:54:07 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)mille.c	5.5 (Berkeley) 2/28/91";
 #endif /* not lint */
 
 # include	"mille.h"
@@ -57,12 +51,13 @@ __RCSID("$NetBSD: mille.c,v 1.6 1997/10/12 00:54:07 lukem Exp $");
  * @(#)mille.c	1.3 (Berkeley) 5/10/83
  */
 
-int
+void	rub();
+
 main(ac, av)
-	int	ac;
-	char	*av[];
-{
-	bool	restore;
+reg int		ac;
+reg char	*av[]; {
+
+	reg bool	restore;
 
 	/* run as the user */
 	setuid(getuid());
@@ -86,6 +81,13 @@ main(ac, av)
 	}
 	Play = PLAYER;
 	initscr();
+# ifdef attron
+#	define	CA	cursor_address
+# endif
+	if (!CA) {
+		printf("Sorry.  Need cursor addressing to play mille\n");
+		exit(-1);
+	}
 	delwin(stdscr);
 	stdscr = Board = newwin(BOARD_Y, BOARD_X, 0, 0);
 	Score = newwin(SCORE_Y, SCORE_X, 0, 40);
@@ -145,27 +147,24 @@ main(ac, av)
  * quit.
  */
 void
-rub(dummy)
-	int dummy;
-{
+rub() {
+
 	(void)signal(SIGINT, SIG_IGN);
 	if (getyn(REALLYPROMPT))
-		die(0);
+		die();
 	(void)signal(SIGINT, rub);
 }
 
 /*
  *	Time to go beddy-by
  */
-void
-die(code)
-	int code;
-{
+die() {
 
 	(void)signal(SIGINT, SIG_IGN);
 	if (outf)
 		fflush(outf);
 	mvcur(0, COLS - 1, LINES - 1, 0);
 	endwin();
-	exit(code);
+	exit(1);
 }
+

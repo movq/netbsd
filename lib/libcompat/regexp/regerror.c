@@ -1,8 +1,3 @@
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: regerror.c,v 1.4 1997/10/09 10:21:11 lukem Exp $");
-#endif /* not lint */
-
 #include <regexp.h>
 #include <stdio.h>
 

@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Sze-Tyan Wang.
@@ -34,12 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)misc.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: misc.c,v 1.4 1997/10/19 23:45:09 lukem Exp $");
+static char sccsid[] = "@(#)misc.c	5.1 (Berkeley) 7/21/91";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -54,13 +50,13 @@ __RCSID("$NetBSD: misc.c,v 1.4 1997/10/19 23:45:09 lukem Exp $");
 void
 ierr()
 {
-	err(0, "%s: %s", fname, strerror(errno));
+	err("%s: %s", fname, strerror(errno));
 }
 
 void
 oerr()
 {
-	err(1, "stdout: %s", strerror(errno));
+	err("stdout: %s", strerror(errno));
 }
 
 #if __STDC__
@@ -71,10 +67,9 @@ oerr()
 
 void
 #if __STDC__
-err(int fatal, const char *fmt, ...)
+err(const char *fmt, ...)
 #else
-err(fatal, fmt, va_alist)
-	int fatal;
+err(fmt, va_alist)
 	char *fmt;
 	va_dcl
 #endif
@@ -89,7 +84,6 @@ err(fatal, fmt, va_alist)
 	(void)vfprintf(stderr, fmt, ap);
 	va_end(ap);
 	(void)fprintf(stderr, "\n");
-	if (fatal)
-		exit(1);
-	rval = 1;
+	exit(1);
+	/* NOTREACHED */
 }

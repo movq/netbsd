@@ -1,5 +1,3 @@
-/*	$NetBSD: strdup.c,v 1.7 1997/07/13 20:24:25 christos Exp $	*/
-
 /*
  * Copyright (c) 1988 The Regents of the University of California.
  * All rights reserved.
@@ -33,15 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "@(#)strdup.c	5.4 (Berkeley) 2/24/91";
-#else
-__RCSID("$NetBSD: strdup.c,v 1.7 1997/07/13 20:24:25 christos Exp $");
-#endif
+static char sccsid[] = "@(#)strdup.c	5.4 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -49,12 +43,12 @@ char *
 strdup(str)
 	const char *str;
 {
-	size_t len;
+	int len;
 	char *copy;
 
 	len = strlen(str) + 1;
-	if (!(copy = malloc(len)))
+	if (!(copy = malloc((u_int)len)))
 		return((char *)NULL);
-	memcpy(copy, str, len);
+	bcopy(str, copy, len);
 	return(copy);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: exec.h,v 1.13 1997/07/20 21:27:37 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)exec.h	8.3 (Berkeley) 6/8/95
+ *	@(#)exec.h	5.1 (Berkeley) 3/7/91
  */
 
 /* values of cmdtype */
@@ -54,22 +52,24 @@ struct cmdentry {
 };
 
 
-#define DO_ERR	1		/* find_command prints errors */
-#define DO_ABS	2		/* find_command checks absolute paths */
-
 extern char *pathopt;		/* set by padvance */
-extern int exerrno;		/* last exec error */
 
-void shellexec __P((char **, char **, char *, int));
-char *padvance __P((char **, char *));
-int hashcmd __P((int, char **));
-void find_command __P((char *, struct cmdentry *, int, char *));
-int find_builtin __P((char *));
-void hashcd __P((void));
-void changepath __P((const char *));
-void deletefuncs __P((void));
-void getcmdentry __P((char *, struct cmdentry *));
-void addcmdentry __P((char *, struct cmdentry *));
-void defun __P((char *, union node *));
-int unsetfunc __P((char *));
-int typecmd __P((int, char **));
+#ifdef __STDC__
+void shellexec(char **, char **, char *, int);
+char *padvance(char **, char *);
+void find_command(char *, struct cmdentry *, int);
+int find_builtin(char *);
+void hashcd(void);
+void changepath(char *);
+void defun(char *, union node *);
+void unsetfunc(char *);
+#else
+void shellexec();
+char *padvance();
+void find_command();
+int find_builtin();
+void hashcd();
+void changepath();
+void defun();
+void unsetfunc();
+#endif

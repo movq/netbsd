@@ -1,11 +1,11 @@
-#	$NetBSD: Makefile,v 1.5 1997/10/08 09:07:21 mrg Exp $
 #	from: @(#)Makefile	8.1 (Berkeley) 6/5/93
+#	$Id: Makefile,v 1.1 1994/06/08 18:42:09 mycroft Exp $
 
 PROG=	lfs_cleanerd
-CFLAGS+=-I${.CURDIR} -DDIAGNOSTIC
-MAN=	lfs_cleanerd.8
+CFLAGS+=-I/sys/ufs/lfs -I${.CURDIR} -DDIAGNOSTIC
+MAN8=	lfs_cleanerd.0
 SRCS=	cleanerd.c lfs_cksum.c library.c misc.c print.c
 
-.PATH:	${.CURDIR}/../../sys/ufs/lfs
+.PATH:	/sys/ufs/lfs
 
 .include <bsd.prog.mk>

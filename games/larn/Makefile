@@ -1,13 +1,9 @@
-#	$NetBSD: Makefile,v 1.12 1997/10/18 20:03:05 christos Exp $
-#	@(#)Makefile	5.12 (Berkeley) 5/30/93
+#	@(#)Makefile	5.9 (Berkeley) 7/25/90
 
 # EXTRA
 #	Incorporates code to gather additional performance statistics
-#
-# TERMIO
-#	Use sysv termio
-# TERMIOS
-#	Use posix termios
+# SYSV
+#	Use system III/V (instead of V7) type ioctl calls
 # BSD
 #	Use BSD specific features (mostly timer and signal stuff)
 # BSD4.1
@@ -56,16 +52,18 @@
 #	Turn off logging.
 
 PROG=	larn
-MAN=	larn.6
-CFLAGS+=-DBSD -DVER=12 -DSUBVER=0 -DNONAP -DUIDSCORE -DTERMIOS
+MAN6=	larn.0
+CFLAGS+=-DBSD -DVER=12 -DSUBVER=0 -DNONAP
 SRCS=	main.c object.c create.c tok.c display.c global.c data.c io.c \
 	monster.c store.c diag.c help.c config.c nap.c bill.c scores.c \
 	signal.c moreobj.c movem.c regen.c fortune.c savelev.c
-DPADD=	${LIBTERM}
-LDADD=	-ltermcap
+DPADD=	${LIBTERM} ${LIBCOMPAT}
+LDADD=	-ltermcap -lcompat
 HIDEGAME=hidegame
-DAT=larnmaze larnopts larn.help
-FILES=${DAT:S@^@${.CURDIR}/datfiles/@g}
-FILESDIR=/usr/share/games/larn
+
+beforeinstall:
+	(cd ${.CURDIR}/datfiles; install -c -o ${BINOWN} -g ${BINGRP} -m 444 \
+	    larnmaze larnopts lfortune larn.help \
+	    ${DESTDIR}/usr/share/games/larn)
 
 .include <bsd.prog.mk>

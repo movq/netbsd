@@ -1,8 +1,6 @@
-/*	$NetBSD: setup.c,v 1.5 1997/10/12 21:25:15 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,22 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)setup.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: setup.c,v 1.5 1997/10/12 21:25:15 christos Exp $");
-#endif
+static char sccsid[] = "@(#)setup.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <math.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <err.h>
-#include "trek.h"
-#include "getpar.h"
+# include	"trek.h"
+# include	"getpar.h"
 
 /*
 **  INITIALIZE THE GAME
@@ -63,40 +51,40 @@ __RCSID("$NetBSD: setup.c,v 1.5 1997/10/12 21:25:15 christos Exp $");
 
 struct cvntab	Lentab[] =
 {
-	{ "s",		"hort",		(cmdfun)1,	0 },
-	{ "m",		"edium",	(cmdfun)2,	0 },
-	{ "l",		"ong",		(cmdfun)4,	0 },
-	{ "restart",	"",		(cmdfun)0,	0 },
-	{ NULL,		NULL,		NULL,		0 }
+	"s",		"hort",			(int (*)())1,		0,
+	"m",		"edium",		(int (*)())2,		0,
+	"l",		"ong",			(int (*)())4,		0,
+	"restart",	"",			0,		0,
+	0
 };
 
 struct cvntab	Skitab[] =
 {
-	{ "n",		"ovice",	(cmdfun)1,	0 },
-	{ "f",		"air",		(cmdfun)2,	0 },
-	{ "g",		"ood",		(cmdfun)3,	0 },
-	{ "e",		"xpert",	(cmdfun)4,	0 },
-	{ "c",		"ommodore",	(cmdfun)5,	0 },
-	{ "i",		"mpossible",	(cmdfun)6,	0 },
-	{ NULL,		NULL,		NULL,		0 }
+	"n",		"ovice",		(int (*)())1,		0,
+	"f",		"air",			(int (*)())2,		0,
+	"g",		"ood",			(int (*)())3,		0,
+	"e",		"xpert",		(int (*)())4,		0,
+	"c",		"ommodore",		(int (*)())5,		0,
+	"i",		"mpossible",		(int (*)())6,		0,
+	0
 };
 
-void
 setup()
 {
 	struct cvntab		*r;
-	int		i, j;
+	register int		i, j;
 	double			f;
 	int			d;
+	int			fd;
 	int			klump;
 	int			ix, iy;
-	struct quad	*q;
+	register struct quad	*q;
 	struct event		*e;
 
 	while (1)
 	{
 		r = getcodpar("What length game", Lentab);
-		Game.length = (long) r->value;
+		Game.length = (int) r->value;
 		if (Game.length == 0)
 		{
 			if (restartgame())
@@ -106,10 +94,10 @@ setup()
 		break;
 	}
 	r = getcodpar("What skill game", Skitab);
-	Game.skill = (long) r->value;
+	Game.skill = (int) r->value;
 	Game.tourn = 0;
 	getstrpar("Enter a password", Game.passwd, 14, 0);
-	if (strcmp(Game.passwd, "tournament") == 0)
+	if (sequal(Game.passwd, "tournament"))
 	{
 		getstrpar("Enter tournament code", Game.passwd, 14, 0);
 		Game.tourn = 1;
@@ -171,7 +159,7 @@ setup()
 	for (i = j = 0; i < NDEV; i++)
 		j += Param.damprob[i];
 	if (j != 1000)
-		errx(1, "Device probabilities sum to %d", j);
+		syserr("Device probabilities sum to %d", j);
 	Param.dockfac = 0.5;
 	Param.regenfac = (5 - Game.skill) * 0.05;
 	if (Param.regenfac < 0.0)

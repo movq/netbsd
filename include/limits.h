@@ -1,5 +1,3 @@
-/*	$NetBSD: limits.h,v 1.8 1996/10/21 05:10:50 jtc Exp $	*/
-
 /*
  * Copyright (c) 1988 The Regents of the University of California.
  * All rights reserved.
@@ -38,7 +36,6 @@
 #ifndef _LIMITS_H_
 #define	_LIMITS_H_
 
-#if !defined(_ANSI_SOURCE)
 #define	_POSIX_ARG_MAX		4096
 #define	_POSIX_CHILD_MAX	6
 #define	_POSIX_LINK_MAX		8
@@ -48,31 +45,16 @@
 #define	_POSIX_NGROUPS_MAX	0
 #define	_POSIX_OPEN_MAX		16
 #define	_POSIX_PATH_MAX		255
-#define _POSIX_PIPE_BUF		512
-#define _POSIX_SSIZE_MAX	32767
-#define _POSIX_STREAM_MAX	8
-#define _POSIX_TZNAME_MAX	3
+#define	_POSIX_PIPE_BUF		512
 
 #define	_POSIX2_BC_BASE_MAX	99
 #define	_POSIX2_BC_DIM_MAX	2048
 #define	_POSIX2_BC_SCALE_MAX	99
 #define	_POSIX2_BC_STRING_MAX	1000
-#define	_POSIX2_COLL_WEIGHTS_MAX	2
+#define	_POSIX2_EQUIV_CLASS_MAX	2
 #define	_POSIX2_EXPR_NEST_MAX	32
 #define	_POSIX2_LINE_MAX	2048
 #define	_POSIX2_RE_DUP_MAX	255
-#endif /* !_ANSI_SOURCE */
-
-#if (!defined(_ANSI_SOURCE)&&!defined(_POSIX_SOURCE)) || defined(_XOPEN_SOURCE)
-#define PASS_MAX		128
-
-#define NL_ARGMAX		9
-#define NL_LANGMAX		14
-#define NL_MSGMAX		32767
-#define NL_NMAX			1
-#define NL_SETMAX		255
-#define NL_TEXTMAX		255
-#endif 
 
 #include <machine/limits.h>
 #include <sys/syslimits.h>

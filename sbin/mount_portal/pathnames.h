@@ -1,8 +1,7 @@
-/*	$NetBSD: pathnames.h,v 1.4 1995/04/23 10:33:21 cgd Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ * All rights reserved.
  *
  * This code is derived from software donated to Berkeley by
  * Jan-Simon Pendry.
@@ -35,8 +34,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: pathnames.h,v 1.2 1992/05/27 07:09:27 jsp Exp
- *	@(#)pathnames.h	8.1 (Berkeley) 6/5/93
+ *	from: Id: pathnames.h,v 1.2 1992/05/27 07:09:27 jsp Exp jsp
+ *	from: @(#)pathnames.h	8.1 (Berkeley) 6/5/93
+ *	$Id: pathnames.h,v 1.1 1994/01/12 20:01:48 cgd Exp $
  */
 
 #include <paths.h>

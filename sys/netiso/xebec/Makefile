@@ -1,4 +1,3 @@
-#	$NetBSD: Makefile,v 1.5 1994/06/29 06:40:59 cgd Exp $
 #	@(#)Makefile	5.16 (Berkeley) 4/26/91
 
 PROG=	xebec

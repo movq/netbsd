@@ -1,10 +1,6 @@
-/*	$NetBSD: def.flag.h,v 1.4 1997/10/19 16:56:56 christos Exp $	*/
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985. */
+/* def.flag.h - version 1.0.3 */
 
-/*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
- */
-#ifndef _DEF_FLAG_H_
-#define _DEF_FLAG_H_
 struct flag {
 	unsigned ident;		/* social security number for each monster */
 	unsigned debug:1;	/* in debugging mode */
@@ -44,4 +40,3 @@ struct flag {
 
 extern struct flag flags;
 
-#endif /* _DEF_FLAG_H_ */

@@ -1,9 +1,6 @@
-/*	$NetBSD: nlist.c,v 1.12 1997/07/21 14:07:21 jtc Exp $	*/
-
 /*
- * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,74 +31,92 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)nlist.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: nlist.c,v 1.12 1997/07/21 14:07:21 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)nlist.c	5.8 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
-#include <sys/param.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/file.h>
-
-#include <errno.h>
+#include <a.out.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <a.out.h>			/* for 'struct nlist' declaration */
 
-#ifdef __weak_alias
-__weak_alias(nlist,_nlist);
-#endif
+typedef struct nlist NLIST;
+#define	_strx	n_un.n_strx
+#define	_name	n_un.n_name
+#define	ISVALID(p)	(p->_name && p->_name[0])
 
-#include "nlist_private.h"
-
-static struct {
-	int	(*fdnlist) __P((int, struct nlist *));
-} fdnlist_fmts[] = {
-#ifdef NLIST_AOUT
-	{	__fdnlist_aout		},
-#endif
-#ifdef NLIST_ECOFF
-	{	__fdnlist_ecoff		},
-#endif
-#ifdef NLIST_ELF32
-	{	__fdnlist_elf32		},
-#endif
-#ifdef NLIST_ELF64
-	{	__fdnlist_elf64		},
-#endif
-};
-	
 int
 nlist(name, list)
 	const char *name;
-	struct nlist *list;
+	NLIST *list;
 {
-	int fd, n;
+	register NLIST *p, *s;
+	struct exec ebuf;
+	FILE *fstr, *fsym;
+	NLIST nbuf;
+	off_t strings_offset, symbol_offset, symbol_size, lseek();
+	int entries, len, maxlen;
+	char sbuf[256];
 
-	fd = open(name, O_RDONLY, 0);
-	if (fd < 0)
-		return (-1);
-	n = __fdnlist(fd, list);
-	(void)close(fd);
-	return (n);
-}
+	entries = -1;
 
-int
-__fdnlist(fd, list)
-	int fd;
-	struct nlist *list;
-{
-	int i, rv;
+	if (!(fsym = fopen(name, "r")))
+		return(-1);
+	if (fread((char *)&ebuf, sizeof(struct exec), 1, fsym) != 1 ||
+	    N_BADMAG(ebuf))
+		goto done1;
 
-	for (i = 0; i < sizeof(fdnlist_fmts) / sizeof(fdnlist_fmts[0]); i++)
-		if ((rv = (*fdnlist_fmts[i].fdnlist)(fd, list)) != -1)
-			return rv;
-	return -1;
+	symbol_offset = N_SYMOFF(ebuf);
+	symbol_size = ebuf.a_syms;
+	strings_offset = symbol_offset + symbol_size;
+	if (fseek(fsym, symbol_offset, SEEK_SET))
+		goto done1;
+
+	if (!(fstr = fopen(name, "r")))
+		goto done1;
+
+	/*
+	 * clean out any left-over information for all valid entries.
+	 * Type and value defined to be 0 if not found; historical
+	 * versions cleared other and desc as well.  Also figure out
+	 * the largest string length so don't read any more of the
+	 * string table than we have to.
+	 */
+	for (p = list, entries = maxlen = 0; ISVALID(p); ++p, ++entries) {
+		p->n_type = 0;
+		p->n_other = 0;
+		p->n_desc = 0;
+		p->n_value = 0;
+		if ((len = strlen(p->_name)) > maxlen)
+			maxlen = len;
+	}
+	if (++maxlen > sizeof(sbuf)) {		/* for the NULL */
+		(void)fprintf(stderr, "nlist: symbol too large.\n");
+		entries = -1;
+		goto done2;
+	}
+
+	for (s = &nbuf; symbol_size; symbol_size -= sizeof(NLIST)) {
+		if (fread((char *)s, sizeof(NLIST), 1, fsym) != 1)
+			goto done2;
+		if (!s->_strx || s->n_type&N_STAB)
+			continue;
+		if (fseek(fstr, strings_offset + s->_strx, SEEK_SET))
+			goto done2;
+		(void)fread(sbuf, sizeof(sbuf[0]), maxlen, fstr);
+		for (p = list; ISVALID(p); p++)
+			if (!strcmp(p->_name, sbuf)) {
+				p->n_value = s->n_value;
+				p->n_type = s->n_type;
+				p->n_desc = s->n_desc;
+				p->n_other = s->n_other;
+				if (!--entries)
+					goto done2;
+			}
+	}
+done2:	(void)fclose(fstr);
+done1:	(void)fclose(fsym);
+	return(entries);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: hsearch.c,v 1.11 1997/07/13 18:52:07 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Margo Seltzer.
@@ -36,79 +34,82 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)hsearch.c	8.4 (Berkeley) 7/21/94";
-#else
-__RCSID("$NetBSD: hsearch.c,v 1.11 1997/07/13 18:52:07 christos Exp $");
-#endif
+static char sccsid[] = "@(#)hsearch.c	5.5 (Berkeley) 3/12/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
-
 #include <fcntl.h>
 #include <string.h>
-
 #include <db.h>
 #include "search.h"
 
-static DB *dbp = NULL;
-static ENTRY retval;
+static	DB	*dbp = NULL;
+static	ENTRY	retval;
 
-extern int
-hcreate(nel)
-	u_int nel;
+extern	int
+hcreate ( nel )
+unsigned	nel;
 {
-	HASHINFO info;
+    int	status;
+    HASHINFO	info;
 
-	info.nelem = nel;
-	info.bsize = 256;
-	info.ffactor = 8;
-	info.cachesize = 0;
-	info.hash = NULL;
-	info.lorder = 0;
-	dbp = (DB *)__hash_open(NULL, O_CREAT | O_RDWR, 0600, &info, 0);
-	return (dbp != NULL);
+    info.nelem = nel;
+    info.bsize = 256;
+    info.ffactor = 8;
+    info.cachesize = NULL;
+    info.hash = NULL;
+    info.lorder = 0;
+    dbp = hash_open ( NULL, O_CREAT|O_RDWR, 0600, &info );
+    return ( (int) dbp );
 }
 
-extern ENTRY *
-hsearch(item, action)
-	ENTRY item;
-	ACTION action;
+
+extern ENTRY	*
+hsearch ( item, action )
+ENTRY	item;
+ACTION	action;
 {
-	DBT key, val;
-	int status;
+    int	status;
+    DBT	key, val;
 
-	if (!dbp)
-		return (NULL);
-	key.data = (u_char *)item.key;
-	key.size = strlen(item.key) + 1;
+    if ( !dbp ) {
+	return(NULL);
+    }
 
-	if (action == ENTER) {
-		val.data = (u_char *)item.data;
-		val.size = strlen(item.data) + 1;
-		status = (dbp->put)(dbp, &key, &val, R_NOOVERWRITE);
-		if (status)
-			return (NULL);
+    key.data = (u_char *)item.key;
+    key.size = strlen(item.key) + 1;
+
+    if ( action == ENTER ) {
+	val.data = (u_char *)item.data;
+	val.size = strlen(item.data) + 1;
+	status = (dbp->put) ( dbp, &key, &val, R_NOOVERWRITE );
+	if ( status ) {
+	    return(NULL);
+	} 
+    } else {
+	/* FIND */
+	status = (dbp->get) ( dbp, &key, &val, 0 );
+	if ( status ) {
+	    return ( NULL );
 	} else {
-		/* FIND */
-		status = (dbp->get)(dbp, &key, &val, 0);
-		if (status)
-			return (NULL);
-		else
-			item.data = (char *)val.data;
+	    item.data = (char *)val.data;
 	}
-	retval.key = item.key;
-	retval.data = item.data;
-	return (&retval);
+    }
+    retval.key = item.key;
+    retval.data = item.data;
+    return ( &retval );
 }
+
 
 extern void
-hdestroy()
+hdestroy ()
 {
-	if (dbp) {
-		(void)(dbp->close)(dbp);
-		dbp = NULL;
-	}
+    if (dbp) {
+	(void)(dbp->close) (dbp);
+	dbp = NULL;
+    }
+    return;
 }
+
+

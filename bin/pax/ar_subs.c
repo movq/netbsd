@@ -1,5 +1,3 @@
-/*	$NetBSD: ar_subs.c,v 1.7 1997/07/20 20:32:18 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992 Keith Muller.
  * Copyright (c) 1992, 1993
@@ -37,13 +35,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)ar_subs.c	8.2 (Berkeley) 4/18/94";
-#else
-__RCSID("$NetBSD: ar_subs.c,v 1.7 1997/07/20 20:32:18 christos Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -61,9 +54,9 @@ __RCSID("$NetBSD: ar_subs.c,v 1.7 1997/07/20 20:32:18 christos Exp $");
 #include "pax.h"
 #include "extern.h"
 
-static void wr_archive __P((ARCHD *, int is_app));
+static void wr_archive __P((register ARCHD *, int is_app));
 static int get_arc __P((void));
-static int next_head __P((ARCHD *));
+static int next_head __P((register ARCHD *));
 extern sigset_t s_mask;
 
 /*
@@ -88,8 +81,8 @@ void
 list()
 #endif
 {
-	ARCHD *arcn;
-	int res;
+	register ARCHD *arcn;
+	register int res;
 	ARCHD archd;
 	time_t now;
 
@@ -170,8 +163,8 @@ void
 extract()
 #endif
 {
-	ARCHD *arcn;
-	int res;
+	register ARCHD *arcn;
+	register int res;
 	off_t cnt;
 	ARCHD archd;
 	struct stat sb;
@@ -352,19 +345,19 @@ extract()
 
 #if __STDC__
 static void
-wr_archive(ARCHD *arcn, int is_app)
+wr_archive(register ARCHD *arcn, int is_app)
 #else
 static void
 wr_archive(arcn, is_app)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 	int is_app;
 #endif
 {
-	int res;
-	int hlk;
-	int wr_one;
+	register int res;
+	register int hlk;
+	register int wr_one;
 	off_t cnt;
-	int (*wrf) __P((ARCHD *));
+	int (*wrf)();
 	int fd = -1;
 
 	/*
@@ -561,8 +554,8 @@ void
 append()
 #endif
 {
-	ARCHD *arcn;
-	int res;
+	register ARCHD *arcn;
+	register int res;
 	ARCHD archd;
 	FSUB *orgfrmt;
 	int udev;
@@ -578,7 +571,7 @@ append()
 	if (get_arc() < 0)
 		return;
 	if ((orgfrmt != NULL) && (orgfrmt != frmt)) {
-		tty_warn(1, "Cannot mix current archive format %s with %s",
+		warn(1, "Cannot mix current archive format %s with %s",
 		    frmt->name, orgfrmt->name);
 		return;
 	}
@@ -733,12 +726,12 @@ void
 copy()
 #endif
 {
-	ARCHD *arcn;
-	int res;
-	int fddest;
-	char *dest_pt;
-	int dlen;
-	int drem;
+	register ARCHD *arcn;
+	register int res;
+	register int fddest;
+	register char *dest_pt;
+	register int dlen;
+	register int drem;
 	int fdsrc = -1;
 	struct stat sb;
 	ARCHD archd;
@@ -764,7 +757,7 @@ copy()
 		return;
 	}
 	if (!S_ISDIR(sb.st_mode)) {
-		tty_warn(1, "Destination is not a directory %s", dirptr);
+		warn(1, "Destination is not a directory %s", dirptr);
 		return;
 	}
 
@@ -818,7 +811,7 @@ copy()
 			else
 				res = 0;
 			if ((arcn->nlen - res) > drem) {
-				tty_warn(1, "Destination pathname too long %s",
+				warn(1, "Destination pathname too long %s",
 					arcn->name);
 				continue;
 			}
@@ -979,19 +972,19 @@ copy()
 
 #if __STDC__
 static int
-next_head(ARCHD *arcn)
+next_head(register ARCHD *arcn)
 #else
 static int
 next_head(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
-	int ret;
-	char *hdend;
-	int res;
-	int shftsz;
-	int hsz;
-	int in_resync = 0; 	/* set when we are in resync mode */
+	register int ret;
+	register char *hdend;
+	register int res;
+	register int shftsz;
+	register int hsz;
+	register int in_resync = 0; 	/* set when we are in resync mode */
 	int cnt = 0;			/* counter for trailer function */
 	
 	/*
@@ -1015,18 +1008,16 @@ next_head(arcn)
 			 * storage device, better give the user the bad news.
 			 */
 			if ((ret == 0) || (rd_sync() < 0)) {
-				tty_warn(1,
-				    "Premature end of file on archive read");
+				warn(1,"Premature end of file on archive read");
 				return(-1);
 			}
 			if (!in_resync) {
 				if (act == APPND) {
-					tty_warn(1,
+					warn(1,
 				          "Archive I/O error, cannot continue");
 					return(-1);
 				}
-				tty_warn(1,
-				    "Archive I/O error. Trying to recover.");
+				warn(1,"Archive I/O error. Trying to recover.");
 				++in_resync;
 			}
 
@@ -1087,15 +1078,13 @@ next_head(arcn)
 		 */
 		if (!in_resync) {
 			if (act == APPND) {
-				tty_warn(1,
-				    "Unable to append, archive header flaw");
+				warn(1,"Unable to append, archive header flaw");
 				return(-1);
 			}
-			tty_warn(1,
-			    "Invalid header, starting valid header search.");
+			warn(1,"Invalid header, starting valid header search.");
 			++in_resync;
 		}
-		memmove(hdbuf, hdbuf+1, shftsz);
+		bcopy(hdbuf+1, hdbuf, shftsz);
 		res = 1;
 		hdend = hdbuf + shftsz;
 	}
@@ -1105,7 +1094,7 @@ next_head(arcn)
 	 * the header. NOTE: the parameters are different than trailer routines
 	 * which encode trailers outside of the header!
 	 */
-	if (frmt->inhead && ((*frmt->subtrail)(arcn) == 0)) {
+	if (frmt->inhead && ((*frmt->trail)(arcn) == 0)) {
 		/*
 		 * valid trailer found, drain input as required
 		 */
@@ -1135,10 +1124,10 @@ static int
 get_arc()
 #endif
 {
-	int i;
-	int hdsz = 0;
-	int res;
-	int minhd = BLKMULT;
+	register int i;
+	register int hdsz = 0;
+	register int res;
+	register int minhd = BLKMULT;
 	char *hdend;
 	int notice = 0;
 	
@@ -1184,8 +1173,7 @@ get_arc()
 			if (!notice) {
 				if (act == APPND)
 					return(-1);
-				tty_warn(1,
-				    "Cannot identify format. Searching...");
+				warn(1,"Cannot identify format. Searching...");
 				++notice;
 			}
 		}
@@ -1220,7 +1208,7 @@ get_arc()
 		if (!notice) {
 			if (act == APPND)
 				return(-1);
-			tty_warn(1, "Cannot identify format. Searching...");
+			warn(1, "Cannot identify format. Searching...");
 			++notice;
 		}
 
@@ -1231,7 +1219,7 @@ get_arc()
 		 * portable manner
 		 */
 		if (--hdsz > 0) {
-			memmove(hdbuf, hdbuf+1, hdsz);
+			bcopy(hdbuf+1, hdbuf, hdsz);
 			res = BLKMULT - hdsz;
 			hdend = hdbuf + hdsz;
 		} else {
@@ -1245,6 +1233,6 @@ get_arc()
 	/*
 	 * we cannot find a header, bow, apologize and quit
 	 */
-	tty_warn(1, "Sorry, unable to determine archive format.");
+	warn(1, "Sorry, unable to determine archive format.");
 	return(-1);
 }

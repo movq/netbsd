@@ -1,7 +1,6 @@
-.\"	$NetBSD: mount_cd9660.8,v 1.4 1997/09/15 04:27:38 lukem Exp $
-.\"
 .\" Copyright (c) 1993, 1994
 .\"     The Regents of the University of California.  All rights reserved.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software donated to Berkeley by
 .\" Christopher G. Demetriou.
@@ -34,7 +33,8 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)mount_cd9660.8	8.3 (Berkeley) 3/27/94
+.\"     from: @(#)mount_cd9660.8	8.3 (Berkeley) 3/27/94
+.\"	$Id: mount_cd9660.8,v 1.1 1994/06/08 19:07:36 mycroft Exp $
 .\"
 .Dd March 27, 1994
 .Dt MOUNT_CD9660 8
@@ -43,13 +43,13 @@
 .Nm mount_cd9660
 .Nd mount an ISO-9660 filesystem
 .Sh SYNOPSIS
-.Nm
+.Nm mount_cd9660
 .Op Fl egr
 .Op Fl o Ar options
 .Ar special | node
 .Sh DESCRIPTION
 The
-.Nm
+.Nm mount_cd9660
 command attaches the ISO-9660 filesystem residing on the device
 .Pa special
 to the global filesystem namespace at the location indicated by
@@ -97,5 +97,5 @@ the one with the highest.
 There is no ECMA support.
 .Sh HISTORY
 The
-.Nm
+.Nm mount_cd9660
 utility first appeared 4.4BSD.

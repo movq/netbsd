@@ -1,8 +1,6 @@
-/*	$NetBSD: cards.c,v 1.4 1997/10/12 17:45:07 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cards.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: cards.c,v 1.4 1997/10/12 17:45:07 christos Exp $");
-#endif
+static char sccsid[] = "@(#)cards.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include	"monop.ext"
@@ -59,16 +52,11 @@ static char	*cardfile	= "cards.pck";
 
 static FILE	*deckf;
 
-static void set_up __P((DECK *));
-static void printmes __P((void));
-
 /*
  *	This routine initializes the decks from the data file,
  * which it opens.
  */
-void
-init_decks()
-{
+init_decks() {
 
 	if ((deckf=fopen(cardfile, "r")) == NULL) {
 file_err:
@@ -83,11 +71,10 @@ file_err:
 /*
  *	This routine sets up the offset pointers for the given deck.
  */
-static void
 set_up(dp)
 DECK	*dp; {
 
-	int	r1, r2;
+	reg int	r1, r2;
 	int	i;
 
 	dp->offsets = (long *) calloc(sizeof (long), dp->num_cards);
@@ -98,7 +85,7 @@ DECK	*dp; {
 	dp->last_card = 0;
 	dp->gojf_used = FALSE;
 	for (i = 0; i < dp->num_cards; i++) {
-		long	temp;
+		reg long	temp;
 
 		r1 = roll(1, dp->num_cards) - 1;
 		r2 = roll(1, dp->num_cards) - 1;
@@ -110,13 +97,11 @@ DECK	*dp; {
 /*
  *	This routine draws a card from the given deck
  */
-void
 get_card(dp)
-DECK	*dp;
-{
+DECK	*dp; {
 
-	char	type_maj, type_min;
-	int		num;
+	reg char	type_maj, type_min;
+	reg int		num;
 	int		i, per_h, per_H, num_h, num_H;
 	OWN		*op;
 
@@ -207,14 +192,12 @@ DECK	*dp;
 	}
 	spec = FALSE;
 }
-
 /*
  *	This routine prints out the message on the card
  */
-static void
 printmes() {
 
-	char	c;
+	reg char	c;
 
 	printline();
 	fflush(stdout);

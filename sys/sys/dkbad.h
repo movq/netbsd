@@ -1,8 +1,6 @@
-/*	$NetBSD: dkbad.h,v 1.10 1994/12/25 13:14:21 pk Exp $	*/
-
 /*-
- * Copyright (c) 1982, 1986, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,11 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)dkbad.h	8.2 (Berkeley) 7/10/94
+ *	@(#)dkbad.h	7.2 (Berkeley) 2/15/91
  */
-
-#ifndef _SYS_DKBAD_H_
-#define _SYS_DKBAD_H_
 
 /*
  * Definitions needed to perform bad sector revectoring ala DEC STD 144.
@@ -58,12 +53,12 @@
  * replacement sectors.
  */
 struct dkbad {
-	int32_t   bt_csn;		/* cartridge serial number */
-	u_int16_t bt_mbz;		/* unused; should be 0 */
-	u_int16_t bt_flag;		/* -1 => alignment cartridge */
+	long bt_csn;			/* cartridge serial number */
+	u_short bt_mbz;			/* unused; should be 0 */
+	u_short bt_flag;		/* -1 => alignment cartridge */
 	struct bt_bad {
-		u_int16_t bt_cyl;	/* cylinder number of bad sector */
-		u_int16_t bt_trksec;	/* track and sector number */
+		u_short bt_cyl;		/* cylinder number of bad sector */
+		u_short bt_trksec;	/* track and sector number */
 	} bt_bad[126];
 };
 
@@ -71,5 +66,3 @@ struct dkbad {
 #define	SSE	1
 #define	BSE	2
 #define	CONT	3
-
-#endif /* _SYS_DKBAD_H_ */

@@ -1,8 +1,6 @@
-/*	$NetBSD: ns_error.h,v 1.7 1997/07/18 19:30:38 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1984, 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1984, 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ns_error.h	8.1 (Berkeley) 6/10/93
+ *	@(#)ns_error.h	7.5 (Berkeley) 6/28/90
  */
 
 /*
@@ -40,11 +38,11 @@
  */
 
 struct ns_errp {
-	u_int16_t	ns_err_num;		/* Error Number */
-	u_int16_t	ns_err_param;		/* Error Parameter */
+	u_short		ns_err_num;		/* Error Number */
+	u_short		ns_err_param;		/* Error Parameter */
 	struct idp	ns_err_idp;		/* Initial segment of offending
 						   packet */
-	u_int8_t	ns_err_lev2[12];	/* at least this much higher
+	u_char		ns_err_lev2[12];	/* at least this much higher
 						   level protocol */
 };
 struct  ns_epidp {
@@ -83,10 +81,10 @@ struct	ns_errstat {
 	int	ns_es_badlen;		/* calculated bound mismatch */
 	int	ns_es_reflect;		/* number of responses */
 	int	ns_es_inhist[NS_ERR_MAX];
-	u_int16_t ns_es_codes[NS_ERR_MAX];/* which error code for outhist
+	u_short	ns_es_codes[NS_ERR_MAX];/* which error code for outhist
 					   since we might not know all */
 };
 
-#ifdef _KERNEL
+#ifdef KERNEL
 struct	ns_errstat ns_errstat;
 #endif

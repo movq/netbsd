@@ -1,8 +1,6 @@
-/*	$NetBSD: init_disp.c,v 1.7 1997/10/20 00:23:21 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,12 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)init_disp.c	8.2 (Berkeley) 2/16/94";
-#endif
-__RCSID("$NetBSD: init_disp.c,v 1.7 1997/10/20 00:23:21 lukem Exp $");
+static char sccsid[] = "@(#)init_disp.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -47,24 +41,18 @@ __RCSID("$NetBSD: init_disp.c,v 1.7 1997/10/20 00:23:21 lukem Exp $");
  */
 
 #include "talk.h"
-#include <sys/ioctl.h>
-#include <sys/ioctl_compat.h>
-#include <err.h>
 #include <signal.h>
-#include <termios.h>
-#include <unistd.h>
 
 /* 
  * Set up curses, catch the appropriate signals,
  * and build the various windows.
  */
-void
 init_display()
 {
+	void sig_sent();
 	struct sigvec sigv;
 
-	if (initscr() == NULL)
-		errx(1, "Terminal type unset or lacking necessary features.");
+	initscr();
 	(void) sigvec(SIGTSTP, (struct sigvec *)0, &sigv);
 	sigv.sv_mask |= sigmask(SIGALRM);
 	(void) sigvec(SIGTSTP, &sigv, (struct sigvec *)0);
@@ -101,20 +89,21 @@ init_display()
  * the first three characters each talk transmits after
  * connection are the three edit characters.
  */
-void
 set_edit_chars()
 {
 	char buf[3];
 	int cc;
-	struct termios tty;
+	struct sgttyb tty;
+	struct ltchars ltc;
 	
-	tcgetattr(0, &tty);
-	my_win.cerase = tty.c_cc[VERASE];
-	my_win.kill = tty.c_cc[VKILL];
-	if (tty.c_cc[VWERASE] == (unsigned char) -1)
+	ioctl(0, TIOCGETP, &tty);
+	ioctl(0, TIOCGLTC, (struct sgttyb *)&ltc);
+	my_win.cerase = tty.sg_erase;
+	my_win.kill = tty.sg_kill;
+	if (ltc.t_werasc == (char) -1)
 		my_win.werase = '\027';	 /* control W */
 	else
-		my_win.werase = tty.c_cc[VWERASE];
+		my_win.werase = ltc.t_werasc;
 	buf[0] = my_win.cerase;
 	buf[1] = my_win.kill;
 	buf[2] = my_win.werase;
@@ -130,8 +119,7 @@ set_edit_chars()
 }
 
 void
-sig_sent(dummy)
-	int dummy;
+sig_sent()
 {
 
 	message("Connection closing. Exiting");
@@ -141,7 +129,6 @@ sig_sent(dummy)
 /*
  * All done talking...hang up the phone and reset terminal thingy's
  */
-void
 quit()
 {
 

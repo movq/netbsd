@@ -1,8 +1,6 @@
-/*	$NetBSD: field.c,v 1.4 1997/10/18 12:49:00 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,61 +31,51 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)field.c	8.4 (Berkeley) 4/2/94";
-#else 
-__RCSID("$NetBSD: field.c,v 1.4 1997/10/18 12:49:00 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)field.c	5.13 (Berkeley) 2/12/91";
 #endif /* not lint */
 
 #include <sys/param.h>
-
-#include <ctype.h>
-#include <err.h>
-#include <errno.h>
-#include <grp.h>
 #include <pwd.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <grp.h>
 #include <string.h>
-#include <unistd.h>
-
+#include <stdio.h>
+#include <ctype.h>
 #include "chpass.h"
 #include "pathnames.h"
 
 /* ARGSUSED */
-int
 p_login(p, pw, ep)
 	char *p;
 	struct passwd *pw;
 	ENTRY *ep;
 {
 	if (!*p) {
-		warnx("empty login field");
-		return (1);
+		(void)fprintf(stderr, "chpass: empty login field.\n");
+		return(1);
 	}
 	if (*p == '-') {
-		warnx("login names may not begin with a hyphen");
-		return (1);
+		(void)fprintf(stderr,
+		    "chpass: login names may not begin with a hyphen.\n");
+		return(1);
 	}
 	if (!(pw->pw_name = strdup(p))) {
-		warnx("can't save entry");
-		return (1);
+		(void)fprintf(stderr, "chpass: can't save entry.\n");
+		return(1);
 	}
-	if (strchr(p, '.'))
-		warnx("\'.\' is dangerous in a login name");
+	if (index(p, '.'))
+		(void)fprintf(stderr,
+		    "chpass: \'.\' is dangerous in a login name.\n");
 	for (; *p; ++p)
 		if (isupper(*p)) {
-			warnx("upper-case letters are dangerous in a login name");
+			(void)fprintf(stderr,
+			    "chpass: upper-case letters are dangerous in a login name.\n");
 			break;
 		}
-	return (0);
+	return(0);
 }
 
 /* ARGSUSED */
-int
 p_passwd(p, pw, ep)
 	char *p;
 	struct passwd *pw;
@@ -96,76 +84,72 @@ p_passwd(p, pw, ep)
 	if (!*p)
 		pw->pw_passwd = "";	/* "NOLOGIN"; */
 	else if (!(pw->pw_passwd = strdup(p))) {
-		warnx("can't save password entry");
-		return (1);
+		(void)fprintf(stderr, "chpass: can't save password entry.\n");
+		return(1);
 	}
 	
-	return (0);
+	return(0);
 }
 
 /* ARGSUSED */
-int
 p_uid(p, pw, ep)
-	char *p;
+	register char *p;
 	struct passwd *pw;
 	ENTRY *ep;
 {
-	uid_t id;
-	char *np;
+	int id;
 
 	if (!*p) {
-		warnx("empty uid field");
-		return (1);
+		(void)fprintf(stderr, "chpass: empty uid field.\n");
+		return(1);
 	}
 	if (!isdigit(*p)) {
-		warnx("illegal uid");
-		return (1);
+		(void)fprintf(stderr, "chpass: illegal uid.\n");
+		return(1);
 	}
-	errno = 0;
-	id = strtoul(p, &np, 10);
-	if (*np || (id == ULONG_MAX && errno == ERANGE)) {
-		warnx("illegal uid");
-		return (1);
+	id = atoi(p);
+	if ((u_int)id > USHRT_MAX) {
+		(void)fprintf(stderr, "chpass: %d > max uid value (%d).\n",
+		    id, USHRT_MAX);
+		return(1);
 	}
 	pw->pw_uid = id;
-	return (0);
+	return(0);
 }
 
 /* ARGSUSED */
-int
 p_gid(p, pw, ep)
-	char *p;
+	register char *p;
 	struct passwd *pw;
 	ENTRY *ep;
 {
 	struct group *gr;
-	gid_t id;
-	char *np;
+	int id;
 
 	if (!*p) {
-		warnx("empty gid field");
-		return (1);
+		(void)fprintf(stderr, "chpass: empty gid field.\n");
+		return(1);
 	}
 	if (!isdigit(*p)) {
 		if (!(gr = getgrnam(p))) {
-			warnx("unknown group %s", p);
-			return (1);
+			(void)fprintf(stderr,
+			    "chpass: unknown group %s.\n", p);
+			return(1);
 		}
 		pw->pw_gid = gr->gr_gid;
-		return (0);
+		return(0);
 	}
-	errno = 0;
-	id = strtoul(p, &np, 10);
-	if (*np || (id == ULONG_MAX && errno == ERANGE)) {
-		warnx("illegal gid");
-		return (1);
+	id = atoi(p);
+	if ((u_int)id > USHRT_MAX) {
+		(void)fprintf(stderr, "chpass: %d > max gid value (%d).\n",
+		    id, USHRT_MAX);
+		return(1);
 	}
 	pw->pw_gid = id;
-	return (0);
+	return(0);
 }
 
 /* ARGSUSED */
-int
 p_class(p, pw, ep)
 	char *p;
 	struct passwd *pw;
@@ -174,41 +158,38 @@ p_class(p, pw, ep)
 	if (!*p)
 		pw->pw_class = "";
 	else if (!(pw->pw_class = strdup(p))) {
-		warnx("can't save entry");
-		return (1);
+		(void)fprintf(stderr, "chpass: can't save entry.\n");
+		return(1);
 	}
 	
-	return (0);
+	return(0);
 }
 
 /* ARGSUSED */
-int
 p_change(p, pw, ep)
 	char *p;
 	struct passwd *pw;
 	ENTRY *ep;
 {
 	if (!atot(p, &pw->pw_change))
-		return (0);
-	warnx("illegal date for change field");
-	return (1);
+		return(0);
+	(void)fprintf(stderr, "chpass: illegal date for change field.\n");
+	return(1);
 }
 
 /* ARGSUSED */
-int
 p_expire(p, pw, ep)
 	char *p;
 	struct passwd *pw;
 	ENTRY *ep;
 {
 	if (!atot(p, &pw->pw_expire))
-		return (0);
-	warnx("illegal date for expire field");
-	return (1);
+		return(0);
+	(void)fprintf(stderr, "chpass: illegal date for expire field.\n");
+	return(1);
 }
 
 /* ARGSUSED */
-int
 p_gecos(p, pw, ep)
 	char *p;
 	struct passwd *pw;
@@ -217,59 +198,59 @@ p_gecos(p, pw, ep)
 	if (!*p)
 		ep->save = "";
 	else if (!(ep->save = strdup(p))) {
-		warnx("can't save entry");
-		return (1);
+		(void)fprintf(stderr, "chpass: can't save entry.\n");
+		return(1);
 	}
-	return (0);
+	return(0);
 }
 
 /* ARGSUSED */
-int
 p_hdir(p, pw, ep)
 	char *p;
 	struct passwd *pw;
 	ENTRY *ep;
 {
 	if (!*p) {
-		warnx("empty home directory field");
-		return (1);
+		(void)fprintf(stderr, "chpass: empty home directory field.\n");
+		return(1);
 	}
 	if (!(pw->pw_dir = strdup(p))) {
-		warnx("can't save entry");
-		return (1);
+		(void)fprintf(stderr, "chpass: can't save entry.\n");
+		return(1);
 	}
-	return (0);
+	return(0);
 }
 
 /* ARGSUSED */
-int
 p_shell(p, pw, ep)
-	char *p;
+	register char *p;
 	struct passwd *pw;
 	ENTRY *ep;
 {
-	char *t;
+	char *t, *ok_shell();
 
 	if (!*p) {
 		pw->pw_shell = _PATH_BSHELL;
-		return (0);
+		return(0);
 	}
 	/* only admin can change from or to "restricted" shells */
 	if (uid && pw->pw_shell && !ok_shell(pw->pw_shell)) {
-		warnx("%s: current shell non-standard", pw->pw_shell);
-		return (1);
+		(void)fprintf(stderr,
+		    "chpass: %s: current shell non-standard.\n", pw->pw_shell);
+		return(1);
 	}
 	if (!(t = ok_shell(p))) {
 		if (uid) {
-			warnx("%s: non-standard shell", p);
-			return (1);
+			(void)fprintf(stderr,
+			    "chpass: %s: non-standard shell.\n", p);
+			return(1);
 		}
 	}
 	else
 		p = t;
 	if (!(pw->pw_shell = strdup(p))) {
-		warnx("can't save entry");
-		return (1);
+		(void)fprintf(stderr, "chpass: can't save entry.\n");
+		return(1);
 	}
-	return (0);
+	return(0);
 }

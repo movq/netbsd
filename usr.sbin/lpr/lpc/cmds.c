@@ -1,8 +1,6 @@
-/*	$NetBSD: cmds.c,v 1.12 1997/10/05 15:12:06 mrg Exp $	*/
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,68 +31,26 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#if 0
-static char sccsid[] = "@(#)cmds.c	8.2 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: cmds.c,v 1.12 1997/10/05 15:12:06 mrg Exp $");
-#endif
+static char sccsid[] = "@(#)cmds.c	5.7 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
  * lpc -- line printer control program -- commands:
  */
 
-#include <sys/param.h>
-#include <sys/time.h>
-#include <sys/stat.h>
-#include <sys/file.h>
-
-#include <signal.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <dirent.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <string.h>
 #include "lp.h"
-#include "lp.local.h"
-#include "lpc.h"
-#include "extern.h"
+#include <sys/time.h>
 #include "pathnames.h"
-
-extern uid_t	uid, euid;
-
-static void	abortpr __P((int));
-static void	cleanpr __P((void));
-static void	disablepr __P((void));
-static int	doarg __P((char *));
-static int	doselect __P((struct dirent *));
-static void	enablepr __P((void));
-static void	prstat __P((void));
-static void	putmsg __P((int, char **));
-static int	sortq __P((const void *, const void *));
-static void	startpr __P((int));
-static void	stoppr __P((void));
-static int	touch __P((struct queue *));
-static void	unlinkf __P((char *));
-static void	upstat __P((char *));
 
 /*
  * kill an existing daemon and disable printing.
  */
-void
-doabort(argc, argv)
-	int argc;
+abort(argc, argv)
 	char *argv[];
 {
-	int c, status;
-	char *cp1, *cp2;
+	register int c, status;
+	register char *cp1, *cp2;
 	char prbuf[100];
 
 	if (argc == 1) {
@@ -103,11 +59,10 @@ doabort(argc, argv)
 	}
 	if (argc == 2 && !strcmp(argv[1], "all")) {
 		printer = prbuf;
-		while (cgetnext(&bp, printcapdb) > 0) {
+		while (getprent(line) > 0) {
 			cp1 = prbuf;
-			cp2 = bp;
-			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			cp2 = line;
+			while ((c = *cp2++) && c != '|' && c != ':')
 				*cp1++ = c;
 			*cp1 = '\0';
 			abortpr(1);
@@ -116,38 +71,35 @@ doabort(argc, argv)
 	}
 	while (--argc) {
 		printer = *++argv;
-		if ((status = cgetent(&bp, printcapdb, printer)) == -2) {
+		if ((status = pgetent(line, printer)) < 0) {
 			printf("cannot open printer description file\n");
 			continue;
-		} else if (status == -1) {
+		} else if (status == 0) {
 			printf("unknown printer %s\n", printer);
 			continue;
-		} else if (status == -3)
-			fatal("potential reference loop detected in printcap file");
+		}
 		abortpr(1);
 	}
 }
 
-static void
 abortpr(dis)
-	int dis;
 {
-	FILE *fp;
+	register FILE *fp;
 	struct stat stbuf;
 	int pid, fd;
 
-	if (cgetstr(bp, "sd", &SD) == -1)
+	bp = pbuf;
+	if ((SD = pgetstr("sd", &bp)) == NULL)
 		SD = _PATH_DEFSPOOL;
-	if (cgetstr(bp, "lo", &LO) == -1)
+	if ((LO = pgetstr("lo", &bp)) == NULL)
 		LO = DEFLOCK;
-	(void)snprintf(line, sizeof(line), "%s/%s", SD, LO);
+	(void) sprintf(line, "%s/%s", SD, LO);
 	printf("%s:\n", printer);
 
 	/*
 	 * Turn on the owner execute bit of the lock file to disable printing.
 	 */
 	if (dis) {
-		seteuid(euid);
 		if (stat(line, &stbuf) >= 0) {
 			if (chmod(line, (stbuf.st_mode & 0777) | 0100) < 0)
 				printf("\tcannot disable printing\n");
@@ -159,15 +111,15 @@ abortpr(dis)
 			if ((fd = open(line, O_WRONLY|O_CREAT, 0760)) < 0)
 				printf("\tcannot create lock file\n");
 			else {
-				(void)close(fd);
+				(void) close(fd);
 				upstat("printing disabled\n");
 				printf("\tprinting disabled\n");
 				printf("\tno daemon to abort\n");
 			}
-			goto out;
+			return;
 		} else {
 			printf("\tcannot stat lock file\n");
-			goto out;
+			return;
 		}
 	}
 	/*
@@ -175,62 +127,55 @@ abortpr(dis)
 	 */
 	if ((fp = fopen(line, "r")) == NULL) {
 		printf("\tcannot open lock file\n");
-		goto out;
+		return;
 	}
 	if (!getline(fp) || flock(fileno(fp), LOCK_SH|LOCK_NB) == 0) {
-		(void)fclose(fp);	/* unlocks as well */
+		(void) fclose(fp);	/* unlocks as well */
 		printf("\tno daemon to abort\n");
-		goto out;
+		return;
 	}
-	(void)fclose(fp);
-	if (kill(pid = atoi(line), SIGTERM) < 0) {
-		if (errno == ESRCH)
-			printf("\tno daemon to abort\n");
-		else
-			printf("\tWarning: daemon (pid %d) not killed\n", pid);
-	} else
+	(void) fclose(fp);
+	if (kill(pid = atoi(line), SIGTERM) < 0)
+		printf("\tWarning: daemon (pid %d) not killed\n", pid);
+	else
 		printf("\tdaemon (pid %d) killed\n", pid);
-out:
-	seteuid(uid);
 }
 
 /*
  * Write a message into the status file.
  */
-static void
 upstat(msg)
 	char *msg;
 {
-	int fd;
-	char statfile[MAXPATHLEN];
+	register int fd;
+	char statfile[BUFSIZ];
 
-	if (cgetstr(bp, "st", &ST) == -1)
+	bp = pbuf;
+	if ((ST = pgetstr("st", &bp)) == NULL)
 		ST = DEFSTAT;
-	(void)snprintf(statfile, sizeof(statfile), "%s/%s", SD, ST);
+	(void) sprintf(statfile, "%s/%s", SD, ST);
 	umask(0);
 	fd = open(statfile, O_WRONLY|O_CREAT, 0664);
 	if (fd < 0 || flock(fd, LOCK_EX) < 0) {
 		printf("\tcannot create status file\n");
 		return;
 	}
-	(void)ftruncate(fd, 0);
+	(void) ftruncate(fd, 0);
 	if (msg == (char *)NULL)
-		(void)write(fd, "\n", 1);
+		(void) write(fd, "\n", 1);
 	else
-		(void)write(fd, msg, strlen(msg));
-	(void)close(fd);
+		(void) write(fd, msg, strlen(msg));
+	(void) close(fd);
 }
 
 /*
  * Remove all spool files and temporaries from the spooling area.
  */
-void
 clean(argc, argv)
-	int argc;
 	char *argv[];
 {
-	int c, status;
-	char *cp1, *cp2;
+	register int c, status;
+	register char *cp1, *cp2;
 	char prbuf[100];
 
 	if (argc == 1) {
@@ -239,11 +184,10 @@ clean(argc, argv)
 	}
 	if (argc == 2 && !strcmp(argv[1], "all")) {
 		printer = prbuf;
-		while (cgetnext(&bp, printcapdb) > 0) {
+		while (getprent(line) > 0) {
 			cp1 = prbuf;
-			cp2 = bp;
-			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			cp2 = line;
+			while ((c = *cp2++) && c != '|' && c != ':')
 				*cp1++ = c;
 			*cp1 = '\0';
 			cleanpr();
@@ -252,22 +196,19 @@ clean(argc, argv)
 	}
 	while (--argc) {
 		printer = *++argv;
-		if ((status = cgetent(&bp, printcapdb, printer)) == -2) {
+		if ((status = pgetent(line, printer)) < 0) {
 			printf("cannot open printer description file\n");
 			continue;
-		} else if (status == -1) {
+		} else if (status == 0) {
 			printf("unknown printer %s\n", printer);
 			continue;
-		} else if (status == -3)
-			fatal("potential reference loop detected in printcap file");
-
+		}
 		cleanpr();
 	}
 }
 
-static int
-doselect(d)
-	struct dirent *d;
+select(d)
+struct direct *d;
 {
 	int c = d->d_name[0];
 
@@ -280,16 +221,12 @@ doselect(d)
  * Comparison routine for scandir. Sort by job number and machine, then
  * by `cf', `tf', or `df', then by the sequence letter A-Z, a-z.
  */
-static int
-sortq(a, b)
-	const void *a, *b;
+sortq(d1, d2)
+struct direct **d1, **d2;
 {
-	struct dirent **d1, **d2;
 	int c1, c2;
 
-	d1 = (struct dirent **)a;
-	d2 = (struct dirent **)b;
-	if ((c1 = strcmp((*d1)->d_name + 3, (*d2)->d_name + 3)) != 0)
+	if (c1 = strcmp((*d1)->d_name + 3, (*d2)->d_name + 3))
 		return(c1);
 	c1 = (*d1)->d_name[0];
 	c2 = (*d2)->d_name[0];
@@ -305,27 +242,23 @@ sortq(a, b)
 /*
  * Remove incomplete jobs from spooling area.
  */
-static void
 cleanpr()
 {
-	int i, n;
-	char *cp, *cp1, *lp;
-	struct dirent **queue;
+	register int i, n;
+	register char *cp, *cp1, *lp;
+	struct direct **queue;
 	int nitems;
 
-	if (cgetstr(bp, "sd", &SD) == -1)
+	bp = pbuf;
+	if ((SD = pgetstr("sd", &bp)) == NULL)
 		SD = _PATH_DEFSPOOL;
 	printf("%s:\n", printer);
 
-	/* XXX depends on SD being non nul */
-	for (lp = line, cp = SD; (lp - line) < sizeof(line) &&
-	    (*lp++ = *cp++) != '\0'; )
+	for (lp = line, cp = SD; *lp++ = *cp++; )
 		;
 	lp[-1] = '/';
 
-	seteuid(euid);
-	nitems = scandir(SD, &queue, doselect, sortq);
-	seteuid(uid);
+	nitems = scandir(SD, &queue, select, sortq);
 	if (nitems < 0) {
 		printf("\tcannot examine spool directory\n");
 		return;
@@ -345,8 +278,7 @@ cleanpr()
 				n++;
 			}
 			if (n == 0) {
-				strncpy(lp, cp, sizeof(line) - strlen(line) - 1);
-				line[sizeof(line) - 1] = '\0';
+				strcpy(lp, cp);
 				unlinkf(line);
 			}
 		} else {
@@ -355,35 +287,29 @@ cleanpr()
 			 * been skipped above) or a tf file (which can always
 			 * be removed).
 			 */
-			strncpy(lp, cp, sizeof(line) - strlen(line) - 1);
-			line[sizeof(line) - 1] = '\0';
+			strcpy(lp, cp);
 			unlinkf(line);
 		}
      	} while (++i < nitems);
 }
  
-static void
 unlinkf(name)
 	char	*name;
 {
-	seteuid(euid);
 	if (unlink(name) < 0)
 		printf("\tcannot remove %s\n", name);
 	else
 		printf("\tremoved %s\n", name);
-	seteuid(uid);
 }
 
 /*
  * Enable queuing to the printer (allow lpr's).
  */
-void
 enable(argc, argv)
-	int argc;
 	char *argv[];
 {
-	int c, status;
-	char *cp1, *cp2;
+	register int c, status;
+	register char *cp1, *cp2;
 	char prbuf[100];
 
 	if (argc == 1) {
@@ -392,11 +318,10 @@ enable(argc, argv)
 	}
 	if (argc == 2 && !strcmp(argv[1], "all")) {
 		printer = prbuf;
-		while (cgetnext(&bp, printcapdb) > 0) {
+		while (getprent(line) > 0) {
 			cp1 = prbuf;
-			cp2 = bp;
-			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			cp2 = line;
+			while ((c = *cp2++) && c != '|' && c != ':')
 				*cp1++ = c;
 			*cp1 = '\0';
 			enablepr();
@@ -405,54 +330,48 @@ enable(argc, argv)
 	}
 	while (--argc) {
 		printer = *++argv;
-		if ((status = cgetent(&bp, printcapdb, printer)) == -2) {
+		if ((status = pgetent(line, printer)) < 0) {
 			printf("cannot open printer description file\n");
 			continue;
-		} else if (status == -1) {
+		} else if (status == 0) {
 			printf("unknown printer %s\n", printer);
 			continue;
-		} else if (status == -3)
-			fatal("potential reference loop detected in printcap file");
-
+		}
 		enablepr();
 	}
 }
 
-static void
 enablepr()
 {
 	struct stat stbuf;
 
-	if (cgetstr(bp, "sd", &SD) == -1)
+	bp = pbuf;
+	if ((SD = pgetstr("sd", &bp)) == NULL)
 		SD = _PATH_DEFSPOOL;
-	if (cgetstr(bp, "lo", &LO) == -1)
+	if ((LO = pgetstr("lo", &bp)) == NULL)
 		LO = DEFLOCK;
-	(void)snprintf(line, sizeof(line), "%s/%s", SD, LO);
+	(void) sprintf(line, "%s/%s", SD, LO);
 	printf("%s:\n", printer);
 
 	/*
 	 * Turn off the group execute bit of the lock file to enable queuing.
 	 */
-	seteuid(euid);
 	if (stat(line, &stbuf) >= 0) {
 		if (chmod(line, stbuf.st_mode & 0767) < 0)
 			printf("\tcannot enable queuing\n");
 		else
 			printf("\tqueuing enabled\n");
 	}
-	seteuid(uid);
 }
 
 /*
  * Disable queuing.
  */
-void
 disable(argc, argv)
-	int argc;
 	char *argv[];
 {
-	int c, status;
-	char *cp1, *cp2;
+	register int c, status;
+	register char *cp1, *cp2;
 	char prbuf[100];
 
 	if (argc == 1) {
@@ -461,11 +380,10 @@ disable(argc, argv)
 	}
 	if (argc == 2 && !strcmp(argv[1], "all")) {
 		printer = prbuf;
-		while (cgetnext(&bp, printcapdb) > 0) {
+		while (getprent(line) > 0) {
 			cp1 = prbuf;
-			cp2 = bp;
-			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			cp2 = line;
+			while ((c = *cp2++) && c != '|' && c != ':')
 				*cp1++ = c;
 			*cp1 = '\0';
 			disablepr();
@@ -474,35 +392,32 @@ disable(argc, argv)
 	}
 	while (--argc) {
 		printer = *++argv;
-		if ((status = cgetent(&bp, printcapdb, printer)) == -2) {
+		if ((status = pgetent(line, printer)) < 0) {
 			printf("cannot open printer description file\n");
 			continue;
-		} else if (status == -1) {
+		} else if (status == 0) {
 			printf("unknown printer %s\n", printer);
 			continue;
-		} else if (status == -3)
-			fatal("potential reference loop detected in printcap file");
-
+		}
 		disablepr();
 	}
 }
 
-static void
 disablepr()
 {
-	int fd;
+	register int fd;
 	struct stat stbuf;
 
-	if (cgetstr(bp, "sd", &SD) == -1)
+	bp = pbuf;
+	if ((SD = pgetstr("sd", &bp)) == NULL)
 		SD = _PATH_DEFSPOOL;
-	if (cgetstr(bp, "lo", &LO) == -1)
+	if ((LO = pgetstr("lo", &bp)) == NULL)
 		LO = DEFLOCK;
-	(void)snprintf(line, sizeof(line), "%s/%s", SD, LO);
+	(void) sprintf(line, "%s/%s", SD, LO);
 	printf("%s:\n", printer);
 	/*
 	 * Turn on the group execute bit of the lock file to disable queuing.
 	 */
-	seteuid(euid);
 	if (stat(line, &stbuf) >= 0) {
 		if (chmod(line, (stbuf.st_mode & 0777) | 010) < 0)
 			printf("\tcannot disable queuing\n");
@@ -512,25 +427,23 @@ disablepr()
 		if ((fd = open(line, O_WRONLY|O_CREAT, 0670)) < 0)
 			printf("\tcannot create lock file\n");
 		else {
-			(void)close(fd);
+			(void) close(fd);
 			printf("\tqueuing disabled\n");
 		}
+		return;
 	} else
 		printf("\tcannot stat lock file\n");
-	seteuid(uid);
 }
 
 /*
  * Disable queuing and printing and put a message into the status file
  * (reason for being down).
  */
-void
 down(argc, argv)
-	int argc;
 	char *argv[];
 {
-	int c, status;
-	char *cp1, *cp2;
+	register int c, status;
+	register char *cp1, *cp2;
 	char prbuf[100];
 
 	if (argc == 1) {
@@ -539,11 +452,10 @@ down(argc, argv)
 	}
 	if (!strcmp(argv[1], "all")) {
 		printer = prbuf;
-		while (cgetnext(&bp, printcapdb) > 0) {
+		while (getprent(line) > 0) {
 			cp1 = prbuf;
-			cp2 = bp;
-			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			cp2 = line;
+			while ((c = *cp2++) && c != '|' && c != ':')
 				*cp1++ = c;
 			*cp1 = '\0';
 			putmsg(argc - 2, argv + 2);
@@ -551,41 +463,37 @@ down(argc, argv)
 		return;
 	}
 	printer = argv[1];
-	if ((status = cgetent(&bp, printcapdb, printer)) == -2) {
+	if ((status = pgetent(line, printer)) < 0) {
 		printf("cannot open printer description file\n");
 		return;
-	} else if (status == -1) {
+	} else if (status == 0) {
 		printf("unknown printer %s\n", printer);
 		return;
-	} else if (status == -3)
-			fatal("potential reference loop detected in printcap file");
-
+	}
 	putmsg(argc - 2, argv + 2);
 }
 
-static void
 putmsg(argc, argv)
-	int argc;
 	char **argv;
 {
-	int fd;
-	char *cp1, *cp2;
+	register int fd;
+	register char *cp1, *cp2;
 	char buf[1024];
 	struct stat stbuf;
 
-	if (cgetstr(bp, "sd", &SD) == -1)
+	bp = pbuf;
+	if ((SD = pgetstr("sd", &bp)) == NULL)
 		SD = _PATH_DEFSPOOL;
-	if (cgetstr(bp, "lo", &LO) == -1)
+	if ((LO = pgetstr("lo", &bp)) == NULL)
 		LO = DEFLOCK;
-	if (cgetstr(bp, "st", &ST) == -1)
+	if ((ST = pgetstr("st", &bp)) == NULL)
 		ST = DEFSTAT;
 	printf("%s:\n", printer);
 	/*
 	 * Turn on the group execute bit of the lock file to disable queuing and
 	 * turn on the owner execute bit of the lock file to disable printing.
 	 */
-	(void)snprintf(line, sizeof(line), "%s/%s", SD, LO);
-	seteuid(euid);
+	(void) sprintf(line, "%s/%s", SD, LO);
 	if (stat(line, &stbuf) >= 0) {
 		if (chmod(line, (stbuf.st_mode & 0777) | 0110) < 0)
 			printf("\tcannot disable queuing\n");
@@ -595,49 +503,44 @@ putmsg(argc, argv)
 		if ((fd = open(line, O_WRONLY|O_CREAT, 0770)) < 0)
 			printf("\tcannot create lock file\n");
 		else {
-			(void)close(fd);
+			(void) close(fd);
 			printf("\tprinter and queuing disabled\n");
 		}
-		seteuid(uid);
 		return;
 	} else
 		printf("\tcannot stat lock file\n");
 	/*
 	 * Write the message into the status file.
 	 */
-	(void)snprintf(line, sizeof(line), "%s/%s", SD, ST);
+	(void) sprintf(line, "%s/%s", SD, ST);
 	fd = open(line, O_WRONLY|O_CREAT, 0664);
 	if (fd < 0 || flock(fd, LOCK_EX) < 0) {
 		printf("\tcannot create status file\n");
-		seteuid(uid);
 		return;
 	}
-	seteuid(uid);
-	(void)ftruncate(fd, 0);
+	(void) ftruncate(fd, 0);
 	if (argc <= 0) {
-		(void)write(fd, "\n", 1);
-		(void)close(fd);
+		(void) write(fd, "\n", 1);
+		(void) close(fd);
 		return;
 	}
 	cp1 = buf;
 	while (--argc >= 0) {
 		cp2 = *argv++;
-		while ((cp1 - buf) < sizeof(buf) && (*cp1++ = *cp2++))
+		while (*cp1++ = *cp2++)
 			;
 		cp1[-1] = ' ';
 	}
 	cp1[-1] = '\n';
 	*cp1 = '\0';
-	(void)write(fd, buf, strlen(buf));
-	(void)close(fd);
+	(void) write(fd, buf, strlen(buf));
+	(void) close(fd);
 }
 
 /*
  * Exit lpc
  */
-void
 quit(argc, argv)
-	int argc;
 	char *argv[];
 {
 	exit(0);
@@ -646,13 +549,11 @@ quit(argc, argv)
 /*
  * Kill and restart the daemon.
  */
-void
 restart(argc, argv)
-	int argc;
 	char *argv[];
 {
-	int c, status;
-	char *cp1, *cp2;
+	register int c, status;
+	register char *cp1, *cp2;
 	char prbuf[100];
 
 	if (argc == 1) {
@@ -661,11 +562,10 @@ restart(argc, argv)
 	}
 	if (argc == 2 && !strcmp(argv[1], "all")) {
 		printer = prbuf;
-		while (cgetnext(&bp, printcapdb) > 0) {
+		while (getprent(line) > 0) {
 			cp1 = prbuf;
-			cp2 = bp;
-			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			cp2 = line;
+			while ((c = *cp2++) && c != '|' && c != ':')
 				*cp1++ = c;
 			*cp1 = '\0';
 			abortpr(0);
@@ -675,15 +575,13 @@ restart(argc, argv)
 	}
 	while (--argc) {
 		printer = *++argv;
-		if ((status = cgetent(&bp, printcapdb, printer)) == -2) {
+		if ((status = pgetent(line, printer)) < 0) {
 			printf("cannot open printer description file\n");
 			continue;
-		} else if (status == -1) {
+		} else if (status == 0) {
 			printf("unknown printer %s\n", printer);
 			continue;
-		} else if (status == -3)
-			fatal("potential reference loop detected in printcap file");
-
+		}
 		abortpr(0);
 		startpr(0);
 	}
@@ -692,13 +590,11 @@ restart(argc, argv)
 /*
  * Enable printing on the specified printer and startup the daemon.
  */
-void
-startcmd(argc, argv)
-	int argc;
+start(argc, argv)
 	char *argv[];
 {
-	int c, status;
-	char *cp1, *cp2;
+	register int c, status;
+	register char *cp1, *cp2;
 	char prbuf[100];
 
 	if (argc == 1) {
@@ -707,11 +603,10 @@ startcmd(argc, argv)
 	}
 	if (argc == 2 && !strcmp(argv[1], "all")) {
 		printer = prbuf;
-		while (cgetnext(&bp, printcapdb) > 0) {
+		while (getprent(line) > 0) {
 			cp1 = prbuf;
-			cp2 = bp;
-			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			cp2 = line;
+			while ((c = *cp2++) && c != '|' && c != ':')
 				*cp1++ = c;
 			*cp1 = '\0';
 			startpr(1);
@@ -720,36 +615,32 @@ startcmd(argc, argv)
 	}
 	while (--argc) {
 		printer = *++argv;
-		if ((status = cgetent(&bp, printcapdb, printer)) == -2) {
+		if ((status = pgetent(line, printer)) < 0) {
 			printf("cannot open printer description file\n");
 			continue;
-		} else if (status == -1) {
+		} else if (status == 0) {
 			printf("unknown printer %s\n", printer);
 			continue;
-		} else if (status == -3)
-			fatal("potential reference loop detected in printcap file");
-
+		}
 		startpr(1);
 	}
 }
 
-static void
 startpr(enable)
-	int enable;
 {
 	struct stat stbuf;
 
-	if (cgetstr(bp, "sd", &SD) == -1)
+	bp = pbuf;
+	if ((SD = pgetstr("sd", &bp)) == NULL)
 		SD = _PATH_DEFSPOOL;
-	if (cgetstr(bp, "lo", &LO) == -1)
+	if ((LO = pgetstr("lo", &bp)) == NULL)
 		LO = DEFLOCK;
-	(void)snprintf(line, sizeof(line), "%s/%s", SD, LO);
+	(void) sprintf(line, "%s/%s", SD, LO);
 	printf("%s:\n", printer);
 
 	/*
 	 * Turn off the owner execute bit of the lock file to enable printing.
 	 */
-	seteuid(euid);
 	if (enable && stat(line, &stbuf) >= 0) {
 		if (chmod(line, stbuf.st_mode & (enable==2 ? 0666 : 0677)) < 0)
 			printf("\tcannot enable printing\n");
@@ -760,28 +651,24 @@ startpr(enable)
 		printf("\tcouldn't start daemon\n");
 	else
 		printf("\tdaemon started\n");
-	seteuid(uid);
 }
 
 /*
  * Print the status of each queue listed or all the queues.
  */
-void
 status(argc, argv)
-	int argc;
 	char *argv[];
 {
-	int c, status;
-	char *cp1, *cp2;
+	register int c, status;
+	register char *cp1, *cp2;
 	char prbuf[100];
 
-	if (argc == 1 || (argc == 2 && strcmp(argv[1], "all") == 0)) {
+	if (argc == 1) {
 		printer = prbuf;
-		while (cgetnext(&bp, printcapdb) > 0) {
+		while (getprent(line) > 0) {
 			cp1 = prbuf;
-			cp2 = bp;
-			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			cp2 = line;
+			while ((c = *cp2++) && c != '|' && c != ':')
 				*cp1++ = c;
 			*cp1 = '\0';
 			prstat();
@@ -790,15 +677,13 @@ status(argc, argv)
 	}
 	while (--argc) {
 		printer = *++argv;
-		if ((status = cgetent(&bp, printcapdb, printer)) == -2) {
+		if ((status = pgetent(line, printer)) < 0) {
 			printf("cannot open printer description file\n");
 			continue;
-		} else if (status == -1) {
+		} else if (status == 0) {
 			printf("unknown printer %s\n", printer);
 			continue;
-		} else if (status == -3)
-			fatal("potential reference loop detected in printcap file");
-
+		}
 		prstat();
 	}
 }
@@ -806,22 +691,22 @@ status(argc, argv)
 /*
  * Print the status of the printer queue.
  */
-static void
 prstat()
 {
 	struct stat stbuf;
-	int fd, i;
-	struct dirent *dp;
+	register int fd, i;
+	register struct direct *dp;
 	DIR *dirp;
 
-	if (cgetstr(bp, "sd", &SD) == -1)
+	bp = pbuf;
+	if ((SD = pgetstr("sd", &bp)) == NULL)
 		SD = _PATH_DEFSPOOL;
-	if (cgetstr(bp, "lo", &LO) == -1)
+	if ((LO = pgetstr("lo", &bp)) == NULL)
 		LO = DEFLOCK;
-	if (cgetstr(bp, "st", &ST) == -1)
+	if ((ST = pgetstr("st", &bp)) == NULL)
 		ST = DEFSTAT;
 	printf("%s:\n", printer);
-	(void)snprintf(line, sizeof(line), "%s/%s", SD, LO);
+	(void) sprintf(line, "%s/%s", SD, LO);
 	if (stat(line, &stbuf) >= 0) {
 		printf("\tqueuing is %s\n",
 			(stbuf.st_mode & 010) ? "disabled" : "enabled");
@@ -849,22 +734,19 @@ prstat()
 		printf("\t%d entries in spool area\n", i);
 	fd = open(line, O_RDONLY);
 	if (fd < 0 || flock(fd, LOCK_SH|LOCK_NB) == 0) {
-		(void)close(fd);	/* unlocks as well */
-		printf("\tprinter idle\n");
+		(void) close(fd);	/* unlocks as well */
+		printf("\tno daemon present\n");
 		return;
 	}
-	(void)close(fd);
-	(void)snprintf(line, sizeof(line), "%s/%s", SD, ST);
+	(void) close(fd);
+	putchar('\t');
+	(void) sprintf(line, "%s/%s", SD, ST);
 	fd = open(line, O_RDONLY);
 	if (fd >= 0) {
-		(void)flock(fd, LOCK_SH);
-		(void)fstat(fd, &stbuf);
-		if (stbuf.st_size > 0) {
-			putchar('\t');
-			while ((i = read(fd, line, sizeof(line))) > 0)
-				(void)fwrite(line, 1, i, stdout);
-		}
-		(void)close(fd);	/* unlocks as well */
+		(void) flock(fd, LOCK_SH);
+		while ((i = read(fd, line, sizeof(line))) > 0)
+			(void) fwrite(line, 1, i, stdout);
+		(void) close(fd);	/* unlocks as well */
 	}
 }
 
@@ -872,13 +754,11 @@ prstat()
  * Stop the specified daemon after completing the current job and disable
  * printing.
  */
-void
 stop(argc, argv)
-	int argc;
 	char *argv[];
 {
-	int c, status;
-	char *cp1, *cp2;
+	register int c, status;
+	register char *cp1, *cp2;
 	char prbuf[100];
 
 	if (argc == 1) {
@@ -887,11 +767,10 @@ stop(argc, argv)
 	}
 	if (argc == 2 && !strcmp(argv[1], "all")) {
 		printer = prbuf;
-		while (cgetnext(&bp, printcapdb) > 0) {
+		while (getprent(line) > 0) {
 			cp1 = prbuf;
-			cp2 = bp;
-			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			cp2 = line;
+			while ((c = *cp2++) && c != '|' && c != ':')
 				*cp1++ = c;
 			*cp1 = '\0';
 			stoppr();
@@ -900,36 +779,33 @@ stop(argc, argv)
 	}
 	while (--argc) {
 		printer = *++argv;
-		if ((status = cgetent(&bp, printcapdb, printer)) == -2) {
+		if ((status = pgetent(line, printer)) < 0) {
 			printf("cannot open printer description file\n");
 			continue;
-		} else if (status == -1) {
+		} else if (status == 0) {
 			printf("unknown printer %s\n", printer);
 			continue;
-		} else if (status == -3)
-			fatal("potential reference loop detected in printcap file");
-
+		}
 		stoppr();
 	}
 }
 
-static void
 stoppr()
 {
-	int fd;
+	register int fd;
 	struct stat stbuf;
 
-	if (cgetstr(bp, "sd", &SD) == -1)
+	bp = pbuf;
+	if ((SD = pgetstr("sd", &bp)) == NULL)
 		SD = _PATH_DEFSPOOL;
-	if (cgetstr(bp, "lo", &LO) == -1)
+	if ((LO = pgetstr("lo", &bp)) == NULL)
 		LO = DEFLOCK;
-	(void)snprintf(line, sizeof(line), "%s/%s", SD, LO);
+	(void) sprintf(line, "%s/%s", SD, LO);
 	printf("%s:\n", printer);
 
 	/*
 	 * Turn on the owner execute bit of the lock file to disable printing.
 	 */
-	seteuid(euid);
 	if (stat(line, &stbuf) >= 0) {
 		if (chmod(line, (stbuf.st_mode & 0777) | 0100) < 0)
 			printf("\tcannot disable printing\n");
@@ -941,13 +817,12 @@ stoppr()
 		if ((fd = open(line, O_WRONLY|O_CREAT, 0760)) < 0)
 			printf("\tcannot create lock file\n");
 		else {
-			(void)close(fd);
+			(void) close(fd);
 			upstat("printing disabled\n");
 			printf("\tprinting disabled\n");
 		}
 	} else
 		printf("\tcannot stat lock file\n");
-	seteuid(uid);
 }
 
 struct	queue **queue;
@@ -957,13 +832,12 @@ time_t	mtime;
 /*
  * Put the specified jobs at the top of printer queue.
  */
-void
 topq(argc, argv)
-	int argc;
 	char *argv[];
 {
-	int i;
+	register int n, i;
 	struct stat stbuf;
+	register char *cfname;
 	int status, changed;
 
 	if (argc < 3) {
@@ -973,28 +847,25 @@ topq(argc, argv)
 
 	--argc;
 	printer = *++argv;
-	status = cgetent(&bp, printcapdb, printer);
-	if (status == -2) {
+	status = pgetent(line, printer);
+	if (status < 0) {
 		printf("cannot open printer description file\n");
 		return;
-	} else if (status == -1) {
+	} else if (status == 0) {
 		printf("%s: unknown printer\n", printer);
 		return;
-	} else if (status == -3)
-		fatal("potential reference loop detected in printcap file");
-
-	if (cgetstr(bp, "sd", &SD) == -1)
+	}
+	bp = pbuf;
+	if ((SD = pgetstr("sd", &bp)) == NULL)
 		SD = _PATH_DEFSPOOL;
-	if (cgetstr(bp, "lo", &LO) == -1)
+	if ((LO = pgetstr("lo", &bp)) == NULL)
 		LO = DEFLOCK;
 	printf("%s:\n", printer);
 
-	seteuid(euid);
 	if (chdir(SD) < 0) {
 		printf("\tcannot chdir to %s\n", SD);
-		goto out;
+		return;
 	}
-	seteuid(uid);
 	nitems = getq(&queue);
 	if (nitems == 0)
 		return;
@@ -1018,44 +889,34 @@ topq(argc, argv)
 	 * Turn on the public execute bit of the lock file to
 	 * get lpd to rebuild the queue after the current job.
 	 */
-	seteuid(euid);
 	if (changed && stat(LO, &stbuf) >= 0)
-		(void)chmod(LO, (stbuf.st_mode & 0777) | 01);
-
-out:
-	seteuid(uid);
+		(void) chmod(LO, (stbuf.st_mode & 0777) | 01);
 } 
 
 /*
  * Reposition the job by changing the modification time of
  * the control file.
  */
-static int
 touch(q)
 	struct queue *q;
 {
 	struct timeval tvp[2];
-	int ret;
 
 	tvp[0].tv_sec = tvp[1].tv_sec = --mtime;
 	tvp[0].tv_usec = tvp[1].tv_usec = 0;
-	seteuid(euid);
-	ret = utimes(q->q_name, tvp);
-	seteuid(uid);
-	return (ret);
+	return(utimes(q->q_name, tvp));
 }
 
 /*
  * Checks if specified job name is in the printer's queue.
  * Returns:  negative (-1) if argument name is not in the queue.
  */
-static int
 doarg(job)
 	char *job;
 {
-	struct queue **qq;
-	int jobnum, n;
-	char *cp, *machine;
+	register struct queue **qq;
+	register int jobnum, n;
+	register char *cp, *machine;
 	int cnt = 0;
 	FILE *fp;
 
@@ -1063,7 +924,7 @@ doarg(job)
 	 * Look for a job item consisting of system name, colon, number 
 	 * (example: ucbarpa:114)  
 	 */
-	if ((cp = strchr(job, ':')) != NULL) {
+	if ((cp = index(job, ':')) != NULL) {
 		machine = job;
 		*cp++ = '\0';
 		job = cp;
@@ -1099,15 +960,12 @@ doarg(job)
 	 * Process item consisting of owner's name (example: henry).
 	 */
 	for (qq = queue + nitems; --qq >= queue; ) {
-		seteuid(euid);
-		fp = fopen((*qq)->q_name, "r");
-		seteuid(uid);
-		if (fp == NULL)
+		if ((fp = fopen((*qq)->q_name, "r")) == NULL)
 			continue;
 		while (getline(fp) > 0)
 			if (line[0] == 'P')
 				break;
-		(void)fclose(fp);
+		(void) fclose(fp);
 		if (line[0] != 'P' || strcmp(job, line+1) != 0)
 			continue;
 		if (touch(*qq) == 0) {
@@ -1121,13 +979,11 @@ doarg(job)
 /*
  * Enable everything and start printer (undo `down').
  */
-void
 up(argc, argv)
-	int argc;
 	char *argv[];
 {
-	int c, status;
-	char *cp1, *cp2;
+	register int c, status;
+	register char *cp1, *cp2;
 	char prbuf[100];
 
 	if (argc == 1) {
@@ -1136,11 +992,10 @@ up(argc, argv)
 	}
 	if (argc == 2 && !strcmp(argv[1], "all")) {
 		printer = prbuf;
-		while (cgetnext(&bp, printcapdb) > 0) {
+		while (getprent(line) > 0) {
 			cp1 = prbuf;
-			cp2 = bp;
-			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			cp2 = line;
+			while ((c = *cp2++) && c != '|' && c != ':')
 				*cp1++ = c;
 			*cp1 = '\0';
 			startpr(2);
@@ -1149,15 +1004,13 @@ up(argc, argv)
 	}
 	while (--argc) {
 		printer = *++argv;
-		if ((status = cgetent(&bp, printcapdb, printer)) == -2) {
+		if ((status = pgetent(line, printer)) < 0) {
 			printf("cannot open printer description file\n");
 			continue;
-		} else if (status == -1) {
+		} else if (status == 0) {
 			printf("unknown printer %s\n", printer);
 			continue;
-		} else if (status == -3)
-			fatal("potential reference loop detected in printcap file");
-
+		}
 		startpr(2);
 	}
 }

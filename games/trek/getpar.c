@@ -1,8 +1,6 @@
-/*	$NetBSD: getpar.c,v 1.6 1997/10/13 22:12:01 cjs Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,31 +31,21 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)getpar.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: getpar.c,v 1.6 1997/10/13 22:12:01 cjs Exp $");
-#endif
+static char sccsid[] = "@(#)getpar.c	4.8 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <string.h>
-#include "getpar.h"
-#include "trek.h"
-
-static int testterm __P((void));
+# include	<stdio.h>
+# include	"getpar.h"
 
 /**
  **	get integer parameter
  **/
 
-int
 getintpar(s)
 char	*s;
 {
-	int	i;
+	register int	i;
 	int		n;
 
 	while (1)
@@ -81,7 +69,7 @@ char	*s;
 double getfltpar(s)
 char	*s;
 {
-	int		i;
+	register int		i;
 	double			d;
 
 	while (1)
@@ -104,19 +92,18 @@ char	*s;
 
 struct cvntab	Yntab[] =
 {
-	{ "y",	"es",	(cmdfun)1,	1 },
-	{ "n",	"o",	(cmdfun)0,	0 },
-	{ NULL,	NULL,	NULL,		0 }
+	"y",	"es",	(int (*)())1,	0,
+	"n",	"o",	(int (*)())0,	0,
+	0
 };
 
-int
 getynpar(s)
 char	*s;
 {
 	struct cvntab		*r;
 
 	r = getcodpar(s, Yntab);
-	return r->value2;
+	return ((int) r->value);
 }
 
 
@@ -129,9 +116,9 @@ char		*s;
 struct cvntab	tab[];
 {
 	char				input[100];
-	struct cvntab		*r;
+	register struct cvntab		*r;
 	int				flag;
-	char			*p, *q;
+	register char			*p, *q;
 	int				c;
 	int				f;
 
@@ -156,8 +143,7 @@ struct cvntab	tab[];
 			c = 4;
 			for (r = tab; r->abrev; r++)
 			{
-				strcpy(input, r->abrev);
-				strcat(input, r->full);
+				concat(r->abrev, r->full, input);
 				printf("%14.14s", input);
 				if (--c > 0)
 					continue;
@@ -202,16 +188,15 @@ struct cvntab	tab[];
  **	get string parameter
  **/
 
-void
 getstrpar(s, r, l, t)
 char	*s;
 char	*r;
 int	l;
 char	*t;
 {
-	int	i;
+	register int	i;
 	char		format[20];
-	int	f;
+	register int	f;
 
 	if (t == 0)
 		t = " \t\n;";
@@ -236,10 +221,9 @@ char	*t;
  **	test if newline is next valid character
  **/
 
-int
 testnl()
 {
-	char		c;
+	register char		c;
 
 	while ((c = cgetc(0)) != '\n')
 		if ((c >= '0' && c <= '9') || c == '.' || c == '!' ||
@@ -258,9 +242,8 @@ testnl()
  **	scan for newline
  **/
 
-void
 skiptonl(c)
-int	c;
+char	c;
 {
 	while (c != '\n')
 		if (!(c = cgetc(0)))
@@ -274,10 +257,9 @@ int	c;
  **	test for valid terminator
  **/
 
-static int
 testterm()
 {
-	char		c;
+	register char		c;
 
 	if (!(c = cgetc(0)))
 		return (1);
@@ -297,13 +279,12 @@ testterm()
 **	zero is returned.
 */
 
-int
 readdelim(d)
 char	d;
 {
-	char	c;
+	register char	c;
 
-	while ((c = cgetc(0)) != '\0')
+	while (c = cgetc(0))
 	{
 		if (c == d)
 			return (1);

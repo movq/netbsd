@@ -1,5 +1,3 @@
-/*	$NetBSD: signal.h,v 1.8 1996/02/29 00:04:57 jtc Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -38,16 +36,13 @@
 #ifndef _USER_SIGNAL_H
 #define _USER_SIGNAL_H
 
+#include <sys/types.h>
 #include <sys/cdefs.h>
 #include <sys/signal.h>
 
-#if !defined(_ANSI_SOURCE)
-#include <sys/types.h>
-#endif
-
 #if !defined(_ANSI_SOURCE) && !defined(_POSIX_SOURCE)
-extern __const char *__const sys_signame[_NSIG];
-extern __const char *__const sys_siglist[_NSIG];
+extern __const char *__const sys_signame[NSIG];
+extern __const char *__const sys_siglist[NSIG];
 #endif
 
 __BEGIN_DECLS
@@ -63,45 +58,6 @@ int	sigismember __P((const sigset_t *, int));
 int	sigpending __P((sigset_t *));
 int	sigprocmask __P((int, const sigset_t *, sigset_t *));
 int	sigsuspend __P((const sigset_t *));
-
-#if defined(__GNUC__) && defined(__STDC__)
-extern __inline int sigaddset(sigset_t *set, int signo) {
-	extern int errno;
-
-	if (signo <= 0 || signo >= _NSIG) {
-		errno = 22;			/* EINVAL */
-		return -1;
-	}
-	*set |= (1 << ((signo)-1));		/* sigmask(signo) */
-	return (0);
-}
-
-extern __inline int sigdelset(sigset_t *set, int signo) {
-	extern int errno;
-
-	if (signo <= 0 || signo >= _NSIG) {
-		errno = 22;			/* EINVAL */
-		return -1;
-	}
-	*set &= ~(1 << ((signo)-1));		/* sigmask(signo) */
-	return (0);
-}
-
-extern __inline int sigismember(const sigset_t *set, int signo) {
-	extern int errno;
-
-	if (signo <= 0 || signo >= _NSIG) {
-		errno = 22;			/* EINVAL */
-		return -1;
-	}
-	return ((*set & (1 << ((signo)-1))) != 0);
-}
-#endif
-
-/* List definitions after function declarations, or Reiser cpp gets upset. */
-#define	sigemptyset(set)	(*(set) = 0, 0)
-#define	sigfillset(set)		(*(set) = ~(sigset_t)0, 0)
-
 #ifndef _POSIX_SOURCE
 int	killpg __P((pid_t, int));
 int	sigblock __P((int));
@@ -110,11 +66,17 @@ int	sigpause __P((int));
 int	sigreturn __P((struct sigcontext *));
 int	sigsetmask __P((int));
 int	sigstack __P((const struct sigstack *, struct sigstack *));
-int	sigaltstack __P((const struct sigaltstack *, struct sigaltstack *));
 int	sigvec __P((int, struct sigvec *, struct sigvec *));
 void	psignal __P((unsigned int, const char *));
 #endif	/* !_POSIX_SOURCE */
 #endif	/* !_ANSI_SOURCE */
 __END_DECLS
+
+/* List definitions after function declarations, or Reiser cpp gets upset. */
+#define	sigaddset(set, signo)	(*(set) |= 1 << ((signo) - 1), 0)
+#define	sigdelset(set, signo)	(*(set) &= ~(1 << ((signo) - 1)), 0)
+#define	sigemptyset(set)	(*(set) = 0, 0)
+#define	sigfillset(set)		(*(set) = ~(sigset_t)0, 0)
+#define	sigismember(set, signo)	((*(set) & (1 << ((signo) - 1))) != 0)
 
 #endif	/* !_USER_SIGNAL_H */

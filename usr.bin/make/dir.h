@@ -1,5 +1,3 @@
-/*	$NetBSD: dir.h,v 1.5 1997/05/08 21:24:42 gwr Exp $	*/
-
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
  * Copyright (c) 1988, 1989 by Adam de Boor
@@ -37,7 +35,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)dir.h	8.1 (Berkeley) 6/6/93
+ *	from: @(#)dir.h	5.4 (Berkeley) 12/28/90
+ *	$Id: dir.h,v 1.1 1994/03/05 00:34:43 cgd Exp $
  */
 
 /* dir.h --
@@ -54,19 +53,18 @@ typedef struct Path {
     Hash_Table    files;    	/* Hash table of files in directory */
 } Path;
 
-void Dir_Init __P((const char *));
-void Dir_End __P((void));
+void Dir_Init __P((void));
 Boolean Dir_HasWildcards __P((char *));
 void Dir_Expand __P((char *, Lst, Lst));
 char *Dir_FindFile __P((char *, Lst));
 int Dir_MTime __P((GNode *));
-Path *Dir_AddDir __P((Lst, const char *));
+void Dir_AddDir __P((Lst, char *));
 char *Dir_MakeFlags __P((char *, Lst));
 void Dir_ClearPath __P((Lst));
 void Dir_Concat __P((Lst, Lst));
 void Dir_PrintDirectories __P((void));
 void Dir_PrintPath __P((Lst));
-void Dir_Destroy __P((ClientData));
-ClientData Dir_CopyDir __P((ClientData));
+void Dir_Destroy __P((Path *));
+ClientData Dir_CopyDir __P((Path *));
 
 #endif /* _DIR */

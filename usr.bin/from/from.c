@@ -1,8 +1,6 @@
-/*	$NetBSD: from.c,v 1.8 1997/10/18 15:08:53 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,36 +31,28 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980, 1988 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)from.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: from.c,v 1.8 1997/10/18 15:08:53 lukem Exp $");
+static char sccsid[] = "@(#)from.c	5.7 (Berkeley) 3/1/91";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <ctype.h>
-#include <paths.h>
 #include <pwd.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <paths.h>
 
-int	main __P((int, char **));
-int	match __P((char *, char *));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
+	extern char *optarg;
+	extern int optind;
 	struct passwd *pwd;
 	int ch, newline;
 	char *file, *sender, *p;
@@ -73,7 +63,7 @@ main(argc, argv)
 #endif
 
 	file = sender = NULL;
-	while ((ch = getopt(argc, argv, "f:s:")) != -1)
+	while ((ch = getopt(argc, argv, "f:s:")) != EOF)
 		switch((char)ch) {
 		case 'f':
 			file = optarg;
@@ -91,36 +81,20 @@ main(argc, argv)
 		}
 	argv += optind;
 
-	/*
-	 * We find the mailbox by:
-	 *	1 -f flag
-	 *	2 user
-	 *	2 MAIL environment variable
-	 *	3 _PATH_MAILDIR/file
-	 */
 	if (!file) {
 		if (!(file = *argv)) {
-			if (!(file = getenv("MAIL"))) {
-				if (!(pwd = getpwuid(getuid()))) {
-					(void)fprintf(stderr,
-				"from: no password file entry for you.\n");
-					exit(1);
-				}
-				if ((file = getenv("USER")) != NULL) {
-					(void)sprintf(buf, "%s/%s",
-					    _PATH_MAILDIR, file);
-					file = buf;
-				} else
-					(void)sprintf(file = buf, "%s/%s",
-					    _PATH_MAILDIR, pwd->pw_name);
+			if (!(pwd = getpwuid(getuid()))) {
+				fprintf(stderr,
+				    "from: no password file entry for you.\n");
+				exit(1);
 			}
-		} else {
-			(void)sprintf(buf, "%s/%s", _PATH_MAILDIR, file);
-			file = buf;
+			file = pwd->pw_name;
 		}
+		(void)sprintf(buf, "%s/%s", _PATH_MAILDIR, file);
+		file = buf;
 	}
 	if (!freopen(file, "r", stdin)) {
-		(void)fprintf(stderr, "from: can't read %s.\n", file);
+		fprintf(stderr, "from: can't read %s.\n", file);
 		exit(1);
 	}
 	for (newline = 1; fgets(buf, sizeof(buf), stdin);) {
@@ -136,11 +110,10 @@ main(argc, argv)
 	exit(0);
 }
 
-int
 match(line, sender)
-	char *line, *sender;
+	register char *line, *sender;
 {
-	char ch, pch, first, *p, *t;
+	register char ch, pch, first, *p, *t;
 
 	for (first = *sender++;;) {
 		if (isspace(ch = *line))

@@ -1,8 +1,6 @@
-/*	$NetBSD: cmdtab.c,v 1.5 1997/10/05 15:12:07 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,23 +31,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cmdtab.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: cmdtab.c,v 1.5 1997/10/05 15:12:07 mrg Exp $");
-#endif
+static char sccsid[] = "@(#)cmdtab.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
-
-#include <sys/cdefs.h>
-
-#include "lpc.h"
-#include "extern.h"
 
 /*
  * lpc -- command tables
  */
+
+#include "lpc.h"
+
+int	abort(), clean(), enable(), disable(), down(), help();
+int	quit(), restart(), start(), status(), stop(), topq(), up();
+
 char	aborthelp[] =	"terminate a spooling daemon immediately and disable printing";
 char	cleanhelp[] =	"remove cruft files from a queue";
 char	enablehelp[] =	"turn a spooling queue on";
@@ -65,7 +59,7 @@ char	topqhelp[] =	"put job at top of printer queue";
 char	uphelp[] =	"enable everything and restart spooling daemon";
 
 struct cmd cmdtab[] = {
-	{ "abort",	aborthelp,	doabort,	1 },
+	{ "abort",	aborthelp,	abort,		1 },
 	{ "clean",	cleanhelp,	clean,		1 },
 	{ "enable",	enablehelp,	enable,		1 },
 	{ "exit",	quithelp,	quit,		0 },
@@ -74,7 +68,7 @@ struct cmd cmdtab[] = {
 	{ "help",	helphelp,	help,		0 },
 	{ "quit",	quithelp,	quit,		0 },
 	{ "restart",	restarthelp,	restart,	0 },
-	{ "start",	starthelp,	startcmd,	1 },
+	{ "start",	starthelp,	start,		1 },
 	{ "status",	statushelp,	status,		0 },
 	{ "stop",	stophelp,	stop,		1 },
 	{ "topq",	topqhelp,	topq,		1 },

@@ -1,5 +1,3 @@
-/*	$NetBSD: sysctl.h,v 1.24 1997/09/19 14:05:53 leo Exp $	*/
-
 /*
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -44,7 +42,7 @@
 /*
  * These are for the eproc structure defined below.
  */
-#ifndef _KERNEL
+#ifndef KERNEL
 #include <sys/time.h>
 #include <sys/ucred.h>
 #include <sys/proc.h>
@@ -64,7 +62,7 @@
 
 /*
  * Each subsystem defined by sysctl defines a list of variables
- * for that subsystem. Each name is either a node with further
+ * for that subsystem. Each name is either a node with further 
  * levels defined below it, or it is a leaf of some particular
  * type given below. Each sysctl level defines a set of name/type
  * pairs to be used by sysctl(1) in manipulating the subsystem.
@@ -91,8 +89,7 @@ struct ctlname {
 #define	CTL_HW		6		/* generic cpu/io */
 #define	CTL_MACHDEP	7		/* machine dependent */
 #define	CTL_USER	8		/* user-level */
-#define	CTL_DDB		9		/* in-kernel debugger */
-#define	CTL_MAXID	10		/* number of valid top-level ids */
+#define	CTL_MAXID	9		/* number of valid top-level ids */
 
 #define CTL_NAMES { \
 	{ 0, 0 }, \
@@ -104,7 +101,6 @@ struct ctlname {
 	{ "hw", CTLTYPE_NODE }, \
 	{ "machdep", CTLTYPE_NODE }, \
 	{ "user", CTLTYPE_NODE }, \
-	{ "ddb", CTLTYPE_NODE }, \
 }
 
 /*
@@ -132,16 +128,7 @@ struct ctlname {
 #define	KERN_SAVED_IDS		20	/* int: saved set-user/group-ID */
 #define	KERN_BOOTTIME		21	/* struct: time kernel was booted */
 #define	KERN_DOMAINNAME		22	/* string: (YP) domainname */
-#define	KERN_MAXPARTITIONS	23	/* int: number of partitions/disk */
-#define KERN_RAWPARTITION	24	/* int: raw partition number */
-#define	KERN_NTPTIME		25	/* struct: extended-precision time */
-#define	KERN_TIMEX		26	/* struct: ntp timekeeping state */
-#define KERN_AUTONICETIME	27	/* int: proc time before autonice */
-#define KERN_AUTONICEVAL	28	/* int: auto nice value */
-#define	KERN_RTC_OFFSET		29	/* int: offset of rtc from gmt */
-#define	KERN_ROOT_DEVICE	30	/* string: root device */
-#define	KERN_MSGBUFSIZE		31	/* int: max # of chars in msg buffer */
-#define	KERN_MAXID		32	/* number of valid kern ids */
+#define	KERN_MAXID		23	/* number of valid kern ids */
 
 #define CTL_KERN_NAMES { \
 	{ 0, 0 }, \
@@ -167,18 +154,9 @@ struct ctlname {
 	{ "saved_ids", CTLTYPE_INT }, \
 	{ "boottime", CTLTYPE_STRUCT }, \
 	{ "domainname", CTLTYPE_STRING }, \
-	{ "maxpartitions", CTLTYPE_INT }, \
-	{ "rawpartition", CTLTYPE_INT }, \
-	{ "ntptime", CTLTYPE_STRUCT }, \
-	{ "timex", CTLTYPE_STRUCT }, \
-	{ "autonicetime", CTLTYPE_INT }, \
-	{ "autoniceval", CTLTYPE_INT }, \
-	{ "rtc_offset", CTLTYPE_INT }, \
-	{ "root_device", CTLTYPE_STRING }, \
-	{ "msgbufsize", CTLTYPE_INT }, \
 }
 
-/*
+/* 
  * KERN_PROC subtypes
  */
 #define KERN_PROC_ALL		0	/* everything */
@@ -189,7 +167,7 @@ struct ctlname {
 #define	KERN_PROC_UID		5	/* by effective uid */
 #define	KERN_PROC_RUID		6	/* by real uid */
 
-/*
+/* 
  * KERN_PROC subtype ops return arrays of augmented proc structures:
  */
 struct kinfo_proc {
@@ -199,15 +177,24 @@ struct kinfo_proc {
 		struct	session *e_sess;	/* session pointer */
 		struct	pcred e_pcred;		/* process credentials */
 		struct	ucred e_ucred;		/* current credentials */
+#ifdef sparc
+		struct {
+			segsz_t	vm_rssize;	/* resident set size */
+			segsz_t	vm_tsize;	/* text size */
+			segsz_t	vm_dsize;	/* data size */
+			segsz_t	vm_ssize;	/* stack size */
+		} e_vm;
+#else
 		struct	vmspace e_vm;		/* address space */
+#endif
 		pid_t	e_ppid;			/* parent process id */
 		pid_t	e_pgid;			/* process group id */
 		short	e_jobc;			/* job control counter */
 		dev_t	e_tdev;			/* controlling tty dev */
 		pid_t	e_tpgid;		/* tty process group id */
 		struct	session *e_tsess;	/* tty session pointer */
-#define	WMESGLEN	8
-		char	e_wmesg[WMESGLEN];	/* wchan message */
+#define	WMESGLEN	7
+		char	e_wmesg[WMESGLEN+1];	/* wchan message */
 		segsz_t e_xsize;		/* text size */
 		short	e_xrssize;		/* text rss */
 		short	e_xccount;		/* text references */
@@ -232,8 +219,7 @@ struct kinfo_proc {
 #define	HW_PAGESIZE	 7		/* int: software page size */
 #define	HW_DISKNAMES	 8		/* strings: disk drive names */
 #define	HW_DISKSTATS	 9		/* struct: diskstats[] */
-#define	HW_MACHINE_ARCH	10		/* string: machine architecture */
-#define	HW_MAXID	11		/* number of valid hw ids */
+#define	HW_MAXID	10		/* number of valid hw ids */
 
 #define CTL_HW_NAMES { \
 	{ 0, 0 }, \
@@ -246,7 +232,6 @@ struct kinfo_proc {
 	{ "pagesize", CTLTYPE_INT }, \
 	{ "disknames", CTLTYPE_STRUCT }, \
 	{ "diskstats", CTLTYPE_STRUCT }, \
-	{ "machine_arch", CTLTYPE_STRING }, \
 }
 
 /*
@@ -299,27 +284,6 @@ struct kinfo_proc {
 }
 
 /*
- * CTL_DDB definitions
- */
-#define	DDBCTL_RADIX		1	/* int: Input and output radix */
-#define	DDBCTL_MAXOFF		2	/* int: max symbol offset */
-#define	DDBCTL_MAXWIDTH		3	/* int: width of the display line */
-#define	DDBCTL_LINES		4	/* int: number of display lines */
-#define	DDBCTL_TABSTOPS		5	/* int: tab width */
-#define	DDBCTL_ONPANIC		6	/* int: DDB on panic if non-zero */
-#define	DDBCTL_MAXID		7	/* number of valid DDB ids */
-
-#define	CTL_DDB_NAMES { \
-	{ 0, 0 }, \
-	{ "radix", CTLTYPE_INT }, \
-	{ "maxoff", CTLTYPE_INT }, \
-	{ "maxwidth", CTLTYPE_INT }, \
-	{ "lines", CTLTYPE_INT }, \
-	{ "tabstops", CTLTYPE_INT }, \
-	{ "onpanic", CTLTYPE_INT }, \
-}
-
-/*
  * CTL_DEBUG definitions
  *
  * Second level identifier specifies which debug variable.
@@ -329,7 +293,7 @@ struct kinfo_proc {
 #define	CTL_DEBUG_VALUE		1	/* int: variable value */
 #define	CTL_DEBUG_MAXID		20
 
-#ifdef	_KERNEL
+#ifdef	KERNEL
 #ifdef	DEBUG
 /*
  * CTL_DEBUG variables.
@@ -370,50 +334,13 @@ int sysctl_rdint __P((void *, size_t *, void *, int));
 int sysctl_string __P((void *, size_t *, void *, size_t, char *, int));
 int sysctl_rdstring __P((void *, size_t *, void *, char *));
 int sysctl_rdstruct __P((void *, size_t *, void *, void *, int));
-int sysctl_struct __P((void *, size_t *, void *, size_t, void *, int));
-int sysctl_file __P((char *, size_t *));
-int sysctl_doproc __P((int *, u_int, char *, size_t *));
-struct radix_node;
-struct walkarg;
-int sysctl_dumpentry __P((struct radix_node *, void *));
-int sysctl_iflist __P((int, struct walkarg *));
-int sysctl_rtable __P((int *, u_int, void *, size_t *, void *, size_t));
-int sysctl_clockrate __P((char *, size_t *));
-int sysctl_rdstring __P((void *, size_t *, void *, char *));
-int sysctl_rdstruct __P((void *, size_t *, void *, void *, int));
-int sysctl_vnode __P((char *, size_t *));
-int sysctl_ntptime __P((char *, size_t *));
-#ifdef GPROF
-int sysctl_doprof __P((int *, u_int, void *, size_t *, void *, size_t));
-#endif
-
 void fill_eproc __P((struct proc *, struct eproc *));
 
-int kern_sysctl __P((int *, u_int, void *, size_t *, void *, size_t,
-		     struct proc *));
-int hw_sysctl __P((int *, u_int, void *, size_t *, void *, size_t,
-		   struct proc *));
-#ifdef DEBUG
-int debug_sysctl __P((int *, u_int, void *, size_t *, void *, size_t,
-		      struct proc *));
-#endif
-int vm_sysctl __P((int *, u_int, void *, size_t *, void *, size_t,
-		   struct proc *));
-int fs_sysctl __P((int *, u_int, void *, size_t *, void *, size_t,
-		   struct proc *));
-int net_sysctl __P((int *, u_int, void *, size_t *, void *, size_t,
-		    struct proc *));
-int cpu_sysctl __P((int *, u_int, void *, size_t *, void *, size_t,
-		    struct proc *));
-#ifdef DDB
-int ddb_sysctl __P((int *, u_int, void *, size_t *, void *, size_t,
-		    struct proc *));
-#endif
-#else	/* !_KERNEL */
+#else	/* !KERNEL */
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
 int	sysctl __P((int *, u_int, void *, size_t *, void *, size_t));
 __END_DECLS
-#endif	/* _KERNEL */
+#endif	/* KERNEL */
 #endif	/* !_SYS_SYSCTL_H_ */

@@ -1,8 +1,6 @@
-/*	$NetBSD: err.h,v 1.11 1994/10/26 00:55:52 cgd Exp $	*/
-
 /*-
- * Copyright (c) 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1993 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)err.h	8.1 (Berkeley) 6/2/93
+ *	@(#)err.h	5.1 (Berkeley) 3/4/93
  */
 
 #ifndef _ERR_H_
@@ -45,26 +43,20 @@
  * for utilities to have to include one of them to include err.h, so we get
  * _BSD_VA_LIST_ from <machine/ansi.h> and use it.
  */
+/* s/_BSD_VA_LIST_/_VA_LIST_ to avoid major changes at this time */
+
 #include <machine/ansi.h>
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-__dead void	err __P((int, const char *, ...))
-			__attribute__((noreturn, format (printf, 2, 3)));
-__dead void	verr __P((int, const char *, _BSD_VA_LIST_))
-			__attribute__((noreturn, format (printf, 2, 0)));
-__dead void	errx __P((int, const char *, ...))
-			__attribute__((noreturn, format (printf, 2, 3)));
-__dead void	verrx __P((int, const char *, _BSD_VA_LIST_))
-			__attribute__((noreturn, format (printf, 2, 0)));
-void		warn __P((const char *, ...))
-			__attribute__((format (printf, 1, 2)));
-void		vwarn __P((const char *, _BSD_VA_LIST_))
-			__attribute__((format (printf, 1, 0)));
-void		warnx __P((const char *, ...))
-			__attribute__((format (printf, 1, 2)));
-void		vwarnx __P((const char *, _BSD_VA_LIST_))
-			__attribute__((format (printf, 1, 0)));
+__dead void	err __P((int, const char *, ...));
+__dead void	verr __P((int, const char *, _VA_LIST_));
+__dead void	errx __P((int, const char *, ...));
+__dead void	verrx __P((int, const char *, _VA_LIST_));
+void		warn __P((const char *, ...));
+void		vwarn __P((const char *, _VA_LIST_));
+void		warnx __P((const char *, ...));
+void		vwarnx __P((const char *, _VA_LIST_));
 __END_DECLS
 
 #endif /* !_ERR_H_ */

@@ -1,13 +1,10 @@
-/*	$NetBSD: bpf_filter.c,v 1.14 1997/10/09 18:20:04 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from the Stanford/CMU enet packet filter,
  * (net/enet.c) distributed as part of 4.3BSD, and code contributed
- * to Berkeley by Steven McCanne and Van Jacobson both of Lawrence
- * Berkeley Laboratory.
+ * to Berkeley by Steven McCanne of Lawrence Berkeley Laboratory.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,49 +34,46 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)bpf_filter.c	8.1 (Berkeley) 6/10/93
+ *	@(#)bpf_filter.c	7.2 (Berkeley) 5/14/91
+ *
+ * static char rcsid[] =
+ * "@(#) $Header: /home/mike/src/cvs/netbsd/src/sys/net/bpf_filter.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ (LBL)";
  */
-
-#if 0
-#if !(defined(lint) || defined(KERNEL))
-static const char rcsid[] =
-    "@(#) Header: bpf_filter.c,v 1.33 97/04/26 13:37:18 leres Exp  (LBL)";
-#endif
-#endif
 
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include <net/bpf.h>
 
 #ifdef sun
 #include <netinet/in.h>
 #endif
 
-#if defined(sparc) || defined(mips) || defined(ibm032) || \
-    (defined(__NetBSD__) && !defined(UNALIGNED_ACCESS))
-#define BPF_ALIGN
+#if defined(sparc) || defined(mips)
+#define ALIGN
 #endif
 
-#ifndef BPF_ALIGN
-#define EXTRACT_SHORT(p)	((u_int16_t)ntohs(*(u_int16_t *)p))
-#define EXTRACT_LONG(p)		(ntohl(*(u_int32_t *)p))
+#ifndef ALIGN
+#define EXTRACT_SHORT(p)	(ntohs(*(u_short *)p))
+#define EXTRACT_LONG(p)		(ntohl(*(u_long *)p))
 #else
 #define EXTRACT_SHORT(p)\
-	((u_int16_t)\
-		((u_int16_t)*((u_char *)p+0)<<8|\
-		 (u_int16_t)*((u_char *)p+1)<<0))
+	((u_short)\
+		(*((u_char *)(p)+0)<<8|\
+		 *((u_char *)(p)+1)<<0))
 #define EXTRACT_LONG(p)\
-		((u_int32_t)*((u_char *)p+0)<<24|\
-		 (u_int32_t)*((u_char *)p+1)<<16|\
-		 (u_int32_t)*((u_char *)p+2)<<8|\
-		 (u_int32_t)*((u_char *)p+3)<<0)
+		(*((u_char *)(p)+0)<<24|\
+		 *((u_char *)(p)+1)<<16|\
+		 *((u_char *)(p)+2)<<8|\
+		 *((u_char *)(p)+3)<<0)
 #endif
 
-#ifdef _KERNEL
+#ifdef KERNEL
 #include <sys/mbuf.h>
-#define MINDEX(len, m, k) \
+#define MINDEX(m, k) \
 { \
-	len = m->m_len; \
+	register int len = m->m_len; \
+ \
 	while (k >= len) { \
 		k -= len; \
 		m = m->m_next; \
@@ -88,9 +82,6 @@ static const char rcsid[] =
 		len = m->m_len; \
 	} \
 }
-
-static int m_xword __P((struct mbuf *, int, int *));
-static int m_xhalf __P((struct mbuf *, int, int *));
 
 static int
 m_xword(m, k, err)
@@ -101,7 +92,14 @@ m_xword(m, k, err)
 	register u_char *cp, *np;
 	register struct mbuf *m0;
 
-	MINDEX(len, m, k);
+	len = m->m_len;
+	while (k >= len) {
+		k -= len;
+		m = m->m_next;
+		if (m == 0)
+			goto bad;
+		len = m->m_len;
+	}
 	cp = mtod(m, u_char *) + k;
 	if (len - k >= 4) {
 		*err = 0;
@@ -115,13 +113,15 @@ m_xword(m, k, err)
 	switch (len - k) {
 
 	case 1:
-		return (cp[0] << 24) | (np[0] << 16) | (np[1] << 8) | np[2];
+		return (cp[k] << 24) | (np[0] << 16) | (np[1] << 8) | np[2];
 
 	case 2:
-		return (cp[0] << 24) | (cp[1] << 16) | (np[0] << 8) | np[1];
+		return (cp[k] << 24) | (cp[k + 1] << 16) | (np[0] << 8) | 
+			np[1];
 
 	default:
-		return (cp[0] << 24) | (cp[1] << 16) | (cp[2] << 8) | np[0];
+		return (cp[k] << 24) | (cp[k + 1] << 16) | (cp[k + 2] << 8) |
+			np[0];
 	}
     bad:
 	*err = 1;
@@ -134,10 +134,17 @@ m_xhalf(m, k, err)
 	register int k, *err;
 {
 	register int len;
-	register u_char *cp;
+	register u_char *cp, *np;
 	register struct mbuf *m0;
 
-	MINDEX(len, m, k);
+	len = m->m_len;
+	while (k >= len) {
+		k -= len;
+		m = m->m_next;
+		if (m == 0)
+			goto bad;
+		len = m->m_len;
+	}
 	cp = mtod(m, u_char *) + k;
 	if (len - k >= 2) {
 		*err = 0;
@@ -147,14 +154,14 @@ m_xhalf(m, k, err)
 	if (m0 == 0)
 		goto bad;
 	*err = 0;
-	return (cp[0] << 8) | mtod(m0, u_char *)[0];
+	return (cp[k] << 8) | mtod(m0, u_char *)[0];
  bad:
 	*err = 1;
 	return 0;
 }
-#endif
 
-#include <net/bpf.h>
+
+#endif
 
 /*
  * Execute the filter program starting at pc on the packet p
@@ -168,24 +175,26 @@ bpf_filter(pc, p, wirelen, buflen)
 	u_int wirelen;
 	register u_int buflen;
 {
-	register u_int32_t A, X;
+	register long A, X;
 	register int k;
-	int32_t mem[BPF_MEMWORDS];
+	long mem[BPF_MEMWORDS];
 
 	if (pc == 0)
 		/*
 		 * No filter means accept all.
 		 */
 		return (u_int)-1;
+#ifdef lint
 	A = 0;
 	X = 0;
+#endif
 	--pc;
 	while (1) {
 		++pc;
 		switch (pc->code) {
 
 		default:
-#ifdef _KERNEL
+#ifdef KERNEL
 			return 0;
 #else
 			abort();
@@ -198,8 +207,8 @@ bpf_filter(pc, p, wirelen, buflen)
 
 		case BPF_LD|BPF_W|BPF_ABS:
 			k = pc->k;
-			if (k + sizeof(int32_t) > buflen) {
-#ifdef _KERNEL
+			if (k + sizeof(long) > buflen) {
+#ifdef KERNEL
 				int merr;
 
 				if (buflen != 0)
@@ -212,13 +221,18 @@ bpf_filter(pc, p, wirelen, buflen)
 				return 0;
 #endif
 			}
-			A = EXTRACT_LONG(&p[k]);
+#ifdef ALIGN
+			if (((int)(p + k) & 3) != 0)
+				A = EXTRACT_LONG(&p[k]);
+			else
+#endif
+				A = *(long *)(p + k);
 			continue;
 
 		case BPF_LD|BPF_H|BPF_ABS:
 			k = pc->k;
-			if (k + sizeof(int16_t) > buflen) {
-#ifdef _KERNEL
+			if (k + sizeof(short) > buflen) {
+#ifdef KERNEL
 				int merr;
 
 				if (buflen != 0)
@@ -235,14 +249,13 @@ bpf_filter(pc, p, wirelen, buflen)
 		case BPF_LD|BPF_B|BPF_ABS:
 			k = pc->k;
 			if (k >= buflen) {
-#ifdef _KERNEL
+#ifdef KERNEL
 				register struct mbuf *m;
-				register int len;
 
 				if (buflen != 0)
 					return 0;
 				m = (struct mbuf *)p;
-				MINDEX(len, m, k);
+				MINDEX(m, k);
 				A = mtod(m, u_char *)[k];
 				continue;
 #else
@@ -262,8 +275,8 @@ bpf_filter(pc, p, wirelen, buflen)
 
 		case BPF_LD|BPF_W|BPF_IND:
 			k = X + pc->k;
-			if (k + sizeof(int32_t) > buflen) {
-#ifdef _KERNEL
+			if (k + sizeof(long) > buflen) {
+#ifdef KERNEL
 				int merr;
 
 				if (buflen != 0)
@@ -276,13 +289,18 @@ bpf_filter(pc, p, wirelen, buflen)
 				return 0;
 #endif
 			}
-			A = EXTRACT_LONG(&p[k]);
+#ifdef ALIGN
+			if (((int)(p + k) & 3) != 0)
+				A = EXTRACT_LONG(&p[k]);
+			else
+#endif
+				A = *(long *)(p + k);
 			continue;
 
 		case BPF_LD|BPF_H|BPF_IND:
 			k = X + pc->k;
-			if (k + sizeof(int16_t) > buflen) {
-#ifdef _KERNEL
+			if (k + sizeof(short) > buflen) {
+#ifdef KERNEL
 				int merr;
 
 				if (buflen != 0)
@@ -301,15 +319,14 @@ bpf_filter(pc, p, wirelen, buflen)
 		case BPF_LD|BPF_B|BPF_IND:
 			k = X + pc->k;
 			if (k >= buflen) {
-#ifdef _KERNEL
+#ifdef KERNEL
 				register struct mbuf *m;
-				register int len;
 
 				if (buflen != 0)
 					return 0;
 				m = (struct mbuf *)p;
-				MINDEX(len, m, k);
-				A = mtod(m, u_char *)[k];
+				MINDEX(m, k);
+				A = mtod(m, char *)[k];
 				continue;
 #else
 				return 0;
@@ -321,14 +338,13 @@ bpf_filter(pc, p, wirelen, buflen)
 		case BPF_LDX|BPF_MSH|BPF_B:
 			k = pc->k;
 			if (k >= buflen) {
-#ifdef _KERNEL
+#ifdef KERNEL
 				register struct mbuf *m;
-				register int len;
 
 				if (buflen != 0)
 					return 0;
 				m = (struct mbuf *)p;
-				MINDEX(len, m, k);
+				MINDEX(m, k);
 				X = (mtod(m, char *)[k] & 0xf) << 2;
 				continue;
 #else
@@ -479,7 +495,7 @@ bpf_filter(pc, p, wirelen, buflen)
 	}
 }
 
-#ifdef _KERNEL
+#ifdef KERNEL
 /*
  * Return true if the 'fcode' is a valid filter program.
  * The constraints are that each jump be forward and to a valid
@@ -508,9 +524,7 @@ bpf_validate(f, len)
 			register int from = i + 1;
 
 			if (BPF_OP(p->code) == BPF_JA) {
-				if ((p->k < 0) ||
-				    (from + p->k >= len) ||
-				    (from + p->k < 0))
+				if (from + p->k >= len)
 					return 0;
 			}
 			else if (from + p->jt >= len || from + p->jf >= len)
@@ -527,8 +541,8 @@ bpf_validate(f, len)
 		/*
 		 * Check for constant division by 0.
 		 */
-		if (p->code == (BPF_ALU|BPF_DIV|BPF_K) && p->k == 0)
-			return 0;
+		if (p->code == BPF_ALU|BPF_DIV|BPF_K && p->k == 0)
+			return;
 	}
 	return BPF_CLASS(f[len - 1].code) == BPF_RET;
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: idp_usrreq.c,v 1.13 1997/07/18 19:30:34 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1984, 1985, 1986, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,32 +30,28 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)idp_usrreq.c	8.1 (Berkeley) 6/10/93
+ *	@(#)idp_usrreq.c	7.11 (Berkeley) 6/27/91
  */
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/malloc.h>
-#include <sys/mbuf.h>
-#include <sys/protosw.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
-#include <sys/errno.h>
-#include <sys/stat.h>
-#include <sys/proc.h>
+#include "param.h"
+#include "malloc.h"
+#include "mbuf.h"
+#include "protosw.h"
+#include "socket.h"
+#include "socketvar.h"
+#include "errno.h"
+#include "stat.h"
 
-#include <net/if.h>
-#include <net/route.h>
+#include "../net/if.h"
+#include "../net/route.h"
 
-#include <netns/ns.h>
-#include <netns/ns_pcb.h>
-#include <netns/ns_if.h>
-#include <netns/ns_var.h>
-#include <netns/idp.h>
-#include <netns/idp_var.h>
-#include <netns/ns_error.h>
+#include "ns.h"
+#include "ns_pcb.h"
+#include "ns_if.h"
+#include "idp.h"
+#include "idp_var.h"
+#include "ns_error.h"
 
-#include <machine/stdarg.h>
 /*
  * IDP protocol implementation.
  */
@@ -67,23 +61,12 @@ struct	sockaddr_ns idp_ns = { sizeof(idp_ns), AF_NS };
 /*
  *  This may also be called for raw listeners.
  */
-void
-#if __STDC__
-idp_input(struct mbuf *m, ...)
-#else
-idp_input(m, va_alist)
+idp_input(m, nsp)
 	struct mbuf *m;
-	va_dcl
-#endif
-{
 	register struct nspcb *nsp;
+{
 	register struct idp *idp = mtod(m, struct idp *);
 	struct ifnet *ifp = m->m_pkthdr.rcvif;
-	va_list ap;
-
-	va_start(ap, m);
-	nsp = va_arg(ap, struct nspcb *);
-	va_end(ap);
 
 	if (nsp==0)
 		panic("No nspcb");
@@ -95,8 +78,7 @@ idp_input(m, va_alist)
 	if (ns_neteqnn(idp->idp_sna.x_net, ns_zeronet) && ifp) {
 		register struct ifaddr *ifa;
 
-		for (ifa = ifp->if_addrlist.tqh_first; ifa != 0;
-		    ifa = ifa->ifa_list.tqe_next) {
+		for (ifa = ifp->if_addrlist; ifa; ifa = ifa->ifa_next) {
 			if (ifa->ifa_addr->sa_family == AF_NS) {
 				idp_ns.sns_addr.x_net =
 					IA_SNS(ifa)->sns_addr.x_net;
@@ -110,8 +92,8 @@ idp_input(m, va_alist)
 		m->m_pkthdr.len -= sizeof (struct idp);
 		m->m_data += sizeof (struct idp);
 	}
-	if (sbappendaddr(&nsp->nsp_socket->so_rcv, snstosa(&idp_ns), m,
-	    (struct mbuf *)0) == 0)
+	if (sbappendaddr(&nsp->nsp_socket->so_rcv, (struct sockaddr *)&idp_ns,
+	    m, (struct mbuf *)0) == 0)
 		goto bad;
 	sorwakeup(nsp->nsp_socket);
 	return;
@@ -119,7 +101,6 @@ bad:
 	m_freem(m);
 }
 
-void
 idp_abort(nsp)
 	struct nspcb *nsp;
 {
@@ -132,50 +113,47 @@ idp_abort(nsp)
  * Drop connection, reporting
  * the specified error.
  */
-void
+struct nspcb *
 idp_drop(nsp, errno)
 	register struct nspcb *nsp;
 	int errno;
 {
 	struct socket *so = nsp->nsp_socket;
 
-#if 0
 	/*
 	 * someday, in the xerox world
 	 * we will generate error protocol packets
 	 * announcing that the socket has gone away.
 	 */
-	if (TCPS_HAVERCVDSYN(tp->t_state)) {
+	/*if (TCPS_HAVERCVDSYN(tp->t_state)) {
 		tp->t_state = TCPS_CLOSED;
 		(void) tcp_output(tp);
-	}
-#endif
+	}*/
 	so->so_error = errno;
 	ns_pcbdisconnect(nsp);
 	soisdisconnected(so);
 }
 
-int
-#if __STDC__
-idp_output(struct mbuf *m0, ...)
-#else
-idp_output(m0, va_alist)
-	struct mbuf *m0;
-	va_dcl
-#endif
-{
+int noIdpRoute;
+idp_output(nsp, m0)
 	struct nspcb *nsp;
+	struct mbuf *m0;
+{
 	register struct mbuf *m;
 	register struct idp *idp;
-	register int len = m0->m_pkthdr.len;
-	struct mbuf *mprev = NULL;
+	register struct socket *so;
+	register int len = 0;
+	register struct route *ro;
+	struct mbuf *mprev;
 	extern int idpcksum;
-	va_list ap;
 
-	va_start(ap, m0);
-	nsp = va_arg(ap, struct nspcb *);
-	va_end(ap);
-
+	/*
+	 * Calculate data length.
+	 */
+	for (m = m0; m; m = m->m_next) {
+		mprev = m;
+		len += m->m_len;
+	}
 	/*
 	 * Make sure packet is actually of even length.
 	 */
@@ -218,7 +196,7 @@ idp_output(m0, va_alist)
 		len += sizeof (struct idp);
 	}
 
-	idp->idp_len = htons((u_int16_t)len);
+	idp->idp_len = htons((u_short)len);
 
 	if (idpcksum) {
 		idp->idp_sum = 0;
@@ -227,6 +205,13 @@ idp_output(m0, va_alist)
 	} else
 		idp->idp_sum = 0xffff;
 
+	/*
+	 * Output datagram.
+	 */
+	so = nsp->nsp_socket;
+	if (so->so_options & SO_DONTROUTE)
+		return (ns_output(m, (struct route *)0,
+		    (so->so_options & SO_BROADCAST) | NS_ROUTETOIF));
 	/*
 	 * Use cached route for previous datagram if
 	 * possible.  If the previous net was the same
@@ -237,11 +222,42 @@ idp_output(m0, va_alist)
 	 * NB: We don't handle broadcasts because that
 	 *     would require 3 subroutine calls.
 	 */
-	return (ns_output(m, &nsp->nsp_route,
-	    nsp->nsp_socket->so_options & (SO_DONTROUTE | SO_BROADCAST)));
+	ro = &nsp->nsp_route;
+#ifdef ancient_history
+	/*
+	 * I think that this will all be handled in ns_pcbconnect!
+	 */
+	if (ro->ro_rt) {
+		if(ns_neteq(nsp->nsp_lastdst, idp->idp_dna)) {
+			/*
+			 * This assumes we have no GH type routes
+			 */
+			if (ro->ro_rt->rt_flags & RTF_HOST) {
+				if (!ns_hosteq(nsp->nsp_lastdst, idp->idp_dna))
+					goto re_route;
+
+			}
+			if ((ro->ro_rt->rt_flags & RTF_GATEWAY) == 0) {
+				register struct ns_addr *dst =
+						&satons_addr(ro->ro_dst);
+				dst->x_host = idp->idp_dna.x_host;
+			}
+			/* 
+			 * Otherwise, we go through the same gateway
+			 * and dst is already set up.
+			 */
+		} else {
+		re_route:
+			RTFREE(ro->ro_rt);
+			ro->ro_rt = (struct rtentry *)0;
+		}
+	}
+	nsp->nsp_lastdst = idp->idp_dna;
+#endif ancient_history
+	if (noIdpRoute) ro = 0;
+	return (ns_output(m, ro, so->so_options & SO_BROADCAST));
 }
 /* ARGSUSED */
-int
 idp_ctloutput(req, so, level, name, value)
 	int req, level;
 	struct socket *so;
@@ -251,6 +267,7 @@ idp_ctloutput(req, so, level, name, value)
 	register struct mbuf *m;
 	struct nspcb *nsp = sotonspcb(so);
 	int mask, error = 0;
+	extern long ns_pexseq;
 
 	if (nsp == NULL)
 		return (EINVAL);
@@ -340,7 +357,7 @@ idp_ctloutput(req, so, level, name, value)
 		case SO_NSIP_ROUTE:
 			error = nsip_route(*value);
 			break;
-#endif /* NSIP */
+#endif NSIP
 		default:
 			error = EINVAL;
 		}
@@ -351,50 +368,51 @@ idp_ctloutput(req, so, level, name, value)
 	return (error);
 }
 
-u_long	idp_sendspace = 2048;
-u_long	idp_recvspace = 2048;
-
 /*ARGSUSED*/
-int
-idp_usrreq(so, req, m, nam, control, p)
+idp_usrreq(so, req, m, nam, control)
 	struct socket *so;
 	int req;
 	struct mbuf *m, *nam, *control;
-	struct proc *p;
 {
-	register struct nspcb *nsp;
-	int s;
+	struct nspcb *nsp = sotonspcb(so);
 	int error = 0;
 
 	if (req == PRU_CONTROL)
-                return (ns_control(so, (long)m, (caddr_t)nam,
-		    (struct ifnet *)control, p));
-
-	s = splsoftnet();
-	nsp = sotonspcb(so);
-	if (nsp == 0 && req != PRU_ATTACH) {
+                return (ns_control(so, (int)m, (caddr_t)nam,
+			(struct ifnet *)control));
+	if (control && control->m_len) {
 		error = EINVAL;
 		goto release;
 	}
-
+	if (nsp == NULL && req != PRU_ATTACH) {
+		error = EINVAL;
+		goto release;
+	}
 	switch (req) {
 
 	case PRU_ATTACH:
-		if (nsp != 0) {
-			error = EISCONN;
+		if (nsp != NULL) {
+			error = EINVAL;
 			break;
 		}
-		if ((error = soreserve(so, idp_sendspace, idp_recvspace)) ||
-		    (error = ns_pcballoc(so, &nspcb)))
+		error = ns_pcballoc(so, &nspcb);
+		if (error)
+			break;
+		error = soreserve(so, (u_long) 2048, (u_long) 2048);
+		if (error)
 			break;
 		break;
 
 	case PRU_DETACH:
+		if (nsp == NULL) {
+			error = ENOTCONN;
+			break;
+		}
 		ns_pcbdetach(nsp);
 		break;
 
 	case PRU_BIND:
-		error = ns_pcbbind(nsp, nam, p);
+		error = ns_pcbbind(nsp, nam);
 		break;
 
 	case PRU_LISTEN:
@@ -402,73 +420,77 @@ idp_usrreq(so, req, m, nam, control, p)
 		break;
 
 	case PRU_CONNECT:
-		error = ns_pcbconnect(nsp, nam);
-		if (error)
+		if (!ns_nullhost(nsp->nsp_faddr)) {
+			error = EISCONN;
 			break;
-		soisconnected(so);
+		}
+		error = ns_pcbconnect(nsp, nam);
+		if (error == 0)
+			soisconnected(so);
 		break;
 
 	case PRU_CONNECT2:
 		error = EOPNOTSUPP;
 		break;
 
+	case PRU_ACCEPT:
+		error = EOPNOTSUPP;
+		break;
+
 	case PRU_DISCONNECT:
-		soisdisconnected(so);
+		if (ns_nullhost(nsp->nsp_faddr)) {
+			error = ENOTCONN;
+			break;
+		}
 		ns_pcbdisconnect(nsp);
+		soisdisconnected(so);
 		break;
 
 	case PRU_SHUTDOWN:
 		socantsendmore(so);
 		break;
 
-	case PRU_RCVD:
-		error = EOPNOTSUPP;
-		break;
-
 	case PRU_SEND:
 	{
 		struct ns_addr laddr;
+		int s;
 
 		if (nam) {
 			laddr = nsp->nsp_laddr;
-			if ((so->so_state & SS_ISCONNECTED) != 0) {
+			if (!ns_nullhost(nsp->nsp_faddr)) {
 				error = EISCONN;
 				break;
 			}
+			/*
+			 * Must block input while temporarily connected.
+			 */
+			s = splnet();
 			error = ns_pcbconnect(nsp, nam);
-			if (error)
+			if (error) {
+				splx(s);
 				break;
+			}
 		} else {
-			if ((so->so_state & SS_ISCONNECTED) == 0) {
+			if (ns_nullhost(nsp->nsp_faddr)) {
 				error = ENOTCONN;
 				break;
 			}
 		}
-		error = idp_output(m, nsp);
+		error = idp_output(nsp, m);
+		m = NULL;
 		if (nam) {
 			ns_pcbdisconnect(nsp);
-			nsp->nsp_laddr = laddr;
+			splx(s);
+			nsp->nsp_laddr.x_host = laddr.x_host;
+			nsp->nsp_laddr.x_port = laddr.x_port;
 		}
 	}
 		break;
 
-	case PRU_SENSE:
-		/*
-		 * stat: don't bother with a blocksize.
-		 */
-		splx(s);
-		return (0);
-
-	/*
-	 * Not supported.
-	 */
-	case PRU_RCVOOB:
-		error = EOPNOTSUPP;
-		break;
-
-	case PRU_SENDOOB:
-		m_freem(m);
-		error = EOPNOTSUPP;
+	case PRU_ABORT:
+		ns_pcbdetach(nsp);
+		sofree(so);
+		soisdisconnected(so);
 		break;
 
 	case PRU_SOCKADDR:
@@ -479,48 +501,65 @@ idp_usrreq(so, req, m, nam, control, p)
 		ns_setpeeraddr(nsp, nam);
 		break;
 
+	case PRU_SENSE:
+		/*
+		 * stat: don't bother with a blocksize.
+		 */
+		return (0);
+
+	case PRU_SENDOOB:
+	case PRU_FASTTIMO:
+	case PRU_SLOWTIMO:
+	case PRU_PROTORCV:
+	case PRU_PROTOSEND:
+		error =  EOPNOTSUPP;
+		break;
+
+	case PRU_CONTROL:
+	case PRU_RCVD:
+	case PRU_RCVOOB:
+		return (EOPNOTSUPP);	/* do not free mbuf's */
+
 	default:
 		panic("idp_usrreq");
 	}
-
 release:
-	splx(s);
+	if (control != NULL)
+		m_freem(control);
+	if (m != NULL)
+		m_freem(m);
 	return (error);
 }
-
 /*ARGSUSED*/
-int
-idp_raw_usrreq(so, req, m, nam, control, p)
+idp_raw_usrreq(so, req, m, nam, control)
 	struct socket *so;
 	int req;
 	struct mbuf *m, *nam, *control;
-	struct proc *p;
 {
 	int error = 0;
 	struct nspcb *nsp = sotonspcb(so);
+	extern struct nspcb nsrawpcb;
 
 	switch (req) {
 
 	case PRU_ATTACH:
-		if (nsp != 0) {
-			error = EISCONN;
+
+		if (!(so->so_state & SS_PRIV) || (nsp != NULL)) {
+			error = EINVAL;
 			break;
 		}
-		if (p == 0 || (error = suser(p->p_ucred, &p->p_acflag))) {
-			error = EACCES;
+		error = ns_pcballoc(so, &nsrawpcb);
+		if (error)
 			break;
-		}
-		if ((error = soreserve(so, idp_sendspace, idp_recvspace)) ||
-		    (error = ns_pcballoc(so, &nspcb)))
+		error = soreserve(so, (u_long) 2048, (u_long) 2048);
+		if (error)
 			break;
 		nsp = sotonspcb(so);
 		nsp->nsp_faddr.x_host = ns_broadhost;
 		nsp->nsp_flags = NSP_RAWIN | NSP_RAWOUT;
 		break;
-
 	default:
-		error = idp_usrreq(so, req, m, nam, control, p);
-		break;
+		error = idp_usrreq(so, req, m, nam, control);
 	}
 	return (error);
 }

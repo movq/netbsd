@@ -29,17 +29,16 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)killpg.2	6.5 (Berkeley) 3/10/91
-.\"	$NetBSD: killpg.3,v 1.6 1997/10/09 10:08:06 lukem Exp $
+.\"     @(#)killpg.2	6.5 (Berkeley) 3/10/91
 .\"
 .Dd March 10, 1991
-.Dt KILLPG 3
+.Dt KILLPG 2
 .Os BSD 4
 .Sh NAME
 .Nm killpg
 .Nd send signal to a process group
 .Sh SYNOPSIS
-.Fd #include <signal.h>
+.Fd #include <sys/signal.h>
 .Ft int
 .Fn killpg "pid_t pgrp" "int sig"
 .Sh DESCRIPTION
@@ -91,6 +90,6 @@ of the sending process.
 .Xr sigaction 2
 .Sh HISTORY
 The
-.Fn killpg
+.Nm
 function call appeared in
 .Bx 4.0 .

@@ -1,8 +1,6 @@
-/*	$NetBSD: pl_7.c,v 1.8 1997/10/13 21:04:32 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)pl_7.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: pl_7.c,v 1.8 1997/10/13 21:04:32 christos Exp $");
-#endif
+static char sccsid[] = "@(#)pl_7.c	5.7 (Berkeley) 2/28/91";
 #endif /* not lint */
 
-#include <sys/ttydefaults.h>
 #include "player.h"
-#ifdef __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
-#include <unistd.h>
-
 
 /*
  * Display interface
@@ -61,7 +46,6 @@ static char *sc_prompt;
 static char *sc_buf;
 static int sc_line;
 
-void
 initscreen()
 {
 	/* initscr() already done in SCREENTEST() */
@@ -75,11 +59,16 @@ initscreen()
 	(void) leaveok(slot_w, 1);
 	(void) leaveok(stat_w, 1);
 	(void) leaveok(turn_w, 1);
+#ifdef SIGTSTP
+	{
+		void susp();
+		(void) signal(SIGTSTP, susp);
+	}
+#endif
 	noecho();
 	crmode();
 }
 
-void
 cleanupscreen()
 {
 	/* alarm already turned off */
@@ -91,10 +80,8 @@ cleanupscreen()
 	}
 }
 
-/*ARGSUSED*/
 void
-newturn(n)
-	int n;
+newturn()
 {
 	repaired = loaded = fired = changed = 0;
 	movebuf[0] = '\0';
@@ -146,65 +133,23 @@ newturn(n)
 }
 
 /*VARARGS2*/
-void
-#ifdef __STDC__
-Signal(const char *fmt, struct ship *ship, ...)
-#else
-Signal(va_alist)
-	va_dcl
-#endif
+Signal(fmt, ship, a, b, c, d)
+char *fmt;
+register struct ship *ship;
+int a, b, c, d;
 {
-	va_list ap;
-	char format[BUFSIZ];
-#ifndef __STDC__
-	const char *fmt;
-	struct ship *ship;
-
-	va_start(ap);
-	fmt = va_arg(ap, const char *);
-	ship = va_arg(ap, struct ship *);
-#else
-	va_start(ap, ship);
-#endif
 	if (!done_curses)
 		return;
 	if (*fmt == '\7')
 		putchar(*fmt++);
-	fmtship(format, sizeof(format), fmt, ship);
-	(void) vwprintw(scroll_w, format, ap);
-	va_end(ap);
+	if (ship == 0)
+		(void) wprintw(scroll_w, fmt, a, b, c, d);
+	else
+		(void) wprintw(scroll_w, fmt, ship->shipname,
+			colours(ship), sterncolour(ship), a, b, c, d);
 	Scroll();
 }
 
-/*VARARGS2*/
-void
-#ifdef __STDC__
-Msg(const char *fmt, ...)
-#else
-Msg(va_alist)
-	va_dcl
-#endif
-{
-	va_list ap;
-#ifndef __STDC__
-	const char *fmt;
-
-	va_start(ap);
-	fmt = va_arg(ap, const char *);
-#else
-	va_start(ap, fmt);
-#endif
-
-	if (!done_curses)
-		return;
-	if (*fmt == '\7')
-		putchar(*fmt++);
-	(void) vwprintw(scroll_w, fmt, ap);
-	va_end(ap);
-	Scroll();
-}
-
-void
 Scroll()
 {
 	if (++sc_line >= SCROLL_Y)
@@ -213,21 +158,23 @@ Scroll()
 	(void) wclrtoeol(scroll_w);
 }
 
-void
 prompt(p, ship)
-char *p;
+register char *p;
 struct ship *ship;
 {
-	static char buf[BUFSIZ];
+	static char buf[60];
 
-	fmtship(buf, sizeof(buf), p, ship);
-	sc_prompt = buf;
+	if (ship != 0) {
+		(void)sprintf(buf, p, ship->shipname, colours(ship),
+			sterncolour(ship));
+		p = buf;
+	}
+	sc_prompt = p;
 	sc_buf = "";
 	sc_hasprompt = 1;
-	(void) waddstr(scroll_w, buf);
+	(void) waddstr(scroll_w, p);
 }
 
-void
 endprompt(flag)
 char flag;
 {
@@ -236,13 +183,13 @@ char flag;
 		Scroll();
 }
 
-int
 sgetch(p, ship, flag)
 char *p;
 struct ship *ship;
 char flag;
 {
-	int c;
+	register c;
+
 	prompt(p, ship);
 	blockalarm();
 	(void) wrefresh(scroll_w);
@@ -255,14 +202,13 @@ char flag;
 	return c;
 }
 
-void
 sgetstr(pr, buf, n)
 char *pr;
-char *buf;
-int n;
+register char *buf;
+register n;
 {
-	int c;
-	char *p = buf;
+	register c;
+	register char *p = buf;
 
 	prompt(pr, (struct ship *)0);
 	sc_buf = buf;
@@ -289,12 +235,11 @@ int n;
 				*p++ = c;
 				(void) waddch(scroll_w, c);
 			} else
-				(void) putchar('\a');
+				(void) putchar(CTRL('g'));
 		}
 	}
 }
 
-void
 draw_screen()
 {
 	draw_view();
@@ -304,10 +249,9 @@ draw_screen()
 	(void) wrefresh(scroll_w);		/* move the cursor */
 }
 
-void
 draw_view()
 {
-	struct ship *sp;
+	register struct ship *sp;
 
 	(void) werase(view_w);
 	foreachship(sp) {
@@ -328,7 +272,6 @@ draw_view()
 	(void) wrefresh(view_w);
 }
 
-void
 draw_turn()
 {
 	(void) wmove(turn_w, 0, 0);
@@ -336,7 +279,6 @@ draw_turn()
 	(void) wrefresh(turn_w);
 }
 
-void
 draw_stat()
 {
 	(void) wmove(stat_w, STAT_1, 0);
@@ -377,7 +319,6 @@ draw_stat()
 	(void) wrefresh(stat_w);
 }
 
-void
 draw_slot()
 {
 	if (!boarding(ms, 0)) {
@@ -441,10 +382,9 @@ draw_slot()
 	(void) wrefresh(slot_w);
 }
 
-void
 draw_board()
 {
-	int n;
+	register int n;
 
 	(void) clear();
 	(void) werase(view_w);
@@ -489,38 +429,32 @@ draw_board()
 	(void) refresh();
 }
 
-void
 centerview()
 {
 	viewrow = mf->row - VIEW_Y / 2;
 	viewcol = mf->col - VIEW_X / 2;
 }
 
-void
 upview()
 {
 	viewrow -= VIEW_Y / 3;
 }
 
-void
 downview()
 {
 	viewrow += VIEW_Y / 3;
 }
 
-void
 leftview()
 {
 	viewcol -= VIEW_X / 5;
 }
 
-void
 rightview()
 {
 	viewcol += VIEW_X / 5;
 }
 
-void
 adjustview()
 {
 	if (dont_adjust)
@@ -534,3 +468,14 @@ adjustview()
 	else if (mf->col > viewcol + (VIEW_X - VIEW_X/8))
 		viewcol = mf->col - VIEW_X/8;
 }
+
+#ifdef SIGTSTP
+void
+susp()
+{
+	blockalarm();
+	tstp();
+	(void) signal(SIGTSTP, susp);
+	unblockalarm();
+}
+#endif

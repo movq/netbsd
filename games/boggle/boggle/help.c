@@ -1,5 +1,3 @@
-/*	$NetBSD: help.c,v 1.3 1997/10/10 12:04:26 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)help.c	8.1 (Berkeley) 6/11/93";
-#else
-__RCSID("$NetBSD: help.c,v 1.3 1997/10/10 12:04:26 lukem Exp $");
-#endif
 #endif /* not lint */
 
 #include <curses.h>

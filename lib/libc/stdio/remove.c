@@ -1,8 +1,6 @@
-/*	$NetBSD: remove.c,v 1.9 1997/10/07 00:02:44 hubertf Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,35 +34,15 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)remove.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: remove.c,v 1.9 1997/10/07 00:02:44 hubertf Exp $");
-#endif
+static char sccsid[] = "@(#)remove.c	5.3 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <stdio.h>
 
-int
 remove(file)
 	const char *file;
 {
-	struct stat sb;
-
-	if (lstat(file, &sb) < 0)
-		return (-1);
-
-	/*
-	 * The file system may prohibit using unlink(2) on directories,
-	 * so always use rmdir(2) in that case.
-	 */
-	if (S_ISDIR(sb.st_mode))
-		return (rmdir(file));
-	else
-		return (unlink(file));
+	return (unlink(file));
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: lfs_subr.c,v 1.5 1996/10/12 21:58:52 christos Exp $	*/
-
 /*
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,11 +30,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)lfs_subr.c	8.2 (Berkeley) 9/21/93
+ *	from: @(#)lfs_subr.c	8.2 (Berkeley) 9/21/93
+ *	$Id: lfs_subr.c,v 1.1 1994/06/08 11:42:43 mycroft Exp $
  */
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/namei.h>
 #include <sys/vnode.h>
 #include <sys/buf.h>
@@ -55,15 +53,14 @@
  * remaining space in the directory.
  */
 int
-lfs_blkatoff(v)
-	void *v;
-{
+lfs_blkatoff(ap)
 	struct vop_blkatoff_args /* {
 		struct vnode *a_vp;
 		off_t a_offset;
 		char **a_res;
 		struct buf **a_bpp;
-	} */ *ap = v;
+	} */ *ap;
+{
 	register struct lfs *fs;
 	struct inode *ip;
 	struct buf *bp;
@@ -76,7 +73,7 @@ lfs_blkatoff(v)
 	bsize = blksize(fs);
 
 	*ap->a_bpp = NULL;
-	if ((error = bread(ap->a_vp, lbn, bsize, NOCRED, &bp)) != 0) {
+	if (error = bread(ap->a_vp, lbn, bsize, NOCRED, &bp)) {
 		brelse(bp);
 		return (error);
 	}

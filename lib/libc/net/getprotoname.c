@@ -1,8 +1,6 @@
-/*	$NetBSD: getprotoname.c,v 1.6 1997/07/21 14:07:59 jtc Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,22 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)getprotoname.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: getprotoname.c,v 1.6 1997/07/21 14:07:59 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)getprotoname.c	5.7 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <netdb.h>
 #include <string.h>
-
-#ifdef __weak_alias
-__weak_alias(getprotobyname,_getprotobyname);
-#endif
 
 extern int _proto_stayopen;
 
@@ -60,7 +48,7 @@ getprotobyname(name)
 	register char **cp;
 
 	setprotoent(_proto_stayopen);
-	while ((p = getprotoent()) != NULL) {
+	while (p = getprotoent()) {
 		if (strcmp(p->p_name, name) == 0)
 			break;
 		for (cp = p->p_aliases; *cp != 0; cp++)

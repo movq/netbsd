@@ -1,8 +1,6 @@
-/*	$NetBSD: forward.c,v 1.8 1997/10/19 23:45:08 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Sze-Tyan Wang.
@@ -36,20 +34,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)forward.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: forward.c,v 1.8 1997/10/19 23:45:08 lukem Exp $");
+static char sccsid[] = "@(#)forward.c	5.4 (Berkeley) 2/12/92";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/mman.h>
-
-#include <limits.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
@@ -89,8 +81,9 @@ forward(fp, style, off, sbp)
 	long off;
 	struct stat *sbp;
 {
-	int ch;
+	register int ch;
 	struct timeval second;
+	fd_set zero;
 
 	switch(style) {
 	case FBYTES:
@@ -99,28 +92,22 @@ forward(fp, style, off, sbp)
 		if (S_ISREG(sbp->st_mode)) {
 			if (sbp->st_size < off)
 				off = sbp->st_size;
-			if (fseek(fp, off, SEEK_SET) == -1) {
+			if (fseek(fp, off, SEEK_SET) == -1)
 				ierr();
-				return;
-			}
 		} else while (off--)
 			if ((ch = getc(fp)) == EOF) {
-				if (ferror(fp)) {
+				if (ferror(fp))
 					ierr();
-					return;
+					break;
 				}
-				break;
-			}
 		break;
 	case FLINES:
 		if (off == 0)
 			break;
 		for (;;) {
 			if ((ch = getc(fp)) == EOF) {
-				if (ferror(fp)) {
+				if (ferror(fp))
 					ierr();
-					return;
-				}
 				break;
 			}
 			if (ch == '\n' && !--off)
@@ -130,61 +117,53 @@ forward(fp, style, off, sbp)
 	case RBYTES:
 		if (S_ISREG(sbp->st_mode)) {
 			if (sbp->st_size >= off &&
-			    fseek(fp, -off, SEEK_END) == -1) {
+			    fseek(fp, -off, SEEK_END) == -1)
 				ierr();
-				return;
-			}
 		} else if (off == 0) {
 			while (getc(fp) != EOF);
-			if (ferror(fp)) {
+			if (ferror(fp))
 				ierr();
-				return;
-			}
 		} else
 			bytes(fp, off);
 		break;
 	case RLINES:
 		if (S_ISREG(sbp->st_mode))
 			if (!off) {
-				if (fseek(fp, 0L, SEEK_END) == -1) {
+				if (fseek(fp, 0L, SEEK_END) == -1)
 					ierr();
-					return;
-				}
 			} else
 				rlines(fp, off, sbp);
 		else if (off == 0) {
 			while (getc(fp) != EOF);
-			if (ferror(fp)) {
+			if (ferror(fp))
 				ierr();
-				return;
-			}
 		} else
 			lines(fp, off);
 		break;
-	default:
-		break;
+	}
+
+	/*
+	 * We pause for one second after displaying any data that has
+	 * accumulated since we read the file.
+	 */
+	if (fflag) {
+		FD_ZERO(&zero);
+		second.tv_sec = 1;
+		second.tv_usec = 0;
 	}
 
 	for (;;) {
 		while ((ch = getc(fp)) != EOF)
 			if (putchar(ch) == EOF)
 				oerr();
-		if (ferror(fp)) {
+		if (ferror(fp))
 			ierr();
-			return;
-		}
 		(void)fflush(stdout);
 		if (!fflag)
 			break;
-		/*
-		 * We pause for one second after displaying any data that has
-		 * accumulated since we read the file.  Since sleep(3) takes
-		 * eight system calls, use select() instead.
-		 */
-		second.tv_sec = 1;
-		second.tv_usec = 0;
-		if (select(0, NULL, NULL, NULL, &second) == -1)
-			err(1, "select: %s", strerror(errno));
+		/* Sleep is eight system calls.  Do it fast. */
+		if (select(0, &zero, &zero, &zero, &second) == -1)
+			err("select: %s", strerror(errno));
 		clearerr(fp);
 	}
 }
@@ -198,26 +177,18 @@ rlines(fp, off, sbp)
 	long off;
 	struct stat *sbp;
 {
-	off_t size;
-	char *p;
-	char *start;
+	register off_t size;
+	register char *p;
 
 	if (!(size = sbp->st_size))
 		return;
 
-	if (size > SIZE_T_MAX) {
-		err(0, "%s: %s", fname, strerror(EFBIG));
-		return;
-	}
-
-	if ((start = mmap(NULL, (size_t)size,
-	    PROT_READ, 0, fileno(fp), (off_t)0)) == (caddr_t)-1) {
-		err(0, "%s: %s", fname, strerror(EFBIG));
-		return;
-	}
+	if ((p = mmap(NULL,
+	    size, PROT_READ, MAP_FILE, fileno(fp), (off_t)0)) == (caddr_t)-1)
+		err("%s", strerror(errno));
 
 	/* Last char is special, ignore whether newline or not. */
-	for (p = start + size - 1; --size;)
+	for (p += size - 1; --size;)
 		if (*--p == '\n' && !--off) {
 			++p;
 			break;
@@ -226,12 +197,6 @@ rlines(fp, off, sbp)
 	/* Set the file pointer to reflect the length displayed. */
 	size = sbp->st_size - size;
 	WR(p, size);
-	if (fseek(fp, (long)sbp->st_size, SEEK_SET) == -1) {
+	if (fseek(fp, sbp->st_size, SEEK_SET) == -1)
 		ierr();
-		return;
-	}
-	if (munmap(start, (size_t)sbp->st_size)) {
-		err(0, "%s: %s", fname, strerror(errno));
-		return;
-	}
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: lex.c,v 1.11 1997/10/19 05:03:29 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lex.c	8.2 (Berkeley) 4/20/95";
-#else
-__RCSID("$NetBSD: lex.c,v 1.11 1997/10/19 05:03:29 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)lex.c	5.23 (Berkeley) 4/1/91";
 #endif /* not lint */
 
 #include "rcv.h"
-#include "extern.h"
+#include <sys/stat.h>
+#include <errno.h>
 
 /*
  * Mail -- a mail program
@@ -59,7 +53,6 @@ char	*prompt = "& ";
  * editing the file, otherwise we are reading our mail which has
  * signficance for mbox and so forth.
  */
-int
 setfile(name)
 	char *name;
 {
@@ -69,7 +62,7 @@ setfile(name)
 	char isedit = *name != '%';
 	char *who = name[1] ? name + 1 : myname;
 	static int shudclob;
-	extern char *tempMesg;
+	extern char tempMesg[];
 	extern int errno;
 
 	if ((name = expand(name)) == NOSTR)
@@ -140,21 +133,13 @@ setfile(name)
 		perror(tempMesg);
 		exit(1);
 	}
-	(void) fcntl(fileno(otf), F_SETFD, 1);
 	if ((itf = fopen(tempMesg, "r")) == NULL) {
 		perror(tempMesg);
 		exit(1);
 	}
-	(void) fcntl(fileno(itf), F_SETFD, 1);
 	rm(tempMesg);
-	setptr(ibuf, 0);
+	setptr(ibuf);
 	setmsize(msgCount);
-	/*
-	 * New mail may have arrived while we were reading
-	 * the mail file, so reset mailsize to be where
-	 * we really are in the file...
-	 */
-	mailsize = ftell(ibuf);
 	Fclose(ibuf);
 	relsesigs();
 	sawcom = 0;
@@ -166,36 +151,6 @@ nomail:
 	return(0);
 }
 
-/*
- * Incorporate any new mail that has arrived since we first
- * started reading mail.
- */
-int
-incfile()
-{
-	int newsize;
-	int omsgCount = msgCount;
-	FILE *ibuf;
-
-	ibuf = Fopen(mailname, "r");
-	if (ibuf == NULL)
-		return -1;
-	holdsigs();
-	newsize = fsize(ibuf);
-	if (newsize == 0)
-		return -1;		/* mail box is now empty??? */
-	if (newsize < mailsize)
-		return -1;              /* mail box has shrunk??? */
-	if (newsize == mailsize)
-		return 0;               /* no new mail */
-	setptr(ibuf, mailsize);
-	setmsize(msgCount);
-	mailsize = ftell(ibuf);
-	Fclose(ibuf);
-	relsesigs();
-	return(msgCount - omsgCount);
-}
-
 int	*msgvec;
 int	reset_on_stop;			/* do a reset() if stopped */
 
@@ -203,16 +158,12 @@ int	reset_on_stop;			/* do a reset() if stopped */
  * Interpret user commands one by one.  If standard input is not a tty,
  * print no prompt.
  */
-void
 commands()
 {
 	int eofloop = 0;
-	int n;
+	register int n;
 	char linebuf[LINESIZE];
-#if __GNUC__
-	/* Avoid longjmp clobbering */
-	(void) &eofloop;
-#endif
+	void intr(), stop(), hangup();
 
 	if (!sourcing) {
 		if (signal(SIGINT, SIG_IGN) != SIG_IGN)
@@ -230,8 +181,6 @@ commands()
 		 * string space, and flush the output.
 		 */
 		if (!sourcing && value("interactive") != NOSTR) {
-			if ((value("autoinc") != NOSTR) && (incfile() > 0))
-				printf("New mail has arrived.\n");
 			reset_on_stop = 1;
 			printf(prompt);
 		}
@@ -285,16 +234,14 @@ commands()
  * the interactive command loop.
  * Contxt is non-zero if called while composing mail.
  */
-int
 execute(linebuf, contxt)
 	char linebuf[];
-	int contxt;
 {
 	char word[LINESIZE];
 	char *arglist[MAXARGC];
-	const struct cmd *com = NULL;
-	char *cp, *cp2;
-	int c;
+	struct cmd *com;
+	register char *cp, *cp2;
+	register int c;
 	int muvec[2];
 	int e = 1;
 
@@ -344,7 +291,7 @@ execute(linebuf, contxt)
 	 */
 
 	if ((com->c_argtype & F) == 0)
-		if ((cond == CRCV && !rcvmode) || (cond == CSEND && rcvmode))
+		if (cond == CRCV && !rcvmode || cond == CSEND && rcvmode)
 			return(0);
 
 	/*
@@ -388,9 +335,9 @@ execute(linebuf, contxt)
 		if (c  == 0) {
 			*msgvec = first(com->c_msgflag,
 				com->c_msgmask);
-			msgvec[1] = 0;
+			msgvec[1] = NULL;
 		}
-		if (*msgvec == 0) {
+		if (*msgvec == NULL) {
 			printf("No applicable messages\n");
 			break;
 		}
@@ -450,7 +397,7 @@ execute(linebuf, contxt)
 		break;
 
 	default:
-		errx(1, "Unknown argtype");
+		panic("Unknown argtype");
 	}
 
 out:
@@ -467,8 +414,6 @@ out:
 			unstack();
 		return 0;
 	}
-	if (com == NULL)
-		return(0);
 	if (value("autoprint") != NOSTR && com->c_argtype & P)
 		if ((dot->m_flag & MDELETED) == 0) {
 			muvec[0] = dot - &message[0] + 1;
@@ -484,13 +429,12 @@ out:
  * Set the size of the message vector used to construct argument
  * lists to message list functions.
  */
-void
+ 
 setmsize(sz)
-	int sz;
 {
 
 	if (msgvec != 0)
-		free((char *) msgvec);
+		cfree((char *) msgvec);
 	msgvec = (int *) calloc((unsigned) (sz + 1), sizeof *msgvec);
 }
 
@@ -499,12 +443,12 @@ setmsize(sz)
  * to the passed command "word"
  */
 
-const struct cmd *
+struct cmd *
 lex(word)
 	char word[];
 {
-	extern const struct cmd cmdtab[];
-	const struct cmd *cp;
+	register struct cmd *cp;
+	extern struct cmd cmdtab[];
 
 	for (cp = &cmdtab[0]; cp->c_name != NOSTR; cp++)
 		if (isprefix(word, cp->c_name))
@@ -516,11 +460,11 @@ lex(word)
  * Determine if as1 is a valid prefix of as2.
  * Return true if yep.
  */
-int
+
 isprefix(as1, as2)
 	char *as1, *as2;
 {
-	char *s1, *s2;
+	register char *s1, *s2;
 
 	s1 = as1;
 	s2 = as2;
@@ -543,7 +487,6 @@ int	inithdr;			/* am printing startup headers */
 /*ARGSUSED*/
 void
 intr(s)
-	int s;
 {
 
 	noreset = 0;
@@ -568,16 +511,12 @@ intr(s)
  */
 void
 stop(s)
-	int s;
 {
 	sig_t old_action = signal(s, SIG_DFL);
-	sigset_t nset;
 
-	sigemptyset(&nset);
-	sigaddset(&nset, s);
-	sigprocmask(SIG_UNBLOCK, &nset, NULL);
+	sigsetmask(sigblock(0) & ~sigmask(s));
 	kill(0, s);
-	sigprocmask(SIG_BLOCK, &nset, NULL);
+	sigblock(sigmask(s));
 	signal(s, old_action);
 	if (reset_on_stop) {
 		reset_on_stop = 0;
@@ -591,7 +530,6 @@ stop(s)
 /*ARGSUSED*/
 void
 hangup(s)
-	int s;
 {
 
 	/* nothing to do? */
@@ -602,12 +540,12 @@ hangup(s)
  * Announce the presence of the current Mail version,
  * give the message count, and print a header listing.
  */
-void
+
 announce()
 {
 	int vec[2], mdot;
 
-	mdot = newfileinfo(0);
+	mdot = newfileinfo();
 	vec[0] = mdot;
 	vec[1] = 0;
 	dot = &message[mdot - 1];
@@ -622,25 +560,23 @@ announce()
  * Announce information about the file we are editing.
  * Return a likely place to set dot.
  */
-int
-newfileinfo(omsgCount)
-	int omsgCount;
+newfileinfo()
 {
-	struct message *mp;
-	int u, n, mdot, d, s, l;
-	char fname[PATHSIZE], zname[PATHSIZE], *ename;
+	register struct message *mp;
+	register int u, n, mdot, d, s;
+	char fname[BUFSIZ], zname[BUFSIZ], *ename;
 
-	for (mp = &message[omsgCount]; mp < &message[msgCount]; mp++)
+	for (mp = &message[0]; mp < &message[msgCount]; mp++)
 		if (mp->m_flag & MNEW)
 			break;
 	if (mp >= &message[msgCount])
-		for (mp = &message[omsgCount]; mp < &message[msgCount]; mp++)
+		for (mp = &message[0]; mp < &message[msgCount]; mp++)
 			if ((mp->m_flag & MREAD) == 0)
 				break;
 	if (mp < &message[msgCount])
 		mdot = mp - &message[0] + 1;
 	else
-		mdot = omsgCount + 1;
+		mdot = 1;
 	s = d = 0;
 	for (mp = &message[0], n = 0, u = 0; mp < &message[msgCount]; mp++) {
 		if (mp->m_flag & MNEW)
@@ -654,12 +590,9 @@ newfileinfo(omsgCount)
 	}
 	ename = mailname;
 	if (getfold(fname) >= 0) {
-		l = strlen(fname);
-		if (l < PATHSIZE - 1)
-			fname[l++] = '/';
-		if (strncmp(fname, mailname, l) == 0) {
-			snprintf(zname, PATHSIZE, "+%s",
-			    mailname + l);
+		strcat(fname, "/");
+		if (strncmp(fname, mailname, strlen(fname)) == 0) {
+			sprintf(zname, "+%s", mailname + strlen(fname));
 			ename = zname;
 		}
 	}
@@ -687,9 +620,7 @@ newfileinfo(omsgCount)
  */
 
 /*ARGSUSED*/
-int
-pversion(v)
-	void *v;
+pversion(e)
 {
 	extern char *version;
 
@@ -700,11 +631,10 @@ pversion(v)
 /*
  * Load a file of user definitions.
  */
-void
 load(name)
 	char *name;
 {
-	FILE *in, *oldin;
+	register FILE *in, *oldin;
 
 	if ((in = Fopen(name, "r")) == NULL)
 		return;

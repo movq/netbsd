@@ -1,8 +1,6 @@
-/*	$NetBSD: ns.c,v 1.10 1997/10/19 05:50:08 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1985, 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "from: @(#)ns.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: ns.c,v 1.10 1997/10/19 05:50:08 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)ns.c	5.13 (Berkeley) 3/1/91";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -69,14 +62,15 @@ __RCSID("$NetBSD: ns.c,v 1.10 1997/10/19 05:50:08 lukem Exp $");
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include "netstat.h"
 
 struct	nspcb nspcb;
 struct	sppcb sppcb;
 struct	socket sockb;
-
-static char *ns_prpr __P((struct ns_addr *));
-static void ns_erputil __P((int, int));
+extern	int Aflag;
+extern	int aflag;
+extern	int nflag;
+extern	char *plural();
+char *ns_prpr();
 
 static	int first = 1;
 
@@ -87,28 +81,27 @@ static	int first = 1;
  * -a (all) flag is specified.
  */
 
-void
 nsprotopr(off, name)
-	u_long off;
+	off_t off;
 	char *name;
 {
 	struct nspcb cb;
-	struct nspcb *prev, *next;
+	register struct nspcb *prev, *next;
 	int isspp;
 
 	if (off == 0)
 		return;
 	isspp = strcmp(name, "spp") == 0;
-	kread(off, (char *)&cb, sizeof (struct nspcb));
+	kvm_read(off, (char *)&cb, sizeof (struct nspcb));
 	nspcb = cb;
 	prev = (struct nspcb *)off;
 	if (nspcb.nsp_next == (struct nspcb *)off)
 		return;
 	for (;nspcb.nsp_next != (struct nspcb *)off; prev = next) {
-		u_long ppcb;
+		off_t ppcb;
 
 		next = nspcb.nsp_next;
-		kread((u_long)next, (char *)&nspcb, sizeof (nspcb));
+		kvm_read((off_t)next, (char *)&nspcb, sizeof (nspcb));
 		if (nspcb.nsp_prev != prev) {
 			printf("???\n");
 			break;
@@ -116,12 +109,12 @@ nsprotopr(off, name)
 		if (!aflag && ns_nullhost(nspcb.nsp_faddr) ) {
 			continue;
 		}
-		kread((u_long)nspcb.nsp_socket,
+		kvm_read((off_t)nspcb.nsp_socket,
 				(char *)&sockb, sizeof (sockb));
-		ppcb = (u_long) nspcb.nsp_pcb;
+		ppcb = (off_t) nspcb.nsp_pcb;
 		if (ppcb) {
 			if (isspp) {
-				kread(ppcb, (char *)&sppcb, sizeof (sppcb));
+				kvm_read(ppcb, (char *)&sppcb, sizeof (sppcb));
 			} else continue;
 		} else
 			if (isspp) continue;
@@ -140,8 +133,8 @@ nsprotopr(off, name)
 			first = 0;
 		}
 		if (Aflag)
-			printf("%8lx ", ppcb);
-		printf("%-5.5s %6ld %6ld ", name, sockb.so_rcv.sb_cc,
+			printf("%8x ", ppcb);
+		printf("%-5.5s %6d %6d ", name, sockb.so_rcv.sb_cc,
 			sockb.so_snd.sb_cc);
 		printf("  %-22.22s", ns_prpr(&nspcb.nsp_laddr));
 		printf(" %-22.22s", ns_prpr(&nspcb.nsp_faddr));
@@ -158,15 +151,12 @@ nsprotopr(off, name)
 }
 #define ANY(x,y,z) \
 	((x) ? printf("\t%d %s%s%s -- %s\n",x,y,plural(x),z,"x") : 0)
-#define ANYL(x,y,z) \
-	((x) ? printf("\t%ld %s%s%s -- %s\n",x,y,plural(x),z,"x") : 0)
 
 /*
  * Dump SPP statistics structure.
  */
-void
 spp_stats(off, name)
-	u_long off;
+	off_t off;
 	char *name;
 {
 	struct spp_istat spp_istat;
@@ -174,7 +164,7 @@ spp_stats(off, name)
 
 	if (off == 0)
 		return;
-	kread(off, (char *)&spp_istat, sizeof (spp_istat));
+	kvm_read(off, (char *)&spp_istat, sizeof (spp_istat));
 	printf("%s:\n", name);
 	ANY(spp_istat.nonucn, "connection", " dropped due to no new sockets ");
 	ANY(spp_istat.gonawy, "connection", " terminated due to our end dying");
@@ -188,71 +178,69 @@ spp_stats(off, name)
 	ANY(spp_istat.bdreas, "packet", " dropped out of sequence");
 	ANY(spp_istat.lstdup, "packet", " duplicating the highest packet");
 	ANY(spp_istat.notyet, "packet", " refused as exceeding allocation");
-	ANYL(sppstat.spps_connattempt, "connection", " initiated");
-	ANYL(sppstat.spps_accepts, "connection", " accepted");
-	ANYL(sppstat.spps_connects, "connection", " established");
-	ANYL(sppstat.spps_drops, "connection", " dropped");
-	ANYL(sppstat.spps_conndrops, "embryonic connection", " dropped");
-	ANYL(sppstat.spps_closed, "connection", " closed (includes drops)");
-	ANYL(sppstat.spps_segstimed, "packet", " where we tried to get rtt");
-	ANYL(sppstat.spps_rttupdated, "time", " we got rtt");
-	ANYL(sppstat.spps_delack, "delayed ack", " sent");
-	ANYL(sppstat.spps_timeoutdrop, "connection", " dropped in rxmt timeout");
-	ANYL(sppstat.spps_rexmttimeo, "retransmit timeout", "");
-	ANYL(sppstat.spps_persisttimeo, "persist timeout", "");
-	ANYL(sppstat.spps_keeptimeo, "keepalive timeout", "");
-	ANYL(sppstat.spps_keepprobe, "keepalive probe", " sent");
-	ANYL(sppstat.spps_keepdrops, "connection", " dropped in keepalive");
-	ANYL(sppstat.spps_sndtotal, "total packet", " sent");
-	ANYL(sppstat.spps_sndpack, "data packet", " sent");
-	ANYL(sppstat.spps_sndbyte, "data byte", " sent");
-	ANYL(sppstat.spps_sndrexmitpack, "data packet", " retransmitted");
-	ANYL(sppstat.spps_sndrexmitbyte, "data byte", " retransmitted");
-	ANYL(sppstat.spps_sndacks, "ack-only packet", " sent");
-	ANYL(sppstat.spps_sndprobe, "window probe", " sent");
-	ANYL(sppstat.spps_sndurg, "packet", " sent with URG only");
-	ANYL(sppstat.spps_sndwinup, "window update-only packet", " sent");
-	ANYL(sppstat.spps_sndctrl, "control (SYN|FIN|RST) packet", " sent");
-	ANYL(sppstat.spps_sndvoid, "request", " to send a non-existant packet");
-	ANYL(sppstat.spps_rcvtotal, "total packet", " received");
-	ANYL(sppstat.spps_rcvpack, "packet", " received in sequence");
-	ANYL(sppstat.spps_rcvbyte, "byte", " received in sequence");
-	ANYL(sppstat.spps_rcvbadsum, "packet", " received with ccksum errs");
-	ANYL(sppstat.spps_rcvbadoff, "packet", " received with bad offset");
-	ANYL(sppstat.spps_rcvshort, "packet", " received too short");
-	ANYL(sppstat.spps_rcvduppack, "duplicate-only packet", " received");
-	ANYL(sppstat.spps_rcvdupbyte, "duplicate-only byte", " received");
-	ANYL(sppstat.spps_rcvpartduppack, "packet", " with some duplicate data");
-	ANYL(sppstat.spps_rcvpartdupbyte, "dup. byte", " in part-dup. packet");
-	ANYL(sppstat.spps_rcvoopack, "out-of-order packet", " received");
-	ANYL(sppstat.spps_rcvoobyte, "out-of-order byte", " received");
-	ANYL(sppstat.spps_rcvpackafterwin, "packet", " with data after window");
-	ANYL(sppstat.spps_rcvbyteafterwin, "byte", " rcvd after window");
-	ANYL(sppstat.spps_rcvafterclose, "packet", " rcvd after 'close'");
-	ANYL(sppstat.spps_rcvwinprobe, "rcvd window probe packet", "");
-	ANYL(sppstat.spps_rcvdupack, "rcvd duplicate ack", "");
-	ANYL(sppstat.spps_rcvacktoomuch, "rcvd ack", " for unsent data");
-	ANYL(sppstat.spps_rcvackpack, "rcvd ack packet", "");
-	ANYL(sppstat.spps_rcvackbyte, "byte", " acked by rcvd acks");
-	ANYL(sppstat.spps_rcvwinupd, "rcvd window update packet", "");
+	ANY(sppstat.spps_connattempt, "connection", " initiated");
+	ANY(sppstat.spps_accepts, "connection", " accepted");
+	ANY(sppstat.spps_connects, "connection", " established");
+	ANY(sppstat.spps_drops, "connection", " dropped");
+	ANY(sppstat.spps_conndrops, "embryonic connection", " dropped");
+	ANY(sppstat.spps_closed, "connection", " closed (includes drops)");
+	ANY(sppstat.spps_segstimed, "packet", " where we tried to get rtt");
+	ANY(sppstat.spps_rttupdated, "time", " we got rtt");
+	ANY(sppstat.spps_delack, "delayed ack", " sent");
+	ANY(sppstat.spps_timeoutdrop, "connection", " dropped in rxmt timeout");
+	ANY(sppstat.spps_rexmttimeo, "retransmit timeout", "");
+	ANY(sppstat.spps_persisttimeo, "persist timeout", "");
+	ANY(sppstat.spps_keeptimeo, "keepalive timeout", "");
+	ANY(sppstat.spps_keepprobe, "keepalive probe", " sent");
+	ANY(sppstat.spps_keepdrops, "connection", " dropped in keepalive");
+	ANY(sppstat.spps_sndtotal, "total packet", " sent");
+	ANY(sppstat.spps_sndpack, "data packet", " sent");
+	ANY(sppstat.spps_sndbyte, "data byte", " sent");
+	ANY(sppstat.spps_sndrexmitpack, "data packet", " retransmitted");
+	ANY(sppstat.spps_sndrexmitbyte, "data byte", " retransmitted");
+	ANY(sppstat.spps_sndacks, "ack-only packet", " sent");
+	ANY(sppstat.spps_sndprobe, "window probe", " sent");
+	ANY(sppstat.spps_sndurg, "packet", " sent with URG only");
+	ANY(sppstat.spps_sndwinup, "window update-only packet", " sent");
+	ANY(sppstat.spps_sndctrl, "control (SYN|FIN|RST) packet", " sent");
+	ANY(sppstat.spps_sndvoid, "request", " to send a non-existant packet");
+	ANY(sppstat.spps_rcvtotal, "total packet", " received");
+	ANY(sppstat.spps_rcvpack, "packet", " received in sequence");
+	ANY(sppstat.spps_rcvbyte, "byte", " received in sequence");
+	ANY(sppstat.spps_rcvbadsum, "packet", " received with ccksum errs");
+	ANY(sppstat.spps_rcvbadoff, "packet", " received with bad offset");
+	ANY(sppstat.spps_rcvshort, "packet", " received too short");
+	ANY(sppstat.spps_rcvduppack, "duplicate-only packet", " received");
+	ANY(sppstat.spps_rcvdupbyte, "duplicate-only byte", " received");
+	ANY(sppstat.spps_rcvpartduppack, "packet", " with some duplicate data");
+	ANY(sppstat.spps_rcvpartdupbyte, "dup. byte", " in part-dup. packet");
+	ANY(sppstat.spps_rcvoopack, "out-of-order packet", " received");
+	ANY(sppstat.spps_rcvoobyte, "out-of-order byte", " received");
+	ANY(sppstat.spps_rcvpackafterwin, "packet", " with data after window");
+	ANY(sppstat.spps_rcvbyteafterwin, "byte", " rcvd after window");
+	ANY(sppstat.spps_rcvafterclose, "packet", " rcvd after 'close'");
+	ANY(sppstat.spps_rcvwinprobe, "rcvd window probe packet", "");
+	ANY(sppstat.spps_rcvdupack, "rcvd duplicate ack", "");
+	ANY(sppstat.spps_rcvacktoomuch, "rcvd ack", " for unsent data");
+	ANY(sppstat.spps_rcvackpack, "rcvd ack packet", "");
+	ANY(sppstat.spps_rcvackbyte, "byte", " acked by rcvd acks");
+	ANY(sppstat.spps_rcvwinupd, "rcvd window update packet", "");
 }
 #undef ANY
-#undef ANYL
 #define ANY(x,y,z)  ((x) ? printf("\t%d %s%s%s\n",x,y,plural(x),z) : 0)
 
 /*
  * Dump IDP statistics structure.
  */
-void
 idp_stats(off, name)
-	u_long off;
+	off_t off;
 	char *name;
 {
 	struct idpstat idpstat;
 
 	if (off == 0)
 		return;
-	kread(off, (char *)&idpstat, sizeof (idpstat));
+	kvm_read(off, (char *)&idpstat, sizeof (idpstat));
 	printf("%s:\n", name);
 	ANY(idpstat.idps_toosmall, "packet", " smaller than a header");
 	ANY(idpstat.idps_tooshort, "packet", " smaller than advertised");
@@ -279,19 +267,18 @@ static	struct {
  * Dump NS Error statistics structure.
  */
 /*ARGSUSED*/
-void
 nserr_stats(off, name)
-	u_long off;
+	off_t off;
 	char *name;
 {
 	struct ns_errstat ns_errstat;
-	int j;
-	int histoprint = 1;
+	register int j;
+	register int histoprint = 1;
 	int z;
 
 	if (off == 0)
 		return;
-	kread(off, (char *)&ns_errstat, sizeof (ns_errstat));
+	kvm_read(off, (char *)&ns_errstat, sizeof (ns_errstat));
 	printf("NS error statistics:\n");
 	ANY(ns_errstat.ns_es_error, "call", " to ns_error");
 	ANY(ns_errstat.ns_es_oldshort, "error",
@@ -322,9 +309,7 @@ nserr_stats(off, name)
 	}
 }
 
-static void
 ns_erputil(z, c)
-	int z, c;
 {
 	int j;
 	char codebuf[30];
@@ -343,19 +328,19 @@ ns_erputil(z, c)
 			where = "at destination";
 		sprintf(codebuf, "Unknown XNS error code 0%o", c);
 		name = codebuf;
-	} else
+	} else 
 		where =  ns_errnames[j].where;
 	ANY(z, name, where);
 }
 
 static struct sockaddr_ns ssns = {AF_NS};
 
-static
 char *ns_prpr(x)
 	struct ns_addr *x;
 {
 	struct sockaddr_ns *sns = &ssns;
+	extern char *ns_print();
 
 	sns->sns_addr = *x;
-	return(ns_print((struct sockaddr *)sns));
+	return(ns_print(sns));
 }

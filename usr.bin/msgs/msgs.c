@@ -1,8 +1,6 @@
-/*	$NetBSD: msgs.c,v 1.11 1997/10/19 05:19:54 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,25 +31,21 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)msgs.c	8.2 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: msgs.c,v 1.11 1997/10/19 05:19:54 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)msgs.c	5.8 (Berkeley) 2/4/91";
 #endif /* not lint */
 
 /*
  * msgs - a user bulletin board program
  *
  * usage:
- *	msgs [fhlopqr] [[-]number]	to read messages
+ *	msgs [fhlopq] [[-]number]	to read messages
  *	msgs -s				to place messages
  *	msgs -c [-days]			to clean up the bulletin board
  *
@@ -70,29 +64,26 @@ __RCSID("$NetBSD: msgs.c,v 1.11 1997/10/19 05:19:54 lukem Exp $");
 
 #define V7		/* will look for TERM in the environment */
 #define OBJECT		/* will object to messages without Subjects */
-#define REJECT		/* will reject messages without Subjects
+/* #define REJECT	/* will reject messages without Subjects
 			   (OBJECT must be defined also) */
-/*#define UNBUFFERED */	/* use unbuffered output */
+/* #define UNBUFFERED	/* use unbuffered output */
 
 #include <sys/param.h>
-#include <sys/ioctl.h>
+#include <sys/dir.h>
 #include <sys/stat.h>
 #include <ctype.h>
-#include <dirent.h>
 #include <errno.h>
 #include <pwd.h>
 #include <setjmp.h>
+#include <sgtty.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termcap.h>
-#include <termios.h>
 #include <time.h>
-#include <unistd.h>
 #include "pathnames.h"
 
-#define CMODE	0664		/* bounds file creation mode */
+#define CMODE	0666		/* bounds file creation mode */
 #define NO	0
 #define YES	1
 #define SUPERUSER	0	/* superuser uid */
@@ -130,7 +121,6 @@ bool	mailing = NO;
 bool	quitit = NO;
 bool	sending = NO;
 bool	intrpflg = NO;
-bool	restricted = NO;
 int	uid;
 int	msg;
 int	prevmsg;
@@ -139,16 +129,12 @@ int	nlines;
 int	Lpp = 0;
 time_t	t;
 time_t	keep;
+struct	sgttyb	otty;
 
-void	ask __P((char *));
-void	gfrsub __P((FILE *));
-int	linecnt __P((FILE *));
-int	main __P((int, char *[]));
-int	next __P((char *));
-char	*nxtfld __P((char *));
-void	onintr __P((int));
-void	onsusp __P((int));
-void	prmesg __P((int));
+char	*mktemp();
+char	*nxtfld();
+void	onintr();
+void	onsusp();
 
 /* option initialization */
 bool	hdrs = NO;
@@ -161,9 +147,8 @@ bool	clean = NO;
 bool	lastcmd = NO;
 jmp_buf	tstpbuf;
 
-int
 main(argc, argv)
-	int argc; char *argv[];
+int argc; char *argv[];
 {
 	bool newrc, already;
 	int rcfirst = 0;		/* first message to print (from .rc) */
@@ -176,6 +161,7 @@ main(argc, argv)
 	setbuf(stdout, NULL);
 #endif
 
+	gtty(fileno(stdout), &otty);
 	time(&t);
 	setuid(uid = getuid());
 	ruptible = (signal(SIGINT, SIG_IGN) == SIG_DFL);
@@ -229,18 +215,13 @@ main(argc, argv)
 				qopt = YES;
 				break;
 
-                        case 'r':               /* restricted */
-                                restricted = YES;
-                                break;
-
-
 			case 's':		/* sending TO msgs */
 				send_msg = YES;
 				break;
 
 			default:
 				fprintf(stderr,
-					"usage: msgs [fhlopqr] [[-]number]\n");
+					"usage: msgs [fhlopq] [[-]number]\n");
 				exit(1);
 			}
 		}
@@ -254,8 +235,7 @@ main(argc, argv)
 	bounds = fopen(fname, "r");
 
 	if (bounds != NULL) {
-		if (fscanf(bounds, "%d %d\n", &firstmsg, &lastmsg) < 2)
-			firstmsg = lastmsg = 0;
+		fscanf(bounds, "%d %d\n", &firstmsg, &lastmsg);
 		fclose(bounds);
 		blast = lastmsg;	/* save upper bound */
 	}
@@ -264,7 +244,7 @@ main(argc, argv)
 		keep = t - (rcback? rcback : NDAYS) DAYS;
 
 	if (clean || bounds == NULL) {	/* relocate message bounds */
-		struct dirent *dp;
+		struct direct *dp;
 		struct stat stbuf;
 		bool seenany = NO;
 		DIR	*dirp;
@@ -274,14 +254,13 @@ main(argc, argv)
 			perror(_PATH_MSGS);
 			exit(errno);
 		}
-		chmod(fname, CMODE);
 
 		firstmsg = 32767;
 		lastmsg = 0;
 
 		for (dp = readdir(dirp); dp != NULL; dp = readdir(dirp)){
-			char *cp = dp->d_name;
-			int i = 0;
+			register char *cp = dp->d_name;
+			register int i = 0;
 
 			if (dp->d_ino == 0)
 				continue;
@@ -406,9 +385,9 @@ main(argc, argv)
 	msgsrc = fopen(fname, "r");
 	if (msgsrc) {
 		newrc = NO;
-                fscanf(msgsrc, "%d\n", &nextmsg);
-                fclose(msgsrc);
-                if (nextmsg > lastmsg+1) {
+		fscanf(msgsrc, "%d\n", &nextmsg);
+		fclose(msgsrc);
+		if (nextmsg > lastmsg+1) {
 			printf("Warning: bounds have been reset (%d, %d)\n",
 				firstmsg, lastmsg);
 			truncate(fname, (off_t)0);
@@ -417,11 +396,9 @@ main(argc, argv)
 		else if (!rcfirst)
 			rcfirst = nextmsg - rcback;
 	}
-        else
-        	newrc = YES;
-        msgsrc = fopen(fname, "r+");
-        if (msgsrc == NULL)
-               msgsrc = fopen(fname, "w");
+	else
+		newrc = YES;
+	msgsrc = fopen(fname, "a");
 	if (msgsrc == NULL) {
 		perror(fname);
 		exit(errno);
@@ -614,21 +591,15 @@ cmnd:
 	exit(0);
 }
 
-void
 prmesg(length)
-	int length;
+int length;
 {
 	FILE *outf;
-	char *env_pager;
 
 	if (use_pager && length > Lpp) {
 		signal(SIGPIPE, SIG_IGN);
 		signal(SIGQUIT, SIG_IGN);
-                if ((env_pager = getenv("PAGER")) == NULL) {
-                        sprintf(cmdbuf, _PATH_PAGER, Lpp);
-                } else {
-                        strcpy(cmdbuf, env_pager);
-                }
+		sprintf(cmdbuf, _PATH_PAGER, Lpp);
 		outf = popen(cmdbuf, "w");
 		if (!outf)
 			outf = stdout;
@@ -659,12 +630,11 @@ prmesg(length)
 	}
 
 	/* trick to force wait on output */
-	tcdrain(fileno(stdout));
+	stty(fileno(stdout), &otty);
 }
 
 void
-onintr(dummy)
-	int dummy;
+onintr()
 {
 	signal(SIGINT, onintr);
 	if (mailing)
@@ -689,8 +659,7 @@ onintr(dummy)
  * We have just gotten a susp.  Suspend and prepare to resume.
  */
 void
-onsusp(dummy)
-	int dummy;
+onsusp()
 {
 
 	signal(SIGTSTP, SIG_DFL);
@@ -701,9 +670,8 @@ onsusp(dummy)
 		longjmp(tstpbuf, 0);
 }
 
-int
 linecnt(f)
-	FILE *f;
+FILE *f;
 {
 	off_t oldpos = ftell(f);
 	int l = 0;
@@ -716,9 +684,8 @@ linecnt(f)
 	return (l);
 }
 
-int
 next(buf)
-	char *buf;
+char *buf;
 {
 	int i;
 	sscanf(buf, "%d", &i);
@@ -726,9 +693,8 @@ next(buf)
 	return(--i);
 }
 
-void
 ask(prompt)
-	char *prompt;
+char *prompt;
 {
 	char	inch;
 	int	n, cmsg;
@@ -747,7 +713,7 @@ ask(prompt)
 	/*
 	 * Handle 'mail' and 'save' here.
 	 */
-        if (((inch = inbuf[0]) == 's' || inch == 'm') && !restricted) {
+	if ((inch = inbuf[0]) == 's' || inch == 'm') {
 		if (inbuf[1] == '-')
 			cmsg = prevmsg;
 		else if (isdigit(inbuf[1]))
@@ -771,7 +737,7 @@ ask(prompt)
 				for (n=0; in[n] > ' '; n++) { /* sizeof fname? */
 					fname[n] = in[n];
 				}
-				fname[n] = '\0';
+				fname[n] = NULL;
 			}
 			else
 				strcpy(fname, "Messages");
@@ -791,7 +757,7 @@ ask(prompt)
 			return;
 		}
 
-		while ((n = fread(inbuf, 1, sizeof inbuf, cpfrom)) != 0)
+		while (n = fread(inbuf, 1, sizeof inbuf, cpfrom))
 			fwrite(inbuf, 1, n, cpto);
 
 		fclose(cpfrom);
@@ -808,15 +774,14 @@ ask(prompt)
 	}
 }
 
-void
 gfrsub(infile)
-	FILE *infile;
+FILE *infile;
 {
 	off_t frompos;
 
 	seensubj = seenfrom = NO;
 	local = YES;
-	subj[0] = from[0] = date[0] = 0;
+	subj[0] = from[0] = date[0] = NULL;
 
 	/*
 	 * Is this a normal message?
@@ -836,12 +801,12 @@ gfrsub(infile)
 				*ptr++ = *in++;
 				/* what about sizeof from ? */
 			}
-			*ptr = '\0';
+			*ptr = NULL;
 			if (*(in = nxtfld(in)))
 				strncpy(date, in, sizeof date);
 			else {
 				date[0] = '\n';
-				date[1] = '\0';
+				date[1] = NULL;
 			}
 		}
 		else {
@@ -887,7 +852,7 @@ gfrsub(infile)
 
 char *
 nxtfld(s)
-	char *s;
+char *s;
 {
 	if (*s) while (*s && *s > ' ') s++;	/* skip over this field */
 	if (*s) while (*s && *s <= ' ') s++;	/* find start of next field */

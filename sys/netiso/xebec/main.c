@@ -1,5 +1,5 @@
-/*	$NetBSD: main.c,v 1.5 1994/06/29 06:41:07 cgd Exp $	*/
-
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/main.c,v 1.1 1993/04/09 12:02:09 cgd Exp $ */
+/* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/main.c,v $ */
 /*
  * TODO:
  * rewrite the command line stuff altogether - it's kludged beyond

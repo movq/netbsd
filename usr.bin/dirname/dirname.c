@@ -1,8 +1,6 @@
-/*	$NetBSD: dirname.c,v 1.7 1997/10/18 13:21:41 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,38 +31,28 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1991 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)dirname.c	8.4 (Berkeley) 5/4/95";
-#endif
-__RCSID("$NetBSD: dirname.c,v 1.7 1997/10/18 13:21:41 lukem Exp $");
+static char sccsid[] = "@(#)dirname.c	5.6 (Berkeley) 3/9/91";
 #endif /* not lint */
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <locale.h>
-#include <unistd.h>
 
-int	main __P((int, char **));
-static void usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
+	extern int optind;
 	register char *p;
 	int ch;
 
-	setlocale(LC_ALL, "");
-
-	while ((ch = getopt(argc, argv, "")) != -1)
+	while ((ch = getopt(argc, argv, "")) != EOF)
 		switch(ch) {
 		case '?':
 		default:
@@ -99,8 +87,7 @@ main(argc, argv)
 	 *     shall be removed.
 	 */
 	for (; *p; ++p);
-	while (*--p == '/')
-		continue;
+	while (*--p == '/');
 	*++p = '\0';
 
 	/*
@@ -145,11 +132,8 @@ main(argc, argv)
 	exit(0);
 }
 
-static void
 usage()
 {
-
 	(void)fprintf(stderr, "usage: dirname path\n");
 	exit(1);
 }
-

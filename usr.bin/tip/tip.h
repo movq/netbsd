@@ -1,9 +1,6 @@
-/*	$NetBSD: tip.h,v 1.7 1997/04/20 00:02:46 mellon Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *      @(#)tip.h	8.1 (Berkeley) 6/6/93
+ *	@(#)tip.h	5.7 (Berkeley) 3/27/91
  */
 
 /*
@@ -45,7 +42,7 @@
 #include <sys/file.h>
 #include <sys/time.h>
 
-#include <termios.h>
+#include <sgtty.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -74,22 +71,21 @@ char	*PH;			/* phone number file */
 char	*RM;			/* remote file name */
 char	*HO;			/* host name */
 
-long	BR;			/* line speed for conversation */
-long	FS;			/* frame size for transfers */
+int	BR;			/* line speed for conversation */
+int	FS;			/* frame size for transfers */
 
-int	DU;			/* this host is dialed up */
-int	HW;			/* this device is hardwired, see hunt.c */
+char	DU;			/* this host is dialed up */
+char	HW;			/* this device is hardwired, see hunt.c */
 char	*ES;			/* escape character */
 char	*EX;			/* exceptions */
 char	*FO;			/* force (literal next) char*/
 char	*RC;			/* raise character */
 char	*RE;			/* script record file */
 char	*PR;			/* remote prompt */
-long	DL;			/* line delay for file transfers to remote */
-long	CL;			/* char delay for file transfers to remote */
-long	ET;			/* echocheck timeout */
-int	HD;			/* this host is half duplex - do local echo */
-char	DC;			/* this host is directly connected. */
+int	DL;			/* line delay for file transfers to remote */
+int	CL;			/* char delay for file transfers to remote */
+int	ET;			/* echocheck timeout */
+char	HD;			/* this host is half duplex - do local echo */
 
 /*
  * String value table
@@ -145,18 +141,30 @@ typedef
  *   initialize it in vars.c, so we cast it as needed to keep lint
  *   happy.
  */
+typedef
+	union {
+		int	zz_number;
+		short	zz_boolean[2];
+		char	zz_character[4];
+		int	*zz_address;
+	}
+	zzhack;
 
 #define value(v)	vtable[v].v_value
 
-#define	number(v)	((long)(v))
-#define	boolean(v)	((short)(long)(v))
-#define	character(v)	((char)(long)(v))
-#define	address(v)	((long *)(v))
+#define number(v)	((((zzhack *)(&(v))))->zz_number)
 
-#define	setnumber(v,n)		do { (v) = (char *)(long)(n); } while (0)
-#define	setboolean(v,n)		do { (v) = (char *)(long)(n); } while (0)
-#define	setcharacter(v,n)	do { (v) = (char *)(long)(n); } while (0)
-#define	setaddress(v,n)		do { (v) = (char *)(n); } while (0)
+#if BYTE_ORDER == LITTLE_ENDIAN
+#define boolean(v)	((((zzhack *)(&(v))))->zz_boolean[0])
+#define character(v)	((((zzhack *)(&(v))))->zz_character[0])
+#endif
+
+#if BYTE_ORDER == BIG_ENDIAN
+#define boolean(v)	((((zzhack *)(&(v))))->zz_boolean[1])
+#define character(v)	((((zzhack *)(&(v))))->zz_character[3])
+#endif
+
+#define address(v)	((((zzhack *)(&(v))))->zz_address)
 
 /*
  * Escape command table definitions --
@@ -230,9 +238,12 @@ extern value_t	vtable[];	/* variable table */
 #define NOFILE	((FILE *)NULL)
 #define NOPWD	((struct passwd *)0)
 
-struct termios	term;		/* current mode of terminal */
-struct termios	defterm;	/* initial mode of terminal */
-struct termios	defchars;	/* current mode with initial chars */
+struct sgttyb	arg;		/* current mode of local terminal */
+struct sgttyb	defarg;		/* initial mode of local terminal */
+struct tchars	tchars;		/* current state of terminal */
+struct tchars	defchars;	/* initial state of terminal */
+struct ltchars	ltchars;	/* current local characters of terminal */
+struct ltchars	deflchars;	/* initial local characters of terminal */
 
 FILE	*fscript;		/* FILE for scripting */
 
@@ -251,8 +262,6 @@ int	intflag;		/* recognized interrupt */
 int	stoprompt;		/* for interrupting a prompt session */
 int	timedout;		/* ~> transfer timedout */
 int	cumode;			/* simulating the "cu" program */
-int	bits8;			/* terminal is is 8-bit mode */
-#define STRIP_PAR	(bits8 ? 0377 : 0177)
 
 char	fname[80];		/* file name buffer for ~< */
 char	copyname[80];		/* file name buffer for ~> */

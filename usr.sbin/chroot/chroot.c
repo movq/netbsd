@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,71 +31,49 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1988 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)chroot.c	8.1 (Berkeley) 6/9/93";
-#else
-__RCSID("$NetBSD: chroot.c,v 1.6 1997/10/18 04:06:32 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)chroot.c	5.8 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <sys/types.h>
-
-#include <err.h>
-#include <errno.h>
-#include <paths.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <paths.h>
 
-int	main __P((int, char **));
-void	usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	int ch;
-	char *shell;
+	extern int errno;
+	char *shell, *getenv(), *strerror();
 
-	while ((ch = getopt(argc, argv, "")) != -1)
-		switch(ch) {
-		case '?':
-		default:
-			usage();
-		}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1)
-		usage();
-
-	if (chdir(argv[0]) || chroot("."))
-		err(1, "%s", argv[0]);
-
-	if (argv[1]) {
-		execvp(argv[1], &argv[1]);
-		err(1, "%s", argv[1]);
+	if (argc < 2) {
+		(void)fprintf(stderr, "usage: chroot newroot [command]\n");
+		exit(1);
 	}
-
-	if (!(shell = getenv("SHELL")))
-		shell = _PATH_BSHELL;
-	execlp(shell, shell, "-i", NULL);
-	err(1, "%s", shell);
+	if (chdir(argv[1]) || chroot("."))
+		fatal(argv[1]);
+	if (argv[2]) {
+		execvp(argv[2], &argv[2]);
+		fatal(argv[2]);
+	} else {
+		if (!(shell = getenv("SHELL")))
+			shell = _PATH_BSHELL;
+		execlp(shell, shell, "-i", (char *)NULL);
+		fatal(shell);
+	}
 	/* NOTREACHED */
 }
 
-void
-usage()
+fatal(msg)
+	char *msg;
 {
-	(void)fprintf(stderr, "usage: chroot newroot [command]\n");
+	extern int errno;
+
+	(void)fprintf(stderr, "chroot: %s: %s\n", msg, strerror(errno));
 	exit(1);
 }

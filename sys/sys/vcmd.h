@@ -1,8 +1,6 @@
-/*	$NetBSD: vcmd.h,v 1.7 1997/01/22 07:09:32 mikel Exp $	*/
-
 /*-
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,11 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)vcmd.h	8.1 (Berkeley) 6/2/93
+ *	@(#)vcmd.h	7.4 (Berkeley) 5/5/91
  */
-
-#ifndef _SYS_VCMD_H_
-#define _SYS_VCMD_H_
 
 #include <sys/ioctl.h>
 
@@ -46,5 +41,3 @@
 
 #define	VGETSTATE	_IOR('v', 0, int)
 #define	VSETSTATE	_IOW('v', 1, int)
-
-#endif /* !_SYS_VCMD_H_ */

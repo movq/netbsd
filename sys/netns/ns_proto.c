@@ -1,8 +1,6 @@
-/*	$NetBSD: ns_proto.c,v 1.6 1996/02/13 22:14:08 christos Exp $	*/
-
 /*
- * Copyright (c) 1984, 1985, 1986, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,33 +30,27 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ns_proto.c	8.1 (Berkeley) 6/10/93
+ *	@(#)ns_proto.c	7.4 (Berkeley) 6/28/90
  */
 
-#include <sys/param.h>
-#include <sys/socket.h>
-#include <sys/protosw.h>
-#include <sys/domain.h>
-#include <sys/mbuf.h>
+#include "param.h"
+#include "socket.h"
+#include "protosw.h"
+#include "domain.h"
+#include "mbuf.h"
 
-#include <net/if.h>
-#include <net/radix.h>
-#include <net/route.h>
+#include "ns.h"
 
 /*
  * NS protocol family: IDP, ERR, PE, SPP, ROUTE.
  */
-#include <netns/ns.h>
-#include <netns/ns_pcb.h>
-#include <netns/ns_if.h>
-#include <netns/ns_var.h>
-#include <netns/idp.h>
-#include <netns/idp_var.h>
-#include <netns/ns_error.h>
-#include <netns/sp.h>
-#include <netns/spidp.h>
-#include <netns/spp_timer.h>
-#include <netns/spp_var.h>
+int	ns_init();
+int	idp_input(), idp_output(), idp_ctlinput(), idp_usrreq();
+int	idp_raw_usrreq(), idp_ctloutput();
+int	spp_input(), spp_ctlinput();
+int	spp_usrreq(), spp_usrreq_sp(), spp_ctloutput();
+int	spp_init(), spp_fasttimo(), spp_slowtimo();
+extern	int raw_usrreq();
 
 extern	struct domain nsdomain;
 
@@ -89,7 +81,7 @@ struct protosw nssw[] = {
   0,		0,		0,		0,
 },
 { SOCK_RAW,	&nsdomain,	NSPROTO_ERROR,	PR_ATOMIC|PR_ADDR,
-  0,		idp_output,	idp_ctlinput,	idp_ctloutput,
+  idp_ctlinput,	idp_output,	0,		idp_ctloutput,
   idp_raw_usrreq,
   0,		0,		0,		0,
 },
@@ -97,6 +89,5 @@ struct protosw nssw[] = {
 
 struct domain nsdomain =
     { AF_NS, "network systems", 0, 0, 0, 
-      nssw, &nssw[sizeof(nssw)/sizeof(nssw[0])], 0,
-      rn_inithead, 16, sizeof(struct sockaddr_ns)};
+      nssw, &nssw[sizeof(nssw)/sizeof(nssw[0])] };
 

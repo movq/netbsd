@@ -1,7 +1,5 @@
-/*	$NetBSD: rec_open.c,v 1.9 1997/07/21 14:06:45 jtc Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
+ * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -36,16 +34,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)rec_open.c	8.10 (Berkeley) 9/1/94";
-#else
-__RCSID("$NetBSD: rec_open.c,v 1.9 1997/07/21 14:06:45 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)rec_open.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -61,9 +53,9 @@ __RCSID("$NetBSD: rec_open.c,v 1.9 1997/07/21 14:06:45 jtc Exp $");
 #include "recno.h"
 
 DB *
-__rec_open(fname, flags, mode, openinfo, dflags)
+__rec_open(fname, flags, mode, openinfo)
 	const char *fname;
-	int flags, mode, dflags;
+	int flags, mode;
 	const RECNOINFO *openinfo;
 {
 	BTREE *t;
@@ -71,8 +63,7 @@ __rec_open(fname, flags, mode, openinfo, dflags)
 	DB *dbp;
 	PAGE *h;
 	struct stat sb;
-	int rfd = -1;	/* pacify gcc */
-	int sverrno;
+	int rfd, sverrno;
 
 	/* Open the user's file -- if this fails, we're done. */
 	if (fname != NULL && (rfd = open(fname, flags, mode)) < 0)
@@ -92,9 +83,9 @@ __rec_open(fname, flags, mode, openinfo, dflags)
 		btopeninfo.prefix = NULL;
 		btopeninfo.lorder = openinfo->lorder;
 		dbp = __bt_open(openinfo->bfname,
-		    O_RDWR, S_IRUSR | S_IWUSR, &btopeninfo, dflags);
+		    O_RDWR, S_IRUSR | S_IWUSR, &btopeninfo);
 	} else
-		dbp = __bt_open(NULL, O_RDWR, S_IRUSR | S_IWUSR, NULL, dflags);
+		dbp = __bt_open(NULL, O_RDWR, S_IRUSR | S_IWUSR, NULL);
 	if (dbp == NULL)
 		goto err;
 
@@ -107,7 +98,7 @@ __rec_open(fname, flags, mode, openinfo, dflags)
 	t = dbp->internal;
 	if (openinfo) {
 		if (openinfo->flags & R_FIXEDLEN) {
-			F_SET(t, R_FIXLEN);
+			SET(t, R_FIXLEN);
 			t->bt_reclen = openinfo->reclen;
 			if (t->bt_reclen == 0)
 				goto einval;
@@ -116,36 +107,35 @@ __rec_open(fname, flags, mode, openinfo, dflags)
 	} else
 		t->bt_bval = '\n';
 
-	F_SET(t, R_RECNO);
+	SET(t, R_RECNO);
 	if (fname == NULL)
-		F_SET(t, R_EOF | R_INMEM);
+		SET(t, R_EOF | R_INMEM);
 	else
 		t->bt_rfd = rfd;
+	t->bt_rcursor = 0;
 
+	/*
+	 * In 4.4BSD stat(2) returns true for ISSOCK on pipes.  Until
+	 * then, this is fairly close.  Pipes are read-only.
+	 */
 	if (fname != NULL) {
-		/*
-		 * In 4.4BSD, stat(2) returns true for ISSOCK on pipes.
-		 * Unfortunately, that's not portable, so we use lseek
-		 * and check the errno values.
-		 */
-		errno = 0;
 		if (lseek(rfd, (off_t)0, SEEK_CUR) == -1 && errno == ESPIPE) {
 			switch (flags & O_ACCMODE) {
 			case O_RDONLY:
-				F_SET(t, R_RDONLY);
+				SET(t, R_RDONLY);
 				break;
 			default:
 				goto einval;
 			}
 slow:			if ((t->bt_rfp = fdopen(rfd, "r")) == NULL)
 				goto err;
-			F_SET(t, R_CLOSEFP);
+			SET(t, R_CLOSEFP);
 			t->bt_irec =
-			    F_ISSET(t, R_FIXLEN) ? __rec_fpipe : __rec_vpipe;
+			    ISSET(t, R_FIXLEN) ? __rec_fpipe : __rec_vpipe;
 		} else {
 			switch (flags & O_ACCMODE) {
 			case O_RDONLY:
-				F_SET(t, R_RDONLY);
+				SET(t, R_RDONLY);
 				break;
 			case O_RDWR:
 				break;
@@ -165,29 +155,18 @@ slow:			if ((t->bt_rfp = fdopen(rfd, "r")) == NULL)
 			 * fails if the file is too large.
 			 */
 			if (sb.st_size == 0)
-				F_SET(t, R_EOF);
+				SET(t, R_EOF);
 			else {
-#ifdef MMAP_NOT_AVAILABLE
-				/*
-				 * XXX
-				 * Mmap doesn't work correctly on many current
-				 * systems.  In particular, it can fail subtly,
-				 * with cache coherency problems.  Don't use it
-				 * for now.
-				 */
 				t->bt_msize = sb.st_size;
-				if ((t->bt_smap = mmap(NULL, t->bt_msize,
-				    PROT_READ, MAP_PRIVATE, rfd,
+				if ((t->bt_smap =
+				    mmap(NULL, t->bt_msize, PROT_READ, 0, rfd,
 				    (off_t)0)) == (caddr_t)-1)
 					goto slow;
 				t->bt_cmap = t->bt_smap;
 				t->bt_emap = t->bt_smap + sb.st_size;
-				t->bt_irec = F_ISSET(t, R_FIXLEN) ?
+				t->bt_irec = ISSET(t, R_FIXLEN) ?
 				    __rec_fmap : __rec_vmap;
-				F_SET(t, R_MEMMAPPED);
-#else
-				goto slow;
-#endif
+				SET(t, R_MEMMAPPED);
 			}
 		}
 	}
@@ -205,14 +184,13 @@ slow:			if ((t->bt_rfp = fdopen(rfd, "r")) == NULL)
 	if ((h = mpool_get(t->bt_mp, P_ROOT, 0)) == NULL)
 		goto err;
 	if ((h->flags & P_TYPE) == P_BLEAF) {
-		F_CLR(h, P_TYPE);
-		F_SET(h, P_RLEAF);
+		h->flags = h->flags & ~P_TYPE | P_RLEAF;
 		mpool_put(t->bt_mp, h, MPOOL_DIRTY);
 	} else
 		mpool_put(t->bt_mp, h, 0);
 
 	if (openinfo && openinfo->flags & R_SNAPSHOT &&
-	    !F_ISSET(t, R_EOF | R_INMEM) &&
+	    !ISSET(t, R_EOF | R_INMEM) &&
 	    t->bt_irec(t, MAX_REC_NUMBER) == RET_ERROR)
                 goto err;
 	return (dbp);
@@ -235,14 +213,7 @@ __rec_fd(dbp)
 
 	t = dbp->internal;
 
-	/* Toss any page pinned across calls. */
-	if (t->bt_pinned != NULL) {
-		mpool_put(t->bt_mp, t->bt_pinned, 0);
-		t->bt_pinned = NULL;
-	}
-
-	/* In-memory database can't have a file descriptor. */
-	if (F_ISSET(t, R_INMEM)) {
+	if (ISSET(t, R_INMEM)) {
 		errno = ENOENT;
 		return (-1);
 	}

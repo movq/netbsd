@@ -1,8 +1,6 @@
-/*	$NetBSD: tp_timer.h,v 1.6 1996/02/13 22:12:13 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tp_timer.h	8.1 (Berkeley) 6/10/93
+ *	@(#)tp_timer.h	7.4 (Berkeley) 5/6/91
  */
 
 /***********************************************************
@@ -40,13 +38,13 @@
 
                       All Rights Reserved
 
-Permission to use, copy, modify, and distribute this software and its
-documentation for any purpose and without fee is hereby granted,
+Permission to use, copy, modify, and distribute this software and its 
+documentation for any purpose and without fee is hereby granted, 
 provided that the above copyright notice appear in all copies and that
-both that copyright notice and this permission notice appear in
+both that copyright notice and this permission notice appear in 
 supporting documentation, and that the name of IBM not be
 used in advertising or publicity pertaining to distribution of the
-software without specific, written prior permission.
+software without specific, written prior permission.  
 
 IBM DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
 ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
@@ -61,29 +59,34 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
-/*
+/* 
+ * ARGO TP
+ *
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_timer.h,v 1.1 1993/04/09 12:01:54 cgd Exp $
+ * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_timer.h,v $
+ *
+ * ARGO TP
  * The callout structures used by the tp timers.
  */
 
-#ifndef _NETISO_TP_TIMER_H_
-#define _NETISO_TP_TIMER_H_
+#ifndef __TP_CALLOUT__
+#define __TP_CALLOUT__
 
-#define SET_DELACK(t) {\
-    (t)->tp_flags |= TPF_DELACK; \
-    if ((t)->tp_fasttimeo == 0)\
-		{ (t)->tp_fasttimeo = tp_ftimeolist; tp_ftimeolist = (t); } }
+/* C timers - one per tpcb, generally cancelled */
 
-#ifdef ARGO_DEBUG
-#define TP_DEBUG_TIMERS
-#endif
+struct	Ccallout {
+	int	c_time;		/* incremental time */
+	int c_active;	/* this timer is active? */
+};
 
-#ifndef TP_DEBUG_TIMERS
-#define tp_ctimeout(tpcb, which, timo) ((tpcb)->tp_timer[which] = (timo))
-#define tp_cuntimeout(tpcb, which) ((tpcb)->tp_timer[which] = 0)
-#define tp_etimeout tp_ctimeout
-#define tp_euntimeout tp_cuntimeout
-#define tp_ctimeout_MIN(p, w, t) \
-    { if((p)->tp_timer[w] > (t)) (p)->tp_timer[w] = (t);}
-#endif				/* TP_DEBUG_TIMERS */
+/* E timers - generally expire or there must be > 1 active per tpcb */
+struct Ecallout {
+	int	c_time;		/* incremental time */
+	int c_func;		/* function to call */
+	u_int c_arg1;	/* argument to routine */
+	u_int c_arg2;	/* argument to routine */
+	int c_arg3;		/* argument to routine */
+	struct Ecallout *c_next;
+};
 
-#endif				/* _NETISO_TP_TIMER_H_ */
+#endif __TP_CALLOUT__

@@ -1,7 +1,5 @@
-.\"	$NetBSD: join.1,v 1.5 1997/10/19 03:32:12 lukem Exp $
-.\"
-.\" Copyright (c) 1990, 1993
-.\"   The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" the Institute of Electrical and Electronics Engineers, Inc.
@@ -34,17 +32,16 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	from: @(#)join.1	8.3 (Berkeley) 4/28/95
-.\"	$NetBSD: join.1,v 1.5 1997/10/19 03:32:12 lukem Exp $
+.\"	@(#)join.1	6.8 (Berkeley) 11/18/91
 .\"
-.Dd April 28, 1995
+.Dd November 18, 1991
 .Dt JOIN 1
 .Os
 .Sh NAME
 .Nm join
 .Nd relational database operator
 .Sh SYNOPSIS
-.Nm
+.Nm join
 .Oo
 .Fl a Ar file_number | Fl v Ar file_number
 .Oc
@@ -87,11 +84,6 @@ The following options are available:
 In addition to the default output, produce a line for each unpairable
 line in file
 .Ar file_number .
-(The argument to
-.Fl a
-must not be preceded by a space; see the
-.Sx COMPATIBILITY
-section.)
 .It Fl e Ar string
 Replace empty output fields with
 .Ar string .
@@ -110,7 +102,7 @@ is a file number and
 .Ar field
 is a field number.
 The elements of list must be either comma (``,'') or whitespace separated.
-(The latter requires quoting to protect it from the shell, or, a simpler
+(This will require quoting to protect it from the shell, or, a simpler
 approach is to use multiple
 .Fl o
 options.)
@@ -146,7 +138,7 @@ should be ordered in the collating sequence of
 using the
 .Fl b
 option, on the fields on which they are to be joined, otherwise
-.Nm
+.Nm join
 may not report all field matches.
 When the field delimiter characters are specified by the
 .Fl t
@@ -163,20 +155,16 @@ or
 is ``-'', the standard input is used.
 .Pp
 The
-.Nm
+.Nm join
 utility exits 0 on success, and >0 if an error occurs.
 .Sh COMPATIBILITY
 For compatibility with historic versions of
-.Nm "" ,
+.Nm join ,
 the following options are available:
 .Bl -tag -width Fl
 .It Fl a
 In addition to the default output, produce a line for each unpairable line
 in both file 1 and file 2.
-(To distinguish between this and
-.Fl a Ar file_number ,
-.Nm
-currently requires that the latter not include any white space.)
 .It Fl j1 Ar field
 Join on the
 .Ar field Ns 'th
@@ -191,7 +179,7 @@ Join on the
 field of both file 1 and file 2.
 .It Fl o Ar list ...
 Historical implementations of
-.Nm
+.Nm join
 permitted multiple arguments to the
 .Fl o
 option.
@@ -206,7 +194,7 @@ These options are available only so historic shellscripts don't require
 modification and should not be used.
 .Sh STANDARDS
 The
-.Nm
+.Nm join
 command is expected to be
 .St -p1003.2
 compatible.

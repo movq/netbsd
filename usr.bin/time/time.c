@@ -1,8 +1,6 @@
-/*	$NetBSD: time.c,v 1.9 1997/10/20 03:28:21 lukem Exp $	*/
-
 /*
- * Copyright (c) 1987, 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1987, 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,59 +31,41 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1987, 1988 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)time.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: time.c,v 1.9 1997/10/20 03:28:21 lukem Exp $");
+static char sccsid[] = "@(#)time.c	4.9 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/resource.h>
-#include <sys/wait.h>
-#include <signal.h>
+#include <sys/signal.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
 
-int lflag;
-int portableflag;
-
-int	main __P((int, char **));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	int pid;
-	int ch, status;
+	extern int optind;
+	register int pid;
+	int ch, status, lflag;
 	struct timeval before, after;
 	struct rusage ru;
 
-#ifdef __GNUC__		/* XXX: borken gcc */
-	(void)&argv;
-#endif
 	lflag = 0;
-	while ((ch = getopt(argc, argv, "lp")) != -1)
+	while ((ch = getopt(argc, argv, "l")) != EOF)
 		switch((char)ch) {
-		case 'p':
-			portableflag = 1;
-			break;
 		case 'l':
 			lflag = 1;
 			break;
 		case '?':
 		default:
-			fprintf(stderr, "usage: time [-lp] command.\n");
+			fprintf(stderr, "usage: time [-l] command.\n");
 			exit(1);
 		}
 
@@ -102,51 +82,39 @@ main(argc, argv)
 	case 0:				/* child */
 		execvp(*argv, argv);
 		perror(*argv);
-		_exit((errno == ENOENT) ? 127 : 126);
+		_exit(1);
 		/* NOTREACHED */
 	}
-
 	/* parent */
 	(void)signal(SIGINT, SIG_IGN);
 	(void)signal(SIGQUIT, SIG_IGN);
-	while (wait3(&status, 0, &ru) != pid);
+	while (wait3(&status, 0, &ru) != pid);		/* XXX use waitpid */
 	gettimeofday(&after, (struct timezone *)NULL);
-	if (!WIFEXITED(status))
+	if (status&0377)
 		fprintf(stderr, "Command terminated abnormally.\n");
-	timersub(&after, &before, &after);
-
-	if (portableflag) {
-		fprintf (stderr, "real %9ld.%02ld\n", 
-			after.tv_sec, after.tv_usec/10000);
-		fprintf (stderr, "user %9ld.%02ld\n",
-			ru.ru_utime.tv_sec, ru.ru_utime.tv_usec/10000);
-		fprintf (stderr, "sys  %9ld.%02ld\n",
-			ru.ru_stime.tv_sec, ru.ru_stime.tv_usec/10000);
-	} else {
-
-		fprintf(stderr, "%9ld.%02ld real ", 
-			after.tv_sec, after.tv_usec/10000);
-		fprintf(stderr, "%9ld.%02ld user ",
-			ru.ru_utime.tv_sec, ru.ru_utime.tv_usec/10000);
-		fprintf(stderr, "%9ld.%02ld sys\n",
-			ru.ru_stime.tv_sec, ru.ru_stime.tv_usec/10000);
-	}
-
+	after.tv_sec -= before.tv_sec;
+	after.tv_usec -= before.tv_usec;
+	if (after.tv_usec < 0)
+		after.tv_sec--, after.tv_usec += 1000000;
+	fprintf(stderr, "%9ld.%02ld real ", after.tv_sec, after.tv_usec/10000);
+	fprintf(stderr, "%9ld.%02ld user ",
+	    ru.ru_utime.tv_sec, ru.ru_utime.tv_usec/10000);
+	fprintf(stderr, "%9ld.%02ld sys\n",
+	    ru.ru_stime.tv_sec, ru.ru_stime.tv_usec/10000);
 	if (lflag) {
 		int hz = 100;			/* XXX */
 		long ticks;
 
 		ticks = hz * (ru.ru_utime.tv_sec + ru.ru_stime.tv_sec) +
 		     hz * (ru.ru_utime.tv_usec + ru.ru_stime.tv_usec) / 1000000;
-
 		fprintf(stderr, "%10ld  %s\n",
 			ru.ru_maxrss, "maximum resident set size");
-		fprintf(stderr, "%10ld  %s\n", ticks ? ru.ru_ixrss / ticks : 0,
-			"average shared memory size");
-		fprintf(stderr, "%10ld  %s\n", ticks ? ru.ru_idrss / ticks : 0,
-			"average unshared data size");
-		fprintf(stderr, "%10ld  %s\n", ticks ? ru.ru_isrss / ticks : 0,
-			"average unshared stack size");
+		fprintf(stderr, "%10ld  %s\n",
+			ru.ru_ixrss / ticks, "average shared memory size");
+		fprintf(stderr, "%10ld  %s\n",
+			ru.ru_idrss / ticks, "average unshared data size");
+		fprintf(stderr, "%10ld  %s\n",
+			ru.ru_isrss / ticks, "average unshared stack size");
 		fprintf(stderr, "%10ld  %s\n",
 			ru.ru_minflt, "page reclaims");
 		fprintf(stderr, "%10ld  %s\n",
@@ -168,6 +136,5 @@ main(argc, argv)
 		fprintf(stderr, "%10ld  %s\n",
 			ru.ru_nivcsw, "involuntary context switches");
 	}
-
-	exit (WIFEXITED(status) ? WEXITSTATUS(status) : EXIT_FAILURE);
+	exit (status>>8);
 }

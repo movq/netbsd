@@ -1,8 +1,6 @@
-/*	$NetBSD: comsat.c,v 1.10 1997/10/07 10:57:11 mrg Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,15 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#if 0
-static char sccsid[] = "from: @(#)comsat.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: comsat.c,v 1.10 1997/10/07 10:57:11 mrg Exp $");
-#endif
+char copyright[] =
+"@(#) Copyright (c) 1980 Regents of the University of California.\n\
+ All rights reserved.\n";
+#endif /* not lint */
+
+#ifndef lint
+static char sccsid[] = "@(#)comsat.c	5.24 (Berkeley) 2/25/91";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -52,19 +49,16 @@ __RCSID("$NetBSD: comsat.c,v 1.10 1997/10/07 10:57:11 mrg Exp $");
 
 #include <netinet/in.h>
 
-#include <ctype.h>
+#include <stdio.h>
+#include <sgtty.h>
+#include <utmp.h>
+#include <signal.h>
 #include <errno.h>
 #include <netdb.h>
-#include <paths.h>
-#include <pwd.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <syslog.h>
-#include <termios.h>
-#include <unistd.h>
-#include <utmp.h>
+#include <ctype.h>
+#include <string.h>
+#include <paths.h>
 
 int	debug = 0;
 #define	dsyslog	if (debug) syslog
@@ -73,26 +67,20 @@ int	debug = 0;
 
 char	hostname[MAXHOSTNAMELEN];
 struct	utmp *utmp = NULL;
-time_t	lastmsgtime;
+time_t	lastmsgtime, time();
 int	nutmp, uf;
 
-void jkfprintf __P((FILE *, char[], off_t));
-void mailfor __P((char *));
-void notify __P((struct utmp *, off_t));
-void onalrm __P((int));
-void reapchildren __P((int));
-int main __P((int, char *[]));
-
-int
+/* ARGSUSED */
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	struct sockaddr_in from;
+	extern int errno;
 	register int cc;
-	int fromlen;
 	char msgbuf[100];
-	sigset_t sigset;
+	struct sockaddr_in from;
+	int fromlen;
+	void onalrm(), reapchildren();
 
 	/* verify proper invocation */
 	fromlen = sizeof(from);
@@ -104,17 +92,16 @@ main(argc, argv)
 	openlog("comsat", LOG_PID, LOG_DAEMON);
 	if (chdir(_PATH_MAILDIR)) {
 		syslog(LOG_ERR, "chdir: %s: %m", _PATH_MAILDIR);
-		(void) recv(0, msgbuf, sizeof(msgbuf) - 1, 0);
 		exit(1);
 	}
 	if ((uf = open(_PATH_UTMP, O_RDONLY, 0)) < 0) {
-		syslog(LOG_ERR, "open: %s: %m", _PATH_UTMP);
+		syslog(LOG_ERR, ".main: %s: %m", _PATH_UTMP);
 		(void) recv(0, msgbuf, sizeof(msgbuf) - 1, 0);
 		exit(1);
 	}
 	(void)time(&lastmsgtime);
 	(void)gethostname(hostname, sizeof(hostname));
-	onalrm(0);
+	onalrm();
 	(void)signal(SIGALRM, onalrm);
 	(void)signal(SIGTTOU, SIG_IGN);
 	(void)signal(SIGCHLD, reapchildren);
@@ -128,33 +115,30 @@ main(argc, argv)
 		}
 		if (!nutmp)		/* no one has logged in yet */
 			continue;
-		sigemptyset(&sigset);
-		sigaddset(&sigset, SIGALRM);
-		sigprocmask(SIG_SETMASK, &sigset, NULL);
-		msgbuf[cc] = '\0';
+		sigblock(sigmask(SIGALRM));
+		msgbuf[cc] = 0;
 		(void)time(&lastmsgtime);
 		mailfor(msgbuf);
-		sigemptyset(&sigset);
-		sigprocmask(SIG_SETMASK, &sigset, NULL);
+		sigsetmask(0L);
 	}
 }
 
 void
-reapchildren(signo)
-	int signo;
+reapchildren()
 {
-	while (wait3(NULL, WNOHANG, NULL) > 0);
+	while (wait3((int *)NULL, WNOHANG, (struct rusage *)NULL) > 0);
 }
 
 void
-onalrm(signo)
-	int signo;
+onalrm()
 {
 	static u_int utmpsize;		/* last malloced size for utmp */
 	static u_int utmpmtime;		/* last modification time for utmp */
 	struct stat statbf;
+	off_t lseek();
+	char *malloc(), *realloc();
 
-	if (time(NULL) - lastmsgtime >= MAXIDLE)
+	if (time((time_t *)NULL) - lastmsgtime >= MAXIDLE)
 		exit(0);
 	(void)alarm((u_int)15);
 	(void)fstat(uf, &statbf);
@@ -162,17 +146,20 @@ onalrm(signo)
 		utmpmtime = statbf.st_mtime;
 		if (statbf.st_size > utmpsize) {
 			utmpsize = statbf.st_size + 10 * sizeof(struct utmp);
-			if ((utmp = realloc(utmp, utmpsize)) == NULL) {
-				syslog(LOG_ERR, "%s", strerror(errno));
+			if (utmp)
+				utmp = (struct utmp *)realloc((char *)utmp, utmpsize);
+			else
+				utmp = (struct utmp *)malloc(utmpsize);
+			if (!utmp) {
+				syslog(LOG_ERR, "malloc failed");
 				exit(1);
 			}
 		}
-		(void)lseek(uf, (off_t)0, SEEK_SET);
+		(void)lseek(uf, 0L, L_SET);
 		nutmp = read(uf, utmp, (int)statbf.st_size)/sizeof(struct utmp);
 	}
 }
 
-void
 mailfor(name)
 	char *name;
 {
@@ -180,7 +167,7 @@ mailfor(name)
 	register char *cp;
 	off_t offset;
 
-	if (!(cp = strchr(name, '@')))
+	if (!(cp = index(name, '@')))
 		return;
 	*cp = '\0';
 	offset = atoi(cp + 1);
@@ -191,23 +178,18 @@ mailfor(name)
 
 static char *cr;
 
-void
 notify(utp, offset)
 	register struct utmp *utp;
 	off_t offset;
 {
-	FILE *tp;
+	static char tty[20] = _PATH_DEV;
+	struct sgttyb gttybuf;
 	struct stat stb;
-	struct termios ttybuf;
-	char tty[20], name[sizeof(utmp[0].ut_name) + 1];
+	FILE *tp;
+	char name[sizeof(utmp[0].ut_name) + 1];
 
-	(void)snprintf(tty, sizeof(tty), "%s%.*s",
-	    _PATH_DEV, (int)sizeof(utp->ut_line), utp->ut_line);
-	if (strchr(tty + sizeof(_PATH_DEV) - 1, '/')) {
-		/* A slash is an attempt to break security... */
-		syslog(LOG_AUTH | LOG_NOTICE, "'/' in \"%s\"", tty);
-		return;
-	}
+	(void)strncpy(tty + sizeof(_PATH_DEV) - 1, utp->ut_line,
+	    sizeof(utp->ut_line));
 	if (stat(tty, &stb) || !(stb.st_mode & S_IEXEC)) {
 		dsyslog(LOG_DEBUG, "%s: wrong mode on %s", utp->ut_name, tty);
 		return;
@@ -218,22 +200,21 @@ notify(utp, offset)
 	(void)signal(SIGALRM, SIG_DFL);
 	(void)alarm((u_int)30);
 	if ((tp = fopen(tty, "w")) == NULL) {
-		dsyslog(LOG_ERR, "%s: %s", tty, strerror(errno));
+		dsyslog(LOG_ERR, "fopen of tty %s failed", tty);
 		_exit(-1);
 	}
-	(void)tcgetattr(fileno(tp), &ttybuf);
-	cr = (ttybuf.c_oflag & ONLCR) && (ttybuf.c_oflag & OPOST) ?
+	(void)ioctl(fileno(tp), TIOCGETP, &gttybuf);
+	cr = (gttybuf.sg_flags&CRMOD) && !(gttybuf.sg_flags&RAW) ?
 	    "\n" : "\n\r";
 	(void)strncpy(name, utp->ut_name, sizeof(utp->ut_name));
 	name[sizeof(name) - 1] = '\0';
 	(void)fprintf(tp, "%s\007New mail for %s@%.*s\007 has arrived:%s----%s",
-	    cr, name, (int)sizeof(hostname), hostname, cr, cr);
+	    cr, name, sizeof(hostname), hostname, cr, cr);
 	jkfprintf(tp, name, offset);
 	(void)fclose(tp);
 	_exit(0);
 }
 
-void
 jkfprintf(tp, name, offset)
 	register FILE *tp;
 	char name[];
@@ -242,17 +223,11 @@ jkfprintf(tp, name, offset)
 	register char *cp, ch;
 	register FILE *fi;
 	register int linecnt, charcnt, inheader;
-	register struct passwd *p;
 	char line[BUFSIZ];
-
-	/* Set effective uid to user in case mail drop is on nfs */
-	if ((p = getpwnam(name)) != NULL)
-		(void) setuid(p->pw_uid);
 
 	if ((fi = fopen(name, "r")) == NULL)
 		return;
-
-	(void)fseek(fi, offset, SEEK_SET);
+	(void)fseek(fi, offset, L_SET);
 	/*
 	 * Print the first 7 lines or 560 characters of the new mail
 	 * (whichever comes first).  Skip header crap other than
@@ -268,13 +243,12 @@ jkfprintf(tp, name, offset)
 				continue;
 			}
 			if (line[0] == ' ' || line[0] == '\t' ||
-			    (strncmp(line, "From:", 5) &&
-			    strncmp(line, "Subject:", 8)))
+			    strncmp(line, "From:", 5) &&
+			    strncmp(line, "Subject:", 8))
 				continue;
 		}
 		if (linecnt <= 0 || charcnt <= 0) {
 			(void)fprintf(tp, "...more...%s", cr);
-			(void)fclose(fi);
 			return;
 		}
 		/* strip weird stuff so can't trojan horse stupid terminals */
@@ -288,5 +262,4 @@ jkfprintf(tp, name, offset)
 		--linecnt;
 	}
 	(void)fprintf(tp, "----%s\n", cr);
-	(void)fclose(fi);
 }

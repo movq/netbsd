@@ -1,8 +1,6 @@
-/*	$NetBSD: tty_tb.c,v 1.18 1996/02/04 02:17:36 christos Exp $	*/
-
 /*-
- * Copyright (c) 1982, 1986, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,28 +30,19 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tty_tb.c	8.1 (Berkeley) 6/10/93
+ *	@(#)tty_tb.c	7.7 (Berkeley) 5/9/91
  */
 
 #include "tb.h"
+#if NTB > 0
 
 /*
  * Line discipline for RS232 tablets;
  * supplies binary coordinate data.
  */
-#include <sys/param.h>
-#include <sys/tablet.h>
-#include <sys/systm.h>
-#include <sys/ioctl.h>
-#include <sys/ioctl_compat.h>
-#include <sys/tty.h>
-#include <sys/proc.h>
-
-union tbpos {
-	struct	hitpos hitpos;
-	struct	gtcopos gtcopos;
-	struct	polpos polpos;
-};
+#include "param.h"
+#include "tablet.h"
+#include "tty.h"
 
 /*
  * Tablet configuration table.
@@ -62,37 +51,32 @@ struct	tbconf {
 	short	tbc_recsize;	/* input record size in bytes */
 	short	tbc_uiosize;	/* size of data record returned user */
 	int	tbc_sync;	/* mask for finding sync byte/bit */
-				/* decoding routine */
-    	void    (*tbc_decode) __P((struct tbconf *, char *, union tbpos *));
-	u_char	*tbc_run;	/* enter run mode sequence */
-	u_char	*tbc_point;	/* enter point mode sequence */
-	u_char	*tbc_stop;	/* stop sequence */
-	u_char	*tbc_start;	/* start/restart sequence */
+	int	(*tbc_decode)();/* decoding routine */
+	char	*tbc_run;	/* enter run mode sequence */
+	char	*tbc_point;	/* enter point mode sequence */
+	char	*tbc_stop;	/* stop sequence */
+	char	*tbc_start;	/* start/restart sequence */
 	int	tbc_flags;
 #define	TBF_POL		0x1	/* polhemus hack */
 #define	TBF_INPROX	0x2	/* tablet has proximity info */
 };
 
-static void gtcodecode __P((struct tbconf *, char *, union tbpos *));
-static void tbolddecode __P((struct tbconf *, char *, union tbpos *));
-static void tblresdecode __P((struct tbconf *, char *, union tbpos *));
-static void tbhresdecode __P((struct tbconf *, char *, union tbpos *));
-static void poldecode __P((struct tbconf *, char *, union tbpos *));
-
+static	int tbdecode(), gtcodecode(), poldecode();
+static	int tblresdecode(), tbhresdecode();
 
 struct	tbconf tbconf[TBTYPE] = {
 { 0 },
-{ 5, sizeof (struct hitpos), 0200, tbolddecode, "6", "4" },
-{ 5, sizeof (struct hitpos), 0200, tbolddecode, "\1CN", "\1RT", "\2", "\4" },
+{ 5, sizeof (struct tbpos), 0200, tbdecode, "6", "4" },
+{ 5, sizeof (struct tbpos), 0200, tbdecode, "\1CN", "\1RT", "\2", "\4" },
 { 8, sizeof (struct gtcopos), 0200, gtcodecode },
 {17, sizeof (struct polpos), 0200, poldecode, 0, 0, "\21", "\5\22\2\23",
   TBF_POL },
-{ 5, sizeof (struct hitpos), 0100, tblresdecode, "\1CN", "\1PT", "\2", "\4",
+{ 5, sizeof (struct tbpos), 0100, tblresdecode, "\1CN", "\1PT", "\2", "\4",
   TBF_INPROX },
-{ 6, sizeof (struct hitpos), 0200, tbhresdecode, "\1CN", "\1PT", "\2", "\4",
+{ 6, sizeof (struct tbpos), 0200, tbhresdecode, "\1CN", "\1PT", "\2", "\4",
   TBF_INPROX },
-{ 5, sizeof (struct hitpos), 0100, tblresdecode, "\1CL\33", "\1PT\33", 0, 0},
-{ 6, sizeof (struct hitpos), 0200, tbhresdecode, "\1CL\33", "\1PT\33", 0, 0},
+{ 5, sizeof (struct tbpos), 0100, tblresdecode, "\1CL\33", "\1PT\33", 0, 0},
+{ 6, sizeof (struct tbpos), 0200, tbhresdecode, "\1CL\33", "\1PT\33", 0, 0},
 };
 
 /*
@@ -102,24 +86,18 @@ struct tb {
 	int	tbflags;		/* mode & type bits */
 #define	TBMAXREC	17	/* max input record size */
 	char	cbuf[TBMAXREC];		/* input buffer */
-	int	tbinbuf;
-	char	*tbcp;
-	union	tbpos tbpos; 
-} tb[NTB];
-
-
-int	tbopen __P((dev_t, struct tty *));
-void	tbclose __P((struct tty *));
-int	tbread __P((struct tty *, struct uio *));
-void	tbinput __P((int, struct tty *));
-int	tbtioctl __P((struct tty *, u_long, caddr_t, int, struct proc *));
-void	tbattach __P((int));
+	union {
+		struct	tbpos tbpos;
+		struct	gtcopos gtcopos;
+		struct	polpos polpos;
+	} rets;				/* processed state */
+#define NTBS	16
+} tb[NTBS];
 
 /*
  * Open as tablet discipline; called on discipline change.
  */
 /*ARGSUSED*/
-int
 tbopen(dev, tp)
 	dev_t dev;
 	register struct tty *tp;
@@ -129,16 +107,16 @@ tbopen(dev, tp)
 	if (tp->t_line == TABLDISC)
 		return (ENODEV);
 	ttywflush(tp);
-	for (tbp = tb; tbp < &tb[NTB]; tbp++)
+	for (tbp = tb; tbp < &tb[NTBS]; tbp++)
 		if (tbp->tbflags == 0)
 			break;
-	if (tbp >= &tb[NTB])
+	if (tbp >= &tb[NTBS])
 		return (EBUSY);
 	tbp->tbflags = TBTIGER|TBPOINT;		/* default */
-	tbp->tbcp = tbp->cbuf;
-	tbp->tbinbuf = 0;
-	bzero((caddr_t)&tbp->tbpos, sizeof (tbp->tbpos));
-	tp->t_sc = (caddr_t)tbp;
+	tp->t_cp = tbp->cbuf;
+	tp->t_inbuf = 0;
+	bzero((caddr_t)&tbp->rets, sizeof (tbp->rets));
+	tp->T_LINEP = (caddr_t)tbp;
 	tp->t_flags |= LITOUT;
 	return (0);
 }
@@ -146,33 +124,40 @@ tbopen(dev, tp)
 /*
  * Line discipline change or last device close.
  */
-void
 tbclose(tp)
 	register struct tty *tp;
 {
+	register int s;
 	int modebits = TBPOINT|TBSTOP;
 
-	tbtioctl(tp, BIOSMODE, (caddr_t) &modebits, 0, curproc);
+	tbioctl(tp, BIOSMODE, &modebits, 0);
+	s = spltty();
+	((struct tb *)tp->T_LINEP)->tbflags = 0;
+	tp->t_cp = 0;
+	tp->t_inbuf = 0;
+	tp->t_rawq.c_cc = 0;		/* clear queues -- paranoid */
+	tp->t_canq.c_cc = 0;
+	tp->t_line = 0;			/* paranoid: avoid races */
+	splx(s);
 }
 
 /*
  * Read from a tablet line.
  * Characters have been buffered in a buffer and decoded.
  */
-int
 tbread(tp, uio)
 	register struct tty *tp;
 	struct uio *uio;
 {
-	register struct tb *tbp = (struct tb *)tp->t_sc;
+	register struct tb *tbp = (struct tb *)tp->T_LINEP;
 	register struct tbconf *tc = &tbconf[tbp->tbflags & TBTYPE];
 	int ret;
 
 	if ((tp->t_state&TS_CARR_ON) == 0)
 		return (EIO);
-	ret = uiomove((caddr_t) &tbp->tbpos, tc->tbc_uiosize, uio);
+	ret = uiomove(&tbp->rets, tc->tbc_uiosize, uio);
 	if (tc->tbc_flags&TBF_POL)
-		tbp->tbpos.polpos.p_key = ' ';
+		tbp->rets.polpos.p_key = ' ';
 	return (ret);
 }
 
@@ -184,12 +169,11 @@ tbread(tp, uio)
  * This routine could be expanded in-line in the receiver
  * interrupt routine to make it run as fast as possible.
  */
-void
 tbinput(c, tp)
 	register int c;
 	register struct tty *tp;
 {
-	register struct tb *tbp = (struct tb *)tp->t_sc;
+	register struct tb *tbp = (struct tb *)tp->T_LINEP;
 	register struct tbconf *tc = &tbconf[tbp->tbflags & TBTYPE];
 
 	if (tc->tbc_recsize == 0 || tc->tbc_decode == 0)	/* paranoid? */
@@ -197,146 +181,138 @@ tbinput(c, tp)
 	/*
 	 * Locate sync bit/byte or reset input buffer.
 	 */
-	if (c&tc->tbc_sync || tbp->tbinbuf == tc->tbc_recsize) {
-		tbp->tbcp = tbp->cbuf;
-		tbp->tbinbuf = 0;
+	if (c&tc->tbc_sync || tp->t_inbuf == tc->tbc_recsize) {
+		tp->t_cp = tbp->cbuf;
+		tp->t_inbuf = 0;
 	}
-	*tbp->tbcp++ = c&0177;
+	*tp->t_cp++ = c&0177;
 	/*
 	 * Call decode routine only if a full record has been collected.
 	 */
-	if (++tbp->tbinbuf == tc->tbc_recsize)
-		(*tc->tbc_decode)(tc, tbp->cbuf, &tbp->tbpos);
+	if (++tp->t_inbuf == tc->tbc_recsize)
+		(*tc->tbc_decode)(tc, tbp->cbuf, &tbp->rets);
 }
 
 /*
  * Decode GTCO 8 byte format (high res, tilt, and pressure).
  */
-static void
-gtcodecode(tc, cp, u)
+static
+gtcodecode(tc, cp, tbpos)
 	struct tbconf *tc;
 	register char *cp;
-	register union tbpos *u;
+	register struct gtcopos *tbpos;
 {
-	struct gtcopos *pos = &u->gtcopos;
-	pos->pressure = *cp >> 2;
-	pos->status = (pos->pressure > 16) | TBINPROX; /* half way down */
-	pos->xpos = (*cp++ & 03) << 14;
-	pos->xpos |= *cp++ << 7;
-	pos->xpos |= *cp++;
-	pos->ypos = (*cp++ & 03) << 14;
-	pos->ypos |= *cp++ << 7;
-	pos->ypos |= *cp++;
-	pos->xtilt = *cp++;
-	pos->ytilt = *cp++;
-	pos->scount++;
+
+	tbpos->pressure = *cp >> 2;
+	tbpos->status = (tbpos->pressure > 16) | TBINPROX; /* half way down */
+	tbpos->xpos = (*cp++ & 03) << 14;
+	tbpos->xpos |= *cp++ << 7;
+	tbpos->xpos |= *cp++;
+	tbpos->ypos = (*cp++ & 03) << 14;
+	tbpos->ypos |= *cp++ << 7;
+	tbpos->ypos |= *cp++;
+	tbpos->xtilt = *cp++;
+	tbpos->ytilt = *cp++;
+	tbpos->scount++;
 }
 
 /*
  * Decode old Hitachi 5 byte format (low res).
  */
-static void
-tbolddecode(tc, cp, u)
+static
+tbdecode(tc, cp, tbpos)
 	struct tbconf *tc;
 	register char *cp;
-	register union tbpos *u;
+	register struct tbpos *tbpos;
 {
-	struct hitpos *pos = &u->hitpos;
 	register char byte;
 
 	byte = *cp++;
-	pos->status = (byte&0100) ? TBINPROX : 0;
+	tbpos->status = (byte&0100) ? TBINPROX : 0;
 	byte &= ~0100;
 	if (byte > 036)
-		pos->status |= 1 << ((byte-040)/2);
-	pos->xpos = *cp++ << 7;
-	pos->xpos |= *cp++;
-	if (pos->xpos < 256)			/* tablet wraps around at 256 */
-		pos->status &= ~TBINPROX;	/* make it out of proximity */
-	pos->ypos = *cp++ << 7;
-	pos->ypos |= *cp++;
-	pos->scount++;
+		tbpos->status |= 1 << ((byte-040)/2);
+	tbpos->xpos = *cp++ << 7;
+	tbpos->xpos |= *cp++;
+	if (tbpos->xpos < 256)			/* tablet wraps around at 256 */
+		tbpos->status &= ~TBINPROX;	/* make it out of proximity */
+	tbpos->ypos = *cp++ << 7;
+	tbpos->ypos |= *cp++;
+	tbpos->scount++;
 }
 
 /*
  * Decode new Hitach 5-byte format (low res).
  */
-static void
-tblresdecode(tc, cp, u)
+static
+tblresdecode(tc, cp, tbpos)
 	struct tbconf *tc;
 	register char *cp;
-	register union tbpos *u;
+	register struct tbpos *tbpos;
 {
-	struct hitpos *pos = &u->hitpos;
 
 	*cp &= ~0100;		/* mask sync bit */
-	pos->status = (*cp++ >> 2) | TBINPROX;
-	if (tc->tbc_flags&TBF_INPROX && pos->status&020)
-		pos->status &= ~(020|TBINPROX);
-	pos->xpos = *cp++;
-	pos->xpos |= *cp++ << 6;
-	pos->ypos = *cp++;
-	pos->ypos |= *cp++ << 6;
-	pos->scount++;
+	tbpos->status = (*cp++ >> 2) | TBINPROX;
+	if (tc->tbc_flags&TBF_INPROX && tbpos->status&020)
+		tbpos->status &= ~(020|TBINPROX);
+	tbpos->xpos = *cp++;
+	tbpos->xpos |= *cp++ << 6;
+	tbpos->ypos = *cp++;
+	tbpos->ypos |= *cp++ << 6;
+	tbpos->scount++;
 }
 
 /*
  * Decode new Hitach 6-byte format (high res).
  */
-static void
-tbhresdecode(tc, cp, u)
+static
+tbhresdecode(tc, cp, tbpos)
 	struct tbconf *tc;
 	register char *cp;
-	register union tbpos *u;
+	register struct tbpos *tbpos;
 {
-	struct hitpos *pos = &u->hitpos;
 	char byte;
 
 	byte = *cp++;
-	pos->xpos = (byte & 03) << 14;
-	pos->xpos |= *cp++ << 7;
-	pos->xpos |= *cp++;
-	pos->ypos = *cp++ << 14;
-	pos->ypos |= *cp++ << 7;
-	pos->ypos |= *cp++;
-	pos->status = (byte >> 2) | TBINPROX;
-	if (tc->tbc_flags&TBF_INPROX && pos->status&020)
-		pos->status &= ~(020|TBINPROX);
-	pos->scount++;
+	tbpos->xpos = (byte & 03) << 14;
+	tbpos->xpos |= *cp++ << 7;
+	tbpos->xpos |= *cp++;
+	tbpos->ypos = *cp++ << 14;
+	tbpos->ypos |= *cp++ << 7;
+	tbpos->ypos |= *cp++;
+	tbpos->status = (byte >> 2) | TBINPROX;
+	if (tc->tbc_flags&TBF_INPROX && tbpos->status&020)
+		tbpos->status &= ~(020|TBINPROX);
+	tbpos->scount++;
 }
 
 /*
  * Polhemus decode.
  */
-static void
-poldecode(tc, cp, u)
+static
+poldecode(tc, cp, polpos)
 	struct tbconf *tc;
 	register char *cp;
-	register union tbpos *u;
+	register struct polpos *polpos;
 {
-	struct polpos *pos = &u->polpos;
 
-	pos->p_x = cp[4] | cp[3]<<7 | (cp[9] & 0x03) << 14;
-	pos->p_y = cp[6] | cp[5]<<7 | (cp[9] & 0x0c) << 12;
-	pos->p_z = cp[8] | cp[7]<<7 | (cp[9] & 0x30) << 10;
-	pos->p_azi = cp[11] | cp[10]<<7 | (cp[16] & 0x03) << 14;
-	pos->p_pit = cp[13] | cp[12]<<7 | (cp[16] & 0x0c) << 12;
-	pos->p_rol = cp[15] | cp[14]<<7 | (cp[16] & 0x30) << 10;
-	pos->p_stat = cp[1] | cp[0]<<7;
+	polpos->p_x = cp[4] | cp[3]<<7 | (cp[9] & 0x03) << 14;
+	polpos->p_y = cp[6] | cp[5]<<7 | (cp[9] & 0x0c) << 12;
+	polpos->p_z = cp[8] | cp[7]<<7 | (cp[9] & 0x30) << 10;
+	polpos->p_azi = cp[11] | cp[10]<<7 | (cp[16] & 0x03) << 14;
+	polpos->p_pit = cp[13] | cp[12]<<7 | (cp[16] & 0x0c) << 12;
+	polpos->p_rol = cp[15] | cp[14]<<7 | (cp[16] & 0x30) << 10;
+	polpos->p_stat = cp[1] | cp[0]<<7;
 	if (cp[2] != ' ')
-		pos->p_key = cp[2];
+		polpos->p_key = cp[2];
 }
 
 /*ARGSUSED*/
-int
-tbtioctl(tp, cmd, data, flag, p)
+tbioctl(tp, cmd, data, flag)
 	struct tty *tp;
-	u_long cmd;
 	caddr_t data;
-	int flag;
-	struct proc *p;
 {
-	register struct tb *tbp = (struct tb *)tp->t_sc;
+	register struct tb *tbp = (struct tb *)tp->T_LINEP;
 
 	switch (cmd) {
 
@@ -354,25 +330,20 @@ tbtioctl(tp, cmd, data, flag, p)
 
 	case BIOSMODE: {
 		register struct tbconf *tc;
-		u_char *c;
 
 		tbp->tbflags &= ~TBMODE;
 		tbp->tbflags |= *(int *)data & TBMODE;
 		tc = &tbconf[tbp->tbflags & TBTYPE];
-		if (tbp->tbflags & TBSTOP) {
+		if (tbp->tbflags&TBSTOP) {
 			if (tc->tbc_stop)
-				for (c = tc->tbc_stop; *c != '\0'; c++)
-					ttyoutput(*c, tp);
+				ttyout(tc->tbc_stop, tp);
 		} else if (tc->tbc_start)
-			for (c = tc->tbc_start; *c != '\0'; c++)
-				ttyoutput(*c, tp);
-		if (tbp->tbflags & TBPOINT) {
+			ttyout(tc->tbc_start, tp);
+		if (tbp->tbflags&TBPOINT) {
 			if (tc->tbc_point)
-				for (c = tc->tbc_point; *c != '\0'; c++)
-					ttyoutput(*c, tp);
+				ttyout(tc->tbc_point, tp);
 		} else if (tc->tbc_run)
-			for (c = tc->tbc_run; *c != '\0'; c++)
-				ttyoutput(*c, tp);
+			ttyout(tc->tbc_run, tp);
 		ttstart(tp);
 		break;
 	}
@@ -392,10 +363,4 @@ tbtioctl(tp, cmd, data, flag, p)
 	}
 	return (0);
 }
-
-void
-tbattach(dummy)
-       int dummy;
-{
-    /* stub to handle side effect of new config */
-}
+#endif

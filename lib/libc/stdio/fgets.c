@@ -1,8 +1,6 @@
-/*	$NetBSD: fgets.c,v 1.6 1997/07/13 20:14:55 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,18 +34,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)fgets.c	8.2 (Berkeley) 12/22/93";
-#else
-__RCSID("$NetBSD: fgets.c,v 1.6 1997/07/13 20:14:55 christos Exp $");
-#endif
+static char sccsid[] = "@(#)fgets.c	5.4 (Berkeley) 5/4/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdio.h>
 #include <string.h>
-#include "local.h"
 
 /*
  * Read at most n-1 characters from the given file.
@@ -57,19 +49,19 @@ __RCSID("$NetBSD: fgets.c,v 1.6 1997/07/13 20:14:55 christos Exp $");
 char *
 fgets(buf, n, fp)
 	char *buf;
-	register int n;
+	register size_t n;
 	register FILE *fp;
 {
 	register size_t len;
 	register char *s;
 	register unsigned char *p, *t;
 
-	if (n <= 0)		/* sanity check */
+	if (n < 2)		/* sanity check */
 		return (NULL);
 
 	s = buf;
 	n--;			/* leave space for NUL */
-	while (n != 0) {
+	do {
 		/*
 		 * If the buffer is empty, refill it.
 		 */
@@ -97,16 +89,15 @@ fgets(buf, n, fp)
 			len = ++t - p;
 			fp->_r -= len;
 			fp->_p = t;
-			(void)memcpy((void *)s, (void *)p, len);
+			(void) bcopy((void *)p, (void *)s, len);
 			s[len] = 0;
 			return (buf);
 		}
 		fp->_r -= len;
 		fp->_p += len;
-		(void)memcpy((void *)s, (void *)p, len);
+		(void) bcopy((void *)p, (void *)s, len);
 		s += len;
-		n -= len;
-	}
+	} while ((n -= len) != 0);
 	*s = 0;
 	return (buf);
 }

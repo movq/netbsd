@@ -1,10 +1,11 @@
-#	$NetBSD: Makefile,v 1.6 1997/10/08 09:12:46 mrg Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 6/4/93
+#	@(#)Makefile	5.3 (Berkeley) 6/25/90
 
 CFLAGS+= -DBSDINETD
 PROG=	uucpd
 NOMAN=	noman
-LDADD+= -lcrypt
+.ifndef EXPORTABLE_SYSTEM
 DPADD+=	${LIBCRYPT}
+LDADD+= -lcrypt
+.endif
 
 .include <bsd.prog.mk>

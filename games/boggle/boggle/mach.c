@@ -1,5 +1,3 @@
-/*	$NetBSD: mach.c,v 1.8 1997/10/13 21:09:59 cjs Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)mach.c	8.1 (Berkeley) 6/11/93";
-#else
-__RCSID("$NetBSD: mach.c,v 1.8 1997/10/13 21:09:59 cjs Exp $");
-#endif
 #endif /* not lint */
 
 /*
@@ -50,16 +43,13 @@ __RCSID("$NetBSD: mach.c,v 1.8 1997/10/13 21:09:59 cjs Exp $");
  *
  * Input is raw and unechoed
  */
-#include <sys/ioctl.h>
-
 #include <ctype.h>
 #include <curses.h>
 #include <fcntl.h>
+#include <sgtty.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <termios.h>
 #include <time.h>
 
 #include "bog.h"
@@ -89,7 +79,7 @@ static void	winch_catcher __P((int));
 int
 setup(sflag, seed)
 	int sflag;
-	time_t seed;
+	long seed;
 {
 	extern int debug;
 
@@ -100,7 +90,7 @@ setup(sflag, seed)
 		time(&seed);
 	srandom(seed);
 	if (debug)
-		(void) printf("seed = %ld\n", (long) seed);
+		(void) printf("seed = %ld\n", seed);
 	return(0);
 }
 
@@ -173,8 +163,8 @@ char *
 getline(q)
 	char *q;
 {
-	int ch, done;
-	char *p;
+	register int ch, done;
+	register char *p;
 	int row, col;
 
 	p = q;
@@ -281,8 +271,10 @@ void
 flushin(fp)
 	FILE *fp;
 {
+	int arg;
 
-	(void) tcflush(fileno(fp), TCIFLUSH);
+	arg = FREAD;
+	(void)ioctl(fileno(fp), TIOCFLUSH, &arg);
 }
 
 static int gone;
@@ -293,8 +285,8 @@ static int gone;
 void
 stoptime()
 {
-	extern time_t start_t;
-	time_t t;
+	extern long start_t;
+	long t;
 
 	(void)time(&t);
 	gone = (int) (t - start_t);
@@ -306,8 +298,8 @@ stoptime()
 void
 starttime()
 {
-	extern time_t start_t;
-	time_t t;
+	extern long start_t;
+	long t;
 
 	(void)time(&t);
 	start_t = t - (long) gone;
@@ -591,9 +583,9 @@ tty_setup()
 	lastline = nlines - 1;
 	ncols = COLS;
 
-	signal(SIGTSTP, stop_catcher);
-	signal(SIGCONT, cont_catcher);
-	signal(SIGWINCH, winch_catcher);
+	(void) signal(SIGTSTP, stop_catcher);
+	(void) signal(SIGCONT, cont_catcher);
+	(void) signal(SIGWINCH, winch_catcher);
 	return(0);
 }
 
@@ -601,27 +593,23 @@ static void
 stop_catcher(signo)
 	int signo;
 {
-	sigset_t sigset, osigset;
-
 	stoptime();
 	noraw();
 	echo();
 	move(nlines - 1, 0);
 	refresh();
 
-	signal(SIGTSTP, SIG_DFL);
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGTSTP);
-	sigprocmask(SIG_UNBLOCK, &sigset, &osigset);
-	kill(0, SIGTSTP);
-	sigprocmask(SIG_SETMASK, &osigset, (sigset_t *)0);
-	signal(SIGTSTP, stop_catcher);
+	(void) signal(SIGTSTP, SIG_DFL);
+	(void) sigsetmask(sigblock(0) & ~(1 << (SIGTSTP-1)));
+	(void) kill(0, SIGTSTP);
+	(void) signal(SIGTSTP, stop_catcher);
 }
  
 static void
 cont_catcher(signo)
 	int signo;
 {
+	(void) signal(SIGCONT, cont_catcher);
 	noecho();
 	raw();
 	clearok(stdscr, 1);
@@ -662,7 +650,7 @@ static void
 tty_showboard(b)
 	char *b;
 {
-	int i;
+	register int i;
 	int line;
 
 	clear();

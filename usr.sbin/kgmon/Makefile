@@ -1,15 +1,6 @@
-#	$NetBSD: Makefile,v 1.8 1997/10/18 17:31:35 mrg Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.3 (Berkeley) 5/11/90
 
 PROG=	kgmon
-MAN=	kgmon.8
-DPADD=	${LIBKVM}
-LDADD=	-lkvm
-#
-# This program may safely be run setuid-root to allow non-root
-# users to start, stop, and reset profiling buffers.
-#
-#BINOWN=root
-#BINMODE=4555
+MAN8=	kgmon.0
 
 .include <bsd.prog.mk>

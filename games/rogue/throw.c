@@ -1,8 +1,6 @@
-/*	$NetBSD: throw.c,v 1.4 1997/10/12 11:46:07 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Timothy C. Stoehr.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)throw.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: throw.c,v 1.4 1997/10/12 11:46:07 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)throw.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -59,7 +52,10 @@ __RCSID("$NetBSD: throw.c,v 1.4 1997/10/12 11:46:07 lukem Exp $");
 
 #include "rogue.h"
 
-void
+extern short cur_room;
+extern char *curse_message;
+extern char hit_message[];
+
 throw()
 {
 	short wch, d;
@@ -123,9 +119,8 @@ throw()
 	vanish(weapon, 1, &rogue.pack);
 }
 
-boolean
 throw_at_monster(monster, weapon)
-	object *monster, *weapon;
+object *monster, *weapon;
 {
 	short damage, hit_chance;
 	short t;
@@ -161,9 +156,9 @@ throw_at_monster(monster, weapon)
 
 object *
 get_thrown_at_monster(obj, dir, row, col)
-	object *obj;
-	short dir;
-	short *row, *col;
+object *obj;
+short dir;
+short *row, *col;
 {
 	short orow, ocol;
 	short i, ch;
@@ -204,10 +199,9 @@ get_thrown_at_monster(obj, dir, row, col)
 	return(0);
 }
 
-void
 flop_weapon(weapon, row, col)
-	object *weapon;
-	short row, col;
+object *weapon;
+short row, col;
 {
 	object *new_weapon, *monster;
 	short i = 0;
@@ -241,8 +235,7 @@ flop_weapon(weapon, row, col)
 			dch = get_dungeon_char(row, col);
 			if (mon) {
 				mch = mvinch(row, col);
-				if ((monster = object_at(&level_monsters,
-				    row, col)) != NULL) {
+				if (monster = object_at(&level_monsters, row, col)) {
 					monster->trail_char = dch;
 				}
 				if ((mch < 'A') || (mch > 'Z')) {
@@ -265,9 +258,8 @@ flop_weapon(weapon, row, col)
 	}
 }
 
-void
 rand_around(i, r, c)
-	short i, *r, *c;
+short i, *r, *c;
 {
 	static char* pos = "\010\007\001\003\004\005\002\006\0";
 	static short row, col;

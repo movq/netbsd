@@ -1,8 +1,6 @@
-/*	$NetBSD: psignal.c,v 1.11 1997/07/21 14:07:24 jtc Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,42 +31,32 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)psignal.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: psignal.c,v 1.11 1997/07/21 14:07:24 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)psignal.c	5.6 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
 /*
  * Print the name of the signal indicated
  * along with the supplied message.
  */
-#include "namespace.h"
-#include <signal.h>
+#include <sys/signal.h>
 #include <string.h>
 #include <unistd.h>
-#include <limits.h>
-#include "extern.h"
-
-#ifdef __weak_alias
-__weak_alias(psignal,_psignal);
-#endif
 
 void
 psignal(sig, s)
 	unsigned int sig;
 	const char *s;
 {
-	static char buf[NL_TEXTMAX];
-	register const char *c;
+	register char *c;
 	register int n;
 
-	c = __strsignal(sig, buf, NL_TEXTMAX);
-	if (s && *s) {
-		n = strlen(s);
+	if (sig < NSIG)
+		c = sys_siglist[sig];
+	else
+		c = "Unknown signal";
+	n = strlen(s);
+	if (n) {
 		(void)write(STDERR_FILENO, s, n);
 		(void)write(STDERR_FILENO, ": ", 2);
 	}

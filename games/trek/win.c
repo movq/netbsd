@@ -1,8 +1,6 @@
-/*	$NetBSD: win.c,v 1.4 1997/10/12 21:25:28 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,20 +31,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)win.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: win.c,v 1.4 1997/10/12 21:25:28 christos Exp $");
-#endif
+static char sccsid[] = "@(#)win.c	5.5 (Berkeley) 6/26/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <unistd.h>
-#include <setjmp.h>
-#include "trek.h"
-#include "getpar.h"
+# include	"trek.h"
+# include	"getpar.h"
+# include	<setjmp.h>
 
 /*
 **  Signal game won
@@ -61,12 +52,13 @@ __RCSID("$NetBSD: win.c,v 1.4 1997/10/12 21:25:28 christos Exp $");
 **	pretty off the wall.
 */
 
-void
 win()
 {
-	long		s;
-	struct cvntab	*p = NULL;
-	extern jmp_buf env;
+	long			s;
+	extern jmp_buf		env;
+	extern long		score();
+	extern struct cvntab	Skitab[];
+	register struct cvntab	*p;
 
 	sleep(1);
 	printf("\nCongratulations, you have saved the Federation\n");

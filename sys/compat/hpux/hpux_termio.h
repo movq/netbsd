@@ -1,9 +1,7 @@
-/*	$NetBSD: hpux_termio.h,v 1.7 1997/04/01 19:59:04 scottr Exp $	*/
-
 /*
  * Copyright (c) 1988 University of Utah.
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -39,7 +37,7 @@
  *
  * from: Utah $Hdr: hpux_termio.h 1.1 90/07/09$
  *
- *	@(#)hpux_termio.h	8.1 (Berkeley) 6/10/93
+ *	@(#)hpux_termio.h	7.3 (Berkeley) 10/24/90
  */
 
 /* HP-UX termio stuff */
@@ -55,8 +53,6 @@
 #define	HPUXVEOL	5
 #define	HPUXVMIN	4
 #define	HPUXVTIME	5
-#define HPUXVEOL2	6
-#define HPUXVSWTCH	7
 
 /* input modes */
 #define	TIO_IGNBRK	0x00000001	/* 0000001 */
@@ -152,7 +148,7 @@
 #define	TIO_ECHONL	0x00000040	/* 0000100 */
 #define	TIO_NOFLSH	0x00000080	/* 0000200 */
 
-struct hpux_termio {
+struct hpuxtermio {
 	u_short	c_iflag;	/* input modes */
 	u_short	c_oflag;	/* output modes */
 	u_short	c_cflag;	/* control modes */
@@ -161,45 +157,7 @@ struct hpux_termio {
 	u_char	c_cc[HPUXNCC];	/* control chars */
 };
 
-#define	HPUXTCGETA	_IOR('T', 1, struct hpux_termio)
-#define	HPUXTCSETA	_IOW('T', 2, struct hpux_termio)
-#define	HPUXTCSETAW	_IOW('T', 3, struct hpux_termio)
-#define	HPUXTCSETAF	_IOW('T', 4, struct hpux_termio)
-
-/* HP-UX termios stuff */
-
-#define	HPUXNCCS	16
-
-/* control characters */
-#define	HPUXVMINS	11	/* different than termio */
-#define	HPUXVTIMES	12	/* different than termio */
-#define	HPUXVSUSP	13
-#define	HPUXVSTART	14
-#define	HPUXVSTOP	15
-
-struct hpux_termios {
-	u_int	c_iflag;	/* input modes */
-	u_int	c_oflag;	/* output modes */
-	u_int	c_cflag;	/* control modes */
-	u_int	c_lflag;	/* line discipline modes */
-	u_int	c_reserved;	/* future use */
-	u_char	c_cc[HPUXNCCS];	/* control chars */
-};
-
-#define	HPUXTCGETATTR	_IOR('T', 16, struct hpux_termios)
-#define	HPUXTCSETATTR	_IOW('T', 17, struct hpux_termios)
-#define	HPUXTCSETATTRD	_IOW('T', 18, struct hpux_termios)
-#define	HPUXTCSETATTRF	_IOW('T', 19, struct hpux_termios)
-
-#ifdef _KERNEL
-struct termio;
-struct termios;
-
-int	hpux_termio __P((int, int, caddr_t, struct proc *));
-void	termiototermios __P((struct hpux_termio *, struct hpux_termios *,
-	    struct termios *));
-void	termiostotermio __P((struct hpux_termios *, struct hpux_termio *));
-int	bsdtohpuxbaud __P((long));
-int	hpuxtobsdbaud __P((int));
-int	getsettty __P((struct proc *, int, int, caddr_t));
-#endif /* _KERNEL */
+#define	HPUXTCGETA	_IOR('T', 1, struct hpuxtermio)
+#define	HPUXTCSETA	_IOW('T', 2, struct hpuxtermio)
+#define	HPUXTCSETAW	_IOW('T', 3, struct hpuxtermio)
+#define	HPUXTCSETAF	_IOW('T', 4, struct hpuxtermio)

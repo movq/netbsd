@@ -1,8 +1,6 @@
-/*	$NetBSD: misc.c,v 1.5 1997/10/17 11:46:40 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,13 +30,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)misc.c	8.1 (Berkeley) 6/6/93
+ *	from: @(#)misc.c	5.2 (Berkeley) 4/17/92
+ *	$Id: misc.c,v 1.1 1993/11/02 07:51:10 cgd Exp $
  */
-
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: misc.c,v 1.5 1997/10/17 11:46:40 lukem Exp $");
-#endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -59,22 +53,19 @@ typedef struct _key {
 
 /* NB: the following table must be sorted lexically. */
 static KEY keylist[] = {
-	{"cksum",	F_CKSUM,	NEEDVALUE},
-	{"gid",		F_GID,		NEEDVALUE},
-	{"gname",	F_GNAME,	NEEDVALUE},
-	{"ignore",	F_IGN,		0},
-	{"link",	F_SLINK,	NEEDVALUE},
-	{"mode",	F_MODE,		NEEDVALUE},
-	{"nlink",	F_NLINK,	NEEDVALUE},
-	{"optional",	F_OPT,		0},
-	{"size",	F_SIZE,		NEEDVALUE},
-	{"time",	F_TIME,		NEEDVALUE},
-	{"type",	F_TYPE,		NEEDVALUE},
-	{"uid",		F_UID,		NEEDVALUE},
-	{"uname",	F_UNAME,	NEEDVALUE}
+	"cksum",	F_CKSUM,	NEEDVALUE,
+	"gid",		F_GID,		NEEDVALUE,
+	"gname",	F_GNAME,	NEEDVALUE,
+	"ignore",	F_IGN,		0,
+	"link",		F_SLINK,	NEEDVALUE,
+	"mode",		F_MODE,		NEEDVALUE,
+	"nlink",	F_NLINK,	NEEDVALUE,
+	"size",		F_SIZE,		NEEDVALUE,
+	"time",		F_TIME,		NEEDVALUE,
+	"type",		F_TYPE,		NEEDVALUE,
+	"uid",		F_UID,		NEEDVALUE,
+	"uname",	F_UNAME,	NEEDVALUE,
 };
-
-int keycompare __P((const void *, const void *));
 
 u_int
 parsekey(name, needvaluep)
@@ -82,6 +73,7 @@ parsekey(name, needvaluep)
 	int *needvaluep;
 {
 	KEY *k, tmp;
+	int keycompare __P((const void *, const void *));
 
 	tmp.name = name;
 	k = (KEY *)bsearch(&tmp, keylist, sizeof(keylist) / sizeof(KEY),

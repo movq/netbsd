@@ -1,9 +1,6 @@
-/*	$NetBSD: lprm.c,v 1.7 1997/10/05 15:12:22 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,15 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#if 0
-static char sccsid[] = "@(#)lprm.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: lprm.c,v 1.7 1997/10/05 15:12:22 mrg Exp $");
-#endif
+char copyright[] =
+"@(#) Copyright (c) 1983 Regents of the University of California.\n\
+ All rights reserved.\n";
+#endif /* not lint */
+
+#ifndef lint
+static char sccsid[] = "@(#)lprm.c	5.6 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 /*
@@ -56,46 +52,28 @@ __RCSID("$NetBSD: lprm.c,v 1.7 1997/10/05 15:12:22 mrg Exp $");
  * entries, otherwise one can only remove their own.
  */
 
-#include <sys/param.h>
-
-#include <syslog.h>
-#include <dirent.h>
-#include <pwd.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <ctype.h>
-
 #include "lp.h"
-#include "lp.local.h"
 
 /*
  * Stuff for handling job specifications
  */
-char	*person;		/* name of person doing lprm */
-int	 requ[MAXREQUESTS];	/* job number of spool entries */
-int	 requests;		/* # of spool requests */
 char	*user[MAXUSERS];	/* users to process */
-int	 users;			/* # of users in user array */
-uid_t	 uid, euid;		/* real and effective user id's */
+int	users;			/* # of users in user array */
+int	requ[MAXREQUESTS];	/* job number of spool entries */
+int	requests;		/* # of spool requests */
+char	*person;		/* name of person doing lprm */
 
 static char	luser[16];	/* buffer for person */
 
-static void usage __P((void));
-int main __P((int, char *[]));
-
-int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	char *arg;
+	register char *arg;
 	struct passwd *p;
+	struct direct **files;
+	int nitems, assasinated = 0;
 
-	uid = getuid();
-	euid = geteuid();
-	seteuid(uid);	/* be safe */
 	name = argv[0];
 	gethostname(host, sizeof(host));
 	openlog("lpd", 0, LOG_LPR);
@@ -103,8 +81,7 @@ main(argc, argv)
 		fatal("Who are you?");
 	if (strlen(p->pw_name) >= sizeof(luser))
 		fatal("Your name is too long");
-	strncpy(luser, p->pw_name, sizeof(luser) - 1);
-	luser[sizeof(luser) - 1] = '\0';
+	strcpy(luser, p->pw_name);
 	person = luser;
 	while (--argc) {
 		if ((arg = *++argv)[0] == '-')
@@ -143,10 +120,8 @@ main(argc, argv)
 		printer = DEFLP;
 
 	rmjob();
-	exit(0);
 }
 
-static void
 usage()
 {
 	fprintf(stderr, "usage: lprm [-] [-Pprinter] [[job #] [user] ...]\n");

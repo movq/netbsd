@@ -1,5 +1,3 @@
-/*	$NetBSD: devname.c,v 1.6 1997/07/21 14:06:52 jtc Exp $	*/
-
 /*
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,30 +31,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
 static char sccsid[] = "@(#)devname.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: devname.c,v 1.6 1997/07/21 14:06:52 jtc Exp $");
-#endif
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
 
 #include <db.h>
+#include <err.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <paths.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
-#include <err.h>
-
-#ifdef __weak_alias
-__weak_alias(devname,_devname);
-#endif
 
 char *
 devname(dev, type)

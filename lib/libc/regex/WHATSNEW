@@ -1,38 +1,3 @@
-#	$NetBSD: WHATSNEW,v 1.6 1995/02/27 13:28:25 cgd Exp $
-# @(#)WHATSNEW	8.3 (Berkeley) 3/18/94
-
-New in alpha3.4:  The complex bug alluded to below has been fixed (in a
-slightly kludgey temporary way that may hurt efficiency a bit; this is
-another "get it out the door for 4.4" release).  The tests at the end of
-the tests file have accordingly been uncommented.  The primary sign of
-the bug was that something like a?b matching ab matched b rather than ab.
-(The bug was essentially specific to this exact situation, else it would
-have shown up earlier.)
-
-New in alpha3.3:  The definition of word boundaries has been altered
-slightly, to more closely match the usual programming notion that "_"
-is an alphabetic.  Stuff used for pre-ANSI systems is now in a subdir,
-and the makefile no longer alludes to it in mysterious ways.  The
-makefile has generally been cleaned up some.  Fixes have been made
-(again!) so that the regression test will run without -DREDEBUG, at
-the cost of weaker checking.  A workaround for a bug in some folks'
-<assert.h> has been added.  And some more things have been added to
-tests, including a couple right at the end which are commented out
-because the code currently flunks them (complex bug; fix coming).
-Plus the usual minor cleanup.
-
-New in alpha3.2:  Assorted bits of cleanup and portability improvement
-(the development base is now a BSDI system using GCC instead of an ancient
-Sun system, and the newer compiler exposed some glitches).  Fix for a
-serious bug that affected REs using many [] (including REG_ICASE REs
-because of the way they are implemented), *sometimes*, depending on
-memory-allocation patterns.  The header-file prototypes no longer name
-the parameters, avoiding possible name conflicts.  The possibility that
-some clot has defined CHAR_MIN as (say) `-128' instead of `(-128)' is
-now handled gracefully.  "uchar" is no longer used as an internal type
-name (too many people have the same idea).  Still the same old lousy
-performance, alas.
-
 New in alpha3.1:  Basically nothing, this release is just a bookkeeping
 convenience.  Stay tuned.
 

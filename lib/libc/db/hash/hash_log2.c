@@ -1,7 +1,5 @@
-/*	$NetBSD: hash_log2.c,v 1.7 1997/07/13 18:52:05 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
+ * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -36,27 +34,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)hash_log2.c	8.2 (Berkeley) 5/31/94";
-#else
-__RCSID("$NetBSD: hash_log2.c,v 1.7 1997/07/13 18:52:05 christos Exp $");
-#endif
+static char sccsid[] = "@(#)hash_log2.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
 
-#include <db.h>
-#include "hash.h"
-#include "page.h"
-#include "extern.h"
-
-u_int32_t
+u_int
 __log2(num)
-	u_int32_t num;
+	u_int num;
 {
-	register u_int32_t i, limit;
+	register u_int i, limit;
 
 	limit = 1;
 	for (i = 0; limit < num; limit = limit << 1, i++);

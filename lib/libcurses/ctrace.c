@@ -1,5 +1,3 @@
-/*	$NetBSD: ctrace.c,v 1.5 1997/07/22 07:36:32 mikel Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,25 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)ctrace.c	8.2 (Berkeley) 10/5/93";
-#else
-__RCSID("$NetBSD: ctrace.c,v 1.5 1997/07/22 07:36:32 mikel Exp $");
-#endif
+static char sccsid[] = "@(#)ctrace.c	8.1 (Berkeley) 6/4/93";
 #endif /* not lint */
 
 #ifdef DEBUG
 #include <stdio.h>
 
-#ifdef __STDC__
+#if __STDC__
 #include <stdarg.h>
 #else
 #include <varargs.h>
 #endif
-
-#include "curses.h"
 
 #ifndef TFILE
 #define	TFILE	"__curses.out"
@@ -60,7 +51,7 @@ __RCSID("$NetBSD: ctrace.c,v 1.5 1997/07/22 07:36:32 mikel Exp $");
 static FILE *tracefp;			/* Curses debugging file descriptor. */
 
 void
-#ifdef __STDC__
+#if __STDC__
 __CTRACE(const char *fmt, ...)
 #else
 __CTRACE(fmt, va_alist)
@@ -69,7 +60,7 @@ __CTRACE(fmt, va_alist)
 #endif
 {
 	va_list ap;
-#ifdef __STDC__
+#if __STDC__
 	va_start(ap, fmt);
 #else
 	va_start(ap);

@@ -1,8 +1,6 @@
-/*	$NetBSD: worms.c,v 1.9 1997/10/12 02:18:25 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)worms.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: worms.c,v 1.9 1997/10/12 02:18:25 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)worms.c	5.9 (Berkeley) 2/28/91";
 #endif /* not lint */
 
 /*
@@ -65,13 +59,13 @@ __RCSID("$NetBSD: worms.c,v 1.9 1997/10/12 02:18:25 lukem Exp $");
  *
  */
 #include <sys/types.h>
-#include <sys/ioctl.h>
-
-#include <signal.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <termios.h>
-#include <unistd.h>
+#ifdef USG
+#include <termio.h>
+#else
+#include <sgtty.h>
+#endif
+#include <signal.h>
 
 static struct options {
 	int nopts;
@@ -170,6 +164,8 @@ static struct options {
 #define	cursor(c, r)	tputs(tgoto(CM, c, r), 1, fputchar)
 
 char *tcp;
+int fputchar();
+
 static char	flavor[] = {
 	'O', '*', '#', '$', '%', '0', '@', '~'
 };
@@ -183,43 +179,35 @@ static struct	worm {
 	short *xpos, *ypos;
 } *worm;
 
-void	 fputchar __P((int));
-int	 main __P((int, char **));
-void	 nomem __P((void));
-void	 onsig __P((int));
-int	 tgetent __P((char *, char *));
-int	 tgetflag __P((char *));
-int	 tgetnum __P((char *));
-char	*tgetstr __P((char *, char **));
-char	*tgoto __P((char *, int, int));
-int	 tputs __P((char *, int, void (*)(int)));
-
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	extern char *UP;
-	int x, y, h, n;
-	struct worm *w;
-	struct options *op;
-	short *ip;
-	char *term;
+	extern int optind;
+	extern short ospeed;
+	extern char *optarg, *UP;
+	register int x, y, h, n;
+	register struct worm *w;
+	register struct options *op;
+	register short *ip;
+	register char *term;
 	int CO, IN, LI, last, bottom, ch, length, number, trail, Wrap;
+	void onsig();
 	short **ref;
 	char *AL, *BC, *CM, *EI, *HO, *IC, *IM, *IP, *SR;
-	char *field, tcb[100], *mp;
-	struct termios ti;
-#ifdef TIOCGWINSZ
-	struct winsize ws;
+	char *field, tcb[100], *mp, *malloc(), *getenv(), *tgetstr(), *tgoto();
+	long random();
+#ifdef USG
+	struct termio sg;
+#else
+	struct sgttyb sg;
 #endif
 
-	mp = NULL;
 	length = 16;
 	number = 3;
 	trail = ' ';
 	field = NULL;
-	while ((ch = getopt(argc, argv, "fl:n:t")) != -1)
+	while ((ch = getopt(argc, argv, "fl:n:t")) != EOF)
 		switch(ch) {
 		case 'f':
 			field = "WORM";
@@ -245,7 +233,7 @@ main(argc, argv)
 		case '?':
 		default:
 			(void)fprintf(stderr,
-			    "usage: worms [-ft] [-l length] [-n number]\n");
+			    "usage: worms [-ft] [-length #] [-number #]\n");
 			exit(1);
 		}
 
@@ -253,8 +241,8 @@ main(argc, argv)
 		(void)fprintf(stderr, "worms: no TERM environment variable.\n");
 		exit(1);
 	}
-	if (!(worm = malloc((size_t)number *
-	    sizeof(struct worm))) || !(mp = malloc((size_t)1024)))
+	if (!(worm = (struct worm *)malloc((u_int)number *
+	    sizeof(struct worm))) || !(mp = malloc((u_int)1024)))
 		nomem();
 	if (tgetent(mp, term) <= 0) {
 		(void)fprintf(stderr, "worms: %s: unknown terminal type.\n",
@@ -269,34 +257,31 @@ main(argc, argv)
 	}
 	AL = tgetstr("al", &tcp);
 	BC = tgetflag("bs") ? "\b" : tgetstr("bc", &tcp);
+	if ((CO = tgetnum("co")) <= 0)
+		CO = 80;
+	last = CO - 1;
 	EI = tgetstr("ei", &tcp);
 	HO = tgetstr("ho", &tcp);
 	IC = tgetstr("ic", &tcp);
 	IM = tgetstr("im", &tcp);
 	IN = tgetflag("in");
 	IP = tgetstr("ip", &tcp);
+	if ((LI = tgetnum("li")) <= 0)
+		LI = 24;
+	bottom = LI - 1;
 	SR = tgetstr("sr", &tcp);
 	UP = tgetstr("up", &tcp);
-#ifdef TIOCGWINSZ
-	if (ioctl(fileno(stdout), TIOCGWINSZ, &ws) != -1 &&
-	    ws.ws_col && ws.ws_row) {
-		CO = ws.ws_col;
-		LI = ws.ws_row;
-	} else
+#ifdef USG
+	ioctl(1, TCGETA, &sg);
+	ospeed = sg.c_cflag&CBAUD;
+#else
+	gtty(1, &sg);
+	ospeed = sg.sg_ospeed;
 #endif
-	{
-		if ((CO = tgetnum("co")) <= 0)
-			CO = 80;
-		if ((LI = tgetnum("li")) <= 0)
-			LI = 24;
-	}
-	last = CO - 1;
-	bottom = LI - 1;
-	tcgetattr(fileno(stdout), &ti);
 	Wrap = tgetflag("am");
-	if (!(ip = malloc((size_t)(LI * CO * sizeof(short)))))
+	if (!(ip = (short *)malloc((u_int)(LI * CO * sizeof(short)))))
 		nomem();
-	if (!(ref = malloc((size_t)(LI * sizeof(short *)))))
+	if (!(ref = (short **)malloc((u_int)(LI * sizeof(short *)))))
 		nomem();
 	for (n = 0; n < LI; ++n) {
 		ref[n] = ip;
@@ -308,12 +293,12 @@ main(argc, argv)
 		ref[bottom][last] = 1;
 	for (n = number, w = &worm[0]; --n >= 0; w++) {
 		w->orientation = w->head = 0;
-		if (!(ip = malloc((size_t)(length * sizeof(short)))))
+		if (!(ip = (short *)malloc((u_int)(length * sizeof(short)))))
 			nomem();
 		w->xpos = ip;
 		for (x = length; --x >= 0;)
 			*ip++ = -1;
-		if (!(ip = malloc((size_t)(length * sizeof(short)))))
+		if (!(ip = (short *)malloc((u_int)(length * sizeof(short)))))
 			nomem();
 		w->ypos = ip;
 		for (y = length; --y >= 0;)
@@ -330,7 +315,7 @@ main(argc, argv)
 	tputs(tgetstr("ti", &tcp), 1, fputchar);
 	tputs(tgetstr("cl", &tcp), 1, fputchar);
 	if (field) {
-		char *p = field;
+		register char *p = field;
 
 		for (y = bottom; --y >= 0;) {
 			for (x = CO; --x >= 0;) {
@@ -406,7 +391,7 @@ main(argc, argv)
 			if (++h == length)
 				h = 0;
 			if (w->xpos[w->head = h] >= 0) {
-				int x1, y1;
+				register int x1, y1;
 
 				x1 = w->xpos[h];
 				y1 = w->ypos[h];
@@ -421,7 +406,7 @@ main(argc, argv)
 			case 0:
 				(void)fflush(stdout);
 				abort();
-				return(1);
+				return;
 			case 1:
 				w->orientation = op->opts[0];
 				break;
@@ -439,22 +424,19 @@ main(argc, argv)
 }
 
 void
-onsig(signo)
-	int signo;
+onsig()
 {
 	tputs(tgetstr("cl", &tcp), 1, fputchar);
 	tputs(tgetstr("te", &tcp), 1, fputchar);
 	exit(0);
 }
 
-void
 fputchar(c)
-	int c;
+	char c;
 {
-	(void)putchar(c);
+	putchar(c);
 }
 
-void
 nomem()
 {
 	(void)fprintf(stderr, "worms: not enough memory.\n");

@@ -1,8 +1,6 @@
-/*	$NetBSD: ftpcmd.y,v 1.14 1997/06/24 08:49:27 hannken Exp $	*/
-
 /*
- * Copyright (c) 1985, 1988, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1985, 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ftpcmd.y	8.3 (Berkeley) 4/6/94
+ *	@(#)ftpcmd.y	5.24 (Berkeley) 2/25/91
  */
 
 /*
@@ -41,37 +39,26 @@
  */
 
 %{
-#include <sys/cdefs.h>
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)ftpcmd.y	8.3 (Berkeley) 4/6/94";
-#else
-__RCSID("$NetBSD: ftpcmd.y,v 1.14 1997/06/24 08:49:27 hannken Exp $");
-#endif
+static char sccsid[] = "@(#)ftpcmd.y	5.24 (Berkeley) 2/25/91";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-
 #include <netinet/in.h>
 #include <arpa/ftp.h>
-
-#include <ctype.h>
-#include <errno.h>
-#include <glob.h>
-#include <pwd.h>
-#include <setjmp.h>
 #include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <setjmp.h>
 #include <syslog.h>
 #include <time.h>
+#include <pwd.h>
 #include <unistd.h>
-
-#include "extern.h"
+#include <stdio.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
 
 extern	struct sockaddr_in data_dest;
 extern	int logged_in;
@@ -81,13 +68,16 @@ extern	int logging;
 extern	int type;
 extern	int form;
 extern	int debug;
+extern	int timeout;
+extern	int maxtimeout;
 extern  int pdata;
 extern	char hostname[], remotehost[];
 extern	char proctitle[];
+extern	char *globerr;
 extern	int usedefault;
 extern  int transflag;
 extern  char tmpline[];
-extern	struct ftpclass curclass;
+char	**ftpglob();
 
 off_t	restart_point;
 
@@ -99,16 +89,11 @@ char	*fromname;
 
 %}
 
-%union {
-	int	i;
-	char   *s;
-}
-
 %token
 	A	B	C	E	F	I
 	L	N	P	R	S	T
 
-	SP	CRLF	COMMA
+	SP	CRLF	COMMA	STRING	NUMBER
 
 	USER	PASS	ACCT	REIN	QUIT	PORT
 	PASV	TYPE	STRU	MODE	RETR	STOR
@@ -122,40 +107,31 @@ char	*fromname;
 
 	LEXERR
 
-%token	<s> STRING
-%token	<i> NUMBER
-
-%type	<i> check_login check_modify octal_number byte_size
-%type	<i> struct_code mode_code type_code form_code
-%type	<s> pathstring pathname password username
-
 %start	cmd_list
 
 %%
 
-cmd_list
-	: /* empty */
-	| cmd_list cmd
-		{
+cmd_list:	/* empty */
+	|	cmd_list cmd
+		= {
 			fromname = (char *) 0;
 			restart_point = (off_t) 0;
 		}
-	| cmd_list rcmd
+	|	cmd_list rcmd
 	;
 
-cmd
-	: USER SP username CRLF
-		{
-			user($3);
-			free($3);
+cmd:		USER SP username CRLF
+		= {
+			user((char *) $3);
+			free((char *) $3);
 		}
-	| PASS SP password CRLF
-		{
-			pass($3);
-			free($3);
+	|	PASS SP password CRLF
+		= {
+			pass((char *) $3);
+			free((char *) $3);
 		}
-	| PORT SP host_port CRLF
-		{
+	|	PORT SP host_port CRLF
+		= {
 			usedefault = 0;
 			if (pdata >= 0) {
 				(void) close(pdata);
@@ -163,12 +139,12 @@ cmd
 			}
 			reply(200, "PORT command successful.");
 		}
-	| PASV CRLF
-		{
+	|	PASV CRLF
+		= {
 			passive();
 		}
-	| TYPE SP type_code CRLF
-		{
+	|	TYPE SP type_code CRLF
+		= {
 			switch (cmd_type) {
 
 			case TYPE_A:
@@ -202,8 +178,8 @@ cmd
 #endif /* NBBY == 8 */
 			}
 		}
-	| STRU SP struct_code CRLF
-		{
+	|	STRU SP struct_code CRLF
+		= {
 			switch ($3) {
 
 			case STRU_F:
@@ -214,8 +190,8 @@ cmd
 				reply(504, "Unimplemented STRU type.");
 			}
 		}
-	| MODE SP mode_code CRLF
-		{
+	|	MODE SP mode_code CRLF
+		= {
 			switch ($3) {
 
 			case MODE_S:
@@ -226,114 +202,114 @@ cmd
 				reply(502, "Unimplemented MODE type.");
 			}
 		}
-	| ALLO SP NUMBER CRLF
-		{
+	|	ALLO SP NUMBER CRLF
+		= {
 			reply(202, "ALLO command ignored.");
 		}
-	| ALLO SP NUMBER SP R SP NUMBER CRLF
-		{
+	|	ALLO SP NUMBER SP R SP NUMBER CRLF
+		= {
 			reply(202, "ALLO command ignored.");
 		}
-	| RETR check_login SP pathname CRLF
-		{
+	|	RETR check_login SP pathname CRLF
+		= {
 			if ($2 && $4 != NULL)
-				retrieve((char *) 0, $4);
+				retrieve((char *) 0, (char *) $4);
 			if ($4 != NULL)
-				free($4);
+				free((char *) $4);
 		}
-	| STOR check_login SP pathname CRLF
-		{
+	|	STOR check_login SP pathname CRLF
+		= {
 			if ($2 && $4 != NULL)
-				store($4, "w", 0);
+				store((char *) $4, "w", 0);
 			if ($4 != NULL)
-				free($4);
+				free((char *) $4);
 		}
-	| APPE check_login SP pathname CRLF
-		{
+	|	APPE check_login SP pathname CRLF
+		= {
 			if ($2 && $4 != NULL)
-				store($4, "a", 0);
+				store((char *) $4, "a", 0);
 			if ($4 != NULL)
-				free($4);
+				free((char *) $4);
 		}
-	| NLST check_login CRLF
-		{
+	|	NLST check_login CRLF
+		= {
 			if ($2)
 				send_file_list(".");
 		}
-	| NLST check_login SP STRING CRLF
-		{
-			if ($2 && $4 != NULL)
-				send_file_list($4);
+	|	NLST check_login SP STRING CRLF
+		= {
+			if ($2 && $4 != NULL) 
+				send_file_list((char *) $4);
 			if ($4 != NULL)
-				free($4);
+				free((char *) $4);
 		}
-	| LIST check_login CRLF
-		{
+	|	LIST check_login CRLF
+		= {
 			if ($2)
 				retrieve("/bin/ls -lgA", "");
 		}
-	| LIST check_login SP pathname CRLF
-		{
+	|	LIST check_login SP pathname CRLF
+		= {
 			if ($2 && $4 != NULL)
-				retrieve("/bin/ls -lgA %s", $4);
+				retrieve("/bin/ls -lgA %s", (char *) $4);
 			if ($4 != NULL)
-				free($4);
+				free((char *) $4);
 		}
-	| STAT check_login SP pathname CRLF
-		{
+	|	STAT check_login SP pathname CRLF
+		= {
 			if ($2 && $4 != NULL)
-				statfilecmd($4);
+				statfilecmd((char *) $4);
 			if ($4 != NULL)
-				free($4);
+				free((char *) $4);
 		}
-	| STAT CRLF
-		{
+	|	STAT CRLF
+		= {
 			statcmd();
 		}
-	| DELE check_modify SP pathname CRLF
-		{
+	|	DELE check_login SP pathname CRLF
+		= {
 			if ($2 && $4 != NULL)
-				delete($4);
+				delete((char *) $4);
 			if ($4 != NULL)
-				free($4);
+				free((char *) $4);
 		}
-	| RNTO SP pathname CRLF
-		{
+	|	RNTO SP pathname CRLF
+		= {
 			if (fromname) {
-				renamecmd(fromname, $3);
+				renamecmd(fromname, (char *) $3);
 				free(fromname);
 				fromname = (char *) 0;
 			} else {
 				reply(503, "Bad sequence of commands.");
 			}
-			free($3);
+			free((char *) $3);
 		}
-	| ABOR CRLF
-		{
+	|	ABOR CRLF
+		= {
 			reply(225, "ABOR command successful.");
 		}
-	| CWD check_login CRLF
-		{
+	|	CWD check_login CRLF
+		= {
 			if ($2)
 				cwd(pw->pw_dir);
 		}
-	| CWD check_login SP pathname CRLF
-		{
+	|	CWD check_login SP pathname CRLF
+		= {
 			if ($2 && $4 != NULL)
-				cwd($4);
+				cwd((char *) $4);
 			if ($4 != NULL)
-				free($4);
+				free((char *) $4);
 		}
-	| HELP CRLF
-		{
+	|	HELP CRLF
+		= {
 			help(cmdtab, (char *) 0);
 		}
-	| HELP SP STRING CRLF
-		{
-			char *cp = $3;
+	|	HELP SP STRING CRLF
+		= {
+			register char *cp = (char *)$3;
 
 			if (strncasecmp(cp, "SITE", 4) == 0) {
-				cp = $3 + 4;
+				cp = (char *)$3 + 4;
 				if (*cp == ' ')
 					cp++;
 				if (*cp)
@@ -341,46 +317,46 @@ cmd
 				else
 					help(sitetab, (char *) 0);
 			} else
-				help(cmdtab, $3);
+				help(cmdtab, (char *) $3);
 		}
-	| NOOP CRLF
-		{
+	|	NOOP CRLF
+		= {
 			reply(200, "NOOP command successful.");
 		}
-	| MKD check_modify SP pathname CRLF
-		{
+	|	MKD check_login SP pathname CRLF
+		= {
 			if ($2 && $4 != NULL)
-				makedir($4);
+				makedir((char *) $4);
 			if ($4 != NULL)
-				free($4);
+				free((char *) $4);
 		}
-	| RMD check_modify SP pathname CRLF
-		{
+	|	RMD check_login SP pathname CRLF
+		= {
 			if ($2 && $4 != NULL)
-				removedir($4);
+				removedir((char *) $4);
 			if ($4 != NULL)
-				free($4);
+				free((char *) $4);
 		}
-	| PWD check_login CRLF
-		{
+	|	PWD check_login CRLF
+		= {
 			if ($2)
 				pwd();
 		}
-	| CDUP check_login CRLF
-		{
+	|	CDUP check_login CRLF
+		= {
 			if ($2)
 				cwd("..");
 		}
-	| SITE SP HELP CRLF
-		{
+	|	SITE SP HELP CRLF
+		= {
 			help(sitetab, (char *) 0);
 		}
-	| SITE SP HELP SP STRING CRLF
-		{
-			help(sitetab, $5);
+	|	SITE SP HELP SP STRING CRLF
+		= {
+			help(sitetab, (char *) $5);
 		}
-	| SITE SP UMASK check_login CRLF
-		{
+	|	SITE SP UMASK check_login CRLF
+		= {
 			int oldmask;
 
 			if ($4) {
@@ -389,8 +365,8 @@ cmd
 				reply(200, "Current UMASK is %03o", oldmask);
 			}
 		}
-	| SITE SP UMASK check_modify SP octal_number CRLF
-		{
+	|	SITE SP UMASK check_login SP octal_number CRLF
+		= {
 			int oldmask;
 
 			if ($4) {
@@ -404,49 +380,49 @@ cmd
 				}
 			}
 		}
-	| SITE SP CHMOD check_modify SP octal_number SP pathname CRLF
-		{
+	|	SITE SP CHMOD check_login SP octal_number SP pathname CRLF
+		= {
 			if ($4 && ($8 != NULL)) {
 				if ($6 > 0777)
 					reply(501,
 				"CHMOD: Mode value must be between 0 and 0777");
-				else if (chmod($8, $6) < 0)
-					perror_reply(550, $8);
+				else if (chmod((char *) $8, $6) < 0)
+					perror_reply(550, (char *) $8);
 				else
 					reply(200, "CHMOD command successful.");
 			}
 			if ($8 != NULL)
-				free($8);
+				free((char *) $8);
 		}
-	| SITE SP IDLE CRLF
-		{
+	|	SITE SP IDLE CRLF
+		= {
 			reply(200,
 			    "Current IDLE time limit is %d seconds; max %d",
-				curclass.timeout, curclass.maxtimeout);
+				timeout, maxtimeout);
 		}
-	| SITE SP IDLE SP NUMBER CRLF
-		{
-			if ($5 < 30 || $5 > curclass.maxtimeout) {
+	|	SITE SP IDLE SP NUMBER CRLF
+		= {
+			if ($5 < 30 || $5 > maxtimeout) {
 				reply(501,
-			"IDLE time limit must be between 30 and %d seconds",
-				    curclass.maxtimeout);
+			"Maximum IDLE time must be between 30 and %d seconds",
+				    maxtimeout);
 			} else {
-				curclass.timeout = $5;
-				(void) alarm(curclass.timeout);
+				timeout = $5;
+				(void) alarm((unsigned) timeout);
 				reply(200,
-				    "IDLE time limit set to %d seconds",
-				    curclass.timeout);
+				    "Maximum IDLE time set to %d seconds",
+				    timeout);
 			}
 		}
-	| STOU check_login SP pathname CRLF
-		{
+	|	STOU check_login SP pathname CRLF
+		= {
 			if ($2 && $4 != NULL)
-				store($4, "w", 1);
+				store((char *) $4, "w", 1);
 			if ($4 != NULL)
-				free($4);
+				free((char *) $4);
 		}
-	| SYST CRLF
-		{
+	|	SYST CRLF
+		= {
 #ifdef unix
 #ifdef BSD
 			reply(215, "UNIX Type: L%d Version: BSD-%d",
@@ -466,12 +442,12 @@ cmd
 		 * Return size of file in a format suitable for
 		 * using with RESTART (we just count bytes).
 		 */
-	| SIZE check_login SP pathname CRLF
-		{
+	|	SIZE check_login SP pathname CRLF
+		= {
 			if ($2 && $4 != NULL)
-				sizecmd($4);
+				sizecmd((char *) $4);
 			if ($4 != NULL)
-				free($4);
+				free((char *) $4);
 		}
 
 		/*
@@ -483,267 +459,228 @@ cmd
 		 * where xxx is the fractional second (of any precision,
 		 * not necessarily 3 digits)
 		 */
-	| MDTM check_login SP pathname CRLF
-		{
+	|	MDTM check_login SP pathname CRLF
+		= {
 			if ($2 && $4 != NULL) {
 				struct stat stbuf;
-				if (stat($4, &stbuf) < 0)
-					reply(550, "%s: %s",
-					    $4, strerror(errno));
-				else if (!S_ISREG(stbuf.st_mode)) {
-					reply(550, "%s: not a plain file.", $4);
+				if (stat((char *) $4, &stbuf) < 0)
+					perror_reply(550, "%s", (char *) $4);
+				else if ((stbuf.st_mode&S_IFMT) != S_IFREG) {
+					reply(550, "%s: not a plain file.",
+						(char *) $4);
 				} else {
-					struct tm *t;
+					register struct tm *t;
+					struct tm *gmtime();
 					t = gmtime(&stbuf.st_mtime);
 					reply(213,
-					    "%04d%02d%02d%02d%02d%02d",
-					    1900 + t->tm_year,
-					    t->tm_mon+1, t->tm_mday,
+					    "19%02d%02d%02d%02d%02d%02d",
+					    t->tm_year, t->tm_mon+1, t->tm_mday,
 					    t->tm_hour, t->tm_min, t->tm_sec);
 				}
 			}
 			if ($4 != NULL)
-				free($4);
+				free((char *) $4);
 		}
-	| QUIT CRLF
-		{
+	|	QUIT CRLF
+		= {
 			reply(221, "Goodbye.");
 			dologout(0);
 		}
-	| error CRLF
-		{
+	|	error CRLF
+		= {
 			yyerrok;
 		}
 	;
-rcmd
-	: RNFR check_login SP pathname CRLF
-		{
+rcmd:		RNFR check_login SP pathname CRLF
+		= {
+			char *renamefrom();
+
 			restart_point = (off_t) 0;
 			if ($2 && $4) {
-				fromname = renamefrom($4);
+				fromname = renamefrom((char *) $4);
 				if (fromname == (char *) 0 && $4) {
-					free($4);
+					free((char *) $4);
 				}
 			}
 		}
-	| REST SP byte_size CRLF
-		{
+	|	REST SP byte_size CRLF
+		= {
+			long atol();
+
 			fromname = (char *) 0;
-			restart_point = $3;	/* XXX $3 is only "int" */
-			reply(350, "Restarting at %qd. %s", restart_point,
+			restart_point = $3;
+			reply(350, "Restarting at %ld. %s", restart_point,
 			    "Send STORE or RETRIEVE to initiate transfer.");
 		}
 	;
-
-username
-	: STRING
+		
+username:	STRING
 	;
 
-password
-	: /* empty */
-		{
-			$$ = (char *)calloc(1, sizeof(char));
+password:	/* empty */
+		= {
+			*(char **)&($$) = (char *)calloc(1, sizeof(char));
 		}
-	| STRING
+	|	STRING
 	;
 
-byte_size
-	: NUMBER
+byte_size:	NUMBER
 	;
 
-host_port
-	: NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA
+host_port:	NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA 
 		NUMBER COMMA NUMBER
-		{
-			char *a, *p;
+		= {
+			register char *a, *p;
 
-			data_dest.sin_len = sizeof(struct sockaddr_in);
-			data_dest.sin_family = AF_INET;
-			p = (char *)&data_dest.sin_port;
-			p[0] = $9; p[1] = $11;
 			a = (char *)&data_dest.sin_addr;
 			a[0] = $1; a[1] = $3; a[2] = $5; a[3] = $7;
+			p = (char *)&data_dest.sin_port;
+			p[0] = $9; p[1] = $11;
+			data_dest.sin_family = AF_INET;
 		}
 	;
 
-form_code
-	: N
-		{
-			$$ = FORM_N;
-		}
-	| T
-		{
-			$$ = FORM_T;
-		}
-	| C
-		{
-			$$ = FORM_C;
-		}
+form_code:	N
+	= {
+		$$ = FORM_N;
+	}
+	|	T
+	= {
+		$$ = FORM_T;
+	}
+	|	C
+	= {
+		$$ = FORM_C;
+	}
 	;
 
-type_code
-	: A
-		{
-			cmd_type = TYPE_A;
-			cmd_form = FORM_N;
-		}
-	| A SP form_code
-		{
-			cmd_type = TYPE_A;
-			cmd_form = $3;
-		}
-	| E
-		{
-			cmd_type = TYPE_E;
-			cmd_form = FORM_N;
-		}
-	| E SP form_code
-		{
-			cmd_type = TYPE_E;
-			cmd_form = $3;
-		}
-	| I
-		{
-			cmd_type = TYPE_I;
-		}
-	| L
-		{
-			cmd_type = TYPE_L;
-			cmd_bytesz = NBBY;
-		}
-	| L SP byte_size
-		{
-			cmd_type = TYPE_L;
-			cmd_bytesz = $3;
-		}
-		/* this is for a bug in the BBN ftp */
-	| L byte_size
-		{
-			cmd_type = TYPE_L;
-			cmd_bytesz = $2;
-		}
+type_code:	A
+	= {
+		cmd_type = TYPE_A;
+		cmd_form = FORM_N;
+	}
+	|	A SP form_code
+	= {
+		cmd_type = TYPE_A;
+		cmd_form = $3;
+	}
+	|	E
+	= {
+		cmd_type = TYPE_E;
+		cmd_form = FORM_N;
+	}
+	|	E SP form_code
+	= {
+		cmd_type = TYPE_E;
+		cmd_form = $3;
+	}
+	|	I
+	= {
+		cmd_type = TYPE_I;
+	}
+	|	L
+	= {
+		cmd_type = TYPE_L;
+		cmd_bytesz = NBBY;
+	}
+	|	L SP byte_size
+	= {
+		cmd_type = TYPE_L;
+		cmd_bytesz = $3;
+	}
+	/* this is for a bug in the BBN ftp */
+	|	L byte_size
+	= {
+		cmd_type = TYPE_L;
+		cmd_bytesz = $2;
+	}
 	;
 
-struct_code
-	: F
-		{
-			$$ = STRU_F;
-		}
-	| R
-		{
-			$$ = STRU_R;
-		}
-	| P
-		{
-			$$ = STRU_P;
-		}
+struct_code:	F
+	= {
+		$$ = STRU_F;
+	}
+	|	R
+	= {
+		$$ = STRU_R;
+	}
+	|	P
+	= {
+		$$ = STRU_P;
+	}
 	;
 
-mode_code
-	: S
-		{
-			$$ = MODE_S;
-		}
-	| B
-		{
-			$$ = MODE_B;
-		}
-	| C
-		{
-			$$ = MODE_C;
-		}
+mode_code:	S
+	= {
+		$$ = MODE_S;
+	}
+	|	B
+	= {
+		$$ = MODE_B;
+	}
+	|	C
+	= {
+		$$ = MODE_C;
+	}
 	;
 
-pathname
-	: pathstring
-		{
-			/*
-			 * Problem: this production is used for all pathname
-			 * processing, but only gives a 550 error reply.
-			 * This is a valid reply in some cases but not in
-			 * others.
-			 */
-			if (logged_in && $1 && *$1 == '~') {
-				glob_t gl;
-				int flags =
-				 GLOB_BRACE|GLOB_NOCHECK|GLOB_QUOTE|GLOB_TILDE;
-
-				if ($1[1] == '\0')
-					$$ = strdup(pw->pw_dir);
-				else {
-					memset(&gl, 0, sizeof(gl));
-					if (glob($1, flags, NULL, &gl) ||
-					    gl.gl_pathc == 0) {
-						reply(550, "not found");
-						$$ = NULL;
-					} else
-						$$ = strdup(gl.gl_pathv[0]);
-					globfree(&gl);
-				}
-				free($1);
-			} else
-				$$ = $1;
-		}
-	;
-
-pathstring
-	: STRING
-	;
-
-octal_number
-	: NUMBER
-		{
-			int ret, dec, multby, digit;
-
-			/*
-			 * Convert a number that was read as decimal number
-			 * to what it would be if it had been read as octal.
-			 */
-			dec = $1;
-			multby = 1;
-			ret = 0;
-			while (dec) {
-				digit = dec%10;
-				if (digit > 7) {
-					ret = -1;
-					break;
-				}
-				ret += digit * multby;
-				multby *= 8;
-				dec /= 10;
+pathname:	pathstring
+	= {
+		/*
+		 * Problem: this production is used for all pathname
+		 * processing, but only gives a 550 error reply.
+		 * This is a valid reply in some cases but not in others.
+		 */
+		if (logged_in && $1 && strncmp((char *) $1, "~", 1) == 0) {
+			*(char **)&($$) = *ftpglob((char *) $1);
+			if (globerr != NULL) {
+				reply(550, globerr);
+				$$ = NULL;
 			}
-			$$ = ret;
-		}
+			free((char *) $1);
+		} else
+			$$ = $1;
+	}
 	;
 
-
-check_login
-	: /* empty */
-		{
-			if (logged_in)
-				$$ = 1;
-			else {
-				reply(530, "Please login with USER and PASS.");
-				$$ = 0;
-			}
-		}
+pathstring:	STRING
 	;
-check_modify
-	: /* empty */
-		{
-			if (logged_in)  {
-				if (curclass.modify) {
-					$$ = 1;
-				} else {
-					reply(502,
-					"No permission to use this command.");
-					$$ = 0;
-				}
-			} else {
-				reply(530, "Please login with USER and PASS.");
-				$$ = 0;
+
+octal_number:	NUMBER
+	= {
+		register int ret, dec, multby, digit;
+
+		/*
+		 * Convert a number that was read as decimal number
+		 * to what it would be if it had been read as octal.
+		 */
+		dec = $1;
+		multby = 1;
+		ret = 0;
+		while (dec) {
+			digit = dec%10;
+			if (digit > 7) {
+				ret = -1;
+				break;
 			}
+			ret += digit * multby;
+			multby *= 8;
+			dec /= 10;
 		}
+		$$ = ret;
+	}
+	;
+
+check_login:	/* empty */
+	= {
+		if (logged_in)
+			$$ = 1;
+		else {
+			reply(530, "Please login with USER and PASS.");
+			$$ = 0;
+		}
+	}
+	;
 
 %%
 
@@ -790,7 +727,7 @@ struct tab cmdtab[] = {		/* In order defined in RFC 765 */
 	{ "MRSQ", MRSQ, OSTR, 0,	"(mail recipient scheme question)" },
 	{ "MRCP", MRCP, STR1, 0,	"(mail recipient)" },
 	{ "ALLO", ALLO, ARGS, 1,	"allocate storage (vacuously)" },
-	{ "REST", REST, ARGS, 1,	"<sp> offset (restart command)" },
+	{ "REST", REST, ARGS, 1,	"(restart command)" },
 	{ "RNFR", RNFR, STR1, 1,	"<sp> file-name" },
 	{ "RNTO", RNTO, STR1, 1,	"<sp> file-name" },
 	{ "ABOR", ABOR, ARGS, 1,	"(abort operation)" },
@@ -826,17 +763,9 @@ struct tab sitetab[] = {
 	{ NULL,   0,    0,    0,	0 }
 };
 
-static char	*copy __P((char *));
-static void	 help __P((struct tab *, char *));
-static struct tab *
-		 lookup __P((struct tab *, char *));
-static void	 sizecmd __P((char *));
-static void	 toolong __P((int));
-static int	 yylex __P((void));
-
-static struct tab *
+struct tab *
 lookup(p, cmd)
-	struct tab *p;
+	register struct tab *p;
 	char *cmd;
 {
 
@@ -854,10 +783,9 @@ lookup(p, cmd)
 char *
 getline(s, n, iop)
 	char *s;
-	int n;
-	FILE *iop;
+	register FILE *iop;
 {
-	int c;
+	register c;
 	register char *cs;
 
 	cs = s;
@@ -906,66 +834,51 @@ getline(s, n, iop)
 	if (c == EOF && cs == s)
 		return (NULL);
 	*cs++ = '\0';
-	if (debug) {
-		if (!guest && strncasecmp("pass ", s, 5) == 0) {
-			/* Don't syslog passwords */
-			syslog(LOG_DEBUG, "command: %.5s ???", s);
-		} else {
-			register char *cp;
-			register int len;
-
-			/* Don't syslog trailing CR-LF */
-			len = strlen(s);
-			cp = s + len - 1;
-			while (cp >= s && (*cp == '\n' || *cp == '\r')) {
-				--cp;
-				--len;
-			}
-			syslog(LOG_DEBUG, "command: %.*s", len, s);
-		}
-	}
+	if (debug)
+		syslog(LOG_DEBUG, "command: %s", s);
 	return (s);
 }
 
 static void
-toolong(signo)
-	int signo;
+toolong()
 {
+	time_t now;
 
 	reply(421,
-	    "Timeout (%d seconds): closing control connection.",
-	    curclass.timeout);
-	if (logging)
-		syslog(LOG_INFO, "User %s timed out after %d seconds",
-		    (pw ? pw -> pw_name : "unknown"), curclass.timeout);
+	  "Timeout (%d seconds): closing control connection.", timeout);
+	(void) time(&now);
+	if (logging) {
+		syslog(LOG_INFO,
+			"User %s timed out after %d seconds at %s",
+			(pw ? pw -> pw_name : "unknown"), timeout, ctime(&now));
+	}
 	dologout(1);
 }
 
-static int
 yylex()
 {
 	static int cpos, state;
-	char *cp, *cp2;
-	struct tab *p;
+	register char *cp, *cp2;
+	register struct tab *p;
 	int n;
-	char c;
+	char c, *copy();
 
 	for (;;) {
 		switch (state) {
 
 		case CMD:
 			(void) signal(SIGALRM, toolong);
-			(void) alarm(curclass.timeout);
+			(void) alarm((unsigned) timeout);
 			if (getline(cbuf, sizeof(cbuf)-1, stdin) == NULL) {
 				reply(221, "You could at least say goodbye.");
 				dologout(0);
 			}
 			(void) alarm(0);
-#ifdef HASSETPROCTITLE
-			if (strncasecmp(cbuf, "PASS", 4) != 0)
+#ifdef SETPROCTITLE
+			if (strncasecmp(cbuf, "PASS", 4) != NULL)
 				setproctitle("%s: %s", proctitle, cbuf);
-#endif /* HASSETPROCTITLE */
-			if ((cp = strchr(cbuf, '\r'))) {
+#endif /* SETPROCTITLE */
+			if ((cp = index(cbuf, '\r'))) {
 				*cp++ = '\n';
 				*cp = '\0';
 			}
@@ -985,7 +898,7 @@ yylex()
 					/* NOTREACHED */
 				}
 				state = p->state;
-				yylval.s = p->name;
+				*(char **)&yylval = p->name;
 				return (p->token);
 			}
 			break;
@@ -1011,7 +924,7 @@ yylex()
 					/* NOTREACHED */
 				}
 				state = p->state;
-				yylval.s = p->name;
+				*(char **)&yylval = p->name;
 				return (p->token);
 			}
 			state = CMD;
@@ -1050,7 +963,7 @@ yylex()
 			 */
 			if (n > 1 && cbuf[cpos] == '\n') {
 				cbuf[cpos] = '\0';
-				yylval.s = copy(cp);
+				*(char **)&yylval = copy(cp);
 				cbuf[cpos] = '\n';
 				state = ARGS;
 				return (STRING);
@@ -1068,7 +981,7 @@ yylex()
 					;
 				c = cbuf[cpos];
 				cbuf[cpos] = '\0';
-				yylval.i = atoi(cp);
+				yylval = atoi(cp);
 				cbuf[cpos] = c;
 				state = STR1;
 				return (NUMBER);
@@ -1083,7 +996,7 @@ yylex()
 					;
 				c = cbuf[cpos];
 				cbuf[cpos] = '\0';
-				yylval.i = atoi(cp);
+				yylval = atoi(cp);
 				cbuf[cpos] = c;
 				return (NUMBER);
 			}
@@ -1159,17 +1072,17 @@ yylex()
 	}
 }
 
-void
 upper(s)
-	char *s;
+	register char *s;
 {
 	while (*s != '\0') {
-		*s = toupper(*s);
+		if (islower(*s))
+			*s = toupper(*s);
 		s++;
 	}
 }
 
-static char *
+char *
 copy(s)
 	char *s;
 {
@@ -1182,13 +1095,12 @@ copy(s)
 	return (p);
 }
 
-static void
 help(ctab, s)
 	struct tab *ctab;
 	char *s;
 {
-	struct tab *c;
-	int width, NCMDS;
+	register struct tab *c;
+	register int width, NCMDS;
 	char *type;
 
 	if (ctab == sitetab)
@@ -1205,7 +1117,7 @@ help(ctab, s)
 	}
 	width = (width + 8) &~ 7;
 	if (s == 0) {
-		int i, j, w;
+		register int i, j, w;
 		int columns, lines;
 
 		lreply(214, "The following %scommands are recognized %s.",
@@ -1247,30 +1159,31 @@ help(ctab, s)
 		    c->name, c->help);
 }
 
-static void
 sizecmd(filename)
-	char *filename;
+char *filename;
 {
 	switch (type) {
 	case TYPE_L:
 	case TYPE_I: {
 		struct stat stbuf;
-		if (stat(filename, &stbuf) < 0 || !S_ISREG(stbuf.st_mode))
+		if (stat(filename, &stbuf) < 0 ||
+		    (stbuf.st_mode&S_IFMT) != S_IFREG)
 			reply(550, "%s: not a plain file.", filename);
 		else
-			reply(213, "%qu", stbuf.st_size);
-		break; }
+			reply(213, "%lu", stbuf.st_size);
+		break;}
 	case TYPE_A: {
 		FILE *fin;
-		int c;
-		off_t count;
+		register int c;
+		register long count;
 		struct stat stbuf;
 		fin = fopen(filename, "r");
 		if (fin == NULL) {
 			perror_reply(550, filename);
 			return;
 		}
-		if (fstat(fileno(fin), &stbuf) < 0 || !S_ISREG(stbuf.st_mode)) {
+		if (fstat(fileno(fin), &stbuf) < 0 ||
+		    (stbuf.st_mode&S_IFMT) != S_IFREG) {
 			reply(550, "%s: not a plain file.", filename);
 			(void) fclose(fin);
 			return;
@@ -1284,8 +1197,8 @@ sizecmd(filename)
 		}
 		(void) fclose(fin);
 
-		reply(213, "%qd", count);
-		break; }
+		reply(213, "%ld", count);
+		break;}
 	default:
 		reply(504, "SIZE not implemented for Type %c.", "?AEIL"[type]);
 	}

@@ -1,8 +1,6 @@
-/*	$NetBSD: hexsyntax.c,v 1.6 1997/10/19 02:34:07 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,37 +31,29 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)hexsyntax.c	8.2 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: hexsyntax.c,v 1.6 1997/10/19 02:34:07 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)hexsyntax.c	5.2 (Berkeley) 5/8/90";
 #endif /* not lint */
 
 #include <sys/types.h>
-
-#include <err.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
 #include "hexdump.h"
 
 off_t skip;				/* bytes to skip */
 
-void
 newsyntax(argc, argvp)
 	int argc;
 	char ***argvp;
 {
+	extern enum _vflag vflag;
+	extern FS *fshead;
+	extern char *optarg;
+	extern int length, optind;
 	int ch;
 	char *p, **argv;
 
 	argv = *argvp;
-	while ((ch = getopt(argc, argv, "bcde:f:n:os:vx")) != -1)
+	while ((ch = getopt(argc, argv, "bcde:f:n:os:vx")) != EOF)
 		switch (ch) {
 		case 'b':
 			add("\"%07.7_Ax\n\"");
@@ -84,16 +74,22 @@ newsyntax(argc, argvp)
 			addfile(optarg);
 			break;
 		case 'n':
-			if ((length = atoi(optarg)) < 0)
-				errx(1, "%s: bad length value", optarg);
+			if ((length = atoi(optarg)) < 0) {
+				(void)fprintf(stderr,
+				    "hexdump: bad length value.\n");
+				exit(1);
+			}
 			break;
 		case 'o':
 			add("\"%07.7_Ax\n\"");
 			add("\"%07.7_ax \" 8/2 \" %06o \" \"\\n\"");
 			break;
 		case 's':
-			if ((skip = strtol(optarg, &p, 0)) < 0)
-				errx(1, "%s: bad skip value", optarg);
+			if ((skip = strtol(optarg, &p, 0)) < 0) {
+				(void)fprintf(stderr,
+				    "hexdump: bad skip value.\n");
+				exit(1);
+			}
 			switch(*p) {
 			case 'b':
 				skip *= 512;
@@ -115,6 +111,7 @@ newsyntax(argc, argvp)
 			break;
 		case '?':
 			usage();
+			exit(1);
 		}
 
 	if (!fshead) {
@@ -125,7 +122,6 @@ newsyntax(argc, argvp)
 	*argvp += optind;
 }
 
-void
 usage()
 {
 	(void)fprintf(stderr,

@@ -1,5 +1,3 @@
-/*	$NetBSD: read.c,v 1.5 1997/07/06 18:25:32 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,15 +34,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if !defined(lint) && !defined(SCCSID)
-#if 0
 static char sccsid[] = "@(#)read.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: read.c,v 1.5 1997/07/06 18:25:32 christos Exp $");
-#endif
-#endif /* not lint && not SCCSID */
 
+#endif /* not lint && not SCCSID */
 /*
  * read.c: Clean this junk up! This is horrible code.
  *	   Terminal read functions
@@ -93,17 +86,13 @@ read__fixio(fd, e)
 
 #ifdef EWOULDBLOCK
     case EWOULDBLOCK:
-# ifndef TRY_AGAIN
-#  define TRY_AGAIN
-# endif
+# define TRY_AGAIN
 #endif /* EWOULDBLOCK */
 
 #if defined(POSIX) && defined(EAGAIN)
 # if defined(EWOULDBLOCK) && EWOULDBLOCK != EAGAIN
     case EAGAIN:
-#  ifndef TRY_AGAIN
-#   define TRY_AGAIN
-#  endif
+#  define TRY_AGAIN
 # endif /* EWOULDBLOCK && EWOULDBLOCK != EAGAIN */
 #endif /* POSIX && EAGAIN */
 
@@ -120,14 +109,10 @@ read__fixio(fd, e)
 # endif /* F_SETFL && O_NDELAY */
 
 # ifdef FIONBIO
-	{
-		int zero = 0;
-
-		if (ioctl(fd, FIONBIO, (ioctl_t) &zero) == -1)
-		    return -1;
-		else
-		    e = 1;
-	}
+	if (ioctl(fd, FIONBIO, (ioctl_t) &e) == -1)
+	    return -1;
+	else
+	    e = 1;
 # endif	/* FIONBIO */
 
 #endif /* TRY_AGAIN */
@@ -393,11 +378,6 @@ el_gets(el, nread)
 	    el->el_state.doingarg = 0;
 	    re_refresh_cursor(el);
 	    break;
-
-	case CC_REDISPLAY:
-	    re_clear_lines(el);
-	    re_clear_display(el);
-		/* FALLTHROUGH */
 
 	case CC_REFRESH:
 	    el->el_state.argument = 1;

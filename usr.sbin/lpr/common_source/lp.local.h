@@ -1,8 +1,6 @@
-/*	$NetBSD: lp.local.h,v 1.7 1995/11/28 19:43:26 jtc Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,12 +30,28 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)lp.local.h	8.1 (Berkeley) 6/6/93
+ *	@(#)lp.local.h	5.5 (Berkeley) 6/1/90
  */
 
 /*
  * Possibly, local parameters to the spooling system
  */
+
+/*
+ * Magic number mapping for binary files, used by lpr to avoid
+ *   printing objects files.
+ */
+
+#include <a.out.h>
+#include <ar.h>
+
+#ifndef A_MAGIC1	/* must be a VM/UNIX system */
+#	define A_MAGIC1	OMAGIC
+#	define A_MAGIC2	NMAGIC
+#	define A_MAGIC3	ZMAGIC
+#	undef ARMAG
+#	define ARMAG	0177545
+#endif
 
 /*
  * Defaults for line printer capabilities data base

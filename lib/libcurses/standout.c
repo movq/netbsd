@@ -1,8 +1,6 @@
-/*	$NetBSD: standout.c,v 1.7 1997/07/22 07:37:05 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,42 +31,41 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)standout.c	8.3 (Berkeley) 8/10/94";
-#else
-__RCSID("$NetBSD: standout.c,v 1.7 1997/07/22 07:37:05 mikel Exp $");
-#endif
+static char sccsid[] = "@(#)standout.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include "curses.h"
+/*
+ * routines dealing with entering and exiting standout mode
+ *
+ */
+
+# include	"curses.ext"
 
 /*
- * wstandout
- *	Enter standout mode.
+ * enter standout mode
  */
-int
+char *
 wstandout(win)
-	WINDOW *win;
+reg WINDOW	*win;
 {
-	/*
-	 * If standout/standend strings, or can underline, set the
-	 * screen standout bit.
-	 */
-	if ((SO != NULL && SE != NULL) || UC != NULL)
-		win->flags |= __WSTANDOUT;
-	return (1);
+	if (!SO && !UC)
+		return FALSE;
+
+	win->_flags |= _STANDOUT;
+	return (SO ? SO : UC);
 }
 
 /*
- * wstandend --
- *	Exit standout mode.
+ * exit standout mode
  */
-int
+char *
 wstandend(win)
-	WINDOW *win;
+reg WINDOW	*win;
 {
-	win->flags &= ~__WSTANDOUT;
-	return (1);
+	if (!SO && !UC)
+		return FALSE;
+
+	win->_flags &= ~_STANDOUT;
+	return (SE ? SE : UC);
 }

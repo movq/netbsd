@@ -1,18 +1,13 @@
-#	$NetBSD: Makefile,v 1.18 1997/10/19 13:01:25 lukem Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/29/93
+#	@(#)Makefile	5.17 (Berkeley) 5/11/90
 
-WARNS=	0
 PROG=	gprof
-SRCS=	gprof.c arcs.c dfn.c lookup.c ${MACHINE_ARCH}.c hertz.c \
+SRCS=	gprof.c arcs.c dfn.c lookup.c ${MACHINE}.c hertz.c \
 	printgprof.c printlist.c
-CFLAGS+= -D${MACHINE_ARCH}
+CFLAGS+=-I${.CURDIR}/../../lib/csu.${MACHINE}
 
-FILES=	${.CURDIR}/gprof.flat ${.CURDIR}/gprof.callg
-FILESDIR=/usr/share/misc
-
-.if make(install)
-SUBDIR+=PSD.doc
-.endif
+beforeinstall:
+	install -c -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \
+	    ${.CURDIR}/gprof.flat ${.CURDIR}/gprof.callg \
+	    ${DESTDIR}/usr/share/misc
 
 .include <bsd.prog.mk>
-.include <bsd.subdir.mk>

@@ -1,8 +1,6 @@
-/*	$NetBSD: head.c,v 1.8 1997/10/19 02:23:45 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1987, 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,127 +31,64 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1987, 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980, 1987 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)head.c	8.2 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: head.c,v 1.8 1997/10/19 02:23:45 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)head.c	5.5 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <sys/types.h>
-
-#include <ctype.h>
-#include <err.h>
-#include <errno.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
+#include <ctype.h>
 /*
  * head - give the first few lines of a stream or of each of a set of files
  *
  * Bill Joy UCB August 24, 1977
  */
 
-void head __P((FILE *, int));
-void obsolete __P((char *[]));
-void usage __P((void));
-int main __P((int, char *[]));
-
-int eval;
-
-int
 main(argc, argv)
-	int argc;
-	char *argv[];
+	int	argc;
+	char	**argv;
 {
-	int ch;
-	FILE *fp;
-	int first, linecnt;
-	char *ep;
+	register int	ch, cnt;
+	int	firsttime, linecnt = 10;
 
-	obsolete(argv);
-	linecnt = 10;
-	while ((ch = getopt(argc, argv, "n:")) != -1)
-		switch(ch) {
-		case 'n':
-			linecnt = strtol(optarg, &ep, 10);
-			if (*ep || linecnt <= 0)
-				err(1, "illegal line count -- %s", optarg);
-			break;
-
-		case '?':
-		default:
-			usage();
+	if (argc > 1 && argv[1][0] == '-') {
+		if (!isdigit(argv[1][1])) {
+			fprintf(stderr, "head: illegal option -- %c\n", argv[1][1]);
+			goto usage;
 		}
-	argc -= optind;
-	argv += optind;
-
-	if (*argv)
-		for (first = 1; *argv; ++argv) {
-			if ((fp = fopen(*argv, "r")) == NULL) {
-				err(0, "%s: %s", *argv, strerror(errno));
-				continue;
+		if ((linecnt = atoi(argv[1] + 1)) < 0) {
+usage:			fputs("usage: head [-line_count] [file ...]\n", stderr);
+			exit(1);
+		}
+		--argc; ++argv;
+	}
+	/* setlinebuf(stdout); */
+	for (firsttime = 1, --argc, ++argv;; firsttime = 0) {
+		if (!*argv) {
+			if (!firsttime)
+				exit(0);
+		}
+		else {
+			if (!freopen(*argv, "r", stdin)) {
+				fprintf(stderr, "head: can't read %s.\n", *argv);
+				exit(1);
 			}
 			if (argc > 1) {
-				(void)printf("%s==> %s <==\n",
-				    first ? "" : "\n", *argv);
-				first = 0;
+				if (!firsttime)
+					putchar('\n');
+				printf("==> %s <==\n", *argv);
 			}
-			head(fp, linecnt);
-			(void)fclose(fp);
+			++argv;
 		}
-	else
-		head(stdin, linecnt);
-	exit(eval);
-}
-
-void
-head(fp, cnt)
-	FILE *fp;
-	int cnt;
-{
-	int ch;
-
-	while (cnt--)
-		while ((ch = getc(fp)) != EOF) {
-			if (putchar(ch) == EOF)
-				err(1, "stdout: %s", strerror(errno));
-			if (ch == '\n')
-				break;
-		}
-}
-
-void
-obsolete(argv)
-	char *argv[];
-{
-	char *ap;
-
-	while ((ap = *++argv)) {
-		/* Return if "--" or not "-[0-9]*". */
-		if (ap[0] != '-' || ap[1] == '-' || !isdigit(ap[1]))
-			return;
-		if ((ap = malloc(strlen(*argv) + 2)) == NULL)
-			err(1, "%s", strerror(errno));
-		ap[0] = '-';
-		ap[1] = 'n';
-		(void)strcpy(ap + 2, *argv + 1);
-		*argv = ap;
+		for (cnt = linecnt; cnt; --cnt)
+			while ((ch = getchar()) != EOF)
+				if (putchar(ch) == '\n')
+					break;
 	}
-}
-
-void
-usage()
-{
-	(void)fputs("usage: head [-n lines] [file ...]\n", stderr);
-	exit(1);
+	/*NOTREACHED*/
 }

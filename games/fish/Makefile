@@ -1,10 +1,10 @@
-#	$NetBSD: Makefile,v 1.8 1997/03/24 22:15:42 christos Exp $
-#	@(#)Makefile	8.1 (Berkeley) 5/31/93
+#	@(#)Makefile	5.5 (Berkeley) 1/18/91
 
 PROG=	fish
-MAN=	fish.6
+MAN6=	fish.0
 HIDEGAME=hidegame
-FILES=fish.instr
-FILESDIR=/usr/share/games
+
+beforeinstall: 
+	install -c -o bin -g bin -m 444 ${.CURDIR}/fish.instr /usr/share/games
 
 .include <bsd.prog.mk>

@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,46 +31,40 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1990 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "from: @(#)dev_mkdb.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: dev_mkdb.c,v 1.8 1997/10/18 08:18:00 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)dev_mkdb.c	5.9 (Berkeley) 5/17/91";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
-
-#include <db.h>
-#include <dirent.h>
-#include <err.h>
-#include <errno.h>
 #include <fcntl.h>
-#include <kvm.h>
+#undef DIRBLKSIZ
+#include <dirent.h>
 #include <nlist.h>
-#include <paths.h>
+#include <kvm.h>
+#include <db.h>
+#include <errno.h>
+#include <unistd.h>
 #include <stdio.h>
+#include <paths.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
-int	main __P((int, char **));
-void	usage __P((void));
+void error(), usage();
 
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	DIR *dirp;
-	struct dirent *dp;
+	extern int optind;
+	register DIR *dirp;
+	register struct dirent *dp;
 	struct stat sb;
 	struct {
 		mode_t type;
@@ -82,7 +76,7 @@ main(argc, argv)
 	u_char buf[MAXNAMLEN + 1];
 	char dbtmp[MAXPATHLEN + 1], dbname[MAXPATHLEN + 1];
 
-	while ((ch = getopt(argc, argv, "")) != -1)
+	while ((ch = getopt(argc, argv, "")) != EOF)
 		switch((char)ch) {
 		case '?':
 		default:
@@ -91,34 +85,29 @@ main(argc, argv)
 	argc -= optind;
 	argv += optind;
 
-	if (argc > 0)
-		usage();
-
 	if (chdir(_PATH_DEV))
-		err(1, "%s", _PATH_DEV);
+		error(_PATH_DEV);
 
 	dirp = opendir(".");
 
-	(void)snprintf(dbtmp, sizeof(dbtmp), "%sdev.tmp", _PATH_VARRUN);
-	(void)snprintf(dbname, sizeof(dbtmp), "%sdev.db", _PATH_VARRUN);
-	db = dbopen(dbtmp, O_CREAT|O_EXLOCK|O_RDWR|O_TRUNC,
-	    S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH, DB_HASH, NULL);
-	if (db == NULL)
-		err(1, "%s", dbtmp);
+	(void)snprintf(dbtmp, sizeof(dbtmp), "%s/dev.tmp", _PATH_VARRUN);
+	(void)snprintf(dbname, sizeof(dbtmp), "%s/dev.db", _PATH_VARRUN);
+	db = hash_open(dbtmp, O_CREAT|O_WRONLY|O_EXCL, DEFFILEMODE,
+	    (HASHINFO *)NULL);
+	if (!db)
+		error(dbtmp);
 
 	/*
 	 * Keys are a mode_t followed by a dev_t.  The former is the type of
-	 * the file (mode & S_IFMT), the latter is the st_rdev field.  Note
-	 * that the structure may contain padding, so we have to clear it
-	 * out here.
+	 * the file (mode & S_IFMT), the latter is the st_rdev field.
 	 */
-	memset(&bkey, 0, sizeof(bkey));
 	key.data = &bkey;
 	key.size = sizeof(bkey);
 	data.data = buf;
-	while ((dp = readdir(dirp)) != NULL) {
-		if (lstat(dp->d_name, &sb)) {
-			warn("%s", dp->d_name);
+	while (dp = readdir(dirp)) {
+		if (stat(dp->d_name, &sb)) {
+			(void)fprintf(stderr, "dev_mkdb: can't stat %s\n",
+				dp->d_name);
 			continue;
 		}
 
@@ -135,22 +124,32 @@ main(argc, argv)
 		 * Create the data; nul terminate the name so caller doesn't
 		 * have to.
 		 */
-		memmove(buf, dp->d_name, dp->d_namlen);
+		bcopy(dp->d_name, buf, dp->d_namlen);
 		buf[dp->d_namlen] = '\0';
 		data.size = dp->d_namlen + 1;
 		if ((db->put)(db, &key, &data, 0))
-			err(1, "dbput %s", dbtmp);
+			error(dbtmp);
 	}
 	(void)(db->close)(db);
-	if (rename(dbtmp, dbname))
-		err(1, "rename %s to %s", dbtmp, dbname);
+	if (rename(dbtmp, dbname)) {
+		(void)fprintf(stderr, "dev_mkdb: %s to %s: %s.\n",
+		    dbtmp, dbname, strerror(errno));
+		exit(1);
+	}
 	exit(0);
+}
+
+void
+error(n)
+	char *n;
+{
+	(void)fprintf(stderr, "dev_mkdb: %s: %s\n", n, strerror(errno));
+	exit(1);
 }
 
 void
 usage()
 {
-
 	(void)fprintf(stderr, "usage: dev_mkdb\n");
 	exit(1);
 }

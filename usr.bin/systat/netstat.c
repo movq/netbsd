@@ -1,5 +1,3 @@
-/*	$NetBSD: netstat.c,v 1.8 1997/10/19 23:36:29 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1980, 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,12 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)netstat.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: netstat.c,v 1.8 1997/10/19 23:36:29 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -51,10 +45,7 @@ __RCSID("$NetBSD: netstat.c,v 1.8 1997/10/19 23:36:29 lukem Exp $");
 #include <sys/protosw.h>
 
 #include <netinet/in.h>
-
-#include <arpa/inet.h>
 #include <net/route.h>
-
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 #include <netinet/in_pcb.h>
@@ -85,6 +76,7 @@ static char *inetname __P((struct in_addr));
 static void inetprint __P((struct in_addr *, int, char *));
 
 #define	streq(a,b)	(strcmp(a,b)==0)
+#define	YMAX(w)		((w)->maxy-1)
 
 WINDOW *
 opennetstat()
@@ -118,15 +110,14 @@ static struct {
 static	int aflag = 0;
 static	int nflag = 0;
 static	int lastrow = 1;
-static	void enter __P((struct inpcb *, struct socket *, int, char *));
-static	void inetprint __P((struct in_addr *, int, char *));
-static	char *inetname __P((struct in_addr));
+static	void enter(), inetprint();
+static	char *inetname();
 
 void
 closenetstat(w)
-	WINDOW *w;
+        WINDOW *w;
 {
-	struct netinfo *p;
+	register struct netinfo *p;
 
 	endhostent();
 	endnetent();
@@ -137,7 +128,7 @@ closenetstat(w)
 		p->ni_line = -1;
 		p = p->ni_forw;
 	}
-	if (w != NULL) {
+        if (w != NULL) {
 		wclear(w);
 		wrefresh(w);
 		delwin(w);
@@ -145,10 +136,10 @@ closenetstat(w)
 }
 
 static struct nlist namelist[] = {
-#define	X_TCBTABLE	0
-	{ "_tcbtable" },
-#define	X_UDBTABLE	1
-	{ "_udbtable" },
+#define	X_TCB	0
+	{ "_tcb" },
+#define	X_UDB	1
+	{ "_udb" },
 	{ "" },
 };
 
@@ -159,7 +150,7 @@ initnetstat()
 		nlisterr(namelist);
 		return(0);
 	}
-	if (namelist[X_TCBTABLE].n_value == 0) {
+	if (namelist[X_TCB].n_value == 0) {
 		error("No symbols in namelist");
 		return(0);
 	}
@@ -171,25 +162,24 @@ initnetstat()
 void
 fetchnetstat()
 {
-	struct inpcbtable pcbtable;
-	struct inpcb *head, *prev, *next;
-	struct netinfo *p;
+	register struct inpcb *prev, *next;
+	register struct netinfo *p;
 	struct inpcb inpcb;
 	struct socket sockb;
 	struct tcpcb tcpcb;
 	void *off;
 	int istcp;
 
-	if (namelist[X_TCBTABLE].n_value == 0)
+	if (namelist[X_TCB].n_value == 0)
 		return;
 	for (p = netcb.ni_forw; p != (struct netinfo *)&netcb; p = p->ni_forw)
 		p->ni_seen = 0;
 	if (protos&TCP) {
-		off = NPTR(X_TCBTABLE); 
+		off = NPTR(X_TCB); 
 		istcp = 1;
 	}
 	else if (protos&UDP) {
-		off = NPTR(X_UDBTABLE); 
+		off = NPTR(X_UDB); 
 		istcp = 0;
 	}
 	else {
@@ -197,22 +187,18 @@ fetchnetstat()
 		return;
 	}
 again:
-	KREAD(off, &pcbtable, sizeof (struct inpcbtable));
-	prev = head = (struct inpcb *)&((struct inpcbtable *)off)->inpt_queue;
-	next = pcbtable.inpt_queue.cqh_first;
-	while (next != head) {
+	KREAD(off, &inpcb, sizeof (struct inpcb));
+	prev = off;
+	for (; inpcb.inp_next != off; prev = next) {
+		next = inpcb.inp_next;
 		KREAD(next, &inpcb, sizeof (inpcb));
-		if (inpcb.inp_queue.cqe_prev != prev) {
-printf("prev = %p, head = %p, next = %p, inpcb...prev = %p\n", prev, head, next, inpcb.inp_queue.cqe_prev);
+		if (inpcb.inp_prev != prev) {
 			p = netcb.ni_forw;
 			for (; p != (struct netinfo *)&netcb; p = p->ni_forw)
 				p->ni_seen = 1;
 			error("Kernel state in transition");
 			return;
 		}
-		prev = next;
-		next = inpcb.inp_queue.cqe_next;
-
 		if (!aflag && inet_lnaof(inpcb.inp_laddr) == INADDR_ANY)
 			continue;
 		if (nhosts && !checkhost(&inpcb))
@@ -228,19 +214,19 @@ printf("prev = %p, head = %p, next = %p, inpcb...prev = %p\n", prev, head, next,
 	}
 	if (istcp && (protos&UDP)) {
 		istcp = 0;
-		off = NPTR(X_UDBTABLE);
+		off = NPTR(X_UDB);
 		goto again;
 	}
 }
 
 static void
 enter(inp, so, state, proto)
-	struct inpcb *inp;
-	struct socket *so;
+	register struct inpcb *inp;
+	register struct socket *so;
 	int state;
 	char *proto;
 {
-	struct netinfo *p;
+	register struct netinfo *p;
 
 	/*
 	 * Only take exact matches, any sockets with
@@ -294,7 +280,7 @@ enter(inp, so, state, proto)
 void
 labelnetstat()
 {
-	if (namelist[X_TCBTABLE].n_type == 0)
+	if (namelist[X_TCB].n_type == 0)
 		return;
 	wmove(wnd, 0, 0); wclrtobot(wnd);
 	mvwaddstr(wnd, 0, LADDR, "Local Address");
@@ -308,7 +294,7 @@ labelnetstat()
 void
 shownetstat()
 {
-	struct netinfo *p, *q;
+	register struct netinfo *p, *q;
 
 	/*
 	 * First, delete any connections that have gone
@@ -344,7 +330,7 @@ shownetstat()
 			/*
 			 * Add a new entry if possible.
 			 */
-			if (lastrow > getmaxy(wnd))
+			if (lastrow > YMAX(wnd))
 				continue;
 			p->ni_line = lastrow++;
 			p->ni_flags |= NIF_LACHG|NIF_FACHG;
@@ -371,9 +357,9 @@ shownetstat()
 				    tcpstates[p->ni_state]);
 		wclrtoeol(wnd);
 	}
-	if (lastrow < getmaxy(wnd)) {
+	if (lastrow < YMAX(wnd)) {
 		wmove(wnd, lastrow, 0); wclrtobot(wnd);
-		wmove(wnd, getmaxy(wnd), 0); wdeleteln(wnd);	/* XXX */
+		wmove(wnd, YMAX(wnd), 0); wdeleteln(wnd);	/* XXX */
 	}
 }
 
@@ -383,15 +369,15 @@ shownetstat()
  */
 static void
 inetprint(in, port, proto)
-	struct in_addr *in;
+	register struct in_addr *in;
 	int port;
 	char *proto;
 {
 	struct servent *sp = 0;
-	char line[80], *cp;
+	char line[80], *cp, *index();
 
 	sprintf(line, "%.*s.", 16, inetname(*in));
-	cp = strchr(line, '\0');
+	cp = index(line, '\0');
 	if (!nflag && port)
 		sp = getservbyport(port, proto);
 	if (sp || port == 0)
@@ -399,7 +385,7 @@ inetprint(in, port, proto)
 	else
 		sprintf(cp, "%d", ntohs((u_short)port));
 	/* pad to full column to clear any garbage */
-	cp = strchr(line, '\0');
+	cp = index(line, '\0');
 	while (cp - line < 22)
 		*cp++ = ' ';
 	*cp = '\0';
@@ -452,7 +438,7 @@ int
 cmdnetstat(cmd, args)
 	char *cmd, *args;
 {
-	struct netinfo *p;
+	register struct netinfo *p;
 
 	if (prefix(cmd, "all")) {
 		aflag = !aflag;
@@ -471,8 +457,6 @@ cmdnetstat(cmd, args)
 			p->ni_flags |= NIF_LACHG|NIF_FACHG;
 		}
 		nflag = new;
-		wclear(wnd);
-		labelnetstat();
 		goto redisplay;
 	}
 	if (!netcmd(cmd, args))

@@ -1,8 +1,6 @@
-/*	$NetBSD: v831.c,v 1.5 1996/12/29 10:42:01 cgd Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,22 +32,16 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)v831.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: v831.c,v 1.5 1996/12/29 10:42:01 cgd Exp $";
+static char sccsid[] = "@(#)v831.c	5.5 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 /*
  * Routines for dialing up on Vadic 831
  */
 #include "tip.h"
-#include <termios.h>
 
 int	v831_abort();
 static	void alarmtr();
-static	int dialit();
-static	char *sanitize();
 extern	int errno;
 
 static jmp_buf jmpbuf;
@@ -60,6 +52,7 @@ v831_dialer(num, acu)
 {
         int status, pid, connected = 1;
         register int timelim;
+	static int dialit();
 
         if (boolean(value(VERBOSE)))
                 printf("\nstarting call...");
@@ -108,6 +101,9 @@ v831_dialer(num, acu)
                 return (0);
         }
         alarm(0);
+#ifdef notdef
+        ioctl(AC, TIOCHPCL, 0);
+#endif
         signal(SIGALRM, SIG_DFL);
         while ((pid = wait(&status)) != child && pid != -1)
                 ;
@@ -131,7 +127,7 @@ alarmtr()
  */
 v831_disconnect()
 {
-	struct termios	cntrl;
+        struct sgttyb cntrl;
 
         sleep(2);
 #ifdef DEBUG
@@ -139,11 +135,10 @@ v831_disconnect()
 #endif
         if (FD > 0) {
                 ioctl(FD, TIOCCDTR, 0);
-		tcgetattr(FD, &cntrl);
-		cfsetospeed(&cntrl, 0);
-		cfsetispeed(&cntrl, 0);
-		tcsetattr(FD, TCSAFLUSH, &cntrl);
-                ioctl(FD, TIOCNXCL, NULL);
+                ioctl(FD, TIOCGETP, &cntrl);
+                cntrl.sg_ispeed = cntrl.sg_ospeed = 0;
+                ioctl(FD, TIOCSETP, &cntrl);
+                ioctl(FD, TIOCNXCL, (struct sgttyb *)NULL);
         }
         close(FD);
 }
@@ -158,7 +153,7 @@ v831_abort()
         if (child > 0)
                 kill(child, SIGKILL);
         if (AC > 0)
-                ioctl(FD, TIOCNXCL, NULL);
+                ioctl(FD, TIOCNXCL, (struct sgttyb *)NULL);
                 close(AC);
         if (FD > 0)
                 ioctl(FD, TIOCCDTR, 0);
@@ -190,9 +185,10 @@ dialit(phonenum, acu)
 	char *acu;
 {
         register struct vaconfig *vp;
-	struct termios cntrl;
+	struct sgttyb cntrl;
         char c;
         int i, two = 2;
+	static char *sanitize();
 
         phonenum = sanitize(phonenum);
 #ifdef DEBUG
@@ -207,13 +203,11 @@ dialit(phonenum, acu)
 		printf("Unable to locate dialer (%s)\n", acu);
 		return ('K');
 	}
-	tcgetattr(AC, &cntrl);
-	cfsetospeed(&cntrl, B2400);
-	cfsetispeed(&cntrl, B2400);
-	cntrl.c_cflag |= PARODD | PARENB;
-	cntrl.c_lflag &= ~(ISIG | ICANON);
-	tcsetattr(AC, TCSANOW, &cntrl);
-	tcflush(AC, TCIOFLUSH);
+        ioctl(AC, TIOCGETP, &cntrl);
+        cntrl.sg_ispeed = cntrl.sg_ospeed = B2400;
+        cntrl.sg_flags = RAW | EVENP | ODDP;
+        ioctl(AC, TIOCSETP, &cntrl);
+	ioctl(AC, TIOCFLUSH, &two);
         pc(STX);
 	pc(vp->vc_rack);
 	pc(vp->vc_modem);

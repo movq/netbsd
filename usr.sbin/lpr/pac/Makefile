@@ -1,7 +1,10 @@
-#	$NetBSD: Makefile,v 1.8 1997/10/10 09:26:44 lukem Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.1 (Berkeley) 5/11/90
 
 PROG=	pac
-MAN=	pac.8
+CFLAGS+=-I${.CURDIR}/../common_source
+MAN8=	pac.0
+SRCS=	pac.c printcap.c
+.PATH:	${.CURDIR}/../common_source
 
+.include "../../Makefile.inc"
 .include <bsd.prog.mk>

@@ -1,8 +1,6 @@
-/*	$NetBSD: conv.c,v 1.7 1997/07/20 21:58:37 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Keith Muller of the University of California, San Diego and Lance
@@ -37,18 +35,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)conv.c	8.3 (Berkeley) 4/2/94";
-#else
-__RCSID("$NetBSD: conv.c,v 1.7 1997/07/20 21:58:37 christos Exp $");
-#endif
+static char sccsid[] = "@(#)conv.c	5.6 (Berkeley) 4/28/93";
 #endif /* not lint */
 
 #include <sys/param.h>
 
-#include <err.h>
 #include <string.h>
 
 #include "dd.h"
@@ -63,11 +55,10 @@ __RCSID("$NetBSD: conv.c,v 1.7 1997/07/20 21:58:37 christos Exp $");
 void
 def()
 {
-	int cnt;
-	u_char *inp;
-	const u_char *t;
+	register int cnt;
+	register u_char *inp, *t;
 
-	if ((t = ctab) != NULL)
+	if (t = ctab)
 		for (inp = in.dbp - (cnt = in.dbrcnt); cnt--; ++inp)
 			*inp = t[*inp];
 
@@ -97,16 +88,6 @@ def_close()
 		out.dbcnt = in.dbcnt;
 }
 
-#ifdef	NO_CONV
-/* Build a smaller version (i.e. for a miniroot) */
-/* These can not be called, but just in case...  */
-static char no_block[] = "unblock and -DNO_CONV?";
-void block()       { errx(1, no_block + 2); }
-void block_close() { errx(1, no_block + 2); }
-void unblock()       { errx(1, no_block); }
-void unblock_close() { errx(1, no_block); }
-#else	/* NO_CONV */
-
 /*
  * Copy variable length newline terminated records with a max size cbsz
  * bytes to output.  Records less than cbs are padded with spaces.
@@ -118,10 +99,9 @@ void
 block()
 {
 	static int intrunc;
-	int ch = 0;	/* pacify gcc */
-	int cnt, maxlen;
-	u_char *inp, *outp;
-	const u_char *t;
+	register int ch, cnt;
+	register u_char *inp, *outp, *t;
+	int maxlen;
 
 	/*
 	 * Record truncation can cross block boundaries.  If currently in a
@@ -149,7 +129,7 @@ block()
 	 */
 	for (inp = in.dbp - in.dbcnt, outp = out.dbp; in.dbcnt;) {
 		maxlen = MIN(cbsz, in.dbcnt);
-		if ((t = ctab) != NULL)
+		if (t = ctab)
 			for (cnt = 0;
 			    cnt < maxlen && (ch = *inp++) != '\n'; ++cnt)
 				*outp++ = t[ch];
@@ -229,12 +209,11 @@ block_close()
 void
 unblock()
 {
-	int cnt;
-	u_char *inp;
-	const u_char *t;
+	register int cnt;
+	register u_char *inp, *t;
 
 	/* Translation and case conversion. */
-	if ((t = ctab) != NULL)
+	if (t = ctab)
 		for (cnt = in.dbrcnt, inp = in.dbp; cnt--;)
 			*--inp = t[*inp];
 	/*
@@ -263,11 +242,11 @@ unblock()
 void
 unblock_close()
 {
-	int cnt;
-	u_char *t;
+	register int cnt;
+	register u_char *t;
 
 	if (in.dbcnt) {
-		warnx("%s: short input record", in.name);
+		warn("%s: short input record", in.name);
 		for (t = in.db + in.dbcnt - 1; t >= in.db && *t == ' '; --t);
 		if (t >= in.db) {
 			cnt = t - in.db + 1;
@@ -279,5 +258,3 @@ unblock_close()
 		*out.dbp++ = '\n';
 	}
 }
-
-#endif	/* NO_CONV */

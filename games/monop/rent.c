@@ -1,8 +1,6 @@
-/*	$NetBSD: rent.c,v 1.4 1997/10/12 17:45:24 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,27 +31,20 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)rent.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: rent.c,v 1.4 1997/10/12 17:45:24 christos Exp $");
-#endif
+static char sccsid[] = "@(#)rent.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include	"monop.ext"
+# include	"monop.ext"
 
 /*
  *	This routine has the player pay rent
  */
-void
 rent(sqp)
-SQUARE	*sqp;
-{
+reg SQUARE	*sqp; {
 
-	int		rnt = 0;
-	PROP	*pp;
+	reg int		rnt;
+	reg PROP	*pp;
 	PLAY		*plp;
 
 	plp = &play[sqp->owner];

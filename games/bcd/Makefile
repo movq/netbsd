@@ -1,8 +1,7 @@
-#	$NetBSD: Makefile,v 1.4 1995/03/21 15:08:10 cgd Exp $
-#	@(#)Makefile	8.1 (Berkeley) 5/31/93
+#	@(#)Makefile	5.3 (Berkeley) 5/11/90
 
 PROG=	bcd
-MAN=	bcd.6
+MAN6=	bcd.0
 MLINKS=	bcd.6 morse.6 bcd.6 ppt.6
 HIDEGAME=hidegame
 

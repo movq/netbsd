@@ -1,5 +1,3 @@
-/*	$NetBSD: pathnames.h,v 1.5 1997/10/05 16:16:15 mrg Exp $	*/
-
 /*
  * Copyright (c) 1989 The Regents of the University of California.
  * All rights reserved.
@@ -32,10 +30,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)pathnames.h	8.1 (Berkeley) 6/6/93
+ *	@(#)pathnames.h	5.3 (Berkeley) 6/1/90
  */
 
 #include <paths.h>
 
 #define	_PATH_INETDCONF	"/etc/inetd.conf"
-#define _PATH_INETDPID	"/var/run/inetd.pid"

@@ -1,9 +1,7 @@
 %{
-/*	$NetBSD: gram.y,v 1.8 1997/10/19 13:59:00 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,13 +32,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)gram.y	8.1 (Berkeley) 6/9/93";
-#else
-__RCSID("$NetBSD: gram.y,v 1.8 1997/10/19 13:59:00 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)gram.y	5.6 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "defs.h"
@@ -49,9 +42,6 @@ struct	cmd *cmds = NULL;
 struct	cmd *last_cmd;
 struct	namelist *last_n;
 struct	subcmd *last_sc;
-
-static char   *makestr __P((char *));
-void	append __P((char *, struct namelist *, char *, struct subcmd *));
 
 %}
 
@@ -144,7 +134,7 @@ cmdlist:	  /* VOID */ {
 		;
 
 cmd:		  INSTALL options opt_namelist SM = {
-			struct namelist *nl;
+			register struct namelist *nl;
 
 			$1->sc_options = $2 | options;
 			if ($3 != NULL) {
@@ -170,8 +160,15 @@ cmd:		  INSTALL options opt_namelist SM = {
 			$$ = $1;
 		}
 		| PATTERN namelist SM = {
-			if ($2 != NULL)
-				$1->sc_args = expand($2, E_VARS);
+			struct namelist *nl;
+#ifdef nope
+			char *cp, *re_comp();
+
+			for (nl = $2; nl != NULL; nl = nl->n_next)
+				if ((cp = re_comp(nl->n_name)) != NULL)
+					yyerror(cp);
+#endif
+			$1->sc_args = expand($2, E_VARS);
 			$$ = $1;
 		}
 		| SPECIAL opt_namelist STRING SM = {
@@ -203,14 +200,11 @@ opt_namelist:	  /* VOID */ = {
 int	yylineno = 1;
 extern	FILE *fin;
 
-int	yylex __P((void));
-
-int
 yylex()
 {
 	static char yytext[INMAX];
-	int c;
-	char *cp1, *cp2;
+	register int c;
+	register char *cp1, *cp2;
 	static char quotechars[] = "[]{}*?$";
 	
 again:
@@ -356,10 +350,9 @@ again:
 	return(c);
 }
 
-int
 any(c, str)
-	int c;
-	char *str;
+	register int c;
+	register char *str;
 {
 	while (*str)
 		if (c == *str++)
@@ -370,18 +363,17 @@ any(c, str)
 /*
  * Insert or append ARROW command to list of hosts to be updated.
  */
-void
 insert(label, files, hosts, subcmds)
 	char *label;
 	struct namelist *files, *hosts;
 	struct subcmd *subcmds;
 {
-	struct cmd *c, *prev, *nc;
-	struct namelist *h, *nexth;
+	register struct cmd *c, *prev, *nc;
+	register struct namelist *h;
 
 	files = expand(files, E_VARS|E_SHELL);
 	hosts = expand(hosts, E_ALL);
-	for (h = hosts; h != NULL; nexth = h->n_next, free(h), h = nexth) {
+	for (h = hosts; h != NULL; free(h), h = h->n_next) {
 		/*
 		 * Search command list for an update to the same host.
 		 */
@@ -421,14 +413,13 @@ insert(label, files, hosts, subcmds)
  * Append DCOLON command to the end of the command list since these are always
  * executed in the order they appear in the distfile.
  */
-void
 append(label, files, stamp, subcmds)
 	char *label;
 	struct namelist *files;
 	char *stamp;
 	struct subcmd *subcmds;
 {
-	struct cmd *c;
+	register struct cmd *c;
 
 	c = ALLOC(cmd);
 	if (c == NULL)
@@ -450,12 +441,12 @@ append(label, files, stamp, subcmds)
 /*
  * Error printing routine in parser.
  */
-void
 yyerror(s)
 	char *s;
 {
+	extern int yychar;
 
-	++nerrs;
+	nerrs++;
 	fflush(stdout);
 	fprintf(stderr, "rdist: line %d: %s\n", yylineno, s);
 }
@@ -463,16 +454,16 @@ yyerror(s)
 /*
  * Return a copy of the string.
  */
-static char *
+char *
 makestr(str)
 	char *str;
 {
-	char *cp, *s;
+	register char *cp, *s;
 
 	str = cp = malloc(strlen(s = str) + 1);
 	if (cp == NULL)
 		fatal("ran out of memory\n");
-	while ((*cp++ = *s++) != NULL)
+	while (*cp++ = *s++)
 		;
 	return(str);
 }
@@ -484,7 +475,7 @@ struct namelist *
 makenl(name)
 	char *name;
 {
-	struct namelist *nl;
+	register struct namelist *nl;
 
 	nl = ALLOC(namelist);
 	if (nl == NULL)
@@ -498,10 +489,12 @@ makenl(name)
  * Make a sub command for lists of variables, commands, etc.
  */
 struct subcmd *
-makesubcmd(type)
-	int	type;
+makesubcmd(type, name)
+	int type;
+	register char *name;
 {
-	struct subcmd *sc;
+	register char *cp;
+	register struct subcmd *sc;
 
 	sc = ALLOC(subcmd);
 	if (sc == NULL)

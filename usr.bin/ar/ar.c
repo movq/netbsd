@@ -1,8 +1,6 @@
-/*	$NetBSD: ar.c,v 1.7 1997/10/18 12:23:28 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Hugh Smith at The University of Guelph.
@@ -36,40 +34,31 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1990 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)ar.c	8.3 (Berkeley) 4/2/94";
-#else
-__RCSID("$NetBSD: ar.c,v 1.7 1997/10/18 12:23:28 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)ar.c	5.11 (Berkeley) 3/21/91";
 #endif /* not lint */
 
 #include <sys/param.h>
-
-#include <ar.h>
+#include <sys/errno.h>
 #include <dirent.h>
-#include <err.h>
-#include <paths.h>
 #include <stdio.h>
-#include <stdlib.h>
+#include <ar.h>
 #include <string.h>
-#include <unistd.h>
-
+#include <stdlib.h>
+#include <paths.h>
 #include "archive.h"
 #include "extern.h"
 
 CHDR chdr;
 u_int options;
 char *archive, *envtmp, *posarg, *posname;
-static void badoptions __P((char *));
-static void usage __P((void));
-int main __P((int, char **));
+static void badoptions(), usage();
 
 /*
  * main --
@@ -77,32 +66,34 @@ int main __P((int, char **));
  *	functions.  Some hacks that let us be backward compatible with 4.3 ar
  *	option parsing and sanity checking.
  */
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
+	extern int optind;
 	int c;
 	char *p;
-	int (*fcall) __P((char **));
+	int (*fcall)(), append(), contents(), delete(), extract(),
+	    move(), print(), replace();
 
 	if (argc < 3)
 		usage();
-	fcall = NULL;
 
 	/*
 	 * Historic versions didn't require a '-' in front of the options.
 	 * Fix it, if necessary.
 	*/
 	if (*argv[1] != '-') {
-		if (!(p = malloc((u_int)(strlen(argv[1]) + 2))))
-			err(1, "malloc");
+		if (!(p = malloc((u_int)(strlen(argv[1]) + 2)))) {
+			(void)fprintf(stderr, "ar: %s.\n", strerror(errno));
+			exit(1);
+		}
 		*p = '-';
 		(void)strcpy(p + 1, argv[1]);
 		argv[1] = p;
 	}
 
-	while ((c = getopt(argc, argv, "abcdilmopqrTtuvx")) != -1) {
+	while ((c = getopt(argc, argv, "abcdilmopqrTtuvx")) != EOF) {
 		switch(c) {
 		case 'a':
 			options |= AR_A;
@@ -167,18 +158,21 @@ main(argc, argv)
 
 	/* One of -dmpqrtx required. */
 	if (!(options & (AR_D|AR_M|AR_P|AR_Q|AR_R|AR_T|AR_X))) {
-		warnx("one of options -dmpqrtx is required");
+		(void)fprintf(stderr,
+		    "ar: one of options -dmpqrtx is required.\n");
 		usage();
 	}
 	/* Only one of -a and -bi allowed. */
 	if (options & AR_A && options & AR_B) {
-		warnx("only one of -a and -[bi] options allowed");
+		(void)fprintf(stderr,
+		    "ar: only one of -a and -[bi] options allowed.\n");
 		usage();
 	}
 	/* -ab require a position argument. */
 	if (options & (AR_A|AR_B)) {
 		if (!(posarg = *argv++)) {
-			warnx("no position operand specified");
+			(void)fprintf(stderr,
+			    "ar: no position operand specified.\n");
 			usage();
 		}
 		posname = rname(posarg);
@@ -206,13 +200,13 @@ main(argc, argv)
 		badoptions("-x");
 
 	if (!(archive = *argv++)) {
-		warnx("no archive specified");
+		(void)fprintf(stderr, "ar: no archive specified.\n");
 		usage();
 	}
 
 	/* -dmqr require a list of archive elements. */
 	if (options & (AR_D|AR_M|AR_Q|AR_R) && !*argv) {
-		warnx("no archive members specified");
+		(void)fprintf(stderr, "ar: no archive members specified.\n");
 		usage();
 	}
 
@@ -223,15 +217,14 @@ static void
 badoptions(arg)
 	char *arg;
 {
-
-	warnx("illegal option combination for %s", arg);
+	(void)fprintf(stderr,
+	    "ar: illegal option combination for %s.\n", arg);
 	usage();
 }
 
 static void
 usage()
 {
-
 	(void)fprintf(stderr, "usage:  ar -d [-Tv] archive file ...\n");
 	(void)fprintf(stderr, "\tar -m [-Tv] archive file ...\n");
 	(void)fprintf(stderr, "\tar -m [-abiTv] position archive file ...\n");

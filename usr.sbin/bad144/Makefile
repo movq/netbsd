@@ -1,12 +1,7 @@
-#	from: @(#)Makefile	8.1 (Berkeley) 6/6/93
-#	$NetBSD: Makefile,v 1.7 1997/10/17 05:31:02 lukem Exp $
+#	@(#)Makefile	5.3 (Berkeley) 5/11/90
 
-.if ${MACHINE} == "alpha" || ${MACHINE} == "i386"
 PROG=	bad144
-.endif
-DPADD+=	${LIBUTIL}
-LDADD+=	-lutil
-
-MAN=	bad144.8
+MAN8=	bad144.0
+MANSUBDIR=/i386
 
 .include <bsd.prog.mk>

@@ -1,6 +1,5 @@
 # Zip Code : Location
-#	$NetBSD: zipcodes,v 1.5 1997/03/26 06:31:01 mikel Exp $
-#	@(#)zipcodes	8.1 (Berkeley) 6/8/93
+#	@(#)zipcodes	5.1 (Berkeley) 2/8/91
 00401:Pleasantville, NY
 00501:Holtsville, NY
 00544:Holtsville, NY
@@ -22039,7 +22038,6 @@
 50011:Ames, IA
 50012:Ames, IA
 50013:Ames, IA
-50014:Ames, IA
 50015:Ankeny, IA
 50020:Anita, IA
 50021:Ankeny, IA
@@ -39964,7 +39962,6 @@
 95334:Livingston, CA
 95335:Long Barn, CA
 95336:Manteca, CA
-95337:Manteca, CA
 95338:Mariposa, CA
 95339:Merced, CA
 95340:Merced, CA
@@ -40558,7 +40555,7 @@
 96328:APO San Francisco, CA
 96331:APO San Francisco, CA
 96333:APO San Francisco, CA
-96334:APO San Francisco, CA
+96334:APO San Francisco, GU
 96335:APO San Francisco, CA
 96336:APO San Francisco, CA
 96343:APO San Francisco, CA

@@ -1,8 +1,6 @@
-/*	$NetBSD: vscanf.c,v 1.7 1997/07/13 20:15:36 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Donn Seeley at UUNET Technologies, Inc.
@@ -36,21 +34,16 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)vscanf.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: vscanf.c,v 1.7 1997/07/13 20:15:36 christos Exp $");
-#endif
+static char sccsid[] = "@(#)vscanf.c	5.1 (Berkeley) 4/15/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdio.h>
 
-int
 vscanf(fmt, ap)
 	const char *fmt;
-	_BSD_VA_LIST_ ap;
+	_VA_LIST_ ap;
 {
+
 	return (__svfscanf(stdin, fmt, ap));
 }

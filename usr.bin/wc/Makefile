@@ -1,5 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 1997/10/18 16:48:29 mrg Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.3 (Berkeley) 5/11/90
 
 PROG=	wc
 

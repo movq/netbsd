@@ -1,8 +1,6 @@
-/*	$NetBSD: foldit.c,v 1.5 1997/10/20 03:06:47 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)foldit.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: foldit.c,v 1.5 1997/10/20 03:06:47 lukem Exp $");
+static char sccsid[] = "@(#)foldit.c	5.1 (Berkeley) 4/18/91";
 #endif /* not lint */
 
-#include <stdio.h>
-
-int foldit __P((char *, int, int));
-
-int
 foldit(chunk, col, max)
 	char *chunk;
-	int col, max;
 {
-	char *cp;
+	register char *cp;
 
 	/*
 	 * Keep track of column position. Insert hidden newline
@@ -65,7 +53,7 @@ again:
 			col = 0;
 			break;
 		case '\t':
-			col = (col + 8) &~ 07;
+			col = col + 8 &~ 07;
 			break;
 		case '\b':
 			col = col ? col - 1 : 0;

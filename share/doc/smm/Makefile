@@ -1,39 +1,22 @@
-#	$NetBSD: Makefile,v 1.13 1997/10/17 09:44:39 mrg Exp $
-#	from: @(#)Makefile	8.2 (Berkeley) 5/10/94
+#	@(#)Makefile	5.2.1.2 (Berkeley) 5/7/91
 
-# The following modules do not build/install:
-# 10.named, 13.amd
-
-# Missing:
-# 02.config 11.timedop 12.timed
-
-# Missing from 4.4BSD-Lite:
-# 14.uucpimpl 15.uucpnet 16.security 17.password
-
+# Missing: 03.kdebug 09.uucpimpl 12.uchanges 13.kchanges 17.security
+#	   18.password 19.porttour 21.uucpnet
 BINDIR=	/usr/share/doc/smm
 FILES=	00.contents Makefile Title
-SUBDIR=	01.setup 04.quotas 05.fastfs 06.nfs 18.net
-.if exists(03.fsck_ffs)
-SUBDIR+= 03.fsck_ffs
-.endif
-.if exists(07.lpd)
-SUBDIR+= 07.lpd
-.endif
-.if exists(08.sendmailop)
-SUBDIR+= 08.sendmailop
-.endif
-.if exists(09.sendmail)
-SUBDIR+= 09.sendmail
-.endif
-#SUBDIR=	01.setup 02.config 03.fsck 04.quotas 05.fastfs 06.nfs 07.lpd \
-#	08.sendmailop 09.sendmail 11.timedop 12.timed 14.uucpimpl \
-#	15.uucpnet 16.security 17.password 18.net 19.perl
+SUBDIR=	02.config 04.quotas 05.fsck 06.lpd 07.sendmailop \
+	08.timedop 10.newsop 11.named \
+	14.fastfs 15.net 16.sendmail \
+	20.termdesc 22.timed
 
-Title.ps: ${FILES}
-	groff -ms Title > ${.TARGET}
+.if	${MACHINE} == "tahoe"
+SUBDIR+=01.setup
+.elif	${MACHINE} == "vax"
+SUBDIR+=01.setup
+.endif
 
-contents.ps: ${FILES}
-	groff -ms 00.contents > ${.TARGET}
+beforeinstall:
+	install -c -o ${BINOWN} -g ${BINGRP} -m 444 ${FILES} \
+	    ${DESTDIR}${BINDIR}
 
-.include <bsd.prog.mk>
 .include <bsd.subdir.mk>

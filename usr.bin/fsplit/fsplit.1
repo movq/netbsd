@@ -1,7 +1,5 @@
-.\"	$NetBSD: fsplit.1,v 1.4 1997/10/18 15:14:48 lukem Exp $
-.\"
-.\" Copyright (c) 1983, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" Asa Romberger and Jerry Berkman.
@@ -33,21 +31,21 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	from: @(#)fsplit.1	8.1 (Berkeley) 6/6/93
+.\"	@(#)fsplit.1	6.7 (Berkeley) 7/24/91
 .\"
-.Dd June 6, 1993
+.Dd July 24, 1991
 .Dt FSPLIT 1
 .Os BSD 4.2
 .Sh NAME
 .Nm fsplit
 .Nd split a multi-routine Fortran file into individual files
 .Sh SYNOPSIS
-.Nm
+.Nm fsplit
 .Op Fl e Ar efile
 \&...
 .Op Ar file
 .Sh DESCRIPTION
-.Nm
+.Nm Fsplit
 takes as input either a file or standard input containing Fortran source code.
 It attempts to split the input into separate routine files of the
 form
@@ -87,17 +85,17 @@ option are not found, a diagnostic is written to
 standard error.
 .Sh HISTORY
 The
-.Nm
+.Nm fsplit
 command
 appeared in
 .Bx 4.2 .
 .Sh AUTHORS
 Asa Romberger and Jerry Berkman
 .Sh BUGS
-.Nm
+.Nm Fsplit
 assumes the subprogram name is on the first noncomment line of the subprogram
 unit.  Nonstandard source formats may confuse
-.Nm "" .
+.Nm fsplit .
 .Pp
 It is hard to use
 .Fl e

@@ -1,8 +1,6 @@
-/*	$NetBSD: cribcur.h,v 1.3 1995/03/21 15:08:48 cgd Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)cribcur.h	8.1 (Berkeley) 5/31/93
+ *	@(#)cribcur.h	5.4 (Berkeley) 6/1/90
  */
 
 # define	PLAY_Y		15	/* size of player's hand window */

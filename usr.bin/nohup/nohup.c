@@ -1,5 +1,3 @@
-/*	$NetBSD: nohup.c,v 1.7 1997/10/19 10:23:35 lukem Exp $	*/
-
 /*
  * Copyright (c) 1989 The Regents of the University of California.
  * All rights reserved.
@@ -33,49 +31,29 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-    "@(#) Copyright (c) 1989 The Regents of the University of California.\n\
- All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)nohup.c	5.4 (Berkeley) 6/1/90";
-#endif
-__RCSID("$NetBSD: nohup.c,v 1.7 1997/10/19 10:23:35 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
+#include <sys/signal.h>
 #include <sys/file.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <unistd.h>
-#include <signal.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
 
-static void dofile __P((void));
-static void usage __P((void));
-int main __P((int, char **));
+extern int errno;
 
-/* nohup shall exit with one of the following values:
-   126 - The utility was found but could not be invoked.
-   127 - An error occured in the nohup utility, or the utility could
-         not be found. */
-#define EXIT_NOEXEC	126
-#define EXIT_NOTFOUND	127
-#define EXIT_MISC	127
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	int exit_status;
+	char *strerror();
 
 	if (argc < 2)
 		usage();
@@ -85,59 +63,49 @@ main(argc, argv)
 	if (isatty(STDERR_FILENO) && dup2(STDOUT_FILENO, STDERR_FILENO) == -1) {
 		/* may have just closed stderr */
 		(void)fprintf(stdin, "nohup: %s\n", strerror(errno));
-		exit(EXIT_MISC);
+		exit(1);
 	}
 
-	/* The nohup utility shall take the standard action for all signals
-	   except that SIGHUP shall be ignored. */
 	(void)signal(SIGHUP, SIG_IGN);
+	(void)signal(SIGQUIT, SIG_IGN);
 
 	execvp(argv[1], &argv[1]);
-	exit_status = (errno = ENOENT) ? EXIT_NOTFOUND : EXIT_NOEXEC;
-	(void)fprintf(stderr, "nohup: %s: %s\n", argv[1], strerror(errno));
-	exit(exit_status);
+	(void)fprintf(stderr,
+	    "nohup: %s: %s\n", argv[1], strerror(errno));
+	exit(1);
 }
 
-static void
 dofile()
 {
 	int fd;
 	char *p, path[MAXPATHLEN];
+	off_t lseek();
+	char *getenv(), *strcpy(), *strcat(), *strerror();
 
-	/* If the standard output is a terminal, all output written to 
-	   its standard output shall be appended to the end of the file
-	   nohup.out in the current directory.  If nohup.out cannot be
-	   created or opened for appending, the output shall be appended
-	   to the end of the file nohup.out in the directory specified 
-	   by the HOME environment variable.
-
-	   If a file is created, the file's permission bits shall be
-	   set to S_IRUSR | S_IWUSR. */
 #define	FILENAME	"nohup.out"
 	p = FILENAME;
-	if ((fd = open(p, O_RDWR|O_CREAT|O_APPEND, S_IRUSR|S_IWUSR)) >= 0)
+	if ((fd = open(p, O_RDWR|O_CREAT, 0600)) >= 0)
 		goto dupit;
-	if ((p = getenv("HOME")) != NULL) {
+	if (p = getenv("HOME")) {
 		(void)strcpy(path, p);
 		(void)strcat(path, "/");
 		(void)strcat(path, FILENAME);
-		if ((fd = open(p = path, O_RDWR|O_CREAT|O_APPEND, S_IRUSR|S_IWUSR)) >= 0)
+		if ((fd = open(p = path, O_RDWR|O_CREAT, 0600)) >= 0)
 			goto dupit;
 	}
 	(void)fprintf(stderr, "nohup: can't open a nohup.out file.\n");
-	exit(EXIT_MISC);
+	exit(1);
 
 dupit:	(void)lseek(fd, 0L, SEEK_END);
 	if (dup2(fd, STDOUT_FILENO) == -1) {
 		(void)fprintf(stderr, "nohup: %s\n", strerror(errno));
-		exit(EXIT_MISC);
+		exit(1);
 	}
 	(void)fprintf(stderr, "sending output to %s\n", p);
 }
 
-static void
 usage()
 {
 	(void)fprintf(stderr, "usage: nohup command\n");
-	exit(EXIT_MISC);
+	exit(1);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: tttermcap.c,v 1.3 1995/09/28 10:34:52 tls Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,11 +35,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)tttermcap.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: tttermcap.c,v 1.3 1995/09/28 10:34:52 tls Exp $";
-#endif
+static char sccsid[] = "@(#)tttermcap.c	3.12 (Berkeley) 6/6/90";
 #endif /* not lint */
 
 #include "tt.h"

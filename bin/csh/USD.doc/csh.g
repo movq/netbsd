@@ -1,5 +1,3 @@
-.\"	$NetBSD: csh.g,v 1.3 1995/03/21 09:03:42 cgd Exp $
-.\"
 .\" Copyright (c) 1980, 1993
 .\"	The Regents of the University of California.  All rights reserved.
 .\"

@@ -1,8 +1,6 @@
-/*	$NetBSD: calendar.c,v 1.11 1997/10/18 12:27:37 lukem Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,93 +31,51 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)calendar.c	8.4 (Berkeley) 1/7/95";
-#endif
-__RCSID("$NetBSD: calendar.c,v 1.11 1997/10/18 12:27:37 lukem Exp $");
+static char sccsid[] = "@(#)calendar.c	4.11 (Berkeley) 10/12/90";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/file.h>
 #include <sys/uio.h>
-#include <sys/wait.h>
-
-#include <ctype.h>
-#include <err.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <pwd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <errno.h>
 #include <tzfile.h>
+#include <stdio.h>
+#include <ctype.h>
 #include <unistd.h>
-
+#include <string.h>
 #include "pathnames.h"
 
-#ifndef TRUE
-#define TRUE 1
-#endif
-#ifndef FALSE
-#define FALSE 0
-#endif
-
-unsigned short lookahead = 1, weekend = 2;
-char *fname = "calendar", *datestr = NULL;
+extern int errno;
 struct passwd *pw;
 int doall;
 
-void	 atodays __P((char, char *, unsigned short *));
-void	 cal __P((void));
-void	 closecal __P((FILE *));
-int	 getday __P((char *));
-int	 getfield __P((char *, char **, int *));
-void	 getmmdd(struct tm *tp, char *ds);
-int	 getmonth __P((char *));
-int	 isnow __P((char *));
-int	 main __P((int, char **));
-FILE	*opencal __P((void));
-void	 settime __P((void));
-void	 usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
 	extern int optind;
 	int ch;
-	char *caldir;
 
-	while ((ch = getopt(argc, argv, "-ad:f:l:w:")) != -1)
-		switch (ch) {
+	while ((ch = getopt(argc, argv, "-a")) != EOF)
+		switch(ch) {
 		case '-':		/* backward contemptible */
 		case 'a':
 			if (getuid()) {
-				errno = EPERM;
-				err(1, "%s", "");
+				(void)fprintf(stderr,
+				    "calendar: %s\n", strerror(EPERM));
+				exit(1);
 			}
 			doall = 1;
-			break;
-		case 'd':
-			datestr = optarg;
-			break;
-		case 'f':
-			fname = optarg;
-			break;
-		case 'l':
-			atodays(ch, optarg, &lookahead);
-			break;
-		case 'w':
-			atodays(ch, optarg, &weekend);
 			break;
 		case '?':
 		default:
@@ -133,34 +89,30 @@ main(argc, argv)
 
 	settime();
 	if (doall)
-		while ((pw = getpwent()) != NULL) {
+		while (pw = getpwent()) {
 			(void)setegid(pw->pw_gid);
 			(void)seteuid(pw->pw_uid);
 			if (!chdir(pw->pw_dir))
 				cal();
 			(void)seteuid(0);
 		}
-	else if ((caldir = getenv("CALENDAR_DIR")) != NULL) {
-			if(!chdir(caldir))
-				cal();
-	} else
+	else
 		cal();
 	exit(0);
 }
 
-void
 cal()
 {
-	int printing;
-	char *p;
-	FILE *fp;
+	register int printing;
+	register char *p;
+	FILE *fp, *opencal();
 	int ch;
 	char buf[2048 + 1];
 
-	if ((fp = opencal()) == NULL)
+	if (!(fp = opencal()))
 		return;
-	for (printing = 0; fgets(buf, sizeof(buf), stdin) != NULL;) {
-		if ((p = strchr(buf, '\n')) != NULL)
+	for (printing = 0; fgets(buf, sizeof(buf), stdin);) {
+		if (p = index(buf, '\n'))
 			*p = '\0';
 		else
 			while ((ch = getchar()) != '\n' && ch != EOF);
@@ -175,34 +127,30 @@ cal()
 }
 
 struct iovec header[] = {
-	{ "From: ", 6 },
-	{ NULL, 0 },
-	{ " (Reminder Service)\nTo: ", 24 },
-	{ NULL, 0 },
-	{ "\nSubject: ", 10 },
-	{ NULL, 0 },
-	{ "'s Calendar\nPrecedence: bulk\n\n",  30 },
+	"From: ", 6,
+	NULL, 0,
+	" (Reminder Service)\nTo: ", 24,
+	NULL, 0,
+	"\nSubject: ", 10,
+	NULL, 0,
+	"'s Calendar\nPrecedence: bulk\n\n",  30,
 };
 
 /* 1-based month, 0-based days, cumulative */
 int daytab[][14] = {
-	{ 0, -1, 30, 58, 89, 119, 150, 180, 211, 242, 272, 303, 333, 364 },
-	{ 0, -1, 30, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365 },
+	0, 0, 30, 58, 89, 119, 150, 180, 211, 242, 272, 303, 333, 364,
+	0, 0, 30, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365,
 };
 struct tm *tp;
 int *cumdays, offset, yrdays;
 char dayname[10];
 
-void
 settime()
 {
-	time_t now;
+	time_t now, time();
 
 	(void)time(&now);
 	tp = localtime(&now);
-	if (datestr) {
-		getmmdd(tp, datestr);
-	}
 	if (isleap(tp->tm_year + 1900)) {
 		yrdays = DAYSPERLYEAR;
 		cumdays = daytab[1];
@@ -211,7 +159,7 @@ settime()
 		cumdays = daytab[0];
 	}
 	/* Friday displays Monday's events */
-	offset = tp->tm_wday == 5 ? lookahead + weekend : lookahead;
+	offset = tp->tm_wday == 5 ? 3 : 1;
 	header[5].iov_base = dayname;
 	header[5].iov_len = strftime(dayname, sizeof(dayname), "%A", tp);
 }
@@ -226,7 +174,6 @@ settime()
  * following a line that is matched, that starts with "whitespace", is shown
  * along with the matched line.
  */
-int
 isnow(endp)
 	char *endp;
 {
@@ -237,19 +184,21 @@ isnow(endp)
 	flags = 0;
 	/* didn't recognize anything, skip it */
 	if (!(v1 = getfield(endp, &endp, &flags)))
-		return (0);
-	if (flags & F_ISDAY || v1 > 12) {
+		return(0);
+	if (flags&F_ISDAY || v1 > 12) {
 		/* found a day */
 		day = v1;
-		month = tp->tm_mon + 1;
-	} else if (flags & F_ISMONTH) {
+		/* if no recognizable month, assume just a day alone */
+		if (!(month = getfield(endp, &endp, &flags)))
+			month = tp->tm_mon;
+	} else if (flags&F_ISMONTH) {
 		month = v1;
 		/* if no recognizable day, assume the first */
 		if (!(day = getfield(endp, &endp, &flags)))
 			day = 1;
 	} else {
 		v2 = getfield(endp, &endp, &flags);
-		if (flags & F_ISMONTH) {
+		if (flags&F_ISMONTH) {
 			day = v1;
 			month = v2;
 		} else {
@@ -259,20 +208,17 @@ isnow(endp)
 			day = v2 ? v2 : 1;
 		}
 	}
-	if (flags & F_ISDAY)
-		day = tp->tm_mday + (((day - 1) - tp->tm_wday + 7) % 7);
 	day = cumdays[month] + day;
 
 	/* if today or today + offset days */
 	if (day >= tp->tm_yday && day <= tp->tm_yday + offset)
-		return (1);
+		return(1);
 	/* if number of days left in this year + days to event in next year */
 	if (yrdays - tp->tm_yday + day <= offset)
-		return (1);
-	return (0);
+		return(1);
+	return(0);
 }
 
-int
 getfield(p, endp, flags)
 	char *p, **endp;
 	int *flags;
@@ -280,39 +226,28 @@ getfield(p, endp, flags)
 	int val;
 	char *start, savech;
 
-	for (; *p != '\0' && !isdigit(*p) && !isalpha(*p) && *p != '*'; ++p)
-		;
 	if (*p == '*') {			/* `*' is current month */
 		*flags |= F_ISMONTH;
-		*endp = p+1;
-		return (tp->tm_mon + 1);
+		return(tp->tm_mon);
 	}
 	if (isdigit(*p)) {
 		val = strtol(p, &p, 10);	/* if 0, it's failure */
-		for (; *p != '\0' && !isdigit(*p) && !isalpha(*p) && *p != '*';
-		    ++p)
-			;
+		for (; !isdigit(*p) && !isalpha(*p); ++p);
 		*endp = p;
-		return (val);
+		return(val);
 	}
-	for (start = p; *p != '\0' && isalpha(*++p);)
-		;
+	for (start = p; isalpha(*++p););
 	savech = *p;
 	*p = '\0';
-	if ((val = getmonth(start)) != 0)
+	if (val = getmonth(start))
 		*flags |= F_ISMONTH;
-	else if ((val = getday(start)) != 0)
+	else if (val = getday(start))
 		*flags |= F_ISDAY;
-	else {
-		*p = savech;
-		return (0);
-	}
-	for (*p = savech;
-	    *p != '\0' && !isdigit(*p) && !isalpha(*p) && *p != '*';
-	    ++p)
-		;
+	else
+		return(0);
+	for (*p = savech; !isdigit(*p) && !isalpha(*p); ++p);
 	*endp = p;
-	return (val);
+	return(val);
 }
 
 char path[MAXPATHLEN + 1];
@@ -321,20 +256,22 @@ FILE *
 opencal()
 {
 	int fd, pdes[2];
+	char *mktemp();
 
 	/* open up calendar file as stdin */
-	if (!freopen(fname, "r", stdin)) {
+	if (!freopen("calendar", "r", stdin)) {
 		if (doall)
-			return (NULL);
-		errx(1, "no calendar file.");
+			return((FILE *)NULL);
+		(void)fprintf(stderr, "calendar: no calendar file.\n");
+		exit(1);
 	}
-	if (pipe(pdes) < 0)
-		return (NULL);
+	if (pipe(pdes) < 0) 
+		return(NULL);
 	switch (vfork()) {
 	case -1:			/* error */
 		(void)close(pdes[0]);
 		(void)close(pdes[1]);
-		return (NULL);
+		return(NULL);
 	case 0:
 		/* child -- stdin already setup, set stdout to pipe input */
 		if (pdes[1] != STDOUT_FILENO) {
@@ -342,8 +279,7 @@ opencal()
 			(void)close(pdes[1]);
 		}
 		(void)close(pdes[0]);
-		execl(_PATH_CPP, "cpp", "-P", "-I.", _PATH_INCLUDE, NULL);
-		warn("execl: %s", _PATH_CPP);
+		execl(_PATH_CPP, "cpp", "-I.", _PATH_INCLUDE, NULL);
 		_exit(1);
 	}
 	/* parent -- set stdin to pipe output */
@@ -353,22 +289,21 @@ opencal()
 
 	/* not reading all calendar files, just set output to stdout */
 	if (!doall)
-		return (stdout);
+		return(stdout);
 
 	/* set output to a temporary file, so if no output don't send mail */
-	(void)snprintf(path, sizeof(path), "%s/_calXXXXXX", _PATH_TMP);
+	(void)sprintf(path, "%s/_calXXXXXX", _PATH_TMP);
 	if ((fd = mkstemp(path)) < 0)
-		return (NULL);
-	return (fdopen(fd, "w+"));
+		return(NULL);
+	return(fdopen(fd, "w+"));
 }
 
-void
 closecal(fp)
 	FILE *fp;
 {
 	struct stat sbuf;
 	int nread, pdes[2], status;
-	char buf[1024];
+	char buf[1024], *mktemp();
 
 	if (!doall)
 		return;
@@ -376,14 +311,14 @@ closecal(fp)
 	(void)rewind(fp);
 	if (fstat(fileno(fp), &sbuf) || !sbuf.st_size)
 		goto done;
-	if (pipe(pdes) < 0)
+	if (pipe(pdes) < 0) 
 		goto done;
 	switch (vfork()) {
 	case -1:			/* error */
 		(void)close(pdes[0]);
 		(void)close(pdes[1]);
 		goto done;
-	case 0:
+	case 0:		
 		/* child -- set stdin to pipe output */
 		if (pdes[0] != STDIN_FILENO) {
 			(void)dup2(pdes[0], STDIN_FILENO);
@@ -392,7 +327,8 @@ closecal(fp)
 		(void)close(pdes[1]);
 		execl(_PATH_SENDMAIL, "sendmail", "-i", "-t", "-F",
 		    "\"Reminder Service\"", "-f", "root", NULL);
-		warn("execl: %s", _PATH_SENDMAIL);
+		(void)fprintf(stderr, "calendar: %s: %s.\n", 
+		    _PATH_SENDMAIL, strerror(errno));
 		_exit(1);
 	}
 	/* parent -- write to pipe input */
@@ -413,105 +349,33 @@ static char *months[] = {
 	"jan", "feb", "mar", "apr", "may", "jun",
 	"jul", "aug", "sep", "oct", "nov", "dec", NULL,
 };
-
-int
 getmonth(s)
-	char *s;
+	register char *s;
 {
-	char **p;
+	register char **p;
 
 	for (p = months; *p; ++p)
 		if (!strncasecmp(s, *p, 3))
-			return ((p - months) + 1);
-	return (0);
+			return((p - months) + 1);
+	return(0);
 }
 
 static char *days[] = {
 	"sun", "mon", "tue", "wed", "thu", "fri", "sat", NULL,
 };
-
-int
 getday(s)
-	char *s;
+	register char *s;
 {
-	char **p;
+	register char **p;
 
 	for (p = days; *p; ++p)
 		if (!strncasecmp(s, *p, 3))
-			return ((p - days) + 1);
-	return (0);
+			return((p - days) + 1);
+	return(0);
 }
 
-void
-atodays(char ch, char *optarg, unsigned short *days)
-{
-	extern char *__progname;
-	int u;
-
-	u = atoi(optarg);
-	if ((u < 0) || (u > 366)) {
-		fprintf(stderr,
-			"%s: warning: -%c %d out of range 0-366, ignored.\n",
-			__progname, ch, u);
-	} else {
-		*days = u;
-	}
-}
-
-#define todigit(x) ((x) - '0')
-#define ATOI2(x) (todigit((x)[0]) * 10 + todigit((x)[1]))
-#define ISDIG2(x) (isdigit((x)[0]) && isdigit((x)[1]))
-
-void
-getmmdd(struct tm *tp, char *ds)
-{
-	extern char *__progname;
-	int ok = FALSE;
-	struct tm ttm;
-
-	ttm = *tp;
-	ttm.tm_isdst = -1;
-
-	if (ISDIG2(ds)) {
-		ttm.tm_mon = ATOI2(ds) - 1;
-		ds += 2;
-	}
-
-	if (ISDIG2(ds)) {
-		ttm.tm_mday = ATOI2(ds);
-		ds += 2;
-
-		ok = TRUE;
-	}
-
-	if (ok) {
-		if (ISDIG2(ds) && ISDIG2(ds + 2)) {
-			ttm.tm_year = ATOI2(ds) * 100 - 1900;
-			ds += 2;
-			ttm.tm_year += ATOI2(ds);
-		} else if (ISDIG2(ds)) {
-			ttm.tm_year = ATOI2(ds);
-		}
-	}
-	
-	if (ok && (mktime(&ttm) < 0)) {
-		ok = FALSE;
-	}
-	
-	if (ok) {
-		*tp = ttm;
-	} else {
-		fprintf(stderr,
-			"%s: warning: can't convert %s to date, ignored.\n",
-			__progname, ds);
-		usage();
-	}
-}
-
-void
 usage()
 {
-	(void)fprintf(stderr, "usage: calendar [-a] [-d MMDD[[YY]YY]" \
-		" [-f fname] [-l days] [-w days]\n");
+	(void)fprintf(stderr, "usage: calendar [-a]\n");
 	exit(1);
 }

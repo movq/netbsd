@@ -1,7 +1,5 @@
-.\"	$NetBSD: arithmetic.6,v 1.5 1997/10/09 23:07:00 lukem Exp $
-.\"
-.\" Copyright (c) 1989, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1989 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" Eamonn McManus of Trinity College Dublin.
@@ -34,74 +32,72 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)arithmetic.6	8.1 (Berkeley) 5/31/93
+.\"	@(#)arithmetic.6	6.6 (Berkeley) 6/23/90
 .\"
-.Dd May 31, 1993
-.Dt ARITHMETIC 6
+.TH ARITHMETIC 6 "June 23, 1990"
 .UC 4
-.Sh NAME
-.Nm arithmetic
-.Nd quiz on simple arithmetic
-.Sh SYNOPSIS
-.Nm
-.Op Fl o Ar +\-x/
-.Op Fl r Ar range
-.Sh DESCRIPTION
-.Nm
+.SH NAME
+arithmetic \- quiz on simple arithmetic
+.SH SYNOPSIS
+.B arithmetic
+.B [
+\-o +\-x/
+.B ]
+.B [
+\-r range
+.B ]
+.SH DESCRIPTION
+.I Arithmetic
 asks you to solve problems in simple arithmetic.
 Each question must be answered correctly before going on to the next.
 After every 20 problems, it prints the score so far and the time taken.
 You can quit at any time by typing the interrupt or end-of-file character.
-.Pp
+.PP
 The options are as follows:
-.Bl -tag -width indent 
-.It Fl o
+.TP
+\-o
 By default,
-.Nm
+.I arithmetic
 asks questions on addition of numbers from 0 to 10, and corresponding
 subtraction.
 By supplying one or more of the characters
-.Ar +\-x/ ,
+.BR +\-x/ ,
 you can ask for problems in addition, subtraction, multiplication, and
 division, respectively.
 If you give one of these characters more than once, that kind of problem
 will be asked correspondingly more often.
-.It Fl r
+.TP
+\-r
 If a
-.Ar range
+.I range
 is supplied,
-.Nm
+.I arithmetic
 selects the numbers in its problems in the following way.
 For addition and multiplication, the numbers to be added or multiplied
 are between 0 and
-.Ar range ,
+.IR range ,
 inclusive.
 For subtraction and division, both the required result and the number to
 divide by or subtract will be between 0 and
-.Ar range .
+.IR range .
 (Of course,
-.Nm
+.I arithmetic
 will not ask you to divide by 0.)  The default
 .I range
 is 10.
-.El
-.Pp
+.PP
 When you get a problem wrong,
-.Nm
+.I arithmetic
 will remember the numbers involved, and will tend to select those numbers
 more often than others, in problems of the same sort.
 Eventually it will forgive and forget.
-.Pp
-.Nm
+.PP
+.I Arithmetic
 cannot be persuaded to tell you the right answer.
 You must work it out for yourself.
-.Sh DIAGNOSTICS
-.Dq What?
-if you get a question wrong.
-.Dq Right!
-if you get it right.
-.Dq Please type a number.
-if arithmetic doesn't understand what you typed.
-.Sh SEE ALSO
-.Xr bc 1 ,
-.Xr dc 1
+.SH DIAGNOSTICS
+``What?'' if you get a question wrong.
+``Right!'' if you get it right.
+``Please type a number.'' if arithmetic doesn't understand what you typed.
+.SH "SEE ALSO"
+bc(1), dc(1)

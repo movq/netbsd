@@ -1,8 +1,6 @@
-/*	$NetBSD: utime.c,v 1.7 1997/07/21 14:07:46 jtc Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,37 +31,22 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)utime.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: utime.c,v 1.7 1997/07/21 14:07:46 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)utime.c	5.4 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/time.h>
 #include <utime.h>
-
-#ifdef __weak_alias
-__weak_alias(utime,_utime);
-#endif
 
 int
 utime(path, times)
 	const char *path;
 	const struct utimbuf *times;
 {
-	struct timeval tv[2], *tvp;
+	struct timeval tv[2];
 
-	if (times == (struct utimbuf *) NULL)
-		tvp = NULL;
-	else {
-		tv[0].tv_sec = times->actime;
-		tv[1].tv_sec = times->modtime;
-		tv[0].tv_usec = tv[1].tv_usec = 0;
-		tvp = tv;
-	}
-	return (utimes(path, tvp));
+	tv[0].tv_sec = times->actime;
+	tv[1].tv_sec = times->modtime;
+	tv[0].tv_usec = tv[1].tv_usec = 0;
+	return(utimes(path, tv));
 }

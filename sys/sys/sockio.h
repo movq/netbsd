@@ -1,5 +1,3 @@
-/*	$NetBSD: sockio.h,v 1.6 1997/03/17 02:56:35 thorpej Exp $	*/
-
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)sockio.h	8.1 (Berkeley) 3/28/94
+ *	from: @(#)sockio.h	8.1 (Berkeley) 3/28/94
+ *	$Id: sockio.h,v 1.1 1994/05/21 05:19:58 cgd Exp $
  */
 
 #ifndef	_SYS_SOCKIO_H_
@@ -75,11 +74,6 @@
 
 #define	SIOCADDMULTI	 _IOW('i', 49, struct ifreq)	/* add m'cast addr */
 #define	SIOCDELMULTI	 _IOW('i', 50, struct ifreq)	/* del m'cast addr */
-#define	SIOCGETVIFCNT	_IOWR('u', 51, struct sioc_vif_req)/* vif pkt cnt */
-#define	SIOCGETSGCNT	_IOWR('u', 52, struct sioc_sg_req) /* sg pkt cnt */
-
-#define	SIOCSIFMEDIA	_IOWR('i', 53, struct ifreq)	/* set net media */
-#define	SIOCGIFMEDIA	_IOWR('i', 54, struct ifmediareq) /* get net media */
 
 #define	SIOCSIFMTU	 _IOW('i', 127, struct ifreq)	/* set ifnet mtu */
 #define	SIOCGIFMTU	_IOWR('i', 126, struct ifreq)	/* get ifnet mtu */

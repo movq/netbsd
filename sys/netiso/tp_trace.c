@@ -1,8 +1,6 @@
-/*	$NetBSD: tp_trace.c,v 1.6 1996/02/13 22:12:20 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tp_trace.c	8.1 (Berkeley) 6/10/93
+ *	@(#)tp_trace.c	7.4 (Berkeley) 5/6/91
  */
 
 /***********************************************************
@@ -40,13 +38,13 @@
 
                       All Rights Reserved
 
-Permission to use, copy, modify, and distribute this software and its
-documentation for any purpose and without fee is hereby granted,
+Permission to use, copy, modify, and distribute this software and its 
+documentation for any purpose and without fee is hereby granted, 
 provided that the above copyright notice appear in all copies and that
-both that copyright notice and this permission notice appear in
+both that copyright notice and this permission notice appear in 
 supporting documentation, and that the name of IBM not be
 used in advertising or publicity pertaining to distribution of the
-software without specific, written prior permission.
+software without specific, written prior permission.  
 
 IBM DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
 ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
@@ -61,34 +59,41 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
-/*
- * The whole protocol trace module. We keep a circular buffer of trace
- * structures, which are big unions of different structures we might want to
- * see. Unfortunately this gets too big pretty easily. Pcbs were removed from
- * the tracing when the kernel got too big to boot.
+/* 
+ * ARGO TP
+ *
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_trace.c,v 1.1 1993/04/09 12:01:57 cgd Exp $
+ * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_trace.c,v $
+ *
+ * The whole protocol trace module.
+ * We keep a circular buffer of trace structures, which are big
+ * unions of different structures we might want to see.
+ * Unfortunately this gets too big pretty easily. Pcbs were removed
+ * from the tracing when the kernel got too big to boot.
  */
 
 #define TP_TRACEFILE
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/mbuf.h>
-#include <sys/socket.h>
-#include <sys/time.h>
+#include "param.h"
+#include "systm.h"
+#include "mbuf.h"
+#include "socket.h"
+#include "types.h"
+#include "time.h"
 
-#include <netiso/tp_param.h>
-#include <netiso/tp_timer.h>
-#include <netiso/tp_stat.h>
-#include <netiso/tp_param.h>
-#include <netiso/tp_ip.h>
-#include <netiso/tp_pcb.h>
-#include <netiso/tp_tpdu.h>
-#include <netiso/argo_debug.h>
-#include <netiso/tp_trace.h>
+#include "tp_param.h"
+#include "tp_timer.h"
+#include "tp_stat.h"
+#include "tp_param.h"
+#include "tp_ip.h"
+#include "tp_pcb.h"
+#include "tp_tpdu.h"
+#include "argo_debug.h"
+#include "tp_trace.h"
 
 #ifdef TPPT
-static          tp_seq = 0;
-u_char          tp_traceflags[128];
+static tp_seq = 0;
+u_char tp_traceflags[128];
 
 /*
  * The argument tpcb is the obvious.
@@ -96,17 +101,17 @@ u_char          tp_traceflags[128];
  * The rest of the arguments have different uses depending
  * on the type of trace event.
  */
-/* ARGSUSED */
-/* VARARGS */
+/*ARGSUSED*/
+/*VARARGS*/
 
 void
 tpTrace(tpcb, event, arg, src, len, arg4, arg5)
-	struct tp_pcb  *tpcb;
-	u_int           event, arg;
-	u_int           src;
-	u_int           len;
-	u_int           arg4;
-	u_int           arg5;
+	struct tp_pcb	*tpcb;
+	u_int 			event, arg;
+	u_int	 		src;
+	u_int	 		len; 
+	u_int	 		arg4;
+	u_int	 		arg5;
 {
 	register struct tp_Trace *tp;
 
@@ -116,56 +121,56 @@ tpTrace(tpcb, event, arg, src, len, arg4, arg5)
 	tp->tpt_event = event;
 	tp->tpt_tseq = tp_seq++;
 	tp->tpt_arg = arg;
-	if (tpcb)
+	if(tpcb)
 		tp->tpt_arg2 = tpcb->tp_lref;
-	bcopy((caddr_t) & time, (caddr_t) & tp->tpt_time, sizeof(struct timeval));
+	bcopy( (caddr_t)&time, (caddr_t)&tp->tpt_time, sizeof(struct timeval) );
 
-	switch (event) {
+	switch(event) {
 
 	case TPPTertpdu:
-		bcopy((caddr_t) src, (caddr_t) & tp->tpt_ertpdu,
-		      (unsigned) MIN((int) len, sizeof(struct tp_Trace)));
+		bcopy((caddr_t)src, (caddr_t)&tp->tpt_ertpdu,
+			(unsigned)MIN((int)len, sizeof(struct tp_Trace)));
 		break;
 
 	case TPPTusrreq:
 	case TPPTmisc:
 
 		/* arg is a string */
-		bcopy((caddr_t) arg, (caddr_t) tp->tpt_str,
-		 (unsigned) MIN(1 + strlen((caddr_t) arg), TPTRACE_STRLEN));
-		tp->tpt_m2 = src;
+		bcopy((caddr_t)arg, (caddr_t)tp->tpt_str, 
+			(unsigned)MIN(1+strlen((caddr_t) arg), TPTRACE_STRLEN));
+		tp->tpt_m2 = src; 
 		tp->tpt_m3 = len;
 		tp->tpt_m4 = arg4;
 		tp->tpt_m1 = arg5;
 		break;
 
-	case TPPTgotXack:
-	case TPPTXack:
-	case TPPTsendack:
-	case TPPTgotack:
-	case TPPTack:
-	case TPPTindicate:
+	case TPPTgotXack: 
+	case TPPTXack: 
+	case TPPTsendack: 
+	case TPPTgotack: 
+	case TPPTack: 
+	case TPPTindicate: 
 	default:
-	case TPPTdriver:
-		tp->tpt_m2 = arg;
+	case TPPTdriver: 
+		tp->tpt_m2 = arg; 
 		tp->tpt_m3 = src;
 		tp->tpt_m4 = len;
 		tp->tpt_m5 = arg4;
-		tp->tpt_m1 = arg5;
+		tp->tpt_m1 = arg5; 
 		break;
 	case TPPTparam:
-		bcopy((caddr_t) src, (caddr_t) & tp->tpt_param, sizeof(struct tp_param));
+		bcopy((caddr_t)src, (caddr_t)&tp->tpt_param, sizeof(struct tp_param));
 		break;
 	case TPPTref:
-		bcopy((caddr_t) src, (caddr_t) & tp->tpt_ref, sizeof(struct tp_ref));
+		bcopy((caddr_t)src, (caddr_t)&tp->tpt_ref, sizeof(struct tp_ref));
 		break;
 
 	case TPPTtpduin:
 	case TPPTtpduout:
 		tp->tpt_arg2 = arg4;
-		bcopy((caddr_t) src, (caddr_t) & tp->tpt_tpdu,
-		      (unsigned) MIN((int) len, sizeof(struct tp_Trace)));
+		bcopy((caddr_t)src, (caddr_t)&tp->tpt_tpdu,
+		      (unsigned)MIN((int)len, sizeof(struct tp_Trace)));
 		break;
 	}
 }
-#endif				/* TPPT */
+#endif TPPT

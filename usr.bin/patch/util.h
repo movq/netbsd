@@ -1,4 +1,13 @@
-/*	$NetBSD: util.h,v 1.3 1996/09/19 06:27:17 thorpej Exp $	*/
+/* $Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/util.h,v 1.1 1993/04/09 11:34:11 cgd Exp $
+ *
+ * $Log: util.h,v $
+ * Revision 1.1  1993/04/09 11:34:11  cgd
+ * patch 2.0.12u8, from prep.ai.mit.edu.  this is not under the GPL.
+ *
+ * Revision 2.0  86/09/17  15:40:06  lwall
+ * Baseline for netwide release.
+ * 
+ */
 
 /* and for those machine that can't handle a variable argument list */
 

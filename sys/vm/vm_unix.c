@@ -1,9 +1,7 @@
-/*	$NetBSD: vm_unix.c,v 1.20 1997/07/22 10:06:43 drochner Exp $	*/
-
 /*
  * Copyright (c) 1988 University of Utah.
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -39,41 +37,34 @@
  *
  * from: Utah $Hdr: vm_unix.c 1.1 89/11/07$
  *
- *	@(#)vm_unix.c	8.1 (Berkeley) 6/11/93
+ *	@(#)vm_unix.c	7.2 (Berkeley) 4/20/91
  */
 
 /*
  * Traditional sbrk/grow interface to VM
  */
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/proc.h>
-#include <sys/resourcevar.h>
-#include <sys/vnode.h>
-#include <sys/core.h>
+#include "param.h"
+#include "systm.h"
+#include "proc.h"
+#include "resourcevar.h"
 
-#include <sys/mount.h>
-#include <sys/syscallargs.h>
-
-#include <vm/vm.h>
+#include "vm.h"
 
 /* ARGSUSED */
-int
-sys_obreak(p, v, retval)
+obreak(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
+	struct args {
+		char	*nsiz;
+	} *uap;
+	int *retval;
 {
-	struct sys_obreak_args /* {
-		syscallarg(char *) nsize;
-	} */ *uap = v;
 	register struct vmspace *vm = p->p_vmspace;
 	vm_offset_t new, old;
 	int rv;
 	register int diff;
 
 	old = (vm_offset_t)vm->vm_daddr;
-	new = round_page(SCARG(uap, nsize));
+	new = round_page(uap->nsiz);
 	if ((int)(new - old) > p->p_rlimit[RLIMIT_DATA].rlim_cur)
 		return(ENOMEM);
 	old = round_page(old + ctob(vm->vm_dsize));
@@ -101,10 +92,9 @@ sys_obreak(p, v, retval)
  * Enlarge the "stack segment" to include the specified
  * stack pointer for the process.
  */
-int
 grow(p, sp)
 	struct proc *p;
-	vm_offset_t sp;
+	unsigned sp;
 {
 	register struct vmspace *vm = p->p_vmspace;
 	register int si;
@@ -112,17 +102,17 @@ grow(p, sp)
 	/*
 	 * For user defined stacks (from sendsig).
 	 */
-	if (sp < (vm_offset_t)vm->vm_maxsaddr)
+	if (sp < (unsigned)vm->vm_maxsaddr)
 		return (0);
 	/*
 	 * For common case of already allocated (from trap).
 	 */
-	if (sp >= USRSTACK - ctob(vm->vm_ssize))
+	if (sp >= (unsigned)vm->vm_maxsaddr + MAXSSIZ - ctob(vm->vm_ssize))
 		return (1);
 	/*
 	 * Really need to check vs limit and increment stack size if ok.
 	 */
-	si = clrnd(btoc(USRSTACK-sp) - vm->vm_ssize);
+	si = clrnd(btoc(vm->vm_maxsaddr + MAXSSIZ - sp) - vm->vm_ssize);
 	if (vm->vm_ssize + si > btoc(p->p_rlimit[RLIMIT_STACK].rlim_cur))
 		return (0);
 	vm->vm_ssize += si;
@@ -130,118 +120,13 @@ grow(p, sp)
 }
 
 /* ARGSUSED */
-int
-sys_ovadvise(p, v, retval)
+ovadvise(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
+	struct args {
+		int	anom;
+	} *uap;
+	int *retval;
 {
-#if 0
-	struct sys_ovadvise_args /* {
-		syscallarg(int) anom;
-	} */ *uap = v;
-#endif
 
 	return (EINVAL);
-}
-
-int
-vm_coredump(p, vp, cred, chdr)
-	struct proc *p;
-	struct vnode *vp;
-	struct ucred *cred;
-	struct core *chdr;
-{
-	register struct vmspace *vm = p->p_vmspace;
-	register vm_map_t	map = &vm->vm_map;
-	register vm_map_entry_t	entry;
-	vm_offset_t start, end;
-	struct coreseg cseg;
-	off_t offset;
-	int flag, error = 0;
-
-	if (!map->is_main_map) {
-#ifdef DEBUG
-		uprintf(
-	"vm_coredump: %s map 0x%lx: pmap=0x%lx,ref=%d,nentries=%d,version=%d\n",
-			(map->is_main_map ? "Task" : "Share"),
-			(long)map, (long)(map->pmap),
-			map->ref_count, map->nentries,
-			map->timestamp);
-#endif
-		return EIO;
-	}
-
-	offset = chdr->c_hdrsize + chdr->c_seghdrsize + chdr->c_cpusize;
-
-	for (entry = map->header.next; entry != &map->header;
-	     entry = entry->next) {
-
-		if (entry->is_a_map || entry->is_sub_map) {
-#ifdef DEBUG
-		 	uprintf(
-			    "vm_coredump: entry: share=0x%lx, offset=0x%lx\n",
-                            (long) entry->object.share_map,
-                            (long) entry->offset);
-#endif
-			continue;
-		}
-
-		if (entry->object.vm_object &&
-		    entry->object.vm_object->pager &&
-		    entry->object.vm_object->pager->pg_type == PG_DEVICE) {
-#ifdef DEBUG
-		    printf("vm_coredump: skipping dev @ %lx\n",
-			   (u_long)entry->start);
-#endif
-		    continue;
-		}
-
-		if (!(entry->protection & VM_PROT_WRITE))
-			continue;
-
-		start = entry->start;
-		end = entry->end;
-
-		if (start >= VM_MAXUSER_ADDRESS)
-			continue;
-
-		if (end > VM_MAXUSER_ADDRESS)
-			end = VM_MAXUSER_ADDRESS;
-
-		if (start >= (vm_offset_t)vm->vm_maxsaddr) {
-			flag = CORE_STACK;
-			start = trunc_page(USRSTACK - ctob(vm->vm_ssize));
-			if (start >= end)
-				continue;
-		} else
-			flag = CORE_DATA;
-
-		/*
-		 * Set up a new core file segment.
-		 */
-		CORE_SETMAGIC(cseg, CORESEGMAGIC, CORE_GETMID(*chdr), flag);
-		cseg.c_addr = start;
-		cseg.c_size = end - start;
-
-		error = vn_rdwr(UIO_WRITE, vp,
-		    (caddr_t)&cseg, chdr->c_seghdrsize,
-		    offset, UIO_SYSSPACE,
-		    IO_NODELOCKED|IO_UNIT, cred, (int *) NULL, p);
-		if (error)
-			break;
-
-		offset += chdr->c_seghdrsize;
-		error = vn_rdwr(UIO_WRITE, vp,
-		    (caddr_t)cseg.c_addr, (int)cseg.c_size,
-		    offset, UIO_USERSPACE,
-		    IO_NODELOCKED|IO_UNIT, cred, (int *) NULL, p);
-		if (error)
-			break;
-
-		offset += cseg.c_size;
-		chdr->c_nseg++;
-	}
-
-	return error;
 }

@@ -1,7 +1,5 @@
-.\"	$NetBSD: getgrent.3,v 1.10 1997/07/14 23:19:41 kleink Exp $
-.\"
-.\" Copyright (c) 1989, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1989, 1991 The Regents of the University of California.
+.\"  All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)getgrent.3	8.2 (Berkeley) 4/19/94
+.\"     @(#)getgrent.3	6.8 (Berkeley) 4/20/91
 .\"
-.Dd April 19, 1994
+.Dd April 20, 1991
 .Dt GETGRENT 3
 .Os
 .Sh NAME
@@ -46,19 +44,18 @@
 .Nm endgrent
 .Nd group database operations
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
 .Fd #include <grp.h>
 .Ft struct group *
 .Fn getgrent void
 .Ft struct group *
-.Fn getgrnam "const char *name"
+.Fn getgrname "const char *name"
 .Ft struct group *
 .Fn getgrgid "gid_t gid"
-.Ft int
+.Ft struct group *
 .Fn setgroupent "int stayopen"
 .\" .Ft void
 .\" .Fn setgrfile "const char *name"
-.Ft void
+.Ft int
 .Fn setgrent void
 .Ft void
 .Fn endgrent void
@@ -99,7 +96,7 @@ function
 sequentially reads the group database and is intended for programs
 that wish to step through the complete list of groups.
 .Pp
-All three routines will open the group file for reading, if necessary.
+All three routines will open the group file for reading, if necesssary.
 .Pp
 The
 .Fn setgroupent
@@ -116,7 +113,7 @@ functionality as the group file may be updated.
 The
 .Fn setgrent
 function
-is equivalent to
+is identical to
 .Fn setgroupent
 with an argument of zero.
 .Pp
@@ -132,30 +129,25 @@ and
 .Fn getgrgid ,
 return a pointer to the group entry if successful; if end-of-file
 is reached or an error occurs a null pointer is returned.
-The
+The functions
 .Fn setgroupent
-function returns the value 1 if successful, otherwise the value
-0 is returned.
-The 
-.Fn endgrent
 and
 .Fn setgrent
-functions have no return value.
+return the value 1 if successful, otherwise the value
+0 is returned.
+The functions
+.Fn endgrent
+and
+.Fn setgrfile
+have no return value.
 .Sh FILES
 .Bl -tag -width /etc/group -compact
 .It Pa /etc/group
 group database file
 .El
 .Sh SEE ALSO
-.Xr getpwent 3 ,
-.Xr group 5
-.Sh STANDARDS
-The
-.Fn getgrnam
-and
-.Fn getgrgid
-functions conform to
-.St -p1003.1-90 .
+.Fn getpwent 3 ,
+.Fn group 5
 .Sh HISTORY
 The functions
 .Fn endgrent ,
@@ -175,7 +167,7 @@ appeared in
 .Sh COMPATIBILITY
 The historic function
 .Fn setgrfile ,
-which allowed the specification of alternative password databases, has
+which allowed the specification of alternate password databases, has
 been deprecated and is no longer available.
 .Sh BUGS
 The functions

@@ -1,8 +1,6 @@
-/*	$NetBSD: wwadd.c,v 1.4 1996/02/08 21:48:56 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,11 +35,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)wwadd.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: wwadd.c,v 1.4 1996/02/08 21:48:56 mycroft Exp $";
-#endif
+static char sccsid[] = "@(#)wwadd.c	3.14 (Berkeley) 6/6/90";
 #endif /* not lint */
 
 #include "ww.h"
@@ -66,7 +60,7 @@ struct ww *w2;
 		w->ww_order++;
 	for (i = w1->ww_i.t; i < w1->ww_i.b; i++) {
 		register j;
-		register unsigned char *smap = wwsmap[i];
+		register char *smap = wwsmap[i];
 		register char *win = w1->ww_win[i];
 		union ww_char *ns = wwns[i];
 		union ww_char *buf = w1->ww_buf[i];

@@ -1,8 +1,7 @@
-#	$NetBSD: Makefile,v 1.6 1995/04/22 08:23:28 cgd Exp $
-#	@(#)Makefile	8.1 (Berkeley) 5/31/93
+#	@(#)Makefile	5.3 (Berkeley) 5/11/90
 
 PROG=	rain
-MAN=	rain.6
+MAN6=	rain.0
 DPADD=	${LIBTERM} ${LIBCOMPAT}
 LDADD=	-ltermcap -lcompat
 

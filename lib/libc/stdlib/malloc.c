@@ -1,5 +1,3 @@
-/*	$NetBSD: malloc.c,v 1.10 1997/07/21 14:08:55 jtc Exp $	*/
-
 /*
  * Copyright (c) 1983 Regents of the University of California.
  * All rights reserved.
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "from: @(#)malloc.c	5.11 (Berkeley) 2/23/91";
-#else
-__RCSID("$NetBSD: malloc.c,v 1.10 1997/07/21 14:08:55 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)malloc.c	5.11 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -53,10 +46,6 @@ __RCSID("$NetBSD: malloc.c,v 1.10 1997/07/21 14:08:55 jtc Exp $");
  * This is designed for use in a virtual memory environment.
  */
 
-#include "namespace.h"
-#if defined(DEBUG) || defined(RCHECK) || defined(MSTATS)
-#include <stdio.h>
-#endif
 #include <sys/types.h>
 #include <stdlib.h>
 #include <string.h>
@@ -64,6 +53,8 @@ __RCSID("$NetBSD: malloc.c,v 1.10 1997/07/21 14:08:55 jtc Exp $");
 
 #define	NULL 0
 
+static void morecore();
+static int findbucket();
 
 /*
  * The overhead on a block is at least 4 bytes.  When free, this space
@@ -82,7 +73,7 @@ union	overhead {
 		u_char	ovu_index;	/* bucket # */
 #ifdef RCHECK
 		u_short	ovu_rmagic;	/* range magic number */
-		u_long	ovu_size;	/* actual block size */
+		u_int	ovu_size;	/* actual block size */
 #endif
 	} ovu;
 #define	ov_magic	ovu.ovu_magic
@@ -107,6 +98,7 @@ union	overhead {
  */
 #define	NBUCKETS 30
 static	union overhead *nextf[NBUCKETS];
+extern	char *sbrk();
 
 static	int pagesz;			/* page size */
 static	int pagebucket;			/* page size bucket */
@@ -120,17 +112,9 @@ static	u_int nmalloc[NBUCKETS];
 #include <stdio.h>
 #endif
 
-static void morecore __P((int));
-static int findbucket __P((union overhead *, int));
-#ifdef MSTATS
-void mstats __P((char *));
-#endif
-
 #if defined(DEBUG) || defined(RCHECK)
-#define	ASSERT(p)   if (!(p)) botch(__STRING(p))
-
-static botch __P((char *));
-
+#define	ASSERT(p)   if (!(p)) botch("p")
+#include <stdio.h>
 static
 botch(s)
 	char *s;
@@ -148,8 +132,7 @@ malloc(nbytes)
 	size_t nbytes;
 {
   	register union overhead *op;
-	register int bucket;
-  	register long n;
+  	register int bucket, n;
 	register unsigned amt;
 
 	/*
@@ -159,7 +142,7 @@ malloc(nbytes)
 	if (pagesz == 0) {
 		pagesz = n = getpagesize();
 		op = (union overhead *)sbrk(0);
-  		n = n - sizeof (*op) - ((long)op & (n - 1));
+  		n = n - sizeof (*op) - ((int)op & (n - 1));
 		if (n < 0)
 			n += pagesz;
   		if (n) {
@@ -187,7 +170,7 @@ malloc(nbytes)
 		amt = 16;	/* size of first bucket */
 		bucket = 1;
 #endif
-		n = -((long)sizeof (*op) + RSLOP);
+		n = -(sizeof (*op) + RSLOP);
 	} else {
 		amt = pagesz;
 		bucket = pagebucket;
@@ -234,8 +217,8 @@ morecore(bucket)
 	int bucket;
 {
   	register union overhead *op;
-	register long sz;		/* size of desired block */
-  	long amt;			/* amount to allocate */
+	register int sz;		/* size of desired block */
+  	int amt;			/* amount to allocate */
   	int nblks;			/* how many blocks we get */
 
 	/*
@@ -258,7 +241,7 @@ morecore(bucket)
 	}
 	op = (union overhead *)sbrk(amt);
 	/* no more room! */
-  	if ((long)op == -1)
+  	if ((int)op == -1)
   		return;
 	/*
 	 * Add new memory allocated to that on
@@ -275,7 +258,7 @@ void
 free(cp)
 	void *cp;
 {   
-  	register long size;
+  	register int size;
 	register union overhead *op;
 
   	if (cp == NULL)
@@ -318,18 +301,14 @@ realloc(cp, nbytes)
 	void *cp; 
 	size_t nbytes;
 {   
-  	register u_long onb;
-	register long i;
+  	register u_int onb;
+	register int i;
 	union overhead *op;
   	char *res;
 	int was_alloced = 0;
 
   	if (cp == NULL)
   		return (malloc(nbytes));
-	if (nbytes == 0) {
-		free (cp);
-		return NULL;
-	}
 	op = (union overhead *)((caddr_t)cp - sizeof (union overhead));
 	if (op->ov_magic == MAGIC) {
 		was_alloced++;
@@ -388,7 +367,7 @@ realloc(cp, nbytes)
  * header starts at ``freep''.  If srchlen is -1 search the whole list.
  * Return bucket number, or -1 if not found.
  */
-static int
+static
 findbucket(freep, srchlen)
 	union overhead *freep;
 	int srchlen;
@@ -415,7 +394,6 @@ findbucket(freep, srchlen)
  * for each size category, the second showing the number of mallocs -
  * frees for each size category.
  */
-void
 mstats(s)
 	char *s;
 {

@@ -1,5 +1,5 @@
-/*	$NetBSD: llscan.c,v 1.5 1994/06/29 06:41:05 cgd Exp $	*/
-
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/llscan.c,v 1.1 1993/04/09 12:02:08 cgd Exp $ */
+/* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/llscan.c,v $ */
 /*
  * ************************* NOTICE *******************************
  * This code is in the public domain.  It cannot be copyrighted.
@@ -188,7 +188,7 @@ char o,c;
 					ch = getch();
 				} while(chtype[ch] & LETTER);
 				addbuf('\0');
-				if( !strncmp(obufp, synonyms[PCB_SYN],
+				if( !strcmp(obufp, synonyms[PCB_SYN],
 										strlen(synonyms[PCB_SYN]) )) {
 					buffptr = obufp;
 					addbuf('p');

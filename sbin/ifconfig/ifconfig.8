@@ -1,7 +1,5 @@
-.\"	$NetBSD: ifconfig.8,v 1.21 1997/10/11 02:44:36 enami Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,63 +29,52 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)ifconfig.8	8.4 (Berkeley) 6/1/94
+.\"     @(#)ifconfig.8	6.13 (Berkeley) 3/16/91
 .\"
-.Dd April 16, 1997
+.Dd March 16, 1991
 .Dt IFCONFIG 8
 .Os BSD 4.2
 .Sh NAME
 .Nm ifconfig
 .Nd configure network interface parameters
 .Sh SYNOPSIS
-.Nm
+.Nm ifconfig
 .Ar interface address_family
 .Oo
 .Ar address
 .Op Ar dest_address
 .Oc
 .Op Ar parameters
-.Nm ""
-.Op Fl m
+.Nm ifconfig
 .Ar interface
 .Op Ar protocol_family
-.Nm ""
-.Fl a
-.Op Fl m
-.Op Fl d
-.Op Fl u
-.Op Ar protocol_family
-.Nm ""
-.Fl l
-.Op Fl d
-.Op Fl u
 .Sh DESCRIPTION
-.Nm
+.Nm Ifconfig
 is used to assign an address
 to a network interface and/or configure
 network interface parameters.
-.Nm
+.Nm Ifconfig
 must be used at boot time to define the network address
 of each interface present on a machine; it may also be used at
 a later time to redefine an interface's address
 or other operating parameters.
 .Pp
 Available operands for
-.Nm "" :
+.Nm ifconfig:
 .Bl -tag -width Ds
 .It Ar Address
 For the
 .Tn DARPA-Internet
 family,
 the address is either a host name present in the host name data
-base,
+base, 
 .Xr hosts 5 ,
 or a
 .Tn DARPA
 Internet address expressed in the Internet standard
 .Dq dot notation .
 For the Xerox Network Systems(tm) family,
-addresses are
+addresses are 
 .Ar net:a.b.c.d.e.f ,
 where
 .Ar net
@@ -111,11 +98,10 @@ Specifies the
 .Ar address family
 which affects interpretation of the remaining parameters.
 Since an interface can receive transmissions in differing protocols
-with different naming schemes, specifying the address family is recommended.
+with different naming schemes, specifying the address family is recommeded.
 The address or protocol families currently
 supported are
 .Dq inet ,
-.Dq atalk ,
 .Dq iso ,
 and
 .Dq ns .
@@ -125,11 +111,11 @@ The
 parameter is a string of the form
 .Dq name unit ,
 for example,
-.Dq en0
+.Dq en0 
 .El
 .Pp
-The following parameters may be set with
-.Nm "" :
+The following parameters may be set with 
+.Nm ifconfig :
 .Bl -tag -width dest_addressxx
 .It Cm alias
 Establish an additional network address for this interface.
@@ -144,7 +130,7 @@ Internet
 addresses and 10Mb/s Ethernet addresses.
 .It Fl arp
 Disable the use of the Address Resolution Protocol.
-.It Cm broadcast Ar mask
+.It Cm broadcast
 (Inet only)
 Specify the address to use to represent broadcasts to the
 network.
@@ -154,7 +140,6 @@ Enable driver dependent debugging code; usually, this turns on
 extra console error logging.
 .It Fl debug
 Disable driver dependent debugging code.
-.ne 1i
 .It Cm delete
 Remove the network address specified.
 This would be used if you incorrectly specified an alias, or it
@@ -168,7 +153,7 @@ of a point to point link.
 .It Cm down
 Mark an interface ``down''.  When an interface is
 marked ``down'', the system will not attempt to
-transmit messages through that interface.
+transmit messages through that interface. 
 If possible, the interface will be reset to disable reception as well.
 This action does not automatically disable routes using the interface.
 .It Cm ipdst
@@ -180,28 +165,6 @@ of the destination.
 IP encapsulation of
 .Tn CLNP
 packets is done differently.
-.It Cm media Ar type
-Set the media type of the interface to
-.Ar type .
-Some interfaces support the mutually exclusive use of one of several
-different physical media connectors.  For example, a 10Mb/s Ethernet
-interface might support the use of either
-.Tn AUI
-or twisted pair connectors.  Setting the media type to
-.Dq 10base5/AUI
-would change the currently active connector to the AUI port.
-Setting it to
-.Dq 10baseT/UTP
-would activate twisted pair.  Refer to the interfaces' driver
-specific man page for a complete list of the available types.
-.It Cm mediaopt Ar opts
-Set the specified media options on the interface.
-.Ar opts
-is a comma delimited list of options to apply to the interface.
-Refer to the interfaces' driver specific man page for a complete
-list of available options.
-.It Fl mediaopt Ar opts
-Disable the specified media options on the interface.
 .It Cm metric Ar n
 Set the routing metric of the interface to
 .Ar n ,
@@ -211,12 +174,8 @@ The routing metric is used by the routing protocol
 Higher metrics have the effect of making a route
 less favorable; metrics are counted as addition hops
 to the destination network or host.
-.It Cm mtu Ar n
-Set the maximum transmission unit of the interface to
-.Ar n .
-Most interfaces don't support this option.
 .It Cm netmask Ar mask
-(Inet and ISO)
+(Inet and Iso)
 Specify how much of the address to reserve for subdividing
 networks into sub-networks.
 The mask includes the network part of the local address
@@ -231,7 +190,7 @@ and 0's for the host part.
 The mask should contain at least the standard network portion,
 and the subnet field should be contiguous with the network
 portion.
-.\" see
+.\" see 
 .\" Xr eon 5 .
 .It Cm nsellength Ar n
 .Pf ( Tn ISO
@@ -244,7 +203,7 @@ taken to be the
 (Network Entity Title).
 The default value is 1, which is conformant to US
 .Tn GOSIP .
-When an ISO address is set in an ifconfig command,
+When an iso address is set in an ifconfig command,
 it is really the
 .Tn NSAP
 which is being specified.
@@ -254,7 +213,7 @@ For example, in
 specified in the
 .Tn ISO NSAP
 to be assigned to the interface.
-There is some evidence that a number different from 1 may be useful
+There is some evidence that a number different 1 may be useful
 for
 .Tn AFI
 37 type addresses.
@@ -276,56 +235,20 @@ hosts that have made such requests.
 Currently used by Internet protocols only.
 .It Fl trailers
 Disable the use of a ``trailer'' link level encapsulation.
-.It Cm link[0-2]
-Enable special processing of the link level of the interface.
-These three options are interface specific in actual effect, however,
-they are in general used to select special modes of operation. An example
-of this is to enable SLIP compression, or to select the connector type
-for some ethernet cards.  Refer to the man page for the specific driver
-for more information.
-.ne 1i
-.It Fl link[0-2]
-Disable special processing at the link level with the specified interface.
 .It Cm up
-Mark an interface ``up''.
+Mark an interface ``up''. 
 This may be used to enable an interface after an ``ifconfig down.''
 It happens automatically when setting the first address on an interface.
 If the interface was reset when previously marked down,
 the hardware will be re-initialized.
 .El
 .Pp
-.Nm
+.Pp
+.Nm Ifconfig
 displays the current configuration for a network interface
 when no optional parameters are supplied.
 If a protocol family is specified,
 Ifconfig will report only the details specific to that protocol family.
-.Pp
-If the
-.Fl m
-flag is passed before an interface name,
-.Nm
-will display all of the supported media for the specified interface.
-.Pp
-Optionally, the
-.Fl a
-flag may be used instead of an interface name.  This flag instructs
-.Nm
-to display information about all interfaces in the system.
-.Fl d
-limits this to interfaces that are down, and
-.Fl u
-limits this to interfaces that are up.
-.Pp
-The
-.Fl l
-flag may be used to list all available interfaces on the system, with
-no other additional information.  Use of this flag is mutually exclusive
-with all other flags and commands, except for
-.Fl d
-(only list interfaces that are down)
-and
-.Fl u
-(only list interfaces that are up).
 .Pp
 Only the super-user may modify the configuration of a network interface.
 .Sh DIAGNOSTICS

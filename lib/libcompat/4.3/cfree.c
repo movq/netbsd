@@ -31,16 +31,9 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
 static char sccsid[] = "@(#)cfree.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: cfree.c,v 1.3 1997/10/09 10:20:35 lukem Exp $");
-#endif
 #endif /* LIBC_SCCS and not lint */
-
-#include <stdlib.h>
 
 void
 cfree(p)

@@ -1,8 +1,6 @@
-/*	$NetBSD: main.c,v 1.8 1997/10/19 05:03:38 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)main.c	8.2 (Berkeley) 4/20/95";
-#else
-__RCSID("$NetBSD: main.c,v 1.8 1997/10/19 05:03:38 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)main.c	5.28 (Berkeley) 4/1/91";
 #endif /* not lint */
 
 #include "rcv.h"
-#include "extern.h"
-
-int	main __P((int, char **));
+#include <sys/stat.h>
 
 /*
  * Mail -- a mail program
@@ -60,18 +52,19 @@ int	main __P((int, char **));
 
 jmp_buf	hdrjmp;
 
-int
 main(argc, argv)
-	int argc;
-	char *argv[];
+	char **argv;
 {
-	int i;
+	register int i;
 	struct name *to, *cc, *bcc, *smopts;
 	char *subject;
 	char *ef;
 	char nosrc = 0;
+	void hdrstop();
 	sig_t prevint;
-	char *rc;
+	extern int getopt(), optind, opterr;
+	extern char *optarg;
+	void sigchild();
 
 	/*
 	 * Set up a reasonable environment.
@@ -95,7 +88,7 @@ main(argc, argv)
 	bcc = NIL;
 	smopts = NIL;
 	subject = NOSTR;
-	while ((i = getopt(argc, argv, "INT:b:c:dfins:u:v")) != -1) {
+	while ((i = getopt(argc, argv, "INT:b:c:dfins:u:v")) != EOF) {
 		switch (i) {
 		case 'T':
 			/*
@@ -219,9 +212,7 @@ Usage: mail [-iInv] [-s subject] [-c cc-addr] [-b bcc-addr] to-addr ...\n\
 	 * Expand returns a savestr, but load only uses the file name
 	 * for fopen, so it's safe to do this.
 	 */
-	if ((rc = getenv("MAILRC")) == 0)
-		rc = "~/.mailrc";
-	load(expand(rc));
+	load(expand("~/.mailrc"));
 	if (!rcvmode) {
 		mail(to, cc, bcc, smopts, subject);
 		/*
@@ -262,8 +253,7 @@ Usage: mail [-iInv] [-s subject] [-c cc-addr] [-b bcc-addr] to-addr ...\n\
  * Interrupt printing of the headers.
  */
 void
-hdrstop(signo)
-	int signo;
+hdrstop()
 {
 
 	fflush(stdout);
@@ -279,22 +269,18 @@ hdrstop(signo)
  *	If baud rate > 1200, use 24 or ws_row
  * Width is either 80 or ws_col;
  */
-void
 setscreensize()
 {
-	struct termios tbuf;
+	struct sgttyb tbuf;
 	struct winsize ws;
-	speed_t ospeed;
 
 	if (ioctl(1, TIOCGWINSZ, (char *) &ws) < 0)
 		ws.ws_col = ws.ws_row = 0;
-	if (tcgetattr(1, &tbuf) < 0)
-		ospeed = 9600;
-	else
-		ospeed = cfgetospeed(&tbuf);
-	if (ospeed < 1200)
+	if (ioctl(1, TIOCGETP, &tbuf) < 0)
+		tbuf.sg_ospeed = B9600;
+	if (tbuf.sg_ospeed < B1200)
 		screenheight = 9;
-	else if (ospeed == 1200)
+	else if (tbuf.sg_ospeed == B1200)
 		screenheight = 14;
 	else if (ws.ws_row != 0)
 		screenheight = ws.ws_row;

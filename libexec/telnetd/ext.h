@@ -1,8 +1,6 @@
-/*	$NetBSD: ext.h,v 1.8 1997/10/16 06:59:09 mikel Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ext.h	8.2 (Berkeley) 12/15/93
+ *	@(#)ext.h	5.7 (Berkeley) 3/1/91
  */
 
 /*
@@ -52,7 +50,6 @@ extern int	lmodetype;	/* Client support for linemode */
 # endif	/* KLUDGELINEMODE */
 #endif	/* LINEMODE */
 extern int	flowmode;	/* current flow control state */
-extern int	restartany;	/* restart output on any character state */
 #ifdef DIAGNOSTICS
 extern int	diagnostic;	/* telnet diagnostic capabilities */
 #endif /* DIAGNOSTICS */
@@ -62,7 +59,7 @@ extern int	bftpd;		/* behave as bftp daemon */
 #if	defined(SecurID)
 extern int	require_SecurID;
 #endif
-#if	defined(AUTHENTICATION)
+#if	defined(AUTHENTICATE)
 extern int	auth_level;
 #endif
 
@@ -91,8 +88,13 @@ extern int	pty, net;
 extern char	*line;
 extern int	SYNCHing;		/* we are in TELNET SYNCH mode */
 
-#include <sys/cdefs.h>
-#define P __P
+#ifndef	P
+# ifdef	__STDC__
+#  define P(x)	x
+# else
+#  define P(x)	()
+# endif
+#endif
 
 extern void
 	_termstat P((void)),
@@ -116,7 +118,6 @@ extern void
 	init_termbuf P((void)),
 	interrupt P((void)),
 	localstat P((void)),
-	flowstat P((void)),
 	netclear P((void)),
 	netflush P((void)),
 #ifdef DIAGNOSTICS
@@ -139,7 +140,11 @@ extern void
 	set_termbuf P((void)),
 	start_login P((char *, int, char *)),
 	start_slc P((int)),
-	startslave P((char *, int, char *)),
+#if	defined(AUTHENTICATE)
+	start_slave P((char *)),
+#else
+	start_slave P((char *, int, char *)),
+#endif
 	suboption P((void)),
 	telrcv P((void)),
 	ttloop P((void)),
@@ -149,16 +154,13 @@ extern void
 extern int
 	end_slc P((unsigned char **)),
 	getnpty P((void)),
-#ifndef convex
-	getpty P((int *)),
-#endif
+	getpty P((void)),
 	login_tty P((int)),
 	spcset P((int, cc_t *, cc_t **)),
 	stilloob P((int)),
 	terminit P((void)),
 	termstat P((void)),
 	tty_flowmode P((void)),
-	tty_restartany P((void)),
 	tty_isbinaryin P((void)),
 	tty_isbinaryout P((void)),
 	tty_iscrnl P((void)),
@@ -184,6 +186,11 @@ extern void
 	wontoption P((int)),
 	writenet P((unsigned char *, int));
 
+#if	defined(ENCRYPT)
+extern void	(*encrypt_output) P((unsigned char *, int));
+extern int	(*decrypt_input) P((int));
+extern char	*nclearto;
+#endif
 
 
 /*
@@ -200,7 +207,6 @@ extern struct {
 	ttypesubopt,		/* ttype subopt is received */
 	tspeedsubopt,		/* tspeed subopt is received */
 	environsubopt,		/* environ subopt is received */
-	oenvironsubopt,		/* old environ subopt is received */
 	xdisplocsubopt,		/* xdisploc subopt is received */
 	baseline,		/* time started to do timed action */
 	gotDM;			/* when did we last see a data mark */
@@ -211,18 +217,8 @@ extern struct {
 extern int	needtermstat;
 #endif
 
-#ifndef	DEFAULT_IM
-# ifdef CRAY
-#  define DEFAULT_IM	"\r\n\r\nCray UNICOS (%h) (%t)\r\n\r\r\n\r"
-# else
-#  ifdef sun
-#   define DEFAULT_IM	"\r\n\r\nSunOS UNIX (%h) (%t)\r\n\r\r\n\r"
-#  else
-#   ifdef ultrix
-#    define DEFAULT_IM	"\r\n\r\nULTRIX (%h) (%t)\r\n\r\r\n\r"
-#   else
-#    define DEFAULT_IM	"\r\n\r\n4.4 BSD UNIX (%h) (%t)\r\n\r\r\n\r"
-#   endif
-#  endif
-# endif
+#ifndef	CRAY
+#define DEFAULT_IM	"\r\n\r\n4.3 BSD UNIX (%h) (%t)\r\n\r\r\n\r"
+#else
+#define DEFAULT_IM	"\r\n\r\nCray UNICOS (%h) (%t)\r\n\r\r\n\r"
 #endif

@@ -1,5 +1,3 @@
-/*	$NetBSD: ffs_extern.h,v 1.6 1996/12/22 10:10:40 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ffs_extern.h	8.3 (Berkeley) 4/16/94
+ *	from: @(#)ffs_extern.h	8.3 (Berkeley) 4/16/94
+ *	$Id: ffs_extern.h,v 1.1 1994/06/08 11:42:03 mycroft Exp $
  */
 
 struct buf;
@@ -45,74 +44,58 @@ struct proc;
 struct statfs;
 struct timeval;
 struct ucred;
-struct ufsmount;
 struct uio;
 struct vnode;
 struct mbuf;
-struct cg;
 
 __BEGIN_DECLS
+int	ffs_alloc __P((struct inode *,
+	    daddr_t, daddr_t, int, struct ucred *, daddr_t *));
+int	ffs_balloc __P((struct inode *,
+	    daddr_t, int, struct ucred *, struct buf **, int));
+int	ffs_blkatoff __P((struct vop_blkatoff_args *));
+int	ffs_blkfree __P((struct inode *, daddr_t, long));
+daddr_t	ffs_blkpref __P((struct inode *, daddr_t, int, daddr_t *));
+int	ffs_bmap __P((struct vop_bmap_args *));
+void	ffs_clrblock __P((struct fs *, u_char *, daddr_t));
+int	ffs_fhtovp __P((struct mount *, struct fid *, struct mbuf *,
+	    struct vnode **, int *, struct ucred **));
+void	ffs_fragacct __P((struct fs *, int, long [], int));
+int	ffs_fsync __P((struct vop_fsync_args *));
+int	ffs_init __P((void));
+int	ffs_isblock __P((struct fs *, u_char *, daddr_t));
+int	ffs_mount __P((struct mount *,
+	    char *, caddr_t, struct nameidata *, struct proc *));
+int	ffs_mountfs __P((struct vnode *, struct mount *, struct proc *));
+int	ffs_mountroot __P((void));
+int	ffs_read __P((struct vop_read_args *));
+int	ffs_reallocblks __P((struct vop_reallocblks_args *));
+int	ffs_realloccg __P((struct inode *,
+	    daddr_t, daddr_t, int, int, struct ucred *, struct buf **));
+int	ffs_reclaim __P((struct vop_reclaim_args *));
+void	ffs_setblock __P((struct fs *, u_char *, daddr_t));
+int	ffs_statfs __P((struct mount *, struct statfs *, struct proc *));
+int	ffs_sync __P((struct mount *, int, struct ucred *, struct proc *));
+int	ffs_truncate __P((struct vop_truncate_args *));
+int	ffs_unmount __P((struct mount *, int, struct proc *));
+int	ffs_update __P((struct vop_update_args *));
+int	ffs_valloc __P((struct vop_valloc_args *));
+int	ffs_vfree __P((struct vop_vfree_args *));
+int	ffs_vget __P((struct mount *, ino_t, struct vnode **));
+int	ffs_vptofh __P((struct vnode *, struct fid *));
+int	ffs_write __P((struct vop_write_args *));
 
-/* ffs_alloc.c */
-int ffs_alloc __P((struct inode *, daddr_t, daddr_t , int, struct ucred *,
-		   daddr_t *));
-int ffs_realloccg __P((struct inode *, daddr_t, daddr_t, int, int ,
-		       struct ucred *, struct buf **));
-int ffs_reallocblks __P((void *));
-int ffs_valloc __P((void *));
-daddr_t ffs_blkpref __P((struct inode *, daddr_t, int, daddr_t *));
-void ffs_blkfree __P((struct inode *, daddr_t, long));
-int ffs_vfree __P((void *));
-void ffs_clusteracct __P((struct fs *, struct cg *, daddr_t, int));
+int	bwrite();		/* FFS needs a bwrite routine.  XXX */
 
-/* ffs_balloc.c */
-int ffs_balloc __P((struct inode *, daddr_t, int, struct ucred *,
-		    struct buf **, int));
-
-/* ffs_inode.c */
-void ffs_init __P((void));
-int ffs_update __P((void *));
-int ffs_truncate __P((void *));
-
-/* ffs_subr.c */
-int ffs_blkatoff __P((void *));
-void ffs_fragacct __P((struct fs *, int, int32_t[], int));
 #ifdef DIAGNOSTIC
 void	ffs_checkoverlap __P((struct buf *, struct inode *));
 #endif
-int ffs_isblock __P((struct fs *, unsigned char *, daddr_t));
-void ffs_clrblock __P((struct fs *, u_char *, daddr_t));
-void ffs_setblock __P((struct fs *, unsigned char *, daddr_t));
-
-/* ffs_vfsops.c */
-int ffs_mountroot __P((void));
-int ffs_mount __P((struct mount *, const char *, void *, struct nameidata *,
-		   struct proc *));
-int ffs_reload __P((struct mount *, struct ucred *, struct proc *));
-int ffs_mountfs __P((struct vnode *, struct mount *, struct proc *));
-int ffs_oldfscompat __P((struct fs *));
-int ffs_unmount __P((struct mount *, int, struct proc *));
-int ffs_flushfiles __P((struct mount *, int, struct proc *));
-int ffs_statfs __P((struct mount *, struct statfs *, struct proc *));
-int ffs_sync __P((struct mount *, int, struct ucred *, struct proc *));
-int ffs_vget __P((struct mount *, ino_t, struct vnode **));
-int ffs_fhtovp __P((struct mount *, struct fid *, struct mbuf *,
-		    struct vnode **, int *, struct ucred **));
-int ffs_vptofh __P((struct vnode *, struct fid *));
-int ffs_sbupdate __P((struct ufsmount *, int));
-int ffs_cgupdate __P((struct ufsmount *, int));
-
-/* ffs_vnops.c */
-int ffs_read __P((void *));
-int ffs_write __P((void *));
-#define ffs_fsync genfs_fsync
-int ffs_reclaim __P((void *));
 __END_DECLS
 
-extern int (**ffs_vnodeop_p) __P((void *));
-extern int (**ffs_specop_p) __P((void *));
+extern int (**ffs_vnodeop_p)();
+extern int (**ffs_specop_p)();
 #ifdef FIFO
-extern int (**ffs_fifoop_p) __P((void *));
+extern int (**ffs_fifoop_p)();
 #define FFS_FIFOOPS ffs_fifoop_p
 #else
 #define FFS_FIFOOPS NULL

@@ -1,5 +1,3 @@
-/*	$NetBSD: db.c,v 1.9 1997/07/21 14:06:39 jtc Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,29 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)db.c	8.4 (Berkeley) 2/21/94";
-#else
-__RCSID("$NetBSD: db.c,v 1.9 1997/07/21 14:06:39 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)db.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
 
 #include <errno.h>
-#include <fcntl.h>
 #include <stddef.h>
 #include <stdio.h>
 
+#define	__DBINTERFACE_PRIVATE
 #include <db.h>
-static int __dberr __P((void));
-
-#ifdef __weak_alias
-__weak_alias(dbopen,_dbopen);
-#endif
 
 DB *
 dbopen(fname, flags, mode, type, openinfo)
@@ -64,24 +51,14 @@ dbopen(fname, flags, mode, type, openinfo)
 	DBTYPE type;
 	const void *openinfo;
 {
-
-#define	DB_FLAGS	(DB_LOCK | DB_SHMEM | DB_TXN)
-#define	USE_OPEN_FLAGS							\
-	(O_CREAT | O_EXCL | O_EXLOCK | O_NONBLOCK | O_RDONLY |		\
-	 O_RDWR | O_SHLOCK | O_TRUNC)
-
-	if ((flags & ~(USE_OPEN_FLAGS | DB_FLAGS)) == 0)
-		switch (type) {
-		case DB_BTREE:
-			return (__bt_open(fname, flags & USE_OPEN_FLAGS,
-			    mode, openinfo, flags & DB_FLAGS));
-		case DB_HASH:
-			return (__hash_open(fname, flags & USE_OPEN_FLAGS,
-			    mode, openinfo, flags & DB_FLAGS));
-		case DB_RECNO:
-			return (__rec_open(fname, flags & USE_OPEN_FLAGS,
-			    mode, openinfo, flags & DB_FLAGS));
-		}
+	switch (type) {
+	case DB_BTREE:
+		return (__bt_open(fname, flags, mode, openinfo));
+	case DB_HASH:
+		return (__hash_open(fname, flags, mode, openinfo));
+	case DB_RECNO:
+		return (__rec_open(fname, flags, mode, openinfo));
+	}
 	errno = EINVAL;
 	return (NULL);
 }
@@ -103,10 +80,10 @@ __dbpanic(dbp)
 	DB *dbp;
 {
 	/* The only thing that can succeed is a close. */
-	dbp->del = (int (*)(const struct __db *, const DBT*, u_int))__dberr;
-	dbp->fd = (int (*)(const struct __db *))__dberr;
-	dbp->get = (int (*)(const struct __db *, const DBT*, DBT *, u_int))__dberr;
-	dbp->put = (int (*)(const struct __db *, DBT *, const DBT *, u_int))__dberr;
-	dbp->seq = (int (*)(const struct __db *, DBT *, DBT *, u_int))__dberr;
-	dbp->sync = (int (*)(const struct __db *, u_int))__dberr;
+	dbp->del = (int (*)())__dberr;
+	dbp->fd = (int (*)())__dberr;
+	dbp->get = (int (*)())__dberr;
+	dbp->put = (int (*)())__dberr;
+	dbp->seq = (int (*)())__dberr;
+	dbp->sync = (int (*)())__dberr;
 }

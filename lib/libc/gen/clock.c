@@ -1,8 +1,6 @@
-/*	$NetBSD: clock.c,v 1.6 1997/07/13 19:45:39 christos Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)clock.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: clock.c,v 1.6 1997/07/13 19:45:39 christos Exp $");
-#endif
+static char sccsid[] = "@(#)clock.c	5.4 (Berkeley) 8/27/90";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>
@@ -47,11 +40,10 @@ __RCSID("$NetBSD: clock.c,v 1.6 1997/07/13 19:45:39 christos Exp $");
 #include <sys/resource.h>
 
 /*
- * Convert usec to clock ticks; could do (usec * CLOCKS_PER_SEC) / 1000000,
+ * Convert usec to clock ticks; could do (usec * CLK_TCK) / 1000000,
  * but this would overflow if we switch to nanosec.
  */
-#define	CONVTCK(r)	(r.tv_sec * CLOCKS_PER_SEC + \
-			 r.tv_usec / (1000000 / CLOCKS_PER_SEC))
+#define	CONVTCK(r)	(r.tv_sec * CLK_TCK + r.tv_usec / (1000000 / CLK_TCK))
 
 clock_t
 clock()

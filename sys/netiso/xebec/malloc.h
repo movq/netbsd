@@ -1,3 +1,4 @@
-/*	$NetBSD: malloc.h,v 1.4 1994/06/29 06:41:11 cgd Exp $	*/
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/malloc.h,v 1.1 1993/04/09 12:02:12 cgd Exp $ */
+/* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/malloc.h,v $ */
 
 char *Malloc();

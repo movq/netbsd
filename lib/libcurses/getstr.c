@@ -1,8 +1,6 @@
-/*	$NetBSD: getstr.c,v 1.8 1997/07/22 07:36:43 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,32 +31,26 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)getstr.c	8.2 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: getstr.c,v 1.8 1997/07/22 07:36:43 mikel Exp $");
-#endif
-#endif	/* not lint */
+static char sccsid[] = "@(#)getstr.c	5.4 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include "curses.h"
+# include	"curses.ext"
 
 /*
- * wgetstr --
- *	Get a string starting at (cury, curx).
+ *	This routine gets a string starting at (_cury,_curx)
+ *
  */
-int
-wgetstr(win, str)
-	register WINDOW *win;
-	register char *str;
-{
+wgetstr(win,str)
+reg WINDOW	*win; 
+reg char	*str; {
+
 	while ((*str = wgetch(win)) != ERR && *str != '\n')
 		str++;
 	if (*str == ERR) {
 		*str = '\0';
-		return (ERR);
+		return ERR;
 	}
 	*str = '\0';
-	return (OK);
+	return OK;
 }

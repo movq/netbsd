@@ -1,13 +1,20 @@
-#	$NetBSD: Makefile,v 1.14 1997/05/08 21:11:44 gwr Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 6/12/93
+#	@(#)Makefile	5.14 (Berkeley) 6/18/90
 
 PROG=	netstat
-SRCS=	atalk.c if.c inet.c iso.c main.c mbuf.c mroute.c ns.c route.c \
-	tp_astring.c unix.c
-.PATH:	${.CURDIR}/../../sys/netiso
+SRCS=	inet.c if.c main.c mbuf.c route.c unix.c
+#
+#SRCS+=	host.c
+#CFLAGS+= -DIMP
+#
+#SRCS+=	ns.c
+#CFLAGS+= -DNS
+#
+#SRCS+=	iso.c
+#CFLAGS+= -DISO
+#
 BINGRP=	kmem
 BINMODE=2555
-LDADD=	-lkvm
-DPADD=	${LIBKVM}
+LDADD=	-lutil
+DPADD=	${LIBUTIL}
 
 .include <bsd.prog.mk>

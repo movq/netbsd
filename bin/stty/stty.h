@@ -1,8 +1,6 @@
-/*	$NetBSD: stty.h,v 1.7 1996/05/07 18:20:11 jtc Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)stty.h	8.1 (Berkeley) 5/31/93
+ *	@(#)stty.h	5.3 (Berkeley) 6/10/91
  */
 
 #include <sys/ioctl.h>
@@ -50,7 +48,7 @@ struct info {
 };
 
 struct cchar {
-	const char *name;
+	char *name;
 	int sub;
 	u_char def;
 };

@@ -1,8 +1,6 @@
-/*	$NetBSD: err.c,v 1.8 1997/07/04 21:23:57 christos Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)err.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: err.c,v 1.8 1997/07/04 21:23:57 christos Exp $");
-#endif
+static char sccsid[] = "@(#)err.c	5.10 (Berkeley) 6/8/91";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -220,9 +213,9 @@ static char *errorlist[] =
 #define ERR_NOHOME	77
     "No $home variable set",
 #define ERR_HISTUS	78
-    "Usage: history [-rh] [# number of events]",
+    "Usage: history [-rht] [# number of events]",
 #define ERR_SPDOLLT	79
-    "$, ! or < not allowed with $# or $?",
+    "$ or < not allowed with $# or $?",
 #define ERR_NEWLINE	80
     "Newline in variable name",
 #define ERR_SPSTAR	81
@@ -312,7 +305,7 @@ seterror(id, va_alist)
 #endif
 	if (id < 0 || id > sizeof(errorlist) / sizeof(errorlist[0]))
 	    id = ERR_INVALID;
-	vsprintf(berr, errorlist[id], va);
+	xvsprintf(berr, errorlist[id], va);
 	va_end(va);
 
 	seterr = strsave(berr);
@@ -347,7 +340,7 @@ stderror(id, va_alist)
 #endif
 {
     va_list va;
-    Char **v;
+    register Char **v;
     int     flags = id & ERR_FLAGS;
 
     id &= ~ERR_FLAGS;
@@ -358,27 +351,32 @@ stderror(id, va_alist)
     if (id < 0 || id > sizeof(errorlist) / sizeof(errorlist[0]))
 	id = ERR_INVALID;
 
-    (void) fflush(cshout);
-    (void) fflush(csherr);
+    /*
+     * Must flush before we print as we wish output before the error to go on
+     * (some form of) standard output, while output after goes on (some form
+     * of) diagnostic output. If didfds then output will go to 1/2 else to
+     * FSHOUT/FSHDIAG. See flush in sh.print.c.
+     */
+    flush();
     haderr = 1;			/* Now to diagnostic output */
     timflg = 0;			/* This isn't otherwise reset */
 
 
     if (!(flags & ERR_SILENT)) {
 	if (flags & ERR_NAME)
-	    (void) fprintf(csherr, "%s: ", bname);
+	    xprintf("%s: ", bname);
 	if ((flags & ERR_OLD))
 	    /* Old error. */
-	    (void) fprintf(csherr, "%s.\n", seterr);
+	    xprintf("%s.\n", seterr);
 	else {
 #if __STDC__
 	    va_start(va, id);
 #else
 	    va_start(va);
 #endif
-	    (void) vfprintf(csherr, errorlist[id], va);
+	    xvprintf(errorlist[id], va);
 	    va_end(va);
-	    (void) fprintf(csherr, ".\n");
+	    xprintf(".\n");
 	}
     }
 
@@ -387,13 +385,11 @@ stderror(id, va_alist)
 	seterr = NULL;
     }
 
-    if ((v = pargv) != NULL)
+    if (v = pargv)
 	pargv = 0, blkfree(v);
-    if ((v = gargv) != NULL)
+    if (v = gargv)
 	gargv = 0, blkfree(v);
 
-    (void) fflush(cshout);
-    (void) fflush(csherr);
     didfds = 0;			/* Forget about 0,1,2 */
     /*
      * Go away if -e or we are a child shell

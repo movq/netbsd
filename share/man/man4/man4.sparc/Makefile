@@ -1,10 +1,8 @@
-#	$NetBSD: Makefile,v 1.10 1997/10/11 08:22:41 mycroft Exp $
 # 	from: @(#)Makefile	8.2 (Berkeley) 2/16/94
+#	$Id: Makefile,v 1.1 1994/07/01 20:47:32 deraadt Exp $
 
-MAN=	bwtwo.4 cgeight.4 cgfour.4 cgsix.4 cgthree.4 cgtwo.4 \
-	fd.4 intro.4 kbd.4 le.4 mem.4 ms.4 openprom.4 tcx.4 cgfourteen.4
+MAN4=	bwtwo.0 cgsix.0 cgthree.0 le.0 mem.0 openprom.0
 MLINKS=	mem.4 kmem.4
-MLINKS=	fd.4 fdc.4
 MANSUBDIR=/sparc
 
-.include <bsd.man.mk>
+.include <bsd.prog.mk>

@@ -1,8 +1,6 @@
-/*	$NetBSD: iso_pcb.h,v 1.9 1997/06/24 02:26:11 thorpej Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)iso_pcb.h	8.1 (Berkeley) 6/10/93
+ *	@(#)iso_pcb.h	7.5 (Berkeley) 5/6/91
  */
 
 /***********************************************************
@@ -40,13 +38,13 @@
 
                       All Rights Reserved
 
-Permission to use, copy, modify, and distribute this software and its
-documentation for any purpose and without fee is hereby granted,
+Permission to use, copy, modify, and distribute this software and its 
+documentation for any purpose and without fee is hereby granted, 
 provided that the above copyright notice appear in all copies and that
-both that copyright notice and this permission notice appear in
+both that copyright notice and this permission notice appear in 
 supporting documentation, and that the name of IBM not be
 used in advertising or publicity pertaining to distribution of the
-software without specific, written prior permission.
+software without specific, written prior permission.  
 
 IBM DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
 ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
@@ -61,6 +59,8 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso_pcb.h,v 1.1 1993/04/09 12:01:19 cgd Exp $ */
+/* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso_pcb.h,v $ */
 
 #define	MAXX25CRUDLEN	16	/* 16 bytes of call request user data */
 
@@ -68,30 +68,27 @@ SOFTWARE.
  * Common structure pcb for argo protocol implementation.
  */
 struct isopcb {
-	struct isopcb  *isop_next, *isop_prev;	/* pointers to other pcb's */
-	struct isopcb  *isop_head;	/* pointer back to chain of pcbs for
-					 * this protocol */
-	struct socket  *isop_socket;	/* back pointer to socket */
-	struct sockaddr_iso *isop_laddr;
-	struct sockaddr_iso *isop_faddr;
-	struct route_iso {
-		struct rtentry *ro_rt;
-		struct sockaddr_iso ro_dst;
-	}               isop_route;	/* CLNP routing entry */
-	struct mbuf    *isop_options;	/* CLNP options */
-	struct mbuf    *isop_optindex;	/* CLNP options index */
-	struct mbuf    *isop_clnpcache;	/* CLNP cached hdr */
-	caddr_t         isop_chan;	/* actually struct pklcb * */
-	u_short         isop_refcnt;	/* mult TP4 tpcb's -> here */
-	u_short         isop_lport;	/* MISLEADLING work var */
-	u_short         isop_tuba_cached;	/* for tuba address ref cnts */
-	int             isop_x25crud_len;	/* x25 call request ud */
-	char            isop_x25crud[MAXX25CRUDLEN];
-	struct ifaddr  *isop_ifa;	/* ESIS interface assoc w/sock */
-	struct mbuf    *isop_mladdr;	/* dynamically allocated laddr */
-	struct mbuf    *isop_mfaddr;	/* dynamically allocated faddr */
-	struct sockaddr_iso isop_sladdr,	/* preallocated laddr */
-	                isop_sfaddr;	/* preallocated faddr */
+	struct	isopcb			*isop_next,*isop_prev; /* pointers to other pcb's */
+	struct	isopcb			*isop_head;	/* pointer back to chain of pcbs for 
+								this protocol */
+	struct	socket			*isop_socket;	/* back pointer to socket */
+	struct	sockaddr_iso	*isop_laddr;
+	struct	sockaddr_iso	*isop_faddr;
+	struct	route_iso {
+		struct	rtentry 	*ro_rt;
+		struct	sockaddr_iso ro_dst;
+	}						isop_route;			/* CLNP routing entry */
+	struct	mbuf			*isop_options;		/* CLNP options */
+	struct	mbuf			*isop_optindex;		/* CLNP options index */
+	struct	mbuf			*isop_clnpcache;	/* CLNP cached hdr */
+	caddr_t					isop_chan;		/* actually struct pklcb * */
+	u_short					isop_refcnt;		/* mult TP4 tpcb's -> here */
+	u_short					isop_lport;			/* MISLEADLING work var */
+	int						isop_x25crud_len;	/* x25 call request ud */
+	char					isop_x25crud[MAXX25CRUDLEN];
+	struct ifaddr			*isop_ifa;		/* ESIS interface assoc w/sock */
+	struct	sockaddr_iso	isop_sladdr,		/* preallocated laddr */
+							isop_sfaddr;		/* preallocated faddr */
 };
 
 #ifdef sotorawcb
@@ -101,30 +98,15 @@ struct isopcb {
  * and space is allocated to the necessary sockaddrs.
  */
 struct rawisopcb {
-	struct rawcb    risop_rcb;	/* common control block prefix */
-	int             risop_flags;	/* flags, e.g. raw sockopts */
-	struct isopcb   risop_isop;	/* space for bound addresses, routes
-					 * etc. */
+	struct	rawcb risop_rcb;		/* common control block prefix */
+	int		risop_flags;			/* flags, e.g. raw sockopts */
+	struct	isopcb risop_isop;		/* space for bound addresses, routes etc.*/
 };
 #endif
 
 #define	sotoisopcb(so)	((struct isopcb *)(so)->so_pcb)
 #define	sotorawisopcb(so)	((struct rawisopcb *)(so)->so_pcb)
 
-#ifdef _KERNEL
-struct socket;
-struct isopcb;
-struct inpcb;
-struct mbuf;
-struct sockaddr_iso;
-
-int iso_pcballoc __P((struct socket *, void *));
-int iso_pcbbind __P((void *, struct mbuf *, struct proc *));
-int iso_pcbconnect __P((void *, struct mbuf *));
-void iso_pcbdisconnect __P((void *));
-void iso_pcbdetach __P((void *));
-void iso_pcbnotify __P((struct isopcb *, struct sockaddr_iso *, int,
-			void (*) (struct isopcb *)));
-struct isopcb  *iso_pcblookup __P((struct isopcb *, int, caddr_t,
-				   struct sockaddr_iso *));
+#ifdef KERNEL
+struct	isopcb *iso_pcblookup();
 #endif

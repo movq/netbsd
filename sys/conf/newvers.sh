@@ -1,9 +1,7 @@
 #!/bin/sh -
 #
-#	$NetBSD: newvers.sh,v 1.27 1997/05/10 15:40:09 lukem Exp $
-#
-# Copyright (c) 1984, 1986, 1990, 1993
-#	The Regents of the University of California.  All rights reserved.
+# Copyright (c) 1984, 1986, 1990 The Regents of the University of California.
+# All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -33,28 +31,19 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-#	@(#)newvers.sh	8.1 (Berkeley) 4/20/94
+#	@(#)newvers.sh	7.4 (Berkeley) 12/7/90
+#
 
 if [ ! -r version ]
 then
 	echo 0 > version
+else
+	expr `cat version` + 1 > version
 fi
 
 touch version
-v=`cat version` u=${USER-root} d=`pwd` h=`hostname` t=`date`
-id=`basename ${d}`
-osrelcmd=`dirname $0`/osrelease.sh
-
-ost="NetBSD"
-osr=`sh $osrelcmd`
-
-echo "char ostype[] = \"${ost}\";" > vers.c
-echo "char osrelease[] = \"${osr}\";" >> vers.c
-# note: pad `sccs' with spaces, so its size becomes 8
-echo "char sccs[8] = { ' ', ' ', ' ', ' ', '@', '(', '#', ')' };" >> vers.c
-echo \
-  "char version[] = \
-    \"${ost} ${osr} (${id}) #${v}: ${t}\\n    ${u}@${h}:${d}\\n\";" \
-  >> vers.c
-
+v=`cat version` t=`date "+ %m/%d/%y %H:%M"`
+(
+  echo "char version[] = \"version: ${v} ${t}\";"
+) > vers.c
 echo `expr ${v} + 1` > version

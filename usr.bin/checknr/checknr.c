@@ -1,8 +1,6 @@
-/*	$NetBSD: checknr.c,v 1.5 1997/10/18 12:38:13 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)checknr.c	8.1 (Berkeley) 6/6/93";
-#else 
-__RCSID("$NetBSD: checknr.c,v 1.5 1997/10/18 12:38:13 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)checknr.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -54,10 +48,8 @@ __RCSID("$NetBSD: checknr.c,v 1.5 1997/10/18 12:38:13 lukem Exp $");
  * later but for now think of these restrictions as contributions to
  * structured typesetting.
  */
-#include <ctype.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <ctype.h>
 
 #define MAXSTK	100	/* Stack size */
 #define MAXBR	100	/* Max number of bracket pairs known */
@@ -83,53 +75,53 @@ struct brstr {
 } br[MAXBR] = {
 	/* A few bare bones troff commands */
 #define SZ	0
-	{ "sz",	"sz"},	/* also \s */
+	"sz",	"sz",	/* also \s */
 #define FT	1
-	{ "ft",	"ft"},	/* also \f */
+	"ft",	"ft",	/* also \f */
 	/* the -mm package */
-	{"AL",	"LE"},
-	{"AS",	"AE"},
-	{"BL",	"LE"},
-	{"BS",	"BE"},
-	{"DF",	"DE"},
-	{"DL",	"LE"},
-	{"DS",	"DE"},
-	{"FS",	"FE"},
-	{"ML",	"LE"},
-	{"NS",	"NE"},
-	{"RL",	"LE"},
-	{"VL",	"LE"},
+	"AL",	"LE",
+	"AS",	"AE",
+	"BL",	"LE",
+	"BS",	"BE",
+	"DF",	"DE",
+	"DL",	"LE",
+	"DS",	"DE",
+	"FS",	"FE",
+	"ML",	"LE",
+	"NS",	"NE",
+	"RL",	"LE",
+	"VL",	"LE",
 	/* the -ms package */
-	{"AB",	"AE"},
-	{"BD",	"DE"},
-	{"CD",	"DE"},
-	{"DS",	"DE"},
-	{"FS",	"FE"},
-	{"ID",	"DE"},
-	{"KF",	"KE"},
-	{"KS",	"KE"},
-	{"LD",	"DE"},
-	{"LG",	"NL"},
-	{"QS",	"QE"},
-	{"RS",	"RE"},
-	{"SM",	"NL"},
-	{"XA",	"XE"},
-	{"XS",	"XE"},
+	"AB",	"AE",
+	"BD",	"DE",
+	"CD",	"DE",
+	"DS",	"DE",
+	"FS",	"FE",
+	"ID",	"DE",
+	"KF",	"KE",
+	"KS",	"KE",
+	"LD",	"DE",
+	"LG",	"NL",
+	"QS",	"QE",
+	"RS",	"RE",
+	"SM",	"NL",
+	"XA",	"XE",
+	"XS",	"XE",
 	/* The -me package */
-	{"(b",	")b"},
-	{"(c",	")c"},
-	{"(d",	")d"},
-	{"(f",	")f"},
-	{"(l",	")l"},
-	{"(q",	")q"},
-	{"(x",	")x"},
-	{"(z",	")z"},
+	"(b",	")b",
+	"(c",	")c",
+	"(d",	")d",
+	"(f",	")f",
+	"(l",	")l",
+	"(q",	")q",
+	"(x",	")x",
+	"(z",	")z",
 	/* Things needed by preprocessors */
-	{"EQ",	"EN"},
-	{"TS",	"TE"},
+	"EQ",	"EN",
+	"TS",	"TE",
 	/* Refer */
-	{"[",	"]"},
-	{0,	0},
+	"[",	"]",
+	0,	0
 };
 
 /*
@@ -179,24 +171,11 @@ int	sflag;		/* -s: ignore \s */
 int	ncmds;		/* size of knowncmds */
 int	slot;		/* slot in knowncmds found by binsrch */
 
-void	addcmd __P((char *));
-void	addmac __P((char *));
-int	binsrch __P((char *));
-void	checkknown __P((char *));
-void	chkcmd __P((char *, char *));
-void	complain __P((int));
-int	eq __P((const void *, const void *));
-int	main __P((int, char **));
-void	nomatch __P((char *));
-void	pe __P((int));
-void	process __P((FILE *));
-void	prop __P((int));
-void	usage __P((void));
+char	*malloc();
 
-int
 main(argc, argv)
-	int argc;
-	char **argv;
+int argc;
+char **argv;
 {
 	FILE *f;
 	int i;
@@ -274,18 +253,16 @@ main(argc, argv)
 	exit(0);
 }
 
-void
 usage()
 {
 	printf("Usage: checknr -s -f -a.xx.yy.xx.yy... -c.xx.xx.xx...\n");
 	exit(1);
 }
 
-void
 process(f)
-	FILE *f;
+FILE *f;
 {
-	int i, n;
+	register int i, n;
 	char mac[5];	/* The current macro or nroff command */
 	int pl;
 
@@ -378,9 +355,7 @@ process(f)
 	}
 }
 
-void
 complain(i)
-	int i;
 {
 	pe(stk[i].lno);
 	printf("Unmatched ");
@@ -388,9 +363,7 @@ complain(i)
 	printf("\n");
 }
 
-void
 prop(i)
-	int i;
 {
 	if (stk[i].pl == 0)
 		printf(".%s", br[stk[i].opno].opbr);
@@ -403,17 +376,15 @@ prop(i)
 		break;
 	default:
 		printf("Bug: stk[%d].opno = %d = .%s, .%s",
-			i, stk[i].opno, br[stk[i].opno].opbr,
-			br[stk[i].opno].clbr);
+			i, stk[i].opno, br[stk[i].opno].opbr, br[stk[i].opno].clbr);
 	}
 }
 
-void
 chkcmd(line, mac)
-	char *line;
-	char *mac;
+char *line;
+char *mac;
 {
-	int i;
+	register int i, n;
 
 	/*
 	 * Check to see if it matches top of stack.
@@ -446,11 +417,10 @@ chkcmd(line, mac)
 	}
 }
 
-void
 nomatch(mac)
-	char *mac;
+char *mac;
 {
-	int i, j;
+	register int i, j;
 
 	/*
 	 * Look for a match further down on stack
@@ -492,26 +462,23 @@ nomatch(mac)
 }
 
 /* eq: are two strings equal? */
-int
 eq(s1, s2)
-	const void *s1, *s2;
+char *s1, *s2;
 {
-	return (strcmp((char *)s1, (char *)s2) == 0);
+	return (strcmp(s1, s2) == 0);
 }
 
 /* print the first part of an error message, given the line number */
-void
 pe(lineno)
-	int lineno;
+int lineno;
 {
 	if (nfiles > 1)
 		printf("%s: ", cfilename);
 	printf("%d: ", lineno);
 }
 
-void
 checkknown(mac)
-	char *mac;
+char *mac;
 {
 
 	if (eq(mac, "."))
@@ -528,9 +495,8 @@ checkknown(mac)
 /*
  * We have a .de xx line in "line".  Add xx to the list of known commands.
  */
-void
 addcmd(line)
-	char *line;
+char *line;
 {
 	char *mac;
 
@@ -560,11 +526,10 @@ addcmd(line)
  * me someday?)  Anyway, I claim that .de is fairly rare in user
  * nroff programs, and the register loop below is pretty fast.
  */
-void
 addmac(mac)
-	char *mac;
+char *mac;
 {
-	char **src, **dest, **loc;
+	register char **src, **dest, **loc;
 
 	if (binsrch(mac) >= 0){	/* it's OK to redefine something */
 #ifdef DEBUG
@@ -593,14 +558,13 @@ printf("after: %s %s %s %s %s, %d cmds\n", knowncmds[slot-2], knowncmds[slot-1],
  * Do a binary search in knowncmds for mac.
  * If found, return the index.  If not, return -1.
  */
-int
 binsrch(mac)
-	char *mac;
+char *mac;
 {
-	char *p;	/* pointer to current cmd in list */
-	int d;		/* difference if any */
-	int mid;	/* mid point in binary search */
-	int top, bot;	/* boundaries of bin search, inclusive */
+	register char *p;	/* pointer to current cmd in list */
+	register int d;		/* difference if any */
+	register int mid;	/* mid point in binary search */
+	register int top, bot;	/* boundaries of bin search, inclusive */
 
 	top = ncmds-1;
 	bot = 0;

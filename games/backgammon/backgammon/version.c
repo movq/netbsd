@@ -1,8 +1,6 @@
-/*	$NetBSD: version.c,v 1.4 1997/10/10 08:59:39 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,16 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)version.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: version.c,v 1.4 1997/10/10 08:59:39 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)version.c	1.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-char   *message[] = {
-	"Last updated on Friday, October 10, 1997.",
+char	*message[] = {
+	"Last updated on Saturday, January 11, 1986.",
 	0
 };

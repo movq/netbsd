@@ -1,8 +1,6 @@
-/*	$NetBSD: lisp.c,v 1.4 1997/10/18 13:18:45 lukem Exp $	*/
-
 /*
- * Copyright (c) 1987, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1987 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,37 +31,30 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lisp.c	8.3 (Berkeley) 4/2/94";
-#else
-__RCSID("$NetBSD: lisp.c,v 1.4 1997/10/18 13:18:45 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)lisp.c	5.5 (Berkeley) 2/26/91";
 #endif /* not lint */
 
-#include <ctype.h>
-#include <limits.h>
 #include <stdio.h>
 #include <string.h>
-
 #include "ctags.h"
+
+extern char	*lbp;			/* pointer shared with fortran */
 
 /*
  * lisp tag functions
  * just look for (def or (DEF
  */
-void
 l_entries()
 {
-	int	special;
-	char	*cp;
-	char	savedc;
+	register int	special;
+	register char	*cp,
+			savedc;
 	char	tok[MAXTOKEN];
 
 	for (;;) {
 		lineftell = ftell(inf);
-		if (!fgets(lbuf, sizeof(lbuf), inf))
+		if (!fgets(lbuf,sizeof(lbuf),inf))
 			return;
 		++lineno;
 		lbp = lbuf;
@@ -79,34 +70,28 @@ l_entries()
 			if (cicmp("wrapper") || cicmp("whopper"))
 				special = YES;
 		}
-		for (; !isspace(*lbp); ++lbp)
-			continue;
-		for (; isspace(*lbp); ++lbp)
-			continue;
-		for (cp = lbp; *cp && *cp != '\n'; ++cp)
-			continue;
+		for (;!isspace(*lbp);++lbp);
+		for (;isspace(*lbp);++lbp);
+		for (cp = lbp;*cp && *cp != '\n';++cp);
 		*cp = EOS;
 		if (special) {
-			if (!(cp = strchr(lbp, ')')))
+			if (!(cp = index(lbp,')')))
 				continue;
-			for (; cp >= lbp && *cp != ':'; --cp)
-				continue;
+			for (;cp >= lbp && *cp != ':';--cp);
 			if (cp < lbp)
 				continue;
 			lbp = cp;
-			for (; *cp && *cp != ')' && *cp != ' '; ++cp)
-				continue;
+			for (;*cp && *cp != ')' && *cp != ' ';++cp);
 		}
 		else
 			for (cp = lbp + 1;
-			    *cp && *cp != '(' && *cp != ' '; ++cp)
-				continue;
+			    *cp && *cp != '(' && *cp != ' ';++cp);
 		savedc = *cp;
 		*cp = EOS;
-		(void)strcpy(tok, lbp);
+		(void)strcpy(tok,lbp);
 		*cp = savedc;
 		getline();
-		pfnote(tok, lineno);
+		pfnote(tok,lineno);
 	}
 	/*NOTREACHED*/
 }

@@ -1,4 +1,3 @@
-.\"	$NetBSD: read_me.nr,v 1.2 1995/04/22 10:59:44 cgd Exp $
 .de @h
 'sp 4
 'tl 'TREK SETUP INSTRUCTIONS''%'

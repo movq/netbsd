@@ -1,7 +1,7 @@
-#	$NetBSD: Makefile,v 1.12 1997/07/20 22:36:47 christos Exp $
-#	@(#)Makefile	8.3 (Berkeley) 5/8/95
+#	@(#)Makefile	5.3 (Berkeley) 5/11/90
 
 PROG=	df
+CFLAGS+=-DCOMPAT_43
 BINGRP=	operator
 BINMODE=2555
 

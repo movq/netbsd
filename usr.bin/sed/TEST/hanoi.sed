@@ -1,7 +1,6 @@
 # Towers of Hanoi in sed.
 #
-#	from: @(#)hanoi.sed	8.1 (Berkeley) 6/6/93
-#	$NetBSD: hanoi.sed,v 1.3 1997/01/09 20:21:35 tls Exp $
+#	@(#)hanoi.sed	8.1 (Berkeley) 6/6/93
 #
 #
 # Ex:

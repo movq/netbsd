@@ -1,9 +1,8 @@
-#	$NetBSD: Makefile,v 1.6 1995/04/22 08:34:27 cgd Exp $
-#	@(#)Makefile	8.1 (Berkeley) 5/31/93
+#	@(#)Makefile	5.11 (Berkeley) 2/28/91
 
 PROG=	snake
 SRCS=	snake.c move.c
-MAN=	snake.6
+MAN6=	snake.0
 DPADD=	${LIBM} ${LIBTERM} ${LIBCOMPAT}
 LDADD=	-lm -ltermcap -lcompat
 HIDEGAME=hidegame

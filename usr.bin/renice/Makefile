@@ -1,7 +1,5 @@
-#	$NetBSD: Makefile,v 1.5 1997/01/09 14:39:10 tls Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 6/9/93
+#	@(#)Makefile	5.3 (Berkeley) 5/11/90
 
 PROG=	renice
-MAN=	renice.8
 
 .include <bsd.prog.mk>

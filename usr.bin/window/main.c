@@ -1,8 +1,6 @@
-/*	$NetBSD: main.c,v 1.6 1996/02/08 20:45:01 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,17 +35,7 @@
  */
 
 #ifndef lint
-char copyright[] =
-"@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n";
-#endif /* not lint */
-
-#ifndef lint
-#if 0
-static char sccsid[] = "@(#)main.c	8.2 (Berkeley) 4/2/94";
-#else
-static char rcsid[] = "$NetBSD: main.c,v 1.6 1996/02/08 20:45:01 mycroft Exp $";
-#endif
+static char sccsid[] = "@(#)main.c	3.42 (Berkeley) 8/12/90";
 #endif /* not lint */
 
 #include "defs.h"
@@ -57,7 +45,7 @@ static char rcsid[] = "$NetBSD: main.c,v 1.6 1996/02/08 20:45:01 mycroft Exp $";
 #include "char.h"
 #include "local.h"
 
-#define next(a) (*++*(a) ? *(a) : (*++(a) ? *(a) : (char *)(long)usage()))
+#define next(a) (*++*(a) ? *(a) : (*++(a) ? *(a) : (char *)usage()))
 
 /*ARGSUSED*/
 main(argc, argv)
@@ -155,23 +143,24 @@ char **argv;
 	if (debug || xflag)
 		(void) wwsettty(0, &wwnewtty);
 
-	if ((cmdwin = wwopen(WWT_INTERNAL, wwbaud > 2400 ? WWO_REVERSE : 0, 1,
-			     wwncol, 0, 0, 0)) == 0) {
+	if ((cmdwin = wwopen(wwbaud > 2400 ? WWO_REVERSE : 0, 1, wwncol,
+			     0, 0, 0)) == 0) {
 		wwflush();
 		(void) fprintf(stderr, "%s.\r\n", wwerror());
 		goto bad;
 	}
-	SET(cmdwin->ww_wflags,
-	    WWW_MAPNL | WWW_NOINTR | WWW_NOUPDATE | WWW_UNCTRL);
-	if ((framewin = wwopen(WWT_INTERNAL, WWO_GLASS|WWO_FRAME, wwnrow,
-			       wwncol, 0, 0, 0)) == 0) {
+	cmdwin->ww_mapnl = 1;
+	cmdwin->ww_nointr = 1;
+	cmdwin->ww_noupdate = 1;
+	cmdwin->ww_unctrl = 1;
+	if ((framewin = wwopen(WWO_GLASS|WWO_FRAME, wwnrow, wwncol, 0, 0, 0))
+	    == 0) {
 		wwflush();
 		(void) fprintf(stderr, "%s.\r\n", wwerror());
 		goto bad;
 	}
 	wwadd(framewin, &wwhead);
-	if ((boxwin = wwopen(WWT_INTERNAL, WWO_GLASS, wwnrow, wwncol, 0, 0, 0))
-	    == 0) {
+	if ((boxwin = wwopen(WWO_GLASS, wwnrow, wwncol, 0, 0, 0)) == 0) {
 		wwflush();
 		(void) fprintf(stderr, "%s.\r\n", wwerror());
 		goto bad;
@@ -195,7 +184,7 @@ char **argv;
 	mloop();
 
 bad:
-	wwend(1);
+	wwend();
 	return 0;
 }
 

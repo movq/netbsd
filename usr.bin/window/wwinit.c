@@ -1,8 +1,6 @@
-/*	$NetBSD: wwinit.c,v 1.11 1996/02/08 21:49:07 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,11 +35,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)wwinit.c	8.2 (Berkeley) 4/28/95";
-#else
-static char rcsid[] = "$NetBSD: wwinit.c,v 1.11 1996/02/08 21:49:07 mycroft Exp $";
-#endif
+static char sccsid[] = "@(#)wwinit.c	3.40 (Berkeley) 8/12/90";
 #endif /* not lint */
 
 #include "ww.h"
@@ -54,22 +48,15 @@ wwinit()
 {
 	register i, j;
 	char *kp;
-	sigset_t sigset, osigset;
+	int s;
 
-	wwdtablesize = 3;
+	wwdtablesize = getdtablesize();
 	wwhead.ww_forw = &wwhead;
 	wwhead.ww_back = &wwhead;
 
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGCHLD);
-	sigaddset(&sigset, SIGALRM);
-	sigaddset(&sigset, SIGHUP);
-	sigaddset(&sigset, SIGTERM);
-	sigprocmask(SIG_BLOCK, &sigset, &osigset);
-
-	if (signal(SIGCHLD, wwchild) == BADSIG ||
-	    signal(SIGHUP, wwquit) == BADSIG ||
-	    signal(SIGTERM, wwquit) == BADSIG ||
+	s = sigblock(sigmask(SIGIO));
+	if (signal(SIGIO, wwrint) == BADSIG ||
+	    signal(SIGCHLD, wwchild) == BADSIG ||
 	    signal(SIGPIPE, SIG_IGN) == BADSIG) {
 		wwerrno = WWE_SYS;
 		return -1;
@@ -110,15 +97,15 @@ wwinit()
 	wwnewtty.ww_termios = wwoldtty.ww_termios;
 	wwnewtty.ww_termios.c_iflag &=
 		~(ISTRIP | INLCR | IGNCR | ICRNL | IXON | IXOFF | IMAXBEL);
+	wwnewtty.ww_termios.c_iflag |= INPCK;
 	wwnewtty.ww_termios.c_oflag = 0;
 	wwnewtty.ww_termios.c_cflag &= ~(CSIZE | PARENB);
 	wwnewtty.ww_termios.c_cflag |= CS8;
 	wwnewtty.ww_termios.c_lflag = 0;
 	for (i = 0; i < NCCS; i++)
 		wwnewtty.ww_termios.c_cc[i] = _POSIX_VDISABLE;
-	wwnewtty.ww_termios.c_cc[VMIN] = 1;
-	wwnewtty.ww_termios.c_cc[VTIME] = 0;
 #endif
+	wwnewtty.ww_fflags = wwoldtty.ww_fflags | FASYNC;
 	if (wwsettty(0, &wwnewtty) < 0)
 		goto bad;
 
@@ -134,7 +121,6 @@ wwinit()
 	wwospeed = wwoldtty.ww_sgttyb.sg_ospeed;
 #else
 	wwospeed = cfgetospeed(&wwoldtty.ww_termios);
-	wwbaud = wwospeed;
 #endif
 	switch (wwospeed) {
 	default:
@@ -194,16 +180,6 @@ wwinit()
 #endif
 		wwbaud = 38400;
 		break;
-#ifdef B57600
-	case B57600:
-		wwbaud= 57600;
-		break;
-#endif
-#ifdef B115200
-	case B115200:
-		wwbaud = 115200;
-		break;
-#endif
 	}
 
 	if (xxinit() < 0)
@@ -223,9 +199,7 @@ wwinit()
 	wwibe = wwib + 512;
 	wwibq = wwibp = wwib;
 
-	wwsmap = (unsigned char **)
-		wwalloc(0, 0, wwnrow, wwncol, sizeof (unsigned char));
-	if (wwsmap == 0)
+	if ((wwsmap = wwalloc(0, 0, wwnrow, wwncol, sizeof (char))) == 0)
 		goto bad;
 	for (i = 0; i < wwnrow; i++)
 		for (j = 0; j < wwncol; j++)
@@ -235,7 +209,9 @@ wwinit()
 		wwalloc(0, 0, wwnrow, wwncol, sizeof (union ww_char));
 	if (wwos == 0)
 		goto bad;
-	/* wwos is cleared in wwstart1() */
+	for (i = 0; i < wwnrow; i++)
+		for (j = 0; j < wwncol; j++)
+			wwos[i][j].c_w = ' ';
 	wwns = (union ww_char **)
 		wwalloc(0, 0, wwnrow, wwncol, sizeof (union ww_char));
 	if (wwns == 0)
@@ -243,13 +219,6 @@ wwinit()
 	for (i = 0; i < wwnrow; i++)
 		for (j = 0; j < wwncol; j++)
 			wwns[i][j].c_w = ' ';
-	if (tt.tt_checkpoint) {
-		/* wwcs is also cleared in wwstart1() */
-		wwcs = (union ww_char **)
-			wwalloc(0, 0, wwnrow, wwncol, sizeof (union ww_char));
-		if (wwcs == 0)
-			goto bad;
-	}
 
 	wwtouched = malloc((unsigned) wwnrow);
 	if (wwtouched == 0) {
@@ -314,29 +283,20 @@ wwinit()
 	 * wwterm now points to the copy.
 	 */
 	(void) setenv("TERM", WWT_TERM, 1);
-#ifdef TERMINFO
-	if (wwterminfoinit() < 0)
-		goto bad;
-#endif
 
-	if (tt.tt_checkpoint)
-		if (signal(SIGALRM, wwalarm) == BADSIG) {
-			wwerrno = WWE_SYS;
-			goto bad;
-		}
-	wwstart1();
-
-	sigprocmask(SIG_SETMASK, &osigset, (sigset_t *)0);
+	(void) sigsetmask(s);
+	/* catch typeahead before ASYNC was set */
+	(void) kill(getpid(), SIGIO);
+	xxstart();
 	return 0;
-
 bad:
 	/*
 	 * Don't bother to free storage.  We're supposed
 	 * to exit when wwinit fails anyway.
 	 */
 	(void) wwsettty(0, &wwoldtty);
-
-	sigprocmask(SIG_SETMASK, &osigset, (sigset_t *)0);
+	(void) signal(SIGIO, SIG_DFL);
+	(void) sigsetmask(s);
 	return -1;
 }
 
@@ -369,42 +329,4 @@ wwaddcap1(cap, kp)
 	while (*(*kp)++ = *cap++)
 		;
 	(*kp)--;
-}
-
-wwstart()
-{
-	register i;
-
-	(void) wwsettty(0, &wwnewtty);
-	for (i = 0; i < wwnrow; i++)
-		wwtouched[i] = WWU_TOUCHED;
-	wwstart1();
-}
-
-wwstart1()
-{
-	register i, j;
-
-	for (i = 0; i < wwnrow; i++)
-		for (j = 0; j < wwncol; j++) {
-			wwos[i][j].c_w = ' ';
-			if (tt.tt_checkpoint)
-				wwcs[i][j].c_w = ' ';
-		}
-	xxstart();
-	if (tt.tt_checkpoint)
-		wwdocheckpoint = 1;
-}
-
-/*
- * Reset data structures and terminal from an unknown state.
- * Restoring wwos has been taken care of elsewhere.
- */
-wwreset()
-{
-	register i;
-
-	xxreset();
-	for (i = 0; i < wwnrow; i++)
-		wwtouched[i] = WWU_TOUCHED;
 }

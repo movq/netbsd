@@ -1,7 +1,5 @@
-.\"	$NetBSD: rm.1,v 1.9 1997/10/20 08:53:14 enami Exp $
-.\"
-.\" Copyright (c) 1990, 1993, 1994
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" the Institute of Electrical and Electronics Engineers, Inc.
@@ -34,22 +32,22 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)rm.1	8.5 (Berkeley) 12/5/94
+.\"	@(#)rm.1	6.9 (Berkeley) 7/27/91
 .\"
-.Dd December 5, 1994
+.Dd July 27, 1991
 .Dt RM 1
 .Os
 .Sh NAME
 .Nm rm
-.Nd remove directory entries
+.Nd Remove directory entries.
 .Sh SYNOPSIS
-.Nm
+.Nm rm
 .Op Fl f | Fl i
-.Op Fl dPRrW
+.Op Fl dRr
 .Ar file ...
 .Sh DESCRIPTION
 The
-.Nm
+.Nm rm
 utility attempts to remove the non-directory type files specified on the
 command line.
 If the permissions of the file do not permit writing, and the standard
@@ -79,10 +77,6 @@ The
 option overrides any previous
 .Fl f 
 options.
-.It Fl P
-Overwrite regular files before deleting them.
-Files are overwritten three times, first with the byte pattern 0xff,
-then 0x00, and then 0xff again, before they are deleted.
 .It Fl R
 Attempt to remove the file hierarchy rooted in each file argument.
 The 
@@ -101,45 +95,31 @@ that directory is skipped.
 .It Fl r
 Equivalent to
 .Fl R .
-.It Fl W
-Attempts to undelete the named files.
-Currently, this option can only be used to recover
-files covered by whiteouts.
 .El
 .Pp
 The
-.Nm
+.Nm rm
 utility removes symbolic links, not the files referenced by the links.
 .Pp
 It is an error to attempt to remove the files ``.'' and ``..''.
 .Pp
 The
-.Nm
+.Nm rm
 utility exits 0 if all of the named files or file hierarchies were removed,
 or if the
 .Fl f
 option was specified and all of the existing files or file hierarchies were
 removed.
 If an error occurs,
-.Nm
+.Nm rm
 exits with a value >0.
 .Sh SEE ALSO
 .Xr rmdir 1 ,
-.Xr undelete 2 ,
 .Xr unlink 2 ,
-.Xr fts 3 ,
-.Xr symlink 7
-.Sh BUGS
-The
-.Fl P
-option assumes that the underlying file system is a fixed-block file
-system.
-UFS is a fixed-block file system, LFS is not.
-In addition, only regular files are overwritten, other types of files
-are not.
+.Xr fts 3
 .Sh COMPATIBILITY
 The
-.Nm
+.Nm rm
 utility differs from historical implementations in that the
 .Fl f
 option only masks attempts to remove non-existent files instead of
@@ -151,7 +131,7 @@ implementations prompted on the standard output,
 not the standard error output.
 .Sh STANDARDS
 The
-.Nm
-utility is expected to be
+.Nm rm
+command is expected to be
 .St -p1003.2
 compatible.

@@ -1,7 +1,5 @@
-.\"	$NetBSD: open.2,v 1.10 1997/07/11 08:00:53 mikel Exp $
-.\"
-.\" Copyright (c) 1980, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1980, 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,16 +29,16 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)open.2	8.2 (Berkeley) 11/16/93
+.\"     @(#)open.2	6.7 (Berkeley) 5/27/91
 .\"
-.Dd November 16, 1993
+.Dd May 27, 1991
 .Dt OPEN 2
 .Os BSD 4
 .Sh NAME
 .Nm open
 .Nd open or create a file for reading or writing
 .Sh SYNOPSIS
-.Fd #include <fcntl.h>
+.Fd #include <sys/file.h>
 .Ft int
 .Fn open "const char *path" "int flags" "mode_t mode"
 .Sh DESCRIPTION
@@ -64,14 +62,14 @@ and modified by the process' umask value (see
 .Xr umask 2 ) .
 .Pp
 The flags specified are formed by
-.Em or Ns 'ing
+.Em or Ap ing
 the following values
 .Pp
 .Bd -literal -offset indent -compact
 O_RDONLY	open for reading only
 O_WRONLY	open for writing only
 O_RDWR		open for reading and writing
-O_NONBLOCK	do not block on open or for data to become available
+O_NONBLOCK	do not block on open
 O_APPEND	append on each write
 O_CREAT		create file if it does not exist
 O_TRUNC		truncate size to 0
@@ -105,15 +103,15 @@ will fail even if the symbolic
 link points to a non-existent name.
 If the
 .Dv O_NONBLOCK
-flag is specified, do not wait for the device or file to be ready or
-available.  If the
+flag is specified and the
 .Fn open
 call would result
 in the process being blocked for some reason (e.g., waiting for
 carrier on a dialup line),
 .Fn open
 returns immediately.
-This flag also has the effect of making all subsequent I/O on the open file non-blocking.
+The first time the process attempts to perform I/O on the open
+file it will block (not currently implemented).
 .Pp
 When opening a file, a lock with
 .Xr flock 2
@@ -129,13 +127,10 @@ the request for the lock will never fail
 .Pp
 If successful,
 .Fn open
-returns a non-negative integer, termed a file descriptor.
-It returns -1 on failure.
+returns a non-negative integer, termed a
+file descriptor.  It returns -1 on failure.
 The file pointer used to mark the current position within the
 file is set to the beginning of the file.
-.Pp
-When a new file is created it is given the group of the directory
-which contains it.
 .Pp
 The new descriptor is set to remain open across
 .Xr execve
@@ -146,7 +141,7 @@ and
 .Pp
 The system imposes a limit on the number of file descriptors
 open simultaneously by one process.
-.Xr Getdtablesize 3
+.Xr Getdtablesize 2
 returns the current system limit.
 .Sh ERRORS
 The named file is opened unless:
@@ -154,11 +149,8 @@ The named file is opened unless:
 .It Bq Er ENOTDIR
 A component of the path prefix is not a directory.
 .It Bq Er ENAMETOOLONG
-A component of a pathname exceeded 
-.Dv {NAME_MAX}
-characters, or an entire path name exceeded 
-.Dv {PATH_MAX}
-characters.
+A component of a pathname exceeded 255 characters,
+or an entire path name exceeded 1023 characters.
 .It Bq Er ENOENT
 .Dv O_CREAT
 is not set and the named file does not exist.
@@ -193,7 +185,7 @@ special file, and the device associated with this special file
 does not exist.
 .It Bq Er EINTR
 The
-.Fn open
+.Nm
 operation was interrupted by a signal.
 .It Bq Er EOPNOTSUPP
 .Dv O_SHLOCK
@@ -251,18 +243,12 @@ An attempt was made to open a socket (not currently implemented).
 .Xr chmod 2 ,
 .Xr close 2 ,
 .Xr dup 2 ,
+.Xr getdtablesize 2 ,
 .Xr lseek 2 ,
 .Xr read 2 ,
 .Xr write 2 ,
-.Xr umask 2 ,
-.Xr getdtablesize 3 .
-.Sh STANDARDS
-The
-.Fn open
-functions conforms to
-.St -p1003.1-88 .
+.Xr umask 2
 .Sh HISTORY
 An
-.Fn open
-function call appeared in 
-.At v6 .
+.Nm
+function call appeared in Version 6 AT&T UNIX.

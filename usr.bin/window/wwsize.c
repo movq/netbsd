@@ -1,8 +1,6 @@
-/*	$NetBSD: wwsize.c,v 1.5 1996/02/08 20:45:11 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,11 +35,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)wwsize.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: wwsize.c,v 1.5 1996/02/08 20:45:11 mycroft Exp $";
-#endif
+static char sccsid[] = "@(#)wwsize.c	3.10 (Berkeley) 8/12/90";
 #endif /* not lint */
 
 #include "ww.h"
@@ -174,14 +168,14 @@ register struct ww *w;
 	/*
 	 * Put cursor back.
 	 */
-	if (ISSET(w->ww_wflags, WWW_HASCURSOR)) {
-		CLR(w->ww_wflags, WWW_HASCURSOR);
+	if (w->ww_hascursor) {
+		w->ww_hascursor = 0;
 		wwcursor(w, 1);
 	}
 	/*
 	 * Fool with pty.
 	 */
-	if (w->ww_type == WWT_PTY && w->ww_pty >= 0)
+	if (w->ww_ispty && w->ww_pty >= 0)
 		(void) wwsetttysize(w->ww_pty, nrow, ncol);
 	return 0;
 bad:

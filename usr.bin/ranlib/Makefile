@@ -1,12 +1,16 @@
-#	$NetBSD: Makefile,v 1.9 1997/10/19 05:50:26 mrg Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.4 (Berkeley) 3/12/91
 
 PROG=	ranlib
 SRCS=	archive.c build.c misc.c ranlib.c touch.c
-MAN=	ranlib.1 ranlib.5
+CFLAGS+=-I${.CURDIR} -I${.CURDIR}/../ar
+MAN1=	ranlib.0
+VPATH=	${.CURDIR}/../ar
+CLEANFILES=ranlib.5.0
 
-CFLAGS+= -I${.CURDIR}
-CFLAGS+= -I${.CURDIR}/../ar
-.PATH:     ${.CURDIR}/../ar
+ranlib.0: ranlib.5.0
+
+afterinstall:
+	install -c -o ${MANOWN} -g ${MANGRP} -m ${MANMODE} ranlib.5.0 \
+	    ${DESTDIR}${MANDIR}5/ranlib.0
 
 .include <bsd.prog.mk>

@@ -1,91 +1,62 @@
-/*	$NetBSD: fdesc_vfsops.c,v 1.22 1996/12/22 10:10:19 cgd Exp $	*/
-
 /*
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1992 The Regents of the University of California
+ * Copyright (c) 1990, 1992 Jan-Simon Pendry
+ * All rights reserved.
  *
  * This code is derived from software donated to Berkeley by
  * Jan-Simon Pendry.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
+ * %sccs.redist.c%
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ *	%W% (Berkeley) %G%
  *
- *	@(#)fdesc_vfsops.c	8.4 (Berkeley) 1/21/94
- *
- * #Id: fdesc_vfsops.c,v 1.9 1993/04/06 15:28:33 jsp Exp #
+ * $Id: fdesc_vfsops.c,v 1.1 1993/03/23 23:56:33 cgd Exp $
  */
 
 /*
  * /dev/fd Filesystem
  */
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/proc.h>
-#include <sys/resourcevar.h>
-#include <sys/filedesc.h>
-#include <sys/vnode.h>
-#include <sys/mount.h>
-#include <sys/namei.h>
-#include <sys/malloc.h>
-#include <miscfs/fdesc/fdesc.h>
+#include "param.h"
+#include "systm.h"
+#include "time.h"
+#include "types.h"
+#include "proc.h"
+#include "resourcevar.h"
+#include "filedesc.h"
+#include "vnode.h"
+#include "mount.h"
+#include "namei.h"
+#include "malloc.h"
+#include "miscfs/fdesc/fdesc.h"
 
-int	fdesc_mount __P((struct mount *, const char *, void *,
-			 struct nameidata *, struct proc *));
-int	fdesc_start __P((struct mount *, int, struct proc *));
-int	fdesc_unmount __P((struct mount *, int, struct proc *));
-int	fdesc_root __P((struct mount *, struct vnode **));
-int	fdesc_quotactl __P((struct mount *, int, uid_t, caddr_t,
-			    struct proc *));
-int	fdesc_statfs __P((struct mount *, struct statfs *, struct proc *));
-int	fdesc_sync __P((struct mount *, int, struct ucred *, struct proc *));
-int	fdesc_vget __P((struct mount *, ino_t, struct vnode **));
-int	fdesc_fhtovp __P((struct mount *, struct fid *, struct mbuf *,
-			  struct vnode **, int *, struct ucred **));
-int	fdesc_vptofh __P((struct vnode *, struct fid *));
+static u_short fdesc_mntid;
+
+fdesc_init()
+{
+#ifdef FDESC_DIAGNOSTIC
+	printf("fdesc_init\n");		/* printed during system boot */
+#endif
+}
 
 /*
  * Mount the per-process file descriptors (/dev/fd)
  */
-int
 fdesc_mount(mp, path, data, ndp, p)
 	struct mount *mp;
-	const char *path;
-	void *data;
+	char *path;
+	caddr_t data;
 	struct nameidata *ndp;
 	struct proc *p;
 {
 	int error = 0;
-	size_t size;
+	u_int size;
 	struct fdescmount *fmp;
 	struct vnode *rvp;
+
+#ifdef FDESC_DIAGNOSTIC
+	printf("fdesc_mount(mp = %x)\n", mp);
+#endif
 
 	/*
 	 * Update is a no-op
@@ -93,27 +64,33 @@ fdesc_mount(mp, path, data, ndp, p)
 	if (mp->mnt_flag & MNT_UPDATE)
 		return (EOPNOTSUPP);
 
-	error = fdesc_allocvp(Froot, FD_ROOT, mp, &rvp);
+	error = getnewvnode(VT_UFS, mp, &fdesc_vnodeops, &rvp);	/* XXX */
 	if (error)
 		return (error);
 
-	MALLOC(fmp, struct fdescmount *, sizeof(struct fdescmount),
-				M_UFSMNT, M_WAITOK);	/* XXX */
+	fmp = (struct fdescmount *) malloc(sizeof(struct fdescmount),
+				 M_UFSMNT, M_WAITOK);	/* XXX */
 	rvp->v_type = VDIR;
 	rvp->v_flag |= VROOT;
+	/*VTOFDESC(rvp)->f_isroot = 1;*/
+#ifdef FDESC_DIAGNOSTIC
+	printf("fdesc_mount: root vp = %x\n", rvp);
+#endif
 	fmp->f_root = rvp;
 	mp->mnt_flag |= MNT_LOCAL;
-	mp->mnt_data = (qaddr_t)fmp;
-	getnewfsid(mp, makefstype(MOUNT_FDESC));
+	mp->mnt_data = (qaddr_t) fmp;
+	getnewfsid(mp, MOUNT_FDESC);
 
 	(void) copyinstr(path, mp->mnt_stat.f_mntonname, MNAMELEN - 1, &size);
 	bzero(mp->mnt_stat.f_mntonname + size, MNAMELEN - size);
 	bzero(mp->mnt_stat.f_mntfromname, MNAMELEN);
 	bcopy("fdesc", mp->mnt_stat.f_mntfromname, sizeof("fdesc"));
+#ifdef FDESC_DIAGNOSTIC
+	printf("fdesc_mount: at %s\n", mp->mnt_stat.f_mntonname);
+#endif
 	return (0);
 }
 
-int
 fdesc_start(mp, flags, p)
 	struct mount *mp;
 	int flags;
@@ -122,7 +99,6 @@ fdesc_start(mp, flags, p)
 	return (0);
 }
 
-int
 fdesc_unmount(mp, mntflags, p)
 	struct mount *mp;
 	int mntflags;
@@ -132,6 +108,10 @@ fdesc_unmount(mp, mntflags, p)
 	int flags = 0;
 	extern int doforce;
 	struct vnode *rootvp = VFSTOFDESC(mp)->f_root;
+
+#ifdef FDESC_DIAGNOSTIC
+	printf("fdesc_unmount(mp = %x)\n", mp);
+#endif
 
 	if (mntflags & MNT_FORCE) {
 		/* fdesc can never be rootfs so don't check for it */
@@ -145,11 +125,26 @@ fdesc_unmount(mp, mntflags, p)
 	 * ever get anything cached at this level at the
 	 * moment, but who knows...
 	 */
+#ifdef FDESC_DIAGNOSTIC
+	printf("fdesc_unmount: calling mntflushbuf\n");
+#endif
+	mntflushbuf(mp, 0); 
+#ifdef FDESC_DIAGNOSTIC
+	printf("fdesc_unmount: calling mntinvalbuf\n");
+#endif
+	if (mntinvalbuf(mp, 1))
+		return (EBUSY);
 	if (rootvp->v_usecount > 1)
 		return (EBUSY);
-	if ((error = vflush(mp, rootvp, flags)) != 0)
+#ifdef FDESC_DIAGNOSTIC
+	printf("fdesc_unmount: calling vflush\n");
+#endif
+	if (error = vflush(mp, rootvp, flags))
 		return (error);
 
+#ifdef FDESC_DIAGNOSTIC
+	vprint("fdesc root", rootvp);
+#endif	 
 	/*
 	 * Release reference on underlying root vnode
 	 */
@@ -163,16 +158,19 @@ fdesc_unmount(mp, mntflags, p)
 	 */
 	free(mp->mnt_data, M_UFSMNT);	/* XXX */
 	mp->mnt_data = 0;
-
-	return (0);
+	return 0;
 }
 
-int
 fdesc_root(mp, vpp)
 	struct mount *mp;
 	struct vnode **vpp;
 {
 	struct vnode *vp;
+	int error;
+
+#ifdef FDESC_DIAGNOSTIC
+	printf("fdesc_root(mp = %x)\n", mp);
+#endif
 
 	/*
 	 * Return locked reference to root.
@@ -184,7 +182,6 @@ fdesc_root(mp, vpp)
 	return (0);
 }
 
-int
 fdesc_quotactl(mp, cmd, uid, arg, p)
 	struct mount *mp;
 	int cmd;
@@ -192,11 +189,9 @@ fdesc_quotactl(mp, cmd, uid, arg, p)
 	caddr_t arg;
 	struct proc *p;
 {
-
 	return (EOPNOTSUPP);
 }
 
-int
 fdesc_statfs(mp, sbp, p)
 	struct mount *mp;
 	struct statfs *sbp;
@@ -208,13 +203,17 @@ fdesc_statfs(mp, sbp, p)
 	int last;
 	int freefd;
 
+#ifdef FDESC_DIAGNOSTIC
+	printf("fdesc_statfs(mp = %x)\n", mp);
+#endif
+
 	/*
 	 * Compute number of free file descriptors.
 	 * [ Strange results will ensue if the open file
 	 * limit is ever reduced below the current number
 	 * of open files... ]
 	 */
-	lim = p->p_rlimit[RLIMIT_NOFILE].rlim_cur;
+	lim = p->p_rlimit[RLIMIT_OFILE].rlim_cur;
 	fdp = p->p_fd;
 	last = min(fdp->fd_nfiles, lim);
 	freefd = 0;
@@ -229,13 +228,10 @@ fdesc_statfs(mp, sbp, p)
 	if (fdp->fd_nfiles < lim)
 		freefd += (lim - fdp->fd_nfiles);
 
-#ifdef COMPAT_09
-	sbp->f_type = 6;
-#else
-	sbp->f_type = 0;
-#endif
+	sbp->f_type = MOUNT_FDESC;
+	sbp->f_flags = 0;
+	sbp->f_fsize = DEV_BSIZE;
 	sbp->f_bsize = DEV_BSIZE;
-	sbp->f_iosize = DEV_BSIZE;
 	sbp->f_blocks = 2;		/* 1K to keep df happy */
 	sbp->f_bfree = 0;
 	sbp->f_bavail = 0;
@@ -246,53 +242,24 @@ fdesc_statfs(mp, sbp, p)
 		bcopy(mp->mnt_stat.f_mntonname, sbp->f_mntonname, MNAMELEN);
 		bcopy(mp->mnt_stat.f_mntfromname, sbp->f_mntfromname, MNAMELEN);
 	}
-	strncpy(sbp->f_fstypename, mp->mnt_op->vfs_name, MFSNAMELEN);
 	return (0);
 }
 
-/*ARGSUSED*/
-int
-fdesc_sync(mp, waitfor, uc, p)
+fdesc_sync(mp, waitfor)
 	struct mount *mp;
 	int waitfor;
-	struct ucred *uc;
-	struct proc *p;
 {
-
 	return (0);
 }
 
-/*
- * Fdesc flat namespace lookup.
- * Currently unsupported.
- */
-int
-fdesc_vget(mp, ino, vpp)
-	struct mount *mp;
-	ino_t ino;
-	struct vnode **vpp;
-{
-
-	return (EOPNOTSUPP);
-}
-
-
-/*ARGSUSED*/
-int
-fdesc_fhtovp(mp, fhp, nam, vpp, exflagsp, credanonp)
+fdesc_fhtovp(mp, fhp, vpp)
 	struct mount *mp;
 	struct fid *fhp;
-	struct mbuf *nam;
 	struct vnode **vpp;
-	int *exflagsp;
-	struct ucred **credanonp;
 {
-
 	return (EOPNOTSUPP);
 }
 
-/*ARGSUSED*/
-int
 fdesc_vptofh(vp, fhp)
 	struct vnode *vp;
 	struct fid *fhp;
@@ -301,7 +268,6 @@ fdesc_vptofh(vp, fhp)
 }
 
 struct vfsops fdesc_vfsops = {
-	MOUNT_FDESC,
 	fdesc_mount,
 	fdesc_start,
 	fdesc_unmount,
@@ -309,7 +275,6 @@ struct vfsops fdesc_vfsops = {
 	fdesc_quotactl,
 	fdesc_statfs,
 	fdesc_sync,
-	fdesc_vget,
 	fdesc_fhtovp,
 	fdesc_vptofh,
 	fdesc_init,

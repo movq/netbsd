@@ -1,10 +1,15 @@
-#	$NetBSD: dot.login,v 1.2 1997/10/17 09:26:59 mrg Exp $
-#csh .login file
+#csh login file
 
-setenv SHELL /bin/csh
-set noglob
-eval `tset -s -m 'network:?xterm'`
-unset noglob
-stty status '^T' crt -tostop
+if ( ! $?TERMCAP ) then
+	tset -Q  '-mdialup:?vt100' $TERM
+endif
+
+stty	newcrt crterase
+
+set	savehist=100
+set	ignoreeof
+
+setenv	EXINIT		'set ai sm noeb'
+setenv	HOSTALIASES	 $HOME/.hostaliases
 
 /usr/games/fortune

@@ -1,5 +1,3 @@
-/*	$NetBSD: realpath.c,v 1.5 1997/07/21 14:09:03 jtc Exp $	*/
-
 /*
  * Copyright (c) 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -36,16 +34,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "from: @(#)realpath.c	8.1 (Berkeley) 2/16/94";
-#else
-__RCSID("$NetBSD: realpath.c,v 1.5 1997/07/21 14:09:03 jtc Exp $");
-#endif
+/*static char sccsid[] = "from: @(#)realpath.c	8.1 (Berkeley) 2/16/94";*/
+static char *rcsid = "$Id: realpath.c,v 1.1 1994/05/17 12:42:30 mycroft Exp $";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/param.h>
 #include <sys/stat.h>
 
@@ -54,10 +47,6 @@ __RCSID("$NetBSD: realpath.c,v 1.5 1997/07/21 14:09:03 jtc Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#ifdef __weak_alias
-__weak_alias(realpath,_realpath);
-#endif
 
 /*
  * char *realpath(const char *path, char resolved_path[MAXPATHLEN]);
@@ -77,7 +66,7 @@ realpath(path, resolved)
 
 	/* Save the starting point. */
 	if ((fd = open(".", O_RDONLY)) < 0) {
-		(void)strncpy(resolved, ".", MAXPATHLEN - 1);
+		(void)strcpy(resolved, ".");
 		return (NULL);
 	}
 
@@ -129,7 +118,7 @@ loop:
 	 * Save the last component name and get the full pathname of
 	 * the current directory.
 	 */
-	(void)strncpy(wbuf, p, sizeof wbuf - 1);
+	(void)strcpy(wbuf, p);
 	if (getcwd(resolved, MAXPATHLEN) == 0)
 		goto err1;
 
@@ -148,8 +137,8 @@ loop:
 			goto err1;
 		}
 		if (rootd == 0)
-			(void)strcat(resolved, "/"); /* XXX: strcat is safe */
-		(void)strcat(resolved, wbuf);	/* XXX: strcat is safe */
+			(void)strcat(resolved, "/");
+		(void)strcat(resolved, wbuf);
 	}
 
 	/* Go back to where we came from. */

@@ -1,8 +1,6 @@
-/*	$NetBSD: trace.h,v 1.8 1997/01/22 07:09:27 mikel Exp $	*/
-
 /*-
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,11 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)trace.h	8.1 (Berkeley) 6/2/93
+ *	@(#)trace.h	7.6 (Berkeley) 5/5/91
  */
-
-#ifndef _SYS_TRACE_H_
-#define _SYS_TRACE_H_
 
 /*
  * File system buffer tracing points; all trace <pack(dev, size), bn>
@@ -104,20 +99,16 @@
 					/* in specified number of hz */
 #define	VTR_STAMP	4		/* user specified stamp */
 
-#ifdef _KERNEL
+#ifdef KERNEL
 #ifdef TRACE
-struct	proc *traceproc;
-int	tracewhich, tracebuf[TRCSIZ];
-u_int	tracex;
 char	traceflags[TR_NFLAGS];
+struct	proc *traceproc;
+int	tracebuf[TRCSIZ];
+unsigned tracex;
+int	tracewhich;
 #define	pack(v,b)	(((v)->v_mount->mnt_stat.f_fsid.val[0])<<16)|(b)
-#define	trace(a,b,c) {							\
-	if (traceflags[a])						\
-		trace1(a,b,c);						\
-}
+#define	trace(a,b,c)	if (traceflags[a]) trace1(a,b,c)
 #else
-#define	trace(a,b,c)
-#endif /* TRACE */
-#endif /* _KERNEL */
-
-#endif /* !_SYS_TRACE_H_ */
+#define	trace(a,b,c)	;
+#endif
+#endif

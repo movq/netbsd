@@ -1,8 +1,6 @@
-/*	$NetBSD: ndbm.c,v 1.13 1997/07/21 14:06:40 jtc Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Margo Seltzer.
@@ -36,208 +34,161 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)ndbm.c	8.4 (Berkeley) 7/21/94";
-#else
-__RCSID("$NetBSD: ndbm.c,v 1.13 1997/07/21 14:06:40 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)ndbm.c	5.7 (Berkeley) 6/17/91";
 #endif /* LIBC_SCCS and not lint */
 
 /*
- * This package provides a dbm compatible interface to the new hashing
- * package described in db(3).
- */
-#include "namespace.h"
+    This package provides a dbm compatible interface to the new hashing
+    package described in db(3)
+*/
+
 #include <sys/param.h>
-
-#include <stdio.h>
-#include <string.h>
-
 #include <ndbm.h>
+#include <db.h>
+#include <stdio.h>
 #include "hash.h"
 
-#ifdef __weak_alias
-__weak_alias(dbm_clearerr,_dbm_clearerr);
-__weak_alias(dbm_close,_dbm_close);
-__weak_alias(dbm_delete,_dbm_delete);
-__weak_alias(dbm_dirfno,_dbm_dirfno);
-__weak_alias(dbm_error,_dbm_error);
-__weak_alias(dbm_fetch,_dbm_fetch);
-__weak_alias(dbm_firstkey,_dbm_firstkey);
-__weak_alias(dbm_nextkey,_dbm_nextkey);
-__weak_alias(dbm_open,_dbm_open);
-__weak_alias(dbm_store,_dbm_store);
-#endif
-
 /*
- * Returns:
- * 	*DBM on success
- *	 NULL on failure
- */
+    return 	*DBM on success
+		NULL on failure
+*/
 extern DBM *
-dbm_open(file, flags, mode)
-	const char *file;
-	int flags, mode;
+dbm_open( file, flags, mode )
+const char 	*file;
+int	flags;
+int	mode;
 {
-	HASHINFO info;
-	char path[MAXPATHLEN];
+    HASHINFO	info;
+    char path[MAXPATHLEN];
 
-	info.bsize = 4096;
-	info.ffactor = 40;
-	info.nelem = 1;
-	info.cachesize = 0;
-	info.hash = NULL;
-	info.lorder = 0;
-	(void)strncpy(path, file, sizeof(path) - 1);
-	(void)strncat(path, DBM_SUFFIX, sizeof(path) - strlen(path) - 1);
-	return ((DBM *)__hash_open(path, flags, mode, &info, 0));
+    info.bsize = 1024;
+    info.ffactor = 5;
+    info.nelem = 1;
+    info.cachesize = NULL;
+    info.hash = NULL;
+    info.lorder = 0;
+    (void)strcpy(path, file);
+    (void)strcat(path, DBM_SUFFIX);
+    return( hash_open ( path, flags, mode, &info ) );
 }
 
-extern void
+extern void 
 dbm_close(db)
-	DBM *db;
+DBM	*db;
 {
-	(void)(db->close)(db);
+    (void)(db->close) (db);
 }
 
 /*
- * Returns:
- *	DATUM on success
- *	NULL on failure
- */
-extern datum
-dbm_fetch(db, key)
-	DBM *db;
-	datum key;
+    Returns 	DATUM on success
+		NULL on failure
+*/
+extern datum 
+dbm_fetch( db, key )
+DBM 	*db;
+datum	key;
 {
-	datum retdata;
-	int status;
-	DBT dbtkey, dbtretdata;
+    int	status;
+    datum	retval;
 
-	dbtkey.data = key.dptr;
-	dbtkey.size = key.dsize;
-	status = (db->get)(db, &dbtkey, &dbtretdata, 0);
-	if (status) {
-		dbtretdata.data = NULL;
-		dbtretdata.size = 0;
-	}
-	retdata.dptr = dbtretdata.data;
-	retdata.dsize = dbtretdata.size;
-	return (retdata);
+    status = (db->get) ( db, (DBT *)&key, (DBT *)&retval, 0 );
+    if ( status ) {
+	retval.dptr = NULL;
+	retval.dsize = 0;
+    }
+    return(retval);
 }
 
 /*
- * Returns:
- *	DATUM on success
- *	NULL on failure
- */
-extern datum
+    Returns 	DATUM on success
+		NULL on failure
+*/
+extern datum 
 dbm_firstkey(db)
-	DBM *db;
+DBM 	*db;
 {
-	int status;
-	datum retkey;
-	DBT dbtretkey, dbtretdata;
+    int	status;
+    datum	retkey;
+    datum	retdata;
 
-	status = (db->seq)(db, &dbtretkey, &dbtretdata, R_FIRST);
-	if (status)
-		dbtretkey.data = NULL;
-	retkey.dptr = dbtretkey.data;
-	retkey.dsize = dbtretkey.size;
-	return (retkey);
+    status = (db->seq) ( db, (DBT *)&retkey, (DBT *)&retdata, R_FIRST );
+    if ( status ) {
+	retkey.dptr = NULL;
+    }
+    return(retkey);
 }
-
 /*
- * Returns:
- *	DATUM on success
- *	NULL on failure
- */
-extern datum
+    Returns 	DATUM on success
+		NULL on failure
+*/
+extern datum 
 dbm_nextkey(db)
-	DBM *db;
+DBM 	*db;
 {
-	int status;
-	datum retkey;
-	DBT dbtretkey, dbtretdata;
+    int	status;
+    datum	retkey;
+    datum	retdata;
 
-	status = (db->seq)(db, &dbtretkey, &dbtretdata, R_NEXT);
-	if (status)
-		dbtretkey.data = NULL;
-	retkey.dptr = dbtretkey.data;
-	retkey.dsize = dbtretkey.size;
-	return (retkey);
+    status = (db->seq) ( db, (DBT *)&retkey, (DBT *)&retdata, R_NEXT );
+    if ( status ) {
+	retkey.dptr = NULL;
+    }
+    return(retkey);
 }
 
 /*
- * Returns:
- *	 0 on success
- *	<0 failure
- */
-extern int
+    0 on success
+    <0 failure
+*/
+extern int 
 dbm_delete(db, key)
-	DBM *db;
-	datum key;
+DBM 	*db;
+datum	key;
 {
-	int status;
-	DBT dbtkey;
+    int	status;
 
-	dbtkey.data = key.dptr;
-	dbtkey.size = key.dsize;
-	status = (db->del)(db, &dbtkey, 0);
-	if (status)
-		return (-1);
-	else
-		return (0);
+    status = (db->del)( db, (DBT *)&key, 0 );
+    if ( status ) {
+	return(-1);
+    } else {
+	return(0);
+    }
 }
 
 /*
- * Returns:
- *	 0 on success
- *	<0 failure
- *	 1 if DBM_INSERT and entry exists
- */
-extern int
-dbm_store(db, key, data, flags)
-	DBM *db;
-	datum key, data;
-	int flags;
+    0 on success
+    <0 failure
+    1 if DBM_INSERT and entry exists
+*/
+extern int 
+dbm_store(db, key, content, flags)
+DBM 	*db;
+datum	key;
+datum	content;
+int	flags;
 {
-	DBT dbtkey, dbtdata;
-
-	dbtkey.data = key.dptr;
-	dbtkey.size = key.dsize;
-	dbtdata.data = data.dptr;
-	dbtdata.size = data.dsize;
-	return ((db->put)(db, &dbtkey, &dbtdata,
-	    (flags == DBM_INSERT) ? R_NOOVERWRITE : 0));
+    return ((db->put)( db, (DBT *)&key, (DBT *)&content, 
+			(flags == DBM_INSERT) ? R_NOOVERWRITE : 0 ));
 }
 
 extern int
 dbm_error(db)
-	DBM *db;
+DBM	*db;
 {
-	HTAB *hp;
+    HTAB	*hp;
 
-	hp = (HTAB *)db->internal;
-	return (hp->err);
+    hp = (HTAB *)db->internal;
+    return ( hp->errno );
 }
 
 extern int
 dbm_clearerr(db)
-	DBM *db;
+DBM	*db;
 {
-	HTAB *hp;
+    HTAB	*hp;
 
-	hp = (HTAB *)db->internal;
-	hp->err = 0;
-	return (0);
-}
-
-extern int
-dbm_dirfno(db)
-	DBM *db;
-{
-	return(((HTAB *)db->internal)->fp);
+    hp = (HTAB *)db->internal;
+    hp->errno = 0;
+    return ( 0 );
 }

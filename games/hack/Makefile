@@ -1,10 +1,7 @@
-#	$NetBSD: Makefile,v 1.24 1997/10/19 16:56:41 christos Exp $
-#	@(#)Makefile	8.2 (Berkeley) 4/27/95
+#	@(#)Makefile	5.10 (Berkeley) 12/8/90
 
 PROG=	hack
-CFLAGS+=-I.
-SRCS+=	hack.onames.h
-SRCS+=	alloc.c hack.Decl.c hack.apply.c hack.bones.c hack.c hack.cmd.c \
+SRCS=	alloc.c hack.Decl.c hack.apply.c hack.bones.c hack.c hack.cmd.c \
 	hack.do.c hack.do_name.c hack.do_wear.c hack.dog.c hack.eat.c \
 	hack.end.c hack.engrave.c hack.fight.c hack.invent.c hack.ioctl.c \
 	hack.lev.c hack.main.c hack.makemon.c hack.mhitu.c hack.mklev.c \
@@ -15,28 +12,24 @@ SRCS+=	alloc.c hack.Decl.c hack.apply.c hack.bones.c hack.c hack.cmd.c \
 	hack.timeout.c hack.topl.c hack.track.c hack.trap.c hack.tty.c \
 	hack.u_init.c hack.unix.c hack.vault.c hack.version.c hack.wield.c \
 	hack.wizard.c hack.worm.c hack.worn.c hack.zap.c rnd.c
-MAN=	hack.6
-DPADD+=	${LIBTERM} ${LIBCOMPAT}
-LDADD+=	-ltermcap
+MAN6=	hack.0
+DPADD=	${LIBTERM} ${LIBCOMPAT}
+LDADD=	-ltermcap -lcompat
 HIDEGAME=hidegame
-CLEANFILES+=hack.onames.h makedefs
-FILES=help hh data
-FILESDIR=/var/games/hackdir
-
-${PROG}: hack.onames.h
 
 hack.onames.h: makedefs def.objects.h
-	${.OBJDIR}/makedefs ${.CURDIR}/def.objects.h > hack.onames.h
+	makedefs ${.CURDIR}/def.objects.h > hack.onames.h
 
-.if !exists(${DESTDIR}${FILESDIR}/perm)
-afterinstall: clobber
-.endif
+makedefs: makedefs.c
+	${CC} ${CFLAGS} -o ${.TARGET} ${.CURDIR}/${.PREFIX}.c
 
-clobber: 
-	${INSTALL} -c -o games -g games -m 600 /dev/null \
+beforeinstall: 
+	install -c -o ${BINOWN} -g ${BINGRP} -m 666 /dev/null \
 	    ${DESTDIR}/var/games/hackdir/perm
-	${INSTALL} -c -o games -g games -m 600 /dev/null \
+	install -c -o ${BINOWN} -g ${BINGRP} -m 666 /dev/null \
 	    ${DESTDIR}/var/games/hackdir/record
+	install -c -o ${BINOWN} -g ${BINGRP} -m 444 ${.CURDIR}/help \
+	    ${.CURDIR}/hh ${.CURDIR}/data ${DESTDIR}/var/games/hackdir
 	rm -f ${DESTDIR}/var/games/hackdir/bones*
 
 .include <bsd.prog.mk>

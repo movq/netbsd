@@ -1,8 +1,6 @@
-/*	$NetBSD: destruct.c,v 1.4 1997/10/12 21:24:40 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,19 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)destruct.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: destruct.c,v 1.4 1997/10/12 21:24:40 christos Exp $");
-#endif
+static char sccsid[] = "@(#)destruct.c	5.5 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <unistd.h>
-#include "trek.h"
-#include "getpar.h"
+# include	"trek.h"
 
 /*
 **  Self Destruct Sequence
@@ -67,19 +57,14 @@ __RCSID("$NetBSD: destruct.c,v 1.4 1997/10/12 21:24:40 christos Exp $");
 **	Uses trace flag 41
 */
 
-/*ARGSUSED*/
-void
-destruct(v)
-	int v;
+destruct()
 {
 	char		checkpass[15];
-	int	i, j;
+	register int	i, j;
 	double		zap;
 
-	if (damaged(COMPUTER)) {
-		out(COMPUTER);
-		return;
-	}
+	if (damaged(COMPUTER))
+		return (out(COMPUTER));
 	printf("\n\07 --- WORKING ---\07\n");
 	sleep(3);
 	/* output the count 10 9 8 7 6 */
@@ -94,10 +79,8 @@ destruct(v)
 	skiptonl(0);
 	getstrpar("Enter password verification", checkpass, 14, 0);
 	sleep(2);
-	if (strcmp(checkpass, Game.passwd) != 0) {
-		printf("Self destruct sequence aborted\n");
-		return;
-	}
+	if (!sequal(checkpass, Game.passwd))
+		return (printf("Self destruct sequence aborted\n"));
 	printf("Password verified; self destruct sequence continues:\n");
 	sleep(2);
 	/* output count 5 4 3 2 1 0 */

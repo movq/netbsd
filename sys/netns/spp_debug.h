@@ -1,8 +1,6 @@
-/*	$NetBSD: spp_debug.h,v 1.5 1994/06/29 06:41:54 cgd Exp $	*/
-
 /*
- * Copyright (c) 1984, 1985, 1986, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)spp_debug.h	8.1 (Berkeley) 6/10/93
+ *	@(#)spp_debug.h	7.4 (Berkeley) 6/28/90
  */
 
 struct	spp_debug {

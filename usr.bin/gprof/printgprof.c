@@ -1,8 +1,6 @@
-/*	$NetBSD: printgprof.c,v 1.6 1997/01/30 09:20:56 matthias Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,11 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)printgprof.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: printgprof.c,v 1.6 1997/01/30 09:20:56 matthias Exp $";
-#endif
+static char sccsid[] = "@(#)printgprof.c	5.7 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "gprof.h"
@@ -69,7 +63,7 @@ printprof()
 	flatprofline( np );
     }
     actime = 0.0;
-    free( sortednlp );
+    cfree( sortednlp );
 }
 
 timecmp( npp1 , npp2 )
@@ -123,8 +117,6 @@ flatprofline( np )
     register nltype	*np;
 {
 
-    if ( onlist( Elist , np -> name ) )
-    	return;
     if ( zflag == 0 && np -> ncall == 0 && np -> time == 0 ) {
 	return;
     }
@@ -182,7 +174,7 @@ gprofline( np )
 	    np -> propself / hz ,
 	    np -> propchild / hz );
     if ( ( np -> ncall + np -> selfcalls ) != 0 ) {
-	printf( " %7d" , np -> npropcall );
+	printf( " %7d" , np -> ncall );
 	if ( np -> selfcalls != 0 ) {
 	    printf( "+%-7d " , np -> selfcalls );
 	} else {
@@ -232,7 +224,7 @@ printgprof(timesortnlp)
 	printf( "-----------------------------------------------\n" );
 	printf( "\n" );
     }
-    free( timesortnlp );
+    cfree( timesortnlp );
 }
 
     /*
@@ -297,7 +289,7 @@ printparents( childp )
     sortparents( childp );
     for ( arcp = childp -> parents ; arcp ; arcp = arcp -> arc_parentlist ) {
 	parentp = arcp -> arc_parentp;
-	if ( childp == parentp || ( arcp -> arc_flags & DEADARC ) ||
+	if ( childp == parentp ||
 	     ( childp->cycleno != 0 && parentp->cycleno == childp->cycleno ) ) {
 		/*
 		 *	selfcall or call among siblings
@@ -314,7 +306,7 @@ printparents( childp )
 	    printf( "%6.6s %5.5s %7.2f %11.2f %7d/%-7d     " ,
 		    "" , "" ,
 		    arcp -> arc_time / hz , arcp -> arc_childtime / hz ,
-		    arcp -> arc_count , cycleheadp -> npropcall );
+		    arcp -> arc_count , cycleheadp -> ncall );
 	    printname( parentp );
 	    printf( "\n" );
 	}
@@ -331,7 +323,7 @@ printchildren( parentp )
     arcp = parentp -> children;
     for ( arcp = parentp -> children ; arcp ; arcp = arcp -> arc_childlist ) {
 	childp = arcp -> arc_childp;
-	if ( childp == parentp || ( arcp -> arc_flags & DEADARC ) ||
+	if ( childp == parentp ||
 	    ( childp->cycleno != 0 && childp->cycleno == parentp->cycleno ) ) {
 		/*
 		 *	self call or call to sibling
@@ -347,7 +339,7 @@ printchildren( parentp )
 	    printf( "%6.6s %5.5s %7.2f %11.2f %7d/%-7d     " ,
 		    "" , "" ,
 		    arcp -> arc_time / hz , arcp -> arc_childtime / hz ,
-		    arcp -> arc_count , childp -> cyclehead -> npropcall );
+		    arcp -> arc_count , childp -> cyclehead -> ncall );
 	    printname( childp );
 	    printf( "\n" );
 	}
@@ -475,7 +467,7 @@ printcycle( cyclep )
 	    100 * ( cyclep -> propself + cyclep -> propchild ) / printtime ,
 	    cyclep -> propself / hz ,
 	    cyclep -> propchild / hz ,
-	    cyclep -> npropcall );
+	    cyclep -> ncall );
     if ( cyclep -> selfcalls != 0 ) {
 	printf( "+%-7d" , cyclep -> selfcalls );
     } else {
@@ -497,7 +489,7 @@ printmembers( cyclep )
     for ( memberp = cyclep -> cnext ; memberp ; memberp = memberp -> cnext ) {
 	printf( "%6.6s %5.5s %7.2f %11.2f %7d" , 
 		"" , "" , memberp -> propself / hz , memberp -> propchild / hz ,
-		memberp -> npropcall );
+		memberp -> ncall );
 	if ( memberp -> selfcalls != 0 ) {
 	    printf( "+%-7d" , memberp -> selfcalls );
 	} else {
@@ -722,5 +714,5 @@ printindex()
 	}
 	printf( "\n" );
     }
-    free( namesortnlp );
+    cfree( namesortnlp );
 }

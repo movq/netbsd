@@ -1,8 +1,6 @@
-/*	$NetBSD: hostname.c,v 1.11 1997/07/20 17:34:52 christos Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983, 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,72 +31,53 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1983, 1988 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)hostname.c	8.2 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: hostname.c,v 1.11 1997/07/20 17:34:52 christos Exp $");
-#endif
+static char sccsid[] = "@(#)hostname.c	5.4 (Berkeley) 5/31/90";
 #endif /* not lint */
 
+#include <stdio.h>
 #include <sys/param.h>
 
-#include <err.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
-void usage __P((void));
-int main __P((int, char *[]));
-
-int
-main(argc, argv)
+main(argc,argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
+	extern int optind;
 	int ch, sflag;
-	char *p, hostname[MAXHOSTNAMELEN];
+	char hostname[MAXHOSTNAMELEN], *p, *index();
 
 	sflag = 0;
-	while ((ch = getopt(argc, argv, "s")) != -1)
-		switch (ch) {
+	while ((ch = getopt(argc, argv, "s")) != EOF)
+		switch((char)ch) {
 		case 's':
 			sflag = 1;
 			break;
 		case '?':
 		default:
-			usage();
+			fputs("hostname [-s] [hostname]\n", stderr);
+			exit(1);
 		}
-	argc -= optind;
 	argv += optind;
 
-	if (argc > 1)
-		usage();
-
 	if (*argv) {
-		if (sethostname(*argv, strlen(*argv)))
-			err(1, "sethostname");
+		if (sethostname(*argv, strlen(*argv))) {
+			perror("sethostname");
+			exit(1);
+		}
 	} else {
-		if (gethostname(hostname, sizeof(hostname)))
-			err(1, "gethostname");
-		if (sflag && (p = strchr(hostname, '.')))
+		if (gethostname(hostname, sizeof(hostname))) {
+			perror("gethostname");
+			exit(1);
+		}
+		if (sflag && (p = index(hostname, '.')))
 			*p = '\0';
-		(void)printf("%s\n", hostname);
+		puts(hostname);
 	}
 	exit(0);
-}
-
-void
-usage()
-{
-
-	(void)fprintf(stderr, "usage: hostname [-s] [name-of-host]\n");
-	exit(1);
 }

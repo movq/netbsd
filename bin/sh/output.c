@@ -1,8 +1,6 @@
-/*	$NetBSD: output.c,v 1.19 1997/07/04 21:02:18 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)output.c	8.2 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: output.c,v 1.19 1997/07/04 21:02:18 christos Exp $");
-#endif
+static char sccsid[] = "@(#)output.c	5.1 (Berkeley) 3/7/91";
 #endif /* not lint */
 
 /*
@@ -56,20 +49,18 @@ __RCSID("$NetBSD: output.c,v 1.19 1997/07/04 21:02:18 christos Exp $");
  *	Our output routines may be smaller than the stdio routines.
  */
 
-#include <sys/types.h>        /* quad_t */
-#include <sys/ioctl.h>
-
 #include <stdio.h>	/* defines BUFSIZ */
-#include <string.h>
-#include <errno.h>
-#include <unistd.h>
-#include <stdlib.h>
-
 #include "shell.h"
 #include "syntax.h"
 #include "output.h"
 #include "memalloc.h"
 #include "error.h"
+#ifdef __STDC__
+#include "stdarg.h"
+#else
+#include <varargs.h>
+#endif
+#include <errno.h>
 
 
 #define OUTBUFSIZ BUFSIZ
@@ -79,7 +70,7 @@ __RCSID("$NetBSD: output.c,v 1.19 1997/07/04 21:02:18 christos Exp $");
 
 
 struct output output = {NULL, 0, NULL, OUTBUFSIZ, 1, 0};
-struct output errout = {NULL, 0, NULL, 100, 2, 0};
+struct output errout = {NULL, 0, NULL, 100, 2, 0};;
 struct output memout = {NULL, 0, NULL, 0, MEM_OUT, 0};
 struct output *out1 = &output;
 struct output *out2 = &errout;
@@ -124,7 +115,7 @@ open_mem(block, length, file)
 
 void
 out1str(p)
-	const char *p;
+	char *p;
 	{
 	outstr(p, out1);
 }
@@ -132,7 +123,7 @@ out1str(p)
 
 void
 out2str(p)
-	const char *p;
+	char *p;
 	{
 	outstr(p, out2);
 }
@@ -140,13 +131,11 @@ out2str(p)
 
 void
 outstr(p, file)
-	const char *p;
-	struct output *file;
+	register char *p;
+	register struct output *file;
 	{
 	while (*p)
 		outc(*p++, file);
-	if (file == out2)
-		flushout(file);
 }
 
 
@@ -237,15 +226,6 @@ out1fmt(char *fmt, ...) {
 	va_end(ap);
 }
 
-void
-dprintf(char *fmt, ...) {
-	va_list ap;
-
-	va_start(ap, fmt);
-	doformat(out2, fmt, ap);
-	va_end(ap);
-	flushout(out2);
-}
 
 void
 fmtstr(char *outbuf, int length, char *fmt, ...) {
@@ -294,19 +274,6 @@ out1fmt(va_alist)
 	va_end(ap);
 }
 
-void
-dprintf(va_alist)
-	va_dcl
-	{
-	va_list ap;
-	char *fmt;
-
-	va_start(ap);
-	fmt = va_arg(ap, char *);
-	doformat(out2, fmt, ap);
-	va_end(ap);
-	flushout(out2);
-}
 
 void
 fmtstr(va_alist)
@@ -338,7 +305,7 @@ fmtstr(va_alist)
  * Formatted output.  This routine handles a subset of the printf formats:
  * - Formats supported: d, u, o, X, s, and c.
  * - The x format is also accepted but is treated like X.
- * - The l and q modifiers are accepted.
+ * - The l modifier is accepted.
  * - The - and # flags are accepted; # only works with the o format.
  * - Width and precision may be specified with any format except c.
  * - An * may be given for the width or precision.
@@ -349,32 +316,30 @@ fmtstr(va_alist)
 
 #define TEMPSIZE 24
 
-static const char digit[] = "0123456789ABCDEF";
+#ifdef __STDC__
+static const char digit[16] = "0123456789ABCDEF";
+#else
+static const char digit[17] = "0123456789ABCDEF";
+#endif
 
 
 void
 doformat(dest, f, ap)
-	struct output *dest;
-	char *f;		/* format string */
+	register struct output *dest;
+	register char *f;		/* format string */
 	va_list ap;
 	{
-	char c;
+	register char c;
 	char temp[TEMPSIZE];
 	int flushleft;
 	int sharp;
 	int width;
 	int prec;
 	int islong;
-	int isquad;
 	char *p;
 	int sign;
-#ifdef BSD4_4
-	quad_t l;
-	u_quad_t num;
-#else
 	long l;
-	u_long num;
-#endif
+	unsigned long num;
 	unsigned base;
 	int len;
 	int size;
@@ -390,7 +355,6 @@ doformat(dest, f, ap)
 		width = 0;
 		prec = -1;
 		islong = 0;
-		isquad = 0;
 		for (;;) {
 			if (*f == '-')
 				flushleft++;
@@ -422,17 +386,9 @@ doformat(dest, f, ap)
 		if (*f == 'l') {
 			islong++;
 			f++;
-		} else if (*f == 'q') {
-			isquad++;
-			f++;
 		}
 		switch (*f) {
 		case 'd':
-#ifdef BSD4_4
-			if (isquad)
-				l = va_arg(ap, quad_t);
-			else
-#endif
 			if (islong)
 				l = va_arg(ap, long);
 			else
@@ -457,11 +413,6 @@ doformat(dest, f, ap)
 			base = 16;
 uns_number:	  /* an unsigned number */
 			sign = 0;
-#ifdef BSD4_4
-			if (isquad)
-				num = va_arg(ap, u_quad_t);
-			else
-#endif
 			if (islong)
 				num = va_arg(ap, unsigned long);
 			else
@@ -568,15 +519,10 @@ xwrite(fd, buf, nbytes)
 
 /*
  * Version of ioctl that retries after a signal is caught.
- * XXX unused function
  */
 
 int
-xioctl(fd, request, arg)
-	int fd;
-	unsigned long request;
-	char * arg;
-{
+xioctl(fd, request, arg) {
 	int i;
 
 	while ((i = ioctl(fd, request, arg)) == -1 && errno == EINTR);

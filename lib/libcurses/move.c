@@ -1,8 +1,6 @@
-/*	$NetBSD: move.c,v 1.7 1997/07/22 07:36:51 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,37 +31,28 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)move.c	8.2 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: move.c,v 1.7 1997/07/22 07:36:51 mikel Exp $");
-#endif
-#endif	/* not lint */
+static char sccsid[] = "@(#)move.c	5.5 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include "curses.h"
+# include	"curses.ext"
 
 /*
- * wmove --
- *	Moves the cursor to the given point.
+ *	This routine moves the cursor to the given point
+ *
  */
-int
 wmove(win, y, x)
-	register WINDOW *win;
-	register int y, x;
-{
+reg WINDOW	*win;
+reg int		y, x; {
 
-#ifdef DEBUG
-	__CTRACE("wmove: (%d, %d)\n", y, x);
-#endif
+# ifdef DEBUG
+	fprintf(outf, "MOVE to (%d, %d)\n", y, x);
+# endif
 	if (x < 0 || y < 0)
-		return (ERR);
-	if (x >= win->maxx || y >= win->maxy)
-		return (ERR);
-	win->curx = x;
-	win->lines[win->cury]->flags &= ~__ISPASTEOL;
-	win->cury = y;
-	win->lines[y]->flags &= ~__ISPASTEOL;
-	return (OK);
+		return ERR;
+	if (x >= win->_maxx || y >= win->_maxy)
+		return ERR;
+	win->_curx = x;
+	win->_cury = y;
+	return OK;
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: getcap.c,v 1.15 1997/08/25 19:31:45 kleink Exp $	*/
-
 /*-
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1992 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Casey Leedom of Lawrence Livermore National Laboratory.
@@ -36,17 +34,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)getcap.c	8.3 (Berkeley) 3/25/94";
-#else
-__RCSID("$NetBSD: getcap.c,v 1.15 1997/08/25 19:31:45 kleink Exp $");
-#endif
+static char sccsid[] = "@(#)getcap.c	5.15 (Berkeley) 3/19/93";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
+
 #include <ctype.h>
 #include <db.h>
 #include <errno.h>	
@@ -56,19 +49,6 @@ __RCSID("$NetBSD: getcap.c,v 1.15 1997/08/25 19:31:45 kleink Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#ifdef __weak_alias
-__weak_alias(cgetcap,_cgetcap);
-__weak_alias(cgetclose,_cgetclose);
-__weak_alias(cgetent,_cgetent);
-__weak_alias(cgetfirst,_cgetfirst);
-__weak_alias(cgetmatch,_cgetmatch);
-__weak_alias(cgetnext,_cgetnext);
-__weak_alias(cgetnum,_cgetnum);
-__weak_alias(cgetset,_cgetset);
-__weak_alias(cgetstr,_cgetstr);
-__weak_alias(cgetustr,_cgetustr);
-#endif
 
 #define	BFRAG		1024
 #define	BSIZE		1024
@@ -110,7 +90,7 @@ cgetset(ent)
                 return (-1);
 	}
 	gottoprec = 0;
-        (void)strcpy(toprec, ent);	/* XXX: strcpy is safe */
+        (void)strcpy(toprec, ent);
         return (0);
 }
 
@@ -212,9 +192,10 @@ getent(cap, len, db_array, fd, name, depth, nfield)
 	int fd, depth;
 {
 	DB *capdbp;
-	register char *r_end, *rp = NULL, **db_p;	/* pacify gcc */
-	int myfd = 0, eof, foundit, retval, clen;
-	char *record, *cbuf;
+	DBT key, data;
+	register char *r_end, *rp, **db_p;
+	int myfd, eof, foundit, retval;
+	char *record;
 	int tc_not_resolved;
 	char pbuf[_POSIX_PATH_MAX];
 	
@@ -233,7 +214,8 @@ getent(cap, len, db_array, fd, name, depth, nfield)
 			errno = ENOMEM;
 			return (-2);
 		}
-		(void)strcpy(record, toprec);	/* XXX: strcpy is safe */
+		(void)strcpy(record, toprec);
+		myfd = 0;
 		db_p = db_array;
 		rp = record + topreclen + 1;
 		r_end = rp + BFRAG;
@@ -260,34 +242,28 @@ getent(cap, len, db_array, fd, name, depth, nfield)
 		 */
 
 		if (fd >= 0) {
-			(void)lseek(fd, (off_t)0, SEEK_SET);
+			(void)lseek(fd, (off_t)0, L_SET);
+			myfd = 0;
 		} else {
 			(void)snprintf(pbuf, sizeof(pbuf), "%s.db", *db_p);
 			if ((capdbp = dbopen(pbuf, O_RDONLY, 0, DB_HASH, 0))
 			     != NULL) {
 				free(record);
 				retval = cdbget(capdbp, &record, name);
-				if (retval < 0) {
-					/* no record available */
-					(void)capdbp->close(capdbp);
-					return (retval);
-				}
-				/* save the data; close frees it */
-				clen = strlen(record);
-				cbuf = malloc(clen + 1);
-				memcpy(cbuf, record, clen + 1);
-				if (capdbp->close(capdbp) < 0) {
-					free(cbuf);
+				if (capdbp->close(capdbp) < 0)
 					return (-2);
-				}
-				*len = clen;
-				*cap = cbuf;
+				*len = strlen(record);
+				*cap = malloc(*len + 1);
+				memmove(*cap, record, *len + 1);
 				return (retval);
 			} else {
 				fd = open(*db_p, O_RDONLY, 0);
 				if (fd < 0) {
 					/* No error on unfound file. */
-					continue;
+					if (errno == ENOENT)
+						continue;
+					free(record);
+					return (-2);
 				}
 				myfd = 1;
 			}
@@ -556,6 +532,8 @@ cdbget(capdbp, bp, name)
 	char **bp, *name;
 {
 	DBT key, data;
+	char *buf;
+	int st;
 
 	key.data = name;
 	key.size = strlen(name);
@@ -679,7 +657,7 @@ cgetnext(bp, db_array)
 			gottoprec = 1;
 			line = toprec;
 		} else {
-			line = fgetln(pfp, &len);
+			line = fgetline(pfp, &len);
 			if (line == NULL && pfp) {
 				(void)fclose(pfp);
 				if (ferror(pfp)) {
@@ -738,7 +716,7 @@ cgetnext(bp, db_array)
 				*np = '\0';
 				break;
 			} else { /* name field extends beyond the line */
-				line = fgetln(pfp, &len);
+				line = fgetline(pfp, &len);
 				if (line == NULL && pfp) {
 					(void)fclose(pfp);
 					if (ferror(pfp)) {
@@ -750,7 +728,7 @@ cgetnext(bp, db_array)
 			}
 		}
 		rp = buf;
-		for(cp = nbuf; *cp != '\0'; cp++)
+		for(cp = nbuf; *cp != NULL; cp++)
 			if (*cp == '|' || *cp == ':')
 				break;
 			else

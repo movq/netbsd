@@ -1,8 +1,6 @@
-/*	$NetBSD: argo_debug.h,v 1.10 1997/09/08 02:06:31 mikel Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)argo_debug.h	8.1 (Berkeley) 6/10/93
+ *	@(#)argo_debug.h	7.4 (Berkeley) 5/6/91
  */
 
 /*****************************************************************
@@ -40,13 +38,13 @@
 
                       All Rights Reserved
 
-Permission to use, copy, modify, and distribute this software and its
-documentation for any purpose and without fee is hereby granted,
+Permission to use, copy, modify, and distribute this software and its 
+documentation for any purpose and without fee is hereby granted, 
 provided that the above copyright notice appear in all copies and that
-both that copyright notice and this permission notice appear in
+both that copyright notice and this permission notice appear in 
 supporting documentation, and that the name of IBM not be
 used in advertising or publicity pertaining to distribution of the
-software without specific, written prior permission.
+software without specific, written prior permission.  
 
 IBM DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
 ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
@@ -61,52 +59,82 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
+/* 
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/argo_debug.h,v 1.1 1993/04/09 12:00:44 cgd Exp $
+ * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/argo_debug.h,v $
+ */
 
-#ifndef _NETISO_ARGO_DEBUG_H_
-#define _NETISO_ARGO_DEBUG_H_
-void Dump_buf __P((caddr_t, int));
+#ifndef __ARGO_DEBUG__
+#define __ARGO_DEBUG__
+
 #define dump_buf(a, b) Dump_buf((caddr_t)(a), (int)(b))
+
+/***********************************************
+ * Lint stuff
+ **********************************************/
+#if	defined(lint)
+/* 
+ * lint can't handle the flaky vacuous definitions 
+ * of IFDEBUG, ENDDEBUG, etc.
+ */
+#endif	defined(lint)
 
 /***********************************************
  * DEBUG ON:
  **********************************************/
 #ifndef ARGO_DEBUG
 #define ARGO_DEBUG
-#endif				/* ARGO_DEBUG */
+#endif ARGO_DEBUG
 
 
 #ifdef ARGO_DEBUG
 /*
     #ifndef TPPT
     #define TPPT
-    #endif
+    #endif TPPT
 
     #ifndef TP_PERF_MEAS
     #define TP_PERF_MEAS
-    #endif
+    #endif TP_PERF_MEAS
 */
 
-unsigned char   argo_debug[128];
+unsigned char	argo_debug[128];
 
-#endif				/* ARGO_DEBUG */
+#define IFDEBUG(ascii) \
+	if(argo_debug[ascii]) { 
+#define ENDDEBUG  ; }
+
+#else  ARGO_DEBUG
 
 /***********************************************
- * ASSERT
+ * DEBUG OFF:
+ **********************************************/
+
+#ifndef STAR
+#define STAR *
+#endif	STAR
+#define IFDEBUG(ascii)	 //*beginning of comment*/STAR
+#define ENDDEBUG	 STAR/*end of comment*//
+
+#endif ARGO_DEBUG
+
+/***********************************************
+ * ASSERT 
  **********************************************/
 #ifdef ARGO_DEBUG
 
 #ifndef lint
 #define ASSERT(phrase) \
 if( !(phrase) ) printf("ASSERTION NOT VALID at line %d file %s\n",__LINE__,__FILE__)
-#else				/* lint */
-#define ASSERT(phrase)		/* phrase */
-#endif				/* lint */
+#else lint
+#define ASSERT(phrase) /* phrase */
+#endif lint
 
-#else				/* ARGO_DEBUG */
+#else ARGO_DEBUG
 
-#define ASSERT(phrase)		/* phrase */
+#define ASSERT(phrase) /* phrase */
 
-#endif				/* ARGO_DEBUG */
+#endif ARGO_DEBUG
 
 
 /***********************************************
@@ -132,20 +160,22 @@ if( !(phrase) ) printf("ASSERTION NOT VALID at line %d file %s\n",__LINE__,__FIL
 /* clnp over token ring */
 #define D_ADCOM			'\12'
 /* clnp over the adcom */
-#define D_ISO			'\13'
+#define D_ISO			'\13'	
 /* iso address family */
 #define	D_FORWARD		'\14'
 /* clnp forwarding */
 #define	D_DUMPOUT		'\15'
 /* dump clnp outgoing packets */
-#define	D_DUMPIN		'\16'
+#define	D_DUMPIN		'\16'	
 /* dump clnp input packets */
-#define D_DISCARD		'\17'
+#define D_DISCARD		'\17'	
 /* debug clnp packet discard/er function */
-#define D_FRAG			'\20'
+#define D_FRAG			'\20'	
 /* clnp fragmentation */
-#define	D_REASS			'\21'
+#define	D_REASS			'\21'	
 /* clnp reassembly */
+
+char *clnp_iso_addrp();
 
 /***********************************************
  * ESIS DEBUG OPTIONS
@@ -228,6 +258,8 @@ if( !(phrase) ) printf("ASSERTION NOT VALID at line %d file %s\n",__LINE__,__FIL
 #define D_TPISO			'\176'
 #define D_QUENCH		'\177'
 
+void dump_mbuf();
+
 /***********************************************
  * New mbuf types for debugging w/ netstat -m
  * This messes up 4.4 malloc for now. need bigger
@@ -236,13 +268,17 @@ if( !(phrase) ) printf("ASSERTION NOT VALID at line %d file %s\n",__LINE__,__FIL
 #ifdef notdef
 
 #define 	TPMT_DATA	0x21
+#define 	TPMT_RCVRTC	0x42
+#define 	TPMT_SNDRTC	0x41
 #define 	TPMT_TPHDR	0x22
 #define 	TPMT_IPHDR	0x32
 #define 	TPMT_SONAME	0x28
 #define 	TPMT_EOT	0x40
 #define 	TPMT_XPD	0x44
+#define 	TPMT_PCB	0x23
+#define 	TPMT_PERF	0x45
 
-#else				/* ARGO_DEBUG */
+#else ARGO_DEBUG
 
 #define 	TPMT_DATA	MT_DATA
 #define 	TPMT_RCVRTC	MT_DATA
@@ -252,7 +288,9 @@ if( !(phrase) ) printf("ASSERTION NOT VALID at line %d file %s\n",__LINE__,__FIL
 #define 	TPMT_SONAME	MT_SONAME
 /* MT_EOT and MT_XPD are defined in tp_param.h */
 #define 	TPMT_XPD	MT_OOBDATA
+#define 	TPMT_PCB	MT_PCB
+#define 	TPMT_PERF	MT_PCB
 
-#endif				/* ARGO_DEBUG */
+#endif ARGO_DEBUG
 
-#endif				/* _NETISO_ARGO_DEBUG_H_ */
+#endif __ARGO_DEBUG__

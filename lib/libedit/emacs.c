@@ -1,5 +1,3 @@
-/*	$NetBSD: emacs.c,v 1.4 1997/07/06 18:25:25 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if !defined(lint) && !defined(SCCSID)
-#if 0
 static char sccsid[] = "@(#)emacs.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: emacs.c,v 1.4 1997/07/06 18:25:25 christos Exp $");
-#endif
 #endif /* not lint && not SCCSID */
 
 /* 
@@ -62,16 +55,20 @@ em_delete_or_list(el, c)
     int c;
 {
     if (el->el_line.cursor == el->el_line.lastchar) {	/* if I'm at the end */
+#ifdef notyet
 	if (el->el_line.cursor == el->el_line.buffer) {	/* and the beginning */
+#endif
 	    term_overwrite(el, STReof, 4);/* then do a EOF */
 	    term__flush();
 	    return CC_EOF;
+#ifdef notyet
 	}
 	else {
-	    /* Here we could list completions, but it is an error right now */
-	    term_beep(el);
-	    return CC_ERROR;
+	    re_goto_bottom(el);
+	    *el->el_line.lastchar = '\0';		/* just in case */
+	    return CC_LIST_CHOICES;
 	}
+#endif
     }
     else {
 	c_delafter(el, el->el_state.argument);	/* delete after dot */

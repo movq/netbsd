@@ -1,8 +1,6 @@
-/*	$NetBSD: robots.h,v 1.7 1997/10/12 14:16:28 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,21 +30,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)robots.h	8.1 (Berkeley) 5/31/93
+ *	@(#)robots.h	5.6 (Berkeley) 2/28/91
  */
 
-# include	<sys/ttydefaults.h>
-# include	<ctype.h>
 # include	<curses.h>
-# include	<err.h>
-# include	<fcntl.h>
-# include	<pwd.h>
 # include	<setjmp.h>
-# include	<signal.h>
-# include	<stdlib.h>
-# include	<string.h>
-# include	<termios.h>
-# include	<unistd.h>
 
 /*
  * miscellaneous constants
@@ -77,20 +65,19 @@
 # define	PLAYER	'@'
 
 /*
+ * pseudo functions
+ */
+
+# undef		CTRL
+# define	CTRL(X)	('X' - 'A' + 1)
+
+/*
  * type definitions
  */
 
 typedef struct {
 	int	y, x;
 } COORD;
-
-typedef struct {
-	int	s_uid;
-	int	s_score;
-	char	s_name[MAXNAME];
-} SCORE;
-
-typedef struct passwd	PASSWD;
 
 /*
  * global variables
@@ -117,25 +104,7 @@ extern jmp_buf	End_move;
  * functions types
  */
 
-void	add_score __P((int));
-bool	another __P((void));
-int	cmp_sc __P((const void *, const void *));
-bool	do_move __P((int, int));
-bool	eaten __P((COORD *));
-void	flush_in __P((void));
-void	get_move __P((void));
-void	init_field __P((void));
-bool	jumping __P((void));
-void	make_level __P((void));
-void	move_robots __P((int));
-bool	must_telep __P((void));
-void	play_level __P((void));
-int	query __P((char *));
-void	quit __P((int));
-void	reset_count __P((void));
-int	rnd __P((int));
-COORD  *rnd_pos __P((void));
-void	score __P((void));
-void	set_name __P((SCORE *));
-void	show_score __P((void));
-int	sign __P((int));
+int	cmp_sc();
+void	move_robots();
+
+COORD	*rnd_pos();

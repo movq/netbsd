@@ -1,7 +1,5 @@
-.\"	$NetBSD: route.8,v 1.13 1997/09/16 07:04:18 lukem Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,54 +29,47 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)route.8	8.4 (Berkeley) 6/1/94
+.\"     @(#)route.8	6.11 (Berkeley) 3/16/91
 .\"
-.Dd June 1, 1994
+.Dd March 16, 1991
 .Dt ROUTE 8
-.Os BSD 4.4
+.Os BSD 4.2
 .Sh NAME
 .Nm route
-.Nd manually manipulate the routing tables.
+.Nd manually manipulate the routing tables (Interim)
 .Sh SYNOPSIS
-.Nm
-.Op Fl nqv
+.Nm route
+.Op Fl n
+.Op Fl q
+.Op Fl v
 .Ar command
 .Oo
 .Op Ar modifiers
 .Ar args
 .Oc
 .Sh DESCRIPTION
-.Nm
-is a utility used to manually manipulate the network
-routing tables.  It normally is not needed, as a
-system routing table management daemon such as
+.Nm Route
+is a program used to manually manipulate the network
+routing tables.  It normally is not needed, as the
+system routing table management daemon,
 .Xr routed 8 ,
 should tend to this task.
 .Pp
-The
-.Nm
-utility supports a limited number of general options,
-but a rich command language, enabling the user to specify
-any arbitrary request that could be delivered via the
-programmatic interface discussed in 
-.Xr route 4 .
+Options supported by
+.Nm route :
 .Pp
 .Bl -tag -width Ds
 .It Fl n
-Bypasses attempts to print host and network names symbolically
-when reporting actions.  (The process of translating between symbolic
-names and numerical equivalents can be quite time consuming, and
-may require correct operation of the network; thus it may be expedient
-to forgo this, especially when attempting to repair networking operations).
-.It Fl q
-Suppress all output.
+Prevent attempts to print host and network names symbolically
+when reporting actions.
 .It Fl v
 (verbose) Print additional details.
+.It Fl q
+Suppress all output.
 .El
 .Pp
-The
-.Nm
-utility provides several commands:
+Commands accepted by
+.Nm route :
 .Pp
 .Bl -tag -width Fl -compact
 .It Cm add
@@ -91,47 +82,37 @@ Delete a specific route.
 Change aspects of a route (such as its gateway).
 .It Cm get
 Lookup and display the route for a destination.
-.It Cm show
-Print out the route table similar to "netstat \-r" (see
-.Xr netstat 8 ).
 .It Cm monitor
 Continuously report any changes to the routing information base,
-routing lookup misses, or suspected network partitionings.
+routing lookup misses, or suspected network partionings.
 .El
 .Pp
 The monitor command has the syntax
 .Pp
 .Bd -filled -offset indent -compact
-.Nm "" Op Fl n
+.Nm route Op Fl n
 .Cm monitor
 .Ed
 .Pp
 The flush command has the syntax
 .Pp
 .Bd -filled -offset indent -compact
-.Nm "" Op Fl n
+.Nm route Op Fl n
 .Cm flush
 .Op Ar family
 .Ed
 .Pp
-If the 
-.Cm flush
-command is specified, 
-.Nm
-will ``flush'' the routing tables of all gateway entries.
-When the address family is specified by any of the
+Where the address family may be specified by any of the
 .Fl osi ,
 .Fl xns ,
-.Fl atalk ,
 or
 .Fl inet
-modifiers, only routes having destinations with addresses in the
-delineated family will be deleted.
+keywords.
 .Pp
 The other commands have the following syntax:
 .Pp
 .Bd -filled -offset indent -compact
-.Nm "" Op Fl n
+.Nm route Op Fl n
 .Ar command
 .Op Fl net No \&| Fl host
 .Ar destination gateway
@@ -139,14 +120,13 @@ The other commands have the following syntax:
 .Pp
 where
 .Ar destination
-is the destination host or network, and
+is the destination host or network,
 .Ar gateway
-is the next-hop intermediary via which packets should be routed.
-Routes to a particular host may be distinguished from those to
-a network by interpreting the Internet address specified as the
-.Ar destination
-argument.
-The optional modifiers
+is the next-hop gateway to which packets should be addressed.
+Routes to a particular host are distinguished from those to
+a network by interpreting the Internet address associated with
+.Ar destination .
+The optional keywords
 .Fl net
 and
 .Fl host
@@ -154,7 +134,7 @@ force the destination to be interpreted as a network or a host, respectively.
 Otherwise, if the 
 .Ar destination
 has a ``local address part'' of
-.Dv INADDR_ANY ,
+INADDR_ANY ,
 or if the
 .Ar destination
 is the symbolic name of a network, then the route is
@@ -176,9 +156,8 @@ and
 is interpreted as
 .Li 128.32.130.0 .
 .Pp
-If the destination is directly reachable
-via an interface requiring
-no intermediary system to act as a gateway, the 
+If the route is via an interface rather than
+via a gateway, the 
 .Fl interface
 modifier should be specified;
 the gateway given is the address of this host on the common network,
@@ -186,17 +165,13 @@ indicating the interface to be used for transmission.
 .Pp
 The optional modifiers
 .Fl xns ,
-.Fl osi ,
-.Fl atalk ,
 and
-.Fl link 
+.Fl osi
 specify that all subsequent addresses are in the
-.Tn XNS ,
-.Tn OSI ,
+.Tn XNS
 or
-.Tn AppleTalk
+.Tn OSI
 address families,
-or are specified as link-level addresses,
 and the names must be numeric specifications rather than
 symbolic names.
 .Pp
@@ -206,33 +181,11 @@ qualifier is intended
 to achieve the effect of an
 .Tn OSI
 .Tn ESIS
-redirect with the netmask option,
-or to manually add subnet routes with
-netmasks different from that of the implied network interface
-(as would otherwise be communicated using the OSPF or ISIS routing protocols).
+redirect with the netmask option.
 One specifies an additional ensuing address parameter
 (to be interpreted as a network mask).
-The implicit network mask generated in the
-.Dv AF_INET
-case
+The implicit network mask generated in the inet case
 can be overridden by making sure this option follows the destination parameter.
-.Pp
-Routes have associated flags which influence operation of the protocols
-when sending to destinations matched by the routes.
-These flags may be set (or sometimes cleared)
-by indicating the following corresponding modifiers:
-.Bd -literal
--cloning   RTF_CLONING    - generates a new route on use
--xresolve  RTF_XRESOLVE   - emit mesg on use (for external lookup)
--iface    ~RTF_GATEWAY    - destination is directly reachable
--static    RTF_STATIC     - manually added route
--nostatic ~RTF_STATIC     - pretend route added by kernel or daemon
--reject    RTF_REJECT     - emit an ICMP unreachable when matched
--blackhole RTF_BLACKHOLE  - silently discard pkts (during updates)
--proto1    RTF_PROTO1     - set protocol specific routing flag #1
--proto2    RTF_PROTO2     - set protocol specific routing flag #2
--llinfo    RTF_LLINFO     - validly translates proto addr to link addr
-.Ed
 .Pp
 The optional modifiers
 .Fl rtt ,
@@ -244,8 +197,7 @@ The optional modifiers
 .Fl expire ,
 and
 .Fl ssthresh
-provide initial values to quantities maintained in the routing entry
-by transport level protocols, such as TCP or TP4.
+provide initial values to metrics maintained in the routing entry.
 These may be individually locked by preceding each such modifier to
 be locked by
 the
@@ -279,16 +231,24 @@ If this lookup fails,
 .Xr getnetbyname 3
 is then used to interpret the name as that of a network.
 .Pp
-.Nm
+.Nm Route
 uses a routing socket and the new message types
-.Dv RTM_ADD ,
-.Dv RTM_DELETE ,
-.Dv RTM_GET ,
+RTM_ADD,
+RTM_DELETE,
+RTM_GET,
 and
-.Dv RTM_CHANGE .
+RTM_CHANGE.
 As such, only the super-user may modify
 the routing tables.
-.ne 1i
+.Pp
+If the 
+.Cm flush
+command is specified, 
+.Nm route
+will ``flush'' the routing tables of all gateway entries.
+One can choose to flush only those routes whose destinations
+are of a given address family, by specifying an optional keyword
+describing which address family.
 .Sh DIAGNOSTICS
 .Bl -tag -width Ds
 .It Sy "add [host \&| network ] %s: gateway %s flags %x"
@@ -319,16 +279,13 @@ wasn't present in the tables.
 An add operation was attempted, but the system was
 low on resources and was unable to allocate memory
 to create the new entry.
-.It Sy "Permission denied"
-The attempted operation is privileged.  Only root may modify the 
-routing tables.  These privileges are enforced by the kernel.
 .El
 .Sh SEE ALSO
 .Xr netintro 4 ,
 .Xr route 4 ,
 .Xr esis 4 ,
-.Xr routed 8
-.\" .Xr XNSrouted 8
+.Xr routed 8 ,
+.Xr XNSrouted 8
 .Sh HISTORY
 The
 .Nm
@@ -336,5 +293,5 @@ command appeared in
 .Bx 4.2 .
 .Sh BUGS
 The first paragraph may have slightly exaggerated
-.Xr routed 8 Ns 's
+.Xr routed Ns 's
 abilities.

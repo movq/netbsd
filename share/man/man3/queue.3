@@ -1,5 +1,3 @@
-.\"	$NetBSD: queue.3,v 1.7 1997/09/30 16:49:20 christos Exp $
-.\"
 .\" Copyright (c) 1993 The Regents of the University of California.
 .\" All rights reserved.
 .\"
@@ -33,38 +31,25 @@
 .\"
 .\"	@(#)queue.3	8.1 (Berkeley) 12/13/93
 .\"
-.Dd June 30, 1997
+.Dd "December 13, 1993"
 .Dt QUEUE 3
 .Os BSD 4
 .Sh NAME
 .Nm LIST_ENTRY ,
 .Nm LIST_HEAD ,
-.Nm LIST_HEAD_INITIALIZER ,
 .Nm LIST_INIT ,
 .Nm LIST_INSERT_AFTER ,
-.Nm LIST_INSERT_BEFORE ,
 .Nm LIST_INSERT_HEAD ,
 .Nm LIST_REMOVE ,
-.Nm SIMPLEQ_ENTRY ,
-.Nm SIMPLEQ_HEAD ,
-.Nm SIMPLEQ_HEAD_INITIALIZER ,
-.Nm SIMPLEQ_INIT ,
-.Nm SIMPLEQ_INSERT_HEAD ,
-.Nm SIMPLEQ_INSERT_TAIL ,
-.Nm SIMPLEQ_INSERT_AFTER ,
-.Nm SIMPLEQ_REMOVE_HEAD ,
 .Nm TAILQ_ENTRY ,
 .Nm TAILQ_HEAD ,
-.Nm TAILQ_HEAD_INITIALIZER ,
 .Nm TAILQ_INIT ,
 .Nm TAILQ_INSERT_AFTER ,
-.Nm TAILQ_INSERT_BEFORE ,
 .Nm TAILQ_INSERT_HEAD ,
 .Nm TAILQ_INSERT_TAIL ,
 .Nm TAILQ_REMOVE ,
 .Nm CIRCLEQ_ENTRY ,
 .Nm CIRCLEQ_HEAD ,
-.Nm CIRCLEQ_HEAD_INITIALIZER ,
 .Nm CIRCLEQ_INIT ,
 .Nm CIRCLEQ_INSERT_AFTER ,
 .Nm CIRCLEQ_INSERT_BEFORE ,
@@ -77,35 +62,21 @@
 .sp
 .Fn LIST_ENTRY "TYPE"
 .Fn LIST_HEAD "HEADNAME" "TYPE"
-.Fn LIST_HEAD_INITIALIZER "head"
 .Fn LIST_INIT "LIST_HEAD *head"
-.Fn LIST_INSERT_AFTER "TYPE *listelm" "TYPE *elm" "LIST_ENTRY NAME"
-.Fn LIST_INSERT_BEFORE "TYPE *listelm" "TYPE *elm" "LIST_ENTRY NAME"
+.Fn LIST_INSERT_AFTER "LIST_ENTRY *listelm" "TYPE *elm" "LIST_ENTRY NAME"
 .Fn LIST_INSERT_HEAD "LIST_HEAD *head" "TYPE *elm" "LIST_ENTRY NAME"
 .Fn LIST_REMOVE "TYPE *elm" "LIST_ENTRY NAME"
 .sp
-.Fn SIMPLEQ_ENTRY "TYPE"
-.Fn SIMPLEQ_HEAD "HEADNAME" "TYPE"
-.Fn SIMPLEQ_HEAD_INITIALIZER "head"
-.Fn SIMPLEQ_INIT "SIMPLEQ_HEAD *head"
-.Fn SIMPLEQ_INSERT_AFTER "SIMPLEQ_HEAD *head" "TYPE *listelm" "TYPE *elm" "SIMPLEQ_ENTRY NAME"
-.Fn SIMPLEQ_INSERT_HEAD "SIMPLEQ_HEAD *head" "TYPE *elm" "SIMPLEQ_ENTRY NAME"
-.Fn SIMPLEQ_INSERT_TAIL "SIMPLEQ_HEAD *head" "TYPE *elm" "SIMPLEQ_ENTRY NAME"
-.Fn SIMPLEQ_REMOVE_HEAD "SIMPLEQ_HEAD *head" "TYPE *elm" "SIMPLEQ_ENTRY NAME"
-.sp
 .Fn TAILQ_ENTRY "TYPE"
 .Fn TAILQ_HEAD "HEADNAME" "TYPE"
-.Fn TAILQ_HEAD_INITIALIZER "head"
 .Fn TAILQ_INIT "TAILQ_HEAD *head"
 .Fn TAILQ_INSERT_AFTER "TAILQ_HEAD *head" "TYPE *listelm" "TYPE *elm" "TAILQ_ENTRY NAME"
-.Fn TAILQ_INSERT_BEFORE "TYPE *listelm" "TYPE *elm" "TAILQ_ENTRY NAME"
 .Fn TAILQ_INSERT_HEAD "TAILQ_HEAD *head" "TYPE *elm" "TAILQ_ENTRY NAME"
 .Fn TAILQ_INSERT_TAIL "TAILQ_HEAD *head" "TYPE *elm" "TAILQ_ENTRY NAME"
 .Fn TAILQ_REMOVE "TAILQ_HEAD *head" "TYPE *elm" "TAILQ_ENTRY NAME"
 .sp
 .Fn CIRCLEQ_ENTRY "TYPE"
 .Fn CIRCLEQ_HEAD "HEADNAME" "TYPE"
-.Fn CIRCLEQ_HEAD_INITIALIZER "head"
 .Fn CIRCLEQ_INIT "CIRCLEQ_HEAD *head"
 .Fn CIRCLEQ_INSERT_AFTER "CIRCLEQ_HEAD *head" "TYPE *listelm" "TYPE *elm" "CIRCLEQ_ENTRY NAME"
 .Fn CIRCLEQ_INSERT_BEFORE "CIRCLEQ_HEAD *head" "TYPE *listelm" "TYPE *elm" "CIRCLEQ_ENTRY NAME"
@@ -113,39 +84,22 @@
 .Fn CIRCLEQ_INSERT_TAIL "CIRCLEQ_HEAD *head" "TYPE *elm" "CIRCLEQ_ENTRY NAME"
 .Fn CIRCLEQ_REMOVE "CIRCLEQ_HEAD *head" "TYPE *elm" "CIRCLEQ_ENTRY NAME"
 .Sh DESCRIPTION
-These macros define and operate on four types of data structures:
-lists, simple queues, tail queues, and circular queues.
-All four structures support the following functionality:
+These macros define and operate on three types of data structures:
+lists, tail queues, and circular queues.
+All three structures support the following functionality:
 .Bl -enum -compact -offset indent
 .It
 Insertion of a new entry at the head of the list.
 .It
-Insertion of a new entry before or after any element in the list.
+Insertion of a new entry after any element in the list.
 .It
 Removal of any entry in the list.
 .It
 Forward traversal through the list.
 .El
 .Pp
-Lists are the simplest of the four data structures and support
+Lists are the simplest of the three data structures and support
 only the above functionality.
-.Pp
-Simple queues add the following functionality:
-.Bl -enum -compact -offset indent
-.It
-Entries can be added at the end of a list.
-.El
-However:
-.Bl -enum -compact -offset indent
-.It
-Entries may not be added before any element in the list.
-.It
-Only the first entry in the list may be removed.
-.It
-All list insertions and removals must specify the head of the list.
-.It
-Each head entry requires two pointers rather than one.
-.El
 .Pp
 Tail queues add the following functionality:
 .Bl -enum -compact -offset indent
@@ -155,8 +109,7 @@ Entries can be added at the end of a list.
 However:
 .Bl -enum -compact -offset indent
 .It
-All list insertions and removals, except insertion before another element, must
-specify the head of the list.
+All list insertions and removals must specify the head of the list.
 .It
 Each head entry requires two pointers rather than one.
 .It
@@ -168,6 +121,8 @@ Circular queues add the following functionality:
 .Bl -enum -compact -offset indent
 .It
 Entries can be added at the end of a list.
+.It
+Entries can be added before another entry.
 .It
 They may be traversed backwards, from tail to head.
 .El
@@ -189,7 +144,6 @@ In the macro definitions,
 is the name of a user defined structure,
 that must contain a field of type
 .Li LIST_ENTRY ,
-.Li SIMPLEQ_ENTRY ,
 .Li TAILQ_ENTRY ,
 or
 .Li CIRCLEQ_ENTRY ,
@@ -200,7 +154,6 @@ The argument
 is the name of a user defined structure that must be declared
 using the macros
 .Li LIST_HEAD ,
-.Li SIMPLEQ_HEAD ,
 .Li TAILQ_HEAD ,
 or
 .Li CIRCLEQ_HEAD .
@@ -214,8 +167,8 @@ This structure contains a single pointer to the first element
 on the list.
 The elements are doubly linked so that an arbitrary element can be
 removed without traversing the list.
-New elements can be added to the list after an existing element,
-before an existing element, or at the head of the list.
+New elements can be added to the list after an existing element or
+at the head of the list.
 A
 .Fa LIST_HEAD
 structure is declared as follows:
@@ -245,15 +198,6 @@ declares a structure that connects the elements in
 the list.
 .Pp
 The macro
-.Nm LIST_HEAD_INITIALIZER
-provides a value which can be used to initialize a list head at
-compile time, and is used at the point that the list head
-variable is declared, like:
-.Bd -literal -offset indent
-struct HEADNAME head = LIST_HEAD_INITIALIZER(head);
-.Ed
-.Pp
-The macro
 .Nm LIST_INIT
 initializes the list referenced by
 .Fa head .
@@ -269,13 +213,6 @@ The macro
 inserts the new element
 .Fa elm
 after the element
-.Fa listelm .
-.Pp
-The macro
-.Nm LIST_INSERT_BEFORE
-inserts the new element
-.Fa elm
-before the element
 .Fa listelm .
 .Pp
 The macro
@@ -300,119 +237,12 @@ LIST_INSERT_HEAD(&head, n1, entries);
 
 n2 = malloc(sizeof(struct entry));	/* Insert after. */
 LIST_INSERT_AFTER(n1, n2, entries);
-
-n2 = malloc(sizeof(struct entry));	/* Insert before. */
-LIST_INSERT_BEFORE(n1, n2, entries);
 					/* Forward traversal. */
 for (np = head.lh_first; np != NULL; np = np->entries.le_next)
 	np-> ...
 
 while (head.lh_first != NULL)		/* Delete. */
 	LIST_REMOVE(head.lh_first, entries);
-.Ed
-.Sh SIMPLE QUEUES
-A simple queue is headed by a structure defined by the
-.Nm SIMPLEQ_HEAD
-macro.
-This structure contains a pair of pointers,
-one to the first element in the simple queue and the other to
-the last element in the simple queue.
-The elements are doubly linked so that an arbitrary element can be
-removed without traversing the simple queue.
-New elements can be added to the queue after an existing element,
-before an existing element, at the head of the queue, or at the end
-the queue.
-A
-.Fa SIMPLEQ_HEAD
-structure is declared as follows:
-.Bd -literal -offset indent
-SIMPLEQ_HEAD(HEADNAME, TYPE) head;
-.Ed
-.sp
-where
-.Li HEADNAME
-is the name of the structure to be defined, and
-.Li TYPE
-is the type of the elements to be linked into the simple queue.
-A pointer to the head of the simple queue can later be declared as:
-.Bd -literal -offset indent
-struct HEADNAME *headp;
-.Ed
-.sp
-(The names
-.Li head
-and
-.Li headp
-are user selectable.)
-.Pp
-The macro
-.Nm SIMPLEQ_ENTRY
-declares a structure that connects the elements in
-the simple queue.
-.Pp
-The macro
-.Nm SIMPLEQ_HEAD_INITIALIZER
-provides a value which can be used to initialize a simple queue head at
-compile time, and is used at the point that the simple queue head
-variable is declared, like:
-.Bd -literal -offset indent
-struct HEADNAME head = SIMPLEQ_HEAD_INITIALIZER(head);
-.Ed
-.Pp
-The macro
-.Nm SIMPLEQ_INIT
-initializes the simple queue referenced by
-.Fa head .
-.Pp
-The macro
-.Nm SIMPLEQ_INSERT_HEAD
-inserts the new element
-.Fa elm
-at the head of the simple queue.
-.Pp
-The macro
-.Nm SIMPLEQ_INSERT_TAIL
-inserts the new element
-.Fa elm
-at the end of the simple queue.
-.Pp
-The macro
-.Nm SIMPLEQ_INSERT_AFTER
-inserts the new element
-.Fa elm
-after the element
-.Fa listelm .
-.Pp
-The macro
-.Nm SIMPLEQ_REMOVE_HEAD
-removes the first element from the simple queue.
-.Sh SIMPLE QUEUE EXAMPLE
-.Bd -literal
-SIMPLEQ_HEAD(simplehead, entry) head;
-struct simplehead *headp;		/* Simple queue head. */
-struct entry {
-	...
-	SIMPLEQ_ENTRY(entry) entries;	/* Simple queue. */
-	...
-} *n1, *n2, *np;
-
-SIMPLEQ_INIT(&head);			/* Initialize the queue. */
-
-n1 = malloc(sizeof(struct entry));	/* Insert at the head. */
-SIMPLEQ_INSERT_HEAD(&head, n1, entries);
-
-n1 = malloc(sizeof(struct entry));	/* Insert at the tail. */
-SIMPLEQ_INSERT_TAIL(&head, n1, entries);
-
-n2 = malloc(sizeof(struct entry));	/* Insert after. */
-SIMPLEQ_INSERT_AFTER(&head, n1, n2, entries);
-
-					/* Forward traversal. */
-for (np = head.sqh_first; np != NULL; np = np->entries.sqe_next)
-	np-> ...
-					/* Delete. */
-while (head.sqh_first != NULL)
-	SIMPLEQ_REMOVE_HEAD(&head, head.sqh_first, entries);
 .Ed
 .Sh TAIL QUEUES
 A tail queue is headed by a structure defined by the
@@ -423,9 +253,8 @@ one to the first element in the tail queue and the other to
 the last element in the tail queue.
 The elements are doubly linked so that an arbitrary element can be
 removed without traversing the tail queue.
-New elements can be added to the queue after an existing element,
-before an existing element, at the head of the queue, or at the end
-the queue.
+New elements can be added to the tail queue after an existing element,
+at the head of the tail queue, or at the end of the tail queue.
 A
 .Fa TAILQ_HEAD
 structure is declared as follows:
@@ -455,15 +284,6 @@ declares a structure that connects the elements in
 the tail queue.
 .Pp
 The macro
-.Nm TAILQ_HEAD_INITIALIZER
-provides a value which can be used to initialize a tail queue head at
-compile time, and is used at the point that the tail queue head
-variable is declared, like:
-.Bd -literal -offset indent
-struct HEADNAME head = TAILQ_HEAD_INITIALIZER(head);
-.Ed
-.Pp
-The macro
 .Nm TAILQ_INIT
 initializes the tail queue referenced by
 .Fa head .
@@ -485,13 +305,6 @@ The macro
 inserts the new element
 .Fa elm
 after the element
-.Fa listelm .
-.Pp
-The macro
-.Nm TAILQ_INSERT_BEFORE
-inserts the new element
-.Fa elm
-before the element
 .Fa listelm .
 .Pp
 The macro
@@ -519,9 +332,6 @@ TAILQ_INSERT_TAIL(&head, n1, entries);
 
 n2 = malloc(sizeof(struct entry));	/* Insert after. */
 TAILQ_INSERT_AFTER(&head, n1, n2, entries);
-
-n2 = malloc(sizeof(struct entry));	/* Insert before. */
-TAILQ_INSERT_BEFORE(n1, n2, entries);
 					/* Forward traversal. */
 for (np = head.tqh_first; np != NULL; np = np->entries.tqe_next)
 	np-> ...
@@ -568,15 +378,6 @@ The macro
 .Nm CIRCLEQ_ENTRY
 declares a structure that connects the elements in
 the circular queue.
-.Pp
-The macro
-.Nm CIRCLEQ_HEAD_INITIALIZER
-provides a value which can be used to initialize a circular queue head at
-compile time, and is used at the point that the circular queue head
-variable is declared, like:
-.Bd -literal -offset indent
-struct HEADNAME head = CIRCLEQ_HEAD_INITIALIZER(head);
-.Ed
 .Pp
 The macro
 .Nm CIRCLEQ_INIT
@@ -651,7 +452,3 @@ while (head.cqh_first != (void *)&head)
 The
 .Nm queue
 functions first appeared in 4.4BSD.
-The
-.Nm SIMPLEQ
-functions first appeared in
-.Nx 1.2 .

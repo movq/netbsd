@@ -1,8 +1,6 @@
-/*	$NetBSD: biff.c,v 1.5 1997/10/18 12:54:24 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,81 +31,55 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)biff.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: biff.c,v 1.5 1997/10/18 12:54:24 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)biff.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
+/*
+ * biff
+ */
 #include <sys/types.h>
 #include <sys/stat.h>
-
-#include <err.h>
-#include <errno.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 
-static void usage __P((void));
-int main __P((int, char **));
+char	*ttyname();
 
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	struct stat sb;
-	int ch;
-	char *name;
+	char *cp = ttyname(2);
+	struct stat stb;
 
-
-	while ((ch = getopt(argc, argv, "")) != -1)
-		switch(ch) {
-		case '?':
-		default:
-			usage();
-		}
-	argc -= optind;
-	argv += optind;
-
-	if ((name = ttyname(STDERR_FILENO)) == NULL)
-		err(2, "tty");
-
-	if (stat(name, &sb))
-		err(2, "stat");
-
-	if (*argv == NULL) {
-		(void)printf("is %s\n", sb.st_mode&0100 ? "y" : "n");
-		exit(sb.st_mode & 0100 ? 0 : 1);
+	argc--, argv++;
+	if (cp == 0)
+		fprintf(stderr, "Where are you?\n"), exit(1);
+	if (stat(cp, &stb) < 0)
+		perror(cp), exit(1);
+	if (argc == 0) {
+		printf("is %s\n", stb.st_mode&0100 ? "y" : "n");
+		exit((stb.st_mode&0100) ? 0 : 1);
 	}
+	switch (argv[0][0]) {
 
-	switch(argv[0][0]) {
-	case 'n':
-		if (chmod(name, sb.st_mode & ~0100) < 0)
-			err(2, name);
-		break;
 	case 'y':
-		if (chmod(name, sb.st_mode | 0100) < 0)
-			err(2, name);
+		if (chmod(cp, stb.st_mode|0100) < 0)
+			perror(cp);
 		break;
-	default:
-		usage();
-	}
-	exit(sb.st_mode & 0100 ? 0 : 1);
-}
 
-static void
-usage()
-{
-	(void)fprintf(stderr, "usage: biff [y | n]\n");
-	exit(2);
+	case 'n':
+		if (chmod(cp, stb.st_mode&~0100) < 0)
+			perror(cp);
+		break;
+
+	default:
+		fprintf(stderr, "usage: biff [y] [n]\n");
+	}
+	exit((stb.st_mode&0100) ? 0 : 1);
 }

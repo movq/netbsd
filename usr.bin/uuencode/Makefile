@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.5 1995/12/05 03:02:31 jtc Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.1 (Berkeley) 5/11/90
 
 PROG=	uuencode
-MAN=	uuencode.1 uuencode.5
+MAN1=	uuencode.0
+MAN5=	uuencode.format.0
 MLINKS=	uuencode.1 uudecode.1
 
 .include <bsd.prog.mk>

@@ -1,5 +1,3 @@
-/*	$NetBSD: lfs_cksum.c,v 1.7 1997/09/15 06:44:48 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,15 +30,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)lfs_cksum.c	8.2 (Berkeley) 10/9/94
+ *	from: @(#)lfs_cksum.c	8.1 (Berkeley) 6/11/93
+ *	$Id: lfs_cksum.c,v 1.1 1994/06/08 11:42:30 mycroft Exp $
  */
 
 #include <sys/types.h>
-#ifdef _KERNEL
-#include <ufs/lfs/lfs_extern.h>
-#else
-u_long cksum __P((void *, size_t));
-#endif
 
 /*
  * Simple, general purpose, fast checksum.  Data must be short-aligned.
@@ -59,7 +53,7 @@ cksum(str, len)
 	len &= ~(sizeof(u_short) - 1);
 	for (sum = 0; len; len -= sizeof(u_short)) {
 		sum ^= *(u_short *)str;
-		str = (void *)((u_short *)str + 1);
+		++(u_short *)str;
 	}
 	return (sum);
 }

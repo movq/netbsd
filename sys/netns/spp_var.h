@@ -1,8 +1,6 @@
-/*	$NetBSD: spp_var.h,v 1.8 1997/06/24 02:26:15 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1984, 1985, 1986, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,14 +30,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)spp_var.h	8.1 (Berkeley) 6/10/93
+ *	@(#)spp_var.h	7.7 (Berkeley) 6/28/90
  */
 
 /*
  * Sp control block, one per connection
  */
 struct sppcb {
-	struct	siqhead	s_q;		/* queue for out-of-order receipt */
+	struct	spidp_q	s_q;		/* queue for out-of-order receipt */
 	struct	nspcb	*s_nspcb;	/* backpointer to internet pcb */
 	u_char	s_state;
 	u_char	s_flags;
@@ -184,7 +182,7 @@ struct	spp_istat {
 	struct sppstat newstats;
 };
 
-#ifdef _KERNEL
+#ifdef KERNEL
 struct spp_istat spp_istat;
 
 /* Following was struct sppstat sppstat; */
@@ -193,35 +191,8 @@ struct spp_istat spp_istat;
 #endif
 
 u_short spp_iss;
-struct sppcb;
-struct spidp;
-
-/* spp_debug.c */
-void spp_trace __P((int, u_int, struct sppcb *, struct spidp *, int));
-
-/* spp_usrreq.c */
-void spp_init __P((void));
-void spp_input __P((struct mbuf *, ...));
-int spp_reass __P((struct sppcb *, struct spidp *, struct mbuf *));
-void *spp_ctlinput __P((int, struct sockaddr *, void *));
-void spp_quench __P((struct nspcb *));
-int spp_fixmtu __P((struct nspcb *));
-int spp_output __P((struct mbuf *, ...));
-void spp_setpersist __P((struct sppcb *));
-int spp_ctloutput __P((int, struct socket *, int, int, struct mbuf **));
-int spp_usrreq __P((struct socket *, int, struct mbuf *, struct mbuf *,
-		    struct mbuf *, struct proc *));
-int spp_usrreq_sp __P((struct socket *, int, struct mbuf *, struct mbuf *,
-		       struct mbuf *, struct proc *));
-void spp_template __P((struct sppcb *));
-struct sppcb *spp_close __P((struct sppcb *));
-struct sppcb *spp_usrclosed __P((struct sppcb *));
-struct sppcb *spp_disconnect __P((struct sppcb *));
-struct sppcb *spp_drop __P((struct sppcb *, int));
-void spp_abort __P((struct nspcb *));
-void spp_fasttimo __P((void));
-void spp_slowtimo __P((void));
-struct sppcb *spp_timers __P((struct sppcb *, long));
+extern struct sppcb *spp_close(), *spp_disconnect(),
+	*spp_usrclosed(), *spp_timers(), *spp_drop();
 #endif
 
 #define	SPP_ISSINCR	128

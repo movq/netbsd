@@ -1,8 +1,6 @@
-/*	$NetBSD: lcmd2.c,v 1.7 1995/09/29 00:44:04 cgd Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,11 +35,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lcmd2.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: lcmd2.c,v 1.7 1995/09/29 00:44:04 cgd Exp $";
-#endif
+static char sccsid[] = "@(#)lcmd2.c	3.23 (Berkeley) 6/17/90";
 #endif /* not lint */
 
 #include "defs.h"
@@ -49,10 +43,8 @@ static char rcsid[] = "$NetBSD: lcmd2.c,v 1.7 1995/09/29 00:44:04 cgd Exp $";
 #include "value.h"
 #include "var.h"
 #include "lcmd.h"
-#include "alias.h"
-#include <sys/types.h>
 #include <sys/resource.h>
-#include <string.h>
+#include "alias.h"
 
 /*ARGSUSED*/
 l_iostat(v, a)
@@ -90,10 +82,9 @@ struct value *v, *a;
 	wwprintf(w, "select\terror\tzero\n");
 	wwprintf(w, "%d\t%d\t%d\n",
 		wwnselect, wwnselecte, wwnselectz);
-	wwprintf(w, "read\terror\tzero\tchar\tack\tnack\tstat\terrorc\n");
-	wwprintf(w, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
-		wwnread, wwnreade, wwnreadz, wwnreadc, wwnreadack, wwnreadnack,
-		wwnreadstat, wwnreadec);
+	wwprintf(w, "read\terror\tzero\tchar\n");
+	wwprintf(w, "%d\t%d\t%d\t%d\n",
+		wwnread, wwnreade, wwnreadz, wwnreadc);
 	wwprintf(w, "ptyread\terror\tzero\tcontrol\tdata\tchar\n");
 	wwprintf(w, "%d\t%d\t%d\t%d\t%d\t%d\n",
 		wwnwread, wwnwreade, wwnwreadz,
@@ -123,7 +114,11 @@ register struct value *a;
 	}
 
 	(void) gettimeofday(&timeval, (struct timezone *)0);
-        timersub(&timeval, &starttime, &timeval);
+	timeval.tv_sec -= starttime.tv_sec;
+	if ((timeval.tv_usec -= starttime.tv_usec) < 0) {
+		timeval.tv_sec--;
+		timeval.tv_usec += 1000000;
+	}
 	(void) getrusage(a->v_type == V_STR
 			&& str_match(a->v_str, "children", 1)
 		? RUSAGE_CHILDREN : RUSAGE_SELF, &rusage);
@@ -224,7 +219,7 @@ struct value *v, *a;
 		error("Can't open variable window: %s.", wwerror());
 		return;
 	}
-	if (var_walk(printvar, (long)w) >= 0)
+	if (var_walk(printvar, (int)w) >= 0)
 		waitnl(w);
 	closeiwin(w);
 }
@@ -307,7 +302,7 @@ l_alias(v, a)
 			error("Can't open alias window: %s.", wwerror());
 			return;
 		}
-		if (alias_walk(printalias, (long)w) >= 0)
+		if (alias_walk(printalias, (int)w) >= 0)
 			waitnl(w);
 		closeiwin(w);
 	} else {

@@ -1,8 +1,6 @@
-/*	$NetBSD: subr.c,v 1.5 1997/10/18 14:44:40 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,33 +31,27 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)subr.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: subr.c,v 1.5 1997/10/18 14:44:40 lukem Exp $");
+static char sccsid[] = "@(#)subr.c	5.5 (Berkeley) 2/26/91";
 #endif /* not lint */
 
-#include <ctype.h>
-#include <err.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 #include "error.h"
 /*
  *	Arrayify a list of rules
  */
-void
 arrayify(e_length, e_array, header)
 	int	*e_length;
 	Eptr	**e_array;
 	Eptr	header;
 {
-	Eptr	errorp;
-	Eptr	*array;
-	int	listlength;
-	int	listindex;
+	reg	Eptr	errorp;
+	reg	Eptr	*array;
+	reg	int	listlength;
+	reg	int	listindex;
 
 	for (errorp = header, listlength = 0;
 	     errorp; errorp = errorp->error_next, listlength++)
@@ -76,19 +68,31 @@ arrayify(e_length, e_array, header)
 	*e_array = array;
 }
 
-char *
-Calloc(nelements, size)
+/*VARARGS1*/
+error(msg, a1, a2, a3)
+	char	*msg;
+{
+	fprintf(stderr, "Error: ");
+	fprintf(stderr, msg, a1, a2, a3);
+	fprintf(stderr, "\n");
+	fflush(stdout);
+	fflush(stderr);
+	exit(6);
+}
+/*ARGSUSED*/
+char *Calloc(nelements, size)
 	int	nelements;
 	int	size;
 {
 	char	*back;
-	if ( (back = (char *)calloc(nelements, size)) == (char *)NULL)
-		errx(1, "Ran out of memory.");
+	if ( (back = (char *)calloc(nelements, size)) == (char *)NULL){
+		error("Ran out of memory.\n");
+		exit(1);
+	}
 	return(back);
 }
 
-char *
-strsave(instring)
+char *strsave(instring)
 	char	*instring;
 {
 	char	*outstring;
@@ -96,17 +100,15 @@ strsave(instring)
 		instring);
 	return(outstring);
 }
-
 /*
  *	find the position of a given character in a string
  *		(one based)
  */
-int
-position(string, ch)
-	char	*string;
-	char	ch;
+int position(string, ch)
+	reg	char	*string;
+	reg	char	ch;
 {
-	int	i;
+	reg	int	i;
 	if (string)
 	for (i=1; *string; string++, i++){
 		if (*string == ch)
@@ -114,16 +116,14 @@ position(string, ch)
 	}
 	return(-1);
 }
-
 /*
  *	clobber the first occurance of ch in string by the new character
  */
-char *
-substitute(string, chold, chnew)
+char *substitute(string, chold, chnew)
 	char	*string;
 	char	chold, chnew;
 {
-	char	*cp = string;
+	reg	char	*cp = string;
 
 	if (cp)
 	while (*cp){
@@ -136,8 +136,7 @@ substitute(string, chold, chnew)
 	return(string);
 }
 
-char
-lastchar(string)
+char lastchar(string)
 	char	*string;
 {
 	int	length;
@@ -149,8 +148,7 @@ lastchar(string)
 		return('\0');
 }
 
-char
-firstchar(string)
+char firstchar(string)
 	char	*string;
 {
 	if (string)
@@ -159,8 +157,7 @@ firstchar(string)
 		return('\0');
 }
 
-char
-next_lastchar(string)
+char	next_lastchar(string)
 	char	*string;
 {
 	int	length;
@@ -172,7 +169,6 @@ next_lastchar(string)
 		return('\0');
 }
 
-void
 clob_last(string, newstuff)
 	char	*string, newstuff;
 {
@@ -187,13 +183,12 @@ clob_last(string, newstuff)
  *	parse a string that is the result of a format %s(%d)
  *	return TRUE if this is of the proper format
  */
-boolean
-persperdexplode(string, r_perd, r_pers)
+boolean persperdexplode(string, r_perd, r_pers)
 	char	*string;
 	char	**r_perd, **r_pers;
 {
-	char	*cp;
-	int	length = 0;
+	reg	char	*cp;
+		int	length = 0;
 
 	if (string)
 		length = strlen(string);
@@ -215,18 +210,16 @@ persperdexplode(string, r_perd, r_pers)
 	}
 	return(FALSE);
 }
-
 /*
  *	parse a quoted string that is the result of a format \"%s\"(%d)
  *	return TRUE if this is of the proper format
  */
-boolean
-qpersperdexplode(string, r_perd, r_pers)
+boolean qpersperdexplode(string, r_perd, r_pers)
 	char	*string;
 	char	**r_perd, **r_pers;
 {
-	char	*cp;
-	int	length = 0;
+	reg	char	*cp;
+		int	length = 0;
 
 	if (string)
 		length = strlen(string);
@@ -265,37 +258,36 @@ static	char	mod2incomment[] = MOD2INCOMMENT;
 static	char	mod2outcomment[] = MOD2OUTCOMMENT;
 
 struct	lang_desc lang_table[] = {
-	{ /*INUNKNOWN	0*/	"unknown", cincomment,	coutcomment },
-	{ /*INCPP	1*/	"cpp",	cincomment,    coutcomment },
-	{ /*INCC	2*/	"cc",	cincomment,    coutcomment },
-	{ /*INAS	3*/	"as",	ASINCOMMENT,   newline },
-	{ /*INLD	4*/	"ld",	cincomment,    coutcomment },
-	{ /*INLINT	5*/	"lint",	cincomment,    coutcomment },
-	{ /*INF77	6*/	"f77",	fincomment,    foutcomment },
-	{ /*INPI	7*/	"pi",	piincomment,   pioutcomment },
-	{ /*INPC	8*/	"pc",	piincomment,   pioutcomment },
-	{ /*INFRANZ	9*/	"franz",lispincomment, newline },
-	{ /*INLISP	10*/	"lisp",	lispincomment, newline },
-	{ /*INVAXIMA	11*/	"vaxima",lispincomment,newline },
-	{ /*INRATFOR	12*/	"ratfor",fincomment,   foutcomment },
-	{ /*INLEX	13*/	"lex",	cincomment,    coutcomment },
-	{ /*INYACC	14*/	"yacc",	cincomment,    coutcomment },
-	{ /*INAPL	15*/	"apl",	".lm",	       newline },
-	{ /*INMAKE	16*/	"make",	ASINCOMMENT,   newline },
-	{ /*INRI	17*/	"ri",	riincomment,   rioutcomment },
-	{ /*INTROFF	18*/	"troff",troffincomment,troffoutcomment },
-	{ /*INMOD2	19*/	"mod2",	mod2incomment, mod2outcomment },
-	{			0,	0,	     0 }
+	/*INUNKNOWN	0*/	"unknown", cincomment,	coutcomment,
+	/*INCPP		1*/	"cpp",	cincomment,    coutcomment,
+	/*INCC		2*/	"cc",	cincomment,    coutcomment,
+	/*INAS		3*/	"as",	ASINCOMMENT,   newline,
+	/*INLD		4*/	"ld",	cincomment,    coutcomment,
+	/*INLINT	5*/	"lint",	cincomment,    coutcomment,
+	/*INF77		6*/	"f77",	fincomment,    foutcomment,
+	/*INPI		7*/	"pi",	piincomment,   pioutcomment,
+	/*INPC		8*/	"pc",	piincomment,   pioutcomment,
+	/*INFRANZ	9*/	"franz",lispincomment, newline,
+	/*INLISP	10*/	"lisp",	lispincomment, newline,
+	/*INVAXIMA	11*/	"vaxima",lispincomment,newline,
+	/*INRATFOR	12*/	"ratfor",fincomment,   foutcomment,
+	/*INLEX		13*/	"lex",	cincomment,    coutcomment,
+	/*INYACC	14*/	"yacc",	cincomment,    coutcomment,
+	/*INAPL		15*/	"apl",	".lm",	       newline,
+	/*INMAKE	16*/	"make",	ASINCOMMENT,   newline,
+	/*INRI		17*/	"ri",	riincomment,   rioutcomment,
+	/*INTROFF	18*/	"troff",troffincomment,troffoutcomment,
+	/*INMOD2	19*/	"mod2",	mod2incomment, mod2outcomment,
+				0,	0,	     0
 };
 
-void
 printerrors(look_at_subclass, errorc, errorv)
 	boolean	look_at_subclass;
 	int	errorc;
 	Eptr	errorv[];
 {
-	int	i;
-	Eptr	errorp;
+	reg	int	i;
+	reg	Eptr	errorp;
 
 	for (errorp = errorv[i = 0]; i < errorc; errorp = errorv[++i]){
 		if (errorp->error_e_class == C_IGNORE)
@@ -311,7 +303,6 @@ printerrors(look_at_subclass, errorc, errorv)
 	}
 }
 
-void
 wordvprint(fyle, wordc, wordv)
 	FILE	*fyle;
 	int	wordc;
@@ -331,18 +322,19 @@ wordvprint(fyle, wordc, wordv)
  *	Given a string, parse it into a number of words, and build
  *	a wordc wordv combination pointing into it.
  */
-void
 wordvbuild(string, r_wordc, r_wordv)
 	char	*string;
 	int	*r_wordc;
 	char	***r_wordv;
 {
-	char 	*cp;
-	char	**wordv;
-	int	wordcount;
-	int	wordindex;
+	reg	char 	*cp;
+		char	*saltedbuffer;
+		char	**wordv;
+		int	wordcount;
+		int	wordindex;
 
-	for (wordcount = 0, cp = string; *cp; wordcount++){
+	saltedbuffer = strsave(string);
+	for (wordcount = 0, cp = saltedbuffer; *cp; wordcount++){
 		while (*cp  && isspace(*cp))
 			cp++;
 		if (*cp == 0)
@@ -351,7 +343,7 @@ wordvbuild(string, r_wordc, r_wordv)
 			cp++;
 	}
 	wordv = (char **)Calloc(wordcount + 1, sizeof (char *));
-	for (cp=string,wordindex=0; wordcount; wordindex++,--wordcount){
+	for (cp=saltedbuffer,wordindex=0; wordcount; wordindex++,--wordcount){
 		while (*cp && isspace(*cp))
 			cp++;
 		if (*cp == 0)
@@ -362,7 +354,7 @@ wordvbuild(string, r_wordc, r_wordv)
 		*cp++ = '\0';
 	}
 	if (wordcount != 0)
-		errx(6, "Initial miscount of the number of words in a line");
+		error("Initial miscount of the number of words in a line\n");
 	wordv[wordindex] = (char *)0;
 #ifdef FULLDEBUG
 	for (wordcount = 0; wordcount < wordindex; wordcount++)
@@ -372,24 +364,22 @@ wordvbuild(string, r_wordc, r_wordv)
 	*r_wordc = wordindex;
 	*r_wordv = wordv;
 }
-
 /*
  *	Compare two 0 based wordvectors
  */
-int
-wordvcmp(wordv1, wordc, wordv2)
+int wordvcmp(wordv1, wordc, wordv2)
 	char	**wordv1;
 	int	wordc;
 	char	**wordv2;
 {
-	int i;
-	int	back;
-
+	reg	int i;
+		int	back;
 	for (i = 0; i < wordc; i++){
 		if (wordv1[i] == 0 || wordv2[i] == 0)
-			return(-1);
-		if ((back = strcmp(wordv1[i], wordv2[i])) != NULL)
+				return(-1);
+		if (back = strcmp(wordv1[i], wordv2[i])){
 			return(back);
+		}
 	}
 	return(0);	/* they are equal */
 }
@@ -398,15 +388,14 @@ wordvcmp(wordv1, wordc, wordv2)
  *	splice a 0 basedword vector onto the tail of a
  *	new wordv, allowing the first emptyhead slots to be empty
  */
-char	**
-wordvsplice(emptyhead, wordc, wordv)
+char	**wordvsplice(emptyhead, wordc, wordv)
 	int	emptyhead;
 	int	wordc;
 	char	**wordv;
 {
-	char	**nwordv;
-	int	nwordc = emptyhead + wordc;
-	int	i;
+	reg	char	**nwordv;
+		int	nwordc = emptyhead + wordc;
+	reg	int	i;
 
 	nwordv = (char **)Calloc(nwordc, sizeof (char *));
 	for (i = 0; i < emptyhead; i++)
@@ -416,23 +405,19 @@ wordvsplice(emptyhead, wordc, wordv)
 	}
 	return(nwordv);
 }
-
 /*
  *	plural'ize and verb forms
  */
 static	char	*S = "s";
 static	char	*N = "";
-
-char *
-plural(n)
+char *plural(n)
 	int	n;
 {
 	return( n > 1 ? S : N);
 }
-
-char *
-verbform(n)
+char *verbform(n)
 	int	n;
 {
 	return( n > 1 ? N : S);
 }
+

@@ -1,5 +1,3 @@
-/*	$NetBSD: ffs.c,v 1.6 1997/07/13 20:24:14 christos Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -33,25 +31,15 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "@(#)ffs.c	5.4 (Berkeley) 5/17/90";
-#else
-__RCSID("$NetBSD: ffs.c,v 1.6 1997/07/13 20:24:14 christos Exp $");
-#endif
+static char sccsid[] = "@(#)ffs.c	5.4 (Berkeley) 5/17/90";
 #endif /* LIBC_SCCS and not lint */
 
-#ifndef _KERNEL
 #include <string.h>
-#else
-#include <lib/libkern/libkern.h>
-#endif
 
 /*
  * ffs -- vax ffs instruction
  */
-int
 ffs(mask)
 	register int mask;
 {

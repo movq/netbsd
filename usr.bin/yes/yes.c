@@ -1,8 +1,6 @@
-/*	$NetBSD: yes.c,v 1.5 1997/10/19 14:28:27 mrg Exp $	*/
-
 /*
- * Copyright (c) 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,31 +31,23 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1987 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)yes.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: yes.c,v 1.5 1997/10/19 14:28:27 mrg Exp $");
+static char sccsid[] = "@(#)yes.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-
-int main __P((int, char **));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
 	if (argc > 1)
 		for(;;)
-			(void)puts(argv[1]);
+			puts(argv[1]);
 	else for (;;)
-		(void)puts("y");
+		puts("y");
 }

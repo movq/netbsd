@@ -1,5 +1,3 @@
-/*	$NetBSD: parse.c,v 1.6 1997/07/06 18:25:31 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if !defined(lint) && !defined(SCCSID)
-#if 0
 static char sccsid[] = "@(#)parse.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: parse.c,v 1.6 1997/07/06 18:25:31 christos Exp $");
-#endif
 #endif /* not lint && not SCCSID */
 
 /*
@@ -52,10 +45,8 @@ __RCSID("$NetBSD: parse.c,v 1.6 1997/07/06 18:25:31 christos Exp $");
  *
  *	bind
  *	echotc
- *	gettc
- *	history
  *	settc
- *	setty
+ *	gettc
  */
 #include "sys.h"
 #include "el.h"
@@ -106,12 +97,12 @@ el_parse(el, argc, argv)
     char *ptr;
     int i;
 
-    if (argc < 1)
-	return -1;
-    ptr = strchr(argv[0], ':');
-    if (ptr != NULL) {
-	*ptr++ = '\0';
-	if (! el_match(el->el_prog, argv[0]))
+    for (ptr = argv[0]; *ptr && *ptr != ':'; ptr++)
+	continue;
+
+    if (*ptr == ':') {
+	*ptr = '\0';
+	if (el_match(el->el_prog, ptr))
 	    return 0;
     }
     else
@@ -199,7 +190,7 @@ parse__escape(ptr)
 	    break;
 	}
     }
-    else if (*p == '^' && isalpha((unsigned char) p[1])) {
+    else if (*p == '^' && isalpha((unsigned char) *p)) {
 	p++;
 	c = (*p == '?') ? '\177' : (*p & 0237);
     }

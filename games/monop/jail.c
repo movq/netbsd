@@ -1,8 +1,6 @@
-/*	$NetBSD: jail.c,v 1.4 1997/10/12 17:45:14 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)jail.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: jail.c,v 1.4 1997/10/12 17:45:14 christos Exp $");
-#endif
+static char sccsid[] = "@(#)jail.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include "monop.ext"
+# include	"monop.ext"
 
 /*
  *	This routine uses a get-out-of-jail-free card to get the
  * player out of jail.
  */
-void
-card()
-{
+card() {
 
 	if (cur_p->loc != JAIL) {
 		printf("But you're not IN Jail\n");
@@ -68,10 +59,8 @@ card()
  *	This routine returns the players get-out-of-jail-free card
  * to a deck.
  */
-void
 ret_card(plr)
-PLAY	*plr;
-{
+reg PLAY	*plr; {
 
 	plr->num_gojf--;
 	if (CC_D.gojf_used)
@@ -82,9 +71,7 @@ PLAY	*plr;
 /*
  *	This routine deals with paying your way out of jail.
  */
-void
-pay()
-{
+pay() {
 
 	if (cur_p->loc != JAIL) {
 		printf("But you're not IN Jail\n");
@@ -98,10 +85,8 @@ pay()
 /*
  *	This routine deals with a move in jail
  */
-int
 move_jail(r1, r2)
-int	r1, r2;
-{
+reg int	r1, r2; {
 
 	if (r1 != r2) {
 		printf("Sorry, that doesn't get you out\n");
@@ -122,10 +107,7 @@ moveit:
 		goto moveit;
 	}
 }
-
-void
-printturn()
-{
+printturn() {
 
 	if (cur_p->loc != JAIL)
 		return;

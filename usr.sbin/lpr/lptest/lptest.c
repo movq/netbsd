@@ -1,9 +1,6 @@
-/*	$NetBSD: lptest.c,v 1.7 1997/10/05 15:12:24 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,32 +31,28 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#if 0
-static char sccsid[] = "@(#)lptest.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: lptest.c,v 1.7 1997/10/05 15:12:24 mrg Exp $");
-#endif
+char copyright[] =
+"@(#) Copyright (c) 1983 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
-#include <stdlib.h>
-#include <stdio.h>
-
-int main __P((int, char *[]));
+#ifndef lint
+static char sccsid[] = "@(#)lptest.c	5.4 (Berkeley) 6/1/90";
+#endif /* not lint */
 
 /*
  * lptest -- line printer test program (and other devices).
  */
-int
+
+#include <stdio.h>
+
 main(argc, argv)
 	int argc;
 	char **argv;
 {
 	int len, count;
-	int i, j, fc, nc;
+	register i, j, fc, nc;
 	char outbuf[BUFSIZ];
 
 	setbuf(stdout, outbuf);
@@ -83,6 +76,5 @@ main(argc, argv)
 		}
 		putchar('\n');
 	}
-	(void)fflush(stdout);
-	exit(0);
+	(void) fflush(stdout);
 }

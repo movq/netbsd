@@ -1,8 +1,6 @@
-/*	$NetBSD: morse.c,v 1.4 1997/10/10 16:38:40 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,23 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1988 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)morse.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: morse.c,v 1.4 1997/10/10 16:38:40 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)morse.c	5.3 (Berkeley) 2/28/91";
 #endif /* not lint */
 
-#include <ctype.h>
 #include <stdio.h>
-#include <unistd.h>
+#include <ctype.h>
 
 static char
 	*digit[] = {
@@ -93,21 +86,18 @@ static char
 	"--..",
 };
 
-int	main __P((int, char *[]));
-void	morse __P((int));
-void	show __P((char *));
-
 static int sflag;
 
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	int ch;
-	char *p;
+	extern char *optarg;
+	extern int optind;
+	register int ch;
+	register char *p;
 
-	while ((ch = getopt(argc, argv, "s")) != -1)
+	while ((ch = getopt(argc, argv, "s")) != EOF)
 		switch((char)ch) {
 		case 's':
 			sflag = 1;
@@ -127,12 +117,10 @@ main(argc, argv)
 		} while (*++argv);
 	else while ((ch = getchar()) != EOF)
 		morse(ch);
-	exit(0);
 }
 
-void
 morse(c)
-	int c;
+	register int c;
 {
 	if (isalpha(c))
 		show(alph[c - (isupper(c) ? 'A' : 'a')]);
@@ -146,9 +134,8 @@ morse(c)
 		show(" ...\n");
 }
 
-void
 show(s)
-	char *s;
+	register char *s;
 {
 	if (sflag)
 		printf(" %s", s);

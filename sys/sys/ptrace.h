@@ -1,8 +1,6 @@
-/*	$NetBSD: ptrace.h,v 1.21 1996/02/09 18:25:26 christos Exp $	*/
-
 /*-
- * Copyright (c) 1984, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1984 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,57 +30,24 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ptrace.h	8.2 (Berkeley) 1/4/94
+ *	@(#)ptrace.h	7.4 (Berkeley) 2/22/91
  */
 
-#ifndef	_SYS_PTRACE_H_
-#define	_SYS_PTRACE_H_
+#ifndef	_PTRACE_H_
+#define	_PTRACE_H_
 
 #define	PT_TRACE_ME	0	/* child declares it's being traced */
 #define	PT_READ_I	1	/* read word in child's I space */
 #define	PT_READ_D	2	/* read word in child's D space */
+#define	PT_READ_U	3	/* read word in child's user structure */
 #define	PT_WRITE_I	4	/* write word in child's I space */
 #define	PT_WRITE_D	5	/* write word in child's D space */
+#define	PT_WRITE_U	6	/* write word in child's user structure */
 #define	PT_CONTINUE	7	/* continue the child */
 #define	PT_KILL		8	/* kill the child process */
-#define	PT_ATTACH	9	/* attach to running process */
-#define	PT_DETACH	10	/* detach from running process */
+#define	PT_STEP		9	/* single step the child */
 
-#define	PT_FIRSTMACH	32	/* for machine-specific requests */
-#include <machine/ptrace.h>	/* machine-specific requests, if any */
-
-#ifdef _KERNEL
-
-#if defined(PT_GETREGS) || defined(PT_SETREGS)
-struct reg;
-#endif
-#if defined(PT_GETFPREGS) || defined(PT_SETFPREGS)
-struct fpreg;
-#endif
-
-void	proc_reparent __P((struct proc *child, struct proc *newparent));
-#ifdef PT_GETFPREGS
-int	process_read_fpregs __P((struct proc *p, struct fpreg *regs));
-#endif
-#ifdef PT_GETREGS
-int	process_read_regs __P((struct proc *p, struct reg *regs));
-#endif
-int	process_set_pc __P((struct proc *p, caddr_t addr));
-int	process_sstep __P((struct proc *p, int sstep));
-#ifdef PT_SETFPREGS
-int	process_write_fpregs __P((struct proc *p, struct fpreg *regs));
-#endif
-#ifdef PT_SETREGS
-int	process_write_regs __P((struct proc *p, struct reg *regs));
-#endif
-
-#ifndef FIX_SSTEP
-#define FIX_SSTEP(p)
-#endif
-
-int	trace_req __P((struct proc *));
-
-#else /* !_KERNEL */
+#ifndef KERNEL
 
 #include <sys/cdefs.h>
 
@@ -90,6 +55,6 @@ __BEGIN_DECLS
 int	ptrace __P((int _request, pid_t _pid, caddr_t _addr, int _data));
 __END_DECLS
 
-#endif /* !_KERNEL */
+#endif /* !KERNEL */
 
-#endif	/* !_SYS_PTRACE_H_ */
+#endif	/* !_PTRACE_H_ */

@@ -1,5 +1,3 @@
-/*	$NetBSD: extern.h,v 1.5 1997/10/19 12:29:35 lukem Exp $	*/
-
 /*
  * Copyright (c) 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -35,9 +33,5 @@
  *	@(#)extern.h	8.1 (Berkeley) 4/2/94
  */
 
-int	kadm_passwd __P((char *, char *, char *, char *));
-int	krb_check __P((void));
 int	krb_passwd __P((void));
 int	local_passwd __P((char *));
-void	to64 __P((char *, long, int));
-int	yp_passwd __P((char *));

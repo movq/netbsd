@@ -1,8 +1,6 @@
-/*	$NetBSD: dr_3.c,v 1.5 1997/10/13 21:03:27 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)dr_3.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: dr_3.c,v 1.5 1997/10/13 21:03:27 christos Exp $");
-#endif
+static char sccsid[] = "@(#)dr_3.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "driver.h"
-#include <stdlib.h>
 
-void
 moveall()		/* move all comp ships */
 {
-	struct ship *sp, *sq;
-	int n;
-	int k, l;
+	register struct ship *sp, *sq;		/* r11, r10 */
+	register int n;				/* r9 */
+	register int k, l;			/* r8, r7 */
 	int row[NSHIP], col[NSHIP], dir[NSHIP], drift[NSHIP];
 	char moved[NSHIP];
 
@@ -134,10 +125,12 @@ moveall()		/* move all comp ships */
 				if (snagged2(sp, sq) && range(sp, sq) > 1)
 					snap++;
 				if (!range(sp, sq) && !fouled2(sp, sq)) {
-					makesignal(sp, "collision with $$", sq);
+					makesignal(sp,
+						"collision with %s (%c%c)", sq);
 					if (die() < 4) {
-						makesignal(sp, "fouled with $$",
-						    sq);
+						makesignal(sp,
+							"fouled with %s (%c%c)",
+							sq);
 						Write(W_FOUL, sp, 0, l, 0, 0, 0);
 						Write(W_FOUL, sq, 0, n, 0, 0, 0);
 					}
@@ -182,11 +175,10 @@ moveall()		/* move all comp ships */
 	}
 }
 
-int
 stillmoving(k)
-int k;
+register int k;
 {
-	struct ship *sp;
+	register struct ship *sp;
 
 	foreachship(sp)
 		if (sp->file->movebuf[k])
@@ -194,11 +186,10 @@ int k;
 	return 0;
 }
 
-int
 isolated(ship)
-struct ship *ship;
+register struct ship *ship;
 {
-	struct ship *sp;
+	register struct ship *sp;
 
 	foreachship(sp) {
 		if (ship != sp && range(ship, sp) <= 10)
@@ -207,11 +198,10 @@ struct ship *ship;
 	return 1;
 }
 
-int
 push(from, to)
-struct ship *from, *to;
+register struct ship *from, *to;
 {
-	int bs, sb;
+	register int bs, sb;
 
 	sb = to->specs->guns;
 	bs = from->specs->guns;
@@ -222,13 +212,12 @@ struct ship *from, *to;
 	return from < to;
 }
 
-void
 step(com, sp, moved)
 char com;
-struct ship *sp;
+register struct ship *sp;
 char *moved;
 {
-	int dist;
+	register int dist;
 
 	switch (com) {
 	case 'r':
@@ -254,7 +243,7 @@ char *moved;
 	case 'd':
 		if (!*moved) {
 			if (windspeed != 0 && ++sp->file->drift > 2 &&
-			    ((sp->specs->class >= 3 && !snagged(sp))
+			    (sp->specs->class >= 3 && !snagged(sp)
 			     || (turn & 1) == 0)) {
 				sp->file->row -= dr[winddir];
 				sp->file->col -= dc[winddir];
@@ -265,14 +254,13 @@ char *moved;
 	}
 }
 
-void
 sendbp(from, to, sections, isdefense)
-struct ship *from, *to;
+register struct ship *from, *to;
 int sections;
 char isdefense;
 {
 	int n;
-	struct BP *bp;
+	register struct BP *bp;
 
 	bp = isdefense ? from->file->DBP : from->file->OBP;
 	for (n = 0; n < NBP && bp[n].turnsent; n++)
@@ -281,19 +269,19 @@ char isdefense;
 		Write(isdefense ? W_DBP : W_OBP, from, 0,
 			n, turn, to->file->index, sections);
 		if (isdefense)
-			makemsg(from, "repelling boarders");
+			makesignal(from, "repelling boarders",
+				(struct ship *)0);
 		else
-			makesignal(from, "boarding the $$", to);
+			makesignal(from, "boarding the %s (%c%c)", to);
 	}
 }
 
-int
 toughmelee(ship, to, isdefense, count)
-struct ship *ship, *to;
+register struct ship *ship, *to;
 int isdefense, count;
 {
-	struct BP *bp;
-	int obp = 0;
+	register struct BP *bp;
+	register obp = 0;
 	int n, OBP = 0, DBP = 0, dbp = 0;
 	int qual;
 
@@ -320,28 +308,26 @@ int isdefense, count;
 		return 0;
 }
 
-void
 reload()
 {
-	struct ship *sp;
+	register struct ship *sp;
 
 	foreachship(sp) {
 		sp->file->loadwith = 0;
 	}
 }
 
-void
 checksails()
 {
-	struct ship *sp;
-	int rig, full; 
+	register struct ship *sp;
+	register int rig, full; 
 	struct ship *close;
 
 	foreachship(sp) {
 		if (sp->file->captain[0] != 0)
 			continue;
 		rig = sp->specs->rig1;
-		if (windspeed == 6 || (windspeed == 5 && sp->specs->class > 4))
+		if (windspeed == 6 || windspeed == 5 && sp->specs->class > 4)
 			rig = 0;
 		if (rig && sp->specs->crew3) {
 			close = closestenemy(sp, 0, 0);

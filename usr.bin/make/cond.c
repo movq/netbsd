@@ -1,5 +1,3 @@
-/*	$NetBSD: cond.c,v 1.9 1997/09/28 03:31:01 lukem Exp $	*/
-
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
  * Copyright (c) 1988, 1989 by Adam de Boor
@@ -38,18 +36,9 @@
  * SUCH DAMAGE.
  */
 
-#ifdef MAKE_BOOTSTRAP
-static char rcsid[] = "$NetBSD: cond.c,v 1.9 1997/09/28 03:31:01 lukem Exp $";
-#else
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cond.c	8.2 (Berkeley) 1/2/94";
-#else
-__RCSID("$NetBSD: cond.c,v 1.9 1997/09/28 03:31:01 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)cond.c	5.6 (Berkeley) 6/1/90";
 #endif /* not lint */
-#endif
 
 /*-
  * cond.c --
@@ -60,12 +49,9 @@ __RCSID("$NetBSD: cond.c,v 1.9 1997/09/28 03:31:01 lukem Exp $");
  *
  */
 
-#include    <ctype.h>
-#include    <math.h>
 #include    "make.h"
-#include    "hash.h"
-#include    "dir.h"
-#include    "buf.h"
+#include    <buf.h>
+#include    <ctype.h>
 
 /*
  * The parsing of conditional expressions is based on this grammar:
@@ -105,36 +91,25 @@ typedef enum {
  * Structures to handle elegantly the different forms of #if's. The
  * last two fields are stored in condInvert and condDefProc, respectively.
  */
-static void CondPushBack __P((Token));
-static int CondGetArg __P((char **, char **, char *, Boolean));
-static Boolean CondDoDefined __P((int, char *));
-static int CondStrMatch __P((ClientData, ClientData));
-static Boolean CondDoMake __P((int, char *));
-static Boolean CondDoExists __P((int, char *));
-static Boolean CondDoTarget __P((int, char *));
-static Boolean CondCvtArg __P((char *, double *));
-static Token CondToken __P((Boolean));
-static Token CondT __P((Boolean));
-static Token CondF __P((Boolean));
-static Token CondE __P((Boolean));
+static Boolean	  CondDoDefined(),
+		  CondDoMake();
 
 static struct If {
     char	*form;	      /* Form of if */
     int		formlen;      /* Length of form */
     Boolean	doNot;	      /* TRUE if default function should be negated */
-    Boolean	(*defProc) __P((int, char *)); /* Default function to apply */
+    Boolean	(*defProc)(); /* Default function to apply */
 } ifs[] = {
-    { "ifdef",	  5,	  FALSE,  CondDoDefined },
-    { "ifndef",	  6,	  TRUE,	  CondDoDefined },
-    { "ifmake",	  6,	  FALSE,  CondDoMake },
-    { "ifnmake",  7,	  TRUE,	  CondDoMake },
-    { "if",	  2,	  FALSE,  CondDoDefined },
-    { NULL,	  0,	  FALSE,  NULL }
+    "ifdef",	  5,	  FALSE,  CondDoDefined,
+    "ifndef",	  6,	  TRUE,	  CondDoDefined,
+    "ifmake",	  6,	  FALSE,  CondDoMake,
+    "ifnmake",	  7,	  TRUE,	  CondDoMake,
+    "if",	  2,	  FALSE,  CondDoDefined,
+    (char *)0,	  0,	  FALSE,  (Boolean (*)())0,
 };
 
 static Boolean	  condInvert;	    	/* Invert the default function */
-static Boolean	  (*condDefProc)	/* Default function to apply */
-		    __P((int, char *));
+static Boolean	  (*condDefProc)(); 	/* Default function to apply */
 static char 	  *condExpr;	    	/* The expression to parse */
 static Token	  condPushBack=None;	/* Single push-back token used in
 					 * parsing */
@@ -146,6 +121,8 @@ static int  	  condTop = MAXIF;  	/* Top-most conditional */
 static int  	  skipIfLevel=0;    	/* Depth of skipped conditionals */
 static Boolean	  skipLine = FALSE; 	/* Whether the parse module is skipping
 					 * lines */
+
+static Token	  CondT(), CondF(), CondE();
 
 /*-
  *-----------------------------------------------------------------------
@@ -223,8 +200,8 @@ CondGetArg (linePtr, argPtr, func, parens)
      * long. Why 16? Why not?
      */
     buf = Buf_Init(16);
-
-    while ((strchr(" \t)&|", *cp) == (char *)NULL) && (*cp != '\0')) {
+    
+    while ((index(" \t)&|", *cp) == (char *)NULL) && (*cp != '\0')) {
 	if (*cp == '$') {
 	    /*
 	     * Parse the variable spec and install it as part of the argument
@@ -266,7 +243,7 @@ CondGetArg (linePtr, argPtr, func, parens)
 	 */
 	cp++;
     }
-
+    
     *linePtr = cp;
     return (argLen);
 }
@@ -290,17 +267,14 @@ CondDoDefined (argLen, arg)
     char    *arg;
 {
     char    savec = arg[argLen];
-    char    *p1;
     Boolean result;
 
     arg[argLen] = '\0';
-    if (Var_Value (arg, VAR_CMD, &p1) != (char *)NULL) {
+    if (Var_Value (arg, VAR_CMD) != (char *)NULL) {
 	result = TRUE;
     } else {
 	result = FALSE;
     }
-    if (p1)
-	free(p1);
     arg[argLen] = savec;
     return (result);
 }
@@ -321,10 +295,10 @@ CondDoDefined (argLen, arg)
  */
 static int
 CondStrMatch(string, pattern)
-    ClientData    string;
-    ClientData    pattern;
+    char    *string;
+    char    *pattern;
 {
-    return(!Str_Match((char *) string,(char *) pattern));
+    return(!Str_Match(string,pattern));
 }
 
 /*-
@@ -430,45 +404,60 @@ CondDoTarget (argLen, arg)
  *-----------------------------------------------------------------------
  * CondCvtArg --
  *	Convert the given number into a double. If the number begins
- *	with 0x, it is interpreted as a hexadecimal integer
+ *	with 0x, or just x, it is interpreted as a hexadecimal integer
  *	and converted to a double from there. All other strings just have
- *	strtod called on them.
+ *	atof called on them.
  *
  * Results:
- *	Sets 'value' to double value of string.
- *	Returns true if the string was a valid number, false o.w.
+ *	The double value of string.
  *
  * Side Effects:
- *	Can change 'value' even if string is not a valid number.
- *
+ *	
  *
  *-----------------------------------------------------------------------
  */
-static Boolean
-CondCvtArg(str, value)
+static double
+CondCvtArg(str)
     register char    	*str;
-    double		*value;
 {
-    if ((*str == '0') && (str[1] == 'x')) {
-	register long i;
-
-	for (str += 2, i = 0; *str; str++) {
-	    int x;
-	    if (isdigit((unsigned char) *str))
-		x  = *str - '0';
-	    else if (isxdigit((unsigned char) *str))
-		x = 10 + *str - isupper((unsigned char) *str) ? 'A' : 'a';
-	    else
-		return FALSE;
-	    i = (i << 4) + x;
-	}
-	*value = (double) i;
-	return TRUE;
+    int	    	  	sign = 1;
+    double  	  	atof();
+    
+    if (*str == '-') {
+	sign = -1;
+	str++;
+    } else if (*str == '+') {
+	str++;
     }
-    else {
-	char *eptr;
-	*value = strtod(str, &eptr);
-	return *eptr == '\0';
+    if (((*str == '0') && (str[1] == 'x')) ||
+	(*str == 'x'))
+    {
+	register int i;
+	
+	str += (*str == 'x') ? 1 : 2;
+
+	i = 0;
+
+	while (isxdigit(*str)) {
+	    i *= 16;
+	    if (*str <= '9') {
+		i += *str - '0';
+	    } else if (*str <= 'F') {
+		i += *str - 'A' + 10;
+	    } else {
+		i += *str - 'a' + 10;
+	    }
+	    str++;
+	}
+	if (sign < 0) {
+	    return((double)(-i));
+	} else {
+	    return((double)i);
+	}
+    } else if (sign < 0) {
+	return(- atof(str));
+    } else {
+	return(atof(str));
     }
 }
 
@@ -548,36 +537,12 @@ CondToken(doEval)
 		}
 		condExpr += varSpecLen;
 
-		if (!isspace((unsigned char) *condExpr) &&
-		    strchr("!=><", *condExpr) == NULL) {
-		    Buffer buf;
-		    char *cp;
-
-		    buf = Buf_Init(0);
-
-		    for (cp = lhs; *cp; cp++)
-			Buf_AddByte(buf, (Byte)*cp);
-
-		    if (doFree)
-			free(lhs);
-
-		    for (;*condExpr && !isspace((unsigned char) *condExpr);
-			 condExpr++)
-			Buf_AddByte(buf, (Byte)*condExpr);
-
-		    Buf_AddByte(buf, (Byte)'\0');
-		    lhs = (char *)Buf_GetAll(buf, &varSpecLen);
-		    Buf_Destroy(buf, FALSE);
-
-		    doFree = TRUE;
-		}
-
 		/*
 		 * Skip whitespace to get to the operator
 		 */
-		while (isspace((unsigned char) *condExpr))
+		while (isspace(*condExpr)) {
 		    condExpr++;
-
+		}
 		/*
 		 * Make sure the operator is a valid one. If it isn't a
 		 * known relational operator, pretend we got a
@@ -601,7 +566,7 @@ CondToken(doEval)
 
 			goto do_compare;
 		}
-		while (isspace((unsigned char) *condExpr)) {
+		while (isspace(*condExpr)) {
 		    condExpr++;
 		}
 		if (*condExpr == '\0') {
@@ -618,10 +583,8 @@ do_compare:
 		     */
 		    char    *string;
 		    char    *cp, *cp2;
-		    int	    qt;
 		    Buffer  buf;
 
-do_string_compare:
 		    if (((*op != '!') && (*op != '=')) || (op[1] != '=')) {
 			Parse_Error(PARSE_WARNING,
 		"String comparison operator should be either == or !=");
@@ -629,12 +592,8 @@ do_string_compare:
 		    }
 
 		    buf = Buf_Init(0);
-		    qt = *rhs == '"' ? 1 : 0;
-
-		    for (cp = &rhs[qt];
-			 ((qt && (*cp != '"')) ||
-			  (!qt && strchr(" \t)", *cp) == NULL)) &&
-			 (*cp != '\0'); cp++) {
+		    
+		    for (cp = rhs+1; (*cp != '"') && (*cp != '\0'); cp++) {
 			if ((*cp == '\\') && (cp[1] != '\0')) {
 			    /*
 			     * Backslash escapes things -- skip over next
@@ -645,7 +604,7 @@ do_string_compare:
 			} else if (*cp == '$') {
 			    int	len;
 			    Boolean freeIt;
-
+			    
 			    cp2 = Var_Parse(cp, VAR_CMD, doEval,&len, &freeIt);
 			    if (cp2 != var_Error) {
 				Buf_AddBytes(buf, strlen(cp2), (Byte *)cp2);
@@ -681,10 +640,7 @@ do_string_compare:
 		    }
 		    free(string);
 		    if (rhs == condExpr) {
-		    	if (!qt && *cp == ')')
-			    condExpr = cp;
-			else
-			    condExpr = cp + 1;
+			condExpr = cp + 1;
 		    }
 		} else {
 		    /*
@@ -694,40 +650,35 @@ do_string_compare:
 		    double  	left, right;
 		    char    	*string;
 
-		    if (!CondCvtArg(lhs, &left))
-			goto do_string_compare;
+		    left = CondCvtArg(lhs);
 		    if (*rhs == '$') {
 			int 	len;
 			Boolean	freeIt;
-
+			
 			string = Var_Parse(rhs, VAR_CMD, doEval,&len,&freeIt);
 			if (string == var_Error) {
 			    right = 0.0;
 			} else {
-			    if (!CondCvtArg(string, &right)) {
-				if (freeIt)
-				    free(string);
-				goto do_string_compare;
-			    }
-			    if (freeIt)
+			    right = CondCvtArg(string);
+			    if (freeIt) {
 				free(string);
-			    if (rhs == condExpr)
+			    }
+			    if (rhs == condExpr) {
 				condExpr += len;
+			    }
 			}
 		    } else {
-			if (!CondCvtArg(rhs, &right))
-			    goto do_string_compare;
+			right = CondCvtArg(rhs);
 			if (rhs == condExpr) {
 			    /*
 			     * Skip over the right-hand side
 			     */
-			    while(!isspace((unsigned char) *condExpr) &&
-				  (*condExpr != '\0')) {
+			    while(!isspace(*condExpr) && (*condExpr != '\0')) {
 				condExpr++;
 			    }
 			}
 		    }
-
+		    
 		    if (DEBUG(COND)) {
 			printf("left = %f, right = %f, op = %.2s\n", left,
 			       right, op);
@@ -766,16 +717,17 @@ do_string_compare:
 		    }
 		}
 error:
-		if (doFree)
+		if (doFree) {
 		    free(lhs);
+		}
 		break;
 	    }
 	    default: {
-		Boolean (*evalProc) __P((int, char *));
+		Boolean (*evalProc)();
 		Boolean invert = FALSE;
 		char	*arg;
 		int	arglen;
-
+		
 		if (strncmp (condExpr, "defined", 7) == 0) {
 		    /*
 		     * Use CondDoDefined to evaluate the argument and
@@ -829,22 +781,16 @@ error:
 		    for (arglen = 0;
 			 condExpr[arglen] != '(' && condExpr[arglen] != '\0';
 			 arglen += 1)
-			continue;
-
+		    {
+			/* void */ ;
+		    }
 		    if (condExpr[arglen] != '\0') {
 			val = Var_Parse(&condExpr[arglen - 1], VAR_CMD,
 					doEval, &length, &doFree);
 			if (val == var_Error) {
 			    t = Err;
 			} else {
-			    /*
-			     * A variable is empty when it just contains
-			     * spaces... 4/15/92, christos
-			     */
-			    char *p;
-			    for (p = val; *p && isspace((unsigned char)*p); p++)
-				continue;
-			    t = (*p == '\0') ? True : False;
+			    t = (*val == '\0') ? True : False;
 			}
 			if (doFree) {
 			    free(val);
@@ -1073,13 +1019,12 @@ CondE(doEval)
  *
  *-----------------------------------------------------------------------
  */
-int
 Cond_Eval (line)
     char    	    *line;    /* Line to parse */
 {
     struct If	    *ifp;
     Boolean 	    isElse;
-    Boolean 	    value = FALSE;
+    Boolean 	    value;
     int	    	    level;  	/* Level at which to report errors. */
 
     level = PARSE_FATAL;
@@ -1120,7 +1065,7 @@ Cond_Eval (line)
     } else {
 	isElse = FALSE;
     }
-
+    
     /*
      * Figure out what sort of conditional it is -- what its default
      * function is, etc. -- by looking in the table of valid "ifs"
@@ -1180,16 +1125,16 @@ Cond_Eval (line)
 	 */
 	condDefProc = ifp->defProc;
 	condInvert = ifp->doNot;
-
+	
 	line += ifp->formlen;
-
+	
 	while (*line == ' ' || *line == '\t') {
 	    line++;
 	}
-
+	
 	condExpr = line;
 	condPushBack = None;
-
+	
 	switch (CondE(TRUE)) {
 	    case True:
 		if (CondToken(TRUE) == EndOfFile) {
@@ -1209,8 +1154,6 @@ Cond_Eval (line)
 		Parse_Error (level, "Malformed conditional (%s)",
 			     line);
 		return (COND_INVALID);
-	    default:
-		break;
 	}
     }
     if (!isElse) {

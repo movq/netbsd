@@ -1,8 +1,6 @@
-/*	$NetBSD: raw_cb.c,v 1.10 1996/05/23 18:35:02 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1980, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1986 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,22 +30,24 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)raw_cb.c	8.1 (Berkeley) 6/10/93
+ *	@(#)raw_cb.c	7.11 (Berkeley) 6/28/90
  */
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/mbuf.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
-#include <sys/domain.h>
-#include <sys/protosw.h>
-#include <sys/errno.h>
+#include "param.h"
+#include "systm.h"
+#include "mbuf.h"
+#include "socket.h"
+#include "socketvar.h"
+#include "domain.h"
+#include "protosw.h"
+#include "errno.h"
 
-#include <net/if.h>
-#include <net/route.h>
-#include <net/raw_cb.h>
-#include <netinet/in.h>
+#include "if.h"
+#include "route.h"
+#include "raw_cb.h"
+#include "../netinet/in.h"
+
+#include "machine/mtpr.h"
 
 /*
  * Routines to manage the raw protocol control blocks. 
@@ -65,7 +65,6 @@ u_long	raw_recvspace = RAWRCVQ;
  * Allocate a control block and a nominal amount
  * of buffer space for the socket.
  */
-int
 raw_attach(so, proto)
 	register struct socket *so;
 	int proto;
@@ -80,12 +79,12 @@ raw_attach(so, proto)
 	 */
 	if (rp == 0)
 		return (ENOBUFS);
-	if ((error = soreserve(so, raw_sendspace, raw_recvspace)) != 0)
+	if (error = soreserve(so, raw_sendspace, raw_recvspace))
 		return (error);
 	rp->rcb_socket = so;
 	rp->rcb_proto.sp_family = so->so_proto->pr_domain->dom_family;
 	rp->rcb_proto.sp_protocol = proto;
-	LIST_INSERT_HEAD(&rawcb, rp, rcb_list);
+	insque(rp, &rawcb);
 	return (0);
 }
 
@@ -93,7 +92,6 @@ raw_attach(so, proto)
  * Detach the raw connection block and discard
  * socket resources.
  */
-void
 raw_detach(rp)
 	register struct rawcb *rp;
 {
@@ -101,21 +99,20 @@ raw_detach(rp)
 
 	so->so_pcb = 0;
 	sofree(so);
-	LIST_REMOVE(rp, rcb_list);
+	remque(rp);
 #ifdef notdef
 	if (rp->rcb_laddr)
 		m_freem(dtom(rp->rcb_laddr));
 	rp->rcb_laddr = 0;
 #endif
-	free((caddr_t)rp, M_PCB);
+	free((caddr_t)(rp), M_PCB);
 }
 
 /*
  * Disconnect and possibly release resources.
  */
-void
 raw_disconnect(rp)
-	register struct rawcb *rp;
+	struct rawcb *rp;
 {
 
 #ifdef notdef
@@ -126,3 +123,20 @@ raw_disconnect(rp)
 	if (rp->rcb_socket->so_state & SS_NOFDREF)
 		raw_detach(rp);
 }
+
+#ifdef notdef
+raw_bind(so, nam)
+	register struct socket *so;
+	struct mbuf *nam;
+{
+	struct sockaddr *addr = mtod(nam, struct sockaddr *);
+	register struct rawcb *rp;
+
+	if (ifnet == 0)
+		return (EADDRNOTAVAIL);
+	rp = sotorawcb(so);
+	nam = m_copym(nam, 0, M_COPYALL, M_WAITOK);
+	rp->rcb_laddr = mtod(nam, struct sockaddr *);
+	return (0);
+}
+#endif

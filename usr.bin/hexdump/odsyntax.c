@@ -1,8 +1,6 @@
-/*	$NetBSD: odsyntax.c,v 1.8 1997/10/19 02:34:09 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,41 +31,32 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)odsyntax.c	8.2 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: odsyntax.c,v 1.8 1997/10/19 02:34:09 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)odsyntax.c	5.4 (Berkeley) 3/8/91";
 #endif /* not lint */
 
 #include <sys/types.h>
-
-#include <ctype.h>
-#include <err.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-
+#include <stdio.h>
 #include "hexdump.h"
 
 int deprecated;
 
-static void odoffset __P((int, char ***));
-static void odprecede __P((void));
-
-void
 oldsyntax(argc, argvp)
 	int argc;
 	char ***argvp;
 {
+	extern enum _vflag vflag;
+	extern FS *fshead;
+	extern char *optarg;
+	extern int length, optind;
 	int ch;
 	char **argv;
+	static void odprecede();
 
 	deprecated = 1;
 	argv = *argvp;
-	while ((ch = getopt(argc, argv, "aBbcDdeFfHhIiLlOoPpswvXx")) != -1)
+	while ((ch = getopt(argc, argv, "aBbcDdeFfHhIiLlOoPpswvXx")) != EOF)
 		switch (ch) {
 		case 'a':
 			odprecede();
@@ -137,10 +126,11 @@ oldsyntax(argc, argvp)
 		case 'w':
 		case '?':
 		default:
-			warnx("od(1) has been deprecated for hexdump(1).");
+			(void)fprintf(stderr,
+			    "od: od(1) has been deprecated for hexdump(1).\n");
 			if (ch != '?')
-				warnx(
-"hexdump(1) compatibility doesn't support the -%c option%s\n",
+				(void)fprintf(stderr,
+"od: hexdump(1) compatibility doesn't support the -%c option%s\n",
 				    ch, ch == 's' ? "; see strings(1)." : ".");
 			usage();
 		}
@@ -153,16 +143,18 @@ oldsyntax(argc, argvp)
 	argc -= optind;
 	*argvp += optind;
 
-	if (argc)
-		odoffset(argc, argvp);
+	odoffset(argc, argvp);
 }
 
-static void
+#define	ishexdigit(c) \
+	(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F')
+
 odoffset(argc, argvp)
 	int argc;
 	char ***argvp;
 {
-	char *num, *p;
+	extern off_t skip;
+	register char *num, *p;
 	int base;
 	char *end;
 
@@ -176,14 +168,11 @@ odoffset(argc, argvp)
 	 * multiplied the number by 512 or 1024 byte units.  There was
 	 * no way to assign a block count to a hex offset.
 	 *
-	 * We assume it's a file if the offset is bad.
+	 * We assumes it's a file if the offset is bad.
 	 */
-	p = argc == 1 ? (*argvp)[0] : (*argvp)[1];
-	if (!p)
-		return;
-
+	p = **argvp;
 	if (*p != '+' && (argc < 2 ||
-	    (!isdigit(p[0]) && (p[0] != 'x' || !isxdigit(p[1])))))
+	    (!isdigit(p[0]) && (p[0] != 'x' || !ishexdigit(p[1])))))
 		return;
 
 	base = 0;
@@ -193,7 +182,7 @@ odoffset(argc, argvp)
 	 */
 	if (p[0] == '+')
 		++p;
-	if (p[0] == 'x' && isxdigit(p[1])) {
+	if (p[0] == 'x' && ishexdigit(p[1])) {
 		++p;
 		base = 16;
 	} else if (p[0] == '0' && p[1] == 'x') {
@@ -203,7 +192,7 @@ odoffset(argc, argvp)
 
 	/* skip over the number */
 	if (base == 16)
-		for (num = p; isxdigit(*p); ++p);
+		for (num = p; ishexdigit(*p); ++p);
 	else
 		for (num = p; isdigit(*p); ++p);
 
@@ -221,40 +210,35 @@ odoffset(argc, argvp)
 	skip = strtol(num, &end, base ? base : 8);
 
 	/* if end isn't the same as p, we got a non-octal digit */
-	if (end != p) {
+	if (end != p)
 		skip = 0;
-		return;
-	}
-
-	if (*p)
-		if (*p == 'B') {
-			skip *= 1024;
-			++p;
-		} else if (*p == 'b') {
-			skip *= 512;
+	else {
+		if (*p) {
+			if (*p == 'b')
+				skip *= 512;
+			else if (*p == 'B')
+				skip *= 1024;
 			++p;
 		}
-
-	if (*p) {
-		skip = 0;
-		return;
-	}
-
-	/*
-	 * If the offset uses a non-octal base, the base of the offset
-	 * is changed as well.  This isn't pretty, but it's easy.
-	 */
+		if (*p)
+			skip = 0;
+		else {
+			++*argvp;
+			/*
+			 * If the offset uses a non-octal base, the base of
+			 * the offset is changed as well.  This isn't pretty,
+			 * but it's easy.
+			 */
 #define	TYPE_OFFSET	7
-	if (base == 16) {
-		fshead->nextfu->fmt[TYPE_OFFSET] = 'x';
-		fshead->nextfs->nextfu->fmt[TYPE_OFFSET] = 'x';
-	} else if (base == 10) {
-		fshead->nextfu->fmt[TYPE_OFFSET] = 'd';
-		fshead->nextfs->nextfu->fmt[TYPE_OFFSET] = 'd';
+			if (base == 16) {
+				fshead->nextfu->fmt[TYPE_OFFSET] = 'x';
+				fshead->nextfs->nextfu->fmt[TYPE_OFFSET] = 'x';
+			} else if (base == 10) {
+				fshead->nextfu->fmt[TYPE_OFFSET] = 'd';
+				fshead->nextfs->nextfu->fmt[TYPE_OFFSET] = 'd';
+			}
+		}
 	}
-
-	/* Terminate file list. */
-	(*argvp)[1] = NULL;
 }
 
 static void

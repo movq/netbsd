@@ -1,8 +1,6 @@
-/*	$NetBSD: clear.c,v 1.7 1997/07/22 07:36:26 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,28 +31,20 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)clear.c	8.2 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: clear.c,v 1.7 1997/07/22 07:36:26 mikel Exp $");
-#endif
-#endif	/* not lint */
+static char sccsid[] = "@(#)clear.c	5.4 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include "curses.h"
+# include	"curses.ext"
 
 /*
- * wclear --
- *	Clear the window.
+ *	This routine clears the window.
+ *
  */
-int
 wclear(win)
-	register WINDOW *win;
-{
-	if (werase(win) == OK) {
-		win->flags |= __CLEAROK;
-		return (OK);
-	}
-	return (ERR);
+reg WINDOW	*win; {
+
+	werase(win);
+	win->_clear = TRUE;
+	return OK;
 }

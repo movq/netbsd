@@ -1,7 +1,5 @@
-.\"	$NetBSD: rsh.1,v 1.7 1997/10/19 14:23:52 lukem Exp $
-.\"
-.\" Copyright (c) 1983, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,40 +29,35 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)rsh.1	8.2 (Berkeley) 4/29/95
+.\"	@(#)rsh.1	6.10 (Berkeley) 7/24/91
 .\"
-.Dd April 29, 1995
+.Dd July 24, 1991
 .Dt RSH 1
 .Os BSD 4.2
 .Sh NAME
 .Nm rsh
 .Nd remote shell
 .Sh SYNOPSIS
-.Nm
+.Nm rsh
 .Op Fl Kdnx
 .Op Fl k Ar realm
 .Op Fl l Ar username
 .Ar host
 .Op command
-.Nm ""
-.Op Fl Kdnx
-.Op Fl k Ar realm
-.Ar username@host
-.Op command
 .Sh DESCRIPTION
-.Nm
+.Nm Rsh
 executes
 .Ar command
 on
 .Ar host  .
 .Pp
-.Nm
+.Nm Rsh
 copies its standard input to the remote command, the standard
 output of the remote command to its standard output, and the
 standard error of the remote command to its standard error.
 Interrupt, quit and terminate signals are propagated to the remote
 command;
-.Nm
+.Nm rsh
 normally terminates when the remote command does.
 The options are as follows:
 .Bl -tag -width flag
@@ -84,7 +77,7 @@ sockets used for communication with the remote host.
 The
 .Fl k
 option causes
-.Nm
+.Nm rsh
 to obtain tickets for the remote host in
 .Ar realm
 instead of the remote host's realm as determined by
@@ -93,9 +86,7 @@ instead of the remote host's realm as determined by
 By default, the remote username is the same as the local username.
 The
 .Fl l
-option or the
-.Pa username@host
-format allow the remote name to be specified.
+option allows the remote name to be specified.
 Kerberos authentication is used, and authorization is determined
 as in
 .Xr rlogin  1  .
@@ -155,18 +146,18 @@ to
 .Xr krb_realmofhost 3
 .Sh HISTORY
 The
-.Nm
+.Nm rsh
 command appeared in
 .Bx 4.2 .
 .Sh BUGS
 If you are using
 .Xr csh  1
 and put a
-.Nm
+.Nm rsh
 in the background without redirecting its input away from the terminal,
 it will block even if no reads are posted by the remote command.
 If no input is desired you should redirect the input of
-.Nm
+.Nm rsh
 to
 .Pa /dev/null
 using the
@@ -179,12 +170,12 @@ You cannot run an interactive command
 or
 .Xr vi  1  )
 using
-.Nm ""  ;
+.Nm rsh  ;
 use
 .Xr rlogin  1
 instead.
 .Pp
 Stop signals stop the local
-.Nm
+.Nm rsh
 process only; this is arguably wrong, but currently hard to fix for reasons
 too complicated to explain here.

@@ -1,8 +1,6 @@
-/*	$NetBSD: fvwrite.c,v 1.7 1997/07/13 20:15:08 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,16 +34,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)fvwrite.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: fvwrite.c,v 1.7 1997/07/13 20:15:08 christos Exp $");
-#endif
+static char sccsid[] = "@(#)fvwrite.c	5.3 (Berkeley) 5/4/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include "local.h"
@@ -57,7 +49,6 @@ __RCSID("$NetBSD: fvwrite.c,v 1.7 1997/07/13 20:15:08 christos Exp $");
  * This routine is large and unsightly, but most of the ugliness due
  * to the three different kinds of output buffering is handled here.
  */
-int
 __sfvwrite(fp, uio)
 	register FILE *fp;
 	register struct __suio *uio;
@@ -72,13 +63,11 @@ __sfvwrite(fp, uio)
 	if ((len = uio->uio_resid) == 0)
 		return (0);
 	/* make sure we can write */
-	if (cantwrite(fp)) {
-		errno = EBADF;
+	if (cantwrite(fp))
 		return (EOF);
-	}
 
 #define	MIN(a, b) ((a) < (b) ? (a) : (b))
-#define	COPY(n)	  (void)memcpy((void *)fp->_p, (void *)p, (size_t)(n))
+#define	COPY(n)	  (void) bcopy((void *)p, (void *)fp->_p, (size_t)(n));
 
 	iov = uio->uio_iov;
 	p = iov->iov_base;

@@ -1,5 +1,3 @@
-/*	$NetBSD: ffs_subr.c,v 1.9 1996/10/12 21:58:45 christos Exp $	*/
-
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,16 +30,17 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ffs_subr.c	8.2 (Berkeley) 9/21/93
+ *	from: @(#)ffs_subr.c	8.2 (Berkeley) 9/21/93
+ *	$Id: ffs_subr.c,v 1.1 1994/06/08 11:42:06 mycroft Exp $
  */
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <ufs/ffs/fs.h>
-#include <ufs/ffs/ffs_extern.h>
 
-#ifdef _KERNEL
+#ifdef KERNEL
+#include <sys/systm.h>
 #include <sys/vnode.h>
+#include <ufs/ffs/ffs_extern.h>
 #include <sys/buf.h>
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
@@ -52,15 +51,14 @@
  * remaining space in the directory.
  */
 int
-ffs_blkatoff(v)
-	void *v;
-{
+ffs_blkatoff(ap)
 	struct vop_blkatoff_args /* {
 		struct vnode *a_vp;
 		off_t a_offset;
 		char **a_res;
 		struct buf **a_bpp;
-	} */ *ap = v;
+	} */ *ap;
+{
 	struct inode *ip;
 	register struct fs *fs;
 	struct buf *bp;
@@ -73,7 +71,7 @@ ffs_blkatoff(v)
 	bsize = blksize(fs, ip, lbn);
 
 	*ap->a_bpp = NULL;
-	if ((error = bread(ap->a_vp, lbn, bsize, NOCRED, &bp)) != 0) {
+	if (error = bread(ap->a_vp, lbn, bsize, NOCRED, &bp)) {
 		brelse(bp);
 		return (error);
 	}
@@ -92,7 +90,7 @@ void
 ffs_fragacct(fs, fragmap, fraglist, cnt)
 	struct fs *fs;
 	int fragmap;
-	int32_t fraglist[];
+	long fraglist[];
 	int cnt;
 {
 	int inblk;
@@ -119,7 +117,7 @@ ffs_fragacct(fs, fragmap, fraglist, cnt)
 	}
 }
 
-#if defined(_KERNEL) && defined(DIAGNOSTIC)
+#if defined(KERNEL) && defined(DIAGNOSTIC)
 void
 ffs_checkoverlap(bp, ip)
 	struct buf *bp;
@@ -145,9 +143,9 @@ ffs_checkoverlap(bp, ip)
 		    ep->b_blkno + btodb(ep->b_bcount) <= start)
 			continue;
 		vprint("Disk overlap", vp);
-		printf("\tstart %d, end %d overlap start %d, end %ld\n",
-		    start, last, ep->b_blkno,
-		    ep->b_blkno + btodb(ep->b_bcount) - 1);
+		(void)printf("\tstart %d, end %d overlap start %d, end %d\n",
+			start, last, ep->b_blkno,
+			ep->b_blkno + btodb(ep->b_bcount) - 1);
 		panic("Disk buffer overlap");
 	}
 }

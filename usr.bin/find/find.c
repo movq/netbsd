@@ -1,8 +1,6 @@
-/*	$NetBSD: find.c,v 1.9 1997/10/19 11:52:27 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Cimarron D. Taylor of the University of California, Berkeley.
@@ -36,25 +34,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "from: @(#)find.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: find.c,v 1.9 1997/10/19 11:52:27 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)find.c	5.3 (Berkeley) 5/25/91";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/stat.h>
-
-#include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <fts.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-
 #include "find.h"
 
 /*
@@ -67,6 +57,8 @@ find_formplan(argv)
 	char **argv;
 {
 	PLAN *plan, *tail, *new;
+	PLAN *c_print(), *find_create(), *not_squish(), *or_squish();
+	PLAN *paren_squish();
 
 	/*
 	 * for each argument in the command line, determine what kind of node
@@ -84,7 +76,7 @@ find_formplan(argv)
 	 * by c_name() with an argument of foo and `-->' represents the
 	 * plan->next pointer.
 	 */
-	for (plan = tail = NULL; *argv;) {
+	for (plan = NULL; *argv;) {
 		if (!(new = find_create(&argv)))
 			continue;
 		if (plan == NULL)
@@ -97,21 +89,15 @@ find_formplan(argv)
     
 	/*
 	 * if the user didn't specify one of -print, -ok or -exec, then -print
-	 * is assumed so we bracket the current expression with parens, if
-	 * necessary, and add a -print node on the end.
+	 * is assumed so we add a -print node on the end.  It is possible that
+	 * the user might want the -print someplace else on the command line,
+	 * but there's no way to know that.
 	 */
 	if (!isoutput) {
-		if (plan == NULL) {
-			new = c_print();
+		new = c_print();
+		if (plan == NULL)
 			tail = plan = new;
-		} else {
-			new = c_openparen();
-			new->next = plan;
-			plan = new;
-			new = c_closeparen();
-			tail->next = new;
-			tail = new;
-			new = c_print();
+		else {
 			tail->next = new;
 			tail = new;
 		}
@@ -143,7 +129,7 @@ find_formplan(argv)
 	plan = paren_squish(plan);		/* ()'s */
 	plan = not_squish(plan);		/* !'s */
 	plan = or_squish(plan);			/* -o's */
-	return (plan);
+	return(plan);
 }
  
 FTS *tree;			/* pointer to top of FTS hierarchy */
@@ -161,10 +147,10 @@ find_execute(plan, paths)
 	register FTSENT *entry;
 	PLAN *p;
     
-	if (!(tree = fts_open(paths, ftsoptions, NULL)))
-		err(1, "ftsopen");
+	if (!(tree = fts_open(paths, ftsoptions, (int (*)())NULL)))
+		err("ftsopen: %s", strerror(errno));
 
-	while ((entry = fts_read(tree)) != NULL) {
+	while (entry = fts_read(tree)) {
 		switch(entry->fts_info) {
 		case FTS_D:
 			if (isdepth)
@@ -177,14 +163,21 @@ find_execute(plan, paths)
 		case FTS_DNR:
 		case FTS_ERR:
 		case FTS_NS:
-			(void)fflush(stdout);
-			warn("%s", entry->fts_path);
+			(void)fprintf(stderr, "find: %s: %s\n", 
+			    entry->fts_path, strerror(errno));
 			continue;
+		case FTS_SL:
+			if (entry->fts_level == FTS_ROOTLEVEL) {
+				(void)fts_set(tree, entry, FTS_FOLLOW);
+				continue;
+			}
+			break;
 		}
+
 #define	BADCH	" \t\n\\'\""
 		if (isxargs && strpbrk(entry->fts_path, BADCH)) {
-			(void)fflush(stdout);
-			warnx("%s: illegal path", entry->fts_path);
+			(void)fprintf(stderr,
+			    "find: illegal path: %s\n", entry->fts_path);
 			continue;
 		}
 		 
@@ -193,8 +186,7 @@ find_execute(plan, paths)
 		 * false or all have been executed.  This is where we do all
 		 * the work specified by the user on the command line.
 		 */
-		for (p = plan; p && (p->eval)(p, entry); p = p->next)
-			;
+		for (p = plan; p && (p->eval)(p, entry); p = p->next);
 	}
 	(void)fts_close(tree);
 }

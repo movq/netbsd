@@ -1,8 +1,6 @@
-/*	$NetBSD: proc.c,v 1.11 1997/07/04 21:24:07 christos Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)proc.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: proc.c,v 1.11 1997/07/04 21:24:07 christos Exp $");
-#endif
+static char sccsid[] = "@(#)proc.c	5.22 (Berkeley) 6/14/91";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -71,7 +64,7 @@ static int	 pprint __P((struct process *, int));
 static void	 ptprint __P((struct process *));
 static void	 pads __P((Char *));
 static void	 pkill __P((Char **v, int));
-static struct	process
+static struct	process 
 		*pgetcurr __P((struct process *));
 static void	 okpcntl __P((void));
 
@@ -87,9 +80,9 @@ void
 pchild(notused)
 	int notused;
 {
-    struct process *pp;
-    struct process *fp;
-    int pid;
+    register struct process *pp;
+    register struct process *fp;
+    register int pid;
     extern int insource;
     union wait w;
     int     jobflags;
@@ -181,15 +174,12 @@ found:
 		;		/* print in pjwait */
 	    }
 	    /* PWP: print a newline after ^C */
-	    else if (jobflags & PINTERRUPTED) {
-		(void) vis_fputc('\r' | QUOTE, cshout);
-		(void) fputc('\n', cshout);
-	    }
+	    else if (jobflags & PINTERRUPTED)
+		xputchar('\r' | QUOTE), xputchar('\n');
 	}
 	else {
 	    if (jobflags & PNOTIFY || adrof(STRnotify)) {
-		(void) vis_fputc('\r' | QUOTE, cshout);
-		(void) fputc('\n', cshout);
+		xputchar('\r' | QUOTE), xputchar('\n');
 		(void) pprint(pp, NUMBER | NAME | REASON);
 		if ((jobflags & PSTOPPED) == 0)
 		    pflush(pp);
@@ -206,21 +196,19 @@ found:
 void
 pnote()
 {
-    struct process *pp;
+    register struct process *pp;
     int     flags;
-    sigset_t sigset, osigset;
+    sigset_t omask;
 
     neednote = 0;
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGCHLD);
     for (pp = proclist.p_next; pp != NULL; pp = pp->p_next) {
 	if (pp->p_flags & PNEEDNOTE) {
-	    sigprocmask(SIG_BLOCK, &sigset, &osigset);
+	    omask = sigblock(sigmask(SIGCHLD));
 	    pp->p_flags &= ~PNEEDNOTE;
 	    flags = pprint(pp, NUMBER | NAME | REASON);
 	    if ((flags & (PRUNNING | PSTOPPED)) == 0)
 		pflush(pp);
-	    sigprocmask(SIG_SETMASK, &osigset, NULL);
+	    (void) sigsetmask(omask);
 	}
     }
 }
@@ -232,15 +220,13 @@ pnote()
 void
 pwait()
 {
-    struct process *fp, *pp;
-    sigset_t sigset, osigset;
+    register struct process *fp, *pp;
+    sigset_t omask;
 
     /*
      * Here's where dead procs get flushed.
      */
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &sigset, &osigset);
+    omask = sigblock(sigmask(SIGCHLD));
     for (pp = (fp = &proclist)->p_next; pp != NULL; pp = (fp = pp)->p_next)
 	if (pp->p_pid == 0) {
 	    fp->p_next = pp->p_next;
@@ -251,7 +237,7 @@ pwait()
 	    xfree((ptr_t) pp);
 	    pp = fp;
 	}
-    sigprocmask(SIG_SETMASK, &osigset, NULL);
+    (void) sigsetmask(omask);
     pjwait(pcurrjob);
 }
 
@@ -262,11 +248,11 @@ pwait()
  */
 void
 pjwait(pp)
-    struct process *pp;
+    register struct process *pp;
 {
-    struct process *fp;
+    register struct process *fp;
     int     jobflags, reason;
-    sigset_t sigset, osigset;
+    sigset_t omask;
 
     while (pp->p_pid != pp->p_jobid)
 	pp = pp->p_friends;
@@ -274,20 +260,16 @@ pjwait(pp)
 
     do {
 	if ((fp->p_flags & (PFOREGND | PRUNNING)) == PRUNNING)
-	    (void) fprintf(csherr, "BUG: waiting for background job!\n");
+	    xprintf("BUG: waiting for background job!\n");
     } while ((fp = fp->p_friends) != pp);
     /*
      * Now keep pausing as long as we are not interrupted (SIGINT), and the
      * target process, or any of its friends, are running
      */
     fp = pp;
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &sigset, &osigset);
+    omask = sigblock(sigmask(SIGCHLD));
     for (;;) {
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGCHLD);
-	sigprocmask(SIG_BLOCK, &sigset, NULL);
+	(void) sigblock(sigmask(SIGCHLD));
 	jobflags = 0;
 	do
 	    jobflags |= fp->p_flags;
@@ -295,20 +277,17 @@ pjwait(pp)
 	if ((jobflags & PRUNNING) == 0)
 	    break;
 #ifdef JOBDEBUG
-	(void) fprintf(csherr, "starting to sigsuspend for  SIGCHLD on %d\n",
-		       fp->p_pid);
+	xprintf("starting to sigpause for  SIGCHLD on %d\n", fp->p_pid);
 #endif				/* JOBDEBUG */
-	sigset = osigset;
-	sigdelset(&sigset, SIGCHLD);
-	sigsuspend(&sigset);
+	(void) sigpause(omask & ~sigmask(SIGCHLD));
     }
-    sigprocmask(SIG_SETMASK, &osigset, NULL);
+    (void) sigsetmask(omask);
     if (tpgrp > 0)		/* get tty back */
 	(void) tcsetpgrp(FSHTTY, tpgrp);
     if ((jobflags & (PSIGNALED | PSTOPPED | PTIME)) ||
 	!eq(dcwd->di_name, fp->p_cwd->di_name)) {
 	if (jobflags & PSTOPPED) {
-	    (void) fputc('\n', cshout);
+	    xprintf("\n");
 	    if (adrof(STRlistjobs)) {
 		Char   *jobcommand[3];
 
@@ -319,7 +298,7 @@ pjwait(pp)
 		    jobcommand[1] = NULL;
 		jobcommand[2] = NULL;
 
-		dojobs(jobcommand, NULL);
+		dojobs(jobcommand);
 		(void) pprint(pp, SHELLDIR);
 	    }
 	    else
@@ -342,9 +321,8 @@ pjwait(pp)
 	    reason = fp->p_flags & (PSIGNALED | PINTERRUPTED) ?
 		fp->p_reason | META : fp->p_reason;
     } while ((fp = fp->p_friends) != pp);
-    if ((reason != 0) && (adrof(STRprintexitvalue))) {
-	(void) fprintf(cshout, "Exit %d\n", reason);
-    }
+    if ((reason != 0) && (adrof(STRprintexitvalue)))
+	xprintf("Exit %d\n", reason);
     set(STRstatus, putn(reason));
     if (reason && exiterr)
 	exitstat();
@@ -355,27 +333,21 @@ pjwait(pp)
  * dowait - wait for all processes to finish
  */
 void
-/*ARGSUSED*/
-dowait(v, t)
-    Char **v;
-    struct command *t;
+dowait()
 {
-    struct process *pp;
-    sigset_t sigset, osigset;
+    register struct process *pp;
+    sigset_t omask;
 
     pjobs++;
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &sigset, &osigset);
+    omask = sigblock(sigmask(SIGCHLD));
 loop:
     for (pp = proclist.p_next; pp; pp = pp->p_next)
 	if (pp->p_pid &&	/* pp->p_pid == pp->p_jobid && */
 	    pp->p_flags & PRUNNING) {
-	    sigemptyset(&sigset);
-	    sigsuspend(&sigset);
+	    (void) sigpause((sigset_t) 0);
 	    goto loop;
 	}
-    sigprocmask(SIG_SETMASK, &osigset, NULL);
+    (void) sigsetmask(omask);
     pjobs = 0;
 }
 
@@ -385,7 +357,7 @@ loop:
 static void
 pflushall()
 {
-    struct process *pp;
+    register struct process *pp;
 
     for (pp = proclist.p_next; pp != NULL; pp = pp->p_next)
 	if (pp->p_pid)
@@ -399,13 +371,13 @@ pflushall()
  */
 static void
 pflush(pp)
-    struct process *pp;
+    register struct process *pp;
 {
-    struct process *np;
-    int idx;
+    register struct process *np;
+    register int idx;
 
     if (pp->p_pid == 0) {
-	(void) fprintf(csherr, "BUG: process flushed twice");
+	xprintf("BUG: process flushed twice");
 	return;
     }
     while (pp->p_pid != pp->p_jobid)
@@ -433,7 +405,7 @@ pflush(pp)
  */
 static void
 pclrcurr(pp)
-    struct process *pp;
+    register struct process *pp;
 {
 
     if (pp == pcurrent)
@@ -461,9 +433,9 @@ static Char *cmdp;
 void
 palloc(pid, t)
     int     pid;
-    struct command *t;
+    register struct command *t;
 {
-    struct process *pp;
+    register struct process *pp;
     int     i;
 
     pp = (struct process *) xcalloc(1, (size_t) sizeof(struct process));
@@ -478,7 +450,7 @@ palloc(pid, t)
     if (t->t_dflg & F_PIPEOUT) {
 	pp->p_flags |= PPOU;
 	if (t->t_dflg & F_STDERR)
-	    pp->p_flags |= PERR;
+	    pp->p_flags |= PDIAG;
     }
     pp->p_command = Strsave(command);
     if (pcurrjob) {
@@ -489,8 +461,7 @@ palloc(pid, t)
 	pp->p_index = pcurrjob->p_index;
 	pp->p_friends = pcurrjob;
 	pp->p_jobid = pcurrjob->p_pid;
-	for (fp = pcurrjob; fp->p_friends != pcurrjob; fp = fp->p_friends)
-	    continue;
+	for (fp = pcurrjob; fp->p_friends != pcurrjob; fp = fp->p_friends);
 	fp->p_friends = pp;
     }
     else {
@@ -527,7 +498,7 @@ palloc(pid, t)
 
 static void
 padd(t)
-    struct command *t;
+    register struct command *t;
 {
     Char  **argp;
 
@@ -588,7 +559,7 @@ static void
 pads(cp)
     Char   *cp;
 {
-    int i;
+    register int i;
 
     /*
      * Avoid the Quoted Space alias hack! Reported by:
@@ -644,19 +615,19 @@ prestjob()
 void
 pendjob()
 {
-    struct process *pp, *tp;
+    register struct process *pp, *tp;
 
     if (pcurrjob && (pcurrjob->p_flags & (PFOREGND | PSTOPPED)) == 0) {
 	pp = pcurrjob;
 	while (pp->p_pid != pp->p_jobid)
 	    pp = pp->p_friends;
-	(void) fprintf(cshout, "[%d]", pp->p_index);
+	xprintf("[%d]", pp->p_index);
 	tp = pp;
 	do {
-	    (void) fprintf(cshout, " %d", pp->p_pid);
+	    xprintf(" %d", pp->p_pid);
 	    pp = pp->p_friends;
 	} while (pp != tp);
-	(void) fputc('\n', cshout);
+	xprintf("\n");
     }
     pholdjob = pcurrjob = 0;
 }
@@ -666,16 +637,14 @@ pendjob()
  */
 static int
 pprint(pp, flag)
-    struct process *pp;
+    register struct process *pp;
     bool    flag;
 {
-    int status, reason;
+    register status, reason;
     struct process *tp;
+    extern char *linp, linbuf[];
     int     jobflags, pstatus;
-    bool hadnl = 1;	/* did we just have a newline */
     char   *format;
-
-    (void) fpurge(cshout);
 
     while (pp->p_pid != pp->p_jobid)
 	pp = pp->p_friends;
@@ -689,30 +658,23 @@ pprint(pp, flag)
     do {
 	jobflags |= pp->p_flags;
 	pstatus = pp->p_flags & PALLSTATES;
-	if (tp != pp && !hadnl && !(flag & FANCY) &&
-	    ((pstatus == status && pp->p_reason == reason) ||
-	     !(flag & REASON))) {
-	    (void) fputc(' ', cshout);
-	    hadnl = 0;
-	}
+	if (tp != pp && linp != linbuf && !(flag & FANCY) &&
+	    (pstatus == status && pp->p_reason == reason ||
+	     !(flag & REASON)))
+	    xprintf(" ");
 	else {
-	    if (tp != pp && !hadnl) {
-		(void) fputc('\n', cshout);
-		hadnl = 1;
-	    }
-	    if (flag & NUMBER) {
+	    if (tp != pp && linp != linbuf)
+		xprintf("\n");
+	    if (flag & NUMBER)
 		if (pp == tp)
-		    (void) fprintf(cshout, "[%d]%s %c ", pp->p_index,
+		    xprintf("[%d]%s %c ", pp->p_index,
 			    pp->p_index < 10 ? " " : "",
 			    pp == pcurrent ? '+' :
 			    (pp == pprevious ? '-' : ' '));
 		else
-		    (void) fprintf(cshout, "       ");
-		hadnl = 0;
-	    }
+		    xprintf("       ");
 	    if (flag & FANCY) {
-		(void) fprintf(cshout, "%5d ", pp->p_pid);
-		hadnl = 0;
+		xprintf("%5d ", pp->p_pid);
 	    }
 	    if (flag & (REASON | AREASON)) {
 		if (flag & NAME)
@@ -721,8 +683,7 @@ pprint(pp, flag)
 		    format = "%s";
 		if (pstatus == status)
 		    if (pp->p_reason == reason) {
-			(void) fprintf(cshout, format, "");
-			hadnl = 0;
+			xprintf(format, "");
 			goto prcomd;
 		    }
 		    else
@@ -734,117 +695,91 @@ pprint(pp, flag)
 		switch (status) {
 
 		case PRUNNING:
-		    (void) fprintf(cshout, format, "Running ");
-		    hadnl = 0;
+		    xprintf(format, "Running ");
 		    break;
 
 		case PINTERRUPTED:
 		case PSTOPPED:
 		case PSIGNALED:
-                    /*
-                     * tell what happened to the background job
-                     * From: Michael Schroeder
-                     * <mlschroe@immd4.informatik.uni-erlangen.de>
-                     */
-                    if ((flag & REASON)
-                        || ((flag & AREASON)
-                            && reason != SIGINT
-                            && (reason != SIGPIPE
-                                || (pp->p_flags & PPOU) == 0))) {
-			(void) fprintf(cshout, format,
-				       sys_siglist[(unsigned char)
-						   pp->p_reason]);
-			hadnl = 0;
-		    }
+		    if ((flag & REASON) || 
+			((flag & AREASON) && reason != SIGINT 
+			 && reason != SIGPIPE))
+			xprintf(format, mesg[pp->p_reason].pname);
 		    break;
 
 		case PNEXITED:
 		case PAEXITED:
-		    if (flag & REASON) {
+		    if (flag & REASON)
 			if (pp->p_reason)
-			    (void) fprintf(cshout, "Exit %-18d", pp->p_reason);
+			    xprintf("Exit %-18d", pp->p_reason);
 			else
-			    (void) fprintf(cshout, format, "Done");
-			hadnl = 0;
-		    }
+			    xprintf(format, "Done");
 		    break;
 
 		default:
-		    (void) fprintf(csherr, "BUG: status=%-9o", status);
+		    xprintf("BUG: status=%-9o", status);
 		}
 	    }
 	}
 prcomd:
 	if (flag & NAME) {
-	    (void) fprintf(cshout, "%s", vis_str(pp->p_command));
+	    xprintf("%s", short2str(pp->p_command));
 	    if (pp->p_flags & PPOU)
-		(void) fprintf(cshout, " |");
-	    if (pp->p_flags & PERR)
-		(void) fputc('&', cshout);
-	    hadnl = 0;
+		xprintf(" |");
+	    if (pp->p_flags & PDIAG)
+		xprintf("&");
 	}
-	if (flag & (REASON | AREASON) && pp->p_flags & PDUMPED) {
-	    (void) fprintf(cshout, " (core dumped)");
-	    hadnl = 0;
-	}
+	if (flag & (REASON | AREASON) && pp->p_flags & PDUMPED)
+	    xprintf(" (core dumped)");
 	if (tp == pp->p_friends) {
-	    if (flag & AMPERSAND) {
-		(void) fprintf(cshout, " &");
-		hadnl = 0;
-	    }
+	    if (flag & AMPERSAND)
+		xprintf(" &");
 	    if (flag & JOBDIR &&
 		!eq(tp->p_cwd->di_name, dcwd->di_name)) {
-		(void) fprintf(cshout, " (wd: ");
+		xprintf(" (wd: ");
 		dtildepr(value(STRhome), tp->p_cwd->di_name);
-		(void) fputc(')', cshout);
-		hadnl = 0;
+		xprintf(")");
 	    }
 	}
 	if (pp->p_flags & PPTIME && !(status & (PSTOPPED | PRUNNING))) {
-	    if (!hadnl)
-		(void) fprintf(cshout, "\n\t");
+	    if (linp != linbuf)
+		xprintf("\n\t");
 	    prusage(&zru, &pp->p_rusage, &pp->p_etime,
 		    &pp->p_btime);
-	    hadnl = 1;
 	}
 	if (tp == pp->p_friends) {
-	    if (!hadnl) {
-		(void) fputc('\n', cshout);
-		hadnl = 1;
-	    }
+	    if (linp != linbuf)
+		xprintf("\n");
 	    if (flag & SHELLDIR && !eq(tp->p_cwd->di_name, dcwd->di_name)) {
-		(void) fprintf(cshout, "(wd now: ");
+		xprintf("(wd now: ");
 		dtildepr(value(STRhome), dcwd->di_name);
-		(void) fprintf(cshout, ")\n");
-		hadnl = 1;
+		xprintf(")\n");
 	    }
 	}
     } while ((pp = pp->p_friends) != tp);
     if (jobflags & PTIME && (jobflags & (PSTOPPED | PRUNNING)) == 0) {
 	if (jobflags & NUMBER)
-	    (void) fprintf(cshout, "       ");
+	    xprintf("       ");
 	ptprint(tp);
-	hadnl = 1;
     }
-    (void) fflush(cshout);
     return (jobflags);
 }
 
 static void
 ptprint(tp)
-    struct process *tp;
+    register struct process *tp;
 {
     struct timeval tetime, diff;
     static struct timeval ztime;
     struct rusage ru;
     static struct rusage zru;
-    struct process *pp = tp;
+    register struct process *pp = tp;
 
     ru = zru;
     tetime = ztime;
     do {
 	ruadd(&ru, &pp->p_rusage);
-	timersub(&pp->p_etime, &pp->p_btime, &diff);
+	tvsub(&diff, &pp->p_etime, &pp->p_btime);
 	if (timercmp(&diff, &tetime, >))
 	    tetime = diff;
     } while ((pp = pp->p_friends) != tp);
@@ -855,13 +790,11 @@ ptprint(tp)
  * dojobs - print all jobs
  */
 void
-/*ARGSUSED*/
-dojobs(v, t)
-    Char **v;
-    struct command *t;
+dojobs(v)
+    Char  **v;
 {
-    struct process *pp;
-    int flag = NUMBER | NAME | REASON;
+    register struct process *pp;
+    register int flag = NUMBER | NAME | REASON;
     int     i;
 
     if (chkstop)
@@ -885,12 +818,10 @@ dojobs(v, t)
  * dofg - builtin - put the job into the foreground
  */
 void
-/*ARGSUSED*/
-dofg(v, t)
-    Char **v;
-    struct command *t;
+dofg(v)
+    Char  **v;
 {
-    struct process *pp;
+    register struct process *pp;
 
     okpcntl();
     ++v;
@@ -905,12 +836,10 @@ dofg(v, t)
  * %... - builtin - put the job into the foreground
  */
 void
-/*ARGSUSED*/
-dofg1(v, t)
-    Char **v;
-    struct command *t;
+dofg1(v)
+    Char  **v;
 {
-    struct process *pp;
+    register struct process *pp;
 
     okpcntl();
     pp = pfind(v[0]);
@@ -922,12 +851,10 @@ dofg1(v, t)
  * dobg - builtin - put the job into the background
  */
 void
-/*ARGSUSED*/
-dobg(v, t)
-    Char **v;
-    struct command *t;
+dobg(v)
+    Char  **v;
 {
-    struct process *pp;
+    register struct process *pp;
 
     okpcntl();
     ++v;
@@ -941,12 +868,10 @@ dobg(v, t)
  * %... & - builtin - put the job into the background
  */
 void
-/*ARGSUSED*/
-dobg1(v, t)
-    Char **v;
-    struct command *t;
+dobg1(v)
+    Char  **v;
 {
-    struct process *pp;
+    register struct process *pp;
 
     pp = pfind(v[0]);
     pstart(pp, 0);
@@ -956,10 +881,8 @@ dobg1(v, t)
  * dostop - builtin - stop the job
  */
 void
-/*ARGSUSED*/
-dostop(v, t)
-    Char **v;
-    struct command *t;
+dostop(v)
+    Char  **v;
 {
     pkill(++v, SIGSTOP);
 }
@@ -968,23 +891,26 @@ dostop(v, t)
  * dokill - builtin - superset of kill (1)
  */
 void
-/*ARGSUSED*/
-dokill(v, t)
-    Char **v;
-    struct command *t;
+dokill(v)
+    Char  **v;
 {
-    int signum = SIGTERM;
-    char *name;
+    register int signum, len = 0;
+    register char *name;
 
     v++;
     if (v[0] && v[0][0] == '-') {
 	if (v[0][1] == 'l') {
-	    for (signum = 1; signum < NSIG; signum++) {
-		(void) fprintf(cshout, "%s ", sys_signame[signum]);
-		if (signum == NSIG / 2)
-		    (void) fputc('\n', cshout);
+	    for (signum = 1; signum <= NSIG; signum++) {
+		if ((name = mesg[signum].iname) != NULL) {
+		    len += strlen(name) + 1;
+		    if (len >= 80 - 1) {
+			xprintf("\n");
+			len = strlen(name) + 1;
+		    }
+		    xprintf("%s ", name);
+		}
 	    }
-	    (void) fputc('\n', cshout);
+	    xprintf("\n");
 	    return;
 	}
 	if (Isdigit(v[0][1])) {
@@ -993,21 +919,18 @@ dokill(v, t)
 		stderror(ERR_NAME | ERR_BADSIG);
 	}
 	else {
-	    name = short2str(&v[0][1]);
-	    if (!strncasecmp(name, "sig", 3))
-		name += 3;
-
-	    for (signum = 1; signum < NSIG; signum++)
-		if (!strcasecmp(sys_signame[signum], name))
-		    break;
-
-	    if (signum == NSIG) {
-		setname(vis_str(&v[0][1]));
-		stderror(ERR_NAME | ERR_UNKSIG);
-	    }
+	    for (signum = 1; signum <= NSIG; signum++)
+		if (mesg[signum].iname &&
+		    eq(&v[0][1], str2short(mesg[signum].iname)))
+		    goto gotsig;
+	    setname(short2str(&v[0][1]));
+	    stderror(ERR_NAME | ERR_UNKSIG);
 	}
+gotsig:
 	v++;
     }
+    else
+	signum = SIGTERM;
     pkill(v, signum);
 }
 
@@ -1016,17 +939,16 @@ pkill(v, signum)
     Char  **v;
     int     signum;
 {
-    struct process *pp, *np;
-    int jobflags = 0;
+    register struct process *pp, *np;
+    register int jobflags = 0;
     int     pid, err1 = 0;
-    sigset_t sigset;
+    sigset_t omask;
     Char   *cp;
 
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGCHLD);
+    omask = sigmask(SIGCHLD);
     if (setintr)
-	sigaddset(&sigset, SIGINT);
-    sigprocmask(SIG_BLOCK, &sigset, NULL);
+	omask |= sigmask(SIGINT);
+    omask = sigblock(omask) & ~omask;
     gflag = 0, tglob(v);
     if (gflag) {
 	v = globall(v);
@@ -1051,8 +973,7 @@ pkill(v, signum)
 	    case SIGTTIN:
 	    case SIGTTOU:
 		if ((jobflags & PRUNNING) == 0) {
-		    (void) fprintf(csherr, "%s: Already suspended\n",
-				   vis_str(cp));
+		    xprintf("%s: Already suspended\n", short2str(cp));
 		    err1++;
 		    goto cont;
 		}
@@ -1065,20 +986,19 @@ pkill(v, signum)
 		pstart(pp, 0);
 		goto cont;
 	    }
-	    if (kill(-pp->p_jobid, signum) < 0) {
-		(void) fprintf(csherr, "%s: %s\n", vis_str(cp),
-			       strerror(errno));
+	    if (killpg((pid_t) pp->p_jobid, signum) < 0) {
+		xprintf("%s: %s\n", short2str(cp), strerror(errno));
 		err1++;
 	    }
 	    if (signum == SIGTERM || signum == SIGHUP)
-		(void) kill(-pp->p_jobid, SIGCONT);
+		(void) killpg((pid_t) pp->p_jobid, SIGCONT);
 	}
 	else if (!(Isdigit(*cp) || *cp == '-'))
 	    stderror(ERR_NAME | ERR_JOBARGS);
 	else {
 	    pid = atoi(short2str(cp));
 	    if (kill((pid_t) pid, signum) < 0) {
-		(void) fprintf(csherr, "%d: %s\n", pid, strerror(errno));
+		xprintf("%d: %s\n", pid, strerror(errno));
 		err1++;
 		goto cont;
 	    }
@@ -1090,7 +1010,7 @@ cont:
     }
     if (gargv)
 	blkfree(gargv), gargv = 0;
-    sigprocmask(SIG_UNBLOCK, &sigset, NULL);
+    (void) sigsetmask(omask);
     if (err1)
 	stderror(ERR_SILENT);
 }
@@ -1100,16 +1020,14 @@ cont:
  */
 void
 pstart(pp, foregnd)
-    struct process *pp;
+    register struct process *pp;
     int     foregnd;
 {
-    struct process *np;
-    sigset_t sigset, osigset;
+    register struct process *np;
+    sigset_t omask;
     long    jobflags = 0;
 
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &sigset, &osigset);
+    omask = sigblock(sigmask(SIGCHLD));
     np = pp;
     do {
 	jobflags |= np->p_flags;
@@ -1128,15 +1046,15 @@ pstart(pp, foregnd)
     if (foregnd)
 	(void) tcsetpgrp(FSHTTY, pp->p_jobid);
     if (jobflags & PSTOPPED)
-	(void) kill(-pp->p_jobid, SIGCONT);
-    sigprocmask(SIG_SETMASK, &osigset, NULL);
+	(void) killpg((pid_t) pp->p_jobid, SIGCONT);
+    (void) sigsetmask(omask);
 }
 
 void
 panystop(neednl)
     bool    neednl;
 {
-    struct process *pp;
+    register struct process *pp;
 
     chkstop = 2;
     for (pp = proclist.p_next; pp; pp = pp->p_next)
@@ -1148,7 +1066,7 @@ struct process *
 pfind(cp)
     Char   *cp;
 {
-    struct process *pp, *np;
+    register struct process *pp, *np;
 
     if (cp == 0 || cp[1] == 0 || eq(cp, STRcent2) || eq(cp, STRcentplus)) {
 	if (pcurrent == NULL)
@@ -1172,7 +1090,7 @@ pfind(cp)
     for (pp = proclist.p_next; pp; pp = pp->p_next)
 	if (pp->p_pid == pp->p_jobid) {
 	    if (cp[1] == '?') {
-		Char *dp;
+		register Char *dp;
 
 		for (dp = pp->p_command; *dp; dp++) {
 		    if (*dp != cp[2])
@@ -1190,7 +1108,7 @@ pfind(cp)
 	}
     if (np)
 	return (np);
-    stderror(ERR_NAME | (cp[1] == '?' ? ERR_JOBPAT : ERR_NOSUCHJOB));
+    stderror(ERR_NAME | cp[1] == '?' ? ERR_JOBPAT : ERR_NOSUCHJOB);
     /* NOTREACHED */
     return (0);
 }
@@ -1201,10 +1119,10 @@ pfind(cp)
  */
 static struct process *
 pgetcurr(pp)
-    struct process *pp;
+    register struct process *pp;
 {
-    struct process *np;
-    struct process *xp = NULL;
+    register struct process *np;
+    register struct process *xp = NULL;
 
     for (np = proclist.p_next; np; np = np->p_next)
 	if (np != pcurrent && np != pp && np->p_pid &&
@@ -1221,12 +1139,10 @@ pgetcurr(pp)
  * donotify - flag the job so as to report termination asynchronously
  */
 void
-/*ARGSUSED*/
-donotify(v, t)
-    Char **v;
-    struct command *t;
+donotify(v)
+    Char  **v;
 {
-    struct process *pp;
+    register struct process *pp;
 
     pp = pfind(*++v);
     pp->p_flags |= PNOTIFY;
@@ -1249,10 +1165,10 @@ pfork(t, wanttty)
     struct command *t;		/* command we are forking for */
     int     wanttty;
 {
-    int pid;
+    register int pid;
     bool    ignint = 0;
     int     pgrp;
-    sigset_t sigset, osigset;
+    sigset_t omask;
 
     /*
      * A child will be uninterruptible only under very special conditions.
@@ -1273,14 +1189,12 @@ pfork(t, wanttty)
     /*
      * Hold SIGCHLD until we have the process installed in our table.
      */
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &sigset, &osigset);
+    omask = sigblock(sigmask(SIGCHLD));
     while ((pid = fork()) < 0)
 	if (setintr == 0)
 	    (void) sleep(FORKSLEEP);
 	else {
-	    sigprocmask(SIG_SETMASK, &osigset, NULL);
+	    (void) sigsetmask(omask);
 	    stderror(ERR_NOPROC);
 	}
     if (pid == 0) {
@@ -1324,7 +1238,7 @@ pfork(t, wanttty)
 	if (wanttty >= 0)
 	    (void) setpgid(pid, pcurrjob ? pcurrjob->p_jobid : pid);
 	palloc(pid, t);
-	sigprocmask(SIG_SETMASK, &osigset, NULL);
+	(void) sigsetmask(omask);
     }
 
     return (pid);
@@ -1351,19 +1265,14 @@ void
 pgetty(wanttty, pgrp)
     int     wanttty, pgrp;
 {
-    sigset_t sigset, osigset;
+    sigset_t omask = 0;
 
     /*
      * christos: I am blocking the tty signals till I've set things
      * correctly....
      */
-    if (wanttty > 0) {
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGTSTP);
-	sigaddset(&sigset, SIGTTIN);
-	sigaddset(&sigset, SIGTTOU);
-	sigprocmask(SIG_BLOCK, &sigset, &osigset);
-    }
+    if (wanttty > 0)
+	omask = sigblock(sigmask(SIGTSTP)|sigmask(SIGTTIN)|sigmask(SIGTTOU));
     /*
      * From: Michael Schroeder <mlschroe@immd4.informatik.uni-erlangen.de>
      * Don't check for tpgrp >= 0 so even non-interactive shells give
@@ -1372,13 +1281,13 @@ pgetty(wanttty, pgrp)
      */
     if (wanttty >= 0)
 	if (setpgid(0, pgrp) == -1) {
-	    (void) fprintf(csherr, "csh: setpgid error.\n");
+	    xprintf("csh: setpgid error.\n");
 	    xexit(0);
 	}
 
     if (wanttty > 0) {
 	(void) tcsetpgrp(FSHTTY, pgrp);
-	sigprocmask(SIG_SETMASK, &osigset, NULL);
+	(void) sigsetmask(omask);
     }
 
     if (tpgrp > 0)

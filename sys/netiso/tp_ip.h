@@ -1,8 +1,6 @@
-/*	$NetBSD: tp_ip.h,v 1.7 1996/02/13 22:11:12 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tp_ip.h	8.1 (Berkeley) 6/10/93
+ *	@(#)tp_ip.h	7.3 (Berkeley) 5/6/91
  */
 
 /***********************************************************
@@ -40,13 +38,13 @@
 
                       All Rights Reserved
 
-Permission to use, copy, modify, and distribute this software and its
-documentation for any purpose and without fee is hereby granted,
+Permission to use, copy, modify, and distribute this software and its 
+documentation for any purpose and without fee is hereby granted, 
 provided that the above copyright notice appear in all copies and that
-both that copyright notice and this permission notice appear in
+both that copyright notice and this permission notice appear in 
 supporting documentation, and that the name of IBM not be
 used in advertising or publicity pertaining to distribution of the
-software without specific, written prior permission.
+software without specific, written prior permission.  
 
 IBM DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
 ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
@@ -61,26 +59,33 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
-/*
+/* 
+ * ARGO TP
+ *
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_ip.h,v 1.1 1993/04/09 12:01:36 cgd Exp $
+ * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_ip.h,v $
+ *
  * internet IP-dependent structures and include files
+ *
  */
 
-#ifndef _NETISO_TP_IP_H_
-#define _NETISO_TP_IP_H_
+
+#ifndef __TP_IP__
+#define __TP_IP__
 
 #ifndef SOCK_STREAM
-#include <sys/socket.h>
-#endif
+#include "socket.h"
+#endif SOCK_STREAM
 
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/ip.h>
-#include <net/route.h>
-#include <netinet/in_pcb.h>
-#include <netinet/ip_var.h>
+#include "../netinet/in.h"
+#include "../netinet/in_systm.h"
+#include "../netinet/ip.h"
+#include "../net/route.h"
+#include "../netinet/in_pcb.h"
+#include "../netinet/ip_var.h"
 
 
-struct inpcbtable tp_inpcb;
-/* queue of active inpcbs for tp ; for tp with dod ip */
+struct inpcb tp_inpcb;	
+	/* queue of active inpcbs for tp ; for tp with dod ip */
 
-#endif				/* _NETISO_TP_IP_H_ */
+#endif __TP_IP__

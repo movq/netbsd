@@ -1,8 +1,6 @@
-/*	$NetBSD: file.c,v 1.13 1997/07/04 21:24:00 christos Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)file.c	8.2 (Berkeley) 3/19/94";
-#else
-__RCSID("$NetBSD: file.c,v 1.13 1997/07/04 21:24:00 christos Exp $");
-#endif
+static char sccsid[] = "@(#)file.c	5.17 (Berkeley) 6/8/91";
 #endif /* not lint */
 
 #ifdef FILEC
@@ -52,9 +45,6 @@ __RCSID("$NetBSD: file.c,v 1.13 1997/07/04 21:24:00 christos Exp $");
 #include <pwd.h>
 #include <stdlib.h>
 #include <unistd.h>
-#ifndef SHORT_STRINGS
-#include <string.h>
-#endif /* SHORT_STRINGS */
 #if __STDC__
 # include <stdarg.h>
 #else
@@ -93,10 +83,10 @@ static void	 catn __P((Char *, Char *, int));
 static void	 copyn __P((Char *, Char *, int));
 static Char	 filetype __P((Char *, Char *));
 static void	 print_by_column __P((Char *, Char *[], int));
-static Char	*tilde __P((Char *, Char *));
+static Char 	*tilde __P((Char *, Char *));
 static void	 retype __P((void));
 static void	 beep __P((void));
-static void	 print_recognized_stuff __P((Char *));
+static void 	 print_recognized_stuff __P((Char *));
 static void	 extract_dir_and_name __P((Char *, Char *, Char *));
 static Char	*getentry __P((DIR *, int));
 static void	 free_items __P((Char **));
@@ -117,25 +107,23 @@ static void
 setup_tty(on)
     int     on;
 {
-    struct termios tchars;
-
-    (void) tcgetattr(SHIN, &tchars);
+    static struct termios tchars;
 
     if (on) {
+	(void) tcgetattr(SHIN, &tchars);
 	tchars.c_cc[VEOL] = ESC;
 	if (tchars.c_lflag & ICANON)
-	    on = TCSADRAIN;
+	    on = TCSANOW;
 	else {
-	    tchars.c_lflag |= ICANON;
 	    on = TCSAFLUSH;
+	    tchars.c_lflag |= ICANON;
 	}
+        (void) tcsetattr(SHIN, on, &tchars);
     }
     else {
 	tchars.c_cc[VEOL] = _POSIX_VDISABLE;
-	on = TCSADRAIN;
+	(void) tcsetattr(SHIN, TCSANOW, &tchars);
     }
-
-    (void) tcsetattr(SHIN, on, &tchars);
 }
 
 /*
@@ -145,19 +133,17 @@ static void
 back_to_col_1()
 {
     struct termios tty, tty_normal;
-    sigset_t sigset, osigset;
+    int     omask;
 
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGINT);
-    sigprocmask(SIG_BLOCK, &sigset, &osigset);
+    omask = sigblock(sigmask(SIGINT));
     (void) tcgetattr(SHOUT, &tty);
     tty_normal = tty;
     tty.c_iflag &= ~INLCR;
     tty.c_oflag &= ~ONLCR;
-    (void) tcsetattr(SHOUT, TCSADRAIN, &tty);
+    (void) tcsetattr(SHOUT, TCSANOW, &tty);
     (void) write(SHOUT, "\r", 1);
-    (void) tcsetattr(SHOUT, TCSADRAIN, &tty_normal);
-    sigprocmask(SIG_SETMASK, &osigset, NULL);
+    (void) tcsetattr(SHOUT, TCSANOW, &tty_normal);
+    (void) sigsetmask(omask);
 }
 
 /*
@@ -167,23 +153,21 @@ static void
 pushback(string)
     Char   *string;
 {
-    Char *p;
+    register Char *p;
     struct termios tty, tty_normal;
-    sigset_t sigset, osigset;
+    int     omask;
     char    c;
 
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGINT);
-    sigprocmask(SIG_BLOCK, &sigset, &osigset);
+    omask = sigblock(sigmask(SIGINT));
     (void) tcgetattr(SHOUT, &tty);
     tty_normal = tty;
     tty.c_lflag &= ~(ECHOKE | ECHO | ECHOE | ECHOK | ECHONL | ECHOPRT | ECHOCTL);
-    (void) tcsetattr(SHOUT, TCSADRAIN, &tty);
+    (void) tcsetattr(SHOUT, TCSANOW, &tty);
 
-    for (p = string; (c = *p) != '\0'; p++)
+    for (p = string; c = *p; p++)
 	(void) ioctl(SHOUT, TIOCSTI, (ioctl_t) & c);
-    (void) tcsetattr(SHOUT, TCSADRAIN, &tty_normal);
-    sigprocmask(SIG_SETMASK, &osigset, NULL);
+    (void) tcsetattr(SHOUT, TCSANOW, &tty_normal);
+    (void) sigsetmask(omask);
 }
 
 /*
@@ -193,8 +177,8 @@ pushback(string)
  */
 static void
 catn(des, src, count)
-    Char *des, *src;
-    int count;
+    register Char *des, *src;
+    register int count;
 {
     while (--count >= 0 && *des)
 	des++;
@@ -210,8 +194,8 @@ catn(des, src, count)
  */
 static void
 copyn(des, src, count)
-    Char *des, *src;
-    int count;
+    register Char *des, *src;
+    register int count;
 {
     while (--count >= 0)
 	if ((*des++ = *src++) == 0)
@@ -260,7 +244,7 @@ print_by_column(dir, items, count)
     Char   *dir, *items[];
     int     count;
 {
-    int i, rows, r, c, maxwidth = 0, columns;
+    register int i, rows, r, c, maxwidth = 0, columns;
 
     if (ioctl(SHOUT, TIOCGWINSZ, (ioctl_t) & win) < 0 || win.ws_col == 0)
 	win.ws_col = 80;
@@ -275,19 +259,19 @@ print_by_column(dir, items, count)
 	for (c = 0; c < columns; c++) {
 	    i = c * rows + r;
 	    if (i < count) {
-		int w;
+		register int w;
 
-		(void) fprintf(cshout, "%s", vis_str(items[i]));
-		(void) fputc(dir ? filetype(dir, items[i]) : ' ', cshout);
+		xprintf("%s", short2str(items[i]));
+		xputchar(dir ? filetype(dir, items[i]) : ' ');
 		if (c < columns - 1) {	/* last column? */
 		    w = Strlen(items[i]) + 1;
 		    for (; w < maxwidth; w++)
-			(void) fputc(' ', cshout);
+			xputchar(' ');
 		}
 	    }
 	}
-	(void) fputc('\r', cshout);
-	(void) fputc('\n', cshout);
+	xputchar('\r');
+	xputchar('\n');
     }
 }
 
@@ -301,15 +285,14 @@ static Char *
 tilde(new, old)
     Char   *new, *old;
 {
-    Char *o, *p;
-    struct passwd *pw;
+    register Char *o, *p;
+    register struct passwd *pw;
     static Char person[40];
 
     if (old[0] != '~')
 	return (Strcpy(new, old));
 
-    for (p = person, o = &old[1]; *o && *o != '/'; *p++ = *o++)
-	continue;
+    for (p = person, o = &old[1]; *o && *o != '/'; *p++ = *o++);
     *p = '\0';
     if (person[0] == '\0')
 	(void) Strcpy(new, value(STRhome));
@@ -333,7 +316,7 @@ retype()
 
     (void) tcgetattr(SHOUT, &tty);
     tty.c_lflag |= PENDIN;
-    (void) tcsetattr(SHOUT, TCSADRAIN, &tty);
+    (void) tcsetattr(SHOUT, TCSANOW, &tty);
 }
 
 static void
@@ -352,28 +335,28 @@ print_recognized_stuff(recognized_part)
     Char   *recognized_part;
 {
     /* An optimized erasing of that silly ^[ */
-    (void) fputc('\b', cshout);
-    (void) fputc('\b', cshout);
+    putraw('\b');
+    putraw('\b');
     switch (Strlen(recognized_part)) {
 
     case 0:			/* erase two Characters: ^[ */
-	(void) fputc(' ', cshout);
-	(void) fputc(' ', cshout);
-	(void) fputc('\b', cshout);
-	(void) fputc('\b', cshout);
+	putraw(' ');
+	putraw(' ');
+	putraw('\b');
+	putraw('\b');
 	break;
 
     case 1:			/* overstrike the ^, erase the [ */
-	(void) fprintf(cshout, "%s", vis_str(recognized_part));
-	(void) fputc(' ', cshout);
-	(void) fputc('\b', cshout);
+	xprintf("%s", short2str(recognized_part));
+	putraw(' ');
+	putraw('\b');
 	break;
 
     default:			/* overstrike both Characters ^[ */
-	(void) fprintf(cshout, "%s", vis_str(recognized_part));
+	xprintf("%s", short2str(recognized_part));
 	break;
     }
-    (void) fflush(cshout);
+    flush();
 }
 
 /*
@@ -384,7 +367,7 @@ static void
 extract_dir_and_name(path, dir, name)
     Char   *path, *dir, *name;
 {
-    Char *p;
+    register Char *p;
 
     p = Strrchr(path, '/');
     if (p == NULL) {
@@ -402,24 +385,24 @@ getentry(dir_fd, looking_for_lognames)
     DIR    *dir_fd;
     int     looking_for_lognames;
 {
-    struct passwd *pw;
-    struct dirent *dirp;
+    register struct passwd *pw;
+    register struct dirent *dirp;
 
     if (looking_for_lognames) {
 	if ((pw = getpwent()) == NULL)
 	    return (NULL);
 	return (str2short(pw->pw_name));
     }
-    if ((dirp = readdir(dir_fd)) != NULL)
+    if (dirp = readdir(dir_fd))
 	return (str2short(dirp->d_name));
     return (NULL);
 }
 
 static void
 free_items(items)
-    Char **items;
+    register Char **items;
 {
-    int i;
+    register int i;
 
     for (i = 0; items[i]; i++)
 	xfree((ptr_t) items[i]);
@@ -427,14 +410,12 @@ free_items(items)
 }
 
 #define FREE_ITEMS(items) { \
-	sigset_t sigset, osigset;\
+	int omask;\
 \
-	sigemptyset(&sigset);\
-	sigaddset(&sigset, SIGINT);\
-	sigprocmask(SIG_BLOCK, &sigset, &osigset);\
+	omask = sigblock(sigmask(SIGINT));\
 	free_items(items);\
 	items = NULL;\
-	sigprocmask(SIG_SETMASK, &osigset, NULL);\
+	(void) sigsetmask(omask);\
 }
 
 /*
@@ -447,9 +428,9 @@ tsearch(word, command, max_word_length)
     int     max_word_length;
 {
     static Char **items = NULL;
-    DIR *dir_fd;
-    int numitems = 0, ignoring = TRUE, nignored = 0;
-    int name_length, looking_for_lognames;
+    register DIR *dir_fd;
+    register numitems = 0, ignoring = TRUE, nignored = 0;
+    register name_length, looking_for_lognames;
     Char    tilded_dir[MAXPATHLEN + 1], dir[MAXPATHLEN + 1];
     Char    name[MAXNAMLEN + 1], extended_name[MAXNAMLEN + 1];
     Char   *entry;
@@ -476,7 +457,7 @@ tsearch(word, command, max_word_length)
 
 again:				/* search for matches */
     name_length = Strlen(name);
-    for (numitems = 0; (entry = getentry(dir_fd, looking_for_lognames)) != NULL;) {
+    for (numitems = 0; entry = getentry(dir_fd, looking_for_lognames);) {
 	if (!is_prefix(name, entry))
 	    continue;
 	/* Don't match . files on null prefix match */
@@ -485,9 +466,9 @@ again:				/* search for matches */
 	    continue;
 	if (command == LIST) {
 	    if (numitems >= MAXITEMS) {
-		(void) fprintf(csherr, "\nYikes!! Too many %s!!\n",
-			       looking_for_lognames ?
-			       "names in password file" : "files");
+		xprintf("\nYikes!! Too many %s!!\n",
+			looking_for_lognames ?
+			"names in password file" : "files");
 		break;
 	    }
 	    if (items == NULL)
@@ -533,7 +514,7 @@ again:				/* search for matches */
     }
     else {			/* LIST */
 	qsort((ptr_t) items, numitems, sizeof(items[0]), 
-		(int (*) __P((const void *, const void *))) sortscmp);
+	      (int (*)(const void *, const void *)) sortscmp);
 	print_by_column(looking_for_lognames ? NULL : tilded_dir,
 			items, numitems);
 	if (items != NULL)
@@ -558,12 +539,11 @@ recognize(extended_name, entry, name_length, numitems)
     if (numitems == 1)		/* 1st match */
 	copyn(extended_name, entry, MAXNAMLEN);
     else {			/* 2nd & subsequent matches */
-	Char *x, *ent;
-	int len = 0;
+	register Char *x, *ent;
+	register int len = 0;
 
 	x = extended_name;
-	for (ent = entry; *x && *x == *ent++; x++, len++)
-	    continue;
+	for (ent = entry; *x && *x == *ent++; x++, len++);
 	*x = '\0';		/* Shorten at 1st Char diff */
 	if (len == name_length)	/* Ambiguous to prefix? */
 	    return (-1);	/* So stop now and save time */
@@ -578,7 +558,7 @@ recognize(extended_name, entry, name_length, numitems)
  */
 static int
 is_prefix(check, template)
-    Char *check, *template;
+    register Char *check, *template;
 {
     do
 	if (*check == 0)
@@ -595,12 +575,10 @@ static int
 is_suffix(check, template)
     Char   *check, *template;
 {
-    Char *c, *t;
+    register Char *c, *t;
 
-    for (c = check; *c++;)
-	continue;
-    for (t = template; *t++;)
-	continue;
+    for (c = check; *c++;);
+    for (t = template; *t++;);
     for (;;) {
 	if (t == template)
 	    return 1;
@@ -614,7 +592,7 @@ tenex(inputline, inputline_size)
     Char   *inputline;
     int     inputline_size;
 {
-    int numitems, num_read;
+    register int numitems, num_read;
     char    tinputline[BUFSIZ];
 
 
@@ -624,8 +602,8 @@ tenex(inputline, inputline_size)
 	int     i;
 	static Char delims[] = {' ', '\'', '"', '\t', ';', '&', '<',
 	'>', '(', ')', '|', '^', '%', '\0'};
-	Char *str_end, *word_start, last_Char, should_retype;
-	int space_left;
+	register Char *str_end, *word_start, last_Char, should_retype;
+	register int space_left;
 	COMMAND command;
 
 	for (i = 0; i < num_read; i++)
@@ -636,7 +614,7 @@ tenex(inputline, inputline_size)
 	    break;
 	command = (last_Char == ESC) ? RECOGNIZE : LIST;
 	if (command == LIST)
-	    (void) fputc('\n', cshout);
+	    xputchar('\n');
 	str_end = &inputline[num_read];
 	if (last_Char == ESC)
 	    --str_end;		/* wipeout trailing cmd Char */
@@ -682,10 +660,10 @@ tenex(inputline, inputline_size)
 
 static int
 ignored(entry)
-    Char *entry;
+    register Char *entry;
 {
     struct varent *vp;
-    Char **cp;
+    register Char **cp;
 
     if ((vp = adrof(STRfignore)) == NULL || (cp = vp->vec) == NULL)
 	return (FALSE);

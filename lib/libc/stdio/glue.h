@@ -1,8 +1,6 @@
-/*	$NetBSD: glue.h,v 1.3 1995/02/02 02:10:02 jtc Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)glue.h	8.1 (Berkeley) 6/4/93
+ *	@(#)glue.h	5.1 (Berkeley) 1/20/91
  */
 
 /*

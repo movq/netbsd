@@ -1,8 +1,6 @@
-/*	$NetBSD: ns_output.c,v 1.9 1997/07/18 19:30:40 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1984, 1985, 1986, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,55 +30,43 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ns_output.c	8.1 (Berkeley) 6/10/93
+ *	@(#)ns_output.c	7.8 (Berkeley) 12/16/90
  */
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/malloc.h>
-#include <sys/mbuf.h>
-#include <sys/errno.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
+#include "param.h"
+#include "malloc.h"
+#include "mbuf.h"
+#include "errno.h"
+#include "socket.h"
+#include "socketvar.h"
 
-#include <net/if.h>
-#include <net/route.h>
+#include "../net/if.h"
+#include "../net/route.h"
 
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#include <netns/ns_var.h>
-#include <netns/idp.h>
-#include <netns/idp_var.h>
+#include "ns.h"
+#include "ns_if.h"
+#include "idp.h"
+#include "idp_var.h"
 
-#include <machine/stdarg.h>
-
+#ifdef vax
+#include "vax/include/mtpr.h"
+#endif
 int ns_hold_output = 0;
 int ns_copy_output = 0;
 int ns_output_cnt = 0;
 struct mbuf *ns_lastout;
 
-int
-#if __STDC__
-ns_output(struct mbuf *m0, ...)
-#else
-ns_output(m0, va_alist)
+ns_output(m0, ro, flags)
 	struct mbuf *m0;
-	va_dcl
-#endif
-{
 	struct route *ro;
 	int flags;
+{
 	register struct idp *idp = mtod(m0, struct idp *);
 	register struct ifnet *ifp = 0;
 	int error = 0;
 	struct route idproute;
 	struct sockaddr_ns *dst;
-	va_list ap;
-
-	va_start(ap, m0);
-	ro = va_arg(ap, struct route *);
-	flags = va_arg(ap, int);
-	va_end(ap);
+	extern int idpcksum;
 
 	if (ns_hold_output) {
 		if (ns_lastout) {
@@ -95,7 +81,7 @@ ns_output(m0, va_alist)
 		ro = &idproute;
 		bzero((caddr_t)ro, sizeof (*ro));
 	}
-	dst = satosns(&ro->ro_dst);
+	dst = (struct sockaddr_ns *)&ro->ro_dst;
 	if (ro->ro_rt == 0) {
 		dst->sns_family = AF_NS;
 		dst->sns_len = sizeof (*dst);
@@ -130,7 +116,7 @@ ns_output(m0, va_alist)
 	}
 	ro->ro_rt->rt_use++;
 	if (ro->ro_rt->rt_flags & (RTF_GATEWAY|RTF_HOST))
-		dst = satosns(ro->ro_rt->rt_gateway);
+		dst = (struct sockaddr_ns *)ro->ro_rt->rt_gateway;
 gotif:
 
 	/*
@@ -149,12 +135,13 @@ gotif:
 		}
 	}
 
-	if (ntohs(idp->idp_len) <= ifp->if_mtu) {
+	if (htons(idp->idp_len) <= ifp->if_mtu) {
 		ns_output_cnt++;
 		if (ns_copy_output) {
 			ns_watch_output(m0, ifp);
 		}
-		error = (*ifp->if_output)(ifp, m0, snstosa(dst), ro->ro_rt);
+		error = (*ifp->if_output)(ifp, m0,
+					(struct sockaddr *)dst, ro->ro_rt);
 		goto done;
 	} else error = EMSGSIZE;
 

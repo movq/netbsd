@@ -1,7 +1,5 @@
-.\"	$NetBSD: setuid.2,v 1.5 1997/07/14 23:20:15 kleink Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,10 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)setuid.2	8.1 (Berkeley) 6/4/93
+.\"     from: @(#)setuid.3	6.4 (Berkeley) 4/19/91
+.\"	$Id: setuid.2,v 1.1 1994/04/06 23:29:33 cgd Exp $
 .\"
-.Dd June 4, 1993
+.Dd April 19, 1991
 .Dt SETUID 2
 .Os BSD 4.2
 .Sh NAME
@@ -56,80 +55,49 @@
 .Sh DESCRIPTION
 The
 .Fn setuid
-function
-sets the real and effective
-user IDs and the saved set-user-ID of the current process
-to the specified value.
-The
+function sets the real and effective user IDs and the saved
+set-user-ID of the current process to the specified value.  The
 .Fn setuid
-function is permitted if the specified ID is equal to the real user ID
-of the process, or if the effective user ID is that of the super user.
+function is permitted if the specified ID is equal to the real user ID of
+the process, or if the effective user ID is that of the super user.
 .Pp
 The
 .Fn setgid
-function
-sets the real and effective
-group IDs and the saved set-group-ID of the current process
-to the specified value.
-The
+function sets the real and effective group IDs and the saved
+set-group-ID of the current process to the specified value.  The
 .Fn setgid
 function is permitted if the specified ID is equal to the real group ID
 of the process, or if the effective user ID is that of the super user.
 .Pp
 The
 .Fn seteuid
-function
-.Pq Fn setegid
-sets the effective user ID (group ID) of the
-current process.
-The effective user ID may be set to the value
-of the real user ID or the saved set-user-ID (see
-.Xr intro 2
+function sets the effective user ID
+of the current process.  The effective user ID may be set to the value of
+the real user ID or the saved set-user-ID (see
+.Xr intro 2 
 and
-.Xr execve 2 ) ;
-in this way, the effective user ID of a set-user-ID executable
-may be toggled by switching to the real user ID, then re-enabled
-by reverting to the set-user-ID value.
-Similarly, the effective group ID may be set to the value
-of the real group ID or the saved set-user-ID.
-.Pp
+.Xr execve 2 );
+in this way, the effective user ID of a set-user-ID executable may be
+toggled by switching to the real user ID, then re-enabled by reverting to
+the set-user-ID value.
+Similarly, with 
+.Fn setegid
+the effective group ID may be set to
+the value of the real group ID or the saved set-user-ID.
 .Sh RETURN VALUES
 Upon success, these functions return 0;
 otherwise \-1 is returned.
 .Pp
-If the user is not the super user, or the uid
-specified is not the real, effective ID, or saved ID,
+If the user is not the super user, or the uid (gid) specified is not
+the real ID, effective ID, or saved ID of the process,
 these functions return \-1.
 .Sh SEE ALSO
 .Xr getuid 2 ,
 .Xr getgid 2
-.Sh STANDARDS
-The
+.Sh HISTORY
+A
 .Fn setuid
 and
 .Fn setgid
-functions are compliant with the
-.St -p1003.1-90
-specification with
-.Li _POSIX_SAVED_IDS
-not defined.
-We do not implement the
-.Li _POSIX_SAVED_IDS
-option as specified in the standard
-because this would make it impossible for a set-user-ID executable owned
-by a user other than the super-user to permanently revoke its privileges.
-.Pp
-The
-.Fn seteuid
-and
-.Fn setegid
-functions are extensions based on the 
-.Tn POSIX
-concept of
-.Li _POSIX_SAVED_IDS ,
-and have been proposed for a future revision of the standard.
-They provide the same feature of toggling effective IDs as
-.Li _POSIX_SAVED_IDS ,
-but do so independent of the current effective
-ID, rather than requiring the super-user to permanently revoke its
-privileges.
+syscall appeared in 
+.At v6 .

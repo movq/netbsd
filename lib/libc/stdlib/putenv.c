@@ -1,5 +1,3 @@
-/*	$NetBSD: putenv.c,v 1.7 1997/07/21 14:08:58 jtc Exp $	*/
-
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
  * All rights reserved.
@@ -33,22 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "from: @(#)putenv.c	5.4 (Berkeley) 2/23/91";
-#else
-__RCSID("$NetBSD: putenv.c,v 1.7 1997/07/21 14:08:58 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)putenv.c	5.4 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <stdlib.h>
 #include <string.h>
-
-#ifdef __weak_alias
-__weak_alias(putenv,_putenv);
-#endif
 
 int
 putenv(str)
@@ -59,7 +47,7 @@ putenv(str)
 
 	if (!(p = strdup(str)))
 		return(1);
-	if (!(equal = strchr(p, '='))) {
+	if (!(equal = index(p, '='))) {
 		(void)free(p);
 		return(1);
 	}

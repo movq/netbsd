@@ -1,8 +1,6 @@
-/*	$NetBSD: message.c,v 1.6 1997/10/12 11:45:25 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Timothy C. Stoehr.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)message.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: message.c,v 1.6 1997/10/12 11:45:25 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)message.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -57,8 +50,7 @@ __RCSID("$NetBSD: message.c,v 1.6 1997/10/12 11:45:25 lukem Exp $");
  *
  */
 
-#include <signal.h>
-#include <termios.h>
+#include <stdio.h>
 #include "rogue.h"
 
 char msgs[NMESSAGES][DCOLS] = {"", "", "", "", ""};
@@ -67,10 +59,13 @@ boolean msg_cleared = 1, rmsg = 0;
 char hunger_str[8] = "";
 char *more = "-more-";
 
-void
+extern boolean cant_int, did_int, interrupted, save_is_interactive;
+extern short add_strength;
+extern short cur_level;
+
 message(msg, intrpt)
-	char *msg;
-	boolean intrpt;
+char *msg;
+boolean intrpt;
 {
 	cant_int = 1;
 
@@ -102,13 +97,12 @@ message(msg, intrpt)
 
 	if (did_int) {
 		did_int = 0;
-		onintr(0);
+		onintr();
 	}
 }
 
-void
 remessage(c)
-	short c;
+short c;
 {
 	if (imsg != -1) {
 		check_message();
@@ -123,7 +117,6 @@ remessage(c)
 	}
 }
 
-void
 check_message()
 {
 	if (msg_cleared) {
@@ -135,12 +128,11 @@ check_message()
 	msg_cleared = 1;
 }
 
-int
 get_input_line(prompt, insert, buf, if_cancelled, add_blank, do_echo)
-	char *prompt, *buf, *insert;
-	char *if_cancelled;
-	boolean add_blank;
-	boolean do_echo;
+char *prompt, *buf, *insert;
+char *if_cancelled;
+boolean add_blank;
+boolean do_echo;
 {
 	short ch;
 	short i = 0, n;
@@ -194,10 +186,9 @@ get_input_line(prompt, insert, buf, if_cancelled, add_blank, do_echo)
 	return(i);
 }
 
-int
 rgetchar()
 {
-	int ch;
+	register ch;
 
 	for(;;) {
 		ch = getchar();
@@ -221,15 +212,13 @@ rgetchar()
 		}
 	}
 }
-
 /*
 Level: 99 Gold: 999999 Hp: 999(999) Str: 99(99) Arm: 99 Exp: 21/10000000 Hungry
 0    5    1    5    2    5    3    5    4    5    5    5    6    5    7    5
 */
 
-void
 print_stats(stat_mask)
-	int stat_mask;
+register stat_mask;
 {
 	char buf[16];
 	boolean label;
@@ -314,10 +303,9 @@ print_stats(stat_mask)
 	refresh();
 }
 
-void
 pad(s, n)
-	char *s;
-	short n;
+char *s;
+short n;
 {
 	short i;
 
@@ -326,7 +314,6 @@ pad(s, n)
 	}
 }
 
-void
 save_screen()
 {
 	FILE *fp;
@@ -355,7 +342,6 @@ save_screen()
 	}
 }
 
-void
 sound_bell()
 {
 	putchar(7);
@@ -364,16 +350,15 @@ sound_bell()
 
 boolean
 is_digit(ch)
-	short ch;
+short ch;
 {
 	return((ch >= '0') && (ch <= '9'));
 }
 
-int
 r_index(str, ch, last)
-	char *str;
-	int ch;
-	boolean last;
+char *str;
+int ch;
+boolean last;
 {
 	int i = 0;
 

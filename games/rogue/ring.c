@@ -1,8 +1,6 @@
-/*	$NetBSD: ring.c,v 1.4 1997/10/12 11:45:47 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Timothy C. Stoehr.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)ring.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: ring.c,v 1.4 1997/10/12 11:45:47 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)ring.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -73,7 +66,9 @@ boolean r_see_invisible;
 boolean sustain_strength;
 boolean maintain_armor;
 
-void
+extern char *curse_message;
+extern boolean wizard;
+
 put_on_ring()
 {
 	short ch;
@@ -134,10 +129,9 @@ put_on_ring()
  * serious problems when do_put_on() is called from read_pack() in restore().
  */
 
-void
 do_put_on(ring, on_left)
-	object *ring;
-	boolean on_left;
+object *ring;
+boolean on_left;
 {
 	if (on_left) {
 		ring->in_use_flags |= ON_LEFT_HAND;
@@ -148,7 +142,6 @@ do_put_on(ring, on_left)
 	}
 }
 
-void
 remove_ring()
 {
 	boolean left = 0, right = 0;
@@ -156,7 +149,6 @@ remove_ring()
 	char buf[DCOLS];
 	object *ring;
 
-	ring = NULL;
 	if (r_rings == 0) {
 		inv_rings();
 	} else if (rogue.left_ring && !rogue.right_ring) {
@@ -199,9 +191,8 @@ remove_ring()
 	}
 }
 
-void
 un_put_on(ring)
-	object *ring;
+object *ring;
 {
 	if (ring && (ring->in_use_flags & ON_LEFT_HAND)) {
 		ring->in_use_flags &= (~ON_LEFT_HAND);
@@ -213,10 +204,9 @@ un_put_on(ring)
 	ring_stats(1);
 }
 
-void
 gr_ring(ring, assign_wk)
-	object *ring;
-	boolean assign_wk;
+object *ring;
+boolean assign_wk;
 {
 	ring->what_is = RING;
 	if (assign_wk) {
@@ -255,7 +245,6 @@ gr_ring(ring, assign_wk)
 	}
 }
 
-void
 inv_rings()
 {
 	char buf[DCOLS];
@@ -281,9 +270,8 @@ inv_rings()
 	}
 }
 
-void
 ring_stats(pr)
-	boolean pr;
+boolean pr;
 {
 	short i;
 	object *ring;

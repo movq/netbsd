@@ -1,5 +1,3 @@
-.\"	$NetBSD: pr.1,v 1.6 1997/10/19 12:42:05 lukem Exp $
-.\"
 .\" Copyright (c) 1991 Keith Muller.
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -36,7 +34,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)pr.1	8.1 (Berkeley) 6/6/93
-.\"	$NetBSD: pr.1,v 1.6 1997/10/19 12:42:05 lukem Exp $
+.\"	$Id: pr.1,v 1.1 1994/01/06 15:57:21 cgd Exp $
 .\"
 .Dd June 6, 1993
 .Dt PR 1
@@ -45,7 +43,7 @@
 .Nm pr
 .Nd print files
 .Sh SYNOPSIS
-.Nm
+.Nm pr
 .Bk -words
 .Op Ar \&+page
 .Ek
@@ -96,7 +94,7 @@
 .Op Ar file ...
 .Sh DESCRIPTION
 The
-.Nm
+.Nm pr
 utility is a printing and pagination filter for text files.
 When multiple input files are specified, each is read, formatted,
 and written to standard output.
@@ -113,7 +111,7 @@ the pathname of the file.
 .Pp
 If standard output is associated with a terminal,
 diagnostic messages are suppressed until the
-.Nm
+.Nm pr
 utility has completed processing.
 .Pp
 When multiple column output is specified,
@@ -184,10 +182,11 @@ Use a
 .Em <form-feed>
 character for new pages,
 instead of the default behavior that uses a
-sequence of
+sequence o
 .Em <newline>
 characters.
 .It Fl h Ar header
+.Ar header
 Use the string 
 .Ar header
 to replace the
@@ -217,7 +216,7 @@ If
 .Ar lines
 is not greater than the sum of both the header and trailer
 depths (in lines), the 
-.Nm
+.Nm pr
 utility suppresses output of both the header and trailer, as if the
 .Fl t
 option were in effect.
@@ -262,7 +261,7 @@ Each line of output is preceeded by
 .Ar offset
 .Em <spaces>s .
 If the
-.Fl o
+.FL o
 option is not specified, the default is zero.
 The space taken is in addition to the output line width.
 .It Fl r
@@ -326,13 +325,13 @@ letter.
 .Sh ERRORS
 .Pp
 If
-.Nm
+.Nm pr
 receives an interrupt while printing to a terminal, it
 flushes all accumulated error messages to the screen before
 terminating.
 .Pp
 The
-.Nm
+.Nm pr
 utility exits 0 on success, and 1 if an error occurs.
 .Pp
 Error messages are written to standard error during the printing
@@ -343,7 +342,7 @@ file printing is complete (when printing to a terminal).
 .Xr more 1
 .Sh STANDARDS
 The
-.Nm
+.Nm pr
 utility is
 .St -p1003.2
 compatible.

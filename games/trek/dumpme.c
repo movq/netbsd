@@ -1,8 +1,6 @@
-/*	$NetBSD: dumpme.c,v 1.4 1997/10/12 21:24:43 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)dumpme.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: dumpme.c,v 1.4 1997/10/12 21:24:43 christos Exp $");
-#endif
+static char sccsid[] = "@(#)dumpme.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include "trek.h"
+# include	"trek.h"
 
 /*
 **  Dump the starship somewhere in the galaxy
@@ -57,21 +49,20 @@ __RCSID("$NetBSD: dumpme.c,v 1.4 1997/10/12 21:24:43 christos Exp $");
 **	Repair of devices must be deferred.
 */
 
-void
 dumpme(flag)
 int	flag;
 {
-	int		f;
-	double		x;
-	struct event	*e;
-	int		i;
+	register int		f;
+	double			x;
+	register struct event	*e;
+	register int		i;
 
 	f = flag;
 	Ship.quadx = ranf(NQUADS);
 	Ship.quady = ranf(NQUADS);
 	Ship.sectx = ranf(NSECTS);
 	Ship.secty = ranf(NSECTS);
-	x = 1.5 * franf();
+	x += 1.5 * franf();
 	Move.time += x;
 	if (f)
 	{

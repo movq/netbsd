@@ -1,8 +1,6 @@
-/*	$NetBSD: tp_clnp.h,v 1.6 1996/02/13 22:10:42 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tp_clnp.h	8.1 (Berkeley) 6/10/93
+ *	@(#)tp_clnp.h	7.3 (Berkeley) 5/6/91
  */
 
 /***********************************************************
@@ -40,13 +38,13 @@
 
                       All Rights Reserved
 
-Permission to use, copy, modify, and distribute this software and its
-documentation for any purpose and without fee is hereby granted,
+Permission to use, copy, modify, and distribute this software and its 
+documentation for any purpose and without fee is hereby granted, 
 provided that the above copyright notice appear in all copies and that
-both that copyright notice and this permission notice appear in
+both that copyright notice and this permission notice appear in 
 supporting documentation, and that the name of IBM not be
 used in advertising or publicity pertaining to distribution of the
-software without specific, written prior permission.
+software without specific, written prior permission.  
 
 IBM DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
 ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
@@ -61,29 +59,36 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
-/*
+/* 
+ * ARGO TP
+ *
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_clnp.h,v 1.1 1993/04/09 12:01:27 cgd Exp $
+ * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_clnp.h,v $
+ *
  * AF_ISO net-dependent structures and include files
+ *
  */
 
-#ifndef _NETISO_TP_CLNP_H_
-#define _NETISO_TP_CLNP_H_
+
+#ifndef __TP_CLNP__
+#define __TP_CLNP__
 
 #ifndef SOCK_STREAM
-#include <sys/socket.h>
-#endif				/* SOCK_STREAM */
+#include "socket.h"
+#endif SOCK_STREAM
 
 #ifndef RTFREE
-#include <net/route.h>
+#include "../net/route.h"
 #endif
-#include <netiso/iso.h>
-#include <netiso/clnp.h>
-#include <netiso/iso_pcb.h>
+#include "../netiso/iso.h"
+#include "../netiso/clnp.h"
+#include "../netiso/iso_pcb.h"
 #ifndef IF_DEQUEUE
-#include <net/if.h>
+#include "../net/if.h"
 #endif
-#include <netiso/iso_var.h>
+#include "../netiso/iso_var.h"
 
-struct isopcb   tp_isopcb;
-/* queue of active inpcbs for tp ; for tp with dod ip */
+struct isopcb tp_isopcb;	
+	/* queue of active inpcbs for tp ; for tp with dod ip */
 
-#endif				/* _NETISO_TP_CLNP_H_ */
+#endif __TP_CLNP__

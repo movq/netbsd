@@ -1,8 +1,7 @@
 #!/bin/sh -
-#	$NetBSD: fasthalt.sh,v 1.6 1995/04/23 10:33:06 cgd Exp $
 #
-# Copyright (c) 1988, 1993
-#	The Regents of the University of California.  All rights reserved.
+# Copyright (c) 1988 The Regents of the University of California.
+# All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -32,7 +31,7 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-#	@(#)fasthalt.sh	8.1 (Berkeley) 6/5/93
+#	@(#)fasthalt.sh	5.4 (Berkeley) 4/16/91
 #
 
 cp /dev/null /fastboot

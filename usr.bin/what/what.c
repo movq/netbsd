@@ -1,8 +1,6 @@
-/*	$NetBSD: what.c,v 1.6 1997/10/20 03:16:31 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,29 +31,22 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980, 1988 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)what.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: what.c,v 1.6 1997/10/20 03:16:31 lukem Exp $");
+static char sccsid[] = "@(#)what.c	5.5 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 #include <stdio.h>
-
-void search __P((void));
-int main __P((int, char **));
 
 /*
  * what
  */
 /* ARGSUSED */
-int
 main(argc, argv)
 	int argc;
 	char **argv;
@@ -73,10 +64,9 @@ main(argc, argv)
 	exit(0);
 }
 
-void
 search()
 {
-	int c;
+	register int c;
 
 	while ((c = getchar()) != EOF) {
 loop:		if (c != '@')

@@ -1,8 +1,6 @@
-/*	$NetBSD: echo.c,v 1.8 1996/11/02 18:26:06 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)echo.c	8.1 (Berkeley) 5/31/93
+ *	@(#)echo.c	5.2 (Berkeley) 3/13/91
  */
 
 /*
@@ -48,7 +46,6 @@
 
 /* #define eflag 1 */
 
-int
 main(argc, argv)  char **argv; {
 	register char **ap;
 	register char *p;

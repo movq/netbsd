@@ -1,5 +1,3 @@
-/*	$NetBSD: rand.c,v 1.6 1997/07/13 20:16:53 christos Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "from: @(#)rand.c	5.6 (Berkeley) 6/24/91";
-#else
-__RCSID("$NetBSD: rand.c,v 1.6 1997/07/13 20:16:53 christos Exp $");
-#endif
+static char sccsid[] = "@(#)rand.c	5.6 (Berkeley) 6/24/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -50,7 +43,7 @@ static u_long next = 1;
 int
 rand()
 {
-	return ((next = next * 1103515245 + 12345) % ((u_int)RAND_MAX + 1));
+	return ((next = next * 1103515245 + 12345) % (RAND_MAX + 1));
 }
 
 void

@@ -1,8 +1,6 @@
-/*	$NetBSD: worm.c,v 1.8 1997/10/12 02:12:48 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)worm.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: worm.c,v 1.8 1997/10/12 02:12:48 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)worm.c	5.8 (Berkeley) 2/28/91";
 #endif /* not lint */
 
 /*
@@ -55,16 +49,18 @@ __RCSID("$NetBSD: worm.c,v 1.8 1997/10/12 02:12:48 lukem Exp $");
 #include <ctype.h>
 #include <curses.h>
 #include <signal.h>
-#include <stdlib.h>
-#include <termios.h>
-#include <unistd.h>
 
 #define newlink() (struct body *) malloc(sizeof (struct body));
 #define HEAD '@'
 #define BODY 'o'
 #define LENGTH 7
 #define RUNLEN 8
+#define when break;case
+#define otherwise break;default
 #define CNTRL(p) (p-'A'+1)
+#ifndef baudrate
+# define	baudrate()	_tty.sg_ospeed
+#endif
 
 WINDOW *tv;
 WINDOW *stw;
@@ -82,20 +78,8 @@ int start_len = LENGTH;
 char lastch;
 char outbuf[BUFSIZ];
 
-void	crash __P((void));
-void	display __P((struct body *, char));
-int	main __P((int, char **));
-void	leave __P((int));
-void	life __P((void));
-void	newpos __P((struct body *));
-void	process __P((char));
-void	prize __P((void));
-int	rnd __P((int));
-void	setup __P((void));
-void	suspend __P((int));
-void	wake __P((int));
+void leave(), wake(), suspend();
 
-int
 main(argc, argv)
 	int argc;
 	char **argv;
@@ -115,7 +99,7 @@ main(argc, argv)
 	initscr();
 	crmode();
 	noecho();
-	slow = (baudrate() <= 1200);
+	slow = (baudrate() <= B1200);
 	clear();
 	stw = newwin(1, COLS-1, 0, 0);
 	tv = newwin(LINES-1, COLS-1, 1, 0);
@@ -145,13 +129,11 @@ main(argc, argv)
 	}
 }
 
-void
 life()
 {
-	struct body *bp, *np;
-	int i;
+	register struct body *bp, *np;
+	register int i;
 
-	np = NULL;
 	head = newlink();
 	head->x = start_len+2;
 	head->y = 12;
@@ -169,42 +151,36 @@ life()
 	tail->prev = NULL;
 }
 
-void
 display(pos, chr)
-	struct body *pos;
-	char chr;
+struct body *pos;
+char chr;
 {
 	wmove(tv, pos->y, pos->x);
 	waddch(tv, chr);
 }
 
 void
-leave(dummy)
-	int dummy;
+leave()
 {
 	endwin();
 	exit(0);
 }
 
 void
-wake(dummy)
-	int dummy;
+wake()
 {
 	signal(SIGALRM, wake);
 	fflush(stdout);
 	process(lastch);
 }
 
-int
 rnd(range)
-	int range;
 {
 	return abs((rand()>>5)+(rand()>>5)) % range;
 }
 
-void
 newpos(bp)
-	struct body * bp;
+struct body * bp;
 {
 	do {
 		bp->y = rnd(LINES-3)+ 2;
@@ -213,7 +189,6 @@ newpos(bp)
 	} while(winch(tv) != ' ');
 }
 
-void
 prize()
 {
 	int value;
@@ -224,11 +199,10 @@ prize()
 	wrefresh(tv);
 }
 
-void
 process(ch)
-	char ch;
+char ch;
 {
-	int x,y;
+	register int x,y;
 	struct body *nh;
 
 	alarm(0);
@@ -236,19 +210,19 @@ process(ch)
 	y = head->y;
 	switch(ch)
 	{
-		case 'h': x--; break;
-		case 'j': y++; break;
-		case 'k': y--; break;
-		case 'l': x++; break;
-		case 'H': x--; running = RUNLEN; ch = tolower(ch); break;
-		case 'J': y++; running = RUNLEN/2; ch = tolower(ch); break;
-		case 'K': y--; running = RUNLEN/2; ch = tolower(ch); break;
-		case 'L': x++; running = RUNLEN; ch = tolower(ch); break;
-		case '\f': setup(); return;
-		case CNTRL('Z'): suspend(0); return;
-		case CNTRL('C'): crash(); return;
-		case CNTRL('D'): crash(); return;
-		default: if (! running) alarm(1);
+		when 'h': x--;
+		when 'j': y++;
+		when 'k': y--;
+		when 'l': x++;
+		when 'H': x--; running = RUNLEN; ch = tolower(ch);
+		when 'J': y++; running = RUNLEN/2; ch = tolower(ch);
+		when 'K': y--; running = RUNLEN/2; ch = tolower(ch);
+		when 'L': x++; running = RUNLEN; ch = tolower(ch);
+		when '\f': setup(); return;
+		when CNTRL('Z'): suspend(); return;
+		when CNTRL('C'): crash(); return;
+		when CNTRL('D'): crash(); return;
+		otherwise: if (! running) alarm(1);
 			   return;
 	}
 	lastch = ch;
@@ -288,7 +262,6 @@ process(ch)
 		alarm(1);
 }
 
-void
 crash()
 {
 	sleep(2);
@@ -297,13 +270,14 @@ crash()
 	refresh();
 	printf("Well, you ran into something and the game is over.\n");
 	printf("Your final score was %d\n", score);
-	leave(0);
+	leave();
 }
 
 void
-suspend(dummy)
-	int dummy;
+suspend()
 {
+	char *sh;
+
 	move(LINES-1, 0);
 	refresh();
 	endwin();
@@ -315,7 +289,6 @@ suspend(dummy)
 	setup();
 }
 
-void
 setup()
 {
 	clear();

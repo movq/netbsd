@@ -1,8 +1,6 @@
-/*	$NetBSD: uipc_proto.c,v 1.8 1996/02/13 21:10:47 christos Exp $	*/
-
 /*-
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,24 +30,21 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)uipc_proto.c	8.1 (Berkeley) 6/10/93
+ *	@(#)uipc_proto.c	7.6 (Berkeley) 5/9/91
  */
 
-#include <sys/param.h>
-#include <sys/socket.h>
-#include <sys/protosw.h>
-#include <sys/domain.h>
-#include <sys/mbuf.h>
-#include <sys/un.h> 
-#include <sys/socketvar.h>
-                        
-#include <net/if.h>
-#include <net/raw_cb.h>
+#include "param.h"
+#include "socket.h"
+#include "protosw.h"
+#include "domain.h"
+#include "mbuf.h"
 
 /*
  * Definitions of protocols supported in the UNIX domain.
  */
 
+int	uipc_usrreq();
+int	raw_init(),raw_usrreq(),raw_input(),raw_ctlinput();
 extern	struct domain unixdomain;		/* or at least forward */
 
 struct protosw unixsw[] = {
@@ -69,6 +64,8 @@ struct protosw unixsw[] = {
   raw_init,	0,		0,		0,
 }
 };
+
+int	unp_externalize(), unp_dispose();
 
 struct domain unixdomain =
     { AF_UNIX, "unix", 0, unp_externalize, unp_dispose,

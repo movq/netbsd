@@ -1,10 +1,6 @@
-/*	$NetBSD: def.rm.h,v 1.4 1997/10/19 16:57:21 christos Exp $	*/
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985. */
+/* def.rm.h - version 1.0.2 */
 
-/*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
- */
-#ifndef _DEF_RM_H_
-#define _DEF_RM_H_
 /* Level location types */
 #define	HWALL 1
 #define	VWALL 2
@@ -54,4 +50,3 @@ struct rm {
 	unsigned lit:1;
 };
 extern struct rm levl[COLNO][ROWNO];
-#endif /* _DEF_RM_H_ */

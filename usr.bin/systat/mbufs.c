@@ -1,5 +1,3 @@
-/*	$NetBSD: mbufs.c,v 1.5 1997/10/19 23:36:27 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1980, 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,12 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)mbufs.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: mbufs.c,v 1.5 1997/10/19 23:36:27 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -101,14 +95,14 @@ labelmbufs()
 void
 showmbufs()
 {
-	int i, j, max, index;
+	register int i, j, max, index;
 	char buf[10];
 
 	if (mb == 0)
 		return;
-	for (j = 0; j < getmaxy(wnd); j++) {
+	for (j = 0; j < wnd->maxy; j++) {
 		max = 0, index = -1; 
-		for (i = 0; i < getmaxy(wnd); i++)
+		for (i = 0; i < wnd->maxy; i++)
 			if (mb->m_mtypes[i] > max) {
 				max = mb->m_mtypes[i];
 				index = i;

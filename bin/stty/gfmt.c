@@ -1,8 +1,6 @@
-/*	$NetBSD: gfmt.c,v 1.11 1997/07/20 21:31:24 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,35 +31,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)gfmt.c	8.6 (Berkeley) 4/2/94";
-#else
-__RCSID("$NetBSD: gfmt.c,v 1.11 1997/07/20 21:31:24 christos Exp $");
-#endif
+static char sccsid[] = "@(#)gfmt.c	5.4 (Berkeley) 6/10/91";
 #endif /* not lint */
 
 #include <sys/types.h>
-
-#include <err.h>
 #include <stdio.h>
 #include <string.h>
-
 #include "stty.h"
 #include "extern.h"
 
 static void gerr __P((char *));
-
-static void
-gerr(s)
-	char *s;
-{
-	if (s)
-		errx(1, "illegal gfmt1 option -- %s", s);
-	else
-		errx(1, "illegal gfmt1 option");
-}
 
 void
 gprint(tp, wp, ldisc)
@@ -69,7 +49,7 @@ gprint(tp, wp, ldisc)
 	struct winsize *wp;
 	int ldisc;
 {
-	const struct cchar *cp;
+	register struct cchar *cp;
 
 	(void)printf("gfmt1:cflag=%x:iflag=%x:lflag=%x:oflag=%x:",
 	    tp->c_cflag, tp->c_iflag, tp->c_lflag, tp->c_oflag);
@@ -80,31 +60,57 @@ gprint(tp, wp, ldisc)
 
 void
 gread(tp, s) 
-	struct termios *tp;
+	register struct termios *tp;
 	char *s;
 {
-	const struct cchar *cp;
-	char *ep, *p;
+	register char *ep, *p;
 	long tmp;
 
-	if ((s = strchr(s, ':')) == NULL)
+#define	CHK(s)	(*p == s[0] && !strcmp(p, s))
+	if (!(s = index(s, ':')))
 		gerr(NULL);
-	for (++s; s != NULL;) {
+	for (++s; s;) {
 		p = strsep(&s, ":\0");
 		if (!p || !*p)
 			break;
-		if (!(ep = strchr(p, '=')))
+		if (!(ep = index(p, '=')))
 			gerr(p);
 		*ep++ = '\0';
 		(void)sscanf(ep, "%lx", &tmp);
-
-#define	CHK(s)	(*p == s[0] && !strcmp(p, s))
 		if (CHK("cflag")) {
 			tp->c_cflag = tmp;
 			continue;
 		}
+		if (CHK("discard")) {
+			tp->c_cc[VDISCARD] = tmp;
+			continue;
+		}
+		if (CHK("dsusp")) {
+			tp->c_cc[VDSUSP] = tmp;
+			continue;
+		}
+		if (CHK("eof")) {
+			tp->c_cc[VEOF] = tmp;
+			continue;
+		}
+		if (CHK("eol")) {
+			tp->c_cc[VEOL] = tmp;
+			continue;
+		}
+		if (CHK("eol2")) {
+			tp->c_cc[VEOL2] = tmp;
+			continue;
+		}
+		if (CHK("erase")) {
+			tp->c_cc[VERASE] = tmp;
+			continue;
+		}
 		if (CHK("iflag")) {
 			tp->c_iflag = tmp;
+			continue;
+		}
+		if (CHK("intr")) {
+			tp->c_cc[VINTR] = tmp;
 			continue;
 		}
 		if (CHK("ispeed")) {
@@ -112,8 +118,16 @@ gread(tp, s)
 			tp->c_ispeed = tmp;
 			continue;
 		}
+		if (CHK("kill")) {
+			tp->c_cc[VKILL] = tmp;
+			continue;
+		}
 		if (CHK("lflag")) {
 			tp->c_lflag = tmp;
+			continue;
+		}
+		if (CHK("lnext")) {
+			tp->c_cc[VLNEXT] = tmp;
 			continue;
 		}
 		if (CHK("oflag")) {
@@ -125,14 +139,44 @@ gread(tp, s)
 			tp->c_ospeed = tmp;
 			continue;
 		}
-		for (cp = cchars1; cp->name != NULL; ++cp)
-			if (CHK(cp->name)) {
-				if (cp->sub == VMIN || cp->sub == VTIME)
-					(void)sscanf(ep, "%ld", &tmp);
-				tp->c_cc[cp->sub] = tmp;
-				break;
-			}
-		if (cp->name == NULL)
-			gerr(p);
+		if (CHK("quit")) {
+			tp->c_cc[VQUIT] = tmp;
+			continue;
+		}
+		if (CHK("reprint")) {
+			tp->c_cc[VREPRINT] = tmp;
+			continue;
+		}
+		if (CHK("start")) {
+			tp->c_cc[VSTART] = tmp;
+			continue;
+		}
+		if (CHK("status")) {
+			tp->c_cc[VSTATUS] = tmp;
+			continue;
+		}
+		if (CHK("stop")) {
+			tp->c_cc[VSTOP] = tmp;
+			continue;
+		}
+		if (CHK("susp")) {
+			tp->c_cc[VSUSP] = tmp;
+			continue;
+		}
+		if (CHK("werase")) {
+			tp->c_cc[VWERASE] = tmp;
+			continue;
+		}
+		gerr(p);
 	}
+}
+
+static void
+gerr(s)
+	char *s;
+{
+	if (s)
+		err("illegal gfmt1 option -- %s", s);
+	else
+		err("illegal gfmt1 option");
 }

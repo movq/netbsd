@@ -1,7 +1,5 @@
-/*	$NetBSD: bt_split.c,v 1.9 1997/10/10 21:08:55 is Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
+ * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -36,18 +34,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_split.c	8.9 (Berkeley) 7/26/94";
-#else
-__RCSID("$NetBSD: bt_split.c,v 1.9 1997/10/10 21:08:55 is Exp $");
-#endif
+static char sccsid[] = "@(#)bt_split.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
 
+#define	__DBINTERFACE_PRIVATE
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,12 +51,12 @@ __RCSID("$NetBSD: bt_split.c,v 1.9 1997/10/10 21:08:55 is Exp $");
 
 static int	 bt_broot __P((BTREE *, PAGE *, PAGE *, PAGE *));
 static PAGE	*bt_page
-		    __P((BTREE *, PAGE *, PAGE **, PAGE **, indx_t *, size_t));
+		    __P((BTREE *, PAGE *, PAGE **, PAGE **, u_int *, size_t));
 static int	 bt_preserve __P((BTREE *, pgno_t));
 static PAGE	*bt_psplit
-		    __P((BTREE *, PAGE *, PAGE *, PAGE *, indx_t *, size_t));
+		    __P((BTREE *, PAGE *, PAGE *, PAGE *, u_int *, size_t));
 static PAGE	*bt_root
-		    __P((BTREE *, PAGE *, PAGE **, PAGE **, indx_t *, size_t));
+		    __P((BTREE *, PAGE *, PAGE **, PAGE **, u_int *, size_t));
 static int	 bt_rroot __P((BTREE *, PAGE *, PAGE *, PAGE *));
 static recno_t	 rec_total __P((PAGE *));
 
@@ -87,22 +80,21 @@ u_long	bt_rootsplit, bt_split, bt_sortsplit, bt_pfxsaved;
  *	RET_ERROR, RET_SUCCESS
  */
 int
-__bt_split(t, sp, key, data, flags, ilen, argskip)
+__bt_split(t, sp, key, data, flags, ilen, skip)
 	BTREE *t;
 	PAGE *sp;
 	const DBT *key, *data;
-	int flags;
+	u_long flags;
 	size_t ilen;
-	u_int32_t argskip;
+	u_int skip;
 {
-	BINTERNAL *bi = NULL;	/* pacify gcc */
-	BLEAF *bl = NULL, *tbl;	/* pacify gcc */
+	BINTERNAL *bi;
+	BLEAF *bl, *tbl;
 	DBT a, b;
 	EPGNO *parent;
 	PAGE *h, *l, *r, *lchild, *rchild;
 	indx_t nxtindex;
-	u_int16_t skip;
-	u_int32_t n, nbytes, nksize = 0; /* pacify gcc */
+	size_t n, nbytes, nksize;
 	int parentsplit;
 	char *dest;
 
@@ -112,7 +104,6 @@ __bt_split(t, sp, key, data, flags, ilen, argskip)
 	 * skip set to the offset which should be used.  Additionally, l and r
 	 * are pinned.
 	 */
-	skip = argskip;
 	h = sp->pgno == P_ROOT ?
 	    bt_root(t, sp, &l, &r, &skip, ilen) :
 	    bt_page(t, sp, &l, &r, &skip, ilen);
@@ -125,14 +116,14 @@ __bt_split(t, sp, key, data, flags, ilen, argskip)
 	 */
 	h->linp[skip] = h->upper -= ilen;
 	dest = (char *)h + h->upper;
-	if (F_ISSET(t, R_RECNO))
+	if (ISSET(t, R_RECNO))
 		WR_RLEAF(dest, data, flags)
 	else
 		WR_BLEAF(dest, key, data, flags)
 
 	/* If the root page was split, make it look right. */
 	if (sp->pgno == P_ROOT &&
-	    (F_ISSET(t, R_RECNO) ?
+	    (ISSET(t, R_RECNO) ?
 	    bt_rroot(t, sp, l, r) : bt_broot(t, sp, l, r)) == RET_ERROR)
 		goto err2;
 
@@ -240,7 +231,7 @@ __bt_split(t, sp, key, data, flags, ilen, argskip)
 		}
 
 		/* Insert the key into the parent page. */
-		switch (rchild->flags & P_TYPE) {
+		switch(rchild->flags & P_TYPE) {
 		case P_BINTERNAL:
 			h->linp[skip] = h->upper -= nbytes;
 			dest = (char *)h + h->linp[skip];
@@ -305,7 +296,7 @@ __bt_split(t, sp, key, data, flags, ilen, argskip)
 
 		/* If the root page was split, make it look right. */
 		if (sp->pgno == P_ROOT &&
-		    (F_ISSET(t, R_RECNO) ?
+		    (ISSET(t, R_RECNO) ?
 		    bt_rroot(t, sp, l, r) : bt_broot(t, sp, l, r)) == RET_ERROR)
 			goto err1;
 
@@ -352,7 +343,7 @@ static PAGE *
 bt_page(t, h, lp, rp, skip, ilen)
 	BTREE *t;
 	PAGE *h, **lp, **rp;
-	indx_t *skip;
+	u_int *skip;
 	size_t ilen;
 {
 	PAGE *l, *r, *tp;
@@ -394,13 +385,10 @@ bt_page(t, h, lp, rp, skip, ilen)
 	}
 
 	/* Put the new left page for the split into place. */
-	if ((l = (PAGE *)malloc(t->bt_psize)) == NULL) {
+	if ((l = malloc(t->bt_psize)) == NULL) {
 		mpool_put(t->bt_mp, r, 0);
 		return (NULL);
 	}
-#ifdef PURIFY
-	memset(l, 0xff, t->bt_psize);
-#endif
 	l->pgno = h->pgno;
 	l->nextpg = r->pgno;
 	l->prevpg = h->prevpg;
@@ -416,7 +404,7 @@ bt_page(t, h, lp, rp, skip, ilen)
 			return (NULL);
 		}
 		tp->prevpg = r->pgno;
-		mpool_put(t->bt_mp, tp, MPOOL_DIRTY);
+		mpool_put(t->bt_mp, tp, 0);
 	}
 
 	/*
@@ -457,7 +445,7 @@ static PAGE *
 bt_root(t, h, lp, rp, skip, ilen)
 	BTREE *t;
 	PAGE *h, **lp, **rp;
-	indx_t *skip;
+	u_int *skip;
 	size_t ilen;
 {
 	PAGE *l, *r, *tp;
@@ -545,9 +533,9 @@ bt_broot(t, h, l, r)
 	BTREE *t;
 	PAGE *h, *l, *r;
 {
-	BINTERNAL *bi = NULL;	/* pacify gcc */
+	BINTERNAL *bi;
 	BLEAF *bl;
-	u_int32_t nbytes;
+	size_t nbytes;
 	char *dest;
 
 	/*
@@ -563,7 +551,7 @@ bt_broot(t, h, l, r)
 	dest = (char *)h + h->upper;
 	WR_BINTERNAL(dest, 0, l->pgno, 0);
 
-	switch (h->flags & P_TYPE) {
+	switch(h->flags & P_TYPE) {
 	case P_BLEAF:
 		bl = GETBLEAF(r, 0);
 		nbytes = NBINTERNAL(bl->ksize);
@@ -621,17 +609,17 @@ static PAGE *
 bt_psplit(t, h, l, r, pskip, ilen)
 	BTREE *t;
 	PAGE *h, *l, *r;
-	indx_t *pskip;
+	u_int *pskip;
 	size_t ilen;
 {
 	BINTERNAL *bi;
 	BLEAF *bl;
-	CURSOR *c;
 	RLEAF *rl;
+	EPGNO *c;
 	PAGE *rval;
-	void *src = NULL;	/* pacify gcc */
+	void *src;
 	indx_t full, half, nxt, off, skip, top, used;
-	u_int32_t nbytes;
+	size_t nbytes;
 	int bigkeycnt, isbigkey;
 
 	/*
@@ -681,8 +669,7 @@ bt_psplit(t, h, l, r, pskip, ilen)
 		 * where we decide to try and copy too much onto the left page.
 		 * Make sure that doesn't happen.
 		 */
-		if ((skip <= off && used + nbytes + sizeof(indx_t) >= full) ||
-		    nxt == top - 1) {
+		if (skip <= off && used + nbytes >= full) {
 			--off;
 			break;
 		}
@@ -695,7 +682,7 @@ bt_psplit(t, h, l, r, pskip, ilen)
 			memmove((char *)l + l->upper, src, nbytes);
 		}
 
-		used += nbytes + sizeof(indx_t);
+		used += nbytes;
 		if (used >= half) {
 			if (!isbigkey || bigkeycnt == 3)
 				break;
@@ -716,16 +703,19 @@ bt_psplit(t, h, l, r, pskip, ilen)
 	 * cursor is at or past the skipped slot, the cursor is incremented by
 	 * one.  If the cursor is on the right page, it is decremented by the
 	 * number of records split to the left page.
+	 *
+	 * Don't bother checking for the B_SEQINIT flag, the page number will
+	 * be P_INVALID.
 	 */
-	c = &t->bt_cursor;
-	if (F_ISSET(c, CURS_INIT) && c->pg.pgno == h->pgno) {
-		if (c->pg.index >= skip)
-			++c->pg.index;
-		if (c->pg.index < nxt)			/* Left page. */
-			c->pg.pgno = l->pgno;
+	c = &t->bt_bcursor;
+	if (c->pgno == h->pgno) {
+		if (c->index >= skip)
+			++c->index;
+		if (c->index < nxt)			/* Left page. */
+			c->pgno = l->pgno;
 		else {					/* Right page. */
-			c->pg.pgno = r->pgno;
-			c->pg.index -= nxt;
+			c->pgno = r->pgno;
+			c->index -= nxt;
 		}
 	}
 

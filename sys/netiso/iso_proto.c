@@ -1,8 +1,6 @@
-/*	$NetBSD: iso_proto.c,v 1.6 1996/02/13 22:10:21 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)iso_proto.c	8.1 (Berkeley) 6/10/93
+ *	@(#)iso_proto.c	7.8 (Berkeley) 5/6/91
  */
 
 /***********************************************************
@@ -40,13 +38,13 @@
 
                       All Rights Reserved
 
-Permission to use, copy, modify, and distribute this software and its
-documentation for any purpose and without fee is hereby granted,
+Permission to use, copy, modify, and distribute this software and its 
+documentation for any purpose and without fee is hereby granted, 
 provided that the above copyright notice appear in all copies and that
-both that copyright notice and this permission notice appear in
+both that copyright notice and this permission notice appear in 
 supporting documentation, and that the name of IBM not be
 used in advertising or publicity pertaining to distribution of the
-software without specific, written prior permission.
+software without specific, written prior permission.  
 
 IBM DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
 ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
@@ -61,7 +59,9 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
-/*
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso_proto.c,v 1.1 1993/04/09 12:01:20 cgd Exp $ 
+ * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso_proto.c,v $ 
+ *
  * iso_proto.c : protocol switch tables in the ISO domain
  *
  * ISO protocol family includes TP, CLTP, CLNP, 8208
@@ -69,121 +69,107 @@ SOFTWARE.
  */
 
 #ifdef	ISO
-#include <sys/param.h>
-#include <sys/socket.h>
-#include <sys/protosw.h>
-#include <sys/domain.h>
-#include <sys/mbuf.h>
+#include "types.h"
+#include "param.h"
+#include "socket.h"
+#include "protosw.h"
+#include "domain.h"
+#include "mbuf.h"
 
-#include <net/radix.h>
+#include "iso.h"
 
-#include <netiso/iso.h>
+int clnp_output(), clnp_init(),clnp_slowtimo(),clnp_drain();
+int rclnp_input(), rclnp_output(), rclnp_ctloutput(), raw_usrreq();
+int	clnp_usrreq();
 
-#include <netiso/clnp.h>
-#include <netiso/tp_param.h>
-#include <netiso/tp_var.h>
-#include <netiso/esis.h>
-#ifdef TUBA
-#include <netiso/tuba_table.h>
-#endif
-#include <netiso/idrp_var.h>
-#include <netiso/iso_pcb.h>
-#include <netiso/cltp_var.h>
+int	tp_ctloutput();
+int	tpclnp_ctlinput();
+int	tpclnp_input();
+int	tp_usrreq();
+int	tp_init(), tp_slowtimo(), tp_drain();
+int	cons_init(), tpcons_input();
 
-struct protosw  isosw[] = {
-	/*
-	 *  We need a datagram entry through which net mgmt programs can get
-	 *	to the iso_control procedure (iso ioctls). Thus, a minimal
-	 *	SOCK_DGRAM interface is provided here.
-	 *  THIS ONE MUST BE FIRST: Kludge city : socket() says if(!proto) call
-	 *  pffindtype, which gets the first entry that matches the type.
-	 *  sigh.
-	 */
-	{SOCK_DGRAM, &isodomain, ISOPROTO_CLTP, PR_ATOMIC | PR_ADDR,
-		0, cltp_output, 0, 0,
-		cltp_usrreq,
-		cltp_init, 0, 0, 0
-	},
+int	esis_input(), esis_ctlinput(), esis_init(), esis_usrreq();
+int	cltp_input(), cltp_ctlinput(), cltp_init(), cltp_usrreq(), cltp_output();
+int isis_input();
 
-	/*
-	 *	A datagram interface for clnp cannot co-exist with TP/CLNP
-	 *  because CLNP has no way to discriminate incoming TP packets from
-	 *  packets coming in for any other higher layer protocol.
-	 *  Old way: set it up so that pffindproto(... dgm, clnp) fails.
-	 *  New way: let pffindproto work (for x.25, thank you) but create
-	 *  	a clnp_usrreq() that returns error on PRU_ATTACH.
-	 */
-	{SOCK_DGRAM, &isodomain, ISOPROTO_CLNP, 0,
-		0, clnp_output, 0, 0,
-		clnp_usrreq,
-		clnp_init, 0, clnp_slowtimo, clnp_drain,
-	},
+struct protosw isosw[] = {
+/*
+ *  We need a datagram entry through which net mgmt programs can get
+ *	to the iso_control procedure (iso ioctls). Thus, a minimal
+ *	SOCK_DGRAM interface is provided here.
+ *  THIS ONE MUST BE FIRST: Kludge city : socket() says if(!proto) call
+ *  pffindtype, which gets the first entry that matches the type.
+ *  sigh.
+ */
+{ SOCK_DGRAM,	&isodomain,		ISOPROTO_CLTP,		PR_ATOMIC|PR_ADDR,
+	0,			cltp_output,	0,					0,
+	cltp_usrreq,
+	cltp_init,	0, 				0,					0
+},
 
-	/* raw clnp */
-	{SOCK_RAW, &isodomain, ISOPROTO_RAW, PR_ATOMIC | PR_ADDR,
-		rclnp_input, rclnp_output, 0, rclnp_ctloutput,
-		clnp_usrreq,
-		0, 0, 0, 0
-	},
+/*
+ *	A datagram interface for clnp cannot co-exist with TP/CLNP
+ *  because CLNP has no way to discriminate incoming TP packets from
+ *  packets coming in for any other higher layer protocol.
+ *  Old way: set it up so that pffindproto(... dgm, clnp) fails.
+ *  New way: let pffindproto work (for x.25, thank you) but create
+ *  	a clnp_usrreq() that returns error on PRU_ATTACH.
+ */
+{SOCK_DGRAM,	&isodomain,		ISOPROTO_CLNP,		0,
+ 0,				clnp_output,	0,					0,
+ clnp_usrreq,
+ clnp_init,		0,				clnp_slowtimo, 		clnp_drain,
+},
 
-	/* ES-IS protocol */
-	{SOCK_DGRAM, &isodomain, ISOPROTO_ESIS, PR_ATOMIC | PR_ADDR,
-		esis_input, 0, esis_ctlinput, 0,
-		esis_usrreq,
-		esis_init, 0, 0, 0
-	},
+/* raw clnp */
+{ SOCK_RAW,		&isodomain,		ISOPROTO_RAW,		PR_ATOMIC|PR_ADDR,
+  rclnp_input,	rclnp_output,	0,					rclnp_ctloutput,
+  clnp_usrreq,
+  0,			0,				0,					0
+},
 
-	/* ISOPROTO_INTRAISIS */
-	{SOCK_DGRAM, &isodomain, ISOPROTO_INTRAISIS, PR_ATOMIC | PR_ADDR,
-		isis_input, 0, 0, 0,
-		esis_usrreq,
-		0, 0, 0, 0
-	},
+/* ES-IS protocol */
+{ SOCK_DGRAM,	&isodomain,		ISOPROTO_ESIS,		PR_ATOMIC|PR_ADDR,
+  esis_input,	0,				esis_ctlinput,		0,
+  esis_usrreq,
+  esis_init,	0,				0,					0
+},
 
-	/* ISOPROTO_IDRP */
-	{SOCK_DGRAM, &isodomain, ISOPROTO_IDRP, PR_ATOMIC | PR_ADDR,
-		idrp_input, 0, 0, 0,
-		idrp_usrreq,
-		idrp_init, 0, 0, 0
-	},
+/* ISOPROTO_INTRAISIS */
+{ SOCK_DGRAM,	&isodomain,		ISOPROTO_INTRAISIS,	PR_ATOMIC|PR_ADDR,
+  isis_input,	0,				0,					0,
+  esis_usrreq,
+  0,			0,				0,					0
+},
 
-	/* ISOPROTO_TP */
-	{SOCK_SEQPACKET, &isodomain, ISOPROTO_TP, PR_CONNREQUIRED | PR_WANTRCVD,
-		tpclnp_input, 0, tpclnp_ctlinput, tp_ctloutput,
-		tp_usrreq,
-		tp_init, tp_fasttimo, tp_slowtimo, tp_drain,
-	},
-
-#ifdef TUBA
-	{SOCK_STREAM, &isodomain, ISOPROTO_TCP, PR_CONNREQUIRED | PR_WANTRCVD,
-		tuba_tcpinput, 0, 0, tuba_ctloutput,
-		tuba_usrreq,
-		tuba_init, tuba_fasttimo, tuba_fasttimo, 0
-	},
-#endif
+/* ISOPROTO_TP */
+{ SOCK_SEQPACKET,	&isodomain,	ISOPROTO_TP,		PR_CONNREQUIRED|PR_WANTRCVD,
+  tpclnp_input,		0,			tpclnp_ctlinput,	tp_ctloutput,
+  tp_usrreq,
+  tp_init,			0,			tp_slowtimo,		tp_drain,
+},
 
 #ifdef TPCONS
-	/* ISOPROTO_TP */
-	{SOCK_SEQPACKET, &isodomain, ISOPROTO_TP0, PR_CONNREQUIRED | PR_WANTRCVD,
-		tpcons_input, 0, 0, tp_ctloutput,
-		tp_usrreq,
-		cons_init, 0, 0, 0,
-	},
+/* ISOPROTO_TP */
+{ SOCK_SEQPACKET,	&isodomain,	ISOPROTO_TP0,		PR_CONNREQUIRED|PR_WANTRCVD,
+  tpcons_input,		0,			0,					tp_ctloutput,
+  tp_usrreq,
+  cons_init,		0,			0,					0,
+},
 #endif
+
 };
 
+int	iso_init();
 
-struct domain   isodomain = {
-	AF_ISO,			/* family */
-	"iso-domain",		/* name */
-	0,			/* initialize routine */
-	0,			/* externalize access rights */
-	0,			/* dispose of internalized rights */
-	isosw,			/* protosw */
-	&isosw[sizeof(isosw) / sizeof(isosw[0])],	/* NPROTOSW */
-	0,			/* next */
-	rn_inithead,		/* rtattach */
-	48,			/* rtoffset */
-	sizeof(struct sockaddr_iso)	/* maxkeylen */
+struct domain isodomain = {
+    AF_ISO, 			/* family */
+	"iso-domain", 		/* name */
+	iso_init,			/* initialize routine */
+	0,					/* externalize access rights */
+	0,					/* dispose of internalized rights */
+	isosw,				/* protosw */
+	&isosw[sizeof(isosw)/sizeof(isosw[0])] /* NPROTOSW */
 };
-#endif				/* ISO */
+#endif	ISO

@@ -1,8 +1,6 @@
-/*	$NetBSD: parse.c,v 1.6 1997/10/11 02:07:33 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,31 +31,24 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)parse.c	8.2 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: parse.c,v 1.6 1997/10/11 02:07:33 lukem Exp $");
-#endif
-#endif				/* not lint */
+static char sccsid[] = "@(#)parse.c	5.3 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include "extern.h"
+#include "externs.h"
 
-void
 wordinit()
 {
-	struct wlist *w;
+	register struct wlist *w;
 
 	for (w = wlist; w->string; w++)
 		install(w);
 }
 
-int
 hash(s)
-	char   *s;
+	register char *s;
 {
-	int     hashval = 0;
+	register hashval = 0;
 
 	while (*s) {
 		hashval += *s++;
@@ -69,9 +60,9 @@ hash(s)
 
 struct wlist *
 lookup(s)
-	char   *s;
+	char *s;
 {
-	struct wlist *wp;
+	register struct wlist *wp;
 
 	for (wp = hashtab[hash(s)]; wp != NULL; wp = wp->next)
 		if (*s == *wp->string && strcmp(s, wp->string) == 0)
@@ -79,11 +70,10 @@ lookup(s)
 	return NULL;
 }
 
-void
 install(wp)
-	struct wlist *wp;
+	register struct wlist *wp;
 {
-	int     hashval;
+	int hashval;
 
 	if (lookup(wp->string) == NULL) {
 		hashval = hash(wp->string);
@@ -93,20 +83,19 @@ install(wp)
 		printf("Multiply defined %s.\n", wp->string);
 }
 
-void
 parse()
 {
-	struct wlist *wp;
-	int     n;
+	register struct wlist *wp;
+	register n;
 
-	wordnumber = 0;		/* for cypher */
+	wordnumber = 0;           /* for cypher */
 	for (n = 0; n <= wordcount; n++) {
 		if ((wp = lookup(words[n])) == NULL) {
 			wordvalue[n] = -1;
 			wordtype[n] = -1;
 		} else {
-			wordvalue[n] = wp->value;
-			wordtype[n] = wp->article;
+			wordvalue[n] = wp -> value;
+			wordtype[n] = wp -> article;
 		}
 	}
 }

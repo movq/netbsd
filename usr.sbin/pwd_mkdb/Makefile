@@ -1,16 +1,7 @@
-#	from: @(#)Makefile	8.1 (Berkeley) 6/6/93
-#	$NetBSD: Makefile,v 1.11 1997/10/18 04:37:49 lukem Exp $
+#	@(#)Makefile	5.1 (Berkeley) 3/8/91
 
 PROG=	pwd_mkdb
-SRCS=	pwd_mkdb.c getpwent.c
-MAN=	pwd_mkdb.8
-LDADD+=	-lutil
-DPADD+=	${LIBUTIL}
-CFLAGS+=	-I${.CURDIR}/../../lib/libc/include
-
-.PATH:	${.CURDIR}/../../lib/libc/gen
+SRCS=	pw_scan.c pwd_mkdb.c
+MAN8=	pwd_mkdb.0
 
 .include <bsd.prog.mk>
-
-getpwent.o: getpwent.c
-	${CC} ${CFLAGS} ${CPPFLAGS} -UYP -c ${.IMPSRC}

@@ -1,7 +1,5 @@
-.\"	$NetBSD: chmod.1,v 1.11 1997/10/20 08:51:10 enami Exp $
-.\"
-.\" Copyright (c) 1989, 1990, 1993, 1994
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1989, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" the Institute of Electrical and Electronics Engineers, Inc.
@@ -34,26 +32,22 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)chmod.1	8.4 (Berkeley) 3/31/94
+.\"	@(#)chmod.1	6.15 (Berkeley) 7/23/91
 .\"
-.Dd March 31, 1994
+.Dd July 23, 1991
 .Dt CHMOD 1
 .Os
 .Sh NAME
 .Nm chmod
 .Nd change file modes
 .Sh SYNOPSIS
-.Nm
-.Oo
-.Fl R
-.Op Fl H | Fl L | Fl P
-.Oc
-.Op Fl h
+.Nm chmod
+.Op Fl R
 .Ar mode
 .Ar file ...
 .Sh DESCRIPTION
 The
-.Nm
+.Nm chmod
 utility modifies the file mode bits of the listed files
 as specified by the
 .Ar mode
@@ -61,58 +55,26 @@ operand.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
-.It Fl H
-If the
-.Fl R
-option is specified, symbolic links on the command line are followed.
-(Symbolic links encountered in the tree traversal are not followed.)
-.It Fl L
-If the
-.Fl R
-option is specified, all symbolic links are followed.
-.It Fl P
-If the
-.Fl R
-option is specified, no symbolic links are followed.
 .It Fl R
-Change the modes of the file hierarchies rooted in the files
-instead of just the files themselves.
-.It Fl h
-If
-.Ar file
-is symbolic link, the mode of the link is changed.
+Traverse a file hierarchy.
+For each file that is of type directory,
+.Nm chmod
+changes the mode of all files in the file hierarchy below it followed
+by the mode of the directory itself.
 .El
 .Pp
-If the option
-.Fl h
-is not given, unless the
-.Fl H
-or
-.Fl L
-option is set,
-.Nm
-on a symbolic link always succeeds and has no effect.
-The
-.Fl H ,
-.Fl L
-and
-.Fl P
-options are ignored unless the
-.Fl R
-option is specified.
-In addition, these options override each other and the
-command's actions are determined by the last one specified.
+Symbolic links are not indirected through, nor are their modes altered.
 .Pp
 Only the owner of a file or the super-user is permitted to change
 the mode of a file.
 .Pp
 The
-.Nm
+.Nm chmod
 utility exits 0 on success, and >0 if an error occurs.
 .Sh MODES
 Modes may be absolute or symbolic.
 An absolute mode is an octal number constructed by
-.Ar or-ing
+.Ar or Ap ing
 the following values:
 .Pp
 .Bl -tag -width 6n -compact -offset indent
@@ -121,8 +83,7 @@ set-user-ID-on-execution
 .It Li 2000
 set-group-ID-on-execution
 .It Li 1000
-sticky bit, see
-.Xr chmod 2
+sticky bit, see chmod(2)
 .It Li 0400
 read by owner
 .It Li 0200
@@ -146,7 +107,7 @@ action       ::= op [perm ...]
 last_action  ::= op [perm ...]
 who          ::= a | u | g | o
 op           ::= + | \- | =
-perm         ::= r | s | t | w | x | X | u | g | o
+perm         ::= r | s | t | w | X | x | u | g | o
 .Ed
 .Pp
 The
@@ -157,7 +118,6 @@ The
 .Ar who
 symbol ``a'' is equivalent to ``ugo''.
 .Pp
-.ne 1i
 The
 .Ar perm
 symbols represent the portions of the mode bits as follows:
@@ -180,13 +140,7 @@ Operations with the
 .Ar perm
 symbol ``X'' are only meaningful in conjunction with the
 .Ar op
-symbol ``+'', and are ignored in all other cases.
-.It u
-The user permission bits in the mode of the original file.
-.It g
-The group permission bits in the mode of the original file.
-.It o
-The other permission bits in the mode of the original file.
+symbol ``+'', and it is ignored in all other cases.
 .El
 .Pp
 The
@@ -214,10 +168,9 @@ If no value is supplied for
 the ``\-'' operation has no effect.
 If no value is supplied for
 .Ar who ,
-each permission bit specified in
-.Ar perm ,
-for which the corresponding bit in the file mode creation mask
-is clear, is cleared.
+the mode bits represented by
+.Ar perm
+are cleared for the owner, group and other permissions.
 Otherwise, the mode bits represented by the specified
 .Ar who
 and
@@ -270,7 +223,7 @@ already searchable/executable by anyone.
 .It Li 755
 .It Li u=rwx,go=rx
 .It Li u=rwx,go=u-w
-make a file readable/executable by everyone and writable by the owner only.
+make a file readable/executable by everyone and writeable by the owner only.
 .Pp
 .It Li go=
 clear all mode bits for group and others.
@@ -289,14 +242,14 @@ option for the naughty bits.
 .Xr umask 2 ,
 .Xr fts 3 ,
 .Xr setmode 3 ,
-.Xr symlink 7 ,
 .Xr chown 8
 .Sh STANDARDS
 The
-.Nm
+.Nm chmod
 utility is expected to be
 .St -p1003.2
-compatible with the exception of the
+compatible with the exception
+of the
 .Ar perm
 symbols
 .Dq t

@@ -1,8 +1,6 @@
-/*	$NetBSD: iso_snpac.h,v 1.9 1996/02/13 22:10:29 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)iso_snpac.h	8.1 (Berkeley) 6/10/93
+ *	@(#)iso_snpac.h	7.8 (Berkeley) 5/6/91
  */
 
 /***********************************************************
@@ -40,13 +38,13 @@
 
                       All Rights Reserved
 
-Permission to use, copy, modify, and distribute this software and its
-documentation for any purpose and without fee is hereby granted,
+Permission to use, copy, modify, and distribute this software and its 
+documentation for any purpose and without fee is hereby granted, 
 provided that the above copyright notice appear in all copies and that
-both that copyright notice and this permission notice appear in
+both that copyright notice and this permission notice appear in 
 supporting documentation, and that the name of IBM not be
 used in advertising or publicity pertaining to distribution of the
-software without specific, written prior permission.
+software without specific, written prior permission.  
 
 IBM DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
 ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
@@ -62,15 +60,15 @@ SOFTWARE.
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
 
-#define	MAX_SNPALEN		8	/* curiously equal to sizeof x.121 (
-					 * plus 1 for nibble len) addr */
+#define	MAX_SNPALEN		8			/* curiously equal to sizeof x.121 (
+										plus 1 for nibble len) addr */
 struct snpa_req {
-	struct iso_addr sr_isoa;/* nsap address */
-	u_char          sr_len;	/* length of snpa */
-	u_char          sr_snpa[MAX_SNPALEN];	/* snpa associated with nsap
-						 * address */
-	u_char          sr_flags;	/* true if entry is valid */
-	u_short         sr_ht;	/* holding time */
+	struct iso_addr	sr_isoa;		/* nsap address */
+	u_char			sr_len;			/* length of snpa */
+	u_char			sr_snpa[MAX_SNPALEN];	/* snpa associated 
+												with nsap address */
+	u_char			sr_flags;		/* true if entry is valid */
+	u_short			sr_ht;			/* holding time */
 };
 
 #define	SNPA_VALID		0x01
@@ -79,15 +77,15 @@ struct snpa_req {
 #define	SNPA_PERM		0x10
 
 struct systype_req {
-	short           sr_holdt;	/* holding timer */
-	short           sr_configt;	/* configuration timer */
-	short           sr_esconfigt;	/* suggested ES configuration timer */
-	char            sr_type;/* SNPA_ES or SNPA_IS */
+	short	sr_holdt;		/* holding timer */
+	short	sr_configt;		/* configuration timer */
+	short	sr_esconfigt;	/* suggested ES configuration timer */
+	char	sr_type;		/* SNPA_ES or SNPA_IS */
 };
 
 struct esis_req {
-	short           er_ht;	/* holding time */
-	u_char          er_flags;	/* type and validity */
+	short	er_ht;			/* holding time */
+	u_char	er_flags;		/* type and validity */
 };
 /*
  * Space for this structure gets added onto the end of a route
@@ -95,9 +93,10 @@ struct esis_req {
  */
 
 struct llinfo_llc {
-	LIST_ENTRY(llinfo_llc) lc_list;
-	struct rtentry *lc_rt;	/* backpointer to route */
-	struct esis_req lc_er;	/* holding time, etc */
+	struct	llinfo_llc *lc_next;	/* keep all llc routes linked */
+	struct	llinfo_llc *lc_prev;	/* keep all llc routes linked */
+	struct	rtentry *lc_rt;			/* backpointer to route */
+	struct	esis_req lc_er;			/* holding time, etc */
 #define lc_ht		lc_er.er_ht
 #define lc_flags	lc_er.er_flags
 };
@@ -105,5 +104,9 @@ struct llinfo_llc {
 
 /* ISO arp IOCTL data structures */
 
-#define	SIOCSSTYPE 	_IOW('a', 39, struct systype_req)	/* set system type */
-#define	SIOCGSTYPE 	_IOR('a', 40, struct systype_req)	/* get system type */
+#define	SIOCSSTYPE 	_IOW('a', 39, struct systype_req) /* set system type */
+#define	SIOCGSTYPE 	_IOR('a', 40, struct systype_req) /* get system type */
+
+#ifdef	KERNEL
+struct llinfo_llc llinfo_llc;	/* head for linked lists */
+#endif	KERNEL

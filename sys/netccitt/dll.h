@@ -1,5 +1,3 @@
-/*	$NetBSD: dll.h,v 1.3 1995/03/26 20:33:43 jtc Exp $	*/
-
 /* 
  * Copyright (C) Dirk Husemann, Computer Science Department IV, 
  * 		 University of Erlangen-Nuremberg, Germany, 1990, 1991, 1992
@@ -34,13 +32,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)dll.h	8.1 (Berkeley) 6/10/93
+ *	from: @(#)dll.h	8.1 (Berkeley) 6/10/93
+ *	$Id: dll.h,v 1.1 1994/05/13 06:04:14 mycroft Exp $
  */
 
 /* 
  * We define the additional PRC_* codes in here
  */
-#ifdef _KERNEL
+#ifdef KERNEL
 #ifndef PRC_IFUP
 #define PRC_IFUP		   3
 #endif

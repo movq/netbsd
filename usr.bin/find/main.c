@@ -1,8 +1,6 @@
-/*	$NetBSD: main.c,v 1.8 1997/10/19 11:52:43 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,26 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: main.c,v 1.8 1997/10/19 11:52:43 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)main.c	5.9 (Berkeley) 5/24/91";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/stat.h>
-
-#include <err.h>
-#include <errno.h>
 #include <fcntl.h>
+#include <time.h>
 #include <fts.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
-
 #include "find.h"
 
 time_t now;			/* time find was run */
@@ -63,33 +53,29 @@ int isdepth;			/* do directories on post-order visit */
 int isoutput;			/* user specified output operator */
 int isxargs;			/* don't permit xargs delimiting chars */
 
-int main __P((int, char **));
-static void usage __P((void));
+static void usage();
 
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	char **p, **start;
+	register char **p, **start;
+	PLAN *find_formplan();
 	int ch;
 
 	(void)time(&now);	/* initialize the time-of-day */
 
 	p = start = argv;
 	ftsoptions = FTS_NOSTAT|FTS_PHYSICAL;
-	while ((ch = getopt(argc, argv, "Hdf:hXx")) != -1)
+	while ((ch = getopt(argc, argv, "df:sXx")) != EOF)
 		switch(ch) {
-		case 'H':
-			ftsoptions |= FTS_COMFOLLOW;
-			break;
 		case 'd':
 			isdepth = 1;
 			break;
 		case 'f':
 			*p++ = optarg;
 			break;
-		case 'h':
+		case 's':
 			ftsoptions &= ~FTS_PHYSICAL;
 			ftsoptions |= FTS_LOGICAL;
 			break;
@@ -108,13 +94,9 @@ main(argc, argv)
 	argc -= optind;	
 	argv += optind;
 
-	/* The first argument that starts with a -, or is a ! or a (, and all
-	 * subsequent arguments shall be interpreted as an expression ...
-	 * (POSIX.2).
-	 */
+	/* Find first option to delimit the file list. */
 	while (*argv) {
-		if (**argv == '-' ||
-		    ((**argv == '!' || **argv == '(') && (*argv)[1] == '\0'))
+		if (option(*argv))
 			break;
 		*p++ = *argv++;
 	}
@@ -124,16 +106,15 @@ main(argc, argv)
 	*p = NULL;
 
 	if ((dotfd = open(".", O_RDONLY, 0)) < 0)
-		err(1, ".:");
+		err(".: %s", strerror(errno));
 
 	find_execute(find_formplan(argv), start);
-	exit(0);
 }
 
 static void
 usage()
 {
 	(void)fprintf(stderr,
-	    "usage: find [-HdhXx] [-f file] [file ...] expression\n");
+	    "usage: find [-dsXx] [-f file] [file ...] expression\n");
 	exit(1);
 }

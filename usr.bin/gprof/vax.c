@@ -1,8 +1,6 @@
-/*	$NetBSD: vax.c,v 1.6 1996/04/20 14:56:37 ragge Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,11 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)vax.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: vax.c,v 1.6 1996/04/20 14:56:37 ragge Exp $";
-#endif
+static char sccsid[] = "@(#)vax.c	5.6 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include	"gprof.h"
@@ -53,17 +47,14 @@ nltype	indirectchild = {
 	(double) 0.0 ,			/* ticks in this routine */
 	(double) 0.0 ,			/* cumulative ticks in children */
 	(long) 0 ,			/* how many times called */
-	(long) 0 ,			/* times called by live arcs */
 	(long) 0 ,			/* how many calls to self */
 	(double) 1.0 ,			/* propagation fraction */
 	(double) 0.0 ,			/* self propagation time */
 	(double) 0.0 ,			/* child propagation time */
-	(short) 0 ,			/* print flag */
-	(short) 0 ,			/* see below */
+	(bool) 0 ,			/* print flag */
 	(int) 0 ,			/* index in the graph list */
 	(int) 0 , 			/* graph call chain top-sort order */
 	(int) 0 ,			/* internal number of cycle on */
-	(int) 0 ,			/* number of live parent arcs */
 	(struct nl *) &indirectchild ,	/* pointer to head of cycle */
 	(struct nl *) 0 ,		/* pointer to next member of cycle */
 	(arctype *) 0 ,			/* list of caller arcs */

@@ -1,8 +1,6 @@
-/*	$NetBSD: mail.c,v 1.11 1997/07/04 21:02:06 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)mail.c	8.2 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: mail.c,v 1.11 1997/07/04 21:02:06 christos Exp $");
-#endif
+static char sccsid[] = "@(#)mail.c	5.1 (Berkeley) 3/7/91";
 #endif /* not lint */
 
 /*
@@ -55,7 +48,6 @@ __RCSID("$NetBSD: mail.c,v 1.11 1997/07/04 21:02:06 christos Exp $");
 #include "output.h"
 #include "memalloc.h"
 #include "error.h"
-#include "mail.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -75,13 +67,11 @@ STATIC time_t mailtime[MAXMBOXES];	/* times of mailboxes */
  */
 
 void
-chkmail(silent)
-	int silent;
-{
-	int i;
+chkmail(silent) {
+	register int i;
 	char *mpath;
 	char *p;
-	char *q;
+	register char *q;
 	struct stackmark smark;
 	struct stat statb;
 

@@ -1,8 +1,17 @@
-#	$NetBSD: Makefile,v 1.11 1997/03/24 21:59:43 christos Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.3 (Berkeley) 5/18/90
 
-MAN=	lorder.1
+MAN1=	lorder.0
 
-SCRIPTS=lorder.sh
+all lorder: ${MAN1}
+
+clean depend lint tags:
+
+cleandir:
+	rm -f ${MAN1}
+
+install: maninstall
+	install -c -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \
+	    ${.CURDIR}/lorder.sh ${DESTDIR}/${BINDIR}/lorder
 
 .include <bsd.prog.mk>
+.include <bsd.man.mk>

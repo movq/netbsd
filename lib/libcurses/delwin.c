@@ -1,8 +1,6 @@
-/*	$NetBSD: delwin.c,v 1.7 1997/07/22 07:36:38 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,55 +31,49 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)delwin.c	8.2 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: delwin.c,v 1.7 1997/07/22 07:36:38 mikel Exp $");
-#endif
-#endif	/* not lint */
+static char sccsid[] = "@(#)delwin.c	5.4 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include <stdlib.h>
-
-#include "curses.h"
+# include	"curses.ext"
 
 /*
- * delwin --
- *	Delete a window and release it back to the system.
+ *	This routine deletes a window and releases it back to the system.
+ *
  */
-int
 delwin(win)
-	register WINDOW *win;
-{
+reg WINDOW	*win; {
 
-	register WINDOW *wp, *np;
+	reg int		i;
+	reg WINDOW	*wp, *np;
 
-	if (win->orig == NULL) {
+	if (win->_orig == NULL) {
 		/*
-		 * If we are the original window, delete the space for all
-		 * the subwindows, the line space and the window space.
+		 * If we are the original window, delete the space for
+		 * all the subwindows, and the array of space as well.
 		 */
-		free(win->lspace);
-		free(win->wspace);
-		free(win->lines);
-		wp = win->nextp;
+		for (i = 0; i < win->_maxy && win->_y[i]; i++)
+			free(win->_y[i]);
+		free(win->_firstch);
+		free(win->_lastch);
+		wp = win->_nextp;
 		while (wp != win) {
-			np = wp->nextp;
+			np = wp->_nextp;
 			delwin(wp);
 			wp = np;
 		}
-	} else {
-		/*
-		 * If we are a subwindow, take ourselves out of the list.
-		 * NOTE: if we are a subwindow, the minimum list is orig
-		 * followed by this subwindow, so there are always at least
-		 * two windows in the list.
-		 */
-		for (wp = win->nextp; wp->nextp != win; wp = wp->nextp)
-			continue;
-		wp->nextp = win->nextp;
 	}
+	else {
+		/*
+		 * If we are a subwindow, take ourselves out of the
+		 * list.  NOTE: if we are a subwindow, the minimum list
+		 * is orig followed by this subwindow, so there are
+		 * always at least two windows in the list.
+		 */
+		for (wp = win->_nextp; wp->_nextp != win; wp = wp->_nextp)
+			continue;
+		wp->_nextp = win->_nextp;
+	}
+	free(win->_y);
 	free(win);
-	return (OK);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: primes.c,v 1.7 1997/10/12 01:04:55 lukem Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Landon Curt Noll.
@@ -36,26 +34,22 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)primes.c	8.5 (Berkeley) 5/10/95";
-#else
-__RCSID("$NetBSD: primes.c,v 1.7 1997/10/12 01:04:55 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)primes.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
  * primes - generate a table of primes between two values
  *
- * By: Landon Curt Noll chongo@toad.com, ...!{sun,tolsoft}!hoptoad!chongo
+ * By: Landon Curt Noll   chongo@toad.com,   ...!{sun,tolsoft}!hoptoad!chongo
  *
- * chongo <for a good prime call: 391581 * 2^216193 - 1> /\oo/\
+ *   chongo <for a good prime call: 391581 * 2^216193 - 1> /\oo/\
  *
  * usage:
  *	primes [start [stop]]
@@ -64,19 +58,15 @@ __RCSID("$NetBSD: primes.c,v 1.7 1997/10/12 01:04:55 lukem Exp $");
  *	the value 4294967295 (2^32-1) is assumed.  If start is
  *	omitted, start is read from standard input.
  *
+ *	Prints "ouch" if start or stop is bogus.
+ *
  * validation check: there are 664579 primes between 0 and 10^7
  */
 
-#include <ctype.h>
-#include <err.h>
-#include <errno.h>
-#include <limits.h>
+#include <stdio.h>
 #include <math.h>
 #include <memory.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-
+#include <ctype.h>
 #include "primes.h"
 
 /*
@@ -107,113 +97,197 @@ extern ubig *pr_limit;		/* largest prime in the prime array */
 extern char pattern[];
 extern int pattern_size;	/* length of pattern array */
 
-int	main __P((int, char *[]));
-void	primes __P((ubig, ubig));
-ubig	read_num_buf __P((void));
-void	usage __P((void));
+#define MAX_LINE 255    /* max line allowed on stdin */
 
-int
+char *read_num_buf();	 /* read a number buffer */
+void primes();		 /* print the primes in range */
+char *program;		 /* our name */
+
 main(argc, argv)
-	int argc;
-	char *argv[];
+	int argc;	/* arg count */
+	char *argv[];	/* args */
 {
-	ubig start;		/* where to start generating */
-	ubig stop;		/* don't generate at or above this value */
-	int ch;
-	char *p;
-
-	while ((ch = getopt(argc, argv, "")) != -1)
-		switch (ch) {
-		case '?':
-		default:
-			usage();
-		}
-	argc -= optind;
-	argv += optind;
-
-	start = 0;
-	stop = BIG;
+	char buf[MAX_LINE+1];   /* input buffer */
+	char *ret;	/* return result */
+	ubig start;	/* where to start generating */
+	ubig stop;	/* don't generate at or above this value */
 
 	/*
-	 * Convert low and high args.  Strtoul(3) sets errno to
-	 * ERANGE if the number is too large, but, if there's
-	 * a leading minus sign it returns the negation of the
-	 * result of the conversion, which we'd rather disallow.
+	 * parse args
 	 */
-	switch (argc) {
-	case 2:
-		/* Start and stop supplied on the command line. */
-		if (argv[0][0] == '-' || argv[1][0] == '-')
-			errx(1, "negative numbers aren't permitted.");
+	program = argv[0];
+	start = 0;
+	stop = BIG;
+	if (argc == 3) {
+		/* convert low and high args */
+		if (read_num_buf(NULL, argv[1]) == NULL) {
+			fprintf(stderr, "%s: ouch\n", program);
+			exit(1);
+		}
+		if (read_num_buf(NULL, argv[2]) == NULL) {
+			fprintf(stderr, "%s: ouch\n", program);
+			exit(1);
+		}
+		if (sscanf(argv[1], "%ld", &start) != 1) {
+			fprintf(stderr, "%s: ouch\n", program);
+			exit(1);
+		}
+		if (sscanf(argv[2], "%ld", &stop) != 1) {
+			fprintf(stderr, "%s: ouch\n", program);
+			exit(1);
+		}
 
-		errno = 0;
-		start = strtoul(argv[0], &p, 10);
-		if (errno)
-			err(1, "%s", argv[0]);
-		if (*p != '\0')
-			errx(1, "%s: illegal numeric format.", argv[0]);
+	} else if (argc == 2) {
+		/* convert low arg */
+		if (read_num_buf(NULL, argv[1]) == NULL) {
+			fprintf(stderr, "%s: ouch\n", program);
+			exit(1);
+		}
+		if (sscanf(argv[1], "%ld", &start) != 1) {
+			fprintf(stderr, "%s: ouch\n", program);
+			exit(1);
+		}
 
-		errno = 0;
-		stop = strtoul(argv[1], &p, 10);
-		if (errno)
-			err(1, "%s", argv[1]);
-		if (*p != '\0')
-			errx(1, "%s: illegal numeric format.", argv[1]);
-		break;
-	case 1:
-		/* Start on the command line. */
-		if (argv[0][0] == '-')
-			errx(1, "negative numbers aren't permitted.");
+	} else {
+		/* read input until we get a good line */
+		if (read_num_buf(stdin, buf) != NULL) {
 
-		errno = 0;
-		start = strtoul(argv[0], &p, 10);
-		if (errno)
-			err(1, "%s", argv[0]);
-		if (*p != '\0')
-			errx(1, "%s: illegal numeric format.", argv[0]);
-		break;
-	case 0:
-		start = read_num_buf();
-		break;
-	default:
-		usage();
+			/* convert the buffer */
+			if (sscanf(buf, "%ld", &start) != 1) {
+				fprintf(stderr, "%s: ouch\n", program);
+				exit(1);
+			}
+		} else {
+			exit(0);
+		}
 	}
-
-	if (start > stop)
-		errx(1, "start value must be less than stop value.");
+	if (start > stop) {
+		fprintf(stderr, "%s: ouch\n", program);
+		exit(1);
+	}
 	primes(start, stop);
 	exit(0);
 }
 
 /*
- * read_num_buf --
- *	This routine returns a number n, where 0 <= n && n <= BIG.
+ * read_num_buf - read a number buffer from a stream
+ *
+ * Read a number on a line of the form:
+ *
+ *	^[ \t]*\(+?[0-9][0-9]\)*.*$
+ *
+ * where ? is a 1-or-0 operator and the number is within \( \).
+ *
+ * If does not match the above pattern, it is ignored and a new
+ * line is read.  If the number is too large or small, we will
+ * print ouch and read a new line.
+ *
+ * We have to be very careful on how we check the magnitude of the
+ * input.  We can not use numeric checks because of the need to
+ * check values against maximum numeric values.
+ *
+ * This routine will return a line containing a ascii number between
+ * 0 and BIG, or it will return NULL.
+ *
+ * If the stream is NULL then buf will be processed as if were
+ * a single line stream.
+ *
+ * returns:
+ *	char *	pointer to leading digit or +
+ *	NULL	EOF or error
  */
-ubig
-read_num_buf()
+char *
+read_num_buf(input, buf)
+	FILE *input;		/* input stream or NULL */
+	char *buf;		/* input buffer */
 {
-	ubig val;
-	char *p, buf[100];		/* > max number of digits. */
+	static char limit[MAX_LINE+1];	/* ascii value of BIG */
+	static int limit_len;		/* digit count of limit */
+	int len;			/* digits in input (excluding +/-) */
+	char *s;	/* line start marker */
+	char *d;	/* first digit, skip +/- */
+	char *p;	/* scan pointer */
+	char *z;	/* zero scan pointer */
 
-	for (;;) {
-		if (fgets(buf, sizeof(buf), stdin) == NULL) {
-			if (ferror(stdin))
-				err(1, "stdin");
-			exit(0);
-		}
-		for (p = buf; isblank(*p); ++p);
-		if (*p == '\n' || *p == '\0')
-			continue;
-		if (*p == '-')
-			errx(1, "negative numbers aren't permitted.");
-		errno = 0;
-		val = strtoul(buf, &p, 10);
-		if (errno)
-			err(1, "%s", buf);
-		if (*p != '\n')
-			errx(1, "%s: illegal numeric format.", buf);
-		return (val);
+	/* form the ascii value of SEMIBIG if needed */
+	if (!isascii(limit[0]) || !isdigit(limit[0])) {
+		sprintf(limit, "%ld", SEMIBIG);
+		limit_len = strlen(limit);
 	}
+	
+	/*
+	 * the search for a good line
+	 */
+	if (input != NULL && fgets(buf, MAX_LINE, input) == NULL) {
+		/* error or EOF */
+		return NULL;
+	}
+	do {
+
+		/* ignore leading whitespace */
+		for (s=buf; *s && s < buf+MAX_LINE; ++s) {
+			if (!isascii(*s) || !isspace(*s)) {
+				break;
+			}
+		}
+
+		/* object if - */
+		if (*s == '-') {
+			fprintf(stderr, "%s: ouch\n", program);
+			continue;
+		}
+
+		/* skip over any leading + */
+		if (*s == '+') {
+			d = s+1;
+		} else {
+			d = s;
+		}
+
+		/* note leading zeros */
+		for (z=d; *z && z < buf+MAX_LINE; ++z) {
+			if (*z != '0') {
+				break;
+			}
+		}
+
+		/* scan for the first non-digit/non-plus/non-minus */
+		for (p=d; *p && p < buf+MAX_LINE; ++p) {
+			if (!isascii(*p) || !isdigit(*p)) {
+				break;
+			}
+		}
+
+		/* ignore empty lines */
+		if (p == d) {
+			continue;
+		}
+		*p = '\0';
+
+		/* object if too many digits */
+		len = strlen(z);
+		len = (len<=0) ? 1 : len;
+		/* accept if digit count is below limit */
+		if (len < limit_len) {
+			/* we have good input */
+			return s;
+
+		/* reject very large numbers */
+		} else if (len > limit_len) {
+			fprintf(stderr, "%s: ouch\n", program);
+			continue;
+
+		/* carefully check against near limit numbers */
+		} else if (strcmp(z, limit) > 0) {
+			fprintf(stderr, "%s: ouch\n", program);
+			continue;
+		}
+		/* number is near limit, but is under it */
+		return s;
+	} while (input != NULL && fgets(buf, MAX_LINE, input) != NULL);
+
+	/* error or EOF */
+	return NULL;
 }
 
 /*
@@ -224,16 +298,17 @@ primes(start, stop)
 	ubig start;	/* where to start generating */
 	ubig stop;	/* don't generate at or above this value */
 {
-	char *q;		/* sieve spot */
-	ubig factor;		/* index and factor */
-	char *tab_lim;		/* the limit to sieve on the table */
-	ubig *p;		/* prime table pointer */
-	ubig fact_lim;		/* highest prime for current block */
+	register char *q;		/* sieve spot */
+	register ubig factor;		/* index and factor */
+	register char *tab_lim;		/* the limit to sieve on the table */
+	register ubig *p;		/* prime table pointer */
+	register ubig fact_lim;		/* highest prime for current block */
 
 	/*
-	 * A number of systems can not convert double values into unsigned
-	 * longs when the values are larger than the largest signed value.
-	 * We don't have this problem, so we can go all the way to BIG.
+	 * A number of systems can not convert double values 
+	 * into unsigned longs when the values are larger than
+	 * the largest signed value.  Thus we take case when
+	 * the double is larger than the value SEMIBIG. *sigh*
 	 */
 	if (start < 3) {
 		start = (ubig)2;
@@ -261,9 +336,10 @@ primes(start, stop)
 	if (start <= *pr_limit) {
 		/* skip primes up to the start value */
 		for (p = &prime[0], factor = prime[0];
-		    factor < stop && p <= pr_limit; factor = *(++p)) {
+		     factor < stop && p <= pr_limit; 
+		     factor = *(++p)) {
 			if (factor >= start) {
-				printf("%lu\n", (unsigned long) factor);
+				printf("%u\n", factor);
 			}
 		}
 		/* return early if we are done */
@@ -286,7 +362,8 @@ primes(start, stop)
 		memcpy(table, &pattern[factor], pattern_size-factor);
 		/* main block pattern copies */
 		for (fact_lim=pattern_size-factor;
-		    fact_lim+pattern_size<=TABSIZE; fact_lim+=pattern_size) {
+		     fact_lim+pattern_size<=TABSIZE;
+		     fact_lim+=pattern_size) {
 			memcpy(&table[fact_lim], pattern, pattern_size);
 		}
 		/* final block pattern copy */
@@ -310,10 +387,10 @@ primes(start, stop)
 		do {
 			/* determine the factor's initial sieve point */
 			q = (char *)(start%factor); /* temp storage for mod */
-			if ((long)q & 0x1) {
-				q = &table[(factor-(long)q)/2];
+			if ((int)q & 0x1) {
+				q = &table[(factor-(int)q)/2];
 			} else {
-				q = &table[q ? factor-((long)q/2) : 0];
+				q = &table[q ? factor-((int)q/2) : 0];
 			}
 			/* sive for our current factor */
 			for ( ; q < tab_lim; q += factor) {
@@ -326,15 +403,8 @@ primes(start, stop)
 		 */
 		for (q = table; q < tab_lim; ++q, start+=2) {
 			if (*q) {
-				printf("%lu\n", (unsigned long) start);
+				printf("%u\n", start);
 			}
 		}
 	}
-}
-
-void
-usage()
-{
-	(void)fprintf(stderr, "usage: primes [start [stop]]\n");
-	exit(1);
 }

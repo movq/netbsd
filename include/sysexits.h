@@ -1,5 +1,3 @@
-/*	$NetBSD: sysexits.h,v 1.4 1994/10/26 00:56:33 cgd Exp $	*/
-
 /*
  * Copyright (c) 1987 Regents of the University of California.
  * All rights reserved.
@@ -36,7 +34,7 @@
  */
 
 #ifndef	_SYSEXITS_H_
-#define	_SYSEXITS_H_
+#define	_SYSEXIST_H_
 
 /*
  *  SYSEXITS.H -- Exit status codes for system programs.
@@ -117,4 +115,4 @@
 
 #define EX__MAX	78	/* maximum listed value */
 
-#endif /* !_SYSEXITS_H_ */
+#endif /* !_SYSEXIST_H_ */

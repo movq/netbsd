@@ -1,8 +1,6 @@
-/*	$NetBSD: telnetd.h,v 1.5 1996/02/28 20:38:25 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,12 +30,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)telnetd.h	8.1 (Berkeley) 6/4/93
+ *	@(#)telnetd.h	5.3 (Berkeley) 3/1/91
  */
 
 
-#include <defs.h>
-#include <ext.h>
+#include "defs.h"
+#include "ext.h"
 
 #ifdef	DIAGNOSTICS
 #define	DIAG(a,b)	if (diagnostic & (a)) b

@@ -1,5 +1,3 @@
-/*	$NetBSD: pat_rep.c,v 1.7 1997/07/20 20:32:37 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992 Keith Muller.
  * Copyright (c) 1992, 1993
@@ -37,13 +35,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)pat_rep.c	8.2 (Berkeley) 4/18/94";
-#else
-__RCSID("$NetBSD: pat_rep.c,v 1.7 1997/07/20 20:32:37 christos Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -78,12 +71,12 @@ static REPLACE *rephead = NULL;		/* replacement string list head */
 static REPLACE *reptail = NULL;		/* replacement string list tail */
 
 static int rep_name __P((char *, int *, int));
-static int tty_rename __P((ARCHD *));
+static int tty_rename __P((register ARCHD *));
 static int fix_path __P((char *, int *, char *, int));
-static int fn_match __P((char *, char *, char **));
-static char * range_match __P((char *, int));
+static int fn_match __P((register char *, register char *, char **));
+static char * range_match __P((register char *, register int));
 #ifdef NET2_REGEX
-static int resub __P((regexp *, char *, char *, char *));
+static int resub __P((regexp *, char *, char *, register char *));
 #else
 static int resub __P((regex_t *, regmatch_t *, char *, char *, char *));
 #endif
@@ -106,18 +99,18 @@ static int resub __P((regex_t *, regmatch_t *, char *, char *, char *));
 
 #if __STDC__
 int
-rep_add(char *str)
+rep_add(register char *str)
 #else
 int
 rep_add(str)
-	char *str;
+	register char *str;
 #endif
 {
-	char *pt1;
-	char *pt2;
-	REPLACE *rep;
+	register char *pt1;
+	register char *pt2;
+	register REPLACE *rep;
 #	ifndef NET2_REGEX
-	int res;
+	register int res;
 	char rebuf[BUFSIZ];
 #	endif
 
@@ -125,7 +118,7 @@ rep_add(str)
 	 * throw out the bad parameters
 	 */
 	if ((str == NULL) || (*str == '\0')) {
-		tty_warn(1, "Empty replacement string");
+		warn(1, "Empty replacement string");
 		return(-1);
 	}
 
@@ -134,7 +127,7 @@ rep_add(str)
 	 * this expression
 	 */
 	if ((pt1 = strchr(str+1, *str)) == NULL) {
-		tty_warn(1, "Invalid replacement string %s", str);
+		warn(1, "Invalid replacement string %s", str);
 		return(-1);
 	}
 
@@ -143,7 +136,7 @@ rep_add(str)
 	 * and split out the regular expression and try to compile it
 	 */
 	if ((rep = (REPLACE *)malloc(sizeof(REPLACE))) == NULL) {
-		tty_warn(1, "Unable to allocate memory for replacement string");
+		warn(1, "Unable to allocate memory for replacement string");
 		return(-1);
 	}
 
@@ -153,8 +146,7 @@ rep_add(str)
 #	else
 	if ((res = regcomp(&(rep->rcmp), str+1, 0)) != 0) {
 		regerror(res, &(rep->rcmp), rebuf, sizeof(rebuf));
-		tty_warn(1, "%s while compiling regular expression %s", rebuf,
-		    str);
+		warn(1, "%s while compiling regular expression %s", rebuf, str);
 #	endif
 		(void)free((char *)rep);
 		return(-1);
@@ -173,7 +165,7 @@ rep_add(str)
 		regfree(&(rep->rcmp));
 #		endif
 		(void)free((char *)rep);
-		tty_warn(1, "Invalid replacement string %s", str);
+		warn(1, "Invalid replacement string %s", str);
 		return(-1);
 	}
 
@@ -203,8 +195,7 @@ rep_add(str)
 #			endif
 			(void)free((char *)rep);
 			*pt1 = *str;
-			tty_warn(1, "Invalid replacement string option %s",
-			    str);
+			warn(1, "Invalid replacement string option %s", str);
 			return(-1);
 		}
 		++pt2;
@@ -243,13 +234,13 @@ pat_add(str)
 	char *str;
 #endif
 {
-	PATTERN *pt;
+	register PATTERN *pt;
 
 	/*
 	 * throw out the junk
 	 */
 	if ((str == NULL) || (*str == '\0')) {
-		tty_warn(1, "Empty pattern string");
+		warn(1, "Empty pattern string");
 		return(-1);
 	}
 
@@ -259,7 +250,7 @@ pat_add(str)
 	 * node to the end of the pattern list
 	 */
 	if ((pt = (PATTERN *)malloc(sizeof(PATTERN))) == NULL) {
-		tty_warn(1, "Unable to allocate memory for pattern string");
+		warn(1, "Unable to allocate memory for pattern string");
 		return(-1);
 	}
 
@@ -291,8 +282,8 @@ void
 pat_chk()
 #endif
 {
-	PATTERN *pt;
-	int wban = 0;
+	register PATTERN *pt;
+	register int wban = 0;
 
 	/*
 	 * walk down the list checking the flags to make sure MTCH was set,
@@ -302,7 +293,7 @@ pat_chk()
 		if (pt->flgs & MTCH)
 			continue;
 		if (!wban) {
-			tty_warn(1, "WARNING! These patterns were not matched:");
+			warn(1, "WARNING! These patterns were not matched:");
 			++wban;
 		}
 		(void)fprintf(stderr, "%s\n", pt->pstr);
@@ -327,16 +318,16 @@ pat_chk()
 
 #if __STDC__
 int
-pat_sel(ARCHD *arcn)
+pat_sel(register ARCHD *arcn)
 #else
 int
 pat_sel(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
-	PATTERN *pt;
-	PATTERN **ppt;
-	int len;
+	register PATTERN *pt;
+	register PATTERN **ppt;
+	register int len;
 
 	/*
 	 * if no patterns just return
@@ -381,7 +372,7 @@ pat_sel(arcn)
 			*pt->pend = '\0';
 			
 		if ((pt->pstr = strdup(arcn->name)) == NULL) {
-			tty_warn(1, "Pattern select out of memory");
+			warn(1, "Pattern select out of memory");
 			if (pt->pend != NULL)
 				*pt->pend = '/';
 			pt->pend = NULL;
@@ -429,7 +420,7 @@ pat_sel(arcn)
 		/*
 		 * should never happen....
 		 */
-		tty_warn(1, "Pattern list inconsistant");
+		warn(1, "Pattern list inconsistant");
 		return(-1);
 	}
 	*ppt = pt->fow;
@@ -452,14 +443,14 @@ pat_sel(arcn)
 
 #if __STDC__
 int
-pat_match(ARCHD *arcn)
+pat_match(register ARCHD *arcn)
 #else
 int
 pat_match(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
-	PATTERN *pt;
+	register PATTERN *pt;
 
 	arcn->pat = NULL;
 
@@ -530,16 +521,16 @@ pat_match(arcn)
 
 #if __STDC__
 static int
-fn_match(char *pattern, char *string, char **pend)
+fn_match(register char *pattern, register char *string, char **pend)
 #else
 static int
 fn_match(pattern, string, pend)
-	char *pattern;
-	char *string;
+	register char *pattern;
+	register char *string;
 	char **pend;
 #endif
 {
-	char c;
+	register char c;
 	char test;
 
 	*pend = NULL;
@@ -611,20 +602,20 @@ fn_match(pattern, string, pend)
 
 #ifdef __STDC__
 static char *
-range_match(char *pattern, int test)
+range_match(register char *pattern, register int test)
 #else
 static char *
 range_match(pattern, test)
-	char *pattern;
-	int test;
+	register char *pattern;
+	register int test;
 #endif
 {
-	char c;
-	char c2;
+	register char c;
+	register char c2;
 	int negate;
 	int ok = 0;
 
-	if ((negate = (*pattern == '!')) != 0)
+	if (negate = (*pattern == '!'))
 		++pattern;
 
 	while ((c = *pattern++) != ']') {
@@ -661,14 +652,14 @@ range_match(pattern, test)
 
 #if __STDC__
 int
-mod_name(ARCHD *arcn)
+mod_name(register ARCHD *arcn)
 #else
 int
 mod_name(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
-	int res = 0;
+	register int res = 0;
 
 	/*
 	 * IMPORTANT: We have a problem. what do we do with symlinks?
@@ -728,11 +719,11 @@ mod_name(arcn)
 
 #if __STDC__
 static int
-tty_rename(ARCHD *arcn)
+tty_rename(register ARCHD *arcn)
 #else
 static int
 tty_rename(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
 	char tmpname[PAXPATHLEN+2];
@@ -799,11 +790,11 @@ tty_rename(arcn)
 
 #if __STDC__
 int
-set_dest(ARCHD *arcn, char *dest_dir, int dir_len)
+set_dest(register ARCHD *arcn, char *dest_dir, int dir_len)
 #else
 int
 set_dest(arcn, dest_dir, dir_len)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 	char *dest_dir;
 	int dir_len;
 #endif
@@ -844,9 +835,9 @@ fix_path(or_name, or_len, dir_name, dir_len)
 	int dir_len;
 #endif
 {
-	char *src;
-	char *dest;
-	char *start;
+	register char *src;
+	register char *dest;
+	register char *start;
 	int len;
 
 	/*
@@ -863,7 +854,7 @@ fix_path(or_name, or_len, dir_name, dir_len)
 		--dest;
 	}
 	if ((len = dest - or_name) > PAXPATHLEN) {
-		tty_warn(1, "File name %s/%s, too long", dir_name, start);
+		warn(1, "File name %s/%s, too long", dir_name, start);
 		return(-1);
 	}
 	*or_len = len;
@@ -915,13 +906,13 @@ rep_name(name, nlen, prnt)
 	int prnt;
 #endif
 {
-	REPLACE *pt;
-	char *inpt;
-	char *outpt;
-	char *endpt;
-	char *rpt;
-	int found = 0;
-	int res;
+	register REPLACE *pt;
+	register char *inpt;
+	register char *outpt;
+	register char *endpt;
+	register char *rpt;
+	register int found = 0;
+	register int res;
 #	ifndef NET2_REGEX
 	regmatch_t pm[MAXSUBEXP];
 #	endif
@@ -990,7 +981,7 @@ rep_name(name, nlen, prnt)
 			    < 0) {
 #			endif
 				if (prnt)
-					tty_warn(1, "Replacement name error %s",
+					warn(1, "Replacement name error %s",
 					    name);
 				return(1);
 			}
@@ -1009,7 +1000,7 @@ rep_name(name, nlen, prnt)
 #			ifdef NET2_REGEX
 			inpt = pt->rcmp->endp[0];
 #			else
-			inpt += pm[0].rm_eo - pm[0].rm_so;
+			inpt += pm[0].rm_eo;
 #			endif
 
 			if ((outpt == endpt) || (*inpt == '\0'))
@@ -1041,7 +1032,7 @@ rep_name(name, nlen, prnt)
 		*outpt = '\0';
 		if ((outpt == endpt) && (*inpt != '\0')) {
 			if (prnt)
-				tty_warn(1,"Replacement name too long %s >> %s",
+				warn(1,"Replacement name too long %s >> %s",
 				    name, nname);
 			return(1);
 		} 
@@ -1079,21 +1070,21 @@ rep_name(name, nlen, prnt)
 
 #if __STDC__
 static int
-resub(regexp *prog, char *src, char *dest, char *destend)
+resub(regexp *prog, char *src, char *dest, register char *destend)
 #else
 static int
 resub(prog, src, dest, destend)
 	regexp *prog;
 	char *src;
 	char *dest;
-	char *destend;
+	register char *destend;
 #endif
 {
-	char *spt;
-	char *dpt;
-	char c;
-	int no;
-	int len;
+	register char *spt;
+	register char *dpt;
+	register char c;
+	register int no;
+	register int len;
 
 	spt = src;
 	dpt = dest;
@@ -1137,23 +1128,23 @@ resub(prog, src, dest, destend)
 
 #if __STDC__
 static int
-resub(regex_t *rp, regmatch_t *pm, char *src, char *dest,
-	char *destend)
+resub(regex_t *rp, register regmatch_t *pm, char *src, char *dest,
+	register char *destend)
 #else
 static int
 resub(rp, pm, src, dest, destend)
 	regex_t *rp;
-	regmatch_t *pm;
+	register regmatch_t *pm;
 	char *src;
 	char *dest;
-	char *destend;
+	register char *destend;
 #endif
 {
-	char *spt;
-	char *dpt;
-	char c;
-	regmatch_t *pmpt;
-	int len;
+	register char *spt;
+	register char *dpt;
+	register char c;
+	register regmatch_t *pmpt;
+	register int len;
 	int subexcnt;
 
 	spt =  src;

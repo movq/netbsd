@@ -1,5 +1,3 @@
-/*	$NetBSD: cd9660_util.c,v 1.12 1997/01/24 00:27:33 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -37,7 +35,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)cd9660_util.c	8.3 (Berkeley) 12/5/94
+ *	from: @(#)cd9660_util.c	8.1 (Berkeley) 1/21/94
+ *	$Id: cd9660_util.c,v 1.1 1994/06/08 11:22:55 mycroft Exp $
  */
 
 #include <sys/param.h>
@@ -52,20 +51,111 @@
 #include <sys/conf.h>
 #include <sys/mount.h>
 #include <sys/vnode.h>
+#include <miscfs/specfs/specdev.h> /* XXX */
+#include <miscfs/fifofs/fifo.h> /* XXX */
 #include <sys/malloc.h>
-#include <sys/dirent.h>
+#include <sys/dir.h>
 
 #include <isofs/cd9660/iso.h>
-#include <isofs/cd9660/cd9660_extern.h>
+
+#ifdef	__notanymore__
+int
+isonum_711 (p)
+unsigned char *p;
+{
+	return (*p);
+}
+
+int
+isonum_712 (p)
+signed char *p;
+{
+	return (*p);
+}
+
+int
+isonum_721 (p)
+unsigned char *p;
+{
+	/* little endian short */
+#if BYTE_ORDER != LITTLE_ENDIAN
+	printf ("isonum_721 called on non little-endian machine!\n");
+#endif
+
+	return *(short *)p;
+}
+
+int
+isonum_722 (p)
+unsigned char *p;
+{
+        /* big endian short */
+#if BYTE_ORDER != BIG_ENDIAN
+        printf ("isonum_722 called on non big-endian machine!\n");
+#endif
+
+	return *(short *)p;
+}
+
+int
+isonum_723 (p)
+unsigned char *p;
+{
+#if BYTE_ORDER == BIG_ENDIAN
+        return isonum_722 (p + 2);
+#elif BYTE_ORDER == LITTLE_ENDIAN
+	return isonum_721 (p);
+#else
+	printf ("isonum_723 unsupported byte order!\n");
+	return 0;
+#endif
+}
+
+int
+isonum_731 (p)
+unsigned char *p;
+{
+        /* little endian long */
+#if BYTE_ORDER != LITTLE_ENDIAN
+        printf ("isonum_731 called on non little-endian machine!\n");
+#endif
+
+	return *(long *)p;
+}
+
+int
+isonum_732 (p)
+unsigned char *p;
+{
+        /* big endian long */
+#if BYTE_ORDER != BIG_ENDIAN
+        printf ("isonum_732 called on non big-endian machine!\n");
+#endif
+
+	return *(long *)p;
+}
+
+int
+isonum_733 (p)
+unsigned char *p;
+{
+#if BYTE_ORDER == BIG_ENDIAN
+        return isonum_732 (p + 4);
+#elif BYTE_ORDER == LITTLE_ENDIAN
+	return isonum_731 (p);
+#else
+	printf ("isonum_733 unsupported byte order!\n");
+	return 0;
+#endif
+}
+#endif	/* __notanymore__ */
 
 /*
  * translate and compare a filename
  * Note: Version number plus ';' may be omitted.
  */
 int
-isofncmp(fn, fnlen, isofn, isolen)
-	const u_char *fn, *isofn;
-	int fnlen, isolen;
+isofncmp(unsigned char *fn,int fnlen,unsigned char *isofn,int isolen)
 {
 	int i, j;
 	char c;
@@ -90,7 +180,7 @@ isofncmp(fn, fnlen, isofn, isolen)
 			for (j = 0; --isolen >= 0; j = j * 10 + *isofn++ - '0');
 			return i - j;
 		}
-		if (((u_char) c) != *fn) {
+		if (c != *fn) {
 			if (c >= 'A' && c <= 'Z') {
 				if (c + ('a' - 'A') != *fn) {
 					if (*fn >= 'a' && *fn <= 'z')
@@ -121,19 +211,15 @@ isofncmp(fn, fnlen, isofn, isolen)
  * translate a filename
  */
 void
-isofntrans(infn, infnlen, outfn, outfnlen, original, assoc)
-	u_char *infn, *outfn;
-	int infnlen;
-	u_short *outfnlen;
-	int original;
-	int assoc;
+isofntrans(unsigned char *infn,int infnlen,
+	   unsigned char *outfn,unsigned short *outfnlen,
+	   int original,int assoc)
 {
 	int fnidx = 0;
 	
 	if (assoc) {
 		*outfn++ = ASSOCCHAR;
 		fnidx++;
-		infnlen++;
 	}
 	for (; fnidx < infnlen; fnidx++) {
 		char c = *infn++;

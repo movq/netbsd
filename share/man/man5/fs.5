@@ -1,7 +1,5 @@
-.\"	$NetBSD: fs.5,v 1.4 1997/01/27 09:38:13 tls Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)fs.5	8.2 (Berkeley) 4/19/94
+.\"     @(#)fs.5	6.4 (Berkeley) 4/29/91
 .\"
-.Dd April 19, 1994
+.Dd April 29, 1991
 .Dt FS 5
 .Os BSD 4.2
 .Sh NAME
@@ -42,8 +40,8 @@
 .Nd format of file system volume
 .Sh SYNOPSIS
 .Fd #include <sys/types.h>
-.Fd #include <ufs/ffs/fs.h>
-.Fd #include <ufs/ufs/inode.h>
+.Fd #include <ufs/fs.h>
+.Fd #include <ufs/inode.h>
 .Sh DESCRIPTION
 The files
 .Aq Pa fs.h
@@ -71,7 +69,7 @@ that is of size
 .Dv SBSIZE .
 The following structure described the super-block and is
 from the file
-.Aq Pa ufs/ffs/fs.h :
+.Aq Pa ufs/fs.h :
 .Bd -literal
 #define	FS_MAGIC 0x011954
 struct fs {
@@ -150,7 +148,7 @@ struct fs {
 	quad	fs_qbmask;	/* ~fs_bmask - for use with quad size */
 	quad	fs_qfmask;	/* ~fs_fmask - for use with quad size */
 	long	fs_postblformat; /* format of positional layout tables */
-	long	fs_nrpos;	/* number of rotational positions */
+	long	fs_nrpos;	/* number of rotaional positions */
 	long	fs_postbloff;	/* (short) rotation block list head */
 	long	fs_rotbloff;	/* (u_char) blocks for each rotation */
 	long	fs_magic;	/* magic number */

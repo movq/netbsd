@@ -1,8 +1,6 @@
-/*	$NetBSD: lstConcat.c,v 1.8 1997/09/28 03:31:19 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1989, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Adam de Boor.
@@ -36,18 +34,9 @@
  * SUCH DAMAGE.
  */
 
-#ifdef MAKE_BOOTSTRAP
-static char rcsid[] = "$NetBSD: lstConcat.c,v 1.8 1997/09/28 03:31:19 lukem Exp $";
-#else
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lstConcat.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: lstConcat.c,v 1.8 1997/09/28 03:31:19 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)lstConcat.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
-#endif
 
 /*-
  * listConcat.c --
@@ -113,8 +102,6 @@ Lst_Concat (l1, l2, flags)
 	    list2->firstPtr->prevPtr = list1->lastPtr;
 	    if (list1->lastPtr != NilListNode) {
  		list1->lastPtr->nextPtr = list2->firstPtr;
-	    } else {
-		list1->firstPtr = list2->firstPtr;
 	    }
 	    list1->lastPtr = list2->lastPtr;
 	}
@@ -160,7 +147,7 @@ Lst_Concat (l1, l2, flags)
 
 	/*
 	 * Finish bookkeeping. The last new element becomes the last element
-	 * of list one.
+	 * of list one. 
 	 */
 	list1->lastPtr = last;
 
@@ -184,4 +171,4 @@ Lst_Concat (l1, l2, flags)
 
     return (SUCCESS);
 }
-
+	

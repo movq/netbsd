@@ -1,5 +1,3 @@
-/*	$NetBSD: buf.h,v 1.7 1996/12/31 17:53:22 christos Exp $	*/
-
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
  * Copyright (c) 1988, 1989 by Adam de Boor
@@ -37,7 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)buf.h	8.1 (Berkeley) 6/6/93
+ *	@(#)buf.h	5.4 (Berkeley) 12/28/90
  */
 
 /*-
@@ -50,7 +48,7 @@
 
 #include    "sprite.h"
 
-typedef char Byte;
+typedef unsigned char Byte;
 
 typedef struct Buffer {
     int	    size; 	/* Current size of the buffer */
@@ -60,24 +58,24 @@ typedef struct Buffer {
     Byte    *outPtr;	/* Place to read from */
 } *Buffer;
 
+Buffer	    	  Buf_Init();	    /* Initialize a buffer */
+void	    	  Buf_Destroy();    /* Destroy a buffer */
+void	    	  Buf_AddBytes();   /* Add a range of bytes to a buffer */
+int	    	  Buf_GetByte();    /* Get a byte from a buffer */
+int	    	  Buf_GetBytes();   /* Get multiple bytes */
+void		  Buf_UngetByte();  /* Push a byte back into the buffer */
+void		  Buf_UngetBytes(); /* Push many bytes back into the buf */
+Byte	    	  *Buf_GetAll();    /* Get them all */
+void	    	  Buf_Discard();    /* Throw away some of the bytes */
+int	    	  Buf_Size();	    /* See how many are there */
+
 /* Buf_AddByte adds a single byte to a buffer. */
 #define	Buf_AddByte(bp, byte) \
-	(void) (--(bp)->left <= 0 ? Buf_OvAddByte(bp, byte), 1 : \
-		(*(bp)->inPtr++ = (byte), *(bp)->inPtr = 0), 1)
+	(--(bp)->left <= 0 ? Buf_OvAddByte(bp, byte) : \
+		(void)(*(bp)->inPtr++ = (byte), *(bp)->inPtr = 0))
+
+void	Buf_OvAddByte();		/* adds a byte when buffer overflows */
 
 #define BUF_ERROR 256
 
-void Buf_OvAddByte __P((Buffer, int));
-void Buf_AddBytes __P((Buffer, int, const Byte *));
-void Buf_UngetByte __P((Buffer, int));
-void Buf_UngetBytes __P((Buffer, int, Byte *));
-int Buf_GetByte __P((Buffer));
-int Buf_GetBytes __P((Buffer, int, Byte *));
-Byte *Buf_GetAll __P((Buffer, int *));
-void Buf_Discard __P((Buffer, int));
-int Buf_Size __P((Buffer));
-Buffer Buf_Init __P((int));
-void Buf_Destroy __P((Buffer, Boolean));
-void Buf_ReplaceLastByte __P((Buffer, int));
-
-#endif /* _BUF_H */
+#endif _BUF_H

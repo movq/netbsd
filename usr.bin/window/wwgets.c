@@ -1,8 +1,6 @@
-/*	$NetBSD: wwgets.c,v 1.6 1996/02/08 20:45:08 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,16 +35,11 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)wwgets.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: wwgets.c,v 1.6 1996/02/08 20:45:08 mycroft Exp $";
-#endif
+static char sccsid[] = "@(#)wwgets.c	3.17 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 #include "ww.h"
 #include "char.h"
-#include <string.h>
 
 wwgets(buf, n, w)
 char *buf;
@@ -54,11 +47,11 @@ int n;
 register struct ww *w;
 {
 	register char *p = buf;
-	register int c;
-	int uc = ISSET(w->ww_wflags, WWW_UNCTRL);
+	register char c;
+	char uc = w->ww_unctrl;
 	static void rub();
 
-	CLR(w->ww_wflags, WWW_UNCTRL);
+	w->ww_unctrl = 0;
 	for (;;) {
 		wwcurtowin(w);
 		while ((c = wwgetc()) < 0)
@@ -102,7 +95,7 @@ register struct ww *w;
 		}
 	}
 	*p = 0;
-	SET(w->ww_wflags, uc);
+	w->ww_unctrl = uc;
 }
 
 static void

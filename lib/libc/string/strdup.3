@@ -29,8 +29,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)strdup.3	5.3 (Berkeley) 4/19/91
-.\"	$NetBSD: strdup.3,v 1.4 1997/10/09 10:09:08 lukem Exp $
+.\"     @(#)strdup.3	5.3 (Berkeley) 4/19/91
 .\"
 .Dd April 19, 1991
 .Dt STRDUP 3
@@ -54,10 +53,10 @@ The pointer may subsequently be used as an
 argument to the function
 .Xr free 3 .
 .Sh SEE ALSO
-.Xr free 3 ,
-.Xr malloc 3 ,
-.Xt strcpy 3 ,
-.Xt strlen 3
+.Xr calloc 3
+.Xr malloc 3
+.Xr realloc 3
+.Xr free 3
 .Sh HISTORY
 The
 .Fn strdup

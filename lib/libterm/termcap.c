@@ -1,8 +1,6 @@
-/*	$NetBSD: termcap.c,v 1.13 1997/10/13 16:11:48 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,23 +31,16 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)termcap.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: termcap.c,v 1.13 1997/10/13 16:11:48 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)termcap.c	5.5 (Berkeley) 6/1/90";
 #endif /* not lint */
 
+#define	BUFSIZ		1024
+#define MAXHOP		32	/* max number of tc= indirections */
 #define	PBUFSIZ		512	/* max length of filename path */
 #define	PVECSIZ		32	/* max number of names in path */
 
-#include <stdio.h>
 #include <ctype.h>
-#include <stdlib.h>
-#include <string.h>
-#include <termcap.h>
 #include "pathnames.h"
 
 /*
@@ -66,52 +57,49 @@ __RCSID("$NetBSD: termcap.c,v 1.13 1997/10/13 16:11:48 lukem Exp $");
  * doesn't, and because living w/o it is not hard.
  */
 
-static	char *tbuf;	/* termcap buffer */
+static	char *tbuf;
+static	int hopcount;	/* detect infinite loops in termcap, init 0 */
+static	char pathbuf[PBUFSIZ];		/* holds raw path of filenames */
+static	char *pathvec[PVECSIZ];		/* to point to names in pathbuf */
+static	char **pvec;			/* holds usable tail of path vector */
+char	*tskip();
+char	*tgetstr();
+char	*tdecode();
+char	*getenv();
 
 /*
  * Get an entry for terminal name in buffer bp from the termcap file.
  */
-int
 tgetent(bp, name)
 	char *bp, *name;
 {
-	char  *p;
-	char  *cp;
-	char  *dummy;
-	char **fname;
-	char  *home;
-	int    i;
-	char   pathbuf[PBUFSIZ];	/* holds raw path of filenames */
-	char  *pathvec[PVECSIZ];	/* to point to names in pathbuf */
-	char **pvec;			/* holds usable tail of path vector */
-	char  *termpath;
+	register char *p;
+	register char *cp;
+	register int c;
+	char *term, *home, *termpath;
+	char **fname = pathvec;
 
-	fname = pathvec;
 	pvec = pathvec;
 	tbuf = bp;
 	p = pathbuf;
 	cp = getenv("TERMCAP");
 	/*
 	 * TERMCAP can have one of two things in it. It can be the
-	 * name of a file to use instead of
-	 * /usr/share/misc/termcap. In this case it better start with
-	 * a "/". Or it can be an entry to use so we don't have to
-	 * read the file. In this case it has to already have the
-	 * newlines crunched out.  If TERMCAP does not hold a file
-	 * name then a path of names is searched instead.  The path is
-	 * found in the TERMPATH variable, or becomes _PATH_DEF
-	 * ("$HOME/.termcap /usr/share/misc/termcap") if no TERMPATH
-	 * exists.
+	 * name of a file to use instead of /etc/termcap. In this
+	 * case it better start with a "/". Or it can be an entry to
+	 * use so we don't have to read the file. In this case it
+	 * has to already have the newlines crunched out.  If TERMCAP
+	 * does not hold a file name then a path of names is searched
+	 * instead.  The path is found in the TERMPATH variable, or
+	 * becomes "$HOME/.termcap /etc/termcap" if no TERMPATH exists.
 	 */
 	if (!cp || *cp != '/') {	/* no TERMCAP or it holds an entry */
-		if ((termpath = getenv("TERMPATH")) != NULL)
+		if (termpath = getenv("TERMPATH"))
 			strncpy(pathbuf, termpath, PBUFSIZ);
 		else {
-			if ((home = getenv("HOME")) != NULL) {
-				/* set up default */
+			if (home = getenv("HOME")) {	/* set up default */
 				p += strlen(home);	/* path, looking in */
-				(void)strncpy(pathbuf, home,
-				    sizeof(pathbuf) - 1);	/* $HOME first */
+				strcpy(pathbuf, home);	/* $HOME first */
 				*p++ = '/';
 			}	/* if no $HOME look in current directory */
 			strncpy(p, _PATH_DEF, PBUFSIZ - (p - pathbuf));
@@ -136,29 +124,176 @@ tgetent(bp, name)
 			}
 		}
 	*fname = (char *) 0;			/* mark end of vector */
-	if (cp && *cp && *cp != '/')
-		if (cgetset(cp) < 0)
-			return (-2);
-
-	/*
-	 * XXX potential security hole here in a set-id program if the
-	 * user had setup name to be built from a path they can not
-	 * normally read.
-	 */
-	dummy = NULL;
-	i = cgetent(&dummy, pathvec, name);      
-
-	if (i == 0) {
-		strncpy(bp, dummy, 1024);
-		bp[1023] = '\0';
+	if (cp && *cp && *cp != '/') {
+		tbuf = cp;
+		c = tnamatch(name);
+		tbuf = bp;
+		if (c) {
+			strcpy(bp,cp);
+			return (tnchktc());
+		}
 	}
-	
-	if (dummy)
-		free(dummy);
-	/* no tc reference loop return code in libterm XXX */
-	if (i == -3)
-		return (-1);
-	return (i + 1);
+	return (tfindent(bp, name));	/* find terminal entry in path */
+}
+
+/*
+ * tfindent - reads through the list of files in pathvec as if they were one
+ * continuous file searching for terminal entries along the way.  It will
+ * participate in indirect recursion if the call to tnchktc() finds a tc=
+ * field, which is only searched for in the current file and files ocurring
+ * after it in pathvec.  The usable part of this vector is kept in the global
+ * variable pvec.  Terminal entries may not be broken across files.  Parse is
+ * very rudimentary; we just notice escaped newlines.
+ */
+tfindent(bp, name)
+	char *bp, *name;
+{
+	register char *cp;
+	register int c;
+	register int i, cnt;
+	char ibuf[BUFSIZ];
+	int opencnt = 0;
+	int tf;
+
+	tbuf = bp;
+nextfile:
+	i = cnt = 0;
+	while (*pvec && (tf = open(*pvec, 0)) < 0)
+		pvec++;
+	if (!*pvec)
+		return (opencnt ? 0 : -1);
+	opencnt++;
+	for (;;) {
+		cp = bp;
+		for (;;) {
+			if (i == cnt) {
+				cnt = read(tf, ibuf, BUFSIZ);
+				if (cnt <= 0) {
+					close(tf);
+					pvec++;
+					goto nextfile;
+				}
+				i = 0;
+			}
+			c = ibuf[i++];
+			if (c == '\n') {
+				if (cp > bp && cp[-1] == '\\'){
+					cp--;
+					continue;
+				}
+				break;
+			}
+			if (cp >= bp+BUFSIZ) {
+				write(2,"Termcap entry too long\n", 23);
+				break;
+			} else
+				*cp++ = c;
+		}
+		*cp = 0;
+
+		/*
+		 * The real work for the match.
+		 */
+		if (tnamatch(name)) {
+			close(tf);
+			return(tnchktc());
+		}
+	}
+}
+
+/*
+ * tnchktc: check the last entry, see if it's tc=xxx. If so,
+ * recursively find xxx and append that entry (minus the names)
+ * to take the place of the tc=xxx entry. This allows termcap
+ * entries to say "like an HP2621 but doesn't turn on the labels".
+ * Note that this works because of the left to right scan.
+ */
+tnchktc()
+{
+	register char *p, *q;
+	char tcname[16];	/* name of similar terminal */
+	char tcbuf[BUFSIZ];
+	char *holdtbuf = tbuf;
+	int l;
+
+	p = tbuf + strlen(tbuf) - 2;	/* before the last colon */
+	while (*--p != ':')
+		if (p<tbuf) {
+			write(2, "Bad termcap entry\n", 18);
+			return (0);
+		}
+	p++;
+	/* p now points to beginning of last field */
+	if (p[0] != 't' || p[1] != 'c')
+		return(1);
+	strcpy(tcname,p+3);
+	q = tcname;
+	while (*q && *q != ':')
+		q++;
+	*q = 0;
+	if (++hopcount > MAXHOP) {
+		write(2, "Infinite tc= loop\n", 18);
+		return (0);
+	}
+	if (tfindent(tcbuf, tcname) != 1) {
+		hopcount = 0;		/* unwind recursion */
+		return(0);
+	}
+	for (q=tcbuf; *q != ':'; q++)
+		;
+	l = p - holdtbuf + strlen(q);
+	if (l > BUFSIZ) {
+		write(2, "Termcap entry too long\n", 23);
+		q[BUFSIZ - (p-tbuf)] = 0;
+	}
+	strcpy(p, q+1);
+	tbuf = holdtbuf;
+	hopcount = 0;			/* unwind recursion */
+	return(1);
+}
+
+/*
+ * Tnamatch deals with name matching.  The first field of the termcap
+ * entry is a sequence of names separated by |'s, so we compare
+ * against each such name.  The normal : terminator after the last
+ * name (before the first field) stops us.
+ */
+tnamatch(np)
+	char *np;
+{
+	register char *Np, *Bp;
+
+	Bp = tbuf;
+	if (*Bp == '#')
+		return(0);
+	for (;;) {
+		for (Np = np; *Np && *Bp == *Np; Bp++, Np++)
+			continue;
+		if (*Np == 0 && (*Bp == '|' || *Bp == ':' || *Bp == 0))
+			return (1);
+		while (*Bp && *Bp != ':' && *Bp != '|')
+			Bp++;
+		if (*Bp == 0 || *Bp == ':')
+			return (0);
+		Bp++;
+	}
+}
+
+/*
+ * Skip to the next field.  Notice that this is very dumb, not
+ * knowing about \: escapes or any such.  If necessary, :'s can be put
+ * into the termcap file in octal.
+ */
+static char *
+tskip(bp)
+	register char *bp;
+{
+
+	while (*bp && *bp != ':')
+		bp++;
+	if (*bp == ':')
+		bp++;
+	return (bp);
 }
 
 /*
@@ -169,16 +304,31 @@ tgetent(bp, name)
  * a # character.  If the option is not found we return -1.
  * Note that we handle octal numbers beginning with 0.
  */
-int
 tgetnum(id)
 	char *id;
 {
-	long num;
+	register int i, base;
+	register char *bp = tbuf;
 
-	if (cgetnum(tbuf, id, &num) == 0)
-		return (num);
-	else
-		return (-1);
+	for (;;) {
+		bp = tskip(bp);
+		if (*bp == 0)
+			return (-1);
+		if (*bp++ != id[0] || *bp == 0 || *bp++ != id[1])
+			continue;
+		if (*bp == '@')
+			return(-1);
+		if (*bp != '#')
+			continue;
+		bp++;
+		base = 10;
+		if (*bp == '0')
+			base = 8;
+		i = 0;
+		while (isdigit(*bp))
+			i *= base, i += *bp++ - '0';
+		return (i);
+	}
 }
 
 /*
@@ -187,11 +337,22 @@ tgetnum(id)
  * of the buffer.  Return 1 if we find the option, or 0 if it is
  * not given.
  */
-int
 tgetflag(id)
 	char *id;
 {
-	return (cgetcap(tbuf, id, ':') != NULL);
+	register char *bp = tbuf;
+
+	for (;;) {
+		bp = tskip(bp);
+		if (!*bp)
+			return (0);
+		if (*bp++ == id[0] && *bp != 0 && *bp++ == id[1]) {
+			if (!*bp || *bp == ':')
+				return (1);
+			else if (*bp == '@')
+				return(0);
+		}
+	}
 }
 
 /*
@@ -206,23 +367,68 @@ char *
 tgetstr(id, area)
 	char *id, **area;
 {
-	char ids[3];
-	char *s;
-	int i;
-	
-	/*
-	 * XXX
-	 * This is for all the boneheaded programs that relied on tgetstr
-	 * to look only at the first 2 characters of the string passed...
-	 */
-	*ids = *id;
-	ids[1] = id[1];
-	ids[2] = '\0';
+	register char *bp = tbuf;
 
-	if ((i = cgetstr(tbuf, ids, &s)) < 0)
-		return NULL;
-	
-	strcpy(*area, s);
-	*area += i + 1;
-	return (s);
+	for (;;) {
+		bp = tskip(bp);
+		if (!*bp)
+			return (0);
+		if (*bp++ != id[0] || *bp == 0 || *bp++ != id[1])
+			continue;
+		if (*bp == '@')
+			return(0);
+		if (*bp != '=')
+			continue;
+		bp++;
+		return (tdecode(bp, area));
+	}
+}
+
+/*
+ * Tdecode does the grung work to decode the
+ * string capability escapes.
+ */
+static char *
+tdecode(str, area)
+	register char *str;
+	char **area;
+{
+	register char *cp;
+	register int c;
+	register char *dp;
+	int i;
+
+	cp = *area;
+	while ((c = *str++) && c != ':') {
+		switch (c) {
+
+		case '^':
+			c = *str++ & 037;
+			break;
+
+		case '\\':
+			dp = "E\033^^\\\\::n\nr\rt\tb\bf\f";
+			c = *str++;
+nextc:
+			if (*dp++ == c) {
+				c = *dp++;
+				break;
+			}
+			dp++;
+			if (*dp)
+				goto nextc;
+			if (isdigit(c)) {
+				c -= '0', i = 2;
+				do
+					c <<= 3, c |= *str++ - '0';
+				while (--i && isdigit(*str));
+			}
+			break;
+		}
+		*cp++ = c;
+	}
+	*cp++ = 0;
+	str = *area;
+	*area = cp;
+	return (str);
 }

@@ -1,6 +1,7 @@
-#	$NetBSD: Makefile,v 1.9 1997/07/20 22:37:50 christos Exp $
-#	@(#)Makefile	8.1 (Berkeley) 5/31/93
+#	@(#)Makefile	5.3 (Berkeley) 12/8/90
 
 PROG=	rm
+LDADD=	-lutil
+DPADD=	${LIBUTIL}
 
 .include <bsd.prog.mk>

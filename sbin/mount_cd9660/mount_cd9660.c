@@ -1,5 +1,3 @@
-/*	$NetBSD: mount_cd9660.c,v 1.5 1997/09/16 12:25:36 lukem Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993, 1994
  *      The Regents of the University of California.  All rights reserved.
@@ -36,25 +34,21 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *      @(#)mount_cd9660.c	8.7 (Berkeley) 5/1/95
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-        The Regents of the University of California.  All rights reserved.\n");
+static char copyright[] =
+"@(#) Copyright (c) 1992, 1993, 1994\n\
+        The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)mount_cd9660.c	8.7 (Berkeley) 5/1/95";
-#else
-__RCSID("$NetBSD: mount_cd9660.c,v 1.5 1997/09/16 12:25:36 lukem Exp $");
-#endif
+/*static char sccsid[] = "from: @(#)mount_cd9660.c	8.4 (Berkeley) 3/27/94";*/
+static char *rcsid = "$Id: mount_cd9660.c,v 1.1 1994/06/08 19:07:37 mycroft Exp $";
 #endif /* not lint */
 
 #include <sys/param.h>
+#define CD9660
 #include <sys/mount.h>
 
 #include <err.h>
@@ -65,13 +59,12 @@ __RCSID("$NetBSD: mount_cd9660.c,v 1.5 1997/09/16 12:25:36 lukem Exp $");
 
 #include "mntopts.h"
 
-const struct mntopt mopts[] = {
+struct mntopt mopts[] = {
 	MOPT_STDOPTS,
 	MOPT_UPDATE,
 	{ NULL }
 };
 
-int	main __P((int, char *[]));
 void	usage __P((void));
 
 int
@@ -84,7 +77,7 @@ main(argc, argv)
 	char *dev, *dir;
 
 	mntflags = opts = 0;
-	while ((ch = getopt(argc, argv, "ego:r")) != -1)
+	while ((ch = getopt(argc, argv, "ego:r")) != EOF)
 		switch (ch) {
 		case 'e':
 			opts |= ISOFSMNT_EXTATT;
@@ -93,7 +86,7 @@ main(argc, argv)
 			opts |= ISOFSMNT_GENS;
 			break;
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			getmntopts(optarg, mopts, &mntflags);
 			break;
 		case 'r':
 			opts |= ISOFSMNT_NORRIP;
@@ -112,17 +105,17 @@ main(argc, argv)
 	dir = argv[1];
 
 #define DEFAULT_ROOTUID	-2
-	/*
-	 * ISO 9660 filesystems are not writeable.
-	 */
-	mntflags |= MNT_RDONLY;
-	args.export.ex_flags = MNT_EXRDONLY;
 	args.fspec = dev;
 	args.export.ex_root = DEFAULT_ROOTUID;
+
+	if (mntflags & MNT_RDONLY)
+		args.export.ex_flags = MNT_EXRDONLY;
+	else
+		args.export.ex_flags = 0;
 	args.flags = opts;
 
 	if (mount(MOUNT_CD9660, dir, mntflags, &args) < 0)
-		err(1, "%s", "");
+		err(1, NULL);
 	exit(0);
 }
 

@@ -1,53 +1,3 @@
-/*	$NetBSD: regexec.c,v 1.9 1997/07/21 14:08:17 jtc Exp $	*/
-
-/*-
- * Copyright (c) 1992, 1993, 1994 Henry Spencer.
- * Copyright (c) 1992, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
- *
- * This code is derived from software contributed to Berkeley by
- * Henry Spencer.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	@(#)regexec.c	8.3 (Berkeley) 3/20/94
- */
-
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)regexec.c	8.3 (Berkeley) 3/20/94";
-#else
-__RCSID("$NetBSD: regexec.c,v 1.9 1997/07/21 14:08:17 jtc Exp $");
-#endif
-#endif /* LIBC_SCCS and not lint */
-
 /*
  * the outer shell of regexec()
  *
@@ -55,7 +5,6 @@ __RCSID("$NetBSD: regexec.c,v 1.9 1997/07/21 14:08:17 jtc Exp $");
  * macros that code uses.  This lets the same code operate on two different
  * representations for state sets.
  */
-#include "namespace.h"
 #include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,35 +13,33 @@ __RCSID("$NetBSD: regexec.c,v 1.9 1997/07/21 14:08:17 jtc Exp $");
 #include <ctype.h>
 #include <regex.h>
 
-#ifdef __weak_alias
-__weak_alias(regexec,_regexec);
-#endif
-
 #include "utils.h"
 #include "regex2.h"
+
+static int nope = 0;		/* for use in asserts; shuts lint up */
 
 /* macros for manipulating states, small version */
 #define	states	long
 #define	states1	states		/* for later use in regexec() decision */
 #define	CLEAR(v)	((v) = 0)
-#define	SET0(v, n)	((v) &= ~((unsigned long)1 << (n)))
-#define	SET1(v, n)	((v) |= (unsigned long)1 << (n))
-#define	ISSET(v, n)	(((v) & ((unsigned long)1 << (n))) != 0)
+#define	SET0(v, n)	((v) &= ~(1 << (n)))
+#define	SET1(v, n)	((v) |= 1 << (n))
+#define	ISSET(v, n)	((v) & (1 << (n)))
 #define	ASSIGN(d, s)	((d) = (s))
 #define	EQ(a, b)	((a) == (b))
-#define	STATEVARS	long dummy	/* dummy version */
+#define	STATEVARS	int dummy	/* dummy version */
 #define	STATESETUP(m, n)	/* nothing */
 #define	STATETEARDOWN(m)	/* nothing */
 #define	SETUP(v)	((v) = 0)
-#define	onestate	long
-#define	INIT(o, n)	((o) = (unsigned long)1 << (n))
+#define	onestate	int
+#define	INIT(o, n)	((o) = (unsigned)1 << (n))
 #define	INC(o)	((o) <<= 1)
-#define	ISSTATEIN(v, o)	(((v) & (o)) != 0)
+#define	ISSTATEIN(v, o)	((v) & (o))
 /* some abbreviations; note that some of these know variable names! */
 /* do "if I'm here, I can also be there" etc without branches */
-#define	FWD(dst, src, n)	((dst) |= ((unsigned long)(src)&(here)) << (n))
-#define	BACK(dst, src, n)	((dst) |= ((unsigned long)(src)&(here)) >> (n))
-#define	ISSETBACK(v, n)	(((v) & ((unsigned long)here >> (n))) != 0)
+#define	FWD(dst, src, n)	((dst) |= ((unsigned)(src)&(here)) << (n))
+#define	BACK(dst, src, n)	((dst) |= ((unsigned)(src)&(here)) >> (n))
+#define	ISSETBACK(v, n)	((v) & ((unsigned)here >> (n)))
 /* function names */
 #define SNAMES			/* engine.c looks after details */
 
@@ -127,13 +74,13 @@ __weak_alias(regexec,_regexec);
 #define	ISSET(v, n)	((v)[n])
 #define	ASSIGN(d, s)	memcpy(d, s, m->g->nstates)
 #define	EQ(a, b)	(memcmp(a, b, m->g->nstates) == 0)
-#define	STATEVARS	long vn; char *space
+#define	STATEVARS	int vn; char *space
 #define	STATESETUP(m, nv)	{ (m)->space = malloc((nv)*(m)->g->nstates); \
 				if ((m)->space == NULL) return(REG_ESPACE); \
 				(m)->vn = 0; }
 #define	STATETEARDOWN(m)	{ free((m)->space); }
 #define	SETUP(v)	((v) = &m->space[m->vn++ * m->g->nstates])
-#define	onestate	long
+#define	onestate	int
 #define	INIT(o, n)	((o) = (n))
 #define	INC(o)	((o)++)
 #define	ISSTATEIN(v, o)	((v)[o])
@@ -149,8 +96,8 @@ __weak_alias(regexec,_regexec);
 
 /*
  - regexec - interface for matching
- = extern int regexec(const regex_t *, const char *, size_t, \
- =					regmatch_t [], int);
+ = extern int regexec(const regex_t *preg, const char *string, size_t nmatch, \
+ =					regmatch_t pmatch[], int eflags);
  = #define	REG_NOTBOL	00001
  = #define	REG_NOTEOL	00002
  = #define	REG_STARTEND	00004
@@ -182,7 +129,8 @@ int eflags;
 	assert(!(g->iflags&BAD));
 	if (g->iflags&BAD)		/* backstop for no-debug case */
 		return(REG_BADPAT);
-	eflags = GOODFLAGS(eflags);
+	if (eflags != GOODFLAGS(eflags))
+		return(REG_INVARG);
 
 	if (g->nstates <= CHAR_BIT*sizeof(states1) && !(eflags&REG_LARGE))
 		return(smatcher(g, (char *)string, nmatch, pmatch, eflags));

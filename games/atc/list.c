@@ -1,8 +1,6 @@
-/*	$NetBSD: list.c,v 1.4 1997/10/10 02:07:23 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Ed James.
@@ -45,13 +43,8 @@
  * For more info on this and all of my stuff, mail edjames@berkeley.edu.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)list.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: list.c,v 1.4 1997/10/10 02:07:23 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)list.c	5.2 (Berkeley) 4/30/90";
 #endif /* not lint */
 
 #include "include.h"
@@ -62,7 +55,6 @@ newplane()
 	return ((PLANE *) calloc(1, sizeof (PLANE)));
 }
 
-void
 append(l, p)
 	LIST	*l;
 	PLANE	*p;
@@ -101,7 +93,6 @@ append(l, p)
 	}
 }
 
-void
 delete(l, p)
 	LIST	*l;
 	PLANE	*p;

@@ -1,8 +1,6 @@
-/*	$NetBSD: ns_pcb.c,v 1.12 1997/07/18 19:30:41 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1984, 1985, 1986, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,54 +30,49 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ns_pcb.c	8.1 (Berkeley) 6/10/93
+ *	@(#)ns_pcb.c	7.11 (Berkeley) 6/27/91
  */
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/mbuf.h>
-#include <sys/errno.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
-#include <sys/protosw.h>
-#include <sys/proc.h>
+#include "param.h"
+#include "systm.h"
+#include "mbuf.h"
+#include "errno.h"
+#include "socket.h"
+#include "socketvar.h"
+#include "protosw.h"
 
-#include <net/if.h>
-#include <net/route.h>
+#include "../net/if.h"
+#include "../net/route.h"
 
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#include <netns/ns_pcb.h>
-#include <netns/ns_var.h>
+#include "ns.h"
+#include "ns_if.h"
+#include "ns_pcb.h"
 
 struct	ns_addr zerons_addr;
 
-int
 ns_pcballoc(so, head)
 	struct socket *so;
 	struct nspcb *head;
 {
+	struct mbuf *m;
 	register struct nspcb *nsp;
 
-	nsp = malloc(sizeof(*nsp), M_PCB, M_NOWAIT);
-	if (nsp == 0)
+	m = m_getclr(M_DONTWAIT, MT_PCB);
+	if (m == NULL)
 		return (ENOBUFS);
-	bzero((caddr_t)nsp, sizeof(*nsp));
+	nsp = mtod(m, struct nspcb *);
 	nsp->nsp_socket = so;
 	insque(nsp, head);
-	so->so_pcb = nsp;
+	so->so_pcb = (caddr_t)nsp;
 	return (0);
 }
 	
-int
-ns_pcbbind(nsp, nam, p)
+ns_pcbbind(nsp, nam)
 	register struct nspcb *nsp;
 	struct mbuf *nam;
-	struct proc *p;
 {
 	register struct sockaddr_ns *sns;
-	u_int16_t lport = 0;
-	int error;
+	u_short lport = 0;
 
 	if (nsp->nsp_lport || !ns_nullhost(nsp->nsp_laddr))
 		return (EINVAL);
@@ -92,15 +85,16 @@ ns_pcbbind(nsp, nam, p)
 		int tport = sns->sns_port;
 
 		sns->sns_port = 0;		/* yech... */
-		if (ifa_ifwithaddr(snstosa(sns)) == 0)
+		if (ifa_ifwithaddr((struct sockaddr *)sns) == 0)
 			return (EADDRNOTAVAIL);
 		sns->sns_port = tport;
 	}
 	lport = sns->sns_port;
 	if (lport) {
+		u_short aport = ntohs(lport);
 
-		if (ntohs(lport) < NSPORT_RESERVED &&
-		    (p == 0 || (error = suser(p->p_ucred, &p->p_acflag))))
+		if (aport < NSPORT_RESERVED &&
+		    (nsp->nsp_socket->so_state & SS_PRIV) == 0)
 			return (EACCES);
 		if (ns_pcblookup(&zerons_addr, lport, 0))
 			return (EADDRINUSE);
@@ -123,7 +117,6 @@ noname:
  * If don't have a local address for this socket yet,
  * then pick one.
  */
-int
 ns_pcbconnect(nsp, nam)
 	struct nspcb *nsp;
 	struct mbuf *nam;
@@ -187,26 +180,25 @@ ns_pcbconnect(nsp, nam)
 		 * our src addr is taken from the i/f, else punt.
 		 */
 
-		ia = 0;
+		ia = (struct ns_ifaddr *)0;
 		/*
 		 * If we found a route, use the address
 		 * corresponding to the outgoing interface
 		 */
 		if (ro->ro_rt && (ifp = ro->ro_rt->rt_ifp))
-			for (ia = ns_ifaddr.tqh_first; ia != 0;
-			    ia = ia->ia_list.tqe_next)
+			for (ia = ns_ifaddr; ia; ia = ia->ia_next)
 				if (ia->ia_ifp == ifp)
 					break;
 		if (ia == 0) {
-			u_int16_t fport = sns->sns_addr.x_port;
+			u_short fport = sns->sns_addr.x_port;
 			sns->sns_addr.x_port = 0;
 			ia = (struct ns_ifaddr *)
-				ifa_ifwithdstaddr(snstosa(sns));
+				ifa_ifwithdstaddr((struct sockaddr *)sns);
 			sns->sns_addr.x_port = fport;
 			if (ia == 0)
 				ia = ns_iaonnetof(&sns->sns_addr);
 			if (ia == 0)
-				ia = ns_ifaddr.tqh_first;
+				ia = ns_ifaddr;
 			if (ia == 0)
 				return (EADDRNOTAVAIL);
 		}
@@ -216,8 +208,7 @@ ns_pcbconnect(nsp, nam)
 		return (EADDRINUSE);
 	if (ns_nullhost(nsp->nsp_laddr)) {
 		if (nsp->nsp_lport == 0)
-			(void) ns_pcbbind(nsp, (struct mbuf *)0,
-			    (struct proc *)0);
+			(void) ns_pcbbind(nsp, (struct mbuf *)0);
 		nsp->nsp_laddr.x_host = ns_thishost;
 	}
 	nsp->nsp_faddr = sns->sns_addr;
@@ -225,7 +216,6 @@ ns_pcbconnect(nsp, nam)
 	return (0);
 }
 
-void
 ns_pcbdisconnect(nsp)
 	struct nspcb *nsp;
 {
@@ -235,7 +225,6 @@ ns_pcbdisconnect(nsp)
 		ns_pcbdetach(nsp);
 }
 
-void
 ns_pcbdetach(nsp)
 	struct nspcb *nsp;
 {
@@ -246,10 +235,9 @@ ns_pcbdetach(nsp)
 	if (nsp->nsp_route.ro_rt)
 		rtfree(nsp->nsp_route.ro_rt);
 	remque(nsp);
-	free(nsp, M_PCB);
+	(void) m_free(dtom(nsp));
 }
 
-void
 ns_setsockaddr(nsp, nam)
 	register struct nspcb *nsp;
 	struct mbuf *nam;
@@ -264,7 +252,6 @@ ns_setsockaddr(nsp, nam)
 	sns->sns_addr = nsp->nsp_laddr;
 }
 
-void
 ns_setpeeraddr(nsp, nam)
 	register struct nspcb *nsp;
 	struct mbuf *nam;
@@ -286,12 +273,10 @@ ns_setpeeraddr(nsp, nam)
  * Also pass an extra paramter via the nspcb. (which may in fact
  * be a parameter list!)
  */
-void
 ns_pcbnotify(dst, errno, notify, param)
 	register struct ns_addr *dst;
 	long param;
-	int errno;
-	void (*notify) __P((struct nspcb *));
+	int errno, (*notify)();
 {
 	register struct nspcb *nsp, *oinp;
 	int s = splimp();
@@ -314,11 +299,11 @@ ns_pcbnotify(dst, errno, notify, param)
 	splx(s);
 }
 
+#ifdef notdef
 /*
  * After a routing change, flush old routing
  * and allocate a (hopefully) better one.
  */
-void
 ns_rtchange(nsp)
 	struct nspcb *nsp;
 {
@@ -332,16 +317,16 @@ ns_rtchange(nsp)
 	}
 	/* SHOULD NOTIFY HIGHER-LEVEL PROTOCOLS */
 }
+#endif
 
 struct nspcb *
 ns_pcblookup(faddr, lport, wildp)
 	struct ns_addr *faddr;
-	u_int16_t lport;
-	int wildp;
+	u_short lport;
 {
 	register struct nspcb *nsp, *match = 0;
 	int matchwild = 3, wildcard;
-	u_int16_t fport;
+	u_short fport;
 
 	fport = faddr->x_port;
 	for (nsp = (&nspcb)->nsp_next; nsp != (&nspcb); nsp = nsp->nsp_next) {

@@ -1,8 +1,6 @@
-/*	$NetBSD: siglist.c,v 1.9 1997/07/13 19:46:16 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,19 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)siglist.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: siglist.c,v 1.9 1997/07/13 19:46:16 christos Exp $");
-#endif
+static char sccsid[] = "@(#)siglist.c	5.6 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include <sys/cdefs.h>
 #include <signal.h>
+#include <unistd.h>
 
-const char *const _sys_siglist[NSIG] = {
+char	*sys_siglist[NSIG] = {
 	"Signal 0",
 	"Hangup",			/* SIGHUP */
 	"Interrupt",			/* SIGINT */
@@ -63,8 +56,8 @@ const char *const _sys_siglist[NSIG] = {
 	"Alarm clock",			/* SIGALRM */
 	"Terminated",			/* SIGTERM */
 	"Urgent I/O condition",		/* SIGURG */
-	"Suspended (signal)",		/* SIGSTOP */
-	"Suspended",			/* SIGTSTP */
+	"Stopped (signal)",		/* SIGSTOP */
+	"Stopped",			/* SIGTSTP */
 	"Continued",			/* SIGCONT */
 	"Child exited",			/* SIGCHLD */
 	"Stopped (tty input)",		/* SIGTTIN */

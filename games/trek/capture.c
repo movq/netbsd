@@ -1,8 +1,6 @@
-/*	$NetBSD: capture.c,v 1.4 1997/10/12 21:24:29 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)capture.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: capture.c,v 1.4 1997/10/12 21:24:29 christos Exp $");
-#endif
+static char sccsid[] = "@(#)capture.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include "trek.h"
+# include	"trek.h"
 
 /*
 **  Ask a Klingon To Surrender
@@ -59,14 +51,12 @@ __RCSID("$NetBSD: capture.c,v 1.4 1997/10/12 21:24:29 christos Exp $");
 **	etc.
 */
 
-/*ARGSUSED*/
-void
-capture(v)
-	int v;
+capture()
 {
-	int		i;
-	struct kling	*k;
+	register int		i;
+	register struct kling	*k;
 	double			x;
+	extern struct kling	*selectklingon();
 
 	/* check for not cloaked */
 	if (Ship.cloaked)
@@ -74,10 +64,8 @@ capture(v)
 		printf("Ship-ship communications out when cloaked\n");
 		return;
 	}
-	if (damaged(SSRADIO)) {
-		out(SSRADIO);
-		return;
-	}
+	if (damaged(SSRADIO))
+		return (out(SSRADIO));
 	/* find out if there are any at all */
 	if (Etc.nkling <= 0)
 	{
@@ -130,7 +118,7 @@ capture(v)
 
 struct kling	*selectklingon()
 {
-	int		i;
+	register int		i;
 
 	if (Etc.nkling < 2)
 		i = 0;

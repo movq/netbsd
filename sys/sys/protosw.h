@@ -1,8 +1,6 @@
-/*	$NetBSD: protosw.h,v 1.14 1997/05/21 20:09:24 gwr Exp $	*/
-
 /*-
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,11 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)protosw.h	8.1 (Berkeley) 6/2/93
+ *	@(#)protosw.h	7.8 (Berkeley) 4/28/91
  */
-
-#ifndef _SYS_PROTOSW_H_
-#define _SYS_PROTOSW_H_
 
 /*
  * Protocol switch table.
@@ -60,46 +55,23 @@
  * The userreq routine interfaces protocols to the system and is
  * described below.
  */
-
-struct mbuf;
-struct sockaddr;
-struct socket;
-struct domain;
-struct proc;
-
 struct protosw {
-	int 	pr_type;		/* socket type used for */
+	short	pr_type;		/* socket type used for */
 	struct	domain *pr_domain;	/* domain protocol a member of */
 	short	pr_protocol;		/* protocol number */
 	short	pr_flags;		/* see below */
-
 /* protocol-protocol hooks */
-	void	(*pr_input)		/* input to protocol (from below) */
-			__P((struct mbuf *, ...));
-	int	(*pr_output)		/* output to protocol (from above) */
-			__P((struct mbuf *, ...));
-	void	*(*pr_ctlinput)		/* control input (from below) */
-			__P((int, struct sockaddr *, void *));
-	int	(*pr_ctloutput)		/* control output (from above) */
-			__P((int, struct socket *, int, int, struct mbuf **));
-
+	int	(*pr_input)();		/* input to protocol (from below) */
+	int	(*pr_output)();		/* output to protocol (from above) */
+	int	(*pr_ctlinput)();	/* control input (from below) */
+	int	(*pr_ctloutput)();	/* control output (from above) */
 /* user-protocol hook */
-	int	(*pr_usrreq)		/* user request: see list below */
-			__P((struct socket *, int, struct mbuf *,
-			     struct mbuf *, struct mbuf *, struct proc *));
-
+	int	(*pr_usrreq)();		/* user request: see list below */
 /* utility hooks */
-	void	(*pr_init)		/* initialization hook */
-			__P((void));
-
-	void	(*pr_fasttimo)		/* fast timeout (200ms) */
-			__P((void));
-	void	(*pr_slowtimo)		/* slow timeout (500ms) */
-			__P((void));
-	void	(*pr_drain)		/* flush any excess space possible */
-			__P((void));
-	int	(*pr_sysctl)		/* sysctl for protocol */
-			__P((int *, u_int, void *, size_t *, void *, size_t));
+	int	(*pr_init)();		/* initialization hook */
+	int	(*pr_fasttimo)();	/* fast timeout (200ms) */
+	int	(*pr_slowtimo)();	/* slow timeout (500ms) */
+	int	(*pr_drain)();		/* flush any excess space possible */
 };
 
 #define	PR_SLOWHZ	2		/* 2 slow timeouts per second */
@@ -118,12 +90,11 @@ struct protosw {
 
 /*
  * The arguments to usrreq are:
- *	(*protosw[].pr_usrreq)(up, req, m, nam, opt, p);
+ *	(*protosw[].pr_usrreq)(up, req, m, nam, opt);
  * where up is a (struct socket *), req is one of these requests,
  * m is a optional mbuf chain containing a message,
  * nam is an optional mbuf chain containing an address,
- * opt is a pointer to a socketopt structure or nil,
- * and p is a pointer to the process requesting the action (if any).
+ * and opt is a pointer to a socketopt structure or nil.
  * The protocol is responsible for disposal of the mbuf chain m,
  * the caller is responsible for any space held by nam and opt.
  * A non-zero return from usrreq gives an
@@ -233,11 +204,6 @@ char	*prcorequests[] = {
 };
 #endif
 
-#ifdef _KERNEL
-struct sockaddr;
-struct protosw *pffindproto __P((int, int, int));
-struct protosw *pffindtype __P((int, int));
-void pfctlinput __P((int, struct sockaddr *));
-#endif /* _KERNEL */
-
-#endif /* !_SYS_PROTOSW_H_ */
+#ifdef KERNEL
+extern	struct protosw *pffindproto(), *pffindtype();
+#endif

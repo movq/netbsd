@@ -1,7 +1,5 @@
-.\"	$NetBSD: sigreturn.2,v 1.6 1995/02/27 12:37:40 cgd Exp $
-.\"
-.\" Copyright (c) 1985, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1985, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,16 +29,16 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)sigreturn.2	8.1 (Berkeley) 6/4/93
+.\"     @(#)sigreturn.2	6.5 (Berkeley) 3/10/91
 .\"
-.Dd June 4, 1993
+.Dd March 10, 1991
 .Dt SIGRETURN 2
 .Os BSD 4.3
 .Sh NAME
 .Nm sigreturn
 .Nd return from signal
 .Sh SYNOPSIS
-.Fd #include <signal.h>
+.Fd #include <sys/signal.h>
 .Bd -literal
 struct sigcontext {
 	int sc_onstack;
@@ -80,7 +78,7 @@ is set to indicate the error.
 .Fn Sigreturn
 will fail and the process context will remain unchanged
 if one of the following occurs.
-.Bl -tag -width Er
+.Bl -tag -width [EINVAL]
 .It Bq Er EFAULT
 .Fa Scp
 points to memory that is not a valid part of the process
@@ -90,10 +88,10 @@ The process status longword is invalid or would improperly
 raise the privilege level of the process.
 .El
 .Sh SEE ALSO
-.Xr sigaction 2 ,
+.Xr sigvec 2 ,
 .Xr setjmp 3
 .Sh HISTORY
 The
-.Fn sigreturn
+.Nm
 function call appeared in
 .Bx 4.3 .

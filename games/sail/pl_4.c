@@ -1,8 +1,6 @@
-/*	$NetBSD: pl_4.c,v 1.6 1997/10/13 21:04:17 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,25 +31,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)pl_4.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: pl_4.c,v 1.6 1997/10/13 21:04:17 christos Exp $");
-#endif
+static char sccsid[] = "@(#)pl_4.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "player.h"
 
-void
 changesail()
 {
 	int rig, full;
 
 	rig = mc->rig1;
 	full = mf->FS;
-	if (windspeed == 6 || (windspeed == 5 && mc->class > 4))
+	if (windspeed == 6 || windspeed == 5 && mc->class > 4)
 		rig = 0;
 	if (mc->crew3 && rig) {
 		if (!full) {
@@ -68,14 +60,13 @@ changesail()
 			}
 		}
 	} else if (!rig)
-		Msg("Sails rent to pieces");
+		Signal("Sails rent to pieces", (struct ship *)0);
 }
 
-void
 acceptsignal()
 {
 	char buf[60];
-	char *p = buf;
+	register char *p = buf;
 
 	*p++ = '"';
 	sgetstr("Message? ", p, sizeof buf - 2);
@@ -83,15 +74,14 @@ acceptsignal()
 		;
 	p[-1] = '"';
 	*p = 0;
-	Write(W_SIGNAL, ms, 1, (long)buf, 0, 0, 0);
+	Write(W_SIGNAL, ms, 1, (int)buf, 0, 0, 0);
 }
 
-void
 lookout()
 {
-	struct ship *sp;
+	register struct ship *sp;
 	char buf[3];
-	char c;
+	register char c;
 
 	sgetstr("What ship? ", buf, sizeof buf);
 	foreachship(sp) {
@@ -106,7 +96,7 @@ lookout()
 
 char *
 saywhat(sp, flag)
-struct ship *sp;
+register struct ship *sp;
 char flag;
 {
 	if (sp->file->captain[0])
@@ -121,19 +111,18 @@ char flag;
 		return "(computer)";
 }
 
-void
 eyeball(ship)
-struct ship *ship;
+register struct ship *ship;
 {
 	int i;
 
 	if (ship->file->dir != 0) {
-		Msg("Sail ho! (range %d, %s)",
-		    range(ms, ship), saywhat(ship, 0));
+		Signal("Sail ho! (range %d, %s)",
+			(struct ship *)0, range(ms, ship), saywhat(ship, 0));
 		i = portside(ms, ship, 1) - mf->dir;
 		if (i <= 0)
 			i += 8;
-		Signal("$$ %s %s %s.",
+		Signal("%s (%c%c) %s %s %s.",
 			ship, countryname[ship->nationality],
 			classname[ship->specs->class], directionname[i]);
 	}

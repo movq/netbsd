@@ -1,8 +1,6 @@
-/*	$NetBSD: hayes.c,v 1.6 1997/02/11 09:24:17 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)hayes.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: hayes.c,v 1.6 1997/02/11 09:24:17 mrg Exp $";
+static char sccsid[] = "@(#)hayes.c	5.4 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 /*
@@ -65,9 +60,6 @@ static char rcsid[] = "$NetBSD: hayes.c,v 1.6 1997/02/11 09:24:17 mrg Exp $";
  */
 #include "tip.h"
 
-#include <termios.h>
-#include <sys/ioctl.h>
-
 #define	min(a,b)	((a < b) ? a : b)
 
 static	void sigALRM();
@@ -90,7 +82,6 @@ hay_dialer(num, acu)
 	register char *cp;
 	register int connected = 0;
 	char dummy;
-	struct termios cntrl;
 #ifdef ACULOG
 	char line[80];
 #endif
@@ -99,17 +90,12 @@ hay_dialer(num, acu)
 	if (boolean(value(VERBOSE)))
 		printf("\ndialing...");
 	fflush(stdout);
-	tcgetattr(FD, &cntrl);
-	cntrl.c_cflag |= HUPCL;
-	tcsetattr(FD, TCSANOW, &cntrl);
-	tcflush(FD, TCIOFLUSH);
+	ioctl(FD, TIOCHPCL, 0);
+	ioctl(FD, TIOCFLUSH, 0);	/* get rid of garbage */
 	write(FD, "ATv0\r", 5);	/* tell modem to use short status codes */
 	gobble("\r");
 	gobble("\r");
 	write(FD, "ATTD", 4);	/* send dial command */
-	for (cp = num; *cp; cp++)
-		if (*cp == '=')
-			*cp = ',';
 	write(FD, num, strlen(num));
 	state = DIALING;
 	write(FD, "\r", 1);
@@ -126,10 +112,10 @@ hay_dialer(num, acu)
 		state = FAILED;
 		return (connected);	/* lets get out of here.. */
 	}
-	tcflush(FD, TCIOFLUSH);
+	ioctl(FD, TIOCFLUSH, 0);
 #ifdef ACULOG
 	if (timeout) {
-		(void)snprintf(line, sizeof line, "%d second dial timeout",
+		sprintf(line, "%d second dial timeout",
 			number(value(DIALTIMEOUT)));
 		logent(value(HOST), num, "hayes", line);
 	}
@@ -254,11 +240,11 @@ goodbye()
 	int len, rlen;
 	char c;
 
-	tcflush(FD, TCIOFLUSH);
+	ioctl(FD, TIOCFLUSH, &len);	/* get rid of trash */
 	if (hay_sync()) {
 		sleep(1);
 #ifndef DEBUG
-		tcflush(FD, TCIOFLUSH);
+		ioctl(FD, TIOCFLUSH, 0);
 #endif
 		write(FD, "ATH0\r", 5);		/* insurance */
 #ifndef DEBUG
@@ -286,7 +272,7 @@ goodbye()
 		printf("read (%d): %s\r\n", rlen, dumbuf);
 #endif
 	}
-	tcflush(FD, TCIOFLUSH);
+	ioctl(FD, TIOCFLUSH, 0);	/* clear the input buffer */
 	ioctl(FD, TIOCCDTR, 0);		/* clear DTR (insurance) */
 	close(FD);
 }

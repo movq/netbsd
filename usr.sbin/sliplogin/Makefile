@@ -1,8 +1,7 @@
-#	$NetBSD: Makefile,v 1.5 1997/10/17 13:36:36 lukem Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 7/19/93
+#	@(#)Makefile	5.1 (Berkeley) 5/11/90
 
 PROG=	sliplogin
-MAN=	sliplogin.8
+MAN8=	sliplogin.0
 BINOWN=	root
 BINMODE=4555
 

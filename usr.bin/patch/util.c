@@ -1,7 +1,3 @@
-#ifndef lint
-static char rcsid[] = "$NetBSD: util.c,v 1.4 1996/09/19 06:27:16 thorpej Exp $";
-#endif /* not lint */
-
 #include "EXTERN.h"
 #include "common.h"
 #include "INTERN.h"
@@ -9,6 +5,19 @@ static char rcsid[] = "$NetBSD: util.c,v 1.4 1996/09/19 06:27:16 thorpej Exp $";
 #include "backupfile.h"
 
 void my_exit();
+
+static char *
+private_strerror (errnum)
+     int errnum;
+{
+  extern char *sys_errlist[];
+  extern int sys_nerr;
+
+  if (errnum > 0 && errnum <= sys_nerr)
+    return sys_errlist[errnum];
+  return "Unknown system error";
+}
+#define strerror private_strerror
 
 /* Rename a file, copying it if necessary. */
 

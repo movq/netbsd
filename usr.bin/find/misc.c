@@ -1,8 +1,6 @@
-/*	$NetBSD: misc.c,v 1.6 1997/10/19 11:52:50 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Cimarron D. Taylor of the University of California, Berkeley.
@@ -36,47 +34,37 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "from: @(#)misc.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: misc.c,v 1.6 1997/10/19 11:52:50 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)misc.c	5.8 (Berkeley) 5/24/91";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/stat.h>
-
-#include <err.h>
-#include <errno.h>
-#include <fts.h>
+#include <sys/errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include "find.h"
  
 /*
  * brace_subst --
- *	Replace occurrences of {} in orig with path, and place it in a malloced
- *      area of memory set in store.
+ *	Replace occurrences of {} in s1 with s2 and return the result string.
  */
 void
 brace_subst(orig, store, path, len)
 	char *orig, **store, *path;
 	int len;
 {
-	int plen;
-	char ch, *p;
+	register int plen;
+	register char ch, *p;
 
 	plen = strlen(path);
-	for (p = *store; (ch = *orig) != 0; ++orig)
+	for (p = *store; ch = *orig; ++orig)
 		if (ch == '{' && orig[1] == '}') {
 			while ((p - *store) + plen > len)
 				if (!(*store = realloc(*store, len *= 2)))
-					err(1, "realloc");
-			memmove(p, path, plen);
+					err("%s", strerror(errno));
+			bcopy(path, p, plen);
 			p += plen;
 			++orig;
 		} else
@@ -89,9 +77,8 @@ brace_subst(orig, store, path, len)
  *	print a message to standard error and then read input from standard
  *	input. If the input is 'y' then 1 is returned.
  */
-int
 queryuser(argv)
-	char **argv;
+	register char **argv;
 {
 	int ch, first, nl;
 
@@ -116,7 +103,7 @@ queryuser(argv)
 		(void)fprintf(stderr, "\n");
 		(void)fflush(stderr);
 	}
-        return (first == 'y');
+        return(first == 'y');
 }
  
 /*
@@ -129,7 +116,37 @@ emalloc(len)
 {
 	void *p;
 
-	if ((p = malloc(len)) != NULL)
-		return (p);
-	err(1, "malloc");
+	if (p = malloc(len))
+		return(p);
+	err("%s", strerror(errno));
+	/* NOTREACHED */
+}
+
+#if __STDC__
+#include <stdarg.h>
+#else
+#include <varargs.h>
+#endif
+
+void
+#if __STDC__
+err(const char *fmt, ...)
+#else
+err(fmt, va_alist)
+	char *fmt;
+        va_dcl
+#endif
+{
+	va_list ap;
+#if __STDC__
+	va_start(ap, fmt);
+#else
+	va_start(ap);
+#endif
+	(void)fprintf(stderr, "find: ");
+	(void)vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	(void)fprintf(stderr, "\n");
+	exit(1);
+	/* NOTREACHED */
 }

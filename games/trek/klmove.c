@@ -1,8 +1,6 @@
-/*	$NetBSD: klmove.c,v 1.4 1997/10/12 21:24:57 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)klmove.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: klmove.c,v 1.4 1997/10/12 21:24:57 christos Exp $");
-#endif
+static char sccsid[] = "@(#)klmove.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include "trek.h"
+# include	"trek.h"
 
 /*
 **  Move Klingons Around
@@ -68,15 +60,14 @@ __RCSID("$NetBSD: klmove.c,v 1.4 1997/10/12 21:24:57 christos Exp $");
 **	course around stars.
 */
 
-void
 klmove(fl)
 int	fl;
 {
 	int			n;
-	struct kling	*k;
+	register struct kling	*k;
 	double			dx, dy;
 	int			nextx, nexty;
-	int		lookx, looky;
+	register int		lookx, looky;
 	int			motion;
 	int			fudgex, fudgey;
 	int			qx, qy;
@@ -87,7 +78,7 @@ int	fl;
 	if (Trace)
 		printf("klmove: fl = %d, Etc.nkling = %d\n", fl, Etc.nkling);
 #	endif
-	for (n = 0; n < Etc.nkling; n++)
+	for (n = 0; n < Etc.nkling; k && n++)
 	{
 		k = &Etc.klingon[n];
 		i = 100;
@@ -154,7 +145,7 @@ int	fl;
 				Sect[k->x][k->y] = EMPTY;
 				Quad[qx][qy].klings += 1;
 				Etc.nkling -= 1;
-				*k = Etc.klingon[Etc.nkling];
+				bmove(&Etc.klingon[Etc.nkling], k, sizeof *k);
 				Quad[Ship.quadx][Ship.quady].klings -= 1;
 				k = 0;
 				break;

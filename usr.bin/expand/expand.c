@@ -1,8 +1,6 @@
-/*	$NetBSD: expand.c,v 1.6 1997/10/18 14:45:57 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,63 +31,36 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)expand.c	8.1 (Berkeley) 6/9/93";
-#endif
-__RCSID("$NetBSD: expand.c,v 1.6 1997/10/18 14:45:57 lukem Exp $");
+static char sccsid[] = "@(#)expand.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <unistd.h>
-
 /*
  * expand - expand tabs to equivalent spaces
  */
 int	nstops;
 int	tabstops[100];
 
-static	void	getstops __P((char *));
-	int	main __P((int, char **));
-static	void	usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	int c, column;
-	int n;
+	register int c, column;
+	register int n;
 
-	/* handle obsolete syntax */
-	while (argc > 1 && argv[1][0] && isdigit(argv[1][1])) {
-		getstops(&argv[1][1]);
-		argc--; argv++;
-	}
-
-	while ((c = getopt (argc, argv, "t:")) != -1) {
-		switch (c) {
-		case 't':
-			getstops(optarg);
-			break;
-		case '?':
-		default:
-			usage();
-			/* NOTREACHED */
-		}
-	}
-	argc -= optind;
-	argv += optind;
-
+	argc--, argv++;
 	do {
+		while (argc > 0 && argv[0][0] == '-') {
+			getstops(argv[0]);
+			argc--, argv++;
+		}
 		if (argc > 0) {
 			if (freopen(argv[0], "r", stdin) == NULL) {
 				perror(argv[0]);
@@ -98,8 +69,12 @@ main(argc, argv)
 			argc--, argv++;
 		}
 		column = 0;
-		while ((c = getchar()) != EOF) {
+		for (;;) {
+			c = getc(stdin);
+			if (c == -1)
+				break;
 			switch (c) {
+
 			case '\t':
 				if (nstops == 0) {
 					do {
@@ -150,13 +125,13 @@ main(argc, argv)
 	exit(0);
 }
 
-static void
 getstops(cp)
-	char *cp;
+	register char *cp;
 {
-	int i;
+	register int i;
 
 	nstops = 0;
+	cp++;
 	for (;;) {
 		i = 0;
 		while (*cp >= '0' && *cp <= '9')
@@ -171,15 +146,7 @@ bad:
 		tabstops[nstops++] = i;
 		if (*cp == 0)
 			break;
-		if (*cp != ',' && *cp != ' ')
+		if (*cp++ != ',')
 			goto bad;
-		cp++;
 	}
-}
-
-static void
-usage()
-{
-	(void)fprintf (stderr, "usage: expand [-t tablist] [file ...]\n");
-	exit(1);
 }

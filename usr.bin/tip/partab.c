@@ -1,8 +1,6 @@
-/*	$NetBSD: partab.c,v 1.4 1996/12/29 10:38:21 cgd Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,16 +32,13 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)partab.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: partab.c,v 1.4 1996/12/29 10:38:21 cgd Exp $";
+static char sccsid[] = "@(#)partab.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
  * Even parity table for 0-0177
  */
-unsigned char evenpartab[] = {
+char evenpartab[] = {
 	0000,0201,0202,0003,0204,0005,0006,0207,
 	0210,0011,0012,0213,0014,0215,0216,0017,
 	0220,0021,0022,0223,0024,0225,0226,0027,

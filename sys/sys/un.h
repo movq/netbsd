@@ -1,8 +1,6 @@
-/*	$NetBSD: un.h,v 1.16 1997/02/27 05:46:37 mikel Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,48 +30,23 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)un.h	8.1 (Berkeley) 6/2/93
+ *	@(#)un.h	7.7 (Berkeley) 6/28/90
  */
-
-#ifndef _SYS_UN_H_
-#define _SYS_UN_H_
 
 /*
  * Definitions for UNIX IPC domain.
  */
 struct	sockaddr_un {
-	u_char	sun_len;		/* total sockaddr length */
+	u_char	sun_len;		/* sockaddr len including null */
 	u_char	sun_family;		/* AF_UNIX */
 	char	sun_path[104];		/* path name (gag) */
 };
 
-#ifdef _KERNEL
-struct unpcb;
-struct socket;
-
-int	unp_attach __P((struct socket *so));
-int	unp_bind __P((struct unpcb *unp, struct mbuf *nam, struct proc *p));
-int	unp_connect __P((struct socket *so, struct mbuf *nam, struct proc *p));
-int	unp_connect2 __P((struct socket *so, struct socket *so2));
-void	unp_detach __P((struct unpcb *unp));
-void	unp_discard __P((struct file *fp));
-void	unp_disconnect __P((struct unpcb *unp));
-void	unp_drop __P((struct unpcb *unp, int errno));
-void	unp_gc __P((void));
-void	unp_mark __P((struct file *fp));
-void	unp_scan __P((struct mbuf *m0, void (*op) __P((struct file *))));
-void	unp_shutdown __P((struct unpcb *unp));
-int 	unp_externalize __P((struct mbuf *));
-int	unp_internalize __P((struct mbuf *, struct proc *));
-void 	unp_dispose __P((struct mbuf *));
-int	unp_output __P((struct mbuf *, struct mbuf *, struct unpcb *));
-void	unp_setsockaddr __P((struct unpcb *, struct mbuf *));
-void	unp_setpeeraddr __P((struct unpcb *, struct mbuf *));
-#else /* !_KERNEL */
+#ifdef KERNEL
+int	unp_discard();
+#else
 
 /* actual length of an initialized sockaddr_un */
 #define SUN_LEN(su) \
 	(sizeof(*(su)) - sizeof((su)->sun_path) + strlen((su)->sun_path))
-#endif /* _KERNEL */
-
-#endif /* !_SYS_UN_H_ */
+#endif

@@ -1,8 +1,6 @@
-/*	$NetBSD: spp_timer.h,v 1.6 1995/03/26 20:36:22 jtc Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)spp_timer.h	8.1 (Berkeley) 6/10/93
+ *	@(#)spp_timer.h	7.3 (Berkeley) 6/28/90
  */
 
 /*
@@ -119,6 +117,6 @@ char *spptimers[] =
 		(tv) = (tvmax); \
 }
 
-#ifdef _KERNEL
+#ifdef KERNEL
 extern int spp_backoff[];
 #endif

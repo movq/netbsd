@@ -1,8 +1,6 @@
-/*	$NetBSD: misc.c,v 1.5 1997/10/13 19:44:38 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,31 +31,22 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)misc.c	8.2 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: misc.c,v 1.5 1997/10/13 19:44:38 christos Exp $");
-#endif
+static char sccsid[] = "@(#)misc.c	5.5 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <fcntl.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include "extern.h"
+#include "externs.h"
 #include "pathnames.h"
 
 #define distance(x,y) (abs(x) >= abs(y) ? abs(x) + abs(y)/2 : abs(y) + abs(x)/2)
 
 /* XXX */
-int
 range(from, to)
 struct ship *from, *to;
 {
-	int bow1r, bow1c, bow2r, bow2c;
+	register bow1r, bow1c, bow2r, bow2c;
 	int stern1r, stern1c, stern2c, stern2r;
-	int bb, bs, sb, ss, result;
+	register int bb, bs, sb, ss, result;
 
 	if (!to->file->dir)
 		return -1;
@@ -81,11 +70,11 @@ struct ship *from, *to;
 
 struct ship *
 closestenemy(from, side, anyship)
-struct ship *from;
+register struct ship *from;
 char side, anyship;
 {
-	struct ship *sp;
-	char a;
+	register struct ship *sp;
+	register char a;
 	int olddist = 30000, dist;
 	struct ship *closest = 0;
 
@@ -108,11 +97,10 @@ char side, anyship;
 	return closest;
 }
 
-int
 angle(dr, dc)
-int dr, dc;
+register dr, dc;
 {
-	int i;
+	register i;
 
 	if (dc >= 0 && dr > 0)
 		i = 0;
@@ -136,12 +124,11 @@ int dr, dc;
 	return i % 8 + 1;
 }
 
-int
 gunsbear(from, to)		/* checks for target bow or stern */
-struct ship *from, *to;
+register struct ship *from, *to;
 {
 	int Dr, Dc, i;
-	int ang;
+	register ang;
 
 	Dr = from->file->row - to->file->row;
 	Dc = to->file->col - from->file->col;
@@ -158,13 +145,12 @@ struct ship *from, *to;
 	return 0;
 }
 
-int
 portside(from, on, quick)
-struct ship *from, *on;
+register struct ship *from, *on;
 int quick;			/* returns true if fromship is */
 {				/* shooting at onship's starboard side */
-	int ang;
-	int Dr, Dc;
+	register ang;
+	register Dr, Dc;
 
 	Dr = from->file->row - on->file->row;
 	Dc = on->file->col - from->file->col;
@@ -179,11 +165,10 @@ int quick;			/* returns true if fromship is */
 	return ang < 5;
 }
 
-int
 colours(sp)
-struct ship *sp;
+register struct ship *sp;
 {
-	char flag = '\0';
+	register char flag;
 
 	if (sp->file->struck)
 		flag = '!';
@@ -197,16 +182,16 @@ struct ship *sp;
 	return sp->file->FS ? flag : tolower(flag);
 }
 
-void
-logger(s)
-struct ship *s;
+#include <sys/file.h>
+log(s)
+register struct ship *s;
 {
 	FILE *fp;
 	int persons;
 	int n;
 	struct logs log[NLOG];
 	float net;
-	struct logs *lp;
+	register struct logs *lp;
 
 	if ((fp = fopen(_PATH_LOGFILE, "r+")) == NULL)
 		return;

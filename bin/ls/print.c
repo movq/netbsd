@@ -1,8 +1,6 @@
-/*	$NetBSD: print.c,v 1.17 1997/07/30 05:01:04 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Michael Fischbein.
@@ -36,205 +34,152 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)print.c	8.5 (Berkeley) 7/28/94";
-#else
-__RCSID("$NetBSD: print.c,v 1.17 1997/07/30 05:01:04 thorpej Exp $");
-#endif
+static char sccsid[] = "@(#)print.c	5.24 (Berkeley) 10/19/90";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
-
-#include <err.h>
-#include <errno.h>
-#include <fts.h>
+#include <stdio.h>
 #include <grp.h>
 #include <pwd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-#include <tzfile.h>
-#include <unistd.h>
 #include <utmp.h>
-
+#include <tzfile.h>
 #include "ls.h"
-#include "extern.h"
 
-static int	printaname __P((FTSENT *, u_long, u_long));
-static void	printlink __P((FTSENT *));
-static void	printtime __P((time_t));
-static int	printtype __P((u_int));
-
-#define	IS_NOPRINT(p)	((p)->fts_number == NO_PRINT)
-
-void
-printscol(dp)
-	DISPLAY *dp;
+printscol(stats, num)
+	register LS *stats;
+	register int num;
 {
-	FTSENT *p;
-
-	for (p = dp->list; p; p = p->fts_link) {
-		if (IS_NOPRINT(p))
-			continue;
-		(void)printaname(p, dp->s_inode, dp->s_block);
+	for (; num--; ++stats) {
+		(void)printaname(stats);
 		(void)putchar('\n');
 	}
 }
 
-void
-printlong(dp)
-	DISPLAY *dp;
+printlong(stats, num)
+	LS *stats;
+	register int num;
 {
-	struct stat *sp;
-	FTSENT *p;
-	NAMES *np;
-	char buf[20];
+	extern int errno;
+	char modep[15], *user_from_uid(), *group_from_gid(), *strerror();
 
-	if (dp->list->fts_level != FTS_ROOTLEVEL && (f_longform || f_size))
-		(void)printf("total %lu\n", howmany(dp->btotal, blocksize));
-
-	for (p = dp->list; p; p = p->fts_link) {
-		if (IS_NOPRINT(p))
-			continue;
-		sp = p->fts_statp;
+	if (f_total)
+		(void)printf("total %lu\n", f_kblocks ?
+		    howmany(stats[0].lstat.st_btotal, 2) :
+		    stats[0].lstat.st_btotal);
+	for (; num--; ++stats) {
 		if (f_inode)
-			(void)printf("%*u ", dp->s_inode, sp->st_ino);
+			(void)printf("%6lu ", stats->lstat.st_ino);
 		if (f_size)
-			(void)printf("%*qd ",
-			    dp->s_block,
-			    (long long)howmany(sp->st_blocks, blocksize));
-		(void)strmode(sp->st_mode, buf);
-		np = p->fts_pointer;
-		(void)printf("%s %*u %-*s  %-*s  ", buf, dp->s_nlink,
-		    sp->st_nlink, dp->s_user, np->user, dp->s_group,
-		    np->group);
-		if (f_flags)
-			(void)printf("%-*s ", dp->s_flags, np->flags);
-		if (S_ISCHR(sp->st_mode) || S_ISBLK(sp->st_mode))
-			(void)printf("%3d, %3d ",
-			    major(sp->st_rdev), minor(sp->st_rdev));
-		else if (dp->bcfile)
-			(void)printf("%*s%*qd ",
-			    8 - dp->s_size, "", dp->s_size,
-			    (long long)sp->st_size);
+			(void)printf("%4ld ", f_kblocks ?
+			    howmany(stats->lstat.st_blocks, 2) :
+			    stats->lstat.st_blocks);
+		(void)strmode(stats->lstat.st_mode, modep);
+		(void)printf("%s %3u %-*s ", modep, stats->lstat.st_nlink,
+		    UT_NAMESIZE, user_from_uid(stats->lstat.st_uid, 0));
+		if (f_group)
+			(void)printf("%-*s ", UT_NAMESIZE,
+			    group_from_gid(stats->lstat.st_gid, 0));
+		if (S_ISCHR(stats->lstat.st_mode) ||
+		    S_ISBLK(stats->lstat.st_mode))
+			(void)printf("%3d, %3d ", major(stats->lstat.st_rdev),
+			    minor(stats->lstat.st_rdev));
 		else
-			(void)printf("%*qd ", dp->s_size,
-			    (long long)sp->st_size);
+			(void)printf("%8ld ", stats->lstat.st_size);
 		if (f_accesstime)
-			printtime(sp->st_atime);
+			printtime(stats->lstat.st_atime);
 		else if (f_statustime)
-			printtime(sp->st_ctime);
+			printtime(stats->lstat.st_ctime);
 		else
-			printtime(sp->st_mtime);
-		(void)printf("%s", p->fts_name);
+			printtime(stats->lstat.st_mtime);
+		(void)printf("%s", stats->name);
 		if (f_type)
-			(void)printtype(sp->st_mode);
-		if (S_ISLNK(sp->st_mode))
-			printlink(p);
+			(void)printtype(stats->lstat.st_mode);
+		if (S_ISLNK(stats->lstat.st_mode))
+			printlink(stats->name);
 		(void)putchar('\n');
 	}
 }
 
-void
-printcol(dp)
-	DISPLAY *dp;
+#define	TAB	8
+
+printcol(stats, num)
+	LS *stats;
+	int num;
 {
 	extern int termwidth;
-	static FTSENT **array;
-	static int lastentries = -1;
-	FTSENT *p;
-	int base, chcnt, col, colwidth, num;
-	int numcols, numrows, row;
+	register int base, chcnt, cnt, col, colwidth;
+	int endcol, numcols, numrows, row;
 
-	/*
-	 * Have to do random access in the linked list -- build a table
-	 * of pointers.
-	 */
-	if (dp->entries > lastentries) {
-		lastentries = dp->entries;
-		if ((array =
-		    realloc(array, dp->entries * sizeof(FTSENT *))) == NULL) {
-			warn("%s", "");
-			printscol(dp);
-		}
-	}
-	for (p = dp->list, num = 0; p; p = p->fts_link)
-		if (p->fts_number != NO_PRINT)
-			array[num++] = p;
-
-	colwidth = dp->maxlen;
+	colwidth = stats[0].lstat.st_maxlen;
 	if (f_inode)
-		colwidth += dp->s_inode + 1;
+		colwidth += 6;
 	if (f_size)
-		colwidth += dp->s_block + 1;
+		colwidth += 5;
 	if (f_type)
 		colwidth += 1;
 
-	colwidth += 1;
-
+	colwidth = (colwidth + TAB) & ~(TAB - 1);
 	if (termwidth < 2 * colwidth) {
-		printscol(dp);
+		printscol(stats, num);
 		return;
 	}
 
 	numcols = termwidth / colwidth;
-	colwidth = termwidth / numcols;		/* spread out if possible */
 	numrows = num / numcols;
 	if (num % numcols)
 		++numrows;
 
-	if (dp->list->fts_level != FTS_ROOTLEVEL && (f_longform || f_size))
-		(void)printf("total %lu\n", howmany(dp->btotal, blocksize));
+	if (f_size && f_total)
+		(void)printf("total %lu\n", f_kblocks ?
+		    howmany(stats[0].lstat.st_btotal, 2) :
+		    stats[0].lstat.st_btotal);
 	for (row = 0; row < numrows; ++row) {
+		endcol = colwidth;
 		for (base = row, chcnt = col = 0; col < numcols; ++col) {
-			chcnt = printaname(array[base], dp->s_inode, dp->s_block);
+			chcnt += printaname(stats + base);
 			if ((base += numrows) >= num)
 				break;
-			while (chcnt++ < colwidth)
-				putchar(' ');
+			while ((cnt = (chcnt + TAB & ~(TAB - 1))) <= endcol) {
+				(void)putchar('\t');
+				chcnt = cnt;
+			}
+			endcol += colwidth;
 		}
-		(void)putchar('\n');
+		putchar('\n');
 	}
 }
 
 /*
  * print [inode] [size] name
- * return # of characters printed, no trailing characters.
+ * return # of characters printed, no trailing characters
  */
-static int
-printaname(p, inodefield, sizefield)
-	FTSENT *p;
-	u_long sizefield, inodefield;
+printaname(lp)
+	LS *lp;
 {
-	struct stat *sp;
 	int chcnt;
 
-	sp = p->fts_statp;
 	chcnt = 0;
 	if (f_inode)
-		chcnt += printf("%*u ", (int)inodefield, sp->st_ino);
+		chcnt += printf("%5lu ", lp->lstat.st_ino);
 	if (f_size)
-		chcnt += printf("%*qd ",
-		    (int)sizefield,
-		    (long long)howmany(sp->st_blocks, blocksize));
-	chcnt += printf("%s", p->fts_name);
+		chcnt += printf("%4ld ", f_kblocks ?
+		    howmany(lp->lstat.st_blocks, 2) : lp->lstat.st_blocks);
+	chcnt += printf("%s", lp->name);
 	if (f_type)
-		chcnt += printtype(sp->st_mode);
-	return (chcnt);
+		chcnt += printtype(lp->lstat.st_mode);
+	return(chcnt);
 }
 
-static void
 printtime(ftime)
 	time_t ftime;
 {
 	int i;
-	char *longstring;
+	char *longstring, *ctime();
+	time_t time();
 
-	longstring = ctime(&ftime);
+	longstring = ctime((long *)&ftime);
 	for (i = 4; i < 11; ++i)
 		(void)putchar(longstring[i]);
 
@@ -242,7 +187,7 @@ printtime(ftime)
 	if (f_sectime)
 		for (i = 11; i < 24; i++)
 			(void)putchar(longstring[i]);
-	else if (ftime + SIXMONTHS > time(NULL))
+	else if (ftime + SIXMONTHS > time((time_t *)NULL))
 		for (i = 11; i < 16; ++i)
 			(void)putchar(longstring[i]);
 	else {
@@ -253,47 +198,34 @@ printtime(ftime)
 	(void)putchar(' ');
 }
 
-static int
 printtype(mode)
-	u_int mode;
+	mode_t mode;
 {
-	switch (mode & S_IFMT) {
+	switch(mode & S_IFMT) {
 	case S_IFDIR:
 		(void)putchar('/');
-		return (1);
-	case S_IFIFO:
-		(void)putchar('|');
-		return (1);
+		return(1);
 	case S_IFLNK:
 		(void)putchar('@');
-		return (1);
+		return(1);
 	case S_IFSOCK:
 		(void)putchar('=');
-		return (1);
-	case S_IFWHT:
-		(void)putchar('%');
-		return (1);
+		return(1);
 	}
 	if (mode & (S_IXUSR | S_IXGRP | S_IXOTH)) {
 		(void)putchar('*');
-		return (1);
+		return(1);
 	}
-	return (0);
+	return(0);
 }
 
-static void
-printlink(p)
-	FTSENT *p;
+printlink(name)
+	char *name;
 {
 	int lnklen;
-	char name[MAXPATHLEN + 1], path[MAXPATHLEN + 1];
+	char path[MAXPATHLEN + 1], *strerror();
 
-	if (p->fts_level == FTS_ROOTLEVEL)
-		(void)snprintf(name, sizeof(name), "%s", p->fts_name);
-	else 
-		(void)snprintf(name, sizeof(name),
-		    "%s/%s", p->fts_parent->fts_accpath, p->fts_name);
-	if ((lnklen = readlink(name, path, sizeof(path) - 1)) == -1) {
+	if ((lnklen = readlink(name, path, MAXPATHLEN)) == -1) {
 		(void)fprintf(stderr, "\nls: %s: %s\n", name, strerror(errno));
 		return;
 	}

@@ -1,8 +1,6 @@
-/*	$NetBSD: nova.c,v 1.4 1997/10/12 21:25:03 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)nova.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: nova.c,v 1.4 1997/10/12 21:25:03 christos Exp $");
-#endif
+static char sccsid[] = "@(#)nova.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include "trek.h"
+# include	"trek.h"
 
 /*
 **  CAUSE A NOVA TO OCCUR
@@ -59,12 +51,11 @@ __RCSID("$NetBSD: nova.c,v 1.4 1997/10/12 21:25:03 christos Exp $");
 **	If the zap is too much, it gets destroyed.
 */
 
-void
 nova(x, y)
 int	x, y;
 {
-	int	i, j;
-	int	se;
+	register int		i, j;
+	register int		se;
 
 	if (Sect[x][y] != STAR || Quad[Ship.quadx][Ship.quady].stars < 0)
 		return;
@@ -73,10 +64,8 @@ int	x, y;
 		printf("Spock: Star at %d,%d failed to nova.\n", x, y);
 		return;
 	}
-	if (ranf(100) < 5) {
-		snova(x, y);
-		return;
-	}
+	if (ranf(100) < 5)
+		return (snova(x, y));
 	printf("Spock: Star at %d,%d gone nova\n", x, y);
 
 	if (ranf(4) != 0)

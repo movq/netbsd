@@ -1,5 +1,3 @@
-/*	$NetBSD: setenv.c,v 1.10 1997/07/21 14:09:04 jtc Exp $	*/
-
 /*
  * Copyright (c) 1987 Regents of the University of California.
  * All rights reserved.
@@ -33,31 +31,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "from: @(#)setenv.c	5.6 (Berkeley) 6/4/91";
-#else
-__RCSID("$NetBSD: setenv.c,v 1.10 1997/07/21 14:09:04 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)setenv.c	5.6 (Berkeley) 6/4/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
-#include "local.h"
-
-#ifdef __weak_alias
-__weak_alias(setenv,_setenv);
-__weak_alias(unsetenv,_unsetenv);
-#endif
 
 /*
  * setenv --
  *	Set the value of the environmental variable "name" to be
  *	"value".  If rewrite is set, replace any current value.
  */
-int
 setenv(name, value, rewrite)
 	register const char *name;
 	register const char *value;
@@ -67,15 +53,16 @@ setenv(name, value, rewrite)
 	static int alloced;			/* if allocated space before */
 	register char *C;
 	int l_value, offset;
+	char *_findenv();
 
 	if (*value == '=')			/* no `=' in value */
 		++value;
 	l_value = strlen(value);
-	if ((C = __findenv(name, &offset))) {	/* find if already exists */
+	if ((C = _findenv(name, &offset))) {	/* find if already exists */
 		if (!rewrite)
 			return (0);
 		if (strlen(C) >= l_value) {	/* old larger; copy over */
-			while ((*C++ = *value++) != '\0');
+			while (*C++ = *value++);
 			return (0);
 		}
 	} else {					/* create new slot */
@@ -107,7 +94,7 @@ setenv(name, value, rewrite)
 		return (-1);
 	for (C = environ[offset]; (*C = *name++) && *C != '='; ++C)
 		;
-	for (*C++ = '='; (*C++ = *value++) != '\0'; )
+	for (*C++ = '='; *C++ = *value++; )
 		;
 	return (0);
 }
@@ -124,7 +111,7 @@ unsetenv(name)
 	register char **P;
 	int offset;
 
-	while (__findenv(name, &offset))	/* if set multiple times */
+	while (_findenv(name, &offset))		/* if set multiple times */
 		for (P = &environ[offset];; ++P)
 			if (!(*P = *(P + 1)))
 				break;

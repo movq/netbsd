@@ -1,8 +1,6 @@
-/*	$NetBSD: mloop.c,v 1.5 1996/02/08 20:45:03 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,14 +35,9 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)mloop.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: mloop.c,v 1.5 1996/02/08 20:45:03 mycroft Exp $";
-#endif
+static char sccsid[] = "@(#)mloop.c	3.17 (Berkeley) 6/6/90";
 #endif /* not lint */
 
-#include <sys/param.h>
 #include "defs.h"
 
 mloop()
@@ -53,7 +46,7 @@ mloop()
 		if (incmd) {
 			docmd();
 		} else if (wwcurwin->ww_state != WWS_HASPROC) {
-			if (!ISSET(wwcurwin->ww_uflags, WWU_KEEPOPEN))
+			if (!wwcurwin->ww_keepopen)
 				closewin(wwcurwin);
 			setcmd(1);
 			if (wwpeekc() == escapec)
@@ -64,25 +57,16 @@ mloop()
 			register char *p;
 			register n;
 
-			if (wwibp >= wwibq) {
-				wwibp = wwibq = wwib;
+			if (wwibp >= wwibq)
 				wwiomux();
-			}
-			for (p = wwibp; p < wwibq && wwmaskc(*p) != escapec;
+			for (p = wwibp; p < wwibq && *p != escapec;
 			     p++)
 				;
 			if ((n = p - wwibp) > 0) {
-				if (w->ww_type != WWT_PTY &&
-				    ISSET(w->ww_pflags, WWP_STOPPED))
+				if (!w->ww_ispty && w->ww_stopped)
 					startwin(w);
-#if defined(sun) && !defined(BSD)
-				/* workaround for SunOS pty bug */
-				while (--n >= 0)
-					(void) write(w->ww_pty, wwibp++, 1);
-#else
 				(void) write(w->ww_pty, wwibp, n);
 				wwibp = p;
-#endif
 			}
 			if (wwpeekc() == escapec) {
 				(void) wwgetc();

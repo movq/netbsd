@@ -1,5 +1,3 @@
-/*	$NetBSD: authenc.c,v 1.5 1997/10/16 06:46:50 mikel Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,13 +31,9 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)authenc.c	8.2 (Berkeley) 5/30/95";
-#else
-__RCSID("$NetBSD: authenc.c,v 1.5 1997/10/16 06:46:50 mikel Exp $");
-#endif
+/* from: static char sccsid[] = "@(#)authenc.c	8.1 (Berkeley) 6/4/93"; */
+static char *rcsid = "$Id: authenc.c,v 1.1 1994/02/25 03:20:42 cgd Exp $";
 #endif /* not lint */
 
 #if	defined(AUTHENTICATION)
@@ -52,7 +46,7 @@ net_write(str, len)
 	int len;
 {
 	if (nfrontp + len < netobuf + BUFSIZ) {
-		memmove((void *)nfrontp, (void *)str, len);
+		bcopy((void *)str, (void *)nfrontp, len);
 		nfrontp += len;
 		return(len);
 	}
@@ -75,6 +69,7 @@ telnet_spin()
 telnet_getenv(val)
 	char *val;
 {
+	extern char *getenv();
 	return(getenv(val));
 }
 

@@ -1,8 +1,6 @@
-/*	$NetBSD: main.c,v 1.23 1997/10/19 23:46:08 cjs Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,72 +31,62 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "from: @(#)main.c	8.1 (Berkeley) 6/20/93";
-#else
-__RCSID("$NetBSD: main.c,v 1.23 1997/10/19 23:46:08 cjs Exp $");
-#endif
+static char sccsid[] = "@(#)main.c	5.16 (Berkeley) 3/27/91";
 #endif /* not lint */
+
+#define USE_OLD_TTY
 
 #include <sys/param.h>
 #include <sys/stat.h>
-#include <termios.h>
-#include <sys/ioctl.h>
-#include <sys/resource.h>
-#include <sys/utsname.h>
-
-#include <errno.h>
+#include <signal.h>
 #include <fcntl.h>
+#include <sgtty.h>
 #include <time.h>
 #include <ctype.h>
-#include <fcntl.h>
-#include <pwd.h>
 #include <setjmp.h>
-#include <signal.h>
+#include <syslog.h>
+#include <unistd.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
-#include <syslog.h>
-#include <time.h>
-#include <unistd.h>
-#include <util.h>
-
 #include "gettytab.h"
 #include "pathnames.h"
-#include "extern.h"
 
-extern char *__progname;
-
-/*
- * Set the amount of running time that getty should accumulate
- * before deciding that something is wrong and exit.
- */
-#define GETTY_TIMEOUT	60 /* seconds */
-
-struct termios tmode, omode;
+struct	sgttyb tmode = {
+	0, 0, CERASE, CKILL, 0
+};
+struct	tchars tc = {
+	CINTR, CQUIT, CSTART,
+	CSTOP, CEOF, CBRK,
+};
+struct	ltchars ltc = {
+	CSUSP, CDSUSP, CRPRNT,
+	CFLUSH, CWERASE, CLNEXT
+};
 
 int crmod, digit, lower, upper;
 
 char	hostname[MAXHOSTNAMELEN];
-struct	utsname kerninfo;
 char	name[16];
 char	dev[] = _PATH_DEV;
 char	ttyn[32];
-char	lockfile[512];
-uid_t	ttyowner;
+char	*portselector();
+char	*ttyname();
 
 #define	OBUFSIZ		128
 #define	TABBUFSIZ	512
 
 char	defent[TABBUFSIZ];
+char	defstrs[TABBUFSIZ];
 char	tabent[TABBUFSIZ];
+char	tabstrs[TABBUFSIZ];
 
 char	*env[128];
 
@@ -121,19 +109,14 @@ char partab[] = {
 	0000,0200,0200,0000,0200,0000,0000,0201
 };
 
-#define	ERASE	tmode.c_cc[VERASE]
-#define	KILL	tmode.c_cc[VKILL]
-#define	EOT	tmode.c_cc[VEOF]
-
-static void	dingdong __P((int));
-static void	interrupt __P((int));
-void		timeoverrun __P((int));
+#define	ERASE	tmode.sg_erase
+#define	KILL	tmode.sg_kill
+#define	EOT	tc.t_eofc
 
 jmp_buf timeout;
 
 static void
-dingdong(signo)
-	int signo;
+dingdong()
 {
 
 	alarm(0);
@@ -144,79 +127,30 @@ dingdong(signo)
 jmp_buf	intrupt;
 
 static void
-interrupt(signo)
-	int signo;
+interrupt()
 {
 
 	signal(SIGINT, interrupt);
 	longjmp(intrupt, 1);
 }
 
-/*
- * Action to take when getty is running too long.
- */
-void
-timeoverrun(signo)
-	int signo;
-{
-
-	syslog(LOG_ERR, "getty exiting due to excessive running time\n");
-	exit(1);
-}
-
-int		main __P((int, char **));
-static int	getname __P((void));
-static void	oflush __P((void));
-static void	prompt __P((void));
-static void	putchr __P((int));
-static void	putf __P((char *));
-static void	putpad __P((char *));
-static void	puts __P((char *));
-
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	extern char **environ;
+	extern	char **environ;
 	char *tname;
-	int repcnt = 0, failopenlogged = 0, uugetty = 0;
-	struct rlimit limit;
-	struct passwd *pw;
-
-#ifdef __GNUC__
-	(void)&tname;		/* XXX gcc -Wall */
-#endif
+	long allflags;
+	int repcnt = 0;
 
 	signal(SIGINT, SIG_IGN);
 /*
 	signal(SIGQUIT, SIG_DFL);
 */
-	openlog("getty", LOG_ODELAY|LOG_CONS|LOG_PID, LOG_AUTH);
+	openlog("getty", LOG_ODELAY|LOG_CONS, LOG_AUTH);
 	gethostname(hostname, sizeof(hostname));
 	if (hostname[0] == '\0')
 		strcpy(hostname, "Amnesiac");
-	uname(&kerninfo);
-
-	if (__progname[0] == 'u' && __progname[1] == 'u')
-		uugetty = 1;
-
-	/*
-	 * Find id of uucp login (if present) so we can chown tty properly.
-	 */
-	if (uugetty && (pw = getpwnam("uucp")))
-		ttyowner = pw->pw_uid;
-	else
-		ttyowner = 0;
-
-	/*
-	 * Limit running time to deal with broken or dead lines.
-	 */
-	(void)signal(SIGXCPU, timeoverrun);
-	limit.rlim_max = RLIM_INFINITY;
-	limit.rlim_cur = GETTY_TIMEOUT;
-	(void)setrlimit(RLIMIT_CPU, &limit);
-
 	/*
 	 * The following is a work around for vhangup interactions
 	 * which cause great problems getting window systems started.
@@ -224,95 +158,66 @@ main(argc, argv)
 	 * that the file descriptors are already set up for us. 
 	 * J. Gettys - MIT Project Athena.
 	 */
-	if (argc <= 2 || strcmp(argv[2], "-") == 0) {
-	    strncpy(ttyn, ttyname(0), 32);
-	    ttyn[31] = (char)NULL;
-	}
+	if (argc <= 2 || strcmp(argv[2], "-") == 0)
+	    strcpy(ttyn, ttyname(0));
 	else {
 	    int i;
 
 	    strcpy(ttyn, dev);
 	    strncat(ttyn, argv[2], sizeof(ttyn)-sizeof(dev));
-
-	    if (uugetty)  {
-		chown(ttyn, ttyowner, 0);
-		strcpy(lockfile, _PATH_LOCK);
-		strncat(lockfile, argv[2], sizeof(lockfile)-sizeof(_PATH_LOCK));
-		/* wait for lockfiles to go away before we try to open */
-		if ( pidlock(lockfile, 0, 0, 0) != 0 )  {
-		    syslog(LOG_ERR, "%s: can't create lockfile", ttyn);
-		    exit(1);
-		}
-		unlink(lockfile);
-	    }
 	    if (strcmp(argv[0], "+") != 0) {
-		chown(ttyn, ttyowner, 0);
+		chown(ttyn, 0, 0);
 		chmod(ttyn, 0600);
 		revoke(ttyn);
-		if (ttyaction(ttyn, "getty", "root"))
-			syslog(LOG_ERR,"%s: ttyaction failed", ttyn);
 		/*
 		 * Delay the open so DTR stays down long enough to be detected.
 		 */
 		sleep(2);
 		while ((i = open(ttyn, O_RDWR)) == -1) {
-			if ((repcnt % 10 == 0) &&
-			    (errno != ENXIO || !failopenlogged)) {
+			if (repcnt % 10 == 0) {
 				syslog(LOG_ERR, "%s: %m", ttyn);
 				closelog();
-				failopenlogged = 1;
 			}
 			repcnt++;
 			sleep(60);
 		}
-		if (uugetty && pidlock(lockfile, 0, 0, 0) != 0)  {
-			syslog(LOG_ERR, "%s: can't create lockfile", ttyn);
-			exit(1);
-		}
-		(void) chown(lockfile, ttyowner, 0);
 		login_tty(i);
 	    }
 	}
 
-	/* Start with default tty settings */
-	if (tcgetattr(0, &tmode) < 0) {
-		syslog(LOG_ERR, "%s: %m", ttyn);
-		exit(1);
-	}
-	omode = tmode;
-
-	gettable("default", defent);
+	gettable("default", defent, defstrs);
 	gendefaults();
 	tname = "default";
 	if (argc > 1)
 		tname = argv[1];
 	for (;;) {
-		int off;
+		int ldisp = OTTYDISC;
+		int off = 0;
 
-		gettable(tname, tabent);
+		gettable(tname, tabent, tabstrs);
 		if (OPset || EPset || APset)
 			APset++, OPset++, EPset++;
 		setdefaults();
-		off = 0;
-		(void)tcflush(0, TCIOFLUSH);	/* clear out the crap */
+		ioctl(0, TIOCFLUSH, 0);		/* clear out the crap */
 		ioctl(0, FIONBIO, &off);	/* turn off non-blocking mode */
 		ioctl(0, FIOASYNC, &off);	/* ditto for async mode */
-
 		if (IS)
-			cfsetispeed(&tmode, IS);
+			tmode.sg_ispeed = speed(IS);
 		else if (SP)
-			cfsetispeed(&tmode, SP);
+			tmode.sg_ispeed = speed(SP);
 		if (OS)
-			cfsetospeed(&tmode, OS);
+			tmode.sg_ospeed = speed(OS);
 		else if (SP)
-			cfsetospeed(&tmode, SP);
-		setflags(0);
+			tmode.sg_ospeed = speed(SP);
+		tmode.sg_flags = setflags(0);
+		ioctl(0, TIOCSETP, &tmode);
 		setchars();
-		if (tcsetattr(0, TCSANOW, &tmode) < 0) {
-			syslog(LOG_ERR, "%s: %m", ttyn);
-			exit(1);
-		}
+		ioctl(0, TIOCSETC, &tc);
+		if (HC)
+			ioctl(0, TIOCHPCL, 0);
 		if (AB) {
+			extern char *autobaud();
+
 			tname = autobaud();
 			continue;
 		}
@@ -326,8 +231,8 @@ main(argc, argv)
 		if (IM && *IM)
 			putf(IM);
 		if (setjmp(timeout)) {
-			tmode.c_ispeed = tmode.c_ospeed = 0;
-			(void)tcsetattr(0, TCSANOW, &tmode);
+			tmode.sg_ispeed = tmode.sg_ospeed = 0;
+			ioctl(0, TIOCSETP, &tmode);
 			exit(1);
 		}
 		if (TO) {
@@ -346,30 +251,29 @@ main(argc, argv)
 			}
 			if (!(upper || lower || digit))
 				continue;
-			setflags(2);
-			if (crmod) {
-				tmode.c_iflag |= ICRNL;
-				tmode.c_oflag |= ONLCR;
-			}
-#if XXX
+			allflags = setflags(2);
+			tmode.sg_flags = allflags & 0xffff;
+			allflags >>= 16;
+			if (crmod || NL)
+				tmode.sg_flags |= CRMOD;
 			if (upper || UC)
 				tmode.sg_flags |= LCASE;
 			if (lower || LC)
 				tmode.sg_flags &= ~LCASE;
-#endif
-			if (tcsetattr(0, TCSANOW, &tmode) < 0) {
-				syslog(LOG_ERR, "%s: %m", ttyn);
-				exit(1);
-			}
+			ioctl(0, TIOCSETP, &tmode);
+			ioctl(0, TIOCSLTC, &ltc);
+			ioctl(0, TIOCLSET, &allflags);
 			signal(SIGINT, SIG_DFL);
 			for (i = 0; environ[i] != (char *)0; i++)
 				env[i] = environ[i];
 			makeenv(&env[i]);
 
-			limit.rlim_max = RLIM_INFINITY;
-			limit.rlim_cur = RLIM_INFINITY;
-			(void)setrlimit(RLIMIT_CPU, &limit);
-			execle(LO, "login", "-p", "--", name, (char *)0, env);
+			/* 
+			 * this is what login was doing anyway.
+			 * soon we rewrite getty completely.
+			 */
+			set_ttydefaults(0);
+			execle(LO, "login", "-p", name, (char *) 0, env);
 			syslog(LOG_ERR, "%s: %m", LO);
 			exit(1);
 		}
@@ -378,11 +282,9 @@ main(argc, argv)
 		signal(SIGINT, SIG_IGN);
 		if (NX && *NX)
 			tname = NX;
-		unlink(lockfile);
 	}
 }
 
-static int
 getname()
 {
 	register int c;
@@ -397,17 +299,16 @@ getname()
 		return (0);
 	}
 	signal(SIGINT, interrupt);
-	setflags(1);
+	tmode.sg_flags = setflags(0);
+	ioctl(0, TIOCSETP, &tmode);
+	tmode.sg_flags = setflags(1);
 	prompt();
 	if (PF > 0) {
 		oflush();
 		sleep(PF);
 		PF = 0;
 	}
-	if (tcsetattr(0, TCSANOW, &tmode) < 0) {
-		syslog(LOG_ERR, "%s: %m", ttyn);
-		exit(1);
-	}
+	ioctl(0, TIOCSETP, &tmode);
 	crmod = digit = lower = upper = 0;
 	np = name;
 	for (;;) {
@@ -429,7 +330,7 @@ getname()
 		else if (c == ERASE || c == '#' || c == '\b') {
 			if (np > name) {
 				np--;
-				if (cfgetospeed(&tmode) >= 1200)
+				if (tmode.sg_ospeed >= B1200)
 					puts("\b \b");
 				else
 					putchr(cs);
@@ -438,7 +339,7 @@ getname()
 		} else if (c == KILL || c == '@') {
 			putchr(cs);
 			putchr('\r');
-			if (cfgetospeed(&tmode) < 1200)
+			if (tmode.sg_ospeed < B1200)
 				putchr('\n');
 			/* this is the way they do it down under ... */
 			else if (np > name)
@@ -457,19 +358,23 @@ getname()
 	*np = 0;
 	if (c == '\r')
 		crmod = 1;
-	if ((upper && !lower && !LC) || UC)
+	if (upper && !lower && !LC || UC)
 		for (np = name; *np; np++)
 			if (isupper(*np))
 				*np = tolower(*np);
 	return (1);
 }
 
-static void
+static
+short	tmspc10[] = {
+	0, 2000, 1333, 909, 743, 666, 500, 333, 166, 83, 55, 41, 20, 10, 5, 15
+};
+
 putpad(s)
 	register char *s;
 {
 	register pad = 0;
-	speed_t ospeed = cfgetospeed(&tmode);
+	register mspc10;
 
 	if (isdigit(*s)) {
 		while (isdigit(*s)) {
@@ -488,7 +393,10 @@ putpad(s)
 	 * If no delay needed, or output speed is
 	 * not comprehensible, then don't try to delay.
 	 */
-	if (pad == 0 || ospeed <= 0)
+	if (pad == 0)
+		return;
+	if (tmode.sg_ospeed <= 0 ||
+	    tmode.sg_ospeed >= (sizeof tmspc10 / sizeof tmspc10[0]))
 		return;
 
 	/*
@@ -497,12 +405,12 @@ putpad(s)
 	 * Transmitting pad characters slows many terminals down and also
 	 * loads the system.
 	 */
-	pad = (pad * ospeed + 50000) / 100000;
-	while (pad--)
+	mspc10 = tmspc10[tmode.sg_ospeed];
+	pad += mspc10 / 2;
+	for (pad /= mspc10; pad > 0; pad--)
 		putchr(*PC);
 }
 
-static void
 puts(s)
 	register char *s;
 {
@@ -513,9 +421,7 @@ puts(s)
 char	outbuf[OBUFSIZ];
 int	obufcnt = 0;
 
-static void
 putchr(cc)
-	int cc;
 {
 	char c;
 
@@ -533,7 +439,6 @@ putchr(cc)
 		write(STDOUT_FILENO, &c, 1);
 }
 
-static void
 oflush()
 {
 	if (obufcnt)
@@ -541,7 +446,6 @@ oflush()
 	obufcnt = 0;
 }
 
-static void
 prompt()
 {
 
@@ -550,7 +454,6 @@ prompt()
 		putchr('\n');
 }
 
-static void
 putf(cp)
 	register char *cp;
 {
@@ -566,7 +469,7 @@ putf(cp)
 		switch (*++cp) {
 
 		case 't':
-			slash = strrchr(ttyn, '/');
+			slash = rindex(ttyn, '/');
 			if (slash == (char *) 0)
 				puts(ttyn);
 			else
@@ -578,28 +481,12 @@ putf(cp)
 			break;
 
 		case 'd': {
-			static char fmt[] = "%l:% %p on %A, %d %B %Y";
+			static char fmt[] = "%l:% %P on %A, %d %B %Y";
 
 			fmt[4] = 'M';		/* I *hate* SCCS... */
 			(void)time(&t);
 			(void)strftime(db, sizeof(db), fmt, localtime(&t));
 			puts(db);
-			break;
-
-		case 's':
-			puts(kerninfo.sysname);
-			break;
-
-		case 'm':
-			puts(kerninfo.machine);
-			break;
-
-		case 'r':
-			puts(kerninfo.release);
-			break;
-
-		case 'v':
-			puts(kerninfo.version);
 			break;
 		}
 

@@ -1,7 +1,8 @@
-#	$NetBSD: Makefile,v 1.8 1997/10/17 05:40:16 mrg Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.2 (Berkeley) 9/27/90
 
 PROG=	portmap
-MAN=	portmap.8
+DPADD=	${LIBRPC} ${LIBUTIL}
+LDADD=	-lrpc -lutil
+MAN8=	portmap.0
 
 .include <bsd.prog.mk>

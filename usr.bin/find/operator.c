@@ -1,8 +1,6 @@
-/*	$NetBSD: operator.c,v 1.5 1997/10/19 11:52:55 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Cimarron D. Taylor of the University of California, Berkeley.
@@ -36,21 +34,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "from: @(#)operator.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: operator.c,v 1.5 1997/10/19 11:52:55 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)operator.c	5.4 (Berkeley) 5/24/91";
 #endif /* not lint */
 
 #include <sys/types.h>
-
-#include <err.h>
-#include <fts.h>
 #include <stdio.h>
-
 #include "find.h"
     
 /*
@@ -64,10 +53,10 @@ yanknode(planp)
 	PLAN *node;		/* top node removed from the plan */
     
 	if ((node = (*planp)) == NULL)
-		return (NULL);
+		return(NULL);
 	(*planp) = (*planp)->next;
 	node->next = NULL;
-	return (node);
+	return(node);
 }
  
 /*
@@ -80,14 +69,15 @@ static PLAN *
 yankexpr(planp)    
 	PLAN **planp;		/* pointer to top of plan (modified) */
 {
-	PLAN *next;		/* temp node holding subexpression results */
+	register PLAN *next;	/* temp node holding subexpression results */
 	PLAN *node;		/* pointer to returned node or expression */
 	PLAN *tail;		/* pointer to tail of subplan */
 	PLAN *subplan;		/* pointer to head of ( ) expression */
+	int f_expr();
     
 	/* first pull the top node from the plan */
 	if ((node = yanknode(planp)) == NULL)
-		return (NULL);
+		return(NULL);
     
 	/*
 	 * If the node is an '(' then we recursively slurp up expressions
@@ -98,7 +88,7 @@ yankexpr(planp)
 	if (node->type == N_OPENPAREN)
 		for (tail = subplan = NULL;;) {
 			if ((next = yankexpr(planp)) == NULL)
-				err(1, "(: missing closing ')'");
+				err("%s: %s", "(", "missing closing ')'");
 			/*
 			 * If we find a closing ')' we store the collected
 			 * subplan in our '(' node and convert the node to
@@ -108,7 +98,8 @@ yankexpr(planp)
 			 */
 			if (next->type == N_CLOSEPAREN) {
 				if (subplan == NULL)
-					errx(1, "(): empty inner expression");
+					err("%s: %s",
+					    "()", "empty inner expression");
 				node->p_data[0] = subplan;
 				node->type = N_EXPR;
 				node->eval = f_expr;
@@ -123,7 +114,7 @@ yankexpr(planp)
 				tail->next = NULL;
 			}
 		}
-	return (node);
+	return(node);
 }
  
 /*
@@ -134,8 +125,8 @@ PLAN *
 paren_squish(plan)
 	PLAN *plan;		/* plan with ( ) nodes */
 {
-	PLAN *expr;		/* pointer to next expression */
-	PLAN *tail;		/* pointer to tail of result plan */
+	register PLAN *expr;	/* pointer to next expression */
+	register PLAN *tail;	/* pointer to tail of result plan */
 	PLAN *result;		/* pointer to head of result plan */
     
 	result = tail = NULL;
@@ -150,7 +141,7 @@ paren_squish(plan)
 		 * '(' someplace.
 		 */
 		if (expr->type == N_CLOSEPAREN)
-			errx(1, "): no beginning '('");
+			err("%s: %s", ")", "no beginning '('");
 
 		/* add the expression to our result plan */
 		if (result == NULL)
@@ -161,7 +152,7 @@ paren_squish(plan)
 		}
 		tail->next = NULL;
 	}
-	return (result);
+	return(result);
 }
  
 /*
@@ -172,9 +163,9 @@ PLAN *
 not_squish(plan)
 	PLAN *plan;		/* plan to process */
 {
-	PLAN *next;		/* next node being processed */
-	PLAN *node;		/* temporary node used in N_NOT processing */
-	PLAN *tail;		/* pointer to tail of result plan */
+	register PLAN *next;	/* next node being processed */
+	register PLAN *node;	/* temporary node used in N_NOT processing */
+	register PLAN *tail;	/* pointer to tail of result plan */
 	PLAN *result;		/* pointer to head of result plan */
     
 	tail = result = next = NULL;
@@ -201,9 +192,9 @@ not_squish(plan)
 				node = yanknode(&plan);
 			}
 			if (node == NULL)
-				errx(1, "!: no following expression");
+				err("%s: %s", "!", "no following expression");
 			if (node->type == N_OR)
-				errx(1, "!: nothing between ! and -o");
+				err("%s: %s", "!", "nothing between ! and -o");
 			if (notlevel % 2 != 1)
 				next = node;
 			else
@@ -219,7 +210,7 @@ not_squish(plan)
 		}
 		tail->next = NULL;
 	}
-	return (result);
+	return(result);
 }
  
 /*
@@ -230,8 +221,8 @@ PLAN *
 or_squish(plan)
 	PLAN *plan;		/* plan with ors to be squished */
 {
-	PLAN *next;		/* next node being processed */
-	PLAN *tail;		/* pointer to tail of result plan */
+	register PLAN *next;	/* next node being processed */
+	register PLAN *tail;	/* pointer to tail of result plan */
 	PLAN *result;		/* pointer to head of result plan */
     
 	tail = result = next = NULL;
@@ -255,12 +246,12 @@ or_squish(plan)
 		 */
 		if (next->type == N_OR) {
 			if (result == NULL)
-				errx(1, "-o: no expression before -o");
+				err("%s: %s", "-o", "no expression before -o");
 			next->p_data[0] = result;
 			next->p_data[1] = or_squish(plan);
 			if (next->p_data[1] == NULL)
-				errx(1, "-o: no expression after -o");
-			return (next);
+				err("%s: %s", "-o", "no expression after -o");
+			return(next);
 		}
 
 		/* add the node to our result plan */
@@ -272,5 +263,5 @@ or_squish(plan)
 		}
 		tail->next = NULL;
 	}
-	return (result);
+	return(result);
 }

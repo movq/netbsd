@@ -1,8 +1,6 @@
-/*	$NetBSD: lstIsEmpty.c,v 1.7 1997/09/28 03:31:30 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1989, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Adam de Boor.
@@ -36,18 +34,9 @@
  * SUCH DAMAGE.
  */
 
-#ifdef MAKE_BOOTSTRAP
-static char rcsid[] = "$NetBSD: lstIsEmpty.c,v 1.7 1997/09/28 03:31:30 lukem Exp $";
-#else
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lstIsEmpty.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: lstIsEmpty.c,v 1.7 1997/09/28 03:31:30 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)lstIsEmpty.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
-#endif
 
 /*-
  * LstIsEmpty.c --

@@ -1,7 +1,5 @@
-.\"	$NetBSD: column.1,v 1.4 1997/10/18 13:02:59 lukem Exp $
-.\"
-.\" Copyright (c) 1989, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1989, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,23 +29,23 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)column.1	8.1 (Berkeley) 6/6/93
+.\"     @(#)column.1	5.8 (Berkeley) 3/14/91
 .\"
-.Dd June 6, 1993
+.Dd March 14, 1991
 .Os
 .Dt COLUMN 1
 .Sh NAME
 .Nm column
 .Nd columnate lists
 .Sh SYNOPSIS
-.Nm
+.Nm column
+.Op Fl c Ns Ar columns
+.Op Fl s Ns Ar sep
 .Op Fl tx
-.Op Fl c Ar columns
-.Op Fl s Ar sep
 .Op Ar
 .Sh DESCRIPTION
 The
-.Nm
+.Nm column
 utility formats its input into multiple columns.
 Rows are filled before columns.
 Input is taken from
@@ -76,7 +74,7 @@ Useful for pretty-printing displays.
 Fill columns before filling rows.
 .El
 .Pp
-.Nm
+.Nm Column
 exits 0 on success, >0 if an error occurred.
 .Sh ENVIRONMENT
 .Bl -tag -width COLUMNS
@@ -87,7 +85,7 @@ is used to determine the size of
 the screen if no other information is available.
 .El
 .Sh EXAMPLES
-.Dl (printf \&"PERM LINKS OWNER SIZE MONTH DAY HH:MM/YEAR NAME\en\&"\ \&;\ \&\e
+.Dl (printf \&"PERM LINKS OWNER SIZE MONTH DAY HH:MM/YEAR NAME\en\&"\ \&;
 .Dl ls -l \&| sed 1d) \&| column -t
 .Sh SEE ALSO
 .Xr colrm 1 ,

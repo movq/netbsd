@@ -1,11 +1,8 @@
-.\"	$NetBSD: tsort.1,v 1.7 1997/10/20 01:09:53 lukem Exp $
-.\"
-.\" Copyright (c) 1990, 1993, 1994
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This manual is derived from one contributed to Berkeley by
 .\" Michael Rendell of Memorial University of Newfoundland.
-.\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
 .\" are met:
@@ -34,21 +31,19 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)tsort.1	8.3 (Berkeley) 4/1/94
+.\"     @(#)tsort.1	6.3 (Berkeley) 4/23/91
 .\"
-.Dd April 1, 1994
+.Dd April 23, 1991
 .Dt TSORT 1
 .Os
 .Sh NAME
 .Nm tsort
 .Nd topological sort of a directed graph
 .Sh SYNOPSIS
-.Nm
-.Op Fl l
-.Op Fl q
+.Nm tsort
 .Op Ar file
 .Sh DESCRIPTION
-.Nm
+.Nm Tsort
 takes a list of pairs of node names representing directed arcs in
 a graph and prints the nodes in topological order on standard output.
 Input is taken from the named
@@ -56,8 +51,8 @@ Input is taken from the named
 or from standard input if no file
 is given.
 .Pp
-Node names in the input are separated by white space and there must
-be an even number of node pairs.
+Node names in the input are separated by white space and there must be an
+even number of nodes.
 .Pp
 Presence of a node in a graph can be represented by an arc from the node
 to itself.
@@ -66,17 +61,6 @@ This is useful when a node is not connected to any other nodes.
 If the graph contains a cycle (and therefore cannot be properly sorted),
 one of the arcs in the cycle is ignored and the sort continues.
 Cycles are reported on standard error.
-.Pp
-The options are as follows:
-.Bl -tag -width Ds
-.It Fl l
-Search for and display the longest cycle.
-Can take a very long time.
-.It Fl q
-Do not display informational messages about cycles.  This is primarily
-intended for building libraries, where optimal ordering is not critical,
-and cycles occur often.
-.El
 .Sh SEE ALSO
 .Xr ar 1
 .Sh HISTORY
@@ -85,6 +69,6 @@ A
 command appeared in
 .At v7 .
 This
-.Nm
+.Nm tsort
 command and manual page are derived from sources contributed to Berkeley by
 Michael Rendell of Memorial University of Newfoundland.

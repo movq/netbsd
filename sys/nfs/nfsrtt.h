@@ -1,5 +1,3 @@
-/*	$NetBSD: nfsrtt.h,v 1.5 1997/05/12 23:36:08 fvdl Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -35,12 +33,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)nfsrtt.h	8.2 (Berkeley) 3/30/95
+ *	from: @(#)nfsrtt.h	8.1 (Berkeley) 6/10/93
+ *	$Id: nfsrtt.h,v 1.1 1994/06/08 11:37:13 mycroft Exp $
  */
-
-
-#ifndef _NFS_NFSRTT_H_
-#define _NFS_NFSRTT_H_
 
 /*
  * Definitions for performance monitor.
@@ -59,15 +54,15 @@
 struct nfsrtt {
 	int pos;			/* Position in array for next entry */
 	struct rttl {
-		u_int32_t	proc;		/* NFS procedure number */
-		int		rtt;		/* Measured round trip time */
-		int		rto;		/* Round Trip Timeout */
-		int		sent;		/* # rpcs in progress */
-		int		cwnd;		/* Send window */
-		int		srtt;		/* Ave Round Trip Time */
-		int		sdrtt;		/* Ave mean deviation of RTT */
-		fsid_t		fsid;		/* Fsid for mount point */
-		struct timeval	tstamp;	/* Timestamp of log entry */
+		int	proc;		/* NFS procedure number */
+		int	rtt;		/* Measured round trip time */
+		int	rto;		/* Round Trip Timeout */
+		int	sent;		/* # rpcs in progress */
+		int	cwnd;		/* Send window */
+		int	srtt;		/* Ave Round Trip Time */
+		int	sdrtt;		/* Ave mean deviation of RTT */
+		fsid_t	fsid;		/* Fsid for mount point */
+		struct timeval tstamp;	/* Timestamp of log entry */
 	} rttl[NFSRTTLOGSIZ];
 };
 
@@ -84,7 +79,6 @@ struct nfsrtt {
 #define	DRT_TCP		0x02	/* Client used TCP transport */
 #define	DRT_CACHEREPLY	0x04	/* Reply was from recent request cache */
 #define	DRT_CACHEDROP	0x08	/* Rpc request dropped, due to recent reply */
-#define DRT_NFSV3	0x10	/* Rpc used NFS Version 3 */
 
 /*
  * Server log structure
@@ -94,12 +88,10 @@ struct nfsrtt {
 struct nfsdrt {
 	int pos;			/* Position of next log entry */
 	struct drt {
-		int       flag;		/* Bits as defined above */
-		u_int32_t proc;		/* NFS procedure number */
-		u_int32_t ipadr;	/* IP address of client */
-		int       resptime;	/* Response time (usec) */
+		int	flag;		/* Bits as defined above */
+		int	proc;		/* NFS procedure number */
+		u_long	ipadr;		/* IP address of client */
+		int	resptime;	/* Response time (usec) */
 		struct timeval tstamp;	/* Timestamp of log entry */
 	} drt[NFSRTTLOGSIZ];
 };
-
-#endif

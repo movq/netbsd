@@ -1,8 +1,6 @@
-/*	$NetBSD: make_level.c,v 1.5 1997/10/12 14:16:27 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)make_level.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: make_level.c,v 1.5 1997/10/12 14:16:27 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)make_level.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include	"robots.h"
@@ -48,12 +41,12 @@ __RCSID("$NetBSD: make_level.c,v 1.5 1997/10/12 14:16:27 lukem Exp $");
  * make_level:
  *	Make the current level
  */
-void
 make_level()
 {
-	int	i;
-	COORD	*cp;
-	int	x;
+	register int	i;
+	register COORD	*cp;
+	register WINDOW	*wp;
+	register int	x, *endp;
 
 	reset_count();
 	for (i = 1; i < Y_FIELDSIZE; i++)
@@ -70,7 +63,7 @@ make_level()
 		cp->y = -1;
 	My_pos.y = -1;
 
-	memset(Field, 0, sizeof Field);
+	bzero(Field, sizeof Field);
 	Min.y = Y_FIELDSIZE;
 	Min.x = X_FIELDSIZE;
 	Max.y = 0;

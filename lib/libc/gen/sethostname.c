@@ -1,5 +1,3 @@
-/*	$NetBSD: sethostname.c,v 1.6 1997/07/21 14:07:30 jtc Exp $	*/
-
 /*
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,29 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
 static char sccsid[] = "@(#)sethostname.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: sethostname.c,v 1.6 1997/07/21 14:07:30 jtc Exp $");
-#endif
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/param.h>
 #include <sys/sysctl.h>
-#include <unistd.h>
-
-#ifdef __weak_alias
-__weak_alias(sethostname,_sethostname);
-#endif
 
 #if __STDC__
-int
+long
 sethostname(const char *name, int namelen)
 #else
-int
+long
 sethostname(name, namelen)
 	char *name;
 	int namelen;

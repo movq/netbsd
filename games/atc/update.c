@@ -1,8 +1,6 @@
-/*	$NetBSD: update.c,v 1.6 1997/10/10 02:07:34 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Ed James.
@@ -45,24 +43,20 @@
  * For more info on this and all of my stuff, mail edjames@berkeley.edu.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)update.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: update.c,v 1.6 1997/10/10 02:07:34 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)update.c	5.5 (Berkeley) 10/30/90";
 #endif not lint
 
 #include "include.h"
 
-void
-update(dummy)
-	int dummy;
+update()
 {
-	int	i, dir_diff, unclean;
-	PLANE	*pp, *p1, *p2;
+	int	i, dir_diff, mask, unclean;
+	PLANE	*pp, *p1, *p2, *p;
 
+#ifdef BSD
+	mask = sigblock(sigmask(SIGINT));
+#endif
 #ifdef SYSV
 	alarm(0);
 	signal(SIGALRM, update);
@@ -217,6 +211,9 @@ update(dummy)
 	if ((rand() % sp->newplane_time) == 0)
 		addplane();
 
+#ifdef BSD
+	sigsetmask(mask);
+#endif
 #ifdef SYSV
 	alarm(sp->update_secs);
 #endif
@@ -227,6 +224,7 @@ command(pp)
 	PLANE	*pp;
 {
 	static char	buf[50], *bp, *comm_start;
+	char	*index();
 
 	buf[0] = '\0';
 	bp = buf;
@@ -234,7 +232,7 @@ command(pp)
 		(pp->fuel < LOWFUEL) ? '*' : ' ',
 		(pp->dest_type == T_AIRPORT) ? 'A' : 'E', pp->dest_no);
 
-	comm_start = bp = strchr(buf, '\0');
+	comm_start = bp = index(buf, '\0');
 	if (pp->altitude == 0)
 		(void)sprintf(bp, "Holding @ A%d", pp->orig_no);
 	else if (pp->new_dir >= MAXDIR || pp->new_dir < 0)
@@ -242,18 +240,18 @@ command(pp)
 	else if (pp->new_dir != pp->dir)
 		(void)sprintf(bp, "%d", dir_deg(pp->new_dir));
 
-	bp = strchr(buf, '\0');
+	bp = index(buf, '\0');
 	if (pp->delayd)
 		(void)sprintf(bp, " @ B%d", pp->delayd_no);
 
-	bp = strchr(buf, '\0');
+	bp = index(buf, '\0');
 	if (*comm_start == '\0' && 
 	    (pp->status == S_UNMARKED || pp->status == S_IGNORED))
 		strcpy(bp, "---------");
 	return (buf);
 }
 
-char
+/* char */
 name(p)
 	PLANE	*p;
 {
@@ -263,9 +261,7 @@ name(p)
 		return ('a' + p->plane_no);
 }
 
-int
 number(l)
-	char l;
 {
 	if (l < 'a' && l > 'z' && l < 'A' && l > 'Z')
 		return (-1);
@@ -275,7 +271,6 @@ number(l)
 		return (l - 'A');
 }
 
-int
 next_plane()
 {
 	static int	last_plane = -1;
@@ -304,13 +299,12 @@ next_plane()
 	return (last_plane);
 }
 
-int
 addplane()
 {
 	PLANE	p, *pp, *p1;
 	int	i, num_starts, close, rnd, rnd2, pnum;
 
-	memset(&p, 0, sizeof (p));
+	bzero(&p, sizeof (p));
 
 	p.status = S_MARKED;
 	p.plane_type = random() % 2;
@@ -365,7 +359,7 @@ addplane()
 	p.plane_no = pnum;
 
 	pp = newplane();
-	memcpy(pp, &p, sizeof (p));
+	bcopy(&p, pp, sizeof (p));
 
 	if (pp->orig_type == T_AIRPORT)
 		append(&ground, pp);
@@ -389,10 +383,8 @@ findplane(n)
 	return (NULL);
 }
 
-int
 too_close(p1, p2, dist)
 	PLANE	*p1, *p2;
-	int	 dist;
 {
 	if (ABS(p1->altitude - p2->altitude) <= dist &&
 	    ABS(p1->xpos - p2->xpos) <= dist && ABS(p1->ypos - p2->ypos) <= dist)
@@ -401,9 +393,7 @@ too_close(p1, p2, dist)
 		return (0);
 }
 
-int
 dir_deg(d)
-	int d;
 {
 	switch (d) {
 	case 0: return (0);

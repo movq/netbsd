@@ -1,8 +1,6 @@
-/*	$NetBSD: idlok.c,v 1.7 1997/07/22 07:36:45 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,29 +31,24 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)idlok.c	8.2 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: idlok.c,v 1.7 1997/07/22 07:36:45 mikel Exp $");
-#endif
-#endif	/* not lint */
+static char sccsid[] = "@(#)idlok.c	5.4 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include "curses.h"
+# include	"curses.ext"
 
 /*
- * idlok --
- *	Turn on and off using insert/deleteln sequences for the
- *	given window.
+ * idlok:
+ *	Turn on and off using insert/deleteln sequences for the given
+ *	window.
+ *
  */
-void
 idlok(win, bf)
-	WINDOW *win;
-	int bf;
+register WINDOW	*win;
+bool		bf;
 {
 	if (bf)
-		win->flags |= __IDLINE;
+		win->_flags |= _IDLINE;
 	else
-		win->flags &= ~__IDLINE;
+		win->_flags &= ~_IDLINE;
 }

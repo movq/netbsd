@@ -1,8 +1,6 @@
-/*	$NetBSD: tutor.c,v 1.4 1997/10/10 08:59:54 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,22 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)tutor.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: tutor.c,v 1.4 1997/10/10 08:59:54 lukem Exp $");
-#endif
-#endif				/* not lint */
+static char sccsid[] = "@(#)tutor.c	5.4 (Berkeley) 6/1/90";
+#endif /* not lint */
 
 #include "back.h"
 #include "tutor.h"
 
-static char better[] = "That is a legal move, but there is a better one.\n";
+extern int	maxmoves;
+extern char	*finis[];
 
-void
-tutor()
-{
-	int     i, j;
+extern struct situatn	test[];
+
+static char	better[] = "That is a legal move, but there is a better one.\n";
+
+tutor ()  {
+	register int	i, j;
 
 	i = 0;
 	begscr = 18;
@@ -66,39 +62,40 @@ tutor()
 	colen = 5;
 	wrboard();
 
-	while (1) {
-		if (!brdeq(test[i].brd, board)) {
+	while (1)  {
+		if (! brdeq(test[i].brd,board))  {
 			if (tflag && curr == 23)
-				curmove(18, 0);
-			writel(better);
+				curmove (18,0);
+			writel (better);
 			nexturn();
-			movback(mvlim);
-			if (tflag) {
+			movback (mvlim);
+			if (tflag)  {
 				refresh();
-				clrest();
+				clrest ();
 			}
-			if ((!tflag) || curr == 19) {
+			if ((! tflag) || curr == 19)  {
 				proll();
-				writec('\t');
-			} else
-				curmove(curr > 19 ? curr - 2 : curr + 4, 25);
+				writec ('\t');
+			}
+			else
+				curmove (curr > 19? curr-2: curr+4,25);
 			getmove();
 			if (cturn == 0)
 				leave();
 			continue;
 		}
 		if (tflag)
-			curmove(18, 0);
-		text(*test[i].com);
-		if (!tflag)
-			writec('\n');
+			curmove (18,0);
+		text (*test[i].com);
+		if (! tflag)
+			writec ('\n');
 		if (i == maxmoves)
 			break;
 		D0 = test[i].roll1;
 		D1 = test[i].roll2;
 		d0 = 0;
 		mvlim = 0;
-		for (j = 0; j < 4; j++) {
+		for (j = 0; j < 4; j++)  {
 			if (test[i].mp[j] == test[i].mg[j])
 				break;
 			p[j] = test[i].mp[j];
@@ -108,7 +105,7 @@ tutor()
 		if (mvlim)
 			for (j = 0; j < mvlim; j++)
 				if (makmove(j))
-					writel("AARGH!!!\n");
+					writel ("AARGH!!!\n");
 		if (tflag)
 			refresh();
 		nexturn();
@@ -117,7 +114,7 @@ tutor()
 		d0 = 0;
 		i++;
 		mvlim = movallow();
-		if (mvlim) {
+		if (mvlim)  {
 			if (tflag)
 				clrest();
 			proll();
@@ -132,29 +129,27 @@ tutor()
 	leave();
 }
 
-void
-clrest()
-{
-	int     r, c, j;
+clrest ()  {
+	register int	r, c, j;
 
 	r = curr;
 	c = curc;
-	for (j = r + 1; j < 24; j++) {
-		curmove(j, 0);
+	for (j = r+1; j < 24; j++)  {
+		curmove (j,0);
 		cline();
 	}
-	curmove(r, c);
+	curmove (r,c);
 }
 
-int
-brdeq(b1, b2)
-	int    *b1, *b2;
-{
-	int    *e;
+brdeq (b1,b2)
+register int  *b1, *b2;
 
-	e = b1 + 26;
+{
+	register int  *e;
+
+	e = b1+26;
 	while (b1 < e)
 		if (*b1++ != *b2++)
-			return (0);
-	return (1);
+			return(0);
+	return(1);
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: strings.h,v 1.3 1994/10/26 00:56:31 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.

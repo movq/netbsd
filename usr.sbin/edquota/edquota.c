@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1980, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1990 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Robert Elz at The University of Melbourne.
@@ -34,18 +34,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980, 1990 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "from: @(#)edquota.c	8.3 (Berkeley) 4/27/95";
-#else
-__RCSID("$NetBSD: edquota.c,v 1.15 1997/10/17 02:25:08 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)edquota.c	5.15 (Berkeley) 9/27/90";
 #endif /* not lint */
 
 /*
@@ -55,19 +51,14 @@ __RCSID("$NetBSD: edquota.c,v 1.15 1997/10/17 02:25:08 lukem Exp $");
 #include <sys/stat.h>
 #include <sys/file.h>
 #include <sys/wait.h>
-#include <sys/queue.h>
-#include <ufs/ufs/quota.h>
-#include <err.h>
+#include <ufs/quota.h>
 #include <errno.h>
 #include <fstab.h>
 #include <pwd.h>
 #include <grp.h>
 #include <ctype.h>
-#include <signal.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include "pathnames.h"
 
 char *qfname = QUOTAFILENAME;
@@ -81,47 +72,29 @@ struct quotause {
 	struct	dqblk dqblk;
 	char	fsname[MAXPATHLEN + 1];
 	char	qfname[1];	/* actually longer */
-};
+} *getprivs();
 #define	FOUND	0x01
 
-int	main __P((int, char **));
-void	usage __P((void));
-int	getentry __P((char *, int));
-struct quotause *
-	getprivs __P((long, int));
-void	putprivs __P((long, int, struct quotause *));
-int	editit __P((char *));
-int	writeprivs __P((struct quotause *, int, char *, int));
-int	readprivs __P((struct quotause *, int));
-int	writetimes __P((struct quotause *, int, int));
-int	readtimes __P((struct quotause *, int));
-char *	cvtstoa __P((time_t));
-int	cvtatos __P((time_t, char *, time_t *));
-void	freeprivs __P((struct quotause *));
-int	alldigits __P((char *));
-int	hasquota __P((struct fstab *, int, char **));
-
-int
 main(argc, argv)
+	register char **argv;
 	int argc;
-	char **argv;
 {
-	struct quotause *qup, *protoprivs, *curprivs;
+	register struct quotause *qup, *protoprivs, *curprivs;
 	extern char *optarg;
 	extern int optind;
-	long id, protoid;
-	int quotatype, tmpfd;
-	char *protoname;
-	int ch;
+	register long id, protoid;
+	register int quotatype, tmpfd;
+	char *protoname, ch;
 	int tflag = 0, pflag = 0;
 
 	if (argc < 2)
 		usage();
-	if (getuid())
-		errx(1, "permission denied");
-	protoname = NULL;
+	if (getuid()) {
+		fprintf(stderr, "edquota: permission denied\n");
+		exit(1);
+	}
 	quotatype = USRQUOTA;
-	while ((ch = getopt(argc, argv, "ugtp:")) != -1) {
+	while ((ch = getopt(argc, argv, "ugtp:")) != EOF) {
 		switch(ch) {
 		case 'p':
 			protoname = optarg;
@@ -183,7 +156,6 @@ main(argc, argv)
 	exit(0);
 }
 
-void
 usage()
 {
 	fprintf(stderr, "%s%s%s%s",
@@ -198,7 +170,6 @@ usage()
  * an identifier. This routine must agree with the kernel routine
  * getinoquota as to the interpretation of quota types.
  */
-int
 getentry(name, quotatype)
 	char *name;
 	int quotatype;
@@ -210,17 +181,17 @@ getentry(name, quotatype)
 		return (atoi(name));
 	switch(quotatype) {
 	case USRQUOTA:
-		if ((pw = getpwnam(name)) != NULL)
+		if (pw = getpwnam(name))
 			return (pw->pw_uid);
-		warnx("%s: no such user", name);
+		fprintf(stderr, "%s: no such user\n", name);
 		break;
 	case GRPQUOTA:
-		if ((gr = getgrnam(name)) != NULL)
+		if (gr = getgrnam(name))
 			return (gr->gr_gid);
-		warnx("%s: no such group", name);
+		fprintf(stderr, "%s: no such group\n", name);
 		break;
 	default:
-		warnx("%d: unknown quota type", quotatype);
+		fprintf(stderr, "%d: unknown quota type\n", quotatype);
 		break;
 	}
 	sleep(1);
@@ -232,11 +203,11 @@ getentry(name, quotatype)
  */
 struct quotause *
 getprivs(id, quotatype)
-	long id;
+	register long id;
 	int quotatype;
 {
-	struct fstab *fs;
-	struct quotause *qup, *quptail;
+	register struct fstab *fs;
+	register struct quotause *qup, *quptail;
 	struct quotause *quphead;
 	int qcmd, qupsize, fd;
 	char *qfpathname;
@@ -244,46 +215,47 @@ getprivs(id, quotatype)
 	extern int errno;
 
 	setfsent();
-	quptail = NULL;
 	quphead = (struct quotause *)0;
 	qcmd = QCMD(Q_GETQUOTA, quotatype);
-	while ((fs = getfsent()) != NULL) {
-		if (strcmp(fs->fs_vfstype, "ffs"))
+	while (fs = getfsent()) {
+		if (strcmp(fs->fs_vfstype, "ufs"))
 			continue;
 		if (!hasquota(fs, quotatype, &qfpathname))
 			continue;
 		qupsize = sizeof(*qup) + strlen(qfpathname);
-		if ((qup = (struct quotause *)malloc(qupsize)) == NULL)
-			errx(2, "out of memory");
+		if ((qup = (struct quotause *)malloc(qupsize)) == NULL) {
+			fprintf(stderr, "edquota: out of memory\n");
+			exit(2);
+		}
 		if (quotactl(fs->fs_file, qcmd, id, &qup->dqblk) != 0) {
 	    		if (errno == EOPNOTSUPP && !warned) {
 				warned++;
-				warnx(
+				fprintf(stderr, "Warning: %s\n",
 				    "Quotas are not compiled into this kernel");
 				sleep(3);
 			}
 			if ((fd = open(qfpathname, O_RDONLY)) < 0) {
 				fd = open(qfpathname, O_RDWR|O_CREAT, 0640);
 				if (fd < 0 && errno != ENOENT) {
-					warnx("open `%s'", qfpathname);
+					perror(qfpathname);
 					free(qup);
 					continue;
 				}
-				warnx("Creating quota file %s", qfpathname);
+				fprintf(stderr, "Creating quota file %s\n",
+				    qfpathname);
 				sleep(3);
 				(void) fchown(fd, getuid(),
 				    getentry(quotagroup, GRPQUOTA));
 				(void) fchmod(fd, 0640);
 			}
-			(void)lseek(fd, (off_t)(id * sizeof(struct dqblk)),
-			    SEEK_SET);
+			lseek(fd, (long)(id * sizeof(struct dqblk)), L_SET);
 			switch (read(fd, &qup->dqblk, sizeof(struct dqblk))) {
 			case 0:			/* EOF */
 				/*
 				 * Convert implicit 0 quota (EOF)
 				 * into an explicit one (zero'ed dqblk)
 				 */
-				memset((caddr_t)&qup->dqblk, 0,
+				bzero((caddr_t)&qup->dqblk,
 				    sizeof(struct dqblk));
 				break;
 
@@ -291,7 +263,8 @@ getprivs(id, quotatype)
 				break;
 
 			default:		/* ERROR */
-				warn("read error in `%s'", qfpathname);
+				fprintf(stderr, "edquota: read error in ");
+				perror(qfpathname);
 				close(fd);
 				free(qup);
 				continue;
@@ -314,13 +287,12 @@ getprivs(id, quotatype)
 /*
  * Store the requested quota information.
  */
-void
 putprivs(id, quotatype, quplist)
 	long id;
 	int quotatype;
 	struct quotause *quplist;
 {
-	struct quotause *qup;
+	register struct quotause *qup;
 	int qcmd, fd;
 
 	qcmd = QCMD(Q_SETQUOTA, quotatype);
@@ -328,14 +300,14 @@ putprivs(id, quotatype, quplist)
 		if (quotactl(qup->fsname, qcmd, id, &qup->dqblk) == 0)
 			continue;
 		if ((fd = open(qup->qfname, O_WRONLY)) < 0) {
-			warnx("open `%s'", qup->qfname);
+			perror(qup->qfname);
 		} else {
-			(void)lseek(fd,
-			    (off_t)(id * (long)sizeof (struct dqblk)),
-			    SEEK_SET);
+			lseek(fd, (long)id * (long)sizeof (struct dqblk), 0);
 			if (write(fd, &qup->dqblk, sizeof (struct dqblk)) !=
-			    sizeof (struct dqblk))
-				warnx("writing `%s'", qup->qfname);
+			    sizeof (struct dqblk)) {
+				fprintf(stderr, "edquota: ");
+				perror(qup->qfname);
+			}
 			close(fd);
 		}
 	}
@@ -344,12 +316,12 @@ putprivs(id, quotatype, quplist)
 /*
  * Take a list of priviledges and get it edited.
  */
-int
 editit(tmpfile)
 	char *tmpfile;
 {
 	long omask;
 	int pid, stat;
+	extern char *getenv();
 
 	omask = sigblock(sigmask(SIGINT)|sigmask(SIGQUIT)|sigmask(SIGHUP));
  top:
@@ -357,18 +329,18 @@ editit(tmpfile)
 		extern errno;
 
 		if (errno == EPROCLIM) {
-			warnx("You have too many processes");
+			fprintf(stderr, "You have too many processes\n");
 			return(0);
 		}
 		if (errno == EAGAIN) {
 			sleep(1);
 			goto top;
 		}
-		warn("fork");
+		perror("fork");
 		return (0);
 	}
 	if (pid == 0) {
-		char *ed;
+		register char *ed;
 
 		sigsetmask(omask);
 		setgid(getgid());
@@ -376,7 +348,8 @@ editit(tmpfile)
 		if ((ed = getenv("EDITOR")) == (char *)0)
 			ed = _PATH_VI;
 		execlp(ed, ed, tmpfile, 0);
-		err(1, "%s", ed);
+		perror(ed);
+		exit(1);
 	}
 	waitpid(pid, &stat, 0);
 	sigsetmask(omask);
@@ -388,20 +361,22 @@ editit(tmpfile)
 /*
  * Convert a quotause list to an ASCII file.
  */
-int
 writeprivs(quplist, outfd, name, quotatype)
 	struct quotause *quplist;
 	int outfd;
 	char *name;
 	int quotatype;
 {
-	struct quotause *qup;
+	register struct quotause *qup;
 	FILE *fd;
 
 	ftruncate(outfd, 0);
-	(void)lseek(outfd, (off_t)0, SEEK_SET);
-	if ((fd = fdopen(dup(outfd), "w")) == NULL)
-		errx(1, "fdopen `%s'", tmpfil);
+	lseek(outfd, 0, L_SET);
+	if ((fd = fdopen(dup(outfd), "w")) == NULL) {
+		fprintf(stderr, "edquota: ");
+		perror(tmpfil);
+		exit(1);
+	}
 	fprintf(fd, "Quotas for %s %s:\n", qfextension[quotatype], name);
 	for (qup = quplist; qup; qup = qup->next) {
 		fprintf(fd, "%s: %s %d, limits (soft = %d, hard = %d)\n",
@@ -420,22 +395,21 @@ writeprivs(quplist, outfd, name, quotatype)
 /*
  * Merge changes to an ASCII file into a quotause list.
  */
-int
 readprivs(quplist, infd)
 	struct quotause *quplist;
 	int infd;
 {
-	struct quotause *qup;
+	register struct quotause *qup;
 	FILE *fd;
 	int cnt;
-	char *cp;
+	register char *cp;
 	struct dqblk dqblk;
 	char *fsp, line1[BUFSIZ], line2[BUFSIZ];
 
-	(void)lseek(infd, (off_t)0, SEEK_SET);
+	lseek(infd, 0, L_SET);
 	fd = fdopen(dup(infd), "r");
 	if (fd == NULL) {
-		warn("Can't re-read temp file");
+		fprintf(stderr, "Can't re-read temp file!!\n");
 		return (0);
 	}
 	/*
@@ -445,11 +419,11 @@ readprivs(quplist, infd)
 	while (fgets(line1, sizeof (line1), fd) != NULL &&
 	       fgets(line2, sizeof (line2), fd) != NULL) {
 		if ((fsp = strtok(line1, " \t:")) == NULL) {
-			warnx("%s: bad format", line1);
+			fprintf(stderr, "%s: bad format\n", line1);
 			return (0);
 		}
 		if ((cp = strtok((char *)0, "\n")) == NULL) {
-			warnx("%s: %s: bad format", fsp,
+			fprintf(stderr, "%s: %s: bad format\n", fsp,
 			    &fsp[strlen(fsp) + 1]);
 			return (0);
 		}
@@ -458,14 +432,14 @@ readprivs(quplist, infd)
 		    &dqblk.dqb_curblocks, &dqblk.dqb_bsoftlimit,
 		    &dqblk.dqb_bhardlimit);
 		if (cnt != 3) {
-			warnx("%s:%s: bad format", fsp, cp);
+			fprintf(stderr, "%s:%s: bad format\n", fsp, cp);
 			return (0);
 		}
 		dqblk.dqb_curblocks = btodb(dqblk.dqb_curblocks * 1024);
 		dqblk.dqb_bsoftlimit = btodb(dqblk.dqb_bsoftlimit * 1024);
 		dqblk.dqb_bhardlimit = btodb(dqblk.dqb_bhardlimit * 1024);
 		if ((cp = strtok(line2, "\n")) == NULL) {
-			warnx("%s: %s: bad format", fsp, line2);
+			fprintf(stderr, "%s: %s: bad format\n", fsp, line2);
 			return (0);
 		}
 		cnt = sscanf(cp,
@@ -473,7 +447,7 @@ readprivs(quplist, infd)
 		    &dqblk.dqb_curinodes, &dqblk.dqb_isoftlimit,
 		    &dqblk.dqb_ihardlimit);
 		if (cnt != 3) {
-			warnx("%s: %s: bad format", fsp, line2);
+			fprintf(stderr, "%s: %s: bad format\n", fsp, line2);
 			return (0);
 		}
 		for (qup = quplist; qup; qup = qup->next) {
@@ -505,7 +479,8 @@ readprivs(quplist, infd)
 			if (dqblk.dqb_curblocks == qup->dqblk.dqb_curblocks &&
 			    dqblk.dqb_curinodes == qup->dqblk.dqb_curinodes)
 				break;
-			warnx("%s: cannot change current allocation", fsp);
+			fprintf(stderr,
+			    "%s: cannot change current allocation\n", fsp);
 			break;
 		}
 	}
@@ -529,19 +504,22 @@ readprivs(quplist, infd)
 /*
  * Convert a quotause list to an ASCII file of grace times.
  */
-int
 writetimes(quplist, outfd, quotatype)
 	struct quotause *quplist;
 	int outfd;
 	int quotatype;
 {
-	struct quotause *qup;
+	register struct quotause *qup;
+	char *cvtstoa();
 	FILE *fd;
 
 	ftruncate(outfd, 0);
-	(void)lseek(outfd, (off_t)0, SEEK_SET);
-	if ((fd = fdopen(dup(outfd), "w")) == NULL)
-		err(1, "fdopen `%s'", tmpfil);
+	lseek(outfd, 0, L_SET);
+	if ((fd = fdopen(dup(outfd), "w")) == NULL) {
+		fprintf(stderr, "edquota: ");
+		perror(tmpfil);
+		exit(1);
+	}
 	fprintf(fd, "Time units may be: days, hours, minutes, or seconds\n");
 	fprintf(fd, "Grace period before enforcing soft limits for %ss:\n",
 	    qfextension[quotatype]);
@@ -558,23 +536,21 @@ writetimes(quplist, outfd, quotatype)
 /*
  * Merge changes of grace times in an ASCII file into a quotause list.
  */
-int
 readtimes(quplist, infd)
 	struct quotause *quplist;
 	int infd;
 {
-	struct quotause *qup;
+	register struct quotause *qup;
 	FILE *fd;
 	int cnt;
-	char *cp;
-	long litime, lbtime;
+	register char *cp;
 	time_t itime, btime, iseconds, bseconds;
 	char *fsp, bunits[10], iunits[10], line1[BUFSIZ];
 
-	(void)lseek(infd, (off_t)0, SEEK_SET);
+	lseek(infd, 0, L_SET);
 	fd = fdopen(dup(infd), "r");
 	if (fd == NULL) {
-		warnx("Can't re-read temp file!!");
+		fprintf(stderr, "Can't re-read temp file!!\n");
 		return (0);
 	}
 	/*
@@ -584,23 +560,21 @@ readtimes(quplist, infd)
 	(void) fgets(line1, sizeof (line1), fd);
 	while (fgets(line1, sizeof (line1), fd) != NULL) {
 		if ((fsp = strtok(line1, " \t:")) == NULL) {
-			warnx("%s: bad format", line1);
+			fprintf(stderr, "%s: bad format\n", line1);
 			return (0);
 		}
 		if ((cp = strtok((char *)0, "\n")) == NULL) {
-			warnx("%s: %s: bad format", fsp,
+			fprintf(stderr, "%s: %s: bad format\n", fsp,
 			    &fsp[strlen(fsp) + 1]);
 			return (0);
 		}
 		cnt = sscanf(cp,
-		    " block grace period: %ld %s file grace period: %ld %s",
-		    &lbtime, bunits, &litime, iunits);
+		    " block grace period: %d %s file grace period: %d %s",
+		    &btime, bunits, &itime, iunits);
 		if (cnt != 4) {
-			warnx("%s:%s: bad format", fsp, cp);
+			fprintf(stderr, "%s:%s: bad format\n", fsp, cp);
 			return (0);
 		}
-		itime = (time_t)litime;
-		btime = (time_t)lbtime;
 		if (cvtatos(btime, bunits, &bseconds) == 0)
 			return (0);
 		if (cvtatos(itime, iunits, &iseconds) == 0)
@@ -641,36 +615,34 @@ cvtstoa(time)
 
 	if (time % (24 * 60 * 60) == 0) {
 		time /= 24 * 60 * 60;
-		snprintf(buf, sizeof buf, "%ld day%s", (long)time,
-		    time == 1 ? "" : "s");
+		sprintf(buf, "%d day%s", time, time == 1 ? "" : "s");
 	} else if (time % (60 * 60) == 0) {
 		time /= 60 * 60;
-		sprintf(buf, "%ld hour%s", (long)time, time == 1 ? "" : "s");
+		sprintf(buf, "%d hour%s", time, time == 1 ? "" : "s");
 	} else if (time % 60 == 0) {
 		time /= 60;
-		sprintf(buf, "%ld minute%s", (long)time, time == 1 ? "" : "s");
+		sprintf(buf, "%d minute%s", time, time == 1 ? "" : "s");
 	} else
-		sprintf(buf, "%ld second%s", (long)time, time == 1 ? "" : "s");
+		sprintf(buf, "%d second%s", time, time == 1 ? "" : "s");
 	return (buf);
 }
 
 /*
  * Convert ASCII input times to seconds.
  */
-int
 cvtatos(time, units, seconds)
 	time_t time;
 	char *units;
 	time_t *seconds;
 {
 
-	if (memcmp(units, "second", 6) == 0)
+	if (bcmp(units, "second", 6) == 0)
 		*seconds = time;
-	else if (memcmp(units, "minute", 6) == 0)
+	else if (bcmp(units, "minute", 6) == 0)
 		*seconds = time * 60;
-	else if (memcmp(units, "hour", 4) == 0)
+	else if (bcmp(units, "hour", 4) == 0)
 		*seconds = time * 60 * 60;
-	else if (memcmp(units, "day", 3) == 0)
+	else if (bcmp(units, "day", 3) == 0)
 		*seconds = time * 24 * 60 * 60;
 	else {
 		printf("%s: bad units, specify %s\n", units,
@@ -683,11 +655,10 @@ cvtatos(time, units, seconds)
 /*
  * Free a list of quotause structures.
  */
-void
 freeprivs(quplist)
 	struct quotause *quplist;
 {
-	struct quotause *qup, *nextqup;
+	register struct quotause *qup, *nextqup;
 
 	for (qup = quplist; qup; qup = nextqup) {
 		nextqup = qup->next;
@@ -698,31 +669,29 @@ freeprivs(quplist)
 /*
  * Check whether a string is completely composed of digits.
  */
-int
 alldigits(s)
-	char *s;
+	register char *s;
 {
-	int c;
+	register c;
 
 	c = *s++;
 	do {
 		if (!isdigit(c))
 			return (0);
-	} while ((c = *s++) != 0);
+	} while (c = *s++);
 	return (1);
 }
 
 /*
  * Check to see if a particular quota is to be enabled.
  */
-int
 hasquota(fs, type, qfnamep)
-	struct fstab *fs;
+	register struct fstab *fs;
 	int type;
 	char **qfnamep;
 {
-	char *opt;
-	char *cp;
+	register char *opt;
+	char *cp, *index(), *strtok();
 	static char initname, usrname[100], grpname[100];
 	static char buf[BUFSIZ];
 
@@ -733,7 +702,7 @@ hasquota(fs, type, qfnamep)
 	}
 	strcpy(buf, fs->fs_mntops);
 	for (opt = strtok(buf, ","); opt; opt = strtok(NULL, ",")) {
-		if ((cp = strchr(opt, '=')) != NULL)
+		if (cp = index(opt, '='))
 			*cp++ = '\0';
 		if (type == USRQUOTA && strcmp(opt, usrname) == 0)
 			break;

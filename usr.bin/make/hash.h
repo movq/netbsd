@@ -1,5 +1,3 @@
-/*	$NetBSD: hash.h,v 1.5 1996/11/06 17:59:07 christos Exp $	*/
-
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
  * Copyright (c) 1988, 1989 by Adam de Boor
@@ -37,7 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)hash.h	8.1 (Berkeley) 6/6/93
+ *	@(#)hash.h	5.4 (Berkeley) 12/28/90
  */
 
 /* hash.h --
@@ -49,7 +47,7 @@
 #ifndef	_HASH
 #define	_HASH
 
-/*
+/* 
  * The following defines one entry in the hash table.
  */
 
@@ -71,7 +69,7 @@ typedef struct Hash_Table {
     int 	mask;		/* Used to select bits for hashing. */
 } Hash_Table;
 
-/*
+/* 
  * The following structure is used by the searching routines
  * to record where we are in the search.
  */
@@ -87,32 +85,40 @@ typedef struct Hash_Search {
  */
 
 /*
- * ClientData Hash_GetValue(h)
- *     Hash_Entry *h;
+ * ClientData Hash_GetValue(h) 
+ *     Hash_Entry *h; 
  */
 
 #define Hash_GetValue(h) ((h)->clientData)
 
-/*
- * Hash_SetValue(h, val);
- *     Hash_Entry *h;
- *     char *val;
+/* 
+ * Hash_SetValue(h, val); 
+ *     Hash_Entry *h; 
+ *     char *val; 
  */
 
 #define Hash_SetValue(h, val) ((h)->clientData = (ClientData) (val))
 
-/*
- * Hash_Size(n) returns the number of words in an object of n bytes
+/* 
+ * Hash_Size(n) returns the number of words in an object of n bytes 
  */
 
 #define	Hash_Size(n)	(((n) + sizeof (int) - 1) / sizeof (int))
 
-void Hash_InitTable __P((Hash_Table *, int));
-void Hash_DeleteTable __P((Hash_Table *));
-Hash_Entry *Hash_FindEntry __P((Hash_Table *, char *));
-Hash_Entry *Hash_CreateEntry __P((Hash_Table *, char *, Boolean *));
-void Hash_DeleteEntry __P((Hash_Table *, Hash_Entry *));
-Hash_Entry *Hash_EnumFirst __P((Hash_Table *, Hash_Search *));
-Hash_Entry *Hash_EnumNext __P((Hash_Search *));
+/*
+ * The following procedure declarations and macros
+ * are the only things that should be needed outside
+ * the implementation code.
+ */
 
-#endif /* _HASH */
+extern Hash_Entry *	Hash_CreateEntry();
+extern void		Hash_DeleteTable();
+extern void		Hash_DeleteEntry();
+extern void		Hash_DeleteTable();
+extern Hash_Entry *	Hash_EnumFirst();
+extern Hash_Entry *	Hash_EnumNext();
+extern Hash_Entry *	Hash_FindEntry();
+extern void		Hash_InitTable();
+extern void		Hash_PrintStats();
+
+#endif _HASH

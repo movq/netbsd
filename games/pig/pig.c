@@ -1,5 +1,3 @@
-/*	$NetBSD: pig.c,v 1.6 1997/10/12 01:00:27 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,30 +31,23 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+static char copyright[] =
+"@(#) Copyright (c) 1992, 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)pig.c	8.2 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: pig.c,v 1.6 1997/10/12 01:00:27 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)pig.c	8.1 (Berkeley) 5/31/93";
 #endif /* not lint */
 
 #include <sys/types.h>
 
 #include <ctype.h>
-#include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
-int main __P((int, char *[]));
 void pigout __P((char *, int));
 void usage __P((void));
 
@@ -65,11 +56,11 @@ main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	int len;
+	register int len;
 	int ch;
 	char buf[1024];
 
-	while ((ch = getopt(argc, argv, "")) != -1)
+	while ((ch = getopt(argc, argv, "")) != EOF)
 		switch(ch) {
 		case '?':
 		default:
@@ -80,8 +71,10 @@ main(argc, argv)
 
 	for (len = 0; (ch = getchar()) != EOF;) {
 		if (isalpha(ch)) {
-			if (len >= sizeof(buf))
-				errx(1, "ate too much!");
+			if (len >= sizeof(buf)) {
+				(void)fprintf(stderr, "pig: ate too much!\n");
+				exit(1);
+			}
 			buf[len++] = ch;
 			continue;
 		}
@@ -99,21 +92,15 @@ pigout(buf, len)
 	char *buf;
 	int len;
 {
-	int ch, start, i;
-	int olen, allupper, firstupper;
-
-	/* See if the word is all upper case */
-	allupper = firstupper = isupper(buf[0]);
-	for (i = 1; i < len && allupper; i++)
-		allupper = allupper && isupper(buf[i]);
+	register int ch, start;
+	int olen;
 
 	/*
 	 * If the word starts with a vowel, append "way".  Don't treat 'y'
 	 * as a vowel if it appears first.
 	 */
-	if (strchr("aeiouAEIOU", buf[0]) != NULL) {
-		(void)printf("%.*s%s", len, buf,
-		    allupper ? "WAY" : "way");
+	if (index("aeiouAEIOU", buf[0]) != NULL) {
+		(void)printf("%.*sway", len, buf);
 		return;
 	}
 
@@ -121,18 +108,14 @@ pigout(buf, len)
 	 * Copy leading consonants to the end of the word.  The unit "qu"
 	 * isn't treated as a vowel.
 	 */
-	if (!allupper)
-		buf[0] = tolower(buf[0]);
 	for (start = 0, olen = len;
-	    !strchr("aeiouyAEIOUY", buf[start]) && start < olen;) {
+	    !index("aeiouyAEIOUY", buf[start]) && start < olen;) {
 		ch = buf[len++] = buf[start++];
 		if ((ch == 'q' || ch == 'Q') && start < olen &&
 		    (buf[start] == 'u' || buf[start] == 'U'))
 			buf[len++] = buf[start++];
 	}
-	if (firstupper)
-		buf[start] = toupper(buf[start]);
-	(void)printf("%.*s%s", olen, buf + start, allupper ? "AY" : "ay");
+	(void)printf("%.*say", olen, buf + start);
 }
 
 void

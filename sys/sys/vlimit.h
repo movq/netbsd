@@ -1,8 +1,6 @@
-/*	$NetBSD: vlimit.h,v 1.7 1997/01/22 07:09:32 mikel Exp $	*/
-
 /*-
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,11 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)vlimit.h	8.1 (Berkeley) 6/2/93
+ *	@(#)vlimit.h	7.2 (Berkeley) 5/5/91
  */
-
-#ifndef _SYS_VLIMIT_H_
-#define _SYS_VLIMIT_H_
 
 /*
  * Limits for u.u_limit[i], per process, inherited.
@@ -52,5 +47,3 @@
 #define	NLIMITS		6
 
 #define	INFINITY	0x7fffffff
-
-#endif /* !_SYS_VLIMIT_H_ */

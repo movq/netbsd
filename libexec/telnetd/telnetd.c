@@ -1,8 +1,6 @@
-/*	$NetBSD: telnetd.c,v 1.12 1997/10/20 02:12:17 enami Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,54 +31,20 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#if 0
-static char sccsid[] = "@(#)telnetd.c	8.4 (Berkeley) 5/30/95";
-#else
-__RCSID("$NetBSD: telnetd.c,v 1.12 1997/10/20 02:12:17 enami Exp $");
-#endif
+char copyright[] =
+"@(#) Copyright (c) 1989 Regents of the University of California.\n\
+ All rights reserved.\n";
+#endif /* not lint */
+
+#ifndef lint
+static char sccsid[] = "@(#)telnetd.c	5.48 (Berkeley) 3/1/91";
 #endif /* not lint */
 
 #include "telnetd.h"
 #include "pathnames.h"
 
-#include <arpa/inet.h>
-
-#include <termcap.h>
-
-#define P __P
-
-#if	defined(_SC_CRAY_SECURE_SYS) && !defined(SCM_SECURITY)
-/*
- * UNICOS 6.0/6.1 do not have SCM_SECURITY defined, so we can
- * use it to tell us to turn off all the socket security code,
- * since that is only used in UNICOS 7.0 and later.
- */
-# undef _SC_CRAY_SECURE_SYS
-#endif
-
-#if	defined(_SC_CRAY_SECURE_SYS)
-#include <sys/sysv.h>
-#include <sys/secdev.h>
-# ifdef SO_SEC_MULTI		/* 8.0 code */
-#include <sys/secparm.h>
-#include <sys/usrv.h>
-# endif /* SO_SEC_MULTI */
-int	secflag;
-char	tty_dev[16];
-struct	secdev dv;
-struct	sysv sysv;
-# ifdef SO_SEC_MULTI		/* 8.0 code */
-struct	socksec ss;
-# else /* SO_SEC_MULTI */	/* 7.0 code */
-struct	socket_security ss;
-# endif /* SO_SEC_MULTI */
-#endif	/* _SC_CRAY_SECURE_SYS */
-
-#if	defined(AUTHENTICATION)
+#if	defined(AUTHENTICATE)
 #include <libtelnet/auth.h>
 int	auth_level = 0;
 #endif
@@ -88,40 +52,12 @@ int	auth_level = 0;
 int	require_SecurID = 0;
 #endif
 
-extern	int utmp_len;
-int	registerd_host_only = 0;
-
-#ifdef	STREAMSPTY
-# include <stropts.h>
-# include <termio.h>
-/* make sure we don't get the bsd version */
-# include "/usr/include/sys/tty.h"
-# include <sys/ptyvar.h>
-
-/*
- * Because of the way ptyibuf is used with streams messages, we need
- * ptyibuf+1 to be on a full-word boundary.  The following wierdness
- * is simply to make that happen.
- */
-long	ptyibufbuf[BUFSIZ/sizeof(long)+1];
-char	*ptyibuf = ((char *)&ptyibufbuf[1])-1;
-char	*ptyip = ((char *)&ptyibufbuf[1])-1;
-char	ptyibuf2[BUFSIZ];
-unsigned char ctlbuf[BUFSIZ];
-struct	strbuf strbufc, strbufd;
-
-int readstream();
-
-#else	/* ! STREAMPTY */
-
 /*
  * I/O data buffers,
  * pointers, and counters.
  */
 char	ptyibuf[BUFSIZ], *ptyip = ptyibuf;
 char	ptyibuf2[BUFSIZ];
-
-#endif /* ! STREAMPTY */
 
 int	hostinfo = 1;			/* do we print login banner? */
 
@@ -132,57 +68,18 @@ int	lowpty = 0, highpty;	/* low, high pty numbers */
 
 int debug = 0;
 int keepalive = 1;
-char *gettyname = "default";
 char *progname;
 
 extern void usage P((void));
-int main __P((int, char *[]));
-void usage __P((void));
-int getterminaltype __P((char *));
-int getent __P((char *, char *));
-void doit __P((struct sockaddr_in *));
-void _gettermname __P((void));
-int terminaltypeok __P((char *));
-char *getstr __P((char *, char **));
 
-/*
- * The string to pass to getopt().  We do it this way so
- * that only the actual options that we support will be
- * passed off to getopt().
- */
-char valid_opts[] = {
-	'd', ':', 'g', ':', 'h', 'k', 'n', 'S', ':', 'u', ':', 'U',
-#ifdef	AUTHENTICATION
-	'a', ':', 'X', ':',
-#endif
-#ifdef BFTPDAEMON
-	'B',
-#endif
-#ifdef DIAGNOSTICS
-	'D', ':',
-#endif
-#if	defined(CRAY) && defined(NEWINIT)
-	'I', ':',
-#endif
-#ifdef	LINEMODE
-	'l',
-#endif
-#ifdef CRAY
-	'r', ':',
-#endif
-#ifdef	SecurID
-	's',
-#endif
-	'\0'
-};
-
-int
 main(argc, argv)
 	char *argv[];
 {
 	struct sockaddr_in from;
 	int on = 1, fromlen;
 	register int ch;
+	extern char *optarg;
+	extern int optind;
 #if	defined(IPPROTO_IP) && defined(IP_TOS)
 	int tos = -1;
 #endif
@@ -190,6 +87,9 @@ main(argc, argv)
 	pfrontp = pbackp = ptyobuf;
 	netip = netibuf;
 	nfrontp = nbackp = netobuf;
+#if	defined(ENCRYPT)
+	nclearto = 0;
+#endif
 
 	progname = *argv;
 
@@ -201,10 +101,10 @@ main(argc, argv)
 	highpty = getnpty();
 #endif /* CRAY */
 
-	while ((ch = getopt(argc, argv, valid_opts)) != -1) {
-		switch (ch) {
+	while ((ch = getopt(argc, argv, "d:a:e:lhnr:I:D:B:sS:a:X:")) != EOF) {
+		switch(ch) {
 
-#ifdef	AUTHENTICATION
+#ifdef	AUTHENTICATE
 		case 'a':
 			/*
 			 * Check for required authentication level
@@ -230,7 +130,7 @@ main(argc, argv)
 			    "telnetd: unknown authorization level for -a\n");
 			}
 			break;
-#endif	/* AUTHENTICATION */
+#endif	/* AUTHENTICATE */
 
 #ifdef BFTPDAEMON
 		case 'B':
@@ -269,9 +169,17 @@ main(argc, argv)
 			break;
 #endif /* DIAGNOSTICS */
 
-		case 'g':
-			gettyname = optarg;
+#ifdef	AUTHENTICATE
+		case 'e':
+			if (strcmp(optarg, "debug") == 0) {
+				extern int encrypt_debug_mode;
+				encrypt_debug_mode = 1;
+				break;
+			}
+			usage();
+			/* NOTREACHED */
 			break;
+#endif	/* AUTHENTICATE */
 
 		case 'h':
 			hostinfo = 0;
@@ -291,14 +199,6 @@ main(argc, argv)
 			alwayslinemode = 1;
 			break;
 #endif	/* LINEMODE */
-
-		case 'k':
-#if	defined(LINEMODE) && defined(KLUDGELINEMODE)
-			lmodetype = NO_AUTOKLUDGE;
-#else
-			/* ignore -k option if built without kludge linemode */
-#endif	/* defined(LINEMODE) && defined(KLUDGELINEMODE) */
-			break;
 
 		case 'n':
 			keepalive = 0;
@@ -350,25 +250,17 @@ main(argc, argv)
 #endif
 			break;
 
-		case 'u':
-			utmp_len = atoi(optarg);
-			break;
-
-		case 'U':
-			registerd_host_only = 1;
-			break;
-
-#ifdef	AUTHENTICATION
+#ifdef	AUTHENTICATE
 		case 'X':
 			/*
 			 * Check for invalid authentication types
 			 */
 			auth_disable_name(optarg);
 			break;
-#endif	/* AUTHENTICATION */
+#endif	/* AUTHENTICATE */
 
 		default:
-			fprintf(stderr, "telnetd: %c: unknown option\n", ch);
+			fprintf(stderr, "telnetd: %s: unknown option\n", ch);
 			/* FALLTHROUGH */
 		case '?':
 			usage();
@@ -388,7 +280,7 @@ main(argc, argv)
 		usage();
 		/* NOT REACHED */
 	    } else if (argc == 1) {
-		    if ((sp = getservbyname(*argv, "tcp"))) {
+		    if (sp = getservbyname(*argv, "tcp")) {
 			sin.sin_port = sp->s_port;
 		    } else {
 			sin.sin_port = atoi(*argv);
@@ -413,8 +305,7 @@ main(argc, argv)
 		    perror("telnetd: socket");;
 		    exit(1);
 	    }
-	    (void) setsockopt(s, SOL_SOCKET, SO_REUSEADDR,
-				(char *)&on, sizeof(on));
+	    (void) setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 	    if (bind(s, (struct sockaddr *)&sin, sizeof sin) < 0) {
 		perror("bind");
 		exit(1);
@@ -441,63 +332,6 @@ main(argc, argv)
 		/* NOT REACHED */
 	}
 
-#if	defined(_SC_CRAY_SECURE_SYS)
-	secflag = sysconf(_SC_CRAY_SECURE_SYS);
-
-	/*
-	 *	Get socket's security label
-	 */
-	if (secflag)  {
-		int szss = sizeof(ss);
-#ifdef SO_SEC_MULTI			/* 8.0 code */
-		int sock_multi;
-		int szi = sizeof(int);
-#endif /* SO_SEC_MULTI */
-
-		memset((char *)&dv, 0, sizeof(dv));
-
-		if (getsysv(&sysv, sizeof(struct sysv)) != 0) {
-			perror("getsysv");
-			exit(1);
-		}
-
-		/*
-		 *	Get socket security label and set device values
-		 *	   {security label to be set on ttyp device}
-		 */
-#ifdef SO_SEC_MULTI			/* 8.0 code */
-		if ((getsockopt(0, SOL_SOCKET, SO_SECURITY,
-			       (char *)&ss, &szss) < 0) ||
-		    (getsockopt(0, SOL_SOCKET, SO_SEC_MULTI,
-				(char *)&sock_multi, &szi) < 0)) {
-			perror("getsockopt");
-			exit(1);
-		} else {
-			dv.dv_actlvl = ss.ss_actlabel.lt_level;
-			dv.dv_actcmp = ss.ss_actlabel.lt_compart;
-			if (!sock_multi) {
-				dv.dv_minlvl = dv.dv_maxlvl = dv.dv_actlvl;
-				dv.dv_valcmp = dv.dv_actcmp;
-			} else {
-				dv.dv_minlvl = ss.ss_minlabel.lt_level;
-				dv.dv_maxlvl = ss.ss_maxlabel.lt_level;
-				dv.dv_valcmp = ss.ss_maxlabel.lt_compart;
-			}
-			dv.dv_devflg = 0;
-		}
-#else /* SO_SEC_MULTI */		/* 7.0 code */
-		if (getsockopt(0, SOL_SOCKET, SO_SECURITY,
-				(char *)&ss, &szss) >= 0) {
-			dv.dv_actlvl = ss.ss_slevel;
-			dv.dv_actcmp = ss.ss_compart;
-			dv.dv_minlvl = ss.ss_minlvl;
-			dv.dv_maxlvl = ss.ss_maxlvl;
-			dv.dv_valcmp = ss.ss_maxcmp;
-		}
-#endif /* SO_SEC_MULTI */
-	}
-#endif	/* _SC_CRAY_SECURE_SYS */
-
 	openlog("telnetd", LOG_PID | LOG_ODELAY, LOG_DAEMON);
 	fromlen = sizeof (from);
 	if (getpeername(0, (struct sockaddr *)&from, &fromlen) < 0) {
@@ -506,8 +340,7 @@ main(argc, argv)
 		_exit(1);
 	}
 	if (keepalive &&
-	    setsockopt(0, SOL_SOCKET, SO_KEEPALIVE,
-			(char *)&on, sizeof (on)) < 0) {
+	    setsockopt(0, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof (on)) < 0) {
 		syslog(LOG_WARNING, "setsockopt (SO_KEEPALIVE): %m");
 	}
 
@@ -521,8 +354,7 @@ main(argc, argv)
 		if (tos < 0)
 			tos = 020;	/* Low Delay bit */
 		if (tos
-		   && (setsockopt(0, IPPROTO_IP, IP_TOS,
-				  (char *)&tos, sizeof(tos)) < 0)
+		   && (setsockopt(0, IPPROTO_IP, IP_TOS, &tos, sizeof(tos)) < 0)
 		   && (errno != ENOPROTOOPT) )
 			syslog(LOG_WARNING, "setsockopt (IP_TOS): %m");
 	}
@@ -530,17 +362,14 @@ main(argc, argv)
 	net = 0;
 	doit(&from);
 	/* NOTREACHED */
-#ifdef __GNUC__
-	exit(0);
-#endif
 }  /* end of main */
 
 	void
 usage()
 {
 	fprintf(stderr, "Usage: telnetd");
-#ifdef	AUTHENTICATION
-	fprintf(stderr, " [-a (debug|other|user|valid|off|none)]\n\t");
+#ifdef	AUTHENTICATE
+	fprintf(stderr, " [-a (debug|other|user|valid|off)]\n\t");
 #endif
 #ifdef BFTPDAEMON
 	fprintf(stderr, " [-B]");
@@ -549,15 +378,12 @@ usage()
 #ifdef DIAGNOSTICS
 	fprintf(stderr, " [-D (options|report|exercise|netdata|ptydata)]\n\t");
 #endif
-#ifdef	AUTHENTICATION
+#ifdef	AUTHENTICATE
 	fprintf(stderr, " [-edebug]");
 #endif
 	fprintf(stderr, " [-h]");
 #if	defined(CRAY) && defined(NEWINIT)
 	fprintf(stderr, " [-Iinitid]");
-#endif
-#if	defined(LINEMODE) && defined(KLUDGELINEMODE)
-	fprintf(stderr, " [-k]");
 #endif
 #ifdef LINEMODE
 	fprintf(stderr, " [-l]");
@@ -566,17 +392,12 @@ usage()
 #ifdef	CRAY
 	fprintf(stderr, " [-r[lowpty]-[highpty]]");
 #endif
-	fprintf(stderr, "\n\t");
 #ifdef	SecurID
 	fprintf(stderr, " [-s]");
 #endif
-#ifdef	HAS_GETTOS
-	fprintf(stderr, " [-S tos]");
-#endif
-#ifdef	AUTHENTICATION
+#ifdef	AUTHENTICATE
 	fprintf(stderr, " [-X auth-type]");
 #endif
-	fprintf(stderr, " [-u utmp_hostname_length] [-U]");
 	fprintf(stderr, " [port]\n");
 	exit(1);
 }
@@ -587,18 +408,17 @@ usage()
  *	Ask the other end to send along its terminal type and speed.
  * Output is the variable terminaltype filled in.
  */
-static unsigned char ttytype_sbbuf[] = {
-	IAC, SB, TELOPT_TTYPE, TELQUAL_SEND, IAC, SE
-};
+static char ttytype_sbbuf[] = { IAC, SB, TELOPT_TTYPE, TELQUAL_SEND, IAC, SE };
 
     int
 getterminaltype(name)
     char *name;
 {
     int retval = -1;
+    void _gettermname();
 
     settimer(baseline);
-#if	defined(AUTHENTICATION)
+#if	defined(AUTHENTICATE)
     /*
      * Handle the Authentication option before we do anything else.
      */
@@ -610,57 +430,54 @@ getterminaltype(name)
     }
 #endif
 
+#if	defined(ENCRYPT)
+    send_will(TELOPT_ENCRYPT, 1);
+#endif
     send_do(TELOPT_TTYPE, 1);
     send_do(TELOPT_TSPEED, 1);
     send_do(TELOPT_XDISPLOC, 1);
-    send_do(TELOPT_NEW_ENVIRON, 1);
-    send_do(TELOPT_OLD_ENVIRON, 1);
+    send_do(TELOPT_ENVIRON, 1);
     while (
+#if	defined(ENCRYPT)
+	   his_do_dont_is_changing(TELOPT_ENCRYPT) ||
+#endif
 	   his_will_wont_is_changing(TELOPT_TTYPE) ||
 	   his_will_wont_is_changing(TELOPT_TSPEED) ||
 	   his_will_wont_is_changing(TELOPT_XDISPLOC) ||
-	   his_will_wont_is_changing(TELOPT_NEW_ENVIRON) ||
-	   his_will_wont_is_changing(TELOPT_OLD_ENVIRON)) {
+	   his_will_wont_is_changing(TELOPT_ENVIRON)) {
 	ttloop();
     }
+#if	defined(ENCRYPT)
+    /*
+     * Wait for the negotiation of what type of encryption we can
+     * send with.  If autoencrypt is not set, this will just return.
+     */
+    if (his_state_is_will(TELOPT_ENCRYPT)) {
+	encrypt_wait();
+    }
+#endif
     if (his_state_is_will(TELOPT_TSPEED)) {
-	static unsigned char sb[] =
-			{ IAC, SB, TELOPT_TSPEED, TELQUAL_SEND, IAC, SE };
+	static char sbbuf[] = { IAC, SB, TELOPT_TSPEED, TELQUAL_SEND, IAC, SE };
 
-	memmove(nfrontp, sb, sizeof sb);
-	nfrontp += sizeof sb;
-	DIAG(TD_OPTIONS, printsub('>', sb + 2, sizeof sb - 2););
+	bcopy(sbbuf, nfrontp, sizeof sbbuf);
+	nfrontp += sizeof sbbuf;
     }
     if (his_state_is_will(TELOPT_XDISPLOC)) {
-	static unsigned char sb[] =
-			{ IAC, SB, TELOPT_XDISPLOC, TELQUAL_SEND, IAC, SE };
+	static char sbbuf[] = { IAC, SB, TELOPT_XDISPLOC, TELQUAL_SEND, IAC, SE };
 
-	memmove(nfrontp, sb, sizeof sb);
-	nfrontp += sizeof sb;
-	DIAG(TD_OPTIONS, printsub('>', sb + 2, sizeof sb - 2););
+	bcopy(sbbuf, nfrontp, sizeof sbbuf);
+	nfrontp += sizeof sbbuf;
     }
-    if (his_state_is_will(TELOPT_NEW_ENVIRON)) {
-	static unsigned char sb[] =
-			{ IAC, SB, TELOPT_NEW_ENVIRON, TELQUAL_SEND, IAC, SE };
+    if (his_state_is_will(TELOPT_ENVIRON)) {
+	static char sbbuf[] = { IAC, SB, TELOPT_ENVIRON, TELQUAL_SEND, IAC, SE };
 
-	memmove(nfrontp, sb, sizeof sb);
-	nfrontp += sizeof sb;
-	DIAG(TD_OPTIONS, printsub('>', sb + 2, sizeof sb - 2););
-    }
-    else if (his_state_is_will(TELOPT_OLD_ENVIRON)) {
-	static unsigned char sb[] =
-			{ IAC, SB, TELOPT_OLD_ENVIRON, TELQUAL_SEND, IAC, SE };
-
-	memmove(nfrontp, sb, sizeof sb);
-	nfrontp += sizeof sb;
-	DIAG(TD_OPTIONS, printsub('>', sb + 2, sizeof sb - 2););
+	bcopy(sbbuf, nfrontp, sizeof sbbuf);
+	nfrontp += sizeof sbbuf;
     }
     if (his_state_is_will(TELOPT_TTYPE)) {
 
-	memmove(nfrontp, ttytype_sbbuf, sizeof ttytype_sbbuf);
+	bcopy(ttytype_sbbuf, nfrontp, sizeof ttytype_sbbuf);
 	nfrontp += sizeof ttytype_sbbuf;
-	DIAG(TD_OPTIONS, printsub('>', ttytype_sbbuf + 2,
-					sizeof ttytype_sbbuf - 2););
     }
     if (his_state_is_will(TELOPT_TSPEED)) {
 	while (sequenceIs(tspeedsubopt, baseline))
@@ -670,12 +487,8 @@ getterminaltype(name)
 	while (sequenceIs(xdisplocsubopt, baseline))
 	    ttloop();
     }
-    if (his_state_is_will(TELOPT_NEW_ENVIRON)) {
+    if (his_state_is_will(TELOPT_ENVIRON)) {
 	while (sequenceIs(environsubopt, baseline))
-	    ttloop();
-    }
-    if (his_state_is_will(TELOPT_OLD_ENVIRON)) {
-	while (sequenceIs(oenvironsubopt, baseline))
 	    ttloop();
     }
     if (his_state_is_will(TELOPT_TTYPE)) {
@@ -733,10 +546,8 @@ _gettermname()
     if (his_state_is_wont(TELOPT_TTYPE))
 	return;
     settimer(baseline);
-    memmove(nfrontp, ttytype_sbbuf, sizeof ttytype_sbbuf);
+    bcopy(ttytype_sbbuf, nfrontp, sizeof ttytype_sbbuf);
     nfrontp += sizeof ttytype_sbbuf;
-    DIAG(TD_OPTIONS, printsub('>', ttytype_sbbuf + 2,
-					sizeof ttytype_sbbuf - 2););
     while (sequenceIs(ttypesubopt, baseline))
 	ttloop();
 }
@@ -779,27 +590,26 @@ extern void telnet P((int, int, char *));
 /*
  * Get a pty, scan input lines.
  */
-void
 doit(who)
 	struct sockaddr_in *who;
 {
-	char *host;
+	char *host, *inet_ntoa();
+	int t;
 	struct hostent *hp;
 	int level;
-	int ptynum;
 	char user_name[256];
 
 	/*
 	 * Find an available pty to use.
 	 */
 #ifndef	convex
-	pty = getpty(&ptynum);
+	pty = getpty();
 	if (pty < 0)
 		fatal(net, "All network ports in use");
 #else
 	for (;;) {
 		char *lp;
-		extern char *line;
+		extern char *line, *getpty();
 
 		if ((lp = getpty()) == NULL)
 			fatal(net, "Out of ptys");
@@ -812,39 +622,13 @@ doit(who)
 	}
 #endif
 
-#if	defined(_SC_CRAY_SECURE_SYS)
-	/*
-	 *	set ttyp line security label
-	 */
-	if (secflag) {
-		char slave_dev[16];
-
-		sprintf(tty_dev, "/dev/pty/%03d", ptynum);
-		if (setdevs(tty_dev, &dv) < 0)
-		 	fatal(net, "cannot set pty security");
-		sprintf(slave_dev, "/dev/ttyp%03d", ptynum);
-		if (setdevs(slave_dev, &dv) < 0)
-		 	fatal(net, "cannot set tty security");
-	}
-#endif	/* _SC_CRAY_SECURE_SYS */
-
 	/* get name of connected client */
 	hp = gethostbyaddr((char *)&who->sin_addr, sizeof (struct in_addr),
 		who->sin_family);
-
-	if (hp == NULL && registerd_host_only) {
-		fatal(net, "Couldn't resolve your address into a host name.\r\n\
-	 Please contact your net administrator");
-#ifdef __GNUC__
-		host = NULL;	/* XXX gcc */
-#endif
-	} else if (hp &&
-	    (strlen(hp->h_name) <= (unsigned int)((utmp_len < 0) ? -utmp_len
-								 : utmp_len))) {
+	if (hp)
 		host = hp->h_name;
-	} else {
+	else
 		host = inet_ntoa(who->sin_addr);
-	}
 	/*
 	 * We must make a copy because Kerberos is probably going
 	 * to also do a gethost* and overwrite the static data...
@@ -856,7 +640,7 @@ doit(who)
 	(void) gethostname(host_name, sizeof (host_name));
 	hostname = host_name;
 
-#if	defined(AUTHENTICATION)
+#if	defined(AUTHENTICATE) || defined(ENCRYPT)
 	auth_encrypt_init(hostname, host, "TELNETD", 1);
 #endif
 
@@ -873,15 +657,6 @@ doit(who)
 	 */
 #ifndef	convex
 	startslave(host, level, user_name);
-
-#if	defined(_SC_CRAY_SECURE_SYS)
-	if (secflag) {
-		if (setulvl(dv.dv_actlvl) < 0)
-			fatal(net,"cannot setulvl()");
-		if (setucmp(dv.dv_actcmp) < 0)
-			fatal(net, "cannot setucmp()");
-	}
-#endif	/* _SC_CRAY_SECURE_SYS */
 
 	telnet(net, pty);  /* begin server processing */
 #else
@@ -928,7 +703,7 @@ telnet(f, p, host)
 	char *HE;
 	char *HN;
 	char *IM;
-	int nfd;
+	void netflush();
 
 	/*
 	 * Initialize the slc mapping table.
@@ -970,8 +745,7 @@ telnet(f, p, host)
 	 */
 	send_do(TELOPT_NAWS, 1);
 	send_will(TELOPT_STATUS, 1);
-	flowmode = 1;		/* default flow control state */
-	restartany = -1;	/* uninitialized... */
+	flowmode = 1;  /* default flow control state */
 	send_do(TELOPT_LFLOW, 1);
 
 	/*
@@ -1027,13 +801,10 @@ telnet(f, p, host)
 	if (my_state_is_wont(TELOPT_ECHO))
 		send_will(TELOPT_ECHO, 1);
 
-#ifndef	STREAMSPTY
 	/*
 	 * Turn on packet mode
 	 */
 	(void) ioctl(p, TIOCPKT, (char *)&on);
-#endif
-
 #if	defined(LINEMODE) && defined(KLUDGELINEMODE)
 	/*
 	 * Continuing line mode support.  If client does not support
@@ -1058,8 +829,7 @@ telnet(f, p, host)
 #endif
 
 #if	defined(SO_OOBINLINE)
-	(void) setsockopt(net, SOL_SOCKET, SO_OOBINLINE,
-				(char *)&on, sizeof on);
+	(void) setsockopt(net, SOL_SOCKET, SO_OOBINLINE, &on, sizeof on);
 #endif	/* defined(SO_OOBINLINE) */
 
 #ifdef	SIGTSTP
@@ -1119,7 +889,8 @@ telnet(f, p, host)
 		hostinfo = 0;
 #endif
 
-	if (getent(defent, gettyname) == 1) {
+	if (getent(defent, "default") == 1) {
+		char *getstr();
 		char *cp=defstrs;
 
 		HE = getstr("he", &cp);
@@ -1157,7 +928,6 @@ telnet(f, p, host)
 	startslave(host);
 #endif
 
-	nfd = ((f > p) ? f : p) + 1;
 	for (;;) {
 		fd_set ibits, obits, xbits;
 		register int c;
@@ -1189,7 +959,7 @@ telnet(f, p, host)
 		if (!SYNCHing) {
 			FD_SET(f, &xbits);
 		}
-		if ((c = select(nfd, &ibits, &obits, &xbits,
+		if ((c = select(16, &ibits, &obits, &xbits,
 						(struct timeval *)0)) < 1) {
 			if (c == -1) {
 				if (errno == EINTR) {
@@ -1286,21 +1056,13 @@ telnet(f, p, host)
 		 * Something to read from the pty...
 		 */
 		if (FD_ISSET(p, &ibits)) {
-#ifndef	STREAMSPTY
 			pcc = read(p, ptyibuf, BUFSIZ);
-#else
-			pcc = readstream(p, ptyibuf, BUFSIZ);
-#endif
 			/*
 			 * On some systems, if we try to read something
 			 * off the master side before the slave side is
 			 * opened, we get EIO.
 			 */
-			if (pcc < 0 && (errno == EWOULDBLOCK ||
-#ifdef	EAGAIN
-					errno == EAGAIN ||
-#endif
-					errno == EIO)) {
+			if (pcc < 0 && (errno == EWOULDBLOCK || errno == EIO)) {
 				pcc = 0;
 			} else {
 				if (pcc <= 0)
@@ -1328,29 +1090,16 @@ telnet(f, p, host)
 					*nfrontp++ = IAC;
 					*nfrontp++ = DM;
 					neturg = nfrontp-1; /* off by one XXX */
-					DIAG(TD_OPTIONS,
-					    printoption("td: send IAC", DM));
-
 #endif
 				}
 				if (his_state_is_will(TELOPT_LFLOW) &&
 				    (ptyibuf[0] &
 				     (TIOCPKT_NOSTOP|TIOCPKT_DOSTOP))) {
-					int newflow =
-					    ptyibuf[0] & TIOCPKT_DOSTOP ? 1 : 0;
-					if (newflow != flowmode) {
-						flowmode = newflow;
-						(void) sprintf(nfrontp,
-							"%c%c%c%c%c%c",
-							IAC, SB, TELOPT_LFLOW,
-							flowmode ? LFLOW_ON
-								 : LFLOW_OFF,
-							IAC, SE);
-						nfrontp += 6;
-						DIAG(TD_OPTIONS, printsub('>',
-						    (unsigned char *)nfrontp-4,
-						    4););
-					}
+					(void) sprintf(nfrontp, "%c%c%c%c%c%c",
+					    IAC, SB, TELOPT_LFLOW,
+					    ptyibuf[0] & TIOCPKT_DOSTOP ? 1 : 0,
+					    IAC, SE);
+					nfrontp += 6;
 				}
 				pcc--;
 				ptyip = ptyibuf+1;
@@ -1408,102 +1157,12 @@ telnet(f, p, host)
 	}
 	cleanup(0);
 }  /* end of telnet */
-
+	
 #ifndef	TCSIG
 # ifdef	TIOCSIG
 #  define TCSIG TIOCSIG
 # endif
 #endif
-
-#ifdef	STREAMSPTY
-
-int flowison = -1;  /* current state of flow: -1 is unknown */
-
-int readstream(p, ibuf, bufsize)
-	int p;
-	char *ibuf;
-	int bufsize;
-{
-	int flags = 0;
-	int ret = 0;
-	struct termios *tsp;
-	struct termio *tp;
-	struct iocblk *ip;
-	char vstop, vstart;
-	int ixon;
-	int newflow;
-
-	strbufc.maxlen = BUFSIZ;
-	strbufc.buf = (char *)ctlbuf;
-	strbufd.maxlen = bufsize-1;
-	strbufd.len = 0;
-	strbufd.buf = ibuf+1;
-	ibuf[0] = 0;
-
-	ret = getmsg(p, &strbufc, &strbufd, &flags);
-	if (ret < 0)  /* error of some sort -- probably EAGAIN */
-		return(-1);
-
-	if (strbufc.len <= 0 || ctlbuf[0] == M_DATA) {
-		/* data message */
-		if (strbufd.len > 0) {			/* real data */
-			return(strbufd.len + 1);	/* count header char */
-		} else {
-			/* nothing there */
-			errno = EAGAIN;
-			return(-1);
-		}
-	}
-
-	/*
-	 * It's a control message.  Return 1, to look at the flag we set
-	 */
-
-	switch (ctlbuf[0]) {
-	case M_FLUSH:
-		if (ibuf[1] & FLUSHW)
-			ibuf[0] = TIOCPKT_FLUSHWRITE;
-		return(1);
-
-	case M_IOCTL:
-		ip = (struct iocblk *) (ibuf+1);
-
-		switch (ip->ioc_cmd) {
-		case TCSETS:
-		case TCSETSW:
-		case TCSETSF:
-			tsp = (struct termios *)
-					(ibuf+1 + sizeof(struct iocblk));
-			vstop = tsp->c_cc[VSTOP];
-			vstart = tsp->c_cc[VSTART];
-			ixon = tsp->c_iflag & IXON;
-			break;
-		case TCSETA:
-		case TCSETAW:
-		case TCSETAF:
-			tp = (struct termio *) (ibuf+1 + sizeof(struct iocblk));
-			vstop = tp->c_cc[VSTOP];
-			vstart = tp->c_cc[VSTART];
-			ixon = tp->c_iflag & IXON;
-			break;
-		default:
-			errno = EAGAIN;
-			return(-1);
-		}
-
-		newflow =  (ixon && (vstart == 021) && (vstop == 023)) ? 1 : 0;
-		if (newflow != flowison) {  /* it's a change */
-			flowison = newflow;
-			ibuf[0] = newflow ? TIOCPKT_DOSTOP : TIOCPKT_NOSTOP;
-			return(1);
-		}
-	}
-
-	/* nothing worth doing anything about */
-	errno = EAGAIN;
-	return(-1);
-}
-#endif /* STREAMSPTY */
 
 /*
  * Send interrupt to process on other side of pty.
@@ -1515,14 +1174,6 @@ interrupt()
 {
 	ptyflush();	/* half-hearted */
 
-#if defined(STREAMSPTY) && defined(TIOCSIGNAL)
-	/* Streams PTY style ioctl to post a signal */
-	{
-		int sig = SIGINT;
-		(void) ioctl(pty, TIOCSIGNAL, &sig);
-		(void) ioctl(pty, I_FLUSH, FLUSHR);
-	}
-#else
 #ifdef	TCSIG
 	(void) ioctl(pty, TCSIG, (char *)SIGINT);
 #else	/* TCSIG */
@@ -1530,7 +1181,6 @@ interrupt()
 	*pfrontp++ = slctab[SLC_IP].sptr ?
 			(unsigned char)*slctab[SLC_IP].sptr : '\177';
 #endif	/* TCSIG */
-#endif
 }
 
 /*

@@ -1,8 +1,6 @@
-/*	$NetBSD: uudecode.c,v 1.8 1997/10/20 02:46:37 lukem Exp $	*/
-
-/*-
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+/*
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#endif
-
-#ifndef lint
-#if 0
-static char sccsid[] = "@(#)uudecode.c	8.2 (Berkeley) 4/2/94";
-#endif
-__RCSID("$NetBSD: uudecode.c,v 1.8 1997/10/20 02:46:37 lukem Exp $");
+static char sccsid[] = "@(#)uudecode.c	5.10 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -54,39 +43,26 @@ __RCSID("$NetBSD: uudecode.c,v 1.8 1997/10/20 02:46:37 lukem Exp $");
  */
 #include <sys/param.h>
 #include <sys/stat.h>
-#include <err.h>
-#include <errno.h>
-#include <locale.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
-
-static int decode __P((void));
-static void usage __P((void));
-int main __P((int, char **));
 
 char *filename;
 
-int
+/* ARGSUSED */
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
+	extern int errno;
 	int rval;
 
-	setlocale(LC_ALL, "");
-
-	while (getopt(argc, argv, "") != -1)
-		usage();
-	argc -= optind;
-	argv += optind;
-
-	if (*argv) {
+	if (*++argv) {
 		rval = 0;
 		do {
 			if (!freopen(filename = *argv, "r", stdin)) {
-				warnx("%s", *argv);
+				(void)fprintf(stderr, "uudecode: %s: %s\n",
+				    *argv, strerror(errno));
 				rval = 1;
 				continue;
 			}
@@ -99,20 +75,20 @@ main(argc, argv)
 	exit(rval);
 }
 
-static int
 decode()
 {
 	extern int errno;
 	struct passwd *pw;
-	int n;
-	char ch, *p;
+	register int n;
+	register char ch, *p;
 	int mode, n1;
 	char buf[MAXPATHLEN];
 
 	/* search for header line */
 	do {
 		if (!fgets(buf, sizeof(buf), stdin)) {
-			warnx("%s: no \"begin\" line", filename);
+			(void)fprintf(stderr,
+			    "uudecode: %s: no \"begin\" line\n", filename);
 			return(1);
 		}
 	} while (strncmp(buf, "begin ", 6));
@@ -120,37 +96,42 @@ decode()
 
 	/* handle ~user/file format */
 	if (buf[0] == '~') {
-		if (!(p = strchr(buf, '/'))) {
-			warnx("%s: illegal ~user.", filename);
+		if (!(p = index(buf, '/'))) {
+			(void)fprintf(stderr, "uudecode: %s: illegal ~user.\n",
+			    filename);
 			return(1);
 		}
-		*p++ = '\0';
+		*p++ = NULL;
 		if (!(pw = getpwnam(buf + 1))) {
-			warnx("%s: no user %s.", filename, buf);
+			(void)fprintf(stderr, "uudecode: %s: no user %s.\n",
+			    filename, buf);
 			return(1);
 		}
 		n = strlen(pw->pw_dir);
 		n1 = strlen(p);
 		if (n + n1 + 2 > MAXPATHLEN) {
-			warnx("%s: path too long.", filename);
+			(void)fprintf(stderr, "uudecode: %s: path too long.\n",
+			    filename);
 			return(1);
 		}
-		memmove(buf + n + 1, p, n1 + 1);
-		memmove(buf, pw->pw_dir, n);
+		bcopy(p, buf + n + 1, n1 + 1);
+		bcopy(pw->pw_dir, buf, n);
 		buf[n] = '/';
 	}
 
 	/* create output file, set mode */
 	if (!freopen(buf, "w", stdout) ||
 	    fchmod(fileno(stdout), mode&0666)) {
-		warnx("%s: %s", buf, filename);
+		(void)fprintf(stderr, "uudecode: %s: %s: %s\n", buf,
+		    filename, strerror(errno));
 		return(1);
 	}
 
 	/* for each input line */
 	for (;;) {
 		if (!fgets(p = buf, sizeof(buf), stdin)) {
-			warnx("%s: short file.", filename);
+			(void)fprintf(stderr, "uudecode: %s: short file.\n",
+			    filename);
 			return(1);
 		}
 #define	DEC(c)	(((c) - ' ') & 077)		/* single character decode */
@@ -185,13 +166,13 @@ decode()
 			}
 	}
 	if (!fgets(buf, sizeof(buf), stdin) || strcmp(buf, "end\n")) {
-		warnx("%s: no \"end\" line.", filename);
+		(void)fprintf(stderr, "uudecode: %s: no \"end\" line.\n",
+		    filename);
 		return(1);
 	}
 	return(0);
 }
 
-static void
 usage()
 {
 	(void)fprintf(stderr, "usage: uudecode [file ...]\n");

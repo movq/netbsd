@@ -1,5 +1,3 @@
-/*	$NetBSD: krcmd.c,v 1.3 1997/10/19 14:10:31 lukem Exp $	*/
-
 /*
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -34,20 +32,16 @@
  */
 
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)krcmd.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: krcmd.c,v 1.3 1997/10/19 14:10:31 lukem Exp $");
-#endif
 #endif /* not lint */
 
 /*
- *	$Source: /a/cvsroot/src/usr.bin/rlogin/krcmd.c,v 
+ *	$Source: /home/mike/src/cvs/netbsd/src/usr.bin/rlogin/Attic/krcmd.c,v $
  *	$Header: /mit/kerberos/ucb/mit/kcmd/RCS/krcmd.c,v 5.1
- *		89/07/25 15:38:44 kfall Exp Locker: kfall 
+ *		89/07/25 15:38:44 kfall Exp Locker: kfall $
  * static char *rcsid_kcmd_c =
  * "$Header: /mit/kerberos/ucb/mit/kcmd/RCS/krcmd.c,v 5.1 89/07/25 15:38:44
- *	kfall Exp Locker: kfall ";
+ *	kfall Exp Locker: kfall $";
  */
 
 #ifdef KERBEROS

@@ -1,5 +1,3 @@
-/*	$NetBSD: mount_union.c,v 1.5 1997/09/16 12:32:54 lukem Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -36,18 +34,15 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1992, 1993, 1994\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)mount_union.c	8.6 (Berkeley) 4/26/95";
-#else
-__RCSID("$NetBSD: mount_union.c,v 1.5 1997/09/16 12:32:54 lukem Exp $");
-#endif
+/*static char sccsid[] = "from: @(#)mount_union.c	8.5 (Berkeley) 3/27/94";*/
+static char *rcsid = "$Id: mount_union.c,v 1.1 1994/06/08 19:29:13 mycroft Exp $";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -63,12 +58,11 @@ __RCSID("$NetBSD: mount_union.c,v 1.5 1997/09/16 12:32:54 lukem Exp $");
 
 #include "mntopts.h"
 
-const struct mntopt mopts[] = {
+struct mntopt mopts[] = {
 	MOPT_STDOPTS,
 	{ NULL }
 };
 
-int	main __P((int, char *[]));
 int	subdir __P((const char *, const char *));
 void	usage __P((void));
 
@@ -83,14 +77,14 @@ main(argc, argv)
 
 	mntflags = 0;
 	args.mntflags = UNMNT_ABOVE;
-	while ((ch = getopt(argc, argv, "bo:r")) != -1)
+	while ((ch = getopt(argc, argv, "bo:r")) != EOF)
 		switch (ch) {
 		case 'b':
 			args.mntflags &= ~UNMNT_OPMASK;
 			args.mntflags |= UNMNT_BELOW;
 			break;
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			getmntopts(optarg, mopts, &mntflags);
 			break;
 		case 'r':
 			args.mntflags &= ~UNMNT_OPMASK;
@@ -117,7 +111,7 @@ main(argc, argv)
 	args.target = target;
 
 	if (mount(MOUNT_UNION, argv[1], mntflags, &args))
-		err(1, "%s", "");
+		err(1, NULL);
 	exit(0);
 }
 

@@ -1,8 +1,6 @@
-/*	$NetBSD: morg.c,v 1.5 1997/10/12 17:45:21 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)morg.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: morg.c,v 1.5 1997/10/12 17:45:21 christos Exp $");
-#endif
+static char sccsid[] = "@(#)morg.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include	"monop.ext"
@@ -55,40 +48,32 @@ static char	*names[MAX_PRP+2],
 			"where",	/*  2 */
 			"own holdings",	/*  3 */
 			"holdings",	/*  4 */
-			"mortgage",	/*  5 */
-			"unmortgage",	/*  6 */
-			"buy",		/*  7 */
-			"sell",		/*  8 */
-			"card",		/*  9 */
-			"pay",		/* 10 */
-			"trade",	/* 11 */
-			"resign",	/* 12 */
-			"save game",	/* 13 */
-			"restore game",	/* 14 */
+			"shell",	/*  5 */
+			"mortgage",	/*  6 */
+			"unmortgage",	/*  7 */
+			"buy",		/*  8 */
+			"sell",		/*  9 */
+			"card",		/* 10 */
+			"pay",		/* 11 */
+			"trade",	/* 12 */
+			"resign",	/* 13 */
+			"save game",	/* 14 */
+			"restore game",	/* 15 */
 			0
 		};
 
-static short	square[MAX_PRP+2];
+static shrt	square[MAX_PRP+2];
 
 static int	num_good,got_houses;
-
-
-static int set_mlist __P((void));
-static void m __P((int));
-static int set_umlist __P((void));
-static void unm __P((int));
-static void fix_ex __P((int));
 
 /*
  *	This routine is the command level response the mortgage command.
  * it gets the list of mortgageable property and asks which are to
  * be mortgaged.
  */
-void
-mortgage()
-{
+mortgage() {
 
-	int	prop;
+	reg int	prop;
 
 	for (;;) {
 		if (set_mlist() == 0) {
@@ -108,17 +93,15 @@ mortgage()
 		if (prop == num_good)
 			return;
 		m(square[prop]);
-		notify();
+		notify(cur_p);
 	}
 }
 /*
  *	This routine sets up the list of mortgageable property
  */
-static int
-set_mlist()
-{
+set_mlist() {
 
-	OWN	*op;
+	reg OWN	*op;
 
 	num_good = 0;
 	for (op = cur_p->own_list; op; op = op->next)
@@ -136,12 +119,10 @@ set_mlist()
 /*
  *	This routine actually mortgages the property.
  */
-static void
 m(prop)
-int	prop;
-{
+reg int	prop; {
 
-	int	price;
+	reg int	price;
 
 	price = board[prop].cost/2;
 	board[prop].desc->morg = TRUE;
@@ -153,11 +134,9 @@ int	prop;
  * command.  It gets the list of mortgaged property and asks which are
  * to be unmortgaged.
  */
-void
-unmortgage() 
-{
+unmortgage() {
 
-	int	prop;
+	reg int	prop;
 
 	for (;;) {
 		if (set_umlist() == 0) {
@@ -179,11 +158,9 @@ unmortgage()
 /*
  *	This routine sets up the list of mortgaged property
  */
-static int
-set_umlist()
-{
+set_umlist() {
 
-	OWN	*op;
+	reg OWN	*op;
 
 	num_good = 0;
 	for (op = cur_p->own_list; op; op = op->next)
@@ -198,12 +175,10 @@ set_umlist()
 /*
  *	This routine actually unmortgages the property
  */
-static void
 unm(prop)
-int	prop; 
-{
+reg int	prop; {
 
-	int	price;
+	reg int	price;
 
 	price = board[prop].cost/2;
 	board[prop].desc->morg = FALSE;
@@ -216,9 +191,7 @@ int	prop;
  *	This routine forces the indebted player to fix his
  * financial woes.
  */
-void
-force_morg()
-{
+force_morg() {
 
 	told_em = fixing = TRUE;
 	while (cur_p->money <= 0)
@@ -228,10 +201,8 @@ force_morg()
 /*
  *	This routine is a special execute for the force_morg routine
  */
-static void
 fix_ex(com_num)
-int	com_num;
-{
+reg int	com_num; {
 
 	told_em = FALSE;
 	(*func[com_num])();

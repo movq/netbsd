@@ -1,8 +1,6 @@
-/*	$NetBSD: ctags.c,v 1.5 1997/10/18 13:18:31 lukem Exp $	*/
-
 /*
- * Copyright (c) 1987, 1993, 1994, 1995
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1987 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,26 +31,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994, 1995\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1987 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)ctags.c	8.4 (Berkeley) 2/7/95";
-#endif
-__RCSID("$NetBSD: ctags.c,v 1.5 1997/10/18 13:18:31 lukem Exp $");
+static char sccsid[] = "@(#)ctags.c	5.8 (Berkeley) 2/26/91";
 #endif /* not lint */
 
-#include <err.h>
-#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
-
 #include "ctags.h"
 
 /*
@@ -62,90 +53,86 @@ __RCSID("$NetBSD: ctags.c,v 1.5 1997/10/18 13:18:31 lukem Exp $");
 NODE	*head;			/* head of the sorted binary tree */
 
 				/* boolean "func" (see init()) */
-bool	_wht[256], _etk[256], _itk[256], _btk[256], _gd[256];
+bool	_wht[0177],_etk[0177],_itk[0177],_btk[0177],_gd[0177];
 
-FILE	*inf;			/* ioptr for current input file */
-FILE	*outf;			/* ioptr for tags file */
+FILE	*inf,			/* ioptr for current input file */
+	*outf;			/* ioptr for tags file */
 
 long	lineftell;		/* ftell after getc( inf ) == '\n' */
 
-int	lineno;			/* line number of current line */
-int	dflag;			/* -d: non-macro defines */
-int	tflag;			/* -t: create tags for typedefs */
-int	vflag;			/* -v: vgrind style index output */
-int	wflag;			/* -w: suppress warnings */
-int	xflag;			/* -x: cxref style output */
+int	lineno,			/* line number of current line */
+	dflag,			/* -d: non-macro defines */
+	tflag,			/* -t: create tags for typedefs */
+	wflag,			/* -w: suppress warnings */
+	vflag,			/* -v: vgrind style index output */
+	xflag;			/* -x: cxref style output */
 
-char	*curfile;		/* current input file name */
-char	searchar = '/';		/* use /.../ searches by default */
-char	lbuf[LINE_MAX];
+char	*curfile,		/* current input file name */
+	searchar = '/',		/* use /.../ searches by default */
+	lbuf[BUFSIZ];
 
-void	init __P((void));
-int	main __P((int, char **));
-void	find_entries __P((char *));
-
-int
-main(argc, argv)
+main(argc,argv)
 	int	argc;
 	char	**argv;
 {
+	extern char	*optarg;		/* getopt arguments */
+	extern int	optind;
 	static char	*outfile = "tags";	/* output file */
-	int	aflag;				/* -a: append to tags */
-	int	uflag;				/* -u: update tags */
-	int	exit_val;			/* exit value */
-	int	step;				/* step through args */
-	int	ch;				/* getopts char */
+	int	aflag,				/* -a: append to tags */
+		uflag,				/* -u: update tags */
+		exit_val,			/* exit value */
+		step,				/* step through args */
+		ch;				/* getopts char */
 	char	cmd[100];			/* too ugly to explain */
 
 	aflag = uflag = NO;
-	while ((ch = getopt(argc, argv, "BFadf:tuwvx")) != -1)
-		switch(ch) {
-		case 'B':
-			searchar = '?';
-			break;
-		case 'F':
-			searchar = '/';
-			break;
-		case 'a':
-			aflag++;
-			break;
-		case 'd':
-			dflag++;
-			break;
-		case 'f':
-			outfile = optarg;
-			break;
-		case 't':
-			tflag++;
-			break;
-		case 'u':
-			uflag++;
-			break;
-		case 'w':
-			wflag++;
-			break;
-		case 'v':
-			vflag++;
-		case 'x':
-			xflag++;
-			break;
-		case '?':
-		default:
-			goto usage;
+	while ((ch = getopt(argc,argv,"BFadf:tuwvx")) != EOF)
+		switch((char)ch) {
+			case 'B':
+				searchar = '?';
+				break;
+			case 'F':
+				searchar = '/';
+				break;
+			case 'a':
+				aflag++;
+				break;
+			case 'd':
+				dflag++;
+				break;
+			case 'f':
+				outfile = optarg;
+				break;
+			case 't':
+				tflag++;
+				break;
+			case 'u':
+				uflag++;
+				break;
+			case 'w':
+				wflag++;
+				break;
+			case 'v':
+				vflag++;
+			case 'x':
+				xflag++;
+				break;
+			case '?':
+			default:
+				goto usage;
 		}
 	argv += optind;
 	argc -= optind;
 	if (!argc) {
-usage:		(void)fprintf(stderr,
-			"usage: ctags [-BFadtuwvx] [-f tagsfile] file ...\n");
+usage:		puts("Usage: ctags [-BFadtuwvx] [-f tagsfile] file ...");
 		exit(1);
 	}
 
 	init();
 
-	for (exit_val = step = 0; step < argc; ++step)
-		if (!(inf = fopen(argv[step], "r"))) {
-			warn("%s", argv[step]);
+	for (exit_val = step = 0;step < argc;++step)
+		if (!(inf = fopen(argv[step],"r"))) {
+			perror(argv[step]);
 			exit_val = 1;
 		}
 		else {
@@ -159,22 +146,20 @@ usage:		(void)fprintf(stderr,
 			put_entries(head);
 		else {
 			if (uflag) {
-				for (step = 0; step < argc; step++) {
-					(void)sprintf(cmd,
-						"mv %s OTAGS; fgrep -v '\t%s\t' OTAGS >%s; rm OTAGS",
-							outfile, argv[step],
-							outfile);
+				for (step = 0;step < argc;step++) {
+					(void)sprintf(cmd,"mv %s OTAGS;fgrep -v '\t%s\t' OTAGS >%s;rm OTAGS",outfile,argv[step],outfile);
 					system(cmd);
 				}
 				++aflag;
 			}
-			if (!(outf = fopen(outfile, aflag ? "a" : "w")))
-				err(exit_val, "%s", outfile);
+			if (!(outf = fopen(outfile, aflag ? "a" : "w"))) {
+				perror(outfile);
+				exit(exit_val);
+			}
 			put_entries(head);
 			(void)fclose(outf);
 			if (uflag) {
-				(void)sprintf(cmd, "sort -o %s %s",
-						outfile, outfile);
+				(void)sprintf(cmd,"sort %s -o %s",outfile,outfile);
 				system(cmd);
 			}
 		}
@@ -191,13 +176,12 @@ usage:		(void)fprintf(stderr,
  *	CWHITE are set to YES.  Thus, "_wht" of a char is YES if it is in
  *	the string CWHITE, else NO.
  */
-void
 init()
 {
-	int		i;
-	unsigned char	*sp;
+	register int	i;
+	register char	*sp;
 
-	for (i = 0; i < 256; i++) {
+	for (i = 0; i < 0177; i++) {
 		_wht[i] = _etk[i] = _itk[i] = _btk[i] = NO;
 		_gd[i] = YES;
 	}
@@ -223,19 +207,18 @@ init()
  *	this routine opens the specified file and calls the function
  *	which searches the file.
  */
-void
 find_entries(file)
 	char	*file;
 {
-	char	*cp;
+	register char	*cp;
 
 	lineno = 0;				/* should be 1 ?? KB */
-	if ((cp = strrchr(file, '.')) != NULL) {
+	if (cp = rindex(file, '.')) {
 		if (cp[1] == 'l' && !cp[2]) {
-			int	c;
+			register int	c;
 
 			for (;;) {
-				if (GETC(==, EOF))
+				if (GETC(==,EOF))
 					return;
 				if (!iswhite(c)) {
 					rewind(inf);
@@ -243,7 +226,7 @@ find_entries(file)
 				}
 			}
 #define	LISPCHR	";(["
-/* lisp */		if (strchr(LISPCHR, c)) {
+/* lisp */		if (index(LISPCHR,(char)c)) {
 				l_entries();
 				return;
 			}
@@ -253,8 +236,8 @@ find_entries(file)
 				 * for C references.  This may be wrong.
 				 */
 				toss_yysec();
-				(void)strcpy(lbuf, "%%$");
-				pfnote("yylex", lineno);
+				(void)strcpy(lbuf,"%%$");
+				pfnote("yylex",lineno);
 				rewind(inf);
 			}
 		}
@@ -264,8 +247,8 @@ find_entries(file)
 			 * for C references.  This may be wrong.
 			 */
 			toss_yysec();
-			(void)strcpy(lbuf, "%%$");
-			pfnote("yyparse", lineno);
+			(void)strcpy(lbuf,"%%$");
+			pfnote("yyparse",lineno);
 			y_entries();
 		}
 /* fortran */	else if ((cp[1] != 'c' && cp[1] != 'h') && !cp[2]) {

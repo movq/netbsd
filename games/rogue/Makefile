@@ -1,19 +1,13 @@
-#	$NetBSD: Makefile,v 1.8 1997/10/11 09:34:19 mycroft Exp $
-#	@(#)Makefile	8.1 (Berkeley) 5/31/93
+#	@(#)Makefile	5.7 (Berkeley) 5/11/90
 
 PROG=	rogue
-CFLAGS+=-DUNIX -fwritable-strings
+CFLAGS+=-DUNIX -DUNIX_BSD4_2 -fwritable-strings
 SRCS=	curses.c hit.c init.c inventory.c level.c machdep.c main.c \
 	message.c monster.c move.c object.c pack.c play.c random.c ring.c \
 	room.c save.c score.c spec_hit.c throw.c trap.c use.c zap.c
-DPADD=	${LIBCURSES} ${LIBTERM} ${LIBCOMPAT}
-LDADD=	-lcurses -ltermlib -lcompat
+DPADD=	${LIBCURSES} ${LIBTERM}
+LDADD=	-lcurses -ltermlib
 HIDEGAME=hidegame
-MAN=	rogue.6
-
-.if make(install)
-SUBDIR+=USD.doc
-.endif
+MAN6=	rogue.0
 
 .include <bsd.prog.mk>
-.include <bsd.subdir.mk>

@@ -1,8 +1,6 @@
-/*	$NetBSD: tprintf.h,v 1.11 1997/01/22 07:09:26 mikel Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,15 +30,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tprintf.h	8.1 (Berkeley) 6/2/93
+ *	@(#)tprintf.h	7.2 (Berkeley) 5/4/91
  */
 
-#ifdef _KERNEL
 typedef struct session *tpr_t;
 
 tpr_t	tprintf_open __P((struct proc *));
 void	tprintf_close __P((tpr_t));
 
-void	tprintf __P((tpr_t, const char *fmt, ...))
-    __kprintf_attribute__((__format__(__kprintf__,2,3)));
-#endif /* _KERNEL */
+void	tprintf __P((tpr_t, const char *fmt, ...));

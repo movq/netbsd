@@ -1,7 +1,5 @@
-.\"	$NetBSD: rx.4,v 1.5 1997/10/19 13:02:03 mrg Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)rx.4	8.1 (Berkeley) 6/5/93
+.\"     @(#)rx.4	6.2 (Berkeley) 3/27/91
 .\"
-.Dd June 5, 1993
+.Dd March 27, 1991
 .Dt RX 4 vax
 .Os BSD 4.2
 .Sh NAME
@@ -153,7 +151,7 @@ small, it is possible to make filesystems on
 double density disks. 
 For example, the command
 .Bd -literal -offset indent
-% newfs -s 1001 -u 13 -t 1 -b 4096 -f 512 -c 32 -m 0 -r 240 /dev/rx0
+% mkfs /dev/rx0 1001 13 1 4096 512 32 0 4
 .Ed
 .Pp
 makes a file system on the double density disk in rx0 with 
@@ -238,6 +236,7 @@ the device
 .Sh SEE ALSO
 .Xr rxformat 8 ,
 .Xr newfs 8 ,
+.Xr mkfs 8 ,
 .Xr tar 1 ,
 .Xr arff 8
 .Sh HISTORY

@@ -1,8 +1,6 @@
-/*	$NetBSD: logwtmp.c,v 1.6 1997/06/29 18:44:07 christos Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,32 +31,24 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)logwtmp.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: logwtmp.c,v 1.6 1997/06/29 18:44:07 christos Exp $");
-#endif
+static char sccsid[] = "@(#)logwtmp.c	5.5 (Berkeley) 6/1/90";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
 #include <sys/file.h>
 #include <sys/time.h>
 #include <sys/stat.h>
-
-#include <string.h>
-#include <unistd.h>
 #include <utmp.h>
-#include <util.h>
 
-void
 logwtmp(line, name, host)
-	const char *line, *name, *host;
+	char *line, *name, *host;
 {
 	struct utmp ut;
 	struct stat buf;
 	int fd;
+	time_t time();
+	char *strncpy();
 
 	if ((fd = open(_PATH_WTMP, O_WRONLY|O_APPEND, 0)) < 0)
 		return;

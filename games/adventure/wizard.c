@@ -1,5 +1,3 @@
-/*	$NetBSD: wizard.c,v 1.6 1997/10/11 01:53:40 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -38,121 +36,98 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)wizard.c	8.1 (Berkeley) 6/2/93";
-#else
-__RCSID("$NetBSD: wizard.c,v 1.6 1997/10/11 01:53:40 lukem Exp $");
-#endif
-#endif				/* not lint */
+#endif /* not lint */
 
 /*      Re-coding of advent in C: privileged operations                 */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <time.h>
-#include "hdr.h"
-#include "extern.h"
+# include "hdr.h"
 
-void
-datime(d, t)
-	int    *d, *t;
-{
-	time_t  tvec;
-	struct tm *tptr;
+datime(d,t)
+int *d,*t;
+{       int tvec[2],*tptr;
+	int *localtime();
 
-	time(&tvec);
-	tptr = localtime(&tvec);
-	/* day since 1977  (mod leap)   */
-	*d = tptr->tm_yday + 365 * (tptr->tm_year - 77);
+	time(tvec);
+	tptr=localtime(tvec);
+	*d=tptr[7]+365*(tptr[5]-77);    /* day since 1977  (mod leap)   */
 	/* bug: this will overflow in the year 2066 AD                  */
 	/* it will be attributed to Wm the C's millenial celebration    */
-	/* and minutes since midnite */
-	*t = tptr->tm_hour * 60 + tptr->tm_min;
-}				/* pretty painless              */
+	*t=tptr[2]*60+tptr[1];          /* and minutes since midnite    */
+}                                       /* pretty painless              */
 
 
-char    magic[6];
+char magic[6];
 
-void
 poof()
 {
-	strcpy(magic, DECR('d', 'w', 'a', 'r', 'f'));
+	strcpy(magic, DECR(d,w,a,r,f));
 	latncy = 45;
 }
 
-int
 Start(n)
-{
-	int     d, t, delay;
+{       int d,t,delay;
 
-	datime(&d, &t);
-	delay = (d - saved) * 1440 + (t - savet);	/* good for about a
-							 * month     */
+	datime(&d,&t);
+	delay=(d-saved)*1440+(t-savet); /* good for about a month     */
 
-	if (delay >= latncy) {
-		saved = -1;
-		return (FALSE);
+	if (delay >= latncy)
+	{       saved = -1;
+		return(FALSE);
 	}
 	printf("This adventure was suspended a mere %d minute%s ago.",
-	    delay, delay == 1 ? "" : "s");
-	if (delay <= latncy / 3) {
-		mspeak(2);
+		delay, delay == 1? "" : "s");
+	if (delay <= latncy/3)
+	{       mspeak(2);
 		exit(0);
 	}
 	mspeak(8);
-	if (!wizard()) {
-		mspeak(9);
+	if (!wizard())
+	{       mspeak(9);
 		exit(0);
 	}
 	saved = -1;
-	return (FALSE);
+	return(FALSE);
 }
 
-int
-wizard()
-{				/* not as complex as advent/10 (for now)        */
-	char   *word, *x;
-	if (!yesm(16, 0, 7))
-		return (FALSE);
+wizard()                /* not as complex as advent/10 (for now)        */
+{       register int wiz;
+	char *word,*x;
+	if (!yesm(16,0,7)) return(FALSE);
 	mspeak(17);
-	getin(&word, &x);
-	if (!weq(word, magic)) {
-		mspeak(20);
-		return (FALSE);
+	getin(&word,&x);
+	if (!weq(word,magic))
+	{       mspeak(20);
+		return(FALSE);
 	}
 	mspeak(19);
-	return (TRUE);
+	return(TRUE);
 }
 
-void
 ciao(cmdfile)
-	char   *cmdfile;
-{
-	char   *c;
-	char    fname[80];
+char *cmdfile;
+{       register char *c;
+	register int outfd, size;
+	char fname[80], buf[512];
+	extern unsigned filesize;
 
 	printf("What would you like to call the saved version?\n");
-	for (c = fname;; c++)
-		if ((*c = getchar()) == '\n')
-			break;
-	*c = 0;
-	if (save(fname) != 0)
-		return;		/* Save failed */
+	for (c=fname;; c++)
+		if ((*c=getchar())=='\n') break;
+	*c=0;
+	if (save(fname) != 0) return;           /* Save failed */
 	printf("To resume, say \"adventure %s\".\n", fname);
 	printf("\"With these rooms I might now have been familiarly acquainted.\"\n");
 	exit(0);
 }
 
 
-int
 ran(range)
-	int     range;
+int range;
 {
-	long    i;
+	long rand(), i;
 
 	i = rand() % range;
-	return (i);
+	return(i);
 }

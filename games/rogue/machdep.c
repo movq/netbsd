@@ -1,8 +1,6 @@
-/*	$NetBSD: machdep.c,v 1.6 1997/10/12 11:45:19 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Timothy C. Stoehr.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)machdep.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: machdep.c,v 1.6 1997/10/12 11:45:19 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)machdep.c	5.7 (Berkeley) 2/28/91";
 #endif /* not lint */
 
 /*
@@ -98,24 +91,23 @@ __RCSID("$NetBSD: machdep.c,v 1.6 1997/10/12 11:45:19 lukem Exp $");
 
 #ifdef UNIX
 
+#include <stdio.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <pwd.h>
 
 #ifdef UNIX_BSD4_2
 #include <sys/time.h>
+#include <sgtty.h>
 #endif
 
 #ifdef UNIX_SYSV
 #include <time.h>
+#include <termio.h>
 #endif
 
 #include <signal.h>
-#include <stdlib.h>
-#include <termios.h>
-#include <unistd.h>
 #include "rogue.h"
 #include "pathnames.h"
 
@@ -131,10 +123,80 @@ __RCSID("$NetBSD: machdep.c,v 1.6 1997/10/12 11:45:19 lukem Exp $");
  * big deal.
  */
 
-void
 md_slurp()
 {
 	(void)fpurge(stdin);
+}
+
+/* md_control_keyboard():
+ *
+ * This routine is much like md_cbreak_no_echo_nonl() below.  It sets up the
+ * keyboard for appropriate input.  Specifically, it prevents the tty driver
+ * from stealing characters.  For example, ^Y is needed as a command
+ * character, but the tty driver intercepts it for another purpose.  Any
+ * such behavior should be stopped.  This routine could be avoided if
+ * we used RAW mode instead of CBREAK.  But RAW mode does not allow the
+ * generation of keyboard signals, which the program uses.
+ *
+ * The parameter 'mode' when true, indicates that the keyboard should
+ * be set up to play rogue.  When false, it should be restored if
+ * necessary.
+ *
+ * This routine is not strictly necessary and may be stubbed.  This may
+ * cause certain command characters to be unavailable.
+ */
+
+md_control_keybord(mode)
+boolean mode;
+{
+	static boolean called_before = 0;
+#ifdef UNIX_BSD4_2
+	static struct ltchars ltc_orig;
+	static struct tchars tc_orig;
+	struct ltchars ltc_temp;
+	struct tchars tc_temp;
+#endif
+#ifdef UNIX_SYSV
+	static struct termio _oldtty;
+	struct termio _tty;
+#endif
+
+	if (!called_before) {
+		called_before = 1;
+#ifdef UNIX_BSD4_2
+		ioctl(0, TIOCGETC, &tc_orig);
+		ioctl(0, TIOCGLTC, &ltc_orig);
+#endif
+#ifdef UNIX_SYSV
+		ioctl(0, TCGETA, &_oldtty);
+#endif
+	}
+#ifdef UNIX_BSD4_2
+	ltc_temp = ltc_orig;
+	tc_temp = tc_orig;
+#endif
+#ifdef UNIX_SYSV
+	_tty = _oldtty;
+#endif
+
+	if (!mode) {
+#ifdef UNIX_BSD4_2
+		ltc_temp.t_suspc = ltc_temp.t_dsuspc = -1;
+		ltc_temp.t_rprntc = ltc_temp.t_flushc = -1;
+		ltc_temp.t_werasc = ltc_temp.t_lnextc = -1;
+		tc_temp.t_startc = tc_temp.t_stopc = -1;
+#endif
+#ifdef UNIX_SYSV
+		_tty.c_cc[VSWTCH] = CNSWTCH;
+#endif
+	}
+#ifdef UNIX_BSD4_2
+	ioctl(0, TIOCSETC, &tc_temp);
+	ioctl(0, TIOCSLTC, &ltc_temp);
+#endif
+#ifdef UNIX_SYSV
+	ioctl(0, TCSETA, &_tty);
+#endif
 }
 
 /* md_heed_signals():
@@ -153,7 +215,6 @@ md_slurp()
  * input, this is not usually critical.
  */
 
-void
 md_heed_signals()
 {
 	signal(SIGINT, onintr);
@@ -173,7 +234,6 @@ md_heed_signals()
  * file, corruption.
  */
 
-void
 md_ignore_signals()
 {
 	signal(SIGQUIT, SIG_IGN);
@@ -192,7 +252,7 @@ md_ignore_signals()
 
 int
 md_get_file_id(fname)
-	char *fname;
+char *fname;
 {
 	struct stat sbuf;
 
@@ -234,12 +294,11 @@ char *fname;
  * saved-game files and play them.  
  */
 
-void
 md_gct(rt_buf)
-	struct rogue_time *rt_buf;
+struct rogue_time *rt_buf;
 {
-	struct tm *t;
-	time_t seconds;
+	struct tm *t, *localtime();
+	long seconds;
 
 	time(&seconds);
 	t = localtime(&seconds);
@@ -268,13 +327,12 @@ md_gct(rt_buf)
  * saved-games that have been modified.
  */
 
-void
 md_gfmt(fname, rt_buf)
-	char *fname;
-	struct rogue_time *rt_buf;
+char *fname;
+struct rogue_time *rt_buf;
 {
 	struct stat sbuf;
-	time_t seconds;
+	long seconds;
 	struct tm *t;
 
 	stat(fname, &sbuf);
@@ -302,7 +360,7 @@ md_gfmt(fname, rt_buf)
 
 boolean
 md_df(fname)
-	char *fname;
+char *fname;
 {
 	if (unlink(fname)) {
 		return(0);
@@ -338,9 +396,8 @@ md_gln()
  * delaying execution, which is useful to this program at some times.
  */
 
-void
 md_sleep(nsecs)
-	int nsecs;
+int nsecs;
 {
 	(void) sleep(nsecs);
 }
@@ -384,9 +441,10 @@ md_sleep(nsecs)
 
 char *
 md_getenv(name)
-	char *name;
+char *name;
 {
 	char *value;
+	char *getenv();
 
 	value = getenv(name);
 
@@ -403,8 +461,9 @@ md_getenv(name)
 
 char *
 md_malloc(n)
-	int n;
+int n;
 {
+	char *malloc();
 	char *t;
 
 	t = malloc(n);
@@ -429,7 +488,6 @@ md_malloc(n)
  * exactly the same way given the same input.
  */
 
-int
 md_gseed()
 {
 	return(getpid());
@@ -442,9 +500,8 @@ md_gseed()
  * hang when it should quit.
  */
 
-void
 md_exit(status)
-	int status;
+int status;
 {
 	exit(status);
 }
@@ -452,32 +509,38 @@ md_exit(status)
 /* md_lock():
  *
  * This function is intended to give the user exclusive access to the score
- * file.  It does so by flock'ing the score file.  The full path name of the
- * score file should be defined for any particular site in rogue.h.  The
- * constants _PATH_SCOREFILE defines this file name.
+ * file.  It does so by "creat"ing a lock file, which can only be created
+ * if it does not already exist.  The file is deleted when score file
+ * processing is finished.  The lock file should be located in the same
+ * directory as the score file.  These full path names should be defined for
+ * any particular site in rogue.h.  The constants _PATH_SCOREFILE and
+ * _PATH_LOCKFILE define these file names.
  *
  * When the parameter 'l' is non-zero (true), a lock is requested.  Otherwise
- * the lock is released.
+ * the lock is released by removing the lock file.
  */
 
-void
 md_lock(l)
-	boolean l;
+boolean l;
 {
-	static int fd;
 	short tries;
+	char *lock_file = _PATH_LOCKFILE;
 
 	if (l) {
-		if ((fd = open(_PATH_SCOREFILE, O_RDONLY)) < 1) {
-			message("cannot lock score file", 0);
-			return;
+		for (tries = 0; tries < 5; tries++) {
+			if (md_get_file_id(lock_file) == -1) {
+				if (creat(lock_file, 0444) != -1) {
+					break;
+				} else {
+					message("cannot lock score file", 0);
+				}
+			} else {
+				message("waiting to lock score file", 0);
+			}
+			sleep(2);
 		}
-		for (tries = 0; tries < 5; tries++)
-			if (!flock(fd, LOCK_EX|LOCK_NB))
-				return;
 	} else {
-		(void)flock(fd, LOCK_NB);
-		(void)close(fd);
+		(void) unlink(lock_file);
 	}
 }
 
@@ -490,11 +553,10 @@ md_lock(l)
  * The effective user id is restored after the shell completes.
  */
 
-void
 md_shell(shell)
-	char *shell;
+char *shell;
 {
-	int w;
+	long w[2];
 
 	if (!fork()) {
 		int uid;
@@ -503,7 +565,7 @@ md_shell(shell)
 		setuid(uid);
 		execl(shell, shell, 0);
 	}
-	wait(&w);
+	wait(w);
 }
 
 /* If you have a viable curses/termlib library, then use it and don't bother
@@ -542,24 +604,40 @@ md_shell(shell)
  *
  */
 
-void
 md_cbreak_no_echo_nonl(on)
-	boolean on;
+boolean on;
 {
-	struct termios tty_buf;
-	static struct termios tty_save;
+#ifdef UNIX_BSD4_2
+	static struct sgttyb tty_buf;
+	static int tsave_flags;
 
 	if (on) {
-		tcgetattr(0, &tty_buf);
+		ioctl(0, TIOCGETP, &tty_buf);
+		tsave_flags = tty_buf.sg_flags;
+		tty_buf.sg_flags |= CBREAK;
+		tty_buf.sg_flags &= ~(ECHO | CRMOD);	/* CRMOD: see note 3 above */
+		ioctl(0, TIOCSETP, &tty_buf);
+	} else {
+		tty_buf.sg_flags = tsave_flags;
+		ioctl(0, TIOCSETP, &tty_buf);
+	}
+#endif
+#ifdef UNIX_SYSV
+	struct termio tty_buf;
+	static struct termio tty_save;
+
+	if (on) {
+		ioctl(0, TCGETA, &tty_buf);
 		tty_save = tty_buf;
 		tty_buf.c_lflag &= ~(ICANON | ECHO);
 		tty_buf.c_oflag &= ~ONLCR;
-		tty_buf.c_cc[VMIN] = 1;
-		tty_buf.c_cc[VTIME] = 2;
-		tcsetattr(0, TCSADRAIN, &tty_buf);
+		tty_buf.c_cc[4] = 1;  /* MIN */
+		tty_buf.c_cc[5] = 2;  /* TIME */
+		ioctl(0, TCSETAF, &tty_buf);
 	} else {
-		tcsetattr(0, TCSADRAIN, &tty_save);
+		ioctl(0, TCSETAF, &tty_save);
 	}
+#endif
 }
 
 /* md_gdtcf(): (Get Default Termcap File)
@@ -591,7 +669,6 @@ md_gdtcf()
  *
  */
 
-void
 md_tstp()
 {
 #ifdef UNIX_BSD4_2

@@ -1,8 +1,6 @@
-/*	$NetBSD: include.h,v 1.6 1997/10/10 02:07:14 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Ed James.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)include.h	8.1 (Berkeley) 5/31/93
+ *	@(#)include.h	5.3 (Berkeley) 4/30/90
  */
 
 /*
@@ -47,26 +45,40 @@
  * For more info on this and all of my stuff, mail edjames@berkeley.edu.
  */
 
-#include <sys/types.h>
-#include <sys/file.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/utsname.h>
-#include <sys/wait.h>
-
-#include <ctype.h>
-#include <curses.h>
-#include <err.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <math.h>
-#include <pwd.h>
-#include <signal.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <termios.h>
+#include <ctype.h>
+#include <sys/types.h>
+#include <pwd.h>
+
+#ifdef BSD
+#include <sgtty.h>
+#include <sys/time.h>
+#include <sys/file.h>
+#endif
+
+#ifdef SYSV
+#include <fcntl.h>
 #include <unistd.h>
+#include <string.h>
+#include <sys/utsname.h>
+#endif
+
+#include <signal.h>
+#include <math.h>
+
+#include <curses.h>
+
+#ifdef SYSV
+#define	index	strchr
+#define	rindex	strrchr
+#define bcopy(a,b,c)	memcpy((b), (a), (c))
+#define	bzero(a,b)	memset((a), '\0', (b))
+#define	srandom	srand
+#define	random	rand
+#define	sgttyb	termio
+#define	sg_erase c_cc[2]
+#define	sg_kill c_cc[3]
+#endif
 
 #include "def.h"
 #include "struct.h"

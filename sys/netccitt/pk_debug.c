@@ -1,9 +1,7 @@
-/*	$NetBSD: pk_debug.c,v 1.8 1996/10/13 02:10:10 christos Exp $	*/
-
 /*
  * Copyright (c) University of British Columbia, 1984
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Laboratory for Computation Vision and the Computer Science Department
@@ -37,23 +35,22 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)pk_debug.c	8.1 (Berkeley) 6/10/93
+ *	@(#)pk_debug.c	7.7 (Berkeley) 5/9/91
  */
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/mbuf.h>
-#include <sys/socket.h>
-#include <sys/protosw.h>
-#include <sys/socketvar.h>
-#include <sys/errno.h>
+#include "param.h"
+#include "systm.h"
+#include "mbuf.h"
+#include "socket.h"
+#include "protosw.h"
+#include "socketvar.h"
+#include "errno.h"
 
-#include <net/if.h>
+#include "../net/if.h"
 
-#include <netccitt/x25.h>
-#include <netccitt/pk.h>
-#include <netccitt/pk_var.h>
-#include <netccitt/pk_extern.h>
+#include "x25.h"
+#include "pk.h"
+#include "pk_var.h"
 
 char	*pk_state[] = {
 	"Listen",	"Ready",	"Received-Call",
@@ -69,11 +66,10 @@ char   *pk_name[] = {
 	"Invalid"
 };
 
-void
 pk_trace (xcp, m, dir)
-	struct x25config *xcp;
-	register struct mbuf *m;
-	char *dir;
+struct x25config *xcp;
+register struct mbuf *m;
+char *dir;
 {
 	register char *s;
 	struct x25_packet *xp = mtod(m, struct x25_packet *);
@@ -94,10 +90,9 @@ pk_trace (xcp, m, dir)
 	printf ("\n");
 }
 
-void
 mbuf_cache(c, m)
-	register struct mbuf_cache *c;
-	struct mbuf *m;
+register struct mbuf_cache *c;
+struct mbuf *m;
 {
 	register struct mbuf **mp;
 
@@ -140,6 +135,5 @@ mbuf_cache(c, m)
 	c->mbc_num = (1 + c->mbc_num) % c->mbc_size;
 	if (*mp)
 		m_freem(*mp);
-	if ((*mp = m_copym(m, 0, M_COPYALL, M_DONTWAIT)) != NULL)
-		(*mp)->m_flags |= m->m_flags & 0x08;
+	*mp = m_copym(m, 0, M_COPYALL, M_DONTWAIT);
 }

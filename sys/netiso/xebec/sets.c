@@ -1,5 +1,5 @@
-/*	$NetBSD: sets.c,v 1.4 1994/06/29 06:41:16 cgd Exp $	*/
-
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/sets.c,v 1.1 1993/04/09 12:02:16 cgd Exp $ */
+/* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/sets.c,v $ */
 /*
  * This code is such a kludge that I don't want to put my name on it.
  * It was a ridiculously fast hack and needs rewriting.

@@ -1,8 +1,6 @@
-/*	$NetBSD: netisr.h,v 1.15 1997/04/02 21:23:29 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1986, 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1986, 1989 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,20 +30,20 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)netisr.h	8.1 (Berkeley) 6/10/93
+ *	@(#)netisr.h	7.8 (Berkeley) 5/7/91
  */
 
 /*
  * The networking code runs off software interrupts.
  *
- * You can switch into the network by doing splsoftnet() and return by splx().
+ * You can switch into the network by doing splnet() and return by splx().
  * The software interrupt level for the network is higher than the software
  * level for the clock (so you can enter the network in routines called
  * at timeout time).
- *
- * The routine to request a network software interrupt, setsoftnet(),
- * is defined in the machine-specific include files.
  */
+#if defined(vax) || defined(tahoe)
+#define	setsoftnet()	mtpr(SIRR, 12)
+#endif
 
 /*
  * Each ``pup-level-1'' input queue has a bit in a ``netisr'' status
@@ -53,21 +51,36 @@
  * interrupt used for scheduling the network code to calls
  * on the lowest level routine of each protocol.
  */
+#define	NETISR_RAW	0		/* same as AF_UNSPEC */
 #define	NETISR_IP	2		/* same as AF_INET */
 #define	NETISR_IMP	3		/* same as AF_IMPLINK */
 #define	NETISR_NS	6		/* same as AF_NS */
 #define	NETISR_ISO	7		/* same as AF_ISO */
 #define	NETISR_CCITT	10		/* same as AF_CCITT */
-#define	NETISR_ATALK	16		/* same as AF_APPLETALK */
-#define	NETISR_ARP	18		/* same as AF_LINK */
-#define NETISR_ISDN	26		/* same as AF_E164 */
-#define NETISR_NATM	27		/* same as AF_NATM */
-#define NETISR_PPP	28		/* for PPP processing */
 
 #define	schednetisr(anisr)	{ netisr |= 1<<(anisr); setsoftnet(); }
 
-#ifndef _LOCORE
-#ifdef _KERNEL
+#ifdef i386
+/* XXX Temporary -- soon to vanish - wfj */
+#define	NETISR_SCLK	11		/* softclock */
+#define	NETISR_AST	12		/* ast -- resched */
+
+#undef	schednetisr
+#define	schednetisr(anisr)	{\
+	if(netisr == 0) { \
+		softem++; \
+	} \
+	netisr |= 1<<(anisr); \
+}
+#ifndef LOCORE
+#ifdef KERNEL
+int	softem;	
+#endif
+#endif
+#endif /* i386 */
+
+#ifndef LOCORE
+#ifdef KERNEL
 int	netisr;				/* scheduling bits for network */
 #endif
 #endif

@@ -1,7 +1,5 @@
-/*	$NetBSD: timedc.c,v 1.6 1997/10/18 07:13:35 lukem Exp $	*/
-
-/*-
- * Copyright (c) 1985, 1993 The Regents of the University of California.
+/*
+ * Copyright (c) 1983 Regents of the University of California.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,45 +31,35 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1985, 1993 The Regents of the University of California.\n\
- All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1983 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)timedc.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: timedc.c,v 1.6 1997/10/18 07:13:35 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)timedc.c	2.10 (Berkeley) 3/5/91";
 #endif /* not lint */
-
-#ifdef sgi
-#ident "$Revision: 1.6 $"
-#endif
 
 #include "timedc.h"
+#include <signal.h>
 #include <ctype.h>
 #include <setjmp.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <string.h>
 #include <syslog.h>
-#include <unistd.h>
 
-int trace = 0;
-FILE *fd = 0;
+int	top;
 int	margc;
 int	fromatty;
 char	*margv[20];
 char	cmdline[200];
 jmp_buf	toplevel;
-static struct cmd *getcmd(char *);
+void	intr();
+int priv_resources();
+struct	cmd *getcmd();
 
-int
-main(int argc, char *argv[])
+
+main(argc, argv)
+	char *argv[];
 {
 	register struct cmd *c;
 
@@ -103,23 +91,45 @@ main(int argc, char *argv[])
 		(*c->c_handler)(argc, argv);
 		exit(0);
 	}
-
 	fromatty = isatty(fileno(stdin));
-	if (setjmp(toplevel))
+	top = setjmp(toplevel) == 0;
+	if (top)
+		(void) signal(SIGINT, intr);
+	for (;;) {
+		cmdscanner(top);
+		top = 1;
+	}
+}
+
+void
+intr()
+{
+	if (!fromatty)
+		exit(0);
+	longjmp(toplevel, 1);
+}
+
+/*
+ * Command parser.
+ */
+cmdscanner(top)
+	int top;
+{
+	register struct cmd *c;
+	extern int help();
+
+	if (!top)
 		putchar('\n');
-	(void) signal(SIGINT, intr);
 	for (;;) {
 		if (fromatty) {
 			printf("timedc> ");
 			(void) fflush(stdout);
 		}
 		if (fgets(cmdline, sizeof(cmdline), stdin) == 0)
-			quit(0, NULL);
+			quit();
 		if (cmdline[0] == 0)
 			break;
 		makeargv();
-		if (margv[0] == 0)
-			continue;
 		c = getcmd(margv[0]);
 		if (c == (struct cmd *)-1) {
 			printf("?Ambiguous command\n");
@@ -135,21 +145,12 @@ main(int argc, char *argv[])
 		}
 		(*c->c_handler)(margc, margv);
 	}
-	return 0;
+	longjmp(toplevel, 0);
 }
 
-void
-intr(signo)
-	int signo;
-{
-	if (!fromatty)
-		exit(0);
-	longjmp(toplevel, 1);
-}
-
-
-static struct cmd *
-getcmd(char *name)
+struct cmd *
+getcmd(name)
+	register char *name;
 {
 	register char *p, *q;
 	register struct cmd *c, *found;
@@ -182,7 +183,6 @@ getcmd(char *name)
 /*
  * Slice a string up into argc/argv.
  */
-void
 makeargv()
 {
 	register char *cp;
@@ -210,7 +210,6 @@ makeargv()
 /*
  * Help command.
  */
-void
 help(argc, argv)
 	int argc;
 	char *argv[];
@@ -261,7 +260,7 @@ help(argc, argv)
 		else if (c == (struct cmd *)0)
 			printf("?Invalid help command %s\n", arg);
 		else
-			printf("%-*s\t%s\n", (int)HELPINDENT,
+			printf("%-*s\t%s\n", HELPINDENT,
 				c->c_name, c->c_help);
 	}
 }

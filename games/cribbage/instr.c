@@ -1,8 +1,6 @@
-/*	$NetBSD: instr.c,v 1.7 1997/10/11 02:44:31 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,52 +31,45 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)instr.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: instr.c,v 1.7 1997/10/11 02:44:31 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)instr.c	5.2 (Berkeley) 2/28/91";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/errno.h>
 #include <sys/stat.h>
-
-#include <curses.h>
-#include <err.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <errno.h>
-
-#include "deck.h"
-#include "cribbage.h"
 #include "pathnames.h"
 
-void
 instructions()
 {
+	extern int errno;
 	struct stat sb;
 	union wait pstat;
 	pid_t pid;
 	char *pager, *path;
 
-	if (stat(_PATH_INSTR, &sb))
-		err(1, "stat %s", _PATH_INSTR);
-	switch (pid = vfork()) {
+	if (stat(_PATH_INSTR, &sb)) {
+		(void)fprintf(stderr, "cribbage: %s: %s.\n", _PATH_INSTR,
+		    strerror(errno));
+		exit(1);
+	}
+	switch(pid = vfork()) {
 	case -1:
-		err(1, "vfork");
+		(void)fprintf(stderr, "cribbage: %s.\n", strerror(errno));
+		exit(1);
 	case 0:
 		if (!(path = getenv("PAGER")))
 			path = _PATH_MORE;
-		if ((pager = strrchr(path, '/')) != NULL)
+		if (pager = rindex(path, '/'))
 			++pager;
 		pager = path;
-		execlp(path, pager, _PATH_INSTR, NULL);
-		warn("%s", "");
+		execlp(path, pager, _PATH_INSTR, (char *)NULL);
+		(void)fprintf(stderr, "cribbage: %s.\n", strerror(errno));
 		_exit(1);
 	default:
 		do {

@@ -1,8 +1,6 @@
-/*	$NetBSD: tcp_subr.c,v 1.32 1997/10/18 21:18:33 kml Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1988, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1988, 1990 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,59 +30,49 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tcp_subr.c	8.1 (Berkeley) 6/10/93
+ *	@(#)tcp_subr.c	7.20 (Berkeley) 12/1/90
  */
 
-#include "rnd.h"
+#include "param.h"
+#include "systm.h"
+#include "malloc.h"
+#include "mbuf.h"
+#include "socket.h"
+#include "socketvar.h"
+#include "protosw.h"
+#include "errno.h"
 
-#include <sys/param.h>
-#include <sys/proc.h>
-#include <sys/systm.h>
-#include <sys/malloc.h>
-#include <sys/mbuf.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
-#include <sys/protosw.h>
-#include <sys/errno.h>
-#include <sys/kernel.h>
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include "../net/route.h"
+#include "../net/if.h"
 
-#include <net/route.h>
-#include <net/if.h>
-
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/ip.h>
-#include <netinet/in_pcb.h>
-#include <netinet/ip_var.h>
-#include <netinet/ip_icmp.h>
-#include <netinet/tcp.h>
-#include <netinet/tcp_fsm.h>
-#include <netinet/tcp_seq.h>
-#include <netinet/tcp_timer.h>
-#include <netinet/tcp_var.h>
-#include <netinet/tcpip.h>
+#include "in.h"
+#include "in_systm.h"
+#include "ip.h"
+#include "in_pcb.h"
+#include "ip_var.h"
+#include "ip_icmp.h"
+#include "tcp.h"
+#include "tcp_fsm.h"
+#include "tcp_seq.h"
+#include "tcp_timer.h"
+#include "tcp_var.h"
+#include "tcpip.h"
 
 /* patchable/settable parameters for tcp */
+int	tcp_ttl = TCP_TTL;
 int 	tcp_mssdflt = TCP_MSS;
 int 	tcp_rttdflt = TCPTV_SRTTDFLT / PR_SLOWHZ;
-int	tcp_do_rfc1323 = 1;
 
-#ifndef TCBHASHSIZE
-#define	TCBHASHSIZE	128
-#endif
-int	tcbhashsize = TCBHASHSIZE;
+extern	struct inpcb *tcp_last_inpcb;
 
 /*
  * Tcp initialization
  */
-void
 tcp_init()
 {
 
-	in_pcbinit(&tcbtable, tcbhashsize, tcbhashsize);
+	tcp_iss = 1;		/* wrong */
+	tcb.inp_next = tcb.inp_prev = &tcb;
 	if (max_protohdr < sizeof(struct tcpiphdr))
 		max_protohdr = sizeof(struct tcpiphdr);
 	if (max_linkhdr + sizeof(struct tcpiphdr) > MHLEN)
@@ -102,15 +90,18 @@ tcp_template(tp)
 	struct tcpcb *tp;
 {
 	register struct inpcb *inp = tp->t_inpcb;
+	register struct mbuf *m;
 	register struct tcpiphdr *n;
 
 	if ((n = tp->t_template) == 0) {
-		MALLOC(n, struct tcpiphdr *, sizeof (struct tcpiphdr),
-		    M_MBUF, M_NOWAIT);
-		if (n == NULL)
+		m = m_get(M_DONTWAIT, MT_HEADER);
+		if (m == NULL)
 			return (0);
+		m->m_len = sizeof (struct tcpiphdr);
+		n = mtod(m, struct tcpiphdr *);
 	}
-	bzero(n->ti_x1, sizeof n->ti_x1);
+	n->ti_next = n->ti_prev = 0;
+	n->ti_x1 = 0;
 	n->ti_pr = IPPROTO_TCP;
 	n->ti_len = htons(sizeof (struct tcpiphdr) - sizeof (struct ip));
 	n->ti_src = inp->inp_laddr;
@@ -141,7 +132,6 @@ tcp_template(tp)
  * In any case the ack and sequence number of the transmitted
  * segment are as specified by the parameters.
  */
-int
 tcp_respond(tp, ti, m, ack, seq, flags)
 	struct tcpcb *tp;
 	register struct tcpiphdr *ti;
@@ -160,7 +150,7 @@ tcp_respond(tp, ti, m, ack, seq, flags)
 	if (m == 0) {
 		m = m_gethdr(M_DONTWAIT, MT_HEADER);
 		if (m == NULL)
-			return (ENOBUFS);
+			return;
 #ifdef TCP_COMPAT_42
 		tlen = 1;
 #else
@@ -177,35 +167,28 @@ tcp_respond(tp, ti, m, ack, seq, flags)
 		m->m_len = sizeof (struct tcpiphdr);
 		tlen = 0;
 #define xchg(a,b,type) { type t; t=a; a=b; b=t; }
-		xchg(ti->ti_dst.s_addr, ti->ti_src.s_addr, u_int32_t);
-		xchg(ti->ti_dport, ti->ti_sport, u_int16_t);
+		xchg(ti->ti_dst.s_addr, ti->ti_src.s_addr, u_long);
+		xchg(ti->ti_dport, ti->ti_sport, u_short);
 #undef xchg
 	}
-	bzero(ti->ti_x1, sizeof ti->ti_x1);
-	ti->ti_seq = htonl(seq);
-	ti->ti_ack = htonl(ack);
-	ti->ti_x2 = 0;
-	if ((flags & TH_SYN) == 0) {
-		if (tp)
-			ti->ti_win = htons((u_int16_t) (win >> tp->rcv_scale));
-		else
-			ti->ti_win = htons((u_int16_t)win);
-		ti->ti_off = sizeof (struct tcphdr) >> 2;
-		tlen += sizeof (struct tcphdr);
-	} else
-		tlen += ti->ti_off << 2;
-	ti->ti_len = htons((u_int16_t)tlen);
-	tlen += sizeof (struct ip);
+	ti->ti_len = htons((u_short)(sizeof (struct tcphdr) + tlen));
+	tlen += sizeof (struct tcpiphdr);
 	m->m_len = tlen;
 	m->m_pkthdr.len = tlen;
 	m->m_pkthdr.rcvif = (struct ifnet *) 0;
+	ti->ti_next = ti->ti_prev = 0;
+	ti->ti_x1 = 0;
+	ti->ti_seq = htonl(seq);
+	ti->ti_ack = htonl(ack);
+	ti->ti_x2 = 0;
+	ti->ti_off = sizeof (struct tcphdr) >> 2;
 	ti->ti_flags = flags;
+	ti->ti_win = htons((u_short)win);
 	ti->ti_urp = 0;
-	ti->ti_sum = 0;
 	ti->ti_sum = in_cksum(m, tlen);
 	((struct ip *)ti)->ip_len = tlen;
-	((struct ip *)ti)->ip_ttl = ip_defttl;
-	return ip_output(m, NULL, ro, 0, NULL);
+	((struct ip *)ti)->ip_ttl = tcp_ttl;
+	(void) ip_output(m, (struct mbuf *)0, ro, 0);
 }
 
 /*
@@ -217,17 +200,16 @@ struct tcpcb *
 tcp_newtcpcb(inp)
 	struct inpcb *inp;
 {
+	struct mbuf *m = m_getclr(M_DONTWAIT, MT_PCB);
 	register struct tcpcb *tp;
 
-	tp = malloc(sizeof(*tp), M_PCB, M_NOWAIT);
-	if (tp == NULL)
+	if (m == NULL)
 		return ((struct tcpcb *)0);
-	bzero((caddr_t)tp, sizeof(struct tcpcb));
-	LIST_INIT(&tp->segq);
+	tp = mtod(m, struct tcpcb *);
+	tp->seg_next = tp->seg_prev = (struct tcpiphdr *)tp;
 	tp->t_maxseg = tcp_mssdflt;
-	tp->t_ourmss = tcp_mssdflt;
 
-	tp->t_flags = tcp_do_rfc1323 ? (TF_REQ_SCALE|TF_REQ_TSTMP) : 0;
+	tp->t_flags = 0;		/* sends options! */
 	tp->t_inpcb = inp;
 	/*
 	 * Init srtt to TCPTV_SRTTBASE (0), so we can tell that we have no
@@ -235,13 +217,14 @@ tcp_newtcpcb(inp)
 	 * reasonable initial retransmit time.
 	 */
 	tp->t_srtt = TCPTV_SRTTBASE;
-	tp->t_rttvar = tcp_rttdflt * PR_SLOWHZ << (TCP_RTTVAR_SHIFT + 2 - 1);
+	tp->t_rttvar = tcp_rttdflt * PR_SLOWHZ << 2;
 	tp->t_rttmin = TCPTV_MIN;
-	TCPT_RANGESET(tp->t_rxtcur, TCP_REXMTVAL(tp),
+	TCPT_RANGESET(tp->t_rxtcur, 
+	    ((TCPTV_SRTTBASE >> 2) + (TCPTV_SRTTDFLT << 2)) >> 1,
 	    TCPTV_MIN, TCPTV_REXMTMAX);
-	tp->snd_cwnd = TCP_MAXWIN << TCP_MAX_WINSHIFT;
-	tp->snd_ssthresh = TCP_MAXWIN << TCP_MAX_WINSHIFT;
-	inp->inp_ip.ip_ttl = ip_defttl;
+	tp->snd_cwnd = TCP_MAXWIN;
+	tp->snd_ssthresh = TCP_MAXWIN;
+	inp->inp_ip.ip_ttl = tcp_ttl;
 	inp->inp_ppcb = (caddr_t)tp;
 	return (tp);
 }
@@ -280,9 +263,10 @@ struct tcpcb *
 tcp_close(tp)
 	register struct tcpcb *tp;
 {
-	register struct ipqent *qe;
+	register struct tcpiphdr *t;
 	struct inpcb *inp = tp->t_inpcb;
 	struct socket *so = inp->inp_socket;
+	register struct mbuf *m;
 #ifdef RTV_RTT
 	register struct rtentry *rt;
 
@@ -300,12 +284,12 @@ tcp_close(tp)
 	 */
 	if (SEQ_LT(tp->iss + so->so_snd.sb_hiwat * 16, tp->snd_max) &&
 	    (rt = inp->inp_route.ro_rt) &&
-	    !in_nullhost(satosin(rt_key(rt))->sin_addr)) {
-		register u_long i = 0;
+	    ((struct sockaddr_in *)rt_key(rt))->sin_addr.s_addr != INADDR_ANY) {
+		register u_long i;
 
 		if ((rt->rt_rmx.rmx_locks & RTV_RTT) == 0) {
 			i = tp->t_srtt *
-			    ((RTM_RTTUNIT / PR_SLOWHZ) >> (TCP_RTT_SHIFT + 2));
+			    (RTM_RTTUNIT / (PR_SLOWHZ * TCP_RTT_SCALE));
 			if (rt->rt_rmx.rmx_rtt && i)
 				/*
 				 * filter this update to half the old & half
@@ -320,7 +304,7 @@ tcp_close(tp)
 		}
 		if ((rt->rt_rmx.rmx_locks & RTV_RTTVAR) == 0) {
 			i = tp->t_rttvar *
-			    ((RTM_RTTUNIT / PR_SLOWHZ) >> (TCP_RTTVAR_SHIFT + 2));
+			    (RTM_RTTUNIT / (PR_SLOWHZ * TCP_RTTVAR_SCALE));
 			if (rt->rt_rmx.rmx_rttvar && i)
 				rt->rt_rmx.rmx_rttvar =
 				    (rt->rt_rmx.rmx_rttvar + i) / 2;
@@ -334,8 +318,8 @@ tcp_close(tp)
 		 * before we start updating, then update on both good
 		 * and bad news.
 		 */
-		if (((rt->rt_rmx.rmx_locks & RTV_SSTHRESH) == 0 &&
-		    (i = tp->snd_ssthresh) && rt->rt_rmx.rmx_ssthresh) ||
+		if ((rt->rt_rmx.rmx_locks & RTV_SSTHRESH) == 0 &&
+		    (i = tp->snd_ssthresh) && rt->rt_rmx.rmx_ssthresh ||
 		    i < (rt->rt_rmx.rmx_sendpipe / 2)) {
 			/*
 			 * convert the limit from user data bytes to
@@ -352,24 +336,28 @@ tcp_close(tp)
 				rt->rt_rmx.rmx_ssthresh = i;
 		}
 	}
-#endif /* RTV_RTT */
+#endif RTV_RTT
 	/* free the reassembly queue, if any */
-	while ((qe = tp->segq.lh_first) != NULL) {
-		LIST_REMOVE(qe, ipqe_q);
-		m_freem(qe->ipqe_m);
-		FREE(qe, M_IPQ);
+	t = tp->seg_next;
+	while (t != (struct tcpiphdr *)tp) {
+		t = (struct tcpiphdr *)t->ti_next;
+		m = REASS_MBUF((struct tcpiphdr *)t->ti_prev);
+		remque(t->ti_prev);
+		m_freem(m);
 	}
 	if (tp->t_template)
-		FREE(tp->t_template, M_MBUF);
-	free(tp, M_PCB);
+		(void) m_free(dtom(tp->t_template));
+	(void) m_free(dtom(tp));
 	inp->inp_ppcb = 0;
 	soisdisconnected(so);
+	/* clobber input pcb cache if we're closing the cached connection */
+	if (inp == tcp_last_inpcb)
+		tcp_last_inpcb = &tcb;
 	in_pcbdetach(inp);
 	tcpstat.tcps_closed++;
 	return ((struct tcpcb *)0);
 }
 
-void
 tcp_drain()
 {
 
@@ -380,368 +368,48 @@ tcp_drain()
  * store error as soft error, but wake up user
  * (for now, won't do anything until can select for soft error).
  */
-void
 tcp_notify(inp, error)
-	struct inpcb *inp;
+	register struct inpcb *inp;
 	int error;
 {
-	register struct tcpcb *tp = (struct tcpcb *)inp->inp_ppcb;
-	register struct socket *so = inp->inp_socket;
 
-	/*
-	 * Ignore some errors if we are hooked up.
-	 * If connection hasn't completed, has retransmitted several times,
-	 * and receives a second error, give up now.  This is better
-	 * than waiting a long time to establish a connection that
-	 * can never complete.
-	 */
-	if (tp->t_state == TCPS_ESTABLISHED &&
-	     (error == EHOSTUNREACH || error == ENETUNREACH ||
-	      error == EHOSTDOWN)) {
-		return;
-	} else if (TCPS_HAVEESTABLISHED(tp->t_state) == 0 &&
-	    tp->t_rxtshift > 3 && tp->t_softerror)
-		so->so_error = error;
-	else 
-		tp->t_softerror = error;
-	wakeup((caddr_t) &so->so_timeo);
-	sorwakeup(so);
-	sowwakeup(so);
+	((struct tcpcb *)inp->inp_ppcb)->t_softerror = error;
+	wakeup((caddr_t) &inp->inp_socket->so_timeo);
+	sorwakeup(inp->inp_socket);
+	sowwakeup(inp->inp_socket);
 }
 
-void *
-tcp_ctlinput(cmd, sa, v)
+tcp_ctlinput(cmd, sa, ip)
 	int cmd;
 	struct sockaddr *sa;
-	register void *v;
+	register struct ip *ip;
 {
-	register struct ip *ip = v;
 	register struct tcphdr *th;
-	extern int inetctlerrmap[];
-	void (*notify) __P((struct inpcb *, int)) = tcp_notify;
-	int errno;
-	int nmatch;
+	extern struct in_addr zeroin_addr;
+	extern u_char inetctlerrmap[];
+	int (*notify)() = tcp_notify, tcp_quench();
 
-	if ((unsigned)cmd >= PRC_NCMDS)
-		return NULL;
-	errno = inetctlerrmap[cmd];
 	if (cmd == PRC_QUENCH)
 		notify = tcp_quench;
-	else if (PRC_IS_REDIRECT(cmd))
-		notify = in_rtchange, ip = 0;
-	else if (cmd == PRC_MSGSIZE && ip_mtudisc)
-		notify = tcp_mtudisc, ip = 0;
-	else if (cmd == PRC_HOSTDEAD)
-		ip = 0;
-	else if (errno == 0)
-		return NULL;
+	else if ((unsigned)cmd > PRC_NCMDS || inetctlerrmap[cmd] == 0)
+		return;
 	if (ip) {
 		th = (struct tcphdr *)((caddr_t)ip + (ip->ip_hl << 2));
-		nmatch = in_pcbnotify(&tcbtable, satosin(sa)->sin_addr,
-		    th->th_dport, ip->ip_src, th->th_sport, errno, notify);
-		if (nmatch == 0 && syn_cache_count &&
-		    (inetctlerrmap[cmd] == EHOSTUNREACH ||
-		    inetctlerrmap[cmd] == ENETUNREACH ||
-		    inetctlerrmap[cmd] == EHOSTDOWN))
-			syn_cache_unreach(ip, th);
+		in_pcbnotify(&tcb, sa, th->th_dport, ip->ip_src, th->th_sport,
+			cmd, notify);
 	} else
-		(void)in_pcbnotifyall(&tcbtable, satosin(sa)->sin_addr, errno,
-		    notify);
-	return NULL;
+		in_pcbnotify(&tcb, sa, 0, zeroin_addr, 0, cmd, notify);
 }
 
 /*
  * When a source quench is received, close congestion window
  * to one segment.  We will gradually open it again as we proceed.
  */
-void
-tcp_quench(inp, errno)
+tcp_quench(inp)
 	struct inpcb *inp;
-	int errno;
 {
 	struct tcpcb *tp = intotcpcb(inp);
 
 	if (tp)
 		tp->snd_cwnd = tp->t_maxseg;
-}
-
-/*
- * On receipt of path MTU corrections, flush old route and replace it
- * with the new one.  Retransmit all unacknowledged packets, to ensure
- * that all packets will be received.
- */
-
-void
-tcp_mtudisc(inp, errno)
-	struct inpcb *inp;
-	int errno;
-{
-	struct tcpcb *tp = intotcpcb(inp);
-	struct rtentry *rt = in_pcbrtentry(inp);
-
-	if (tp != 0) {
-		if (rt != 0) {
-			/* If this was not a host route, remove and realloc */
-
-			if ((rt->rt_flags & RTF_HOST) == 0) {
-				in_rtchange(inp, errno);
-				rtfree(rt);
-				if ((rt = in_pcbrtentry(inp)) == 0)
-					return;
-			}
-		}
-	    
-		/* Resend unacknowledged packets: */
-
-		tp->snd_nxt = tp->snd_una;
-		tcp_output(tp);
-	}
-}
-
-
-/*
- * Compute the MSS to advertise to the peer.  Called only during
- * the 3-way handshake.  If we are the server (peer initiated
- * connection), we are called with the TCPCB for the listen
- * socket.  If we are the client (we initiated connection), we
- * are called witht he TCPCB for the actual connection.
- */
-int
-tcp_mss_to_advertise(tp)
-	const struct tcpcb *tp;
-{
-	extern u_long in_maxmtu;
-	struct inpcb *inp;
-	struct socket *so;
-	int mss;
-
-	inp = tp->t_inpcb;
-	so = inp->inp_socket;
-
-	/*
-	 * In order to avoid defeating path MTU discovery on the peer,
-	 * we advertise the max MTU of all attached networks as our MSS,
-	 * per RFC 1191, section 3.1.
-	 *
-	 * XXX Should we allow room for the timestamp option if
-	 * XXX rfc1323 is enabled?
-	 */
-	mss = in_maxmtu - sizeof(struct tcpiphdr);
-
-	return (mss);
-}
-
-/*
- * Set connection variables based on the peer's advertised MSS.
- * We are passed the TCPCB for the actual connection.  If we
- * are the server, we are called by the compressed state engine
- * when the 3-way handshake is complete.  If we are the client,
- * we are called when we recieve the SYN,ACK from the server.
- *
- * NOTE: Our advertised MSS value must be initialized in the TCPCB
- * before this routine is called!
- */
-void
-tcp_mss_from_peer(tp, offer)
-	struct tcpcb *tp;
-	int offer;
-{
-	struct inpcb *inp = tp->t_inpcb;
-	struct socket *so = inp->inp_socket;
-#if defined(RTV_SPIPE) || defined(RTV_SSTHRESH)
-	struct rtentry *rt = in_pcbrtentry(inp);
-#endif
-	u_long bufsize;
-	int mss;
-
-	/*
-	 * Assume our MSS is the MSS of the peer, unless they sent us
-	 * an offer.  Do not accept offers less than 32 bytes.
-	 */
-	mss = tp->t_ourmss;
-	if (offer)
-		mss = offer;
-	mss = max(mss, 32);		/* sanity */
-
-	/*
-	 * If there's a pipesize, change the socket buffer to that size.
-	 * Make the socket buffer an integral number of MSS units.  If
-	 * the MSS is larger than the socket buffer, artificially decrease
-	 * the MSS.
-	 */
-#ifdef RTV_SPIPE
-	if (rt != NULL && rt->rt_rmx.rmx_sendpipe != 0)
-		bufsize = rt->rt_rmx.rmx_sendpipe;
-	else
-#endif
-		bufsize = so->so_snd.sb_hiwat;
-	if (bufsize < mss)
-		mss = bufsize;
-	else {
-		bufsize = roundup(bufsize, mss);
-		if (bufsize > sb_max)
-			bufsize = sb_max;
-		(void) sbreserve(&so->so_snd, bufsize);
-	}
-	tp->t_maxseg = mss;
-
-	/* Initialize the initial congestion window. */
-	tp->snd_cwnd = mss;
-
-#ifdef RTV_SSTHRESH
-	if (rt != NULL && rt->rt_rmx.rmx_ssthresh) {
-		/*
-		 * There's some sort of gateway or interface buffer
-		 * limit on the path.  Use this to set the slow
-		 * start threshold, but set the threshold to no less
-		 * than 2 * MSS.
-		 */
-		tp->snd_ssthresh = max(2 * mss, rt->rt_rmx.rmx_ssthresh);
-	}
-#endif
-}
-
-/*
- * Processing necessary when a TCP connection is established.
- */
-void
-tcp_established(tp)
-	struct tcpcb *tp;
-{
-	struct inpcb *inp = tp->t_inpcb;
-	struct socket *so = inp->inp_socket;
-#ifdef RTV_RPIPE
-	struct rtentry *rt = in_pcbrtentry(inp);
-#endif
-	u_long bufsize;
-
-	tp->t_state = TCPS_ESTABLISHED;
-	tp->t_timer[TCPT_KEEP] = tcp_keepidle;
-
-#ifdef RTV_RPIPE
-	if (rt != NULL && rt->rt_rmx.rmx_recvpipe != 0)
-		bufsize = rt->rt_rmx.rmx_recvpipe;
-	else
-#endif
-		bufsize = so->so_rcv.sb_hiwat;
-	if (bufsize > tp->t_ourmss) {
-		bufsize = roundup(bufsize, tp->t_ourmss);
-		if (bufsize > sb_max)
-			bufsize = sb_max;
-		(void) sbreserve(&so->so_rcv, bufsize);
-	}
-}
-
-/*
- * Check if there's an initial rtt or rttvar.  Convert from the
- * route-table units to scaled multiples of the slow timeout timer.
- * Called only during the 3-way handshake.
- */
-void
-tcp_rmx_rtt(tp)
-	struct tcpcb *tp;
-{
-#ifdef RTV_RTT
-	struct rtentry *rt;
-	int rtt;
-
-	if ((rt = in_pcbrtentry(tp->t_inpcb)) == NULL)
-		return;
-
-	if (tp->t_srtt == 0 && (rtt = rt->rt_rmx.rmx_rtt)) {
-		/*
-		 * XXX The lock bit for MTU indicates that the value
-		 * is also a minimum value; this is subject to time.
-		 */
-		if (rt->rt_rmx.rmx_locks & RTV_RTT)
-			tp->t_rttmin = rtt / (RTM_RTTUNIT / PR_SLOWHZ);
-		tp->t_srtt = rtt /
-		    ((RTM_RTTUNIT / PR_SLOWHZ) >> (TCP_RTT_SHIFT + 2));
-		if (rt->rt_rmx.rmx_rttvar) {
-			tp->t_rttvar = rt->rt_rmx.rmx_rttvar /
-			    ((RTM_RTTUNIT / PR_SLOWHZ) >>
-				(TCP_RTTVAR_SHIFT + 2));
-		} else {
-			/* Default variation is +- 1 rtt */
-			tp->t_rttvar =
-			    tp->t_srtt >> (TCP_RTT_SHIFT - TCP_RTTVAR_SHIFT);
-		}
-		TCPT_RANGESET(tp->t_rxtcur,
-		    ((tp->t_srtt >> 2) + tp->t_rttvar) >> (1 + 2),
-		    tp->t_rttmin, TCPTV_REXMTMAX);
-	}
-#endif
-}
-
-tcp_seq	 tcp_iss_seq = 0;	/* tcp initial seq # */
-
-/*
- * Get a new sequence value given a tcp control block
- */
-tcp_seq
-tcp_new_iss(tp, len, addin)
-	void            *tp;
-	u_long           len;
-	tcp_seq		 addin;
-{
-	tcp_seq          tcp_iss;
-
-	/*
-	 * add randomness about this connection, but do not estimate
-	 * entropy from the timing, since the physical device driver would
-	 * have done that for us.
-	 */
-#if NRND > 0
-	if (tp != NULL)
-		rnd_add_data(NULL, tp, len, 0);
-#endif
-
-	/*
-	 * randomize.
-	 */
-#if NRND > 0
-	rnd_extract_data(&tcp_iss, sizeof(tcp_iss), RND_EXTRACT_ANY);
-#else
-	tcp_iss = random();
-#endif
-
-	/*
-	 * If we were asked to add some amount to a known value,
-	 * we will take a random value obtained above, mask off the upper
-	 * bits, and add in the known value.  We also add in a constant to
-	 * ensure that we are at least a certain distance from the original
-	 * value.
-	 *
-	 * This is used when an old connection is in timed wait
-	 * and we have a new one coming in, for instance.
-	 */
-	if (addin != 0) {
-#ifdef TCPISS_DEBUG
-		printf("Random %08x, ", tcp_iss);
-#endif
-		tcp_iss &= TCP_ISS_RANDOM_MASK;
-		tcp_iss = tcp_iss + addin + TCP_ISSINCR;
-		tcp_iss_seq += TCP_ISSINCR;
-		tcp_iss += tcp_iss_seq;
-#ifdef TCPISS_DEBUG
-		printf("Old ISS %08x, ISS %08x\n", addin, tcp_iss);
-#endif
-	} else {
-		tcp_iss &= TCP_ISS_RANDOM_MASK;
-		tcp_iss_seq += TCP_ISSINCR;
-		tcp_iss += tcp_iss_seq;
-#ifdef TCPISS_DEBUG
-		printf("ISS %08x\n", tcp_iss);
-#endif
-	}
-
-#ifdef TCP_COMPAT_42
-	/*
-	 * limit it to the positive range for really old TCP implementations
-	 */
-	if ((int)tcp_iss < 0)
-		tcp_iss &= 0x7fffffff;		/* XXX */
-#endif
-
-	return tcp_iss;
 }

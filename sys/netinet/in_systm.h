@@ -1,8 +1,6 @@
-/*	$NetBSD: in_systm.h,v 1.9 1997/07/07 20:57:46 phil Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,11 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)in_systm.h	8.1 (Berkeley) 6/10/93
+ *	@(#)in_systm.h	7.4 (Berkeley) 6/28/90
  */
-
-#ifndef __IN_SYSTM_H__
-#define __IN_SYSTM_H__
 
 /*
  * Miscellaneous internetwork
@@ -51,13 +46,11 @@
  * the bytes before transmission at each protocol level.  The n_ types
  * represent the types with the bytes in ``high-ender'' order.
  */
-typedef u_int16_t n_short;		/* short as received from the net */
-typedef u_int32_t n_long;		/* long as received from the net */
+typedef u_short n_short;		/* short as received from the net */
+typedef u_long	n_long;			/* long as received from the net */
 
-typedef u_int32_t n_time;		/* ms since 00:00 GMT, byte rev */
+typedef	u_long	n_time;			/* ms since 00:00 GMT, byte rev */
 
-#ifdef _KERNEL
-n_time	 iptime __P((void));
+#ifdef KERNEL
+n_time	iptime();
 #endif
-
-#endif /* __IN_SYSTM_H__ */

@@ -1,8 +1,6 @@
-/*	$NetBSD: play.c,v 1.4 1997/10/12 11:45:40 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Timothy C. Stoehr.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)play.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: play.c,v 1.4 1997/10/12 11:45:40 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)play.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -62,7 +55,10 @@ __RCSID("$NetBSD: play.c,v 1.4 1997/10/12 11:45:40 lukem Exp $");
 boolean interrupted = 0;
 char *unknown_command = "unknown command";
 
-void
+extern short party_room, bear_trap;
+extern char hit_message[];
+extern boolean wizard, trap_door;
+
 play_level()
 {
 	short ch;

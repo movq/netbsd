@@ -1,8 +1,7 @@
-#	$NetBSD: Makefile,v 1.7 1997/10/20 03:58:04 mrg Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.7 (Berkeley) 5/11/90
 
-WARNS=	0
 PROG=	window
+CFLAGS+=-R
 SRCS=	char.c cmd.c cmd1.c cmd2.c cmd3.c cmd4.c cmd5.c cmd6.c cmd7.c \
 	context.c error.c lcmd.c lcmd1.c lcmd2.c main.c mloop.c parser1.c \
 	parser2.c parser3.c parser4.c parser5.c scanner.c startup.c string.c \
@@ -14,9 +13,8 @@ SRCS=	char.c cmd.c cmd1.c cmd2.c cmd3.c cmd4.c cmd5.c cmd6.c cmd7.c \
 	wwinschar.c wwinsline.c wwiomux.c wwlabel.c wwmisc.c wwmove.c \
 	wwopen.c wwprintf.c wwpty.c wwputc.c wwputs.c wwredraw.c \
 	wwredrawwin.c wwrint.c wwscroll.c wwsize.c wwspawn.c wwsuspend.c \
-	wwterminfo.c wwtty.c wwunframe.c wwupdate.c wwwrite.c xx.c xxflush.c \
-	compress.c
-MAN=	window.1
+	wwtty.c wwunframe.c wwupdate.c wwwrite.c xx.c xxflush.c compress.c
+MAN=	window.0
 DPADD=	${LIBTERMCAP}
 LDADD=	-ltermcap
 

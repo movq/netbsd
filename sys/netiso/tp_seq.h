@@ -1,8 +1,6 @@
-/*	$NetBSD: tp_seq.h,v 1.6 1996/02/13 22:11:48 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tp_seq.h	8.1 (Berkeley) 6/10/93
+ *	@(#)tp_seq.h	7.5 (Berkeley) 5/6/91
  */
 
 /***********************************************************
@@ -40,13 +38,13 @@
 
                       All Rights Reserved
 
-Permission to use, copy, modify, and distribute this software and its
-documentation for any purpose and without fee is hereby granted,
+Permission to use, copy, modify, and distribute this software and its 
+documentation for any purpose and without fee is hereby granted, 
 provided that the above copyright notice appear in all copies and that
-both that copyright notice and this permission notice appear in
+both that copyright notice and this permission notice appear in 
 supporting documentation, and that the name of IBM not be
 used in advertising or publicity pertaining to distribution of the
-software without specific, written prior permission.
+software without specific, written prior permission.  
 
 IBM DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING
 ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL
@@ -61,16 +59,22 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
-/*
+/* 
+ * ARGO TP
+ *
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_seq.h,v 1.1 1993/04/09 12:01:45 cgd Exp $
+ * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_seq.h,v $
+ *
  * These macros perform sequence number arithmetic modulo (2**7 or 2**31).
- * The relevant fields in the tpcb are: tp_seqmask : the mask of bits that
- * define the sequence space. tp_seqbit  : 1 + tp_seqmask tp_seqhalf :
- * tp_seqbit / 2 or half the sequence space (rounded up) Not exactly fast,
- * but at least it's maintainable.
+ * The relevant fields in the tpcb are:
+ *  	tp_seqmask : the mask of bits that define the sequence space.
+ *  	tp_seqbit  : 1 + tp_seqmask
+ *  	tp_seqhalf : tp_seqbit / 2 or half the sequence space (rounded up)
+ * Not exactly fast, but at least it's maintainable.
  */
 
-#ifndef _NETISO_TP_SEQ_H_
-#define _NETISO_TP_SEQ_H_
+#ifndef __TP_SEQ__
+#define __TP_SEQ__
 
 #define SEQ(tpcb,x) \
 	((x) & (tpcb)->tp_seqmask)
@@ -94,7 +98,7 @@ SOFTWARE.
 ( ((int)((seq)-(operand)) < 0)\
 ? ((-(int)((seq)-(operand))) < (int)(tpcb)->tp_seqhalf)\
 : !(((int)(seq)-(operand)) < (int)(tpcb)->tp_seqhalf))
-
+	
 #define SEQ_MIN(tpcb, a, b) ( SEQ_GT(tpcb, a, b) ? b : a)
 
 #define SEQ_MAX(tpcb, a, b) ( SEQ_GT(tpcb, a, b) ? a : b)
@@ -117,4 +121,4 @@ SOFTWARE.
 #define IN_SWINDOW(tpcb, seq, lwe, uwe)\
 	( SEQ_GT(tpcb, seq, lwe) && SEQ_LEQ(tpcb, seq, uwe) )
 
-#endif				/* _NETISO_TP_SEQ_H_ */
+#endif __TP_SEQ__

@@ -1,7 +1,5 @@
-/*	$NetBSD: man.c,v 1.9 1997/10/17 06:42:11 mikel Exp $	*/
-
 /*
- * Copyright (c) 1987, 1993, 1994, 1995
+ * Copyright (c) 1987, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,19 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994, 1995\n\
-	The Regents of the University of California.  All rights reserved.\n");
+static char copyright[] =
+"@(#) Copyright (c) 1987, 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)man.c	8.17 (Berkeley) 1/31/95";
-#else
-__RCSID("$NetBSD: man.c,v 1.9 1997/10/17 06:42:11 mikel Exp $");
-#endif
+static char sccsid[] = "@(#)man.c	8.13 (Berkeley) 12/20/93";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -68,7 +61,6 @@ __RCSID("$NetBSD: man.c,v 1.9 1997/10/17 06:42:11 mikel Exp $");
 
 int f_all, f_where;
 
-int		 main __P((int, char **));
 static void	 build_page __P((char *, char **));
 static void	 cat __P((char *));
 static char	*check_pager __P((char *));
@@ -84,6 +76,8 @@ main(argc, argv)
 	int argc;
 	char *argv[];
 {
+	extern char *optarg;
+	extern int optind;
 	TAG *defp, *defnewp, *section, *sectnewp, *subp;
 	ENTRY *e_defp, *e_sectp, *e_subp, *ep;
 	glob_t pg;
@@ -92,13 +86,9 @@ main(argc, argv)
 	char **ap, *cmd, *machine, *p, *p_add, *p_path, *pager, *slashp;
 	char *conffile, buf[MAXPATHLEN * 2];
 
-#ifdef __GNUC__
-	pager = NULL;		/* XXX gcc -Wuninitialized */
-#endif
-
 	f_cat = f_how = 0;
 	conffile = p_add = p_path = NULL;
-	while ((ch = getopt(argc, argv, "-aC:cfhkM:m:P:w")) != -1)
+	while ((ch = getopt(argc, argv, "-aC:cfhkM:m:P:w")) != EOF)
 		switch (ch) {
 		case 'a':
 			f_all = 1;
@@ -143,7 +133,7 @@ main(argc, argv)
 	if (!*argv)
 		usage();
 
-	if (!f_cat && !f_how && !f_where)
+	if (!f_cat && !f_how)
 		if (!isatty(1))
 			f_cat = 1;
 		else if ((pager = getenv("PAGER")) != NULL)
@@ -184,7 +174,7 @@ main(argc, argv)
 				    p, slashp, e_subp->s, machine);
 				if ((ep = malloc(sizeof(ENTRY))) == NULL ||
 				    (ep->s = strdup(buf)) == NULL)
-					err(1, "malloc");
+					err(1, NULL);
 				TAILQ_INSERT_TAIL(&defp->list, ep, q);
 			}
 		}
@@ -212,7 +202,7 @@ main(argc, argv)
 				e_defp->s, slashp, e_subp->s, machine);
 				if ((ep = malloc(sizeof(ENTRY))) == NULL ||
 				    (ep->s = strdup(buf)) == NULL)
-					err(1, "malloc");
+					err(1, NULL);
 				TAILQ_INSERT_TAIL(&defnewp->list, ep, q);
 			}
 		}
@@ -244,17 +234,18 @@ main(argc, argv)
 				    p, slashp, e_subp->s, machine);
 				if ((ep = malloc(sizeof(ENTRY))) == NULL ||
 				    (ep->s = strdup(buf)) == NULL)
-					err(1, "malloc");
+					err(1, NULL);
 				TAILQ_INSERT_HEAD(&defp->list, ep, q);
 			}
 		}
 
 	/*
-	 * 4: If no -m was specified, and a section was, rewrite the section's
-	 *    paths (if they have a trailing slash) to append the _subdir list
-	 *    and the machine.  This then becomes the _default list.
+	 * 4: If none of MANPATH, -M, or -m were specified, and a section was,
+	 *    rewrite the section's paths (if they have a trailing slash) to
+	 *    append the _subdir list and the machine.  This then becomes the
+	 *    _default list.
 	 */
-	if (p_add == NULL && section != NULL) {
+	if (p_path == NULL && p_add == NULL && section != NULL) {
 		sectnewp = addlist("_section_new");
 		for (e_sectp = section->list.tqh_first;
 		    e_sectp != NULL; e_sectp = e_sectp->q.tqe_next) {
@@ -263,7 +254,7 @@ main(argc, argv)
 				    "%s{/%s,}", e_sectp->s, machine);
 				if ((ep = malloc(sizeof(ENTRY))) == NULL ||
 				    (ep->s = strdup(buf)) == NULL)
-					err(1, "malloc");
+					err(1, NULL);
 				TAILQ_INSERT_TAIL(&sectnewp->list, ep, q);
 				continue;
 			}
@@ -274,7 +265,7 @@ main(argc, argv)
 				    e_sectp->s, e_subp->s, machine);
 				if ((ep = malloc(sizeof(ENTRY))) == NULL ||
 				    (ep->s = strdup(buf)) == NULL)
-					err(1, "malloc");
+					err(1, NULL);
 				TAILQ_INSERT_TAIL(&sectnewp->list, ep, q);
 			}
 		}
@@ -337,7 +328,7 @@ main(argc, argv)
 		len += strlen(*ap) + 1;
 	}
 	if ((cmd = malloc(len)) == NULL) {
-		warn("malloc");
+		warn(NULL);
 		(void)cleanup();
 		exit(1);
 	}
@@ -375,7 +366,7 @@ manual(page, tag, pg)
 	ENTRY *ep, *e_sufp, *e_tag;
 	TAG *missp, *sufp;
 	int anyfound, cnt, found;
-	char *p, buf[MAXPATHLEN];
+	char *p, buf[128];
 
 	anyfound = 0;
 	buf[0] = '*';
@@ -409,7 +400,7 @@ manual(page, tag, pg)
 			 */
 			(void)snprintf(buf, sizeof(buf), "*/%s.0", page);
 			if (!fnmatch(buf, pg->gl_pathv[cnt], 0))
-				goto next;
+				goto easy;
 
 			e_sufp = (sufp = getlist("_suffix")) == NULL ?
 			    NULL : sufp->list.tqh_first;
@@ -422,8 +413,12 @@ manual(page, tag, pg)
 					break;
 				}
 			}
-			if (found)
-				goto next;
+			if (found) {
+easy:				anyfound = 1;
+				if (!f_all)
+					break;
+				continue;
+			}
 
 			/* Try the _build key words next. */
 			e_sufp = (sufp = getlist("_build")) == NULL ?
@@ -448,13 +443,9 @@ manual(page, tag, pg)
 				*p = ' ';
 			}
 			if (found) {
-next:				anyfound = 1;
-				if (!f_all) {
-					/* Delete any other matches. */
-					while (++cnt< pg->gl_pathc)
-						pg->gl_pathv[cnt] = "";
+				anyfound = 1;
+				if (!f_all)
 					break;
-				}
 				continue;
 			}
 
@@ -472,7 +463,7 @@ next:				anyfound = 1;
 			missp = addlist("_missing");
 		if ((ep = malloc(sizeof(ENTRY))) == NULL ||
 		    (ep->s = strdup(page)) == NULL) {
-			warn("malloc");
+			warn(NULL);
 			(void)cleanup();
 			exit(1);
 		}
@@ -492,8 +483,7 @@ build_page(fmt, pathp)
 	static int warned;
 	ENTRY *ep;
 	TAG *intmpp;
-	int fd, n;
-	char *p, *b;
+	int fd;
 	char buf[MAXPATHLEN], cmd[MAXPATHLEN], tpath[sizeof(_PATH_TMP)];
 
 	/* Let the user know this may take awhile. */
@@ -501,29 +491,6 @@ build_page(fmt, pathp)
 		warned = 1;
 		warnx("Formatting manual page...");
 	}
-
-       /*
-        * Historically man chdir'd to the root of the man tree. 
-        * This was used in man pages that contained relative ".so"
-        * directives (including other man pages for command aliases etc.)
-        * It even went one step farther, by examining the first line
-        * of the man page and parsing the .so filename so it would
-        * make hard(?) links to the cat'ted man pages for space savings.
-        * (We don't do that here, but we could).
-        */
- 
-       /* copy and find the end */
-       for (b = buf, p = *pathp; (*b++ = *p++) != '\0';)
-               continue;
- 
-       /* skip the last two path components, page name and man[n] */
-       for (--b, n = 2; b != buf; b--)
-               if (*b == '/')
-                       if (--n == 0) {
-                               *b = '\0';
-                               (void) chdir(buf);
-                       }
-
 
 	/* Add a remove-when-done list. */
 	if ((intmpp = getlist("_intmp")) == NULL)
@@ -547,14 +514,14 @@ build_page(fmt, pathp)
 	(void)system(cmd);
 	(void)close(fd);
 	if ((*pathp = strdup(tpath)) == NULL) {
-		warn("malloc");
+		warn(NULL);
 		(void)cleanup();
 		exit(1);
 	}
 
 	/* Link the built file into the remove-when-done list. */
 	if ((ep = malloc(sizeof(ENTRY))) == NULL) {
-		warn("malloc");
+		warn(NULL);
 		(void)cleanup();
 		exit(1);
 	}
@@ -661,7 +628,7 @@ check_pager(name)
 		/* allocate space to add the "-s" */
 		if (!(name =
 		    malloc((u_int)(strlen(save) + sizeof("-s") + 1))))
-			err(1, "malloc");
+			err(1, NULL);
 		(void)sprintf(name, "%s %s", save, "-s");
 	}
 	return(name);
@@ -740,6 +707,6 @@ static void
 usage()
 {
 	(void)fprintf(stderr,
-    "usage: man [-achw] [-C file] [-M path] [-m path] [section] title ...\n");
+    "usage: man [-ac] [-C file] [-M path] [-m path] [section] title ...\n");
 	exit(1);
 }

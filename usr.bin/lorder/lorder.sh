@@ -1,8 +1,7 @@
 #!/bin/sh -
-#	$NetBSD: lorder.sh,v 1.6 1997/07/22 05:21:03 cgd Exp $
 #
-# Copyright (c) 1990, 1993
-#	The Regents of the University of California.  All rights reserved.
+# Copyright (c) 1990 The Regents of the University of California.
+# All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -32,25 +31,9 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-#	@(#)lorder.sh	8.1 (Berkeley) 6/6/93
+#	@(#)lorder.sh	5.3 (Berkeley) 4/12/91
 #
 
-# If the user has set ${NM} then we use it, otherwise we use 'nm'.
-# We try to find the compiler in the user's path, and if that fails we
-# try to find it in the default path.  If we can't find it, we punt.
-# Once we find it, we canonicalize its name and set the path to the
-# default path so that other commands we use are picked properly.
-
-if ! type "${NM:=nm}" > /dev/null 2>&1; then
-        PATH=/bin:/usr/bin
-        export PATH
-        if ! type "${NM}" > /dev/null 2>&1; then
-                echo "lorder: ${NM}: not found"
-                exit 1
-        fi
-fi
-cmd='set `type "${NM}"` ; eval echo \$$#'
-NM=`eval $cmd`
 PATH=/bin:/usr/bin
 export PATH
 
@@ -79,20 +62,20 @@ trap "rm -f $R $S; exit 1" 1 2 3 13 15
 #
 # if the line has " U " it's a globally undefined symbol, put it into
 # the reference file.
-(for file in $* ; do echo $file":" ; done ; $NM -go $*) | sed "
+nm -go $* | sed "
 	/:$/ {
 		s/://
 		s/.*/& &/
 		p
 		d
 	}
-	/ [TDGR] / {
-		s/:.* [TDGR] / /
+	/ [TD] / {
+		s/:.* [TD]//
 		w $S
 		d
 	}
 	/ U / {
-		s/:.* U / /
+		s/:.* U//
 		w $R
 	}
 	d

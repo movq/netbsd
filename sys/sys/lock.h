@@ -1,5 +1,3 @@
-/*	$NetBSD: lock.h,v 1.4 1997/10/09 12:49:56 mycroft Exp $	*/
-
 /* 
  * Copyright (c) 1995
  *	The Regents of the University of California.  All rights reserved.
@@ -42,16 +40,6 @@
 #ifndef	_LOCK_H_
 #define	_LOCK_H_
 
-#define NCPUS 1		/* XXX */
-
-/*
- * Placeholder for simple lock structure until spinlocks are
- * really used an machine-dependently defined.
- */
-struct simplelock {
-	int lock_data;
-};
-
 /*
  * The general lock structure.  Provides for multiple shared locks,
  * upgrading from shared to exclusive, and sleeping until the lock
@@ -64,7 +52,7 @@ struct lock {
 	int	lk_waitcount;		/* # of processes sleeping for lock */
 	short	lk_exclusivecount;	/* # of recursive exclusive locks */
 	short	lk_prio;		/* priority at which to sleep */
-	const char *lk_wmesg;		/* resource sleeping (for tsleep) */
+	char	*lk_wmesg;		/* resource sleeping (for tsleep) */
 	int	lk_timo;		/* maximum sleep time (for tsleep) */
 	pid_t	lk_lockholder;		/* pid of exclusive lock holder */
 };
@@ -166,14 +154,13 @@ struct lock {
 
 struct proc;
 
-void	lockinit __P((struct lock *, int prio, const char *wmesg, int timo,
+void	lockinit __P((struct lock *, int prio, char *wmesg, int timo,
 			int flags));
 int	lockmgr __P((__volatile struct lock *, u_int flags,
 			struct simplelock *, struct proc *p));
 int	lockstatus __P((struct lock *));
-void	lockmgr_printinfo __P((struct lock *));
 
-#ifdef LOCKDEBUG
+#ifdef DEBUG
 void _simple_unlock __P((__volatile struct simplelock *alp, const char *, int));
 #define simple_unlock(alp) _simple_unlock(alp, __FILE__, __LINE__)
 int _simple_lock_try __P((__volatile struct simplelock *alp, const char *, int));
@@ -181,13 +168,13 @@ int _simple_lock_try __P((__volatile struct simplelock *alp, const char *, int))
 void _simple_lock __P((__volatile struct simplelock *alp, const char *, int));
 #define simple_lock(alp) _simple_lock(alp, __FILE__, __LINE__)
 void simple_lock_init __P((struct simplelock *alp));
-#else /* !LOCKDEBUG */
+#else /* !DEBUG */
 #if NCPUS == 1 /* no multiprocessor locking is necessary */
 #define	simple_lock_init(alp)
 #define	simple_lock(alp)
 #define	simple_lock_try(alp)	(1)	/* always succeeds */
 #define	simple_unlock(alp)
 #endif /* NCPUS == 1 */
-#endif /* !LOCKDEBUG */
+#endif /* !DEBUG */
 
 #endif /* !_LOCK_H_ */

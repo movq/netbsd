@@ -1,8 +1,6 @@
-/*	$NetBSD: attack.c,v 1.4 1997/10/12 21:24:26 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)attack.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: attack.c,v 1.4 1997/10/12 21:24:26 christos Exp $");
-#endif
+static char sccsid[] = "@(#)attack.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <math.h>
-#include "trek.h"
+# include	"trek.h"
 
 /*
 **  Klingon Attack Routine
@@ -76,16 +67,15 @@ __RCSID("$NetBSD: attack.c,v 1.4 1997/10/12 21:24:26 christos Exp $");
 **	Casualties can also occur.
 */
 
-void
 attack(resting)
 int	resting;	/* set if attack while resting */
 {
-	int		hit, i, l;
-	int		maxhit, tothit, shldabsb;
-	double		chgfac, propor, extradm;
-	double		dustfac, tothe;
-	int		cas;
-	int		hitflag;
+	register int		hit, i, l;
+	int			maxhit, tothit, shldabsb;
+	double			chgfac, propor, extradm;
+	double			dustfac, tothe;
+	int			cas;
+	int			hitflag;
 
 	if (Move.free)
 		return;

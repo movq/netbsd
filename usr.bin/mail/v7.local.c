@@ -1,8 +1,6 @@
-/*	$NetBSD: v7.local.c,v 1.9 1997/10/19 05:04:02 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)v7.local.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: v7.local.c,v 1.9 1997/10/19 05:04:02 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)v7.local.c	5.12 (Berkeley) 2/3/91";
 #endif /* not lint */
 
 /*
@@ -51,50 +44,36 @@ __RCSID("$NetBSD: v7.local.c,v 1.9 1997/10/19 05:04:02 lukem Exp $");
  */
 
 #include "rcv.h"
-#include "extern.h"
 
 /*
  * Locate the user's mailbox file (ie, the place where new, unread
  * mail is queued).
  */
-void
 findmail(user, buf)
 	char *user, *buf;
 {
-	char *mbox;
-
-	if (!(mbox = getenv("MAIL")))
-		(void)snprintf(buf, PATHSIZE, "%s/%s", _PATH_MAILDIR, user);
-	else {
-		(void)strncpy(buf, mbox, PATHSIZE - 1);
-		buf[PATHSIZE - 1] = '\0';
-	}
+	(void)sprintf(buf, "%s/%s", _PATH_MAILDIR, user);
 }
 
 /*
  * Get rid of the queued mail.
  */
-void
 demail()
 {
 
 	if (value("keep") != NOSTR || rm(mailname) < 0)
-		(void)close(creat(mailname, 0600));
+		close(creat(mailname, 0600));
 }
 
 /*
  * Discover user login name.
  */
-char *
+char*
 username()
 {
 	char *np;
-	uid_t uid;
 
 	if ((np = getenv("USER")) != NOSTR)
 		return np;
-	if ((np = getname(uid = getuid())) != NOSTR)
-		return np;
-	printf("Cannot associate a name with uid %u\n", (unsigned)uid);
-	return NOSTR;
+	return getname(getuid());
 }

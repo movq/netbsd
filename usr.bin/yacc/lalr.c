@@ -1,5 +1,3 @@
-/*	$NetBSD: lalr.c,v 1.5 1997/07/25 16:46:32 perry Exp $	*/
-
 /*
  * Copyright (c) 1989 The Regents of the University of California.
  * All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)lalr.c	5.3 (Berkeley) 6/1/90";
-#else
-__RCSID("$NetBSD: lalr.c,v 1.5 1997/07/25 16:46:32 perry Exp $");
-#endif
 #endif /* not lint */
 
 #include "defs.h"
@@ -67,25 +60,7 @@ short *goto_map;
 short *from_state;
 short *to_state;
 
-short **transpose(short **, int);
-void set_state_table __P((void));
-void set_state_table __P((void));
-void set_accessing_symbol __P((void));
-void set_shift_table __P((void));
-void set_reduction_table __P((void));
-void set_maxrhs __P((void));
-void initialize_LA __P((void));
-void set_goto_map __P((void));
-void initialize_F __P((void));
-void build_relations __P((void));
-void compute_FOLLOWS __P((void));
-void compute_lookaheads __P((void));
-
-int map_goto __P((int, int));
-void digraph __P((short **));
-void add_lookback_edge __P((int, int, int));
-void traverse __P((int));
-
+short **transpose();
 
 static int infinity;
 static int maxrhs;
@@ -98,7 +73,7 @@ static short *INDEX;
 static short *VERTICES;
 static int top;
 
-void
+
 lalr()
 {
     tokensetsize = WORDSIZE(ntokens);
@@ -117,10 +92,10 @@ lalr()
 }
 
 
-void
+
 set_state_table()
 {
-    core *sp;
+    register core *sp;
 
     state_table = NEW2(nstates, core *);
     for (sp = first_state; sp; sp = sp->next)
@@ -128,10 +103,10 @@ set_state_table()
 }
 
 
-void
+
 set_accessing_symbol()
 {
-    core *sp;
+    register core *sp;
 
     accessing_symbol = NEW2(nstates, short);
     for (sp = first_state; sp; sp = sp->next)
@@ -139,10 +114,10 @@ set_accessing_symbol()
 }
 
 
-void
+
 set_shift_table()
 {
-    shifts *sp;
+    register shifts *sp;
 
     shift_table = NEW2(nstates, shifts *);
     for (sp = first_shift; sp; sp = sp->next)
@@ -150,10 +125,10 @@ set_shift_table()
 }
 
 
-void
+
 set_reduction_table()
 {
-    reductions *rp;
+    register reductions *rp;
 
     reduction_table = NEW2(nstates, reductions *);
     for (rp = first_reduction; rp; rp = rp->next)
@@ -161,13 +136,13 @@ set_reduction_table()
 }
 
 
-void
+
 set_maxrhs()
 {
-  short *itemp;
-  short *item_end;
-  int length;
-  int max;
+  register short *itemp;
+  register short *item_end;
+  register int length;
+  register int max;
 
   length = 0;
   max = 0;
@@ -189,11 +164,11 @@ set_maxrhs()
 }
 
 
-void
+
 initialize_LA()
 {
-  int i, j, k;
-  reductions *rp;
+  register int i, j, k;
+  register reductions *rp;
 
   lookaheads = NEW2(nstates + 1, short);
 
@@ -227,16 +202,15 @@ initialize_LA()
 }
 
 
-void
 set_goto_map()
 {
-  shifts *sp;
-  int i;
-  int symbol;
-  int k;
-  short *temp_map;
-  int state2;
-  int state1;
+  register shifts *sp;
+  register int i;
+  register int symbol;
+  register int k;
+  register short *temp_map;
+  register int state2;
+  register int state1;
 
   goto_map = NEW2(nvars + 1, short) - ntokens;
   temp_map = NEW2(nvars + 1, short) - ntokens;
@@ -302,10 +276,10 @@ map_goto(state, symbol)
 int state;
 int symbol;
 {
-    int high;
-    int low;
-    int middle;
-    int s;
+    register int high;
+    register int low;
+    register int middle;
+    register int s;
 
     low = goto_map[symbol];
     high = goto_map[symbol + 1];
@@ -325,21 +299,21 @@ int symbol;
 }
 
 
-void
+
 initialize_F()
 {
-  int i;
-  int j;
-  int k;
-  shifts *sp;
-  short *edge;
-  unsigned *rowp;
-  short *rp;
-  short **reads;
-  int nedges;
-  int stateno;
-  int symbol;
-  int nwords;
+  register int i;
+  register int j;
+  register int k;
+  register shifts *sp;
+  register short *edge;
+  register unsigned *rowp;
+  register short *rp;
+  register short **reads;
+  register int nedges;
+  register int stateno;
+  register int symbol;
+  register int nwords;
 
   nwords = ngotos * tokensetsize;
   F = NEW2(nwords, unsigned);
@@ -402,26 +376,26 @@ initialize_F()
 }
 
 
-void
+
 build_relations()
 {
-  int i;
-  int j;
-  int k;
-  short *rulep;
-  short *rp;
-  shifts *sp;
-  int length;
-  int nedges;
-  int done;
-  int state1;
-  int stateno;
-  int symbol1;
-  int symbol2;
-  short *shortp;
-  short *edge;
-  short *states;
-  short **new_includes;
+  register int i;
+  register int j;
+  register int k;
+  register short *rulep;
+  register short *rp;
+  register shifts *sp;
+  register int length;
+  register int nedges;
+  register int done;
+  register int state1;
+  register int stateno;
+  register int symbol1;
+  register int symbol2;
+  register short *shortp;
+  register short *edge;
+  register short *states;
+  register short **new_includes;
 
   includes = NEW2(ngotos, short *);
   edge = NEW2(ngotos + 1, short);
@@ -495,13 +469,12 @@ build_relations()
 }
 
 
-void
 add_lookback_edge(stateno, ruleno, gotono)
 int stateno, ruleno, gotono;
 {
-    int i, k;
-    int found;
-    shorts *sp;
+    register int i, k;
+    register int found;
+    register shorts *sp;
 
     i = lookaheads[stateno];
     k = lookaheads[stateno + 1];
@@ -528,12 +501,12 @@ transpose(R, n)
 short **R;
 int n;
 {
-  short **new_R;
-  short **temp_R;
-  short *nedges;
-  short *sp;
-  int i;
-  int k;
+  register short **new_R;
+  register short **temp_R;
+  register short *nedges;
+  register short *sp;
+  register int i;
+  register int k;
 
   nedges = NEW2(n, short);
 
@@ -580,20 +553,19 @@ int n;
 }
 
 
-void
+
 compute_FOLLOWS()
 {
   digraph(includes);
 }
 
 
-void
 compute_lookaheads()
 {
-  int i, n;
-  unsigned *fp1, *fp2, *fp3;
-  shorts *sp, *next;
-  unsigned *rowp;
+  register int i, n;
+  register unsigned *fp1, *fp2, *fp3;
+  register shorts *sp, *next;
+  register unsigned *rowp;
 
   rowp = LA;
   n = lookaheads[nstates];
@@ -622,11 +594,10 @@ compute_lookaheads()
 }
 
 
-void
 digraph(relation)
 short **relation;
 {
-  int i;
+  register int i;
 
   infinity = ngotos + 2;
   INDEX = NEW2(ngotos + 1, short);
@@ -649,15 +620,15 @@ short **relation;
 }
 
 
-void
+
 traverse(i)
-int i;
+register int i;
 {
-  unsigned *fp1;
-  unsigned *fp2;
-  unsigned *fp3;
-  int j;
-  short *rp;
+  register unsigned *fp1;
+  register unsigned *fp2;
+  register unsigned *fp3;
+  register int j;
+  register short *rp;
 
   int height;
   unsigned *base;

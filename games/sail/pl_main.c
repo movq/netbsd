@@ -1,8 +1,6 @@
-/*	$NetBSD: pl_main.c,v 1.6 1997/10/13 19:45:48 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,23 +31,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)pl_main.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: pl_main.c,v 1.6 1997/10/13 19:45:48 christos Exp $");
-#endif
+static char sccsid[] = "@(#)pl_main.c	5.5 (Berkeley) 2/28/91";
 #endif /* not lint */
 
 #include "player.h"
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <stdlib.h>
-#include <unistd.h>
+
+void choke(), child();
 
 /*ARGSUSED*/
-int
 pl_main()
 {
 
@@ -58,12 +50,11 @@ pl_main()
 		exit(1);
 	}
 	initialize();
-	Msg("Aye aye, Sir");
+	Signal("Aye aye, Sir", (struct ship *)0);
 	play();
 	return 0;			/* for lint,  play() never returns */
 }
 
-void
 initialize()
 {
 	register struct File *fp;
@@ -207,14 +198,12 @@ reprint:
 	else {
 		(void) printf("Your name, Captain? ");
 		(void) fflush(stdout);
-		(void) fgets(captain, sizeof captain, stdin);
+		(void) gets(captain);
 		if (!*captain)
 			(void) strcpy(captain, "no name");
-		else
-		    captain[strlen(captain) - 1] = '\0';
 	}
 	captain[sizeof captain - 1] = '\0';
-	Write(W_CAPTAIN, ms, 1, (long)captain, 0, 0, 0);
+	Write(W_CAPTAIN, ms, 1, (int)captain, 0, 0, 0);
 	for (n = 0; n < 2; n++) {
 		char buf[10];
 
@@ -250,6 +239,6 @@ reprint:
 	initscreen();
 	draw_board();
 	(void) sprintf(message, "Captain %s assuming command", captain);
-	Write(W_SIGNAL, ms, 1, (long)message, 0, 0, 0);
-	newturn(0);
+	Write(W_SIGNAL, ms, 1, (int)message, 0, 0, 0);
+	newturn();
 }

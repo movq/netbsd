@@ -1,8 +1,6 @@
-/*	$NetBSD: dr_main.c,v 1.5 1997/10/13 19:43:54 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,16 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)dr_main.c	8.2 (Berkeley) 4/16/94";
-#else
-__RCSID("$NetBSD: dr_main.c,v 1.5 1997/10/13 19:43:54 christos Exp $");
-#endif
+static char sccsid[] = "@(#)dr_main.c	5.5 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "driver.h"
-#include <stdlib.h>
-#include <unistd.h>
 
-int
 dr_main()
 {
-	int n;
-	struct ship *sp;
+	register int n;
+	register struct ship *sp;
 	int nat[NNATION];
 	int value = 0;
 
@@ -58,7 +48,7 @@ dr_main()
 	(void) signal(SIGQUIT, SIG_IGN);
 	(void) signal(SIGTSTP, SIG_IGN);
 	if (issetuid)
-		(void) setuid(geteuid());
+		(void) setruid(geteuid());
 	if (game < 0 || game >= NSCENE) {
 		fprintf(stderr, "DRIVER: Bad game number %d\n", game);
 		exit(1);

@@ -1,8 +1,6 @@
-/*	$NetBSD: mille.h,v 1.7 1997/10/12 00:54:11 lukem Exp $	*/
-
 /*
- * Copyright (c) 1982, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,21 +30,13 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)mille.h	8.1 (Berkeley) 5/31/93
+ *	@(#)mille.h	5.5 (Berkeley) 6/1/90
  */
 
 # include	<sys/types.h>
-# include	<sys/uio.h>
-# include	<sys/stat.h>
 # include	<ctype.h>
-# include	<err.h>
-# include	<errno.h>
 # include	<curses.h>
-# include	<fcntl.h>
-# include	<stdlib.h>
 # include	<string.h>
-# include	<termios.h>
-# include	<unistd.h>
 
 /*
  * @(#)mille.h	1.1 (Berkeley) 4/1/82
@@ -160,7 +150,17 @@
 # ifdef	SYSV
 # define	srandom(x)	srand(x)
 # define	random()	rand()
-# endif	/* SYSV */
+
+# ifndef	attron
+#	define	erasechar()	_tty.c_cc[VERASE]
+#	define	killchar()	_tty.c_cc[VKILL]
+# endif
+# else
+# ifndef	erasechar
+#	define	erasechar()	_tty.sg_erase
+#	define	killchar()	_tty.sg_kill
+# endif
+# endif	SYSV
 
 typedef struct {
 	bool	coups[NUM_SAFE];
@@ -225,40 +225,4 @@ extern WINDOW	*Board, *Miles, *Score;
  * functions
  */
 
-void	account __P((CARD));
-void	calcmove __P((void));
-int	canplay __P((PLAY *, PLAY *, CARD));
-int	check_ext __P((bool));
-void	check_go __P((void));
-void	check_more __P((void));
-void	die __P((int));
-void	domove __P((void));
-bool	error __P((char *, ...));
-void	extrapolate __P((PLAY *));
-void	finalscore __P((PLAY *));
-CARD	getcard __P((void));
-void	getmove __P((void));
-int	getyn __P((int));
-int	haspicked __P((PLAY *));
-void	init __P((void));
-int	isrepair __P((CARD));
-int	main __P((int, char **));
-void	newboard __P((void));
-void	newscore __P((void));
-int	onecard __P((PLAY *));
-int	playcard __P((PLAY *));
-void	prboard __P((void));
-void	prompt __P((int));
-void	prscore __P((int));
-int	readch __P((void));
-bool	rest_f __P((char *));
-int	roll __P((int, int));
-void	rub __P((int));
-int	safety __P((CARD));
-bool	save __P((void));
-void	show_card __P((int, int, CARD, CARD *));
-void	show_score __P((int, int, int, int *));
-void	shuffle __P((void));
-void	sort __P((CARD *));
-void	undoex __P((int));
-bool	varpush __P((int, ssize_t __P((int, const struct iovec *, int))));
+CARD	getcard();

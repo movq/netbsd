@@ -1,5 +1,3 @@
-/*	$NetBSD: bit.h,v 1.5 1995/11/08 02:30:53 christos Exp $	*/
-
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
  * Copyright (c) 1988, 1989 by Adam de Boor
@@ -37,7 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)bit.h	5.3 (Berkeley) 6/1/90
+ *	@(#)bit.h	5.3 (Berkeley) 6/1/90
  */
 
 /*
@@ -64,7 +62,7 @@
 	(Bit_NumInts(numBits) * sizeof(int))
 
 #define Bit_Alloc(numBits, bitArrayPtr)  	\
-        bitArrayPtr = (int *) emalloc((unsigned)Bit_NumBytes(numBits)); \
+        bitArrayPtr = (int *)malloc((unsigned)Bit_NumBytes(numBits)); \
         Bit_Zero((numBits), (bitArrayPtr))
 
 #define Bit_Free(bitArrayPtr)	\
@@ -99,4 +97,4 @@ extern Boolean 	  Bit_Union();
 extern Boolean 	  Bit_AnySet();
 extern int  	  *Bit_Expand();
 	 
-#endif /* _BIT */
+#endif _BIT

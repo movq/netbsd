@@ -1,5 +1,5 @@
-/*	$NetBSD: tp_states.init,v 1.4 1994/06/29 06:40:33 cgd Exp $	*/
-
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_states.init,v 1.1 1993/04/09 12:01:49 cgd Exp $ */
+/* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_states.init,v $ */
 {0x3,0x0},
 {0x6,0x1},
 {0x6,0x2},

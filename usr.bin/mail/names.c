@@ -1,8 +1,6 @@
-/*	$NetBSD: names.c,v 1.6 1997/10/19 05:03:41 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)names.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: names.c,v 1.6 1997/10/19 05:03:41 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)names.c	5.16 (Berkeley) 6/25/90";
 #endif /* not lint */
 
 /*
@@ -49,7 +42,6 @@ __RCSID("$NetBSD: names.c,v 1.6 1997/10/19 05:03:41 lukem Exp $");
  */
 
 #include "rcv.h"
-#include "extern.h"
 
 /*
  * Allocate a single element of a name list,
@@ -59,9 +51,8 @@ __RCSID("$NetBSD: names.c,v 1.6 1997/10/19 05:03:41 lukem Exp $");
 struct name *
 nalloc(str, ntype)
 	char str[];
-	int ntype;
 {
-	struct name *np;
+	register struct name *np;
 
 	np = (struct name *) salloc(sizeof *np);
 	np->n_flink = NIL;
@@ -78,7 +69,7 @@ struct name *
 tailof(name)
 	struct name *name;
 {
-	struct name *np;
+	register struct name *np;
 
 	np = name;
 	if (np == NIL)
@@ -96,10 +87,9 @@ tailof(name)
 struct name *
 extract(line, ntype)
 	char line[];
-	int ntype;
 {
-	char *cp;
-	struct name *top, *np, *t;
+	register char *cp;
+	register struct name *top, *np, *t;
 	char nbuf[BUFSIZ];
 
 	if (line == NOSTR || *line == '\0')
@@ -124,13 +114,12 @@ extract(line, ntype)
  */
 char *
 detract(np, ntype)
-	struct name *np;
-	int ntype;
+	register struct name *np;
 {
-	int s;
-	char *cp, *top;
-	struct name *p;
-	int comma;
+	register int s;
+	register char *cp, *top;
+	register struct name *p;
+	register int comma;
 
 	comma = ntype & GCOMMA;
 	if (np == NIL)
@@ -173,14 +162,14 @@ char *
 yankword(ap, wbuf)
 	char *ap, wbuf[];
 {
-	char *cp, *cp2;
+	register char *cp, *cp2;
 
 	cp = ap;
 	for (;;) {
 		if (*cp == '\0')
 			return NOSTR;
 		if (*cp == '(') {
-			int nesting = 0;
+			register int nesting = 0;
 
 			while (*cp != '\0') {
 				switch (*cp++) {
@@ -223,13 +212,13 @@ outof(names, fo, hp)
 	FILE *fo;
 	struct header *hp;
 {
-	int c;
-	struct name *np, *top;
-	time_t now;
-	char *date, *fname;
+	register int c;
+	register struct name *np, *top;
+	time_t now, time();
+	char *date, *fname, *ctime();
 	FILE *fout, *fin;
 	int ispipe;
-	extern char *tempEdit;
+	extern char tempEdit[];
 
 	top = names;
 	np = names;
@@ -265,7 +254,6 @@ outof(names, fo, hp)
 				(void) Fclose(fout);
 				goto cant;
 			}
-			(void) fcntl(image, F_SETFD, 1);
 			fprintf(fout, "From %s %s", myname, date);
 			puthead(hp, fout, GTO|GSUBJECT|GCC|GNL);
 			while ((c = getc(fo)) != EOF)
@@ -287,7 +275,6 @@ outof(names, fo, hp)
 		if (ispipe) {
 			int pid;
 			char *shell;
-			sigset_t nset;
 
 			/*
 			 * XXX
@@ -298,11 +285,8 @@ outof(names, fo, hp)
 			 */
 			if ((shell = value("SHELL")) == NOSTR)
 				shell = _PATH_CSHELL;
-			sigemptyset(&nset);
-			sigaddset(&nset, SIGHUP);
-			sigaddset(&nset, SIGINT);
-			sigaddset(&nset, SIGQUIT);
-			pid = start_command(shell, &nset,
+			pid = start_command(shell, sigmask(SIGHUP)|
+					sigmask(SIGINT)|sigmask(SIGQUIT),
 				image, -1, "-c", fname, NOSTR);
 			if (pid < 0) {
 				senderr++;
@@ -356,11 +340,10 @@ cant:
  * If any of the network metacharacters precedes any slashes, it can't
  * be a filename.  We cheat with .'s to allow path names like ./...
  */
-int
 isfileaddr(name)
 	char *name;
 {
-	char *cp;
+	register char *cp;
 
 	if (*name == '+')
 		return 1;
@@ -384,9 +367,9 @@ struct name *
 usermap(names)
 	struct name *names;
 {
-	struct name *new, *np, *cp;
+	register struct name *new, *np, *cp;
 	struct grouphead *gh;
-	int metoo;
+	register int metoo;
 
 	new = NIL;
 	np = names;
@@ -419,7 +402,6 @@ struct name *
 gexpand(nlist, gh, metoo, ntype)
 	struct name *nlist;
 	struct grouphead *gh;
-	int metoo, ntype;
 {
 	struct group *gp;
 	struct grouphead *ngh;
@@ -466,7 +448,7 @@ struct name *
 cat(n1, n2)
 	struct name *n1, *n2;
 {
-	struct name *tail;
+	register struct name *tail;
 
 	if (n1 == NIL)
 		return(n2);
@@ -486,13 +468,13 @@ char **
 unpack(np)
 	struct name *np;
 {
-	char **ap, **top;
-	struct name *n;
+	register char **ap, **top;
+	register struct name *n;
 	int t, extra, metoo, verbose;
 
 	n = np;
 	if ((t = count(n)) == 0)
-		errx(1, "No names to unpack");
+		panic("No names to unpack");
 	/*
 	 * Compute the number of extra arguments we will need.
 	 * We need at least two extra -- one for "mail" and one for
@@ -531,7 +513,7 @@ struct name *
 elide(names)
 	struct name *names;
 {
-	struct name *np, *t, *new;
+	register struct name *np, *t, *new;
 	struct name *x;
 
 	if (names == NIL)
@@ -641,11 +623,10 @@ put(list, node)
  * Determine the number of undeleted elements in
  * a name list and return it.
  */
-int
 count(np)
-	struct name *np;
+	register struct name *np;
 {
-	int c;
+	register int c;
 
 	for (c = 0; np != NIL; np = np->n_flink)
 		if ((np->n_type & GDEL) == 0)
@@ -658,10 +639,10 @@ count(np)
  */
 struct name *
 delname(np, name)
-	struct name *np;
+	register struct name *np;
 	char name[];
 {
-	struct name *p;
+	register struct name *p;
 
 	for (p = np; p != NIL; p = p->n_flink)
 		if (strcasecmp(p->n_name, name) == 0) {
@@ -688,11 +669,10 @@ delname(np, name)
  */
 
 /*
-void
 prettyprint(name)
 	struct name *name;
 {
-	struct name *np;
+	register struct name *np;
 
 	np = name;
 	while (np != NIL) {

@@ -1,8 +1,6 @@
-/*	$NetBSD: nodes.c.pat,v 1.8 1997/04/11 23:03:09 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -35,10 +33,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)nodes.c.pat	8.2 (Berkeley) 5/4/95
+ *	@(#)nodes.c.pat	5.2 (Berkeley) 3/8/91
  */
 
-#include <stdlib.h>
 /*
  * Routine for dealing with parsed shell commands.
  */
@@ -50,19 +47,31 @@
 #include "mystring.h"
 
 
-int     funcblocksize;		/* size of structures in function */
-int     funcstringsize;		/* size of strings in node */
+int funcblocksize;		/* size of structures in function */
+int funcstringsize;		/* size of strings in node */
+#ifdef __STDC__
 pointer funcblock;		/* block to allocate function from */
-char   *funcstring;		/* block to allocate strings from */
+#else
+char *funcblock;		/* block to allocate function from */
+#endif
+char *funcstring;		/* block to allocate strings from */
 
 %SIZES
 
 
-STATIC void calcsize __P((union node *));
-STATIC void sizenodelist __P((struct nodelist *));
-STATIC union node *copynode __P((union node *));
-STATIC struct nodelist *copynodelist __P((struct nodelist *));
-STATIC char *nodesavestr __P((char *));
+#ifdef __STDC__
+STATIC void calcsize(union node *);
+STATIC void sizenodelist(struct nodelist *);
+STATIC union node *copynode(union node *);
+STATIC struct nodelist *copynodelist(struct nodelist *);
+STATIC char *nodesavestr(char *);
+#else
+STATIC void calcsize();
+STATIC void sizenodelist();
+STATIC union node *copynode();
+STATIC struct nodelist *copynodelist();
+STATIC char *nodesavestr();
+#endif
 
 
 
@@ -72,86 +81,85 @@ STATIC char *nodesavestr __P((char *));
 
 union node *
 copyfunc(n)
-	union node *n;
-{
-	if (n == NULL)
-		return NULL;
-	funcblocksize = 0;
-	funcstringsize = 0;
-	calcsize(n);
-	funcblock = ckmalloc(funcblocksize + funcstringsize);
-	funcstring = (char *) funcblock + funcblocksize;
-	return copynode(n);
+      union node *n;
+      {
+      if (n == NULL)
+	    return NULL;
+      funcblocksize = 0;
+      funcstringsize = 0;
+      calcsize(n);
+      funcblock = ckmalloc(funcblocksize + funcstringsize);
+      funcstring = funcblock + funcblocksize;
+      return copynode(n);
 }
 
 
 
 STATIC void
 calcsize(n)
-	union node *n;
-{
-	%CALCSIZE
+      union node *n;
+      {
+      %CALCSIZE
 }
 
 
 
 STATIC void
 sizenodelist(lp)
-	struct nodelist *lp;
-{
-	while (lp) {
-		funcblocksize += ALIGN(sizeof(struct nodelist));
-		calcsize(lp->n);
-		lp = lp->next;
-	}
+      struct nodelist *lp;
+      {
+      while (lp) {
+	    funcblocksize += ALIGN(sizeof (struct nodelist));
+	    calcsize(lp->n);
+	    lp = lp->next;
+      }
 }
 
 
 
 STATIC union node *
 copynode(n)
-	union node *n;
-{
-	union node *new;
+      union node *n;
+      {
+      union node *new;
 
-	%COPY
-	return new;
+      %COPY
+      return new;
 }
 
 
 STATIC struct nodelist *
 copynodelist(lp)
-	struct nodelist *lp;
-{
-	struct nodelist *start;
-	struct nodelist **lpp;
+      struct nodelist *lp;
+      {
+      struct nodelist *start;
+      struct nodelist **lpp;
 
-	lpp = &start;
-	while (lp) {
-		*lpp = funcblock;
-		funcblock = (char *) funcblock + ALIGN(sizeof(struct nodelist));
-		(*lpp)->n = copynode(lp->n);
-		lp = lp->next;
-		lpp = &(*lpp)->next;
-	}
-	*lpp = NULL;
-	return start;
+      lpp = &start;
+      while (lp) {
+	    *lpp = funcblock;
+	    funcblock += ALIGN(sizeof (struct nodelist));
+	    (*lpp)->n = copynode(lp->n);
+	    lp = lp->next;
+	    lpp = &(*lpp)->next;
+      }
+      *lpp = NULL;
+      return start;
 }
 
 
 
 STATIC char *
 nodesavestr(s)
-	char   *s;
-{
-	register char *p = s;
-	register char *q = funcstring;
-	char   *rtn = funcstring;
+      char *s;
+      {
+      register char *p = s;
+      register char *q = funcstring;
+      char *rtn = funcstring;
 
-	while ((*q++ = *p++) != '\0')
-		continue;
-	funcstring = q;
-	return rtn;
+      while (*q++ = *p++);
+      funcstring = q;
+      return rtn;
 }
 
 
@@ -162,8 +170,8 @@ nodesavestr(s)
 
 void
 freefunc(n)
-	union node *n;
-{
-	if (n)
-		ckfree(n);
+      union node *n;
+      {
+      if (n)
+	    ckfree(n);
 }

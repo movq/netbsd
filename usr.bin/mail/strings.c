@@ -1,8 +1,6 @@
-/*	$NetBSD: strings.c,v 1.6 1997/10/19 05:03:54 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)strings.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: strings.c,v 1.6 1997/10/19 05:03:54 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)strings.c	5.9 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -51,7 +44,6 @@ __RCSID("$NetBSD: strings.c,v 1.6 1997/10/19 05:03:54 lukem Exp $");
  */
 
 #include "rcv.h"
-#include "extern.h"
 
 /*
  * Allocate size more bytes of space and return the address of the
@@ -63,16 +55,15 @@ __RCSID("$NetBSD: strings.c,v 1.6 1997/10/19 05:03:54 lukem Exp $");
 
 char *
 salloc(size)
-	int size;
 {
-	char *t;
-	int s;
-	struct strings *sp;
+	register char *t;
+	register int s;
+	register struct strings *sp;
 	int index;
 
 	s = size;
-	s += (sizeof (char *) - 1);
-	s &= ~(sizeof (char *) - 1);
+	s += 3;
+	s &= ~03;
 	index = 0;
 	for (sp = &stringdope[0]; sp < &stringdope[NSPACE]; sp++) {
 		if (sp->s_topFree == NOSTR && (STRINGSIZE << index) >= s)
@@ -82,12 +73,14 @@ salloc(size)
 		index++;
 	}
 	if (sp >= &stringdope[NSPACE])
-		errx(1, "String too large");
+		panic("String too large");
 	if (sp->s_topFree == NOSTR) {
 		index = sp - &stringdope[0];
 		sp->s_topFree = malloc(STRINGSIZE << index);
-		if (sp->s_topFree == NOSTR)
-			errx(1, "No room for space %d", index);
+		if (sp->s_topFree == NOSTR) {
+			fprintf(stderr, "No room for space %d\n", index);
+			panic("Internal error");
+		}
 		sp->s_nextFree = sp->s_topFree;
 		sp->s_nleft = STRINGSIZE << index;
 	}
@@ -102,11 +95,10 @@ salloc(size)
  * Called to free all strings allocated
  * since last reset.
  */
-void
 sreset()
 {
-	struct strings *sp;
-	int index;
+	register struct strings *sp;
+	register int index;
 
 	if (noreset)
 		return;
@@ -124,10 +116,9 @@ sreset()
  * Make the string area permanent.
  * Meant to be called in main, after initialization.
  */
-void
 spreserve()
 {
-	struct strings *sp;
+	register struct strings *sp;
 
 	for (sp = &stringdope[0]; sp < &stringdope[NSPACE]; sp++)
 		sp->s_topFree = NOSTR;

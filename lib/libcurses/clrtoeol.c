@@ -1,8 +1,6 @@
-/*	$NetBSD: clrtoeol.c,v 1.8 1997/07/22 07:36:29 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,58 +31,41 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)clrtoeol.c	8.2 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: clrtoeol.c,v 1.8 1997/07/22 07:36:29 mikel Exp $");
-#endif
-#endif	/* not lint */
+static char sccsid[] = "@(#)clrtoeol.c	5.4 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include "curses.h"
+# include	"curses.ext"
 
 /*
- * wclrtoeol --
- *	Clear up to the end of line.
+ *	This routine clears up to the end of line
+ *
  */
-int
 wclrtoeol(win)
-	register WINDOW *win;
-{
-	register int minx, x, y;
-	register __LDATA *end, *maxx, *sp;
+reg WINDOW	*win; {
 
-	y = win->cury;
-	x = win->curx;
-	if (win->lines[y]->flags & __ISPASTEOL) {
-		if (y < win->maxy - 1) {
-			y++;
-			x = 0;
-		} else
-			return (OK);
-	}
-	end = &win->lines[y]->line[win->maxx];
-	minx = -1;
-	maxx = &win->lines[y]->line[x];
+	reg char	*sp, *end;
+	reg int		y, x;
+	reg char	*maxx;
+	reg int		minx;
+
+	y = win->_cury;
+	x = win->_curx;
+	end = &win->_y[y][win->_maxx];
+	minx = _NOCHANGE;
+	maxx = &win->_y[y][x];
 	for (sp = maxx; sp < end; sp++)
-		if (sp->ch != ' ' || sp->attr != 0) {
+		if (*sp != ' ') {
 			maxx = sp;
-			if (minx == -1)
-				minx = sp - win->lines[y]->line;
-			sp->ch = ' ';
-			sp->attr = 0;
+			if (minx == _NOCHANGE)
+				minx = sp - win->_y[y];
+			*sp = ' ';
 		}
-#ifdef DEBUG
-	__CTRACE("CLRTOEOL: minx = %d, maxx = %d, firstch = %d, lastch = %d\n",
-	    minx, maxx - win->lines[y]->line, *win->lines[y]->firstchp, 
-	    *win->lines[y]->lastchp);
-#endif
-	/* Update firstch and lastch for the line. */
-	return (__touchline(win, y, x, win->maxx - 1, 0));
+	/*
+	 * update firstch and lastch for the line
+	 */
+	touchline(win, y, win->_curx, win->_maxx - 1);
+# ifdef DEBUG
+	fprintf(outf, "CLRTOEOL: minx = %d, maxx = %d, firstch = %d, lastch = %d\n", minx, maxx - win->_y[y], win->_firstch[y], win->_lastch[y]);
+# endif
 }
-
-
-
-
-

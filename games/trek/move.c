@@ -1,8 +1,6 @@
-/*	$NetBSD: move.c,v 1.4 1997/10/12 21:25:02 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)move.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: move.c,v 1.4 1997/10/12 21:25:02 christos Exp $");
-#endif
+static char sccsid[] = "@(#)move.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <math.h>
-#include "trek.h"
+# include	"trek.h"
 
 /*
 **  Move Under Warp or Impulse Power
@@ -89,10 +80,10 @@ double	speed;
 {
 	double			angle;
 	double			x, y, dx, dy;
-	int		ix = 0, iy = 0;
+	register int		ix, iy;
 	double			bigger;
 	int			n;
-	int		i;
+	register int		i;
 	double			dist;
 	double			sectsize;
 	double			xn;
@@ -125,7 +116,7 @@ double	speed;
 	evtime = Now.eventptr[E_LRTB]->date - Now.date;
 #	ifdef xTRACE
 	if (Trace)
-		printf("E.ep = %p, ->evcode = %d, ->date = %.2f, evtime = %.2f\n",
+		printf("E.ep = %u, ->evcode = %d, ->date = %.2f, evtime = %.2f\n",
 			Now.eventptr[E_LRTB], Now.eventptr[E_LRTB]->evcode,
 			Now.eventptr[E_LRTB]->date, evtime);
 #	endif

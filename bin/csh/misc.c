@@ -1,8 +1,6 @@
-/*	$NetBSD: misc.c,v 1.9 1997/07/04 21:24:06 christos Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)misc.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: misc.c,v 1.9 1997/07/04 21:24:06 christos Exp $");
-#endif
+static char sccsid[] = "@(#)misc.c	5.13 (Berkeley) 6/27/91";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -58,8 +51,8 @@ static int	renum __P((int, int));
 
 int
 any(s, c)
-    char *s;
-    int c;
+    register char *s;
+    register int c;
 {
     if (!s)
 	return (0);		/* Check for nil pointer */
@@ -82,24 +75,22 @@ setzero(cp, i)
 
 char   *
 strsave(s)
-    char *s;
+    register char *s;
 {
     char   *n;
-    char *p;
+    register char *p;
 
     if (s == NULL)
 	s = "";
-    for (p = s; *p++;)
-	continue;
+    for (p = s; *p++;);
     n = p = (char *) xmalloc((size_t) ((p - s) * sizeof(char)));
-    while ((*p++ = *s++) != '\0')
-	continue;
+    while (*p++ = *s++);
     return (n);
 }
 
 Char  **
 blkend(up)
-    Char **up;
+    register Char **up;
 {
 
     while (*up)
@@ -109,23 +100,22 @@ blkend(up)
 
 
 void
-blkpr(fp, av)
-    FILE *fp;
-    Char **av;
+blkpr(av)
+    register Char **av;
 {
 
     for (; *av; av++) {
-	(void) fprintf(fp, "%s", vis_str(*av));
+	xprintf("%s", short2str(*av));
 	if (av[1])
-	    (void) fprintf(fp, " ");
+	    xprintf(" ");
     }
 }
 
 int
 blklen(av)
-    Char **av;
+    register Char **av;
 {
-    int i = 0;
+    register int i = 0;
 
     while (*av++)
 	i++;
@@ -135,11 +125,11 @@ blklen(av)
 Char  **
 blkcpy(oav, bv)
     Char  **oav;
-    Char **bv;
+    register Char **bv;
 {
-    Char **av = oav;
+    register Char **av = oav;
 
-    while ((*av++ = *bv++) != NULL)
+    while (*av++ = *bv++)
 	continue;
     return (oav);
 }
@@ -157,7 +147,7 @@ void
 blkfree(av0)
     Char  **av0;
 {
-    Char **av = av0;
+    register Char **av = av0;
 
     if (!av0)
 	return;
@@ -168,9 +158,9 @@ blkfree(av0)
 
 Char  **
 saveblk(v)
-    Char **v;
+    register Char **v;
 {
-    Char **newv =
+    register Char **newv =
     (Char **) xcalloc((size_t) (blklen(v) + 1), sizeof(Char **));
     Char  **onewv = newv;
 
@@ -182,11 +172,11 @@ saveblk(v)
 #ifdef NOTUSED
 char   *
 strstr(s, t)
-    char *s, *t;
+    register char *s, *t;
 {
     do {
-	char *ss = s;
-	char *tt = t;
+	register char *ss = s;
+	register char *tt = t;
 
 	do
 	    if (*tt == '\0')
@@ -204,21 +194,17 @@ strspl(cp, dp)
     char   *cp, *dp;
 {
     char   *ep;
-    char *p, *q;
+    register char *p, *q;
 
     if (!cp)
 	cp = "";
     if (!dp)
 	dp = "";
-    for (p = cp; *p++;)
-	continue;
-    for (q = dp; *q++;)
-	continue;
+    for (p = cp; *p++;);
+    for (q = dp; *q++;);
     ep = (char *) xmalloc((size_t) (((p - cp) + (q - dp) - 1) * sizeof(char)));
-    for (p = ep, q = cp; *p++ = *q++;)
-	continue;
-    for (p--, q = dp; *p++ = *q++;)
-	continue;
+    for (p = ep, q = cp; *p++ = *q++;);
+    for (p--, q = dp; *p++ = *q++;);
     return (ep);
 }
 
@@ -226,9 +212,9 @@ strspl(cp, dp)
 
 Char  **
 blkspl(up, vp)
-    Char **up, **vp;
+    register Char **up, **vp;
 {
-    Char **wp =
+    register Char **wp =
     (Char **) xcalloc((size_t) (blklen(up) + blklen(vp) + 1),
 		      sizeof(Char **));
 
@@ -238,7 +224,7 @@ blkspl(up, vp)
 
 Char
 lastchr(cp)
-    Char *cp;
+    register Char *cp;
 {
 
     if (!cp)
@@ -257,10 +243,10 @@ lastchr(cp)
 void
 closem()
 {
-    int f;
+    register int f;
 
     for (f = 0; f < NOFILE; f++)
-	if (f != SHIN && f != SHOUT && f != SHERR && f != OLDSTD &&
+	if (f != SHIN && f != SHOUT && f != SHDIAG && f != OLDSTD &&
 	    f != FSHTTY)
 	    (void) close(f);
 }
@@ -268,10 +254,10 @@ closem()
 void
 donefds()
 {
+
     (void) close(0);
     (void) close(1);
     (void) close(2);
-
     didfds = 0;
 }
 
@@ -282,7 +268,7 @@ donefds()
  */
 int
 dmove(i, j)
-    int i, j;
+    register int i, j;
 {
 
     if (i == j || i < 0)
@@ -301,10 +287,10 @@ dmove(i, j)
 
 int
 dcopy(i, j)
-    int i, j;
+    register int i, j;
 {
 
-    if (i == j || i < 0 || (j < 0 && i > 2))
+    if (i == j || i < 0 || j < 0 && i > 2)
 	return (i);
     if (j >= 0) {
 	(void) dup2(i, j);
@@ -316,9 +302,9 @@ dcopy(i, j)
 
 static int
 renum(i, j)
-    int i, j;
+    register int i, j;
 {
-    int k = dup(i);
+    register int k = dup(i);
 
     if (k < 0)
 	return (-1);
@@ -339,13 +325,13 @@ renum(i, j)
  */
 void
 lshift(v, c)
-    Char **v;
-    int c;
+    register Char **v;
+    register int c;
 {
-    Char **u;
+    register Char **u = v;
 
-    for (u = v; *u && --c >= 0; u++)
-	xfree((ptr_t) *u);
+    while (*u && --c >= 0)
+	xfree((ptr_t) * u++);
     (void) blkcpy(v, u);
 }
 
@@ -368,7 +354,7 @@ number(cp)
 
 Char  **
 copyblk(v)
-    Char **v;
+    register Char **v;
 {
     Char  **nv = (Char **) xcalloc((size_t) (blklen(v) + 1), sizeof(Char **));
 
@@ -378,7 +364,7 @@ copyblk(v)
 #ifndef SHORT_STRINGS
 char   *
 strend(cp)
-    char *cp;
+    register char *cp;
 {
     if (!cp)
 	return (cp);
@@ -387,31 +373,18 @@ strend(cp)
     return (cp);
 }
 
-#endif /* SHORT_STRINGS */
+#endif				/* SHORT_STRINGS */
 
 Char   *
 strip(cp)
     Char   *cp;
 {
-    Char *dp = cp;
+    register Char *dp = cp;
 
     if (!cp)
 	return (cp);
-    while ((*dp++ &= TRIM) != '\0')
+    while (*dp++ &= TRIM)
 	continue;
-    return (cp);
-}
-
-Char   *
-quote(cp)
-    Char   *cp;
-{
-    Char *dp = cp;
-
-    if (!cp)
-	return (cp);
-    while (*dp != '\0')
-	*dp++ |= QUOTE;
     return (cp);
 }
 
@@ -420,13 +393,13 @@ udvar(name)
     Char   *name;
 {
 
-    setname(vis_str(name));
+    setname(short2str(name));
     stderror(ERR_NAME | ERR_UNDVAR);
 }
 
 int
 prefix(sub, str)
-    Char *sub, *str;
+    register Char *sub, *str;
 {
 
     for (;;) {

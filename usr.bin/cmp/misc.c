@@ -1,5 +1,3 @@
-/*	$NetBSD: misc.c,v 1.5 1997/10/19 14:06:01 mrg Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)misc.c	8.3 (Berkeley) 4/2/94";
-#else
-__RCSID("$NetBSD: misc.c,v 1.5 1997/10/19 14:06:01 mrg Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -66,6 +59,6 @@ diffmsg(file1, file2, byte, line)
 {
 	if (!sflag)
 		(void)printf("%s %s differ: char %qd, line %qd\n",
-		    file1, file2, (long long)byte, (long long)line);
+		    file1, file2, byte, line);
 	exit(DIFF_EXIT);
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: mcount.c,v 1.8 1997/07/13 19:53:56 christos Exp $	*/
-
 /*-
  * Copyright (c) 1983, 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,19 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if !defined(lint) && !defined(_KERNEL) && defined(LIBC_SCCS)
-#if 0
+#if !defined(lint) && !defined(KERNEL) && defined(LIBC_SCCS)
 static char sccsid[] = "@(#)mcount.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: mcount.c,v 1.8 1997/07/13 19:53:56 christos Exp $");
-#endif
 #endif
 
 #include <sys/param.h>
 #include <sys/gmon.h>
-
-_MCOUNT_DECL __P((u_long, u_long)) __attribute__((__unused__));	/* see below. */
 
 /*
  * mcount is called on entry to each function compiled with the profiling
@@ -69,7 +60,7 @@ _MCOUNT_DECL(frompc, selfpc)	/* _mcount; may be static, inline, etc */
 	register struct tostruct *top, *prevtop;
 	register struct gmonparam *p;
 	register long toindex;
-#ifdef _KERNEL
+#ifdef KERNEL
 	register int s;
 #endif
 
@@ -80,10 +71,11 @@ _MCOUNT_DECL(frompc, selfpc)	/* _mcount; may be static, inline, etc */
 	 */
 	if (p->state != GMON_PROF_ON)
 		return;
-#ifdef _KERNEL
+#ifdef KERNEL
 	MCOUNT_ENTER;
-#endif
+#else
 	p->state = GMON_PROF_BUSY;
+#endif
 	/*
 	 * check that frompcindex is a reasonable pc value.
 	 * for example:	signal catchers get called from the stack,
@@ -93,14 +85,7 @@ _MCOUNT_DECL(frompc, selfpc)	/* _mcount; may be static, inline, etc */
 	if (frompc > p->textsize)
 		goto done;
 
-#if (HASHFRACTION & (HASHFRACTION - 1)) == 0
-	if (p->hashfraction == HASHFRACTION)
-		frompcindex =
-		    &p->froms[frompc / (HASHFRACTION * sizeof(*p->froms))];
-	else
-#endif
-		frompcindex =
-		    &p->froms[frompc / (p->hashfraction * sizeof(*p->froms))];
+	frompcindex = &p->froms[frompc / (p->hashfraction * sizeof(*p->froms))];
 	toindex = *frompcindex;
 	if (toindex == 0) {
 		/*
@@ -172,14 +157,15 @@ _MCOUNT_DECL(frompc, selfpc)	/* _mcount; may be static, inline, etc */
 		
 	}
 done:
-	p->state = GMON_PROF_ON;
-#ifdef _KERNEL
+#ifdef KERNEL
 	MCOUNT_EXIT;
+#else
+	p->state = GMON_PROF_ON;
 #endif
 	return;
 overflow:
 	p->state = GMON_PROF_ERROR;
-#ifdef _KERNEL
+#ifdef KERNEL
 	MCOUNT_EXIT;
 #endif
 	return;

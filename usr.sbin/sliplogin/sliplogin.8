@@ -1,7 +1,5 @@
-.\"	$NetBSD: sliplogin.8,v 1.6 1997/10/17 13:36:47 lukem Exp $
-.\"
-.\" Copyright (c) 1990, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,25 +29,25 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)sliplogin.8	8.2 (Berkeley) 1/5/94
+.\"     @(#)sliplogin.8	5.4 (Berkeley) 8/5/91
 .\"
-.Dd January 5, 1994
+.Dd August 5, 1991
 .Dt SLIPLOGIN 8
 .Os
 .Sh NAME
 .Nm sliplogin
 .Nd attach a serial line network interface
 .Sh SYNOPSIS
-.Nm
+.Nm sliplogin
 .Op Ar loginname
 .Sh DESCRIPTION
-.Nm
+.Nm Sliplogin
 is used to turn the terminal line on standard input into
 a Serial Line IP
 .Pq Tn SLIP
 link to a remote host.  To do this, the program
 searches the file
-.Pa /etc/sliphome/slip.hosts
+.Pa /etc/slip.hosts
 for an entry matching
 .Ar loginname
 (which defaults to the current login name if omitted).
@@ -64,9 +62,9 @@ address,
 netmask, etc.
 .Pp
 The usual initialization script is
-.Pa /etc/sliphome/slip.login
+.Pa /etc/slip.login
 but, if particular hosts need special initialization, the file
-.Pa /etc/sliphome/slip.login. Ns Ar loginname
+.Pa /etc/slip.login. Ns Ar loginname
 will be executed instead if it exists.
 The script is invoked with the parameters
 .Bl -tag -width slipunit
@@ -79,23 +77,23 @@ for
 The speed of the line.
 .It Em args
 The arguments from the
-.Pa /etc/sliphome/slip.hosts
+.Pa /etc/slip.hosts
 entry, in order starting with
 .Ar loginname .
 .El
 .Pp
 Only the super-user may attach a network interface.  The interface is
 automatically detached when the other end hangs up or the
-.Nm
+.Nm sliplogin
 process dies.  If the kernel slip
 module has been configured for it, all routes through that interface will
 also disappear at the same time.  If there is other processing a site
 would like done on hangup, the file
-.Pa /etc/sliphome/slip.logout
+.Pa /etc/slip.logout
 or
-.Pa /etc/sliphome/slip.logout. Ns Ar loginname
+.Pa /etc/slip.logout. Ns Ar loginname
 is executed if it exists.  It is given the same arguments as the login script.
-.Ss Format of /etc/sliphome/slip.hosts
+.Ss Format of /etc/slip.hosts
 Comments (lines starting with a `#') and blank lines are ignored.
 Other lines must start with a
 .Ar loginname
@@ -122,18 +120,18 @@ slip line and
 is the appropriate IP netmask.  These arguments are passed
 directly to
 .Xr ifconfig 8 .
-.Em opt-args
+.Em Opt-args
 are optional arguments used to configure the line.
 .Sh EXAMPLE
 The normal use of
-.Nm
+.Nm sliplogin
 is to create a
 .Pa /etc/passwd
 entry for each legal, remote slip site with
-.Nm
+.Nm sliplogin
 as the shell for that entry.  E.g.,
 .Bd -literal
-Sfoo:ikhuy6:2010:1:slip line to foo:/tmp:/usr/sbin/sliplogin
+Sfoo:ikhuy6:2010:1:slip line to foo:/tmp:/etc/sliplogin
 .Ed
 .Pp
 (Our convention is to name the account used by remote host
@@ -157,21 +155,21 @@ to the local host name and
 is the local host IP netmask.
 .Pp
 Note that
-.Nm
+.Nm sliplogin
 must be setuid to root and, while not a security hole, moral defectives
 can use it to place terminal lines in an unusable state and/or deny
 access to legitimate users of a remote slip line.  To prevent this,
 a site can create a group, say
 .Em slip ,
 that only the slip login accounts are put in then make sure that
-.Pa /usr/sbin/sliplogin
+.Pa /etc/sliplogin
 is in group
 .Em slip
 and mode 4550 (setuid root, only group
 .Em slip
 can execute binary).
 .Sh DIAGNOSTICS
-.Nm
+.Nm Sliplogin
 logs various information to the system log daemon,
 .Xr syslogd 8 ,
 with a facility code of
@@ -192,16 +190,16 @@ A
 .Fn ioctl
 to set the line parameters failed.
 .Pp
-.It Sy /etc/sliphome/slip.hosts: Em reason
+.It Sy /etc/slip.hosts: Em reason
 The
-.Pa /etc/sliphome/slip.hosts
+.Pa /etc/slip.hosts
 file could not be opened.
 .Pp
 .It Sy access denied for Em user
 No entry for
 .Em user
 was found in
-.Pa /etc/sliphome/slip.hosts .
+.Pa /etc/slip.hosts .
 .El
 .Pp
 .Sy Notice Severity
@@ -213,7 +211,6 @@ unit
 was successfully attached.
 .El
 .Sh SEE ALSO
-.Xr sl 4 ,
 .Xr slattach 8 ,
 .Xr syslogd 8
 .Sh HISTORY

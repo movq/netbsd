@@ -1,5 +1,3 @@
-/*	$NetBSD: stat_flags.c,v 1.6 1997/07/20 18:53:12 christos Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)stat_flags.c	8.2 (Berkeley) 7/28/94";
-#else
-__RCSID("$NetBSD: stat_flags.c,v 1.6 1997/07/20 18:53:12 christos Exp $");
-#endif
+static char sccsid[] = "@(#)stat_flags.c	8.1 (Berkeley) 5/31/93";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -47,10 +40,6 @@ __RCSID("$NetBSD: stat_flags.c,v 1.6 1997/07/20 18:53:12 christos Exp $");
 
 #include <stddef.h>
 #include <string.h>
-#include <fts.h>
-
-#include "ls.h"
-#include "extern.h"
 
 #define	SAPPEND(s) {							\
 	if (prefix != NULL)						\
@@ -80,8 +69,6 @@ flags_to_string(flags, def)
 		SAPPEND("uchg");
 	if (flags & UF_NODUMP)
 		SAPPEND("nodump");
-	if (flags & UF_OPAQUE)
-		SAPPEND("opaque");
 	if (flags & SF_APPEND)
 		SAPPEND("sappnd");
 	if (flags & SF_ARCHIVED)
@@ -138,9 +125,6 @@ string_to_flags(stringp, setp, clrp)
 		case 'd':
 			clear = !clear;
 			TEST(p, "dump", UF_NODUMP);
-			return (1);
-		case 'o':
-			TEST(p, "opaque", UF_OPAQUE);
 			return (1);
 		case 's':
 			TEST(p, "sappnd", SF_APPEND);

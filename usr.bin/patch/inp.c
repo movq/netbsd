@@ -1,6 +1,16 @@
-#ifndef lint
-static char rcsid[] = "$NetBSD: inp.c,v 1.3 1996/09/19 06:27:10 thorpej Exp $";
-#endif /* not lint */
+/* $Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/inp.c,v 1.1 1993/04/09 11:34:00 cgd Exp $
+ *
+ * $Log: inp.c,v $
+ * Revision 1.1  1993/04/09 11:34:00  cgd
+ * patch 2.0.12u8, from prep.ai.mit.edu.  this is not under the GPL.
+ *
+ * Revision 2.0.1.1  88/06/03  15:06:13  lwall
+ * patch10: made a little smarter about sccs files
+ * 
+ * Revision 2.0  86/09/17  15:37:02  lwall
+ * Baseline for netwide release.
+ * 
+ */
 
 #include "EXTERN.h"
 #include "common.h"

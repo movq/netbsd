@@ -1,8 +1,6 @@
-/*	$NetBSD: pl_6.c,v 1.4 1997/10/13 19:45:33 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,30 +31,24 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)pl_6.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: pl_6.c,v 1.4 1997/10/13 19:45:33 christos Exp $");
-#endif
+static char sccsid[] = "@(#)pl_6.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "player.h"
 
-void
 repair()
 {
 	char c;
-	char *repairs;
-	struct shipspecs *ptr = mc;
-	int count;
+	register char *repairs;
+	register struct shipspecs *ptr = mc;
+	register int count;
 
 #define FIX(x, m) (m - ptr->x > count \
 	? (ptr->x += count, count = 0) : (count -= m - ptr->x, ptr->x = m))
 
 	if (repaired || loaded || fired || changed || turned()) {
-		Msg("No hands free to repair");
+		Signal("No hands free to repair", (struct ship *)0);
 		return;
 	}
 	c = sgetch("Repair (hull, guns, rigging)? ", (struct ship *)0, 1);
@@ -71,7 +63,7 @@ repair()
 			repairs = &mf->RR;
 			break;
 		default:
-			Msg("Avast heaving!");
+			Signal("Avast heaving!", (struct ship *)0);
 			return;
 	}
 	if (++*repairs >= 3) {
@@ -123,7 +115,7 @@ repair()
 			break;
 		}
 		if (count == 2) {
-			Msg("Repairs completed.");
+			Signal("Repairs completed.", (struct ship *)0);
 			*repairs = 2;
 		} else {
 			*repairs = 0;
@@ -138,10 +130,9 @@ repair()
 	repaired = 1;
 }
 
-int
 turned()
 {
-	char *p;
+	register char *p;
 
 	for (p = movebuf; *p; p++)
 		if (*p == 'r' || *p == 'l')
@@ -149,14 +140,13 @@ turned()
 	return 0;
 }
 
-void
 loadplayer()
 {
 	char c;
-	int loadL, loadR, ready, load;
+	register loadL, loadR, ready, load;
 
 	if (!mc->crew3) {
-		Msg("Out of crew");
+		Signal("Out of crew", (struct ship *)0);
 		return;
 	}
 	loadL = mf->loadL;
@@ -169,7 +159,7 @@ loadplayer()
 		else
 			loadR = 1;
 	}
-	if ((!loadL && loadR) || (loadL && !loadR)) {
+	if (!loadL && loadR || loadL && !loadR) {
 		c = sgetch("Reload with (round, double, chain, grape)? ",
 			(struct ship *)0, 1);
 		switch (c) {
@@ -190,7 +180,8 @@ loadplayer()
 			ready = 0;
 			break;
 		default:
-			Msg("Broadside not loaded.");
+			Signal("Broadside not loaded.",
+				(struct ship *)0);
 			return;
 		}
 		if (!loadR) {

@@ -1,7 +1,5 @@
-/*	$NetBSD: addnstr.c,v 1.4 1997/07/22 07:36:23 mikel Exp $	*/
-
 /*
- * Copyright (c) 1993, 1994
+ * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,18 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)addnstr.c	8.2 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: addnstr.c,v 1.4 1997/07/22 07:36:23 mikel Exp $");
-#endif
+static char sccsid[] = "@(#)addnstr.c	8.1 (Berkeley) 6/4/93";
 #endif	/* not lint */
 
+#include <curses.h>
 #include <string.h>
-
-#include "curses.h"
 
 /*
  * waddnstr --

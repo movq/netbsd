@@ -1,8 +1,6 @@
-/*	$NetBSD: inet_network.c,v 1.7 1997/07/21 14:08:06 jtc Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)inet_network.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: inet_network.c,v 1.7 1997/07/21 14:08:06 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)inet_network.c	5.8 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ctype.h>
-
-#ifdef __weak_alias
-__weak_alias(inet_network,_inet_network);
-#endif
 
 /*
  * Internet network address interpretation routine.
@@ -72,7 +60,7 @@ again:
 		base = 8, cp++;
 	if (*cp == 'x' || *cp == 'X')
 		base = 16, cp++;
-	while ((c = *cp) != '\0') {
+	while (c = *cp) {
 		if (isdigit(c)) {
 			val = (val * base) + (c - '0');
 			cp++;
@@ -86,7 +74,7 @@ again:
 		break;
 	}
 	if (*cp == '.') {
-		if (pp >= parts + 3)
+		if (pp >= parts + 4)
 			return (INADDR_NONE);
 		*pp++ = val, cp++;
 		goto again;
@@ -95,6 +83,8 @@ again:
 		return (INADDR_NONE);
 	*pp++ = val;
 	n = pp - parts;
+	if (n > 4)
+		return (INADDR_NONE);
 	for (val = 0, i = 0; i < n; i++) {
 		val <<= 8;
 		val |= parts[i] & 0xff;

@@ -1,8 +1,6 @@
-/*	$NetBSD: getname.c,v 1.5 1997/10/19 05:03:24 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,26 +31,27 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)getname.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: getname.c,v 1.5 1997/10/19 05:03:24 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)getname.c	5.8 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include "rcv.h"
-#include "extern.h"
-
-/* Getname / getuserid for those with hashed passwd data base). */
+#include <sys/types.h>
+#include <pwd.h>
 
 /*
- * Search the passwd file for a uid.  Return name on success, NOSTR on failure
+ * Getname / getuserid for those with
+ * hashed passwd data base).
+ *
+ */
+
+#include "rcv.h"
+
+/*
+ * Search the passwd file for a uid.  Return name through ref parameter
+ * if found, indicating success with 0 return.  Return -1 on error.
  */
 char *
 getname(uid)
-	int uid;
 {
 	struct passwd *pw;
 
@@ -65,7 +64,6 @@ getname(uid)
  * Convert the passed name to a user id and return it.  Return -1
  * on error.
  */
-int
 getuserid(name)
 	char name[];
 {

@@ -1,5 +1,3 @@
-/*	$NetBSD: sysctl.c,v 1.10 1997/01/09 05:38:55 thorpej Exp $	*/
-
 /*
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -40,11 +38,7 @@ static char copyright[] =
 #endif /* not lint */
 
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)sysctl.c	8.1 (Berkeley) 6/6/93";
-#else
-static char *rcsid = "$NetBSD: sysctl.c,v 1.10 1997/01/09 05:38:55 thorpej Exp $";
-#endif
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -63,9 +57,6 @@ static char *rcsid = "$NetBSD: sysctl.c,v 1.10 1997/01/09 05:38:55 thorpej Exp $
 #include <netinet/ip_var.h>
 #include <netinet/udp.h>
 #include <netinet/udp_var.h>
-#include <netinet/tcp.h>
-#include <netinet/tcp_timer.h>
-#include <netinet/tcp_var.h>
 
 #include <errno.h>
 #include <stdio.h>
@@ -78,7 +69,6 @@ struct ctlname vmname[] = CTL_VM_NAMES;
 struct ctlname netname[] = CTL_NET_NAMES;
 struct ctlname hwname[] = CTL_HW_NAMES;
 struct ctlname username[] = CTL_USER_NAMES;
-struct ctlname ddbname[] = CTL_DDB_NAMES;
 struct ctlname debugname[CTL_DEBUG_MAXID];
 #ifdef CTL_MACHDEP_NAMES
 struct ctlname machdepname[] = CTL_MACHDEP_NAMES;
@@ -104,7 +94,6 @@ struct list secondlevel[] = {
 	{ 0, 0 },			/* CTL_MACHDEP */
 #endif
 	{ username, USER_MAXID },	/* CTL_USER_NAMES */
-	{ ddbname, DDBCTL_MAXID },	/* CTL_DDB_NAMES */
 };
 
 int	Aflag, aflag, nflag, wflag;
@@ -160,7 +149,7 @@ main(argc, argv)
 	if (argc == 0)
 		usage();
 	while (argc-- > 0)
-		parse(*argv++, 1);
+		parse(*argv, 1);
 	exit(0);
 }
 
@@ -196,12 +185,11 @@ parse(string, flags)
 	char *string;
 	int flags;
 {
-	int indx, type, state, len;
+	int indx, type, state, size, len;
 	int special = 0;
 	void *newval = 0;
 	int intval, newsize = 0;
 	quad_t quadval;
-	size_t size;
 	struct list *lp;
 	int mib[CTL_MAXNAME];
 	char *cp, *bufp, buf[BUFSIZ], strval[BUFSIZ];
@@ -328,7 +316,6 @@ parse(string, flags)
 
 	case CTL_FS:
 	case CTL_USER:
-	case CTL_DDB:
 		break;
 
 	default:
@@ -337,7 +324,7 @@ parse(string, flags)
 	
 	}
 	if (bufp) {
-		fprintf(stderr, "name %s in %s is unknown\n", bufp, string);
+		fprintf(stderr, "name %s in %s is unknown\n", *bufp, string);
 		return;
 	}
 	if (newsize > 0) {
@@ -382,18 +369,17 @@ parse(string, flags)
 		if (!nflag)
 			fprintf(stdout, "%s: ", string);
 		fprintf(stdout,
-		    "tick = %d, tickadj = %d, hz = %d, profhz = %d, stathz = %d\n",
-		    clkp->tick, clkp->tickadj, clkp->hz, clkp->profhz, clkp->stathz);
+		    "hz = %d, tick = %d, profhz = %d, stathz = %d\n",
+		    clkp->hz, clkp->tick, clkp->profhz, clkp->stathz);
 		return;
 	}
 	if (special & BOOTTIME) {
 		struct timeval *btp = (struct timeval *)buf;
-		time_t boottime;
 
-		if (!nflag) {
-			boottime = btp->tv_sec;
-			fprintf(stdout, "%s = %s\n", string, ctime(&boottime));
-		} else
+		if (!nflag)
+			fprintf(stdout, "%s = %s\n", string,
+			    ctime(&btp->tv_sec));
+		else
 			fprintf(stdout, "%d\n", btp->tv_sec);
 		return;
 	}
@@ -464,8 +450,7 @@ parse(string, flags)
  */
 debuginit()
 {
-	int mib[3], loc, i;
-	size_t size;
+	int mib[3], size, loc, i;
 
 	if (secondlevel[CTL_DEBUG].list != 0)
 		return;
@@ -486,7 +471,6 @@ debuginit()
 struct ctlname inetname[] = CTL_IPPROTO_NAMES;
 struct ctlname ipname[] = IPCTL_NAMES;
 struct ctlname icmpname[] = ICMPCTL_NAMES;
-struct ctlname tcpname[] = TCPCTL_NAMES;
 struct ctlname udpname[] = UDPCTL_NAMES;
 struct list inetlist = { inetname, IPPROTO_MAXID };
 struct list inetvars[] = {
@@ -496,7 +480,7 @@ struct list inetvars[] = {
 	{ 0, 0 },			/* ggmp */
 	{ 0, 0 },
 	{ 0, 0 },
-	{ tcpname, TCPCTL_MAXID },	/* tcp */
+	{ 0, 0 },			/* tcp */
 	{ 0, 0 },
 	{ 0, 0 },			/* egp */
 	{ 0, 0 },

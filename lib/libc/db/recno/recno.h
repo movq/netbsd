@@ -1,5 +1,3 @@
-/*	$NetBSD: recno.h,v 1.5 1996/05/03 21:38:55 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.

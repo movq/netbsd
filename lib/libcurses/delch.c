@@ -1,8 +1,6 @@
-/*	$NetBSD: delch.c,v 1.8 1997/07/22 07:36:35 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,38 +31,30 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)delch.c	8.2 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: delch.c,v 1.8 1997/07/22 07:36:35 mikel Exp $");
-#endif
-#endif	/* not lint */
+static char sccsid[] = "@(#)delch.c	5.4 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include <string.h>
-
-#include "curses.h"
+# include	"curses.ext"
 
 /*
- * wdelch --
- *	Do an insert-char on the line, leaving (cury, curx) unchanged.
+ *	This routine performs an insert-char on the line, leaving
+ * (_cury,_curx) unchanged.
+ *
  */
-int
 wdelch(win)
-	register WINDOW *win;
-{
-	register __LDATA *end, *temp1, *temp2;
+reg WINDOW	*win; {
 
-	end = &win->lines[win->cury]->line[win->maxx - 1];
-	temp1 = &win->lines[win->cury]->line[win->curx];
+	reg char	*temp1, *temp2;
+	reg char	*end;
+	reg int		lch;
+
+	end = &win->_y[win->_cury][win->_maxx - 1];
+	temp1 = &win->_y[win->_cury][win->_curx];
 	temp2 = temp1 + 1;
-	while (temp1 < end) {
-		(void)memcpy(temp1, temp2, sizeof(__LDATA));
-		temp1++, temp2++;
-	}
-	temp1->ch = ' ';
-	temp1->attr = 0;
-	__touchline(win, win->cury, win->curx, win->maxx - 1, 0);
-	return (OK);
+	while (temp1 < end)
+		*temp1++ = *temp2++;
+	*temp1 = ' ';
+	touchline(win, win->_cury, win->_curx, win->_maxx - 1);
+	return OK;
 }

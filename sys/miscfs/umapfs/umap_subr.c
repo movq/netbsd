@@ -1,5 +1,3 @@
-/*	$NetBSD: umap_subr.c,v 1.11 1997/09/10 13:44:28 christos Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,7 +34,8 @@
  * SUCH DAMAGE.
  *
  *	from: Id: lofs_subr.c, v 1.11 1992/05/30 10:05:43 jsp Exp
- *	@(#)umap_subr.c	8.6 (Berkeley) 1/26/94
+ *	from: @(#)umap_subr.c	8.6 (Berkeley) 1/26/94
+ *	$Id: umap_subr.c,v 1.1 1994/06/08 11:33:51 mycroft Exp $
  */
 
 #include <sys/param.h>
@@ -47,11 +46,11 @@
 #include <sys/mount.h>
 #include <sys/namei.h>
 #include <sys/malloc.h>
-#include <miscfs/specfs/specdev.h>
 #include <miscfs/umapfs/umap.h>
 
 #define LOG2_SIZEVNODE 7		/* log2(sizeof struct vnode) */
 #define	NUMAPNODECACHE 16
+#define	UMAP_NHASH(vp) ((((u_long) vp)>>LOG2_SIZEVNODE) & (NUMAPNODECACHE-1))
 
 /*
  * Null layer cache:
@@ -61,27 +60,39 @@
  * alias is removed the target vnode is vrele'd.
  */
 
-#define	UMAP_NHASH(vp) \
-	(&umap_node_hashtbl[(((u_long)vp)>>LOG2_SIZEVNODE) & umap_node_hash])
-LIST_HEAD(umap_node_hashhead, umap_node) *umap_node_hashtbl;
-u_long umap_node_hash;
+/*
+ * Cache head
+ */
+struct umap_node_cache {
+	struct umap_node	*ac_forw;
+	struct umap_node	*ac_back;
+};
 
-static u_long umap_findid __P((u_long, u_long [][2], int));
-static struct vnode *umap_node_find __P((struct mount *, struct vnode *));
-static int umap_node_alloc __P((struct mount *, struct vnode *,
-				struct vnode **));
+static struct umap_node_cache umap_node_cache[NUMAPNODECACHE];
 
 /*
  * Initialise cache headers
  */
-void
 umapfs_init()
 {
-
+	struct umap_node_cache *ac;
 #ifdef UMAPFS_DIAGNOSTIC
 	printf("umapfs_init\n");		/* printed during system boot */
 #endif
-	umap_node_hashtbl = hashinit(NUMAPNODECACHE, M_CACHE, &umap_node_hash);
+
+	for (ac = umap_node_cache; ac < umap_node_cache + NUMAPNODECACHE; ac++)
+		ac->ac_forw = ac->ac_back = (struct umap_node *) ac;
+}
+
+/*
+ * Compute hash list for given target vnode
+ */
+static struct umap_node_cache *
+umap_node_hash(targetvp)
+	struct vnode *targetvp;
+{
+
+	return (&umap_node_cache[UMAP_NHASH(targetvp)]);
 }
 
 /*
@@ -140,12 +151,12 @@ umap_node_find(mp, targetvp)
 	struct mount *mp;
 	struct vnode *targetvp;
 {
-	struct umap_node_hashhead *hd;
+	struct umap_node_cache *hd;
 	struct umap_node *a;
 	struct vnode *vp;
 
 #ifdef UMAPFS_DIAGNOSTIC
-	printf("umap_node_find(mp = %p, target = %p)\n", mp, targetvp);
+	printf("umap_node_find(mp = %x, target = %x)\n", mp, targetvp);
 #endif
 
 	/*
@@ -154,9 +165,10 @@ umap_node_find(mp, targetvp)
 	 * the target vnode.  If found, the increment the umap_node
 	 * reference count (but NOT the target vnode's VREF counter).
 	 */
-	hd = UMAP_NHASH(targetvp);
-loop:
-	for (a = hd->lh_first; a != 0; a = a->umap_hash.le_next) {
+	hd = umap_node_hash(targetvp);
+
+ loop:
+	for (a = hd->ac_forw; a != (struct umap_node *) hd; a = a->umap_forw) {
 		if (a->umap_lowervp == targetvp &&
 		    a->umap_vnode->v_mount == mp) {
 			vp = UMAPTOV(a);
@@ -176,7 +188,7 @@ loop:
 	}
 
 #ifdef UMAPFS_DIAGNOSTIC
-	printf("umap_node_find(%p, %p): NOT found\n", mp, targetvp);
+	printf("umap_node_find(%x, %x): NOT found\n", mp, targetvp);
 #endif
 
 	return (0);
@@ -184,8 +196,8 @@ loop:
 
 /*
  * Make a new umap_node node.
- * Vp is the alias vnode, lowervp is the target vnode.
- * Maintain a reference to lowervp.
+ * Vp is the alias vnode, lofsvp is the target vnode.
+ * Maintain a reference to (targetvp).
  */
 static int
 umap_node_alloc(mp, lowervp, vpp)
@@ -193,94 +205,36 @@ umap_node_alloc(mp, lowervp, vpp)
 	struct vnode *lowervp;
 	struct vnode **vpp;
 {
-	struct umap_node_hashhead *hd;
+	struct umap_node_cache *hd;
 	struct umap_node *xp;
-	struct vnode *vp, *nvp;
+	struct vnode *othervp, *vp;
 	int error;
-	extern int (**dead_vnodeop_p) __P((void *));
 
-	if ((error = getnewvnode(VT_UMAP, mp, umap_vnodeop_p, &vp)) != 0)
+	if (error = getnewvnode(VT_UMAP, mp, umap_vnodeop_p, vpp))
 		return (error);
+	vp = *vpp;
+
+	MALLOC(xp, struct umap_node *, sizeof(struct umap_node),
+	    M_TEMP, M_WAITOK);
 	vp->v_type = lowervp->v_type;
-
-	MALLOC(xp, struct umap_node *, sizeof(struct umap_node), M_TEMP,
-	    M_WAITOK);
-	if (vp->v_type == VBLK || vp->v_type == VCHR) {
-		MALLOC(vp->v_specinfo, struct specinfo *,
-		    sizeof(struct specinfo), M_VNODE, M_WAITOK);
-		vp->v_rdev = lowervp->v_rdev;
-	}
-
-	vp->v_data = xp;
 	xp->umap_vnode = vp;
+	vp->v_data = xp;
 	xp->umap_lowervp = lowervp;
 	/*
 	 * Before we insert our new node onto the hash chains,
 	 * check to see if someone else has beaten us to it.
 	 * (We could have slept in MALLOC.)
 	 */
-	if ((nvp = umap_node_find(mp, lowervp)) != NULL) {
-		*vpp = nvp;
-
-		/* free the substructures we've allocated. */
+	if (othervp = umap_node_find(lowervp)) {
 		FREE(xp, M_TEMP);
-		if (vp->v_type == VBLK || vp->v_type == VCHR)
-			FREE(vp->v_specinfo, M_VNODE);
-
-		vp->v_type = VBAD;		/* node is discarded */
-		vp->v_op = dead_vnodeop_p;	/* so ops will still work */
-		vrele(vp);			/* get rid of it. */
+		vp->v_type = VBAD;	/* node is discarded */
+		vp->v_usecount = 0;	/* XXX */
+		*vpp = othervp;
 		return (0);
 	}
-
-	/*
-	 * XXX if it's a device node, it needs to be checkalias()ed.
-	 * however, for locking reasons, that's just not possible.
-	 * so we have to do most of the dirty work inline.  Note that
-	 * this is a limited case; we know that there's going to be
-	 * an alias, and we know that that alias will be a "real"
-	 * device node, i.e. not tagged VT_NON.
-	 */
-	if (vp->v_type == VBLK || vp->v_type == VCHR) {
-		struct vnode *cvp, **cvpp;
-
-		cvpp = &speclisth[SPECHASH(vp->v_rdev)];
-loop:
-		for (cvp = *cvpp; cvp; cvp = cvp->v_specnext) {
-			if (vp->v_rdev != cvp->v_rdev ||
-			    vp->v_type != cvp->v_type)
-				continue;
-
-			/*
-			 * Alias, but not in use, so flush it out.
-			 */
-			if (cvp->v_usecount == 0) {
-				vgone(cvp);
-				goto loop;
-			}
-			if (vget(cvp, 0))	/* can't lock; will die! */
-				goto loop;
-			break;
-		}
-
-		vp->v_hashchain = cvpp;
-		vp->v_specnext = *cvpp;
-		vp->v_specflags = 0;
-		*cvpp = vp;
-#ifdef DIAGNOSTIC
-		if (cvp == NULLVP)
-			panic("umap_node_alloc: no alias for device");
-#endif
-		vp->v_flag |= VALIASED;
-		cvp->v_flag |= VALIASED;
-		vrele(cvp);
-	}
-	/* XXX end of transmogrified checkalias() */
-
-	*vpp = vp;
-	VREF(lowervp);	/* Extra VREF will be vrele'd in umap_node_create */
-	hd = UMAP_NHASH(lowervp);
-	LIST_INSERT_HEAD(hd, xp, umap_hash);
+	VREF(lowervp);   /* Extra VREF will be vrele'd in umap_node_create */
+	hd = umap_node_hash(lowervp);
+	insque(xp, hd);
 	return (0);
 }
 
@@ -298,12 +252,12 @@ umap_node_create(mp, targetvp, newvpp)
 {
 	struct vnode *aliasvp;
 
-	if ((aliasvp = umap_node_find(mp, targetvp)) != NULL) {
+	if (aliasvp = umap_node_find(mp, targetvp)) {
 		/*
 		 * Take another reference to the alias vnode
 		 */
 #ifdef UMAPFS_DIAGNOSTIC
-		vprint("umap_node_create: exists", aliasvp);
+		vprint("umap_node_create: exists", ap->umap_vnode);
 #endif
 		/* VREF(aliasvp); */
 	} else {
@@ -318,7 +272,7 @@ umap_node_create(mp, targetvp, newvpp)
 		/*
 		 * Make new vnode reference the umap_node.
 		 */
-		if ((error = umap_node_alloc(mp, targetvp, &aliasvp)) != 0)
+		if (error = umap_node_alloc(mp, targetvp, &aliasvp))
 			return (error);
 
 		/*
@@ -352,7 +306,7 @@ umap_checkvp(vp, fil, lno)
 	 * with funny vop vector.
 	 */
 	if (vp->v_op != umap_vnodeop_p) {
-		printf("umap_checkvp: on non-umap-node\n");
+		printf ("umap_checkvp: on non-umap-node\n");
 		while (umap_checkvp_barrier) /*WAIT*/ ;
 		panic("umap_checkvp");
 	}
@@ -360,9 +314,9 @@ umap_checkvp(vp, fil, lno)
 	if (a->umap_lowervp == NULL) {
 		/* Should never happen */
 		int i; u_long *p;
-		printf("vp = %p, ZERO ptr\n", vp);
+		printf("vp = %x, ZERO ptr\n", vp);
 		for (p = (u_long *) a, i = 0; i < 8; i++)
-			printf(" %lx", p[i]);
+			printf(" %x", p[i]);
 		printf("\n");
 		/* wait for debugger */
 		while (umap_checkvp_barrier) /*WAIT*/ ;
@@ -370,16 +324,16 @@ umap_checkvp(vp, fil, lno)
 	}
 	if (a->umap_lowervp->v_usecount < 1) {
 		int i; u_long *p;
-		printf("vp = %p, unref'ed lowervp\n", vp);
+		printf("vp = %x, unref'ed lowervp\n", vp);
 		for (p = (u_long *) a, i = 0; i < 8; i++)
-			printf(" %lx", p[i]);
+			printf(" %x", p[i]);
 		printf("\n");
 		/* wait for debugger */
 		while (umap_checkvp_barrier) /*WAIT*/ ;
 		panic ("umap with unref'ed lowervp");
 	}
 #if 0
-	printf("umap %p/%d -> %p/%d [%s, %d]\n",
+	printf("umap %x/%d -> %x/%d [%s, %d]\n",
 	        a->umap_vnode, a->umap_vnode->v_usecount,
 		a->umap_lowervp, a->umap_lowervp->v_usecount,
 		fil, lno);
@@ -396,17 +350,13 @@ umap_mapids(v_mount, credp)
 	struct ucred *credp;
 {
 	int i, unentries, gnentries;
-	uid_t uid;
-	gid_t gid;
-	u_long (*usermap)[2], (*groupmap)[2];
-
-	if (credp == NOCRED)
-		return;
+	uid_t uid, *usermap;
+	gid_t gid, *groupmap;
 
 	unentries =  MOUNTTOUMAPMOUNT(v_mount)->info_nentries;
-	usermap =  MOUNTTOUMAPMOUNT(v_mount)->info_mapdata;
+	usermap =  &(MOUNTTOUMAPMOUNT(v_mount)->info_mapdata[0][0]);
 	gnentries =  MOUNTTOUMAPMOUNT(v_mount)->info_gnentries;
-	groupmap =  MOUNTTOUMAPMOUNT(v_mount)->info_gmapdata;
+	groupmap =  &(MOUNTTOUMAPMOUNT(v_mount)->info_gmapdata[0][0]);
 
 	/* Find uid entry in map */
 
@@ -417,8 +367,8 @@ umap_mapids(v_mount, credp)
 	else
 		credp->cr_uid = (uid_t) NOBODY;
 
-#if 1
-	/* cr_gid is the same as cr_groups[0] in 4BSD, but not in NetBSD */
+#ifdef notdef
+	/* cr_gid is the same as cr_groups[0] in 4BSD */
 
 	/* Find gid entry in map */
 
@@ -436,7 +386,7 @@ umap_mapids(v_mount, credp)
 	i = 0;
 	while (credp->cr_groups[i] != 0) {
 		gid = (gid_t) umap_findid(credp->cr_groups[i],
-					  groupmap, gnentries);
+					groupmap, gnentries);
 
 		if (gid != -1)
 			credp->cr_groups[i++] = gid;

@@ -1,8 +1,6 @@
-/*	$NetBSD: termios.h,v 1.16 1997/10/20 08:04:26 scottr Exp $	*/
-
 /*
- * Copyright (c) 1988, 1989, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988, 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,18 +30,21 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)termios.h	8.3 (Berkeley) 3/28/94
+ *	@(#)termios.h	7.22 (Berkeley) 5/7/91
  */
 
-#ifndef _SYS_TERMIOS_H_
-#define _SYS_TERMIOS_H_
-
 /*
- * Special Control Characters
+ *  termios structure
+ */
+#ifndef _TERMIOS_H_
+#define _TERMIOS_H_
+
+/* 
+ * Special Control Characters 
  *
  * Index into c_cc[] character array.
  *
- *	Name	     Subscript	Enabled by
+ *	Name	     Subscript	Enabled by 
  */
 #define	VEOF		0	/* ICANON */
 #define	VEOL		1	/* ICANON */
@@ -53,7 +54,7 @@
 #define	VERASE		3	/* ICANON */
 #ifndef _POSIX_SOURCE
 #define VWERASE 	4	/* ICANON */
-#endif
+#endif 
 #define VKILL		5	/* ICANON */
 #ifndef _POSIX_SOURCE
 #define	VREPRINT 	6	/* ICANON */
@@ -76,8 +77,8 @@
 #ifndef _POSIX_SOURCE
 #define VSTATUS		18	/* ICANON */
 /*			19	   spare 2 */
-#endif
 #define	NCCS		20
+#endif
 
 #define _POSIX_VDISABLE	((unsigned char)'\377')
 
@@ -112,7 +113,6 @@
 #define ONLCR		0x00000002	/* map NL to CR-NL (ala CRMOD) */
 #define OXTABS		0x00000004	/* expand tabs to spaces */
 #define ONOEOT		0x00000008	/* discard EOT's (^D) on output) */
-#define OCRNL		0x00000010	/* map CR to NL */
 #endif  /*_POSIX_SOURCE */
 
 /*
@@ -133,16 +133,14 @@
 #define HUPCL		0x00004000	/* hang up on last close */
 #define CLOCAL		0x00008000	/* ignore modem status lines */
 #ifndef _POSIX_SOURCE
-#define	CRTSCTS		0x00010000	/* RTS/CTS full-duplex flow control */
-#define	CRTS_IFLOW	CRTSCTS		/* XXX compat */
-#define	CCTS_OFLOW	CRTSCTS		/* XXX compat */
-#define	CDTRCTS		0x00020000	/* DTR/CTS full-duplex flow control */
-#define	MDMBUF		0x00100000	/* DTR/DCD hardware flow control */
-#define	CHWFLOW		(MDMBUF|CRTSCTS|CDTRCTS) /* all types of hw flow control */
+#define CCTS_OFLOW	0x00010000	/* CTS flow control of output */
+#define CRTSCTS		CCTS_OFLOW	/* ??? */
+#define CRTS_IFLOW	0x00020000	/* RTS flow control of input */
+#define	MDMBUF		0x00100000	/* flow control output via Carrier */
 #endif
 
 
-/*
+/* 
  * "Local" flags - dumping ground for other state
  *
  * Warning: some flags in this structure begin with
@@ -176,9 +174,9 @@
 #endif  /*_POSIX_SOURCE */
 #define	NOFLSH		0x80000000	/* don't flush after interrupt */
 
-typedef unsigned int	tcflag_t;
+typedef unsigned long	tcflag_t;
 typedef unsigned char	cc_t;
-typedef unsigned int	speed_t;
+typedef long		speed_t;
 
 struct termios {
 	tcflag_t	c_iflag;	/* input flags */
@@ -186,11 +184,11 @@ struct termios {
 	tcflag_t	c_cflag;	/* control flags */
 	tcflag_t	c_lflag;	/* local flags */
 	cc_t		c_cc[NCCS];	/* control chars */
-	int		c_ispeed;	/* input speed */
-	int		c_ospeed;	/* output speed */
+	long		c_ispeed;	/* input speed */
+	long		c_ospeed;	/* output speed */
 };
 
-/*
+/* 
  * Commands passed to tcsetattr() for setting the termios structure.
  */
 #define	TCSANOW		0		/* make change immediate */
@@ -220,18 +218,25 @@ struct termios {
 #define B19200	19200
 #define B38400	38400
 #ifndef _POSIX_SOURCE
-#define B7200	7200
-#define B14400	14400
-#define B28800	28800
-#define B57600	57600
-#define B76800	76800
-#define B115200	115200
-#define B230400	230400
 #define EXTA	19200
 #define EXTB	38400
-#endif  /* !_POSIX_SOURCE */
+#endif  /*_POSIX_SOURCE */
 
-#ifndef _KERNEL
+#ifndef KERNEL
+
+#include <sys/cdefs.h>
+
+__BEGIN_DECLS
+speed_t	cfgetispeed __P((const struct termios *));
+speed_t	cfgetospeed __P((const struct termios *));
+int	cfsetispeed __P((struct termios *, speed_t));
+int	cfsetospeed __P((struct termios *, speed_t));
+int	tcdrain __P((int));
+int	tcflow __P((int, int));
+int	tcflush __P((int, int));
+int	tcgetattr __P((int, struct termios *));
+int	tcsendbreak __P((int, int));
+int	tcsetattr __P((int, int, const struct termios *));
 
 #define	TCIFLUSH	1
 #define	TCOFLUSH	2
@@ -241,43 +246,23 @@ struct termios {
 #define TCIOFF		3
 #define TCION		4
 
-#include <sys/cdefs.h>
-
-__BEGIN_DECLS
-speed_t	cfgetispeed __P((const struct termios *));
-speed_t	cfgetospeed __P((const struct termios *));
-int	cfsetispeed __P((struct termios *, speed_t));
-int	cfsetospeed __P((struct termios *, speed_t));
-int	tcgetattr __P((int, struct termios *));
-int	tcsetattr __P((int, int, const struct termios *));
-int	tcdrain __P((int));
-int	tcflow __P((int, int));
-int	tcflush __P((int, int));
-int	tcsendbreak __P((int, int));
-
 #ifndef _POSIX_SOURCE
 void	cfmakeraw __P((struct termios *));
-int	cfsetspeed __P((struct termios *, speed_t));
-#endif /* !_POSIX_SOURCE */
+void	cfsetspeed __P((struct termios *, speed_t));
+#endif /* !POSIX */
 __END_DECLS
 
-#endif /* !_KERNEL */
-
-#ifndef _POSIX_SOURCE
-
-/*
- * Include tty ioctl's that aren't just for backwards compatibility
- * with the old tty driver.  These ioctl definitions were previously
- * in <sys/ioctl.h>.
- */
-#include <sys/ttycom.h>
-#endif
+#endif /* !KERNEL */
 
 /*
  * END OF PROTECTED INCLUDE.
  */
-#endif /* !_SYS_TERMIOS_H_ */
+#endif /* !_TERMIOS_H_ */
 
 #ifndef _POSIX_SOURCE
+#ifdef KERNEL
+#include "ttydefaults.h"
+#else
 #include <sys/ttydefaults.h>
 #endif
+#endif  /*_POSIX_SOURCE */

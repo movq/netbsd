@@ -1,8 +1,6 @@
-/*	$NetBSD: misc.c,v 1.6 1997/10/11 02:07:27 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)misc.c	8.2 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: misc.c,v 1.6 1997/10/11 02:07:27 lukem Exp $");
-#endif
-#endif				/* not lint */
+static char sccsid[] = "@(#)misc.c	5.3 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include "extern.h"
+#include "externs.h"
 
-int
 card(array, size)		/* for beenthere, injuries */
-	char   *array;
-	int     size;
+	register char *array;
+	int size;
 {
-	char   *end = array + size;
-	int     i = 0;
+	register char *end = array + size;
+	register int i = 0;
 
 	while (array < end)
 		if (*array++)
@@ -58,14 +50,13 @@ card(array, size)		/* for beenthere, injuries */
 	return (i);
 }
 
-int
 ucard(array)
-	unsigned int *array;
+	register unsigned *array;
 {
-	int     j = 0, n;
+	register int j = 0, n;
 
 	for (n = 0; n < NUMOFOBJECTS; n++)
 		if (testbit(array, n))
-			j++;
+			    j++;
 	return (j);
 }

@@ -31,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
 static char sccsid[] = "@(#)rexec.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: rexec.c,v 1.6 1997/10/09 10:21:00 lukem Exp $");
-#endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -47,16 +42,13 @@ __RCSID("$NetBSD: rexec.c,v 1.6 1997/10/09 10:21:00 lukem Exp $");
 
 #include <stdio.h>
 #include <netdb.h>
-#include <string.h>
 #include <errno.h>
-#include <unistd.h>
 
+extern	errno;
+char	*index();
 int	rexecoptions;
+char	*getpass(), *getlogin();
 
-void	ruserpass __P((const char *, char **, char **));
-int	rexec __P((char **, int, char *, char *, char *, int *));
-
-int
 rexec(ahost, rport, name, pass, cmd, fd2p)
 	char **ahost;
 	int rport;
@@ -83,7 +75,6 @@ retry:
 		return (-1);
 	}
 	sin.sin_family = hp->h_addrtype;
-	sin.sin_len = sizeof(sin);
 	sin.sin_port = rport;
 	bcopy(hp->h_addr, (caddr_t)&sin.sin_addr, hp->h_length);
 	if (connect(s, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
@@ -96,9 +87,9 @@ retry:
 		perror(hp->h_name);
 		return (-1);
 	}
-	port = 0;
 	if (fd2p == 0) {
 		(void) write(s, "", 1);
+		port = 0;
 	} else {
 		char num[8];
 		int s2, sin2len;
@@ -117,7 +108,7 @@ retry:
 			goto bad;
 		}
 		port = ntohs((u_short)sin2.sin_port);
-		(void)snprintf(num, sizeof num, "%u", port);
+		(void) sprintf(num, "%u", port);
 		(void) write(s, num, strlen(num)+1);
 		{ int len = sizeof (from);
 		  s3 = accept(s2, (struct sockaddr *)&from, &len);

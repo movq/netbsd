@@ -1,5 +1,3 @@
-/*	$NetBSD: main.c,v 1.12 1997/10/19 23:36:26 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1980, 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,28 +31,21 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#if 0
+static char copyright[] =
+"@(#) Copyright (c) 1980, 1992, 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
+#endif /* not lint */
+
+#ifndef lint
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: main.c,v 1.12 1997/10/19 23:36:26 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
 
-#include <err.h>
-#include <limits.h>
 #include <nlist.h>
 #include <signal.h>
 #include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <ctype.h>
-
 #include "systat.h"
 #include "extern.h"
 
@@ -69,8 +60,6 @@ static struct nlist namelist[] = {
 static int     dellave;
 
 kvm_t *kd;
-char	*memf = NULL;
-char	*nlistf = NULL;
 sig_t	sigtstpdfl;
 double avenrun[3];
 int     col;
@@ -85,60 +74,33 @@ int     CMDLINE;
 
 static	WINDOW *wload;			/* one line window for load average */
 
-static void usage __P((void));
-int main __P((int, char **));
-
-int
+void
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	int ch;
-	char errbuf[_POSIX2_LINE_MAX];
+	char errbuf[80];
 
-	while ((ch = getopt(argc, argv, "M:N:w:")) != -1)
-		switch(ch) {
-		case 'M':
-			memf = optarg;
-			break;
-		case 'N':
-			nlistf = optarg;
-			break;
-		case 'w':
-			if ((naptime = atoi(optarg)) <= 0)
-				errx(1, "interval <= 0.");
-			break;
-		case '?':
-		default:
-			usage();
-		}
-	argc -= optind;
-	argv += optind;
-	/*
-	 * Discard setgid privileges if not the running kernel so that bad
-	 * guys can't print interesting stuff from kernel memory.
-	 */
-	if (nlistf != NULL || memf != NULL)
-		setgid(getgid());
-
+	argc--, argv++;
 	while (argc > 0) {
-		if (isdigit(argv[0][0])) {
+		if (argv[0][0] == '-') {
+			struct cmdtab *p;
+
+			p = lookup(&argv[0][1]);
+			if (p == (struct cmdtab *)-1) {
+				fprintf(stderr, "%s: unknown request\n",
+				    &argv[0][1]);
+				exit(1);
+			}
+			curcmd = p;
+		} else {
 			naptime = atoi(argv[0]);
 			if (naptime <= 0)
 				naptime = 5;
-		} else {
-			struct cmdtab *p;
-
-			p = lookup(&argv[0][0]);
-			if (p == (struct cmdtab *)-1)
-				errx(1, "ambiguous request: %s", &argv[0][0]);
-			if (p == 0)
-				errx(1, "unknown request: %s", &argv[0][0]);
-			curcmd = p;
 		}
 		argc--, argv++;
 	}
-	kd = kvm_openfiles(nlistf, memf, NULL, O_RDONLY, errbuf);
+	kd = kvm_openfiles(NULL, NULL, NULL, O_RDONLY, errbuf);
 	if (kd == NULL) {
 		error("%s", errbuf);
 		exit(1);
@@ -147,12 +109,13 @@ main(argc, argv)
 		nlisterr(namelist);
 		exit(1);
 	}
-	if (namelist[X_FIRST].n_type == 0)
-		errx(1, "couldn't read namelist");
+	if (namelist[X_FIRST].n_type == 0) {
+		fprintf(stderr, "couldn't read namelist.\n");
+		exit(1);
+	}
 	signal(SIGINT, die);
 	signal(SIGQUIT, die);
 	signal(SIGTERM, die);
-	signal(SIGWINCH, redraw);
 
 	/*
 	 * Initialize display.  Load average appears in a one line
@@ -160,21 +123,16 @@ main(argc, argv)
 	 * an overlapping sub-window of stdscr configured by the display
 	 * routines to minimize update work by curses.
 	 */
-	if (initscr() == NULL)
-	{
-		warnx("couldn't initialize screen");
-		exit(0);
-	}
-
+	initscr();
 	CMDLINE = LINES - 1;
 	wnd = (*curcmd->c_open)();
 	if (wnd == NULL) {
-		warnx("couldn't initialize display");
+		fprintf(stderr, "Couldn't initialize display.\n");
 		die(0);
 	}
 	wload = newwin(1, 0, 3, 20);
 	if (wload == NULL) {
-		warnx("couldn't set up load average window");
+		fprintf(stderr, "Couldn't set up load average window.\n");
 		die(0);
 	}
 	gethostname(hostname, sizeof (hostname));
@@ -193,14 +151,6 @@ main(argc, argv)
 	keyboard();
 	/*NOTREACHED*/
 }
-
-static void
-usage()
-{
-	fprintf(stderr, "usage: systat [-M core] [-N system] [-w wait]\n");
-	exit(1);
-}
-
 
 void
 labels()
@@ -221,7 +171,7 @@ void
 display(signo)
 	int signo;
 {
-	int i, j;
+	register int i, j;
 
 	/* Get the load average over the last minute. */
 	(void) getloadavg(avenrun, sizeof(avenrun) / sizeof(avenrun[0]));
@@ -251,20 +201,6 @@ display(signo)
 	move(CMDLINE, col);
 	refresh();
 	alarm(naptime);
-}
-
-void
-redraw(signo)
-	int signo;
-{
-	sigset_t set;
-
-	sigemptyset(&set);
-	sigaddset(&set, SIGALRM);
-	sigprocmask(SIG_BLOCK, &set, NULL);
-	wrefresh(curscr);
-	refresh();
-	sigprocmask(SIG_UNBLOCK, &set, NULL);
 }
 
 void

@@ -1,14 +1,6 @@
 #ifndef lint
-/*static char yysccsid[] = "from: @(#)yaccpar	1.9 (Berkeley) 02/21/93";*/
-static char rcsid[] = "$NetBSD: error.tab.c,v 1.4 1997/01/09 20:23:30 tls Exp $";
+char yysccsid[] = "@(#)yaccpar	1.3 (Berkeley) 01/21/90";
 #endif
-#define YYBYACC 1
-#define YYMAJOR 1
-#define YYMINOR 9
-#define yyclearin (yychar=(-1))
-#define yyerrok (yyerrflag=0)
-#define YYRECOVERING (yyerrflag!=0)
-#define YYPREFIX "yy"
 #define YYERRCODE 256
 short yylhs[] = {                                        -1,
     0,
@@ -51,15 +43,13 @@ char *yyrule[] = {
 #ifndef YYSTYPE
 typedef int YYSTYPE;
 #endif
-#ifdef YYSTACKSIZE
-#undef YYMAXDEPTH
-#define YYMAXDEPTH YYSTACKSIZE
-#else
+#define yyclearin (yychar=(-1))
+#define yyerrok (yyerrflag=0)
+#ifndef YYSTACKSIZE
 #ifdef YYMAXDEPTH
 #define YYSTACKSIZE YYMAXDEPTH
 #else
-#define YYSTACKSIZE 500
-#define YYMAXDEPTH 500
+#define YYSTACKSIZE 300
 #endif
 #endif
 int yydebug;
@@ -70,16 +60,15 @@ short *yyssp;
 YYSTYPE *yyvsp;
 YYSTYPE yyval;
 YYSTYPE yylval;
+#define yystacksize YYSTACKSIZE
 short yyss[YYSTACKSIZE];
 YYSTYPE yyvs[YYSTACKSIZE];
-#define yystacksize YYSTACKSIZE
 #line 4 "error.y"
 main(){printf("yyparse() = %d\n",yyparse());}
 yylex(){return-1;}
 yyerror(s)char*s;{printf("%s\n",s);}
-#line 80 "error.tab.c"
+#line 70 "error.tab.c"
 #define YYABORT goto yyabort
-#define YYREJECT goto yyabort
 #define YYACCEPT goto yyaccept
 #define YYERROR goto yyerrlab
 int
@@ -93,7 +82,9 @@ yyparse()
     if (yys = getenv("YYDEBUG"))
     {
         yyn = *yys;
-        if (yyn >= '0' && yyn <= '9')
+        if (yyn == '0')
+            yydebug = 0;
+        else if (yyn >= '1' && yyn <= '9')
             yydebug = yyn - '0';
     }
 #endif
@@ -117,8 +108,8 @@ yyloop:
             yys = 0;
             if (yychar <= YYMAXTOKEN) yys = yyname[yychar];
             if (!yys) yys = "illegal-symbol";
-            printf("%sdebug: state %d, reading %d (%s)\n",
-                    YYPREFIX, yystate, yychar, yys);
+            printf("yydebug: state %d, reading %d (%s)\n", yystate,
+                    yychar, yys);
         }
 #endif
     }
@@ -127,8 +118,8 @@ yyloop:
     {
 #if YYDEBUG
         if (yydebug)
-            printf("%sdebug: state %d, shifting to state %d\n",
-                    YYPREFIX, yystate, yytable[yyn]);
+            printf("yydebug: state %d, shifting to state %d\n",
+                    yystate, yytable[yyn]);
 #endif
         if (yyssp >= yyss + yystacksize - 1)
         {
@@ -168,8 +159,8 @@ yyinrecovery:
             {
 #if YYDEBUG
                 if (yydebug)
-                    printf("%sdebug: state %d, error recovery shifting\
- to state %d\n", YYPREFIX, *yyssp, yytable[yyn]);
+                    printf("yydebug: state %d, error recovery shifting\
+ to state %d\n", *yyssp, yytable[yyn]);
 #endif
                 if (yyssp >= yyss + yystacksize - 1)
                 {
@@ -183,8 +174,8 @@ yyinrecovery:
             {
 #if YYDEBUG
                 if (yydebug)
-                    printf("%sdebug: error recovery discarding state %d\n",
-                            YYPREFIX, *yyssp);
+                    printf("yydebug: error recovery discarding state %d\n",
+                            *yyssp);
 #endif
                 if (yyssp <= yyss) goto yyabort;
                 --yyssp;
@@ -201,8 +192,8 @@ yyinrecovery:
             yys = 0;
             if (yychar <= YYMAXTOKEN) yys = yyname[yychar];
             if (!yys) yys = "illegal-symbol";
-            printf("%sdebug: state %d, error recovery discards token %d (%s)\n",
-                    YYPREFIX, yystate, yychar, yys);
+            printf("yydebug: state %d, error recovery discards token %d (%s)\n",
+                    yystate, yychar, yys);
         }
 #endif
         yychar = (-1);
@@ -211,8 +202,8 @@ yyinrecovery:
 yyreduce:
 #if YYDEBUG
     if (yydebug)
-        printf("%sdebug: state %d, reducing by rule %d (%s)\n",
-                YYPREFIX, yystate, yyn, yyrule[yyn]);
+        printf("yydebug: state %d, reducing by rule %d (%s)\n",
+                yystate, yyn, yyrule[yyn]);
 #endif
     yym = yylen[yyn];
     yyval = yyvsp[1-yym];
@@ -225,10 +216,10 @@ yyreduce:
     yym = yylhs[yyn];
     if (yystate == 0 && yym == 0)
     {
-#if YYDEBUG
+#ifdef YYDEBUG
         if (yydebug)
-            printf("%sdebug: after reduction, shifting from state 0 to\
- state %d\n", YYPREFIX, YYFINAL);
+            printf("yydebug: after reduction, shifting from state 0 to\
+ state %d\n", YYFINAL);
 #endif
         yystate = YYFINAL;
         *++yyssp = YYFINAL;
@@ -242,8 +233,8 @@ yyreduce:
                 yys = 0;
                 if (yychar <= YYMAXTOKEN) yys = yyname[yychar];
                 if (!yys) yys = "illegal-symbol";
-                printf("%sdebug: state %d, reading %d (%s)\n",
-                        YYPREFIX, YYFINAL, yychar, yys);
+                printf("yydebug: state %d, reading %d (%s)\n",
+                        YYFINAL, yychar, yys);
             }
 #endif
         }
@@ -255,10 +246,10 @@ yyreduce:
         yystate = yytable[yyn];
     else
         yystate = yydgoto[yym];
-#if YYDEBUG
+#ifdef YYDEBUG
     if (yydebug)
-        printf("%sdebug: after reduction, shifting from state %d \
-to state %d\n", YYPREFIX, *yyssp, yystate);
+        printf("yydebug: after reduction, shifting from state %d \
+to state %d\n", *yyssp, yystate);
 #endif
     if (yyssp >= yyss + yystacksize - 1)
     {

@@ -1,8 +1,6 @@
-/*	$NetBSD: wall.c,v 1.9 1997/10/20 03:13:34 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988, 1990 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1988 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)wall.c	8.2 (Berkeley) 11/16/93";
-#endif
-__RCSID("$NetBSD: wall.c,v 1.9 1997/10/20 03:13:34 lukem Exp $");
+static char sccsid[] = "@(#)wall.c	5.14 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 /*
@@ -55,19 +50,11 @@ __RCSID("$NetBSD: wall.c,v 1.9 1997/10/20 03:13:34 lukem Exp $");
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/uio.h>
-
-#include <err.h>
-#include <paths.h>
+#include <utmp.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <utmp.h>
-#include <util.h>
-
-void	makemsg __P((char *));
-int	main __P((int, char *[]));
+#include <paths.h>
 
 #define	IGNOREUSER	"sleeper"
 
@@ -76,7 +63,6 @@ int mbufsize;
 char *mbuf;
 
 /* ARGSUSED */
-int
 main(argc, argv)
 	int argc;
 	char **argv;
@@ -86,15 +72,13 @@ main(argc, argv)
 	struct iovec iov;
 	struct utmp utmp;
 	FILE *fp;
-	char *p;
-	struct passwd *pep = getpwnam("nobody");
-	char line[sizeof(utmp.ut_line) + 1];
+	char *p, *ttymsg();
 
-	while ((ch = getopt(argc, argv, "n")) != -1)
+	while ((ch = getopt(argc, argv, "n")) != EOF)
 		switch (ch) {
 		case 'n':
 			/* undoc option for shutdown: suppress banner */
-			if (geteuid() == 0 || (pep && getuid() == pep->pw_uid))
+			if (geteuid() == 0)
 				nobanner = 1;
 			break;
 		case '?':
@@ -110,8 +94,10 @@ usage:
 
 	makemsg(*argv);
 
-	if (!(fp = fopen(_PATH_UTMP, "r")))
-		err(1, "cannot read %s", _PATH_UTMP);
+	if (!(fp = fopen(_PATH_UTMP, "r"))) {
+		(void)fprintf(stderr, "wall: cannot read %s.\n", _PATH_UTMP);
+		exit(1);
+	}
 	iov.iov_base = mbuf;
 	iov.iov_len = mbufsize;
 	/* NOSTRICT */
@@ -119,15 +105,12 @@ usage:
 		if (!utmp.ut_name[0] ||
 		    !strncmp(utmp.ut_name, IGNOREUSER, sizeof(utmp.ut_name)))
 			continue;
-		strncpy(line, utmp.ut_line, sizeof(utmp.ut_line));
-		line[sizeof(utmp.ut_line)] = '\0';
-		if ((p = ttymsg(&iov, 1, line, 60*5)) != NULL)
-			warnx("%s", p);
+		if (p = ttymsg(&iov, 1, utmp.ut_line))
+			(void)fprintf(stderr, "wall: %s\n", p);
 	}
 	exit(0);
 }
 
-void
 makemsg(fname)
 	char *fname;
 {
@@ -135,14 +118,18 @@ makemsg(fname)
 	struct tm *lt;
 	struct passwd *pw;
 	struct stat sbuf;
-	time_t now;
+	time_t now, time();
 	FILE *fp;
 	int fd;
 	char *p, *whom, hostname[MAXHOSTNAMELEN], lbuf[100], tmpname[15];
+	char *getlogin(), *strcpy(), *ttyname();
 
-	(void)snprintf(tmpname, sizeof tmpname, "%s/wall.XXXXXX", _PATH_TMP);
-	if (!(fd = mkstemp(tmpname)) || !(fp = fdopen(fd, "r+")))
-		err(1, "can't open temporary file");
+	(void)strcpy(tmpname, _PATH_TMP);
+	(void)strcat(tmpname, "/wall.XXXXXX");
+	if (!(fd = mkstemp(tmpname)) || !(fp = fdopen(fd, "r+"))) {
+		(void)fprintf(stderr, "wall: can't open temporary file.\n");
+		exit(1);
+	}
 	(void)unlink(tmpname);
 
 	if (!nobanner) {
@@ -160,38 +147,45 @@ makemsg(fname)
 		 * in column 80, but that can't be helped.
 		 */
 		(void)fprintf(fp, "\r%79s\r\n", " ");
-		(void)snprintf(lbuf, sizeof lbuf,
-		    "Broadcast Message from %s@%s", whom, hostname);
+		(void)sprintf(lbuf, "Broadcast Message from %s@%s",
+		    whom, hostname);
 		(void)fprintf(fp, "%-79.79s\007\007\r\n", lbuf);
-		(void)snprintf(lbuf, sizeof lbuf, "        (%s) at %d:%02d ...",
-		    ttyname(2), lt->tm_hour, lt->tm_min);
+		(void)sprintf(lbuf, "        (%s) at %d:%02d ...", ttyname(2),
+		    lt->tm_hour, lt->tm_min);
 		(void)fprintf(fp, "%-79.79s\r\n", lbuf);
 	}
 	(void)fprintf(fp, "%79s\r\n", " ");
 
-	if (fname && !(freopen(fname, "r", stdin)))
-		err(1, "can't read %s", fname);
+	if (*fname && !(freopen(fname, "r", stdin))) {
+		(void)fprintf(stderr, "wall: can't read %s.\n", fname);
+		exit(1);
+	}
 	while (fgets(lbuf, sizeof(lbuf), stdin))
-		for (cnt = 0, p = lbuf; (ch = *p) != '\0'; ++p, ++cnt) {
+		for (cnt = 0, p = lbuf; ch = *p; ++p, ++cnt) {
 			if (cnt == 79 || ch == '\n') {
 				for (; cnt < 79; ++cnt)
 					putc(' ', fp);
 				putc('\r', fp);
 				putc('\n', fp);
-				cnt = -1;
-			}
-			if (ch != '\n')
+				cnt = 0;
+			} else
 				putc(ch, fp);
 		}
 	(void)fprintf(fp, "%79s\r\n", " ");
 	rewind(fp);
 
-	if (fstat(fd, &sbuf))
-		err(1, "can't stat temporary file");
+	if (fstat(fd, &sbuf)) {
+		(void)fprintf(stderr, "wall: can't stat temporary file.\n");
+		exit(1);
+	}
 	mbufsize = sbuf.st_size;
-	if (!(mbuf = malloc((u_int)mbufsize)))
-		err(1, "malloc");
-	if (fread(mbuf, sizeof(*mbuf), mbufsize, fp) != mbufsize)
-		err(1, "can't read temporary file");
+	if (!(mbuf = malloc((u_int)mbufsize))) {
+		(void)fprintf(stderr, "wall: out of memory.\n");
+		exit(1);
+	}
+	if (fread(mbuf, sizeof(*mbuf), mbufsize, fp) != mbufsize) {
+		(void)fprintf(stderr, "wall: can't read temporary file.\n");
+		exit(1);
+	}
 	(void)close(fd);
 }

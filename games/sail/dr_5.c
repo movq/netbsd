@@ -1,8 +1,6 @@
-/*	$NetBSD: dr_5.c,v 1.5 1997/10/13 19:43:47 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)dr_5.c	8.2 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: dr_5.c,v 1.5 1997/10/13 19:43:47 christos Exp $");
-#endif
+static char sccsid[] = "@(#)dr_5.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include "extern.h"
+#include "externs.h"
 
-void
 subtract(from, totalfrom, crewfrom, fromcap, pcfrom)
 struct ship *from, *fromcap;
 int pcfrom;
-int  totalfrom, crewfrom[3];
+register int  totalfrom, crewfrom[3];
 {
-	int n;
+	register int n;
 
 	if (fromcap == from && totalfrom) {		/* if not captured */
 		for (n = 0; n < 3; n++) {
@@ -70,16 +62,15 @@ int  totalfrom, crewfrom[3];
 	}
 }
 
-int
 mensent(from, to, crew, captured, pc, isdefense)
 struct ship *from, *to, **captured;
 int crew[3], *pc;
 char isdefense;
 {					/* returns # of crew squares sent */
 	int men = 0;
-	int n;
+	register int n;
 	int c1, c2, c3;
-	struct BP *bp;
+	register struct BP *bp;
 
 	*pc = from->file->pcrew;
 	*captured = from->file->captured;
