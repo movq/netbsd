@@ -1,4 +1,4 @@
-/* $NetBSD: lkminit_vfs.c,v 1.1 1998/09/25 15:01:56 rvb Exp $ */
+/* $NetBSD: lkminit_vfs.c,v 1.1.1.1 1998/09/25 15:01:56 rvb Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
