@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.list,v 1.1 1999/08/19 21:43:52 is Exp $
+# $NetBSD: Makefile.list,v 1.1.1.1 1999/08/19 21:43:52 is Exp $
 
 #
 # list of M68060 architecture dependent files for libm.

@@ -1,4 +1,4 @@
-/* $NetBSD: fplsp_wrap.S,v 1.1 1999/08/19 21:43:52 is Exp $ */
+/* $NetBSD: fplsp_wrap.S,v 1.1.1.1 1999/08/19 21:43:52 is Exp $ */
 
 /*
  * FPLSP wrapper.
