@@ -47,7 +47,7 @@
 #include "check-common.h"
 
 __RCSID("$Heimdal: check-gen.c,v 1.2.2.1 2003/05/06 16:49:57 joda Exp $"
-        "$NetBSD: check-gen.c,v 1.1 2003/05/15 20:28:45 lha Exp $");
+        "$NetBSD: check-gen.c,v 1.1.1.1 2003/05/15 20:28:45 lha Exp $");
 
 static char *lha_princ[] = { "lha" };
 static char *lharoot_princ[] = { "lha", "root" };

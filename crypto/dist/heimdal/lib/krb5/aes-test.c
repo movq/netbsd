@@ -37,7 +37,7 @@
 #endif
 
 __RCSID("$Heimdal: aes-test.c,v 1.3 2003/03/25 11:30:41 lha Exp $"
-        "$NetBSD: aes-test.c,v 1.1 2003/05/15 20:28:47 lha Exp $");
+        "$NetBSD: aes-test.c,v 1.1.1.1 2003/05/15 20:28:47 lha Exp $");
 
 static int verbose = 0;
 

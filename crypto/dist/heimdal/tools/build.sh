@@ -3,7 +3,7 @@
 # Build many combinations of kth-krb/heimdal/openssl
 #
 # $Heimdal: build.sh,v 1.8 2003/04/17 12:55:02 lha Exp $
-# $NetBSD: build.sh,v 1.1 2003/05/15 20:28:51 lha Exp $
+# $NetBSD: build.sh,v 1.1.1.1 2003/05/15 20:28:51 lha Exp $
 
 opt_n= #:
 make_f= #-j
