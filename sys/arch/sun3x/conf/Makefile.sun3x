@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.sun3x,v 1.1 1997/01/14 20:57:01 gwr Exp $
+#	$NetBSD: Makefile.sun3x,v 1.1.1.1 1997/01/14 20:57:01 gwr Exp $
 
 # Makefile for NetBSD
 #

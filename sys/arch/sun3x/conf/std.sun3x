@@ -1,4 +1,4 @@
-#	$NetBSD: std.sun3x,v 1.1 1997/01/14 20:57:01 gwr Exp $
+#	$NetBSD: std.sun3x,v 1.1.1.1 1997/01/14 20:57:01 gwr Exp $
 
 # Standard information for sun3's.
 machine	sun3x m68k

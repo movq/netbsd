@@ -1,4 +1,4 @@
-/*	$NetBSD: memerr.h,v 1.1 1997/01/14 20:57:03 gwr Exp $ */
+/*	$NetBSD: memerr.h,v 1.1.1.1 1997/01/14 20:57:03 gwr Exp $ */
 
 /*
  * Copyright (c) 1992, 1993

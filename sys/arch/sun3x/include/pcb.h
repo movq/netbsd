@@ -1,4 +1,4 @@
-/*	$NetBSD: pcb.h,v 1.1 1997/01/14 20:57:06 gwr Exp $	*/
+/*	$NetBSD: pcb.h,v 1.1.1.1 1997/01/14 20:57:06 gwr Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.

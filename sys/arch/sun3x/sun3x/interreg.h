@@ -1,4 +1,4 @@
-/*	$NetBSD: interreg.h,v 1.1 1997/01/14 20:57:08 gwr Exp $	*/
+/*	$NetBSD: interreg.h,v 1.1.1.1 1997/01/14 20:57:08 gwr Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
