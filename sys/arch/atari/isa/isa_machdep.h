@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.h,v 1.1 1997/07/15 08:17:39 leo Exp $	*/
+/*	$NetBSD: isa_machdep.h,v 1.1.1.1 1997/07/15 08:17:39 leo Exp $	*/
 
 /*
  * Copyright (c) 1997 Leo Weppelman.  All rights reserved.
