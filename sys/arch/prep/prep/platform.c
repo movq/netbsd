@@ -1,4 +1,4 @@
-/*	$NetBSD: platform.c,v 1.3 2002/02/24 13:19:09 kleink Exp $	*/
+/*	$NetBSD: platform.c,v 1.4 2002/02/26 16:09:15 kleink Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -71,8 +71,15 @@ ident_platform(void)
 	if (res == NULL)
 		return 0;
 
-	if (strncmp(res->VitalProductData.PrintableModel, "IBM", 3) == 0)
+	if (strncmp(res->VitalProductData.PrintableModel,
+	    "IBM", 3) == 0)
 		p = &plattab_ibm;
+	else if (strncmp(res->VitalProductData.PrintableModel,
+	    "MOT", 3) == 0)
+		p = &plattab_mot;
+	else if (strncmp(res->VitalProductData.PrintableModel,
+	    "BULL ESTRELLA (e0)         (e0)", 31) == 0) /* XXX */
+		p = &plattab_mot;
 	else
 		p = &plattab_unknown;
 
