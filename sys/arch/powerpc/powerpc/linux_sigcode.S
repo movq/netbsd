@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_sigcode.S,v 1.2 2001/04/11 19:41:02 manu Exp $ */
+/*	$NetBSD: linux_sigcode.S,v 1.3 2003/01/19 00:00:11 matt Exp $ */
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -38,8 +38,6 @@
  * Emmanuel Dreyfus <p99dreyf@criens.u-psud.fr>
  */
 
-#include <machine/asm.h>
-
 #include <compat/linux/linux_syscall.h>
 
 /*
@@ -47,24 +45,10 @@
  */
 #define LINUX__SIGNAL_FRAMESIZE 64
 
-/*
- * The following code gets copied to the top of the user stack on process
- * execution.  It does signal trampolining on signal delivery.
- *
- * On entry r1 points to a struct sigframe at bottom of current stack.
- * All other registers are unchanged.
- * 
- * XXX Linux just does this: 
- *  0x38007777   li r0,0x7777
- *  0x44000002   sc
- */
-	.globl	_C_LABEL(linux_sigcode),_C_LABEL(linux_esigcode)
-_C_LABEL(linux_sigcode):
-	addi	1,1,-16			/* reserved space for callee */
-	blrl
-	addi	3,1,16+LINUX__SIGNAL_FRAMESIZE	/* compute &sf_sc */
-	li	0,LINUX_SYS_sigreturn
-	sc				/* linux_sys_sigreturn(scp) */
-	li	0,LINUX_SYS_exit
-	sc				/* linux_sys_exit(errno) */
-_C_LABEL(linux_esigcode):
+#define	SIGCODE_NAME		linux_sigcode
+#define	ESIGCODE_NAME		linux_esigcode
+#define	SIGNAL_FRAMESIZE	LINUX_SIGNAL_FRAMESIZE
+#define	SIGRETURN_NAME		LINUX_SYS_sigreturn
+#define	EXIT_NAME		LINUX_SYS_exit
+
+#include "sigcode.S"
