@@ -1,4 +1,4 @@
-/*	$NetBSD: makefs.h,v 1.1 2001/10/26 05:11:42 lukem Exp $	*/
+/*	$NetBSD: makefs.h,v 1.1.1.1 2001/10/26 05:11:42 lukem Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
