@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.2 2002/08/26 10:24:57 scw Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.3 2003/03/13 13:44:18 scw Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -72,4 +72,9 @@ cpu_rootconf(void)
 		printf("\n");
 
 	setroot(booted_device, bootpart);
+}
+
+void
+device_register(struct device *dev, void *aux)
+{
 }
