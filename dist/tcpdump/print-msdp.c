@@ -1,4 +1,4 @@
-/*	$NetBSD: print-msdp.c,v 1.1 2002/02/18 09:08:22 itojun Exp $	*/
+/*	$NetBSD: print-msdp.c,v 1.1.1.1 2002/02/18 09:08:22 itojun Exp $	*/
 
 /*
  * Copyright (c) 2001 William C. Fenner.

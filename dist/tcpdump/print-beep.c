@@ -1,4 +1,4 @@
-/*	$NetBSD: print-beep.c,v 1.1 2002/02/18 09:07:50 itojun Exp $	*/
+/*	$NetBSD: print-beep.c,v 1.1.1.1 2002/02/18 09:07:50 itojun Exp $	*/
 
 /*
  * Copyright (C) 2000, Richard Sharpe
