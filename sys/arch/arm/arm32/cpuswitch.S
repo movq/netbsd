@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuswitch.S,v 1.25 2002/10/15 20:53:38 bjh21 Exp $	*/
+/*	$NetBSD: cpuswitch.S,v 1.28 2002/10/19 00:10:53 bjh21 Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
