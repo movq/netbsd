@@ -1,7 +1,7 @@
-#	%W% (Berkeley) %G%
+#	@(#)Makefile	8.1 (Berkeley) 6/28/93
 
 PROG=	fsinfo
-NOMAN=	true
+MAN8=	fsinfo.0
 SRCS=	fsinfo.c fsi_gram.c fsi_lex.c \
 	fsi_util.c fsi_analyze.c fsi_dict.c \
 	wr_atab.c wr_bparam.c wr_dumpset.c \
@@ -10,9 +10,9 @@ CLEANFILES= \
 	fsi_gram.c y.tab.c fsi_gram.h y.tab.h \
 	fsi_lex.c lex.yy.c y.output
 CFLAGS+=-I.
-CFLAGS+=-I${.CURDIR}/../config
 CFLAGS+=-I${.CURDIR}/../include
-CFLAGS+=-DOS_HDR=\"os-netbsd.h\"
+CFLAGS+=-I${.CURDIR}/../config
+CFLAGS+=-DOS_HDR=\"os-bsd44.h\"
 
 fsi_lex.o fsinfo.o: fsi_gram.h
 fsi_gram.c fsi_gram.h: ../fsinfo/fsi_gram.y
