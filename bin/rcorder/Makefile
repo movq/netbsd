@@ -1,4 +1,4 @@
-#       $NetBSD: Makefile,v 1.1 1999/11/19 04:30:55 mrg Exp $
+#       $NetBSD: Makefile,v 1.1.1.1 1999/11/19 04:30:55 mrg Exp $
 
 PROG=   rcorder
 SRCS=   ealloc.c hash.c rcorder.c
