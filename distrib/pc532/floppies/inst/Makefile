@@ -1,4 +1,4 @@
-#	$Id: Makefile,v 1.1 1995/09/10 06:13:42 phil Exp $
+#	$Id: Makefile,v 1.1.1.1 1995/09/10 06:13:42 phil Exp $
 
 TOP=		${.CURDIR}/..
 
