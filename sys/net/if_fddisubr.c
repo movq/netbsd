@@ -1,5 +1,3 @@
-/*	$NetBSD: if_fddisubr.c,v 1.3 1995/12/24 03:32:03 mycroft Exp $	*/
-
 /*
  * Copyright (c) 1995
  *	Matt Thomas.  All rights reserved.
@@ -35,6 +33,21 @@
  * SUCH DAMAGE.
  *
  *	@(#)if_fddisubr.c	8.1 (Berkeley) 6/10/93
+ *
+ * $Id: if_fddisubr.c,v 1.1 1995/08/19 00:59:47 cgd Exp $
+ * $Log: if_fddisubr.c,v $
+ * Revision 1.1  1995/08/19 00:59:47  cgd
+ * Initial revision
+ *
+ * Revision 1.8  1995/08/16  22:57:28  thomas
+ * Add support for NetBSD
+ *
+ * Revision 1.7  1995/04/20  20:17:33  thomas
+ * fix typo
+ *
+ * Revision 1.6  1995/04/20  19:21:58  thomas
+ * *** empty log message ***
+ *
  */
 
 #include <sys/param.h>
@@ -116,6 +129,8 @@ extern struct ifqueue pkintrq;
 /*
  * FDDI output routine.
  * Encapsulate a packet of type family for the local net.
+ * Use trailer local net encapsulation if enough data in first
+ * packet leaves a multiple of 512 bytes of data in remainder.
  * Assumes that ifp is actually pointer to arpcom structure.
  */
 int
@@ -125,7 +140,7 @@ fddi_output(ifp, m0, dst, rt0)
 	struct sockaddr *dst;
 	struct rtentry *rt0;
 {
-	u_int16_t type;
+	short type;
 	int s, error = 0;
  	u_char edst[6];
 	register struct mbuf *m = m0;
@@ -259,8 +274,8 @@ fddi_output(ifp, m0, dst, rt0)
 			for (i=0; i<6; i++)
 				printf("%x ", edst[i] & 0xff);
 			printf(" len 0x%x dsap 0x%x ssap 0x%x control 0x%x\n", 
-			    m->m_pkthdr.len, l->llc_dsap & 0xff, l->llc_ssap &0xff,
-			    l->llc_control & 0xff);
+			       type & 0xff, l->llc_dsap & 0xff, l->llc_ssap &0xff,
+			       l->llc_control & 0xff);
 
 		}
 #endif /* LLC_DEBUG */
@@ -319,9 +334,9 @@ fddi_output(ifp, m0, dst, rt0)
 		senderr(EAFNOSUPPORT);
 	}
 
+
 	if (mcopy)
 		(void) looutput(ifp, mcopy, dst, rt);
-
 	if (type != 0) {
 		register struct llc *l;
 		M_PREPEND(m, sizeof (struct llc), M_DONTWAIT);
@@ -385,7 +400,6 @@ fddi_input(ifp, fh, m)
 {
 	register struct ifqueue *inq;
 	register struct llc *l;
-	struct arpcom *ac = (struct arpcom *)ifp;
 	int s;
 
 	if ((ifp->if_flags & IFF_UP) == 0) {
@@ -407,14 +421,14 @@ fddi_input(ifp, fh, m)
 #if defined(INET) || defined(NS) || defined(DECNET)
 	case LLC_SNAP_LSAP:
 	{
-		u_int16_t etype;
+		unsigned fddi_type;
 		if (l->llc_control != LLC_UI || l->llc_ssap != LLC_SNAP_LSAP)
 			goto dropanyway;
 		if (l->llc_snap.org_code[0] != 0 || l->llc_snap.org_code[1] != 0|| l->llc_snap.org_code[2] != 0)
 			goto dropanyway;
-		etype = ntohs(l->llc_snap.ether_type);
+		fddi_type = ntohs(l->llc_snap.ether_type);
 		m_adj(m, 8);
-		switch (etype) {
+		switch (fddi_type) {
 #ifdef INET
 		case ETHERTYPE_IP:
 			schednetisr(NETISR_IP);
@@ -439,7 +453,7 @@ fddi_input(ifp, fh, m)
 			break;
 #endif
 		default:
-			/* printf("fddi_input: unknown protocol 0x%x\n", etype); */
+			/* printf("fddi_input: unknown protocol 0x%x\n", fddi_type); */
 			ifp->if_noproto++;
 			goto dropanyway;
 		}
@@ -483,7 +497,7 @@ fddi_input(ifp, fh, m)
 		case LLC_TEST_P:
 		{
 			struct sockaddr sa;
-			register struct ether_header *eh;
+			register struct ether_header *eh2;
 			int i;
 			u_char c = l->llc_dsap;
 
@@ -491,17 +505,17 @@ fddi_input(ifp, fh, m)
 			l->llc_ssap = c;
 			if (m->m_flags & (M_BCAST | M_MCAST))
 				bcopy((caddr_t)ac->ac_enaddr,
-				      (caddr_t)fh->fddi_dhost, 6);
+				      (caddr_t)eh->ether_dhost, 6);
 			sa.sa_family = AF_UNSPEC;
 			sa.sa_len = sizeof(sa);
-			eh = (struct ether_header *)sa.sa_data;
+			eh2 = (struct ether_header *)sa.sa_data;
 			for (i = 0; i < 6; i++) {
-				eh->ether_shost[i] = c = fh->fddi_dhost[i];
-				eh->ether_dhost[i] = 
-					eh->ether_dhost[i] = fh->fddi_shost[i];
-				eh->ether_shost[i] = c;
+				eh2->ether_shost[i] = c = eh->fddi_dhost[i];
+				eh2->ether_dhost[i] = 
+					eh->ether_dhost[i] = eh->fddi_shost[i];
+				eh2->ether_shost[i] = c;
 			}
-			eh->ether_type = 0;
+			eh2->ether_type = 0;
 			ifp->if_output(ifp, m, &sa, NULL);
 			return;
 		}
@@ -561,13 +575,7 @@ fddi_ifattach(ifp)
 	ifp->if_addrlen = 6;
 	ifp->if_hdrlen = 21;
 	ifp->if_mtu = FDDIMTU;
-	ifp->if_output = fddi_output;
-#ifdef __NetBSD__
-	for (ifa = ifp->if_addrlist.tqh_first; ifa != 0;
-	    ifa = ifa->ifa_list.tqe_next)
-#else
 	for (ifa = ifp->if_addrlist; ifa; ifa = ifa->ifa_next)
-#endif
 		if ((sdl = (struct sockaddr_dl *)ifa->ifa_addr) &&
 		    sdl->sdl_family == AF_LINK) {
 			sdl->sdl_type = IFT_FDDI;
