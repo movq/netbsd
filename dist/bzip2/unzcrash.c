@@ -1,4 +1,4 @@
-/*	$NetBSD: unzcrash.c,v 1.1 2001/06/03 13:03:19 simonb Exp $	*/
+/*	$NetBSD: unzcrash.c,v 1.1.1.1 2001/06/03 13:03:19 simonb Exp $	*/
 
 
 /* A test program written to test robustness to decompression of

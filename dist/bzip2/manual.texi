@@ -1,5 +1,5 @@
 \input texinfo  @c                                  -*- Texinfo -*-
-@c $NetBSD: manual.texi,v 1.1 2001/06/03 13:03:16 simonb Exp $
+@c $NetBSD: manual.texi,v 1.1.1.1 2001/06/03 13:03:16 simonb Exp $
 @setfilename bzip2.info
 
 @ignore

@@ -1,4 +1,4 @@
-/*	$NetBSD: dlltest.c,v 1.1 2001/06/03 13:03:06 simonb Exp $	*/
+/*	$NetBSD: dlltest.c,v 1.1.1.1 2001/06/03 13:03:06 simonb Exp $	*/
 
 /*
    minibz2

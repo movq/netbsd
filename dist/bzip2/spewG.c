@@ -1,4 +1,4 @@
-/*	$NetBSD: spewG.c,v 1.1 2001/06/03 13:03:06 simonb Exp $	*/
+/*	$NetBSD: spewG.c,v 1.1.1.1 2001/06/03 13:03:06 simonb Exp $	*/
 
 
 /* spew out a thoroughly gigantic file designed so that bzip2
