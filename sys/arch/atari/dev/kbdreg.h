@@ -1,4 +1,4 @@
-/*	$NetBSD: kbdreg.h,v 1.1.1.1 1995/03/26 07:12:12 leo Exp $	*/
+/*	$NetBSD: kbdreg.h,v 1.1 1995/03/26 07:12:12 leo Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

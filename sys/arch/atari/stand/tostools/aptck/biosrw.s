@@ -1,4 +1,4 @@
-/*	$NetBSD: biosrw.s,v 1.1.1.1 1996/01/07 21:54:15 leo Exp $	*/
+/*	$NetBSD: biosrw.s,v 1.1 1996/01/07 21:54:15 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens.

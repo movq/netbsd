@@ -1,4 +1,4 @@
-/*	$NetBSD: stalloc.c,v 1.4 1996/02/22 10:10:54 leo Exp $	*/
+/*	$NetBSD: stalloc.c,v 1.1 1995/03/26 07:12:21 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman (Atari modifications)
@@ -35,7 +35,6 @@
 
 #include <sys/types.h>
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/queue.h>
 
 #include <atari/atari/misc.h>
@@ -52,7 +51,7 @@ extern u_long st_pool_size, st_pool_virt, st_pool_phys;
 
 static CIRCLEQ_HEAD(stlist, mem_node) st_list;
 static CIRCLEQ_HEAD(freelist, mem_node) free_list;
-u_long   stmem_total;		/* total free.		*/
+static u_long   stmem_total;		/* total free.		*/
 
 void
 init_stmem()
@@ -78,7 +77,8 @@ alloc_stmem(size, phys_addr)
 u_long	size;
 void	**phys_addr;
 {
-	struct mem_node *mn, *new, *bfit;
+	struct mem_node *mn, *new;
+	void		*mem;
 	int		s;
 
 	if (size == 0)
@@ -90,23 +90,15 @@ void	**phys_addr;
 		size = (size & ST_BLOCKMASK) + ST_BLOCKSIZE;
 
 	/*
-	 * walk list of available nodes, finding the best-fit.
+	 * walk list of available nodes.
 	 */
-	bfit = NULL;
-	mn   = free_list.cqh_first;
-	for(; mn != (void *)&free_list; mn = mn->free_link.cqe_next) {
-		if(size <= mn->size) {
-			if((bfit != NULL) && (bfit->size < mn->size))
-				continue;
-			bfit = mn;
-		}
-	}
-	if(bfit != NULL)
-		mn = bfit;
+	mn = free_list.cqh_first;
+	while (size > mn->size && mn != (void *)&free_list)
+		mn = mn->free_link.cqe_next;
+
 	if (mn == (void *)&free_list) {
 		printf("St-mem pool exhausted, binpatch 'st_pool_size'"
 			"to get more\n");
-		splx(s);
 		return(NULL);
 	}
 
@@ -163,7 +155,8 @@ void *mem;
 	/*
 	 * check ahead of us.
 	 */
-	if (next != (void *)&st_list && next->free_link.cqe_next) {
+	if (next->link.cqe_next != (void *)&st_list && 
+	    next->free_link.cqe_next) {
 		/*
 		 * if next is: a valid node and a free node. ==> merge
 		 */
@@ -173,7 +166,8 @@ void *mem;
 		stmem_total += mn->size + sizeof(struct mem_node);
 		mn->size += next->size + sizeof(struct mem_node);
 	}
-	if (prev != (void *)&st_list && prev->free_link.cqe_prev) {
+	if (prev->link.cqe_prev != (void *)&st_list &&
+	    prev->free_link.cqe_prev) {
 		/*
 		 * if prev is: a valid node and a free node. ==> merge
 		 */
@@ -191,7 +185,8 @@ void *mem;
 		 * we still are not on free list and we need to be.
 		 * <-- | -->
 		 */
-		while (next != (void *)&st_list && prev != (void *)&st_list) {
+		while (next->link.cqe_next != (void *)&st_list && 
+		    prev->link.cqe_prev != (void *)&st_list) {
 			if (next->free_link.cqe_next) {
 				CIRCLEQ_INSERT_BEFORE(&free_list, next, mn,
 				    free_link);
@@ -206,7 +201,7 @@ void *mem;
 			next = next->link.cqe_next;
 		}
 		if (mn->free_link.cqe_next == NULL) {
-			if (next == (void *)&st_list) {
+			if (next->link.cqe_next == (void *)&st_list) {
 				/*
 				 * we are not on list so we can add
 				 * ourselves to the tail. (we walked to it.)

@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.7 1996/02/22 10:10:47 leo Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.1 1995/03/26 07:12:18 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -30,37 +30,29 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DISKLABEL_NBDA
-#define	DISKLABEL_NBDA	/* required */
-#endif
-
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/buf.h>
-#include <ufs/ffs/fs.h>
 #include <sys/disklabel.h>
-#include <machine/ahdilabel.h>
+#include <machine/tospart.h>
+
+#define b_cylin b_resid
+#define baddr(bp) (void *)((bp)->b_un.b_addr)
 
 /*
- * BBSIZE in <ufs/ffs/fs.h> must be greater than
- * or equal to BBMINSIZE in <machine/disklabel.h>
+ * Stash TOS partition info in here before handling.
  */
-#if BBSIZE < BBMINSIZE
-#error BBSIZE smaller than BBMINSIZE
-#endif
+typedef struct {
+	u_long	nblocks;
+	u_long	blkoff;
+	u_long	type;
+} TMP_PART;
 
-static void  ck_label __P((struct disklabel *, struct cpu_disklabel *));
-static int   bsd_label __P((dev_t, void (*)(struct buf *),
-			struct disklabel *, u_int, u_int *));
-static int   ahdi_label __P((dev_t, void (*)(struct buf *),
-			struct disklabel *, struct cpu_disklabel *));
-static void  ahdi_to_bsd __P((struct disklabel *, struct ahdi_ptbl *));
-static u_int ahdi_getparts __P((dev_t, void (*)(struct buf *), u_int,
-					u_int, u_int, struct ahdi_ptbl *));
+#define	ROOT_FLAG	0x8000	/* Added in TMP_PART.type when NBR	*/
 
-/*
- * XXX unknown function but needed for /sys/scsi to link
- */
+static char *rd_tosparts __P((TMP_PART *,dev_t,void (*)(),struct disklabel *));
+static int	get_type __P((u_char *));
+
+/* XXX unknown function but needed for /sys/scsi to link */
 int
 dk_establish()
 {
@@ -68,119 +60,95 @@ dk_establish()
 }
 
 /*
- * Determine the size of the transfer, and make sure it is
- * within the boundaries of the partition. Adjust transfer
- * if needed, and signal errors or early completion.
- */
-int
-bounds_check_with_label(bp, lp, wlabel)
-	struct buf		*bp;
-	struct disklabel	*lp;
-	int			wlabel;
-{
-	struct partition	*pp;
-	u_int			maxsz, sz;
-
-	pp = &lp->d_partitions[DISKPART(bp->b_dev)];
-	if (bp->b_flags & B_RAW) {
-		if (bp->b_bcount & (lp->d_secsize - 1)) {
-			bp->b_error = EINVAL;
-			bp->b_flags |= B_ERROR;
-			return(-1);
-		}
-
-		maxsz = pp->p_size * (lp->d_secsize / DEV_BSIZE);
-		sz = (bp->b_bcount + DEV_BSIZE - 1) >> DEV_BSHIFT;
-	} else {
-		maxsz = pp->p_size;
-		sz = (bp->b_bcount + lp->d_secsize - 1) / lp->d_secsize;
-	}
-
-	if (bp->b_blkno < 0 || bp->b_blkno + sz > maxsz) {
-		if (bp->b_blkno == maxsz) {
-			/* 
-			 * trying to get one block beyond return EOF.
-			 */
-			bp->b_resid = bp->b_bcount;
-			return(0);
-		}
-		sz = maxsz - bp->b_blkno;
-		if (sz <= 0 || bp->b_blkno < 0) {
-			bp->b_error = EINVAL;
-			bp->b_flags |= B_ERROR;
-			return(-1);
-		}
-		/* 
-		 * adjust count down
-		 */
-		if (bp->b_flags & B_RAW)
-			bp->b_bcount = sz << DEV_BSHIFT;
-		else bp->b_bcount = sz * lp->d_secsize;
-	}
-
-	/*
-	 * calc cylinder for disksort to order transfers with
-	 */
-	bp->b_cylinder = (bp->b_blkno + pp->p_offset) / lp->d_secpercyl;
-	return(1);
-}
-
-/*
- * Attempt to read a disk label from a device using the
- * indicated strategy routine. The label must be partly
- * set up before this:
+ * Attempt to read a disk label from a device
+ * using the indicated stategy routine.
+ * The label must be partly set up before this:
  * secpercyl and anything required in the strategy routine
- * (e.g. sector size) must be filled in before calling us.
- * Returns NULL on success and an error string on failure.
+ * (e.g., sector size) must be filled in before calling us.
+ * Returns null on success and an error string on failure.
  */
 char *
 readdisklabel(dev, strat, lp, clp)
-	dev_t			dev;
-	void			(*strat)(struct buf *);
-	struct disklabel	*lp;
-	struct cpu_disklabel	*clp;
+dev_t			dev;
+void			(*strat)();
+struct disklabel	*lp;
+struct cpu_disklabel	*clp;
 {
-	int			e;
+	TMP_PART	sizes[TOS_MAXPART];
+	char		*msg;
+	int		i;
+	int		usr_part = RAW_PART;
 
-	bzero(clp, sizeof *clp);
+	bzero(sizes, sizeof(sizes));
+	if((msg = rd_tosparts(sizes, dev, strat, lp)) != NULL)
+		return(msg);
 
 	/*
-	 * Give some guaranteed validity to the disk label.
+	 * give some guarnteed validity to
+	 * the disklabel
 	 */
-	if (lp->d_secsize == 0)
-		lp->d_secsize = DEV_BSIZE;
-	if (lp->d_secperunit == 0)
+	if(lp->d_secperunit == 0)
 		lp->d_secperunit = 0x1fffffff;
-	if (lp->d_secpercyl == 0)
+	if(lp->d_secpercyl == 0)
 		return("Zero secpercyl");
-	bzero(lp->d_partitions, sizeof lp->d_partitions);
-	lp->d_partitions[RAW_PART].p_size = lp->d_secperunit;
-	lp->d_npartitions                 = RAW_PART + 1;
-	lp->d_bbsize                      = BBSIZE;
-	lp->d_sbsize                      = SBSIZE;
+	lp->d_npartitions = RAW_PART + 1;
 
-#ifdef DISKLABEL_NBDA
-	/* Try the native NetBSD/Atari format first. */
-	e = bsd_label(dev, strat, lp, 0, &clp->cd_label);
-#endif
-#if 0
-	/* Other label formats go here. */
-	if (e > 0)
-		e = foo_label(dev, strat, lp, ...);
-#endif
-#ifdef DISKLABEL_AHDI
-	/* The unprotected AHDI format comes last. */
-	if (e > 0)
-		e = ahdi_label(dev, strat, lp, clp);
-#endif
-	if (e < 0)
-		return("I/O error");
+	for(i = 0; i < MAXPARTITIONS; i++) {
+		if(i == RAW_PART)
+			continue;
+		lp->d_partitions[i].p_size   = 0;
+		lp->d_partitions[i].p_offset = 0;
+	}
 
-	/* Unknown format or unitialised volume? */
-	if (e > 0)
-		uprintf("Warning: unknown disklabel format\n");
+	/*
+	 * Now map the partition table from TOS to the NetBSD table.
+	 *
+	 * This means:
+	 *  Part 0   : Root
+	 *  Part 1   : Swap
+	 *  Part 2   : Whole disk
+	 *  Part 3.. : User partitions
+	 *
+	 * When more than one root partition is found, the only the first one 
+	 * will be recognized as such. The others are mapped as user partitions.
+	 */
+	lp->d_partitions[RAW_PART].p_size   = sizes[0].nblocks;
+	lp->d_partitions[RAW_PART].p_offset = sizes[0].blkoff;
 
-	/* Calulate new checksum. */
+	for(i = 0; sizes[i].nblocks; i++) {
+		int		have_root = 0;
+		int		pno;
+
+		if(!have_root && (sizes[i].type & ROOT_FLAG)) {
+			lp->d_partitions[0].p_size   = sizes[i].nblocks;
+			lp->d_partitions[0].p_offset = sizes[i].blkoff;
+			lp->d_partitions[0].p_fstype = FS_BSDFFS;
+			have_root++;
+			continue;
+		}
+		switch(sizes[i].type &= ~ROOT_FLAG) {
+			case FS_SWAP:
+					pno = 1;
+					break;
+			case FS_BSDFFS:
+			case FS_MSDOS:
+					pno = ++usr_part;
+					break;
+			default:
+					continue;
+		}
+		if(pno >= MAXPARTITIONS)
+			break; /* XXX */
+		lp->d_partitions[pno].p_size   = sizes[i].nblocks;
+		lp->d_partitions[pno].p_offset = sizes[i].blkoff;
+		lp->d_partitions[pno].p_fstype = sizes[i].type;
+	}
+	lp->d_npartitions = usr_part + 1;
+	lp->d_secperunit  = sizes[0].nblocks;
+
+	/*
+	 * calulate new checksum.
+	 */
 	lp->d_magic = lp->d_magic2 = DISKMAGIC;
 	lp->d_checksum = 0;
 	lp->d_checksum = dkcksum(lp);
@@ -189,56 +157,16 @@ readdisklabel(dev, strat, lp, clp)
 }
 
 /*
- * Check new disk label for sensibility before setting it.
+ * Check new disk label for sensibility
+ * before setting it.
  */
 int
 setdisklabel(olp, nlp, openmask, clp)
-	struct disklabel	*olp, *nlp;
-	u_long			openmask;
-	struct cpu_disklabel	*clp;
+register struct disklabel *olp, *nlp;
+u_long openmask;
+struct cpu_disklabel *clp;
 {
-	/* special case to allow disklabel to be invalidated */
-	if (nlp->d_magic == 0xffffffff) {
-		*olp = *nlp;
-		return(0);
-	}
-
-	/* sanity clause */
-	if (nlp->d_secpercyl == 0 || nlp->d_npartitions > MAXPARTITIONS
-	  || nlp->d_secsize  == 0 || (nlp->d_secsize % DEV_BSIZE) != 0
-	  || nlp->d_magic != DISKMAGIC || nlp->d_magic2 != DISKMAGIC
-	  || dkcksum(nlp) != 0)
-		return(EINVAL);
-
-#ifdef DISKLABEL_AHDI
-	if (clp->cd_bblock)
-		ck_label(nlp, clp);
-#endif
-	while (openmask) {
-		struct partition *op, *np;
-		int i = ffs(openmask) - 1;
-		openmask &= ~(1 << i);
-		if (i >= nlp->d_npartitions)
-			return(EBUSY);
-		op = &olp->d_partitions[i];
-		np = &nlp->d_partitions[i];
-		if (np->p_offset != op->p_offset || np->p_size < op->p_size)
-			return(EBUSY);
-		/*
-		 * Copy internally-set partition information
-		 * if new label doesn't include it.		XXX
-		 */
-		if (np->p_fstype == FS_UNUSED && op->p_fstype != FS_UNUSED) {
-			np->p_fstype = op->p_fstype;
-			np->p_fsize  = op->p_fsize;
-			np->p_frag   = op->p_frag;
-			np->p_cpg    = op->p_cpg;
-		}
-	}
- 	nlp->d_checksum = 0;
- 	nlp->d_checksum = dkcksum(nlp);
-	*olp = *nlp;
-	return(0);
+	return (EINVAL);
 }
 
 /*
@@ -246,407 +174,197 @@ setdisklabel(olp, nlp, openmask, clp)
  */
 int
 writedisklabel(dev, strat, lp, clp)
-	dev_t			dev;
-	void			(*strat)(struct buf *);
-	struct disklabel	*lp;
-	struct cpu_disklabel	*clp;
+	dev_t dev;
+	void (*strat)();
+	register struct disklabel *lp;
+	struct cpu_disklabel *clp;
 {
-	struct buf		*bp;
-	u_int			blk;
-	int			rv;
-
-	blk = clp->cd_bblock;
-	if (blk == NO_BOOT_BLOCK)
-		return(ENXIO);
-
-	bp = geteblk(BBMINSIZE);
-	bp->b_dev      = MAKEDISKDEV(major(dev), DISKUNIT(dev), RAW_PART);
-	bp->b_flags    = B_BUSY | B_READ;
-	bp->b_bcount   = BBMINSIZE;
-	bp->b_blkno    = blk;
-	bp->b_cylinder = blk / lp->d_secpercyl;
-	(*strat)(bp);
-	rv = biowait(bp);
-	if (!rv) {
-		struct bootblock *bb = (struct bootblock *)bp->b_data;
-		/*
-		 * Allthough the disk pack label may appear anywhere
-		 * in the boot block while reading, it is always
-		 * written at a fixed location.
-		 */
-		if (clp->cd_label != LABELOFFSET) {
-			clp->cd_label = LABELOFFSET;
-			bzero(bb, sizeof(*bb));
-		}
-		bb->bb_magic = (blk == 0) ? NBDAMAGIC : AHDIMAGIC;
-		BBSETLABEL(bb, lp);
-
-		bp->b_flags    = B_BUSY | B_WRITE;
-		bp->b_bcount   = BBMINSIZE;
-		bp->b_blkno    = blk;
-		bp->b_cylinder = blk / lp->d_secpercyl;
-		(*strat)(bp);
-		rv = biowait(bp);
-	}
-	bp->b_flags |= B_INVAL | B_AGE;
-	brelse(bp);
-	return(rv);
+	return(EINVAL);
 }
 
-/*
- * Read bootblock at block `blkno' and check
- * if it contains a valid NetBSD disk label.
- *
- * Returns:  0 if successfull,
- *          -1 if an I/O error occured,
- *          +1 if no valid label was found.
- */
-static int
-bsd_label(dev, strat, label, blkno, offset)
-	dev_t			dev;
-	void			(*strat)(struct buf *);
-	struct disklabel	*label;
-	u_int			blkno,
-				*offset;
-{
-	struct buf		*bp;
-	int			rv;
 
-	bp = geteblk(BBMINSIZE);
-	bp->b_dev      = MAKEDISKDEV(major(dev), DISKUNIT(dev), RAW_PART);
-	bp->b_flags    = B_BUSY | B_READ;
-	bp->b_bcount   = BBMINSIZE;
-	bp->b_blkno    = blkno;
-	bp->b_cylinder = blkno / label->d_secpercyl;
-	(*strat)(bp);
-
-	rv = -1;
-	if (!biowait(bp)) {
-		struct bootblock *bb;
-		u_int32_t   *p, *end;
-
-		rv  = 1;
-		bb  = (struct bootblock *)bp->b_data;
-		end = (u_int32_t *)((char *)&bb[1] - sizeof(struct disklabel));
-		for (p = (u_int32_t *)bb; p < end; ++p) {
-			struct disklabel *dl = (struct disklabel *)&p[1];
-			/*
-			 * Compatibility kludge: the boot block magic number is
-			 * new in 1.1A, in previous versions the disklabel was
-			 * stored at the end of the boot block (offset 7168).
-			 */
-			if (  (  (p[0] == NBDAMAGIC && blkno == 0)
-			      || (p[0] == AHDIMAGIC && blkno != 0)
-#if 1	/* #ifdef COMPAT_11 */
-			      || (char *)dl - (char *)bb == 7168
-#endif
-			      )
-			   && dl->d_npartitions <= MAXPARTITIONS
-			   && dl->d_magic2 == DISKMAGIC
-			   && dl->d_magic  == DISKMAGIC
-		  	   && dkcksum(dl)  == 0
-			   )	{
-				*offset = (char *)dl - (char *)bb;
-				*label  = *dl;
-				rv      = 0;
-				break;
-			}
-		}
-	}
-
-	bp->b_flags = B_INVAL | B_AGE | B_READ;
-	brelse(bp);
-	return(rv);
-}
-
-#ifdef DISKLABEL_AHDI
-/*
- * Check for consistency between the NetBSD partition table
- * and the AHDI auxilary root sectors. There's no good reason
- * to force such consistency, but issueing a warning may help
- * an inexperienced sysadmin to prevent corruption of AHDI
- * partitions.
- */
-static void
-ck_label(dl, cdl)
-	struct disklabel	*dl;
-	struct cpu_disklabel	*cdl;
-{
-	u_int			*rp, i;
-
-	for (i = 0; i < dl->d_npartitions; ++i) {
-		struct partition *p = &dl->d_partitions[i];
-		if (i == RAW_PART || p->p_size == 0)
-			continue;
-		if ( (p->p_offset >= cdl->cd_bslst
-		   && p->p_offset <= cdl->cd_bslend)
-		  || (cdl->cd_bslst >= p->p_offset
-		   && cdl->cd_bslst <  p->p_offset + p->p_size)) {
-			uprintf("Warning: NetBSD partition %c includes"
-				" AHDI bad sector list\n", 'a'+i);
-		}
-		for (rp = &cdl->cd_roots[0]; *rp; ++rp) {
-			if (*rp >= p->p_offset
-			  && *rp < p->p_offset + p->p_size) {
-				uprintf("Warning: NetBSD partition %c"
-				" includes AHDI auxilary root\n", 'a'+i);
-			}
-		}
-	}
-}
-
-/*
- * Check volume for the existance of an AHDI label. Fetch
- * NetBSD label from NBD or RAW partition, or otherwise
- * create a fake NetBSD label based on the AHDI label.
- *
- * Returns:  0 if successful,
- *          -1 if an I/O error occured,
- *          +1 if no valid AHDI label was found.
- */
 int
-ahdi_label(dev, strat, dl, cdl)
-	dev_t			dev;
-	void			(*strat)(struct buf *);
-	struct disklabel	*dl;
-	struct cpu_disklabel	*cdl;
+bounds_check_with_label(bp, lp, wlabel)
+struct buf		*bp;
+struct disklabel	*lp;
+int			wlabel;
 {
-	struct ahdi_ptbl	apt;
-	u_int			i;
-	int			j;
+	struct partition	*pp;
+	long			maxsz, sz;
 
-	/*
-	 * The AHDI format requires a specific block size.
-	 */
-	if (dl->d_secsize != AHDI_BSIZE)
-		return(1);
-
-	/*
-	 * Fetch the AHDI partition descriptors.
-	 */
-	apt.at_cdl    = cdl;
-	apt.at_nroots = apt.at_nparts = 0;
-	i = ahdi_getparts(dev, strat, dl->d_secpercyl,
-			  AHDI_BBLOCK, AHDI_BBLOCK, &apt);
-	if (i) {
-		if (i < dl->d_secperunit)
-			return(-1);	/* disk read error		*/
-		else return(1);		/* reading past end of medium	*/
+	pp = &lp->d_partitions[DISKPART(bp->b_dev)];
+	if(bp->b_flags & B_RAW) {
+		maxsz = pp->p_size * (lp->d_secsize / DEV_BSIZE);
+		sz = (bp->b_bcount + DEV_BSIZE - 1) >> DEV_BSHIFT;
+	}
+	else {
+		maxsz = pp->p_size;
+		sz = (bp->b_bcount + lp->d_secsize - 1) / lp->d_secsize;
 	}
 
-	/*
-	 * Perform sanity checks.
-	 */
-	if (apt.at_bslst == 0 || apt.at_bslend == 0)	/* illegal */
-		return(1);
-	if (apt.at_hdsize == 0 || apt.at_nparts == 0)	/* unlikely */
-		return(1);
-	if (apt.at_nparts > AHDI_MAXPARTS)		/* XXX kludge */
-		return(-1);
-	for (i = 0; i < apt.at_nparts; ++i) {
-		struct ahdi_part *p1 = &apt.at_parts[i];
-
-		for (j = 0; j < apt.at_nroots; ++j) {
-			u_int	aux = apt.at_roots[j];
-			if (aux >= p1->ap_st && aux <= p1->ap_end)
-				return(1);
-		}
-		for (j = i + 1; j < apt.at_nparts; ++j) {
-			struct ahdi_part *p2 = &apt.at_parts[j];
-			if (p1->ap_st >= p2->ap_st && p1->ap_st <= p2->ap_end)
-				return(1);
-			if (p2->ap_st >= p1->ap_st && p2->ap_st <= p1->ap_end)
-				return(1);
-		}
-		if (p1->ap_st >= apt.at_bslst && p1->ap_st <= apt.at_bslend)
-			return(1);
-		if (apt.at_bslst >= p1->ap_st && apt.at_bslst <= p1->ap_end)
-			return(1);
-	}
-
-	/*
-	 * Search for a NetBSD disk label
-	 */
-	apt.at_bblock = NO_BOOT_BLOCK;
-	for (i = 0; i < apt.at_nparts; ++i) {
-		struct ahdi_part *pd = &apt.at_parts[i];
-		u_int		 id  = *((u_int32_t *)&pd->ap_flg);
-		if (id == AHDI_PID_NBD || id == AHDI_PID_RAW) {
-			u_int	blkno = pd->ap_st;
-			j = bsd_label(dev, strat, dl, blkno, &apt.at_label);
-			if (j < 0) {
-				return(j);		/* I/O error */
-			}
-			if (!j) {
-				apt.at_bblock = blkno;	/* got it */
-				ck_label(dl, cdl);
-				return(0);
-			}
-			/*
-			 * Not yet, but if this is the first NBD partition
-			 * on this volume, we'll mark it anyway as a possible
-			 * destination for future writedisklabel() calls, just
-			 * in case there is no valid disk label on any of the
-			 * other AHDI partitions.
+	if(bp->b_blkno < 0 || bp->b_blkno + sz > maxsz) {
+		if(bp->b_blkno == maxsz) {
+			/* 
+			 * trying to get one block beyond return EOF.
 			 */
-			if (id == AHDI_PID_NBD
-			    && apt.at_bblock == NO_BOOT_BLOCK)
-				apt.at_bblock = blkno;
+			bp->b_resid = bp->b_bcount;
+			return(0);
 		}
+		sz = maxsz - bp->b_blkno;
+		if(sz <= 0 || bp->b_blkno < 0) {
+			bp->b_error = EINVAL;
+			bp->b_flags |= B_ERROR;
+			return(-1);
+		}
+		/* 
+		 * adjust count down
+		 */
+		if(bp->b_flags & B_RAW)
+			bp->b_bcount = sz << DEV_BSHIFT;
+		else bp->b_bcount = sz * lp->d_secsize;
 	}
 
 	/*
-	 * No NetBSD disk label on this volume, use the AHDI
-	 * label to create a fake BSD label. If there is no
-	 * NBD partition on this volume either, subsequent
-	 * writedisklabel() calls will fail.
+	 * calc cylinder for disksort to order transfers with
 	 */
-	ahdi_to_bsd(dl, &apt);
-	return(0);
+	bp->b_cylin = (bp->b_blkno + pp->p_offset) / lp->d_secpercyl;
+	return(1);
 }
 
 /*
- * Map the AHDI partition table to the NetBSD table.
- *
- * This means:
- *  Part 0   : Root
- *  Part 1   : Swap
- *  Part 2   : Whole disk
- *  Part 3.. : User partitions
- *
- * When more than one root partition is found, only the first one will
- * be recognized as such. The others are mapped as user partitions.
+ * Read a GEM-partition info and translate it to our temporary partitions array.
+ * Returns 0 if an error occured, 1 if all went ok.
  */
-static void
-ahdi_to_bsd(dl, apt)
-	struct disklabel	*dl;
-	struct ahdi_ptbl	*apt;
-{
-	int		i, have_root, user_part;
-
-	user_part = RAW_PART;
-	have_root = (apt->at_bblock != NO_BOOT_BLOCK);
-
-	for (i = 0; i < apt->at_nparts; ++i) {
-		struct ahdi_part *pd = &apt->at_parts[i];
-		int		 fst, pno = -1;
-
-		switch (*((u_int32_t *)&pd->ap_flg)) {
-			case AHDI_PID_NBD:
-				/*
-				 * If this partition has been marked as the
-				 * first NBD partition, it will be the root
-				 * partition.
-				 */
-				if (pd->ap_st == apt->at_bblock)
-					pno = 0;
-				/* FALL THROUGH */
-			case AHDI_PID_NBR:
-				/*
-				 * If there is no NBD partition and this is
-				 * the first NBR partition, it will be the
-				 * root partition.
-				 */
-				if (!have_root) {
-					have_root = 1;
-					pno = 0;
-				}
-				/* FALL THROUGH */
-			case AHDI_PID_NBU:
-				fst = FS_BSDFFS;
-				break;
-			case AHDI_PID_NBS:
-			case AHDI_PID_SWP:
-				if (dl->d_partitions[1].p_size == 0)
-					pno = 1;
-				fst = FS_SWAP;
-				break;
-			case AHDI_PID_BGM:
-			case AHDI_PID_GEM:
-				fst = FS_MSDOS;
-				break;
-			default:
-				fst = FS_OTHER;
-				break;
+#define	BP_SETUP(bp, block) {						\
+			bp->b_blkno  = block;				\
+			bp->b_cylin  = block / lp->d_secpercyl;		\
+			bp->b_bcount = TOS_BSIZE;			\
+			bp->b_flags  = B_BUSY | B_READ;			\
 		}
-		if (pno < 0) {
-			if((pno = user_part + 1) >= MAXPARTITIONS)
-				continue;
-			user_part = pno;
-		}
-		dl->d_partitions[pno].p_size   = pd->ap_end - pd->ap_st + 1;
-		dl->d_partitions[pno].p_offset = pd->ap_st;
-		dl->d_partitions[pno].p_fstype = fst;
-	}
-	dl->d_npartitions = user_part + 1;
-}
 
-/*
- * Fetch the AHDI partitions and auxilary roots.
- *
- * Returns:  0 if successful,
- *           otherwise an I/O error occurred, and the
- *           number of the offending block is returned.
- */
-static u_int
-ahdi_getparts(dev, strat, secpercyl, rsec, esec, apt)
-	dev_t			dev;
-	void			(*strat)(struct buf *);
-	u_int			secpercyl,
-				rsec, esec;
-	struct ahdi_ptbl	*apt;
+static char *
+rd_tosparts(sizes, dev, strat, lp)
+TMP_PART		*sizes;
+dev_t			dev;
+void			(*strat)();
+struct disklabel	*lp;
 {
-	struct ahdi_part	*part, *end;
-	struct ahdi_root	*root;
-	struct buf		*bp;
-	u_int			rv;
+	GEM_ROOT	*g_root;
+	GEM_PART	g_local[NGEM_PARTS];
+	struct buf	*bp;
+	int		pno  = 1;
+	char		*msg = NULL;
+	int		i;
 
-	bp = geteblk(AHDI_BSIZE);
-	bp->b_dev      = MAKEDISKDEV(major(dev), DISKUNIT(dev), RAW_PART);
-	bp->b_flags    = B_BUSY | B_READ;
-	bp->b_bcount   = AHDI_BSIZE;
-	bp->b_blkno    = rsec;
-	bp->b_cylinder = rsec / secpercyl;
-	(*strat)(bp);
-	if (biowait(bp)) {
-		rv = rsec + (rsec == 0);
+	/*
+	 * Get a buffer first, so we can read the disk.
+	 */
+	bp = (void*)geteblk(TOS_BSIZE);
+	bp->b_dev = MAKEDISKDEV(major(dev), DISKUNIT(dev), RAW_PART);
+	
+	/*
+	 * Read root sector
+	 */
+	BP_SETUP(bp, TOS_BBLOCK);
+	strat(bp);
+	if(biowait(bp)) {
+		msg = "I/O error";
 		goto done;
 	}
-	root = (struct ahdi_root *)bp->b_data;
 
-	if (rsec == AHDI_BBLOCK)
-		end = &root->ar_parts[AHDI_MAXRPD];
-	else end = &root->ar_parts[AHDI_MAXARPD];
-	for (part = root->ar_parts; part < end; ++part) {
-		u_int	id = *((u_int32_t *)&part->ap_flg);
-		if (!(id & 0x01000000))
-			continue;
-		if ((id &= 0x00ffffff) == AHDI_PID_XGM) {
-			u_int	offs = part->ap_st + esec;
-			if (apt->at_nroots < AHDI_MAXROOTS)
-				apt->at_roots[apt->at_nroots] = offs;
-			apt->at_nroots += 1;
-			rv = ahdi_getparts(dev, strat, secpercyl, offs,
-				(esec == AHDI_BBLOCK) ? offs : esec, apt);
-			if (rv)
+	/*
+	 * Make local copy of partition info, we may need to re-use
+	 * the buffer in case of 'XGM' partitions.
+	 */
+	g_root  = (GEM_ROOT*)baddr(bp);
+	bcopy(g_root->parts, g_local, NGEM_PARTS*sizeof(GEM_PART));
+
+	/*
+	 * Partition 0 contains whole disk!
+	 */
+	sizes[0].nblocks = g_root->hd_siz;
+	sizes[0].blkoff  = 0;
+	sizes[0].type    = FS_UNUSED;
+
+	for(i = 0; i < NGEM_PARTS; i++) {
+	    if(!(g_local[i].p_flg & 1)) 
+		continue;
+	    if(!strncmp(g_local[i].p_id, "XGM", 3)) {
+		int	j;
+		daddr_t	new_root = g_local[i].p_st;
+
+		/*
+		 * Loop through extended partition list
+		 */
+		for(;;) {
+		    BP_SETUP(bp, new_root);
+		    strat(bp);
+		    if(biowait(bp)) {
+				msg = "I/O error";
 				goto done;
-			continue;
+		    }
+		    for(j = 0; j < NGEM_PARTS; j++) {
+			if(!(g_root->parts[j].p_flg & 1))
+				continue;
+			if(!strncmp(g_root->parts[j].p_id, "XGM", 3)) {
+			    new_root = g_local[i].p_st + g_root->parts[j].p_st;
+			    break;
+			}
+			else {
+			    sizes[pno].nblocks=g_root->parts[j].p_size;
+			    sizes[pno].blkoff =g_root->parts[j].p_st+new_root;
+			    sizes[pno].type   =get_type(g_root->parts[j].p_id);
+			    pno++;
+			    if(pno >= TOS_MAXPART)
+				break;
+			}
+		    }
+		    if(j == NGEM_PARTS)
+			break;
 		}
-		else if (apt->at_nparts < AHDI_MAXPARTS) {
-			struct ahdi_part *p = &apt->at_parts[apt->at_nparts];
-			*((u_int32_t *)&p->ap_flg) = id;
-			p->ap_st  = part->ap_st + rsec;
-			p->ap_end = p->ap_st + part->ap_size - 1;
-		}
-		apt->at_nparts += 1;
+	    }
+	    else {
+		sizes[pno].nblocks = g_local[i].p_size;
+		sizes[pno].blkoff  = g_local[i].p_st;
+		sizes[pno].type    = get_type(g_local[i].p_id);
+		pno++;
+	    }
 	}
-	apt->at_hdsize = root->ar_hdsize;
-	apt->at_bslst  = root->ar_bslst;
-	apt->at_bslend = root->ar_bslst + root->ar_bslsize - 1;
-	rv = 0;
+	/*
+	 * Check sensibility of partition info
+	 */
+	for(i = 2; i < pno; i++) {
+		if(sizes[i].blkoff < (sizes[i-1].blkoff + sizes[i-1].nblocks)) {
+			msg = "Partion table bad (overlap)";
+			goto done;
+		}
+		if((sizes[i].blkoff + sizes[i].nblocks) > sizes[0].nblocks) {
+			msg = "Partion table bad (extends beyond disk)";
+			goto done;
+		}
+	}
 done:
 	bp->b_flags = B_INVAL | B_AGE | B_READ;
 	brelse(bp);
-	return(rv);
+	return(msg);
 }
-#endif /* DISKLABEL_AHDI */
+
+/*
+ * Translate a TOS partition type to a NetBSD partition type.
+ */
+#define	ID_CMP(a,b)	((a[0] == b[0]) && (a[1] == b[1]) && (a[2] == b[2]))
+
+static int
+get_type(p_id)
+u_char	*p_id;
+{
+	if(ID_CMP(p_id, "GEM") || ID_CMP(p_id, "BGM"))
+		return(FS_MSDOS); /* XXX - should be compatible */
+	if(ID_CMP(p_id, "NBU"))
+		return(FS_BSDFFS);
+	if(ID_CMP(p_id, "NBR"))
+		return(FS_BSDFFS|ROOT_FLAG);
+	if(ID_CMP(p_id, "NBS"))
+		return(FS_SWAP);
+	return(FS_OTHER);
+}

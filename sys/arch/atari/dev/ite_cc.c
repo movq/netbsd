@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_cc.c,v 1.5 1996/02/22 10:11:29 leo Exp $	*/
+/*	$NetBSD: ite_cc.c,v 1.1 1995/03/26 07:12:14 leo Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -190,20 +190,18 @@ ite_newsize(ip, winsz)
 struct ite_softc	*ip;
 struct itewinsize	*winsz;
 {
-	struct view_size	vs;
-	ipriv_t			*cci = ip->priv;    
-	u_long			i, j;
-	int			error = 0;
-	view_t			*view;
+	struct view_size		vs;
+	ipriv_t				*cci = ip->priv;    
+	u_long				fbp, i, j;
+	int				error = 0;
+	view_t				*view = ip->grf->g_view;
 
 	vs.x      = winsz->x;
 	vs.y      = winsz->y;
 	vs.width  = winsz->width;
 	vs.height = winsz->height;
 	vs.depth  = winsz->depth;
-
 	error = viewioctl(ip->grf->g_viewdev, VIOCSSIZE, &vs, 0, -1);
-	view  = viewview(ip->grf->g_viewdev);
 
 	/*
 	 * Reinitialize our structs
@@ -235,12 +233,13 @@ struct itewinsize	*winsz;
 		cci->column_offset = con_columns;
 	}
 	else {
-	  cci->row_ptr = malloc(sizeof(u_char *) * ip->rows,M_DEVBUF,M_NOWAIT);
-	  cci->column_offset = malloc(sizeof(u_int)*ip->cols,M_DEVBUF,M_NOWAIT);
+	  cci->row_ptr = malloc(sizeof(u_char *) * ip->rows,M_DEVBUF,M_WAITOK);
+	  cci->column_offset = malloc(sizeof(u_int)*ip->cols,M_DEVBUF,M_WAITOK);
 	}
 
 	if(!cci->row_ptr || !cci->column_offset)
 		panic("No memory for ite-view");
+    
 
 	cci->width      = view->bitmap->bytes_per_row << 3;
 	cci->underline  = ip->font.baseline + 1;
@@ -267,96 +266,6 @@ struct itewinsize	*winsz;
 		cci->font_cell[i] = cci->font_cell[i-1] + ip->font.height;
 	    
 	return(error);
-}
-
-int
-ite_grf_ioctl(ip, cmd, addr, flag, p)
-struct ite_softc	*ip;
-u_long			cmd;
-caddr_t			addr;
-int			flag;
-struct proc		*p;
-{
-	struct winsize		ws;
-	struct itewinsize	*is;
-	int			error = 0;
-	view_t			*view = viewview(ip->grf->g_viewdev);
-#if 0 /* LWP: notyet */
-	struct itebell		*ib;
-#endif
-
-	switch (cmd) {
-	case ITEIOCGWINSZ:
-		is         = (struct itewinsize *)addr;
-		is->x      = view->display.x;
-		is->y      = view->display.y;
-		is->width  = view->display.width;
-		is->height = view->display.height;
-		is->depth  = view->bitmap->depth;
-		break;
-	case ITEIOCSWINSZ:
-		is = (struct itewinsize *)addr;
-
-		if(ite_newsize(ip, is))
-			error = ENOMEM;
-		else {
-			view         = viewview(ip->grf->g_viewdev);
-			ws.ws_row    = ip->rows;
-			ws.ws_col    = ip->cols;
-			ws.ws_xpixel = view->display.width;
-			ws.ws_ypixel = view->display.height;
-			ite_reset(ip);
-			/*
-			 * XXX tell tty about the change 
-			 * XXX this is messy, but works 
-			 */
-			iteioctl(ip->grf->g_itedev,TIOCSWINSZ,(caddr_t)&ws,0,p);
-		}
-		break;
-	case ITEIOCDSPWIN:
-		ip->grf->g_mode(ip->grf, GM_GRFON, NULL, 0, 0);
-		break;
-	case ITEIOCREMWIN:
-		ip->grf->g_mode(ip->grf, GM_GRFOFF, NULL, 0, 0);
-		break;
-	case ITEIOCGBELL:
-#if 0 /* LWP */
-		/* XXX This won't work now			*/
-		/* XXX Should the bell be device dependent?	*/
-		ib         = (struct itebell *)addr;
-		ib->volume = bvolume;
-		ib->pitch  = bpitch;
-		ib->msec   = bmsec;
-#endif
-		break;
-	case ITEIOCSBELL:
-#if 0 /* LWP */
-		/* XXX See above				*/
-		ib = (struct itebell *)addr;
-		/* bounds check */
-		if(ib->pitch > MAXBPITCH || ib->pitch < MINBPITCH ||
-		    ib->volume > MAXBVOLUME || ib->msec > MAXBTIME)
-			error = EINVAL;
-		else {
-			bvolume = ib->volume;
-			bpitch  = ib->pitch;
-			bmsec   = ib->msec;
-		}
-#endif
-		break;
-	case VIOCSCMAP:
-	case VIOCGCMAP:
-		/*
-		 * XXX watchout for that -1 its not really the kernel talking
-		 * XXX these two commands don't use the proc pointer though
-		 */
-		error = viewioctl(ip->grf->g_viewdev, cmd, addr, flag, -1);
-		break;
-	default:
-		error = -1;
-		break;
-	}
-	return (error);
 }
 
 static void
@@ -443,18 +352,15 @@ putc8(struct ite_softc *ip, int c, int dy, int dx, int mode)
 
 	eor_mask = (mode & ATTR_INV) ? 0xff : 0x00;
 	bl       = (mode & ATTR_BOLD) ? 1 : 0;
-	ul       = (mode & ATTR_UL) ? fh - cci->underline : fh;
-	for(; fh--; pl += ro) {
-		if(fh != ul) {
-			tmp = *ft++;
-			if(bl)
-				tmp |= (tmp >> 1);
-			*pl = tmp ^ eor_mask;
-		}
-		else {
-			*pl = 0xff ^ eor_mask;
-			ft++;
-		}
+	ul       = fh - cci->underline;
+	while(fh--) {
+		tmp = *ft++ ^ eor_mask;
+		if(bl)
+			*pl = tmp | (tmp >> 1);
+		else *pl = tmp;
+		if(fh == ul)
+			*pl = 0xff;
+		pl += ro;
 	}
 }
 
@@ -462,7 +368,7 @@ static void
 clear8(struct ite_softc *ip, int sy, int sx, int h, int w)
 {
 	ipriv_t	*cci = (ipriv_t *) ip->priv;
-	view_t	*v   = viewview(ip->grf->g_viewdev);
+	view_t	*v   = ip->grf->g_view;
 	bmap_t	*bm  = v->bitmap;
 
 	if((sx == 0) && (w == ip->cols)) {
@@ -508,11 +414,13 @@ register struct ite_softc	*ip;
 register int			sy;
 int				dir, sx, count;
 {
-	bmap_t *bm = viewview(ip->grf->g_viewdev)->bitmap;
+	bmap_t *bm = ip->grf->g_view->bitmap;
 	u_char *pl = ((ipriv_t *)ip->priv)->row_ptr[sy];
 
 	if(dir == SCROLL_UP) {
 		int	dy = sy - count;
+		int	height = ip->bottom_margin - sy + 1;
+		int	i;
 
 		cursor32(ip, ERASE_CURSOR);
 		scrollbmap(bm, 0, dy*ip->font.height, bm->bytes_per_row >> 3,
@@ -520,7 +428,11 @@ int				dir, sx, count;
 				0, -(count*ip->font.height));
 	}
 	else if(dir == SCROLL_DOWN) {
-        	cursor32(ip, ERASE_CURSOR);
+		int	dy = sy + count;
+		int	height = ip->bottom_margin - dy + 1;
+		int	i;
+
+        cursor32(ip, ERASE_CURSOR);
 		scrollbmap(bm, 0, sy*ip->font.height, bm->bytes_per_row >> 3,
 				(ip->bottom_margin-sy+1)*ip->font.height,
 				0, count*ip->font.height);
@@ -573,6 +485,7 @@ int				dir, sx, count;
 static void 
 scrollbmap (bmap_t *bm, u_short x, u_short y, u_short width, u_short height, short dx, short dy)
 {
+    u_short	depth = bm->depth; 
     u_short lwpr  = bm->bytes_per_row >> 2;
 
     if(dx) {

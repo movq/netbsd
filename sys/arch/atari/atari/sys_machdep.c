@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_machdep.c,v 1.5 1996/02/22 10:10:58 leo Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.1 1995/03/26 07:12:18 leo Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986 Regents of the University of California.
@@ -55,15 +55,14 @@
 #ifdef TRACE
 int	nvualarm;
 
-sys_vtrace(p, v, retval)
+vtrace(p, uap, retval)
 	struct proc *p;
-	void *v;
+	register struct vtrace_args /* {
+		syscallarg(int)	request;
+		syscallarg(int)	value;
+	} */ *uap;
 	register_t *retval;
 {
-	register struct sys_vtrace_args /* {
-		syscallarg(int) request;
-		syscallarg(int) value;
-	} */ *uap = v;
 	int vdoualarm();
 
 	switch(SCARG(uap, request)) {
@@ -119,7 +118,6 @@ vdoualarm(arg)
 /* XXX end should be */
 
 /*ARGSUSED1*/
-int
 cachectl(req, addr, len)
 	int req;
 	caddr_t	addr;
@@ -231,7 +229,6 @@ cachectl(req, addr, len)
  */
 
 /*ARGSUSED1*/
-int
 dma_cachectl(addr, len)
 	caddr_t	addr;
 	int len;
@@ -273,18 +270,14 @@ dma_cachectl(addr, len)
 }
 
 int
-sys_sysarch(p, v, retval)
+sysarch(p, uap, retval)
 	struct proc *p;
-	void *v;
+	struct sysarch_args /* {
+		syscallarg(int)	op;
+		syscallarg(char*)parms;
+	} */ *uap;
 	register_t *retval;
 {
-#ifdef notyet
-	struct sys_sysarch_args /* {
-		syscallarg(int) op;
-		syscallarg(char*)parms; 
-	} */ *uap = v;
-#endif
-
 	return ENOSYS;
 }
 

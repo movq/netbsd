@@ -1,4 +1,4 @@
-/*	$NetBSD: grf.c,v 1.7 1996/02/22 10:11:23 leo Exp $	*/
+/*	$NetBSD: grf.c,v 1.1 1995/03/26 07:12:12 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman
@@ -86,7 +86,7 @@ int grfopen __P((dev_t, int, int, struct proc *));
 int grfclose __P((dev_t, int));
 int grfioctl __P((dev_t, u_long, caddr_t, int, struct proc *));
 int grfselect __P((dev_t, int));
-int grfmmap __P((dev_t, int, int));
+int grfmap __P((dev_t, int, int));
 
 int grfon __P((dev_t));
 int grfoff __P((dev_t));
@@ -222,6 +222,7 @@ grfattach(pdp, dp, auxp)
 struct device	*pdp, *dp;
 void		*auxp;
 {
+	extern struct view_softc	views[];
 	static struct grf_softc		congrf;
 	       struct grf_softc		*gp;
 	       int			maj;
@@ -242,6 +243,7 @@ void		*auxp;
 		congrf.g_flags   = GF_ALIVE;
 		congrf.g_mode    = grf_mode;
 		congrf.g_conpri  = grfcc_cnprobe();
+		congrf.g_view    = views[0].view; /* XXX */
 		congrf.g_viewdev = congrf.g_unit;
 		grfcc_iteinit(&congrf);
 		grf_viewsync(&congrf);
@@ -268,6 +270,7 @@ void		*auxp;
 		gp->g_flags   = GF_ALIVE;
 		gp->g_mode    = grf_mode;
 		gp->g_conpri  = 0;
+		gp->g_view    = views[gp->g_unit].view; /* XXX */
 		gp->g_viewdev = gp->g_unit;
 		grfcc_iteinit(gp);
 		grf_viewsync(gp);
@@ -314,7 +317,6 @@ grfopen(dev, flags, devtype, p)
 
 	if ((gp->g_flags & (GF_OPEN|GF_EXCLUDE)) == (GF_OPEN|GF_EXCLUDE))
 		return(EBUSY);
-	grf_viewsync(gp);
 
 	return(0);
 }
@@ -366,14 +368,14 @@ struct proc	*p;
 		error = grfsinfo(dev, (struct grfdyninfo *) data);
 		break;
 	case GRFGETVMODE:
-		return(gp->g_mode(gp, GM_GRFGETVMODE, data, 0, 0));
+		return(gp->g_mode(gp, GM_GRFGETVMODE, data));
 	case GRFSETVMODE:
-		error = gp->g_mode(gp, GM_GRFSETVMODE, data, 0, 0);
+		error = gp->g_mode(gp, GM_GRFSETVMODE, data);
 		if (error == 0 && gp->g_itedev)
 			ite_reinit(gp->g_itedev);
 		break;
 	case GRFGETNUMVM:
-		return(gp->g_mode(gp, GM_GRFGETNUMVM, data, 0, 0));
+		return(gp->g_mode(gp, GM_GRFGETNUMVM, data));
 	/*
 	 * these are all hardware dependant, and have to be resolved
 	 * in the respective driver.
@@ -390,7 +392,8 @@ struct proc	*p;
 		 * check to see whether it's a command recognized by the
 		 * view code.
 		 */
-		return(viewioctl(gp->g_viewdev, cmd, data, flag, p));
+		if(gp->g_view != NULL)
+			return(viewioctl(gp->g_viewdev, cmd, data, flag, p));
 		error = EINVAL;
 		break;
 
@@ -414,22 +417,11 @@ grfselect(dev, rw)
  * memory space.
  */
 int
-grfmmap(dev, off, prot)
+grfmap(dev, off, prot)
 dev_t	dev;
 int	off, prot;
 {
-	struct grf_softc	*gp;
-	struct grfinfo		*gi;
-	
-	gp = grfsp[GRFUNIT(dev)];
-	gi = &gp->g_display;
-
-	/*
-	 * frame buffer
-	 */
-	if ((off >= 0) && (off < gi->gd_fbsize))
-		return (((u_int)gi->gd_fbaddr + off) >> PGSHIFT);
-	return(-1);
+panic("No grfmap\n"); /* LWP */
 }
 
 int
@@ -447,8 +439,7 @@ grfon(dev)
 	if (gp->g_itedev != NODEV)
 		ite_off(gp->g_itedev, 3);
 
-	return(gp->g_mode(gp, (dev & GRFOVDEV) ? GM_GRFOVON : GM_GRFON,
-							NULL, 0, 0));
+	return(gp->g_mode(gp, (dev & GRFOVDEV) ? GM_GRFOVON : GM_GRFON));
 }
 
 int
@@ -464,8 +455,7 @@ grfoff(dev)
 		return(0);
 
 	gp->g_flags &= ~GF_GRFON;
-	error = gp->g_mode(gp, (dev & GRFOVDEV) ? GM_GRFOVOFF : GM_GRFOFF,
-						NULL, 0, 0);
+	error = gp->g_mode(gp, (dev & GRFOVDEV) ? GM_GRFOVOFF : GM_GRFOFF);
 
 	/*
 	 * Closely tied together no X's
@@ -485,7 +475,7 @@ grfsinfo(dev, dyninfo)
 	int error;
 
 	gp = grfsp[GRFUNIT(dev)];
-	error = gp->g_mode(gp, GM_GRFCONFIG, dyninfo, 0, 0);
+	error = gp->g_mode(gp, GM_GRFCONFIG, dyninfo);
 
 	/*
 	 * Closely tied together no X's
@@ -522,7 +512,7 @@ struct grf_softc *gp;
 		 */
 		vs.width  = 640;
 		vs.height = 400;
-		vs.depth  = 1;
+		vs.depth  = 2;
 	}
 	gi->gd_colors = 1 << vs.depth;
 	gi->gd_planes = vs.depth;

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1.1.1 1995/03/26 07:12:03 leo Exp $
+#	$NetBSD: Makefile,v 1.1 1995/03/26 07:12:03 leo Exp $
 #
 #	from: @(#)Makefile	7.3 (Berkeley) 6/9/91
 #

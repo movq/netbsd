@@ -1,4 +1,4 @@
-/*	$NetBSD: itevar.h,v 1.3 1996/02/22 10:11:31 leo Exp $	*/
+/*	$NetBSD: itevar.h,v 1.1 1995/03/26 07:12:12 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman (Atari modifications)
@@ -61,7 +61,6 @@ struct ite_softc {
 	void			*priv;
 	font_info		font;
 	u_char			*tabs;
-	struct kbdmap		*kbdmap;
 	int			flags;
 	short			cursorx;
 	short			cursory;
@@ -190,7 +189,7 @@ void	itestart __P((struct tty *));
 
 /* ite functions */
 int	ite_on __P((dev_t, int));
-void	ite_off __P((dev_t, int));
+int	ite_off __P((dev_t, int));
 void	ite_reinit __P((dev_t));
 int	ite_param __P((struct tty *, struct termios *));
 void	ite_reset __P((struct ite_softc *));

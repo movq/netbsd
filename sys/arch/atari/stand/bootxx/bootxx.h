@@ -1,4 +1,4 @@
-/*	$NetBSD: bootxx.h,v 1.1.1.1 1996/02/29 11:35:06 leo Exp $	*/
+/*	$NetBSD: bootxx.h,v 1.1 1996/02/29 11:35:06 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 L. Weppelman

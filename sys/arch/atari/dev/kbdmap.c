@@ -1,4 +1,4 @@
-/*	$NetBSD: kbdmap.c,v 1.2 1995/07/24 05:56:14 leo Exp $	*/
+/*	$NetBSD: kbdmap.c,v 1.1 1995/03/26 07:12:12 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -40,6 +40,7 @@
 #define C KBD_MODE_CAPS
 #define K KBD_MODE_KPAD
 
+struct kbdmap kbdmap;
 struct kbdmap ascii_kbdmap = {
 	/* normal map */
 	{

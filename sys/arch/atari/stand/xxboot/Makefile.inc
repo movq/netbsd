@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1.1.1 1996/02/29 11:36:49 leo Exp $
+#	$NetBSD: Makefile.inc,v 1.1 1996/02/29 11:36:49 leo Exp $
 
 BINDIR=		/usr/mdec
 BINMODE=	${NONBINMODE}

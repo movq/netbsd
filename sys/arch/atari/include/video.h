@@ -1,4 +1,4 @@
-/*	$NetBSD: video.h,v 1.4 1996/01/02 20:59:43 leo Exp $	*/
+/*	$NetBSD: video.h,v 1.1 1995/03/26 07:12:08 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -39,41 +39,14 @@
 #define	VIDEO	((struct video *)AD_VIDEO)
 
 struct video {
-    volatile	char	vdb[14];	/* sparsely filled		    */
-    volatile	u_short vd_line_wide;	/* Falcon line word distance        */
-    volatile	u_short vd_vert_wrap;	/* Falcon line length		    */
-    volatile	char	vd_fill0[45];	/* filler			    */
+    volatile	char	vdb[64];	/* sparsely filled		    */
     volatile	u_short	vd_st_rgb[16];	/* RGB for simultaneous colors	(ST)*/
     volatile	u_char	vd_st_res;	/* ST resolution		    */
     volatile	char	vd_fill1;	/* filler			    */
     volatile	u_short	vd_tt_res;	/* TT-resultion mode		    */
     volatile	u_char  vd_ste_hscroll;	/* MEGA STe hor bitwise scroll	    */
-    volatile	u_short vd_fal_res;	/* Falcon resolution		    */
-    volatile	char    vd_fill2[23];
-    volatile	u_short vd_h_hold_cnt;	/* Falcon horizontal hold counter   */
-    volatile	u_short vd_h_hold_tim;	/* Falcon horizontal hold timer     */
-    volatile	u_short vd_h_bord_beg;  /* Falcon horizontal border begin   */
-    volatile	u_short vd_h_bord_end;	/* Falcon horizontal border end     */
-    volatile	u_short vd_h_dis_beg;	/* Falcon horizontal display begin  */
-    volatile	u_short vd_h_dis_end;	/* Falcon horizontal display end    */
-    volatile	u_short vd_h_ss;	/* Falcon horizontal SS             */
-    volatile    u_short vd_h_fs;	/* Falcon horizontal FS		    */
-    volatile	u_short vd_h_hh;	/* Falcon horizontal HH		    */
-    volatile	char    vd_fill3[13];
-    volatile	u_short vd_v_freq_cnt;	/* Falcon vertical frequency count  */
-    volatile	u_short vd_v_freq_tim;	/* Falcon vertical frequency timer  */
-    volatile	u_short vd_v_bord_beg;	/* Falcon vertical border begin     */
-    volatile	u_short vd_v_bord_end;	/* Falcon vertical border end       */
-    volatile	u_short vd_v_dis_beg;	/* Falcon vertical display begin    */
-    volatile	u_short vd_v_dis_end;	/* Falcon vertical display end      */
-    volatile	u_short vd_v_ss;	/* Falcon vertical SS               */
-    volatile	char    vd_fill4[17];
-    volatile	u_short vd_fal_ctrl;	/* Falcon video control		    */
-    volatile	u_short vd_fal_mode;	/* Falcon video mode	            */
-    volatile	char    vd_fill5[315];
+    volatile	u_char  vd_fill2[411];
     volatile	u_short vd_tt_rgb[256];	/* RGB for simultaneous TT colors   */
-    volatile	char	vd_fill6[4608];
-    volatile	u_long  vd_fal_rgb[256];/* RGB for Falcon colors            */
 };
 
 #define	vd_ramh		vdb[ 1]	/* base address Video RAM, high byte	*/
@@ -120,18 +93,6 @@ struct video {
 #define TT_PALLET	0x000f	/* Pallette number			*/
 #define	TT_HYMONO	0x8000	/* Hyper mono mode			*/
 #define	TT_SHOLD	0x1000	/* Sample/hold mode			*/
-
-/* The falcon video modes */
-#define RES_FALAUTO	0	/* Falcon resolution dedected at boot	*/
-#define RES_VGA2	1	/* 640x480,   2 colors			*/
-#define RES_VGA4	2	/* 640x480,   4 colors			*/
-#define RES_VGA16	3	/* 640x480,  16 colors			*/
-#define RES_VGA256	4	/* 640x480, 256 colors			*/
-#define RES_DIRECT	5	/* 320x200, 65536 colors		*/
-#define RES_FAL_STLOW	6	/* 320x200,  16 colors			*/
-#define RES_FAL_STMID	7	/* 640x200,   4 colors			*/
-#define RES_FAL_STHIGH	8	/* 640x400,   2 colors			*/
-#define RES_FAL_TTLOW	9	/* 320x480, 256 colors			*/
 
 /*
  * Yahama YM-2149 Programmable Sound Generator
@@ -196,6 +157,6 @@ struct sound {
 #define	PA_SDTR		0x10	/* Serial DTR				*/
 #define	PA_PSTROBE	0x20	/* Parallel Strobe			*/
 #define	PA_USER		0x40	/* Free Pin on Monitor Connector	*/
-#define	PA_SER2		0x80	/* Choose between LAN or Ser2 port	*/
+/*			0x80	 reserved	 */
 
 #endif /*  _MACHINE_VIDEO_H */

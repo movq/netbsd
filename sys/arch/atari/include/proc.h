@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.1.1.1 1995/03/26 07:12:06 leo Exp $	*/
+/*	$NetBSD: proc.h,v 1.1 1995/03/26 07:12:06 leo Exp $	*/
 
 /*
  * Copyright (c) 1991 Regents of the University of California.

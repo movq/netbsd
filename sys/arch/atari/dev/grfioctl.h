@@ -1,4 +1,4 @@
-/*	$NetBSD: grfioctl.h,v 1.1.1.1 1995/03/26 07:12:12 leo Exp $	*/
+/*	$NetBSD: grfioctl.h,v 1.1 1995/03/26 07:12:12 leo Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.

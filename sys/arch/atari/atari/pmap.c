@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.9 1996/02/22 10:10:56 leo Exp $	*/
+/*	$NetBSD: pmap.c,v 1.1 1995/03/26 07:12:20 leo Exp $	*/
 
 /* 
  * Copyright (c) 1991 Regents of the University of California.
@@ -76,7 +76,6 @@
  */
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/malloc.h>
 #include <sys/msgbuf.h>
@@ -101,8 +100,8 @@ struct kpt_stats {
 	int kptmaxuse;
 };
 struct enter_stats {
-	int kernel;	/* entering kernel mapping */
-	int user;	/* entering user mapping */
+	int kernel;		/* entering kernel mapping */
+	int user;		/* entering user mapping */
 	int ptpneeded;	/* needed to allocate a PT page */
 	int pwchange;	/* no mapping change, just wiring or protection */
 	int wchange;	/* no mapping change, just wiring */
@@ -110,7 +109,7 @@ struct enter_stats {
 	int managed;	/* a managed page */
 	int firstpv;	/* first mapping for this PA */
 	int secondpv;	/* second mapping for this PA */
-	int ci;		/* cache inhibited */
+	int ci;			/* cache inhibited */
 	int unmanaged;	/* not a managed page */
 	int flushes;	/* cache flushes */
 };
@@ -128,20 +127,20 @@ struct remove_stats remove_stats;
 struct enter_stats enter_stats;
 struct kpt_stats kpt_stats;
 
-#define PDB_FOLLOW	0x0001
-#define PDB_INIT	0x0002
-#define PDB_ENTER	0x0004
-#define PDB_REMOVE	0x0008
-#define PDB_CREATE	0x0010
-#define PDB_PTPAGE	0x0020
-#define PDB_CACHE	0x0040
-#define PDB_BITS	0x0080
-#define PDB_COLLECT	0x0100
-#define PDB_PROTECT	0x0200
-#define PDB_SEGTAB	0x0400
+#define PDB_FOLLOW		0x0001
+#define PDB_INIT		0x0002
+#define PDB_ENTER		0x0004
+#define PDB_REMOVE		0x0008
+#define PDB_CREATE		0x0010
+#define PDB_PTPAGE		0x0020
+#define PDB_CACHE		0x0040
+#define PDB_BITS		0x0080
+#define PDB_COLLECT		0x0100
+#define PDB_PROTECT		0x0200
+#define PDB_SEGTAB		0x0400
 #define PDB_PARANOIA	0x2000
-#define PDB_WIRING	0x4000
-#define PDB_PVDUMP	0x8000
+#define PDB_WIRING		0x4000
+#define PDB_PVDUMP		0x8000
 int debugmap = 0;
 int pmapdebug = PDB_PARANOIA;
 #endif
@@ -172,7 +171,7 @@ int pmapdebug = PDB_PARANOIA;
 #define pmap_pte_prot_chg(pte, np)	((np) ^ pmap_pte_prot(pte))
 
 #define active_pmap(pm)	\
-    ((pm) == pmap_kernel() || (pm) == curproc->p_vmspace->vm_map.pmap)
+    ((pm) == kernel_pmap || (pm) == curproc->p_vmspace->vm_map.pmap)
 
 /*
  * Given a map and a machine independent protection code,
@@ -201,18 +200,18 @@ struct kpt_page *kpt_pages;
  * Segtabzero is an empty segment table which all processes share til they
  * reference something.
  */
-u_int		*Sysseg1;		/* root segment for 68040 */
-u_int		*Sysseg;
-u_int		*Sysmap, *Sysptmap;
-u_int		*Segtabzero;
+u_int	*Sysseg1;		/* root segment for 68040 */
+u_int	*Sysseg;
+u_int	*Sysptmap;
+u_int	*Segtabzero;
 vm_size_t	Sysptsize = VM_KERNEL_PT_PAGES + 4 / NPTEPG;
 
 struct pmap	kernel_pmap_store;
+pmap_t		kernel_pmap;
 vm_map_t	pt_map;
 
 vm_offset_t    	avail_start;	/* PA of first available physical page */
 vm_offset_t	avail_end;	/* PA of last available physical page */
-vm_size_t	mem_size;	/* memory size in bytes */
 vm_offset_t	virtual_avail;  /* VA of first avail page (after kernel bss)*/
 vm_offset_t	virtual_end;	/* VA of last avail page (end of kernel AS) */
 vm_offset_t	vm_first_phys;	/* PA of first managed page */
@@ -221,23 +220,19 @@ boolean_t	pmap_initialized = FALSE;	/* Has pmap_init completed? */
 char		*pmap_attributes;	/* reference and modify bits */
 static int	pmap_ishift;	/* segment table index shift */
 
-#ifdef MACHINE_NONCONTIG
-static	vm_offset_t	avail_next;
-static	vm_size_t	avail_remaining;
-#endif
+boolean_t	pmap_testbit();
+void		pmap_enter_ptpage();
 
-boolean_t		pmap_testbit __P((vm_offset_t, int));
-void			pmap_enter_ptpage __P((pmap_t, vm_offset_t));
-extern vm_offset_t	reserve_dumppages __P((vm_offset_t));
-static void		pmap_changebit __P((vm_offset_t, int, boolean_t));
-static void		atari_protection_init __P((void));
+/*
+ * The following vars become valid just before pmap_bootstrap is called.
+ * They give info about free memory with the kernel and the tables allocated
+ * in 'start_c' excluded.
+ */
+vm_offset_t	st_ramstart;	/* First available ST RAM address	*/
+vm_offset_t	st_ramend;	/* First ST RAM address	not available	*/
+vm_offset_t	tt_ramstart;	/* First available TT RAM address	*/
+vm_offset_t	tt_ramend;	/* First TT RAM address	not available	*/
 
-#ifdef MACHINE_NONCONTIG
-#define pmap_valid_page(pa)	(pmap_initialized && pmap_isvalidphys(pa))
-#else
-#define pmap_valid_page(pa)	(pmap_initialized && pa >= vm_first_phys && \
-				pa < vm_last_phys)
-#endif
 
 /*
  * All those kernel PT submaps that BSD is so fond of
@@ -256,36 +251,24 @@ u_int	*CMAP1, *CMAP2, *vmpte, *msgbufmap;
  *	from the linked base (virtual) address 0 to the actual (physical)
  *	address of 0xFFxxxxxx.]
  */
-void
-pmap_bootstrap(kernel_size)
+void pmap_bootstrap(kernel_size)
 vm_offset_t kernel_size;
 {
 	vm_offset_t	va;
 	u_int		*pte;
-	int		i;
 
 	/*
 	 * Setup physical address ranges
 	 */
-	for (i = 0; phys_segs[i+1].start; i++)
-		;
+	avail_start   = st_ramstart;
+	avail_end     = tt_ramend ? tt_ramend : st_ramend;
+
 	/* XXX: allow for msgbuf */
-	phys_segs[i].end -= atari_round_page(sizeof(struct msgbuf));
+	avail_end    -= atari_round_page(sizeof(struct msgbuf));
 
-	avail_start = phys_segs[0].start;
-	avail_end   = phys_segs[i].end;
-
-#ifdef MACHINE_NONCONTIG
 	/*
-	 * Setup var's for pmap_next_page()
+	 * Setup virtual address ranges
 	 */
-	for (i = 0, avail_remaining = 0; phys_segs[i].start; i++)
-		avail_remaining += phys_segs[i].end - phys_segs[i].start;
-
-	avail_remaining >>= PGSHIFT;
-	avail_next        = phys_segs[0].start;
-#endif
-
 	virtual_avail = VM_MIN_KERNEL_ADDRESS + kernel_size;
 	virtual_end   = VM_MAX_KERNEL_ADDRESS;
 
@@ -295,21 +278,28 @@ vm_offset_t kernel_size;
 	atari_protection_init();
 
 	/*
+	 * The kernel's pmap is statically allocated so we don't
+	 * have to use pmap_create, which is unlikely to work
+	 * correctly at this part of the boot sequence.
+	 */
+	kernel_pmap = &kernel_pmap_store;
+
+	/*
 	 * Kernel page/segment table allocated in locore,
 	 * just initialize pointers.
 	 */
-	pmap_kernel()->pm_stab = Sysseg;
-	pmap_kernel()->pm_ptab = Sysmap;
+	kernel_pmap->pm_stab = Sysseg;
+	kernel_pmap->pm_ptab = Sysmap;
 #ifdef M68040
 	if (cpu040) {
-		pmap_kernel()->pm_rtab = Sysseg1;
-		pmap_ishift = SG4_SHIFT2;
+		kernel_pmap->pm_rtab = Sysseg1;
+		pmap_ishift = SG4_ISHIFT;
 	} else
 #endif
 		pmap_ishift = SG_ISHIFT;
 
-	simple_lock_init(&pmap_kernel()->pm_lock);
-	pmap_kernel()->pm_count = 1;
+	simple_lock_init(&kernel_pmap->pm_lock);
+	kernel_pmap->pm_count = 1;
 
 	/*
 	 * Allocate all the submaps we need
@@ -317,15 +307,15 @@ vm_offset_t kernel_size;
 #define	SYSMAP(c, p, v, n)	\
 	v = (c)va; va += ((n)*NBPG); p = pte; pte += (n);
 
-	va = virtual_avail;
-	pte = pmap_pte(pmap_kernel(), va);
+	va  = virtual_avail;
+	pte = pmap_pte(kernel_pmap, va);
 
 	SYSMAP(caddr_t		,CMAP1		,CADDR1	   ,1		)
 	SYSMAP(caddr_t		,CMAP2		,CADDR2	   ,1		)
 	SYSMAP(caddr_t		,vmpte		,vmmap	   ,1		)
 	SYSMAP(struct msgbuf *	,msgbufmap	,msgbufp   ,1		)
 
-	virtual_avail = reserve_dumppages(va);
+	virtual_avail = va;
 }
 
 /*
@@ -349,15 +339,16 @@ pmap_bootstrap_alloc(size)
 	if (vm_page_startup_initialized)
 		panic("pmap_bootstrap_alloc: called after startup initialized");
 	size = round_page(size);
-	val  = virtual_avail;
+	val = virtual_avail;
 
 	virtual_avail = pmap_map(virtual_avail, avail_start,
 		avail_start + size, VM_PROT_READ|VM_PROT_WRITE);
 	avail_start += size;
 
-	bzero((caddr_t) val, size);
+	blkclr((caddr_t) val, size);
 	return((void *) val);
 }
+
 
 /*
  *	Initialize the pmap module.
@@ -365,24 +356,17 @@ pmap_bootstrap_alloc(size)
  *	system needs to map virtual memory.
  */
 void
-#ifdef MACHINE_NONCONTIG
-pmap_init()
-#else
 pmap_init(phys_start, phys_end)
 	vm_offset_t	phys_start, phys_end;
-#endif
 {
+	extern char kstack[];
 	vm_offset_t	addr, addr2;
 	vm_size_t	npg, s;
 	int		rv;
 
 #ifdef DEBUG
 	if (pmapdebug & PDB_FOLLOW)
-#ifdef MACHINE_NONCONTIG
-		printf("pmap_init(%x, %x)\n", avail_start, avail_end);
-#else
 		printf("pmap_init(%x, %x)\n", phys_start, phys_end);
-#endif
 #endif
 	addr = (vm_offset_t) Sysmap;
 	vm_object_reference(kernel_object);
@@ -394,7 +378,16 @@ pmap_init(phys_start, phys_end)
 	 * page table map.   Need to adjust pmap_size() in atari_init.c.
 	 */
 	if (addr != (vm_offset_t)Sysmap)
+		goto bogons;
+
+	addr = (vm_offset_t) kstack;
+	vm_object_reference(kernel_object);
+	(void) vm_map_find(kernel_map, kernel_object, addr,
+			   &addr, atari_ptob(UPAGES), FALSE);
+	if (addr != (vm_offset_t)kstack)
+bogons:
 		panic("pmap_init: bogons in the VM system!\n");
+
 #ifdef DEBUG
 	if (pmapdebug & PDB_INIT) {
 		printf("pmap_init: Sysseg %x, Sysmap %x, Sysptmap %x\n",
@@ -408,19 +401,7 @@ pmap_init(phys_start, phys_end)
 	 * Allocate memory for random pmap data structures.  Includes the
 	 * initial segment table, pv_head_table and pmap_attributes.
 	 */
-#ifdef MACHINE_NONCONTIG
-	{
-		int i;
-		for (npg = 0, i = 0; phys_segs[i].start; ++i)
-			npg += atop(phys_segs[i].end - phys_segs[i].start);
-	}
-#ifdef DEBUG
-	printf ("pmap_init: avail_start %08x phys_segs[0].start %08x npg %d\n",
-		avail_start, phys_segs[0].start, npg);
-#endif
-#else
 	npg = atop(phys_end - phys_start);
-#endif
 #ifdef M68040
 	if (cpu040)
 		s = (vm_size_t)ATARI_040STSIZE * 128 + 
@@ -481,7 +462,7 @@ pmap_init(phys_start, phys_end)
 		(--kpt_pages)->kpt_next = kpt_free_list;
 		kpt_free_list = kpt_pages;
 		kpt_pages->kpt_va = addr2;
-		kpt_pages->kpt_pa = pmap_extract(pmap_kernel(), addr2);
+		kpt_pages->kpt_pa = pmap_extract(kernel_pmap, addr2);
 	} while (addr != addr2);
 #ifdef DEBUG
 	kpt_stats.kpttotal = atop(s);
@@ -495,18 +476,7 @@ pmap_init(phys_start, phys_end)
 	 * map where we want it.
 	 */
 	addr = ATARI_UPTBASE;
-	if (ATARI_UPTMAXSIZE / ATARI_UPTSIZE < maxproc) {
-		s = ATARI_UPTMAXSIZE;
-
-		/*
-		 * XXX We don't want to hang when we run out of page
-		 * tables, so we lower maxproc so that fork will fail
-		 * instead. Note that root could still raise this
-		 * value through sysctl(2).
-		 */
-		maxproc = ATARI_UPTMAXSIZE / ATARI_UPTSIZE;
-	}
-	else s = maxproc * ATARI_UPTSIZE;
+	s = min(ATARI_UPTMAXSIZE, maxproc * ATARI_UPTSIZE);
 	addr2 = addr + s;
 	rv = vm_map_find(kernel_map, NULL, 0, &addr, s, TRUE);
 	if (rv != KERN_SUCCESS)
@@ -526,79 +496,10 @@ pmap_init(phys_start, phys_end)
 	/*
 	 * Now it is safe to enable pv_table recording.
 	 */
-#ifdef MACHINE_NONCONTIG
-	vm_first_phys = avail_start;
-	vm_last_phys = avail_end;
-#else
 	vm_first_phys = phys_start;
 	vm_last_phys = phys_end;
-#endif
 	pmap_initialized = TRUE;
 }
-
-#ifdef MACHINE_NONCONTIG
-unsigned int
-pmap_free_pages()
-{
-
-	return avail_remaining;
-}
-
-int
-pmap_next_page(addrp)
-	vm_offset_t *addrp;
-{
-	static int cur_seg = 0;
-
-#ifdef DEBUG
-	if(!cur_seg && (avail_next == phys_segs[cur_seg].start))
-		printf ("pmap_next_page: next %08x remain %d\n",
-		    avail_next, avail_remaining);
-#endif
-	if (phys_segs[cur_seg].start == 0)
-		return FALSE;
-	if (avail_next == phys_segs[cur_seg].end) {
-		avail_next = phys_segs[++cur_seg].start;
-#ifdef DEBUG
-		printf ("pmap_next_page: next %08x remain %d\n",
-		    avail_next, avail_remaining);
-#endif
-	}
-
-	if (avail_next == 0)
-		return FALSE;
-	*addrp = avail_next;
-	avail_next += NBPG;
-	avail_remaining--;
-	return TRUE;
-}
-
-int
-pmap_page_index(pa)
-	vm_offset_t pa;
-{
-
-	struct physeg *sep = &phys_segs[0];
-
-	while (sep->start) {
-		if (pa >= sep->start && pa < sep->end)
-			return (atari_btop(pa - sep->start) + sep->first_page);
-		++sep;
-	}
-	return -1;
-}
-
-void
-pmap_virtual_space(startp, endp)
-	vm_offset_t	*startp;
-	vm_offset_t	*endp;
-{
-	*startp = virtual_avail;
-	*endp = virtual_end;
-}
-#else
-#define pmap_page_index(pa) (pa_index(pa))
-#endif	/* MACHINE_NONCONTIG */
 
 /*
  *	Used to map a range of physical addresses into kernel
@@ -619,7 +520,7 @@ pmap_map(virt, start, end, prot)
 		printf("pmap_map(%x, %x, %x, %x)\n", virt, start, end, prot);
 #endif
 	while (start < end) {
-		pmap_enter(pmap_kernel(), virt, start, prot, FALSE);
+		pmap_enter(kernel_pmap, virt, start, prot, FALSE);
 		virt += PAGE_SIZE;
 		start += PAGE_SIZE;
 	}
@@ -790,7 +691,7 @@ pmap_remove(pmap, sva, eva)
 	register u_int *pte;
 	register pv_entry_t pv, npv;
 	pmap_t ptpmap;
-	int *ste, s, bits;
+	int *ste, i, s, bits;
 	boolean_t flushcache = FALSE;
 #ifdef DEBUG
 	u_int opte;
@@ -853,7 +754,7 @@ pmap_remove(pmap, sva, eva)
 		 * pmap_pageable which clears the modify bit for the
 		 * PT page.
 		 */
-		if (pmap != pmap_kernel()) {
+		if (pmap != kernel_pmap) {
 			pte = pmap_pte(pmap, va);
 			vm_map_pageable(pt_map, trunc_page(pte),
 					round_page(pte+1), TRUE);
@@ -866,7 +767,7 @@ pmap_remove(pmap, sva, eva)
 		 * Remove from the PV table (raise IPL since we
 		 * may be called at interrupt time).
 		 */
-		if (!pmap_valid_page(pa))
+		if (pa < vm_first_phys || pa >= vm_last_phys)
 			continue;
 		pv = pa_to_pvh(pa);
 		ste = (int *)0;
@@ -899,10 +800,8 @@ pmap_remove(pmap, sva, eva)
 				pv = npv;
 			}
 #ifdef DEBUG
-			if (npv == NULL) {
-printf ("pmap_remove: PA %08x index %d\n", pa, pa_index(pa));
+			if (npv == NULL)
 				panic("pmap_remove: PA not in pv_tab");
-			}
 #endif
 			ste = (int *)npv->pv_ptste;
 			ptpmap = npv->pv_ptpmap;
@@ -950,7 +849,7 @@ printf ("pmap_remove: PA %08x index %d\n", pa, pa_index(pa));
 			 * reference count on the segment table as well,
 			 * freeing it if it is now empty.
 			 */
-			if (ptpmap != pmap_kernel()) {
+			if (ptpmap != kernel_pmap) {
 #ifdef DEBUG
 				if (pmapdebug & (PDB_REMOVE|PDB_SEGTAB))
 					printf("remove: stab %x, refcnt %d\n",
@@ -993,7 +892,7 @@ printf ("pmap_remove: PA %08x index %d\n", pa, pa_index(pa));
 							(struct pcb *)curproc->p_addr, 1);
 				}
 			}
-			if (ptpmap == pmap_kernel())
+			if (ptpmap == kernel_pmap)
 				TBIAS();
 			else
 				TBIAU();
@@ -1007,7 +906,7 @@ printf ("pmap_remove: PA %08x index %d\n", pa, pa_index(pa));
 		splx(s);
 	}
 	if (flushcache) {
-		if (pmap == pmap_kernel()) {
+		if (pmap == kernel_pmap) {
 			DCIS();
 #ifdef DEBUG
 			remove_stats.sflushes++;
@@ -1039,7 +938,7 @@ pmap_page_protect(pa, prot)
 	    prot == VM_PROT_NONE && (pmapdebug & PDB_REMOVE))
 		printf("pmap_page_protect(%x, %x)\n", pa, prot);
 #endif
-	if (!pmap_valid_page(pa))
+	if (pa < vm_first_phys || pa >= vm_last_phys)
 		return;
 
 	switch (prot) {
@@ -1058,13 +957,7 @@ pmap_page_protect(pa, prot)
 #ifdef DEBUG
 			if (!pmap_ste_v(pmap_ste(pv->pv_pmap,pv->pv_va)) ||
 			    pmap_pte_pa(pmap_pte(pv->pv_pmap,pv->pv_va)) != pa)
-{
-  printf ("pmap_page_protect: va %08x, pmap_ste_v %d pmap_pte_pa %08x/%08x\n",
-    pv->pv_va, pmap_ste_v(pmap_ste(pv->pv_pmap,pv->pv_va)),
-    pmap_pte_pa(pmap_pte(pv->pv_pmap,pv->pv_va)),pa);
-  printf (" pvh %08x pv %08x pv_next %08x\n", pa_to_pvh(pa), pv, pv->pv_next);
 				panic("pmap_page_protect: bad mapping");
-}
 #endif
 			pmap_remove(pv->pv_pmap, pv->pv_va,
 				    pv->pv_va + PAGE_SIZE);
@@ -1182,7 +1075,7 @@ pmap_enter(pmap, va, pa, prot, wired)
 		return;
 
 #ifdef DEBUG
-	if (pmap == pmap_kernel())
+	if (pmap == kernel_pmap)
 		enter_stats.kernel++;
 	else
 		enter_stats.user++;
@@ -1204,7 +1097,7 @@ pmap_enter(pmap, va, pa, prot, wired)
 	opa = pmap_pte_pa(pte);
 #ifdef DEBUG
 	if (pmapdebug & PDB_ENTER)
-		printf("enter: pte %x, *pte %x\n", pte, *(int *)pte);
+		printf("enter: pte %x, *pte %x, opa: %x\n", pte, *(int *)pte, opa);
 #endif
 
 	/*
@@ -1220,7 +1113,7 @@ pmap_enter(pmap, va, pa, prot, wired)
 		 * resident as long as there are valid mappings in them.
 		 * Hence, if a user page is wired, the PT page will be also.
 		 */
-		if ((wired && !pmap_pte_w(pte)) || (!wired && pmap_pte_w(pte))){
+		if (wired && !pmap_pte_w(pte) || !wired && pmap_pte_w(pte)) {
 #ifdef DEBUG
 			if (pmapdebug & PDB_ENTER)
 				printf("enter: wiring change -> %x\n", wired);
@@ -1262,7 +1155,7 @@ pmap_enter(pmap, va, pa, prot, wired)
 	 * on this PT page.  PT pages are wired down as long as there
 	 * is a valid mapping in the page.
 	 */
-	if (pmap != pmap_kernel())
+	if (pmap != kernel_pmap)
 		vm_map_pageable(pt_map, trunc_page(pte),
 				round_page(pte+1), FALSE);
 
@@ -1271,7 +1164,7 @@ pmap_enter(pmap, va, pa, prot, wired)
 	 * Note that we raise IPL while manipulating pv_table
 	 * since pmap_enter can be called at interrupt time.
 	 */
-	if (pmap_valid_page(pa)) {
+	if (pa >= vm_first_phys && pa < vm_last_phys) {
 		register pv_entry_t pv, npv;
 		int s;
 
@@ -1349,7 +1242,7 @@ validate:
 	 * ATARI pages in a MACH page.
 	 */
 #ifdef M68040
-	if (cpu040 && pmap == pmap_kernel() && va >= ATARI_UPTBASE && 
+	if (cpu040 && pmap == kernel_pmap && va >= ATARI_UPTBASE && 
 	    va < (ATARI_UPTBASE + ATARI_UPTMAXSIZE))
 		cacheable = FALSE;	/* don't cache user page tables */
 #endif
@@ -1382,7 +1275,7 @@ validate:
 	if (!wired && active_pmap(pmap))
 		TBIS(va);
 #ifdef DEBUG
-	if ((pmapdebug & PDB_WIRING) && pmap != pmap_kernel()) {
+	if ((pmapdebug & PDB_WIRING) && pmap != kernel_pmap) {
 		va -= PAGE_SIZE;
 		pmap_check_wiring("enter", trunc_page(pmap_pte(pmap, va)));
 	}
@@ -1432,7 +1325,7 @@ pmap_change_wiring(pmap, va, wired)
 			printf("pmap_change_wiring: invalid PTE for %x\n", va);
 	}
 #endif
-	if ((wired && !pmap_pte_w(pte)) || (!wired && pmap_pte_w(pte))) {
+	if (wired && !pmap_pte_w(pte) || !wired && pmap_pte_w(pte)) {
 		if (wired)
 			pmap->pm_stats.wired_count++;
 		else
@@ -1538,7 +1431,7 @@ pmap_collect(pmap)
 	int *ste;
 	int opmapdebug;
 #endif
-	if (pmap != pmap_kernel())
+	if (pmap != kernel_pmap)
 		return;
 
 #ifdef DEBUG
@@ -1555,10 +1448,10 @@ pmap_collect(pmap)
 		 * page table pages.
 		 */
 		pv = pa_to_pvh(pa);
-		if (pv->pv_pmap != pmap_kernel() || !(pv->pv_flags & PV_PTPAGE))
+		if (pv->pv_pmap != kernel_pmap || !(pv->pv_flags & PV_PTPAGE))
 			continue;
 		do {
-			if (pv->pv_ptste && pv->pv_ptpmap == pmap_kernel())
+			if (pv->pv_ptste && pv->pv_ptpmap == kernel_pmap)
 				break;
 		} while (pv = pv->pv_next);
 		if (pv == NULL)
@@ -1625,7 +1518,7 @@ ok:
 		if (*ste)
 			printf("collect: kernel STE at %x still valid (%x)\n",
 			       ste, *ste);
-		ste = (int *)&Sysptmap[(u_int *)ste-pmap_ste(pmap_kernel(), 0)];
+		ste = (int *)&Sysptmap[(u_int *)ste-pmap_ste(kernel_pmap, 0)];
 		if (*ste)
 			printf("collect: kernel PTmap at %x still valid (%x)\n",
 			       ste, *ste);
@@ -1717,7 +1610,7 @@ pmap_pageable(pmap, sva, eva, pageable)
 	 *	- we are called with only one page at a time
 	 *	- PT pages have only one pv_table entry
 	 */
-	if (pmap == pmap_kernel() && pageable && sva + PAGE_SIZE == eva) {
+	if (pmap == kernel_pmap && pageable && sva + PAGE_SIZE == eva) {
 		register pv_entry_t pv;
 		register vm_offset_t pa;
 
@@ -1729,7 +1622,7 @@ pmap_pageable(pmap, sva, eva, pageable)
 		if (!pmap_ste_v(pmap_ste(pmap, sva)))
 			return;
 		pa = pmap_pte_pa(pmap_pte(pmap, sva));
-		if (!pmap_valid_page(pa))
+		if (pa < vm_first_phys || pa >= vm_last_phys)
 			return;
 		pv = pa_to_pvh(pa);
 		if (pv->pv_ptste == NULL)
@@ -1839,7 +1732,7 @@ pmap_phys_address(ppn)
  * Miscellaneous support routines follow
  */
 
-static void
+/* static */
 atari_protection_init()
 {
 	register int *kp, prot;
@@ -1875,7 +1768,7 @@ pmap_testbit(pa, bit)
 	register int *pte;
 	int s;
 
-	if (!pmap_valid_page(pa))
+	if (pa < vm_first_phys || pa >= vm_last_phys)
 		return(FALSE);
 
 	pv = pa_to_pvh(pa);
@@ -1904,7 +1797,7 @@ pmap_testbit(pa, bit)
 	return(FALSE);
 }
 
-static void
+/* static */
 pmap_changebit(pa, bit, setem)
 	register vm_offset_t pa;
 	int bit;
@@ -1923,7 +1816,7 @@ pmap_changebit(pa, bit, setem)
 		printf("pmap_changebit(%x, %x, %s)\n",
 		       pa, bit, setem ? "set" : "clear");
 #endif
-	if (!pmap_valid_page(pa))
+	if (pa < vm_first_phys || pa >= vm_last_phys)
 		return;
 
 	pv = pa_to_pvh(pa);
@@ -1991,6 +1884,7 @@ pmap_enter_ptpage(pmap, va)
 	register pv_entry_t pv;
 	u_int *ste;
 	int s;
+	u_int sg_proto, *sg;
 
 #ifdef DEBUG
 	if (pmapdebug & (PDB_FOLLOW|PDB_ENTER|PDB_PTPAGE))
@@ -2013,7 +1907,7 @@ pmap_enter_ptpage(pmap, va)
 				kmem_alloc(kernel_map, ATARI_040STSIZE*128);
 			/* intialize root table entries */
 			sg = (u_int *) pmap->pm_rtab;
-			sg_proto = pmap_extract(pmap_kernel(), 
+			sg_proto = pmap_extract(kernel_pmap, 
 			    (vm_offset_t) pmap->pm_stab) | SG_RW | SG_V;
 #ifdef DEBUG
 			if (pmapdebug & (PDB_ENTER|PDB_PTPAGE))
@@ -2050,9 +1944,8 @@ pmap_enter_ptpage(pmap, va)
 	 */
 #ifdef M68040
 	if (cpu040) {
-		ste = pmap_ste(pmap, va & ((SG4_MASK1 | SG4_MASK2) << 6));
-		va = trunc_page((vm_offset_t)pmap_pte(pmap,
-		    va & ((SG4_MASK1|SG4_MASK2) << 6)));
+		ste = pmap_ste(pmap, va & (SG4_IMASK << 6));
+		va = trunc_page((vm_offset_t)pmap_pte(pmap, va & (SG4_IMASK << 6)));
 	} else
 #endif
 	{
@@ -2065,7 +1958,7 @@ pmap_enter_ptpage(pmap, va)
 	 * free list and map it into the kernel page table map (via
 	 * pmap_enter).
 	 */
-	if (pmap == pmap_kernel()) {
+	if (pmap == kernel_pmap) {
 		register struct kpt_page *kpt;
 
 		s = splimp();
@@ -2078,7 +1971,7 @@ pmap_enter_ptpage(pmap, va)
 			if (pmapdebug & PDB_COLLECT)
 				printf("enter: no KPT pages, collecting...\n");
 #endif
-			pmap_collect(pmap_kernel());
+			pmap_collect(kernel_pmap);
 			if ((kpt = kpt_free_list) == (struct kpt_page *)0)
 				panic("pmap_enter_ptpage: can't get KPT page");
 		}
@@ -2090,7 +1983,7 @@ pmap_enter_ptpage(pmap, va)
 		kpt->kpt_next = kpt_used_list;
 		kpt_used_list = kpt;
 		ptpa = kpt->kpt_pa;
-		bzero((caddr_t)kpt->kpt_va, NBPG);
+		bzero(kpt->kpt_va, NBPG);
 		pmap_enter(pmap, va, ptpa, VM_PROT_DEFAULT, TRUE);
 #ifdef DEBUG
 		if (pmapdebug & (PDB_ENTER|PDB_PTPAGE))
@@ -2106,11 +1999,6 @@ pmap_enter_ptpage(pmap, va)
 	 * letting the VM system allocate a zero-filled page.
 	 */
 	else {
-		/*
-		 * Count the segment table reference now so that we won't
-		 * lose the segment table when low on memory.
-		 */
-		pmap->pm_sref++;
 #ifdef DEBUG
 		if (pmapdebug & (PDB_ENTER|PDB_PTPAGE))
 			printf("enter: about to fault UPT pg at %x\n", va);
@@ -2118,7 +2006,7 @@ pmap_enter_ptpage(pmap, va)
 		if (vm_fault(pt_map, va, VM_PROT_READ|VM_PROT_WRITE, FALSE)
 		    != KERN_SUCCESS)
 			panic("pmap_enter: vm_fault failed");
-		ptpa = pmap_extract(pmap_kernel(), va);
+		ptpa = pmap_extract(kernel_pmap, va);
 #ifdef DEBUG
 		PHYS_TO_VM_PAGE(ptpa)->flags |=  PG_PTPAGE;
 #endif
@@ -2134,7 +2022,7 @@ pmap_enter_ptpage(pmap, va)
 	if (pv) {
 		pv->pv_flags |= PV_PTPAGE;
 		do {
-			if (pv->pv_pmap == pmap_kernel() && pv->pv_va == va)
+			if (pv->pv_pmap == kernel_pmap && pv->pv_va == va)
 				break;
 		} while (pv = pv->pv_next);
 	}
@@ -2170,7 +2058,8 @@ pmap_enter_ptpage(pmap, va)
 	else
 #endif
 		*(int *)ste = (ptpa & SG_FRAME) | SG_RW | SG_V;
-	if (pmap != pmap_kernel()) {
+	if (pmap != kernel_pmap) {
+		pmap->pm_sref++;
 #ifdef DEBUG
 		if (pmapdebug & (PDB_ENTER|PDB_PTPAGE|PDB_SEGTAB))
 			printf("enter: stab %x refcnt %d\n",
@@ -2180,7 +2069,7 @@ pmap_enter_ptpage(pmap, va)
 	/*
 	 * Flush stale TLB info.
 	 */
-	if (pmap == pmap_kernel())
+	if (pmap == kernel_pmap)
 		TBIAS();
 	else
 		TBIAU();
@@ -2188,18 +2077,14 @@ pmap_enter_ptpage(pmap, va)
 	splx(s);
 }
 
-int
-pmap_isvalidphys(pa)
-vm_offset_t pa;
+int pmap_isvalidphys(pa)
+vm_offset_t	pa;
 {
-    struct physeg *sep = &phys_segs[0];
-
-    while (sep->start) {
-	if (pa >= sep->start && pa < sep->end)
+	if((pa >= st_ramstart) && (pa < st_ramend))
 		return(TRUE);
-	++sep;
-    }
-    return(FALSE);
+	if((pa >= tt_ramstart) && (pa < tt_ramend))
+		return(TRUE);
+	return(FALSE);
 }
 
 #ifdef DEBUG
@@ -2224,8 +2109,8 @@ pmap_check_wiring(str, va)
 	register int count, *pte;
 
 	va = trunc_page(va);
-	if (!pmap_ste_v(pmap_ste(pmap_kernel(), va)) ||
-	    !pmap_pte_v(pmap_pte(pmap_kernel(), va)))
+	if (!pmap_ste_v(pmap_ste(kernel_pmap, va)) ||
+	    !pmap_pte_v(pmap_pte(kernel_pmap, va)))
 		return;
 
 	if (!vm_map_lookup_entry(pt_map, va, &entry)) {

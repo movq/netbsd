@@ -1,5 +1,5 @@
 #
-#	$NetBSD: disktab,v 1.1.1.1 1995/03/30 05:44:08 leo Exp $
+#	$NetBSD: disktab,v 1.1 1995/03/30 05:44:08 leo Exp $
 #
 # Disk geometry and partition layout tables. 
 # Key:

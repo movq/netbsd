@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.11 1996/02/22 10:11:43 leo Exp $	*/
+ /*	$NetBSD: param.h,v 1.1 1995/03/26 07:12:07 leo Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -67,7 +67,7 @@
 
 #define NBSEG		(cpu040 ? 32*NBPG : 2048*NBPG)	/* bytes/segment */
 #define	SEGOFSET	(NBSEG-1)			/* byte offset into segment */
-#define	SEGSHIFT	24		/* LOG2(NBSEG) [68030 value] */
+#define	SEGSHIFT	(cpu040 ? 18 : 24)		/* LOG2(NBSEG) */
 
 #define	KERNBASE	0x0		/* start of kernel virtual */
 #define	BTOPKERNBASE	((u_long)KERNBASE >> PGSHIFT)
@@ -113,17 +113,23 @@
 #define	NKMEMCLUSTERS	(3072*1024/CLBYTES)
 #endif
 
+#define MAXPARTITIONS	16
+
 /* pages ("clicks") to disk blocks */
-#define	ctod(x)		((x) << (PGSHIFT - DEV_BSHIFT))
-#define	dtoc(x)		((x) >> (PGSHIFT - DEV_BSHIFT))
+#define	ctod(x)	((x)<<(PGSHIFT-DEV_BSHIFT))
+#define	dtoc(x)	((x)>>(PGSHIFT-DEV_BSHIFT))
+#define	dtob(x)	((x)<<DEV_BSHIFT)
 
 /* pages to bytes */
-#define	ctob(x)		((x) << PGSHIFT)
-#define	btoc(x)		(((x) + PGOFSET) >> PGSHIFT)
+#define	ctob(x)	((x)<<PGSHIFT)
 
-/* bytes to disk blocks */
-#define	btodb(x)	((x) >> DEV_BSHIFT)
-#define	dbtob(x)	((x) << DEV_BSHIFT)
+/* bytes to pages */
+#define	btoc(x)	(((unsigned)(x)+(NBPG-1))>>PGSHIFT)
+
+#define	btodb(bytes)	 		/* calculates (bytes / DEV_BSIZE) */ \
+	((unsigned)(bytes) >> DEV_BSHIFT)
+#define	dbtob(db)			/* calculates (db * DEV_BSIZE) */ \
+	((unsigned)(db) << DEV_BSHIFT)
 
 /*
  * Map a ``block device block'' to a file system block.
@@ -187,15 +193,14 @@
 
 #define splnone()	spl0()
 #define splsoftclock()	spl1()
-#define splsoftnet()	spl1()
+#define splnet()	spl1()
 #define splbio()	spl3()
-#define splnet()	spl3()
+#define splimp()	spl3()
 /*
  * lowered to spl4 to allow for serial input into
  * private ringbuffer inspite of spltty
  */
 #define spltty()	spl4()
-#define splimp()	spl4()
 #define splclock()	spl6()
 #define splstatclock()	spl6()
 #define splvm()		spl6()
@@ -204,11 +209,12 @@
 
 #define splx(s)         (s & PSL_IPL ? _spl_no_check(s) : spl0())
 
-#ifdef _KERNEL
-int spl0 __P((void));
+#ifdef KERNEL
+extern int	cpuspeed;
 void delay __P((int));
-
-#define	DELAY(n)	delay(n)
-#endif /* _KERNEL */
+void DELAY __P((int));
+#else
+#define	DELAY(n)	{ register int N = (n); while (--N > 0); }
+#endif
 
 #endif /* !_MACHINE_PARAM_H_ */

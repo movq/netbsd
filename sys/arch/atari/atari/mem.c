@@ -1,9 +1,9 @@
-/*	$NetBSD: mem.c,v 1.5 1996/02/22 10:10:53 leo Exp $	*/
+/*	$NetBSD: mem.c,v 1.1 1995/03/26 07:12:18 leo Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
- * Copyright (c) 1982, 1986, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -37,7 +37,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)mem.c	8.3 (Berkeley) 1/12/94
+ * from: Utah $Hdr: mem.c 1.14 90/10/12$
+ *
+ *	@(#)mem.c	7.5 (Berkeley) 5/7/91
  */
 
 /*
@@ -46,46 +48,17 @@
 
 #include <sys/param.h>
 #include <sys/conf.h>
-#include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/systm.h>
-#include <sys/uio.h>
 #include <sys/malloc.h>
 
 #include <machine/cpu.h>
 
-#include <vm/vm.h>
+#include <vm/vm_param.h>
+#include <vm/vm_prot.h>
+#include <vm/lock.h>
+#include <vm/pmap.h>
 
-#include "nvr.h"
-
-dev_type_open(mmopen);
-dev_type_close(mmclose);
-dev_type_mmap(mmmmap);
-
-extern u_int lowram;
-caddr_t zeropage;
-
-/*ARGSUSED*/
-int
-mmopen(dev, flag, mode, p)
-	dev_t 		dev;
-	int		flag, mode;
-	struct proc	*p;
-{
-
-	return (0);
-}
-
-/*ARGSUSED*/
-int
-mmclose(dev, flag, mode, p)
-	dev_t 		dev;
-	int		flag, mode;
-	struct proc	*p;
-{
-
-	return (0);
-}
 
 /*ARGSUSED*/
 int
@@ -94,23 +67,16 @@ mmrw(dev, uio, flags)
 	struct uio *uio;
 	int flags;
 {
-	register vm_offset_t o, v;
-	register int c;
+	extern u_int lowram;
+	register int o;
+	register u_int c, v;
 	register struct iovec *iov;
-	int error = 0;
-	static int physlock;
+	int error;
+	caddr_t zbuf;
 
-	if (minor(dev) == 0) {
-		/* lock against other uses of shared vmmap */
-		while (physlock > 0) {
-			physlock++;
-			error = tsleep((caddr_t)&physlock, PZERO | PCATCH,
-			    "mmrw", 0);
-			if (error)
-				return (error);
-		}
-		physlock = 1;
-	}
+	zbuf = NULL;
+	error = 0;
+
 	while (uio->uio_resid > 0 && error == 0) {
 		iov = uio->uio_iov;
 		if (iov->iov_len == 0) {
@@ -122,65 +88,81 @@ mmrw(dev, uio, flags)
 		}
 		switch (minor(dev)) {
 
-/* minor device 0 is physical memory */
+		/*
+		 * minor device 0 is physical memory
+		 */
 		case 0:
 			v = uio->uio_offset;
 #ifndef DEBUG
 			/* allow reads only in RAM (except for DEBUG) */
-			if (v >= 0xFFFFFFFC || v < lowram) {
-				error = EFAULT;
-				goto unlock;
-			}
+			if (v >= 0xFFFFFFFC || v < lowram)
+				return (EFAULT);
 #endif
-			pmap_enter(pmap_kernel(), (vm_offset_t)vmmap,
-			    trunc_page(v), uio->uio_rw == UIO_READ ?
-			    VM_PROT_READ : VM_PROT_WRITE, TRUE);
-			o = uio->uio_offset & PGOFSET;
-			c = min(uio->uio_resid, (int)(NBPG - o));
-			error = uiomove((caddr_t)vmmap + o, c, uio);
-			pmap_remove(pmap_kernel(), (vm_offset_t)vmmap,
-			    (vm_offset_t)vmmap + NBPG);
+			pmap_enter(kernel_pmap, (vm_offset_t) vmmap, 
+			    trunc_page(v), uio->uio_rw == UIO_READ 
+			    ?  VM_PROT_READ : VM_PROT_WRITE, TRUE);
+			o = (int)uio->uio_offset & PGOFSET;
+			c = (u_int)(NBPG - ((int)iov->iov_base & PGOFSET));
+			c = min(c, (u_int)(NBPG - o));
+			c = min(c, (u_int)iov->iov_len);
+			error = uiomove((caddr_t)&vmmap[o], (int)c, uio);
+			pmap_remove(kernel_pmap, (vm_offset_t)vmmap, 
+			    (vm_offset_t)&vmmap[NBPG]);
 			continue;
 
-/* minor device 1 is kernel memory */
+		/*
+		 * minor device 1 is kernel memory
+		 */
 		case 1:
-			v = uio->uio_offset;
 			c = min(iov->iov_len, MAXPHYS);
-			if (!kernacc((caddr_t)v, c,
+			if (!kernacc((caddr_t)(vm_offset_t)uio->uio_offset, c,
 			    uio->uio_rw == UIO_READ ? B_READ : B_WRITE))
 				return (EFAULT);
-			error = uiomove((caddr_t)v, c, uio);
+			error = uiomove((caddr_t)(vm_offset_t)uio->uio_offset,
+			    (int)c, uio);
 			continue;
 
-/* minor device 2 is EOF/RATHOLE */
+		/*
+		 * minor device 2 is EOF/RATHOLE
+		 */
 		case 2:
 			if (uio->uio_rw == UIO_WRITE)
 				uio->uio_resid = 0;
 			return (0);
 
-/* minor device 11 (/dev/nvram) */
-		case 11:
-#if NNVR > 0
-			error = nvram_uio(uio);
-			return (error);
-#else
-			return (ENXIO);
-#endif
-
-/* minor device 12 (/dev/zero) is source of nulls on read, rathole on write */
+		/*
+		 * minor device 12 (/dev/zero) is source of nulls on
+                 * read, rathole on write
+		 */
 		case 12:
 			if (uio->uio_rw == UIO_WRITE) {
 				c = iov->iov_len;
 				break;
 			}
-			if (zeropage == NULL) {
-				zeropage = (caddr_t)
+			if (zbuf == NULL) {
+				zbuf = (caddr_t)
 				    malloc(CLBYTES, M_TEMP, M_WAITOK);
-				bzero(zeropage, CLBYTES);
+				bzero(zbuf, CLBYTES);
 			}
 			c = min(iov->iov_len, CLBYTES);
-			error = uiomove(zeropage, c, uio);
+			error = uiomove(zbuf, (int)c, uio);
 			continue;
+
+#ifdef notyet /* LWP */
+		/*
+		 * minor device 20 (/dev/reload) represents
+		 * magic memory which you can write a kernel
+		 * image to, causing a reboot into that
+		 * kernel.
+		 */
+		case 20:
+			/* Reads simply get EOF.  */
+			if (uio->uio_rw == UIO_READ)
+				return 0;
+
+			error = kernel_reload_write(uio);
+			continue;
+#endif /* notyet */
 
 		default:
 			return (ENXIO);
@@ -192,20 +174,7 @@ mmrw(dev, uio, flags)
 		uio->uio_offset += c;
 		uio->uio_resid -= c;
 	}
-	if (minor(dev) == 0) {
-unlock:
-		if (physlock > 1)
-			wakeup((caddr_t)&physlock);
-		physlock = 0;
-	}
+	if (zbuf)
+		free(zbuf, M_TEMP);
 	return (error);
-}
-
-int
-mmmmap(dev, off, prot)
-	dev_t dev;
-	int off, prot;
-{
-
-	return (EOPNOTSUPP);
 }

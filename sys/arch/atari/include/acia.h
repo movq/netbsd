@@ -1,4 +1,4 @@
-/*	$NetBSD: acia.h,v 1.3 1995/06/09 19:47:30 leo Exp $	*/
+ /*	$NetBSD: acia.h,v 1.1 1995/03/26 07:12:07 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -41,7 +41,7 @@
 #define	MDI	(((struct acia *)AD_ACIA) + 1)
 
 struct acia {
-	volatile u_char	acb[4];	/* use only the even bytes */
+	volatile char	acb[4];	/* use only the even bytes */
 };
 
 #define	ac_cs	acb[0]		/* control and status register	*/
