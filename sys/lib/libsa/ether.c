@@ -1,4 +1,4 @@
-/*	$NetBSD: ether.c,v 1.16 2003/03/12 14:51:31 drochner Exp $	*/
+/*	$NetBSD: ether.c,v 1.17 2003/03/12 16:46:31 drochner Exp $	*/
 
 /*
  * Copyright (c) 1992 Regents of the University of California.
@@ -52,7 +52,6 @@
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
-#include <netinet/ip.h>
 
 #include "stand.h"
 #include "net.h"
@@ -131,25 +130,4 @@ readether(d, pkt, len, tleft, etype)
 
 	n -= sizeof(*eh);
 	return (n);
-}
-
-/*
- * Convert Ethernet address to printable (loggable) representation.
- */
-static char digits[] = "0123456789abcdef";
-char *
-ether_sprintf(ap)
-        u_char *ap;
-{
-	int i;
-	static char etherbuf[18];
-	char *cp = etherbuf;
-
-	for (i = 0; i < 6; i++) {
-		*cp++ = digits[*ap >> 4];
-		*cp++ = digits[*ap++ & 0xf];
-		*cp++ = ':';
-	}
-	*--cp = 0;
-	return (etherbuf);
 }
