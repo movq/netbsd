@@ -1,5 +1,5 @@
 /* lang.c -- language depend behaviour (startpoint)
-   $Id: lang.c,v 1.1 2001/07/25 16:20:59 assar Exp $
+   $Id: lang.c,v 1.1.1.1 2001/07/25 16:20:59 assar Exp $
 
    Copyright (C) 1999 Free Software Foundation, Inc.
 

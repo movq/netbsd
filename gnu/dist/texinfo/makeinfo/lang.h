@@ -1,5 +1,5 @@
 /* lang.h -- declarations for language codes etc.
-   $Id: lang.h,v 1.1 2001/07/25 16:20:59 assar Exp $
+   $Id: lang.h,v 1.1.1.1 2001/07/25 16:20:59 assar Exp $
 
    Copyright (C) 1999 Free Software Foundation, Inc.
 

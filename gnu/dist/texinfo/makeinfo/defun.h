@@ -1,5 +1,5 @@
 /* defun.h -- declaration for defuns.
-   $Id: defun.h,v 1.1 2001/07/25 16:20:57 assar Exp $
+   $Id: defun.h,v 1.1.1.1 2001/07/25 16:20:57 assar Exp $
 
    Copyright (C) 1999 Free Software Foundation, Inc.
 

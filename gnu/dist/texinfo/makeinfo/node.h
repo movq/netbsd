@@ -1,5 +1,5 @@
 /* node.h -- declarations for Node.
-   $Id: node.h,v 1.1 2001/07/25 16:21:03 assar Exp $
+   $Id: node.h,v 1.1.1.1 2001/07/25 16:21:03 assar Exp $
 
    Copyright (C) 1996, 97, 98, 99 Free Software Foundation, Inc.
 
