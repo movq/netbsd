@@ -1,7 +1,7 @@
-/*	$NetBSD: version.c,v 1.1.1.1 1995/02/14 22:56:37 gwr Exp $ */
+/*	$NetBSD: SRT1.c,v 1.1.1.1 1995/02/14 22:56:37 gwr Exp $	*/
 
 /*
- * Copyright (c) 1993 Paul Kranenburg
+ * Copyright (c) 1995 Gordon W. Ross
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,11 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ * 4. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed by Paul Kranenburg.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
+ *      This product includes software developed by Gordon Ross
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,11 +30,45 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
- *	NOTE ANY CHANGES YOU MAKE TO THE BOOTBLOCKS HERE.
- *
- *	1.1
- *	1.2	get it to work with V0 bootproms.
- */
+/* SRT1.c - Stand-alone Run-time startup code, part 1 */
 
-char *version = "$Revision: 1.1.1.1 $";
+#include <stdarg.h>
+#include <sys/types.h>
+#include <machine/mon.h>
+
+extern char edata[], end[];
+extern int * getvbr();
+extern volatile void abort();
+
+volatile void
+exit()
+{
+	mon_exit_to_mon();
+	abort();
+}
+
+/*
+ * This is called by SRT0.S
+ * to do final prep for main
+ */
+_start()
+{
+	register int *p;
+
+	/* Clear BSS */
+	p = (int *) edata;
+	do *p++ = 0;
+	while (((char*)p) < end);
+
+	/* Set the vector for trap 0 used by abort. */
+	p = getvbr();
+	p[32] = (int)romp->abortEntry;
+
+	main(0);
+	exit();
+}
+
+/*
+ * Boot programs in C++ ?  Not likely!
+ */
+__main() {}
