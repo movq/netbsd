@@ -1,4 +1,4 @@
-/*	$NetBSD: kbd_tables.h,v 1.1 1996/01/24 01:15:35 gwr Exp $	*/
+/*	$NetBSD: kbd_tables.h,v 1.1.1.1 1996/01/24 01:15:35 gwr Exp $	*/
 
 /*
  * Copyright (c) 1996 Gordon W. Ross
