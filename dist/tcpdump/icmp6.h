@@ -1,7 +1,7 @@
-/*	$NetBSD: icmp6.h,v 1.1 2001/06/25 19:26:31 itojun Exp $	*/
+/*	$NetBSD: icmp6.h,v 1.1.1.1 2001/06/25 19:26:31 itojun Exp $	*/
 
 /* @(#) Header: /tcpdump/master/tcpdump/icmp6.h,v 1.11 2001/06/01 23:01:04 itojun Exp (LBL) */
-/*	$NetBSD: icmp6.h,v 1.1 2001/06/25 19:26:31 itojun Exp $	*/
+/*	$NetBSD: icmp6.h,v 1.1.1.1 2001/06/25 19:26:31 itojun Exp $	*/
 /*	$KAME: icmp6.h,v 1.22 2000/08/03 15:25:16 jinmei Exp $	*/
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: parsenfsfh.c,v 1.1 2001/06/25 19:26:33 itojun Exp $	*/
+/*	$NetBSD: parsenfsfh.c,v 1.1.1.1 2001/06/25 19:26:33 itojun Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994 Jeffrey C. Mogul, Digital Equipment Corporation,

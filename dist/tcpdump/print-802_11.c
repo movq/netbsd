@@ -1,4 +1,4 @@
-/*	$NetBSD: print-802_11.c,v 1.1 2001/06/25 19:26:33 itojun Exp $	*/
+/*	$NetBSD: print-802_11.c,v 1.1.1.1 2001/06/25 19:26:33 itojun Exp $	*/
 
 /*
  * Copyright (c) 2001

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-telnet.c,v 1.1 2001/06/25 19:26:39 itojun Exp $	*/
+/*	$NetBSD: print-telnet.c,v 1.1.1.1 2001/06/25 19:26:39 itojun Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.

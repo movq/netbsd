@@ -1,4 +1,4 @@
-/*	$NetBSD: udp.h,v 1.1 2001/06/25 19:26:41 itojun Exp $	*/
+/*	$NetBSD: udp.h,v 1.1.1.1 2001/06/25 19:26:41 itojun Exp $	*/
 
 /* @(#) Header: /tcpdump/master/tcpdump/udp.h,v 1.2 2000/10/03 02:55:03 itojun Exp (LBL) */
 /*

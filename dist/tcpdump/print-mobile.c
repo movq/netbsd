@@ -1,4 +1,4 @@
-/*	$NetBSD: print-mobile.c,v 1.1 2001/06/25 19:26:36 itojun Exp $	*/
+/*	$NetBSD: print-mobile.c,v 1.1.1.1 2001/06/25 19:26:36 itojun Exp $	*/
 
 /*
  * (c) 1998 The NetBSD Foundation, Inc.

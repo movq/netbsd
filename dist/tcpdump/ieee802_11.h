@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee802_11.h,v 1.1 2001/06/25 19:26:31 itojun Exp $	*/
+/*	$NetBSD: ieee802_11.h,v 1.1.1.1 2001/06/25 19:26:31 itojun Exp $	*/
 
 /* @(#) Header: /tcpdump/master/tcpdump/ieee802_11.h,v 1.3 2001/06/14 09:50:01 guy Exp (LBL) */
 /*

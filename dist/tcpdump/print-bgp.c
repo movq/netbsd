@@ -1,4 +1,4 @@
-/*	$NetBSD: print-bgp.c,v 1.1 2001/06/25 19:26:33 itojun Exp $	*/
+/*	$NetBSD: print-bgp.c,v 1.1.1.1 2001/06/25 19:26:33 itojun Exp $	*/
 
 /*
  * Copyright (C) 1999 WIDE Project.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp.h,v 1.1 2001/06/25 19:26:32 itojun Exp $	*/
+/*	$NetBSD: ntp.h,v 1.1.1.1 2001/06/25 19:26:32 itojun Exp $	*/
 
 /* Header: /tcpdump/master/tcpdump/ntp.h,v 1.4 2000/10/03 02:54:57 itojun Exp */
 

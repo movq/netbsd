@@ -1,4 +1,4 @@
-/*	$NetBSD: ipx.h,v 1.1 2001/06/25 19:26:32 itojun Exp $	*/
+/*	$NetBSD: ipx.h,v 1.1.1.1 2001/06/25 19:26:32 itojun Exp $	*/
 
 /*
  * IPX protocol formats 

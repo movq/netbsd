@@ -1,4 +1,4 @@
-/*	$NetBSD: sctpHeader.h,v 1.1 2001/06/25 19:26:40 itojun Exp $	*/
+/*	$NetBSD: sctpHeader.h,v 1.1.1.1 2001/06/25 19:26:40 itojun Exp $	*/
 
 /* SCTP reference Implementation Copyright (C) 1999 Cisco And Motorola
  *

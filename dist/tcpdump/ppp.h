@@ -1,4 +1,4 @@
-/*	$NetBSD: ppp.h,v 1.1 2001/06/25 19:26:33 itojun Exp $	*/
+/*	$NetBSD: ppp.h,v 1.1.1.1 2001/06/25 19:26:33 itojun Exp $	*/
 
 /* @(#) Header: /tcpdump/master/tcpdump/ppp.h,v 1.12 2001/02/04 02:17:55 fenner Exp (LBL) */
 /*

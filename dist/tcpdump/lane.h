@@ -1,4 +1,4 @@
-/*	$NetBSD: lane.h,v 1.1 2001/06/25 19:26:32 itojun Exp $	*/
+/*	$NetBSD: lane.h,v 1.1.1.1 2001/06/25 19:26:32 itojun Exp $	*/
 
 /*
  * Marko Kiiskila carnil@cs.tut.fi 

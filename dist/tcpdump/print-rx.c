@@ -1,4 +1,4 @@
-/*	$NetBSD: print-rx.c,v 1.1 2001/06/25 19:26:38 itojun Exp $	*/
+/*	$NetBSD: print-rx.c,v 1.1.1.1 2001/06/25 19:26:38 itojun Exp $	*/
 
 /*
  * This code unmangles RX packets.  RX is the mutant form of RPC that AFS

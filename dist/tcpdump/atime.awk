@@ -1,4 +1,4 @@
-#	$NetBSD: atime.awk,v 1.1 2001/06/25 19:26:29 itojun Exp $
+#	$NetBSD: atime.awk,v 1.1.1.1 2001/06/25 19:26:29 itojun Exp $
 
 $6 ~ /^ack/ && $5 !~ /[SFR]/ 	{
 	# given a tcpdump ftp trace, output one line for each ack

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-vrrp.c,v 1.1 2001/06/25 19:26:40 itojun Exp $	*/
+/*	$NetBSD: print-vrrp.c,v 1.1.1.1 2001/06/25 19:26:40 itojun Exp $	*/
 
 /*
  * Copyright (c) 2000 William C. Fenner.

@@ -1,4 +1,4 @@
-/*	$NetBSD: decnet.h,v 1.1 2001/06/25 19:26:31 itojun Exp $	*/
+/*	$NetBSD: decnet.h,v 1.1.1.1 2001/06/25 19:26:31 itojun Exp $	*/
 
 /*
  * Copyright (c) 1992, 1994, 1996
