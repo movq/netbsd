@@ -1,4 +1,4 @@
-/*	$NetBSD: mk251.c,v 1.1 2002/03/15 01:35:28 mjl Exp $	*/
+/*	$NetBSD: mk251.c,v 1.1.1.1 2002/03/15 01:35:28 mjl Exp $	*/
 
 
 /* Spew out a long sequence of the byte 251.  When fed to bzip2
