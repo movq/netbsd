@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_types.h,v 1.8 1997/07/21 23:02:46 christos Exp $	 */
+/*	$NetBSD: svr4_types.h,v 1.8.6.1 1997/11/17 02:28:22 thorpej Exp $	 */
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -61,5 +61,13 @@ typedef long		 svr4_clock_t;
 typedef int		 svr4_key_t;
 
 typedef struct timespec  svr4_timestruc_t;
+
+#define svr4_to_bsd_odev_t(d) makedev((((d) & 0x7f00) >> 8), ((d) & 0xff))
+/* XXX: we limit the minor number to 0xff, instead of 0x3ffff */
+#define svr4_to_bsd_dev_t(d) makedev((((d) & 0xfffc0000) >> 18), ((d) & 0xff))
+
+#define bsd_to_svr4_odev_t(d) (((major(d) & 0x7f) << 8)|(minor(d) & 0xff))
+#define bsd_to_svr4_dev_t(d) (((major(d) & 0x3fff) << 18)|(minor(d) & 0x3ffff))
+
 
 #endif /* !_SVR4_TYPES_H_ */
