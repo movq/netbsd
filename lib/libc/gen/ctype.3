@@ -31,7 +31,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)ctype.3	6.5 (Berkeley) 4/19/91
-.\"	$Id: ctype.3,v 1.2 1993/07/30 08:35:32 mycroft Exp $
+.\"	$Id: ctype.3,v 1.3 1993/09/14 19:23:27 jtc Exp $
 .\"
 .Dd April 19, 1991
 .Dt CTYPE 3
@@ -48,6 +48,7 @@
 .Nm isprint ,
 .Nm isgraph ,
 .Nm iscntrl ,
+.Nm isblank ,
 .Nm isascii ,
 .Nm toupper ,
 .Nm tolower ,
@@ -68,6 +69,7 @@
 .Fn isprint c
 .Fn isgraph c
 .Fn iscntrl c
+.Fn isblank c
 .Fn isascii c
 .Fn toupper c
 .Fn tolower c
@@ -89,6 +91,7 @@ See the specific manual pages for more information.
 .Xr isprint 3 ,
 .Xr isgraph 3 ,
 .Xr iscntrl 3 ,
+.Xr isblank 3 ,
 .Xr isascii 3 ,
 .Xr toupper 3 ,
 .Xr tolower 3 ,
@@ -96,6 +99,7 @@ See the specific manual pages for more information.
 .Xr ascii 7
 .Sh STANDARDS
 These functions, except for
+.Fn isblank ,
 .Fn toupper ,
 .Fn tolower
 and
