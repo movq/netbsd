@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1999/01/18 07:37:24 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1999/01/18 07:37:24 mrg Exp $
 
 PROG=	mksunbootcd
 MAN=	mksunbootcd.1

@@ -1,4 +1,4 @@
-/*	$NetBSD: mksunbootcd.c,v 1.1 1999/01/18 07:37:23 mrg Exp $	*/
+/*	$NetBSD: mksunbootcd.c,v 1.1.1.1 1999/01/18 07:37:23 mrg Exp $	*/
 
 /*
  * Copyright (c) 1998 Ignatios Souvatzis
