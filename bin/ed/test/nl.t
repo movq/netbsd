@@ -1,6 +1,0 @@
-1
-
-
-a
-hello world
-.
