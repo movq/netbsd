@@ -1,4 +1,4 @@
-/*      $NetBSD: ethers.c,v 1.1 2004/03/28 08:56:01 martti Exp $      */
+/*      $NetBSD: ethers.c,v 1.1.1.1 2004/03/28 08:56:01 martti Exp $      */
 
 /*
  * ethers(3N) a la Sun.

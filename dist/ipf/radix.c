@@ -1,4 +1,4 @@
-/*	$NetBSD: radix.c,v 1.1 2004/03/28 08:55:49 martti Exp $	*/
+/*	$NetBSD: radix.c,v 1.1.1.1 2004/03/28 08:55:49 martti Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_fil_irix.c,v 1.1 2004/03/28 08:55:33 martti Exp $	*/
+/*	$NetBSD: ip_fil_irix.c,v 1.1.1.1 2004/03/28 08:55:33 martti Exp $	*/
 
 /*
  * Copyright (C) 1993-2003 by Darren Reed.

@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf_filter.c,v 1.1 2004/03/28 08:55:22 martti Exp $	*/
+/*	$NetBSD: bpf_filter.c,v 1.1.1.1 2004/03/28 08:55:22 martti Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997
@@ -42,7 +42,7 @@
 
 #if !(defined(lint) || defined(KERNEL) || defined(_KERNEL))
 static const char rcsid[] =
-    "@(#) $Header: /home/mike/src/cvs/netbsd/src/dist/ipf/Attic/bpf_filter.c,v 1.1 2004/03/28 08:55:22 martti Exp $ (LBL)";
+    "@(#) $Header: /home/mike/src/cvs/netbsd/src/dist/ipf/Attic/bpf_filter.c,v 1.1.1.1 2004/03/28 08:55:22 martti Exp $ (LBL)";
 #endif
 
 #include <sys/param.h>

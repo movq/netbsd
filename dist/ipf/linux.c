@@ -1,4 +1,4 @@
-/*	$NetBSD: linux.c,v 1.1 2004/03/28 08:55:47 martti Exp $	*/
+/*	$NetBSD: linux.c,v 1.1.1.1 2004/03/28 08:55:47 martti Exp $	*/
 
 #include "ipf-linux.h"
 #include <linux/devfs_fs_kernel.h>

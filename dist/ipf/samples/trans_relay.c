@@ -1,4 +1,4 @@
-/*	$NetBSD: trans_relay.c,v 1.1 2004/03/28 08:56:26 martti Exp $	*/
+/*	$NetBSD: trans_relay.c,v 1.1.1.1 2004/03/28 08:56:26 martti Exp $	*/
 
 /*
  * Sample program to be used as a transparent proxy.

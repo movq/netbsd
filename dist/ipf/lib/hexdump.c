@@ -1,4 +1,4 @@
-/*	$NetBSD: hexdump.c,v 1.1 2004/03/28 08:56:18 martti Exp $	*/
+/*	$NetBSD: hexdump.c,v 1.1.1.1 2004/03/28 08:56:18 martti Exp $	*/
 
 #include <ctype.h>
 

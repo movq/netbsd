@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_htable.c,v 1.1 2004/03/28 08:56:43 martti Exp $	*/
+/*	$NetBSD: ip_htable.c,v 1.1.1.1 2004/03/28 08:56:43 martti Exp $	*/
 
 /*
  * Copyright (C) 1993-2001, 2003 by Darren Reed.

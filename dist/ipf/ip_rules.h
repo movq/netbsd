@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_rules.h,v 1.1 2004/03/28 08:55:43 martti Exp $	*/
+/*	$NetBSD: ip_rules.h,v 1.1.1.1 2004/03/28 08:55:43 martti Exp $	*/
 
 extern int ipfrule_add __P((void));
 extern int ipfrule_remove __P((void));

@@ -1,4 +1,4 @@
-/*	$NetBSD: ipnat_y.y,v 1.1 2004/03/28 08:56:34 martti Exp $	*/
+/*	$NetBSD: ipnat_y.y,v 1.1.1.1 2004/03/28 08:56:34 martti Exp $	*/
 
 %{
 #ifdef  __FreeBSD__

@@ -1,4 +1,4 @@
-/*	$NetBSD: ipf_y.y,v 1.1 2004/03/28 08:56:31 martti Exp $	*/
+/*	$NetBSD: ipf_y.y,v 1.1.1.1 2004/03/28 08:56:31 martti Exp $	*/
 
 %{
 #include "ipf.h"

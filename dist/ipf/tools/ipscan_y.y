@@ -1,4 +1,4 @@
-/*	$NetBSD: ipscan_y.y,v 1.1 2004/03/28 08:56:35 martti Exp $	*/
+/*	$NetBSD: ipscan_y.y,v 1.1.1.1 2004/03/28 08:56:35 martti Exp $	*/
 
 %{
 #include <sys/types.h>

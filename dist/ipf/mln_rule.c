@@ -1,4 +1,4 @@
-/*	$NetBSD: mln_rule.c,v 1.1 2004/03/28 08:55:48 martti Exp $	*/
+/*	$NetBSD: mln_rule.c,v 1.1.1.1 2004/03/28 08:55:48 martti Exp $	*/
 
 /*
  * Copyright (C) 1993-2001 by Darren Reed.

@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf-ipf.h,v 1.1 2004/03/28 08:55:20 martti Exp $	*/
+/*	$NetBSD: bpf-ipf.h,v 1.1.1.1 2004/03/28 08:55:20 martti Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997
@@ -39,7 +39,7 @@
  *
  *      @(#)bpf.h       7.1 (Berkeley) 5/7/91
  *
- * @(#) $Header: /home/mike/src/cvs/netbsd/src/dist/ipf/Attic/bpf-ipf.h,v 1.1 2004/03/28 08:55:20 martti Exp $ (LBL)
+ * @(#) $Header: /home/mike/src/cvs/netbsd/src/dist/ipf/Attic/bpf-ipf.h,v 1.1.1.1 2004/03/28 08:55:20 martti Exp $ (LBL)
  */
 
 #ifndef BPF_MAJOR_VERSION

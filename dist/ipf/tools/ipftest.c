@@ -1,4 +1,4 @@
-/*	$NetBSD: ipftest.c,v 1.1 2004/03/28 08:56:32 martti Exp $	*/
+/*	$NetBSD: ipftest.c,v 1.1.1.1 2004/03/28 08:56:32 martti Exp $	*/
 
 /*
  * Copyright (C) 1993-2001 by Darren Reed.
