@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_wait.h,v 1.1 1994/11/18 02:56:21 christos Exp $	 */
+/*	$NetBSD: svr4_wait.h,v 1.2 1995/01/08 21:31:49 christos Exp $	 */
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -91,6 +91,6 @@ struct svr4_siginfo {
 #define si_status	_data._proc._pdata._cld._status
 #define si_utime	_data._proc._pdata._cld._utime
 #define si_uid		_data._proc._pdata._kill._uid
-#define si_pid		_data._proc._pid;
+#define si_pid		_data._proc._pid
 
 #endif /* !_SVR4_WAIT_H_ */
