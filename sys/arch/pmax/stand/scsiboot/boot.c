@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.6 1995/06/28 10:22:32 jonathan Exp $	*/
+/*	$NetBSD: boot.c,v 1.10 1999/02/01 02:46:59 jonathan Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -41,12 +41,12 @@
 #include <sys/param.h>
 #include <sys/exec.h>
 #include <stand.h>
-#include <pmax/stand/dec_prom.h>
+#include <machine/dec_prom.h>
 
 
 #include "byteswap.h"
 
-char	line[1024];
+char	line[512];
 
 /*
  * This gets arguments from the PROM, calls other routines to open
@@ -57,7 +57,7 @@ char	line[1024];
  * The argument "-a" means vmunix should do an automatic reboot.
  */
 int
-main(argc, argv)
+_main(argc, argv)
 	int argc;
 	char **argv;
 {
@@ -115,6 +115,7 @@ loadfile(fname)
 	register struct devices *dp;
 	register int fd, i, n;
 	struct exec aout;
+	char *buf;
 
 	if ((fd = open(fname, 0)) < 0) {
 		printf("open(%s) failed: %d\n", fname, errno);
@@ -141,7 +142,20 @@ loadfile(fname)
 	}
 #endif
 	i = aout.a_text + aout.a_data;
-	n = read(fd, (char *)aout.a_entry, i);
+	n = read(fd, buf = (char *)aout.a_entry, i);
+/* XXX symbols */
+	if (aout.a_syms) {
+		/*
+		 * Copy exec header to start of bss.
+		 * Load symbols into end + sizeof(int).
+		 */
+		memcpy(buf += i, (char *)&aout, sizeof(aout));
+		n += read(fd, buf += aout.a_bss + 4, aout.a_syms + 4);
+		i += aout.a_syms + 4;
+		buf += aout.a_syms;
+		n += read(fd, buf + 4, *(long *)buf);
+		i += *(long *)buf;
+	}
 #ifndef SMALL
 	(void) close(fd);
 #endif

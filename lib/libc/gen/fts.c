@@ -1,4 +1,4 @@
-/*	$NetBSD: fts.c,v 1.19 1997/10/09 22:59:18 christos Exp $	*/
+/*	$NetBSD: fts.c,v 1.20 1997/10/21 00:56:51 fvdl Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)fts.c	8.6 (Berkeley) 8/14/94";
 #else
-__RCSID("$NetBSD: fts.c,v 1.19 1997/10/09 22:59:18 christos Exp $");
+__RCSID("$NetBSD: fts.c,v 1.20 1997/10/21 00:56:51 fvdl Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -53,6 +53,18 @@ __RCSID("$NetBSD: fts.c,v 1.19 1997/10/09 22:59:18 christos Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#undef fts_children
+#undef fts_close
+#undef fts_open
+#undef fts_read
+#undef fts_set
+#undef stat
+#undef fstat
+#undef lstat
+
+#define FTSENT FTSENT12
+#define FTS FTS12
 
 #ifdef __weak_alias
 __weak_alias(fts_children,_fts_children);
@@ -799,7 +811,7 @@ fts_stat(sp, p, follow)
 	register FTSENT *t;
 	register dev_t dev;
 	register ino_t ino;
-	struct stat *sbp, sb;
+	struct stat12 *sbp, sb;
 	int saved_errno;
 
 	/* If user needs stat info, stat buffer already allocated. */
@@ -833,7 +845,7 @@ fts_stat(sp, p, follow)
 		}
 	} else if (lstat(p->fts_accpath, sbp)) {
 		p->fts_errno = errno;
-err:		memset(sbp, 0, sizeof(struct stat));
+err:		memset(sbp, 0, sizeof(struct stat12));
 		return (FTS_NS);
 	}
 
@@ -924,7 +936,7 @@ fts_alloc(sp, name, namelen)
 	 */
 	len = sizeof(FTSENT) + namelen;
 	if (!ISSET(FTS_NOSTAT))
-		len += sizeof(struct stat) + ALIGNBYTES;
+		len += sizeof(struct stat12) + ALIGNBYTES;
 	if ((p = malloc(len)) == NULL)
 		return (NULL);
 
@@ -932,7 +944,7 @@ fts_alloc(sp, name, namelen)
 	memmove(p->fts_name, name, namelen + 1);
 
 	if (!ISSET(FTS_NOSTAT))
-		p->fts_statp = (struct stat *)ALIGN(p->fts_name + namelen + 2);
+		p->fts_statp = (struct stat12 *)ALIGN(p->fts_name + namelen + 2);
 	p->fts_namelen = namelen;
 	p->fts_path = sp->fts_path;
 	p->fts_errno = 0;
