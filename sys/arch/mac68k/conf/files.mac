@@ -1,4 +1,4 @@
-#	$Id: files.mac,v 1.1 1993/09/29 06:09:11 briggs Exp $
+#	$Id: files.mac,v 1.1.1.1 1993/09/29 06:09:12 briggs Exp $
 #
 arch/mac/mac/disksubr.c		standard
 arch/mac/mac/vm_machdep.c	standard

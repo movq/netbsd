@@ -90,7 +90,7 @@
 
 	.even
 	.text
-	.asciz	"$Id: oc_cksum.s,v 1.1 1993/09/29 06:09:15 briggs Exp $"
+	.asciz	"$Id: oc_cksum.s,v 1.1.1.1 1993/09/29 06:09:16 briggs Exp $"
 	.even
 
 	.globl	_oc_cksum

@@ -22,7 +22,7 @@
  *
  */
 
-static	char rev[] = "$Revision: 1.1 $";
+static	char rev[] = "$Revision: 1.1.1.1 $";
 
 /*
  * Ported to run under 386BSD by Julian Elischer (julian@dialix.oz.au) Sept 1992

@@ -39,7 +39,7 @@
  *
  *	@(#)grf_gbreg.h	7.2 (Berkeley) 11/4/90
  */
-#ident "$Id: grf_gbreg.h,v 1.1 1993/09/29 06:09:29 briggs Exp $"
+#ident "$Id: grf_gbreg.h,v 1.1.1.1 1993/09/29 06:09:30 briggs Exp $"
 
 /*
  * Gatorbox driver regs

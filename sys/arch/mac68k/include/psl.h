@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
 */
-#ident "$Id: psl.h,v 1.1 1993/09/29 06:09:20 briggs Exp $"
+#ident "$Id: psl.h,v 1.1.1.1 1993/09/29 06:09:21 briggs Exp $"
 /*
  *	@(#)psl.h	7.2 (Berkeley) 5/4/91
  */

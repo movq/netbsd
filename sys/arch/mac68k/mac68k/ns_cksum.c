@@ -33,7 +33,7 @@
  *	from: @(#)ns_cksum.c	7.7 (Berkeley) 4/29/91
  *	ns_cksum.c,v 1.2 1993/05/22 07:57:36 cgd Exp
  */
-#ident "$Id: ns_cksum.c,v 1.1 1993/09/29 06:09:12 briggs Exp $"
+#ident "$Id: ns_cksum.c,v 1.1.1.1 1993/09/29 06:09:13 briggs Exp $"
 
 #include "sys/param.h"
 #include "sys/mbuf.h"

@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
 */
-#ident "$Id: endian.h,v 1.1 1993/09/29 06:09:23 briggs Exp $"
+#ident "$Id: endian.h,v 1.1.1.1 1993/09/29 06:09:24 briggs Exp $"
 
 /*
  *	@(#)endian.h	7.7 (Berkeley) 4/3/91

@@ -68,7 +68,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: cpu.h,v 1.1 1993/09/29 06:09:23 briggs Exp $"
+#ident "$Id: cpu.h,v 1.1.1.1 1993/09/29 06:09:24 briggs Exp $"
 
 /*
  * from: Utah $Hdr: cpu.h 1.16 91/03/25$

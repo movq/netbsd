@@ -32,7 +32,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: nubus.h,v 1.1 1993/09/29 06:09:22 briggs Exp $"
+#ident "$Id: nubus.h,v 1.1.1.1 1993/09/29 06:09:23 briggs Exp $"
 
 /* LAK: NuBus info */
 

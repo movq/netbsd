@@ -40,7 +40,7 @@
  *	from: @(#)grfvar.h	7.3 (Berkeley) 5/7/91
  *	grfvar.h,v 1.2 1993/05/22 07:56:15 cgd Exp
  */
-#ident "$Id: grfvar.h,v 1.1 1993/09/29 06:09:30 briggs Exp $"
+#ident "$Id: grfvar.h,v 1.1.1.1 1993/09/29 06:09:31 briggs Exp $"
 
 /* internal structure of lock page */
 #define GRFMAXLCK	256

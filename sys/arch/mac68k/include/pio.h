@@ -29,7 +29,7 @@
  * 	[90/03/26            rvb]
  * 
  */
-#ident "$Id: pio.h,v 1.1 1993/09/29 06:09:21 briggs Exp $"
+#ident "$Id: pio.h,v 1.1.1.1 1993/09/29 06:09:22 briggs Exp $"
 
 
 #define inl(y) \

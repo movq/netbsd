@@ -68,7 +68,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: pcb.h,v 1.1 1993/09/29 06:09:21 briggs Exp $"
+#ident "$Id: pcb.h,v 1.1.1.1 1993/09/29 06:09:22 briggs Exp $"
 /*
  * from: Utah $Hdr: pcb.h 1.13 89/04/23$
  *

@@ -31,7 +31,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: pram.c,v 1.1 1993/09/29 06:09:14 briggs Exp $"
+#ident "$Id: pram.c,v 1.1.1.1 1993/09/29 06:09:15 briggs Exp $"
 
 
 /* #include "stand.h"  */

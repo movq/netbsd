@@ -31,7 +31,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: via.h,v 1.1 1993/09/29 06:09:13 briggs Exp $"
+#ident "$Id: via.h,v 1.1.1.1 1993/09/29 06:09:14 briggs Exp $"
 /*
 
 	Prototype VIA control definitions

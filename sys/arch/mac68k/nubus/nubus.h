@@ -31,7 +31,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: nubus.h,v 1.1 1993/09/29 06:09:24 briggs Exp $"
+#ident "$Id: nubus.h,v 1.1.1.1 1993/09/29 06:09:25 briggs Exp $"
 
 #define NUBUS_VIDEO 3
 #define NUBUS_NETWORK 4

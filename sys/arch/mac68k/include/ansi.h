@@ -35,7 +35,7 @@
 
 #ifndef	_ANSI_H_
 #define	_ANSI_H_
-#ident "$Id: ansi.h,v 1.1 1993/09/29 06:09:23 briggs Exp $"
+#ident "$Id: ansi.h,v 1.1.1.1 1993/09/29 06:09:24 briggs Exp $"
 
 /*
  * Types which are fundamental to the implementation and may appear in

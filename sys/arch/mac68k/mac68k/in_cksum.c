@@ -35,7 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ident "$Id: in_cksum.c,v 1.1 1993/09/29 06:09:17 briggs Exp $"
+#ident "$Id: in_cksum.c,v 1.1.1.1 1993/09/29 06:09:18 briggs Exp $"
 /*
  * from: Utah $Hdr: in_cksum.c 1.1 90/07/09$
  *

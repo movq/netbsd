@@ -35,7 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ident "$Id: trap.h,v 1.1 1993/09/29 06:09:20 briggs Exp $"
+#ident "$Id: trap.h,v 1.1.1.1 1993/09/29 06:09:21 briggs Exp $"
 /*
  * from: Utah $Hdr: trap.h 1.1 90/07/09$
  *

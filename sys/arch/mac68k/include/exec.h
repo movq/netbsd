@@ -33,7 +33,7 @@
  */
 #ifndef _MACHINE_EXEC_H
 #define _MACHINE_EXEC_H
-#ident "$Id: exec.h,v 1.1 1993/09/29 06:09:22 briggs Exp $"
+#ident "$Id: exec.h,v 1.1.1.1 1993/09/29 06:09:23 briggs Exp $"
 
 #include "sys/exec.h"
 

@@ -31,7 +31,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: console.h,v 1.1 1993/09/29 06:09:28 briggs Exp $"
+#ident "$Id: console.h,v 1.1.1.1 1993/09/29 06:09:29 briggs Exp $"
 
 /* Must #include <sys/ioctl.h> for these to work: */
 #define CON_GETCURSOR TIOCMGET
