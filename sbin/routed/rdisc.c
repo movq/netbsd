@@ -35,7 +35,7 @@
 static char sccsid[] = "@(#)rdisc.c	8.1 (Berkeley) x/y/95";
 #endif /* not lint */
 
-#ident "$Revision: 1.1 $"
+#ident "$Revision: 1.1.1.1 $"
 
 #include "defs.h"
 #include <netinet/in_systm.h>

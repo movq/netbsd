@@ -35,7 +35,7 @@
 static char sccsid[] = "@(#)if.c	8.1 (Berkeley) 6/5/93";
 #endif /* not lint */
 
-#ident "$Revision: 1.1 $"
+#ident "$Revision: 1.1.1.1 $"
 
 #include "defs.h"
 #include "pathnames.h"
