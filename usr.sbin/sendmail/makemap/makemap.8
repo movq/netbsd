@@ -29,59 +29,59 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)makemap.8	8.3 (Berkeley) 7/24/94
+.\"     @(#)makemap.8	8.1 (Berkeley) 6/7/93
 .\"
-.Dd November 16, 1992
-.Dt MAKEMAP 8
-.Os BSD 4.4
-.Sh NAME
-.Nm makemap
-.Nd create database maps for sendmail
-.Sh SYNOPSIS
-.Nm
-.Op Fl N
-.Op Fl d
-.Op Fl f
-.Op Fl o
-.Op Fl r
-.Op Fl v
-.Ar maptype
-.Ar mapname
-.Sh DESCRIPTION
-.Nm
+.TH MAKEMAP 8 November\ 16,\ 1992
+.UC 6
+.sh NAME
+makemap \- create database maps for sendmail
+.SH SYNOPSIS
+.B makemap
+[
+\-N
+] [
+\-f
+] [
+\-o
+] [
+\-r
+] [
+\-v
+]
+maptype mapname
+.SH DESCRIPTION
+.I Makemap
 creates the database maps used by the keyed map lookups in
-.Xr sendmail 8 .
+.IR sendmail (8).
 It reads input from the standard input
 and outputs them to the indicated
-.Ar mapname .
-.Pp
+.IR mapname .
+.PP
 Depending on how it is compiled,
-.Nm
+.I makemap
 handles up to three different database formats,
 selected using the
-.Ar maptype
+.I maptype
 parameter.
 They may be
-.Bl -tag -width Fl
-.It Li dbm
+.IP dbm
 DBM format maps.
 This requires the
-.Xr ndbm 3
+.IR ndbm (3)
 library.
-.It Li btree
+.IP btree
 B-Tree format maps.
 This requires the new Berkeley
-.Xr db 3
+.IR db (3)
 library.
-.It Li hash
+.IP hash
 Hash format maps.
 This also requires the
-.Xr db 3
+.IR db (3)
 library.
-.El
-.Pp
+.PP
 In all cases,
-.Nm
+.I makemap
 reads lines from the standard input consisting of two
 words separated by white space.
 The first is the database key,
@@ -92,43 +92,30 @@ strings to indicated parameter substitution.
 Literal parentheses should be doubled
 (``%%'').
 Blank lines and lines beginning with ``#'' are ignored.
-.Ss Flags
-.Bl -tag -width Fl
-.It Fl N
+.SH FLAGS
+.IP \-N
 Include the null byte that terminates strings
 in the map.
 This must match the \-N flag in the sendmail.cf
 ``K'' line.
-.It Fl d
-Allow duplicate keys in the map.
-This is only allowed on B-Tree format maps.
-If two identical keys are read,
-they will both be inserted into the map.
-.It Fl f
-Normally all upper case letters in the key
-are folded to lower case.
-This flag disables that behaviour.
-This is intended to mesh with the
+.IP \-f
+Fold all upper case letters in the key
+to lower case;
+this is intended to mesh with the
 \-f flag in the
-\fBK\fP
+.B K
 line in sendmail.cf.
-The value is never case folded.
-.It Fl o
+The value is not case folded.
+.IP \-o
 Append to an old file.
 This allows you to augment an existing file.
-.It Fl r
+.IP \-r
 Allow replacement of existing keys.
 Normally
-.Nm
+.I makemap
 complains if you repeat a key,
 and does not do the insert.
-.It Fl v
+.IP \-v
 Verbosely print what it is doing.
-.El
-.Sh SEE ALSO
-.Xr sendmail 8
-.Sh HISTORY
-The
-.Nm
-command appeared in
-.Bx 4.4 .
+.SH SEE ALSO
+sendmail(8)

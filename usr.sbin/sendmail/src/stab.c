@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 1983, 1995 Eric P. Allman
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Eric P. Allman
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,7 +33,7 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)stab.c	8.6 (Berkeley) 8/31/95";
+static char sccsid[] = "@(#)stab.c	5.7 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include "sendmail.h"
@@ -57,7 +57,7 @@ static char sccsid[] = "@(#)stab.c	8.6 (Berkeley) 8/31/95";
 **		can update the symbol table.
 */
 
-# define STABSIZE	2003
+# define STABSIZE	400
 
 static STAB	*SymTab[STABSIZE];
 
@@ -78,28 +78,20 @@ stab(name, type, op)
 
 	/*
 	**  Compute the hashing function
+	**
+	**	We could probably do better....
 	*/
 
 	hfunc = type;
 	for (p = name; *p != '\0'; p++)
-		hfunc = ((hfunc << 1) ^ (lower(*p) & 0377)) % STABSIZE;
+		hfunc = (((hfunc << 7) | lower(*p)) & 077777) % STABSIZE;
 
 	if (tTd(36, 9))
 		printf("(hfunc=%d) ", hfunc);
 
 	ps = &SymTab[hfunc];
-	if (type == ST_MACRO || type == ST_RULESET)
-	{
-		while ((s = *ps) != NULL &&
-		       (s->s_type != type || strcmp(name, s->s_name)))
-			ps = &s->s_next;
-	}
-	else
-	{
-		while ((s = *ps) != NULL &&
-		       (s->s_type != type || strcasecmp(name, s->s_name)))
-			ps = &s->s_next;
-	}
+	while ((s = *ps) != NULL && (strcasecmp(name, s->s_name) || s->s_type != type))
+		ps = &s->s_next;
 
 	/*
 	**  Dispose of the entry.
@@ -133,41 +125,11 @@ stab(name, type, op)
 	s = (STAB *) xalloc(sizeof *s);
 	bzero((char *) s, sizeof *s);
 	s->s_name = newstr(name);
+	makelower(s->s_name);
 	s->s_type = type;
 
 	/* link it in */
 	*ps = s;
 
 	return (s);
-}
-/*
-**  STABAPPLY -- apply function to all stab entries
-**
-**	Parameters:
-**		func -- the function to apply.  It will be given one
-**			parameter (the stab entry).
-**		arg -- an arbitrary argument, passed to func.
-**
-**	Returns:
-**		none.
-*/
-
-void
-stabapply(func, arg)
-	void (*func)__P((STAB *, int));
-	int arg;
-{
-	register STAB **shead;
-	register STAB *s;
-
-	for (shead = SymTab; shead < &SymTab[STABSIZE]; shead++)
-	{
-		for (s = *shead; s != NULL; s = s->s_next)
-		{
-			if (tTd(36, 90))
-				printf("stabapply: trying %d/%s\n",
-					s->s_type, s->s_name);
-			func(s, arg);
-		}
-	}
 }

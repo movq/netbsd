@@ -1,85 +1,79 @@
-#	@(#)Makefile	8.17 (Berkeley) 9/12/95
-
 #
-#  This Makefile uses the new Berkeley "make" program.  See Makefile.dist
-#  for a more vanilla version.
+#  Sendmail
+#  Copyright (c) 1983  Eric P. Allman
+#  Berkeley, California
 #
-#  Configuration files are created using "m4 file.mc > file.cf";
-#  this may be easier than tweaking the Makefile.  You do need to
-#  have a fairly modern M4 available (GNU m4 works).  On SunOS, use
-#  /usr/5bin/m4.
+#  Copyright (c) 1983 Regents of the University of California.
+#  All rights reserved.  The Berkeley software License Agreement
+#  specifies the terms and conditions for redistribution.
 #
+######################################################################
+#
+#	Makefile for Sendmail UCB configuration files
+#
+######################################################################
 
-M4=	m4
-CHMOD=	chmod
-ROMODE=	444
-RM=	rm -f
 
-.SUFFIXES:  .mc .cf
+NSSRCS	=	cad.mc cadgroup.mc cogsci.mc okeeffe.mc ucbarpa.mc ucbvax.mc \
+		cc.mc cchem.mc ic.mc id.mc
+
+GENSRCS	=	proto.mc
+
+NSALL	=	cad.cf cadgroup.cf cogsci.cf okeeffe.cf ucbarpa.cf ucbvax.cf \
+		cc.cf cchem.cf ic.cf id.cf
+
+PROTOS	=	ucbtcp.cf uucpproto.cf tcpproto.cf tcpuucpproto.cf
+
+EXP	=	x-ucbtcp_fw.cf
+
+UUCP	=	../m4/uucpm.m4 ../m4/suucpm.m4 ../m4/rule5.m4 \
+		../m4/smtpuucpm.m4
+
+ALL	=	$(NSALL) $(PROTOS) $(EXP)
+
+GET	=	sccs get
+
+BLDFILE	=	buildinfo
+
+.SUFFIXES: .mc .cf
 
 .mc.cf:
-	$(RM) $@
-	(cd ${.CURDIR} && $(M4) ${@:R}.mc > ${.OBJDIR}/$@)
-	$(CHMOD) $(ROMODE) $@
-
-ALL=	boat-anchor.cf chimera.cf pain.cf sun-lamp.cf trinity.cf \
-	clientproto.cf netbsd-proto.cf tcpproto.cf uucpproto.cf
+	rm -f $(BLDFILE)
+	echo "# built by `whoami` on `date`" > $(BLDFILE)
+	echo "# in `pwd` on `hostname`" >> $(BLDFILE)
+	m4 < $*.mc > $*.cf
+	rm -f $(BLDFILE)
 
 all: $(ALL)
 
-clean cleandir:
-	$(RM) $(ALL) core
+clean:
+	rm -f $(ALL) a.out core make.out
+	rm -f ,*
 
-depend install: 
+#
+# Standard files included by all
+#
+$(ALL): ../m4/nsmacros.m4 ../m4/nsclasses.m4 ../sitedep/nicregistered.m4 \
+	../m4/version.m4 ../m4/boilerplate.m4 ../m4/prewriterule.m4 \
+	../m4/postwriterule.m4 ../m4/rule3.m4 ../m4/localm.m4 ../m4/nstcpm.m4 \
+	../m4/nstcpldm.m4 ../m4/rule0.m4 ../m4/fake_domains.m4
 
-distribution:
-	install -c -o root -g wheel -m 444 netbsd-proto.cf \
-	    ${DESTDIR}/etc/sendmail.cf
-
-# this is overkill, but....
-M4FILES=\
-	../domain/Berkeley.EDU.m4 \
-	../domain/CS.Berkeley.EDU.m4 \
-	../domain/EECS.Berkeley.EDU.m4 \
-	../domain/S2K.Berkeley.EDU.m4 \
-	../feature/allmasquerade.m4 \
-	../feature/always_add_domain.m4 \
-	../feature/bestmx_is_local.m4 \
-	../feature/bitdomain.m4 \
-	../feature/domaintable.m4 \
-	../feature/local_procmail.m4 \
-	../feature/mailertable.m4 \
-	../feature/nocanonify.m4 \
-	../feature/nodns.m4 \
-	../feature/notsticky.m4 \
-	../feature/nouucp.m4 \
-	../feature/nullclient.m4 \
-	../feature/redirect.m4 \
-	../feature/smrsh.m4 \
-	../feature/stickyhost.m4 \
-	../feature/use_cw_file.m4 \
-	../feature/uucpdomain.m4 \
-	../hack/cssubdomain.m4 \
-	../m4/cf.m4 \
-	../m4/cfhead.m4 \
-	../m4/nullrelay.m4 \
-	../m4/proto.m4 \
-	../m4/version.m4 \
-	../mailer/cyrus.m4 \
-	../mailer/fax.m4 \
-	../mailer/local.m4 \
-	../mailer/mail11.m4 \
-	../mailer/pop.m4 \
-	../mailer/procmail.m4 \
-	../mailer/smtp.m4 \
-	../mailer/usenet.m4 \
-	../mailer/uucp.m4 \
-	../ostype/bsd4.4.m4 \
-	../siteconfig/uucp.cogsci.m4 \
-	../siteconfig/uucp.old.arpa.m4 \
-	../siteconfig/uucp.ucbarpa.m4 \
-	../siteconfig/uucp.ucbvax.m4 \
-
-$(ALL):  $(M4FILES)
-
-.include <bsd.prog.mk>
+#
+# Special include files used only by specific hosts
+#
+cad.cf:		proto.mc $(UUCP) ../sitedep/uucp.cad.m4 \
+		../sitedep/smtpuucp.cad.m4
+cadgroup.cf:	proto.mc
+cc.cf:		proto.mc
+cchem.cf:	proto.mc
+ic.cf:		proto.mc $(UUCP) ../sitedep/uucp.ic.m4
+id.cf:		proto.mc $(UUCP) ../sitedep/uucp.id.m4
+cogsci.cf:	proto.mc $(UUCP) ../sitedep/uucp.cogsci.m4
+okeeffe.cf:	proto.mc $(UUCP) ../sitedep/uucp.okeeffe.m4
+ucbarpa.cf:	proto.mc $(UUCP) ../sitedep/uucp.ucbarpa.m4
+ucbvax.cf:	$(UUCP) ../sitedep/uucp.cad.m4 ../sitedep/uucp.cogsci.m4 \
+		../sitedep/uucp.ucbarpa.m4 ../sitedep/uucp.ucbvax.m4 \
+		../sitedep/smtpuucp.ucbvax.m4
+# prototypes
+uucpproto.cf:	proto.mc $(UUCP) ../sitedep/uucp.proto.m4
+tcpproto.cf:	proto.mc

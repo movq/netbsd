@@ -1,8 +1,10 @@
-#       @(#)Makefile	8.12 (Berkeley) 5/29/95
+#       @(#)Makefile	4.16 (Berkeley) 5/11/90
 
-SUBDIR= src mailstats makemap praliases cf/cf
-.if make(install)
-SUBDIR+= doc/intro doc/op
+SUBDIR= mailstats # praliases
+
+# don't trivially install sendmail
+.if !make(install)
+SUBDIR+=src
 .endif
 
 .include <bsd.subdir.mk>

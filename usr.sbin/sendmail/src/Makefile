@@ -1,45 +1,31 @@
-#	$NetBSD: Makefile,v 1.25 1996/01/29 04:58:23 mrg Exp $
-#
-#  NetBSD Makefile
-#
-#	@(#)Makefile.NetBSD	8.3 (Berkeley) 9/13/95
-#	@Id: Makefile.NetBSD,v 1.3 1994/02/01 05:33:44 glass Exp $
-#
+#	@(#)Makefile	5.21 (Berkeley) 3/9/91
 
 PROG=	sendmail
 
-# define the database format to use for aliases et al.  Can be -DNEWDB (for
-# the new BSD database package -- this is preferred) or -DNDBM for the NDBM
-# database package.  The old putrescent V7 DBM package is no longer
-# supported.
-# You can define both NEWDB and NDBM during a transition period; old
-# databases are read, but the new format will be used on any rebuilds.  On
-# really gnarly systems, you can set this to null; it will crawl like a high
-# spiral snail, but it will work.
-DBMDEF=	-DNEWDB -DNIS
-
-CFLAGS+=-I${.CURDIR} ${DBMDEF} -DNETISO
+CFLAGS+=-I${.CURDIR} -DVMUNIX -DUSE_DB
 
 SRCS=	alias.c arpadate.c clock.c collect.c conf.c convtime.c daemon.c \
-	deliver.c domain.c envelope.c err.c headers.c macro.c main.c map.c \
-	mci.c mime.c parseaddr.c queue.c readcf.c recipient.c savemail.c \
-	srvrsmtp.c stab.c stats.c sysexits.c trace.c udb.c usersmtp.c \
-	util.c version.c
-MAN=	aliases.5 mailq.1 newaliases.1 sendmail.8
-LINKS=	/usr/sbin/sendmail /usr/bin/newaliases \
-	/usr/sbin/sendmail /usr/bin/mailq
-INSTALL=install
+	deliver.c domain.c envelope.c err.c headers.c macro.c main.c \
+	parseaddr.c queue.c readcf.c recipient.c savemail.c srvrsmtp.c \
+	stab.c stats.c sysexits.c trace.c usersmtp.c util.c version.c
+DPADD=	${LIBUTIL}
+LDADD=	-lutil
+MAN1=	newaliases.0
+MAN5=	aliases.0
+MAN8=	sendmail.0 
+LINKS=	${DESTDIR}/usr/sbin/sendmail ${DESTDIR}/usr/bin/newaliases \
+	${DESTDIR}/usr/sbin/sendmail ${DESTDIR}/usr/bin/mailq
 BINDIR=	/usr/sbin
 BINOWN=	root
 BINGRP=	kmem
 BINMODE=6555
 
 beforeinstall:
-#	${INSTALL} -c -o ${BINOWN} -g ${BINGRP} -m 644 /dev/null \
-#	    ${DESTDIR}/etc/sendmail.fc
-	${INSTALL} -c -o ${BINOWN} -g ${BINGRP} -m 644 /dev/null \
+	install -c -o ${BINOWN} -g ${BINGRP} -m 644 /dev/null \
+	    ${DESTDIR}/etc/sendmail.fc
+	install -c -o ${BINOWN} -g ${BINGRP} -m 666 /dev/null \
 	    ${DESTDIR}/var/log/sendmail.st
-	${INSTALL} -c -o ${BINOWN} -g ${BINGRP} -m 444 ${.CURDIR}/sendmail.hf \
+	install -c -o ${BINOWN} -g ${BINGRP} -m 444 ${.CURDIR}/sendmail.hf \
 	    ${DESTDIR}/usr/share/misc
 
 .include <bsd.prog.mk>

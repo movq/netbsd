@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 1983, 1995 Eric P. Allman
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Eric P. Allman
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,10 +33,11 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)convtime.c	8.4 (Berkeley) 5/19/95";
+static char sccsid[] = "@(#)convtime.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-# include "sendmail.h"
+# include <ctype.h>
+# include "useful.h"
 
 /*
 **  CONVTIME -- convert time
@@ -52,7 +53,6 @@ static char sccsid[] = "@(#)convtime.c	8.4 (Berkeley) 5/19/95";
 **
 **	Parameters:
 **		p -- pointer to ascii time.
-**		units -- default units if none specified.
 **
 **	Returns:
 **		time in seconds.
@@ -62,9 +62,8 @@ static char sccsid[] = "@(#)convtime.c	8.4 (Berkeley) 5/19/95";
 */
 
 time_t
-convtime(p, units)
+convtime(p)
 	char *p;
-	char units;
 {
 	register time_t t, r;
 	register char c;
@@ -73,18 +72,10 @@ convtime(p, units)
 	while (*p != '\0')
 	{
 		t = 0;
-		while ((c = *p++) != '\0' && isascii(c) && isdigit(c))
+		while (isdigit(c = *p++))
 			t = t * 10 + (c - '0');
 		if (c == '\0')
-		{
-			c = units;
 			p--;
-		}
-		else if (strchr("wdhms", c) == NULL)
-		{
-			usrerr("Invalid time unit `%c'", c);
-			c = units;
-		}
 		switch (c)
 		{
 		  case 'w':		/* weeks */

@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 1983, 1995 Eric P. Allman
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Eric P. Allman
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,14 +33,10 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)macro.c	8.13 (Berkeley) 7/10/95";
+static char sccsid[] = "@(#)macro.c	5.7 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include "sendmail.h"
-
-char	*MacroName[256];	/* macro id to name table */
-int	NextMacroId = 0240;	/* codes for long named macros */
-
 
 /*
 **  EXPAND -- macro expand a string using $x escapes.
@@ -48,7 +44,8 @@ int	NextMacroId = 0240;	/* codes for long named macros */
 **	Parameters:
 **		s -- the string to expand.
 **		buf -- the place to put the expansion.
-**		bufsize -- the size of the buffer.
+**		buflim -- the buffer limit, i.e., the address
+**			of the last usable position in buf.
 **		e -- envelope in which to work.
 **
 **	Returns:
@@ -58,11 +55,10 @@ int	NextMacroId = 0240;	/* codes for long named macros */
 **		none.
 */
 
-void
-expand(s, buf, bufsize, e)
+expand(s, buf, buflim, e)
 	register char *s;
 	register char *buf;
-	size_t bufsize;
+	char *buflim;
 	register ENVELOPE *e;
 {
 	register char *xp;
@@ -70,8 +66,8 @@ expand(s, buf, bufsize, e)
 	bool skipping;		/* set if conditionally skipping output */
 	bool recurse = FALSE;	/* set if recursion required */
 	int i;
-	int iflev;		/* if nesting level */
 	char xbuf[BUFSIZ];
+	extern char *macvalue();
 
 	if (tTd(35, 24))
 	{
@@ -81,12 +77,11 @@ expand(s, buf, bufsize, e)
 	}
 
 	skipping = FALSE;
-	iflev = 0;
 	if (s == NULL)
 		s = "";
 	for (xp = xbuf; *s != '\0'; s++)
 	{
-		int c;
+		char c;
 
 		/*
 		**  Check for non-ordinary (special?) character.
@@ -95,37 +90,24 @@ expand(s, buf, bufsize, e)
 
 		q = NULL;
 		c = *s;
-		switch (c & 0377)
+		switch (c)
 		{
 		  case CONDIF:		/* see if var set */
 			c = *++s;
-			if (skipping)
-				iflev++;
-			else
-				skipping = macvalue(c, e) == NULL;
+			skipping = macvalue(c, e) == NULL;
 			continue;
 
 		  case CONDELSE:	/* change state of skipping */
-			if (iflev == 0)
-				skipping = !skipping;
+			skipping = !skipping;
 			continue;
 
 		  case CONDFI:		/* stop skipping */
-			if (iflev == 0)
-				skipping = FALSE;
-			if (skipping)
-				iflev--;
+			skipping = FALSE;
 			continue;
 
-		  case MACROEXPAND:	/* macro interpolation */
-			c = *++s & 0377;
-			if (c != '\0')
-				q = macvalue(c, e);
-			else
-			{
-				s--;
-				q = NULL;
-			}
+		  case '\001':		/* macro interpolation */
+			c = *++s;
+			q = macvalue(c & 0177, e);
 			if (q == NULL)
 				continue;
 			break;
@@ -144,8 +126,7 @@ expand(s, buf, bufsize, e)
 			/* copy to end of q or max space remaining in buf */
 			while ((c = *q++) != '\0' && xp < &xbuf[sizeof xbuf - 1])
 			{
-				/* check for any sendmail metacharacters */
-				if ((c & 0340) == 0200)
+				if (iscntrl(c) && !isspace(c))
 					recurse = TRUE;
 				*xp++ = c;
 			}
@@ -163,14 +144,14 @@ expand(s, buf, bufsize, e)
 	/* recurse as appropriate */
 	if (recurse)
 	{
-		expand(xbuf, buf, bufsize, e);
+		expand(xbuf, buf, buflim, e);
 		return;
 	}
 
 	/* copy results out */
-	i = xp - xbuf;
-	if (i >= bufsize)
-		i = bufsize - 1;
+	i = buflim - buf - 1;
+	if (i > xp - xbuf)
+		i = xp - xbuf;
 	bcopy(xbuf, buf, i);
 	buf[i] = '\0';
 }
@@ -207,9 +188,7 @@ expand(s, buf, bufsize, e)
 **		$h   to host
 **		$i   queue id
 **		$j   official SMTP hostname, used in messages+
-**		$k   UUCP node name
 **		$l   UNIX-style from line+
-**		$m   The domain part of our full name.
 **		$n   name of sendmail ("MAILER-DAEMON" on local
 **		     net typically)+
 **		$o   delimiters ("operators") for address tokens+
@@ -225,7 +204,6 @@ expand(s, buf, bufsize, e)
 **		$x   signature (full name) of from person
 **		$y   the tty id of our terminal
 **		$z   home directory of to person
-**		$_   RFC1413 authenticated sender address
 **
 **		Macros marked with + must be defined in the
 **		configuration file and are used internally, but
@@ -237,20 +215,18 @@ expand(s, buf, bufsize, e)
 **		are available.
 */
 
-void
 define(n, v, e)
-	int n;
+	char n;
 	char *v;
 	register ENVELOPE *e;
 {
 	if (tTd(35, 9))
 	{
-		printf("%sdefine(%s as ", 
-		    (e->e_macro[n & 0377] == NULL) ? "" : "re", macname(n));
+		printf("define(%c as ", n);
 		xputs(v);
 		printf(")\n");
 	}
-	e->e_macro[n & 0377] = v;
+	e->e_macro[n & 0177] = v;
 }
 /*
 **  MACVALUE -- return uninterpreted value of a macro.
@@ -267,10 +243,10 @@ define(n, v, e)
 
 char *
 macvalue(n, e)
-	int n;
+	char n;
 	register ENVELOPE *e;
 {
-	n &= 0377;
+	n &= 0177;
 	while (e != NULL)
 	{
 		register char *p = e->e_macro[n];
@@ -280,162 +256,4 @@ macvalue(n, e)
 		e = e->e_parent;
 	}
 	return (NULL);
-}
-/*
-**  MACNAME -- return the name of a macro given its internal id
-**
-**	Parameter:
-**		n -- the id of the macro
-**
-**	Returns:
-**		The name of n.
-**
-**	Side Effects:
-**		none.
-*/
-
-char *
-macname(n)
-	int n;
-{
-	static char mbuf[2];
-
-	n &= 0377;
-	if (bitset(0200, n))
-	{
-		char *p = MacroName[n];
-
-		if (p != NULL)
-			return p;
-		return "***UNDEFINED MACRO***";
-	}
-	mbuf[0] = n;
-	mbuf[1] = '\0';
-	return mbuf;
-}
-/*
-**  MACID -- return id of macro identified by its name
-**
-**	Parameters:
-**		p -- pointer to name string -- either a single
-**			character or {name}.
-**		ep -- filled in with the pointer to the byte
-**			after the name.
-**
-**	Returns:
-**		The internal id code for this macro.  This will
-**		fit into a single byte.
-**
-**	Side Effects:
-**		If this is a new macro name, a new id is allocated.
-*/
-
-int
-macid(p, ep)
-	register char *p;
-	char **ep;
-{
-	int mid;
-	register char *bp;
-	char mbuf[21];
-
-	if (tTd(35, 14))
-	{
-		printf("macid(");
-		xputs(p);
-		printf(") => ");
-	}
-
-	if (*p == '\0' || (p[0] == '{' && p[1] == '}'))
-	{
-		syserr("Name required for macro/class");
-		if (ep != NULL)
-			*ep = p;
-		if (tTd(35, 14))
-			printf("NULL\n");
-		return '\0';
-	}
-	if (*p != '{')
-	{
-		/* the macro is its own code */
-		if (ep != NULL)
-			*ep = p + 1;
-		if (tTd(35, 14))
-			printf("%c\n", *p);
-		return *p;
-	}
-	bp = mbuf;
-	while (*++p != '\0' && *p != '}' && bp < &mbuf[sizeof mbuf])
-	{
-		if (isascii(*p) && (isalnum(*p) || *p == '_'))
-			*bp++ = *p;
-		else
-			syserr("Invalid macro/class character %c", *p);
-	}
-	*bp = '\0';
-	mid = -1;
-	if (*p == '\0')
-	{
-		syserr("Unbalanced { on %s", mbuf);	/* missing } */
-	}
-	else if (*p != '}')
-	{
-		syserr("Macro/class name ({%s}) too long (%d chars max)",
-			mbuf, sizeof mbuf - 1);
-	}
-	else if (mbuf[1] == '\0')
-	{
-		/* ${x} == $x */
-		mid = mbuf[0];
-		p++;
-	}
-	else
-	{
-		register STAB *s;
-
-		s = stab(mbuf, ST_MACRO, ST_ENTER);
-		if (s->s_macro != 0)
-			mid = s->s_macro;
-		else
-		{
-			if (NextMacroId > 0377)
-			{
-				syserr("Macro/class {%s}: too many long names", mbuf);
-				s->s_macro = -1;
-			}
-			else
-			{
-				MacroName[NextMacroId] = s->s_name;
-				s->s_macro = mid = NextMacroId++;
-			}
-		}
-		p++;
-	}
-	if (ep != NULL)
-		*ep = p;
-	if (tTd(35, 14))
-		printf("0x%x\n", mid);
-	return mid;
-}
-/*
-**  WORDINCLASS -- tell if a word is in a specific class
-**
-**	Parameters:
-**		str -- the name of the word to look up.
-**		cl -- the class name.
-**
-**	Returns:
-**		TRUE if str can be found in cl.
-**		FALSE otherwise.
-*/
-
-bool
-wordinclass(str, cl)
-	char *str;
-	int cl;
-{
-	register STAB *s;
-
-	s = stab(str, ST_CLASS, ST_FIND);
-	return s != NULL && bitnset(cl & 0xff, s->s_class);
 }
