@@ -1,4 +1,4 @@
-/*	$NetBSD: txsnd.c,v 1.1 2000/01/12 14:56:18 uch Exp $ */
+/*	$NetBSD: txsnd.c,v 1.2 2000/01/16 21:47:01 uch Exp $ */
 
 /*
  * Copyright (c) 2000, by UCHIYAMA Yasushi
@@ -33,7 +33,8 @@
 #include <hpcmips/tx/txsnd.h>
 
 struct	tx_sound_tag __tx_sound_default;
-void	__tx_sound_click __P((tx_sound_tag_t));
+void	__tx_sound_click	__P((tx_sound_tag_t));
+void	__tx_sound_mute		__P((tx_sound_tag_t, int));
 
 void
 tx_sound_init(tc)
@@ -41,6 +42,7 @@ tx_sound_init(tc)
 {
 	__tx_sound_default.ts_v = NULL;
 	__tx_sound_default.ts_click = __tx_sound_click;
+	__tx_sound_default.ts_mute  = __tx_sound_mute;
 
 	tx_conf_register_sound(tc, &__tx_sound_default);
 }
@@ -50,3 +52,10 @@ __tx_sound_click(arg)
 	tx_sound_tag_t arg;
 {
 }
+void
+__tx_sound_mute(arg, onoff)
+	tx_sound_tag_t arg;
+	int onoff;
+{
+}
+
