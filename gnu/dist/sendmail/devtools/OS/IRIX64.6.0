@@ -1,4 +1,4 @@
-#	$Id: IRIX64.6.0,v 1.1 2000/05/03 09:27:18 itojun Exp $
+#	$Id: IRIX64.6.0,v 1.1.1.1 2000/05/03 09:27:18 itojun Exp $
 define(`confMAPDEF', `-DNDBM')
 define(`confENVDEF', `-DIRIX64')
 define(`confLIBS', `-lelf -lmalloc')

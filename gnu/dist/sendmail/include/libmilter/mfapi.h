@@ -7,7 +7,7 @@
  * the sendmail distribution.
  *
  *
- *	$Id: mfapi.h,v 1.1 2000/05/03 09:27:24 itojun Exp $
+ *	$Id: mfapi.h,v 1.1.1.1 2000/05/03 09:27:24 itojun Exp $
  */
 
 /*

@@ -10,7 +10,7 @@ divert(-1)
 #
 #  Definitions for Makefile construction for sendmail
 #
-#	$Id: switch.m4,v 1.1 2000/05/03 09:27:17 itojun Exp $
+#	$Id: switch.m4,v 1.1.1.1 2000/05/03 09:27:17 itojun Exp $
 #
 divert(0)dnl
 include(confBUILDTOOLSDIR`/M4/string.m4')dnl

@@ -23,25 +23,25 @@
 ######################################################################
 ######################################################################
 
-#####  $Id: generic-linux.cf,v 1.1 2000/05/03 09:27:27 itojun Exp $  #####
-#####  $Id: generic-linux.cf,v 1.1 2000/05/03 09:27:27 itojun Exp $  #####
-#####  $Id: generic-linux.cf,v 1.1 2000/05/03 09:27:27 itojun Exp $  #####
+#####  $Id: generic-linux.cf,v 1.1.1.1 2000/05/03 09:27:27 itojun Exp $  #####
+#####  $Id: generic-linux.cf,v 1.1.1.1 2000/05/03 09:27:27 itojun Exp $  #####
+#####  $Id: generic-linux.cf,v 1.1.1.1 2000/05/03 09:27:27 itojun Exp $  #####
 
-#####  $Id: generic-linux.cf,v 1.1 2000/05/03 09:27:27 itojun Exp $  #####
-
-
-#####  $Id: generic-linux.cf,v 1.1 2000/05/03 09:27:27 itojun Exp $  #####
+#####  $Id: generic-linux.cf,v 1.1.1.1 2000/05/03 09:27:27 itojun Exp $  #####
 
 
-#####  $Id: generic-linux.cf,v 1.1 2000/05/03 09:27:27 itojun Exp $  #####
-
-#####  $Id: generic-linux.cf,v 1.1 2000/05/03 09:27:27 itojun Exp $  #####
-
-#####  $Id: generic-linux.cf,v 1.1 2000/05/03 09:27:27 itojun Exp $  #####
+#####  $Id: generic-linux.cf,v 1.1.1.1 2000/05/03 09:27:27 itojun Exp $  #####
 
 
+#####  $Id: generic-linux.cf,v 1.1.1.1 2000/05/03 09:27:27 itojun Exp $  #####
 
-#####  $Id: generic-linux.cf,v 1.1 2000/05/03 09:27:27 itojun Exp $  #####
+#####  $Id: generic-linux.cf,v 1.1.1.1 2000/05/03 09:27:27 itojun Exp $  #####
+
+#####  $Id: generic-linux.cf,v 1.1.1.1 2000/05/03 09:27:27 itojun Exp $  #####
+
+
+
+#####  $Id: generic-linux.cf,v 1.1.1.1 2000/05/03 09:27:27 itojun Exp $  #####
 
 
 # level 9 config file format
@@ -1049,7 +1049,7 @@ SLocal_trust_auth
 ###   Local and Program Mailer specification   ###
 ##################################################
 
-#####  $Id: generic-linux.cf,v 1.1 2000/05/03 09:27:27 itojun Exp $  #####
+#####  $Id: generic-linux.cf,v 1.1.1.1 2000/05/03 09:27:27 itojun Exp $  #####
 
 #
 #  Envelope sender rewriting
@@ -1098,7 +1098,7 @@ Mprog,		P=/bin/sh, F=lsDFMoqeu9, S=EnvFromL/HdrFromL, R=EnvToL/HdrToL, D=$z:/,
 ###   SMTP Mailer specification   ###
 #####################################
 
-#####  $Id: generic-linux.cf,v 1.1 2000/05/03 09:27:27 itojun Exp $  #####
+#####  $Id: generic-linux.cf,v 1.1.1.1 2000/05/03 09:27:27 itojun Exp $  #####
 
 #
 #  common sender and masquerading recipient rewriting

@@ -8,7 +8,7 @@
 # the sendmail distribution.
 #
 #
-#	$Id: install.sh,v 1.1 2000/05/03 09:27:17 itojun Exp $
+#	$Id: install.sh,v 1.1.1.1 2000/05/03 09:27:17 itojun Exp $
 
 # Set default program
 program=mv

@@ -8,6 +8,6 @@
 # the sendmail distribution.
 #
 #
-#	$Id: makesendmail,v 1.1 2000/05/03 09:27:23 itojun Exp $
+#	$Id: makesendmail,v 1.1.1.1 2000/05/03 09:27:23 itojun Exp $
 
 exec ./Build $*

@@ -13,7 +13,7 @@
 #include <sendmail.h>
 
 #ifndef lint
-static char id[] = "@(#)$Id: alias.c,v 1.1 2000/05/03 09:27:22 itojun Exp $";
+static char id[] = "@(#)$Id: alias.c,v 1.1.1.1 2000/05/03 09:27:22 itojun Exp $";
 #endif /* ! lint */
 
 static MAP	*AliasFileMap = NULL;	/* the actual aliases.files map */
