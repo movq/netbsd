@@ -1,4 +1,4 @@
-/*	$NetBSD: midivar.h,v 1.3 1998/08/12 21:29:29 augustss Exp $	*/
+/*	$NetBSD: midivar.h,v 1.4 1998/08/17 21:16:12 augustss Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -34,6 +34,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#ifndef _SYS_DEV_MIDIVAR_H_
+#define _SYS_DEV_MIDIVAR_H_
 
 #define MIDI_BUFSIZE 1024
 
@@ -85,6 +88,4 @@ struct midi_softc {
 
 #define MIDIUNIT(d) ((d) & 0xff)
 
-int	midi_unit_count __P((void));
-void	midi_getinfo __P((dev_t, struct midi_info *));
-void	midi_attach __P((struct midi_softc *, struct device *));
+#endif /* _SYS_DEV_MIDIVAR_H_ */
