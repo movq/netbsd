@@ -1,5 +1,5 @@
 /*	$OpenBSD: mem.c,v 1.3 1997/04/19 17:19:45 pefo Exp $	*/
-/*	$NetBSD: mem.c,v 1.1 2000/01/23 20:24:25 soda Exp $	*/
+/*	$NetBSD: mem.c,v 1.1.1.1 2000/01/23 20:24:25 soda Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.

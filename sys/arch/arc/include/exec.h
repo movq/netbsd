@@ -1,5 +1,5 @@
 /*	$OpenBSD: exec.h,v 1.2 1996/12/23 02:42:26 deraadt Exp $	*/
-/*	$NetBSD: exec.h,v 1.1 2000/01/23 20:24:28 soda Exp $	*/
+/*	$NetBSD: exec.h,v 1.1.1.1 2000/01/23 20:24:28 soda Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993

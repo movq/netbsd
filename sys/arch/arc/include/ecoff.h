@@ -1,5 +1,5 @@
 /*	$OpenBSD: ecoff.h,v 1.3 1996/10/02 21:47:53 pefo Exp $	*/
-/*	$NetBSD: ecoff.h,v 1.1 2000/01/23 20:24:28 soda Exp $	*/
+/*	$NetBSD: ecoff.h,v 1.1.1.1 2000/01/23 20:24:28 soda Exp $	*/
 
 /*
  * Copyright (c) 1994 Adam Glass
