@@ -35,7 +35,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)pmaxtype.h	7.2 (Berkeley) 12/20/92
- * $Id: pmaxtype.h,v 1.1 1993/10/12 03:22:33 deraadt Exp $
+ * $Id: pmaxtype.h,v 1.1.1.1 1993/10/12 03:22:34 deraadt Exp $
  */
 
 /*

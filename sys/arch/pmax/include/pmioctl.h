@@ -60,7 +60,7 @@
  *
  * from: SPRITE (DECWRL) Header: devSerialPmax.c, v 1.4 89/05/22 13:31:07 mnelson Exp
  * from: @(#)pmioctl.h	7.1 (Berkeley) 1/7/92
- * $Id: pmioctl.h,v 1.1 1993/10/12 03:22:40 deraadt Exp $
+ * $Id: pmioctl.h,v 1.1.1.1 1993/10/12 03:22:41 deraadt Exp $
  */
 
 #include <sys/ioctl.h>

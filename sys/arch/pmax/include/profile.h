@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)profile.h	7.3 (Berkeley) 2/26/93
- * $Id: profile.h,v 1.1 1993/10/12 03:22:39 deraadt Exp $
+ * $Id: profile.h,v 1.1.1.1 1993/10/12 03:22:40 deraadt Exp $
  */
 
 #define	_MCOUNT_DECL static void __mcount

@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)exec.h	7.2 (Berkeley) 9/13/92
- * $Id: exec.h,v 1.1 1993/10/12 03:22:40 deraadt Exp $
+ * $Id: exec.h,v 1.1.1.1 1993/10/12 03:22:41 deraadt Exp $
  */
 
 /*

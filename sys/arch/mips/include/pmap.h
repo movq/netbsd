@@ -35,7 +35,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)pmap.h	7.6 (Berkeley) 2/4/93
- * $Id: pmap.h,v 1.1 1993/10/12 03:22:39 deraadt Exp $
+ * $Id: pmap.h,v 1.1.1.1 1993/10/12 03:22:40 deraadt Exp $
  */
 
 #ifndef	_PMAP_MACHINE_

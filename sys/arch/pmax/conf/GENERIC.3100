@@ -2,7 +2,7 @@
 # GENERIC DECstation 3100
 #
 # from:	@(#)GENERIC.3100	7.4 (Berkeley) 7/25/92
-# $Id: GENERIC.3100,v 1.1 1993/10/12 03:22:19 deraadt Exp $
+# $Id: GENERIC.3100,v 1.1.1.1 1993/10/12 03:22:20 deraadt Exp $
 machine		pmax
 
 cpu		"DS3100"

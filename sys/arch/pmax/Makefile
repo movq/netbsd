@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.1 1993/10/12 03:22:18 deraadt Exp $
+# $Id: Makefile,v 1.1.1.1 1993/10/12 03:22:19 deraadt Exp $
 # from:	@(#)Makefile	7.3 (Berkeley) 7/24/92
 
 # Makefile for pmax tags file

@@ -36,7 +36,7 @@
  * from: Header: /sprite/src/boot/decprom/ds3100.md/RCS/start.s,
  *	v 1.1 90/02/16 16:19:39 shirriff Exp SPRITE (DECWRL)
  * from: @(#)start.s	7.5 (Berkeley) 2/15/93
- * $Id: start.s,v 1.1 1993/10/12 03:22:43 deraadt Exp $
+ * $Id: start.s,v 1.1.1.1 1993/10/12 03:22:44 deraadt Exp $
  *
  * start.s -
  *

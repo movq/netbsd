@@ -37,7 +37,7 @@
  *
  * from: Utah Hdr: hpux_syscalls.c 1.1 90/07/09
  * from: @(#)ultrix_syscalls.c	7.1 (Berkeley) 1/7/92
- * $Id: ultrix_syscalls.c,v 1.1 1993/10/12 03:22:46 deraadt Exp $
+ * $Id: ultrix_syscalls.c,v 1.1.1.1 1993/10/12 03:22:47 deraadt Exp $
  */
 
 #ifdef HPUXCOMPAT

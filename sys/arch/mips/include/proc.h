@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)proc.h	7.3 (Berkeley) 2/29/92
- * $Id: proc.h,v 1.1 1993/10/12 03:22:40 deraadt Exp $
+ * $Id: proc.h,v 1.1.1.1 1993/10/12 03:22:41 deraadt Exp $
  */
 
 /*

@@ -49,7 +49,7 @@
  *
  * from: Header: /sprite/src/kernel/dev/ds3100.md/RCS/dc7085.h,
  *	v 1.4 89/08/15 19:52:46 rab Exp SPRITE (DECWRL)
- * $Id: dc7085cons.h,v 1.1 1993/10/12 03:22:39 deraadt Exp $
+ * $Id: dc7085cons.h,v 1.1.1.1 1993/10/12 03:22:40 deraadt Exp $
  */
 
 #ifndef _DC7085

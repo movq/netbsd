@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)cpu.h	7.7 (Berkeley) 11/15/92
- * $Id: cpu.h,v 1.1 1993/10/12 03:22:39 deraadt Exp $
+ * $Id: cpu.h,v 1.1.1.1 1993/10/12 03:22:40 deraadt Exp $
  */
 
 #ifndef _CPU_H_

@@ -32,7 +32,7 @@
 # SUCH DAMAGE.
 #
 # from:	@(#)maketape	7.1 (Berkeley) 4/20/92
-# $Id: maketape,v 1.1 1993/10/12 03:22:47 deraadt Exp $
+# $Id: maketape,v 1.1.1.1 1993/10/12 03:22:48 deraadt Exp $
 #
 
 # maketape [ 6250 | 1600 [ tapename [ remotetapemachine ] ] ]

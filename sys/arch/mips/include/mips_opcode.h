@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)mips_opcode.h	7.1 (Berkeley) 3/19/92
- * $Id: mips_opcode.h,v 1.1 1993/10/12 03:22:42 deraadt Exp $
+ * $Id: mips_opcode.h,v 1.1.1.1 1993/10/12 03:22:43 deraadt Exp $
  */
 
 /*

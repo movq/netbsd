@@ -37,7 +37,7 @@
  *
  * from: Utah Hdr: vmparam.h 1.16 91/01/18
  * from: @(#)vmparam.h	7.2 (Berkeley) 2/4/93
- * $Id: vmparam.h,v 1.1 1993/10/12 03:22:41 deraadt Exp $
+ * $Id: vmparam.h,v 1.1.1.1 1993/10/12 03:22:42 deraadt Exp $
  */
 
 /*

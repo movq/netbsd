@@ -1,6 +1,6 @@
 #
 # GENERIC DECstation 5000
-# $Id: MAXP,v 1.1 1993/10/12 03:22:19 deraadt Exp $
+# $Id: MAXP,v 1.1.1.1 1993/10/12 03:22:20 deraadt Exp $
 machine		pmax
 
 cpu		"DS5000"

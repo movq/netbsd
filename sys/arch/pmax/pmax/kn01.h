@@ -35,7 +35,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)kn01.h	7.1 (Berkeley) 11/15/92
- * $Id: kn01.h,v 1.1 1993/10/12 03:22:34 deraadt Exp $
+ * $Id: kn01.h,v 1.1.1.1 1993/10/12 03:22:35 deraadt Exp $
  */
 
 /* 

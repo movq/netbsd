@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)psl.h	7.2 (Berkeley) 10/11/92
- * $Id: psl.h,v 1.1 1993/10/12 03:22:40 deraadt Exp $
+ * $Id: psl.h,v 1.1.1.1 1993/10/12 03:22:41 deraadt Exp $
  */
 
 #include <machine/machConst.h>

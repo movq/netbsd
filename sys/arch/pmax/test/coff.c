@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)coff.c	7.1 (Berkeley) 1/7/92
- * $Id: coff.c,v 1.1 1993/10/12 03:22:50 deraadt Exp $
+ * $Id: coff.c,v 1.1.1.1 1993/10/12 03:22:51 deraadt Exp $
  */
 
 #define COFF

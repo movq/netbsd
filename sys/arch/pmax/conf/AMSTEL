@@ -1,6 +1,6 @@
 #
 # GENERIC DEC Station
-# $Id: AMSTEL,v 1.1 1993/10/12 03:22:20 deraadt Exp $
+# $Id: AMSTEL,v 1.1.1.1 1993/10/12 03:22:21 deraadt Exp $
 machine		pmax
 
 cpu		"DS3100"

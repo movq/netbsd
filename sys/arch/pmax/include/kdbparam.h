@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)kdbparam.h	7.2 (Berkeley) 3/22/92
- * $Id: kdbparam.h,v 1.1 1993/10/12 03:22:41 deraadt Exp $
+ * $Id: kdbparam.h,v 1.1.1.1 1993/10/12 03:22:42 deraadt Exp $
  */
 
 /*

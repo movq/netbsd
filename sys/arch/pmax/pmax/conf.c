@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)conf.c	7.5 (Berkeley) 11/15/92
- * $Id: conf.c,v 1.1 1993/10/12 03:22:28 deraadt Exp $
+ * $Id: conf.c,v 1.1.1.1 1993/10/12 03:22:29 deraadt Exp $
  */
 
 #include <sys/param.h>

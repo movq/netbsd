@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)ptrace.h	7.1 (Berkeley) 2/5/92
- * $Id: ptrace.h,v 1.1 1993/10/12 03:22:41 deraadt Exp $
+ * $Id: ptrace.h,v 1.1.1.1 1993/10/12 03:22:42 deraadt Exp $
  */
 
 /*
