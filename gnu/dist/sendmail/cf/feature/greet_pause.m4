@@ -11,7 +11,7 @@ divert(-1)
 
 divert(0)
 VERSIONID(`Id: greet_pause.m4,v 1.4 2004/07/06 20:49:51 ca Exp')
-VERSIONID(`$NetBSD: greet_pause.m4,v 1.1 2005/03/15 02:06:02 atatat Exp $')
+VERSIONID(`$NetBSD: greet_pause.m4,v 1.1.1.1 2005/03/15 02:06:02 atatat Exp $')
 divert(-1)
 
 ifelse(len(X`'_ARG_),`1',`ifdef(`_ACCESS_TABLE_', `',

@@ -11,4 +11,4 @@ csh% setenv GROFF_NO_SGR 1
 sh$ GROFF_NO_SGR=1; export GROFF_NO_SGR
 
 Id: README,v 8.1 2004/07/20 20:25:10 ca Exp
-$NetBSD: README,v 1.1 2005/03/15 02:05:33 atatat Exp $
+$NetBSD: README,v 1.1.1.1 2005/03/15 02:05:33 atatat Exp $

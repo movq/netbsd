@@ -2,7 +2,7 @@
 #
 # Contributed by Bastiaan Bakker for SOCKETMAP
 # Id: socketmapServer.pl,v 1.1 2003/05/21 15:36:33 ca Exp
-# $NetBSD: socketmapServer.pl,v 1.1 2005/03/15 02:06:05 atatat Exp $
+# $NetBSD: socketmapServer.pl,v 1.1.1.1 2005/03/15 02:06:05 atatat Exp $
 
 use strict;
 use IO::Socket;

@@ -1,4 +1,4 @@
-/* $NetBSD: sm_os_dragonfly.h,v 1.1 2005/03/15 02:05:52 atatat Exp $ */
+/* $NetBSD: sm_os_dragonfly.h,v 1.1.1.1 2005/03/15 02:05:52 atatat Exp $ */
 /*
  * Copyright (c) 2000-2001, 2004 Sendmail, Inc. and its suppliers.
  *	All rights reserved.
