@@ -1,7 +1,7 @@
-/*	$NetBSD: db_memrw.c,v 1.6 1994/12/12 18:59:58 gwr Exp $	*/
+/*	$NetBSD: db_memrw.c,v 1.7 1995/02/07 04:37:48 gwr Exp $	*/
 
 /*
- * Copyright (c) 1994 Gordon W. Ross
+ * Copyright (c) 1994, 1995 Gordon W. Ross
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,6 +14,9 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
+ * 4. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Gordon Ross
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,12 +31,7 @@
  */
 
 /*
- * Interface to the debugger for virtual memory read/write.
- * To write in the text segment, we have to first make
- * the page writable, do the write, then restore the PTE.
- * For writes outside the text segment, and all reads,
- * just do the access -- if it causes a fault, the debugger
- * will recover with a longjmp to an appropriate place.
+ * Machine-dependent functions used by ddb
  */
 
 #include <sys/param.h>
@@ -42,7 +40,19 @@
 #include <vm/vm.h>
 
 #include <machine/db_machdep.h>
+#include <ddb/db_command.h>
+
 #include <machine/pte.h>
+
+/*
+ * Interface to the debugger for virtual memory read/write.
+ *
+ * To write in the text segment, we have to first make
+ * the page writable, do the write, then restore the PTE.
+ * For writes outside the text segment, and all reads,
+ * just do the access -- if it causes a fault, the debugger
+ * will recover with a longjmp to an appropriate place.
+ */
 
 /*
  * Read bytes from kernel address space for debugger.
@@ -110,4 +120,38 @@ db_write_bytes(addr, size, data)
 			*dst = *data;
 		dst++; data++;
 	}
+}
+
+
+/*
+ * Machine-specific ddb commands for the sun3:
+ *    abort:	Drop into monitor via abort (allows continue)
+ *    halt: 	Exit to monitor as in halt(8)
+ *    reboot:	Reboot the machine as in reboot(8)
+ */
+
+extern void sun3_mon_abort();
+extern void sun3_mon_halt();
+
+void
+db_mon_reboot()
+{
+	sun3_mon_reboot("");
+}
+
+struct db_command db_machine_cmds[] = {
+	{ "abort",	sun3_mon_abort,	0,	0 },
+	{ "halt",	sun3_mon_halt,	0,	0 },
+	{ "reboot",	db_mon_reboot,	0,	0 },
+	{ (char *)0, }
+};
+
+/*
+ * This is called before ddb_init() to install the
+ * machine-specific command table. (see machdep.c)
+ */
+void
+db_machine_init()
+{
+	db_machine_commands_install(db_machine_cmds);
 }
