@@ -1,4 +1,4 @@
-/* $NetBSD: sb_pnpbios.c,v 1.1 1999/11/12 18:36:46 drochner Exp $ */
+/* $NetBSD: sb_pnpbios.c,v 1.2 1999/11/14 02:15:51 thorpej Exp $ */
 /*
  * Copyright (c) 1999
  * 	Matthias Drochner.  All rights reserved.
@@ -101,7 +101,10 @@ sb_pnpbios_attach(parent, self, aux)
 	if (pnpbios_getdmachan(aa->pbt, aa->resc, 1, &sc->sc_drq16))
 		sc->sc_drq16 = -1;
 
-	printf("\n%s", self->dv_xname);
+	printf("\n");
+	pnpbios_print_devres(self, aa);
+
+	printf("%s", self->dv_xname);
 
 	if (!sbmatch(sc)) {
 		printf("%s: sbmatch failed\n", sc->sc_dev.dv_xname);
@@ -113,4 +116,3 @@ sb_pnpbios_attach(parent, self, aux)
 
 	sbattach(sc);
 }
-
