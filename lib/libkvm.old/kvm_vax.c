@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_vax.c,v 1.1 1996/03/16 10:05:24 leo Exp $ */
+/*	$NetBSD: kvm_vax.c,v 1.1.1.1 1996/03/16 10:05:24 leo Exp $ */
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
