@@ -1,4 +1,4 @@
-/*	$NetBSD: led.c,v 1.2 2001/06/01 16:00:03 thorpej Exp $	*/
+/*	$NetBSD: led.c,v 1.3 2001/06/22 06:02:54 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -63,8 +63,11 @@
 #define	LEDBASE		MIPS_PHYS_TO_KSEG1(P5064_LED1)
 #define	LED(x)		((3 - (x)) * 4)
 #elif defined(ALGOR_P6032)
-#define	LEDBASE		MIPS_PHYS_TO_KSEG1(XXX)
-#define	LED(x)		XXX
+#define	HD2532_STRIDE		4
+#define	HD2532_NFLASH_OFFSET	0x80
+#define	HD2532_CRAM	(HD2532_NFLASH_OFFSET + (0x18 * HD2532_STRIDE))
+#define	LEDBASE		MIPS_PHYS_TO_KSEG1(P6032_HDSP2532_BASE + HD2532_CRAM)
+#define	LED(x)		((x) * HD2532_STRIDE)
 #endif
 
 /*
@@ -81,4 +84,10 @@ led_display(u_int8_t a, u_int8_t b, u_int8_t c, u_int8_t d)
 	leds[LED(1)] = b;
 	leds[LED(2)] = c;
 	leds[LED(3)] = d;
+#if defined(ALGOR_P6032)	/* XXX Should support these */
+	leds[LED(4)] = ' ';
+	leds[LED(5)] = ' ';
+	leds[LED(6)] = ' ';
+	leds[LED(7)] = ' ';
+#endif
 }
