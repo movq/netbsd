@@ -1,4 +1,4 @@
-/*	$NetBSD: vripvar.h,v 1.6 2002/01/26 10:50:44 takemura Exp $	*/
+/*	$NetBSD: vripvar.h,v 1.7 2002/01/27 14:18:13 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002
@@ -30,50 +30,21 @@
  *
  */
 
-typedef void *vrip_chipset_tag_t;
+#ifndef _VRIPVAR_H_
+#define _VRIPVAR_H_
 
-#include <hpcmips/vr/cmuvar.h>
-#include <dev/hpc/hpciovar.h>
-
-/* Vrip GPIO chips */
-enum vrip_iochip {
-	VRIP_IOCHIP_VRGIU = 0,
-	VRIP_IOCHIP_VRC4172GPIO,
-	VRIP_NIOCHIPS
+struct vrip_unit {
+	char	*vu_name;
+	int	vu_intr[2];
+	int	vu_clkmask;
+	bus_addr_t	vu_lreg;
+	bus_addr_t	vu_mlreg;
+	bus_addr_t	vu_hreg;
+	bus_addr_t	vu_mhreg;
 };
 
-/* 
- * Vrip driver attach arguments. 
- */
-struct vrip_attach_args {
-	vrip_chipset_tag_t va_vc; /* Chipset tag */
-	bus_space_tag_t va_iot;	/* i/o space tag */
-	bus_addr_t	va_addr;	/* i/o address	*/
-	bus_size_t	va_size;
-	int		va_intr;	/* level 1 interrupt line */
-	bus_addr_t	va_addr2;	/* i/o address 2	*/
-	bus_size_t	va_size2;
-	hpcio_chip_t*	va_gpio_chips;
-	vrcmu_chipset_tag_t va_cc;
-	vrcmu_function_tag_t va_cf;
-#ifdef HPCMIPS_NOT_YET
-	bus_dma_tag_t va_dmat;	/* DMA tag */
-#endif
-};
-
-/*
- * Interrupt establishment/disestablishment functions
- */
-void *vrip_intr_establish(vrip_chipset_tag_t, int, int, int(*)(void*), void*);
-void vrip_intr_disestablish(vrip_chipset_tag_t, void*);
-void vrip_intr_setmask1(vrip_chipset_tag_t, void*, int);
-void vrip_intr_setmask2(vrip_chipset_tag_t, void*, u_int32_t, int);
-void vrip_intr_get_status2(vrip_chipset_tag_t, void*, u_int32_t*);
 void vrip_intr_suspend(void);
 void vrip_intr_resume(void);
-/*
- * CMU/GPIO interface.
- */
-void vrip_cmu_function_register(vrip_chipset_tag_t, vrcmu_function_tag_t,
-    vrcmu_chipset_tag_t);
-void vrip_gpio_register(vrip_chipset_tag_t, hpcio_chip_t);
+void vripattach_common(struct device *, struct device *, void *);
+
+#endif /* !_VRIPVAR_H_ */
