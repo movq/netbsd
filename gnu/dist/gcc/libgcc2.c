@@ -1406,8 +1406,6 @@ __eprintf (const char *string, const char *expression,
 
 #ifdef L_bb
 
-#include <sys/time.h>
-
 /* Structure emitted by -a  */
 struct bb
 {
