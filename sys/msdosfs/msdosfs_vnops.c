@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_vnops.c,v 1.89 1999/11/15 18:49:11 fvdl Exp $	*/
+/*	$NetBSD: msdosfs_vnops.c,v 1.87 1999/08/19 03:42:23 itohy Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -782,7 +782,7 @@ msdosfs_update(v)
 	if (error)
 		return (error);
 	DE_EXTERNALIZE(dirp, dep);
-	if (ap->a_waitfor == MNT_WAIT)
+	if (ap->a_waitfor)
 		return (bwrite(bp));
 	else {
 		bdwrite(bp);
@@ -1469,7 +1469,7 @@ msdosfs_readdir(v)
 	struct uio *uio = ap->a_uio;
 	off_t *cookies = NULL;
 	int ncookies = 0, nc = 0;
-	off_t offset, uio_off;
+	off_t offset;
 	int chksum = -1;
 
 #ifdef MSDOSFS_DEBUG
@@ -1503,7 +1503,6 @@ msdosfs_readdir(v)
 		return (EINVAL);
 	lost = uio->uio_resid - count;
 	uio->uio_resid = count;
-	uio_off = uio->uio_offset;
 
 	if (ap->a_ncookies) {
 		nc = uio->uio_resid / 16;
@@ -1555,7 +1554,6 @@ msdosfs_readdir(v)
 				if (error)
 					goto out;
 				offset += sizeof(struct direntry);
-				uio_off = offset;
 				if (cookies) {
 					*cookies++ = offset;
 					ncookies++;
@@ -1670,7 +1668,6 @@ msdosfs_readdir(v)
 				brelse(bp);
 				goto out;
 			}
-			uio_off = offset + sizeof(struct direntry);
 			if (cookies) {
 				*cookies++ = offset + sizeof(struct direntry);
 				ncookies++;
@@ -1684,7 +1681,7 @@ msdosfs_readdir(v)
 	}
 
 out:
-	uio->uio_offset = uio_off;
+	uio->uio_offset = offset;
 	uio->uio_resid += lost;
 	if (dep->de_FileSize - (offset - bias) <= 0)
 		*ap->a_eofflag = 1;

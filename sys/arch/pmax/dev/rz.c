@@ -1,4 +1,4 @@
-/*	$NetBSD: rz.c,v 1.51 1999/12/06 02:53:50 simonb Exp $	*/
+/*	$NetBSD: rz.c,v 1.47 1999/09/17 20:04:49 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: rz.c,v 1.51 1999/12/06 02:53:50 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rz.c,v 1.47 1999/09/17 20:04:49 thorpej Exp $");
 
 /*
  * SCSI CCS (Command Command Set) disk driver.
@@ -520,8 +520,7 @@ rzprobe(xxxsd)
 			if (revl[i] != ' ')
 				break;
 		revl[i+1] = 0;
-		printf(" %s %s rev %s (SCSI-%d)", vid, pid, revl,
-		    inqbuf.version);
+		printf(" %s %s rev %s", vid, pid, revl);
 	}
 
 	printf ("%s\n",
@@ -703,12 +702,8 @@ rzstrategy(bp)
 			/* otherwise, truncate */
 			bp->b_bcount = dbtob(sz);
 		}
-		/*
-		 * Check for write to write protected label (except on the
-		 * raw partition).
-		 */
-		if (part != RAW_PART &&
-		    bn + pp->p_offset <= LABELSECTOR &&
+		/* check for write to write protected label */
+		if (bn + pp->p_offset <= LABELSECTOR &&
 #if LABELSECTOR != 0
 		    bn + pp->p_offset + sz > LABELSECTOR &&
 #endif
@@ -960,14 +955,14 @@ rzgetinfo(dev)
 	/*
 	 * If this is an installation diskimage, the label geometry
 	 * is from a vnd(4) diskimage, not the real SCSI disk, and so
-	 * the RAW_PART info is wrong.  Fake up an entry for RAW_PART.
+	 the RAW_PART info is wrong.  Fake up an entry for RAW_PART.
 	 */
 	if (msg == NULL &&
 	    strncmp(lp->d_typename, "install diskimag", 16) == 0 &&
 	    strlen(lp->d_packname) == 0 &&
 	    lp->d_npartitions == RAW_PART+1 &&
 	    lp->d_partitions[0].p_offset == 0 &&
-	    (lp->d_partitions[0].p_size < 32768 ||
+	    (lp->d_partitions[0].p_size == 4096 ||
 	     lp->d_partitions[0].p_size == 65536 ) &&
 #if 0
 	    lp->d_partitions[0].p_size == lp->d_partitions[RAW_PART].p_size &&

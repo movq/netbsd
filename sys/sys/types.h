@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.41 1999/12/11 05:19:08 simonb Exp $	*/
+/*	$NetBSD: types.h,v 1.39 1999/08/25 05:05:49 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993, 1994
@@ -67,9 +67,6 @@ typedef	u_int64_t	u_quad_t;	/* quads */
 typedef	int64_t		quad_t;
 typedef	quad_t *	qaddr_t;
 
-typedef	quad_t		longlong_t;	/* ANSI long long type */
-typedef	u_quad_t	u_longlong_t;	/* ANSI unsigned long long type */
-
 typedef	int64_t		blkcnt_t;	/* fs block count */
 typedef	u_int32_t	blksize_t;	/* fs optimal block size */
 typedef	char *		caddr_t;	/* core address */
@@ -100,7 +97,7 @@ union __semun {
 	struct semid_ds	*buf;		/* buffer for IPC_STAT & IPC_SET */
 	unsigned short	*array;		/* array for GETALL & SETALL */
 };
-#endif /* _KERNEL || _LIBC */
+#endif /* _KERNEL || __LIBC12_SOURCE__ */
 
 /*
  * These belong in unistd.h, but are placed here too to ensure that

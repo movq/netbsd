@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_bio.c,v 1.47 1999/11/23 23:52:41 fvdl Exp $	*/
+/*	$NetBSD: nfs_bio.c,v 1.45 1999/03/24 05:51:28 mrg Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -931,7 +931,7 @@ again:
 				bp->b_wcred = cred;
 			}
 		}
-
+	
 		TAILQ_INSERT_TAIL(&nmp->nm_bufq, bp, b_freelist);
 		nmp->nm_bufqlen++;
 		return (0);
@@ -958,7 +958,7 @@ nfs_doio(bp, cr, p)
 	register struct vnode *vp;
 	struct nfsnode *np;
 	struct nfsmount *nmp;
-	int error = 0, diff, len, iomode, must_commit = 0, s;
+	int error = 0, diff, len, iomode, must_commit = 0;
 	struct uio uio;
 	struct iovec io;
 
@@ -1084,7 +1084,6 @@ nfs_doio(bp, cr, p)
 		vp, bp, bp->b_dirtyoff, bp->b_dirtyend);
 #endif
 	    error = nfs_writerpc(vp, uiop, cr, &iomode, &must_commit);
-	    s = splbio();
 	    if (!error && iomode == NFSV3WRITE_UNSTABLE)
 		bp->b_flags |= B_NEEDCOMMIT;
 	    else
@@ -1111,9 +1110,9 @@ nfs_doio(bp, cr, p)
 		 * buffer to the clean list, we have to reassign it back to the
 		 * dirty one. Ugh.
 		 */
-		if (bp->b_flags & B_ASYNC) {
+		if (bp->b_flags & B_ASYNC)
 		    reassignbuf(bp, vp);
-		} else if (error)
+		else if (error)
 		    bp->b_flags |= B_EINTR;
 	    } else {
 		if (error) {
@@ -1123,7 +1122,6 @@ nfs_doio(bp, cr, p)
 		}
 		bp->b_dirtyoff = bp->b_dirtyend = 0;
 	    }
-	    splx(s);
 	}
 	bp->b_resid = uiop->uio_resid;
 	if (must_commit)
