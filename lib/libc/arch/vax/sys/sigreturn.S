@@ -33,7 +33,7 @@
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
 	/* .asciz "@(#)sigreturn.s	8.1 (Berkeley) 6/4/93" */
-	.asciz "$NetBSD: sigreturn.S,v 1.3 1997/02/04 18:38:22 ragge Exp $"
+	.asciz "$NetBSD: sigreturn.S,v 1.4 1998/09/30 18:37:39 ragge Exp $"
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
@@ -48,5 +48,4 @@
 	.data; 1:; .long 0; .text; moval 1b,r0; jsb mcount; popr $0x3f;
 #endif /* GPROF */
 
-SYSCALL(sigreturn)
-	ret
+PSEUDO(sigreturn,compat_13_sigreturn13)
