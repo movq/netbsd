@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.h,v 1.13 2002/02/22 19:44:02 uch Exp $	*/
+/*	$NetBSD: cpufunc.h,v 1.14 2002/02/28 01:56:58 uch Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -39,18 +39,16 @@
 #ifdef _KERNEL
 #ifndef _LOCORE
 
-/*
- * Memory-mapped register access method.
- */
-#define	_reg_read_1(a)		(*(__volatile__ u_int8_t *)((vaddr_t)(a)))
-#define	_reg_read_2(a)		(*(__volatile__ u_int16_t *)((vaddr_t)(a)))
-#define	_reg_read_4(a)		(*(__volatile__ u_int32_t *)((vaddr_t)(a)))
-#define	_reg_write_1(a, v)						\
-	(*(__volatile__ u_int8_t *)(a) = (u_int8_t)(v))
-#define	_reg_write_2(a, v)						\
-	(*(__volatile__ u_int16_t *)(a) = (u_int16_t)(v))
-#define	_reg_write_4(a, v)						\
-	(*(__volatile__ u_int32_t *)(a) = (u_int32_t)(v))
+/* Status Register */
+#define SR_MD			0x40000000
+#define SR_RB			0x20000000
+#define SR_BL			0x10000000
+#define SR_FD			0x00008000
+#define SR_M			0x00000200
+#define SR_IMASK		0x000000f0
+#define SR_IMASK_SHIFT	4
+#define SR_S			0x00000002
+#define SR_T			0x00000001
 
 /*
  * CPU exception/interrupt ops.	(locore_subr.S)
