@@ -1,13 +1,11 @@
-#	@(#)Makefile	6.1 (Berkeley) 3/3/91
-
-.include "../Makefile.g++"
-.include "../../Makefile.inc"
+# Makefile for tbl
 
 PROG=		tbl
 SRCS=		main.cc table.cc
-LDADD+=		$(.CURDIR)/../libgroff/obj/libgroff.a
-# Delete the -Ig++-include after we fix libg++ and install it
-CXXFLAGS+=	-I$(.CURDIR) -I$(.CURDIR)/../libgroff \
-		-I$(.CURDIR)/../../../lib/libg++/g++-include
+CFLAGS+=	-I$(.CURDIR)/../include
+LDADD+=		$(LIBGROFF) -lm
+DPADD+=		$(LIBGROFF) $(LIBMATH)
 
 .include <bsd.prog.mk>
+.include "../../Makefile.inc"
+.include "../Makefile.cfg"
