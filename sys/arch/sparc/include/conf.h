@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.h,v 1.14 1998/11/13 04:47:08 oster Exp $	*/
+/*	$NetBSD: conf.h,v 1.14.6.1 1999/08/02 20:09:13 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -52,6 +52,7 @@ cdev_decl(openprom);
 cdev_decl(cn);
 
 cdev_decl(zs);
+cdev_decl(com);
 
 bdev_decl(fd);
 cdev_decl(fd);
@@ -84,6 +85,8 @@ cdev_decl(cgeight);
 cdev_decl(tcx);
 
 cdev_decl(cgfourteen);
+
+cdev_decl(p9100);	/* pnozz */
 
 bdev_decl(xd);
 cdev_decl(xd);
