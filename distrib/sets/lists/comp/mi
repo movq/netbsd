@@ -1,4 +1,4 @@
-#	$NetBSD: mi,v 1.739 2004/11/11 19:00:31 jdolecek Exp $
+#	$NetBSD: mi,v 1.742 2004/12/06 17:35:53 yamt Exp $
 ./etc/mtree/set.comp				comp-sys-root
 ./usr/bin/addr2line				comp-debug-bin		bfd
 ./usr/bin/ar					comp-util-bin		bfd
@@ -4210,6 +4210,7 @@
 ./usr/share/man/cat3/sleep.0			comp-c-catman		.cat
 ./usr/share/man/cat3/snprintb.0			comp-c-catman		.cat
 ./usr/share/man/cat3/snprintf.0			comp-c-catman		.cat
+./usr/share/man/cat3/sockaddr_snprintf.0	comp-c-catman		.cat
 ./usr/share/man/cat3/sockatmark.0		comp-c-catman		.cat
 ./usr/share/man/cat3/sprintf.0			comp-c-catman		.cat
 ./usr/share/man/cat3/sqrt.0			comp-c-catman		.cat
@@ -4961,6 +4962,7 @@
 ./usr/share/man/cat9/driver.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/dumpsys.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/dupfdopen.0		comp-sys-catman		.cat
+./usr/share/man/cat9/errno.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/ether_addmulti.0		comp-sys-catman		.cat
 ./usr/share/man/cat9/ether_delmulti.0		comp-sys-catman		.cat
 ./usr/share/man/cat9/ether_ifattach.0		comp-sys-catman		.cat
@@ -5482,6 +5484,7 @@
 ./usr/share/man/cat9/uvm_swapin.0		comp-sys-catman		.cat
 ./usr/share/man/cat9/uvm_sysctl.0		comp-obsolete		obsolete
 ./usr/share/man/cat9/uvm_unloan.0		comp-sys-catman		.cat
+./usr/share/man/cat9/uvm_unmap.0		comp-sys-catman		.cat
 ./usr/share/man/cat9/uvm_useracc.0		comp-obsolete		obsolete
 ./usr/share/man/cat9/uvm_vnp_setsize.0		comp-sys-catman		.cat
 ./usr/share/man/cat9/uvm_vnp_sync.0		comp-obsolete		obsolete
@@ -7974,6 +7977,7 @@
 ./usr/share/man/man3/sleep.3			comp-c-man		.man
 ./usr/share/man/man3/snprintb.3			comp-c-man		.man
 ./usr/share/man/man3/snprintf.3			comp-c-man		.man
+./usr/share/man/man3/sockaddr_snprintf.3	comp-c-man		.man
 ./usr/share/man/man3/sockatmark.3		comp-c-man		.man
 ./usr/share/man/man3/sprintf.3			comp-c-man		.man
 ./usr/share/man/man3/sqrt.3			comp-c-man		.man
@@ -8724,6 +8728,7 @@
 ./usr/share/man/man9/driver.9			comp-sys-man		.man
 ./usr/share/man/man9/dumpsys.9			comp-sys-man		.man
 ./usr/share/man/man9/dupfdopen.9		comp-sys-man		.man
+./usr/share/man/man9/errno.9			comp-sys-man		.man
 ./usr/share/man/man9/ether_addmulti.9		comp-sys-man		.man
 ./usr/share/man/man9/ether_delmulti.9		comp-sys-man		.man
 ./usr/share/man/man9/ether_ifattach.9		comp-sys-man		.man
@@ -9245,6 +9250,7 @@
 ./usr/share/man/man9/uvm_swapin.9		comp-sys-man		.man
 ./usr/share/man/man9/uvm_sysctl.9		comp-obsolete		obsolete
 ./usr/share/man/man9/uvm_unloan.9		comp-sys-man		.man
+./usr/share/man/man9/uvm_unmap.9		comp-sys-man		.man
 ./usr/share/man/man9/uvm_useracc.9		comp-obsolete		obsolete
 ./usr/share/man/man9/uvm_vnp_setsize.9		comp-sys-man		.man
 ./usr/share/man/man9/uvm_vnp_sync.9		comp-obsolete		obsolete
