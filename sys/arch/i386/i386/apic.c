@@ -1,4 +1,4 @@
-/* $NetBSD: apic.c,v 1.2.2.2 2002/10/18 02:37:36 nathanw Exp $ */
+/* $NetBSD: apic.c,v 1.2.2.3 2002/12/11 06:00:51 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -81,20 +81,3 @@ void apic_format_redir (where1, where2, idx, redirhi, redirlo)
 
 	printf("\n");
 }
-
-void apic_intlock(void);	/* XXXSMP cleanup */
-void apic_intunlock(void);	/* XXXSMP cleanup */
-
-void
-apic_intlock()
-{
-	KERNEL_LOCK(LK_EXCLUSIVE|LK_CANRECURSE);
-}
-
-void
-apic_intunlock()
-{
-	KERNEL_UNLOCK();
-}
-
-	    
