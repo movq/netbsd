@@ -1,184 +1,124 @@
-#!/usr/pkg/bin/perl
+#! /bin/sh
 #
-#	$NetBSD: file2netbsd,v 1.1 2003/02/23 23:46:55 pooka Exp $
+#	$NetBSD: file2netbsd,v 1.1.1.1 2004/09/16 13:43:40 pooka Exp $
 #
-#  Perl script to convert a standard distribution directory for file into
-#	a NetBSD source tree.
+# Copyright (c) 2003 The NetBSD Foundation, Inc.
+# All rights reserved.
 #
-#  This is done as a script so that as each distribution is released,
-#	only changes from the previous one need to be dealt with as
-#	modifications to this script and related files.  This should
-#	reduce the cost of updating from a new release of file by an
-#	order of magnitude (or more?)
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+# 3. All advertising materials mentioning features or use of this software
+#    must display the following acknowledgement:
+#	This product includes software developed by the NetBSD
+#	Foundation, Inc. and its contributors.
+# 4. Neither the name of The NetBSD Foundation nor the names of its
+#    contributors may be used to endorse or promote products derived
+#    from this software without specific prior written permission.
 #
-#  This script requires two environment variables set:
-#	SRCDIR - file source directory
-#	TARGETDIR - name of the high level directory to make
+# THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+# ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+# TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+# BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
 #
-#  Written by Christos Zoulas July 17, 1997 for file-3.26
+# file2netbsd:  convert a file source tree into a
+# format suitable for import.  Works on current dir.
+# You can run this only once if you want it to work.
 #
-
-$version = "3.40";
-
-# definitions ...
-
-@subdirs = ("dist/file", "dist/file/magdir");
-
-
-@filef = ("LEGAL.NOTICE", "MAINT",
-	  "README", "apprentice.c", "ascmagic.c",
-	  "compress.c", "file.c", "file.h", "fsmagic.c",
-	  "is_tar.c", "names.h", "patchlevel.h",
-	  "print.c", "readelf.c", "readelf.h", "softmagic.c", "tar.h");
-#
-# Utility Subroutines
-#
-
-sub makedir {
-    system("mkdir -p @_");
-}
-
-# &fixrcs (fromfile, tofile);
-sub fixrcs
-{
-    my ($f, $t) = @_;
-    my @keywords = ("Author", "Date", "Header", "Id", "Locker", "Log",
-		    "Name", "RCSfile", "Revision", "Source", "State");
-    my %mansubst = ('__CSECTION__', '1',
-                    '__FSECTION__', '5',
-                    '__VERSION__', $version,
-                    '__MAGIC__', '/usr/share/misc/magic');
-    my $state = 0;
-
-    open(IFILE, "<$f") || die "Cannot open $f";
-    open(OFILE, ">$t") || die "Cannot create $t";
-
-    if ($t =~ /.*\.[0-9]/) {
-	print OFILE '.\\" $', 'NetBSD',  '$', "\n", '.\\"', "\n";
-    }
-    elsif ($t =~ /.*\.[ch]/) {
-	print OFILE "/*\t", '$', 'NetBSD', '$', "\t*/\n\n";
-    }
-    elsif ($t =~ /magic.mime/) {
-	print OFILE "#\t", '$', 'NetBSD', '$', "\n\n";
-    }
-    else {
-	print OFILE '$', 'NetBSD', '$', "\n\n";
-    }
-    while (<IFILE>) {
-	if ($state == 2) {
-	    if (/#endif/) {
-		print OFILE "#else\n__RCSID(", '"$', 'NetBSD', '$"',
-		    ");\n#endif\n";
-		$state = 0;
-	    }
-	}
-	if ($state == 1) {
-	    print OFILE "#if 0\n";
-	    $state = 2;
-	}
-	if (/#ifndef\slint/) {
-	    $state = 1;
-	}
-	foreach $key (@keywords) {
-	    s/\$$key\$/$key/g;
-	    s/\$$key:(.*)\$/$key:$1/g;
-	}
-	while (($from, $to) = each %mansubst) {
-	    s/$from/$to/g;
-	}
-	print OFILE $_;
-    }
-    close(IFILE) || die "closing input file";
-    close(OFILE) || die "closing output file";
-}
-
-# &copyfiles (fromdir, todir, list of files);
-sub copyfiles {
-    local ($fdir, $tdir, @list) = @_;
-    local ($f);
-
-    foreach $f (@list) {
-	print "  $fdir/$f --> $tdir/$f\n";
-	&fixrcs("$fdir/$f", "$tdir/$f");
-    }
-}
-
-# &copyfile (fromfile, tofile);
-sub copyfile {
-    local ($f, $t) = @_;
-
-    print "  $f --> $t\n";
-    &fixrcs("$f", "$t");
-}
-
-sub uniq {
-    local (@inlist) = @_;
-    local (@outlist);
-
-    @outlist = ($inlist[0]);
-    for ( $i=1; $i < @inlist; $i++ ) {
-	if ($inlist[$i] ne $inlist[$i-1]) {
-	    push (@outlist, $inlist[$i]);
-	}
-    }
-
-    @outlist;
-}
-
-sub dumpsrcs {
-    local (@names) = @_;
-    local ($count);
-
-    print ODATA "SRCS=\t";
-    $count = 0;
-    while ($f = pop(@names)) {
-        print ODATA "$f ";
-	if ($count == 5 && @names > 0) {
-	    print ODATA "\\\n";
-	    $count = 0;
-	} else {
-	    $count += 1;
-	}
-    }
-    if ($count != 0) {
-	print ODATA "\n";
-    }
-}
-
-#
-# Main progarm.
-# 
-
-$srcdir = $ENV{'SRCDIR'};
-$targetdir = $ENV{'TARGETDIR'};
-$incdirs = "-I. -I$srcdir/config -I$srcdir";
-
-if (!$srcdir | !targetdir) {
-    die "You must define the environment variables SRCDIR and TARGETDIR.\n"
-} 
-print "Making the NetBSD directory tree.\n";
-foreach $f (@subdirs) { 
-    print "   -->$f\n";
-    makedir ("$targetdir/$f");
-}
-
-print "Populating the dist/file directory.\n";
-&copyfiles ("$srcdir", "$targetdir/dist/file", @filef);
-&copyfile("$srcdir/file.man", "$targetdir/dist/file/file.1");
-&copyfile("$srcdir/magic.man", "$targetdir/dist/file/magic.5");
-&copyfile("$srcdir/magic.mime", "$targetdir/dist/file/magic.mime");
-system("cat $srcdir/Header > $targetdir/dist/file/Header");
-system("cat $srcdir/Localstuff > $targetdir/dist/file/Localstuff");
-
-print "Populating the dist/file/magdir directory.\n";
-system("cp -rp $srcdir/Magdir/* $targetdir/dist/file/magdir; chmod -R ug+w $targetdir/dist/file/magdir");
-
-#
-# Sed transformations of files
+# based on texinfo2netbsd
 #
 
-foreach $n (keys(%sedlist)) {
-    print "Modifying $n\n";
-    system ("cd $targetdir; sed $sedlist{$n} $n > tmp;  mv -f tmp $n");
-}
+# edit this
+file_vers='4.10'
+
+#
+# (usually) NO NEED TO EDIT BELOW THIS LINE
+#
+
+### Wipe out stuff we don't want
+rm -f .cvsignore
+
+### Remove the $'s around RCS tags
+find . -type f -print | xargs egrep -l '\$(Id|Date|Header|Log|Revision)'\
+    | while read f; do
+	sed -e 's/\$\(Id.*\) \$/\1/' \
+	    -e 's/\$\(Date.*\) \$/\1/' \
+	    -e 's/\$\(Header.*\) \$/\1/' \
+	    -e 's/\$\(Log.*\) \$/\1/' \
+	    -e 's/\$\(Revision.*\) \$/\1/' \
+	    $f > /tmp/file2$$ && mv /tmp/file2$$ $f && \
+	echo removed RCS tag from $f
+done
+
+### Add NetBSD RCS Id
+find . -type f -name '*.[chly]' -print | while read c; do
+	sed -e '1{/$NetBSD/!{i\
+/*	\$NetBSD\$	*/\
+\
+
+};}
+/#ifndef[ 	]lint/{N;/FILE_RCSID/s/\n/\
+#if 0\
+/
+a\
+#else\
+__RCSID("\$NetBSD\$");\
+#endif
+}' $c > /tmp/file3$$
+mv /tmp/file3$$ $c && echo did source mods for $c
+done
+
+#### Move files to proper names
+mv -f doc/file.man doc/file.1
+mv -f doc/libmagic.man doc/libmagic.3
+mv -f doc/magic.man doc/magic.5
+
+#### Add RCS tags to man pages
+find . -type f -name '*.[0-9]' -print | while read m; do
+	sed -e '1{/$NetBSD/!i\
+.\\"	\$NetBSD\$\
+.\\"
+
+}'	    -e 's/__CSECTION__/1/g' \
+	    -e 's/__FSECTION__/5/g' \
+	    -e 's/__VERSION__/'"${file_vers}/g" \
+	    -e 's,__MAGIC__,/usr/share/misc/magic,g' \
+	    $m > /tmp/file4$$
+mv /tmp/file4$$ $m && echo did manpage mods for $m
+done
+
+#### de-"capsize" the magdir
+mv magic/Magdir magic/magdir
+
+#### Make building easier, don't build magic and doc
+echo '/^SUBDIRS/
+t.
+s/^/#/
+-
+s/ magic.*//
+wq' | ed Makefile.in > /dev/null 2>&1
+
+#### No python in the base system
+rm -rf python
+
+echo done
+
+echo You can import now.
+
+echo Path: src/dist/file
+echo Vendor: CHRISTOS
+echo Versiontag: FILE4_XY
+
+exit 0
