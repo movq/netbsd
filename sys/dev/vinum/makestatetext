@@ -1,7 +1,7 @@
 #!/bin/sh
 # Make statetexts.h from vinumstate.h
 # $FreeBSD$
-# $Id: makestatetext,v 1.1 2003/10/10 03:07:29 grog Exp $
+# $Id: makestatetext,v 1.1.1.1 2003/10/10 03:07:29 grog Exp $
 infile=vinumstate.h
 ofile=statetexts.h
 echo >$ofile "/* Created by $0 on" `date`.  "Do not edit */"

@@ -39,7 +39,7 @@
  * otherwise) arising in any way out of the use of this software, even if
  * advised of the possibility of such damage.
  *
- * $Id: vinuminterrupt.c,v 1.1 2003/10/10 03:08:17 grog Exp $
+ * $Id: vinuminterrupt.c,v 1.1.1.1 2003/10/10 03:08:17 grog Exp $
  * $FreeBSD$
  */
 

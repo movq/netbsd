@@ -33,7 +33,7 @@
  * otherwise) arising in any way out of the use of this software, even if
  * advised of the possibility of such damage.
  *
- * $Id: vinumconfig.c,v 1.1 2003/10/10 03:08:01 grog Exp $
+ * $Id: vinumconfig.c,v 1.1.1.1 2003/10/10 03:08:01 grog Exp $
  * $FreeBSD$
  */
 

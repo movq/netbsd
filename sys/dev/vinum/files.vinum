@@ -1,5 +1,5 @@
-# $NetBSD: files.vinum,v 1.1 2003/10/10 03:09:44 grog Exp $
-# $Id: files.vinum,v 1.1 2003/10/10 03:09:44 grog Exp $
+# $NetBSD: files.vinum,v 1.1.1.1 2003/10/10 03:09:44 grog Exp $
+# $Id: files.vinum,v 1.1.1.1 2003/10/10 03:09:44 grog Exp $
 #
 # Configuration file for Vinum
 
