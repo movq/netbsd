@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.10 1999/07/09 18:46:09 thorpej Exp $	*/
+/*	$NetBSD: util.c,v 1.14 2000/10/11 20:23:50 is Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -48,26 +48,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#if __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 #include <sys/types.h>
 #include "config.h"
 
-static void nomem __P((void));
-static void vxerror __P((const char *, int, const char *, va_list));
-static void vxwarn __P((const char *, int, const char *, va_list));
-static void vxmsg __P((const char *fname, int line, const char *class, 
-		       const char *fmt, va_list));
+static void nomem(void);
+static void vxerror(const char *, int, const char *, va_list)
+	     __attribute__((__format__(__printf__, 3, 0)));
+static void vxwarn(const char *, int, const char *, va_list)
+	     __attribute__((__format__(__printf__, 3, 0)));
+static void vxmsg(const char *fname, int line, const char *class, 
+		  const char *fmt, va_list)
+     __attribute__((__format__(__printf__, 4, 0)));
 
 /*
  * Malloc, with abort on error.
  */
 void *
-emalloc(size)
-	size_t size;
+emalloc(size_t size)
 {
 	void *p;
 
@@ -80,9 +78,7 @@ emalloc(size)
  * Realloc, with abort on error.
  */
 void *
-erealloc(p, size)
-	void *p;
-	size_t size;
+erealloc(void *p, size_t size)
 {
 
 	if ((p = realloc(p, size)) == NULL)
@@ -94,8 +90,7 @@ erealloc(p, size)
  * Strdup, with abort on error.
  */
 char *
-estrdup(p)
-	const char *p;
+estrdup(const char *p)
 {
 	char *cp;
 
@@ -105,7 +100,7 @@ estrdup(p)
 }
 
 static void
-nomem()
+nomem(void)
 {
 
 	(void)fprintf(stderr, "config: out of memory\n");
@@ -116,15 +111,14 @@ nomem()
  * Push a prefix onto the prefix stack.
  */
 void
-prefix_push(path)
-	const char *path;
+prefix_push(const char *path)
 {
 	struct prefix *pf;
 	char *cp;
 
 	pf = emalloc(sizeof(struct prefix));
 
-	if (prefixes != NULL) {
+	if (prefixes != NULL && *path != '/') {
 		cp = emalloc(strlen(prefixes->pf_prefix) + 1 +
 		    strlen(path) + 1);
 		(void) sprintf(cp, "%s/%s", prefixes->pf_prefix, path);
@@ -141,7 +135,7 @@ prefix_push(path)
  * Pop a prefix off the prefix stack.
  */
 void
-prefix_pop()
+prefix_pop(void)
 {
 	struct prefix *pf;
 
@@ -161,22 +155,28 @@ prefix_pop()
  * Prepend the source path to a file name.
  */
 char *
-sourcepath(file)
-	const char *file;
+sourcepath(const char *file)
 {
 	size_t len;
 	char *cp;
 
-	len = strlen(srcdir) + 1 + strlen(file) + 1;
-	if (prefixes != NULL)
-		len += strlen(prefixes->pf_prefix) + 1;
+	if (prefixes != NULL && *prefixes->pf_prefix == '/')
+		len = strlen(prefixes->pf_prefix) + 1 + strlen(file) + 1;
+	else {
+		len = strlen(srcdir) + 1 + strlen(file) + 1;
+		if (prefixes != NULL)
+			len += strlen(prefixes->pf_prefix) + 1;
+	}
 
 	cp = emalloc(len);
 
-	if (prefixes != NULL)
-		(void) sprintf(cp, "%s/%s/%s", srcdir,
-		    prefixes->pf_prefix, file);
-	else
+	if (prefixes != NULL) {
+		if (*prefixes->pf_prefix == '/')
+			(void) sprintf(cp, "%s/%s", prefixes->pf_prefix, file);
+		else
+			(void) sprintf(cp, "%s/%s/%s", srcdir,
+			    prefixes->pf_prefix, file);
+	} else
 		(void) sprintf(cp, "%s/%s", srcdir, file);
 	return (cp);
 }
@@ -184,11 +184,7 @@ sourcepath(file)
 static struct nvlist *nvhead;
 
 struct nvlist *
-newnv(name, str, ptr, i, next)
-	const char *name, *str;
-	void *ptr;
-	int i;
-	struct nvlist *next;
+newnv(const char *name, const char *str, void *ptr, int i, struct nvlist *next)
 {
 	struct nvlist *nv;
 
@@ -213,8 +209,7 @@ newnv(name, str, ptr, i, next)
  * Free an nvlist structure (just one).
  */
 void
-nvfree(nv)
-	struct nvlist *nv;
+nvfree(struct nvlist *nv)
 {
 
 	nv->nv_next = nvhead;
@@ -225,8 +220,7 @@ nvfree(nv)
  * Free an nvlist (the whole list).
  */
 void
-nvfreel(nv)
-	struct nvlist *nv;
+nvfreel(struct nvlist *nv)
 {
 	struct nvlist *next;
 
@@ -238,33 +232,19 @@ nvfreel(nv)
 }
 
 void
-#if __STDC__
 warn(const char *fmt, ...)
-#else
-warn(fmt, va_alist)
-	const char *fmt;
-	va_dcl
-#endif
 {
 	va_list ap;
 	extern const char *yyfile;
 
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	vxwarn(yyfile, currentline(), fmt, ap);
 	va_end(ap);
 }
 
 
 static void
-vxwarn(file, line, fmt, ap)
-	const char *file;
-	int line;
-	const char *fmt;
-	va_list ap;
+vxwarn(const char *file, int line, const char *fmt, va_list ap)
 {
 	vxmsg(file, line, "warning: ", fmt, ap);
 }
@@ -274,22 +254,12 @@ vxwarn(file, line, fmt, ap)
  * and line number.
  */
 void
-#if __STDC__
 error(const char *fmt, ...)
-#else
-error(fmt, va_alist)
-	const char *fmt;
-	va_dcl
-#endif	/* __STDC__ */
 {
 	va_list ap;
 	extern const char *yyfile;
 
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	vxerror(yyfile, currentline(), fmt, ap);
 	va_end(ap);
 }
@@ -299,23 +269,11 @@ error(fmt, va_alist)
  * find out about it until later).
  */
 void
-#if __STDC__
 xerror(const char *file, int line, const char *fmt, ...)
-#else
-xerror(file, line, fmt, va_alist)
-	const char *file;
-	int line;
-	const char *fmt;
-	va_dcl
-#endif
 {
 	va_list ap;
 
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	vxerror(file, line, fmt, ap);
 	va_end(ap);
 }
@@ -324,11 +282,7 @@ xerror(file, line, fmt, va_alist)
  * Internal form of error() and xerror().
  */
 static void
-vxerror(file, line, fmt, ap)
-	const char *file;
-	int line;
-	const char *fmt;
-	va_list ap;
+vxerror(const char *file, int line, const char *fmt, va_list ap)
 {
 	vxmsg(file, line, "", fmt, ap);
 	errors++;
@@ -339,21 +293,11 @@ vxerror(file, line, fmt, ap)
  * Internal error, abort.
  */
 __dead void
-#if __STDC__
 panic(const char *fmt, ...)
-#else
-panic(fmt, va_alist)
-	const char *fmt;
-	va_dcl
-#endif
 {
 	va_list ap;
 
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	(void)fprintf(stderr, "config: panic: ");
 	(void)vfprintf(stderr, fmt, ap);
 	(void)putc('\n', stderr);
@@ -365,12 +309,8 @@ panic(fmt, va_alist)
  * Internal form of error() and xerror().
  */
 static void
-vxmsg(file, line, msgclass, fmt, ap)
-	const char *file;
-	int line;
-	const char *msgclass;
-	const char *fmt;
-	va_list ap;
+vxmsg(const char *file, int line, const char *msgclass, const char *fmt,
+      va_list ap)
 {
 
 	(void)fprintf(stderr, "%s:%d: %s", file, line, msgclass);

@@ -1,4 +1,4 @@
-/*	$NetBSD: mkioconf.c,v 1.52 1999/09/24 04:48:37 enami Exp $	*/
+/*	$NetBSD: mkioconf.c,v 1.55 2001/01/18 07:09:47 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -54,18 +54,18 @@
 /*
  * Make ioconf.c.
  */
-static int cf_locnames_print __P((const char *, void *, void *));
-static int cforder __P((const void *, const void *));
-static int emitcfdata __P((FILE *));
-static int emitcfdrivers __P((FILE *));
-static int emitexterns __P((FILE *));
-static int emithdr __P((FILE *));
-static int emitloc __P((FILE *));
-static int emitpseudo __P((FILE *));
-static int emitpv __P((FILE *));
-static int emitroots __P((FILE *));
-static int emitvfslist __P((FILE *));
-static int emitname2blk __P((FILE *));
+static int cf_locnames_print(const char *, void *, void *);
+static int cforder(const void *, const void *);
+static int emitcfdata(FILE *);
+static int emitcfdrivers(FILE *);
+static int emitexterns(FILE *);
+static int emithdr(FILE *);
+static int emitloc(FILE *);
+static int emitpseudo(FILE *);
+static int emitpv(FILE *);
+static int emitroots(FILE *);
+static int emitvfslist(FILE *);
+static int emitname2blk(FILE *);
 
 #define	SEP(pos, max)	(((u_int)(pos) % (max)) == 0 ? "\n\t" : " ")
 
@@ -78,7 +78,7 @@ static int emitname2blk __P((FILE *));
 #define	NEWLINE		if (putc('\n', fp) < 0) return (1)
 
 int
-mkioconf()
+mkioconf(void)
 {
 	FILE *fp;
 	int v;
@@ -106,8 +106,7 @@ mkioconf()
 }
 
 static int
-cforder(a, b)
-	const void *a, *b;
+cforder(const void *a, const void *b)
 {
 	int n1, n2;
 
@@ -117,8 +116,7 @@ cforder(a, b)
 }
 
 static int
-emithdr(ofp)
-	FILE *ofp;
+emithdr(FILE *ofp)
 {
 	FILE *ifp;
 	int n, rv;
@@ -162,8 +160,7 @@ emithdr(ofp)
 }
 
 static int
-emitcfdrivers(fp)
-	FILE *fp;
+emitcfdrivers(FILE *fp)
 {
 	struct devbase *d;
 
@@ -185,8 +182,7 @@ emitcfdrivers(fp)
 }
 
 static int
-emitexterns(fp)
-	FILE *fp;
+emitexterns(FILE *fp)
 {
 	struct deva *da;
 
@@ -207,10 +203,7 @@ emitexterns(fp)
  * attribute's locators.
  */
 static int
-cf_locnames_print(name, value, arg)
-	const char *name;
-	void *value;
-	void *arg;
+cf_locnames_print(const char *name, void *value, void *arg)
 {
 	struct attr *a;
 	struct nvlist *nv;
@@ -230,31 +223,48 @@ cf_locnames_print(name, value, arg)
 }
 
 static int
-emitloc(fp)
-	FILE *fp;
+emitloc(FILE *fp)
 {
 	int i;
 
-	if (fprintf(fp, "\n/* locators */\n\
+	if (locators.used != 0) {
+		if (fprintf(fp, "\n/* locators */\n\
 static int loc[%d] = {", locators.used) < 0)
-		return (1);
-	for (i = 0; i < locators.used; i++)
-		if (fprintf(fp, "%s%s,", SEP(i, 8), locators.vec[i]) < 0)
 			return (1);
-	if (fprintf(fp,
-		    "\n};\n\nconst char *nullcf_locnames[] = {NULL};\n") < 0)
-		return (1);
-	return ht_enumerate(attrtab, cf_locnames_print, fp);
+		for (i = 0; i < locators.used; i++)
+			if (fprintf(fp, "%s%s,", SEP(i, 8),
+			    locators.vec[i]) < 0)
+				return (1);
+		if (fprintf(fp, "\n};\n") < 0)
+			return (1);
+	} else if (*packed != NULL) {
+		/* We need to have *something*. */
+		if (fprintf(fp, "\n/* locators */\n\
+static int loc[1] = { -1 };\n") < 0)
+			return (1);
+	}
+
+	if (*packed != NULL)
+		if (fprintf(fp,
+		    "\nconst char *nullcf_locnames[] = {NULL};\n") < 0)
+			return (1);
+
+	if (locators.used != 0)
+		return ht_enumerate(attrtab, cf_locnames_print, fp);
+
+	return (0);
 }
 
 /*
  * Emit global parents-vector.
  */
 static int
-emitpv(fp)
-	FILE *fp;
+emitpv(FILE *fp)
 {
 	int i;
+
+	if (parents.used == 0)
+		return (0);
 
 	if (fprintf(fp, "\n/* parent vectors */\n\
 static short pv[%d] = {", parents.used) < 0)
@@ -269,8 +279,7 @@ static short pv[%d] = {", parents.used) < 0)
  * Emit the cfdata array.
  */
 static int
-emitcfdata(fp)
-	FILE *fp;
+emitcfdata(FILE *fp)
 {
 	struct devi **p, *i, **par;
 	int unit, v;
@@ -347,8 +356,7 @@ struct cfdata cfdata[] = {\n\
  * Emit the table of potential roots.
  */
 static int
-emitroots(fp)
-	FILE *fp;
+emitroots(FILE *fp)
 {
 	struct devi **p, *i;
 
@@ -373,8 +381,7 @@ emitroots(fp)
  * Emit pseudo-device initialization.
  */
 static int
-emitpseudo(fp)
-	FILE *fp;
+emitpseudo(FILE *fp)
 {
 	struct devi *i;
 	struct devbase *d;
@@ -400,8 +407,7 @@ emitpseudo(fp)
  * Emit the initial VFS list.
  */
 static int
-emitvfslist(fp)
-	FILE *fp;
+emitvfslist(FILE *fp)
 {
 	struct nvlist *nv;
 
@@ -438,8 +444,7 @@ emitvfslist(fp)
  * Emit name to major block number table.
  */
 int
-emitname2blk(fp)
-	FILE *fp;
+emitname2blk(FILE *fp)
 {
 	struct devbase *dev;
 
