@@ -1,4 +1,4 @@
-static const char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/usr.sbin/dhcp/dst/Attic/dst_support.c,v 1.1 2001/04/02 21:57:03 mellon Exp $";
+static const char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/usr.sbin/dhcp/dst/Attic/dst_support.c,v 1.1.1.1 2001/04/02 21:57:03 mellon Exp $";
 
 
 /*
