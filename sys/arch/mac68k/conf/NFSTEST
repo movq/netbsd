@@ -1,6 +1,6 @@
 # GENERIC + NFS services
 #
-#     $Id: NFSTEST,v 1.1 1994/02/23 04:42:24 briggs Exp $
+#     $Id: NFSTEST,v 1.2 1994/02/27 03:44:26 briggs Exp $
 
 include	"std.mac68k"
 
@@ -50,6 +50,9 @@ options		COMPAT_43
 options		NS
 options		MAPMEM
 options		SYSVSHM,SYSVSEM,SYSVMSG
+
+# Macintosh-specific options
+options		FPCOPROC
 
 config		netbsd	swap generic
 
