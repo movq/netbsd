@@ -1,4 +1,4 @@
-.\"	$NetBSD: ipv6-patch-4.0,v 1.1 2001/03/26 03:53:49 mike Exp $
+.\"	$NetBSD: ipv6-patch-4.0,v 1.1.1.1 2001/03/26 03:53:49 mike Exp $
 .\"
 *** ip6_input.c.orig	Sun Feb 13 14:32:01 2000
 --- ip6_input.c	Wed Apr 26 22:31:34 2000
