@@ -16,7 +16,7 @@
  */
 
 /*
- *	$Id: res_update.h,v 1.1 2000/04/22 07:11:51 mellon Exp $
+ *	$Id: res_update.h,v 1.1.1.1 2000/04/22 07:11:51 mellon Exp $
  */
 
 #ifndef __RES_UPDATE_H
