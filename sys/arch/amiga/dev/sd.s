@@ -2,7 +2,7 @@
 gcc2_compiled.:
 .data
 _rcsid:
-	.ascii "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/amiga/dev/Attic/sd.s,v 1.1 1993/09/02 16:53:10 mw Exp $\0"
+	.ascii "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/amiga/dev/Attic/sd.s,v 1.1.1.1 1993/09/02 16:53:11 mw Exp $\0"
 .globl _sddriver
 .text
 LC0:
