@@ -403,7 +403,7 @@ user_write:
 	move.l	a1,-(sp)
 	move.l	a0,-(sp)
 	jsr		copyout
-	add.w	#12,sp
+	add.l	#12,sp
 	move.l	(sp)+,d1
 	rts
 *
@@ -442,7 +442,7 @@ user_read:
 	move.l	a1,-(sp)
 	move.l	a0,-(sp)
 	jsr		copyin
-	add.w	#12,sp
+	add.l	#12,sp
 	move.l	(sp)+,d1
 	rts
 
