@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_log.c,v 1.1 1997/09/21 16:49:48 veego Exp $	*/
+/*	$NetBSD: ip_log.c,v 1.1.1.1 1997/09/21 16:49:48 veego Exp $	*/
 
 /*
  * (C)opyright 1997 by Darren Reed.
