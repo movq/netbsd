@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1983 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1983, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -35,12 +35,13 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)context.c	3.12 (Berkeley) 6/6/90";
+static char sccsid[] = "@(#)context.c	8.1 (Berkeley) 6/6/93";
 #endif /* not lint */
 
 #include "value.h"
 #include "string.h"
 #include "context.h"
+#include <fcntl.h>
 
 /*
  * Context push/pop for nested command files.
@@ -89,6 +90,7 @@ char *filename;
 	cx.x_fp = fopen(filename, "r");
 	if (cx.x_fp == 0)
 		goto bad;
+	(void) fcntl(fileno(cx.x_fp), F_SETFD, 1);
 	cx.x_bol = 1;
 	cx.x_lineno = 0;
 	cx.x_errwin = 0;
