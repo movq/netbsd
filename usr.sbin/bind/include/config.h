@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* $Id: config.h,v 1.1 2004/05/18 00:06:57 christos Exp $ */
+/* $Id: config.h,v 1.1.1.1 2004/05/18 00:06:57 christos Exp $ */
 
 /***
  *** This file is not to be included by any public header files, because

@@ -15,7 +15,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* $Id: platform.h,v 1.1 2004/05/18 00:06:57 christos Exp $ */
+/* $Id: platform.h,v 1.1.1.1 2004/05/18 00:06:57 christos Exp $ */
 
 #ifndef ISC_PLATFORM_H
 #define ISC_PLATFORM_H 1

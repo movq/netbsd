@@ -15,7 +15,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* $Id: netdb.h,v 1.1 2004/05/18 00:06:58 christos Exp $ */
+/* $Id: netdb.h,v 1.1.1.1 2004/05/18 00:06:58 christos Exp $ */
 
 #ifndef LWRES_NETDB_H
 #define LWRES_NETDB_H 1
