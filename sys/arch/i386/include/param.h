@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)param.h	5.8 (Berkeley) 6/28/91
- *	$Id: param.h,v 1.8 1993/08/03 21:51:10 mycroft Exp $
+ *	$Id: param.h,v 1.13 1994/01/05 16:02:36 mycroft Exp $
  */
 
 /*
@@ -42,6 +42,7 @@
  */
 
 #define MACHINE		"i386"
+#define MACHINE_ARCH	"i386"
 #define MID_MACHINE	MID_I386
 
 /*
@@ -52,30 +53,27 @@
 #define ALIGNBYTES	(sizeof(int) - 1)
 #define ALIGN(p)	(((u_int)(p) + ALIGNBYTES) &~ ALIGNBYTES)
 
-#define	NBPG		4096		/* bytes/page */
-#define	PGOFSET		(NBPG-1)	/* byte offset into page */
 #define	PGSHIFT		12		/* LOG2(NBPG) */
+#define	NBPG		(1 << PGSHIFT)	/* bytes/page */
+#define	PGOFSET		(NBPG-1)	/* byte offset into page */
 #define	NPTEPG		(NBPG/(sizeof (struct pte)))
 
-#define NBPDR		(1024*NBPG)	/* bytes/page dir */
-#define	PDROFSET	(NBPDR-1)	/* byte offset into page dir */
-#define	PDRSHIFT	22		/* LOG2(NBPDR) */
-
-#define	KERNBASE	0xFE000000	/* start of kernel virtual */
+#define	KERNBASE	0xf8000000	/* start of kernel virtual space */
+#define	KERNSIZE	0x01800000	/* size of kernel virtual space */
+#define	KERNTEXTOFF	0xf8100000	/* start of kernel text */
 #define	BTOPKERNBASE	((u_long)KERNBASE >> PGSHIFT)
 
-#define	DEV_BSIZE	512
 #define	DEV_BSHIFT	9		/* log2(DEV_BSIZE) */
-#define BLKDEV_IOSIZE	2048
+#define	DEV_BSIZE	(1 << DEV_BSHIFT)
+#define	BLKDEV_IOSIZE	2048
 #define	MAXPHYS		(64 * 1024)	/* max raw I/O transfer size */
 
-#define	CLSIZE		1
 #define	CLSIZELOG2	0
+#define	CLSIZE		(1 << CLSIZELOG2)
 
 /* NOTE: SSIZE, SINCR and UPAGES must be multiples of CLSIZE */
 #define	SSIZE	1		/* initial stack size/NBPG */
 #define	SINCR	1		/* increment of stack/NBPG */
-
 #define	UPAGES	2		/* pages of u-area */
 
 /*
@@ -85,13 +83,8 @@
  * clusters (MAPPED_MBUFS), MCLBYTES must also be an integral multiple
  * of the hardware page size.
  */
-#ifndef	MSIZE
 #define	MSIZE		128		/* size of an mbuf */
-#endif	/* MSIZE */
-
-#ifndef	MCLSHIFT
 #define	MCLSHIFT	11		/* convert bytes to m_buf clusters */
-#endif	/* MCLSHIFT */
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
 #define	MCLOFSET	(MCLBYTES - 1)	/* offset within a m_buf cluster */
 
@@ -100,32 +93,25 @@
 #define	NMBCLUSTERS	512		/* map size, max cluster allocation */
 #else
 #define	NMBCLUSTERS	256		/* map size, max cluster allocation */
-#endif	/* GATEWAY */
-#endif	/* NMBCLUSTERS */
+#endif
+#endif
 
 /*
  * Size of kernel malloc arena in CLBYTES-sized logical pages
  */ 
 #ifndef NKMEMCLUSTERS
-#define	NKMEMCLUSTERS	(3072*1024/CLBYTES)
+#define	NKMEMCLUSTERS	(6 * 1024 * 1024 / CLBYTES)
 #endif
-/*
- * Some macros for units conversion
- */
-/* Core clicks (4096 bytes) to segments and vice versa */
-#define	ctos(x)	(x)
-#define	stoc(x)	(x)
 
-/* Core clicks (4096 bytes) to disk blocks */
-#define	ctod(x)	((x)<<(PGSHIFT-DEV_BSHIFT))
-#define	dtoc(x)	((x)>>(PGSHIFT-DEV_BSHIFT))
-#define	dtob(x)	((x)<<DEV_BSHIFT)
+/* pages ("clicks") (4096 bytes) to disk blocks */
+#define	ctod(x)	((x) << (PGSHIFT - DEV_BSHIFT))
+#define	dtoc(x)	((x) >> (PGSHIFT - DEV_BSHIFT))
+#define	dtob(x)	((x) << DEV_BSHIFT)
 
-/* clicks to bytes */
-#define	ctob(x)	((x)<<PGSHIFT)
+#define	ctob(x)	((x) << PGSHIFT)
 
-/* bytes to clicks */
-#define	btoc(x)	(((unsigned)(x)+(NBPG-1))>>PGSHIFT)
+/* bytes to pages */
+#define	btoc(x)	(((unsigned)(x) + PGOFSET) >> PGSHIFT)
 
 #define	btodb(bytes)	 		/* calculates (bytes / DEV_BSIZE) */ \
 	((unsigned)(bytes) >> DEV_BSHIFT)
@@ -134,20 +120,20 @@
 
 /*
  * Map a ``block device block'' to a file system block.
- * This should be device dependent, and will be if we
- * add an entry to cdevsw/bdevsw for that purpose.
+ * This should be device dependent, and should use the bsize
+ * field from the disk label.
  * For now though just use DEV_BSIZE.
  */
-#define	bdbtofsb(bn)	((bn) / (BLKDEV_IOSIZE/DEV_BSIZE))
+#define	bdbtofsb(bn)	((bn) / (BLKDEV_IOSIZE / DEV_BSIZE))
 
 /*
  * Mach derived conversion macros
  */
-#define i386_round_pdr(x)	((((unsigned)(x)) + NBPDR - 1) & ~(NBPDR-1))
-#define i386_trunc_pdr(x)	((unsigned)(x) & ~(NBPDR-1))
-#define i386_round_page(x)	((((unsigned)(x)) + NBPG - 1) & ~(NBPG-1))
-#define i386_trunc_page(x)	((unsigned)(x) & ~(NBPG-1))
-#define i386_btod(x)		((unsigned)(x) >> PDRSHIFT)
-#define i386_dtob(x)		((unsigned)(x) << PDRSHIFT)
-#define i386_btop(x)		((unsigned)(x) >> PGSHIFT)
-#define i386_ptob(x)		((unsigned)(x) << PGSHIFT)
+#define	i386_round_pdr(x)	((((unsigned)(x)) + PDOFSET) & ~PDOFSET)
+#define	i386_trunc_pdr(x)	((unsigned)(x) & ~PDOFSET)
+#define	i386_btod(x)		((unsigned)(x) >> PDSHIFT)
+#define	i386_dtob(x)		((unsigned)(x) << PDSHIFT)
+#define	i386_round_page(x)	((((unsigned)(x)) + PGOFSET) & ~PGOFSET)
+#define	i386_trunc_page(x)	((unsigned)(x) & ~PGOFSET)
+#define	i386_btop(x)		((unsigned)(x) >> PGSHIFT)
+#define	i386_ptob(x)		((unsigned)(x) << PGSHIFT)

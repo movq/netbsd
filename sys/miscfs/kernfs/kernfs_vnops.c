@@ -33,28 +33,29 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	$Id: kernfs_vnops.c,v 1.12 1993/09/07 15:41:21 ws Exp $
+ *	$Id: kernfs_vnops.c,v 1.15 1993/12/20 12:39:12 cgd Exp $
  */
 
 /*
  * Kernel parameter filesystem
  */
 
-#include "param.h"
-#include "systm.h"
-#include "kernel.h"
-#include "types.h"
-#include "time.h"
-#include "proc.h"
-#include "file.h"
-#include "vnode.h"
-#include "stat.h"
-#include "mount.h"
-#include "namei.h"
-#include "buf.h"
-#include "miscfs/kernfs/kernfs.h"
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/kernel.h>
+#include <sys/types.h>
+#include <sys/time.h>
+#include <sys/proc.h>
+#include <sys/file.h>
+#include <sys/vnode.h>
+#include <sys/stat.h>
+#include <sys/mount.h>
+#include <sys/namei.h>
+#include <sys/buf.h>
 
-#include "../ufs/dir.h"		/* For readdir() XXX */
+#include <ufs/dir.h>		/* For readdir() XXX */
+
+#include <miscfs/kernfs/kernfs.h>
 
 struct kernfs_target kernfs_targets[] = {
 /* NOTE: The name must be less than UIO_MX-16 chars in length */
@@ -65,7 +66,9 @@ REG_TARGET("hostname",	0,		KTT_HOSTNAME,	KTM_RW_PERMS	)
 REG_TARGET("hz",	&hz,		KTT_INT,	KTM_RO_PERMS	)
 REG_TARGET("loadavg",	0,		KTT_AVENRUN,	KTM_RO_PERMS	)
 REG_TARGET("physmem",	&physmem,	KTT_INT,	KTM_RO_PERMS	)
+#ifdef KERNFS_HAVE_ROOTDIR	
 DIR_TARGET("root",	0,		KTT_NULL,	KTM_DIR_PERMS	)
+#endif
 BLK_TARGET("rootdev",	0,		KTT_NULL,	KTM_RO_PERMS	)
 CHR_TARGET("rrootdev",	0,		KTT_NULL,	KTM_RO_PERMS	)
 REG_TARGET("time",	0,		KTT_TIME,	KTM_RO_PERMS	)
@@ -123,9 +126,9 @@ kernfs_xread(kt, buf, len, lenp)
 
 	case KTT_AVENRUN:
 		sprintf(buf, "%d %d %d %d\n",
-				averunnable[0],
-				averunnable[1],
-				averunnable[2],
+				averunnable.ldavg[0],
+				averunnable.ldavg[1],
+				averunnable.ldavg[2],
 				FSCALE);
 		break;
 
@@ -185,7 +188,8 @@ kernfs_lookup(dvp, ndp, p)
 		/*VOP_LOCK(dvp);*/
 		return (0);
 	}
-	
+
+#ifdef KERNFS_HAVE_ROOTDIR	
 	if (ndp->ni_namelen == 4 && bcmp(pname, "root", 4) == 0) {
 		ndp->ni_dvp = dvp;
 		ndp->ni_vp = rootdir;
@@ -193,24 +197,31 @@ kernfs_lookup(dvp, ndp, p)
 		VOP_LOCK(rootdir);
 		return (0);
 	}
-	
+#endif
+
 	/*
 	 * /kern/rootdev is the root device
 	 */
 	if (ndp->ni_namelen == 7 && bcmp(pname, "rootdev", 7) == 0) {
-		if (vfinddev(rootdev, VBLK, &fvp))
-			return (ENXIO);
+		if (!rootvp) {
+			error = ENOENT;
+			goto bad;
+		}
 		ndp->ni_dvp = dvp;
-		ndp->ni_vp = fvp;
-		VREF(fvp);
-		VOP_LOCK(fvp);
+		ndp->ni_vp = rootvp;
+		VREF(rootvp);
+		VOP_LOCK(rootvp);
 		return (0);
 	}
 
 	/*
-	 * /kern/rrootdev is the root device
+	 * /kern/rrootdev is the raw root device
 	 */
 	if (ndp->ni_namelen == 8 && bcmp(pname, "rrootdev", 7) == 0) {
+		if (!rrootdevvp) {
+			error = ENOENT;
+			goto bad;
+		}
 		ndp->ni_dvp = dvp;
 		ndp->ni_vp = rrootdevvp;
 		VREF(rrootdevvp);

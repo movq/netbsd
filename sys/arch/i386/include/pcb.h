@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)pcb.h	5.10 (Berkeley) 5/12/91
- *	$Id: pcb.h,v 1.6 1993/06/27 04:50:12 andrew Exp $
+ *	pcb.h,v 1.6 1993/06/27 04:50:12 andrew Exp
  */
 
 #ifndef _I386_PCB_H_
@@ -58,6 +58,8 @@ struct pcb {
 #ifdef	notyet
 	u_char	pcb_iomap[NPORT/sizeof(u_char)]; /* i/o port bitmap */
 #endif
+        caddr_t	pcb_ldt;		/* per process (user) LDT */
+        int	pcb_ldt_len;		/*      number of LDT entries */
 	struct	save87	pcb_savefpu;	/* floating point state for 287/387 */
 	struct	emcsts	pcb_saveemc;	/* Cyrix EMC state */
 /*
@@ -70,11 +72,9 @@ struct pcb {
 #define	FP_NEEDSRESTORE	0x04	/* ... that needs restore on next DNA fault */
 #endif
 #define	FP_USESEMC	0x08	/* process uses EMC memory-mapped mode */
-#define	FM_TRAP		0x10	/* process entered kernel on a trap frame */
 #define	FP_SOFTFP	0x20	/* process using software fltng pnt emulator */
-	short	pcb_iml;	/* interrupt mask level */
+	int	pcb_iml;	/* interrupt mask level */
 	caddr_t	pcb_onfault;	/* copyin/out fault recovery */
-	int	pcb_cmap2;	/* XXX temporary PTE - will prefault instead */
 };
 
 #ifdef KERNEL

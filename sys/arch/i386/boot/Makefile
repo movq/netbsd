@@ -22,24 +22,20 @@
 # any improvements or extensions that they make and grant Carnegie Mellon
 # the rights to redistribute these changes.
 #
-#	$Id: Makefile,v 1.7 1993/08/01 19:25:24 mycroft Exp $
+#	$Id: Makefile,v 1.12 1994/01/28 08:21:24 cgd Exp $
 #
 
-wd0:
-	dd if=boot of=biosboot count=1
-	dd if=boot of=bootbios skip=1
-	disklabel -r -w wd0 nec5655 newboot biosboot bootbios
-	rm biosboot bootbios
+all: biosboot bootbios
 
 NOPROG=	noprog
 NOMAN=	noman
 
-CFLAGS	= -O -DDO_BAD144 -I${.CURDIR}
+CFLAGS	= -O6 -DDO_BAD144 -I${.CURDIR}
 LIBS= -lc
 INC= -I${.CURDIR}/../..
 
 # start.o should be first
-OBJS = start.o table.o boot2.o boot.o asm.o bios.o io.o disk.o sys.o
+OBJS = start.o table.o boot2.o boot.o asm.o bios.o io.o disk.o sys.o version.o
 
 .SUFFIXES: .S .c .o
 
@@ -50,7 +46,7 @@ OBJS = start.o table.o boot2.o boot.o asm.o bios.o io.o disk.o sys.o
 	$(CC)  $(CFLAGS) -c $<
 
 boot: $(OBJS)
-	$(LD) -N -T 0 -o boot $(OBJS) $(LIBS)
+	$(LD) -Bstatic -e start -N -T 0 -o boot $(OBJS) $(LIBS)
 	cp boot boot.sym
 	@strip boot
 	@sh ${.CURDIR}/rmaouthdr boot boot.tmp
@@ -63,39 +59,31 @@ biosboot:	boot
 bootbios:	boot
 	dd if=boot of=bootbios skip=1
 
-/usr/mdec/bootsd:	bootbios
-	cp bootbios /usr/mdec/bootsd
+${DESTDIR}/usr/mdec/bootsd:	bootbios
+	cp bootbios ${DESTDIR}/usr/mdec/bootsd
 
-/usr/mdec/sdboot:	biosboot
-	cp biosboot /usr/mdec/sdboot
+${DESTDIR}/usr/mdec/sdboot:	biosboot
+	cp biosboot ${DESTDIR}/usr/mdec/sdboot
 
-/usr/mdec/bootwd:	/usr/mdec/bootsd
-	rm -f /usr/mdec/bootwd
-	ln /usr/mdec/bootsd /usr/mdec/bootwd
+${DESTDIR}/usr/mdec/bootwd:	${DESTDIR}/usr/mdec/bootsd
+	rm -f ${DESTDIR}/usr/mdec/bootwd
+	ln ${DESTDIR}/usr/mdec/bootsd ${DESTDIR}/usr/mdec/bootwd
 
-/usr/mdec/wdboot:	/usr/mdec/sdboot
-	rm -f /usr/mdec/wdboot
-	ln /usr/mdec/sdboot /usr/mdec/wdboot
+${DESTDIR}/usr/mdec/wdboot:	${DESTDIR}/usr/mdec/sdboot
+	rm -f ${DESTDIR}/usr/mdec/wdboot
+	ln ${DESTDIR}/usr/mdec/sdboot ${DESTDIR}/usr/mdec/wdboot
 
-/usr/mdec/bootfd:	/usr/mdec/bootsd
-	rm -f /usr/mdec/bootfd
-	ln /usr/mdec/bootsd /usr/mdec/bootfd
+${DESTDIR}/usr/mdec/bootfd:	${DESTDIR}/usr/mdec/bootsd
+	rm -f ${DESTDIR}/usr/mdec/bootfd
+	ln ${DESTDIR}/usr/mdec/bootsd ${DESTDIR}/usr/mdec/bootfd
 
-/usr/mdec/fdboot:	/usr/mdec/sdboot
-	rm -f /usr/mdec/fdboot
-	ln /usr/mdec/sdboot /usr/mdec/fdboot
+${DESTDIR}/usr/mdec/fdboot:	${DESTDIR}/usr/mdec/sdboot
+	rm -f ${DESTDIR}/usr/mdec/fdboot
+	ln ${DESTDIR}/usr/mdec/sdboot ${DESTDIR}/usr/mdec/fdboot
 
-sd:	/usr/mdec/bootsd /usr/mdec/sdboot
-wd:	/usr/mdec/bootwd /usr/mdec/wdboot
-fd:	/usr/mdec/bootfd /usr/mdec/fdboot
-
-all: biosboot bootbios
-
-fd0:
-	dd if=boot of=biosboot count=1
-	dd if=boot of=bootbios skip=1
-	disklabel -r -w fd0 floppy bootflpy biosboot bootbios
-	rm biosboot bootbios
+sd:	${DESTDIR}/usr/mdec/bootsd ${DESTDIR}/usr/mdec/sdboot
+wd:	${DESTDIR}/usr/mdec/bootwd ${DESTDIR}/usr/mdec/wdboot
+fd:	${DESTDIR}/usr/mdec/bootfd ${DESTDIR}/usr/mdec/fdboot
 
 install: wd sd fd
 

@@ -1,14 +1,41 @@
 /*
- * Functions to provide access to special i386 instructions.
- * XXX - bezillions more are defined in locore.s but are not declared anywhere.
+ * Copyright (c) 1993 Charles Hannum.
+ * All rights reserved.
  *
- *	$Id: cpufunc.h,v 1.2 1993/08/02 17:52:24 mycroft Exp $
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles Hannum.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ *	$Id: cpufunc.h,v 1.5 1994/01/28 23:44:07 jtc Exp $
+ */
+
+/*
+ * Functions to provide access to i386-specific instructions.
  */
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
-
-#ifdef	__GNUC__
 
 static __inline int bdb(void)
 {
@@ -16,9 +43,76 @@ static __inline int bdb(void)
 
 	if (!bdb_exists)
 		return (0);
-	__asm("int $3");
+	__asm __volatile("int $3");
 	return (1);
 }
+
+static __inline void
+lidt(void *p)
+{
+	__asm __volatile("lidt (%0)" : : "r" (p));
+}
+
+static __inline void
+lldt(u_short sel)
+{
+	__asm __volatile("lldt %0" : : "r" (sel));
+}
+
+static __inline void
+ltr(u_short sel)
+{
+	__asm __volatile("ltr %0" : : "r" (sel));
+}
+
+static __inline void
+tlbflush(void)
+{
+	__asm __volatile("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3" : : : "%eax");
+}
+
+static __inline void
+lcr0(u_int val)
+{
+	__asm __volatile("movl %0,%%cr0" : : "r" (val));
+}
+
+static __inline u_int
+rcr0(void)
+{
+	u_int val;
+	__asm __volatile("movl %%cr0,%0" : "=a" (val));
+	return val;
+}
+
+static __inline u_int
+rcr2(void)
+{
+	u_int val;
+	__asm __volatile("movl %%cr2,%0" : "=a" (val));
+	return val;
+}
+
+static __inline void
+lcr3(u_int val)
+{
+	__asm __volatile("movl %0,%%cr3" : : "r" (val));
+}
+
+static __inline u_int
+rcr3(void)
+{
+	u_int val;
+	__asm __volatile("movl %%cr3,%0" : "=a" (val));
+	return val;
+}
+
+#ifdef notyet
+void	setidt	__P((int idx, /*XXX*/caddr_t func, int typ, int dpl));
+#endif
+
+
+/* XXXX ought to be in psl.h with spl() functions */
 
 static __inline void
 disable_intr(void)
@@ -32,53 +126,3 @@ enable_intr(void)
 	__asm __volatile("sti");
 }
 
-/*
- * This roundabout method of returning a u_char helps stop gcc-1.40 from
- * generating unnecessary movzbl's.
- */
-#define	inb(port)	((u_char) u_int_inb(port))
-
-static __inline u_int
-u_int_inb(u_int port)
-{
-	u_char	data;
-	/*
-	 * We use %%dx and not %1 here because i/o is done at %dx and not at
-	 * %edx, while gcc-2.2.2 generates inferior code (movw instead of movl)
-	 * if we tell it to load (u_short) port.
-	 */
-	__asm __volatile("inb %%dx,%0" : "=a" (data) : "d" (port));
-	return data;
-}
-
-static __inline void
-outb(u_int port, u_char data)
-{
-	register u_char	al asm("ax");
-
-	al = data;		/* help gcc-1.40's register allocator */
-	__asm __volatile("outb %0,%%dx" : : "a" (al), "d" (port));
-}
-
-#else /* not __GNUC__ */
-
-int	bdb		__P((void));
-void	disable_intr	__P((void));
-void	enable_intr	__P((void));
-u_char	inb		__P((u_int port));
-void	outb		__P((u_int port, u_int data));	/* XXX - incompat */
-
-#endif	/* __GNUC__ */
-
-#define	really_u_int	int	/* XXX */
-#define	really_void	int	/* XXX */
-
-void	load_cr0	__P((u_int cr0));
-really_u_int	rcr0	__P((void));
-
-#ifdef notyet
-really_void	setidt	__P((int idx, /*XXX*/caddr_t func, int typ, int dpl));
-#endif
-
-#undef	really_u_int
-#undef	really_void

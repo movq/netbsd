@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)npx.h	5.3 (Berkeley) 1/18/91
- *	$Id: npx.h,v 1.4 1993/07/29 21:42:19 jtc Exp $
+ *	$Id: npx.h,v 1.9 1994/01/25 19:58:30 jtc Exp $
  */
 
 /*
@@ -42,8 +42,8 @@
  * W. Jolitz 1/90
  */
 
-#ifndef	___NPX87___
-#define	___NPX87___
+#ifndef	_I386_NPX_H_
+#define	_I386_NPX_H_
 
 /* Environment information of floating point unit */
 struct	env87 {
@@ -91,6 +91,8 @@ struct	emcsts {
 #define	__iBCS_NPXCW__		0x262
 /* wfj prefers temporary real (64 bit) precision */
 #define	__386BSD_NPXCW__	0x362
+/* */
+#define	__NetBSD_NPXCW__	0x127f
 /*
  * bde prefers 53 bit precision and all exceptions masked.
  *
@@ -126,14 +128,10 @@ struct	emcsts {
 #define	__BDE_NPXCW__		0x1272
 #define	__BETTER_BDE_NPXCW__	0x127f
 
-#ifdef __BROKEN_NPXCW__
-#ifdef __386BSD__
-#define	__INITIAL_NPXCW__	__386BSD_NPXCW__
+#ifdef __NetBSD__
+#define	__INITIAL_NPXCW__	__NetBSD_NPXCW__
 #else
 #define	__INITIAL_NPXCW__	__iBCS_NPXCW__
 #endif
-#else
-#define	__INITIAL_NPXCW__	__BDE_NPXCW__
-#endif
 
-#endif /* ___NPX87___ */
+#endif /* !_I386_NPX_H_ */

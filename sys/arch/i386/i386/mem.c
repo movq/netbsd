@@ -38,7 +38,7 @@
  *
  *	from: Utah Hdr: mem.c 1.13 89/10/08
  *	from: @(#)mem.c 7.2 (Berkeley) 5/9/91
- *	$Id: mem.c,v 1.4 1993/08/14 01:29:36 mycroft Exp $
+ *	$Id: mem.c,v 1.9 1994/02/01 05:40:11 mycroft Exp $
  */
 
 /*
@@ -54,7 +54,6 @@
 #include "proc.h"
 
 #include "machine/cpu.h"
-#include "machine/psl.h"
 
 #include "vm/vm_param.h"
 #include "vm/lock.h"
@@ -69,36 +68,38 @@ mmclose(dev, uio, flags)
 	struct uio *uio;
 	int flags;
 {
-	struct syscframe *fp;
+	struct trapframe *fp;
 
 	switch (minor(dev)) {
 	case 14:
-		fp = (struct syscframe *)curproc->p_regs;
-		fp->sf_eflags &= ~PSL_IOPL;
+		fp = (struct trapframe *)curproc->p_regs;
+		fp->tf_eflags &= ~PSL_IOPL;
 		break;
 	default:
 		break;
 	}
 	return(0);
 }
+
 /*ARGSUSED*/
 mmopen(dev, uio, flags)
 	dev_t dev;
 	struct uio *uio;
 	int flags;
 {
-	struct syscframe *fp;
+	struct trapframe *fp;
 
 	switch (minor(dev)) {
 	case 14:
-		fp = (struct syscframe *)curproc->p_regs;
-		fp->sf_eflags |= PSL_IOPL;
+		fp = (struct trapframe *)curproc->p_regs;
+		fp->tf_eflags |= PSL_IOPL;
 		break;
 	default:
 		break;
 	}
 	return(0);
 }
+
 /*ARGSUSED*/
 mmrw(dev, uio, flags)
 	dev_t dev;
@@ -227,4 +228,35 @@ mmrw(dev, uio, flags)
 	if (zbuf)
 		free(zbuf, M_TEMP);
 	return (error);
+}
+
+
+/*
+ * mmap() physical memory sections
+ */
+int
+mmmmap(dev, offset)
+	dev_t dev;
+	int offset;
+{
+
+#ifdef notyet
+	switch (minor(dev)) {
+/* minor device 0 is physical memory */
+	case 0:
+		if (offset > ctob(physmem))
+			return -1;
+		return i386_btop(offset);
+/* minor device 1 is kernel memory */
+	case 1:
+		/* kernacc() doesn't check executable permissions. */
+		if (!kerncheckprot((caddr_t)offset, NBPG, nprot))
+			return -1;
+		return i386_btop(vtophys(offset));
+	default:
+		return -1;
+	}
+#else
+	return -1;
+#endif
 }

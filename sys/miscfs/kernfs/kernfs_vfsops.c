@@ -33,24 +33,25 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	$Id: kernfs_vfsops.c,v 1.8 1993/08/23 05:02:14 cgd Exp $
+ *	$Id: kernfs_vfsops.c,v 1.10 1993/12/20 12:39:10 cgd Exp $
  */
 
 /*
  * Kernel params Filesystem
  */
 
-#include "param.h"
-#include "systm.h"
-#include "time.h"
-#include "types.h"
-#include "proc.h"
-#include "vnode.h"
-#include "mount.h"
-#include "namei.h"
-#include "malloc.h"
-#include "conf.h"
-#include "miscfs/kernfs/kernfs.h"
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/proc.h>
+#include <sys/vnode.h>
+#include <sys/mount.h>
+#include <sys/namei.h>
+#include <sys/malloc.h>
+#include <sys/conf.h>
+
+#include <miscfs/kernfs/kernfs.h>
 
 /* bring in the spec vnodeops for cdevvp */
 extern struct vnodeops spec_vnodeops;
@@ -59,31 +60,40 @@ struct vnode *rrootdevvp;
 
 kernfs_init()
 {
-  int error, bmaj, cmaj;
-
 #ifdef KERNFS_DIAGNOSTIC
-  printf("kernfs_init\n");                 /* printed during system boot */
+	printf("kernfs_init\n");	/* printed during system boot */
 #endif
 
-  bmaj = major(rootdev);
+	/* DO NOTHING */
+}
 
-  /* hunt for the raw root device by looking in cdevsw for a matching
-   * open routine...
-   */
-  for (cmaj = 0; cmaj < nchrdev; cmaj++) {
-    if (cdevsw[cmaj].d_open == bdevsw[bmaj].d_open) {
-      dev_t cdev = makedev(cmaj, minor(rootdev));
-      error = cdevvp(cdev, &rrootdevvp);
-      if (error == 0)
-	break;
-    }
-  }
+kernfs_rrootdevvp_init()
+{
+	int error, bmaj, cmaj;
 
-  /* this isn't fatal... */
-  if (error) {
-    printf("kernfs: no raw root device\n");
-    rrootdevvp = 0;
-  }
+	if (rrootdevvp != NULL)		/* then we've already done this */
+		return;
+
+	error = ENXIO;
+	bmaj = major(rootdev);
+
+	/* hunt for the raw root device by looking in cdevsw for a matching
+	 * open routine...
+	 */
+	for (cmaj = 0; cmaj < nchrdev; cmaj++) {
+		if (cdevsw[cmaj].d_open == bdevsw[bmaj].d_open) {
+			dev_t cdev = makedev(cmaj, minor(rootdev));
+			error = cdevvp(cdev, &rrootdevvp);
+			if (!error)
+				return;
+		}
+	}
+
+	/* this isn't fatal... */
+	if (error) {
+		printf("kernfs: no raw root device\n");
+		rrootdevvp = NULL;
+	}
 }
 
 /*
@@ -135,6 +145,9 @@ kernfs_mount(mp, path, data, ndp, p)
 #ifdef KERNFS_DIAGNOSTIC
 	printf("kernfs_mount: at %s\n", mp->mnt_stat.f_mntonname);
 #endif
+
+	kernfs_rrootdevvp_init();
+
 	return (0);
 }
 

@@ -61,16 +61,18 @@
  * rights to redistribute these changes.
  */
 
-#include "param.h"
-#include "systm.h"
-#include "proc.h"
-#include "resourcevar.h"
-#include "buf.h"
-#include "user.h"
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/proc.h>
+#include <sys/resourcevar.h>
+#include <sys/buf.h>
+#include <sys/user.h>
 
-#include "vm.h"
-#include "vm_page.h"
-#include "vm_kern.h"
+#include <vm/vm.h>
+#include <vm/vm_page.h>
+#include <vm/vm_kern.h>
+
+#include <machine/cpu.h>
 
 int	avefree = 0;		/* XXX */
 int	readbuffers = 0;	/* XXX allow kgdb to read kernel buffer pool */
@@ -79,9 +81,17 @@ kernacc(addr, len, rw)
 	caddr_t addr;
 	int len, rw;
 {
+	vm_prot_t prot = rw == B_READ ? VM_PROT_READ : VM_PROT_WRITE;
+
+	return (kerncheckprot(addr, len, prot));
+}
+
+kerncheckprot(addr, len, prot)
+	caddr_t addr;
+	int len, prot;
+{
 	boolean_t rv;
 	vm_offset_t saddr, eaddr;
-	vm_prot_t prot = rw == B_READ ? VM_PROT_READ : VM_PROT_WRITE;
 
 	saddr = trunc_page(addr);
 	eaddr = round_page(addr+len);
@@ -95,11 +105,9 @@ kernacc(addr, len, rw)
 	 * or worse, inconsistencies at the pmap level.  We only worry
 	 * about the buffer cache for now.
 	 */
-#ifdef notyet
 	if (!readbuffers && rv && (eaddr > (vm_offset_t)buffers &&
 		   saddr < (vm_offset_t)buffers + MAXBSIZE * nbuf))
 		rv = FALSE;
-#endif
 	return(rv == TRUE);
 }
 
@@ -192,7 +200,7 @@ vm_fork(p1, p2, isvfork)
 	 * objects that reside in the map by marking all of them non-inheritable
 	 */
 	(void)vm_map_inherit(&p1->p_vmspace->vm_map,
-		UPT_MIN_ADDRESS-UPAGES*NBPG, VM_MAX_ADDRESS, VM_INHERIT_NONE);
+		VM_MAXUSER_ADDRESS, VM_MAX_ADDRESS, VM_INHERIT_NONE);
 #endif
 	p2->p_vmspace = vmspace_fork(p1->p_vmspace);
 
@@ -230,13 +238,13 @@ vm_fork(p1, p2, isvfork)
 	     (caddr_t)&up->u_stats.pstat_startcopy));
 
 #if defined(i386) || defined(pc532)
-	{ u_int addr = UPT_MIN_ADDRESS - UPAGES*NBPG; struct vm_map *vp;
+	{ u_int addr = VM_MAXUSER_ADDRESS; struct vm_map *vp;
 
 	vp = &p2->p_vmspace->vm_map;
 
 	/* ream out old pagetables and kernel stack */
-	(void)vm_deallocate(vp, addr, UPT_MAX_ADDRESS - addr);
-	(void)vm_allocate(vp, &addr, UPT_MAX_ADDRESS - addr, FALSE);
+	(void)vm_deallocate(vp, addr, VM_MAX_ADDRESS - addr);
+	(void)vm_allocate(vp, &addr, VM_MAX_ADDRESS - addr, FALSE);
 	}
 #endif
 	/*
@@ -273,7 +281,7 @@ vm_init_limits(p)
 		ptoa(vm_page_free_count);
 }
 
-#include "../vm/vm_pageout.h"
+#include <vm/vm_pageout.h>
 
 #ifdef DEBUG
 int	enableswap = 1;
@@ -309,7 +317,7 @@ loop:
 #endif
 	pp = NULL;
 	ppri = INT_MIN;
-	for (p = allproc; p != NULL; p = p->p_nxt)
+	for (p = (struct proc *)allproc; p != NULL; p = p->p_nxt)
 		if (p->p_stat == SRUN && (p->p_flag & SLOAD) == 0) {
 			pri = p->p_time + p->p_slptime - p->p_nice * 8;
 			if (pri > ppri) {
@@ -397,7 +405,7 @@ swapout_threads()
 #endif
 	outp = outp2 = NULL;
 	outpri = outpri2 = 0;
-	for (p = allproc; p != NULL; p = p->p_nxt) {
+	for (p = (struct proc *)allproc; p != NULL; p = p->p_nxt) {
 		if (!swappable(p))
 			continue;
 		switch (p->p_stat) {
@@ -453,6 +461,7 @@ swapout(p)
 #endif
 	size = round_page(ctob(UPAGES));
 	addr = (vm_offset_t) p->p_addr;
+	p->p_stats->p_ru.ru_nswap++;	/* record that it got swapped out */
 #ifdef notyet
 #ifdef hp300
 	/*
@@ -543,17 +552,18 @@ thread_wakeup(event)
 int indent = 0;
 
 /*ARGSUSED2*/
-iprintf(a, b, c, d, e, f, g, h)
+iprintf(pr, a, b, c, d, e, f, g, h)
+	void (*pr)();
 	char *a;
 {
 	register int i;
 
 	i = indent;
 	while (i >= 8) {
-		printf("\t");
+		(*pr)("\t");
 		i -= 8;
 	}
 	for (; i > 0; --i)
-		printf(" ");
-	printf(a, b, c, d, e, f, g, h);
+		(*pr)(" ");
+	(*pr)(a, b, c, d, e, f, g, h);
 }

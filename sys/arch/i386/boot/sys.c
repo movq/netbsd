@@ -25,61 +25,52 @@
  * any improvements or extensions that they make and grant Carnegie Mellon
  * the rights to redistribute these changes.
  *
- *	$Id: sys.c,v 1.2 1993/08/02 17:52:17 mycroft Exp $
+ *	$Id: sys.c,v 1.6 1994/02/03 22:56:33 mycroft Exp $
  */
 
 #include "boot.h"
-#include <sys/dir.h>
+#include <sys/dirent.h>
 #include <sys/reboot.h>
 
-/* #define BUFSIZE 4096 */
-#define BUFSIZE MAXBSIZE
+char mapbuf[MAXBSIZE], iobuf[MAXBSIZE], fsbuf[SBSIZE];
+int mapblock = 0;
 
-char buf[BUFSIZE], fsbuf[SBSIZE], iobuf[MAXBSIZE];
-
-int xread(addr, size)
-	char		* addr;
-	int		size;
-{
-	int count = BUFSIZE;
-	while (size > 0) {
-		if (BUFSIZE > size)
-			count = size;
-		read(buf, count);
-		pcpy(buf, addr, count);
-		size -= count;
-		addr += count;
-	}
-}
+void bcopy(), pcpy();
 
 read(buffer, count)
-	int count;
 	char *buffer;
+	int count;
+{
+	_read(buffer, count, bcopy);
+}
+
+xread(buffer, count)
+	char *buffer;
+	int count;
+{
+	_read(buffer, count, pcpy);
+}
+
+_read(buffer, count, copy)
+	char *buffer;
+	int count;
+	void (*copy)();
 {
 	int logno, off, size;
-	int cnt2, bnum2;
+	int cnt2;
 
 	while (count) {
 		off = blkoff(fs, poff);
 		logno = lblkno(fs, poff);
 		cnt2 = size = blksize(fs, &inode, logno);
-		bnum2 = fsbtodb(fs, block_map(logno)) + boff;
+		bnum = fsbtodb(fs, block_map(logno)) + boff;
 		cnt = cnt2;
-		bnum = bnum2;
-		if (	(!off)  && (size <= count))
-		{
-			iodest = buffer;
-			devread();
-		}
-		else
-		{
-			iodest = iobuf;
-			size -= off;
-			if (size > count)
-				size = count;
-			devread();
-			bcopy(iodest+off,buffer,size);
-		}
+		iodest = iobuf;
+		devread();
+		size -= off;
+		if (size > count)
+			size = count;
+		copy(iodest + off, buffer, size);
 		buffer += size;
 		count -= size;
 		poff += size;
@@ -87,54 +78,55 @@ read(buffer, count)
 }
 
 find(path)
-     char *path;
+	char *path;
 {
 	char *rest, ch;
 	int block, off, loc, ino = ROOTINO;
-	struct direct *dp;
-loop:	iodest = iobuf;
+	struct dirent *dp;
+
+loop:
+	iodest = iobuf;
 	cnt = fs->fs_bsize;
-	bnum = fsbtodb(fs,itod(fs,ino)) + boff;
+	bnum = fsbtodb(fs, itod(fs,ino)) + boff;
 	devread();
 	bcopy(&((struct dinode *)iodest)[ino % fs->fs_inopb],
 	      &inode.i_din,
-	      sizeof (struct dinode));
+	      sizeof(struct dinode));
 	if (!*path)
 		return 1;
 	while (*path == '/')
 		path++;
-	if (!inode.i_size || ((inode.i_mode&IFMT) != IFDIR))
+	if (!inode.i_size || ((inode.i_mode & IFMT) != IFDIR))
 		return 0;
-	for (rest = path; (ch = *rest) && ch != '/'; rest++) ;
+	for (rest = path; (ch = *rest) && ch != '/'; rest++);
 	*rest = 0;
 	loc = 0;
 	do {
 		if (loc >= inode.i_size)
 			return 0;
 		if (!(off = blkoff(fs, loc))) {
+			int cnt2;
 			block = lblkno(fs, loc);
-			cnt = blksize(fs, &inode, block);
+			cnt2 = blksize(fs, &inode, block);
 			bnum = fsbtodb(fs, block_map(block)) + boff;
+			cnt = cnt2;
 			iodest = iobuf;
 			devread();
 		}
-		dp = (struct direct *)(iodest + off);
+		dp = (struct dirent *)(iodest + off);
 		loc += dp->d_reclen;
-	} while (!dp->d_ino || strcmp(path, dp->d_name));
-	ino = dp->d_ino;
+	} while (!dp->d_fileno || strcmp(path, dp->d_name));
+	ino = dp->d_fileno;
 	*(path = rest) = ch;
 	goto loop;
 }
 
-char mapbuf[MAXBSIZE];
-int mapblock = 0;
-
 block_map(file_block)
-     int file_block;
+	int file_block;
 {
 	if (file_block < NDADDR)
 		return(inode.i_db[file_block]);
-	if ((bnum=fsbtodb(fs, inode.i_ib[0])+boff) != mapblock) {
+	if ((bnum = fsbtodb(fs, inode.i_ib[0]) + boff) != mapblock) {
 		iodest = mapbuf;
 		cnt = fs->fs_bsize;
 		devread();
@@ -151,20 +143,15 @@ openrd()
 	\*******************************************************/
 	while (*cp && *cp!='(')
 		cp++;
-	if (!*cp)
-	{
+	if (!*cp) {
 		cp = name;
-	}
-	else
-	{
-		if (cp++ != name)
-		{
+	} else {
+		if (cp++ != name) {
 			for (devp = devs; *devp; devp++)
 				if (name[0] == (*devp)[0] &&
 				    name[1] == (*devp)[1])
 					break;
-			if (!*devp)
-			{
+			if (!*devp) {
 				printf("Unknown device\n");
 				return 1;
 			}
@@ -174,8 +161,7 @@ openrd()
 		* Look inside brackets for unit number, and partition	*
 		\*******************************************************/
 		if (*cp >= '0' && *cp <= '9')
-			if ((unit = *cp++ - '0') > 1)
-			{
+			if ((unit = *cp++ - '0') > 1) {
 				printf("Bad unit\n");
 				return 1;
 			}
@@ -187,8 +173,7 @@ openrd()
 		if (!*cp)
 			return 1;
 	}
-	switch(maj)
-	{
+	switch(maj) {
 	case 1:
 		dosdev = unit | 0x80;
 		unit = 0;
@@ -220,13 +205,13 @@ openrd()
 	cnt = SBSIZE;
 	bnum = SBLOCK + boff;
 	devread();
+
 	/***********************************************\
 	* Find the actual FILE on the mounted device	*
 	\***********************************************/
 	if (!find(cp))
-	{
 		return 1;
-	}
+
 	poff = 0;
 	name = cp;
 	return 0;
