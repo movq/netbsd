@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.h,v 1.1 2002/10/23 13:26:36 scw Exp $	*/
+/*	$NetBSD: netbsd32_machdep.h,v 1.2 2003/01/19 19:49:49 scw Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -60,6 +60,6 @@ typedef netbsd32_pointer_t netbsd32_sigcontextp_t;
 #define	netbsd32_sendsig	sendsig
 #define	netbsd32_syscall_intern	syscall_intern
 
-extern void netbsd32_setregs(struct proc *, struct exec_package *, u_long);
+extern void netbsd32_setregs(struct lwp *, struct exec_package *, u_long);
 
 #endif /* _SH5_NETBSD32_MACHDEP_H */
