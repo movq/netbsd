@@ -1,4 +1,4 @@
-/*	$NetBSD: mkhelp.c,v 1.1 2001/07/26 12:00:34 mrg Exp $	*/
+/*	$NetBSD: mkhelp.c,v 1.1.1.1 2001/07/26 12:00:34 mrg Exp $	*/
 
 /*
  * Copyright (C) 1984-2000  Mark Nudelman
