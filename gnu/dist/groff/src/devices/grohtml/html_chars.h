@@ -1,4 +1,4 @@
-/*	$NetBSD: html_chars.h,v 1.1 2001/04/19 12:52:18 wiz Exp $	*/
+/*	$NetBSD: html_chars.h,v 1.1.1.1 2001/04/19 12:52:18 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 2000 Free Software Foundation, Inc.

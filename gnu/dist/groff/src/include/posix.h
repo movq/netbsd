@@ -1,4 +1,4 @@
-/*	$NetBSD: posix.h,v 1.1 2001/04/19 12:50:45 wiz Exp $	*/
+/*	$NetBSD: posix.h,v 1.1.1.1 2001/04/19 12:50:45 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1992, 2000 Free Software Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: Menu.h,v 1.1 2001/04/19 12:52:31 wiz Exp $	*/
+/*	$NetBSD: Menu.h,v 1.1.1.1 2001/04/19 12:52:31 wiz Exp $	*/
 
 /*
  * $XConsortium: Menu.h,v 1.2 89/07/21 14:22:10 jim Exp $

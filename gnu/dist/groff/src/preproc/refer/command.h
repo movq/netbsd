@@ -1,4 +1,4 @@
-/*	$NetBSD: command.h,v 1.1 2001/04/19 12:51:54 wiz Exp $	*/
+/*	$NetBSD: command.h,v 1.1.1.1 2001/04/19 12:51:54 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1989, 1990, 1991, 1992 Free Software Foundation, Inc.

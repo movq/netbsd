@@ -1,4 +1,4 @@
-/*	$NetBSD: dirnamemax.c,v 1.1 2001/04/19 12:52:24 wiz Exp $	*/
+/*	$NetBSD: dirnamemax.c,v 1.1.1.1 2001/04/19 12:52:24 wiz Exp $	*/
 
 /* dir_name_max(dir) does the same as pathconf(dir, _PC_NAME_MAX) */
 

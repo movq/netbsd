@@ -1,4 +1,4 @@
-/*	$NetBSD: gprint.h,v 1.1 2001/04/19 12:51:45 wiz Exp $	*/
+/*	$NetBSD: gprint.h,v 1.1.1.1 2001/04/19 12:51:45 wiz Exp $	*/
 
 /* Last non-groff version: gprint.h  1.1  84/10/08
  *

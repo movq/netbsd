@@ -1,4 +1,4 @@
-/*	$NetBSD: getcwd.c,v 1.1 2001/04/19 12:50:51 wiz Exp $	*/
+/*	$NetBSD: getcwd.c,v 1.1.1.1 2001/04/19 12:50:51 wiz Exp $	*/
 
 /* Partial emulation of getcwd in terms of getwd. */
 

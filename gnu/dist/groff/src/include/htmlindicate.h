@@ -1,4 +1,4 @@
-/*	$NetBSD: htmlindicate.h,v 1.1 2001/04/19 12:50:45 wiz Exp $	*/
+/*	$NetBSD: htmlindicate.h,v 1.1.1.1 2001/04/19 12:50:45 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 2000 Free Software Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: xditview.c,v 1.1 2001/04/19 12:52:33 wiz Exp $	*/
+/*	$NetBSD: xditview.c,v 1.1.1.1 2001/04/19 12:52:33 wiz Exp $	*/
 
 /*
  * Copyright 1991 Massachusetts Institute of Technology

@@ -1,4 +1,4 @@
-/*	$NetBSD: pic_tab.h,v 1.1 2001/04/19 12:51:34 wiz Exp $	*/
+/*	$NetBSD: pic_tab.h,v 1.1.1.1 2001/04/19 12:51:34 wiz Exp $	*/
 
 #define LABEL 257
 #define VARIABLE 258

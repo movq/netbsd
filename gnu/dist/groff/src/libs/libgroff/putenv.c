@@ -1,4 +1,4 @@
-/*	$NetBSD: putenv.c,v 1.1 2001/04/19 12:50:53 wiz Exp $	*/
+/*	$NetBSD: putenv.c,v 1.1.1.1 2001/04/19 12:50:53 wiz Exp $	*/
 
 /* Copyright (C) 1991 Free Software Foundation, Inc.
 This file is part of the GNU C Library.

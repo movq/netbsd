@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.c,v 1.1 2001/04/19 12:52:26 wiz Exp $	*/
+/*	$NetBSD: signal.c,v 1.1.1.1 2001/04/19 12:52:26 wiz Exp $	*/
 
 /* Copyright (C) 1992 Free Software Foundation, Inc.
      Written by James Clark (jjc@jclark.com)

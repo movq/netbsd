@@ -1,4 +1,4 @@
-/*	$NetBSD: device.h,v 1.1 2001/04/19 12:52:32 wiz Exp $	*/
+/*	$NetBSD: device.h,v 1.1.1.1 2001/04/19 12:52:32 wiz Exp $	*/
 
 
 typedef struct _DeviceFont DeviceFont;

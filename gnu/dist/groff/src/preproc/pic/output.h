@@ -1,4 +1,4 @@
-/*	$NetBSD: output.h,v 1.1 2001/04/19 12:51:31 wiz Exp $	*/
+/*	$NetBSD: output.h,v 1.1.1.1 2001/04/19 12:51:31 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1989, 1990, 1991, 1992 Free Software Foundation, Inc.

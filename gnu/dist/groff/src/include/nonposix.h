@@ -1,4 +1,4 @@
-/*	$NetBSD: nonposix.h,v 1.1 2001/04/19 12:50:45 wiz Exp $	*/
+/*	$NetBSD: nonposix.h,v 1.1.1.1 2001/04/19 12:50:45 wiz Exp $	*/
 
 /* Copyright (C) 2000 Free Software Foundation, Inc.
      Written by Eli Zaretskii (eliz@is.elta.co.il)

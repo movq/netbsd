@@ -1,4 +1,4 @@
-/*	$NetBSD: ordered_list.h,v 1.1 2001/04/19 12:52:19 wiz Exp $	*/
+/*	$NetBSD: ordered_list.h,v 1.1.1.1 2001/04/19 12:52:19 wiz Exp $	*/
 
 /*
  * Copyright (C) 1999 Free Software Foundation, Inc.
